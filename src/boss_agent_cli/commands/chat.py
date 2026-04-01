@@ -68,8 +68,8 @@ def chat_cmd(ctx, page, from_who, days, export_fmt, output_path):
 		return
 
 	try:
-		client = BossClient(auth, delay=delay, cdp_url=cdp_url)
-		resp = client.friend_list(page=page)
+		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+			resp = client.friend_list(page=page)
 		zp_data = resp.get("zpData", {})
 		items = zp_data.get("result") or zp_data.get("friendList") or []
 
@@ -134,6 +134,17 @@ def chat_cmd(ctx, page, from_who, days, export_fmt, output_path):
 					export_dir = os.path.join(data_dir, "chat-export")
 				os.makedirs(export_dir, exist_ok=True)
 				output_path = os.path.join(export_dir, f"沟通列表-{today}.{export_fmt}")
+
+			# 路径安全校验：禁止 .. 跳转
+			resolved = os.path.realpath(output_path)
+			if ".." in os.path.relpath(resolved, os.getcwd()):
+				safe_dir = os.path.realpath(export_dir if 'export_dir' in dir() else data_dir)
+				if not resolved.startswith(safe_dir) and not resolved.startswith(os.path.realpath(os.getcwd())):
+					handle_error_output(
+						ctx, "chat", code="INVALID_PARAM",
+						message=f"输出路径不安全: {output_path}",
+					)
+					return
 
 			os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 			with open(output_path, "w", encoding="utf-8", newline="") as f:

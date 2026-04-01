@@ -33,90 +33,83 @@ def greet_cmd(ctx, security_id, job_id, message):
 	delay = ctx.obj["delay"]
 	cdp_url = ctx.obj.get("cdp_url")
 
-	cache = CacheStore(data_dir / "cache" / "boss_agent.db")
-
-	if cache.is_greeted(security_id):
-		cache.close()
-		handle_error_output(
-			ctx, "greet",
-			code="ALREADY_GREETED",
-			message="已向该招聘者打过招呼",
-			hints={"next_actions": ["boss search <query> — 搜索其他职位"]},
-		)
-		return
-
-	try:
-		auth = AuthManager(data_dir, logger=logger)
-		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-			# greet_before hook — allows veto
-			hooks = ctx.obj.get("hooks")
-			if hooks:
-				veto = hooks.greet_before.call({
-					"security_id": security_id,
-					"job_id": job_id,
-					"message": message,
-					"source": "greet",
-				})
-				if veto:
-					cache.close()
-					handle_error_output(
-						ctx, "greet", code="HOOK_BLOCKED",
-						message=f"打招呼被钩子阻止: {veto}",
-						recoverable=True,
-					)
-					return
-
-			result = client.greet(security_id, job_id, message)
-
-			cache.record_greet(security_id, job_id)
-			cache.close()
-
-			# greet_after hook
-			if hooks:
-				hooks.greet_after.call({
-					"security_id": security_id,
-					"job_id": job_id,
-					"success": True,
-					"source": "greet",
-				})
-
-			data = {
-				"security_id": security_id,
-				"job_id": job_id,
-				"message": "打招呼成功",
-			}
-			hints = {
-				"next_actions": [
-					"boss search <query> — 继续搜索其他职位",
-					"boss recommend — 获取个性化推荐",
-				],
-			}
-			handle_output(
-				ctx, "greet", data,
-				render=lambda d: render_message_panel(d, title="greet"),
-				hints=hints,
+	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+		if cache.is_greeted(security_id):
+			handle_error_output(
+				ctx, "greet",
+				code="ALREADY_GREETED",
+				message="已向该招聘者打过招呼",
+				hints={"next_actions": ["boss search <query> — 搜索其他职位"]},
 			)
-	except AuthRequired:
-		cache.close()
-		handle_error_output(
-			ctx, "greet", code="AUTH_REQUIRED",
-			message="未登录，请先执行 boss login",
-			recoverable=True, recovery_action="boss login",
-		)
-	except TokenRefreshFailed:
-		cache.close()
-		handle_error_output(
-			ctx, "greet", code="TOKEN_REFRESH_FAILED",
-			message="Token 刷新失败，请重新登录",
-			recoverable=True, recovery_action="boss login",
-		)
-	except Exception as e:
-		cache.close()
-		handle_error_output(
-			ctx, "greet", code="NETWORK_ERROR",
-			message=f"打招呼失败: {e}",
-			recoverable=True, recovery_action="重试",
-		)
+			return
+
+		try:
+			auth = AuthManager(data_dir, logger=logger)
+			with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+				# greet_before hook — allows veto
+				hooks = ctx.obj.get("hooks")
+				if hooks:
+					veto = hooks.greet_before.call({
+						"security_id": security_id,
+						"job_id": job_id,
+						"message": message,
+						"source": "greet",
+					})
+					if veto:
+						handle_error_output(
+							ctx, "greet", code="HOOK_BLOCKED",
+							message=f"打招呼被钩子阻止: {veto}",
+							recoverable=True,
+						)
+						return
+
+				result = client.greet(security_id, job_id, message)
+
+				cache.record_greet(security_id, job_id)
+
+				# greet_after hook
+				if hooks:
+					hooks.greet_after.call({
+						"security_id": security_id,
+						"job_id": job_id,
+						"success": True,
+						"source": "greet",
+					})
+
+				data = {
+					"security_id": security_id,
+					"job_id": job_id,
+					"message": "打招呼成功",
+				}
+				hints = {
+					"next_actions": [
+						"boss search <query> — 继续搜索其他职位",
+						"boss recommend — 获取个性化推荐",
+					],
+				}
+				handle_output(
+					ctx, "greet", data,
+					render=lambda d: render_message_panel(d, title="greet"),
+					hints=hints,
+				)
+		except AuthRequired:
+			handle_error_output(
+				ctx, "greet", code="AUTH_REQUIRED",
+				message="未登录，请先执行 boss login",
+				recoverable=True, recovery_action="boss login",
+			)
+		except TokenRefreshFailed:
+			handle_error_output(
+				ctx, "greet", code="TOKEN_REFRESH_FAILED",
+				message="Token 刷新失败，请重新登录",
+				recoverable=True, recovery_action="boss login",
+			)
+		except Exception as e:
+			handle_error_output(
+				ctx, "greet", code="NETWORK_ERROR",
+				message=f"打招呼失败: {e}",
+				recoverable=True, recovery_action="重试",
+			)
 
 
 @click.command("batch-greet")

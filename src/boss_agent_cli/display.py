@@ -66,7 +66,7 @@ def handle_error_output(
 		console.print(f"[red]error[/red] [{code}] {message}")
 		if recovery_action:
 			console.print(f"  [dim]recovery: {recovery_action}[/dim]")
-		sys.exit(1)
+		raise SystemExit(1)
 
 
 # ── Table builders ──────────────────────────────────────────────────
