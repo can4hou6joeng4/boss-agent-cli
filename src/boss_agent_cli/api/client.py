@@ -236,6 +236,11 @@ class BossClient:
 		params = {"friendId": friend_id, "friendSource": friend_source, "labelId": label_id}
 		return self._request("GET", url, params=params)
 
+	def exchange_contact(self, security_id: str, uid: str, name: str, exchange_type: int = 1) -> dict:
+		"""请求交换联系方式（1=手机, 2=微信）。"""
+		data = {"type": exchange_type, "securityId": security_id, "uniqueId": uid, "name": name}
+		return self._browser_request("POST", endpoints.EXCHANGE_REQUEST_URL, data=data)
+
 	# ── Lifecycle ────────────────────────────────────────────────────
 
 	def close(self):

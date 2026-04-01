@@ -303,6 +303,15 @@ SCHEMA_DATA = {
 				"--remove": {"type": "boolean", "default": False, "description": "移除标签（默认为添加）"},
 			},
 		},
+		"exchange": {
+			"description": "请求交换联系方式（手机号或微信）",
+			"args": [
+				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
+			],
+			"options": {
+				"--type": {"type": "string", "default": "phone", "description": "交换类型", "enum": ["phone", "wechat"]},
+			},
+		},
 		"interviews": {
 			"description": "查看面试邀请列表",
 			"args": [],
