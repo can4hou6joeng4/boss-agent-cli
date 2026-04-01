@@ -134,123 +134,116 @@ def batch_greet_cmd(ctx, query, city, salary, experience, education, industry, s
 
 	count = min(count, 10)
 
-	cache = CacheStore(data_dir / "cache" / "boss_agent.db")
-
-	try:
-		auth = AuthManager(data_dir, logger=logger)
-		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-			raw = client.search_jobs(
-				query, city=city, salary=salary, experience=experience,
-				education=education, industry=industry, scale=scale,
-				stage=stage, job_type=job_type,
-			)
-			zp_data = raw.get("zpData", {})
-			job_list = zp_data.get("jobList", [])
-
-			candidates = []
-			for raw_item in job_list:
-				item = JobItem.from_api(raw_item)
-				if not cache.is_greeted(item.security_id):
-					candidates.append(item)
-				if len(candidates) >= count:
-					break
-
-			if dry_run:
-				items = [item.to_dict() for item in candidates]
-				cache.close()
-				handle_output(
-					ctx, "batch-greet", {
-						"dry_run": True,
-						"candidates": items,
-						"count": len(items),
-					},
-					render=lambda d: render_batch_operation_summary(d, title="batch-greet"),
+	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+		try:
+			auth = AuthManager(data_dir, logger=logger)
+			with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+				raw = client.search_jobs(
+					query, city=city, salary=salary, experience=experience,
+					education=education, industry=industry, scale=scale,
+					stage=stage, job_type=job_type,
 				)
-				return
+				zp_data = raw.get("zpData", {})
+				job_list = zp_data.get("jobList", [])
 
-			results = []
-			stopped_reason = None
-
-			for item in candidates:
-				retry_count = 0
-				success = False
-
-				while retry_count <= 1:
-					try:
-						client.greet(item.security_id, item.job_id)
-						cache.record_greet(item.security_id, item.job_id)
-						results.append({
-							"security_id": item.security_id,
-							"job_id": item.job_id,
-							"title": item.title,
-							"company": item.company,
-							"status": "success",
-						})
-						success = True
-						logger.info(f"打招呼成功: {item.title} @ {item.company}")
+				candidates = []
+				for raw_item in job_list:
+					item = JobItem.from_api(raw_item)
+					if not cache.is_greeted(item.security_id):
+						candidates.append(item)
+					if len(candidates) >= count:
 						break
-					except Exception as e:
-						error_msg = str(e)
-						if "RATE_LIMITED" in error_msg or "频率" in error_msg:
-							stopped_reason = "RATE_LIMITED"
-							break
-						if "GREET_LIMIT" in error_msg or "上限" in error_msg:
-							stopped_reason = "GREET_LIMIT"
-							break
-						if retry_count == 0:
-							logger.warning(f"打招呼失败，重试中: {item.title}")
-							retry_count += 1
-							time.sleep(random.uniform(1.0, 2.0))
-						else:
+
+				if dry_run:
+					items = [item.to_dict() for item in candidates]
+					handle_output(
+						ctx, "batch-greet", {
+							"dry_run": True,
+							"candidates": items,
+							"count": len(items),
+						},
+						render=lambda d: render_batch_operation_summary(d, title="batch-greet"),
+					)
+					return
+
+				results = []
+				stopped_reason = None
+
+				for idx, item in enumerate(candidates):
+					retry_count = 0
+					success = False
+
+					while retry_count <= 1:
+						try:
+							client.greet(item.security_id, item.job_id)
+							cache.record_greet(item.security_id, item.job_id)
 							results.append({
 								"security_id": item.security_id,
 								"job_id": item.job_id,
 								"title": item.title,
 								"company": item.company,
-								"status": "failed",
-								"error": error_msg,
+								"status": "success",
 							})
+							success = True
+							logger.info(f"打招呼成功: {item.title} @ {item.company}")
 							break
+						except Exception as e:
+							error_msg = str(e)
+							if "RATE_LIMITED" in error_msg or "频率" in error_msg:
+								stopped_reason = "RATE_LIMITED"
+								break
+							if "GREET_LIMIT" in error_msg or "上限" in error_msg:
+								stopped_reason = "GREET_LIMIT"
+								break
+							if retry_count == 0:
+								logger.warning(f"打招呼失败，重试中: {item.title}")
+								retry_count += 1
+								time.sleep(random.uniform(1.0, 2.0))
+							else:
+								results.append({
+									"security_id": item.security_id,
+									"job_id": item.job_id,
+									"title": item.title,
+									"company": item.company,
+									"status": "failed",
+									"error": error_msg,
+								})
+								break
 
+					if stopped_reason:
+						break
+
+					if success and idx < len(candidates) - 1:
+						time.sleep(random.uniform(2.0, 5.0))
+
+				data = {
+					"greeted": [r for r in results if r["status"] == "success"],
+					"failed": [r for r in results if r["status"] == "failed"],
+					"total_greeted": sum(1 for r in results if r["status"] == "success"),
+					"total_failed": sum(1 for r in results if r["status"] == "failed"),
+				}
 				if stopped_reason:
-					break
+					data["stopped_reason"] = stopped_reason
 
-				if success and item != candidates[-1]:
-					time.sleep(random.uniform(2.0, 5.0))
-
-			cache.close()
-
-			data = {
-				"greeted": [r for r in results if r["status"] == "success"],
-				"failed": [r for r in results if r["status"] == "failed"],
-				"total_greeted": sum(1 for r in results if r["status"] == "success"),
-				"total_failed": sum(1 for r in results if r["status"] == "failed"),
-			}
-			if stopped_reason:
-				data["stopped_reason"] = stopped_reason
-
-			handle_output(
-				ctx, "batch-greet", data,
-				render=lambda d: render_batch_operation_summary(d, title="batch-greet"),
+				handle_output(
+					ctx, "batch-greet", data,
+					render=lambda d: render_batch_operation_summary(d, title="batch-greet"),
+				)
+		except AuthRequired:
+			handle_error_output(
+				ctx, "batch-greet", code="AUTH_REQUIRED",
+				message="未登录，请先执行 boss login",
+				recoverable=True, recovery_action="boss login",
 			)
-	except AuthRequired:
-		cache.close()
-		handle_error_output(
-			ctx, "batch-greet", code="AUTH_REQUIRED",
-			message="未登录，请先执行 boss login",
-			recoverable=True, recovery_action="boss login",
-		)
-	except TokenRefreshFailed:
-		cache.close()
-		handle_error_output(
-			ctx, "batch-greet", code="TOKEN_REFRESH_FAILED",
-			message="Token 刷新失败，请重新登录",
-			recoverable=True, recovery_action="boss login",
-		)
-	except Exception as e:
-		cache.close()
-		handle_error_output(
-			ctx, "batch-greet", code="NETWORK_ERROR",
-			message=f"批量打招呼失败: {e}",
-			recoverable=True, recovery_action="重试",
-		)
+		except TokenRefreshFailed:
+			handle_error_output(
+				ctx, "batch-greet", code="TOKEN_REFRESH_FAILED",
+				message="Token 刷新失败，请重新登录",
+				recoverable=True, recovery_action="boss login",
+			)
+		except Exception as e:
+			handle_error_output(
+				ctx, "batch-greet", code="NETWORK_ERROR",
+				message=f"批量打招呼失败: {e}",
+				recoverable=True, recovery_action="重试",
+			)
