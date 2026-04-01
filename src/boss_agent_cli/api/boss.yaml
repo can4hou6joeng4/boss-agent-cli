@@ -77,6 +77,14 @@ endpoints:
     method: GET
     path: "/wapi/zpchat/geek/historyMsg"
     referer: "/web/geek/chat"
+  friend_label_add:
+    method: GET
+    path: "/wapi/zprelation/friend/label/addMark"
+    referer: "/web/geek/chat"
+  friend_label_delete:
+    method: GET
+    path: "/wapi/zprelation/friend/label/deleteMark"
+    referer: "/web/geek/chat"
 
 lookups:
   city:

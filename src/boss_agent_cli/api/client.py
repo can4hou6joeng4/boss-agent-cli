@@ -230,6 +230,12 @@ class BossClient:
 		params = {"gid": gid, "securityId": security_id, "page": page, "c": count, "src": 0}
 		return self._request("GET", endpoints.CHAT_HISTORY_URL, params=params)
 
+	def friend_label(self, friend_id: str, label_id: int, friend_source: int = 0, *, remove: bool = False) -> dict:
+		"""添加或移除好友标签。"""
+		url = endpoints.FRIEND_LABEL_DELETE_URL if remove else endpoints.FRIEND_LABEL_ADD_URL
+		params = {"friendId": friend_id, "friendSource": friend_source, "labelId": label_id}
+		return self._request("GET", url, params=params)
+
 	# ── Lifecycle ────────────────────────────────────────────────────
 
 	def close(self):

@@ -33,6 +33,8 @@ FRIEND_LIST_URL = _url("friend_list")
 INTERVIEW_DATA_URL = _url("interview_data")
 JOB_HISTORY_URL = _url("job_history")
 CHAT_HISTORY_URL = _url("chat_history")
+FRIEND_LABEL_ADD_URL = _url("friend_label_add")
+FRIEND_LABEL_DELETE_URL = _url("friend_label_delete")
 
 # ── API response codes ──────────────────────────────────────────────
 CODE_SUCCESS = _spec.response_codes.get("success", 0)
