@@ -73,6 +73,10 @@ endpoints:
     method: GET
     path: "/wapi/zpgeek/history/joblist.json"
     referer: "/web/geek/job"
+  chat_history:
+    method: GET
+    path: "/wapi/zpchat/geek/historyMsg"
+    referer: "/web/geek/chat"
 
 lookups:
   city:

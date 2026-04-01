@@ -283,6 +283,16 @@ SCHEMA_DATA = {
 				},
 			},
 		},
+		"chatmsg": {
+			"description": "查看与指定好友的聊天消息历史",
+			"args": [
+				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
+			],
+			"options": {
+				"--page": {"type": "int", "default": 1, "description": "页码"},
+				"--count": {"type": "int", "default": 20, "description": "每页消息数量"},
+			},
+		},
 		"interviews": {
 			"description": "查看面试邀请列表",
 			"args": [],

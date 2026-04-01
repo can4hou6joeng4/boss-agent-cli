@@ -225,6 +225,11 @@ class BossClient:
 		params = {"page": page}
 		return self._request("GET", endpoints.JOB_HISTORY_URL, params=params)
 
+	def chat_history(self, gid: str, security_id: str, *, page: int = 1, count: int = 20) -> dict:
+		"""获取与指定好友的聊天消息历史。"""
+		params = {"gid": gid, "securityId": security_id, "page": page, "c": count, "src": 0}
+		return self._request("GET", endpoints.CHAT_HISTORY_URL, params=params)
+
 	# ── Lifecycle ────────────────────────────────────────────────────
 
 	def close(self):

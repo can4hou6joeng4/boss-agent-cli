@@ -32,6 +32,7 @@ DELIVER_LIST_URL = _url("deliver_list")
 FRIEND_LIST_URL = _url("friend_list")
 INTERVIEW_DATA_URL = _url("interview_data")
 JOB_HISTORY_URL = _url("job_history")
+CHAT_HISTORY_URL = _url("chat_history")
 
 # ── API response codes ──────────────────────────────────────────────
 CODE_SUCCESS = _spec.response_codes.get("success", 0)
