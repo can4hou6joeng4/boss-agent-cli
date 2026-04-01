@@ -25,8 +25,11 @@ _GROUP_ORDER = ["对方主动", "我主动", "投递"]
 
 
 def _sanitize_csv_cell(value: str) -> str:
-	"""防止 CSV 公式注入：以 =+@- 开头的值前置单引号。"""
-	if isinstance(value, str) and value and value[0] in ("=", "+", "-", "@"):
+	"""防止 CSV 公式注入：以 =+@- 开头的值前置单引号；过滤 Tab 和回车。"""
+	if not isinstance(value, str):
+		return str(value)
+	value = value.replace("\t", " ").replace("\r", "")
+	if value and value[0] in ("=", "+", "-", "@"):
 		return f"'{value}"
 	return value
 

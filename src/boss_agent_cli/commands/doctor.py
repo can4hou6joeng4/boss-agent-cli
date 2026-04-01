@@ -31,8 +31,16 @@ def doctor_cmd(ctx):
 		})
 
 	# 1) CLI dependencies
-	python_ok = True
-	add_check("python", "ok" if python_ok else "error", "Python 运行环境可用")
+	import sys
+	py_version = sys.version_info
+	python_ok = py_version >= (3, 10)
+	py_detail = f"Python {py_version.major}.{py_version.minor}.{py_version.micro}"
+	add_check(
+		"python",
+		"ok" if python_ok else "error",
+		f"{py_detail}" if python_ok else f"{py_detail}（需要 >=3.10）",
+		None if python_ok else "升级 Python 到 3.10+",
+	)
 
 	patchright_bin = shutil.which("patchright")
 	add_check(

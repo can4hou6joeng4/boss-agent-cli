@@ -214,7 +214,8 @@ def batch_greet_cmd(ctx, query, city, salary, experience, education, industry, s
 						break
 
 					if success and idx < len(candidates) - 1:
-						time.sleep(random.uniform(2.0, 5.0))
+						bg_delay = ctx.obj.get("config", {}).get("batch_greet_delay", [2.0, 5.0])
+						time.sleep(random.uniform(bg_delay[0], bg_delay[1]))
 
 				data = {
 					"greeted": [r for r in results if r["status"] == "success"],
