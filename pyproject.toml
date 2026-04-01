@@ -41,7 +41,10 @@ Repository = "https://github.com/can4hou6joeng4/boss-agent-cli"
 Issues = "https://github.com/can4hou6joeng4/boss-agent-cli/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+dev = [
+	"pytest>=7.0",
+	"ruff>=0.4",
+]
 
 [project.scripts]
 boss = "boss_agent_cli.main:cli"
@@ -50,8 +53,6 @@ boss = "boss_agent_cli.main:cli"
 testpaths = ["tests"]
 pythonpath = ["src"]
 
-[dependency-groups]
-dev = [
-    "fpdf2>=2.8.7",
-    "markdown>=3.10.2",
-]
+[tool.ruff]
+line-length = 120
+indent-width = 4

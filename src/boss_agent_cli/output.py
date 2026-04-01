@@ -68,7 +68,9 @@ class Logger:
 
 	def _log(self, level: str, message: str):
 		if _LEVEL_ORDER.get(level, 0) >= self._threshold:
-			print(message, file=sys.stderr)
+			import datetime
+			ts = datetime.datetime.now().strftime("%H:%M:%S")
+			print(f"[{level.upper()} {ts}] {message}", file=sys.stderr)
 
 	def debug(self, message: str):
 		self._log("debug", message)
