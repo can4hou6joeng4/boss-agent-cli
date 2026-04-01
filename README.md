@@ -46,25 +46,75 @@ uv run patchright install chromium
 
 </details>
 
+## 登录链路说明
+
+`boss login` 当前采用三级降级：
+
+1. **Cookie 提取**
+   - 优先尝试从本机浏览器提取 `zhipin.com` Cookie
+   - 适合你已经在 Chrome / Edge / Firefox 中登录过 BOSS 直聘的场景
+2. **CDP 登录**
+   - 若检测到带远程调试端口的 Chrome，则复用用户浏览器完成登录
+   - 适合希望保持浏览器真实指纹、减少额外扫码的场景
+3. **patchright 扫码**
+   - 最后兜底，拉起 patchright Chromium 让你扫码登录
+
+推荐工作流：
+
+```bash
+boss doctor
+boss login
+boss status
+```
+
+### CDP 启动示例
+
+macOS:
+
+```bash
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+  --remote-debugging-port=9222 \
+  --user-data-dir=/tmp/boss-chrome
+```
+
+Linux:
+
+```bash
+google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/boss-chrome
+```
+
+然后可执行：
+
+```bash
+boss --cdp-url http://localhost:9222 doctor
+boss --cdp-url http://localhost:9222 login --cdp
+```
+
 ## 快速开始
 
 ```bash
+# 0. 先做环境自检（推荐）
+boss doctor
+
 # 1. 登录（优先免扫码，失败弹出浏览器）
 boss login
 
-# 2. 搜索广州的 Golang 职位，要求双休+五险一金
+# 2. 验证登录态
+boss status
+
+# 3. 搜索广州的 Golang 职位，要求双休+五险一金
 boss search "Golang" --city 广州 --welfare "双休,五险一金"
 
-# 3. 查看职位详情
+# 4. 查看职位详情
 boss detail <security_id>
 
-# 4. 向招聘者打招呼
+# 5. 向招聘者打招呼
 boss greet <security_id> <job_id>
 
-# 5. 获取个性化推荐
+# 6. 获取个性化推荐
 boss recommend
 
-# 6. 导出 50 条搜索结果为 CSV
+# 7. 导出 50 条搜索结果为 CSV
 boss export "Golang" --city 广州 --count 50 -o jobs.csv
 ```
 
@@ -119,6 +169,7 @@ npx skills add can4hou6joeng4/boss-agent-cli
 | 命令 | 说明 |
 |------|------|
 | `boss login` | 登录（Cookie 提取优先，失败扫码） |
+| `boss doctor` | 诊断本地环境、依赖、登录态和网络 |
 | `boss status` | 检查登录态 |
 | `boss me` | 我的信息（用户/简历/期望/投递记录） |
 | `boss search <query>` | 搜索职位（支持 `--welfare` 福利筛选） |
@@ -161,6 +212,51 @@ boss search "Golang" --city 广州 --welfare "双休,五险一金,年终奖"
 4. 每个结果带 `welfare_match` 字段说明匹配来源
 
 支持的福利关键词：`双休` `五险一金` `年终奖` `餐补` `住房补贴` `定期体检` `股票期权` `加班补助` `带薪年假`
+
+## 诊断与排障
+
+优先执行：
+
+```bash
+boss doctor
+```
+
+典型诊断项：
+- `patchright`：CLI 是否已安装
+- `patchright_chromium`：Chromium 内核是否已安装
+- `cookie_extract`：是否能从本地浏览器提取 zhipin Cookie
+- `auth_session`：本地登录态是否存在、是否可解密
+- `auth_token_quality`：当前登录态质量（是否具备 wt2 / stoken）
+- `cdp`：Chrome 远程调试端口是否可连
+- `network`：是否可访问 `https://www.zhipin.com/`
+- `data_dir`：数据目录是否可写
+
+常见修复动作：
+
+```bash
+# 安装浏览器内核
+patchright install chromium
+
+# 清除损坏/旧机器指纹的登录态
+boss logout
+
+# 重新登录
+boss login
+
+# 指定 CDP 地址做诊断
+boss --cdp-url http://localhost:9222 doctor
+```
+
+如果 `doctor` 中 `auth_session` 显示“session 文件但无法解密/已损坏”，通常意味着：
+- 登录态来自旧机器指纹
+- 或 session 文件已损坏
+
+此时执行 `boss logout && boss login` 即可恢复。
+
+如果 `doctor` 中 `auth_token_quality` 显示：
+- `wt2/stoken 均存在`：登录态完整，可优先执行 `boss status`
+- `wt2 存在，但 stoken 缺失`：通常仍能读取部分信息；若接口失败，再执行 `boss login`
+- `wt2 缺失`：说明关键 Cookie 不完整，建议直接 `boss logout && boss login`
 
 ## 错误处理
 

@@ -26,15 +26,15 @@ def status_cmd(ctx):
 		return
 
 	try:
-		client = BossClient(auth, delay=delay, cdp_url=cdp_url)
-		info = client.user_info()
-		user_name = info.get("zpData", {}).get("name", "未知用户")
-		data = {
-			"logged_in": True,
-			"user_name": user_name,
-			"token_expires_in": None,
-		}
-		handle_output(ctx, "status", data, render=render_status)
+		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+			info = client.user_info()
+			user_name = info.get("zpData", {}).get("name", "未知用户")
+			data = {
+				"logged_in": True,
+				"user_name": user_name,
+				"token_expires_in": None,
+			}
+			handle_output(ctx, "status", data, render=render_status)
 	except AuthRequired:
 		handle_error_output(
 			ctx, "status",

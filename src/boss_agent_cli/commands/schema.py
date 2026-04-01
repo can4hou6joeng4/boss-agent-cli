@@ -27,6 +27,11 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {},
 		},
+		"doctor": {
+			"description": "诊断本地运行环境、依赖、登录条件和网络连通性",
+			"args": [],
+			"options": {},
+		},
 		"search": {
 			"description": "按关键词和筛选条件搜索职位列表",
 			"args": [

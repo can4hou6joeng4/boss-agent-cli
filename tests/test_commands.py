@@ -124,7 +124,52 @@ def test_schema_includes_new_commands():
 	assert "chat" in commands
 	assert "interviews" in commands
 	assert "logout" in commands
-	assert len(commands) == 15
+	assert "doctor" in commands
+	assert len(commands) == 16
+
+
+@patch("boss_agent_cli.commands.doctor.extract_cookies")
+@patch("boss_agent_cli.commands.doctor.httpx.get")
+@patch("boss_agent_cli.commands.doctor.probe_cdp")
+@patch("boss_agent_cli.commands.doctor.AuthManager")
+def test_doctor_command(mock_auth_cls, mock_probe_cdp, mock_httpx_get, mock_extract_cookies):
+	mock_auth_cls.return_value.check_status.return_value = None
+	mock_probe_cdp.return_value = None
+	mock_extract_cookies.return_value = None
+	mock_httpx_get.return_value = MagicMock(status_code=200)
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["doctor"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["command"] == "doctor"
+	assert parsed["data"]["check_count"] >= 8
+	assert "checks" in parsed["data"]
+	assert any(item["name"] == "network" for item in parsed["data"]["checks"])
+	assert any(item["name"] == "cookie_extract" for item in parsed["data"]["checks"])
+	assert any(item["name"] == "auth_token_quality" for item in parsed["data"]["checks"])
+	assert parsed["hints"]["next_actions"]
+
+
+@patch("boss_agent_cli.commands.doctor.extract_cookies")
+@patch("boss_agent_cli.commands.doctor.httpx.get")
+@patch("boss_agent_cli.commands.doctor.probe_cdp")
+@patch("boss_agent_cli.commands.doctor.AuthManager")
+def test_doctor_with_partial_token_quality_warn(mock_auth_cls, mock_probe_cdp, mock_httpx_get, mock_extract_cookies):
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "ok"}, "stoken": ""}
+	mock_probe_cdp.return_value = None
+	mock_extract_cookies.return_value = {"cookies": {"wt2": "ok"}}
+	mock_httpx_get.return_value = MagicMock(status_code=200)
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["doctor"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	quality = next(item for item in parsed["data"]["checks"] if item["name"] == "auth_token_quality")
+	assert quality["status"] == "warn"
+	assert "stoken 缺失" in quality["detail"]
+	assert any("boss status" in action for action in parsed["hints"]["next_actions"])
 
 
 @patch("boss_agent_cli.commands.recommend.CacheStore")

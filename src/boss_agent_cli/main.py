@@ -2,7 +2,7 @@ from pathlib import Path
 
 import click
 
-from boss_agent_cli.commands import schema, login, logout, status, search, detail, greet, recommend, export, cities, me, chat, interviews, show, history
+from boss_agent_cli.commands import schema, login, logout, status, doctor, search, detail, greet, recommend, export, cities, me, chat, interviews, show, history
 from boss_agent_cli.config import load_config
 from boss_agent_cli.hooks import create_hook_bus
 from boss_agent_cli.output import Logger
@@ -42,6 +42,7 @@ cli.add_command(schema.schema_cmd, "schema")
 cli.add_command(login.login_cmd, "login")
 cli.add_command(logout.logout_cmd, "logout")
 cli.add_command(status.status_cmd, "status")
+cli.add_command(doctor.doctor_cmd, "doctor")
 cli.add_command(search.search_cmd, "search")
 cli.add_command(detail.detail_cmd, "detail")
 cli.add_command(greet.greet_cmd, "greet")
