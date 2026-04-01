@@ -1,8 +1,8 @@
 import click
 
 from boss_agent_cli.api.client import BossClient
-from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
-from boss_agent_cli.display import handle_error_output, handle_output, render_message_panel
+from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_message_panel
 
 _LABEL_MAP = {
 	"新招呼": 1, "沟通中": 2, "已约面": 3, "已获取简历": 4,
@@ -31,6 +31,7 @@ def _resolve_label(label_input: str) -> int:
 @click.option("--label", required=True, help="标签名称（新招呼/沟通中/已约面/已获取简历/已交换电话/已交换微信/不合适/收藏）或 ID")
 @click.option("--remove", is_flag=True, default=False, help="移除标签（默认为添加）")
 @click.pass_context
+@handle_auth_errors("mark")
 def mark_cmd(ctx, security_id, label, remove):
 	"""给联系人添加/移除标签"""
 	data_dir = ctx.obj["data_dir"]
@@ -43,61 +44,41 @@ def mark_cmd(ctx, security_id, label, remove):
 	label_name = _LABEL_NAMES.get(label_id, str(label_id))
 	action_text = "移除" if remove else "添加"
 
-	try:
-		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-			# 从 friend_list 找到 friend_id (uid)
-			friends_resp = client.friend_list(page=1)
-			zp_data = friends_resp.get("zpData", {})
-			items = zp_data.get("result") or zp_data.get("friendList") or []
+	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+		friends_resp = client.friend_list(page=1)
+		zp_data = friends_resp.get("zpData", {})
+		items = zp_data.get("result") or zp_data.get("friendList") or []
 
-			friend_id = None
-			friend_source = 0
-			friend_name = None
-			for item in items:
-				if item.get("securityId") == security_id:
-					friend_id = str(item.get("uid", ""))
-					friend_source = item.get("friendSource", 0)
-					friend_name = item.get("name") or "-"
-					break
+		friend_id = None
+		friend_source = 0
+		friend_name = None
+		for item in items:
+			if item.get("securityId") == security_id:
+				friend_id = str(item.get("uid", ""))
+				friend_source = item.get("friendSource", 0)
+				friend_name = item.get("name") or "-"
+				break
 
-			if not friend_id:
-				handle_error_output(
-					ctx, "mark", code="JOB_NOT_FOUND",
-					message=f"未在沟通列表中找到 security_id={security_id}",
-				)
-				return
-
-			client.friend_label(friend_id, label_id, friend_source, remove=remove)
-
-			data = {
-				"security_id": security_id,
-				"name": friend_name,
-				"label": label_name,
-				"action": action_text,
-				"message": f"已{action_text}标签「{label_name}」",
-			}
-			handle_output(
-				ctx, "mark", data,
-				render=lambda d: render_message_panel(d, title="mark"),
-				hints={"next_actions": [
-					"boss chat — 返回沟通列表",
-				]},
+		if not friend_id:
+			handle_error_output(
+				ctx, "mark", code="JOB_NOT_FOUND",
+				message=f"未在沟通列表中找到 security_id={security_id}",
 			)
-	except AuthRequired:
-		handle_error_output(
-			ctx, "mark", code="AUTH_REQUIRED",
-			message="未登录，请先执行 boss login",
-			recoverable=True, recovery_action="boss login",
-		)
-	except TokenRefreshFailed:
-		handle_error_output(
-			ctx, "mark", code="TOKEN_REFRESH_FAILED",
-			message="Token 刷新失败，请重新登录",
-			recoverable=True, recovery_action="boss login",
-		)
-	except Exception as e:
-		handle_error_output(
-			ctx, "mark", code="NETWORK_ERROR",
-			message=f"标签操作失败: {e}",
-			recoverable=True, recovery_action="重试",
+			return
+
+		client.friend_label(friend_id, label_id, friend_source, remove=remove)
+
+		data = {
+			"security_id": security_id,
+			"name": friend_name,
+			"label": label_name,
+			"action": action_text,
+			"message": f"已{action_text}标签「{label_name}」",
+		}
+		handle_output(
+			ctx, "mark", data,
+			render=lambda d: render_message_panel(d, title="mark"),
+			hints={"next_actions": [
+				"boss chat — 返回沟通列表",
+			]},
 		)

@@ -265,3 +265,44 @@ def render_export_summary(data: dict) -> None:
 		console.print(f"[green]exported[/green] {count} jobs to [bold]{path}[/bold] ({fmt})")
 	else:
 		console.print(f"[green]exported[/green] {count} jobs ({fmt})")
+
+
+# ── Auth error decorator ─────────────────────────────────────────────
+
+
+def handle_auth_errors(command_name: str):
+	"""装饰器：统一处理 AuthRequired / TokenRefreshFailed / Exception 三层捕获。
+
+	用法:
+		@handle_auth_errors("search")
+		def _search_impl(ctx, ...):
+			...  # 只写业务逻辑，不需要 try/except
+	"""
+	from functools import wraps
+
+	def decorator(func):
+		@wraps(func)
+		def wrapper(ctx, *args, **kwargs):
+			from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
+			try:
+				return func(ctx, *args, **kwargs)
+			except AuthRequired:
+				handle_error_output(
+					ctx, command_name, code="AUTH_REQUIRED",
+					message="未登录，请先执行 boss login",
+					recoverable=True, recovery_action="boss login",
+				)
+			except TokenRefreshFailed:
+				handle_error_output(
+					ctx, command_name, code="TOKEN_REFRESH_FAILED",
+					message="Token 刷新失败，请重新登录",
+					recoverable=True, recovery_action="boss login",
+				)
+			except Exception as e:
+				handle_error_output(
+					ctx, command_name, code="NETWORK_ERROR",
+					message=f"{command_name} 失败: {e}",
+					recoverable=True, recovery_action="重试",
+				)
+		return wrapper
+	return decorator
