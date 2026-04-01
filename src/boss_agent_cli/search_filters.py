@@ -183,8 +183,8 @@ def match_all_welfare(
 	return results
 
 
-def _fetch_and_check(client, cache, welfare_conditions, raw_item) -> dict | None:
-	"""Single job: fetch detail + welfare match."""
+def _fetch_and_check(client, welfare_conditions, raw_item) -> dict | None:
+	"""Single job: fetch detail + welfare match. 不访问 cache（线程安全）。"""
 	welfare_list = raw_item.get("welfareList", [])
 	try:
 		card_raw = client.job_card(
@@ -198,7 +198,6 @@ def _fetch_and_check(client, cache, welfare_conditions, raw_item) -> dict | None
 	match_results = match_all_welfare(welfare_conditions, welfare_list, desc)
 	if match_results:
 		item = JobItem.from_api(raw_item)
-		item.greeted = cache.is_greeted(item.security_id)
 		d = item.to_dict()
 		d["welfare_match"] = "✅ " + ", ".join(match_results)
 		return d
@@ -206,10 +205,10 @@ def _fetch_and_check(client, cache, welfare_conditions, raw_item) -> dict | None
 
 
 def _check_details_parallel(client, cache, logger, welfare_conditions, items, matched):
-	"""Parallel detail check, append matched to list."""
+	"""Parallel detail check, append matched to list. cache 操作在主线程完成。"""
 	with ThreadPoolExecutor(max_workers=_WELFARE_WORKERS) as pool:
 		futures = {
-			pool.submit(_fetch_and_check, client, cache, welfare_conditions, raw_item): raw_item
+			pool.submit(_fetch_and_check, client, welfare_conditions, raw_item): raw_item
 			for raw_item in items
 		}
 		for future in as_completed(futures):
@@ -219,6 +218,10 @@ def _check_details_parallel(client, cache, logger, welfare_conditions, items, ma
 			try:
 				result = future.result()
 				if result:
+					# is_greeted 在主线程中安全访问 cache
+					sid = result.get("security_id", "")
+					if sid:
+						result["greeted"] = cache.is_greeted(sid)
 					matched.append(result)
 					logger.info(f"  ✅ {company} - {title}（详情匹配）")
 				else:

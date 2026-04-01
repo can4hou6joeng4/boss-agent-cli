@@ -66,6 +66,7 @@ class BossClient:
 				user_agent=token.get("user_agent", ""),
 				delay=self._delay,
 				cdp_url=self._cdp_url,
+				logger=getattr(self._auth, '_logger', None),
 			)
 		return self._browser_session
 

@@ -229,9 +229,9 @@ def chat_cmd(ctx, page, from_who, days, export_fmt, output_path):
 
 
 def _format_ts(ts_ms: int) -> str:
-	"""将毫秒时间戳格式化为可读日期"""
-	dt = datetime.datetime.fromtimestamp(ts_ms / 1000)
-	now = datetime.datetime.now()
+	"""将毫秒时间戳格式化为可读日期（使用本地时区）"""
+	dt = datetime.datetime.fromtimestamp(ts_ms / 1000, tz=datetime.timezone.utc).astimezone()
+	now = datetime.datetime.now(tz=datetime.timezone.utc).astimezone()
 	if dt.date() == now.date():
 		return dt.strftime("今天 %H:%M")
 	delta = (now.date() - dt.date()).days

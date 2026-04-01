@@ -34,7 +34,7 @@ class BrowserSession:
 	Tries CDP connection to user's Chrome first; falls back to headless patchright.
 	"""
 
-	def __init__(self, cookies: dict, user_agent: str, *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None):
+	def __init__(self, cookies: dict, user_agent: str, *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None, logger=None):
 		self._throttle = RequestThrottle(delay)
 		self._pw = None
 		self._browser = None
@@ -46,6 +46,14 @@ class BrowserSession:
 		self._cdp_url = cdp_url
 		self._is_cdp = False
 		self._own_context = False  # 是否由我们创建的 context（需要在 close 时清理）
+		self._logger = logger
+
+	def _log(self, message: str) -> None:
+		"""通过注入的 logger 输出，受 --log-level 控制。"""
+		if self._logger:
+			self._logger.info(message)
+		else:
+			print(message, file=sys.stderr)
 
 	def _ensure_started(self):
 		if self._started:
@@ -115,7 +123,7 @@ class BrowserSession:
 				pass  # 即使导航超时，页面 JS 环境已可用
 			self._started = True
 			self._is_cdp = True
-			print(f"[boss] CDP 连接成功 ({url})，使用用户 Chrome（隔离 context）", file=sys.stderr)
+			self._log(f"[boss] CDP 连接成功 ({url})，使用用户 Chrome（隔离 context）")
 			return True
 		except Exception:
 			if self._browser:
@@ -171,7 +179,7 @@ class BrowserSession:
 		self._page.wait_for_load_state("networkidle")
 		self._started = True
 		self._is_cdp = False
-		print("[boss] CDP 不可用（提示：需以 --remote-debugging-port=9222 启动 Chrome），降级到 headless patchright", file=sys.stderr)
+		self._log("[boss] CDP 不可用（提示：需以 --remote-debugging-port=9222 启动 Chrome），降级到 headless patchright")
 
 	# ── Core request via browser fetch() ─────────────────────────────
 
