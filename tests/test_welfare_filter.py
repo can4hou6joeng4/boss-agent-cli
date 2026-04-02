@@ -40,7 +40,7 @@ def _ctx_mock(mock_cls):
 @patch("boss_agent_cli.commands.search.AuthManager")
 def test_welfare_filter_tag_match(mock_auth, mock_client_cls, mock_cache_cls, mock_save):
 	"""福利筛选：标签直接匹配不需要查详情"""
-	mock_cache = mock_cache_cls.return_value
+	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.search_jobs.return_value = {
@@ -69,7 +69,7 @@ def test_welfare_filter_tag_match(mock_auth, mock_client_cls, mock_cache_cls, mo
 @patch("boss_agent_cli.commands.search.AuthManager")
 def test_welfare_filter_detail_fallback(mock_auth, mock_client_cls, mock_cache_cls, mock_save):
 	"""福利筛选：标签不够时并行查详情"""
-	mock_cache = mock_cache_cls.return_value
+	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.search_jobs.return_value = {

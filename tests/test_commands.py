@@ -53,6 +53,7 @@ def test_search_invalid_city(mock_client_cls, mock_auth_cls, mock_cache_cls):
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
 def test_greet_already_greeted(mock_cache_cls, mock_auth_cls, mock_client_cls):
+	_ctx_mock(mock_cache_cls)
 	mock_cache_cls.return_value.is_greeted.return_value = True
 	runner = CliRunner()
 	result = runner.invoke(cli, ["greet", "sec_001", "job_001"])
@@ -66,7 +67,7 @@ def test_greet_already_greeted(mock_cache_cls, mock_auth_cls, mock_client_cls):
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
 def test_batch_greet_dry_run(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
-	mock_cache = mock_cache_cls.return_value
+	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.search_jobs.return_value = {
@@ -125,7 +126,7 @@ def test_schema_includes_new_commands():
 	assert "interviews" in commands
 	assert "logout" in commands
 	assert "doctor" in commands
-	assert len(commands) == 16
+	assert len(commands) == 19
 
 
 @patch("boss_agent_cli.commands.doctor.extract_cookies")
@@ -176,7 +177,7 @@ def test_doctor_with_partial_token_quality_warn(mock_auth_cls, mock_probe_cdp, m
 @patch("boss_agent_cli.commands.recommend.BossClient")
 @patch("boss_agent_cli.commands.recommend.AuthManager")
 def test_recommend_success(mock_auth_cls, mock_client_cls, mock_cache_cls):
-	mock_cache = mock_cache_cls.return_value
+	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.recommend_jobs.return_value = {
@@ -219,7 +220,7 @@ def test_recommend_success(mock_auth_cls, mock_client_cls, mock_cache_cls):
 @patch("boss_agent_cli.commands.export.BossClient")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_to_stdout(mock_auth_cls, mock_client_cls):
-	mock_client = _ctx_mock(mock_client_cls)
+	mock_client =	_ctx_mock(mock_client_cls)
 	mock_client.search_jobs.return_value = {
 		"zpData": {
 			"hasMore": False,
@@ -282,6 +283,7 @@ def test_chat_from_boss_filter(mock_auth_cls, mock_client_cls):
 	import time
 	now_ms = int(time.time() * 1000)
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {
 			"result": [
@@ -308,6 +310,7 @@ def test_chat_days_filter(mock_auth_cls, mock_client_cls):
 	now_ms = int(time.time() * 1000)
 	old_ms = now_ms - 5 * 86400 * 1000  # 5 天前
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {
 			"result": [
@@ -333,6 +336,7 @@ def test_chat_combined_filter(mock_auth_cls, mock_client_cls):
 	now_ms = int(time.time() * 1000)
 	old_ms = now_ms - 5 * 86400 * 1000
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {
 			"result": [
@@ -359,6 +363,7 @@ def test_chat_export_md(mock_auth_cls, mock_client_cls, tmp_path):
 	import time
 	now_ms = int(time.time() * 1000)
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {
 			"result": [
@@ -396,6 +401,7 @@ def test_chat_export_csv(mock_auth_cls, mock_client_cls, tmp_path):
 	import time
 	now_ms = int(time.time() * 1000)
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {
 			"result": [
@@ -423,6 +429,7 @@ def test_chat_export_json_default_path(mock_auth_cls, mock_client_cls, tmp_path)
 	import time
 	now_ms = int(time.time() * 1000)
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {
 			"result": [
@@ -475,6 +482,7 @@ def test_chat_snapshot_diff(mock_auth_cls, mock_client_cls, tmp_path):
 
 	# 现在 API 返回多了一条
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {
 			"result": [
@@ -525,6 +533,7 @@ def test_chat_export_none_fields(mock_auth_cls, mock_client_cls, tmp_path):
 	import time
 	now_ms = int(time.time() * 1000)
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {
 			"result": [{
@@ -558,6 +567,7 @@ def test_chat_export_unknown_relation_type(mock_auth_cls, mock_client_cls, tmp_p
 	import time
 	now_ms = int(time.time() * 1000)
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {
 			"result": [
@@ -615,6 +625,7 @@ def test_chat_snapshot_page_merge(mock_auth_cls, mock_client_cls, tmp_path):
 
 	# 现在 API 返回 page=2 的不同记录
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {
 			"result": [
@@ -644,6 +655,7 @@ def test_chat_export_html(mock_auth_cls, mock_client_cls, tmp_path):
 	import time
 	now_ms = int(time.time() * 1000)
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {
 			"result": [
@@ -679,6 +691,7 @@ def test_chat_export_html_xss_prevention(mock_auth_cls, mock_client_cls, tmp_pat
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
 	xss_item = _make_friend_item("<script>alert(1)</script>", "公司&名", 1, now_ms)
 	xss_item["lastMsg"] = '<img onerror="alert(1)">'
+	_ctx_mock(mock_client_cls)
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {"result": [xss_item]},
 	}

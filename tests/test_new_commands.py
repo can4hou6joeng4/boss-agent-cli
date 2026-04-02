@@ -144,6 +144,8 @@ def test_exchange_wechat(mock_auth_cls, mock_client_cls):
 @patch("boss_agent_cli.commands.detail.BossClient")
 @patch("boss_agent_cli.commands.detail.AuthManager")
 def test_detail_with_job_id(mock_auth_cls, mock_client_cls, mock_cache_cls):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.job_detail.return_value = {
 		"code": 0,
@@ -156,6 +158,7 @@ def test_detail_with_job_id(mock_auth_cls, mock_client_cls, mock_cache_cls):
 				"locationName": "北京",
 				"postDescription": "职位描述",
 				"showSkills": ["Golang", "K8s"],
+				"jobLabels": ["Golang", "K8s"],
 				"encryptId": "enc_001",
 			},
 			"bossInfo": {
@@ -187,10 +190,10 @@ def test_detail_with_job_id(mock_auth_cls, mock_client_cls, mock_cache_cls):
 @patch("boss_agent_cli.commands.me.AuthManager")
 def test_me_basic(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
-	mock_client.user_info.return_value = {
-		"code": 0,
-		"zpData": {"name": "测试用户", "userId": 123},
-	}
+	mock_client.user_info.return_value = {"code": 0, "zpData": {"name": "测试用户", "userId": 123}}
+	mock_client.resume_baseinfo.return_value = {"code": 0, "zpData": {"degree": "本科"}}
+	mock_client.resume_expect.return_value = {"code": 0, "zpData": {"city": "北京"}}
+	mock_client.deliver_list.return_value = {"code": 0, "zpData": {"list": []}}
 	runner = CliRunner()
 	result = runner.invoke(cli, ["me"])
 	assert result.exit_code == 0
