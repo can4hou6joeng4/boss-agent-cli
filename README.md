@@ -168,18 +168,26 @@ npx skills add can4hou6joeng4/boss-agent-cli
 
 | 命令 | 说明 |
 |------|------|
-| `boss login` | 登录（Cookie 提取优先，失败扫码） |
-| `boss doctor` | 诊断本地环境、依赖、登录态和网络 |
+| `boss schema` | 输出完整能力描述（Agent 首先调用这个） |
+| `boss login` | 登录（Cookie 提取 → CDP → 扫码三级降级） |
 | `boss status` | 检查登录态 |
+| `boss doctor` | 诊断本地环境、依赖、登录态和网络 |
 | `boss me` | 我的信息（用户/简历/期望/投递记录） |
 | `boss search <query>` | 搜索职位（支持 `--welfare` 福利筛选） |
 | `boss recommend` | 个性化推荐 |
-| `boss detail <security_id>` | 职位详情（描述、地址、技能） |
-| `boss greet <security_id> <job_id>` | 向招聘者打招呼 |
+| `boss detail <security_id>` | 职位详情（`--job-id` 走快速通道） |
+| `boss show <#>` | 按编号查看上次搜索结果 |
+| `boss greet <sid> <jid>` | 向招聘者打招呼 |
 | `boss batch-greet <query>` | 批量打招呼（上限 10） |
+| `boss chat` | 沟通列表（支持筛选和导出 html/md/csv/json） |
+| `boss chatmsg <sid>` | 查看聊天消息历史 |
+| `boss mark <sid> --label X` | 联系人标签管理（9 种标签） |
+| `boss exchange <sid>` | 请求交换手机/微信 |
+| `boss interviews` | 面试邀请列表 |
+| `boss history` | 浏览历史 |
 | `boss export <query>` | 导出搜索结果（CSV / JSON） |
 | `boss cities` | 列出支持的 40 个城市 |
-| `boss schema` | 输出完整能力描述（Agent 自描述） |
+| `boss logout` | 退出登录 |
 
 ### 搜索筛选参数
 
