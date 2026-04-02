@@ -140,6 +140,7 @@ class BridgeClient:
 						credentials: 'include',
 						headers: {{
 							'Accept': 'application/json',
+							'X-Requested-With': 'XMLHttpRequest',
 							{f"'Referer': {json.dumps(referer)}," if referer else ""}
 						}},
 					}});
@@ -147,7 +148,7 @@ class BridgeClient:
 				}})()
 			"""
 		else:
-			form_entries = "\\n".join(
+			form_entries = "\n".join(
 				f"formData.append({json.dumps(k)}, {json.dumps(str(v))});"
 				for k, v in (data or {}).items()
 			)
@@ -161,6 +162,7 @@ class BridgeClient:
 						headers: {{
 							'Accept': 'application/json',
 							'Content-Type': 'application/x-www-form-urlencoded',
+							'X-Requested-With': 'XMLHttpRequest',
 							{f"'Referer': {json.dumps(referer)}," if referer else ""}
 						}},
 						body: formData.toString(),

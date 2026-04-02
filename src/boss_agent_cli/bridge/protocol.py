@@ -66,5 +66,6 @@ class BridgeResult:
 
 
 def make_command_id() -> str:
-	"""生成唯一命令 ID。"""
-	return f"cmd_{int(time.time() * 1000)}_{os.getpid()}"
+	"""生成唯一命令 ID（uuid 防碰撞）。"""
+	import uuid
+	return f"cmd_{uuid.uuid4().hex[:12]}"

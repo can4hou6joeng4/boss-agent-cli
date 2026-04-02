@@ -2,18 +2,18 @@
 
 接收 CLI 的 HTTP 命令，转发给 Chrome 扩展（WebSocket），返回结果。
 首次浏览器命令时自动启动，空闲 4h 后自动退出。
+
+依赖 aiohttp（可选依赖，仅 bridge extra 安装）。
 """
 
 import asyncio
 import json
 import os
 import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
-
-# daemon 需要 websockets 和 aiohttp，但作为可选依赖
-# 只在实际启动 daemon 时导入
 
 _PID_FILE = Path.home() / ".boss-agent" / "bridge" / "daemon.pid"
 _LOG_FILE = Path.home() / ".boss-agent" / "bridge" / "daemon.log"
@@ -56,7 +56,6 @@ def stop_daemon() -> bool:
 		return False
 	try:
 		os.kill(pid, signal.SIGTERM)
-		# 等待进程退出
 		for _ in range(20):
 			try:
 				os.kill(pid, 0)
@@ -70,95 +69,59 @@ def stop_daemon() -> bool:
 		return False
 
 
-def start_daemon_background() -> int:
-	"""在后台启动 daemon 进程，返回 PID。"""
+def start_daemon_background() -> int | None:
+	"""在后台启动 daemon 进程，返回实际 daemon PID。跨平台兼容。"""
 	if is_daemon_running():
 		return get_daemon_pid()
 
 	_ensure_dirs()
 
-	# Fork 一个子进程运行 daemon
-	pid = os.fork()
-	if pid > 0:
-		# 父进程：等待一小段时间确认启动
-		time.sleep(0.5)
-		return pid
+	# 跨平台后台启动：用 subprocess.Popen 替代 os.fork
+	kwargs = {}
+	if sys.platform == "win32":
+		# Windows: DETACHED_PROCESS 标志
+		kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+	else:
+		# Unix: 新会话脱离终端
+		kwargs["start_new_session"] = True
 
-	# 子进程：脱离终端
-	os.setsid()
-	pid2 = os.fork()
-	if pid2 > 0:
-		os._exit(0)
-
-	# 孙进程：真正的 daemon
-	# 重定向 stdio
-	sys.stdin.close()
 	log_fd = open(_LOG_FILE, "a")
-	os.dup2(log_fd.fileno(), sys.stdout.fileno())
-	os.dup2(log_fd.fileno(), sys.stderr.fileno())
+	proc = subprocess.Popen(
+		[sys.executable, "-m", "boss_agent_cli.bridge.daemon", "--serve"],
+		stdout=log_fd,
+		stderr=log_fd,
+		stdin=subprocess.DEVNULL,
+		**kwargs,
+	)
+	log_fd.close()
 
-	# 写 PID 文件
-	_PID_FILE.write_text(str(os.getpid()))
+	# 等待 PID 文件出现（daemon 启动后写入）
+	for _ in range(20):
+		time.sleep(0.25)
+		pid = get_daemon_pid()
+		if pid is not None:
+			return pid
 
-	# 运行 asyncio 事件循环
-	try:
-		asyncio.run(_run_daemon())
-	finally:
-		_PID_FILE.unlink(missing_ok=True)
-		os._exit(0)
+	# fallback: 返回 Popen 的 PID
+	return proc.pid
 
 
 async def _run_daemon():
-	"""daemon 主循环：HTTP 服务 + WebSocket 服务。"""
+	"""daemon 主循环：统一 aiohttp HTTP + WebSocket 服务。"""
 	from aiohttp import web
-	import websockets.server
 
 	from boss_agent_cli.bridge.protocol import (
 		BRIDGE_HOST, BRIDGE_PORT, DAEMON_IDLE_TIMEOUT,
 		DAEMON_WS_PATH, DAEMON_PING_PATH, DAEMON_STATUS_PATH, DAEMON_COMMAND_PATH,
 	)
 
-	# 状态
+	start_time = time.time()
 	ext_ws = None
 	ext_version = None
 	last_activity = time.time()
 	pending_commands: dict[str, asyncio.Future] = {}
 
-	# ── WebSocket handler（Chrome 扩展连接） ──────────────────────
-
-	async def ws_handler(websocket):
-		nonlocal ext_ws, ext_version
-		ext_ws = websocket
-		print(f"[bridge] 扩展已连接: {websocket.remote_address}", flush=True)
-		try:
-			async for message in websocket:
-				data = json.loads(message)
-				msg_type = data.get("type")
-
-				if msg_type == "hello":
-					ext_version = data.get("version", "unknown")
-					print(f"[bridge] 扩展版本: {ext_version}", flush=True)
-					continue
-
-				if msg_type == "log":
-					level = data.get("level", "info")
-					msg = data.get("msg", "")
-					print(f"[bridge:ext:{level}] {msg}", flush=True)
-					continue
-
-				# 命令结果
-				cmd_id = data.get("id")
-				if cmd_id and cmd_id in pending_commands:
-					pending_commands[cmd_id].set_result(data)
-		except Exception as e:
-			print(f"[bridge] 扩展断连: {e}", flush=True)
-		finally:
-			if ext_ws is websocket:
-				ext_ws = None
-				ext_version = None
-			print("[bridge] 扩展已断开", flush=True)
-
-	# ── HTTP handler ──────────────────────────────────────────────
+	# ── HTTP handlers ─────────────────────────────────────────────
 
 	async def handle_ping(request):
 		nonlocal last_activity
@@ -177,7 +140,7 @@ async def _run_daemon():
 		})
 
 	async def handle_command(request):
-		nonlocal last_activity, ext_ws
+		nonlocal last_activity
 		last_activity = time.time()
 
 		if ext_ws is None:
@@ -199,7 +162,7 @@ async def _run_daemon():
 		pending_commands[cmd_id] = future
 
 		try:
-			await ext_ws.send(json.dumps(cmd))
+			await ext_ws.send_json(cmd)
 			result = await asyncio.wait_for(future, timeout=30.0)
 			return web.json_response(result)
 		except asyncio.TimeoutError:
@@ -215,51 +178,14 @@ async def _run_daemon():
 		finally:
 			pending_commands.pop(cmd_id, None)
 
-	# ── 启动服务 ──────────────────────────────────────────────────
+	# ── WebSocket handler（Chrome 扩展连接） ──────────────────────
 
-	start_time = time.time()
-
-	# HTTP server
-	app = web.Application()
-	app.router.add_get(DAEMON_PING_PATH, handle_ping)
-	app.router.add_get(DAEMON_STATUS_PATH, handle_status)
-	app.router.add_post(DAEMON_COMMAND_PATH, handle_command)
-
-	runner = web.AppRunner(app, access_log=None)
-	await runner.setup()
-	site = web.TCPSite(runner, BRIDGE_HOST, BRIDGE_PORT)
-	await site.start()
-	print(f"[bridge] HTTP 服务启动: http://{BRIDGE_HOST}:{BRIDGE_PORT}", flush=True)
-
-	# WebSocket server（独立端口或同端口不同路径）
-	# 使用 aiohttp 的 WebSocket 支持替代 websockets 库
-	ws_app = web.Application()
-
-	async def ws_upgrade_handler(request):
-		ws = web.WebSocketResponse()
-		await ws.prepare(request)
-		await _ws_handler_aiohttp(ws, ext_ws_holder={})
-		return ws
-
-	# 用 aiohttp 内置 WebSocket 替代 websockets 库，减少依赖
-	# 重写为统一 HTTP server 处理 WS 升级
-	# 这里简化：在同一个 app 上加 WS 路由
-
-	# 清理之前的方案，用 aiohttp 统一处理
-	await runner.cleanup()
-
-	# 重建统一 app
-	unified_app = web.Application()
-	unified_app.router.add_get(DAEMON_PING_PATH, handle_ping)
-	unified_app.router.add_get(DAEMON_STATUS_PATH, handle_status)
-	unified_app.router.add_post(DAEMON_COMMAND_PATH, handle_command)
-
-	async def ws_aiohttp_handler(request):
+	async def ws_handler(request):
 		nonlocal ext_ws, ext_version
 		ws = web.WebSocketResponse()
 		await ws.prepare(request)
 		ext_ws = ws
-		print(f"[bridge] 扩展已连接 (aiohttp WS)", flush=True)
+		print(f"[bridge] 扩展已连接", flush=True)
 
 		try:
 			async for msg in ws:
@@ -278,6 +204,7 @@ async def _run_daemon():
 						print(f"[bridge:ext:{level}] {log_msg}", flush=True)
 						continue
 
+					# 命令结果
 					cmd_id = data.get("id")
 					if cmd_id and cmd_id in pending_commands:
 						pending_commands[cmd_id].set_result(data)
@@ -287,18 +214,31 @@ async def _run_daemon():
 			if ext_ws is ws:
 				ext_ws = None
 				ext_version = None
+				# 扩展断连：取消所有 pending 命令
+				for cmd_id, fut in list(pending_commands.items()):
+					if not fut.done():
+						fut.set_result({"id": cmd_id, "ok": False, "error": "Extension disconnected"})
 			print("[bridge] 扩展已断开", flush=True)
 
 		return ws
 
-	unified_app.router.add_get(DAEMON_WS_PATH, ws_aiohttp_handler)
+	# ── 启动统一服务 ──────────────────────────────────────────────
 
-	unified_runner = web.AppRunner(unified_app, access_log=None)
-	await unified_runner.setup()
-	unified_site = web.TCPSite(unified_runner, BRIDGE_HOST, BRIDGE_PORT)
-	await unified_site.start()
-	print(f"[bridge] 统一服务启动: http://{BRIDGE_HOST}:{BRIDGE_PORT}", flush=True)
+	app = web.Application()
+	app.router.add_get(DAEMON_PING_PATH, handle_ping)
+	app.router.add_get(DAEMON_STATUS_PATH, handle_status)
+	app.router.add_post(DAEMON_COMMAND_PATH, handle_command)
+	app.router.add_get(DAEMON_WS_PATH, ws_handler)
+
+	runner = web.AppRunner(app, access_log=None)
+	await runner.setup()
+	site = web.TCPSite(runner, BRIDGE_HOST, BRIDGE_PORT)
+	await site.start()
+	print(f"[bridge] 服务启动: http://{BRIDGE_HOST}:{BRIDGE_PORT}", flush=True)
 	print(f"[bridge] PID: {os.getpid()}, 空闲超时: {DAEMON_IDLE_TIMEOUT}s", flush=True)
+
+	# 写 PID 文件（服务启动后再写，确保端口可用）
+	_PID_FILE.write_text(str(os.getpid()))
 
 	# ── 空闲超时检查 ──────────────────────────────────────────────
 
@@ -312,5 +252,19 @@ async def _run_daemon():
 	except asyncio.CancelledError:
 		pass
 	finally:
-		await unified_runner.cleanup()
+		_PID_FILE.unlink(missing_ok=True)
+		await runner.cleanup()
 		print("[bridge] daemon 已停止", flush=True)
+
+
+# ── CLI 入口：python -m boss_agent_cli.bridge.daemon --serve ────────
+
+if __name__ == "__main__":
+	if "--serve" in sys.argv:
+		_ensure_dirs()
+		try:
+			asyncio.run(_run_daemon())
+		except KeyboardInterrupt:
+			pass
+		finally:
+			_PID_FILE.unlink(missing_ok=True)
