@@ -11,9 +11,9 @@ from boss_agent_cli.api.endpoints import (
 	STAGE_CODES,
 )
 from boss_agent_cli.api.models import JobItem
-from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
+from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.display import handle_error_output, handle_output, render_job_table
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_job_table
 from boss_agent_cli.index_cache import save_index
 from boss_agent_cli.output import emit_success
 from boss_agent_cli.search_filters import (
@@ -37,6 +37,7 @@ from boss_agent_cli.search_filters import (
 @click.option("--page", default=1, help="页码")
 @click.option("--no-cache", is_flag=True, default=False, help="跳过缓存")
 @click.pass_context
+@handle_auth_errors("search")
 def search_cmd(ctx, query, city, salary, experience, education, industry, scale, stage, job_type, welfare, page, no_cache):
 	"""按关键词和筛选条件搜索职位列表"""
 	data_dir = ctx.obj["data_dir"]
@@ -65,29 +66,26 @@ def search_cmd(ctx, query, city, salary, experience, education, industry, scale,
 		job_type=job_type,
 	)
 
-	cache = CacheStore(data_dir / "cache" / "boss_agent.db")
+	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+		# 有福利筛选时跳过缓存（因为需要逐个查详情）
+		if not welfare_conditions and not no_cache:
+			search_params = {
+				"query": query, "city": city, "salary": salary,
+				"experience": experience, "education": education,
+				"industry": industry, "scale": scale, "stage": stage,
+				"job_type": job_type, "page": page,
+			}
+			cached = cache.get_search(search_params)
+			if cached is not None:
+				logger.debug("搜索命中缓存")
+				result = json.loads(cached)
+				handle_output(
+					ctx, "search", result["data"],
+					render=lambda data: render_job_table(data, f"search: {query}"),
+					pagination=result.get("pagination"), hints=result.get("hints"),
+				)
+				return
 
-	# 有福利筛选时跳过缓存（因为需要逐个查详情）
-	if not welfare_conditions and not no_cache:
-		search_params = {
-			"query": query, "city": city, "salary": salary,
-			"experience": experience, "education": education,
-			"industry": industry, "scale": scale, "stage": stage,
-			"job_type": job_type, "page": page,
-		}
-		cached = cache.get_search(search_params)
-		if cached is not None:
-			logger.debug("搜索命中缓存")
-			result = json.loads(cached)
-			handle_output(
-				ctx, "search", result["data"],
-				render=lambda data: render_job_table(data, f"search: {query}"),
-				pagination=result.get("pagination"), hints=result.get("hints"),
-			)
-			cache.close()
-			return
-
-	try:
 		auth = AuthManager(data_dir, logger=logger)
 		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
 			max_pages = 5 if welfare_conditions else 1
@@ -154,23 +152,3 @@ def search_cmd(ctx, query, city, salary, experience, education, industry, scale,
 				),
 				pagination=pagination, hints=hints,
 			)
-	except AuthRequired:
-		handle_error_output(
-			ctx, "search", code="AUTH_REQUIRED",
-			message="未登录，请先执行 boss login",
-			recoverable=True, recovery_action="boss login",
-		)
-	except TokenRefreshFailed:
-		handle_error_output(
-			ctx, "search", code="TOKEN_REFRESH_FAILED",
-			message="Token 刷新失败，请重新登录",
-			recoverable=True, recovery_action="boss login",
-		)
-	except Exception as e:
-		handle_error_output(
-			ctx, "search", code="NETWORK_ERROR",
-			message=f"搜索失败: {e}",
-			recoverable=True, recovery_action="重试",
-		)
-	finally:
-		cache.close()

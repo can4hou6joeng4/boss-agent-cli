@@ -1,9 +1,9 @@
 import click
 
 from boss_agent_cli.api.client import BossClient
-from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
+from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.display import handle_error_output, handle_output, render_job_detail
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_job_detail
 
 
 @click.command("detail")
@@ -11,6 +11,7 @@ from boss_agent_cli.display import handle_error_output, handle_output, render_jo
 @click.option("--lid", default="", help="列表项 ID（从 search 结果获取，可选）")
 @click.option("--job-id", default="", help="职位加密 ID（提供时走 httpx 快速通道，跳过浏览器）")
 @click.pass_context
+@handle_auth_errors("detail")
 def detail_cmd(ctx, security_id, lid, job_id):
 	"""查看职位完整信息（职位描述、地址、招聘者信息）"""
 	data_dir = ctx.obj["data_dir"]
@@ -18,55 +19,32 @@ def detail_cmd(ctx, security_id, lid, job_id):
 	delay = ctx.obj["delay"]
 	cdp_url = ctx.obj.get("cdp_url")
 
-	try:
-		auth = AuthManager(data_dir, logger=logger)
-		client = BossClient(auth, delay=delay, cdp_url=cdp_url)
+	auth = AuthManager(data_dir, logger=logger)
+	client = BossClient(auth, delay=delay, cdp_url=cdp_url)
 
-		# 优先走 httpx 快速通道：显式传入 > 缓存查找 > 降级浏览器通道
-		if not job_id:
-			cache = CacheStore(data_dir / "cache" / "boss_agent.db")
+	# 优先走 httpx 快速通道：显式传入 > 缓存查找 > 降级浏览器通道
+	if not job_id:
+		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 			job_id = cache.get_job_id(security_id) or ""
-			cache.close()
-			if job_id:
-				logger.info(f"从缓存命中 job_id，走 httpx 快速通道")
-
 		if job_id:
-			result = _detail_via_httpx(client, security_id, job_id, data_dir)
-		else:
-			result = _detail_via_browser(client, security_id, lid, data_dir)
+			logger.info(f"从缓存命中 job_id，走 httpx 快速通道")
 
-		if result is None:
-			handle_error_output(
-				ctx, "detail",
-				code="JOB_NOT_FOUND",
-				message="职位不存在或已下架",
-			)
-			return
+	if job_id:
+		result = _detail_via_httpx(client, security_id, job_id, data_dir)
+	else:
+		result = _detail_via_browser(client, security_id, lid, data_dir)
 
-		greet_target = f"boss greet {security_id} {result['job_id']}"
-		hints = {"next_actions": [greet_target, "boss search <query>"]}
-		handle_output(ctx, "detail", result, render=render_job_detail, hints=hints)
-	except AuthRequired:
+	if result is None:
 		handle_error_output(
 			ctx, "detail",
-			code="AUTH_REQUIRED",
-			message="未登录，请先执行 boss login",
-			recoverable=True, recovery_action="boss login",
+			code="JOB_NOT_FOUND",
+			message="职位不存在或已下架",
 		)
-	except TokenRefreshFailed:
-		handle_error_output(
-			ctx, "detail",
-			code="TOKEN_REFRESH_FAILED",
-			message="Token 刷新失败，请重新登录",
-			recoverable=True, recovery_action="boss login",
-		)
-	except Exception as e:
-		handle_error_output(
-			ctx, "detail",
-			code="NETWORK_ERROR",
-			message=f"获取职位详情失败: {e}",
-			recoverable=True, recovery_action="重试",
-		)
+		return
+
+	greet_target = f"boss greet {security_id} {result['job_id']}"
+	hints = {"next_actions": [greet_target, "boss search <query>"]}
+	handle_output(ctx, "detail", result, render=render_job_detail, hints=hints)
 
 
 def _detail_via_httpx(client, security_id, job_id, data_dir):
@@ -80,9 +58,8 @@ def _detail_via_httpx(client, security_id, job_id, data_dir):
 	if not job_info:
 		return None
 
-	cache = CacheStore(data_dir / "cache" / "boss_agent.db")
-	greeted = cache.is_greeted(security_id)
-	cache.close()
+	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+		greeted = cache.is_greeted(security_id)
 
 	return {
 		"job_id": job_id,
@@ -112,9 +89,8 @@ def _detail_via_browser(client, security_id, lid, data_dir):
 
 	job_id = card.get("encryptJobId", "")
 
-	cache = CacheStore(data_dir / "cache" / "boss_agent.db")
-	greeted = cache.is_greeted(security_id)
-	cache.close()
+	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+		greeted = cache.is_greeted(security_id)
 
 	return {
 		"job_id": job_id,

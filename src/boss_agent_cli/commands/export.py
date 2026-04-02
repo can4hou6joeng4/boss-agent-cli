@@ -7,8 +7,8 @@ import click
 
 from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.api.models import JobItem
-from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
-from boss_agent_cli.display import handle_error_output, handle_output, render_export_summary, render_job_table
+from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.display import handle_auth_errors, handle_output, render_export_summary, render_job_table
 
 
 @click.command("export")
@@ -19,6 +19,7 @@ from boss_agent_cli.display import handle_error_output, handle_output, render_ex
 @click.option("--format", "fmt", default="csv", type=click.Choice(["html", "csv", "json"]), help="输出格式")
 @click.option("--output", "-o", default=None, help="输出文件路径（不指定则输出到 stdout JSON 信封）")
 @click.pass_context
+@handle_auth_errors("export")
 def export_cmd(ctx, query, city, salary, count, fmt, output):
 	"""导出搜索结果为 CSV 或 JSON 文件"""
 	data_dir = ctx.obj["data_dir"]
@@ -26,70 +27,63 @@ def export_cmd(ctx, query, city, salary, count, fmt, output):
 	delay = ctx.obj["delay"]
 	cdp_url = ctx.obj.get("cdp_url")
 
-	try:
-		auth = AuthManager(data_dir, logger=logger)
-		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-			all_items = []
-			page = 1
-			max_pages = (count + 14) // 15  # 每页约 15 条
+	auth = AuthManager(data_dir, logger=logger)
+	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+		all_items = []
+		page = 1
+		max_pages = (count + 14) // 15  # 每页约 15 条
 
-			while len(all_items) < count and page <= max_pages:
-				logger.info(f"正在获取第 {page} 页...")
-				raw = client.search_jobs(query, city=city, salary=salary, page=page)
-				zp_data = raw.get("zpData", {})
-				job_list = zp_data.get("jobList", [])
-				if not job_list:
+		while len(all_items) < count and page <= max_pages:
+			logger.info(f"正在获取第 {page} 页...")
+			raw = client.search_jobs(query, city=city, salary=salary, page=page)
+			zp_data = raw.get("zpData", {})
+			job_list = zp_data.get("jobList", [])
+			if not job_list:
+				break
+
+			for raw_item in job_list:
+				if len(all_items) >= count:
 					break
+				item = JobItem.from_api(raw_item)
+				all_items.append(item.to_dict())
 
-				for raw_item in job_list:
-					if len(all_items) >= count:
-						break
-					item = JobItem.from_api(raw_item)
-					all_items.append(item.to_dict())
+			if not zp_data.get("hasMore", False):
+				break
+			page += 1
 
-				if not zp_data.get("hasMore", False):
-					break
-				page += 1
-
-			if output:
-				_write_to_file(all_items, fmt, output)
-				data = {
-					"message": f"已导出 {len(all_items)} 条到 {output}",
-					"count": len(all_items),
-					"format": fmt,
-					"path": output,
-				}
-				handle_output(
-					ctx, "export", data,
-					render=lambda d: render_export_summary(d),
-					hints={
-						"next_actions": [
-							"boss search <query> — 继续搜索",
-							"boss recommend — 获取个性化推荐",
-						],
-					},
-				)
-			else:
-				data = {
-					"count": len(all_items),
-					"format": fmt,
-					"jobs": all_items,
-				}
-				handle_output(
-					ctx, "export", data,
-					render=lambda d: render_job_table(d.get("jobs", []), "export"),
-					hints={
-						"next_actions": [
-							"boss export <query> -o file.csv — 导出到文件",
-						],
-					},
-				)
-	except AuthRequired:
-		handle_error_output(ctx, "export", code="AUTH_REQUIRED", message="未登录", recoverable=True, recovery_action="boss login")
-	except TokenRefreshFailed:
-		handle_error_output(ctx, "export", code="TOKEN_REFRESH_FAILED", message="Token 刷新失败", recoverable=True, recovery_action="boss login")
-	except Exception as e:
-		handle_error_output(ctx, "export", code="NETWORK_ERROR", message=f"导出失败: {e}", recoverable=True, recovery_action="重试")
+		if output:
+			_write_to_file(all_items, fmt, output)
+			data = {
+				"message": f"已导出 {len(all_items)} 条到 {output}",
+				"count": len(all_items),
+				"format": fmt,
+				"path": output,
+			}
+			handle_output(
+				ctx, "export", data,
+				render=lambda d: render_export_summary(d),
+				hints={
+					"next_actions": [
+						"boss search <query> — 继续搜索",
+						"boss recommend — 获取个性化推荐",
+					],
+				},
+			)
+		else:
+			data = {
+				"count": len(all_items),
+				"format": fmt,
+				"jobs": all_items,
+			}
+			handle_output(
+				ctx, "export", data,
+				render=lambda d: render_job_table(d.get("jobs", []), "export"),
+				hints={
+					"next_actions": [
+						"boss export <query> -o file.csv — 导出到文件",
+					],
+				},
+			)
 
 
 def _write_to_file(items: list[dict], fmt: str, path: str):

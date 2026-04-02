@@ -9,8 +9,8 @@ import time
 import click
 
 from boss_agent_cli.api.client import BossClient
-from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
-from boss_agent_cli.display import handle_error_output, handle_output, render_simple_list
+from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_simple_list
 
 # relationType 映射：API 返回值 → 可读标签
 _RELATION_LABELS = {1: "对方主动", 2: "我主动", 3: "投递"}
@@ -52,6 +52,7 @@ def _escape_md_cell(value: str) -> str:
 @click.option("-o", "--output", "output_path", default=None,
 	help="输出文件路径（不指定则自动保存到配置的 export_dir）")
 @click.pass_context
+@handle_auth_errors("chat")
 def chat_cmd(ctx, page, from_who, days, export_fmt, output_path):
 	"""查看沟通列表（支持按发起方、时间筛选，支持导出）"""
 	data_dir = ctx.obj["data_dir"]
@@ -70,9 +71,8 @@ def chat_cmd(ctx, page, from_who, days, export_fmt, output_path):
 		)
 		return
 
-	try:
-		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-			resp = client.friend_list(page=page)
+	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+		resp = client.friend_list(page=page)
 		zp_data = resp.get("zpData", {})
 		items = zp_data.get("result") or zp_data.get("friendList") or []
 
@@ -205,27 +205,7 @@ def chat_cmd(ctx, page, from_who, days, export_fmt, output_path):
 				"boss greet <security_id> <job_id> — 打招呼",
 			]},
 		)
-	except AuthRequired:
-		handle_error_output(
-			ctx, "chat",
-			code="AUTH_REQUIRED",
-			message="登录态已失效，请重新登录",
-			recoverable=True, recovery_action="boss login",
-		)
-	except TokenRefreshFailed:
-		handle_error_output(
-			ctx, "chat",
-			code="TOKEN_REFRESH_FAILED",
-			message="Token 刷新失败，请重新登录",
-			recoverable=True, recovery_action="boss login",
-		)
-	except Exception as e:
-		handle_error_output(
-			ctx, "chat",
-			code="NETWORK_ERROR",
-			message=f"获取沟通列表失败: {e}",
-			recoverable=True, recovery_action="重试",
-		)
+
 
 
 # ── 时间格式化 ────────────────────────────────────────────────────
