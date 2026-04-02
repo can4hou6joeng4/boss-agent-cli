@@ -47,6 +47,8 @@ class BrowserSession:
 		self._is_cdp = False
 		self._own_context = False  # 是否由我们创建的 context（需要在 close 时清理）
 		self._logger = logger
+		self._bridge_client = None
+		self._is_bridge = False
 
 	def _log(self, message: str) -> None:
 		"""通过注入的 logger 输出，受 --log-level 控制。"""
@@ -58,14 +60,38 @@ class BrowserSession:
 	def _ensure_started(self):
 		if self._started:
 			return
+
+		# 优先尝试 Bridge 模式（Chrome 扩展 + daemon，零配置）
+		if self._try_bridge():
+			return
+
 		self._pw = sync_playwright().start()
 
-		# 优先尝试 CDP 连接用户 Chrome（真实指纹 + 天然登录态）
+		# 第二优先：CDP 连接用户 Chrome（真实指纹 + 天然登录态）
 		if self._try_cdp():
 			return
 
-		# 降级：启动 headless patchright
+		# 兜底：启动 headless patchright
 		self._start_headless()
+
+	def _try_bridge(self) -> bool:
+		"""尝试通过 Browser Bridge（Chrome 扩展 + daemon）连接。"""
+		try:
+			from boss_agent_cli.bridge.client import BridgeClient
+			client = BridgeClient()
+			if not client.is_running():
+				return False
+			if not client.is_extension_connected():
+				self._log("[boss] Bridge daemon 运行中但扩展未连接")
+				return False
+			self._bridge_client = client
+			self._started = True
+			self._is_cdp = False
+			self._is_bridge = True
+			self._log("[boss] Bridge 模式连接成功（Chrome 扩展 + daemon）")
+			return True
+		except Exception:
+			return False
 
 	def _try_cdp(self) -> bool:
 		"""Try connecting to user's Chrome via CDP.
@@ -189,6 +215,22 @@ class BrowserSession:
 
 		referer = endpoints.REFERER_MAP.get(url, f"{endpoints.BASE_URL}/")
 
+		# Bridge 模式：通过扩展 fetch
+		if self._is_bridge and self._bridge_client:
+			import urllib.parse
+			full_url = url
+			if params:
+				full_url = f"{url}?{urllib.parse.urlencode(params)}"
+			result = self._bridge_client.fetch_json(
+				full_url,
+				method=method,
+				data=data,
+				referer=referer,
+			)
+			self._throttle.mark()
+			return result
+
+		# Playwright 模式（CDP 或 headless）
 		result = self._page.evaluate("""
 			async ({method, url, params, data, referer}) => {
 				try {
@@ -239,6 +281,15 @@ class BrowserSession:
 		return self._is_cdp
 
 	def close(self):
+		if self._is_bridge and self._bridge_client:
+			try:
+				self._bridge_client.close_window()
+			except Exception:
+				pass
+			self._bridge_client = None
+			self._started = False
+			return
+
 		if self._is_cdp:
 			# CDP 模式：关闭我们创建的 page 和 context，不关闭用户浏览器
 			if self._page:

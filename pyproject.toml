@@ -33,6 +33,7 @@ dependencies = [
 	"browser-cookie3>=0.16.2",
 	"rich>=13.0",
 	"pyyaml>=6.0",
+	"aiohttp>=3.9",
 ]
 
 [project.urls]

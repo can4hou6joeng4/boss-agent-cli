@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "BOSS Agent Bridge",
+  "version": "1.0.0",
+  "description": "Browser Bridge for boss-agent-cli — executes commands in Chrome via local daemon.",
+  "permissions": [
+    "debugger",
+    "tabs",
+    "cookies",
+    "activeTab",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://*.zhipin.com/*",
+    "http://127.0.0.1:19826/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "BOSS Agent Bridge",
+    "default_popup": "popup.html"
+  }
+}

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+	body { width: 240px; padding: 12px; font-family: -apple-system, sans-serif; font-size: 13px; }
+	.status { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+	.dot { width: 10px; height: 10px; border-radius: 50%; }
+	.dot.on { background: #00b38a; }
+	.dot.off { background: #ccc; }
+	.label { color: #666; }
+	h3 { margin: 0 0 8px; font-size: 14px; }
+</style>
+</head>
+<body>
+<h3>BOSS Agent Bridge</h3>
+<div class="status">
+	<div class="dot" id="dot"></div>
+	<span id="label">检查中...</span>
+</div>
+<div class="label" id="hint"></div>
+<script>
+	chrome.runtime.sendMessage({ type: 'getStatus' }, (res) => {
+		const dot = document.getElementById('dot');
+		const label = document.getElementById('label');
+		const hint = document.getElementById('hint');
+		if (res?.connected) {
+			dot.classList.add('on');
+			label.textContent = '已连接 daemon';
+			hint.textContent = 'boss-agent-cli 可以使用 Bridge 模式';
+		} else {
+			dot.classList.add('off');
+			label.textContent = '未连接';
+			hint.textContent = '运行 boss doctor 检查状态';
+		}
+	});
+</script>
+</body>
+</html>
