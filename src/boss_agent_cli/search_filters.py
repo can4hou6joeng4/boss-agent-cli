@@ -192,7 +192,7 @@ def _fetch_and_check(client, welfare_conditions, raw_item) -> dict | None:
 			raw_item.get("lid", ""),
 		)
 		desc = card_raw.get("zpData", {}).get("jobCard", {}).get("postDescription", "")
-	except Exception:
+	except (OSError, KeyError, TypeError):
 		desc = ""
 
 	match_results = match_all_welfare(welfare_conditions, welfare_list, desc)

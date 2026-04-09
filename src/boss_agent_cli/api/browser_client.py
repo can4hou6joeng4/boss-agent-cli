@@ -18,6 +18,10 @@ from boss_agent_cli.api.throttle import RequestThrottle
 HOME_URL = "https://www.zhipin.com/"
 CDP_DEFAULT_URL = "http://localhost:9222"
 
+# 超时常量
+_CDP_PROBE_TIMEOUT = 3           # CDP 探测 HTTP 超时（秒）
+_NAV_TIMEOUT_MS = 15000          # 页面导航超时（毫秒）
+
 # macOS / Linux / Windows Chrome user data 默认路径
 _CHROME_USER_DATA_CANDIDATES = [
 	Path.home() / "Library/Application Support/Google/Chrome",              # macOS
@@ -142,7 +146,7 @@ class BrowserSession:
 			self._page = self._context.new_page()
 			# CDP 模式下用较长超时 + commit 级等待（避免 networkidle 卡住）
 			try:
-				self._page.goto(HOME_URL, wait_until="commit", timeout=15000)
+				self._page.goto(HOME_URL, wait_until="commit", timeout=_NAV_TIMEOUT_MS)
 			except Exception:
 				pass  # 即使导航超时，页面 JS 环境已可用
 			self._started = True
@@ -163,7 +167,7 @@ class BrowserSession:
 		"""Fetch WebSocket debugger URL from Chrome's /json/version endpoint."""
 		import httpx
 		try:
-			resp = httpx.get(f"{http_url}/json/version", timeout=3)
+			resp = httpx.get(f"{http_url}/json/version", timeout=_CDP_PROBE_TIMEOUT)
 			return resp.json().get("webSocketDebuggerUrl")
 		except Exception:
 			return None

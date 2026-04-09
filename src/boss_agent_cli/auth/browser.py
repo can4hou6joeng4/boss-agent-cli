@@ -7,13 +7,19 @@ LOGIN_PAGE_URL = "https://www.zhipin.com/web/user/"
 HOME_URL = "https://www.zhipin.com/"
 _DEFAULT_CDP_URL = "http://localhost:9222"
 
+# 超时常量（秒/毫秒）
+_CDP_PROBE_TIMEOUT = 3           # CDP 探测 HTTP 超时（秒）
+_NAV_TIMEOUT_MS = 15000          # 页面导航超时（毫秒）
+_POST_LOGIN_WAIT = 3             # 登录成功后等待 cookie 传播（秒）
+_STOKEN_GENERATION_WAIT = 2      # stoken 生成等待（秒）
+
 
 def probe_cdp(cdp_url: str | None = None) -> str | None:
 	"""探测 CDP 是否可用，返回 WebSocket URL 或 None。"""
 	import httpx
 	base = cdp_url or _DEFAULT_CDP_URL
 	try:
-		resp = httpx.get(f"{base}/json/version", timeout=3)
+		resp = httpx.get(f"{base}/json/version", timeout=_CDP_PROBE_TIMEOUT)
 		return resp.json().get("webSocketDebuggerUrl")
 	except Exception:
 		return None
@@ -37,7 +43,7 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120) -> dict:
 	try:
 		page.goto(
 			f"{LOGIN_PAGE_URL}?ka=header-login",
-			wait_until="commit", timeout=15000,
+			wait_until="commit", timeout=_NAV_TIMEOUT_MS,
 		)
 	except Exception:
 		pass
@@ -115,7 +121,7 @@ def login_via_browser(*, timeout: int = 120) -> dict:
 			raise TimeoutError(f"扫码登录超时（{timeout}秒）")
 
 		print("检测到登录成功，正在提取凭证...", file=sys.stderr)
-		time.sleep(3)
+		time.sleep(_POST_LOGIN_WAIT)
 
 		# 跳转主站提取完整 cookies 和 stoken
 		page.goto(HOME_URL, wait_until="domcontentloaded")
@@ -150,7 +156,7 @@ def refresh_stoken_via_cdp(cdp_url: str | None = None) -> str:
 		page.goto(HOME_URL, wait_until="commit", timeout=15000)
 	except Exception:
 		pass
-	time.sleep(2)
+	time.sleep(_STOKEN_GENERATION_WAIT)
 
 	stoken = _extract_stoken(page)
 	page.close()
