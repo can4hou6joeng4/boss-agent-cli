@@ -13,6 +13,8 @@
 
 [English](#features) · [安装](#安装) · [快速开始](#快速开始) · [AI Agent 集成](#ai-agent-集成) · [命令参考](#命令参考)
 
+<img src="demo.gif" alt="boss-agent-cli 终端演示" width="100%">
+
 </div>
 
 ---
