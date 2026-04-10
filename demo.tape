@@ -55,14 +55,14 @@ Ctrl+L
 Sleep 300ms
 
 # ══════════════════════════════════════════════════
-# Act 4: 核心功能 — 搜索 + 福利精准筛选
+# Act 4: 可复现能力 — 支持城市列表
 # ══════════════════════════════════════════════════
-Type "# 搜索 + 福利精准筛选（自动翻页 + 详情匹配，只返回命中结果）"
+Type "# 支持城市列表：40 个城市编码可直接供 Agent 选择"
 Enter
 Sleep 800ms
-Type 'boss search "Golang" --city 广州 --welfare "双休,五险一金"'
-Sleep 500ms
+Type "boss cities"
+Sleep 300ms
 Enter
-Sleep 8s
+Sleep 4s
 
 Sleep 2s
