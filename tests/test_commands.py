@@ -128,7 +128,9 @@ def test_schema_includes_new_commands():
 	assert "logout" in commands
 	assert "doctor" in commands
 	assert "watch" in commands
-	assert len(commands) == 20
+	assert "pipeline" in commands
+	assert "follow-up" in commands
+	assert len(commands) == 22
 
 
 @patch("boss_agent_cli.commands.doctor.extract_cookies")

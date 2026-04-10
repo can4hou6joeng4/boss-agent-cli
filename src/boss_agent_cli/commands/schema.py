@@ -327,6 +327,20 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {},
 		},
+		"pipeline": {
+			"description": "聚合聊天和面试数据，生成统一候选进度视图",
+			"args": [],
+			"options": {
+				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则标记为 follow_up"},
+			},
+		},
+		"follow-up": {
+			"description": "筛出需要优先跟进的候选项（未读、超时未推进、面试）",
+			"args": [],
+			"options": {
+				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则视为 follow_up"},
+			},
+		},
 	},
 	"global_options": {
 		"--data-dir": {
