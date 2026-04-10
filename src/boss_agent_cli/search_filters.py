@@ -248,6 +248,7 @@ def run_search_pipeline(
 	stats = SearchPipelineStats()
 	matched: list[dict] = []
 	current_page = start_page
+	last_page_scanned = 0
 	has_more = False
 
 	for _ in range(max_pages):
@@ -265,6 +266,7 @@ def run_search_pipeline(
 		)
 		zp_data = raw.get("zpData", {})
 		job_list = zp_data.get("jobList", [])
+		last_page_scanned = current_page
 		stats.pages_scanned += 1
 		stats.jobs_seen += len(job_list)
 
@@ -333,6 +335,6 @@ def run_search_pipeline(
 		items=matched,
 		has_more=has_more,
 		total=len(matched),
-		last_page=current_page,
+		last_page=last_page_scanned,
 		stats=stats,
 	)
