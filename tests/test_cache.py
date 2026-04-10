@@ -54,3 +54,35 @@ def test_search_cache_max_100(tmp_path):
 		store.put_search({"query": f"q{i}", "page": "1"}, f'{{"i": {i}}}')
 	assert store.get_search({"query": "q0", "page": "1"}) is None
 	assert store.get_search({"query": "q104", "page": "1"}) is not None
+
+
+def test_saved_search_crud(tmp_path):
+	store = CacheStore(tmp_path / "test.db")
+	store.save_saved_search("golang-gz", {"query": "golang", "city": "广州", "welfare": "双休"})
+	record = store.get_saved_search("golang-gz")
+	assert record is not None
+	assert record["params"]["query"] == "golang"
+	assert len(store.list_saved_searches()) == 1
+	assert store.delete_saved_search("golang-gz") is True
+	assert store.get_saved_search("golang-gz") is None
+
+
+def test_watch_results_only_mark_new_items_once(tmp_path):
+	store = CacheStore(tmp_path / "test.db")
+	first = store.record_watch_results(
+		"golang-gz",
+		[
+			{"security_id": "sec-1", "job_id": "job-1", "title": "Go 开发"},
+			{"security_id": "sec-2", "job_id": "job-2", "title": "Python 开发"},
+		],
+	)
+	second = store.record_watch_results(
+		"golang-gz",
+		[
+			{"security_id": "sec-2", "job_id": "job-2", "title": "Python 开发"},
+			{"security_id": "sec-3", "job_id": "job-3", "title": "Rust 开发"},
+		],
+	)
+	assert first["new_count"] == 2
+	assert second["new_count"] == 1
+	assert second["new_items"][0]["security_id"] == "sec-3"

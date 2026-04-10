@@ -2,7 +2,7 @@ from pathlib import Path
 
 import click
 
-from boss_agent_cli.commands import schema, login, logout, status, doctor, search, detail, greet, recommend, export, cities, me, chat, chatmsg, mark, exchange, interviews, show, history
+from boss_agent_cli.commands import schema, login, logout, status, doctor, search, detail, greet, recommend, export, cities, me, chat, chatmsg, mark, exchange, interviews, show, history, watch
 from boss_agent_cli.config import load_config
 from boss_agent_cli.hooks import create_hook_bus
 from boss_agent_cli.output import Logger
@@ -58,3 +58,4 @@ cli.add_command(exchange.exchange_cmd, "exchange")
 cli.add_command(interviews.interviews_cmd, "interviews")
 cli.add_command(show.show_cmd, "show")
 cli.add_command(history.history_cmd, "history")
+cli.add_command(watch.watch_group, "watch")
