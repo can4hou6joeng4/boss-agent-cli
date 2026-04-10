@@ -2,6 +2,10 @@
 
 将 boss-agent-cli 作为 MCP 工具接入 Claude Desktop / Cursor 等客户端。
 
+相关文档：
+- [Agent Quickstart](../docs/agent-quickstart.md)
+- [Capability Matrix](../docs/capability-matrix.md)
+
 ## 安装
 
 ```bash

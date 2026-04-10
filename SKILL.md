@@ -68,6 +68,11 @@ boss status
 
 ## Agent Usage
 
+## Docs
+
+- [Agent Quickstart](docs/agent-quickstart.md)
+- [Capability Matrix](docs/capability-matrix.md)
+
 ### Step 1: Discover capabilities
 
 ```bash
