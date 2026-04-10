@@ -322,6 +322,11 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {},
 		},
+		"watch": {
+			"description": "保存搜索条件并执行增量监控（子命令：add/list/remove/run）",
+			"args": [],
+			"options": {},
+		},
 	},
 	"global_options": {
 		"--data-dir": {

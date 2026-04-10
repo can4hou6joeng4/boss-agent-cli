@@ -29,6 +29,20 @@ class CacheStore:
 				response TEXT NOT NULL,
 				created_at REAL NOT NULL
 			);
+			CREATE TABLE IF NOT EXISTS saved_searches (
+				name TEXT PRIMARY KEY,
+				params TEXT NOT NULL,
+				created_at REAL NOT NULL,
+				updated_at REAL NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS watch_hits (
+				search_name TEXT NOT NULL,
+				job_key TEXT NOT NULL,
+				payload TEXT NOT NULL,
+				first_seen_at REAL NOT NULL,
+				last_seen_at REAL NOT NULL,
+				PRIMARY KEY (search_name, job_key)
+			);
 		""")
 
 	@staticmethod
@@ -90,6 +104,99 @@ class CacheStore:
 				(excess,),
 			)
 			self._conn.commit()
+
+	def save_saved_search(self, name: str, params: dict) -> None:
+		now = time.time()
+		existing = self._conn.execute(
+			"SELECT created_at FROM saved_searches WHERE name = ?",
+			(name,),
+		).fetchone()
+		created_at = existing[0] if existing else now
+		self._conn.execute(
+			"INSERT OR REPLACE INTO saved_searches (name, params, created_at, updated_at) VALUES (?, ?, ?, ?)",
+			(name, json.dumps(params, ensure_ascii=False, sort_keys=True), created_at, now),
+		)
+		self._conn.commit()
+
+	def get_saved_search(self, name: str) -> dict | None:
+		row = self._conn.execute(
+			"SELECT name, params, created_at, updated_at FROM saved_searches WHERE name = ?",
+			(name,),
+		).fetchone()
+		if row is None:
+			return None
+		return {
+			"name": row[0],
+			"params": json.loads(row[1]),
+			"created_at": row[2],
+			"updated_at": row[3],
+		}
+
+	def list_saved_searches(self) -> list[dict]:
+		rows = self._conn.execute(
+			"SELECT name, params, created_at, updated_at FROM saved_searches ORDER BY updated_at DESC"
+		).fetchall()
+		return [
+			{
+				"name": row[0],
+				"params": json.loads(row[1]),
+				"created_at": row[2],
+				"updated_at": row[3],
+			}
+			for row in rows
+		]
+
+	def delete_saved_search(self, name: str) -> bool:
+		cursor = self._conn.execute(
+			"DELETE FROM saved_searches WHERE name = ?",
+			(name,),
+		)
+		self._conn.execute(
+			"DELETE FROM watch_hits WHERE search_name = ?",
+			(name,),
+		)
+		self._conn.commit()
+		return cursor.rowcount > 0
+
+	@staticmethod
+	def _make_watch_job_key(item: dict) -> str:
+		security_id = item.get("security_id") or item.get("securityId") or ""
+		job_id = item.get("job_id") or item.get("encryptJobId") or ""
+		if security_id or job_id:
+			return f"{security_id}:{job_id}"
+		raw = json.dumps(item, sort_keys=True, ensure_ascii=False)
+		return hashlib.sha256(raw.encode()).hexdigest()
+
+	def record_watch_results(self, search_name: str, items: list[dict]) -> dict:
+		now = time.time()
+		new_items = []
+		seen_count = 0
+		for item in items:
+			job_key = self._make_watch_job_key(item)
+			payload = json.dumps(item, ensure_ascii=False, sort_keys=True)
+			row = self._conn.execute(
+				"SELECT 1 FROM watch_hits WHERE search_name = ? AND job_key = ?",
+				(search_name, job_key),
+			).fetchone()
+			if row is None:
+				new_items.append(item)
+				self._conn.execute(
+					"INSERT INTO watch_hits (search_name, job_key, payload, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?)",
+					(search_name, job_key, payload, now, now),
+				)
+			else:
+				seen_count += 1
+				self._conn.execute(
+					"UPDATE watch_hits SET payload = ?, last_seen_at = ? WHERE search_name = ? AND job_key = ?",
+					(payload, now, search_name, job_key),
+				)
+		self._conn.commit()
+		return {
+			"new_count": len(new_items),
+			"seen_count": seen_count,
+			"new_items": new_items,
+			"total_count": len(items),
+		}
 
 	def close(self):
 		self._conn.close()
