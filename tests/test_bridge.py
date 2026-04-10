@@ -1,6 +1,6 @@
 """Tests for bridge module — protocol, client, daemon utilities."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from boss_agent_cli.bridge.protocol import (
 	BridgeCommand, BridgeResult, make_command_id,

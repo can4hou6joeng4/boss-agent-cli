@@ -1,8 +1,6 @@
 """Tests for index_cache.py — save, load, get by index."""
 
 import json
-import time
-from pathlib import Path
 
 from boss_agent_cli.index_cache import (
 	save_index, try_save_index, get_job_by_index, get_index_info,

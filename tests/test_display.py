@@ -1,7 +1,6 @@
 """Tests for display.py — TTY detection, renderers, auth error decorator."""
 
 import sys
-from io import StringIO
 from unittest.mock import patch, MagicMock
 
 from boss_agent_cli.display import (
@@ -9,7 +8,6 @@ from boss_agent_cli.display import (
 	handle_output,
 	handle_error_output,
 	handle_auth_errors,
-	render_string_grid,
 )
 
 
