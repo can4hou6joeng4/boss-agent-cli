@@ -131,6 +131,7 @@ def test_schema_includes_new_commands():
 	assert "pipeline" in commands
 	assert "follow-up" in commands
 	assert "apply" in commands
+	assert "shortlist" in commands
 	assert len(commands) >= 23
 
 

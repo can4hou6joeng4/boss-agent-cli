@@ -351,6 +351,11 @@ SCHEMA_DATA = {
 				"--lid": {"type": "string", "default": "", "description": "列表项 ID（可选）"},
 			},
 		},
+		"shortlist": {
+			"description": "管理职位候选池（子命令：add/list/remove）",
+			"args": [],
+			"options": {},
+		},
 	},
 	"global_options": {
 		"--data-dir": {

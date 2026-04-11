@@ -49,6 +49,17 @@ class CacheStore:
 				applied_at REAL NOT NULL,
 				PRIMARY KEY (security_id, job_id)
 			);
+			CREATE TABLE IF NOT EXISTS shortlist_records (
+				security_id TEXT NOT NULL,
+				job_id TEXT NOT NULL,
+				title TEXT NOT NULL,
+				company TEXT NOT NULL,
+				city TEXT NOT NULL,
+				salary TEXT NOT NULL,
+				source TEXT NOT NULL,
+				created_at REAL NOT NULL,
+				PRIMARY KEY (security_id, job_id)
+			);
 		""")
 
 	@staticmethod
@@ -217,6 +228,55 @@ class CacheStore:
 			(security_id, job_id, time.time()),
 		)
 		self._conn.commit()
+
+	def is_shortlisted(self, security_id: str, job_id: str) -> bool:
+		row = self._conn.execute(
+			"SELECT 1 FROM shortlist_records WHERE security_id = ? AND job_id = ?",
+			(security_id, job_id),
+		).fetchone()
+		return row is not None
+
+	def add_shortlist(self, item: dict) -> None:
+		self._conn.execute(
+			"INSERT OR REPLACE INTO shortlist_records (security_id, job_id, title, company, city, salary, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			(
+				item.get("security_id", ""),
+				item.get("job_id", ""),
+				item.get("title", ""),
+				item.get("company", ""),
+				item.get("city", ""),
+				item.get("salary", ""),
+				item.get("source", ""),
+				time.time(),
+			),
+		)
+		self._conn.commit()
+
+	def list_shortlist(self) -> list[dict]:
+		rows = self._conn.execute(
+			"SELECT security_id, job_id, title, company, city, salary, source, created_at FROM shortlist_records ORDER BY created_at DESC"
+		).fetchall()
+		return [
+			{
+				"security_id": row[0],
+				"job_id": row[1],
+				"title": row[2],
+				"company": row[3],
+				"city": row[4],
+				"salary": row[5],
+				"source": row[6],
+				"created_at": row[7],
+			}
+			for row in rows
+		]
+
+	def remove_shortlist(self, security_id: str, job_id: str) -> bool:
+		cursor = self._conn.execute(
+			"DELETE FROM shortlist_records WHERE security_id = ? AND job_id = ?",
+			(security_id, job_id),
+		)
+		self._conn.commit()
+		return cursor.rowcount > 0
 
 	def close(self):
 		self._conn.close()
