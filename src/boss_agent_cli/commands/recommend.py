@@ -6,13 +6,15 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.display import handle_output, render_job_table, handle_auth_errors
 from boss_agent_cli.index_cache import try_save_index
+from boss_agent_cli.match_score import score_job_dict
 
 
 @click.command("recommend")
 @click.option("--page", default=1, type=int, help="页码")
+@click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
 @click.pass_context
 @handle_auth_errors("recommend")
-def recommend_cmd(ctx, page):
+def recommend_cmd(ctx, page, with_score):
 	"""基于简历的个性化职位推荐"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -22,6 +24,7 @@ def recommend_cmd(ctx, page):
 	auth = AuthManager(data_dir, logger=logger)
 	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+			expect_data = client.resume_expect().get("zpData", {}) if with_score else None
 
 			raw = client.recommend_jobs(page=page)
 			zp_data = raw.get("zpData", {})
@@ -31,7 +34,10 @@ def recommend_cmd(ctx, page):
 			for raw_item in job_list:
 				item = JobItem.from_api(raw_item)
 				item.greeted = cache.is_greeted(item.security_id)
-				items.append(item.to_dict())
+				item_dict = item.to_dict()
+				if with_score:
+					item_dict = score_job_dict(item_dict, criteria=None, expect_data=expect_data)
+				items.append(item_dict)
 
 		try_save_index(data_dir, items, source="recommend", logger=logger)
 

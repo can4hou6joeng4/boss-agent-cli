@@ -14,6 +14,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_job_table
 from boss_agent_cli.index_cache import try_save_index
+from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	resolve_welfare_keywords,
@@ -34,9 +35,10 @@ from boss_agent_cli.search_filters import (
 @click.option("--welfare", default=None, help="福利筛选（如 双休、五险一金），会逐个检查职位详情")
 @click.option("--page", default=1, help="页码")
 @click.option("--no-cache", is_flag=True, default=False, help="跳过缓存")
+@click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
 @click.pass_context
 @handle_auth_errors("search")
-def search_cmd(ctx, query, city, salary, experience, education, industry, scale, stage, job_type, welfare, page, no_cache):
+def search_cmd(ctx, query, city, salary, experience, education, industry, scale, stage, job_type, welfare, page, no_cache, with_score):
 	"""按关键词和筛选条件搜索职位列表"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -66,7 +68,7 @@ def search_cmd(ctx, query, city, salary, experience, education, industry, scale,
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		# 有福利筛选时跳过缓存（因为需要逐个查详情）
-		if not welfare_conditions and not no_cache:
+		if not welfare_conditions and not no_cache and not with_score:
 			search_params = {
 				"query": query, "city": city, "salary": salary,
 				"experience": experience, "education": education,
@@ -95,6 +97,8 @@ def search_cmd(ctx, query, city, salary, experience, education, industry, scale,
 				welfare_conditions=welfare_conditions,
 			)
 			items = pipeline_result.items
+			if with_score:
+				items = [score_job_dict(item, criteria=criteria, expect_data=None) for item in items]
 			try_save_index(data_dir, items, source=f"search:{query}", logger=logger)
 
 			# Emit search_completed hook
@@ -130,7 +134,7 @@ def search_cmd(ctx, query, city, salary, experience, education, industry, scale,
 				)
 
 			# 缓存普通搜索结果
-			if not welfare_conditions:
+			if not welfare_conditions and not with_score:
 				search_params = {
 					"query": query, "city": city, "salary": salary,
 					"experience": experience, "education": education,
