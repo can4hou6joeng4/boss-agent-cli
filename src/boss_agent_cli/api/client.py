@@ -29,6 +29,14 @@ class AuthError(Exception):
 	pass
 
 
+class AccountRiskError(Exception):
+	"""BOSS 直聘风控拦截（code 36）：检测到异常行为（通常为 headless 浏览器）。"""
+
+	def __init__(self, message: str = "", is_cdp: bool = False):
+		self.is_cdp = is_cdp
+		super().__init__(message)
+
+
 class BossClient:
 	"""Hybrid API client: browser channel for high-risk ops, httpx for low-risk ops."""
 
@@ -143,7 +151,20 @@ class BossClient:
 	# ── Browser request (high-risk ops) ──────────────────────────────
 
 	def _browser_request(self, method: str, url: str, *, params: dict | None = None, data: dict | None = None) -> dict:
-		return self._get_browser().request(method, url, params=params, data=data)
+		result = self._get_browser().request(method, url, params=params, data=data)
+		code = result.get("code")
+		if code == endpoints.CODE_ACCOUNT_RISK:
+			msg = result.get("message", "账户存在异常行为")
+			browser = self._get_browser()
+			is_cdp = getattr(browser, "_is_cdp", False)
+			mode = "CDP" if is_cdp else ("Bridge" if getattr(browser, "_is_bridge", False) else "headless patchright")
+			raise AccountRiskError(
+				f"BOSS 直聘风控拦截 (code {code}): {msg}。"
+				f"当前浏览器模式: {mode}。"
+				f"建议：以 --remote-debugging-port=9222 启动 Chrome 后重试（CDP 模式可规避风控检测）",
+				is_cdp=is_cdp,
+			)
+		return result
 
 	# ── Public API ───────────────────────────────────────────────────
 	# High-risk: search, recommend, greet, job_card → browser channel

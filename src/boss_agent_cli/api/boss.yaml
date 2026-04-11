@@ -23,6 +23,7 @@ response_codes:
   success: 0
   stoken_expired: 37
   rate_limited: 9
+  account_risk: 36
 
 endpoints:
   search:
