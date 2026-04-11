@@ -86,3 +86,11 @@ def test_watch_results_only_mark_new_items_once(tmp_path):
 	assert first["new_count"] == 2
 	assert second["new_count"] == 1
 	assert second["new_items"][0]["security_id"] == "sec-3"
+
+
+def test_apply_record_idempotency(tmp_path):
+	store = CacheStore(tmp_path / "test.db")
+	assert store.is_applied("sec_001", "job_001") is False
+	store.record_apply("sec_001", "job_001")
+	assert store.is_applied("sec_001", "job_001") is True
+	assert store.is_applied("sec_001", "job_002") is False
