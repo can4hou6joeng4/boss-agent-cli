@@ -341,6 +341,16 @@ SCHEMA_DATA = {
 				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则视为 follow_up"},
 			},
 		},
+		"apply": {
+			"description": "发起最小可用投递/立即沟通动作（当前复用立即沟通链路）",
+			"args": [
+				{"name": "security_id", "required": True, "description": "安全 ID"},
+				{"name": "job_id", "required": True, "description": "加密职位 ID"},
+			],
+			"options": {
+				"--lid": {"type": "string", "default": "", "description": "列表项 ID（可选）"},
+			},
+		},
 	},
 	"global_options": {
 		"--data-dir": {
@@ -398,6 +408,11 @@ SCHEMA_DATA = {
 		},
 		"ALREADY_GREETED": {
 			"message": "已向该招聘者打过招呼",
+			"recoverable": False,
+			"recovery_action": None,
+		},
+		"ALREADY_APPLIED": {
+			"message": "已发起过投递/立即沟通",
 			"recoverable": False,
 			"recovery_action": None,
 		},

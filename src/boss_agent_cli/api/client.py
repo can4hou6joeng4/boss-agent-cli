@@ -198,6 +198,16 @@ class BossClient:
 		}
 		return self._browser_request("POST", endpoints.GREET_URL, data=data)
 
+	def apply(self, security_id: str, job_id: str, lid: str = "") -> dict:
+		"""Current minimal apply path - reuses the immediate-chat browser endpoint."""
+		data = {
+			"securityId": security_id,
+			"jobId": job_id,
+		}
+		if lid:
+			data["lid"] = lid
+		return self._browser_request("POST", endpoints.GREET_URL, data=data)
+
 	def job_card(self, security_id: str, lid: str = "") -> dict:
 		params = {"securityId": security_id, "lid": lid}
 		return self._browser_request("GET", endpoints.JOB_CARD_URL, params=params)

@@ -43,6 +43,12 @@ class CacheStore:
 				last_seen_at REAL NOT NULL,
 				PRIMARY KEY (search_name, job_key)
 			);
+			CREATE TABLE IF NOT EXISTS apply_records (
+				security_id TEXT NOT NULL,
+				job_id TEXT NOT NULL,
+				applied_at REAL NOT NULL,
+				PRIMARY KEY (security_id, job_id)
+			);
 		""")
 
 	@staticmethod
@@ -197,6 +203,20 @@ class CacheStore:
 			"new_items": new_items,
 			"total_count": len(items),
 		}
+
+	def is_applied(self, security_id: str, job_id: str) -> bool:
+		row = self._conn.execute(
+			"SELECT 1 FROM apply_records WHERE security_id = ? AND job_id = ?",
+			(security_id, job_id),
+		).fetchone()
+		return row is not None
+
+	def record_apply(self, security_id: str, job_id: str) -> None:
+		self._conn.execute(
+			"INSERT OR REPLACE INTO apply_records (security_id, job_id, applied_at) VALUES (?, ?, ?)",
+			(security_id, job_id, time.time()),
+		)
+		self._conn.commit()
 
 	def close(self):
 		self._conn.close()
