@@ -93,6 +93,11 @@ SCHEMA_DATA = {
 					"default": 1,
 					"description": "页码",
 				},
+				"--with-score": {
+					"type": "bool",
+					"default": False,
+					"description": "附加匹配分和原因",
+				},
 				"--no-cache": {
 					"type": "bool",
 					"default": False,
@@ -199,6 +204,7 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"--page": {"type": "int", "default": 1, "description": "页码"},
+				"--with-score": {"type": "bool", "default": False, "description": "附加匹配分和原因"},
 			},
 		},
 		"export": {

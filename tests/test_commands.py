@@ -223,6 +223,94 @@ def test_recommend_success(mock_auth_cls, mock_client_cls, mock_cache_cls):
 	assert parsed["hints"] is not None
 
 
+@patch("boss_agent_cli.commands.recommend.CacheStore")
+@patch("boss_agent_cli.commands.recommend.BossClient")
+@patch("boss_agent_cli.commands.recommend.AuthManager")
+def test_recommend_with_score(mock_auth_cls, mock_client_cls, mock_cache_cls):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.resume_expect.return_value = {"zpData": {"city": "广州", "salary": "20-50K", "degree": "本科"}}
+	mock_client.recommend_jobs.return_value = {
+		"zpData": {
+			"hasMore": False,
+			"jobList": [
+				{
+					"encryptJobId": "j1",
+					"jobName": "Go 开发",
+					"brandName": "TestCo",
+					"salaryDesc": "20-30K",
+					"cityName": "广州",
+					"areaDistrict": "天河区",
+					"jobExperience": "3-5年",
+					"jobDegree": "本科",
+					"skills": ["Golang"],
+					"welfareList": ["双休"],
+					"brandIndustry": "互联网",
+					"brandScaleName": "100-499人",
+					"brandStageName": "A轮",
+					"bossName": "李",
+					"bossTitle": "HR",
+					"bossOnline": True,
+					"securityId": "sec_r1",
+				},
+			],
+		},
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["recommend", "--with-score"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["data"][0]["match_score"] >= 0
+	assert "match_reasons" in parsed["data"][0]
+
+
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.BossClient")
+def test_search_with_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = None
+	_ctx_mock(mock_client_cls)
+	mock_pipeline.return_value = SimpleNamespace(
+		items=[{
+			"job_id": "j1",
+			"title": "Go 开发",
+			"company": "TestCo",
+			"salary": "20-30K",
+			"city": "广州",
+			"district": "天河区",
+			"experience": "3-5年",
+			"education": "本科",
+			"skills": ["Golang"],
+			"welfare": ["双休"],
+			"industry": "互联网",
+			"scale": "100-499人",
+			"stage": "A轮",
+			"boss_name": "李",
+			"boss_title": "HR",
+			"boss_active": "在线",
+			"security_id": "sec_001",
+			"greeted": False,
+		}],
+		has_more=False,
+		total=1,
+		stats=SimpleNamespace(
+			pages_scanned=1,
+			jobs_seen=1,
+			jobs_prefiltered=0,
+			detail_checks=0,
+		),
+	)
+	runner = CliRunner()
+	result = runner.invoke(cli, ["search", "golang", "--city", "广州", "--salary", "20-50K", "--with-score"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["data"][0]["match_score"] >= 0
+	assert "match_reasons" in parsed["data"][0]
+
+
 @patch("boss_agent_cli.index_cache.save_index", side_effect=PermissionError("readonly"))
 @patch("boss_agent_cli.commands.recommend.CacheStore")
 @patch("boss_agent_cli.commands.recommend.BossClient")
