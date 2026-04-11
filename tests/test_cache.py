@@ -94,3 +94,24 @@ def test_apply_record_idempotency(tmp_path):
 	store.record_apply("sec_001", "job_001")
 	assert store.is_applied("sec_001", "job_001") is True
 	assert store.is_applied("sec_001", "job_002") is False
+
+
+def test_shortlist_crud(tmp_path):
+	store = CacheStore(tmp_path / "test.db")
+	item = {
+		"security_id": "sec_001",
+		"job_id": "job_001",
+		"title": "Go 开发",
+		"company": "TestCo",
+		"city": "广州",
+		"salary": "20-30K",
+		"source": "search",
+	}
+	assert store.is_shortlisted("sec_001", "job_001") is False
+	store.add_shortlist(item)
+	assert store.is_shortlisted("sec_001", "job_001") is True
+	items = store.list_shortlist()
+	assert len(items) == 1
+	assert items[0]["title"] == "Go 开发"
+	assert store.remove_shortlist("sec_001", "job_001") is True
+	assert store.is_shortlisted("sec_001", "job_001") is False
