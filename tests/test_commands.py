@@ -884,3 +884,31 @@ def test_chat_export_html_xss_prevention(mock_auth_cls, mock_client_cls, tmp_pat
 	# 转义后的实体应该存在
 	assert "&lt;script&gt;" in content
 	assert "&amp;名" in content
+
+
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.BossClient")
+def test_search_account_risk_returns_error(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
+	"""搜索触发风控 code 36 时应返回 ACCOUNT_RISK 错误码"""
+	from boss_agent_cli.api.client import AccountRiskError
+
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = None
+	_ctx_mock(mock_client_cls)
+	mock_pipeline.side_effect = AccountRiskError(
+		"BOSS 直聘风控拦截 (code 36): 您的账户存在异常行为。当前浏览器模式: headless patchright。"
+		"建议：以 --remote-debugging-port=9222 启动 Chrome 后重试（CDP 模式可规避风控检测）",
+		is_cdp=False,
+	)
+	runner = CliRunner()
+	result = runner.invoke(cli, ["search", "golang"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert "风控拦截" in parsed["error"]["message"]
+	assert parsed["error"]["recoverable"] is True
+	assert "Chrome" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"]

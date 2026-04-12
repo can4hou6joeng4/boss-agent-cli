@@ -177,6 +177,31 @@ def doctor_cmd(ctx):
 	except Exception as e:
 		add_check("network", "warn", f"访问 zhipin.com 失败: {e}", "检查网络、代理或风控拦截")
 
+	# 5.5) Browser channel risk assessment
+	cdp_ok = any(item["name"] == "cdp" and item["status"] == "ok" for item in checks)
+	bridge_ok = False
+	try:
+		from boss_agent_cli.bridge.client import BridgeClient
+		bc = BridgeClient()
+		bridge_ok = bc.is_running() and bc.is_extension_connected()
+	except Exception:
+		pass
+
+	if cdp_ok or bridge_ok:
+		mode = "CDP" if cdp_ok else "Bridge"
+		add_check(
+			"browser_channel",
+			"ok",
+			f"高风险操作将使用 {mode} 模式（真实浏览器指纹，不触发风控）",
+		)
+	else:
+		add_check(
+			"browser_channel",
+			"warn",
+			"CDP 和 Bridge 均不可用，搜索/推荐/打招呼将降级到 headless patchright（可能触发 BOSS 直聘风控 code 36）",
+			"以 --remote-debugging-port=9222 启动 Chrome（推荐），或安装 Bridge 扩展",
+		)
+
 	# 6) Data dir writable
 	try:
 		auth_dir.mkdir(parents=True, exist_ok=True)
