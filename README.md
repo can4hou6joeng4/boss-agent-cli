@@ -11,11 +11,13 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/can4hou6joeng4/boss-agent-cli)](https://github.com/can4hou6joeng4/boss-agent-cli/releases)
 
-[English](#features) · [安装](#安装) · [快速开始](#快速开始) · [AI Agent 集成](#ai-agent-集成) · [命令参考](#命令参考)
+[安装](#安装) · [快速开始](#快速开始) · [AI Agent 集成](#ai-agent-集成) · [命令参考](#命令参考)
 
 <img src="demo.gif" alt="boss-agent-cli 终端演示" width="100%">
 
 </div>
+
+> **English** | A CLI tool designed for AI Agents to interact with [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). All output is structured JSON. Supports job search with welfare filtering, auto-greeting, chat export, and anti-detection login via [patchright](https://github.com/nichochar/patchright). Install: `uv tool install git+https://github.com/can4hou6joeng4/boss-agent-cli.git`
 
 ---
 
