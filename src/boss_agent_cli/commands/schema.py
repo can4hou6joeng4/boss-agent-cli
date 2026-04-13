@@ -449,6 +449,11 @@ SCHEMA_DATA = {
 			"recoverable": False,
 			"recovery_action": None,
 		},
+		"ACCOUNT_RISK": {
+			"message": "风控拦截",
+			"recoverable": True,
+			"recovery_action": "启动 CDP Chrome 重试，或联系客服",
+		},
 		"GREET_LIMIT": {
 			"message": "今日打招呼次数已用完",
 			"recoverable": False,
