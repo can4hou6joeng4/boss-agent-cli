@@ -114,13 +114,20 @@ async function evaluate(tabId, code) {
 
 // ── Tab management ───────────────────────────────────────────────────
 
-async function resolveTabId(tabId) {
+async function resolveTabId(tabId, workspace) {
 	if (tabId !== undefined) {
 		try {
 			const tab = await chrome.tabs.get(tabId);
 			if (tab.url?.startsWith('http')) return tabId;
 		} catch {}
 	}
+
+	// workspace="boss" 时，优先找已有的 zhipin tab（用户正常浏览的页面）
+	if (workspace === 'boss') {
+		const zhipinTabs = await chrome.tabs.query({ url: '*://*.zhipin.com/*' });
+		if (zhipinTabs.length > 0) return zhipinTabs[0].id;
+	}
+
 	const windowId = await getAutomationWindow();
 	const tabs = await chrome.tabs.query({ windowId });
 	const good = tabs.find(t => t.url?.startsWith('http') || t.url?.startsWith('data:'));
@@ -203,7 +210,7 @@ async function handleCommand(cmd) {
 
 async function handleExec(cmd) {
 	if (!cmd.code) return { id: cmd.id, ok: false, error: 'Missing code' };
-	const tabId = await resolveTabId(cmd.tabId);
+	const tabId = await resolveTabId(cmd.tabId, cmd.workspace);
 	const data = await evaluate(tabId, cmd.code);
 	return { id: cmd.id, ok: true, data };
 }
@@ -212,7 +219,7 @@ async function handleNavigate(cmd) {
 	if (!cmd.url) return { id: cmd.id, ok: false, error: 'Missing url' };
 	if (!cmd.url.startsWith('http')) return { id: cmd.id, ok: false, error: 'Only http(s) allowed' };
 
-	const tabId = await resolveTabId(cmd.tabId);
+	const tabId = await resolveTabId(cmd.tabId, cmd.workspace);
 	await chrome.tabs.update(tabId, { url: cmd.url });
 
 	// 等待导航完成
