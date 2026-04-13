@@ -2,7 +2,7 @@ from pathlib import Path
 
 import click
 
-from boss_agent_cli.commands import schema, login, logout, status, doctor, search, detail, greet, recommend, export, cities, me, chat, chatmsg, chat_summary, mark, exchange, interviews, show, history, watch, pipeline, apply, shortlist, preset
+from boss_agent_cli.commands import schema, login, logout, status, doctor, search, detail, greet, recommend, export, cities, me, chat, chatmsg, chat_summary, mark, exchange, interviews, show, history, watch, pipeline, apply, shortlist, preset, digest
 from boss_agent_cli.config import load_config
 from boss_agent_cli.hooks import create_hook_bus
 from boss_agent_cli.output import Logger
@@ -65,3 +65,4 @@ cli.add_command(pipeline.follow_up_cmd, "follow-up")
 cli.add_command(apply.apply_cmd, "apply")
 cli.add_command(shortlist.shortlist_group, "shortlist")
 cli.add_command(preset.preset_group, "preset")
+cli.add_command(digest.digest_cmd, "digest")
