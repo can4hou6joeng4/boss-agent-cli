@@ -288,6 +288,84 @@ def test_detail_uses_client_context_manager(mock_auth_cls, mock_client_cls, mock
 	instance.__exit__.assert_called_once()
 
 
+@patch("boss_agent_cli.commands.detail.CacheStore")
+@patch("boss_agent_cli.commands.detail.BossClient")
+@patch("boss_agent_cli.commands.detail.AuthManager")
+def test_detail_httpx_fallback_to_browser_on_auth_error(mock_auth_cls, mock_client_cls, mock_cache_cls):
+	"""httpx 快速通道因 AuthError 失败时，应降级到浏览器通道而非直接报错"""
+	from boss_agent_cli.api.client import AuthError
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_cache.get_job_id.return_value = ""
+	mock_client = _ctx_mock(mock_client_cls)
+	# httpx 通道抛 AuthError（stoken 过期刷新失败）
+	mock_client.job_detail.side_effect = AuthError("stoken refresh failed")
+	# 浏览器通道返回正常数据
+	mock_client.job_card.return_value = {
+		"zpData": {
+			"jobCard": {
+				"encryptJobId": "enc_001",
+				"jobName": "Go 开发",
+				"brandName": "TestCo",
+				"salaryDesc": "30K",
+				"cityName": "北京",
+				"experienceName": "3-5年",
+				"degreeName": "本科",
+				"postDescription": "JD 描述",
+				"bossName": "张总",
+				"bossTitle": "CTO",
+				"activeTimeDesc": "刚刚活跃",
+			}
+		}
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["detail", "sec_001", "--job-id", "enc_001"])
+	assert result.exit_code == 0, f"exit_code={result.exit_code}, output={result.output}"
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["title"] == "Go 开发"
+	# 确认 httpx 被调用后又降级到了浏览器通道
+	mock_client.job_detail.assert_called_once()
+	mock_client.job_card.assert_called_once()
+
+
+@patch("boss_agent_cli.commands.detail.CacheStore")
+@patch("boss_agent_cli.commands.detail.BossClient")
+@patch("boss_agent_cli.commands.detail.AuthManager")
+def test_detail_httpx_fallback_to_browser_on_none(mock_auth_cls, mock_client_cls, mock_cache_cls):
+	"""httpx 快速通道返回空 jobInfo 时，应降级到浏览器通道"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_cache.get_job_id.return_value = ""
+	mock_client = _ctx_mock(mock_client_cls)
+	# httpx 返回无 jobInfo（解析后 result=None）
+	mock_client.job_detail.return_value = {"zpData": {"jobInfo": {}}}
+	# 浏览器通道返回正常数据
+	mock_client.job_card.return_value = {
+		"zpData": {
+			"jobCard": {
+				"encryptJobId": "enc_001",
+				"jobName": "Go 开发",
+				"brandName": "FallbackCo",
+				"salaryDesc": "25K",
+				"cityName": "深圳",
+				"experienceName": "1-3年",
+				"degreeName": "大专",
+				"postDescription": "降级 JD",
+				"bossName": "李总",
+				"bossTitle": "HR",
+				"activeTimeDesc": "在线",
+			}
+		}
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["detail", "sec_001", "--job-id", "enc_001"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["company"] == "FallbackCo"
+
+
 @patch("boss_agent_cli.commands.show.CacheStore")
 @patch("boss_agent_cli.commands.show.get_job_by_index")
 @patch("boss_agent_cli.commands.show.BossClient")
