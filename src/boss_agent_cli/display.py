@@ -283,6 +283,7 @@ def handle_auth_errors(command_name: str):
 	def decorator(func):
 		@wraps(func)
 		def wrapper(ctx, *args, **kwargs):
+			from boss_agent_cli.api.client import AccountRiskError
 			from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 			try:
 				return func(ctx, *args, **kwargs)
@@ -297,6 +298,22 @@ def handle_auth_errors(command_name: str):
 					ctx, command_name, code="TOKEN_REFRESH_FAILED",
 					message="Token 刷新失败，请重新登录",
 					recoverable=True, recovery_action="boss login",
+				)
+			except AccountRiskError as e:
+				recovery = (
+					"以 --remote-debugging-port=9222 启动 Chrome，然后重试（CDP 模式）"
+					if not e.is_cdp
+					else "联系 BOSS 直聘客服解除风控限制"
+				)
+				handle_error_output(
+					ctx, command_name, code="ACCOUNT_RISK",
+					message=str(e),
+					recoverable=not e.is_cdp,
+					recovery_action=recovery,
+					hints={"next_actions": [
+						"boss-chrome  # 启动带调试端口的 Chrome",
+						"boss search <query>  # CDP 模式自动生效",
+					]} if not e.is_cdp else None,
 				)
 			except Exception as e:
 				handle_error_output(

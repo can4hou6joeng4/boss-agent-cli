@@ -41,6 +41,7 @@ EXCHANGE_REQUEST_URL = _url("exchange_request")
 CODE_SUCCESS = _spec.response_codes.get("success", 0)
 CODE_STOKEN_EXPIRED = _spec.response_codes.get("stoken_expired", 37)
 CODE_RATE_LIMITED = _spec.response_codes.get("rate_limited", 9)
+CODE_ACCOUNT_RISK = _spec.response_codes.get("account_risk", 36)
 
 # ── Browser-like headers ─────────────────────────────────────────────
 DEFAULT_HEADERS = dict(_spec.default_headers)

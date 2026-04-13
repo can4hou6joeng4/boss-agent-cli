@@ -1,4 +1,7 @@
-from boss_agent_cli.api.endpoints import CITY_CODES, SALARY_CODES, EXPERIENCE_CODES
+from boss_agent_cli.api.endpoints import (
+	CITY_CODES, SALARY_CODES, EXPERIENCE_CODES,
+	CODE_ACCOUNT_RISK, CODE_STOKEN_EXPIRED, CODE_RATE_LIMITED,
+)
 from boss_agent_cli.api.models import JobItem
 
 
@@ -16,6 +19,13 @@ def test_salary_code_lookup():
 def test_experience_code_lookup():
 	assert EXPERIENCE_CODES["应届"] == "108"
 	assert EXPERIENCE_CODES["3-5年"] == "104"
+
+
+def test_response_code_constants():
+	"""验证 BOSS API 返回码常量加载正确（含风控 code 36）"""
+	assert CODE_STOKEN_EXPIRED == 37
+	assert CODE_RATE_LIMITED == 9
+	assert CODE_ACCOUNT_RISK == 36
 
 
 def test_job_item_from_api():
@@ -77,3 +87,56 @@ def test_job_item_to_dict():
 	assert d["greeted"] is False
 	assert d["welfare"] == ["五险一金"]
 	assert d["skills"] == ["Golang"]
+
+
+def test_account_risk_error_raised_on_code_36():
+	"""_browser_request 收到 code 36 时应抛出 AccountRiskError"""
+	from unittest.mock import MagicMock
+	from boss_agent_cli.api.client import BossClient, AccountRiskError
+
+	auth = MagicMock()
+	auth.get_token.return_value = {"cookies": {}, "user_agent": "ua", "stoken": "s"}
+	client = BossClient(auth)
+
+	# 模拟 browser session 返回 code 36
+	mock_browser = MagicMock()
+	mock_browser.request.return_value = {
+		"code": 36,
+		"message": "您的账户存在异常行为.",
+		"zpData": {},
+	}
+	mock_browser._is_cdp = False
+	mock_browser._is_bridge = False
+	client._browser_session = mock_browser
+
+	import pytest
+	with pytest.raises(AccountRiskError) as exc_info:
+		client._browser_request("GET", "/wapi/zpgeek/search/joblist.json")
+
+	assert "code 36" in str(exc_info.value)
+	assert "风控拦截" in str(exc_info.value)
+	assert exc_info.value.is_cdp is False
+	client.close()
+
+
+def test_account_risk_error_not_raised_on_success():
+	"""_browser_request 收到 code 0 时正常返回"""
+	from unittest.mock import MagicMock
+	from boss_agent_cli.api.client import BossClient
+
+	auth = MagicMock()
+	auth.get_token.return_value = {"cookies": {}, "user_agent": "ua", "stoken": "s"}
+	client = BossClient(auth)
+
+	mock_browser = MagicMock()
+	mock_browser.request.return_value = {
+		"code": 0,
+		"message": "Success",
+		"zpData": {"jobList": [{"jobName": "test"}]},
+	}
+	client._browser_session = mock_browser
+
+	result = client._browser_request("GET", "/wapi/zpgeek/search/joblist.json")
+	assert result["code"] == 0
+	assert result["zpData"]["jobList"][0]["jobName"] == "test"
+	client.close()

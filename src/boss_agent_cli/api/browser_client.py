@@ -124,24 +124,29 @@ class BrowserSession:
 		return False
 
 	def _try_connect(self, url: str) -> bool:
-		"""Attempt a single CDP connection with context isolation.
+		"""Attempt a single CDP connection, reusing user's existing context.
 
-		Extracts cookies from user's existing context, then creates an isolated
-		context to avoid tab leakage into user's daily browsing.
+		Reuses the first existing browser context (preserves login state and
+		avoids Chrome's automation detection on new contexts). Only creates
+		a new context when none exists.
 		"""
 		try:
 			self._browser = self._pw.chromium.connect_over_cdp(url)
 			contexts = self._browser.contexts
 
-			# 从用户现有 context 提取 Cookie（保留登录态），然后创建隔离 context
 			if contexts:
-				user_cookies = contexts[0].cookies()
-				self._context = self._browser.new_context()
-				if user_cookies:
-					self._context.add_cookies(user_cookies)
+				# 复用用户现有 context（保留登录态 + 规避 automation 检测）
+				self._context = contexts[0]
+				self._own_context = False  # 非我们创建，close 时不关闭
 			else:
+				# 没有已存在 context，创建新的并注入 cookies
 				self._context = self._browser.new_context()
-			self._own_context = True  # 标记：由我们创建，close 时需清理
+				if self._cookies:
+					self._context.add_cookies([
+						{"name": name, "value": value, "domain": ".zhipin.com", "path": "/"}
+						for name, value in self._cookies.items()
+					])
+				self._own_context = True
 
 			self._page = self._context.new_page()
 			# CDP 模式下用较长超时 + commit 级等待（避免 networkidle 卡住）
@@ -151,7 +156,8 @@ class BrowserSession:
 				pass  # 即使导航超时，页面 JS 环境已可用
 			self._started = True
 			self._is_cdp = True
-			self._log(f"[boss] CDP 连接成功 ({url})，使用用户 Chrome（隔离 context）")
+			reuse_label = "复用用户 context" if not self._own_context else "新建 context"
+			self._log(f"[boss] CDP 连接成功 ({url})，{reuse_label}")
 			return True
 		except Exception:
 			if self._browser:
