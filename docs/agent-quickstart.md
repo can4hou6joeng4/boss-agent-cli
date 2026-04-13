@@ -16,6 +16,8 @@ boss status
 - `boss doctor` 返回 `ok=true`
 - `boss status` 返回当前登录态
 
+如果你不是直接在终端里手动跑命令，而是准备把它接进 Agent 宿主，先看 [Agent Host Examples](agent-hosts.md) 选择对应接入模板。
+
 ## 2) 三步跑通 Agent 闭环
 
 ```bash
@@ -50,4 +52,6 @@ boss status
 - `RATE_LIMITED`：等待后重试
 - `INVALID_PARAM`：校正参数（城市、福利、页码等）
 
-能力映射明细见 [Capability Matrix](capability-matrix.md)。
+延伸阅读：
+- [Agent Host Examples](agent-hosts.md)
+- [Capability Matrix](capability-matrix.md)

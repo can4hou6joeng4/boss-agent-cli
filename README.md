@@ -128,6 +128,7 @@ boss export "Golang" --city 广州 --count 50 -o jobs.csv
 
 推荐先阅读：
 - [Agent Quickstart](docs/agent-quickstart.md)
+- [Agent Host Examples](docs/agent-hosts.md)
 - [Capability Matrix](docs/capability-matrix.md)
 
 ### 方式一：Skill 安装（推荐）
