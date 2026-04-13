@@ -4,7 +4,7 @@
 
 **专为 AI Agent 设计的 BOSS 直聘求职 CLI 工具**
 
-搜索职位 · 福利筛选 · 个性化推荐 · 自动打招呼 · 导出数据
+搜索职位 · 福利筛选 · 个性化推荐 · 自动打招呼 · 求职流水线 · 增量监控 · 导出数据
 
 [![CI](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-≥3.10-3776AB?logo=python&logoColor=white)](https://python.org)
@@ -25,6 +25,9 @@
 
 - **AI Agent 友好** — 所有输出为结构化 JSON，`boss schema` 自描述协议让 Agent 一次调用就理解全部能力
 - **福利精准筛选** — `--welfare "双休,五险一金"` 自动翻页逐个检查职位详情，只返回匹配结果
+- **求职流水线** — `pipeline` / `follow-up` / `digest` 构成完整的求职进度追踪与每日摘要
+- **增量监控** — `watch` 保存搜索条件，定期执行并标出新职位；`shortlist` 管理候选池
+- **搜索预设** — `preset` 保存常用搜索参数组合，一键复用
 - **免扫码登录** — 优先从本地浏览器提取 Cookie（支持 Chrome/Firefox/Edge 等 10+ 浏览器），失败才弹出扫码
 - **反检测登录** — 基于 [patchright](https://github.com/nichochar/patchright)（Playwright 反检测 fork），从二进制层面修补自动化标记
 - **智能反爬** — 高斯分布请求延迟 + 指数退避重试，模拟人类操作节奏
@@ -114,14 +117,23 @@ boss search "Golang" --city 广州 --welfare "双休,五险一金"
 # 4. 查看职位详情
 boss detail <security_id>
 
-# 5. 向招聘者打招呼
+# 5. 向招聘者打招呼（或发起投递）
 boss greet <security_id> <job_id>
+boss apply <security_id> <job_id>
 
 # 6. 获取个性化推荐
 boss recommend
 
 # 7. 导出 50 条搜索结果为 CSV
 boss export "Golang" --city 广州 --count 50 -o jobs.csv
+
+# 8. 查看求职流水线和每日摘要
+boss pipeline
+boss digest
+
+# 9. 保存搜索条件并监控新职位
+boss watch add my-golang "Golang" --city 广州 --welfare "双休"
+boss watch run my-golang
 ```
 
 ## AI Agent 集成
@@ -181,24 +193,32 @@ npx skills add can4hou6joeng4/boss-agent-cli
 |------|------|
 | `boss schema` | 输出完整能力描述（Agent 首先调用这个） |
 | `boss login` | 登录（Cookie 提取 → CDP → 扫码三级降级） |
+| `boss logout` | 退出登录 |
 | `boss status` | 检查登录态 |
 | `boss doctor` | 诊断本地环境、依赖、登录态和网络 |
 | `boss me` | 我的信息（用户/简历/期望/投递记录） |
-| `boss search <query>` | 搜索职位（支持 `--welfare` 福利筛选） |
+| `boss search <query>` | 搜索职位（支持 `--welfare` 福利筛选和 `--preset` 预设） |
 | `boss recommend` | 个性化推荐 |
 | `boss detail <security_id>` | 职位详情（`--job-id` 走快速通道） |
 | `boss show <#>` | 按编号查看上次搜索结果 |
 | `boss greet <sid> <jid>` | 向招聘者打招呼 |
 | `boss batch-greet <query>` | 批量打招呼（上限 10） |
+| `boss apply <sid> <jid>` | 发起投递/立即沟通（幂等，不重复投递） |
 | `boss chat` | 沟通列表（支持筛选和导出 html/md/csv/json） |
 | `boss chatmsg <sid>` | 查看聊天消息历史 |
+| `boss chat-summary <sid>` | 沟通摘要（按消息生成结构化摘要） |
 | `boss mark <sid> --label X` | 联系人标签管理（9 种标签） |
 | `boss exchange <sid>` | 请求交换手机/微信 |
 | `boss interviews` | 面试邀请列表 |
 | `boss history` | 浏览历史 |
+| `boss pipeline` | 求职流水线（汇总沟通+面试，标记各阶段状态） |
+| `boss follow-up` | 跟进提醒（筛选超时未推进的联系人） |
+| `boss digest` | 每日摘要（综合流水线、跟进、统计） |
+| `boss watch add/list/remove/run` | 搜索订阅与增量监控 |
+| `boss shortlist add/list/remove` | 职位候选池管理 |
+| `boss preset add/list/remove` | 搜索预设管理（保存/复用搜索参数组合） |
 | `boss export <query>` | 导出搜索结果（CSV / JSON） |
 | `boss cities` | 列出支持的 40 个城市 |
-| `boss logout` | 退出登录 |
 
 ### 搜索筛选参数
 
