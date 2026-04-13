@@ -299,6 +299,16 @@ SCHEMA_DATA = {
 				"--count": {"type": "int", "default": 20, "description": "每页消息数量"},
 			},
 		},
+		"chat-summary": {
+			"description": "基于聊天历史生成结构化摘要与下一步建议",
+			"args": [
+				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
+			],
+			"options": {
+				"--page": {"type": "int", "default": 1, "description": "页码"},
+				"--count": {"type": "int", "default": 20, "description": "每页消息数量"},
+			},
+		},
 		"mark": {
 			"description": "给联系人添加/移除标签（新招呼/沟通中/已约面/不合适/收藏等）",
 			"args": [
