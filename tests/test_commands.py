@@ -134,7 +134,8 @@ def test_schema_includes_new_commands():
 	assert "shortlist" in commands
 	assert "chat-summary" in commands
 	assert "preset" in commands
-	assert len(commands) >= 25
+	assert "digest" in commands
+	assert len(commands) >= 26
 
 
 @patch("boss_agent_cli.commands.doctor.extract_cookies")

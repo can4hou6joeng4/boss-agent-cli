@@ -377,6 +377,13 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {},
 		},
+		"digest": {
+			"description": "汇总新增职位、待跟进会话和面试项的只读日报",
+			"args": [],
+			"options": {
+				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则视为 follow_up"},
+			},
+		},
 	},
 	"global_options": {
 		"--data-dir": {
