@@ -343,6 +343,11 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {},
 		},
+		"preset": {
+			"description": "管理可复用搜索预设（子命令：add/list/remove）",
+			"args": [],
+			"options": {},
+		},
 		"pipeline": {
 			"description": "聚合聊天和面试数据，生成统一候选进度视图",
 			"args": [],

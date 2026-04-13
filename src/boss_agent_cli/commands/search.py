@@ -23,7 +23,8 @@ from boss_agent_cli.search_filters import (
 
 
 @click.command("search")
-@click.argument("query")
+@click.argument("query", required=False)
+@click.option("--preset", default=None, help="预设名称（从 boss preset add 保存）")
 @click.option("--city", default=None, help="城市名称（如 北京、上海）")
 @click.option("--salary", default=None, help="薪资范围（如 10-20K）")
 @click.option("--experience", default=None, help="经验要求（如 3-5年）")
@@ -38,12 +39,34 @@ from boss_agent_cli.search_filters import (
 @click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
 @click.pass_context
 @handle_auth_errors("search")
-def search_cmd(ctx, query, city, salary, experience, education, industry, scale, stage, job_type, welfare, page, no_cache, with_score):
+def search_cmd(ctx, query, preset, city, salary, experience, education, industry, scale, stage, job_type, welfare, page, no_cache, with_score):
 	"""按关键词和筛选条件搜索职位列表"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	delay = ctx.obj["delay"]
 	cdp_url = ctx.obj.get("cdp_url")
+
+	if preset:
+		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+			record = cache.get_saved_search(preset)
+		if record is None:
+			handle_error_output(ctx, "search", code="JOB_NOT_FOUND", message=f"未找到 preset: {preset}")
+			return
+		params = record["params"]
+		query = params.get("query") or query
+		city = city or params.get("city")
+		salary = salary or params.get("salary")
+		experience = experience or params.get("experience")
+		education = education or params.get("education")
+		industry = industry or params.get("industry")
+		scale = scale or params.get("scale")
+		stage = stage or params.get("stage")
+		job_type = job_type or params.get("job_type")
+		welfare = welfare or params.get("welfare")
+
+	if not query:
+		handle_error_output(ctx, "search", code="INVALID_PARAM", message="未提供 query，请传入搜索关键词或 --preset")
+		return
 
 	if city and city not in CITY_CODES:
 		handle_error_output(
