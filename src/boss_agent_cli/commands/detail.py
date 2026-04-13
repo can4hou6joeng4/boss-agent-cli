@@ -1,6 +1,6 @@
 import click
 
-from boss_agent_cli.api.client import AuthError, BossClient
+from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_job_detail
@@ -32,7 +32,7 @@ def detail_cmd(ctx, security_id, lid, job_id):
 		if job_id:
 			try:
 				result = _detail_via_httpx(client, security_id, job_id, data_dir)
-			except (AuthError, Exception) as e:
+			except Exception as e:
 				logger.info(f"httpx 快速通道失败（{e}），降级到浏览器通道")
 				result = None
 		if result is None:
