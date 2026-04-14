@@ -1,4 +1,5 @@
 import json
+from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
@@ -163,13 +164,29 @@ def test_export_json(tmp_path):
 	assert parsed["data"]["data"]["name"] == "exportme"
 
 
-def test_export_unsupported_format(tmp_path):
+def test_export_pdf_success(tmp_path):
+	"""PDF 导出使用 mock patchright 验证成功路径"""
 	runner = CliRunner()
-	_invoke(runner, tmp_path, ["init", "--name", "nopdf", "--template", "default"])
-	result = _invoke(runner, tmp_path, ["export", "nopdf", "--format", "pdf"])
-	assert result.exit_code == 1
+	_invoke(runner, tmp_path, ["init", "--name", "pdftest", "--template", "default"])
+
+	mock_page = MagicMock()
+	mock_browser = MagicMock()
+	mock_browser.new_page.return_value = mock_page
+	mock_chromium = MagicMock()
+	mock_chromium.launch.return_value = mock_browser
+	mock_pw = MagicMock()
+	mock_pw.chromium = mock_chromium
+	mock_cm = MagicMock()
+	mock_cm.__enter__ = MagicMock(return_value=mock_pw)
+	mock_cm.__exit__ = MagicMock(return_value=False)
+
+	out_file = tmp_path / "test_output.pdf"
+	with patch("patchright.sync_api.sync_playwright", return_value=mock_cm):
+		result = _invoke(runner, tmp_path, ["export", "pdftest", "--format", "pdf", "-o", str(out_file)])
+	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "EXPORT_FAILED"
+	assert parsed["ok"] is True
+	assert parsed["data"]["format"] == "pdf"
 
 
 def test_export_not_found(tmp_path):

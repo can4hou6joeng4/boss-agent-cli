@@ -16,3 +16,6 @@ GEMINI.md
 .ace-tool/
 .agents/skills/
 .trellis/
+*.html
+!src/**/*.html
+*.pdf

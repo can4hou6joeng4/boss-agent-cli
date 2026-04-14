@@ -192,14 +192,35 @@ def resume_export_cmd(ctx, name, fmt, output_path):
 		ctx.exit(1)
 		return
 	if fmt in ("pdf", "html"):
-		handle_error_output(
+		resume = store.get(name)
+		if resume is None:
+			handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
+			ctx.exit(1)
+			return
+		if output_path is None:
+			output_path = f"{name}.{fmt}"
+		out = Path(output_path)
+		try:
+			from boss_agent_cli.resume.export import export_html, export_pdf
+			if fmt == "html":
+				export_html(resume, out)
+			else:
+				export_pdf(resume, out)
+		except Exception as exc:
+			handle_error_output(
+				ctx, "resume",
+				code="EXPORT_FAILED",
+				message=f"{fmt.upper()} 导出失败: {exc}",
+				recoverable=True,
+				recovery_action="请确认 patchright 已安装并执行 uv run playwright install chromium",
+			)
+			ctx.exit(1)
+			return
+		handle_output(
 			ctx, "resume",
-			code="EXPORT_FAILED",
-			message=f"{fmt.upper()} 导出将在后续版本支持",
-			recoverable=True,
-			recovery_action="当前请使用 --format json",
+			{"action": "export", "name": name, "format": fmt, "path": str(out.resolve())},
+			hints={"next_actions": [f"boss resume show {name}"]},
 		)
-		ctx.exit(1)
 		return
 	json_str = store.export_json(name)
 	export_data = json.loads(json_str)
