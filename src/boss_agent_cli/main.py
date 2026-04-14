@@ -3,7 +3,7 @@ from pathlib import Path
 import click
 
 from boss_agent_cli import __version__
-from boss_agent_cli.commands import schema, login, logout, status, doctor, search, detail, greet, recommend, export, cities, me, chat, chatmsg, chat_summary, mark, exchange, interviews, show, history, watch, pipeline, apply, shortlist, preset, digest, config_cmd, clean
+from boss_agent_cli.commands import schema, login, logout, status, doctor, search, detail, greet, recommend, export, cities, me, chat, chatmsg, chat_summary, mark, exchange, interviews, show, history, watch, pipeline, apply, shortlist, preset, digest, config_cmd, clean, resume_cmd
 from boss_agent_cli.config import load_config
 from boss_agent_cli.hooks import create_hook_bus
 from boss_agent_cli.output import Logger
@@ -70,3 +70,4 @@ cli.add_command(preset.preset_group, "preset")
 cli.add_command(digest.digest_cmd, "digest")
 cli.add_command(config_cmd.config_group, "config")
 cli.add_command(clean.clean_cmd, "clean")
+cli.add_command(resume_cmd.resume_group, "resume")

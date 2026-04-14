@@ -11,6 +11,8 @@ DEFAULTS = {
 	"login_timeout": 120,
 	"cdp_url": None,
 	"export_dir": None,
+	"resume_default_template": "default",
+	"resume_export_format": "pdf",
 }
 
 

@@ -404,6 +404,22 @@ SCHEMA_DATA = {
 				"--days": {"type": "int", "default": 30, "description": "清理超过指定天数的快照和导出"},
 			},
 		},
+		"resume": {
+			"description": "本地简历管理（子命令：init/list/show/edit/delete/export/import/clone/diff）",
+			"args": [],
+			"options": {},
+			"subcommands": {
+				"init": "从 BOSS 直聘简历或默认模板初始化本地简历",
+				"list": "列出所有本地简历",
+				"show": "查看简历详情",
+				"edit": "编辑简历字段",
+				"delete": "删除简历",
+				"export": "导出为 PDF/JSON/HTML",
+				"import": "导入 JSON 简历（兼容 wzdnzd/zine0 格式）",
+				"clone": "复制简历为新版本",
+				"diff": "对比两份简历差异",
+			},
+		},
 	},
 	"global_options": {
 		"--data-dir": {
@@ -488,6 +504,21 @@ SCHEMA_DATA = {
 			"message": "参数校验失败",
 			"recoverable": False,
 			"recovery_action": "修正参数",
+		},
+		"RESUME_NOT_FOUND": {
+			"message": "简历不存在",
+			"recoverable": False,
+			"recovery_action": None,
+		},
+		"RESUME_ALREADY_EXISTS": {
+			"message": "简历名称已存在",
+			"recoverable": False,
+			"recovery_action": "使用不同名称或先删除已有简历",
+		},
+		"EXPORT_FAILED": {
+			"message": "导出失败",
+			"recoverable": True,
+			"recovery_action": "检查 patchright 安装：patchright install chromium",
 		},
 	},
 	"conventions": {
