@@ -298,6 +298,48 @@ def test_diff_one_not_found(tmp_path):
 	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
 
 
+# ── link / applications ─────────────────────────────────────
+
+
+def test_link_resume_to_job(tmp_path):
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "linktest", "--template", "default"])
+	result = _invoke(runner, tmp_path, ["link", "linktest", "sid-001", "jid-001", "--title", "后端工程师", "--company", "测试公司"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["action"] == "link"
+	assert parsed["data"]["security_id"] == "sid-001"
+
+
+def test_link_resume_not_found(tmp_path):
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["link", "ghost", "sid", "jid"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
+
+
+def test_applications_list(tmp_path):
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "apptest", "--template", "default"])
+	_invoke(runner, tmp_path, ["link", "apptest", "sid-a", "jid-a", "--title", "前端", "--company", "公司甲"])
+	_invoke(runner, tmp_path, ["link", "apptest", "sid-b", "jid-b", "--title", "后端", "--company", "公司乙"])
+	result = _invoke(runner, tmp_path, ["applications", "apptest"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert len(parsed["data"]) == 2
+
+
+def test_applications_resume_not_found(tmp_path):
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["applications", "ghost"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
+
+
 # ── schema 集成 ───────────────────────────────────────────────
 
 

@@ -60,6 +60,18 @@ class CacheStore:
 				created_at REAL NOT NULL,
 				PRIMARY KEY (security_id, job_id)
 			);
+			CREATE TABLE IF NOT EXISTS resume_job_links (
+				resume_name TEXT NOT NULL,
+				security_id TEXT NOT NULL,
+				job_id TEXT NOT NULL,
+				job_title TEXT NOT NULL,
+				company TEXT NOT NULL,
+				status TEXT NOT NULL DEFAULT 'prepared',
+				notes TEXT DEFAULT '',
+				linked_at REAL NOT NULL,
+				updated_at REAL NOT NULL,
+				PRIMARY KEY (resume_name, security_id, job_id)
+			);
 		""")
 
 	@staticmethod
@@ -274,6 +286,95 @@ class CacheStore:
 		cursor = self._conn.execute(
 			"DELETE FROM shortlist_records WHERE security_id = ? AND job_id = ?",
 			(security_id, job_id),
+		)
+		self._conn.commit()
+		return cursor.rowcount > 0
+
+	def link_resume_to_job(
+		self,
+		resume_name: str,
+		security_id: str,
+		job_id: str,
+		job_title: str,
+		company: str,
+	) -> None:
+		"""将简历与职位关联"""
+		now = time.time()
+		self._conn.execute(
+			"INSERT OR REPLACE INTO resume_job_links "
+			"(resume_name, security_id, job_id, job_title, company, status, notes, linked_at, updated_at) "
+			"VALUES (?, ?, ?, ?, ?, 'prepared', '', ?, ?)",
+			(resume_name, security_id, job_id, job_title, company, now, now),
+		)
+		self._conn.commit()
+
+	def update_job_link_status(
+		self,
+		resume_name: str,
+		security_id: str,
+		job_id: str,
+		status: str,
+		notes: str = "",
+	) -> bool:
+		"""更新关联状态"""
+		now = time.time()
+		cursor = self._conn.execute(
+			"UPDATE resume_job_links SET status = ?, notes = ?, updated_at = ? "
+			"WHERE resume_name = ? AND security_id = ? AND job_id = ?",
+			(status, notes, now, resume_name, security_id, job_id),
+		)
+		self._conn.commit()
+		return cursor.rowcount > 0
+
+	def get_resume_applications(self, resume_name: str) -> list[dict]:
+		"""查看某份简历投递的所有职位"""
+		rows = self._conn.execute(
+			"SELECT resume_name, security_id, job_id, job_title, company, status, notes, linked_at, updated_at "
+			"FROM resume_job_links WHERE resume_name = ? ORDER BY updated_at DESC",
+			(resume_name,),
+		).fetchall()
+		return [
+			{
+				"resume_name": row[0],
+				"security_id": row[1],
+				"job_id": row[2],
+				"job_title": row[3],
+				"company": row[4],
+				"status": row[5],
+				"notes": row[6],
+				"linked_at": row[7],
+				"updated_at": row[8],
+			}
+			for row in rows
+		]
+
+	def get_job_resumes(self, security_id: str, job_id: str) -> list[dict]:
+		"""查看某职位关联的所有简历版本"""
+		rows = self._conn.execute(
+			"SELECT resume_name, security_id, job_id, job_title, company, status, notes, linked_at, updated_at "
+			"FROM resume_job_links WHERE security_id = ? AND job_id = ? ORDER BY updated_at DESC",
+			(security_id, job_id),
+		).fetchall()
+		return [
+			{
+				"resume_name": row[0],
+				"security_id": row[1],
+				"job_id": row[2],
+				"job_title": row[3],
+				"company": row[4],
+				"status": row[5],
+				"notes": row[6],
+				"linked_at": row[7],
+				"updated_at": row[8],
+			}
+			for row in rows
+		]
+
+	def remove_job_link(self, resume_name: str, security_id: str, job_id: str) -> bool:
+		"""移除简历职位关联"""
+		cursor = self._conn.execute(
+			"DELETE FROM resume_job_links WHERE resume_name = ? AND security_id = ? AND job_id = ?",
+			(resume_name, security_id, job_id),
 		)
 		self._conn.commit()
 		return cursor.rowcount > 0

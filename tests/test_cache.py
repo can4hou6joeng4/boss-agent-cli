@@ -115,3 +115,37 @@ def test_shortlist_crud(tmp_path):
 	assert items[0]["title"] == "Go 开发"
 	assert store.remove_shortlist("sec_001", "job_001") is True
 	assert store.is_shortlisted("sec_001", "job_001") is False
+
+
+def test_resume_job_link_crud(tmp_path):
+	store = CacheStore(tmp_path / "test.db")
+	store.link_resume_to_job("default", "sec_001", "job_001", "后端工程师", "测试公司")
+	apps = store.get_resume_applications("default")
+	assert len(apps) == 1
+	assert apps[0]["job_title"] == "后端工程师"
+	assert apps[0]["status"] == "prepared"
+
+	# 更新状态
+	ok = store.update_job_link_status("default", "sec_001", "job_001", "applied", "已投递")
+	assert ok is True
+	apps = store.get_resume_applications("default")
+	assert apps[0]["status"] == "applied"
+	assert apps[0]["notes"] == "已投递"
+
+	# 反向查询
+	resumes = store.get_job_resumes("sec_001", "job_001")
+	assert len(resumes) == 1
+	assert resumes[0]["resume_name"] == "default"
+
+	# 删除关联
+	ok = store.remove_job_link("default", "sec_001", "job_001")
+	assert ok is True
+	assert store.get_resume_applications("default") == []
+
+
+def test_resume_job_link_multiple(tmp_path):
+	store = CacheStore(tmp_path / "test.db")
+	store.link_resume_to_job("v1", "sec_001", "job_001", "后端", "公司甲")
+	store.link_resume_to_job("v2", "sec_001", "job_001", "后端", "公司甲")
+	resumes = store.get_job_resumes("sec_001", "job_001")
+	assert len(resumes) == 2

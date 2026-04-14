@@ -317,3 +317,49 @@ def resume_diff_cmd(ctx, name1, name2):
 		{"name1": name1, "name2": name2, "diffs": diffs},
 		hints={"next_actions": [f"boss resume show {name1}", f"boss resume show {name2}"]},
 	)
+
+
+@resume_group.command("link")
+@click.argument("name")
+@click.argument("security_id")
+@click.argument("job_id")
+@click.option("--title", default="", help="职位名称")
+@click.option("--company", default="", help="公司名称")
+@click.pass_context
+def resume_link_cmd(ctx, name, security_id, job_id, title, company):
+	"""关联简历与职位"""
+	store = _get_store(ctx)
+	if not store.exists(name):
+		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
+		ctx.exit(1)
+		return
+	from boss_agent_cli.cache.store import CacheStore
+	cache = CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db")
+	cache.link_resume_to_job(name, security_id, job_id, title, company)
+	cache.close()
+	handle_output(
+		ctx, "resume",
+		{"action": "link", "name": name, "security_id": security_id, "job_id": job_id},
+		hints={"next_actions": [f"boss resume applications {name}", f"boss apply {security_id} {job_id}"]},
+	)
+
+
+@resume_group.command("applications")
+@click.argument("name")
+@click.pass_context
+def resume_applications_cmd(ctx, name):
+	"""查看简历关联的所有职位"""
+	store = _get_store(ctx)
+	if not store.exists(name):
+		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
+		ctx.exit(1)
+		return
+	from boss_agent_cli.cache.store import CacheStore
+	cache = CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db")
+	items = cache.get_resume_applications(name)
+	cache.close()
+	handle_output(
+		ctx, "resume",
+		items,
+		hints={"next_actions": [f"boss resume show {name}"]},
+	)
