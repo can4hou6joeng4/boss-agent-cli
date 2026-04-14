@@ -1,6 +1,5 @@
 import json
 
-from boss_agent_cli.resume.models import ResumeData
 from boss_agent_cli.resume.store import ResumeStore
 
 

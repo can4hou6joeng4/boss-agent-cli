@@ -1,6 +1,6 @@
 import json
 
-from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, PersonalInfoItem, ResumeModule, resume_to_dict
+from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, PersonalInfoItem, ResumeModule
 from boss_agent_cli.resume.store import ResumeStore
 
 
