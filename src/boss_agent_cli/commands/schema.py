@@ -405,7 +405,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"resume": {
-			"description": "本地简历管理（子命令：init/list/show/edit/delete/export/import/clone/diff）",
+			"description": "本地简历管理（子命令：init/list/show/edit/delete/export/import/clone/diff/link/applications）",
 			"args": [],
 			"options": {},
 			"subcommands": {
@@ -418,6 +418,20 @@ SCHEMA_DATA = {
 				"import": "导入 JSON 简历（兼容 wzdnzd/zine0 格式）",
 				"clone": "复制简历为新版本",
 				"diff": "对比两份简历差异",
+				"link": "关联简历与职位",
+				"applications": "查看简历关联的所有职位",
+			},
+		},
+		"ai": {
+			"description": "AI 简历优化（子命令：config/analyze-jd/polish/optimize/suggest）",
+			"args": [],
+			"options": {},
+			"subcommands": {
+				"config": "配置 AI 服务提供商和模型",
+				"analyze-jd": "分析职位描述并评估简历匹配度",
+				"polish": "通用简历润色",
+				"optimize": "基于目标职位描述优化简历",
+				"suggest": "基于目标职位描述给出优化建议（不修改简历）",
 			},
 		},
 	},
@@ -519,6 +533,21 @@ SCHEMA_DATA = {
 			"message": "导出失败",
 			"recoverable": True,
 			"recovery_action": "检查 patchright 安装：patchright install chromium",
+		},
+		"AI_NOT_CONFIGURED": {
+			"message": "AI 服务未配置",
+			"recoverable": True,
+			"recovery_action": "boss ai config --provider <provider> --model <model> --api-key <key>",
+		},
+		"AI_API_ERROR": {
+			"message": "AI 服务调用失败",
+			"recoverable": True,
+			"recovery_action": "检查网络连接和密钥配置，重试",
+		},
+		"AI_PARSE_ERROR": {
+			"message": "AI 返回结果解析失败",
+			"recoverable": True,
+			"recovery_action": "重试（模型输出不稳定时可能发生）",
 		},
 	},
 	"conventions": {
