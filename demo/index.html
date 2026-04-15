@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>boss-agent-cli — AI Agent 求职 CLI 工具</title>
+<meta name="description" content="专为 AI Agent 设计的 BOSS 直聘求职 CLI 工具。搜索职位、福利筛选、自动打招呼、求职流水线、简历管理、AI 优化。">
+<meta property="og:title" content="boss-agent-cli">
+<meta property="og:description" content="专为 AI Agent 设计的 BOSS 直聘求职 CLI 工具">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+<style>
+:root {
+  --bg: #fafafa; --bg-surface: #ffffff; --bg-code: #1e1e2e; --bg-code-header: #181825;
+  --ink: #1a1a2e; --ink-muted: #64748b; --ink-code: #cdd6f4;
+  --accent: #2563eb; --accent-soft: rgba(37,99,235,0.08); --accent-hover: #1d4ed8;
+  --green: #10b981; --green-soft: rgba(16,185,129,0.1);
+  --orange: #f59e0b; --orange-soft: rgba(245,158,11,0.1);
+  --red: #ef4444; --red-soft: rgba(239,68,68,0.1);
+  --purple: #8b5cf6; --purple-soft: rgba(139,92,246,0.1);
+  --line: rgba(0,0,0,0.06);
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Menlo', monospace;
+  --radius: 12px; --radius-lg: 16px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-lg: 0 10px 40px rgba(0,0,0,0.08);
+}
+[data-theme="dark"] {
+  --bg: #0f0f1a; --bg-surface: #1a1a2e; --bg-code: #11111b; --bg-code-header: #0a0a14;
+  --ink: #e2e8f0; --ink-muted: #94a3b8; --ink-code: #cdd6f4;
+  --accent: #60a5fa; --accent-soft: rgba(96,165,250,0.1); --accent-hover: #93c5fd;
+  --line: rgba(255,255,255,0.06);
+  --shadow: 0 1px 3px rgba(0,0,0,0.3); --shadow-lg: 0 10px 40px rgba(0,0,0,0.4);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+a:hover { color: var(--accent-hover); }
+.container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+
+/* ── Theme Toggle ── */
+.theme-toggle { position: fixed; top: 1.2rem; right: 1.2rem; z-index: 100; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-surface); border: 1px solid var(--line); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s; box-shadow: var(--shadow); }
+.theme-toggle:hover { transform: scale(1.1); }
+.theme-toggle svg { width: 18px; height: 18px; stroke: var(--ink); fill: none; stroke-width: 2; }
+.theme-toggle .icon-moon { display: none; }
+[data-theme="dark"] .theme-toggle .icon-sun { display: none; }
+[data-theme="dark"] .theme-toggle .icon-moon { display: block; }
+
+/* ── Nav ── */
+.nav { position: sticky; top: 0; z-index: 50; background: var(--bg); border-bottom: 1px solid var(--line); backdrop-filter: blur(12px); background: rgba(250,250,250,0.85); }
+[data-theme="dark"] .nav { background: rgba(15,15,26,0.85); }
+.nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
+.nav-brand { font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: 8px; color: var(--ink); }
+.nav-brand span { color: var(--accent); }
+.nav-links { display: flex; gap: 24px; font-size: 0.9rem; }
+.nav-links a { color: var(--ink-muted); font-weight: 500; }
+.nav-links a:hover { color: var(--accent); }
+@media (max-width: 640px) { .nav-links { display: none; } }
+
+/* ── Hero ── */
+.hero { padding: 80px 0 60px; text-align: center; }
+.hero-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 16px; background: var(--accent-soft); border-radius: 100px; font-size: 0.8rem; color: var(--accent); font-weight: 600; margin-bottom: 24px; }
+.hero h1 { font-size: clamp(2.2rem, 5vw, 3.5rem); font-weight: 700; line-height: 1.15; margin-bottom: 16px; letter-spacing: -0.02em; }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero p { font-size: clamp(1rem, 1.5vw, 1.15rem); color: var(--ink-muted); max-width: 600px; margin: 0 auto 32px; }
+.hero-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 28px; border-radius: 100px; font-family: var(--font-body); font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: all 0.2s; border: none; min-height: 48px; text-decoration: none; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); color: #fff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.3); }
+.btn-outline { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
+.btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+.badges { display: flex; justify-content: center; gap: 8px; margin-top: 24px; flex-wrap: wrap; }
+.badges img { height: 22px; }
+
+/* ── Terminal ── */
+.terminal-section { padding: 60px 0; }
+.terminal { background: var(--bg-code); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-lg); max-width: 780px; margin: 0 auto; }
+.terminal-header { background: var(--bg-code-header); padding: 12px 16px; display: flex; align-items: center; gap: 8px; }
+.terminal-dot { width: 12px; height: 12px; border-radius: 50%; }
+.terminal-dot.r { background: #ff5f57; }
+.terminal-dot.y { background: #febc2e; }
+.terminal-dot.g { background: #28c840; }
+.terminal-title { color: #585b70; font-size: 0.8rem; font-family: var(--font-mono); margin-left: 8px; }
+.terminal-body { padding: 20px 24px; font-family: var(--font-mono); font-size: 0.85rem; line-height: 1.8; color: var(--ink-code); min-height: 320px; }
+.terminal-line { opacity: 0; transform: translateY(4px); }
+.terminal-line .prompt { color: #a6e3a1; }
+.terminal-line .cmd { color: #89b4fa; }
+.terminal-line .flag { color: #fab387; }
+.terminal-line .str { color: #f9e2af; }
+.terminal-line .comment { color: #585b70; font-style: italic; }
+.terminal-line .output { color: #94a3b8; }
+.terminal-line .success { color: #a6e3a1; }
+.terminal-line .json-key { color: #89b4fa; }
+.terminal-line .json-val { color: #a6e3a1; }
+.terminal-line .json-str { color: #f9e2af; }
+.terminal-line .json-brace { color: #cdd6f4; }
+.terminal-tabs { display: flex; gap: 0; margin: 0 auto; max-width: 780px; }
+.terminal-tab { flex: 1; padding: 10px 16px; background: var(--bg-surface); border: 1px solid var(--line); cursor: pointer; font-size: 0.85rem; font-weight: 500; color: var(--ink-muted); text-align: center; transition: all 0.2s; }
+.terminal-tab:first-child { border-radius: var(--radius) 0 0 0; }
+.terminal-tab:last-child { border-radius: 0 var(--radius) 0 0; }
+.terminal-tab.active { background: var(--bg-code); color: var(--accent); border-color: var(--bg-code); border-bottom-color: transparent; }
+
+/* ── Stats ── */
+.stats { padding: 40px 0; }
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+@media (max-width: 640px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+.stat-card { text-align: center; padding: 24px 16px; background: var(--bg-surface); border-radius: var(--radius); border: 1px solid var(--line); }
+.stat-num { font-size: 2rem; font-weight: 700; color: var(--accent); line-height: 1.2; }
+.stat-label { font-size: 0.85rem; color: var(--ink-muted); margin-top: 4px; }
+
+/* ── Features ── */
+.features { padding: 80px 0; }
+.section-title { text-align: center; font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; margin-bottom: 12px; letter-spacing: -0.01em; }
+.section-subtitle { text-align: center; color: var(--ink-muted); font-size: 1rem; margin-bottom: 48px; max-width: 500px; margin-left: auto; margin-right: auto; }
+.features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+@media (max-width: 768px) { .features-grid { grid-template-columns: 1fr; } }
+.feature-card { padding: 28px 24px; background: var(--bg-surface); border-radius: var(--radius); border: 1px solid var(--line); transition: all 0.3s; }
+.feature-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--accent); }
+.feature-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; margin-bottom: 16px; }
+.feature-card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
+.feature-card p { font-size: 0.88rem; color: var(--ink-muted); line-height: 1.6; }
+
+/* ── Command Matrix ── */
+.commands { padding: 80px 0; }
+.cmd-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+@media (max-width: 768px) { .cmd-grid { grid-template-columns: 1fr; } }
+.cmd-item { display: flex; align-items: baseline; gap: 12px; padding: 12px 16px; background: var(--bg-surface); border-radius: var(--radius); border: 1px solid var(--line); font-size: 0.88rem; transition: border-color 0.2s; }
+.cmd-item:hover { border-color: var(--accent); }
+.cmd-name { font-family: var(--font-mono); font-weight: 500; color: var(--accent); white-space: nowrap; font-size: 0.82rem; }
+.cmd-desc { color: var(--ink-muted); }
+
+/* ── Architecture ── */
+.architecture { padding: 80px 0; }
+.arch-flow { display: flex; flex-direction: column; gap: 0; align-items: center; max-width: 700px; margin: 0 auto; }
+.arch-node { padding: 16px 32px; border-radius: var(--radius); font-weight: 600; font-size: 0.95rem; text-align: center; width: 100%; max-width: 480px; border: 1.5px solid; }
+.arch-arrow { color: var(--ink-muted); font-size: 1.2rem; padding: 4px 0; }
+.arch-row { display: flex; gap: 12px; width: 100%; max-width: 600px; justify-content: center; }
+.arch-row .arch-node { flex: 1; max-width: none; padding: 12px 16px; font-size: 0.85rem; }
+
+/* ── JSON Output ── */
+.json-section { padding: 60px 0; }
+.json-block { background: var(--bg-code); border-radius: var(--radius-lg); padding: 24px; font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.7; color: var(--ink-code); max-width: 680px; margin: 0 auto; overflow-x: auto; box-shadow: var(--shadow-lg); }
+
+/* ── Install ── */
+.install { padding: 80px 0; text-align: center; }
+.install-code { display: inline-block; background: var(--bg-code); color: var(--ink-code); font-family: var(--font-mono); font-size: 0.95rem; padding: 16px 32px; border-radius: var(--radius); margin: 24px 0; box-shadow: var(--shadow); }
+
+/* ── Footer ── */
+.footer { padding: 40px 0; border-top: 1px solid var(--line); text-align: center; }
+.footer p { color: var(--ink-muted); font-size: 0.85rem; }
+.footer-links { display: flex; justify-content: center; gap: 24px; margin-top: 12px; }
+.footer-links a { color: var(--ink-muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<!-- Theme Toggle -->
+<button class="theme-toggle" onclick="toggleTheme()" aria-label="切换主题">
+  <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+  <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="container nav-inner">
+    <a href="#" class="nav-brand"><span>&gt;_</span> boss-agent-cli</a>
+    <div class="nav-links">
+      <a href="#features">特性</a>
+      <a href="#demo">演示</a>
+      <a href="#commands">命令</a>
+      <a href="#architecture">架构</a>
+      <a href="https://github.com/can4hou6joeng4/boss-agent-cli">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge">专为 AI Agent 设计</div>
+    <h1>让 Agent 帮你<em>找工作</em></h1>
+    <p>BOSS 直聘全链路求职 CLI 工具。结构化 JSON 输出，30+ 命令覆盖搜索、投递、沟通、简历管理和 AI 优化全流程。</p>
+    <div class="hero-actions">
+      <a href="https://github.com/can4hou6joeng4/boss-agent-cli" class="btn btn-primary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+        GitHub
+      </a>
+      <a href="#demo" class="btn btn-outline">查看演示</a>
+    </div>
+    <div class="badges">
+      <img src="https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg" alt="CI">
+      <img src="https://img.shields.io/badge/Python-%E2%89%A53.10-3776AB?logo=python&logoColor=white" alt="Python">
+      <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
+      <img src="https://img.shields.io/github/v/release/can4hou6joeng4/boss-agent-cli" alt="Release">
+    </div>
+  </div>
+</section>
+
+<!-- Stats -->
+<section class="stats">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-num">30+</div><div class="stat-label">CLI 命令</div></div>
+      <div class="stat-card"><div class="stat-num">650+</div><div class="stat-label">测试用例</div></div>
+      <div class="stat-card"><div class="stat-num">0</div><div class="stat-label">新增运行时依赖</div></div>
+      <div class="stat-card"><div class="stat-num">4</div><div class="stat-label">Python 版本支持</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- Terminal Demo -->
+<section class="terminal-section" id="demo">
+  <div class="container">
+    <h2 class="section-title">终端演示</h2>
+    <p class="section-subtitle">从搜索到投递，一条命令链闭环</p>
+
+    <div class="terminal-tabs">
+      <button class="terminal-tab active" onclick="showDemo('search')">搜索投递</button>
+      <button class="terminal-tab" onclick="showDemo('pipeline')">求职流水线</button>
+      <button class="terminal-tab" onclick="showDemo('ai')">AI 优化</button>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-header">
+        <span class="terminal-dot r"></span>
+        <span class="terminal-dot y"></span>
+        <span class="terminal-dot g"></span>
+        <span class="terminal-title">boss-agent-cli</span>
+      </div>
+      <div class="terminal-body" id="terminal-content">
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="features" id="features">
+  <div class="container">
+    <h2 class="section-title">核心特性</h2>
+    <p class="section-subtitle">不只是 API 封装，是完整的 Agent 求职基础设施</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon" style="background:var(--accent-soft); color:var(--accent);">&#x1F50D;</div>
+        <h3>福利精准筛选</h3>
+        <p>--welfare "双休,五险一金" 自动翻页逐个查详情，只返回真正匹配的结果。核心差异化功能。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:var(--green-soft); color:var(--green);">&#x1F916;</div>
+        <h3>Agent 友好协议</h3>
+        <p>所有输出为 JSON 信封。boss schema 一次调用理解全部能力，hints.next_actions 引导下一步。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:var(--purple-soft); color:var(--purple);">&#x1F9E0;</div>
+        <h3>AI 简历优化</h3>
+        <p>JD 匹配分析、简历润色、针对性优化、改进建议。支持 OpenAI 兼容的任意大模型。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:var(--orange-soft); color:var(--orange);">&#x1F6E1;</div>
+        <h3>智能反检测</h3>
+        <p>基于 patchright 反检测浏览器 + 高斯分布请求延迟 + CDP 真实指纹，从根本上规避风控。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:var(--red-soft); color:var(--red);">&#x1F4CA;</div>
+        <h3>求职流水线</h3>
+        <p>pipeline 聚合沟通和面试数据，follow-up 筛选待跟进，digest 生成每日摘要。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:var(--green-soft); color:var(--green);">&#x1F4DD;</div>
+        <h3>本地简历管理</h3>
+        <p>多版本简历管理、HTML/PDF 导出、格式兼容导入、简历-职位关联追踪。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Commands -->
+<section class="commands" id="commands">
+  <div class="container">
+    <h2 class="section-title">命令矩阵</h2>
+    <p class="section-subtitle">覆盖求职全流程的 30+ 命令</p>
+    <div class="cmd-grid">
+      <div class="cmd-item"><span class="cmd-name">boss schema</span><span class="cmd-desc">工具能力自描述（Agent 首先调用）</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss login</span><span class="cmd-desc">三级降级登录（Cookie / CDP / 扫码）</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss doctor</span><span class="cmd-desc">环境诊断（依赖、网络、登录态）</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss search</span><span class="cmd-desc">搜索职位（支持福利筛选 + 预设）</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss detail</span><span class="cmd-desc">职位详情（httpx 快速通道）</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss recommend</span><span class="cmd-desc">个性化推荐</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss greet</span><span class="cmd-desc">向招聘者打招呼</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss batch-greet</span><span class="cmd-desc">批量打招呼（上限 10）</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss apply</span><span class="cmd-desc">发起投递/立即沟通（幂等）</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss chat</span><span class="cmd-desc">沟通列表（支持多格式导出）</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss chatmsg</span><span class="cmd-desc">聊天消息历史</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss chat-summary</span><span class="cmd-desc">沟通结构化摘要</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss pipeline</span><span class="cmd-desc">求职进度流水线</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss follow-up</span><span class="cmd-desc">跟进提醒（超时/未读）</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss digest</span><span class="cmd-desc">每日求职摘要</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss watch</span><span class="cmd-desc">搜索订阅与增量监控</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss shortlist</span><span class="cmd-desc">职位候选池管理</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss preset</span><span class="cmd-desc">搜索预设管理</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss resume</span><span class="cmd-desc">本地简历管理（11 个子命令）</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss ai</span><span class="cmd-desc">AI 简历优化（5 个子命令）</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss export</span><span class="cmd-desc">搜索结果导出（CSV / JSON）</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss me</span><span class="cmd-desc">我的信息（用户/简历/期望）</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss mark</span><span class="cmd-desc">联系人标签管理</span></div>
+      <div class="cmd-item"><span class="cmd-name">boss exchange</span><span class="cmd-desc">交换联系方式（手机/微信）</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section class="architecture" id="architecture">
+  <div class="container">
+    <h2 class="section-title">技术架构</h2>
+    <p class="section-subtitle">清晰的分层设计，每一层职责明确</p>
+    <div class="arch-flow">
+      <div class="arch-node" style="background:var(--accent-soft); border-color:var(--accent); color:var(--accent);">CLI 入口 (Click) — 30+ 命令</div>
+      <div class="arch-arrow">&#x2193;</div>
+      <div class="arch-row">
+        <div class="arch-node" style="background:var(--green-soft); border-color:var(--green); color:var(--green);">AuthManager<br><small>Token 生命周期</small></div>
+        <div class="arch-node" style="background:var(--purple-soft); border-color:var(--purple); color:var(--purple);">AIService<br><small>多模型对话补全</small></div>
+      </div>
+      <div class="arch-arrow">&#x2193;</div>
+      <div class="arch-node" style="background:var(--orange-soft); border-color:var(--orange); color:var(--orange);">BossClient (httpx + BrowserSession + CDP)</div>
+      <div class="arch-arrow">&#x2193;</div>
+      <div class="arch-row">
+        <div class="arch-node" style="background:var(--red-soft); border-color:var(--red); color:var(--red);">CacheStore<br><small>SQLite WAL</small></div>
+        <div class="arch-node" style="background:var(--accent-soft); border-color:var(--accent); color:var(--accent);">ResumeStore<br><small>JSON 文件</small></div>
+      </div>
+      <div class="arch-arrow">&#x2193;</div>
+      <div class="arch-node" style="background:var(--green-soft); border-color:var(--green); color:var(--green);">JSON 信封 &#x2192; stdout</div>
+    </div>
+  </div>
+</section>
+
+<!-- JSON Output -->
+<section class="json-section">
+  <div class="container">
+    <h2 class="section-title">结构化输出协议</h2>
+    <p class="section-subtitle">每个命令都输出标准 JSON 信封，Agent 无需猜测</p>
+    <div class="json-block"><pre>{
+  <span class="json-key">"ok"</span>: <span class="json-val">true</span>,
+  <span class="json-key">"schema_version"</span>: <span class="json-str">"1.0"</span>,
+  <span class="json-key">"command"</span>: <span class="json-str">"search"</span>,
+  <span class="json-key">"data"</span>: [
+    {
+      <span class="json-key">"title"</span>: <span class="json-str">"Golang 高级工程师"</span>,
+      <span class="json-key">"company"</span>: <span class="json-str">"某科技有限公司"</span>,
+      <span class="json-key">"salary"</span>: <span class="json-str">"25-50K"</span>,
+      <span class="json-key">"welfare_match"</span>: { <span class="json-key">"双休"</span>: <span class="json-str">"tag"</span>, <span class="json-key">"五险一金"</span>: <span class="json-str">"tag"</span> }
+    }
+  ],
+  <span class="json-key">"pagination"</span>: { <span class="json-key">"page"</span>: <span class="json-val">1</span>, <span class="json-key">"has_more"</span>: <span class="json-val">true</span> },
+  <span class="json-key">"hints"</span>: { <span class="json-key">"next_actions"</span>: [<span class="json-str">"boss detail &lt;security_id&gt;"</span>] }
+}</pre></div>
+  </div>
+</section>
+
+<!-- Install -->
+<section class="install" id="install">
+  <div class="container">
+    <h2 class="section-title">快速开始</h2>
+    <p class="section-subtitle">两行命令，秒级安装</p>
+    <div class="install-code">
+      <span style="color:#a6e3a1;">$</span> <span style="color:#89b4fa;">uv tool install</span> <span style="color:#f9e2af;">boss-agent-cli</span><br>
+      <span style="color:#a6e3a1;">$</span> <span style="color:#89b4fa;">patchright install</span> <span style="color:#f9e2af;">chromium</span>
+    </div>
+    <div style="margin-top:24px;">
+      <a href="https://github.com/can4hou6joeng4/boss-agent-cli#安装" class="btn btn-primary">查看完整文档</a>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="container">
+    <p>boss-agent-cli &mdash; 专为 AI Agent 设计的 BOSS 直聘求职 CLI 工具</p>
+    <div class="footer-links">
+      <a href="https://github.com/can4hou6joeng4/boss-agent-cli">GitHub</a>
+      <a href="https://github.com/can4hou6joeng4/boss-agent-cli/releases">Releases</a>
+      <a href="https://github.com/can4hou6joeng4/boss-agent-cli/blob/master/LICENSE">MIT License</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ── Theme ──
+function toggleTheme() {
+  const t = document.documentElement.getAttribute('data-theme') === 'dark' ? '' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('theme', t);
+}
+(function() {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+})();
+
+// ── Terminal Demos ──
+const demos = {
+  search: [
+    { type: 'comment', text: '# 搜索广州的 Golang 职位，要求双休+五险一金' },
+    { type: 'cmd', text: '<span class="prompt">$</span> <span class="cmd">boss search</span> <span class="str">"Golang"</span> <span class="flag">--city</span> <span class="str">广州</span> <span class="flag">--welfare</span> <span class="str">"双休,五险一金"</span>' },
+    { type: 'output', text: '<span class="success">ok</span>  找到 15 个匹配职位（已过滤福利）' },
+    { type: 'blank' },
+    { type: 'comment', text: '# 查看第一个职位详情' },
+    { type: 'cmd', text: '<span class="prompt">$</span> <span class="cmd">boss detail</span> <span class="str">sec_abc123</span> <span class="flag">--job-id</span> <span class="str">enc_xyz</span>' },
+    { type: 'output', text: '<span class="success">ok</span>  Golang 高级工程师 · 某科技 · 25-50K · 广州天河' },
+    { type: 'blank' },
+    { type: 'comment', text: '# 向招聘者打招呼' },
+    { type: 'cmd', text: '<span class="prompt">$</span> <span class="cmd">boss greet</span> <span class="str">sec_abc123</span> <span class="str">job_xyz</span>' },
+    { type: 'output', text: '<span class="success">ok</span>  打招呼成功 &#x2714;' },
+  ],
+  pipeline: [
+    { type: 'comment', text: '# 查看求职进度流水线' },
+    { type: 'cmd', text: '<span class="prompt">$</span> <span class="cmd">boss pipeline</span>' },
+    { type: 'output', text: '<span class="success">ok</span>  stages: 待回复 3 · 沟通中 5 · 面试 2 · 已投递 8' },
+    { type: 'blank' },
+    { type: 'comment', text: '# 筛出需要跟进的联系人' },
+    { type: 'cmd', text: '<span class="prompt">$</span> <span class="cmd">boss follow-up</span>' },
+    { type: 'output', text: '<span class="success">ok</span>  3 个联系人超过 48 小时未回复' },
+    { type: 'blank' },
+    { type: 'comment', text: '# 生成每日求职摘要' },
+    { type: 'cmd', text: '<span class="prompt">$</span> <span class="cmd">boss digest</span>' },
+    { type: 'output', text: '<span class="success">ok</span>  新增职位 12 · 待跟进 3 · 面试邀请 1' },
+    { type: 'blank' },
+    { type: 'comment', text: '# 增量监控：只看新出现的职位' },
+    { type: 'cmd', text: '<span class="prompt">$</span> <span class="cmd">boss watch run</span> <span class="str">my-golang</span>' },
+    { type: 'output', text: '<span class="success">ok</span>  发现 4 个新职位（已标记）' },
+  ],
+  ai: [
+    { type: 'comment', text: '# 配置 AI 服务' },
+    { type: 'cmd', text: '<span class="prompt">$</span> <span class="cmd">boss ai config</span> <span class="flag">--provider</span> <span class="str">openai</span> <span class="flag">--model</span> <span class="str">gpt-4o</span> <span class="flag">--api-key</span> <span class="str">sk-***</span>' },
+    { type: 'output', text: '<span class="success">ok</span>  配置已保存（密钥已加密存储）' },
+    { type: 'blank' },
+    { type: 'comment', text: '# 分析 JD 与简历匹配度' },
+    { type: 'cmd', text: '<span class="prompt">$</span> <span class="cmd">boss ai analyze-jd</span> <span class="str">@jd.txt</span> <span class="flag">--resume</span> <span class="str">default</span>' },
+    { type: 'output', text: '<span class="success">ok</span>  匹配分 85/100 · 优势 3 · 差距 2 · 建议 4' },
+    { type: 'blank' },
+    { type: 'comment', text: '# 基于 JD 优化简历' },
+    { type: 'cmd', text: '<span class="prompt">$</span> <span class="cmd">boss ai optimize</span> <span class="str">default</span> <span class="flag">--jd</span> <span class="str">@jd.txt</span>' },
+    { type: 'output', text: '<span class="success">ok</span>  匹配分 65 &#x2192; 87 · 优化 5 个模块' },
+    { type: 'blank' },
+    { type: 'comment', text: '# 导出为 PDF' },
+    { type: 'cmd', text: '<span class="prompt">$</span> <span class="cmd">boss resume export</span> <span class="str">default</span> <span class="flag">--format</span> <span class="str">pdf</span>' },
+    { type: 'output', text: '<span class="success">ok</span>  已导出到 default.pdf' },
+  ],
+};
+
+let currentDemo = 'search';
+let animTimeline = null;
+
+function showDemo(name) {
+  currentDemo = name;
+  document.querySelectorAll('.terminal-tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  renderTerminal(name);
+}
+
+function renderTerminal(name) {
+  if (animTimeline) { animTimeline.kill(); }
+  const body = document.getElementById('terminal-content');
+  const lines = demos[name];
+  body.innerHTML = lines.map((line, i) => {
+    if (line.type === 'blank') return '<div class="terminal-line" style="height:8px;"></div>';
+    if (line.type === 'comment') return `<div class="terminal-line"><span class="comment">${line.text}</span></div>`;
+    if (line.type === 'cmd') return `<div class="terminal-line">${line.text}</div>`;
+    return `<div class="terminal-line"><span class="output">${line.text}</span></div>`;
+  }).join('');
+
+  animTimeline = gsap.timeline();
+  body.querySelectorAll('.terminal-line').forEach((el, i) => {
+    animTimeline.to(el, { opacity: 1, y: 0, duration: 0.3, ease: 'power2.out' }, i * 0.15);
+  });
+}
+
+// ── GSAP Scroll Animations ──
+document.addEventListener('DOMContentLoaded', function() {
+  gsap.registerPlugin(ScrollTrigger);
+
+  // Hero entrance
+  gsap.from('.hero-badge', { opacity: 0, y: 20, duration: 0.6, delay: 0.1 });
+  gsap.from('.hero h1', { opacity: 0, y: 30, duration: 0.8, delay: 0.2 });
+  gsap.from('.hero p', { opacity: 0, y: 20, duration: 0.6, delay: 0.4 });
+  gsap.from('.hero-actions', { opacity: 0, y: 20, duration: 0.6, delay: 0.5 });
+  gsap.from('.badges', { opacity: 0, duration: 0.6, delay: 0.6 });
+
+  // Stats counter
+  document.querySelectorAll('.stat-num').forEach(el => {
+    const target = parseInt(el.textContent);
+    gsap.from(el, {
+      textContent: 0, duration: 1.5, ease: 'power2.out', snap: { textContent: 1 },
+      scrollTrigger: { trigger: el, start: 'top 85%', once: true },
+      onUpdate: function() { el.textContent = Math.round(this.targets()[0].textContent) + (el.dataset.suffix || ''); }
+    });
+  });
+
+  // Stat cards
+  gsap.utils.toArray('.stat-card').forEach((card, i) => {
+    gsap.from(card, { opacity: 0, y: 30, duration: 0.5, delay: i * 0.1,
+      scrollTrigger: { trigger: card, start: 'top 85%', once: true }
+    });
+  });
+
+  // Feature cards
+  gsap.utils.toArray('.feature-card').forEach((card, i) => {
+    gsap.from(card, { opacity: 0, y: 40, duration: 0.6, delay: i * 0.1,
+      scrollTrigger: { trigger: card, start: 'top 85%', once: true }
+    });
+  });
+
+  // Command items
+  gsap.utils.toArray('.cmd-item').forEach((item, i) => {
+    gsap.from(item, { opacity: 0, x: i % 2 === 0 ? -20 : 20, duration: 0.4, delay: (i % 12) * 0.05,
+      scrollTrigger: { trigger: item, start: 'top 90%', once: true }
+    });
+  });
+
+  // Architecture nodes
+  gsap.utils.toArray('.arch-node, .arch-arrow').forEach((node, i) => {
+    gsap.from(node, { opacity: 0, scale: 0.9, duration: 0.5, delay: i * 0.12,
+      scrollTrigger: { trigger: node, start: 'top 85%', once: true }
+    });
+  });
+
+  // Section titles
+  gsap.utils.toArray('.section-title').forEach(title => {
+    gsap.from(title, { opacity: 0, y: 20, duration: 0.6,
+      scrollTrigger: { trigger: title, start: 'top 85%', once: true }
+    });
+  });
+
+  // JSON block
+  gsap.from('.json-block', { opacity: 0, y: 30, duration: 0.8,
+    scrollTrigger: { trigger: '.json-block', start: 'top 85%', once: true }
+  });
+
+  // Init terminal
+  renderTerminal('search');
+});
+</script>
+</body>
+</html>

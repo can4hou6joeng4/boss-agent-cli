@@ -18,4 +18,5 @@ GEMINI.md
 .trellis/
 *.html
 !src/**/*.html
+!demo/**/*.html
 *.pdf
