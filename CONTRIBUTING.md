@@ -9,6 +9,9 @@ git clone https://github.com/can4hou6joeng4/boss-agent-cli.git
 cd boss-agent-cli
 uv sync --all-extras
 uv run pytest tests/ -v
+
+# 启用本地提交质量门禁（推荐）
+uv run pre-commit install
 ```
 
 ## 编码规范
