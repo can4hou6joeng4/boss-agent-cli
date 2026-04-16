@@ -65,6 +65,11 @@ def test_required_tools_present():
 		"boss_chatmsg", "boss_chat_summary", "boss_mark", "boss_exchange",
 		"boss_apply", "boss_batch_greet", "boss_show", "boss_pipeline",
 		"boss_follow_up", "boss_digest", "boss_config", "boss_clean",
+		"boss_stats", "boss_ai_reply",
+		"boss_resume_list", "boss_resume_show",
+		"boss_ai_analyze_jd", "boss_ai_optimize", "boss_ai_suggest",
+		"boss_watch_list", "boss_watch_run",
+		"boss_preset_list", "boss_shortlist_list",
 	}
 	missing = required - names
 	assert not missing, f"缺少核心工具: {missing}"
@@ -318,3 +323,79 @@ def test_run_boss_timeout(mock_run):
 	mock_run.return_value = MagicMock(stdout='{"ok": true}', stderr="")
 	_run_boss("doctor")
 	assert mock_run.call_args[1]["timeout"] == 120
+
+
+# ── 新增工具 _build_args 覆盖（PR #41 扩展）─────────────────
+
+
+def test_build_args_stats_default():
+	assert _build_args("boss_stats", {}) == ["stats"]
+
+
+def test_build_args_stats_with_days():
+	args = _build_args("boss_stats", {"days": 7})
+	assert args == ["stats", "--days", "7"]
+
+
+def test_build_args_ai_reply_minimal():
+	args = _build_args("boss_ai_reply", {"recruiter_message": "请问到岗时间？"})
+	assert args == ["ai", "reply", "请问到岗时间？"]
+
+
+def test_build_args_ai_reply_full():
+	args = _build_args("boss_ai_reply", {
+		"recruiter_message": "hello",
+		"context": "previous chat",
+		"resume": "test",
+		"tone": "热情积极",
+	})
+	assert "--context" in args
+	assert "previous chat" in args
+	assert "--resume" in args
+	assert "test" in args
+	assert "--tone" in args
+	assert "热情积极" in args
+
+
+def test_build_args_resume_list():
+	assert _build_args("boss_resume_list", {}) == ["resume", "list"]
+
+
+def test_build_args_resume_show():
+	assert _build_args("boss_resume_show", {"name": "default"}) == ["resume", "show", "default"]
+
+
+def test_build_args_ai_analyze_jd():
+	args = _build_args("boss_ai_analyze_jd", {"jd_text": "需要 Python", "resume": "my"})
+	assert args == ["ai", "analyze-jd", "需要 Python", "--resume", "my"]
+
+
+def test_build_args_ai_optimize():
+	args = _build_args("boss_ai_optimize", {"resume": "my", "jd_text": "后端岗位"})
+	assert args == ["ai", "optimize", "my", "--jd", "后端岗位"]
+
+
+def test_build_args_ai_suggest():
+	args = _build_args("boss_ai_suggest", {"resume": "my", "jd_text": "后端岗位"})
+	assert args == ["ai", "suggest", "my", "--jd", "后端岗位"]
+
+
+def test_build_args_watch_list():
+	assert _build_args("boss_watch_list", {}) == ["watch", "list"]
+
+
+def test_build_args_watch_run():
+	assert _build_args("boss_watch_run", {"name": "daily"}) == ["watch", "run", "daily"]
+
+
+def test_build_args_preset_list():
+	assert _build_args("boss_preset_list", {}) == ["preset", "list"]
+
+
+def test_build_args_shortlist_list():
+	assert _build_args("boss_shortlist_list", {}) == ["shortlist", "list"]
+
+
+def test_tool_count_after_pr41():
+	"""PR #41 合并后工具数应达到 34（23 原有 + 11 新增）。"""
+	assert len(TOOLS) >= 34
