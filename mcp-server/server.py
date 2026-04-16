@@ -254,6 +254,114 @@ TOOLS = [
 			"required": [],
 		},
 	),
+	Tool(
+		name="boss_stats",
+		description="投递转化漏斗统计（只读聚合打招呼、投递、候选池、监控数据）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"days": {"type": "integer", "description": "统计窗口天数", "default": 30},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_ai_reply",
+		description="基于招聘者消息生成回复草稿（2-3 条候选，支持简历参考和语气偏好）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"recruiter_message": {"type": "string", "description": "招聘者消息文本"},
+				"context": {"type": "string", "description": "会话上下文（可选）"},
+				"resume": {"type": "string", "description": "参考简历名称（可选）"},
+				"tone": {
+					"type": "string",
+					"description": "语气偏好",
+					"enum": ["简洁专业", "热情积极", "谨慎确认"],
+					"default": "简洁专业",
+				},
+			},
+			"required": ["recruiter_message"],
+		},
+	),
+	Tool(
+		name="boss_resume_list",
+		description="列出所有本地简历（名称、创建时间、关联职位数）",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_resume_show",
+		description="查看指定简历的完整内容（基本信息、教育、工作经历、技能、项目）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"name": {"type": "string", "description": "简历名称"},
+			},
+			"required": ["name"],
+		},
+	),
+	Tool(
+		name="boss_ai_analyze_jd",
+		description="分析职位描述并评估简历匹配度，输出匹配分数和差距分析",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"jd_text": {"type": "string", "description": "职位描述文本"},
+				"resume": {"type": "string", "description": "对比的本地简历名称"},
+			},
+			"required": ["jd_text", "resume"],
+		},
+	),
+	Tool(
+		name="boss_ai_optimize",
+		description="基于目标职位描述优化简历（输出优化后结构，不直接写回磁盘）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"resume": {"type": "string", "description": "简历名称"},
+				"jd_text": {"type": "string", "description": "目标职位描述"},
+			},
+			"required": ["resume", "jd_text"],
+		},
+	),
+	Tool(
+		name="boss_ai_suggest",
+		description="基于目标职位给出简历改进建议（按优先级排序，不修改简历）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"resume": {"type": "string", "description": "简历名称"},
+				"jd_text": {"type": "string", "description": "目标职位描述"},
+			},
+			"required": ["resume", "jd_text"],
+		},
+	),
+	Tool(
+		name="boss_watch_list",
+		description="列出所有已保存的监控条件",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_watch_run",
+		description="执行指定监控并返回新增职位列表",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"name": {"type": "string", "description": "监控名称"},
+			},
+			"required": ["name"],
+		},
+	),
+	Tool(
+		name="boss_preset_list",
+		description="列出所有搜索预设",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_shortlist_list",
+		description="查看候选池中的所有职位",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
 ]
 
 
@@ -379,6 +487,49 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 		if "days_stale" in arguments:
 			args.extend(["--days-stale", str(arguments["days_stale"])])
 		return args
+
+	if name == "stats":
+		args = [name]
+		if "days" in arguments:
+			args.extend(["--days", str(arguments["days"])])
+		return args
+
+	if name == "ai_reply":
+		args = ["ai", "reply", arguments["recruiter_message"]]
+		if arguments.get("context"):
+			args.extend(["--context", arguments["context"]])
+		if arguments.get("resume"):
+			args.extend(["--resume", arguments["resume"]])
+		if arguments.get("tone"):
+			args.extend(["--tone", arguments["tone"]])
+		return args
+
+	if name == "resume_list":
+		return ["resume", "list"]
+
+	if name == "resume_show":
+		return ["resume", "show", arguments["name"]]
+
+	if name == "ai_analyze_jd":
+		return ["ai", "analyze-jd", arguments["jd_text"], "--resume", arguments["resume"]]
+
+	if name == "ai_optimize":
+		return ["ai", "optimize", arguments["resume"], "--jd", arguments["jd_text"]]
+
+	if name == "ai_suggest":
+		return ["ai", "suggest", arguments["resume"], "--jd", arguments["jd_text"]]
+
+	if name == "watch_list":
+		return ["watch", "list"]
+
+	if name == "watch_run":
+		return ["watch", "run", arguments["name"]]
+
+	if name == "preset_list":
+		return ["preset", "list"]
+
+	if name == "shortlist_list":
+		return ["shortlist", "list"]
 
 	# 无参数命令：status, doctor, cities, interviews, history, pipeline
 	return [name]
