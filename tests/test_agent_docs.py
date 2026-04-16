@@ -50,3 +50,22 @@ def test_mcp_readme_links_to_quickstart_and_matrix():
 	content = _read("mcp-server/README.md")
 	assert "[Agent Quickstart](../docs/agent-quickstart.md)" in content
 	assert "[Capability Matrix](../docs/capability-matrix.md)" in content
+
+
+def test_schema_main_and_modules_command_count_consistent():
+	"""防漂移：main.py 注册命令去掉 schema 自身后，应与 SCHEMA_DATA 完全一致。"""
+	import re
+
+	from boss_agent_cli.commands.schema import SCHEMA_DATA
+
+	main_text = _read("src/boss_agent_cli/main.py")
+	registered = re.findall(r'cli\.add_command\([^,]+,\s*"([^"]+)"', main_text)
+	registered_set = set(registered) - {"schema"}
+
+	schema_set = set(SCHEMA_DATA["commands"].keys())
+
+	assert registered_set == schema_set, (
+		f"main.py 注册命令与 SCHEMA_DATA 不一致："
+		f"仅在 main: {registered_set - schema_set}，仅在 schema: {schema_set - registered_set}"
+	)
+	assert len(registered) == len(set(registered)), "main.py 存在重复注册命令"

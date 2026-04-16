@@ -1,5 +1,5 @@
 """Tests for auth/qr_login.py — QR code httpx login flow."""
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 import pytest
 
 
