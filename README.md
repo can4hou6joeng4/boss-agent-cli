@@ -10,15 +10,17 @@
 [![Python](https://img.shields.io/badge/Python-≥3.10-3776AB?logo=python&logoColor=white)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/can4hou6joeng4/boss-agent-cli)](https://github.com/can4hou6joeng4/boss-agent-cli/releases)
-[![Tests](https://img.shields.io/badge/Tests-666%20passed-brightgreen)](https://github.com/can4hou6joeng4/boss-agent-cli)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/pulls)
 
-[安装](#-安装) · [快速开始](#-快速开始) · [Agent 集成](#-ai-agent-集成) · [命令参考](#-命令参考) · [架构](#-技术架构)
+[安装](#-安装) · [快速开始](#-快速开始) · [Agent 集成](#-ai-agent-集成) · [命令参考](#-命令参考) · [架构](#-技术架构) · [更新日志](CHANGELOG.md)
+
+**中文** | [English](README.en.md)
 
 <img src="demo.gif" alt="boss-agent-cli 终端演示" width="100%">
 
 </div>
 
-> **English** | A CLI tool designed for AI Agents to interact with [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). All output is structured JSON, 32 commands, 4-tier login fallback. Install: `uv tool install boss-agent-cli && patchright install chromium`
+> A CLI tool designed for AI Agents to interact with [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). All output is structured JSON, 34 commands, 4-tier login fallback. See [README.en.md](README.en.md) for the English version.
 
 ---
 

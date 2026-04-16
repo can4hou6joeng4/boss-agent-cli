@@ -4,9 +4,25 @@
 
 ## [Unreleased]
 
+### Added
+- 新增 `boss ai reply` 命令 — 基于招聘者消息生成 2-3 条回复草稿，支持简历参考和语气偏好
+- 新增 `boss stats` 命令 — 投递转化漏斗统计，只读聚合打招呼/投递/候选池/监控数据
+- MCP 协议扩展：新增 `boss_ai_reply` / `boss_stats` / `boss_resume_list` / `boss_resume_show` / `boss_ai_analyze_jd` / `boss_ai_optimize` / `boss_ai_suggest` / `boss_watch_list` / `boss_watch_run` / `boss_preset_list` / `boss_shortlist_list` 共 11 个工具（23→35）
+- 元测试：main.py 注册命令与 SCHEMA_DATA 对齐的防漂移校验
+- 本地提交质量门禁：新增 `.pre-commit-config.yaml`（ruff check + 通用 hooks）
+- 新增英文版 README（`README.en.md`），README 首屏加入语言切换
+- README 加入 CHANGELOG 导航入口
+
+### Fixed
+- 清理 `tests/test_qr_login.py` 未使用 import，修复 ruff lint 失败
+
 ## [1.6.0] - 2026-04-14
 
 ### Added
+- 新增 `resume` 命令组 — 本地简历管理，支持初始化、列表、查看、编辑、删除、导出、导入、克隆、版本比对
+- 新增 `ai` 命令组 — 智能简历优化，支持配置、JD 分析、润色、优化、建议五个子命令，覆盖 OpenAI/Claude/Gemini/通义千问/DeepSeek 多模型
+- 简历数据模型、本地存储、模板渲染、多格式导出（HTML/Markdown/PDF/DOCX）
+- AI 服务模块：多模型配置、密钥加密存储、提示词模板、对话补全
 - 模型上下文协议服务从十一个工具扩展至二十三个，覆盖全部命令
 
 ### Changed
