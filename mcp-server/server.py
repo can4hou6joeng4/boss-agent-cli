@@ -362,6 +362,83 @@ TOOLS = [
 		description="查看候选池中的所有职位",
 		inputSchema={"type": "object", "properties": {}, "required": []},
 	),
+	Tool(
+		name="boss_shortlist_add",
+		description="将职位加入候选池",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"security_id": {"type": "string", "description": "职位安全 ID"},
+				"job_id": {"type": "string", "description": "加密职位 ID"},
+			},
+			"required": ["security_id", "job_id"],
+		},
+	),
+	Tool(
+		name="boss_shortlist_remove",
+		description="从候选池移除职位",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"security_id": {"type": "string", "description": "职位安全 ID"},
+				"job_id": {"type": "string", "description": "加密职位 ID"},
+			},
+			"required": ["security_id", "job_id"],
+		},
+	),
+	Tool(
+		name="boss_preset_add",
+		description="保存搜索预设",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"name": {"type": "string", "description": "预设名称"},
+				"query": {"type": "string", "description": "搜索关键词"},
+				"city": {"type": "string", "description": "城市（可选）"},
+				"salary": {"type": "string", "description": "薪资范围（可选）"},
+				"experience": {"type": "string", "description": "经验要求（可选）"},
+				"education": {"type": "string", "description": "学历要求（可选）"},
+				"welfare": {"type": "string", "description": "福利筛选（可选）"},
+			},
+			"required": ["name", "query"],
+		},
+	),
+	Tool(
+		name="boss_preset_remove",
+		description="删除指定搜索预设",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"name": {"type": "string", "description": "预设名称"},
+			},
+			"required": ["name"],
+		},
+	),
+	Tool(
+		name="boss_watch_add",
+		description="保存增量监控的搜索条件",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"name": {"type": "string", "description": "监控名称"},
+				"query": {"type": "string", "description": "搜索关键词"},
+				"city": {"type": "string", "description": "城市（可选）"},
+				"salary": {"type": "string", "description": "薪资范围（可选）"},
+			},
+			"required": ["name", "query"],
+		},
+	),
+	Tool(
+		name="boss_watch_remove",
+		description="删除指定监控",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"name": {"type": "string", "description": "监控名称"},
+			},
+			"required": ["name"],
+		},
+	),
 ]
 
 
@@ -530,6 +607,32 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 
 	if name == "shortlist_list":
 		return ["shortlist", "list"]
+
+	if name == "shortlist_add":
+		return ["shortlist", "add", arguments["security_id"], arguments["job_id"]]
+
+	if name == "shortlist_remove":
+		return ["shortlist", "remove", arguments["security_id"], arguments["job_id"]]
+
+	if name == "preset_add":
+		args = ["preset", "add", arguments["name"], arguments["query"]]
+		for opt in ("city", "salary", "experience", "education", "welfare"):
+			if arguments.get(opt):
+				args.extend([f"--{opt}", str(arguments[opt])])
+		return args
+
+	if name == "preset_remove":
+		return ["preset", "remove", arguments["name"]]
+
+	if name == "watch_add":
+		args = ["watch", "add", arguments["name"], arguments["query"]]
+		for opt in ("city", "salary"):
+			if arguments.get(opt):
+				args.extend([f"--{opt}", str(arguments[opt])])
+		return args
+
+	if name == "watch_remove":
+		return ["watch", "remove", arguments["name"]]
 
 	# 无参数命令：status, doctor, cities, interviews, history, pipeline
 	return [name]

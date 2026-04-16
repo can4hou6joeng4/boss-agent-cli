@@ -397,5 +397,44 @@ def test_build_args_shortlist_list():
 
 
 def test_tool_count_after_pr41():
-	"""PR #41 合并后工具数应达到 34（23 原有 + 11 新增）。"""
-	assert len(TOOLS) >= 34
+	"""协议服务工具总数应达到 40+（含 shortlist/preset/watch 的 add/remove）。"""
+	assert len(TOOLS) >= 40
+
+
+def test_build_args_shortlist_add():
+	args = _build_args("boss_shortlist_add", {"security_id": "s1", "job_id": "j1"})
+	assert args == ["shortlist", "add", "s1", "j1"]
+
+
+def test_build_args_shortlist_remove():
+	args = _build_args("boss_shortlist_remove", {"security_id": "s1", "job_id": "j1"})
+	assert args == ["shortlist", "remove", "s1", "j1"]
+
+
+def test_build_args_preset_add_minimal():
+	args = _build_args("boss_preset_add", {"name": "p1", "query": "python"})
+	assert args == ["preset", "add", "p1", "python"]
+
+
+def test_build_args_preset_add_full():
+	args = _build_args("boss_preset_add", {
+		"name": "p1", "query": "golang",
+		"city": "上海", "salary": "30-50K", "welfare": "双休",
+	})
+	assert "--city" in args and "上海" in args
+	assert "--salary" in args and "30-50K" in args
+	assert "--welfare" in args and "双休" in args
+
+
+def test_build_args_preset_remove():
+	assert _build_args("boss_preset_remove", {"name": "p1"}) == ["preset", "remove", "p1"]
+
+
+def test_build_args_watch_add():
+	args = _build_args("boss_watch_add", {"name": "w1", "query": "rust", "city": "北京"})
+	assert args[:4] == ["watch", "add", "w1", "rust"]
+	assert "--city" in args and "北京" in args
+
+
+def test_build_args_watch_remove():
+	assert _build_args("boss_watch_remove", {"name": "w1"}) == ["watch", "remove", "w1"]

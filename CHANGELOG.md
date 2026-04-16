@@ -5,6 +5,13 @@
 ## [Unreleased]
 
 ### Added
+- 协议服务补齐 shortlist/preset/watch 的 add/remove 工具（34→41）
+- 能力矩阵文档补齐简历管理、智能能力、数据洞察三大分区
+
+### Changed
+- 能力矩阵命令总数对齐到当前状态
+
+### Added
 - 新增 `boss ai reply` 命令 — 基于招聘者消息生成 2-3 条回复草稿，支持简历参考和语气偏好
 - 新增 `boss stats` 命令 — 投递转化漏斗统计，只读聚合打招呼/投递/候选池/监控数据
 - MCP 协议扩展：新增 `boss_ai_reply` / `boss_stats` / `boss_resume_list` / `boss_resume_show` / `boss_ai_analyze_jd` / `boss_ai_optimize` / `boss_ai_suggest` / `boss_watch_list` / `boss_watch_run` / `boss_preset_list` / `boss_shortlist_list` 共 11 个工具（23→35）
