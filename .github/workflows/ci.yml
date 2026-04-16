@@ -31,8 +31,16 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
 
-      - name: Run tests
-        run: uv run pytest tests/ -v --tb=short
+      - name: Run tests with coverage
+        run: uv run pytest tests/ -v --tb=short --cov=boss_agent_cli --cov-report=xml --cov-report=term
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Verify CLI loads
         run: uv run python -c "from boss_agent_cli.main import cli; print('CLI loaded')"

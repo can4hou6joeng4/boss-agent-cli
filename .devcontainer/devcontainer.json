@@ -1,0 +1,37 @@
+{
+	"name": "boss-agent-cli",
+	"image": "mcr.microsoft.com/devcontainers/python:3.11",
+	"features": {
+		"ghcr.io/devcontainers/features/github-cli:1": {},
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "lts"
+		}
+	},
+	"postCreateCommand": "curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv sync --all-extras && ~/.local/bin/uv run patchright install chromium --with-deps",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"charliermarsh.ruff",
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"tamasfe.even-better-toml",
+				"GitHub.copilot"
+			],
+			"settings": {
+				"python.defaultInterpreterPath": "/workspaces/boss-agent-cli/.venv/bin/python",
+				"[python]": {
+					"editor.defaultFormatter": "charliermarsh.ruff",
+					"editor.formatOnSave": true
+				}
+			}
+		}
+	},
+	"forwardPorts": [9222],
+	"portsAttributes": {
+		"9222": {
+			"label": "Chrome DevTools Protocol",
+			"onAutoForward": "silent"
+		}
+	},
+	"remoteUser": "vscode"
+}

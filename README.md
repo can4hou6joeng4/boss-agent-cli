@@ -7,12 +7,14 @@
 > 搜索职位 · 福利筛选 · 个性化推荐 · 自动打招呼 · 求职流水线 · 增量监控 · AI 简历优化
 
 [![CI](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli)
 [![Python](https://img.shields.io/badge/Python-≥3.10-3776AB?logo=python&logoColor=white)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/can4hou6joeng4/boss-agent-cli)](https://github.com/can4hou6joeng4/boss-agent-cli/releases)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/pulls)
+[![Open in Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/can4hou6joeng4/boss-agent-cli)
 
-[安装](#-安装) · [快速开始](#-快速开始) · [Agent 集成](#-ai-agent-集成) · [命令参考](#-命令参考) · [架构](#-技术架构) · [更新日志](CHANGELOG.md)
+[安装](#-安装) · [快速开始](#-快速开始) · [Agent 集成](#-ai-agent-集成) · [命令参考](#-命令参考) · [架构](#-技术架构) · [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
 
 **中文** | [English](README.en.md)
 
