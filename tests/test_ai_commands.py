@@ -207,6 +207,58 @@ def test_suggest_success(tmp_path, monkeypatch):
 # ── AI 调用失败 ──────────────────────────────────────────
 
 
+def test_reply_success_without_resume(tmp_path, monkeypatch):
+	"""ai reply 不提供简历也能生成草稿"""
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+
+	mock_result = {
+		"intent_analysis": "招聘者希望确认到岗时间",
+		"reply_drafts": [
+			{"style": "简洁专业", "text": "您好，下月初可入职", "suitable_when": "已做好准备"},
+		],
+		"key_points": ["明确入职时间"],
+		"avoid": ["模糊承诺"],
+	}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)):
+		result = _invoke(runner, tmp_path, ["reply", "您什么时候可以入职？"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert len(parsed["data"]["reply_drafts"]) == 1
+	assert parsed["data"]["reply_drafts"][0]["style"] == "简洁专业"
+
+
+def test_reply_with_resume_and_context(tmp_path, monkeypatch):
+	"""ai reply 支持简历和上下文"""
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+
+	mock_result = {"intent_analysis": "x", "reply_drafts": [{"style": "热情积极", "text": "感谢", "suitable_when": ""}], "key_points": [], "avoid": []}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)):
+		result = _invoke(runner, tmp_path, [
+			"reply", "请发一下简历", "--resume", "test-resume",
+			"--context", "前面聊了 Python 岗位", "--tone", "热情积极",
+		])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+
+
+def test_reply_requires_ai_config(tmp_path, monkeypatch):
+	"""未配置 AI 时 reply 应返回 AI_NOT_CONFIGURED"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	runner = CliRunner()
+
+	result = _invoke(runner, tmp_path, ["reply", "hello"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AI_NOT_CONFIGURED"
+
+
 def test_analyze_jd_ai_error(tmp_path, monkeypatch):
 	"""AI 调用失败返回错误"""
 	_setup_ai_config(tmp_path, monkeypatch)
@@ -317,6 +369,7 @@ def test_schema_contains_ai():
 	assert "polish" in cmd["subcommands"]
 	assert "optimize" in cmd["subcommands"]
 	assert "suggest" in cmd["subcommands"]
+	assert "reply" in cmd["subcommands"]
 
 
 def test_schema_contains_ai_error_codes():

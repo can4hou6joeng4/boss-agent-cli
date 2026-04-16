@@ -404,6 +404,13 @@ SCHEMA_DATA = {
 				"--days": {"type": "int", "default": 30, "description": "清理超过指定天数的快照和导出"},
 			},
 		},
+		"stats": {
+			"description": "投递转化漏斗统计（只读聚合打招呼/投递/候选池/监控）",
+			"args": [],
+			"options": {
+				"--days": {"type": "int", "default": 30, "description": "统计窗口天数"},
+			},
+		},
 		"resume": {
 			"description": "本地简历管理（子命令：init/list/show/edit/delete/export/import/clone/diff/link/applications）",
 			"args": [],
@@ -423,7 +430,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"ai": {
-			"description": "AI 简历优化（子命令：config/analyze-jd/polish/optimize/suggest）",
+			"description": "AI 简历优化与聊天回复（子命令：config/analyze-jd/polish/optimize/suggest/reply）",
 			"args": [],
 			"options": {},
 			"subcommands": {
@@ -432,6 +439,7 @@ SCHEMA_DATA = {
 				"polish": "通用简历润色",
 				"optimize": "基于目标职位描述优化简历",
 				"suggest": "基于目标职位描述给出优化建议（不修改简历）",
+				"reply": "基于招聘者消息生成回复草稿（2-3 条候选）",
 			},
 		},
 	},

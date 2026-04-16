@@ -10,6 +10,7 @@ import click
 
 from boss_agent_cli.ai.config import AIConfigStore
 from boss_agent_cli.ai.prompts import (
+	CHAT_REPLY_PROMPT,
 	JD_ANALYSIS_PROMPT,
 	RESUME_OPTIMIZE_FOR_JD_PROMPT,
 	RESUME_POLISH_PROMPT,
@@ -305,5 +306,58 @@ def ai_suggest_cmd(ctx, resume_name, jd_text):
 		hints={"next_actions": [
 			f"boss ai optimize {resume_name} --jd <jd_text>",
 			f"boss resume show {resume_name}",
+		]},
+	)
+
+
+@ai_group.command("reply")
+@click.argument("recruiter_message")
+@click.option("--context", default="", help="会话上下文（可选，或 @文件路径）")
+@click.option("--resume", "resume_name", default=None, help="参考简历名称（可选）")
+@click.option("--tone", default="简洁专业", type=click.Choice(["简洁专业", "热情积极", "谨慎确认"]), help="语气偏好")
+@click.pass_context
+def ai_reply_cmd(ctx, recruiter_message, context, resume_name, tone):
+	"""基于招聘者消息生成回复草稿（2-3 条候选）
+
+	RECRUITER_MESSAGE 为招聘者发来的消息文本，或 @文件路径 读取文件内容。
+	"""
+	svc = _require_ai_service(ctx)
+	if svc is None:
+		return
+
+	def _resolve_text(value: str) -> str:
+		if value.startswith("@"):
+			file_path = Path(value[1:])
+			if not file_path.exists():
+				handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
+				ctx.exit(1)
+			return file_path.read_text(encoding="utf-8")
+		return value
+
+	recruiter_message = _resolve_text(recruiter_message)
+	context_text = _resolve_text(context) if context else "（无）"
+
+	resume_text = "（未指定）"
+	if resume_name:
+		loaded = _load_resume_text(ctx, resume_name)
+		if loaded is None:
+			return
+		resume_text = loaded
+
+	prompt = CHAT_REPLY_PROMPT.format(
+		recruiter_message=recruiter_message,
+		context=context_text,
+		resume_text=resume_text,
+		tone=tone,
+	)
+	result = _call_ai(ctx, svc, prompt)
+	if result is None:
+		return
+
+	handle_output(
+		ctx, "ai-reply", result,
+		hints={"next_actions": [
+			"复制草稿到 BOSS 聊天框发送",
+			"boss chatmsg <security_id> 查看完整聊天历史",
 		]},
 	)
