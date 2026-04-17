@@ -4,11 +4,25 @@
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-04-17
+
 ### Added
 - `boss schema --format openai-tools` 和 `--format anthropic-tools` — 一键导出 OpenAI Functions / Claude Tool Use 兼容的 JSON Schema，免手动转换即可喂给 SDK
 - `boss stats --format html -o <path>` 输出自包含交互式漏斗报表（纯 CSS + SVG，无外部 CDN）
 - 协议服务文档补齐传输层章节（stdio 当前支持 / SSE 规划中）和贡献指引
 - Issue / PR 模板全面升级：bug_report 强制 doctor 输出和版本号，feature_request 新增贡献意愿字段，新增 documentation 专用模板，PR 模板新增 Closes 关联和 Breaking Change 声明
+- 英文版说明补齐 Troubleshooting 章节（诊断清单 / 登录 / 浏览器 / 搜索 / 错误码 / 术语表），对齐中文版
+- Codecov 覆盖率追踪接入，基线 80%，每次 PR 自动上报
+- 开发容器（`.devcontainer/devcontainer.json`）支持 GitHub Codespaces 一键启动
+- `ROADMAP.md` + 4 个 Issue（含 2 个 good-first-issue）招募外部贡献者
+- 本地提交质量门禁 `.pre-commit-config.yaml`（ruff + 通用 hooks）
+
+### Changed
+- CI 支持 `workflow_dispatch` 手动触发
+- 协议服务 `awesome-mcp-servers` 投稿材料和多语言投稿模板整理
+
+### Fixed
+- 清理 `tests/test_qr_login.py` 未使用 import，修复 ruff lint 失败
 
 ## [1.7.0] - 2026-04-17
 
