@@ -132,6 +132,172 @@ See [Agent Quickstart](docs/agent-quickstart.md) and [Capability Matrix](docs/ca
 
 Run `boss <cmd> --help` for options, or `boss schema` for the complete JSON self-description.
 
+**Export for any agent framework** — no MCP required:
+
+```bash
+boss schema --format openai-tools      # OpenAI Functions / Tools API
+boss schema --format anthropic-tools   # Claude Tool Use API
+```
+
+## 🩺 Troubleshooting
+
+If something misbehaves, always start with:
+
+```bash
+boss doctor   # outputs JSON with 7 diagnostic checks
+```
+
+<details>
+<summary>📖 Common diagnostic checks</summary>
+
+| Check | What it means |
+|-------|---------------|
+| `python_version` | Python ≥ 3.10 installed |
+| `patchright_chromium` | Chromium installed |
+| `cookie_extract` | Local browser cookies accessible |
+| `auth_session` | Encrypted session file readable |
+| `auth_token_quality` | Core tokens (wt2 / stoken) present |
+| `cookie_completeness` | Auxiliary tokens (wbg / zp_at) |
+| `cdp` | Chrome DevTools Protocol reachable |
+| `network` | zhipin.com reachable |
+
+</details>
+
+<details>
+<summary>📖 Login issues</summary>
+
+### Cookie extraction fails
+
+```bash
+# Force re-login via QR scan
+boss logout && boss login
+```
+
+### BOSS detects automation (code 36 / `ACCOUNT_RISK`)
+
+BOSS Zhipin's risk system flags headless browsers. Fix by attaching to your real Chrome:
+
+```bash
+# 1. Quit Chrome completely, then:
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+  --remote-debugging-port=9222 \
+  --user-data-dir="$HOME/.boss-agent/chrome-cdp-profile" \
+  --no-first-run
+
+# 2. In another terminal:
+boss login --cdp
+boss search "python" --city 北京
+```
+
+### Token expired mid-session
+
+```bash
+# stoken (core session token) expires after ~24h
+# Re-login — auth_token_quality will report the issue
+boss logout && boss login
+```
+
+</details>
+
+<details>
+<summary>📖 Browser / patchright issues</summary>
+
+### `patchright install chromium` fails
+
+```bash
+# macOS / Linux: ensure write access to ~/Library/Caches (macOS) or ~/.cache (Linux)
+# Windows: run as admin once
+pip install --upgrade patchright
+patchright install chromium --with-deps
+```
+
+### Chromium launches but stays blank
+
+- Check `auth_session` via `boss doctor` — if "corrupted", delete `~/.boss-agent/auth/` and re-login
+- Check `network` — some regions need a proxy: `HTTPS_PROXY=http://...:port boss login`
+
+### CDP connection refused
+
+```bash
+# Verify CDP is actually listening
+curl http://localhost:9222/json/version
+
+# If empty, Chrome wasn't started with --remote-debugging-port
+# macOS users: make sure Chrome is fully quit first (⌘Q, not just close window)
+```
+
+</details>
+
+<details>
+<summary>📖 Search / API errors</summary>
+
+### `code 36` / `ACCOUNT_RISK`
+
+Risk control detected automation. Switch to CDP mode (see Login issues above) or wait 24h.
+
+### `RATE_LIMITED`
+
+Too many requests in a window. Increase delay:
+
+```bash
+boss --delay 3-7 search "python"
+# Or set globally
+boss config set request_delay "[3.0, 7.0]"
+```
+
+### `JOB_NOT_FOUND`
+
+- Check if job was taken down on BOSS website manually
+- Pass `--job-id` directly if you have `encrypt_job_id`, skips broken detail cache
+
+### Empty search results despite valid query
+
+- Always check `boss doctor` first — often an auth problem surfacing as zero results
+- Add `--log-level debug` to see the actual request going out on stderr
+
+</details>
+
+<details>
+<summary>📖 Error codes & agent-friendly recovery</summary>
+
+Every error response contains `code`, `recoverable`, and `recovery_action`, so agents can react programmatically.
+
+| Error Code | Meaning | Agent Recovery |
+|------------|---------|----------------|
+| `AUTH_REQUIRED` | Not logged in | `boss login` |
+| `AUTH_EXPIRED` | Session expired | `boss login` |
+| `RATE_LIMITED` | Too many requests | Wait and retry |
+| `TOKEN_REFRESH_FAILED` | stoken refresh failed | `boss login` |
+| `ACCOUNT_RISK` | Risk-control block (code 36) | Switch to CDP Chrome |
+| `JOB_NOT_FOUND` | Job removed or invalid | Skip |
+| `ALREADY_GREETED` | Already messaged recruiter | Skip |
+| `ALREADY_APPLIED` | Already applied | Skip |
+| `GREET_LIMIT` | Daily greet quota hit | Pause until tomorrow |
+| `NETWORK_ERROR` | Connection failed | Retry with backoff |
+| `INVALID_PARAM` | Bad argument | Fix parameter |
+| `AI_NOT_CONFIGURED` | AI service not set up | `boss ai config` |
+| `AI_API_ERROR` | AI provider call failed | Retry / check key |
+| `AI_PARSE_ERROR` | AI response not JSON | Retry |
+
+</details>
+
+<details>
+<summary>📖 Glossary (Chinese terms kept in code)</summary>
+
+| Term | Meaning |
+|------|---------|
+| `stoken` | Session token — core auth credential for BOSS API |
+| `wt2` | Long-lived bearer token, paired with stoken |
+| `wbg` / `zp_at` | Auxiliary cookies used by wapi endpoints |
+| `security_id` | Per-job opaque ID returned by search; required by detail / greet / apply |
+| `encrypt_job_id` | Alternative job ID for the httpx fast path (skips browser) |
+| `CDP` | Chrome DevTools Protocol — how we attach to your real Chrome for realistic fingerprints |
+| `wapi` | BOSS Zhipin internal JSON API (behind `www.zhipin.com/wapi/...`) |
+
+These terms appear in JSON responses and error messages as-is — we deliberately don't translate them to keep parity with BOSS's own naming.
+
+</details>
+
 ## 🏗 Architecture
 
 See [中文版 README](README.md#-技术架构) for the full architecture diagram.
