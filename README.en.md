@@ -317,6 +317,10 @@ All state lives under `~/.boss-agent/` — encrypted tokens, cached searches, ch
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). TL;DR: fork → `feat/xxx` branch → write tests → `uv run pytest` → PR.
 
+## 🔗 Community
+
+- [LINUX DO — a new community for tech enthusiasts](https://linux.do/) — this project is promoted on LINUX DO; huge thanks to the community for early feedback and support.
+
 ## 📄 License
 
 MIT © [can4hou6joeng4](https://github.com/can4hou6joeng4)

@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- README 中英文版均新增「友情链接 / Community」分区，链接认可 LINUX DO 社区，符合社区开源推广规范要求
+
 ## [1.7.1] - 2026-04-17
 
 ### Added
