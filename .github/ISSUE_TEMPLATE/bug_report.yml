@@ -1,33 +1,108 @@
-name: Bug Report
-description: 报告一个 Bug
-labels: ["bug"]
+name: 🐛 Bug Report / 缺陷报告
+description: 报告一个 Bug（用于技术问题，不是使用疑问）
+title: "[Bug] "
+labels: ["bug", "triage"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！提交前请确认：
+        - ✅ 已搜索过 [现有 Issue](https://github.com/can4hou6joeng4/boss-agent-cli/issues?q=is%3Aissue) 没有重复
+        - ✅ 已升级到最新版：`uv tool install --upgrade boss-agent-cli`
+        - ✅ 使用问题请移步 [Discussions](https://github.com/can4hou6joeng4/boss-agent-cli/discussions)
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 提交前检查
+      options:
+        - label: 已搜索现有 Issue 确认无重复
+          required: true
+        - label: 已升级到最新版本
+          required: true
+        - label: 已运行 `boss doctor` 查看诊断输出
+          required: true
+
   - type: textarea
+    id: summary
     attributes:
       label: 问题描述
-      description: 清晰描述遇到的问题
+      description: 一两句话清晰描述现象
+      placeholder: "执行 boss search 返回空结果但账户正常"
     validations:
       required: true
+
   - type: textarea
+    id: reproduce
     attributes:
       label: 复现步骤
-      description: 按步骤描述如何复现
+      description: 准确列出可复现的操作步骤
       value: |
         1. 执行命令 `boss ...`
         2. 观察到 ...
         3. 期望的结果是 ...
     validations:
       required: true
+
   - type: textarea
+    id: error_output
     attributes:
-      label: 错误输出
-      description: 粘贴完整的 JSON 错误输出
+      label: 错误输出（完整 JSON 信封）
+      description: 粘贴 stdout 返回的 JSON，务必完整，**请先脱敏**（去除 security_id / token / cookie 等）
       render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor_output
+    attributes:
+      label: boss doctor 输出
+      description: 运行 `boss doctor` 并粘贴完整 JSON，便于快速定位环境问题
+      render: json
+    validations:
+      required: true
+
   - type: input
+    id: version
+    attributes:
+      label: boss-agent-cli 版本
+      description: 运行 `boss --version` 查看
+      placeholder: "1.7.0"
+    validations:
+      required: true
+
+  - type: input
+    id: python_version
     attributes:
       label: Python 版本
-      placeholder: "3.10"
+      placeholder: "3.11.9"
+    validations:
+      required: true
+
   - type: input
+    id: os_version
     attributes:
       label: 操作系统
       placeholder: "macOS 15.3 / Ubuntu 22.04 / Windows 11"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: browser_channel
+    attributes:
+      label: 浏览器通道
+      description: 影响风控和登录表现
+      options:
+        - 不涉及（login/status 等命令）
+        - Bridge（Chrome 扩展）
+        - CDP（用户 Chrome）
+        - patchright headless
+        - 不确定
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 其他信息
+      description: 日志片段、截图、相关 Issue 链接等

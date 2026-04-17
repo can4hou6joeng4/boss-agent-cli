@@ -1,0 +1,44 @@
+name: 📚 Documentation / 文档改进
+description: 报告文档错误、过时内容或改进建议
+title: "[Docs] "
+labels: ["documentation", "triage"]
+body:
+  - type: textarea
+    id: location
+    attributes:
+      label: 文档位置
+      description: 哪份文档？具体到文件路径 + 小节标题
+      placeholder: |
+        - README.md → ## 🚀 快速开始
+        - docs/agent-quickstart.md → Step 2
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 现有文档哪里不对 / 不清楚 / 已过时
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: 改进建议
+      description: 你建议改成什么样子？
+    validations:
+      required: false
+
+  - type: dropdown
+    id: doc_type
+    attributes:
+      label: 问题类型
+      options:
+        - 错误（内容有误 / 死链）
+        - 过时（随代码演进失效）
+        - 缺失（该有而没有）
+        - 表述不清（语义歧义）
+        - 翻译（中英不一致）
+    validations:
+      required: true

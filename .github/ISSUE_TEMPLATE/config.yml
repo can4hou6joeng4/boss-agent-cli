@@ -1,5 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 使用问题 / Questions
+  - name: 💬 使用问题 / Usage Questions
     url: https://github.com/can4hou6joeng4/boss-agent-cli/discussions
-    about: 使用问题请到 Discussions 讨论区提问
+    about: 使用疑问、安装困难、Agent 接入等请到 Discussions 讨论区提问
+  - name: 🔒 安全漏洞 / Security Vulnerability
+    url: https://github.com/can4hou6joeng4/boss-agent-cli/security/advisories/new
+    about: 请勿公开提 Issue，按 SECURITY.md 流程私下报告
+  - name: 📖 阅读文档 / Read the Docs
+    url: https://github.com/can4hou6joeng4/boss-agent-cli/blob/master/docs/agent-quickstart.md
+    about: 先看 Agent Quickstart 和 Capability Matrix 可能直接解决你的问题
