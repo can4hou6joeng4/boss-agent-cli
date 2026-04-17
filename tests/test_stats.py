@@ -93,3 +93,67 @@ def test_stats_registered_in_main_and_schema(tmp_path):
 	parsed = json.loads(schema_result.output)
 	assert "stats" in parsed["data"]["commands"]
 	assert parsed["data"]["commands"]["stats"]["description"]
+
+
+# ── HTML 格式扩展 ─────────────────────────────────────────────
+
+
+def test_stats_html_format_to_stdout(tmp_path):
+	"""--format html 无 -o 时 HTML 直出 stdout。"""
+	_seed_cache(tmp_path, greet=3, applied=1, shortlist=1)
+	runner = CliRunner()
+	result = runner.invoke(cli, [
+		"--data-dir", str(tmp_path), "stats", "--format", "html",
+	])
+	assert result.exit_code == 0
+	assert "<!doctype html>" in result.output
+	assert "<title>boss-agent-cli 投递漏斗报表</title>" in result.output
+	# 数据点应嵌入到 HTML
+	assert ">3<" in result.output  # greeted 显示
+	assert "33.33%" in result.output or "0.3333%" in result.output or "33.33" in result.output  # apply_rate
+
+
+def test_stats_html_format_to_file(tmp_path):
+	"""--format html -o 写文件时 stdout 返回 JSON 信封。"""
+	_seed_cache(tmp_path, greet=10, applied=5, shortlist=3)
+	out_path = tmp_path / "report.html"
+	result = _invoke(tmp_path, "--format", "html", "-o", str(out_path))
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["format"] == "html"
+	assert parsed["data"]["path"] == str(out_path)
+	assert parsed["data"]["bytes"] > 1000
+	# 文件真的写了
+	assert out_path.exists()
+	html_content = out_path.read_text(encoding="utf-8")
+	assert "<!doctype html>" in html_content
+	assert "10" in html_content  # greeted
+	assert "50.0%" in html_content  # apply_rate
+
+
+def test_stats_html_empty_cache(tmp_path):
+	"""无缓存时 HTML 也能生成，显示 note。"""
+	result = _invoke(tmp_path, "--format", "html", "-o", str(tmp_path / "r.html"))
+	assert result.exit_code == 0
+	html_content = (tmp_path / "r.html").read_text(encoding="utf-8")
+	assert "缓存尚未建立" in html_content
+
+
+def test_stats_html_self_contained_no_external_deps(tmp_path):
+	"""HTML 报表不应引入外部 CDN 或 script src。"""
+	_seed_cache(tmp_path, greet=5, applied=2)
+	result = _invoke(tmp_path, "--format", "html", "-o", str(tmp_path / "r.html"))
+	assert result.exit_code == 0
+	html_content = (tmp_path / "r.html").read_text(encoding="utf-8")
+	# 安全约束：不得有外部 script / link 引用
+	assert '<script src=' not in html_content
+	assert '<link rel="stylesheet" href=' not in html_content
+	assert 'cdn.' not in html_content
+	assert 'googleapis' not in html_content
+
+
+def test_stats_html_format_invalid_raises(tmp_path):
+	"""非法 --format 值应被 Click 拦截。"""
+	result = _invoke(tmp_path, "--format", "xml")
+	assert result.exit_code != 0

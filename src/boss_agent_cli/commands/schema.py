@@ -409,6 +409,8 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"--days": {"type": "int", "default": 30, "description": "统计窗口天数"},
+				"--format": {"type": "string", "default": "json", "description": "输出格式：json（JSON 信封）或 html（自包含报表）"},
+				"-o, --output": {"type": "string", "default": None, "description": "HTML 输出路径（仅 --format html 时有效）"},
 			},
 		},
 		"resume": {

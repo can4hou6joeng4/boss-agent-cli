@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+- `boss stats --format html -o <path>` 输出自包含交互式漏斗报表（纯 CSS + SVG，无外部 CDN）
+- 协议服务文档补齐传输层章节（stdio 当前支持 / SSE 规划中）和贡献指引
+
 ## [1.7.0] - 2026-04-17
 
 ### Added
