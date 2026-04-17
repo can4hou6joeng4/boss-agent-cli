@@ -320,3 +320,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). TL;DR: fork → `feat/xxx` branch → wr
 ## 📄 License
 
 MIT © [can4hou6joeng4](https://github.com/can4hou6joeng4)
+
+## 👭 Related Communities
+
+- [LINUX DO - a new community for tech enthusiasts](https://linux.do/)

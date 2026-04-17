@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- 英文版 README 新增「👭 Related Communities」分区，对齐中文版的 LINUX DO 友链认可
+
 ## [1.7.1] - 2026-04-17
 
 ### Added
