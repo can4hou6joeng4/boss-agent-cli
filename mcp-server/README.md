@@ -135,11 +135,19 @@ python3 mcp-server/server.py --transport sse --host 127.0.0.1 --port 8765
 - HTTP 传输默认绑定 `127.0.0.1`，远程暴露需用户显式 `--host 0.0.0.0`
 - 不内置鉴权 / TLS，需要时通过反向代理（nginx / Caddy / Cloudflare Tunnel）处理
 
-## 注意事项
+## 其他 Agent 宿主接入
 
-- 首次使用需要先登录：在终端执行 `boss login`
-- MCP Server 通过 subprocess 调用 `boss` CLI，确保 `boss` 在 PATH 中
-- 不暴露 login/logout 等交互式命令（需要浏览器界面）
+本 MCP Server 专注 stdio/SSE 协议。如果你用的 Agent 框架不支持 MCP，可以用 `boss schema` 命令直接生成对应格式：
+
+```bash
+# OpenAI Functions / Tools API（GPT-4 / GPT-5）
+boss schema --format openai-tools
+
+# Anthropic Tool Use（Claude API 直连）
+boss schema --format anthropic-tools
+```
+
+然后把 stdout 的 `data.tools` 数组直接喂给对应 SDK 即可。
 
 ## 贡献
 

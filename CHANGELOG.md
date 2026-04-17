@@ -5,8 +5,10 @@
 ## [Unreleased]
 
 ### Added
+- `boss schema --format openai-tools` 和 `--format anthropic-tools` — 一键导出 OpenAI Functions / Claude Tool Use 兼容的 JSON Schema，免手动转换即可喂给 SDK
 - `boss stats --format html -o <path>` 输出自包含交互式漏斗报表（纯 CSS + SVG，无外部 CDN）
 - 协议服务文档补齐传输层章节（stdio 当前支持 / SSE 规划中）和贡献指引
+- Issue / PR 模板全面升级：bug_report 强制 doctor 输出和版本号，feature_request 新增贡献意愿字段，新增 documentation 专用模板，PR 模板新增 Closes 关联和 Breaking Change 声明
 
 ## [1.7.0] - 2026-04-17
 

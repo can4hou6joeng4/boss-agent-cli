@@ -2,6 +2,86 @@ import click
 
 from boss_agent_cli.output import emit_success
 
+# 类型转换：native schema → JSON Schema 基础类型
+_JSON_SCHEMA_TYPE_MAP = {
+	"string": "string",
+	"int": "integer",
+	"integer": "integer",
+	"bool": "boolean",
+	"boolean": "boolean",
+	"float": "number",
+	"number": "number",
+}
+
+
+def _option_to_json_schema_property(opt_spec: dict) -> dict:
+	"""把 native option 转成单个 JSON Schema 属性。"""
+	native_type = opt_spec.get("type", "string")
+	prop: dict = {"type": _JSON_SCHEMA_TYPE_MAP.get(native_type, "string")}
+	desc = opt_spec.get("description")
+	if desc:
+		prop["description"] = desc
+	default = opt_spec.get("default")
+	if default is not None:
+		prop["default"] = default
+	return prop
+
+
+def _command_to_json_schema(cmd_name: str, cmd_spec: dict) -> dict:
+	"""把 native 命令描述转成 OpenAI Tools / Anthropic Tool Use 共用的 JSON Schema。"""
+	properties: dict = {}
+	required: list[str] = []
+
+	for arg in cmd_spec.get("args", []):
+		arg_name = arg["name"]
+		properties[arg_name] = {
+			"type": "string",
+			"description": arg.get("description", ""),
+		}
+		if arg.get("required"):
+			required.append(arg_name)
+
+	for opt_key, opt_spec in cmd_spec.get("options", {}).items():
+		# 去掉短/长选项前缀，保留长选项作为参数名
+		primary_name = opt_key.split(",")[-1].strip().lstrip("-").replace("-", "_")
+		properties[primary_name] = _option_to_json_schema_property(opt_spec)
+
+	schema: dict = {
+		"type": "object",
+		"properties": properties,
+	}
+	if required:
+		schema["required"] = required
+	return schema
+
+
+def _format_openai_tools(data: dict) -> list[dict]:
+	"""OpenAI Functions / Tools API 格式。"""
+	tools = []
+	for cmd_name, cmd_spec in data["commands"].items():
+		tools.append({
+			"type": "function",
+			"function": {
+				"name": f"boss_{cmd_name.replace('-', '_')}",
+				"description": cmd_spec.get("description", ""),
+				"parameters": _command_to_json_schema(cmd_name, cmd_spec),
+			},
+		})
+	return tools
+
+
+def _format_anthropic_tools(data: dict) -> list[dict]:
+	"""Anthropic Tool Use 格式。"""
+	tools = []
+	for cmd_name, cmd_spec in data["commands"].items():
+		tools.append({
+			"name": f"boss_{cmd_name.replace('-', '_')}",
+			"description": cmd_spec.get("description", ""),
+			"input_schema": _command_to_json_schema(cmd_name, cmd_spec),
+		})
+	return tools
+
+
 SCHEMA_DATA = {
 	"name": "boss-agent-cli",
 	"description": "BOSS直聘求职工具。32 个命令覆盖搜索、筛选、打招呼、沟通、流水线、简历优化全流程。",
@@ -572,6 +652,18 @@ SCHEMA_DATA = {
 
 
 @click.command("schema")
-def schema_cmd():
+@click.option(
+	"--format", "output_format",
+	type=click.Choice(["native", "openai-tools", "anthropic-tools"]),
+	default="native",
+	help="输出格式：native（本项目信封）/ openai-tools（OpenAI Functions & Tools API）/ anthropic-tools（Claude Tool Use API）",
+)
+def schema_cmd(output_format):
 	"""返回工具完整能力描述的 JSON"""
+	if output_format == "openai-tools":
+		emit_success("schema", {"format": "openai-tools", "tools": _format_openai_tools(SCHEMA_DATA)})
+		return
+	if output_format == "anthropic-tools":
+		emit_success("schema", {"format": "anthropic-tools", "tools": _format_anthropic_tools(SCHEMA_DATA)})
+		return
 	emit_success("schema", SCHEMA_DATA)
