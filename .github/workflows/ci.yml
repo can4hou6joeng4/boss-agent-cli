@@ -41,6 +41,8 @@ jobs:
           files: ./coverage.xml
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
+          # 公开仓库支持 tokenless 上传，token 配置后可获得完整功能
+          # 若 secret 缺失，action 会降级为 tokenless，不阻塞 CI
 
       - name: Verify CLI loads
         run: uv run python -c "from boss_agent_cli.main import cli; print('CLI loaded')"

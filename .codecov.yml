@@ -1,0 +1,25 @@
+# Codecov Configuration
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 2%
+        informational: false
+    patch:
+      default:
+        target: 80%
+        threshold: 5%
+        informational: true
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false
+
+ignore:
+  - "tests/"
+  - "docs/"
+  - "mcp-server/"
+  - "scripts/"
