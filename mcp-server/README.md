@@ -110,8 +110,47 @@ pip install mcp
 
 Claude 会自动调用 `boss_search` 工具并展示结果。
 
+## 传输层（Transports）
+
+### stdio（默认，已支持）
+
+Claude Desktop / Cursor / Codex 等通过 stdin/stdout 直接对接。上述 `claude_desktop_config.json` 配置方式即为 stdio 模式。
+
+```bash
+python3 mcp-server/server.py
+# 默认等价于：--transport stdio
+```
+
+### HTTP / SSE（规划中，见 [Issue #48](https://github.com/can4hou6joeng4/boss-agent-cli/issues/48)）
+
+面向远程宿主、自定义编排器的 Server-Sent Events 传输，允许跨机部署 MCP 服务。
+
+```bash
+# 规划形态（未实现，等 PR 合入）
+python3 mcp-server/server.py --transport sse --host 127.0.0.1 --port 8765
+```
+
+**设计约束**：
+- `stdio` 保持为默认行为，不破坏现有集成
+- HTTP 传输默认绑定 `127.0.0.1`，远程暴露需用户显式 `--host 0.0.0.0`
+- 不内置鉴权 / TLS，需要时通过反向代理（nginx / Caddy / Cloudflare Tunnel）处理
+
 ## 注意事项
 
 - 首次使用需要先登录：在终端执行 `boss login`
 - MCP Server 通过 subprocess 调用 `boss` CLI，确保 `boss` 在 PATH 中
 - 不暴露 login/logout 等交互式命令（需要浏览器界面）
+
+## 贡献
+
+欢迎在 [Issue Tracker](https://github.com/can4hou6joeng4/boss-agent-cli/issues) 认领带 `good first issue` / `help wanted` 标签的任务。
+
+开发环境：
+
+```bash
+cd boss-agent-cli
+uv sync --all-extras
+uv run pytest tests/test_mcp_server.py -v  # 65 tests covering tool schema + arg construction
+```
+
+代码风格：tab 缩进，`uv run ruff check src/ tests/` 必须通过。
