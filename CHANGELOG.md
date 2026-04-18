@@ -4,17 +4,25 @@
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-04-19
+
 ### Added
-- 新增 `docs/integrations/python-sdk.md` Python SDK 直调集成样例（OpenAI + Anthropic 两套 ~150 行可运行代码）
-- Agent 宿主索引表（`agent-hosts.md`）新增 Python SDK 直调入口
+- `docs/integrations/python-sdk.md` — Python SDK 直调集成样例（OpenAI + Anthropic 两套 ~150 行可运行代码），Agent 宿主索引表同步补入口
+- README 中英文版均链接认可 LINUX DO 社区
 
 ### Changed
-- `auth/manager.py` 测试覆盖率 74% → 96%（+14 测试）
-- `commands/export.py` 测试覆盖率 47% → 98%（+13 测试）
-- 总测试数 710 → 737，总覆盖率维持 81%
+- 测试覆盖率大幅提升：总体 **80% → 84%**（+4 点）
+  - `api/client.py` 63% → **97%**（+37 测试）
+  - `commands/greet.py` 65% → **97%**（+8 测试）
+  - `commands/export.py` 47% → **98%**（+13 测试）
+  - `auth/manager.py` 74% → **96%**（+14 测试）
+  - `auth/token_store.py` 81% → **100%**（+14 测试）
+  - `commands/login.py` 83% → **100%**（+6 测试）
+- 总测试数 **710 → 802**（+92）
 
-### Added
-- 英文版 README 新增「👭 Related Communities」分区，对齐中文版的 LINUX DO 友链认可
+### Fixed
+- 移除误跟踪的 `.coverage` artifact 并扩展 `.gitignore` 忽略覆盖率文件
+- Dependabot 批量升级 5 个 GitHub Actions 版本（`checkout`/`upload-pages-artifact`/`configure-pages`/`deploy-pages`/`gh-release`）
 
 ## [1.7.1] - 2026-04-17
 
