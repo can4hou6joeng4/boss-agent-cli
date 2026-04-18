@@ -5,6 +5,15 @@
 ## [Unreleased]
 
 ### Added
+- 新增 `docs/integrations/python-sdk.md` Python SDK 直调集成样例（OpenAI + Anthropic 两套 ~150 行可运行代码）
+- Agent 宿主索引表（`agent-hosts.md`）新增 Python SDK 直调入口
+
+### Changed
+- `auth/manager.py` 测试覆盖率 74% → 96%（+14 测试）
+- `commands/export.py` 测试覆盖率 47% → 98%（+13 测试）
+- 总测试数 710 → 737，总覆盖率维持 81%
+
+### Added
 - 英文版 README 新增「👭 Related Communities」分区，对齐中文版的 LINUX DO 友链认可
 
 ## [1.7.1] - 2026-04-17
