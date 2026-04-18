@@ -20,3 +20,10 @@ GEMINI.md
 !src/**/*.html
 !demo/**/*.html
 *.pdf
+
+# Coverage artifacts
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+htmlcov/
