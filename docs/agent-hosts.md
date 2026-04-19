@@ -33,3 +33,7 @@
 2. 所有成功/失败都以 stdout JSON 信封为准，不要解析 stderr。
 3. 把 `boss doctor`、`boss login`、`boss status` 当成统一恢复入口。
 4. 用户提到福利要求时，优先把条件落到 `--welfare`。
+
+## 相关文档
+
+- [推荐 AI 模型与入口](integrations/ai-models.md) — Claude 4.7 / GPT-5 / DeepSeek-V3 / Qwen3 等最新模型配置示例

@@ -275,6 +275,8 @@ npx skills add can4hou6joeng4/boss-agent-cli
 | `boss ai interview-prep` | 基于 JD 生成模拟面试题 |
 | `boss ai chat-coach` | 基于聊天记录给沟通建议 |
 
+> 支持 Claude 4.7 / GPT-5 / DeepSeek-V3 / Qwen3 等最新模型，详见 [推荐模型与入口](docs/integrations/ai-models.md)。
+
 ### 系统管理
 
 | 命令 | 说明 |

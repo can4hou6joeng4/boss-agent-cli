@@ -127,10 +127,10 @@ def ai_group():
 
 
 @ai_group.command("config")
-@click.option("--provider", default=None, help="AI 提供商（openai/deepseek/moonshot/custom）")
-@click.option("--model", default=None, help="模型名称（如 gpt-4o）")
+@click.option("--provider", default=None, help="AI 提供商（openai/deepseek/moonshot/openrouter/qwen/zhipu/siliconflow/custom）")
+@click.option("--model", default=None, help="模型名称（如 gpt-4o / claude-sonnet-4.5 / deepseek-chat）")
 @click.option("--api-key", default=None, help="API 密钥（将加密存储）")
-@click.option("--base-url", default=None, help="自定义 API 基础地址")
+@click.option("--base-url", default=None, help="自定义 API 基础地址（provider=custom 或自建代理时使用）")
 @click.option("--temperature", default=None, type=float, help="生成温度")
 @click.option("--max-tokens", default=None, type=int, help="最大令牌数")
 @click.pass_context

@@ -124,6 +124,34 @@ def test_base_url_moonshot(tmp_path, monkeypatch):
 	assert store.get_base_url() == "https://api.moonshot.cn/v1"
 
 
+def test_base_url_openrouter(tmp_path, monkeypatch):
+	"""OpenRouter 聚合入口，支持 Claude / GPT-5 等多家模型。"""
+	store = _make_store(tmp_path, monkeypatch)
+	store.save_config(ai_provider="openrouter")
+	assert store.get_base_url() == "https://openrouter.ai/api/v1"
+
+
+def test_base_url_qwen(tmp_path, monkeypatch):
+	"""通义千问 DashScope OpenAI 兼容入口。"""
+	store = _make_store(tmp_path, monkeypatch)
+	store.save_config(ai_provider="qwen")
+	assert store.get_base_url() == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+
+def test_base_url_zhipu(tmp_path, monkeypatch):
+	"""智谱 GLM 开放平台入口。"""
+	store = _make_store(tmp_path, monkeypatch)
+	store.save_config(ai_provider="zhipu")
+	assert store.get_base_url() == "https://open.bigmodel.cn/api/paas/v4"
+
+
+def test_base_url_siliconflow(tmp_path, monkeypatch):
+	"""硅基流动聚合推理入口。"""
+	store = _make_store(tmp_path, monkeypatch)
+	store.save_config(ai_provider="siliconflow")
+	assert store.get_base_url() == "https://api.siliconflow.cn/v1"
+
+
 # ── is_configured ────────────────────────────────────────────
 
 
@@ -166,5 +194,9 @@ def test_provider_base_urls_completeness():
 	assert "openai" in PROVIDER_BASE_URLS
 	assert "deepseek" in PROVIDER_BASE_URLS
 	assert "moonshot" in PROVIDER_BASE_URLS
+	assert "openrouter" in PROVIDER_BASE_URLS
+	assert "qwen" in PROVIDER_BASE_URLS
+	assert "zhipu" in PROVIDER_BASE_URLS
+	assert "siliconflow" in PROVIDER_BASE_URLS
 	assert "custom" in PROVIDER_BASE_URLS
 	assert PROVIDER_BASE_URLS["custom"] is None
