@@ -27,3 +27,6 @@ GEMINI.md
 coverage.xml
 coverage.json
 htmlcov/
+
+# 本地专属的社区发帖草稿（未公开前保留在本地）
+docs/blog/linuxdo-promo.md
