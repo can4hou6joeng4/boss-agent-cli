@@ -15,7 +15,7 @@ BailHandler = Callable[[dict], str | bool | None]
 class SyncHook:
 	"""Synchronous hook — all handlers fire, exceptions are swallowed."""
 
-	def __init__(self):
+	def __init__(self) -> None:
 		self._handlers: list[tuple[str, Handler]] = []
 
 	def tap(self, name: str, handler: Handler) -> None:
@@ -32,7 +32,7 @@ class SyncHook:
 class BailHook:
 	"""Bail hook — first handler returning truthy value vetoes the action."""
 
-	def __init__(self):
+	def __init__(self) -> None:
 		self._handlers: list[tuple[str, BailHandler]] = []
 
 	def tap(self, name: str, handler: BailHandler) -> None:

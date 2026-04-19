@@ -79,3 +79,25 @@ jobs:
           from boss_agent_cli.commands.schema import schema_cmd
           print('All critical imports OK')
           "
+
+  typecheck:
+    runs-on: ubuntu-latest
+    # 静态类型检查：目前以 baseline 形式非阻塞运行，逐模块收敛
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run mypy (non-blocking baseline)
+        run: uv run mypy src/boss_agent_cli
+        continue-on-error: true

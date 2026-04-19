@@ -20,6 +20,7 @@ Python **≥ 3.10** is required. We use [`uv`](https://github.com/astral-sh/uv) 
 
 - **Indentation:** tabs (not spaces) — enforced by `ruff format`
 - **Python version:** 3.10+, use `X | Y` union syntax (no `Optional[X]`)
+- **Type checking:** `uv run mypy src/boss_agent_cli` — strict modules are enforced, baseline errors in legacy code are non-blocking for now
 - **Commit messages:** `type: 中文描述` — the description is written in Chinese even if the code/comments are in English. Valid types: `feat / fix / refactor / docs / test / chore / perf / ci`
   - ✅ `feat: 新增配置管理命令`
   - ❌ `feat: add config command`  (English description)

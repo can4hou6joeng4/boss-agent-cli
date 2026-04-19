@@ -47,6 +47,8 @@ dev = [
 	"pytest-cov>=5.0",
 	"ruff>=0.4",
 	"pre-commit>=3.0",
+	"mypy>=1.20",
+	"types-PyYAML>=6.0",
 ]
 bridge = [
 	"aiohttp>=3.9",
@@ -62,3 +64,32 @@ pythonpath = ["src"]
 [tool.ruff]
 line-length = 120
 indent-width = 4
+
+[tool.mypy]
+python_version = "3.10"
+# 渐进接入：仅跑基础类型检查，允许现有未注解函数存在
+# 目标：先覆盖报错→逐模块消化→最终切 --strict
+ignore_missing_imports = true
+check_untyped_defs = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+exclude = [
+	"^build/",
+	"^dist/",
+	"^\\.venv/",
+]
+
+# 逐模块严格化：已覆盖率 100% 的核心工具模块先严起来
+[[tool.mypy.overrides]]
+module = [
+	"boss_agent_cli.output",
+	"boss_agent_cli.config",
+	"boss_agent_cli.hooks",
+]
+disallow_untyped_defs = true
+
+[dependency-groups]
+dev = [
+    "mypy>=1.20.1",
+    "types-pyyaml>=6.0.12.20260408",
+]

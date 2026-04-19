@@ -1,12 +1,13 @@
 import json
 import sys
+from typing import Any
 
 _LEVEL_ORDER = {"debug": 0, "info": 1, "warning": 2, "error": 3}
 
 
 def envelope_success(
 	command: str,
-	data,
+	data: Any,
 	*,
 	pagination: dict | None = None,
 	hints: dict | None = None,
@@ -53,33 +54,33 @@ def envelope_error(
 	)
 
 
-def emit_success(command: str, data, **kwargs) -> None:
+def emit_success(command: str, data: Any, **kwargs: Any) -> None:
 	print(envelope_success(command, data, **kwargs))
 
 
-def emit_error(command: str, **kwargs) -> None:
+def emit_error(command: str, **kwargs: Any) -> None:
 	print(envelope_error(command, **kwargs))
 	sys.exit(1)
 
 
 class Logger:
-	def __init__(self, level: str = "error"):
+	def __init__(self, level: str = "error") -> None:
 		self._threshold = _LEVEL_ORDER.get(level, 3)
 
-	def _log(self, level: str, message: str):
+	def _log(self, level: str, message: str) -> None:
 		if _LEVEL_ORDER.get(level, 0) >= self._threshold:
 			import datetime
 			ts = datetime.datetime.now().strftime("%H:%M:%S")
 			print(f"[{level.upper()} {ts}] {message}", file=sys.stderr)
 
-	def debug(self, message: str):
+	def debug(self, message: str) -> None:
 		self._log("debug", message)
 
-	def info(self, message: str):
+	def info(self, message: str) -> None:
 		self._log("info", message)
 
-	def warning(self, message: str):
+	def warning(self, message: str) -> None:
 		self._log("warning", message)
 
-	def error(self, message: str):
+	def error(self, message: str) -> None:
 		self._log("error", message)
