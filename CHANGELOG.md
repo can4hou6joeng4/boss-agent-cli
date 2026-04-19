@@ -4,6 +4,30 @@
 
 ## [Unreleased]
 
+## [1.8.3] - 2026-04-20
+
+### Added
+- 英文版贡献者指南 `CONTRIBUTING.en.md`（#84） — 对齐中文版全量章节，并明确说明 commit message 纯中文描述约定
+- 静态类型检查接入（#86）— `mypy` 依赖 + 宽松基线配置 + `typecheck` CI 非阻塞 job；`output` / `config` / `hooks` 三个纯工具模块启用严格模式（`disallow_untyped_defs`）
+- `docs/integrations/ai-models.md` 作为 ROADMAP v2.0 社区建设的英文贡献者入口被纳入索引
+
+### Changed
+- `CONTRIBUTING.md` 首行补 `CONTRIBUTING.en.md` 链接
+- `CONTRIBUTING` 双语版增加 mypy 本地跑法提示
+- `output.py` / `hooks.py` 补齐类型注解（`emit_success` / `emit_error` / `Logger.*` / `SyncHook.__init__` / `BailHook.__init__`）
+
+### 测试覆盖率二次冲刺（#85）
+- `commands/logout.py` 86% → 100%
+- `commands/show.py` 85% → ~98%
+- `commands/mark.py` 86% → ~95%
+- `commands/me.py` 88% → 100%
+- `match_score.py` 93% → 100%
+- `pipeline_state.py` 93% → 100%
+- 全量测试 **893 → 911**（+18）
+
+### Fixed
+- （无 bug 修复）
+
 ## [1.8.2] - 2026-04-20
 
 ### Added
