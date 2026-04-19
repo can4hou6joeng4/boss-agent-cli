@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+## [1.8.4] - 2026-04-20
+
+### Changed
+- **类型检查门禁升级为阻塞式**（#88）— mypy 12 baseline errors 全部清零，CI `typecheck` job 去掉 `continue-on-error`，新代码必须零 mypy 错误才能合入 master
+
+### Fixed
+- `api/browser_client.py` × 8：patchright 类属性加 `Any` 类型注解
+- `auth/manager.py`：登录方法 `token` 变量显式声明为 `dict | None`
+- `bridge/daemon.py`：Popen `kwargs` 显式声明为 `dict[str, Any]`
+- `commands/chat_utils.py`：`RELATION_LABELS` key 类型放宽为 `object`
+- `resume/models.py`：for 循环变量 `item` 改名 `ji_item` 避免类型混淆
+
 ## [1.8.3] - 2026-04-20
 
 ### Added
