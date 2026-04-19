@@ -180,6 +180,9 @@ patchright install chromium    # QR httpx 模式可省略此步
 | `boss ai polish` | 润色简历 | 无 |
 | `boss ai optimize` | 针对岗位优化 | 无 |
 | `boss ai suggest` | 求职建议 | 无 |
+| `boss ai reply` | 招聘者消息回复草稿 | `--context` `--resume` `--tone` |
+| `boss ai interview-prep` | 基于 JD 生成模拟面试题 | `--resume` `--count` |
+| `boss ai chat-coach` | 基于聊天记录给沟通建议 | `--resume` `--style` |
 
 ### 系统
 

@@ -117,6 +117,9 @@ boss status    # 验证登录态
 | `boss ai polish` | 润色简历 |
 | `boss ai optimize` | 针对岗位优化简历 |
 | `boss ai suggest` | 求职建议 |
+| `boss ai reply` | 招聘者消息回复草稿 |
+| `boss ai interview-prep` | 基于 JD 生成模拟面试题 |
+| `boss ai chat-coach` | 基于聊天记录给沟通建议 |
 
 ### System
 

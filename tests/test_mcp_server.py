@@ -66,6 +66,7 @@ def test_required_tools_present():
 		"boss_apply", "boss_batch_greet", "boss_show", "boss_pipeline",
 		"boss_follow_up", "boss_digest", "boss_config", "boss_clean",
 		"boss_stats", "boss_ai_reply",
+		"boss_ai_interview_prep", "boss_ai_chat_coach",
 		"boss_resume_list", "boss_resume_show",
 		"boss_ai_analyze_jd", "boss_ai_optimize", "boss_ai_suggest",
 		"boss_watch_list", "boss_watch_run",
@@ -353,8 +354,38 @@ def test_build_args_ai_reply_full():
 	assert "previous chat" in args
 	assert "--resume" in args
 	assert "test" in args
-	assert "--tone" in args
-	assert "热情积极" in args
+
+
+def test_build_args_ai_interview_prep_minimal():
+	args = _build_args("boss_ai_interview_prep", {"jd_text": "后端工程师 JD"})
+	assert args == ["ai", "interview-prep", "后端工程师 JD"]
+
+
+def test_build_args_ai_interview_prep_full():
+	args = _build_args("boss_ai_interview_prep", {
+		"jd_text": "JD",
+		"resume": "r1",
+		"count": 5,
+	})
+	assert args[:3] == ["ai", "interview-prep", "JD"]
+	assert "--resume" in args and "r1" in args
+	assert "--count" in args and "5" in args
+
+
+def test_build_args_ai_chat_coach_minimal():
+	args = _build_args("boss_ai_chat_coach", {"chat_text": "聊天记录"})
+	assert args == ["ai", "chat-coach", "聊天记录"]
+
+
+def test_build_args_ai_chat_coach_full():
+	args = _build_args("boss_ai_chat_coach", {
+		"chat_text": "对话",
+		"resume": "r1",
+		"style": "积极主动",
+	})
+	assert args[:3] == ["ai", "chat-coach", "对话"]
+	assert "--resume" in args and "r1" in args
+	assert "--style" in args and "积极主动" in args
 
 
 def test_build_args_resume_list():

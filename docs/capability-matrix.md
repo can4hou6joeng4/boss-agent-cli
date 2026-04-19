@@ -78,6 +78,8 @@
 | 简历定向优化 | `boss ai optimize` | 否 | AI 服务 |
 | 简历改进建议 | `boss ai suggest` | 否 | AI 服务 |
 | 聊天回复草稿 | `boss ai reply` | 否 | AI 服务 |
+| 模拟面试题 | `boss ai interview-prep` | 否 | AI 服务 |
+| 沟通教练 | `boss ai chat-coach` | 否 | AI 服务 |
 
 ## 数据洞察
 

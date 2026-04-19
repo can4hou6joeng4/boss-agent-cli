@@ -285,6 +285,36 @@ TOOLS = [
 		},
 	),
 	Tool(
+		name="boss_ai_interview_prep",
+		description="基于目标职位描述生成模拟面试题与准备建议（支持简历参考定制题目）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"jd_text": {"type": "string", "description": "目标职位描述文本"},
+				"resume": {"type": "string", "description": "参考简历名称（可选）"},
+				"count": {"type": "integer", "description": "题量，默认 10", "default": 10},
+			},
+			"required": ["jd_text"],
+		},
+	),
+	Tool(
+		name="boss_ai_chat_coach",
+		description="基于聊天记录诊断沟通状态并给出下一步行动建议与现成消息模板",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"chat_text": {"type": "string", "description": "聊天记录文本"},
+				"resume": {"type": "string", "description": "参考简历名称（可选）"},
+				"style": {
+					"type": "string",
+					"description": "沟通风格偏好（如 简洁专业/积极主动/谨慎稳重）",
+					"default": "简洁专业",
+				},
+			},
+			"required": ["chat_text"],
+		},
+	),
+	Tool(
 		name="boss_resume_list",
 		description="列出所有本地简历（名称、创建时间、关联职位数）",
 		inputSchema={"type": "object", "properties": {}, "required": []},
@@ -579,6 +609,22 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 			args.extend(["--resume", arguments["resume"]])
 		if arguments.get("tone"):
 			args.extend(["--tone", arguments["tone"]])
+		return args
+
+	if name == "ai_interview_prep":
+		args = ["ai", "interview-prep", arguments["jd_text"]]
+		if arguments.get("resume"):
+			args.extend(["--resume", arguments["resume"]])
+		if "count" in arguments:
+			args.extend(["--count", str(arguments["count"])])
+		return args
+
+	if name == "ai_chat_coach":
+		args = ["ai", "chat-coach", arguments["chat_text"]]
+		if arguments.get("resume"):
+			args.extend(["--resume", arguments["resume"]])
+		if arguments.get("style"):
+			args.extend(["--style", arguments["style"]])
 		return args
 
 	if name == "resume_list":

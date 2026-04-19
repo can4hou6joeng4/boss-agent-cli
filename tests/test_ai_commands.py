@@ -370,6 +370,8 @@ def test_schema_contains_ai():
 	assert "optimize" in cmd["subcommands"]
 	assert "suggest" in cmd["subcommands"]
 	assert "reply" in cmd["subcommands"]
+	assert "interview-prep" in cmd["subcommands"]
+	assert "chat-coach" in cmd["subcommands"]
 
 
 def test_schema_contains_ai_error_codes():
@@ -382,3 +384,191 @@ def test_schema_contains_ai_error_codes():
 	assert "AI_NOT_CONFIGURED" in codes
 	assert "AI_API_ERROR" in codes
 	assert "AI_PARSE_ERROR" in codes
+
+
+# ── interview-prep 子命令 ─────────────────────────────────
+
+
+def test_interview_prep_not_configured(tmp_path, monkeypatch):
+	"""AI 未配置时返回错误"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["interview-prep", "需要三年后端经验"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AI_NOT_CONFIGURED"
+
+
+def test_interview_prep_success(tmp_path, monkeypatch):
+	"""基于 JD 生成面试题成功"""
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+
+	mock_result = {
+		"job_summary": "后端工程师岗位",
+		"questions": [
+			{
+				"category": "技术",
+				"question": "说说对分布式事务的理解",
+				"framework": "先定义再举例再总结",
+				"evaluation_points": ["概念准确", "举例贴合"],
+				"difficulty": "中等",
+			},
+			{
+				"category": "行为",
+				"question": "描述一次线上故障处理经历",
+				"framework": "STAR",
+				"evaluation_points": ["定位能力", "复盘深度"],
+				"difficulty": "高",
+			},
+		],
+		"preparation_tips": ["复习 CAP 定理", "准备项目故事"],
+	}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)):
+		result = _invoke(runner, tmp_path, ["interview-prep", "招聘后端工程师 需要 Go 和 Kafka"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert len(parsed["data"]["questions"]) == 2
+	assert parsed["data"]["questions"][0]["category"] == "技术"
+
+
+def test_interview_prep_with_resume_and_count(tmp_path, monkeypatch):
+	"""interview-prep 支持简历参考和题量参数"""
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+
+	mock_result = {"job_summary": "x", "questions": [], "preparation_tips": []}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)):
+		result = _invoke(runner, tmp_path, [
+			"interview-prep", "需要 Java 工程师", "--resume", "test-resume", "--count", "5",
+		])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+
+
+def test_interview_prep_at_file(tmp_path, monkeypatch):
+	"""interview-prep 支持 @file 读取 JD"""
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+
+	jd_file = tmp_path / "jd.txt"
+	jd_file.write_text("资深后端工程师 要求 Java + Kafka", encoding="utf-8")
+
+	mock_result = {"job_summary": "x", "questions": [], "preparation_tips": []}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)):
+		result = _invoke(runner, tmp_path, ["interview-prep", f"@{jd_file}"])
+
+	assert result.exit_code == 0
+
+
+def test_interview_prep_resume_not_found(tmp_path, monkeypatch):
+	"""指定了不存在的简历应返回 RESUME_NOT_FOUND"""
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["interview-prep", "JD 文本", "--resume", "ghost"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
+
+
+# ── chat-coach 子命令 ────────────────────────────────────
+
+
+def test_chat_coach_not_configured(tmp_path, monkeypatch):
+	"""AI 未配置时返回错误"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["chat-coach", "聊天记录文本"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AI_NOT_CONFIGURED"
+
+
+def test_chat_coach_success(tmp_path, monkeypatch):
+	"""基于聊天记录生成沟通建议成功"""
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+
+	mock_result = {
+		"stage_analysis": "初次接触阶段",
+		"recruiter_intent": "想确认工作经验和薪资期望",
+		"strengths": ["自我介绍清晰"],
+		"weaknesses": ["未主动引导下一步"],
+		"next_action_recommendation": "主动询问流程",
+		"message_templates": [
+			{"scenario": "询问流程", "text": "请问接下来需要准备什么？"}
+		],
+		"avoid_pitfalls": ["避免直接谈薪资"],
+	}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)):
+		result = _invoke(runner, tmp_path, ["chat-coach", "招聘者：您好\n我：你好"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["recruiter_intent"] == "想确认工作经验和薪资期望"
+	assert len(parsed["data"]["message_templates"]) == 1
+
+
+def test_chat_coach_at_file(tmp_path, monkeypatch):
+	"""chat-coach 支持 @file 读取聊天记录"""
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+
+	chat_file = tmp_path / "chat.txt"
+	chat_file.write_text("招聘者：您好\n我：你好", encoding="utf-8")
+
+	mock_result = {
+		"stage_analysis": "x",
+		"recruiter_intent": "y",
+		"strengths": [], "weaknesses": [],
+		"next_action_recommendation": "z",
+		"message_templates": [], "avoid_pitfalls": [],
+	}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)):
+		result = _invoke(runner, tmp_path, ["chat-coach", f"@{chat_file}"])
+
+	assert result.exit_code == 0
+
+
+def test_chat_coach_with_style(tmp_path, monkeypatch):
+	"""chat-coach 支持沟通风格偏好"""
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+
+	mock_result = {
+		"stage_analysis": "x", "recruiter_intent": "y",
+		"strengths": [], "weaknesses": [],
+		"next_action_recommendation": "z",
+		"message_templates": [], "avoid_pitfalls": [],
+	}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)):
+		result = _invoke(runner, tmp_path, ["chat-coach", "聊天记录", "--style", "积极主动"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+
+
+def test_chat_coach_parse_error(tmp_path, monkeypatch):
+	"""AI 返回非 JSON 时返回 AI_PARSE_ERROR"""
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+
+	mock_resp = MagicMock()
+	mock_resp.status_code = 200
+	mock_resp.json.return_value = {
+		"choices": [{"message": {"content": "this is plain text"}}]
+	}
+	mock_resp.raise_for_status = MagicMock()
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=mock_resp):
+		result = _invoke(runner, tmp_path, ["chat-coach", "文本"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AI_PARSE_ERROR"

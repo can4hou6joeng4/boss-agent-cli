@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v1.8.0 (2026-04-19)：AI 沟通与面试扩展（ai interview-prep / ai chat-coach）+ 协议服务扩展至 43 工具
 - ✅ v1.7.0 (2026-04-17)：聊天回复草稿 + 投递漏斗 + 协议服务扩展至 41 工具
 
 完整历史见 [CHANGELOG.md](CHANGELOG.md)。
@@ -11,18 +12,18 @@
 ## 🎯 近期（v1.8.x）
 
 ### 数据可视化
-- [ ] `boss stats --format html` 输出交互式漏斗报表
+- [x] `boss stats --format html` 输出交互式漏斗报表
 - [ ] `boss digest --format md` 每日摘要邮件/飞书可直接发送
-- [ ] codecov badge 集成到 README
+- [x] codecov badge 集成到 README
 
 ### Agent 集成
 - [ ] MCP 服务支持 HTTP streaming（stdio 已支持）
 - [ ] Codex / Cursor / Windsurf 专用接入示例
-- [ ] OpenAI Functions 格式导出 `boss schema --format openai-tools`
+- [x] OpenAI Functions 格式导出 `boss schema --format openai-tools`
 
 ### 智能能力
-- [ ] `boss ai chat-coach` — 基于聊天记录给出沟通技巧建议
-- [ ] `boss ai interview-prep` — 基于 JD 生成模拟面试题
+- [x] `boss ai chat-coach` — 基于聊天记录给出沟通技巧建议
+- [x] `boss ai interview-prep` — 基于 JD 生成模拟面试题
 - [ ] 支持 Claude 4.7 / GPT-5 最新模型
 
 ## 🔮 中期（v2.0）

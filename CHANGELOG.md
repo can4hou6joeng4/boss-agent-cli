@@ -4,6 +4,22 @@
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-04-19
+
+### Added
+- `boss ai interview-prep <jd_text>` — 基于目标职位生成模拟面试题与准备建议，支持 `--resume` 参考简历、`--count` 控制题量；返回分类（技术/行为/情景）、参考回答框架、考察点、难度、高优先级准备项
+- `boss ai chat-coach <chat_text>` — 基于聊天记录诊断沟通状态并给出下一步建议，支持 `--resume`、`--style` 偏好；输出阶段判断、招聘者意图、优劣势、可直发消息模板、需避免的雷区
+- 协议服务新增 `boss_ai_interview_prep` / `boss_ai_chat_coach` 两个工具（41 → 43）
+- Prompt 模板新增 `INTERVIEW_PREP_PROMPT` / `CHAT_COACH_PROMPT`
+
+### Changed
+- ROADMAP v1.8.x 智能能力分区两项勾选完成
+- README / capability-matrix / SKILL 同步新增两条 AI 能力
+- schema 中 `ai` 命令子命令列表由 6 → 8
+
+### Fixed
+- （无 bug 修复）
+
 ## [1.7.2] - 2026-04-19
 
 ### Added

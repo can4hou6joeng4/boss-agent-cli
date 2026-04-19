@@ -10,7 +10,9 @@ import click
 
 from boss_agent_cli.ai.config import AIConfigStore
 from boss_agent_cli.ai.prompts import (
+	CHAT_COACH_PROMPT,
 	CHAT_REPLY_PROMPT,
+	INTERVIEW_PREP_PROMPT,
 	JD_ANALYSIS_PROMPT,
 	RESUME_OPTIMIZE_FOR_JD_PROMPT,
 	RESUME_POLISH_PROMPT,
@@ -359,5 +361,99 @@ def ai_reply_cmd(ctx, recruiter_message, context, resume_name, tone):
 		hints={"next_actions": [
 			"复制草稿到 BOSS 聊天框发送",
 			"boss chatmsg <security_id> 查看完整聊天历史",
+		]},
+	)
+
+
+@ai_group.command("interview-prep")
+@click.argument("jd_text")
+@click.option("--resume", "resume_name", default=None, help="参考简历名称（可选，根据简历真实经历定制问题）")
+@click.option("--count", default=10, type=int, help="题量，默认 10")
+@click.pass_context
+def ai_interview_prep_cmd(ctx, jd_text, resume_name, count):
+	"""基于目标职位生成模拟面试题
+
+	JD_TEXT 是目标职位描述文本，或 @文件路径 读取文件内容。
+	"""
+	svc = _require_ai_service(ctx)
+	if svc is None:
+		return
+
+	if jd_text.startswith("@"):
+		file_path = Path(jd_text[1:])
+		if not file_path.exists():
+			handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
+			ctx.exit(1)
+			return
+		jd_text = file_path.read_text(encoding="utf-8")
+
+	resume_text = "（未指定）"
+	if resume_name:
+		loaded = _load_resume_text(ctx, resume_name)
+		if loaded is None:
+			return
+		resume_text = loaded
+
+	prompt = INTERVIEW_PREP_PROMPT.format(
+		jd_text=jd_text,
+		resume_text=resume_text,
+		count=count,
+	)
+	result = _call_ai(ctx, svc, prompt)
+	if result is None:
+		return
+
+	handle_output(
+		ctx, "ai-interview-prep", result,
+		hints={"next_actions": [
+			"对照 questions 逐题准备答案",
+			"boss ai chat-coach <chat_text> 用于沟通准备",
+		]},
+	)
+
+
+@ai_group.command("chat-coach")
+@click.argument("chat_text")
+@click.option("--resume", "resume_name", default=None, help="参考简历名称（可选）")
+@click.option("--style", default="简洁专业", help="沟通风格偏好（如 简洁专业/积极主动/谨慎稳重）")
+@click.pass_context
+def ai_chat_coach_cmd(ctx, chat_text, resume_name, style):
+	"""基于聊天记录给出沟通技巧诊断与下一步建议
+
+	CHAT_TEXT 是聊天记录文本，或 @文件路径 读取文件内容。
+	"""
+	svc = _require_ai_service(ctx)
+	if svc is None:
+		return
+
+	if chat_text.startswith("@"):
+		file_path = Path(chat_text[1:])
+		if not file_path.exists():
+			handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
+			ctx.exit(1)
+			return
+		chat_text = file_path.read_text(encoding="utf-8")
+
+	resume_text = "（未指定）"
+	if resume_name:
+		loaded = _load_resume_text(ctx, resume_name)
+		if loaded is None:
+			return
+		resume_text = loaded
+
+	prompt = CHAT_COACH_PROMPT.format(
+		chat_text=chat_text,
+		resume_text=resume_text,
+		style=style,
+	)
+	result = _call_ai(ctx, svc, prompt)
+	if result is None:
+		return
+
+	handle_output(
+		ctx, "ai-chat-coach", result,
+		hints={"next_actions": [
+			"按 next_action_recommendation 的建议行动",
+			"message_templates 可直接复制发送",
 		]},
 	)

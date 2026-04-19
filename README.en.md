@@ -127,7 +127,7 @@ See [Agent Quickstart](docs/agent-quickstart.md) and [Capability Matrix](docs/ca
 | **Track** | `chat` · `chatmsg` · `chat-summary` · `interviews` · `pipeline` · `follow-up` · `digest` · `stats` |
 | **Organize** | `watch` · `preset` · `shortlist` |
 | **Resume** | `resume` · `me` |
-| **AI** | `ai config` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai suggest` · `ai reply` |
+| **AI** | `ai config` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai suggest` · `ai reply` · `ai interview-prep` · `ai chat-coach` |
 | **Utility** | `schema` · `export` · `config` · `clean` |
 
 Run `boss <cmd> --help` for options, or `boss schema` for the complete JSON self-description.

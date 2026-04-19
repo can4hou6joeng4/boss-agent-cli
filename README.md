@@ -54,7 +54,7 @@ boss digest                                                  # 每日汇报
 | 📊 **进度管理** | 求职流水线 + 跟进提醒 + 每日摘要 | `pipeline` `follow-up` `digest` |
 | 👀 **增量监控** | 保存搜索条件、定期执行、标出新职位 | `watch` `shortlist` `preset` |
 | 💬 **沟通管理** | 聊天记录、结构化摘要、标签管理 | `chat` `chatmsg` `chat-summary` |
-| 🤖 **AI 优化** | 岗位分析 + 简历润色 + 匹配优化建议 | `ai analyze-jd` `ai polish` `ai optimize` |
+| 🤖 **AI 优化** | 岗位分析 + 简历润色 + 匹配优化 + 面试准备 + 沟通指导 | `ai analyze-jd` `ai polish` `ai optimize` `ai interview-prep` `ai chat-coach` |
 | 📤 **数据导出** | CSV / JSON / HTML / Markdown 多格式 | `export` `chat --export` |
 
 ---
@@ -271,6 +271,9 @@ npx skills add can4hou6joeng4/boss-agent-cli
 | `boss ai polish` | 润色简历 |
 | `boss ai optimize` | 针对目标岗位优化 |
 | `boss ai suggest` | 求职建议 |
+| `boss ai reply` | 生成招聘者消息回复草稿 |
+| `boss ai interview-prep` | 基于 JD 生成模拟面试题 |
+| `boss ai chat-coach` | 基于聊天记录给沟通建议 |
 
 ### 系统管理
 
