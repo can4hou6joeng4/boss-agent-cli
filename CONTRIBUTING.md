@@ -1,6 +1,6 @@
 # Contributing
 
-感谢你对 boss-agent-cli 的关注！
+感谢你对 boss-agent-cli 的关注！English version: [CONTRIBUTING.en.md](CONTRIBUTING.en.md)
 
 ## 开发环境
 

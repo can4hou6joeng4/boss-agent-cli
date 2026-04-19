@@ -315,7 +315,7 @@ All state lives under `~/.boss-agent/` — encrypted tokens, cached searches, ch
 
 ## 🤝 Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). TL;DR: fork → `feat/xxx` branch → write tests → `uv run pytest` → PR.
+See [CONTRIBUTING.en.md](CONTRIBUTING.en.md) (English) or [CONTRIBUTING.md](CONTRIBUTING.md) (中文). TL;DR: fork → `feat/xxx` branch → write tests → `uv run pytest` → PR.
 
 ## 📄 License
 
