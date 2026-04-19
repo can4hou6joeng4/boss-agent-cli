@@ -14,6 +14,8 @@
 |---|---|---|
 | Codex | 在终端内直接做 Bash 编排和 JSON 解析 | [Codex](integrations/codex.md) |
 | Claude Code | 通过 skill / 规则文件接入求职动作 | [Claude Code](integrations/claude-code.md) |
+| Cursor | Composer Agent + MCP 或 `.cursor/rules` | [Cursor](integrations/cursor.md) |
+| Windsurf | Cascade Agent + MCP 或 `.windsurfrules` | [Windsurf](integrations/windsurf.md) |
 | Shell Agent | 任意支持 shell tool 的 Agent 框架或自建编排器 | [Shell Agent](integrations/shell-agent.md) |
 | Python SDK 直调 | 自建 Agent / LangGraph / 业务代码直接驱动 OpenAI 或 Claude SDK | [Python SDK](integrations/python-sdk.md) |
 
@@ -21,6 +23,7 @@
 
 - 如果 Agent 原生支持终端和多步工具调用，优先看 `Codex`
 - 如果你已经在用 skill 分发和规则驱动，优先看 `Claude Code`
+- 在 Cursor / Windsurf IDE 里工作，优先把 MCP 服务挂上（见各自文档的「方式一」）
 - 如果你有自己的 Agent 宿主或调度器，优先看 `Shell Agent`
 - 如果要在 Python 代码里直接驱动大模型做工具调用，优先看 `Python SDK 直调`
 

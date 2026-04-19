@@ -7,6 +7,8 @@ INDEX_DOC = DOCS_ROOT / "agent-hosts.md"
 HOST_DOCS = {
 	"Codex": DOCS_ROOT / "integrations" / "codex.md",
 	"Claude Code": DOCS_ROOT / "integrations" / "claude-code.md",
+	"Cursor": DOCS_ROOT / "integrations" / "cursor.md",
+	"Windsurf": DOCS_ROOT / "integrations" / "windsurf.md",
 	"Shell Agent": DOCS_ROOT / "integrations" / "shell-agent.md",
 }
 REQUIRED_COMMANDS = [
