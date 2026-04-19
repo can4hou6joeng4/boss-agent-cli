@@ -52,5 +52,5 @@ def _try_extract(loader) -> dict | None:
 			"user_agent": "",  # browser-cookie3 无法获取 UA，后续由 httpx 默认 UA 补充
 			"stoken": cookies.get("__zp_stoken__", ""),
 		}
-	except (OSError, KeyError, ValueError, PermissionError):
+	except Exception:
 		return None
