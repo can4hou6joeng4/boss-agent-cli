@@ -220,11 +220,13 @@ TOOLS = [
 	),
 	Tool(
 		name="boss_digest",
-		description="汇总新增职位、待跟进会话和面试项的只读日报",
+		description="汇总新增职位、待跟进会话和面试项的只读日报（支持 md 输出便于邮件/飞书直发）",
 		inputSchema={
 			"type": "object",
 			"properties": {
 				"days_stale": {"type": "integer", "description": "超过 N 天未推进视为待跟进", "default": 3},
+				"format": {"type": "string", "description": "输出格式", "enum": ["json", "md"], "default": "json"},
+				"output": {"type": "string", "description": "Markdown 输出路径（仅 format=md 时生效）"},
 			},
 			"required": [],
 		},
@@ -593,6 +595,10 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 		args = [name]
 		if "days_stale" in arguments:
 			args.extend(["--days-stale", str(arguments["days_stale"])])
+		if arguments.get("format"):
+			args.extend(["--format", arguments["format"]])
+		if arguments.get("output"):
+			args.extend(["-o", arguments["output"]])
 		return args
 
 	if name == "stats":

@@ -257,6 +257,16 @@ def test_build_args_digest():
 	assert args == ["digest", "--days-stale", "5"]
 
 
+def test_build_args_digest_format_md():
+	args = _build_args("boss_digest", {"format": "md"})
+	assert args == ["digest", "--format", "md"]
+
+
+def test_build_args_digest_format_md_with_output():
+	args = _build_args("boss_digest", {"format": "md", "output": "/tmp/d.md"})
+	assert args == ["digest", "--format", "md", "-o", "/tmp/d.md"]
+
+
 def test_build_args_config_list():
 	assert _build_args("boss_config", {"action": "list"}) == ["config", "list"]
 

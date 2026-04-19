@@ -458,10 +458,12 @@ SCHEMA_DATA = {
 			"options": {},
 		},
 		"digest": {
-			"description": "汇总新增职位、待跟进会话和面试项的只读日报",
+			"description": "汇总新增职位、待跟进会话和面试项的只读日报（支持 JSON / Markdown 两种输出）",
 			"args": [],
 			"options": {
 				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则视为 follow_up"},
+				"--format": {"type": "string", "default": "json", "description": "输出格式（json 信封 / md 可直发邮件飞书）"},
+				"-o, --output": {"type": "string", "default": None, "description": "Markdown 输出路径（仅 --format md 时有效）"},
 			},
 		},
 		"config": {
