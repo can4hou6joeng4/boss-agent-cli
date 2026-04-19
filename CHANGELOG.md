@@ -4,6 +4,31 @@
 
 ## [Unreleased]
 
+## [1.8.2] - 2026-04-20
+
+### Added
+- AI Provider 扩展 4 家，覆盖主流国内外聚合入口：
+  - `openrouter` — Anthropic Claude 4.7 / OpenAI GPT-5 / Google Gemini 等全家桶聚合
+  - `qwen` — 通义千问 DashScope OpenAI 兼容入口
+  - `zhipu` — 智谱 GLM-4.6 开放平台
+  - `siliconflow` — 硅基流动聚合推理
+- 新建 `docs/integrations/ai-models.md` 推荐模型与入口表，给 Claude 4.7 / GPT-5 / DeepSeek-V3 / Qwen3 / GLM-4.6 等最新模型最短接入路径
+
+### Changed
+- `ai config` 命令 `--provider` / `--model` 帮助文案同步最新 provider 列表
+- `docs/agent-hosts.md` 索引补入 AI 模型入口文档链接
+- `README.md` AI 命令表下方加推荐模型引用
+
+### Fixed
+- （无 bug 修复）
+
+### 测试覆盖率冲刺（独立主题）
+- `commands/display.py` 30% → **100%**（+21 测试）
+- `commands/status.py` 73% → **95%**（+2 测试）
+- `commands/ai_cmd.py` 77% → **84%**（+30 测试，剩余是 ctx.exit 后的防御性死代码不做硬刷）
+- `tests/test_ai_config.py` 新增 4 条 provider base_url 断言
+- 整体测试 **835 → 893**（+58），覆盖率 **85% → 88%**
+
 ## [1.8.1] - 2026-04-19
 
 ### Added
