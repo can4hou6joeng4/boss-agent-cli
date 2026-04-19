@@ -4,6 +4,25 @@
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-04-19
+
+### Added
+- `boss digest --format md [-o <path>]` — 每日摘要 Markdown 输出，可直接贴邮件/飞书发送；核心指标表 + 新匹配 / 待跟进 / 面试三段落，空数据写「暂无」占位
+- `docs/integrations/cursor.md` — Cursor Composer Agent 接入示例（MCP 推荐 + `.cursor/rules` 兜底）
+- `docs/integrations/windsurf.md` — Windsurf Cascade Agent 接入示例（MCP 推荐 + `.windsurfrules` 兜底）
+- `docs/agent-hosts.md` 宿主索引表补入 Cursor / Windsurf 两条
+- `.gitignore` 精准忽略本地专属的社区发帖草稿（`docs/blog/linuxdo-promo.md`）
+- 协议服务 `boss_digest` 工具新增 `format` / `output` 参数
+- `tests/test_digest_command.py` 新增 5 条 md 输出路径测试、`tests/test_mcp_server.py` 新增 2 条 `_build_args` 测试（828 → 835，+7）
+
+### Changed
+- ROADMAP v1.8.x「数据可视化」和「Agent 集成」分区各勾选一项完成
+- `digest` 命令描述同步更新说明支持 JSON / Markdown 两种输出
+- `tests/test_agent_host_examples.py` meta 测试覆盖新增两份集成示例
+
+### Fixed
+- （无 bug 修复）
+
 ## [1.8.0] - 2026-04-19
 
 ### Added
