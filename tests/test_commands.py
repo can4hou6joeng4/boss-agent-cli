@@ -39,6 +39,42 @@ def test_status_not_logged_in(mock_auth_cls):
 	assert parsed["error"]["code"] == "AUTH_REQUIRED"
 
 
+@patch("boss_agent_cli.commands.status.BossClient")
+@patch("boss_agent_cli.commands.status.AuthManager")
+def test_status_logged_in_happy_path(mock_auth_cls, mock_client_cls):
+	"""登录成功路径：check_status 返回 token，user_info 返回名字"""
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "x"}}
+	mock_client = mock_client_cls.return_value
+	mock_client.__enter__ = lambda self: self
+	mock_client.__exit__ = lambda self, *a: None
+	mock_client.user_info.return_value = {"zpData": {"name": "张三"}}
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "status"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["logged_in"] is True
+	assert parsed["data"]["user_name"] == "张三"
+
+
+@patch("boss_agent_cli.commands.status.BossClient")
+@patch("boss_agent_cli.commands.status.AuthManager")
+def test_status_logged_in_unknown_user(mock_auth_cls, mock_client_cls):
+	"""user_info 缺失 name 字段时应回退到默认占位"""
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "x"}}
+	mock_client = mock_client_cls.return_value
+	mock_client.__enter__ = lambda self: self
+	mock_client.__exit__ = lambda self, *a: None
+	mock_client.user_info.return_value = {"zpData": {}}
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "status"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["data"]["user_name"] == "未知用户"
+
+
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
 @patch("boss_agent_cli.commands.search.BossClient")

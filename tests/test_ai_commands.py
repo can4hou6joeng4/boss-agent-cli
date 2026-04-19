@@ -572,3 +572,321 @@ def test_chat_coach_parse_error(tmp_path, monkeypatch):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "AI_PARSE_ERROR"
+
+
+# ── 覆盖率补齐：各命令剩余错误分支 ─────────────────────────
+
+from boss_agent_cli.ai.service import AIServiceError  # noqa: E402
+
+
+def _mock_ai_error(message: str = "API 500", status: int = 500):
+	return patch("boss_agent_cli.ai.service.httpx.post", side_effect=AIServiceError(message, status_code=status))
+
+
+def _mock_ai_non_json():
+	"""返回 200 但 content 不是 JSON 的响应"""
+	mock_resp = MagicMock()
+	mock_resp.status_code = 200
+	mock_resp.json.return_value = {"choices": [{"message": {"content": "plain"}}]}
+	mock_resp.raise_for_status = MagicMock()
+	return patch("boss_agent_cli.ai.service.httpx.post", return_value=mock_resp)
+
+
+# ── _create_ai_service 边界：配置存在但 api_key / base_url 缺失 ──
+
+
+def test_require_ai_service_when_api_key_missing(tmp_path, monkeypatch):
+	"""AI 配置存在但 api_key 未保存时应视为未配置"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	from boss_agent_cli.ai.config import AIConfigStore
+	store = AIConfigStore(tmp_path)
+	store.save_config(ai_provider="openai", ai_model="gpt-4o")
+	# 故意不存 api_key -> is_configured 为 True，但 get_api_key 返回 None
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["polish", "任意"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AI_NOT_CONFIGURED"
+
+
+# ── ai config 剩余参数分支 ────────────────────────────────
+
+
+def test_config_set_base_url(tmp_path, monkeypatch):
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["config", "--base-url", "https://api.openai.com/v1"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert "ai_base_url" in parsed["data"]["updated_fields"]
+
+
+def test_config_set_max_tokens(tmp_path, monkeypatch):
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["config", "--max-tokens", "8000"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert "ai_max_tokens" in parsed["data"]["updated_fields"]
+
+
+# ── polish 错误分支 ──────────────────────────────────────
+
+
+def test_polish_resume_not_found(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["polish", "ghost"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
+
+
+def test_polish_ai_error(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+	with _mock_ai_error():
+		result = _invoke(runner, tmp_path, ["polish", "test-resume"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AI_API_ERROR"
+
+
+def test_polish_parse_error(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+	with _mock_ai_non_json():
+		result = _invoke(runner, tmp_path, ["polish", "test-resume"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AI_PARSE_ERROR"
+
+
+# ── optimize 错误分支 ─────────────────────────────────────
+
+
+def test_optimize_at_file_not_found(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["optimize", "test-resume", "--jd", "@/no/such.txt"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+
+
+def test_optimize_resume_not_found(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["optimize", "ghost", "--jd", "jd"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
+
+
+def test_optimize_ai_error(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+	with _mock_ai_error():
+		result = _invoke(runner, tmp_path, ["optimize", "test-resume", "--jd", "jd"])
+	assert result.exit_code == 1
+	assert json.loads(result.output)["error"]["code"] == "AI_API_ERROR"
+
+
+def test_optimize_parse_error(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+	with _mock_ai_non_json():
+		result = _invoke(runner, tmp_path, ["optimize", "test-resume", "--jd", "jd"])
+	assert json.loads(result.output)["error"]["code"] == "AI_PARSE_ERROR"
+
+
+def test_optimize_at_file_success(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+	jd_file = tmp_path / "jd.txt"
+	jd_file.write_text("JD 内容", encoding="utf-8")
+	mock_result = {"match_score_before": 60, "match_score_after": 82, "optimized_sections": []}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)):
+		result = _invoke(runner, tmp_path, ["optimize", "test-resume", "--jd", f"@{jd_file}"])
+	assert result.exit_code == 0
+
+
+# ── suggest 错误分支 ──────────────────────────────────────
+
+
+def test_suggest_at_file_not_found(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["suggest", "test-resume", "--jd", "@/no/such.txt"])
+	assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"
+
+
+def test_suggest_resume_not_found(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["suggest", "ghost", "--jd", "jd"])
+	assert json.loads(result.output)["error"]["code"] == "RESUME_NOT_FOUND"
+
+
+def test_suggest_ai_error(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+	with _mock_ai_error():
+		result = _invoke(runner, tmp_path, ["suggest", "test-resume", "--jd", "jd"])
+	assert json.loads(result.output)["error"]["code"] == "AI_API_ERROR"
+
+
+def test_suggest_parse_error(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+	with _mock_ai_non_json():
+		result = _invoke(runner, tmp_path, ["suggest", "test-resume", "--jd", "jd"])
+	assert json.loads(result.output)["error"]["code"] == "AI_PARSE_ERROR"
+
+
+def test_suggest_at_file_success(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+	jd_file = tmp_path / "jd.txt"
+	jd_file.write_text("资深后端", encoding="utf-8")
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response({"suggestions": []})):
+		result = _invoke(runner, tmp_path, ["suggest", "test-resume", "--jd", f"@{jd_file}"])
+	assert result.exit_code == 0
+
+
+# ── reply 错误分支 ────────────────────────────────────────
+
+
+def test_reply_recruiter_message_file_not_found(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["reply", "@/no/such.txt"])
+	assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"
+
+
+def test_reply_context_file_not_found(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["reply", "hello", "--context", "@/no/such.txt"])
+	assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"
+
+
+def test_reply_resume_not_found(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["reply", "hello", "--resume", "ghost"])
+	assert json.loads(result.output)["error"]["code"] == "RESUME_NOT_FOUND"
+
+
+def test_reply_ai_error(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	with _mock_ai_error():
+		result = _invoke(runner, tmp_path, ["reply", "hi"])
+	assert json.loads(result.output)["error"]["code"] == "AI_API_ERROR"
+
+
+def test_reply_parse_error(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	with _mock_ai_non_json():
+		result = _invoke(runner, tmp_path, ["reply", "hi"])
+	assert json.loads(result.output)["error"]["code"] == "AI_PARSE_ERROR"
+
+
+def test_reply_recruiter_message_at_file_success(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	msg_file = tmp_path / "msg.txt"
+	msg_file.write_text("您好，请问...", encoding="utf-8")
+	mock_result = {"intent_analysis": "x", "reply_drafts": [], "key_points": [], "avoid": []}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)):
+		result = _invoke(runner, tmp_path, ["reply", f"@{msg_file}"])
+	assert result.exit_code == 0
+
+
+def test_reply_context_at_file_success(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	ctx_file = tmp_path / "ctx.txt"
+	ctx_file.write_text("之前聊了 Python 岗", encoding="utf-8")
+	mock_result = {"intent_analysis": "x", "reply_drafts": [], "key_points": [], "avoid": []}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)):
+		result = _invoke(runner, tmp_path, ["reply", "你好", "--context", f"@{ctx_file}"])
+	assert result.exit_code == 0
+
+
+# ── interview-prep 错误分支 ───────────────────────────────
+
+
+def test_interview_prep_at_file_not_found(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["interview-prep", "@/no/such.txt"])
+	assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"
+
+
+def test_interview_prep_ai_error(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	with _mock_ai_error():
+		result = _invoke(runner, tmp_path, ["interview-prep", "jd"])
+	assert json.loads(result.output)["error"]["code"] == "AI_API_ERROR"
+
+
+def test_interview_prep_parse_error(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	with _mock_ai_non_json():
+		result = _invoke(runner, tmp_path, ["interview-prep", "jd"])
+	assert json.loads(result.output)["error"]["code"] == "AI_PARSE_ERROR"
+
+
+# ── chat-coach 错误分支 ──────────────────────────────────
+
+
+def test_chat_coach_at_file_not_found(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["chat-coach", "@/no/such.txt"])
+	assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"
+
+
+def test_chat_coach_resume_not_found(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["chat-coach", "文本", "--resume", "ghost"])
+	assert json.loads(result.output)["error"]["code"] == "RESUME_NOT_FOUND"
+
+
+def test_chat_coach_ai_error(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	with _mock_ai_error():
+		result = _invoke(runner, tmp_path, ["chat-coach", "文本"])
+	assert json.loads(result.output)["error"]["code"] == "AI_API_ERROR"
+
+
+def test_chat_coach_with_resume_success(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+	mock_result = {
+		"stage_analysis": "x", "recruiter_intent": "y",
+		"strengths": [], "weaknesses": [],
+		"next_action_recommendation": "z",
+		"message_templates": [], "avoid_pitfalls": [],
+	}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)):
+		result = _invoke(runner, tmp_path, ["chat-coach", "聊天", "--resume", "test-resume"])
+	assert result.exit_code == 0
