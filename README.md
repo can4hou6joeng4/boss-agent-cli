@@ -182,6 +182,23 @@ npx skills add can4hou6joeng4/boss-agent-cli
 5. 用户提到福利要求时使用 `--welfare` 参数
 ```
 
+### 方式三：Python 直接嵌入（不走 subprocess）
+
+包已随 `py.typed` 标记发布，可直接作为类型化的 Python 库使用：
+
+```python
+from boss_agent_cli import AuthManager, BossClient, AuthRequired
+
+auth = AuthManager(data_dir=Path("~/.boss-agent").expanduser())
+try:
+    with BossClient(auth) as client:
+        result = client.search_jobs("Golang", city="广州")
+except AuthRequired:
+    ...  # 提示用户 boss login
+```
+
+公开 API（详见 `boss_agent_cli.__all__`）：`AuthManager` / `BossClient` / `CacheStore` / `JobItem` / `JobDetail` / `AIService` / `ResumeData` 等核心类型。
+
 ### 输出协议
 
 所有命令输出 JSON 到 stdout，统一信封格式：
