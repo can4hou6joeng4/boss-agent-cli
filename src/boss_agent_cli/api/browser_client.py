@@ -9,6 +9,7 @@ Supports two modes:
 """
 import sys
 from pathlib import Path
+from typing import Any
 
 from patchright.sync_api import sync_playwright
 
@@ -38,10 +39,11 @@ class BrowserSession:
 
 	def __init__(self, cookies: dict, user_agent: str, *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None, logger=None):
 		self._throttle = RequestThrottle(delay)
-		self._pw = None
-		self._browser = None
-		self._context = None
-		self._page = None
+		# patchright / BridgeClient 运行时创建；注解为 Any 让 mypy 对外部依赖放行
+		self._pw: Any = None
+		self._browser: Any = None
+		self._context: Any = None
+		self._page: Any = None
 		self._cookies = cookies
 		self._user_agent = user_agent
 		self._started = False
@@ -49,7 +51,7 @@ class BrowserSession:
 		self._is_cdp = False
 		self._own_context = False  # 是否由我们创建的 context（需要在 close 时清理）
 		self._logger = logger
-		self._bridge_client = None
+		self._bridge_client: Any = None
 		self._is_bridge = False
 
 	def _log(self, message: str) -> None:

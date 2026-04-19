@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 _PID_FILE = Path.home() / ".boss-agent" / "bridge" / "daemon.pid"
 _LOG_FILE = Path.home() / ".boss-agent" / "bridge" / "daemon.log"
@@ -77,7 +78,7 @@ def start_daemon_background() -> int | None:
 	_ensure_dirs()
 
 	# 跨平台后台启动：用 subprocess.Popen 替代 os.fork
-	kwargs = {}
+	kwargs: dict[str, Any] = {}
 	if sys.platform == "win32":
 		# Windows: DETACHED_PROCESS 标志
 		kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP

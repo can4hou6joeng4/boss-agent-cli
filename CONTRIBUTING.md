@@ -19,7 +19,7 @@ uv run pre-commit install
 - 缩进使用 **tab**
 - Python >= 3.10（使用 `X | Y` 联合类型）
 - commit message：`type: 中文描述`（feat / fix / refactor / docs / test / chore）
-- 类型检查（建议本地跑）：`uv run mypy src/boss_agent_cli`（CI 以 baseline 非阻塞运行）
+- 类型检查：`uv run mypy src/boss_agent_cli`（CI 阻塞式门禁，新代码必须零 mypy 错误）
 
 ## 提交流程
 

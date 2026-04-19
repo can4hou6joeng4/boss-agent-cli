@@ -209,8 +209,8 @@ def resume_to_text(resume: ResumeData) -> str:
 
 	if resume.job_intention is not None:
 		lines.append(resume.job_intention.title)
-		for item in resume.job_intention.items:
-			lines.append(f"{item.label}: {item.value}")
+		for ji_item in resume.job_intention.items:
+			lines.append(f"{ji_item.label}: {ji_item.value}")
 		lines.append("")
 
 	for mod in resume.modules:

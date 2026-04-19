@@ -43,6 +43,7 @@ class AuthManager:
 			force_cdp: 为 True 时跳过 Cookie 提取，CDP 不可用直接报错。
 		"""
 		method = "未知"
+		token: dict | None = None
 
 		if force_cdp:
 			# --cdp 强制模式：跳过 Cookie，CDP 不可用直接抛异常

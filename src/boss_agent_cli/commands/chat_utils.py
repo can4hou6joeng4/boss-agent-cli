@@ -1,7 +1,7 @@
 """Chat 共享常量和安全工具函数。"""
 
-# relationType 映射：API 返回值 → 可读标签
-RELATION_LABELS = {1: "对方主动", 2: "我主动", 3: "投递"}
+# relationType 映射：API 返回值 → 可读标签（key 类型放宽为 object，兼容 API 返回 None/未知值走 default）
+RELATION_LABELS: dict[object, str] = {1: "对方主动", 2: "我主动", 3: "投递"}
 FROM_FILTER = {"boss": 1, "me": 2}
 MSG_STATUS_LABELS = {1: "未读", 2: "已读"}
 

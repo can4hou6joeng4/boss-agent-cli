@@ -82,8 +82,7 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
-    # 静态类型检查：目前以 baseline 形式非阻塞运行，逐模块收敛
-    continue-on-error: true
+    # 静态类型检查：baseline 已清零，切为 blocking
     steps:
       - uses: actions/checkout@v6
 
@@ -98,6 +97,5 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
 
-      - name: Run mypy (non-blocking baseline)
+      - name: Run mypy
         run: uv run mypy src/boss_agent_cli
-        continue-on-error: true
