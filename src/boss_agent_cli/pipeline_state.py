@@ -1,4 +1,5 @@
 import datetime
+from typing import Any
 
 from boss_agent_cli.commands.chat_utils import RELATION_LABELS
 
@@ -13,7 +14,7 @@ def _ts_to_label(ts_ms: int) -> str:
 	return dt.strftime("%m-%d %H:%M")
 
 
-def _chat_stage(item: dict, *, now_ts_ms: int, stale_days: int) -> str:
+def _chat_stage(item: dict[str, Any], *, now_ts_ms: int, stale_days: int) -> str:
 	unread = item.get("unreadMsgCount") or 0
 	relation_type = item.get("relationType")
 	last_ts = item.get("lastTS") or 0
@@ -26,8 +27,8 @@ def _chat_stage(item: dict, *, now_ts_ms: int, stale_days: int) -> str:
 	return "chatting"
 
 
-def build_pipeline_items(*, chat_items: list[dict], interview_items: list[dict], now_ts_ms: int, stale_days: int = 3) -> list[dict]:
-	items = []
+def build_pipeline_items(*, chat_items: list[dict[str, Any]], interview_items: list[dict[str, Any]], now_ts_ms: int, stale_days: int = 3) -> list[dict[str, Any]]:
+	items: list[dict[str, Any]] = []
 
 	for raw in chat_items:
 		items.append(
@@ -67,5 +68,5 @@ def build_pipeline_items(*, chat_items: list[dict], interview_items: list[dict],
 	return sorted(items, key=lambda item: (priority.get(item["stage"], 99), item["company"], item["title"]))
 
 
-def select_follow_up_candidates(items: list[dict]) -> list[dict]:
+def select_follow_up_candidates(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 	return [item for item in items if item.get("stage") in _FOLLOW_UP_STATES]

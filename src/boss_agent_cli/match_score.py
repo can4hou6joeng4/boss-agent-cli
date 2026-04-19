@@ -1,3 +1,5 @@
+from typing import Any
+
 from boss_agent_cli.api.models import JobItem
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
@@ -7,7 +9,7 @@ from boss_agent_cli.search_filters import (
 )
 
 
-def _extract_expect_preferences(expect_data: dict | None) -> dict:
+def _extract_expect_preferences(expect_data: dict[str, Any] | None) -> dict[str, Any]:
 	if not expect_data:
 		return {}
 	return {
@@ -31,7 +33,7 @@ def _score_salary(candidate: str, required: str | None, match_reasons: list[str]
 	return 0
 
 
-def score_job_item(job: JobItem, *, criteria: SearchFilterCriteria | None, expect_data: dict | None) -> dict:
+def score_job_item(job: JobItem, *, criteria: SearchFilterCriteria | None, expect_data: dict[str, Any] | None) -> dict[str, Any]:
 	preferences = _extract_expect_preferences(expect_data)
 	match_reasons: list[str] = []
 	mismatch_reasons: list[str] = []
@@ -82,7 +84,7 @@ def score_job_item(job: JobItem, *, criteria: SearchFilterCriteria | None, expec
 	}
 
 
-def score_job_dict(item: dict, *, criteria: SearchFilterCriteria | None, expect_data: dict | None) -> dict:
+def score_job_dict(item: dict[str, Any], *, criteria: SearchFilterCriteria | None, expect_data: dict[str, Any] | None) -> dict[str, Any]:
 	job = JobItem(
 		job_id=item.get("job_id", ""),
 		title=item.get("title", ""),

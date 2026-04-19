@@ -4,6 +4,9 @@
 import json
 import time
 from pathlib import Path
+from typing import Any, cast
+
+from boss_agent_cli.output import Logger
 
 _CACHE_FILE = "index_cache.json"
 
@@ -12,7 +15,7 @@ def _cache_path(data_dir: Path) -> Path:
 	return data_dir / "cache" / _CACHE_FILE
 
 
-def save_index(data_dir: Path, jobs: list[dict], source: str = "search") -> None:
+def save_index(data_dir: Path, jobs: list[dict[str, Any]], source: str = "search") -> None:
 	"""保存搜索/推荐结果到索引缓存。"""
 	entries = []
 	for job in jobs:
@@ -40,7 +43,7 @@ def save_index(data_dir: Path, jobs: list[dict], source: str = "search") -> None
 	path.write_text(json.dumps(cache_data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def try_save_index(data_dir: Path, jobs: list[dict], *, source: str = "search", logger=None) -> bool:
+def try_save_index(data_dir: Path, jobs: list[dict[str, Any]], *, source: str = "search", logger: Logger | None = None) -> bool:
 	"""Best-effort 保存索引缓存，失败时记录 warning，不影响主命令成功返回。"""
 	try:
 		save_index(data_dir, jobs, source=source)
@@ -51,7 +54,7 @@ def try_save_index(data_dir: Path, jobs: list[dict], *, source: str = "search", 
 		return False
 
 
-def get_job_by_index(data_dir: Path, index: int) -> dict | None:
+def get_job_by_index(data_dir: Path, index: int) -> dict[str, Any] | None:
 	"""按 1-based 编号获取缓存的职位信息。"""
 	path = _cache_path(data_dir)
 	if not path.exists():
@@ -66,10 +69,10 @@ def get_job_by_index(data_dir: Path, index: int) -> dict | None:
 	if index < 1 or index > len(jobs):
 		return None
 
-	return jobs[index - 1]
+	return cast("dict[str, Any]", jobs[index - 1])
 
 
-def get_index_info(data_dir: Path) -> dict:
+def get_index_info(data_dir: Path) -> dict[str, Any]:
 	"""获取缓存元信息（来源、数量、保存时间）。"""
 	path = _cache_path(data_dir)
 	if not path.exists():

@@ -6,10 +6,10 @@ Two hook types:
 """
 import sys
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Any, Callable
 
-Handler = Callable[[dict], None]
-BailHandler = Callable[[dict], str | bool | None]
+Handler = Callable[[dict[str, Any]], None]
+BailHandler = Callable[[dict[str, Any]], str | bool | None]
 
 
 class SyncHook:
@@ -21,7 +21,7 @@ class SyncHook:
 	def tap(self, name: str, handler: Handler) -> None:
 		self._handlers.append((name, handler))
 
-	def call(self, payload: dict) -> None:
+	def call(self, payload: dict[str, Any]) -> None:
 		for name, handler in self._handlers:
 			try:
 				handler(payload)
@@ -38,7 +38,7 @@ class BailHook:
 	def tap(self, name: str, handler: BailHandler) -> None:
 		self._handlers.append((name, handler))
 
-	def call(self, payload: dict) -> str | bool | None:
+	def call(self, payload: dict[str, Any]) -> str | bool | None:
 		for name, handler in self._handlers:
 			result = handler(payload)
 			if result:

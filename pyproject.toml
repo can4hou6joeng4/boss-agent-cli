@@ -85,8 +85,14 @@ module = [
 	"boss_agent_cli.output",
 	"boss_agent_cli.config",
 	"boss_agent_cli.hooks",
+	"boss_agent_cli.digest",
+	"boss_agent_cli.match_score",
+	"boss_agent_cli.pipeline_state",
+	"boss_agent_cli.index_cache",
 ]
 disallow_untyped_defs = true
+disallow_any_generics = true
+warn_return_any = true
 
 [dependency-groups]
 dev = [

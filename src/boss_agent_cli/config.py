@@ -1,7 +1,8 @@
 import json
 from pathlib import Path
+from typing import Any
 
-DEFAULTS = {
+DEFAULTS: dict[str, Any] = {
 	"default_city": None,
 	"default_salary": None,
 	"request_delay": [1.5, 3.0],
@@ -16,7 +17,7 @@ DEFAULTS = {
 }
 
 
-def load_config(config_path: Path | None) -> dict:
+def load_config(config_path: Path | None) -> dict[str, Any]:
 	cfg = dict(DEFAULTS)
 	if config_path and config_path.exists():
 		with open(config_path) as f:

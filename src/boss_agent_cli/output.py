@@ -9,8 +9,8 @@ def envelope_success(
 	command: str,
 	data: Any,
 	*,
-	pagination: dict | None = None,
-	hints: dict | None = None,
+	pagination: dict[str, Any] | None = None,
+	hints: dict[str, Any] | None = None,
 ) -> str:
 	return json.dumps(
 		{
@@ -33,7 +33,7 @@ def envelope_error(
 	message: str,
 	recoverable: bool = False,
 	recovery_action: str | None = None,
-	hints: dict | None = None,
+	hints: dict[str, Any] | None = None,
 ) -> str:
 	return json.dumps(
 		{

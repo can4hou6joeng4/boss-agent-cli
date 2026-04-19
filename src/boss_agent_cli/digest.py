@@ -1,7 +1,8 @@
 import time
+from typing import Any
 
 
-def build_digest(*, new_matches: list[dict], follow_ups: list[dict], interviews: list[dict]) -> dict:
+def build_digest(*, new_matches: list[dict[str, Any]], follow_ups: list[dict[str, Any]], interviews: list[dict[str, Any]]) -> dict[str, Any]:
 	return {
 		"new_match_count": len(new_matches),
 		"follow_up_count": len(follow_ups),
@@ -19,7 +20,7 @@ def _escape_md_cell(text: object) -> str:
 	return s.replace("|", "\\|").replace("\n", " ").replace("\r", " ")
 
 
-def _fmt_follow_up(item: dict) -> str:
+def _fmt_follow_up(item: dict[str, Any]) -> str:
 	company = _escape_md_cell(item.get("company") or "-")
 	title = _escape_md_cell(item.get("title") or "-")
 	stage = _escape_md_cell(item.get("stage") or "")
@@ -47,7 +48,7 @@ def _fmt_follow_up(item: dict) -> str:
 	return line
 
 
-def _fmt_new_match(item: dict) -> str:
+def _fmt_new_match(item: dict[str, Any]) -> str:
 	company = _escape_md_cell(item.get("company") or "-")
 	title = _escape_md_cell(item.get("title") or "-")
 	relation = _escape_md_cell(item.get("relation") or "")
@@ -69,7 +70,7 @@ def _fmt_new_match(item: dict) -> str:
 	return line
 
 
-def _fmt_interview(item: dict) -> str:
+def _fmt_interview(item: dict[str, Any]) -> str:
 	company = _escape_md_cell(item.get("company") or "-")
 	title = _escape_md_cell(item.get("title") or "-")
 	interview_time = _escape_md_cell(item.get("last_time") or "")
@@ -84,7 +85,7 @@ def _fmt_interview(item: dict) -> str:
 	return "- " + " ".join(parts)
 
 
-def render_digest_markdown(data: dict, *, generated_at: str | None = None) -> str:
+def render_digest_markdown(data: dict[str, Any], *, generated_at: str | None = None) -> str:
 	"""把 build_digest 产出的结构化数据渲染为 Markdown 文本，可直接发邮件/飞书。"""
 	if generated_at is None:
 		generated_at = time.strftime("%Y-%m-%d %H:%M:%S")
