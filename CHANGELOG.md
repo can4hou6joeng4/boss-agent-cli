@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [1.8.5] - 2026-04-20
+
+### Added
+- `research` issue label + Issue #90「多平台适配器 API 调研：拉勾 / 智联 / 猎聘」— 对齐顶层设计：API 调研优先、实现 PR 必须基于调研报告
+- ROADMAP「生态扩展」条目补入调研 issue 引用（#91）
+
+### Changed
+- 严格类型检查白名单从 **3 个扩到 7 个**（#92）— 新增 `digest` / `match_score` / `pipeline_state` / `index_cache` 四个 100% 覆盖率纯函数模块
+- 启用的严格选项：`disallow_untyped_defs` + `disallow_any_generics` + `warn_return_any`
+- 所有白名单模块的裸 `dict` / `list` 均补上泛型参数
+
 ## [1.8.4] - 2026-04-20
 
 ### Changed
