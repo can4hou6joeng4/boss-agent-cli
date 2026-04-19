@@ -53,4 +53,8 @@ def _try_extract(loader) -> dict | None:
 			"stoken": cookies.get("__zp_stoken__", ""),
 		}
 	except Exception:
+		# 故意捕获所有异常：browser_cookie3 在浏览器未安装、profile 路径不可访问、
+		# 数据库被锁定等场景会抛库自定义的 BrowserCookieError 等异常，这些不在 stdlib
+		# 异常树里。本函数是 best-effort 降级链路的一环，任何失败都应静默返回 None
+		# 让上层尝试下一个浏览器/通道，而非中断整条调用链。
 		return None
