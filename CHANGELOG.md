@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [1.8.6] - 2026-04-20
+
+### Added
+- **包级公开接口**（#94）— `boss_agent_cli.__all__` 导出 14 个核心符号（AuthManager / BossClient / CacheStore / JobItem / JobDetail / AIService / ResumeData 等），下游项目可直接 `from boss_agent_cli import X` 使用，不再需要深路径 import
+- `tests/test_public_api.py` 16 条契约测试守护 public API（identity 一致性 / 异常继承 / SemVer 版本格式 / py.typed marker 存在）
+- `README.md` 新增「方式三：Python 直接嵌入」章节，给出 canonical 使用示例
+
+### Changed
+- `src/boss_agent_cli/__init__.py` 补完整 docstring 说明包的公开 API 契约
+
 ## [1.8.5] - 2026-04-20
 
 ### Added
