@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [1.8.15] - 2026-04-20
+
+### Changed
+- **严格类型检查白名单扩至 56 个模块**（#113）— 新增 `api/models` / `api/throttle` / `api/endpoints` / `api/endpoints_loader` / `commands/stats`
+- 所有 api/* 基础模块首次全部进入严格白名单
+- SQL 聚合查询结果（`_safe_count` / `_count_since`）用 typed 中间变量避免 `no-any-return`
+
 ## [1.8.14] - 2026-04-20
 
 ### Changed
