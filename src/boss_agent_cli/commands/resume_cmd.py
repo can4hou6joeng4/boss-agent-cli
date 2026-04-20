@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -8,7 +9,7 @@ from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, resume
 from boss_agent_cli.resume.store import ResumeStore
 
 
-def _get_store(ctx) -> ResumeStore:
+def _get_store(ctx: click.Context) -> ResumeStore:
 	resumes_dir: Path = ctx.obj["data_dir"] / "resumes"
 	return ResumeStore(resumes_dir)
 
@@ -26,10 +27,10 @@ def _build_default_template(name: str) -> ResumeData:
 	)
 
 
-def _set_nested(data: dict, path: str, value: str) -> bool:
+def _set_nested(data: dict[str, Any], path: str, value: str) -> bool:
 	"""通过 . 分隔路径设置嵌套 dict 字段，返回是否成功"""
 	keys = path.split(".")
-	current = data
+	current: Any = data
 	for key in keys[:-1]:
 		if isinstance(current, dict) and key in current:
 			current = current[key]
@@ -42,9 +43,9 @@ def _set_nested(data: dict, path: str, value: str) -> bool:
 	return False
 
 
-def _flat_diff(left: dict, right: dict, prefix: str = "") -> list[dict]:
+def _flat_diff(left: dict[str, Any], right: dict[str, Any], prefix: str = "") -> list[dict[str, Any]]:
 	"""对比两个 dict 的差异，返回 [{field, left, right}, ...]"""
-	diffs: list[dict] = []
+	diffs: list[dict[str, Any]] = []
 	all_keys = sorted(set(list(left.keys()) + list(right.keys())))
 	for key in all_keys:
 		full_key = f"{prefix}.{key}" if prefix else key
@@ -61,7 +62,7 @@ def _flat_diff(left: dict, right: dict, prefix: str = "") -> list[dict]:
 
 
 @click.group("resume")
-def resume_group():
+def resume_group() -> None:
 	"""本地简历管理。"""
 
 
@@ -69,7 +70,7 @@ def resume_group():
 @click.option("--name", default=None, help="简历名称")
 @click.option("--template", default=None, help="模板名称（如 default）")
 @click.pass_context
-def resume_init_cmd(ctx, name, template):
+def resume_init_cmd(ctx: click.Context, name: str | None, template: str | None) -> None:
 	"""从默认模板初始化本地简历"""
 	store = _get_store(ctx)
 	if template is None:
@@ -97,7 +98,7 @@ def resume_init_cmd(ctx, name, template):
 
 @resume_group.command("list")
 @click.pass_context
-def resume_list_cmd(ctx):
+def resume_list_cmd(ctx: click.Context) -> None:
 	"""列出所有本地简历"""
 	store = _get_store(ctx)
 	items = store.list_all()
@@ -110,7 +111,7 @@ def resume_list_cmd(ctx):
 @resume_group.command("show")
 @click.argument("name")
 @click.pass_context
-def resume_show_cmd(ctx, name):
+def resume_show_cmd(ctx: click.Context, name: str) -> None:
 	"""查看简历详情"""
 	store = _get_store(ctx)
 	resume = store.get(name)
@@ -132,7 +133,7 @@ def resume_show_cmd(ctx, name):
 @click.option("--field", required=True, help="字段路径（如 title, personal_info.layout）")
 @click.option("--value", required=True, help="新值")
 @click.pass_context
-def resume_edit_cmd(ctx, name, field, value):
+def resume_edit_cmd(ctx: click.Context, name: str, field: str, value: str) -> None:
 	"""编辑简历字段"""
 	store = _get_store(ctx)
 	resume = store.get(name)
@@ -164,7 +165,7 @@ def resume_edit_cmd(ctx, name, field, value):
 @resume_group.command("delete")
 @click.argument("name")
 @click.pass_context
-def resume_delete_cmd(ctx, name):
+def resume_delete_cmd(ctx: click.Context, name: str) -> None:
 	"""删除简历"""
 	store = _get_store(ctx)
 	if not store.exists(name):
@@ -184,7 +185,7 @@ def resume_delete_cmd(ctx, name):
 @click.option("--format", "fmt", default="json", type=click.Choice(["pdf", "json", "html"]), help="导出格式")
 @click.option("-o", "--output", "output_path", default=None, help="输出文件路径")
 @click.pass_context
-def resume_export_cmd(ctx, name, fmt, output_path):
+def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: Path | None) -> None:
 	"""导出简历"""
 	store = _get_store(ctx)
 	if not store.exists(name):
@@ -198,7 +199,7 @@ def resume_export_cmd(ctx, name, fmt, output_path):
 			ctx.exit(1)
 			return
 		if output_path is None:
-			output_path = f"{name}.{fmt}"
+			output_path = Path(f"{name}.{fmt}")
 		out = Path(output_path)
 		try:
 			from boss_agent_cli.resume.export import export_html, export_pdf
@@ -235,7 +236,7 @@ def resume_export_cmd(ctx, name, fmt, output_path):
 @resume_group.command("import")
 @click.argument("file_path", type=click.Path())
 @click.pass_context
-def resume_import_cmd(ctx, file_path):
+def resume_import_cmd(ctx: click.Context, file_path: Path) -> None:
 	"""导入 JSON 简历"""
 	path = Path(file_path)
 	if not path.exists():
@@ -268,7 +269,7 @@ def resume_import_cmd(ctx, file_path):
 @click.argument("name")
 @click.argument("new_name")
 @click.pass_context
-def resume_clone_cmd(ctx, name, new_name):
+def resume_clone_cmd(ctx: click.Context, name: str, new_name: str) -> None:
 	"""复制简历为新版本"""
 	store = _get_store(ctx)
 	if not store.exists(name):
@@ -296,7 +297,7 @@ def resume_clone_cmd(ctx, name, new_name):
 @click.argument("name1")
 @click.argument("name2")
 @click.pass_context
-def resume_diff_cmd(ctx, name1, name2):
+def resume_diff_cmd(ctx: click.Context, name1: str, name2: str) -> None:
 	"""对比两份简历差异"""
 	store = _get_store(ctx)
 	r1 = store.get(name1)
@@ -326,7 +327,7 @@ def resume_diff_cmd(ctx, name1, name2):
 @click.option("--title", default="", help="职位名称")
 @click.option("--company", default="", help="公司名称")
 @click.pass_context
-def resume_link_cmd(ctx, name, security_id, job_id, title, company):
+def resume_link_cmd(ctx: click.Context, name: str, security_id: str, job_id: str, title: str, company: str) -> None:
 	"""关联简历与职位"""
 	store = _get_store(ctx)
 	if not store.exists(name):
@@ -347,7 +348,7 @@ def resume_link_cmd(ctx, name, security_id, job_id, title, company):
 @resume_group.command("applications")
 @click.argument("name")
 @click.pass_context
-def resume_applications_cmd(ctx, name):
+def resume_applications_cmd(ctx: click.Context, name: str) -> None:
 	"""查看简历关联的所有职位"""
 	store = _get_store(ctx)
 	if not store.exists(name):

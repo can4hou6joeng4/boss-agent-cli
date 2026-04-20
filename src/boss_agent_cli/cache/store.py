@@ -379,7 +379,7 @@ class CacheStore:
 		self._conn.commit()
 		return cursor.rowcount > 0
 
-	def close(self):
+	def close(self) -> None:
 		self._conn.close()
 
 	def __enter__(self):

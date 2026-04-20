@@ -123,6 +123,8 @@ module = [
 	"boss_agent_cli.commands.schema",
 	"boss_agent_cli.commands.chat_export",
 	"boss_agent_cli.commands.config_cmd",
+	"boss_agent_cli.commands.ai_cmd",
+	"boss_agent_cli.commands.resume_cmd",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

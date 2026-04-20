@@ -5,6 +5,7 @@
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import click
 
@@ -24,15 +25,15 @@ from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
 
 
-def _get_ai_config_store(ctx) -> AIConfigStore:
+def _get_ai_config_store(ctx: click.Context) -> AIConfigStore:
 	return AIConfigStore(ctx.obj["data_dir"])
 
 
-def _get_resume_store(ctx) -> ResumeStore:
+def _get_resume_store(ctx: click.Context) -> ResumeStore:
 	return ResumeStore(ctx.obj["data_dir"] / "resumes")
 
 
-def _create_ai_service(ctx) -> AIService | None:
+def _create_ai_service(ctx: click.Context) -> AIService | None:
 	"""从配置创建 AIService 实例，未配置时返回 None。"""
 	store = _get_ai_config_store(ctx)
 	if not store.is_configured():
@@ -51,7 +52,7 @@ def _create_ai_service(ctx) -> AIService | None:
 	)
 
 
-def _require_ai_service(ctx) -> AIService | None:
+def _require_ai_service(ctx: click.Context) -> AIService | None:
 	"""获取 AIService，未配置时输出错误信封并返回 None。"""
 	svc = _create_ai_service(ctx)
 	if svc is None:
@@ -67,7 +68,7 @@ def _require_ai_service(ctx) -> AIService | None:
 	return svc
 
 
-def _load_resume_text(ctx, resume_name: str) -> str | None:
+def _load_resume_text(ctx: click.Context, resume_name: str) -> str | None:
 	"""加载简历纯文本，不存在时输出错误。"""
 	store = _get_resume_store(ctx)
 	resume = store.get(resume_name)
@@ -82,7 +83,7 @@ def _load_resume_text(ctx, resume_name: str) -> str | None:
 	return resume_to_text(resume)
 
 
-def _call_ai(ctx, svc: AIService, prompt: str) -> dict | None:
+def _call_ai(ctx: click.Context, svc: AIService, prompt: str) -> dict[str, Any] | None:
 	"""调用 AI 并解析 JSON 结果，失败时输出错误信封。"""
 	try:
 		raw = svc.chat([
@@ -108,7 +109,7 @@ def _call_ai(ctx, svc: AIService, prompt: str) -> dict | None:
 		text = "\n".join(lines).strip()
 
 	try:
-		return json.loads(text)
+		return cast("dict[str, Any]", json.loads(text))
 	except json.JSONDecodeError:
 		handle_error_output(
 			ctx, "ai",
@@ -122,7 +123,7 @@ def _call_ai(ctx, svc: AIService, prompt: str) -> dict | None:
 
 
 @click.group("ai")
-def ai_group():
+def ai_group() -> None:
 	"""AI 简历优化。"""
 
 
@@ -134,7 +135,7 @@ def ai_group():
 @click.option("--temperature", default=None, type=float, help="生成温度")
 @click.option("--max-tokens", default=None, type=int, help="最大令牌数")
 @click.pass_context
-def ai_config_cmd(ctx, provider, model, api_key, base_url, temperature, max_tokens):
+def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, api_key: str | None, base_url: str | None, temperature: float | None, max_tokens: int | None) -> None:
 	"""查看或设置 AI 服务配置"""
 	store = _get_ai_config_store(ctx)
 
@@ -153,7 +154,7 @@ def ai_config_cmd(ctx, provider, model, api_key, base_url, temperature, max_toke
 		return
 
 	# 有参数时更新配置
-	updates = {}
+	updates: dict[str, Any] = {}
 	if provider is not None:
 		updates["ai_provider"] = provider
 	if model is not None:
@@ -180,7 +181,7 @@ def ai_config_cmd(ctx, provider, model, api_key, base_url, temperature, max_toke
 @click.argument("jd_text")
 @click.option("--resume", "resume_name", required=True, help="对比的本地简历名称")
 @click.pass_context
-def ai_analyze_jd_cmd(ctx, jd_text, resume_name):
+def ai_analyze_jd_cmd(ctx: click.Context, jd_text: str, resume_name: str) -> None:
 	"""分析职位描述并评估简历匹配度
 
 	JD_TEXT 可以是职位描述文本，也可以是 @文件路径 读取文件内容。
@@ -219,7 +220,7 @@ def ai_analyze_jd_cmd(ctx, jd_text, resume_name):
 @ai_group.command("polish")
 @click.argument("resume_name")
 @click.pass_context
-def ai_polish_cmd(ctx, resume_name):
+def ai_polish_cmd(ctx: click.Context, resume_name: str) -> None:
 	"""通用简历润色优化"""
 	svc = _require_ai_service(ctx)
 	if svc is None:
@@ -244,7 +245,7 @@ def ai_polish_cmd(ctx, resume_name):
 @click.argument("resume_name")
 @click.option("--jd", "jd_text", required=True, help="目标职位描述文本或 @文件路径")
 @click.pass_context
-def ai_optimize_cmd(ctx, resume_name, jd_text):
+def ai_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str) -> None:
 	"""基于目标职位描述优化简历"""
 	svc = _require_ai_service(ctx)
 	if svc is None:
@@ -280,7 +281,7 @@ def ai_optimize_cmd(ctx, resume_name, jd_text):
 @click.argument("resume_name")
 @click.option("--jd", "jd_text", required=True, help="目标职位描述文本或 @文件路径")
 @click.pass_context
-def ai_suggest_cmd(ctx, resume_name, jd_text):
+def ai_suggest_cmd(ctx: click.Context, resume_name: str, jd_text: str) -> None:
 	"""基于目标职位描述给出改进建议（不修改简历）"""
 	svc = _require_ai_service(ctx)
 	if svc is None:
@@ -318,7 +319,7 @@ def ai_suggest_cmd(ctx, resume_name, jd_text):
 @click.option("--resume", "resume_name", default=None, help="参考简历名称（可选）")
 @click.option("--tone", default="简洁专业", type=click.Choice(["简洁专业", "热情积极", "谨慎确认"]), help="语气偏好")
 @click.pass_context
-def ai_reply_cmd(ctx, recruiter_message, context, resume_name, tone):
+def ai_reply_cmd(ctx: click.Context, recruiter_message: str, context: str, resume_name: str | None, tone: str) -> None:
 	"""基于招聘者消息生成回复草稿（2-3 条候选）
 
 	RECRUITER_MESSAGE 为招聘者发来的消息文本，或 @文件路径 读取文件内容。
@@ -370,7 +371,7 @@ def ai_reply_cmd(ctx, recruiter_message, context, resume_name, tone):
 @click.option("--resume", "resume_name", default=None, help="参考简历名称（可选，根据简历真实经历定制问题）")
 @click.option("--count", default=10, type=int, help="题量，默认 10")
 @click.pass_context
-def ai_interview_prep_cmd(ctx, jd_text, resume_name, count):
+def ai_interview_prep_cmd(ctx: click.Context, jd_text: str, resume_name: str | None, count: int) -> None:
 	"""基于目标职位生成模拟面试题
 
 	JD_TEXT 是目标职位描述文本，或 @文件路径 读取文件内容。
@@ -417,7 +418,7 @@ def ai_interview_prep_cmd(ctx, jd_text, resume_name, count):
 @click.option("--resume", "resume_name", default=None, help="参考简历名称（可选）")
 @click.option("--style", default="简洁专业", help="沟通风格偏好（如 简洁专业/积极主动/谨慎稳重）")
 @click.pass_context
-def ai_chat_coach_cmd(ctx, chat_text, resume_name, style):
+def ai_chat_coach_cmd(ctx: click.Context, chat_text: str, resume_name: str | None, style: str) -> None:
 	"""基于聊天记录给出沟通技巧诊断与下一步建议
 
 	CHAT_TEXT 是聊天记录文本，或 @文件路径 读取文件内容。
