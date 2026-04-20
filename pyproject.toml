@@ -142,6 +142,7 @@ module = [
 	"boss_agent_cli.cache.store",
 	"boss_agent_cli.auth.manager",
 	"boss_agent_cli.auth.qr_login",
+	"boss_agent_cli.api.client",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

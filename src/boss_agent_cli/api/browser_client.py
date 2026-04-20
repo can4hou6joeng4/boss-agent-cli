@@ -290,7 +290,7 @@ class BrowserSession:
 		"""Whether this session is using CDP connection to user's Chrome."""
 		return self._is_cdp
 
-	def close(self):
+	def close(self) -> None:
 		if self._is_bridge and self._bridge_client:
 			try:
 				self._bridge_client.close_window()

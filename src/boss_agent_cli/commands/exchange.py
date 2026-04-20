@@ -27,7 +27,7 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 		items = zp_data.get("result") or zp_data.get("friendList") or []
 
 		uid = None
-		friend_name = None
+		friend_name: str = "-"
 		for item in items:
 			if item.get("securityId") == security_id:
 				uid = str(item.get("uid", ""))

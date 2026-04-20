@@ -2,11 +2,17 @@ import atexit
 import random
 import time
 import weakref
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
 from boss_agent_cli.api import endpoints
 from boss_agent_cli.api.throttle import RequestThrottle
+
+if TYPE_CHECKING:
+	from boss_agent_cli.api.browser_client import BrowserSession
+	from boss_agent_cli.auth.manager import AuthManager
 
 _MAX_RETRIES = 3
 
@@ -14,7 +20,7 @@ _MAX_RETRIES = 3
 _OPEN_CLIENTS: weakref.WeakSet["BossClient"] = weakref.WeakSet()
 
 
-def _close_open_clients():
+def _close_open_clients() -> None:
 	for client in list(_OPEN_CLIENTS):
 		try:
 			client.close()
@@ -40,11 +46,11 @@ class AccountRiskError(Exception):
 class BossClient:
 	"""Hybrid API client: browser channel for high-risk ops, httpx for low-risk ops."""
 
-	def __init__(self, auth_manager, *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None):
+	def __init__(self, auth_manager: "AuthManager", *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None) -> None:
 		self._auth = auth_manager
 		self._delay = delay
 		self._client: httpx.Client | None = None
-		self._browser_session = None
+		self._browser_session: "BrowserSession | None" = None
 		self._throttle = RequestThrottle(delay)
 		self._cdp_url = cdp_url
 		self._closed = False
@@ -71,7 +77,7 @@ class BossClient:
 			)
 		return self._client
 
-	def _get_browser(self):
+	def _get_browser(self) -> "BrowserSession":
 		if self._browser_session is None:
 			from boss_agent_cli.api.browser_client import BrowserSession
 			token = self._auth.get_token()
@@ -90,14 +96,14 @@ class BossClient:
 		referer = endpoints.REFERER_MAP.get(url, f"{endpoints.BASE_URL}/")
 		return {"Referer": referer}
 
-	def _merge_cookies(self, resp: httpx.Response):
+	def _merge_cookies(self, resp: httpx.Response) -> None:
 		for name, value in resp.cookies.items():
 			if value:
 				self._get_client().cookies.set(name, value)
 
 	# ── httpx request (low-risk ops) ─────────────────────────────────
 
-	def _request(self, method: str, url: str, **kwargs) -> dict:
+	def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
 		"""httpx 请求，循环重试（最多 _MAX_RETRIES 次），替代递归调用。"""
 		for attempt in range(_MAX_RETRIES + 1):
 			client = self._get_client()
@@ -144,13 +150,13 @@ class BossClient:
 				time.sleep(cooldown)
 				continue
 
-			return data
+			return cast("dict[str, Any]", data)
 
 		raise AuthError("请求失败，已达最大重试次数")
 
 	# ── Browser request (high-risk ops) ──────────────────────────────
 
-	def _browser_request(self, method: str, url: str, *, params: dict | None = None, data: dict | None = None) -> dict:
+	def _browser_request(self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None) -> dict[str, Any]:
 		result = self._get_browser().request(method, url, params=params, data=data)
 		code = result.get("code")
 		if code == endpoints.CODE_ACCOUNT_RISK:
@@ -164,14 +170,14 @@ class BossClient:
 				f"建议：以 --remote-debugging-port=9222 启动 Chrome 后重试（CDP 模式可规避风控检测）",
 				is_cdp=is_cdp,
 			)
-		return result
+		return cast("dict[str, Any]", result)
 
 	# ── Public API ───────────────────────────────────────────────────
 	# High-risk: search, recommend, greet, job_card → browser channel
 	# Low-risk: status, me, cities, schema, detail → httpx channel
 
-	def search_jobs(self, query: str, **filters) -> dict:
-		params = {"query": query, "page": filters.get("page", 1)}
+	def search_jobs(self, query: str, **filters: Any) -> dict[str, Any]:
+		params: dict[str, Any] = {"query": query, "page": filters.get("page", 1)}
 		if city := filters.get("city"):
 			code = endpoints.CITY_CODES.get(city)
 			if code is None:
@@ -207,11 +213,11 @@ class BossClient:
 				params["jobType"] = code
 		return self._browser_request("GET", endpoints.SEARCH_URL, params=params)
 
-	def recommend_jobs(self, page: int = 1) -> dict:
+	def recommend_jobs(self, page: int = 1) -> dict[str, Any]:
 		params = {"page": page}
 		return self._browser_request("GET", endpoints.RECOMMEND_URL, params=params)
 
-	def greet(self, security_id: str, job_id: str, message: str = "") -> dict:
+	def greet(self, security_id: str, job_id: str, message: str = "") -> dict[str, Any]:
 		data = {
 			"securityId": security_id,
 			"jobId": job_id,
@@ -219,7 +225,7 @@ class BossClient:
 		}
 		return self._browser_request("POST", endpoints.GREET_URL, data=data)
 
-	def apply(self, security_id: str, job_id: str, lid: str = "") -> dict:
+	def apply(self, security_id: str, job_id: str, lid: str = "") -> dict[str, Any]:
 		"""Current minimal apply path - reuses the immediate-chat browser endpoint."""
 		data = {
 			"securityId": security_id,
@@ -229,7 +235,7 @@ class BossClient:
 			data["lid"] = lid
 		return self._browser_request("POST", endpoints.GREET_URL, data=data)
 
-	def job_card(self, security_id: str, lid: str = "") -> dict:
+	def job_card(self, security_id: str, lid: str = "") -> dict[str, Any]:
 		"""httpx 优先 + 浏览器降级获取职位卡片信息。"""
 		try:
 			return self.job_card_httpx(security_id, lid)
@@ -238,69 +244,69 @@ class BossClient:
 		params = {"securityId": security_id, "lid": lid}
 		return self._browser_request("GET", endpoints.JOB_CARD_URL, params=params)
 
-	def job_card_httpx(self, security_id: str, lid: str = "") -> dict:
+	def job_card_httpx(self, security_id: str, lid: str = "") -> dict[str, Any]:
 		"""通过 httpx 通道获取职位卡片信息（低延迟）。"""
 		params = {"securityId": security_id, "lid": lid}
 		return self._request("GET", endpoints.JOB_CARD_URL, params=params)
 
 	# ── Low-risk: httpx channel ──────────────────────────────────────
 
-	def job_detail(self, job_id: str) -> dict:
+	def job_detail(self, job_id: str) -> dict[str, Any]:
 		params = {"encryptJobId": job_id}
 		return self._request("GET", endpoints.DETAIL_URL, params=params)
 
-	def user_info(self) -> dict:
+	def user_info(self) -> dict[str, Any]:
 		return self._request("GET", endpoints.USER_INFO_URL)
 
-	def resume_baseinfo(self) -> dict:
+	def resume_baseinfo(self) -> dict[str, Any]:
 		return self._request("GET", endpoints.RESUME_BASEINFO_URL)
 
-	def resume_expect(self) -> dict:
+	def resume_expect(self) -> dict[str, Any]:
 		return self._request("GET", endpoints.RESUME_EXPECT_URL)
 
-	def deliver_list(self, page: int = 1) -> dict:
+	def deliver_list(self, page: int = 1) -> dict[str, Any]:
 		params = {"page": page}
 		return self._request("GET", endpoints.DELIVER_LIST_URL, params=params)
 
-	def friend_list(self, page: int = 1) -> dict:
+	def friend_list(self, page: int = 1) -> dict[str, Any]:
 		params = {"page": page}
 		return self._request("GET", endpoints.FRIEND_LIST_URL, params=params)
 
-	def interview_data(self) -> dict:
+	def interview_data(self) -> dict[str, Any]:
 		return self._request("GET", endpoints.INTERVIEW_DATA_URL)
 
-	def job_history(self, page: int = 1) -> dict:
+	def job_history(self, page: int = 1) -> dict[str, Any]:
 		params = {"page": page}
 		return self._request("GET", endpoints.JOB_HISTORY_URL, params=params)
 
-	def chat_history(self, gid: str, security_id: str, *, page: int = 1, count: int = 20) -> dict:
+	def chat_history(self, gid: str, security_id: str, *, page: int = 1, count: int = 20) -> dict[str, Any]:
 		"""获取与指定好友的聊天消息历史。"""
 		params = {"gid": gid, "securityId": security_id, "page": page, "c": count, "src": 0}
 		return self._request("GET", endpoints.CHAT_HISTORY_URL, params=params)
 
-	def friend_label(self, friend_id: str, label_id: int, friend_source: int = 0, *, remove: bool = False) -> dict:
+	def friend_label(self, friend_id: str, label_id: int, friend_source: int = 0, *, remove: bool = False) -> dict[str, Any]:
 		"""添加或移除好友标签。"""
 		url = endpoints.FRIEND_LABEL_DELETE_URL if remove else endpoints.FRIEND_LABEL_ADD_URL
 		params = {"friendId": friend_id, "friendSource": friend_source, "labelId": label_id}
 		return self._request("GET", url, params=params)
 
-	def exchange_contact(self, security_id: str, uid: str, name: str, exchange_type: int = 1) -> dict:
+	def exchange_contact(self, security_id: str, uid: str, name: str, exchange_type: int = 1) -> dict[str, Any]:
 		"""请求交换联系方式（1=手机, 2=微信）。"""
 		data = {"type": exchange_type, "securityId": security_id, "uniqueId": uid, "name": name}
 		return self._browser_request("POST", endpoints.EXCHANGE_REQUEST_URL, data=data)
 
-	def resume_status(self) -> dict:
+	def resume_status(self) -> dict[str, Any]:
 		"""查询简历完整度和在线状态。"""
 		return self._request("GET", endpoints.RESUME_STATUS_URL)
 
-	def geek_get_job(self, security_id: str) -> dict:
+	def geek_get_job(self, security_id: str) -> dict[str, Any]:
 		"""查询与某招聘者的互动关系（是否已打招呼等）。"""
 		params = {"securityId": security_id}
 		return self._request("GET", endpoints.GEEK_GET_JOB_URL, params=params)
 
 	# ── Lifecycle ────────────────────────────────────────────────────
 
-	def close(self):
+	def close(self) -> None:
 		"""Release httpx client and browser session. Idempotent."""
 		if self._closed:
 			return
@@ -313,8 +319,13 @@ class BossClient:
 			self._client = None
 		_OPEN_CLIENTS.discard(self)
 
-	def __enter__(self):
+	def __enter__(self) -> "BossClient":
 		return self
 
-	def __exit__(self, *args):
+	def __exit__(
+		self,
+		exc_type: type[BaseException] | None,
+		exc_val: BaseException | None,
+		exc_tb: TracebackType | None,
+	) -> None:
 		self.close()
