@@ -88,12 +88,29 @@
 5. "MIT License，本地加密存储，数据不出机"
 6. "mypy 严格化 81%，927 测试，下游 Python 嵌入零学习成本"
 
-## 实际投稿记录
+## 实际投稿记录 & 渠道约束（2026-04-20 复盘）
 
-| 日期 | 列表 | 状态 |
-|------|------|------|
-| 2026-04-17 | awesome-mcp-servers (#4992) | 等待审核 |
-| TBD | awesome-claude-code | 待投递 |
-| TBD | awesome-agents | 待投递 |
+| 列表 | 日期 | PR/Issue | 状态 | 接续动作 |
+|------|------|---------|------|---------|
+| [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | 2026-04-17 | PR #4992 | ⏳ 机器人要求先注册 [Glama.ai](https://glama.ai/mcp/servers) | **阻塞**：需在 Glama.ai 提交 MCP server → 通过 server introspection check → 加 `[![...](...badges/score.svg)](...)` 徽章到 PR → 重新 push |
+| [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code) | — | — | ⚠️ 渠道限制 | **必须通过 Web UI issue 表单**（`/issues/new?template=recommend-resource.yml`），**禁止 gh CLI**（违规会被封禁，见 docs/CONTRIBUTING.md 明文警告） |
+| [awesome-agents (kyrolabs)](https://github.com/kyrolabs/awesome-agents) | — | — | ⚠️ 星数门槛 | 规则明确：brand new repo without demonstrated traction 自动拒绝。当前 19 star 低于阈值，建议达 50+ 后再投 |
+| [awesome-ai-tools (mahseema)](https://github.com/mahseema/awesome-ai-tools) | — | — | 🟢 可投 | 无明确门槛，可考虑投稿 Agents & Automation 分区 |
+| ~~awesome-python-cli (shinokada)~~ | — | — | ❌ 仓库不存在 | 404，从投稿列表移除 |
 
-> 策略：达到 30+ stars 后再集中批量投稿，减少"brand new repo"被拒概率（awesome-agents 明确拒绝无历史仓库）。
+### 接续路径
+
+1. **短期**（本会话或下次）：给 [awesome-mcp-servers PR #4992](https://github.com/punkpeye/awesome-mcp-servers/pull/4992) 解锁——到 glama.ai 注册 MCP server，通过 introspection check，回填徽章
+2. **中期**（star ≥ 30 后）：集中批量投稿其他 awesome 列表
+3. **长期**（star ≥ 50 后）：awesome-agents (kyrolabs) 满足 demonstrated traction
+
+### 投稿渠道约束快查表
+
+| 渠道 | 可用 gh CLI？ | 特殊前置 |
+|------|------------|---------|
+| awesome-mcp-servers | ✅ | Glama.ai 注册 + 徽章 |
+| awesome-claude-code | ❌ 只能 Web UI 表单 | — |
+| awesome-agents (kyrolabs) | ✅ | 明示 traction（star ≥ 50 建议） |
+| awesome-ai-tools | ✅ | 无明示 |
+
+> 策略总结：**不强投**——对于设有 traction 门槛或非 CLI 渠道的列表，宁可推迟到条件满足，避免无效 PR 浪费维护者时间。核心阻塞是 PR #4992 的 Glama.ai 注册动作，这是下次会话应优先推进的外部动作。
