@@ -4,6 +4,19 @@
 
 ## [Unreleased]
 
+## [1.8.18] - 2026-04-20
+
+### Changed
+- **严格类型检查覆盖 api/client 核心请求客户端**（#119）— 37 error → 0，白名单 60 → 61
+- 用 `TYPE_CHECKING` 避免 BrowserSession / AuthManager 循环导入
+- `_request` / `_browser_request` 返回值用 `cast` 修 no-any-return
+- `__exit__` 精确 `TracebackType` 签名
+- 连锁修复 `commands/exchange.py` 类型传播问题
+
+### 里程碑
+- api/ 层覆盖达 6/7（剩 api/browser_client，patchright 外部依赖最重）
+- 严格模块累计 61 / 75（81%）
+
 ## [1.8.17] - 2026-04-20
 
 ### Changed
