@@ -1,3 +1,5 @@
+from typing import Any
+
 import click
 
 from boss_agent_cli.output import emit_success
@@ -14,10 +16,10 @@ _JSON_SCHEMA_TYPE_MAP = {
 }
 
 
-def _option_to_json_schema_property(opt_spec: dict) -> dict:
+def _option_to_json_schema_property(opt_spec: dict[str, Any]) -> dict[str, Any]:
 	"""把 native option 转成单个 JSON Schema 属性。"""
 	native_type = opt_spec.get("type", "string")
-	prop: dict = {"type": _JSON_SCHEMA_TYPE_MAP.get(native_type, "string")}
+	prop: dict[str, Any] = {"type": _JSON_SCHEMA_TYPE_MAP.get(native_type, "string")}
 	desc = opt_spec.get("description")
 	if desc:
 		prop["description"] = desc
@@ -27,9 +29,9 @@ def _option_to_json_schema_property(opt_spec: dict) -> dict:
 	return prop
 
 
-def _command_to_json_schema(cmd_name: str, cmd_spec: dict) -> dict:
+def _command_to_json_schema(cmd_name: str, cmd_spec: dict[str, Any]) -> dict[str, Any]:
 	"""把 native 命令描述转成 OpenAI Tools / Anthropic Tool Use 共用的 JSON Schema。"""
-	properties: dict = {}
+	properties: dict[str, Any] = {}
 	required: list[str] = []
 
 	for arg in cmd_spec.get("args", []):
@@ -46,7 +48,7 @@ def _command_to_json_schema(cmd_name: str, cmd_spec: dict) -> dict:
 		primary_name = opt_key.split(",")[-1].strip().lstrip("-").replace("-", "_")
 		properties[primary_name] = _option_to_json_schema_property(opt_spec)
 
-	schema: dict = {
+	schema: dict[str, Any] = {
 		"type": "object",
 		"properties": properties,
 	}
@@ -55,7 +57,7 @@ def _command_to_json_schema(cmd_name: str, cmd_spec: dict) -> dict:
 	return schema
 
 
-def _format_openai_tools(data: dict) -> list[dict]:
+def _format_openai_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 	"""OpenAI Functions / Tools API 格式。"""
 	tools = []
 	for cmd_name, cmd_spec in data["commands"].items():
@@ -70,7 +72,7 @@ def _format_openai_tools(data: dict) -> list[dict]:
 	return tools
 
 
-def _format_anthropic_tools(data: dict) -> list[dict]:
+def _format_anthropic_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 	"""Anthropic Tool Use 格式。"""
 	tools = []
 	for cmd_name, cmd_spec in data["commands"].items():
@@ -662,7 +664,7 @@ SCHEMA_DATA = {
 	default="native",
 	help="输出格式：native（本项目信封）/ openai-tools（OpenAI Functions & Tools API）/ anthropic-tools（Claude Tool Use API）",
 )
-def schema_cmd(output_format):
+def schema_cmd(output_format: str) -> None:
 	"""返回工具完整能力描述的 JSON"""
 	if output_format == "openai-tools":
 		emit_success("schema", {"format": "openai-tools", "tools": _format_openai_tools(SCHEMA_DATA)})

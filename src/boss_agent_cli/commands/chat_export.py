@@ -5,20 +5,21 @@ import datetime
 import html as _html
 import io
 import json
+from typing import Any
 
 from boss_agent_cli.commands.chat_utils import sanitize_csv_cell, escape_md_cell, GROUP_ORDER
 
 
 def prepare_render_data(
-	friends: list[dict],
+	friends: list[dict[str, Any]],
 	from_who: str | None,
-	diff_result: dict,
-) -> dict:
+	diff_result: dict[str, Any],
+) -> dict[str, Any]:
 	"""公共数据准备：分组、统计、diff 标记、渲染顺序。供 MD/HTML 共用。"""
 	now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
 	# 按 relationType 分组
-	groups: dict[str, list[dict]] = {}
+	groups: dict[str, list[dict[str, Any]]] = {}
 	for item in friends:
 		key = item.get("initiated_by", "未知")
 		groups.setdefault(key, []).append(item)
@@ -111,11 +112,11 @@ def prepare_render_data(
 
 
 def render_export(
-	friends: list[dict],
+	friends: list[dict[str, Any]],
 	fmt: str,
 	from_who: str | None,
 	days: int | None,
-	diff_result: dict,
+	diff_result: dict[str, Any],
 ) -> str:
 	"""将沟通列表渲染为指定格式的字符串。"""
 	if fmt == "json":
@@ -127,7 +128,7 @@ def render_export(
 	return _render_markdown(friends, from_who, days, diff_result)
 
 
-def _render_csv(friends: list[dict]) -> str:
+def _render_csv(friends: list[dict[str, Any]]) -> str:
 	"""渲染为 CSV 格式（含公式注入防护）。"""
 	if not friends:
 		return ""
@@ -146,10 +147,10 @@ def _render_csv(friends: list[dict]) -> str:
 
 
 def _render_markdown(
-	friends: list[dict],
+	friends: list[dict[str, Any]],
 	from_who: str | None,
 	days: int | None,
-	diff_result: dict,
+	diff_result: dict[str, Any],
 ) -> str:
 	"""渲染为分组 Markdown 格式，含摘要和 diff 标记。"""
 	rd = prepare_render_data(friends, from_who, diff_result)
@@ -218,10 +219,10 @@ def _render_markdown(
 
 
 def _render_html(
-	friends: list[dict],
+	friends: list[dict[str, Any]],
 	from_who: str | None,
 	days: int | None,
-	diff_result: dict,
+	diff_result: dict[str, Any],
 ) -> str:
 	"""渲染为 HTML 格式，含分组、diff 标记和 security_id 映射。"""
 	esc = _html.escape

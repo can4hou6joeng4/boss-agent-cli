@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from typing import Any
 
 import click
 
@@ -12,7 +14,7 @@ from boss_agent_cli.display import handle_output, render_simple_list
 
 @click.group("config", invoke_without_command=True)
 @click.pass_context
-def config_group(ctx):
+def config_group(ctx: click.Context) -> None:
 	"""查看和修改配置项。不带子命令时显示当前全部配置。"""
 	if ctx.invoked_subcommand is None:
 		ctx.invoke(config_list_cmd)
@@ -20,7 +22,7 @@ def config_group(ctx):
 
 @config_group.command("list")
 @click.pass_context
-def config_list_cmd(ctx):
+def config_list_cmd(ctx: click.Context) -> None:
 	"""显示当前全部配置。"""
 	cfg = ctx.obj["config"]
 	config_path = ctx.obj["data_dir"] / "config.json"
@@ -65,7 +67,7 @@ def config_list_cmd(ctx):
 @config_group.command("get")
 @click.argument("key")
 @click.pass_context
-def config_get_cmd(ctx, key):
+def config_get_cmd(ctx: click.Context, key: str) -> None:
 	"""查看单个配置项的值。"""
 	cfg = ctx.obj["config"]
 	if key not in DEFAULTS:
@@ -90,7 +92,7 @@ def config_get_cmd(ctx, key):
 @click.argument("key")
 @click.argument("value")
 @click.pass_context
-def config_set_cmd(ctx, key, value):
+def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 	"""修改配置项。"""
 	if key not in DEFAULTS:
 		from boss_agent_cli.output import emit_error
@@ -116,7 +118,7 @@ def config_set_cmd(ctx, key, value):
 @config_group.command("reset")
 @click.argument("key")
 @click.pass_context
-def config_reset_cmd(ctx, key):
+def config_reset_cmd(ctx: click.Context, key: str) -> None:
 	"""将配置项恢复为默认值。"""
 	if key not in DEFAULTS:
 		from boss_agent_cli.output import emit_error
@@ -137,18 +139,19 @@ def config_reset_cmd(ctx, key):
 	handle_output(ctx, "config", data, render=lambda d: None)
 
 
-def _load_user_overrides(config_path) -> dict:
+def _load_user_overrides(config_path: Path) -> dict[str, Any]:
 	"""加载用户自定义配置（不含默认值）。"""
 	if config_path.exists():
 		try:
 			with open(config_path) as f:
-				return json.load(f)
+				result: dict[str, Any] = json.load(f)
+				return result
 		except (json.JSONDecodeError, OSError):
 			return {}
 	return {}
 
 
-def _save_user_overrides(config_path, user_cfg: dict):
+def _save_user_overrides(config_path: Path, user_cfg: dict[str, Any]) -> None:
 	"""保存用户配置到文件。"""
 	config_path.parent.mkdir(parents=True, exist_ok=True)
 	with open(config_path, "w", encoding="utf-8") as f:
@@ -156,7 +159,7 @@ def _save_user_overrides(config_path, user_cfg: dict):
 		f.write("\n")
 
 
-def _parse_value(raw: str, default):
+def _parse_value(raw: str, default: Any) -> Any:
 	"""根据默认值类型推断并转换输入值。"""
 	if default is None:
 		if raw.lower() in ("null", "none", ""):
