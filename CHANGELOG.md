@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+## [1.8.13] - 2026-04-20
+
+### Changed
+- **CLI 命令层严格类型覆盖首次达 100% (32/32)**（#109）— 新增 `ai_cmd` / `resume_cmd` 两个大模块，白名单 41 → 43
+- `cache/store.CacheStore.close` 补 `-> None` 类型注解（解锁 resume_cmd 对其的调用）
+- `ai_cmd._call_ai` 使用 cast 精确声明 JSON 解析结果类型
+- 22 个 AI + Resume 子命令签名升级为完整类型化
+
+### 里程碑
+- 从 R3 `handle_auth_errors` 装饰器解锁开始，6 轮推进（#99→#109）
+- 每轮都不堆积模块，而是修系统级障碍带一批模块严格化
+
 ## [1.8.12] - 2026-04-20
 
 ### Changed
