@@ -5,6 +5,24 @@
 ## [Unreleased]
 
 ### Added
+- **ZhilianPlatform stub**（Issue #129 Week 1d · 抽象自证）— `src/boss_agent_cli/platforms/zhilian.py` 新增智联招聘 stub 实现：
+  - 元信息：`name="zhilian"` / `display_name="智联招聘"` / `base_url="https://m.zhaopin.com"`
+  - 包络适配按 [zhaopin.md](docs/research/platforms/zhaopin.md) §4 调研结果完整实现（`is_success` 检 `code==200` · `unwrap_data` 取 `data` key · `parse_error` 映射 401/403/429）
+  - P0/P1/P2 方法抛 `NotImplementedError("Week 2 待实现")`，Week 2 替换为真实现
+- `boss --platform zhilian` CLI 选项正式接入，`schema` 输出 `supported_platforms` 包含 `zhilian`
+- Python 嵌入 API 导出 `ZhilianPlatform`，下游可提前查看类型签名
+- `tests/test_zhilian_stub.py` 新增 **27 条契约测试**覆盖元信息 / 包络适配 / stub 行为 / CLI 集成
+
+### Changed
+- Platform 注册表从单一 `{"zhipin": BossPlatform}` 扩展为 `{"zhipin": BossPlatform, "zhilian": ZhilianPlatform}`
+- mypy 严格白名单扩到 71（新增 `platforms.zhilian`）
+- `tests/test_public_api.py` 同步 `EXPECTED_EXPORTS` 加入 `ZhilianPlatform`
+- schema `--platform` 描述更新为 "zhipin 生产可用；zhilian stub Week 2 真实现"
+
+### 底层逻辑
+Platform 抽象只有一个实现（zhipin）时**抽象设计是否正确尚未被证伪**。本轮加入 Zhilian stub 强制第二平台走完整注册 / CLI / schema / with 上下文流程，发现任何设计缺陷前置暴露（事实：全通过，抽象设计对齐 zhaopin.md §7 差异矩阵）。
+
+### Added
 - **Platform 命令层迁移（Issue #129 Week 1c，首批 2 个命令）** — `boss greet` 和 `boss apply` 从 `BossClient` 直用切换到 `get_platform_instance(ctx, auth)`，走统一 Platform 抽象。
 - **Platform ABC 支持 `with` 上下文管理器** — `__enter__` / `__exit__` / `close()` 委托给底层 client，资源释放语义无损。
 - `tests/test_platform_base.py` 新增 5 条 context manager 契约测试。

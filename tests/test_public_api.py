@@ -28,6 +28,7 @@ EXPECTED_EXPORTS = {
 	"ResumeFile",
 	"Platform",
 	"BossPlatform",
+	"ZhilianPlatform",
 	"get_platform",
 	"list_platforms",
 }

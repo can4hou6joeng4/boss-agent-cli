@@ -15,7 +15,7 @@ from boss_agent_cli.api.client import AccountRiskError, AuthError, BossClient
 from boss_agent_cli.api.models import JobDetail, JobItem
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.platforms import BossPlatform, Platform, get_platform, list_platforms
+from boss_agent_cli.platforms import BossPlatform, Platform, ZhilianPlatform, get_platform, list_platforms
 from boss_agent_cli.resume.models import ResumeData, ResumeFile
 
 __version__ = "1.9.1"
@@ -45,6 +45,7 @@ __all__ = [
 	# 平台抽象（Week 1 ABC，详见 Issue #129）
 	"Platform",
 	"BossPlatform",
+	"ZhilianPlatform",
 	"get_platform",
 	"list_platforms",
 ]

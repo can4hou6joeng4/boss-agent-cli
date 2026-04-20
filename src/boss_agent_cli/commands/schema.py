@@ -557,8 +557,8 @@ SCHEMA_DATA = {
 		"--platform": {
 			"type": "string",
 			"default": "zhipin",
-			"description": "招聘平台适配器（当前仅 zhipin，其他平台通过 Platform ABC 后续接入）",
-			"choices": ["zhipin"],
+			"description": "招聘平台适配器（zhipin=BOSS 直聘生产可用；zhilian=智联招聘 stub，Week 2 真实现）",
+			"choices": ["zhipin", "zhilian"],
 		},
 		"--json": {
 			"type": "bool",

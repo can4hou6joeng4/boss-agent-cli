@@ -11,10 +11,12 @@
 from __future__ import annotations
 
 from boss_agent_cli.platforms.base import Platform
+from boss_agent_cli.platforms.zhilian import ZhilianPlatform
 from boss_agent_cli.platforms.zhipin import BossPlatform
 
 _REGISTRY: dict[str, type[Platform]] = {
 	"zhipin": BossPlatform,
+	"zhilian": ZhilianPlatform,
 }
 
 
@@ -44,6 +46,7 @@ def register_platform(name: str, cls: type[Platform]) -> None:
 __all__ = [
 	"Platform",
 	"BossPlatform",
+	"ZhilianPlatform",
 	"get_platform",
 	"list_platforms",
 	"register_platform",
