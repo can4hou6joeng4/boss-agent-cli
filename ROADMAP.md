@@ -30,7 +30,7 @@
 ## 🔮 中期（v2.0）
 
 ### 架构演进
-- [ ] mypy 严格模式全量接入 — **81% 已完成**（61/75 严格化，CLI 命令层 100%、api/* 6/7、auth/* 4/5、cache/ 1/1）。剩余 4 个 patchright/aiohttp 外部依赖模块。
+- [x] mypy 严格模式全量接入 — **100% 完成**（66/66 业务模块全部 `disallow_untyped_defs + disallow_any_generics + warn_return_any` 严格化，v1.9.1）
 - [x] 类型签名导出到 `stubs/`，供下游 IDE 使用（v1.8.6，py.typed + canonical `__all__` + 16 条契约测试）
 - [ ] Bridge 协议从 HTTP/WS 升级为 gRPC — 先做调研（Issue #96）再启动实现
 

@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-04-20
+
+### Changed
+- **🎯 mypy 严格模式全量接入达成 100%**（#124）— 本轮收尾 4 个 patchright / aiohttp 外部依赖深水区（`api/browser_client` / `auth/browser` / `bridge/client` / `bridge/daemon`），白名单 61 → **66（业务代码 100%）**
+- ROADMAP v2.0「架构演进」分区 2/3 完成（mypy 严格化 ✅、类型 stubs 导出 ✅）
+- 所有业务模块强制 `disallow_untyped_defs + disallow_any_generics + warn_return_any`
+
+### 里程碑
+从 R1（#86）到 R14（#124），14 轮连续推进，严格模块 0 → 66。CI `typecheck` job 阻塞式，新代码零容忍。
+
 ## [1.9.0] - 2026-04-20
 
 ### Summary
