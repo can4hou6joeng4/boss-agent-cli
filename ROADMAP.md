@@ -32,7 +32,7 @@
 ### 架构演进
 - [x] mypy 严格模式全量接入 — **100% 完成**（66/66 业务模块全部 `disallow_untyped_defs + disallow_any_generics + warn_return_any` 严格化，v1.9.1）
 - [x] 类型签名导出到 `stubs/`，供下游 IDE 使用（v1.8.6，py.typed + canonical `__all__` + 16 条契约测试）
-- [ ] Bridge 协议从 HTTP/WS 升级为 gRPC — 先做调研（Issue #96）再启动实现
+- [ ] Bridge 协议从 HTTP/WS 升级为 gRPC — 调研已完成（Issue #96 · [docs/research/bridge-grpc.md](docs/research/bridge-grpc.md)），**结论：暂不迁移**（localhost 单用户场景无性能收益 + MV3 扩展兼容性风险高 + 依赖膨胀 8MB）。重启调研的 5 个触发条件已明确
 
 ### 生态扩展
 - [ ] Web UI（React + Tailwind），适合非 Agent 用户
