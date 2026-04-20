@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [1.8.9] - 2026-04-20
+
+### Changed
+- **严格类型检查白名单扩至 24 个模块**（#101）— 本轮新增 CLI 命令层 7 个：`apply` / `chatmsg` / `digest` / `exchange` / `interviews` / `pipeline` / `status`
+- 所有 7 个命令签名升级为 `def cmd(ctx: click.Context, ...) -> None`
+- `pipeline._collect_pipeline_items` 返回类型精确标注为 `list[dict[str, Any]]`
+
 ## [1.8.8] - 2026-04-20
 
 ### Changed
