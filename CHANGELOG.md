@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [1.8.8] - 2026-04-20
+
+### Changed
+- **严格类型检查白名单扩至 17 个模块**（#99）— 首次覆盖 CLI 命令层：`commands/cities` / `commands/chat_utils` / `commands/history` / `commands/login` / `commands/logout` / `commands/recommend`
+- `display.handle_auth_errors` 装饰器补全类型注解，解锁下游 11+ 个命令的严格化路径
+- 所有目标命令的 `def cmd(ctx, ...)` 签名升级为 `def cmd(ctx: click.Context, ...) -> None`
+
 ## [1.8.7] - 2026-04-20
 
 ### Changed
