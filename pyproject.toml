@@ -89,6 +89,10 @@ module = [
 	"boss_agent_cli.match_score",
 	"boss_agent_cli.pipeline_state",
 	"boss_agent_cli.index_cache",
+	"boss_agent_cli.chat_summary",
+	"boss_agent_cli.search_filters",
+	"boss_agent_cli.resume.models",
+	"boss_agent_cli.resume.store",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

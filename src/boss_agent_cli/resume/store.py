@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from boss_agent_cli.resume.models import ResumeData, ResumeFile, dict_to_resume, resume_to_dict
 
@@ -20,9 +21,9 @@ class ResumeStore:
 	def _path_for(self, name: str) -> Path:
 		return self._dir / f"{_safe_filename(name)}.json"
 
-	def list_all(self) -> list[dict]:
+	def list_all(self) -> list[dict[str, Any]]:
 		"""列出所有简历摘要（name, title, updated_at）"""
-		results: list[dict] = []
+		results: list[dict[str, Any]] = []
 		for path in sorted(self._dir.glob("*.json")):
 			try:
 				raw = json.loads(path.read_text(encoding="utf-8"))

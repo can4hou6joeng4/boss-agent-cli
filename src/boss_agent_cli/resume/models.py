@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 
 @dataclass
@@ -62,7 +63,7 @@ class ResumeModule:
 	id: str
 	title: str
 	icon: str = ""
-	rows: list[dict] = field(default_factory=list)
+	rows: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -79,7 +80,7 @@ class ResumeData:
 	created_at: str = ""
 	updated_at: str = ""
 
-	def __post_init__(self):
+	def __post_init__(self) -> None:
 		now = datetime.now().isoformat()
 		if not self.created_at:
 			self.created_at = now
@@ -93,7 +94,7 @@ class ResumeFile:
 
 	version: str = "1.0"
 	data: ResumeData | None = None
-	metadata: dict = field(
+	metadata: dict[str, Any] = field(
 		default_factory=lambda: {
 			"exported_at": "",
 			"app_version": "",
@@ -102,9 +103,9 @@ class ResumeFile:
 	)
 
 
-def resume_to_dict(resume: ResumeData) -> dict:
+def resume_to_dict(resume: ResumeData) -> dict[str, Any]:
 	"""将 ResumeData 转为可 JSON 序列化的 dict"""
-	d: dict = {
+	d: dict[str, Any] = {
 		"name": resume.name,
 		"title": resume.title,
 		"center_title": resume.center_title,
@@ -139,7 +140,7 @@ def resume_to_dict(resume: ResumeData) -> dict:
 	return d
 
 
-def dict_to_resume(data: dict) -> ResumeData:
+def dict_to_resume(data: dict[str, Any]) -> ResumeData:
 	"""从 dict 恢复 ResumeData（处理嵌套对象）"""
 	pi_data = data.get("personal_info") or data.get("personalInfoSection") or {}
 	pi_items = [

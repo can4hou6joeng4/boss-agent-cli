@@ -1,4 +1,7 @@
-def summarize_messages(messages: list[dict], *, friend_uid: str) -> dict:
+from typing import Any
+
+
+def summarize_messages(messages: list[dict[str, Any]], *, friend_uid: str) -> dict[str, Any]:
 	stage = "new"
 	pending_action = "review"
 	key_facts: list[str] = []

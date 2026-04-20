@@ -5,6 +5,7 @@ Centralizes filtering logic shared by search, batch-greet, and export commands.
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from typing import Any
 
 from boss_agent_cli.api.models import JobItem
 
@@ -111,7 +112,7 @@ class SearchPipelineStats:
 
 @dataclass
 class SearchPipelineResult:
-	items: list[dict] = field(default_factory=list)
+	items: list[dict[str, Any]] = field(default_factory=list)
 	has_more: bool = False
 	total: int | None = None
 	last_page: int = 0
@@ -120,7 +121,7 @@ class SearchPipelineResult:
 
 # ── List-page prefilter ─────────────────────────────────────────────
 
-def prefilter_job(raw_item: dict, criteria: SearchFilterCriteria) -> tuple[bool, list[str]]:
+def prefilter_job(raw_item: dict[str, Any], criteria: SearchFilterCriteria) -> tuple[bool, list[str]]:
 	"""Fast prefilter using list-page fields only. Returns (pass, rejection_reasons)."""
 	reasons: list[str] = []
 
@@ -183,7 +184,7 @@ def match_all_welfare(
 	return results
 
 
-def _fetch_and_check(client, welfare_conditions, raw_item) -> dict | None:
+def _fetch_and_check(client: Any, welfare_conditions: list[tuple[str, list[str]]], raw_item: dict[str, Any]) -> dict[str, Any] | None:
 	"""Single job: fetch detail + welfare match. 不访问 cache（线程安全）。"""
 	welfare_list = raw_item.get("welfareList", [])
 	try:
@@ -204,7 +205,14 @@ def _fetch_and_check(client, welfare_conditions, raw_item) -> dict | None:
 	return None
 
 
-def _check_details_parallel(client, cache, logger, welfare_conditions, items, matched):
+def _check_details_parallel(
+	client: Any,
+	cache: Any,
+	logger: Any,
+	welfare_conditions: list[tuple[str, list[str]]],
+	items: list[dict[str, Any]],
+	matched: list[dict[str, Any]],
+) -> None:
 	"""Parallel detail check, append matched to list. cache 操作在主线程完成。"""
 	with ThreadPoolExecutor(max_workers=_WELFARE_WORKERS) as pool:
 		futures = {
@@ -233,9 +241,9 @@ def _check_details_parallel(client, cache, logger, welfare_conditions, items, ma
 # ── Main pipeline ───────────────────────────────────────────────────
 
 def run_search_pipeline(
-	client,
-	cache,
-	logger,
+	client: Any,
+	cache: Any,
+	logger: Any,
 	*,
 	criteria: SearchFilterCriteria,
 	start_page: int = 1,
@@ -246,7 +254,7 @@ def run_search_pipeline(
 ) -> SearchPipelineResult:
 	"""Run the full search pipeline: API search → list prefilter → welfare detail fallback."""
 	stats = SearchPipelineStats()
-	matched: list[dict] = []
+	matched: list[dict[str, Any]] = []
 	current_page = start_page
 	last_page_scanned = 0
 	has_more = False
