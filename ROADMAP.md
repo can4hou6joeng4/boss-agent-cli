@@ -37,7 +37,7 @@
 ### 生态扩展
 - [ ] Web UI（React + Tailwind），适合非 Agent 用户
 - [ ] 浏览器扩展深度集成 BOSS 直聘原生页面
-- [ ] 多平台支持：拉勾 / 智联 / 猎聘适配器 — 先做 API 调研（Issue #90，拉勾已完成 → [docs/research/platforms/lagou.md](docs/research/platforms/lagou.md) 结论「不建议接入」；智联 / 猎聘待认领）再启动实现
+- [ ] 多平台支持：拉勾 / 智联 / 猎聘适配器 — API 调研已全部完成（Issue #90 · [docs/research/platforms/](docs/research/platforms/)），结论：**智联为 v2.0 优先接入候选**（2-3 周），拉勾和猎聘不建议接入
 
 ### 社区建设
 - [ ] 中文 + 英文视频 demo
