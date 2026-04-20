@@ -1,5 +1,6 @@
 import sys
 import time
+from typing import Any, cast
 
 from patchright.sync_api import sync_playwright
 
@@ -20,12 +21,12 @@ def probe_cdp(cdp_url: str | None = None) -> str | None:
 	base = cdp_url or _DEFAULT_CDP_URL
 	try:
 		resp = httpx.get(f"{base}/json/version", timeout=_CDP_PROBE_TIMEOUT)
-		return resp.json().get("webSocketDebuggerUrl")
+		return cast("str | None", resp.json().get("webSocketDebuggerUrl"))
 	except (httpx.HTTPError, ValueError, KeyError):
 		return None
 
 
-def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120) -> dict:
+def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120) -> dict[str, Any]:
 	"""
 	通过 CDP 连接用户 Chrome 扫码登录。
 	返回 token dict，失败抛异常。
@@ -73,7 +74,7 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120) -> dict:
 	return {"cookies": all_cookies, "stoken": "", "user_agent": ua}
 
 
-def login_via_browser(*, timeout: int = 120) -> dict:
+def login_via_browser(*, timeout: int = 120) -> dict[str, Any]:
 	"""
 	使用 patchright（Playwright 反检测 fork）打开登录页。
 	双重检测登录成功：监听 API 响应 + 轮询 wt2 cookie。
@@ -94,7 +95,7 @@ def login_via_browser(*, timeout: int = 120) -> dict:
 		# 双重检测：API 响应 或 wt2 cookie 出现，任一触发即认为登录成功
 		login_detected = False
 
-		def _on_response(response):
+		def _on_response(response: Any) -> None:
 			nonlocal login_detected
 			url = response.url
 			if (url.startswith("https://www.zhipin.com/wapi/zppassport/qrcode/loginConfirm")
@@ -167,7 +168,7 @@ def refresh_stoken_via_cdp(cdp_url: str | None = None) -> str:
 	return stoken
 
 
-def refresh_stoken(cookies: dict, user_agent: str) -> str:
+def refresh_stoken(cookies: dict[str, Any], user_agent: str) -> str:
 	"""通过 headless patchright 刷新 stoken（兜底方案）。"""
 	with sync_playwright() as p:
 		browser = p.chromium.launch(headless=True)
@@ -185,7 +186,7 @@ def refresh_stoken(cookies: dict, user_agent: str) -> str:
 	return stoken
 
 
-def _extract_stoken(page) -> str:
+def _extract_stoken(page: Any) -> str:
 	try:
 		stoken = page.evaluate("""
 			() => {
@@ -195,6 +196,6 @@ def _extract_stoken(page) -> str:
 		""")
 		if not stoken:
 			stoken = page.evaluate("() => window.__zp_stoken__ || ''")
-		return stoken
+		return cast("str", stoken)
 	except Exception:
 		return ""

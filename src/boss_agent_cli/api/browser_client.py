@@ -9,7 +9,8 @@ Supports two modes:
 """
 import sys
 from pathlib import Path
-from typing import Any
+from types import TracebackType
+from typing import Any, cast
 
 from patchright.sync_api import sync_playwright
 
@@ -37,7 +38,7 @@ class BrowserSession:
 	Tries CDP connection to user's Chrome first; falls back to headless patchright.
 	"""
 
-	def __init__(self, cookies: dict, user_agent: str, *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None, logger=None):
+	def __init__(self, cookies: dict[str, Any], user_agent: str, *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None, logger: Any = None) -> None:
 		self._throttle = RequestThrottle(delay)
 		# patchright / BridgeClient 运行时创建；注解为 Any 让 mypy 对外部依赖放行
 		self._pw: Any = None
@@ -61,7 +62,7 @@ class BrowserSession:
 		else:
 			print(message, file=sys.stderr)
 
-	def _ensure_started(self):
+	def _ensure_started(self) -> None:
 		if self._started:
 			return
 
@@ -176,7 +177,7 @@ class BrowserSession:
 		import httpx
 		try:
 			resp = httpx.get(f"{http_url}/json/version", timeout=_CDP_PROBE_TIMEOUT)
-			return resp.json().get("webSocketDebuggerUrl")
+			return cast("str | None", resp.json().get("webSocketDebuggerUrl"))
 		except (httpx.HTTPError, ValueError, KeyError):
 			return None
 
@@ -196,7 +197,7 @@ class BrowserSession:
 					continue
 		return None
 
-	def _start_headless(self):
+	def _start_headless(self) -> None:
 		"""Fallback: launch headless patchright Chromium."""
 		self._browser = self._pw.chromium.launch(headless=True)
 		self._context = self._browser.new_context(
@@ -219,7 +220,7 @@ class BrowserSession:
 
 	# ── Core request via browser fetch() ─────────────────────────────
 
-	def request(self, method: str, url: str, *, params: dict | None = None, data: dict | None = None) -> dict:
+	def request(self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None) -> dict[str, Any]:
 		self._ensure_started()
 		self._throttle.wait()
 
@@ -238,7 +239,7 @@ class BrowserSession:
 				referer=referer,
 			)
 			self._throttle.mark()
-			return result
+			return cast("dict[str, Any]", result)
 
 		# Playwright 模式（CDP 或 headless）
 		result = self._page.evaluate("""
@@ -281,7 +282,7 @@ class BrowserSession:
 		""", {"method": method, "url": url, "params": params or {}, "data": data, "referer": referer})
 
 		self._throttle.mark()
-		return result
+		return cast("dict[str, Any]", result)
 
 	# ── Lifecycle ────────────────────────────────────────────────────
 
@@ -320,8 +321,13 @@ class BrowserSession:
 			self._pw.stop()
 		self._started = False
 
-	def __enter__(self):
+	def __enter__(self) -> "BrowserSession":
 		return self
 
-	def __exit__(self, *args):
+	def __exit__(
+		self,
+		exc_type: type[BaseException] | None,
+		exc_val: BaseException | None,
+		exc_tb: TracebackType | None,
+	) -> None:
 		self.close()

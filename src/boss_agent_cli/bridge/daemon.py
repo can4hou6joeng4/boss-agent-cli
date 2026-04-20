@@ -20,7 +20,7 @@ _PID_FILE = Path.home() / ".boss-agent" / "bridge" / "daemon.pid"
 _LOG_FILE = Path.home() / ".boss-agent" / "bridge" / "daemon.log"
 
 
-def _ensure_dirs():
+def _ensure_dirs() -> None:
 	_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
@@ -106,7 +106,7 @@ def start_daemon_background() -> int | None:
 	return proc.pid
 
 
-async def _run_daemon():
+async def _run_daemon() -> None:
 	"""daemon 主循环：统一 aiohttp HTTP + WebSocket 服务。"""
 	from aiohttp import web
 
@@ -116,19 +116,19 @@ async def _run_daemon():
 	)
 
 	start_time = time.time()
-	ext_ws = None
-	ext_version = None
+	ext_ws: Any = None
+	ext_version: str | None = None
 	last_activity = time.time()
-	pending_commands: dict[str, asyncio.Future] = {}
+	pending_commands: dict[str, "asyncio.Future[Any]"] = {}
 
 	# ── HTTP handlers ─────────────────────────────────────────────
 
-	async def handle_ping(request):
+	async def handle_ping(request: Any) -> Any:
 		nonlocal last_activity
 		last_activity = time.time()
 		return web.json_response({"ok": True})
 
-	async def handle_status(request):
+	async def handle_status(request: Any) -> Any:
 		nonlocal last_activity
 		last_activity = time.time()
 		return web.json_response({
@@ -139,7 +139,7 @@ async def _run_daemon():
 			"uptime": int(time.time() - start_time),
 		})
 
-	async def handle_command(request):
+	async def handle_command(request: Any) -> Any:
 		nonlocal last_activity
 		last_activity = time.time()
 
@@ -180,7 +180,7 @@ async def _run_daemon():
 
 	# ── WebSocket handler（Chrome 扩展连接） ──────────────────────
 
-	async def ws_handler(request):
+	async def ws_handler(request: Any) -> Any:
 		nonlocal ext_ws, ext_version
 		ws = web.WebSocketResponse()
 		await ws.prepare(request)

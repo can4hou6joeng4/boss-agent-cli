@@ -170,7 +170,7 @@ class BossClient:
 				f"建议：以 --remote-debugging-port=9222 启动 Chrome 后重试（CDP 模式可规避风控检测）",
 				is_cdp=is_cdp,
 			)
-		return cast("dict[str, Any]", result)
+		return result
 
 	# ── Public API ───────────────────────────────────────────────────
 	# High-risk: search, recommend, greet, job_card → browser channel

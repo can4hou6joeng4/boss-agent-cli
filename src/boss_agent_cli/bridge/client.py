@@ -2,6 +2,7 @@
 
 import json
 import time
+from typing import Any, cast
 
 import httpx
 
@@ -39,7 +40,7 @@ class BridgeClient:
 		except (httpx.HTTPError, OSError):
 			return False
 
-	def status(self) -> dict | None:
+	def status(self) -> dict[str, Any] | None:
 		"""获取 daemon 状态。"""
 		try:
 			resp = httpx.get(
@@ -47,7 +48,7 @@ class BridgeClient:
 				timeout=2.0,
 			)
 			if resp.status_code == 200:
-				return resp.json()
+				return cast("dict[str, Any]", resp.json())
 			return None
 		except (httpx.HTTPError, ValueError, OSError):
 			return None
@@ -57,7 +58,7 @@ class BridgeClient:
 		st = self.status()
 		return st is not None and st.get("extensionConnected", False)
 
-	def send_command(self, action: str, **kwargs) -> BridgeResult:
+	def send_command(self, action: str, **kwargs: Any) -> BridgeResult:
 		"""发送命令到扩展，自动重试。"""
 		last_error = ""
 
@@ -105,21 +106,21 @@ class BridgeClient:
 
 	# ── 高级 API ─────────────────────────────────────────────────
 
-	def evaluate(self, code: str, *, workspace: str = "boss") -> dict:
+	def evaluate(self, code: str, *, workspace: str = "boss") -> dict[str, Any]:
 		"""在页面上下文中执行 JS，返回结果。"""
 		result = self.send_command("exec", code=code, workspace=workspace)
 		if not result.ok:
 			raise RuntimeError(f"Bridge evaluate 失败: {result.error}")
 		return result.data if isinstance(result.data, dict) else {"result": result.data}
 
-	def navigate(self, url: str, *, workspace: str = "boss") -> dict:
+	def navigate(self, url: str, *, workspace: str = "boss") -> dict[str, Any]:
 		"""导航到指定 URL。"""
 		result = self.send_command("navigate", url=url, workspace=workspace)
 		if not result.ok:
 			raise RuntimeError(f"Bridge navigate 失败: {result.error}")
 		return result.data if isinstance(result.data, dict) else {}
 
-	def get_cookies(self, domain: str) -> list[dict]:
+	def get_cookies(self, domain: str) -> list[dict[str, Any]]:
 		"""获取指定域名的 Cookie。"""
 		result = self.send_command("cookies", domain=domain)
 		if not result.ok:
@@ -130,7 +131,7 @@ class BridgeClient:
 		"""关闭 automation window。"""
 		self.send_command("close-window", workspace=workspace)
 
-	def fetch_json(self, url: str, *, method: str = "GET", data: dict | None = None, referer: str = "", workspace: str = "boss") -> dict:
+	def fetch_json(self, url: str, *, method: str = "GET", data: dict[str, Any] | None = None, referer: str = "", workspace: str = "boss") -> dict[str, Any]:
 		"""通过浏览器 fetch() 发起 API 请求，返回 JSON。"""
 		if method == "GET":
 			js = f"""
