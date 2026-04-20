@@ -11,7 +11,7 @@ from boss_agent_cli.index_cache import get_index_info, get_job_by_index
 @click.argument("index", type=int)
 @click.pass_context
 @handle_auth_errors("show")
-def show_cmd(ctx, index):
+def show_cmd(ctx: click.Context, index: int) -> None:
 	"""按编号查看搜索/推荐结果中的职位详情（如 boss show 3）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

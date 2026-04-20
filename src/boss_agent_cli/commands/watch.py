@@ -14,7 +14,18 @@ from boss_agent_cli.display import handle_auth_errors, handle_error_output, hand
 from boss_agent_cli.search_filters import SearchFilterCriteria, resolve_welfare_keywords, run_search_pipeline
 
 
-def _parse_watch_filters(query, city, salary, experience, education, industry, scale, stage, job_type, welfare) -> tuple[dict, list[tuple[str, list[str]]] | None]:
+def _parse_watch_filters(
+	query: str,
+	city: str | None,
+	salary: str | None,
+	experience: str | None,
+	education: str | None,
+	industry: str | None,
+	scale: str | None,
+	stage: str | None,
+	job_type: str | None,
+	welfare: str | None,
+) -> tuple[dict[str, str | None], list[tuple[str, list[str]]] | None]:
 	params = {
 		"query": query,
 		"city": city,
@@ -35,7 +46,7 @@ def _parse_watch_filters(query, city, salary, experience, education, industry, s
 
 
 @click.group("watch")
-def watch_group():
+def watch_group() -> None:
 	"""保存搜索条件并执行增量监控。"""
 
 
@@ -52,7 +63,20 @@ def watch_group():
 @click.option("--job-type", default=None, type=click.Choice(list(JOB_TYPE_CODES.keys()), case_sensitive=False), help="职位类型")
 @click.option("--welfare", default=None, help="福利筛选")
 @click.pass_context
-def watch_add_cmd(ctx, name, query, city, salary, experience, education, industry, scale, stage, job_type, welfare):
+def watch_add_cmd(
+	ctx: click.Context,
+	name: str,
+	query: str,
+	city: str | None,
+	salary: str | None,
+	experience: str | None,
+	education: str | None,
+	industry: str | None,
+	scale: str | None,
+	stage: str | None,
+	job_type: str | None,
+	welfare: str | None,
+) -> None:
 	if city and city not in CITY_CODES:
 		handle_error_output(ctx, "watch", code="INVALID_PARAM", message=f"未知城市: {city}")
 		return
@@ -69,7 +93,7 @@ def watch_add_cmd(ctx, name, query, city, salary, experience, education, industr
 
 @watch_group.command("list")
 @click.pass_context
-def watch_list_cmd(ctx):
+def watch_list_cmd(ctx: click.Context) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		items = cache.list_saved_searches()
 	handle_output(ctx, "watch", items, hints={"next_actions": ["boss watch run <name>", "boss watch remove <name>"]})
@@ -78,7 +102,7 @@ def watch_list_cmd(ctx):
 @watch_group.command("remove")
 @click.argument("name")
 @click.pass_context
-def watch_remove_cmd(ctx, name):
+def watch_remove_cmd(ctx: click.Context, name: str) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		removed = cache.delete_saved_search(name)
 	handle_output(ctx, "watch", {"action": "remove", "name": name, "removed": removed})
@@ -88,7 +112,7 @@ def watch_remove_cmd(ctx, name):
 @click.argument("name")
 @click.pass_context
 @handle_auth_errors("watch")
-def watch_run_cmd(ctx, name):
+def watch_run_cmd(ctx: click.Context, name: str) -> None:
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	delay = ctx.obj["delay"]

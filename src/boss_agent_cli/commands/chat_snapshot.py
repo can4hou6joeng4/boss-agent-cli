@@ -3,11 +3,14 @@
 import datetime
 import json
 import os
+from typing import Any
+
+from boss_agent_cli.output import Logger
 
 
 def save_snapshot_and_diff(
-	snapshot_dir: str, friends: list[dict], logger
-) -> dict:
+	snapshot_dir: str, friends: list[dict[str, Any]], logger: Logger
+) -> dict[str, Any]:
 	"""保存当日 JSON 快照（按 security_id 合并）并与上次对比。"""
 	os.makedirs(snapshot_dir, exist_ok=True)
 	today = datetime.date.today().isoformat()
@@ -73,7 +76,7 @@ def save_snapshot_and_diff(
 	}
 
 
-def load_snapshot(path: str, logger) -> list[dict] | None:
+def load_snapshot(path: str, logger: Logger) -> list[dict[str, Any]] | None:
 	"""加载并校验快照文件，返回 None 表示不可用。"""
 	try:
 		with open(path, encoding="utf-8") as f:

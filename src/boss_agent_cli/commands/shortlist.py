@@ -5,7 +5,7 @@ from boss_agent_cli.display import handle_output, render_simple_list
 
 
 @click.group("shortlist")
-def shortlist_group():
+def shortlist_group() -> None:
 	"""管理职位候选池。"""
 
 
@@ -18,7 +18,7 @@ def shortlist_group():
 @click.option("--salary", default="", help="薪资")
 @click.option("--source", default="manual", help="来源，如 search/recommend/show/manual")
 @click.pass_context
-def shortlist_add_cmd(ctx, security_id, job_id, title, company, city, salary, source):
+def shortlist_add_cmd(ctx: click.Context, security_id: str, job_id: str, title: str, company: str, city: str, salary: str, source: str) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		cache.add_shortlist(
 			{
@@ -50,7 +50,7 @@ def shortlist_add_cmd(ctx, security_id, job_id, title, company, city, salary, so
 
 @shortlist_group.command("list")
 @click.pass_context
-def shortlist_list_cmd(ctx):
+def shortlist_list_cmd(ctx: click.Context) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		items = cache.list_shortlist()
 	handle_output(
@@ -76,7 +76,7 @@ def shortlist_list_cmd(ctx):
 @click.argument("security_id")
 @click.argument("job_id")
 @click.pass_context
-def shortlist_remove_cmd(ctx, security_id, job_id):
+def shortlist_remove_cmd(ctx: click.Context, security_id: str, job_id: str) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		removed = cache.remove_shortlist(security_id, job_id)
 	handle_output(

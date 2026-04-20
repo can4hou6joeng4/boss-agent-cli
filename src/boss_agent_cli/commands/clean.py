@@ -16,7 +16,7 @@ from boss_agent_cli.display import handle_output
 @click.option("--all", "clean_all", is_flag=True, default=False, help="清理全部缓存（包括未过期的搜索缓存和打招呼记录）")
 @click.option("--days", default=30, help="清理超过指定天数的快照和导出文件")
 @click.pass_context
-def clean_cmd(ctx, dry_run, clean_all, days):
+def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, days: int) -> None:
 	"""清理过期缓存和临时文件。"""
 	data_dir = ctx.obj["data_dir"]
 	results = []
@@ -59,7 +59,7 @@ def clean_cmd(ctx, dry_run, clean_all, days):
 		"total_bytes_freed_display": _format_size(total_freed),
 	}
 
-	hints = {"next_actions": []}
+	hints: dict[str, list[str]] = {"next_actions": []}
 	if dry_run:
 		hints["next_actions"].append("boss clean — 执行实际清理")
 	else:

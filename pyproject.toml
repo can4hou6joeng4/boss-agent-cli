@@ -106,6 +106,14 @@ module = [
 	"boss_agent_cli.commands.interviews",
 	"boss_agent_cli.commands.pipeline",
 	"boss_agent_cli.commands.status",
+	"boss_agent_cli.commands.me",
+	"boss_agent_cli.commands.show",
+	"boss_agent_cli.commands.mark",
+	"boss_agent_cli.commands.clean",
+	"boss_agent_cli.commands.shortlist",
+	"boss_agent_cli.commands.chat_snapshot",
+	"boss_agent_cli.commands.preset",
+	"boss_agent_cli.commands.watch",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

@@ -11,7 +11,18 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.display import handle_error_output, handle_output
 
 
-def _build_params(query, city, salary, experience, education, industry, scale, stage, job_type, welfare) -> dict:
+def _build_params(
+	query: str,
+	city: str | None,
+	salary: str | None,
+	experience: str | None,
+	education: str | None,
+	industry: str | None,
+	scale: str | None,
+	stage: str | None,
+	job_type: str | None,
+	welfare: str | None,
+) -> dict[str, str | None]:
 	return {
 		"query": query,
 		"city": city,
@@ -27,7 +38,7 @@ def _build_params(query, city, salary, experience, education, industry, scale, s
 
 
 @click.group("preset")
-def preset_group():
+def preset_group() -> None:
 	"""管理可复用搜索预设。"""
 
 
@@ -44,7 +55,20 @@ def preset_group():
 @click.option("--job-type", default=None, type=click.Choice(list(JOB_TYPE_CODES.keys()), case_sensitive=False), help="职位类型")
 @click.option("--welfare", default=None, help="福利筛选")
 @click.pass_context
-def preset_add_cmd(ctx, name, query, city, salary, experience, education, industry, scale, stage, job_type, welfare):
+def preset_add_cmd(
+	ctx: click.Context,
+	name: str,
+	query: str,
+	city: str | None,
+	salary: str | None,
+	experience: str | None,
+	education: str | None,
+	industry: str | None,
+	scale: str | None,
+	stage: str | None,
+	job_type: str | None,
+	welfare: str | None,
+) -> None:
 	if city and city not in CITY_CODES:
 		handle_error_output(ctx, "preset", code="INVALID_PARAM", message=f"未知城市: {city}")
 		return
@@ -62,7 +86,7 @@ def preset_add_cmd(ctx, name, query, city, salary, experience, education, indust
 
 @preset_group.command("list")
 @click.pass_context
-def preset_list_cmd(ctx):
+def preset_list_cmd(ctx: click.Context) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		items = cache.list_saved_searches()
 	handle_output(
@@ -76,7 +100,7 @@ def preset_list_cmd(ctx):
 @preset_group.command("remove")
 @click.argument("name")
 @click.pass_context
-def preset_remove_cmd(ctx, name):
+def preset_remove_cmd(ctx: click.Context, name: str) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		removed = cache.delete_saved_search(name)
 	handle_output(ctx, "preset", {"action": "remove", "name": name, "removed": removed})

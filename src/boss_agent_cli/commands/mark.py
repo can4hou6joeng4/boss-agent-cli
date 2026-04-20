@@ -32,7 +32,7 @@ def _resolve_label(label_input: str) -> int:
 @click.option("--remove", is_flag=True, default=False, help="移除标签（默认为添加）")
 @click.pass_context
 @handle_auth_errors("mark")
-def mark_cmd(ctx, security_id, label, remove):
+def mark_cmd(ctx: click.Context, security_id: str, label: str, remove: bool) -> None:
 	"""给联系人添加/移除标签"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
