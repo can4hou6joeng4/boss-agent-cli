@@ -125,6 +125,14 @@ module = [
 	"boss_agent_cli.commands.config_cmd",
 	"boss_agent_cli.commands.ai_cmd",
 	"boss_agent_cli.commands.resume_cmd",
+	"boss_agent_cli.main",
+	"boss_agent_cli.ai.config",
+	"boss_agent_cli.ai.service",
+	"boss_agent_cli.ai.prompts",
+	"boss_agent_cli.resume.templates",
+	"boss_agent_cli.resume.export",
+	"boss_agent_cli.auth.token_store",
+	"boss_agent_cli.auth.cookie_extract",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

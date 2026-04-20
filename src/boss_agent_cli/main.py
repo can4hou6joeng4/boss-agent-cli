@@ -17,14 +17,14 @@ from boss_agent_cli.output import Logger
 @click.option("--log-level", default=None, type=click.Choice(["error", "warning", "info", "debug"]))
 @click.option("--json/--no-json", "json_output", default=False, help="强制 JSON 输出（即使在终端中）")
 @click.pass_context
-def cli(ctx, data_dir, delay, cdp_url, log_level, json_output):
+def cli(ctx: click.Context, data_dir: str, delay: str | None, cdp_url: str | None, log_level: str | None, json_output: bool) -> None:
 	ctx.ensure_object(dict)
-	data_dir = Path(data_dir).expanduser()
-	data_dir.mkdir(parents=True, exist_ok=True)
-	ctx.obj["data_dir"] = data_dir
+	resolved_dir = Path(data_dir).expanduser()
+	resolved_dir.mkdir(parents=True, exist_ok=True)
+	ctx.obj["data_dir"] = resolved_dir
 	ctx.obj["json_output"] = json_output
 
-	cfg = load_config(data_dir / "config.json")
+	cfg = load_config(resolved_dir / "config.json")
 
 	if delay:
 		low, high = delay.split("-")

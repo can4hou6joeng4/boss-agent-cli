@@ -3,6 +3,8 @@
 Provides a simple interface for chat completions with error handling.
 """
 
+from typing import Any, cast
+
 import httpx
 
 
@@ -34,7 +36,7 @@ class AIService:
 
 	def chat(
 		self,
-		messages: list[dict],
+		messages: list[dict[str, Any]],
 		*,
 		temperature: float | None = None,
 		max_tokens: int | None = None,
@@ -77,6 +79,6 @@ class AIService:
 
 		try:
 			data = response.json()
-			return data["choices"][0]["message"]["content"]
+			return cast("str", data["choices"][0]["message"]["content"])
 		except (KeyError, IndexError, TypeError) as exc:
 			raise AIServiceError(f"响应格式异常: {exc}") from exc

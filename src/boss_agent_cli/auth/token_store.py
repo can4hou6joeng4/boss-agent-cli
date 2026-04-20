@@ -8,6 +8,7 @@ import time
 from base64 import urlsafe_b64encode
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any, Iterator, cast
 
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -87,13 +88,13 @@ class TokenStore:
 		key = kdf.derive(machine_id.encode())
 		return urlsafe_b64encode(key)
 
-	def save(self, token_data: dict) -> None:
+	def save(self, token_data: dict[str, Any]) -> None:
 		fernet = Fernet(self._derive_key())
 		plaintext = json.dumps(token_data, ensure_ascii=False).encode()
 		encrypted = fernet.encrypt(plaintext)
 		self._session_path.write_bytes(encrypted)
 
-	def load(self) -> dict | None:
+	def load(self) -> dict[str, Any] | None:
 		if not self._session_path.exists():
 			return None
 		fernet = Fernet(self._derive_key())
@@ -102,14 +103,14 @@ class TokenStore:
 			plaintext = fernet.decrypt(encrypted)
 		except (InvalidToken, ValueError):
 			return None
-		return json.loads(plaintext)
+		return cast("dict[str, Any]", json.loads(plaintext))
 
 	def clear(self) -> None:
 		"""删除 session.enc 文件（保留 salt 供下次登录复用）"""
 		self._session_path.unlink(missing_ok=True)
 
 	@contextmanager
-	def refresh_lock(self):
+	def refresh_lock(self) -> Iterator[None]:
 		"""原子文件锁：使用 O_CREAT|O_EXCL 避免 TOCTOU 竞态条件。"""
 		deadline = time.time() + _LOCK_TIMEOUT
 		fd = None

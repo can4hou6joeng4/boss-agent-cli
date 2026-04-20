@@ -10,6 +10,7 @@ import os
 import platform
 from base64 import urlsafe_b64encode
 from pathlib import Path
+from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
@@ -26,7 +27,7 @@ PROVIDER_BASE_URLS: dict[str, str | None] = {
 	"custom": None,
 }
 
-_DEFAULT_CONFIG: dict = {
+_DEFAULT_CONFIG: dict[str, Any] = {
 	"ai_provider": None,
 	"ai_model": None,
 	"ai_base_url": None,
@@ -97,7 +98,7 @@ class AIConfigStore:
 			return None
 		return plaintext.decode("utf-8")
 
-	def save_config(self, **kwargs) -> None:
+	def save_config(self, **kwargs: Any) -> None:
 		"""Save configuration, merging with existing values."""
 		current = self.load_config()
 		current.update(kwargs)
@@ -106,7 +107,7 @@ class AIConfigStore:
 			encoding="utf-8",
 		)
 
-	def load_config(self) -> dict:
+	def load_config(self) -> dict[str, Any]:
 		"""Load configuration with defaults for missing keys."""
 		config = dict(_DEFAULT_CONFIG)
 		if self._config_path.exists():
@@ -120,8 +121,9 @@ class AIConfigStore:
 	def get_base_url(self) -> str | None:
 		"""Get the API base URL: user config takes priority, then provider lookup."""
 		config = self.load_config()
-		if config.get("ai_base_url"):
-			return config["ai_base_url"]
+		base_url = config.get("ai_base_url")
+		if base_url:
+			return str(base_url)
 		provider = config.get("ai_provider")
 		if provider and provider in PROVIDER_BASE_URLS:
 			return PROVIDER_BASE_URLS[provider]

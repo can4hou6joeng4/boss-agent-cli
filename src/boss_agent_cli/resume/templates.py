@@ -5,6 +5,7 @@ optimized for A4 printing and PDF export.
 """
 
 import html
+from typing import Any
 
 from boss_agent_cli.resume.models import ResumeData
 
@@ -49,7 +50,7 @@ def _render_job_intention(resume: ResumeData) -> str:
 </div>"""
 
 
-def _render_row(row: dict) -> str:
+def _render_row(row: dict[str, Any]) -> str:
 	"""Render a single module row (richtext or tags)."""
 	row_type = row.get("type", "")
 	if row_type == "tags":

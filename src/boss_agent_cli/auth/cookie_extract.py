@@ -1,7 +1,8 @@
 import sys
+from typing import Any, Callable
 
 
-def extract_cookies(source: str | None = None) -> dict | None:
+def extract_cookies(source: str | None = None) -> dict[str, Any] | None:
 	"""
 	从本地浏览器提取 zhipin.com 的 Cookie。
 	source: 指定浏览器名（如 "chrome"），None 则自动检测。
@@ -40,7 +41,7 @@ def extract_cookies(source: str | None = None) -> dict | None:
 	return None
 
 
-def _try_extract(loader) -> dict | None:
+def _try_extract(loader: Callable[..., Any]) -> dict[str, Any] | None:
 	"""尝试从单个浏览器提取 zhipin.com cookies"""
 	try:
 		cj = loader(domain_name=".zhipin.com")
