@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [1.8.11] - 2026-04-20
+
+### Changed
+- **严格类型检查白名单扩至 38 个模块**（#105）— 新增核心 CLI 命令 6 个：`search` / `greet` / `chat` / `detail` / `doctor` / `export`
+- CLI 命令层严格覆盖率从 66% (21/32) 提升至 **84% (27/32)**
+- `detail._detail_via_httpx` / `_detail_via_browser` 补全 BossClient / Path 类型
+- `doctor.add_check` 的 `hint` 参数支持 `str | None`
+
 ## [1.8.10] - 2026-04-20
 
 ### Changed
