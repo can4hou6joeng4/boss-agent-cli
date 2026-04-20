@@ -3,7 +3,6 @@ import time
 
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.api.endpoints import (
 	INDUSTRY_CODES,
 	JOB_TYPE_CODES,
@@ -112,15 +111,13 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 	"""搜索后批量打招呼（上限 10）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 
 	count = min(count, 10)
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		auth = AuthManager(data_dir, logger=logger)
-		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-			raw = client.search_jobs(
+		with get_platform_instance(ctx, auth) as platform:
+			raw = platform.search_jobs(
 				query, city=city, salary=salary, experience=experience,
 				education=education, industry=industry, scale=scale,
 				stage=stage, job_type=job_type,
@@ -157,7 +154,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 
 				while retry_count <= 1:
 					try:
-						client.greet(item.security_id, item.job_id)
+						platform.greet(item.security_id, item.job_id)
 						cache.record_greet(item.security_id, item.job_id)
 						results.append({
 							"security_id": item.security_id,

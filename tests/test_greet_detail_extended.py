@@ -12,7 +12,7 @@ from boss_agent_cli.main import cli
 
 _PATCHES = {
 	"auth": "boss_agent_cli.commands.greet.AuthManager",
-	"client": "boss_agent_cli.commands.greet.BossClient",
+	"client": "boss_agent_cli.commands.greet.get_platform_instance",
 	"platform": "boss_agent_cli.commands.greet.get_platform_instance",
 	"cache": "boss_agent_cli.commands.greet.CacheStore",
 }

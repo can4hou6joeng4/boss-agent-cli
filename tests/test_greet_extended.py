@@ -73,7 +73,7 @@ def test_greet_success_renders_message_and_records_cache(mock_cache_cls, mock_au
 
 
 @patch("boss_agent_cli.commands.greet.time")
-@patch("boss_agent_cli.commands.greet.BossClient")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
 def test_batch_greet_success_all(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
@@ -101,7 +101,7 @@ def test_batch_greet_success_all(mock_cache_cls, mock_auth_cls, mock_client_cls,
 
 
 @patch("boss_agent_cli.commands.greet.time")
-@patch("boss_agent_cli.commands.greet.BossClient")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
 def test_batch_greet_rate_limited_stops_remaining(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
@@ -134,7 +134,7 @@ def test_batch_greet_rate_limited_stops_remaining(mock_cache_cls, mock_auth_cls,
 
 
 @patch("boss_agent_cli.commands.greet.time")
-@patch("boss_agent_cli.commands.greet.BossClient")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
 def test_batch_greet_greet_limit_stops_remaining(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
@@ -157,7 +157,7 @@ def test_batch_greet_greet_limit_stops_remaining(mock_cache_cls, mock_auth_cls, 
 
 
 @patch("boss_agent_cli.commands.greet.time")
-@patch("boss_agent_cli.commands.greet.BossClient")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
 def test_batch_greet_network_error_retries_once_then_skips(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
@@ -194,7 +194,7 @@ def test_batch_greet_network_error_retries_once_then_skips(mock_cache_cls, mock_
 
 
 @patch("boss_agent_cli.commands.greet.time")
-@patch("boss_agent_cli.commands.greet.BossClient")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
 def test_batch_greet_network_error_first_retry_succeeds(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
@@ -226,7 +226,7 @@ def test_batch_greet_network_error_first_retry_succeeds(mock_cache_cls, mock_aut
 
 
 @patch("boss_agent_cli.commands.greet.time")
-@patch("boss_agent_cli.commands.greet.BossClient")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
 def test_batch_greet_skips_already_greeted(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
@@ -252,7 +252,7 @@ def test_batch_greet_skips_already_greeted(mock_cache_cls, mock_auth_cls, mock_c
 
 
 @patch("boss_agent_cli.commands.greet.time")
-@patch("boss_agent_cli.commands.greet.BossClient")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
 def test_batch_greet_respects_count_cap(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):

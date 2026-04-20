@@ -86,7 +86,7 @@ def test_search_invalid_city(mock_client_cls, mock_auth_cls, mock_cache_cls):
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 
 
-@patch("boss_agent_cli.commands.greet.BossClient")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
 def test_greet_already_greeted(mock_cache_cls, mock_auth_cls, mock_client_cls):
@@ -100,7 +100,7 @@ def test_greet_already_greeted(mock_cache_cls, mock_auth_cls, mock_client_cls):
 
 
 @patch("boss_agent_cli.commands.greet.time")
-@patch("boss_agent_cli.commands.greet.BossClient")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
 def test_batch_greet_dry_run(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):

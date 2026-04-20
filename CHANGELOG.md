@@ -5,6 +5,12 @@
 ## [Unreleased]
 
 ### Added
+- **`boss batch-greet` 迁移到 Platform**（Week 1c 第 3 个命令）— 从 `BossClient` 直用切换到 `get_platform_instance(ctx, auth)`，内部 `client.search_jobs` / `client.greet` 改为 `platform.search_jobs` / `platform.greet`。删除 `greet.py` 对 `BossClient` 的直接引用。
+
+### Changed
+- `tests/test_greet_extended.py` / `test_greet_detail_extended.py` / `test_commands.py` 共 10 处 mock patch 位置从 `commands.greet.BossClient` 切到 `commands.greet.get_platform_instance`。
+
+### Added
 - **ZhilianPlatform stub**（Issue #129 Week 1d · 抽象自证）— `src/boss_agent_cli/platforms/zhilian.py` 新增智联招聘 stub 实现：
   - 元信息：`name="zhilian"` / `display_name="智联招聘"` / `base_url="https://m.zhaopin.com"`
   - 包络适配按 [zhaopin.md](docs/research/platforms/zhaopin.md) §4 调研结果完整实现（`is_success` 检 `code==200` · `unwrap_data` 取 `data` key · `parse_error` 映射 401/403/429）
