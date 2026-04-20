@@ -6,7 +6,7 @@ from boss_agent_cli.output import emit_error, emit_success
 
 @click.command("logout")
 @click.pass_context
-def logout_cmd(ctx):
+def logout_cmd(ctx: click.Context) -> None:
 	"""退出登录，清除本地保存的登录态"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

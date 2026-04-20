@@ -9,7 +9,7 @@ from boss_agent_cli.output import emit_error, emit_success
 @click.option("--cookie-source", default=None, help="指定浏览器提取 Cookie（如 chrome/firefox/edge），不指定则自动检测")
 @click.option("--cdp", is_flag=True, default=False, help="强制 CDP 模式（跳过 Cookie 提取，CDP 不可用直接报错）")
 @click.pass_context
-def login_cmd(ctx, timeout, cookie_source, cdp):
+def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: bool) -> None:
 	"""登录 BOSS 直聘（三级降级：Cookie 提取 → CDP 自动探测 → patchright 扫码）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

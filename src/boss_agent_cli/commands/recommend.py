@@ -14,7 +14,7 @@ from boss_agent_cli.match_score import score_job_dict
 @click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
 @click.pass_context
 @handle_auth_errors("recommend")
-def recommend_cmd(ctx, page, with_score):
+def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 	"""基于简历的个性化职位推荐"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

@@ -270,7 +270,7 @@ def render_export_summary(data: dict) -> None:
 # ── Auth error decorator ─────────────────────────────────────────────
 
 
-def handle_auth_errors(command_name: str):
+def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
 	"""装饰器：统一处理 AuthRequired / TokenRefreshFailed / Exception 三层捕获。
 
 	用法:
@@ -280,9 +280,9 @@ def handle_auth_errors(command_name: str):
 	"""
 	from functools import wraps
 
-	def decorator(func):
+	def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
 		@wraps(func)
-		def wrapper(ctx, *args, **kwargs):
+		def wrapper(ctx: Any, *args: Any, **kwargs: Any) -> Any:
 			from boss_agent_cli.api.client import AccountRiskError
 			from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 			try:

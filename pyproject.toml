@@ -93,6 +93,12 @@ module = [
 	"boss_agent_cli.search_filters",
 	"boss_agent_cli.resume.models",
 	"boss_agent_cli.resume.store",
+	"boss_agent_cli.commands.cities",
+	"boss_agent_cli.commands.chat_utils",
+	"boss_agent_cli.commands.history",
+	"boss_agent_cli.commands.login",
+	"boss_agent_cli.commands.logout",
+	"boss_agent_cli.commands.recommend",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

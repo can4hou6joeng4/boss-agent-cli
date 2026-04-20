@@ -10,7 +10,7 @@ from boss_agent_cli.display import handle_auth_errors, handle_output, render_job
 @click.option("--page", default=1, help="页码")
 @click.pass_context
 @handle_auth_errors("history")
-def history_cmd(ctx, page):
+def history_cmd(ctx: click.Context, page: int) -> None:
 	"""查看最近浏览过的职位"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
