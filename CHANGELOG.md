@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [1.8.10] - 2026-04-20
+
+### Changed
+- **严格类型检查白名单扩至 32 个模块**（#103）— 新增 8 个 CLI 命令：`me` / `show` / `mark` / `clean` / `shortlist` / `chat_snapshot` / `preset` / `watch`
+- CLI 命令层严格覆盖率从 40% (13/32) 提升至 **66% (21/32)**
+- `preset` / `watch` 的参数构造器给 10 个参数逐个精确标注 `str | None`
+- `chat_snapshot` 使用 `boss_agent_cli.output.Logger` 替代裸 `logger` 参数
+
 ## [1.8.9] - 2026-04-20
 
 ### Changed

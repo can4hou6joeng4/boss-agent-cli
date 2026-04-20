@@ -17,7 +17,7 @@ from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshF
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.resume.models import ResumeData, ResumeFile
 
-__version__ = "1.8.9"
+__version__ = "1.8.10"
 
 __all__ = [
 	# 版本
