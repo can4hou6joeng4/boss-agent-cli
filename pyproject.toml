@@ -133,6 +133,11 @@ module = [
 	"boss_agent_cli.resume.export",
 	"boss_agent_cli.auth.token_store",
 	"boss_agent_cli.auth.cookie_extract",
+	"boss_agent_cli.api.models",
+	"boss_agent_cli.api.throttle",
+	"boss_agent_cli.api.endpoints",
+	"boss_agent_cli.api.endpoints_loader",
+	"boss_agent_cli.commands.stats",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

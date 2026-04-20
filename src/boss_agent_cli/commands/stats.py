@@ -11,6 +11,7 @@ import sqlite3
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -19,16 +20,18 @@ from boss_agent_cli.display import handle_output
 
 def _safe_count(conn: sqlite3.Connection, table: str) -> int:
 	try:
-		return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+		result: int = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+		return result
 	except sqlite3.OperationalError:
 		return 0
 
 
 def _count_since(conn: sqlite3.Connection, table: str, column: str, since: float) -> int:
 	try:
-		return conn.execute(
+		result: int = conn.execute(
 			f"SELECT COUNT(*) FROM {table} WHERE {column} >= ?", (since,)
 		).fetchone()[0]
+		return result
 	except sqlite3.OperationalError:
 		return 0
 
@@ -39,7 +42,7 @@ def _ratio(numer: int, denom: int) -> float:
 	return round(numer / denom, 4)
 
 
-def _collect_stats(db_path: Path, days: int) -> dict:
+def _collect_stats(db_path: Path, days: int) -> dict[str, Any]:
 	"""从 SQLite 收集漏斗数据，返回结构化 dict。"""
 	if not db_path.exists():
 		return {
@@ -84,7 +87,7 @@ def _collect_stats(db_path: Path, days: int) -> dict:
 	}
 
 
-def _build_hints(data: dict) -> list[str]:
+def _build_hints(data: dict[str, Any]) -> list[str]:
 	hints: list[str] = []
 	funnel = data.get("funnel", {})
 	greeted_total = funnel.get("greeted", 0)
@@ -101,7 +104,7 @@ def _build_hints(data: dict) -> list[str]:
 	return hints
 
 
-def _render_html(data: dict) -> str:
+def _render_html(data: dict[str, Any]) -> str:
 	"""渲染自包含交互式 HTML 报表（纯 CSS + SVG，无外部依赖）。"""
 	funnel = data.get("funnel", {})
 	window = data.get("window", {})
@@ -303,7 +306,7 @@ footer a {{ color: var(--accent); text-decoration: none; }}
 	help="HTML 输出路径（仅 --format html 时有效，未指定时写到 stdout）",
 )
 @click.pass_context
-def stats_cmd(ctx, days, output_format, output_path):
+def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Path | None) -> None:
 	"""投递转化漏斗统计（只读聚合）"""
 	data_dir: Path = ctx.obj["data_dir"]
 	db_path = data_dir / "cache" / "boss_agent.db"

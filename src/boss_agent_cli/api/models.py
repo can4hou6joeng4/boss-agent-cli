@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -23,7 +24,7 @@ class JobItem:
 	greeted: bool = False
 
 	@classmethod
-	def from_api(cls, raw: dict) -> "JobItem":
+	def from_api(cls, raw: dict[str, Any]) -> "JobItem":
 		return cls(
 			job_id=raw.get("encryptJobId", ""),
 			title=raw.get("jobName", ""),
@@ -44,7 +45,7 @@ class JobItem:
 			security_id=raw.get("securityId", ""),
 		)
 
-	def to_dict(self) -> dict:
+	def to_dict(self) -> dict[str, Any]:
 		return {
 			"job_id": self.job_id,
 			"title": self.title,
@@ -81,11 +82,11 @@ class JobDetail:
 	boss_title: str
 	boss_active: str
 	security_id: str
-	company_info: dict = field(default_factory=dict)
+	company_info: dict[str, Any] = field(default_factory=dict)
 	greeted: bool = False
 
 	@classmethod
-	def from_api(cls, raw: dict) -> "JobDetail":
+	def from_api(cls, raw: dict[str, Any]) -> "JobDetail":
 		job_info = raw.get("jobInfo", {})
 		boss_info = raw.get("bossInfo", {})
 		brand_info = raw.get("brandComInfo", {})
@@ -109,7 +110,7 @@ class JobDetail:
 			},
 		)
 
-	def to_dict(self) -> dict:
+	def to_dict(self) -> dict[str, Any]:
 		return {
 			"job_id": self.job_id,
 			"title": self.title,

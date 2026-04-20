@@ -27,7 +27,8 @@ class BossApiSpec:
 def _load_yaml() -> dict[str, Any]:
 	"""Load boss.yaml from package resources."""
 	ref = importlib.resources.files("boss_agent_cli.api").joinpath("boss.yaml")
-	return yaml.safe_load(ref.read_text(encoding="utf-8"))
+	result: dict[str, Any] = yaml.safe_load(ref.read_text(encoding="utf-8"))
+	return result
 
 
 def load_boss_api_spec() -> BossApiSpec:

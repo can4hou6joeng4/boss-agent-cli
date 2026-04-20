@@ -10,12 +10,12 @@ from collections import deque
 class RequestThrottle:
 	"""Rate limiter with Gaussian-distributed delays and burst detection."""
 
-	def __init__(self, delay: tuple[float, float] = (1.5, 3.0)):
+	def __init__(self, delay: tuple[float, float] = (1.5, 3.0)) -> None:
 		self._delay = delay
 		self._last_request_time = 0.0
 		self._recent_times: deque[float] = deque(maxlen=12)
 
-	def wait(self):
+	def wait(self) -> None:
 		"""Block until it's safe to send the next request."""
 		elapsed = time.time() - self._last_request_time
 		mean = sum(self._delay) / 2
@@ -31,7 +31,7 @@ class RequestThrottle:
 		if total > 0:
 			time.sleep(total)
 
-	def mark(self):
+	def mark(self) -> None:
 		"""Record that a request was just sent."""
 		now = time.time()
 		self._last_request_time = now
