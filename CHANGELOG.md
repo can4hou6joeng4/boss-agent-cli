@@ -4,6 +4,47 @@
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-04-20
+
+### Summary
+1.8.x 系列连发 19 个 patch 完成以下核心里程碑，按 SemVer 规范 bump 到 1.9.0 标记这个里程碑节点。
+
+### 🎯 核心里程碑（从 1.8.0 到 1.9.0）
+
+#### 严格类型体系（从 0 到 81%）
+- mypy 严格类型检查模块：3 → **61** 个（81% 覆盖率）
+- CLI 命令层 **32/32 = 100%**
+- api / auth / cache 核心基础层全部进入严格保护
+- `typecheck` CI 从 non-blocking 升级为阻塞式门禁
+- Python 嵌入 API：canonical `__all__` 导出 14 个核心符号 + 16 条契约测试 + `py.typed` marker
+
+#### 智能能力扩展
+- `boss ai interview-prep` — 基于 JD 生成模拟面试题
+- `boss ai chat-coach` — 基于聊天记录给出沟通技巧建议
+- AI Provider 扩至 **8 家**：OpenAI / DeepSeek / Moonshot / OpenRouter / Qwen / Zhipu / SiliconFlow / Custom
+- 支持 Claude 4.7 / GPT-5 / DeepSeek-V3 / Qwen3 / GLM-4.6 等最新模型
+
+#### 数据输出
+- `boss digest --format md` — 邮件/飞书可直接发送的 Markdown 日报
+- `boss stats --format html` — 自包含交互式漏斗报表
+
+#### Agent 集成
+- Cursor / Windsurf 专用接入示例（MCP 推荐 + 规则文件兜底）
+- `boss schema --format openai-tools / anthropic-tools` 直出 SDK 可用格式
+- `docs/integrations/ai-models.md` 推荐模型配置表
+
+#### 工程卫生
+- 测试覆盖率 80% → **85%**
+- 测试数 802 → **927**
+- `CONTRIBUTING.en.md` 英文贡献者指南
+- research Issue 模式建立：#90（多平台适配器）+ #96（Bridge gRPC）
+
+### 🗂️ ROADMAP 进度对齐
+- v1.8.x 数据可视化分区：**3/3 ✅**
+- v1.8.x 智能能力分区：**3/3 ✅**
+- v1.8.x Agent 集成分区：**2/3**（剩 MCP HTTP Streaming，Issue #48 外部认领）
+- v2.0 架构演进：类型 stubs 导出 ✅，mypy 严格化 81%（进行中），Bridge gRPC 调研中
+
 ## [1.8.18] - 2026-04-20
 
 ### Changed
