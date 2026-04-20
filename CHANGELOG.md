@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [1.8.7] - 2026-04-20
+
+### Changed
+- **严格类型检查白名单扩至 11 个模块**（#97）— 新增 `chat_summary` / `search_filters` / `resume/models` / `resume/store`，所有这些模块现在强制 `disallow_untyped_defs` + `disallow_any_generics` + `warn_return_any`
+- 所有白名单模块的裸 `dict` / `list` 补上泛型参数
+- `search_filters._check_details_parallel` 修正 `welfare_conditions` 参数类型为 `list[tuple[str, list[str]]]`
+
+### Added
+- Issue #96「Bridge 协议 HTTP/WS → gRPC 升级调研」— 按多平台适配器（#90）的调研先行模式，为 v2.0 架构演进剩余一项锁定调研清单
+
 ## [1.8.6] - 2026-04-20
 
 ### Added
