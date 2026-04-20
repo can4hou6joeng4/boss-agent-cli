@@ -26,6 +26,10 @@ EXPECTED_EXPORTS = {
 	"AIServiceError",
 	"ResumeData",
 	"ResumeFile",
+	"Platform",
+	"BossPlatform",
+	"get_platform",
+	"list_platforms",
 }
 
 
@@ -93,6 +97,31 @@ def test_account_risk_error_is_exception():
 
 def test_ai_service_error_is_exception():
 	assert issubclass(boss_agent_cli.AIServiceError, Exception)
+
+
+# ── 平台抽象 ──────────────────────────────────────────────
+
+
+def test_platform_is_abstract():
+	import abc
+	assert inspect_abstract(boss_agent_cli.Platform)
+
+
+def inspect_abstract(cls: type) -> bool:
+	import abc
+	return bool(getattr(cls, "__abstractmethods__", set()))
+
+
+def test_boss_platform_subclasses_platform():
+	assert issubclass(boss_agent_cli.BossPlatform, boss_agent_cli.Platform)
+
+
+def test_get_platform_returns_boss_by_default():
+	assert boss_agent_cli.get_platform("zhipin") is boss_agent_cli.BossPlatform
+
+
+def test_list_platforms_contains_zhipin():
+	assert "zhipin" in boss_agent_cli.list_platforms()
 
 
 # ── 版本格式 ──────────────────────────────────────────────

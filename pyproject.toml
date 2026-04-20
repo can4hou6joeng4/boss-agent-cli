@@ -147,6 +147,9 @@ module = [
 	"boss_agent_cli.auth.browser",
 	"boss_agent_cli.bridge.client",
 	"boss_agent_cli.bridge.daemon",
+	"boss_agent_cli.platforms",
+	"boss_agent_cli.platforms.base",
+	"boss_agent_cli.platforms.zhipin",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

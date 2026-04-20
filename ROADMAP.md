@@ -37,7 +37,11 @@
 ### 生态扩展
 - [ ] Web UI（React + Tailwind），适合非 Agent 用户
 - [ ] 浏览器扩展深度集成 BOSS 直聘原生页面
-- [ ] 多平台支持：拉勾 / 智联 / 猎聘适配器 — API 调研已全部完成（Issue #90 · [docs/research/platforms/](docs/research/platforms/)），结论：**智联为 v2.0 优先接入候选**（2-3 周），拉勾和猎聘不建议接入
+- [ ] 多平台支持：拉勾 / 智联 / 猎聘适配器 — API 调研已全部完成（Issue #90 已闭环 · [docs/research/platforms/](docs/research/platforms/)），结论：**智联为 v2.0 优先接入候选**（2-3 周），拉勾和猎聘不建议接入
+  - [x] Week 1a：Platform ABC 骨架 + BossPlatform adapter（#129，零行为变化）
+  - [ ] Week 1b：CLI 命令层迁移到 Platform 接口（`--platform zhipin` 全局选项）
+  - [ ] Week 2：ZhilianPlatform 只读实现（search / detail / recommend / user_info）
+  - [ ] Week 3：ZhilianPlatform 写操作（greet / apply）+ 文档 + MCP 适配
 
 ### 社区建设
 - [ ] 中文 + 英文视频 demo

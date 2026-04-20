@@ -108,6 +108,7 @@ graph TD
 | `src/boss_agent_cli/bridge/` | Python | Browser Bridge — Chrome 扩展 + Python daemon 零配置浏览器通道 | `client.py` | `tests/test_bridge.py`, `tests/test_bridge_extended.py` |
 | `src/boss_agent_cli/resume/` | Python | 简历数据模型、本地存储、模板渲染、多格式导出 | `models.py` | `tests/test_resume_commands.py`, `tests/test_resume_templates.py`, `tests/test_resume_export.py`, `tests/test_resume_models.py`, `tests/test_resume_store.py`, `tests/test_resume_import_compat.py` |
 | `src/boss_agent_cli/ai/` | Python | 智能服务：多模型配置、密钥加密存储、提示词模板、对话补全 | `service.py` | `tests/test_ai_config.py`, `tests/test_ai_prompts.py`, `tests/test_ai_service.py`, `tests/test_ai_commands.py` |
+| `src/boss_agent_cli/platforms/` | Python | 跨平台抽象（Issue #129 Week 1 骨架）：Platform ABC + 注册表 + BossPlatform adapter | `base.py`, `zhipin.py` | `tests/test_platform_base.py` |
 
 ## 技术栈
 
@@ -389,3 +390,4 @@ boss logout       -> 退出登录
 | 2026-04-15 | 文档对齐 | 补充不变量契约段落、Git 禁止项和 PR 合并流程、AI 错误码、调用链和文档引用全量更新 |
 | 2026-04-15 | 协议分析 | 基于竞品端点对比新增两个端点定义、诊断命令增加辅助凭据完整性检查、职位卡片请求优先走轻量通道，测试 52→55（658 项） |
 | 2026-04-19 | 智能能力扩展 | ai 命令组新增 interview-prep 和 chat-coach 两个子命令，协议服务新增两个工具（41→43），测试 814→828，版本 1.8.0 |
+| 2026-04-21 | Platform 抽象 | 新增 platforms/ 子包定义 Platform ABC + BossPlatform adapter（Week 1a 骨架，零行为变化），Issue #90 研究闭环，下游嵌入 API 新增 4 个导出符号，测试 927→956，mypy 严格模块 66→69 |

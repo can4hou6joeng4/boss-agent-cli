@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Added
+- **Platform 抽象基类**（Issue #129 Week 1 骨架）— 新增 `src/boss_agent_cli/platforms/` 子包：`Platform` ABC 定义跨平台统一契约（is_success / unwrap_data / parse_error + P0 只读 + P1 写操作 + P2 沟通），`BossPlatform` 降级为 `BossClient` 的 adapter（零行为变化）；新增 `get_platform` / `list_platforms` 注册表入口。
+- Python 嵌入 API 扩展导出 `Platform` / `BossPlatform` / `get_platform` / `list_platforms`，下游可用 `from boss_agent_cli import get_platform` 注入具体平台实现。
+- `tests/test_platform_base.py` 新增 25 条契约测试覆盖 ABC 限制、包络适配、委托调用、注册表行为。
+
+### Changed
+- mypy 严格化覆盖 `boss_agent_cli.platforms` / `.base` / `.zhipin` 三个新模块（严格白名单 66 → 69）。
+- Issue #90（多平台 API 调研）闭环，研究报告索引入库 `docs/research/platforms/`。
+
 ## [1.9.1] - 2026-04-20
 
 ### Changed
