@@ -12,7 +12,7 @@ from boss_agent_cli.display import handle_auth_errors, handle_error_output, hand
 @click.option("--lid", default="", help="列表项 ID（可选）")
 @click.pass_context
 @handle_auth_errors("apply")
-def apply_cmd(ctx, security_id, job_id, lid):
+def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> None:
 	"""发起最小可用投递/立即沟通动作（当前复用立即沟通链路）。"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

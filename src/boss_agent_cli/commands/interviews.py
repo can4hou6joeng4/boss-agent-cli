@@ -3,12 +3,13 @@ import click
 from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_simple_list
+from typing import Any
 
 
 @click.command("interviews")
 @click.pass_context
 @handle_auth_errors("interviews")
-def interviews_cmd(ctx):
+def interviews_cmd(ctx: click.Context) -> None:
 	"""查看面试邀请列表"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -41,7 +42,7 @@ def interviews_cmd(ctx):
 		for it in interview_list
 	]
 
-	def _render(data):
+	def _render(data: list[dict[str, Any]]) -> None:
 		render_simple_list(
 			data,
 			"interviews",

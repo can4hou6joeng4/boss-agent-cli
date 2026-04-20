@@ -8,7 +8,7 @@ from boss_agent_cli.display import handle_auth_errors, handle_error_output, hand
 @click.command("status")
 @click.pass_context
 @handle_auth_errors("status")
-def status_cmd(ctx):
+def status_cmd(ctx: click.Context) -> None:
 	"""检查当前登录态"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

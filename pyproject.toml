@@ -99,6 +99,13 @@ module = [
 	"boss_agent_cli.commands.login",
 	"boss_agent_cli.commands.logout",
 	"boss_agent_cli.commands.recommend",
+	"boss_agent_cli.commands.apply",
+	"boss_agent_cli.commands.chatmsg",
+	"boss_agent_cli.commands.digest",
+	"boss_agent_cli.commands.exchange",
+	"boss_agent_cli.commands.interviews",
+	"boss_agent_cli.commands.pipeline",
+	"boss_agent_cli.commands.status",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

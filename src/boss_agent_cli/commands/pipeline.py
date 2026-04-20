@@ -1,4 +1,5 @@
 import time
+from typing import Any
 
 import click
 
@@ -8,7 +9,7 @@ from boss_agent_cli.display import handle_auth_errors, handle_output, render_sim
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
 
 
-def _collect_pipeline_items(ctx, *, now_ts_ms: int | None, stale_days: int) -> list[dict]:
+def _collect_pipeline_items(ctx: click.Context, *, now_ts_ms: int | None, stale_days: int) -> list[dict[str, Any]]:
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	delay = ctx.obj["delay"]
@@ -29,7 +30,7 @@ def _collect_pipeline_items(ctx, *, now_ts_ms: int | None, stale_days: int) -> l
 	)
 
 
-def _render_pipeline(data, title: str):
+def _render_pipeline(data: list[dict[str, Any]], title: str) -> None:
 	render_simple_list(
 		data,
 		title,
@@ -50,7 +51,7 @@ def _render_pipeline(data, title: str):
 @click.option("--now-ts-ms", default=None, type=int, help="测试用：覆盖当前时间戳（毫秒）")
 @click.pass_context
 @handle_auth_errors("pipeline")
-def pipeline_cmd(ctx, days_stale, now_ts_ms):
+def pipeline_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None) -> None:
 	items = _collect_pipeline_items(ctx, now_ts_ms=now_ts_ms, stale_days=days_stale)
 	handle_output(
 		ctx,
@@ -66,7 +67,7 @@ def pipeline_cmd(ctx, days_stale, now_ts_ms):
 @click.option("--now-ts-ms", default=None, type=int, help="测试用：覆盖当前时间戳（毫秒）")
 @click.pass_context
 @handle_auth_errors("follow-up")
-def follow_up_cmd(ctx, days_stale, now_ts_ms):
+def follow_up_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None) -> None:
 	items = _collect_pipeline_items(ctx, now_ts_ms=now_ts_ms, stale_days=days_stale)
 	candidates = select_follow_up_candidates(items)
 	handle_output(

@@ -10,7 +10,7 @@ from boss_agent_cli.display import handle_auth_errors, handle_error_output, hand
 @click.option("--type", "exchange_type", default="phone", type=click.Choice(["phone", "wechat"]), help="交换类型：phone=手机号 / wechat=微信")
 @click.pass_context
 @handle_auth_errors("exchange")
-def exchange_cmd(ctx, security_id, exchange_type):
+def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> None:
 	"""请求交换联系方式（手机号或微信）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

@@ -1,4 +1,5 @@
 import datetime
+from typing import Any
 
 import click
 
@@ -18,7 +19,7 @@ _MSG_TYPE_MAP = {
 @click.option("--count", default=20, help="每页消息数量")
 @click.pass_context
 @handle_auth_errors("chatmsg")
-def chatmsg_cmd(ctx, security_id, page, count):
+def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> None:
 	"""查看与指定好友的聊天消息历史"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -74,7 +75,7 @@ def chatmsg_cmd(ctx, security_id, page, count):
 				"time": msg_time,
 			})
 
-		def _render(data):
+		def _render(data: list[dict[str, Any]]) -> None:
 			render_simple_list(
 				data,
 				f"聊天记录 — {friend_name}",
