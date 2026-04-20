@@ -29,6 +29,13 @@ class Platform(ABC):
 	display_name: str
 	base_url: str
 
+	def __init__(self, client: Any) -> None:
+		"""ABC 构造签名：所有实现都接收一个平台专用 client。
+
+		具体实现可以覆盖参数类型（如 ``BossPlatform`` 声明 ``BossClient``）。
+		"""
+		self._client: Any = client
+
 	@abstractmethod
 	def is_success(self, response: dict[str, Any]) -> bool:
 		"""判断响应是否成功。

@@ -3,6 +3,7 @@ from typing import Any
 import click
 
 from boss_agent_cli.output import emit_success
+from boss_agent_cli.platforms import list_platforms
 
 # 类型转换：native schema → JSON Schema 基础类型
 _JSON_SCHEMA_TYPE_MAP = {
@@ -553,6 +554,12 @@ SCHEMA_DATA = {
 			"default": None,
 			"description": "Chrome CDP 调试地址（如 http://localhost:9222），启用后优先用用户 Chrome 发请求",
 		},
+		"--platform": {
+			"type": "string",
+			"default": "zhipin",
+			"description": "招聘平台适配器（当前仅 zhipin，其他平台通过 Platform ABC 后续接入）",
+			"choices": ["zhipin"],
+		},
 		"--json": {
 			"type": "bool",
 			"default": False,
@@ -664,12 +671,19 @@ SCHEMA_DATA = {
 	default="native",
 	help="输出格式：native（本项目信封）/ openai-tools（OpenAI Functions & Tools API）/ anthropic-tools（Claude Tool Use API）",
 )
-def schema_cmd(output_format: str) -> None:
+@click.pass_context
+def schema_cmd(ctx: click.Context, output_format: str) -> None:
 	"""返回工具完整能力描述的 JSON"""
+	# 动态注入当前会话的平台信息（Issue #129 Week 1b）
+	data = dict(SCHEMA_DATA)
+	current = (ctx.obj or {}).get("platform") or "zhipin"
+	data["current_platform"] = current
+	data["supported_platforms"] = list_platforms()
+
 	if output_format == "openai-tools":
-		emit_success("schema", {"format": "openai-tools", "tools": _format_openai_tools(SCHEMA_DATA)})
+		emit_success("schema", {"format": "openai-tools", "tools": _format_openai_tools(data)})
 		return
 	if output_format == "anthropic-tools":
-		emit_success("schema", {"format": "anthropic-tools", "tools": _format_anthropic_tools(SCHEMA_DATA)})
+		emit_success("schema", {"format": "anthropic-tools", "tools": _format_anthropic_tools(data)})
 		return
-	emit_success("schema", SCHEMA_DATA)
+	emit_success("schema", data)

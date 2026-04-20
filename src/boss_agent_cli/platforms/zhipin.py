@@ -32,7 +32,9 @@ class BossPlatform(Platform):
 	base_url = BASE_URL
 
 	def __init__(self, client: "BossClient") -> None:
-		self._client = client
+		super().__init__(client)
+		# 重新 bound 出类型化属性，下游 IDE 可以看到 BossClient 方法
+		self._client: "BossClient" = client
 
 	# ── 包络适配 ────────────────────────────────────────
 

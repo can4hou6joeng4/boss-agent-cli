@@ -14,6 +14,7 @@ DEFAULTS: dict[str, Any] = {
 	"export_dir": None,
 	"resume_default_template": "default",
 	"resume_export_format": "pdf",
+	"platform": "zhipin",
 }
 
 
