@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from boss_agent_cli.auth.browser import login_via_browser, login_via_cdp, probe_cdp, refresh_stoken, refresh_stoken_via_cdp
 from boss_agent_cli.auth.cookie_extract import extract_cookies
@@ -16,12 +17,12 @@ class TokenRefreshFailed(Exception):
 
 
 class AuthManager:
-	def __init__(self, data_dir: Path, *, logger: Logger | None = None):
+	def __init__(self, data_dir: Path, *, logger: Logger | None = None) -> None:
 		self._store = TokenStore(data_dir / "auth")
-		self._token: dict | None = None
+		self._token: dict[str, Any] | None = None
 		self._logger = logger or Logger()
 
-	def get_token(self) -> dict:
+	def get_token(self) -> dict[str, Any]:
 		if self._token is not None:
 			return self._token
 		self._token = self._store.load()
@@ -36,14 +37,14 @@ class AuthManager:
 		cookie_source: str | None = None,
 		cdp_url: str | None = None,
 		force_cdp: bool = False,
-	) -> dict:
+	) -> dict[str, Any]:
 		"""三级降级登录：Cookie 提取 → CDP 自动探测 → patchright 扫码。
 
 		Args:
 			force_cdp: 为 True 时跳过 Cookie 提取，CDP 不可用直接报错。
 		"""
 		method = "未知"
-		token: dict | None = None
+		token: dict[str, Any] | None = None
 
 		if force_cdp:
 			# --cdp 强制模式：跳过 Cookie，CDP 不可用直接抛异常
@@ -99,7 +100,7 @@ class AuthManager:
 		self._token = token
 		return {**token, "_method": method}
 
-	def _verify_cookie(self, token: dict) -> bool:
+	def _verify_cookie(self, token: dict[str, Any]) -> bool:
 		"""验证 Cookie 是否有效（不依赖 stoken，直接用 Cookie 请求用户信息）"""
 		try:
 			import httpx
@@ -116,7 +117,7 @@ class AuthManager:
 				timeout=10,
 			)
 			data = resp.json()
-			return data.get("code") == 0
+			return bool(data.get("code") == 0)
 		except (httpx.HTTPError, ValueError, KeyError):
 			return False
 
@@ -143,7 +144,7 @@ class AuthManager:
 			except Exception as e:
 				raise TokenRefreshFailed(f"Token 刷新失败: {e}") from e
 
-	def check_status(self) -> dict | None:
+	def check_status(self) -> dict[str, Any] | None:
 		return self._store.load()
 
 	def logout(self) -> None:

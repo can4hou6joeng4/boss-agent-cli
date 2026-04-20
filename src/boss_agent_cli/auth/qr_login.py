@@ -3,6 +3,7 @@
 Flow: randkey → getqrcode → poll scan → scanLogin/dispatcher → extract cookies.
 """
 import sys
+from typing import Any
 import time
 
 import httpx
@@ -13,7 +14,7 @@ _POLL_INTERVAL = 2
 _DEFAULT_TIMEOUT = 120
 
 
-def qr_login_httpx(*, timeout: int = _DEFAULT_TIMEOUT) -> dict:
+def qr_login_httpx(*, timeout: int = _DEFAULT_TIMEOUT) -> dict[str, Any]:
 	"""Execute QR login flow via httpx only.
 
 	Returns token dict: {"cookies": {...}, "stoken": "", "user_agent": ua}

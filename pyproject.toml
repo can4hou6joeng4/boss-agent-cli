@@ -138,7 +138,10 @@ module = [
 	"boss_agent_cli.api.endpoints",
 	"boss_agent_cli.api.endpoints_loader",
 	"boss_agent_cli.commands.stats",
+	"boss_agent_cli.commands.chat_summary",
 	"boss_agent_cli.cache.store",
+	"boss_agent_cli.auth.manager",
+	"boss_agent_cli.auth.qr_login",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

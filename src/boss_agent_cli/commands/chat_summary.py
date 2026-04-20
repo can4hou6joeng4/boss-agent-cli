@@ -12,7 +12,7 @@ from boss_agent_cli.display import handle_auth_errors, handle_error_output, hand
 @click.option("--count", default=20, help="每页消息数量")
 @click.pass_context
 @handle_auth_errors("chat-summary")
-def chat_summary_cmd(ctx, security_id, page, count):
+def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> None:
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	delay = ctx.obj["delay"]
