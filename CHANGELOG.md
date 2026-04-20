@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [1.8.14] - 2026-04-20
+
+### Changed
+- **严格类型检查白名单扩至 51 个模块**（#111）— 新增 8 个非 CLI 模块：`ai/config` / `ai/service` / `ai/prompts` / `resume/templates` / `resume/export` / `auth/token_store` / `auth/cookie_extract` / `main`
+- `token_store.load()` / `ai/service.chat()` 使用 `cast()` 精确声明 JSON 返回类型
+- `main.cli` 重命名局部变量避免 `str → Path` 类型冲突
+- `ai/config.get_base_url` 显式 `str()` 包装解决 `warn_return_any`
+
 ## [1.8.13] - 2026-04-20
 
 ### Changed
