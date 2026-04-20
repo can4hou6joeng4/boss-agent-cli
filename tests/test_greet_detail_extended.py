@@ -13,6 +13,7 @@ from boss_agent_cli.main import cli
 _PATCHES = {
 	"auth": "boss_agent_cli.commands.greet.AuthManager",
 	"client": "boss_agent_cli.commands.greet.BossClient",
+	"platform": "boss_agent_cli.commands.greet.get_platform_instance",
 	"cache": "boss_agent_cli.commands.greet.CacheStore",
 }
 
@@ -21,7 +22,7 @@ def _invoke_greet(*args, tmp_path, cache_greeted=False, greet_side_effect=None):
 	runner = CliRunner()
 	with (
 		patch(_PATCHES["auth"]),
-		patch(_PATCHES["client"]) as mock_client_cls,
+		patch(_PATCHES["platform"]) as mock_get_platform,
 		patch(_PATCHES["cache"]) as mock_cache_cls,
 	):
 		mock_cache = MagicMock()
@@ -29,16 +30,16 @@ def _invoke_greet(*args, tmp_path, cache_greeted=False, greet_side_effect=None):
 		mock_cache_cls.return_value.__enter__ = lambda s: mock_cache
 		mock_cache_cls.return_value.__exit__ = MagicMock(return_value=False)
 
-		mock_client = MagicMock()
+		mock_platform = MagicMock()
 		if greet_side_effect:
-			mock_client.greet.side_effect = greet_side_effect
-		mock_client_cls.return_value.__enter__ = lambda s: mock_client
-		mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+			mock_platform.greet.side_effect = greet_side_effect
+		mock_get_platform.return_value.__enter__ = lambda s: mock_platform
+		mock_get_platform.return_value.__exit__ = MagicMock(return_value=False)
 
 		cli_args = ["--data-dir", str(tmp_path), *args]
 		result = runner.invoke(cli, cli_args)
 	parsed = json.loads(result.output) if result.output.strip() else None
-	return result.exit_code, parsed, mock_cache, mock_client
+	return result.exit_code, parsed, mock_cache, mock_platform
 
 
 # ── greet 命令 ──────────────────────────────────────────────────────

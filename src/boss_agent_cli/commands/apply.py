@@ -1,8 +1,8 @@
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_message_panel
 
 
@@ -16,8 +16,6 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 	"""发起最小可用投递/立即沟通动作（当前复用立即沟通链路）。"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		if cache.is_applied(security_id, job_id):
@@ -31,8 +29,8 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 			return
 
 		auth = AuthManager(data_dir, logger=logger)
-		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-			resp = client.apply(security_id, job_id, lid=lid)
+		with get_platform_instance(ctx, auth) as platform:
+			resp = platform.apply(security_id, job_id, lid=lid)
 			if resp.get("code") not in (None, 0):
 				handle_error_output(
 					ctx,

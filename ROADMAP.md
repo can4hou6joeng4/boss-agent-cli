@@ -40,7 +40,7 @@
 - [ ] 多平台支持：拉勾 / 智联 / 猎聘适配器 — API 调研已全部完成（Issue #90 已闭环 · [docs/research/platforms/](docs/research/platforms/)），结论：**智联为 v2.0 优先接入候选**（2-3 周），拉勾和猎聘不建议接入
   - [x] Week 1a：Platform ABC 骨架 + BossPlatform adapter（#129，零行为变化）
   - [x] Week 1b：`--platform` 全局 CLI 选项 + `get_platform_instance` helper + schema 暴露 current_platform
-  - [ ] Week 1c：逐步迁移 30+ 命令到 Platform 接口调用
+  - [ ] Week 1c：逐步迁移 30+ 命令到 Platform 接口调用（已迁移 2 个：greet / apply）
   - [ ] Week 2：ZhilianPlatform 只读实现（search / detail / recommend / user_info）
   - [ ] Week 3：ZhilianPlatform 写操作（greet / apply）+ 文档 + MCP 适配
 

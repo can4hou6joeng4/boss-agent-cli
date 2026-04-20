@@ -392,3 +392,4 @@ boss logout       -> 退出登录
 | 2026-04-19 | 智能能力扩展 | ai 命令组新增 interview-prep 和 chat-coach 两个子命令，协议服务新增两个工具（41→43），测试 814→828，版本 1.8.0 |
 | 2026-04-21 | Platform 抽象 | 新增 platforms/ 子包定义 Platform ABC + BossPlatform adapter（Week 1a 骨架，零行为变化），Issue #90 研究闭环，下游嵌入 API 新增 4 个导出符号，测试 927→956，mypy 严格模块 66→69 |
 | 2026-04-21 | Platform CLI | 新增 --platform 全局选项与 get_platform_instance 辅助函数，schema 输出增加 current_platform / supported_platforms 字段，config.json 支持 platform 字段，测试 956→966，mypy 严格模块 69→70 |
+| 2026-04-21 | Platform 迁移 | greet 和 apply 命令从 BossClient 直用切换到 get_platform_instance，Platform ABC 补齐 with 上下文管理器（__enter__/__exit__/close），测试 966→971 |

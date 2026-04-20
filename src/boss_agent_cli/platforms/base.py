@@ -10,6 +10,7 @@ Week 1 交付：接口定义 + BOSS 直聘 adapter，不改动现有命令行为
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from types import TracebackType
 from typing import Any
 
 
@@ -23,6 +24,9 @@ class Platform(ABC):
 
 	写操作（greet / apply）和沟通接口（friend_list / chat_messages）为可选，
 	平台不支持时抛 NotImplementedError。
+
+	资源管理：支持 ``with`` 上下文管理器语法，``__exit__`` 自动调用 ``close()``
+	释放底层 client 持有的 httpx / 浏览器资源。
 	"""
 
 	name: str
@@ -35,6 +39,25 @@ class Platform(ABC):
 		具体实现可以覆盖参数类型（如 ``BossPlatform`` 声明 ``BossClient``）。
 		"""
 		self._client: Any = client
+
+	# ── 资源生命周期 ───────────────────────────────────
+
+	def close(self) -> None:
+		"""释放底层资源。默认委托给 ``client.close()``（若存在）。"""
+		close_fn = getattr(self._client, "close", None)
+		if callable(close_fn):
+			close_fn()
+
+	def __enter__(self) -> "Platform":
+		return self
+
+	def __exit__(
+		self,
+		exc_type: type[BaseException] | None,
+		exc_val: BaseException | None,
+		exc_tb: TracebackType | None,
+	) -> None:
+		self.close()
 
 	@abstractmethod
 	def is_success(self, response: dict[str, Any]) -> bool:

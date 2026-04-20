@@ -163,3 +163,41 @@ class TestPlatformInterfaceCompleteness:
 		assert callable(plat.is_success)
 		assert callable(plat.unwrap_data)
 		assert callable(plat.parse_error)
+
+
+class TestPlatformContextManager:
+	"""Platform 作为 with 上下文管理器释放底层资源。"""
+
+	def test_platform_supports_with_statement(self) -> None:
+		client = MagicMock()
+		plat = BossPlatform(client)
+		with plat as p:
+			assert p is plat
+		client.close.assert_called_once()
+
+	def test_close_calls_client_close(self) -> None:
+		client = MagicMock()
+		plat = BossPlatform(client)
+		plat.close()
+		client.close.assert_called_once()
+
+	def test_close_tolerates_missing_close(self) -> None:
+		"""底层 client 没有 close 方法时不抛错。"""
+		client_no_close = object()
+		plat = BossPlatform(client_no_close)  # type: ignore[arg-type]
+		plat.close()  # 不抛错
+
+	def test_exit_closes_on_exception(self) -> None:
+		"""with 块内抛异常时仍然关闭底层资源。"""
+		client = MagicMock()
+		plat = BossPlatform(client)
+		with pytest.raises(RuntimeError):
+			with plat:
+				raise RuntimeError("boom")
+		client.close.assert_called_once()
+
+	def test_enter_returns_self(self) -> None:
+		client = MagicMock()
+		plat = BossPlatform(client)
+		entered = plat.__enter__()
+		assert entered is plat

@@ -5,14 +5,13 @@
 ## [Unreleased]
 
 ### Added
-- **`--platform` 全局 CLI 选项**（Issue #129 Week 1b）— 默认 `zhipin`，未知平台抛 `click.BadParameter`（exit code 2）；`~/.boss-agent/config.json` 支持 `"platform": "zhipin"` 字段持久化
-- `boss schema` 输出新增 `current_platform` 和 `supported_platforms` 字段，Agent 可实时感知当前平台配置
-- `src/boss_agent_cli/commands/_platform.py` — `get_platform_instance(ctx, auth)` 辅助函数为后续命令层迁移铺路
-- `tests/test_platform_cli.py` 新增 10 条测试覆盖 CLI 选项、schema 字段、helper 行为
+- **Platform 命令层迁移（Issue #129 Week 1c，首批 2 个命令）** — `boss greet` 和 `boss apply` 从 `BossClient` 直用切换到 `get_platform_instance(ctx, auth)`，走统一 Platform 抽象。
+- **Platform ABC 支持 `with` 上下文管理器** — `__enter__` / `__exit__` / `close()` 委托给底层 client，资源释放语义无损。
+- `tests/test_platform_base.py` 新增 5 条 context manager 契约测试。
 
 ### Changed
-- `Platform` ABC 统一 `__init__(client: Any)` 签名，子类可窄化类型（`BossPlatform` 保留 `BossClient` 类型）
-- mypy 严格白名单扩到 70（新增 `commands._platform`）
+- `commands/greet.py` 和 `commands/apply.py` 去除 delay / cdp_url 从 ctx.obj 手动读取的样板代码，复用 helper 统一处理。
+- 测试 Mock 位置从 `commands.greet.BossClient` / `commands.apply.BossClient` 迁到 `commands.greet.get_platform_instance` / `commands.apply.get_platform_instance`。
 
 ## [1.9.1] - 2026-04-20
 

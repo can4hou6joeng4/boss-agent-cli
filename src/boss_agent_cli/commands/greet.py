@@ -13,6 +13,7 @@ from boss_agent_cli.api.endpoints import (
 from boss_agent_cli.api.models import JobItem
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_error_output,
@@ -32,8 +33,6 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 	"""向指定招聘者打招呼"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		if cache.is_greeted(security_id):
@@ -46,7 +45,7 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 			return
 
 		auth = AuthManager(data_dir, logger=logger)
-		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+		with get_platform_instance(ctx, auth) as platform:
 			# greet_before hook — allows veto
 			hooks = ctx.obj.get("hooks")
 			if hooks:
@@ -64,7 +63,7 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 					)
 					return
 
-			client.greet(security_id, job_id, message)
+			platform.greet(security_id, job_id, message)
 
 			cache.record_greet(security_id, job_id)
 

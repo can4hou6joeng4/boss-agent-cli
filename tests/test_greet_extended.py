@@ -43,14 +43,14 @@ def _make_raw_job(name: str = "Go 开发", security_id: str = "sec_x") -> dict:
 # ── greet 成功路径 ─────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.greet.BossClient")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
-def test_greet_success_renders_message_and_records_cache(mock_cache_cls, mock_auth_cls, mock_client_cls):
+def test_greet_success_renders_message_and_records_cache(mock_cache_cls, mock_auth_cls, mock_get_platform):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
-	mock_client = _ctx_mock(mock_client_cls)
-	mock_client.greet.return_value = None
+	mock_platform = _ctx_mock(mock_get_platform)
+	mock_platform.greet.return_value = None
 
 	runner = CliRunner()
 	result = runner.invoke(cli, ["greet", "sec_001", "job_001"])
@@ -61,7 +61,7 @@ def test_greet_success_renders_message_and_records_cache(mock_cache_cls, mock_au
 	assert parsed["data"]["job_id"] == "job_001"
 	assert "打招呼成功" in parsed["data"]["message"]
 
-	mock_client.greet.assert_called_once_with("sec_001", "job_001", "")
+	mock_platform.greet.assert_called_once_with("sec_001", "job_001", "")
 	mock_cache.record_greet.assert_called_once_with("sec_001", "job_001")
 
 
