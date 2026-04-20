@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+## [1.8.16] - 2026-04-20
+
+### Changed
+- **严格类型检查覆盖 cache/store 模块**（#115）— 白名单 56 → 57，SQLite 存储层首次严格化
+- `__enter__` / `__exit__` 补精确 `TracebackType` 类型签名
+- `get_search` 返回值用 `cast("str", ...)` 修复 `no-any-return`
+- 所有 SQL 参数/返回 dict 补泛型 `dict[str, Any]`
+
+### Progress
+- cache/ + api/ 两个基础层全部严格化完成
+- 剩余 6 个硬骨头（外部依赖 playwright / aiohttp）：api/client / api/browser_client / auth/manager / auth/browser / bridge/daemon / bridge/client
+
 ## [1.8.15] - 2026-04-20
 
 ### Changed
