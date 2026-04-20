@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [1.8.17] - 2026-04-20
+
+### Changed
+- **严格类型检查白名单扩至 60 个模块**（#117）— 新增 `auth/manager` / `auth/qr_login` / `commands/chat_summary`
+- auth/ 层严格覆盖达到 4/5（剩 `auth/browser` 外部依赖）
+- 核心认证状态机（AuthManager）进入严格保护
+
 ## [1.8.16] - 2026-04-20
 
 ### Changed
