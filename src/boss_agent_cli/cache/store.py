@@ -3,13 +3,15 @@ import json
 import sqlite3
 import time
 from pathlib import Path
+from types import TracebackType
+from typing import Any, cast
 
 _SEARCH_TTL = 86400  # 24 hours
 _MAX_SEARCH_CACHE = 100
 
 
 class CacheStore:
-	def __init__(self, db_path: Path, *, search_ttl_seconds: int = _SEARCH_TTL):
+	def __init__(self, db_path: Path, *, search_ttl_seconds: int = _SEARCH_TTL) -> None:
 		self._db_path = db_path
 		self._search_ttl = search_ttl_seconds
 		db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -17,7 +19,7 @@ class CacheStore:
 		self._conn.execute("PRAGMA journal_mode=WAL")
 		self._init_tables()
 
-	def _init_tables(self):
+	def _init_tables(self) -> None:
 		self._conn.executescript("""
 			CREATE TABLE IF NOT EXISTS greet_records (
 				security_id TEXT PRIMARY KEY,
@@ -75,7 +77,7 @@ class CacheStore:
 		""")
 
 	@staticmethod
-	def _make_search_key(params: dict) -> str:
+	def _make_search_key(params: dict[str, Any]) -> str:
 		raw = json.dumps(params, sort_keys=True, ensure_ascii=False)
 		return hashlib.sha256(raw.encode()).hexdigest()
 
@@ -100,7 +102,7 @@ class CacheStore:
 		)
 		self._conn.commit()
 
-	def get_search(self, params: dict) -> str | None:
+	def get_search(self, params: dict[str, Any]) -> str | None:
 		key = self._make_search_key(params)
 		row = self._conn.execute(
 			"SELECT response, created_at FROM search_cache WHERE cache_key = ?",
@@ -112,9 +114,9 @@ class CacheStore:
 			self._conn.execute("DELETE FROM search_cache WHERE cache_key = ?", (key,))
 			self._conn.commit()
 			return None
-		return row[0]
+		return cast("str", row[0])
 
-	def put_search(self, params: dict, response: str) -> None:
+	def put_search(self, params: dict[str, Any], response: str) -> None:
 		key = self._make_search_key(params)
 		self._conn.execute(
 			"INSERT OR REPLACE INTO search_cache (cache_key, response, created_at) VALUES (?, ?, ?)",
@@ -134,7 +136,7 @@ class CacheStore:
 			)
 			self._conn.commit()
 
-	def save_saved_search(self, name: str, params: dict) -> None:
+	def save_saved_search(self, name: str, params: dict[str, Any]) -> None:
 		now = time.time()
 		existing = self._conn.execute(
 			"SELECT created_at FROM saved_searches WHERE name = ?",
@@ -147,7 +149,7 @@ class CacheStore:
 		)
 		self._conn.commit()
 
-	def get_saved_search(self, name: str) -> dict | None:
+	def get_saved_search(self, name: str) -> dict[str, Any] | None:
 		row = self._conn.execute(
 			"SELECT name, params, created_at, updated_at FROM saved_searches WHERE name = ?",
 			(name,),
@@ -161,7 +163,7 @@ class CacheStore:
 			"updated_at": row[3],
 		}
 
-	def list_saved_searches(self) -> list[dict]:
+	def list_saved_searches(self) -> list[dict[str, Any]]:
 		rows = self._conn.execute(
 			"SELECT name, params, created_at, updated_at FROM saved_searches ORDER BY updated_at DESC"
 		).fetchall()
@@ -188,7 +190,7 @@ class CacheStore:
 		return cursor.rowcount > 0
 
 	@staticmethod
-	def _make_watch_job_key(item: dict) -> str:
+	def _make_watch_job_key(item: dict[str, Any]) -> str:
 		security_id = item.get("security_id") or item.get("securityId") or ""
 		job_id = item.get("job_id") or item.get("encryptJobId") or ""
 		if security_id or job_id:
@@ -196,7 +198,7 @@ class CacheStore:
 		raw = json.dumps(item, sort_keys=True, ensure_ascii=False)
 		return hashlib.sha256(raw.encode()).hexdigest()
 
-	def record_watch_results(self, search_name: str, items: list[dict]) -> dict:
+	def record_watch_results(self, search_name: str, items: list[dict[str, Any]]) -> dict[str, Any]:
 		now = time.time()
 		new_items = []
 		seen_count = 0
@@ -248,7 +250,7 @@ class CacheStore:
 		).fetchone()
 		return row is not None
 
-	def add_shortlist(self, item: dict) -> None:
+	def add_shortlist(self, item: dict[str, Any]) -> None:
 		self._conn.execute(
 			"INSERT OR REPLACE INTO shortlist_records (security_id, job_id, title, company, city, salary, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 			(
@@ -264,7 +266,7 @@ class CacheStore:
 		)
 		self._conn.commit()
 
-	def list_shortlist(self) -> list[dict]:
+	def list_shortlist(self) -> list[dict[str, Any]]:
 		rows = self._conn.execute(
 			"SELECT security_id, job_id, title, company, city, salary, source, created_at FROM shortlist_records ORDER BY created_at DESC"
 		).fetchall()
@@ -326,7 +328,7 @@ class CacheStore:
 		self._conn.commit()
 		return cursor.rowcount > 0
 
-	def get_resume_applications(self, resume_name: str) -> list[dict]:
+	def get_resume_applications(self, resume_name: str) -> list[dict[str, Any]]:
 		"""查看某份简历投递的所有职位"""
 		rows = self._conn.execute(
 			"SELECT resume_name, security_id, job_id, job_title, company, status, notes, linked_at, updated_at "
@@ -348,7 +350,7 @@ class CacheStore:
 			for row in rows
 		]
 
-	def get_job_resumes(self, security_id: str, job_id: str) -> list[dict]:
+	def get_job_resumes(self, security_id: str, job_id: str) -> list[dict[str, Any]]:
 		"""查看某职位关联的所有简历版本"""
 		rows = self._conn.execute(
 			"SELECT resume_name, security_id, job_id, job_title, company, status, notes, linked_at, updated_at "
@@ -382,8 +384,13 @@ class CacheStore:
 	def close(self) -> None:
 		self._conn.close()
 
-	def __enter__(self):
+	def __enter__(self) -> "CacheStore":
 		return self
 
-	def __exit__(self, *args):
+	def __exit__(
+		self,
+		exc_type: type[BaseException] | None,
+		exc_val: BaseException | None,
+		exc_tb: TracebackType | None,
+	) -> None:
 		self.close()
