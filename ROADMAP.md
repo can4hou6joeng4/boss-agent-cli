@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v1.8.x（2026-04-20，patch 连发）：严格类型检查白名单 3 → 61（81% 覆盖）+ Python 嵌入 API + ai interview-prep / chat-coach + digest Markdown + Cursor/Windsurf 接入 + 4 家 AI 聚合入口 + 英文贡献指南
 - ✅ v1.8.0 (2026-04-19)：AI 沟通与面试扩展（ai interview-prep / ai chat-coach）+ 协议服务扩展至 43 工具
 - ✅ v1.7.0 (2026-04-17)：聊天回复草稿 + 投递漏斗 + 协议服务扩展至 41 工具
 
@@ -12,36 +13,36 @@
 ## 🎯 近期（v1.8.x）
 
 ### 数据可视化
-- [x] `boss stats --format html` 输出交互式漏斗报表
-- [ ] `boss digest --format md` 每日摘要邮件/飞书可直接发送
-- [x] codecov badge 集成到 README
+- [x] `boss stats --format html` 输出交互式漏斗报表（v1.7.1）
+- [x] `boss digest --format md` 每日摘要邮件/飞书可直接发送（v1.8.1）
+- [x] codecov badge 集成到 README（v1.7.1）
 
 ### Agent 集成
-- [ ] MCP 服务支持 HTTP streaming（stdio 已支持）
-- [ ] Codex / Cursor / Windsurf 专用接入示例
-- [x] OpenAI Functions 格式导出 `boss schema --format openai-tools`
+- [ ] MCP 服务支持 HTTP streaming（stdio 已支持）— Issue #48 外部贡献者认领中
+- [x] Codex / Cursor / Windsurf 专用接入示例（v1.8.1，docs/integrations/ 全覆盖）
+- [x] OpenAI Functions 格式导出 `boss schema --format openai-tools`（v1.7.1）
 
 ### 智能能力
-- [x] `boss ai chat-coach` — 基于聊天记录给出沟通技巧建议
-- [x] `boss ai interview-prep` — 基于 JD 生成模拟面试题
-- [ ] 支持 Claude 4.7 / GPT-5 最新模型
+- [x] `boss ai chat-coach` — 基于聊天记录给出沟通技巧建议（v1.8.0）
+- [x] `boss ai interview-prep` — 基于 JD 生成模拟面试题（v1.8.0）
+- [x] 支持 Claude 4.7 / GPT-5 最新模型（v1.8.2，provider 扩至 openrouter/qwen/zhipu/siliconflow）
 
 ## 🔮 中期（v2.0）
 
 ### 架构演进
-- [ ] mypy 严格模式全量接入
-- [ ] 类型签名导出到 `stubs/`，供下游 IDE 使用
-- [ ] Bridge 协议从 HTTP/WS 升级为 gRPC
+- [ ] mypy 严格模式全量接入 — **81% 已完成**（61/75 严格化，CLI 命令层 100%、api/* 6/7、auth/* 4/5、cache/ 1/1）。剩余 4 个 patchright/aiohttp 外部依赖模块。
+- [x] 类型签名导出到 `stubs/`，供下游 IDE 使用（v1.8.6，py.typed + canonical `__all__` + 16 条契约测试）
+- [ ] Bridge 协议从 HTTP/WS 升级为 gRPC — 先做调研（Issue #96）再启动实现
 
 ### 生态扩展
 - [ ] Web UI（React + Tailwind），适合非 Agent 用户
 - [ ] 浏览器扩展深度集成 BOSS 直聘原生页面
-- [ ] 多平台支持：拉勾 / 智联 / 猎聘适配器 — 先做 API 调研（#90）再启动实现
+- [ ] 多平台支持：拉勾 / 智联 / 猎聘适配器 — 先做 API 调研（Issue #90）再启动实现
 
 ### 社区建设
 - [ ] 中文 + 英文视频 demo
 - [ ] 提交到 [awesome-agents](https://github.com/kyrolabs/awesome-agents) / [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code)
-- [ ] 贡献者指南英文版（`CONTRIBUTING.en.md`）
+- [x] 贡献者指南英文版（`CONTRIBUTING.en.md`，v1.8.3）
 
 ## 💡 长期愿景
 
