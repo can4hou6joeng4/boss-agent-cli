@@ -1,5 +1,6 @@
 import datetime
 import os
+from typing import Any
 
 import click
 
@@ -34,7 +35,7 @@ _escape_md_cell = escape_md_cell
 	help="输出文件路径（不指定则自动保存到配置的 export_dir）")
 @click.pass_context
 @handle_auth_errors("chat")
-def chat_cmd(ctx, page, from_who, days, export_fmt, output_path):
+def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | None, export_fmt: str | None, output_path: str | None) -> None:
 	"""查看沟通列表（支持按发起方、时间筛选，支持导出）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -162,7 +163,7 @@ def chat_cmd(ctx, page, from_who, days, export_fmt, output_path):
 		if days is not None:
 			title += f"（最近 {days} 天）"
 
-		def _render(data):
+		def _render(data: list[dict[str, Any]]) -> None:
 			render_simple_list(
 				data,
 				title,

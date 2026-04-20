@@ -1,3 +1,6 @@
+from pathlib import Path
+from typing import Any
+
 import click
 
 from boss_agent_cli.api.client import BossClient
@@ -12,7 +15,7 @@ from boss_agent_cli.display import handle_auth_errors, handle_error_output, hand
 @click.option("--job-id", default="", help="职位加密 ID（提供时走 httpx 快速通道，跳过浏览器）")
 @click.pass_context
 @handle_auth_errors("detail")
-def detail_cmd(ctx, security_id, lid, job_id):
+def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> None:
 	"""查看职位完整信息（职位描述、地址、招聘者信息）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -51,7 +54,7 @@ def detail_cmd(ctx, security_id, lid, job_id):
 	handle_output(ctx, "detail", result, render=render_job_detail, hints=hints)
 
 
-def _detail_via_httpx(client, security_id, job_id, data_dir):
+def _detail_via_httpx(client: BossClient, security_id: str, job_id: str, data_dir: Path) -> dict[str, Any] | None:
 	"""快速通道：通过 httpx 获取职位详情（不需要浏览器）"""
 	raw = client.job_detail(job_id)
 	zp = raw.get("zpData", {})
@@ -84,7 +87,7 @@ def _detail_via_httpx(client, security_id, job_id, data_dir):
 	}
 
 
-def _detail_via_browser(client, security_id, lid, data_dir):
+def _detail_via_browser(client: BossClient, security_id: str, lid: str, data_dir: Path) -> dict[str, Any] | None:
 	"""兜底通道：通过浏览器 job_card 获取职位详情"""
 	raw = client.job_card(security_id, lid)
 	card = raw.get("zpData", {}).get("jobCard", {})

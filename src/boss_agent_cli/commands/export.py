@@ -1,6 +1,7 @@
 import csv
 import html as _html
 import json
+from typing import Any
 
 import click
 
@@ -19,7 +20,7 @@ from boss_agent_cli.display import handle_auth_errors, handle_output, render_exp
 @click.option("--output", "-o", default=None, help="输出文件路径（不指定则输出到 stdout JSON 信封）")
 @click.pass_context
 @handle_auth_errors("export")
-def export_cmd(ctx, query, city, salary, count, fmt, output):
+def export_cmd(ctx: click.Context, query: str, city: str | None, salary: str | None, count: int, fmt: str, output: str | None) -> None:
 	"""导出搜索结果为 CSV 或 JSON 文件"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -28,7 +29,7 @@ def export_cmd(ctx, query, city, salary, count, fmt, output):
 
 	auth = AuthManager(data_dir, logger=logger)
 	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-		all_items = []
+		all_items: list[dict[str, Any]] = []
 		page = 1
 		max_pages = (count + 14) // 15  # 每页约 15 条
 
@@ -85,7 +86,7 @@ def export_cmd(ctx, query, city, salary, count, fmt, output):
 			)
 
 
-def _write_to_file(items: list[dict], fmt: str, path: str):
+def _write_to_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 	if fmt == "json":
 		with open(path, "w", encoding="utf-8") as f:
 			json.dump(items, f, ensure_ascii=False, indent=2)
@@ -120,7 +121,7 @@ def _sanitize_csv_cell(value: str) -> str:
 	return value
 
 
-def _write_html(items: list[dict], path: str):
+def _write_html(items: list[dict[str, Any]], path: str) -> None:
 	"""将搜索结果导出为 HTML 表格。"""
 	esc = _html.escape
 	if not items:

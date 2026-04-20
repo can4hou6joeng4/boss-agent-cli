@@ -39,7 +39,7 @@ from boss_agent_cli.search_filters import (
 @click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
 @click.pass_context
 @handle_auth_errors("search")
-def search_cmd(ctx, query, preset, city, salary, experience, education, industry, scale, stage, job_type, welfare, page, no_cache, with_score):
+def search_cmd(ctx: click.Context, query: str, preset: str | None, city: str | None, salary: str | None, experience: str | None, education: str | None, industry: str | None, scale: str | None, stage: str | None, job_type: str | None, welfare: str | None, page: int, no_cache: bool, with_score: bool) -> None:
 	"""按关键词和筛选条件搜索职位列表"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

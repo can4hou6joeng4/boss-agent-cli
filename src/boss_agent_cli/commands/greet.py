@@ -28,7 +28,7 @@ from boss_agent_cli.display import (
 @click.option("--message", default="", help="自定义打招呼消息")
 @click.pass_context
 @handle_auth_errors("greet")
-def greet_cmd(ctx, security_id, job_id, message):
+def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -> None:
 	"""向指定招聘者打招呼"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -109,7 +109,7 @@ def greet_cmd(ctx, security_id, job_id, message):
 @click.option("--dry-run", is_flag=True, default=False, help="仅模拟执行，不实际打招呼")
 @click.pass_context
 @handle_auth_errors("batch-greet")
-def batch_greet_cmd(ctx, query, city, salary, experience, education, industry, scale, stage, job_type, count, dry_run):
+def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: str | None, experience: str | None, education: str | None, industry: str | None, scale: str | None, stage: str | None, job_type: str | None, count: int, dry_run: bool) -> None:
 	"""搜索后批量打招呼（上限 10）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

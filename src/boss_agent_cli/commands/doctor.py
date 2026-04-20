@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from typing import Any
 
 import click
 import httpx
@@ -14,15 +15,15 @@ from boss_agent_cli.display import handle_output, render_simple_list
 
 @click.command("doctor")
 @click.pass_context
-def doctor_cmd(ctx):
+def doctor_cmd(ctx: click.Context) -> None:
 	"""诊断本地运行环境、依赖和登录条件。"""
 	data_dir = ctx.obj["data_dir"]
 	auth = AuthManager(data_dir)
 	cdp_url = ctx.obj.get("cdp_url")
 
-	checks: list[dict] = []
+	checks: list[dict[str, Any]] = []
 
-	def add_check(name: str, status: str, detail: str, hint: str = ""):
+	def add_check(name: str, status: str, detail: str, hint: str | None = "") -> None:
 		checks.append({
 			"name": name,
 			"status": status,
@@ -54,7 +55,7 @@ def doctor_cmd(ctx):
 		Path.home() / ".cache" / "ms-playwright",
 		Path.home() / "Library" / "Caches" / "ms-playwright",
 	]
-	chromium_candidates = []
+	chromium_candidates: list[Path] = []
 	for base in patchright_browser_dirs:
 		if base.exists():
 			chromium_candidates.extend(base.glob("chromium-*"))

@@ -114,6 +114,12 @@ module = [
 	"boss_agent_cli.commands.chat_snapshot",
 	"boss_agent_cli.commands.preset",
 	"boss_agent_cli.commands.watch",
+	"boss_agent_cli.commands.search",
+	"boss_agent_cli.commands.greet",
+	"boss_agent_cli.commands.chat",
+	"boss_agent_cli.commands.detail",
+	"boss_agent_cli.commands.doctor",
+	"boss_agent_cli.commands.export",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true
