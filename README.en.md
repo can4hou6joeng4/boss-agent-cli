@@ -30,7 +30,7 @@ Every command outputs **structured JSON** that AI Agents parse directly. No frag
 
 ## 🌟 Core Capabilities
 
-- **34 CLI commands** covering the full loop: search → detail → greet → chat → follow-up → apply
+- **33 CLI commands** covering the full loop: search → detail → greet → chat → follow-up → apply
 - **JSON envelope output** on stdout, logs on stderr — Agent-friendly by design
 - **4-tier login fallback**: Cookie extract → CDP → QR httpx → patchright QR scan
 - **CDP mode** connects your local Chrome for real browser fingerprint and automatic stoken refresh
@@ -117,7 +117,7 @@ See [Agent Quickstart](docs/agent-quickstart.md) and [Capability Matrix](docs/ca
 
 ## 📚 Commands
 
-34 commands, grouped by stage:
+33 commands, grouped by stage:
 
 | Stage | Commands |
 |-------|----------|
@@ -129,6 +129,7 @@ See [Agent Quickstart](docs/agent-quickstart.md) and [Capability Matrix](docs/ca
 | **Resume** | `resume` · `me` |
 | **AI** | `ai config` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai suggest` · `ai reply` · `ai interview-prep` · `ai chat-coach` |
 | **Utility** | `schema` · `export` · `config` · `clean` |
+| **Recruiter** | `hr applications` · `hr resume` · `hr chat` · `hr jobs list/offline/online` · `hr candidates` · `hr reply` · `hr request-resume` |
 
 Run `boss <cmd> --help` for options, or `boss schema` for the complete JSON self-description.
 

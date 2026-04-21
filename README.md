@@ -22,7 +22,7 @@
 
 </div>
 
-> A CLI tool designed for AI Agents to interact with [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). All output is structured JSON, 34 commands, 4-tier login fallback. See [README.en.md](README.en.md) for the English version.
+> A CLI tool designed for AI Agents to interact with [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). All output is structured JSON, 33 commands, 4-tier login fallback. See [README.en.md](README.en.md) for the English version.
 
 ---
 
@@ -230,7 +230,7 @@ except AuthRequired:
 
 | 命令 | 说明 |
 |------|------|
-| `boss schema` | 输出 32 个命令的完整能力描述（Agent 首先调用） |
+| `boss schema` | 输出 33 个命令的完整能力描述（Agent 首先调用） |
 | `boss login` | 四级降级登录 |
 | `boss logout` | 退出登录 |
 | `boss status` | 检查登录态 |
@@ -278,11 +278,23 @@ except AuthRequired:
 | `boss shortlist add/list/remove` | 候选池 |
 | `boss preset add/list/remove` | 搜索预设 |
 
+### 招聘者模式
+
+| 命令 | 说明 |
+|------|------|
+| `boss hr applications` | 查看候选人投递申请列表 |
+| `boss hr resume` | 查看或请求候选人简历 |
+| `boss hr chat` | 查看与候选人的沟通列表 |
+| `boss hr jobs list/offline/online` | 职位列表与上下线管理 |
+| `boss hr candidates <keyword>` | 搜索候选人 |
+| `boss hr reply <friend_id> <message>` | 回复候选人消息 |
+| `boss hr request-resume <friend_id> --job-id <id>` | 请求候选人分享附件简历 |
+
 ### 简历与 AI
 
 | 命令 | 说明 |
 |------|------|
-| `boss resume init/list/show/edit/delete/export/import/clone/diff` | 本地简历管理 |
+| `boss resume init/list/show/edit/delete/export/import/clone/diff/link/applications` | 本地简历管理 |
 | `boss ai config` | 配置 AI 服务 |
 | `boss ai analyze-jd` | 分析岗位要求 |
 | `boss ai polish` | 润色简历 |
