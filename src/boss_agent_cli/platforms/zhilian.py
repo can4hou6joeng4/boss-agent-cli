@@ -34,7 +34,7 @@ _ERROR_CODE_MAP: dict[int, str] = {
 }
 
 # Week 2 时会替换为真实实现
-_NOT_YET_MSG = "Zhilian Week 2 待实现，当前为注册自证 stub，详见 Issue #129"
+_NOT_YET_MSG = "Zhilian Week 2 待实现，当前为注册自证 stub，追踪进度见 Issue #140（https://github.com/can4hou6joeng4/boss-agent-cli/issues/140）"
 
 
 class ZhilianPlatform(Platform):
