@@ -1,0 +1,71 @@
+base_url: "https://www.zhipin.com"
+
+web_pages:
+  boss_base: "/web/boss"
+  boss_recommend: "/web/boss/recommend/geeks"
+  boss_chat: "/web/boss/chat"
+  boss_jobs: "/web/boss/job"
+
+default_headers:
+  User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+  sec-ch-ua: '"Chromium";v="145", "Not(A:Brand";v="99", "Google Chrome";v="145"'
+  sec-ch-ua-mobile: "?0"
+  sec-ch-ua-platform: '"macOS"'
+  Sec-Fetch-Dest: "empty"
+  Sec-Fetch-Mode: "cors"
+  Sec-Fetch-Site: "same-origin"
+  Accept: "application/json, text/plain, */*"
+  Accept-Language: "zh-CN,zh;q=0.9,en;q=0.8"
+  DNT: "1"
+
+response_codes:
+  success: 0
+  stoken_expired: 37
+  rate_limited: 9
+  account_risk: 36
+
+endpoints:
+  boss_friend_list:
+    method: GET
+    path: "/wapi/zpchat/boss/friendList"
+    referer: "/web/boss/chat"
+  boss_chat_history:
+    method: GET
+    path: "/wapi/zpchat/boss/historyMsg"
+    referer: "/web/boss/chat"
+  boss_send_message:
+    method: POST
+    path: "/wapi/zpchat/boss/sendMsg"
+    referer: "/web/boss/chat"
+  boss_recommend_geeks:
+    method: GET
+    path: "/wapi/zpboss/recommend/geeks"
+    referer: "/web/boss/recommend/geeks"
+  boss_geek_resume:
+    method: GET
+    path: "/wapi/zpboss/geek/resume"
+    referer: "/web/boss/recommend/geeks"
+  boss_request_resume:
+    method: POST
+    path: "/wapi/zpboss/geek/requestResume"
+    referer: "/web/boss/recommend/geeks"
+  boss_job_list:
+    method: GET
+    path: "/wapi/zpboss/job/list"
+    referer: "/web/boss/job"
+  boss_job_detail:
+    method: GET
+    path: "/wapi/zpboss/job/detail"
+    referer: "/web/boss/job"
+  boss_job_publish:
+    method: POST
+    path: "/wapi/zpboss/job/publish"
+    referer: "/web/boss/job"
+  boss_job_edit:
+    method: POST
+    path: "/wapi/zpboss/job/edit"
+    referer: "/web/boss/job"
+  boss_job_close:
+    method: POST
+    path: "/wapi/zpboss/job/close"
+    referer: "/web/boss/job"
