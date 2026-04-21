@@ -1,7 +1,7 @@
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_message_panel
 
 
@@ -14,15 +14,13 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 	"""请求交换联系方式（手机号或微信）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 	auth = AuthManager(data_dir, logger=logger)
 
 	type_id = 2 if exchange_type == "wechat" else 1
 	type_label = "微信" if exchange_type == "wechat" else "手机号"
 
-	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-		friends_resp = client.friend_list(page=1)
+	with get_platform_instance(ctx, auth) as platform:
+		friends_resp = platform.friend_list(page=1)
 		zp_data = friends_resp.get("zpData", {})
 		items = zp_data.get("result") or zp_data.get("friendList") or []
 
@@ -41,7 +39,7 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 			)
 			return
 
-		client.exchange_contact(security_id, uid, friend_name, exchange_type=type_id)
+		platform.exchange_contact(security_id, uid, friend_name, exchange_type=type_id)
 
 		data = {
 			"security_id": security_id,

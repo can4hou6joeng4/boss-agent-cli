@@ -4,8 +4,8 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands.chat_export import render_export
 from boss_agent_cli.commands.chat_snapshot import save_snapshot_and_diff, load_snapshot
 from boss_agent_cli.commands.chat_utils import (
@@ -39,8 +39,6 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 	"""查看沟通列表（支持按发起方、时间筛选，支持导出）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 	auth = AuthManager(data_dir, logger=logger)
 
 	token = auth.check_status()
@@ -53,8 +51,8 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 		)
 		return
 
-	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-		resp = client.friend_list(page=page)
+	with get_platform_instance(ctx, auth) as platform:
+		resp = platform.friend_list(page=page)
 		zp_data = resp.get("zpData", {})
 		items = zp_data.get("result") or zp_data.get("friendList") or []
 

@@ -5,14 +5,11 @@
 ## [Unreleased]
 
 ### Added
-- **Platform ABC 扩展 9 个 P0+ 方法**（Issue #129 Week 1c 第 4 轮）— 补齐 BossClient 实际公开面所需的：`resume_baseinfo` / `resume_expect` / `deliver_list` / `job_card` / `interview_data` / `chat_history` / `friend_label` / `exchange_contact`。BossPlatform 全部透传给底层 `BossClient`；ZhilianPlatform 未覆盖走基类默认 `NotImplementedError`。
-- **5 个命令迁移到 Platform** — `interviews` / `detail` / `show` / `me` / `recommend` 从 `with BossClient(...)` 切换到 `with get_platform_instance(ctx, auth) as platform:`。
-- 迁移后 Platform 已覆盖 **8 个命令**（greet / apply / batch-greet / interviews / detail / show / me / recommend）。
+- **Week 1c 命令层迁移收口**（Issue #129 Week 1c 第 5 轮）— 剩余 6 个需网络请求的命令全部迁移到 `get_platform_instance`：`chat` / `chatmsg` / `mark` / `exchange` / `pipeline` / `digest`（包括 `pipeline` 的内部 `_collect_pipeline_items` 辅助函数）。
+- 至此 Week 1c 目标达成：**14 个命令**（前序 8 个 + 本轮 6 个）已全部经 Platform 抽象调用。只有 `search` 因为 `run_search_pipeline` 间接耦合的 BossClient 签名留待独立重构 PR。
 
 ### Changed
-- 相关测试文件 mock 位点从 `commands.X.BossClient` 切到 `commands.X.get_platform_instance`（`test_new_commands.py` / `test_commands.py` / `test_coverage_second_sprint.py` / `test_greet_detail_extended.py`）。
-- detail.py 内部辅助函数 `_detail_via_httpx` / `_detail_via_browser` 形参类型从 `BossClient` 改为 `Platform`。
-- me.py 保留 `from boss_agent_cli.api.client import AuthError` 仅做异常类型绑定，不再直接 instantiate `BossClient`。
+- 相关测试文件 mock 位点从 `commands.X.BossClient` → `commands.X.get_platform_instance`（覆盖 `test_chatmsg_extended.py` / `test_commands.py` / `test_coverage_second_sprint.py` / `test_digest_command.py` / `test_new_commands.py` / `test_pipeline_commands.py` 共 6 个测试文件）。
 
 ### Added
 - **ZhilianPlatform stub**（Issue #129 Week 1d · 抽象自证）— `src/boss_agent_cli/platforms/zhilian.py` 新增智联招聘 stub 实现：

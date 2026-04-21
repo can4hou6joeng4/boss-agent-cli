@@ -51,7 +51,7 @@ def _interview_item():
 	}
 
 
-@patch("boss_agent_cli.commands.pipeline.BossClient")
+@patch("boss_agent_cli.commands.pipeline.get_platform_instance")
 @patch("boss_agent_cli.commands.pipeline.AuthManager")
 def test_pipeline_command_returns_aggregated_items(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -68,7 +68,7 @@ def test_pipeline_command_returns_aggregated_items(mock_auth_cls, mock_client_cl
 	assert "interview" in stages
 
 
-@patch("boss_agent_cli.commands.pipeline.BossClient")
+@patch("boss_agent_cli.commands.pipeline.get_platform_instance")
 @patch("boss_agent_cli.commands.pipeline.AuthManager")
 def test_follow_up_command_filters_actionable_items(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)

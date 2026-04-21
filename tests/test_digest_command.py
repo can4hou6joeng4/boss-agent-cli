@@ -46,7 +46,7 @@ def _setup_digest_mocks(mock_client_cls):
 	return mock_client
 
 
-@patch("boss_agent_cli.commands.digest.BossClient")
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
 @patch("boss_agent_cli.commands.digest.AuthManager")
 def test_digest_command_returns_structured_sections(mock_auth_cls, mock_client_cls):
 	_setup_digest_mocks(mock_client_cls)
@@ -71,7 +71,7 @@ def test_digest_is_exposed_in_schema():
 # ── --format md 支持 ────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.digest.BossClient")
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
 @patch("boss_agent_cli.commands.digest.AuthManager")
 def test_digest_format_md_writes_markdown_to_stdout(mock_auth_cls, mock_client_cls):
 	"""--format md 未指定 -o 时把 Markdown 写到 stdout，不套 JSON 信封"""
@@ -88,7 +88,7 @@ def test_digest_format_md_writes_markdown_to_stdout(mock_auth_cls, mock_client_c
 	assert not result.output.lstrip().startswith("{")
 
 
-@patch("boss_agent_cli.commands.digest.BossClient")
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
 @patch("boss_agent_cli.commands.digest.AuthManager")
 def test_digest_format_md_with_output_path_writes_file(mock_auth_cls, mock_client_cls, tmp_path):
 	"""--format md -o <path> 写文件并返回 JSON 信封说明路径"""
@@ -111,7 +111,7 @@ def test_digest_format_md_with_output_path_writes_file(mock_auth_cls, mock_clien
 	assert "Go 开发" in content
 
 
-@patch("boss_agent_cli.commands.digest.BossClient")
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
 @patch("boss_agent_cli.commands.digest.AuthManager")
 def test_digest_format_md_contains_interview_details(mock_auth_cls, mock_client_cls):
 	"""Markdown 中面试条目应含岗位名 / 公司 / 时间"""
@@ -124,7 +124,7 @@ def test_digest_format_md_contains_interview_details(mock_auth_cls, mock_client_
 	assert "2026-04-14" in result.output
 
 
-@patch("boss_agent_cli.commands.digest.BossClient")
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
 @patch("boss_agent_cli.commands.digest.AuthManager")
 def test_digest_format_md_handles_empty_sections(mock_auth_cls, mock_client_cls):
 	"""没有任何数据时 md 应写友好占位符而非抛异常"""
@@ -140,7 +140,7 @@ def test_digest_format_md_handles_empty_sections(mock_auth_cls, mock_client_cls)
 	assert "暂无" in result.output or "无" in result.output
 
 
-@patch("boss_agent_cli.commands.digest.BossClient")
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
 @patch("boss_agent_cli.commands.digest.AuthManager")
 def test_digest_format_json_default_unchanged(mock_auth_cls, mock_client_cls):
 	"""未指定 format 时保持原来的 JSON 信封行为不变"""

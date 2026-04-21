@@ -33,7 +33,7 @@ def _make_friend(name="张HR", sid="sec_001", uid=12345):
 # ── 正常消息历史返回 ────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_returns_correct_messages(mock_auth_cls, mock_client_cls):
 	"""正常返回消息列表，包含正确的字段。
@@ -67,7 +67,7 @@ def test_chatmsg_returns_correct_messages(mock_auth_cls, mock_client_cls):
 	assert parsed["data"][2]["text"] == "方便聊聊吗"
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_message_fields_complete(mock_auth_cls, mock_client_cls):
 	"""返回的每条消息应包含 from/type/text/time 四个字段"""
@@ -90,7 +90,7 @@ def test_chatmsg_message_fields_complete(mock_auth_cls, mock_client_cls):
 	assert "time" in msg
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_hints_present(mock_auth_cls, mock_client_cls):
 	"""返回结果应包含 hints.next_actions"""
@@ -113,7 +113,7 @@ def test_chatmsg_hints_present(mock_auth_cls, mock_client_cls):
 # ── 空消息列表边界 ──────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_empty_messages(mock_auth_cls, mock_client_cls):
 	"""好友存在但消息列表为空时应返回空数组"""
@@ -130,7 +130,7 @@ def test_chatmsg_empty_messages(mock_auth_cls, mock_client_cls):
 	assert parsed["data"] == []
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_messages_key_missing(mock_auth_cls, mock_client_cls):
 	"""API 返回中缺少 messages 键时应安全降级为空列表"""
@@ -147,7 +147,7 @@ def test_chatmsg_messages_key_missing(mock_auth_cls, mock_client_cls):
 	assert parsed["data"] == []
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_uses_history_msg_list_fallback(mock_auth_cls, mock_client_cls):
 	"""API 返回 historyMsgList 而非 messages 时应正确解析"""
@@ -171,7 +171,7 @@ def test_chatmsg_uses_history_msg_list_fallback(mock_auth_cls, mock_client_cls):
 # ── 无效好友 ID 处理 ────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_invalid_security_id(mock_auth_cls, mock_client_cls):
 	"""不存在的 security_id 应返回 JOB_NOT_FOUND 错误"""
@@ -186,7 +186,7 @@ def test_chatmsg_invalid_security_id(mock_auth_cls, mock_client_cls):
 	assert "sec_nonexistent" in parsed["error"]["message"]
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_empty_friend_list(mock_auth_cls, mock_client_cls):
 	"""好友列表为空时应返回 JOB_NOT_FOUND"""
@@ -202,7 +202,7 @@ def test_chatmsg_empty_friend_list(mock_auth_cls, mock_client_cls):
 # ── 消息格式化逻辑 ─────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_message_type_mapping(mock_auth_cls, mock_client_cls):
 	"""消息类型应被正确映射为可读标签"""
@@ -230,7 +230,7 @@ def test_chatmsg_message_type_mapping(mock_auth_cls, mock_client_cls):
 	assert types[4] == "系统"
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_unknown_message_type(mock_auth_cls, mock_client_cls):
 	"""未知消息类型应显示为 '其他(N)' 格式"""
@@ -249,7 +249,7 @@ def test_chatmsg_unknown_message_type(mock_auth_cls, mock_client_cls):
 	assert parsed["data"][0]["type"] == "其他(99)"
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_self_message_identified(mock_auth_cls, mock_client_cls):
 	"""自己发的消息 from 应显示为 '我'。
@@ -275,7 +275,7 @@ def test_chatmsg_self_message_identified(mock_auth_cls, mock_client_cls):
 	assert parsed["data"][1]["from"] == "张HR"
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_time_formatting(mock_auth_cls, mock_client_cls):
 	"""消息时间应被格式化为 MM-DD HH:MM 格式"""
@@ -299,7 +299,7 @@ def test_chatmsg_time_formatting(mock_auth_cls, mock_client_cls):
 	assert ":" in time_str
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_no_time_field(mock_auth_cls, mock_client_cls):
 	"""消息缺少 time 字段时应返回空字符串"""
@@ -318,7 +318,7 @@ def test_chatmsg_no_time_field(mock_auth_cls, mock_client_cls):
 	assert parsed["data"][0]["time"] == ""
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_text_fallback_to_body(mock_auth_cls, mock_client_cls):
 	"""text 为空时应从 body.text 取值"""
@@ -343,7 +343,7 @@ def test_chatmsg_text_fallback_to_body(mock_auth_cls, mock_client_cls):
 	assert parsed["data"][0]["text"] == "来自body的内容"
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_text_both_empty(mock_auth_cls, mock_client_cls):
 	"""text 和 body.text 都为空时应返回空字符串"""
@@ -371,7 +371,7 @@ def test_chatmsg_text_both_empty(mock_auth_cls, mock_client_cls):
 # ── 分页参数 ────────────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_page_and_count_params(mock_auth_cls, mock_client_cls):
 	"""--page 和 --count 参数应传递给 chat_history"""
@@ -391,7 +391,7 @@ def test_chatmsg_page_and_count_params(mock_auth_cls, mock_client_cls):
 # ── Context manager 验证 ──────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_uses_client_context_manager(mock_auth_cls, mock_client_cls):
 	"""应使用 BossClient 的 context manager"""

@@ -102,7 +102,7 @@ def test_mark_resolve_label_unknown_raises():
 		_resolve_label("火星标签")
 
 
-@patch("boss_agent_cli.commands.mark.BossClient")
+@patch("boss_agent_cli.commands.mark.get_platform_instance")
 @patch("boss_agent_cli.commands.mark.AuthManager")
 def test_mark_security_id_not_found_in_friend_list(mock_auth_cls, mock_client_cls):
 	client = _ctx_mock(mock_client_cls)

@@ -489,7 +489,7 @@ def _make_friend_item(name, brand, relation_type, last_ts):
 	}
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_from_boss_filter(mock_auth_cls, mock_client_cls):
 	"""--from boss 只返回 relationType=1 的记录"""
@@ -515,7 +515,7 @@ def test_chat_from_boss_filter(mock_auth_cls, mock_client_cls):
 	assert all(f["initiated_by"] == "对方主动" for f in parsed["data"])
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_days_filter(mock_auth_cls, mock_client_cls):
 	"""--days 3 只返回最近 3 天的记录"""
@@ -541,7 +541,7 @@ def test_chat_days_filter(mock_auth_cls, mock_client_cls):
 	assert parsed["data"][0]["brand_name"] == "阿里"
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_combined_filter(mock_auth_cls, mock_client_cls):
 	"""--from boss --days 3 组合筛选"""
@@ -569,7 +569,7 @@ def test_chat_combined_filter(mock_auth_cls, mock_client_cls):
 	assert parsed["data"][0]["initiated_by"] == "对方主动"
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_md(mock_auth_cls, mock_client_cls, tmp_path):
 	"""--export md 导出包含 security_id 和 diff 摘要"""
@@ -606,7 +606,7 @@ def test_chat_export_md(mock_auth_cls, mock_client_cls, tmp_path):
 	assert len(json_files) == 1
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_csv(mock_auth_cls, mock_client_cls, tmp_path):
 	"""--export csv 导出 CSV 格式"""
@@ -634,7 +634,7 @@ def test_chat_export_csv(mock_auth_cls, mock_client_cls, tmp_path):
 	assert "张HR" in content
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_json_default_path(mock_auth_cls, mock_client_cls, tmp_path):
 	"""--export json 不指定 -o 时自动保存到 export_dir"""
@@ -673,7 +673,7 @@ def test_chat_export_json_default_path(mock_auth_cls, mock_client_cls, tmp_path)
 	assert items[0]["security_id"] == "sec_张HR"
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_snapshot_diff(mock_auth_cls, mock_client_cls, tmp_path):
 	"""第二次导出时 diff 能检测新增条目"""
@@ -738,7 +738,7 @@ def test_md_escape_pipe_and_newline():
 	assert _escape_md_cell("正常") == "正常"
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_none_fields(mock_auth_cls, mock_client_cls, tmp_path):
 	"""API 返回 None 字段时不应 crash"""
@@ -772,7 +772,7 @@ def test_chat_export_none_fields(mock_auth_cls, mock_client_cls, tmp_path):
 	assert result.exit_code == 0
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_unknown_relation_type(mock_auth_cls, mock_client_cls, tmp_path):
 	"""未知 relationType 应渲染到「未知」分组，不被丢弃"""
@@ -818,7 +818,7 @@ def test_snapshot_corrupted_structure(tmp_path):
 	assert result == [{"security_id": "ok"}]
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_snapshot_page_merge(mock_auth_cls, mock_client_cls, tmp_path):
 	"""同天不同页的快照应合并，而非覆盖"""
@@ -861,7 +861,7 @@ def test_chat_snapshot_page_merge(mock_auth_cls, mock_client_cls, tmp_path):
 	assert "sec_P2_HR" in sids  # page 2 新增
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_html(mock_auth_cls, mock_client_cls, tmp_path):
 	"""--export html 导出 HTML 格式，包含表格、分组和映射表"""
@@ -895,7 +895,7 @@ def test_chat_export_html(mock_auth_cls, mock_client_cls, tmp_path):
 	assert "<table>" in content
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_html_xss_prevention(mock_auth_cls, mock_client_cls, tmp_path):
 	"""HTML 导出应转义特殊字符，防止 XSS"""

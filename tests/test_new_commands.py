@@ -31,7 +31,7 @@ def _make_friend(name="张HR", sid="sec_001", uid=12345):
 # ── chatmsg ──────────────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_success(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -53,7 +53,7 @@ def test_chatmsg_success(mock_auth_cls, mock_client_cls):
 	assert parsed["data"][0]["text"] == "你好"
 
 
-@patch("boss_agent_cli.commands.chatmsg.BossClient")
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_not_found(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -68,7 +68,7 @@ def test_chatmsg_not_found(mock_auth_cls, mock_client_cls):
 # ── mark ─────────────────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.mark.BossClient")
+@patch("boss_agent_cli.commands.mark.get_platform_instance")
 @patch("boss_agent_cli.commands.mark.AuthManager")
 def test_mark_add_label(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -82,7 +82,7 @@ def test_mark_add_label(mock_auth_cls, mock_client_cls):
 	assert "沟通中" in parsed["data"]["message"]
 
 
-@patch("boss_agent_cli.commands.mark.BossClient")
+@patch("boss_agent_cli.commands.mark.get_platform_instance")
 @patch("boss_agent_cli.commands.mark.AuthManager")
 def test_mark_remove_label(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -95,7 +95,7 @@ def test_mark_remove_label(mock_auth_cls, mock_client_cls):
 	assert parsed["data"]["action"] == "移除"
 
 
-@patch("boss_agent_cli.commands.mark.BossClient")
+@patch("boss_agent_cli.commands.mark.get_platform_instance")
 @patch("boss_agent_cli.commands.mark.AuthManager")
 def test_mark_not_found(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -110,7 +110,7 @@ def test_mark_not_found(mock_auth_cls, mock_client_cls):
 # ── exchange ─────────────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.exchange.BossClient")
+@patch("boss_agent_cli.commands.exchange.get_platform_instance")
 @patch("boss_agent_cli.commands.exchange.AuthManager")
 def test_exchange_phone(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -124,7 +124,7 @@ def test_exchange_phone(mock_auth_cls, mock_client_cls):
 	assert "手机号" in parsed["data"]["message"]
 
 
-@patch("boss_agent_cli.commands.exchange.BossClient")
+@patch("boss_agent_cli.commands.exchange.get_platform_instance")
 @patch("boss_agent_cli.commands.exchange.AuthManager")
 def test_exchange_wechat(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
