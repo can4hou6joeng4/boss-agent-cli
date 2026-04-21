@@ -97,7 +97,7 @@ cli.add_command(ai_cmd.ai_group, "ai")
 cli.add_command(stats.stats_cmd, "stats")
 
 # Recruiter commands
-cli.add_command(recruiter_group)
+cli.add_command(recruiter_group, "recruiter")
 recruiter_group.add_command(recruiter_applications.applications_cmd, "applications")
 recruiter_group.add_command(recruiter_resume.resume_cmd, "resume")
 recruiter_group.add_command(recruiter_chat.recruiter_chat_cmd, "chat")

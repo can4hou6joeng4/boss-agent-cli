@@ -531,6 +531,18 @@ SCHEMA_DATA = {
 				"chat-coach": "基于聊天记录诊断沟通状态并给出下一步建议",
 			},
 		},
+		"recruiter": {
+			"description": "招聘者模式命令组（需 --role recruiter）",
+			"args": [],
+			"options": {},
+			"subcommands": {
+				"applications": "查看候选人投递申请列表",
+				"resume": "查看或请求候选人简历",
+				"chat": "查看与候选人的沟通列表",
+				"jobs": "管理职位发布（list/detail/close）",
+				"candidates": "查看候选人池",
+			},
+		},
 	},
 	"global_options": {
 		"--data-dir": {
@@ -564,6 +576,12 @@ SCHEMA_DATA = {
 			"type": "bool",
 			"default": False,
 			"description": "强制 JSON 输出（即使在终端中，默认管道模式自动 JSON）",
+		},
+		"--role": {
+			"type": "string",
+			"default": "candidate",
+			"description": "角色模式：candidate（求职者）/ recruiter（招聘者）",
+			"choices": ["candidate", "recruiter"],
 		},
 	},
 	"error_codes": {
@@ -652,6 +670,26 @@ SCHEMA_DATA = {
 			"recoverable": True,
 			"recovery_action": "重试（模型输出不稳定时可能发生）",
 		},
+		"RECRUITER_NOT_AUTHORIZED": {
+			"message": "当前账号非招聘者账号",
+			"recoverable": True,
+			"recovery_action": "切换招聘者账号或使用 --role candidate",
+		},
+		"APPLICATION_NOT_FOUND": {
+			"message": "投递申请不存在",
+			"recoverable": False,
+			"recovery_action": None,
+		},
+		"RESUME_NOT_SHARED": {
+			"message": "候选人未分享简历",
+			"recoverable": True,
+			"recovery_action": "使用 resume <id> --request 请求简历",
+		},
+		"JOB_POST_LIMIT": {
+			"message": "职位发布数量已达上限",
+			"recoverable": False,
+			"recovery_action": None,
+		},
 	},
 	"conventions": {
 		"stdout": "仅 JSON 结构化数据（信封格式）",
@@ -678,6 +716,7 @@ def schema_cmd(ctx: click.Context, output_format: str) -> None:
 	data = dict(SCHEMA_DATA)
 	current = (ctx.obj or {}).get("platform") or "zhipin"
 	data["current_platform"] = current
+	data["current_role"] = (ctx.obj or {}).get("role") or "candidate"
 	data["supported_platforms"] = list_platforms()
 
 	if output_format == "openai-tools":

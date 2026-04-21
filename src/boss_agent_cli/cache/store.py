@@ -74,6 +74,22 @@ class CacheStore:
 				updated_at REAL NOT NULL,
 				PRIMARY KEY (resume_name, security_id, job_id)
 			);
+			CREATE TABLE IF NOT EXISTS recruiter_applications (
+				id TEXT PRIMARY KEY,
+				geek_id TEXT,
+				job_id TEXT,
+				status TEXT,
+				resume_shared INTEGER DEFAULT 0,
+				applied_at TEXT,
+				cached_at TEXT
+			);
+			CREATE TABLE IF NOT EXISTS recruiter_jobs (
+				job_id TEXT PRIMARY KEY,
+				title TEXT,
+				status TEXT,
+				applicant_count INTEGER DEFAULT 0,
+				cached_at TEXT
+			);
 		""")
 
 	@staticmethod
