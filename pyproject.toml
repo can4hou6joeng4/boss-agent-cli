@@ -151,6 +151,7 @@ module = [
 	"boss_agent_cli.platforms.base",
 	"boss_agent_cli.platforms.zhipin",
 	"boss_agent_cli.platforms.zhilian",
+	"boss_agent_cli.api.zhilian_client",
 	"boss_agent_cli.commands._platform",
 ]
 disallow_untyped_defs = true

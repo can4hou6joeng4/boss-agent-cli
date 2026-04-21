@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+### Added
+- **ZhilianClient 内部 HTTP 客户端骨架**（Issue #140 Week 2 起步）— 新增 `src/boss_agent_cli/api/zhilian_client.py`：
+  - 类结构 + `__init__(auth_manager, *, delay, cdp_url)` 签名完全对齐 `BossClient`
+  - `close()` / `__enter__` / `__exit__` 资源生命周期支持
+  - `atexit` 自动清理未显式关闭的实例
+  - 所有 P0 方法（search_jobs / job_detail / recommend_jobs / user_info）抛 `NotImplementedError` 附 Issue #140 链接
+- **`get_platform_instance` 支持按平台分发 client**（`_platform.py`）：
+  - zhipin → BossClient
+  - zhilian → ZhilianClient
+  - 新增 `_build_client(name, ...)` helper 封装分发逻辑
+- `tests/test_zhilian_client.py` 13 条契约测试覆盖类结构 / 上下文管理器 / stub 方法 / 平台路由分发
+
+### Changed
+- mypy 严格白名单扩到 72（新增 `api.zhilian_client`）
+
 ## [1.10.1] - 2026-04-21
 
 ### Added
