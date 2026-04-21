@@ -17,39 +17,81 @@
 - `schema` 输出新增 `current_role`、`--role` 选项、`recruiter` 命令组、4 个招聘者错误码
 - `CacheStore` 新增 `recruiter_applications`/`recruiter_jobs` 表
 - 测试 998→1021（+23），覆盖客户端、平台适配器、命令、端点加载
+- **ZhilianClient 内部 HTTP 客户端骨架**（Issue #140 Week 2 起步）— 新增 `src/boss_agent_cli/api/zhilian_client.py`：
+  - 类结构 + `__init__(auth_manager, *, delay, cdp_url)` 签名完全对齐 `BossClient`
+  - `close()` / `__enter__` / `__exit__` 资源生命周期支持
+  - `atexit` 自动清理未显式关闭的实例
+  - 所有 P0 方法（search_jobs / job_detail / recommend_jobs / user_info）抛 `NotImplementedError` 附 Issue #140 链接
+- **`get_platform_instance` 支持按平台分发 client**（`_platform.py`）：
+  - zhipin → BossClient
+  - zhilian → ZhilianClient
+  - 新增 `_build_client(name, ...)` helper 封装分发逻辑
+- `tests/test_zhilian_client.py` 13 条契约测试覆盖类结构 / 上下文管理器 / stub 方法 / 平台路由分发
 
 ### Changed
 - **`boss batch-greet` 迁移到 Platform**（Week 1c 第 3 个命令）— 从 `BossClient` 直用切换到 `get_platform_instance(ctx, auth)`，内部 `client.search_jobs` / `client.greet` 改为 `platform.search_jobs` / `platform.greet`。删除 `greet.py` 对 `BossClient` 的直接引用。
+- mypy 严格白名单扩到 72（新增 `api.zhilian_client`）
 
-### Changed
-- `tests/test_greet_extended.py` / `test_greet_detail_extended.py` / `test_commands.py` 共 10 处 mock patch 位置从 `commands.greet.BossClient` 切到 `commands.greet.get_platform_instance`。
-
-### Added
-- **ZhilianPlatform stub**（Issue #129 Week 1d · 抽象自证）— `src/boss_agent_cli/platforms/zhilian.py` 新增智联招聘 stub 实现：
-  - 元信息：`name="zhilian"` / `display_name="智联招聘"` / `base_url="https://m.zhaopin.com"`
-  - 包络适配按 [zhaopin.md](docs/research/platforms/zhaopin.md) §4 调研结果完整实现（`is_success` 检 `code==200` · `unwrap_data` 取 `data` key · `parse_error` 映射 401/403/429）
-  - P0/P1/P2 方法抛 `NotImplementedError("Week 2 待实现")`，Week 2 替换为真实现
-- `boss --platform zhilian` CLI 选项正式接入，`schema` 输出 `supported_platforms` 包含 `zhilian`
-- Python 嵌入 API 导出 `ZhilianPlatform`，下游可提前查看类型签名
-- `tests/test_zhilian_stub.py` 新增 **27 条契约测试**覆盖元信息 / 包络适配 / stub 行为 / CLI 集成
-
-### Changed
-- Platform 注册表从单一 `{"zhipin": BossPlatform}` 扩展为 `{"zhipin": BossPlatform, "zhilian": ZhilianPlatform}`
-- mypy 严格白名单扩到 71（新增 `platforms.zhilian`）
-- `tests/test_public_api.py` 同步 `EXPECTED_EXPORTS` 加入 `ZhilianPlatform`
-- schema `--platform` 描述更新为 "zhipin 生产可用；zhilian stub Week 2 真实现"
-
-### 底层逻辑
-Platform 抽象只有一个实现（zhipin）时**抽象设计是否正确尚未被证伪**。本轮加入 Zhilian stub 强制第二平台走完整注册 / CLI / schema / with 上下文流程，发现任何设计缺陷前置暴露（事实：全通过，抽象设计对齐 zhaopin.md §7 差异矩阵）。
+## [1.10.1] - 2026-04-21
 
 ### Added
-- **Platform 命令层迁移（Issue #129 Week 1c，首批 2 个命令）** — `boss greet` 和 `boss apply` 从 `BossClient` 直用切换到 `get_platform_instance(ctx, auth)`，走统一 Platform 抽象。
-- **Platform ABC 支持 `with` 上下文管理器** — `__enter__` / `__exit__` / `close()` 委托给底层 client，资源释放语义无损。
-- `tests/test_platform_base.py` 新增 5 条 context manager 契约测试。
+- **Week 1c 100% 完成**（PR #139）— 剩余 6 个命令迁移到 Platform 抽象：`search` / `export` / `chat_summary` / `history` / `status` / `watch`。`run_search_pipeline` 接受 `client: Any` 保持兼容，直接传 Platform 实例。
+- Platform ABC 新增 `job_history(page=1)` 方法（history 命令所需）。
+- **`docs/platform-abstraction.md`** — Platform 抽象设计与迁移 SOP 文档化 Week 1 全经验，包含 ABC 方法契约、迁移模板、测试 mock 位点规则、ZhilianPlatform 自证经验。
 
 ### Changed
-- `commands/greet.py` 和 `commands/apply.py` 去除 delay / cdp_url 从 ctx.obj 手动读取的样板代码，复用 helper 统一处理。
-- 测试 Mock 位置从 `commands.greet.BossClient` / `commands.apply.BossClient` 迁到 `commands.greet.get_platform_instance` / `commands.apply.get_platform_instance`。
+- 至此 `commands/` 目录下除 `_platform.py`（桥接层）外**无任何命令直接引用 BossClient**。
+- ZhilianPlatform stub 的 `NotImplementedError` 消息从"详见 Issue #129"更新为"追踪进度见 Issue #140"（PR #141）。
+
+### Fixed
+- CHANGELOG 中 [1.10.0] 的"14 命令 + search 留待独立 PR"描述，实际在本版本完成全量 20 命令迁移。
+
+## [1.10.0] - 2026-04-21
+
+### 🎯 核心里程碑：Platform 抽象架构落地（Issue #129 Week 1 全量收口）
+
+从 v1.9.1 到 v1.10.0，本版本沿着 C → A → B 三阶段路线把 Platform 抽象从"只有骨架"推到"两个平台注册 + 14 个命令走抽象"的稳定状态，为 v2.0 多平台（智联真实现）打平底盘。
+
+#### Platform ABC 完整设计（PR #131 / #132 / #133 / #136）
+- `src/boss_agent_cli/platforms/` 新子包定义 Platform ABC + 注册表 + BossPlatform adapter
+- P0 只读（`search_jobs` / `job_detail` / `recommend_jobs` / `user_info`）+ P1 写操作（`greet` / `apply`）+ P2 沟通（`friend_list`）
+- ABC 扩展 P0+：`resume_baseinfo` / `resume_expect` / `deliver_list` / `job_card` / `interview_data` / `chat_history` / `friend_label` / `exchange_contact`
+- ABC 统一 `__init__(client: Any)` 签名 + `with` 上下文管理器（`__enter__` / `__exit__` / `close()`）
+- `Platform` / `BossPlatform` / `ZhilianPlatform` / `get_platform` / `list_platforms` 导出到 `from boss_agent_cli import ...` 公共 API 面
+
+#### CLI 与注册表（PR #132 / #134）
+- `--platform` 全局 CLI 选项（默认 `zhipin`），未知平台 exit code 2
+- `~/.boss-agent/config.json` 支持 `"platform": "zhipin"` 字段持久化
+- `boss schema` 输出 `current_platform` + `supported_platforms`
+- Zhilian stub 接入注册表，`boss --platform zhilian schema` 端到端可用
+
+#### 命令层迁移（PR #133 / #135 / #136 / #137，共 14 个命令）
+| 命令 | PR | 使用的 Platform 方法 |
+|------|-----|--------------------|
+| `greet` / `apply` | #133 | `greet` / `apply` |
+| `batch-greet` | #135 | `search_jobs` + `greet` |
+| `interviews` / `detail` / `show` / `me` / `recommend` | #136 | P0 + P0+ 方法 |
+| `chat` / `chatmsg` / `mark` / `exchange` / `pipeline` / `digest` | #137 | `friend_list` / `chat_history` / `friend_label` / `exchange_contact` / `interview_data` |
+
+唯一留待独立 PR 的是 `search`，因为通过 `run_search_pipeline(client, ...)` 间接耦合 BossClient 签名需单独重构。
+
+#### ZhilianPlatform 自证（PR #134）
+- `src/boss_agent_cli/platforms/zhilian.py` — 智联招聘 stub 实现
+- 包络适配按 [zhaopin.md](docs/research/platforms/zhaopin.md) §4 完整实现（`code==200` / `data` key / 401+403+429 映射）
+- P0/P1/P2 方法抛 `NotImplementedError("Week 2 待实现")`
+- 27 条契约测试覆盖元信息 / 包络适配 / stub 行为 / CLI 集成
+
+#### Research 闭环
+- Issue #90 关闭（拉勾 + 智联 + 猎聘 API 调研全部归档到 `docs/research/platforms/`）
+
+### Tests & Quality
+- 测试 927 → **998**（+71 新增：25 platform ABC + 27 zhilian + 10 CLI + 5 context manager + 4 contract）
+- mypy 严格模块 66 → **71**（新增 4 个 platforms 子模块 + `commands._platform`）
+- mypy `--strict` 0 错误 / 80 源文件全覆盖
+- 7 PR 连合（#131/#132/#133/#134/#135/#136/#137），全部 CI 7/7 绿
+
+### Breaking Changes
+**无**。命令行为、信封格式、错误码枚举、CLI 接口全部向后兼容。Platform 抽象为纯重构，新增能力均在基类默认 `NotImplementedError` 形式下兼容老代码。
 
 ## [1.9.1] - 2026-04-20
 

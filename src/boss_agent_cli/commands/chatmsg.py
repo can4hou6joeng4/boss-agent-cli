@@ -3,8 +3,8 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_simple_list
 
 _MSG_TYPE_MAP = {
@@ -23,12 +23,10 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> 
 	"""查看与指定好友的聊天消息历史"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 	auth = AuthManager(data_dir, logger=logger)
 
-	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-		friends_resp = client.friend_list(page=1)
+	with get_platform_instance(ctx, auth) as platform:
+		friends_resp = platform.friend_list(page=1)
 		zp_data = friends_resp.get("zpData", {})
 		items = zp_data.get("result") or zp_data.get("friendList") or []
 
@@ -48,7 +46,7 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> 
 			)
 			return
 
-		resp = client.chat_history(gid, security_id, page=page, count=count)
+		resp = platform.chat_history(gid, security_id, page=page, count=count)
 		msg_data = resp.get("zpData", {})
 		messages = msg_data.get("messages") or msg_data.get("historyMsgList") or []
 

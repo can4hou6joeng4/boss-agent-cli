@@ -4,8 +4,8 @@ from pathlib import Path
 
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.digest import build_digest, render_digest_markdown
 from boss_agent_cli.display import handle_auth_errors, handle_output, render_message_panel
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
@@ -31,14 +31,12 @@ from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up
 def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, output_format: str, output_path: Path | None) -> None:
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 	auth = AuthManager(data_dir, logger=logger)
 
-	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-		friend_resp = client.friend_list(page=1)
+	with get_platform_instance(ctx, auth) as platform:
+		friend_resp = platform.friend_list(page=1)
 		chat_items = friend_resp.get("zpData", {}).get("result") or friend_resp.get("zpData", {}).get("friendList") or []
-		interview_resp = client.interview_data()
+		interview_resp = platform.interview_data()
 		interview_items = interview_resp.get("zpData", {}).get("interviewList") or []
 
 	items = build_pipeline_items(

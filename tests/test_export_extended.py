@@ -48,7 +48,7 @@ def _api_response(jobs: list[dict], has_more: bool = False) -> dict:
 # ── 文件输出 · CSV ────────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.export.BossClient")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_csv_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -73,7 +73,7 @@ def test_export_csv_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	assert parsed["data"]["path"] == str(out_path)
 
 
-@patch("boss_agent_cli.commands.export.BossClient")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_csv_formula_injection_sanitized(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	"""CSV 公式注入防护：以 =+@- 开头的值应前置单引号。"""
@@ -94,7 +94,7 @@ def test_export_csv_formula_injection_sanitized(mock_auth_cls, mock_client_cls, 
 	assert rows[0]["company"].startswith("'+")
 
 
-@patch("boss_agent_cli.commands.export.BossClient")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_csv_empty_result_writes_empty_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -111,7 +111,7 @@ def test_export_csv_empty_result_writes_empty_file(mock_auth_cls, mock_client_cl
 # ── 文件输出 · JSON ──────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.export.BossClient")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_json_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -135,7 +135,7 @@ def test_export_json_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 # ── 文件输出 · HTML ──────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.export.BossClient")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_html_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -162,7 +162,7 @@ def test_export_html_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	assert "共 1 条" in content
 
 
-@patch("boss_agent_cli.commands.export.BossClient")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_html_empty_result(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -176,7 +176,7 @@ def test_export_html_empty_result(mock_auth_cls, mock_client_cls, tmp_path: Path
 	assert "无数据" in content
 
 
-@patch("boss_agent_cli.commands.export.BossClient")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_html_escapes_user_content(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	"""HTML 输出必须转义用户数据避免 XSS。"""
@@ -198,7 +198,7 @@ def test_export_html_escapes_user_content(mock_auth_cls, mock_client_cls, tmp_pa
 # ── 分页循环 ──────────────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.export.BossClient")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_paginates_until_count_reached(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	"""当 count > 15 时应翻页直到达量或无 hasMore。"""
@@ -226,7 +226,7 @@ def test_export_paginates_until_count_reached(mock_auth_cls, mock_client_cls, tm
 	assert mock_client.search_jobs.call_count == 2
 
 
-@patch("boss_agent_cli.commands.export.BossClient")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_stops_when_no_more_and_last_page_short(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	"""页数据少于 count 且 hasMore=False 时应提前终止，不造成空循环。"""
@@ -242,7 +242,7 @@ def test_export_stops_when_no_more_and_last_page_short(mock_auth_cls, mock_clien
 	assert mock_client.search_jobs.call_count == 1
 
 
-@patch("boss_agent_cli.commands.export.BossClient")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_stops_when_job_list_empty(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	"""空 jobList 也应触发终止。"""

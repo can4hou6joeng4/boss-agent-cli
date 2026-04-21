@@ -39,7 +39,7 @@ def test_status_not_logged_in(mock_auth_cls):
 	assert parsed["error"]["code"] == "AUTH_REQUIRED"
 
 
-@patch("boss_agent_cli.commands.status.BossClient")
+@patch("boss_agent_cli.commands.status.get_platform_instance")
 @patch("boss_agent_cli.commands.status.AuthManager")
 def test_status_logged_in_happy_path(mock_auth_cls, mock_client_cls):
 	"""登录成功路径：check_status 返回 token，user_info 返回名字"""
@@ -58,7 +58,7 @@ def test_status_logged_in_happy_path(mock_auth_cls, mock_client_cls):
 	assert parsed["data"]["user_name"] == "张三"
 
 
-@patch("boss_agent_cli.commands.status.BossClient")
+@patch("boss_agent_cli.commands.status.get_platform_instance")
 @patch("boss_agent_cli.commands.status.AuthManager")
 def test_status_logged_in_unknown_user(mock_auth_cls, mock_client_cls):
 	"""user_info 缺失 name 字段时应回退到默认占位"""
@@ -77,7 +77,7 @@ def test_status_logged_in_unknown_user(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
-@patch("boss_agent_cli.commands.search.BossClient")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
 def test_search_invalid_city(mock_client_cls, mock_auth_cls, mock_cache_cls):
 	runner = CliRunner()
 	result = runner.invoke(cli, ["search", "golang", "--city", "火星"])
@@ -219,7 +219,7 @@ def test_doctor_with_partial_token_quality_warn(mock_auth_cls, mock_probe_cdp, m
 
 
 @patch("boss_agent_cli.commands.recommend.CacheStore")
-@patch("boss_agent_cli.commands.recommend.BossClient")
+@patch("boss_agent_cli.commands.recommend.get_platform_instance")
 @patch("boss_agent_cli.commands.recommend.AuthManager")
 def test_recommend_success(mock_auth_cls, mock_client_cls, mock_cache_cls):
 	mock_cache = _ctx_mock(mock_cache_cls)
@@ -263,7 +263,7 @@ def test_recommend_success(mock_auth_cls, mock_client_cls, mock_cache_cls):
 
 
 @patch("boss_agent_cli.commands.recommend.CacheStore")
-@patch("boss_agent_cli.commands.recommend.BossClient")
+@patch("boss_agent_cli.commands.recommend.get_platform_instance")
 @patch("boss_agent_cli.commands.recommend.AuthManager")
 def test_recommend_with_score(mock_auth_cls, mock_client_cls, mock_cache_cls):
 	mock_cache = _ctx_mock(mock_cache_cls)
@@ -307,7 +307,7 @@ def test_recommend_with_score(mock_auth_cls, mock_client_cls, mock_cache_cls):
 @patch("boss_agent_cli.commands.search.run_search_pipeline")
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
-@patch("boss_agent_cli.commands.search.BossClient")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
 def test_search_with_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.get_search.return_value = None
@@ -352,7 +352,7 @@ def test_search_with_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_
 
 @patch("boss_agent_cli.index_cache.save_index", side_effect=PermissionError("readonly"))
 @patch("boss_agent_cli.commands.recommend.CacheStore")
-@patch("boss_agent_cli.commands.recommend.BossClient")
+@patch("boss_agent_cli.commands.recommend.get_platform_instance")
 @patch("boss_agent_cli.commands.recommend.AuthManager")
 def test_recommend_ignores_index_cache_write_failure(mock_auth_cls, mock_client_cls, mock_cache_cls, mock_save_index):
 	mock_cache = _ctx_mock(mock_cache_cls)
@@ -396,7 +396,7 @@ def test_recommend_ignores_index_cache_write_failure(mock_auth_cls, mock_client_
 @patch("boss_agent_cli.commands.search.run_search_pipeline")
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
-@patch("boss_agent_cli.commands.search.BossClient")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
 def test_search_ignores_index_cache_write_failure(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline, mock_save_index):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.get_search.return_value = None
@@ -430,7 +430,7 @@ def test_search_ignores_index_cache_write_failure(mock_client_cls, mock_auth_cls
 	mock_save_index.assert_called_once()
 
 
-@patch("boss_agent_cli.commands.export.BossClient")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_to_stdout(mock_auth_cls, mock_client_cls):
 	mock_client =	_ctx_mock(mock_client_cls)
@@ -489,7 +489,7 @@ def _make_friend_item(name, brand, relation_type, last_ts):
 	}
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_from_boss_filter(mock_auth_cls, mock_client_cls):
 	"""--from boss 只返回 relationType=1 的记录"""
@@ -515,7 +515,7 @@ def test_chat_from_boss_filter(mock_auth_cls, mock_client_cls):
 	assert all(f["initiated_by"] == "对方主动" for f in parsed["data"])
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_days_filter(mock_auth_cls, mock_client_cls):
 	"""--days 3 只返回最近 3 天的记录"""
@@ -541,7 +541,7 @@ def test_chat_days_filter(mock_auth_cls, mock_client_cls):
 	assert parsed["data"][0]["brand_name"] == "阿里"
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_combined_filter(mock_auth_cls, mock_client_cls):
 	"""--from boss --days 3 组合筛选"""
@@ -569,7 +569,7 @@ def test_chat_combined_filter(mock_auth_cls, mock_client_cls):
 	assert parsed["data"][0]["initiated_by"] == "对方主动"
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_md(mock_auth_cls, mock_client_cls, tmp_path):
 	"""--export md 导出包含 security_id 和 diff 摘要"""
@@ -606,7 +606,7 @@ def test_chat_export_md(mock_auth_cls, mock_client_cls, tmp_path):
 	assert len(json_files) == 1
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_csv(mock_auth_cls, mock_client_cls, tmp_path):
 	"""--export csv 导出 CSV 格式"""
@@ -634,7 +634,7 @@ def test_chat_export_csv(mock_auth_cls, mock_client_cls, tmp_path):
 	assert "张HR" in content
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_json_default_path(mock_auth_cls, mock_client_cls, tmp_path):
 	"""--export json 不指定 -o 时自动保存到 export_dir"""
@@ -673,7 +673,7 @@ def test_chat_export_json_default_path(mock_auth_cls, mock_client_cls, tmp_path)
 	assert items[0]["security_id"] == "sec_张HR"
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_snapshot_diff(mock_auth_cls, mock_client_cls, tmp_path):
 	"""第二次导出时 diff 能检测新增条目"""
@@ -738,7 +738,7 @@ def test_md_escape_pipe_and_newline():
 	assert _escape_md_cell("正常") == "正常"
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_none_fields(mock_auth_cls, mock_client_cls, tmp_path):
 	"""API 返回 None 字段时不应 crash"""
@@ -772,7 +772,7 @@ def test_chat_export_none_fields(mock_auth_cls, mock_client_cls, tmp_path):
 	assert result.exit_code == 0
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_unknown_relation_type(mock_auth_cls, mock_client_cls, tmp_path):
 	"""未知 relationType 应渲染到「未知」分组，不被丢弃"""
@@ -818,7 +818,7 @@ def test_snapshot_corrupted_structure(tmp_path):
 	assert result == [{"security_id": "ok"}]
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_snapshot_page_merge(mock_auth_cls, mock_client_cls, tmp_path):
 	"""同天不同页的快照应合并，而非覆盖"""
@@ -861,7 +861,7 @@ def test_chat_snapshot_page_merge(mock_auth_cls, mock_client_cls, tmp_path):
 	assert "sec_P2_HR" in sids  # page 2 新增
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_html(mock_auth_cls, mock_client_cls, tmp_path):
 	"""--export html 导出 HTML 格式，包含表格、分组和映射表"""
@@ -895,7 +895,7 @@ def test_chat_export_html(mock_auth_cls, mock_client_cls, tmp_path):
 	assert "<table>" in content
 
 
-@patch("boss_agent_cli.commands.chat.BossClient")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_html_xss_prevention(mock_auth_cls, mock_client_cls, tmp_path):
 	"""HTML 导出应转义特殊字符，防止 XSS"""
@@ -928,7 +928,7 @@ def test_chat_export_html_xss_prevention(mock_auth_cls, mock_client_cls, tmp_pat
 @patch("boss_agent_cli.commands.search.run_search_pipeline")
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
-@patch("boss_agent_cli.commands.search.BossClient")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
 def test_search_account_risk_returns_error(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
 	"""搜索触发风控 code 36 时应返回 ACCOUNT_RISK 错误码"""
 	from boss_agent_cli.api.client import AccountRiskError

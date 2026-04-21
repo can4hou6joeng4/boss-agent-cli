@@ -1,7 +1,8 @@
 import click
 
-from boss_agent_cli.api.client import AuthError, BossClient
+from boss_agent_cli.api.client import AuthError
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_error_output, handle_output, render_sectioned_record
 
 
@@ -13,13 +14,11 @@ from boss_agent_cli.display import handle_error_output, handle_output, render_se
 def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 	"""获取当前登录用户的个人信息、简历、求职期望、投递记录"""
 	data_dir = ctx.obj["data_dir"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 	logger = ctx.obj.get("logger")
 
 	try:
 		auth = AuthManager(data_dir, logger=logger)
-		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+		with get_platform_instance(ctx, auth) as platform:
 			result = {}
 
 			sections = [section] if section else ["user", "resume", "expect", "deliver"]
@@ -27,7 +26,7 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 			if "user" in sections:
 				if logger:
 					logger.info("获取用户基本信息...")
-				resp = client.user_info()
+				resp = platform.user_info()
 				zp_data = resp.get("zpData", {})
 				result["user"] = {
 					"name": zp_data.get("name", ""),
@@ -40,21 +39,21 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 			if "resume" in sections:
 				if logger:
 					logger.info("获取简历基本信息...")
-				resp = client.resume_baseinfo()
+				resp = platform.resume_baseinfo()
 				zp_data = resp.get("zpData", {})
 				result["resume"] = zp_data
 
 			if "expect" in sections:
 				if logger:
 					logger.info("获取求职期望...")
-				resp = client.resume_expect()
+				resp = platform.resume_expect()
 				zp_data = resp.get("zpData", {})
 				result["expect"] = zp_data
 
 			if "deliver" in sections:
 				if logger:
 					logger.info("获取投递记录...")
-				resp = client.deliver_list(page=deliver_page)
+				resp = platform.deliver_list(page=deliver_page)
 				zp_data = resp.get("zpData", {})
 				result["deliver"] = zp_data
 

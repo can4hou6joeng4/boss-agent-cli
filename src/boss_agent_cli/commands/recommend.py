@@ -1,9 +1,9 @@
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.api.models import JobItem
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_output, render_job_table, handle_auth_errors
 from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.match_score import score_job_dict
@@ -18,15 +18,13 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 	"""基于简历的个性化职位推荐"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 
 	auth = AuthManager(data_dir, logger=logger)
-	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+	with get_platform_instance(ctx, auth) as platform:
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
-			expect_data = client.resume_expect().get("zpData", {}) if with_score else None
+			expect_data = platform.resume_expect().get("zpData", {}) if with_score else None
 
-			raw = client.recommend_jobs(page=page)
+			raw = platform.recommend_jobs(page=page)
 			zp_data = raw.get("zpData", {})
 			job_list = zp_data.get("jobList", [])
 

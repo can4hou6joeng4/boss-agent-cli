@@ -1,6 +1,5 @@
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.api.endpoints import (
 	CITY_CODES,
 	INDUSTRY_CODES,
@@ -10,6 +9,7 @@ from boss_agent_cli.api.endpoints import (
 )
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output
 from boss_agent_cli.search_filters import SearchFilterCriteria, resolve_welfare_keywords, run_search_pipeline
 
@@ -115,8 +115,6 @@ def watch_remove_cmd(ctx: click.Context, name: str) -> None:
 def watch_run_cmd(ctx: click.Context, name: str) -> None:
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		record = cache.get_saved_search(name)
@@ -150,9 +148,9 @@ def watch_run_cmd(ctx: click.Context, name: str) -> None:
 			job_type=params.get("job_type"),
 		)
 		auth = AuthManager(data_dir, logger=logger)
-		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+		with get_platform_instance(ctx, auth) as platform:
 			pipeline_result = run_search_pipeline(
-				client,
+				platform,
 				cache,
 				logger,
 				criteria=criteria,

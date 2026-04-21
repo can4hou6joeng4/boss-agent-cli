@@ -412,4 +412,6 @@ boss --role recruiter recruiter candidates                        -> 候选人�
 | 2026-04-21 | Platform CLI | 新增 --platform 全局选项与 get_platform_instance 辅助函数，schema 输出增加 current_platform / supported_platforms 字段，config.json 支持 platform 字段，测试 956→966，mypy 严格模块 69→70 |
 | 2026-04-21 | Platform 迁移 | greet 和 apply 命令从 BossClient 直用切换到 get_platform_instance，Platform ABC 补齐 with 上下文管理器（__enter__/__exit__/close），测试 966→971 |
 | 2026-04-21 | Platform 自证 | 新增 ZhilianPlatform stub 注册到 Platform 注册表，包络适配按 zhaopin.md 调研完整实现，P0/P1/P2 抛 NotImplementedError 待 Week 2 真实现，测试 971→998 |
+| 2026-04-21 | Platform ABC 扩展 | Platform ABC 补齐 9 个 P0+ 方法（resume_baseinfo/resume_expect/deliver_list/job_card/interview_data/chat_history/friend_label/exchange_contact），BossPlatform 全部透传；interviews/detail/show/me/recommend 共 5 个命令迁移到 Platform 接口 |
+| 2026-04-21 | Platform 迁移收口 | chat/chatmsg/mark/exchange/pipeline/digest 共 6 个命令迁移到 Platform（Week 1c 第 5 轮），累计 14 个命令已走 Platform 抽象 |
 | 2026-04-21 | 招聘者模式 | 新增 --role recruiter 全局选项、BossRecruiterClient 双通道客户端、RecruiterPlatform ABC + BossRecruiterPlatform 适配器、招聘者命令组（applications/resume/chat/jobs/candidates）、4 个招聘者错误码、2 个缓存表、recruiter.yaml 端点定义，测试 998→1021（+23） |

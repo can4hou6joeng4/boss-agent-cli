@@ -34,7 +34,7 @@ def _friend():
 	}
 
 
-@patch("boss_agent_cli.commands.chat_summary.BossClient")
+@patch("boss_agent_cli.commands.chat_summary.get_platform_instance")
 @patch("boss_agent_cli.commands.chat_summary.AuthManager")
 def test_chat_summary_command_success(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
