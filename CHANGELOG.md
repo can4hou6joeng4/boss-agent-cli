@@ -4,13 +4,19 @@
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-04-21
+
 ### Added
-- **Week 1c 100% 完成** — 剩余 6 个命令迁移到 Platform 抽象：`search` / `export` / `chat_summary` / `history` / `status` / `watch`。`run_search_pipeline` 接受 `client: Any` 保持兼容，直接传 Platform 实例。
+- **Week 1c 100% 完成**（PR #139）— 剩余 6 个命令迁移到 Platform 抽象：`search` / `export` / `chat_summary` / `history` / `status` / `watch`。`run_search_pipeline` 接受 `client: Any` 保持兼容，直接传 Platform 实例。
 - Platform ABC 新增 `job_history(page=1)` 方法（history 命令所需）。
-- 至此 `commands/` 目录下除 `_platform.py`（桥接层）外**无任何命令直接引用 BossClient**。
+- **`docs/platform-abstraction.md`** — Platform 抽象设计与迁移 SOP 文档化 Week 1 全经验，包含 ABC 方法契约、迁移模板、测试 mock 位点规则、ZhilianPlatform 自证经验。
 
 ### Changed
-- 相关测试 mock 位点从 `commands.X.BossClient` → `commands.X.get_platform_instance`。
+- 至此 `commands/` 目录下除 `_platform.py`（桥接层）外**无任何命令直接引用 BossClient**。
+- ZhilianPlatform stub 的 `NotImplementedError` 消息从"详见 Issue #129"更新为"追踪进度见 Issue #140"（PR #141）。
+
+### Fixed
+- CHANGELOG 中 [1.10.0] 的"14 命令 + search 留待独立 PR"描述，实际在本版本完成全量 20 命令迁移。
 
 ## [1.10.0] - 2026-04-21
 
