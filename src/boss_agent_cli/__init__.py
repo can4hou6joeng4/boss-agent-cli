@@ -18,7 +18,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.platforms import BossPlatform, Platform, ZhilianPlatform, get_platform, list_platforms
 from boss_agent_cli.resume.models import ResumeData, ResumeFile
 
-__version__ = "1.9.1"
+__version__ = "1.10.0"
 
 __all__ = [
 	# 版本
