@@ -1,10 +1,9 @@
 base_url: "https://www.zhipin.com"
 
 web_pages:
-  boss_base: "/web/boss"
-  boss_recommend: "/web/boss/recommend/geeks"
-  boss_chat: "/web/boss/chat"
-  boss_jobs: "/web/boss/job"
+  boss_chat: "/web/chat/index"
+  boss_recommend: "/web/chat/recommend"
+  boss_search: "/web/chat/search"
 
 default_headers:
   User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
@@ -25,47 +24,114 @@ response_codes:
   account_risk: 36
 
 endpoints:
+  # ── 候选人列表与筛选 ────────────────────────────────
   boss_friend_list:
+    method: POST
+    path: "/wapi/zprelation/friend/filterByLabel"
+    referer: "/web/chat/index"
+  boss_friend_detail:
+    method: POST
+    path: "/wapi/zprelation/friend/getBossFriendListV2.json"
+    referer: "/web/chat/index"
+  boss_friend_labels:
     method: GET
-    path: "/wapi/zpchat/boss/friendList"
-    referer: "/web/boss/chat"
+    path: "/wapi/zprelation/friend/label/get"
+    referer: "/web/chat/index"
+  boss_friend_note:
+    method: GET
+    path: "/wapi/zprelation/friend/getNoteAndLabels"
+    referer: "/web/chat/index"
+
+  # ── 消息 / 聊天 ────────────────────────────────────
+  boss_last_messages:
+    method: POST
+    path: "/wapi/zpchat/boss/userLastMsg"
+    referer: "/web/chat/index"
   boss_chat_history:
     method: GET
     path: "/wapi/zpchat/boss/historyMsg"
-    referer: "/web/boss/chat"
+    referer: "/web/chat/index"
   boss_send_message:
     method: POST
-    path: "/wapi/zpchat/boss/sendMsg"
-    referer: "/web/boss/chat"
-  boss_recommend_geeks:
-    method: GET
-    path: "/wapi/zpboss/recommend/geeks"
-    referer: "/web/boss/recommend/geeks"
-  boss_geek_resume:
-    method: GET
-    path: "/wapi/zpboss/geek/resume"
-    referer: "/web/boss/recommend/geeks"
-  boss_request_resume:
+    path: "/wapi/zpchat/fastReply/sendReplyMsg"
+    referer: "/web/chat/index"
+  boss_session_enter:
     method: POST
-    path: "/wapi/zpboss/geek/requestResume"
-    referer: "/web/boss/recommend/geeks"
+    path: "/wapi/zpchat/session/bossEnter"
+    referer: "/web/chat/index"
+
+  # ── 打招呼 / 新招呼 ────────────────────────────────
+  boss_greet_list:
+    method: GET
+    path: "/wapi/zprelation/friend/greetSort/getList"
+    referer: "/web/chat/index"
+  boss_greet_rec_list:
+    method: GET
+    path: "/wapi/zprelation/friend/greetRecSortList"
+    referer: "/web/chat/index"
+  boss_greet_new_list:
+    method: GET
+    path: "/wapi/zpchat/boss/newgreeting/getHistoryList"
+    referer: "/web/chat/index"
+
+  # ── 候选人搜索与简历查看 ────────────────────────────
+  boss_search_geek:
+    method: GET
+    path: "/wapi/zpitem/web/boss/search/geek/info"
+    referer: "/web/chat/search"
+  boss_view_geek:
+    method: GET
+    path: "/wapi/zpjob/view/geek/info"
+    referer: "/web/chat/index"
+  boss_chat_geek_info:
+    method: GET
+    path: "/wapi/zpjob/chat/geek/info"
+    referer: "/web/chat/index"
+
+  # ── 职位管理 ────────────────────────────────────────
   boss_job_list:
     method: GET
-    path: "/wapi/zpboss/job/list"
-    referer: "/web/boss/job"
-  boss_job_detail:
+    path: "/wapi/zpjob/job/chatted/jobList"
+    referer: "/web/chat/index"
+  boss_job_offline:
+    method: POST
+    path: "/wapi/zpjob/job/offline"
+    referer: "/web/chat/index"
+  boss_job_online:
+    method: POST
+    path: "/wapi/zpjob/job/online"
+    referer: "/web/chat/index"
+
+  # ── 交换联系方式（手机/微信/简历）──────────────────
+  boss_exchange_request:
+    method: POST
+    path: "/wapi/zpchat/exchange/request"
+    referer: "/web/chat/index"
+  boss_exchange_content:
+    method: POST
+    path: "/wapi/zprelation/friend/getExchangeContent"
+    referer: "/web/chat/index"
+
+  # ── 面试 ────────────────────────────────────────────
+  boss_interview_list:
     method: GET
-    path: "/wapi/zpboss/job/detail"
-    referer: "/web/boss/job"
-  boss_job_publish:
+    path: "/wapi/zpinterview/boss/interview/valid/list"
+    referer: "/web/chat/index"
+  boss_interview_invite:
     method: POST
-    path: "/wapi/zpboss/job/publish"
-    referer: "/web/boss/job"
-  boss_job_edit:
+    path: "/wapi/zpinterview/boss/interview/invite"
+    referer: "/web/chat/index"
+  boss_interview_detail:
+    method: GET
+    path: "/wapi/zpinterview/boss/interview/detail"
+    referer: "/web/chat/index"
+
+  # ── 候选人操作 ──────────────────────────────────────
+  boss_mark_unsuitable:
     method: POST
-    path: "/wapi/zpboss/job/edit"
-    referer: "/web/boss/job"
-  boss_job_close:
+    path: "/wapi/zprelation/friend/bossRemoveFilter"
+    referer: "/web/chat/index"
+  boss_add_friend:
     method: POST
-    path: "/wapi/zpboss/job/close"
-    referer: "/web/boss/job"
+    path: "/wapi/zprelation/friend/bossAddFriend"
+    referer: "/web/chat/index"

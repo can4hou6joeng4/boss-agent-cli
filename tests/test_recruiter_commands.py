@@ -18,7 +18,8 @@ def test_recruiter_group_is_registered():
 	runner = CliRunner()
 	result = runner.invoke(cli, ["--help"])
 	assert result.exit_code == 0
-	assert "recruiter" in result.output
+	assert "hr" in result.output
+	assert "\n  recruiter" not in result.output
 
 
 def test_recruiter_role_flag_is_accepted():
@@ -29,16 +30,44 @@ def test_recruiter_role_flag_is_accepted():
 
 @patch("boss_agent_cli.commands.recruiter.applications.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.applications.AuthManager")
-def test_applications_command_lists_applications(mock_auth_cls, mock_get_platform):
+def test_applications_command_lists_friends(mock_auth_cls, mock_get_platform):
 	mock_platform = _ctx_mock(mock_get_platform)
-	mock_platform.list_applications.return_value = {"code": 0, "zpData": {"list": []}}
+	mock_platform.friend_list.return_value = {"code": 0, "zpData": {"list": []}}
 
 	runner = CliRunner()
-	result = runner.invoke(cli, ["--role", "recruiter", "recruiter", "applications"])
+	result = runner.invoke(cli, ["--role", "recruiter", "hr", "applications"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	assert parsed["command"] == "recruiter-applications"
+
+
+@patch("boss_agent_cli.commands.recruiter.candidates.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.candidates.AuthManager")
+def test_candidates_command_searches(mock_auth_cls, mock_get_platform):
+	mock_platform = _ctx_mock(mock_get_platform)
+	mock_platform.search_geeks.return_value = {"code": 0, "zpData": {"list": []}}
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--role", "recruiter", "hr", "candidates", "Python"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["command"] == "recruiter-candidates"
+
+
+@patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
+def test_chat_command_lists_friends(mock_auth_cls, mock_get_platform):
+	mock_platform = _ctx_mock(mock_get_platform)
+	mock_platform.friend_list.return_value = {"code": 0, "zpData": {"list": []}}
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--role", "recruiter", "hr", "chat"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["command"] == "recruiter-chat"
 
 
 def test_role_default_is_candidate():
@@ -54,7 +83,8 @@ def test_recruiter_in_schema():
 	result = runner.invoke(cli, ["schema"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert "recruiter" in parsed["data"]["commands"]
+	assert "hr" in parsed["data"]["commands"]
+	assert "recruiter" not in parsed["data"]["commands"]
 
 
 def test_recruiter_role_in_schema_output():

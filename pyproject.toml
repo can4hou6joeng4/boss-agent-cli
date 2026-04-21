@@ -161,4 +161,5 @@ warn_return_any = true
 dev = [
     "mypy>=1.20.1",
     "types-pyyaml>=6.0.12.20260408",
+    "websockets>=16.0",
 ]

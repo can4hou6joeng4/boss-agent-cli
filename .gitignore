@@ -28,5 +28,12 @@ coverage.xml
 coverage.json
 htmlcov/
 
+# recruiter local test files
+/tests/test_recruiter_client.py
+/tests/test_recruiter_commands.py
+/tests/test_recruiter_endpoints.py
+/tests/test_recruiter_platform.py
+/tests/test_resume_parser.py
+
 # 本地专属的社区发帖草稿（未公开前保留在本地）
 docs/blog/linuxdo-promo.md

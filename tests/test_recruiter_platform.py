@@ -41,22 +41,51 @@ def test_boss_recruiter_parse_error():
 	assert "too fast" in message
 
 
-def test_list_applications_delegates():
+def test_friend_list_delegates():
 	client = _mock_client()
-	client.list_applications.return_value = {"code": 0, "zpData": {"result": []}}
+	client.friend_list.return_value = {"code": 0, "zpData": {"result": []}}
 	platform = BossRecruiterPlatform(client)
-	result = platform.list_applications(page=1, status="active")
-	client.list_applications.assert_called_once_with(page=1, status="active")
+	result = platform.friend_list(page=1, job_id="j1")
+	client.friend_list.assert_called_once_with(page=1, job_id="j1", label_id=0)
 	assert result == {"code": 0, "zpData": {"result": []}}
 
 
-def test_get_resume_delegates():
+def test_view_geek_delegates():
 	client = _mock_client()
-	client.get_resume.return_value = {"code": 0, "zpData": {"name": "Alice"}}
+	client.view_geek.return_value = {"code": 0, "zpData": {"name": "Alice"}}
 	platform = BossRecruiterPlatform(client)
-	result = platform.get_resume("g1", "s1")
-	client.get_resume.assert_called_once_with("g1", "s1")
+	result = platform.view_geek("g1", "j1", security_id="s1")
+	client.view_geek.assert_called_once_with("g1", job_id="j1", security_id="s1")
 	assert result == {"code": 0, "zpData": {"name": "Alice"}}
+
+
+def test_search_geeks_delegates():
+	client = _mock_client()
+	client.search_geeks.return_value = {"code": 0, "zpData": {"list": []}}
+	platform = BossRecruiterPlatform(client)
+	result = platform.search_geeks("Python", city="101010100", page=2)
+	client.search_geeks.assert_called_once_with(
+		"Python", city="101010100", page=2, job_id=None, experience=None, degree=None,
+	)
+	assert result == {"code": 0, "zpData": {"list": []}}
+
+
+def test_job_offline_delegates():
+	client = _mock_client()
+	client.job_offline.return_value = {"code": 0, "zpData": {}}
+	platform = BossRecruiterPlatform(client)
+	result = platform.job_offline("enc123")
+	client.job_offline.assert_called_once_with("enc123")
+	assert result == {"code": 0, "zpData": {}}
+
+
+def test_send_message_delegates():
+	client = _mock_client()
+	client.send_message.return_value = {"code": 0, "zpData": {}}
+	platform = BossRecruiterPlatform(client)
+	result = platform.send_message(123, "你好")
+	client.send_message.assert_called_once_with(123, "你好")
+	assert result == {"code": 0, "zpData": {}}
 
 
 def test_context_manager_closes():

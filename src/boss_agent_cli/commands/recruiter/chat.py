@@ -8,20 +8,22 @@ from boss_agent_cli.display import handle_auth_errors, handle_output
 
 @click.command("chat")
 @click.option("--page", default=1, type=int, help="页码")
+@click.option("--job-id", default=None, help="按职位筛选")
+@click.option("--label-id", default=0, type=int, help="按标签筛选（0=全部, 1=新招呼, 2=沟通中）")
 @click.pass_context
 @handle_auth_errors("recruiter-chat")
-def recruiter_chat_cmd(ctx: click.Context, page: int) -> None:
+def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_id: int) -> None:
 	"""查看与候选人的沟通列表"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
 	auth = AuthManager(data_dir, logger=logger)
 	with get_recruiter_platform_instance(ctx, auth) as platform:
-		result = platform.friend_list(page)
+		result = platform.friend_list(page=page, label_id=label_id, job_id=job_id)
 		data = result.get("zpData", {})
 		handle_output(
 			ctx, "recruiter-chat", data,
 			hints={"next_actions": [
-				"boss --role recruiter recruiter resume <id> — 查看候选人简历",
+				"boss --role recruiter recruiter resume <geek_id> --job-id <id> --security-id <id> — 查看候选人简历",
 			]},
 		)

@@ -1,7 +1,7 @@
 """Recruiter-side API client.
 
 Dual-channel like BossClient: httpx for low-risk reads, browser for high-risk writes.
-Shares BrowserSession pattern and RequestThrottle with BossClient.
+Endpoints sourced from newboss/boss-cli project (confirmed via reverse engineering).
 """
 import atexit
 import random
@@ -147,62 +147,117 @@ class BossRecruiterClient:
 
 	# ── Public API ───────────────────────────────────────────────────
 
-	# Application management (high-risk → browser)
-	def list_applications(self, job_id: str | None = None, status: str | None = None, keyword: str | None = None, page: int = 1) -> dict[str, Any]:
+	# ── 候选人列表与筛选 ────────────────────────────────
+
+	def friend_list(self, page: int = 1, label_id: int = 0, job_id: str | None = None) -> dict[str, Any]:
+		data: dict[str, Any] = {"labelId": label_id, "page": page}
+		if job_id:
+			data["encJobId"] = job_id
+		return self._request("POST", ep.BOSS_FRIEND_LIST_URL, data=data)
+
+	def friend_detail(self, friend_ids: list[int]) -> dict[str, Any]:
+		data = {"friendIds": ",".join(str(i) for i in friend_ids)}
+		return self._request("POST", ep.BOSS_FRIEND_DETAIL_URL, data=data)
+
+	def friend_labels(self) -> dict[str, Any]:
+		return self._request("GET", ep.BOSS_FRIEND_LABELS_URL)
+
+	# ── 打招呼 / 新招呼列表 ──────────────────────────────
+
+	def greet_list(self, page: int = 1, job_id: str | None = None) -> dict[str, Any]:
 		params: dict[str, Any] = {"page": page}
 		if job_id:
-			params["jobId"] = job_id
-		if status:
-			params["status"] = status
-		if keyword:
-			params["keyword"] = keyword
-		return self._browser_request("GET", ep.BOSS_RECOMMEND_GEEKS_URL, params=params)
+			params["encJobId"] = job_id
+		return self._request("GET", ep.BOSS_GREET_LIST_URL, params=params)
 
-	def application_detail(self, application_id: str) -> dict[str, Any]:
-		params = {"id": application_id}
-		return self._request("GET", ep.BOSS_RECOMMEND_GEEKS_URL, params=params)
+	def greet_rec_list(self, page: int = 1, job_id: str | None = None) -> dict[str, Any]:
+		params: dict[str, Any] = {"page": page}
+		if job_id:
+			params["encJobId"] = job_id
+		return self._request("GET", ep.BOSS_GREET_REC_LIST_URL, params=params)
 
-	# Resume (low-risk → httpx, high-risk request → browser)
-	def get_resume(self, geek_id: str, security_id: str) -> dict[str, Any]:
-		params = {"geekId": geek_id, "securityId": security_id}
-		return self._request("GET", ep.BOSS_GEEK_RESUME_URL, params=params)
+	# ── 候选人搜索与简历 ──────────────────────────────────
 
-	def request_resume(self, geek_id: str) -> dict[str, Any]:
-		data = {"geekId": geek_id}
-		return self._browser_request("POST", ep.BOSS_REQUEST_RESUME_URL, data=data)
+	def search_geeks(self, query: str, *, city: str | None = None, page: int = 1, job_id: str | None = None, experience: str | None = None, degree: str | None = None) -> dict[str, Any]:
+		params: dict[str, Any] = {"query": query, "page": page}
+		if city:
+			params["city"] = city
+		if job_id:
+			params["encryptJobId"] = job_id
+		if experience:
+			params["experience"] = experience
+		if degree:
+			params["degree"] = degree
+		return self._request("GET", ep.BOSS_SEARCH_GEEK_URL, params=params)
 
-	# Job management (low-risk → httpx, high-risk → browser)
-	def list_jobs(self, page: int = 1) -> dict[str, Any]:
-		params = {"page": page}
-		return self._request("GET", ep.BOSS_JOB_LIST_URL, params=params)
+	def view_geek(self, geek_id: str, job_id: str, security_id: str | None = None) -> dict[str, Any]:
+		params: dict[str, Any] = {"encryptGeekId": geek_id, "encryptJobId": job_id}
+		if security_id:
+			params["securityId"] = security_id
+		return self._request("GET", ep.BOSS_VIEW_GEEK_URL, params=params)
 
-	def job_detail(self, job_id: str) -> dict[str, Any]:
-		params = {"jobId": job_id}
-		return self._request("GET", ep.BOSS_JOB_DETAIL_URL, params=params)
+	def chat_geek_info(self, geek_id: str, security_id: str, job_id: int) -> dict[str, Any]:
+		params = {"encryptGeekId": geek_id, "securityId": security_id, "jobId": job_id}
+		return self._request("GET", ep.BOSS_CHAT_GEEK_INFO_URL, params=params)
 
-	def create_job(self, **params: Any) -> dict[str, Any]:
-		return self._browser_request("POST", ep.BOSS_JOB_PUBLISH_URL, data=params)
+	# ── 消息 / 聊天 ──────────────────────────────────────
 
-	def update_job(self, job_id: str, **params: Any) -> dict[str, Any]:
-		params["jobId"] = job_id
-		return self._browser_request("POST", ep.BOSS_JOB_EDIT_URL, data=params)
+	def last_messages(self, friend_ids: list[int]) -> dict[str, Any]:
+		data = {"friendIds": ",".join(str(i) for i in friend_ids), "src": 0}
+		return self._request("POST", ep.BOSS_LAST_MESSAGES_URL, data=data)
 
-	def close_job(self, job_id: str) -> dict[str, Any]:
-		data = {"jobId": job_id}
-		return self._browser_request("POST", ep.BOSS_JOB_CLOSE_URL, data=data)
-
-	# Chat (recruiter-side)
-	def friend_list(self, page: int = 1) -> dict[str, Any]:
-		params = {"page": page}
-		return self._request("GET", ep.BOSS_FRIEND_LIST_URL, params=params)
-
-	def chat_history(self, friend_id: str, page: int = 1) -> dict[str, Any]:
-		params = {"friendId": friend_id, "page": page}
+	def chat_history(self, gid: int, *, count: int = 20, max_msg_id: int | None = None) -> dict[str, Any]:
+		params: dict[str, Any] = {"gid": gid, "c": count, "src": 0}
+		if max_msg_id:
+			params["maxMsgId"] = max_msg_id
 		return self._request("GET", ep.BOSS_CHAT_HISTORY_URL, params=params)
 
-	def send_message(self, friend_id: str, message: str) -> dict[str, Any]:
-		data = {"friendId": friend_id, "message": message}
+	def send_message(self, gid: int, content: str) -> dict[str, Any]:
+		data = {"gid": gid, "content": content}
 		return self._browser_request("POST", ep.BOSS_SEND_MESSAGE_URL, data=data)
+
+	def session_enter(self, geek_id: str, expect_id: str, job_id: str, security_id: str) -> dict[str, Any]:
+		data = {"geekId": geek_id, "expectId": expect_id, "jobId": job_id, "securityId": security_id}
+		return self._browser_request("POST", ep.BOSS_SESSION_ENTER_URL, data=data)
+
+	# ── 职位管理 ──────────────────────────────────────────
+
+	def list_jobs(self) -> dict[str, Any]:
+		return self._request("GET", ep.BOSS_JOB_LIST_URL)
+
+	def job_offline(self, job_id: str) -> dict[str, Any]:
+		data = {"encryptJobId": job_id}
+		return self._browser_request("POST", ep.BOSS_JOB_OFFLINE_URL, data=data)
+
+	def job_online(self, job_id: str) -> dict[str, Any]:
+		data = {"encryptJobId": job_id}
+		return self._browser_request("POST", ep.BOSS_JOB_ONLINE_URL, data=data)
+
+	# ── 交换联系方式（手机/微信/简历）─────────────────────
+
+	def exchange_request(self, exchange_type: int, uid: int, job_id: int, gid: int) -> dict[str, Any]:
+		data = {"type": exchange_type, "uid": uid, "jobId": job_id, "gid": gid}
+		return self._browser_request("POST", ep.BOSS_EXCHANGE_REQUEST_URL, data=data)
+
+	def exchange_content(self, uid: int) -> dict[str, Any]:
+		data = {"uid": uid}
+		return self._request("POST", ep.BOSS_EXCHANGE_CONTENT_URL, data=data)
+
+	# ── 面试 ──────────────────────────────────────────────
+
+	def interview_list(self) -> dict[str, Any]:
+		return self._request("GET", ep.BOSS_INTERVIEW_LIST_URL)
+
+	def interview_invite(self, geek_id: str, job_id: str, security_id: str, **kwargs: Any) -> dict[str, Any]:
+		data: dict[str, Any] = {"encryptGeekId": geek_id, "encryptJobId": job_id, "securityId": security_id}
+		data.update(kwargs)
+		return self._browser_request("POST", ep.BOSS_INTERVIEW_INVITE_URL, data=data)
+
+	# ── 候选人操作 ────────────────────────────────────────
+
+	def mark_unsuitable(self, geek_id: str, job_id: str) -> dict[str, Any]:
+		data = {"encryptGeekId": geek_id, "encryptJobId": job_id}
+		return self._browser_request("POST", ep.BOSS_MARK_UNSUITABLE_URL, data=data)
 
 	# ── Lifecycle ────────────────────────────────────────────────────
 

@@ -4,12 +4,13 @@ import click
 
 from boss_agent_cli import __version__
 from boss_agent_cli.commands import schema, login, logout, status, doctor, search, detail, greet, recommend, export, cities, me, chat, chatmsg, chat_summary, mark, exchange, interviews, show, history, watch, pipeline, apply, shortlist, preset, digest, config_cmd, clean, resume_cmd, ai_cmd, stats
-from boss_agent_cli.commands.recruiter import recruiter_group
 from boss_agent_cli.commands.recruiter import applications as recruiter_applications
 from boss_agent_cli.commands.recruiter import resume as recruiter_resume
 from boss_agent_cli.commands.recruiter import chat as recruiter_chat
 from boss_agent_cli.commands.recruiter import jobs as recruiter_jobs
 from boss_agent_cli.commands.recruiter import candidates as recruiter_candidates
+from boss_agent_cli.commands.recruiter import reply as recruiter_reply
+from boss_agent_cli.commands.recruiter import request_resume as recruiter_request_resume
 from boss_agent_cli.config import load_config
 from boss_agent_cli.hooks import create_hook_bus
 from boss_agent_cli.output import Logger
@@ -96,10 +97,17 @@ cli.add_command(resume_cmd.resume_group, "resume")
 cli.add_command(ai_cmd.ai_group, "ai")
 cli.add_command(stats.stats_cmd, "stats")
 
-# Recruiter commands
-cli.add_command(recruiter_group, "recruiter")
-recruiter_group.add_command(recruiter_applications.applications_cmd, "applications")
-recruiter_group.add_command(recruiter_resume.resume_cmd, "resume")
-recruiter_group.add_command(recruiter_chat.recruiter_chat_cmd, "chat")
-recruiter_group.add_command(recruiter_jobs.jobs_group, "jobs")
-recruiter_group.add_command(recruiter_candidates.candidates_cmd, "candidates")
+# Recruiter shortcut: boss hr <subcommand>
+@click.group("hr", help="招聘者模式快捷命令")
+@click.pass_context
+def hr_group(ctx: click.Context) -> None:
+	ctx.obj["role"] = "recruiter"
+
+cli.add_command(hr_group, "hr")
+hr_group.add_command(recruiter_applications.applications_cmd, "applications")
+hr_group.add_command(recruiter_resume.resume_cmd, "resume")
+hr_group.add_command(recruiter_chat.recruiter_chat_cmd, "chat")
+hr_group.add_command(recruiter_jobs.jobs_group, "jobs")
+hr_group.add_command(recruiter_candidates.candidates_cmd, "candidates")
+hr_group.add_command(recruiter_reply.reply_cmd, "reply")
+hr_group.add_command(recruiter_request_resume.request_resume_cmd, "request-resume")
