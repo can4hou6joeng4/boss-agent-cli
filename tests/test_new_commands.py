@@ -141,7 +141,7 @@ def test_exchange_wechat(mock_auth_cls, mock_client_cls):
 
 
 @patch("boss_agent_cli.commands.detail.CacheStore")
-@patch("boss_agent_cli.commands.detail.BossClient")
+@patch("boss_agent_cli.commands.detail.get_platform_instance")
 @patch("boss_agent_cli.commands.detail.AuthManager")
 def test_detail_with_job_id(mock_auth_cls, mock_client_cls, mock_cache_cls):
 	mock_cache = _ctx_mock(mock_cache_cls)
@@ -186,7 +186,7 @@ def test_detail_with_job_id(mock_auth_cls, mock_client_cls, mock_cache_cls):
 # ── me ───────────────────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.me.BossClient")
+@patch("boss_agent_cli.commands.me.get_platform_instance")
 @patch("boss_agent_cli.commands.me.AuthManager")
 def test_me_basic(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -249,7 +249,7 @@ def test_history_uses_client_context_manager(mock_auth_cls, mock_client_cls):
 # ── interviews ───────────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.interviews.BossClient")
+@patch("boss_agent_cli.commands.interviews.get_platform_instance")
 @patch("boss_agent_cli.commands.interviews.AuthManager")
 def test_interviews_success(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -265,7 +265,7 @@ def test_interviews_success(mock_auth_cls, mock_client_cls):
 
 
 @patch("boss_agent_cli.commands.detail.CacheStore")
-@patch("boss_agent_cli.commands.detail.BossClient")
+@patch("boss_agent_cli.commands.detail.get_platform_instance")
 @patch("boss_agent_cli.commands.detail.AuthManager")
 def test_detail_uses_client_context_manager(mock_auth_cls, mock_client_cls, mock_cache_cls):
 	mock_cache = _ctx_mock(mock_cache_cls)
@@ -289,7 +289,7 @@ def test_detail_uses_client_context_manager(mock_auth_cls, mock_client_cls, mock
 
 
 @patch("boss_agent_cli.commands.detail.CacheStore")
-@patch("boss_agent_cli.commands.detail.BossClient")
+@patch("boss_agent_cli.commands.detail.get_platform_instance")
 @patch("boss_agent_cli.commands.detail.AuthManager")
 def test_detail_httpx_fallback_to_browser_on_auth_error(mock_auth_cls, mock_client_cls, mock_cache_cls):
 	"""httpx 快速通道因 AuthError 失败时，应降级到浏览器通道而非直接报错"""
@@ -330,7 +330,7 @@ def test_detail_httpx_fallback_to_browser_on_auth_error(mock_auth_cls, mock_clie
 
 
 @patch("boss_agent_cli.commands.detail.CacheStore")
-@patch("boss_agent_cli.commands.detail.BossClient")
+@patch("boss_agent_cli.commands.detail.get_platform_instance")
 @patch("boss_agent_cli.commands.detail.AuthManager")
 def test_detail_httpx_fallback_to_browser_on_none(mock_auth_cls, mock_client_cls, mock_cache_cls):
 	"""httpx 快速通道返回空 jobInfo 时，应降级到浏览器通道"""
@@ -368,7 +368,7 @@ def test_detail_httpx_fallback_to_browser_on_none(mock_auth_cls, mock_client_cls
 
 @patch("boss_agent_cli.commands.show.CacheStore")
 @patch("boss_agent_cli.commands.show.get_job_by_index")
-@patch("boss_agent_cli.commands.show.BossClient")
+@patch("boss_agent_cli.commands.show.get_platform_instance")
 @patch("boss_agent_cli.commands.show.AuthManager")
 def test_show_uses_client_context_manager(mock_auth_cls, mock_client_cls, mock_get_job_by_index, mock_cache_cls):
 	mock_get_job_by_index.return_value = {"security_id": "sec_001"}
@@ -397,7 +397,7 @@ def test_show_uses_client_context_manager(mock_auth_cls, mock_client_cls, mock_g
 	instance.__exit__.assert_called_once()
 
 
-@patch("boss_agent_cli.commands.interviews.BossClient")
+@patch("boss_agent_cli.commands.interviews.get_platform_instance")
 @patch("boss_agent_cli.commands.interviews.AuthManager")
 def test_interviews_uses_client_context_manager(mock_auth_cls, mock_client_cls):
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "ok"}}

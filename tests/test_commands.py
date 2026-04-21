@@ -219,7 +219,7 @@ def test_doctor_with_partial_token_quality_warn(mock_auth_cls, mock_probe_cdp, m
 
 
 @patch("boss_agent_cli.commands.recommend.CacheStore")
-@patch("boss_agent_cli.commands.recommend.BossClient")
+@patch("boss_agent_cli.commands.recommend.get_platform_instance")
 @patch("boss_agent_cli.commands.recommend.AuthManager")
 def test_recommend_success(mock_auth_cls, mock_client_cls, mock_cache_cls):
 	mock_cache = _ctx_mock(mock_cache_cls)
@@ -263,7 +263,7 @@ def test_recommend_success(mock_auth_cls, mock_client_cls, mock_cache_cls):
 
 
 @patch("boss_agent_cli.commands.recommend.CacheStore")
-@patch("boss_agent_cli.commands.recommend.BossClient")
+@patch("boss_agent_cli.commands.recommend.get_platform_instance")
 @patch("boss_agent_cli.commands.recommend.AuthManager")
 def test_recommend_with_score(mock_auth_cls, mock_client_cls, mock_cache_cls):
 	mock_cache = _ctx_mock(mock_cache_cls)
@@ -352,7 +352,7 @@ def test_search_with_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_
 
 @patch("boss_agent_cli.index_cache.save_index", side_effect=PermissionError("readonly"))
 @patch("boss_agent_cli.commands.recommend.CacheStore")
-@patch("boss_agent_cli.commands.recommend.BossClient")
+@patch("boss_agent_cli.commands.recommend.get_platform_instance")
 @patch("boss_agent_cli.commands.recommend.AuthManager")
 def test_recommend_ignores_index_cache_write_failure(mock_auth_cls, mock_client_cls, mock_cache_cls, mock_save_index):
 	mock_cache = _ctx_mock(mock_cache_cls)

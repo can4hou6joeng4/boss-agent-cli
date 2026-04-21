@@ -66,7 +66,7 @@ def test_show_missing_security_id(mock_get_job):
 	assert "security_id" in parsed["error"]["message"]
 
 
-@patch("boss_agent_cli.commands.show.BossClient")
+@patch("boss_agent_cli.commands.show.get_platform_instance")
 @patch("boss_agent_cli.commands.show.AuthManager")
 @patch("boss_agent_cli.commands.show.get_job_by_index")
 def test_show_job_card_empty_returns_not_found(mock_get_job, mock_auth_cls, mock_client_cls):
@@ -118,7 +118,7 @@ def test_mark_security_id_not_found_in_friend_list(mock_auth_cls, mock_client_cl
 # ── me 异常分支 ──────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.me.BossClient")
+@patch("boss_agent_cli.commands.me.get_platform_instance")
 @patch("boss_agent_cli.commands.me.AuthManager")
 def test_me_auth_required(mock_auth_cls, mock_client_cls):
 	from boss_agent_cli.auth.manager import AuthRequired
@@ -129,7 +129,7 @@ def test_me_auth_required(mock_auth_cls, mock_client_cls):
 	assert parsed["error"]["code"] == "AUTH_REQUIRED"
 
 
-@patch("boss_agent_cli.commands.me.BossClient")
+@patch("boss_agent_cli.commands.me.get_platform_instance")
 @patch("boss_agent_cli.commands.me.AuthManager")
 def test_me_auth_error(mock_auth_cls, mock_client_cls):
 	from boss_agent_cli.api.client import AuthError
@@ -140,7 +140,7 @@ def test_me_auth_error(mock_auth_cls, mock_client_cls):
 	assert parsed["error"]["code"] == "AUTH_EXPIRED"
 
 
-@patch("boss_agent_cli.commands.me.BossClient")
+@patch("boss_agent_cli.commands.me.get_platform_instance")
 @patch("boss_agent_cli.commands.me.AuthManager")
 def test_me_generic_exception(mock_auth_cls, mock_client_cls):
 	mock_client_cls.side_effect = RuntimeError("boom")

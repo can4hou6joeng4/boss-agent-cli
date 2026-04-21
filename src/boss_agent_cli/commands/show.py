@@ -1,8 +1,8 @@
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_job_detail
 from boss_agent_cli.index_cache import get_index_info, get_job_by_index
 
@@ -15,8 +15,6 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 	"""按编号查看搜索/推荐结果中的职位详情（如 boss show 3）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 
 	# 从索引缓存获取职位信息
 	job = get_job_by_index(data_dir, index)
@@ -46,8 +44,8 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 		return
 
 	auth = AuthManager(data_dir, logger=logger)
-	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-		raw = client.job_card(security_id)
+	with get_platform_instance(ctx, auth) as platform:
+		raw = platform.job_card(security_id)
 
 	card = raw.get("zpData", {}).get("jobCard", {})
 	if not card:

@@ -3,10 +3,11 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_job_detail
+from boss_agent_cli.platforms import Platform
 
 
 @click.command("detail")
@@ -19,11 +20,9 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 	"""查看职位完整信息（职位描述、地址、招聘者信息）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 
 	auth = AuthManager(data_dir, logger=logger)
-	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+	with get_platform_instance(ctx, auth) as platform:
 		# 优先走 httpx 快速通道：显式传入 > 缓存查找 > 降级浏览器通道
 		if not job_id:
 			with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
@@ -34,12 +33,12 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 		result = None
 		if job_id:
 			try:
-				result = _detail_via_httpx(client, security_id, job_id, data_dir)
+				result = _detail_via_httpx(platform, security_id, job_id, data_dir)
 			except Exception as e:
 				logger.info(f"httpx 快速通道失败（{e}），降级到浏览器通道")
 				result = None
 		if result is None:
-			result = _detail_via_browser(client, security_id, lid, data_dir)
+			result = _detail_via_browser(platform, security_id, lid, data_dir)
 
 	if result is None:
 		handle_error_output(
@@ -54,9 +53,9 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 	handle_output(ctx, "detail", result, render=render_job_detail, hints=hints)
 
 
-def _detail_via_httpx(client: BossClient, security_id: str, job_id: str, data_dir: Path) -> dict[str, Any] | None:
+def _detail_via_httpx(platform: Platform, security_id: str, job_id: str, data_dir: Path) -> dict[str, Any] | None:
 	"""快速通道：通过 httpx 获取职位详情（不需要浏览器）"""
-	raw = client.job_detail(job_id)
+	raw = platform.job_detail(job_id)
 	zp = raw.get("zpData", {})
 	job_info = zp.get("jobInfo", {})
 	boss_info = zp.get("bossInfo", {})
@@ -87,9 +86,9 @@ def _detail_via_httpx(client: BossClient, security_id: str, job_id: str, data_di
 	}
 
 
-def _detail_via_browser(client: BossClient, security_id: str, lid: str, data_dir: Path) -> dict[str, Any] | None:
+def _detail_via_browser(platform: Platform, security_id: str, lid: str, data_dir: Path) -> dict[str, Any] | None:
 	"""兜底通道：通过浏览器 job_card 获取职位详情"""
-	raw = client.job_card(security_id, lid)
+	raw = platform.job_card(security_id, lid)
 	card = raw.get("zpData", {}).get("jobCard", {})
 	if not card:
 		return None

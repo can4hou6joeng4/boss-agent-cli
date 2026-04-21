@@ -5,10 +5,14 @@
 ## [Unreleased]
 
 ### Added
-- **`boss batch-greet` 迁移到 Platform**（Week 1c 第 3 个命令）— 从 `BossClient` 直用切换到 `get_platform_instance(ctx, auth)`，内部 `client.search_jobs` / `client.greet` 改为 `platform.search_jobs` / `platform.greet`。删除 `greet.py` 对 `BossClient` 的直接引用。
+- **Platform ABC 扩展 9 个 P0+ 方法**（Issue #129 Week 1c 第 4 轮）— 补齐 BossClient 实际公开面所需的：`resume_baseinfo` / `resume_expect` / `deliver_list` / `job_card` / `interview_data` / `chat_history` / `friend_label` / `exchange_contact`。BossPlatform 全部透传给底层 `BossClient`；ZhilianPlatform 未覆盖走基类默认 `NotImplementedError`。
+- **5 个命令迁移到 Platform** — `interviews` / `detail` / `show` / `me` / `recommend` 从 `with BossClient(...)` 切换到 `with get_platform_instance(ctx, auth) as platform:`。
+- 迁移后 Platform 已覆盖 **8 个命令**（greet / apply / batch-greet / interviews / detail / show / me / recommend）。
 
 ### Changed
-- `tests/test_greet_extended.py` / `test_greet_detail_extended.py` / `test_commands.py` 共 10 处 mock patch 位置从 `commands.greet.BossClient` 切到 `commands.greet.get_platform_instance`。
+- 相关测试文件 mock 位点从 `commands.X.BossClient` 切到 `commands.X.get_platform_instance`（`test_new_commands.py` / `test_commands.py` / `test_coverage_second_sprint.py` / `test_greet_detail_extended.py`）。
+- detail.py 内部辅助函数 `_detail_via_httpx` / `_detail_via_browser` 形参类型从 `BossClient` 改为 `Platform`。
+- me.py 保留 `from boss_agent_cli.api.client import AuthError` 仅做异常类型绑定，不再直接 instantiate `BossClient`。
 
 ### Added
 - **ZhilianPlatform stub**（Issue #129 Week 1d · 抽象自证）— `src/boss_agent_cli/platforms/zhilian.py` 新增智联招聘 stub 实现：

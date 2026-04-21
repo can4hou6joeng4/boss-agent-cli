@@ -162,7 +162,7 @@ def test_batch_greet_respects_count_limit(tmp_path):
 
 _DETAIL_PATCHES = {
 	"auth": "boss_agent_cli.commands.detail.AuthManager",
-	"client": "boss_agent_cli.commands.detail.BossClient",
+	"client": "boss_agent_cli.commands.detail.get_platform_instance",
 	"cache": "boss_agent_cli.commands.detail.CacheStore",
 }
 

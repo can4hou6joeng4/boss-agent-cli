@@ -101,6 +101,46 @@ class Platform(ABC):
 	def user_info(self) -> dict[str, Any]:
 		"""获取当前用户信息。"""
 
+	# ── 简历 / 投递（P0+，平台不支持时抛 NotImplementedError）──
+
+	def resume_baseinfo(self) -> dict[str, Any]:
+		"""获取简历基本信息。"""
+		raise NotImplementedError(f"{self.name} platform does not implement resume_baseinfo")
+
+	def resume_expect(self) -> dict[str, Any]:
+		"""获取求职期望。"""
+		raise NotImplementedError(f"{self.name} platform does not implement resume_expect")
+
+	def deliver_list(self, page: int = 1) -> dict[str, Any]:
+		"""获取投递记录。"""
+		raise NotImplementedError(f"{self.name} platform does not implement deliver_list")
+
+	# ── 职位卡片（详情降级通道）──
+
+	def job_card(self, security_id: str, lid: str = "") -> dict[str, Any]:
+		"""职位卡片（用于详情页降级）。"""
+		raise NotImplementedError(f"{self.name} platform does not implement job_card")
+
+	# ── 面试 ──
+
+	def interview_data(self) -> dict[str, Any]:
+		"""获取面试邀请列表。"""
+		raise NotImplementedError(f"{self.name} platform does not implement interview_data")
+
+	# ── 沟通扩展 ──
+
+	def chat_history(self, gid: str, security_id: str, page: int = 1, count: int = 20) -> dict[str, Any]:
+		"""查看与某联系人的聊天消息历史。"""
+		raise NotImplementedError(f"{self.name} platform does not implement chat_history")
+
+	def friend_label(self, friend_id: str, label_id: int, friend_source: int = 0, remove: bool = False) -> dict[str, Any]:
+		"""给联系人加/删标签。"""
+		raise NotImplementedError(f"{self.name} platform does not implement friend_label")
+
+	def exchange_contact(self, security_id: str, uid: str, friend_name: str, exchange_type: int = 1) -> dict[str, Any]:
+		"""请求交换联系方式（手机 / 微信）。"""
+		raise NotImplementedError(f"{self.name} platform does not implement exchange_contact")
+
 	def greet(self, security_id: str, job_id: str, message: str = "") -> dict[str, Any]:
 		"""打招呼。平台不支持时抛 NotImplementedError。"""
 		raise NotImplementedError(f"{self.name} platform does not implement greet")

@@ -1,7 +1,7 @@
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_simple_list
 from typing import Any
 
@@ -13,8 +13,6 @@ def interviews_cmd(ctx: click.Context) -> None:
 	"""查看面试邀请列表"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 	auth = AuthManager(data_dir, logger=logger)
 
 	token = auth.check_status()
@@ -27,8 +25,8 @@ def interviews_cmd(ctx: click.Context) -> None:
 		)
 		return
 
-	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-		raw = client.interview_data()
+	with get_platform_instance(ctx, auth) as platform:
+		raw = platform.interview_data()
 		interview_list = raw.get("zpData", {}).get("interviewList", [])
 
 	items = [

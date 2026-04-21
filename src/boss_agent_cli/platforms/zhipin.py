@@ -76,3 +76,29 @@ class BossPlatform(Platform):
 
 	def friend_list(self, page: int = 1) -> dict[str, Any]:
 		return self._client.friend_list(page)
+
+	# ── P0+ 扩展方法（BossClient 全部支持）───────────────
+
+	def resume_baseinfo(self) -> dict[str, Any]:
+		return self._client.resume_baseinfo()
+
+	def resume_expect(self) -> dict[str, Any]:
+		return self._client.resume_expect()
+
+	def deliver_list(self, page: int = 1) -> dict[str, Any]:
+		return self._client.deliver_list(page=page)
+
+	def job_card(self, security_id: str, lid: str = "") -> dict[str, Any]:
+		return self._client.job_card(security_id, lid)
+
+	def interview_data(self) -> dict[str, Any]:
+		return self._client.interview_data()
+
+	def chat_history(self, gid: str, security_id: str, page: int = 1, count: int = 20) -> dict[str, Any]:
+		return self._client.chat_history(gid, security_id, page=page, count=count)
+
+	def friend_label(self, friend_id: str, label_id: int, friend_source: int = 0, remove: bool = False) -> dict[str, Any]:
+		return self._client.friend_label(friend_id, label_id, friend_source, remove=remove)
+
+	def exchange_contact(self, security_id: str, uid: str, friend_name: str, exchange_type: int = 1) -> dict[str, Any]:
+		return self._client.exchange_contact(security_id, uid, friend_name, exchange_type=exchange_type)
