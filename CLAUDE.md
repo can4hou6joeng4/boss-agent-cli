@@ -108,7 +108,7 @@ graph TD
 | `src/boss_agent_cli/bridge/` | Python | Browser Bridge — Chrome 扩展 + Python daemon 零配置浏览器通道 | `client.py` | `tests/test_bridge.py`, `tests/test_bridge_extended.py` |
 | `src/boss_agent_cli/resume/` | Python | 简历数据模型、本地存储、模板渲染、多格式导出 | `models.py` | `tests/test_resume_commands.py`, `tests/test_resume_templates.py`, `tests/test_resume_export.py`, `tests/test_resume_models.py`, `tests/test_resume_store.py`, `tests/test_resume_import_compat.py` |
 | `src/boss_agent_cli/ai/` | Python | 智能服务：多模型配置、密钥加密存储、提示词模板、对话补全 | `service.py` | `tests/test_ai_config.py`, `tests/test_ai_prompts.py`, `tests/test_ai_service.py`, `tests/test_ai_commands.py` |
-| `src/boss_agent_cli/platforms/` | Python | 跨平台抽象（Issue #129 Week 1 骨架）：Platform ABC + 注册表 + BossPlatform adapter | `base.py`, `zhipin.py` | `tests/test_platform_base.py` |
+| `src/boss_agent_cli/platforms/` | Python | 跨平台抽象（Issue #129 Week 1 骨架）：Platform ABC + 注册表 + BossPlatform adapter；招聘者抽象：RecruiterPlatform ABC + BossRecruiterPlatform adapter | `base.py`, `zhipin.py`, `recruiter_base.py`, `zhipin_recruiter.py` | `tests/test_platform_base.py`, `tests/test_recruiter_platform.py` |
 
 ## 技术栈
 
@@ -288,6 +288,10 @@ boss-chrome
 | AI_NOT_CONFIGURED | AI 服务未配置 | 是 | `boss ai config --provider <p> --model <m> --api-key <k>` |
 | AI_API_ERROR | AI 服务调用失败 | 是 | 检查网络连接和密钥配置，重试 |
 | AI_PARSE_ERROR | AI 返回结果解析失败 | 是 | 重试（模型输出不稳定时可能发生） |
+| RECRUITER_NOT_AUTHORIZED | 当前账号非招聘者账号 | 是 | 切换招聘者账号或使用 --role candidate |
+| APPLICATION_NOT_FOUND | 投递申请不存在 | 否 | - |
+| RESUME_NOT_SHARED | 候选人未分享简历 | 是 | 使用 resume <id> --request 请求简历 |
+| JOB_POST_LIMIT | 职位发布数量已达上限 | 否 | - |
 
 ## AI 使用指引
 
@@ -325,6 +329,20 @@ boss ai           -> AI 简历优化与沟通准备（子命令：config/analyze
 boss config       -> 查看和修改配置项（子命令：list/set/reset）
 boss clean        -> 清理过期缓存和临时文件（--dry-run/--all/--days）
 boss logout       -> 退出登录
+```
+
+**Agent 招聘者调用链**（`--role recruiter`）：
+```
+boss --role recruiter status           -> 检查登录态
+boss --role recruiter recruiter applications           -> 查看候选人投递申请
+boss --role recruiter recruiter applications --keyword python -> 按关键词筛选
+boss --role recruiter recruiter resume <geek_id> --security-id <sid> -> 查看简历
+boss --role recruiter recruiter resume <geek_id> --request         -> 请求简历
+boss --role recruiter recruiter chat                              -> 沟通列表
+boss --role recruiter recruiter jobs list                         -> 职位列表
+boss --role recruiter recruiter jobs detail <job_id>              -> 职位详情
+boss --role recruiter recruiter jobs close <job_id>               -> 关闭职位
+boss --role recruiter recruiter candidates                        -> 候选人池
 ```
 
 **关键设计决策**：
@@ -394,3 +412,4 @@ boss logout       -> 退出登录
 | 2026-04-21 | Platform CLI | 新增 --platform 全局选项与 get_platform_instance 辅助函数，schema 输出增加 current_platform / supported_platforms 字段，config.json 支持 platform 字段，测试 956→966，mypy 严格模块 69→70 |
 | 2026-04-21 | Platform 迁移 | greet 和 apply 命令从 BossClient 直用切换到 get_platform_instance，Platform ABC 补齐 with 上下文管理器（__enter__/__exit__/close），测试 966→971 |
 | 2026-04-21 | Platform 自证 | 新增 ZhilianPlatform stub 注册到 Platform 注册表，包络适配按 zhaopin.md 调研完整实现，P0/P1/P2 抛 NotImplementedError 待 Week 2 真实现，测试 971→998 |
+| 2026-04-21 | 招聘者模式 | 新增 --role recruiter 全局选项、BossRecruiterClient 双通道客户端、RecruiterPlatform ABC + BossRecruiterPlatform 适配器、招聘者命令组（applications/resume/chat/jobs/candidates）、4 个招聘者错误码、2 个缓存表、recruiter.yaml 端点定义，测试 998→1021（+23） |

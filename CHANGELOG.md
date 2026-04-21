@@ -5,6 +5,20 @@
 ## [Unreleased]
 
 ### Added
+- **招聘者模式**（`--role recruiter`）— 全套招聘者 CLI 命令组：
+  - `boss --role recruiter recruiter applications` — 查看/筛选候选人投递申请
+  - `boss --role recruiter recruiter resume <id>` — 查看/请求候选人简历
+  - `boss --role recruiter recruiter chat` — 与候选人沟通列表
+  - `boss --role recruiter recruiter jobs list/detail/close` — 职位发布管理
+  - `boss --role recruiter recruiter candidates` — 候选人池
+- `BossRecruiterClient` 双通道客户端（httpx 低风险 + 浏览器高风险），复用 `AuthManager`/`BrowserSession`/`RequestThrottle`
+- `RecruiterPlatform` ABC + `BossRecruiterPlatform` 适配器，遵循现有 Platform 抽象模式
+- `api/recruiter.yaml` 招聘者端点定义（11 个 wapi 端点，Phase 0 待确认）
+- `schema` 输出新增 `current_role`、`--role` 选项、`recruiter` 命令组、4 个招聘者错误码
+- `CacheStore` 新增 `recruiter_applications`/`recruiter_jobs` 表
+- 测试 998→1021（+23），覆盖客户端、平台适配器、命令、端点加载
+
+### Changed
 - **`boss batch-greet` 迁移到 Platform**（Week 1c 第 3 个命令）— 从 `BossClient` 直用切换到 `get_platform_instance(ctx, auth)`，内部 `client.search_jobs` / `client.greet` 改为 `platform.search_jobs` / `platform.greet`。删除 `greet.py` 对 `BossClient` 的直接引用。
 
 ### Changed
