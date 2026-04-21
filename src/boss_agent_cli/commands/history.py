@@ -1,8 +1,8 @@
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.api.models import JobItem
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_output, render_job_table
 
 
@@ -14,12 +14,10 @@ def history_cmd(ctx: click.Context, page: int) -> None:
 	"""查看最近浏览过的职位"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 
 	auth = AuthManager(data_dir, logger=logger)
-	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-		raw = client.job_history(page)
+	with get_platform_instance(ctx, auth) as platform:
+		raw = platform.job_history(page)
 		zp_data = raw.get("zpData", {})
 		job_list = zp_data.get("jobList", [])
 

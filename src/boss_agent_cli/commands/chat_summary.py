@@ -1,8 +1,8 @@
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.chat_summary import summarize_messages
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_message_panel
 
 
@@ -15,12 +15,10 @@ from boss_agent_cli.display import handle_auth_errors, handle_error_output, hand
 def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> None:
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 	auth = AuthManager(data_dir, logger=logger)
 
-	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
-		friends_resp = client.friend_list(page=1)
+	with get_platform_instance(ctx, auth) as platform:
+		friends_resp = platform.friend_list(page=1)
 		items = friends_resp.get("zpData", {}).get("result") or friends_resp.get("zpData", {}).get("friendList") or []
 
 		gid = None
@@ -40,7 +38,7 @@ def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int
 			)
 			return
 
-		resp = client.chat_history(gid, security_id, page=page, count=count)
+		resp = platform.chat_history(gid, security_id, page=page, count=count)
 		messages = resp.get("zpData", {}).get("messages") or resp.get("zpData", {}).get("historyMsgList") or []
 		summary = summarize_messages(messages, friend_uid=gid)
 

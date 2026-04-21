@@ -205,7 +205,7 @@ def test_me_basic(mock_auth_cls, mock_client_cls):
 # ── history ──────────────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.history.BossClient")
+@patch("boss_agent_cli.commands.history.get_platform_instance")
 @patch("boss_agent_cli.commands.history.AuthManager")
 def test_history_success(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
@@ -232,7 +232,7 @@ def test_history_success(mock_auth_cls, mock_client_cls):
 	assert parsed["ok"] is True
 
 
-@patch("boss_agent_cli.commands.history.BossClient")
+@patch("boss_agent_cli.commands.history.get_platform_instance")
 @patch("boss_agent_cli.commands.history.AuthManager")
 def test_history_uses_client_context_manager(mock_auth_cls, mock_client_cls):
 	instance = mock_client_cls.return_value

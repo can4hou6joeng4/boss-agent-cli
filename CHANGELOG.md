@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added
+- **Week 1c 100% 完成** — 剩余 6 个命令迁移到 Platform 抽象：`search` / `export` / `chat_summary` / `history` / `status` / `watch`。`run_search_pipeline` 接受 `client: Any` 保持兼容，直接传 Platform 实例。
+- Platform ABC 新增 `job_history(page=1)` 方法（history 命令所需）。
+- 至此 `commands/` 目录下除 `_platform.py`（桥接层）外**无任何命令直接引用 BossClient**。
+
+### Changed
+- 相关测试 mock 位点从 `commands.X.BossClient` → `commands.X.get_platform_instance`。
+
 ## [1.10.0] - 2026-04-21
 
 ### 🎯 核心里程碑：Platform 抽象架构落地（Issue #129 Week 1 全量收口）

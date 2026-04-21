@@ -2,7 +2,6 @@ import json
 
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.api.endpoints import (
 	CITY_CODES,
 	INDUSTRY_CODES,
@@ -12,6 +11,7 @@ from boss_agent_cli.api.endpoints import (
 )
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_job_table
 from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.match_score import score_job_dict
@@ -43,8 +43,6 @@ def search_cmd(ctx: click.Context, query: str, preset: str | None, city: str | N
 	"""按关键词和筛选条件搜索职位列表"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 
 	if preset:
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
@@ -110,10 +108,10 @@ def search_cmd(ctx: click.Context, query: str, preset: str | None, city: str | N
 				return
 
 		auth = AuthManager(data_dir, logger=logger)
-		with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+		with get_platform_instance(ctx, auth) as platform:
 			max_pages = 5 if welfare_conditions else 1
 			pipeline_result = run_search_pipeline(
-				client, cache, logger,
+				platform, cache, logger,
 				criteria=criteria,
 				start_page=page,
 				max_pages=max_pages,

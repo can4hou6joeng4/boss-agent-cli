@@ -102,3 +102,6 @@ class BossPlatform(Platform):
 
 	def exchange_contact(self, security_id: str, uid: str, friend_name: str, exchange_type: int = 1) -> dict[str, Any]:
 		return self._client.exchange_contact(security_id, uid, friend_name, exchange_type=exchange_type)
+
+	def job_history(self, page: int = 1) -> dict[str, Any]:
+		return self._client.job_history(page)

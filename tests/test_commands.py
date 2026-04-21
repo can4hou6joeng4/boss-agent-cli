@@ -39,7 +39,7 @@ def test_status_not_logged_in(mock_auth_cls):
 	assert parsed["error"]["code"] == "AUTH_REQUIRED"
 
 
-@patch("boss_agent_cli.commands.status.BossClient")
+@patch("boss_agent_cli.commands.status.get_platform_instance")
 @patch("boss_agent_cli.commands.status.AuthManager")
 def test_status_logged_in_happy_path(mock_auth_cls, mock_client_cls):
 	"""登录成功路径：check_status 返回 token，user_info 返回名字"""
@@ -58,7 +58,7 @@ def test_status_logged_in_happy_path(mock_auth_cls, mock_client_cls):
 	assert parsed["data"]["user_name"] == "张三"
 
 
-@patch("boss_agent_cli.commands.status.BossClient")
+@patch("boss_agent_cli.commands.status.get_platform_instance")
 @patch("boss_agent_cli.commands.status.AuthManager")
 def test_status_logged_in_unknown_user(mock_auth_cls, mock_client_cls):
 	"""user_info 缺失 name 字段时应回退到默认占位"""
@@ -77,7 +77,7 @@ def test_status_logged_in_unknown_user(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
-@patch("boss_agent_cli.commands.search.BossClient")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
 def test_search_invalid_city(mock_client_cls, mock_auth_cls, mock_cache_cls):
 	runner = CliRunner()
 	result = runner.invoke(cli, ["search", "golang", "--city", "火星"])
@@ -307,7 +307,7 @@ def test_recommend_with_score(mock_auth_cls, mock_client_cls, mock_cache_cls):
 @patch("boss_agent_cli.commands.search.run_search_pipeline")
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
-@patch("boss_agent_cli.commands.search.BossClient")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
 def test_search_with_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.get_search.return_value = None
@@ -396,7 +396,7 @@ def test_recommend_ignores_index_cache_write_failure(mock_auth_cls, mock_client_
 @patch("boss_agent_cli.commands.search.run_search_pipeline")
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
-@patch("boss_agent_cli.commands.search.BossClient")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
 def test_search_ignores_index_cache_write_failure(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline, mock_save_index):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.get_search.return_value = None
@@ -430,7 +430,7 @@ def test_search_ignores_index_cache_write_failure(mock_client_cls, mock_auth_cls
 	mock_save_index.assert_called_once()
 
 
-@patch("boss_agent_cli.commands.export.BossClient")
+@patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_to_stdout(mock_auth_cls, mock_client_cls):
 	mock_client =	_ctx_mock(mock_client_cls)
@@ -928,7 +928,7 @@ def test_chat_export_html_xss_prevention(mock_auth_cls, mock_client_cls, tmp_pat
 @patch("boss_agent_cli.commands.search.run_search_pipeline")
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
-@patch("boss_agent_cli.commands.search.BossClient")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
 def test_search_account_risk_returns_error(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
 	"""搜索触发风控 code 36 时应返回 ACCOUNT_RISK 错误码"""
 	from boss_agent_cli.api.client import AccountRiskError

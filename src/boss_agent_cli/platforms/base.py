@@ -141,6 +141,10 @@ class Platform(ABC):
 		"""请求交换联系方式（手机 / 微信）。"""
 		raise NotImplementedError(f"{self.name} platform does not implement exchange_contact")
 
+	def job_history(self, page: int = 1) -> dict[str, Any]:
+		"""浏览历史。"""
+		raise NotImplementedError(f"{self.name} platform does not implement job_history")
+
 	def greet(self, security_id: str, job_id: str, message: str = "") -> dict[str, Any]:
 		"""打招呼。平台不支持时抛 NotImplementedError。"""
 		raise NotImplementedError(f"{self.name} platform does not implement greet")

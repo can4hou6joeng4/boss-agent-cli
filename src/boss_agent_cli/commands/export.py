@@ -5,9 +5,9 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.api.models import JobItem
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_output, render_export_summary, render_job_table
 
 
@@ -24,18 +24,16 @@ def export_cmd(ctx: click.Context, query: str, city: str | None, salary: str | N
 	"""导出搜索结果为 CSV 或 JSON 文件"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	delay = ctx.obj["delay"]
-	cdp_url = ctx.obj.get("cdp_url")
 
 	auth = AuthManager(data_dir, logger=logger)
-	with BossClient(auth, delay=delay, cdp_url=cdp_url) as client:
+	with get_platform_instance(ctx, auth) as platform:
 		all_items: list[dict[str, Any]] = []
 		page = 1
 		max_pages = (count + 14) // 15  # 每页约 15 条
 
 		while len(all_items) < count and page <= max_pages:
 			logger.info(f"正在获取第 {page} 页...")
-			raw = client.search_jobs(query, city=city, salary=salary, page=page)
+			raw = platform.search_jobs(query, city=city, salary=salary, page=page)
 			zp_data = raw.get("zpData", {})
 			job_list = zp_data.get("jobList", [])
 			if not job_list:

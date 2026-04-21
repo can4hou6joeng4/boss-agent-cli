@@ -63,7 +63,7 @@ def test_watch_add_list_remove(tmp_path):
 	assert remove_parsed["data"]["removed"] is True
 
 
-@patch("boss_agent_cli.commands.watch.BossClient")
+@patch("boss_agent_cli.commands.watch.get_platform_instance")
 @patch("boss_agent_cli.commands.watch.AuthManager")
 def test_watch_run_marks_only_new_items(mock_auth_cls, mock_client_cls, tmp_path):
 	mock_client = _ctx_mock(mock_client_cls)

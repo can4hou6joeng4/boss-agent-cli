@@ -62,7 +62,7 @@ def test_preset_add_list_remove(tmp_path):
 	assert remove_parsed["data"]["removed"] is True
 
 
-@patch("boss_agent_cli.commands.search.BossClient")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
 @patch("boss_agent_cli.commands.search.AuthManager")
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.try_save_index")
