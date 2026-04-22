@@ -2,9 +2,11 @@
 
 # boss-agent-cli
 
-**专为 AI Agent 设计的 BOSS 直聘求职 CLI 工具**
+**专为 AI Agent 设计的 BOSS 直聘双端 CLI 工具**
 
-> 搜索职位 · 福利筛选 · 个性化推荐 · 自动打招呼 · 求职流水线 · 增量监控 · AI 简历优化
+> 求职者：搜索 · 福利筛选 · 个性化推荐 · 自动打招呼 · 求职流水线 · 增量监控 · AI 简历优化
+>
+> 招聘者：候选人检索 · 沟通回复 · 简历请求 · 职位上下线 · 多平台抽象（规划中）
 
 [![CI](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli)
@@ -22,7 +24,7 @@
 
 </div>
 
-> A CLI tool designed for AI Agents to interact with [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). All output is structured JSON, 33 commands, 4-tier login fallback. See [README.en.md](README.en.md) for the English version.
+> A CLI tool designed for AI Agents to interact with [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). Structured JSON output, 34 top-level commands plus 7 recruiter subcommands, 4-tier login fallback, cross-platform adapter layer. See [README.en.md](README.en.md) for the English version.
 
 ---
 
@@ -51,10 +53,12 @@ boss digest                                                  # 每日汇报
 | 🔍 **职位发现** | 关键词搜索 + 8 维筛选 + 个性化推荐 | `search` `recommend` |
 | 🎯 **福利筛选** | `--welfare "双休,五险一金"` 自动翻页逐条匹配 | `search --welfare` |
 | 👋 **主动出击** | 单个/批量打招呼、立即沟通投递 | `greet` `batch-greet` `apply` |
-| 📊 **进度管理** | 求职流水线 + 跟进提醒 + 每日摘要 | `pipeline` `follow-up` `digest` |
+| 📊 **进度管理** | 求职流水线 + 跟进提醒 + 每日摘要 + 漏斗统计 | `pipeline` `follow-up` `digest` `stats` |
 | 👀 **增量监控** | 保存搜索条件、定期执行、标出新职位 | `watch` `shortlist` `preset` |
 | 💬 **沟通管理** | 聊天记录、结构化摘要、标签管理 | `chat` `chatmsg` `chat-summary` |
 | 🤖 **AI 优化** | 岗位分析 + 简历润色 + 匹配优化 + 面试准备 + 沟通指导 | `ai analyze-jd` `ai polish` `ai optimize` `ai interview-prep` `ai chat-coach` |
+| 👔 **招聘者模式** | 候选人搜索 / 简历请求 / 沟通回复 / 职位上下线 | `hr applications` `hr candidates` `hr jobs` `hr reply` |
+| 🔌 **多平台抽象** | `Platform` / `RecruiterPlatform` 双注册表，智联招聘骨架已接入 | `--platform zhipin\|zhilian` |
 | 📤 **数据导出** | CSV / JSON / HTML / Markdown 多格式 | `export` `chat --export` |
 
 ---
@@ -123,6 +127,12 @@ boss digest
 # 8. 增量监控
 boss watch add my-golang "Golang" --city 广州 --welfare "双休"
 boss watch run my-golang
+
+# 9. 招聘者模式（HR 视角）
+boss hr applications                  # 候选人投递申请
+boss hr candidates "Golang"           # 搜索候选人
+boss hr reply <friend_id> "你好"      # 回复消息
+boss hr jobs list                     # 我发布的职位
 ```
 
 ---
@@ -154,6 +164,49 @@ boss --cdp-url http://localhost:9222 login --cdp
 ```
 
 </details>
+
+---
+
+## 🎭 角色模式与多平台
+
+boss-agent-cli 同时覆盖求职者和招聘者两端，并为后续接入更多招聘平台做了抽象。
+
+### 角色切换
+
+| 选项 | 说明 | 典型命令 |
+|------|------|----------|
+| `--role candidate`（默认） | 求职者视角 | `search` / `greet` / `apply` |
+| `--role recruiter` | 招聘者视角 | `hr applications` / `hr candidates` |
+
+快捷入口：`boss hr <子命令>` 会自动把当前会话切换到招聘者角色，不必显式传 `--role`。
+
+```bash
+# 方式 A: --role 显式指定
+boss --role recruiter ...
+
+# 方式 B: 招聘者快捷组（自动切换 role）
+boss hr applications
+boss hr candidates "Golang"
+```
+
+### 多平台抽象
+
+`Platform` / `RecruiterPlatform` 双注册表让命令层不耦合具体平台协议：
+
+| 平台 | 求职者 | 招聘者 | 状态 |
+|------|:------:|:------:|------|
+| BOSS 直聘 (`zhipin`) | ✅ | ✅ | 默认 |
+| 智联招聘 (`zhilian`) | 🟡 骨架 | — | 真实现追踪 [Issue #140](https://github.com/can4hou6joeng4/boss-agent-cli/issues/140) |
+
+```bash
+# 指定平台
+boss --platform zhilian search "Python"
+
+# 设为默认
+boss config set platform zhilian
+```
+
+设计细节见 [docs/platform-abstraction.md](docs/platform-abstraction.md)。
 
 ---
 
@@ -230,7 +283,7 @@ except AuthRequired:
 
 | 命令 | 说明 |
 |------|------|
-| `boss schema` | 输出 33 个命令的完整能力描述（Agent 首先调用） |
+| `boss schema` | 输出完整工具能力描述 JSON（33 个顶层命令 + hr 分组展开，Agent 首先调用） |
 | `boss login` | 四级降级登录 |
 | `boss logout` | 退出登录 |
 | `boss status` | 检查登录态 |
@@ -312,6 +365,7 @@ except AuthRequired:
 |------|------|
 | `boss config list/set/reset` | 配置管理 |
 | `boss clean` | 清理缓存 |
+| `boss stats` | 投递转化漏斗统计（greeted/applied/shortlist） |
 | `boss export <query>` | 导出结果（CSV/JSON） |
 
 <details>
@@ -453,10 +507,14 @@ CLI (Click)
     ├── AuthManager ── Cookie 提取 / CDP / QR httpx / patchright
     │       └── TokenStore (Fernet + PBKDF2 机器绑定加密)
     │
-    ├── BossClient ── httpx (低风险) + 浏览器 (高风险) 混合通道
+    ├── Platform 抽象层（多平台注册表）
+    │       ├── BossPlatform (求职者) / BossRecruiterPlatform (招聘者)
+    │       └── ZhilianPlatform (骨架已接入，真实现 tracking Issue #140)
+    │
+    ├── BossClient / BossRecruiterClient ── httpx (低风险) + 浏览器 (高风险) 双通道
     │       ├── RequestThrottle (高斯延迟 + 突发惩罚)
     │       ├── BrowserSession (CDP / Bridge / patchright)
-    │       └── BOSS 直聘 wapi (18+ 端点)
+    │       └── BOSS 直聘 wapi (求职者 30 端点 + 招聘者 24 端点，共 54 端点)
     │
     ├── CacheStore (SQLite WAL)
     ├── AIService (OpenAI / Anthropic / 兼容 API)
@@ -474,7 +532,7 @@ CLI (Click)
 | 数据库 | sqlite3 (WAL 模式) |
 | 渲染 | rich |
 | AI | OpenAI / Anthropic Chat Completions API |
-| 测试 | pytest（666 项） |
+| 测试 | pytest（1042 项） |
 
 ---
 

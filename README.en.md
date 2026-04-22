@@ -2,9 +2,11 @@
 
 # boss-agent-cli
 
-**A CLI tool designed for AI Agents to interact with BOSS Zhipin**
+**A CLI tool designed for AI Agents to interact with BOSS Zhipin, for both job-seekers and recruiters**
 
-> Search jobs · Welfare filtering · Personalized recommendations · Auto-greeting · Job pipeline · Incremental watch · AI resume optimization
+> Job-seeker: search · welfare filtering · personalized recommendations · auto-greeting · pipeline · incremental watch · AI resume optimization
+>
+> Recruiter: candidate search · chat reply · resume request · job publish management · cross-platform adapter layer
 
 [![CI](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-≥3.10-3776AB?logo=python&logoColor=white)](https://python.org)
@@ -30,15 +32,17 @@ Every command outputs **structured JSON** that AI Agents parse directly. No frag
 
 ## 🌟 Core Capabilities
 
-- **33 CLI commands** covering the full loop: search → detail → greet → chat → follow-up → apply
+- **41 CLI commands** (34 top-level + 7 recruiter subcommands) covering the full loop: search → detail → greet → chat → follow-up → apply, plus the recruiter workflow (applications → candidates → jobs → reply)
 - **JSON envelope output** on stdout, logs on stderr — Agent-friendly by design
 - **4-tier login fallback**: Cookie extract → CDP → QR httpx → patchright QR scan
 - **CDP mode** connects your local Chrome for real browser fingerprint and automatic stoken refresh
 - **Welfare filter** (`--welfare "双休,五险一金"`) with client-side AND logic and parallel detail fetching
+- **Recruiter mode** via `boss hr <sub>` (or `--role recruiter`) — candidate search, resume request, chat reply, job online/offline
+- **Cross-platform adapter layer** — `Platform` / `RecruiterPlatform` ABC + registry, Zhilian platform skeleton in progress ([Issue #140](https://github.com/can4hou6joeng4/boss-agent-cli/issues/140))
 - **AI resume optimization** with OpenAI / Claude / Gemini / Qwen / DeepSeek multi-model support
 - **AI chat reply drafting** based on recruiter message context
 - **Investment funnel stats** — greeted / applied / shortlist conversion rates
-- **MCP server** with 31 tools, works out of the box with Claude Desktop / Cursor
+- **MCP server** with 43 tools, works out of the box with Claude Desktop / Cursor
 
 ## 📦 Install
 
@@ -82,7 +86,35 @@ boss ai reply "请问什么时候方便聊一下？"
 
 # 7. Investment funnel analysis
 boss stats --days 30
+
+# 8. Recruiter mode (HR workflow)
+boss hr applications                    # candidate applications
+boss hr candidates "Golang"             # search candidates
+boss hr reply <friend_id> "Hi"          # reply to candidate
+boss hr jobs list                       # my job postings
 ```
+
+## 🎭 Roles & Platforms
+
+boss-agent-cli covers both the job-seeker and the recruiter side, with a pluggable platform layer for future adapters.
+
+| Role | Flag | Entry commands |
+|------|------|----------------|
+| Candidate *(default)* | `--role candidate` | `search` / `greet` / `apply` |
+| Recruiter | `--role recruiter`, or `boss hr <sub>` shortcut | `hr applications` / `hr candidates` / `hr jobs` |
+
+| Platform | Candidate | Recruiter | Status |
+|----------|:---------:|:---------:|--------|
+| BOSS Zhipin (`zhipin`) | ✅ | ✅ | default |
+| Zhaopin (`zhilian`)    | 🟡 skeleton | — | real implementation tracked in [Issue #140](https://github.com/can4hou6joeng4/boss-agent-cli/issues/140) |
+
+```bash
+# pick a platform
+boss --platform zhilian search "Python"
+boss config set platform zhilian
+```
+
+Architecture notes: [docs/platform-abstraction.md](docs/platform-abstraction.md).
 
 ## 🤖 Agent Integration
 
@@ -117,7 +149,7 @@ See [Agent Quickstart](docs/agent-quickstart.md) and [Capability Matrix](docs/ca
 
 ## 📚 Commands
 
-33 commands, grouped by stage:
+41 commands total (34 top-level + 7 recruiter subcommands), grouped by stage:
 
 | Stage | Commands |
 |-------|----------|
