@@ -26,7 +26,8 @@ npx skills add can4hou6joeng4/boss-agent-cli
 4. 搜索使用 boss search
 5. 查看详情使用 boss detail
 6. 执行动作使用 boss greet
-7. 只读取 stdout JSON，不解析 stderr
+7. 招聘者场景使用 boss hr applications / candidates / reply / request-resume
+8. 只读取 stdout JSON，不解析 stderr
 ```
 
 最小命令链路：
@@ -37,6 +38,16 @@ boss status
 boss search "Golang" --city 广州 --welfare "双休,五险一金"
 boss detail <security_id>
 boss greet <security_id> <job_id>
+```
+
+招聘者最小命令链路：
+
+```bash
+boss schema
+boss status
+boss hr applications
+boss hr candidates "Golang"
+boss hr reply <friend_id> "你好"
 ```
 
 接入建议：

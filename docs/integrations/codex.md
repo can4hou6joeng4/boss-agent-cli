@@ -20,7 +20,8 @@
 4. 搜索时优先调用 boss search
 5. 命中目标后调用 boss detail
 6. 需要主动触达时调用 boss greet
-7. 只解析 stdout JSON，ok=false 时读取 error.code 与 error.recovery_action
+7. 招聘者场景优先使用 boss hr applications / candidates / reply / request-resume
+8. 只解析 stdout JSON，ok=false 时读取 error.code 与 error.recovery_action
 ```
 
 最小命令链路：
@@ -31,6 +32,16 @@ boss status
 boss search "Golang" --city 广州 --welfare "双休,五险一金"
 boss detail <security_id>
 boss greet <security_id> <job_id>
+```
+
+招聘者最小链路：
+
+```bash
+boss schema
+boss status
+boss hr applications
+boss hr candidates "Golang"
+boss hr reply <friend_id> "你好"
 ```
 
 推荐解析字段：

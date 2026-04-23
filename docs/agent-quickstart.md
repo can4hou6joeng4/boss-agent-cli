@@ -1,6 +1,6 @@
 # Agent Quickstart
 
-面向 AI Agent 的最短上手路径：先识别能力，再跑通搜索到行动的闭环。
+面向 AI Agent 的最短上手路径：先识别能力，再跑通从搜索到行动的闭环；如果你接的是招聘者场景，也能用同一套 JSON 契约接 `boss hr`。
 
 ## 1) 安装与环境准备
 
@@ -42,6 +42,28 @@ boss greet <security_id> <job_id>
 解析约定：
 - `stdout` 只读 JSON 信封
 - `ok=true` 代表成功，`ok=false` 时读取 `error.code` 与 `error.recovery_action`
+
+### 招聘者最小闭环
+
+如果 Agent 面向 HR / 招聘者角色，建议直接走 `boss hr`：
+
+```bash
+# Step 1: 同样先做能力发现
+boss schema
+
+# Step 2: 拉取招聘者侧能力
+boss hr applications
+boss hr candidates "Golang"
+
+# Step 3: 触达候选人
+boss hr reply <friend_id> "你好，方便聊一下岗位吗？"
+boss hr request-resume <friend_id> --job-id <job_id>
+```
+
+建议做法：
+- 先把 `boss schema` 里的 `hr` 命令组当作招聘者能力真源
+- `boss hr <subcommand>` 会自动切到 recruiter 角色，不需要额外推断 `--role`
+- 求职者与招聘者两端都遵守同一套 `stdout JSON / stderr 日志` 契约
 
 ## 3) 失败恢复与排障
 

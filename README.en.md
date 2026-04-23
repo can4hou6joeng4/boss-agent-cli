@@ -9,12 +9,16 @@
 > Recruiter: candidate search · chat reply · resume request · job publish management · cross-platform adapter layer
 
 [![CI](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli)
 [![Python](https://img.shields.io/badge/Python-≥3.10-3776AB?logo=python&logoColor=white)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/can4hou6joeng4/boss-agent-cli)](https://github.com/can4hou6joeng4/boss-agent-cli/releases)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/boss-agent-cli)](https://pypi.org/project/boss-agent-cli/)
+[![Contributors](https://img.shields.io/github/contributors/can4hou6joeng4/boss-agent-cli)](https://github.com/can4hou6joeng4/boss-agent-cli/graphs/contributors)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/pulls)
+[![Open in Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/can4hou6joeng4/boss-agent-cli)
 
-[Install](#-install) · [Quickstart](#-quickstart) · [Agent Integration](#-agent-integration) · [Commands](#-commands) · [Architecture](#-architecture) · [Changelog](CHANGELOG.md)
+[Install](#-install) · [Quickstart](#-quickstart) · [Roles & Platforms](#-roles--platforms) · [Agent Integration](#-agent-integration) · [Commands](#-commands) · [Troubleshooting](#-troubleshooting) · [Architecture](#-architecture) · [Changelog](CHANGELOG.md)
 
 [中文](README.md) | **English**
 
@@ -30,19 +34,44 @@ With AI Agents: `boss search` → `boss ai optimize` → `boss batch-greet` → 
 
 Every command outputs **structured JSON** that AI Agents parse directly. No fragile HTML scraping, no brittle selectors.
 
+## 🧭 Table of Contents
+
+- [Why boss-agent-cli?](#-why-boss-agent-cli)
+- [Core Capabilities](#-core-capabilities)
+- [Install](#-install)
+- [Quickstart](#-quickstart)
+- [Roles & Platforms](#-roles--platforms)
+- [Agent Integration](#-agent-integration)
+- [Commands](#-commands)
+- [Troubleshooting](#-troubleshooting)
+- [Architecture](#-architecture)
+- [Local Storage](#-local-storage)
+- [Contributing](#-contributing)
+
 ## 🌟 Core Capabilities
 
-- **41 CLI commands** (34 top-level + 7 recruiter subcommands) covering the full loop: search → detail → greet → chat → follow-up → apply, plus the recruiter workflow (applications → candidates → jobs → reply)
-- **JSON envelope output** on stdout, logs on stderr — Agent-friendly by design
-- **4-tier login fallback**: Cookie extract → CDP → QR httpx → patchright QR scan
-- **CDP mode** connects your local Chrome for real browser fingerprint and automatic stoken refresh
-- **Welfare filter** (`--welfare "双休,五险一金"`) with client-side AND logic and parallel detail fetching
-- **Recruiter mode** via `boss hr <sub>` (or `--role recruiter`) — candidate search, resume request, chat reply, job online/offline
-- **Cross-platform adapter layer** — `Platform` / `RecruiterPlatform` ABC + registry, Zhilian platform skeleton in progress ([Issue #140](https://github.com/can4hou6joeng4/boss-agent-cli/issues/140))
-- **AI resume optimization** with OpenAI / Claude / Gemini / Qwen / DeepSeek multi-model support
-- **AI chat reply drafting** based on recruiter message context
-- **Investment funnel stats** — greeted / applied / shortlist conversion rates
-- **MCP server** with 43 tools, works out of the box with Claude Desktop / Cursor
+### Job-seeker workflow
+
+- **Discovery**: keyword search, layered filters, recommendations, and cached `show` navigation. Commands: `search` `recommend` `show`
+- **Welfare-aware search**: `--welfare "双休,五险一金"` runs real AND matching by paging, fetching details, and checking text fallback. Command: `search --welfare`
+- **Action loop**: inspect, greet, batch-greet, and apply in one flow. Commands: `detail` `greet` `batch-greet` `apply`
+- **Pipeline control**: follow-up reminders, daily digest, and funnel stats for the full application lifecycle. Commands: `pipeline` `follow-up` `digest` `stats`
+- **Conversation ops**: chat list, message history, structured summaries, labels, and contact exchange. Commands: `chat` `chatmsg` `chat-summary` `mark` `exchange`
+- **AI job-hunting assist**: JD analysis, resume polish, role-targeted optimization, interview prep, and chat coaching. Commands: `ai analyze-jd` `ai polish` `ai optimize` `ai interview-prep` `ai chat-coach`
+
+### Recruiter workflow
+
+- **Candidate operations**: incoming applications, candidate search, recruiter chat list, inline resume view, and resume requests. Commands: `hr applications` `hr candidates` `hr chat` `hr resume` `hr request-resume`
+- **Recruiter messaging**: reply to candidates while keeping the same JSON contract as the candidate side. Command: `hr reply`
+- **Job lifecycle management**: list, bring online, and take offline recruiter postings. Commands: `hr jobs list` `hr jobs online` `hr jobs offline`
+
+### Platform & integration foundation
+
+- **Schema-first integration**: `boss schema` is the capability source of truth for shell agents, SDKs, and tool-export formats
+- **Structured transport**: stdout is JSON-only, stderr is logs-only, which keeps automation stable
+- **4-tier login fallback**: Cookie extract → CDP → QR httpx → patchright
+- **Cross-platform adapter layer**: `Platform` / `RecruiterPlatform` registries are live; Zhaopin is tracked as the next real adapter in [Issue #140](https://github.com/can4hou6joeng4/boss-agent-cli/issues/140)
+- **MCP server with 43 tools**: ready for Claude Desktop / Cursor / Windsurf without wrapping your own bridge
 
 ## 📦 Install
 
@@ -149,7 +178,7 @@ See [Agent Quickstart](docs/agent-quickstart.md) and [Capability Matrix](docs/ca
 
 ## 📚 Commands
 
-41 commands total (34 top-level + 7 recruiter subcommands), grouped by stage:
+`boss schema` currently exposes 33 top-level commands, plus 7 first-level recruiter subcommands under `hr`, grouped below by workflow:
 
 | Stage | Commands |
 |-------|----------|

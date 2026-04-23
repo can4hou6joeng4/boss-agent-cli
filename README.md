@@ -6,17 +6,19 @@
 
 > 求职者：搜索 · 福利筛选 · 个性化推荐 · 自动打招呼 · 求职流水线 · 增量监控 · AI 简历优化
 >
-> 招聘者：候选人检索 · 沟通回复 · 简历请求 · 职位上下线 · 多平台抽象（规划中）
+> 招聘者：候选人检索 · 沟通回复 · 简历请求 · 职位上下线 · 多平台抽象
 
 [![CI](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli)
 [![Python](https://img.shields.io/badge/Python-≥3.10-3776AB?logo=python&logoColor=white)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/can4hou6joeng4/boss-agent-cli)](https://github.com/can4hou6joeng4/boss-agent-cli/releases)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/boss-agent-cli)](https://pypi.org/project/boss-agent-cli/)
+[![Contributors](https://img.shields.io/github/contributors/can4hou6joeng4/boss-agent-cli)](https://github.com/can4hou6joeng4/boss-agent-cli/graphs/contributors)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/pulls)
 [![Open in Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/can4hou6joeng4/boss-agent-cli)
 
-[安装](#-安装) · [快速开始](#-快速开始) · [Agent 集成](#-ai-agent-集成) · [命令参考](#-命令参考) · [架构](#-技术架构) · [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
+[安装](#-安装) · [快速开始](#-快速开始) · [角色模式](#-角色模式与多平台) · [Agent 集成](#-ai-agent-集成) · [命令参考](#-命令参考) · [排障](#-诊断与排障) · [架构](#-技术架构) · [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
 
 **中文** | [English](README.en.md)
 
@@ -24,7 +26,7 @@
 
 </div>
 
-> A CLI tool designed for AI Agents to interact with [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). Structured JSON output, 34 top-level commands plus 7 recruiter subcommands, 4-tier login fallback, cross-platform adapter layer. See [README.en.md](README.en.md) for the English version.
+> A CLI tool designed for AI Agents to interact with [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). Structured JSON output, schema-driven capability discovery, 4-tier login fallback, recruiter workflow support, and a cross-platform adapter layer. See [README.en.md](README.en.md) for the English version.
 
 ---
 
@@ -46,20 +48,46 @@ boss digest                                                  # 每日汇报
 
 ---
 
+## 🧭 导航目录
+
+- [为什么用 boss-agent-cli](#-为什么用-boss-agent-cli)
+- [核心能力](#-核心能力)
+- [安装](#-安装)
+- [快速开始](#-快速开始)
+- [登录链路](#-登录链路)
+- [角色模式与多平台](#-角色模式与多平台)
+- [AI Agent 集成](#-ai-agent-集成)
+- [命令参考](#-命令参考)
+- [诊断与排障](#-诊断与排障)
+- [配置](#-配置)
+- [技术架构](#-技术架构)
+- [贡献](#-贡献)
+
+---
+
 ## 🌟 核心能力
 
-| 能力 | 说明 | 命令 |
-|------|------|------|
-| 🔍 **职位发现** | 关键词搜索 + 8 维筛选 + 个性化推荐 | `search` `recommend` |
-| 🎯 **福利筛选** | `--welfare "双休,五险一金"` 自动翻页逐条匹配 | `search --welfare` |
-| 👋 **主动出击** | 单个/批量打招呼、立即沟通投递 | `greet` `batch-greet` `apply` |
-| 📊 **进度管理** | 求职流水线 + 跟进提醒 + 每日摘要 + 漏斗统计 | `pipeline` `follow-up` `digest` `stats` |
-| 👀 **增量监控** | 保存搜索条件、定期执行、标出新职位 | `watch` `shortlist` `preset` |
-| 💬 **沟通管理** | 聊天记录、结构化摘要、标签管理 | `chat` `chatmsg` `chat-summary` |
-| 🤖 **AI 优化** | 岗位分析 + 简历润色 + 匹配优化 + 面试准备 + 沟通指导 | `ai analyze-jd` `ai polish` `ai optimize` `ai interview-prep` `ai chat-coach` |
-| 👔 **招聘者模式** | 候选人搜索 / 简历请求 / 沟通回复 / 职位上下线 | `hr applications` `hr candidates` `hr jobs` `hr reply` |
-| 🔌 **多平台抽象** | `Platform` / `RecruiterPlatform` 双注册表，智联招聘骨架已接入 | `--platform zhipin\|zhilian` |
-| 📤 **数据导出** | CSV / JSON / HTML / Markdown 多格式 | `export` `chat --export` |
+### 求职者工作流
+
+- `🔍 职位发现`：关键词搜索、8 维筛选、个性化推荐、按编号回看同一条结果。命令：`search` `recommend` `show`
+- `🎯 福利筛选`：`--welfare "双休,五险一金"` 会自动翻页、补抓详情、按 AND 逻辑做真实匹配。命令：`search --welfare`
+- `👋 主动出击`：从职位详情直接打招呼、批量打招呼、立即沟通投递。命令：`detail` `greet` `batch-greet` `apply`
+- `📊 流程推进`：流水线、跟进提醒、每日摘要、投递转化漏斗一条线闭环。命令：`pipeline` `follow-up` `digest` `stats`
+- `👀 增量监控`：保存搜索条件、定期执行、标出新职位、沉淀 shortlist。命令：`watch` `preset` `shortlist`
+- `💬 沟通管理`：聊天列表、消息历史、结构化摘要、标签和联系方式交换。命令：`chat` `chatmsg` `chat-summary` `mark` `exchange`
+- `🤖 AI 求职增强`：JD 分析、简历润色、定向优化、模拟面试、沟通指导。命令：`ai analyze-jd` `ai polish` `ai optimize` `ai interview-prep` `ai chat-coach`
+
+### 招聘者工作流
+
+- `👔 候选人运营`：投递申请、候选人搜索、沟通列表、在线简历查看与附件简历请求。命令：`hr applications` `hr candidates` `hr chat` `hr resume` `hr request-resume`
+- `💬 招聘沟通`：直接回复候选人消息，把 HR 场景纳入同一套 JSON 协议。命令：`hr reply`
+- `📌 职位管理`：查看职位、上架、下架，作为招聘者端的最小可操作闭环。命令：`hr jobs list` `hr jobs online` `hr jobs offline`
+
+### 平台与集成基础
+
+- `🔌 多平台抽象`：`Platform` / `RecruiterPlatform` 双注册表已落地，BOSS 直聘可用、智联招聘骨架已接入。命令：`--platform zhipin|zhilian`
+- `📤 结构化输出`：stdout 只输出 JSON 信封，适合 CLI 编排、Shell Agent、MCP 和 Python SDK。命令：`schema` `export`
+- `🧩 Agent 接入`：同一套能力可通过 Skill、subprocess、MCP、Python SDK 四种路径暴露给 Agent。文档：`docs/agent-quickstart.md` `docs/agent-hosts.md`
 
 ---
 
