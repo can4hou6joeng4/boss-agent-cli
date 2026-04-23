@@ -7,7 +7,7 @@
 ## Title Candidates
 
 - **A**: Show HN: I built a CLI that lets Claude apply to jobs for me
-- **B**: boss-agent-cli — 34 commands + 41 MCP tools for AI-driven job hunting
+- **B**: boss-agent-cli — 33 top-level commands + 7 recruiter subcommands + 43 MCP tools for AI-driven job hunting
 - **C**: I open-sourced the CLI that turns Claude into my recruiter liaison
 
 Recommended: **A** (HN-friendly).
@@ -18,7 +18,7 @@ Recommended: **A** (HN-friendly).
 
 ### TL;DR
 
-`boss-agent-cli` is an open-source CLI tool designed for AI agents to handle the full job-hunting workflow on [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). Every command outputs structured JSON; 41 MCP tools plug into Claude Desktop, Cursor, or any MCP-compatible host. MIT licensed, 80% test coverage, v1.7.0 on PyPI.
+`boss-agent-cli` is an open-source CLI tool designed for AI agents to handle the full job-hunting workflow on [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). Every command outputs structured JSON; 43 MCP tools plug into Claude Desktop, Cursor, or any MCP-compatible host. MIT licensed, 1000+ tests, dual job-seeker + recruiter workflow, and v1.11.0 on PyPI.
 
 ```bash
 uv tool install boss-agent-cli
@@ -59,7 +59,7 @@ The fix: `ThreadPoolExecutor` with 3 workers running detail fetches in parallel,
 
 #### 3. MCP server as the primary integration surface
 
-Model Context Protocol is Anthropic's standard for exposing tools to AI agents. The `mcp-server/` directory ships a stdio server that wraps all 34 CLI commands into 41 MCP tools (subcommands exploded).
+Model Context Protocol is Anthropic's standard for exposing tools to AI agents. The `mcp-server/` directory ships a stdio server that wraps the CLI into 43 MCP tools, including recruiter-side operations and AI workflow helpers.
 
 In `claude_desktop_config.json`:
 
@@ -102,7 +102,7 @@ $ boss ai reply "Are you available for a call this week?" \
 
 ### Engineering stats (for the skeptics)
 
-- 696 pytest tests, 80% line coverage
+- 1042 pytest tests, roughly 86% line coverage
 - CI matrix across Python 3.10 / 3.11 / 3.12 / 3.13
 - Ruff lint + pre-commit hooks
 - Drift-detection meta-test: schema ↔ main.py registration must stay aligned
@@ -110,9 +110,9 @@ $ boss ai reply "Are you available for a call this week?" \
 
 ### Roadmap (help wanted)
 
-- `boss stats --format html` — interactive funnel charts (good first issue)
+- Zhilian real adapter beyond the current skeleton
 - MCP HTTP Streaming transport
-- `boss schema --format openai-tools` for OpenAI Functions compat
+- More recruiter-side platform adapters beyond BOSS Zhipin
 
 ### Links
 
