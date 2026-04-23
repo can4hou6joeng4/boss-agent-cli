@@ -1,0 +1,17 @@
+# Default owner for the whole repository.
+* @can4hou6joeng4
+
+# Release and packaging surface.
+/pyproject.toml @can4hou6joeng4
+/uv.lock @can4hou6joeng4
+/src/boss_agent_cli/__init__.py @can4hou6joeng4
+
+# Public agent-facing contracts and docs.
+/README.md @can4hou6joeng4
+/README.en.md @can4hou6joeng4
+/SKILL.md @can4hou6joeng4
+/docs/ @can4hou6joeng4
+/mcp-server/ @can4hou6joeng4
+
+# GitHub automation and governance.
+/.github/ @can4hou6joeng4

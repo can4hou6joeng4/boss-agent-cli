@@ -50,6 +50,7 @@ Closes #
 - [ ] 如新增 MCP 工具：已更新 `mcp-server/server.py` 和 `mcp-server/README.md`
 - [ ] 如新增错误码：已添加到 `schema.py` 的 `error_codes`
 - [ ] 已更新 `CHANGELOG.md` 的 `[Unreleased]` 段落
+- [ ] 如变更 Agent 主卖点或安装路径：已同步检查 `SKILL.md` / PyPI 版本 / GitHub Release 说明
 
 ## 安全与规范 / Safety & Convention
 
