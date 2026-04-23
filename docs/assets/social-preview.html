@@ -35,7 +35,7 @@
 
     body {
       position: relative;
-      padding: 30px 36px 26px;
+      padding: 26px 34px 22px;
     }
 
     .backdrop {
@@ -73,19 +73,19 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
-      padding: 6px 6px 2px 0;
+      padding: 2px 6px 18px 0;
     }
 
     .eyebrow {
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      padding: 8px 14px;
+      padding: 7px 13px;
       border: 1px solid var(--line);
       border-radius: 999px;
       background: rgba(8, 17, 31, 0.42);
       color: var(--muted);
-      font-size: 17px;
+      font-size: 16px;
       letter-spacing: 0.04em;
       width: fit-content;
     }
@@ -99,8 +99,8 @@
     }
 
     h1 {
-      margin: 14px 0 12px;
-      font-size: 62px;
+      margin: 10px 0 8px;
+      font-size: 52px;
       line-height: 1.02;
       letter-spacing: -0.045em;
       max-width: 700px;
@@ -109,9 +109,9 @@
     .lede {
       margin: 0;
       color: var(--muted);
-      font-size: 23px;
-      line-height: 1.4;
-      max-width: 720px;
+      font-size: 19px;
+      line-height: 1.32;
+      max-width: 650px;
     }
 
     .lede strong {
@@ -119,15 +119,27 @@
       font-weight: 700;
     }
 
+    .summary-line {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.42;
+      max-width: 650px;
+    }
+
+    .summary-line strong {
+      color: var(--text);
+    }
+
     .metric-row {
       display: flex;
       gap: 12px;
       flex-wrap: wrap;
-      margin-top: 14px;
+      margin-top: 12px;
     }
 
     .metric {
-      min-width: 138px;
+      min-width: 150px;
       padding: 12px 14px 10px;
       border-radius: 20px;
       border: 1px solid var(--line);
@@ -136,7 +148,7 @@
     }
 
     .metric .value {
-      font-size: 28px;
+      font-size: 26px;
       font-weight: 800;
       letter-spacing: -0.04em;
     }
@@ -150,24 +162,24 @@
     }
 
     .terminal {
-      margin-top: 12px;
+      margin-top: 14px;
       border-radius: 24px;
       border: 1px solid rgba(125, 211, 252, 0.18);
       background: rgba(5, 12, 23, 0.78);
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
       overflow: hidden;
       max-width: 740px;
-      max-height: 118px;
+      max-height: 84px;
     }
 
     .terminal-top {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 14px 18px;
+      padding: 10px 15px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.07);
       color: var(--muted);
-      font-size: 15px;
+      font-size: 14px;
     }
 
     .window-dot {
@@ -181,10 +193,10 @@
     .w-green { background: #86efac; }
 
     .code {
-      padding: 14px 18px 16px;
+      padding: 10px 15px 11px;
       font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
-      font-size: 15px;
-      line-height: 1.35;
+      font-size: 14px;
+      line-height: 1.2;
       color: #dce8f6;
       white-space: pre-wrap;
     }
@@ -315,26 +327,23 @@
         </div>
         <h1>boss-agent-cli</h1>
         <p class="lede">
-          <strong>BOSS 直聘</strong> job-seeker + recruiter workflow for AI agents.
-          Structured JSON, <strong>43 MCP tools</strong>, welfare filtering,
-          recruiter ops, and local-first automation.
+          <strong>BOSS 直聘</strong> dual-sided workflow for AI agents.
+          Structured JSON, recruiter ops, welfare filtering, and local-first automation.
         </p>
+        <div class="summary-line">
+          <strong>33</strong> top-level commands ·
+          <strong>7</strong> recruiter subcommands ·
+          <strong>43</strong> MCP tools ·
+          <strong>1042</strong> tests
+        </div>
         <div class="metric-row">
           <div class="metric">
-            <div class="value">33 + 7</div>
-            <div class="label">CLI surface</div>
-          </div>
-          <div class="metric">
-            <div class="value">43</div>
-            <div class="label">MCP tools</div>
-          </div>
-          <div class="metric">
-            <div class="value">1042</div>
-            <div class="label">Tests</div>
-          </div>
-          <div class="metric">
             <div class="value">v1.11.0</div>
-            <div class="label">Latest release</div>
+            <div class="label">Release</div>
+          </div>
+          <div class="metric">
+            <div class="value">JSON</div>
+            <div class="label">stdout only</div>
           </div>
         </div>
       </div>
@@ -346,8 +355,7 @@
           <span class="window-dot w-green"></span>
           <span style="margin-left:8px;">agent workflow</span>
         </div>
-        <div class="code"><span class="prompt">$</span> boss search <span class="accent">"Golang"</span> <span class="flag">--welfare</span> <span class="accent">"双休,五险一金"</span>
-<span class="prompt">$</span> boss hr reply <span class="accent">"你好，方便聊一下岗位吗？"</span></div>
+        <div class="code"><span class="prompt">$</span> boss hr reply <span class="accent">"你好，方便聊一下岗位吗？"</span></div>
       </div>
     </section>
 
