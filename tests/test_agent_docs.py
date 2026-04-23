@@ -33,7 +33,8 @@ def test_capability_matrix_exists_and_covers_core_capabilities():
 	assert "`boss digest`" in content
 	assert "`boss config`" in content
 	assert "`boss clean`" in content
-	assert "30" in content
+	assert "33 个顶层命令" in content
+	assert "7 个一级招聘者子命令" in content
 
 
 def test_readme_and_skill_link_to_new_docs():
