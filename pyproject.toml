@@ -43,7 +43,7 @@ Issues = "https://github.com/can4hou6joeng4/boss-agent-cli/issues"
 
 [project.optional-dependencies]
 dev = [
-	"pytest>=7.0",
+	"pytest>=9.0.3",
 	"pytest-cov>=5.0",
 	"ruff>=0.4",
 	"pre-commit>=3.0",
