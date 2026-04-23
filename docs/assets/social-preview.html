@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>boss-agent-cli social preview</title>
+  <style>
+    :root {
+      --bg-1: #08111f;
+      --bg-2: #0f223a;
+      --bg-3: #14355c;
+      --card: rgba(255, 255, 255, 0.08);
+      --line: rgba(255, 255, 255, 0.14);
+      --text: #f4f7fb;
+      --muted: #c7d7eb;
+      --cyan: #7dd3fc;
+      --mint: #86efac;
+      --amber: #fbbf24;
+      --rose: #fb7185;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      width: 1280px;
+      height: 640px;
+      overflow: hidden;
+      background: #0b1627;
+      color: var(--text);
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+    }
+
+    body {
+      position: relative;
+      padding: 30px 36px 26px;
+    }
+
+    .backdrop {
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(circle at top left, rgba(125, 211, 252, 0.18), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(134, 239, 172, 0.18), transparent 28%),
+        linear-gradient(135deg, var(--bg-1) 0%, var(--bg-2) 46%, var(--bg-3) 100%);
+      pointer-events: none;
+    }
+
+    .noise {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), transparent 92%);
+      pointer-events: none;
+    }
+
+    .frame {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: 1.18fr 0.82fr;
+      gap: 26px;
+    }
+
+    .hero {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      padding: 6px 6px 2px 0;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(8, 17, 31, 0.42);
+      color: var(--muted);
+      font-size: 17px;
+      letter-spacing: 0.04em;
+      width: fit-content;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--cyan), var(--mint));
+      box-shadow: 0 0 18px rgba(125, 211, 252, 0.55);
+    }
+
+    h1 {
+      margin: 14px 0 12px;
+      font-size: 62px;
+      line-height: 1.02;
+      letter-spacing: -0.045em;
+      max-width: 700px;
+    }
+
+    .lede {
+      margin: 0;
+      color: var(--muted);
+      font-size: 23px;
+      line-height: 1.4;
+      max-width: 720px;
+    }
+
+    .lede strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .metric-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .metric {
+      min-width: 138px;
+      padding: 12px 14px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.04));
+      backdrop-filter: blur(10px);
+    }
+
+    .metric .value {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+    }
+
+    .metric .label {
+      margin-top: 6px;
+      font-size: 14px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .terminal {
+      margin-top: 12px;
+      border-radius: 24px;
+      border: 1px solid rgba(125, 211, 252, 0.18);
+      background: rgba(5, 12, 23, 0.78);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+      max-width: 740px;
+      max-height: 118px;
+    }
+
+    .terminal-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .window-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+    }
+
+    .w-red { background: #fb7185; }
+    .w-yellow { background: #fbbf24; }
+    .w-green { background: #86efac; }
+
+    .code {
+      padding: 14px 18px 16px;
+      font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+      font-size: 15px;
+      line-height: 1.35;
+      color: #dce8f6;
+      white-space: pre-wrap;
+    }
+
+    .code .prompt { color: var(--mint); }
+    .code .flag { color: var(--amber); }
+    .code .accent { color: var(--cyan); }
+
+    .sidebar {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 14px;
+    }
+
+    .panel {
+      border-radius: 24px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05));
+      backdrop-filter: blur(10px);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: 16px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .section-title strong {
+      color: var(--text);
+      font-size: 17px;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .chip-card {
+      padding: 12px 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .chip-card .title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .chip-card .desc {
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .badge-cloud {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .badge {
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 14px;
+      letter-spacing: 0.03em;
+      background: rgba(10, 18, 31, 0.42);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text);
+    }
+
+    .footer-card {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 18px;
+      border-radius: 24px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .footer-card .left {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .footer-card .left .repo {
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .footer-card .left .sub {
+      font-size: 15px;
+      color: var(--muted);
+    }
+
+    .footer-card .mark {
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      font-size: 15px;
+      color: var(--cyan);
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="backdrop"></div>
+  <div class="noise"></div>
+  <div class="frame">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">
+          <span class="dot"></span>
+          Agent-first job hunt CLI
+        </div>
+        <h1>boss-agent-cli</h1>
+        <p class="lede">
+          <strong>BOSS 直聘</strong> job-seeker + recruiter workflow for AI agents.
+          Structured JSON, <strong>43 MCP tools</strong>, welfare filtering,
+          recruiter ops, and local-first automation.
+        </p>
+        <div class="metric-row">
+          <div class="metric">
+            <div class="value">33 + 7</div>
+            <div class="label">CLI surface</div>
+          </div>
+          <div class="metric">
+            <div class="value">43</div>
+            <div class="label">MCP tools</div>
+          </div>
+          <div class="metric">
+            <div class="value">1042</div>
+            <div class="label">Tests</div>
+          </div>
+          <div class="metric">
+            <div class="value">v1.11.0</div>
+            <div class="label">Latest release</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="terminal">
+        <div class="terminal-top">
+          <span class="window-dot w-red"></span>
+          <span class="window-dot w-yellow"></span>
+          <span class="window-dot w-green"></span>
+          <span style="margin-left:8px;">agent workflow</span>
+        </div>
+        <div class="code"><span class="prompt">$</span> boss search <span class="accent">"Golang"</span> <span class="flag">--welfare</span> <span class="accent">"双休,五险一金"</span>
+<span class="prompt">$</span> boss hr reply <span class="accent">"你好，方便聊一下岗位吗？"</span></div>
+      </div>
+    </section>
+
+    <aside class="sidebar">
+      <div class="panel">
+        <div class="section-title">
+          <span>Core workflow</span>
+          <strong>Dual-sided</strong>
+        </div>
+        <div class="stack">
+          <div class="chip-card">
+            <div class="title">Job-seeker</div>
+            <div class="desc">Search, welfare filtering, greet/apply, chat summary, pipeline, digest, shortlist, AI resume optimization.</div>
+          </div>
+          <div class="chip-card">
+            <div class="title">Recruiter</div>
+            <div class="desc">Applications, candidate search, recruiter chat, resume request, direct reply, and job online/offline management.</div>
+          </div>
+          <div class="chip-card">
+            <div class="title">Delivery surface</div>
+            <div class="desc">Skill install, MCP server, Python SDK, and CLI-first subprocess orchestration with stdout JSON only.</div>
+          </div>
+        </div>
+
+        <div class="section-title" style="margin-top:4px;">
+          <span>Topics</span>
+          <strong>Discoverability</strong>
+        </div>
+        <div class="badge-cloud">
+          <span class="badge">ai-agent</span>
+          <span class="badge">mcp</span>
+          <span class="badge">job-search</span>
+          <span class="badge">resume</span>
+          <span class="badge">recruiter-workflow</span>
+          <span class="badge">python</span>
+        </div>
+      </div>
+
+      <div class="footer-card">
+        <div class="left">
+          <div class="repo">can4hou6joeng4/boss-agent-cli</div>
+          <div class="sub">AI-agent-first CLI for BOSS 直聘</div>
+        </div>
+        <div class="mark">JSON stdout · local-first · MCP-ready</div>
+      </div>
+    </aside>
+  </div>
+</body>
+</html>
