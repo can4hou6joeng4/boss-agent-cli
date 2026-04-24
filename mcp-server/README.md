@@ -49,6 +49,8 @@ pip install mcp
 
 ## 可用工具
 
+当前 MCP Server 暴露 **49 个工具**，覆盖求职者链路、AI 辅助能力，以及招聘者侧 `hr` 工作流。
+
 ### 认证与环境
 
 | 工具 | 说明 |
@@ -101,6 +103,18 @@ pip install mcp
 | 工具 | 说明 |
 |------|------|
 | `boss_me` | 用户信息（基本信息、简历、求职期望、投递记录） |
+
+### 招聘者工作流
+
+| 工具 | 说明 |
+|------|------|
+| `boss_hr_applications` | 查看候选人投递申请列表 |
+| `boss_hr_candidates` | 搜索候选人 |
+| `boss_hr_chat` | 招聘者沟通列表 |
+| `boss_hr_resume` | 查看候选人在线简历 |
+| `boss_hr_reply` | 回复候选人消息 |
+| `boss_hr_request_resume` | 请求候选人附件简历 |
+| `boss_hr_jobs` | 职位列表与上下线管理 |
 
 ## 使用示例
 

@@ -18,7 +18,7 @@ Recommended: **A** (HN-friendly).
 
 ### TL;DR
 
-`boss-agent-cli` is an open-source CLI tool designed for AI agents to handle the full job-hunting workflow on [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). Every command outputs structured JSON; 43 MCP tools plug into Claude Desktop, Cursor, or any MCP-compatible host. MIT licensed, 1000+ tests, dual job-seeker + recruiter workflow, and v1.11.0 on PyPI.
+`boss-agent-cli` is an open-source CLI tool designed for AI agents to handle the full job-hunting workflow on [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). Every command outputs structured JSON; 49 MCP tools plug into Claude Desktop, Cursor, or any MCP-compatible host. MIT licensed, 1000+ tests, dual job-seeker + recruiter workflow, and v1.11.0 on PyPI.
 
 ```bash
 uv tool install boss-agent-cli

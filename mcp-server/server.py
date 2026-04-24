@@ -471,6 +471,98 @@ TOOLS = [
 			"required": ["name"],
 		},
 	),
+	Tool(
+		name="boss_hr_applications",
+		description="招聘者模式：查看候选人投递申请列表",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"job_id": {"type": "string", "description": "按职位筛选（可选）"},
+				"label_id": {"type": "integer", "description": "标签筛选（0=全部, 1=新招呼, 2=沟通中）", "default": 0},
+				"page": {"type": "integer", "description": "页码", "default": 1},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_hr_candidates",
+		description="招聘者模式：搜索候选人",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"query": {"type": "string", "description": "搜索关键词（可选，不传时返回默认候选集）"},
+				"city": {"type": "string", "description": "城市筛选"},
+				"job_id": {"type": "string", "description": "按职位筛选"},
+				"experience": {"type": "string", "description": "经验要求"},
+				"degree": {"type": "string", "description": "学历要求"},
+				"page": {"type": "integer", "description": "页码", "default": 1},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_hr_chat",
+		description="招聘者模式：查看与候选人的沟通列表",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"page": {"type": "integer", "description": "页码", "default": 1},
+				"job_id": {"type": "string", "description": "按职位筛选"},
+				"label_id": {"type": "integer", "description": "标签筛选（0=全部, 1=新招呼, 2=沟通中）", "default": 0},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_hr_resume",
+		description="招聘者模式：查看候选人在线简历",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"geek_id": {"type": "string", "description": "候选人 geek_id"},
+				"job_id": {"type": "string", "description": "关联职位 ID"},
+				"security_id": {"type": "string", "description": "候选人的 security_id"},
+				"raw": {"type": "boolean", "description": "输出原始 API 数据", "default": False},
+			},
+			"required": ["geek_id", "job_id", "security_id"],
+		},
+	),
+	Tool(
+		name="boss_hr_reply",
+		description="招聘者模式：回复候选人消息",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
+				"message": {"type": "string", "description": "回复消息内容"},
+			},
+			"required": ["friend_id", "message"],
+		},
+	),
+	Tool(
+		name="boss_hr_request_resume",
+		description="招聘者模式：请求候选人分享附件简历",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
+				"job_id": {"type": "integer", "description": "关联职位 ID"},
+			},
+			"required": ["friend_id", "job_id"],
+		},
+	),
+	Tool(
+		name="boss_hr_jobs",
+		description="招聘者模式：查看职位列表，或执行上线/下线操作",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"action": {"type": "string", "description": "操作类型", "enum": ["list", "online", "offline"], "default": "list"},
+				"job_id": {"type": "string", "description": "职位 ID（online/offline 时必填）"},
+			},
+			"required": [],
+		},
+	),
 ]
 
 
@@ -685,6 +777,56 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 
 	if name == "watch_remove":
 		return ["watch", "remove", arguments["name"]]
+
+	if name == "hr_applications":
+		args = ["hr", "applications"]
+		if arguments.get("job_id"):
+			args.extend(["--job-id", str(arguments["job_id"])])
+		if "label_id" in arguments:
+			args.extend(["--label-id", str(arguments["label_id"])])
+		if "page" in arguments:
+			args.extend(["--page", str(arguments["page"])])
+		return args
+
+	if name == "hr_candidates":
+		args = ["hr", "candidates"]
+		if arguments.get("query"):
+			args.append(arguments["query"])
+		for opt in ("city", "job_id", "experience", "degree"):
+			if arguments.get(opt):
+				args.extend([f"--{opt.replace('_', '-')}", str(arguments[opt])])
+		if "page" in arguments:
+			args.extend(["--page", str(arguments["page"])])
+		return args
+
+	if name == "hr_chat":
+		args = ["hr", "chat"]
+		if "page" in arguments:
+			args.extend(["--page", str(arguments["page"])])
+		if arguments.get("job_id"):
+			args.extend(["--job-id", str(arguments["job_id"])])
+		if "label_id" in arguments:
+			args.extend(["--label-id", str(arguments["label_id"])])
+		return args
+
+	if name == "hr_resume":
+		args = ["hr", "resume", arguments["geek_id"], "--job-id", str(arguments["job_id"]), "--security-id", str(arguments["security_id"])]
+		if arguments.get("raw"):
+			args.append("--raw")
+		return args
+
+	if name == "hr_reply":
+		return ["hr", "reply", str(arguments["friend_id"]), arguments["message"]]
+
+	if name == "hr_request_resume":
+		return ["hr", "request-resume", str(arguments["friend_id"]), "--job-id", str(arguments["job_id"])]
+
+	if name == "hr_jobs":
+		action = arguments.get("action", "list")
+		args = ["hr", "jobs", action]
+		if action in {"online", "offline"}:
+			args.append(str(arguments["job_id"]))
+		return args
 
 	# 无参数命令：status, doctor, cities, interviews, history, pipeline
 	return [name]

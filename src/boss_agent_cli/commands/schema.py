@@ -87,7 +87,7 @@ def _format_anthropic_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 SCHEMA_DATA = {
 	"name": "boss-agent-cli",
-	"description": "BOSS直聘求职工具。32 个命令覆盖搜索、筛选、打招呼、沟通、流水线、简历优化全流程。",
+	"description": "BOSS直聘求职工具。33 个顶层命令覆盖搜索、筛选、打招呼、沟通、流水线、招聘者工作流与简历优化全流程。",
 	"commands": {
 		"login": {
 			"description": "登录 BOSS 直聘（四级降级：Cookie 提取 → CDP → QR httpx 扫码 → patchright 扫码）",

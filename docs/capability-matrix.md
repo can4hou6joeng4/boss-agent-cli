@@ -87,6 +87,18 @@
 |---|---|---|---|
 | 投递转化漏斗 | `boss stats` | 否 | 本地 |
 
+## 招聘者工作流
+
+| 能力 | CLI 命令 | 需要登录 | 通道 |
+|---|---|---|---|
+| 投递申请列表 | `boss hr applications` | 是 | httpx |
+| 候选人搜索 | `boss hr candidates` | 是 | httpx |
+| 沟通列表 | `boss hr chat` | 是 | httpx |
+| 在线简历查看 | `boss hr resume` | 是 | httpx |
+| 消息回复 | `boss hr reply` | 是 | httpx |
+| 附件简历请求 | `boss hr request-resume` | 是 | httpx |
+| 职位列表与上下线 | `boss hr jobs` | 是 | httpx |
+
 说明：
 - **通道**：httpx 为直接 API 请求（低风险），浏览器为 CDP/patchright 通道（高风险操作需要真实浏览器指纹），AI 服务为第三方大模型 API。
 - 若以 CLI 直连为主，优先通过 `boss schema` 进行能力发现与参数校验。

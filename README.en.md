@@ -71,7 +71,7 @@ Every command outputs **structured JSON** that AI Agents parse directly. No frag
 - **Structured transport**: stdout is JSON-only, stderr is logs-only, which keeps automation stable
 - **4-tier login fallback**: Cookie extract → CDP → QR httpx → patchright
 - **Cross-platform adapter layer**: `Platform` / `RecruiterPlatform` registries are live; Zhaopin is tracked as the next real adapter in [Issue #140](https://github.com/can4hou6joeng4/boss-agent-cli/issues/140)
-- **MCP server with 43 tools**: ready for Claude Desktop / Cursor / Windsurf without wrapping your own bridge
+- **MCP server with 49 tools**: ready for Claude Desktop / Cursor / Windsurf, including recruiter-side tools without wrapping your own bridge
 
 ## 📦 Install
 

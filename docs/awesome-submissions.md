@@ -4,7 +4,7 @@
 
 ## 项目一句话介绍
 
-**中文**：专为 AI Agent 设计的 BOSS 直聘求职 CLI，33 个顶层命令 + 7 个招聘者子命令 + 43 个 MCP 工具，全部输出 JSON，支持 Claude Desktop/Cursor/Windsurf 无缝接入，覆盖求职者与招聘者双端工作流。
+**中文**：专为 AI Agent 设计的 BOSS 直聘求职 CLI，33 个顶层命令 + 7 个招聘者子命令 + 49 个 MCP 工具，全部输出 JSON，支持 Claude Desktop/Cursor/Windsurf 无缝接入，覆盖求职者与招聘者双端工作流。
 
 **English**: AI-agent-first CLI for BOSS Zhipin. 33 top-level commands + 7 recruiter subcommands + 43 MCP tools, JSON envelope output, typed Python SDK (PEP 561), and out-of-the-box integration for Claude Desktop / Cursor / Windsurf.
 
@@ -81,12 +81,12 @@
 
 ## 一句话钩子（A/B 测试素材）
 
-1. "33 个顶层命令 + 7 个招聘者子命令 + 43 个 MCP 工具，让 AI Agent 帮你打招呼、投简历、聊 HR、准备面试"
+1. "33 个顶层命令 + 7 个招聘者子命令 + 49 个 MCP 工具，让 AI Agent 帮你打招呼、投简历、聊 HR、准备面试"
 2. "第一个 MCP 就绪、类型安全的中国招聘平台 CLI，为 Claude Desktop / Cursor / Windsurf 设计"
 3. "`boss ai interview-prep` — 把 JD 扔进 AI，秒出 10 道模拟面试题"
 4. "你只负责描述期望，AI Agent 负责搜、聊、投、跟进"
 5. "MIT License，本地加密存储，数据不出机"
-6. "1042 测试、43 个 MCP 工具、下游 Python 嵌入零学习成本"
+6. "1042 测试、49 个 MCP 工具、下游 Python 嵌入零学习成本"
 
 ## 实际投稿记录 & 渠道约束（2026-04-20 复盘）
 

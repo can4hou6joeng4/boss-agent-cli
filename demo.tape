@@ -27,9 +27,9 @@ Ctrl+L
 Sleep 300ms
 
 # ══════════════════════════════════════════════════
-# Act 2: AI 自描述协议 — 32 个命令分组展示
+# Act 2: AI 自描述协议 — 33 个顶层命令分组展示
 # ══════════════════════════════════════════════════
-Type "# AI 自描述：32 commands + 错误自愈 + JSON 信封协议"
+Type "# AI 自描述：33 top-level commands + 错误自愈 + JSON 信封协议"
 Enter
 Sleep 800ms
 Type "boss --json schema 2>/dev/null | python3 demo_showcase.py"
