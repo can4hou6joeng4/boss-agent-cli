@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 import types
 from pathlib import Path
@@ -92,6 +93,18 @@ def test_readme_en_mentions_current_mcp_tool_count():
 	content = _read("README.en.md")
 	tool_count = len(_load_mcp_tools())
 	assert f"MCP server with {tool_count} tools" in content
+
+
+def test_glama_metadata_exists_and_declares_owner():
+	content = json.loads(_read("glama.json"))
+	assert content["$schema"] == "https://glama.ai/mcp/schemas/server.json"
+	assert "can4hou6joeng4" in content["maintainers"]
+
+
+def test_pyproject_exposes_boss_mcp_script():
+	pyproject = _read("pyproject.toml")
+	assert 'boss-mcp = "boss_agent_cli.mcp_server:run"' in pyproject
+	assert '"mcp>=1.0.0"' in pyproject
 
 
 def test_schema_main_and_modules_command_count_consistent():

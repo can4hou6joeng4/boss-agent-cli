@@ -13,8 +13,8 @@
 uv tool install boss-agent-cli
 patchright install chromium
 
-# 2. 安装 MCP 依赖
-pip install mcp
+# 2. 安装 MCP 依赖并暴露 MCP 入口
+uv tool install "boss-agent-cli[mcp]"
 ```
 
 ## 配置 Claude Desktop
@@ -25,8 +25,8 @@ pip install mcp
 {
   "mcpServers": {
     "boss-agent-cli": {
-      "command": "python3",
-      "args": ["/path/to/boss-agent-cli/mcp-server/server.py"]
+      "command": "boss-mcp",
+      "args": []
     }
   }
 }
@@ -41,8 +41,8 @@ pip install mcp
 ```json
 {
   "boss-agent-cli": {
-    "command": "python3",
-    "args": ["/path/to/boss-agent-cli/mcp-server/server.py"]
+    "command": "boss-mcp",
+    "args": []
   }
 }
 ```
@@ -131,8 +131,7 @@ Claude 会自动调用 `boss_search` 工具并展示结果。
 Claude Desktop / Cursor / Codex 等通过 stdin/stdout 直接对接。上述 `claude_desktop_config.json` 配置方式即为 stdio 模式。
 
 ```bash
-python3 mcp-server/server.py
-# 默认等价于：--transport stdio
+boss-mcp
 ```
 
 ### HTTP / SSE（规划中，见 [Issue #48](https://github.com/can4hou6joeng4/boss-agent-cli/issues/48)）

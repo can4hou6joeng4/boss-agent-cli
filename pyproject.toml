@@ -53,9 +53,13 @@ dev = [
 bridge = [
 	"aiohttp>=3.9",
 ]
+mcp = [
+	"mcp>=1.0.0",
+]
 
 [project.scripts]
 boss = "boss_agent_cli.main:cli"
+boss-mcp = "boss_agent_cli.mcp_server:run"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
