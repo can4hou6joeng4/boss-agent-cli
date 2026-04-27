@@ -15,7 +15,9 @@ AGENTS.md
 GEMINI.md
 .ace-tool/
 .agents/skills/
+.agents/skills.disabled-*/
 .trellis/
+skills/*.disabled-*/
 *.html
 !src/**/*.html
 !demo/**/*.html
