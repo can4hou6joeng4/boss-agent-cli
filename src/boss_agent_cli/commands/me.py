@@ -3,7 +3,7 @@ import click
 from boss_agent_cli.api.client import AuthError
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import handle_error_output, handle_output, login_action_for_ctx, render_sectioned_record
+from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, login_action_for_ctx, render_sectioned_record
 
 
 @click.command("me")
@@ -62,8 +62,8 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 				render=lambda d: render_sectioned_record(d, title="me"),
 				hints={
 					"next_actions": [
-						"boss search <关键词> --city <城市>",
-						"boss recommend",
+						boss_command_for_ctx(ctx, "search <关键词> --city <城市>"),
+						boss_command_for_ctx(ctx, "recommend"),
 					],
 				},
 			)

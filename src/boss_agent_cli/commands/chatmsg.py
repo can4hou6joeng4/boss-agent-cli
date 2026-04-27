@@ -5,7 +5,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_simple_list
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, render_simple_list
 
 _MSG_TYPE_MAP = {
 	1: "文本", 2: "图片", 3: "招呼", 4: "简历", 5: "系统",
@@ -89,7 +89,7 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> 
 			ctx, "chatmsg", result,
 			render=_render,
 			hints={"next_actions": [
-				"boss chat — 返回沟通列表",
-				f"boss detail {security_id} — 查看职位详情",
+				f"{boss_command_for_ctx(ctx, 'chat')} — 返回沟通列表",
+				f"{boss_command_for_ctx(ctx, f'detail {security_id}')} — 查看职位详情",
 			]},
 		)

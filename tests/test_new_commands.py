@@ -87,6 +87,27 @@ def test_chatmsg_supports_data_envelope(mock_auth_cls, mock_client_cls):
 	assert parsed["data"][0]["text"] == "智联你好"
 
 
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
+@patch("boss_agent_cli.commands.chatmsg.AuthManager")
+def test_chatmsg_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = {"code": 200, "data": {"result": [_make_friend()]}}
+	mock_client.chat_history.return_value = {
+		"code": 200,
+		"data": {
+			"messages": [
+				{"from": {"uid": 99, "name": "张HR"}, "type": 1, "text": "智联你好", "time": 1700000000000},
+			],
+		},
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--platform", "zhilian", "chatmsg", "sec_001"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["hints"]["next_actions"][0] == "boss --platform zhilian chat — 返回沟通列表"
+	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian detail sec_001 — 查看职位详情"
+
+
 # ── mark ─────────────────────────────────────────────────────────────
 
 
@@ -206,6 +227,36 @@ def test_detail_with_job_id(mock_auth_cls, mock_client_cls, mock_cache_cls):
 	assert "Golang" in parsed["data"]["skills"]
 
 
+@patch("boss_agent_cli.commands.detail.CacheStore")
+@patch("boss_agent_cli.commands.detail.get_platform_instance")
+@patch("boss_agent_cli.commands.detail.AuthManager")
+def test_detail_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock_client_cls, mock_cache_cls):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.job_detail.return_value = {
+		"code": 200,
+		"data": {
+			"jobInfo": {
+				"jobName": "Go 开发",
+				"salaryDesc": "30K",
+				"experienceName": "3-5年",
+				"degreeName": "本科",
+				"jobLabels": ["Golang"],
+			},
+			"bossInfo": {"name": "张总", "title": "CTO"},
+			"brandComInfo": {"brandName": "智联测试公司"},
+		},
+	}
+	mock_client.unwrap_data.return_value = mock_client.job_detail.return_value["data"]
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--platform", "zhilian", "detail", "sec_001", "--job-id", "enc_001"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["hints"]["next_actions"][0] == "boss --platform zhilian greet sec_001 enc_001"
+	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian search <query>"
+
+
 # ── me ───────────────────────────────────────────────────────────────
 
 
@@ -236,6 +287,19 @@ def test_me_user_section_supports_data_envelope(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	assert parsed["data"]["user"]["name"] == "智联用户"
+
+
+@patch("boss_agent_cli.commands.me.get_platform_instance")
+@patch("boss_agent_cli.commands.me.AuthManager")
+def test_me_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.user_info.return_value = {"code": 200, "data": {"name": "智联用户"}}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--platform", "zhilian", "me", "--section", "user"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["hints"]["next_actions"][0] == "boss --platform zhilian search <关键词> --city <城市>"
+	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian recommend"
 
 
 # ── history ──────────────────────────────────────────────────────────
@@ -282,6 +346,36 @@ def test_history_uses_client_context_manager(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 0
 	instance.__enter__.assert_called_once()
 	instance.__exit__.assert_called_once()
+
+
+@patch("boss_agent_cli.commands.history.get_platform_instance")
+@patch("boss_agent_cli.commands.history.AuthManager")
+def test_history_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.job_history.return_value = {
+		"code": 200,
+		"data": {
+			"hasMore": True,
+			"jobList": [
+				{
+					"encryptJobId": "j1", "jobName": "测试岗位",
+					"brandName": "公司A", "salaryDesc": "20K",
+					"cityName": "北京", "jobExperience": "3-5年",
+					"jobDegree": "本科", "bossName": "HR",
+					"bossTitle": "招聘", "bossOnline": True,
+					"securityId": "sec_h1",
+				},
+			],
+		},
+	}
+	mock_client.unwrap_data.return_value = mock_client.job_history.return_value["data"]
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--platform", "zhilian", "history"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["hints"]["next_actions"][0] == "使用 boss --platform zhilian detail <security_id> 查看职位详情"
+	assert parsed["hints"]["next_actions"][1] == "使用 boss --platform zhilian greet <security_id> <job_id> 打招呼"
+	assert parsed["hints"]["next_actions"][2] == "使用 boss --platform zhilian history --page 2 查看下一页"
 
 
 # ── interviews ───────────────────────────────────────────────────────

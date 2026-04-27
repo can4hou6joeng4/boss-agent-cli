@@ -6,7 +6,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_job_detail
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, render_job_detail
 from boss_agent_cli.platforms import Platform
 
 
@@ -48,9 +48,16 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 		)
 		return
 
-	greet_target = f"boss greet {security_id} {result['job_id']}"
-	hints = {"next_actions": [greet_target, "boss search <query>"]}
-	handle_output(ctx, "detail", result, render=render_job_detail, hints=hints)
+	greet_target = boss_command_for_ctx(ctx, f"greet {security_id} {result['job_id']}")
+	search_target = boss_command_for_ctx(ctx, "search <query>")
+	hints = {"next_actions": [greet_target, search_target]}
+	handle_output(
+		ctx,
+		"detail",
+		result,
+		render=lambda data: render_job_detail(data, greet_command=greet_target),
+		hints=hints,
+	)
 
 
 def _detail_via_httpx(platform: Platform, security_id: str, job_id: str, data_dir: Path) -> dict[str, Any] | None:

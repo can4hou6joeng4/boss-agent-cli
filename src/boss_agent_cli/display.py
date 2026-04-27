@@ -124,7 +124,7 @@ def render_job_table(
 		console.print(f"  [dim]{hint_next}[/dim]")
 
 
-def render_job_detail(data: dict) -> None:
+def render_job_detail(data: dict, *, greet_command: str | None = None) -> None:
 	"""Render job detail as a rich panel."""
 	title = data.get("title", "-")
 	salary = data.get("salary", "-")
@@ -160,7 +160,8 @@ def render_job_detail(data: dict) -> None:
 	sid = data.get("security_id", "")
 	jid = data.get("job_id", "")
 	if sid and jid:
-		console.print(f"  [dim]greet: boss greet {sid} {jid}[/dim]")
+		greet_command = greet_command or f"boss greet {sid} {jid}"
+		console.print(f"  [dim]greet: {greet_command}[/dim]")
 
 
 def render_status(data: dict, *, login_action: str = "boss login") -> None:
