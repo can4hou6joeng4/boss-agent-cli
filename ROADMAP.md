@@ -47,8 +47,9 @@
   - [ ] Week 4：招聘者侧能力评估与是否接入的产品决策（当前仅候选者侧可用）
 
 ### 社区建设
-- [ ] 中文 + 英文视频 demo
-- [ ] 提交到 [awesome-agents](https://github.com/kyrolabs/awesome-agents) / [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code)
+- [ ] 更完整的中文 + 英文视频 demo / 发布素材（当前已有 `demo.gif` + `demo.tape` 终端演示）
+- [ ] 跟进 [awesome-agents](https://github.com/kyrolabs/awesome-agents) PR #423 审阅结果
+- [ ] 视时机决定是否进入 [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code)
 - [x] 贡献者指南英文版（`CONTRIBUTING.en.md`，v1.8.3）
 
 ## 💡 长期愿景

@@ -64,7 +64,7 @@
 - [x] **mypy / typecheck 阻塞 CI，核心业务模块严格化持续推进**
 - [x] **Cursor / Windsurf / Codex / Claude Code 四个 Agent 宿主集成文档**
 - [x] 英文贡献者指南（CONTRIBUTING.en.md）
-- [x] ≥30 stars（当前 108）
+- [x] ≥30 stars（当前 112）
 - [x] 视频 / 终端录屏 demo（`demo.gif` + `demo.tape` + `demo_showcase.py`）
 
 ## 推广平台
@@ -88,7 +88,7 @@
 5. "MIT License，本地加密存储，数据不出机"
 6. "1119 测试、49 个 MCP 工具、下游 Python 嵌入零学习成本"
 
-## 实际投稿记录 & 渠道约束（2026-04-27 更新）
+## 实际投稿记录 & 渠道约束（2026-04-28 更新）
 
 | 列表 | 日期 | PR/Issue | 状态 | 接续动作 |
 |------|------|---------|------|---------|
@@ -100,8 +100,8 @@
 
 ### 接续路径
 
-1. **短期**：继续推进尚未提交的 awesome 渠道，优先 `awesome-claude-code`（Web UI 表单），并跟进 `awesome-ai-tools` PR #1206 与 `awesome-agents` PR #423 审阅结果
-2. **中期**：基于当前 traction 继续扩展投稿面，并补视频 / asciinema demo 提高通过率
+1. **短期**：跟进 `awesome-ai-tools` PR #1206 与 `awesome-agents` PR #423 审阅结果，优先处理维护者反馈
+2. **中期**：基于当前 traction 继续扩展投稿面，并补更完整的双语视频 demo / 发布素材提高通过率
 3. **长期**：把投稿状态和对外素材与每次 release 同步维护，避免再次出现“已完成但仓库文档仍写阻塞中”的漂移
 
 ### 投稿渠道约束快查表
@@ -113,4 +113,4 @@
 | awesome-agents (kyrolabs) | ✅ | 明示 traction（star ≥ 50 建议） |
 | awesome-ai-tools | ✅ | 无明示 |
 
-> 策略总结：**不强投**——对于设有 traction 门槛或非 CLI 渠道的列表，宁可推迟到条件满足，避免无效 PR 浪费维护者时间。`awesome-mcp-servers` 的 Glama 阻塞已解除并完成合并，后续重点转向其余尚未投递的渠道。
+> 策略总结：**不强投**——对于设有 traction 门槛或非 CLI 渠道的列表，宁可推迟到条件满足，避免无效 PR 浪费维护者时间。`awesome-mcp-servers` 的 Glama 阻塞已解除并完成合并，`awesome-ai-tools` / `awesome-agents` 已进入待审阶段，后续重点转向审阅跟进和更强的对外展示素材。
