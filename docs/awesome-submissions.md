@@ -1,12 +1,12 @@
 # Awesome List Submissions
 
-本文件记录 boss-agent-cli 向各大 awesome 列表投稿的模板，供维护者提交用。最后更新：v1.11.0 (2026-04-23)。
+本文件记录 boss-agent-cli 向各大 awesome 列表投稿的模板，供维护者提交用。最后更新：master 当前状态 (2026-04-27)。
 
 ## 项目一句话介绍
 
 **中文**：专为 AI Agent 设计的 BOSS 直聘求职 CLI，33 个顶层命令 + 7 个招聘者子命令 + 49 个 MCP 工具，全部输出 JSON，支持 Claude Desktop/Cursor/Windsurf 无缝接入，覆盖求职者与招聘者双端工作流。
 
-**English**: AI-agent-first CLI for BOSS Zhipin. 33 top-level commands + 7 recruiter subcommands + 43 MCP tools, JSON envelope output, typed Python SDK (PEP 561), and out-of-the-box integration for Claude Desktop / Cursor / Windsurf.
+**English**: AI-agent-first CLI for BOSS Zhipin. 33 top-level commands + 7 recruiter subcommands + 49 MCP tools, JSON envelope output, typed Python SDK (PEP 561), and out-of-the-box integration for Claude Desktop / Cursor / Windsurf.
 
 ## 推荐投稿目标
 
@@ -15,7 +15,7 @@
 分类：Productivity / Job Search
 
 ```markdown
-- [boss-agent-cli](https://github.com/can4hou6joeng4/boss-agent-cli) - BOSS Zhipin (China's largest recruitment platform) integration for AI agents, exposing 43 MCP tools covering search, greet, chat, pipeline, resume management, and AI-powered interview prep / chat coaching.
+- [boss-agent-cli](https://github.com/can4hou6joeng4/boss-agent-cli) - BOSS Zhipin (China's largest recruitment platform) integration for AI agents, exposing 49 MCP tools covering search, greet, chat, pipeline, recruiter ops, resume management, and AI-powered interview prep / chat coaching.
 ```
 
 ### 2. [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code)
@@ -31,7 +31,7 @@
 分类：Specialized Agents
 
 ```markdown
-- [boss-agent-cli](https://github.com/can4hou6joeng4/boss-agent-cli) ![](https://img.shields.io/github/stars/can4hou6joeng4/boss-agent-cli) - Job-hunt CLI purpose-built for AI agents. BOSS Zhipin integration with 33 top-level commands, recruiter workflow subcommands, 43 MCP tools, JSON envelope output, and local-first encrypted storage.
+- [boss-agent-cli](https://github.com/can4hou6joeng4/boss-agent-cli) ![](https://img.shields.io/github/stars/can4hou6joeng4/boss-agent-cli) - Job-hunt CLI purpose-built for AI agents. BOSS Zhipin integration with 33 top-level commands, recruiter workflow subcommands, 49 MCP tools, JSON envelope output, and local-first encrypted storage.
 ```
 
 ### 4. [awesome-python-cli](https://github.com/shinokada/awesome-python-cli)
@@ -45,16 +45,16 @@
 分类：Agents & Automation
 
 ```markdown
-- [boss-agent-cli](https://github.com/can4hou6joeng4/boss-agent-cli) - Let your AI agent handle the job hunt. 33 top-level CLI commands + 7 recruiter subcommands + 43 MCP tools covering search, chat, pipeline, recruiter operations, interview prep, and AI resume coaching on BOSS Zhipin.
+- [boss-agent-cli](https://github.com/can4hou6joeng4/boss-agent-cli) - Let your AI agent handle the job hunt. 33 top-level CLI commands + 7 recruiter subcommands + 49 MCP tools covering search, chat, pipeline, recruiter operations, interview prep, and AI resume coaching on BOSS Zhipin.
 ```
 
-## 投稿前 Checklist（v1.11.0 最新状态）
+## 投稿前 Checklist（master 当前状态）
 
 - [x] README 双语（中文 + 英文）
 - [x] MIT License
-- [x] CI 全绿 + **1042 测试**
-- [x] 发布到 PyPI（`pip install boss-agent-cli`，当前 1.11.0）
-- [x] GitHub Release 规范（v1.11.0 已发）
+- [x] CI 全绿 + **1119 测试**
+- [x] 发布到 PyPI（`pip install boss-agent-cli`，当前 latest release 1.11.0）
+- [x] GitHub Release 规范（latest release 1.11.0 已发）
 - [x] CHANGELOG 完整
 - [x] Code of Conduct + Security Policy
 - [x] Issue / PR 模板
@@ -64,7 +64,7 @@
 - [x] **mypy / typecheck 阻塞 CI，核心业务模块严格化持续推进**
 - [x] **Cursor / Windsurf / Codex / Claude Code 四个 Agent 宿主集成文档**
 - [x] 英文贡献者指南（CONTRIBUTING.en.md）
-- [x] ≥30 stars（当前 89）
+- [x] ≥30 stars（当前 108）
 - [ ] 视频或 asciinema demo
 
 ## 推广平台
@@ -86,7 +86,7 @@
 3. "`boss ai interview-prep` — 把 JD 扔进 AI，秒出 10 道模拟面试题"
 4. "你只负责描述期望，AI Agent 负责搜、聊、投、跟进"
 5. "MIT License，本地加密存储，数据不出机"
-6. "1042 测试、49 个 MCP 工具、下游 Python 嵌入零学习成本"
+6. "1119 测试、49 个 MCP 工具、下游 Python 嵌入零学习成本"
 
 ## 实际投稿记录 & 渠道约束（2026-04-20 复盘）
 
@@ -94,7 +94,7 @@
 |------|------|---------|------|---------|
 | [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | 2026-04-17 | PR #4992 | ⏳ 机器人要求先注册 [Glama.ai](https://glama.ai/mcp/servers) | **阻塞**：需在 Glama.ai 提交 MCP server → 通过 server introspection check → 加 `[![...](...badges/score.svg)](...)` 徽章到 PR → 重新 push |
 | [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code) | — | — | ⚠️ 渠道限制 | **必须通过 Web UI issue 表单**（`/issues/new?template=recommend-resource.yml`），**禁止 gh CLI**（违规会被封禁，见 docs/CONTRIBUTING.md 明文警告） |
-| [awesome-agents (kyrolabs)](https://github.com/kyrolabs/awesome-agents) | — | — | 🟢 已具备 traction | 规则明确：brand new repo without demonstrated traction 自动拒绝。当前 89 star 已跨过基础门槛，可进入候选投稿队列 |
+| [awesome-agents (kyrolabs)](https://github.com/kyrolabs/awesome-agents) | — | — | 🟢 已具备 traction | 规则明确：brand new repo without demonstrated traction 自动拒绝。当前 108 star 已跨过基础门槛，可进入候选投稿队列 |
 | [awesome-ai-tools (mahseema)](https://github.com/mahseema/awesome-ai-tools) | — | — | 🟢 可投 | 无明确门槛，可考虑投稿 Agents & Automation 分区 |
 | ~~awesome-python-cli (shinokada)~~ | — | — | ❌ 仓库不存在 | 404，从投稿列表移除 |
 

@@ -85,7 +85,7 @@ boss digest                                                  # 每日汇报
 
 ### 平台与集成基础
 
-- `🔌 多平台抽象`：`Platform` / `RecruiterPlatform` 双注册表已落地；BOSS 直聘求职者/招聘者均可用，智联招聘已接通求职者侧包络与命令兼容。命令：`--platform zhipin|zhilian`
+- `🔌 多平台抽象`：`Platform` / `RecruiterPlatform` 双注册表已落地；BOSS 直聘求职者/招聘者均可用，智联招聘已接通求职者侧登录、只读与写操作链路。命令：`--platform zhipin|zhilian`
 - `📤 结构化输出`：stdout 只输出 JSON 信封，适合 CLI 编排、Shell Agent、MCP 和 Python SDK。命令：`schema` `export`
 - `🧩 Agent 接入`：同一套能力可通过 Skill、subprocess、MCP、Python SDK 四种路径暴露给 Agent。文档：`docs/agent-quickstart.md` `docs/agent-hosts.md`
 
@@ -176,8 +176,9 @@ boss hr jobs list                     # 我发布的职位
 
 补充说明：
 - `boss login` 默认按当前 `--platform` / 配置文件里的 `platform` 工作
-- `boss --platform zhilian login` 已可用，但目前只覆盖**求职者侧**认证链路
-- `boss --platform zhilian hr ...` 仍不支持，招聘者侧继续追踪 [Issue #140](https://github.com/can4hou6joeng4/boss-agent-cli/issues/140)
+- `boss --platform zhilian login` 已可用，当前覆盖**求职者侧**认证链路
+- `boss --platform zhilian` 目前已支持候选者侧 `search / detail / recommend / user_info / greet / apply`
+- `boss --platform zhilian hr ...` 仍不支持，CLI 会直接拒绝执行招聘者侧子命令
 
 <details>
 <summary>📖 CDP 启动示例</summary>
@@ -231,7 +232,7 @@ boss hr candidates "Golang"
 | 平台 | 求职者 | 招聘者 | 状态 |
 |------|:------:|:------:|------|
 | BOSS 直聘 (`zhipin`) | ✅ | ✅ | 默认 |
-| 智联招聘 (`zhilian`) | 🟡 包络与命令兼容已接通 | — | 招聘者侧未接入，继续追踪 [Issue #140](https://github.com/can4hou6joeng4/boss-agent-cli/issues/140) |
+| 智联招聘 (`zhilian`) | 🟡 候选者侧登录 + 读写链路已接通 | — | 招聘者侧未接入，运行时会直接拒绝 `hr` 子命令 |
 
 ```bash
 # 指定平台
@@ -544,7 +545,7 @@ CLI (Click)
     │
     ├── Platform 抽象层（多平台注册表）
     │       ├── BossPlatform (求职者) / BossRecruiterPlatform (招聘者)
-    │       └── ZhilianPlatform (求职者侧包络与命令兼容已接通，招聘者侧未接入)
+    │       └── ZhilianPlatform (求职者侧登录 + 读写链路已接通，招聘者侧未接入)
     │
     ├── BossClient / BossRecruiterClient ── httpx (低风险) + 浏览器 (高风险) 双通道
     │       ├── RequestThrottle (高斯延迟 + 突发惩罚)

@@ -10,7 +10,7 @@
 
 完整历史见 [CHANGELOG.md](CHANGELOG.md)。
 
-## 🎯 近期（v1.8.x）
+## 🎯 近期（当前主线）
 
 ### 数据可视化
 - [x] `boss stats --format html` 输出交互式漏斗报表（v1.7.1）
@@ -18,7 +18,7 @@
 - [x] codecov badge 集成到 README（v1.7.1）
 
 ### Agent 集成
-- [ ] MCP 服务支持 HTTP streaming（stdio 已支持）— Issue #48 外部贡献者认领中
+- [x] MCP 服务支持 HTTP streaming / SSE / stdio 三种传输（2026-04-27，PR #160）
 - [x] Codex / Cursor / Windsurf 专用接入示例（v1.8.1，docs/integrations/ 全覆盖）
 - [x] OpenAI Functions 格式导出 `boss schema --format openai-tools`（v1.7.1）
 
@@ -42,8 +42,9 @@
   - [x] Week 1b：`--platform` 全局 CLI 选项 + `get_platform_instance` helper + schema 暴露 current_platform
   - [x] Week 1c：命令层全量迁移到 Platform 接口（**20 个命令**：greet / apply / batch-greet / interviews / detail / show / me / recommend / chat / chatmsg / mark / exchange / pipeline / digest / search / export / chat_summary / history / status / watch）
   - [x] Week 1d：ZhilianPlatform stub 接入注册表（抽象自证，包络适配完整实现，P0/P1/P2 暂 NotImplementedError）
-  - [ ] Week 2：ZhilianPlatform 只读实现（search / detail / recommend / user_info）
-  - [ ] Week 3：ZhilianPlatform 写操作（greet / apply）+ 文档 + MCP 适配
+  - [x] Week 2：ZhilianPlatform 只读实现（search / detail / recommend / user_info）
+  - [x] Week 3：ZhilianPlatform 写操作（greet / apply）+ 文档 + MCP 适配
+  - [ ] Week 4：招聘者侧能力评估与是否接入的产品决策（当前仅候选者侧可用）
 
 ### 社区建设
 - [ ] 中文 + 英文视频 demo

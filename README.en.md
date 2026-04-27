@@ -70,7 +70,7 @@ Every command outputs **structured JSON** that AI Agents parse directly. No frag
 - **Schema-first integration**: `boss schema` is the capability source of truth for shell agents, SDKs, and tool-export formats
 - **Structured transport**: stdout is JSON-only, stderr is logs-only, which keeps automation stable
 - **Platform-aware login**: `zhipin` uses Cookie → CDP → QR httpx → patchright; `zhilian` uses Cookie → CDP → browser login
-- **Cross-platform adapter layer**: `Platform` / `RecruiterPlatform` registries are live; BOSS is available on both candidate and recruiter sides, and Zhaopin already has candidate-side envelope and command compatibility wired in
+- **Cross-platform adapter layer**: `Platform` / `RecruiterPlatform` registries are live; BOSS is available on both candidate and recruiter sides, and Zhaopin already has candidate-side login plus read/write flow wired in
 - **MCP server with 49 tools**: ready for Claude Desktop / Cursor / Windsurf, including recruiter-side tools without wrapping your own bridge
 
 ## 📦 Install
@@ -135,7 +135,7 @@ boss-agent-cli covers both the job-seeker and the recruiter side, with a pluggab
 | Platform | Candidate | Recruiter | Status |
 |----------|:---------:|:---------:|--------|
 | BOSS Zhipin (`zhipin`) | ✅ | ✅ | default |
-| Zhaopin (`zhilian`)    | 🟡 envelope + command compatibility wired | — | recruiter side not implemented yet, tracked in [Issue #140](https://github.com/can4hou6joeng4/boss-agent-cli/issues/140) |
+| Zhaopin (`zhilian`)    | 🟡 candidate-side login + read/write flow wired | — | recruiter side is still intentionally unavailable at runtime |
 
 ```bash
 # pick a platform
@@ -145,7 +145,8 @@ boss config set platform zhilian
 
 Notes:
 - `boss login` follows the current platform selection
-- `boss --platform zhilian login` is now available for candidate-side auth
+- `boss --platform zhilian login` is available for candidate-side auth
+- candidate-side `search / detail / recommend / user_info / greet / apply` are wired for `zhilian`
 - `boss --platform zhilian hr ...` is still intentionally rejected at runtime because recruiter support is not implemented yet
 
 Architecture notes: [docs/platform-abstraction.md](docs/platform-abstraction.md).

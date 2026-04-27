@@ -192,6 +192,6 @@ _REGISTRY: dict[str, type[Platform]] = {
 ## 参考
 
 - [Issue #129 — Week 1 设计 + 实施](https://github.com/can4hou6joeng4/boss-agent-cli/issues/129)
-- [Issue #140 — Week 2 Zhilian 真实现追踪](https://github.com/can4hou6joeng4/boss-agent-cli/issues/140)
+- Zhilian 候选者侧真实现已并入主线（PR #157 / #158 及后续修复），招聘者侧能力仍未接入
 - [Issue #90 — 多平台 API 调研](https://github.com/can4hou6joeng4/boss-agent-cli/issues/90)
 - PR #131 / #132 / #133 / #134 / #135 / #136 / #137 / #138 / #139 / #141 — Week 1 全部 PR
