@@ -95,12 +95,12 @@
 | [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | 2026-04-17 | PR #4992 | ✅ 已合并（2026-04-26） | 已完成 Glama / introspection 前置并成功并入列表，无需继续跟进此阻塞项 |
 | [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code) | — | — | ⚠️ 渠道限制 | **必须通过 Web UI issue 表单**（`/issues/new?template=recommend-resource.yml`），**禁止 gh CLI**（违规会被封禁，见 docs/CONTRIBUTING.md 明文警告） |
 | [awesome-agents (kyrolabs)](https://github.com/kyrolabs/awesome-agents) | — | — | 🟢 已具备 traction | 规则明确：brand new repo without demonstrated traction 自动拒绝。当前 108 star 已跨过基础门槛，可进入候选投稿队列 |
-| [awesome-ai-tools (mahseema)](https://github.com/mahseema/awesome-ai-tools) | — | — | 🟢 可投 | 无明确门槛，可考虑投稿 Agents & Automation 分区 |
+| [awesome-ai-tools (mahseema)](https://github.com/mahseema/awesome-ai-tools) | 2026-04-27 | [PR #1206](https://github.com/mahseema/awesome-ai-tools/pull/1206) | 🟡 已提交，待审 | 已按 `Developer tools` 分区提交，等待维护者审阅 |
 | ~~awesome-python-cli (shinokada)~~ | — | — | ❌ 仓库不存在 | 404，从投稿列表移除 |
 
 ### 接续路径
 
-1. **短期**：继续推进尚未提交的 awesome 渠道，优先 `awesome-claude-code`（Web UI 表单）与 `awesome-ai-tools`
+1. **短期**：继续推进尚未提交的 awesome 渠道，优先 `awesome-claude-code`（Web UI 表单），并跟进 `awesome-ai-tools` PR #1206 审阅结果
 2. **中期**：基于当前 traction 继续扩展投稿面，并补视频 / asciinema demo 提高通过率
 3. **长期**：把投稿状态和对外素材与每次 release 同步维护，避免再次出现“已完成但仓库文档仍写阻塞中”的漂移
 
