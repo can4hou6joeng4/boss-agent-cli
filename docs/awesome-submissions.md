@@ -88,11 +88,11 @@
 5. "MIT License，本地加密存储，数据不出机"
 6. "1119 测试、49 个 MCP 工具、下游 Python 嵌入零学习成本"
 
-## 实际投稿记录 & 渠道约束（2026-04-20 复盘）
+## 实际投稿记录 & 渠道约束（2026-04-27 更新）
 
 | 列表 | 日期 | PR/Issue | 状态 | 接续动作 |
 |------|------|---------|------|---------|
-| [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | 2026-04-17 | PR #4992 | ⏳ 机器人要求先注册 [Glama.ai](https://glama.ai/mcp/servers) | **阻塞**：需在 Glama.ai 提交 MCP server → 通过 server introspection check → 加 `[![...](...badges/score.svg)](...)` 徽章到 PR → 重新 push |
+| [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | 2026-04-17 | PR #4992 | ✅ 已合并（2026-04-26） | 已完成 Glama / introspection 前置并成功并入列表，无需继续跟进此阻塞项 |
 | [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code) | — | — | ⚠️ 渠道限制 | **必须通过 Web UI issue 表单**（`/issues/new?template=recommend-resource.yml`），**禁止 gh CLI**（违规会被封禁，见 docs/CONTRIBUTING.md 明文警告） |
 | [awesome-agents (kyrolabs)](https://github.com/kyrolabs/awesome-agents) | — | — | 🟢 已具备 traction | 规则明确：brand new repo without demonstrated traction 自动拒绝。当前 108 star 已跨过基础门槛，可进入候选投稿队列 |
 | [awesome-ai-tools (mahseema)](https://github.com/mahseema/awesome-ai-tools) | — | — | 🟢 可投 | 无明确门槛，可考虑投稿 Agents & Automation 分区 |
@@ -100,17 +100,17 @@
 
 ### 接续路径
 
-1. **短期**（本会话或下次）：给 [awesome-mcp-servers PR #4992](https://github.com/punkpeye/awesome-mcp-servers/pull/4992) 解锁——到 glama.ai 注册 MCP server，通过 introspection check，回填徽章
-2. **中期**（star ≥ 30 后）：集中批量投稿其他 awesome 列表
-3. **长期**（star ≥ 50 后）：awesome-agents (kyrolabs) 满足 demonstrated traction
+1. **短期**：继续推进尚未提交的 awesome 渠道，优先 `awesome-claude-code`（Web UI 表单）与 `awesome-ai-tools`
+2. **中期**：基于当前 traction 继续扩展投稿面，并补视频 / asciinema demo 提高通过率
+3. **长期**：把投稿状态和对外素材与每次 release 同步维护，避免再次出现“已完成但仓库文档仍写阻塞中”的漂移
 
 ### 投稿渠道约束快查表
 
 | 渠道 | 可用 gh CLI？ | 特殊前置 |
 |------|------------|---------|
-| awesome-mcp-servers | ✅ | Glama.ai 注册 + 徽章 |
+| awesome-mcp-servers | ✅ | 前置已完成，PR #4992 已合并 |
 | awesome-claude-code | ❌ 只能 Web UI 表单 | — |
 | awesome-agents (kyrolabs) | ✅ | 明示 traction（star ≥ 50 建议） |
 | awesome-ai-tools | ✅ | 无明示 |
 
-> 策略总结：**不强投**——对于设有 traction 门槛或非 CLI 渠道的列表，宁可推迟到条件满足，避免无效 PR 浪费维护者时间。核心阻塞是 PR #4992 的 Glama.ai 注册动作，这是下次会话应优先推进的外部动作。
+> 策略总结：**不强投**——对于设有 traction 门槛或非 CLI 渠道的列表，宁可推迟到条件满足，避免无效 PR 浪费维护者时间。`awesome-mcp-servers` 的 Glama 阻塞已解除并完成合并，后续重点转向其余尚未投递的渠道。
