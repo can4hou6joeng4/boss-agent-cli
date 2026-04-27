@@ -6,6 +6,7 @@ dist/
 build/
 .pytest_cache/
 .playwright-mcp/
+.codex/
 .worktrees/
 .claude/
 docs/superpowers/
