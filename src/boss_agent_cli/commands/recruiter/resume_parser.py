@@ -103,6 +103,8 @@ def parse_resume(raw: dict[str, Any]) -> dict[str, Any]:
 		project_experience / education / competitive_analysis / certifications
 	"""
 	payload = raw.get("zpData") if "zpData" in raw else raw.get("data", raw)
+	if not isinstance(payload, dict):
+		payload = {}
 	info = payload.get("geekDetailInfo", {})
 
 	certs = [_safe_str(c.get("certName")) for c in info.get("geekCertificationList", []) if c.get("certName")]

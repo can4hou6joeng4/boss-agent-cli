@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import click
 
@@ -88,13 +88,20 @@ def _command_availability(
 	recruiter_platforms: list[str],
 ) -> dict[str, Any]:
 	if cmd_name == "hr":
+		commands = cast(dict[str, Any], SCHEMA_DATA.get("commands", {}))
+		hr_spec = commands.get("hr", {})
+		if not isinstance(hr_spec, dict):
+			hr_spec = {}
+		subcommands = hr_spec.get("subcommands", {})
+		if not isinstance(subcommands, dict):
+			subcommands = {}
 		subcommand_availability = {
 			sub_name: {
 				"roles": ["recruiter"],
 				"candidate_platforms": [],
 				"recruiter_platforms": recruiter_platforms,
 			}
-			for sub_name in SCHEMA_DATA["commands"]["hr"].get("subcommands", {})
+			for sub_name in subcommands
 		}
 		return {
 			"roles": ["recruiter"],

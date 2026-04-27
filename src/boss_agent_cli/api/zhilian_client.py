@@ -194,6 +194,8 @@ class ZhilianClient:
 
 			resp.raise_for_status()
 			data = resp.json()
+			if not isinstance(data, dict):
+				raise RuntimeError("智联响应格式异常：期望 JSON object")
 			code = data.get("code")
 			if code in (401, 403) and attempt < _MAX_RETRIES:
 				backoff = (2 ** attempt) + random.uniform(0.3, 0.9)
