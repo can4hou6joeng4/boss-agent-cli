@@ -7,7 +7,7 @@
 ## Title Candidates
 
 - **A**: Show HN: I built a CLI that lets Claude apply to jobs for me
-- **B**: boss-agent-cli — 33 top-level commands + 7 recruiter subcommands + 43 MCP tools for AI-driven job hunting
+- **B**: boss-agent-cli — 33 top-level commands + 7 recruiter subcommands + 49 MCP tools for AI-driven job hunting
 - **C**: I open-sourced the CLI that turns Claude into my recruiter liaison
 
 Recommended: **A** (HN-friendly).
@@ -59,7 +59,7 @@ The fix: `ThreadPoolExecutor` with 3 workers running detail fetches in parallel,
 
 #### 3. MCP server as the primary integration surface
 
-Model Context Protocol is Anthropic's standard for exposing tools to AI agents. The `mcp-server/` directory ships a stdio server that wraps the CLI into 43 MCP tools, including recruiter-side operations and AI workflow helpers.
+Model Context Protocol is Anthropic's standard for exposing tools to AI agents. The `mcp-server/` directory ships a stdio server that wraps the CLI into 49 MCP tools, including recruiter-side operations and AI workflow helpers.
 
 In `claude_desktop_config.json`:
 
@@ -102,7 +102,7 @@ $ boss ai reply "Are you available for a call this week?" \
 
 ### Engineering stats (for the skeptics)
 
-- 1042 pytest tests, roughly 86% line coverage
+- 1119 pytest tests, roughly 86% line coverage
 - CI matrix across Python 3.10 / 3.11 / 3.12 / 3.13
 - Ruff lint + pre-commit hooks
 - Drift-detection meta-test: schema ↔ main.py registration must stay aligned

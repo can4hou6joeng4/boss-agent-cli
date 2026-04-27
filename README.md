@@ -568,7 +568,7 @@ CLI (Click)
 | 数据库 | sqlite3 (WAL 模式) |
 | 渲染 | rich |
 | AI | OpenAI / Anthropic Chat Completions API |
-| 测试 | pytest（1042 项） |
+| 测试 | pytest（1119 项） |
 
 ---
 
