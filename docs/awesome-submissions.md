@@ -65,7 +65,7 @@
 - [x] **Cursor / Windsurf / Codex / Claude Code 四个 Agent 宿主集成文档**
 - [x] 英文贡献者指南（CONTRIBUTING.en.md）
 - [x] ≥30 stars（当前 108）
-- [ ] 视频或 asciinema demo
+- [x] 视频 / 终端录屏 demo（`demo.gif` + `demo.tape` + `demo_showcase.py`）
 
 ## 推广平台
 
