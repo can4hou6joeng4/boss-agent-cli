@@ -4,6 +4,7 @@ import sys
 from unittest.mock import patch, MagicMock
 
 from boss_agent_cli.display import (
+	boss_command_for_ctx,
 	is_json_mode,
 	handle_output,
 	handle_error_output,
@@ -155,6 +156,16 @@ class TestHandleOutputFallback:
 
 
 class TestLoginActionForCtx:
+	def test_default_platform_uses_plain_boss_command(self):
+		ctx = MagicMock()
+		ctx.obj = {}
+		assert boss_command_for_ctx(ctx, "status") == "boss status"
+
+	def test_zhilian_platform_uses_platform_specific_boss_command(self):
+		ctx = MagicMock()
+		ctx.obj = {"platform": "zhilian"}
+		assert boss_command_for_ctx(ctx, "status") == "boss --platform zhilian status"
+
 	def test_default_platform_uses_plain_login(self):
 		ctx = MagicMock()
 		ctx.obj = {}
@@ -271,6 +282,10 @@ class TestRenderers:
 	def test_render_status_not_logged_in(self):
 		from boss_agent_cli.display import render_status
 		render_status({"logged_in": False})
+
+	def test_render_status_not_logged_in_with_custom_login_action(self):
+		from boss_agent_cli.display import render_status
+		render_status({"logged_in": False}, login_action="boss --platform zhilian login")
 
 	def test_render_simple_list_empty(self):
 		from boss_agent_cli.display import render_simple_list

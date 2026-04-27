@@ -25,9 +25,23 @@ def test_smoke_script_step_metadata_is_complete():
 	module = importlib.util.module_from_spec(spec)
 	spec.loader.exec_module(module)
 	for step in module.DEFAULT_STEPS:
+		assert step.platform
 		assert step.purpose
 		assert step.preconditions
 		assert step.failure_classification
+
+
+def test_smoke_script_can_build_zhilian_steps():
+	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
+	assert spec is not None and spec.loader is not None
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+
+	steps = module.build_default_steps("zhilian")
+	assert [step.name for step in steps] == ["doctor", "status", "search", "detail"]
+	assert all(step.platform == "zhilian" for step in steps)
+	assert steps[0].command == ["boss", "--platform", "zhilian", "doctor"]
+	assert steps[1].command == ["boss", "--platform", "zhilian", "status"]
 
 
 def test_smoke_runner_distinguishes_step_failure_types():
@@ -40,6 +54,7 @@ def test_smoke_runner_distinguishes_step_failure_types():
 		steps=[
 			module.SmokeStep(
 				name="ok",
+				platform="zhipin",
 				purpose="pass",
 				preconditions=["none"],
 				failure_classification="command_error",
@@ -47,6 +62,7 @@ def test_smoke_runner_distinguishes_step_failure_types():
 			),
 			module.SmokeStep(
 				name="missing",
+				platform="zhipin",
 				purpose="skip",
 				preconditions=["env:BOSS_AGENT_FAKE_TOKEN"],
 				failure_classification="env_error",

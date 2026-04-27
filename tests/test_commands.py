@@ -410,6 +410,45 @@ def test_search_with_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_
 	assert "match_reasons" in parsed["data"][0]
 
 
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_supports_zhilian_platform_minimal_loop(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = None
+	_ctx_mock(mock_client_cls)
+	mock_pipeline.return_value = SimpleNamespace(
+		items=[{
+			"job_id": "zl_001",
+			"title": "Go 开发",
+			"company": "智联测试公司",
+			"salary": "20-30K",
+			"city": "广州",
+			"experience": "3-5年",
+			"education": "本科",
+			"security_id": "zl_sec_001",
+			"greeted": False,
+		}],
+		has_more=False,
+		total=1,
+		stats=SimpleNamespace(
+			pages_scanned=1,
+			jobs_seen=1,
+			jobs_prefiltered=0,
+			detail_checks=0,
+		),
+	)
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--platform", "zhilian", "search", "golang"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"][0]["job_id"] == "zl_001"
+	mock_auth_cls.assert_called_once()
+	assert mock_auth_cls.call_args.kwargs["platform"] == "zhilian"
+
+
 @patch("boss_agent_cli.index_cache.save_index", side_effect=PermissionError("readonly"))
 @patch("boss_agent_cli.commands.recommend.CacheStore")
 @patch("boss_agent_cli.commands.recommend.get_platform_instance")

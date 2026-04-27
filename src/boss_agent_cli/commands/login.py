@@ -1,7 +1,7 @@
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
-from boss_agent_cli.display import login_action_for_ctx
+from boss_agent_cli.display import boss_command_for_ctx, login_action_for_ctx
 from boss_agent_cli.output import emit_error, emit_success
 
 
@@ -11,7 +11,7 @@ from boss_agent_cli.output import emit_error, emit_success
 @click.option("--cdp", is_flag=True, default=False, help="强制 CDP 模式（跳过 Cookie 提取，CDP 不可用直接报错）")
 @click.pass_context
 def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: bool) -> None:
-	"""登录 BOSS 直聘（三级降级：Cookie 提取 → CDP 自动探测 → patchright 扫码）"""
+	"""登录当前招聘平台（按平台走对应的 Cookie / CDP / 浏览器降级链路）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	cdp_url = ctx.obj.get("cdp_url")
@@ -26,11 +26,14 @@ def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: 
 			force_cdp=cdp,
 		)
 		method = token.pop("_method", "未知")
+		status_cmd = boss_command_for_ctx(ctx, "status")
+		search_cmd = boss_command_for_ctx(ctx, "search <query>")
+		recommend_cmd = boss_command_for_ctx(ctx, "recommend")
 		emit_success("login", {"message": f"登录成功（{method}）"}, hints={
 			"next_actions": [
-				"boss status — 验证登录态",
-				"boss search <query> — 搜索职位",
-				"boss recommend — 获取个性化推荐",
+				f"{status_cmd} — 验证登录态",
+				f"{search_cmd} — 搜索职位",
+				f"{recommend_cmd} — 获取个性化推荐",
 			],
 		})
 	except ConnectionError as e:

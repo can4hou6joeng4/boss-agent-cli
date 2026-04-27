@@ -34,4 +34,9 @@ def status_cmd(ctx: click.Context) -> None:
 			"user_name": user_name,
 			"token_expires_in": None,
 		}
-		handle_output(ctx, "status", data, render=render_status)
+		handle_output(
+			ctx,
+			"status",
+			data,
+			render=lambda payload: render_status(payload, login_action=login_action_for_ctx(ctx)),
+		)

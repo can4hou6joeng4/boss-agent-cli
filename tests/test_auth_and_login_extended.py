@@ -233,6 +233,8 @@ def test_login_supports_zhilian_platform(mock_auth_cls):
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
+	assert parsed["hints"]["next_actions"][0] == "boss --platform zhilian status — 验证登录态"
+	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian search <query> — 搜索职位"
 	mock_auth.login.assert_called_once()
 
 

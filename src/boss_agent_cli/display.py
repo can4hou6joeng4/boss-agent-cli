@@ -18,12 +18,18 @@ from boss_agent_cli.output import emit_success
 console = Console(stderr=True)
 
 
-def login_action_for_ctx(ctx: Any) -> str:
-	"""Return the platform-aware login recovery command."""
+def boss_command_for_ctx(ctx: Any, command: str) -> str:
+	"""Return a platform-aware boss subcommand."""
 	platform_name = "zhipin"
 	if ctx and getattr(ctx, "obj", None):
 		platform_name = ctx.obj.get("platform") or "zhipin"
-	return "boss --platform zhilian login" if platform_name == "zhilian" else "boss login"
+	prefix = "boss --platform zhilian" if platform_name == "zhilian" else "boss"
+	return f"{prefix} {command}".strip()
+
+
+def login_action_for_ctx(ctx: Any) -> str:
+	"""Return the platform-aware login recovery command."""
+	return boss_command_for_ctx(ctx, "login")
 
 
 def is_json_mode(ctx) -> bool:
@@ -157,13 +163,13 @@ def render_job_detail(data: dict) -> None:
 		console.print(f"  [dim]greet: boss greet {sid} {jid}[/dim]")
 
 
-def render_status(data: dict) -> None:
+def render_status(data: dict, *, login_action: str = "boss login") -> None:
 	"""Render login status."""
 	if data.get("logged_in"):
 		name = data.get("user_name", "unknown")
 		console.print(f"[green]logged in[/green] as [bold]{name}[/bold]")
 	else:
-		console.print("[yellow]not logged in[/yellow] - run: boss login")
+		console.print(f"[yellow]not logged in[/yellow] - run: {login_action}")
 
 
 def render_simple_list(

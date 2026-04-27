@@ -11,42 +11,52 @@ ROOT = Path(__file__).resolve().parents[1]
 @dataclass(frozen=True)
 class SmokeStep:
 	name: str
+	platform: str
 	purpose: str
 	preconditions: list[str]
 	failure_classification: str
 	command: list[str]
 
 
-DEFAULT_STEPS = [
-	SmokeStep(
-		name="doctor",
-		purpose="验证本地环境、自检和网络前提",
-		preconditions=["command:boss"],
-		failure_classification="env_error",
-		command=["boss", "doctor"],
-	),
-	SmokeStep(
-		name="status",
-		purpose="验证本地登录态是否存在且可读取",
-		preconditions=["command:boss"],
-		failure_classification="env_error",
-		command=["boss", "status"],
-	),
-	SmokeStep(
-		name="search",
-		purpose="验证最小职位发现路径可执行",
-		preconditions=["command:boss", "env:BOSS_SMOKE_QUERY"],
-		failure_classification="command_error",
-		command=["boss", "search", "golang"],
-	),
-	SmokeStep(
-		name="detail",
-		purpose="验证职位详情路径具备可测试入口",
-		preconditions=["command:boss", "env:BOSS_SMOKE_SECURITY_ID"],
-		failure_classification="command_error",
-		command=["boss", "detail", "demo-security-id"],
-	),
-]
+def build_default_steps(platform: str = "zhipin") -> list[SmokeStep]:
+	platform_args = ["--platform", platform] if platform != "zhipin" else []
+	return [
+		SmokeStep(
+			name="doctor",
+			platform=platform,
+			purpose="验证本地环境、自检和网络前提",
+			preconditions=["command:boss"],
+			failure_classification="env_error",
+			command=["boss", *platform_args, "doctor"],
+		),
+		SmokeStep(
+			name="status",
+			platform=platform,
+			purpose="验证本地登录态是否存在且可读取",
+			preconditions=["command:boss"],
+			failure_classification="env_error",
+			command=["boss", *platform_args, "status"],
+		),
+		SmokeStep(
+			name="search",
+			platform=platform,
+			purpose="验证最小职位发现路径可执行",
+			preconditions=["command:boss", "env:BOSS_SMOKE_QUERY"],
+			failure_classification="command_error",
+			command=["boss", *platform_args, "search", "golang"],
+		),
+		SmokeStep(
+			name="detail",
+			platform=platform,
+			purpose="验证职位详情路径具备可测试入口",
+			preconditions=["command:boss", "env:BOSS_SMOKE_SECURITY_ID"],
+			failure_classification="command_error",
+			command=["boss", *platform_args, "detail", "demo-security-id"],
+		),
+	]
+
+
+DEFAULT_STEPS = build_default_steps()
 
 
 class SmokeRunner:
@@ -91,7 +101,8 @@ class SmokeRunner:
 
 
 def main():
-	runner = SmokeRunner(DEFAULT_STEPS)
+	platform = os.environ.get("BOSS_SMOKE_PLATFORM", "zhipin").strip() or "zhipin"
+	runner = SmokeRunner(build_default_steps(platform))
 	print(json.dumps(runner.run(), ensure_ascii=False))
 
 
