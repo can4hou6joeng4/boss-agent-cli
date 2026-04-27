@@ -1,5 +1,5 @@
 """模型上下文协议服务测试 — 覆盖工具定义、参数构建和调用逻辑。"""
-
+import inspect
 import sys
 import types
 from pathlib import Path
@@ -24,7 +24,15 @@ sys.modules.setdefault("mcp.server.stdio", _mcp_stdio)
 sys.modules.setdefault("mcp.types", _mcp_types)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "mcp-server"))
-from server import TOOLS, _build_args, _run_boss  # noqa: E402
+from server import (  # noqa: E402
+	TOOLS,
+	_build_args,
+	_parse_cli_args,
+	_run_boss,
+	_run_http_server,
+	_run_sse_server,
+	run,
+)
 
 
 # ── 工具定义完整性 ──────────────────────────────────────────────────
@@ -351,6 +359,78 @@ def test_run_boss_timeout(mock_run):
 	mock_run.return_value = MagicMock(stdout='{"ok": true}', stderr="")
 	_run_boss("doctor")
 	assert mock_run.call_args[1]["timeout"] == 120
+
+
+def test_parse_cli_args_defaults():
+	args = _parse_cli_args([])
+	assert args.transport == "stdio"
+	assert args.host == "127.0.0.1"
+	assert args.port == 8765
+	assert args.path == "/mcp"
+	assert args.sse_path == "/sse"
+	assert args.message_path == "/messages/"
+
+
+def test_parse_cli_args_http_overrides():
+	args = _parse_cli_args([
+		"--transport", "http",
+		"--host", "0.0.0.0",
+		"--port", "9000",
+		"--path", "/rpc",
+	])
+	assert args.transport == "http"
+	assert args.host == "0.0.0.0"
+	assert args.port == 9000
+	assert args.path == "/rpc"
+
+
+@patch("boss_agent_cli.mcp_server.asyncio.run")
+@patch("boss_agent_cli.mcp_server.main")
+def test_run_defaults_to_stdio(mock_main, mock_asyncio_run):
+	mock_main.return_value = "stdio-coro"
+	run([])
+	mock_main.assert_called_once_with()
+	mock_asyncio_run.assert_called_once()
+	coro = mock_asyncio_run.call_args.args[0]
+	assert inspect.iscoroutine(coro)
+	coro.close()
+
+
+@patch("boss_agent_cli.mcp_server._run_sse_server")
+def test_run_dispatches_sse_transport(mock_run_sse):
+	run(["--transport", "sse", "--host", "0.0.0.0", "--port", "9001", "--sse-path", "/events", "--message-path", "/inbox"])
+	mock_run_sse.assert_called_once_with(
+		host="0.0.0.0",
+		port=9001,
+		sse_path="/events",
+		message_path="/inbox",
+	)
+
+
+@patch("boss_agent_cli.mcp_server._run_http_server")
+def test_run_dispatches_http_transport(mock_run_http):
+	run(["--transport", "http", "--host", "127.0.0.1", "--port", "9002", "--path", "/rpc"])
+	mock_run_http.assert_called_once_with(host="127.0.0.1", port=9002, path="/rpc")
+
+
+@patch("boss_agent_cli.mcp_server._serve_asgi_app")
+@patch("boss_agent_cli.mcp_server._create_sse_app")
+def test_run_sse_server_builds_app_and_serves(mock_create_app, mock_serve):
+	fake_app = object()
+	mock_create_app.return_value = fake_app
+	_run_sse_server(host="127.0.0.1", port=8765, sse_path="/sse", message_path="/messages/")
+	mock_create_app.assert_called_once_with(sse_path="/sse", message_path="/messages/")
+	mock_serve.assert_called_once_with(fake_app, host="127.0.0.1", port=8765)
+
+
+@patch("boss_agent_cli.mcp_server._serve_asgi_app")
+@patch("boss_agent_cli.mcp_server._create_streamable_http_app")
+def test_run_http_server_builds_app_and_serves(mock_create_app, mock_serve):
+	fake_app = object()
+	mock_create_app.return_value = fake_app
+	_run_http_server(host="127.0.0.1", port=8765, path="/mcp")
+	mock_create_app.assert_called_once_with(path="/mcp")
+	mock_serve.assert_called_once_with(fake_app, host="127.0.0.1", port=8765)
 
 
 # ── 新增工具 _build_args 覆盖（PR #41 扩展）─────────────────

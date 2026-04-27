@@ -134,13 +134,39 @@ Claude Desktop / Cursor / Codex 等通过 stdin/stdout 直接对接。上述 `cl
 boss-mcp
 ```
 
-### HTTP / SSE（规划中，见 [Issue #48](https://github.com/can4hou6joeng4/boss-agent-cli/issues/48)）
+### SSE
 
-面向远程宿主、自定义编排器的 Server-Sent Events 传输，允许跨机部署 MCP 服务。
+面向支持传统 MCP SSE 传输的宿主或自定义编排器。
 
 ```bash
-# 规划形态（未实现，等 PR 合入）
-python3 mcp-server/server.py --transport sse --host 127.0.0.1 --port 8765
+boss-mcp --transport sse --host 127.0.0.1 --port 8765
+```
+
+默认路径：
+- SSE 建链：`/sse`
+- 消息回传：`/messages/`
+
+如需自定义：
+
+```bash
+boss-mcp --transport sse --port 8765 --sse-path /events --message-path /inbox
+```
+
+### HTTP Streaming
+
+面向支持新版 MCP Streamable HTTP 传输的宿主。
+
+```bash
+boss-mcp --transport http --host 127.0.0.1 --port 8765
+```
+
+默认路径：
+- HTTP Streaming：`/mcp`
+
+如需自定义路径：
+
+```bash
+boss-mcp --transport http --port 8765 --path /rpc
 ```
 
 **设计约束**：

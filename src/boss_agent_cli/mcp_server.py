@@ -1,5 +1,7 @@
 """MCP Server for boss-agent-cli — 让 Claude Desktop / Cursor 直接调用 BOSS 直聘求职工具。"""
 
+import argparse
+import asyncio
 import copy
 import json
 import subprocess
@@ -13,6 +15,12 @@ from boss_agent_cli.commands.schema import SCHEMA_DATA, _availability_note, _inj
 from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
 
 server = Server("boss-agent-cli")
+DEFAULT_TRANSPORT = "stdio"
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8765
+DEFAULT_HTTP_PATH = "/mcp"
+DEFAULT_SSE_PATH = "/sse"
+DEFAULT_MESSAGE_PATH = "/messages/"
 
 
 def _build_schema_with_availability() -> dict[str, Any]:
@@ -910,9 +918,111 @@ async def main():
 		await server.run(read_stream, write_stream, server.create_initialization_options())
 
 
-def run() -> None:
-	import asyncio
-	asyncio.run(main())
+def _normalize_path(path: str) -> str:
+	if not path.startswith("/"):
+		return f"/{path}"
+	return path
+
+
+def _create_sse_app(*, sse_path: str = DEFAULT_SSE_PATH, message_path: str = DEFAULT_MESSAGE_PATH):
+	from mcp.server.sse import SseServerTransport
+	from starlette.applications import Starlette
+	from starlette.requests import Request
+	from starlette.responses import Response
+	from starlette.routing import Mount, Route
+
+	sse_path = _normalize_path(sse_path)
+	message_path = _normalize_path(message_path)
+	sse = SseServerTransport(message_path)
+
+	async def handle_sse(scope, receive, send):
+		async with sse.connect_sse(scope, receive, send) as streams:
+			await server.run(
+				streams[0],
+				streams[1],
+				server.create_initialization_options(),
+			)
+		return Response()
+
+	async def sse_endpoint(request: Request) -> Response:
+		return await handle_sse(request.scope, request.receive, request._send)
+
+	return Starlette(
+		routes=[
+			Route(sse_path, endpoint=sse_endpoint, methods=["GET"]),
+			Mount(message_path, app=sse.handle_post_message),
+		]
+	)
+
+
+class _StreamableHTTPASGIApp:
+	def __init__(self, session_manager):
+		self.session_manager = session_manager
+
+	async def __call__(self, scope, receive, send) -> None:
+		await self.session_manager.handle_request(scope, receive, send)
+
+
+def _create_streamable_http_app(*, path: str = DEFAULT_HTTP_PATH):
+	from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+	from starlette.applications import Starlette
+	from starlette.routing import Route
+
+	path = _normalize_path(path)
+	session_manager = StreamableHTTPSessionManager(app=server)
+	http_app = _StreamableHTTPASGIApp(session_manager)
+
+	async def lifespan(app):
+		async with session_manager.run():
+			yield
+
+	return Starlette(
+		routes=[Route(path, endpoint=http_app)],
+		lifespan=lifespan,
+	)
+
+
+def _serve_asgi_app(app, *, host: str, port: int) -> None:
+	import uvicorn
+
+	uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+def _run_sse_server(*, host: str, port: int, sse_path: str, message_path: str) -> None:
+	app = _create_sse_app(sse_path=sse_path, message_path=message_path)
+	_serve_asgi_app(app, host=host, port=port)
+
+
+def _run_http_server(*, host: str, port: int, path: str) -> None:
+	app = _create_streamable_http_app(path=path)
+	_serve_asgi_app(app, host=host, port=port)
+
+
+def _parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
+	parser = argparse.ArgumentParser(description="Run boss-agent-cli MCP server")
+	parser.add_argument(
+		"--transport",
+		choices=("stdio", "sse", "http"),
+		default=DEFAULT_TRANSPORT,
+		help="MCP 传输模式（默认 stdio）",
+	)
+	parser.add_argument("--host", default=DEFAULT_HOST, help="HTTP/SSE 监听地址")
+	parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="HTTP/SSE 监听端口")
+	parser.add_argument("--path", default=DEFAULT_HTTP_PATH, help="HTTP streaming 路径")
+	parser.add_argument("--sse-path", default=DEFAULT_SSE_PATH, help="SSE 建链路径")
+	parser.add_argument("--message-path", default=DEFAULT_MESSAGE_PATH, help="SSE 消息回传路径")
+	return parser.parse_args(argv)
+
+
+def run(argv: list[str] | None = None) -> None:
+	args = _parse_cli_args(argv)
+	if args.transport == "stdio":
+		asyncio.run(main())
+		return
+	if args.transport == "sse":
+		_run_sse_server(host=args.host, port=args.port, sse_path=args.sse_path, message_path=args.message_path)
+		return
+	_run_http_server(host=args.host, port=args.port, path=args.path)
 
 
 if __name__ == "__main__":
