@@ -1,7 +1,7 @@
 import click
 
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.display import handle_output, render_simple_list
+from boss_agent_cli.display import boss_command_for_ctx, handle_output, render_simple_list
 
 
 @click.group("shortlist")
@@ -44,7 +44,12 @@ def shortlist_add_cmd(ctx: click.Context, security_id: str, job_id: str, title: 
 			"salary": salary,
 			"source": source,
 		},
-		hints={"next_actions": ["boss shortlist list", f"boss shortlist remove {security_id} {job_id}"]},
+		hints={
+			"next_actions": [
+				boss_command_for_ctx(ctx, "shortlist list"),
+				boss_command_for_ctx(ctx, f"shortlist remove {security_id} {job_id}"),
+			]
+		},
 	)
 
 
@@ -68,7 +73,7 @@ def shortlist_list_cmd(ctx: click.Context) -> None:
 				("source", "source", "magenta"),
 			],
 		),
-		hints={"next_actions": ["boss detail <security_id> --job-id <job_id>"]},
+		hints={"next_actions": [boss_command_for_ctx(ctx, "detail <security_id> --job-id <job_id>")]},
 	)
 
 
@@ -83,5 +88,5 @@ def shortlist_remove_cmd(ctx: click.Context, security_id: str, job_id: str) -> N
 		ctx,
 		"shortlist",
 		{"action": "remove", "security_id": security_id, "job_id": job_id, "removed": removed},
-		hints={"next_actions": ["boss shortlist list"]},
+		hints={"next_actions": [boss_command_for_ctx(ctx, "shortlist list")]},
 	)

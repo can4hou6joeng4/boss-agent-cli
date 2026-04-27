@@ -257,6 +257,38 @@ def test_detail_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock
 	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian search <query>"
 
 
+@patch("boss_agent_cli.commands.show.CacheStore")
+@patch("boss_agent_cli.commands.show.get_job_by_index")
+@patch("boss_agent_cli.commands.show.get_platform_instance")
+@patch("boss_agent_cli.commands.show.AuthManager")
+def test_show_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock_client_cls, mock_get_job_by_index, mock_cache_cls):
+	mock_get_job_by_index.return_value = {"security_id": "sec_001"}
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.job_card.return_value = {
+		"code": 200,
+		"data": {
+			"jobCard": {
+				"encryptJobId": "enc_001",
+				"jobName": "Go 开发",
+				"brandName": "智联测试公司",
+				"salaryDesc": "30K",
+				"cityName": "北京",
+				"experienceName": "3-5年",
+				"degreeName": "本科",
+			},
+		},
+	}
+	mock_client.unwrap_data.return_value = mock_client.job_card.return_value["data"]
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--platform", "zhilian", "show", "1"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["hints"]["next_actions"][0] == "boss --platform zhilian greet sec_001 enc_001"
+	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian search <query>"
+
+
 # ── me ───────────────────────────────────────────────────────────────
 
 
@@ -412,6 +444,31 @@ def test_interviews_supports_zhilian_style_data(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"][0]["jobName"] == "测试岗位"
+
+
+@patch("boss_agent_cli.commands.chat_summary.get_platform_instance")
+@patch("boss_agent_cli.commands.chat_summary.AuthManager")
+def test_chat_summary_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = {
+		"code": 200,
+		"data": {"result": [_make_friend("张HR", "sec_001", 12345)]},
+	}
+	mock_client.chat_history.return_value = {
+		"code": 200,
+		"data": {
+			"messages": [
+				{"from": {"uid": 12345, "name": "张HR"}, "text": "您好", "type": 1, "time": 1700000000000},
+				{"from": {"uid": 99999, "name": "我"}, "text": "收到", "type": 1, "time": 1700000001000},
+			],
+		},
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "--platform", "zhilian", "chat-summary", "sec_001"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["hints"]["next_actions"][0] == "boss --platform zhilian chat"
+	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian chatmsg sec_001"
 
 
 @patch("boss_agent_cli.commands.detail.CacheStore")

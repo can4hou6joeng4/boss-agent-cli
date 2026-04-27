@@ -3,7 +3,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.chat_summary import summarize_messages
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_message_panel
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, render_message_panel
 
 
 @click.command("chat-summary")
@@ -53,5 +53,10 @@ def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int
 			**summary,
 		},
 		render=lambda d: render_message_panel(d, title="chat-summary"),
-		hints={"next_actions": ["boss chat", f"boss chatmsg {security_id}"]},
+		hints={
+			"next_actions": [
+				boss_command_for_ctx(ctx, "chat"),
+				boss_command_for_ctx(ctx, f"chatmsg {security_id}"),
+			]
+		},
 	)
