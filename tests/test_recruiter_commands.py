@@ -82,6 +82,36 @@ def test_recruiter_jobs_list_supports_data_envelope(mock_auth_cls, mock_platform
 	assert parsed["data"]["jobList"][0]["jobName"] == "后端工程师"
 
 
+@patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.jobs.AuthManager")
+def test_recruiter_jobs_offline_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.job_offline.return_value = {"code": 37, "message": "stoken expired"}
+	mock_platform.is_success.return_value = False
+	mock_platform.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	result = _invoke("hr", "jobs", "offline", "enc-job-1")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"
+
+
+@patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.jobs.AuthManager")
+def test_recruiter_jobs_online_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.job_online.return_value = {"code": 9, "message": "too fast"}
+	mock_platform.is_success.return_value = False
+	mock_platform.parse_error.return_value = ("RATE_LIMITED", "too fast")
+	result = _invoke("hr", "jobs", "online", "enc-job-1")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "RATE_LIMITED"
+	assert parsed["error"]["message"] == "too fast"
+
+
 @patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
 def test_recruiter_resume_exchange_supports_data_envelope(mock_auth_cls, mock_platform_cls):

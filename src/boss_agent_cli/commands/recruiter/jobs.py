@@ -3,7 +3,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_output
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output
 
 
 @click.group("jobs")
@@ -39,7 +39,16 @@ def jobs_offline_cmd(ctx: click.Context, job_id: str) -> None:
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_recruiter_platform_instance(ctx, auth) as platform:
-		platform.job_offline(job_id)
+		result = platform.job_offline(job_id)
+		if not platform.is_success(result):
+			code, message = platform.parse_error(result)
+			handle_error_output(
+				ctx, "recruiter-jobs-offline",
+				code=code,
+				message=message or "职位下线失败",
+				recoverable=False,
+			)
+			return
 		data = {"job_id": job_id, "message": "职位已下线"}
 		handle_output(ctx, "recruiter-jobs-offline", data)
 
@@ -55,6 +64,15 @@ def jobs_online_cmd(ctx: click.Context, job_id: str) -> None:
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_recruiter_platform_instance(ctx, auth) as platform:
-		platform.job_online(job_id)
+		result = platform.job_online(job_id)
+		if not platform.is_success(result):
+			code, message = platform.parse_error(result)
+			handle_error_output(
+				ctx, "recruiter-jobs-online",
+				code=code,
+				message=message or "职位上线失败",
+				recoverable=False,
+			)
+			return
 		data = {"job_id": job_id, "message": "职位已上线"}
 		handle_output(ctx, "recruiter-jobs-online", data)
