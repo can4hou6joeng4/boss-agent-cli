@@ -13,6 +13,7 @@ def _ctx_mock(mock_cls):
 	instance.__enter__ = lambda self: self
 	instance.__exit__ = lambda self, *a: None
 	instance.unwrap_data.side_effect = lambda response: response.get("zpData") if "zpData" in response else response.get("data")
+	instance.is_success.side_effect = lambda response: response.get("code", 0) in (0, 200)
 	return instance
 
 

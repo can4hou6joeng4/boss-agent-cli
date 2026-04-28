@@ -11,6 +11,7 @@ def _ctx_mock(mock_cls):
 	instance.__enter__ = lambda self: self
 	instance.__exit__ = lambda self, *a: None
 	instance.unwrap_data.side_effect = lambda response: response.get("zpData") if "zpData" in response else response.get("data")
+	instance.is_success.side_effect = lambda response: response.get("code", 0) in (0, 200)
 	return instance
 
 
@@ -108,6 +109,38 @@ def test_chatmsg_zhilian_hints_use_platform_specific_commands(mock_auth_cls, moc
 	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian detail sec_001 — 查看职位详情"
 
 
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
+@patch("boss_agent_cli.commands.chatmsg.AuthManager")
+def test_chatmsg_reports_friend_list_error(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = {"code": 37, "message": "stoken expired"}
+	mock_client.is_success.side_effect = None
+	mock_client.is_success.return_value = False
+	mock_client.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["chatmsg", "sec_001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"
+
+
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
+@patch("boss_agent_cli.commands.chatmsg.AuthManager")
+def test_chatmsg_reports_chat_history_error(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_make_friend()])
+	mock_client.chat_history.return_value = {"code": 9, "message": "too fast"}
+	mock_client.is_success.side_effect = lambda response: response.get("code", 0) in (0, 200)
+	mock_client.parse_error.return_value = ("RATE_LIMITED", "too fast")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["chatmsg", "sec_001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RATE_LIMITED"
+	assert parsed["error"]["message"] == "too fast"
+
+
 # ── mark ─────────────────────────────────────────────────────────────
 
 
@@ -153,6 +186,22 @@ def test_mark_reports_error_when_platform_rejects(mock_auth_cls, mock_client_cls
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
 	assert parsed["error"]["message"] == "account risk"
+
+
+@patch("boss_agent_cli.commands.mark.get_platform_instance")
+@patch("boss_agent_cli.commands.mark.AuthManager")
+def test_mark_reports_friend_list_error(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = {"code": 37, "message": "stoken expired"}
+	mock_client.is_success.side_effect = None
+	mock_client.is_success.return_value = False
+	mock_client.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["mark", "sec_001", "--label", "沟通中"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"
 
 
 @patch("boss_agent_cli.commands.mark.get_platform_instance")
@@ -212,6 +261,22 @@ def test_exchange_reports_error_when_platform_rejects(mock_auth_cls, mock_client
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "RATE_LIMITED"
 	assert parsed["error"]["message"] == "too fast"
+
+
+@patch("boss_agent_cli.commands.exchange.get_platform_instance")
+@patch("boss_agent_cli.commands.exchange.AuthManager")
+def test_exchange_reports_friend_list_error(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = {"code": 36, "message": "account risk"}
+	mock_client.is_success.side_effect = None
+	mock_client.is_success.return_value = False
+	mock_client.parse_error.return_value = ("ACCOUNT_RISK", "account risk")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["exchange", "sec_001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["message"] == "account risk"
 
 
 # ── detail ───────────────────────────────────────────────────────────

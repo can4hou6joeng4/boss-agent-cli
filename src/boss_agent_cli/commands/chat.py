@@ -54,6 +54,15 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 
 	with get_platform_instance(ctx, auth) as platform:
 		resp = platform.friend_list(page=page)
+		if not platform.is_success(resp):
+			code, message = platform.parse_error(resp)
+			handle_error_output(
+				ctx, "chat",
+				code=code,
+				message=message or "沟通列表获取失败",
+				recoverable=False,
+			)
+			return
 		platform_data = platform.unwrap_data(resp) or {}
 		items = platform_data.get("result") or platform_data.get("friendList") or []
 

@@ -12,6 +12,7 @@ def _ctx_mock(mock_cls):
 	instance.__enter__ = lambda self: self
 	instance.__exit__ = lambda self, *a: None
 	instance.unwrap_data.side_effect = lambda response: response.get("zpData") if "zpData" in response else response.get("data")
+	instance.is_success.side_effect = lambda response: response.get("code", 0) in (0, 200)
 	return instance
 
 
@@ -706,6 +707,21 @@ def test_chat_combined_filter(mock_auth_cls, mock_client_cls):
 	assert len(parsed["data"]) == 1
 	assert parsed["data"][0]["brand_name"] == "阿里"
 	assert parsed["data"][0]["initiated_by"] == "对方主动"
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_reports_friend_list_error(mock_auth_cls, mock_client_cls):
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
+	mock_client_cls.return_value.friend_list.return_value = {"code": 37, "message": "stoken expired"}
+	mock_client_cls.return_value.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["chat"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"
 
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")

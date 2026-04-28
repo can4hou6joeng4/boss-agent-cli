@@ -19,6 +19,16 @@ def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int
 
 	with get_platform_instance(ctx, auth) as platform:
 		friends_resp = platform.friend_list(page=1)
+		if not platform.is_success(friends_resp):
+			code, message = platform.parse_error(friends_resp)
+			handle_error_output(
+				ctx,
+				"chat-summary",
+				code=code,
+				message=message or "沟通列表获取失败",
+				recoverable=False,
+			)
+			return
 		friends_data = platform.unwrap_data(friends_resp) or {}
 		items = friends_data.get("result") or friends_data.get("friendList") or []
 
@@ -40,6 +50,16 @@ def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int
 			return
 
 		resp = platform.chat_history(gid, security_id, page=page, count=count)
+		if not platform.is_success(resp):
+			code, message = platform.parse_error(resp)
+			handle_error_output(
+				ctx,
+				"chat-summary",
+				code=code,
+				message=message or "聊天记录获取失败",
+				recoverable=False,
+			)
+			return
 		msg_data = platform.unwrap_data(resp) or {}
 		messages = msg_data.get("messages") or msg_data.get("historyMsgList") or []
 		summary = summarize_messages(messages, friend_uid=gid)

@@ -11,6 +11,7 @@ def _ctx_mock(mock_cls):
 	instance.__enter__ = lambda self: self
 	instance.__exit__ = lambda self, *a: None
 	instance.unwrap_data.side_effect = lambda response: response.get("zpData") if "zpData" in response else response.get("data")
+	instance.is_success.side_effect = lambda response: response.get("code", 0) in (0, 200)
 	return instance
 
 
@@ -55,6 +56,35 @@ def test_chat_summary_command_success(mock_auth_cls, mock_client_cls):
 	assert parsed["ok"] is True
 	assert parsed["data"]["stage"] == "reply_needed"
 	assert parsed["data"]["security_id"] == "sec_001"
+
+
+@patch("boss_agent_cli.commands.chat_summary.get_platform_instance")
+@patch("boss_agent_cli.commands.chat_summary.AuthManager")
+def test_chat_summary_reports_chat_history_error(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_friend()])
+	mock_client.chat_history.return_value = {"code": 9, "message": "too fast"}
+	mock_client.parse_error.return_value = ("RATE_LIMITED", "too fast")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "chat-summary", "sec_001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RATE_LIMITED"
+	assert parsed["error"]["message"] == "too fast"
+
+
+@patch("boss_agent_cli.commands.chat_summary.get_platform_instance")
+@patch("boss_agent_cli.commands.chat_summary.AuthManager")
+def test_chat_summary_reports_friend_list_error(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = {"code": 37, "message": "stoken expired"}
+	mock_client.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "chat-summary", "sec_001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"
 
 
 def test_chat_summary_is_exposed_in_schema():

@@ -21,6 +21,15 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 
 	with get_platform_instance(ctx, auth) as platform:
 		friends_resp = platform.friend_list(page=1)
+		if not platform.is_success(friends_resp):
+			code, message = platform.parse_error(friends_resp)
+			handle_error_output(
+				ctx, "exchange",
+				code=code,
+				message=message or "沟通列表获取失败",
+				recoverable=False,
+			)
+			return
 		friend_data = platform.unwrap_data(friends_resp) or {}
 		items = friend_data.get("result") or friend_data.get("friendList") or []
 
