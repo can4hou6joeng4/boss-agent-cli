@@ -114,6 +114,14 @@ patchright install chromium    # QR httpx 模式可省略此步
 
 > Codex 环境中所有命令加 `--data-dir /tmp/boss-agent-codex`
 
+### 搜索前的环境兜底
+
+- `boss search` / `boss recommend` / `boss greet` 依赖浏览器通道，不是纯 `httpx`
+- 如果上一条相关命令报 `NETWORK_ERROR`，不要直接判断成“skill 参数错了”或“未登录”
+- 先执行 `boss --data-dir /tmp/boss-agent-codex --json doctor`
+- 若 `network=ok` 但 `browser_channel=warn` 或 `cdp=warn`，说明命令会降级到 `headless patchright`，此时更容易出现页面预热超时或风控
+- 优先修复浏览器通道后再重试：启动带 `--remote-debugging-port=9222` 的 Chrome，或接入 Bridge；仅在 `status` / `doctor` 也失败时，再回头排查 data dir、登录态或网络
+
 ## 命令速查（32 个）
 
 运行 `boss schema` 获取完整命令定义。运行 `boss <cmd> --help` 查看单个命令帮助。

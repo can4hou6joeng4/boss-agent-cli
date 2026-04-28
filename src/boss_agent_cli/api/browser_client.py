@@ -23,6 +23,7 @@ HOME_URL = "https://www.zhipin.com/"
 # 超时常量
 _CDP_PROBE_TIMEOUT = 3           # CDP 探测 HTTP 超时（秒）
 _NAV_TIMEOUT_MS = 15000          # 页面导航超时（毫秒）
+_HEADLESS_NETWORKIDLE_GRACE_MS = 3000  # headless 预热的额外宽限，避免卡满 30s
 
 # macOS / Linux / Windows Chrome user data 默认路径
 _CHROME_USER_DATA_CANDIDATES = [
@@ -212,8 +213,13 @@ class BrowserSession:
 			for name, value in self._cookies.items()
 		])
 		self._page = self._context.new_page()
-		self._page.goto(HOME_URL, wait_until="domcontentloaded")
-		self._page.wait_for_load_state("networkidle")
+		self._page.goto(HOME_URL, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+		try:
+			self._page.wait_for_load_state("networkidle", timeout=_HEADLESS_NETWORKIDLE_GRACE_MS)
+		except Exception as e:
+			# zhipin 首页常驻请求较多，headless 模式下不一定能进入 networkidle；
+			# 页面 JS 环境已可用时，继续直接发起 fetch 请求更稳。
+			self._log(f"[boss] headless 首页未进入 networkidle（{e}），继续直接发起请求")
 		self._started = True
 		self._is_cdp = False
 		self._log("[boss] CDP 不可用（提示：需以 --remote-debugging-port=9222 启动 Chrome），降级到 headless patchright")

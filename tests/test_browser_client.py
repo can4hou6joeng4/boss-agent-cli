@@ -2,7 +2,12 @@ from unittest.mock import patch, MagicMock
 
 import httpx
 
-from boss_agent_cli.api.browser_client import BrowserSession
+from boss_agent_cli.api.browser_client import (
+	HOME_URL,
+	_HEADLESS_NETWORKIDLE_GRACE_MS,
+	_NAV_TIMEOUT_MS,
+	BrowserSession,
+)
 
 
 def test_browser_session_defaults():
@@ -140,3 +145,37 @@ def test_try_connect_creates_new_context_when_none_exists():
 	mock_new_context.add_cookies.assert_called_once()
 	cookies_arg = mock_new_context.add_cookies.call_args[0][0]
 	assert any(c["name"] == "wt2" for c in cookies_arg)
+
+
+def test_start_headless_tolerates_networkidle_timeout():
+	"""Headless 预热不应因 networkidle 等待超时而直接失败。"""
+	logger = MagicMock()
+	session = BrowserSession(cookies={"wt2": "abc"}, user_agent="UA", logger=logger)
+	session._pw = MagicMock()
+
+	mock_browser = MagicMock()
+	mock_context = MagicMock()
+	mock_page = MagicMock()
+	mock_page.wait_for_load_state.side_effect = Exception("Timeout 30000ms exceeded")
+	mock_context.new_page.return_value = mock_page
+	mock_browser.new_context.return_value = mock_context
+	session._pw.chromium.launch.return_value = mock_browser
+
+	session._start_headless()
+
+	assert session._started is True
+	assert session._is_cdp is False
+	mock_page.goto.assert_called_once_with(
+		HOME_URL,
+		wait_until="domcontentloaded",
+		timeout=_NAV_TIMEOUT_MS,
+	)
+	mock_page.wait_for_load_state.assert_called_once_with(
+		"networkidle",
+		timeout=_HEADLESS_NETWORKIDLE_GRACE_MS,
+	)
+	logger.info.assert_any_call("[boss] CDP 不可用（提示：需以 --remote-debugging-port=9222 启动 Chrome），降级到 headless patchright")
+	assert any(
+		"headless 首页未进入 networkidle" in call.args[0]
+		for call in logger.info.call_args_list
+	)
