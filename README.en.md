@@ -182,7 +182,7 @@ jobs = json.loads(result.stdout)["data"]["items"]
 }
 ```
 
-See [Agent Quickstart](docs/agent-quickstart.md) and [Capability Matrix](docs/capability-matrix.md) for the full picture.
+See [Agent Quickstart](docs/agent-quickstart.en.md) and [Capability Matrix](docs/capability-matrix.en.md) for the full picture.
 
 ## 📚 Commands
 

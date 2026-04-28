@@ -95,6 +95,40 @@ def test_readme_en_mentions_current_mcp_tool_count():
 	assert f"MCP server with {tool_count} tools" in content
 
 
+def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
+	quickstart = _read("docs/agent-quickstart.en.md")
+	assert "# Agent Quickstart" in quickstart
+	assert "## 1) Install and prepare the environment" in quickstart
+	assert "## 2) Complete the minimal agent loop in three steps" in quickstart
+	assert "## 3) Recovery flow and troubleshooting" in quickstart
+	assert "[Capability Matrix](capability-matrix.en.md)" in quickstart
+
+	hosts = _read("docs/agent-hosts.en.md")
+	assert "# Agent Host Examples" in hosts
+	assert "[Codex](integrations/codex.md)" in hosts
+	assert "[Python SDK](integrations/python-sdk.md)" in hosts
+
+	matrix = _read("docs/capability-matrix.en.md")
+	assert "# Capability Matrix" in matrix
+	assert "| Capability | CLI command | Login required | Transport |" in matrix
+	assert "`boss schema`" in matrix
+	assert "`boss hr candidates`" in matrix
+	assert "33 top-level commands" in matrix
+	assert "7 first-level recruiter subcommands" in matrix
+
+	mcp_readme = _read("mcp-server/README.en.md")
+	assert "[Agent Quickstart](../docs/agent-quickstart.en.md)" in mcp_readme
+	assert "[Capability Matrix](../docs/capability-matrix.en.md)" in mcp_readme
+
+	readme_en = _read("README.en.md")
+	assert "[Agent Quickstart](docs/agent-quickstart.en.md)" in readme_en
+	assert "[Capability Matrix](docs/capability-matrix.en.md)" in readme_en
+
+	python_sdk = _read("docs/integrations/python-sdk.md")
+	assert "[`boss schema --format` options](../capability-matrix.en.md)" in python_sdk
+	assert "[MCP integration guide (Claude Desktop / Cursor)](../../mcp-server/README.en.md)" in python_sdk
+
+
 def test_glama_metadata_exists_and_declares_owner():
 	content = json.loads(_read("glama.json"))
 	assert content["$schema"] == "https://glama.ai/mcp/schemas/server.json"

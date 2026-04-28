@@ -253,5 +253,5 @@ if not output["ok"]:
 
 - [OpenAI Tools API docs](https://platform.openai.com/docs/guides/function-calling)
 - [Anthropic Tool Use docs](https://docs.claude.com/en/docs/build-with-claude/tool-use)
-- [`boss schema --format` options](../capability-matrix.md)
-- [MCP integration guide (Claude Desktop / Cursor)](../../mcp-server/README.md)
+- [`boss schema --format` options](../capability-matrix.en.md)
+- [MCP integration guide (Claude Desktop / Cursor)](../../mcp-server/README.en.md)
