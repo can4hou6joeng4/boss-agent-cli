@@ -94,15 +94,15 @@
 |------|------|---------|------|---------|
 | [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | 2026-04-17 | PR #4992 | ✅ 已合并（2026-04-26） | 已完成 Glama / introspection 前置并成功并入列表，无需继续跟进此阻塞项 |
 | [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code) | — | — | ⚠️ 渠道限制 | **必须通过 Web UI issue 表单**（`/issues/new?template=recommend-resource.yml`），**禁止 gh CLI**（违规会被封禁，见 docs/CONTRIBUTING.md 明文警告） |
-| [awesome-agents (kyrolabs)](https://github.com/kyrolabs/awesome-agents) | 2026-04-27 | [PR #423](https://github.com/kyrolabs/awesome-agents/pull/423) | 🟡 已提交，待审 | 已按 `Software Development` 分区提交，等待维护者审阅 |
-| [awesome-ai-tools (mahseema)](https://github.com/mahseema/awesome-ai-tools) | 2026-04-27 | [PR #1206](https://github.com/mahseema/awesome-ai-tools/pull/1206) | 🟡 已提交，待审 | 已按 `Developer tools` 分区提交，等待维护者审阅 |
+| [awesome-agents (kyrolabs)](https://github.com/kyrolabs/awesome-agents) | 2026-04-27 | [PR #423](https://github.com/kyrolabs/awesome-agents/pull/423) | ⚠️ 已关闭（2026-04-28） | 由 `botbocks` 直接关闭，**无 review / 无 comment / 无 merge**；同仓库 `Software Development` 分区近期也有多条投稿被静默关闭，暂不建议立刻重投 |
+| [awesome-ai-tools (mahseema)](https://github.com/mahseema/awesome-ai-tools) | 2026-04-27 | [PR #1206](https://github.com/mahseema/awesome-ai-tools/pull/1206) | 🟡 仍为 OPEN | 已按 `Developer tools` 分区提交，继续观察维护者反馈 |
 | ~~awesome-python-cli (shinokada)~~ | — | — | ❌ 仓库不存在 | 404，从投稿列表移除 |
 
 ### 接续路径
 
-1. **短期**：跟进 `awesome-ai-tools` PR #1206 与 `awesome-agents` PR #423 审阅结果，优先处理维护者反馈
-2. **中期**：基于当前 traction 继续扩展投稿面，并补更完整的双语视频 demo / 发布素材提高通过率
-3. **长期**：把投稿状态和对外素材与每次 release 同步维护，避免再次出现“已完成但仓库文档仍写阻塞中”的漂移
+1. **短期**：继续跟进 `awesome-ai-tools` PR #1206；`awesome-agents` PR #423 已转为关闭态观察样本，先不急于重投
+2. **中期**：如果 `awesome-agents` 后续出现明确投稿规范、批量 reopen、或新增同类条目被合并，再决定是否带更强 traction / 描述重投
+3. **长期**：把投稿状态和对外素材与每次 release 同步维护，避免再次出现“外部状态已变化，但仓库内记录仍滞后”的漂移
 
 ### 投稿渠道约束快查表
 
@@ -110,7 +110,7 @@
 |------|------------|---------|
 | awesome-mcp-servers | ✅ | 前置已完成，PR #4992 已合并 |
 | awesome-claude-code | ❌ 只能 Web UI 表单 | — |
-| awesome-agents (kyrolabs) | ✅ | 明示 traction（star ≥ 50 建议） |
+| awesome-agents (kyrolabs) | ✅ | 明示 traction（star ≥ 50 建议）；近期 `Software Development` 分区存在 bot 静默关单现象 |
 | awesome-ai-tools | ✅ | 无明示 |
 
-> 策略总结：**不强投**——对于设有 traction 门槛或非 CLI 渠道的列表，宁可推迟到条件满足，避免无效 PR 浪费维护者时间。`awesome-mcp-servers` 的 Glama 阻塞已解除并完成合并，`awesome-ai-tools` / `awesome-agents` 已进入待审阶段，后续重点转向审阅跟进和更强的对外展示素材。
+> 策略总结：**不强投**——对于设有 traction 门槛或维护节奏不透明的列表，宁可先观察真实通过模式，也不要反复提交无效 PR。`awesome-mcp-servers` 的 Glama 阻塞已解除并完成合并；`awesome-ai-tools` 仍在待审；`awesome-agents` 已出现 bot 静默关单，后续重点是跟踪规则变化，而不是立即重复投稿。
