@@ -3,7 +3,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_output
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output
 
 
 @click.command("reply")
@@ -19,10 +19,19 @@ def reply_cmd(ctx: click.Context, friend_id: int, message: str) -> None:
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		result = platform.send_message(friend_id, message)
+		if not platform.is_success(result):
+			code, error_message = platform.parse_error(result)
+			handle_error_output(
+				ctx, "recruiter-reply",
+				code=code,
+				message=error_message or "消息发送失败",
+				recoverable=False,
+			)
+			return
 		data = {
 			"friend_id": friend_id,
 			"message": message,
-			"sent": platform.is_success(result),
+			"sent": True,
 		}
 		handle_output(
 			ctx, "recruiter-reply", data,

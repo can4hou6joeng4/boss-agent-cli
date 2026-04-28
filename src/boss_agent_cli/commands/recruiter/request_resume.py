@@ -3,7 +3,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_output
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output
 
 
 @click.command("request-resume")
@@ -20,11 +20,20 @@ def request_resume_cmd(ctx: click.Context, friend_id: int, job_id: int) -> None:
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		# friend_id 就是 uid，gid 也设为 uid
 		result = platform.exchange_request(3, friend_id, job_id, friend_id)
+		if not platform.is_success(result):
+			code, error_message = platform.parse_error(result)
+			handle_error_output(
+				ctx, "recruiter-request-resume",
+				code=code,
+				message=error_message or "附件简历请求失败",
+				recoverable=False,
+			)
+			return
 		data = {
 			"friend_id": friend_id,
 			"job_id": job_id,
-			"requested": platform.is_success(result),
-			"message": "附件简历请求已发送" if platform.is_success(result) else "请求失败，可能已请求过或权限不足",
+			"requested": True,
+			"message": "附件简历请求已发送",
 		}
 		handle_output(
 			ctx, "recruiter-request-resume", data,

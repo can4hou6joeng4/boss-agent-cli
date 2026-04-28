@@ -34,6 +34,15 @@ def resume_cmd(ctx: click.Context, geek_id: str, job_id: str, security_id: str |
 				)
 				return
 			result = platform.exchange_request(1, uid, int(job_id), gid)
+			if not platform.is_success(result):
+				code, message = platform.parse_error(result)
+				handle_error_output(
+					ctx, "recruiter-resume",
+					code=code,
+					message=message or "联系方式交换请求失败",
+					recoverable=False,
+				)
+				return
 			data = platform.unwrap_data(result) or {}
 			data["message"] = "联系方式交换请求已发送"
 		elif security_id and job_id:

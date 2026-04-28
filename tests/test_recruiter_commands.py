@@ -130,6 +130,21 @@ def test_recruiter_resume_exchange_supports_data_envelope(mock_auth_cls, mock_pl
 
 @patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
+def test_recruiter_resume_exchange_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.exchange_request.return_value = {"code": 37, "message": "stoken expired"}
+	mock_platform.is_success.return_value = False
+	mock_platform.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	result = _invoke("hr", "resume", "geek-1", "--exchange", "--uid", "1", "--gid", "2", "--job-id", "3")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"
+
+
+@patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
 def test_recruiter_resume_parse_supports_data_envelope(mock_auth_cls, mock_platform_cls):
 	mock_platform = _ctx_mock(mock_platform_cls)
 	mock_platform.view_geek.return_value = {
@@ -158,6 +173,36 @@ def test_recruiter_resume_parse_supports_data_envelope(mock_auth_cls, mock_platf
 	assert parsed["data"]["basic"]["name"] == "张三"
 	assert parsed["data"]["expectation"]["position"] == "后端工程师"
 	assert parsed["hints"]["next_actions"][0] == "boss hr applications — 返回候选人列表"
+
+
+@patch("boss_agent_cli.commands.recruiter.reply.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.reply.AuthManager")
+def test_recruiter_reply_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.send_message.return_value = {"code": 9, "message": "too fast"}
+	mock_platform.is_success.return_value = False
+	mock_platform.parse_error.return_value = ("RATE_LIMITED", "too fast")
+	result = _invoke("hr", "reply", "123", "你好")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "RATE_LIMITED"
+	assert parsed["error"]["message"] == "too fast"
+
+
+@patch("boss_agent_cli.commands.recruiter.request_resume.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.request_resume.AuthManager")
+def test_recruiter_request_resume_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.exchange_request.return_value = {"code": 36, "message": "account risk"}
+	mock_platform.is_success.return_value = False
+	mock_platform.parse_error.return_value = ("ACCOUNT_RISK", "account risk")
+	result = _invoke("hr", "request-resume", "123", "--job-id", "88")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["message"] == "account risk"
 
 
 def test_parse_resume_accepts_data_envelope():
