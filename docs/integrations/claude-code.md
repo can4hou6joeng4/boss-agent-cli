@@ -1,36 +1,36 @@
 # Claude Code Integration Example
 
-适用版本：`boss-agent-cli` 当前 CLI 契约（2026-04-13）
+Applies to the current `boss-agent-cli` CLI contract as of April 28, 2026.
 
-## 适用场景
+## Good fit when
 
-- 团队通过 skill 分发统一的求职能力
-- 希望 Agent 在规则文件里固定 BOSS 直聘操作顺序
-- 需要把 `boss` 命令当成稳定 shell 能力暴露给 Claude Code
+- your team distributes job-hunt capability through Skills
+- you want Claude Code rules to enforce a stable BOSS Zhipin workflow
+- you want `boss` exposed as a reliable shell capability for Claude Code
 
-## 最小接入流程
+## Minimal integration
 
-优先安装 skill：
+Preferred path: install the Skill.
 
 ```bash
 npx skills add can4hou6joeng4/boss-agent-cli
 ```
 
-如果你走规则文件方式，可以直接放入以下约束：
+If you prefer a rules-file workflow, you can add guidance like this:
 
 ```markdown
-当用户要求搜索职位、查看职位详情、打招呼或推进招聘沟通时：
-1. 先运行 boss schema
-2. 再运行 boss status
-3. 未登录时运行 boss login
-4. 搜索使用 boss search
-5. 查看详情使用 boss detail
-6. 执行动作使用 boss greet
-7. 招聘者场景使用 boss hr applications / candidates / reply / request-resume
-8. 只读取 stdout JSON，不解析 stderr
+When the user asks to search jobs, inspect job details, greet recruiters, or continue recruiter-side communication:
+1. Run `boss schema` first
+2. Then run `boss status`
+3. If not logged in, run `boss login`
+4. Use `boss search` for discovery
+5. Use `boss detail` for a full job view
+6. Use `boss greet` for the first outbound action
+7. In recruiter workflows, use `boss hr applications / candidates / reply / request-resume`
+8. Read stdout JSON only; do not parse stderr
 ```
 
-最小命令链路：
+Minimal candidate-side command chain:
 
 ```bash
 boss schema
@@ -40,7 +40,7 @@ boss detail <security_id>
 boss greet <security_id> <job_id>
 ```
 
-招聘者最小命令链路：
+Minimal recruiter-side command chain:
 
 ```bash
 boss schema
@@ -50,15 +50,15 @@ boss hr candidates "Golang"
 boss hr reply <friend_id> "你好"
 ```
 
-接入建议：
+Integration advice:
 
-- 把 `boss schema` 结果当成能力真源
-- 把 `boss detail` 返回结果拼回上下文，再决定是否 `boss greet`
-- 遇到 `ok=false` 时优先消费 `error.recovery_action`
+- treat `boss schema` as the source of truth for capabilities and arguments
+- feed `boss detail` output back into the context before deciding whether to call `boss greet`
+- when `ok=false`, prefer `error.recovery_action` before inventing your own retry logic
 
-## 失败恢复
+## Recovery flow
 
-推荐恢复顺序：
+Recommended order:
 
 ```bash
 boss doctor
@@ -67,8 +67,8 @@ boss login
 boss search "Golang" --city 广州
 ```
 
-常见恢复动作：
+Common recovery actions:
 
-- 登录失效：重新执行 `boss login`
-- 参数错误：回到 `boss schema` 或 `boss cities`
-- 环境异常：先跑 `boss doctor`，再决定是否继续 `boss greet`
+- login expired: run `boss login` again
+- invalid parameters: go back to `boss schema` or `boss cities`
+- environment issue: run `boss doctor` first, then decide whether it is safe to continue with `boss greet`

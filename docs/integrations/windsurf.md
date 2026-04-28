@@ -1,22 +1,22 @@
 # Windsurf Integration Example
 
-适用版本：`boss-agent-cli` 当前 CLI 契约（2026-04-19）
+Applies to the current `boss-agent-cli` CLI contract as of April 28, 2026.
 
-Windsurf 是 Codeium 发布的 agentic IDE，Cascade 面板是主力 Agent，支持 MCP 协议和项目级 `.windsurfrules`。本指引给两种接入方式：MCP 原生接入（推荐）和规则文件接入（兜底）。
+Windsurf is Codeium's agentic IDE. Cascade is the primary agent surface and supports both MCP servers and project-level `.windsurfrules`. This guide covers two options: native MCP integration (recommended) and rules-file integration (fallback).
 
-## 适用场景
+## Good fit when
 
-- 用 Cascade 跑完整求职链路，让 Agent 自主决定何时 search / detail / greet
-- 希望把 `boss` 能力以 MCP 工具形式注册，而非每次粘贴终端命令
-- 已有 `.windsurfrules` 项目规则，想追加 BOSS 直聘约束
+- you want Cascade to run the full job-hunt loop and decide when to search, inspect, and greet
+- you want `boss` registered as MCP tools instead of pasting terminal commands
+- you already have project rules in `.windsurfrules` and want to add BOSS Zhipin constraints
 
-## 最小接入流程
+## Minimal integration
 
-Windsurf 支持两种接入方式，按需二选一。
+Windsurf supports two approaches. Choose the one that fits your setup.
 
-### 方式一：MCP 服务接入（推荐）
+### Option 1: MCP server integration (recommended)
 
-在 Windsurf 设置 → Cascade → MCP Servers 里添加：
+In Windsurf Settings → Cascade → MCP Servers, add:
 
 ```json
 {
@@ -35,26 +35,26 @@ Windsurf 支持两种接入方式，按需二选一。
 }
 ```
 
-启用后 Cascade 会自动枚举 `boss_search` / `boss_detail` / `boss_greet` / `boss_ai_*` 等 43 个工具，无需额外提示词。
+Once enabled, Cascade will automatically enumerate `boss_search`, `boss_detail`, `boss_greet`, `boss_ai_*`, and the rest of the 49 MCP tools. No extra prompting glue is required.
 
-### 方式二：.windsurfrules 规则接入
+### Option 2: `.windsurfrules` integration
 
-在项目根目录 `.windsurfrules` 里追加：
+Append guidance like this to the project root `.windsurfrules`:
 
 ```markdown
-## BOSS 直聘求职能力
+## BOSS Zhipin job-hunt capability
 
-当任务涉及搜索岗位、查看职位详情、打招呼或推进求职进度时：
-1. 先运行 `boss schema` 获取能力和参数
-2. 再运行 `boss status` 检查登录态
-3. 未登录时运行 `boss login`，提示用户完成扫码
-4. 搜索使用 `boss search`，优先带 `--welfare` 精准筛选
-5. 命中后用 `boss detail <security_id>` 看完整信息
-6. 执行动作用 `boss greet <security_id> <job_id>`
-7. 只消费 stdout JSON；`ok=false` 时读 `error.recovery_action` 做恢复决策
+When the task involves job discovery, job-detail inspection, greeting, or candidate workflow progression:
+1. Run `boss schema` first to learn the capability surface and argument shapes
+2. Then run `boss status` to verify authentication
+3. If not logged in, run `boss login` and ask the user to scan if needed
+4. Use `boss search`, preferably with `--welfare` for precise filtering
+5. Use `boss detail <security_id>` once a hit looks promising
+6. Use `boss greet <security_id> <job_id>` for the outbound action
+7. Consume stdout JSON only; when `ok=false`, read `error.recovery_action` before retrying
 ```
 
-最小命令链路：
+Minimal command chain:
 
 ```bash
 boss schema
@@ -64,17 +64,17 @@ boss detail <security_id>
 boss greet <security_id> <job_id>
 ```
 
-## 解析字段
+## Fields to parse
 
-- `ok`：判断命令是否成功
-- `data`：读取职位、详情或动作结果
-- `hints.next_actions`：决定下一条命令
-- `error.code`：做恢复分流
-- `error.recovery_action`：告诉 Cascade 如何修复
+- `ok`: whether the command succeeded
+- `data`: jobs, details, or action results
+- `hints.next_actions`: suggested next command
+- `error.code`: recovery routing
+- `error.recovery_action`: how Cascade should recover
 
-## 失败恢复
+## Recovery flow
 
-推荐恢复顺序：
+Recommended order:
 
 ```bash
 boss doctor
@@ -82,14 +82,14 @@ boss status
 boss login
 ```
 
-常见分流：
+Common branches:
 
-- `AUTH_REQUIRED` / `AUTH_EXPIRED`：重新执行 `boss login`
-- `INVALID_PARAM`：回退到 `boss schema` 校验参数名
-- `RATE_LIMITED`：等待后重试，不要盲目连发 `boss greet`
-- `ACCOUNT_RISK`：启动 CDP Chrome（`boss-chrome` alias），再重试
+- `AUTH_REQUIRED` / `AUTH_EXPIRED`: run `boss login` again
+- `INVALID_PARAM`: return to `boss schema` and validate parameter names
+- `RATE_LIMITED`: wait before retrying; do not spam `boss greet`
+- `ACCOUNT_RISK`: start a CDP Chrome session (for example via a `boss-chrome` alias), then retry
 
-## 进阶
+## Advanced ideas
 
-- 把 `boss ai reply <message>` / `boss ai chat-coach <chat>` 接给 Cascade，让它在沟通过程中提供话术支持
-- 用 `boss digest --format md` 生成每日摘要，Cascade 预览面板直出飞书/邮件可用版
+- Hook `boss ai reply <message>` and `boss ai chat-coach <chat>` into Cascade so it can help with communication quality
+- Generate daily summaries with `boss digest --format md` and render them directly in the Windsurf preview panel

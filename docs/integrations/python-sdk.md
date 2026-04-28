@@ -1,42 +1,42 @@
-# Python 直接集成（OpenAI / Claude SDK）
+# Python Direct Integration (OpenAI / Claude SDK)
 
-面向不走 MCP 通道的场景：在自己的 Python Agent 里直接调用 OpenAI Functions API 或 Claude Tool Use API，让大模型驱动 `boss-agent-cli`。
+Use this path when you do not want MCP in the loop. Your own Python agent can call the OpenAI Functions API or Claude Tool Use API directly, while `boss-agent-cli` remains the execution backend.
 
-## 适用场景
+## Good fit when
 
-- 自建 Agent 框架（LangGraph / LlamaIndex / 手写 Loop）
-- 想把 BOSS 求职能力嵌入到现有业务代码
-- 测试新模型对 34 个 CLI 工具的调度能力
-- CI/CD 里跑定时任务让 Agent 自动跟进投递
+- you run a custom agent framework (LangGraph, LlamaIndex, or a hand-written loop)
+- you want BOSS job-hunt capability embedded in existing business code
+- you want to test new models against the exported `boss` tool surface
+- you run scheduled follow-up tasks in CI/CD
 
-## 核心思路
+## Core idea
 
-`boss schema` 命令支持三种输出格式：
+`boss schema` supports three output formats:
 
-| `--format` | 输出结构 | 适用 SDK |
+| `--format` | Output shape | SDK target |
 |-----------|---------|---------|
-| `native`（默认） | 项目自定义 JSON 信封 | 手动解析 / MCP 转换 |
-| `openai-tools` | 符合 OpenAI Functions / Tools API | `openai` Python SDK |
-| `anthropic-tools` | 符合 Claude Tool Use API | `anthropic` Python SDK |
+| `native` (default) | project-specific JSON envelope | manual parsing / MCP conversion |
+| `openai-tools` | OpenAI Functions / Tools API compatible | `openai` Python SDK |
+| `anthropic-tools` | Claude Tool Use API compatible | `anthropic` Python SDK |
 
-后两种格式可直接喂给对应 SDK 的 `tools=` 参数，无需手写转换。
+The latter two can be passed directly into the relevant SDK's `tools=` parameter with no hand-written conversion layer.
 
-补充说明：
-- `native` schema 里每个命令都带有 `availability`，可用于在业务侧先做 `role/platform` 过滤
-- `openai-tools` / `anthropic-tools` 导出的 `description` 也会内嵌同一份可用性提示，方便模型直接感知边界
+Notes:
+- every command in the `native` schema includes `availability`, which lets your application pre-filter by `role` or `platform`
+- the exported `description` fields in `openai-tools` and `anthropic-tools` also carry the same availability hints so the model can see the boundary conditions directly
 
-## 最小 OpenAI 示例
+## Minimal OpenAI example
 
-`examples/openai_agent.py`：
+`examples/openai_agent.py`:
 
 ```python
-"""用 OpenAI GPT-4o 驱动 boss-agent-cli。
+"""Drive boss-agent-cli with OpenAI GPT-4o.
 
-运行：
+Run:
     pip install openai
     export OPENAI_API_KEY=sk-...
-    boss login  # 先确保已登录
-    python examples/openai_agent.py "找上海 30K 以上的 Python 后端"
+    boss login  # make sure auth is ready first
+    python examples/openai_agent.py "Find Python backend jobs in Shanghai above 30K"
 """
 import json
 import subprocess
@@ -44,7 +44,7 @@ import sys
 from openai import OpenAI
 
 def run_boss(*args):
-    """调用 boss CLI，返回解析后的 JSON 信封。"""
+    """Call the boss CLI and return the parsed JSON envelope."""
     result = subprocess.run(
         ["boss", "--json", *args],
         capture_output=True, text=True, timeout=120,
@@ -56,7 +56,7 @@ def run_boss(*args):
 
 
 def load_tools():
-    """拉 boss schema openai-tools 格式，直接喂给 SDK。"""
+    """Load boss schema in openai-tools format and feed it directly to the SDK."""
     out = subprocess.run(
         ["boss", "schema", "--format", "openai-tools"],
         capture_output=True, text=True,
@@ -68,11 +68,11 @@ def main(user_prompt: str):
     client = OpenAI()
     tools = load_tools()
     messages = [
-        {"role": "system", "content": "你是求职助手。通过 boss_* 工具帮用户操作 BOSS 直聘。每个工具的返回值是 JSON 信封，ok=false 时要告知用户。"},
+        {"role": "system", "content": "You are a job-hunt assistant. Use boss_* tools to operate BOSS Zhipin. Every tool returns a JSON envelope; if ok=false, explain the failure to the user."},
         {"role": "user", "content": user_prompt},
     ]
 
-    for _ in range(10):  # 最多 10 轮工具调用
+    for _ in range(10):  # at most 10 tool rounds
         resp = client.chat.completions.create(
             model="gpt-4o",
             messages=messages,
@@ -86,11 +86,11 @@ def main(user_prompt: str):
             return
 
         for call in msg.tool_calls:
-            # 工具名形如 "boss_search"；还原成 "search"
+            # Tool name looks like "boss_search"; convert back to CLI command name.
             cmd = call.function.name.replace("boss_", "").replace("_", "-")
             args = json.loads(call.function.arguments)
 
-            # 把 dict 参数拆成 CLI 参数
+            # Flatten dict arguments into CLI arguments.
             cli_args = [cmd]
             for key, value in args.items():
                 if key == "query" or (len(args) == 1 and isinstance(value, str)):
@@ -107,23 +107,23 @@ def main(user_prompt: str):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "搜索北京的 Python 开发岗位")
+    main(sys.argv[1] if len(sys.argv) > 1 else "Search Python developer jobs in Beijing")
 ```
 
-运行：
+Run:
 
 ```bash
 export OPENAI_API_KEY=sk-...
 boss login
-python examples/openai_agent.py "搜上海 25K 以上的 Golang 岗位"
+python examples/openai_agent.py "Search Golang jobs in Shanghai above 25K"
 ```
 
-## 最小 Claude (Anthropic) 示例
+## Minimal Claude (Anthropic) example
 
 `examples/anthropic_agent.py`：
 
 ```python
-"""用 Claude Sonnet 4.6 驱动 boss-agent-cli。"""
+"""Drive boss-agent-cli with Claude Sonnet 4.6."""
 import json
 import subprocess
 import sys
@@ -154,7 +154,7 @@ def main(user_prompt: str):
         resp = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=4096,
-            system="你是求职助手。通过 boss_* 工具帮用户操作 BOSS 直聘。",
+            system="You are a job-hunt assistant. Use boss_* tools to operate BOSS Zhipin.",
             tools=tools,
             messages=messages,
         )
@@ -193,21 +193,21 @@ def main(user_prompt: str):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "搜索北京的 Python 开发岗位")
+    main(sys.argv[1] if len(sys.argv) > 1 else "Search Python developer jobs in Beijing")
 ```
 
-## 参数转换要点
+## Argument-mapping notes
 
-从 LLM 的 JSON 参数到 CLI 参数的映射约定：
+Recommended mapping from model JSON arguments to CLI arguments:
 
-| LLM 参数 | CLI 形式 | 示例 |
+| LLM argument | CLI form | Example |
 |---------|---------|------|
-| 位置参数（如 `query`） | 直接拼进 args 开头 | `boss search python` |
-| 下划线字段名（如 `job_id`） | 转 dash 作为 long option | `--job-id abc123` |
-| bool true | 作为 flag 加入 | `--dry-run` |
-| bool false | 省略（CLI 默认就是 false） | — |
+| positional argument (for example `query`) | append at the start of args | `boss search python` |
+| snake_case field (for example `job_id`) | convert to dashed long option | `--job-id abc123` |
+| bool `true` | include as a flag | `--dry-run` |
+| bool `false` | omit it (CLI defaults to false) | — |
 
-更健壮的参数转换器参考 `mcp-server/server.py` 的 `_build_args()` 函数，它已经覆盖了 34 个命令的完整转换逻辑，建议直接复用：
+For a more robust conversion path, reuse `_build_args()` in `mcp-server/server.py`. It already covers the full exported command surface and is a better choice than hand-maintained mappings:
 
 ```python
 sys.path.insert(0, "path/to/boss-agent-cli/mcp-server")
@@ -216,42 +216,42 @@ from server import _build_args
 cli_args = _build_args(call.function.name, args)
 ```
 
-## 错误处理建议
+## Error-handling advice
 
-boss CLI 的错误信封结构：
+boss CLI error envelope:
 
 ```json
 {
   "ok": false,
   "error": {
     "code": "AUTH_EXPIRED",
-    "message": "登录态已过期",
+    "message": "Session expired",
     "recoverable": true,
     "recovery_action": "boss login"
   }
 }
 ```
 
-让你的 Agent 识别 `recovery_action` 字段自动重试：
+Teach your agent to respect `recovery_action` and retry automatically when appropriate:
 
 ```python
 if not output["ok"]:
     err = output["error"]
     if err.get("recoverable") and err["code"] == "AUTH_EXPIRED":
-        run_boss("login")  # 自动重登
-        output = run_boss(*cli_args)  # 重试一次
+        run_boss("login")  # automatic re-login
+        output = run_boss(*cli_args)  # retry once
 ```
 
-## 环境依赖
+## Environment prerequisites
 
 - Python ≥ 3.10
-- `boss-agent-cli` 已 `uv tool install` 或 `pipx install`
-- 已跑过 `boss login` 确保登录态存在
-- OpenAI / Anthropic API key 按 SDK 标准环境变量设置
+- `boss-agent-cli` installed via `uv tool install` or `pipx install`
+- `boss login` already completed so a local session exists
+- OpenAI / Anthropic API keys configured via the standard SDK environment variables
 
-## 参考
+## References
 
-- [OpenAI Tools API 文档](https://platform.openai.com/docs/guides/function-calling)
-- [Anthropic Tool Use 文档](https://docs.claude.com/en/docs/build-with-claude/tool-use)
-- [boss schema --format 选项](../capability-matrix.md)
-- [MCP 集成方式（Claude Desktop / Cursor）](../../mcp-server/README.md)
+- [OpenAI Tools API docs](https://platform.openai.com/docs/guides/function-calling)
+- [Anthropic Tool Use docs](https://docs.claude.com/en/docs/build-with-claude/tool-use)
+- [`boss schema --format` options](../capability-matrix.md)
+- [MCP integration guide (Claude Desktop / Cursor)](../../mcp-server/README.md)

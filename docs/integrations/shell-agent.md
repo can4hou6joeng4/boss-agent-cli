@@ -1,29 +1,29 @@
 # Shell Agent Integration Example
 
-适用版本：`boss-agent-cli` 当前 CLI 契约（2026-04-13）
+Applies to the current `boss-agent-cli` CLI contract as of April 28, 2026.
 
-## 适用场景
+## Good fit when
 
-- 你的 Agent 框架只需要一个 shell/subprocess tool
-- 你希望把 `boss` 作为可复用外部命令挂到已有编排器
-- 你需要最通用、最少依赖的接入方式
+- your agent framework only needs a shell or subprocess tool
+- you want to expose `boss` as a reusable external command inside an existing orchestrator
+- you want the most universal, lowest-dependency integration path
 
-## 最小接入流程
+## Minimal integration
 
-核心原则：让宿主只负责“运行命令 + 解析 JSON”，不要自己重写 BOSS 直聘协议。
+Core rule: let the host do only two things, "run the command" and "parse JSON". Do not reimplement the BOSS Zhipin protocol inside the host.
 
-推荐包装流程：
+Recommended wrapper flow:
 
 ```text
-1. 运行 boss schema
-2. 运行 boss status
-3. 未登录时运行 boss login
-4. 运行 boss search
-5. 运行 boss detail
-6. 满足条件时运行 boss greet
+1. Run `boss schema`
+2. Run `boss status`
+3. If not logged in, run `boss login`
+4. Run `boss search`
+5. Run `boss detail`
+6. When the result is promising, run `boss greet`
 ```
 
-最小命令链路：
+Minimal command chain:
 
 ```bash
 boss schema
@@ -33,7 +33,7 @@ boss detail <security_id>
 boss greet <security_id> <job_id>
 ```
 
-如果宿主支持单函数包装，建议包装成：
+If the host supports a single wrapper function, use something like:
 
 ```python
 def run_boss(*args: str) -> dict:
@@ -41,11 +41,11 @@ def run_boss(*args: str) -> dict:
 	return json.loads(result.stdout)
 ```
 
-然后让上层只依赖返回的 JSON 信封字段。
+Then let the upper layer depend only on the returned JSON envelope.
 
-## 失败恢复
+## Recovery flow
 
-标准恢复顺序：
+Standard order:
 
 ```bash
 boss doctor
@@ -54,8 +54,8 @@ boss login
 boss search "Golang" --city 广州
 ```
 
-通用处理建议：
+General advice:
 
-- `ok=false` 时不要继续后续动作
-- `AUTH_REQUIRED` 时先恢复登录，再重试 `boss search`
-- `RATE_LIMITED` 时暂停，不要继续 `boss greet`
+- do not continue follow-up actions when `ok=false`
+- on `AUTH_REQUIRED`, restore login first and only then retry `boss search`
+- on `RATE_LIMITED`, pause instead of continuing with `boss greet`

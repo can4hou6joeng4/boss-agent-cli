@@ -1,22 +1,22 @@
 # Cursor Integration Example
 
-适用版本：`boss-agent-cli` 当前 CLI 契约（2026-04-19）
+Applies to the current `boss-agent-cli` CLI contract as of April 28, 2026.
 
-Cursor 是基于 VS Code 的 AI 优先 IDE，Composer 模式的 Agent 可以直接执行终端命令，0.42+ 还支持 MCP 协议接入。本指引给两种接入方式：MCP 原生接入（推荐）和 Shell 命令接入（兜底）。
+Cursor is a VS Code-based AI-first IDE. Its Composer agent can run terminal commands directly, and Cursor 0.42+ can also attach MCP servers. This guide covers two options: native MCP integration (recommended) and shell-command integration (fallback).
 
-## 适用场景
+## Good fit when
 
-- 在 Cursor 里用 Composer Agent 推进完整求职链路
-- 希望 `boss` 命令以 MCP 工具形式暴露给 Cursor，而非依赖 terminal 脚本
-- 已经有 `.cursor/rules/` 规则体系，想追加 BOSS 直聘能力
+- you want Composer to drive the full job-hunt flow inside Cursor
+- you want `boss` exposed as MCP tools instead of pasted shell snippets
+- you already maintain `.cursor/rules/` and want to add BOSS Zhipin capability
 
-## 最小接入流程
+## Minimal integration
 
-Cursor 支持两种接入方式，按需二选一。
+Cursor supports two approaches. Use whichever fits your setup.
 
-### 方式一：MCP 服务接入（推荐）
+### Option 1: MCP server integration (recommended)
 
-在 Cursor 设置 → MCP 里添加一个 stdio 服务器，指向本仓库的 `mcp-server/server.py`：
+In Cursor Settings → MCP, add a stdio server that points to this repo's `mcp-server/server.py`:
 
 ```json
 {
@@ -35,30 +35,30 @@ Cursor 支持两种接入方式，按需二选一。
 }
 ```
 
-启用后 Composer 会自动看到 `boss_search` / `boss_detail` / `boss_greet` 等 43 个工具，直接在会话里调用即可。不需要额外粘贴 shell 命令。
+Once enabled, Composer will automatically discover `boss_search`, `boss_detail`, `boss_greet`, and the rest of the 49 MCP tools. No extra shell prompt glue is required.
 
-### 方式二：Shell 命令接入
+### Option 2: shell-command integration
 
-在 `.cursor/rules/boss-agent-cli.mdc` 里加入以下规则：
+Add a rule like this to `.cursor/rules/boss-agent-cli.mdc`:
 
 ```markdown
 ---
-description: BOSS 直聘求职能力
+description: BOSS Zhipin job-hunt capability
 globs:
 alwaysApply: false
 ---
 
-当用户要求搜索岗位 / 查看详情 / 打招呼 / 推进候选进度时：
-1. 先运行 `boss schema` 获取能力与参数
-2. 再运行 `boss status` 检查登录态
-3. 未登录时运行 `boss login`，提示用户扫码
-4. 搜索使用 `boss search <query> --city <city> --welfare <keywords>`
-5. 命中后用 `boss detail <security_id>` 看完整信息
-6. 执行动作用 `boss greet <security_id> <job_id>`
-7. 只读取 stdout JSON；`ok=false` 时读 `error.recovery_action`
+When the user asks to search jobs, inspect job details, greet recruiters, or continue a candidate workflow:
+1. Run `boss schema` first to learn the capability surface
+2. Then run `boss status` to check authentication
+3. If not logged in, run `boss login` and ask the user to scan if needed
+4. Use `boss search <query> --city <city> --welfare <keywords>` for discovery
+5. Use `boss detail <security_id>` to inspect a matching job
+6. Use `boss greet <security_id> <job_id>` when it is time to reach out
+7. Read stdout JSON only; when `ok=false`, inspect `error.recovery_action`
 ```
 
-最小命令链路：
+Minimal command chain:
 
 ```bash
 boss schema
@@ -68,17 +68,17 @@ boss detail <security_id>
 boss greet <security_id> <job_id>
 ```
 
-## 解析字段
+## Fields to parse
 
-- `ok`：判断命令是否成功
-- `data`：读取职位、详情或动作结果
-- `hints.next_actions`：决定下一条命令
-- `error.code`：做恢复分流
-- `error.recovery_action`：告诉 Agent 如何修复
+- `ok`: whether the command succeeded
+- `data`: jobs, details, or action results
+- `hints.next_actions`: suggested next command
+- `error.code`: recovery routing
+- `error.recovery_action`: how the agent should recover
 
-## 失败恢复
+## Recovery flow
 
-推荐恢复顺序：
+Recommended order:
 
 ```bash
 boss doctor
@@ -86,14 +86,14 @@ boss status
 boss login
 ```
 
-常见分流：
+Common branches:
 
-- `AUTH_REQUIRED` / `AUTH_EXPIRED`：重新执行 `boss login`
-- `INVALID_PARAM`：回退到 `boss schema` 校验参数名
-- `RATE_LIMITED`：等待后重试，不要盲目连发 `boss greet`
-- `ACCOUNT_RISK`：启动 CDP Chrome（`boss-chrome` alias），再重试
+- `AUTH_REQUIRED` / `AUTH_EXPIRED`: run `boss login` again
+- `INVALID_PARAM`: return to `boss schema` and validate parameter names
+- `RATE_LIMITED`: wait before retrying; do not spam `boss greet`
+- `ACCOUNT_RISK`: start a CDP Chrome session (for example via a `boss-chrome` alias), then retry
 
-## 进阶
+## Advanced ideas
 
-- 把 `boss ai interview-prep <jd>` / `boss ai chat-coach <chat>` 接入 Composer，让 Cursor 承担简历匹配与沟通辅导
-- 用 `boss digest --format md -o daily.md` 生成每日摘要，Cursor 侧边栏打开预览即可
+- Wire `boss ai interview-prep <jd>` and `boss ai chat-coach <chat>` into Composer for resume matching and communication coaching
+- Generate daily markdown reports with `boss digest --format md -o daily.md` and preview them directly in Cursor

@@ -37,9 +37,9 @@ def test_agent_host_index_links_all_examples():
 def test_agent_host_examples_cover_core_agent_loop():
 	for host_name, path in HOST_DOCS.items():
 		text = _read(path)
-		assert "## 适用场景" in text, host_name
-		assert "## 最小接入流程" in text, host_name
-		assert "## 失败恢复" in text, host_name
+		assert ("## 适用场景" in text or "## Good fit when" in text), host_name
+		assert ("## 最小接入流程" in text or "## Minimal integration" in text), host_name
+		assert ("## 失败恢复" in text or "## Recovery flow" in text), host_name
 		for command in REQUIRED_COMMANDS:
 			assert command in text, f"{host_name} missing {command}"
 

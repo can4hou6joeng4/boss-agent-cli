@@ -18,9 +18,11 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/pulls)
 [![Open in Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/can4hou6joeng4/boss-agent-cli)
 
-[Install](#-install) · [Quickstart](#-quickstart) · [Roles & Platforms](#-roles--platforms) · [Agent Integration](#-agent-integration) · [Commands](#-commands) · [Troubleshooting](#-troubleshooting) · [Architecture](#-architecture) · [Changelog](CHANGELOG.md)
+[Install](#-install) · [Quickstart](#-quickstart) · [Roles & Platforms](#-roles--platforms) · [Agent Integration](#-agent-integration) · [Commands](#-commands) · [Troubleshooting](#-troubleshooting) · [Architecture](#-architecture) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 [中文](README.md) | **English**
+
+<img src="demo.gif" alt="boss-agent-cli terminal demo" width="100%">
 
 </div>
 

@@ -1,30 +1,30 @@
 # Codex Integration Example
 
-适用版本：`boss-agent-cli` 当前 CLI 契约（2026-04-13）
+Applies to the current `boss-agent-cli` CLI contract as of April 28, 2026.
 
-## 适用场景
+## Good fit when
 
-- Agent 直接运行终端命令
-- 需要多步串联 `schema -> status -> search -> detail -> greet`
-- 需要把 stdout JSON 结果继续喂给后续决策
+- the agent runs terminal commands directly
+- you need a multi-step chain such as `schema -> status -> search -> detail -> greet`
+- you want stdout JSON to feed the next decision step programmatically
 
-## 最小接入流程
+## Minimal integration
 
-先让 Agent 遵守这条工作习惯：
+Teach the agent to follow this working pattern:
 
 ```text
-当任务涉及 BOSS 直聘搜索、查看详情、打招呼或推进候选流程时：
-1. 先运行 boss schema 获取能力与参数
-2. 再运行 boss status 检查登录态
-3. 未登录时执行 boss login，并提示用户完成扫码
-4. 搜索时优先调用 boss search
-5. 命中目标后调用 boss detail
-6. 需要主动触达时调用 boss greet
-7. 招聘者场景优先使用 boss hr applications / candidates / reply / request-resume
-8. 只解析 stdout JSON，ok=false 时读取 error.code 与 error.recovery_action
+When the task involves BOSS Zhipin search, detail inspection, greeting, or candidate workflow progression:
+1. Run `boss schema` first to get capabilities and arguments
+2. Run `boss status` to check authentication
+3. If not logged in, run `boss login` and tell the user to complete the QR flow if needed
+4. Use `boss search` for discovery
+5. Use `boss detail` after a promising hit
+6. Use `boss greet` when active outreach is appropriate
+7. In recruiter workflows, prefer `boss hr applications / candidates / reply / request-resume`
+8. Parse stdout JSON only; when `ok=false`, inspect `error.code` and `error.recovery_action`
 ```
 
-最小命令链路：
+Minimal candidate-side command chain:
 
 ```bash
 boss schema
@@ -34,7 +34,7 @@ boss detail <security_id>
 boss greet <security_id> <job_id>
 ```
 
-招聘者最小链路：
+Minimal recruiter-side chain:
 
 ```bash
 boss schema
@@ -44,17 +44,17 @@ boss hr candidates "Golang"
 boss hr reply <friend_id> "你好"
 ```
 
-推荐解析字段：
+Recommended fields to parse:
 
-- `ok`: 判断命令是否成功
-- `data`: 读取职位、详情或动作结果
-- `hints.next_actions`: 决定下一条命令
-- `error.code`: 做恢复分流
-- `error.recovery_action`: 告诉 Agent 如何修复
+- `ok`: success or failure
+- `data`: jobs, details, or action results
+- `hints.next_actions`: suggested next command
+- `error.code`: recovery routing
+- `error.recovery_action`: what the agent should do next
 
-## 失败恢复
+## Recovery flow
 
-优先按这个顺序恢复：
+Preferred order:
 
 ```bash
 boss doctor
@@ -63,8 +63,8 @@ boss login
 boss search "Golang" --city 广州
 ```
 
-常见分流：
+Common branches:
 
-- `AUTH_REQUIRED` / `AUTH_EXPIRED`: 重新执行 `boss login`
-- `INVALID_PARAM`: 回退到 `boss schema` 校验参数
-- `RATE_LIMITED`: 等待后重试，不要盲目连发 `boss greet`
+- `AUTH_REQUIRED` / `AUTH_EXPIRED`: run `boss login` again
+- `INVALID_PARAM`: return to `boss schema` and validate arguments
+- `RATE_LIMITED`: back off before retrying; do not spam `boss greet`
