@@ -11,6 +11,7 @@ _DEFAULT_CDP_URL = "http://localhost:9222"
 # 超时常量（秒/毫秒）
 _CDP_PROBE_TIMEOUT = 3           # CDP 探测 HTTP 超时（秒）
 _NAV_TIMEOUT_MS = 15000          # 页面导航超时（毫秒）
+_NETWORKIDLE_GRACE_MS = 3000     # 首页进入 networkidle 的额外宽限（毫秒）
 _POST_LOGIN_WAIT = 3             # 登录成功后等待 cookie 传播（秒）
 _STOKEN_GENERATION_WAIT = 2      # stoken 生成等待（秒）
 
@@ -51,6 +52,18 @@ def _extract_zhilian_client_id(page: Any) -> str:
 		"""))
 	except Exception:
 		return ""
+
+
+def _warm_home_for_runtime(page: Any, home_url: str, *, stage: str) -> None:
+	"""预热首页运行时；networkidle 只尽力等待，不作为必须条件。"""
+	try:
+		page.goto(home_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+	except Exception as e:
+		print(f"[boss] {stage}：首页导航未在预期时间完成（{e}），继续尝试提取凭证", file=sys.stderr)
+	try:
+		page.wait_for_load_state("networkidle", timeout=_NETWORKIDLE_GRACE_MS)
+	except Exception as e:
+		print(f"[boss] {stage}：首页未进入 networkidle（{e}），继续提取凭证", file=sys.stderr)
 
 
 def probe_cdp(cdp_url: str | None = None) -> str | None:
@@ -181,8 +194,7 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 		time.sleep(_POST_LOGIN_WAIT)
 
 		# 跳转主站提取完整 cookies 和 stoken
-		page.goto(home_url, wait_until="domcontentloaded")
-		page.wait_for_load_state("networkidle")
+		_warm_home_for_runtime(page, home_url, stage="登录后回到首页")
 
 		cookies_list = context.cookies()
 		cookies = {c["name"]: c["value"] for c in cookies_list if cookie_domain in c.get("domain", "")}
@@ -238,8 +250,7 @@ def refresh_stoken(cookies: dict[str, Any], user_agent: str) -> str:
 			for name, value in cookies.items()
 		])
 		page = context.new_page()
-		page.goto(HOME_URL)
-		page.wait_for_load_state("networkidle")
+		_warm_home_for_runtime(page, HOME_URL, stage="刷新 stoken")
 		stoken = _extract_stoken(page)
 		browser.close()
 
