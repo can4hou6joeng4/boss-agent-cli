@@ -39,7 +39,16 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 			)
 			return
 
-		platform.exchange_contact(security_id, uid, friend_name, exchange_type=type_id)
+		resp = platform.exchange_contact(security_id, uid, friend_name, exchange_type=type_id)
+		if not platform.is_success(resp):
+			code, message = platform.parse_error(resp)
+			handle_error_output(
+				ctx, "exchange",
+				code=code,
+				message=message or f"{type_label}交换请求失败",
+				recoverable=False,
+			)
+			return
 
 		data = {
 			"security_id": security_id,

@@ -64,7 +64,16 @@ def mark_cmd(ctx: click.Context, security_id: str, label: str, remove: bool) -> 
 			)
 			return
 
-		platform.friend_label(friend_id, label_id, friend_source, remove=remove)
+		resp = platform.friend_label(friend_id, label_id, friend_source, remove=remove)
+		if not platform.is_success(resp):
+			code, message = platform.parse_error(resp)
+			handle_error_output(
+				ctx, "mark",
+				code=code,
+				message=message or f"{action_text}标签失败",
+				recoverable=False,
+			)
+			return
 
 		data = {
 			"security_id": security_id,

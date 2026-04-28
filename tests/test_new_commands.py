@@ -140,6 +140,23 @@ def test_mark_remove_label(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.mark.get_platform_instance")
 @patch("boss_agent_cli.commands.mark.AuthManager")
+def test_mark_reports_error_when_platform_rejects(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_make_friend()])
+	mock_client.friend_label.return_value = {"code": 36, "message": "account risk"}
+	mock_client.is_success.return_value = False
+	mock_client.parse_error.return_value = ("ACCOUNT_RISK", "account risk")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["mark", "sec_001", "--label", "沟通中"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["message"] == "account risk"
+
+
+@patch("boss_agent_cli.commands.mark.get_platform_instance")
+@patch("boss_agent_cli.commands.mark.AuthManager")
 def test_mark_not_found(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response([])
@@ -178,6 +195,23 @@ def test_exchange_wechat(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert "微信" in parsed["data"]["message"]
+
+
+@patch("boss_agent_cli.commands.exchange.get_platform_instance")
+@patch("boss_agent_cli.commands.exchange.AuthManager")
+def test_exchange_reports_error_when_platform_rejects(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_make_friend()])
+	mock_client.exchange_contact.return_value = {"code": 9, "message": "too fast"}
+	mock_client.is_success.return_value = False
+	mock_client.parse_error.return_value = ("RATE_LIMITED", "too fast")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["exchange", "sec_001", "--type", "wechat"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "RATE_LIMITED"
+	assert parsed["error"]["message"] == "too fast"
 
 
 # ── detail ───────────────────────────────────────────────────────────
