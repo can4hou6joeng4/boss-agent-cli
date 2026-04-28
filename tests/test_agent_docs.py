@@ -123,10 +123,24 @@ def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
 	readme_en = _read("README.en.md")
 	assert "[Agent Quickstart](docs/agent-quickstart.en.md)" in readme_en
 	assert "[Capability Matrix](docs/capability-matrix.en.md)" in readme_en
+	assert "[docs/platform-abstraction.en.md](docs/platform-abstraction.en.md)" in readme_en
 
 	python_sdk = _read("docs/integrations/python-sdk.md")
 	assert "[`boss schema --format` options](../capability-matrix.en.md)" in python_sdk
 	assert "[MCP integration guide (Claude Desktop / Cursor)](../../mcp-server/README.en.md)" in python_sdk
+
+	models_en = _read("docs/integrations/ai-models.en.md")
+	assert "# Recommended AI Models and Providers" in models_en
+	assert "## Supported providers" in models_en
+	assert "`openrouter`" in models_en
+	assert "`gpt-5`" in models_en
+
+	platform_en = _read("docs/platform-abstraction.en.md")
+	assert "# Platform Abstraction Design and Migration SOP" in platform_en
+	assert "## Why the platform abstraction exists" in platform_en
+	assert "## Contract invariants" in platform_en
+
+	assert "[Recommended models and entry points](integrations/ai-models.en.md)" in hosts
 
 
 def test_glama_metadata_exists_and_declares_owner():

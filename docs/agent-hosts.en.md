@@ -36,4 +36,4 @@ Current example baseline:
 
 ## Related docs
 
-- [Recommended models and entry points](integrations/ai-models.md) - current setup examples for Claude 4.7, GPT-5, DeepSeek-V3, Qwen3, and more
+- [Recommended models and entry points](integrations/ai-models.en.md) - current setup examples for Claude 4.7, GPT-5, DeepSeek-V3, Qwen3, and more

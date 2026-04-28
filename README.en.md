@@ -151,7 +151,7 @@ Notes:
 - candidate-side `search / detail / recommend / user_info / greet / apply` are wired for `zhilian`
 - `boss --platform zhilian hr ...` is still intentionally rejected at runtime because recruiter support is not implemented yet
 
-Architecture notes: [docs/platform-abstraction.md](docs/platform-abstraction.md).
+Architecture notes: [docs/platform-abstraction.en.md](docs/platform-abstraction.en.md).
 
 ## 🤖 Agent Integration
 
