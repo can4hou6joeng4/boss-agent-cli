@@ -24,6 +24,15 @@ def jobs_list_cmd(ctx: click.Context) -> None:
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		result = platform.list_jobs()
+		if not platform.is_success(result):
+			code, message = platform.parse_error(result)
+			handle_error_output(
+				ctx, "recruiter-jobs-list",
+				code=code,
+				message=message or "职位列表获取失败",
+				recoverable=False,
+			)
+			return
 		data = platform.unwrap_data(result) or {}
 		handle_output(ctx, "recruiter-jobs-list", data)
 

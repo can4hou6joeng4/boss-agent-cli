@@ -3,7 +3,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_output
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output
 
 
 @click.command("candidates")
@@ -26,6 +26,15 @@ def candidates_cmd(ctx: click.Context, query: str, city: str | None, job_id: str
 			query, city=city, page=page, job_id=job_id,
 			experience=experience, degree=degree,
 		)
+		if not platform.is_success(result):
+			code, message = platform.parse_error(result)
+			handle_error_output(
+				ctx, "recruiter-candidates",
+				code=code,
+				message=message or "候选人搜索失败",
+				recoverable=False,
+			)
+			return
 		data = platform.unwrap_data(result) or {}
 		handle_output(
 			ctx, "recruiter-candidates", data,

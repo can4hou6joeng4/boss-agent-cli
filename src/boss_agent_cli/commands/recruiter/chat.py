@@ -3,7 +3,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_output
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output
 
 
 @click.command("chat")
@@ -20,6 +20,15 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		result = platform.friend_list(page=page, label_id=label_id, job_id=job_id)
+		if not platform.is_success(result):
+			code, message = platform.parse_error(result)
+			handle_error_output(
+				ctx, "recruiter-chat",
+				code=code,
+				message=message or "沟通列表获取失败",
+				recoverable=False,
+			)
+			return
 		data = platform.unwrap_data(result) or {}
 		handle_output(
 			ctx, "recruiter-chat", data,

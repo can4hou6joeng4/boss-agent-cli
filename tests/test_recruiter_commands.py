@@ -12,6 +12,7 @@ def _ctx_mock(mock_cls):
 	instance.__enter__ = lambda self: self
 	instance.__exit__ = lambda self, *a: None
 	instance.unwrap_data.side_effect = lambda response: response.get("zpData") if "zpData" in response else response.get("data")
+	instance.is_success.side_effect = lambda response: response.get("code", 0) in (0, 200)
 	return instance
 
 
@@ -37,6 +38,19 @@ def test_recruiter_candidates_supports_data_envelope(mock_auth_cls, mock_platfor
 	assert parsed["hints"]["next_actions"][1] == "boss hr chat — 查看沟通"
 
 
+@patch("boss_agent_cli.commands.recruiter.candidates.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.candidates.AuthManager")
+def test_recruiter_candidates_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.search_geeks.return_value = {"code": 9, "message": "too fast"}
+	mock_platform.parse_error.return_value = ("RATE_LIMITED", "too fast")
+	result = _invoke("hr", "candidates", "python")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RATE_LIMITED"
+	assert parsed["error"]["message"] == "too fast"
+
+
 @patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
 def test_recruiter_chat_supports_data_envelope(mock_auth_cls, mock_platform_cls):
@@ -50,6 +64,19 @@ def test_recruiter_chat_supports_data_envelope(mock_auth_cls, mock_platform_cls)
 	parsed = json.loads(result.output)
 	assert parsed["data"]["friendList"][0]["name"] == "候选人B"
 	assert parsed["hints"]["next_actions"][0] == "boss hr resume <geek_id> --job-id <id> --security-id <id> — 查看候选人简历"
+
+
+@patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
+def test_recruiter_chat_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.friend_list.return_value = {"code": 37, "message": "stoken expired"}
+	mock_platform.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	result = _invoke("hr", "chat")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"
 
 
 @patch("boss_agent_cli.commands.recruiter.applications.get_recruiter_platform_instance")
@@ -68,6 +95,19 @@ def test_recruiter_applications_supports_data_envelope(mock_auth_cls, mock_platf
 	assert parsed["hints"]["next_actions"][1] == "boss hr chat — 查看沟通列表"
 
 
+@patch("boss_agent_cli.commands.recruiter.applications.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.applications.AuthManager")
+def test_recruiter_applications_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.friend_list.return_value = {"code": 36, "message": "account risk"}
+	mock_platform.parse_error.return_value = ("ACCOUNT_RISK", "account risk")
+	result = _invoke("hr", "applications")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["message"] == "account risk"
+
+
 @patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.jobs.AuthManager")
 def test_recruiter_jobs_list_supports_data_envelope(mock_auth_cls, mock_platform_cls):
@@ -80,6 +120,19 @@ def test_recruiter_jobs_list_supports_data_envelope(mock_auth_cls, mock_platform
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"]["jobList"][0]["jobName"] == "后端工程师"
+
+
+@patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.jobs.AuthManager")
+def test_recruiter_jobs_list_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.list_jobs.return_value = {"code": 9, "message": "too fast"}
+	mock_platform.parse_error.return_value = ("RATE_LIMITED", "too fast")
+	result = _invoke("hr", "jobs", "list")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RATE_LIMITED"
+	assert parsed["error"]["message"] == "too fast"
 
 
 @patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
@@ -173,6 +226,19 @@ def test_recruiter_resume_parse_supports_data_envelope(mock_auth_cls, mock_platf
 	assert parsed["data"]["basic"]["name"] == "张三"
 	assert parsed["data"]["expectation"]["position"] == "后端工程师"
 	assert parsed["hints"]["next_actions"][0] == "boss hr applications — 返回候选人列表"
+
+
+@patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
+def test_recruiter_resume_parse_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.view_geek.return_value = {"code": 37, "message": "stoken expired"}
+	mock_platform.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	result = _invoke("hr", "resume", "geek-1", "--job-id", "job-1", "--security-id", "sec-1")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"
 
 
 @patch("boss_agent_cli.commands.recruiter.reply.get_recruiter_platform_instance")
