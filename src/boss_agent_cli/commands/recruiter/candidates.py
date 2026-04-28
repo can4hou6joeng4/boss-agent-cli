@@ -30,7 +30,7 @@ def candidates_cmd(ctx: click.Context, query: str, city: str | None, job_id: str
 		handle_output(
 			ctx, "recruiter-candidates", data,
 			hints={"next_actions": [
-				"boss --role recruiter recruiter resume <geek_id> --job-id <id> --security-id <id> — 查看简历",
-				"boss --role recruiter recruiter chat — 查看沟通",
+				"boss hr resume <geek_id> --job-id <id> --security-id <id> — 查看简历",
+				"boss hr chat — 查看沟通",
 			]},
 		)

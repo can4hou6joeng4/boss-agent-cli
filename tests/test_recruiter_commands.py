@@ -33,6 +33,8 @@ def test_recruiter_candidates_supports_data_envelope(mock_auth_cls, mock_platfor
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	assert parsed["data"]["geekList"][0]["name"] == "候选人A"
+	assert parsed["hints"]["next_actions"][0] == "boss hr resume <geek_id> --job-id <id> --security-id <id> — 查看简历"
+	assert parsed["hints"]["next_actions"][1] == "boss hr chat — 查看沟通"
 
 
 @patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
@@ -47,6 +49,7 @@ def test_recruiter_chat_supports_data_envelope(mock_auth_cls, mock_platform_cls)
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"]["friendList"][0]["name"] == "候选人B"
+	assert parsed["hints"]["next_actions"][0] == "boss hr resume <geek_id> --job-id <id> --security-id <id> — 查看候选人简历"
 
 
 @patch("boss_agent_cli.commands.recruiter.applications.get_recruiter_platform_instance")
@@ -61,6 +64,8 @@ def test_recruiter_applications_supports_data_envelope(mock_auth_cls, mock_platf
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"]["friendList"][0]["name"] == "候选人C"
+	assert parsed["hints"]["next_actions"][0] == "boss hr resume <geek_id> --job-id <id> --security-id <id> — 查看候选人简历"
+	assert parsed["hints"]["next_actions"][1] == "boss hr chat — 查看沟通列表"
 
 
 @patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
@@ -90,6 +95,7 @@ def test_recruiter_resume_exchange_supports_data_envelope(mock_auth_cls, mock_pl
 	parsed = json.loads(result.output)
 	assert parsed["data"]["exchangeStatus"] == "sent"
 	assert "联系方式交换请求已发送" == parsed["data"]["message"]
+	assert parsed["hints"]["next_actions"][0] == "boss hr applications — 返回候选人列表"
 
 
 @patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
@@ -121,6 +127,7 @@ def test_recruiter_resume_parse_supports_data_envelope(mock_auth_cls, mock_platf
 	parsed = json.loads(result.output)
 	assert parsed["data"]["basic"]["name"] == "张三"
 	assert parsed["data"]["expectation"]["position"] == "后端工程师"
+	assert parsed["hints"]["next_actions"][0] == "boss hr applications — 返回候选人列表"
 
 
 def test_parse_resume_accepts_data_envelope():

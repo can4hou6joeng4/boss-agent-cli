@@ -51,6 +51,6 @@ def resume_cmd(ctx: click.Context, geek_id: str, job_id: str, security_id: str |
 		handle_output(
 			ctx, "recruiter-resume", data,
 			hints={"next_actions": [
-				"boss --role recruiter recruiter applications — 返回候选人列表",
+				"boss hr applications — 返回候选人列表",
 			]},
 		)

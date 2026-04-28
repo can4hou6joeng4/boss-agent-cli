@@ -24,7 +24,7 @@ def applications_cmd(ctx: click.Context, job_id: str | None, label_id: int, page
 		handle_output(
 			ctx, "recruiter-applications", data,
 			hints={"next_actions": [
-				"boss --role recruiter recruiter resume <geek_id> --job-id <id> --security-id <id> — 查看候选人简历",
-				"boss --role recruiter recruiter chat — 查看沟通列表",
+				"boss hr resume <geek_id> --job-id <id> --security-id <id> — 查看候选人简历",
+				"boss hr chat — 查看沟通列表",
 			]},
 		)

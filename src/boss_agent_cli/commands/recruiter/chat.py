@@ -24,6 +24,6 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 		handle_output(
 			ctx, "recruiter-chat", data,
 			hints={"next_actions": [
-				"boss --role recruiter recruiter resume <geek_id> --job-id <id> --security-id <id> — 查看候选人简历",
+				"boss hr resume <geek_id> --job-id <id> --security-id <id> — 查看候选人简历",
 			]},
 		)
