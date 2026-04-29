@@ -803,7 +803,9 @@ def test_me_resume_reports_not_supported(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NOT_SUPPORTED"
-	assert parsed["error"]["message"] == "resume_baseinfo is not supported"
+	assert parsed["error"]["message"] == "当前平台暂不支持简历基本信息查询，请改用 --section user 或切换平台后重试"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "切换平台或调整命令参数后重试"
 
 
 @patch("boss_agent_cli.commands.me.get_platform_instance")
@@ -816,7 +818,7 @@ def test_me_expect_reports_not_supported(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NOT_SUPPORTED"
-	assert parsed["error"]["message"] == "resume_expect is not supported"
+	assert parsed["error"]["message"] == "当前平台暂不支持求职期望查询，请改用 --section user 或切换平台后重试"
 	assert parsed["error"]["recoverable"] is True
 	assert parsed["error"]["recovery_action"] == "切换平台或调整命令参数后重试"
 
@@ -831,7 +833,9 @@ def test_me_deliver_reports_not_supported(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NOT_SUPPORTED"
-	assert parsed["error"]["message"] == "deliver_list is not supported"
+	assert parsed["error"]["message"] == "当前平台暂不支持投递记录查询，请切换平台后重试"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "切换平台或调整命令参数后重试"
 
 
 @patch("boss_agent_cli.commands.me.get_platform_instance")
@@ -846,7 +850,7 @@ def test_me_default_sequence_stops_on_expect_not_supported(mock_auth_cls, mock_c
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NOT_SUPPORTED"
-	assert parsed["error"]["message"] == "resume_expect is not supported"
+	assert parsed["error"]["message"] == "当前平台暂不支持求职期望查询，请改用 --section user 或切换平台后重试"
 	assert parsed["error"]["recoverable"] is True
 	assert parsed["error"]["recovery_action"] == "切换平台或调整命令参数后重试"
 	mock_client.user_info.assert_called_once_with()

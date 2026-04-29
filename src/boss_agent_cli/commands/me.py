@@ -54,11 +54,11 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 					logger.info("获取简历基本信息...")
 				try:
 					resp = platform.resume_baseinfo()
-				except NotImplementedError as exc:
+				except NotImplementedError:
 					handle_error_output(
 						ctx, "me",
 						code="NOT_SUPPORTED",
-						message=str(exc) or "当前平台不支持简历基本信息能力",
+						message="当前平台暂不支持简历基本信息查询，请改用 --section user 或切换平台后重试",
 						recoverable=True,
 						recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
 					)
@@ -82,11 +82,11 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 					logger.info("获取求职期望...")
 				try:
 					resp = platform.resume_expect()
-				except NotImplementedError as exc:
+				except NotImplementedError:
 					handle_error_output(
 						ctx, "me",
 						code="NOT_SUPPORTED",
-						message=str(exc) or "当前平台不支持求职期望能力",
+						message="当前平台暂不支持求职期望查询，请改用 --section user 或切换平台后重试",
 						recoverable=True,
 						recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
 					)
@@ -110,11 +110,11 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 					logger.info("获取投递记录...")
 				try:
 					resp = platform.deliver_list(page=deliver_page)
-				except NotImplementedError as exc:
+				except NotImplementedError:
 					handle_error_output(
 						ctx, "me",
 						code="NOT_SUPPORTED",
-						message=str(exc) or "当前平台不支持投递记录能力",
+						message="当前平台暂不支持投递记录查询，请切换平台后重试",
 						recoverable=True,
 						recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
 					)
