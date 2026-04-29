@@ -8,7 +8,7 @@ import click
 from boss_agent_cli.api.models import JobItem
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_output, render_export_summary, render_job_table
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_export_summary, render_job_table
 
 
 @click.command("export")
@@ -34,6 +34,15 @@ def export_cmd(ctx: click.Context, query: str, city: str | None, salary: str | N
 		while len(all_items) < count and page <= max_pages:
 			logger.info(f"正在获取第 {page} 页...")
 			raw = platform.search_jobs(query, city=city, salary=salary, page=page)
+			if not platform.is_success(raw):
+				code, message = platform.parse_error(raw)
+				handle_error_output(
+					ctx, "export",
+					code=code,
+					message=message or "搜索结果获取失败",
+					recoverable=False,
+				)
+				return
 			platform_data = platform.unwrap_data(raw) or {}
 			job_list = platform_data.get("jobList", [])
 			if not job_list:
