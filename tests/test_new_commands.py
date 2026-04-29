@@ -561,6 +561,8 @@ def test_me_expect_reports_not_supported(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NOT_SUPPORTED"
 	assert parsed["error"]["message"] == "resume_expect is not supported"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "切换平台或调整命令参数后重试"
 
 
 @patch("boss_agent_cli.commands.me.get_platform_instance")
@@ -574,6 +576,27 @@ def test_me_deliver_reports_not_supported(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NOT_SUPPORTED"
 	assert parsed["error"]["message"] == "deliver_list is not supported"
+
+
+@patch("boss_agent_cli.commands.me.get_platform_instance")
+@patch("boss_agent_cli.commands.me.AuthManager")
+def test_me_default_sequence_stops_on_expect_not_supported(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.user_info.return_value = {"code": 0, "zpData": {"name": "测试用户"}}
+	mock_client.resume_baseinfo.return_value = {"code": 0, "zpData": {"degree": "本科"}}
+	mock_client.resume_expect.side_effect = NotImplementedError("resume_expect is not supported")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["me"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "NOT_SUPPORTED"
+	assert parsed["error"]["message"] == "resume_expect is not supported"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "切换平台或调整命令参数后重试"
+	mock_client.user_info.assert_called_once_with()
+	mock_client.resume_baseinfo.assert_called_once_with()
+	mock_client.resume_expect.assert_called_once_with()
+	mock_client.deliver_list.assert_not_called()
 
 
 # ── history ──────────────────────────────────────────────────────────

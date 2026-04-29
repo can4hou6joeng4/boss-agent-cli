@@ -5,6 +5,8 @@ from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshF
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, login_action_for_ctx, render_sectioned_record
 
+NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
+
 
 @click.command("me")
 @click.option("--section", default=None, type=click.Choice(["user", "resume", "expect", "deliver"]),
@@ -55,7 +57,8 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 						ctx, "me",
 						code="NOT_SUPPORTED",
 						message=str(exc) or "当前平台不支持简历基本信息能力",
-						recoverable=False,
+						recoverable=True,
+						recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
 					)
 					return
 				if not platform.is_success(resp):
@@ -80,7 +83,8 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 						ctx, "me",
 						code="NOT_SUPPORTED",
 						message=str(exc) or "当前平台不支持求职期望能力",
-						recoverable=False,
+						recoverable=True,
+						recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
 					)
 					return
 				if not platform.is_success(resp):
@@ -105,7 +109,8 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 						ctx, "me",
 						code="NOT_SUPPORTED",
 						message=str(exc) or "当前平台不支持投递记录能力",
-						recoverable=False,
+						recoverable=True,
+						recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
 					)
 					return
 				if not platform.is_success(resp):
