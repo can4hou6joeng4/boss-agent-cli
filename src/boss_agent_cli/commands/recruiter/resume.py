@@ -4,7 +4,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.commands.recruiter.resume_parser import parse_resume
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output
+from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output
 
 
 @click.command("resume")
@@ -36,11 +36,13 @@ def resume_cmd(ctx: click.Context, geek_id: str, job_id: str, security_id: str |
 			result = platform.exchange_request(1, uid, int(job_id), gid)
 			if not platform.is_success(result):
 				code, message = platform.parse_error(result)
+				recoverable, recovery_action = error_contract_for_code(code)
 				handle_error_output(
 					ctx, "recruiter-resume",
 					code=code,
 					message=message or "联系方式交换请求失败",
-					recoverable=False,
+					recoverable=recoverable,
+					recovery_action=recovery_action,
 				)
 				return
 			data = platform.unwrap_data(result) or {}
@@ -49,11 +51,13 @@ def resume_cmd(ctx: click.Context, geek_id: str, job_id: str, security_id: str |
 			result = platform.view_geek(geek_id, job_id, security_id=security_id)
 			if not platform.is_success(result):
 				code, message = platform.parse_error(result)
+				recoverable, recovery_action = error_contract_for_code(code)
 				handle_error_output(
 					ctx, "recruiter-resume",
 					code=code,
 					message=message or "候选人简历获取失败",
-					recoverable=False,
+					recoverable=recoverable,
+					recovery_action=recovery_action,
 				)
 				return
 			data = result if show_raw else parse_resume(result)

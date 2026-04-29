@@ -21,6 +21,13 @@ def _invoke(*args):
 	return runner.invoke(cli, ["--role", "recruiter", *args])
 
 
+def _assert_error_contract(parsed: dict, *, code: str, message: str, recoverable: bool, recovery_action: str | None) -> None:
+	assert parsed["error"]["code"] == code
+	assert parsed["error"]["message"] == message
+	assert parsed["error"]["recoverable"] is recoverable
+	assert parsed["error"]["recovery_action"] == recovery_action
+
+
 @patch("boss_agent_cli.commands.recruiter.candidates.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.candidates.AuthManager")
 def test_recruiter_candidates_supports_data_envelope(mock_auth_cls, mock_platform_cls):
@@ -75,8 +82,13 @@ def test_recruiter_chat_reports_error_when_platform_rejects(mock_auth_cls, mock_
 	result = _invoke("hr", "chat")
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
-	assert parsed["error"]["message"] == "stoken expired"
+	_assert_error_contract(
+		parsed,
+		code="TOKEN_REFRESH_FAILED",
+		message="stoken expired",
+		recoverable=True,
+		recovery_action="boss login",
+	)
 
 
 @patch("boss_agent_cli.commands.recruiter.applications.get_recruiter_platform_instance")
@@ -104,8 +116,13 @@ def test_recruiter_applications_reports_error_when_platform_rejects(mock_auth_cl
 	result = _invoke("hr", "applications")
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "ACCOUNT_RISK"
-	assert parsed["error"]["message"] == "account risk"
+	_assert_error_contract(
+		parsed,
+		code="ACCOUNT_RISK",
+		message="account risk",
+		recoverable=True,
+		recovery_action="启动 CDP Chrome 重试，或联系客服",
+	)
 
 
 @patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
@@ -131,8 +148,13 @@ def test_recruiter_jobs_list_reports_error_when_platform_rejects(mock_auth_cls, 
 	result = _invoke("hr", "jobs", "list")
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "RATE_LIMITED"
-	assert parsed["error"]["message"] == "too fast"
+	_assert_error_contract(
+		parsed,
+		code="RATE_LIMITED",
+		message="too fast",
+		recoverable=True,
+		recovery_action="等待后重试",
+	)
 
 
 @patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
@@ -146,8 +168,13 @@ def test_recruiter_jobs_offline_reports_error_when_platform_rejects(mock_auth_cl
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
-	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
-	assert parsed["error"]["message"] == "stoken expired"
+	_assert_error_contract(
+		parsed,
+		code="TOKEN_REFRESH_FAILED",
+		message="stoken expired",
+		recoverable=True,
+		recovery_action="boss login",
+	)
 
 
 @patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
@@ -161,8 +188,13 @@ def test_recruiter_jobs_online_reports_error_when_platform_rejects(mock_auth_cls
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
-	assert parsed["error"]["code"] == "RATE_LIMITED"
-	assert parsed["error"]["message"] == "too fast"
+	_assert_error_contract(
+		parsed,
+		code="RATE_LIMITED",
+		message="too fast",
+		recoverable=True,
+		recovery_action="等待后重试",
+	)
 
 
 @patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
@@ -192,8 +224,13 @@ def test_recruiter_resume_exchange_reports_error_when_platform_rejects(mock_auth
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
-	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
-	assert parsed["error"]["message"] == "stoken expired"
+	_assert_error_contract(
+		parsed,
+		code="TOKEN_REFRESH_FAILED",
+		message="stoken expired",
+		recoverable=True,
+		recovery_action="boss login",
+	)
 
 
 @patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
@@ -237,8 +274,13 @@ def test_recruiter_resume_parse_reports_error_when_platform_rejects(mock_auth_cl
 	result = _invoke("hr", "resume", "geek-1", "--job-id", "job-1", "--security-id", "sec-1")
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
-	assert parsed["error"]["message"] == "stoken expired"
+	_assert_error_contract(
+		parsed,
+		code="TOKEN_REFRESH_FAILED",
+		message="stoken expired",
+		recoverable=True,
+		recovery_action="boss login",
+	)
 
 
 @patch("boss_agent_cli.commands.recruiter.reply.get_recruiter_platform_instance")
@@ -267,8 +309,13 @@ def test_recruiter_request_resume_reports_error_when_platform_rejects(mock_auth_
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
-	assert parsed["error"]["code"] == "ACCOUNT_RISK"
-	assert parsed["error"]["message"] == "account risk"
+	_assert_error_contract(
+		parsed,
+		code="ACCOUNT_RISK",
+		message="account risk",
+		recoverable=True,
+		recovery_action="启动 CDP Chrome 重试，或联系客服",
+	)
 
 
 def test_parse_resume_accepts_data_envelope():

@@ -62,6 +62,66 @@ def test_digest_command_returns_structured_sections(mock_auth_cls, mock_client_c
 	assert parsed["data"]["interview_count"] == 1
 
 
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
+@patch("boss_agent_cli.commands.digest.AuthManager")
+def test_digest_aggregates_second_page_matches(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.side_effect = [
+		{
+			"zpData": {
+				"result": [
+					{
+						"name": "张HR",
+						"securityId": "sec_1",
+						"uid": 99,
+						"title": "HR",
+						"brandName": "TestCo",
+						"friendSource": 0,
+						"encryptJobId": "job_1",
+						"lastMsg": "请尽快回复",
+						"lastTS": 1700000001000,
+						"unreadMsgCount": 1,
+						"relationType": 1,
+						"lastMessageInfo": {"status": 1},
+					},
+				],
+			},
+		},
+		{
+			"zpData": {
+				"result": [
+					{
+						"name": "李HR",
+						"securityId": "sec_2",
+						"uid": 100,
+						"title": "HRBP",
+						"brandName": "PageTwo Inc",
+						"friendSource": 0,
+						"encryptJobId": "job_2",
+						"lastMsg": "第二页待回复",
+						"lastTS": 1700000002000,
+						"unreadMsgCount": 1,
+						"relationType": 1,
+						"lastMessageInfo": {"status": 1},
+					},
+				],
+			},
+		},
+		{"zpData": {"result": []}},
+	]
+	mock_client.interview_data.return_value = {"zpData": {"interviewList": []}}
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "digest"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	companies = {item["company"] for item in parsed["data"]["new_matches"]}
+	assert "TestCo" in companies
+	assert "PageTwo Inc" in companies
+	assert parsed["data"]["new_match_count"] == 2
+
+
 def test_digest_is_exposed_in_schema():
 	runner = CliRunner()
 	result = runner.invoke(cli, ["schema"])
@@ -169,3 +229,39 @@ def test_digest_reports_interview_error(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
 	assert parsed["error"]["message"] == "account risk"
+
+
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
+@patch("boss_agent_cli.commands.digest.AuthManager")
+def test_digest_reports_second_page_friend_list_error(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.side_effect = [
+		{
+			"zpData": {
+				"result": [
+					{
+						"name": "张HR",
+						"securityId": "sec_1",
+						"uid": 99,
+						"title": "HR",
+						"brandName": "TestCo",
+						"friendSource": 0,
+						"encryptJobId": "job_1",
+						"lastMsg": "请尽快回复",
+						"lastTS": 1700000001000,
+						"unreadMsgCount": 1,
+						"relationType": 1,
+						"lastMessageInfo": {"status": 1},
+					},
+				],
+			},
+		},
+		{"code": 37, "message": "stoken expired"},
+	]
+	mock_client.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "digest"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"

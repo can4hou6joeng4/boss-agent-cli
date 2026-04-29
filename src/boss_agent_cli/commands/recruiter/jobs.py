@@ -3,7 +3,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output
+from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output
 
 
 @click.group("jobs")
@@ -26,11 +26,13 @@ def jobs_list_cmd(ctx: click.Context) -> None:
 		result = platform.list_jobs()
 		if not platform.is_success(result):
 			code, message = platform.parse_error(result)
+			recoverable, recovery_action = error_contract_for_code(code)
 			handle_error_output(
 				ctx, "recruiter-jobs-list",
 				code=code,
 				message=message or "职位列表获取失败",
-				recoverable=False,
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
 			return
 		data = platform.unwrap_data(result) or {}
@@ -51,11 +53,13 @@ def jobs_offline_cmd(ctx: click.Context, job_id: str) -> None:
 		result = platform.job_offline(job_id)
 		if not platform.is_success(result):
 			code, message = platform.parse_error(result)
+			recoverable, recovery_action = error_contract_for_code(code)
 			handle_error_output(
 				ctx, "recruiter-jobs-offline",
 				code=code,
 				message=message or "职位下线失败",
-				recoverable=False,
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
 			return
 		data = {"job_id": job_id, "message": "职位已下线"}
@@ -76,11 +80,13 @@ def jobs_online_cmd(ctx: click.Context, job_id: str) -> None:
 		result = platform.job_online(job_id)
 		if not platform.is_success(result):
 			code, message = platform.parse_error(result)
+			recoverable, recovery_action = error_contract_for_code(code)
 			handle_error_output(
 				ctx, "recruiter-jobs-online",
 				code=code,
 				message=message or "职位上线失败",
-				recoverable=False,
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
 			return
 		data = {"job_id": job_id, "message": "职位已上线"}
