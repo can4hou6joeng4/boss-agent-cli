@@ -46,6 +46,15 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_platform_instance(ctx, auth) as platform:
 		raw = platform.job_card(security_id)
+		if not platform.is_success(raw):
+			code, message = platform.parse_error(raw)
+			handle_error_output(
+				ctx, "show",
+				code=code,
+				message=message or "职位详情获取失败",
+				recoverable=False,
+			)
+			return
 
 	platform_data = platform.unwrap_data(raw) or {}
 	card = platform_data.get("jobCard", {})

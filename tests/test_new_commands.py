@@ -356,6 +356,23 @@ def test_detail_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock
 	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian search <query>"
 
 
+@patch("boss_agent_cli.commands.detail.CacheStore")
+@patch("boss_agent_cli.commands.detail.get_platform_instance")
+@patch("boss_agent_cli.commands.detail.AuthManager")
+def test_detail_reports_platform_error(mock_auth_cls, mock_client_cls, mock_cache_cls):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.job_detail.return_value = {"code": 37, "message": "stoken expired"}
+	mock_client.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["detail", "sec_001", "--job-id", "enc_001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"
+
+
 @patch("boss_agent_cli.commands.show.CacheStore")
 @patch("boss_agent_cli.commands.show.get_job_by_index")
 @patch("boss_agent_cli.commands.show.get_platform_instance")
@@ -386,6 +403,25 @@ def test_show_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock_c
 	parsed = json.loads(result.output)
 	assert parsed["hints"]["next_actions"][0] == "boss --platform zhilian greet sec_001 enc_001"
 	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian search <query>"
+
+
+@patch("boss_agent_cli.commands.show.CacheStore")
+@patch("boss_agent_cli.commands.show.get_job_by_index")
+@patch("boss_agent_cli.commands.show.get_platform_instance")
+@patch("boss_agent_cli.commands.show.AuthManager")
+def test_show_reports_platform_error(mock_auth_cls, mock_client_cls, mock_get_job_by_index, mock_cache_cls):
+	mock_get_job_by_index.return_value = {"security_id": "sec_001"}
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.job_card.return_value = {"code": 9, "message": "too fast"}
+	mock_client.parse_error.return_value = ("RATE_LIMITED", "too fast")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["show", "1"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RATE_LIMITED"
+	assert parsed["error"]["message"] == "too fast"
 
 
 # ── me ───────────────────────────────────────────────────────────────
