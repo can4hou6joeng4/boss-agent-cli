@@ -1,9 +1,10 @@
 import json
-from unittest.mock import patch, MagicMock
 from types import SimpleNamespace
+from unittest.mock import patch, MagicMock
 
 from click.testing import CliRunner
 from boss_agent_cli.main import cli
+from boss_agent_cli.search_filters import SearchPipelinePlatformError
 
 
 def _ctx_mock(mock_cls):
@@ -1275,3 +1276,22 @@ def test_search_account_risk_returns_error(mock_client_cls, mock_auth_cls, mock_
 	assert parsed["error"]["recoverable"] is True
 	assert "Chrome" in parsed["error"]["recovery_action"]
 	assert parsed["hints"]["next_actions"]
+
+
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_reports_pipeline_platform_error(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = None
+	_ctx_mock(mock_client_cls)
+	mock_pipeline.side_effect = SearchPipelinePlatformError("UPSTREAM_ERROR", "service unavailable")
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["search", "golang"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "UPSTREAM_ERROR"
+	assert parsed["error"]["message"] == "service unavailable"

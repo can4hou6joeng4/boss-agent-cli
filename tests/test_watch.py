@@ -67,6 +67,7 @@ def test_watch_add_list_remove(tmp_path):
 @patch("boss_agent_cli.commands.watch.AuthManager")
 def test_watch_run_marks_only_new_items(mock_auth_cls, mock_client_cls, tmp_path):
 	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.is_success.return_value = True
 	mock_client.search_jobs.return_value = {
 		"zpData": {
 			"hasMore": False,
@@ -94,6 +95,31 @@ def test_watch_run_marks_only_new_items(mock_auth_cls, mock_client_cls, tmp_path
 	assert second.exit_code == 0
 	second_parsed = json.loads(second.output)
 	assert second_parsed["data"]["new_count"] == 0
+
+
+@patch("boss_agent_cli.commands.watch.get_platform_instance")
+@patch("boss_agent_cli.commands.watch.AuthManager")
+def test_watch_run_reports_platform_error(mock_auth_cls, mock_client_cls, tmp_path):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.is_success.return_value = False
+	mock_client.parse_error.return_value = ("UPSTREAM_ERROR", "service unavailable")
+	mock_client.search_jobs.return_value = {"code": 500, "message": "service unavailable"}
+
+	runner = CliRunner()
+	runner.invoke(
+		cli,
+		[
+			"--data-dir", str(tmp_path),
+			"--json",
+			"watch", "add", "golang-gz", "golang",
+		],
+	)
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", "golang-gz"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "UPSTREAM_ERROR"
 
 
 def test_watch_schema_is_exposed():

@@ -119,6 +119,13 @@ class SearchPipelineResult:
 	stats: SearchPipelineStats = field(default_factory=SearchPipelineStats)
 
 
+class SearchPipelinePlatformError(Exception):
+	def __init__(self, code: str, message: str):
+		self.code = code
+		self.message = message
+		super().__init__(message)
+
+
 # ── List-page prefilter ─────────────────────────────────────────────
 
 def prefilter_job(raw_item: dict[str, Any], criteria: SearchFilterCriteria) -> tuple[bool, list[str]]:
@@ -272,6 +279,9 @@ def run_search_pipeline(
 			stage=criteria.stage, job_type=criteria.job_type,
 			page=current_page,
 		)
+		if not client.is_success(raw):
+			code, message = client.parse_error(raw)
+			raise SearchPipelinePlatformError(code, message or "搜索结果获取失败")
 		zp_data = raw.get("zpData", {})
 		job_list = zp_data.get("jobList", [])
 		last_page_scanned = current_page

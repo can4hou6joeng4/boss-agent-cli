@@ -11,7 +11,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output
-from boss_agent_cli.search_filters import SearchFilterCriteria, resolve_welfare_keywords, run_search_pipeline
+from boss_agent_cli.search_filters import SearchFilterCriteria, SearchPipelinePlatformError, resolve_welfare_keywords, run_search_pipeline
 
 
 def _parse_watch_filters(
@@ -149,15 +149,24 @@ def watch_run_cmd(ctx: click.Context, name: str) -> None:
 		)
 		auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 		with get_platform_instance(ctx, auth) as platform:
-			pipeline_result = run_search_pipeline(
-				platform,
-				cache,
-				logger,
-				criteria=criteria,
-				start_page=1,
-				max_pages=5 if welfare_conditions else 1,
-				welfare_conditions=welfare_conditions,
-			)
+			try:
+				pipeline_result = run_search_pipeline(
+					platform,
+					cache,
+					logger,
+					criteria=criteria,
+					start_page=1,
+					max_pages=5 if welfare_conditions else 1,
+					welfare_conditions=welfare_conditions,
+				)
+			except SearchPipelinePlatformError as exc:
+				handle_error_output(
+					ctx, "watch",
+					code=exc.code,
+					message=exc.message or "搜索结果获取失败",
+					recoverable=False,
+				)
+				return
 		watch_result = cache.record_watch_results(name, pipeline_result.items)
 		handle_output(
 			ctx,

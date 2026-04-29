@@ -17,6 +17,7 @@ from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
+	SearchPipelinePlatformError,
 	resolve_welfare_keywords,
 	run_search_pipeline,
 )
@@ -110,13 +111,22 @@ def search_cmd(ctx: click.Context, query: str, preset: str | None, city: str | N
 		auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 		with get_platform_instance(ctx, auth) as platform:
 			max_pages = 5 if welfare_conditions else 1
-			pipeline_result = run_search_pipeline(
-				platform, cache, logger,
-				criteria=criteria,
-				start_page=page,
-				max_pages=max_pages,
-				welfare_conditions=welfare_conditions,
-			)
+			try:
+				pipeline_result = run_search_pipeline(
+					platform, cache, logger,
+					criteria=criteria,
+					start_page=page,
+					max_pages=max_pages,
+					welfare_conditions=welfare_conditions,
+				)
+			except SearchPipelinePlatformError as exc:
+				handle_error_output(
+					ctx, "search",
+					code=exc.code,
+					message=exc.message or "搜索结果获取失败",
+					recoverable=False,
+				)
+				return
 			items = pipeline_result.items
 			if with_score:
 				items = [score_job_dict(item, criteria=criteria, expect_data=None) for item in items]

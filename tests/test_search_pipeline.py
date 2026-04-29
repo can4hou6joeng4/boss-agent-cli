@@ -1,4 +1,6 @@
-from boss_agent_cli.search_filters import SearchFilterCriteria, resolve_welfare_keywords, run_search_pipeline
+import pytest
+
+from boss_agent_cli.search_filters import SearchFilterCriteria, SearchPipelinePlatformError, resolve_welfare_keywords, run_search_pipeline
 
 
 class FakeLogger:
@@ -27,6 +29,12 @@ class FakeClient:
 	def search_jobs(self, query: str, **filters):
 		self.search_calls.append({"query": query, "filters": filters})
 		return self.pages.pop(0)
+
+	def is_success(self, response: dict) -> bool:
+		return response.get("code", 0) in (0, 200)
+
+	def parse_error(self, response: dict) -> tuple[str, str]:
+		return response.get("error_code", "UNKNOWN"), response.get("message", "")
 
 	def job_card(self, security_id: str, lid: str = ""):
 		self.detail_calls.append((security_id, lid))
@@ -202,3 +210,21 @@ def test_pipeline_respects_max_pages_even_when_has_more():
 	assert len(result.items) == 1
 	assert result.last_page == 1
 	assert result.has_more is True
+
+
+def test_pipeline_reports_platform_error():
+	client = FakeClient(
+		pages=[{"code": 500, "message": "service unavailable", "error_code": "UPSTREAM_ERROR"}],
+		descriptions={},
+	)
+
+	with pytest.raises(SearchPipelinePlatformError) as exc_info:
+		run_search_pipeline(
+			client,
+			FakeCache(),
+			FakeLogger(),
+			criteria=SearchFilterCriteria(query="python"),
+		)
+
+	assert exc_info.value.code == "UPSTREAM_ERROR"
+	assert exc_info.value.message == "service unavailable"
