@@ -420,6 +420,50 @@ def test_recommend_with_score_reports_expect_error(mock_auth_cls, mock_client_cl
 	assert parsed["error"]["message"] == "stoken expired"
 
 
+@patch("boss_agent_cli.commands.recommend.CacheStore")
+@patch("boss_agent_cli.commands.recommend.get_platform_instance")
+@patch("boss_agent_cli.commands.recommend.AuthManager")
+def test_recommend_with_score_reports_not_supported(mock_auth_cls, mock_client_cls, mock_cache_cls):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.resume_expect.side_effect = NotImplementedError("当前平台不支持求职期望能力")
+	mock_client.recommend_jobs.return_value = {
+		"zpData": {
+			"hasMore": False,
+			"jobList": [
+				{
+					"encryptJobId": "j1",
+					"jobName": "Go 开发",
+					"brandName": "TestCo",
+					"salaryDesc": "20-30K",
+					"cityName": "广州",
+					"areaDistrict": "天河区",
+					"jobExperience": "3-5年",
+					"jobDegree": "本科",
+					"skills": ["Golang"],
+					"welfareList": ["双休"],
+					"brandIndustry": "互联网",
+					"brandScaleName": "100-499人",
+					"brandStageName": "A轮",
+					"bossName": "李",
+					"bossTitle": "HR",
+					"bossOnline": True,
+					"securityId": "sec_r1",
+				},
+			],
+		},
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["recommend", "--with-score"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "NOT_SUPPORTED"
+	assert parsed["error"]["message"] == "当前平台不支持求职期望能力"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "切换平台或调整命令参数后重试"
+
+
 @patch("boss_agent_cli.commands.search.run_search_pipeline")
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")

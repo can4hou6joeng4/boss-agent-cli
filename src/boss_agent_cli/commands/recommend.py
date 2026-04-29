@@ -8,6 +8,8 @@ from boss_agent_cli.display import handle_error_output, handle_output, render_jo
 from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.match_score import score_job_dict
 
+NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
+
 
 @click.command("recommend")
 @click.option("--page", default=1, type=int, help="页码")
@@ -26,8 +28,15 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 			if with_score:
 				try:
 					expect_resp = platform.resume_expect()
-				except NotImplementedError:
-					expect_data = None
+				except NotImplementedError as exc:
+					handle_error_output(
+						ctx, "recommend",
+						code="NOT_SUPPORTED",
+						message=str(exc) or "当前平台不支持求职期望能力",
+						recoverable=True,
+						recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
+					)
+					return
 				else:
 					if not platform.is_success(expect_resp):
 						code, message = platform.parse_error(expect_resp)
