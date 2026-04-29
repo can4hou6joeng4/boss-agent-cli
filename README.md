@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/can4hou6joeng4-boss-agent-cli-badge.png)](https://mseep.ai/app/can4hou6joeng4-boss-agent-cli)
+
 <div align="center">
 
 # boss-agent-cli
