@@ -1,6 +1,10 @@
 from typing import Any
 
 
+class FriendLookupLimitExceeded(RuntimeError):
+	"""Raised when paginated friend lookup cannot prove completion safely."""
+
+
 def find_friend_by_security_id(
 	platform: Any,
 	security_id: str,
@@ -16,6 +20,8 @@ def find_friend_by_security_id(
 	- 遍历完成仍未找到：返回 (None, None)
 	"""
 	page = start_page
+	terminated = False
+	seen_signatures: set[tuple[str, ...]] = set()
 	for _ in range(max_pages):
 		resp = platform.friend_list(page=page)
 		if not platform.is_success(resp):
@@ -27,9 +33,18 @@ def find_friend_by_security_id(
 			if item.get("securityId") == security_id:
 				return item, None
 
+		signature = tuple(str(item.get("securityId", "")) for item in items if isinstance(item, dict))
+		if signature in seen_signatures:
+			terminated = True
+			break
+		seen_signatures.add(signature)
+
 		has_more = platform_data.get("hasMore")
 		if not items or has_more is False:
+			terminated = True
 			break
 		page += 1
 
+	if not terminated:
+		raise FriendLookupLimitExceeded("沟通列表分页遍历超过上限，未能确认联系人是否存在，请重试")
 	return None, None

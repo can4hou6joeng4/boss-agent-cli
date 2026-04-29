@@ -401,6 +401,8 @@ def test_recommend_reports_recommend_jobs_error(mock_auth_cls, mock_client_cls, 
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "RATE_LIMITED"
 	assert parsed["error"]["message"] == "too fast"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "等待后重试"
 
 
 @patch("boss_agent_cli.commands.recommend.CacheStore")
@@ -418,6 +420,8 @@ def test_recommend_with_score_reports_expect_error(mock_auth_cls, mock_client_cl
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "boss login"
 
 
 @patch("boss_agent_cli.commands.recommend.CacheStore")
@@ -1250,6 +1254,21 @@ def test_chat_summary_not_found_keeps_job_not_found(mock_auth_cls, mock_client_c
 	assert parsed["error"]["code"] == "JOB_NOT_FOUND"
 
 
+@patch("boss_agent_cli.commands.chat_summary.get_platform_instance")
+@patch("boss_agent_cli.commands.chat_summary.AuthManager")
+def test_chat_summary_not_found_after_second_page_keeps_job_not_found(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.side_effect = [
+		{"code": 200, "data": {"result": [_make_friend_item("其他HR", "别家公司", 1, 1700000000000) | {"securityId": "sec_other", "uid": 99999}]}},
+		{"code": 200, "data": {"result": [], "hasMore": False}},
+	]
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "--platform", "zhilian", "chat-summary", "sec_missing"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "JOB_NOT_FOUND"
+
+
 @patch("boss_agent_cli.commands.pipeline.get_platform_instance")
 @patch("boss_agent_cli.commands.pipeline.AuthManager")
 def test_pipeline_supports_data_envelope(mock_auth_cls, mock_client_cls):
@@ -1290,6 +1309,39 @@ def test_pipeline_supports_data_envelope(mock_auth_cls, mock_client_cls):
 	assert len(parsed["data"]) >= 1
 
 
+@patch("boss_agent_cli.commands.pipeline.get_platform_instance")
+@patch("boss_agent_cli.commands.pipeline.AuthManager")
+def test_pipeline_reports_friend_list_error_contract(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = {"code": 37, "message": "stoken expired"}
+	mock_client.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "pipeline"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "boss login"
+
+
+@patch("boss_agent_cli.commands.pipeline.get_platform_instance")
+@patch("boss_agent_cli.commands.pipeline.AuthManager")
+def test_pipeline_reports_interview_error_contract(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = {"code": 0, "zpData": {"result": []}}
+	mock_client.interview_data.return_value = {"code": 9, "message": "too fast"}
+	mock_client.parse_error.return_value = ("RATE_LIMITED", "too fast")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "pipeline"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RATE_LIMITED"
+	assert parsed["error"]["message"] == "too fast"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "等待后重试"
+
+
 @patch("boss_agent_cli.commands.digest.get_platform_instance")
 @patch("boss_agent_cli.commands.digest.AuthManager")
 def test_digest_supports_data_envelope(mock_auth_cls, mock_client_cls):
@@ -1324,6 +1376,39 @@ def test_digest_supports_data_envelope(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	assert "follow_ups" in parsed["data"]
+
+
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
+@patch("boss_agent_cli.commands.digest.AuthManager")
+def test_digest_reports_friend_list_error_contract(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = {"code": 37, "message": "stoken expired"}
+	mock_client.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "digest"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "boss login"
+
+
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
+@patch("boss_agent_cli.commands.digest.AuthManager")
+def test_digest_reports_interview_error_contract(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = {"code": 0, "zpData": {"result": []}}
+	mock_client.interview_data.return_value = {"code": 9, "message": "too fast"}
+	mock_client.parse_error.return_value = ("RATE_LIMITED", "too fast")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "digest"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RATE_LIMITED"
+	assert parsed["error"]["message"] == "too fast"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "等待后重试"
 
 
 @patch("boss_agent_cli.commands.search.run_search_pipeline")

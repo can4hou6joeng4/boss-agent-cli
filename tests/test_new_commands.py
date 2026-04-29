@@ -41,8 +41,8 @@ def test_chatmsg_success(mock_auth_cls, mock_client_cls):
 	mock_client.chat_history.return_value = {
 		"zpData": {
 			"messages": [
-				{"from": {"uid": 99, "name": "张HR"}, "type": 1, "text": "你好", "time": 1700000000000},
-				{"from": {"uid": 12345, "name": "我"}, "type": 1, "text": "谢谢", "time": 1700000001000},
+				{"from": {"uid": 12345, "name": "张HR"}, "type": 1, "text": "你好", "time": 1700000000000},
+				{"from": {"uid": 99, "name": "我"}, "type": 1, "text": "谢谢", "time": 1700000001000},
 			],
 		},
 	}
@@ -52,6 +52,8 @@ def test_chatmsg_success(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	assert len(parsed["data"]) == 2
+	assert parsed["data"][0]["from"] == "张HR"
+	assert parsed["data"][1]["from"] == "我"
 	assert parsed["data"][0]["text"] == "你好"
 
 
@@ -66,7 +68,7 @@ def test_chatmsg_finds_contact_on_second_page(mock_auth_cls, mock_client_cls):
 	mock_client.chat_history.return_value = {
 		"zpData": {
 			"messages": [
-				{"from": {"uid": 99, "name": "张HR"}, "type": 1, "text": "第二页找到你了", "time": 1700000000000},
+				{"from": {"uid": 12345, "name": "张HR"}, "type": 1, "text": "第二页找到你了", "time": 1700000000000},
 			],
 		},
 	}
@@ -75,6 +77,7 @@ def test_chatmsg_finds_contact_on_second_page(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
+	assert parsed["data"][0]["from"] == "张HR"
 	assert parsed["data"][0]["text"] == "第二页找到你了"
 	assert mock_client.friend_list.call_args_list[0].kwargs == {"page": 1}
 	assert mock_client.friend_list.call_args_list[1].kwargs == {"page": 2}
@@ -94,6 +97,21 @@ def test_chatmsg_not_found(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
+def test_chatmsg_not_found_after_second_page_keeps_job_not_found(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.side_effect = [
+		_friend_list_response([_make_friend(sid="sec_other", uid=999)]),
+		{"zpData": {"result": [], "friendList": [], "hasMore": False}},
+	]
+	runner = CliRunner()
+	result = runner.invoke(cli, ["chatmsg", "sec_nonexistent"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "JOB_NOT_FOUND"
+
+
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
+@patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_supports_data_envelope(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = {"code": 200, "data": {"result": [_make_friend()]}}
@@ -101,7 +119,7 @@ def test_chatmsg_supports_data_envelope(mock_auth_cls, mock_client_cls):
 		"code": 200,
 		"data": {
 			"messages": [
-				{"from": {"uid": 99, "name": "张HR"}, "type": 1, "text": "智联你好", "time": 1700000000000},
+				{"from": {"uid": 12345, "name": "张HR"}, "type": 1, "text": "智联你好", "time": 1700000000000},
 			],
 		},
 	}
@@ -110,6 +128,7 @@ def test_chatmsg_supports_data_envelope(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
+	assert parsed["data"][0]["from"] == "张HR"
 	assert parsed["data"][0]["text"] == "智联你好"
 
 
@@ -122,7 +141,7 @@ def test_chatmsg_zhilian_hints_use_platform_specific_commands(mock_auth_cls, moc
 		"code": 200,
 		"data": {
 			"messages": [
-				{"from": {"uid": 99, "name": "张HR"}, "type": 1, "text": "智联你好", "time": 1700000000000},
+				{"from": {"uid": 12345, "name": "张HR"}, "type": 1, "text": "智联你好", "time": 1700000000000},
 			],
 		},
 	}
@@ -314,6 +333,21 @@ def test_mark_not_found(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.mark.get_platform_instance")
 @patch("boss_agent_cli.commands.mark.AuthManager")
+def test_mark_not_found_after_second_page_keeps_job_not_found(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.side_effect = [
+		_friend_list_response([_make_friend(sid="sec_other", uid=999)]),
+		{"zpData": {"result": [], "friendList": [], "hasMore": False}},
+	]
+	runner = CliRunner()
+	result = runner.invoke(cli, ["mark", "sec_none", "--label", "收藏"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "JOB_NOT_FOUND"
+
+
+@patch("boss_agent_cli.commands.mark.get_platform_instance")
+@patch("boss_agent_cli.commands.mark.AuthManager")
 def test_mark_reports_not_supported_when_friend_list_missing(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.side_effect = NotImplementedError("friend_list is not supported")
@@ -377,6 +411,21 @@ def test_exchange_finds_contact_on_second_page(mock_auth_cls, mock_client_cls):
 	assert parsed["data"]["name"] == "张HR"
 	assert mock_client.friend_list.call_args_list[0].kwargs == {"page": 1}
 	assert mock_client.friend_list.call_args_list[1].kwargs == {"page": 2}
+
+
+@patch("boss_agent_cli.commands.exchange.get_platform_instance")
+@patch("boss_agent_cli.commands.exchange.AuthManager")
+def test_exchange_not_found_after_second_page_keeps_job_not_found(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.side_effect = [
+		_friend_list_response([_make_friend(sid="sec_other", uid=999)]),
+		{"zpData": {"result": [], "friendList": [], "hasMore": False}},
+	]
+	runner = CliRunner()
+	result = runner.invoke(cli, ["exchange", "sec_none"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "JOB_NOT_FOUND"
 
 
 @patch("boss_agent_cli.commands.exchange.get_platform_instance")
@@ -566,6 +615,8 @@ def test_detail_reports_platform_error(mock_auth_cls, mock_client_cls, mock_cach
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "boss login"
 
 
 @patch("boss_agent_cli.commands.detail.CacheStore")
@@ -604,6 +655,8 @@ def test_detail_preserves_httpx_platform_error_when_browser_fallback_not_support
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "RATE_LIMITED"
 	assert parsed["error"]["message"] == "too fast"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "等待后重试"
 
 
 @patch("boss_agent_cli.commands.show.CacheStore")
@@ -655,6 +708,8 @@ def test_show_reports_platform_error(mock_auth_cls, mock_client_cls, mock_get_jo
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "RATE_LIMITED"
 	assert parsed["error"]["message"] == "too fast"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "等待后重试"
 
 
 @patch("boss_agent_cli.commands.show.CacheStore")
@@ -734,6 +789,8 @@ def test_me_reports_user_info_error(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "boss login"
 
 
 @patch("boss_agent_cli.commands.me.get_platform_instance")

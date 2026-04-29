@@ -3,7 +3,7 @@ import click
 from boss_agent_cli.api.client import AuthError
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, login_action_for_ctx, render_sectioned_record
+from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_error_output, handle_output, login_action_for_ctx, render_sectioned_record
 
 NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
 
@@ -31,11 +31,13 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 				resp = platform.user_info()
 				if not platform.is_success(resp):
 					code, message = platform.parse_error(resp)
+					recoverable, recovery_action = error_contract_for_code(code)
 					handle_error_output(
 						ctx, "me",
 						code=code,
 						message=message or "用户基本信息获取失败",
-						recoverable=False,
+						recoverable=recoverable,
+						recovery_action=recovery_action,
 					)
 					return
 				zp_data = platform.unwrap_data(resp) or {}
@@ -63,11 +65,13 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 					return
 				if not platform.is_success(resp):
 					code, message = platform.parse_error(resp)
+					recoverable, recovery_action = error_contract_for_code(code)
 					handle_error_output(
 						ctx, "me",
 						code=code,
 						message=message or "简历基本信息获取失败",
-						recoverable=False,
+						recoverable=recoverable,
+						recovery_action=recovery_action,
 					)
 					return
 				zp_data = platform.unwrap_data(resp) or {}
@@ -89,11 +93,13 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 					return
 				if not platform.is_success(resp):
 					code, message = platform.parse_error(resp)
+					recoverable, recovery_action = error_contract_for_code(code)
 					handle_error_output(
 						ctx, "me",
 						code=code,
 						message=message or "求职期望获取失败",
-						recoverable=False,
+						recoverable=recoverable,
+						recovery_action=recovery_action,
 					)
 					return
 				zp_data = platform.unwrap_data(resp) or {}
@@ -115,11 +121,13 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 					return
 				if not platform.is_success(resp):
 					code, message = platform.parse_error(resp)
+					recoverable, recovery_action = error_contract_for_code(code)
 					handle_error_output(
 						ctx, "me",
 						code=code,
 						message=message or "投递记录获取失败",
-						recoverable=False,
+						recoverable=recoverable,
+						recovery_action=recovery_action,
 					)
 					return
 				zp_data = platform.unwrap_data(resp) or {}

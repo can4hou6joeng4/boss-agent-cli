@@ -5,7 +5,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_simple_list
+from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_simple_list
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
 
 
@@ -18,11 +18,13 @@ def _collect_pipeline_items(ctx: click.Context, *, now_ts_ms: int | None, stale_
 		friend_resp = platform.friend_list(page=1)
 		if not platform.is_success(friend_resp):
 			code, message = platform.parse_error(friend_resp)
+			recoverable, recovery_action = error_contract_for_code(code)
 			handle_error_output(
 				ctx, "pipeline",
 				code=code,
 				message=message or "沟通列表获取失败",
-				recoverable=False,
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
 			return []
 		friend_data = platform.unwrap_data(friend_resp) or {}
@@ -30,11 +32,13 @@ def _collect_pipeline_items(ctx: click.Context, *, now_ts_ms: int | None, stale_
 		interview_resp = platform.interview_data()
 		if not platform.is_success(interview_resp):
 			code, message = platform.parse_error(interview_resp)
+			recoverable, recovery_action = error_contract_for_code(code)
 			handle_error_output(
 				ctx, "pipeline",
 				code=code,
 				message=message or "面试列表获取失败",
-				recoverable=False,
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
 			return []
 		interview_data = platform.unwrap_data(interview_resp) or {}

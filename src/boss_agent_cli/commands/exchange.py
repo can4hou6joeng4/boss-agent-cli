@@ -2,7 +2,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.commands.contact_lookup import find_friend_by_security_id
+from boss_agent_cli.commands.contact_lookup import FriendLookupLimitExceeded, find_friend_by_security_id
 from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_message_panel
 
 NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
@@ -32,6 +32,15 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 				message=str(exc) or "当前平台不支持沟通列表能力",
 				recoverable=True,
 				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
+			)
+			return
+		except FriendLookupLimitExceeded as exc:
+			handle_error_output(
+				ctx, "exchange",
+				code="NETWORK_ERROR",
+				message=str(exc),
+				recoverable=True,
+				recovery_action="重试",
 			)
 			return
 		if friends_error is not None:

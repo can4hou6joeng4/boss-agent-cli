@@ -4,7 +4,7 @@ from boss_agent_cli.api.models import JobItem
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import handle_error_output, handle_output, render_job_table, handle_auth_errors
+from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_job_table
 from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.match_score import score_job_dict
 
@@ -40,11 +40,13 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 				else:
 					if not platform.is_success(expect_resp):
 						code, message = platform.parse_error(expect_resp)
+						recoverable, recovery_action = error_contract_for_code(code)
 						handle_error_output(
 							ctx, "recommend",
 							code=code,
 							message=message or "求职期望获取失败",
-							recoverable=False,
+							recoverable=recoverable,
+							recovery_action=recovery_action,
 						)
 						return
 					expect_data = platform.unwrap_data(expect_resp) or {}
@@ -52,11 +54,13 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 			raw = platform.recommend_jobs(page=page)
 			if not platform.is_success(raw):
 				code, message = platform.parse_error(raw)
+				recoverable, recovery_action = error_contract_for_code(code)
 				handle_error_output(
 					ctx, "recommend",
 					code=code,
 					message=message or "推荐职位获取失败",
-					recoverable=False,
+					recoverable=recoverable,
+					recovery_action=recovery_action,
 				)
 				return
 			platform_data = platform.unwrap_data(raw) or {}

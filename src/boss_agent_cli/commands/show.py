@@ -3,7 +3,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, render_job_detail
+from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_job_detail
 from boss_agent_cli.index_cache import get_index_info, get_job_by_index
 
 NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
@@ -60,11 +60,13 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 			return
 		if not platform.is_success(raw):
 			code, message = platform.parse_error(raw)
+			recoverable, recovery_action = error_contract_for_code(code)
 			handle_error_output(
 				ctx, "show",
 				code=code,
 				message=message or "职位详情获取失败",
-				recoverable=False,
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
 			return
 
