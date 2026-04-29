@@ -199,6 +199,9 @@ def _fetch_and_check(client: Any, welfare_conditions: list[tuple[str, list[str]]
 			raw_item.get("securityId", ""),
 			raw_item.get("lid", ""),
 		)
+		if not client.is_success(card_raw):
+			code, message = client.parse_error(card_raw)
+			raise SearchPipelinePlatformError(code, message or "职位详情获取失败")
 		desc = card_raw.get("zpData", {}).get("jobCard", {}).get("postDescription", "")
 	except (OSError, KeyError, TypeError):
 		desc = ""
@@ -241,6 +244,9 @@ def _check_details_parallel(
 					logger.info(f"  ✅ {company} - {title}（详情匹配）")
 				else:
 					logger.info(f"  ❌ {company} - {title}")
+			except SearchPipelinePlatformError:
+				logger.info(f"  ❌ {company} - {title}（详情接口失败）")
+				raise
 			except Exception:
 				logger.info(f"  ❌ {company} - {title}（查询失败）")
 

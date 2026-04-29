@@ -122,6 +122,39 @@ def test_watch_run_reports_platform_error(mock_auth_cls, mock_client_cls, tmp_pa
 	assert parsed["error"]["code"] == "UPSTREAM_ERROR"
 
 
+@patch("boss_agent_cli.commands.watch.get_platform_instance")
+@patch("boss_agent_cli.commands.watch.AuthManager")
+def test_watch_run_reports_detail_platform_error(mock_auth_cls, mock_client_cls, tmp_path):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.is_success.side_effect = lambda response: response.get("code", 0) in (0, 200)
+	mock_client.parse_error.side_effect = lambda response: (response.get("error_code", "UNKNOWN"), response.get("message", ""))
+	mock_client.search_jobs.return_value = {
+		"code": 0,
+		"zpData": {
+			"hasMore": False,
+			"jobList": [_job("sec-1", "job-1", title="Go 开发") | {"welfareList": []}],
+		},
+	}
+	mock_client.job_card.return_value = {"code": 500, "message": "detail unavailable", "error_code": "DETAIL_ERROR"}
+
+	runner = CliRunner()
+	runner.invoke(
+		cli,
+		[
+			"--data-dir", str(tmp_path),
+			"--json",
+			"watch", "add", "golang-gz", "golang",
+			"--welfare", "双休",
+		],
+	)
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", "golang-gz"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "DETAIL_ERROR"
+
+
 def test_watch_schema_is_exposed():
 	runner = CliRunner()
 	result = runner.invoke(cli, ["schema"])

@@ -41,6 +41,8 @@ class FakeClient:
 		value = self.descriptions[security_id]
 		if isinstance(value, Exception):
 			raise value
+		if isinstance(value, dict):
+			return value
 		return {"zpData": {"jobCard": {"postDescription": value}}}
 
 
@@ -228,3 +230,24 @@ def test_pipeline_reports_platform_error():
 
 	assert exc_info.value.code == "UPSTREAM_ERROR"
 	assert exc_info.value.message == "service unavailable"
+
+
+def test_pipeline_reports_detail_platform_error():
+	client = FakeClient(
+		pages=[{"zpData": {"hasMore": False, "jobList": [_make_job_raw(security_id="sec-1", job_id="job-1")]}}],
+		descriptions={
+			"sec-1": {"code": 500, "message": "detail unavailable", "error_code": "DETAIL_ERROR"},
+		},
+	)
+
+	with pytest.raises(SearchPipelinePlatformError) as exc_info:
+		run_search_pipeline(
+			client,
+			FakeCache(),
+			FakeLogger(),
+			criteria=SearchFilterCriteria(query="python"),
+			welfare_conditions=_welfare_conditions(),
+		)
+
+	assert exc_info.value.code == "DETAIL_ERROR"
+	assert exc_info.value.message == "detail unavailable"
