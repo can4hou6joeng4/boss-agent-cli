@@ -28,6 +28,15 @@ def interviews_cmd(ctx: click.Context) -> None:
 
 	with get_platform_instance(ctx, auth) as platform:
 		raw = platform.interview_data()
+		if not platform.is_success(raw):
+			code, message = platform.parse_error(raw)
+			handle_error_output(
+				ctx, "interviews",
+				code=code,
+				message=message or "面试邀请获取失败",
+				recoverable=False,
+			)
+			return
 		platform_data = platform.unwrap_data(raw) or {}
 		interview_list = platform_data.get("interviewList", [])
 

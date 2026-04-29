@@ -433,6 +433,20 @@ def test_me_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock_cli
 	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian recommend"
 
 
+@patch("boss_agent_cli.commands.me.get_platform_instance")
+@patch("boss_agent_cli.commands.me.AuthManager")
+def test_me_reports_user_info_error(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.user_info.return_value = {"code": 37, "message": "stoken expired"}
+	mock_client.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["me", "--section", "user"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"
+
+
 # ── history ──────────────────────────────────────────────────────────
 
 
@@ -509,6 +523,20 @@ def test_history_zhilian_hints_use_platform_specific_commands(mock_auth_cls, moc
 	assert parsed["hints"]["next_actions"][2] == "使用 boss --platform zhilian history --page 2 查看下一页"
 
 
+@patch("boss_agent_cli.commands.history.get_platform_instance")
+@patch("boss_agent_cli.commands.history.AuthManager")
+def test_history_reports_platform_error(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.job_history.return_value = {"code": 9, "message": "too fast"}
+	mock_client.parse_error.return_value = ("RATE_LIMITED", "too fast")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["history"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RATE_LIMITED"
+	assert parsed["error"]["message"] == "too fast"
+
+
 # ── interviews ───────────────────────────────────────────────────────
 
 
@@ -543,6 +571,21 @@ def test_interviews_supports_zhilian_style_data(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"][0]["jobName"] == "测试岗位"
+
+
+@patch("boss_agent_cli.commands.interviews.get_platform_instance")
+@patch("boss_agent_cli.commands.interviews.AuthManager")
+def test_interviews_reports_platform_error(mock_auth_cls, mock_client_cls):
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"zp_token": "x"}}
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.interview_data.return_value = {"code": 36, "message": "account risk"}
+	mock_client.parse_error.return_value = ("ACCOUNT_RISK", "account risk")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["interviews"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["message"] == "account risk"
 
 
 @patch("boss_agent_cli.commands.chat_summary.get_platform_instance")

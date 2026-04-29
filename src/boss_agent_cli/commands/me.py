@@ -27,6 +27,15 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 				if logger:
 					logger.info("获取用户基本信息...")
 				resp = platform.user_info()
+				if not platform.is_success(resp):
+					code, message = platform.parse_error(resp)
+					handle_error_output(
+						ctx, "me",
+						code=code,
+						message=message or "用户基本信息获取失败",
+						recoverable=False,
+					)
+					return
 				zp_data = platform.unwrap_data(resp) or {}
 				result["user"] = {
 					"name": zp_data.get("name", ""),
@@ -40,6 +49,15 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 				if logger:
 					logger.info("获取简历基本信息...")
 				resp = platform.resume_baseinfo()
+				if not platform.is_success(resp):
+					code, message = platform.parse_error(resp)
+					handle_error_output(
+						ctx, "me",
+						code=code,
+						message=message or "简历基本信息获取失败",
+						recoverable=False,
+					)
+					return
 				zp_data = platform.unwrap_data(resp) or {}
 				result["resume"] = zp_data
 
@@ -47,6 +65,15 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 				if logger:
 					logger.info("获取求职期望...")
 				resp = platform.resume_expect()
+				if not platform.is_success(resp):
+					code, message = platform.parse_error(resp)
+					handle_error_output(
+						ctx, "me",
+						code=code,
+						message=message or "求职期望获取失败",
+						recoverable=False,
+					)
+					return
 				zp_data = platform.unwrap_data(resp) or {}
 				result["expect"] = zp_data
 
@@ -54,6 +81,15 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 				if logger:
 					logger.info("获取投递记录...")
 				resp = platform.deliver_list(page=deliver_page)
+				if not platform.is_success(resp):
+					code, message = platform.parse_error(resp)
+					handle_error_output(
+						ctx, "me",
+						code=code,
+						message=message or "投递记录获取失败",
+						recoverable=False,
+					)
+					return
 				zp_data = platform.unwrap_data(resp) or {}
 				result["deliver"] = zp_data
 

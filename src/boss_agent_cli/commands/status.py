@@ -27,6 +27,16 @@ def status_cmd(ctx: click.Context) -> None:
 
 	with get_platform_instance(ctx, auth) as platform:
 		info = platform.user_info()
+		if not platform.is_success(info):
+			code, message = platform.parse_error(info)
+			handle_error_output(
+				ctx,
+				"status",
+				code=code,
+				message=message or "用户信息获取失败",
+				recoverable=False,
+			)
+			return
 		user_info = platform.unwrap_data(info) or {}
 		user_name = user_info.get("name", "未知用户")
 		data = {

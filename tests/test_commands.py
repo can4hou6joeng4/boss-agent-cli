@@ -59,6 +59,7 @@ def test_status_logged_in_happy_path(mock_auth_cls, mock_client_cls):
 	mock_client = mock_client_cls.return_value
 	mock_client.__enter__ = lambda self: self
 	mock_client.__exit__ = lambda self, *a: None
+	mock_client.is_success.return_value = True
 	mock_client.user_info.return_value = {"zpData": {"name": "张三"}}
 	mock_client.unwrap_data.return_value = {"name": "张三"}
 
@@ -79,6 +80,7 @@ def test_status_logged_in_unknown_user(mock_auth_cls, mock_client_cls):
 	mock_client = mock_client_cls.return_value
 	mock_client.__enter__ = lambda self: self
 	mock_client.__exit__ = lambda self, *a: None
+	mock_client.is_success.return_value = True
 	mock_client.user_info.return_value = {"zpData": {}}
 	mock_client.unwrap_data.return_value = {}
 
@@ -87,6 +89,24 @@ def test_status_logged_in_unknown_user(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"]["user_name"] == "未知用户"
+
+
+@patch("boss_agent_cli.commands.status.get_platform_instance")
+@patch("boss_agent_cli.commands.status.AuthManager")
+def test_status_reports_user_info_error(mock_auth_cls, mock_client_cls):
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "x"}}
+	mock_client = mock_client_cls.return_value
+	mock_client.__enter__ = lambda self: self
+	mock_client.__exit__ = lambda self, *a: None
+	mock_client.is_success.return_value = False
+	mock_client.user_info.return_value = {"code": 37, "message": "stoken expired"}
+	mock_client.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "status"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
+	assert parsed["error"]["message"] == "stoken expired"
 
 
 @patch("boss_agent_cli.commands.search.CacheStore")
