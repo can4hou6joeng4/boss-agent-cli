@@ -54,8 +54,13 @@ def test_recruiter_candidates_reports_error_when_platform_rejects(mock_auth_cls,
 	result = _invoke("hr", "candidates", "python")
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "RATE_LIMITED"
-	assert parsed["error"]["message"] == "too fast"
+	_assert_error_contract(
+		parsed,
+		code="RATE_LIMITED",
+		message="too fast",
+		recoverable=True,
+		recovery_action="等待后重试",
+	)
 
 
 @patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
@@ -294,8 +299,13 @@ def test_recruiter_reply_reports_error_when_platform_rejects(mock_auth_cls, mock
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
-	assert parsed["error"]["code"] == "RATE_LIMITED"
-	assert parsed["error"]["message"] == "too fast"
+	_assert_error_contract(
+		parsed,
+		code="RATE_LIMITED",
+		message="too fast",
+		recoverable=True,
+		recovery_action="等待后重试",
+	)
 
 
 @patch("boss_agent_cli.commands.recruiter.request_resume.get_recruiter_platform_instance")

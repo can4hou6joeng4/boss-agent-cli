@@ -3,7 +3,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output
+from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output
 
 
 @click.command("reply")
@@ -21,11 +21,13 @@ def reply_cmd(ctx: click.Context, friend_id: int, message: str) -> None:
 		result = platform.send_message(friend_id, message)
 		if not platform.is_success(result):
 			code, error_message = platform.parse_error(result)
+			recoverable, recovery_action = error_contract_for_code(code)
 			handle_error_output(
 				ctx, "recruiter-reply",
 				code=code,
 				message=error_message or "消息发送失败",
-				recoverable=False,
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
 			return
 		data = {
