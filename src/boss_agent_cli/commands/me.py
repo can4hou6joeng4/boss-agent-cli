@@ -48,7 +48,16 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 			if "resume" in sections:
 				if logger:
 					logger.info("获取简历基本信息...")
-				resp = platform.resume_baseinfo()
+				try:
+					resp = platform.resume_baseinfo()
+				except NotImplementedError as exc:
+					handle_error_output(
+						ctx, "me",
+						code="NOT_SUPPORTED",
+						message=str(exc) or "当前平台不支持简历基本信息能力",
+						recoverable=False,
+					)
+					return
 				if not platform.is_success(resp):
 					code, message = platform.parse_error(resp)
 					handle_error_output(
@@ -64,7 +73,16 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 			if "expect" in sections:
 				if logger:
 					logger.info("获取求职期望...")
-				resp = platform.resume_expect()
+				try:
+					resp = platform.resume_expect()
+				except NotImplementedError as exc:
+					handle_error_output(
+						ctx, "me",
+						code="NOT_SUPPORTED",
+						message=str(exc) or "当前平台不支持求职期望能力",
+						recoverable=False,
+					)
+					return
 				if not platform.is_success(resp):
 					code, message = platform.parse_error(resp)
 					handle_error_output(
@@ -80,7 +98,16 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 			if "deliver" in sections:
 				if logger:
 					logger.info("获取投递记录...")
-				resp = platform.deliver_list(page=deliver_page)
+				try:
+					resp = platform.deliver_list(page=deliver_page)
+				except NotImplementedError as exc:
+					handle_error_output(
+						ctx, "me",
+						code="NOT_SUPPORTED",
+						message=str(exc) or "当前平台不支持投递记录能力",
+						recoverable=False,
+					)
+					return
 				if not platform.is_success(resp):
 					code, message = platform.parse_error(resp)
 					handle_error_output(

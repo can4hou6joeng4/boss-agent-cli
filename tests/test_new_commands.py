@@ -537,6 +537,45 @@ def test_me_reports_user_info_error(mock_auth_cls, mock_client_cls):
 	assert parsed["error"]["message"] == "stoken expired"
 
 
+@patch("boss_agent_cli.commands.me.get_platform_instance")
+@patch("boss_agent_cli.commands.me.AuthManager")
+def test_me_resume_reports_not_supported(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.resume_baseinfo.side_effect = NotImplementedError("resume_baseinfo is not supported")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["me", "--section", "resume"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "NOT_SUPPORTED"
+	assert parsed["error"]["message"] == "resume_baseinfo is not supported"
+
+
+@patch("boss_agent_cli.commands.me.get_platform_instance")
+@patch("boss_agent_cli.commands.me.AuthManager")
+def test_me_expect_reports_not_supported(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.resume_expect.side_effect = NotImplementedError("resume_expect is not supported")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["me", "--section", "expect"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "NOT_SUPPORTED"
+	assert parsed["error"]["message"] == "resume_expect is not supported"
+
+
+@patch("boss_agent_cli.commands.me.get_platform_instance")
+@patch("boss_agent_cli.commands.me.AuthManager")
+def test_me_deliver_reports_not_supported(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.deliver_list.side_effect = NotImplementedError("deliver_list is not supported")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["me", "--section", "deliver"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "NOT_SUPPORTED"
+	assert parsed["error"]["message"] == "deliver_list is not supported"
+
+
 # ── history ──────────────────────────────────────────────────────────
 
 
