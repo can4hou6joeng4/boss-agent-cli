@@ -5,6 +5,8 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, render_job_table
 
+NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
+
 
 @click.command("history")
 @click.option("--page", default=1, help="页码")
@@ -17,7 +19,17 @@ def history_cmd(ctx: click.Context, page: int) -> None:
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_platform_instance(ctx, auth) as platform:
-		raw = platform.job_history(page)
+		try:
+			raw = platform.job_history(page)
+		except NotImplementedError as exc:
+			handle_error_output(
+				ctx, "history",
+				code="NOT_SUPPORTED",
+				message=str(exc) or "当前平台不支持浏览历史能力",
+				recoverable=True,
+				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
+			)
+			return
 		if not platform.is_success(raw):
 			code, message = platform.parse_error(raw)
 			handle_error_output(

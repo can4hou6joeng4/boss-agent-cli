@@ -5,6 +5,8 @@ from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, login_action_for_ctx, render_simple_list
 from typing import Any
 
+NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
+
 
 @click.command("interviews")
 @click.pass_context
@@ -27,7 +29,17 @@ def interviews_cmd(ctx: click.Context) -> None:
 		return
 
 	with get_platform_instance(ctx, auth) as platform:
-		raw = platform.interview_data()
+		try:
+			raw = platform.interview_data()
+		except NotImplementedError as exc:
+			handle_error_output(
+				ctx, "interviews",
+				code="NOT_SUPPORTED",
+				message=str(exc) or "当前平台不支持面试邀请能力",
+				recoverable=True,
+				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
+			)
+			return
 		if not platform.is_success(raw):
 			code, message = platform.parse_error(raw)
 			handle_error_output(

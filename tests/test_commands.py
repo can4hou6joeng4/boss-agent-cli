@@ -814,6 +814,22 @@ def test_chat_reports_friend_list_error(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_reports_not_supported_when_friend_list_missing(mock_auth_cls, mock_client_cls):
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
+	mock_client_cls.return_value.friend_list.side_effect = NotImplementedError("friend_list is not supported")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["chat"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "NOT_SUPPORTED"
+	assert parsed["error"]["message"] == "friend_list is not supported"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "切换平台或调整命令参数后重试"
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_md(mock_auth_cls, mock_client_cls, tmp_path):
 	"""--export md 导出包含 security_id 和 diff 摘要"""
 	import time
