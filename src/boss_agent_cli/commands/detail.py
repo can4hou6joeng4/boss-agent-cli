@@ -40,7 +40,8 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 				result = None
 		if result is None:
 			result, browser_error = _detail_via_browser(platform, security_id, lid, data_dir)
-			last_error = browser_error or last_error
+			if browser_error and (last_error is None or browser_error[0] != "NOT_SUPPORTED"):
+				last_error = browser_error
 
 	if result is None:
 		if last_error:

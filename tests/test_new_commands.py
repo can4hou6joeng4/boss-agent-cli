@@ -390,6 +390,25 @@ def test_detail_reports_not_supported_when_browser_fallback_missing(mock_auth_cl
 	assert parsed["error"]["message"] == "job_card is not supported"
 
 
+@patch("boss_agent_cli.commands.detail.CacheStore")
+@patch("boss_agent_cli.commands.detail.get_platform_instance")
+@patch("boss_agent_cli.commands.detail.AuthManager")
+def test_detail_preserves_httpx_platform_error_when_browser_fallback_not_supported(mock_auth_cls, mock_client_cls, mock_cache_cls):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_cache.get_job_id.return_value = "enc_cached_001"
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.job_detail.return_value = {"code": 9, "message": "too fast"}
+	mock_client.parse_error.return_value = ("RATE_LIMITED", "too fast")
+	mock_client.job_card.side_effect = NotImplementedError("job_card is not supported")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["detail", "sec_001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RATE_LIMITED"
+	assert parsed["error"]["message"] == "too fast"
+
+
 @patch("boss_agent_cli.commands.show.CacheStore")
 @patch("boss_agent_cli.commands.show.get_job_by_index")
 @patch("boss_agent_cli.commands.show.get_platform_instance")
