@@ -47,6 +47,8 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 
 	if result is None:
 		if last_error:
+			recoverable: bool
+			recovery_action: str | None
 			if last_error[0] == "NOT_SUPPORTED":
 				recoverable = True
 				recovery_action = NOT_SUPPORTED_RECOVERY_ACTION
