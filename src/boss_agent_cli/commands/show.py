@@ -49,11 +49,11 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 	with get_platform_instance(ctx, auth) as platform:
 		try:
 			raw = platform.job_card(security_id)
-		except NotImplementedError as exc:
+		except NotImplementedError:
 			handle_error_output(
 				ctx, "show",
 				code="NOT_SUPPORTED",
-				message=str(exc) or "当前平台不支持职位详情能力",
+				message="当前平台暂不支持按编号查看职位详情，请改用 detail <security_id> --job-id <job_id> 或切换平台后重试",
 				recoverable=True,
 				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
 			)

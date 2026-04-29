@@ -121,8 +121,8 @@ def _detail_via_browser(platform: Platform, security_id: str, lid: str, data_dir
 	"""兜底通道：通过浏览器 job_card 获取职位详情"""
 	try:
 		raw = platform.job_card(security_id, lid)
-	except NotImplementedError as exc:
-		return None, ("NOT_SUPPORTED", str(exc) or "当前平台不支持职位详情兜底能力")
+	except NotImplementedError:
+		return None, ("NOT_SUPPORTED", "当前平台暂不支持 detail 浏览器兜底，请提供 --job-id 或切换平台后重试")
 	if not platform.is_success(raw):
 		code, message = platform.parse_error(raw)
 		return None, (code, message or "职位详情获取失败")

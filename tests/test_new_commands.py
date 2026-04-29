@@ -633,7 +633,7 @@ def test_detail_reports_not_supported_when_browser_fallback_missing(mock_auth_cl
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NOT_SUPPORTED"
-	assert parsed["error"]["message"] == "job_card is not supported"
+	assert parsed["error"]["message"] == "当前平台暂不支持 detail 浏览器兜底，请提供 --job-id 或切换平台后重试"
 	assert parsed["error"]["recoverable"] is True
 	assert parsed["error"]["recovery_action"] == "切换平台或调整命令参数后重试"
 
@@ -727,7 +727,7 @@ def test_show_reports_not_supported_when_job_card_missing(mock_auth_cls, mock_cl
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NOT_SUPPORTED"
-	assert parsed["error"]["message"] == "job_card is not supported"
+	assert parsed["error"]["message"] == "当前平台暂不支持按编号查看职位详情，请改用 detail <security_id> --job-id <job_id> 或切换平台后重试"
 	assert parsed["error"]["recoverable"] is True
 	assert parsed["error"]["recovery_action"] == "切换平台或调整命令参数后重试"
 
