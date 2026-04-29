@@ -57,6 +57,31 @@ def test_chatmsg_success(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
+def test_chatmsg_finds_contact_on_second_page(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.side_effect = [
+		_friend_list_response([_make_friend(sid="sec_other", uid=999)]),
+		_friend_list_response([_make_friend()]),
+	]
+	mock_client.chat_history.return_value = {
+		"zpData": {
+			"messages": [
+				{"from": {"uid": 99, "name": "张HR"}, "type": 1, "text": "第二页找到你了", "time": 1700000000000},
+			],
+		},
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["chatmsg", "sec_001"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"][0]["text"] == "第二页找到你了"
+	assert mock_client.friend_list.call_args_list[0].kwargs == {"page": 1}
+	assert mock_client.friend_list.call_args_list[1].kwargs == {"page": 2}
+
+
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
+@patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_not_found(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response([])
@@ -195,6 +220,25 @@ def test_mark_add_label(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.mark.get_platform_instance")
 @patch("boss_agent_cli.commands.mark.AuthManager")
+def test_mark_finds_contact_on_second_page(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.side_effect = [
+		_friend_list_response([_make_friend(sid="sec_other", uid=999)]),
+		_friend_list_response([_make_friend()]),
+	]
+	mock_client.friend_label.return_value = {"code": 0, "zpData": {}}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["mark", "sec_001", "--label", "沟通中"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["name"] == "张HR"
+	assert mock_client.friend_list.call_args_list[0].kwargs == {"page": 1}
+	assert mock_client.friend_list.call_args_list[1].kwargs == {"page": 2}
+
+
+@patch("boss_agent_cli.commands.mark.get_platform_instance")
+@patch("boss_agent_cli.commands.mark.AuthManager")
 def test_mark_remove_label(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response([_make_friend()])
@@ -314,6 +358,25 @@ def test_exchange_phone(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	assert "手机号" in parsed["data"]["message"]
+
+
+@patch("boss_agent_cli.commands.exchange.get_platform_instance")
+@patch("boss_agent_cli.commands.exchange.AuthManager")
+def test_exchange_finds_contact_on_second_page(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.side_effect = [
+		_friend_list_response([_make_friend(sid="sec_other", uid=999)]),
+		_friend_list_response([_make_friend()]),
+	]
+	mock_client.exchange_contact.return_value = {"code": 0, "zpData": {}}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["exchange", "sec_001"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["name"] == "张HR"
+	assert mock_client.friend_list.call_args_list[0].kwargs == {"page": 1}
+	assert mock_client.friend_list.call_args_list[1].kwargs == {"page": 2}
 
 
 @patch("boss_agent_cli.commands.exchange.get_platform_instance")

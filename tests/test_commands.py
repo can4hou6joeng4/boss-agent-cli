@@ -1211,6 +1211,45 @@ def test_chat_summary_supports_data_envelope(mock_auth_cls, mock_client_cls):
 	assert parsed["data"]["security_id"] == "sec_张HR"
 
 
+@patch("boss_agent_cli.commands.chat_summary.get_platform_instance")
+@patch("boss_agent_cli.commands.chat_summary.AuthManager")
+def test_chat_summary_finds_contact_on_second_page(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.side_effect = [
+		{"code": 200, "data": {"result": [_make_friend_item("其他HR", "别家公司", 1, 1700000000000) | {"securityId": "sec_other", "uid": 99999}]}},
+		{"code": 200, "data": {"result": [_make_friend_item("张HR", "智联科技", 1, 1700000000000) | {"uid": 12345}]}},
+	]
+	mock_client.chat_history.return_value = {
+		"code": 200,
+		"data": {
+			"messages": [
+				{"from": {"uid": 12345, "name": "张HR"}, "text": "您好", "type": 1, "time": 1700000000000},
+				{"from": {"uid": 88888, "name": "我"}, "text": "第二页摘要", "type": 1, "time": 1700000001000},
+			],
+		},
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "--platform", "zhilian", "chat-summary", "sec_张HR"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["security_id"] == "sec_张HR"
+	assert mock_client.friend_list.call_args_list[0].kwargs == {"page": 1}
+	assert mock_client.friend_list.call_args_list[1].kwargs == {"page": 2}
+
+
+@patch("boss_agent_cli.commands.chat_summary.get_platform_instance")
+@patch("boss_agent_cli.commands.chat_summary.AuthManager")
+def test_chat_summary_not_found_keeps_job_not_found(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = {"code": 200, "data": {"result": []}}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "--platform", "zhilian", "chat-summary", "sec_missing"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "JOB_NOT_FOUND"
+
+
 @patch("boss_agent_cli.commands.pipeline.get_platform_instance")
 @patch("boss_agent_cli.commands.pipeline.AuthManager")
 def test_pipeline_supports_data_envelope(mock_auth_cls, mock_client_cls):

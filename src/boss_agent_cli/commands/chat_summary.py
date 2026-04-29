@@ -3,7 +3,10 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.chat_summary import summarize_messages
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, render_message_panel
+from boss_agent_cli.commands.contact_lookup import find_friend_by_security_id
+from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_message_panel
+
+NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
 
 
 @click.command("chat-summary")
@@ -18,29 +21,31 @@ def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 
 	with get_platform_instance(ctx, auth) as platform:
-		friends_resp = platform.friend_list(page=1)
-		if not platform.is_success(friends_resp):
-			code, message = platform.parse_error(friends_resp)
+		try:
+			friend_item, friends_error = find_friend_by_security_id(platform, security_id)
+		except NotImplementedError as exc:
+			handle_error_output(
+				ctx,
+				"chat-summary",
+				code="NOT_SUPPORTED",
+				message=str(exc) or "当前平台不支持沟通列表能力",
+				recoverable=True,
+				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
+			)
+			return
+		if friends_error is not None:
+			code, message = platform.parse_error(friends_error)
+			recoverable, recovery_action = error_contract_for_code(code)
 			handle_error_output(
 				ctx,
 				"chat-summary",
 				code=code,
 				message=message or "沟通列表获取失败",
-				recoverable=False,
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
 			return
-		friends_data = platform.unwrap_data(friends_resp) or {}
-		items = friends_data.get("result") or friends_data.get("friendList") or []
-
-		gid = None
-		friend_name = "-"
-		for item in items:
-			if item.get("securityId") == security_id:
-				gid = str(item.get("uid", ""))
-				friend_name = item.get("name") or "-"
-				break
-
-		if not gid:
+		if friend_item is None:
 			handle_error_output(
 				ctx,
 				"chat-summary",
@@ -48,16 +53,31 @@ def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int
 				message=f"未在沟通列表中找到 security_id={security_id}",
 			)
 			return
+		gid = str(friend_item.get("uid", ""))
+		friend_name = friend_item.get("name") or "-"
 
-		resp = platform.chat_history(gid, security_id, page=page, count=count)
+		try:
+			resp = platform.chat_history(gid, security_id, page=page, count=count)
+		except NotImplementedError as exc:
+			handle_error_output(
+				ctx,
+				"chat-summary",
+				code="NOT_SUPPORTED",
+				message=str(exc) or "当前平台不支持聊天记录能力",
+				recoverable=True,
+				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
+			)
+			return
 		if not platform.is_success(resp):
 			code, message = platform.parse_error(resp)
+			recoverable, recovery_action = error_contract_for_code(code)
 			handle_error_output(
 				ctx,
 				"chat-summary",
 				code=code,
 				message=message or "聊天记录获取失败",
-				recoverable=False,
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
 			return
 		msg_data = platform.unwrap_data(resp) or {}

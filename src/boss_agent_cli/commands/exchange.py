@@ -2,6 +2,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.commands.contact_lookup import find_friend_by_security_id
 from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_message_panel
 
 NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
@@ -23,7 +24,7 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 
 	with get_platform_instance(ctx, auth) as platform:
 		try:
-			friends_resp = platform.friend_list(page=1)
+			friend_item, friends_error = find_friend_by_security_id(platform, security_id)
 		except NotImplementedError as exc:
 			handle_error_output(
 				ctx, "exchange",
@@ -33,8 +34,8 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
 			)
 			return
-		if not platform.is_success(friends_resp):
-			code, message = platform.parse_error(friends_resp)
+		if friends_error is not None:
+			code, message = platform.parse_error(friends_error)
 			recoverable, recovery_action = error_contract_for_code(code)
 			handle_error_output(
 				ctx, "exchange",
@@ -44,23 +45,14 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 				recovery_action=recovery_action,
 			)
 			return
-		friend_data = platform.unwrap_data(friends_resp) or {}
-		items = friend_data.get("result") or friend_data.get("friendList") or []
-
-		uid = None
-		friend_name: str = "-"
-		for item in items:
-			if item.get("securityId") == security_id:
-				uid = str(item.get("uid", ""))
-				friend_name = item.get("name") or "-"
-				break
-
-		if not uid:
+		if friend_item is None:
 			handle_error_output(
 				ctx, "exchange", code="JOB_NOT_FOUND",
 				message=f"未在沟通列表中找到 security_id={security_id}",
 			)
 			return
+		uid = str(friend_item.get("uid", ""))
+		friend_name: str = friend_item.get("name") or "-"
 
 		try:
 			resp = platform.exchange_contact(security_id, uid, friend_name, exchange_type=type_id)

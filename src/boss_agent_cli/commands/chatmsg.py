@@ -4,6 +4,7 @@ from typing import Any
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.commands.contact_lookup import find_friend_by_security_id
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_simple_list
 
@@ -29,7 +30,7 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> 
 
 	with get_platform_instance(ctx, auth) as platform:
 		try:
-			friends_resp = platform.friend_list(page=1)
+			friend_item, friends_error = find_friend_by_security_id(platform, security_id)
 		except NotImplementedError as exc:
 			handle_error_output(
 				ctx, "chatmsg",
@@ -39,8 +40,8 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> 
 				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
 			)
 			return
-		if not platform.is_success(friends_resp):
-			code, message = platform.parse_error(friends_resp)
+		if friends_error is not None:
+			code, message = platform.parse_error(friends_error)
 			recoverable, recovery_action = error_contract_for_code(code)
 			handle_error_output(
 				ctx, "chatmsg",
@@ -50,24 +51,15 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> 
 				recovery_action=recovery_action,
 			)
 			return
-		platform_data = platform.unwrap_data(friends_resp) or {}
-		items = platform_data.get("result") or platform_data.get("friendList") or []
-
-		gid = None
-		friend_name = None
-		for item in items:
-			if item.get("securityId") == security_id:
-				gid = str(item.get("uid", ""))
-				friend_name = item.get("name") or "-"
-				break
-
-		if not gid:
+		if friend_item is None:
 			handle_error_output(
 				ctx, "chatmsg",
 				code="JOB_NOT_FOUND",
 				message=f"未在沟通列表中找到 security_id={security_id}，请确认该联系人存在",
 			)
 			return
+		gid = str(friend_item.get("uid", ""))
+		friend_name = friend_item.get("name") or "-"
 
 		try:
 			resp = platform.chat_history(gid, security_id, page=page, count=count)
