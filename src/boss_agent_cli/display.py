@@ -32,6 +32,25 @@ def login_action_for_ctx(ctx: Any) -> str:
 	return boss_command_for_ctx(ctx, "login")
 
 
+def error_contract_for_code(
+	code: str,
+	*,
+	fallback_recoverable: bool = False,
+	fallback_recovery_action: str | None = None,
+) -> tuple[bool, str | None]:
+	"""Return recoverability metadata for a known error code."""
+	from boss_agent_cli.commands.schema import SCHEMA_DATA
+
+	error_codes = SCHEMA_DATA.get("error_codes", {})
+	spec = error_codes.get(code, {}) if isinstance(error_codes, dict) else {}
+	if not isinstance(spec, dict):
+		spec = {}
+	return (
+		bool(spec.get("recoverable", fallback_recoverable)),
+		spec.get("recovery_action", fallback_recovery_action),
+	)
+
+
 def is_json_mode(ctx) -> bool:
 	"""Check if --json flag is set or stdout is piped (non-TTY)."""
 	force_json = ctx.obj.get("json_output", False) if ctx and ctx.obj else False

@@ -5,7 +5,9 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, render_simple_list
+from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_simple_list
+
+NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
 
 _MSG_TYPE_MAP = {
 	1: "文本", 2: "图片", 3: "招呼", 4: "简历", 5: "系统",
@@ -26,14 +28,26 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 
 	with get_platform_instance(ctx, auth) as platform:
-		friends_resp = platform.friend_list(page=1)
+		try:
+			friends_resp = platform.friend_list(page=1)
+		except NotImplementedError as exc:
+			handle_error_output(
+				ctx, "chatmsg",
+				code="NOT_SUPPORTED",
+				message=str(exc) or "当前平台不支持沟通列表能力",
+				recoverable=True,
+				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
+			)
+			return
 		if not platform.is_success(friends_resp):
 			code, message = platform.parse_error(friends_resp)
+			recoverable, recovery_action = error_contract_for_code(code)
 			handle_error_output(
 				ctx, "chatmsg",
 				code=code,
 				message=message or "沟通列表获取失败",
-				recoverable=False,
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
 			return
 		platform_data = platform.unwrap_data(friends_resp) or {}
@@ -55,14 +69,26 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> 
 			)
 			return
 
-		resp = platform.chat_history(gid, security_id, page=page, count=count)
+		try:
+			resp = platform.chat_history(gid, security_id, page=page, count=count)
+		except NotImplementedError as exc:
+			handle_error_output(
+				ctx, "chatmsg",
+				code="NOT_SUPPORTED",
+				message=str(exc) or "当前平台不支持聊天记录能力",
+				recoverable=True,
+				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
+			)
+			return
 		if not platform.is_success(resp):
 			code, message = platform.parse_error(resp)
+			recoverable, recovery_action = error_contract_for_code(code)
 			handle_error_output(
 				ctx, "chatmsg",
 				code=code,
 				message=message or "聊天记录获取失败",
-				recoverable=False,
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
 			return
 		msg_data = platform.unwrap_data(resp) or {}

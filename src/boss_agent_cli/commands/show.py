@@ -6,6 +6,8 @@ from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, render_job_detail
 from boss_agent_cli.index_cache import get_index_info, get_job_by_index
 
+NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
+
 
 @click.command("show")
 @click.argument("index", type=int)
@@ -52,7 +54,8 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 				ctx, "show",
 				code="NOT_SUPPORTED",
 				message=str(exc) or "当前平台不支持职位详情能力",
-				recoverable=False,
+				recoverable=True,
+				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
 			)
 			return
 		if not platform.is_success(raw):

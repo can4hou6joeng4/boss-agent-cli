@@ -9,6 +9,8 @@ from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, render_job_detail
 from boss_agent_cli.platforms import Platform
 
+NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
+
 
 @click.command("detail")
 @click.argument("security_id")
@@ -45,11 +47,13 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 
 	if result is None:
 		if last_error:
+			recoverable = last_error[0] == "NOT_SUPPORTED"
 			handle_error_output(
 				ctx, "detail",
 				code=last_error[0],
 				message=last_error[1],
-				recoverable=False,
+				recoverable=recoverable,
+				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION if recoverable else None,
 			)
 			return
 		handle_error_output(

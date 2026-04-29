@@ -810,6 +810,8 @@ def test_chat_reports_friend_list_error(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "boss login"
 
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
