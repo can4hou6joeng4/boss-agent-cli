@@ -132,6 +132,15 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 				education=education, industry=industry, scale=scale,
 				stage=stage, job_type=job_type,
 			)
+			if not platform.is_success(raw):
+				code, message = platform.parse_error(raw)
+				handle_error_output(
+					ctx, "batch-greet",
+					code=code,
+					message=message or "搜索结果获取失败",
+					recoverable=False,
+				)
+				return
 			platform_data = platform.unwrap_data(raw) or {}
 			job_list = platform_data.get("jobList", [])
 

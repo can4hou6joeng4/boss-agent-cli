@@ -113,7 +113,7 @@ def test_greet_hints_present(tmp_path):
 # ── batch-greet 命令 ────────────────────────────────────────────────
 
 
-def _invoke_batch_greet(*args, tmp_path, search_result=None, greeted_ids=None):
+def _invoke_batch_greet(*args, tmp_path, search_result=None, greeted_ids=None, is_success=True, parse_error=("UNKNOWN", "")):
 	runner = CliRunner()
 	greeted = set(greeted_ids or [])
 	with (
@@ -139,6 +139,8 @@ def _invoke_batch_greet(*args, tmp_path, search_result=None, greeted_ids=None):
 				 "activeTimeDesc": "今日活跃"},
 			]},
 		}
+		mock_client.is_success.return_value = is_success
+		mock_client.parse_error.return_value = parse_error
 		mock_client.unwrap_data.side_effect = lambda payload: payload.get("zpData") if "zpData" in payload else payload.get("data")
 		mock_client_cls.return_value.__enter__ = lambda s: mock_client
 		mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
@@ -174,6 +176,19 @@ def test_batch_greet_respects_count_limit(tmp_path):
 		"batch-greet", "python", "--dry-run", "--count", "1", tmp_path=tmp_path,
 	)
 	assert parsed["data"]["count"] == 1
+
+
+def test_batch_greet_reports_platform_error(tmp_path):
+	"""搜索接口明确失败时，不应伪装成空候选成功。"""
+	code, parsed = _invoke_batch_greet(
+		"batch-greet", "python", "--dry-run", tmp_path=tmp_path,
+		search_result={"code": 500, "message": "service unavailable"},
+		is_success=False,
+		parse_error=("UPSTREAM_ERROR", "service unavailable"),
+	)
+	assert code == 1
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "UPSTREAM_ERROR"
 
 
 # ── detail 命令 ─────────────────────────────────────────────────────
