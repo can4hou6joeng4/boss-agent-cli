@@ -45,7 +45,16 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_platform_instance(ctx, auth) as platform:
-		raw = platform.job_card(security_id)
+		try:
+			raw = platform.job_card(security_id)
+		except NotImplementedError as exc:
+			handle_error_output(
+				ctx, "show",
+				code="NOT_SUPPORTED",
+				message=str(exc) or "当前平台不支持职位详情能力",
+				recoverable=False,
+			)
+			return
 		if not platform.is_success(raw):
 			code, message = platform.parse_error(raw)
 			handle_error_output(

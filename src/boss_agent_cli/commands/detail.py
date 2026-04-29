@@ -108,7 +108,10 @@ def _detail_via_httpx(platform: Platform, security_id: str, job_id: str, data_di
 
 def _detail_via_browser(platform: Platform, security_id: str, lid: str, data_dir: Path) -> tuple[dict[str, Any] | None, tuple[str, str] | None]:
 	"""兜底通道：通过浏览器 job_card 获取职位详情"""
-	raw = platform.job_card(security_id, lid)
+	try:
+		raw = platform.job_card(security_id, lid)
+	except NotImplementedError as exc:
+		return None, ("NOT_SUPPORTED", str(exc) or "当前平台不支持职位详情兜底能力")
 	if not platform.is_success(raw):
 		code, message = platform.parse_error(raw)
 		return None, (code, message or "职位详情获取失败")
