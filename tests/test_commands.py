@@ -1295,3 +1295,47 @@ def test_search_reports_pipeline_platform_error(mock_client_cls, mock_auth_cls, 
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "UPSTREAM_ERROR"
 	assert parsed["error"]["message"] == "service unavailable"
+
+
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_reports_welfare_not_supported(mock_client_cls, mock_auth_cls, mock_cache_cls):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = None
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = {
+		"code": 0,
+		"zpData": {
+			"hasMore": False,
+			"jobList": [
+				{
+					"encryptJobId": "j1",
+					"jobName": "Go 开发",
+					"brandName": "TestCo",
+					"salaryDesc": "20K",
+					"cityName": "广州",
+					"areaDistrict": "天河区",
+					"jobExperience": "3-5年",
+					"jobDegree": "本科",
+					"skills": ["Golang"],
+					"welfareList": [],
+					"brandIndustry": "互联网",
+					"brandScaleName": "100-499人",
+					"brandStageName": "A轮",
+					"bossName": "李",
+					"bossTitle": "HR",
+					"bossOnline": True,
+					"securityId": "sec_001",
+				},
+			],
+		},
+	}
+	mock_client.job_card.side_effect = NotImplementedError("unsupported")
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["search", "golang", "--welfare", "双休"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "NOT_SUPPORTED"

@@ -734,6 +734,11 @@ SCHEMA_DATA = {
 			"recoverable": False,
 			"recovery_action": "修正参数",
 		},
+		"NOT_SUPPORTED": {
+			"message": "当前平台暂不支持该能力",
+			"recoverable": True,
+			"recovery_action": "切换平台或调整命令参数后重试",
+		},
 		"RESUME_NOT_FOUND": {
 			"message": "简历不存在",
 			"recoverable": False,

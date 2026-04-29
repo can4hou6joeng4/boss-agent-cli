@@ -251,3 +251,23 @@ def test_pipeline_reports_detail_platform_error():
 
 	assert exc_info.value.code == "DETAIL_ERROR"
 	assert exc_info.value.message == "detail unavailable"
+
+
+def test_pipeline_reports_welfare_not_supported():
+	client = FakeClient(
+		pages=[{"zpData": {"hasMore": False, "jobList": [_make_job_raw(security_id="sec-1", job_id="job-1")]}}],
+		descriptions={},
+	)
+	client.job_card = lambda security_id, lid="": (_ for _ in ()).throw(NotImplementedError("unsupported"))
+
+	with pytest.raises(SearchPipelinePlatformError) as exc_info:
+		run_search_pipeline(
+			client,
+			FakeCache(),
+			FakeLogger(),
+			criteria=SearchFilterCriteria(query="python"),
+			welfare_conditions=_welfare_conditions(),
+		)
+
+	assert exc_info.value.code == "NOT_SUPPORTED"
+	assert "不支持福利详情筛选" in exc_info.value.message

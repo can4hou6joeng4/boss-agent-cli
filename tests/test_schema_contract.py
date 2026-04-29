@@ -102,6 +102,7 @@ def test_schema_error_codes_cover_all_used_codes():
 		"GREET_LIMIT",
 		"NETWORK_ERROR",
 		"INVALID_PARAM",
+		"NOT_SUPPORTED",
 		"HOOK_BLOCKED",
 	}
 

@@ -203,6 +203,11 @@ def _fetch_and_check(client: Any, welfare_conditions: list[tuple[str, list[str]]
 			code, message = client.parse_error(card_raw)
 			raise SearchPipelinePlatformError(code, message or "职位详情获取失败")
 		desc = card_raw.get("zpData", {}).get("jobCard", {}).get("postDescription", "")
+	except NotImplementedError:
+		raise SearchPipelinePlatformError(
+			"NOT_SUPPORTED",
+			"当前平台暂不支持福利详情筛选，请去掉 --welfare 后重试",
+		)
 	except (OSError, KeyError, TypeError):
 		desc = ""
 
