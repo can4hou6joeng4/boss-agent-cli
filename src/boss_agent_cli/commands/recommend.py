@@ -28,11 +28,11 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 			if with_score:
 				try:
 					expect_resp = platform.resume_expect()
-				except NotImplementedError as exc:
+				except NotImplementedError:
 					handle_error_output(
 						ctx, "recommend",
 						code="NOT_SUPPORTED",
-						message=str(exc) or "当前平台不支持求职期望能力",
+						message="当前平台暂不支持带期望加权的推荐评分，请去掉 --with-score 或切换平台后重试",
 						recoverable=True,
 						recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
 					)

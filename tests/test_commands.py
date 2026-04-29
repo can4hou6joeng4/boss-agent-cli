@@ -437,7 +437,7 @@ def test_recommend_with_score_reports_not_supported(mock_auth_cls, mock_client_c
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NOT_SUPPORTED"
-	assert parsed["error"]["message"] == "当前平台不支持求职期望能力"
+	assert parsed["error"]["message"] == "当前平台暂不支持带期望加权的推荐评分，请去掉 --with-score 或切换平台后重试"
 	assert parsed["error"]["recoverable"] is True
 	assert parsed["error"]["recovery_action"] == "切换平台或调整命令参数后重试"
 	mock_client.recommend_jobs.assert_not_called()
