@@ -65,3 +65,7 @@ class ZhilianPlatform(Platform):
 
 	def apply(self, security_id: str, job_id: str, lid: str = "") -> dict[str, Any]:
 		return self._client.apply(security_id, job_id, lid)
+
+	def interview_data(self) -> dict[str, Any]:
+		"""智联面试邀请列表。透传 client 包络，由命令层 unwrap_data 解包。"""
+		return self._client.interview_data()

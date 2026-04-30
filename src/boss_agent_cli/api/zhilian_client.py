@@ -299,3 +299,11 @@ class ZhilianClient:
 
 	def user_info(self) -> dict[str, Any]:
 		return self._request("GET", USER_INFO_URL)
+
+	def interview_data(self) -> dict[str, Any]:
+		"""智联面试邀请列表占位实现。
+
+		正式端点尚在协议侧调研中，先返回空集合保持包络结构合规，
+		使 boss --platform zhilian interviews 不再抛 NotImplementedError。
+		"""
+		return {"code": 200, "data": {"items": [], "total": 0}, "_stub": True}
