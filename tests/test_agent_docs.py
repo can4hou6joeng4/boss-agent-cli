@@ -82,6 +82,16 @@ def test_mcp_readme_links_to_quickstart_and_matrix():
 	assert "[Capability Matrix](../docs/capability-matrix.md)" in content
 
 
+def test_readme_badge_policy_exists_and_has_core_rules():
+	content = _read("docs/readme-badge-policy.md")
+	assert "# README 第三方 Badge 准入标准" in content
+	assert "`README.md` / `README.en.md`" in content
+	assert "### 一类：默认允许" in content
+	assert "### 二类：默认不允许" in content
+	assert "### 4. 双语 README 对称" in content
+	assert "### 6. 不形成未经批准的背书" in content
+
+
 def test_schema_description_mentions_current_top_level_command_count():
 	from boss_agent_cli.commands.schema import SCHEMA_DATA
 
