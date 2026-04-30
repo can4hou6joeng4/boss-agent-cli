@@ -94,7 +94,7 @@ def hr_group(ctx: click.Context) -> None:
 		handle_error_output(
 			ctx,
 			"hr",
-			code="INVALID_PARAM",
+			code="PLATFORM_NOT_SUPPORTED",
 			message=(
 				f"招聘者模式暂不支持平台 {platform_name!r}；"
 				f"当前仅支持: {', '.join(supported)}"

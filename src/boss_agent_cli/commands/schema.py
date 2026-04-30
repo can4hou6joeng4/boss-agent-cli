@@ -801,6 +801,11 @@ SCHEMA_DATA = {
 			"recoverable": False,
 			"recovery_action": None,
 		},
+		"PLATFORM_NOT_SUPPORTED": {
+			"message": "当前平台不支持该角色或子命令",
+			"recoverable": True,
+			"recovery_action": "切换到支持的平台（如 boss --platform zhipin hr ...）",
+		},
 	},
 	"conventions": {
 		"stdout": "仅 JSON 结构化数据（信封格式）",
