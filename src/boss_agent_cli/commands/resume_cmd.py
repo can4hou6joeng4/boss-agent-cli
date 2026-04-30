@@ -74,7 +74,6 @@ def resume_init_cmd(ctx: click.Context, name: str | None, template: str | None) 
 	"""从默认模板初始化本地简历"""
 	store = _get_store(ctx)
 	if template is None:
-		# TODO: 从 BOSS 直聘 API 拉取简历（需登录态）
 		template = "default"
 	if name is None:
 		name = "default"
@@ -92,7 +91,11 @@ def resume_init_cmd(ctx: click.Context, name: str | None, template: str | None) 
 	handle_output(
 		ctx, "resume",
 		{"action": "init", "name": name, "template": template},
-		hints={"next_actions": [f"boss resume show {name}", f"boss resume edit {name} --field title --value <新标题>"]},
+		hints={"next_actions": [
+			f"boss resume show {name}",
+			f"boss resume edit {name} --field title --value <新标题>",
+			"boss me 然后用 boss resume import 导入平台真实简历",
+		]},
 	)
 
 
