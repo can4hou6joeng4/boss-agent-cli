@@ -26,6 +26,7 @@
 |------|------|------|---------|
 | 拉勾 | [lagou.md](lagou.md) | **不建议接入**（ROI 低 + JWT 密钥随构建变） | 2026-04-20 |
 | 智联 | [zhaopin.md](zhaopin.md) | **推荐优先接入**（3 家中首选，预估 2-3 周） | 2026-04-20 |
+| 智联招聘者侧 | [zhaopin-recruiter-evaluation.md](zhaopin-recruiter-evaluation.md) | _评估提纲_，调研中 | 2026-04-30 |
 | 猎聘 | [liepin.md](liepin.md) | **不建议接入**（用户画像错位 + 非会员写操作配额极严） | 2026-04-20 |
 | 前程无忧 | _待认领（优先级低）_ | — | — |
 
