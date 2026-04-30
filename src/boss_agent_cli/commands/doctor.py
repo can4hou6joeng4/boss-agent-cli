@@ -224,6 +224,14 @@ def doctor_cmd(ctx: click.Context) -> None:
 	except Exception as e:
 		add_check("network", "warn", f"访问 {config['site_host']} 失败: {e}", "检查网络、代理或风控拦截")
 
+	# 5.1) 跨平台网络探针：智联端点连通性（与当前平台无关，便于 Agent 调试 --platform zhilian）
+	try:
+		resp = httpx.get("https://www.zhaopin.com/", timeout=5, follow_redirects=True)
+		zhilian_status = "ok" if resp.status_code < 400 else "warn"
+		add_check("network_zhilian", zhilian_status, f"访问 zhaopin.com 返回 HTTP {resp.status_code}")
+	except Exception as e:
+		add_check("network_zhilian", "warn", f"访问 zhaopin.com 失败: {e}", "检查网络或代理")
+
 	# 5.5) Browser channel risk assessment
 	cdp_ok = any(item["name"] == "cdp" and item["status"] == "ok" for item in checks)
 	bridge_ok = False
