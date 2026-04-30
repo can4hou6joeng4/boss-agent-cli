@@ -177,6 +177,21 @@ def _format_anthropic_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 	return tools
 
 
+def _format_mcp_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
+	"""Model Context Protocol Tools 格式（与 Anthropic 同结构，键名 inputSchema）。"""
+	tools = []
+	for cmd_name, cmd_spec in data["commands"].items():
+		description = cmd_spec.get("description", "")
+		if availability := cmd_spec.get("availability"):
+			description = f"{description} [{_availability_note(availability)}]"
+		tools.append({
+			"name": f"boss_{cmd_name.replace('-', '_')}",
+			"description": description,
+			"inputSchema": _command_to_json_schema(cmd_name, cmd_spec),
+		})
+	return tools
+
+
 SCHEMA_DATA = {
 	"name": "boss-agent-cli",
 	"description": "BOSS直聘求职工具。34 个顶层命令覆盖搜索、筛选、打招呼、沟通、流水线、招聘者工作流与简历优化全流程。",
@@ -821,9 +836,9 @@ SCHEMA_DATA = {
 @click.command("schema")
 @click.option(
 	"--format", "output_format",
-	type=click.Choice(["native", "openai-tools", "anthropic-tools"]),
+	type=click.Choice(["native", "openai-tools", "anthropic-tools", "mcp-tools"]),
 	default="native",
-	help="输出格式：native（本项目信封）/ openai-tools（OpenAI Functions & Tools API）/ anthropic-tools（Claude Tool Use API）",
+	help="输出格式：native（本项目信封）/ openai-tools（OpenAI Functions & Tools API）/ anthropic-tools（Claude Tool Use API）/ mcp-tools（Model Context Protocol Tools）",
 )
 @click.pass_context
 def schema_cmd(ctx: click.Context, output_format: str) -> None:
@@ -842,5 +857,8 @@ def schema_cmd(ctx: click.Context, output_format: str) -> None:
 		return
 	if output_format == "anthropic-tools":
 		emit_success("schema", {"format": "anthropic-tools", "tools": _format_anthropic_tools(data)})
+		return
+	if output_format == "mcp-tools":
+		emit_success("schema", {"format": "mcp-tools", "tools": _format_mcp_tools(data)})
 		return
 	emit_success("schema", data)

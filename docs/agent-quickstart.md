@@ -84,6 +84,18 @@ boss status
 - `RATE_LIMITED`：等待后重试
 - `INVALID_PARAM`：校正参数（城市、福利、页码等）
 
+## 4) 工具协议直出
+
+不同 Agent host 需要不同形态的工具定义，`boss schema --format` 一次产出：
+
+```bash
+boss schema --format openai-tools     # OpenAI Functions / Tools API
+boss schema --format anthropic-tools  # Claude Tool Use API
+boss schema --format mcp-tools        # Model Context Protocol Tools
+```
+
+输出可直接喂给对应 host，无需手写适配。
+
 延伸阅读：
 - [Agent Host Examples](agent-hosts.md)
 - [Capability Matrix](capability-matrix.md)
