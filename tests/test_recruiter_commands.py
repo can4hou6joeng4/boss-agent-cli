@@ -363,6 +363,6 @@ def test_hr_group_rejects_unsupported_zhilian_platform():
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
-	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["code"] == "PLATFORM_NOT_SUPPORTED"
 	assert "暂不支持平台" in parsed["error"]["message"]
 	assert "boss --platform zhipin hr ..." == parsed["error"]["recovery_action"]
