@@ -1,4 +1,5 @@
 import click
+from typing import Any
 
 from boss_agent_cli.api.endpoints import (
 	CITY_CODES,
@@ -108,75 +109,111 @@ def watch_remove_cmd(ctx: click.Context, name: str) -> None:
 	handle_output(ctx, "watch", {"action": "remove", "name": name, "removed": removed})
 
 
-@watch_group.command("run")
-@click.argument("name")
-@click.pass_context
-@handle_auth_errors("watch")
-def watch_run_cmd(ctx: click.Context, name: str) -> None:
+def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str, Any] | None:
+	"""执行单个 watch，返回聚合结果；找不到时返回 None。"""
+	record = cache.get_saved_search(name)
+	if record is None:
+		return None
+
+	params = record["params"]
+	welfare = params.get("welfare")
+	_, welfare_conditions = _parse_watch_filters(
+		params.get("query"),
+		params.get("city"),
+		params.get("salary"),
+		params.get("experience"),
+		params.get("education"),
+		params.get("industry"),
+		params.get("scale"),
+		params.get("stage"),
+		params.get("job_type"),
+		welfare,
+	)
+	criteria = SearchFilterCriteria(
+		query=params.get("query", ""),
+		city=params.get("city"),
+		salary=params.get("salary"),
+		experience=params.get("experience"),
+		education=params.get("education"),
+		industry=params.get("industry"),
+		scale=params.get("scale"),
+		stage=params.get("stage"),
+		job_type=params.get("job_type"),
+	)
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
+	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
+	with get_platform_instance(ctx, auth) as platform:
+		pipeline_result = run_search_pipeline(
+			platform,
+			cache,
+			logger,
+			criteria=criteria,
+			start_page=1,
+			max_pages=5 if welfare_conditions else 1,
+			welfare_conditions=welfare_conditions,
+		)
+	watch_result = cache.record_watch_results(name, pipeline_result.items)
+	return {
+		"name": name,
+		"new_count": watch_result["new_count"],
+		"seen_count": watch_result["seen_count"],
+		"total_count": watch_result["total_count"],
+		"new_items": watch_result["new_items"],
+	}
+
+
+@watch_group.command("run")
+@click.argument("name", required=False)
+@click.option("--all", "run_all", is_flag=True, help="跑所有已保存 watch")
+@click.pass_context
+@handle_auth_errors("watch")
+def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
+	data_dir = ctx.obj["data_dir"]
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
-		record = cache.get_saved_search(name)
-		if record is None:
+		if run_all:
+			records = cache.list_saved_searches()
+			watches: list[dict[str, Any]] = []
+			for record in records:
+				try:
+					summary = _execute_single_watch(ctx, cache, record["name"])
+				except SearchPipelinePlatformError as exc:
+					summary = {"name": record["name"], "error": exc.code, "message": exc.message}
+				if summary is not None:
+					watches.append(summary)
+			handle_output(
+				ctx, "watch",
+				{"mode": "all", "watches": watches, "total": len(watches)},
+				hints={"next_actions": ["boss watch list", "boss detail <security_id>"]},
+			)
+			return
+
+		if not name:
+			handle_error_output(
+				ctx, "watch",
+				code="INVALID_PARAM",
+				message="必须传入 watch 名或使用 --all",
+				recoverable=False,
+			)
+			return
+
+		try:
+			summary = _execute_single_watch(ctx, cache, name)
+		except SearchPipelinePlatformError as exc:
+			handle_error_output(
+				ctx, "watch",
+				code=exc.code,
+				message=exc.message or "搜索结果获取失败",
+				recoverable=False,
+			)
+			return
+
+		if summary is None:
 			handle_error_output(ctx, "watch", code="JOB_NOT_FOUND", message=f"未找到 watch: {name}")
 			return
 
-		params = record["params"]
-		welfare = params.get("welfare")
-		_, welfare_conditions = _parse_watch_filters(
-			params.get("query"),
-			params.get("city"),
-			params.get("salary"),
-			params.get("experience"),
-			params.get("education"),
-			params.get("industry"),
-			params.get("scale"),
-			params.get("stage"),
-			params.get("job_type"),
-			welfare,
-		)
-		criteria = SearchFilterCriteria(
-			query=params.get("query", ""),
-			city=params.get("city"),
-			salary=params.get("salary"),
-			experience=params.get("experience"),
-			education=params.get("education"),
-			industry=params.get("industry"),
-			scale=params.get("scale"),
-			stage=params.get("stage"),
-			job_type=params.get("job_type"),
-		)
-		auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
-		with get_platform_instance(ctx, auth) as platform:
-			try:
-				pipeline_result = run_search_pipeline(
-					platform,
-					cache,
-					logger,
-					criteria=criteria,
-					start_page=1,
-					max_pages=5 if welfare_conditions else 1,
-					welfare_conditions=welfare_conditions,
-				)
-			except SearchPipelinePlatformError as exc:
-				handle_error_output(
-					ctx, "watch",
-					code=exc.code,
-					message=exc.message or "搜索结果获取失败",
-					recoverable=False,
-				)
-				return
-		watch_result = cache.record_watch_results(name, pipeline_result.items)
 		handle_output(
-			ctx,
-			"watch",
-			{
-				"name": name,
-				"new_count": watch_result["new_count"],
-				"seen_count": watch_result["seen_count"],
-				"total_count": watch_result["total_count"],
-				"new_items": watch_result["new_items"],
-			},
+			ctx, "watch", summary,
 			hints={"next_actions": ["boss detail <security_id>", "boss watch list"]},
 		)
