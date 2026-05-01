@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 import sys
 import types
 from pathlib import Path
@@ -11,6 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _read(path: str) -> str:
 	return (ROOT / path).read_text(encoding="utf-8")
+
+
+def _extract_readme_badges(path: str) -> list[tuple[str, str, str]]:
+	content = _read(path)
+	header = content.split("</div>", 1)[0]
+	return re.findall(r"\[!\[([^\]]+)\]\(([^)]+)\)\]\(([^)]+)\)", header)
 
 
 def _load_mcp_tools() -> list:
@@ -90,6 +97,18 @@ def test_readme_badge_policy_exists_and_has_core_rules():
 	assert "### 二类：默认不允许" in content
 	assert "### 4. 双语 README 对称" in content
 	assert "### 6. 不形成未经批准的背书" in content
+
+
+def test_readme_homepage_badges_stay_bilingual_and_symmetric():
+	readme_badges = _extract_readme_badges("README.md")
+	readme_en_badges = _extract_readme_badges("README.en.md")
+
+	assert readme_badges, "README.md 首页应存在 badge 区"
+	assert readme_en_badges, "README.en.md 首页应存在 badge 区"
+	assert readme_badges == readme_en_badges, (
+		"README 首页 badge 必须保持中英文对称；若新增或删除 badge，"
+		"应同步更新 README.md 与 README.en.md 的同一组 badge"
+	)
 
 
 def test_schema_description_mentions_current_top_level_command_count():
