@@ -245,3 +245,17 @@ def test_smoke_runner_dry_run_does_not_execute_commands():
 	assert calls == []
 	assert results["steps"][0]["status"] == "dry_run"
 	assert results["steps"][0]["detail"] == "command not executed"
+
+
+def test_smoke_docs_describe_env_controls_and_failure_classes():
+	content = (ROOT / "docs" / "smoke-testing.md").read_text(encoding="utf-8")
+
+	assert "BOSS_SMOKE_PLATFORM" in content
+	assert "BOSS_SMOKE_QUERY" in content
+	assert "BOSS_SMOKE_SECURITY_ID" in content
+	assert "BOSS_SMOKE_TIMEOUT" in content
+	assert "BOSS_SMOKE_DRY_RUN" in content
+	assert "contract_error" in content
+	assert "timeout" in content
+	assert "dry_run" in content
+	assert "不提交真实 Cookie" in content
