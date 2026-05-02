@@ -184,6 +184,139 @@ def test_smoke_runner_marks_ok_false_envelope_as_command_error():
 	assert step["recovery_action"] == "boss login"
 
 
+def test_smoke_runner_redacts_detail_security_id_from_reported_command():
+	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
+	assert spec is not None and spec.loader is not None
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+
+	def fake_run(command, cwd, capture_output, text, timeout, check):
+		return module.CommandResult(
+			returncode=0,
+			stdout='{"ok": true, "schema_version": "1.0", "command": "detail", "data": {}, "pagination": null, "error": null, "hints": null}',
+			stderr="",
+		)
+
+	runner = module.SmokeRunner(
+		steps=[
+			module.SmokeStep(
+				name="detail",
+				platform="zhipin",
+				purpose="privacy",
+				preconditions=["command:boss"],
+				failure_classification="command_error",
+				command=["boss", "detail", "real-security-id"],
+			),
+		],
+		run_command=fake_run,
+	)
+
+	step = runner.run()["steps"][0]
+	assert step["status"] == "pass"
+	assert step["command"] == ["boss", "detail", "<redacted>"]
+
+
+def test_smoke_runner_marks_exit_code_ok_mismatch_as_contract_error():
+	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
+	assert spec is not None and spec.loader is not None
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+
+	def fake_run(command, cwd, capture_output, text, timeout, check):
+		return module.CommandResult(
+			returncode=1,
+			stdout='{"ok": true, "schema_version": "1.0", "command": "status", "data": {}, "pagination": null, "error": null, "hints": null}',
+			stderr="",
+		)
+
+	runner = module.SmokeRunner(
+		steps=[
+			module.SmokeStep(
+				name="status",
+				platform="zhipin",
+				purpose="contract",
+				preconditions=["command:boss"],
+				failure_classification="env_error",
+				command=["boss", "status"],
+			),
+		],
+		run_command=fake_run,
+	)
+
+	step = runner.run()["steps"][0]
+	assert step["status"] == "contract_error"
+	assert step["ok"] is True
+	assert step["returncode"] == 1
+	assert step["detail"] == "stdout envelope ok did not match process exit code"
+
+
+def test_smoke_runner_marks_ok_false_exit_zero_as_contract_error():
+	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
+	assert spec is not None and spec.loader is not None
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+
+	def fake_run(command, cwd, capture_output, text, timeout, check):
+		return module.CommandResult(
+			returncode=0,
+			stdout='{"ok": false, "schema_version": "1.0", "command": "status", "data": null, "pagination": null, "error": {"code": "AUTH_REQUIRED", "message": "未登录", "recoverable": true, "recovery_action": "boss login"}, "hints": null}',
+			stderr="",
+		)
+
+	runner = module.SmokeRunner(
+		steps=[
+			module.SmokeStep(
+				name="status",
+				platform="zhipin",
+				purpose="contract",
+				preconditions=["command:boss"],
+				failure_classification="env_error",
+				command=["boss", "status"],
+			),
+		],
+		run_command=fake_run,
+	)
+
+	step = runner.run()["steps"][0]
+	assert step["status"] == "contract_error"
+	assert step["ok"] is False
+	assert step["returncode"] == 0
+	assert step["detail"] == "stdout envelope ok did not match process exit code"
+
+
+def test_smoke_runner_marks_missing_error_fields_as_contract_error():
+	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
+	assert spec is not None and spec.loader is not None
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+
+	def fake_run(command, cwd, capture_output, text, timeout, check):
+		return module.CommandResult(
+			returncode=1,
+			stdout='{"ok": false, "schema_version": "1.0", "command": "status", "data": null, "pagination": null, "error": {"message": "未登录"}, "hints": null}',
+			stderr="",
+		)
+
+	runner = module.SmokeRunner(
+		steps=[
+			module.SmokeStep(
+				name="status",
+				platform="zhipin",
+				purpose="contract",
+				preconditions=["command:boss"],
+				failure_classification="env_error",
+				command=["boss", "status"],
+			),
+		],
+		run_command=fake_run,
+	)
+
+	step = runner.run()["steps"][0]
+	assert step["status"] == "contract_error"
+	assert step["ok"] is False
+	assert step["detail"] == "stdout envelope error did not match the error shape"
+
+
 def test_smoke_runner_marks_timeout():
 	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
 	assert spec is not None and spec.loader is not None

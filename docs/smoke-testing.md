@@ -84,6 +84,7 @@ The script prints one JSON object:
 
 - 不提交真实 Cookie、token、security_id、联系人姓名、公司名称或原始 stdout 到仓库。
 - Use fresh local values for `BOSS_SMOKE_SECURITY_ID`; do not commit them into scripts or docs.
+- Smoke output redacts the `detail` command argument so live `security_id` values are not printed by the harness.
 - Public CI should run unit tests for the smoke harness, not live platform smoke.
 - Private/manual CI may run smoke only with an explicitly provisioned account and redacted logs.
 

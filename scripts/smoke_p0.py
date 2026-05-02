@@ -83,6 +83,27 @@ def parse_envelope(stdout: str) -> tuple[dict | None, str | None]:
 	return payload, None
 
 
+def validate_envelope_result(payload: dict, returncode: int) -> str | None:
+	ok = payload["ok"]
+	expected_returncode = 0 if ok else 1
+	if returncode != expected_returncode:
+		return "stdout envelope ok did not match process exit code"
+	if not ok:
+		error = payload.get("error")
+		required = {"code", "recoverable", "recovery_action"}
+		if not isinstance(error, dict) or not required.issubset(error):
+			return "stdout envelope error did not match the error shape"
+		if not isinstance(error.get("code"), str) or not isinstance(error.get("recoverable"), bool):
+			return "stdout envelope error did not match the error shape"
+	return None
+
+
+def reported_command(step: SmokeStep) -> list[str]:
+	if step.name == "detail" and step.command:
+		return [*step.command[:-1], "<redacted>"]
+	return step.command
+
+
 DEFAULT_STEPS = build_default_steps()
 
 
@@ -154,7 +175,11 @@ class SmokeRunner:
 							detail = contract_error
 						else:
 							ok = payload["ok"]
-							if ok:
+							result_error = validate_envelope_result(payload, returncode)
+							if result_error:
+								status = "contract_error"
+								detail = result_error
+							elif ok:
 								status = "pass"
 							else:
 								status = step.failure_classification
@@ -175,7 +200,7 @@ class SmokeRunner:
 					"platform": step.platform,
 					"preconditions": step.preconditions,
 					"failure_classification": step.failure_classification,
-					"command": step.command,
+					"command": reported_command(step),
 					"status": status,
 					"ok": ok,
 					"error_code": error_code,
