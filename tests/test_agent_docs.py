@@ -195,19 +195,17 @@ def test_pyproject_exposes_boss_mcp_script():
 
 
 def test_schema_main_and_modules_command_count_consistent():
-	"""防漂移：main.py 注册命令去掉 schema 自身后，应与 SCHEMA_DATA 完全一致。"""
-	import re
-
+	"""防漂移：Click 顶层命令去掉 schema 自身后，应与 SCHEMA_DATA 完全一致。"""
 	from boss_agent_cli.commands.schema import SCHEMA_DATA
+	from boss_agent_cli.main import cli
 
-	main_text = _read("src/boss_agent_cli/main.py")
-	registered = re.findall(r'cli\.add_command\([^,]+,\s*"([^"]+)"', main_text)
+	registered = list(cli.commands)
 	registered_set = set(registered) - {"schema"}
 
 	schema_set = set(SCHEMA_DATA["commands"].keys())
 
 	assert registered_set == schema_set, (
-		f"main.py 注册命令与 SCHEMA_DATA 不一致："
-		f"仅在 main: {registered_set - schema_set}，仅在 schema: {schema_set - registered_set}"
+		f"Click 顶层命令与 SCHEMA_DATA 不一致："
+		f"仅在 Click: {registered_set - schema_set}，仅在 schema: {schema_set - registered_set}"
 	)
-	assert len(registered) == len(set(registered)), "main.py 存在重复注册命令"
+	assert len(registered) == len(set(registered)), "Click 顶层命令存在重复注册"
