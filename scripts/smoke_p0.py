@@ -18,7 +18,12 @@ class SmokeStep:
 	command: list[str]
 
 
-def build_default_steps(platform: str = "zhipin") -> list[SmokeStep]:
+def build_default_steps(
+	platform: str = "zhipin",
+	*,
+	query: str = "golang",
+	security_id: str = "demo-security-id",
+) -> list[SmokeStep]:
 	platform_args = ["--platform", platform] if platform != "zhipin" else []
 	return [
 		SmokeStep(
@@ -43,7 +48,7 @@ def build_default_steps(platform: str = "zhipin") -> list[SmokeStep]:
 			purpose="验证最小职位发现路径可执行",
 			preconditions=["command:boss", "env:BOSS_SMOKE_QUERY"],
 			failure_classification="command_error",
-			command=["boss", *platform_args, "search", "golang"],
+			command=["boss", *platform_args, "search", query],
 		),
 		SmokeStep(
 			name="detail",
@@ -51,7 +56,7 @@ def build_default_steps(platform: str = "zhipin") -> list[SmokeStep]:
 			purpose="验证职位详情路径具备可测试入口",
 			preconditions=["command:boss", "env:BOSS_SMOKE_SECURITY_ID"],
 			failure_classification="command_error",
-			command=["boss", *platform_args, "detail", "demo-security-id"],
+			command=["boss", *platform_args, "detail", security_id],
 		),
 	]
 
@@ -100,9 +105,11 @@ class SmokeRunner:
 		return {"steps": results}
 
 
-def main():
+def main() -> None:
 	platform = os.environ.get("BOSS_SMOKE_PLATFORM", "zhipin").strip() or "zhipin"
-	runner = SmokeRunner(build_default_steps(platform))
+	query = os.environ.get("BOSS_SMOKE_QUERY", "golang").strip() or "golang"
+	security_id = os.environ.get("BOSS_SMOKE_SECURITY_ID", "demo-security-id").strip() or "demo-security-id"
+	runner = SmokeRunner(build_default_steps(platform, query=query, security_id=security_id))
 	print(json.dumps(runner.run(), ensure_ascii=False))
 
 

@@ -37,11 +37,45 @@ def test_smoke_script_can_build_zhilian_steps():
 	module = importlib.util.module_from_spec(spec)
 	spec.loader.exec_module(module)
 
-	steps = module.build_default_steps("zhilian")
+	steps = module.build_default_steps("zhilian", query="golang", security_id="demo-security-id")
 	assert [step.name for step in steps] == ["doctor", "status", "search", "detail"]
 	assert all(step.platform == "zhilian" for step in steps)
 	assert steps[0].command == ["boss", "--platform", "zhilian", "doctor"]
 	assert steps[1].command == ["boss", "--platform", "zhilian", "status"]
+
+
+def test_smoke_steps_use_configured_query_and_security_id():
+	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
+	assert spec is not None and spec.loader is not None
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+
+	steps = module.build_default_steps(
+		"zhipin",
+		query="python",
+		security_id="real-security-id",
+	)
+
+	commands = {step.name: step.command for step in steps}
+	assert commands["search"] == ["boss", "search", "python"]
+	assert commands["detail"] == ["boss", "detail", "real-security-id"]
+
+
+def test_smoke_steps_use_configured_zhilian_query_and_security_id():
+	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
+	assert spec is not None and spec.loader is not None
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+
+	steps = module.build_default_steps(
+		"zhilian",
+		query="java",
+		security_id="zhilian-security-id",
+	)
+
+	commands = {step.name: step.command for step in steps}
+	assert commands["search"] == ["boss", "--platform", "zhilian", "search", "java"]
+	assert commands["detail"] == ["boss", "--platform", "zhilian", "detail", "zhilian-security-id"]
 
 
 def test_smoke_runner_distinguishes_step_failure_types():
