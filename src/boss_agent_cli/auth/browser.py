@@ -98,44 +98,45 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 	page = ctx.new_page()
 
 	try:
-		page.goto(
-			login_page_url,
-			wait_until="commit", timeout=_NAV_TIMEOUT_MS,
-		)
-	except Exception:
-		pass
+		try:
+			page.goto(
+				login_page_url,
+				wait_until="commit", timeout=_NAV_TIMEOUT_MS,
+			)
+		except Exception:
+			pass
 
-	print(f"[boss] 请在 Chrome 中扫码登录，等待中...（超时 {timeout}s）", file=sys.stderr)
+		print(f"[boss] 请在 Chrome 中扫码登录，等待中...（超时 {timeout}s）", file=sys.stderr)
 
-	for i in range(timeout):
-		time.sleep(1)
-		cookies = ctx.cookies()
-		success = [c for c in cookies if c["name"] == success_cookie and cookie_domain in c.get("domain", "")]
-		if success:
-			print("[boss] 检测到登录成功！", file=sys.stderr)
-			break
-		if i > 0 and i % 15 == 0:
-			print(f"[boss] 等待中... {i}s", file=sys.stderr)
-	else:
-		page.close()
-		pw.stop()
-		raise TimeoutError(f"CDP 扫码登录超时（{timeout}s）")
+		for i in range(timeout):
+			time.sleep(1)
+			cookies = ctx.cookies()
+			success = [c for c in cookies if c["name"] == success_cookie and cookie_domain in c.get("domain", "")]
+			if success:
+				print("[boss] 检测到登录成功！", file=sys.stderr)
+				break
+			if i > 0 and i % 15 == 0:
+				print(f"[boss] 等待中... {i}s", file=sys.stderr)
+		else:
+			raise TimeoutError(f"CDP 扫码登录超时（{timeout}s）")
 
-	try:
-		page.goto(home_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
-	except Exception:
-		pass
-	all_cookies = {c["name"]: c["value"] for c in ctx.cookies() if cookie_domain in c.get("domain", "")}
-	ua = page.evaluate("navigator.userAgent")
-	x_zp_client_id = _extract_zhilian_client_id(page) if platform == "zhilian" else ""
+		try:
+			page.goto(home_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+		except Exception:
+			pass
+		all_cookies = {c["name"]: c["value"] for c in ctx.cookies() if cookie_domain in c.get("domain", "")}
+		ua = page.evaluate("navigator.userAgent")
+		x_zp_client_id = _extract_zhilian_client_id(page) if platform == "zhilian" else ""
 
-	page.close()
-	pw.stop()
-
-	result: dict[str, Any] = {"cookies": all_cookies, "stoken": "", "user_agent": ua}
-	if x_zp_client_id:
-		result["x_zp_client_id"] = x_zp_client_id
-	return result
+		result: dict[str, Any] = {"cookies": all_cookies, "stoken": "", "user_agent": ua}
+		if x_zp_client_id:
+			result["x_zp_client_id"] = x_zp_client_id
+		return result
+	finally:
+		try:
+			page.close()
+		finally:
+			pw.stop()
 
 
 def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[str, Any]:

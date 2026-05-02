@@ -174,9 +174,9 @@ class AuthManager:
 						current["cookies"],
 						current.get("user_agent", ""),
 					)
-				current["stoken"] = new_stoken
-				self._store.save(current)
-				self._token = current
+				refreshed = {**current, "stoken": new_stoken}
+				self._store.save(refreshed)
+				self._token = refreshed
 			except Exception as e:
 				raise TokenRefreshFailed(f"Token 刷新失败: {e}") from e
 

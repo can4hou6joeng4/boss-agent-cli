@@ -101,9 +101,12 @@ class TokenStore:
 		encrypted = self._session_path.read_bytes()
 		try:
 			plaintext = fernet.decrypt(encrypted)
-		except (InvalidToken, ValueError):
+			decoded = json.loads(plaintext)
+		except (InvalidToken, ValueError, TypeError, json.JSONDecodeError):
 			return None
-		return cast("dict[str, Any]", json.loads(plaintext))
+		if not isinstance(decoded, dict):
+			return None
+		return cast("dict[str, Any]", decoded)
 
 	def clear(self) -> None:
 		"""删除 session.enc 文件（保留 salt 供下次登录复用）"""

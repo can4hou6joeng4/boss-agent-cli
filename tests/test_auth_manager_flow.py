@@ -223,6 +223,35 @@ def test_force_refresh_prefers_cdp_and_persists_new_stoken(
 
 
 @patch("boss_agent_cli.auth.manager.TokenStore")
+@patch("boss_agent_cli.auth.manager.refresh_stoken")
+@patch("boss_agent_cli.auth.manager.refresh_stoken_via_cdp")
+@patch("boss_agent_cli.auth.manager.probe_cdp")
+def test_force_refresh_does_not_mutate_loaded_token_when_save_fails(
+	mock_probe_cdp,
+	mock_refresh_cdp,
+	mock_refresh_stoken,
+	mock_store_cls,
+	tmp_path,
+):
+	current = {"cookies": {"wt2": "cookie"}, "stoken": "old-token", "user_agent": "ua"}
+	store = _make_store(token=current)
+	store.save.side_effect = OSError("disk full")
+	mock_store_cls.return_value = store
+	mock_probe_cdp.return_value = False
+	mock_refresh_stoken.return_value = "new-token"
+
+	manager = AuthManager(tmp_path)
+
+	with pytest.raises(TokenRefreshFailed, match="Token 刷新失败"):
+		manager.force_refresh()
+
+	mock_refresh_cdp.assert_not_called()
+	mock_refresh_stoken.assert_called_once_with({"wt2": "cookie"}, "ua")
+	assert current["stoken"] == "old-token"
+	assert manager._token is None
+
+
+@patch("boss_agent_cli.auth.manager.TokenStore")
 @patch("boss_agent_cli.auth.manager.extract_cookies")
 def test_zhilian_force_refresh_prefers_browser_cookie_extract(mock_extract, mock_store_cls, tmp_path):
 	current = {"cookies": {"zp_token": "old"}, "user_agent": "ua"}

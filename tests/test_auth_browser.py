@@ -1,10 +1,13 @@
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from boss_agent_cli.auth.browser import (
 	HOME_URL,
 	LOGIN_PAGE_URL,
 	_NAV_TIMEOUT_MS,
 	_NETWORKIDLE_GRACE_MS,
+	login_via_cdp,
 	login_via_browser,
 	refresh_stoken,
 )
@@ -19,6 +22,55 @@ def _mock_playwright_context(mock_browser: MagicMock) -> MagicMock:
 	mock_context_manager.__enter__ = MagicMock(return_value=mock_playwright)
 	mock_context_manager.__exit__ = MagicMock(return_value=False)
 	return mock_context_manager
+
+
+def _mock_cdp_playwright(mock_context: MagicMock) -> tuple[MagicMock, MagicMock, MagicMock]:
+	mock_page = MagicMock()
+	mock_context.new_page.return_value = mock_page
+
+	mock_browser = MagicMock()
+	mock_browser.contexts = [mock_context]
+
+	mock_playwright = MagicMock()
+	mock_playwright.chromium.connect_over_cdp.return_value = mock_browser
+
+	mock_launcher = MagicMock()
+	mock_launcher.start.return_value = mock_playwright
+	return mock_launcher, mock_playwright, mock_page
+
+
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_login_via_cdp_stops_playwright_on_timeout(mock_sleep, mock_probe_cdp):
+	mock_context = MagicMock()
+	mock_context.cookies.return_value = []
+	mock_launcher, mock_playwright, mock_page = _mock_cdp_playwright(mock_context)
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
+		with pytest.raises(TimeoutError):
+			login_via_cdp(timeout=1)
+
+	mock_page.close.assert_called_once()
+	mock_playwright.stop.assert_called_once()
+
+
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_login_via_cdp_stops_playwright_when_user_agent_extraction_fails(mock_sleep, mock_probe_cdp):
+	mock_context = MagicMock()
+	mock_context.cookies.side_effect = [
+		[{"name": "wt2", "value": "token", "domain": ".zhipin.com"}],
+		[{"name": "wt2", "value": "token", "domain": ".zhipin.com"}],
+	]
+	mock_launcher, mock_playwright, mock_page = _mock_cdp_playwright(mock_context)
+	mock_page.evaluate.side_effect = RuntimeError("user agent unavailable")
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
+		with pytest.raises(RuntimeError, match="user agent unavailable"):
+			login_via_cdp(timeout=1)
+
+	mock_page.close.assert_called_once()
+	mock_playwright.stop.assert_called_once()
 
 
 @patch("boss_agent_cli.auth.browser._extract_stoken", return_value="fresh-stoken")

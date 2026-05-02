@@ -31,6 +31,36 @@ def test_schema_command():
 	assert "stdout" in parsed["data"]["conventions"]
 
 
+@patch("boss_agent_cli.commands.login.AuthManager")
+def test_login_cdp_connection_error_returns_json_envelope(mock_auth_cls):
+	mock_auth_cls.return_value.login.side_effect = ConnectionError("CDP 不可用")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["login", "--cdp"])
+	assert result.exit_code == 1
+	assert result.stderr == ""
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["command"] == "login"
+	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "boss-chrome 启动 Chrome 后重试"
+
+
+@patch("boss_agent_cli.commands.login.AuthManager")
+def test_login_timeout_returns_platform_aware_recovery_action(mock_auth_cls):
+	mock_auth_cls.return_value.login.side_effect = TimeoutError("扫码登录超时")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--platform", "zhilian", "login"])
+	assert result.exit_code == 1
+	assert result.stderr == ""
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["command"] == "login"
+	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "boss --platform zhilian login"
+
+
 @patch("boss_agent_cli.commands.status.AuthManager")
 def test_status_not_logged_in(mock_auth_cls):
 	mock_auth_cls.return_value.check_status.return_value = None

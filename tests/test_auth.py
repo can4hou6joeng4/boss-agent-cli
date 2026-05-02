@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+from cryptography.fernet import Fernet
+
 from boss_agent_cli.auth.token_store import TokenStore
 
 
@@ -30,6 +32,20 @@ def test_overwrite(tmp_path):
 def test_load_invalid_token_returns_none(tmp_path):
 	store = TokenStore(tmp_path)
 	(store._auth_dir / "session.enc").write_bytes(b"not-a-valid-fernet-token")
+	assert store.load() is None
+
+
+def test_load_malformed_decrypted_json_returns_none(tmp_path):
+	store = TokenStore(tmp_path)
+	fernet = Fernet(store._derive_key())
+	(store._auth_dir / "session.enc").write_bytes(fernet.encrypt(b"{not-json"))
+	assert store.load() is None
+
+
+def test_load_decrypted_non_dict_returns_none(tmp_path):
+	store = TokenStore(tmp_path)
+	fernet = Fernet(store._derive_key())
+	(store._auth_dir / "session.enc").write_bytes(fernet.encrypt(b'["not", "a", "dict"]'))
 	assert store.load() is None
 
 
