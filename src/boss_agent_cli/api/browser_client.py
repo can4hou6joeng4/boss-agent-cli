@@ -178,7 +178,10 @@ class BrowserSession:
 		import httpx
 		try:
 			resp = httpx.get(f"{http_url}/json/version", timeout=_CDP_PROBE_TIMEOUT)
-			return cast("str | None", resp.json().get("webSocketDebuggerUrl"))
+			payload = resp.json()
+			if not isinstance(payload, dict):
+				return None
+			return cast("str | None", payload.get("webSocketDebuggerUrl"))
 		except (httpx.HTTPError, ValueError, KeyError):
 			return None
 
@@ -322,9 +325,15 @@ class BrowserSession:
 		else:
 			# Headless 模式：关闭整个浏览器实例
 			if self._browser:
-				self._browser.close()
+				try:
+					self._browser.close()
+				except Exception:
+					pass
 		if self._pw:
-			self._pw.stop()
+			try:
+				self._pw.stop()
+			except Exception:
+				pass
 		self._started = False
 
 	def __enter__(self) -> "BrowserSession":

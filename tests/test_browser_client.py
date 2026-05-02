@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 import httpx
 
 from boss_agent_cli.api.browser_client import (
+	CDP_DEFAULT_URL,
 	HOME_URL,
 	_HEADLESS_NETWORKIDLE_GRACE_MS,
 	_NAV_TIMEOUT_MS,
@@ -29,6 +30,39 @@ def test_fetch_ws_url_success():
 def test_fetch_ws_url_failure():
 	with patch("httpx.get", side_effect=httpx.ConnectError("connection refused")):
 		ws = BrowserSession._fetch_ws_url("http://127.0.0.1:9222")
+		assert ws is None
+
+
+def test_fetch_ws_url_invalid_json_returns_none():
+	with patch("httpx.get") as mock_get:
+		mock_resp = MagicMock()
+		mock_resp.json.side_effect = ValueError("invalid json")
+		mock_get.return_value = mock_resp
+
+		ws = BrowserSession._fetch_ws_url("http://127.0.0.1:9222")
+
+		assert ws is None
+
+
+def test_fetch_ws_url_missing_websocket_debugger_url_returns_none():
+	with patch("httpx.get") as mock_get:
+		mock_resp = MagicMock()
+		mock_resp.json.return_value = {"Browser": "Chrome"}
+		mock_get.return_value = mock_resp
+
+		ws = BrowserSession._fetch_ws_url("http://127.0.0.1:9222")
+
+		assert ws is None
+
+
+def test_fetch_ws_url_non_object_json_returns_none():
+	with patch("httpx.get") as mock_get:
+		mock_resp = MagicMock()
+		mock_resp.json.return_value = ["not", "a", "devtools", "object"]
+		mock_get.return_value = mock_resp
+
+		ws = BrowserSession._fetch_ws_url("http://127.0.0.1:9222")
+
 		assert ws is None
 
 
@@ -93,6 +127,44 @@ def test_close_headless_mode_closes_browser():
 	session.close()
 
 	session._browser.close.assert_called_once()
+
+
+def test_close_is_idempotent_when_cdp_resources_are_partial_and_raise():
+	session = BrowserSession(cookies={}, user_agent="")
+	session._is_cdp = True
+	session._own_context = True
+	session._started = True
+	session._page = MagicMock()
+	session._context = MagicMock()
+	session._pw = MagicMock()
+	session._page.close.side_effect = RuntimeError("page already closed")
+	session._context.close.side_effect = RuntimeError("context already closed")
+	session._pw.stop.side_effect = RuntimeError("playwright already stopped")
+
+	session.close()
+	session.close()
+
+	assert session._started is False
+	assert session._page.close.call_count == 2
+	assert session._context.close.call_count == 2
+	assert session._pw.stop.call_count == 2
+
+
+def test_close_is_idempotent_when_headless_resources_are_partial_and_raise():
+	session = BrowserSession(cookies={}, user_agent="")
+	session._is_cdp = False
+	session._started = True
+	session._browser = MagicMock()
+	session._pw = MagicMock()
+	session._browser.close.side_effect = RuntimeError("browser already closed")
+	session._pw.stop.side_effect = RuntimeError("playwright already stopped")
+
+	session.close()
+	session.close()
+
+	assert session._started is False
+	assert session._browser.close.call_count == 2
+	assert session._pw.stop.call_count == 2
 
 
 def test_try_connect_reuses_existing_context():
@@ -179,3 +251,84 @@ def test_start_headless_tolerates_networkidle_timeout():
 		"headless 首页未进入 networkidle" in call.args[0]
 		for call in logger.info.call_args_list
 	)
+
+
+def test_ensure_started_falls_back_to_patchright_when_bridge_and_cdp_fail():
+	session = BrowserSession(cookies={}, user_agent="")
+	mock_pw = MagicMock()
+	sentinel = {"headless_started": False}
+
+	def mark_headless_started():
+		sentinel["headless_started"] = True
+		session._started = True
+
+	with (
+		patch.object(session, "_try_bridge", return_value=False) as mock_try_bridge,
+		patch("boss_agent_cli.api.browser_client.sync_playwright") as mock_sync_playwright,
+		patch.object(session, "_try_cdp", return_value=False) as mock_try_cdp,
+		patch.object(session, "_start_headless", side_effect=mark_headless_started) as mock_start_headless,
+	):
+		mock_sync_playwright.return_value.start.return_value = mock_pw
+
+		session._ensure_started()
+
+	assert sentinel["headless_started"] is True
+	assert session._started is True
+	assert session._pw is mock_pw
+	mock_try_bridge.assert_called_once()
+	mock_sync_playwright.assert_called_once()
+	mock_try_cdp.assert_called_once()
+	mock_start_headless.assert_called_once()
+
+
+def test_try_cdp_attempts_http_ws_and_devtools_urls_before_falling_back():
+	session = BrowserSession(cookies={}, user_agent="", cdp_url="http://127.0.0.1:9333")
+
+	with (
+		patch.object(session, "_try_connect", return_value=False) as mock_try_connect,
+		patch.object(BrowserSession, "_fetch_ws_url", side_effect=[None, "ws://127.0.0.1:9222/devtools/browser/default"]) as mock_fetch_ws_url,
+		patch.object(BrowserSession, "_read_devtools_active_port", return_value="ws://127.0.0.1:9222/devtools/browser/file") as mock_read_port,
+	):
+		result = session._try_cdp()
+
+	assert result is False
+	mock_read_port.assert_called_once()
+	assert [call.args[0] for call in mock_try_connect.call_args_list] == [
+		"http://127.0.0.1:9333",
+		CDP_DEFAULT_URL,
+		"ws://127.0.0.1:9222/devtools/browser/default",
+		"ws://127.0.0.1:9222/devtools/browser/file",
+	]
+	assert [call.args[0] for call in mock_fetch_ws_url.call_args_list] == [
+		"http://127.0.0.1:9333",
+		CDP_DEFAULT_URL,
+	]
+
+
+def test_request_returns_browser_evaluation_json_and_marks_throttle():
+	session = BrowserSession(cookies={}, user_agent="")
+	session._started = True
+	session._page = MagicMock()
+	session._throttle = MagicMock()
+	expected = {"code": 0, "zpData": {"jobs": []}}
+	session._page.evaluate.return_value = expected
+
+	result = session.request(
+		"POST",
+		"https://www.zhipin.com/wapi/zpgeek/search/joblist.json",
+		params={"query": "python", "page": 1},
+		data={"city": "101020100"},
+	)
+
+	assert result == expected
+	session._throttle.wait.assert_called_once()
+	session._throttle.mark.assert_called_once()
+	evaluate_script, evaluate_args = session._page.evaluate.call_args.args
+	assert "fetch(fetchUrl, options)" in evaluate_script
+	assert evaluate_args == {
+		"method": "POST",
+		"url": "https://www.zhipin.com/wapi/zpgeek/search/joblist.json",
+		"params": {"query": "python", "page": 1},
+		"data": {"city": "101020100"},
+		"referer": "https://www.zhipin.com/web/geek/job",
+	}
