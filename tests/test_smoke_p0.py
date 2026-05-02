@@ -84,6 +84,13 @@ def test_smoke_runner_distinguishes_step_failure_types():
 	module = importlib.util.module_from_spec(spec)
 	spec.loader.exec_module(module)
 
+	def fake_run(command, cwd, capture_output, text, timeout, check):
+		return module.CommandResult(
+			returncode=0,
+			stdout='{"ok": true, "schema_version": "1.0", "command": "doctor", "data": {}, "pagination": null, "error": null, "hints": null}',
+			stderr="",
+		)
+
 	runner = module.SmokeRunner(
 		steps=[
 			module.SmokeStep(
@@ -102,10 +109,76 @@ def test_smoke_runner_distinguishes_step_failure_types():
 				failure_classification="env_error",
 				command=["echo", "skip"],
 			),
-		]
+		],
+		run_command=fake_run,
 	)
 
 	results = runner.run()
 	statuses = {item["name"]: item["status"] for item in results["steps"]}
 	assert statuses["ok"] == "pass"
 	assert statuses["missing"] == "env_error"
+
+
+def test_smoke_runner_marks_non_json_stdout_as_contract_error():
+	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
+	assert spec is not None and spec.loader is not None
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+
+	def fake_run(command, cwd, capture_output, text, timeout, check):
+		return module.CommandResult(returncode=0, stdout="not json", stderr="")
+
+	runner = module.SmokeRunner(
+		steps=[
+			module.SmokeStep(
+				name="schema",
+				platform="zhipin",
+				purpose="contract",
+				preconditions=["command:boss"],
+				failure_classification="command_error",
+				command=["boss", "schema"],
+			),
+		],
+		run_command=fake_run,
+	)
+
+	results = runner.run()
+	step = results["steps"][0]
+	assert step["status"] == "contract_error"
+	assert step["ok"] is None
+	assert "stdout was not a JSON envelope" in step["detail"]
+
+
+def test_smoke_runner_marks_ok_false_envelope_as_command_error():
+	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
+	assert spec is not None and spec.loader is not None
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+
+	def fake_run(command, cwd, capture_output, text, timeout, check):
+		return module.CommandResult(
+			returncode=1,
+			stdout='{"ok": false, "schema_version": "1.0", "command": "status", "data": null, "pagination": null, "error": {"code": "AUTH_REQUIRED", "message": "未登录", "recoverable": true, "recovery_action": "boss login"}, "hints": null}',
+			stderr="",
+		)
+
+	runner = module.SmokeRunner(
+		steps=[
+			module.SmokeStep(
+				name="status",
+				platform="zhipin",
+				purpose="auth",
+				preconditions=["command:boss"],
+				failure_classification="env_error",
+				command=["boss", "status"],
+			),
+		],
+		run_command=fake_run,
+	)
+
+	results = runner.run()
+	step = results["steps"][0]
+	assert step["status"] == "env_error"
+	assert step["ok"] is False
+	assert step["error_code"] == "AUTH_REQUIRED"
+	assert step["recovery_action"] == "boss login"

@@ -18,6 +18,13 @@ class SmokeStep:
 	command: list[str]
 
 
+@dataclass(frozen=True)
+class CommandResult:
+	returncode: int
+	stdout: str
+	stderr: str
+
+
 def build_default_steps(
 	platform: str = "zhipin",
 	*,
@@ -61,12 +68,44 @@ def build_default_steps(
 	]
 
 
+def parse_envelope(stdout: str) -> tuple[dict | None, str | None]:
+	try:
+		payload = json.loads(stdout.strip())
+	except json.JSONDecodeError:
+		return None, "stdout was not a JSON envelope"
+	required = {"ok", "schema_version", "command", "data", "pagination", "error", "hints"}
+	if not isinstance(payload, dict) or set(payload) != required:
+		return None, "stdout JSON did not match the envelope shape"
+	if payload.get("schema_version") != "1.0":
+		return None, "stdout envelope schema_version was not 1.0"
+	if not isinstance(payload.get("ok"), bool):
+		return None, "stdout envelope ok was not a boolean"
+	return payload, None
+
+
 DEFAULT_STEPS = build_default_steps()
 
 
 class SmokeRunner:
-	def __init__(self, steps: list[SmokeStep]):
+	def __init__(self, steps: list[SmokeStep], *, run_command=None, timeout_seconds: int = 30):
 		self.steps = steps
+		self._run_command = run_command or self._default_run_command
+		self._timeout_seconds = timeout_seconds
+
+	def _default_run_command(self, command, cwd, capture_output, text, timeout, check):
+		completed = subprocess.run(
+			command,
+			check=check,
+			cwd=cwd,
+			capture_output=capture_output,
+			text=text,
+			timeout=timeout,
+		)
+		return CommandResult(
+			returncode=completed.returncode,
+			stdout=completed.stdout,
+			stderr=completed.stderr,
+		)
 
 	def _check_preconditions(self, step: SmokeStep) -> str | None:
 		for item in step.preconditions:
@@ -80,26 +119,56 @@ class SmokeRunner:
 		results = []
 		for step in self.steps:
 			status = self._check_preconditions(step)
+			detail = ""
+			ok = None
+			error_code = None
+			recovery_action = None
+			returncode = None
 			if status is None:
 				try:
-					subprocess.run(
+					completed = self._run_command(
 						step.command,
-						check=True,
 						cwd=ROOT,
-						stdout=subprocess.DEVNULL,
-						stderr=subprocess.DEVNULL,
+						capture_output=True,
+						text=True,
+						timeout=self._timeout_seconds,
+						check=False,
 					)
-					status = "pass"
-				except Exception:
-					status = step.failure_classification
+					returncode = completed.returncode
+					payload, contract_error = parse_envelope(completed.stdout)
+					if contract_error:
+						status = "contract_error"
+						detail = contract_error
+					else:
+						ok = payload["ok"]
+						if ok:
+							status = "pass"
+						else:
+							status = step.failure_classification
+							error = payload.get("error") or {}
+							error_code = error.get("code")
+							recovery_action = error.get("recovery_action")
+							detail = error.get("message") or ""
+				except subprocess.TimeoutExpired:
+					status = "timeout"
+					detail = f"command exceeded {self._timeout_seconds}s"
+				except OSError as e:
+					status = "env_error"
+					detail = str(e)
 			results.append(
 				{
 					"name": step.name,
 					"purpose": step.purpose,
+					"platform": step.platform,
 					"preconditions": step.preconditions,
 					"failure_classification": step.failure_classification,
 					"command": step.command,
 					"status": status,
+					"ok": ok,
+					"error_code": error_code,
+					"recovery_action": recovery_action,
+					"returncode": returncode,
+					"detail": detail,
 				}
 			)
 		return {"steps": results}
