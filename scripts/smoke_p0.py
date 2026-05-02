@@ -126,17 +126,18 @@ class SmokeRunner:
 	def run(self) -> dict:
 		results = []
 		for step in self.steps:
-			status = self._check_preconditions(step)
+			status = None
 			detail = ""
 			ok = None
 			error_code = None
 			recovery_action = None
 			returncode = None
-			if status is None:
-				if self._dry_run:
-					status = "dry_run"
-					detail = "command not executed"
-				else:
+			if self._dry_run:
+				status = "dry_run"
+				detail = "command not executed"
+			else:
+				status = self._check_preconditions(step)
+				if status is None:
 					try:
 						completed = self._run_command(
 							step.command,

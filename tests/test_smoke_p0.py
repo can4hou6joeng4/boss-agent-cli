@@ -247,6 +247,40 @@ def test_smoke_runner_dry_run_does_not_execute_commands():
 	assert results["steps"][0]["detail"] == "command not executed"
 
 
+def test_smoke_runner_dry_run_bypasses_live_env_preconditions(monkeypatch):
+	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
+	assert spec is not None and spec.loader is not None
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+
+	monkeypatch.delenv("BOSS_SMOKE_QUERY", raising=False)
+	calls = []
+
+	def fake_run(command, cwd, capture_output, text, timeout, check):
+		calls.append(command)
+		return module.CommandResult(returncode=0, stdout="{}", stderr="")
+
+	runner = module.SmokeRunner(
+		steps=[
+			module.SmokeStep(
+				name="search",
+				platform="zhipin",
+				purpose="dry",
+				preconditions=["command:boss", "env:BOSS_SMOKE_QUERY"],
+				failure_classification="command_error",
+				command=["boss", "search", "golang"],
+			),
+		],
+		run_command=fake_run,
+		dry_run=True,
+	)
+
+	results = runner.run()
+	assert calls == []
+	assert results["steps"][0]["status"] == "dry_run"
+	assert results["steps"][0]["detail"] == "command not executed"
+
+
 def test_smoke_docs_describe_env_controls_and_failure_classes():
 	content = (ROOT / "docs" / "smoke-testing.md").read_text(encoding="utf-8")
 
