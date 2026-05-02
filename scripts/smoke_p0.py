@@ -87,10 +87,18 @@ DEFAULT_STEPS = build_default_steps()
 
 
 class SmokeRunner:
-	def __init__(self, steps: list[SmokeStep], *, run_command=None, timeout_seconds: int = 30):
+	def __init__(
+		self,
+		steps: list[SmokeStep],
+		*,
+		run_command=None,
+		timeout_seconds: int = 30,
+		dry_run: bool = False,
+	):
 		self.steps = steps
 		self._run_command = run_command or self._default_run_command
 		self._timeout_seconds = timeout_seconds
+		self._dry_run = dry_run
 
 	def _default_run_command(self, command, cwd, capture_output, text, timeout, check):
 		completed = subprocess.run(
@@ -125,36 +133,40 @@ class SmokeRunner:
 			recovery_action = None
 			returncode = None
 			if status is None:
-				try:
-					completed = self._run_command(
-						step.command,
-						cwd=ROOT,
-						capture_output=True,
-						text=True,
-						timeout=self._timeout_seconds,
-						check=False,
-					)
-					returncode = completed.returncode
-					payload, contract_error = parse_envelope(completed.stdout)
-					if contract_error:
-						status = "contract_error"
-						detail = contract_error
-					else:
-						ok = payload["ok"]
-						if ok:
-							status = "pass"
+				if self._dry_run:
+					status = "dry_run"
+					detail = "command not executed"
+				else:
+					try:
+						completed = self._run_command(
+							step.command,
+							cwd=ROOT,
+							capture_output=True,
+							text=True,
+							timeout=self._timeout_seconds,
+							check=False,
+						)
+						returncode = completed.returncode
+						payload, contract_error = parse_envelope(completed.stdout)
+						if contract_error:
+							status = "contract_error"
+							detail = contract_error
 						else:
-							status = step.failure_classification
-							error = payload.get("error") or {}
-							error_code = error.get("code")
-							recovery_action = error.get("recovery_action")
-							detail = error.get("message") or ""
-				except subprocess.TimeoutExpired:
-					status = "timeout"
-					detail = f"command exceeded {self._timeout_seconds}s"
-				except OSError as e:
-					status = "env_error"
-					detail = str(e)
+							ok = payload["ok"]
+							if ok:
+								status = "pass"
+							else:
+								status = step.failure_classification
+								error = payload.get("error") or {}
+								error_code = error.get("code")
+								recovery_action = error.get("recovery_action")
+								detail = error.get("message") or ""
+					except subprocess.TimeoutExpired:
+						status = "timeout"
+						detail = f"command exceeded {self._timeout_seconds}s"
+					except OSError as e:
+						status = "env_error"
+						detail = str(e)
 			results.append(
 				{
 					"name": step.name,
@@ -178,7 +190,13 @@ def main() -> None:
 	platform = os.environ.get("BOSS_SMOKE_PLATFORM", "zhipin").strip() or "zhipin"
 	query = os.environ.get("BOSS_SMOKE_QUERY", "golang").strip() or "golang"
 	security_id = os.environ.get("BOSS_SMOKE_SECURITY_ID", "demo-security-id").strip() or "demo-security-id"
-	runner = SmokeRunner(build_default_steps(platform, query=query, security_id=security_id))
+	timeout_seconds = int(os.environ.get("BOSS_SMOKE_TIMEOUT", "30"))
+	dry_run = os.environ.get("BOSS_SMOKE_DRY_RUN", "").strip() in {"1", "true", "yes"}
+	runner = SmokeRunner(
+		build_default_steps(platform, query=query, security_id=security_id),
+		timeout_seconds=timeout_seconds,
+		dry_run=dry_run,
+	)
 	print(json.dumps(runner.run(), ensure_ascii=False))
 
 

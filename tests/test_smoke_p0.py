@@ -182,3 +182,66 @@ def test_smoke_runner_marks_ok_false_envelope_as_command_error():
 	assert step["ok"] is False
 	assert step["error_code"] == "AUTH_REQUIRED"
 	assert step["recovery_action"] == "boss login"
+
+
+def test_smoke_runner_marks_timeout():
+	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
+	assert spec is not None and spec.loader is not None
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+
+	def fake_timeout(command, cwd, capture_output, text, timeout, check):
+		raise module.subprocess.TimeoutExpired(command, timeout)
+
+	runner = module.SmokeRunner(
+		steps=[
+			module.SmokeStep(
+				name="search",
+				platform="zhipin",
+				purpose="timeout",
+				preconditions=["command:boss"],
+				failure_classification="command_error",
+				command=["boss", "search", "golang"],
+			),
+		],
+		run_command=fake_timeout,
+		timeout_seconds=7,
+	)
+
+	results = runner.run()
+	step = results["steps"][0]
+	assert step["status"] == "timeout"
+	assert step["detail"] == "command exceeded 7s"
+
+
+def test_smoke_runner_dry_run_does_not_execute_commands():
+	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
+	assert spec is not None and spec.loader is not None
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+
+	calls = []
+
+	def fake_run(command, cwd, capture_output, text, timeout, check):
+		calls.append(command)
+		return module.CommandResult(returncode=0, stdout="{}", stderr="")
+
+	runner = module.SmokeRunner(
+		steps=[
+			module.SmokeStep(
+				name="doctor",
+				platform="zhipin",
+				purpose="dry",
+				preconditions=["command:boss"],
+				failure_classification="env_error",
+				command=["boss", "doctor"],
+			),
+		],
+		run_command=fake_run,
+		dry_run=True,
+	)
+
+	results = runner.run()
+	assert calls == []
+	assert results["steps"][0]["status"] == "dry_run"
+	assert results["steps"][0]["detail"] == "command not executed"
