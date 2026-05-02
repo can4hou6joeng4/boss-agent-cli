@@ -61,7 +61,14 @@ class TestPlatformGlobalOption:
 		from boss_agent_cli.main import cli
 
 		result = runner.invoke(cli, ["--platform", "nonexistent", "schema"])
-		assert result.exit_code != 0
+		assert result.exit_code == 1
+		payload = json.loads(result.output)
+		assert payload["ok"] is False
+		assert payload["command"] == "boss"
+		assert payload["error"]["code"] == "INVALID_PARAM"
+		assert payload["error"]["recoverable"] is False
+		assert payload["error"]["recovery_action"] == "修正参数"
+		assert result.stderr == ""
 
 	def test_schema_exposes_platform_option_in_global(self, runner: CliRunner) -> None:
 		from boss_agent_cli.main import cli

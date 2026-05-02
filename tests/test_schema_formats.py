@@ -68,6 +68,19 @@ def test_openai_and_anthropic_share_parameters_schema():
 	assert oai_search == anth_search
 
 
+def test_tool_formats_keep_search_welfare_parameter():
+	"""OpenAI / Anthropic tool schema 都必须暴露 search.welfare 参数。"""
+	oai = _format_openai_tools(SCHEMA_DATA)
+	anth = _format_anthropic_tools(SCHEMA_DATA)
+
+	oai_search = next(t["function"]["parameters"] for t in oai if t["function"]["name"] == "boss_search")
+	anth_search = next(t["input_schema"] for t in anth if t["name"] == "boss_search")
+	assert "welfare" in oai_search["properties"]
+	assert "福利筛选" in oai_search["properties"]["welfare"]["description"]
+	assert "welfare" in anth_search["properties"]
+	assert "福利筛选" in anth_search["properties"]["welfare"]["description"]
+
+
 def test_command_to_json_schema_required_args():
 	"""required=True 的参数应出现在 required 数组中。"""
 	cmd_spec = {
@@ -110,10 +123,17 @@ def test_command_name_dash_to_underscore():
 
 
 def test_invalid_format_raises():
-	"""非法 --format 应被 Click 拦截。"""
+	"""非法 --format 应转换为标准 JSON 错误信封。"""
 	runner = CliRunner()
 	result = runner.invoke(cli, ["schema", "--format", "xml"])
-	assert result.exit_code != 0
+	assert result.exit_code == 1
+	payload = json.loads(result.output)
+	assert payload["ok"] is False
+	assert payload["command"] == "schema"
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert payload["error"]["recoverable"] is False
+	assert payload["error"]["recovery_action"] == "修正参数"
+	assert result.stderr == ""
 
 
 def test_openai_tools_output_ready_for_openai_sdk():

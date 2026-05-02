@@ -43,9 +43,9 @@ def test_schema_output_is_json_envelope():
 
 
 def test_schema_commands_match_registered():
-	"""schema 中声明的命令集合应等于 main.py 中注册的所有命令（排除 schema 自身）。"""
+	"""schema 中声明的命令集合应等于 main.py 中注册的所有顶层命令。"""
 	# 从 CLI group 获取已注册命令名
-	registered = set(cli.commands.keys()) - {"schema"}
+	registered = set(cli.commands.keys())
 
 	# 从 schema 获取声明命令名
 	schema_commands = set(SCHEMA_DATA["commands"].keys())
@@ -141,3 +141,23 @@ def test_schema_error_codes_have_recoverable_field():
 	assert not missing, (
 		f"以下错误码缺少 recoverable 字段: {missing}"
 	)
+
+
+def test_schema_error_codes_have_recovery_action_field():
+	"""schema 中每个错误码都应显式声明 recovery_action 字段。"""
+	error_codes = SCHEMA_DATA["error_codes"]
+	missing = []
+	for code, spec in error_codes.items():
+		if "recovery_action" not in spec:
+			missing.append(code)
+
+	assert not missing, (
+		f"以下错误码缺少 recovery_action 字段: {missing}"
+	)
+
+
+def test_search_schema_keeps_welfare_option():
+	"""--welfare 是核心差异化能力，必须保留在 search schema 中。"""
+	welfare = SCHEMA_DATA["commands"]["search"]["options"]["--welfare"]
+	assert welfare["type"] == "string"
+	assert "福利筛选" in welfare["description"]

@@ -96,3 +96,12 @@ def test_welfare_filter_detail_fallback(mock_auth, mock_client_cls, mock_cache_c
 	assert len(parsed["data"]) == 1
 	# 确认调用了 job_card 查详情
 	mock_client.job_card.assert_called_once()
+
+
+def test_search_click_keeps_welfare_option():
+	"""--welfare 必须持续暴露在 search CLI help 中。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["search", "--help"])
+	assert result.exit_code == 0
+	assert "--welfare" in result.output
+	assert "福利筛选" in result.output

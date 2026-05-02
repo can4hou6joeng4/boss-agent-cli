@@ -104,4 +104,4 @@ Notes:
 - For CLI-first integrations, prefer `boss schema` for capability discovery and parameter validation; the schema exposes both `supported_platforms` and `supported_recruiter_platforms`.
 - Current platform coverage: `zhipin` supports both candidate and recruiter workflows; `zhilian` already supports candidate-side login plus read/write actions, while the recruiter side is still unavailable.
 - Current auth posture: `zhipin` keeps the four-tier fallback login chain; `zhilian` now supports the candidate-side browser login foundation (Cookie / CDP / browser fallback), while recruiter auth is not implemented yet.
-- Use `boss schema` as the source of truth: it currently exposes 33 top-level commands, with 7 first-level recruiter subcommands under `hr`, while `ai` and `resume` remain command-group entries.
+- Use `boss schema` as the source of truth: it currently exposes 34 top-level commands, with 7 first-level recruiter subcommands under `hr`, while `ai` and `resume` remain command-group entries.

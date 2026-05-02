@@ -1,4 +1,6 @@
 from pathlib import Path
+from collections.abc import Sequence
+from typing import Any
 
 import click
 
@@ -6,11 +8,45 @@ from boss_agent_cli import __version__
 from boss_agent_cli.commands.register import register_candidate_commands, register_recruiter_commands
 from boss_agent_cli.config import load_config
 from boss_agent_cli.hooks import create_hook_bus
-from boss_agent_cli.output import Logger
+from boss_agent_cli.output import emit_error, Logger
 from boss_agent_cli.platforms import list_platforms
 
 
-@click.group(context_settings={"allow_interspersed_args": False})
+class BossCliGroup(click.Group):
+	"""Click group that preserves the JSON envelope contract for usage errors."""
+
+	def main(
+		self,
+		args: Sequence[str] | None = None,
+		prog_name: str | None = None,
+		complete_var: str | None = None,
+		standalone_mode: bool = True,
+		**extra: Any,
+	) -> Any:
+		try:
+			return super().main(
+				args=args,
+				prog_name=prog_name,
+				complete_var=complete_var,
+				standalone_mode=False,
+				**extra,
+			)
+		except click.ClickException as exc:
+			if not standalone_mode:
+				raise
+			ctx = getattr(exc, "ctx", None)
+			command = getattr(ctx, "info_name", None) or self.name or "boss"
+			emit_error(
+				command,
+				code="INVALID_PARAM",
+				message=exc.format_message(),
+				recoverable=False,
+				recovery_action="修正参数",
+			)
+			return None
+
+
+@click.group(name="boss", cls=BossCliGroup, context_settings={"allow_interspersed_args": False})
 @click.version_option(version=__version__, prog_name="boss")
 @click.option("--data-dir", default="~/.boss-agent", help="数据存储目录")
 @click.option("--delay", default=None, help="请求间隔范围（秒），如 1.5-3.0")

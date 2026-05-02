@@ -179,7 +179,7 @@ def _format_anthropic_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 SCHEMA_DATA = {
 	"name": "boss-agent-cli",
-	"description": "BOSS直聘求职工具。33 个顶层命令覆盖搜索、筛选、打招呼、沟通、流水线、招聘者工作流与简历优化全流程。",
+	"description": "BOSS直聘求职工具。34 个顶层命令覆盖搜索、筛选、打招呼、沟通、流水线、招聘者工作流与简历优化全流程。",
 	"commands": {
 		"login": {
 			"description": "按当前平台登录（zhipin: Cookie 提取 → CDP → QR httpx → patchright；zhilian: Cookie 提取 → CDP → 浏览器登录）",
@@ -206,6 +206,18 @@ SCHEMA_DATA = {
 			"description": "诊断本地运行环境、依赖、登录条件和网络连通性",
 			"args": [],
 			"options": {},
+		},
+		"schema": {
+			"description": "返回工具完整能力描述的 JSON",
+			"args": [],
+			"options": {
+				"--format": {
+					"type": "string",
+					"default": "native",
+					"description": "输出格式",
+					"choices": ["native", "openai-tools", "anthropic-tools"],
+				},
+			},
 		},
 		"search": {
 			"description": "按关键词和筛选条件搜索职位列表",

@@ -104,4 +104,4 @@
 - 若以 CLI 直连为主，优先通过 `boss schema` 进行能力发现与参数校验；当前 schema 会同时暴露 `supported_platforms` 与 `supported_recruiter_platforms`。
 - 当前多平台状态：`zhipin` 已覆盖求职者与招聘者；`zhilian` 已接通候选者侧登录、只读与写操作链路，招聘者侧暂未接入。
 - 当前登录状态：`zhipin` 保留四级降级登录；`zhilian` 已接通候选者侧浏览器登录基础链路（Cookie / CDP / 浏览器兜底），但 recruiter 侧仍未接入。
-- 以 `boss schema` 为准：当前暴露 33 个顶层命令；其中 `hr` 下还有 7 个一级招聘者子命令，`ai` / `resume` 为命令组入口。
+- 以 `boss schema` 为准：当前暴露 34 个顶层命令；其中 `hr` 下还有 7 个一级招聘者子命令，`ai` / `resume` 为命令组入口。

@@ -319,7 +319,7 @@ except AuthRequired:
 
 | 命令 | 说明 |
 |------|------|
-| `boss schema` | 输出完整工具能力描述 JSON（33 个顶层命令 + hr 分组展开，Agent 首先调用） |
+| `boss schema` | 输出完整工具能力描述 JSON（34 个顶层命令 + hr 分组展开，Agent 首先调用） |
 | `boss login` | 四级降级登录 |
 | `boss logout` | 退出登录 |
 | `boss status` | 检查登录态 |

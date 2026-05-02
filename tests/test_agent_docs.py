@@ -69,7 +69,7 @@ def test_capability_matrix_exists_and_covers_core_capabilities():
 	assert "`boss digest`" in content
 	assert "`boss config`" in content
 	assert "`boss clean`" in content
-	assert "33 个顶层命令" in content
+	assert "34 个顶层命令" in content
 	assert "7 个一级招聘者子命令" in content
 
 
@@ -143,7 +143,7 @@ def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
 	assert "| Capability | CLI command | Login required | Transport |" in matrix
 	assert "`boss schema`" in matrix
 	assert "`boss hr candidates`" in matrix
-	assert "33 top-level commands" in matrix
+	assert "34 top-level commands" in matrix
 	assert "7 first-level recruiter subcommands" in matrix
 
 	mcp_readme = _read("mcp-server/README.en.md")
@@ -195,12 +195,12 @@ def test_pyproject_exposes_boss_mcp_script():
 
 
 def test_schema_main_and_modules_command_count_consistent():
-	"""防漂移：Click 顶层命令去掉 schema 自身后，应与 SCHEMA_DATA 完全一致。"""
+	"""防漂移：Click 顶层命令应与 SCHEMA_DATA 完全一致。"""
 	from boss_agent_cli.commands.schema import SCHEMA_DATA
 	from boss_agent_cli.main import cli
 
 	registered = list(cli.commands)
-	registered_set = set(registered) - {"schema"}
+	registered_set = set(registered)
 
 	schema_set = set(SCHEMA_DATA["commands"].keys())
 
