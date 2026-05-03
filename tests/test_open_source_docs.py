@@ -185,7 +185,16 @@ def test_docs_workflow_runs_open_source_doc_checks():
 		"uv python install 3.11",
 		"uv sync --all-extras",
 		"uv run pytest tests/test_agent_docs.py tests/test_open_source_docs.py -q",
-		"git diff --check",
+		(
+			"if [ \"${{ github.event_name }}\" = \"pull_request\" ]; then\n"
+			"  git fetch --no-tags --depth=1 origin \"${{ github.base_ref }}\"\n"
+			"  git diff --check \"origin/${{ github.base_ref }}...HEAD\"\n"
+			"elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then\n"
+			"  git diff --check HEAD^...HEAD\n"
+			"else\n"
+			"  git diff --check\n"
+			"fi\n"
+		),
 	]
 
 	assert "name: Docs" in raw_workflow
@@ -194,9 +203,9 @@ def test_docs_workflow_runs_open_source_doc_checks():
 	triggers = workflow["on"]
 	assert {"push", "pull_request", "workflow_dispatch"} <= set(triggers)
 	assert triggers["push"]["branches"] == ["master"]
+	assert set(expected_paths) <= set(triggers["push"]["paths"])
 	assert triggers["pull_request"]["branches"] == ["master"]
-	for trigger_name in ("push", "pull_request"):
-		assert set(expected_paths) <= set(triggers[trigger_name]["paths"])
+	assert "paths" not in triggers["pull_request"]
 
 	jobs = workflow["jobs"]
 	assert "docs" in jobs
