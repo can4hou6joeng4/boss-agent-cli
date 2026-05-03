@@ -2,6 +2,8 @@
 
 Thanks for your interest in `boss-agent-cli`! This guide is the English companion of [CONTRIBUTING.md](CONTRIBUTING.md) — both describe the same workflow, so pick whichever fits you.
 
+Before your first contribution, complete the local preflight and developer verification in [Getting Started](docs/getting-started.en.md).
+
 ## Development Environment
 
 ```bash

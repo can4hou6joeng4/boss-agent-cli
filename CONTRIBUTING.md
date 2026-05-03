@@ -2,6 +2,8 @@
 
 感谢你对 boss-agent-cli 的关注！English version: [CONTRIBUTING.en.md](CONTRIBUTING.en.md)
 
+首次贡献前请先完成 [快速上手](docs/getting-started.md) 中的本地自检与开发者验证。
+
 ## 开发环境
 
 ```bash
