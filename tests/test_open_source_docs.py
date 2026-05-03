@@ -1,11 +1,25 @@
 from pathlib import Path
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[1]
+ISSUE_FORM_PATHS = [
+	".github/ISSUE_TEMPLATE/bug_report.yml",
+	".github/ISSUE_TEMPLATE/feature_request.yml",
+	".github/ISSUE_TEMPLATE/documentation.yml",
+]
+SUPPORTED_ISSUE_FORM_TYPES = {"markdown", "input", "textarea", "dropdown", "checkboxes"}
 
 
 def read(path: str) -> str:
 	return (ROOT / path).read_text(encoding="utf-8")
+
+
+def load_yaml(path: str) -> dict:
+	content = yaml.safe_load(read(path))
+	assert isinstance(content, dict)
+	return content
 
 
 def test_getting_started_docs_exist_and_cover_happy_path():
@@ -96,6 +110,8 @@ def test_pull_request_template_requires_quality_and_risk_checks():
 	assert "docs/maintainer/release-checklist.md" in template
 	assert "JSON 信封" in template
 	assert "Token / 密码 / Cookie / security_id" in template
+	assert "commit message 格式: `type: 中文描述`" in template
+	assert "（或英文等价）" not in template
 
 
 def test_issue_templates_collect_contract_and_platform_context():
@@ -117,3 +133,32 @@ def test_issue_templates_collect_contract_and_platform_context():
 
 	assert "docs-parity" in docs
 	assert "README.en.md" in docs
+
+
+def test_issue_templates_are_valid_structured_forms():
+	for path in ISSUE_FORM_PATHS:
+		form = load_yaml(path)
+
+		assert {"name", "description", "title", "labels", "body"} <= set(form)
+
+		body = form["body"]
+		assert isinstance(body, list)
+		assert body
+
+		ids = []
+		for item in body:
+			assert isinstance(item, dict)
+			assert item.get("type") in SUPPORTED_ISSUE_FORM_TYPES
+
+			if item["type"] != "markdown":
+				assert item.get("id")
+				ids.append(item["id"])
+
+			if item["type"] in {"dropdown", "checkboxes"}:
+				attributes = item.get("attributes")
+				assert isinstance(attributes, dict)
+				options = attributes.get("options")
+				assert isinstance(options, list)
+				assert options
+
+		assert len(ids) == len(set(ids))
