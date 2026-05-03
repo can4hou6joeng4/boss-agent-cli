@@ -47,3 +47,36 @@ def test_security_and_readme_link_platform_risk_docs():
 	assert "docs/platform-risk.md" in read("README.md")
 	assert "docs/platform-risk.en.md" in read("README.en.md")
 	assert "docs/platform-risk.md" in read("SECURITY.md")
+
+
+def test_maintainer_docs_cover_open_source_governance():
+	branch = read("docs/maintainer/branch-protection.md")
+	release = read("docs/maintainer/release-checklist.md")
+	labels = read("docs/maintainer/labels.md")
+
+	assert "required status checks" in branch
+	assert "CI / test" in branch
+	assert "CI / lint" in branch
+	assert "CI / typecheck" in branch
+	assert "allow_force_pushes" in branch
+	assert "allow_deletions" in branch
+
+	assert "uv run pytest tests/ -q" in release
+	assert "uv run ruff check src/ tests/" in release
+	assert "uv run mypy src/boss_agent_cli" in release
+	assert "uv build" in release
+	assert "uv publish" in release
+	assert "schema" in release
+	assert "redact" in release.lower()
+
+	assert "good first issue" in labels
+	assert "platform-drift" in labels
+	assert "contract" in labels
+	assert "triage" in labels
+
+
+def test_contributing_links_maintainer_governance_docs():
+	assert "docs/maintainer/release-checklist.md" in read("CONTRIBUTING.md")
+	assert "docs/maintainer/labels.md" in read("CONTRIBUTING.md")
+	assert "docs/maintainer/release-checklist.md" in read("CONTRIBUTING.en.md")
+	assert "docs/maintainer/labels.md" in read("CONTRIBUTING.en.md")

@@ -31,6 +31,12 @@ uv run pre-commit install
 4. 提交并推送
 5. 创建 Pull Request
 
+## 维护者文档
+
+- [Release Checklist](docs/maintainer/release-checklist.md)
+- [Labels And Triage](docs/maintainer/labels.md)
+- [Branch Protection](docs/maintainer/branch-protection.md)
+
 ## 添加新命令
 
 1. 在 `src/boss_agent_cli/commands/` 下新建文件

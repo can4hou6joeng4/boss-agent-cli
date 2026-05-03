@@ -45,6 +45,12 @@ Python **≥ 3.10** is required. We use [`uv`](https://github.com/astral-sh/uv) 
 
 Maintainers will `squash merge`, so the squash title must follow the commit convention above.
 
+## Maintainer Docs
+
+- [Release Checklist](docs/maintainer/release-checklist.md)
+- [Labels And Triage](docs/maintainer/labels.md)
+- [Branch Protection](docs/maintainer/branch-protection.md)
+
 ## Adding a New Command
 
 1. Create a file under `src/boss_agent_cli/commands/`
