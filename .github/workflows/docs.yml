@@ -1,0 +1,59 @@
+name: Docs
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "README.md"
+      - "README.en.md"
+      - "CONTRIBUTING.md"
+      - "CONTRIBUTING.en.md"
+      - "SECURITY.md"
+      - "docs/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+      - "tests/test_agent_docs.py"
+      - "tests/test_open_source_docs.py"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "README.md"
+      - "README.en.md"
+      - "CONTRIBUTING.md"
+      - "CONTRIBUTING.en.md"
+      - "SECURITY.md"
+      - "docs/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+      - "tests/test_agent_docs.py"
+      - "tests/test_open_source_docs.py"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run docs checks
+        run: uv run pytest tests/test_agent_docs.py tests/test_open_source_docs.py -q
+
+      - name: Check whitespace
+        run: git diff --check

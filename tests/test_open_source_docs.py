@@ -162,3 +162,13 @@ def test_issue_templates_are_valid_structured_forms():
 				assert options
 
 		assert len(ids) == len(set(ids))
+
+
+def test_docs_workflow_runs_open_source_doc_checks():
+	workflow = read(".github/workflows/docs.yml")
+
+	assert "name: Docs" in workflow
+	assert "uv run pytest tests/test_agent_docs.py tests/test_open_source_docs.py -q" in workflow
+	assert "git diff --check" in workflow
+	assert "pull_request" in workflow
+	assert "master" in workflow
