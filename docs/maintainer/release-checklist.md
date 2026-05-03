@@ -47,7 +47,7 @@ python -m zipfile -l dist/*.whl | sed -n '1,80p'
 Create an annotated release tag only after CI is green:
 
 ```bash
-git tag vX.Y.Z
+git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin vX.Y.Z
 ```
 

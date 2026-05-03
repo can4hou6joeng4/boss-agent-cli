@@ -14,15 +14,18 @@ The default branch is `master`. Keep branch protection aligned with the quality 
 
 ## Required status checks
 
-Use stable GitHub Actions job names:
+Select the concrete check contexts emitted by `.github/workflows/ci.yml`:
 
-- `CI / test`
-- `CI / lint`
-- `CI / typecheck`
+- `test (3.10)`
+- `test (3.11)`
+- `test (3.12)`
+- `test (3.13)`
+- `lint`
+- `typecheck`
 
 The project may also require documentation checks when `.github/workflows/docs.yml` is enabled:
 
-- `Docs / docs`
+- `docs`
 
 ## Verification
 

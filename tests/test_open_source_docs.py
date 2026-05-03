@@ -55,9 +55,13 @@ def test_maintainer_docs_cover_open_source_governance():
 	labels = read("docs/maintainer/labels.md")
 
 	assert "required status checks" in branch
-	assert "CI / test" in branch
-	assert "CI / lint" in branch
-	assert "CI / typecheck" in branch
+	assert "test (3.10)" in branch
+	assert "test (3.11)" in branch
+	assert "test (3.12)" in branch
+	assert "test (3.13)" in branch
+	assert "lint" in branch
+	assert "typecheck" in branch
+	assert "docs" in branch
 	assert "allow_force_pushes" in branch
 	assert "allow_deletions" in branch
 
