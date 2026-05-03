@@ -236,6 +236,8 @@ boss doctor   # outputs JSON with 7 diagnostic checks
 <details>
 <summary>📖 Login issues</summary>
 
+For Cookie, CDP, patchright, real-account, request-rate, or platform-drift issues, read [Platform Risk Boundaries](docs/platform-risk.en.md) first.
+
 ### Cookie extraction fails
 
 ```bash

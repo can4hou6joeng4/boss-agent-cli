@@ -180,6 +180,8 @@ boss hr jobs list                     # 我发布的职位
 - `boss --platform zhilian` 目前已支持候选者侧 `search / detail / recommend / user_info / greet / apply`
 - `boss --platform zhilian hr ...` 仍不支持，CLI 会直接拒绝执行招聘者侧子命令
 
+涉及 Cookie、CDP、patchright、真实账号、请求频率或平台接口漂移的问题，请先阅读 [平台风险边界](docs/platform-risk.md)。
+
 <details>
 <summary>📖 CDP 启动示例</summary>
 

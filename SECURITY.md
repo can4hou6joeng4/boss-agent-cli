@@ -32,3 +32,5 @@
 - **浏览器自动化**：所有浏览器操作限定在 `zhipin.com` 域名
 - **本地数据**：缓存数据存储在 `~/.boss-agent/`，不上传任何数据到第三方服务
 - **CSV/HTML 导出**：已实施公式注入防护和 XSS 防护
+
+更多平台自动化、Cookie/CDP、真实账号和 smoke test 风险边界见 [docs/platform-risk.md](docs/platform-risk.md)。

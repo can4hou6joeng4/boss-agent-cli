@@ -27,3 +27,23 @@ def test_readme_and_contributing_link_getting_started_docs():
 	assert "docs/getting-started.en.md" in read("README.en.md")
 	assert "docs/getting-started.md" in read("CONTRIBUTING.md")
 	assert "docs/getting-started.en.md" in read("CONTRIBUTING.en.md")
+
+
+def test_platform_risk_docs_exist_and_cover_sensitive_boundaries():
+	zh = read("docs/platform-risk.md")
+	en = read("docs/platform-risk.en.md")
+
+	for content in (zh, en):
+		assert "Cookie" in content
+		assert "CDP" in content
+		assert "patchright" in content
+		assert "rate" in content.lower() or "频率" in content
+		assert "security_id" in content
+		assert "BOSS_SMOKE_DRY_RUN" in content
+		assert "redact" in content.lower() or "脱敏" in content
+
+
+def test_security_and_readme_link_platform_risk_docs():
+	assert "docs/platform-risk.md" in read("README.md")
+	assert "docs/platform-risk.en.md" in read("README.en.md")
+	assert "docs/platform-risk.md" in read("SECURITY.md")
