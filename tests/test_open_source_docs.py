@@ -165,10 +165,46 @@ def test_issue_templates_are_valid_structured_forms():
 
 
 def test_docs_workflow_runs_open_source_doc_checks():
-	workflow = read(".github/workflows/docs.yml")
+	raw_workflow = read(".github/workflows/docs.yml")
+	workflow = load_yaml(".github/workflows/docs.yml")
 
-	assert "name: Docs" in workflow
-	assert "uv run pytest tests/test_agent_docs.py tests/test_open_source_docs.py -q" in workflow
-	assert "git diff --check" in workflow
-	assert "pull_request" in workflow
-	assert "master" in workflow
+	expected_paths = [
+		"README.md",
+		"README.en.md",
+		"CONTRIBUTING.md",
+		"CONTRIBUTING.en.md",
+		"SECURITY.md",
+		"docs/**",
+		".github/ISSUE_TEMPLATE/**",
+		".github/PULL_REQUEST_TEMPLATE.md",
+		"tests/test_agent_docs.py",
+		"tests/test_open_source_docs.py",
+		".github/workflows/docs.yml",
+	]
+	expected_run_commands = [
+		"uv python install 3.11",
+		"uv sync --all-extras",
+		"uv run pytest tests/test_agent_docs.py tests/test_open_source_docs.py -q",
+		"git diff --check",
+	]
+
+	assert "name: Docs" in raw_workflow
+	assert workflow["name"] == "Docs"
+
+	triggers = workflow["on"]
+	assert {"push", "pull_request", "workflow_dispatch"} <= set(triggers)
+	assert triggers["push"]["branches"] == ["master"]
+	assert triggers["pull_request"]["branches"] == ["master"]
+	for trigger_name in ("push", "pull_request"):
+		assert set(expected_paths) <= set(triggers[trigger_name]["paths"])
+
+	jobs = workflow["jobs"]
+	assert "docs" in jobs
+	docs_job = jobs["docs"]
+	assert docs_job["runs-on"] == "ubuntu-latest"
+	run_commands = [
+		step["run"]
+		for step in docs_job["steps"]
+		if "run" in step
+	]
+	assert run_commands == expected_run_commands
