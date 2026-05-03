@@ -1,7 +1,7 @@
 name: 📚 Documentation / 文档改进
 description: 报告文档错误、过时内容或改进建议
 title: "[Docs] "
-labels: ["documentation", "triage"]
+labels: ["documentation", "triage", "docs-parity"]
 body:
   - type: textarea
     id: location
@@ -42,3 +42,12 @@ body:
         - 翻译（中英不一致）
     validations:
       required: true
+
+  - type: checkboxes
+    id: docs_parity
+    attributes:
+      label: 中英文同步 / Docs parity
+      options:
+        - label: 如果修改 README.md，也需要检查 README.en.md
+        - label: 如果修改中文 docs，也需要检查对应英文 docs
+        - label: 如确认无需同步，请在 Issue 中说明原因

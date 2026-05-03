@@ -84,3 +84,36 @@ def test_contributing_links_maintainer_governance_docs():
 	assert "docs/maintainer/labels.md" in read("CONTRIBUTING.md")
 	assert "docs/maintainer/release-checklist.md" in read("CONTRIBUTING.en.md")
 	assert "docs/maintainer/labels.md" in read("CONTRIBUTING.en.md")
+
+
+def test_pull_request_template_requires_quality_and_risk_checks():
+	template = read(".github/PULL_REQUEST_TEMPLATE.md")
+
+	assert "uv run pytest tests/ -q" in template
+	assert "uv run ruff check src/ tests/" in template
+	assert "uv run mypy src/boss_agent_cli" in template
+	assert "docs/platform-risk.md" in template
+	assert "docs/maintainer/release-checklist.md" in template
+	assert "JSON 信封" in template
+	assert "Token / 密码 / Cookie / security_id" in template
+
+
+def test_issue_templates_collect_contract_and_platform_context():
+	bug = read(".github/ISSUE_TEMPLATE/bug_report.yml")
+	feature = read(".github/ISSUE_TEMPLATE/feature_request.yml")
+	docs = read(".github/ISSUE_TEMPLATE/documentation.yml")
+
+	assert "platform" in bug
+	assert "role" in bug
+	assert "security_id" in bug
+	assert "平台漂移" in bug
+	assert "JSON 信封" in bug
+	assert "redacted" in bug or "脱敏" in bug
+
+	assert "platform" in feature
+	assert "role" in feature
+	assert "JSON 信封" in feature
+	assert "Agent" in feature
+
+	assert "docs-parity" in docs
+	assert "README.en.md" in docs

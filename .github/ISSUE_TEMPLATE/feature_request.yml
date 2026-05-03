@@ -55,6 +55,40 @@ body:
         boss stats --format html -o report.html
         # 生成自包含 HTML 漏斗报表
 
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 目标平台 / Target platform
+      options:
+        - zhipin
+        - zhilian
+        - all platforms
+        - not platform-specific
+    validations:
+      required: true
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: 目标角色 / Target role
+      options:
+        - candidate
+        - recruiter
+        - both
+        - not role-specific
+    validations:
+      required: true
+
+  - type: textarea
+    id: agent_contract
+    attributes:
+      label: Agent 契约影响
+      description: 描述期望的 JSON 信封字段、schema 暴露方式、错误码或 MCP/Skill 影响
+      placeholder: |
+        - 新命令会出现在 boss schema --format native
+        - stdout 仍只输出 JSON 信封
+        - 失败错误码为 NOT_SUPPORTED
+
   - type: textarea
     id: alternatives
     attributes:

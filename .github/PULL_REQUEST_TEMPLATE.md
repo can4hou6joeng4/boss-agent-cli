@@ -40,8 +40,11 @@ Closes #
 
 - [ ] `uv run pytest tests/ -q` 全部通过
 - [ ] `uv run ruff check src/ tests/` 无报错
+- [ ] `uv run mypy src/boss_agent_cli` 无报错
+- [ ] `uv run boss --help` 可加载
+- [ ] `uv run boss schema --format native` 返回合法 JSON 信封
 - [ ] 新增/修改的功能已有对应测试覆盖
-- [ ] 本地跑过涉及命令（如有可粘贴输出）
+- [ ] 本地跑过涉及命令（如有可粘贴已脱敏输出）
 
 ## 文档与契约 / Docs & Contracts
 
@@ -55,5 +58,7 @@ Closes #
 ## 安全与规范 / Safety & Convention
 
 - [ ] commit message 格式: `type: 中文描述`（或英文等价）
-- [ ] 无敏感信息（Token / 密码 / Cookie / 真实账号）
+- [ ] 无敏感信息（Token / 密码 / Cookie / security_id / 手机号 / 微信 / 真实账号）
+- [ ] 如涉及 Cookie、CDP、patchright、请求频率或真实账号，已阅读 `docs/platform-risk.md`
+- [ ] 如涉及发布流程，已阅读 `docs/maintainer/release-checklist.md`
 - [ ] 无新增外部 CDN / script 依赖（HTML 报表类特别注意）

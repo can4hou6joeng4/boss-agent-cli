@@ -79,6 +79,48 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 招聘平台 / Platform
+      options:
+        - zhipin
+        - zhilian
+        - unknown
+    validations:
+      required: true
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: 角色 / Role
+      options:
+        - candidate
+        - recruiter
+        - unknown
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: redaction
+    attributes:
+      label: 脱敏确认 / Redaction
+      options:
+        - label: 我已移除 Token / 密码 / Cookie / security_id / 手机号 / 微信 / 真实账号信息
+          required: true
+
+  - type: dropdown
+    id: platform_drift
+    attributes:
+      label: 是否疑似平台漂移 / Possible platform drift
+      description: 如果 mock/本地契约正常但真实平台命令失败，请选择“是”
+      options:
+        - 否
+        - 是
+        - 不确定
+    validations:
+      required: true
+
   - type: input
     id: os_version
     attributes:
