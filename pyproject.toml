@@ -65,6 +65,7 @@ boss-mcp = "boss_agent_cli.mcp_server:run"
 testpaths = ["tests"]
 pythonpath = ["src"]
 
+# Python files intentionally use tabs. Ruff's indent-width controls visual width.
 [tool.ruff]
 line-length = 120
 indent-width = 4

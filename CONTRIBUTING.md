@@ -18,10 +18,31 @@ uv run pre-commit install
 
 ## 编码规范
 
-- 缩进使用 **tab**
-- Python >= 3.10（使用 `X | Y` 联合类型）
-- commit message：`type: 中文描述`（feat / fix / refactor / docs / test / chore）
-- 类型检查：`uv run mypy src/boss_agent_cli`（CI 阻塞式门禁，新代码必须零 mypy 错误）
+- Python 源码缩进使用 **tab**。
+- `pyproject.toml` 中的 `indent-width = 4` 表示格式工具的视觉宽度，不表示改为空格缩进。
+- Python >= 3.10，使用 `X | Y` 联合类型。
+- 命令输出必须保持 JSON 信封契约：stdout 只输出 Agent 可读 JSON，stderr 输出日志和进度。
+- commit message：`type: 中文描述`（feat / fix / refactor / docs / test / chore / ci）。
+- 类型检查：`uv run mypy src/boss_agent_cli`，CI 阻塞式门禁，新代码必须零 mypy 错误。
+
+## 本地验证
+
+代码改动提交前尽量运行完整矩阵：
+
+```bash
+uv run pytest tests/ -q
+uv run ruff check src/ tests/
+uv run mypy src/boss_agent_cli
+uv run boss --help
+uv run boss schema --format native
+```
+
+文档改动至少运行：
+
+```bash
+uv run pytest tests/test_agent_docs.py tests/test_open_source_docs.py -q
+git diff --check
+```
 
 ## 提交流程
 

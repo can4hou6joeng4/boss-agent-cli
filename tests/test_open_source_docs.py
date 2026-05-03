@@ -208,3 +208,19 @@ def test_docs_workflow_runs_open_source_doc_checks():
 		if "run" in step
 	]
 	assert run_commands == expected_run_commands
+
+
+def test_contributing_clarifies_verification_and_tab_indentation():
+	zh = read("CONTRIBUTING.md")
+	en = read("CONTRIBUTING.en.md")
+	pyproject = read("pyproject.toml")
+
+	for content in (zh, en):
+		assert "tab" in content.lower()
+		assert "indent-width" in content
+		assert "uv run pytest tests/ -q" in content
+		assert "uv run ruff check src/ tests/" in content
+		assert "uv run mypy src/boss_agent_cli" in content
+		assert "uv run boss schema --format native" in content
+
+	assert "# Python files intentionally use tabs" in pyproject

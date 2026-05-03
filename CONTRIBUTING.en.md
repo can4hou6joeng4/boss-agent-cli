@@ -18,16 +18,37 @@ uv run pre-commit install
 
 Python **≥ 3.10** is required. We use [`uv`](https://github.com/astral-sh/uv) for dependency management — `uv sync --all-extras` installs runtime + dev deps in a local `.venv`.
 
-## Coding Conventions
+## Coding Standards
 
-- **Indentation:** tabs (not spaces) — enforced by `ruff format`
-- **Python version:** 3.10+, use `X | Y` union syntax (no `Optional[X]`)
-- **Type checking:** `uv run mypy src/boss_agent_cli` — enforced as a blocking CI gate. All new code must pass mypy.
-- **Commit messages:** `type: 中文描述` — the description is written in Chinese even if the code/comments are in English. Valid types: `feat / fix / refactor / docs / test / chore / perf / ci`
+- Python source indentation uses **tabs**.
+- `indent-width = 4` in `pyproject.toml` is the formatter display width. It does not mean Python files should switch to spaces.
+- Use Python >= 3.10 and `X | Y` union syntax.
+- Command output must preserve the JSON envelope contract: stdout is agent-readable JSON only, stderr is logs and progress.
+- Commit messages use the repository Chinese format `type: 中文描述`.
+- Type checking is blocking in CI. New code must pass `uv run mypy src/boss_agent_cli`.
   - ✅ `feat: 新增配置管理命令`
   - ❌ `feat: add config command`  (English description)
   - ❌ `feat: 新增 config 命令`  (mixed English/Chinese, forbidden)
   - Do NOT add `Co-authored-by` trailers or any AI-attribution lines
+
+## Local Verification
+
+Run the full matrix before submitting code changes:
+
+```bash
+uv run pytest tests/ -q
+uv run ruff check src/ tests/
+uv run mypy src/boss_agent_cli
+uv run boss --help
+uv run boss schema --format native
+```
+
+For documentation-only changes, run at least:
+
+```bash
+uv run pytest tests/test_agent_docs.py tests/test_open_source_docs.py -q
+git diff --check
+```
 
 ## Pull Request Workflow
 
