@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>boss-agent-cli Showcase</title>
+</head>
+<body>
+<div
+	id="boss-agent-cli-showcase"
+	data-composition-id="boss-agent-cli-showcase"
+	data-start="0"
+	data-duration="16"
+	data-track-index="0"
+	data-width="1920"
+	data-height="1080"
+>
+	<div class="backdrop" data-layout-ignore>
+		<div class="grid"></div>
+		<div class="glow glow-a"></div>
+		<div class="glow glow-b"></div>
+		<div class="ghost ghost-a">schema</div>
+		<div class="ghost ghost-b">json</div>
+	</div>
+
+	<section class="hf-scene scene-one is-visible" id="scene-one">
+		<div class="scene-content scene-content--center" data-layout-allow-overflow>
+			<p class="eyebrow s1-el">专为 AI Agent 设计</p>
+			<h1 class="hero-title s1-el">boss-agent-cli</h1>
+			<p class="hero-copy s1-el">把招聘平台工作流变成稳定、可编排、可验证的命令行协议。</p>
+			<div class="badge-row s1-el">
+				<span>Python >=3.10</span>
+				<span>JSON stdout</span>
+				<span>Schema first</span>
+				<span>MIT</span>
+			</div>
+		</div>
+	</section>
+
+	<section class="hf-scene scene-two" id="scene-two">
+		<div class="scene-content scene-content--split" data-layout-allow-overflow>
+			<div class="copy-block">
+				<p class="eyebrow s2-el">能力发现</p>
+				<h2 class="scene-title s2-el">Agent 先读 schema，再执行动作。</h2>
+				<p class="scene-copy s2-el">`boss schema` 是能力真源：命令、参数、角色、平台可用性一次返回，宿主不需要硬编码命令表。</p>
+			</div>
+			<div class="terminal-panel s2-el">
+				<div class="terminal-chrome">
+					<span></span><span></span><span></span>
+					<strong>agent-session</strong>
+				</div>
+				<div class="terminal-body">
+					<p><em>$</em> boss schema --format native</p>
+					<p class="dim">{</p>
+					<p><b>"ok"</b>: true,</p>
+					<p><b>"supported_platforms"</b>: ["zhipin", "zhilian"],</p>
+					<p><b>"commands"</b>: ["search", "detail", "greet", "hr"]</p>
+					<p class="dim">}</p>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section class="hf-scene scene-three" id="scene-three">
+		<div class="scene-content scene-content--workflow" data-layout-allow-overflow>
+			<div class="copy-block">
+				<p class="eyebrow s3-el">核心差异化</p>
+				<h2 class="scene-title s3-el">福利筛选是真过滤，不是关键词装饰。</h2>
+			</div>
+			<div class="search-card s3-el" data-layout-allow-overflow>
+				<div class="command-line">
+					<span class="prompt">$</span>
+					<span>boss search "Golang"</span>
+					<span class="flag">--city 广州</span>
+					<span class="flag">--welfare "双休,五险一金"</span>
+				</div>
+				<div class="flow">
+					<div class="flow-step flow-a">
+						<strong>搜索</strong>
+						<span>职位列表</span>
+					</div>
+					<div class="flow-arrow">→</div>
+					<div class="flow-step flow-b">
+						<strong>补抓详情</strong>
+						<span>福利字段</span>
+					</div>
+					<div class="flow-arrow">→</div>
+					<div class="flow-step flow-c">
+						<strong>AND 匹配</strong>
+						<span>精准结果</span>
+					</div>
+				</div>
+			</div>
+			<div class="result-strip s3-el">
+				<span class="ok">ok</span>
+				<span>15 个匹配职位</span>
+				<span>hints.next_actions: detail → greet → pipeline</span>
+			</div>
+		</div>
+	</section>
+
+	<section class="hf-scene scene-four" id="scene-four">
+		<div class="scene-content scene-content--json" data-layout-allow-overflow>
+			<div class="json-panel s4-el">
+				<pre>{
+  "ok": true,
+  "schema_version": "1.0",
+  "command": "search",
+  "data": [
+    {
+      "title": "Golang 高级工程师",
+      "salary": "25-50K",
+      "welfare_match": {
+        "双休": "tag",
+        "五险一金": "tag"
+      }
+    }
+  ],
+  "pagination": { "has_more": true },
+  "hints": { "next_actions": ["boss detail &lt;sid&gt;"] }
+}</pre>
+			</div>
+			<div class="contract-stack">
+				<p class="eyebrow s4-el">CLI 不变量</p>
+				<h2 class="scene-title s4-el">stdout 只给机器读。</h2>
+				<div class="contract-list">
+					<div class="contract-item s4-el"><span>01</span> JSON envelope only</div>
+					<div class="contract-item s4-el"><span>02</span> exit 0 means ok:true</div>
+					<div class="contract-item s4-el"><span>03</span> error includes recovery_action</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section class="hf-scene scene-five" id="scene-five">
+		<div class="scene-content scene-content--final" data-layout-allow-overflow>
+			<p class="eyebrow s5-el">开源项目质量</p>
+			<h2 class="final-title s5-el">从命令契约到贡献流程，都可验证。</h2>
+			<div class="quality-grid s5-el">
+				<div><strong>650+</strong><span>测试用例</span></div>
+				<div><strong>docs</strong><span>中英文文档</span></div>
+				<div><strong>CI</strong><span>lint · typecheck · tests</span></div>
+				<div><strong>schema</strong><span>能力自描述</span></div>
+			</div>
+			<p class="final-url s5-el">github.com/can4hou6joeng4/boss-agent-cli</p>
+		</div>
+	</section>
+
+	<div class="transition transition-a" data-layout-ignore></div>
+	<div class="transition transition-b" data-layout-ignore></div>
+	<div class="scanline" data-layout-ignore></div>
+
+	<style>
+		#boss-agent-cli-showcase {
+			position: relative;
+			width: 100%;
+			height: 100%;
+			overflow: hidden;
+			background: #0e0c09;
+			color: #f2ede4;
+			font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", -apple-system, BlinkMacSystemFont, sans-serif;
+		}
+
+		#boss-agent-cli-showcase * {
+			box-sizing: border-box;
+		}
+
+		.backdrop,
+		.hf-scene,
+		.transition,
+		.scanline {
+			position: absolute;
+			inset: 0;
+		}
+
+		.backdrop {
+			z-index: 0;
+			background:
+				radial-gradient(circle at 20% 10%, rgba(0, 139, 139, 0.22), rgba(0, 139, 139, 0) 32%),
+				radial-gradient(circle at 82% 70%, rgba(55, 118, 171, 0.18), rgba(55, 118, 171, 0) 34%),
+				#0e0c09;
+		}
+
+		.grid {
+			position: absolute;
+			inset: -80px;
+			opacity: 0.22;
+			background-image:
+				linear-gradient(rgba(242, 237, 228, 0.08) 1px, rgba(242, 237, 228, 0) 1px),
+				linear-gradient(90deg, rgba(242, 237, 228, 0.08) 1px, rgba(242, 237, 228, 0) 1px);
+			background-size: 72px 72px;
+		}
+
+		.glow {
+			position: absolute;
+			width: 520px;
+			height: 520px;
+			border-radius: 50%;
+			filter: blur(34px);
+			opacity: 0.28;
+		}
+
+		.glow-a {
+			left: 90px;
+			top: 90px;
+			background: rgba(0, 139, 139, 0.34);
+		}
+
+		.glow-b {
+			right: 120px;
+			bottom: 30px;
+			background: rgba(55, 118, 171, 0.28);
+		}
+
+		.ghost {
+			position: absolute;
+			font-family: Georgia, "Songti SC", serif;
+			font-size: 210px;
+			font-weight: 700;
+			color: rgba(242, 237, 228, 0.045);
+			letter-spacing: 0;
+			white-space: nowrap;
+		}
+
+		.ghost-a {
+			left: 80px;
+			bottom: 72px;
+		}
+
+		.ghost-b {
+			right: 72px;
+			top: 64px;
+		}
+
+		.hf-scene {
+			z-index: 2;
+			opacity: 0;
+			background: rgba(14, 12, 9, 0.01);
+		}
+
+		.hf-scene.is-visible {
+			opacity: 1;
+		}
+
+		.scene-content {
+			width: 100%;
+			height: 100%;
+			padding: 112px 136px;
+			display: flex;
+			box-sizing: border-box;
+			position: relative;
+			z-index: 3;
+		}
+
+		.scene-content--center {
+			align-items: center;
+			justify-content: center;
+			flex-direction: column;
+			text-align: center;
+			gap: 34px;
+		}
+
+		.scene-content--split,
+		.scene-content--json {
+			align-items: center;
+			justify-content: space-between;
+			gap: 80px;
+		}
+
+		.scene-content--workflow,
+		.scene-content--final {
+			flex-direction: column;
+			justify-content: center;
+			gap: 42px;
+		}
+
+		.scene-content--json {
+			padding-right: 116px;
+		}
+
+		.eyebrow {
+			margin: 0;
+			color: #47c772;
+			font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+			font-size: 24px;
+			font-weight: 600;
+			letter-spacing: 0;
+			text-transform: uppercase;
+		}
+
+		.hero-title {
+			margin: 0;
+			font-size: 142px;
+			line-height: 0.92;
+			font-weight: 900;
+			letter-spacing: 0;
+			color: #f2ede4;
+		}
+
+		.hero-copy,
+		.scene-copy {
+			margin: 0;
+			color: #c9bbad;
+			font-size: 36px;
+			font-weight: 350;
+			line-height: 1.42;
+			max-width: 860px;
+		}
+
+		.scene-title,
+		.final-title {
+			margin: 0;
+			color: #f2ede4;
+			font-size: 78px;
+			font-weight: 860;
+			line-height: 1.05;
+			letter-spacing: 0;
+			max-width: 760px;
+		}
+
+		.final-title {
+			max-width: 1180px;
+			font-size: 88px;
+		}
+
+		.badge-row {
+			display: flex;
+			gap: 18px;
+			flex-wrap: wrap;
+			justify-content: center;
+		}
+
+		.badge-row span,
+		.result-strip {
+			border: 1px solid rgba(242, 237, 228, 0.15);
+			background: rgba(23, 19, 15, 0.82);
+			border-radius: 8px;
+			padding: 16px 22px;
+			font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+			font-size: 22px;
+			color: #d8cfc5;
+		}
+
+		.copy-block {
+			display: flex;
+			flex-direction: column;
+			gap: 28px;
+			flex: 1 1 0;
+		}
+
+		.terminal-panel,
+		.search-card,
+		.json-panel {
+			border: 1px solid rgba(242, 237, 228, 0.14);
+			background: rgba(18, 16, 12, 0.9);
+			box-shadow: 0 30px 90px rgba(0, 0, 0, 0.34);
+			border-radius: 8px;
+			overflow: hidden;
+		}
+
+		.terminal-panel {
+			width: 840px;
+		}
+
+		.terminal-chrome {
+			height: 58px;
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			padding: 0 24px;
+			background: #090806;
+			border-bottom: 1px solid rgba(242, 237, 228, 0.1);
+		}
+
+		.terminal-chrome span {
+			width: 14px;
+			height: 14px;
+			border-radius: 50%;
+			background: #d99a31;
+		}
+
+		.terminal-chrome span:first-child {
+			background: #d85f4f;
+		}
+
+		.terminal-chrome span:nth-child(3) {
+			background: #47c772;
+		}
+
+		.terminal-chrome strong {
+			margin-left: auto;
+			color: #a7988b;
+			font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+			font-size: 18px;
+			font-weight: 500;
+		}
+
+		.terminal-body,
+		.json-panel pre {
+			margin: 0;
+			padding: 34px;
+			font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+			font-size: 26px;
+			line-height: 1.55;
+			color: #f2ede4;
+			font-variant-ligatures: none;
+		}
+
+		.terminal-body p {
+			margin: 0;
+		}
+
+		.terminal-body em,
+		.prompt {
+			color: #47c772;
+			font-style: normal;
+		}
+
+		.terminal-body b {
+			color: #008b8b;
+			font-weight: 700;
+		}
+
+		.dim {
+			color: #a7988b;
+		}
+
+		.search-card {
+			width: 100%;
+			padding: 38px;
+			display: flex;
+			flex-direction: column;
+			gap: 42px;
+		}
+
+		.command-line {
+			display: flex;
+			align-items: center;
+			flex-wrap: wrap;
+			gap: 18px;
+			font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+			font-size: 27px;
+			color: #f2ede4;
+		}
+
+		.flag {
+			color: #47c772;
+		}
+
+		.flow {
+			display: grid;
+			grid-template-columns: 1fr auto 1fr auto 1fr;
+			gap: 22px;
+			align-items: stretch;
+		}
+
+		.flow-step {
+			min-height: 210px;
+			padding: 32px;
+			border-radius: 8px;
+			background: rgba(0, 139, 139, 0.12);
+			border: 1px solid rgba(0, 139, 139, 0.32);
+			display: flex;
+			flex-direction: column;
+			justify-content: space-between;
+		}
+
+		.flow-step strong {
+			font-size: 44px;
+			color: #f2ede4;
+		}
+
+		.flow-step span {
+			font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+			color: #c9bbad;
+			font-size: 22px;
+		}
+
+		.flow-arrow {
+			align-self: center;
+			font-size: 54px;
+			color: #008b8b;
+		}
+
+		.result-strip {
+			display: flex;
+			align-items: center;
+			gap: 26px;
+			width: max-content;
+			max-width: 100%;
+		}
+
+		.ok {
+			color: #47c772;
+			font-weight: 700;
+		}
+
+		.json-panel {
+			width: 1000px;
+		}
+
+		.json-panel pre {
+			font-size: 24px;
+			white-space: pre-wrap;
+		}
+
+		.contract-stack {
+			width: 600px;
+			display: flex;
+			flex-direction: column;
+			gap: 30px;
+		}
+
+		.contract-list {
+			display: flex;
+			flex-direction: column;
+			gap: 18px;
+		}
+
+		.contract-item {
+			display: flex;
+			align-items: center;
+			gap: 20px;
+			padding: 22px 24px;
+			border-radius: 8px;
+			background: rgba(23, 19, 15, 0.86);
+			border: 1px solid rgba(242, 237, 228, 0.13);
+			color: #e6ded4;
+			font-size: 26px;
+		}
+
+		.contract-item span {
+			color: #008b8b;
+			font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+			font-size: 21px;
+		}
+
+		.quality-grid {
+			display: grid;
+			grid-template-columns: repeat(4, 1fr);
+			gap: 22px;
+			width: 100%;
+		}
+
+		.quality-grid div {
+			min-height: 230px;
+			border-radius: 8px;
+			border: 1px solid rgba(242, 237, 228, 0.13);
+			background: rgba(23, 19, 15, 0.84);
+			padding: 34px;
+			display: flex;
+			flex-direction: column;
+			justify-content: space-between;
+		}
+
+		.quality-grid strong {
+			color: #47c772;
+			font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+			font-size: 58px;
+			line-height: 1;
+			font-variant-numeric: tabular-nums;
+		}
+
+		.quality-grid span {
+			color: #c9bbad;
+			font-size: 26px;
+		}
+
+		.final-url {
+			margin: 0;
+			color: #008b8b;
+			font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+			font-size: 28px;
+		}
+
+		.transition {
+			z-index: 8;
+			top: 0;
+			bottom: 0;
+			width: 32vw;
+			left: 0;
+			pointer-events: none;
+			will-change: transform, opacity;
+		}
+
+		.transition-a {
+			background: linear-gradient(90deg, rgba(0, 139, 139, 0) 0%, rgba(0, 139, 139, 0.92) 18%, rgba(71, 199, 114, 0.9) 50%, rgba(0, 139, 139, 0.92) 82%, rgba(0, 139, 139, 0) 100%);
+			opacity: 0.9;
+			filter: saturate(1.05);
+		}
+
+		.transition-b {
+			z-index: 9;
+			width: 18vw;
+			background: linear-gradient(90deg, rgba(242, 237, 228, 0) 0%, rgba(242, 237, 228, 0.86) 50%, rgba(242, 237, 228, 0) 100%);
+			opacity: 0.16;
+			mix-blend-mode: screen;
+		}
+
+		.scanline {
+			z-index: 10;
+			pointer-events: none;
+			opacity: 0.12;
+			background-image: linear-gradient(rgba(242, 237, 228, 0.22) 1px, rgba(242, 237, 228, 0) 1px);
+			background-size: 100% 6px;
+			mix-blend-mode: screen;
+		}
+	</style>
+
+	<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+	<script>
+		window.__timelines = window.__timelines || {};
+
+		const tl = gsap.timeline({ paused: true });
+		const scenes = ["#scene-one", "#scene-two", "#scene-three", "#scene-four", "#scene-five"];
+		const switchScene = (fromScene, toScene, at) => {
+			const sweepIn = 0.34;
+			const sweepOut = 0.34;
+			const switchAt = at + 0.18;
+			const fadeAt = switchAt - 0.07;
+			const resetAt = switchAt + sweepOut + 0.08;
+
+			tl.set(toScene, { opacity: 0 }, at);
+			tl.to(".transition-a", { xPercent: 420, duration: sweepIn, ease: "power3.inOut", overwrite: "auto" }, at);
+			tl.to(".transition-b", { xPercent: 470, duration: sweepIn + 0.04, ease: "power2.inOut", overwrite: "auto" }, at + 0.03);
+			tl.to(fromScene, { opacity: 0, duration: 0.18, ease: "sine.inOut" }, fadeAt);
+			tl.to(toScene, { opacity: 1, duration: 0.18, ease: "sine.inOut" }, fadeAt);
+			tl.to(".transition-a", { xPercent: 850, duration: sweepOut, ease: "power3.inOut", overwrite: "auto" }, switchAt);
+			tl.to(".transition-b", { xPercent: 900, duration: sweepOut + 0.04, ease: "power2.inOut", overwrite: "auto" }, switchAt + 0.03);
+			tl.set(".transition-a", { xPercent: -190 }, resetAt);
+			tl.set(".transition-b", { xPercent: -210 }, resetAt);
+		};
+
+		tl.set(".transition-a", { xPercent: -190 }, 0);
+		tl.set(".transition-b", { xPercent: -210 }, 0);
+		tl.from(".grid", { opacity: 0, scale: 1.04, duration: 0.8, ease: "sine.out" }, 0.1);
+		tl.to(".grid", { x: 54, y: 36, duration: 16, ease: "none" }, 0);
+		tl.to(".glow-a", { scale: 1.08, x: 34, duration: 5, repeat: 3, yoyo: true, ease: "sine.inOut" }, 0);
+		tl.to(".glow-b", { scale: 0.94, y: -28, duration: 4, repeat: 3, yoyo: true, ease: "sine.inOut" }, 0.2);
+		tl.to(".ghost-a", { x: 42, duration: 16, ease: "none" }, 0);
+		tl.to(".ghost-b", { x: -48, duration: 16, ease: "none" }, 0);
+		tl.to(".scanline", { y: 24, duration: 1.6, repeat: 9, ease: "none" }, 0);
+
+		tl.from(".s1-el", { y: 46, opacity: 0, scale: 0.98, duration: 0.66, stagger: 0.12, ease: "power3.out" }, 0.35);
+
+		switchScene("#scene-one", "#scene-two", 2.75);
+		tl.from(".s2-el", { x: -44, opacity: 0, duration: 0.58, stagger: 0.13, ease: "expo.out" }, 3.28);
+		tl.from(".terminal-body p", { y: 18, opacity: 0, duration: 0.32, stagger: 0.08, ease: "power2.out" }, 3.64);
+
+		switchScene("#scene-two", "#scene-three", 5.95);
+		tl.from(".s3-el", { y: 42, opacity: 0, duration: 0.55, stagger: 0.12, ease: "power4.out" }, 6.48);
+		tl.from(".flow-a", { scale: 0.92, opacity: 0, duration: 0.42, ease: "back.out(1.4)" }, 7.12);
+		tl.from(".flow-b", { scale: 0.92, opacity: 0, duration: 0.42, ease: "back.out(1.4)" }, 7.3);
+		tl.from(".flow-c", { scale: 0.92, opacity: 0, duration: 0.42, ease: "back.out(1.4)" }, 7.48);
+
+		switchScene("#scene-three", "#scene-four", 9.05);
+		tl.from(".s4-el", { y: 36, opacity: 0, duration: 0.54, stagger: 0.1, ease: "power3.out" }, 9.58);
+		tl.from(".json-panel", { x: -56, filter: "blur(10px)", opacity: 0, duration: 0.62, ease: "power2.out" }, 9.66);
+
+		switchScene("#scene-four", "#scene-five", 12.15);
+		tl.from(".s5-el", { y: 44, opacity: 0, duration: 0.62, stagger: 0.14, ease: "expo.out" }, 12.7);
+		tl.from(".quality-grid div", { y: 38, opacity: 0, scale: 0.96, duration: 0.44, stagger: 0.08, ease: "power2.out" }, 13.3);
+		tl.to(".scene-five", { opacity: 0, duration: 0.7, ease: "sine.inOut" }, 15.25);
+		tl.to(".backdrop", { opacity: 0, duration: 0.7, ease: "sine.inOut" }, 15.25);
+
+		scenes.forEach((selector, index) => {
+			if (index > 0) {
+				tl.set(selector, { opacity: 0 }, 0);
+			}
+		});
+
+		window.__timelines["boss-agent-cli-showcase"] = tl;
+	</script>
+</div>
+</body>
+</html>

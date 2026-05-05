@@ -1,0 +1,10 @@
+{
+	"name": "boss-agent-cli-hyperframes-showcase",
+	"private": true,
+	"scripts": {
+		"preview": "hyperframes preview --port 3017",
+		"lint": "hyperframes lint",
+		"inspect": "hyperframes inspect --samples 15",
+		"render": "hyperframes render --output boss-agent-cli-showcase.mp4 --quality standard"
+	}
+}

@@ -22,6 +22,12 @@
 
 [中文](README.md) | **English**
 
+<a href="demo/showcase/boss-agent-cli-showcase.mp4">
+  <img src="demo/showcase/boss-agent-cli-showcase-thumb.jpg" alt="boss-agent-cli project showcase video" width="100%">
+</a>
+
+**[Watch the 16-second project showcase](demo/showcase/boss-agent-cli-showcase.mp4)** · schema-driven · welfare filtering · JSON envelope · open-source engineering quality
+
 <img src="demo.gif" alt="boss-agent-cli terminal demo" width="100%">
 
 </div>
