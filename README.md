@@ -22,13 +22,11 @@
 
 **中文** | [English](README.en.md)
 
-<a href="demo/showcase/boss-agent-cli-showcase.mp4">
-  <img src="demo/showcase/boss-agent-cli-showcase-thumb.jpg" alt="boss-agent-cli 项目展示视频" width="100%">
+<a href="demo/showcase/boss-agent-cli-showcase.mp4" title="观看完整项目展示视频">
+  <img src="demo/showcase/boss-agent-cli-showcase.gif" alt="boss-agent-cli 项目展示动图" width="100%">
 </a>
 
-**[观看 16 秒项目展示视频](demo/showcase/boss-agent-cli-showcase.mp4)** · schema 驱动 · 福利筛选 · JSON 信封 · 开源工程质量
-
-<img src="demo.gif" alt="boss-agent-cli 终端演示" width="100%">
+**[观看 16 秒完整展示视频](demo/showcase/boss-agent-cli-showcase.mp4)** · [终端交互演示](demo.gif) · schema 驱动 · 福利筛选 · JSON 信封 · 开源工程质量
 
 </div>
 
