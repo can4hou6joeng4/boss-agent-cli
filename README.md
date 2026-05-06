@@ -493,6 +493,7 @@ boss --cdp-url http://localhost:9222 doctor
 | `GREET_LIMIT` | 今日次数用完 | 告知用户 |
 | `NETWORK_ERROR` | 网络错误 | 重试 |
 | `AI_NOT_CONFIGURED` | AI 未配置 | `boss ai config` |
+| `PLATFORM_NOT_SUPPORTED` | 当前平台不支持该角色或子命令 | 切换到支持的平台 |
 
 </details>
 

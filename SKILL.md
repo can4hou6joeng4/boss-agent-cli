@@ -75,11 +75,11 @@ boss status    # 验证登录态
 
 | Command | Description |
 |---------|-------------|
-| `boss schema` | 返回全部命令的 JSON 自描述（Agent 首先调用） |
+| `boss schema` | 返回全部命令的 JSON 自描述（Agent 首先调用，可加 `--format mcp` 直出 Model Context Protocol 工具集） |
 | `boss login` | 四级降级登录（Cookie → CDP → QR httpx → patchright） |
 | `boss logout` | 退出登录 |
 | `boss status` | 检查登录态 |
-| `boss doctor` | 诊断环境、依赖、凭据完整性和网络 |
+| `boss doctor` | 诊断环境、依赖、凭据完整性、网络连通性（含智联端点跨平台探针） |
 | `boss me` | 个人信息/简历/求职期望/投递记录 |
 
 ### Job Search
@@ -119,7 +119,7 @@ boss status    # 验证登录态
 | `boss pipeline` | 求职流水线（各阶段状态） |
 | `boss follow-up` | 跟进提醒（超时未推进） |
 | `boss digest` | 每日摘要 |
-| `boss watch add/list/remove/run` | 增量监控 |
+| `boss watch add/list/remove/run` | 增量监控（`run --all` 一次跑完所有预设） |
 | `boss shortlist add/list/remove` | 候选池 |
 | `boss preset add/list/remove` | 搜索预设 |
 
