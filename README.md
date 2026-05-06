@@ -26,7 +26,7 @@
   <img src="demo/showcase/boss-agent-cli-showcase.gif" alt="boss-agent-cli 项目展示动图" width="100%">
 </a>
 
-**[观看 16 秒完整展示视频](demo/showcase/boss-agent-cli-showcase.mp4)** · [终端交互演示](demo.gif) · schema 驱动 · 福利筛选 · JSON 信封 · 开源工程质量
+**[观看完整展示视频](demo/showcase/boss-agent-cli-showcase.mp4)** · [查看终端交互演示](demo.gif) · schema 驱动 · 福利筛选 · JSON 信封 · 开源工程质量
 
 </div>
 
@@ -55,6 +55,7 @@ boss digest                                                  # 每日汇报
 ## 🧭 导航目录
 
 - [为什么用 boss-agent-cli](#-为什么用-boss-agent-cli)
+- [演示素材](#-演示素材)
 - [核心能力](#-核心能力)
 - [安装](#-安装)
 - [快速开始](#-快速开始)
@@ -66,6 +67,17 @@ boss digest                                                  # 每日汇报
 - [配置](#-配置)
 - [技术架构](#-技术架构)
 - [贡献](#-贡献)
+
+---
+
+## 🎬 演示素材
+
+| 类型 | 入口 | 适合场景 |
+|------|------|----------|
+| 项目展示动图 | [首页自动播放 GIF](demo/showcase/boss-agent-cli-showcase.gif) | 快速理解项目定位、schema 驱动、JSON 信封与开源工程质量 |
+| 完整展示视频 | [16 秒 MP4](demo/showcase/boss-agent-cli-showcase.mp4) | 查看更清晰、更完整的项目叙事 |
+| 终端交互演示 | [终端 GIF](demo.gif) | 直接观察 CLI 命令和输出形态 |
+| 可复现源工程 | [HyperFrames 源文件](demo/hyperframes-showcase/) | 维护或迭代 README 首页展示动画 |
 
 ---
 
