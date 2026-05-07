@@ -26,7 +26,11 @@
   <img src="demo/showcase/boss-agent-cli-showcase.gif" alt="boss-agent-cli project showcase animation" width="100%">
 </a>
 
-**[Watch the full showcase video](demo/showcase/boss-agent-cli-showcase.mp4)** · [view the terminal demo](demo.gif) · schema-driven · welfare filtering · JSON envelope · open-source engineering quality
+**[Watch the full showcase video](demo/showcase/boss-agent-cli-showcase.mp4)** · [view the terminal demo](demo-en.gif) · schema-driven · welfare filtering · JSON envelope · open-source engineering quality
+
+<p align="center">
+  <img src="demo-en.gif" alt="boss-agent-cli terminal demo (1280×720 / 30fps)" width="100%">
+</p>
 
 </div>
 
@@ -61,7 +65,7 @@ Every command outputs **structured JSON** that AI Agents parse directly. No frag
 |------|-------|----------|
 | Project showcase animation | [Homepage autoplay GIF](demo/showcase/boss-agent-cli-showcase.gif) | Quickly understanding the project positioning, schema-driven workflow, JSON envelope, and open-source engineering quality |
 | Full showcase video | [16-second MP4](demo/showcase/boss-agent-cli-showcase.mp4) | Viewing the clearer, complete project narrative |
-| Terminal interaction demo | [Terminal GIF](demo.gif) | Seeing the CLI commands and output shape directly |
+| Terminal interaction demo | [Terminal GIF](demo-en.gif) · [VHS tape](demo-en.tape) | Seeing the CLI commands and output shape directly (1280×720 / 30fps) |
 | Reproducible source | [HyperFrames source](demo/hyperframes-showcase/) | Maintaining or iterating the README homepage animation |
 
 ## 🌟 Core Capabilities

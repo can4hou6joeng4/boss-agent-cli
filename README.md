@@ -26,7 +26,11 @@
   <img src="demo/showcase/boss-agent-cli-showcase.gif" alt="boss-agent-cli 项目展示动图" width="100%">
 </a>
 
-**[观看完整展示视频](demo/showcase/boss-agent-cli-showcase.mp4)** · [查看终端交互演示](demo.gif) · schema 驱动 · 福利筛选 · JSON 信封 · 开源工程质量
+**[观看完整展示视频](demo/showcase/boss-agent-cli-showcase.mp4)** · [查看终端交互演示](demo-zh.gif) · schema 驱动 · 福利筛选 · JSON 信封 · 开源工程质量
+
+<p align="center">
+  <img src="demo-zh.gif" alt="boss-agent-cli 终端交互演示（1280×720 / 30fps）" width="100%">
+</p>
 
 </div>
 
@@ -76,7 +80,7 @@ boss digest                                                  # 每日汇报
 |------|------|----------|
 | 项目展示动图 | [首页自动播放 GIF](demo/showcase/boss-agent-cli-showcase.gif) | 快速理解项目定位、schema 驱动、JSON 信封与开源工程质量 |
 | 完整展示视频 | [16 秒 MP4](demo/showcase/boss-agent-cli-showcase.mp4) | 查看更清晰、更完整的项目叙事 |
-| 终端交互演示 | [终端 GIF](demo.gif) | 直接观察 CLI 命令和输出形态 |
+| 终端交互演示 | [终端 GIF](demo-zh.gif) · [VHS 录制脚本](demo-zh.tape) | 直接观察 CLI 命令和输出形态（1280×720 / 30fps） |
 | 可复现源工程 | [HyperFrames 源文件](demo/hyperframes-showcase/) | 维护或迭代 README 首页展示动画 |
 
 ---

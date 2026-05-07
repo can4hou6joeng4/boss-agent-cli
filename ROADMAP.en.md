@@ -53,7 +53,7 @@ Full release history lives in [CHANGELOG.md](CHANGELOG.md).
 
 ### Community building
 
-- [ ] richer Chinese and English demo assets and launch materials (the repo already ships `demo.gif` and `demo.tape` terminal demos)
+- [ ] richer Chinese and English demo assets and launch materials (the repo already ships `demo-zh.gif` / `demo-en.gif` plus the matching `demo-zh.tape` / `demo-en.tape` terminal demos)
 - [ ] follow up on the review outcome of [awesome-agents](https://github.com/kyrolabs/awesome-agents) PR #423
 - [ ] decide later whether to pursue [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code)
 - [x] English contribution guide (`CONTRIBUTING.en.md`, v1.8.3)
