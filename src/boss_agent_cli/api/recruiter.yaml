@@ -77,8 +77,8 @@ endpoints:
   # ── 候选人搜索与简历查看 ────────────────────────────
   boss_search_geek:
     method: GET
-    path: "/wapi/zpitem/web/boss/search/geek/info"
-    referer: "/web/chat/search"
+    path: "/wapi/zpitem/web/boss/search/geeks.json"
+    referer: "/web/frame/search/"
   boss_view_geek:
     method: GET
     path: "/wapi/zpjob/view/geek/info"

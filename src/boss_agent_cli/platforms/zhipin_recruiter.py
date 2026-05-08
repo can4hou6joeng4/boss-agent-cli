@@ -68,8 +68,8 @@ class BossRecruiterPlatform(RecruiterPlatform):
 
 	# ── 候选人搜索与简历 ────────────────────────────────
 
-	def search_geeks(self, query: str, *, city: str | None = None, page: int = 1, job_id: str | None = None, experience: str | None = None, degree: str | None = None) -> dict[str, Any]:
-		return self._client.search_geeks(query, city=city, page=page, job_id=job_id, experience=experience, degree=degree)
+	def search_geeks(self, query: str, *, city: str | None = None, page: int = 1, job_id: str | None = None, experience: str | None = None, degree: str | None = None, age: str | None = None, school_level: str | None = None, activeness: str | None = None, source: str | None = None, select: bool = False, salary: str | None = None) -> dict[str, Any]:
+		return self._client.search_geeks(query, city=city, page=page, job_id=job_id, experience=experience, degree=degree, age=age, school_level=school_level, activeness=activeness, source=source, select=select, salary=salary)
 
 	def view_geek(self, geek_id: str, job_id: str, security_id: str | None = None) -> dict[str, Any]:
 		return self._client.view_geek(geek_id, job_id=job_id, security_id=security_id)

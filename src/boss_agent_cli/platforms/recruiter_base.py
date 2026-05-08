@@ -85,7 +85,7 @@ class RecruiterPlatform(ABC):
 	# ── 候选人搜索与简历 ────────────────────────────────
 
 	@abstractmethod
-	def search_geeks(self, query: str, *, city: str | None = None, page: int = 1, job_id: str | None = None, experience: str | None = None, degree: str | None = None) -> dict[str, Any]:
+	def search_geeks(self, query: str, *, city: str | None = None, page: int = 1, job_id: str | None = None, experience: str | None = None, degree: str | None = None, age: str | None = None, school_level: str | None = None, activeness: str | None = None, source: str | None = None, select: bool = False, salary: str | None = None) -> dict[str, Any]:
 		"""搜索候选人。"""
 
 	@abstractmethod
