@@ -48,8 +48,64 @@ def test_search_geeks_calls_get():
 		result = client.search_geeks("Python", city="101010100", page=2)
 		mock_req.assert_called_once_with(
 			"GET", ep.BOSS_SEARCH_GEEK_URL,
-			params={"query": "Python", "page": 2, "city": "101010100"},
+			params={
+				"page": 2,
+				"keywords": "Python",
+				"tag": "",
+				"city": "101010100",
+				"gender": "-1",
+				"experience": "-1,-1",
+				"salary": "-1,-1",
+				"age": "-1,-1",
+				"applyStatus": "-1",
+				"degree": "-1,-1",
+				"switchFreq": 0,
+				"manageExperience": 0,
+				"geekJobRequirements": 0,
+				"exchangeResume": 0,
+				"viewResume": 0,
+				"firstDegree": 0,
+				"queryAnd": 0,
+				"source": 4,
+				"activeness": 0,
+				"defaultCondition": 2,
+				"hasRcd": 0,
+				"filterParams": '{"sortType":1,"region":{"cityCode":"-2","cityName":"","areas":[]},"overSeaWorkExperience":0,"overSeaWorkLanguage":0,"overSeaWorkWill":0,"manageExperience":0}',
+			},
 		)
+		assert result == mock_result
+	client.close()
+
+
+def test_search_geeks_forwards_new_filters():
+	auth = _make_auth()
+	client = BossRecruiterClient(auth)
+	mock_result = {"code": 0, "zpData": {"list": []}}
+	with patch.object(client, "_request", return_value=mock_result) as mock_req:
+		result = client.search_geeks(
+			"Python",
+			page=3,
+			job_id="job123",
+			experience="3,5",
+			degree="201,201",
+			age="20,30",
+			school_level="1101",
+			activeness="2",
+			source="5",
+			salary="-1,3",
+			select=True,
+		)
+		params = mock_req.call_args.kwargs["params"]
+		assert params["jobId"] == "job123"
+		assert params["experience"] == "3,5"
+		assert params["degree"] == "201,201"
+		assert params["age"] == "20,30"
+		assert params["schoolLevel"] == "1101"
+		assert params["activeness"] == "2"
+		assert params["source"] == "5"
+		assert params["salary"] == "-1,3"
+		assert params["select"] == "true"
+		assert params["page"] == 3
 		assert result == mock_result
 	client.close()
 

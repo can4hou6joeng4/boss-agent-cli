@@ -47,6 +47,45 @@ def test_recruiter_candidates_supports_data_envelope(mock_auth_cls, mock_platfor
 
 @patch("boss_agent_cli.commands.recruiter.candidates.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.candidates.AuthManager")
+def test_recruiter_candidates_forwards_filters(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.search_geeks.return_value = {
+		"code": 200,
+		"data": {"geekList": [], "hasMore": False},
+	}
+	result = _invoke(
+		"hr", "candidates", "python",
+		"--city", "101010100",
+		"--job-id", "job123",
+		"--experience", "3,5",
+		"--degree", "201,201",
+		"--age", "20,30",
+		"--school-level", "1101",
+		"--activeness", "2",
+		"--source", "5",
+		"--salary", "-1,3",
+		"--select",
+		"--page", "3",
+	)
+	assert result.exit_code == 0
+	mock_platform.search_geeks.assert_called_once_with(
+		"python",
+		city="101010100",
+		page=3,
+		job_id="job123",
+		experience="3,5",
+		degree="201,201",
+		age="20,30",
+		school_level="1101",
+		activeness="2",
+		source="5",
+		select=True,
+		salary="-1,3",
+	)
+
+
+@patch("boss_agent_cli.commands.recruiter.candidates.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.candidates.AuthManager")
 def test_recruiter_candidates_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
 	mock_platform = _ctx_mock(mock_platform_cls)
 	mock_platform.search_geeks.return_value = {"code": 9, "message": "too fast"}

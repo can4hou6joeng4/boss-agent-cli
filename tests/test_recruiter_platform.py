@@ -66,6 +66,7 @@ def test_search_geeks_delegates():
 	result = platform.search_geeks("Python", city="101010100", page=2)
 	client.search_geeks.assert_called_once_with(
 		"Python", city="101010100", page=2, job_id=None, experience=None, degree=None,
+		age=None, school_level=None, activeness=None, source=None, select=False, salary=None,
 	)
 	assert result == {"code": 0, "zpData": {"list": []}}
 

@@ -92,7 +92,7 @@
 | 能力 | CLI 命令 | 需要登录 | 通道 |
 |---|---|---|---|
 | 投递申请列表 | `boss hr applications` | 是 | httpx |
-| 候选人搜索 | `boss hr candidates` | 是 | httpx |
+| 候选人搜索 | `boss hr candidates` | 是 | httpx，支持 `--city` / `--job-id` / `--experience` / `--degree` / `--age` / `--school-level` / `--activeness` / `--source` / `--salary` / `--select` / `--page` |
 | 沟通列表 | `boss hr chat` | 是 | httpx |
 | 在线简历查看 | `boss hr resume` | 是 | httpx |
 | 消息回复 | `boss hr reply` | 是 | httpx |

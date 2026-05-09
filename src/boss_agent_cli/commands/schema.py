@@ -659,7 +659,7 @@ SCHEMA_DATA = {
 				"resume": "查看或请求候选人简历",
 				"chat": "查看与候选人的沟通列表",
 				"jobs": "管理职位发布（list/offline/online）",
-				"candidates": "搜索候选人",
+				"candidates": "搜索候选人（支持 city/job-id/experience/degree/age/school-level/activeness/source/salary/select/page 筛选）",
 				"reply": "回复候选人消息",
 				"request-resume": "请求候选人分享附件简历",
 			},
