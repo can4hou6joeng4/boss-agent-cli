@@ -21,6 +21,7 @@ _ERROR_CODE_MAP: dict[int, str] = {
 	9: "RATE_LIMITED",
 	36: "ACCOUNT_RISK",
 	37: "TOKEN_REFRESH_FAILED",
+	121: "INVALID_PARAM",
 }
 
 

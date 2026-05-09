@@ -41,6 +41,14 @@ def test_boss_recruiter_parse_error():
 	assert "too fast" in message
 
 
+def test_boss_recruiter_parse_error_maps_invalid_request():
+	client = _mock_client()
+	platform = BossRecruiterPlatform(client)
+	unified, message = platform.parse_error({"code": 121, "message": "请求不合法(121)"})
+	assert unified == "INVALID_PARAM"
+	assert message == "请求不合法(121)"
+
+
 def test_friend_list_delegates():
 	client = _mock_client()
 	client.friend_list.return_value = {"code": 0, "zpData": {"result": []}}

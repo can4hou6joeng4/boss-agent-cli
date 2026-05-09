@@ -102,6 +102,25 @@ def test_recruiter_candidates_reports_error_when_platform_rejects(mock_auth_cls,
 	)
 
 
+@patch("boss_agent_cli.commands.recruiter.reply.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.reply.AuthManager")
+def test_recruiter_reply_maps_invalid_request_contract(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.send_message.return_value = {"code": 121, "message": "请求不合法(121)"}
+	mock_platform.is_success.return_value = False
+	mock_platform.parse_error.return_value = ("INVALID_PARAM", "请求不合法(121)")
+	result = _invoke("hr", "reply", "36226510", "你好")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_contract(
+		parsed,
+		code="INVALID_PARAM",
+		message="请求不合法(121)",
+		recoverable=False,
+		recovery_action="修正参数",
+	)
+
+
 @patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
 def test_recruiter_chat_supports_data_envelope(mock_auth_cls, mock_platform_cls):
