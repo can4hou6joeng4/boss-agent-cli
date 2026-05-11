@@ -131,7 +131,27 @@ def test_export_json_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	data = json.loads(out_path.read_text(encoding="utf-8"))
 	assert len(data) == 2
 	assert data[0]["title"] == "Go 1"
-	assert data[1]["security_id"] == "s2"
+	assert data[1]["security_id"] == "[REDACTED]"
+	assert data[1]["boss_name"] == "[REDACTED]"
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_json_include_private_keeps_routing_fields(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = _api_response([_make_raw_job("Go", security_id="s1")])
+
+	out_path = tmp_path / "jobs-private.json"
+	runner = CliRunner()
+	result = runner.invoke(
+		cli,
+		["export", "golang", "--count", "1", "--format", "json", "--include-private", "-o", str(out_path)],
+	)
+
+	assert result.exit_code == 0
+	data = json.loads(out_path.read_text(encoding="utf-8"))
+	assert data[0]["security_id"] == "s1"
+	assert data[0]["boss_name"] == "李"
 
 
 # ── 文件输出 · HTML ──────────────────────────────────────────────────
@@ -155,6 +175,8 @@ def test_export_html_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	assert "<!DOCTYPE html>" in content
 	assert "Full-Stack" in content
 	assert "TestCo" in content
+	assert "李" not in content
+	assert "[REDACTED]" in content
 	# 技能和福利应各自带标签样式
 	assert 'class="tag sk"' in content
 	assert 'class="tag wf"' in content

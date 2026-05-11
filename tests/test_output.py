@@ -18,7 +18,15 @@ def test_envelope_success_minimal():
 def test_envelope_success_with_pagination():
 	result = envelope_success(
 		"search",
-		{"jobs": []},
+		{
+			"jobs": [],
+			"auth": {
+				"token": "secret-token",
+				"api_key_set": False,
+				"cookies": {"wt2": "secret-cookie"},
+				"security_id": "sec_001",
+			},
+		},
 		pagination={"page": 1, "total_pages": 5, "total_count": 50, "has_next": True},
 		hints={"next_actions": ["boss search q --page 2"]},
 	)
@@ -26,22 +34,30 @@ def test_envelope_success_with_pagination():
 	assert parsed["ok"] is True
 	assert parsed["pagination"]["has_next"] is True
 	assert parsed["hints"]["next_actions"][0] == "boss search q --page 2"
+	assert parsed["data"]["auth"]["token"] == "[REDACTED]"
+	assert parsed["data"]["auth"]["api_key_set"] is False
+	assert parsed["data"]["auth"]["cookies"] == "[REDACTED]"
+	# security_id is a CLI routing identifier and must remain available in stdout envelopes.
+	assert parsed["data"]["auth"]["security_id"] == "sec_001"
 
 
 def test_envelope_error():
 	result = envelope_error(
 		"search",
 		code="AUTH_EXPIRED",
-		message="登录态已过期",
+		message="登录态已过期 token=secret-token",
 		recoverable=True,
 		recovery_action="boss login",
+		hints={"cookie": "secret-cookie"},
 	)
 	parsed = json.loads(result)
 	assert parsed["ok"] is False
 	assert parsed["data"] is None
 	assert parsed["error"]["code"] == "AUTH_EXPIRED"
+	assert parsed["error"]["message"] == "登录态已过期 token=secret-token"
 	assert parsed["error"]["recoverable"] is True
 	assert parsed["error"]["recovery_action"] == "boss login"
+	assert parsed["hints"]["cookie"] == "[REDACTED]"
 
 
 def test_logger_filters_by_level(capsys):

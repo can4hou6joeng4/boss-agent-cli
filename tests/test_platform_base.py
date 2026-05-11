@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
 from unittest.mock import MagicMock
 
 import pytest
@@ -31,7 +32,7 @@ class TestPlatformABC:
 		plat = BossPlatform(MagicMock())
 		assert plat.name == "zhipin"
 		assert plat.display_name == "BOSS 直聘"
-		assert "zhipin.com" in plat.base_url
+		assert urlparse(plat.base_url).hostname == "www.zhipin.com"
 
 
 class TestBossEnvelopeAdapter:

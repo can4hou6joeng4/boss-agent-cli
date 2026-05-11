@@ -18,9 +18,10 @@ from boss_agent_cli.display import handle_auth_errors, handle_error_output, hand
 @click.option("--count", default=50, type=int, help="导出数量")
 @click.option("--format", "fmt", default="csv", type=click.Choice(["html", "csv", "json"]), help="输出格式")
 @click.option("--output", "-o", default=None, help="输出文件路径（不指定则输出到 stdout JSON 信封）")
+@click.option("--include-private", is_flag=True, help="导出明文平台标识和招聘者姓名等私有字段")
 @click.pass_context
 @handle_auth_errors("export")
-def export_cmd(ctx: click.Context, query: str, city: str | None, salary: str | None, count: int, fmt: str, output: str | None) -> None:
+def export_cmd(ctx: click.Context, query: str, city: str | None, salary: str | None, count: int, fmt: str, output: str | None, include_private: bool) -> None:
 	"""导出搜索结果为 CSV 或 JSON 文件"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -59,12 +60,14 @@ def export_cmd(ctx: click.Context, query: str, city: str | None, salary: str | N
 			page += 1
 
 		if output:
-			_write_to_file(all_items, fmt, output)
+			write_items = all_items if include_private else [_redact_export_item(item) for item in all_items]
+			_write_to_file(write_items, fmt, output)
 			data = {
 				"message": f"已导出 {len(all_items)} 条到 {output}",
 				"count": len(all_items),
 				"format": fmt,
 				"path": output,
+				"private_fields": "included" if include_private else "redacted",
 			}
 			handle_output(
 				ctx, "export", data,
@@ -91,6 +94,14 @@ def export_cmd(ctx: click.Context, query: str, city: str | None, salary: str | N
 					],
 				},
 			)
+
+
+def _redact_export_item(item: dict[str, Any]) -> dict[str, Any]:
+	redacted = dict(item)
+	for key in ("job_id", "security_id", "boss_name"):
+		if key in redacted:
+			redacted[key] = "[REDACTED]"
+	return redacted
 
 
 def _write_to_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:

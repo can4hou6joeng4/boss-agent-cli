@@ -14,7 +14,10 @@ def test_doctor_includes_zhilian_network_check(tmp_path: Path) -> None:
 	def fake_get(url: str, **kwargs: object) -> httpx.Response:
 		return httpx.Response(200, request=httpx.Request("GET", url))
 
-	with patch("httpx.get", side_effect=fake_get):
+	with (
+		patch("httpx.get", side_effect=fake_get),
+		patch("boss_agent_cli.commands.doctor.extract_cookies", return_value=None),
+	):
 		runner = CliRunner()
 		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "doctor"])
 	assert result.exit_code in (0, 1), result.output
@@ -29,7 +32,10 @@ def test_doctor_zhilian_check_handles_network_error(tmp_path: Path) -> None:
 	def fake_get(url: str, **kwargs: object) -> httpx.Response:
 		raise httpx.ConnectError("network down")
 
-	with patch("httpx.get", side_effect=fake_get):
+	with (
+		patch("httpx.get", side_effect=fake_get),
+		patch("boss_agent_cli.commands.doctor.extract_cookies", return_value=None),
+	):
 		runner = CliRunner()
 		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "doctor"])
 	assert result.exit_code in (0, 1), result.output

@@ -3,6 +3,38 @@ import sys
 from typing import Any
 
 _LEVEL_ORDER = {"debug": 0, "info": 1, "warning": 2, "error": 3}
+_REDACTED = "[REDACTED]"
+_SENSITIVE_KEY_PARTS = (
+	"api_key",
+	"apikey",
+	"authorization",
+	"cookie",
+	"credential",
+	"password",
+	"private",
+	"secret",
+	"session",
+	"stoken",
+	"token",
+)
+
+
+def redact_sensitive(value: Any) -> Any:
+	"""Return a JSON-safe copy with credential-like fields redacted."""
+	if isinstance(value, dict):
+		redacted: dict[Any, Any] = {}
+		for key, item in value.items():
+			key_text = str(key).lower()
+			if any(part in key_text for part in _SENSITIVE_KEY_PARTS) and not isinstance(item, bool):
+				redacted[key] = _REDACTED
+			else:
+				redacted[key] = redact_sensitive(item)
+		return redacted
+	if isinstance(value, list):
+		return [redact_sensitive(item) for item in value]
+	if isinstance(value, tuple):
+		return [redact_sensitive(item) for item in value]
+	return value
 
 
 def envelope_success(
@@ -17,10 +49,10 @@ def envelope_success(
 			"ok": True,
 			"schema_version": "1.0",
 			"command": command,
-			"data": data,
-			"pagination": pagination,
+			"data": redact_sensitive(data),
+			"pagination": redact_sensitive(pagination),
 			"error": None,
-			"hints": hints,
+			"hints": redact_sensitive(hints),
 		},
 		ensure_ascii=False,
 	)
@@ -48,7 +80,7 @@ def envelope_error(
 				"recoverable": recoverable,
 				"recovery_action": recovery_action,
 			},
-			"hints": hints,
+			"hints": redact_sensitive(hints),
 		},
 		ensure_ascii=False,
 	)

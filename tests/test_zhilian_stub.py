@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import urlparse
 from unittest.mock import MagicMock
 from click.testing import CliRunner
 
@@ -42,7 +43,7 @@ class TestZhilianMetadata:
 		assert self.plat.display_name == "智联招聘"
 
 	def test_base_url_points_to_zhaopin(self) -> None:
-		assert "zhaopin.com" in self.plat.base_url
+		assert urlparse(self.plat.base_url).hostname == "m.zhaopin.com"
 
 
 class TestZhilianEnvelopeAdapter:

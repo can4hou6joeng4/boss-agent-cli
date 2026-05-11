@@ -418,4 +418,4 @@ def test_zhilian_doctor_uses_platform_specific_cookie_and_network_messages(tmp_p
 	assert "boss --platform zhilian login" in ce["hint"]
 	network = _find_check(parsed["data"]["checks"], "network")
 	assert network is not None
-	assert "zhaopin.com" in network["detail"]
+	assert network["detail"] == "访问 zhaopin.com 返回 HTTP 200"
