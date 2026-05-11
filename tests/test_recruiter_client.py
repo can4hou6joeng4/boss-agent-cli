@@ -1,4 +1,5 @@
 """BossRecruiterClient unit tests — mock httpx + browser channels."""
+import json
 from unittest.mock import MagicMock, patch
 
 from boss_agent_cli.api.recruiter_client import BossRecruiterClient
@@ -70,7 +71,7 @@ def test_search_geeks_calls_get():
 				"activeness": 0,
 				"defaultCondition": 2,
 				"hasRcd": 0,
-				"filterParams": '{"sortType":1,"region":{"cityCode":"-2","cityName":"","areas":[]},"overSeaWorkExperience":0,"overSeaWorkLanguage":0,"overSeaWorkWill":0,"manageExperience":0}',
+				"filterParams": '{"sortType":1,"region":{"cityCode":"101010100","cityName":"","areas":[]},"overSeaWorkExperience":0,"overSeaWorkLanguage":0,"overSeaWorkWill":0,"manageExperience":0}',
 			},
 		)
 		assert result == mock_result
@@ -107,6 +108,19 @@ def test_search_geeks_forwards_new_filters():
 		assert params["select"] == "true"
 		assert params["page"] == 3
 		assert result == mock_result
+	client.close()
+
+
+def test_search_geeks_filter_params_city_defaults_to_nationwide():
+	auth = _make_auth()
+	client = BossRecruiterClient(auth)
+	mock_result = {"code": 0, "zpData": {"list": []}}
+	with patch.object(client, "_request", return_value=mock_result) as mock_req:
+		client.search_geeks("Python")
+		params = mock_req.call_args.kwargs["params"]
+		filter_params = json.loads(params["filterParams"])
+		assert params["city"] == "-2"
+		assert filter_params["region"]["cityCode"] == "-2"
 	client.close()
 
 
