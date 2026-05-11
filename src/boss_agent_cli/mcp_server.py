@@ -552,10 +552,16 @@ TOOLS = [
 			"type": "object",
 			"properties": {
 				"query": {"type": "string", "description": "搜索关键词（可选，不传时返回默认候选集）"},
-				"city": {"type": "string", "description": "城市筛选"},
+				"city": {"type": "string", "description": "城市筛选（cityCode，如 101020100；-2=全国）"},
 				"job_id": {"type": "string", "description": "按职位筛选"},
-				"experience": {"type": "string", "description": "经验要求"},
-				"degree": {"type": "string", "description": "学历要求"},
+				"experience": {"type": "string", "description": "经验要求，如 -3,-3（应届）/ -1,-1（不限）"},
+				"degree": {"type": "string", "description": "学历要求，如 201,201 / -1,-1"},
+				"age": {"type": "string", "description": "年龄范围，如 20,25"},
+				"school_level": {"type": "string", "description": "学校层次（如 1101）"},
+				"activeness": {"type": "string", "description": "活跃度，如 2"},
+				"source": {"type": "string", "description": "来源编码（默认 4）"},
+				"salary": {"type": "string", "description": "薪资范围，如 -1,3"},
+				"select": {"type": "boolean", "description": "是否带 select=true", "default": False},
 				"page": {"type": "integer", "description": "页码", "default": 1},
 			},
 			"required": [],
@@ -855,9 +861,11 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 		args = ["hr", "candidates"]
 		if arguments.get("query"):
 			args.append(arguments["query"])
-		for opt in ("city", "job_id", "experience", "degree"):
+		for opt in ("city", "job_id", "experience", "degree", "age", "school_level", "activeness", "source", "salary"):
 			if arguments.get(opt):
 				args.extend([f"--{opt.replace('_', '-')}", str(arguments[opt])])
+		if arguments.get("select"):
+			args.append("--select")
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
 		return args

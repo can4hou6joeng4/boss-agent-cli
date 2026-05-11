@@ -590,6 +590,12 @@ def test_build_args_hr_candidates():
 		"job_id": "42",
 		"experience": "3-5年",
 		"degree": "本科",
+		"age": "20,25",
+		"school_level": "1101",
+		"activeness": "2",
+		"source": "4",
+		"salary": "-1,3",
+		"select": True,
 		"page": 2,
 	})
 	assert args == [
@@ -598,8 +604,24 @@ def test_build_args_hr_candidates():
 		"--job-id", "42",
 		"--experience", "3-5年",
 		"--degree", "本科",
+		"--age", "20,25",
+		"--school-level", "1101",
+		"--activeness", "2",
+		"--source", "4",
+		"--salary", "-1,3",
+		"--select",
 		"--page", "2",
 	]
+
+
+def test_build_args_hr_candidates_minimal():
+	args = _build_args("boss_hr_candidates", {"query": "golang"})
+	assert args == ["hr", "candidates", "golang"]
+
+
+def test_build_args_hr_candidates_select_false_omitted():
+	args = _build_args("boss_hr_candidates", {"query": "golang", "select": False})
+	assert "--select" not in args
 
 
 def test_build_args_hr_chat():
