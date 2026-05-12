@@ -70,6 +70,9 @@ pythonpath = ["src"]
 line-length = 120
 indent-width = 4
 
+[tool.ruff.format]
+indent-style = "tab"
+
 [tool.mypy]
 python_version = "3.10"
 # 渐进接入：仅跑基础类型检查，允许现有未注解函数存在

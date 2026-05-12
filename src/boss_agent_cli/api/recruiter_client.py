@@ -3,6 +3,7 @@
 Dual-channel like BossClient: httpx for low-risk reads, browser for high-risk writes.
 Endpoints sourced from newboss/boss-cli project (confirmed via reverse engineering).
 """
+
 import atexit
 import json
 import random
@@ -43,7 +44,9 @@ class RecruiterAuthError(Exception):
 class BossRecruiterClient:
 	"""Recruiter-side hybrid API client."""
 
-	def __init__(self, auth_manager: "AuthManager", *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None) -> None:
+	def __init__(
+		self, auth_manager: "AuthManager", *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None
+	) -> None:
 		self._auth = auth_manager
 		self._delay = delay
 		self._client: httpx.Client | None = None
@@ -60,6 +63,7 @@ class BossRecruiterClient:
 			if ua := token.get("user_agent"):
 				headers["User-Agent"] = ua
 			import sys
+
 			if sys.platform == "win32":
 				headers["sec-ch-ua-platform"] = '"Windows"'
 			elif sys.platform == "linux":
@@ -76,13 +80,14 @@ class BossRecruiterClient:
 	def _get_browser(self) -> "BrowserSession":
 		if self._browser_session is None:
 			from boss_agent_cli.api.browser_client import BrowserSession
+
 			token = self._auth.get_token()
 			self._browser_session = BrowserSession(
 				cookies=token.get("cookies", {}),
 				user_agent=token.get("user_agent", ""),
 				delay=self._delay,
 				cdp_url=self._cdp_url,
-				logger=getattr(self._auth, '_logger', None),
+				logger=getattr(self._auth, "_logger", None),
 			)
 		return self._browser_session
 
@@ -117,7 +122,7 @@ class BossRecruiterClient:
 			if resp.status_code == 403 or "安全验证" in resp.text:
 				if attempt >= _MAX_RETRIES:
 					raise RecruiterAuthError("Token 刷新后仍被拒绝，请重新登录")
-				backoff = (2 ** attempt) + random.uniform(0.5, 1.5)
+				backoff = (2**attempt) + random.uniform(0.5, 1.5)
 				time.sleep(backoff)
 				self._auth.force_refresh(cdp_url=self._cdp_url)
 				self._client = None
@@ -128,23 +133,30 @@ class BossRecruiterClient:
 			code = data.get("code")
 
 			if code == ep.CODE_STOKEN_EXPIRED and attempt < _MAX_RETRIES:
-				backoff = (2 ** attempt) + random.uniform(0.5, 1.5)
+				backoff = (2**attempt) + random.uniform(0.5, 1.5)
 				time.sleep(backoff)
 				self._auth.force_refresh(cdp_url=self._cdp_url)
 				self._client = None
 				continue
 
 			if code == ep.CODE_RATE_LIMITED and attempt < _MAX_RETRIES:
-				cooldown = min(60, 10 * (2 ** attempt))
+				cooldown = min(60, 10 * (2**attempt))
 				time.sleep(cooldown)
 				continue
 
+			if isinstance(data, dict):
+				data.setdefault("__cli_endpoint_hint__", url)
 			return cast("dict[str, Any]", data)
 
 		raise RecruiterAuthError("请求失败，已达最大重试次数")
 
-	def _browser_request(self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None) -> dict[str, Any]:
-		return self._get_browser().request(method, url, params=params, data=data)
+	def _browser_request(
+		self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None
+	) -> dict[str, Any]:
+		result = self._get_browser().request(method, url, params=params, data=data)
+		if isinstance(result, dict):
+			result.setdefault("__cli_endpoint_hint__", url)
+		return result
 
 	# ── Public API ───────────────────────────────────────────────────
 
@@ -179,7 +191,22 @@ class BossRecruiterClient:
 
 	# ── 候选人搜索与简历 ──────────────────────────────────
 
-	def search_geeks(self, query: str, *, city: str | None = None, page: int = 1, job_id: str | None = None, experience: str | None = None, degree: str | None = None, age: str | None = None, school_level: str | None = None, activeness: str | None = None, source: str | None = None, select: bool = False, salary: str | None = None) -> dict[str, Any]:
+	def search_geeks(
+		self,
+		query: str,
+		*,
+		city: str | None = None,
+		page: int = 1,
+		job_id: str | None = None,
+		experience: str | None = None,
+		degree: str | None = None,
+		age: str | None = None,
+		school_level: str | None = None,
+		activeness: str | None = None,
+		source: str | None = None,
+		select: bool = False,
+		salary: str | None = None,
+	) -> dict[str, Any]:
 		city_code = city or "-2"
 		params: dict[str, Any] = {
 			"page": page,
@@ -203,14 +230,17 @@ class BossRecruiterClient:
 			"activeness": activeness or 0,
 			"defaultCondition": 2,
 			"hasRcd": 0,
-			"filterParams": json.dumps({
-				"sortType": 1,
-				"region": {"cityCode": city_code, "cityName": "", "areas": []},
-				"overSeaWorkExperience": 0,
-				"overSeaWorkLanguage": 0,
-				"overSeaWorkWill": 0,
-				"manageExperience": 0,
-			}, separators=(",", ":")),
+			"filterParams": json.dumps(
+				{
+					"sortType": 1,
+					"region": {"cityCode": city_code, "cityName": "", "areas": []},
+					"overSeaWorkExperience": 0,
+					"overSeaWorkLanguage": 0,
+					"overSeaWorkWill": 0,
+					"manageExperience": 0,
+				},
+				separators=(",", ":"),
+			),
 		}
 		if school_level:
 			params["schoolLevel"] = school_level
