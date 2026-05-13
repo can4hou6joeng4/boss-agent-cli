@@ -207,15 +207,25 @@ boss hr jobs list                     # 我发布的职位
 <details>
 <summary>📖 CDP 启动示例</summary>
 
+macOS：
+
 ```bash
-# macOS
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --remote-debugging-port=9222 --user-data-dir=/tmp/boss-chrome
+  --remote-debugging-port=9222 \
+  --user-data-dir=/tmp/boss-chrome
+```
 
-# Linux
-google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/boss-chrome
+Linux：
 
-# Windows Powershell
+```bash
+google-chrome \
+  --remote-debugging-port=9222 \
+  --user-data-dir=/tmp/boss-chrome
+```
+
+Windows PowerShell：
+
+```powershell
 $chromeCandidates = @(
   "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
   "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
@@ -223,13 +233,17 @@ $chromeCandidates = @(
 )
 
 $chrome = $chromeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $chrome) { throw "Google Chrome executable was not found" }
 
 & $chrome `
   --remote-debugging-port=9222 `
   --remote-allow-origins=* `
   --user-data-dir="$env:LOCALAPPDATA\boss-agent-cdp-profile"
+```
 
-# 使用 CDP 登录
+启动后在另一个终端使用 CDP 登录：
+
+```bash
 boss --cdp-url http://localhost:9222 login --cdp
 ```
 

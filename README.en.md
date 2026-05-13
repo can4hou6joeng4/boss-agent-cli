@@ -269,14 +269,45 @@ boss logout && boss login
 
 BOSS Zhipin's risk system flags headless browsers. Fix by attaching to your real Chrome:
 
+macOS:
+
 ```bash
-# 1. Quit Chrome completely, then:
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
   --remote-debugging-port=9222 \
   --user-data-dir="$HOME/.boss-agent/chrome-cdp-profile" \
   --no-first-run
+```
 
-# 2. In another terminal:
+Linux:
+
+```bash
+google-chrome \
+  --remote-debugging-port=9222 \
+  --user-data-dir="$HOME/.boss-agent/chrome-cdp-profile" \
+  --no-first-run
+```
+
+Windows PowerShell:
+
+```powershell
+$chromeCandidates = @(
+  "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+  "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+  "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
+)
+
+$chrome = $chromeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $chrome) { throw "Google Chrome executable was not found" }
+
+& $chrome `
+  --remote-debugging-port=9222 `
+  --remote-allow-origins=* `
+  --user-data-dir="$env:LOCALAPPDATA\boss-agent-cdp-profile"
+```
+
+Then sign in from another terminal:
+
+```bash
 boss login --cdp
 boss search "python" --city 北京
 ```
