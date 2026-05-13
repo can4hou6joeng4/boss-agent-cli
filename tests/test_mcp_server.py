@@ -24,6 +24,7 @@ sys.modules.setdefault("mcp.server.stdio", _mcp_stdio)
 sys.modules.setdefault("mcp.types", _mcp_types)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "mcp-server"))
+import server  # noqa: E402
 from server import (  # noqa: E402
 	TOOLS,
 	_build_args,
@@ -359,6 +360,16 @@ def test_run_boss_timeout(mock_run):
 	mock_run.return_value = MagicMock(stdout='{"ok": true}', stderr="")
 	_run_boss("doctor")
 	assert mock_run.call_args[1]["timeout"] == 120
+
+
+@patch("server.subprocess.run")
+def test_run_boss_detaches_child_stdin_from_mcp_stdio(mock_run):
+	"""boss 子进程不应继承 MCP stdio 协议输入流。"""
+	mock_run.return_value = MagicMock(stdout='{"ok": true}', stderr="")
+
+	_run_boss("status")
+
+	assert mock_run.call_args[1]["stdin"] is server.subprocess.DEVNULL
 
 
 def test_parse_cli_args_defaults():

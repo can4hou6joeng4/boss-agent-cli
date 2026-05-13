@@ -641,7 +641,13 @@ _decorate_tool_descriptions()
 def _run_boss(*args: str) -> dict[str, Any]:
 	"""调用 boss CLI 并返回解析后的 JSON。"""
 	cmd = ["boss", "--json", *args]
-	result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+	result = subprocess.run(
+		cmd,
+		capture_output=True,
+		text=True,
+		timeout=120,
+		stdin=subprocess.DEVNULL,
+	)
 	try:
 		return json.loads(result.stdout)
 	except json.JSONDecodeError:
