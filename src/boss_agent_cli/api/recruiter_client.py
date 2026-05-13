@@ -25,6 +25,149 @@ _MAX_RETRIES = 3
 
 _OPEN_CLIENTS: weakref.WeakSet["BossRecruiterClient"] = weakref.WeakSet()
 
+_CHAT_FRONTEND_HELPERS_JS = """
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const squashText = (text) => String(text || '').replace(/\\s+/g, ' ').trim();
+const escapeHtml = (text) => String(text)
+	.replace(/&/g, '&amp;')
+	.replace(/</g, '&lt;')
+	.replace(/>/g, '&gt;');
+const getGeekList = () => {
+	const chatUser = document.querySelector('.chat-user');
+	if (!chatUser) return [null, '.chat-user not found (chat tab not open?)'];
+	const geekList = chatUser.__vue__;
+	if (!geekList || geekList.$options.name !== 'geek-list') {
+		return [null, 'geek-list Vue component not at .chat-user'];
+	}
+	return [geekList, null];
+};
+const getEditorState = () => {
+	const input = document.querySelector('.boss-chat-editor-input');
+	if (!input) return {input: null, editor: null, error: 'no .boss-chat-editor-input element'};
+	const editor = input.parentElement && input.parentElement.__vue__;
+	if (!editor) return {input: null, editor: null, error: 'editor parent has no __vue__ instance'};
+	return {input, editor, error: null};
+};
+const switchConversation = async (friendData, targetFriendId, switchTimeoutMs, requireSecurityId, log) => {
+	const [geekList, geekErr] = getGeekList();
+	if (geekErr) return {ok: false, error: geekErr, log};
+	try {
+		geekList.geekClick(friendData);
+		log.push('geekClick called');
+	} catch (e) {
+		return {ok: false, error: 'geekClick threw: ' + e.message, log};
+	}
+
+	const deadline = Date.now() + switchTimeoutMs;
+	while (Date.now() < deadline) {
+		await sleep(150);
+		const state = getEditorState();
+		if (state.error) continue;
+		const conversation = state.editor && state.editor.conversation$;
+		if (!conversation || conversation.friendId !== targetFriendId) continue;
+		if (requireSecurityId && !conversation.securityId) continue;
+		log.push('editor switched to target after ' + (switchTimeoutMs - (deadline - Date.now())) + 'ms');
+		return {ok: true, input: state.input, editor: state.editor, conversation};
+	}
+
+	const prefix = requireSecurityId
+		? 'conversation$ not ready for target friend in '
+		: 'editor did not switch to target friend in ';
+	return {ok: false, error: prefix + switchTimeoutMs + 'ms', log};
+};
+const findVueComponent = (name) => {
+	const seen = new Set();
+	const queue = [];
+	for (const el of document.querySelectorAll('*')) {
+		if (el.__vue__) queue.push(el.__vue__);
+	}
+	while (queue.length) {
+		const vm = queue.shift();
+		if (!vm || seen.has(vm)) continue;
+		seen.add(vm);
+		try {
+			for (const child of vm.$children || []) queue.push(child);
+		} catch (e) {}
+		const vmName = vm.$options && (vm.$options.name || vm.$options._componentTag);
+		if (vmName === name) return vm;
+	}
+	return null;
+};
+const clickPrimaryConfirm = () => {
+	const roots = Array.from(document.querySelectorAll('.exchange-tooltip, .popover, .ui-dialog'));
+	roots.push(document.body);
+	const candidates = [];
+	for (const root of roots) {
+		const rootText = squashText(root.innerText || root.textContent || '');
+		if (!rootText || !/确定|取消|请求|交换|简历|电话|手机|微信/.test(rootText)) continue;
+		for (const el of root.querySelectorAll('button, a, span, div')) {
+			const text = squashText(el.innerText || el.textContent || '');
+			const cls = String(el.className || '');
+			if (text === '确定' || /confirm|sure|primary/.test(cls)) {
+				candidates.push({el, text});
+			}
+		}
+	}
+	const candidate = candidates.find((item) => item.text === '确定') || candidates[0];
+	if (!candidate) return false;
+	candidate.el.click();
+	return true;
+};
+const chatConversationText = () => squashText(document.querySelector('.chat-conversation')?.innerText || '');
+"""
+
+_SEND_MESSAGE_ACTION_JS = """
+const escaped = escapeHtml(args.content);
+editor.disabled = false;
+editor.conversationLoading$ = false;
+editor.draft[editor.uniqueId] = args.content;
+input.innerHTML = escaped;
+log.push('editbox html set, calling sendText');
+try {
+	const ret = editor.sendText();
+	log.push('sendText returned ' + (ret === undefined ? 'undefined' : String(ret)));
+} catch (e) {
+	return {ok: false, error: 'sendText threw: ' + e.message, log};
+}
+await sleep(args.postSendUiWaitMs);
+return {ok: true, log};
+"""
+
+_EXCHANGE_ACTION_JS = """
+const vm = findVueComponent(args.componentName);
+if (!vm) return {ok: false, error: args.componentName + ' Vue component not found', log};
+log.push('found ' + args.componentName + ' type=' + vm.type);
+
+const beforeText = chatConversationText();
+try {
+	const ret = vm.handleExChange();
+	if (ret && typeof ret.then === 'function') await ret;
+	log.push('handleExChange returned');
+} catch (e) {
+	return {ok: false, error: 'handleExChange threw: ' + e.message, log};
+}
+
+await sleep(1000);
+const confirmed = clickPrimaryConfirm();
+log.push('confirm clicked=' + confirmed);
+
+await sleep(2500);
+const afterText = chatConversationText();
+const expectedText = args.componentName === 'ExchangeResume'
+	? ['简历请求已发送', '方便发一份简历过来吗？']
+	: ['请求交换联系方式已发送', '请求交换联系方式'];
+const ok = expectedText.some((text) => afterText.includes(text) && (!beforeText.includes(text) || text.includes('已发送')));
+return {
+	ok,
+	error: ok ? null : args.componentName + ' did not produce expected sent marker',
+	log,
+	confirmed,
+	componentName: args.componentName,
+};
+"""
+
+_EXCHANGE_COMPONENT_NAMES = {1: "ExchangePhone", 2: "ExchangeWx", 4: "ExchangeResume"}
+
 
 def _close_open_clients() -> None:
 	for client in list(_OPEN_CLIENTS):
@@ -158,53 +301,113 @@ class BossRecruiterClient:
 			result.setdefault("__cli_endpoint_hint__", url)
 		return result
 
-	def _evaluate_request(self, method: str, url: str, *, data: dict[str, Any] | None = None) -> dict[str, Any]:
-		"""Issue an HTTP POST via raw-CDP fetch in the user's chat tab.
+	def _require_chat_friend_data(self, friend_id: int) -> dict[str, Any]:
+		"""Normalize friend_detail output into the Vue payload expected by geekClick.
 
-		Workaround for patchright's 'Frame was detached' race condition that
-		fires whenever we attach to a CDP context with an active Vue re-render.
-		Used by send_message_by_friend and exchange_request_by_friend which
-		can't tolerate that race during a multi-step call chain.
-
-		Uses BrowserSession.evaluate_js → _cdp_evaluate_in_chat_tab. Cookies
-		flow through naturally (the chat tab is logged in). Returns the parsed
-		JSON response body, mirroring _browser_request's contract.
+		BOSS 的 friend_detail 仍用 uid，而聊天页 Vue 组件期待 friendId/uniqueId。
+		把这层映射集中在一个 helper，避免 reply / exchange 各自拼字段后漂移。
 		"""
-		# Build a JS function that fetches in-page; pass body as URL-encoded form
-		# matching BrowserSession.request semantics.
-		js = """
+		fd_resp = self.friend_detail([friend_id])
+		friends = (fd_resp.get("zpData") or {}).get("friendList") or []
+		if not friends:
+			raise LookupError("friend_detail 未返回候选人信息（friend_id 可能无效）")
+
+		friend_data: dict[str, Any] = {**friends[0]}
+		if "friendId" not in friend_data and "uid" in friend_data:
+			friend_data["friendId"] = friend_data["uid"]
+		friend_data["uniqueId"] = f"{friend_data['friendId']}-{friend_data.get('friendSource', 0)}"
+		friend_data.setdefault("newMsgCount", 0)
+		friend_data.setdefault("jumpUrl", "")
+		return friend_data
+
+	def _run_chat_frontend_action(
+		self,
+		*,
+		friend_data: dict[str, Any],
+		action_js: str,
+		require_security_id: bool,
+		settle_ms: int,
+		extra_args: dict[str, Any] | None = None,
+		listen_ms: int | None = None,
+	) -> tuple[Any, list[dict[str, Any]]]:
+		"""Run a Vue-mediated action in the recruiter's existing chat tab.
+
+		reply / request-resume / exchange 都依赖同一段前置动作：
+		1. geekClick 切到目标会话
+		2. 等 conversation$ 指向目标 friend
+		3. 等页面把内部副作用跑完
+
+		这层统一成一个执行器，避免每个写操作都复制一份聊天页侦察脚本。
+		"""
+		template = """
 			async (args) => {
-				const body = new URLSearchParams();
-				if (args.data) {
-					for (const [k, v] of Object.entries(args.data)) {
-						if (v !== null && v !== undefined) body.append(k, String(v));
-					}
-				}
-				const opts = {
-					method: args.method,
-					credentials: 'include',
-					headers: {
-						'Accept': 'application/json, text/plain, */*',
-						'X-Requested-With': 'XMLHttpRequest',
-						'Referer': 'https://www.zhipin.com/web/chat/index',
-					},
-				};
-				if (args.method === 'POST') {
-					opts.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-					opts.body = body.toString();
-				}
-				try {
-					const resp = await fetch(args.url, opts);
-					return await resp.json();
-				} catch (e) {
-					return {code: -1, message: 'fetch threw: ' + e.message, zpData: {}};
-				}
+				const log = [];
+				__HELPERS__
+				const switched = await switchConversation(
+					args.friendData,
+					args.targetFriendId,
+					args.switchTimeoutMs,
+					__REQUIRE_SECURITY_ID__,
+					log,
+				);
+				if (!switched.ok) return switched;
+				await sleep(args.settleMs);
+				const input = switched.input;
+				const editor = switched.editor;
+				const conversation = switched.conversation;
+				__ACTION__
 			}
 		"""
-		result = self._get_browser().evaluate_js(js, {"method": method, "url": url, "data": data})
-		if isinstance(result, dict):
-			result.setdefault("__cli_endpoint_hint__", url)
-		return cast("dict[str, Any]", result)
+		script = (
+			template
+			.replace("__HELPERS__", _CHAT_FRONTEND_HELPERS_JS)
+			.replace("__REQUIRE_SECURITY_ID__", "true" if require_security_id else "false")
+			.replace("__ACTION__", action_js)
+		)
+		args: dict[str, Any] = {
+			"friendData": friend_data,
+			"targetFriendId": friend_data["friendId"],
+			"switchTimeoutMs": 5000,
+			"settleMs": settle_ms,
+		}
+		if extra_args:
+			args.update(extra_args)
+
+		browser = self._get_browser()
+		if listen_ms is None:
+			return browser.evaluate_js(script, args), []
+
+		capture = browser.evaluate_js_with_chat_events(script, args, listen_ms=listen_ms)
+		result = capture.get("value") if isinstance(capture, dict) else capture
+		events = capture.get("events", []) if isinstance(capture, dict) else []
+		return result, cast("list[dict[str, Any]]", events)
+
+	def _matching_chat_send_events(self, events: list[dict[str, Any]], content: str) -> list[dict[str, Any]]:
+		return [
+			event
+			for event in events
+			if event.get("kind") == "ws_send"
+			and int(event.get("bytes", 0)) >= 100
+			and any(content in bit for bit in event.get("utf8_bits", []))
+		]
+
+	def _chat_ws_evidence(self, events: list[dict[str, Any]], content: str) -> dict[str, Any]:
+		ws_send = [event for event in events if event.get("kind") == "ws_send"]
+		sample_bits: list[str] = []
+		for event in ws_send:
+			for bit in event.get("utf8_bits", []):
+				if bit not in sample_bits:
+					sample_bits.append(bit)
+				if len(sample_bits) >= 6:
+					break
+			if len(sample_bits) >= 6:
+				break
+		return {
+			"event_count": len(events),
+			"ws_send_count": len(ws_send),
+			"matched_ws_count": len(self._matching_chat_send_events(events, content)),
+			"sample_bits": sample_bits,
+		}
 
 	# ── Public API ───────────────────────────────────────────────────
 
@@ -341,113 +544,57 @@ class BossRecruiterClient:
 		  2. JS: geekList.geekClick(friendData) 触发 BOSS 自己的会话切换链
 		         → BOSS 自动调 session/bossEnter + boss/historyMsg + chat/geek/info
 		         → editor.conversation$ 切换到目标 friend
-		  3. JS: 轮询 editor.conversation$.friendId === target_friend_id（4s 超时）
-		  4. JS: editor.disabled = false (强制绕过 UI 业务规则)
-		         editor.draft[uniqueId] = content  + input.innerText = content
-		         editor.sendText()                ← 真正触发 WS protobuf 帧
-		  5. 等 2s，验证 WS 帧已发出（caller 端不参与，前端会自己发 zpblock 风控报备）
+		  3. JS: 轮询 editor.conversation$.friendId === target_friend_id（5s 超时）
+		  4. JS: editor.disabled = false + editbox.innerHTML = escaped(text)
+		         editor.draft[uniqueId] = content; editor.sendText()
+		  5. 原始 CDP 监听 3s，必须看到真实 chat WS 帧；只出现
+		     `/message/suggest` 之类提示流量不算成功
 
 		失败验证记录（避免后人重走弯路）：
 		  - ❌ 直接调 BOSS_SEND_MESSAGE_URL (旧路径) → 121 INVALID_PARAM (端点已弃)
 		  - ❌ 调 session_enter（HTTP）后 sendText → editor 不切，仍发到上一个候选人
 		  - ❌ HTTP zpblock/chat/reply/block/v2 作为前置 → 实际是事后报备，前端自动发
-		  - ❌ 跟随 Editor.disabled=true → 客户端业务规则，服务端不看（绕过即可）
+		  - ❌ 只写 draft / innerText → 可能只触发 `/message/suggest`，并未真发
 		  - ✅ geekList.geekClick(friendData) → BOSS 前端自己处理切会话和发消息
 		"""
-		# Step 1: friend_detail
-		fd_resp = self.friend_detail([friend_id])
-		friends = (fd_resp.get("zpData") or {}).get("friendList") or []
-		if not friends:
+		try:
+			friend_data = self._require_chat_friend_data(friend_id)
+		except LookupError as exc:
 			return {
 				"code": -1,
-				"message": "friend_detail 未返回候选人信息（friend_id 可能无效）",
+				"message": str(exc),
 				"zpData": {},
 			}
-		friend = friends[0]
-		# friend_detail 用 uid 字段，前端 geekClick 期待 friendId
-		friend_data: dict[str, Any] = {**friend}
-		if "friendId" not in friend_data and "uid" in friend_data:
-			friend_data["friendId"] = friend_data["uid"]
-		friend_data["uniqueId"] = f"{friend_data['friendId']}-{friend_data.get('friendSource', 0)}"
-		friend_data.setdefault("newMsgCount", 0)
-		friend_data.setdefault("jumpUrl", "")
-
-		# Step 2-4: hand off to the page's Vue runtime
-		js = """
-			async ({friendData, content, targetFriendId, switchTimeoutMs, ackTimeoutMs}) => {
-				const log = [];
-				const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-				const findEditor = () => {
-					const input = document.querySelector('.boss-chat-editor-input');
-					if (!input) return [null, null, 'no .boss-chat-editor-input element'];
-					const editor = input.parentElement && input.parentElement.__vue__;
-					if (!editor) return [null, null, 'editor parent has no __vue__ instance'];
-					return [input, editor, null];
-				};
-				// Click via geek-list.geekClick — drives BOSS's own session-switch chain
-				const chatUser = document.querySelector('.chat-user');
-				if (!chatUser) return {ok: false, error: '.chat-user not found (chat tab not open?)', log};
-				const geekList = chatUser.__vue__;
-				if (!geekList || geekList.$options.name !== 'geek-list') {
-					return {ok: false, error: 'geek-list Vue component not at .chat-user', log};
-				}
-				try {
-					geekList.geekClick(friendData);
-					log.push('geekClick called');
-				} catch (e) {
-					return {ok: false, error: 'geekClick threw: ' + e.message, log};
-				}
-				// Wait for editor to repoint to target
-				const deadline = Date.now() + switchTimeoutMs;
-				let editor = null, input = null;
-				while (Date.now() < deadline) {
-					await sleep(150);
-					const [inp, ed, err] = findEditor();
-					if (err) continue;
-					if (ed.conversation$ && ed.conversation$.friendId === targetFriendId) {
-						editor = ed;
-						input = inp;
-						log.push('editor switched to target after ' + (switchTimeoutMs - (deadline - Date.now())) + 'ms');
-						break;
-					}
-				}
-				if (!editor) return {ok: false, error: 'editor did not switch to target friend in ' + switchTimeoutMs + 'ms', log};
-				// Force-bypass UI disable rule (server doesn't enforce it)
-				editor.disabled = false;
-				editor.draft[editor.uniqueId] = content;
-				input.innerText = content;
-				log.push('draft set, calling sendText');
-				try {
-					editor.sendText();
-				} catch (e) {
-					return {ok: false, error: 'sendText threw: ' + e.message, log};
-				}
-				// Best-effort wait so the WS frame can leave the page before
-				// caller closes/disconnects the CDP session.
-				await sleep(ackTimeoutMs);
-				log.push('done');
-				return {ok: true, log};
-			}
-		"""
-		result = self._get_browser().evaluate_js(
-			js,
-			{
-				"friendData": friend_data,
-				"content": content,
-				"targetFriendId": friend_data["friendId"],
-				"switchTimeoutMs": 4000,
-				"ackTimeoutMs": 2000,
-			},
+		result, events = self._run_chat_frontend_action(
+			friend_data=friend_data,
+			action_js=_SEND_MESSAGE_ACTION_JS,
+			require_security_id=False,
+			settle_ms=2000,
+			extra_args={"content": content, "postSendUiWaitMs": 1200},
+			listen_ms=3000,
 		)
 
 		if isinstance(result, dict) and result.get("ok"):
-			return {"code": 0, "message": "Success", "zpData": {"friendId": friend_id, "log": result.get("log")}}
+			matched_ws = self._matching_chat_send_events(events, content)
+			if matched_ws:
+				return {
+					"code": 0,
+					"message": "Success",
+					"zpData": {
+						"friendId": friend_id,
+						"log": result.get("log"),
+						"matched_ws_count": len(matched_ws),
+					},
+				}
+			result.setdefault("error", "no confirmed chat websocket send detected")
+		if isinstance(result, dict):
+			result.setdefault("ws_evidence", self._chat_ws_evidence(events, content))
 		# Surface the page-side error in CLI envelope shape
 		err_msg = (result or {}).get("error") if isinstance(result, dict) else f"unexpected result: {result!r}"
 		return {
 			"code": -1,
 			"message": f"send_message_by_friend failed: {err_msg}",
-			"zpData": {"log": (result or {}).get("log") if isinstance(result, dict) else None},
+			"zpData": result if isinstance(result, dict) else {"ws_evidence": self._chat_ws_evidence(events, content)},
 		}
 
 	def session_enter(self, geek_id: str, expect_id: str, job_id: str, security_id: str) -> dict[str, Any]:
@@ -482,149 +629,70 @@ class BossRecruiterClient:
 	def exchange_request_by_friend(self, friend_id: int, exchange_type: int) -> dict[str, Any]:
 		"""请求交换联系方式（手机号/微信）或附件简历。
 
-		issue #217 — 抓包实证的真实协议：
+		issue #217 — 走 BOSS 招聘者前端 Vue 组件代劳真实 exchange 链路。
 
 		  type 取值:
 		    1 = 换手机号
+		    2 = 换微信
 		    4 = 求附件简历
 		    （旧代码的 type=3 是错的, 已弃）
 
-		  完整调用顺序（前端抓包顺序）：
-		    1. POST /wapi/zpblock/chat/reply/block/v2
-		       encryptJid=encJobId, encryptExpId=encExpId,
-		       securityId=securityId, autoRelease=0, bgSource=12
-		       (与 send_message 风控前置同源, autoRelease/bgSource 不同)
-		    2. POST /wapi/zpchat/exchange/test  (type, securityId)
-		    3. POST /wapi/zpchat/exchange/test  (二次确认)
-		    4. POST /wapi/zpchat/exchange/request
-		       type, securityId, name=候选人姓名(URL encoded)
-
-		  关键字段全来自 friend_detail([friend_id]) 响应，CLI 用户只需要
-		  传 friend_id + type，不必关心 securityId / name / encryptJobId。
+		  实测失败路径：CLI 手写 zpblock → exchange/test → exchange/test →
+		  exchange/request，第一步过、第二步仍 121。真实可用路径是先
+		  geekClick 切到目标会话，再调用页面里的 ExchangePhone /
+		  ExchangeResume.handleExChange()，由前端自己处理动态 securityId、
+		  风控请求、确认弹窗和状态刷新。
 
 		失败验证记录:
 		  - ❌ 旧 exchange_request(type, uid, jobId, gid) → 121 (参数协议错位)
-		  - ❌ 缺少 zpblock 前置 + exchange/test → 服务端拒
+		  - ❌ CLI 复刻四步 HTTP → exchange/test 仍 121
+		  - ✅ ExchangeResume.handleExChange() → 发送"方便发一份简历过来吗？"
+		  - ✅ ExchangePhone.handleExChange() → 发送"请求交换联系方式"
+		  - ✅ ExchangeWx.handleExChange() → 发送"请求交换联系方式"
 		"""
-		fd_resp = self.friend_detail([friend_id])
-		friends = (fd_resp.get("zpData") or {}).get("friendList") or []
-		if not friends:
+		try:
+			friend_data = self._require_chat_friend_data(friend_id)
+		except LookupError as exc:
 			return {
 				"code": -1,
-				"message": "friend_detail 未返回候选人信息（friend_id 可能无效）",
+				"message": str(exc),
 				"zpData": {},
 			}
-		friend = friends[0]
 
-		# 关键：friend_detail 响应 encryptExpectId 总是 null，但 zpblock/v2
-		# 需要它的加密字符串形式（如 "3a40ce7d18586f591nF739i7FlFVyg~~"）。
-		# 前端 editor.conversation$.encryptExpectId 才有这个值——必须先 geekClick
-		# 切到目标候选人会话，让 BOSS 内部接口填充 conversation$，再读出来。
-		# 顺便也用 conversation$ 里的最新 securityId/encryptJobId/name（更可靠）。
-		switch_js = """
-			async (args) => {
-				const sleep = ms => new Promise(r => setTimeout(r, ms));
-				const chatUser = document.querySelector('.chat-user');
-				if (!chatUser) return {ok: false, error: '.chat-user not found'};
-				const geekList = chatUser.__vue__;
-				if (!geekList || geekList.$options.name !== 'geek-list') {
-					return {ok: false, error: 'geek-list Vue component not at .chat-user'};
-				}
-				try {
-					geekList.geekClick(args.friendData);
-				} catch (e) {
-					return {ok: false, error: 'geekClick threw: ' + e.message};
-				}
-				// conversation$ is populated progressively after geekClick:
-				// friendId appears first, then securityId/encryptExpectId are
-				// filled by subsequent /chat/geek/info + /session/bossEnter
-				// responses. We must wait for all required fields.
-				const deadline = Date.now() + args.timeoutMs;
-				let partial = null;
-				while (Date.now() < deadline) {
-					await sleep(150);
-					const inp = document.querySelector('.boss-chat-editor-input');
-					const ed = inp && inp.parentElement && inp.parentElement.__vue__;
-					if (!ed || !ed.conversation$) continue;
-					const c = ed.conversation$;
-					if (c.friendId !== args.targetFriendId) continue;
-					partial = {
-						encryptUid: c.encryptUid,
-						encryptJobId: c.encryptJobId || c.toPositionId,
-						encryptExpectId: c.encryptExpectId || '',
-						securityId: c.securityId,
-						name: c.name,
-					};
-					// Only return when the write-path required fields are populated.
-					if (partial.securityId && partial.encryptJobId) {
-						return {ok: true, ...partial};
-					}
-				}
-				return {
-					ok: false,
-					error: 'conversation$ not fully populated in ' + args.timeoutMs + 'ms',
-					partial,
-				};
+		component_name = _EXCHANGE_COMPONENT_NAMES.get(exchange_type)
+		if component_name is None:
+			return {
+				"code": -1,
+				"message": f"unsupported exchange_type={exchange_type}; expected 1(phone), 2(wechat) or 4(resume)",
+				"zpData": {},
 			}
-		"""
-		friend_data: dict[str, Any] = {**friend}
-		if "friendId" not in friend_data and "uid" in friend_data:
-			friend_data["friendId"] = friend_data["uid"]
-		friend_data["uniqueId"] = f"{friend_data['friendId']}-{friend_data.get('friendSource', 0)}"
-		friend_data.setdefault("newMsgCount", 0)
-		friend_data.setdefault("jumpUrl", "")
 
-		switch_result = self._get_browser().evaluate_js(
-			switch_js,
-			{"friendData": friend_data, "targetFriendId": friend_data["friendId"], "timeoutMs": 4000},
+		result, _ = self._run_chat_frontend_action(
+			friend_data=friend_data,
+			action_js=_EXCHANGE_ACTION_JS,
+			require_security_id=True,
+			settle_ms=1000,
+			extra_args={"componentName": component_name},
 		)
-		# 等待 BOSS 前端把 geekClick 触发的内部请求（historyMsg / geek/info /
-		# session/bossEnter / brandCard）跑完，避免与 CLI 后续 zpblock+exchange
-		# 序列产生 race，导致 securityId 一次性令牌被前端先消费掉 → 121
-		time.sleep(1.5)
-		if not (isinstance(switch_result, dict) and switch_result.get("ok")):
-			err = (switch_result or {}).get("error") if isinstance(switch_result, dict) else f"unexpected: {switch_result!r}"
-			return {"code": -1, "message": f"无法切换到目标候选人会话: {err}", "zpData": {}}
 
-		encrypt_job_id = switch_result.get("encryptJobId") or ""
-		encrypt_exp_id = switch_result.get("encryptExpectId") or ""
-		security_id = switch_result.get("securityId") or ""
-		name = switch_result.get("name") or friend.get("name") or ""
-		if not security_id:
-			return {"code": -1, "message": "conversation$ 缺 securityId", "zpData": switch_result}
-
-		# 所有 4 步都走 _evaluate_request (raw CDP fetch in chat tab),
-		# 不能用 _browser_request：后者会触发 patchright connect_over_cdp,
-		# 而招聘者 chat tab 持续 Vue 重渲染会让 patchright 在 attach 阶段崩
-		# (Node driver 'Frame was detached')。
-		# Step 1: zpblock 风控前置 (与 send_message 同源但参数不同)
-		block_data = {
-			"encryptJid": encrypt_job_id,
-			"encryptExpId": encrypt_exp_id,  # 从 conversation$ 拿，friend_detail 给不了
-			"securityId": security_id,
-			"autoRelease": "0",  # 注意 send_message 不传此参数（默认 1）
-			"bgSource": "12",    # 12 = exchange，与 reply 的 1 区分
+		if isinstance(result, dict) and result.get("ok"):
+			return {
+				"code": 0,
+				"message": "Success",
+				"zpData": {
+					"friendId": friend_id,
+					"exchange_type": exchange_type,
+					"componentName": result.get("componentName"),
+					"confirmed": result.get("confirmed"),
+					"log": result.get("log"),
+				},
+			}
+		err = (result or {}).get("error") if isinstance(result, dict) else f"unexpected result: {result!r}"
+		return {
+			"code": -1,
+			"message": f"exchange_request_by_friend failed: {err}",
+			"zpData": result if isinstance(result, dict) else {},
 		}
-		block_resp = self._evaluate_request("POST", ep.BOSS_CHAT_REPLY_BLOCK_URL, data=block_data)
-		if block_resp.get("code") != 0:
-			return block_resp
-
-		# Step 2-3: exchange/test (两次都跑，复刻前端二次确认行为)
-		test_data: dict[str, Any] = {"type": exchange_type, "securityId": security_id}
-		test1 = self._evaluate_request("POST", ep.BOSS_EXCHANGE_TEST_URL, data=test_data)
-		if test1.get("code") != 0:
-			return test1
-		test2 = self._evaluate_request("POST", ep.BOSS_EXCHANGE_TEST_URL, data=test_data)
-		if test2.get("code") != 0:
-			return test2
-
-		# Step 4: exchange/request
-		req_data: dict[str, Any] = {
-			"type": exchange_type,
-			"securityId": security_id,
-			"name": name,  # 服务端要 URL-encoded UTF-8 姓名；URLSearchParams 自动编码
-		}
-		return self._evaluate_request("POST", ep.BOSS_EXCHANGE_REQUEST_URL, data=req_data)
 
 	def exchange_content(self, uid: int) -> dict[str, Any]:
 		data = {"uid": uid}

@@ -59,7 +59,8 @@ boss hr candidates "Golang"
 
 # Step 3: contact candidates
 boss hr reply <friend_id> "你好，方便聊一下岗位吗？"
-boss hr request-resume <friend_id> --job-id <job_id>
+boss hr request-resume <friend_id>
+boss hr resume --exchange --friend-id <friend_id> --type phone
 ```
 
 Recommended usage:

@@ -595,6 +595,18 @@ TOOLS = [
 		},
 	),
 	Tool(
+		name="boss_hr_exchange",
+		description="招聘者模式：请求交换候选人手机号或微信",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
+				"type": {"type": "string", "description": "交换类型", "enum": ["phone", "wechat"], "default": "phone"},
+			},
+			"required": ["friend_id"],
+		},
+	),
+	Tool(
 		name="boss_hr_reply",
 		description="招聘者模式：回复候选人消息",
 		inputSchema={
@@ -613,9 +625,8 @@ TOOLS = [
 			"type": "object",
 			"properties": {
 				"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
-				"job_id": {"type": "integer", "description": "关联职位 ID"},
 			},
-			"required": ["friend_id", "job_id"],
+			"required": ["friend_id"],
 		},
 	),
 	Tool(
@@ -892,11 +903,17 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 			args.append("--raw")
 		return args
 
+	if name == "hr_exchange":
+		args = ["hr", "resume", "--exchange", "--friend-id", str(arguments["friend_id"])]
+		if arguments.get("type") and arguments["type"] != "phone":
+			args.extend(["--type", str(arguments["type"])])
+		return args
+
 	if name == "hr_reply":
 		return ["hr", "reply", str(arguments["friend_id"]), arguments["message"]]
 
 	if name == "hr_request_resume":
-		return ["hr", "request-resume", str(arguments["friend_id"]), "--job-id", str(arguments["job_id"])]
+		return ["hr", "request-resume", str(arguments["friend_id"])]
 
 	if name == "hr_jobs":
 		action = arguments.get("action", "list")

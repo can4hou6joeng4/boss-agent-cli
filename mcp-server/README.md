@@ -83,7 +83,7 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 
 ## 可用工具
 
-当前 MCP Server 暴露 **49 个工具**，覆盖求职者链路、AI 辅助能力，以及招聘者侧 `hr` 工作流。
+当前 MCP Server 暴露 **50 个工具**，覆盖求职者链路、AI 辅助能力，以及招聘者侧 `hr` 工作流。
 
 ### 认证与环境
 
@@ -146,6 +146,7 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 | `boss_hr_candidates` | 搜索候选人 |
 | `boss_hr_chat` | 招聘者沟通列表 |
 | `boss_hr_resume` | 查看候选人在线简历 |
+| `boss_hr_exchange` | 请求交换候选人手机号或微信 |
 | `boss_hr_reply` | 回复候选人消息 |
 | `boss_hr_request_resume` | 请求候选人附件简历 |
 | `boss_hr_jobs` | 职位列表与上下线管理 |

@@ -775,7 +775,7 @@ SCHEMA_DATA = {
 			"options": {},
 			"subcommands": {
 				"applications": "查看候选人投递申请列表",
-				"resume": "查看或请求候选人简历",
+				"resume": "查看候选人在线简历或发起联系方式交换",
 				"chat": "查看与候选人的沟通列表",
 				"jobs": "管理职位发布（list/offline/online）",
 				"candidates": "搜索候选人（支持 city/job-id/experience/degree/age/school-level/activeness/source/salary/select/page 筛选）",
@@ -938,7 +938,7 @@ SCHEMA_DATA = {
 		"RESUME_NOT_SHARED": {
 			"message": "候选人未分享简历",
 			"recoverable": True,
-			"recovery_action": "使用 resume <id> --request 请求简历",
+			"recovery_action": "使用 boss hr request-resume <friend_id> 请求附件简历",
 		},
 		"JOB_POST_LIMIT": {
 			"message": "职位发布数量已达上限",

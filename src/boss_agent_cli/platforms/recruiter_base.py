@@ -149,7 +149,7 @@ class RecruiterPlatform(ABC):
 	def exchange_request_by_friend(self, friend_id: int, exchange_type: int) -> dict[str, Any]:
 		"""请求交换联系方式 / 求附件简历（issue #217 修复）。
 
-		type: 1=换手机号, 4=求附件简历
+		type: 1=换手机号, 2=换微信, 4=求附件简历
 		"""
 		raise NotImplementedError(f"{self.name} does not implement exchange_request_by_friend")
 

@@ -6,7 +6,7 @@
 
 > Job-seeker: search · welfare filtering · personalized recommendations · auto-greeting · pipeline · incremental watch · AI resume optimization
 >
-> Recruiter: candidate search · chat reply · resume request · job publish management · cross-platform adapter layer
+> Recruiter: candidate search · chat reply · resume/contact requests · job publish management · cross-platform adapter layer
 
 [![CI](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli)
@@ -81,7 +81,7 @@ Every command outputs **structured JSON** that AI Agents parse directly. No frag
 
 ### Recruiter workflow
 
-- **Candidate operations**: incoming applications, candidate search, recruiter chat list, inline resume view, and resume requests. Commands: `hr applications` `hr candidates` `hr chat` `hr resume` `hr request-resume`
+- **Candidate operations**: incoming applications, candidate search, recruiter chat list, inline resume view, attached-resume requests, and phone/WeChat exchange requests. Commands: `hr applications` `hr candidates` `hr chat` `hr resume` `hr request-resume`
 - **Recruiter messaging**: reply to candidates while keeping the same JSON contract as the candidate side. Command: `hr reply`
 - **Job lifecycle management**: list, bring online, and take offline recruiter postings. Commands: `hr jobs list` `hr jobs online` `hr jobs offline`
 
@@ -91,7 +91,7 @@ Every command outputs **structured JSON** that AI Agents parse directly. No frag
 - **Structured transport**: stdout is JSON-only, stderr is logs-only, which keeps automation stable
 - **Platform-aware login**: `zhipin` uses Cookie → CDP → QR httpx → patchright; `zhilian` uses Cookie → CDP → browser login
 - **Cross-platform adapter layer**: `Platform` / `RecruiterPlatform` registries are live; BOSS is available on both candidate and recruiter sides, and Zhaopin already has candidate-side login plus read/write flow wired in
-- **MCP server with 49 tools**: ready for Claude Desktop / Cursor / Windsurf, including recruiter-side tools without wrapping your own bridge
+- **MCP server with 50 tools**: ready for Claude Desktop / Cursor / Windsurf, including recruiter-side tools without wrapping your own bridge
 
 ## 📦 Install
 
@@ -140,6 +140,8 @@ boss stats --days 30
 boss hr applications                    # candidate applications
 boss hr candidates "Golang"             # search candidates
 boss hr reply <friend_id> "Hi"          # reply to candidate
+boss hr request-resume <friend_id>      # request attached resume
+boss hr resume --exchange --friend-id <friend_id> --type wechat   # request WeChat exchange
 boss hr jobs list                       # my job postings
 ```
 

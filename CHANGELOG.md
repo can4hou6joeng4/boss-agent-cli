@@ -9,6 +9,8 @@
 - `mcp-server/README.md` 补齐 SSE / HTTP Streaming 启动示例、默认路径和自定义路径说明
 
 ### Changed
+- 招聘者写操作收口到同一条 chat-tab Vue/CDP 链路：`boss hr reply` 现在用真实 WebSocket 帧校验发送成功，`boss hr request-resume` 不再需要 `--job-id`，`boss hr resume --exchange` 支持 `phone|wechat`
+- MCP 新增 `boss_hr_exchange`，并同步修正 `boss_hr_request_resume` 的输入契约为仅需 `friend_id`
 - 测试依赖 `pytest` 最低版本提升到 `9.0.3`，并同步更新锁文件，修复 Dependabot 报告的临时目录处理漏洞告警
 - ROADMAP / README / README.en 对齐当前主线事实：`#48` 已完成，智联候选者侧登录与读写链路已接通，招聘者侧仍保持显式拒绝
 

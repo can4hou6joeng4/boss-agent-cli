@@ -94,9 +94,10 @@ Use this matrix to keep CLI, skills, and MCP integrations aligned across differe
 | Application inbox | `boss hr applications` | Yes | httpx |
 | Candidate search | `boss hr candidates` | Yes | httpx, supports `--city` / `--job-id` / `--experience` / `--degree` / `--age` / `--school-level` / `--activeness` / `--source` / `--salary` / `--select` / `--page` |
 | Recruiter chat list | `boss hr chat` | Yes | httpx |
-| Online resume view | `boss hr resume` | Yes | httpx |
-| Reply to candidate | `boss hr reply` | Yes | httpx |
-| Request attached resume | `boss hr request-resume` | Yes | httpx |
+| Online resume view | `boss hr resume <geek_id> --job-id <id> --security-id <id>` | Yes | httpx |
+| Contact exchange | `boss hr resume --exchange --friend-id <friend_id> [--type wechat]` | Yes | Browser (CDP chat tab) |
+| Reply to candidate | `boss hr reply <friend_id> <message>` | Yes | Browser (CDP chat tab) |
+| Request attached resume | `boss hr request-resume <friend_id>` | Yes | Browser (CDP chat tab) |
 | Job listing and online/offline operations | `boss hr jobs` | Yes | httpx |
 
 Notes:
