@@ -34,7 +34,6 @@ def reply_cmd(ctx: click.Context, friend_id: int, message: str) -> None:
 			return
 		data = {
 			"friend_id": friend_id,
-			"message": message,
 			"sent": True,
 		}
 		handle_output(

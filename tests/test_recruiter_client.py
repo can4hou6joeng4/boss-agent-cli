@@ -310,6 +310,7 @@ def test_send_message_by_friend_without_real_ws_send_returns_error():
 	"""只出现 suggestion 等旁路流量时，不应乐观判成功。"""
 	auth = _make_auth()
 	client = BossRecruiterClient(auth)
+	private_message = "候选人张三问薪资 30K 可否远程"
 	friend_detail_resp = {
 		"code": 0,
 		"zpData": {"friendList": [{"uid": 1, "encryptUid": "u", "encryptJobId": "j", "securityId": "s", "friendSource": 0}]},
@@ -319,7 +320,7 @@ def test_send_message_by_friend_without_real_ws_send_returns_error():
 		mock_browser = MagicMock()
 		mock_browser.evaluate_js_with_chat_events.return_value = {
 			"value": {"ok": True, "log": ["sendText returned undefined"]},
-			"events": [{"kind": "ws_send", "bytes": 156, "utf8_bits": ["/message/suggest", "query"]}],
+			"events": [{"kind": "ws_send", "bytes": 156, "utf8_bits": ["/message/suggest", private_message]}],
 		}
 		mock_get_browser.return_value = mock_browser
 
@@ -327,6 +328,8 @@ def test_send_message_by_friend_without_real_ws_send_returns_error():
 		assert result["code"] == -1
 		assert "no confirmed chat websocket send detected" in result["message"]
 		assert result["zpData"]["ws_evidence"]["matched_ws_count"] == 0
+		assert "sample_bits" not in result["zpData"]["ws_evidence"]
+		assert private_message not in json.dumps(result, ensure_ascii=False)
 	client.close()
 
 

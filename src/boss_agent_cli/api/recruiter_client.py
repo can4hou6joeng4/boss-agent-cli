@@ -390,20 +390,10 @@ class BossRecruiterClient:
 
 	def _chat_ws_evidence(self, events: list[dict[str, Any]], expected_bits: list[str]) -> dict[str, Any]:
 		ws_send = [event for event in events if event.get("kind") == "ws_send"]
-		sample_bits: list[str] = []
-		for event in ws_send:
-			for bit in event.get("utf8_bits", []):
-				if bit not in sample_bits:
-					sample_bits.append(bit)
-				if len(sample_bits) >= 6:
-					break
-			if len(sample_bits) >= 6:
-				break
 		return {
 			"event_count": len(events),
 			"ws_send_count": len(ws_send),
 			"matched_ws_count": len(self._matching_chat_send_events(events, expected_bits)),
-			"sample_bits": sample_bits,
 		}
 
 	def _chat_action_failure_data(
