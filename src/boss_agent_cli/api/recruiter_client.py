@@ -138,7 +138,6 @@ const vm = findVueComponent(args.componentName);
 if (!vm) return {ok: false, error: args.componentName + ' Vue component not found', log};
 log.push('found ' + args.componentName + ' type=' + vm.type);
 
-const beforeText = chatConversationText();
 try {
 	const ret = vm.handleExChange();
 	if (ret && typeof ret.then === 'function') await ret;
@@ -147,19 +146,16 @@ try {
 	return {ok: false, error: 'handleExChange threw: ' + e.message, log};
 }
 
-await sleep(1000);
+await sleep(args.preConfirmUiWaitMs);
 const confirmed = clickPrimaryConfirm();
 log.push('confirm clicked=' + confirmed);
-
-await sleep(2500);
-const afterText = chatConversationText();
-const expectedText = args.componentName === 'ExchangeResume'
-	? ['简历请求已发送', '方便发一份简历过来吗？']
-	: ['请求交换联系方式已发送', '请求交换联系方式'];
-const ok = expectedText.some((text) => afterText.includes(text) && (!beforeText.includes(text) || text.includes('已发送')));
+if (!confirmed) {
+	return {ok: false, error: args.componentName + ' confirm button not found', log, confirmed, componentName: args.componentName};
+}
+await sleep(args.postConfirmUiWaitMs);
 return {
-	ok,
-	error: ok ? null : args.componentName + ' did not produce expected sent marker',
+	ok: true,
+	error: null,
 	log,
 	confirmed,
 	componentName: args.componentName,
@@ -167,6 +163,7 @@ return {
 """
 
 _EXCHANGE_COMPONENT_NAMES = {1: "ExchangePhone", 2: "ExchangeWx", 4: "ExchangeResume"}
+_EXCHANGE_MESSAGE_TEXT = {1: "请求交换联系方式", 2: "请求交换联系方式", 4: "方便发一份简历过来吗？"}
 
 
 def _close_open_clients() -> None:
@@ -382,16 +379,16 @@ class BossRecruiterClient:
 		events = capture.get("events", []) if isinstance(capture, dict) else []
 		return result, cast("list[dict[str, Any]]", events)
 
-	def _matching_chat_send_events(self, events: list[dict[str, Any]], content: str) -> list[dict[str, Any]]:
+	def _matching_chat_send_events(self, events: list[dict[str, Any]], expected_bits: list[str]) -> list[dict[str, Any]]:
 		return [
 			event
 			for event in events
 			if event.get("kind") == "ws_send"
 			and int(event.get("bytes", 0)) >= 100
-			and any(content in bit for bit in event.get("utf8_bits", []))
+			and any(expected in bit for expected in expected_bits for bit in event.get("utf8_bits", []))
 		]
 
-	def _chat_ws_evidence(self, events: list[dict[str, Any]], content: str) -> dict[str, Any]:
+	def _chat_ws_evidence(self, events: list[dict[str, Any]], expected_bits: list[str]) -> dict[str, Any]:
 		ws_send = [event for event in events if event.get("kind") == "ws_send"]
 		sample_bits: list[str] = []
 		for event in ws_send:
@@ -405,9 +402,36 @@ class BossRecruiterClient:
 		return {
 			"event_count": len(events),
 			"ws_send_count": len(ws_send),
-			"matched_ws_count": len(self._matching_chat_send_events(events, content)),
+			"matched_ws_count": len(self._matching_chat_send_events(events, expected_bits)),
 			"sample_bits": sample_bits,
 		}
+
+	def _chat_action_failure_data(
+		self,
+		*,
+		action: str,
+		friend_id: int,
+		error: str,
+		expected_bits: list[str],
+		result: Any = None,
+		events: list[dict[str, Any]] | None = None,
+		extra: dict[str, Any] | None = None,
+	) -> dict[str, Any]:
+		payload: dict[str, Any] = {
+			"action": action,
+			"friendId": friend_id,
+			"ok": False,
+			"error": error,
+			"log": result.get("log", []) if isinstance(result, dict) else [],
+			"ws_evidence": self._chat_ws_evidence(events or [], expected_bits),
+		}
+		if isinstance(result, dict):
+			for key in ("confirmed", "componentName"):
+				if key in result:
+					payload[key] = result[key]
+		if extra:
+			payload.update(extra)
+		return payload
 
 	# ── Public API ───────────────────────────────────────────────────
 
@@ -563,7 +587,12 @@ class BossRecruiterClient:
 			return {
 				"code": -1,
 				"message": str(exc),
-				"zpData": {},
+				"zpData": self._chat_action_failure_data(
+					action="reply",
+					friend_id=friend_id,
+					error=str(exc),
+					expected_bits=[content],
+				),
 			}
 		result, events = self._run_chat_frontend_action(
 			friend_data=friend_data,
@@ -575,7 +604,7 @@ class BossRecruiterClient:
 		)
 
 		if isinstance(result, dict) and result.get("ok"):
-			matched_ws = self._matching_chat_send_events(events, content)
+			matched_ws = self._matching_chat_send_events(events, [content])
 			if matched_ws:
 				return {
 					"code": 0,
@@ -587,14 +616,23 @@ class BossRecruiterClient:
 					},
 				}
 			result.setdefault("error", "no confirmed chat websocket send detected")
-		if isinstance(result, dict):
-			result.setdefault("ws_evidence", self._chat_ws_evidence(events, content))
 		# Surface the page-side error in CLI envelope shape
-		err_msg = (result or {}).get("error") if isinstance(result, dict) else f"unexpected result: {result!r}"
+		err_msg = (
+			str((result or {}).get("error") or "unexpected page result")
+			if isinstance(result, dict)
+			else f"unexpected result: {result!r}"
+		)
 		return {
 			"code": -1,
 			"message": f"send_message_by_friend failed: {err_msg}",
-			"zpData": result if isinstance(result, dict) else {"ws_evidence": self._chat_ws_evidence(events, content)},
+			"zpData": self._chat_action_failure_data(
+				action="reply",
+				friend_id=friend_id,
+				error=err_msg,
+				expected_bits=[content],
+				result=result,
+				events=events,
+			),
 		}
 
 	def session_enter(self, geek_id: str, expect_id: str, job_id: str, security_id: str) -> dict[str, Any]:
@@ -656,7 +694,13 @@ class BossRecruiterClient:
 			return {
 				"code": -1,
 				"message": str(exc),
-				"zpData": {},
+				"zpData": self._chat_action_failure_data(
+					action="exchange",
+					friend_id=friend_id,
+					error=str(exc),
+					expected_bits=[],
+					extra={"exchange_type": exchange_type},
+				),
 			}
 
 		component_name = _EXCHANGE_COMPONENT_NAMES.get(exchange_type)
@@ -664,34 +708,62 @@ class BossRecruiterClient:
 			return {
 				"code": -1,
 				"message": f"unsupported exchange_type={exchange_type}; expected 1(phone), 2(wechat) or 4(resume)",
-				"zpData": {},
+				"zpData": self._chat_action_failure_data(
+					action="exchange",
+					friend_id=friend_id,
+					error=f"unsupported exchange_type={exchange_type}; expected 1(phone), 2(wechat) or 4(resume)",
+					expected_bits=[],
+					extra={"exchange_type": exchange_type},
+				),
 			}
 
-		result, _ = self._run_chat_frontend_action(
+		expected_text = _EXCHANGE_MESSAGE_TEXT[exchange_type]
+		result, events = self._run_chat_frontend_action(
 			friend_data=friend_data,
 			action_js=_EXCHANGE_ACTION_JS,
 			require_security_id=True,
 			settle_ms=1000,
-			extra_args={"componentName": component_name},
+			extra_args={
+				"componentName": component_name,
+				"preConfirmUiWaitMs": 1000,
+				"postConfirmUiWaitMs": 800,
+			},
+			listen_ms=3000,
 		)
 
 		if isinstance(result, dict) and result.get("ok"):
-			return {
-				"code": 0,
-				"message": "Success",
-				"zpData": {
-					"friendId": friend_id,
-					"exchange_type": exchange_type,
-					"componentName": result.get("componentName"),
-					"confirmed": result.get("confirmed"),
-					"log": result.get("log"),
-				},
-			}
-		err = (result or {}).get("error") if isinstance(result, dict) else f"unexpected result: {result!r}"
+			matched_ws = self._matching_chat_send_events(events, [expected_text])
+			if matched_ws:
+				return {
+					"code": 0,
+					"message": "Success",
+					"zpData": {
+						"friendId": friend_id,
+						"exchange_type": exchange_type,
+						"componentName": result.get("componentName"),
+						"confirmed": result.get("confirmed"),
+						"log": result.get("log"),
+						"matched_ws_count": len(matched_ws),
+					},
+				}
+			result.setdefault("error", "no confirmed chat websocket send detected")
+		err = (
+			str((result or {}).get("error") or "unexpected page result")
+			if isinstance(result, dict)
+			else f"unexpected result: {result!r}"
+		)
 		return {
 			"code": -1,
 			"message": f"exchange_request_by_friend failed: {err}",
-			"zpData": result if isinstance(result, dict) else {},
+			"zpData": self._chat_action_failure_data(
+				action="exchange",
+				friend_id=friend_id,
+				error=err,
+				expected_bits=[expected_text],
+				result=result,
+				events=events,
+				extra={"exchange_type": exchange_type, "componentName": component_name},
+			),
 		}
 
 	def exchange_content(self, uid: int) -> dict[str, Any]:

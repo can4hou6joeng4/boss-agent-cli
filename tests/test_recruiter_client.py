@@ -193,6 +193,10 @@ def test_send_message_by_friend_no_friend_returns_error():
 		result = client.send_message_by_friend(99999, "x")
 		assert result["code"] == -1
 		assert "friend_detail" in result["message"]
+		assert result["zpData"]["action"] == "reply"
+		assert result["zpData"]["friendId"] == 99999
+		assert result["zpData"]["ok"] is False
+		assert result["zpData"]["ws_evidence"]["matched_ws_count"] == 0
 	client.close()
 
 
@@ -205,13 +209,16 @@ def test_exchange_request_by_friend_uses_frontend_component():
 	page_response = {
 		"ok": True,
 		"componentName": "ExchangePhone",
-		"type": 1,
+		"confirmed": True,
 		"log": ["geekClick called", "found ExchangePhone type=1", "handleExChange returned"],
 	}
 	with patch.object(client, "_request", return_value=friend_detail_resp), \
 		patch.object(client, "_get_browser") as mock_get_browser:
 		mock_browser = MagicMock()
-		mock_browser.evaluate_js.return_value = page_response
+		mock_browser.evaluate_js_with_chat_events.return_value = {
+			"value": page_response,
+			"events": [{"kind": "ws_send", "bytes": 194, "utf8_bits": ["请求交换联系方式"]}],
+		}
 		mock_get_browser.return_value = mock_browser
 
 		result = client.exchange_request_by_friend(1, exchange_type=1)
@@ -219,8 +226,8 @@ def test_exchange_request_by_friend_uses_frontend_component():
 		assert result["zpData"]["friendId"] == 1
 		assert result["zpData"]["componentName"] == "ExchangePhone"
 		assert result["zpData"]["exchange_type"] == 1
-		assert "type" not in result["zpData"]
-		js_arg = mock_browser.evaluate_js.call_args[0][1]
+		assert result["zpData"]["matched_ws_count"] == 1
+		js_arg = mock_browser.evaluate_js_with_chat_events.call_args[0][1]
 		assert js_arg["componentName"] == "ExchangePhone"
 		assert js_arg["targetFriendId"] == 1
 	assert js_arg["friendData"]["uniqueId"] == "1-0"
@@ -238,12 +245,15 @@ def test_exchange_request_by_friend_maps_wechat_to_exchangewx():
 	with patch.object(client, "_request", return_value=friend_detail_resp), \
 		patch.object(client, "_get_browser") as mock_get_browser:
 		mock_browser = MagicMock()
-		mock_browser.evaluate_js.return_value = {"ok": True, "componentName": "ExchangeWx", "type": 2, "log": []}
+		mock_browser.evaluate_js_with_chat_events.return_value = {
+			"value": {"ok": True, "componentName": "ExchangeWx", "confirmed": True, "log": []},
+			"events": [{"kind": "ws_send", "bytes": 194, "utf8_bits": ["请求交换联系方式"]}],
+		}
 		mock_get_browser.return_value = mock_browser
 
 		result = client.exchange_request_by_friend(1, exchange_type=2)
 		assert result["code"] == 0
-		js_arg = mock_browser.evaluate_js.call_args[0][1]
+		js_arg = mock_browser.evaluate_js_with_chat_events.call_args[0][1]
 		assert js_arg["componentName"] == "ExchangeWx"
 	client.close()
 
@@ -256,13 +266,19 @@ def test_exchange_request_by_friend_page_error_propagated():
 	with patch.object(client, "_request", return_value=friend_detail_resp), \
 		patch.object(client, "_get_browser") as mock_get_browser:
 		mock_browser = MagicMock()
-		mock_browser.evaluate_js.return_value = {"ok": False, "error": "ExchangeResume Vue component not found", "log": []}
+		mock_browser.evaluate_js_with_chat_events.return_value = {
+			"value": {"ok": False, "error": "ExchangeResume Vue component not found", "log": []},
+			"events": [],
+		}
 		mock_get_browser.return_value = mock_browser
 
 		result = client.exchange_request_by_friend(1, exchange_type=4)
 		assert result["code"] == -1
 		assert "ExchangeResume" in result["message"]
 		assert result["zpData"]["error"] == "ExchangeResume Vue component not found"
+		assert result["zpData"]["action"] == "exchange"
+		assert result["zpData"]["friendId"] == 1
+		assert result["zpData"]["exchange_type"] == 4
 	client.close()
 
 
@@ -286,6 +302,7 @@ def test_send_message_by_friend_page_error_propagated():
 		result = client.send_message_by_friend(1, "x")
 		assert result["code"] == -1
 		assert "geek-list Vue" in result["message"]
+		assert result["zpData"]["action"] == "reply"
 	client.close()
 
 
@@ -309,6 +326,31 @@ def test_send_message_by_friend_without_real_ws_send_returns_error():
 		result = client.send_message_by_friend(1, "x")
 		assert result["code"] == -1
 		assert "no confirmed chat websocket send detected" in result["message"]
+		assert result["zpData"]["ws_evidence"]["matched_ws_count"] == 0
+	client.close()
+
+
+def test_exchange_request_by_friend_without_real_ws_send_returns_error():
+	"""exchange 也必须命中真实 chat WS 帧，DOM 文案不足以判成功。"""
+	auth = _make_auth()
+	client = BossRecruiterClient(auth)
+	friend_detail_resp = {
+		"code": 0,
+		"zpData": {"friendList": [{"uid": 1, "encryptUid": "u", "encryptJobId": "j", "securityId": "s", "friendSource": 0}]},
+	}
+	with patch.object(client, "_request", return_value=friend_detail_resp), \
+		patch.object(client, "_get_browser") as mock_get_browser:
+		mock_browser = MagicMock()
+		mock_browser.evaluate_js_with_chat_events.return_value = {
+			"value": {"ok": True, "componentName": "ExchangeResume", "confirmed": True, "log": ["handleExChange returned"]},
+			"events": [{"kind": "ws_send", "bytes": 156, "utf8_bits": ["/message/suggest", "query"]}],
+		}
+		mock_get_browser.return_value = mock_browser
+
+		result = client.exchange_request_by_friend(1, exchange_type=4)
+		assert result["code"] == -1
+		assert "no confirmed chat websocket send detected" in result["message"]
+		assert result["zpData"]["action"] == "exchange"
 		assert result["zpData"]["ws_evidence"]["matched_ws_count"] == 0
 	client.close()
 
