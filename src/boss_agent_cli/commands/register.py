@@ -111,6 +111,8 @@ def register_recruiter_commands(cli: click.Group) -> None:
 	hr_group.add_command(recruiter_applications.applications_cmd, "applications")
 	hr_group.add_command(recruiter_resume.resume_cmd, "resume")
 	hr_group.add_command(recruiter_chat.recruiter_chat_cmd, "chat")
+	hr_group.add_command(recruiter_chat.recruiter_chatmsg_cmd, "chatmsg")
+	hr_group.add_command(recruiter_chat.recruiter_last_messages_cmd, "last-messages")
 	hr_group.add_command(recruiter_jobs.jobs_group, "jobs")
 	hr_group.add_command(recruiter_candidates.candidates_cmd, "candidates")
 	hr_group.add_command(recruiter_reply.reply_cmd, "reply")

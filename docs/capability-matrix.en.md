@@ -93,7 +93,9 @@ Use this matrix to keep CLI, skills, and MCP integrations aligned across differe
 |---|---|---|---|
 | Application inbox | `boss hr applications` | Yes | httpx |
 | Candidate search | `boss hr candidates` | Yes | httpx, supports `--city` / `--job-id` / `--experience` / `--degree` / `--age` / `--school-level` / `--activeness` / `--source` / `--salary` / `--select` / `--page` |
-| Recruiter chat list | `boss hr chat` | Yes | httpx |
+| Recruiter chat list | `boss hr chat` | Yes | httpx, includes unread and latest-message summaries |
+| Chat message history | `boss hr chatmsg <friend_id>` | Yes | httpx |
+| Recent-message summaries | `boss hr last-messages [--friend-id <id>]` | Yes | httpx |
 | Online resume view | `boss hr resume <geek_id> --job-id <id> --security-id <id>` | Yes | httpx |
 | Contact exchange | `boss hr resume --exchange --friend-id <friend_id> [--type wechat]` | Yes | Browser (CDP chat tab) |
 | Reply to candidate | `boss hr reply <friend_id> <message>` | Yes | Browser (CDP chat tab) |
@@ -105,4 +107,4 @@ Notes:
 - For CLI-first integrations, prefer `boss schema` for capability discovery and parameter validation; the schema exposes both `supported_platforms` and `supported_recruiter_platforms`.
 - Current platform coverage: `zhipin` supports both candidate and recruiter workflows; `zhilian` already supports candidate-side login plus read/write actions, while the recruiter side is still unavailable.
 - Current auth posture: `zhipin` keeps the four-tier fallback login chain; `zhilian` now supports the candidate-side browser login foundation (Cookie / CDP / browser fallback), while recruiter auth is not implemented yet.
-- Use `boss schema` as the source of truth: it currently exposes 34 top-level commands, with 7 first-level recruiter subcommands under `hr`, while `ai` and `resume` remain command-group entries.
+- Use `boss schema` as the source of truth: it currently exposes 34 top-level commands, with 9 first-level recruiter subcommands under `hr`, while `ai` and `resume` remain command-group entries.

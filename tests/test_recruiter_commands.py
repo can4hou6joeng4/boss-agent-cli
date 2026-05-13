@@ -138,6 +138,94 @@ def test_recruiter_chat_supports_data_envelope(mock_auth_cls, mock_platform_cls)
 
 @patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
+def test_recruiter_chat_enriches_last_message_summary(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.friend_list.return_value = {
+		"code": 200,
+		"data": {"friendList": [{"friendId": 12345, "name": "候选人B", "friendSource": 0}]},
+	}
+	mock_platform.last_messages.return_value = {
+		"code": 200,
+		"data": {
+			"lastMessageList": [{
+				"friendId": 12345,
+				"unreadMsgCount": 3,
+				"lastMsg": "您好，我对岗位很感兴趣",
+				"lastMessageInfo": {"status": 2},
+				"lastTime": "05-13 17:28",
+			}],
+		},
+	}
+	result = _invoke("hr", "chat")
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	item = parsed["data"]["friendList"][0]
+	assert item["unread"] == 3
+	assert item["msg_status"] == "已读"
+	assert item["last_msg"] == "您好，我对岗位很感兴趣"
+	assert item["last_time"] == "05-13 17:28"
+	mock_platform.last_messages.assert_called_once_with([12345])
+
+
+@patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
+def test_recruiter_chatmsg_returns_history_envelope(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.chat_history.return_value = {
+		"code": 200,
+		"data": {
+			"messages": [{
+				"msgId": 9001,
+				"from": {"name": "招聘者", "type": "boss"},
+				"to": {"name": "候选人", "type": "geek"},
+				"content": "您好，看了您的简历想进一步沟通",
+				"time": "2026-05-12 14:30:00",
+				"status": "已读",
+			}],
+			"hasMore": False,
+		},
+	}
+	result = _invoke("hr", "chatmsg", "12345", "--count", "10")
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["command"] == "recruiter-chatmsg"
+	assert parsed["data"]["messages"][0]["content"] == "您好，看了您的简历想进一步沟通"
+	assert parsed["data"]["hasMore"] is False
+	mock_platform.chat_history.assert_called_once_with(12345, count=10, max_msg_id=None)
+
+
+@patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
+def test_recruiter_last_messages_returns_batch_summary(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.friend_list.return_value = {
+		"code": 200,
+		"data": {"friendList": [{"friendId": 12345, "name": "候选人B"}]},
+	}
+	mock_platform.last_messages.return_value = {
+		"code": 200,
+		"data": {
+			"lastMessageList": [{
+				"friendId": 12345,
+				"unreadMsgCount": 1,
+				"lastMsg": "请问还在招聘吗",
+				"lastMessageInfo": {"status": 1},
+				"lastTime": "05-14 09:10",
+			}],
+		},
+	}
+	result = _invoke("hr", "last-messages")
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["command"] == "recruiter-last-messages"
+	assert parsed["data"]["friend_ids"] == [12345]
+	assert parsed["data"]["messages"][0]["msg_status"] == "未读"
+	assert parsed["data"]["messages"][0]["last_msg"] == "请问还在招聘吗"
+	mock_platform.last_messages.assert_called_once_with([12345])
+
+
+@patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
 def test_recruiter_chat_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
 	mock_platform = _ctx_mock(mock_platform_cls)
 	mock_platform.friend_list.return_value = {"code": 37, "message": "stoken expired"}

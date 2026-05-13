@@ -47,7 +47,7 @@ Add the server in Cursor Settings -> MCP Servers:
 
 ## Available tools
 
-The current MCP server exposes **50 tools**, covering candidate workflows, AI assistance, and recruiter-side `hr` operations.
+The current MCP server exposes **52 tools**, covering candidate workflows, AI assistance, and recruiter-side `hr` operations.
 
 ### Auth and environment
 

@@ -99,8 +99,8 @@ boss digest                                                  # 每日汇报
 
 ### 招聘者工作流
 
-- `👔 候选人运营`：投递申请、候选人搜索、沟通列表、在线简历查看、附件简历请求与换手机/微信。命令：`hr applications` `hr candidates` `hr chat` `hr resume` `hr request-resume`
-- `💬 招聘沟通`：直接回复候选人消息，把 HR 场景纳入同一套 JSON 协议。命令：`hr reply`
+- `👔 候选人运营`：投递申请、候选人搜索、带未读摘要的沟通列表、在线简历查看、附件简历请求与换手机/微信。命令：`hr applications` `hr candidates` `hr chat` `hr resume` `hr request-resume`
+- `💬 招聘沟通`：查看单聊历史、批量最近消息摘要并直接回复候选人，把 HR 场景纳入同一套 JSON 协议。命令：`hr chatmsg` `hr last-messages` `hr reply`
 - `📌 职位管理`：查看职位、上架、下架，作为招聘者端的最小可操作闭环。命令：`hr jobs list` `hr jobs online` `hr jobs offline`
 
 ### 平台与集成基础
@@ -179,6 +179,9 @@ boss watch run my-golang
 # 9. 招聘者模式（HR 视角）
 boss hr applications                  # 候选人投递申请
 boss hr candidates "Golang"           # 搜索候选人
+boss hr chat                          # 沟通列表，含未读数和最近消息摘要
+boss hr chatmsg <friend_id>           # 查看候选人聊天历史
+boss hr last-messages                 # 批量查看最近消息摘要
 boss hr reply <friend_id> "你好"      # 回复消息
 boss hr request-resume <friend_id>    # 请求候选人附件简历
 boss hr resume --exchange --friend-id <friend_id> --type wechat   # 请求换微信
@@ -426,7 +429,9 @@ except AuthRequired:
 | `boss hr applications` | 查看候选人投递申请列表 |
 | `boss hr resume <geek_id> --job-id <id> --security-id <id>` | 查看候选人在线简历 |
 | `boss hr resume --exchange --friend-id <friend_id> [--type wechat]` | 请求交换手机号或微信（默认 phone） |
-| `boss hr chat` | 查看与候选人的沟通列表 |
+| `boss hr chat` | 查看与候选人的沟通列表，含未读数和最近消息摘要 |
+| `boss hr chatmsg <friend_id>` | 查看与候选人的聊天消息历史 |
+| `boss hr last-messages [--friend-id <id>]` | 批量查看候选人最近消息摘要 |
 | `boss hr jobs list/offline/online` | 职位列表与上下线管理 |
 | `boss hr candidates <keyword>` | 搜索候选人 |
 | `boss hr reply <friend_id> <message>` | 回复候选人消息 |

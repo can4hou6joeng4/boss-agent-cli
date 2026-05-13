@@ -161,3 +161,10 @@ def test_search_schema_keeps_welfare_option():
 	welfare = SCHEMA_DATA["commands"]["search"]["options"]["--welfare"]
 	assert welfare["type"] == "string"
 	assert "福利筛选" in welfare["description"]
+
+
+def test_schema_exposes_recruiter_chat_context_commands():
+	"""招聘者沟通上下文命令必须进入 boss schema 能力真源。"""
+	subcommands = SCHEMA_DATA["commands"]["hr"]["subcommands"]
+	assert "chatmsg" in subcommands
+	assert "last-messages" in subcommands

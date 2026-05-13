@@ -776,7 +776,9 @@ SCHEMA_DATA = {
 			"subcommands": {
 				"applications": "查看候选人投递申请列表",
 				"resume": "查看候选人在线简历或发起联系方式交换",
-				"chat": "查看与候选人的沟通列表",
+				"chat": "查看与候选人的沟通列表（含未读数和最近消息摘要）",
+				"chatmsg": "查看与指定候选人的聊天消息历史",
+				"last-messages": "批量查看候选人最近消息摘要",
 				"jobs": "管理职位发布（list/offline/online）",
 				"candidates": "搜索候选人（支持 city/job-id/experience/degree/age/school-level/activeness/source/salary/select/page 筛选）",
 				"reply": "回复候选人消息",

@@ -93,7 +93,9 @@
 |---|---|---|---|
 | 投递申请列表 | `boss hr applications` | 是 | httpx |
 | 候选人搜索 | `boss hr candidates` | 是 | httpx，支持 `--city` / `--job-id` / `--experience` / `--degree` / `--age` / `--school-level` / `--activeness` / `--source` / `--salary` / `--select` / `--page` |
-| 沟通列表 | `boss hr chat` | 是 | httpx |
+| 沟通列表 | `boss hr chat` | 是 | httpx，含未读数和最近消息摘要 |
+| 聊天消息历史 | `boss hr chatmsg <friend_id>` | 是 | httpx |
+| 最近消息摘要 | `boss hr last-messages [--friend-id <id>]` | 是 | httpx |
 | 在线简历查看 | `boss hr resume <geek_id> --job-id <id> --security-id <id>` | 是 | httpx |
 | 联系方式交换 | `boss hr resume --exchange --friend-id <friend_id> [--type wechat]` | 是 | 浏览器（CDP chat tab） |
 | 消息回复 | `boss hr reply <friend_id> <message>` | 是 | 浏览器（CDP chat tab） |
@@ -105,4 +107,4 @@
 - 若以 CLI 直连为主，优先通过 `boss schema` 进行能力发现与参数校验；当前 schema 会同时暴露 `supported_platforms` 与 `supported_recruiter_platforms`。
 - 当前多平台状态：`zhipin` 已覆盖求职者与招聘者；`zhilian` 已接通候选者侧登录、只读与写操作链路，招聘者侧暂未接入。
 - 当前登录状态：`zhipin` 保留四级降级登录；`zhilian` 已接通候选者侧浏览器登录基础链路（Cookie / CDP / 浏览器兜底），但 recruiter 侧仍未接入。
-- 以 `boss schema` 为准：当前暴露 34 个顶层命令；其中 `hr` 下还有 7 个一级招聘者子命令，`ai` / `resume` 为命令组入口。
+- 以 `boss schema` 为准：当前暴露 34 个顶层命令；其中 `hr` 下还有 9 个一级招聘者子命令，`ai` / `resume` 为命令组入口。

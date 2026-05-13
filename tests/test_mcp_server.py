@@ -96,7 +96,8 @@ def test_required_tools_present():
 		"boss_watch_list", "boss_watch_run",
 		"boss_preset_list", "boss_shortlist_list",
 		"boss_hr_applications", "boss_hr_candidates", "boss_hr_chat",
-		"boss_hr_resume", "boss_hr_exchange", "boss_hr_reply", "boss_hr_request_resume", "boss_hr_jobs",
+		"boss_hr_chatmsg", "boss_hr_last_messages", "boss_hr_resume",
+		"boss_hr_exchange", "boss_hr_reply", "boss_hr_request_resume", "boss_hr_jobs",
 	}
 	missing = required - names
 	assert not missing, f"缺少核心工具: {missing}"
@@ -104,7 +105,7 @@ def test_required_tools_present():
 
 def test_tool_count():
 	"""工具总数应与当前注册一致。"""
-	assert len(TOOLS) == 50
+	assert len(TOOLS) == 52
 
 
 def test_search_tool_requires_query():
@@ -547,7 +548,7 @@ def test_build_args_shortlist_list():
 
 def test_tool_count_after_pr41():
 	"""协议服务工具总数应与当前 MCP 暴露能力完全一致。"""
-	assert len(TOOLS) == 50
+	assert len(TOOLS) == 52
 
 
 def test_build_args_shortlist_add():
@@ -638,6 +639,16 @@ def test_build_args_hr_candidates_select_false_omitted():
 def test_build_args_hr_chat():
 	args = _build_args("boss_hr_chat", {"page": 2, "job_id": "55", "label_id": 1})
 	assert args == ["hr", "chat", "--page", "2", "--job-id", "55", "--label-id", "1"]
+
+
+def test_build_args_hr_chatmsg():
+	args = _build_args("boss_hr_chatmsg", {"friend_id": 12345, "count": 10, "max_msg_id": 9001})
+	assert args == ["hr", "chatmsg", "12345", "--count", "10", "--max-msg-id", "9001"]
+
+
+def test_build_args_hr_last_messages():
+	args = _build_args("boss_hr_last_messages", {"friend_ids": [12345, 67890], "page": 2})
+	assert args == ["hr", "last-messages", "--friend-id", "12345", "--friend-id", "67890", "--page", "2"]
 
 
 def test_build_args_hr_resume():
