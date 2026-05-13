@@ -152,6 +152,127 @@ def test_send_message_calls_browser():
 	client.close()
 
 
+def test_send_message_by_friend_happy_path():
+	"""A' 路径：friend_detail → page.evaluate(geekClick + sendText) → ok 信封。"""
+	auth = _make_auth()
+	client = BossRecruiterClient(auth)
+	friend_detail_resp = {
+		"code": 0,
+		"zpData": {"friendList": [{
+			"uid": 12345, "encryptUid": "enc-u",
+			"encryptJobId": "enc-j", "securityId": "sec-s",
+			"friendSource": 0, "name": "Tester",
+		}]},
+	}
+	with patch.object(client, "_request", return_value=friend_detail_resp), \
+		patch.object(client, "_get_browser") as mock_get_browser:
+		mock_browser = MagicMock()
+		mock_browser.evaluate_js.return_value = {"ok": True, "log": ["geekClick called", "done"]}
+		mock_get_browser.return_value = mock_browser
+
+		result = client.send_message_by_friend(12345, "你好")
+		assert result["code"] == 0
+		# 验证 friendData 拼装：uid → friendId, uniqueId 由 friendId-friendSource 拼成
+		js_arg = mock_browser.evaluate_js.call_args[0][1]
+		assert js_arg["targetFriendId"] == 12345
+		assert js_arg["friendData"]["friendId"] == 12345
+		assert js_arg["friendData"]["uniqueId"] == "12345-0"
+		assert js_arg["content"] == "你好"
+	client.close()
+
+
+def test_send_message_by_friend_no_friend_returns_error():
+	"""friend_detail 返回空列表时，返回 code=-1 错误信封。"""
+	auth = _make_auth()
+	client = BossRecruiterClient(auth)
+	with patch.object(client, "_request", return_value={"code": 0, "zpData": {"friendList": []}}):
+		result = client.send_message_by_friend(99999, "x")
+		assert result["code"] == -1
+		assert "friend_detail" in result["message"]
+	client.close()
+
+
+def test_exchange_request_by_friend_full_chain():
+	"""exchange_request_by_friend 走 geekClick + zpblock → test×2 → request 完整链路。"""
+	auth = _make_auth()
+	client = BossRecruiterClient(auth)
+	friend = {"uid": 1, "encryptUid": "u", "encryptJobId": "j", "encryptExpectId": None, "securityId": "sec-old", "name": "Tester", "friendSource": 0}
+	friend_detail_resp = {"code": 0, "zpData": {"friendList": [friend]}}
+	ok = {"code": 0, "zpData": {}}
+	# Mock evaluate_js (the geekClick + read conversation$ call)
+	switch_response = {
+		"ok": True,
+		"encryptUid": "u",
+		"encryptJobId": "j",
+		"encryptExpectId": "ex-encrypted-from-conv",  # 从 conversation$ 拿到的真实 encryptExpectId
+		"securityId": "sec-new-from-conv",
+		"name": "Tester",
+	}
+	with patch.object(client, "_request", return_value=friend_detail_resp), \
+		patch.object(client, "_get_browser") as mock_get_browser, \
+		patch.object(client, "_evaluate_request", return_value=ok) as mock_er:
+		mock_browser = MagicMock()
+		mock_browser.evaluate_js.return_value = switch_response
+		mock_get_browser.return_value = mock_browser
+
+		result = client.exchange_request_by_friend(1, exchange_type=1)
+		assert result == ok
+		# 4 个 _evaluate_request 调用按顺序：zpblock → test → test → request
+		assert mock_er.call_count == 4
+		first_call = mock_er.call_args_list[0]
+		assert first_call[0][1] == ep.BOSS_CHAT_REPLY_BLOCK_URL
+		assert first_call[1]["data"]["bgSource"] == "12"  # exchange 用 12
+		assert first_call[1]["data"]["encryptExpId"] == "ex-encrypted-from-conv"  # 从 conversation$ 拿
+		assert first_call[1]["data"]["securityId"] == "sec-new-from-conv"  # 从 conversation$ 拿
+		test_call = mock_er.call_args_list[1]
+		assert test_call[0][1] == ep.BOSS_EXCHANGE_TEST_URL
+		assert test_call[1]["data"] == {"type": 1, "securityId": "sec-new-from-conv"}
+		final = mock_er.call_args_list[3]
+		assert final[0][1] == ep.BOSS_EXCHANGE_REQUEST_URL
+		assert final[1]["data"] == {"type": 1, "securityId": "sec-new-from-conv", "name": "Tester"}
+	client.close()
+
+
+def test_exchange_request_by_friend_aborts_on_zpblock_failure():
+	"""zpblock 前置失败时立即返回错误，不调后续 test/request。"""
+	auth = _make_auth()
+	client = BossRecruiterClient(auth)
+	friend_detail_resp = {"code": 0, "zpData": {"friendList": [{"uid": 1, "encryptUid": "u", "encryptJobId": "j", "securityId": "s", "name": "Tester", "friendSource": 0}]}}
+	switch_response = {"ok": True, "encryptUid": "u", "encryptJobId": "j", "encryptExpectId": "e", "securityId": "s", "name": "Tester"}
+	with patch.object(client, "_request", return_value=friend_detail_resp), \
+		patch.object(client, "_get_browser") as mock_get_browser, \
+		patch.object(client, "_evaluate_request", return_value={"code": 121, "message": "blocked"}) as mock_er:
+		mock_browser = MagicMock()
+		mock_browser.evaluate_js.return_value = switch_response
+		mock_get_browser.return_value = mock_browser
+
+		result = client.exchange_request_by_friend(1, exchange_type=4)
+		assert result["code"] == 121
+		# 只调了一次 zpblock，没继续 test/request
+		assert mock_er.call_count == 1
+	client.close()
+
+
+def test_send_message_by_friend_page_error_propagated():
+	"""页面侧 ok=false 时，错误信息进入 CLI 信封。"""
+	auth = _make_auth()
+	client = BossRecruiterClient(auth)
+	friend_detail_resp = {
+		"code": 0,
+		"zpData": {"friendList": [{"uid": 1, "encryptUid": "u", "encryptJobId": "j", "securityId": "s", "friendSource": 0}]},
+	}
+	with patch.object(client, "_request", return_value=friend_detail_resp), \
+		patch.object(client, "_get_browser") as mock_get_browser:
+		mock_browser = MagicMock()
+		mock_browser.evaluate_js.return_value = {"ok": False, "error": "geek-list Vue component not at .chat-user", "log": []}
+		mock_get_browser.return_value = mock_browser
+
+		result = client.send_message_by_friend(1, "x")
+		assert result["code"] == -1
+		assert "geek-list Vue" in result["message"]
+	client.close()
+
+
 def test_list_jobs_calls_get():
 	auth = _make_auth()
 	client = BossRecruiterClient(auth)

@@ -14,10 +14,11 @@ from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, 
 @click.option("--exchange", "exchange_contact", is_flag=True, default=False, help="请求交换联系方式")
 @click.option("--uid", default=None, type=int, help="候选人 uid（交换联系方式时需要）")
 @click.option("--gid", default=None, type=int, help="会话 gid（交换联系方式时需要）")
+@click.option("--friend-id", default=None, type=int, help="候选人 friendId（交换联系方式新路径; issue #217）")
 @click.option("--raw", "show_raw", is_flag=True, default=False, help="输出原始 API 数据（不解析）")
 @click.pass_context
 @handle_auth_errors("recruiter-resume")
-def resume_cmd(ctx: click.Context, geek_id: str, job_id: str, security_id: str | None, exchange_contact: bool, uid: int | None, gid: int | None, show_raw: bool) -> None:
+def resume_cmd(ctx: click.Context, geek_id: str, job_id: str, security_id: str | None, exchange_contact: bool, uid: int | None, gid: int | None, friend_id: int | None, show_raw: bool) -> None:
 	"""查看候选人简历或请求交换联系方式"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -25,15 +26,18 @@ def resume_cmd(ctx: click.Context, geek_id: str, job_id: str, security_id: str |
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		if exchange_contact:
-			if not uid or not gid or not job_id:
+			# issue #217 修复路径：只要 friend_id 即可。旧的 uid/gid/jobId 路径
+			# 已 121 弃用，保留参数仅作过渡兼容。
+			if friend_id is None:
 				handle_error_output(
 					ctx, "recruiter-resume",
 					code="INVALID_PARAM",
-					message="交换联系方式需要 --uid、--gid 和 --job-id 参数",
+					message="交换联系方式需要 --friend-id 参数（从 hr chat 获取）",
 					recoverable=False,
 				)
 				return
-			result = platform.exchange_request(1, uid, int(job_id), gid)
+			# type=1 = 换手机号（抓包实证 issue #217）
+			result = platform.exchange_request_by_friend(friend_id, exchange_type=1)
 			if not platform.is_success(result):
 				code, message = platform.parse_error(result)
 				recoverable, recovery_action = error_contract_for_code(code)

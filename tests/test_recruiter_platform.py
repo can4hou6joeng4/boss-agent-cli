@@ -136,6 +136,15 @@ def test_send_message_delegates():
 	assert result == {"code": 0, "zpData": {}}
 
 
+def test_send_message_by_friend_delegates():
+	client = _mock_client()
+	client.send_message_by_friend.return_value = {"code": 0, "zpData": {"friendId": 123}}
+	platform = BossRecruiterPlatform(client)
+	result = platform.send_message_by_friend(123, "你好")
+	client.send_message_by_friend.assert_called_once_with(123, "你好")
+	assert result["code"] == 0
+
+
 def test_context_manager_closes():
 	client = _mock_client()
 	with BossRecruiterPlatform(client) as platform:

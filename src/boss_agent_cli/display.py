@@ -317,10 +317,22 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 	def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
 		@wraps(func)
 		def wrapper(ctx: Any, *args: Any, **kwargs: Any) -> Any:
+			from boss_agent_cli.api.browser_client import RecruiterChatTabRequired
 			from boss_agent_cli.api.client import AccountRiskError
 			from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 			try:
 				return func(ctx, *args, **kwargs)
+			except RecruiterChatTabRequired as e:
+				handle_error_output(
+					ctx, command_name, code="RECRUITER_CHAT_TAB_REQUIRED",
+					message=str(e),
+					recoverable=True,
+					recovery_action="在 CDP Chrome 里打开 https://www.zhipin.com/web/chat/index 后重试",
+					hints={"next_actions": [
+						"在 Chrome 里访问 https://www.zhipin.com/web/chat/index",
+						"或在已有 chat tab 上 boss --role recruiter <command> 重试",
+					]},
+				)
 			except AuthRequired:
 				login_action = login_action_for_ctx(ctx)
 				handle_error_output(

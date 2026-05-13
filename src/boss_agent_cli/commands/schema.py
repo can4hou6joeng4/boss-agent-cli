@@ -885,6 +885,11 @@ SCHEMA_DATA = {
 			"recoverable": False,
 			"recovery_action": "跟进 https://github.com/can4hou6joeng4/boss-agent-cli/issues/217",
 		},
+		"RECRUITER_CHAT_TAB_REQUIRED": {
+			"message": "招聘者操作需要 Chrome 已打开聊天页 (chat/index)",
+			"recoverable": True,
+			"recovery_action": "在 CDP Chrome 里打开 https://www.zhipin.com/web/chat/index 后重试",
+		},
 		"NOT_SUPPORTED": {
 			"message": "当前平台暂不支持该能力",
 			"recoverable": True,

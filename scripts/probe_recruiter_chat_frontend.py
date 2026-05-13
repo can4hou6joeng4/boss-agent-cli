@@ -29,7 +29,7 @@ import time
 from typing import Any
 
 _DEFAULT_CDP_URL = "http://localhost:9222"
-_CHAT_URL_TPL = "https://www.zhipin.com/web/boss/chat/index?friendId={friend_id}"
+_CHAT_URL_TPL = "https://www.zhipin.com/web/chat/index?friendId={friend_id}"
 
 # ─── JS payloads ─────────────────────────────────────────────────────────
 
@@ -165,6 +165,20 @@ def _emit_dry_run(report: dict[str, Any]) -> None:
 	print(json.dumps(report, ensure_ascii=False, indent=2))
 
 
+_CHAT_URL_MATCH = "/web/chat/index"
+
+
+def _find_chat_page(context: Any) -> Any:
+	"""Return the existing recruiter chat tab in the context, or None."""
+	for page in context.pages:
+		try:
+			if _CHAT_URL_MATCH in page.url:
+				return page
+		except Exception:
+			continue
+	return None
+
+
 def _run_live_probe(report: dict[str, Any], *, friend_id: int, cdp_url: str, wait_seconds: int) -> dict[str, Any]:
 	from patchright.sync_api import sync_playwright
 
@@ -179,26 +193,34 @@ def _run_live_probe(report: dict[str, Any], *, friend_id: int, cdp_url: str, wai
 			raise SystemExit("CDP Chrome 没有可用 context，先在 Chrome 中扫码登录招聘者账号")
 		context = contexts[0]
 
-		# 在导航前注入 WebSocket spy
-		context.add_init_script(JS_WEBSOCKET_SPY)
-		page = context.new_page()
-		try:
-			chat_url = _CHAT_URL_TPL.format(friend_id=friend_id)
-			page.goto(chat_url, wait_until="domcontentloaded", timeout=20000)
-			page.wait_for_timeout(3000)  # 让 Vue 挂载完
-
-			report["global_chat_keys"] = page.evaluate(JS_GLOBAL_SCAN)
-			report["vue_candidates"] = page.evaluate(JS_VUE_PROBE)
-
-			print(
-				"\n>>> 现在请在 Chrome 招聘者后台手动输入一条「探测消息」并点发送按钮，"
-				f"脚本将在 {wait_seconds} 秒后采集 WebSocket 调用栈\n",
-				file=sys.stderr,
+		# Attach 现有 chat tab —— 不开新 tab、不导航（避免触发 BOSS 风控登出）
+		page = _find_chat_page(context)
+		if page is None:
+			raise SystemExit(
+				f"未在 CDP 里找到包含 {_CHAT_URL_MATCH} 的 tab。"
+				"\n请先在 Chrome 里打开招聘者聊天页（沟通中），再重新跑本脚本。"
 			)
-			page.wait_for_timeout(wait_seconds * 1000)
-			report["websocket"] = page.evaluate(JS_DUMP_WS)
-		finally:
-			page.close()
+		print(f"[probe] attached to existing tab: {page.url}", file=sys.stderr)
+
+		# 在已加载页面里注入 WebSocket spy（劫持后续 ws.send；已有 WS 实例的 send 拦不到）
+		try:
+			page.evaluate(JS_WEBSOCKET_SPY)
+		except Exception as exc:
+			print(f"[probe] WARN: WebSocket spy 注入失败: {exc}", file=sys.stderr)
+
+		# Vue/Vuex/Pinia 静态扫描（不需要用户操作就能拿到）
+		report["global_chat_keys"] = page.evaluate(JS_GLOBAL_SCAN)
+		report["vue_candidates"] = page.evaluate(JS_VUE_PROBE)
+
+		print(
+			f"\n>>> 现在请在 Chrome 招聘者 tab 里：\n"
+			f"    1. 从左侧联系人列表点中 friendId={friend_id} 的候选人进入会话\n"
+			"    2. 在输入框打字 + 点发送按钮（消息内容由你定）\n"
+			f"脚本将在 {wait_seconds} 秒后采集 WebSocket 调用栈\n",
+			file=sys.stderr,
+		)
+		page.wait_for_timeout(wait_seconds * 1000)
+		report["websocket"] = page.evaluate(JS_DUMP_WS)
 
 	return report
 

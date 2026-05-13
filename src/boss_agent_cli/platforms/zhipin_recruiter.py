@@ -127,6 +127,9 @@ class BossRecruiterPlatform(RecruiterPlatform):
 	def send_message(self, gid: int, content: str) -> dict[str, Any]:
 		return self._client.send_message(gid, content)
 
+	def send_message_by_friend(self, friend_id: int, content: str) -> dict[str, Any]:
+		return self._client.send_message_by_friend(friend_id, content)
+
 	def session_enter(self, geek_id: str, expect_id: str, job_id: str, security_id: str) -> dict[str, Any]:
 		return self._client.session_enter(geek_id, expect_id, job_id, security_id)
 
@@ -145,6 +148,9 @@ class BossRecruiterPlatform(RecruiterPlatform):
 
 	def exchange_request(self, exchange_type: int, uid: int, job_id: int, gid: int) -> dict[str, Any]:
 		return self._client.exchange_request(exchange_type, uid, job_id, gid)
+
+	def exchange_request_by_friend(self, friend_id: int, exchange_type: int) -> dict[str, Any]:
+		return self._client.exchange_request_by_friend(friend_id, exchange_type)
 
 	def exchange_content(self, uid: int) -> dict[str, Any]:
 		return self._client.exchange_content(uid)

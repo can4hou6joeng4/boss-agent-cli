@@ -47,8 +47,10 @@ BOSS_JOB_OFFLINE_URL = _url("boss_job_offline")
 BOSS_JOB_ONLINE_URL = _url("boss_job_online")
 
 # ── 交换联系方式 ────────────────────────────────────
+BOSS_EXCHANGE_TEST_URL = _url("boss_exchange_test")
 BOSS_EXCHANGE_REQUEST_URL = _url("boss_exchange_request")
 BOSS_EXCHANGE_CONTENT_URL = _url("boss_exchange_content")
+BOSS_CHAT_REPLY_BLOCK_URL = f"{BASE_URL}/wapi/zpblock/chat/reply/block/v2"
 
 # ── 面试 ────────────────────────────────────────────
 BOSS_INTERVIEW_LIST_URL = _url("boss_interview_list")

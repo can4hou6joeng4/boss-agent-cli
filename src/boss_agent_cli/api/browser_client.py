@@ -8,6 +8,7 @@ Supports two modes:
   2. Patchright mode (fallback): launches a headless Chromium instance
 """
 import sys
+import time
 from pathlib import Path
 from types import TracebackType
 from typing import Any, cast
@@ -19,6 +20,21 @@ from boss_agent_cli.api.throttle import RequestThrottle
 from boss_agent_cli.auth.browser import _DEFAULT_CDP_URL as CDP_DEFAULT_URL
 
 HOME_URL = "https://www.zhipin.com/"
+
+
+class RecruiterChatTabRequired(RuntimeError):
+	"""招聘者操作（issue #217 修复路径）需要用户已打开 chat/index 页。
+
+	不自动新开 tab：实测会触发 BOSS 反爬，把用户当前 tab 踢到首页。
+	友好做法是返回明确指引，让用户自己打开。
+	"""
+
+	def __init__(self) -> None:
+		super().__init__(
+			"recruiter chat tab not found in CDP Chrome — "
+			"please open https://www.zhipin.com/web/chat/index in your "
+			"Chrome (CDP-attached) and retry."
+		)
 
 # 超时常量
 _CDP_PROBE_TIMEOUT = 3           # CDP 探测 HTTP 超时（秒）
@@ -293,6 +309,38 @@ class BrowserSession:
 		self._throttle.mark()
 		return cast("dict[str, Any]", result)
 
+	# ── Arbitrary JS evaluation (CDP-only, raw websocket) ────────────
+
+	def evaluate_js(self, script: str, arg: Any = None) -> Any:
+		"""Run JS in the user's recruiter chat tab via raw CDP websocket.
+
+		Required for recruiter send_message (issue #217): we reach into the
+		招聘者 chat page's Vue 2 instance to call geek-list.geekClick() +
+		editor.sendText(). The normal BrowserSession.request fetch path can't
+		do that — it runs JS in a blank tab BrowserSession owns, not in the
+		user's recruiter tab.
+
+		Why raw CDP instead of patchright: attaching patchright to another
+		tab we didn't create via new_page() triggers 'Frame was detached'
+		errors when that page navigates or re-renders (Vue SFC rebuilds
+		frame tree). Raw CDP is a stateless RPC — we just send
+		Runtime.evaluate and read the result, no session book-keeping.
+
+		Intentionally does NOT call _ensure_started(): patchright's
+		connect_over_cdp enumerates every tab's frame tree on attach, which
+		can race with Vue re-renders on the recruiter page and crash the
+		Node driver before we even get to our evaluate call. evaluate_js
+		only needs the CDP HTTP endpoint reachable — not patchright.
+
+		Only works in CDP mode (user has chrome://<devtools port>/json
+		reachable and the recruiter chat tab open). Bridge/headless modes
+		have no access to the user's Vue runtime.
+		"""
+		if self._is_bridge:
+			raise RuntimeError("evaluate_js requires CDP mode (bridge mode has no access to user Chrome)")
+		cdp_url = self._cdp_url or CDP_DEFAULT_URL
+		return _cdp_evaluate_in_chat_tab(cdp_url, script, arg)
+
 	# ── Lifecycle ────────────────────────────────────────────────────
 
 	@property
@@ -346,3 +394,71 @@ class BrowserSession:
 		exc_tb: TracebackType | None,
 	) -> None:
 		self.close()
+
+
+# ─── Raw CDP helper for evaluate_js ──────────────────────────────────────
+
+def _cdp_evaluate_in_chat_tab(cdp_http_url: str, script: str, arg: Any) -> Any:
+	"""Send Runtime.evaluate to the BOSS recruiter chat tab via raw CDP.
+
+	Bypasses patchright entirely — avoids 'Frame was detached' errors when
+	the Vue page re-renders during our call. Wraps the caller's script as
+	`(fnSrc)(arg)` when arg is provided, so the script can be a JS expression
+	that evaluates to a function of one argument (mirrors patchright's
+	`page.evaluate(script, arg)` contract used by the PoC).
+	"""
+	import json as _json
+	import urllib.request
+
+	import websockets.sync.client as _ws_client
+
+	# 1. Find recruiter chat tab webSocketDebuggerUrl
+	list_url = cdp_http_url.rstrip("/") + "/json"
+	try:
+		with urllib.request.urlopen(list_url, timeout=3) as resp:
+			tabs = _json.load(resp)
+	except Exception as exc:
+		raise RuntimeError(f"cannot reach CDP at {list_url}: {exc}") from exc
+	target_ws = None
+	for t in tabs:
+		if t.get("type") == "page" and "/web/chat/index" in t.get("url", ""):
+			target_ws = t.get("webSocketDebuggerUrl")
+			break
+	if not target_ws:
+		raise RecruiterChatTabRequired()
+
+	# 2. Build expression. If arg supplied, wrap as IIFE passing the arg.
+	if arg is not None:
+		expression = f"({script})({_json.dumps(arg, ensure_ascii=False)})"
+	else:
+		expression = script
+
+	# 3. Send Runtime.evaluate and wait for the same id response.
+	with _ws_client.connect(target_ws, max_size=8 * 1024 * 1024) as ws:
+		ws.send(_json.dumps({
+			"id": 1,
+			"method": "Runtime.evaluate",
+			"params": {
+				"expression": expression,
+				"returnByValue": True,
+				"awaitPromise": True,
+			},
+		}))
+		deadline = time.time() + 30.0
+		while time.time() < deadline:
+			raw = ws.recv(timeout=max(0.1, deadline - time.time()))
+			msg = _json.loads(raw)
+			if msg.get("id") != 1:
+				continue
+			err = msg.get("error")
+			if err:
+				raise RuntimeError(f"CDP Runtime.evaluate error: {err}")
+			result = msg.get("result", {}).get("result", {})
+			if "value" in result:
+				return result["value"]
+			# Exception in JS side
+			exc_details = msg.get("result", {}).get("exceptionDetails")
+			if exc_details:
+				raise RuntimeError(f"JS exception: {exc_details.get('text')} — {exc_details.get('exception', {}).get('description', '')[:300]}")
+			return result
+		raise RuntimeError("CDP Runtime.evaluate timed out after 30s")
