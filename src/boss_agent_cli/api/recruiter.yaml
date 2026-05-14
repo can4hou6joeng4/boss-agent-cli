@@ -103,6 +103,13 @@ endpoints:
     referer: "/web/chat/index"
 
   # ── 交换联系方式（手机/微信/简历）──────────────────
+  # type 取值（实证抓包，issue #217）：
+  #   1 = 换手机号、4 = 求附件简历
+  # 完整流程：zpblock/chat/reply/block/v2 (bgSource=12) → exchange/test ×2 → exchange/request
+  boss_exchange_test:
+    method: POST
+    path: "/wapi/zpchat/exchange/test"
+    referer: "/web/chat/index"
   boss_exchange_request:
     method: POST
     path: "/wapi/zpchat/exchange/request"

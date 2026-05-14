@@ -37,6 +37,26 @@ In Cursor Settings → MCP, add a stdio server that points to this repo's `mcp-s
 
 Once enabled, Composer will automatically discover `boss_search`, `boss_detail`, `boss_greet`, and the rest of the 49 MCP tools. No extra shell prompt glue is required.
 
+For Windows / VS Code-style `mcp.json`, use escaped backslashes in the project path:
+
+```json
+{
+  "servers": {
+    "boss-agent-cli": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "--directory",
+        "E:\\tools\\boss-agent-cli",
+        "run",
+        "python",
+        "mcp-server/server.py"
+      ]
+    }
+  }
+}
+```
+
 ### Option 2: shell-command integration
 
 Add a rule like this to `.cursor/rules/boss-agent-cli.mdc`:

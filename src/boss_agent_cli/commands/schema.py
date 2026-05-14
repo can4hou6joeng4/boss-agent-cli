@@ -59,14 +59,42 @@ def _command_to_json_schema(cmd_name: str, cmd_spec: dict[str, Any]) -> dict[str
 
 
 _ROLE_BOTH_COMMANDS = {
-	"login", "status", "doctor", "logout", "schema", "config", "clean", "cities",
+	"login",
+	"status",
+	"doctor",
+	"logout",
+	"schema",
+	"config",
+	"clean",
+	"cities",
 }
 
 _CANDIDATE_COMMANDS = {
-	"search", "detail", "greet", "batch-greet", "recommend", "export", "me", "show",
-	"history", "chat", "chatmsg", "chat-summary", "mark", "exchange", "interviews",
-	"watch", "preset", "pipeline", "follow-up", "apply", "shortlist", "digest",
-	"stats", "resume", "ai",
+	"search",
+	"detail",
+	"greet",
+	"batch-greet",
+	"recommend",
+	"export",
+	"me",
+	"show",
+	"history",
+	"chat",
+	"chatmsg",
+	"chat-summary",
+	"mark",
+	"exchange",
+	"interviews",
+	"watch",
+	"preset",
+	"pipeline",
+	"follow-up",
+	"apply",
+	"shortlist",
+	"digest",
+	"stats",
+	"resume",
+	"ai",
 }
 
 
@@ -75,9 +103,7 @@ def _availability_note(availability: dict[str, Any]) -> str:
 	candidate_platforms = ", ".join(availability.get("candidate_platforms", [])) or "-"
 	recruiter_platforms = ", ".join(availability.get("recruiter_platforms", [])) or "-"
 	return (
-		f"可用性: roles={roles}; "
-		f"candidate_platforms={candidate_platforms}; "
-		f"recruiter_platforms={recruiter_platforms}"
+		f"可用性: roles={roles}; candidate_platforms={candidate_platforms}; recruiter_platforms={recruiter_platforms}"
 	)
 
 
@@ -151,14 +177,16 @@ def _format_openai_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 		description = cmd_spec.get("description", "")
 		if availability := cmd_spec.get("availability"):
 			description = f"{description} [{_availability_note(availability)}]"
-		tools.append({
-			"type": "function",
-			"function": {
-				"name": f"boss_{cmd_name.replace('-', '_')}",
-				"description": description,
-				"parameters": _command_to_json_schema(cmd_name, cmd_spec),
-			},
-		})
+		tools.append(
+			{
+				"type": "function",
+				"function": {
+					"name": f"boss_{cmd_name.replace('-', '_')}",
+					"description": description,
+					"parameters": _command_to_json_schema(cmd_name, cmd_spec),
+				},
+			}
+		)
 	return tools
 
 
@@ -169,11 +197,13 @@ def _format_anthropic_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 		description = cmd_spec.get("description", "")
 		if availability := cmd_spec.get("availability"):
 			description = f"{description} [{_availability_note(availability)}]"
-		tools.append({
-			"name": f"boss_{cmd_name.replace('-', '_')}",
-			"description": description,
-			"input_schema": _command_to_json_schema(cmd_name, cmd_spec),
-		})
+		tools.append(
+			{
+				"name": f"boss_{cmd_name.replace('-', '_')}",
+				"description": description,
+				"input_schema": _command_to_json_schema(cmd_name, cmd_spec),
+			}
+		)
 	return tools
 
 
@@ -184,11 +214,13 @@ def _format_mcp_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 		description = cmd_spec.get("description", "")
 		if availability := cmd_spec.get("availability"):
 			description = f"{description} [{_availability_note(availability)}]"
-		tools.append({
-			"name": f"boss_{cmd_name.replace('-', '_')}",
-			"description": description,
-			"inputSchema": _command_to_json_schema(cmd_name, cmd_spec),
-		})
+		tools.append(
+			{
+				"name": f"boss_{cmd_name.replace('-', '_')}",
+				"description": description,
+				"inputSchema": _command_to_json_schema(cmd_name, cmd_spec),
+			}
+		)
 	return tools
 
 
@@ -264,7 +296,33 @@ SCHEMA_DATA = {
 					"type": "string",
 					"default": None,
 					"description": "行业类型",
-					"choices": ["不限", "互联网", "电子商务", "游戏", "软件/信息服务", "人工智能", "大数据", "云计算", "区块链", "物联网", "金融", "银行", "保险", "证券/基金", "教育培训", "医疗健康", "房地产", "汽车", "物流/运输", "广告/传媒", "消费品", "制造业", "能源/环保", "政府/非营利", "农业"],
+					"choices": [
+						"不限",
+						"互联网",
+						"电子商务",
+						"游戏",
+						"软件/信息服务",
+						"人工智能",
+						"大数据",
+						"云计算",
+						"区块链",
+						"物联网",
+						"金融",
+						"银行",
+						"保险",
+						"证券/基金",
+						"教育培训",
+						"医疗健康",
+						"房地产",
+						"汽车",
+						"物流/运输",
+						"广告/传媒",
+						"消费品",
+						"制造业",
+						"能源/环保",
+						"政府/非营利",
+						"农业",
+					],
 				},
 				"--scale": {
 					"type": "string",
@@ -310,7 +368,11 @@ SCHEMA_DATA = {
 		"detail": {
 			"description": "查看职位完整信息（职位描述、地址、招聘者信息）。传入 --job-id 走 httpx 快速通道（毫秒级），否则先查缓存、最后降级浏览器通道（秒级）",
 			"args": [
-				{"name": "security_id", "required": True, "description": "安全 ID，从 search/chat/recommend 结果中获取"},
+				{
+					"name": "security_id",
+					"required": True,
+					"description": "安全 ID，从 search/chat/recommend 结果中获取",
+				},
 			],
 			"options": {
 				"--job-id": {
@@ -369,7 +431,33 @@ SCHEMA_DATA = {
 					"type": "string",
 					"default": None,
 					"description": "行业类型",
-					"choices": ["不限", "互联网", "电子商务", "游戏", "软件/信息服务", "人工智能", "大数据", "云计算", "区块链", "物联网", "金融", "银行", "保险", "证券/基金", "教育培训", "医疗健康", "房地产", "汽车", "物流/运输", "广告/传媒", "消费品", "制造业", "能源/环保", "政府/非营利", "农业"],
+					"choices": [
+						"不限",
+						"互联网",
+						"电子商务",
+						"游戏",
+						"软件/信息服务",
+						"人工智能",
+						"大数据",
+						"云计算",
+						"区块链",
+						"物联网",
+						"金融",
+						"银行",
+						"保险",
+						"证券/基金",
+						"教育培训",
+						"医疗健康",
+						"房地产",
+						"汽车",
+						"物流/运输",
+						"广告/传媒",
+						"消费品",
+						"制造业",
+						"能源/环保",
+						"政府/非营利",
+						"农业",
+					],
 				},
 				"--scale": {
 					"type": "string",
@@ -418,7 +506,12 @@ SCHEMA_DATA = {
 				"--city": {"type": "string", "default": None, "description": "城市名称"},
 				"--salary": {"type": "string", "default": None, "description": "薪资范围"},
 				"--count": {"type": "int", "default": 50, "description": "导出数量"},
-				"--format": {"type": "string", "default": "csv", "description": "输出格式", "enum": ["html", "csv", "json"]},
+				"--format": {
+					"type": "string",
+					"default": "csv",
+					"description": "输出格式",
+					"enum": ["html", "csv", "json"],
+				},
 				"--output": {"type": "string", "default": None, "description": "输出文件路径（不指定则输出到 stdout）"},
 			},
 		},
@@ -517,7 +610,12 @@ SCHEMA_DATA = {
 				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
 			],
 			"options": {
-				"--label": {"type": "string", "required": True, "description": "标签名称或 ID", "enum": ["新招呼", "沟通中", "已约面", "已获取简历", "已交换电话", "已交换微信", "不合适", "收藏"]},
+				"--label": {
+					"type": "string",
+					"required": True,
+					"description": "标签名称或 ID",
+					"enum": ["新招呼", "沟通中", "已约面", "已获取简历", "已交换电话", "已交换微信", "不合适", "收藏"],
+				},
 				"--remove": {"type": "boolean", "default": False, "description": "移除标签（默认为添加）"},
 			},
 		},
@@ -527,7 +625,12 @@ SCHEMA_DATA = {
 				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
 			],
 			"options": {
-				"--type": {"type": "string", "default": "phone", "description": "交换类型", "enum": ["phone", "wechat"]},
+				"--type": {
+					"type": "string",
+					"default": "phone",
+					"description": "交换类型",
+					"enum": ["phone", "wechat"],
+				},
 			},
 		},
 		"interviews": {
@@ -584,8 +687,16 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则视为 follow_up"},
-				"--format": {"type": "string", "default": "json", "description": "输出格式（json 信封 / md 可直发邮件飞书）"},
-				"-o, --output": {"type": "string", "default": None, "description": "Markdown 输出路径（仅 --format md 时有效）"},
+				"--format": {
+					"type": "string",
+					"default": "json",
+					"description": "输出格式（json 信封 / md 可直发邮件飞书）",
+				},
+				"-o, --output": {
+					"type": "string",
+					"default": None,
+					"description": "Markdown 输出路径（仅 --format md 时有效）",
+				},
 			},
 		},
 		"config": {
@@ -613,8 +724,16 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"--days": {"type": "int", "default": 30, "description": "统计窗口天数"},
-				"--format": {"type": "string", "default": "json", "description": "输出格式：json（JSON 信封）或 html（自包含报表）"},
-				"-o, --output": {"type": "string", "default": None, "description": "HTML 输出路径（仅 --format html 时有效）"},
+				"--format": {
+					"type": "string",
+					"default": "json",
+					"description": "输出格式：json（JSON 信封）或 html（自包含报表）",
+				},
+				"-o, --output": {
+					"type": "string",
+					"default": None,
+					"description": "HTML 输出路径（仅 --format html 时有效）",
+				},
 			},
 		},
 		"resume": {
@@ -656,7 +775,7 @@ SCHEMA_DATA = {
 			"options": {},
 			"subcommands": {
 				"applications": "查看候选人投递申请列表",
-				"resume": "查看或请求候选人简历",
+				"resume": "查看候选人在线简历或发起联系方式交换",
 				"chat": "查看与候选人的沟通列表",
 				"jobs": "管理职位发布（list/offline/online）",
 				"candidates": "搜索候选人（支持 city/job-id/experience/degree/age/school-level/activeness/source/salary/select/page 筛选）",
@@ -761,6 +880,16 @@ SCHEMA_DATA = {
 			"recoverable": False,
 			"recovery_action": "修正参数",
 		},
+		"ENDPOINT_DEPRECATED": {
+			"message": "服务端端点已迁移，CLI 当前实现无法直接发送",
+			"recoverable": False,
+			"recovery_action": "跟进 https://github.com/can4hou6joeng4/boss-agent-cli/issues/217",
+		},
+		"RECRUITER_CHAT_TAB_REQUIRED": {
+			"message": "招聘者操作需要 Chrome 已打开聊天页 (chat/index)",
+			"recoverable": True,
+			"recovery_action": "在 CDP Chrome 里打开 https://www.zhipin.com/web/chat/index 后重试",
+		},
 		"NOT_SUPPORTED": {
 			"message": "当前平台暂不支持该能力",
 			"recoverable": True,
@@ -809,7 +938,7 @@ SCHEMA_DATA = {
 		"RESUME_NOT_SHARED": {
 			"message": "候选人未分享简历",
 			"recoverable": True,
-			"recovery_action": "使用 resume <id> --request 请求简历",
+			"recovery_action": "使用 boss hr request-resume <friend_id> 请求附件简历",
 		},
 		"JOB_POST_LIMIT": {
 			"message": "职位发布数量已达上限",
@@ -835,7 +964,8 @@ SCHEMA_DATA = {
 
 @click.command("schema")
 @click.option(
-	"--format", "output_format",
+	"--format",
+	"output_format",
 	type=click.Choice(["native", "openai-tools", "anthropic-tools", "mcp-tools"]),
 	default="native",
 	help="输出格式：native（本项目信封）/ openai-tools（OpenAI Functions & Tools API）/ anthropic-tools（Claude Tool Use API）/ mcp-tools（Model Context Protocol Tools）",

@@ -8,18 +8,20 @@ from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, 
 
 @click.command("request-resume")
 @click.argument("friend_id", type=int)
-@click.option("--job-id", type=int, required=True, help="关联职位 ID（从 chat/applications 获取）")
 @click.pass_context
 @handle_auth_errors("recruiter-request-resume")
-def request_resume_cmd(ctx: click.Context, friend_id: int, job_id: int) -> None:
-	"""请求候选人分享附件简历"""
+def request_resume_cmd(ctx: click.Context, friend_id: int) -> None:
+	"""请求候选人分享附件简历（issue #217 修复）
+
+	不再需要 --job-id 参数 — 内部从 friend_detail 自动取出 securityId/jobId/name。
+	"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_recruiter_platform_instance(ctx, auth) as platform:
-		# friend_id 就是 uid，gid 也设为 uid
-		result = platform.exchange_request(3, friend_id, job_id, friend_id)
+		# type=4 是抓包实证的"求附件简历"类型；旧代码用 type=3 是错的
+		result = platform.exchange_request_by_friend(friend_id, exchange_type=4)
 		if not platform.is_success(result):
 			code, error_message = platform.parse_error(result)
 			recoverable, recovery_action = error_contract_for_code(code)
@@ -33,7 +35,6 @@ def request_resume_cmd(ctx: click.Context, friend_id: int, job_id: int) -> None:
 			return
 		data = {
 			"friend_id": friend_id,
-			"job_id": job_id,
 			"requested": True,
 			"message": "附件简历请求已发送",
 		}

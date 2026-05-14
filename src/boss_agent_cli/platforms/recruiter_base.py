@@ -143,8 +143,15 @@ class RecruiterPlatform(ABC):
 		raise NotImplementedError(f"{self.name} does not implement job_online")
 
 	def exchange_request(self, exchange_type: int, uid: int, job_id: int, gid: int) -> dict[str, Any]:
-		"""请求交换联系方式。"""
+		"""请求交换联系方式。DEPRECATED — 见 exchange_request_by_friend (issue #217)。"""
 		raise NotImplementedError(f"{self.name} does not implement exchange_request")
+
+	def exchange_request_by_friend(self, friend_id: int, exchange_type: int) -> dict[str, Any]:
+		"""请求交换联系方式 / 求附件简历（issue #217 修复）。
+
+		type: 1=换手机号, 2=换微信, 4=求附件简历
+		"""
+		raise NotImplementedError(f"{self.name} does not implement exchange_request_by_friend")
 
 	def exchange_content(self, uid: int) -> dict[str, Any]:
 		"""获取交换内容。"""

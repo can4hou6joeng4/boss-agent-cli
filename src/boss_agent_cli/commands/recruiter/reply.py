@@ -18,7 +18,9 @@ def reply_cmd(ctx: click.Context, friend_id: int, message: str) -> None:
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_recruiter_platform_instance(ctx, auth) as platform:
-		result = platform.send_message(friend_id, message)
+		# A' 路径：让 BOSS 招聘者前端 Vue 组件代劳真正的 WS 发送 (issue #217)。
+		# 旧的 send_message(gid, content) 走 fastReply/sendReplyMsg 已 121 弃端点。
+		result = platform.send_message_by_friend(friend_id, message)
 		if not platform.is_success(result):
 			code, error_message = platform.parse_error(result)
 			recoverable, recovery_action = error_contract_for_code(code)
@@ -32,7 +34,6 @@ def reply_cmd(ctx: click.Context, friend_id: int, message: str) -> None:
 			return
 		data = {
 			"friend_id": friend_id,
-			"message": message,
 			"sent": True,
 		}
 		handle_output(

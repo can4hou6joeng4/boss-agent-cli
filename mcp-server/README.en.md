@@ -47,7 +47,7 @@ Add the server in Cursor Settings -> MCP Servers:
 
 ## Available tools
 
-The current MCP server exposes **49 tools**, covering candidate workflows, AI assistance, and recruiter-side `hr` operations.
+The current MCP server exposes **50 tools**, covering candidate workflows, AI assistance, and recruiter-side `hr` operations.
 
 ### Auth and environment
 
@@ -110,6 +110,7 @@ The current MCP server exposes **49 tools**, covering candidate workflows, AI as
 | `boss_hr_candidates` | Search candidates |
 | `boss_hr_chat` | Recruiter conversation list |
 | `boss_hr_resume` | View online candidate resumes |
+| `boss_hr_exchange` | Request a phone or WeChat exchange with a candidate |
 | `boss_hr_reply` | Reply to a candidate |
 | `boss_hr_request_resume` | Request an attached resume from a candidate |
 | `boss_hr_jobs` | Manage job listings and online/offline state |

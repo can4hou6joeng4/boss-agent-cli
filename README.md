@@ -6,7 +6,7 @@
 
 > 求职者：搜索 · 福利筛选 · 个性化推荐 · 自动打招呼 · 求职流水线 · 增量监控 · AI 简历优化
 >
-> 招聘者：候选人检索 · 沟通回复 · 简历请求 · 职位上下线 · 多平台抽象
+> 招聘者：候选人检索 · 沟通回复 · 简历/联系方式请求 · 职位上下线 · 多平台抽象
 
 [![CI](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli)
@@ -99,7 +99,7 @@ boss digest                                                  # 每日汇报
 
 ### 招聘者工作流
 
-- `👔 候选人运营`：投递申请、候选人搜索、沟通列表、在线简历查看与附件简历请求。命令：`hr applications` `hr candidates` `hr chat` `hr resume` `hr request-resume`
+- `👔 候选人运营`：投递申请、候选人搜索、沟通列表、在线简历查看、附件简历请求与换手机/微信。命令：`hr applications` `hr candidates` `hr chat` `hr resume` `hr request-resume`
 - `💬 招聘沟通`：直接回复候选人消息，把 HR 场景纳入同一套 JSON 协议。命令：`hr reply`
 - `📌 职位管理`：查看职位、上架、下架，作为招聘者端的最小可操作闭环。命令：`hr jobs list` `hr jobs online` `hr jobs offline`
 
@@ -180,6 +180,8 @@ boss watch run my-golang
 boss hr applications                  # 候选人投递申请
 boss hr candidates "Golang"           # 搜索候选人
 boss hr reply <friend_id> "你好"      # 回复消息
+boss hr request-resume <friend_id>    # 请求候选人附件简历
+boss hr resume --exchange --friend-id <friend_id> --type wechat   # 请求换微信
 boss hr jobs list                     # 我发布的职位
 ```
 
@@ -394,12 +396,13 @@ except AuthRequired:
 | 命令 | 说明 |
 |------|------|
 | `boss hr applications` | 查看候选人投递申请列表 |
-| `boss hr resume` | 查看或请求候选人简历 |
+| `boss hr resume <geek_id> --job-id <id> --security-id <id>` | 查看候选人在线简历 |
+| `boss hr resume --exchange --friend-id <friend_id> [--type wechat]` | 请求交换手机号或微信（默认 phone） |
 | `boss hr chat` | 查看与候选人的沟通列表 |
 | `boss hr jobs list/offline/online` | 职位列表与上下线管理 |
 | `boss hr candidates <keyword>` | 搜索候选人 |
 | `boss hr reply <friend_id> <message>` | 回复候选人消息 |
-| `boss hr request-resume <friend_id> --job-id <id>` | 请求候选人分享附件简历 |
+| `boss hr request-resume <friend_id>` | 请求候选人分享附件简历 |
 
 ### 简历与 AI
 

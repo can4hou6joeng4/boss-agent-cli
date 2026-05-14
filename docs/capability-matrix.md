@@ -94,9 +94,10 @@
 | 投递申请列表 | `boss hr applications` | 是 | httpx |
 | 候选人搜索 | `boss hr candidates` | 是 | httpx，支持 `--city` / `--job-id` / `--experience` / `--degree` / `--age` / `--school-level` / `--activeness` / `--source` / `--salary` / `--select` / `--page` |
 | 沟通列表 | `boss hr chat` | 是 | httpx |
-| 在线简历查看 | `boss hr resume` | 是 | httpx |
-| 消息回复 | `boss hr reply` | 是 | httpx |
-| 附件简历请求 | `boss hr request-resume` | 是 | httpx |
+| 在线简历查看 | `boss hr resume <geek_id> --job-id <id> --security-id <id>` | 是 | httpx |
+| 联系方式交换 | `boss hr resume --exchange --friend-id <friend_id> [--type wechat]` | 是 | 浏览器（CDP chat tab） |
+| 消息回复 | `boss hr reply <friend_id> <message>` | 是 | 浏览器（CDP chat tab） |
+| 附件简历请求 | `boss hr request-resume <friend_id>` | 是 | 浏览器（CDP chat tab） |
 | 职位列表与上下线 | `boss hr jobs` | 是 | httpx |
 
 说明：

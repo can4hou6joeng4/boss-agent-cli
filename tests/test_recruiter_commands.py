@@ -264,26 +264,39 @@ def test_recruiter_jobs_online_reports_error_when_platform_rejects(mock_auth_cls
 @patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
 def test_recruiter_resume_exchange_supports_data_envelope(mock_auth_cls, mock_platform_cls):
 	mock_platform = _ctx_mock(mock_platform_cls)
-	mock_platform.exchange_request.return_value = {
+	mock_platform.exchange_request_by_friend.return_value = {
 		"code": 200,
 		"data": {"exchangeStatus": "sent"},
 	}
-	result = _invoke("hr", "resume", "geek-1", "--exchange", "--uid", "1", "--gid", "2", "--job-id", "3")
+	result = _invoke("hr", "resume", "--exchange", "--friend-id", "1")
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"]["exchangeStatus"] == "sent"
 	assert "联系方式交换请求已发送" == parsed["data"]["message"]
 	assert parsed["hints"]["next_actions"][0] == "boss hr applications — 返回候选人列表"
+	mock_platform.exchange_request_by_friend.assert_called_once_with(1, exchange_type=1)
+
+
+@patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
+def test_recruiter_resume_exchange_wechat_maps_to_type_2(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.exchange_request_by_friend.return_value = {"code": 200, "data": {"exchangeStatus": "sent"}}
+	result = _invoke("hr", "resume", "--exchange", "--type", "wechat", "--friend-id", "1")
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["data"]["exchangeStatus"] == "sent"
+	mock_platform.exchange_request_by_friend.assert_called_once_with(1, exchange_type=2)
 
 
 @patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
 def test_recruiter_resume_exchange_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
 	mock_platform = _ctx_mock(mock_platform_cls)
-	mock_platform.exchange_request.return_value = {"code": 37, "message": "stoken expired"}
+	mock_platform.exchange_request_by_friend.return_value = {"code": 37, "message": "stoken expired"}
 	mock_platform.is_success.return_value = False
 	mock_platform.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
-	result = _invoke("hr", "resume", "geek-1", "--exchange", "--uid", "1", "--gid", "2", "--job-id", "3")
+	result = _invoke("hr", "resume", "--exchange", "--friend-id", "1")
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
@@ -350,7 +363,7 @@ def test_recruiter_resume_parse_reports_error_when_platform_rejects(mock_auth_cl
 @patch("boss_agent_cli.commands.recruiter.reply.AuthManager")
 def test_recruiter_reply_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
 	mock_platform = _ctx_mock(mock_platform_cls)
-	mock_platform.send_message.return_value = {"code": 9, "message": "too fast"}
+	mock_platform.send_message_by_friend.return_value = {"code": 9, "message": "too fast"}
 	mock_platform.is_success.return_value = False
 	mock_platform.parse_error.return_value = ("RATE_LIMITED", "too fast")
 	result = _invoke("hr", "reply", "123", "你好")
@@ -366,14 +379,32 @@ def test_recruiter_reply_reports_error_when_platform_rejects(mock_auth_cls, mock
 	)
 
 
+@patch("boss_agent_cli.commands.recruiter.reply.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.reply.AuthManager")
+def test_recruiter_reply_success_does_not_echo_message_body(mock_auth_cls, mock_platform_cls):
+	"""招聘者回复成功信封不应回显聊天正文。"""
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.send_message_by_friend.return_value = {"code": 0, "zpData": {"friendId": 123}}
+	private_message = "候选人张三问薪资 30K 可否远程"
+
+	result = _invoke("hr", "reply", "123", private_message)
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"] == {"friend_id": 123, "sent": True}
+	assert private_message not in result.output
+	mock_platform.send_message_by_friend.assert_called_once_with(123, private_message)
+
+
 @patch("boss_agent_cli.commands.recruiter.request_resume.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.request_resume.AuthManager")
 def test_recruiter_request_resume_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
 	mock_platform = _ctx_mock(mock_platform_cls)
-	mock_platform.exchange_request.return_value = {"code": 36, "message": "account risk"}
+	mock_platform.exchange_request_by_friend.return_value = {"code": 36, "message": "account risk"}
 	mock_platform.is_success.return_value = False
 	mock_platform.parse_error.return_value = ("ACCOUNT_RISK", "account risk")
-	result = _invoke("hr", "request-resume", "123", "--job-id", "88")
+	result = _invoke("hr", "request-resume", "123")
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False

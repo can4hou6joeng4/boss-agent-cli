@@ -24,6 +24,10 @@ _ERROR_CODE_MAP: dict[int, str] = {
 	121: "INVALID_PARAM",
 }
 
+# 端点路径片段 → 已知端点漂移场景（命中后将该路径下的 121 重映射为 ENDPOINT_DEPRECATED）
+# 真源：issue #217 — qianjunye 抓包确认 fastReply/sendReplyMsg 已被 BOSS 替换为 WS+Protobuf 双通道。
+_DEPRECATED_ENDPOINT_FRAGMENTS: tuple[str, ...] = ("fastReply/sendReplyMsg",)
+
 
 class BossRecruiterPlatform(RecruiterPlatform):
 	"""BOSS 直聘招聘者平台实现。"""
@@ -48,6 +52,12 @@ class BossRecruiterPlatform(RecruiterPlatform):
 		code = response.get("code")
 		message = str(response.get("message") or response.get("zpData") or "")
 		unified = _ERROR_CODE_MAP.get(code, "UNKNOWN") if isinstance(code, int) else "UNKNOWN"
+		# 端点漂移场景下重映射 121：调用方（_browser_request / _request）在 response dict 注入
+		# __cli_endpoint_hint__ 字段（CLI 内部命名空间，避免与服务端字段冲突）。
+		if code == 121:
+			hint = response.get("__cli_endpoint_hint__")
+			if isinstance(hint, str) and any(frag in hint for frag in _DEPRECATED_ENDPOINT_FRAGMENTS):
+				unified = "ENDPOINT_DEPRECATED"
 		return unified, message
 
 	# ── 候选人列表与筛选 ────────────────────────────────
@@ -69,8 +79,36 @@ class BossRecruiterPlatform(RecruiterPlatform):
 
 	# ── 候选人搜索与简历 ────────────────────────────────
 
-	def search_geeks(self, query: str, *, city: str | None = None, page: int = 1, job_id: str | None = None, experience: str | None = None, degree: str | None = None, age: str | None = None, school_level: str | None = None, activeness: str | None = None, source: str | None = None, select: bool = False, salary: str | None = None) -> dict[str, Any]:
-		return self._client.search_geeks(query, city=city, page=page, job_id=job_id, experience=experience, degree=degree, age=age, school_level=school_level, activeness=activeness, source=source, select=select, salary=salary)
+	def search_geeks(
+		self,
+		query: str,
+		*,
+		city: str | None = None,
+		page: int = 1,
+		job_id: str | None = None,
+		experience: str | None = None,
+		degree: str | None = None,
+		age: str | None = None,
+		school_level: str | None = None,
+		activeness: str | None = None,
+		source: str | None = None,
+		select: bool = False,
+		salary: str | None = None,
+	) -> dict[str, Any]:
+		return self._client.search_geeks(
+			query,
+			city=city,
+			page=page,
+			job_id=job_id,
+			experience=experience,
+			degree=degree,
+			age=age,
+			school_level=school_level,
+			activeness=activeness,
+			source=source,
+			select=select,
+			salary=salary,
+		)
 
 	def view_geek(self, geek_id: str, job_id: str, security_id: str | None = None) -> dict[str, Any]:
 		return self._client.view_geek(geek_id, job_id=job_id, security_id=security_id)
@@ -88,6 +126,9 @@ class BossRecruiterPlatform(RecruiterPlatform):
 
 	def send_message(self, gid: int, content: str) -> dict[str, Any]:
 		return self._client.send_message(gid, content)
+
+	def send_message_by_friend(self, friend_id: int, content: str) -> dict[str, Any]:
+		return self._client.send_message_by_friend(friend_id, content)
 
 	def session_enter(self, geek_id: str, expect_id: str, job_id: str, security_id: str) -> dict[str, Any]:
 		return self._client.session_enter(geek_id, expect_id, job_id, security_id)
@@ -107,6 +148,9 @@ class BossRecruiterPlatform(RecruiterPlatform):
 
 	def exchange_request(self, exchange_type: int, uid: int, job_id: int, gid: int) -> dict[str, Any]:
 		return self._client.exchange_request(exchange_type, uid, job_id, gid)
+
+	def exchange_request_by_friend(self, friend_id: int, exchange_type: int) -> dict[str, Any]:
+		return self._client.exchange_request_by_friend(friend_id, exchange_type)
 
 	def exchange_content(self, uid: int) -> dict[str, Any]:
 		return self._client.exchange_content(uid)

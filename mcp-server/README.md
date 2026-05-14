@@ -47,9 +47,43 @@ uv tool install "boss-agent-cli[mcp]"
 }
 ```
 
+## 配置 VS Code（Windows）
+
+在 VS Code 的 `mcp.json` 中添加 stdio server。将 `E:\tools\boss-agent-cli` 替换为你的本地项目路径：
+
+```json
+{
+  "servers": {
+    "boss-agent-cli": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "--directory",
+        "E:\\tools\\boss-agent-cli",
+        "run",
+        "python",
+        "mcp-server/server.py"
+      ]
+    }
+  }
+}
+```
+
+如果你的 VS Code MCP 配置使用顶层 server 对象，也可以只保留内部条目：
+
+```json
+"boss-agent-cli": {
+  "type": "stdio",
+  "command": "uv",
+  "args": ["--directory", "E:\\tools\\boss-agent-cli", "run", "python", "mcp-server/server.py"]
+}
+```
+
+MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程误读 VS Code 的 MCP stdio 协议流导致阻塞超时。
+
 ## 可用工具
 
-当前 MCP Server 暴露 **49 个工具**，覆盖求职者链路、AI 辅助能力，以及招聘者侧 `hr` 工作流。
+当前 MCP Server 暴露 **50 个工具**，覆盖求职者链路、AI 辅助能力，以及招聘者侧 `hr` 工作流。
 
 ### 认证与环境
 
@@ -112,6 +146,7 @@ uv tool install "boss-agent-cli[mcp]"
 | `boss_hr_candidates` | 搜索候选人 |
 | `boss_hr_chat` | 招聘者沟通列表 |
 | `boss_hr_resume` | 查看候选人在线简历 |
+| `boss_hr_exchange` | 请求交换候选人手机号或微信 |
 | `boss_hr_reply` | 回复候选人消息 |
 | `boss_hr_request_resume` | 请求候选人附件简历 |
 | `boss_hr_jobs` | 职位列表与上下线管理 |

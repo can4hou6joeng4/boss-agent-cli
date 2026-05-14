@@ -49,6 +49,35 @@ def test_boss_recruiter_parse_error_maps_invalid_request():
 	assert message == "请求不合法(121)"
 
 
+def test_parse_error_send_message_121_maps_to_endpoint_deprecated():
+	"""issue #217 — sendReplyMsg 端点 121 重映射为 ENDPOINT_DEPRECATED，引导用户跟 issue。"""
+	client = _mock_client()
+	platform = BossRecruiterPlatform(client)
+	unified, message = platform.parse_error(
+		{
+			"code": 121,
+			"message": "请求不合法(121)",
+			"__cli_endpoint_hint__": "https://www.zhipin.com/wapi/zpchat/fastReply/sendReplyMsg",
+		}
+	)
+	assert unified == "ENDPOINT_DEPRECATED"
+	assert "请求不合法" in message
+
+
+def test_parse_error_exchange_121_keeps_invalid_param():
+	"""保护边界：exchange_request 端点的 121 根因待查，保持 INVALID_PARAM 不动。"""
+	client = _mock_client()
+	platform = BossRecruiterPlatform(client)
+	unified, _ = platform.parse_error(
+		{
+			"code": 121,
+			"message": "请求不合法(121)",
+			"__cli_endpoint_hint__": "https://www.zhipin.com/wapi/zpchat/exchange/request",
+		}
+	)
+	assert unified == "INVALID_PARAM"
+
+
 def test_friend_list_delegates():
 	client = _mock_client()
 	client.friend_list.return_value = {"code": 0, "zpData": {"result": []}}
@@ -73,8 +102,18 @@ def test_search_geeks_delegates():
 	platform = BossRecruiterPlatform(client)
 	result = platform.search_geeks("Python", city="101010100", page=2)
 	client.search_geeks.assert_called_once_with(
-		"Python", city="101010100", page=2, job_id=None, experience=None, degree=None,
-		age=None, school_level=None, activeness=None, source=None, select=False, salary=None,
+		"Python",
+		city="101010100",
+		page=2,
+		job_id=None,
+		experience=None,
+		degree=None,
+		age=None,
+		school_level=None,
+		activeness=None,
+		source=None,
+		select=False,
+		salary=None,
 	)
 	assert result == {"code": 0, "zpData": {"list": []}}
 
@@ -95,6 +134,15 @@ def test_send_message_delegates():
 	result = platform.send_message(123, "你好")
 	client.send_message.assert_called_once_with(123, "你好")
 	assert result == {"code": 0, "zpData": {}}
+
+
+def test_send_message_by_friend_delegates():
+	client = _mock_client()
+	client.send_message_by_friend.return_value = {"code": 0, "zpData": {"friendId": 123}}
+	platform = BossRecruiterPlatform(client)
+	result = platform.send_message_by_friend(123, "你好")
+	client.send_message_by_friend.assert_called_once_with(123, "你好")
+	assert result["code"] == 0
 
 
 def test_context_manager_closes():

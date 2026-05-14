@@ -8,6 +8,7 @@ Supports two modes:
   2. Patchright mode (fallback): launches a headless Chromium instance
 """
 import sys
+import time
 from pathlib import Path
 from types import TracebackType
 from typing import Any, cast
@@ -19,6 +20,21 @@ from boss_agent_cli.api.throttle import RequestThrottle
 from boss_agent_cli.auth.browser import _DEFAULT_CDP_URL as CDP_DEFAULT_URL
 
 HOME_URL = "https://www.zhipin.com/"
+
+
+class RecruiterChatTabRequired(RuntimeError):
+	"""招聘者操作（issue #217 修复路径）需要用户已打开 chat/index 页。
+
+	不自动新开 tab：实测会触发 BOSS 反爬，把用户当前 tab 踢到首页。
+	友好做法是返回明确指引，让用户自己打开。
+	"""
+
+	def __init__(self) -> None:
+		super().__init__(
+			"recruiter chat tab not found in CDP Chrome — "
+			"please open https://www.zhipin.com/web/chat/index in your "
+			"Chrome (CDP-attached) and retry."
+		)
 
 # 超时常量
 _CDP_PROBE_TIMEOUT = 3           # CDP 探测 HTTP 超时（秒）
@@ -293,6 +309,49 @@ class BrowserSession:
 		self._throttle.mark()
 		return cast("dict[str, Any]", result)
 
+	# ── Arbitrary JS evaluation (CDP-only, raw websocket) ────────────
+
+	def evaluate_js(self, script: str, arg: Any = None) -> Any:
+		"""Run JS in the user's recruiter chat tab via raw CDP websocket.
+
+		Required for recruiter send_message (issue #217): we reach into the
+		招聘者 chat page's Vue 2 instance to call geek-list.geekClick() +
+		editor.sendText(). The normal BrowserSession.request fetch path can't
+		do that — it runs JS in a blank tab BrowserSession owns, not in the
+		user's recruiter tab.
+
+		Why raw CDP instead of patchright: attaching patchright to another
+		tab we didn't create via new_page() triggers 'Frame was detached'
+		errors when that page navigates or re-renders (Vue SFC rebuilds
+		frame tree). Raw CDP is a stateless RPC — we just send
+		Runtime.evaluate and read the result, no session book-keeping.
+
+		Intentionally does NOT call _ensure_started(): patchright's
+		connect_over_cdp enumerates every tab's frame tree on attach, which
+		can race with Vue re-renders on the recruiter page and crash the
+		Node driver before we even get to our evaluate call. evaluate_js
+		only needs the CDP HTTP endpoint reachable — not patchright.
+
+		Only works in CDP mode (user has chrome://<devtools port>/json
+		reachable and the recruiter chat tab open). Bridge/headless modes
+		have no access to the user's Vue runtime.
+		"""
+		if self._is_bridge:
+			raise RuntimeError("evaluate_js requires CDP mode (bridge mode has no access to user Chrome)")
+		cdp_url = self._cdp_url or CDP_DEFAULT_URL
+		return _cdp_evaluate_in_chat_tab(cdp_url, script, arg)
+
+	def evaluate_js_with_chat_events(self, script: str, arg: Any = None, *, listen_ms: int = 3000) -> dict[str, Any]:
+		"""Run JS in the recruiter chat tab and collect short-lived chat WS events.
+
+		Used by recruiter send_message verification to distinguish a real chat send
+		from UI-only draft mutation or suggestion traffic.
+		"""
+		if self._is_bridge:
+			raise RuntimeError("evaluate_js_with_chat_events requires CDP mode (bridge mode has no access to user Chrome)")
+		cdp_url = self._cdp_url or CDP_DEFAULT_URL
+		return _cdp_evaluate_with_chat_events_in_chat_tab(cdp_url, script, arg, listen_ms=listen_ms)
+
 	# ── Lifecycle ────────────────────────────────────────────────────
 
 	@property
@@ -346,3 +405,178 @@ class BrowserSession:
 		exc_tb: TracebackType | None,
 	) -> None:
 		self.close()
+
+
+# ─── Raw CDP helper for evaluate_js ──────────────────────────────────────
+
+def _pick_chat_target_ws(cdp_http_url: str) -> str:
+	import json as _json
+	import urllib.request
+
+	list_url = cdp_http_url.rstrip("/") + "/json"
+	try:
+		with urllib.request.urlopen(list_url, timeout=3) as resp:
+			tabs = _json.load(resp)
+	except Exception as exc:
+		raise RuntimeError(f"cannot reach CDP at {list_url}: {exc}") from exc
+
+	for t in tabs:
+		if t.get("type") == "page" and "/web/chat/index" in t.get("url", ""):
+			target_ws = t.get("webSocketDebuggerUrl")
+			if target_ws:
+				return cast("str", target_ws)
+	raise RecruiterChatTabRequired()
+
+
+def _build_eval_expression(script: str, arg: Any) -> str:
+	import json as _json
+
+	if arg is not None:
+		return f"({script})({_json.dumps(arg, ensure_ascii=False)})"
+	return script
+
+
+def _carve_utf8_bits(bs: bytes) -> list[str]:
+	out: list[str] = []
+	i = 0
+	while i < len(bs):
+		for length in range(min(len(bs) - i, 240), 4, -1):
+			try:
+				text = bs[i : i + length].decode("utf-8")
+			except UnicodeDecodeError:
+				continue
+			if len(text) >= 5 and all(ch.isprintable() or ch in "\n\r\t" for ch in text):
+				out.append(text)
+				i += length
+				break
+		else:
+			i += 1
+	return out
+
+def _cdp_evaluate_in_chat_tab(cdp_http_url: str, script: str, arg: Any) -> Any:
+	"""Send Runtime.evaluate to the BOSS recruiter chat tab via raw CDP.
+
+	Bypasses patchright entirely — avoids 'Frame was detached' errors when
+	the Vue page re-renders during our call. Wraps the caller's script as
+	`(fnSrc)(arg)` when arg is provided, so the script can be a JS expression
+	that evaluates to a function of one argument (mirrors patchright's
+	`page.evaluate(script, arg)` contract used by the PoC).
+	"""
+	import json as _json
+
+	import websockets.sync.client as _ws_client
+
+	target_ws = _pick_chat_target_ws(cdp_http_url)
+	expression = _build_eval_expression(script, arg)
+
+	with _ws_client.connect(target_ws, max_size=8 * 1024 * 1024) as ws:
+		ws.send(_json.dumps({
+			"id": 1,
+			"method": "Runtime.evaluate",
+			"params": {
+				"expression": expression,
+				"returnByValue": True,
+				"awaitPromise": True,
+			},
+		}))
+		deadline = time.time() + 30.0
+		while time.time() < deadline:
+			raw = ws.recv(timeout=max(0.1, deadline - time.time()))
+			msg = _json.loads(raw)
+			if msg.get("id") != 1:
+				continue
+			err = msg.get("error")
+			if err:
+				raise RuntimeError(f"CDP Runtime.evaluate error: {err}")
+			result = msg.get("result", {}).get("result", {})
+			if "value" in result:
+				return result["value"]
+			# Exception in JS side
+			exc_details = msg.get("result", {}).get("exceptionDetails")
+			if exc_details:
+				raise RuntimeError(f"JS exception: {exc_details.get('text')} — {exc_details.get('exception', {}).get('description', '')[:300]}")
+			return result
+		raise RuntimeError("CDP Runtime.evaluate timed out after 30s")
+
+
+def _cdp_evaluate_with_chat_events_in_chat_tab(
+	cdp_http_url: str, script: str, arg: Any, *, listen_ms: int
+) -> dict[str, Any]:
+	import base64 as _base64
+	import json as _json
+
+	import websockets.sync.client as _ws_client
+
+	target_ws = _pick_chat_target_ws(cdp_http_url)
+	expression = _build_eval_expression(script, arg)
+
+	with _ws_client.connect(target_ws, max_size=8 * 1024 * 1024) as ws:
+		ws.send(_json.dumps({"id": 1, "method": "Network.enable"}))
+		ws.send(_json.dumps({
+			"id": 2,
+			"method": "Runtime.evaluate",
+			"params": {
+				"expression": expression,
+				"returnByValue": True,
+				"awaitPromise": True,
+			},
+		}))
+
+		events: list[dict[str, Any]] = []
+		eval_value: Any = None
+		eval_done = False
+		deadline = time.time() + 30.0
+		listen_deadline: float | None = None
+
+		while True:
+			now = time.time()
+			if eval_done and listen_deadline is not None and now >= listen_deadline:
+				return {"value": eval_value, "events": events}
+			if now >= deadline:
+				raise RuntimeError("CDP Runtime.evaluate timed out after 30s")
+
+			timeout = 0.1 if eval_done and listen_deadline is not None else max(0.1, deadline - now)
+			try:
+				raw = ws.recv(timeout=timeout)
+			except TimeoutError:
+				continue
+
+			msg = _json.loads(raw)
+			msg_id = msg.get("id")
+			if msg_id == 2:
+				err = msg.get("error")
+				if err:
+					raise RuntimeError(f"CDP Runtime.evaluate error: {err}")
+				result = msg.get("result", {}).get("result", {})
+				exc_details = msg.get("result", {}).get("exceptionDetails")
+				if exc_details:
+					raise RuntimeError(
+						f"JS exception: {exc_details.get('text')} — "
+						f"{exc_details.get('exception', {}).get('description', '')[:300]}"
+					)
+				eval_value = result.get("value", result)
+				eval_done = True
+				listen_deadline = time.time() + (listen_ms / 1000.0)
+				continue
+
+			method = msg.get("method")
+			if method not in ("Network.webSocketFrameSent", "Network.webSocketFrameReceived"):
+				continue
+			frame = msg.get("params", {}).get("response", {})
+			if frame.get("opcode") not in (1, 2):
+				continue
+
+			payload_data = frame.get("payloadData", "")
+			try:
+				bs = _base64.b64decode(payload_data, validate=False)
+			except Exception:
+				bs = payload_data.encode("utf-8", errors="ignore")
+			if len(bs) < 30:
+				continue
+
+			events.append({
+				"ts": time.time(),
+				"kind": "ws_send" if method.endswith("Sent") else "ws_recv",
+				"bytes": len(bs),
+				"utf8_bits": _carve_utf8_bits(bs)[:10],
+			})
