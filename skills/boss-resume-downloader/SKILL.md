@@ -85,7 +85,7 @@ After sync, all resumes are at:
 To analyze them, read the local files directly. Example prompts that work well once files are synced:
 
 - "Read all resume.md files under ~/WorkBuddy/boss-resumes and shortlist candidates with Python experience."
-- "Compare the work experience sections across all downloaded resumes for job 研发实习生."
+- "Compare the work experience sections across all downloaded resumes for job <job_name>."
 - "Find candidates who mentioned crawler/scrapy/selenium in their resumes."
 
 This is faster and more reliable than querying BOSS live for each analysis question.

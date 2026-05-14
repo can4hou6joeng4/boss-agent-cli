@@ -7,7 +7,7 @@ Verified recruiter login in this workspace:
 ```json
 {
   "logged_in": true,
-  "user_name": "钱俊烨"
+  "user_name": "<recruiter_name>"
 }
 ```
 
@@ -15,11 +15,11 @@ Known online job from prior verification:
 
 ```json
 {
-  "jobName": "研发实习生（爬虫方向）",
-  "jobId": 538261874,
-  "encryptJobId": "8e0361425656f7200ndy2du8GFVU",
-  "salaryDesc": "200-250元/天",
-  "address": "上海",
+  "jobName": "<job_name>",
+  "jobId": "<jobId>",
+  "encryptJobId": "<encryptJobId>",
+  "salaryDesc": "<salary>",
+  "address": "<city>",
   "jobOnlineStatus": 1
 }
 ```
