@@ -81,8 +81,8 @@ Every command outputs **structured JSON** that AI Agents parse directly. No frag
 
 ### Recruiter workflow
 
-- **Candidate operations**: incoming applications, candidate search, recruiter chat list, inline resume view, attached-resume requests, and phone/WeChat exchange requests. Commands: `hr applications` `hr candidates` `hr chat` `hr resume` `hr request-resume`
-- **Recruiter messaging**: reply to candidates while keeping the same JSON contract as the candidate side. Command: `hr reply`
+- **Candidate operations**: incoming applications, candidate search, recruiter chat list with unread summaries, inline resume view, attached-resume requests, and phone/WeChat exchange requests. Commands: `hr applications` `hr candidates` `hr chat` `hr resume` `hr request-resume`
+- **Recruiter messaging**: inspect chat history, batch recent-message summaries, and reply to candidates while keeping the same JSON contract as the candidate side. Commands: `hr chatmsg` `hr last-messages` `hr reply`
 - **Job lifecycle management**: list, bring online, and take offline recruiter postings. Commands: `hr jobs list` `hr jobs online` `hr jobs offline`
 
 ### Platform & integration foundation
@@ -91,7 +91,7 @@ Every command outputs **structured JSON** that AI Agents parse directly. No frag
 - **Structured transport**: stdout is JSON-only, stderr is logs-only, which keeps automation stable
 - **Platform-aware login**: `zhipin` uses Cookie → CDP → QR httpx → patchright; `zhilian` uses Cookie → CDP → browser login
 - **Cross-platform adapter layer**: `Platform` / `RecruiterPlatform` registries are live; BOSS is available on both candidate and recruiter sides, and Zhaopin already has candidate-side login plus read/write flow wired in
-- **MCP server with 50 tools**: ready for Claude Desktop / Cursor / Windsurf, including recruiter-side tools without wrapping your own bridge
+- **MCP server with 52 tools**: ready for Claude Desktop / Cursor / Windsurf, including recruiter-side tools without wrapping your own bridge
 
 ## 📦 Install
 
@@ -139,6 +139,9 @@ boss stats --days 30
 # 8. Recruiter mode (HR workflow)
 boss hr applications                    # candidate applications
 boss hr candidates "Golang"             # search candidates
+boss hr chat                            # chat list with unread and latest-message summaries
+boss hr chatmsg <friend_id>             # candidate chat history
+boss hr last-messages                   # batch recent-message summaries
 boss hr reply <friend_id> "Hi"          # reply to candidate
 boss hr request-resume <friend_id>      # request attached resume
 boss hr resume --exchange --friend-id <friend_id> --type wechat   # request WeChat exchange
@@ -206,7 +209,7 @@ See [Agent Quickstart](docs/agent-quickstart.en.md) and [Capability Matrix](docs
 
 ## 📚 Commands
 
-`boss schema` currently exposes 33 top-level commands, plus 7 first-level recruiter subcommands under `hr`, grouped below by workflow:
+`boss schema` currently exposes 34 top-level commands, plus 9 first-level recruiter subcommands under `hr`, grouped below by workflow:
 
 | Stage | Commands |
 |-------|----------|
@@ -218,7 +221,7 @@ See [Agent Quickstart](docs/agent-quickstart.en.md) and [Capability Matrix](docs
 | **Resume** | `resume` · `me` |
 | **AI** | `ai config` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai suggest` · `ai reply` · `ai interview-prep` · `ai chat-coach` |
 | **Utility** | `schema` · `export` · `config` · `clean` |
-| **Recruiter** | `hr applications` · `hr resume` · `hr chat` · `hr jobs list/offline/online` · `hr candidates` · `hr reply` · `hr request-resume` |
+| **Recruiter** | `hr applications` · `hr resume` · `hr chat` · `hr chatmsg` · `hr last-messages` · `hr jobs list/offline/online` · `hr candidates` · `hr reply` · `hr request-resume` |
 
 Run `boss <cmd> --help` for options, or `boss schema` for the complete JSON self-description.
 
@@ -269,14 +272,45 @@ boss logout && boss login
 
 BOSS Zhipin's risk system flags headless browsers. Fix by attaching to your real Chrome:
 
+macOS:
+
 ```bash
-# 1. Quit Chrome completely, then:
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
   --remote-debugging-port=9222 \
   --user-data-dir="$HOME/.boss-agent/chrome-cdp-profile" \
   --no-first-run
+```
 
-# 2. In another terminal:
+Linux:
+
+```bash
+google-chrome \
+  --remote-debugging-port=9222 \
+  --user-data-dir="$HOME/.boss-agent/chrome-cdp-profile" \
+  --no-first-run
+```
+
+Windows PowerShell:
+
+```powershell
+$chromeCandidates = @(
+  "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+  "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+  "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
+)
+
+$chrome = $chromeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $chrome) { throw "Google Chrome executable was not found" }
+
+& $chrome `
+  --remote-debugging-port=9222 `
+  --remote-allow-origins=* `
+  --user-data-dir="$env:LOCALAPPDATA\boss-agent-cdp-profile"
+```
+
+Then sign in from another terminal:
+
+```bash
 boss login --cdp
 boss search "python" --city 北京
 ```

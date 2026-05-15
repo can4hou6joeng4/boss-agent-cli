@@ -569,11 +569,42 @@ TOOLS = [
 	),
 	Tool(
 		name="boss_hr_chat",
-		description="招聘者模式：查看与候选人的沟通列表",
+		description="招聘者模式：查看与候选人的沟通列表（含未读数和最近消息摘要）",
 		inputSchema={
 			"type": "object",
 			"properties": {
 				"page": {"type": "integer", "description": "页码", "default": 1},
+				"job_id": {"type": "string", "description": "按职位筛选"},
+				"label_id": {"type": "integer", "description": "标签筛选（0=全部, 1=新招呼, 2=沟通中）", "default": 0},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_hr_chatmsg",
+		description="招聘者模式：查看与指定候选人的聊天消息历史",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
+				"count": {"type": "integer", "description": "消息数量", "default": 20},
+				"max_msg_id": {"type": "integer", "description": "向前翻页的最大消息 ID"},
+			},
+			"required": ["friend_id"],
+		},
+	),
+	Tool(
+		name="boss_hr_last_messages",
+		description="招聘者模式：批量查看候选人最近消息摘要",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"friend_ids": {
+					"type": "array",
+					"items": {"type": "integer"},
+					"description": "候选人会话 friend_id 列表；不传时从 hr chat 页获取当前页候选人",
+				},
+				"page": {"type": "integer", "description": "沟通列表页码", "default": 1},
 				"job_id": {"type": "string", "description": "按职位筛选"},
 				"label_id": {"type": "integer", "description": "标签筛选（0=全部, 1=新招呼, 2=沟通中）", "default": 0},
 			},
@@ -889,6 +920,26 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 
 	if name == "hr_chat":
 		args = ["hr", "chat"]
+		if "page" in arguments:
+			args.extend(["--page", str(arguments["page"])])
+		if arguments.get("job_id"):
+			args.extend(["--job-id", str(arguments["job_id"])])
+		if "label_id" in arguments:
+			args.extend(["--label-id", str(arguments["label_id"])])
+		return args
+
+	if name == "hr_chatmsg":
+		args = ["hr", "chatmsg", str(arguments["friend_id"])]
+		if "count" in arguments:
+			args.extend(["--count", str(arguments["count"])])
+		if arguments.get("max_msg_id"):
+			args.extend(["--max-msg-id", str(arguments["max_msg_id"])])
+		return args
+
+	if name == "hr_last_messages":
+		args = ["hr", "last-messages"]
+		for friend_id in arguments.get("friend_ids") or []:
+			args.extend(["--friend-id", str(friend_id)])
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
 		if arguments.get("job_id"):
