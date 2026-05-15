@@ -779,7 +779,7 @@ SCHEMA_DATA = {
 				"chat": "查看与候选人的沟通列表（含未读数和最近消息摘要）",
 				"chatmsg": "查看与指定候选人的聊天消息历史",
 				"last-messages": "批量查看候选人最近消息摘要",
-				"jobs": "管理职位发布（list/offline/online）",
+				"jobs": "管理职位发布（list/offline/online/detail）",
 				"candidates": "搜索候选人（支持 city/job-id/experience/degree/age/school-level/activeness/source/salary/select/page 筛选）",
 				"reply": "回复候选人消息",
 				"request-resume": "请求候选人分享附件简历",

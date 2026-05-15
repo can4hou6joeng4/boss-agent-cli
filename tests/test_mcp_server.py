@@ -98,6 +98,7 @@ def test_required_tools_present():
 		"boss_hr_applications", "boss_hr_candidates", "boss_hr_chat",
 		"boss_hr_chatmsg", "boss_hr_last_messages", "boss_hr_resume",
 		"boss_hr_exchange", "boss_hr_reply", "boss_hr_request_resume", "boss_hr_jobs",
+		"boss_hr_jobs_detail",
 	}
 	missing = required - names
 	assert not missing, f"缺少核心工具: {missing}"
@@ -105,7 +106,7 @@ def test_required_tools_present():
 
 def test_tool_count():
 	"""工具总数应与当前注册一致。"""
-	assert len(TOOLS) == 52
+	assert len(TOOLS) == 53
 
 
 def test_search_tool_requires_query():
@@ -548,7 +549,7 @@ def test_build_args_shortlist_list():
 
 def test_tool_count_after_pr41():
 	"""协议服务工具总数应与当前 MCP 暴露能力完全一致。"""
-	assert len(TOOLS) == 52
+	assert len(TOOLS) == 53
 
 
 def test_build_args_shortlist_add():
@@ -677,3 +678,7 @@ def test_build_args_hr_jobs_list():
 
 def test_build_args_hr_jobs_online():
 	assert _build_args("boss_hr_jobs", {"action": "online", "job_id": "77"}) == ["hr", "jobs", "online", "77"]
+
+
+def test_build_args_hr_jobs_detail():
+	assert _build_args("boss_hr_jobs_detail", {"enc_job_id": "abc123"}) == ["hr", "jobs", "detail", "abc123"]

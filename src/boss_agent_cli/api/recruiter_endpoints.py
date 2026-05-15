@@ -45,6 +45,7 @@ BOSS_CHAT_GEEK_INFO_URL = _url("boss_chat_geek_info")
 BOSS_JOB_LIST_URL = _url("boss_job_list")
 BOSS_JOB_OFFLINE_URL = _url("boss_job_offline")
 BOSS_JOB_ONLINE_URL = _url("boss_job_online")
+BOSS_JOB_EDIT_URL = _url("boss_job_edit")
 
 # ── 交换联系方式 ────────────────────────────────────
 BOSS_EXCHANGE_TEST_URL = _url("boss_exchange_test")
