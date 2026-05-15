@@ -144,6 +144,9 @@ class BossRecruiterPlatform(RecruiterPlatform):
 	def job_online(self, job_id: str) -> dict[str, Any]:
 		return self._client.job_online(job_id)
 
+	def job_detail(self, enc_job_id: str) -> dict[str, Any]:
+		return self._client.job_detail(enc_job_id)
+
 	# ── 交换联系方式 ──────────────────────────────────────
 
 	def exchange_request(self, exchange_type: int, uid: int, job_id: int, gid: int) -> dict[str, Any]:

@@ -91,3 +91,30 @@ def jobs_online_cmd(ctx: click.Context, job_id: str) -> None:
 			return
 		data = {"job_id": job_id, "message": "职位已上线"}
 		handle_output(ctx, "recruiter-jobs-online", data)
+
+
+@jobs_group.command("detail")
+@click.argument("enc_job_id")
+@click.pass_context
+@handle_auth_errors("recruiter-jobs-detail")
+def jobs_detail_cmd(ctx: click.Context, enc_job_id: str) -> None:
+	"""查看职位详情（含完整 JD）"""
+	data_dir = ctx.obj["data_dir"]
+	logger = ctx.obj["logger"]
+
+	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
+	with get_recruiter_platform_instance(ctx, auth) as platform:
+		result = platform.job_detail(enc_job_id)
+		if not platform.is_success(result):
+			code, message = platform.parse_error(result)
+			recoverable, recovery_action = error_contract_for_code(code)
+			handle_error_output(
+				ctx, "recruiter-jobs-detail",
+				code=code,
+				message=message or "职位详情获取失败",
+				recoverable=recoverable,
+				recovery_action=recovery_action,
+			)
+			return
+		data = platform.unwrap_data(result) or {}
+		handle_output(ctx, "recruiter-jobs-detail", data)
