@@ -105,6 +105,13 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				last_time_str = _format_ts(last_ts)
 			else:
 				last_time_str = item.get("lastTime", "-")
+			last_message_info = item.get("lastMessageInfo") or {}
+			message_status = last_message_info.get("status")
+			msg_status_label = (
+				_MSG_STATUS_LABELS.get(message_status, "未知")
+				if isinstance(message_status, int)
+				else "未知"
+			)
 
 			friends.append({
 				"name": item.get("name") or "-",
@@ -114,9 +121,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				"last_msg": item.get("lastMsg") or "-",
 				"last_time": last_time_str,
 				"last_ts": last_ts,
-				"msg_status": _MSG_STATUS_LABELS.get(
-					item.get("lastMessageInfo", {}).get("status"), "未知"
-				),
+				"msg_status": msg_status_label,
 				"security_id": item.get("securityId") or "",
 				"encrypt_job_id": item.get("encryptJobId") or "",
 				"unread": item.get("unreadMsgCount") or 0,

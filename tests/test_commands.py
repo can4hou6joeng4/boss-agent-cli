@@ -805,6 +805,31 @@ def test_chat_days_filter(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_handles_null_last_message_info(mock_auth_cls, mock_client_cls):
+	"""BOSS 可能返回 lastMessageInfo=null，chat 应兜底而不是崩溃。"""
+	import time
+	now_ms = int(time.time() * 1000)
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
+	item = _make_friend_item("HR", "腾讯", 2, now_ms)
+	item["lastMsg"] = None
+	item["lastMessageInfo"] = None
+	mock_client_cls.return_value.friend_list.return_value = {
+		"zpData": {
+			"result": [item],
+		},
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["chat"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"][0]["last_msg"] == "-"
+	assert parsed["data"][0]["msg_status"] == "未知"
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_combined_filter(mock_auth_cls, mock_client_cls):
 	"""--from boss --days 3 组合筛选"""
 	import time
