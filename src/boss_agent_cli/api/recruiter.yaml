@@ -101,6 +101,10 @@ endpoints:
     method: POST
     path: "/wapi/zpjob/job/online"
     referer: "/web/chat/index"
+  boss_job_edit:
+    method: GET
+    path: "/wapi/zpjob/job/edit"
+    referer: "/web/frame/job/edit"
 
   # ── 交换联系方式（手机/微信/简历）──────────────────
   # type 取值（实证抓包，issue #217）：

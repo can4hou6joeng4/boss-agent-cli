@@ -242,6 +242,9 @@ class BossRecruiterClient:
 
 	def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
 		"""httpx request with retry loop."""
+		# extra_headers overrides yaml-driven defaults from _headers_for(url); use only when
+		# a static yaml referer can't carry per-call query params (e.g. job/edit needs encryptId).
+		extra_headers_override: dict[str, str] = kwargs.pop("extra_headers", {})
 		for attempt in range(_MAX_RETRIES + 1):
 			client = self._get_client()
 			token = self._auth.get_token()
@@ -254,8 +257,8 @@ class BossRecruiterClient:
 
 			self._throttle.wait()
 
-			extra_headers = self._headers_for(url)
-			resp = client.request(method, url, headers=extra_headers, **kwargs)
+			headers = {**self._headers_for(url), **extra_headers_override}
+			resp = client.request(method, url, headers=headers, **kwargs)
 			self._throttle.mark()
 			self._merge_cookies(resp)
 
@@ -641,6 +644,11 @@ class BossRecruiterClient:
 	def job_online(self, job_id: str) -> dict[str, Any]:
 		data = {"encryptJobId": job_id}
 		return self._browser_request("POST", ep.BOSS_JOB_ONLINE_URL, data=data)
+
+	def job_detail(self, enc_job_id: str) -> dict[str, Any]:
+		params = {"encJobId": enc_job_id, "lid": "", "encAtsJobId": ""}
+		referer = f"{ep.BASE_URL}/web/frame/job/edit?jobversion=9921&encryptId={enc_job_id}&jobCreateSource=0&enterSource=6"
+		return self._request("GET", ep.BOSS_JOB_EDIT_URL, params=params, extra_headers={"Referer": referer})
 
 	# ── 交换联系方式（手机/微信/简历）─────────────────────
 

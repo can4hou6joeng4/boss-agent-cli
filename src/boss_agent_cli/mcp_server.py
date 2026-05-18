@@ -672,6 +672,17 @@ TOOLS = [
 			"required": [],
 		},
 	),
+	Tool(
+		name="boss_hr_jobs_detail",
+		description="招聘者模式：查看指定职位的完整详情（包括岗位描述 postDescription）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"enc_job_id": {"type": "string", "description": "职位的加密 ID（encryptJobId）"},
+			},
+			"required": ["enc_job_id"],
+		},
+	),
 ]
 
 _decorate_tool_descriptions()
@@ -972,6 +983,9 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 		if action in {"online", "offline"}:
 			args.append(str(arguments["job_id"]))
 		return args
+
+	if name == "hr_jobs_detail":
+		return ["hr", "jobs", "detail", str(arguments["enc_job_id"])]
 
 	# 无参数命令：status, doctor, cities, interviews, history, pipeline
 	return [name]
