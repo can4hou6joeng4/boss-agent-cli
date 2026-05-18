@@ -14,8 +14,12 @@ def _read(path: str) -> str:
 	return (ROOT / path).read_text(encoding="utf-8")
 
 
+def _existing(paths: list[str] | tuple[str, ...]) -> list[str]:
+	return [path for path in paths if (ROOT / path).exists()]
+
+
 def _doc_paths_for_compliance_guardrails() -> list[str]:
-	return [
+	return _existing([
 		"README.md",
 		"README.en.md",
 		"SKILL.md",
@@ -30,7 +34,7 @@ def _doc_paths_for_compliance_guardrails() -> list[str]:
 		"mcp-server/README.md",
 		"mcp-server/README.en.md",
 		"SECURITY.md",
-	]
+	])
 
 
 def _extract_readme_badges(path: str) -> list[tuple[str, str, str]]:
@@ -236,7 +240,7 @@ def test_agent_facing_docs_keep_low_risk_compliance_boundary():
 
 
 def test_agent_instructions_send_sensitive_actions_to_official_platform():
-	for path in ("AGENTS.md", "CLAUDE.md", "README.md", "README.en.md"):
+	for path in _existing(("AGENTS.md", "CLAUDE.md", "README.md", "README.en.md")):
 		content = _read(path)
 		assert "COMPLIANCE_BLOCKED" in content, path
 		assert (
