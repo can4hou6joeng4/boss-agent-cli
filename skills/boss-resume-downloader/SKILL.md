@@ -51,6 +51,9 @@ Important known facts:
 
 **Strongly recommended over one-shot bulk downloads.**
 
+> ⚠️ **Risk notice — recruiter resume access is sensitive.**
+> Recruiter-side resume access is a monitored, high-sensitivity action. Bulk resume screening has been observed to trigger account-level risk controls (rate limiting, CAPTCHA challenges, temporary account restrictions; see upstream issue #232). The patterns and limits in this skill **reduce** that risk but do not eliminate it. Treat any safeguards here — incremental scheduling, randomized delay, per-run/per-job download caps — as **risk-reduction measures, not safety guarantees**. Recruiter accounts may still be limited, challenged, or restricted at any time; monitor for `ACCOUNT_RISK` / `RATE_LIMITED` errors and back off.
+
 ### Schedule hourly incremental sync via agent
 
 Use your agent harness's scheduled task capability (e.g., Claude Code `/loop`, cron, or any recurring job) to run `sync-all` every hour:
@@ -66,11 +69,11 @@ In Claude Code you can set this up with:
 /loop 1h python "${SKILL_DIR}/scripts/sync_boss_resumes.py" sync-all
 ```
 
-Each run only downloads candidates not yet in `candidate_index.json`, so an hourly job downloads at most the few new applicants from the past hour — typically 1–5 requests per run.
+Each run only downloads candidates not yet in `candidate_index.json`, so an hourly job typically only needs to download the few new applicants from the past hour.
 
-**Why this is better than a one-shot bulk sync:**
+**Why this is preferred over a one-shot bulk sync:**
 
-1. **Avoids risk control.** BOSS/Zhipin detects abnormal access patterns. Downloading 50+ resumes in one session looks like scraping and may trigger a temporary block or CAPTCHA. Spreading the same work across 24 hourly runs of 1–3 resumes each is indistinguishable from normal recruiter browsing.
+1. **Reduces (does not eliminate) risk-control exposure.** Downloading dozens or hundreds of resumes in one session resembles scraping and is more likely to trigger account risk controls. Spreading work across many small hourly runs lowers — but does not remove — that likelihood. The script also enforces hard per-run/per-job download caps (`--max-downloads-per-run`, `--max-downloads-per-job`) so a single run cannot accidentally produce a bulk-access pattern even if many new candidates accumulated.
 
 2. **Local analysis is fast and free.** Once resumes are on disk as `resume.md`, any analysis (filtering by keyword, comparing candidates, summarizing, ranking) runs entirely locally — no network round-trips, no rate limits, no extra API calls to BOSS.
 
@@ -280,7 +283,20 @@ python "${SKILL_DIR}/scripts/sync_boss_resumes.py" refresh-jobs
 
 # Dry run without downloading resumes
 python "${SKILL_DIR}/scripts/sync_boss_resumes.py" sync-all --dry-run
+
+# Override per-run / per-job download caps (defaults: 400 per run, 80 per job)
+python "${SKILL_DIR}/scripts/sync_boss_resumes.py" sync-all \
+  --max-downloads-per-run 400 --max-downloads-per-job 80
 ```
+
+The script enforces conservative download caps **by default** so a single run cannot perform a bulk-access pattern even when many new candidates have accumulated:
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--max-downloads-per-run` | 400 | Hard cap on resume downloads across the entire run. When reached, the run stops cleanly (current job is finalized then no more jobs are processed). |
+| `--max-downloads-per-job` | 80 | Hard cap on resume downloads within a single job. When reached, that job's candidate loop ends cleanly and the run moves to the next job. |
+
+When a cap is hit, the run still exits with `ok: true`; the summary's `stopped_due_to_limit` field is set (`"run"`, `"job"`, or `null`) so the operator knows work remains and the next scheduled run will pick up where this one stopped.
 
 Use the Python interpreter that has `boss_agent_cli` importable, otherwise the `friend_detail` fallback will be disabled. The script prints a warning to stderr (with `--verbose`) when this happens.
 
@@ -310,6 +326,7 @@ Report the following after each sync:
 - skipped existing resumes
 - candidates pending `securityId`
 - failures with exact error messages
+- whether the run stopped early because a download cap was reached
 
 A successful sync envelope shape:
 
@@ -318,6 +335,7 @@ A successful sync envelope shape:
   "ok": true,
   "resume_root": "<resolved path>",
   "mode": "sync-all",
+  "stopped_due_to_limit": null,
   "totals": {
     "candidates_discovered": 0,
     "downloaded": 0,
@@ -327,6 +345,8 @@ A successful sync envelope shape:
   }
 }
 ```
+
+`stopped_due_to_limit` takes one of `null` (ran to completion), `"run"` (per-run cap hit), or `"job"` (per-job cap hit on at least one job).
 
 ## Safety and Etiquette
 

@@ -535,7 +535,18 @@ def download_resume(candidate: dict[str, Any], job_enc_id: str, security_id: str
     return require_ok(result, f"download resume for {candidate_name(candidate)}")
 
 
-def sync_job(job: dict[str, Any], root: Path, cdp_url: str, boss_bin: str, data_dir: Path, force: bool, dry_run: bool, verbose: bool) -> dict[str, Any]:
+def sync_job(
+    job: dict[str, Any],
+    root: Path,
+    cdp_url: str,
+    boss_bin: str,
+    data_dir: Path,
+    force: bool,
+    dry_run: bool,
+    verbose: bool,
+    max_per_job: int,
+    run_budget: dict[str, int],
+) -> dict[str, Any]:
     plain = job_plain_id(job)
     enc = job_encrypt_id(job)
     dirname = f"{safe_name(plain)}_{safe_name(job_name(job))}"
@@ -559,10 +570,12 @@ def sync_job(job: dict[str, Any], root: Path, cdp_url: str, boss_bin: str, data_
         "pending_security_id": 0,
         "failed": 0,
         "failures": [],
+        "stopped_due_to_limit": None,
     }
 
     candidates = list_applications(enc, cdp_url=cdp_url, boss_bin=boss_bin, verbose=verbose)
     stats["candidates_discovered"] = len(candidates)
+    job_downloads = 0
 
     for candidate in candidates:
         cid = candidate_id(candidate)
@@ -581,6 +594,15 @@ def sync_job(job: dict[str, Any], root: Path, cdp_url: str, boss_bin: str, data_
             stats["skipped_existing"] += 1
             candidate_index["candidates"][cid] = current
             continue
+
+        # Enforce caps before issuing a new resume request. Already-downloaded
+        # / pending / dry-run paths above don't count against the budget.
+        if not dry_run and run_budget["remaining"] <= 0:
+            stats["stopped_due_to_limit"] = "run"
+            break
+        if not dry_run and job_downloads >= max_per_job:
+            stats["stopped_due_to_limit"] = "job"
+            break
 
         sid = resolve_security_id(candidate, enc, cdp_url=cdp_url, boss_bin=boss_bin, verbose=verbose, data_dir=data_dir)
         cname = candidate_name(candidate)
@@ -622,6 +644,11 @@ def sync_job(job: dict[str, Any], root: Path, cdp_url: str, boss_bin: str, data_
             candidate_index["candidates"][cid] = current
             candidate_index["updated_at"] = now_iso()
             write_json(candidate_index_path, candidate_index)
+            # Attempted a real resume request — count it against both budgets
+            # whether it succeeded or failed, since either pattern shows up to
+            # the server.
+            job_downloads += 1
+            run_budget["remaining"] -= 1
 
         if not dry_run:
             time.sleep(random.uniform(3, 6))
@@ -643,20 +670,38 @@ def command_refresh_jobs(args: argparse.Namespace) -> int:
 
 def command_sync_all(args: argparse.Namespace) -> int:
     jobs = refresh_jobs(args.root, args.cdp_url, args.boss_bin, args.verbose)
+    run_budget = {"remaining": args.max_downloads_per_run}
     summary = {
         "ok": True,
         "resume_root": str(args.root),
         "mode": "sync-all",
         "dry_run": args.dry_run,
         "jobs_discovered": len(jobs),
+        "limits": {
+            "max_downloads_per_run": args.max_downloads_per_run,
+            "max_downloads_per_job": args.max_downloads_per_job,
+        },
+        "stopped_due_to_limit": None,
         "jobs": [],
         "totals": {"candidates_discovered": 0, "downloaded": 0, "skipped_existing": 0, "pending_security_id": 0, "failed": 0},
     }
     for job in jobs:
-        stats = sync_job(job, args.root, args.cdp_url, args.boss_bin, args.data_dir, args.force, args.dry_run, args.verbose)
+        if not args.dry_run and run_budget["remaining"] <= 0:
+            summary["stopped_due_to_limit"] = "run"
+            break
+        stats = sync_job(
+            job, args.root, args.cdp_url, args.boss_bin, args.data_dir,
+            args.force, args.dry_run, args.verbose,
+            args.max_downloads_per_job, run_budget,
+        )
         summary["jobs"].append(stats)
         for key in summary["totals"]:
             summary["totals"][key] += int(stats.get(key, 0))
+        if stats.get("stopped_due_to_limit") == "run":
+            summary["stopped_due_to_limit"] = "run"
+            break
+        if stats.get("stopped_due_to_limit") == "job" and summary["stopped_due_to_limit"] is None:
+            summary["stopped_due_to_limit"] = "job"
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 
@@ -669,8 +714,24 @@ def command_sync_job(args: argparse.Namespace) -> int:
         print(json.dumps({"ok": False, "error": f"job not found in job_index: {args.job_id}"}, ensure_ascii=False, indent=2), file=sys.stderr)
         return 1
     raw_job = job_entry.get("raw") or job_entry
-    stats = sync_job(raw_job, args.root, args.cdp_url, args.boss_bin, args.data_dir, args.force, args.dry_run, args.verbose)
-    print(json.dumps({"ok": True, "resume_root": str(args.root), "mode": "sync-job", "dry_run": args.dry_run, "job": stats}, ensure_ascii=False, indent=2))
+    run_budget = {"remaining": args.max_downloads_per_run}
+    stats = sync_job(
+        raw_job, args.root, args.cdp_url, args.boss_bin, args.data_dir,
+        args.force, args.dry_run, args.verbose,
+        args.max_downloads_per_job, run_budget,
+    )
+    print(json.dumps({
+        "ok": True,
+        "resume_root": str(args.root),
+        "mode": "sync-job",
+        "dry_run": args.dry_run,
+        "limits": {
+            "max_downloads_per_run": args.max_downloads_per_run,
+            "max_downloads_per_job": args.max_downloads_per_job,
+        },
+        "stopped_due_to_limit": stats.get("stopped_due_to_limit"),
+        "job": stats,
+    }, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -690,12 +751,16 @@ def build_parser() -> argparse.ArgumentParser:
     sub_all = sub.add_parser("sync-all", help="Incrementally sync resumes for all online jobs.")
     sub_all.add_argument("--force", action="store_true", help="Re-download candidates already marked downloaded.")
     sub_all.add_argument("--dry-run", action="store_true", help="Resolve candidates without downloading resumes.")
+    sub_all.add_argument("--max-downloads-per-run", type=int, default=400, help="Hard cap on resume downloads across the entire run. Default: 400.")
+    sub_all.add_argument("--max-downloads-per-job", type=int, default=80, help="Hard cap on resume downloads within a single job. Default: 80.")
     sub_all.set_defaults(func=command_sync_all)
 
     sub_job = sub.add_parser("sync-job", help="Incrementally sync one job by numeric or encrypted job ID.")
     sub_job.add_argument("--job-id", required=True, help="Numeric jobId or encryptJobId from job_index.json.")
     sub_job.add_argument("--force", action="store_true", help="Re-download candidates already marked downloaded.")
     sub_job.add_argument("--dry-run", action="store_true", help="Resolve candidates without downloading resumes.")
+    sub_job.add_argument("--max-downloads-per-run", type=int, default=400, help="Hard cap on resume downloads for this run. Default: 400.")
+    sub_job.add_argument("--max-downloads-per-job", type=int, default=80, help="Hard cap on resume downloads within the job. Default: 80.")
     sub_job.set_defaults(func=command_sync_job)
 
     return parser
