@@ -12,6 +12,7 @@ from boss_agent_cli.api.endpoints import (
 from boss_agent_cli.api.models import JobItem
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import (
 	handle_auth_errors,
@@ -30,6 +31,9 @@ from boss_agent_cli.display import (
 @handle_auth_errors("greet")
 def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -> None:
 	"""向指定招聘者打招呼"""
+	if not require_compliance_allowed(ctx, "greet"):
+		return
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
@@ -119,6 +123,9 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 @handle_auth_errors("batch-greet")
 def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: str | None, experience: str | None, education: str | None, industry: str | None, scale: str | None, stage: str | None, job_type: str | None, count: int, dry_run: bool) -> None:
 	"""搜索后批量打招呼（上限 10）"""
+	if not require_compliance_allowed(ctx, "batch-greet"):
+		return
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 

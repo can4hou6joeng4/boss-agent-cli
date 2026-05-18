@@ -5,6 +5,7 @@ from typing import Any
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.commands.chat_utils import MSG_STATUS_LABELS
 from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output
@@ -124,6 +125,9 @@ def _fetch_friend_ids(platform: Any, *, page: int, label_id: int, job_id: str | 
 @handle_auth_errors("recruiter-chat")
 def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_id: int) -> None:
 	"""查看与候选人的沟通列表"""
+	if not require_compliance_allowed(ctx, "recruiter-chat"):
+		return
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
@@ -171,6 +175,9 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 @handle_auth_errors("recruiter-chatmsg")
 def recruiter_chatmsg_cmd(ctx: click.Context, friend_id: int, count: int, max_msg_id: int | None) -> None:
 	"""查看与指定候选人的聊天消息历史"""
+	if not require_compliance_allowed(ctx, "recruiter-chatmsg"):
+		return
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
@@ -213,6 +220,9 @@ def recruiter_last_messages_cmd(
 	friend_ids: tuple[int, ...],
 ) -> None:
 	"""批量查看候选人最近消息摘要"""
+	if not require_compliance_allowed(ctx, "recruiter-last-messages"):
+		return
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 

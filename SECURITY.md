@@ -26,11 +26,11 @@
 
 ## Security Considerations
 
-本项目涉及以下敏感操作，开发时请特别注意：
+本项目默认启用低风险辅助模式：本地辅助、只读优先、用户主动触发、不批量触达、不抓取平台数据。开发时请特别注意：
 
 - **Cookie/Token 存储**：使用 Fernet 对称加密 + PBKDF2 机器绑定密钥
-- **浏览器自动化**：所有浏览器操作限定在 `zhipin.com` 域名
+- **浏览器兼容通道**：仅用于用户主动登录和低风险兼容路径，所有浏览器操作限定在 `zhipin.com` 域名
 - **本地数据**：缓存数据存储在 `~/.boss-agent/`，不上传任何数据到第三方服务
 - **CSV/HTML 导出**：已实施公式注入防护和 XSS 防护
 
-更多平台自动化、Cookie/CDP、真实账号和 smoke test 风险边界见 [docs/platform-risk.md](docs/platform-risk.md)。
+更多平台边界、Cookie/CDP、真实账号和 smoke test 风险边界见 [docs/platform-risk.md](docs/platform-risk.md)。

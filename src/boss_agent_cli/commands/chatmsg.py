@@ -4,6 +4,7 @@ from typing import Any
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands.contact_lookup import FriendLookupLimitExceeded, find_friend_by_security_id
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_simple_list
@@ -24,6 +25,9 @@ _MSG_TYPE_MAP = {
 @handle_auth_errors("chatmsg")
 def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> None:
 	"""查看与指定好友的聊天消息历史"""
+	if not require_compliance_allowed(ctx, "chatmsg"):
+		ctx.exit(1)
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))

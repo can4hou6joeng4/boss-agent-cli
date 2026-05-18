@@ -141,7 +141,7 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 
 def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[str, Any]:
 	"""
-	使用 patchright（Playwright 反检测 fork）打开登录页。
+	使用 patchright（Playwright 兼容 fork）打开登录页。
 	双重检测登录成功：监听 API 响应 + 轮询 wt2 cookie。
 	"""
 	config = _get_platform_config(platform)

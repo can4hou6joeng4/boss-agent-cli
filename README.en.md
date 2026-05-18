@@ -2,11 +2,11 @@
 
 # boss-agent-cli
 
-**A CLI tool designed for AI Agents to interact with BOSS Zhipin, for both job-seekers and recruiters**
+**A local-assist CLI for AI Agents working around BOSS Zhipin**
 
-> Job-seeker: search · welfare filtering · personalized recommendations · auto-greeting · pipeline · incremental watch · AI resume optimization
+> Default low-risk mode: local assistance · read-only first · user-triggered · no risk-control bypass · no bulk outreach · no platform-data scraping
 >
-> Recruiter: candidate search · chat reply · resume/contact requests · job publish management · cross-platform adapter layer
+> Job-seeker: search · welfare filtering · detail review · shortlist · local resume and AI assistance
 
 [![CI](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli)
@@ -38,11 +38,15 @@
 
 ## 💡 Why boss-agent-cli?
 
-Traditional job hunting: open a web page → flip through dozens of pages → check each detail → manually greet → forget who to follow up with.
+Traditional job hunting: open a web page → flip through dozens of pages → check each detail → organize shortlists manually → forget who to follow up with.
 
-With AI Agents: `boss search` → `boss ai optimize` → `boss batch-greet` → `boss pipeline` — one chain closes the entire loop.
+With AI Agents: `boss search` -> `boss detail` -> `boss shortlist` -> `boss stats` — one local-assist chain for organizing work while sensitive actions stay on the official website.
 
-Every command outputs **structured JSON** that AI Agents parse directly. No fragile HTML scraping, no brittle selectors.
+Every command outputs **structured JSON** that AI Agents parse directly. Default low-risk mode blocks automated outreach, bulk actions, contact exchange, recruiter candidate data workflows, and risk-control retries.
+
+## ⚠️ Compliance Boundary
+
+The project enables Low-Risk Assistance Mode by default. It is intentionally scoped to local assistance, read-only-first workflows, and user-triggered actions. CLI commands that would greet, batch-greet, apply, exchange contacts, search recruiter candidates, read candidate resumes/chats, request attachments, or reply to candidates are blocked by default; users should perform those actions manually on the official platform.
 
 ## 🧭 Table of Contents
 
@@ -72,26 +76,25 @@ Every command outputs **structured JSON** that AI Agents parse directly. No frag
 
 ### Job-seeker workflow
 
-- **Discovery**: keyword search, layered filters, recommendations, and cached `show` navigation. Commands: `search` `recommend` `show`
+- **Discovery**: keyword search, layered filters, and cached `show` navigation. Commands: `search` `show`
 - **Welfare-aware search**: `--welfare "双休,五险一金"` runs real AND matching by paging, fetching details, and checking text fallback. Command: `search --welfare`
-- **Action loop**: inspect, greet, batch-greet, and apply in one flow. Commands: `detail` `greet` `batch-greet` `apply`
-- **Pipeline control**: follow-up reminders, daily digest, and funnel stats for the full application lifecycle. Commands: `pipeline` `follow-up` `digest` `stats`
-- **Conversation ops**: chat list, message history, structured summaries, labels, and contact exchange. Commands: `chat` `chatmsg` `chat-summary` `mark` `exchange`
+- **Local shortlist**: inspect details and organize candidate jobs locally; apply and messaging stay on the official website. Commands: `detail` `show` `shortlist`
+- **Pipeline control**: local shortlist and funnel stats from local state. Commands: `shortlist` `stats`
+- **Conversation support**: low-risk local organization only by default; message history, labels, and contact exchange are sensitive workflows and blocked by default.
 - **AI job-hunting assist**: JD analysis, resume polish, role-targeted optimization, interview prep, and chat coaching. Commands: `ai analyze-jd` `ai polish` `ai optimize` `ai interview-prep` `ai chat-coach`
 
 ### Recruiter workflow
 
-- **Candidate operations**: incoming applications, candidate search, recruiter chat list with unread summaries, inline resume view, attached-resume requests, and phone/WeChat exchange requests. Commands: `hr applications` `hr candidates` `hr chat` `hr resume` `hr request-resume`
-- **Recruiter messaging**: inspect chat history, batch recent-message summaries, and reply to candidates while keeping the same JSON contract as the candidate side. Commands: `hr chatmsg` `hr last-messages` `hr reply`
+- **Recruiter boundary**: candidate search, applications, resumes, chat records, attachment requests, contact exchange, and replies are blocked by default; use the official recruiter UI for those actions.
 - **Job lifecycle management**: list, bring online, and take offline recruiter postings. Commands: `hr jobs list` `hr jobs online` `hr jobs offline`
 
 ### Platform & integration foundation
 
 - **Schema-first integration**: `boss schema` is the capability source of truth for shell agents, SDKs, and tool-export formats
 - **Structured transport**: stdout is JSON-only, stderr is logs-only, which keeps automation stable
-- **Platform-aware login**: `zhipin` uses Cookie → CDP → QR httpx → patchright; `zhilian` uses Cookie → CDP → browser login
-- **Cross-platform adapter layer**: `Platform` / `RecruiterPlatform` registries are live; BOSS is available on both candidate and recruiter sides, and Zhaopin already has candidate-side login plus read/write flow wired in
-- **MCP server with 53 tools**: ready for Claude Desktop / Cursor / Windsurf, including recruiter-side tools without wrapping your own bridge
+- **Platform-aware login**: user-triggered login state is stored locally and encrypted; it is not a risk-control bypass workflow
+- **Cross-platform adapter layer**: `Platform` / `RecruiterPlatform` registries are live, with low-risk mode governing sensitive capabilities
+- **MCP server with 31 tools**: exposes only the low-risk tool surface by default
 
 ## 📦 Install
 
@@ -125,10 +128,9 @@ boss status
 # 4. Search Golang jobs in Guangzhou with 双休 + 五险一金
 boss search "Golang" --city 广州 --welfare "双休,五险一金"
 
-# 5. View detail → greet → apply
+# 5. View detail → add to local shortlist
 boss show 1
-boss greet <security_id> <job_id>
-boss apply <security_id> <job_id>
+boss shortlist add <security_id> <job_id>
 
 # 6. AI-powered chat reply
 boss ai reply "请问什么时候方便聊一下？"
@@ -136,16 +138,9 @@ boss ai reply "请问什么时候方便聊一下？"
 # 7. Investment funnel analysis
 boss stats --days 30
 
-# 8. Recruiter mode (HR workflow)
-boss hr applications                    # candidate applications
-boss hr candidates "Golang"             # search candidates
-boss hr chat                            # chat list with unread and latest-message summaries
-boss hr chatmsg <friend_id>             # candidate chat history
-boss hr last-messages                   # batch recent-message summaries
-boss hr reply <friend_id> "Hi"          # reply to candidate
-boss hr request-resume <friend_id>      # request attached resume
-boss hr resume --exchange --friend-id <friend_id> --type wechat   # request WeChat exchange
+# 8. Recruiter mode
 boss hr jobs list                       # my job postings
+# Candidate search, resumes, chat, replies, attachments, and contact exchange are blocked by default.
 ```
 
 ## 🎭 Roles & Platforms
@@ -154,8 +149,8 @@ boss-agent-cli covers both the job-seeker and the recruiter side, with a pluggab
 
 | Role | Flag | Entry commands |
 |------|------|----------------|
-| Candidate *(default)* | `--role candidate` | `search` / `greet` / `apply` |
-| Recruiter | `--role recruiter`, or `boss hr <sub>` shortcut | `hr applications` / `hr candidates` / `hr jobs` |
+| Candidate *(default)* | `--role candidate` | `search` / `detail` / `shortlist` |
+| Recruiter | `--role recruiter`, or `boss hr <sub>` shortcut | `hr jobs list`; candidate-data workflows are blocked by default |
 
 | Platform | Candidate | Recruiter | Status |
 |----------|:---------:|:---------:|--------|
@@ -171,14 +166,14 @@ boss config set platform zhilian
 Notes:
 - `boss login` follows the current platform selection
 - `boss --platform zhilian login` is available for candidate-side auth
-- candidate-side `search / detail / recommend / user_info / greet / apply` are wired for `zhilian`
+- candidate-side `search / detail / user_info` are wired for `zhilian`; recommendation streams and write actions are blocked by default in low-risk mode
 - `boss --platform zhilian hr ...` is still intentionally rejected at runtime because recruiter support is not implemented yet
 
 Architecture notes: [docs/platform-abstraction.en.md](docs/platform-abstraction.en.md).
 
 ## 🤖 Agent Integration
 
-The whole point of this tool is to let AI Agents drive the job hunt.
+The point of this tool is to let AI Agents help organize job-hunting context without automating sensitive platform actions.
 
 ```bash
 # Step 1: let the Agent read the tool self-description
@@ -214,14 +209,14 @@ See [Agent Quickstart](docs/agent-quickstart.en.md) and [Capability Matrix](docs
 | Stage | Commands |
 |-------|----------|
 | **Auth** | `login` · `logout` · `status` · `doctor` |
-| **Discover** | `search` · `recommend` · `detail` · `show` · `cities` · `history` |
-| **Act** | `greet` · `batch-greet` · `apply` · `exchange` · `mark` |
-| **Track** | `chat` · `chatmsg` · `chat-summary` · `interviews` · `pipeline` · `follow-up` · `digest` · `stats` |
+| **Discover** | `search` · `detail` · `show` · `cities` · `history` |
+| **Restricted Actions** | `greet` · `batch-greet` · `apply` · `exchange` · `mark` are blocked by default |
+| **Restricted Track** | `chat` · `chatmsg` · `chat-summary` · `pipeline` · `follow-up` · `digest` are blocked by default; use `stats` for local state |
 | **Organize** | `watch` · `preset` · `shortlist` |
 | **Resume** | `resume` · `me` |
 | **AI** | `ai config` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai suggest` · `ai reply` · `ai interview-prep` · `ai chat-coach` |
 | **Utility** | `schema` · `export` · `config` · `clean` |
-| **Recruiter** | `hr applications` · `hr resume` · `hr chat` · `hr chatmsg` · `hr last-messages` · `hr jobs list/offline/online` · `hr candidates` · `hr reply` · `hr request-resume` |
+| **Recruiter** | `hr jobs list/offline/online`; candidate-data and messaging workflows are blocked by default |
 
 Run `boss <cmd> --help` for options, or `boss schema` for the complete JSON self-description.
 
@@ -270,50 +265,7 @@ boss logout && boss login
 
 ### BOSS detects automation (code 36 / `ACCOUNT_RISK`)
 
-BOSS Zhipin's risk system flags headless browsers. Fix by attaching to your real Chrome:
-
-macOS:
-
-```bash
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/.boss-agent/chrome-cdp-profile" \
-  --no-first-run
-```
-
-Linux:
-
-```bash
-google-chrome \
-  --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/.boss-agent/chrome-cdp-profile" \
-  --no-first-run
-```
-
-Windows PowerShell:
-
-```powershell
-$chromeCandidates = @(
-  "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
-  "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
-  "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
-)
-
-$chrome = $chromeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $chrome) { throw "Google Chrome executable was not found" }
-
-& $chrome `
-  --remote-debugging-port=9222 `
-  --remote-allow-origins=* `
-  --user-data-dir="$env:LOCALAPPDATA\boss-agent-cdp-profile"
-```
-
-Then sign in from another terminal:
-
-```bash
-boss login --cdp
-boss search "python" --city 北京
-```
+Stop automated access and return to the official BOSS Zhipin website. Do not retry the blocked action through CDP, patchright, or Browser Bridge.
 
 ### Token expired mid-session
 
@@ -359,7 +311,7 @@ curl http://localhost:9222/json/version
 
 ### `code 36` / `ACCOUNT_RISK`
 
-Risk control detected automation. Switch to CDP mode (see Login issues above) or wait 24h.
+Risk control detected automation. Stop the automated flow and use the official website manually.
 
 ### `RATE_LIMITED`
 
@@ -394,7 +346,8 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `AUTH_EXPIRED` | Session expired | `boss login` |
 | `RATE_LIMITED` | Too many requests | Wait and retry |
 | `TOKEN_REFRESH_FAILED` | stoken refresh failed | `boss login` |
-| `ACCOUNT_RISK` | Risk-control block (code 36) | Switch to CDP Chrome |
+| `ACCOUNT_RISK` | Risk-control block (code 36) | Stop automated access; use the official website manually |
+| `COMPLIANCE_BLOCKED` | Low-risk mode blocked a sensitive command | Use read-only/local tools or complete the action manually on the official website |
 | `JOB_NOT_FOUND` | Job removed or invalid | Skip |
 | `ALREADY_GREETED` | Already messaged recruiter | Skip |
 | `ALREADY_APPLIED` | Already applied | Skip |
@@ -415,9 +368,9 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `stoken` | Session token — core auth credential for BOSS API |
 | `wt2` | Long-lived bearer token, paired with stoken |
 | `wbg` / `zp_at` | Auxiliary cookies used by wapi endpoints |
-| `security_id` | Per-job opaque ID returned by search; required by detail / greet / apply |
+| `security_id` | Per-job opaque ID returned by search; used by detail and local organization commands |
 | `encrypt_job_id` | Alternative job ID for the httpx fast path (skips browser) |
-| `CDP` | Chrome DevTools Protocol — how we attach to your real Chrome for realistic fingerprints |
+| `CDP` | Chrome DevTools Protocol — compatibility login mechanism, not a risk-control bypass |
 | `wapi` | BOSS Zhipin internal JSON API (behind `www.zhipin.com/wapi/...`) |
 
 These terms appear in JSON responses and error messages as-is — we deliberately don't translate them to keep parity with BOSS's own naming.
@@ -428,7 +381,7 @@ These terms appear in JSON responses and error messages as-is — we deliberatel
 
 See [中文版 README](README.md#-技术架构) for the full architecture diagram.
 
-Short version: Click CLI → AuthManager (Fernet-encrypted tokens) → BossClient (httpx + CDP browser session) → JSON envelope on stdout.
+Short version: Click CLI → Compliance Guardrails → AuthManager (Fernet-encrypted tokens) → BossClient → JSON envelope on stdout.
 
 Invariant contracts:
 - stdout is JSON-only; stderr holds logs (controlled by `--log-level`)

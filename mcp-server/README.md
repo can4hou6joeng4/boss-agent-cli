@@ -1,6 +1,6 @@
 # boss-agent-cli MCP Server
 
-将 boss-agent-cli 作为 MCP 工具接入 Claude Desktop / Cursor 等客户端。
+将 boss-agent-cli 作为默认低风险 MCP 工具接入 Claude Desktop / Cursor 等客户端。MCP 默认只暴露本地辅助、职位搜索/详情、本地候选池、简历和 AI 辅助等低风险工具；自动触达、批量操作、聊天记录、候选人个人信息和招聘者敏感工作流不会默认暴露。
 
 相关文档：
 - [Agent Quickstart](../docs/agent-quickstart.md)
@@ -9,12 +9,14 @@
 ## 安装
 
 ```bash
-# 1. 安装 boss CLI
-uv tool install boss-agent-cli
-patchright install chromium
-
-# 2. 安装 MCP 依赖并暴露 MCP 入口
 uv tool install "boss-agent-cli[mcp]"
+```
+
+如从源码运行：
+
+```bash
+uv sync --all-extras
+uv run python mcp-server/server.py
 ```
 
 ## 配置 Claude Desktop
@@ -32,11 +34,9 @@ uv tool install "boss-agent-cli[mcp]"
 }
 ```
 
-将 `/path/to/` 替换为实际项目路径。
-
 ## 配置 Cursor
 
-在 Cursor Settings → MCP Servers 中添加：
+在 Cursor Settings -> MCP Servers 中添加：
 
 ```json
 {
@@ -69,21 +69,11 @@ uv tool install "boss-agent-cli[mcp]"
 }
 ```
 
-如果你的 VS Code MCP 配置使用顶层 server 对象，也可以只保留内部条目：
-
-```json
-"boss-agent-cli": {
-  "type": "stdio",
-  "command": "uv",
-  "args": ["--directory", "E:\\tools\\boss-agent-cli", "run", "python", "mcp-server/server.py"]
-}
-```
-
 MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程误读 VS Code 的 MCP stdio 协议流导致阻塞超时。
 
 ## 可用工具
 
-当前 MCP Server 暴露 **52 个工具**，覆盖求职者链路、AI 辅助能力，以及招聘者侧 `hr` 工作流。
+当前 MCP Server 默认暴露 **31 个低风险工具**。
 
 ### 认证与环境
 
@@ -94,84 +84,66 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 | `boss_config` | 查看和修改配置项 |
 | `boss_clean` | 清理过期缓存和临时文件 |
 
-### 职位发现
+### 职位发现与本地整理
 
 | 工具 | 说明 |
 |------|------|
 | `boss_search` | 搜索职位（支持城市、薪资、福利筛选） |
-| `boss_recommend` | 个性化推荐 |
 | `boss_detail` | 职位详情 |
 | `boss_show` | 按编号查看上次搜索结果中的职位 |
 | `boss_cities` | 城市列表 |
 | `boss_history` | 浏览历史 |
+| `boss_shortlist_list` | 查看本地候选池 |
+| `boss_shortlist_add` | 加入本地候选池 |
+| `boss_shortlist_remove` | 从本地候选池移除 |
+| `boss_preset_add/list/remove` | 管理本地搜索预设 |
+| `boss_watch_add/list/remove` | 管理本地监控预设；`watch run` 默认不暴露 |
 
-### 求职动作
-
-| 工具 | 说明 |
-|------|------|
-| `boss_greet` | 向招聘者打招呼 |
-| `boss_batch_greet` | 搜索后批量打招呼 |
-| `boss_apply` | 发起投递或立即沟通 |
-
-### 沟通管理
-
-| 工具 | 说明 |
-|------|------|
-| `boss_chat` | 沟通列表 |
-| `boss_chatmsg` | 聊天消息历史 |
-| `boss_chat_summary` | 聊天摘要与下一步建议 |
-| `boss_mark` | 联系人标签管理 |
-| `boss_exchange` | 交换联系方式 |
-| `boss_interviews` | 面试邀请 |
-
-### 流程管理
-
-| 工具 | 说明 |
-|------|------|
-| `boss_pipeline` | 候选进度视图 |
-| `boss_follow_up` | 跟进筛选 |
-| `boss_digest` | 日报汇总 |
-
-### 用户信息
+### 用户与简历
 
 | 工具 | 说明 |
 |------|------|
 | `boss_me` | 用户信息（基本信息、简历、求职期望、投递记录） |
+| `boss_resume_list` | 列出本地简历 |
+| `boss_resume_show` | 查看本地简历 |
 
-### 招聘者工作流
+### AI 辅助
 
 | 工具 | 说明 |
 |------|------|
-| `boss_hr_applications` | 查看候选人投递申请列表 |
-| `boss_hr_candidates` | 搜索候选人 |
-| `boss_hr_chat` | 招聘者沟通列表 |
-| `boss_hr_resume` | 查看候选人在线简历 |
-| `boss_hr_exchange` | 请求交换候选人手机号或微信 |
-| `boss_hr_reply` | 回复候选人消息 |
-| `boss_hr_request_resume` | 请求候选人附件简历 |
+| `boss_ai_analyze_jd` | 分析岗位描述 |
+| `boss_ai_optimize` | 基于岗位优化本地简历草稿 |
+| `boss_ai_suggest` | 生成简历改进建议 |
+| `boss_ai_reply` | 基于用户提供文本生成回复草稿 |
+| `boss_ai_interview_prep` | 基于岗位描述生成面试准备 |
+| `boss_ai_chat_coach` | 基于用户主动提供文本生成沟通建议 |
+
+### 招聘者低风险入口
+
+| 工具 | 说明 |
+|------|------|
 | `boss_hr_jobs` | 职位列表与上下线管理 |
+| `boss_hr_jobs_detail` | 查看招聘者职位详情 |
+
+敏感工具（如 `boss_greet`、`boss_apply`、`boss_chat`、`boss_chatmsg`、`boss_pipeline`、`boss_digest`、`boss_hr_candidates`、`boss_hr_reply` 等）默认不暴露；若通过 CLI 直接调用，也会在默认低风险模式返回 `COMPLIANCE_BLOCKED`。
 
 ## 使用示例
 
 配置完成后，在 Claude Desktop 中直接说：
 
-> "帮我搜一下广州的 Golang 职位，要双休和五险一金"
+> "帮我搜一下广州的 Golang 职位，要双休和五险一金，然后把合适的岗位加入候选池。"
 
-Claude 会自动调用 `boss_search` 工具并展示结果。
+Claude 会调用 `boss_search` / `boss_detail` / `boss_shortlist_add` 等低风险工具。投递、沟通、联系方式交换和候选人处理应回到平台官网由用户手动完成。
 
 ## 传输层（Transports）
 
-### stdio（默认，已支持）
-
-Claude Desktop / Cursor / Codex 等通过 stdin/stdout 直接对接。上述 `claude_desktop_config.json` 配置方式即为 stdio 模式。
+### stdio（默认）
 
 ```bash
 boss-mcp
 ```
 
 ### SSE
-
-面向支持传统 MCP SSE 传输的宿主或自定义编排器。
 
 ```bash
 boss-mcp --transport sse --host 127.0.0.1 --port 8765
@@ -181,15 +153,7 @@ boss-mcp --transport sse --host 127.0.0.1 --port 8765
 - SSE 建链：`/sse`
 - 消息回传：`/messages/`
 
-如需自定义：
-
-```bash
-boss-mcp --transport sse --port 8765 --sse-path /events --message-path /inbox
-```
-
 ### HTTP Streaming
-
-面向支持新版 MCP Streamable HTTP 传输的宿主。
 
 ```bash
 boss-mcp --transport http --host 127.0.0.1 --port 8765
@@ -198,41 +162,29 @@ boss-mcp --transport http --host 127.0.0.1 --port 8765
 默认路径：
 - HTTP Streaming：`/mcp`
 
-如需自定义路径：
-
-```bash
-boss-mcp --transport http --port 8765 --path /rpc
-```
-
 **设计约束**：
 - `stdio` 保持为默认行为，不破坏现有集成
 - HTTP 传输默认绑定 `127.0.0.1`，远程暴露需用户显式 `--host 0.0.0.0`
-- 不内置鉴权 / TLS，需要时通过反向代理（nginx / Caddy / Cloudflare Tunnel）处理
+- 不内置鉴权 / TLS，需要时通过反向代理处理
 
 ## 其他 Agent 宿主接入
 
-本 MCP Server 专注 stdio/SSE 协议。如果你用的 Agent 框架不支持 MCP，可以用 `boss schema` 命令直接生成对应格式：
-
 ```bash
-# OpenAI Functions / Tools API（GPT-4 / GPT-5）
 boss schema --format openai-tools
-
-# Anthropic Tool Use（Claude API 直连）
 boss schema --format anthropic-tools
+boss schema --format mcp-tools
 ```
 
 然后把 stdout 的 `data.tools` 数组直接喂给对应 SDK 即可。
 
 ## 贡献
 
-欢迎在 [Issue Tracker](https://github.com/can4hou6joeng4/boss-agent-cli/issues) 认领带 `good first issue` / `help wanted` 标签的任务。
-
 开发环境：
 
 ```bash
 cd boss-agent-cli
 uv sync --all-extras
-uv run pytest tests/test_mcp_server.py -v  # 65 tests covering tool schema + arg construction
+uv run pytest tests/test_mcp_server.py -v
 ```
 
 代码风格：tab 缩进，`uv run ruff check src/ tests/` 必须通过。

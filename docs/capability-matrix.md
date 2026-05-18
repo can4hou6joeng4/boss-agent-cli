@@ -2,12 +2,14 @@
 
 用于统一 CLI / Skill / MCP 的能力对照，方便 Agent 在不同接入面保持同一语义。
 
+默认低风险辅助模式：本地辅助、只读优先、用户主动触发、不规避风控、不批量触达、不抓取平台数据。标记为“受限”的能力会返回 `COMPLIANCE_BLOCKED`，应回到平台官网手动完成。
+
 ## 认证与环境
 
 | 能力 | CLI 命令 | 需要登录 | 通道 |
 |---|---|---|---|
 | 协议发现 | `boss schema` | 否 | 本地 |
-| 登录 | `boss login` | 否 | 浏览器 |
+| 登录 | `boss login` | 否 | 用户主动登录 |
 | 退出登录 | `boss logout` | 否 | 本地 |
 | 登录态检查 | `boss status` | 是 | httpx |
 | 环境诊断 | `boss doctor` | 否 | 混合 |
@@ -19,7 +21,7 @@
 | 能力 | CLI 命令 | 需要登录 | 通道 |
 |---|---|---|---|
 | 职位搜索 | `boss search` | 是 | 浏览器 |
-| 个性化推荐 | `boss recommend` | 是 | 浏览器 |
+| 个性化推荐 | `boss recommend` | 是 | 受限（默认阻断） |
 | 职位详情 | `boss detail` | 是 | httpx 优先，降级浏览器 |
 | 按编号查看 | `boss show` | 否 | 本地缓存 |
 | 城市列表 | `boss cities` | 否 | httpx |
@@ -29,30 +31,30 @@
 
 | 能力 | CLI 命令 | 需要登录 | 通道 |
 |---|---|---|---|
-| 打招呼 | `boss greet` | 是 | 浏览器 |
-| 批量打招呼 | `boss batch-greet` | 是 | 浏览器 |
-| 投递沟通 | `boss apply` | 是 | 浏览器 |
+| 打招呼 | `boss greet` | 是 | 受限（默认阻断） |
+| 批量打招呼 | `boss batch-greet` | 是 | 受限（默认阻断） |
+| 投递沟通 | `boss apply` | 是 | 受限（默认阻断） |
 | 导出结果 | `boss export` | 是 | 浏览器 |
 
 ## 沟通管理
 
 | 能力 | CLI 命令 | 需要登录 | 通道 |
 |---|---|---|---|
-| 沟通列表 | `boss chat` | 是 | httpx |
-| 聊天消息 | `boss chatmsg` | 是 | httpx |
-| 聊天摘要 | `boss chat-summary` | 是 | httpx |
-| 联系人标签 | `boss mark` | 是 | httpx |
-| 交换联系方式 | `boss exchange` | 是 | httpx |
+| 沟通列表 | `boss chat` | 是 | 受限（默认阻断） |
+| 聊天消息 | `boss chatmsg` | 是 | 受限（默认阻断） |
+| 聊天摘要 | `boss chat-summary` | 是 | 受限（默认阻断） |
+| 联系人标签 | `boss mark` | 是 | 受限（默认阻断） |
+| 交换联系方式 | `boss exchange` | 是 | 受限（默认阻断） |
 | 面试邀请 | `boss interviews` | 是 | httpx |
 
 ## 流程管理
 
 | 能力 | CLI 命令 | 需要登录 | 通道 |
 |---|---|---|---|
-| 候选进度 | `boss pipeline` | 是 | httpx |
-| 跟进筛选 | `boss follow-up` | 是 | httpx |
-| 日报汇总 | `boss digest` | 是 | httpx |
-| 增量监控 | `boss watch` | 是 | 浏览器 |
+| 候选进度 | `boss pipeline` | 是 | 受限（默认阻断） |
+| 跟进筛选 | `boss follow-up` | 是 | 受限（默认阻断） |
+| 日报汇总 | `boss digest` | 是 | 受限（默认阻断） |
+| 增量监控 | `boss watch run` | 是 | 受限（默认阻断）；add/list/remove 为本地 |
 | 搜索预设 | `boss preset` | 否 | 本地 |
 | 候选池 | `boss shortlist` | 否 | 本地 |
 
@@ -91,20 +93,20 @@
 
 | 能力 | CLI 命令 | 需要登录 | 通道 |
 |---|---|---|---|
-| 投递申请列表 | `boss hr applications` | 是 | httpx |
-| 候选人搜索 | `boss hr candidates` | 是 | httpx，支持 `--city` / `--job-id` / `--experience` / `--degree` / `--age` / `--school-level` / `--activeness` / `--source` / `--salary` / `--select` / `--page` |
-| 沟通列表 | `boss hr chat` | 是 | httpx，含未读数和最近消息摘要 |
-| 聊天消息历史 | `boss hr chatmsg <friend_id>` | 是 | httpx |
-| 最近消息摘要 | `boss hr last-messages [--friend-id <id>]` | 是 | httpx |
-| 在线简历查看 | `boss hr resume <geek_id> --job-id <id> --security-id <id>` | 是 | httpx |
-| 联系方式交换 | `boss hr resume --exchange --friend-id <friend_id> [--type wechat]` | 是 | 浏览器（CDP chat tab） |
-| 消息回复 | `boss hr reply <friend_id> <message>` | 是 | 浏览器（CDP chat tab） |
-| 附件简历请求 | `boss hr request-resume <friend_id>` | 是 | 浏览器（CDP chat tab） |
+| 投递申请列表 | `boss hr applications` | 是 | 受限（默认阻断） |
+| 候选人搜索 | `boss hr candidates` | 是 | 受限（默认阻断） |
+| 沟通列表 | `boss hr chat` | 是 | 受限（默认阻断） |
+| 聊天消息历史 | `boss hr chatmsg <friend_id>` | 是 | 受限（默认阻断） |
+| 最近消息摘要 | `boss hr last-messages [--friend-id <id>]` | 是 | 受限（默认阻断） |
+| 在线简历查看 | `boss hr resume <geek_id> --job-id <id> --security-id <id>` | 是 | 受限（默认阻断） |
+| 联系方式交换 | `boss hr resume --exchange --friend-id <friend_id> [--type wechat]` | 是 | 受限（默认阻断） |
+| 消息回复 | `boss hr reply <friend_id> <message>` | 是 | 受限（默认阻断） |
+| 附件简历请求 | `boss hr request-resume <friend_id>` | 是 | 受限（默认阻断） |
 | 职位列表与上下线 | `boss hr jobs` | 是 | httpx |
 
 说明：
-- **通道**：httpx 为直接 API 请求（低风险），浏览器为 CDP/patchright 通道（高风险操作需要真实浏览器指纹），AI 服务为第三方大模型 API。
+- **通道**：httpx 为直接 API 请求，浏览器通道仅作兼容保留；命中风控时不应切换自动化通道继续重试。AI 服务为第三方大模型 API，不应输入平台聊天记录、候选人简历或联系方式等未获授权的个人信息。
 - 若以 CLI 直连为主，优先通过 `boss schema` 进行能力发现与参数校验；当前 schema 会同时暴露 `supported_platforms` 与 `supported_recruiter_platforms`。
-- 当前多平台状态：`zhipin` 已覆盖求职者与招聘者；`zhilian` 已接通候选者侧登录、只读与写操作链路，招聘者侧暂未接入。
-- 当前登录状态：`zhipin` 保留四级降级登录；`zhilian` 已接通候选者侧浏览器登录基础链路（Cookie / CDP / 浏览器兜底），但 recruiter 侧仍未接入。
+- 当前多平台状态：`zhipin` 已覆盖求职者与招聘者实现，但敏感链路默认受低风险模式阻断；`zhilian` 已接通候选者侧登录和只读链路，招聘者侧暂未接入。
+- 当前登录状态：`zhipin` / `zhilian` 保留用户主动登录兼容链路，但不得用于规避平台风控。
 - 以 `boss schema` 为准：当前暴露 34 个顶层命令；其中 `hr` 下还有 9 个一级招聘者子命令，`ai` / `resume` 为命令组入口。

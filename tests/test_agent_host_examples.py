@@ -16,7 +16,7 @@ REQUIRED_COMMANDS = [
 	"boss status",
 	"boss search",
 	"boss detail",
-	"boss greet",
+	"boss shortlist",
 ]
 
 

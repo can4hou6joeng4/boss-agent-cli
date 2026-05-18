@@ -1,6 +1,6 @@
 # boss-agent-cli
 
-> AI Agent 专用的 BOSS 直聘双端 CLI 工具 — 33 个顶层命令 + 7 个招聘者子命令，覆盖职位搜索、福利筛选、沟通、流水线、招聘者工作流、MCP 工具与 AI 简历优化。
+> AI Agent 专用的 BOSS 直聘本地辅助 CLI 工具 — 34 个顶层命令，默认低风险模式聚焦本地辅助、只读优先、用户主动触发，不做自动触达、批量操作或平台数据抓取。
 
 ## Install
 
@@ -20,7 +20,7 @@ patchright install chromium
 ## Setup
 
 ```bash
-boss login     # 四级降级：Cookie 提取 → CDP → QR httpx → patchright 扫码
+boss login     # 用户主动登录；兼容 Cookie / CDP / QR / patchright，不用于规避风控
 boss status    # 验证登录态
 ```
 
@@ -31,20 +31,20 @@ boss status    # 验证登录态
 │
 ├─ "帮我找工作"
 │   → boss status → boss search "关键词" --city X --welfare "Y"
-│   → boss detail <sid> → boss greet <sid> <jid>
+│   → boss detail <sid> → 回到平台官网由用户手动投递或沟通
 │
 ├─ "有什么新职位？"
-│   → boss watch run <name>  (已有监控)
-│   → boss recommend         (个性化推荐)
+│   → boss search "关键词" --city X
+│   → boss show <编号>
 │
 ├─ "我的求职进展怎样？"
-│   → boss pipeline → boss follow-up → boss digest
+│   → boss shortlist list → boss stats
 │
 ├─ "帮我优化简历"
 │   → boss ai analyze-jd → boss ai polish → boss ai optimize
 │
 ├─ "查看沟通记录"
-│   → boss chat → boss chatmsg <sid> → boss chat-summary <sid>
+│   → 默认低风险模式阻断平台会话读取；回到平台官网手动查看
 │
 ├─ "登录/环境有问题"
 │   → boss doctor → boss login
@@ -56,8 +56,8 @@ boss status    # 验证登录态
 ## Commands
 
 当前 `boss schema` 暴露：
-- **33 个顶层命令**
-- **`hr` 下 7 个一级招聘者子命令**
+- **34 个顶层命令**
+- **`hr` 下 9 个一级招聘者子命令（敏感候选人数据链路默认阻断）**
 
 ### Recruiter Workflow
 
@@ -87,7 +87,7 @@ boss status    # 验证登录态
 | Command | Description |
 |---------|-------------|
 | `boss search <query>` | 搜索职位（8 维筛选：城市/薪资/经验/学历/规模/行业/融资/福利） |
-| `boss recommend` | 个性化推荐 |
+| `boss recommend` | 受限：默认低风险模式阻断，避免自动读取推荐流 |
 | `boss detail <security_id>` | 职位详情（`--job-id` 走快速通道） |
 | `boss show <#>` | 按编号查看上次搜索结果 |
 | `boss cities` | 40 个支持城市 |
@@ -96,19 +96,19 @@ boss status    # 验证登录态
 
 | Command | Description |
 |---------|-------------|
-| `boss greet <sid> <jid>` | 打招呼 |
-| `boss batch-greet <query>` | 批量打招呼（上限 10） |
-| `boss apply <sid> <jid>` | 投递/立即沟通（幂等） |
-| `boss exchange <sid>` | 交换手机/微信 |
+| `boss greet <sid> <jid>` | 受限：默认低风险模式阻断，回到平台官网手动完成 |
+| `boss batch-greet <query>` | 受限：默认低风险模式阻断，避免批量触达 |
+| `boss apply <sid> <jid>` | 受限：默认低风险模式阻断，回到平台官网手动完成 |
+| `boss exchange <sid>` | 受限：默认低风险模式阻断，涉及个人信息处理 |
 
 ### Communication
 
 | Command | Description |
 |---------|-------------|
-| `boss chat` | 沟通列表（导出 html/md/csv/json） |
-| `boss chatmsg <sid>` | 聊天消息历史 |
-| `boss chat-summary <sid>` | 结构化沟通摘要（阶段/待办/风险） |
-| `boss mark <sid> --label X` | 标签管理（9 种） |
+| `boss chat` | 受限：默认低风险模式阻断，涉及会话数据 |
+| `boss chatmsg <sid>` | 受限：默认低风险模式阻断，涉及通信内容 |
+| `boss chat-summary <sid>` | 受限：默认低风险模式阻断，依赖通信内容 |
+| `boss mark <sid> --label X` | 受限：默认低风险模式阻断，涉及平台关系写入 |
 | `boss interviews` | 面试邀请 |
 | `boss history` | 浏览历史 |
 
@@ -116,10 +116,10 @@ boss status    # 验证登录态
 
 | Command | Description |
 |---------|-------------|
-| `boss pipeline` | 求职流水线（各阶段状态） |
-| `boss follow-up` | 跟进提醒（超时未推进） |
-| `boss digest` | 每日摘要 |
-| `boss watch add/list/remove/run` | 增量监控（`run --all` 一次跑完所有预设） |
+| `boss pipeline` | 受限：默认低风险模式阻断，依赖会话/面试数据 |
+| `boss follow-up` | 受限：默认低风险模式阻断，依赖会话/面试数据 |
+| `boss digest` | 受限：默认低风险模式阻断，依赖会话/面试数据 |
+| `boss watch add/list/remove/run` | add/list/remove 为本地预设；run 默认阻断，避免自动增量拉取平台数据 |
 | `boss shortlist add/list/remove` | 候选池 |
 | `boss preset add/list/remove` | 搜索预设 |
 
@@ -153,7 +153,7 @@ boss status    # 验证登录态
 boss schema
 ```
 
-Returns a JSON envelope describing all 33 top-level commands, the `hr` recruiter command group, parameters, error codes, and output conventions.
+Returns a JSON envelope describing all 34 top-level commands, the `hr` recruiter command group, parameters, error codes, and output conventions.
 
 ### Step 2: Check auth, then act
 
@@ -161,12 +161,8 @@ Returns a JSON envelope describing all 33 top-level commands, the `hr` recruiter
 boss status                                        # Check auth
 boss search "golang" --city 杭州 --welfare "双休"    # Search with welfare filter
 boss detail <security_id> --job-id <id>            # View details (fast path)
-boss greet <security_id> <job_id>                  # Send greeting
-boss pipeline                                      # Track progress
-boss digest                                        # Daily summary
-boss hr applications                               # Recruiter inbox
-boss hr candidates "golang"                        # Search candidates
-boss hr reply <friend_id> "你好"                   # Recruiter reply
+boss shortlist add <security_id> <job_id>          # Organize locally
+# 投递、沟通、候选人处理请回到平台官网由用户手动完成
 ```
 
 ### Step 3: Parse output
@@ -197,13 +193,14 @@ All commands output structured JSON to stdout:
 | AUTH_EXPIRED | Yes | `boss login` |
 | TOKEN_REFRESH_FAILED | Yes | `boss login` |
 | RATE_LIMITED | Yes | Wait and retry |
-| ACCOUNT_RISK | Yes | Retry with CDP Chrome |
+| ACCOUNT_RISK | No | Stop automation and use the official website manually |
 | NETWORK_ERROR | Yes | Retry |
 | AI_NOT_CONFIGURED | Yes | `boss ai config` |
 | AI_API_ERROR | Yes | Retry |
 | AI_PARSE_ERROR | Yes | Retry |
 | EXPORT_FAILED | Yes | Check dependencies |
 | JOB_NOT_FOUND | No | — |
+| COMPLIANCE_BLOCKED | No | Use local/read-only commands or complete manually on the official website |
 | ALREADY_GREETED | No | Skip |
 | ALREADY_APPLIED | No | Skip |
 | GREET_LIMIT | No | Inform user |

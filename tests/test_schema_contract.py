@@ -103,6 +103,7 @@ def test_schema_error_codes_cover_all_used_codes():
 		"NETWORK_ERROR",
 		"INVALID_PARAM",
 		"NOT_SUPPORTED",
+		"COMPLIANCE_BLOCKED",
 		"HOOK_BLOCKED",
 	}
 

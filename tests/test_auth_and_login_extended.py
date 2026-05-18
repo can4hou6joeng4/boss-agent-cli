@@ -240,7 +240,7 @@ def test_login_supports_zhilian_platform(mock_auth_cls):
 
 @patch("boss_agent_cli.commands.login.AuthManager")
 def test_login_connection_error_recovery_is_boss_chrome(mock_auth_cls):
-	"""ConnectionError 应返回 NETWORK_ERROR + boss-chrome 恢复建议。"""
+	"""ConnectionError 应返回 NETWORK_ERROR + 重新登录恢复建议。"""
 	mock_auth = MagicMock()
 	mock_auth.login.side_effect = ConnectionError("can't reach chrome")
 	mock_auth_cls.return_value = mock_auth
@@ -250,7 +250,7 @@ def test_login_connection_error_recovery_is_boss_chrome(mock_auth_cls):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NETWORK_ERROR"
-	assert "chrome" in parsed["error"]["recovery_action"].lower()
+	assert parsed["error"]["recovery_action"] == "boss login"
 
 
 @patch("boss_agent_cli.commands.login.AuthManager")

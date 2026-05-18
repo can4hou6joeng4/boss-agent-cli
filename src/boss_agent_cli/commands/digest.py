@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands.friend_list_pages import collect_friend_list_items
 from boss_agent_cli.digest import build_digest, render_digest_markdown
@@ -30,6 +31,9 @@ from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up
 @click.pass_context
 @handle_auth_errors("digest")
 def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, output_format: str, output_path: Path | None) -> None:
+	if not require_compliance_allowed(ctx, "digest"):
+		ctx.exit(1)
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))

@@ -297,8 +297,8 @@ def test_mark_reports_error_when_platform_rejects(mock_auth_cls, mock_client_cls
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
 	assert parsed["error"]["message"] == "account risk"
-	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "启动 CDP Chrome 重试，或联系客服"
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["error"]["recovery_action"] == "停止自动化访问，回到平台官网手动处理，必要时联系客服"
 
 
 @patch("boss_agent_cli.commands.mark.get_platform_instance")
@@ -488,8 +488,8 @@ def test_exchange_reports_friend_list_error(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
 	assert parsed["error"]["message"] == "account risk"
-	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "启动 CDP Chrome 重试，或联系客服"
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["error"]["recovery_action"] == "停止自动化访问，回到平台官网手动处理，必要时联系客服"
 
 
 @patch("boss_agent_cli.commands.exchange.get_platform_instance")
@@ -596,8 +596,8 @@ def test_detail_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock
 	result = runner.invoke(cli, ["--platform", "zhilian", "detail", "sec_001", "--job-id", "enc_001"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["hints"]["next_actions"][0] == "boss --platform zhilian greet sec_001 enc_001"
-	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian search <query>"
+	assert parsed["hints"]["next_actions"][0] == "如需投递或沟通，请回到 BOSS 直聘官方页面由用户手动完成"
+	assert parsed["hints"]["next_actions"][1] == "boss search <query>"
 
 
 @patch("boss_agent_cli.commands.detail.CacheStore")
@@ -687,8 +687,8 @@ def test_show_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock_c
 	result = runner.invoke(cli, ["--platform", "zhilian", "show", "1"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["hints"]["next_actions"][0] == "boss --platform zhilian greet sec_001 enc_001"
-	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian search <query>"
+	assert parsed["hints"]["next_actions"][0] == "如需投递或沟通，请回到 BOSS 直聘官方页面由用户手动完成"
+	assert parsed["hints"]["next_actions"][1] == "boss search <query>"
 
 
 @patch("boss_agent_cli.commands.show.CacheStore")
@@ -927,7 +927,7 @@ def test_history_zhilian_hints_use_platform_specific_commands(mock_auth_cls, moc
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["hints"]["next_actions"][0] == "使用 boss --platform zhilian detail <security_id> 查看职位详情"
-	assert parsed["hints"]["next_actions"][1] == "使用 boss --platform zhilian greet <security_id> <job_id> 打招呼"
+	assert parsed["hints"]["next_actions"][1] == "如需投递或沟通，请回到平台官网由用户手动完成"
 	assert parsed["hints"]["next_actions"][2] == "使用 boss --platform zhilian history --page 2 查看下一页"
 
 
@@ -1013,8 +1013,8 @@ def test_interviews_reports_platform_error(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
 	assert parsed["error"]["message"] == "account risk"
-	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "启动 CDP Chrome 重试，或联系客服"
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["error"]["recovery_action"] == "停止自动化访问，回到平台官网手动处理，必要时联系客服"
 
 
 @patch("boss_agent_cli.commands.interviews.get_platform_instance")

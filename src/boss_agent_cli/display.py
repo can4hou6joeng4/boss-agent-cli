@@ -179,8 +179,8 @@ def render_job_detail(data: dict, *, greet_command: str | None = None) -> None:
 	sid = data.get("security_id", "")
 	jid = data.get("job_id", "")
 	if sid and jid:
-		greet_command = greet_command or f"boss greet {sid} {jid}"
-		console.print(f"  [dim]greet: {greet_command}[/dim]")
+		greet_command = greet_command or "回到平台官网由用户手动投递或沟通"
+		console.print(f"  [dim]next: {greet_command}[/dim]")
 
 
 def render_status(data: dict, *, login_action: str = "boss login") -> None:
@@ -327,10 +327,10 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					ctx, command_name, code="RECRUITER_CHAT_TAB_REQUIRED",
 					message=str(e),
 					recoverable=True,
-					recovery_action="在 CDP Chrome 里打开 https://www.zhipin.com/web/chat/index 后重试",
+					recovery_action="回到 BOSS 直聘官方招聘者页面手动处理",
 					hints={"next_actions": [
-						"在 Chrome 里访问 https://www.zhipin.com/web/chat/index",
-						"或在已有 chat tab 上 boss --role recruiter <command> 重试",
+						"在 BOSS 直聘官方页面确认候选人和沟通上下文",
+						"保持 CLI 默认低风险模式，不通过自动化链路发送消息或请求简历",
 					]},
 				)
 			except AuthRequired:
@@ -348,20 +348,15 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recoverable=True, recovery_action=login_action,
 				)
 			except AccountRiskError as e:
-				recovery = (
-					"以 --remote-debugging-port=9222 启动 Chrome，然后重试（CDP 模式）"
-					if not e.is_cdp
-					else "联系 BOSS 直聘客服解除风控限制"
-				)
 				handle_error_output(
 					ctx, command_name, code="ACCOUNT_RISK",
 					message=str(e),
-					recoverable=not e.is_cdp,
-					recovery_action=recovery,
+					recoverable=False,
+					recovery_action="停止自动化访问；回到 BOSS 直聘官方页面手动处理，必要时联系 BOSS 直聘客服",
 					hints={"next_actions": [
-						"boss-chrome  # 启动带调试端口的 Chrome",
-						"boss search <query>  # CDP 模式自动生效",
-					]} if not e.is_cdp else None,
+						"不要通过 CDP、patchright 或 Bridge 重试该操作",
+						"只保留本地辅助和用户主动触发的只读命令",
+					]},
 				)
 			except Exception as e:
 				handle_error_output(

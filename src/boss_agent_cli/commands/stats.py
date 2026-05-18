@@ -95,7 +95,7 @@ def _build_hints(data: dict[str, Any]) -> list[str]:
 	if greeted_total == 0:
 		hints.append("boss search <query> 搜索职位")
 	elif applied_total == 0 and greeted_total > 0:
-		hints.append("boss apply <security_id> <job_id> 发起投递")
+		hints.append("如需投递，请回到平台官网由用户手动完成")
 	apply_rate = data.get("conversion", {}).get("apply_rate", 0)
 	if apply_rate < 0.1 and greeted_total >= 20:
 		hints.append("打招呼转投递率偏低，考虑调整目标岗位或优化简历（boss ai optimize）")

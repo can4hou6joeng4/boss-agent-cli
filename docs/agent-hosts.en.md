@@ -5,7 +5,7 @@ An index of the smallest useful integration examples for each agent host, so `bo
 Current example baseline:
 - Discover capabilities via `boss schema`
 - Verify login state with `boss status`
-- Complete the minimal action loop with `boss search` / `boss detail` / `boss greet`
+- Complete the low-risk local-organization loop with `boss search` / `boss detail` / `boss shortlist`
 - Parse `ok`, `data`, `error.code`, and `error.recovery_action` from the JSON envelope
 
 ## Example list

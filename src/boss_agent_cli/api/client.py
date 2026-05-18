@@ -36,7 +36,7 @@ class AuthError(Exception):
 
 
 class AccountRiskError(Exception):
-	"""BOSS 直聘风控拦截（code 36）：检测到异常行为（通常为 headless 浏览器）。"""
+	"""BOSS 直聘风控拦截（code 36）：检测到异常行为。"""
 
 	def __init__(self, message: str = "", is_cdp: bool = False):
 		self.is_cdp = is_cdp
@@ -167,7 +167,7 @@ class BossClient:
 			raise AccountRiskError(
 				f"BOSS 直聘风控拦截 (code {code}): {msg}。"
 				f"当前浏览器模式: {mode}。"
-				f"建议：以 --remote-debugging-port=9222 启动 Chrome 后重试（CDP 模式可规避风控检测）",
+				f"建议：停止自动化访问并回到 BOSS 直聘官方页面手动处理。",
 				is_cdp=is_cdp,
 			)
 		return result

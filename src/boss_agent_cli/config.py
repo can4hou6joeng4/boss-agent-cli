@@ -16,6 +16,7 @@ DEFAULTS: dict[str, Any] = {
 	"resume_export_format": "pdf",
 	"platform": "zhipin",
 	"role": "candidate",
+	"low_risk_mode": True,
 }
 
 

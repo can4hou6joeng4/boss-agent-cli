@@ -12,6 +12,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from boss_agent_cli.commands.schema import SCHEMA_DATA, _availability_note, _inject_availability
+from boss_agent_cli.compliance import COMPLIANCE_BLOCKED_ACTION, LOW_RISK_MODE_DESCRIPTION
 from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
 
 server = Server("boss-agent-cli")
@@ -72,6 +73,31 @@ def _decorate_tool_descriptions() -> None:
 			tool.description = f"{tool.description} [可用性: {_availability_note(availability)}]"
 
 # ── Tool 定义 ──────────────────────────────────────────────────────
+
+_LOW_RISK_BLOCKED_TOOLS = {
+	"boss_recommend",
+	"boss_greet",
+	"boss_apply",
+	"boss_batch_greet",
+	"boss_exchange",
+	"boss_chat",
+	"boss_chatmsg",
+	"boss_chat_summary",
+	"boss_mark",
+	"boss_pipeline",
+	"boss_follow_up",
+	"boss_digest",
+	"boss_watch_run",
+	"boss_hr_applications",
+	"boss_hr_candidates",
+	"boss_hr_chat",
+	"boss_hr_chatmsg",
+	"boss_hr_last_messages",
+	"boss_hr_resume",
+	"boss_hr_exchange",
+	"boss_hr_reply",
+	"boss_hr_request_resume",
+}
 
 TOOLS = [
 	Tool(
@@ -685,6 +711,7 @@ TOOLS = [
 	),
 ]
 
+TOOLS = [tool for tool in TOOLS if tool.name not in _LOW_RISK_BLOCKED_TOOLS]
 _decorate_tool_descriptions()
 
 
@@ -1001,6 +1028,27 @@ async def list_tools() -> list[Tool]:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+	if name in _LOW_RISK_BLOCKED_TOOLS:
+		result = {
+			"ok": False,
+			"schema_version": "1.0",
+			"command": name.removeprefix("boss_"),
+			"data": None,
+			"pagination": None,
+			"error": {
+				"code": "COMPLIANCE_BLOCKED",
+				"message": LOW_RISK_MODE_DESCRIPTION,
+				"recoverable": False,
+				"recovery_action": COMPLIANCE_BLOCKED_ACTION,
+			},
+			"hints": {
+				"next_actions": [
+					"使用只读或本地辅助工具",
+					"需要写操作或候选人个人信息处理时，请回到平台官网由用户手动完成",
+				],
+			},
+		}
+		return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 	args = _build_args(name, arguments)
 	result = _run_boss(*args)
 	return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]

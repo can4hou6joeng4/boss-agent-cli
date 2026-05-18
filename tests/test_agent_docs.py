@@ -14,6 +14,25 @@ def _read(path: str) -> str:
 	return (ROOT / path).read_text(encoding="utf-8")
 
 
+def _doc_paths_for_compliance_guardrails() -> list[str]:
+	return [
+		"README.md",
+		"README.en.md",
+		"SKILL.md",
+		"AGENTS.md",
+		"CLAUDE.md",
+		"docs/agent-quickstart.md",
+		"docs/agent-quickstart.en.md",
+		"docs/capability-matrix.md",
+		"docs/capability-matrix.en.md",
+		"docs/platform-risk.md",
+		"docs/platform-risk.en.md",
+		"mcp-server/README.md",
+		"mcp-server/README.en.md",
+		"SECURITY.md",
+	]
+
+
 def _extract_readme_badges(path: str) -> list[tuple[str, str, str]]:
 	content = _read(path)
 	header = content.split("</div>", 1)[0]
@@ -50,7 +69,7 @@ def test_agent_quickstart_exists_and_has_core_sections():
 	content = _read("docs/agent-quickstart.md")
 	assert "# Agent Quickstart" in content
 	assert "## 1) 安装与环境准备" in content
-	assert "## 2) 三步跑通 Agent 闭环" in content
+	assert "## 2) 三步跑通低风险 Agent 闭环" in content
 	assert "## 3) 失败恢复与排障" in content
 	assert "[Capability Matrix](capability-matrix.md)" in content
 
@@ -129,7 +148,7 @@ def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
 	quickstart = _read("docs/agent-quickstart.en.md")
 	assert "# Agent Quickstart" in quickstart
 	assert "## 1) Install and prepare the environment" in quickstart
-	assert "## 2) Complete the minimal agent loop in three steps" in quickstart
+	assert "## 2) Complete the low-risk agent loop in three steps" in quickstart
 	assert "## 3) Recovery flow and troubleshooting" in quickstart
 	assert "[Capability Matrix](capability-matrix.en.md)" in quickstart
 
@@ -192,6 +211,56 @@ def test_pyproject_exposes_boss_mcp_script():
 	pyproject = _read("pyproject.toml")
 	assert 'boss-mcp = "boss_agent_cli.mcp_server:run"' in pyproject
 	assert '"mcp>=1.0.0"' in pyproject
+
+
+def test_agent_facing_docs_keep_low_risk_compliance_boundary():
+	"""Agent-facing docs must not reintroduce old automation-first guidance."""
+	for path in _doc_paths_for_compliance_guardrails():
+		content = _read(path)
+		assert "低风险" in content or "low-risk" in content.lower(), path
+		assert "use cdp as a risk-control bypass" not in content.lower(), path
+		assert "use cdp to bypass" not in content.lower(), path
+		assert "启动 CDP Chrome 重试" not in content, path
+		assert "Switch to CDP Chrome" not in content, path
+		assert "CDP Chrome 重试" not in content, path
+		assert "Switch to CDP mode" not in content, path
+		assert "完整的求职操作链" not in content, path
+		assert "完整操作链" not in content, path
+		assert "自动化 + 反检测" not in content, path
+		assert "浏览器自动化 + 反检测" not in content, path
+		assert "反检测 fork" not in content, path
+		assert "高风险操作" not in content, path
+		assert "真实指纹" not in content, path
+		assert "真实 gid" not in content, path
+		assert "嗅探真实" not in content, path
+
+
+def test_agent_instructions_send_sensitive_actions_to_official_platform():
+	for path in ("AGENTS.md", "CLAUDE.md", "README.md", "README.en.md"):
+		content = _read(path)
+		assert "COMPLIANCE_BLOCKED" in content, path
+		assert (
+			"平台官网" in content
+			or "官方页面" in content
+			or "官方平台" in content
+			or "official platform" in content.lower()
+			or "official website" in content.lower()
+		), path
+		assert "batch-greet  -> 默认低风险模式阻断" in content or "batch-greet" in content, path
+
+
+def test_public_docs_do_not_expose_low_risk_mode_config_key():
+	for path in _doc_paths_for_compliance_guardrails():
+		content = _read(path)
+		assert "low_risk_mode" not in content, path
+		assert "low_risk_mode=false" not in content, path
+
+
+def test_config_command_does_not_document_internal_low_risk_policy_key():
+	content = _read("README.md")
+	config_section = content.split("## ⚙️ 配置", 1)[1].split("## 🏗️ 技术架构", 1)[0]
+	assert "low_risk_mode" not in config_section
+	assert "低风险辅助模式" not in config_section
 
 
 def test_schema_main_and_modules_command_count_consistent():

@@ -3,7 +3,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_job_detail
+from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_job_detail
 from boss_agent_cli.index_cache import get_index_info, get_job_by_index
 
 NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
@@ -104,13 +104,12 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 		"index": index,
 	}
 
-	greet_target = boss_command_for_ctx(ctx, f"greet {security_id} {job_id}")
-	search_target = boss_command_for_ctx(ctx, "search <query>")
-	hints = {"next_actions": [greet_target, search_target]}
+	manual_handoff = "如需投递或沟通，请回到 BOSS 直聘官方页面由用户手动完成"
+	hints = {"next_actions": [manual_handoff, "boss search <query>"]}
 	handle_output(
 		ctx,
 		"show",
 		result,
-		render=lambda data: render_job_detail(data, greet_command=greet_target),
+		render=lambda data: render_job_detail(data, greet_command=manual_handoff),
 		hints=hints,
 	)

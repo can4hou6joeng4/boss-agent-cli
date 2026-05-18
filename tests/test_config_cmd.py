@@ -30,6 +30,7 @@ def test_config_list_returns_all_defaults(tmp_path):
 	assert "log_level" in keys
 	assert "cdp_url" in keys
 	assert "request_delay" in keys
+	assert "low_risk_mode" not in keys
 	for item in items:
 		assert item["source"] == "默认值"
 
@@ -116,6 +117,19 @@ def test_config_set_unknown_key(tmp_path):
 	code, parsed = _invoke("config", "set", "bad_key", "val", tmp_path=tmp_path)
 	assert code == 1
 	assert parsed["error"]["code"] == "INVALID_PARAM"
+
+
+def test_config_commands_do_not_expose_internal_low_risk_policy(tmp_path):
+	"""低风险策略不是普通用户配置项，不通过 config 命令提供恢复路径。"""
+	for args in (
+		("get", "low_risk_mode"),
+		("set", "low_risk_mode", "false"),
+		("reset", "low_risk_mode"),
+	):
+		code, parsed = _invoke("config", *args, tmp_path=tmp_path)
+		assert code == 1
+		assert parsed["error"]["code"] == "INVALID_PARAM"
+		assert "low_risk_mode" not in parsed["error"]["message"]
 
 
 # ── config reset ────────────────────────────────────────────────────

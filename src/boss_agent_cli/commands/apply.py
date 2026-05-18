@@ -2,6 +2,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, render_message_panel
 
@@ -14,6 +15,9 @@ from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, han
 @handle_auth_errors("apply")
 def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> None:
 	"""发起最小可用投递/立即沟通动作（当前复用立即沟通链路）。"""
+	if not require_compliance_allowed(ctx, "apply"):
+		return
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 

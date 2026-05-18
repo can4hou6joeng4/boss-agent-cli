@@ -1,6 +1,7 @@
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands.contact_lookup import FriendLookupLimitExceeded, find_friend_by_security_id
 from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_message_panel
@@ -37,6 +38,9 @@ def _resolve_label(label_input: str) -> int:
 @handle_auth_errors("mark")
 def mark_cmd(ctx: click.Context, security_id: str, label: str, remove: bool) -> None:
 	"""给联系人添加/移除标签"""
+	if not require_compliance_allowed(ctx, "mark"):
+		return
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))

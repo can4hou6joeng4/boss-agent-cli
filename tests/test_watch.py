@@ -65,7 +65,7 @@ def test_watch_add_list_remove(tmp_path):
 
 @patch("boss_agent_cli.commands.watch.get_platform_instance")
 @patch("boss_agent_cli.commands.watch.AuthManager")
-def test_watch_run_marks_only_new_items(mock_auth_cls, mock_client_cls, tmp_path):
+def test_watch_run_marks_only_new_items(mock_auth_cls, mock_client_cls, tmp_path, legacy_args):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.is_success.return_value = True
 	mock_client.search_jobs.return_value = {
@@ -99,7 +99,7 @@ def test_watch_run_marks_only_new_items(mock_auth_cls, mock_client_cls, tmp_path
 
 @patch("boss_agent_cli.commands.watch.get_platform_instance")
 @patch("boss_agent_cli.commands.watch.AuthManager")
-def test_watch_run_reports_platform_error(mock_auth_cls, mock_client_cls, tmp_path):
+def test_watch_run_reports_platform_error(mock_auth_cls, mock_client_cls, tmp_path, legacy_args):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.is_success.return_value = False
 	mock_client.parse_error.return_value = ("UPSTREAM_ERROR", "service unavailable")
@@ -124,7 +124,7 @@ def test_watch_run_reports_platform_error(mock_auth_cls, mock_client_cls, tmp_pa
 
 @patch("boss_agent_cli.commands.watch.get_platform_instance")
 @patch("boss_agent_cli.commands.watch.AuthManager")
-def test_watch_run_reports_detail_platform_error(mock_auth_cls, mock_client_cls, tmp_path):
+def test_watch_run_reports_detail_platform_error(mock_auth_cls, mock_client_cls, tmp_path, legacy_args):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.is_success.side_effect = lambda response: response.get("code", 0) in (0, 200)
 	mock_client.parse_error.side_effect = lambda response: (response.get("error_code", "UNKNOWN"), response.get("message", ""))
@@ -157,7 +157,7 @@ def test_watch_run_reports_detail_platform_error(mock_auth_cls, mock_client_cls,
 
 @patch("boss_agent_cli.commands.watch.get_platform_instance")
 @patch("boss_agent_cli.commands.watch.AuthManager")
-def test_watch_run_reports_welfare_not_supported(mock_auth_cls, mock_client_cls, tmp_path):
+def test_watch_run_reports_welfare_not_supported(mock_auth_cls, mock_client_cls, tmp_path, legacy_args):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.is_success.side_effect = lambda response: response.get("code", 0) in (0, 200)
 	mock_client.search_jobs.return_value = {

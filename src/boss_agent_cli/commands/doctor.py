@@ -247,14 +247,14 @@ def doctor_cmd(ctx: click.Context) -> None:
 		add_check(
 			"browser_channel",
 			"ok",
-			f"高风险操作将使用 {mode} 模式（真实浏览器指纹，不触发风控）",
+			f"{mode} 兼容通道可用；默认低风险模式下不得用于规避平台风控",
 		)
 	else:
 		add_check(
 			"browser_channel",
 			"warn",
-			"CDP 和 Bridge 均不可用，相关浏览器操作将降级到 patchright/手动登录链路",
-			"以 --remote-debugging-port=9222 启动 Chrome（推荐），或安装 Bridge 扩展",
+			"CDP 和 Bridge 均不可用；默认低风险模式不依赖它们执行敏感操作",
+			"如需登录，请使用 boss login；命中风控时停止自动化访问",
 		)
 
 	# 6) Data dir writable

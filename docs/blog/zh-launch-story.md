@@ -59,11 +59,11 @@ boss stats --days 30
 用户环境千差万别，单一登录方式一定翻车。按"快→慢"的顺序尝试：
 
 1. **从本地 Chrome 提取 Cookie**（browser-cookie3）→ 秒级，免扫码
-2. **CDP 连接用户 Chrome**（`--remote-debugging-port`）→ 真实指纹，自动生成 stoken
+2. **CDP 连接用户主动启动的 Chrome**（`--remote-debugging-port`）→ 登录态兼容路径，不用于规避平台风控
 3. **httpx 直接拉 QR 码**在终端显示 → 不启动浏览器也能扫码
 4. **patchright headless QR**（最后兜底）
 
-4 条路径全跑一遍才报错，这是为什么 `boss login` 成功率接近 100%。
+这些路径用于用户主动登录兼容；命中平台风控时应停止自动化访问，而不是换通道继续重试。
 
 #### 3.2 --welfare 福利精准筛选
 
@@ -88,7 +88,7 @@ MCP（Model Context Protocol）是 Anthropic 推的标准，让任意 CLI/服务
 }
 ```
 
-然后在 Claude Desktop 里直接说："帮我找上海 30K 以上的 Python 岗位，把头 5 个打上招呼"——Claude 会自己调用 `boss_search` → `boss_show` → `boss_greet` 完成全链路。
+然后在 Claude Desktop 里直接说："帮我找上海 30K 以上的 Python 岗位，把头 5 个加入本地候选池"——Claude 会自己调用 `boss_search` → `boss_show` → `boss_shortlist_add` 完成全链路。
 
 ### 4. 可能更有意思的：AI 帮你聊 HR
 

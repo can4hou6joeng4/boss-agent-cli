@@ -1,6 +1,6 @@
 # Shell Agent Integration Example
 
-Applies to the current `boss-agent-cli` CLI contract as of April 28, 2026.
+Applies to the current `boss-agent-cli` low-risk CLI contract as of May 18, 2026.
 
 ## Good fit when
 
@@ -20,7 +20,7 @@ Recommended wrapper flow:
 3. If not logged in, run `boss login`
 4. Run `boss search`
 5. Run `boss detail`
-6. When the result is promising, run `boss greet`
+6. When the result is promising, run `boss shortlist add`; applications and messaging stay on the official website
 ```
 
 Minimal command chain:
@@ -30,7 +30,7 @@ boss schema
 boss status
 boss search "Golang" --city 广州 --welfare "双休,五险一金"
 boss detail <security_id>
-boss greet <security_id> <job_id>
+boss shortlist add <security_id> <job_id>
 ```
 
 If the host supports a single wrapper function, use something like:
@@ -58,4 +58,4 @@ General advice:
 
 - do not continue follow-up actions when `ok=false`
 - on `AUTH_REQUIRED`, restore login first and only then retry `boss search`
-- on `RATE_LIMITED`, pause instead of continuing with `boss greet`
+- on `RATE_LIMITED`, pause instead of continuing sensitive automation

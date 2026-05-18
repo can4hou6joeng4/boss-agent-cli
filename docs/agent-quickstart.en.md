@@ -1,6 +1,6 @@
 # Agent Quickstart
 
-The shortest path for an AI agent to get productive with `boss-agent-cli`: discover capabilities first, then complete a search-to-action loop. Recruiter workflows use the same JSON contract through `boss hr`.
+The shortest path for an AI agent to get productive with `boss-agent-cli`: discover capabilities first, then complete a low-risk search, detail, and local-organization loop. Applications, messaging, and candidate handling stay on the official website.
 
 ## 1) Install and prepare the environment
 
@@ -26,7 +26,7 @@ Success criteria:
 
 If you plan to wire the CLI into an agent host instead of running commands manually in a terminal, start with [Agent Host Examples](agent-hosts.en.md).
 
-## 2) Complete the minimal agent loop in three steps
+## 2) Complete the low-risk agent loop in three steps
 
 ```bash
 # Step 1: fetch the self-described capability schema
@@ -35,9 +35,9 @@ boss schema
 # Step 2: search and narrow down target jobs
 boss search "Golang" --city 广州 --welfare "双休,五险一金"
 
-# Step 3: inspect details and take action
+# Step 3: inspect details and organize locally; apply/message manually on the official website
 boss detail <security_id>
-boss greet <security_id> <job_id>
+boss shortlist add <security_id> <job_id>
 ```
 
 Parsing contract:
@@ -45,22 +45,18 @@ Parsing contract:
 - `ok=true` means success; when `ok=false`, inspect `error.code` and `error.recovery_action`
 - `boss schema` also returns `supported_platforms`, `supported_recruiter_platforms`, and per-command `availability`, so agents can route tools by `role/platform`
 
-### Minimal recruiter loop
+### Recruiter boundary
 
-If your agent operates for recruiters or hiring teams, use `boss hr` directly:
+Default low-risk mode blocks recruiter candidate search, applications, resumes, chats, contact exchange, and replies. The low-risk recruiter surface keeps job-list management available:
 
 ```bash
 # Step 1: discover capabilities
 boss schema
 
-# Step 2: access recruiter-side workflows
-boss hr applications
-boss hr candidates "Golang"
+# Step 2: inspect recruiter job listings
+boss hr jobs list
 
-# Step 3: contact candidates
-boss hr reply <friend_id> "你好，方便聊一下岗位吗？"
-boss hr request-resume <friend_id>
-boss hr resume --exchange --friend-id <friend_id> --type phone
+# Candidate handling, messaging, and contact exchange should be completed manually on the official website
 ```
 
 Recommended usage:
@@ -68,6 +64,7 @@ Recommended usage:
 - `boss hr <subcommand>` switches to recruiter mode automatically, so you do not need to infer `--role` yourself
 - Candidate-side and recruiter-side commands share the same `stdout JSON / stderr logs` contract
 - `hr` currently supports `zhipin-recruiter` only; if the active platform is `zhilian`, recruiter commands are rejected intentionally
+- When a sensitive subcommand returns `COMPLIANCE_BLOCKED`, do not switch automation channels to continue
 
 ## 3) Recovery flow and troubleshooting
 

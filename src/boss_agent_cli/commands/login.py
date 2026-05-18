@@ -42,7 +42,7 @@ def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: 
 			code="NETWORK_ERROR",
 			message=str(e),
 			recoverable=True,
-			recovery_action="boss-chrome 启动 Chrome 后重试",
+			recovery_action=login_action_for_ctx(ctx),
 		)
 	except TimeoutError as e:
 		emit_error(

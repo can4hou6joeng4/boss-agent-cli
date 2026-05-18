@@ -1,4 +1,4 @@
-# 让 AI Agent 自动帮你投简历：boss-agent-cli 开源实践
+# 让 AI Agent 辅助整理职位：boss-agent-cli 开源实践
 
 > 双休、五险一金、年终奖——这些福利条件你还在一个个手动翻看 BOSS 直聘？
 
@@ -10,7 +10,7 @@
 2. **重复劳动**——每天刷推荐、搜关键词、看详情、打招呼，动作完全一样
 3. **信息不对称**——招聘者的活跃度、公司的真实福利，都需要多次操作才能获取到
 
-如果有个工具能帮你：**搜索职位时自动过滤「双休+五险一金」，批量打招呼，导出整理好的 CSV**——你只需要最终面试就好了呢？
+如果有个工具能帮你：**搜索职位时自动过滤「双休+五险一金」，查看详情，加入本地候选池，导出整理好的 CSV**——而投递和沟通仍由你在官方页面手动完成呢？
 
 ## boss-agent-cli 是什么
 
@@ -20,11 +20,9 @@
 # 搜索广州的 Golang 职位，要求双休+五险一金
 boss search "Golang" --city 广州 --welfare "双休,五险一金"
 
-# 获取个性化推荐
-boss recommend
-
-# 批量打招呼（先预览，再执行）
-boss batch-greet "Python" --city 深圳 --dry-run
+# 查看详情并加入本地候选池
+boss detail <security_id> --job-id <job_id>
+boss shortlist add <security_id> <job_id>
 ```
 
 所有输出都是结构化 JSON，AI Agent 可以直接解析执行。也可以当普通 CLI 用，终端会渲染成漂亮的表格。
@@ -44,13 +42,13 @@ boss batch-greet "Python" --city 深圳 --dry-run
 
 市面上类似工具大多用 Selenium 或 Puppeteer。我们选了不同的路：
 
-**反检测层**：使用 [patchright](https://github.com/nichochar/patchright)（Playwright 的反检测 fork），从二进制层面修补自动化标记。不是注入 JS 来伪装，而是让浏览器本身就不暴露自动化特征。
+**默认低风险边界**：项目默认启用低风险辅助模式，阻断打招呼、投递、联系方式交换、聊天记录读取、招聘者候选人处理等敏感链路。
 
 **双通道架构**：
-- 高风险操作（搜索/打招呼）→ 浏览器通道（自动生成 stoken）
-- 低风险操作（详情/状态）→ httpx 直连（毫秒级响应）
+- 用户主动触发的职位搜索/详情 → CLI 输出结构化 JSON
+- 投递、沟通、候选人处理 → 回到官方页面手动完成
 
-**CDP 模式**：可以连接你本地的 Chrome 浏览器（通过 DevTools Protocol），复用真实浏览器指纹和登录态。从根本上消除 stoken 过期问题。
+**CDP / 浏览器能力**：仅作为登录兼容路径保留，不用于规避平台风控或重试被平台拦截的操作。
 
 **登录三级降级**：
 1. 优先从本地浏览器提取 Cookie（免扫码）
@@ -70,7 +68,7 @@ boss batch-greet "Python" --city 深圳 --dry-run
 }
 ```
 
-Agent 调用 `boss schema` 一次，就能理解全部 19 个命令的参数和返回格式。`hints.next_actions` 告诉 Agent 下一步该做什么。错误响应包含 `recovery_action`，Agent 可以自动修复。
+Agent 调用 `boss schema` 一次，就能理解命令参数、返回格式和默认低风险阻断边界。`hints.next_actions` 告诉 Agent 下一步该做什么。错误响应包含 `recovery_action`，Agent 可以自动修复。
 
 ### Claude Code 一键集成
 
@@ -80,9 +78,9 @@ npx skills add can4hou6joeng4/boss-agent-cli
 
 安装后 Agent 自动获得调用能力。你只需要说：
 
-> "帮我搜广州的 Golang 职位，要双休五险一金，找到合适的自动打招呼"
+> "帮我搜广州的 Golang 职位，要双休五险一金，找到合适的加入候选池"
 
-Agent 会自动执行 `status → search → detail → greet` 的完整链路。
+Agent 会自动执行 `status → search → detail → shortlist` 的低风险本地整理链路。
 
 ## 安装
 

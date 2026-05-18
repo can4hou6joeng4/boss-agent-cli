@@ -10,6 +10,7 @@ from boss_agent_cli.api.endpoints import (
 )
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output
 from boss_agent_cli.search_filters import SearchFilterCriteria, SearchPipelinePlatformError, resolve_welfare_keywords, run_search_pipeline
@@ -169,6 +170,9 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 @click.pass_context
 @handle_auth_errors("watch")
 def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
+	if not require_compliance_allowed(ctx, "watch-run"):
+		ctx.exit(1)
+
 	data_dir = ctx.obj["data_dir"]
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:

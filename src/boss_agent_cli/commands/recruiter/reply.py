@@ -2,6 +2,7 @@
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output
 
@@ -13,6 +14,9 @@ from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, 
 @handle_auth_errors("recruiter-reply")
 def reply_cmd(ctx: click.Context, friend_id: int, message: str) -> None:
 	"""回复候选人消息（friend_id 可从 chat/applications 获取）"""
+	if not require_compliance_allowed(ctx, "recruiter-reply"):
+		return
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 

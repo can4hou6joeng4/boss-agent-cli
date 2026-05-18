@@ -156,7 +156,7 @@ def search_cmd(ctx: click.Context, query: str, preset: str | None, city: str | N
 			hints = {
 				"next_actions": [
 					"使用 boss detail <security_id> 查看职位详情",
-					"使用 boss greet <security_id> <job_id> 打招呼",
+					"如需投递或沟通，请回到平台官网由用户手动完成",
 				],
 			}
 			if pipeline_result.has_more and not welfare_conditions:

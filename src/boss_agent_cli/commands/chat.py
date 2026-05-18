@@ -5,6 +5,7 @@ from typing import Any
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands.chat_export import render_export
 from boss_agent_cli.commands.chat_snapshot import save_snapshot_and_diff, load_snapshot
@@ -39,6 +40,9 @@ _escape_md_cell = escape_md_cell
 @handle_auth_errors("chat")
 def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | None, export_fmt: str | None, output_path: str | None) -> None:
 	"""查看沟通列表（支持按发起方、时间筛选，支持导出）"""
+	if not require_compliance_allowed(ctx, "chat"):
+		ctx.exit(1)
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
@@ -175,7 +179,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				),
 				hints={"next_actions": [
 					"boss detail <security_id> — 查看职位详情",
-					"boss greet <security_id> <job_id> — 打招呼",
+					"如需沟通，请回到平台官网由用户手动完成",
 				]},
 			)
 			return
@@ -211,7 +215,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			render=_render,
 			hints={"next_actions": [
 				"boss detail <security_id> — 查看职位详情",
-				"boss greet <security_id> <job_id> — 打招呼",
+				"如需沟通，请回到平台官网由用户手动完成",
 			]},
 		)
 

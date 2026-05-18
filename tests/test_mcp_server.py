@@ -60,7 +60,7 @@ def test_candidate_tool_description_includes_availability():
 
 
 def test_recruiter_tool_description_includes_availability():
-	tool = next(t for t in TOOLS if t.name == "boss_hr_candidates")
+	tool = next(t for t in TOOLS if t.name == "boss_hr_jobs")
 	assert "可用性:" in tool.description
 	assert "roles=recruiter" in tool.description
 	assert "zhipin-recruiter" in tool.description
@@ -85,19 +85,15 @@ def test_required_tools_present():
 	names = {t.name for t in TOOLS}
 	required = {
 		"boss_status", "boss_doctor", "boss_search", "boss_detail",
-		"boss_greet", "boss_chat", "boss_me", "boss_cities",
-		"boss_chatmsg", "boss_chat_summary", "boss_mark", "boss_exchange",
-		"boss_apply", "boss_batch_greet", "boss_show", "boss_pipeline",
-		"boss_follow_up", "boss_digest", "boss_config", "boss_clean",
+		"boss_me", "boss_cities",
+		"boss_show", "boss_config", "boss_clean",
 		"boss_stats", "boss_ai_reply",
 		"boss_ai_interview_prep", "boss_ai_chat_coach",
 		"boss_resume_list", "boss_resume_show",
 		"boss_ai_analyze_jd", "boss_ai_optimize", "boss_ai_suggest",
-		"boss_watch_list", "boss_watch_run",
+		"boss_watch_list",
 		"boss_preset_list", "boss_shortlist_list",
-		"boss_hr_applications", "boss_hr_candidates", "boss_hr_chat",
-		"boss_hr_chatmsg", "boss_hr_last_messages", "boss_hr_resume",
-		"boss_hr_exchange", "boss_hr_reply", "boss_hr_request_resume", "boss_hr_jobs",
+		"boss_hr_jobs",
 		"boss_hr_jobs_detail",
 	}
 	missing = required - names
@@ -106,7 +102,7 @@ def test_required_tools_present():
 
 def test_tool_count():
 	"""工具总数应与当前注册一致。"""
-	assert len(TOOLS) == 53
+	assert len(TOOLS) == 31
 
 
 def test_search_tool_requires_query():
@@ -115,12 +111,15 @@ def test_search_tool_requires_query():
 	assert "query" in search.inputSchema.get("required", [])
 
 
-def test_greet_tool_requires_both_ids():
-	"""打招呼工具应要求 security_id 和 job_id。"""
-	greet = next(t for t in TOOLS if t.name == "boss_greet")
-	required = greet.inputSchema.get("required", [])
-	assert "security_id" in required
-	assert "job_id" in required
+def test_sensitive_tools_not_exposed_by_default():
+	"""默认低风险模式下，敏感 MCP 工具不直接暴露给 Agent。"""
+	names = {t.name for t in TOOLS}
+	assert "boss_greet" not in names
+	assert "boss_batch_greet" not in names
+	assert "boss_chat" not in names
+	assert "boss_pipeline" not in names
+	assert "boss_watch_run" not in names
+	assert "boss_hr_candidates" not in names
 
 
 # ── 参数构建 ────────────────────────────────────────────────────────
@@ -549,7 +548,7 @@ def test_build_args_shortlist_list():
 
 def test_tool_count_after_pr41():
 	"""协议服务工具总数应与当前 MCP 暴露能力完全一致。"""
-	assert len(TOOLS) == 53
+	assert len(TOOLS) == 31
 
 
 def test_build_args_shortlist_add():

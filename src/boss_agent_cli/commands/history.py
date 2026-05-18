@@ -54,7 +54,7 @@ def history_cmd(ctx: click.Context, page: int) -> None:
 	hints = {
 		"next_actions": [
 			f"使用 {boss_command_for_ctx(ctx, 'detail <security_id>')} 查看职位详情",
-			f"使用 {boss_command_for_ctx(ctx, 'greet <security_id> <job_id>')} 打招呼",
+			"如需投递或沟通，请回到平台官网由用户手动完成",
 			f"使用 {boss_command_for_ctx(ctx, f'history --page {page + 1}')} 查看下一页",
 		],
 	}

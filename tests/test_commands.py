@@ -43,7 +43,7 @@ def test_login_cdp_connection_error_returns_json_envelope(mock_auth_cls):
 	assert parsed["command"] == "login"
 	assert parsed["error"]["code"] == "NETWORK_ERROR"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss-chrome 启动 Chrome 后重试"
+	assert parsed["error"]["recovery_action"] == "boss login"
 
 
 @patch("boss_agent_cli.commands.login.AuthManager")
@@ -1479,7 +1479,7 @@ def test_search_account_risk_returns_error(mock_client_cls, mock_auth_cls, mock_
 	_ctx_mock(mock_client_cls)
 	mock_pipeline.side_effect = AccountRiskError(
 		"BOSS 直聘风控拦截 (code 36): 您的账户存在异常行为。当前浏览器模式: headless patchright。"
-		"建议：以 --remote-debugging-port=9222 启动 Chrome 后重试（CDP 模式可规避风控检测）",
+		"建议：停止自动化访问并回到 BOSS 直聘官方页面手动处理。",
 		is_cdp=False,
 	)
 	runner = CliRunner()
@@ -1489,8 +1489,8 @@ def test_search_account_risk_returns_error(mock_client_cls, mock_auth_cls, mock_
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
 	assert "风控拦截" in parsed["error"]["message"]
-	assert parsed["error"]["recoverable"] is True
-	assert "Chrome" in parsed["error"]["recovery_action"]
+	assert parsed["error"]["recoverable"] is False
+	assert "停止自动化访问" in parsed["error"]["recovery_action"]
 	assert parsed["hints"]["next_actions"]
 
 

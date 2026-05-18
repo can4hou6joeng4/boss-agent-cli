@@ -317,7 +317,7 @@ def test_browser_channel_warn_without_cdp_or_bridge(tmp_path):
 	ch = _find_check(parsed["data"]["checks"], "browser_channel")
 	assert ch is not None
 	assert ch["status"] == "warn"
-	assert "降级" in ch["detail"]
+	assert "默认低风险模式" in ch["detail"]
 
 
 # ── 9. cookie 提取检查 ───────────────────────────────────────────────

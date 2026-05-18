@@ -1,0 +1,3 @@
+# Default to Low-Risk Assistance Mode
+
+The project previously presented an end-to-end automation loop for job search, outreach, and recruiter workflows, which created platform-agreement and personal-data handling risk. We now default to **Low-Risk Assistance Mode**: local assistance, read-only first, user-triggered, no risk-control bypass, no bulk outreach, and no platform-data scraping. Sensitive commands remain present only as restricted compatibility surfaces and are blocked by default so future maintainers do not accidentally restore automated outreach or candidate personal-data processing as the default product shape.

@@ -55,13 +55,13 @@ def _interview_item():
 
 @patch("boss_agent_cli.commands.pipeline.get_platform_instance")
 @patch("boss_agent_cli.commands.pipeline.AuthManager")
-def test_pipeline_command_returns_aggregated_items(mock_auth_cls, mock_client_cls):
+def test_pipeline_command_returns_aggregated_items(mock_auth_cls, mock_client_cls, legacy_args):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response([_chat_item(unread=1)])
 	mock_client.interview_data.return_value = {"zpData": {"interviewList": [_interview_item()]}}
 
 	runner = CliRunner()
-	result = runner.invoke(cli, ["--json", "pipeline"])
+	result = runner.invoke(cli, ["--json", *legacy_args, "pipeline"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
@@ -72,7 +72,7 @@ def test_pipeline_command_returns_aggregated_items(mock_auth_cls, mock_client_cl
 
 @patch("boss_agent_cli.commands.pipeline.get_platform_instance")
 @patch("boss_agent_cli.commands.pipeline.AuthManager")
-def test_follow_up_command_filters_actionable_items(mock_auth_cls, mock_client_cls):
+def test_follow_up_command_filters_actionable_items(mock_auth_cls, mock_client_cls, legacy_args):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response(
 		[
@@ -83,7 +83,7 @@ def test_follow_up_command_filters_actionable_items(mock_auth_cls, mock_client_c
 	mock_client.interview_data.return_value = {"zpData": {"interviewList": [_interview_item()]}}
 
 	runner = CliRunner()
-	result = runner.invoke(cli, ["--json", "follow-up", "--now-ts-ms", str(1700000000000 + 5 * 24 * 3600 * 1000)])
+	result = runner.invoke(cli, ["--json", *legacy_args, "follow-up", "--now-ts-ms", str(1700000000000 + 5 * 24 * 3600 * 1000)])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
@@ -95,7 +95,7 @@ def test_follow_up_command_filters_actionable_items(mock_auth_cls, mock_client_c
 
 @patch("boss_agent_cli.commands.pipeline.get_platform_instance")
 @patch("boss_agent_cli.commands.pipeline.AuthManager")
-def test_follow_up_command_aggregates_items_from_second_page(mock_auth_cls, mock_client_cls):
+def test_follow_up_command_aggregates_items_from_second_page(mock_auth_cls, mock_client_cls, legacy_args):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.side_effect = [
 		_friend_list_response([_chat_item(unread=1, security_id="sec_001", job_id="job_001")]),
@@ -105,7 +105,7 @@ def test_follow_up_command_aggregates_items_from_second_page(mock_auth_cls, mock
 	mock_client.interview_data.return_value = {"zpData": {"interviewList": []}}
 
 	runner = CliRunner()
-	result = runner.invoke(cli, ["--json", "follow-up", "--now-ts-ms", str(1700000000000 + 5 * 24 * 3600 * 1000)])
+	result = runner.invoke(cli, ["--json", *legacy_args, "follow-up", "--now-ts-ms", str(1700000000000 + 5 * 24 * 3600 * 1000)])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
@@ -119,12 +119,12 @@ def test_follow_up_command_aggregates_items_from_second_page(mock_auth_cls, mock
 
 @patch("boss_agent_cli.commands.pipeline.get_platform_instance")
 @patch("boss_agent_cli.commands.pipeline.AuthManager")
-def test_pipeline_reports_friend_list_error(mock_auth_cls, mock_client_cls):
+def test_pipeline_reports_friend_list_error(mock_auth_cls, mock_client_cls, legacy_args):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = {"code": 37, "message": "stoken expired"}
 	mock_client.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
 	runner = CliRunner()
-	result = runner.invoke(cli, ["--json", "pipeline"])
+	result = runner.invoke(cli, ["--json", *legacy_args, "pipeline"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
@@ -133,7 +133,7 @@ def test_pipeline_reports_friend_list_error(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.pipeline.get_platform_instance")
 @patch("boss_agent_cli.commands.pipeline.AuthManager")
-def test_pipeline_reports_second_page_friend_list_error(mock_auth_cls, mock_client_cls):
+def test_pipeline_reports_second_page_friend_list_error(mock_auth_cls, mock_client_cls, legacy_args):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.side_effect = [
 		_friend_list_response([_chat_item(unread=1)]),
@@ -141,7 +141,7 @@ def test_pipeline_reports_second_page_friend_list_error(mock_auth_cls, mock_clie
 	]
 	mock_client.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
 	runner = CliRunner()
-	result = runner.invoke(cli, ["--json", "pipeline"])
+	result = runner.invoke(cli, ["--json", *legacy_args, "pipeline"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"

@@ -97,7 +97,8 @@ class TestPlatformGlobalOption:
 		assert result.exit_code == 0
 		payload = json.loads(result.output)
 		login_desc = payload["data"]["commands"]["login"]["description"]
-		assert "zhipin" in login_desc
+		assert "当前平台" in login_desc
+		assert "低风险模式" in login_desc
 		assert "zhilian" in login_desc
 
 

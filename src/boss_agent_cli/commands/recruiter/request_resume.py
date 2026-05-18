@@ -2,6 +2,7 @@
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output
 
@@ -15,6 +16,9 @@ def request_resume_cmd(ctx: click.Context, friend_id: int) -> None:
 
 	不再需要 --job-id 参数 — 内部从 friend_detail 自动取出 securityId/jobId/name。
 	"""
+	if not require_compliance_allowed(ctx, "recruiter-request-resume"):
+		return
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 

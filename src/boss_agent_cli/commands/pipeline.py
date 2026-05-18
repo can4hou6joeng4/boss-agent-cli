@@ -4,6 +4,7 @@ from typing import Any
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands.friend_list_pages import collect_friend_list_items
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_simple_list
@@ -73,6 +74,9 @@ def _render_pipeline(data: list[dict[str, Any]], title: str) -> None:
 @click.pass_context
 @handle_auth_errors("pipeline")
 def pipeline_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None) -> None:
+	if not require_compliance_allowed(ctx, "pipeline"):
+		ctx.exit(1)
+
 	items = _collect_pipeline_items(ctx, command_name="pipeline", now_ts_ms=now_ts_ms, stale_days=days_stale)
 	handle_output(
 		ctx,
@@ -89,6 +93,9 @@ def pipeline_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None) -> 
 @click.pass_context
 @handle_auth_errors("follow-up")
 def follow_up_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None) -> None:
+	if not require_compliance_allowed(ctx, "follow-up"):
+		ctx.exit(1)
+
 	items = _collect_pipeline_items(ctx, command_name="follow-up", now_ts_ms=now_ts_ms, stale_days=days_stale)
 	candidates = select_follow_up_candidates(items)
 	handle_output(

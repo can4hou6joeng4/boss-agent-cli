@@ -2,6 +2,7 @@ from typing import Any, cast
 
 import click
 
+from boss_agent_cli.compliance import compliance_mode_data
 from boss_agent_cli.output import emit_success
 from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
 
@@ -72,9 +73,9 @@ _ROLE_BOTH_COMMANDS = {
 _CANDIDATE_COMMANDS = {
 	"search",
 	"detail",
+	"recommend",
 	"greet",
 	"batch-greet",
-	"recommend",
 	"export",
 	"me",
 	"show",
@@ -226,10 +227,10 @@ def _format_mcp_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 SCHEMA_DATA = {
 	"name": "boss-agent-cli",
-	"description": "BOSS直聘求职工具。34 个顶层命令覆盖搜索、筛选、打招呼、沟通、流水线、招聘者工作流与简历优化全流程。",
+	"description": "BOSS直聘本地辅助工具，共 34 个顶层命令。默认低风险模式聚焦只读、本地辅助、用户主动触发；自动触达、批量操作和候选人个人信息处理默认受限。",
 	"commands": {
 		"login": {
-			"description": "按当前平台登录（zhipin: Cookie 提取 → CDP → QR httpx → patchright；zhilian: Cookie 提取 → CDP → 浏览器登录）",
+			"description": "按当前平台登录（zhipin / zhilian）。默认低风险模式仅用于用户主动触发的本地辅助与只读命令，不用于规避平台风控。",
 			"args": [],
 			"options": {
 				"--timeout": {
@@ -388,7 +389,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"greet": {
-			"description": "向指定招聘者打招呼",
+			"description": "受限能力：向指定招聘者打招呼。默认低风险模式会阻断，建议回到平台官网由用户手动完成。",
 			"args": [
 				{"name": "security_id", "required": True, "description": "安全 ID"},
 				{"name": "job_id", "required": True, "description": "加密职位 ID"},
@@ -402,7 +403,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"batch-greet": {
-			"description": "搜索后批量打招呼（上限 10）",
+			"description": "受限能力：搜索后批量打招呼。默认低风险模式会阻断，避免批量触达。",
 			"args": [
 				{"name": "query", "required": True, "description": "搜索关键词"},
 			],
@@ -490,7 +491,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"recommend": {
-			"description": "基于简历的个性化职位推荐",
+			"description": "受限能力：基于用户登录态的个性化职位推荐。默认低风险模式会阻断，避免自动读取平台推荐流。",
 			"args": [],
 			"options": {
 				"--page": {"type": "int", "default": 1, "description": "页码"},
@@ -552,7 +553,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"chat": {
-			"description": "查看沟通列表（支持按发起方、时间筛选，支持导出 html/md/csv/json）",
+			"description": "受限能力：查看沟通列表或导出会话摘要。默认低风险模式会阻断，避免通过 CLI 读取会话数据。",
 			"args": [],
 			"options": {
 				"--from": {
@@ -585,7 +586,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"chatmsg": {
-			"description": "查看与指定好友的聊天消息历史",
+			"description": "受限能力：查看与指定好友的聊天消息历史。默认低风险模式会阻断，避免通过 CLI 读取通信内容。",
 			"args": [
 				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
 			],
@@ -595,7 +596,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"chat-summary": {
-			"description": "基于聊天历史生成结构化摘要与下一步建议",
+			"description": "受限能力：基于聊天历史生成结构化摘要与下一步建议。默认低风险模式会阻断，避免通过 CLI 读取通信内容。",
 			"args": [
 				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
 			],
@@ -605,7 +606,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"mark": {
-			"description": "给联系人添加/移除标签（新招呼/沟通中/已约面/不合适/收藏等）",
+			"description": "受限能力：给联系人添加/移除标签。默认低风险模式会阻断，涉及平台关系数据写入时请回到平台官网手动完成。",
 			"args": [
 				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
 			],
@@ -620,7 +621,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"exchange": {
-			"description": "请求交换联系方式（手机号或微信）",
+			"description": "受限能力：请求交换联系方式（手机号或微信）。默认低风险模式会阻断，涉及个人信息处理时请回到平台官网手动完成。",
 			"args": [
 				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
 			],
@@ -644,7 +645,7 @@ SCHEMA_DATA = {
 			"options": {},
 		},
 		"watch": {
-			"description": "保存搜索条件并执行增量监控（子命令：add/list/remove/run）",
+			"description": "本地保存搜索条件；run 子命令为受限能力，默认低风险模式会阻断自动增量拉取平台数据。",
 			"args": [],
 			"options": {},
 		},
@@ -654,21 +655,21 @@ SCHEMA_DATA = {
 			"options": {},
 		},
 		"pipeline": {
-			"description": "聚合聊天和面试数据，生成统一候选进度视图",
+			"description": "受限能力：聚合聊天和面试数据生成候选进度视图。默认低风险模式会阻断。",
 			"args": [],
 			"options": {
 				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则标记为 follow_up"},
 			},
 		},
 		"follow-up": {
-			"description": "筛出需要优先跟进的候选项（未读、超时未推进、面试）",
+			"description": "受限能力：基于聊天和面试数据筛出需要跟进的候选项。默认低风险模式会阻断。",
 			"args": [],
 			"options": {
 				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则视为 follow_up"},
 			},
 		},
 		"apply": {
-			"description": "发起最小可用投递/立即沟通动作（当前复用立即沟通链路）",
+			"description": "受限能力：发起投递/立即沟通动作。默认低风险模式会阻断，建议回到平台官网由用户手动完成。",
 			"args": [
 				{"name": "security_id", "required": True, "description": "安全 ID"},
 				{"name": "job_id", "required": True, "description": "加密职位 ID"},
@@ -683,7 +684,7 @@ SCHEMA_DATA = {
 			"options": {},
 		},
 		"digest": {
-			"description": "汇总新增职位、待跟进会话和面试项的只读日报（支持 JSON / Markdown 两种输出）",
+			"description": "受限能力：汇总新增职位、待跟进会话和面试项的日报。默认低风险模式会阻断。",
 			"args": [],
 			"options": {
 				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则视为 follow_up"},
@@ -770,19 +771,19 @@ SCHEMA_DATA = {
 			},
 		},
 		"hr": {
-			"description": "招聘者模式快捷命令",
+			"description": "招聘者模式快捷命令。默认低风险模式会阻断候选人搜索、简历、沟通、联系方式交换和消息发送等涉及个人信息或写操作的子命令。",
 			"args": [],
 			"options": {},
 			"subcommands": {
-				"applications": "查看候选人投递申请列表",
-				"resume": "查看候选人在线简历或发起联系方式交换",
-				"chat": "查看与候选人的沟通列表（含未读数和最近消息摘要）",
-				"chatmsg": "查看与指定候选人的聊天消息历史",
-				"last-messages": "批量查看候选人最近消息摘要",
+				"applications": "受限：查看候选人投递申请列表",
+				"resume": "受限：查看候选人在线简历或发起联系方式交换",
+				"chat": "受限：查看与候选人的沟通列表（含未读数和最近消息摘要）",
+				"chatmsg": "受限：查看与指定候选人的聊天消息历史",
+				"last-messages": "受限：批量查看候选人最近消息摘要",
 				"jobs": "管理职位发布（list/offline/online/detail）",
-				"candidates": "搜索候选人（支持 city/job-id/experience/degree/age/school-level/activeness/source/salary/select/page 筛选）",
-				"reply": "回复候选人消息",
-				"request-resume": "请求候选人分享附件简历",
+				"candidates": "受限：搜索候选人",
+				"reply": "受限：回复候选人消息",
+				"request-resume": "受限：请求候选人分享附件简历",
 			},
 		},
 	},
@@ -806,7 +807,7 @@ SCHEMA_DATA = {
 		"--cdp-url": {
 			"type": "string",
 			"default": None,
-			"description": "Chrome CDP 调试地址（如 http://localhost:9222），启用后优先用用户 Chrome 发请求",
+			"description": "Chrome CDP 调试地址（兼容保留）。不得用于规避平台风控或重试被平台拦截的操作。",
 		},
 		"--platform": {
 			"type": "string",
@@ -864,8 +865,13 @@ SCHEMA_DATA = {
 		},
 		"ACCOUNT_RISK": {
 			"message": "风控拦截",
-			"recoverable": True,
-			"recovery_action": "启动 CDP Chrome 重试，或联系客服",
+			"recoverable": False,
+			"recovery_action": "停止自动化访问，回到平台官网手动处理，必要时联系客服",
+		},
+		"COMPLIANCE_BLOCKED": {
+			"message": "默认低风险模式已阻断该敏感操作",
+			"recoverable": False,
+			"recovery_action": "保持默认低风险模式；如需处理，请回到平台官网手动完成",
 		},
 		"GREET_LIMIT": {
 			"message": "今日打招呼次数已用完",
@@ -890,7 +896,7 @@ SCHEMA_DATA = {
 		"RECRUITER_CHAT_TAB_REQUIRED": {
 			"message": "招聘者操作需要 Chrome 已打开聊天页 (chat/index)",
 			"recoverable": True,
-			"recovery_action": "在 CDP Chrome 里打开 https://www.zhipin.com/web/chat/index 后重试",
+			"recovery_action": "回到 BOSS 直聘官方招聘者页面手动处理",
 		},
 		"NOT_SUPPORTED": {
 			"message": "当前平台暂不支持该能力",
@@ -982,6 +988,7 @@ def schema_cmd(ctx: click.Context, output_format: str) -> None:
 	data["current_role"] = (ctx.obj or {}).get("role") or "candidate"
 	data["supported_platforms"] = list_platforms()
 	data["supported_recruiter_platforms"] = list_recruiter_platforms()
+	data["compliance"] = compliance_mode_data(ctx)
 	data = _inject_availability(data)
 
 	if output_format == "openai-tools":

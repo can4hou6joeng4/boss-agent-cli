@@ -7,7 +7,7 @@
 ## Title Candidates
 
 - **A**: Show HN: I built a CLI that lets Claude apply to jobs for me
-- **B**: boss-agent-cli — 33 top-level commands + 7 recruiter subcommands + 49 MCP tools for AI-driven job hunting
+- **B**: boss-agent-cli — 33 top-level commands + 7 recruiter subcommands + 31 default low-risk MCP tools for AI-driven job hunting
 - **C**: I open-sourced the CLI that turns Claude into my recruiter liaison
 
 Recommended: **A** (HN-friendly).
@@ -18,7 +18,7 @@ Recommended: **A** (HN-friendly).
 
 ### TL;DR
 
-`boss-agent-cli` is an open-source CLI tool designed for AI agents to handle the full job-hunting workflow on [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). Every command outputs structured JSON; 49 MCP tools plug into Claude Desktop, Cursor, or any MCP-compatible host. MIT licensed, 1000+ tests, dual job-seeker + recruiter workflow, and v1.11.0 on PyPI.
+`boss-agent-cli` is an open-source CLI tool designed for AI agents to handle the low-risk job discovery and local-organization workflow on [BOSS Zhipin](https://www.zhipin.com/) (China's largest recruitment platform). Every command outputs structured JSON; 31 default low-risk MCP tools plug into Claude Desktop, Cursor, or any MCP-compatible host. MIT licensed, 1000+ tests, dual job-seeker + recruiter workflow, and v1.11.0 on PyPI.
 
 ```bash
 uv tool install boss-agent-cli
@@ -45,11 +45,11 @@ So I wrote what I actually wanted: a CLI where **every command outputs JSON on s
 User environments are hostile. Any single auth method fails for *someone*. So `boss login` tries, in order:
 
 1. Extract cookies from local Chrome (`browser-cookie3`) — instant, no QR scan
-2. Attach to user's Chrome via CDP (`--remote-debugging-port=9222`) — real fingerprint, automatic token rotation
+2. Attach to user-triggered Chrome via CDP (`--remote-debugging-port=9222`) — compatibility path for login state, not a risk-control bypass
 3. Fetch QR code via `httpx` and render in terminal — works without a browser
 4. Spin up a patchright headless browser as last resort
 
-Login success rate is effectively 100% because at least one path always works.
+The goal is user-triggered login compatibility, not retrying platform risk-control blocks through another automation channel.
 
 #### 2. Parallel welfare filtering
 
@@ -59,7 +59,7 @@ The fix: `ThreadPoolExecutor` with 3 workers running detail fetches in parallel,
 
 #### 3. MCP server as the primary integration surface
 
-Model Context Protocol is Anthropic's standard for exposing tools to AI agents. The `mcp-server/` directory ships a stdio server that wraps the CLI into 49 MCP tools, including recruiter-side operations and AI workflow helpers.
+Model Context Protocol is Anthropic's standard for exposing tools to AI agents. The `mcp-server/` directory ships a stdio server that wraps the CLI into 31 default low-risk MCP tools, including recruiter-side operations and AI workflow helpers.
 
 In `claude_desktop_config.json`:
 
@@ -74,7 +74,7 @@ In `claude_desktop_config.json`:
 }
 ```
 
-Then I can say in Claude Desktop: *"Find Python jobs in Shanghai paying over 30K, greet the top 5."* Claude chains `boss_search` → `boss_show` → `boss_greet` on its own.
+Then I can say in Claude Desktop: *"Find Python jobs in Shanghai paying over 30K, add the top 5 to my local shortlist."* Claude chains `boss_search` → `boss_show` → `boss_shortlist_add` on its own.
 
 ### The feature I'm most proud of: AI reply drafts
 

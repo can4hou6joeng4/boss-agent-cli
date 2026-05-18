@@ -47,7 +47,7 @@ def _make_raw_job(name: str = "Go 开发", security_id: str = "sec_x") -> dict:
 @patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
-def test_greet_success_renders_message_and_records_cache(mock_cache_cls, mock_auth_cls, mock_get_platform):
+def test_greet_success_renders_message_and_records_cache(mock_cache_cls, mock_auth_cls, mock_get_platform, legacy_args):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	mock_platform = _ctx_mock(mock_get_platform)
@@ -55,7 +55,7 @@ def test_greet_success_renders_message_and_records_cache(mock_cache_cls, mock_au
 	mock_platform.is_success.return_value = True
 
 	runner = CliRunner()
-	result = runner.invoke(cli, ["greet", "sec_001", "job_001"])
+	result = runner.invoke(cli, [*legacy_args, "greet", "sec_001", "job_001"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
@@ -78,7 +78,7 @@ def test_greet_success_renders_message_and_records_cache(mock_cache_cls, mock_au
 @patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
-def test_batch_greet_success_all(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
+def test_batch_greet_success_all(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time, legacy_args):
 	"""2 个职位全部打招呼成功。"""
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
@@ -91,7 +91,7 @@ def test_batch_greet_success_all(mock_cache_cls, mock_auth_cls, mock_client_cls,
 	mock_time.sleep = MagicMock()
 
 	runner = CliRunner()
-	result = runner.invoke(cli, ["batch-greet", "golang", "--count", "2"])
+	result = runner.invoke(cli, [*legacy_args, "batch-greet", "golang", "--count", "2"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
@@ -107,7 +107,7 @@ def test_batch_greet_success_all(mock_cache_cls, mock_auth_cls, mock_client_cls,
 @patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
-def test_batch_greet_rate_limited_stops_remaining(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
+def test_batch_greet_rate_limited_stops_remaining(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time, legacy_args):
 	"""第 1 个成功，第 2 个 RATE_LIMITED 应中止剩余。"""
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
@@ -130,7 +130,7 @@ def test_batch_greet_rate_limited_stops_remaining(mock_cache_cls, mock_auth_cls,
 	mock_time.sleep = MagicMock()
 
 	runner = CliRunner()
-	result = runner.invoke(cli, ["batch-greet", "test", "--count", "3"])
+	result = runner.invoke(cli, [*legacy_args, "batch-greet", "test", "--count", "3"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"]["total_greeted"] == 1

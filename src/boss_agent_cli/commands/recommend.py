@@ -3,6 +3,7 @@ import click
 from boss_agent_cli.api.models import JobItem
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_job_table
 from boss_agent_cli.index_cache import try_save_index
@@ -18,6 +19,9 @@ NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
 @handle_auth_errors("recommend")
 def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 	"""基于简历的个性化职位推荐"""
+	if not require_compliance_allowed(ctx, "recommend"):
+		ctx.exit(1)
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
@@ -85,7 +89,7 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 		hints = {
 			"next_actions": [
 				"使用 boss detail <security_id> 查看职位详情",
-				"使用 boss greet <security_id> <job_id> 打招呼",
+				"如需投递或沟通，请回到平台官网由用户手动完成",
 				f"使用 boss recommend --page {page + 1} 查看下一页",
 			],
 		}

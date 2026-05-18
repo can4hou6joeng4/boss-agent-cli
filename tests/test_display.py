@@ -207,7 +207,7 @@ class TestHandleErrorOutputTTY:
 
 
 class TestHandleAuthErrorsAccountRisk:
-	def test_account_risk_non_cdp_suggests_cdp_chrome(self):
+	def test_account_risk_non_cdp_stops_automation(self):
 		from boss_agent_cli.api.client import AccountRiskError
 		ctx = MagicMock()
 		ctx.obj = {"json_output": True}
@@ -221,8 +221,8 @@ class TestHandleAuthErrorsAccountRisk:
 			mock_err.assert_called_once()
 			kwargs = mock_err.call_args[1]
 			assert kwargs["code"] == "ACCOUNT_RISK"
-			assert kwargs["recoverable"] is True
-			assert "9222" in kwargs["recovery_action"]
+			assert kwargs["recoverable"] is False
+			assert "停止自动化访问" in kwargs["recovery_action"]
 
 	def test_account_risk_cdp_mode_suggests_contact_support(self):
 		from boss_agent_cli.api.client import AccountRiskError

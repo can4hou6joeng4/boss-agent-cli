@@ -271,8 +271,8 @@ def test_recruiter_applications_reports_error_when_platform_rejects(mock_auth_cl
 		parsed,
 		code="ACCOUNT_RISK",
 		message="account risk",
-		recoverable=True,
-		recovery_action="启动 CDP Chrome 重试，或联系客服",
+		recoverable=False,
+		recovery_action="停止自动化访问，回到平台官网手动处理，必要时联系客服",
 	)
 
 
@@ -500,8 +500,8 @@ def test_recruiter_request_resume_reports_error_when_platform_rejects(mock_auth_
 		parsed,
 		code="ACCOUNT_RISK",
 		message="account risk",
-		recoverable=True,
-		recovery_action="启动 CDP Chrome 重试，或联系客服",
+		recoverable=False,
+		recovery_action="停止自动化访问，回到平台官网手动处理，必要时联系客服",
 	)
 
 

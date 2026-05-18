@@ -11,6 +11,12 @@ import click
 from boss_agent_cli.config import DEFAULTS
 from boss_agent_cli.display import handle_output, render_simple_list
 
+_PUBLIC_CONFIG_KEYS = tuple(
+	key for key in DEFAULTS
+	if key != "low_risk_mode"
+)
+_AVAILABLE_CONFIG_MESSAGE = f"可用项: {', '.join(sorted(_PUBLIC_CONFIG_KEYS))}"
+
 
 @click.group("config", invoke_without_command=True)
 @click.pass_context
@@ -28,7 +34,7 @@ def config_list_cmd(ctx: click.Context) -> None:
 	config_path = ctx.obj["data_dir"] / "config.json"
 
 	items = []
-	for key in sorted(DEFAULTS):
+	for key in sorted(_PUBLIC_CONFIG_KEYS):
 		default_val = DEFAULTS[key]
 		current_val = cfg.get(key, default_val)
 		is_custom = key in _load_user_overrides(config_path)
@@ -70,12 +76,12 @@ def config_list_cmd(ctx: click.Context) -> None:
 def config_get_cmd(ctx: click.Context, key: str) -> None:
 	"""查看单个配置项的值。"""
 	cfg = ctx.obj["config"]
-	if key not in DEFAULTS:
+	if key not in _PUBLIC_CONFIG_KEYS:
 		from boss_agent_cli.output import emit_error
 		emit_error(
 			"config",
 			code="INVALID_PARAM",
-			message=f"未知配置项: {key}，可用项: {', '.join(sorted(DEFAULTS))}",
+			message=f"未知配置项。{_AVAILABLE_CONFIG_MESSAGE}",
 		)
 		ctx.exit(1)
 		return
@@ -94,12 +100,12 @@ def config_get_cmd(ctx: click.Context, key: str) -> None:
 @click.pass_context
 def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 	"""修改配置项。"""
-	if key not in DEFAULTS:
+	if key not in _PUBLIC_CONFIG_KEYS:
 		from boss_agent_cli.output import emit_error
 		emit_error(
 			"config",
 			code="INVALID_PARAM",
-			message=f"未知配置项: {key}，可用项: {', '.join(sorted(DEFAULTS))}",
+			message=f"未知配置项。{_AVAILABLE_CONFIG_MESSAGE}",
 		)
 		ctx.exit(1)
 		return
@@ -120,12 +126,12 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 @click.pass_context
 def config_reset_cmd(ctx: click.Context, key: str) -> None:
 	"""将配置项恢复为默认值。"""
-	if key not in DEFAULTS:
+	if key not in _PUBLIC_CONFIG_KEYS:
 		from boss_agent_cli.output import emit_error
 		emit_error(
 			"config",
 			code="INVALID_PARAM",
-			message=f"未知配置项: {key}，可用项: {', '.join(sorted(DEFAULTS))}",
+			message=f"未知配置项。{_AVAILABLE_CONFIG_MESSAGE}",
 		)
 		ctx.exit(1)
 		return

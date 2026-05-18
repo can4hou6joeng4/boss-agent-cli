@@ -2,6 +2,7 @@
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output
 
@@ -23,6 +24,9 @@ from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, 
 @handle_auth_errors("recruiter-candidates")
 def candidates_cmd(ctx: click.Context, query: str, city: str | None, job_id: str | None, experience: str | None, degree: str | None, age: str | None, school_level: str | None, activeness: str | None, source: str | None, salary: str | None, select: bool, page: int) -> None:
 	"""搜索候选人"""
+	if not require_compliance_allowed(ctx, "recruiter-candidates"):
+		return
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 

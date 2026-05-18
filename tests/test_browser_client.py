@@ -168,7 +168,7 @@ def test_close_is_idempotent_when_headless_resources_are_partial_and_raise():
 
 
 def test_try_connect_reuses_existing_context():
-	"""CDP 连接应复用用户现有 context（规避 automation 检测）"""
+	"""CDP 连接应复用用户现有 context，避免创建额外浏览器状态。"""
 	session = BrowserSession(cookies={}, user_agent="")
 	session._pw = MagicMock()
 

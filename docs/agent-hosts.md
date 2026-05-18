@@ -5,7 +5,7 @@
 当前示例覆盖的 CLI 基线：
 - 通过 `boss schema` 做能力发现
 - 通过 `boss status` 确认登录态
-- 通过 `boss search` / `boss detail` / `boss greet` 跑通最小行动闭环
+- 通过 `boss search` / `boss detail` / `boss shortlist` 跑通低风险本地整理闭环
 - 通过 JSON 信封读取 `ok`、`data`、`error.code`、`error.recovery_action`
 
 ## 示例列表
