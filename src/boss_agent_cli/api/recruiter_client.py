@@ -242,6 +242,8 @@ class BossRecruiterClient:
 
 	def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
 		"""httpx request with retry loop."""
+		# extra_headers overrides yaml-driven defaults from _headers_for(url); use only when
+		# a static yaml referer can't carry per-call query params (e.g. job/edit needs encryptId).
 		extra_headers_override: dict[str, str] = kwargs.pop("extra_headers", {})
 		for attempt in range(_MAX_RETRIES + 1):
 			client = self._get_client()
