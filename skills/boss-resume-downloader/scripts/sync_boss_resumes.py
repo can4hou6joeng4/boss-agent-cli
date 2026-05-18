@@ -751,16 +751,16 @@ def build_parser() -> argparse.ArgumentParser:
     sub_all = sub.add_parser("sync-all", help="Incrementally sync resumes for all online jobs.")
     sub_all.add_argument("--force", action="store_true", help="Re-download candidates already marked downloaded.")
     sub_all.add_argument("--dry-run", action="store_true", help="Resolve candidates without downloading resumes.")
-    sub_all.add_argument("--max-downloads-per-run", type=int, default=100, help="Hard cap on resume downloads across the entire run. Default: 100.")
-    sub_all.add_argument("--max-downloads-per-job", type=int, default=50, help="Hard cap on resume downloads within a single job. Default: 50.")
+    sub_all.add_argument("--max-downloads-per-run", type=int, default=20, help="Hard cap on resume downloads across the entire run. Default: 20.")
+    sub_all.add_argument("--max-downloads-per-job", type=int, default=10, help="Hard cap on resume downloads within a single job. Default: 10.")
     sub_all.set_defaults(func=command_sync_all)
 
     sub_job = sub.add_parser("sync-job", help="Incrementally sync one job by numeric or encrypted job ID.")
     sub_job.add_argument("--job-id", required=True, help="Numeric jobId or encryptJobId from job_index.json.")
     sub_job.add_argument("--force", action="store_true", help="Re-download candidates already marked downloaded.")
     sub_job.add_argument("--dry-run", action="store_true", help="Resolve candidates without downloading resumes.")
-    sub_job.add_argument("--max-downloads-per-run", type=int, default=100, help="Hard cap on resume downloads for this run. Default: 100.")
-    sub_job.add_argument("--max-downloads-per-job", type=int, default=50, help="Hard cap on resume downloads within the job. Default: 50.")
+    sub_job.add_argument("--max-downloads-per-run", type=int, default=20, help="Hard cap on resume downloads for this run. Default: 20.")
+    sub_job.add_argument("--max-downloads-per-job", type=int, default=10, help="Hard cap on resume downloads within the job. Default: 10.")
     sub_job.set_defaults(func=command_sync_job)
 
     return parser

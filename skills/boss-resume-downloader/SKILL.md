@@ -284,17 +284,17 @@ python "${SKILL_DIR}/scripts/sync_boss_resumes.py" refresh-jobs
 # Dry run without downloading resumes
 python "${SKILL_DIR}/scripts/sync_boss_resumes.py" sync-all --dry-run
 
-# Override per-run / per-job download caps (defaults: 400 per run, 80 per job)
+# Override per-run / per-job download caps (defaults: 20 per run, 10 per job)
 python "${SKILL_DIR}/scripts/sync_boss_resumes.py" sync-all \
-  --max-downloads-per-run 400 --max-downloads-per-job 80
+  --max-downloads-per-run 50 --max-downloads-per-job 20
 ```
 
 The script enforces conservative download caps **by default** so a single run cannot perform a bulk-access pattern even when many new candidates have accumulated:
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--max-downloads-per-run` | 400 | Hard cap on resume downloads across the entire run. When reached, the run stops cleanly (current job is finalized then no more jobs are processed). |
-| `--max-downloads-per-job` | 80 | Hard cap on resume downloads within a single job. When reached, that job's candidate loop ends cleanly and the run moves to the next job. |
+| `--max-downloads-per-run` | 20 | Hard cap on resume downloads across the entire run. When reached, the run stops cleanly (current job is finalized then no more jobs are processed). |
+| `--max-downloads-per-job` | 10 | Hard cap on resume downloads within a single job. When reached, that job's candidate loop ends cleanly and the run moves to the next job. |
 
 When a cap is hit, the run still exits with `ok: true`; the summary's `stopped_due_to_limit` field is set (`"run"`, `"job"`, or `null`) so the operator knows work remains and the next scheduled run will pick up where this one stopped.
 
