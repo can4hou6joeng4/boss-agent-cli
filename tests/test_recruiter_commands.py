@@ -169,6 +169,31 @@ def test_recruiter_chat_enriches_last_message_summary(mock_auth_cls, mock_platfo
 
 @patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
+def test_recruiter_chat_supports_list_data_payload(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.friend_list.return_value = {
+		"code": 200,
+		"data": [{"friendId": 12345, "name": "候选人B"}],
+	}
+	mock_platform.last_messages.return_value = {
+		"code": 200,
+		"data": {
+			"lastMessageList": [{
+				"friendId": 12345,
+				"lastMsg": "您好",
+				"lastMessageInfo": {"status": 1},
+			}],
+		},
+	}
+	result = _invoke("hr", "chat", "--label-id", "2")
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["data"]["friendList"][0]["name"] == "候选人B"
+	assert parsed["data"]["friendList"][0]["last_msg"] == "您好"
+
+
+@patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
 def test_recruiter_chatmsg_returns_history_envelope(mock_auth_cls, mock_platform_cls):
 	mock_platform = _ctx_mock(mock_platform_cls)
 	mock_platform.chat_history.return_value = {

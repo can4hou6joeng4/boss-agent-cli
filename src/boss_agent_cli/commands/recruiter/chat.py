@@ -34,11 +34,29 @@ def _friend_id_for(item: dict[str, Any]) -> int | None:
 	return None
 
 
-def _message_items(data: dict[str, Any]) -> list[dict[str, Any]]:
+def _list_dict_items(value: Any) -> list[dict[str, Any]]:
+	if isinstance(value, list):
+		return [item for item in value if isinstance(item, dict)]
+	return []
+
+
+def _friend_data(data: Any) -> dict[str, Any]:
+	if isinstance(data, dict):
+		return data
+	if isinstance(data, list):
+		return {"friendList": _list_dict_items(data)}
+	return {}
+
+
+def _message_items(data: Any) -> list[dict[str, Any]]:
+	if isinstance(data, list):
+		return _list_dict_items(data)
+	if not isinstance(data, dict):
+		return []
 	for key in ("lastMessageList", "messages", "messageList", "result", "friendList", "list"):
 		value = data.get(key)
 		if isinstance(value, list):
-			return [item for item in value if isinstance(item, dict)]
+			return _list_dict_items(value)
 	return []
 
 
@@ -92,11 +110,15 @@ def _merge_last_messages(friend_items: list[dict[str, Any]], message_items: list
 		item.update({key: value for key, value in message.items() if key != "friendId"})
 
 
-def _friend_items(data: dict[str, Any]) -> list[dict[str, Any]]:
+def _friend_items(data: Any) -> list[dict[str, Any]]:
+	if isinstance(data, list):
+		return _list_dict_items(data)
+	if not isinstance(data, dict):
+		return []
 	for key in ("friendList", "result", "list"):
 		value = data.get(key)
 		if isinstance(value, list):
-			return [item for item in value if isinstance(item, dict)]
+			return _list_dict_items(value)
 	return []
 
 
@@ -113,7 +135,7 @@ def _fetch_friend_ids(platform: Any, *, page: int, label_id: int, job_id: str | 
 	result = platform.friend_list(page=page, label_id=label_id, job_id=job_id)
 	if not platform.is_success(result):
 		return [], result
-	data = platform.unwrap_data(result) or {}
+	data = _friend_data(platform.unwrap_data(result))
 	return _friend_ids_from_items(_friend_items(data)), None
 
 
@@ -145,7 +167,7 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 				recovery_action=recovery_action,
 			)
 			return
-		data = platform.unwrap_data(result) or {}
+		data = _friend_data(platform.unwrap_data(result))
 		friend_items = _friend_items(data)
 		friend_ids = _friend_ids_from_items(friend_items)
 		if friend_ids:
