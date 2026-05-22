@@ -1,241 +1,112 @@
 # boss-agent-cli
 
-> AI Agent 专用的 BOSS 直聘本地辅助 CLI 工具 — 34 个顶层命令，默认低风险模式聚焦本地辅助、只读优先、用户主动触发，不做自动触达、批量操作或平台数据抓取。
+> AI Agent 专用的 BOSS 直聘本地辅助 CLI。默认低风险模式只做本地辅助、只读优先、用户主动触发，不自动触达、不批量操作、不抓取平台数据。
 
 ## Install
 
-### Skills CLI (Recommended)
+### Skills CLI
 
 ```bash
 npx skills add can4hou6joeng4/boss-agent-cli
 ```
 
-### pip / uv tool
+### CLI
 
 ```bash
 uv tool install boss-agent-cli
-patchright install chromium
+patchright install chromium  # only needed for browser-assisted login
 ```
 
-## Setup
+## First Minute
+
+按这个顺序跑，不需要先读完整 README：
 
 ```bash
-boss login     # 用户主动登录；兼容 Cookie / CDP / QR / patchright，不用于规避风控
-boss status    # 验证登录态
+boss doctor
+boss schema
+boss status
+boss login   # only if status reports AUTH_REQUIRED / AUTH_EXPIRED
 ```
 
-## Agent Decision Tree
+完成标准：
 
-```
-用户意图 → 选择命令链
-│
-├─ "帮我找工作"
-│   → boss status → boss search "关键词" --city X --welfare "Y"
-│   → boss detail <sid> → 回到平台官网由用户手动投递或沟通
-│
-├─ "有什么新职位？"
-│   → boss search "关键词" --city X
-│   → boss show <编号>
-│
-├─ "我的求职进展怎样？"
-│   → boss shortlist list → boss stats
-│
-├─ "帮我优化简历"
-│   → boss ai analyze-jd → boss ai polish → boss ai optimize
-│
-├─ "查看沟通记录"
-│   → 默认低风险模式阻断平台会话读取；回到平台官网手动查看
-│
-├─ "登录/环境有问题"
-│   → boss doctor → boss login
-│
-└─ "不知道能做什么"
-    → boss schema  (返回全部能力 JSON)
-```
+- `boss doctor` 返回 `ok=true`，或给出可执行的 `error.recovery_action`。
+- `boss schema` 返回当前命令、参数、平台和错误码自描述。
+- `boss status` 返回当前登录态；未登录时由用户主动执行 `boss login`。
 
-## Commands
+## Safe Candidate Loop
 
-当前 `boss schema` 暴露：
-- **34 个顶层命令**
-- **`hr` 下 9 个一级招聘者子命令（敏感候选人数据链路默认阻断）**
-
-### Recruiter Workflow
-
-| Command | Description |
-|---------|-------------|
-| `boss hr applications` | 查看候选人投递申请 |
-| `boss hr candidates <keyword>` | 搜索候选人 |
-| `boss hr chat` | 招聘者沟通列表 |
-| `boss hr resume` | 查看/请求候选人简历 |
-| `boss hr reply <friend_id> <message>` | 回复候选人消息 |
-| `boss hr request-resume <friend_id> --job-id <id>` | 请求候选人附件简历 |
-| `boss hr jobs list/online/offline` | 职位列表与上下线管理 |
-
-### Discovery & Auth
-
-| Command | Description |
-|---------|-------------|
-| `boss schema` | 返回全部命令的 JSON 自描述（Agent 首先调用，可加 `--format mcp` 直出 Model Context Protocol 工具集） |
-| `boss login` | 四级降级登录（Cookie → CDP → QR httpx → patchright） |
-| `boss logout` | 退出登录 |
-| `boss status` | 检查登录态 |
-| `boss doctor` | 诊断环境、依赖、凭据完整性、网络连通性（含智联端点跨平台探针） |
-| `boss me` | 个人信息/简历/求职期望/投递记录 |
-
-### Job Search
-
-| Command | Description |
-|---------|-------------|
-| `boss search <query>` | 搜索职位（8 维筛选：城市/薪资/经验/学历/规模/行业/融资/福利） |
-| `boss recommend` | 受限：默认低风险模式阻断，避免自动读取推荐流 |
-| `boss detail <security_id>` | 职位详情（`--job-id` 走快速通道） |
-| `boss show <#>` | 按编号查看上次搜索结果 |
-| `boss cities` | 40 个支持城市 |
-
-### Job Actions
-
-| Command | Description |
-|---------|-------------|
-| `boss greet <sid> <jid>` | 受限：默认低风险模式阻断，回到平台官网手动完成 |
-| `boss batch-greet <query>` | 受限：默认低风险模式阻断，避免批量触达 |
-| `boss apply <sid> <jid>` | 受限：默认低风险模式阻断，回到平台官网手动完成 |
-| `boss exchange <sid>` | 受限：默认低风险模式阻断，涉及个人信息处理 |
-
-### Communication
-
-| Command | Description |
-|---------|-------------|
-| `boss chat` | 受限：默认低风险模式阻断，涉及会话数据 |
-| `boss chatmsg <sid>` | 受限：默认低风险模式阻断，涉及通信内容 |
-| `boss chat-summary <sid>` | 受限：默认低风险模式阻断，依赖通信内容 |
-| `boss mark <sid> --label X` | 受限：默认低风险模式阻断，涉及平台关系写入 |
-| `boss interviews` | 面试邀请 |
-| `boss history` | 浏览历史 |
-
-### Pipeline & Monitoring
-
-| Command | Description |
-|---------|-------------|
-| `boss pipeline` | 受限：默认低风险模式阻断，依赖会话/面试数据 |
-| `boss follow-up` | 受限：默认低风险模式阻断，依赖会话/面试数据 |
-| `boss digest` | 受限：默认低风险模式阻断，依赖会话/面试数据 |
-| `boss watch add/list/remove/run` | add/list/remove 为本地预设；run 默认阻断，避免自动增量拉取平台数据 |
-| `boss shortlist add/list/remove` | 候选池 |
-| `boss preset add/list/remove` | 搜索预设 |
-
-### Resume & AI
-
-| Command | Description |
-|---------|-------------|
-| `boss resume init/list/show/edit/delete/export/import/clone/diff` | 本地简历管理 |
-| `boss ai config` | 配置 AI 服务（OpenAI / Anthropic / 兼容 API） |
-| `boss ai analyze-jd` | 分析岗位要求 |
-| `boss ai polish` | 润色简历 |
-| `boss ai optimize` | 针对岗位优化简历 |
-| `boss ai suggest` | 求职建议 |
-| `boss ai reply` | 招聘者消息回复草稿 |
-| `boss ai interview-prep` | 基于 JD 生成模拟面试题 |
-| `boss ai chat-coach` | 基于聊天记录给沟通建议 |
-
-### System
-
-| Command | Description |
-|---------|-------------|
-| `boss config list/set/reset` | 配置管理 |
-| `boss clean` | 清理缓存 |
-| `boss export <query>` | 导出搜索结果（CSV/JSON） |
-
-## Agent Usage
-
-### Step 1: Discover capabilities
+求职者侧默认只推荐这个低风险闭环：
 
 ```bash
 boss schema
+boss search "Golang" --city 广州 --welfare "双休,五险一金"
+boss detail <security_id>
+boss shortlist add <security_id> <job_id>
 ```
 
-Returns a JSON envelope describing all 34 top-level commands, the `hr` recruiter command group, parameters, error codes, and output conventions.
+规则：
 
-### Step 2: Check auth, then act
+- 先调用 `boss schema`，不要硬编码完整命令表。
+- 只解析 stdout 的 JSON 信封；stderr 只当日志和进度信息。
+- `ok=false` 时读取 `error.code` 和 `error.recovery_action`，不要猜测恢复步骤。
+- `--welfare` 是核心筛选能力，适合用于低风险职位搜索和本地整理。
+- 投递、打招呼、沟通、交换联系方式等动作回到平台官网由用户手动完成。
+
+## Recruiter Boundary
+
+招聘者侧默认只保留低风险职位管理入口：
 
 ```bash
-boss status                                        # Check auth
-boss search "golang" --city 杭州 --welfare "双休"    # Search with welfare filter
-boss detail <security_id> --job-id <id>            # View details (fast path)
-boss shortlist add <security_id> <job_id>          # Organize locally
-# 投递、沟通、候选人处理请回到平台官网由用户手动完成
+boss schema
+boss hr jobs list
+boss hr jobs online <job_id>
+boss hr jobs offline <job_id>
 ```
 
-### Step 3: Parse output
+候选人搜索、投递申请、在线简历、附件简历、聊天记录、消息回复、联系方式交换等链路涉及个人信息或平台关系写入，默认低风险模式会返回 `COMPLIANCE_BLOCKED`。遇到这类结果时，停止自动化，回到官方页面由用户手动处理。
 
-All commands output structured JSON to stdout:
+## Output Contract
+
+所有命令都遵守同一 stdout JSON 信封：
 
 ```json
 {
   "ok": true,
   "schema_version": "1.0",
   "command": "search",
-  "data": [...],
-  "pagination": {"page": 1, "has_more": true},
+  "data": [],
+  "pagination": null,
   "error": null,
-  "hints": {"next_actions": ["boss detail <sid>"]}
+  "hints": {}
 }
 ```
 
-- `ok: true` → exit code 0, `data` contains results
-- `ok: false` → exit code 1, `error.code` + `error.recovery_action` for auto-recovery
-- `hints.next_actions` → suggested next commands for the Agent to follow
+- `stdout`: 只输出 JSON 信封。
+- `stderr`: 只输出日志和进度，受 `--log-level` 控制。
+- exit code `0`: `ok=true`。
+- exit code `1`: `ok=false`，必须读取 `error.code`、`error.recoverable`、`error.recovery_action`。
 
-### Error Recovery
+## Recovery
 
-| Error Code | Recoverable | Action |
-|-----------|-------------|--------|
-| AUTH_REQUIRED | Yes | `boss login` |
-| AUTH_EXPIRED | Yes | `boss login` |
-| TOKEN_REFRESH_FAILED | Yes | `boss login` |
-| RATE_LIMITED | Yes | Wait and retry |
-| ACCOUNT_RISK | No | Stop automation and use the official website manually |
-| NETWORK_ERROR | Yes | Retry |
-| AI_NOT_CONFIGURED | Yes | `boss ai config` |
-| AI_API_ERROR | Yes | Retry |
-| AI_PARSE_ERROR | Yes | Retry |
-| EXPORT_FAILED | Yes | Check dependencies |
-| JOB_NOT_FOUND | No | — |
-| COMPLIANCE_BLOCKED | No | Use local/read-only commands or complete manually on the official website |
-| ALREADY_GREETED | No | Skip |
-| ALREADY_APPLIED | No | Skip |
-| GREET_LIMIT | No | Inform user |
-| INVALID_PARAM | No | Fix parameters |
-| RESUME_NOT_FOUND | No | Check name |
-| RESUME_ALREADY_EXISTS | No | Use different name |
+优先按错误信封恢复：
 
-## Output Conventions
+| Error code | Agent action |
+|---|---|
+| `AUTH_REQUIRED` / `AUTH_EXPIRED` / `TOKEN_REFRESH_FAILED` | 让用户主动执行 `boss login`，然后再跑 `boss status` |
+| `RATE_LIMITED` / `NETWORK_ERROR` | 等待后按 `recovery_action` 重试 |
+| `INVALID_PARAM` | 修正参数后重试，例如城市、页码、福利关键词 |
+| `AI_NOT_CONFIGURED` / `AI_API_ERROR` / `AI_PARSE_ERROR` | 按 `recovery_action` 配置或重试 AI 能力 |
+| `ACCOUNT_RISK` / `COMPLIANCE_BLOCKED` | 停止自动化，使用平台官网或官方页面手动完成 |
 
-- **stdout**: JSON only (structured envelope)
-- **stderr**: Logs and progress (controlled by `--log-level`)
-- **exit 0**: Success (`ok: true`)
-- **exit 1**: Failure (`ok: false`)
-
-## Welfare Filter (Core Feature)
-
-`--welfare "双休,五险一金"` triggers deep inspection:
-1. Check job's welfare tags first
-2. If tags don't match, fetch full job description and search
-3. Auto-paginate (up to 5 pages)
-4. Each result includes `welfare_match` field explaining the match source
-
-Keywords: `双休` `五险一金` `年终奖` `餐补` `住房补贴` `定期体检` `股票期权` `加班补助` `带薪年假`
-
-## Requirements
-
-- Python >= 3.10
-- patchright + Chromium (for login; QR httpx mode works without browser)
-- macOS / Linux / Windows
+不要把登录降级、浏览器通道或 CDP 当作规避风控的手段。
 
 ## Docs
 
 - [Agent Quickstart](docs/agent-quickstart.md)
 - [Agent Host Examples](docs/agent-hosts.md)
 - [Capability Matrix](docs/capability-matrix.md)
+- [README](README.md)
 
 ## License
 
