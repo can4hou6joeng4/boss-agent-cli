@@ -102,7 +102,7 @@ $ boss ai reply "Are you available for a call this week?" \
 
 ### Engineering stats (for the skeptics)
 
-- 1119 pytest tests, roughly 86% line coverage
+- 1315 pytest tests, roughly 86% line coverage
 - CI matrix across Python 3.10 / 3.11 / 3.12 / 3.13
 - Ruff lint + pre-commit hooks
 - Drift-detection meta-test: schema ↔ main.py registration must stay aligned

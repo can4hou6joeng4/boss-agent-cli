@@ -52,7 +52,7 @@
 
 - [x] README 双语（中文 + 英文）
 - [x] MIT License
-- [x] CI 全绿 + **1119 测试**
+- [x] CI 全绿 + **1315 测试**
 - [x] 发布到 PyPI（`pip install boss-agent-cli`，当前 latest release 1.11.0）
 - [x] GitHub Release 规范（latest release 1.11.0 已发）
 - [x] CHANGELOG 完整
@@ -86,7 +86,7 @@
 3. "`boss ai interview-prep` — 把 JD 扔进 AI，秒出 10 道模拟面试题"
 4. "你只负责描述期望，AI Agent 负责搜、聊、投、跟进"
 5. "MIT License，本地加密存储，数据不出机"
-6. "1119 测试、49 个 MCP 工具、下游 Python 嵌入零学习成本"
+6. "1315 测试、49 个 MCP 工具、下游 Python 嵌入零学习成本"
 
 ## 实际投稿记录 & 渠道约束（2026-04-28 更新）
 

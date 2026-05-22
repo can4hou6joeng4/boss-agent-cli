@@ -120,7 +120,7 @@ $ boss ai reply "您什么时候方便聊一下？" --resume my-cv --tone 简洁
 
 ### 5. 工程细节（给较真的同学）
 
-- **测试**：pytest 1119 用例 / 覆盖率约 86% / 四个 Python 版本矩阵
+- **测试**：pytest 1315 用例 / 覆盖率约 86% / 四个 Python 版本矩阵
 - **防漂移**：元测试校验 main.py 注册命令与 schema 一致，新增命令不同步就挂 CI
 - **质量门禁**：ruff check + pre-commit 本地钩子
 - **发版**：SemVer + CHANGELOG + GitHub Release + PyPI 双通道
