@@ -19,7 +19,6 @@ from __future__ import annotations
 import atexit
 from html.parser import HTMLParser
 import random
-import sys
 import time
 import weakref
 from types import TracebackType
@@ -27,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from boss_agent_cli.api.httpx_helpers import browser_headers, merge_response_cookies, referer_header
 from boss_agent_cli.api.throttle import RequestThrottle
 
 if TYPE_CHECKING:
@@ -117,17 +117,7 @@ class ZhilianClient:
 	def _get_client(self) -> httpx.Client:
 		if self._client is None:
 			token = self._auth.get_token()
-			headers = dict(_DEFAULT_HEADERS)
-			if ua := token.get("user_agent"):
-				headers["User-Agent"] = str(ua)
-			if client_id := token.get("x_zp_client_id") or token.get("client_id"):
-				headers["x-zp-client-id"] = str(client_id)
-			if sys.platform == "win32":
-				headers["sec-ch-ua-platform"] = '"Windows"'
-			elif sys.platform == "linux":
-				headers["sec-ch-ua-platform"] = '"Linux"'
-			else:
-				headers["sec-ch-ua-platform"] = '"macOS"'
+			headers = browser_headers(_DEFAULT_HEADERS, token, include_client_id=True, default_platform="macOS")
 			self._client = httpx.Client(
 				cookies=token.get("cookies", {}),
 				headers=headers,
@@ -137,7 +127,7 @@ class ZhilianClient:
 		return self._client
 
 	def _headers_for(self, url: str) -> dict[str, str]:
-		return {"Referer": _REFERER_MAP.get(url, "https://www.zhaopin.com/")}
+		return referer_header(url, _REFERER_MAP, "https://www.zhaopin.com/")
 
 	def _fetch_csrf_token(self) -> str:
 		for attempt in range(_MAX_RETRIES + 1):
@@ -167,9 +157,7 @@ class ZhilianClient:
 		raise RuntimeError("智联 csrf-token 获取失败，已达最大重试次数")
 
 	def _merge_cookies(self, resp: httpx.Response) -> None:
-		for name, value in resp.cookies.items():
-			if value:
-				self._get_client().cookies.set(name, value)
+		merge_response_cookies(self._get_client(), resp)
 
 	def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
 		for attempt in range(_MAX_RETRIES + 1):

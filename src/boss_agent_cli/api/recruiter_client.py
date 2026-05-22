@@ -14,6 +14,12 @@ from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
+from boss_agent_cli.api.httpx_helpers import (
+	add_stoken_to_get_params,
+	browser_headers,
+	merge_response_cookies,
+	referer_header,
+)
 from boss_agent_cli.api import recruiter_endpoints as ep
 from boss_agent_cli.api.throttle import RequestThrottle
 
@@ -199,15 +205,7 @@ class BossRecruiterClient:
 	def _get_client(self) -> httpx.Client:
 		if self._client is None:
 			token = self._auth.get_token()
-			headers = dict(ep.DEFAULT_HEADERS)
-			if ua := token.get("user_agent"):
-				headers["User-Agent"] = ua
-			import sys
-
-			if sys.platform == "win32":
-				headers["sec-ch-ua-platform"] = '"Windows"'
-			elif sys.platform == "linux":
-				headers["sec-ch-ua-platform"] = '"Linux"'
+			headers = browser_headers(ep.DEFAULT_HEADERS, token)
 			self._client = httpx.Client(
 				base_url=ep.BASE_URL,
 				cookies=token.get("cookies", {}),
@@ -232,13 +230,10 @@ class BossRecruiterClient:
 		return self._browser_session
 
 	def _headers_for(self, url: str) -> dict[str, str]:
-		referer = ep.REFERER_MAP.get(url, f"{ep.BASE_URL}/")
-		return {"Referer": referer}
+		return referer_header(url, ep.REFERER_MAP, f"{ep.BASE_URL}/")
 
 	def _merge_cookies(self, resp: httpx.Response) -> None:
-		for name, value in resp.cookies.items():
-			if value:
-				self._get_client().cookies.set(name, value)
+		merge_response_cookies(self._get_client(), resp)
 
 	def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
 		"""httpx request with retry loop."""
@@ -250,10 +245,7 @@ class BossRecruiterClient:
 			token = self._auth.get_token()
 			stoken = token.get("stoken", "")
 
-			if method == "GET":
-				params = kwargs.get("params", {})
-				params["__zp_stoken__"] = stoken
-				kwargs["params"] = params
+			add_stoken_to_get_params(method, kwargs, stoken)
 
 			self._throttle.wait()
 
