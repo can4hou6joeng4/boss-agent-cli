@@ -102,6 +102,27 @@ def handle_error_output(
 		raise SystemExit(1)
 
 
+def handle_platform_error_output(
+	ctx,
+	command: str,
+	platform: Any,
+	response: Any,
+	*,
+	fallback_message: str,
+) -> None:
+	"""Emit a schema-backed error envelope for an unsuccessful platform response."""
+	code, message = platform.parse_error(response)
+	recoverable, recovery_action = error_contract_for_code(code)
+	handle_error_output(
+		ctx,
+		command,
+		code=code,
+		message=message or fallback_message,
+		recoverable=recoverable,
+		recovery_action=recovery_action,
+	)
+
+
 # ── Table builders ──────────────────────────────────────────────────
 
 

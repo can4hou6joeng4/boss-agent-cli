@@ -373,6 +373,26 @@ def test_recruiter_jobs_online_reports_error_when_platform_rejects(mock_auth_cls
 	)
 
 
+@patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.jobs.AuthManager")
+def test_recruiter_jobs_detail_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.job_detail.return_value = {"code": 37, "message": "stoken expired"}
+	mock_platform.is_success.return_value = False
+	mock_platform.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
+	result = _invoke("hr", "jobs", "detail", "enc-job-1")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	_assert_error_contract(
+		parsed,
+		code="TOKEN_REFRESH_FAILED",
+		message="stoken expired",
+		recoverable=True,
+		recovery_action="boss login",
+	)
+
+
 @patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
 def test_recruiter_resume_exchange_supports_data_envelope(mock_auth_cls, mock_platform_cls):

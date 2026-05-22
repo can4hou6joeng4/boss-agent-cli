@@ -3,7 +3,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output
+from boss_agent_cli.display import handle_auth_errors, handle_output, handle_platform_error_output
 
 
 @click.group("jobs")
@@ -25,15 +25,7 @@ def jobs_list_cmd(ctx: click.Context) -> None:
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		result = platform.list_jobs()
 		if not platform.is_success(result):
-			code, message = platform.parse_error(result)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx, "recruiter-jobs-list",
-				code=code,
-				message=message or "职位列表获取失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
+			handle_platform_error_output(ctx, "recruiter-jobs-list", platform, result, fallback_message="职位列表获取失败")
 			return
 		data = platform.unwrap_data(result) or {}
 		handle_output(ctx, "recruiter-jobs-list", data)
@@ -52,15 +44,7 @@ def jobs_offline_cmd(ctx: click.Context, job_id: str) -> None:
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		result = platform.job_offline(job_id)
 		if not platform.is_success(result):
-			code, message = platform.parse_error(result)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx, "recruiter-jobs-offline",
-				code=code,
-				message=message or "职位下线失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
+			handle_platform_error_output(ctx, "recruiter-jobs-offline", platform, result, fallback_message="职位下线失败")
 			return
 		data = {"job_id": job_id, "message": "职位已下线"}
 		handle_output(ctx, "recruiter-jobs-offline", data)
@@ -79,15 +63,7 @@ def jobs_online_cmd(ctx: click.Context, job_id: str) -> None:
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		result = platform.job_online(job_id)
 		if not platform.is_success(result):
-			code, message = platform.parse_error(result)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx, "recruiter-jobs-online",
-				code=code,
-				message=message or "职位上线失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
+			handle_platform_error_output(ctx, "recruiter-jobs-online", platform, result, fallback_message="职位上线失败")
 			return
 		data = {"job_id": job_id, "message": "职位已上线"}
 		handle_output(ctx, "recruiter-jobs-online", data)
@@ -106,15 +82,7 @@ def jobs_detail_cmd(ctx: click.Context, enc_job_id: str) -> None:
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		result = platform.job_detail(enc_job_id)
 		if not platform.is_success(result):
-			code, message = platform.parse_error(result)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx, "recruiter-jobs-detail",
-				code=code,
-				message=message or "职位详情获取失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
+			handle_platform_error_output(ctx, "recruiter-jobs-detail", platform, result, fallback_message="职位详情获取失败")
 			return
 		data = platform.unwrap_data(result) or {}
 		handle_output(ctx, "recruiter-jobs-detail", data)
