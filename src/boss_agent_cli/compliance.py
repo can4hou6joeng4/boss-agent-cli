@@ -39,6 +39,11 @@ _SENSITIVE_COMMANDS = {
 }
 
 
+def low_risk_blocked_commands() -> set[str]:
+	"""Return command identifiers blocked by default low-risk mode."""
+	return set(_SENSITIVE_COMMANDS)
+
+
 def is_low_risk_mode(ctx: click.Context) -> bool:
 	"""Return whether platform-sensitive commands should be blocked by default."""
 	config = ctx.obj.get("config", {}) if ctx and ctx.obj else {}
@@ -77,5 +82,5 @@ def compliance_mode_data(ctx: click.Context) -> dict[str, Any]:
 		"default_boundary": "low_risk_assistance",
 		"sensitive_commands_blocked": is_low_risk_mode(ctx),
 		"description": LOW_RISK_MODE_DESCRIPTION,
-		"blocked_commands": sorted(_SENSITIVE_COMMANDS),
+		"blocked_commands": sorted(low_risk_blocked_commands()),
 	}

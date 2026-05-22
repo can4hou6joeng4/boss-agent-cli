@@ -12,7 +12,11 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from boss_agent_cli.commands.schema import SCHEMA_DATA, _availability_note, _inject_availability
-from boss_agent_cli.compliance import COMPLIANCE_BLOCKED_ACTION, LOW_RISK_MODE_DESCRIPTION
+from boss_agent_cli.compliance import (
+	COMPLIANCE_BLOCKED_ACTION,
+	LOW_RISK_MODE_DESCRIPTION,
+	low_risk_blocked_commands,
+)
 from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
 
 server = Server("boss-agent-cli")
@@ -74,30 +78,32 @@ def _decorate_tool_descriptions() -> None:
 
 # ── Tool 定义 ──────────────────────────────────────────────────────
 
-_LOW_RISK_BLOCKED_TOOLS = {
-	"boss_recommend",
-	"boss_greet",
-	"boss_apply",
-	"boss_batch_greet",
-	"boss_exchange",
-	"boss_chat",
-	"boss_chatmsg",
-	"boss_chat_summary",
-	"boss_mark",
-	"boss_pipeline",
-	"boss_follow_up",
-	"boss_digest",
-	"boss_watch_run",
-	"boss_hr_applications",
-	"boss_hr_candidates",
-	"boss_hr_chat",
-	"boss_hr_chatmsg",
-	"boss_hr_last_messages",
-	"boss_hr_resume",
-	"boss_hr_exchange",
-	"boss_hr_reply",
-	"boss_hr_request_resume",
+_MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES = {
+	"boss_batch_greet": "batch-greet",
+	"boss_chat_summary": "chat-summary",
+	"boss_follow_up": "follow-up",
+	"boss_watch_run": "watch-run",
+	"boss_hr_applications": "recruiter-applications",
+	"boss_hr_candidates": "recruiter-candidates",
+	"boss_hr_chat": "recruiter-chat",
+	"boss_hr_chatmsg": "recruiter-chatmsg",
+	"boss_hr_last_messages": "recruiter-last-messages",
+	"boss_hr_resume": "recruiter-resume",
+	"boss_hr_exchange": "recruiter-resume",
+	"boss_hr_reply": "recruiter-reply",
+	"boss_hr_request_resume": "recruiter-request-resume",
 }
+
+
+def _compliance_command_for_tool(tool_name: str) -> str:
+	"""Map an MCP tool name to the CLI compliance command identifier."""
+	if override := _MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES.get(tool_name):
+		return override
+	return tool_name.removeprefix("boss_").replace("_", "-")
+
+
+def _is_low_risk_blocked_tool(tool_name: str) -> bool:
+	return _compliance_command_for_tool(tool_name) in low_risk_blocked_commands()
 
 TOOLS = [
 	Tool(
@@ -711,6 +717,11 @@ TOOLS = [
 	),
 ]
 
+_LOW_RISK_BLOCKED_TOOLS = {
+	tool.name
+	for tool in TOOLS
+	if _is_low_risk_blocked_tool(tool.name)
+}
 TOOLS = [tool for tool in TOOLS if tool.name not in _LOW_RISK_BLOCKED_TOOLS]
 _decorate_tool_descriptions()
 

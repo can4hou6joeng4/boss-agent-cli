@@ -28,12 +28,16 @@ import server  # noqa: E402
 from server import (  # noqa: E402
 	TOOLS,
 	_build_args,
+	_compliance_command_for_tool,
+	_LOW_RISK_BLOCKED_TOOLS,
+	_tool_availability,
 	_parse_cli_args,
 	_run_boss,
 	_run_http_server,
 	_run_sse_server,
 	run,
 )
+from boss_agent_cli.compliance import low_risk_blocked_commands  # noqa: E402
 
 
 # ── 工具定义完整性 ──────────────────────────────────────────────────
@@ -72,6 +76,12 @@ def test_all_tools_have_input_schema():
 		schema = tool.inputSchema
 		assert isinstance(schema, dict), f"{tool.name} 缺少输入模式"
 		assert schema.get("type") == "object", f"{tool.name} 输入模式类型应为 object"
+
+
+def test_exposed_tools_have_schema_availability_metadata():
+	"""每个暴露的 MCP 工具都必须能回溯到 boss schema 可用性元数据。"""
+	missing = [tool.name for tool in TOOLS if not _tool_availability(tool.name)]
+	assert not missing
 
 
 def test_tool_names_follow_convention():
@@ -120,6 +130,16 @@ def test_sensitive_tools_not_exposed_by_default():
 	assert "boss_pipeline" not in names
 	assert "boss_watch_run" not in names
 	assert "boss_hr_candidates" not in names
+
+
+def test_low_risk_blocked_tools_are_derived_from_compliance_commands():
+	"""MCP 低风险过滤集合必须从 compliance 命令集合派生，避免独立手写漂移。"""
+	blocked_commands = low_risk_blocked_commands()
+	assert _LOW_RISK_BLOCKED_TOOLS
+	for tool_name in _LOW_RISK_BLOCKED_TOOLS:
+		assert _compliance_command_for_tool(tool_name) in blocked_commands
+	assert _compliance_command_for_tool("boss_hr_exchange") == "recruiter-resume"
+	assert _compliance_command_for_tool("boss_watch_run") == "watch-run"
 
 
 # ── 参数构建 ────────────────────────────────────────────────────────
