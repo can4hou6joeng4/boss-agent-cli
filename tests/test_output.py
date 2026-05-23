@@ -41,6 +41,26 @@ def test_envelope_success_with_pagination():
 	assert parsed["data"]["auth"]["security_id"] == "sec_001"
 
 
+def test_redaction_preserves_public_error_code_metadata():
+	result = envelope_success(
+		"schema",
+		{
+			"error_codes": {
+				"TOKEN_REFRESH_FAILED": {
+					"message": "Token 刷新失败",
+					"recoverable": True,
+					"recovery_action": "boss login",
+				},
+			},
+			"real_token": "secret-token",
+		},
+	)
+	parsed = json.loads(result)
+	assert parsed["data"]["error_codes"]["TOKEN_REFRESH_FAILED"]["message"] == "Token 刷新失败"
+	assert parsed["data"]["error_codes"]["TOKEN_REFRESH_FAILED"]["recovery_action"] == "boss login"
+	assert parsed["data"]["real_token"] == "[REDACTED]"
+
+
 def test_envelope_error():
 	result = envelope_error(
 		"search",

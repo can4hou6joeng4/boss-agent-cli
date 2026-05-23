@@ -21,7 +21,7 @@ boss status
 
 Success criteria:
 - `boss doctor` returns `ok=true`
-- `boss status` returns the current authenticated session
+- `boss status` returns layered local login health; use `boss status --live` only when you need an online read-only probe
 - If you are using `zhilian`, pass the platform explicitly: `boss --platform zhilian doctor && boss --platform zhilian login`
 
 If you plan to wire the CLI into an agent host instead of running commands manually in a terminal, start with [Agent Host Examples](agent-hosts.en.md).
@@ -81,6 +81,7 @@ boss status
 
 Common recovery actions:
 - `AUTH_REQUIRED` / `AUTH_EXPIRED` / `TOKEN_REFRESH_FAILED`: run `boss login` again
+- `wt2` present but `stoken` missing: treat it as partial auth; start Chrome with a CDP debugging port and run `boss login --cdp`, or run `boss login` again
 - `RATE_LIMITED`: wait and retry
 - `INVALID_PARAM`: correct the input parameters, such as city, welfare filters, or page number
 

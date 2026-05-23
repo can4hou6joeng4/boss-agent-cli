@@ -161,6 +161,8 @@ def test_auth_logged_in_full(tmp_path):
 	quality = _find_check(parsed["data"]["checks"], "auth_token_quality")
 	assert quality["status"] == "ok"
 	assert "完整" in quality["detail"]
+	stoken_presence = _find_check(parsed["data"]["checks"], "stoken_presence")
+	assert stoken_presence["status"] == "ok"
 
 
 def test_auth_logged_in_no_stoken(tmp_path):
@@ -170,6 +172,10 @@ def test_auth_logged_in_no_stoken(tmp_path):
 	quality = _find_check(parsed["data"]["checks"], "auth_token_quality")
 	assert quality["status"] == "warn"
 	assert "stoken 缺失" in quality["detail"]
+	stoken_presence = _find_check(parsed["data"]["checks"], "stoken_presence")
+	assert stoken_presence["status"] == "warn"
+	assert "CDP" in stoken_presence["recovery_action"]
+	assert parsed["data"]["auth_state"] == "partial"
 
 
 def test_auth_logged_in_no_wt2(tmp_path):
@@ -266,7 +272,9 @@ def test_json_envelope_structure(tmp_path):
 	# data 子字段
 	data = parsed["data"]
 	assert "summary" in data
+	assert "auth_state" in data
 	assert "data_dir" in data
+	assert "live_probe" in data
 	assert "check_count" in data
 	assert "checks" in data
 	assert isinstance(data["checks"], list)
@@ -355,7 +363,7 @@ def test_next_actions_suggests_status_when_logged_in(tmp_path):
 	token = {"cookies": {"wt2": "tok"}, "stoken": "st"}
 	code, parsed = _invoke_doctor(tmp_path, token=token, cdp_ws="ws://x")
 	actions = parsed["hints"]["next_actions"]
-	assert any("boss status" in a for a in actions)
+	assert any("boss status --live" in a for a in actions)
 
 
 # ── Cookie 完整性检查（wbg/zp_at） ─────────────────────────────────
@@ -378,6 +386,80 @@ def test_cookie_completeness_missing_wbg(tmp_path):
 	assert completeness is not None
 	assert completeness["status"] == "warn"
 	assert "wbg" in completeness["detail"]
+
+
+def test_doctor_includes_layered_auth_health_checks(tmp_path):
+	token = {"cookies": {"wt2": "tok"}, "stoken": "stoken_val"}
+	code, parsed = _invoke_doctor(tmp_path, token=token)
+	names = {item["name"] for item in parsed["data"]["checks"]}
+	assert {
+		"credential_file",
+		"cookie_presence",
+		"wt2_presence",
+		"stoken_presence",
+		"stoken_freshness",
+		"candidate_search_health",
+		"candidate_detail_health",
+		"recruiter_read_health",
+	}.issubset(names)
+
+
+def test_doctor_redacts_sensitive_token_values(tmp_path):
+	token = {
+		"cookies": {"wt2": "secret-wt2", "wbg": "secret-wbg", "zp_at": "secret-zp"},
+		"stoken": "secret-stoken",
+		"user_agent": "ua",
+	}
+	code, parsed = _invoke_doctor(tmp_path, token=token, cookie={"cookies": {"wt2": "secret-wt2"}})
+	output = json.dumps(parsed, ensure_ascii=False)
+	assert "secret-wt2" not in output
+	assert "secret-stoken" not in output
+	assert "secret-zp" not in output
+
+
+def test_doctor_marks_zhilian_recruiter_read_unsupported(tmp_path):
+	token = {"cookies": {"zp_token": "tok", "at": "a", "rt": "r"}, "x_zp_client_id": "cid"}
+	code, parsed = _invoke_doctor(tmp_path, platform="zhilian", token=token)
+	recruiter = _find_check(parsed["data"]["checks"], "recruiter_read_health")
+	assert recruiter["status"] == "warn"
+	assert "暂未接入" in recruiter["detail"]
+
+
+@patch("boss_agent_cli.commands.doctor.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.doctor.get_platform_instance")
+def test_doctor_live_probe_adds_readonly_probe_checks(mock_platform_cls, mock_recruiter_cls, tmp_path):
+	paths = _base_patches()
+	runner = CliRunner()
+	with (
+		patch(paths["auth"]) as mock_auth,
+		patch(paths["cdp"]) as mock_cdp,
+		patch(paths["httpx"]) as mock_httpx,
+		patch(paths["cookie"]) as mock_cookie,
+		patch("boss_agent_cli.bridge.client.BridgeClient") as mock_bridge,
+	):
+		mock_bridge.return_value.is_running.return_value = False
+		mock_auth.return_value.check_status.return_value = {"cookies": {"wt2": "tok"}, "stoken": "st"}
+		mock_cdp.return_value = None
+		mock_cookie.return_value = None
+		mock_httpx.return_value = MagicMock(status_code=200)
+
+		platform = mock_platform_cls.return_value
+		platform.__enter__ = lambda self: self
+		platform.__exit__ = lambda self, *a: None
+		platform.user_info.return_value = {"zpData": {"name": "tester"}}
+		platform.is_success.return_value = True
+
+		recruiter = mock_recruiter_cls.return_value
+		recruiter.__enter__ = lambda self: self
+		recruiter.__exit__ = lambda self, *a: None
+		recruiter.list_jobs.return_value = {"zpData": {"list": []}}
+		recruiter.is_success.return_value = True
+
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "doctor", "--live-probe"])
+
+	parsed = json.loads(result.output)
+	assert _find_check(parsed["data"]["checks"], "candidate_live_user_info")["status"] == "ok"
+	assert _find_check(parsed["data"]["checks"], "recruiter_live_read")["status"] == "ok"
 
 
 def test_cookie_completeness_missing_zp_at(tmp_path):

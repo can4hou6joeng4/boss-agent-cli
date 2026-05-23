@@ -246,14 +246,26 @@ SCHEMA_DATA = {
 			},
 		},
 		"status": {
-			"description": "检查当前登录态",
+			"description": "轻量检查当前登录态分层健康状态；默认不请求平台，--live 才执行一次只读在线验证",
 			"args": [],
-			"options": {},
+			"options": {
+				"--live": {
+					"type": "bool",
+					"default": False,
+					"description": "执行一次只读 user_info 在线验证；默认仅检查本地凭据完整性",
+				},
+			},
 		},
 		"doctor": {
-			"description": "诊断本地运行环境、依赖、登录条件和网络连通性",
+			"description": "诊断本地运行环境、依赖、分层认证健康、CDP 可达性和网络连通性；默认不做真实业务探测",
 			"args": [],
-			"options": {},
+			"options": {
+				"--live-probe": {
+					"type": "bool",
+					"default": False,
+					"description": "显式执行低频只读平台探测，用于区分本地凭据完整但接口不可用的状态",
+				},
+			},
 		},
 		"schema": {
 			"description": "返回工具完整能力描述的 JSON",

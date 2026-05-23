@@ -9,42 +9,21 @@ import httpx
 
 from boss_agent_cli.auth.browser import probe_cdp, _DEFAULT_CDP_URL
 from boss_agent_cli.auth.cookie_extract import extract_cookies
+from boss_agent_cli.auth.health import assess_auth_health, auth_config_for_platform
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.display import handle_output, render_simple_list
-
-_PLATFORM_DIAG_CONFIG: dict[str, dict[str, Any]] = {
-	"zhipin": {
-		"auth_dir_suffix": (),
-		"primary_cookie": "wt2",
-		"secondary_token_label": "stoken",
-		"secondary_token_key": "stoken",
-		"aux_cookies": ["wbg", "zp_at"],
-		"cookie_domain_label": "zhipin",
-		"site_url": "https://www.zhipin.com/",
-		"site_host": "zhipin.com",
-		"login_action": "boss login",
-	},
-	"zhilian": {
-		"auth_dir_suffix": ("zhilian",),
-		"primary_cookie": "zp_token",
-		"secondary_token_label": "x-zp-client-id",
-		"secondary_token_key": "x_zp_client_id",
-		"aux_cookies": ["at", "rt"],
-		"cookie_domain_label": "zhaopin",
-		"site_url": "https://www.zhaopin.com/",
-		"site_host": "zhaopin.com",
-		"login_action": "boss --platform zhilian login",
-	},
-}
 
 
 @click.command("doctor")
+@click.option("--live-probe", is_flag=True, default=False, help="执行低频只读平台探测（默认仅做本地诊断）")
 @click.pass_context
-def doctor_cmd(ctx: click.Context) -> None:
+def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 	"""诊断本地运行环境、依赖和登录条件。"""
 	data_dir = ctx.obj["data_dir"]
 	platform_name = ctx.obj.get("platform", "zhipin")
-	config = _PLATFORM_DIAG_CONFIG.get(platform_name, _PLATFORM_DIAG_CONFIG["zhipin"])
+	config = auth_config_for_platform(platform_name)
 	auth = AuthManager(data_dir, platform=platform_name)
 	cdp_url = ctx.obj.get("cdp_url")
 
@@ -110,72 +89,17 @@ def doctor_cmd(ctx: click.Context) -> None:
 	)
 
 	# 2) Auth storage
-	auth_dir = data_dir / "auth"
-	for suffix in config["auth_dir_suffix"]:
-		auth_dir = auth_dir / suffix
-	session_path = auth_dir / "session.enc"
-	salt_path = auth_dir / "salt"
 	token = auth.check_status()
-	has_token = token is not None
-	if token:
-		cookie_count = len(token.get("cookies", {}))
-		secondary_label = config["secondary_token_label"]
-		secondary_key = config["secondary_token_key"]
-		secondary_state = "存在" if token.get(secondary_key) or token.get("stoken") else "缺失"
-		add_check("auth_session", "ok", f"检测到登录态文件: {session_path}（cookies={cookie_count}, {secondary_label}={secondary_state}）")
-	else:
-		status = "warn"
-		detail = "未检测到本地登录态"
-		if session_path.exists():
-			status = "error"
-			detail = f"检测到 session 文件但无法解密/已损坏: {session_path}"
-		add_check("auth_session", status, detail, f"运行 {config['login_action']} 完成登录；如为旧密钥残留，可先 boss logout")
+	auth_health = assess_auth_health(data_dir, platform=platform_name, token=token)
+	has_token = auth_health.token_present
+	checks.extend(auth_health.checks_as_dicts())
 
 	add_check(
 		"auth_salt",
-		"ok" if salt_path.exists() else "warn",
-		f"salt 文件{'存在' if salt_path.exists() else '不存在'}: {salt_path}",
+		"ok" if auth_health.salt_path.exists() else "warn",
+		f"salt 文件{'存在' if auth_health.salt_path.exists() else '不存在'}: {auth_health.salt_path}",
 		"首次保存登录态后会自动生成，可忽略",
 	)
-
-	if token:
-		cookies = token.get("cookies", {}) or {}
-		primary_cookie = config["primary_cookie"]
-		secondary_label = config["secondary_token_label"]
-		secondary_key = config["secondary_token_key"]
-		has_primary_cookie = bool(cookies.get(primary_cookie))
-		has_secondary_token = bool(token.get(secondary_key) or token.get("stoken"))
-		if has_primary_cookie and has_secondary_token:
-			quality_status = "ok"
-			quality_detail = f"登录态完整：{primary_cookie}/{secondary_label} 均存在"
-			quality_hint = "可直接运行 boss status / boss search 验证实际可用性"
-		elif has_primary_cookie and not has_secondary_token:
-			quality_status = "warn"
-			quality_detail = f"登录态部分可用：{primary_cookie} 存在，但 {secondary_label} 缺失"
-			quality_hint = f"通常仍可读信息；若请求失败可先运行 boss status，必要时 {config['login_action']} 触发重建/刷新"
-		elif not has_primary_cookie and has_secondary_token:
-			quality_status = "error"
-			quality_detail = f"登录态异常：{secondary_label} 存在，但关键 Cookie {primary_cookie} 缺失"
-			quality_hint = f"执行 boss logout && {config['login_action']} 重建登录态"
-		else:
-			quality_status = "error"
-			quality_detail = f"登录态无效：{primary_cookie}/{secondary_label} 均缺失"
-			quality_hint = f"执行 {config['login_action']} 建立有效登录态"
-		add_check("auth_token_quality", quality_status, quality_detail, quality_hint)
-		# Cookie 完整性检查（辅助 Cookie）
-		missing_aux = [c for c in config["aux_cookies"] if not cookies.get(c)]
-		if not missing_aux:
-			aux_str = "/".join(config["aux_cookies"])
-			add_check("cookie_completeness", "ok", f"辅助 Cookie 完整：{aux_str} 均存在")
-		else:
-			missing_str = "/".join(missing_aux)
-			add_check(
-				"cookie_completeness", "warn",
-				f"辅助 Cookie 缺失：{missing_str}",
-				f"部分接口可能受影响；重新登录通常可补全：boss logout && {config['login_action']}",
-			)
-	else:
-		add_check("auth_token_quality", "warn", "未检测到可评估的登录态", f"先运行 {config['login_action']}，再用 boss doctor / boss status 复查")
 
 	# 3) Cookie extraction support
 	cookie_probe = extract_cookies(None, platform=platform_name)
@@ -190,8 +114,8 @@ def doctor_cmd(ctx: click.Context) -> None:
 		add_check(
 			"cookie_extract",
 			"warn",
-			f"未从本地浏览器提取到 {config['cookie_domain_label']} Cookie",
-			f"请先在本机浏览器登录 {config['site_host']}，或使用 {config['login_action']}",
+			f"未从本地浏览器提取到 {config.cookie_domain_label} Cookie",
+			f"请先在本机浏览器登录 {config.site_host}，或使用 {config.login_action}",
 		)
 
 	# 4) CDP availability
@@ -218,11 +142,11 @@ def doctor_cmd(ctx: click.Context) -> None:
 
 	# 5) Network probe
 	try:
-		resp = httpx.get(config["site_url"], timeout=5, follow_redirects=True)
+		resp = httpx.get(config.site_url, timeout=5, follow_redirects=True)
 		status = "ok" if resp.status_code < 400 else "warn"
-		add_check("network", status, f"访问 {config['site_host']} 返回 HTTP {resp.status_code}")
+		add_check("network", status, f"访问 {config.site_host} 返回 HTTP {resp.status_code}")
 	except Exception as e:
-		add_check("network", "warn", f"访问 {config['site_host']} 失败: {e}", "检查网络、代理或风控拦截")
+		add_check("network", "warn", f"访问 {config.site_host} 失败: {e}", "检查网络、代理或风控拦截")
 
 	# 5.1) 跨平台网络探针：智联端点连通性（与当前平台无关，便于 Agent 调试 --platform zhilian）
 	try:
@@ -257,10 +181,14 @@ def doctor_cmd(ctx: click.Context) -> None:
 			"如需登录，请使用 boss login；命中风控时停止自动化访问",
 		)
 
+	# 5.6) Optional low-frequency live read probes
+	if live_probe:
+		_add_live_probe_checks(ctx, auth, checks)
+
 	# 6) Data dir writable
 	try:
-		auth_dir.mkdir(parents=True, exist_ok=True)
-		probe_file = auth_dir / ".doctor-write-test"
+		auth_health.auth_dir.mkdir(parents=True, exist_ok=True)
+		probe_file = auth_health.auth_dir / ".doctor-write-test"
 		probe_file.write_text("ok", encoding="utf-8")
 		probe_file.unlink(missing_ok=True)
 		add_check("data_dir", "ok", f"数据目录可写: {data_dir}")
@@ -273,24 +201,26 @@ def doctor_cmd(ctx: click.Context) -> None:
 
 	next_actions = []
 	if not has_token:
-		next_actions.append(f"{config['login_action']} — 建立登录态")
+		next_actions.append(f"{config.login_action} — 建立登录态")
 	else:
 		auth_quality = next((item for item in checks if item["name"] == "auth_token_quality"), None)
 		if auth_quality and auth_quality["status"] == "warn":
-			next_actions.append(f"boss status — 验证缺失 {config['secondary_token_label']} 的登录态是否仍可用")
-			next_actions.append(f"如状态异常，执行 {config['login_action']} — 重建或刷新登录态")
+			next_actions.append(f"boss status --live — 验证缺失 {config.secondary_token_label} 的登录态是否仍可用")
+			next_actions.append(f"如状态异常，执行 {config.login_action} — 重建或刷新登录态")
 		elif auth_quality and auth_quality["status"] == "error":
-			next_actions.append(f"boss logout && {config['login_action']} — 重建损坏的登录态")
+			next_actions.append(f"boss logout && {config.login_action} — 重建损坏的登录态")
 		else:
-			next_actions.append("boss status — 验证当前账号是否可用")
+			next_actions.append("boss status --live — 可选执行一次只读在线验证")
 	if not any(item["name"] == "cdp" and item["status"] == "ok" for item in checks):
 		next_actions.append("boss --cdp-url http://localhost:9222 doctor — 检查指定 CDP 地址")
 	if not any(item["name"] == "cookie_extract" and item["status"] == "ok" for item in checks):
-		next_actions.append(f"先在本机浏览器登录 {config['site_host']}，再重试 {config['login_action']}")
+		next_actions.append(f"先在本机浏览器登录 {config.site_host}，再重试 {config.login_action}")
 
 	data = {
 		"summary": summary,
+		"auth_state": auth_health.auth_state,
 		"data_dir": str(data_dir),
+		"live_probe": live_probe,
 		"check_count": len(checks),
 		"checks": checks,
 	}
@@ -312,3 +242,65 @@ def doctor_cmd(ctx: click.Context) -> None:
 		),
 		hints=hints,
 	)
+
+
+def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[dict[str, Any]]) -> None:
+	"""Run explicit, low-frequency read probes only when requested."""
+	try:
+		with get_platform_instance(ctx, auth) as platform:
+			info = platform.user_info()
+			if platform.is_success(info):
+				checks.append({
+					"name": "candidate_live_user_info",
+					"status": "ok",
+					"detail": "求职者只读 user_info 探测通过",
+				})
+			else:
+				code, message = platform.parse_error(info)
+				checks.append({
+					"name": "candidate_live_user_info",
+					"status": "warn",
+					"detail": f"求职者只读 user_info 探测失败: {code} {message}".strip(),
+					"recovery_action": "按错误码执行恢复；命中风控时停止自动化访问",
+				})
+	except Exception as exc:
+		checks.append({
+			"name": "candidate_live_user_info",
+			"status": "warn",
+			"detail": f"求职者只读 user_info 探测异常: {exc}",
+			"recovery_action": "先运行 boss status 检查本地登录态；命中风控时停止自动化访问",
+		})
+
+	if (ctx.obj or {}).get("platform") == "zhilian":
+		checks.append({
+			"name": "recruiter_live_read",
+			"status": "warn",
+			"detail": "zhilian 招聘者侧暂未接入；跳过招聘者只读探测",
+			"recovery_action": "切换到 boss --platform zhipin --role recruiter doctor",
+		})
+		return
+
+	try:
+		with get_recruiter_platform_instance(ctx, auth) as recruiter:
+			result = recruiter.list_jobs()
+			if recruiter.is_success(result):
+				checks.append({
+					"name": "recruiter_live_read",
+					"status": "ok",
+					"detail": "招聘者职位列表只读探测通过",
+				})
+			else:
+				code, message = recruiter.parse_error(result)
+				checks.append({
+					"name": "recruiter_live_read",
+					"status": "warn",
+					"detail": f"招聘者只读探测失败: {code} {message}".strip(),
+					"recovery_action": "确认当前账号具备招聘者身份；命中风控时停止自动化访问",
+				})
+	except Exception as exc:
+		checks.append({
+			"name": "recruiter_live_read",
+			"status": "warn",
+			"detail": f"招聘者只读探测异常: {exc}",
+			"recovery_action": "确认当前账号具备招聘者身份；zhilian 招聘者侧暂不支持",
+		})

@@ -70,6 +70,8 @@ def test_status_not_logged_in(mock_auth_cls):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "AUTH_REQUIRED"
+	assert parsed["hints"]["auth_health"]["primary_name"] == "wt2"
+	assert parsed["hints"]["auth_health"]["secondary_name"] == "stoken"
 
 
 @patch("boss_agent_cli.commands.status.AuthManager")
@@ -82,17 +84,10 @@ def test_status_not_logged_in_for_zhilian_has_platform_specific_recovery(mock_au
 	assert parsed["error"]["recovery_action"] == "boss --platform zhilian login"
 
 
-@patch("boss_agent_cli.commands.status.get_platform_instance")
 @patch("boss_agent_cli.commands.status.AuthManager")
-def test_status_logged_in_happy_path(mock_auth_cls, mock_client_cls):
-	"""登录成功路径：check_status 返回 token，user_info 返回名字"""
-	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "x"}}
-	mock_client = mock_client_cls.return_value
-	mock_client.__enter__ = lambda self: self
-	mock_client.__exit__ = lambda self, *a: None
-	mock_client.is_success.return_value = True
-	mock_client.user_info.return_value = {"zpData": {"name": "张三"}}
-	mock_client.unwrap_data.return_value = {"name": "张三"}
+def test_status_logged_in_happy_path(mock_auth_cls):
+	"""默认状态检查只读取本地健康状态，不请求平台。"""
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "x"}, "stoken": "s"}
 
 	runner = CliRunner()
 	result = runner.invoke(cli, ["--json", "status"])
@@ -100,14 +95,17 @@ def test_status_logged_in_happy_path(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	assert parsed["data"]["logged_in"] is True
-	assert parsed["data"]["user_name"] == "张三"
+	assert parsed["data"]["live"] is False
+	assert parsed["data"]["auth_state"] == "complete"
+	assert parsed["data"]["user_name"] is None
+	assert "checks" in parsed["data"]
 
 
 @patch("boss_agent_cli.commands.status.get_platform_instance")
 @patch("boss_agent_cli.commands.status.AuthManager")
-def test_status_logged_in_unknown_user(mock_auth_cls, mock_client_cls):
+def test_status_live_logged_in_unknown_user(mock_auth_cls, mock_client_cls):
 	"""user_info 缺失 name 字段时应回退到默认占位"""
-	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "x"}}
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "x"}, "stoken": "s"}
 	mock_client = mock_client_cls.return_value
 	mock_client.__enter__ = lambda self: self
 	mock_client.__exit__ = lambda self, *a: None
@@ -116,16 +114,17 @@ def test_status_logged_in_unknown_user(mock_auth_cls, mock_client_cls):
 	mock_client.unwrap_data.return_value = {}
 
 	runner = CliRunner()
-	result = runner.invoke(cli, ["--json", "status"])
+	result = runner.invoke(cli, ["--json", "status", "--live"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
+	assert parsed["data"]["live"] is True
 	assert parsed["data"]["user_name"] == "未知用户"
 
 
 @patch("boss_agent_cli.commands.status.get_platform_instance")
 @patch("boss_agent_cli.commands.status.AuthManager")
 def test_status_reports_user_info_error(mock_auth_cls, mock_client_cls):
-	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "x"}}
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "x"}, "stoken": "s"}
 	mock_client = mock_client_cls.return_value
 	mock_client.__enter__ = lambda self: self
 	mock_client.__exit__ = lambda self, *a: None
@@ -133,7 +132,7 @@ def test_status_reports_user_info_error(mock_auth_cls, mock_client_cls):
 	mock_client.user_info.return_value = {"code": 37, "message": "stoken expired"}
 	mock_client.parse_error.return_value = ("TOKEN_REFRESH_FAILED", "stoken expired")
 	runner = CliRunner()
-	result = runner.invoke(cli, ["--json", "status"])
+	result = runner.invoke(cli, ["--json", "status", "--live"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
@@ -260,6 +259,8 @@ def test_doctor_command(mock_auth_cls, mock_probe_cdp, mock_httpx_get, mock_extr
 	assert any(item["name"] == "network" for item in parsed["data"]["checks"])
 	assert any(item["name"] == "cookie_extract" for item in parsed["data"]["checks"])
 	assert any(item["name"] == "auth_token_quality" for item in parsed["data"]["checks"])
+	assert any(item["name"] == "credential_file" for item in parsed["data"]["checks"])
+	assert any(item["name"] == "candidate_search_health" for item in parsed["data"]["checks"])
 	assert parsed["hints"]["next_actions"]
 
 

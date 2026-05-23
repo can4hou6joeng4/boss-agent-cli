@@ -21,7 +21,7 @@ boss status
 
 完成标准：
 - `boss doctor` 返回 `ok=true`
-- `boss status` 返回当前登录态
+- `boss status` 返回本地登录态的分层健康状态；如需真实只读验证，显式运行 `boss status --live`
 - 若使用 `zhilian`，请显式带上平台：`boss --platform zhilian doctor && boss --platform zhilian login`
 
 如果你不是直接在终端里手动跑命令，而是准备把它接进 Agent 宿主，先看 [Agent Host Examples](agent-hosts.md) 选择对应接入模板。
@@ -81,6 +81,7 @@ boss status
 
 常见恢复动作：
 - `AUTH_REQUIRED` / `AUTH_EXPIRED` / `TOKEN_REFRESH_FAILED`：重新执行 `boss login`
+- `wt2` 存在但 `stoken` 缺失：通常为部分登录态；使用 Chrome CDP 远程调试端口后运行 `boss login --cdp`，或重新执行 `boss login`
 - `RATE_LIMITED`：等待后重试
 - `INVALID_PARAM`：校正参数（城市、福利、页码等）
 

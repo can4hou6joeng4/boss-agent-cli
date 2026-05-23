@@ -241,7 +241,11 @@ boss schema --format anthropic-tools   # Claude Tool Use API
 If something misbehaves, always start with:
 
 ```bash
-boss doctor   # outputs JSON with 7 diagnostic checks
+boss doctor
+boss status
+# Optional: run an explicit low-frequency read-only live probe
+boss status --live
+boss doctor --live-probe
 ```
 
 <details>
@@ -252,10 +256,15 @@ boss doctor   # outputs JSON with 7 diagnostic checks
 | `python_version` | Python ≥ 3.10 installed |
 | `patchright_chromium` | Chromium installed |
 | `cookie_extract` | Local browser cookies accessible |
+| `credential_file` | Encrypted credential file exists and is readable |
 | `auth_session` | Encrypted session file readable |
+| `cookie_presence` / `wt2_presence` | Cookies and the primary auth cookie are present |
+| `stoken_presence` / `stoken_freshness` | `__zp_stoken__` exists and is likely fresh |
 | `auth_token_quality` | Core tokens (wt2 / stoken) present |
 | `cookie_completeness` | Auxiliary tokens (wbg / zp_at) |
 | `cdp` | Chrome DevTools Protocol reachable |
+| `candidate_search_health` / `candidate_detail_health` | Candidate read-only prerequisites |
+| `recruiter_read_health` | Recruiter read-only prerequisites; Zhaopin recruiter mode is explicitly marked unsupported |
 | `network` | zhipin.com reachable |
 
 </details>
@@ -280,7 +289,7 @@ Stop automated access and return to the official BOSS Zhipin website. Do not ret
 
 ```bash
 # stoken (core session token) expires after ~24h
-# Re-login — auth_token_quality will report the issue
+# Re-login or use Chrome CDP hydration; auth_token_quality will report the issue
 boss logout && boss login
 ```
 

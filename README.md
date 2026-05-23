@@ -491,6 +491,10 @@ boss export --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280
 
 ```bash
 boss doctor
+boss status
+# 可选：执行一次低频只读平台验证
+boss status --live
+boss doctor --live-probe
 ```
 
 | 检查项 | 说明 |
@@ -499,10 +503,15 @@ boss doctor
 | `patchright` | CLI 已安装 |
 | `patchright_chromium` | Chromium 已安装 |
 | `cookie_extract` | 本地浏览器 Cookie 可提取 |
+| `credential_file` | 登录态文件是否存在且可读取 |
 | `auth_session` | 登录态存在且可解密 |
+| `cookie_presence` / `wt2_presence` | Cookie 与核心 Cookie 是否存在 |
+| `stoken_presence` / `stoken_freshness` | `__zp_stoken__` 是否生成、是否可能过期 |
 | `auth_token_quality` | 核心凭据（wt2 / stoken） |
 | `cookie_completeness` | 辅助凭据（wbg / zp_at） |
 | `cdp` | Chrome 调试端口可连 |
+| `candidate_search_health` / `candidate_detail_health` | 求职者只读能力前置条件 |
+| `recruiter_read_health` | 招聘者只读能力前置条件；智联招聘者侧会明确标记暂未接入 |
 | `network` | zhipin.com 可访问 |
 
 <details>
@@ -517,13 +526,16 @@ boss logout && boss login
 
 # CDP 诊断
 boss --cdp-url http://localhost:9222 doctor
+
+# 默认 status 只检查本地凭据；需要真实只读验证时显式加 --live
+boss status --live
 ```
 
 **auth_session 显示"损坏"**：登录态来自旧机器指纹或文件损坏 → `boss logout && boss login`
 
 **auth_token_quality 各状态含义**：
 - `wt2/stoken 均存在`：完整，可正常使用
-- `wt2 存在，stoken 缺失`：部分可用，接口失败时 `boss login` 刷新
+- `wt2 存在，stoken 缺失`：部分可用，通常是二维码或 Cookie 提取只拿到部分登录态；建议以 Chrome CDP 远程调试端口启动浏览器后运行 `boss login --cdp`，或重新执行 `boss login`
 - `wt2 缺失`：无效 → `boss logout && boss login`
 
 </details>

@@ -19,13 +19,27 @@ _SENSITIVE_KEY_PARTS = (
 )
 
 
+def _is_error_code_metadata(value: Any) -> bool:
+	"""Schema error-code metadata is public even when the code contains TOKEN."""
+	if not isinstance(value, dict):
+		return False
+	keys = set(value)
+	return {"message", "recoverable", "recovery_action"}.issubset(keys) and keys.issubset({
+		"message",
+		"recoverable",
+		"recovery_action",
+	})
+
+
 def redact_sensitive(value: Any) -> Any:
 	"""Return a JSON-safe copy with credential-like fields redacted."""
 	if isinstance(value, dict):
 		redacted: dict[Any, Any] = {}
 		for key, item in value.items():
 			key_text = str(key).lower()
-			if any(part in key_text for part in _SENSITIVE_KEY_PARTS) and not isinstance(item, bool):
+			if _is_error_code_metadata(item):
+				redacted[key] = redact_sensitive(item)
+			elif any(part in key_text for part in _SENSITIVE_KEY_PARTS) and not isinstance(item, bool):
 				redacted[key] = _REDACTED
 			else:
 				redacted[key] = redact_sensitive(item)
