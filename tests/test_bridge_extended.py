@@ -166,6 +166,74 @@ def test_client_is_extension_disconnected(mock_get):
 	assert client.is_extension_connected() is False
 
 
+@patch("boss_agent_cli.bridge.client.httpx.get")
+def test_client_diagnose_reports_daemon_disconnected(mock_get):
+	"""daemon 不可用时诊断应给出 daemon 和 extension 恢复动作。"""
+	mock_get.side_effect = ConnectionError("refused")
+	client = BridgeClient()
+	checks = client.diagnose()
+	names = {item["name"] for item in checks}
+	assert {"bridge_daemon", "bridge_extension"} <= names
+	assert next(item for item in checks if item["name"] == "bridge_daemon")["status"] == "warn"
+	assert "19826" in next(item for item in checks if item["name"] == "bridge_daemon")["recovery_action"]
+
+
+@patch("boss_agent_cli.bridge.client.httpx.post")
+@patch("boss_agent_cli.bridge.client.httpx.get")
+def test_client_diagnose_reports_connected_capabilities(mock_get, mock_post):
+	"""扩展连接时诊断应检查协议、workspace、exec 和 fetch。"""
+	mock_get.return_value = MagicMock(
+		status_code=200,
+		json=lambda: {
+			"ok": True,
+			"extensionConnected": True,
+			"extensionVersion": "1.0.0",
+			"pid": 123,
+			"uptime": 7,
+		},
+	)
+	mock_post.side_effect = [
+		MagicMock(json=lambda: {
+			"id": "cmd_x",
+			"ok": True,
+			"data": {"ok": True, "href": "https://www.zhipin.com/web/geek/job", "title": "BOSS"},
+		}),
+		MagicMock(json=lambda: {"id": "cmd_y", "ok": True, "data": {"ok": True}}),
+		MagicMock(json=lambda: {"id": "cmd_z", "ok": True, "data": {"url": "http://127.0.0.1:19826/ping"}}),
+	]
+	client = BridgeClient(max_retries=1)
+	checks = client.diagnose()
+	by_name = {item["name"]: item for item in checks}
+	assert by_name["bridge_daemon"]["status"] == "ok"
+	assert by_name["bridge_extension"]["status"] == "ok"
+	assert by_name["bridge_protocol"]["status"] == "ok"
+	assert by_name["bridge_workspace"]["status"] == "ok"
+	assert by_name["bridge_workspace"]["tab_url"] == "https://www.zhipin.com/web/geek/job"
+	assert by_name["bridge_exec"]["status"] == "ok"
+	assert by_name["bridge_fetch"]["status"] == "ok"
+	assert by_name["bridge_navigate"]["status"] == "ok"
+
+
+@patch("boss_agent_cli.bridge.client.httpx.get")
+def test_client_diagnose_warns_on_protocol_mismatch(mock_get):
+	"""扩展 major 版本不匹配时协议检查应为 warn。"""
+	mock_get.return_value = MagicMock(
+		status_code=200,
+		json=lambda: {
+			"ok": True,
+			"extensionConnected": True,
+			"extensionVersion": "2.0.0",
+			"pid": 123,
+			"uptime": 7,
+		},
+	)
+	client = BridgeClient()
+	checks = client.diagnose(run_probes=False)
+	protocol = next(item for item in checks if item["name"] == "bridge_protocol")
+	assert protocol["status"] == "warn"
+	assert "重新加载" in protocol["recovery_action"]
+
+
 @patch("boss_agent_cli.bridge.client.httpx.post")
 def test_client_send_command_success(mock_post):
 	"""send_command 成功时返回 ok 结果。"""

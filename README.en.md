@@ -263,6 +263,12 @@ boss doctor --live-probe
 | `auth_token_quality` | Core tokens (wt2 / stoken) present |
 | `cookie_completeness` | Auxiliary tokens (wbg / zp_at) |
 | `cdp` | Chrome DevTools Protocol reachable |
+| `bridge_daemon` | Local Browser Bridge daemon is reachable |
+| `bridge_extension` | Chrome extension is connected to the daemon |
+| `bridge_protocol` | CLI and extension version/protocol are compatible |
+| `bridge_workspace` | Current Bridge workspace/tab is usable |
+| `bridge_exec` / `bridge_fetch` / `bridge_navigate` | Basic extension execution, browser fetch, and navigation capabilities |
+| `browser_channel` | CDP/Bridge summary; not a risk-control bypass path |
 | `candidate_search_health` / `candidate_detail_health` | Candidate read-only prerequisites |
 | `recruiter_read_health` | Recruiter read-only prerequisites; Zhaopin recruiter mode is explicitly marked unsupported |
 | `network` | zhipin.com reachable |
@@ -284,6 +290,20 @@ boss logout && boss login
 ### BOSS detects automation (code 36 / `ACCOUNT_RISK`)
 
 Stop automated access and return to the official BOSS Zhipin website. Do not retry the blocked action through CDP, patchright, or Browser Bridge.
+
+### Browser Bridge is not connected
+
+```bash
+python -m boss_agent_cli.bridge.daemon --serve
+# Then load and enable extension/ from chrome://extensions, and run:
+boss doctor
+```
+
+`bridge_daemon`, `bridge_extension`, `bridge_protocol`, `bridge_workspace`,
+`bridge_exec`, `bridge_fetch`, and `bridge_navigate` show the local daemon,
+extension, tab, and basic browser-command health. Bridge is only for local diagnostics,
+user-triggered login compatibility, and read-only assistance. Do not use it to
+retry platform risk-control blocks.
 
 ### Token expired mid-session
 

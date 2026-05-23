@@ -78,6 +78,14 @@ def test_schema_commands_have_descriptions():
 	)
 
 
+def test_doctor_schema_documents_bridge_risk_boundary():
+	"""doctor schema 应说明 Bridge 是诊断/登录兼容入口，不是风控绕过入口。"""
+	description = SCHEMA_DATA["commands"]["doctor"]["description"]
+	assert "Bridge" in description
+	assert "浏览器桥" in description
+	assert "不得用于规避平台风控" in description
+
+
 # ── 错误码一致性 ────────────────────────────────────────────────────
 
 

@@ -66,6 +66,23 @@ def test_security_and_readme_link_platform_risk_docs():
 	assert "docs/platform-risk.md" in read("SECURITY.md")
 
 
+def test_readme_documents_browser_bridge_diagnostics():
+	zh = read("README.md")
+	en = read("README.en.md")
+
+	for content in (zh, en):
+		assert "bridge_daemon" in content
+		assert "bridge_extension" in content
+		assert "bridge_protocol" in content
+		assert "bridge_workspace" in content
+		assert "bridge_exec" in content
+		assert "bridge_fetch" in content
+		assert "bridge_navigate" in content
+		assert "python -m boss_agent_cli.bridge.daemon --serve" in content
+		assert "Bridge" in content
+		assert "风控" in content or "risk-control" in content.lower()
+
+
 def test_platform_research_template_covers_adapter_admission_gate():
 	index = read("docs/research/platforms/README.md")
 	abstraction_zh = read("docs/platform-abstraction.md")

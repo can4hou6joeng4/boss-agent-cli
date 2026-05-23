@@ -510,6 +510,12 @@ boss doctor --live-probe
 | `auth_token_quality` | 核心凭据（wt2 / stoken） |
 | `cookie_completeness` | 辅助凭据（wbg / zp_at） |
 | `cdp` | Chrome 调试端口可连 |
+| `bridge_daemon` | 本地 Browser Bridge daemon 是否运行 |
+| `bridge_extension` | Chrome 扩展是否连接 daemon |
+| `bridge_protocol` | CLI 与扩展版本/协议是否兼容 |
+| `bridge_workspace` | Bridge 当前 workspace/tab 是否可用 |
+| `bridge_exec` / `bridge_fetch` / `bridge_navigate` | 扩展基础执行、浏览器 fetch 与导航能力 |
+| `browser_channel` | CDP/Bridge 汇总状态；不得用于规避平台风控 |
 | `candidate_search_health` / `candidate_detail_health` | 求职者只读能力前置条件 |
 | `recruiter_read_health` | 招聘者只读能力前置条件；智联招聘者侧会明确标记暂未接入 |
 | `network` | zhipin.com 可访问 |
@@ -527,6 +533,11 @@ boss logout && boss login
 # CDP 诊断
 boss --cdp-url http://localhost:9222 doctor
 
+# Browser Bridge 诊断
+python -m boss_agent_cli.bridge.daemon --serve
+# 在 Chrome 的 chrome://extensions 中加载并启用 extension/ 后，再运行：
+boss doctor
+
 # 默认 status 只检查本地凭据；需要真实只读验证时显式加 --live
 boss status --live
 ```
@@ -537,6 +548,11 @@ boss status --live
 - `wt2/stoken 均存在`：完整，可正常使用
 - `wt2 存在，stoken 缺失`：部分可用，通常是二维码或 Cookie 提取只拿到部分登录态；建议以 Chrome CDP 远程调试端口启动浏览器后运行 `boss login --cdp`，或重新执行 `boss login`
 - `wt2 缺失`：无效 → `boss logout && boss login`
+
+**bridge_daemon / bridge_extension 显示 warn**：本地 daemon 未运行或扩展未连接。
+先启动 daemon，确认 19826 端口未被占用，再到 `chrome://extensions` 加载并启用
+`extension/`。Bridge 只用于本地诊断、用户主动登录兼容和只读辅助；命中平台
+风控时应停止自动化访问，不要切换到 Bridge 重试。
 
 </details>
 
