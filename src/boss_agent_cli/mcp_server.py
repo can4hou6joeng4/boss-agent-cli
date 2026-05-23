@@ -219,6 +219,8 @@ TOOLS = [
 			"properties": {
 				"security_id": {"type": "string", "description": "好友的 security_id"},
 				"page": {"type": "integer", "description": "页码", "default": 1},
+				"count": {"type": "integer", "description": "每页消息数量", "default": 20},
+				"raw": {"type": "boolean", "description": "输出保真结构化消息字段（仍受合规门控）", "default": False},
 			},
 			"required": ["security_id"],
 		},
@@ -796,6 +798,10 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 		args = [name, arguments["security_id"]]
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
+		if "count" in arguments:
+			args.extend(["--count", str(arguments["count"])])
+		if arguments.get("raw"):
+			args.append("--raw")
 		return args
 
 	if name == "chat_summary":

@@ -26,3 +26,17 @@ def test_schema_mcp_tools_output_shape(tmp_path: Path) -> None:
 		assert "inputSchema" in tool
 		assert tool["inputSchema"]["type"] == "object"
 		assert tool["name"].startswith("boss_")
+
+
+def test_schema_mcp_tools_exposes_chatmsg_raw_option(tmp_path: Path) -> None:
+	runner = CliRunner()
+	result = runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "schema", "--format", "mcp-tools"],
+	)
+	assert result.exit_code == 0, result.output
+	envelope = json.loads(result.output)
+	tool = next(item for item in envelope["data"]["tools"] if item["name"] == "boss_chatmsg")
+	properties = tool["inputSchema"]["properties"]
+	assert properties["raw"]["type"] == "boolean"
+	assert "保真" in properties["raw"]["description"]

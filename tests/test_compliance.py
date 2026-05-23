@@ -27,6 +27,13 @@ def test_default_low_risk_mode_blocks_platform_data_aggregation():
 	assert "默认低风险模式" in parsed["error"]["message"]
 
 
+def test_raw_chatmsg_does_not_bypass_low_risk_compliance():
+	code, parsed = _invoke("chatmsg", "sec_001", "--raw")
+	assert code == 1
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "COMPLIANCE_BLOCKED"
+
+
 def test_schema_exposes_current_compliance_mode():
 	code, parsed = _invoke("schema")
 	assert code == 0

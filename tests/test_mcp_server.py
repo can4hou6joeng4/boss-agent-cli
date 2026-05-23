@@ -255,6 +255,11 @@ def test_build_args_chatmsg():
 	assert args == ["chatmsg", "s1", "--page", "2"]
 
 
+def test_build_args_chatmsg_raw():
+	args = _build_args("boss_chatmsg", {"security_id": "s1", "page": 2, "count": 50, "raw": True})
+	assert args == ["chatmsg", "s1", "--page", "2", "--count", "50", "--raw"]
+
+
 def test_build_args_chat_summary():
 	args = _build_args("boss_chat_summary", {"security_id": "s1"})
 	assert args == ["chat-summary", "s1"]

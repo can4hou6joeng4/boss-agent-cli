@@ -610,13 +610,14 @@ SCHEMA_DATA = {
 			},
 		},
 		"chatmsg": {
-			"description": "受限能力：查看与指定好友的聊天消息历史。默认低风险模式会阻断，避免通过 CLI 读取通信内容。",
+			"description": "受限能力：查看与指定好友的聊天消息历史。默认低风险模式会阻断；--raw 仅在合规放行后输出保真结构化消息字段。",
 			"args": [
 				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
 			],
 			"options": {
 				"--page": {"type": "int", "default": 1, "description": "页码"},
 				"--count": {"type": "int", "default": 20, "description": "每页消息数量"},
+				"--raw": {"type": "bool", "default": False, "description": "保真输出结构化 body、链接、职位卡片字段和原始消息对象；仍受合规门控"},
 			},
 		},
 		"chat-summary": {

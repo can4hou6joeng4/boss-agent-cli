@@ -396,7 +396,7 @@ except AuthRequired:
 | 命令 | 说明 |
 |------|------|
 | `boss chat` | 受限：默认低风险模式阻断，涉及会话数据 |
-| `boss chatmsg <sid>` | 受限：默认低风险模式阻断，涉及通信内容 |
+| `boss chatmsg <sid> [--raw]` | 受限：默认低风险模式阻断；`--raw` 仅在合规放行后保留结构化 body、链接和职位卡片字段 |
 | `boss chat-summary <sid>` | 受限：默认低风险模式阻断，依赖通信内容 |
 | `boss mark <sid> --label X` | 受限：默认低风险模式阻断，涉及平台关系写入 |
 | `boss interviews` | 面试邀请 |

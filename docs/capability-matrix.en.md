@@ -41,7 +41,7 @@ Default Low-Risk Assistance Mode: local assistance, read-only first, user-trigge
 | Capability | CLI command | Login required | Transport |
 |---|---|---|---|
 | Conversation list | `boss chat` | Yes | Restricted (blocked by default) |
-| Message history | `boss chatmsg` | Yes | Restricted (blocked by default) |
+| Message history | `boss chatmsg [--raw]` | Yes | Restricted (blocked by default); `--raw` preserves structured body/link/job-card fields only after compliance allows the command |
 | Conversation summary | `boss chat-summary` | Yes | Restricted (blocked by default) |
 | Contact labels | `boss mark` | Yes | Restricted (blocked by default) |
 | Contact exchange | `boss exchange` | Yes | Restricted (blocked by default) |

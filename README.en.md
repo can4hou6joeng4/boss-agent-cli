@@ -211,7 +211,7 @@ See [Agent Quickstart](docs/agent-quickstart.en.md) and [Capability Matrix](docs
 | **Auth** | `login` · `logout` · `status` · `doctor` |
 | **Discover** | `search` · `detail` · `show` · `cities` · `history` |
 | **Restricted Actions** | `greet` · `batch-greet` · `apply` · `exchange` · `mark` are blocked by default |
-| **Restricted Track** | `chat` · `chatmsg` · `chat-summary` · `pipeline` · `follow-up` · `digest` are blocked by default; use `stats` for local state |
+| **Restricted Track** | `chat` · `chatmsg` · `chat-summary` · `pipeline` · `follow-up` · `digest` are blocked by default; `chatmsg --raw` preserves structured body/link/card fields only after compliance allows the command; use `stats` for local state |
 | **Organize** | `watch` · `preset` · `shortlist` |
 | **Resume** | `resume` · `me` |
 | **AI** | `ai config` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai suggest` · `ai reply` · `ai interview-prep` · `ai chat-coach` |

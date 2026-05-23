@@ -90,6 +90,7 @@ def test_chatmsg_message_fields_complete(mock_auth_cls, mock_client_cls):
 	assert "type" in msg
 	assert "text" in msg
 	assert "time" in msg
+	assert "raw" not in msg
 
 
 @patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
@@ -318,6 +319,83 @@ def test_chatmsg_no_time_field(mock_auth_cls, mock_client_cls):
 	result = runner.invoke(cli, ["chatmsg", "sec_001"])
 	parsed = json.loads(result.output)
 	assert parsed["data"][0]["time"] == ""
+
+
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
+@patch("boss_agent_cli.commands.chatmsg.AuthManager")
+def test_chatmsg_raw_preserves_structured_body_and_links(mock_auth_cls, mock_client_cls):
+	"""--raw 应保留 JD 卡片 body、职位链接和原始对象，同时保留 compact 字段。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_make_friend(uid=12345)])
+	mock_client.chat_history.return_value = {
+		"zpData": {
+			"messages": [
+				{
+					"id": "m1",
+					"from": {"uid": 12345, "name": "张HR"},
+					"type": 6,
+					"time": 1700000000000,
+					"body": {
+						"text": "职位卡片",
+						"title": "后端工程师",
+						"securityId": "card-sec",
+						"jobId": "job-raw",
+						"url": "https://www.zhipin.com/job_detail/card-sec.html",
+					},
+				},
+			],
+		},
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["chatmsg", "sec_001", "--raw"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	msg = parsed["data"][0]
+	assert msg["from"] == "张HR"
+	assert msg["type"] == "名片"
+	assert msg["text"] == "职位卡片"
+	assert msg["message_id"] == "m1"
+	assert msg["type_code"] == 6
+	assert msg["body"]["title"] == "后端工程师"
+	assert msg["security_id"] == "card-sec"
+	assert msg["job_id"] == "job-raw"
+	assert msg["links"] == ["https://www.zhipin.com/job_detail/card-sec.html"]
+	assert msg["raw"]["body"]["securityId"] == "card-sec"
+
+
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
+@patch("boss_agent_cli.commands.chatmsg.AuthManager")
+def test_chatmsg_raw_redacts_sensitive_auth_fields(mock_auth_cls, mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_make_friend(uid=12345)])
+	mock_client.chat_history.return_value = {
+		"zpData": {
+			"messages": [
+				{
+					"from": {"uid": 12345, "name": "张HR"},
+					"type": 1,
+					"text": "hello",
+					"body": {
+						"authorization": "Bearer secret",
+						"cookie": "wt2=secret",
+						"token": "secret-token",
+						"securityId": "safe-sec",
+					},
+				},
+			],
+		},
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["chatmsg", "sec_001", "--raw"])
+	parsed = json.loads(result.output)
+	output = json.dumps(parsed, ensure_ascii=False)
+	assert "Bearer secret" not in output
+	assert "wt2=secret" not in output
+	assert "secret-token" not in output
+	msg = parsed["data"][0]
+	assert msg["body"]["authorization"] == "[REDACTED]"
+	assert msg["body"]["cookie"] == "[REDACTED]"
+	assert msg["security_id"] == "safe-sec"
 
 
 @patch("boss_agent_cli.commands.chatmsg.get_platform_instance")

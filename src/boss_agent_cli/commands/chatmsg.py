@@ -1,4 +1,5 @@
 import datetime
+import re
 from typing import Any
 
 import click
@@ -21,9 +22,10 @@ _MSG_TYPE_MAP = {
 @click.argument("security_id")
 @click.option("--page", default=1, help="页码")
 @click.option("--count", default=20, help="每页消息数量")
+@click.option("--raw", "show_raw", is_flag=True, default=False, help="输出保真结构化消息字段（仍受合规门控）")
 @click.pass_context
 @handle_auth_errors("chatmsg")
-def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> None:
+def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int, show_raw: bool) -> None:
 	"""查看与指定好友的聊天消息历史"""
 	if not require_compliance_allowed(ctx, "chatmsg"):
 		ctx.exit(1)
@@ -101,26 +103,7 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> 
 
 		result = []
 		for msg in messages:
-			from_obj = msg.get("from", {})
-			is_self = False
-			from_name = friend_name
-			if isinstance(from_obj, dict):
-				is_self = str(from_obj.get("uid", "")) != gid
-				if not is_self:
-					from_name = from_obj.get("name", friend_name)
-			if is_self:
-				from_name = "我"
-
-			msg_time = ""
-			if ts := msg.get("time"):
-				msg_time = datetime.datetime.fromtimestamp(ts / 1000).strftime("%m-%d %H:%M")
-
-			result.append({
-				"from": from_name,
-				"type": _MSG_TYPE_MAP.get(msg.get("type"), f"其他({msg.get('type')})"),
-				"text": msg.get("text") or msg.get("body", {}).get("text", "") or "",
-				"time": msg_time,
-			})
+			result.append(_normalize_message(msg, gid=gid, friend_name=friend_name, include_raw=show_raw))
 
 		def _render(data: list[dict[str, Any]]) -> None:
 			render_simple_list(
@@ -142,3 +125,85 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> 
 				f"{boss_command_for_ctx(ctx, f'detail {security_id}')} — 查看职位详情",
 			]},
 		)
+
+
+def _normalize_message(
+	msg: dict[str, Any],
+	*,
+	gid: str,
+	friend_name: str,
+	include_raw: bool = False,
+) -> dict[str, Any]:
+	from_obj = msg.get("from", {})
+	is_self = False
+	from_name = friend_name
+	if isinstance(from_obj, dict):
+		is_self = str(from_obj.get("uid", "")) != gid
+		if not is_self:
+			from_name = from_obj.get("name", friend_name)
+	if is_self:
+		from_name = "我"
+
+	msg_time = ""
+	if ts := msg.get("time"):
+		msg_time = datetime.datetime.fromtimestamp(ts / 1000).strftime("%m-%d %H:%M")
+
+	body = _message_body(msg)
+	text = msg.get("text") or body.get("text", "") or ""
+	msg_type = msg.get("type")
+	normalized: dict[str, Any] = {
+		"from": from_name,
+		"type": _message_type_label(msg_type),
+		"text": text,
+		"time": msg_time,
+	}
+	if include_raw:
+		normalized.update({
+			"message_id": msg.get("id") or msg.get("msgId") or msg.get("messageId"),
+			"type_code": msg.get("type"),
+			"timestamp": msg.get("time"),
+			"body": body,
+			"links": _extract_links(msg, body=body),
+			"security_id": _first_present(msg, body, ("securityId", "security_id")),
+			"job_id": _first_present(msg, body, ("jobId", "job_id", "encryptJobId")),
+			"raw": msg,
+		})
+	return normalized
+
+
+def _message_body(msg: dict[str, Any]) -> dict[str, Any]:
+	body = msg.get("body")
+	if isinstance(body, dict):
+		return body
+	return {}
+
+
+def _message_type_label(msg_type: Any) -> str:
+	if isinstance(msg_type, int):
+		return _MSG_TYPE_MAP.get(msg_type, f"其他({msg_type})")
+	return f"其他({msg_type})"
+
+
+def _first_present(primary: dict[str, Any], secondary: dict[str, Any], keys: tuple[str, ...]) -> Any:
+	for source in (primary, secondary):
+		for key in keys:
+			value = source.get(key)
+			if value not in (None, ""):
+				return value
+	return None
+
+
+def _extract_links(msg: dict[str, Any], *, body: dict[str, Any]) -> list[str]:
+	links: list[str] = []
+	for value in list(msg.values()) + list(body.values()):
+		if isinstance(value, str):
+			links.extend(re.findall(r"https?://[^\s\"'<>]+", value))
+		elif isinstance(value, dict):
+			links.extend(_extract_links(value, body={}))
+		elif isinstance(value, list):
+			for item in value:
+				if isinstance(item, str):
+					links.extend(re.findall(r"https?://[^\s\"'<>]+", item))
+				elif isinstance(item, dict):
+					links.extend(_extract_links(item, body={}))
+	return list(dict.fromkeys(links))
