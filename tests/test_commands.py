@@ -523,6 +523,54 @@ def test_search_with_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
 @patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_supports_url_and_multiselect_filters(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = None
+	_ctx_mock(mock_client_cls)
+	mock_pipeline.return_value = SimpleNamespace(
+		items=[],
+		has_more=False,
+		total=0,
+		stats=SimpleNamespace(
+			pages_scanned=1,
+			jobs_seen=0,
+			jobs_prefiltered=0,
+			detail_checks=0,
+		),
+	)
+
+	runner = CliRunner()
+	result = runner.invoke(cli, [
+		"search",
+		"--url",
+		"https://www.zhipin.com/web/geek/jobs?query=Python&city=101280100&degree=203",
+		"--experience",
+		"应届,3-5年",
+	])
+
+	assert result.exit_code == 0
+	criteria = mock_pipeline.call_args.kwargs["criteria"]
+	assert criteria.query == "Python"
+	assert criteria.raw_params == {
+		"city": "101280100",
+		"degree": "203",
+		"experience": "108,104",
+	}
+
+
+def test_search_rejects_non_boss_url():
+	runner = CliRunner()
+	result = runner.invoke(cli, ["search", "--url", "https://example.com/jobs?query=Python"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+
+
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
 def test_search_supports_zhilian_platform_minimal_loop(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.get_search.return_value = None

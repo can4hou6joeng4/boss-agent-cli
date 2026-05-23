@@ -170,37 +170,39 @@ class BossClient:
 
 	def search_jobs(self, query: str, **filters: Any) -> dict[str, Any]:
 		params: dict[str, Any] = {"query": query, "page": filters.get("page", 1)}
+		if raw_params := filters.get("raw_params"):
+			params.update(raw_params)
 		if city := filters.get("city"):
 			code = endpoints.CITY_CODES.get(city)
 			if code is None:
 				raise ValueError(f"未知城市: {city}")
 			params["city"] = code
 		if salary := filters.get("salary"):
-			code = endpoints.SALARY_CODES.get(salary)
+			code = filters.get("salary_code") or endpoints.SALARY_CODES.get(salary)
 			if code:
 				params["salary"] = code
 		if exp := filters.get("experience"):
-			code = endpoints.EXPERIENCE_CODES.get(exp)
+			code = filters.get("experience_code") or endpoints.EXPERIENCE_CODES.get(exp)
 			if code:
 				params["experience"] = code
 		if edu := filters.get("education"):
-			code = endpoints.EDUCATION_CODES.get(edu)
+			code = filters.get("education_code") or endpoints.EDUCATION_CODES.get(edu)
 			if code:
 				params["degree"] = code
 		if scale := filters.get("scale"):
-			code = endpoints.SCALE_CODES.get(scale)
+			code = filters.get("scale_code") or endpoints.SCALE_CODES.get(scale)
 			if code:
 				params["scale"] = code
 		if industry := filters.get("industry"):
-			code = endpoints.INDUSTRY_CODES.get(industry)
+			code = filters.get("industry_code") or endpoints.INDUSTRY_CODES.get(industry)
 			if code:
 				params["industry"] = code
 		if stage := filters.get("stage"):
-			code = endpoints.STAGE_CODES.get(stage)
+			code = filters.get("stage_code") or endpoints.STAGE_CODES.get(stage)
 			if code:
 				params["stage"] = code
 		if job_type := filters.get("job_type"):
-			code = endpoints.JOB_TYPE_CODES.get(job_type)
+			code = filters.get("job_type_code") or endpoints.JOB_TYPE_CODES.get(job_type)
 			if code:
 				params["jobType"] = code
 		return self._browser_request("GET", endpoints.SEARCH_URL, params=params)

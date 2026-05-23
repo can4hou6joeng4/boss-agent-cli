@@ -263,16 +263,21 @@ SCHEMA_DATA = {
 					"type": "string",
 					"default": "native",
 					"description": "输出格式",
-					"choices": ["native", "openai-tools", "anthropic-tools"],
+					"choices": ["native", "openai-tools", "anthropic-tools", "mcp-tools"],
 				},
 			},
 		},
 		"search": {
-			"description": "按关键词和筛选条件搜索职位列表",
+			"description": "按关键词和筛选条件搜索职位列表，可传入 BOSS 直聘搜索页 URL 复用网页筛选参数",
 			"args": [
-				{"name": "query", "required": True, "description": "搜索关键词"},
+				{"name": "query", "required": False, "description": "搜索关键词；提供 --url 时可省略"},
 			],
 			"options": {
+				"--url": {
+					"type": "string",
+					"default": None,
+					"description": "BOSS 直聘搜索页 URL（可从网页复制完整筛选条件）",
+				},
 				"--city": {
 					"type": "string",
 					"default": None,
@@ -286,17 +291,17 @@ SCHEMA_DATA = {
 				"--experience": {
 					"type": "string",
 					"default": None,
-					"description": "经验要求（如 3-5年）",
+					"description": "经验要求（如 3-5年），支持逗号分隔多选",
 				},
 				"--education": {
 					"type": "string",
 					"default": None,
-					"description": "学历要求（如 本科）",
+					"description": "学历要求（如 本科），支持逗号分隔多选",
 				},
 				"--industry": {
 					"type": "string",
 					"default": None,
-					"description": "行业类型",
+					"description": "行业类型，支持逗号分隔多选",
 					"choices": [
 						"不限",
 						"互联网",
@@ -328,19 +333,19 @@ SCHEMA_DATA = {
 				"--scale": {
 					"type": "string",
 					"default": None,
-					"description": "公司规模（如 100-499人）",
+					"description": "公司规模（如 100-499人），支持逗号分隔多选",
 					"choices": ["0-20人", "20-99人", "100-499人", "500-999人", "1000-9999人", "10000人以上"],
 				},
 				"--stage": {
 					"type": "string",
 					"default": None,
-					"description": "融资阶段（如 已上市、A轮）",
+					"description": "融资阶段（如 已上市、A轮），支持逗号分隔多选",
 					"choices": ["不限", "未融资", "天使轮", "A轮", "B轮", "C轮", "D轮及以上", "已上市", "不需要融资"],
 				},
 				"--job-type": {
 					"type": "string",
 					"default": None,
-					"description": "职位类型（全职/兼职/实习）",
+					"description": "职位类型（全职/兼职/实习），支持逗号分隔多选",
 					"choices": ["全职", "兼职", "实习"],
 				},
 				"--welfare": {
@@ -499,13 +504,20 @@ SCHEMA_DATA = {
 			},
 		},
 		"export": {
-			"description": "导出搜索结果为 HTML / CSV / JSON 文件",
+			"description": "导出搜索结果为 HTML / CSV / JSON 文件，可传入 BOSS 直聘搜索页 URL 复用网页筛选参数",
 			"args": [
-				{"name": "query", "required": True, "description": "搜索关键词"},
+				{"name": "query", "required": False, "description": "搜索关键词；提供 --url 时可省略"},
 			],
 			"options": {
+				"--url": {"type": "string", "default": None, "description": "BOSS 直聘搜索页 URL（可从网页复制完整筛选条件）"},
 				"--city": {"type": "string", "default": None, "description": "城市名称"},
 				"--salary": {"type": "string", "default": None, "description": "薪资范围"},
+				"--experience": {"type": "string", "default": None, "description": "经验要求，支持逗号分隔多选"},
+				"--education": {"type": "string", "default": None, "description": "学历要求，支持逗号分隔多选"},
+				"--industry": {"type": "string", "default": None, "description": "行业类型，支持逗号分隔多选"},
+				"--scale": {"type": "string", "default": None, "description": "公司规模，支持逗号分隔多选"},
+				"--stage": {"type": "string", "default": None, "description": "融资阶段，支持逗号分隔多选"},
+				"--job-type": {"type": "string", "default": None, "description": "职位类型，支持逗号分隔多选"},
 				"--count": {"type": "int", "default": 50, "description": "导出数量"},
 				"--format": {
 					"type": "string",

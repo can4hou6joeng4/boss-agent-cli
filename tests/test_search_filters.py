@@ -1,10 +1,15 @@
 """Tests for search_filters module — list-page prefiltering and pipeline."""
+import pytest
+
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
+	SearchUrlParseError,
 	parse_salary_range,
+	parse_boss_search_url,
 	meets_experience_threshold,
 	meets_education_threshold,
 	prefilter_job,
+	resolve_search_code_params,
 )
 
 
@@ -31,6 +36,37 @@ class TestParseSalaryRange:
 
 	def test_below_range(self):
 		assert parse_salary_range("3K以下") == (0, 3)
+
+
+# ── URL and code parsing ────────────────────────────────────────────
+
+class TestSearchUrlParsing:
+	def test_parse_boss_search_url_with_filters(self):
+		parsed = parse_boss_search_url(
+			"https://www.zhipin.com/web/geek/jobs?query=Python&city=101280100&experience=102,104&degree=203&page=2"
+		)
+		assert parsed.query == "Python"
+		assert parsed.params == {
+			"city": "101280100",
+			"experience": "102,104",
+			"degree": "203",
+		}
+		assert parsed.page == 2
+
+	def test_parse_boss_search_url_allows_filter_only_url(self):
+		parsed = parse_boss_search_url("https://www.zhipin.com/web/geek/job?city=101280100&salary=406")
+		assert parsed.query == ""
+		assert parsed.params == {"city": "101280100", "salary": "406"}
+
+	def test_parse_boss_search_url_rejects_external_host(self):
+		with pytest.raises(SearchUrlParseError):
+			parse_boss_search_url("https://example.com/web/geek/jobs?query=Python")
+
+	def test_resolve_search_code_params_supports_multiselect(self):
+		params = resolve_search_code_params(experience="应届,3-5年", education="本科,硕士", job_type="全职,实习")
+		assert params["experience"] == "108,104"
+		assert params["degree"] == "203,204"
+		assert params["jobType"] == "1901,1903"
 
 
 # ── Experience threshold ────────────────────────────────────────────

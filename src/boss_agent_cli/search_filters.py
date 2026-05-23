@@ -6,7 +6,9 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
+from boss_agent_cli.api import endpoints
 from boss_agent_cli.api.models import JobItem
 
 # ── Ordinal lookups for threshold comparisons ───────────────────────
@@ -36,6 +38,129 @@ WELFARE_KEYWORDS: dict[str, list[str]] = {
 
 _MAX_FILTER_PAGES = 5
 _WELFARE_WORKERS = 3
+
+_BOSS_SEARCH_HOSTS = {"www.zhipin.com", "zhipin.com"}
+_BOSS_SEARCH_PATHS = {"/web/geek/job", "/web/geek/jobs"}
+_URL_PARAM_ALIASES = {
+	"query": "query",
+	"city": "city",
+	"salary": "salary",
+	"experience": "experience",
+	"degree": "degree",
+	"education": "degree",
+	"industry": "industry",
+	"scale": "scale",
+	"stage": "stage",
+	"jobType": "jobType",
+	"job_type": "jobType",
+}
+_URL_SEARCH_PARAM_KEYS = {
+	"city",
+	"salary",
+	"experience",
+	"degree",
+	"industry",
+	"scale",
+	"stage",
+	"jobType",
+}
+
+
+class SearchUrlParseError(ValueError):
+	"""Raised when a user-supplied BOSS search URL cannot be safely used."""
+
+
+@dataclass(frozen=True)
+class ParsedSearchUrl:
+	query: str
+	params: dict[str, str]
+	page: int | None = None
+
+
+def _first_query_value(parsed: dict[str, list[str]], key: str) -> str:
+	values = parsed.get(key, [])
+	for value in values:
+		candidate = value.strip()
+		if candidate:
+			return candidate
+	return ""
+
+
+def parse_boss_search_url(search_url: str) -> ParsedSearchUrl:
+	"""Parse a user-copied BOSS search URL into whitelisted API search params."""
+	parts = urlparse(search_url)
+	if parts.scheme not in {"http", "https"} or parts.netloc not in _BOSS_SEARCH_HOSTS:
+		raise SearchUrlParseError("仅支持 zhipin.com 的职位搜索 URL")
+	if parts.path.rstrip("/") not in _BOSS_SEARCH_PATHS:
+		raise SearchUrlParseError("仅支持 BOSS 直聘求职者职位搜索页 URL")
+
+	query_values = parse_qs(parts.query, keep_blank_values=False)
+	params: dict[str, str] = {}
+	for source_key, target_key in _URL_PARAM_ALIASES.items():
+		value = _first_query_value(query_values, source_key)
+		if value:
+			params[target_key] = value
+
+	query = params.pop("query", "")
+	page = None
+	if raw_page := _first_query_value(query_values, "page"):
+		try:
+			page = max(1, int(raw_page))
+		except ValueError as exc:
+			raise SearchUrlParseError("URL 中的 page 参数不是有效数字") from exc
+
+	if not query and not any(key in params for key in _URL_SEARCH_PARAM_KEYS):
+		raise SearchUrlParseError("URL 中没有可用的搜索参数")
+	return ParsedSearchUrl(query=query, params=params, page=page)
+
+
+def _split_multi_value(value: str) -> list[str]:
+	return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def resolve_lookup_codes(value: str | None, lookup: dict[str, str], label: str) -> str | None:
+	"""Resolve comma-separated display labels or raw numeric codes into API codes."""
+	if not value:
+		return None
+	codes: list[str] = []
+	for part in _split_multi_value(value):
+		if part.isdigit():
+			codes.append(part)
+			continue
+		code = lookup.get(part)
+		if code is None:
+			raise ValueError(f"未知{label}: {part}")
+		codes.append(code)
+	return ",".join(codes) if codes else None
+
+
+def resolve_search_code_params(
+	*,
+	salary: str | None = None,
+	experience: str | None = None,
+	education: str | None = None,
+	industry: str | None = None,
+	scale: str | None = None,
+	stage: str | None = None,
+	job_type: str | None = None,
+) -> dict[str, str]:
+	"""Resolve user-facing search filters into BOSS API parameter codes."""
+	params: dict[str, str] = {}
+	if code := resolve_lookup_codes(salary, endpoints.SALARY_CODES, "薪资范围"):
+		params["salary"] = code
+	if code := resolve_lookup_codes(experience, endpoints.EXPERIENCE_CODES, "经验要求"):
+		params["experience"] = code
+	if code := resolve_lookup_codes(education, endpoints.EDUCATION_CODES, "学历要求"):
+		params["degree"] = code
+	if code := resolve_lookup_codes(industry, endpoints.INDUSTRY_CODES, "行业类型"):
+		params["industry"] = code
+	if code := resolve_lookup_codes(scale, endpoints.SCALE_CODES, "公司规模"):
+		params["scale"] = code
+	if code := resolve_lookup_codes(stage, endpoints.STAGE_CODES, "融资阶段"):
+		params["stage"] = code
+	if code := resolve_lookup_codes(job_type, endpoints.JOB_TYPE_CODES, "职位类型"):
+		params["jobType"] = code
+	return params
 
 # ── Salary parsing ──────────────────────────────────────────────────
 
@@ -99,6 +224,7 @@ class SearchFilterCriteria:
 	scale: str | None = None
 	stage: str | None = None
 	job_type: str | None = None
+	raw_params: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -282,13 +408,23 @@ def run_search_pipeline(
 			break
 
 		logger.info(f"正在搜索第 {current_page} 页...")
+		search_filters: dict[str, Any] = {
+			"city": criteria.city,
+			"salary": criteria.salary,
+			"experience": criteria.experience,
+			"education": criteria.education,
+			"industry": criteria.industry,
+			"scale": criteria.scale,
+			"stage": criteria.stage,
+			"job_type": criteria.job_type,
+			"page": current_page,
+		}
+		if criteria.raw_params:
+			search_filters["raw_params"] = criteria.raw_params
+
 		raw = client.search_jobs(
 			criteria.query,
-			city=criteria.city, salary=criteria.salary,
-			experience=criteria.experience, education=criteria.education,
-			industry=criteria.industry, scale=criteria.scale,
-			stage=criteria.stage, job_type=criteria.job_type,
-			page=current_page,
+			**search_filters,
 		)
 		if not client.is_success(raw):
 			code, message = client.parse_error(raw)

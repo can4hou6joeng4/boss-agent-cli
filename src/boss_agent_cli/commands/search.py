@@ -4,10 +4,6 @@ import click
 
 from boss_agent_cli.api.endpoints import (
 	CITY_CODES,
-	INDUSTRY_CODES,
-	JOB_TYPE_CODES,
-	SCALE_CODES,
-	STAGE_CODES,
 )
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
@@ -18,6 +14,9 @@ from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	SearchPipelinePlatformError,
+	SearchUrlParseError,
+	parse_boss_search_url,
+	resolve_search_code_params,
 	resolve_welfare_keywords,
 	run_search_pipeline,
 )
@@ -25,25 +24,27 @@ from boss_agent_cli.search_filters import (
 
 @click.command("search")
 @click.argument("query", required=False)
+@click.option("--url", "search_url", default=None, help="BOSS 直聘搜索页 URL（可从网页复制完整筛选条件）")
 @click.option("--preset", default=None, help="预设名称（从 boss preset add 保存）")
 @click.option("--city", default=None, help="城市名称（如 北京、上海）")
 @click.option("--salary", default=None, help="薪资范围（如 10-20K）")
 @click.option("--experience", default=None, help="经验要求（如 3-5年）")
 @click.option("--education", default=None, help="学历要求（如 本科）")
-@click.option("--industry", default=None, type=click.Choice(list(INDUSTRY_CODES.keys()), case_sensitive=False), help="行业类型")
-@click.option("--scale", default=None, type=click.Choice(list(SCALE_CODES.keys()), case_sensitive=False), help="公司规模（如 100-499人）")
-@click.option("--stage", default=None, type=click.Choice(list(STAGE_CODES.keys()), case_sensitive=False), help="融资阶段（如 已上市、A轮）")
-@click.option("--job-type", default=None, type=click.Choice(list(JOB_TYPE_CODES.keys()), case_sensitive=False), help="职位类型（全职/兼职/实习）")
+@click.option("--industry", default=None, help="行业类型，支持逗号分隔多选")
+@click.option("--scale", default=None, help="公司规模（如 100-499人），支持逗号分隔多选")
+@click.option("--stage", default=None, help="融资阶段（如 已上市、A轮），支持逗号分隔多选")
+@click.option("--job-type", default=None, help="职位类型（全职/兼职/实习），支持逗号分隔多选")
 @click.option("--welfare", default=None, help="福利筛选（如 双休、五险一金），会逐个检查职位详情")
 @click.option("--page", default=1, help="页码")
 @click.option("--no-cache", is_flag=True, default=False, help="跳过缓存")
 @click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
 @click.pass_context
 @handle_auth_errors("search")
-def search_cmd(ctx: click.Context, query: str, preset: str | None, city: str | None, salary: str | None, experience: str | None, education: str | None, industry: str | None, scale: str | None, stage: str | None, job_type: str | None, welfare: str | None, page: int, no_cache: bool, with_score: bool) -> None:
+def search_cmd(ctx: click.Context, query: str | None, search_url: str | None, preset: str | None, city: str | None, salary: str | None, experience: str | None, education: str | None, industry: str | None, scale: str | None, stage: str | None, job_type: str | None, welfare: str | None, page: int, no_cache: bool, with_score: bool) -> None:
 	"""按关键词和筛选条件搜索职位列表"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
+	raw_params: dict[str, str] = {}
 
 	if preset:
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
@@ -63,9 +64,21 @@ def search_cmd(ctx: click.Context, query: str, preset: str | None, city: str | N
 		job_type = job_type or params.get("job_type")
 		welfare = welfare or params.get("welfare")
 
-	if not query:
-		handle_error_output(ctx, "search", code="INVALID_PARAM", message="未提供 query，请传入搜索关键词或 --preset")
+	if search_url:
+		try:
+			parsed_url = parse_boss_search_url(search_url)
+		except SearchUrlParseError as exc:
+			handle_error_output(ctx, "search", code="INVALID_PARAM", message=str(exc))
+			return
+		query = query or parsed_url.query
+		raw_params.update(parsed_url.params)
+		if parsed_url.page is not None and page == 1:
+			page = parsed_url.page
+
+	if not query and not search_url:
+		handle_error_output(ctx, "search", code="INVALID_PARAM", message="未提供 query，请传入搜索关键词、--preset 或 --url")
 		return
+	query = query or ""
 
 	if city and city not in CITY_CODES:
 		handle_error_output(
@@ -74,6 +87,21 @@ def search_cmd(ctx: click.Context, query: str, preset: str | None, city: str | N
 			message=f"未知城市: {city}，请使用 CITY_CODES 中的城市名",
 		)
 		return
+
+	try:
+		code_params = resolve_search_code_params(
+			salary=salary,
+			experience=experience,
+			education=education,
+			industry=industry,
+			scale=scale,
+			stage=stage,
+			job_type=job_type,
+		)
+	except ValueError as exc:
+		handle_error_output(ctx, "search", code="INVALID_PARAM", message=str(exc))
+		return
+	raw_params.update({key: value for key, value in code_params.items() if value})
 
 	# 解析福利关键词（支持逗号分隔的多条件组合）
 	welfare_conditions = None
@@ -86,6 +114,7 @@ def search_cmd(ctx: click.Context, query: str, preset: str | None, city: str | N
 		experience=experience, education=education,
 		industry=industry, scale=scale, stage=stage,
 		job_type=job_type,
+		raw_params=raw_params,
 	)
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
@@ -95,7 +124,7 @@ def search_cmd(ctx: click.Context, query: str, preset: str | None, city: str | N
 				"query": query, "city": city, "salary": salary,
 				"experience": experience, "education": education,
 				"industry": industry, "scale": scale, "stage": stage,
-				"job_type": job_type, "page": page,
+				"job_type": job_type, "url": search_url, "raw_params": raw_params, "page": page,
 			}
 			cached = cache.get_search(search_params)
 			if cached is not None:
@@ -137,6 +166,7 @@ def search_cmd(ctx: click.Context, query: str, preset: str | None, city: str | N
 			if hooks:
 				hooks.search_completed.call({
 					"query": query,
+					"url": search_url,
 					"page": page,
 					"result_count": len(items),
 					"stats": {
@@ -170,7 +200,7 @@ def search_cmd(ctx: click.Context, query: str, preset: str | None, city: str | N
 					"query": query, "city": city, "salary": salary,
 					"experience": experience, "education": education,
 					"industry": industry, "scale": scale, "stage": stage,
-					"job_type": job_type, "page": page,
+					"job_type": job_type, "url": search_url, "raw_params": raw_params, "page": page,
 				}
 				cache_data = {"data": items, "pagination": pagination, "hints": hints}
 				cache.put_search(search_params, json.dumps(cache_data, ensure_ascii=False))

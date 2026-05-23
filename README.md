@@ -376,7 +376,7 @@ except AuthRequired:
 
 | 命令 | 说明 |
 |------|------|
-| `boss search <query>` | 搜索职位（支持 `--welfare` 筛选、`--preset` 预设） |
+| `boss search <query>` | 搜索职位（支持 `--url` 网页筛选、逗号多选、`--welfare` 筛选、`--preset` 预设） |
 | `boss recommend` | 受限：默认低风险模式阻断，避免自动读取推荐流 |
 | `boss detail <security_id>` | 职位详情（`--job-id` 走快速通道） |
 | `boss show <#>` | 按编号查看上次搜索结果 |
@@ -451,7 +451,7 @@ except AuthRequired:
 | `boss config list/set/reset` | 配置管理 |
 | `boss clean` | 清理缓存 |
 | `boss stats` | 投递转化漏斗统计（greeted/applied/shortlist） |
-| `boss export <query>` | 导出结果（CSV/JSON） |
+| `boss export <query>` | 导出结果（CSV/JSON/HTML，支持 `--url` 网页筛选） |
 
 <details>
 <summary>🔎 搜索筛选参数详解</summary>
@@ -460,12 +460,19 @@ except AuthRequired:
 boss search "golang" \
   --city 广州 \             # 城市（40 个可选）
   --salary 20-50K \         # 薪资范围
-  --experience 3-5年 \      # 经验要求
-  --education 本科 \        # 学历要求
+  --experience 3-5年,5-10年 \ # 经验要求（支持逗号多选）
+  --education 本科,硕士 \    # 学历要求（支持逗号多选）
   --scale 100-499人 \       # 公司规模
   --industry 互联网 \       # 行业
   --stage 已上市 \          # 融资阶段
   --welfare "双休,五险一金"  # 福利筛选（AND 逻辑）
+```
+
+也可以先在 BOSS 直聘网页上手动选好筛选条件，再复制搜索页 URL 给 CLI：
+
+```bash
+boss search --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280100&experience=104,105'
+boss export --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280100' --count 50 -o jobs.csv
 ```
 
 **福利筛选工作原理**：

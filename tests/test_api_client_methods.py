@@ -80,6 +80,20 @@ def test_search_jobs_all_filter_codes_applied():
 	assert params.get("jobType") is not None
 
 
+def test_search_jobs_raw_params_and_multiselect_codes_applied():
+	client = _make_client()
+	client.search_jobs(
+		"python",
+		raw_params={"city": "101280100", "degree": "203,204"},
+		experience="应届,3-5年",
+		experience_code="108,104",
+	)
+	params = client._browser_request.call_args.kwargs["params"]
+	assert params["city"] == "101280100"
+	assert params["degree"] == "203,204"
+	assert params["experience"] == "108,104"
+
+
 def test_search_jobs_unknown_city_raises():
 	client = _make_client()
 	with pytest.raises(ValueError, match="未知城市"):

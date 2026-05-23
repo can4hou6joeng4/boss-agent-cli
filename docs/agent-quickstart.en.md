@@ -34,6 +34,8 @@ boss schema
 
 # Step 2: search and narrow down target jobs
 boss search "Golang" --city 广州 --welfare "双休,五险一金"
+# Complex filters can reuse a URL selected manually on the web UI
+boss search --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280100&experience=104,105'
 
 # Step 3: inspect details and organize locally; apply/message manually on the official website
 boss detail <security_id>

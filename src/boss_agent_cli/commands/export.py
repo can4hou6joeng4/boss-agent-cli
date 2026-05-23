@@ -9,22 +9,59 @@ from boss_agent_cli.api.models import JobItem
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_export_summary, render_job_table
+from boss_agent_cli.search_filters import SearchUrlParseError, parse_boss_search_url, resolve_search_code_params
 
 
 @click.command("export")
-@click.argument("query")
+@click.argument("query", required=False)
+@click.option("--url", "search_url", default=None, help="BOSS 直聘搜索页 URL（可从网页复制完整筛选条件）")
 @click.option("--city", default=None, help="城市名称")
 @click.option("--salary", default=None, help="薪资范围")
+@click.option("--experience", default=None, help="经验要求，支持逗号分隔多选")
+@click.option("--education", default=None, help="学历要求，支持逗号分隔多选")
+@click.option("--industry", default=None, help="行业类型，支持逗号分隔多选")
+@click.option("--scale", default=None, help="公司规模，支持逗号分隔多选")
+@click.option("--stage", default=None, help="融资阶段，支持逗号分隔多选")
+@click.option("--job-type", default=None, help="职位类型，支持逗号分隔多选")
 @click.option("--count", default=50, type=int, help="导出数量")
 @click.option("--format", "fmt", default="csv", type=click.Choice(["html", "csv", "json"]), help="输出格式")
 @click.option("--output", "-o", default=None, help="输出文件路径（不指定则输出到 stdout JSON 信封）")
 @click.option("--include-private", is_flag=True, help="导出明文平台标识和招聘者姓名等私有字段")
 @click.pass_context
 @handle_auth_errors("export")
-def export_cmd(ctx: click.Context, query: str, city: str | None, salary: str | None, count: int, fmt: str, output: str | None, include_private: bool) -> None:
+def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, city: str | None, salary: str | None, experience: str | None, education: str | None, industry: str | None, scale: str | None, stage: str | None, job_type: str | None, count: int, fmt: str, output: str | None, include_private: bool) -> None:
 	"""导出搜索结果为 CSV 或 JSON 文件"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
+	raw_params: dict[str, str] = {}
+
+	if search_url:
+		try:
+			parsed_url = parse_boss_search_url(search_url)
+		except SearchUrlParseError as exc:
+			handle_error_output(ctx, "export", code="INVALID_PARAM", message=str(exc))
+			return
+		query = query or parsed_url.query
+		raw_params.update(parsed_url.params)
+
+	if not query and not search_url:
+		handle_error_output(ctx, "export", code="INVALID_PARAM", message="未提供 query，请传入搜索关键词或 --url")
+		return
+	query = query or ""
+
+	try:
+		raw_params.update(resolve_search_code_params(
+			salary=salary,
+			experience=experience,
+			education=education,
+			industry=industry,
+			scale=scale,
+			stage=stage,
+			job_type=job_type,
+		))
+	except ValueError as exc:
+		handle_error_output(ctx, "export", code="INVALID_PARAM", message=str(exc))
+		return
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_platform_instance(ctx, auth) as platform:
@@ -34,7 +71,22 @@ def export_cmd(ctx: click.Context, query: str, city: str | None, salary: str | N
 
 		while len(all_items) < count and page <= max_pages:
 			logger.info(f"正在获取第 {page} 页...")
-			raw = platform.search_jobs(query, city=city, salary=salary, page=page)
+			search_filters: dict[str, Any] = {"page": page}
+			for key, value in {
+				"city": city,
+				"salary": salary,
+				"experience": experience,
+				"education": education,
+				"industry": industry,
+				"scale": scale,
+				"stage": stage,
+				"job_type": job_type,
+			}.items():
+				if value:
+					search_filters[key] = value
+			if raw_params:
+				search_filters["raw_params"] = raw_params
+			raw = platform.search_jobs(query, **search_filters)
 			if not platform.is_success(raw):
 				code, message = platform.parse_error(raw)
 				handle_error_output(

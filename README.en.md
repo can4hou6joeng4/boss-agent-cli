@@ -220,6 +220,15 @@ See [Agent Quickstart](docs/agent-quickstart.en.md) and [Capability Matrix](docs
 
 Run `boss <cmd> --help` for options, or `boss schema` for the complete JSON self-description.
 
+Search and export can reuse filters selected manually on the BOSS web UI:
+
+```bash
+boss search --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280100&experience=104,105'
+boss export --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280100' --count 50 -o jobs.csv
+```
+
+Parameter mode also supports comma-separated multi-select filters such as `--experience "应届,3-5年"` and `--education "本科,硕士"`.
+
 **Export for any agent framework** — no MCP required:
 
 ```bash

@@ -20,7 +20,7 @@ Default Low-Risk Assistance Mode: local assistance, read-only first, user-trigge
 
 | Capability | CLI command | Login required | Transport |
 |---|---|---|---|
-| Job search | `boss search` | Yes | Browser |
+| Job search | `boss search` | Yes | Browser; supports `--url` web-filter reuse and comma-separated multi-select filters |
 | Personalized recommendations | `boss recommend` | Yes | Restricted (blocked by default) |
 | Job detail | `boss detail` | Yes | httpx first, browser fallback |
 | Show by index | `boss show` | No | Local cache |
@@ -34,7 +34,7 @@ Default Low-Risk Assistance Mode: local assistance, read-only first, user-trigge
 | Greet a recruiter | `boss greet` | Yes | Restricted (blocked by default) |
 | Batch greet after search | `boss batch-greet` | Yes | Restricted (blocked by default) |
 | Apply or start the conversation | `boss apply` | Yes | Restricted (blocked by default) |
-| Export results | `boss export` | Yes | Browser |
+| Export results | `boss export` | Yes | Browser; supports `--url` web-filter reuse |
 
 ## Conversation management
 

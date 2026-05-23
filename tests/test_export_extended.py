@@ -252,6 +252,38 @@ def test_export_paginates_until_count_reached(mock_auth_cls, mock_client_cls, tm
 
 @patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_supports_url_and_multiselect_filters(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = _api_response([_make_raw_job("Go")], has_more=False)
+
+	out_path = tmp_path / "url.json"
+	runner = CliRunner()
+	result = runner.invoke(cli, [
+		"export",
+		"--url",
+		"https://www.zhipin.com/web/geek/jobs?query=Go&city=101280100&degree=203",
+		"--experience",
+		"应届,3-5年",
+		"--count",
+		"1",
+		"--format",
+		"json",
+		"-o",
+		str(out_path),
+	])
+
+	assert result.exit_code == 0
+	_, kwargs = mock_client.search_jobs.call_args
+	assert kwargs["raw_params"] == {
+		"city": "101280100",
+		"degree": "203",
+		"experience": "108,104",
+	}
+	assert json.loads(out_path.read_text(encoding="utf-8"))[0]["title"] == "Go"
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_stops_when_no_more_and_last_page_short(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	"""页数据少于 count 且 hasMore=False 时应提前终止，不造成空循环。"""
 	mock_client = _ctx_mock(mock_client_cls)

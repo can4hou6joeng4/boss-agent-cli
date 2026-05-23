@@ -34,6 +34,8 @@ boss schema
 
 # Step 2: 搜索并定位目标职位
 boss search "Golang" --city 广州 --welfare "双休,五险一金"
+# 复杂筛选可复用用户在网页上选好的 URL
+boss search --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280100&experience=104,105'
 
 # Step 3: 查看详情并本地整理；投递/沟通回到平台官网手动完成
 boss detail <security_id>
