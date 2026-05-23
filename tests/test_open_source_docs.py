@@ -55,12 +55,69 @@ def test_platform_risk_docs_exist_and_cover_sensitive_boundaries():
 		assert "security_id" in content
 		assert "BOSS_SMOKE_DRY_RUN" in content
 		assert "redact" in content.lower() or "脱敏" in content
+		assert "research/platforms/README.md" in content
+		assert "response interception" in content
+		assert "risk" in content.lower() or "风险" in content
 
 
 def test_security_and_readme_link_platform_risk_docs():
 	assert "docs/platform-risk.md" in read("README.md")
 	assert "docs/platform-risk.en.md" in read("README.en.md")
 	assert "docs/platform-risk.md" in read("SECURITY.md")
+
+
+def test_platform_research_template_covers_adapter_admission_gate():
+	index = read("docs/research/platforms/README.md")
+	abstraction_zh = read("docs/platform-abstraction.md")
+	abstraction_en = read("docs/platform-abstraction.en.md")
+
+	required_sections = [
+		"## 准入原则",
+		"## 研究模板",
+		"### 3. 只读能力",
+		"### 5. 禁止能力",
+		"### 9. 验收命令",
+		"## 平台准入流程",
+		"## 第三方样本使用边界",
+	]
+	for section in required_sections:
+		assert section in index
+
+	for token in (
+		"zhipin.md",
+		"zhaopin.md",
+		"lagou.md",
+		"liepin.md",
+		"xunjin58/zp_api",
+		"stealth",
+		"response interception",
+		"自动滚动抓取",
+		"不能直接复制为主线实现",
+		"uv run pytest tests/test_agent_docs.py tests/test_open_source_docs.py -q",
+	):
+		assert token in index
+
+	assert "research/platforms/README.md" in abstraction_zh
+	assert "第三方 scraper" in abstraction_zh
+	assert "research/platforms/README.md" in abstraction_en
+	assert "Third-party scraper" in abstraction_en
+
+
+def test_platform_research_docs_include_unified_adapter_evaluation():
+	for path in (
+		"docs/research/platforms/zhipin.md",
+		"docs/research/platforms/zhaopin.md",
+		"docs/research/platforms/lagou.md",
+		"docs/research/platforms/liepin.md",
+	):
+		content = read(path)
+		assert "统一适配器评估" in content or "适配器基线研究" in content, path
+		assert "只读" in content, path
+		assert "禁止" in content, path
+		assert "stealth" in content, path
+		assert "response interception" in content, path
+		assert "cookie" in content.lower(), path
+		assert "token" in content.lower(), path
 
 
 def test_maintainer_docs_cover_open_source_governance():

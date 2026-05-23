@@ -47,6 +47,12 @@ The default request interval is controlled by `--delay`. Do not use this tool fo
 
 patchright, CDP, local Chrome profiles, system keychains, browser extensions, and platform risk-control systems all affect login and access stability. A working browser session does not guarantee the httpx path works; a working httpx path does not guarantee browser automation works. If the platform flags automation, stop the automated flow instead of switching automation channels and retrying.
 
+Third-party examples that use stealth, response interception, auto-scroll
+collection, bulk extraction, or simulated real-user fingerprints are risk signals
+only. Do not copy them into the main implementation, recommended docs path, test
+fixtures, or smoke flows. Every new platform must first pass the
+[platform adapter research template](research/platforms/README.md) gate.
+
 ## 5. Smoke-test boundaries
 
 Real-flow smoke tests must be explicitly configured and should not access real accounts from regular CI:

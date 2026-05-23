@@ -134,14 +134,16 @@ done
 
 ### Step 1：研究报告（docs/research/platforms/<name>.md）
 
-覆盖 7 项（样板见 [lagou.md](research/platforms/lagou.md)）：
-1. 登录链路
-2. 核心 API 端点清单
-3. 请求签名 / 防爬机制
-4. 响应结构
-5. CDP / Browser 通道可行性
-6. 风控触发阈值
-7. 与 BOSS 直聘的协议差异矩阵
+先按 [多平台适配器研究模板](research/platforms/README.md) 完成平台准入研究。
+研究文档必须覆盖平台范围、认证方式、只读能力、受限能力、禁止能力、
+端点/字段证据、风险评级、测试样本和验收命令。已有历史调研可保留
+7 项清单（样板见 [lagou.md](research/platforms/lagou.md)），但必须补齐
+“统一适配器评估”章节。
+
+第三方 scraper、stealth、response interception、自动滚动抓取和批量触达
+示例只能作为风险观察材料，不能直接复制到 `Platform` 主线实现。若研究
+结论不能证明 P0 只读能力、字段映射、脱敏样本和低风险边界都清晰，应停在
+风险占位，不进入 stub。
 
 ### Step 2：注册 stub（自证抽象设计对齐）
 ```python

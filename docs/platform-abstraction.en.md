@@ -150,15 +150,20 @@ done
 
 ### Step 1: research note
 
-Create `docs/research/platforms/<name>.md` and cover the same seven areas used in [lagou.md](research/platforms/lagou.md):
+Start with the [platform adapter research template](research/platforms/README.md).
+Each `docs/research/platforms/<name>.md` note must cover platform scope,
+authentication, read-only capabilities, restricted capabilities, forbidden
+capabilities, endpoint and field evidence, risk rating, test samples, and
+acceptance commands. Older seven-part research notes, such as
+[lagou.md](research/platforms/lagou.md), may keep their original structure, but
+they must include a "统一适配器评估" section before the platform can enter the
+implementation queue.
 
-1. login flow
-2. core API endpoint inventory
-3. request signing or anti-bot mechanisms
-4. response structure
-5. CDP / browser-channel feasibility
-6. risk-control thresholds
-7. protocol-difference matrix compared to BOSS Zhipin
+Third-party scraper, stealth, response-interception, auto-scroll collection, and
+bulk-outreach examples are risk signals only. Do not copy them into the main
+`Platform` implementation path. If the research cannot prove P0 read-only
+capabilities, field mapping, redacted samples, and a low-risk boundary, keep the
+platform as a risk placeholder instead of registering a stub.
 
 ### Step 2: register a stub
 
