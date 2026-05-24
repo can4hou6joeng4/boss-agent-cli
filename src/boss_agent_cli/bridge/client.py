@@ -51,7 +51,9 @@ class BridgeClient:
 				timeout=2.0,
 			)
 			if resp.status_code == 200:
-				return cast("dict[str, Any]", resp.json())
+				data = resp.json()
+				if isinstance(data, dict):
+					return cast("dict[str, Any]", data)
 			return None
 		except (httpx.HTTPError, ValueError, OSError):
 			return None

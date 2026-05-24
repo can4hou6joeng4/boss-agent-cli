@@ -143,6 +143,14 @@ def test_client_status_returns_dict(mock_get):
 
 
 @patch("boss_agent_cli.bridge.client.httpx.get")
+def test_client_status_returns_none_for_non_object_payload(mock_get):
+	"""status 返回非对象 JSON 时应视为 daemon 不可用。"""
+	mock_get.return_value = MagicMock(status_code=200, json=lambda: ["unexpected"])
+	client = BridgeClient()
+	assert client.status() is None
+
+
+@patch("boss_agent_cli.bridge.client.httpx.get")
 def test_client_status_returns_none_on_error(mock_get):
 	"""status 连接失败时应返回 None。"""
 	mock_get.side_effect = ConnectionError("refused")
