@@ -338,3 +338,46 @@ def test_sanitize_csv_cell_passes_other_specials():
 	# # 和 " 不是公式前缀，不应加单引号
 	assert _sanitize_csv_cell("#test") == "#test"
 	assert _sanitize_csv_cell('"quoted"') == '"quoted"'
+
+
+# ── stdout 分支脱敏 ────────────────────────────────────────────────────
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_stdout_default_redacts_private_fields(mock_auth_cls, mock_client_cls):
+	"""stdout 分支默认应脱敏 job_id / security_id / boss_name。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = _api_response([_make_raw_job("Go", security_id="s1")])
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["export", "golang", "--count", "1"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	jobs = parsed["data"]["jobs"]
+	assert len(jobs) == 1
+	assert jobs[0]["job_id"] == "[REDACTED]"
+	assert jobs[0]["security_id"] == "[REDACTED]"
+	assert jobs[0]["boss_name"] == "[REDACTED]"
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_stdout_include_private_keeps_raw(mock_auth_cls, mock_client_cls):
+	"""stdout + --include-private 应保留原始字段值。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = _api_response([_make_raw_job("Go", security_id="s1")])
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["export", "golang", "--count", "1", "--include-private"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	jobs = parsed["data"]["jobs"]
+	assert len(jobs) == 1
+	assert jobs[0]["security_id"] == "s1"
+	assert jobs[0]["boss_name"] == "李"
+	assert jobs[0]["job_id"] == "j_s1"

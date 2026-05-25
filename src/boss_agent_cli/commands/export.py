@@ -132,10 +132,11 @@ def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, ci
 				},
 			)
 		else:
+			write_items = all_items if include_private else [_redact_export_item(item) for item in all_items]
 			data = {
 				"count": len(all_items),
 				"format": fmt,
-				"jobs": all_items,
+				"jobs": write_items,
 			}
 			handle_output(
 				ctx, "export", data,
