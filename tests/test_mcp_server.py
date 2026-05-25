@@ -96,7 +96,7 @@ def test_required_tools_present():
 	required = {
 		"boss_status", "boss_doctor", "boss_search", "boss_detail",
 		"boss_me", "boss_cities",
-		"boss_show", "boss_config", "boss_clean",
+		"boss_show", "boss_export", "boss_config", "boss_clean",
 		"boss_stats", "boss_ai_reply",
 		"boss_ai_interview_prep", "boss_ai_chat_coach",
 		"boss_resume_list", "boss_resume_show",
@@ -112,7 +112,7 @@ def test_required_tools_present():
 
 def test_tool_count():
 	"""工具总数应与当前注册一致。"""
-	assert len(TOOLS) == 31
+	assert len(TOOLS) == 32
 
 
 def test_search_tool_requires_query():
@@ -573,7 +573,7 @@ def test_build_args_shortlist_list():
 
 def test_tool_count_after_pr41():
 	"""协议服务工具总数应与当前 MCP 暴露能力完全一致。"""
-	assert len(TOOLS) == 31
+	assert len(TOOLS) == 32
 
 
 def test_build_args_shortlist_add():
@@ -706,3 +706,63 @@ def test_build_args_hr_jobs_online():
 
 def test_build_args_hr_jobs_detail():
 	assert _build_args("boss_hr_jobs_detail", {"enc_job_id": "abc123"}) == ["hr", "jobs", "detail", "abc123"]
+
+
+def test_build_args_export_minimal():
+	args = _build_args("boss_export", {"query": "python"})
+	assert args == ["export", "python"]
+
+
+def test_build_args_export_full():
+	args = _build_args("boss_export", {
+		"query": "golang",
+		"url": "https://www.zhipin.com/web/geek/job?query=golang",
+		"city": "深圳",
+		"salary": "20-50K",
+		"experience": "3-5年",
+		"education": "本科",
+		"industry": "互联网",
+		"scale": "100-499人",
+		"stage": "B轮",
+		"job_type": "全职",
+		"count": 100,
+		"format": "json",
+		"output_file": "/tmp/out.json",
+		"include_private": True,
+	})
+	assert args[0] == "export"
+	assert "golang" in args
+	assert "--url" in args
+	assert "--city" in args and "深圳" in args
+	assert "--salary" in args and "20-50K" in args
+	assert "--experience" in args
+	assert "--education" in args
+	assert "--industry" in args
+	assert "--scale" in args
+	assert "--stage" in args
+	assert "--job-type" in args
+	assert "--count" in args and "100" in args
+	assert "--format" in args and "json" in args
+	assert "--output" in args and "/tmp/out.json" in args
+	assert "--include-private" in args
+
+
+def test_build_args_export_url_only():
+	args = _build_args("boss_export", {"url": "https://www.zhipin.com/web/geek/job?query=java"})
+	assert args[0] == "export"
+	assert "--url" in args
+	assert "https://www.zhipin.com/web/geek/job?query=java" in args
+	# query 未传，不应出现裸位置参数（url 值跟在 --url 后面不算）
+	url_idx = args.index("--url")
+	positional = [a for i, a in enumerate(args) if not a.startswith("--") and a != "export" and i != url_idx + 1]
+	assert len(positional) == 0
+
+
+def test_build_args_export_format_default_omitted():
+	args = _build_args("boss_export", {"query": "前端"})
+	assert "--format" not in args
+
+
+def test_build_args_export_include_private_false_omitted():
+	args = _build_args("boss_export", {"query": "前端", "include_private": False})
+	assert "--include-private" not in args

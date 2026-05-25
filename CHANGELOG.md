@@ -7,6 +7,7 @@
 ### Added
 - MCP server 新增 `stdio` / `sse` / `http` 三种传输模式，`boss-mcp --transport http --port 8765` 与 `boss-mcp --transport sse` 可直接启动，默认仍保持 `stdio`
 - `mcp-server/README.md` 补齐 SSE / HTTP Streaming 启动示例、默认路径和自定义路径说明
+- MCP 新增 `boss_export`：协议服务对齐 CLI `boss export`，Agent 可直接导出搜索结果为 CSV / JSON / HTML（默认脱敏 job_id/security_id/boss_name），工具计数 31 → 32
 
 ### Changed
 - 招聘者写操作收口到同一条 chat-tab Vue/CDP 链路：`boss hr reply` 现在用真实 WebSocket 帧校验发送成功，`boss hr request-resume` 不再需要 `--job-id`，`boss hr resume --exchange` 支持 `phone|wechat`

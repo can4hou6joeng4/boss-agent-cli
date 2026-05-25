@@ -49,7 +49,7 @@ Add the server in Cursor Settings -> MCP Servers:
 
 ## Available tools
 
-The current MCP server exposes **31 low-risk tools** by default.
+The current MCP server exposes **32 low-risk tools** by default.
 
 ### Auth and environment
 
@@ -67,6 +67,7 @@ The current MCP server exposes **31 low-risk tools** by default.
 | `boss_search` | Search jobs with city, salary, and welfare filters |
 | `boss_detail` | Fetch job details |
 | `boss_show` | Open a job from the previous search result by index |
+| `boss_export` | Export search results to CSV / JSON / HTML (supports `url` for replaying web filters; redacts job_id/security_id/boss_name by default) |
 | `boss_cities` | List supported cities |
 | `boss_history` | Read browsing history |
 | `boss_shortlist_list` | View the local shortlist |

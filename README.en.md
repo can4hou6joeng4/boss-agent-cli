@@ -94,7 +94,7 @@ The project enables Low-Risk Assistance Mode by default. It is intentionally sco
 - **Structured transport**: stdout is JSON-only, stderr is logs-only, which keeps automation stable
 - **Platform-aware login**: user-triggered login state is stored locally and encrypted; it is not a risk-control bypass workflow
 - **Cross-platform adapter layer**: `Platform` / `RecruiterPlatform` registries are live, with low-risk mode governing sensitive capabilities
-- **MCP server with 31 tools**: exposes only the low-risk tool surface by default
+- **MCP server with 32 tools**: exposes only the low-risk tool surface by default
 
 ## 📦 Install
 

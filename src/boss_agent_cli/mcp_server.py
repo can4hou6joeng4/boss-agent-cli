@@ -298,6 +298,30 @@ TOOLS = [
 		},
 	),
 	Tool(
+		name="boss_export",
+		description="导出搜索结果为 CSV / JSON / HTML 文件，支持 BOSS 直聘搜索页 URL 复用筛选条件。默认脱敏 job_id/security_id/boss_name。",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"query": {"type": "string", "description": "搜索关键词；提供 url 时可省略"},
+				"url": {"type": "string", "description": "BOSS 直聘搜索页完整 URL（可省略 query 直接复用网页筛选）"},
+				"city": {"type": "string", "description": "城市名称（如 北京、广州）"},
+				"salary": {"type": "string", "description": "薪资范围（如 20-50K）"},
+				"experience": {"type": "string", "description": "经验要求，支持逗号分隔多选"},
+				"education": {"type": "string", "description": "学历要求，支持逗号分隔多选"},
+				"industry": {"type": "string", "description": "行业类型，支持逗号分隔多选"},
+				"scale": {"type": "string", "description": "公司规模，支持逗号分隔多选"},
+				"stage": {"type": "string", "description": "融资阶段，支持逗号分隔多选"},
+				"job_type": {"type": "string", "description": "职位类型，支持逗号分隔多选"},
+				"count": {"type": "integer", "description": "导出数量", "default": 50},
+				"format": {"type": "string", "enum": ["csv", "json", "html"], "description": "输出格式", "default": "csv"},
+				"output_file": {"type": "string", "description": "输出文件路径；不传则在 stdout 信封内 inline 返回 jobs 列表"},
+				"include_private": {"type": "boolean", "description": "保留 job_id/security_id/boss_name 明文（默认脱敏）", "default": False},
+			},
+			"required": [],
+		},
+	),
+	Tool(
 		name="boss_pipeline",
 		description="聚合聊天和面试数据，生成统一候选进度视图",
 		inputSchema={"type": "object", "properties": {}, "required": []},
@@ -831,6 +855,26 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 
 	if name == "show":
 		return [name, str(arguments["number"])]
+
+	if name == "export":
+		args = [name]
+		if arguments.get("query"):
+			args.append(arguments["query"])
+		if arguments.get("url"):
+			args.extend(["--url", arguments["url"]])
+		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type"):
+			if arguments.get(opt):
+				cli_flag = f"--{opt.replace('_', '-')}"
+				args.extend([cli_flag, arguments[opt]])
+		if "count" in arguments:
+			args.extend(["--count", str(arguments["count"])])
+		if arguments.get("format"):
+			args.extend(["--format", arguments["format"]])
+		if arguments.get("output_file"):
+			args.extend(["--output", arguments["output_file"]])
+		if arguments.get("include_private"):
+			args.append("--include-private")
+		return args
 
 	if name == "follow_up":
 		args = ["follow-up"]
