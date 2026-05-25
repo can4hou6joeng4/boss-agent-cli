@@ -871,7 +871,7 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 		if arguments.get("format"):
 			args.extend(["--format", arguments["format"]])
 		if arguments.get("output_file"):
-			args.extend(["--output", arguments["output_file"]])
+			args.extend(["-o", arguments["output_file"]])
 		if arguments.get("include_private"):
 			args.append("--include-private")
 		return args

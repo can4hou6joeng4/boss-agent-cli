@@ -743,7 +743,7 @@ def test_build_args_export_full():
 	assert "--job-type" in args
 	assert "--count" in args and "100" in args
 	assert "--format" in args and "json" in args
-	assert "--output" in args and "/tmp/out.json" in args
+	assert "-o" in args and "/tmp/out.json" in args
 	assert "--include-private" in args
 
 
