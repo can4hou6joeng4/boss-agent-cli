@@ -82,7 +82,7 @@ Maintainers will `squash merge`, so the squash title must follow the commit conv
 6. Update `AGENTS.md` (command-count invariant)
 7. Update `README.md` and `README.en.md` (command reference table)
 8. Update the relevant module's `CLAUDE.md`
-9. If the command is useful for Agents via MCP, also register it in `mcp-server/server.py` (both the `Tool` definition and `_build_args` branch)
+9. If the command is useful for Agents via MCP, also register it in `src/boss_agent_cli/mcp_server.py` (add a Tool to the `TOOLS` list and a branch in `_build_args`; `mcp-server/server.py` is a thin wrapper that auto re-exports both)
 
 ## Output Contract (Do Not Break)
 
@@ -105,7 +105,7 @@ Every command must output a JSON envelope to **stdout**:
 - `exit 0` — success (`ok=true`)
 - `exit 1` — failure (`ok=false`)
 
-On error, the envelope must contain `error.code`, `error.recoverable`, and `error.recovery_action`. See `ERROR_CODES` in `schema.py` for the current enum.
+On error, the envelope must contain `error.code`, `error.recoverable`, and `error.recovery_action`. See `SCHEMA_DATA["error_codes"]` in `src/boss_agent_cli/commands/schema.py` (around line 855) for the current enum.
 
 ## Testing Philosophy
 

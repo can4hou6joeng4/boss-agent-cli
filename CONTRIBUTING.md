@@ -87,7 +87,7 @@ git diff --check
 - `exit 0` 表示成功（`ok=true`）。
 - `exit 1` 表示失败（`ok=false`）。
 
-出错时信封必须包含 `error.code`、`error.recoverable` 和 `error.recovery_action`。可用错误码见 `schema.py` 中的 `ERROR_CODES`。
+出错时信封必须包含 `error.code`、`error.recoverable` 和 `error.recovery_action`。可用错误码见 `src/boss_agent_cli/commands/schema.py` 中 `SCHEMA_DATA["error_codes"]`（约 line 855）。
 
 ## 测试理念
 
@@ -111,7 +111,7 @@ git diff --check
 6. 更新 `AGENTS.md`（CLI 不变量契约中的命令数）
 7. 更新 `README.md` 和 `README.en.md`（命令参考表）
 8. 更新对应模块的 `CLAUDE.md`
-9. 如果命令对 Agent 通过 MCP 调用有用，还需在 `mcp-server/server.py` 中注册（`Tool` 定义和 `_build_args` 分支）
+9. 如果命令对 Agent 通过 MCP 调用有用，还需在 `src/boss_agent_cli/mcp_server.py` 的 `TOOLS` 列表加 Tool 定义、在 `_build_args` 函数加分支（`mcp-server/server.py` 是 thin wrapper，会自动 re-export）
 
 ## 提交 Issue
 
