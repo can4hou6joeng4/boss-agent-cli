@@ -1,6 +1,6 @@
 # Awesome List Submissions
 
-本文件记录 boss-agent-cli 向各大 awesome 列表投稿的模板，供维护者提交用。最后更新：master 当前状态 (2026-04-27)。
+本文件记录 boss-agent-cli 向各大 awesome 列表投稿的模板，供维护者提交用。最后更新：master 当前状态 (2026-05-28)。
 
 ## 项目一句话介绍
 
@@ -96,6 +96,9 @@
 | [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code) | — | — | ⚠️ 渠道限制 | **必须通过 Web UI issue 表单**（`/issues/new?template=recommend-resource.yml`），**禁止 gh CLI**（违规会被封禁，见 docs/CONTRIBUTING.md 明文警告） |
 | [awesome-agents (kyrolabs)](https://github.com/kyrolabs/awesome-agents) | 2026-04-27 | [PR #423](https://github.com/kyrolabs/awesome-agents/pull/423) | ⚠️ 已关闭（2026-04-28） | 由 `botbocks` 直接关闭，**无 review / 无 comment / 无 merge**；同仓库 `Software Development` 分区近期也有多条投稿被静默关闭，暂不建议立刻重投 |
 | [awesome-ai-tools (mahseema)](https://github.com/mahseema/awesome-ai-tools) | 2026-04-27 | [PR #1206](https://github.com/mahseema/awesome-ai-tools/pull/1206) | 🟡 仍为 OPEN | 已按 `Developer tools` 分区提交，继续观察维护者反馈 |
+| [awesome-cli-apps-in-a-csv](https://github.com/toolleeo/awesome-cli-apps-in-a-csv) | 2026-05-28 | [PR #276](https://github.com/toolleeo/awesome-cli-apps-in-a-csv/pull/276) | 🟡 仍为 OPEN | 已按仓库要求修改 `data/apps.csv` 并重新生成 README，归入 `Productivity` |
+| [awesome-cli-apps](https://github.com/agarrharr/awesome-cli-apps) | 2026-05-28 | [PR #1107](https://github.com/agarrharr/awesome-cli-apps/pull/1107) | 🟡 仍为 OPEN | 已按贡献指南以单应用 PR 投稿，归入 `AI / Agents` |
+| [awesome-chinese-ai-agents](https://github.com/FatBy/awesome-chinese-ai-agents) | 2026-05-28 | [PR #2](https://github.com/FatBy/awesome-chinese-ai-agents/pull/2) | 🟡 仍为 OPEN | 已按中文资源格式加入开发工具章节 |
 | ~~awesome-python-cli (shinokada)~~ | — | — | ❌ 仓库不存在 | 404，从投稿列表移除 |
 
 ### 接续路径
