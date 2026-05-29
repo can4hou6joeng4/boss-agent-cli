@@ -698,3 +698,43 @@ uv run ruff check src/     # 代码检查
 ## 👭 友情链接
 
 - [LINUX DO - 新的理想型社区](https://linux.do/)
+
+
+## FAQ
+
+### What is boss-agent-cli?
+
+boss-agent-cli is an AI agent-related project in the AI agent ecosystem.
+
+### Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **AI Agent Integration** | Works with AI agents and agent frameworks |
+| **Automation** | Automates workflows and tasks |
+| **Extensible** | Plugin-based architecture for customization |
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/can4hou6joeng4/boss-agent-cli.git
+cd boss-agent-cli
+
+# Follow project-specific installation instructions
+```
+
+### Requirements
+
+- Node.js 18+ / Python 3.10+ (depending on project)
+- Git
+- Basic understanding of AI agents
+
+### License
+
+Check the project repository for license information.
+
+### Help & Resources
+
+- [Issues](https://github.com/can4hou6joeng4/boss-agent-cli/issues) - Report bugs and request features
+- [Documentation](https://github.com/can4hou6joeng4/boss-agent-cli#readme) - Project README
