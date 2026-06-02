@@ -1033,6 +1033,52 @@ def test_interviews_reports_not_supported_when_interview_data_missing(mock_auth_
 	assert parsed["error"]["recovery_action"] == "切换平台或调整命令参数后重试"
 
 
+@patch("boss_agent_cli.commands.interviews.get_platform_instance")
+@patch("boss_agent_cli.commands.interviews.AuthManager")
+def test_interviews_stub_surfaces_capability_hint(mock_auth_cls, mock_client_cls):
+	"""占位实现（_stub）应在 hints 中如实声明 capability，
+
+	避免 Agent 把'功能未实现的空集合'误读为'真的没有面试邀请'。
+	"""
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"zp_token": "x"}}
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.interview_data.return_value = {
+		"code": 200,
+		"data": {"items": [], "total": 0},
+		"_stub": True,
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--platform", "zhilian", "interviews"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"] == []
+	# 核心契约：占位状态如实浮现给 Agent
+	assert parsed["hints"]["capability"] == "stub"
+	assert "占位" in parsed["hints"]["note"]
+	# 既有 next_actions 不被破坏
+	assert parsed["hints"]["next_actions"]
+
+
+@patch("boss_agent_cli.commands.interviews.get_platform_instance")
+@patch("boss_agent_cli.commands.interviews.AuthManager")
+def test_interviews_real_data_has_no_stub_hint(mock_auth_cls, mock_client_cls):
+	"""真实数据（无 _stub）不应出现 capability/note，避免误标正常结果为占位。"""
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"zp_token": "x"}}
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.interview_data.return_value = {
+		"code": 200,
+		"data": {"interviewList": [{"jobName": "测试岗位"}]},
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--platform", "zhilian", "interviews"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert "capability" not in parsed["hints"]
+	assert "note" not in parsed["hints"]
+
+
 @patch("boss_agent_cli.commands.chat_summary.get_platform_instance")
 @patch("boss_agent_cli.commands.chat_summary.AuthManager")
 def test_chat_summary_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock_client_cls):

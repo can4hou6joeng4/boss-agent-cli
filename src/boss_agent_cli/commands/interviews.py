@@ -53,6 +53,9 @@ def interviews_cmd(ctx: click.Context) -> None:
 			return
 		platform_data = platform.unwrap_data(raw) or {}
 		interview_list = platform_data.get("interviewList", [])
+		# 接续 client 埋下的 _stub 标记：占位实现需向 Agent 如实声明，
+		# 避免把"功能未实现"误判为"真的没有面试邀请"。
+		is_stub = bool(raw.get("_stub"))
 
 	items = [
 		{
@@ -78,8 +81,14 @@ def interviews_cmd(ctx: click.Context) -> None:
 			],
 		)
 
+	hints: dict[str, Any] = {"next_actions": [boss_command_for_ctx(ctx, "search <query>")]}
+	if is_stub:
+		# 占位实现：向 Agent 如实声明能力状态，避免空集合被误读为"无面试邀请"。
+		hints["capability"] = "stub"
+		hints["note"] = "当前平台的面试邀请端点尚在协议侧调研中，返回空集合占位，非真实数据"
+
 	handle_output(
 		ctx, "interviews", items,
 		render=_render,
-		hints={"next_actions": [boss_command_for_ctx(ctx, "search <query>")]},
+		hints=hints,
 	)
