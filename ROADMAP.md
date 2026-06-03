@@ -44,7 +44,7 @@
   - [x] Week 1d：ZhilianPlatform stub 接入注册表（抽象自证，包络适配完整实现，P0/P1/P2 暂 NotImplementedError）
   - [x] Week 2：ZhilianPlatform 只读实现（search / detail / recommend / user_info）
   - [x] Week 3：ZhilianPlatform 写操作（greet / apply）+ 文档 + MCP 适配
-  - [ ] Week 4：招聘者侧能力评估与是否接入的产品决策（当前仅候选者侧可用）
+  - [x] Week 4：招聘者侧能力评估完成 → **暂不接入**（接入条件 0/4 满足，保留 RecruiterPlatform 骨架待社区信号重启；详见 `docs/research/platforms/zhaopin-recruiter-evaluation.md`）
 
 ### 社区建设
 - [ ] 更完整的中文 + 英文视频 demo / 发布素材（当前已有 `demo-zh.gif` / `demo-en.gif` + 对应 `demo-zh.tape` / `demo-en.tape` 终端演示）
