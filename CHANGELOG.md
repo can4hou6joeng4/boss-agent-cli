@@ -14,9 +14,11 @@
 - MCP 新增 `boss_hr_exchange`，并同步修正 `boss_hr_request_resume` 的输入契约为仅需 `friend_id`
 - 测试依赖 `pytest` 最低版本提升到 `9.0.3`，并同步更新锁文件，修复 Dependabot 报告的临时目录处理漏洞告警
 - ROADMAP / README / README.en 对齐当前主线事实：`#48` 已完成，智联候选者侧登录与读写链路已接通，招聘者侧仍保持显式拒绝
+- ROADMAP Week 4 招聘者侧能力评估落槌为「暂不接入」（接入条件 0/4 满足，保留 `RecruiterPlatform` 骨架待社区信号重启；详见 `docs/research/platforms/zhaopin-recruiter-evaluation.md`）
 
 ### Fixed
 - `boss hr chat --label-id` 兼容招聘端沟通列表接口直接返回数组的响应形态，避免成功响应被误处理为 `NETWORK_ERROR`
+- `boss interviews` 占位实现现在经 hints 如实声明能力状态（`capability=stub` + `note`），避免 Agent 把空集合占位误读为「无真实面试邀请」
 
 ## [1.11.0] - 2026-04-23
 
