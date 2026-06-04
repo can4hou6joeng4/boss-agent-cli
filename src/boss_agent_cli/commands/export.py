@@ -12,6 +12,9 @@ from boss_agent_cli.display import handle_auth_errors, handle_error_output, hand
 from boss_agent_cli.search_filters import SearchUrlParseError, parse_boss_search_url, resolve_search_code_params
 
 
+_HTML_PUBLIC_EXPORT_FIELDS = ("title", "company", "city", "experience", "education", "skills", "welfare")
+
+
 @click.command("export")
 @click.argument("query", required=False)
 @click.option("--url", "search_url", default=None, help="BOSS 直聘搜索页 URL（可从网页复制完整筛选条件）")
@@ -26,7 +29,7 @@ from boss_agent_cli.search_filters import SearchUrlParseError, parse_boss_search
 @click.option("--count", default=50, type=int, help="导出数量")
 @click.option("--format", "fmt", default="csv", type=click.Choice(["html", "csv", "json"]), help="输出格式")
 @click.option("--output", "-o", default=None, help="输出文件路径（不指定则输出到 stdout JSON 信封）")
-@click.option("--include-private", is_flag=True, help="CSV/JSON/stdout 保留明文平台标识和招聘者姓名；HTML 始终省略")
+@click.option("--include-private", is_flag=True, help="CSV/JSON/stdout 保留明文平台标识和招聘者姓名；HTML 省略平台标识、招聘者和薪资")
 @click.pass_context
 @handle_auth_errors("export")
 def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, city: str | None, salary: str | None, experience: str | None, education: str | None, industry: str | None, scale: str | None, stage: str | None, job_type: str | None, count: int, fmt: str, output: str | None, include_private: bool) -> None:
@@ -172,10 +175,7 @@ def _redact_export_item(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _public_html_export_item(item: dict[str, Any]) -> dict[str, Any]:
-	public_item = dict(item)
-	for key in ("job_id", "security_id", "boss_name"):
-		public_item.pop(key, None)
-	return public_item
+	return {key: item[key] for key in _HTML_PUBLIC_EXPORT_FIELDS if key in item}
 
 
 def _write_to_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
@@ -238,7 +238,6 @@ def _write_html(items: list[dict[str, Any]], path: str) -> None:
 			f"<td>{i}</td>"
 			f"<td class='title'>{esc(item.get('title', ''))}</td>"
 			f"<td class='company'>{esc(item.get('company', ''))}</td>"
-			f"<td class='salary'>{esc(item.get('salary', ''))}</td>"
 			f"<td>{esc(item.get('city', ''))}</td>"
 			f"<td>{esc(item.get('experience', ''))}</td>"
 			f"<td>{esc(item.get('education', ''))}</td>"
@@ -264,7 +263,6 @@ def _write_html(items: list[dict[str, Any]], path: str) -> None:
   tr:hover {{ background: #f5faf8; }}
   .title {{ font-weight: 600; }}
   .company {{ color: var(--green); font-weight: 600; }}
-  .salary {{ color: #ff6633; font-weight: 700; white-space: nowrap; }}
   .dim {{ color: #888; }}
   .tag {{ display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px; margin: 1px; }}
   .sk {{ background: #e8f5e9; color: #2e7d32; }}
@@ -274,7 +272,7 @@ def _write_html(items: list[dict[str, Any]], path: str) -> None:
 <div class="sub">共 {len(items)} 条</div>
 <table>
   <thead><tr>
-    <th>#</th><th>岗位</th><th>公司</th><th>薪资</th><th>城市</th>
+    <th>#</th><th>岗位</th><th>公司</th><th>城市</th>
     <th>经验</th><th>学历</th><th>技能</th><th>福利</th>
   </tr></thead>
   <tbody>{''.join(rows)}</tbody>

@@ -299,7 +299,7 @@ TOOLS = [
 	),
 	Tool(
 		name="boss_export",
-		description="导出搜索结果为 CSV / JSON / HTML 文件，支持 BOSS 直聘搜索页 URL 复用筛选条件。默认脱敏 job_id/security_id/boss_name，HTML 始终省略这些私有字段。",
+		description="导出搜索结果为 CSV / JSON / HTML 文件，支持 BOSS 直聘搜索页 URL 复用筛选条件。默认脱敏 job_id/security_id/boss_name，HTML 始终省略平台标识、招聘者姓名和薪资。",
 		inputSchema={
 			"type": "object",
 			"properties": {
@@ -316,7 +316,7 @@ TOOLS = [
 				"count": {"type": "integer", "description": "导出数量", "default": 50},
 				"format": {"type": "string", "enum": ["csv", "json", "html"], "description": "输出格式", "default": "csv"},
 				"output_file": {"type": "string", "description": "输出文件路径；不传则在 stdout 信封内 inline 返回 jobs 列表"},
-				"include_private": {"type": "boolean", "description": "CSV/JSON/stdout 保留 job_id/security_id/boss_name 明文；HTML 始终省略", "default": False},
+				"include_private": {"type": "boolean", "description": "CSV/JSON/stdout 保留 job_id/security_id/boss_name 明文；HTML 始终省略平台标识、招聘者姓名和薪资", "default": False},
 			},
 			"required": [],
 		},

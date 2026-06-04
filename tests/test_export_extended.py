@@ -175,6 +175,8 @@ def test_export_html_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	assert "<!DOCTYPE html>" in content
 	assert "Full-Stack" in content
 	assert "TestCo" in content
+	assert "20K" not in content
+	assert "薪资" not in content
 	assert "李" not in content
 	assert "招聘者" not in content
 	# 技能和福利应各自带标签样式
@@ -208,6 +210,8 @@ def test_export_html_include_private_still_omits_private_fields(mock_auth_cls, m
 	content = out_path.read_text(encoding="utf-8")
 	assert "Full-Stack" in content
 	assert "TestCo" in content
+	assert "20K" not in content
+	assert "薪资" not in content
 	assert "李" not in content
 	assert "sec_private" not in content
 	assert "j_sec_private" not in content
