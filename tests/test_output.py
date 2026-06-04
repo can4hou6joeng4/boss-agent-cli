@@ -1,6 +1,7 @@
 import json
+import pytest
 
-from boss_agent_cli.output import envelope_success, envelope_error, Logger
+from boss_agent_cli.output import envelope_success, envelope_error, emit_error, emit_success, Logger
 
 
 def test_envelope_success_minimal():
@@ -61,6 +62,19 @@ def test_redaction_preserves_public_error_code_metadata():
 	assert parsed["data"]["real_token"] == "[REDACTED]"
 
 
+def test_redaction_preserves_public_private_fields_metadata():
+	result = envelope_success(
+		"export",
+		{
+			"private_fields": "omitted",
+			"private_token": "secret-token",
+		},
+	)
+	parsed = json.loads(result)
+	assert parsed["data"]["private_fields"] == "omitted"
+	assert parsed["data"]["private_token"] == "[REDACTED]"
+
+
 def test_envelope_error():
 	result = envelope_error(
 		"search",
@@ -74,10 +88,28 @@ def test_envelope_error():
 	assert parsed["ok"] is False
 	assert parsed["data"] is None
 	assert parsed["error"]["code"] == "AUTH_EXPIRED"
-	assert parsed["error"]["message"] == "登录态已过期 token=secret-token"
+	assert parsed["error"]["message"] == "登录态已过期 token=[REDACTED]"
 	assert parsed["error"]["recoverable"] is True
 	assert parsed["error"]["recovery_action"] == "boss login"
 	assert parsed["hints"]["cookie"] == "[REDACTED]"
+
+
+def test_envelope_error_redacts_sensitive_values_inside_message():
+	result = envelope_error(
+		"search",
+		code="NETWORK_ERROR",
+		message="请求失败 token=secret-token cookie: wt2=secret-cookie session_id=abc123 password=hunter2 authorization: Bearer auth-secret",
+		recoverable=True,
+		recovery_action="重试",
+	)
+	parsed = json.loads(result)
+	message = parsed["error"]["message"]
+	assert "secret-token" not in message
+	assert "secret-cookie" not in message
+	assert "abc123" not in message
+	assert "hunter2" not in message
+	assert "auth-secret" not in message
+	assert message.count("[REDACTED]") == 5
 
 
 def test_logger_filters_by_level(capsys):
@@ -91,6 +123,37 @@ def test_logger_filters_by_level(capsys):
 	assert "info msg" not in captured.err
 	assert "warn msg" in captured.err
 	assert "error msg" in captured.err
+
+
+def test_logger_redacts_sensitive_values_inside_message(capsys):
+	logger = Logger("debug")
+	logger.error("refresh failed token=secret-token cookie: wt2=secret-cookie session=abc123")
+	captured = capsys.readouterr()
+	assert "secret-token" not in captured.err
+	assert "secret-cookie" not in captured.err
+	assert "abc123" not in captured.err
+	assert "token=[REDACTED]" in captured.err
+	assert "cookie: [REDACTED]" in captured.err
+	assert "session=[REDACTED]" in captured.err
+
+
+def test_emit_success_redacts_sensitive_text_at_stdout_boundary(capsys):
+	emit_success("status", {"message": "token=secret-token", "cookie": "secret-cookie"})
+	captured = capsys.readouterr()
+	assert "secret-token" not in captured.out
+	assert "secret-cookie" not in captured.out
+	parsed = json.loads(captured.out)
+	assert parsed["data"]["message"] == "token=[REDACTED]"
+	assert parsed["data"]["cookie"] == "[REDACTED]"
+
+
+def test_emit_error_redacts_sensitive_text_at_stdout_boundary(capsys):
+	with pytest.raises(SystemExit):
+		emit_error("status", code="NETWORK_ERROR", message="cookie: wt2=secret-cookie")
+	captured = capsys.readouterr()
+	assert "secret-cookie" not in captured.out
+	parsed = json.loads(captured.out)
+	assert parsed["error"]["message"] == "cookie: [REDACTED]"
 
 
 def test_config_defaults():

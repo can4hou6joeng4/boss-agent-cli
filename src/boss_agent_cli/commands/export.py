@@ -26,7 +26,7 @@ from boss_agent_cli.search_filters import SearchUrlParseError, parse_boss_search
 @click.option("--count", default=50, type=int, help="导出数量")
 @click.option("--format", "fmt", default="csv", type=click.Choice(["html", "csv", "json"]), help="输出格式")
 @click.option("--output", "-o", default=None, help="输出文件路径（不指定则输出到 stdout JSON 信封）")
-@click.option("--include-private", is_flag=True, help="导出明文平台标识和招聘者姓名等私有字段")
+@click.option("--include-private", is_flag=True, help="CSV/JSON/stdout 保留明文平台标识和招聘者姓名；HTML 始终省略")
 @click.pass_context
 @handle_auth_errors("export")
 def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, city: str | None, salary: str | None, experience: str | None, education: str | None, industry: str | None, scale: str | None, stage: str | None, job_type: str | None, count: int, fmt: str, output: str | None, include_private: bool) -> None:
@@ -112,14 +112,14 @@ def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, ci
 			page += 1
 
 		if output:
-			write_items = all_items if include_private else [_redact_export_item(item) for item in all_items]
+			write_items = _prepare_export_items(all_items, fmt=fmt, include_private=include_private)
 			_write_to_file(write_items, fmt, output)
 			data = {
 				"message": f"已导出 {len(all_items)} 条到 {output}",
 				"count": len(all_items),
 				"format": fmt,
 				"path": output,
-				"private_fields": "included" if include_private else "redacted",
+				"private_fields": _private_fields_state(fmt=fmt, include_private=include_private),
 			}
 			handle_output(
 				ctx, "export", data,
@@ -149,12 +149,33 @@ def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, ci
 			)
 
 
+def _prepare_export_items(items: list[dict[str, Any]], *, fmt: str, include_private: bool) -> list[dict[str, Any]]:
+	if fmt == "html":
+		return [_public_html_export_item(item) for item in items]
+	if include_private:
+		return items
+	return [_redact_export_item(item) for item in items]
+
+
+def _private_fields_state(*, fmt: str, include_private: bool) -> str:
+	if fmt == "html":
+		return "omitted"
+	return "included" if include_private else "redacted"
+
+
 def _redact_export_item(item: dict[str, Any]) -> dict[str, Any]:
 	redacted = dict(item)
 	for key in ("job_id", "security_id", "boss_name"):
 		if key in redacted:
 			redacted[key] = "[REDACTED]"
 	return redacted
+
+
+def _public_html_export_item(item: dict[str, Any]) -> dict[str, Any]:
+	public_item = dict(item)
+	for key in ("job_id", "security_id", "boss_name"):
+		public_item.pop(key, None)
+	return public_item
 
 
 def _write_to_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
@@ -223,7 +244,6 @@ def _write_html(items: list[dict[str, Any]], path: str) -> None:
 			f"<td>{esc(item.get('education', ''))}</td>"
 			f"<td>{skills_html}</td>"
 			f"<td>{welfare_html}</td>"
-			f"<td class='dim'>{esc(item.get('boss_name', ''))}</td>"
 			f"</tr>"
 		)
 
@@ -255,7 +275,7 @@ def _write_html(items: list[dict[str, Any]], path: str) -> None:
 <table>
   <thead><tr>
     <th>#</th><th>岗位</th><th>公司</th><th>薪资</th><th>城市</th>
-    <th>经验</th><th>学历</th><th>技能</th><th>福利</th><th>招聘者</th>
+    <th>经验</th><th>学历</th><th>技能</th><th>福利</th>
   </tr></thead>
   <tbody>{''.join(rows)}</tbody>
 </table>
