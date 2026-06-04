@@ -69,10 +69,12 @@ def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, ci
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_platform_instance(ctx, auth) as platform:
 		all_items: list[dict[str, Any]] = []
+		html_items: list[dict[str, Any]] = []
+		html_file_output = bool(output and fmt == "html")
 		page = 1
 		max_pages = (count + 14) // 15  # 每页约 15 条
 
-		while len(all_items) < count and page <= max_pages:
+		while _export_item_count(all_items, html_items, html_file_output=html_file_output) < count and page <= max_pages:
 			logger.info(f"正在获取第 {page} 页...")
 			search_filters: dict[str, Any] = {"page": page}
 			for key, value in {
@@ -105,21 +107,29 @@ def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, ci
 				break
 
 			for raw_item in job_list:
-				if len(all_items) >= count:
+				if _export_item_count(all_items, html_items, html_file_output=html_file_output) >= count:
 					break
-				item = JobItem.from_api(raw_item)
-				all_items.append(item.to_dict())
+				if html_file_output:
+					html_items.append(_public_html_export_item_from_api(raw_item))
+				else:
+					item = JobItem.from_api(raw_item)
+					all_items.append(item.to_dict())
 
 			if not platform_data.get("hasMore", False):
 				break
 			page += 1
 
 		if output:
-			write_items = _prepare_export_items(all_items, fmt=fmt, include_private=include_private)
-			_write_to_file(write_items, fmt, output)
+			if html_file_output:
+				_write_to_file(html_items, fmt, output)
+				item_count = len(html_items)
+			else:
+				write_items = _prepare_export_items(all_items, fmt=fmt, include_private=include_private)
+				_write_to_file(write_items, fmt, output)
+				item_count = len(all_items)
 			data = {
-				"message": f"已导出 {len(all_items)} 条到 {output}",
-				"count": len(all_items),
+				"message": f"已导出 {item_count} 条到 {output}",
+				"count": item_count,
 				"format": fmt,
 				"path": output,
 				"private_fields": _private_fields_state(fmt=fmt, include_private=include_private),
@@ -152,6 +162,12 @@ def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, ci
 			)
 
 
+def _export_item_count(all_items: list[dict[str, Any]], html_items: list[dict[str, Any]], *, html_file_output: bool) -> int:
+	if html_file_output:
+		return len(html_items)
+	return len(all_items)
+
+
 def _prepare_export_items(items: list[dict[str, Any]], *, fmt: str, include_private: bool) -> list[dict[str, Any]]:
 	if fmt == "html":
 		return [_public_html_export_item(item) for item in items]
@@ -176,6 +192,18 @@ def _redact_export_item(item: dict[str, Any]) -> dict[str, Any]:
 
 def _public_html_export_item(item: dict[str, Any]) -> dict[str, Any]:
 	return {key: item[key] for key in _HTML_PUBLIC_EXPORT_FIELDS if key in item}
+
+
+def _public_html_export_item_from_api(raw: dict[str, Any]) -> dict[str, Any]:
+	return {
+		"title": raw.get("jobName", ""),
+		"company": raw.get("brandName", ""),
+		"city": raw.get("cityName", ""),
+		"experience": raw.get("jobExperience", ""),
+		"education": raw.get("jobDegree", ""),
+		"skills": raw.get("skills", []),
+		"welfare": raw.get("welfareList", []),
+	}
 
 
 def _write_to_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
