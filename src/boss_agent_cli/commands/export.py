@@ -121,10 +121,10 @@ def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, ci
 
 		if output:
 			if html_file_output:
-				_write_to_file(html_items, fmt, output)
+				_write_html(html_items, output)
 				item_count = len(html_items)
 			else:
-				write_items = _prepare_export_items(all_items, fmt=fmt, include_private=include_private)
+				write_items = _prepare_export_items(all_items, include_private=include_private)
 				_write_to_file(write_items, fmt, output)
 				item_count = len(all_items)
 			data = {
@@ -168,9 +168,7 @@ def _export_item_count(all_items: list[dict[str, Any]], html_items: list[dict[st
 	return len(all_items)
 
 
-def _prepare_export_items(items: list[dict[str, Any]], *, fmt: str, include_private: bool) -> list[dict[str, Any]]:
-	if fmt == "html":
-		return [_public_html_export_item(item) for item in items]
+def _prepare_export_items(items: list[dict[str, Any]], *, include_private: bool) -> list[dict[str, Any]]:
 	if include_private:
 		return items
 	return [_redact_export_item(item) for item in items]
@@ -188,10 +186,6 @@ def _redact_export_item(item: dict[str, Any]) -> dict[str, Any]:
 		if key in redacted:
 			redacted[key] = "[REDACTED]"
 	return redacted
-
-
-def _public_html_export_item(item: dict[str, Any]) -> dict[str, Any]:
-	return {key: item[key] for key in _HTML_PUBLIC_EXPORT_FIELDS if key in item}
 
 
 def _public_html_export_item_from_api(raw: dict[str, Any]) -> dict[str, Any]:
@@ -230,8 +224,6 @@ def _write_to_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 				# CSV 公式注入防护
 				row = {k: _sanitize_csv_cell(str(v)) for k, v in row.items()}
 				writer.writerow(row)
-	elif fmt == "html":
-		_write_html(items, path)
 
 
 def _sanitize_csv_cell(value: str) -> str:
