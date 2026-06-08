@@ -13,6 +13,17 @@ LOW_RISK_MODE_DESCRIPTION = (
 )
 
 COMPLIANCE_BLOCKED_ACTION = "保持默认低风险模式；如需处理，请回到平台官网手动完成。"
+_COMPLIANCE_NEXT_ACTIONS = [
+	"使用只读命令确认信息，例如 boss search、boss detail、boss show、boss shortlist",
+	"需要写操作或候选人个人信息处理时，请回到平台官网由用户手动完成",
+]
+_COMPLIANCE_BLOCK_HINTS = {
+	"policy": "low_risk_assistance",
+	"blocked": True,
+	"manual_action_required": True,
+	"allowed_alternatives": ["search", "detail", "show", "shortlist"],
+	"next_actions": _COMPLIANCE_NEXT_ACTIONS,
+}
 
 _SENSITIVE_COMMANDS = {
 	"greet": "自动打招呼属于平台写操作，默认低风险模式不通过 CLI 触达招聘者。",
@@ -66,12 +77,7 @@ def require_compliance_allowed(ctx: click.Context, command: str) -> bool:
 		message=f"{reason} {LOW_RISK_MODE_DESCRIPTION}",
 		recoverable=False,
 		recovery_action=COMPLIANCE_BLOCKED_ACTION,
-		hints={
-			"next_actions": [
-				"使用只读命令确认信息，例如 boss search、boss detail、boss show、boss shortlist",
-				"需要写操作或候选人个人信息处理时，请回到平台官网由用户手动完成",
-			],
-		},
+		hints=_COMPLIANCE_BLOCK_HINTS,
 	)
 	return False
 

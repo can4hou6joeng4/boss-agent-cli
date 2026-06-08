@@ -89,6 +89,22 @@ class TestZhilianEnvelopeAdapter:
 		code, _ = self.plat.parse_error({"code": 999, "message": "whatever"})
 		assert code == "UNKNOWN"
 
+	def test_parse_error_status_code_network_error(self) -> None:
+		code, _ = self.plat.parse_error({"status_code": 503, "message": "service unavailable"})
+		assert code == "NETWORK_ERROR"
+
+	def test_parse_error_message_auth_expired(self) -> None:
+		code, _ = self.plat.parse_error({"code": "ERR", "message": "token expired"})
+		assert code == "AUTH_EXPIRED"
+
+	def test_parse_error_message_rate_limited(self) -> None:
+		code, _ = self.plat.parse_error({"code": "ERR", "message": "rate limit"})
+		assert code == "RATE_LIMITED"
+
+	def test_parse_error_message_account_risk(self) -> None:
+		code, _ = self.plat.parse_error({"code": "ERR", "message": "risk control"})
+		assert code == "ACCOUNT_RISK"
+
 
 class TestZhilianDelegation:
 	"""ZhilianPlatform 只读方法委托给底层 ZhilianClient。"""

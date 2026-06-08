@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import sqlite3
 import time
 from pathlib import Path
@@ -14,9 +15,10 @@ from boss_agent_cli.display import handle_output
 @click.command("clean")
 @click.option("--dry-run", is_flag=True, default=False, help="仅预览将清理的内容，不实际删除")
 @click.option("--all", "clean_all", is_flag=True, default=False, help="清理全部缓存（包括未过期的搜索缓存和打招呼记录）")
+@click.option("--privacy", is_flag=True, default=False, help="清理本地敏感数据（登录会话、简历、聊天快照和导出文件）")
 @click.option("--days", default=30, help="清理超过指定天数的快照和导出文件")
 @click.pass_context
-def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, days: int) -> None:
+def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool, days: int) -> None:
 	"""清理过期缓存和临时文件。"""
 	data_dir = ctx.obj["data_dir"]
 	results = []
@@ -42,7 +44,19 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, days: int) -> 
 	results.append({"target": "导出文件", "cleaned": count, "bytes_freed": freed})
 	total_freed += freed
 
-	# 5) 全量清理额外项
+	# 5) 隐私清理：显式 opt-in，避免误删登录态和本地简历
+	if privacy:
+		for target, path in (
+			("登录会话", data_dir / "auth" / "session.enc"),
+			("本地简历", data_dir / "resumes"),
+			("聊天快照", data_dir / "chat-history"),
+			("导出文件", data_dir / "chat-export"),
+		):
+			freed, count = _clean_path(path, dry_run=dry_run)
+			results.append({"target": target, "cleaned": count, "bytes_freed": freed})
+			total_freed += freed
+
+	# 6) 全量清理额外项
 	if clean_all:
 		freed, count = _clean_greet_records(data_dir, dry_run=dry_run)
 		results.append({"target": "打招呼记录", "cleaned": count, "bytes_freed": freed})
@@ -62,6 +76,9 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, days: int) -> 
 	hints: dict[str, list[str]] = {"next_actions": []}
 	if dry_run:
 		hints["next_actions"].append("boss clean — 执行实际清理")
+	elif privacy:
+		hints["next_actions"].append("boss login — 隐私清理后需要重新登录")
+		hints["next_actions"].append("boss doctor — 检查清理后环境状态")
 	else:
 		hints["next_actions"].append("boss doctor — 检查清理后环境状态")
 
@@ -126,6 +143,34 @@ def _clean_dir(dir_path: Path, *, days: int, dry_run: bool) -> tuple[int, int]:
 				f.unlink()
 
 	return total_size, count
+
+
+def _clean_path(path: Path, *, dry_run: bool) -> tuple[int, int]:
+	"""清理单个文件或目录，返回 (释放字节数, 清理条数)。"""
+	if not path.exists():
+		return 0, 0
+	size, count = _path_stats(path)
+	if not dry_run:
+		if path.is_dir():
+			shutil.rmtree(path)
+		else:
+			path.unlink()
+	return size, count
+
+
+def _path_stats(path: Path) -> tuple[int, int]:
+	"""统计文件/目录字节数和文件数量。"""
+	if path.is_file():
+		return path.stat().st_size, 1
+	if not path.is_dir():
+		return 0, 0
+	size = 0
+	count = 0
+	for item in path.rglob("*"):
+		if item.is_file():
+			size += item.stat().st_size
+			count += 1
+	return size, count
 
 
 def _clean_greet_records(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:

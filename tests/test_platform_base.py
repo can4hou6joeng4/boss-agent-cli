@@ -74,6 +74,19 @@ class TestBossEnvelopeAdapter:
 		code, _ = self.plat.parse_error({"code": 999, "message": "unknown"})
 		assert code == "UNKNOWN"
 
+	def test_parse_error_http_status_auth_expired(self) -> None:
+		code, msg = self.plat.parse_error({"status_code": 401, "message": "session expired"})
+		assert code == "AUTH_EXPIRED"
+		assert msg == "session expired"
+
+	def test_parse_error_http_status_network_error(self) -> None:
+		code, _ = self.plat.parse_error({"status_code": 502, "message": "bad gateway"})
+		assert code == "NETWORK_ERROR"
+
+	def test_parse_error_message_network_error(self) -> None:
+		code, _ = self.plat.parse_error({"code": "ERR", "message": "request timeout"})
+		assert code == "NETWORK_ERROR"
+
 
 class TestBossPlatformDelegation:
 	"""BossPlatform 委托给底层 BossClient。"""

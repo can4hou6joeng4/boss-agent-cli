@@ -155,6 +155,26 @@ class TestZhilianClientReadonlyMethods:
 		assert params["financingStage"] == "A轮"
 		assert params["jobType"] == "全职"
 
+	def test_search_jobs_accepts_boss_compatible_aliases(self) -> None:
+		self.client.search_jobs(
+			"Python",
+			raw_params={"cityId": "530", "extra": "keep"},
+			city="北京",
+			city_code="538",
+			experience="3-5年",
+			experience_code="104",
+			degree="本科",
+			degree_code="203",
+			job_type="全职",
+			job_type_code="1901",
+		)
+		params = self.client._request.call_args.kwargs["params"]
+		assert params["cityId"] == "538"
+		assert params["extra"] == "keep"
+		assert params["workExp"] == "104"
+		assert params["education"] == "203"
+		assert params["jobType"] == "1901"
+
 	def test_job_detail_uses_path_param_url(self) -> None:
 		self.client.job_detail("job-1")
 		call = self.client._request.call_args

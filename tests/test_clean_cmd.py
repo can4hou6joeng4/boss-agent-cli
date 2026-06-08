@@ -165,3 +165,44 @@ def test_clean_hints_after_actual(tmp_path):
 	code, parsed = _invoke("clean", tmp_path=tmp_path)
 	actions = parsed.get("hints", {}).get("next_actions", [])
 	assert any("doctor" in a for a in actions)
+
+
+def test_clean_privacy_dry_run_does_not_delete_sensitive_files(tmp_path):
+	"""隐私清理预览应报告敏感文件但不删除。"""
+	session = tmp_path / "auth" / "session.enc"
+	resume = tmp_path / "resumes" / "default.json"
+	export = tmp_path / "chat-export" / "messages.json"
+	for file in (session, resume, export):
+		file.parent.mkdir(parents=True, exist_ok=True)
+		file.write_text("secret", encoding="utf-8")
+
+	code, parsed = _invoke("clean", "--privacy", "--dry-run", tmp_path=tmp_path)
+
+	assert code == 0
+	targets = {r["target"]: r for r in parsed["data"]["results"]}
+	assert targets["登录会话"]["cleaned"] == 1
+	assert targets["本地简历"]["cleaned"] == 1
+	assert targets["导出文件"]["cleaned"] >= 1
+	assert session.exists()
+	assert resume.exists()
+	assert export.exists()
+
+
+def test_clean_privacy_deletes_sensitive_files_and_hints_relogin(tmp_path):
+	"""显式隐私清理应删除登录会话、本地简历和导出/快照数据。"""
+	files = [
+		tmp_path / "auth" / "session.enc",
+		tmp_path / "resumes" / "default.json",
+		tmp_path / "chat-history" / "snapshot.json",
+		tmp_path / "chat-export" / "messages.json",
+	]
+	for file in files:
+		file.parent.mkdir(parents=True, exist_ok=True)
+		file.write_text("secret", encoding="utf-8")
+
+	code, parsed = _invoke("clean", "--privacy", tmp_path=tmp_path)
+
+	assert code == 0
+	assert all(not file.exists() for file in files)
+	actions = parsed.get("hints", {}).get("next_actions", [])
+	assert any("login" in a for a in actions)

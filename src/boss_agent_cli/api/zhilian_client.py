@@ -262,20 +262,24 @@ class ZhilianClient:
 			"keyword": query,
 			"pageNum": filters.get("page", 1),
 		}
+		if raw_params := filters.get("raw_params"):
+			params.update(raw_params)
 		if page_size := filters.get("page_size"):
 			params["pageSize"] = page_size
 		filter_map = {
-			"city": "cityId",
-			"salary": "salary",
-			"experience": "workExp",
-			"education": "education",
-			"scale": "companySize",
-			"industry": "industry",
-			"stage": "financingStage",
-			"job_type": "jobType",
+			"city": ("cityId", "city_code"),
+			"salary": ("salary", "salary_code"),
+			"experience": ("workExp", "experience_code"),
+			"education": ("education", "education_code"),
+			"degree": ("education", "degree_code"),
+			"scale": ("companySize", "scale_code"),
+			"industry": ("industry", "industry_code"),
+			"stage": ("financingStage", "stage_code"),
+			"job_type": ("jobType", "job_type_code"),
 		}
-		for source_key, target_key in filter_map.items():
-			if value := filters.get(source_key):
+		for source_key, (target_key, code_key) in filter_map.items():
+			value = filters.get(code_key) or filters.get(source_key)
+			if value:
 				params[target_key] = value
 		return self._request("GET", SEARCH_URL, params=params)
 

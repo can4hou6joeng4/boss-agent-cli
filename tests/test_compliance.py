@@ -14,6 +14,15 @@ def _invoke(*args: str):
 	return result.exit_code, json.loads(result.output)
 
 
+def _assert_compliance_block_hints(parsed: dict) -> None:
+	hints = parsed["hints"]
+	assert hints["policy"] == "low_risk_assistance"
+	assert hints["blocked"] is True
+	assert hints["manual_action_required"] is True
+	assert hints["allowed_alternatives"] == ["search", "detail", "show", "shortlist"]
+	assert hints["next_actions"]
+
+
 def test_default_low_risk_mode_blocks_outbound_greet():
 	code, parsed = _invoke("greet", "sec_001", "job_001")
 	assert code == 1
@@ -21,6 +30,7 @@ def test_default_low_risk_mode_blocks_outbound_greet():
 	assert parsed["error"]["code"] == "COMPLIANCE_BLOCKED"
 	assert parsed["error"]["recoverable"] is False
 	assert "平台官网" in parsed["error"]["recovery_action"]
+	_assert_compliance_block_hints(parsed)
 
 
 def test_default_low_risk_mode_blocks_platform_data_aggregation():
@@ -28,6 +38,7 @@ def test_default_low_risk_mode_blocks_platform_data_aggregation():
 	assert code == 1
 	assert parsed["error"]["code"] == "COMPLIANCE_BLOCKED"
 	assert "默认低风险模式" in parsed["error"]["message"]
+	_assert_compliance_block_hints(parsed)
 
 
 def test_raw_chatmsg_does_not_bypass_low_risk_compliance():

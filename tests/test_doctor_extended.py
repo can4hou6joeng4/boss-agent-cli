@@ -574,3 +574,30 @@ def test_zhilian_doctor_uses_platform_specific_cookie_and_network_messages(tmp_p
 	network = _find_check(parsed["data"]["checks"], "network")
 	assert network is not None
 	assert network["detail"] == "访问 zhaopin.com 返回 HTTP 200"
+
+def test_doctor_login_preflight_blocks_missing_auth_before_platform_requests(tmp_path):
+	code, parsed = _invoke_doctor(tmp_path, token=None)
+	preflight = _find_check(parsed["data"]["checks"], "login_preflight")
+	assert preflight is not None
+	assert preflight["status"] == "error"
+	assert "禁止发起需要认证的平台请求" in preflight["detail"]
+	assert "boss login" in preflight["recovery_action"]
+
+
+def test_doctor_login_preflight_warns_on_partial_auth(tmp_path):
+	token = {"cookies": {"wt2": "tok"}}
+	code, parsed = _invoke_doctor(tmp_path, token=token)
+	preflight = _find_check(parsed["data"]["checks"], "login_preflight")
+	assert preflight is not None
+	assert preflight["status"] == "warn"
+	assert "只读请求可能失败" in preflight["detail"]
+	assert "刷新登录态" in preflight["recovery_action"]
+
+
+def test_doctor_login_preflight_passes_complete_auth(tmp_path):
+	token = {"cookies": {"wt2": "tok"}, "stoken": "st"}
+	code, parsed = _invoke_doctor(tmp_path, token=token)
+	preflight = _find_check(parsed["data"]["checks"], "login_preflight")
+	assert preflight is not None
+	assert preflight["status"] == "ok"
+	assert "登录前置通过" in preflight["detail"]

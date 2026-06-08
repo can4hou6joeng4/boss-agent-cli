@@ -41,10 +41,7 @@ class ZhilianPlatform(Platform):
 		return response.get("data")
 
 	def parse_error(self, response: dict[str, Any]) -> tuple[str, str]:
-		code = response.get("code")
-		message = str(response.get("message") or "")
-		unified = _ERROR_CODE_MAP.get(code, "UNKNOWN") if isinstance(code, int) else "UNKNOWN"
-		return unified, message
+		return self._classify_platform_error(response, _ERROR_CODE_MAP)
 
 	# ── P0 只读委托 ────────────────────────────────
 

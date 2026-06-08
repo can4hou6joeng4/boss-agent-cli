@@ -59,6 +59,54 @@ class Platform(ABC):
 	) -> None:
 		self.close()
 
+	def _classify_platform_error(
+		self,
+		response: dict[str, Any],
+		code_map: dict[int, str] | None = None,
+		*,
+		default: str = "UNKNOWN",
+	) -> tuple[str, str]:
+		"""把平台错误包络统一分类为 CLI 稳定错误码。
+
+		平台 adapter 可先传入各自的服务端错误码映射；未命中时按通用
+		HTTP 状态码与消息关键词兜底，避免 401/429/网络错误等跨平台
+		常见失败都退化为 UNKNOWN。
+		"""
+		code = response.get("code")
+		status_code = response.get("status_code") or response.get("status")
+		message = str(
+			response.get("message")
+			or response.get("msg")
+			or response.get("error")
+			or response.get("zpData")
+			or ""
+		)
+		mapping = code_map or {}
+		if isinstance(code, int) and code in mapping:
+			return mapping[code], message
+
+		numeric_code = code if isinstance(code, int) else status_code
+		if numeric_code in (401, 40301):
+			return "AUTH_EXPIRED", message
+		if numeric_code == 403:
+			return "ACCOUNT_RISK", message
+		if numeric_code == 429:
+			return "RATE_LIMITED", message
+		if isinstance(numeric_code, int) and 500 <= numeric_code < 600:
+			return "NETWORK_ERROR", message
+
+		lower_msg = message.lower()
+		if any(token in lower_msg for token in ("stoken", "token", "unauthorized", "登录", "登陆", "未认证")):
+			return "AUTH_EXPIRED", message
+		if any(token in lower_msg for token in ("too many", "rate", "频繁", "限流", "稍后再试")):
+			return "RATE_LIMITED", message
+		if any(token in lower_msg for token in ("risk", "forbidden", "风控", "安全验证", "异常访问")):
+			return "ACCOUNT_RISK", message
+		if any(token in lower_msg for token in ("timeout", "timed out", "network", "connection", "网络", "连接")):
+			return "NETWORK_ERROR", message
+
+		return default, message
+
 	@abstractmethod
 	def is_success(self, response: dict[str, Any]) -> bool:
 		"""判断响应是否成功。

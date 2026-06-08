@@ -173,6 +173,7 @@ def assess_auth_health(
 	checks.append(_stoken_presence_check(config, has_token=has_token, has_secondary=has_secondary))
 	checks.append(_stoken_freshness_check(config, session_path, has_token=has_token, has_secondary=has_secondary, now=current_time))
 	checks.append(_auth_token_quality_check(config, has_token=has_token, has_primary=has_primary, has_secondary=has_secondary))
+	checks.append(_login_preflight_check(config, has_token=has_token, has_primary=has_primary, has_secondary=has_secondary))
 	checks.append(_cookie_completeness_check(config, cookies, login_action=login_action))
 	checks.extend(_capability_readiness_checks(config, has_token=has_token, has_primary=has_primary, has_secondary=has_secondary))
 
@@ -301,6 +302,44 @@ def _auth_token_quality_check(
 		"auth_token_quality",
 		"error",
 		f"登录态无效：{config.primary_cookie}/{config.secondary_token_label} 均缺失",
+		config.login_action,
+	)
+
+
+def _login_preflight_check(
+	config: PlatformAuthConfig,
+	*,
+	has_token: bool,
+	has_primary: bool,
+	has_secondary: bool,
+) -> AuthHealthCheck:
+	"""Summarise whether login-gated commands may run before making platform requests."""
+	if has_token and has_primary and has_secondary:
+		return AuthHealthCheck(
+			"login_preflight",
+			"ok",
+			f"登录前置通过：{config.primary_cookie}/{config.secondary_token_label} 均存在，可执行只读请求",
+			hint="仍建议用 boss status --live 做低频只读验证；遇到风控立即停止自动化访问",
+		)
+	if has_token and has_primary:
+		return AuthHealthCheck(
+			"login_preflight",
+			"warn",
+			f"登录前置部分通过：{config.primary_cookie} 存在，但 {config.secondary_token_label} 缺失；只读请求可能失败",
+			"通过 CDP 或 boss login 刷新登录态后再执行需要平台请求的命令",
+			hint="不要在缺少二级令牌时重试高频请求；优先刷新登录态",
+		)
+	if has_token:
+		return AuthHealthCheck(
+			"login_preflight",
+			"error",
+			f"登录前置失败：缺少关键 Cookie {config.primary_cookie}，当前登录态不可用于平台请求",
+			f"boss logout && {config.login_action}",
+		)
+	return AuthHealthCheck(
+		"login_preflight",
+		"error",
+		"登录前置失败：未检测到本地登录态，禁止发起需要认证的平台请求",
 		config.login_action,
 	)
 
