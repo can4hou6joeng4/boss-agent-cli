@@ -224,6 +224,7 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 		next_actions.append("boss --cdp-url http://localhost:9222 doctor — 检查指定 CDP 地址")
 	if not any(item["name"] == "cookie_extract" and item["status"] == "ok" for item in checks):
 		next_actions.append(f"先在本机浏览器登录 {config.site_host}，再重试 {config.login_action}")
+	next_actions.append("敏感操作或命中风控时，停止自动化访问并回到官方页面由用户手动完成")
 
 	data = {
 		"summary": summary,

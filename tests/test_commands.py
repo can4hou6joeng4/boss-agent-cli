@@ -262,6 +262,7 @@ def test_doctor_command(mock_auth_cls, mock_probe_cdp, mock_httpx_get, mock_extr
 	assert any(item["name"] == "credential_file" for item in parsed["data"]["checks"])
 	assert any(item["name"] == "candidate_search_health" for item in parsed["data"]["checks"])
 	assert parsed["hints"]["next_actions"]
+	assert any("官方页面" in action and "手动完成" in action for action in parsed["hints"]["next_actions"])
 
 
 @patch("boss_agent_cli.commands.doctor.extract_cookies")

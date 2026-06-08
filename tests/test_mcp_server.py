@@ -142,6 +142,26 @@ def test_low_risk_blocked_tools_are_derived_from_compliance_commands():
 	assert _compliance_command_for_tool("boss_watch_run") == "watch-run"
 
 
+def test_low_risk_blocked_tools_match_schema_blocked_commands():
+	"""MCP 隐藏工具集合必须与 schema 暴露的低风险阻断命令保持同源。"""
+	blocked_commands = low_risk_blocked_commands()
+	assert {
+		_compliance_command_for_tool(tool_name)
+		for tool_name in _LOW_RISK_BLOCKED_TOOLS
+	} == blocked_commands
+
+
+def test_no_exposed_tool_maps_to_schema_blocked_command():
+	"""默认暴露的 MCP 工具不得映射到 schema/compliance 的低风险阻断命令。"""
+	blocked_commands = low_risk_blocked_commands()
+	leaked = [
+		tool.name
+		for tool in TOOLS
+		if _compliance_command_for_tool(tool.name) in blocked_commands
+	]
+	assert not leaked
+
+
 # ── 参数构建 ────────────────────────────────────────────────────────
 
 

@@ -376,7 +376,7 @@ except AuthRequired:
 | `boss login` | 四级降级登录 |
 | `boss logout` | 退出登录 |
 | `boss status` | 检查登录态 |
-| `boss doctor` | 诊断环境、依赖、凭据完整性和网络 |
+| `boss doctor` | 诊断环境、依赖、凭据完整性和网络；默认仅本地诊断，`--live-probe` 才执行低频只读探测；敏感操作或命中风控时提示回到官方页面手动完成 |
 | `boss me` | 我的信息（用户/简历/期望/投递记录） |
 
 ### 职位搜索

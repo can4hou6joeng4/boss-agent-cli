@@ -1,7 +1,10 @@
+import ast
 import json
+from pathlib import Path
 
 from click.testing import CliRunner
 
+from boss_agent_cli.compliance import low_risk_blocked_commands
 from boss_agent_cli.main import cli
 
 
@@ -51,3 +54,37 @@ def test_internal_policy_fixture_keeps_historical_contract_tests_reachable(restr
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"]["compliance"]["sensitive_commands_blocked"] is False
+
+
+def _guarded_command_names_from_source() -> set[str]:
+	"""Return command ids passed to require_compliance_allowed(ctx, ...)."""
+	commands_dir = Path(__file__).resolve().parents[1] / "src" / "boss_agent_cli" / "commands"
+	guarded: set[str] = set()
+	for path in commands_dir.rglob("*.py"):
+		tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+		for node in ast.walk(tree):
+			if not isinstance(node, ast.Call):
+				continue
+			func = node.func
+			if not isinstance(func, ast.Name) or func.id != "require_compliance_allowed":
+				continue
+			if len(node.args) < 2 or not isinstance(node.args[1], ast.Constant):
+				continue
+			command = node.args[1].value
+			if isinstance(command, str):
+				guarded.add(command)
+	return guarded
+
+
+def test_compliance_registry_matches_all_guarded_sensitive_commands():
+	"""Every command using the compliance guard must be listed in schema-visible policy data."""
+	guarded = _guarded_command_names_from_source()
+	blocked = low_risk_blocked_commands()
+	assert guarded
+	assert guarded == blocked
+
+
+def test_schema_blocked_commands_match_guarded_sensitive_commands():
+	code, parsed = _invoke("schema")
+	assert code == 0
+	assert set(parsed["data"]["compliance"]["blocked_commands"]) == _guarded_command_names_from_source()
