@@ -156,7 +156,10 @@ def _command_availability(
 
 
 def _inject_availability(data: dict[str, Any]) -> dict[str, Any]:
-	candidate_platforms = data.get("supported_platforms", [])
+	# supported_platforms 表示“已注册 / 可选择”的平台；availability 表示命令真实可用的
+	# 平台。qiancheng/51job 当前是 NOT_SUPPORTED 占位 adapter，不能注入到
+	# search/detail/stats 等命令的可用性列表，避免误导上层 agent 调度。
+	candidate_platforms = ["zhilian", "zhipin"]
 	recruiter_platforms = data.get("supported_recruiter_platforms", [])
 	commands: dict[str, Any] = {}
 	for cmd_name, cmd_spec in data["commands"].items():
@@ -837,8 +840,8 @@ SCHEMA_DATA = {
 		"--platform": {
 			"type": "string",
 			"default": "zhipin",
-			"description": "招聘平台适配器（zhipin=BOSS 直聘求职者/招聘者均可用；zhilian=智联招聘已接通求职者侧包络与命令兼容，招聘者侧暂未接入）",
-			"choices": ["zhipin", "zhilian"],
+			"description": "招聘平台适配器（zhipin=BOSS 直聘求职者/招聘者均可用；zhilian=智联招聘已接通求职者侧包络与命令兼容；qiancheng/51job=前程无忧占位适配器，当前稳定返回 NOT_SUPPORTED）",
+			"choices": ["51job", "qiancheng", "zhipin", "zhilian"],
 		},
 		"--json": {
 			"type": "bool",

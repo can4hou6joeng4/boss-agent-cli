@@ -19,11 +19,14 @@ from __future__ import annotations
 
 from boss_agent_cli.platforms.base import Platform
 from boss_agent_cli.platforms.recruiter_base import RecruiterPlatform
+from boss_agent_cli.platforms.qiancheng import QianchengPlatform
 from boss_agent_cli.platforms.zhilian import ZhilianPlatform
 from boss_agent_cli.platforms.zhipin import BossPlatform
 from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
 
 _REGISTRY: dict[str, type[Platform]] = {
+	"qiancheng": QianchengPlatform,
+	"51job": QianchengPlatform,
 	"zhipin": BossPlatform,
 	"zhilian": ZhilianPlatform,
 }
@@ -77,6 +80,7 @@ def list_recruiter_platforms() -> list[str]:
 __all__ = [
 	"Platform",
 	"BossPlatform",
+	"QianchengPlatform",
 	"ZhilianPlatform",
 	"get_platform",
 	"list_platforms",
