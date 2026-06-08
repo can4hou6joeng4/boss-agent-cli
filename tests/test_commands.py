@@ -688,6 +688,51 @@ def test_search_ignores_index_cache_write_failure(mock_client_cls, mock_auth_cls
 	mock_save_index.assert_called_once()
 
 
+@patch("boss_agent_cli.index_cache.save_index")
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_json_hints_keep_jobseeker_flow_read_only(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline, mock_save_index):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = None
+	_ctx_mock(mock_client_cls)
+	mock_pipeline.return_value = SimpleNamespace(
+		items=[{
+			"job_id": "j1",
+			"title": "Go 开发",
+			"company": "TestCo",
+			"salary": "20K",
+			"city": "广州",
+			"experience": "3-5年",
+			"education": "本科",
+			"security_id": "sec_001",
+			"greeted": False,
+		}],
+		has_more=False,
+		total=1,
+		stats=SimpleNamespace(
+			pages_scanned=1,
+			jobs_seen=1,
+			jobs_prefiltered=0,
+			detail_checks=0,
+		),
+	)
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["search", "golang"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	actions = parsed["hints"]["next_actions"]
+	assert "使用 boss detail <security_id> 查看职位详情" in actions
+	assert "如需投递或沟通，请回到平台官网由用户手动完成" in actions
+	assert all("boss greet" not in action for action in actions)
+	assert all("boss apply" not in action for action in actions)
+	mock_save_index.assert_called_once()
+
+
 @patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_to_stdout(mock_auth_cls, mock_client_cls):
@@ -1604,3 +1649,94 @@ def test_search_reports_welfare_not_supported(mock_client_cls, mock_auth_cls, mo
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "NOT_SUPPORTED"
+
+@patch("boss_agent_cli.commands.detail.CacheStore")
+@patch("boss_agent_cli.commands.detail.AuthManager")
+@patch("boss_agent_cli.commands.detail.get_platform_instance")
+def test_detail_json_hints_keep_jobseeker_flow_read_only(mock_client_cls, mock_auth_cls, mock_cache_cls):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.job_detail.return_value = {
+		"zpData": {
+			"jobInfo": {
+				"jobName": "Go 开发",
+				"salaryDesc": "20K",
+				"cityName": "广州",
+				"experienceName": "3-5年",
+				"degreeName": "本科",
+				"address": "天河",
+			},
+			"bossInfo": {"name": "王经理", "title": "HRBP"},
+			"brandComInfo": {"brandName": "TestCo"},
+		},
+	}
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["detail", "sec_001", "--job-id", "j1"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	actions = parsed["hints"]["next_actions"]
+	assert "如需投递或沟通，请回到 BOSS 直聘官方页面由用户手动完成" in actions
+	assert all("boss greet" not in action for action in actions)
+	assert all("boss apply" not in action for action in actions)
+
+
+@patch("boss_agent_cli.commands.show.CacheStore")
+@patch("boss_agent_cli.commands.show.AuthManager")
+@patch("boss_agent_cli.commands.show.get_platform_instance")
+@patch("boss_agent_cli.commands.show.get_job_by_index")
+def test_show_json_hints_keep_jobseeker_flow_read_only(mock_get_job, mock_client_cls, mock_auth_cls, mock_cache_cls):
+	mock_get_job.return_value = {"security_id": "sec_001"}
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.job_card.return_value = {
+		"zpData": {
+			"jobCard": {
+				"encryptJobId": "j1",
+				"jobName": "Go 开发",
+				"brandName": "TestCo",
+				"salaryDesc": "20K",
+				"cityName": "广州",
+				"experienceName": "3-5年",
+				"degreeName": "本科",
+				"address": "天河",
+				"bossName": "王经理",
+				"bossTitle": "HRBP",
+			},
+		},
+	}
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["show", "1"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	actions = parsed["hints"]["next_actions"]
+	assert "如需投递或沟通，请回到 BOSS 直聘官方页面由用户手动完成" in actions
+	assert all("boss greet" not in action for action in actions)
+	assert all("boss apply" not in action for action in actions)
+
+
+@patch("boss_agent_cli.commands.stats._collect_stats")
+def test_stats_json_hints_keep_application_manual_handoff(mock_collect_stats):
+	mock_collect_stats.return_value = {
+		"window_days": 30,
+		"funnel": {"greeted": 1, "applied": 0, "shortlist": 0},
+		"window": {"greeted": 1, "applied": 0, "shortlist": 0, "watch_hits": 0},
+		"conversion": {"apply_rate": 0, "shortlist_rate": 0, "apply_rate_window": 0},
+	}
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["stats"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	actions = parsed["hints"]["next_actions"]
+	assert "如需投递，请回到平台官网由用户手动完成" in actions
+	assert all("boss apply" not in action for action in actions)
