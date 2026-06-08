@@ -107,6 +107,6 @@ Default Low-Risk Assistance Mode: local assistance, read-only first, user-trigge
 Notes:
 - **Transport**: `httpx` means a direct API call; browser transport remains for compatibility and must not be used to retry risk-control blocks. `AI service` means a third-party model API; do not send platform chat records, candidate resumes, or contact details without authorization.
 - For CLI-first integrations, prefer `boss schema` for capability discovery and parameter validation; the schema exposes both `supported_platforms` and `supported_recruiter_platforms`.
-- Current platform coverage: `zhipin` has both candidate and recruiter implementations, but sensitive workflows are blocked by default; `zhilian` supports candidate-side login and read-only workflows, while the recruiter side is still unavailable.
+- Current platform coverage: `zhipin` has both candidate and recruiter implementations, but sensitive workflows are blocked by default; `zhilian` supports candidate-side login and read-only workflows, while the recruiter side is still unavailable; `qiancheng` / 51job is a registered placeholder adapter whose real workflows return `NOT_SUPPORTED`.
 - Current auth posture: `zhipin` and `zhilian` keep user-triggered login compatibility, but it must not be used to bypass platform risk controls.
 - Use `boss schema` as the source of truth: it currently exposes 34 top-level commands, with 9 first-level recruiter subcommands under `hr`, while `ai` and `resume` remain command-group entries.

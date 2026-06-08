@@ -145,7 +145,7 @@ boss hr jobs list                       # my job postings
 
 ## 🎭 Roles & Platforms
 
-boss-agent-cli covers both the job-seeker and the recruiter side, with a pluggable platform layer for future adapters.
+boss-agent-cli covers both the job-seeker and the recruiter side, with a pluggable platform layer for future adapters and explicitly unsupported placeholders.
 
 | Role | Flag | Entry commands |
 |------|------|----------------|
@@ -156,11 +156,14 @@ boss-agent-cli covers both the job-seeker and the recruiter side, with a pluggab
 |----------|:---------:|:---------:|--------|
 | BOSS Zhipin (`zhipin`) | ✅ | ✅ | default |
 | Zhaopin (`zhilian`)    | 🟡 candidate-side login + read/write flow wired | — | recruiter side is still intentionally unavailable at runtime |
+| 51job (`qiancheng`)     | 🚧 registered placeholder | — | returns `NOT_SUPPORTED` until the read-only research gate is satisfied |
 
 ```bash
 # pick a platform
 boss --platform zhilian search "Python"
 boss config set platform zhilian
+# 51job is currently identity-only; real commands return NOT_SUPPORTED
+boss --platform qiancheng status
 ```
 
 Notes:
@@ -168,6 +171,7 @@ Notes:
 - `boss --platform zhilian login` is available for candidate-side auth
 - candidate-side `search / detail / user_info` are wired for `zhilian`; recommendation streams and write actions are blocked by default in low-risk mode
 - `boss --platform zhilian hr ...` is still intentionally rejected at runtime because recruiter support is not implemented yet
+- `boss --platform qiancheng ...` is registered for schema/config identity only and returns `NOT_SUPPORTED` for real workflows
 
 Architecture notes: [docs/platform-abstraction.en.md](docs/platform-abstraction.en.md).
 

@@ -94,6 +94,22 @@ def test_capability_matrix_exists_and_covers_core_capabilities():
 	assert "`boss clean`" in content
 	assert "34 个顶层命令" in content
 	assert "9 个一级招聘者子命令" in content
+	assert "`qiancheng` / 51job" in content
+	assert "`NOT_SUPPORTED`" in content
+
+
+def test_readme_documents_registered_qiancheng_placeholder():
+	readme = _read("README.md")
+	readme_en = _read("README.en.md")
+	matrix_en = _read("docs/capability-matrix.en.md")
+
+	assert "--platform zhipin|zhilian|qiancheng" in readme
+	assert "前程无忧 / 51job (`qiancheng`)" in readme
+	assert "QianchengPlatform (51job 占位适配器，统一返回 NOT_SUPPORTED)" in readme
+
+	assert "51job (`qiancheng`)" in readme_en
+	assert "returns `NOT_SUPPORTED`" in readme_en
+	assert "registered placeholder adapter" in matrix_en
 
 
 def test_readme_and_skill_link_to_new_docs():

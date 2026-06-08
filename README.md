@@ -114,7 +114,7 @@ boss stats                                                   # 本地统计
 
 ### 平台与集成基础
 
-- `🔌 多平台抽象`：`Platform` / `RecruiterPlatform` 双注册表已落地；默认低风险模式优先暴露只读和本地辅助链路。命令：`--platform zhipin|zhilian`
+- `🔌 多平台抽象`：`Platform` / `RecruiterPlatform` 双注册表已落地；默认低风险模式优先暴露只读和本地辅助链路。命令：`--platform zhipin|zhilian|qiancheng`
 - `📤 结构化输出`：stdout 只输出 JSON 信封，适合 CLI 编排、Shell Agent、MCP 和 Python SDK。命令：`schema` `export`
 - `🧩 Agent 接入`：同一套能力可通过 Skill、subprocess、MCP、Python SDK 四种路径暴露给 Agent。文档：`docs/agent-quickstart.md` `docs/agent-hosts.md`
 
@@ -285,6 +285,7 @@ boss hr candidates "Golang"
 |------|:------:|:------:|------|
 | BOSS 直聘 (`zhipin`) | ✅ | ✅ | 默认 |
 | 智联招聘 (`zhilian`) | 🟡 候选者侧登录 + 读写链路已接通 | — | 招聘者侧未接入，运行时会直接拒绝 `hr` 子命令 |
+| 前程无忧 / 51job (`qiancheng`) | 🚧 已注册占位 | — | 统一返回 `NOT_SUPPORTED`，待只读研究门槛满足后再接入真实能力 |
 
 ```bash
 # 指定平台
@@ -292,6 +293,8 @@ boss --platform zhilian search "Python"
 
 # 设为默认
 boss config set platform zhilian
+# 51job 当前仅用于识别平台身份；真实命令会返回 NOT_SUPPORTED
+boss --platform qiancheng status
 ```
 
 设计细节见 [docs/platform-abstraction.md](docs/platform-abstraction.md)。
@@ -638,7 +641,8 @@ CLI (Click)
     │
     ├── Platform 抽象层（多平台注册表）
     │       ├── BossPlatform (求职者) / BossRecruiterPlatform (招聘者)
-    │       └── ZhilianPlatform (求职者侧登录 + 读写链路已接通，招聘者侧未接入)
+    │       ├── ZhilianPlatform (求职者侧登录 + 读写链路已接通，招聘者侧未接入)
+    │       └── QianchengPlatform (51job 占位适配器，统一返回 NOT_SUPPORTED)
     │
     ├── Compliance Guardrails ── 默认低风险模式，阻断敏感写操作和候选人个人信息链路
     │
