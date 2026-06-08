@@ -10,6 +10,27 @@ def _invoke(runner, tmp_path, args):
 	return runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "resume"] + args)
 
 
+def _assert_success_envelope(parsed, *, command="resume"):
+	assert parsed["ok"] is True
+	assert parsed["schema_version"] == "1.0"
+	assert parsed["command"] == command
+	assert parsed["pagination"] is None
+	assert parsed["error"] is None
+	assert isinstance(parsed["hints"]["next_actions"], list)
+	assert parsed["hints"]["next_actions"]
+
+
+def _assert_error_envelope(parsed, code: str, *, command="resume"):
+	assert parsed["ok"] is False
+	assert parsed["schema_version"] == "1.0"
+	assert parsed["command"] == command
+	assert parsed["data"] is None
+	assert parsed["pagination"] is None
+	assert parsed["error"]["code"] == code
+	assert isinstance(parsed["error"]["message"], str)
+	assert parsed["error"]["message"]
+
+
 # ── init ──────────────────────────────────────────────────────
 
 
@@ -18,9 +39,13 @@ def test_init_with_template(tmp_path):
 	result = _invoke(runner, tmp_path, ["init", "--name", "myresume", "--template", "default"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["ok"] is True
-	assert parsed["data"]["name"] == "myresume"
-	assert parsed["data"]["action"] == "init"
+	_assert_success_envelope(parsed)
+	assert parsed["data"] == {"action": "init", "name": "myresume", "template": "default"}
+	assert parsed["hints"]["next_actions"] == [
+		"boss resume show myresume",
+		"boss resume edit myresume --field title --value <新标题>",
+		"boss me 然后用 boss resume import 导入平台真实简历",
+	]
 
 
 def test_init_default_name(tmp_path):
@@ -51,8 +76,9 @@ def test_list_empty(tmp_path):
 	result = _invoke(runner, tmp_path, ["list"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["ok"] is True
+	_assert_success_envelope(parsed)
 	assert parsed["data"] == []
+	assert parsed["hints"]["next_actions"] == ["boss resume show <name>", "boss resume init --template default"]
 
 
 def test_list_with_items(tmp_path):
@@ -62,7 +88,9 @@ def test_list_with_items(tmp_path):
 	result = _invoke(runner, tmp_path, ["list"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert len(parsed["data"]) == 2
+	_assert_success_envelope(parsed)
+	assert [item["name"] for item in parsed["data"]] == ["r1", "r2"]
+	assert all({"name", "title", "updated_at"}.issubset(item) for item in parsed["data"])
 
 
 # ── show ──────────────────────────────────────────────────────
@@ -74,10 +102,15 @@ def test_show_existing(tmp_path):
 	result = _invoke(runner, tmp_path, ["show", "showme"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["ok"] is True
+	_assert_success_envelope(parsed)
 	assert parsed["data"]["name"] == "showme"
-	assert "title" in parsed["data"]
-	assert "personal_info" in parsed["data"]
+	assert parsed["data"]["title"] == "我的简历"
+	assert parsed["data"]["personal_info"] == {"items": [], "layout": "inline"}
+	assert parsed["data"]["modules"] == []
+	assert parsed["hints"]["next_actions"] == [
+		"boss resume edit showme --field title --value <新标题>",
+		"boss resume export showme --format json",
+	]
 
 
 def test_show_not_found(tmp_path):
@@ -85,8 +118,7 @@ def test_show_not_found(tmp_path):
 	result = _invoke(runner, tmp_path, ["show", "nonexist"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["ok"] is False
-	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
+	_assert_error_envelope(parsed, "RESUME_NOT_FOUND")
 
 
 # ── edit ──────────────────────────────────────────────────────
@@ -98,9 +130,9 @@ def test_edit_existing_field(tmp_path):
 	result = _invoke(runner, tmp_path, ["edit", "editable", "--field", "title", "--value", "Senior Dev"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["ok"] is True
-	assert parsed["data"]["field"] == "title"
-	assert parsed["data"]["value"] == "Senior Dev"
+	_assert_success_envelope(parsed)
+	assert parsed["data"] == {"action": "edit", "name": "editable", "field": "title", "value": "Senior Dev"}
+	assert parsed["hints"]["next_actions"] == ["boss resume show editable"]
 
 	# 验证确实修改了
 	show_result = _invoke(runner, tmp_path, ["show", "editable"])
@@ -122,7 +154,7 @@ def test_edit_not_found(tmp_path):
 	result = _invoke(runner, tmp_path, ["edit", "ghost", "--field", "title", "--value", "X"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
+	_assert_error_envelope(parsed, "RESUME_NOT_FOUND")
 
 
 # ── delete ────────────────────────────────────────────────────
@@ -185,8 +217,10 @@ def test_export_pdf_success(tmp_path):
 		result = _invoke(runner, tmp_path, ["export", "pdftest", "--format", "pdf", "-o", str(out_file)])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["ok"] is True
+	_assert_success_envelope(parsed)
 	assert parsed["data"]["format"] == "pdf"
+	assert parsed["data"]["path"] == str(out_file)
+	assert parsed["hints"]["next_actions"] == ["boss resume show pdftest"]
 
 
 def test_export_not_found(tmp_path):
@@ -216,8 +250,9 @@ def test_import_valid(tmp_path):
 	result = _invoke(runner, tmp_path, ["import", str(resume_file)])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["ok"] is True
-	assert parsed["data"]["name"] == "imported"
+	_assert_success_envelope(parsed)
+	assert parsed["data"] == {"action": "import", "name": "imported", "title": "Imported Resume"}
+	assert parsed["hints"]["next_actions"] == ["boss resume show imported"]
 
 
 def test_import_invalid_file(tmp_path):
@@ -307,9 +342,14 @@ def test_link_resume_to_job(tmp_path):
 	result = _invoke(runner, tmp_path, ["link", "linktest", "sid-001", "jid-001", "--title", "后端工程师", "--company", "测试公司"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["ok"] is True
-	assert parsed["data"]["action"] == "link"
-	assert parsed["data"]["security_id"] == "sid-001"
+	_assert_success_envelope(parsed)
+	assert parsed["data"] == {
+		"action": "link",
+		"name": "linktest",
+		"security_id": "sid-001",
+		"job_id": "jid-001",
+	}
+	assert parsed["hints"]["next_actions"] == ["boss resume applications linktest", "boss apply sid-001 jid-001"]
 
 
 def test_link_resume_not_found(tmp_path):
@@ -328,8 +368,14 @@ def test_applications_list(tmp_path):
 	result = _invoke(runner, tmp_path, ["applications", "apptest"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["ok"] is True
-	assert len(parsed["data"]) == 2
+	_assert_success_envelope(parsed)
+	assert [(item["security_id"], item["job_id"], item["job_title"], item["company"]) for item in parsed["data"]] == [
+		("sid-b", "jid-b", "后端", "公司乙"),
+		("sid-a", "jid-a", "前端", "公司甲"),
+	]
+	assert all(item["resume_name"] == "apptest" for item in parsed["data"])
+	assert all(item["status"] == "prepared" for item in parsed["data"])
+	assert parsed["hints"]["next_actions"] == ["boss resume show apptest"]
 
 
 def test_applications_resume_not_found(tmp_path):
