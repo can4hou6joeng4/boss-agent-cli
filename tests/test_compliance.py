@@ -41,6 +41,22 @@ def test_default_low_risk_mode_blocks_platform_data_aggregation():
 	_assert_compliance_block_hints(parsed)
 
 
+def test_default_low_risk_mode_blocks_recruiter_candidate_screening():
+	for args, command in [
+		(("hr", "candidates", "python"), "recruiter-candidates"),
+		(("hr", "resume", "geek_001", "--job-id", "job_001", "--security-id", "sec_001"), "recruiter-resume"),
+		(("hr", "request-resume", "12345"), "recruiter-request-resume"),
+	]:
+		code, parsed = _invoke(*args)
+		assert code == 1
+		assert parsed["ok"] is False
+		assert parsed["command"] == command
+		assert parsed["error"]["code"] == "COMPLIANCE_BLOCKED"
+		assert "候选" in parsed["error"]["message"] or "简历" in parsed["error"]["message"]
+		assert parsed["error"]["recoverable"] is False
+		_assert_compliance_block_hints(parsed)
+
+
 def test_raw_chatmsg_does_not_bypass_low_risk_compliance():
 	code, parsed = _invoke("chatmsg", "sec_001", "--raw")
 	assert code == 1
