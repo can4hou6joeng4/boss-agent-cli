@@ -15,7 +15,13 @@ def _invoke(tmp_path: Path, *args):
 	return runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "stats", *args])
 
 
-def _seed_cache(tmp_path: Path, greet: int = 0, applied: int = 0, shortlist: int = 0):
+def _seed_cache(
+	tmp_path: Path,
+	greet: int = 0,
+	applied: int = 0,
+	shortlist: int = 0,
+	watch_hits: int = 0,
+):
 	"""初始化缓存表并插入测试数据。"""
 	from boss_agent_cli.cache.store import CacheStore
 
@@ -37,6 +43,11 @@ def _seed_cache(tmp_path: Path, greet: int = 0, applied: int = 0, shortlist: int
 			"INSERT OR REPLACE INTO shortlist_records VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 			(f"sid-{i}", f"jid-{i}", "职位", "公司", "北京", "20-30K", "search", now),
 		)
+	for i in range(watch_hits):
+		conn.execute(
+			"INSERT OR REPLACE INTO watch_hits VALUES (?, ?, ?, ?, ?)",
+			("daily", f"sid-{i}:jid-{i}", "{}", now, now),
+		)
 	conn.commit()
 	conn.close()
 
@@ -47,13 +58,25 @@ def test_stats_empty_cache(tmp_path):
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
-	assert parsed["data"]["funnel"]["greeted"] == 0
+	assert parsed["data"]["funnel"] == {
+		"greeted": 0,
+		"applied": 0,
+		"shortlist": 0,
+		"watch_hits": 0,
+	}
+	assert parsed["data"]["conversion"] == {"apply_rate": 0.0, "shortlist_rate": 0.0}
+	assert parsed["data"]["window_days"] == 30
 	assert "缓存尚未建立" in parsed["data"]["note"]
+	assert parsed["hints"]["next_actions"] == [
+		"boss search <query> 搜索职位",
+		"boss pipeline 查看候选进度",
+		"boss follow-up 查看需要跟进的联系人",
+	]
 
 
 def test_stats_funnel_counts(tmp_path):
 	"""漏斗基数与转化率计算正确。"""
-	_seed_cache(tmp_path, greet=10, applied=3, shortlist=2)
+	_seed_cache(tmp_path, greet=10, applied=3, shortlist=2, watch_hits=4)
 	result = _invoke(tmp_path)
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
@@ -61,9 +84,20 @@ def test_stats_funnel_counts(tmp_path):
 	assert funnel["greeted"] == 10
 	assert funnel["applied"] == 3
 	assert funnel["shortlist"] == 2
+	assert parsed["data"]["window"] == {
+		"greeted": 10,
+		"applied": 3,
+		"shortlist": 2,
+		"watch_hits": 4,
+	}
 	conv = parsed["data"]["conversion"]
 	assert conv["apply_rate"] == 0.3
 	assert conv["shortlist_rate"] == 0.2
+	assert conv["apply_rate_window"] == 0.3
+	assert parsed["hints"]["next_actions"] == [
+		"boss pipeline 查看候选进度",
+		"boss follow-up 查看需要跟进的联系人",
+	]
 
 
 def test_stats_window_days_option(tmp_path):
@@ -73,7 +107,12 @@ def test_stats_window_days_option(tmp_path):
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"]["window_days"] == 7
-	assert parsed["data"]["window"]["greeted"] == 1
+	assert parsed["data"]["window"] == {
+		"greeted": 1,
+		"applied": 0,
+		"shortlist": 0,
+		"watch_hits": 0,
+	}
 
 
 def test_stats_zero_greet_no_divide_by_zero(tmp_path):
@@ -82,7 +121,11 @@ def test_stats_zero_greet_no_divide_by_zero(tmp_path):
 	result = _invoke(tmp_path)
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["data"]["conversion"]["apply_rate"] == 0.0
+	assert parsed["data"]["conversion"] == {
+		"apply_rate": 0.0,
+		"shortlist_rate": 0.0,
+		"apply_rate_window": 0.0,
+	}
 
 
 def test_stats_registered_in_main_and_schema(tmp_path):
@@ -91,8 +134,15 @@ def test_stats_registered_in_main_and_schema(tmp_path):
 	schema_result = runner.invoke(cli, ["schema"])
 	assert schema_result.exit_code == 0
 	parsed = json.loads(schema_result.output)
-	assert "stats" in parsed["data"]["commands"]
-	assert parsed["data"]["commands"]["stats"]["description"]
+	stats_schema = parsed["data"]["commands"]["stats"]
+	assert stats_schema["description"]
+	assert stats_schema["options"]["--days"]["default"] == 30
+	assert stats_schema["options"]["--format"]["default"] == "json"
+	assert stats_schema["availability"] == {
+		"roles": ["candidate"],
+		"candidate_platforms": ["zhilian", "zhipin"],
+		"recruiter_platforms": [],
+	}
 
 
 # ── HTML 格式扩展 ─────────────────────────────────────────────
