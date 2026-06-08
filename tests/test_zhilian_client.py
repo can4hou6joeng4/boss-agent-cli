@@ -74,6 +74,46 @@ class TestZhilianClientContextManager:
 			assert not client._closed
 		assert client._closed
 
+	def test_close_releases_httpx_client_and_unregisters(self) -> None:
+		from boss_agent_cli.api.zhilian_client import _OPEN_CLIENTS
+
+		client = ZhilianClient(_StubAuth())
+		fake_http = MagicMock()
+		client._client = fake_http
+
+		assert client in _OPEN_CLIENTS
+		client.close()
+
+		fake_http.close.assert_called_once()
+		assert client._client is None
+		assert client._closed is True
+		assert client not in _OPEN_CLIENTS
+
+	def test_atexit_safeguard_closes_open_clients(self) -> None:
+		from boss_agent_cli.api.zhilian_client import _OPEN_CLIENTS, _close_open_clients
+
+		client1 = ZhilianClient(_StubAuth())
+		client2 = ZhilianClient(_StubAuth())
+		assert client1 in _OPEN_CLIENTS
+		assert client2 in _OPEN_CLIENTS
+
+		_close_open_clients()
+
+		assert client1._closed is True
+		assert client2._closed is True
+
+	def test_atexit_safeguard_ignores_close_errors(self) -> None:
+		from boss_agent_cli.api.zhilian_client import _close_open_clients
+
+		broken = ZhilianClient(_StubAuth())
+		good = ZhilianClient(_StubAuth())
+		broken.close = MagicMock(side_effect=RuntimeError("boom"))
+
+		_close_open_clients()
+
+		broken.close.assert_called_once()
+		assert good._closed is True
+
 
 class TestZhilianClientReadonlyMethods:
 	"""P0 只读能力参数构造正确。"""
