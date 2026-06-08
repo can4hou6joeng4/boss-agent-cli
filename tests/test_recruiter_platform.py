@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from boss_agent_cli.platforms import get_recruiter_platform
 from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
 
@@ -149,6 +151,34 @@ def test_context_manager_closes():
 	client = _mock_client()
 	with BossRecruiterPlatform(client) as platform:
 		assert platform.name == "zhipin-recruiter"
+	client.close.assert_called_once()
+
+
+def test_enter_returns_self():
+	client = _mock_client()
+	platform = BossRecruiterPlatform(client)
+	assert platform.__enter__() is platform
+	client.close.assert_not_called()
+
+
+def test_close_calls_client_close():
+	client = _mock_client()
+	platform = BossRecruiterPlatform(client)
+	platform.close()
+	client.close.assert_called_once()
+
+
+def test_close_tolerates_client_without_close():
+	platform = BossRecruiterPlatform(object())  # type: ignore[arg-type]
+	platform.close()  # 不抛错
+
+
+def test_exit_closes_on_exception():
+	client = _mock_client()
+	platform = BossRecruiterPlatform(client)
+	with pytest.raises(RuntimeError):
+		with platform:
+			raise RuntimeError("boom")
 	client.close.assert_called_once()
 
 
