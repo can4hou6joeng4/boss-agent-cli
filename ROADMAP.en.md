@@ -50,6 +50,7 @@ Full release history lives in [CHANGELOG.md](CHANGELOG.md).
   - [x] Week 2: Zhilian read-only implementation (`search`, `detail`, `recommend`, `user_info`)
   - [x] Week 3: Zhilian write operations (`greet`, `apply`) + docs + MCP adaptation
   - [ ] Week 4: product decision on recruiter-side support and whether to onboard it at all (candidate-side support is the only runtime path today)
+  - [ ] 51job: keep it in the research backlog until the candidate-side read-only entry points and redacted fixtures are clear enough for a runtime adapter ([docs/research/platforms/51job.md](docs/research/platforms/51job.md))
 
 ### Community building
 
