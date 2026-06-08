@@ -240,7 +240,7 @@ def test_login_supports_zhilian_platform(mock_auth_cls):
 
 @patch("boss_agent_cli.commands.login.AuthManager")
 def test_login_connection_error_recovery_is_boss_chrome(mock_auth_cls):
-	"""ConnectionError 应返回 NETWORK_ERROR + 重新登录恢复建议。"""
+	"""ConnectionError 应返回 CDP_UNAVAILABLE + 重新登录恢复建议。"""
 	mock_auth = MagicMock()
 	mock_auth.login.side_effect = ConnectionError("can't reach chrome")
 	mock_auth_cls.return_value = mock_auth
@@ -249,13 +249,13 @@ def test_login_connection_error_recovery_is_boss_chrome(mock_auth_cls):
 	result = runner.invoke(cli, ["login"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	assert parsed["error"]["code"] == "CDP_UNAVAILABLE"
 	assert parsed["error"]["recovery_action"] == "boss login"
 
 
 @patch("boss_agent_cli.commands.login.AuthManager")
 def test_login_timeout_error_recovery_is_retry(mock_auth_cls):
-	"""TimeoutError 应返回 NETWORK_ERROR + 重试建议。"""
+	"""TimeoutError 应返回 LOGIN_TIMEOUT + 重试建议。"""
 	mock_auth = MagicMock()
 	mock_auth.login.side_effect = TimeoutError("扫码超时")
 	mock_auth_cls.return_value = mock_auth
@@ -264,7 +264,7 @@ def test_login_timeout_error_recovery_is_retry(mock_auth_cls):
 	result = runner.invoke(cli, ["login"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	assert parsed["error"]["code"] == "LOGIN_TIMEOUT"
 	assert parsed["error"]["recovery_action"] == "boss login"
 
 
@@ -335,3 +335,80 @@ def test_login_cookie_source_propagates(mock_auth_cls):
 	assert result.exit_code == 0
 	kwargs = mock_auth.login.call_args.kwargs
 	assert kwargs["cookie_source"] == "chrome"
+
+
+@patch("boss_agent_cli.commands.login.AuthManager")
+def test_login_timeout_error_has_actionable_diagnostics(mock_auth_cls):
+	"""Issue #235: Playwright/扫码等待超时不应再被笼统显示为 NETWORK_ERROR。"""
+	mock_auth = MagicMock()
+	mock_auth.login.side_effect = TimeoutError("Timeout 30000ms exceeded while waiting for page")
+	mock_auth_cls.return_value = mock_auth
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["login"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "LOGIN_TIMEOUT"
+	assert "登录等待超时" in parsed["error"]["message"]
+	assert parsed["error"]["recovery_action"] == "boss login"
+	assert any("--timeout 180" in action for action in parsed["hints"]["next_actions"])
+
+
+@patch("boss_agent_cli.commands.login.AuthManager")
+def test_login_connection_error_has_cdp_diagnostics(mock_auth_cls):
+	mock_auth = MagicMock()
+	mock_auth.login.side_effect = ConnectionError("CDP 不可用，请先运行 boss-chrome")
+	mock_auth_cls.return_value = mock_auth
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["login", "--cdp"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "CDP_UNAVAILABLE"
+	assert "Chrome 调试连接不可用" in parsed["error"]["message"]
+	assert any("boss-chrome" in action for action in parsed["hints"]["next_actions"])
+
+
+@patch("boss_agent_cli.commands.login.AuthManager")
+def test_login_risk_control_error_is_not_suggested_as_plain_network_retry(mock_auth_cls):
+	mock_auth = MagicMock()
+	mock_auth.login.side_effect = RuntimeError("HTTP 403 forbidden risk control")
+	mock_auth_cls.return_value = mock_auth
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["login"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "LOGIN_RISK_CONTROL"
+	assert "风控" in parsed["error"]["message"]
+	assert any("暂停自动化重试" in action for action in parsed["hints"]["next_actions"])
+
+
+@patch("boss_agent_cli.commands.login.AuthManager")
+def test_login_credential_extraction_error_has_cookie_hints(mock_auth_cls):
+	mock_auth = MagicMock()
+	mock_auth.login.side_effect = RuntimeError("cookie exists but stoken extraction failed")
+	mock_auth_cls.return_value = mock_auth
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["login"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "LOGIN_CREDENTIAL_EXTRACTION_FAILED"
+	assert "提取凭证失败" in parsed["error"]["message"]
+	assert any("--cookie-source" in action for action in parsed["hints"]["next_actions"])
+
+
+@patch("boss_agent_cli.commands.login.AuthManager")
+def test_login_generic_error_keeps_network_fallback_with_doctor_hint(mock_auth_cls):
+	mock_auth = MagicMock()
+	mock_auth.login.side_effect = RuntimeError("unexpected upstream response")
+	mock_auth_cls.return_value = mock_auth
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["login"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	assert "登录失败" in parsed["error"]["message"]
+	assert any("boss doctor" in action for action in parsed["hints"]["next_actions"])

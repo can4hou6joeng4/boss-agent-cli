@@ -41,7 +41,8 @@ def test_login_cdp_connection_error_returns_json_envelope(mock_auth_cls):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
 	assert parsed["command"] == "login"
-	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	assert parsed["error"]["code"] == "CDP_UNAVAILABLE"
+	assert "Chrome 调试连接不可用" in parsed["error"]["message"]
 	assert parsed["error"]["recoverable"] is True
 	assert parsed["error"]["recovery_action"] == "boss login"
 
@@ -56,7 +57,8 @@ def test_login_timeout_returns_platform_aware_recovery_action(mock_auth_cls):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
 	assert parsed["command"] == "login"
-	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	assert parsed["error"]["code"] == "LOGIN_TIMEOUT"
+	assert "登录等待超时" in parsed["error"]["message"]
 	assert parsed["error"]["recoverable"] is True
 	assert parsed["error"]["recovery_action"] == "boss --platform zhilian login"
 
