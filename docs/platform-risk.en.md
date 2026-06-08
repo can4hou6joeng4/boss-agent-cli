@@ -47,6 +47,8 @@ The default request interval is controlled by `--delay`. Do not use this tool fo
 
 patchright, CDP, local Chrome profiles, system keychains, browser extensions, and platform risk-control systems all affect login and access stability. A working browser session does not guarantee the httpx path works; a working httpx path does not guarantee browser automation works. If the platform flags automation, stop the automated flow instead of switching automation channels and retrying.
 
+Windows clients, visible browsers, RPA tools, and fingerprint browsers do not change this project's compliance boundary. boss-agent-cli does not provide implementations, recovery advice, or smoke paths for bypassing platform risk controls through a Windows app, CloakBrowser, stealth profiles, or similar RPA flows. Acceptable discussion is limited to low-risk human assistance: opening the official website, showing diagnostics, asking the user to handle the action manually, and stopping automated access immediately when captcha, `ACCOUNT_RISK`, illegal-request responses, or other platform anomalies appear.
+
 Third-party examples that use stealth, response interception, auto-scroll
 collection, bulk extraction, or simulated real-user fingerprints are risk signals
 only. Do not copy them into the main implementation, recommended docs path, test
