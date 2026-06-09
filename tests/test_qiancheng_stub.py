@@ -53,6 +53,7 @@ class TestQianchengNotSupportedEnvelope:
 			self.plat.job_detail("job-id"),
 			self.plat.recommend_jobs(page=1),
 			self.plat.user_info(),
+			self.plat.job_card("security-id"),
 		):
 			assert raw["code"] == "NOT_SUPPORTED"
 			assert self.plat.is_success(raw) is False
@@ -66,6 +67,7 @@ class TestQianchengNotSupportedEnvelope:
 		self.plat.job_detail("job-id")
 		self.plat.recommend_jobs()
 		self.plat.user_info()
+		self.plat.job_card("security-id")
 		self.client.assert_not_called()
 
 
@@ -83,3 +85,12 @@ class TestQianchengCliVisibility:
 		runner = CliRunner()
 		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--platform", "qiancheng", "schema"])
 		assert result.exit_code == 0
+
+	def test_detail_returns_qiancheng_not_supported_envelope(self, tmp_path) -> None:
+		runner = CliRunner()
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--platform", "qiancheng", "detail", "fake-id"])
+		assert result.exit_code == 1
+		payload = json.loads(result.output)
+		assert payload["error"]["code"] == "NOT_SUPPORTED"
+		assert "51job/前程无忧适配器" in payload["error"]["message"]
+		assert "job_card" in payload["error"]["message"]

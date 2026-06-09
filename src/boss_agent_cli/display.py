@@ -23,7 +23,7 @@ def boss_command_for_ctx(ctx: Any, command: str) -> str:
 	platform_name = "zhipin"
 	if ctx and getattr(ctx, "obj", None):
 		platform_name = ctx.obj.get("platform") or "zhipin"
-	prefix = "boss --platform zhilian" if platform_name == "zhilian" else "boss"
+	prefix = "boss" if platform_name == "zhipin" else f"boss --platform {platform_name}"
 	return f"{prefix} {command}".strip()
 
 

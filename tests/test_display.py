@@ -186,6 +186,12 @@ class TestLoginActionForCtx:
 		ctx.obj = {"platform": "zhilian"}
 		assert login_action_for_ctx(ctx) == "boss --platform zhilian login"
 
+	def test_non_default_platform_uses_platform_specific_boss_command(self):
+		ctx = MagicMock()
+		ctx.obj = {"platform": "qiancheng"}
+		assert boss_command_for_ctx(ctx, "status") == "boss --platform qiancheng status"
+		assert login_action_for_ctx(ctx) == "boss --platform qiancheng login"
+
 
 # ── handle_error_output TTY 分支 ─────────────────────────────
 

@@ -57,3 +57,6 @@ class QianchengPlatform(Platform):
 
 	def user_info(self) -> dict[str, Any]:
 		return self._not_supported("user_info")
+
+	def job_card(self, security_id: str, lid: str = "") -> dict[str, Any]:
+		return self._not_supported("job_card")
