@@ -79,5 +79,39 @@ class QianchengPlatform(Platform):
 	def user_info(self) -> dict[str, Any]:
 		return self._not_supported("user_info")
 
+
+	def resume_baseinfo(self) -> dict[str, Any]:
+		return self._not_supported("resume_baseinfo")
+
+	def resume_expect(self) -> dict[str, Any]:
+		return self._not_supported("resume_expect")
+
+	def deliver_list(self, page: int = 1) -> dict[str, Any]:
+		return self._not_supported("deliver_list")
+
 	def job_card(self, security_id: str, lid: str = "") -> dict[str, Any]:
 		return self._not_supported("job_card")
+
+	def interview_data(self) -> dict[str, Any]:
+		return self._not_supported("interview_data")
+
+	def chat_history(self, gid: str, security_id: str, page: int = 1, count: int = 20) -> dict[str, Any]:
+		return self._not_supported("chat_history")
+
+	def friend_label(self, friend_id: str, label_id: int, friend_source: int = 0, remove: bool = False) -> dict[str, Any]:
+		return self._not_supported("friend_label")
+
+	def exchange_contact(self, security_id: str, uid: str, friend_name: str, exchange_type: int = 1) -> dict[str, Any]:
+		return self._not_supported("exchange_contact")
+
+	def job_history(self, page: int = 1) -> dict[str, Any]:
+		return self._not_supported("job_history")
+
+	def greet(self, security_id: str, job_id: str, message: str = "") -> dict[str, Any]:
+		return self._not_supported("greet")
+
+	def apply(self, security_id: str, job_id: str, lid: str = "") -> dict[str, Any]:
+		return self._not_supported("apply")
+
+	def friend_list(self, page: int = 1) -> dict[str, Any]:
+		return self._not_supported("friend_list")

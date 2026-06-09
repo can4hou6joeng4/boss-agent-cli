@@ -47,13 +47,24 @@ class TestQianchengNotSupportedEnvelope:
 		self.client = MagicMock()
 		self.plat = QianchengPlatform(self.client)
 
-	def test_required_capabilities_return_not_supported(self) -> None:
+	def test_candidate_capabilities_return_not_supported(self) -> None:
 		for raw in (
 			self.plat.search_jobs("Python", city="广州"),
 			self.plat.job_detail("job-id"),
 			self.plat.recommend_jobs(page=1),
 			self.plat.user_info(),
+			self.plat.resume_baseinfo(),
+			self.plat.resume_expect(),
+			self.plat.deliver_list(page=1),
 			self.plat.job_card("security-id"),
+			self.plat.interview_data(),
+			self.plat.chat_history("gid", "security-id"),
+			self.plat.friend_label("friend-id", 1),
+			self.plat.exchange_contact("security-id", "uid", "friend"),
+			self.plat.job_history(page=1),
+			self.plat.greet("security-id", "job-id", "你好"),
+			self.plat.apply("security-id", "job-id"),
+			self.plat.friend_list(page=1),
 		):
 			assert raw["code"] == -1
 			assert raw["error"]["code"] == "NOT_SUPPORTED"
@@ -70,7 +81,18 @@ class TestQianchengNotSupportedEnvelope:
 		self.plat.job_detail("job-id")
 		self.plat.recommend_jobs()
 		self.plat.user_info()
+		self.plat.resume_baseinfo()
+		self.plat.resume_expect()
+		self.plat.deliver_list()
 		self.plat.job_card("security-id")
+		self.plat.interview_data()
+		self.plat.chat_history("gid", "security-id")
+		self.plat.friend_label("friend-id", 1)
+		self.plat.exchange_contact("security-id", "uid", "friend")
+		self.plat.job_history()
+		self.plat.greet("security-id", "job-id")
+		self.plat.apply("security-id", "job-id")
+		self.plat.friend_list()
 		self.client.assert_not_called()
 
 

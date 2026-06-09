@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Changed
+- 51job/前程无忧占位适配器补齐候选者侧全量能力的稳定 `NOT_SUPPORTED` 包络，避免未启用真实适配前落入默认 `NotImplementedError`。
+
 ## [1.12.0] - 2026-06-09
 
 ### Added
