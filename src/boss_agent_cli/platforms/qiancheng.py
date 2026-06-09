@@ -25,12 +25,30 @@ class QianchengPlatform(Platform):
 	display_name = "前程无忧（51job）"
 	base_url = "https://www.51job.com"
 
+	def __init__(self, client: Any | None = None) -> None:
+		# 占位 adapter 不需要也不应构造真实网络 client。
+		super().__init__(client)
+
+	@property
+	def client(self) -> Any | None:
+		return self._client
+
 	@staticmethod
 	def _not_supported(capability: str) -> dict[str, Any]:
+		message = f"{_NOT_SUPPORTED_MESSAGE}：{capability}"
 		return {
-			"code": "NOT_SUPPORTED",
-			"message": f"{_NOT_SUPPORTED_MESSAGE}：{capability}",
+			"code": -1,
 			"data": None,
+			"error": {
+				"code": "NOT_SUPPORTED",
+				"message": message,
+				"recoverable": True,
+				"recovery_action": None,
+				"details": {
+					"platform": "qiancheng",
+					"capability": capability,
+				},
+			},
 		}
 
 	def is_success(self, response: dict[str, Any]) -> bool:
@@ -40,6 +58,9 @@ class QianchengPlatform(Platform):
 		return response.get("data")
 
 	def parse_error(self, response: dict[str, Any]) -> tuple[str, str]:
+		error = response.get("error")
+		if isinstance(error, dict) and error.get("code") == "NOT_SUPPORTED":
+			return "NOT_SUPPORTED", str(error.get("message") or "")
 		code = response.get("code")
 		message = str(response.get("message") or response.get("msg") or "")
 		if code == "NOT_SUPPORTED":

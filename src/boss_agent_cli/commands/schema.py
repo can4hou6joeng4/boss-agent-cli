@@ -98,6 +98,14 @@ _CANDIDATE_COMMANDS = {
 	"ai",
 }
 
+_QIANCHENG_PLACEHOLDER_COMMANDS = {
+	"search",
+	"detail",
+	"recommend",
+	"me",
+	"show",
+}
+
 
 def _availability_note(availability: dict[str, Any]) -> str:
 	roles = ", ".join(availability.get("roles", [])) or "none"
@@ -136,29 +144,43 @@ def _command_availability(
 			"recruiter_platforms": recruiter_platforms,
 			"subcommands": subcommand_availability,
 		}
+	availability_candidate_platforms = list(candidate_platforms)
+	placeholder_note = "qiancheng/51job 当前为稳定 NOT_SUPPORTED 占位适配器，列入候选平台仅表示可选择与可发现。"
+	include_qiancheng_placeholder = cmd_name in _QIANCHENG_PLACEHOLDER_COMMANDS
+	if include_qiancheng_placeholder and "qiancheng" not in availability_candidate_platforms:
+		availability_candidate_platforms = ["qiancheng", *availability_candidate_platforms]
 	if cmd_name in _ROLE_BOTH_COMMANDS:
-		return {
+		availability: dict[str, Any] = {
 			"roles": ["candidate", "recruiter"],
-			"candidate_platforms": candidate_platforms,
+			"candidate_platforms": availability_candidate_platforms,
 			"recruiter_platforms": recruiter_platforms,
 		}
+		if include_qiancheng_placeholder:
+			availability["note"] = placeholder_note
+		return availability
 	if cmd_name in _CANDIDATE_COMMANDS:
-		return {
+		availability = {
 			"roles": ["candidate"],
-			"candidate_platforms": candidate_platforms,
+			"candidate_platforms": availability_candidate_platforms,
 			"recruiter_platforms": [],
 		}
-	return {
+		if include_qiancheng_placeholder:
+			availability["note"] = placeholder_note
+		return availability
+	availability = {
 		"roles": ["candidate"],
-		"candidate_platforms": candidate_platforms,
+		"candidate_platforms": availability_candidate_platforms,
 		"recruiter_platforms": [],
 	}
+	if include_qiancheng_placeholder:
+		availability["note"] = placeholder_note
+	return availability
 
 
 def _inject_availability(data: dict[str, Any]) -> dict[str, Any]:
 	# supported_platforms 表示“已注册 / 可选择”的平台；availability 表示命令真实可用的
-	# 平台。qiancheng/51job 当前是 NOT_SUPPORTED 占位 adapter，不能注入到
-	# search/detail/stats 等命令的可用性列表，避免误导上层 agent 调度。
+	# 候选者平台。qiancheng/51job 当前仍是 NOT_SUPPORTED 占位 adapter，仅在
+	# 对应占位能力命令中通过 availability.note 明示不可调度真实平台能力。
 	candidate_platforms = ["zhilian", "zhipin"]
 	recruiter_platforms = data.get("supported_recruiter_platforms", [])
 	commands: dict[str, Any] = {}

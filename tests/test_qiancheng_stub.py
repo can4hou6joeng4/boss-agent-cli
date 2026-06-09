@@ -55,7 +55,10 @@ class TestQianchengNotSupportedEnvelope:
 			self.plat.user_info(),
 			self.plat.job_card("security-id"),
 		):
-			assert raw["code"] == "NOT_SUPPORTED"
+			assert raw["code"] == -1
+			assert raw["error"]["code"] == "NOT_SUPPORTED"
+			assert raw["error"]["recoverable"] is True
+			assert raw["error"]["details"]["platform"] == "qiancheng"
 			assert self.plat.is_success(raw) is False
 			code, message = self.plat.parse_error(raw)
 			assert code == "NOT_SUPPORTED"

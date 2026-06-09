@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 
 def _build_client(name: str, auth: "AuthManager", delay: tuple[float, float], cdp_url: str | None) -> Any:
 	"""按平台名构造对应的内部 client。"""
+	if name in {"qiancheng", "51job"}:
+		return None
 	if name == "zhilian":
 		return ZhilianClient(auth, delay=delay, cdp_url=cdp_url)
 	# 默认 zhipin 走 BossClient
