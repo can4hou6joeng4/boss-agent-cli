@@ -112,6 +112,19 @@ def test_readme_documents_registered_qiancheng_placeholder():
 	assert "registered placeholder adapter" in matrix_en
 
 
+def test_51job_research_readiness_contract_is_documented():
+	content = _read("docs/research/platforms/51job.md")
+
+	assert "### 3.1 字段映射草案" in content
+	assert "### 3.2 Readiness checklist" in content
+	assert "`job_id`" in content
+	assert "`source_url`" in content
+	assert "不得用列表序号或分页位置代替" in content
+	assert "默认 CI 不访问真实网络" in content
+	assert "`PLATFORM_DRIFT`" in content
+	assert "写操作、批量抓取、自动投递仍处于禁止或受限状态" in content
+
+
 def test_readme_and_skill_link_to_new_docs():
 	readme = _read("README.md")
 	assert "[Agent Quickstart](docs/agent-quickstart.md)" in readme
