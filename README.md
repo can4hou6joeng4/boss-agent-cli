@@ -512,6 +512,8 @@ boss doctor --live-probe
 | `python` | Python 版本 >= 3.10 |
 | `patchright` | CLI 已安装 |
 | `patchright_chromium` | Chromium 已安装 |
+| `quality_baseline` | 源码仓库内的 P0 本地质量基线入口是否可用 |
+| `quality_tool_ruff` / `quality_tool_pytest` / `quality_tool_mypy` | 本机质量工具可用性；缺失时可通过 `uv run` 或 `uv sync --all-extras` 使用项目环境 |
 | `cookie_extract` | 本地浏览器 Cookie 可提取 |
 | `credential_file` | 登录态文件是否存在且可读取 |
 | `auth_session` | 登录态存在且可解密 |
@@ -680,8 +682,10 @@ CLI (Click)
 git clone https://github.com/can4hou6joeng4/boss-agent-cli.git
 cd boss-agent-cli
 uv sync --all-extras
-uv run pytest tests/ -v    # 运行测试
-uv run ruff check src/     # 代码检查
+python scripts/quality_baseline.py  # P0 基线/CI 门禁：ruff + 全量离线 pytest + mypy
+uv run pytest tests/ -v           # 运行完整测试
+uv run ruff check src/ tests/     # 代码检查
+uv run mypy src/boss_agent_cli    # 类型检查
 ```
 
 详见 [CONTRIBUTING.md](CONTRIBUTING.md)

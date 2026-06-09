@@ -16,6 +16,59 @@ from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_i
 from boss_agent_cli.display import handle_output, render_simple_list
 
 
+def _find_project_root() -> Path:
+	"""Return the repository root when running from a source checkout."""
+	for parent in Path(__file__).resolve().parents:
+		if (parent / "pyproject.toml").exists():
+			return parent
+	return Path.cwd()
+
+
+def _add_quality_baseline_checks(checks: list[dict[str, Any]]) -> None:
+	"""Report whether the local P0 quality baseline can be run offline."""
+	root = _find_project_root()
+	baseline = root / "scripts" / "quality_baseline.py"
+	pyproject = root / "pyproject.toml"
+	if baseline.exists() and pyproject.exists():
+		checks.append(
+			{
+				"name": "quality_baseline",
+				"status": "ok",
+				"detail": "可运行 scripts/quality_baseline.py 执行 CI 同款 P0 门禁：ruff、全量离线 pytest 和 mypy",
+				"hint": "python scripts/quality_baseline.py",
+			}
+		)
+	else:
+		checks.append(
+			{
+				"name": "quality_baseline",
+				"status": "warn",
+				"detail": "未检测到源码仓库质量基线入口（安装包运行时可忽略）",
+				"hint": "在项目根目录运行，或使用发布包自带的外部 CI",
+			}
+		)
+
+	for tool in ("ruff", "pytest", "mypy"):
+		path = shutil.which(tool)
+		if path:
+			checks.append(
+				{
+					"name": f"quality_tool_{tool}",
+					"status": "ok",
+					"detail": path,
+				}
+			)
+		else:
+			checks.append(
+				{
+					"name": f"quality_tool_{tool}",
+					"status": "warn",
+					"detail": f"未在 PATH 中发现 {tool}",
+					"hint": "运行 uv sync --all-extras 或通过 uv run 自动使用项目环境",
+				}
+			)
+
+
 @click.command("doctor")
 @click.option("--live-probe", is_flag=True, default=False, help="执行低频只读平台探测（默认仅做本地诊断）")
 @click.pass_context
@@ -30,15 +83,18 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 	checks: list[dict[str, Any]] = []
 
 	def add_check(name: str, status: str, detail: str, hint: str | None = "") -> None:
-		checks.append({
-			"name": name,
-			"status": status,
-			"detail": detail,
-			"hint": hint,
-		})
+		checks.append(
+			{
+				"name": name,
+				"status": status,
+				"detail": detail,
+				"hint": hint,
+			}
+		)
 
 	# 1) CLI dependencies
 	import sys
+
 	py_version = sys.version_info
 	python_ok = py_version >= (3, 10)
 	py_detail = f"Python {py_version.major}.{py_version.minor}.{py_version.micro}"
@@ -68,7 +124,9 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 	add_check(
 		"patchright_chromium",
 		"ok" if chromium_candidates else "warn",
-		f"检测到 {len(chromium_candidates)} 个 Chromium 安装" if chromium_candidates else "未检测到 patchright/Playwright Chromium 缓存",
+		f"检测到 {len(chromium_candidates)} 个 Chromium 安装"
+		if chromium_candidates
+		else "未检测到 patchright/Playwright Chromium 缓存",
 		"运行 patchright install chromium 安装浏览器内核",
 	)
 
@@ -87,6 +145,9 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 		chrome_path or "未在 PATH 中发现 Chrome/Chromium/Edge",
 		"如需 CDP 登录，请先启动支持远程调试端口的浏览器；如仅用 patchright，可忽略此项",
 	)
+
+	# 1.5) Local source quality baseline
+	_add_quality_baseline_checks(checks)
 
 	# 2) Auth storage
 	token = auth.check_status()
@@ -162,17 +223,20 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 	bridge_checks: list[dict[str, Any]] = []
 	try:
 		from boss_agent_cli.bridge.client import BridgeClient
+
 		bc = BridgeClient()
 		bridge_checks = bc.diagnose(workspace="boss", run_probes=True)
 		bridge_ok = any(item["name"] == "bridge_extension" and item["status"] == "ok" for item in bridge_checks)
 	except Exception as exc:
-		bridge_checks = [{
-			"name": "bridge_daemon",
-			"status": "warn",
-			"detail": f"Bridge 诊断失败: {exc}",
-			"recovery_action": "检查 Bridge daemon、扩展安装状态和本地端口占用",
-			"hint": "检查 Bridge daemon、扩展安装状态和本地端口占用",
-		}]
+		bridge_checks = [
+			{
+				"name": "bridge_daemon",
+				"status": "warn",
+				"detail": f"Bridge 诊断失败: {exc}",
+				"recovery_action": "检查 Bridge daemon、扩展安装状态和本地端口占用",
+				"hint": "检查 Bridge daemon、扩展安装状态和本地端口占用",
+			}
+		]
 	checks.extend(bridge_checks)
 
 	if cdp_ok or bridge_ok:
@@ -224,6 +288,7 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 		next_actions.append("boss --cdp-url http://localhost:9222 doctor — 检查指定 CDP 地址")
 	if not any(item["name"] == "cookie_extract" and item["status"] == "ok" for item in checks):
 		next_actions.append(f"先在本机浏览器登录 {config.site_host}，再重试 {config.login_action}")
+	next_actions.append("python scripts/quality_baseline.py — 提交前运行本地 P0 质量基线")
 	next_actions.append("敏感操作或命中风控时，停止自动化访问并回到官方页面由用户手动完成")
 
 	data = {
@@ -260,57 +325,71 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 		with get_platform_instance(ctx, auth) as platform:
 			info = platform.user_info()
 			if platform.is_success(info):
-				checks.append({
-					"name": "candidate_live_user_info",
-					"status": "ok",
-					"detail": "求职者只读 user_info 探测通过",
-				})
+				checks.append(
+					{
+						"name": "candidate_live_user_info",
+						"status": "ok",
+						"detail": "求职者只读 user_info 探测通过",
+					}
+				)
 			else:
 				code, message = platform.parse_error(info)
-				checks.append({
-					"name": "candidate_live_user_info",
-					"status": "warn",
-					"detail": f"求职者只读 user_info 探测失败: {code} {message}".strip(),
-					"recovery_action": "按错误码执行恢复；命中风控时停止自动化访问",
-				})
+				checks.append(
+					{
+						"name": "candidate_live_user_info",
+						"status": "warn",
+						"detail": f"求职者只读 user_info 探测失败: {code} {message}".strip(),
+						"recovery_action": "按错误码执行恢复；命中风控时停止自动化访问",
+					}
+				)
 	except Exception as exc:
-		checks.append({
-			"name": "candidate_live_user_info",
-			"status": "warn",
-			"detail": f"求职者只读 user_info 探测异常: {exc}",
-			"recovery_action": "先运行 boss status 检查本地登录态；命中风控时停止自动化访问",
-		})
+		checks.append(
+			{
+				"name": "candidate_live_user_info",
+				"status": "warn",
+				"detail": f"求职者只读 user_info 探测异常: {exc}",
+				"recovery_action": "先运行 boss status 检查本地登录态；命中风控时停止自动化访问",
+			}
+		)
 
 	if (ctx.obj or {}).get("platform") == "zhilian":
-		checks.append({
-			"name": "recruiter_live_read",
-			"status": "warn",
-			"detail": "zhilian 招聘者侧暂未接入；跳过招聘者只读探测",
-			"recovery_action": "切换到 boss --platform zhipin --role recruiter doctor",
-		})
+		checks.append(
+			{
+				"name": "recruiter_live_read",
+				"status": "warn",
+				"detail": "zhilian 招聘者侧暂未接入；跳过招聘者只读探测",
+				"recovery_action": "切换到 boss --platform zhipin --role recruiter doctor",
+			}
+		)
 		return
 
 	try:
 		with get_recruiter_platform_instance(ctx, auth) as recruiter:
 			result = recruiter.list_jobs()
 			if recruiter.is_success(result):
-				checks.append({
-					"name": "recruiter_live_read",
-					"status": "ok",
-					"detail": "招聘者职位列表只读探测通过",
-				})
+				checks.append(
+					{
+						"name": "recruiter_live_read",
+						"status": "ok",
+						"detail": "招聘者职位列表只读探测通过",
+					}
+				)
 			else:
 				code, message = recruiter.parse_error(result)
-				checks.append({
-					"name": "recruiter_live_read",
-					"status": "warn",
-					"detail": f"招聘者只读探测失败: {code} {message}".strip(),
-					"recovery_action": "确认当前账号具备招聘者身份；命中风控时停止自动化访问",
-				})
+				checks.append(
+					{
+						"name": "recruiter_live_read",
+						"status": "warn",
+						"detail": f"招聘者只读探测失败: {code} {message}".strip(),
+						"recovery_action": "确认当前账号具备招聘者身份；命中风控时停止自动化访问",
+					}
+				)
 	except Exception as exc:
-		checks.append({
-			"name": "recruiter_live_read",
-			"status": "warn",
-			"detail": f"招聘者只读探测异常: {exc}",
-			"recovery_action": "确认当前账号具备招聘者身份；zhilian 招聘者侧暂不支持",
-		})
+		checks.append(
+			{
+				"name": "recruiter_live_read",
+				"status": "warn",
+				"detail": f"招聘者只读探测异常: {exc}",
+				"recovery_action": "确认当前账号具备招聘者身份；zhilian 招聘者侧暂不支持",
+			}
+		)

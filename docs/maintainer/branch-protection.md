@@ -16,12 +16,15 @@ The default branch is `master`. Keep branch protection aligned with the quality 
 
 Select the concrete check contexts emitted by `.github/workflows/ci.yml`:
 
+- `P0 quality baseline`
 - `test (3.10)`
 - `test (3.11)`
 - `test (3.12)`
 - `test (3.13)`
 - `lint`
 - `typecheck`
+
+`P0 quality baseline` is the canonical blocking quality gate. It runs `scripts/quality_baseline.py`, which covers ruff, the full offline pytest suite, and mypy with the same command used locally.
 
 The project may also require documentation checks when `.github/workflows/docs.yml` is enabled:
 

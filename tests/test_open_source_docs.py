@@ -180,6 +180,7 @@ def test_maintainer_docs_cover_open_source_governance():
 	labels = read("docs/maintainer/labels.md")
 
 	assert "required status checks" in branch
+	assert "P0 quality baseline" in branch
 	assert "test (3.10)" in branch
 	assert "test (3.11)" in branch
 	assert "test (3.12)" in branch
@@ -273,6 +274,33 @@ def test_issue_templates_are_valid_structured_forms():
 				assert options
 
 		assert len(ids) == len(set(ids))
+
+
+def test_ci_workflow_runs_p0_quality_gate():
+	raw_workflow = read(".github/workflows/ci.yml")
+	workflow = load_yaml(".github/workflows/ci.yml")
+
+	jobs = workflow["jobs"]
+	assert "p0_quality_gate" in jobs
+	gate = jobs["p0_quality_gate"]
+	assert gate["name"] == "P0 quality baseline"
+	assert gate["runs-on"] == "ubuntu-latest"
+	run_commands = [step["run"] for step in gate["steps"] if "run" in step]
+	assert run_commands == [
+		"uv python install 3.11",
+		"uv sync --all-extras",
+		"uv run python scripts/quality_baseline.py",
+	]
+	assert "scripts/quality_baseline.py" in raw_workflow
+
+
+def test_quality_baseline_script_matches_blocking_p0_commands():
+	content = read("scripts/quality_baseline.py")
+
+	assert '("ruff", ("ruff", "check", "src/boss_agent_cli", "tests", "--output-format=concise"))' in content
+	assert '("pytest", ("pytest", "-q"))' in content
+	assert '("mypy", ("mypy", "src/boss_agent_cli"))' in content
+	assert "--skip-mypy" in content
 
 
 def test_docs_workflow_runs_open_source_doc_checks():

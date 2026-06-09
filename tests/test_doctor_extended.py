@@ -10,6 +10,7 @@ from boss_agent_cli.main import cli
 
 # ── 辅助 ─────────────────────────────────────────────────────────────
 
+
 def _base_patches():
 	"""返回 doctor 命令核心 mock 的 patch 路径字典。"""
 	return {
@@ -36,12 +37,14 @@ def _invoke_doctor(tmp_path=None, platform="zhipin", **overrides):
 		patch("boss_agent_cli.bridge.client.BridgeClient") as mock_bridge,
 	):
 		# BridgeClient 构造不抛异常，但 is_running 返回 False
-		mock_bridge.return_value.diagnose.return_value = [{
-			"name": "bridge_daemon",
-			"status": "warn",
-			"detail": "Bridge daemon 未运行或无法访问 http://127.0.0.1:19826",
-			"recovery_action": "运行 Bridge daemon 或检查端口占用",
-		}]
+		mock_bridge.return_value.diagnose.return_value = [
+			{
+				"name": "bridge_daemon",
+				"status": "warn",
+				"detail": "Bridge daemon 未运行或无法访问 http://127.0.0.1:19826",
+				"recovery_action": "运行 Bridge daemon 或检查端口占用",
+			}
+		]
 		# 默认值
 		mock_auth.return_value.check_status.return_value = overrides.get("token", None)
 		mock_cdp.return_value = overrides.get("cdp_ws", None)
@@ -69,6 +72,7 @@ def _find_check(checks, name):
 
 # ── 1. 所有检查项正常通过 ────────────────────────────────────────────
 
+
 def test_all_checks_pass(tmp_path):
 	"""所有检查项均为 ok 时 summary 应为 healthy（环境依赖项除外）。"""
 	token = {"cookies": {"wt2": "tok", "wbg": "1", "zp_at": "a"}, "stoken": "st_ok", "user_agent": "ua"}
@@ -91,14 +95,17 @@ def test_all_checks_pass(tmp_path):
 
 # ── 2. Python 版本不满足 ─────────────────────────────────────────────
 
+
 def test_python_version_below_310(tmp_path):
 	"""Python 版本低于 3.10 时 python 检查应为 error。"""
 
 	class FakeVersionInfo(tuple):
 		"""模拟 sys.version_info：同时支持元组比较和属性访问。"""
+
 		major = 3
 		minor = 9
 		micro = 1
+
 		def __new__(cls):
 			return tuple.__new__(cls, (3, 9, 1))
 
@@ -123,6 +130,7 @@ def test_python_version_satisfies(tmp_path):
 
 # ── 3. 依赖缺失 ─────────────────────────────────────────────────────
 
+
 @patch("boss_agent_cli.commands.doctor.shutil.which", return_value=None)
 def test_patchright_missing(mock_which, tmp_path):
 	"""patchright 可执行文件不在 PATH 中时应为 warn。"""
@@ -133,6 +141,7 @@ def test_patchright_missing(mock_which, tmp_path):
 
 
 # ── 4. 网络不通 ──────────────────────────────────────────────────────
+
 
 def test_network_failure(tmp_path):
 	"""访问 zhipin.com 抛异常时 network 应为 warn。"""
@@ -158,6 +167,7 @@ def test_network_ok(tmp_path):
 
 
 # ── 5. 登录态检查 ────────────────────────────────────────────────────
+
 
 def test_auth_logged_in_full(tmp_path):
 	"""wt2 + stoken 均在时 auth_token_quality 应为 ok。"""
@@ -225,6 +235,7 @@ def test_auth_session_file_exists_but_undecryptable(tmp_path):
 
 # ── 6. CDP 可用/不可用 ───────────────────────────────────────────────
 
+
 def test_cdp_available(tmp_path):
 	"""CDP 探测返回 ws url 时 cdp 检查应为 ok。"""
 	code, parsed = _invoke_doctor(tmp_path, cdp_ws="ws://127.0.0.1:9222/devtools/browser/abc")
@@ -269,7 +280,11 @@ def test_bridge_diagnostics_are_included(tmp_path):
 		{"name": "bridge_daemon", "status": "ok", "detail": "Bridge daemon 运行中 pid=123 uptime=7s"},
 		{"name": "bridge_extension", "status": "ok", "detail": "Chrome 扩展已连接 version=1.0.0"},
 		{"name": "bridge_protocol", "status": "ok", "detail": "扩展协议版本 1.0.0；CLI 期望 major=1"},
-		{"name": "bridge_workspace", "status": "ok", "detail": "Bridge workspace/tab 可用: https://www.zhipin.com/web/geek/job"},
+		{
+			"name": "bridge_workspace",
+			"status": "ok",
+			"detail": "Bridge workspace/tab 可用: https://www.zhipin.com/web/geek/job",
+		},
 		{"name": "bridge_exec", "status": "ok", "detail": "Bridge exec 基础能力可用"},
 		{"name": "bridge_fetch", "status": "ok", "detail": "Bridge fetch 基础能力可用"},
 		{"name": "bridge_navigate", "status": "ok", "detail": "Bridge navigate 基础能力可用"},
@@ -293,7 +308,15 @@ def test_bridge_diagnostics_are_included(tmp_path):
 
 	parsed = json.loads(result.output)
 	checks = parsed["data"]["checks"]
-	for name in ("bridge_daemon", "bridge_extension", "bridge_protocol", "bridge_workspace", "bridge_exec", "bridge_fetch", "bridge_navigate"):
+	for name in (
+		"bridge_daemon",
+		"bridge_extension",
+		"bridge_protocol",
+		"bridge_workspace",
+		"bridge_exec",
+		"bridge_fetch",
+		"bridge_navigate",
+	):
 		assert _find_check(checks, name) is not None
 	browser_channel = _find_check(checks, "browser_channel")
 	assert browser_channel["status"] == "ok"
@@ -302,12 +325,14 @@ def test_bridge_diagnostics_are_included(tmp_path):
 
 def test_bridge_diagnostics_do_not_expose_secrets(tmp_path):
 	"""doctor 输出不应泄漏 Bridge 诊断中的 cookie/header/token 字样值。"""
-	bridge_checks = [{
-		"name": "bridge_workspace",
-		"status": "ok",
-		"detail": "Bridge workspace/tab 可用: https://www.zhipin.com/web/geek/job",
-		"tab_url": "https://www.zhipin.com/web/geek/job",
-	}]
+	bridge_checks = [
+		{
+			"name": "bridge_workspace",
+			"status": "ok",
+			"detail": "Bridge workspace/tab 可用: https://www.zhipin.com/web/geek/job",
+			"tab_url": "https://www.zhipin.com/web/geek/job",
+		}
+	]
 	paths = _base_patches()
 	runner = CliRunner()
 	with (
@@ -332,6 +357,7 @@ def test_bridge_diagnostics_do_not_expose_secrets(tmp_path):
 
 
 # ── 7. 输出 JSON 格式正确性 ─────────────────────────────────────────
+
 
 def test_json_envelope_structure(tmp_path):
 	"""验证 doctor 输出的 JSON 信封结构完整。"""
@@ -383,6 +409,7 @@ def test_summary_broken_when_error_exists(tmp_path):
 
 # ── 8. browser_channel 检查 ──────────────────────────────────────────
 
+
 def test_browser_channel_ok_with_cdp(tmp_path):
 	"""CDP 可用时 browser_channel 应为 ok 且提示 CDP 模式。"""
 	code, parsed = _invoke_doctor(tmp_path, cdp_ws="ws://127.0.0.1:9222/devtools/browser/abc")
@@ -403,6 +430,7 @@ def test_browser_channel_warn_without_cdp_or_bridge(tmp_path):
 
 # ── 9. cookie 提取检查 ───────────────────────────────────────────────
 
+
 def test_cookie_extract_ok(tmp_path):
 	"""本地浏览器可提取 Cookie 时应为 ok。"""
 	code, parsed = _invoke_doctor(tmp_path, cookie={"cookies": {"wt2": "v", "token": "t"}})
@@ -419,6 +447,7 @@ def test_cookie_extract_not_available(tmp_path):
 
 
 # ── 10. next_actions 提示逻辑 ────────────────────────────────────────
+
 
 def test_next_actions_suggests_login_when_not_logged_in(tmp_path):
 	code, parsed = _invoke_doctor(tmp_path, token=None)
@@ -575,6 +604,7 @@ def test_zhilian_doctor_uses_platform_specific_cookie_and_network_messages(tmp_p
 	assert network is not None
 	assert network["detail"] == "访问 zhaopin.com 返回 HTTP 200"
 
+
 def test_doctor_login_preflight_blocks_missing_auth_before_platform_requests(tmp_path):
 	code, parsed = _invoke_doctor(tmp_path, token=None)
 	preflight = _find_check(parsed["data"]["checks"], "login_preflight")
@@ -601,3 +631,15 @@ def test_doctor_login_preflight_passes_complete_auth(tmp_path):
 	assert preflight is not None
 	assert preflight["status"] == "ok"
 	assert "登录前置通过" in preflight["detail"]
+
+
+def test_doctor_reports_quality_baseline(tmp_path):
+	code, parsed = _invoke_doctor(tmp_path)
+	assert code == 0
+	checks = parsed["data"]["checks"]
+	baseline = _find_check(checks, "quality_baseline")
+	assert baseline["status"] == "ok"
+	assert "scripts/quality_baseline.py" in baseline["detail"]
+	for tool in ("ruff", "pytest", "mypy"):
+		assert _find_check(checks, f"quality_tool_{tool}")["status"] in {"ok", "warn"}
+	assert any("quality_baseline.py" in action for action in parsed["hints"]["next_actions"])
