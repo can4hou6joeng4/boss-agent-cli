@@ -127,6 +127,7 @@ boss status
 
 # Optional: inspect local platform capability status (no network)
 boss platforms
+boss platforms --platform qiancheng  # Inspect one platform; 51job alias is supported
 
 # 4. Search Golang jobs in Guangzhou with 双休 + 五险一金
 boss search "Golang" --city 广州 --welfare "双休,五险一金"

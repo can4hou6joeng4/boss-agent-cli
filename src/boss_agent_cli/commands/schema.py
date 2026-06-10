@@ -274,7 +274,13 @@ SCHEMA_DATA = {
 		"platforms": {
 			"description": "列出本地已注册平台与能力状态；只读本地元数据，不触发登录、浏览器、CDP 或网络请求",
 			"args": [],
-			"options": {},
+			"options": {
+				"--platform": {
+					"type": "string",
+					"default": None,
+					"description": "仅查看指定平台（支持 qiancheng / 51job 等已注册平台或别名）",
+				},
+			},
 		},
 		"status": {
 			"description": "轻量检查当前登录态分层健康状态；默认不请求平台，--live 才执行一次只读在线验证",

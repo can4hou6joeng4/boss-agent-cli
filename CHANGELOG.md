@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- `boss platforms` 新增 `--platform` 单平台过滤，支持 `qiancheng` 与 `51job` 别名，仅读取本地能力元数据并保持未知平台的 `INVALID_PARAM` JSON 包络。
+
 ### Changed
 - 补强 `boss config` 未知配置项错误路径的 stdout 单行 JSON 包络契约测试，确保 Agent 可稳定解析 `INVALID_PARAM`。
 - PR 模板补充无 `Co-authored-by` 尾注或 AI 署名行检查项，对齐贡献规范。

@@ -52,9 +52,27 @@ _ALIAS_NAMES = {
 }
 
 
-def platform_capability_data() -> dict[str, Any]:
-	"""Return local-only platform capability metadata without creating clients."""
+def _resolve_platform_filter(platform_name: str | None) -> str | None:
+	if platform_name is None:
+		return None
+	aliases = {"51job": "qiancheng"}
+	resolved = aliases.get(platform_name, platform_name)
 	candidate_platforms = [name for name in list_platforms() if name not in _ALIAS_NAMES]
+	if resolved not in candidate_platforms:
+		supported = ", ".join([*candidate_platforms, *sorted(aliases)])
+		raise click.BadParameter(
+			f"unknown platform {platform_name!r}, supported: {supported}",
+			param_hint="--platform",
+		)
+	return resolved
+
+
+def platform_capability_data(platform_name: str | None = None) -> dict[str, Any]:
+	"""Return local-only platform capability metadata without creating clients."""
+	resolved_platform = _resolve_platform_filter(platform_name)
+	candidate_platforms = [name for name in list_platforms() if name not in _ALIAS_NAMES]
+	if resolved_platform is not None:
+		candidate_platforms = [resolved_platform]
 	recruiter_platforms = list_recruiter_platforms()
 	platforms = []
 	for name in candidate_platforms:
@@ -92,13 +110,14 @@ def _render_platforms(data: dict[str, Any]) -> None:
 
 
 @click.command("platforms")
+@click.option("--platform", "platform_name", default=None, help="仅查看指定平台（支持 qiancheng / 51job 等已注册平台或别名）")
 @click.pass_context
-def platforms_cmd(ctx: click.Context) -> None:
+def platforms_cmd(ctx: click.Context, platform_name: str | None) -> None:
 	"""列出本地已注册平台与能力状态。"""
 	handle_output(
 		ctx,
 		"platforms",
-		platform_capability_data(),
+		platform_capability_data(platform_name),
 		render=_render_platforms,
 		hints={
 			"next_actions": [

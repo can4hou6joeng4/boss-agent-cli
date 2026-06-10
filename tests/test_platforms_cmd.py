@@ -30,6 +30,38 @@ def test_platforms_outputs_local_capability_matrix() -> None:
 	assert platforms["zhilian"]["capabilities"]["readonly"]["search"] == "available"
 
 
+def test_platforms_can_filter_single_platform_by_registered_name() -> None:
+	runner = CliRunner()
+	result = runner.invoke(cli, ["platforms", "--platform", "qiancheng"])
+
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.output)
+	assert payload["data"]["count"] == 1
+	assert payload["data"]["platforms"][0]["name"] == "qiancheng"
+	assert payload["data"]["platforms"][0]["status"] == "placeholder"
+
+
+def test_platforms_can_filter_single_platform_by_alias() -> None:
+	runner = CliRunner()
+	result = runner.invoke(cli, ["platforms", "--platform", "51job"])
+
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.output)
+	assert payload["data"]["count"] == 1
+	assert payload["data"]["platforms"][0]["name"] == "qiancheng"
+
+
+def test_platforms_unknown_platform_uses_json_error_envelope() -> None:
+	runner = CliRunner()
+	result = runner.invoke(cli, ["platforms", "--platform", "unknown"])
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "unknown platform" in payload["error"]["message"]
+
+
 def test_platforms_is_listed_in_schema() -> None:
 	runner = CliRunner()
 	result = runner.invoke(cli, ["schema"])
@@ -38,5 +70,6 @@ def test_platforms_is_listed_in_schema() -> None:
 	payload = json.loads(result.output)
 	platforms_schema = payload["data"]["commands"]["platforms"]
 	assert platforms_schema["args"] == []
-	assert platforms_schema["options"] == {}
+	assert "--platform" in platforms_schema["options"]
+	assert platforms_schema["options"]["--platform"]["default"] is None
 	assert "不触发登录" in platforms_schema["description"]
