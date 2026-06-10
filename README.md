@@ -165,6 +165,9 @@ boss login
 # 3. 验证登录态
 boss status
 
+# 可选：查看本地平台注册与能力状态（不触网）
+boss platforms
+
 # 4. 搜索广州的 Golang 职位，要求双休+五险一金
 boss search "Golang" --city 广州 --welfare "双休,五险一金"
 

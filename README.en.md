@@ -125,6 +125,9 @@ boss login
 # 3. Verify login
 boss status
 
+# Optional: inspect local platform capability status (no network)
+boss platforms
+
 # 4. Search Golang jobs in Guangzhou with 双休 + 五险一金
 boss search "Golang" --city 广州 --welfare "双休,五险一金"
 

@@ -68,6 +68,7 @@ _ROLE_BOTH_COMMANDS = {
 	"config",
 	"clean",
 	"cities",
+	"platforms",
 }
 
 _CANDIDATE_COMMANDS = {
@@ -252,7 +253,7 @@ def _format_mcp_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 SCHEMA_DATA = {
 	"name": "boss-agent-cli",
-	"description": "BOSS直聘本地辅助工具，共 34 个顶层命令。默认低风险模式聚焦只读、本地辅助、用户主动触发；自动触达、批量操作和候选人个人信息处理默认受限。",
+	"description": "BOSS直聘本地辅助工具，共 35 个顶层命令。默认低风险模式聚焦只读、本地辅助、用户主动触发；自动触达、批量操作和候选人个人信息处理默认受限。",
 	"commands": {
 		"login": {
 			"description": "按当前平台登录（zhipin / zhilian）。默认低风险模式仅用于用户主动触发的本地辅助与只读命令，不用于规避平台风控。",
@@ -269,6 +270,11 @@ SCHEMA_DATA = {
 					"description": "强制 CDP 模式（跳过 Cookie 提取，CDP 不可用直接报错）",
 				},
 			},
+		},
+		"platforms": {
+			"description": "列出本地已注册平台与能力状态；只读本地元数据，不触发登录、浏览器、CDP 或网络请求",
+			"args": [],
+			"options": {},
 		},
 		"status": {
 			"description": "轻量检查当前登录态分层健康状态；默认不请求平台，--live 才执行一次只读在线验证",

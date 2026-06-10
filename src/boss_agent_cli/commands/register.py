@@ -24,6 +24,7 @@ from boss_agent_cli.commands import (
 	mark,
 	me,
 	pipeline,
+	platforms,
 	preset,
 	recommend,
 	resume_cmd,
@@ -52,6 +53,7 @@ def register_candidate_commands(cli: click.Group) -> None:
 	cli.add_command(login.login_cmd, "login")
 	cli.add_command(logout.logout_cmd, "logout")
 	cli.add_command(status.status_cmd, "status")
+	cli.add_command(platforms.platforms_cmd, "platforms")
 	cli.add_command(doctor.doctor_cmd, "doctor")
 	cli.add_command(search.search_cmd, "search")
 	cli.add_command(detail.detail_cmd, "detail")
