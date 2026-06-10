@@ -41,6 +41,26 @@ _PLATFORM_CAPABILITY_STATUS: dict[str, dict[str, str]] = {
 	},
 }
 
+_CAPABILITY_STATUS_LEGEND: dict[str, dict[str, str]] = {
+	"available": {
+		"label": "可用",
+		"description": "本地 CLI 已接入该能力；是否需要登录仍以具体命令契约为准。",
+	},
+	"not_supported": {
+		"label": "不支持",
+		"description": "当前平台适配器没有实现该真实工作流；CLI 会稳定返回 NOT_SUPPORTED。",
+	},
+	"placeholder_only": {
+		"label": "仅占位",
+		"description": "仅用于平台注册、别名、schema/config 可见性；不代表真实平台能力已接入。",
+	},
+	"low_risk_blocked": {
+		"label": "低风险模式阻断",
+		"description": "涉及写操作、敏感数据或平台风险边界；默认低风险模式阻断并提示回到官方页面手动处理。",
+	},
+}
+
+
 _PLATFORM_NOTES = {
 	"zhipin": "默认平台；候选者侧与招聘者侧注册表均已接入。",
 	"zhilian": "候选者侧只读链路已接入；招聘者侧暂不可用。",
@@ -96,6 +116,7 @@ def platform_capability_data(platform_name: str | None = None) -> dict[str, Any]
 		"count": len(platforms),
 		"default": "zhipin",
 		"aliases": {"51job": "qiancheng"},
+		"capability_status_legend": _CAPABILITY_STATUS_LEGEND,
 		"platforms": platforms,
 	}
 
@@ -106,6 +127,10 @@ def _render_platforms(data: dict[str, Any]) -> None:
 		candidate = "yes" if item["candidate"] else "no"
 		recruiter = "yes" if item["recruiter"] else "no"
 		lines.append(f"{item['name']}\t{item['display_name']}\t{item['status']}\t{candidate}\t{recruiter}")
+	lines.append("")
+	lines.append("capability_status_legend")
+	for status, meta in data["capability_status_legend"].items():
+		lines.append(f"{status}\t{meta['label']}\t{meta['description']}")
 	click.echo("\n".join(lines))
 
 

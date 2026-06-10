@@ -291,6 +291,15 @@ boss hr candidates "Golang"
 | 智联招聘 (`zhilian`) | 🟡 候选者侧登录 + 读写链路已接通 | — | 招聘者侧未接入，运行时会直接拒绝 `hr` 子命令 |
 | 前程无忧 / 51job (`qiancheng`) | 🚧 已注册占位 | — | 统一返回 `NOT_SUPPORTED`，待只读研究门槛满足后再接入真实能力 |
 
+`boss platforms` 会在 JSON 与终端输出中附带 `capability_status_legend`，用于解释能力状态：
+
+| 状态 | 语义 |
+|------|------|
+| `available` | 本地 CLI 已接入该能力；是否需要登录仍以具体命令契约为准 |
+| `not_supported` | 当前平台适配器没有实现该真实工作流；CLI 会稳定返回 `NOT_SUPPORTED` |
+| `placeholder_only` | 仅用于平台注册、别名、schema/config 可见性；不代表真实平台能力已接入 |
+| `low_risk_blocked` | 涉及写操作、敏感数据或平台风险边界；默认低风险模式阻断并提示回到官方页面手动处理 |
+
 ```bash
 # 指定平台
 boss --platform zhilian search "Python"

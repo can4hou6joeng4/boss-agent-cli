@@ -6,6 +6,7 @@ import json
 
 from click.testing import CliRunner
 
+from boss_agent_cli.commands.platforms import _render_platforms, platform_capability_data
 from boss_agent_cli.main import cli
 
 
@@ -19,6 +20,11 @@ def test_platforms_outputs_local_capability_matrix() -> None:
 	assert payload["command"] == "platforms"
 	assert payload["data"]["default"] == "zhipin"
 	assert payload["data"]["aliases"] == {"51job": "qiancheng"}
+	legend = payload["data"]["capability_status_legend"]
+	assert set(legend) == {"available", "not_supported", "placeholder_only", "low_risk_blocked"}
+	assert "NOT_SUPPORTED" in legend["not_supported"]["description"]
+	assert "低风险模式" in legend["low_risk_blocked"]["label"]
+	assert "不代表真实平台能力" in legend["placeholder_only"]["description"]
 
 	platforms = {item["name"]: item for item in payload["data"]["platforms"]}
 	assert set(platforms) == {"qiancheng", "zhipin", "zhilian"}
@@ -28,6 +34,33 @@ def test_platforms_outputs_local_capability_matrix() -> None:
 	assert "NOT_SUPPORTED" in platforms["qiancheng"]["notes"]
 	assert platforms["zhipin"]["recruiter"] is True
 	assert platforms["zhilian"]["capabilities"]["readonly"]["search"] == "available"
+
+
+def test_platforms_json_payload_includes_status_legend() -> None:
+	runner = CliRunner()
+	result = runner.invoke(cli, ["platforms"])
+
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.output)
+	legend = payload["data"]["capability_status_legend"]
+	assert set(legend) == {"available", "not_supported", "placeholder_only", "low_risk_blocked"}
+	assert legend["available"]["label"] == "可用"
+	assert "NOT_SUPPORTED" in legend["not_supported"]["description"]
+	assert "不代表真实平台能力" in legend["placeholder_only"]["description"]
+	assert "默认低风险模式阻断" in legend["low_risk_blocked"]["description"]
+
+
+def test_platforms_terminal_render_includes_status_legend(capsys) -> None:
+	_render_platforms(platform_capability_data())
+	captured = capsys.readouterr()
+
+	rendered = captured.out + captured.err
+	assert "capability_status_legend" in rendered
+	assert "available" in rendered
+	assert "可用" in rendered
+	assert "not_supported" in rendered
+	assert "placeholder_only" in rendered
+	assert "low_risk_blocked" in rendered
 
 
 def test_platforms_can_filter_single_platform_by_registered_name() -> None:
