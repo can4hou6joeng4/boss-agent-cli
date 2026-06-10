@@ -3,18 +3,6 @@ name: Docs
 "on":
   push:
     branches: [master]
-    paths:
-      - "README.md"
-      - "README.en.md"
-      - "CONTRIBUTING.md"
-      - "CONTRIBUTING.en.md"
-      - "SECURITY.md"
-      - "docs/**"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE.md"
-      - "tests/test_agent_docs.py"
-      - "tests/test_open_source_docs.py"
-      - ".github/workflows/docs.yml"
   pull_request:
     branches: [master]
   workflow_dispatch:

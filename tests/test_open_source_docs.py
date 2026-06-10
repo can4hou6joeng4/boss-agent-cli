@@ -342,7 +342,11 @@ def test_docs_workflow_runs_open_source_doc_checks():
 	triggers = workflow["on"]
 	assert {"push", "pull_request", "workflow_dispatch"} <= set(triggers)
 	assert triggers["push"]["branches"] == ["master"]
-	assert set(expected_paths) <= set(triggers["push"]["paths"])
+	assert "paths" not in triggers["push"]
+	assert "push" in raw_workflow
+	assert "paths:" not in raw_workflow.split("pull_request:", 1)[0]
+	for path in expected_paths:
+		assert path not in raw_workflow.split("pull_request:", 1)[0]
 	assert triggers["pull_request"]["branches"] == ["master"]
 	assert "paths" not in triggers["pull_request"]
 
