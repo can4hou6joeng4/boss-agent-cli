@@ -154,6 +154,7 @@ def search_cmd(ctx: click.Context, query: str | None, search_url: str | None, pr
 					code=exc.code,
 					message=exc.message or "搜索结果获取失败",
 					recoverable=False,
+					details=exc.details,
 				)
 				return
 			items = pipeline_result.items

@@ -110,8 +110,17 @@ def envelope_error(
 	message: str,
 	recoverable: bool = False,
 	recovery_action: str | None = None,
+	details: dict[str, Any] | None = None,
 	hints: dict[str, Any] | None = None,
 ) -> str:
+	error = {
+		"code": code,
+		"message": redact_sensitive_text(message),
+		"recoverable": recoverable,
+		"recovery_action": recovery_action,
+	}
+	if details is not None:
+		error["details"] = redact_sensitive(details)
 	return json.dumps(
 		{
 			"ok": False,
@@ -119,12 +128,7 @@ def envelope_error(
 			"command": command,
 			"data": None,
 			"pagination": None,
-			"error": {
-				"code": code,
-				"message": redact_sensitive_text(message),
-				"recoverable": recoverable,
-				"recovery_action": recovery_action,
-			},
+			"error": error,
 			"hints": redact_sensitive(hints),
 		},
 		ensure_ascii=False,

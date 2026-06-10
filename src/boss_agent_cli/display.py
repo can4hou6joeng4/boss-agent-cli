@@ -84,6 +84,7 @@ def handle_error_output(
 	message: str,
 	recoverable: bool = False,
 	recovery_action: str | None = None,
+	details: dict | None = None,
 	hints: dict | None = None,
 ) -> None:
 	"""Smart error output: TTY -> rich error, pipe -> JSON error envelope."""
@@ -93,6 +94,7 @@ def handle_error_output(
 		emit_error(
 			command, code=code, message=message,
 			recoverable=recoverable, recovery_action=recovery_action,
+			details=details,
 			hints=hints,
 		)
 	else:
@@ -113,6 +115,13 @@ def handle_platform_error_output(
 	"""Emit a schema-backed error envelope for an unsuccessful platform response."""
 	code, message = platform.parse_error(response)
 	recoverable, recovery_action = error_contract_for_code(code)
+	details = None
+	if isinstance(response, dict):
+		error = response.get("error")
+		if isinstance(error, dict):
+			raw_details = error.get("details")
+			if isinstance(raw_details, dict):
+				details = raw_details
 	handle_error_output(
 		ctx,
 		command,
@@ -120,6 +129,7 @@ def handle_platform_error_output(
 		message=message or fallback_message,
 		recoverable=recoverable,
 		recovery_action=recovery_action,
+		details=details,
 	)
 
 

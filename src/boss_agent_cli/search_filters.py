@@ -246,9 +246,10 @@ class SearchPipelineResult:
 
 
 class SearchPipelinePlatformError(Exception):
-	def __init__(self, code: str, message: str):
+	def __init__(self, code: str, message: str, details: dict[str, Any] | None = None):
 		self.code = code
 		self.message = message
+		self.details = details
 		super().__init__(message)
 
 
@@ -428,7 +429,12 @@ def run_search_pipeline(
 		)
 		if not client.is_success(raw):
 			code, message = client.parse_error(raw)
-			raise SearchPipelinePlatformError(code, message or "搜索结果获取失败")
+			details = None
+			if isinstance(raw, dict):
+				error = raw.get("error")
+				if isinstance(error, dict) and isinstance(error.get("details"), dict):
+					details = error["details"]
+			raise SearchPipelinePlatformError(code, message or "搜索结果获取失败", details=details)
 		zp_data = raw.get("zpData", {})
 		job_list = zp_data.get("jobList", [])
 		last_page_scanned = current_page

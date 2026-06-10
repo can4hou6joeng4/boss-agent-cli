@@ -10,6 +10,17 @@ from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, 
 from boss_agent_cli.platforms import Platform
 
 NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
+DetailError = tuple[str, str, dict[str, Any] | None]
+
+
+def _platform_error_details(response: Any) -> dict[str, Any] | None:
+	if isinstance(response, dict):
+		error = response.get("error")
+		if isinstance(error, dict):
+			details = error.get("details")
+			if isinstance(details, dict):
+				return details
+	return None
 
 
 @click.command("detail")
@@ -33,7 +44,7 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 				logger.info("从缓存命中 job_id，走 httpx 快速通道")
 
 		result = None
-		last_error: tuple[str, str] | None = None
+		last_error: DetailError | None = None
 		if job_id:
 			try:
 				result, last_error = _detail_via_httpx(platform, security_id, job_id, data_dir)
@@ -60,6 +71,7 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 				message=last_error[1],
 				recoverable=recoverable,
 				recovery_action=recovery_action,
+				details=last_error[2],
 			)
 			return
 		handle_error_output(
@@ -80,12 +92,12 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 	)
 
 
-def _detail_via_httpx(platform: Platform, security_id: str, job_id: str, data_dir: Path) -> tuple[dict[str, Any] | None, tuple[str, str] | None]:
+def _detail_via_httpx(platform: Platform, security_id: str, job_id: str, data_dir: Path) -> tuple[dict[str, Any] | None, DetailError | None]:
 	"""快速通道：通过 httpx 获取职位详情（不需要浏览器）"""
 	raw = platform.job_detail(job_id)
 	if not platform.is_success(raw):
 		code, message = platform.parse_error(raw)
-		return None, (code, message or "职位详情获取失败")
+		return None, (code, message or "职位详情获取失败", _platform_error_details(raw))
 	platform_data = platform.unwrap_data(raw) or {}
 	job_info = platform_data.get("jobInfo", {})
 	boss_info = platform_data.get("bossInfo", {})
@@ -116,15 +128,15 @@ def _detail_via_httpx(platform: Platform, security_id: str, job_id: str, data_di
 	}, None
 
 
-def _detail_via_browser(platform: Platform, security_id: str, lid: str, data_dir: Path) -> tuple[dict[str, Any] | None, tuple[str, str] | None]:
+def _detail_via_browser(platform: Platform, security_id: str, lid: str, data_dir: Path) -> tuple[dict[str, Any] | None, DetailError | None]:
 	"""兜底通道：通过浏览器 job_card 获取职位详情"""
 	try:
 		raw = platform.job_card(security_id, lid)
 	except NotImplementedError as exc:
-		return None, ("NOT_SUPPORTED", str(exc) or "当前平台不支持职位详情兜底能力")
+		return None, ("NOT_SUPPORTED", str(exc) or "当前平台不支持职位详情兜底能力", None)
 	if not platform.is_success(raw):
 		code, message = platform.parse_error(raw)
-		return None, (code, message or "职位详情获取失败")
+		return None, (code, message or "职位详情获取失败", _platform_error_details(raw))
 	platform_data = platform.unwrap_data(raw) or {}
 	card = platform_data.get("jobCard", {})
 	if not card:
