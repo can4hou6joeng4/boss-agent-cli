@@ -66,8 +66,14 @@ def cli(ctx: click.Context, data_dir: str, delay: str | None, cdp_url: str | Non
 	cfg = load_config(resolved_dir / "config.json")
 
 	if delay:
-		low, high = delay.split("-")
-		ctx.obj["delay"] = (float(low), float(high))
+		try:
+			low, high = delay.split("-", 1)
+			ctx.obj["delay"] = (float(low), float(high))
+		except ValueError as exc:
+			raise click.BadParameter(
+				"delay must be a range like 1.5-3.0",
+				param_hint="--delay",
+			) from exc
 	else:
 		ctx.obj["delay"] = tuple(cfg["request_delay"])
 
