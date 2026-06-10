@@ -223,6 +223,8 @@ def test_pull_request_template_requires_quality_and_risk_checks():
 	assert "JSON 信封" in template
 	assert "Token / 密码 / Cookie / security_id" in template
 	assert "commit message 格式: `type: 中文描述`" in template
+	assert "Co-authored-by" in template
+	assert "AI 署名" in template
 	assert "（或英文等价）" not in template
 
 

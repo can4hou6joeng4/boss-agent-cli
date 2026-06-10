@@ -58,6 +58,7 @@ Closes #
 ## 安全与规范 / Safety & Convention
 
 - [ ] commit message 格式: `type: 中文描述`
+- [ ] 无 `Co-authored-by` 尾注或 AI 署名行
 - [ ] 无敏感信息（Token / 密码 / Cookie / security_id / 手机号 / 微信 / 真实账号）
 - [ ] 如涉及 Cookie、CDP、patchright、请求频率或真实账号，已阅读 `docs/platform-risk.md`
 - [ ] 如涉及发布流程，已阅读 `docs/maintainer/release-checklist.md`
