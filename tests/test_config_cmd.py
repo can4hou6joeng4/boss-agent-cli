@@ -1,10 +1,33 @@
 """config 命令测试 — 覆盖查看、设置、重置配置项。"""
 
 import json
+from typing import Any
 
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 
 from boss_agent_cli.main import cli
+
+
+_ERROR_KEYS = {"code", "message", "recoverable", "recovery_action"}
+
+
+def _assert_single_stdout_json_error(result: Result, *, command: str, code: str) -> dict[str, Any]:
+	"""Agent-facing error output must stay machine-consumable on stdout only."""
+	assert result.exit_code == 1
+	assert result.stderr == ""
+	assert result.output.strip()
+	assert "\n" not in result.output.strip()
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["schema_version"] == "1.0"
+	assert parsed["command"] == command
+	assert parsed["data"] is None
+	assert parsed["pagination"] is None
+	assert set(parsed["error"]) == _ERROR_KEYS
+	assert parsed["error"]["code"] == code
+	assert isinstance(parsed["error"]["message"], str)
+	assert isinstance(parsed["error"]["recoverable"], bool)
+	return parsed
 
 
 def _invoke(*args, tmp_path=None):
@@ -66,11 +89,12 @@ def test_config_get_valid_key(tmp_path):
 
 
 def test_config_get_unknown_key(tmp_path):
-	"""获取未知配置项应返回错误。"""
-	code, parsed = _invoke("config", "get", "nonexistent", tmp_path=tmp_path)
-	assert code == 1
-	assert parsed["ok"] is False
-	assert parsed["error"]["code"] == "INVALID_PARAM"
+	"""获取未知配置项应返回 Agent 可消费的 stdout JSON 错误包络。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "config", "get", "nonexistent"])
+	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
+	assert "可用项" in parsed["error"]["message"]
+	assert parsed["hints"] is None
 
 
 # ── config set ──────────────────────────────────────────────────────
@@ -113,10 +137,11 @@ def test_config_set_null_value(tmp_path):
 
 
 def test_config_set_unknown_key(tmp_path):
-	"""设置未知配置项应返回错误。"""
-	code, parsed = _invoke("config", "set", "bad_key", "val", tmp_path=tmp_path)
-	assert code == 1
-	assert parsed["error"]["code"] == "INVALID_PARAM"
+	"""设置未知配置项应返回 Agent 可消费的 stdout JSON 错误包络。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "config", "set", "bad_key", "val"])
+	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
+	assert "可用项" in parsed["error"]["message"]
 
 
 def test_config_commands_do_not_expose_internal_low_risk_policy(tmp_path):
@@ -151,10 +176,11 @@ def test_config_reset_restores_default(tmp_path):
 
 
 def test_config_reset_unknown_key(tmp_path):
-	"""重置未知配置项应返回错误。"""
-	code, parsed = _invoke("config", "reset", "bad_key", tmp_path=tmp_path)
-	assert code == 1
-	assert parsed["error"]["code"] == "INVALID_PARAM"
+	"""重置未知配置项应返回 Agent 可消费的 stdout JSON 错误包络。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "config", "reset", "bad_key"])
+	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
+	assert "可用项" in parsed["error"]["message"]
 
 
 # ── JSON 信封格式 ──────────────────────────────────────────────────
