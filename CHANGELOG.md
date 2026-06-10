@@ -7,6 +7,7 @@
 ### Changed
 - PR 模板补充无 `Co-authored-by` 尾注或 AI 署名行检查项，对齐贡献规范。
 - 51job/前程无忧占位适配器补齐候选者侧全量能力的稳定 `NOT_SUPPORTED` 包络，避免未启用真实适配前落入默认 `NotImplementedError`。
+- 补强 51job/前程无忧占位包络的 `capability` 明细契约，确保 Agent 可稳定区分具体未支持能力。
 
 ## [1.12.0] - 2026-06-09
 

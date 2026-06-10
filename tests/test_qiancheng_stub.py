@@ -48,6 +48,7 @@ class TestQianchengNotSupportedEnvelope:
 		self.plat = QianchengPlatform(self.client)
 
 	def test_candidate_capabilities_return_not_supported(self) -> None:
+		capabilities = set()
 		for raw in (
 			self.plat.search_jobs("Python", city="广州"),
 			self.plat.job_detail("job-id"),
@@ -70,11 +71,31 @@ class TestQianchengNotSupportedEnvelope:
 			assert raw["error"]["code"] == "NOT_SUPPORTED"
 			assert raw["error"]["recoverable"] is True
 			assert raw["error"]["details"]["platform"] == "qiancheng"
+			capabilities.add(raw["error"]["details"]["capability"])
 			assert self.plat.is_success(raw) is False
 			code, message = self.plat.parse_error(raw)
 			assert code == "NOT_SUPPORTED"
 			assert "research backlog" in message
+			assert raw["error"]["details"]["capability"] in message
 			assert self.plat.unwrap_data(raw) is None
+		assert capabilities == {
+			"search_jobs",
+			"job_detail",
+			"recommend_jobs",
+			"user_info",
+			"resume_baseinfo",
+			"resume_expect",
+			"deliver_list",
+			"job_card",
+			"interview_data",
+			"chat_history",
+			"friend_label",
+			"exchange_contact",
+			"job_history",
+			"greet",
+			"apply",
+			"friend_list",
+		}
 
 	def test_stub_does_not_delegate_to_client(self) -> None:
 		self.plat.search_jobs("Python")
