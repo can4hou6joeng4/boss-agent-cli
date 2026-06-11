@@ -152,11 +152,11 @@ class MyPlatform(Platform):
     name = "myname"
     display_name = "平台中文名"
     base_url = "https://..."
-    
+
     def is_success(self, r): ...  # 按研究报告的响应结构
     def unwrap_data(self, r): ...
     def parse_error(self, r): ...
-    
+
     # P0/P1/P2 方法全部抛 NotImplementedError("Week 2 待实现")
 ```
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import click
 
@@ -122,7 +122,7 @@ def platform_capability_data(platform_name: str | None = None, capability: str |
 	if resolved_platform is not None:
 		candidate_platforms = [resolved_platform]
 	recruiter_platforms = list_recruiter_platforms()
-	platforms = []
+	platforms: list[dict[str, Any]] = []
 	for name in candidate_platforms:
 		platform_cls = get_platform(name)
 		statuses = _PLATFORM_CAPABILITY_STATUS[name]
@@ -159,8 +159,8 @@ def platform_capability_data(platform_name: str | None = None, capability: str |
 			"not_supported": [],
 		}
 		for item in platforms:
-			match = item["capability_match"]
-			status_groups[match["status"]].append(item["name"])
+			match = cast(dict[str, str], item["capability_match"])
+			status_groups[match["status"]].append(cast(str, item["name"]))
 		capability_filter = {
 			"capability": resolved_capability,
 			"status_groups": status_groups,
