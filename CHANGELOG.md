@@ -14,10 +14,11 @@
 - 51job/前程无忧占位适配器补齐候选者侧全量能力的稳定 `NOT_SUPPORTED` 包络，避免未启用真实适配前落入默认 `NotImplementedError`。
 - 补强 51job/前程无忧占位包络的 `capability` 明细契约，确保 Agent 可稳定区分具体未支持能力。
 - 双语 README 重构为导航型主页：命令参考与诊断排障下沉到 `docs/commands(.en).md` 与 `docs/troubleshooting(.en).md`，中英结构对齐；根目录演示资产归位 `demo/`，推广物料归位 `docs/marketing/`。
-- Agent Skill 安装路径统一为 `npx skills add can4hou6joeng4/boss-skill`：全部 Skill 内容（CLI 安装入口与场景化工作流）迁至独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill) 管理，与 CLI 发版节奏解耦；CLI 能力与错误码继续以 `boss schema` 自描述为真源。
+- Agent Skill 安装路径统一为 `npx skills add can4hou6joeng4/boss-skill`：CLI 的 Agent Skill 迁至独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill)（仓库本身即 Skill），与 CLI 发版节奏解耦；CLI 能力与错误码继续以 `boss schema` 自描述为真源。
 
 ### Removed
-- 根目录 `SKILL.md` 与 `skills/boss-resume-downloader` 迁移至独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill)；此前经 `npx skills add can4hou6joeng4/boss-agent-cli` 安装的用户，请改用 `npx skills add can4hou6joeng4/boss-skill` 获取更新。
+- 根目录 `SKILL.md` 迁移至独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill)；此前经 `npx skills add can4hou6joeng4/boss-agent-cli` 安装的用户，请改用 `npx skills add can4hou6joeng4/boss-skill` 获取更新。
+- `skills/boss-resume-downloader` 招聘者简历批量同步工作流退役下线（与默认低风险合规姿态存在张力）；历史版本可在本仓库 git 历史（`85cc4e2` 之前）中找到。
 
 ## [1.12.0] - 2026-06-09
 

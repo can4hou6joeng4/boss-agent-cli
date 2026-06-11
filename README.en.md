@@ -184,7 +184,7 @@ The point of this tool is to let AI Agents help organize job-hunting context wit
 npx skills add can4hou6joeng4/boss-skill
 ```
 
-> All Agent Skills (the CLI install entry and scenario-specific workflows such as recruiter resume bulk sync) live in the standalone [boss-skill](https://github.com/can4hou6joeng4/boss-skill) repository, decoupled from the CLI release cadence.
+> The Agent Skill for this CLI is managed in the standalone [boss-skill](https://github.com/can4hou6joeng4/boss-skill) repository (the repository itself is the skill), decoupled from the CLI release cadence.
 
 ### Option 2: subprocess + JSON parse
 

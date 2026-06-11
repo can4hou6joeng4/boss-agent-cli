@@ -261,7 +261,7 @@ npx skills add can4hou6joeng4/boss-skill
 
 安装后 Agent 自动获得调用 `boss` 命令的能力，无需手动配置。
 
-> 全部 Agent Skill（CLI 安装入口与场景化工作流，如招聘者简历批量同步）统一在独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill) 中管理，与 CLI 发版节奏解耦。
+> 本 CLI 的 Agent Skill 在独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill) 中管理（仓库本身即 Skill），与 CLI 发版节奏解耦。
 
 ### 方式二：手动配置
 
