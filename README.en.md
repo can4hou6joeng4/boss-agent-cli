@@ -219,6 +219,8 @@ jobs = json.loads(result.stdout)["data"]["items"]
 
 See [Agent Quickstart](docs/agent-quickstart.en.md) and [Capability Matrix](docs/capability-matrix.en.md) for the full picture.
 
+> Scenario-specific workflow skills built on top of this CLI (e.g. recruiter resume bulk sync) live in the standalone [boss-skill](https://github.com/can4hou6joeng4/boss-skill) repository, decoupled from the CLI release cadence.
+
 ## 📚 Commands
 
 `boss schema` currently exposes 34 top-level commands, plus 9 first-level recruiter subcommands under `hr`, grouped below by workflow:
