@@ -916,6 +916,36 @@ SCHEMA_DATA = {
 			"recoverable": True,
 			"recovery_action": "boss login",
 		},
+		"LOGIN_TIMEOUT": {
+			"message": "登录等待超时（扫码未完成或网络缓慢）",
+			"recoverable": True,
+			"recovery_action": "boss login --timeout 180",
+		},
+		"CDP_UNAVAILABLE": {
+			"message": "Chrome 调试连接不可用",
+			"recoverable": True,
+			"recovery_action": "boss login",
+		},
+		"BROWSER_KERNEL_MISSING": {
+			"message": "patchright 浏览器内核缺失或与所需修订版不匹配",
+			"recoverable": True,
+			"recovery_action": "patchright install chromium",
+		},
+		"LOGIN_RISK_CONTROL": {
+			"message": "登录请求可能触发平台风控",
+			"recoverable": False,
+			"recovery_action": "停止自动化重试，改用浏览器手动确认账号状态",
+		},
+		"LOGIN_EXPIRED": {
+			"message": "登录态已失效或授权不足",
+			"recoverable": True,
+			"recovery_action": "boss login",
+		},
+		"LOGIN_CREDENTIAL_EXTRACTION_FAILED": {
+			"message": "登录成功后提取凭证失败",
+			"recoverable": True,
+			"recovery_action": "boss login --cookie-source chrome",
+		},
 		"JOB_NOT_FOUND": {
 			"message": "职位不存在或已下架",
 			"recoverable": False,
