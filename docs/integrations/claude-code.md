@@ -13,7 +13,7 @@ Applies to the current `boss-agent-cli` low-risk CLI contract as of May 18, 2026
 Preferred path: install the Skill.
 
 ```bash
-npx skills add can4hou6joeng4/boss-agent-cli
+npx skills add can4hou6joeng4/boss-skill
 ```
 
 If you prefer a rules-file workflow, you can add guidance like this:

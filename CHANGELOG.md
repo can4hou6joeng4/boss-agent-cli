@@ -13,10 +13,10 @@
 - PR 模板补充无 `Co-authored-by` 尾注或 AI 署名行检查项，对齐贡献规范。
 - 51job/前程无忧占位适配器补齐候选者侧全量能力的稳定 `NOT_SUPPORTED` 包络，避免未启用真实适配前落入默认 `NotImplementedError`。
 - 补强 51job/前程无忧占位包络的 `capability` 明细契约，确保 Agent 可稳定区分具体未支持能力。
-- 根目录 `SKILL.md` 瘦身为"安装 + 首分钟引导 + 文档链接"：能力与错误码以 `boss schema` 自描述为真源，详细用法收敛到 Agent Quickstart / Capability Matrix，消除与文档的内容复写漂移。`npx skills add can4hou6joeng4/boss-agent-cli` 安装路径不变。
+- Agent Skill 安装路径统一为 `npx skills add can4hou6joeng4/boss-skill`：全部 Skill 内容（CLI 安装入口与场景化工作流）迁至独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill) 管理，与 CLI 发版节奏解耦；CLI 能力与错误码继续以 `boss schema` 自描述为真源。
 
 ### Removed
-- `skills/boss-resume-downloader` 工作流迁移至独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill) 管理；此前经 `npx skills add can4hou6joeng4/boss-agent-cli` 安装过该 skill 的用户，请改从新仓库获取更新。
+- 根目录 `SKILL.md` 与 `skills/boss-resume-downloader` 迁移至独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill)；此前经 `npx skills add can4hou6joeng4/boss-agent-cli` 安装的用户，请改用 `npx skills add can4hou6joeng4/boss-skill` 获取更新。
 
 ## [1.12.0] - 2026-06-09
 
