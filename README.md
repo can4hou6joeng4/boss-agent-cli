@@ -321,7 +321,7 @@ except AuthRequired:
 
 ## 📚 命令速查
 
-`boss schema` 当前暴露 34 个顶层命令和 9 个一级招聘者子命令，按工作流分组：
+`boss schema` 当前暴露 35 个顶层命令和 9 个一级招聘者子命令，按工作流分组：
 
 | 阶段 | 命令 |
 |------|------|
@@ -332,7 +332,7 @@ except AuthRequired:
 | **本地整理** | `watch` · `preset` · `shortlist` |
 | **简历** | `resume` · `me` |
 | **AI** | `ai config` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai suggest` · `ai reply` · `ai interview-prep` · `ai chat-coach` |
-| **系统** | `schema` · `export` · `config` · `clean` |
+| **系统** | `schema` · `platforms` · `export` · `config` · `clean` |
 | **招聘者** | `hr jobs list/offline/online`；候选人数据与消息链路默认阻断 |
 
 完整命令表、参数详解与福利筛选原理见 **[命令参考](docs/commands.md)**；能力真源是 `boss schema`（支持 `--format openai-tools` / `anthropic-tools` 导出工具定义）。

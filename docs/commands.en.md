@@ -12,7 +12,7 @@ boss schema --format anthropic-tools   # export Claude Tool Use definitions
 boss <cmd> --help                      # options for a single command
 ```
 
-`boss schema` currently exposes 34 top-level commands, plus 9 first-level recruiter
+`boss schema` currently exposes 35 top-level commands, plus 9 first-level recruiter
 subcommands under `hr`, grouped below by workflow stage.
 
 ## Basics
@@ -20,6 +20,7 @@ subcommands under `hr`, grouped below by workflow stage.
 | Command | Description |
 |---------|-------------|
 | `boss schema` | Full tool self-description JSON (agents call this first) |
+| `boss platforms` | Local platform registry and capability status (no network; `--platform` filter, `--capability` reverse lookup, includes `capability_status_legend`) |
 | `boss login` | User-triggered login (Cookie / CDP / QR / browser fallback per platform) |
 | `boss logout` | Log out |
 | `boss status` | Check login state (local-only by default; `--live` runs a low-frequency read-only probe) |

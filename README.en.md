@@ -218,7 +218,7 @@ See [Agent Quickstart](docs/agent-quickstart.en.md) and [Capability Matrix](docs
 
 ## 📚 Commands
 
-`boss schema` currently exposes 34 top-level commands, plus 9 first-level recruiter subcommands under `hr`, grouped below by workflow:
+`boss schema` currently exposes 35 top-level commands, plus 9 first-level recruiter subcommands under `hr`, grouped below by workflow:
 
 | Stage | Commands |
 |-------|----------|
@@ -229,7 +229,7 @@ See [Agent Quickstart](docs/agent-quickstart.en.md) and [Capability Matrix](docs
 | **Organize** | `watch` · `preset` · `shortlist` |
 | **Resume** | `resume` · `me` |
 | **AI** | `ai config` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai suggest` · `ai reply` · `ai interview-prep` · `ai chat-coach` |
-| **Utility** | `schema` · `export` · `config` · `clean` |
+| **Utility** | `schema` · `platforms` · `export` · `config` · `clean` |
 | **Recruiter** | `hr jobs list/offline/online`; candidate-data and messaging workflows are blocked by default |
 
 Full command tables, filter parameters, and welfare-matching internals: **[Command Reference](docs/commands.en.md)**. The capability source of truth is `boss schema` (with `--format openai-tools` / `anthropic-tools` exports for any agent framework).

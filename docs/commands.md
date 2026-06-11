@@ -15,7 +15,8 @@ boss <命令> --help                      # 查看单个命令选项
 
 | 命令 | 说明 |
 |------|------|
-| `boss schema` | 输出完整工具能力描述 JSON（34 个顶层命令 + hr 分组展开，Agent 首先调用） |
+| `boss schema` | 输出完整工具能力描述 JSON（35 个顶层命令 + hr 分组展开，Agent 首先调用） |
+| `boss platforms` | 本地平台注册与能力状态（不触网；支持 `--platform` 单平台过滤与 `--capability` 反查，附 `capability_status_legend`） |
 | `boss login` | 用户主动登录（按平台走 Cookie / CDP / QR / 浏览器降级链路） |
 | `boss logout` | 退出登录 |
 | `boss status` | 检查登录态（默认仅本地；`--live` 才执行低频只读验证） |
