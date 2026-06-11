@@ -4,9 +4,12 @@
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-06-11
+
 ### Added
 - `boss platforms` 新增 `--platform` 单平台过滤，支持 `qiancheng` 与 `51job` 别名，仅读取本地能力元数据并保持未知平台的 `INVALID_PARAM` JSON 包络。
 - `boss platforms` 输出新增 `capability_status_legend`，解释 `available` / `not_supported` / `placeholder_only` / `low_risk_blocked` 的清晰语义，避免 Agent 将占位或低风险阻断误读为真实能力。
+- `boss schema` 错误码枚举补齐 login 链路 6 码（`LOGIN_TIMEOUT` / `CDP_UNAVAILABLE` / `BROWSER_KERNEL_MISSING` / `LOGIN_RISK_CONTROL` / `LOGIN_EXPIRED` / `LOGIN_CREDENTIAL_EXTRACTION_FAILED`），错误码总数 26 → 32，Agent 可经 schema 发现全部登录错误的恢复动作。
 
 ### Changed
 - 补强 `boss config` 未知配置项错误路径的 stdout 单行 JSON 包络契约测试，确保 Agent 可稳定解析 `INVALID_PARAM`。
@@ -16,9 +19,14 @@
 - 双语 README 重构为导航型主页：命令参考与诊断排障下沉到 `docs/commands(.en).md` 与 `docs/troubleshooting(.en).md`，中英结构对齐；根目录演示资产归位 `demo/`，推广物料归位 `docs/marketing/`。
 - Agent Skill 安装路径统一为 `npx skills add can4hou6joeng4/boss-skill`：CLI 的 Agent Skill 迁至独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill)（仓库本身即 Skill），与 CLI 发版节奏解耦；CLI 能力与错误码继续以 `boss schema` 自描述为真源。
 
-### Removed
-- 根目录 `SKILL.md` 迁移至独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill)；此前经 `npx skills add can4hou6joeng4/boss-agent-cli` 安装的用户，请改用 `npx skills add can4hou6joeng4/boss-skill` 获取更新。
-- `skills/boss-resume-downloader` 招聘者简历批量同步工作流退役下线（与默认低风险合规姿态存在张力）；历史版本可在本仓库 git 历史（`85cc4e2` 之前）中找到。
+### Fixed
+- `boss doctor` 的 `patchright_chromium` 检查改为按 patchright 自带 `browsers.json` 声明的修订版精确校验，修复"缓存存在其他版本即报 ok 但 `boss login` 启动浏览器失败"的假绿灯。
+- `boss login` 浏览器内核缺失时不再误报 `CDP_UNAVAILABLE`：新增 `BROWSER_KERNEL_MISSING` 分类，`recovery_action` 修正为可执行的 `patchright install chromium`。
+- 隔离简历导出默认路径测试，避免每次全量测试向仓库根目录写入临时文件。
+
+### Removed（含 Breaking Change）
+- 根目录 `SKILL.md` 迁移至独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill)；**此前经 `npx skills add can4hou6joeng4/boss-agent-cli` 安装的用户，请改用 `npx skills add can4hou6joeng4/boss-skill` 获取更新**。CLI 命令行为、JSON 信封与既有错误码全部向后兼容。
+- `skills/boss-resume-downloader` 招聘者简历批量同步工作流退役下线（与默认低风险合规姿态存在张力）；历史版本可在本仓库 git 历史中找到。
 
 ## [1.12.0] - 2026-06-09
 
