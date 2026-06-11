@@ -291,7 +291,18 @@ boss hr candidates "Golang"
 | 智联招聘 (`zhilian`) | 🟡 候选者侧登录 + 读写链路已接通 | — | 招聘者侧未接入，运行时会直接拒绝 `hr` 子命令 |
 | 前程无忧 / 51job (`qiancheng`) | 🚧 已注册占位 | — | 统一返回 `NOT_SUPPORTED`，待只读研究门槛满足后再接入真实能力 |
 
-`boss platforms` 会在 JSON 与终端输出中附带 `capability_status_legend`，用于解释能力状态：
+`boss platforms` 会在 JSON 与终端输出中附带 `capability_status_legend`，用于解释能力状态；也可以用 `--capability <capability>` 按现有本地能力矩阵反查平台状态，不会触发登录、浏览器/CDP 或网络请求：
+
+```bash
+# 查看哪些平台对 status 是 available / placeholder / blocked_by_policy / not_supported
+boss platforms --capability status
+
+# 可与平台过滤组合；51job 会解析为 qiancheng
+boss platforms --platform 51job --capability search
+```
+
+`--capability` 的 `capability_filter.status_groups` 使用 Agent 友好的归一化状态名：`available`、`placeholder`、`blocked_by_policy`、`not_supported`；每个平台的 `capability_match.raw_status` 保留矩阵原始状态（如 `placeholder_only` / `low_risk_blocked`）。
+
 
 | 状态 | 语义 |
 |------|------|

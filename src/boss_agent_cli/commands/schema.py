@@ -280,6 +280,12 @@ SCHEMA_DATA = {
 					"default": None,
 					"description": "仅查看指定平台（支持 qiancheng / 51job 等已注册平台或别名）",
 				},
+				"--capability": {
+					"type": "string",
+					"default": None,
+					"description": "按现有本地能力矩阵反查平台状态；返回 available / placeholder / blocked_by_policy / not_supported 分组",
+					"choices": ["search", "detail", "recommend", "me", "status", "greet", "apply", "shortlist", "stats", "config", "schema"],
+				},
 			},
 		},
 		"status": {
