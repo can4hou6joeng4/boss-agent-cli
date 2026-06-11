@@ -1,8 +1,8 @@
 # boss-agent-cli 终端演示（中文版） — 复刻 Trellis 风格 30fps/1280px
-# 使用方式: vhs demo-zh.tape
-# 输出: demo-zh.gif
+# 使用方式: vhs demo/demo-zh.tape
+# 输出: demo/demo-zh.gif
 
-Output demo-zh.gif
+Output demo/demo-zh.gif
 
 Set Shell "zsh"
 Set FontSize 14
@@ -46,7 +46,7 @@ Sleep 400ms
 Type "# AI 自描述：34 顶层命令 + 错误自愈 + JSON 信封协议"
 Enter
 Sleep 800ms
-Type "boss --json schema 2>/dev/null | python3 demo_showcase.py"
+Type "boss --json schema 2>/dev/null | python3 demo/demo_showcase.py"
 Sleep 300ms
 Enter
 Sleep 6s

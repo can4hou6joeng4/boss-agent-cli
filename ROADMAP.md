@@ -48,7 +48,7 @@
   - [ ] 51job / 前程无忧：先进入 research backlog，候选者侧只读入口和脱敏测试样本明确前不进入真实运行路径（详见 `docs/research/platforms/51job.md`）
 
 ### 社区建设
-- [ ] 更完整的中文 + 英文视频 demo / 发布素材（当前已有 `demo-zh.gif` / `demo-en.gif` + 对应 `demo-zh.tape` / `demo-en.tape` 终端演示）
+- [ ] 更完整的中文 + 英文视频 demo / 发布素材（当前已有 `demo/demo-zh.gif` / `demo/demo-en.gif` + 对应 `demo/demo-zh.tape` / `demo/demo-en.tape` 终端演示）
 - [ ] 跟进 [awesome-agents](https://github.com/kyrolabs/awesome-agents) PR #423 审阅结果
 - [ ] 视时机决定是否进入 [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code)
 - [x] 贡献者指南英文版（`CONTRIBUTING.en.md`，v1.8.3）

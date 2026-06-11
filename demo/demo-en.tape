@@ -1,8 +1,8 @@
 # boss-agent-cli terminal demo (English) — Trellis-style 30fps/1280px
-# Usage: vhs demo-en.tape
-# Output: demo-en.gif
+# Usage: vhs demo/demo-en.tape
+# Output: demo/demo-en.gif
 
-Output demo-en.gif
+Output demo/demo-en.gif
 
 Set Shell "zsh"
 Set FontSize 14
@@ -45,7 +45,7 @@ Sleep 400ms
 Type "# Schema-driven: 34 commands + auto-recoverable errors + JSON envelope"
 Enter
 Sleep 800ms
-Type "boss --json schema 2>/dev/null | python3 demo_showcase_en.py"
+Type "boss --json schema 2>/dev/null | python3 demo/demo_showcase_en.py"
 Sleep 300ms
 Enter
 Sleep 6s

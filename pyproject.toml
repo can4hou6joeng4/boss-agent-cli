@@ -72,8 +72,6 @@ exclude = [
 	"/build",
 	"/demo/**/*.mp4",
 	"/demo/**/*.gif",
-	"/demo-en.gif",
-	"/demo-zh.gif",
 ]
 
 [tool.pytest.ini_options]
