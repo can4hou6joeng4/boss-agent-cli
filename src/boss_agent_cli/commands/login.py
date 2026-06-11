@@ -15,12 +15,14 @@ def _classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, objec
 	message = raw_message.lower()
 	recovery_action = login_action_for_ctx(ctx)
 
-	def payload(code: str, user_message: str, next_actions: list[str]) -> dict[str, object]:
+	def payload(
+		code: str, user_message: str, next_actions: list[str], recovery: str | None = None
+	) -> dict[str, object]:
 		return {
 			"code": code,
 			"message": user_message,
 			"recoverable": True,
-			"recovery_action": recovery_action,
+			"recovery_action": recovery or recovery_action,
 			"hints": {"next_actions": next_actions},
 		}
 
@@ -33,6 +35,18 @@ def _classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, objec
 				"网络较慢时可追加 --timeout 180 或更长时间",
 				"如已打开本机 Chrome，可先运行 boss-chrome 后再重试登录",
 			],
+		)
+
+	if "executable doesn't exist" in message or "playwright was just installed" in message:
+		return payload(
+			"BROWSER_KERNEL_MISSING",
+			f"patchright 浏览器内核缺失或与所需修订版不匹配: {raw_message}",
+			[
+				"运行 patchright install chromium 安装当前 patchright 所需的浏览器内核",
+				"安装完成后重新执行登录",
+				"可先运行 boss doctor 预检浏览器内核状态",
+			],
+			recovery="patchright install chromium",
 		)
 
 	if "cdp" in message or "chrome" in message or isinstance(exc, ConnectionError):
@@ -114,12 +128,16 @@ def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: 
 		status_cmd = boss_command_for_ctx(ctx, "status")
 		search_cmd = boss_command_for_ctx(ctx, "search <query>")
 		recommend_cmd = boss_command_for_ctx(ctx, "recommend")
-		emit_success("login", {"message": f"登录成功（{method}）"}, hints={
-			"next_actions": [
-				f"{status_cmd} — 验证登录态",
-				f"{search_cmd} — 搜索职位",
-				f"{recommend_cmd} — 获取个性化推荐",
-			],
-		})
+		emit_success(
+			"login",
+			{"message": f"登录成功（{method}）"},
+			hints={
+				"next_actions": [
+					f"{status_cmd} — 验证登录态",
+					f"{search_cmd} — 搜索职位",
+					f"{recommend_cmd} — 获取个性化推荐",
+				],
+			},
+		)
 	except Exception as e:
 		emit_error("login", **_classify_login_error(e, ctx))

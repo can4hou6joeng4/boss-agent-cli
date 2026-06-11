@@ -643,3 +643,39 @@ def test_doctor_reports_quality_baseline(tmp_path):
 	for tool in ("ruff", "pytest", "mypy"):
 		assert _find_check(checks, f"quality_tool_{tool}")["status"] in {"ok", "warn"}
 	assert any("quality_baseline.py" in action for action in parsed["hints"]["next_actions"])
+
+
+def test_evaluate_patchright_chromium_requires_exact_revision(tmp_path):
+	"""回归：缓存里有其他修订版不代表 patchright 可用，必须精确匹配所需修订版。"""
+	from boss_agent_cli.commands.doctor import _evaluate_patchright_chromium
+
+	installed = [tmp_path / "chromium-1217", tmp_path / "chromium-1223"]
+	status, detail = _evaluate_patchright_chromium("1208", installed)
+	assert status == "warn"
+	assert "chromium-1208" in detail
+	assert "boss login" in detail
+
+	status_ok, detail_ok = _evaluate_patchright_chromium("1217", installed)
+	assert status_ok == "ok"
+	assert "chromium-1217" in detail_ok
+
+
+def test_evaluate_patchright_chromium_falls_back_without_manifest(tmp_path):
+	"""browsers.json 不可读时退回旧的目录计数口径，不阻断 doctor。"""
+	from boss_agent_cli.commands.doctor import _evaluate_patchright_chromium
+
+	status, detail = _evaluate_patchright_chromium(None, [tmp_path / "chromium-1217"])
+	assert status == "ok"
+	assert "无法确认" in detail
+
+	status_empty, _ = _evaluate_patchright_chromium(None, [])
+	assert status_empty == "warn"
+
+
+def test_patchright_chromium_revision_reads_packaged_manifest():
+	"""patchright 是项目硬依赖，应能从其 browsers.json 读出数字修订版。"""
+	from boss_agent_cli.commands.doctor import _patchright_chromium_revision
+
+	revision = _patchright_chromium_revision()
+	assert revision is not None
+	assert revision.isdigit()

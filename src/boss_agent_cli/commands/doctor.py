@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,42 @@ def _find_project_root() -> Path:
 		if (parent / "pyproject.toml").exists():
 			return parent
 	return Path.cwd()
+
+
+def _patchright_chromium_revision() -> str | None:
+	"""读取 patchright 自带 browsers.json 声明的 chromium 修订版。"""
+	try:
+		import patchright
+
+		browsers_json = Path(patchright.__file__).resolve().parent / "driver" / "package" / "browsers.json"
+		data = json.loads(browsers_json.read_text(encoding="utf-8"))
+	except Exception:
+		return None
+	for browser in data.get("browsers", []):
+		if browser.get("name") == "chromium":
+			revision = browser.get("revision")
+			return str(revision) if revision else None
+	return None
+
+
+def _evaluate_patchright_chromium(required_revision: str | None, installed: list[Path]) -> tuple[str, str]:
+	"""Return (status, detail) for the patchright_chromium doctor check.
+
+	patchright 启动浏览器只认 browsers.json 声明的修订版，其他版本的缓存
+	无法替代，因此必须按所需修订版精确校验，不能只统计缓存目录个数。
+	"""
+	if required_revision:
+		expected = f"chromium-{required_revision}"
+		if any(p.name == expected for p in installed):
+			return "ok", f"已安装 patchright 所需修订版 {expected}"
+		found = "、".join(sorted(p.name for p in installed)) or "无"
+		return (
+			"warn",
+			f"patchright 需要 {expected}，本机缓存仅有：{found}；boss login 启动内置浏览器会失败",
+		)
+	if installed:
+		return "ok", f"检测到 {len(installed)} 个 Chromium 安装（无法确认 patchright 所需修订版）"
+	return "warn", "未检测到 patchright/Playwright Chromium 缓存"
 
 
 def _add_quality_baseline_checks(checks: list[dict[str, Any]]) -> None:
@@ -121,12 +158,13 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 	for base in patchright_browser_dirs:
 		if base.exists():
 			chromium_candidates.extend(base.glob("chromium-*"))
+	chromium_status, chromium_detail = _evaluate_patchright_chromium(
+		_patchright_chromium_revision(), chromium_candidates
+	)
 	add_check(
 		"patchright_chromium",
-		"ok" if chromium_candidates else "warn",
-		f"检测到 {len(chromium_candidates)} 个 Chromium 安装"
-		if chromium_candidates
-		else "未检测到 patchright/Playwright Chromium 缓存",
+		chromium_status,
+		chromium_detail,
 		"运行 patchright install chromium 安装浏览器内核",
 	)
 

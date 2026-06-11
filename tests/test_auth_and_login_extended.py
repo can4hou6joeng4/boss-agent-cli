@@ -32,8 +32,10 @@ def test_machine_id_linux_reads_machine_id_file(tmp_path, monkeypatch):
 	store = _make_store(tmp_path)
 
 	fake_content = "linux-machine-abc123\n"
-	with patch("boss_agent_cli.auth.token_store.platform.system", return_value="Linux"), \
-		 patch("boss_agent_cli.auth.token_store.Path") as mock_path_cls:
+	with (
+		patch("boss_agent_cli.auth.token_store.platform.system", return_value="Linux"),
+		patch("boss_agent_cli.auth.token_store.Path") as mock_path_cls,
+	):
 		fake_machine_file = MagicMock()
 		fake_machine_file.exists.return_value = True
 		fake_machine_file.read_text.return_value = fake_content
@@ -48,8 +50,10 @@ def test_machine_id_linux_file_missing_falls_back_to_hostname(tmp_path, monkeypa
 	monkeypatch.delenv("BOSS_AGENT_MACHINE_ID", raising=False)
 	store = _make_store(tmp_path)
 
-	with patch("boss_agent_cli.auth.token_store.platform.system", return_value="Linux"), \
-		 patch("boss_agent_cli.auth.token_store.Path") as mock_path_cls:
+	with (
+		patch("boss_agent_cli.auth.token_store.platform.system", return_value="Linux"),
+		patch("boss_agent_cli.auth.token_store.Path") as mock_path_cls,
+	):
 		fake_machine_file = MagicMock()
 		fake_machine_file.exists.return_value = False
 		mock_path_cls.return_value = fake_machine_file
@@ -65,13 +69,17 @@ def test_machine_id_windows_reg_query(tmp_path, monkeypatch):
 	monkeypatch.delenv("BOSS_AGENT_MACHINE_ID", raising=False)
 	store = _make_store(tmp_path)
 
-	fake_stdout = "\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography\r\n    MachineGuid    REG_SZ    abc-windows-guid\r\n"
+	fake_stdout = (
+		"\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography\r\n    MachineGuid    REG_SZ    abc-windows-guid\r\n"
+	)
 	fake_result = MagicMock()
 	fake_result.stdout = fake_stdout
 
-	with patch("boss_agent_cli.auth.token_store.platform.system", return_value="Windows"), \
-		 patch("boss_agent_cli.auth.token_store.shutil.which", return_value="/windows/reg.exe"), \
-		 patch("boss_agent_cli.auth.token_store.subprocess.run", return_value=fake_result):
+	with (
+		patch("boss_agent_cli.auth.token_store.platform.system", return_value="Windows"),
+		patch("boss_agent_cli.auth.token_store.shutil.which", return_value="/windows/reg.exe"),
+		patch("boss_agent_cli.auth.token_store.subprocess.run", return_value=fake_result),
+	):
 		result = store._get_machine_id()
 		assert result == "abc-windows-guid"
 
@@ -92,9 +100,11 @@ def test_machine_id_oserror_exception_falls_back(tmp_path, monkeypatch):
 	monkeypatch.delenv("BOSS_AGENT_MACHINE_ID", raising=False)
 	store = _make_store(tmp_path)
 
-	with patch("boss_agent_cli.auth.token_store.platform.system", return_value="Darwin"), \
-		 patch("boss_agent_cli.auth.token_store.shutil.which", return_value="/usr/sbin/ioreg"), \
-		 patch("boss_agent_cli.auth.token_store.subprocess.run", side_effect=OSError("denied")):
+	with (
+		patch("boss_agent_cli.auth.token_store.platform.system", return_value="Darwin"),
+		patch("boss_agent_cli.auth.token_store.shutil.which", return_value="/usr/sbin/ioreg"),
+		patch("boss_agent_cli.auth.token_store.subprocess.run", side_effect=OSError("denied")),
+	):
 		result = store._get_machine_id()
 		# 异常被吃掉，走 fingerprint 兜底
 		assert len(result) == 64
@@ -207,7 +217,9 @@ def test_login_success(mock_auth_cls):
 	"""正常登录成功路径。"""
 	mock_auth = MagicMock()
 	mock_auth.login.return_value = {
-		"cookies": {"wt2": "x"}, "stoken": "s", "_method": "Cookie 提取",
+		"cookies": {"wt2": "x"},
+		"stoken": "s",
+		"_method": "Cookie 提取",
 	}
 	mock_auth_cls.return_value = mock_auth
 
@@ -224,7 +236,9 @@ def test_login_success(mock_auth_cls):
 def test_login_supports_zhilian_platform(mock_auth_cls):
 	mock_auth = MagicMock()
 	mock_auth.login.return_value = {
-		"cookies": {"zp_token": "x"}, "user_agent": "ua", "_method": "Cookie 提取",
+		"cookies": {"zp_token": "x"},
+		"user_agent": "ua",
+		"_method": "Cookie 提取",
 	}
 	mock_auth_cls.return_value = mock_auth
 
@@ -251,6 +265,31 @@ def test_login_connection_error_recovery_is_boss_chrome(mock_auth_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "CDP_UNAVAILABLE"
 	assert parsed["error"]["recovery_action"] == "boss login"
+
+
+@patch("boss_agent_cli.commands.login.AuthManager")
+def test_login_missing_browser_kernel_recovery_is_patchright_install(mock_auth_cls):
+	"""浏览器内核缺失应返回 BROWSER_KERNEL_MISSING + patchright install 恢复动作。
+
+	回归：patchright 升级后所需 chromium 修订版未安装时，BrowserType.launch
+	报 Executable doesn't exist；此前被笼统归入 CDP_UNAVAILABLE 且
+	recovery_action 给 boss login（重跑无效）。
+	"""
+	mock_auth = MagicMock()
+	mock_auth.login.side_effect = RuntimeError(
+		"BrowserType.launch: Executable doesn't exist at "
+		"/Users/u/Library/Caches/ms-playwright/chromium-1208/chrome-mac-arm64/"
+		"Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+	)
+	mock_auth_cls.return_value = mock_auth
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["login"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "BROWSER_KERNEL_MISSING"
+	assert parsed["error"]["recovery_action"] == "patchright install chromium"
+	assert any("patchright install chromium" in action for action in parsed["hints"]["next_actions"])
 
 
 @patch("boss_agent_cli.commands.login.AuthManager")
