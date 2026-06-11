@@ -169,8 +169,9 @@ def test_cli_export_html(tmp_path):
 	assert out_file.exists()
 
 
-def test_cli_export_html_default_path(tmp_path):
-	"""When no -o is given, export defaults to <name>.html."""
+def test_cli_export_html_default_path(tmp_path, monkeypatch):
+	"""When no -o is given, export defaults to <name>.html (in cwd, isolated here)."""
+	monkeypatch.chdir(tmp_path)
 	runner = CliRunner()
 	_invoke(runner, tmp_path, ["init", "--name", "autopath", "--template", "default"])
 	result = _invoke(runner, tmp_path, ["export", "autopath", "--format", "html"])
@@ -178,6 +179,7 @@ def test_cli_export_html_default_path(tmp_path):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	assert parsed["data"]["format"] == "html"
+	assert (tmp_path / "autopath.html").exists()
 
 
 # ── CLI integration: --format pdf chromium unavailable ───────
