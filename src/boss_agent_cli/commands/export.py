@@ -8,7 +8,13 @@ import click
 from boss_agent_cli.api.models import JobItem
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_export_summary, render_job_table
+from boss_agent_cli.display import (
+	handle_auth_errors,
+	handle_error_output,
+	handle_output,
+	render_export_summary,
+	render_job_table,
+)
 from boss_agent_cli.search_filters import SearchUrlParseError, parse_boss_search_url, resolve_search_code_params
 
 
@@ -29,10 +35,30 @@ _HTML_PUBLIC_EXPORT_FIELDS = ("title", "company", "city", "experience", "educati
 @click.option("--count", default=50, type=int, help="导出数量")
 @click.option("--format", "fmt", default="csv", type=click.Choice(["html", "csv", "json"]), help="输出格式")
 @click.option("--output", "-o", default=None, help="输出文件路径（不指定则输出到 stdout JSON 信封）")
-@click.option("--include-private", is_flag=True, help="CSV/JSON/stdout 保留明文平台标识和招聘者姓名；HTML 省略平台标识、招聘者和薪资")
+@click.option(
+	"--include-private",
+	is_flag=True,
+	help="CSV/JSON/stdout 保留明文平台标识和招聘者姓名；HTML 省略平台标识、招聘者和薪资",
+)
 @click.pass_context
 @handle_auth_errors("export")
-def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, city: str | None, salary: str | None, experience: str | None, education: str | None, industry: str | None, scale: str | None, stage: str | None, job_type: str | None, count: int, fmt: str, output: str | None, include_private: bool) -> None:
+def export_cmd(
+	ctx: click.Context,
+	query: str | None,
+	search_url: str | None,
+	city: str | None,
+	salary: str | None,
+	experience: str | None,
+	education: str | None,
+	industry: str | None,
+	scale: str | None,
+	stage: str | None,
+	job_type: str | None,
+	count: int,
+	fmt: str,
+	output: str | None,
+	include_private: bool,
+) -> None:
 	"""导出搜索结果为 CSV 或 JSON 文件"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -48,20 +74,29 @@ def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, ci
 		raw_params.update(parsed_url.params)
 
 	if not query and not search_url:
-		handle_error_output(ctx, "export", code="INVALID_PARAM", message="未提供 query，请传入搜索关键词或 --url")
+		handle_error_output(
+			ctx,
+			"export",
+			code="INVALID_PARAM",
+			message="未提供 query，请传入搜索关键词或 --url",
+			recoverable=True,
+			recovery_action="boss export <query> 或 boss export --url <搜索页URL>",
+		)
 		return
 	query = query or ""
 
 	try:
-		raw_params.update(resolve_search_code_params(
-			salary=salary,
-			experience=experience,
-			education=education,
-			industry=industry,
-			scale=scale,
-			stage=stage,
-			job_type=job_type,
-		))
+		raw_params.update(
+			resolve_search_code_params(
+				salary=salary,
+				experience=experience,
+				education=education,
+				industry=industry,
+				scale=scale,
+				stage=stage,
+				job_type=job_type,
+			)
+		)
 	except ValueError as exc:
 		handle_error_output(ctx, "export", code="INVALID_PARAM", message=str(exc))
 		return
@@ -74,7 +109,9 @@ def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, ci
 		page = 1
 		max_pages = (count + 14) // 15  # 每页约 15 条
 
-		while _export_item_count(all_items, html_items, html_file_output=html_file_output) < count and page <= max_pages:
+		while (
+			_export_item_count(all_items, html_items, html_file_output=html_file_output) < count and page <= max_pages
+		):
 			logger.info(f"正在获取第 {page} 页...")
 			search_filters: dict[str, Any] = {"page": page}
 			for key, value in {
@@ -95,7 +132,8 @@ def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, ci
 			if not platform.is_success(raw):
 				code, message = platform.parse_error(raw)
 				handle_error_output(
-					ctx, "export",
+					ctx,
+					"export",
 					code=code,
 					message=message or "搜索结果获取失败",
 					recoverable=False,
@@ -135,7 +173,9 @@ def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, ci
 				"private_fields": _private_fields_state(fmt=fmt, include_private=include_private),
 			}
 			handle_output(
-				ctx, "export", data,
+				ctx,
+				"export",
+				data,
 				render=lambda d: render_export_summary(d),
 				hints={
 					"next_actions": [
@@ -152,7 +192,9 @@ def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, ci
 				"jobs": write_items,
 			}
 			handle_output(
-				ctx, "export", data,
+				ctx,
+				"export",
+				data,
 				render=lambda d: render_job_table(d.get("jobs", []), "export"),
 				hints={
 					"next_actions": [
@@ -162,7 +204,9 @@ def export_cmd(ctx: click.Context, query: str | None, search_url: str | None, ci
 			)
 
 
-def _export_item_count(all_items: list[dict[str, Any]], html_items: list[dict[str, Any]], *, html_file_output: bool) -> int:
+def _export_item_count(
+	all_items: list[dict[str, Any]], html_items: list[dict[str, Any]], *, html_file_output: bool
+) -> int:
 	if html_file_output:
 		return len(html_items)
 	return len(all_items)
@@ -209,9 +253,23 @@ def _write_to_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 			with open(path, "w") as f:
 				f.write("")
 			return
-		fields = ["title", "company", "salary", "city", "district", "experience",
-				"education", "skills", "welfare", "industry", "scale", "boss_name",
-				"boss_title", "job_id", "security_id"]
+		fields = [
+			"title",
+			"company",
+			"salary",
+			"city",
+			"district",
+			"experience",
+			"education",
+			"skills",
+			"welfare",
+			"industry",
+			"scale",
+			"boss_name",
+			"boss_title",
+			"job_id",
+			"security_id",
+		]
 		with open(path, "w", encoding="utf-8", newline="") as f:
 			writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
 			writer.writeheader()
@@ -295,7 +353,7 @@ def _write_html(items: list[dict[str, Any]], path: str) -> None:
     <th>#</th><th>岗位</th><th>公司</th><th>城市</th>
     <th>经验</th><th>学历</th><th>技能</th><th>福利</th>
   </tr></thead>
-  <tbody>{''.join(rows)}</tbody>
+  <tbody>{"".join(rows)}</tbody>
 </table>
 </body></html>"""
 

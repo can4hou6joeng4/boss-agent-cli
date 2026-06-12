@@ -16,12 +16,16 @@ def _ctx_mock(mock_cls):
 	instance = mock_cls.return_value
 	instance.__enter__ = lambda self: self
 	instance.__exit__ = lambda self, *a: None
-	instance.unwrap_data.side_effect = lambda response: response.get("zpData") if "zpData" in response else response.get("data")
+	instance.unwrap_data.side_effect = lambda response: (
+		response.get("zpData") if "zpData" in response else response.get("data")
+	)
 	instance.is_success.side_effect = lambda response: response.get("code", 0) in (0, 200)
 	return instance
 
 
-def _make_raw_job(name: str = "Go 开发", skills: list | None = None, welfare: list | None = None, security_id: str = "sec_x") -> dict:
+def _make_raw_job(
+	name: str = "Go 开发", skills: list | None = None, welfare: list | None = None, security_id: str = "sec_x"
+) -> dict:
 	return {
 		"encryptJobId": f"j_{security_id}",
 		"jobName": name,
@@ -80,7 +84,7 @@ def test_export_csv_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 def test_export_csv_formula_injection_sanitized(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	"""CSV 公式注入防护：以 =+@- 开头的值应前置单引号。"""
 	mock_client = _ctx_mock(mock_client_cls)
-	evil_job = _make_raw_job(name="=HYPERLINK(\"https://evil\")")
+	evil_job = _make_raw_job(name='=HYPERLINK("https://evil")')
 	evil_job["brandName"] = "+7060035"
 	mock_client.search_jobs.return_value = _api_response([evil_job])
 
@@ -117,10 +121,12 @@ def test_export_csv_empty_result_writes_empty_file(mock_auth_cls, mock_client_cl
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_json_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	mock_client = _ctx_mock(mock_client_cls)
-	mock_client.search_jobs.return_value = _api_response([
-		_make_raw_job("Go 1", security_id="s1"),
-		_make_raw_job("Go 2", security_id="s2"),
-	])
+	mock_client.search_jobs.return_value = _api_response(
+		[
+			_make_raw_job("Go 1", security_id="s1"),
+			_make_raw_job("Go 2", security_id="s2"),
+		]
+	)
 
 	out_path = tmp_path / "jobs.json"
 	runner = CliRunner()
@@ -161,9 +167,11 @@ def test_export_json_include_private_keeps_routing_fields(mock_auth_cls, mock_cl
 @patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_html_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	mock_client = _ctx_mock(mock_client_cls)
-	mock_client.search_jobs.return_value = _api_response([
-		_make_raw_job("Full-Stack", skills=["Python", "React"], welfare=["双休", "五险"]),
-	])
+	mock_client.search_jobs.return_value = _api_response(
+		[
+			_make_raw_job("Full-Stack", skills=["Python", "React"], welfare=["双休", "五险"]),
+		]
+	)
 
 	out_path = tmp_path / "jobs.html"
 	runner = CliRunner()
@@ -193,9 +201,13 @@ def test_export_html_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 def test_export_html_include_private_still_omits_private_fields(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	"""HTML 文件是可分享报表，即使显式 include_private 也不写路由/招聘者私有字段。"""
 	mock_client = _ctx_mock(mock_client_cls)
-	mock_client.search_jobs.return_value = _api_response([
-		_make_raw_job("Full-Stack", skills=["Python", "React"], welfare=["双休", "五险"], security_id="sec_private"),
-	])
+	mock_client.search_jobs.return_value = _api_response(
+		[
+			_make_raw_job(
+				"Full-Stack", skills=["Python", "React"], welfare=["双休", "五险"], security_id="sec_private"
+			),
+		]
+	)
 
 	out_path = tmp_path / "jobs-private.html"
 	runner = CliRunner()
@@ -224,9 +236,11 @@ def test_export_html_include_private_still_omits_private_fields(mock_auth_cls, m
 def test_export_html_to_file_uses_public_api_projection(mock_auth_cls, mock_client_cls, mock_from_api, tmp_path: Path):
 	"""HTML 文件导出不经过包含薪资和路由字段的 JobItem.to_dict 路径。"""
 	mock_client = _ctx_mock(mock_client_cls)
-	mock_client.search_jobs.return_value = _api_response([
-		_make_raw_job("Full-Stack", skills=["Python"], welfare=["双休"], security_id="sec_private"),
-	])
+	mock_client.search_jobs.return_value = _api_response(
+		[
+			_make_raw_job("Full-Stack", skills=["Python"], welfare=["双休"], security_id="sec_private"),
+		]
+	)
 	mock_from_api.side_effect = AssertionError("HTML export should not build full JobItem")
 
 	out_path = tmp_path / "jobs-public.html"
@@ -315,19 +329,22 @@ def test_export_supports_url_and_multiselect_filters(mock_auth_cls, mock_client_
 
 	out_path = tmp_path / "url.json"
 	runner = CliRunner()
-	result = runner.invoke(cli, [
-		"export",
-		"--url",
-		"https://www.zhipin.com/web/geek/jobs?query=Go&city=101280100&degree=203",
-		"--experience",
-		"应届,3-5年",
-		"--count",
-		"1",
-		"--format",
-		"json",
-		"-o",
-		str(out_path),
-	])
+	result = runner.invoke(
+		cli,
+		[
+			"export",
+			"--url",
+			"https://www.zhipin.com/web/geek/jobs?query=Go&city=101280100&degree=203",
+			"--experience",
+			"应届,3-5年",
+			"--count",
+			"1",
+			"--format",
+			"json",
+			"-o",
+			str(out_path),
+		],
+	)
 
 	assert result.exit_code == 0
 	_, kwargs = mock_client.search_jobs.call_args
@@ -438,3 +455,15 @@ def test_export_stdout_include_private_keeps_raw(mock_auth_cls, mock_client_cls)
 	assert jobs[0]["security_id"] == "s1"
 	assert jobs[0]["boss_name"] == "李"
 	assert jobs[0]["job_id"] == "j_s1"
+
+
+def test_export_without_query_returns_actionable_recovery():
+	"""空参导出应返回 INVALID_PARAM 且带可执行 recovery_action。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "export"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["recoverable"] is True
+	assert "boss export" in parsed["error"]["recovery_action"]
