@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `boss export` 缺少关键词时的 `INVALID_PARAM` 信封补充可执行 `recovery_action`，Agent 可程序化恢复。
+
 ## [1.13.0] - 2026-06-11
 
 ### Added
