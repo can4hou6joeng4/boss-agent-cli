@@ -9,6 +9,7 @@ Supports two modes:
   1. CDP mode: connects to user's existing Chrome via DevTools Protocol
   2. Patchright mode (fallback): launches a headless Chromium instance
 """
+
 import sys
 import time
 from pathlib import Path
@@ -38,16 +39,20 @@ class RecruiterChatTabRequired(RuntimeError):
 			"Chrome (CDP-attached) and retry."
 		)
 
+
 # 超时常量
-_CDP_PROBE_TIMEOUT = 3           # CDP 探测 HTTP 超时（秒）
-_NAV_TIMEOUT_MS = 15000          # 页面导航超时（毫秒）
-_HEADLESS_NETWORKIDLE_GRACE_MS = 3000  # headless 预热的额外宽限，避免卡满 30s
+_CDP_PROBE_TIMEOUT = 3  # 显式 --cdp-url 的 CDP 探测 HTTP 超时（秒）
+_CDP_AUTO_PROBE_TIMEOUT = 1  # 默认自动探测 localhost:9222 的超时（无调试端口时快速失败，省 ~2s）
+_NAV_TIMEOUT_MS = 15000  # 页面导航超时（毫秒）
+# zhipin 首页常驻请求多、headless 下基本进不了 networkidle；domcontentloaded 后 JS
+# 环境即可发 fetch，故宽限缩到 0.8s（实测每次都会耗满，缩短直接省 ~2s/搜索）。
+_HEADLESS_NETWORKIDLE_GRACE_MS = 800
 
 # macOS / Linux / Windows Chrome user data 默认路径
 _CHROME_USER_DATA_CANDIDATES = [
-	Path.home() / "Library/Application Support/Google/Chrome",              # macOS
-	Path.home() / ".config/google-chrome",                                  # Linux
-	Path.home() / "AppData/Local/Google/Chrome/User Data",                  # Windows
+	Path.home() / "Library/Application Support/Google/Chrome",  # macOS
+	Path.home() / ".config/google-chrome",  # Linux
+	Path.home() / "AppData/Local/Google/Chrome/User Data",  # Windows
 ]
 
 
@@ -57,7 +62,15 @@ class BrowserSession:
 	Tries CDP connection to user's Chrome first; falls back to headless patchright.
 	"""
 
-	def __init__(self, cookies: dict[str, Any], user_agent: str, *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None, logger: Any = None) -> None:
+	def __init__(
+		self,
+		cookies: dict[str, Any],
+		user_agent: str,
+		*,
+		delay: tuple[float, float] = (1.5, 3.0),
+		cdp_url: str | None = None,
+		logger: Any = None,
+	) -> None:
 		self._throttle = RequestThrottle(delay)
 		# patchright / BridgeClient 运行时创建；注解为 Any 让 mypy 对外部依赖放行
 		self._pw: Any = None
@@ -102,6 +115,7 @@ class BrowserSession:
 		"""尝试通过 Browser Bridge（Chrome 扩展 + daemon）连接。"""
 		try:
 			from boss_agent_cli.bridge.client import BridgeClient
+
 			client = BridgeClient()
 			if not client.is_running():
 				return False
@@ -138,9 +152,12 @@ class BrowserSession:
 		for url in urls_to_try:
 			if self._try_connect(url):
 				return True
-			# HTTP URL 连接失败时，尝试从 /json/version 获取 WS URL
+			# HTTP URL 连接失败时，尝试从 /json/version 获取 WS URL。
+			# 仅对用户显式提供的 --cdp-url 用较长超时；默认 localhost:9222 自动探测
+			# 用短超时快速失败（无调试端口时避免白等 ~2s）。
 			if url.startswith("http"):
-				ws = self._fetch_ws_url(url)
+				probe_timeout = _CDP_PROBE_TIMEOUT if url == self._cdp_url else _CDP_AUTO_PROBE_TIMEOUT
+				ws = self._fetch_ws_url(url, timeout=probe_timeout)
 				if ws and self._try_connect(ws):
 					return True
 		return False
@@ -164,10 +181,12 @@ class BrowserSession:
 				# 没有已存在 context，创建新的并注入 cookies
 				self._context = self._browser.new_context()
 				if self._cookies:
-					self._context.add_cookies([
-						{"name": name, "value": value, "domain": ".zhipin.com", "path": "/"}
-						for name, value in self._cookies.items()
-					])
+					self._context.add_cookies(
+						[
+							{"name": name, "value": value, "domain": ".zhipin.com", "path": "/"}
+							for name, value in self._cookies.items()
+						]
+					)
 				self._own_context = True
 
 			self._page = self._context.new_page()
@@ -191,11 +210,12 @@ class BrowserSession:
 			return False
 
 	@staticmethod
-	def _fetch_ws_url(http_url: str) -> str | None:
+	def _fetch_ws_url(http_url: str, timeout: float = _CDP_PROBE_TIMEOUT) -> str | None:
 		"""Fetch WebSocket debugger URL from Chrome's /json/version endpoint."""
 		import httpx
+
 		try:
-			resp = httpx.get(f"{http_url}/json/version", timeout=_CDP_PROBE_TIMEOUT)
+			resp = httpx.get(f"{http_url}/json/version", timeout=timeout)
 			payload = resp.json()
 			if not isinstance(payload, dict):
 				return None
@@ -229,10 +249,12 @@ class BrowserSession:
 			timezone_id="Asia/Shanghai",
 		)
 		self._own_context = True
-		self._context.add_cookies([
-			{"name": name, "value": value, "domain": ".zhipin.com", "path": "/"}
-			for name, value in self._cookies.items()
-		])
+		self._context.add_cookies(
+			[
+				{"name": name, "value": value, "domain": ".zhipin.com", "path": "/"}
+				for name, value in self._cookies.items()
+			]
+		)
 		self._page = self._context.new_page()
 		self._page.goto(HOME_URL, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
 		try:
@@ -243,11 +265,15 @@ class BrowserSession:
 			self._log(f"[boss] headless 首页未进入 networkidle（{e}），继续直接发起请求")
 		self._started = True
 		self._is_cdp = False
-		self._log("[boss] CDP 不可用（提示：需以 --remote-debugging-port=9222 启动 Chrome），降级到 headless patchright")
+		self._log(
+			"[boss] CDP 不可用（提示：需以 --remote-debugging-port=9222 启动 Chrome），降级到 headless patchright"
+		)
 
 	# ── Core request via browser fetch() ─────────────────────────────
 
-	def request(self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None) -> dict[str, Any]:
+	def request(
+		self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None
+	) -> dict[str, Any]:
 		self._ensure_started()
 		self._throttle.wait()
 
@@ -256,6 +282,7 @@ class BrowserSession:
 		# Bridge 模式：通过扩展 fetch
 		if self._is_bridge and self._bridge_client:
 			import urllib.parse
+
 			full_url = url
 			if params:
 				full_url = f"{url}?{urllib.parse.urlencode(params)}"
@@ -269,7 +296,8 @@ class BrowserSession:
 			return cast("dict[str, Any]", result)
 
 		# Playwright 模式（CDP 或 headless）
-		result = self._page.evaluate("""
+		result = self._page.evaluate(
+			"""
 			async ({method, url, params, data, referer}) => {
 				try {
 					let fetchUrl = url;
@@ -306,7 +334,9 @@ class BrowserSession:
 					return {code: -1, message: e.message, zpData: {}};
 				}
 			}
-		""", {"method": method, "url": url, "params": params or {}, "data": data, "referer": referer})
+		""",
+			{"method": method, "url": url, "params": params or {}, "data": data, "referer": referer},
+		)
 
 		self._throttle.mark()
 		return cast("dict[str, Any]", result)
@@ -350,7 +380,9 @@ class BrowserSession:
 		from UI-only draft mutation or suggestion traffic.
 		"""
 		if self._is_bridge:
-			raise RuntimeError("evaluate_js_with_chat_events requires CDP mode (bridge mode has no access to user Chrome)")
+			raise RuntimeError(
+				"evaluate_js_with_chat_events requires CDP mode (bridge mode has no access to user Chrome)"
+			)
 		cdp_url = self._cdp_url or CDP_DEFAULT_URL
 		return _cdp_evaluate_with_chat_events_in_chat_tab(cdp_url, script, arg, listen_ms=listen_ms)
 
@@ -411,6 +443,7 @@ class BrowserSession:
 
 # ─── Raw CDP helper for evaluate_js ──────────────────────────────────────
 
+
 def _pick_chat_target_ws(cdp_http_url: str) -> str:
 	import json as _json
 	import urllib.request
@@ -455,6 +488,7 @@ def _carve_utf8_bits(bs: bytes) -> list[str]:
 			i += 1
 	return out
 
+
 def _cdp_evaluate_in_chat_tab(cdp_http_url: str, script: str, arg: Any) -> Any:
 	"""Send Runtime.evaluate to the BOSS recruiter chat tab via raw CDP.
 
@@ -472,15 +506,19 @@ def _cdp_evaluate_in_chat_tab(cdp_http_url: str, script: str, arg: Any) -> Any:
 	expression = _build_eval_expression(script, arg)
 
 	with _ws_client.connect(target_ws, max_size=8 * 1024 * 1024) as ws:
-		ws.send(_json.dumps({
-			"id": 1,
-			"method": "Runtime.evaluate",
-			"params": {
-				"expression": expression,
-				"returnByValue": True,
-				"awaitPromise": True,
-			},
-		}))
+		ws.send(
+			_json.dumps(
+				{
+					"id": 1,
+					"method": "Runtime.evaluate",
+					"params": {
+						"expression": expression,
+						"returnByValue": True,
+						"awaitPromise": True,
+					},
+				}
+			)
+		)
 		deadline = time.time() + 30.0
 		while time.time() < deadline:
 			raw = ws.recv(timeout=max(0.1, deadline - time.time()))
@@ -496,7 +534,9 @@ def _cdp_evaluate_in_chat_tab(cdp_http_url: str, script: str, arg: Any) -> Any:
 			# Exception in JS side
 			exc_details = msg.get("result", {}).get("exceptionDetails")
 			if exc_details:
-				raise RuntimeError(f"JS exception: {exc_details.get('text')} — {exc_details.get('exception', {}).get('description', '')[:300]}")
+				raise RuntimeError(
+					f"JS exception: {exc_details.get('text')} — {exc_details.get('exception', {}).get('description', '')[:300]}"
+				)
 			return result
 		raise RuntimeError("CDP Runtime.evaluate timed out after 30s")
 
@@ -514,15 +554,19 @@ def _cdp_evaluate_with_chat_events_in_chat_tab(
 
 	with _ws_client.connect(target_ws, max_size=8 * 1024 * 1024) as ws:
 		ws.send(_json.dumps({"id": 1, "method": "Network.enable"}))
-		ws.send(_json.dumps({
-			"id": 2,
-			"method": "Runtime.evaluate",
-			"params": {
-				"expression": expression,
-				"returnByValue": True,
-				"awaitPromise": True,
-			},
-		}))
+		ws.send(
+			_json.dumps(
+				{
+					"id": 2,
+					"method": "Runtime.evaluate",
+					"params": {
+						"expression": expression,
+						"returnByValue": True,
+						"awaitPromise": True,
+					},
+				}
+			)
+		)
 
 		events: list[dict[str, Any]] = []
 		eval_value: Any = None
@@ -576,9 +620,11 @@ def _cdp_evaluate_with_chat_events_in_chat_tab(
 			if len(bs) < 30:
 				continue
 
-			events.append({
-				"ts": time.time(),
-				"kind": "ws_send" if method.endswith("Sent") else "ws_recv",
-				"bytes": len(bs),
-				"utf8_bits": _carve_utf8_bits(bs)[:10],
-			})
+			events.append(
+				{
+					"ts": time.time(),
+					"kind": "ws_send" if method.endswith("Sent") else "ws_recv",
+					"bytes": len(bs),
+					"utf8_bits": _carve_utf8_bits(bs)[:10],
+				}
+			)

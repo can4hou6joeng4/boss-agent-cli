@@ -246,11 +246,10 @@ def test_start_headless_tolerates_networkidle_timeout():
 		"networkidle",
 		timeout=_HEADLESS_NETWORKIDLE_GRACE_MS,
 	)
-	logger.info.assert_any_call("[boss] CDP 不可用（提示：需以 --remote-debugging-port=9222 启动 Chrome），降级到 headless patchright")
-	assert any(
-		"headless 首页未进入 networkidle" in call.args[0]
-		for call in logger.info.call_args_list
+	logger.info.assert_any_call(
+		"[boss] CDP 不可用（提示：需以 --remote-debugging-port=9222 启动 Chrome），降级到 headless patchright"
 	)
+	assert any("headless 首页未进入 networkidle" in call.args[0] for call in logger.info.call_args_list)
 
 
 def test_ensure_started_falls_back_to_patchright_when_bridge_and_cdp_fail():
@@ -286,8 +285,12 @@ def test_try_cdp_attempts_http_ws_and_devtools_urls_before_falling_back():
 
 	with (
 		patch.object(session, "_try_connect", return_value=False) as mock_try_connect,
-		patch.object(BrowserSession, "_fetch_ws_url", side_effect=[None, "ws://127.0.0.1:9222/devtools/browser/default"]) as mock_fetch_ws_url,
-		patch.object(BrowserSession, "_read_devtools_active_port", return_value="ws://127.0.0.1:9222/devtools/browser/file") as mock_read_port,
+		patch.object(
+			BrowserSession, "_fetch_ws_url", side_effect=[None, "ws://127.0.0.1:9222/devtools/browser/default"]
+		) as mock_fetch_ws_url,
+		patch.object(
+			BrowserSession, "_read_devtools_active_port", return_value="ws://127.0.0.1:9222/devtools/browser/file"
+		) as mock_read_port,
 	):
 		result = session._try_cdp()
 
@@ -332,3 +335,29 @@ def test_request_returns_browser_evaluation_json_and_marks_throttle():
 		"data": {"city": "101020100"},
 		"referer": "https://www.zhipin.com/web/geek/job",
 	}
+
+
+def test_cold_start_wait_constants_stay_lean():
+	"""回归护栏：冷启动两处等待须保持精简（曾各浪费 ~3s/搜索）。
+
+	- 自动探测默认 localhost:9222 的超时必须短于显式 --cdp-url 的超时；
+	- headless 首页 networkidle 宽限须 <=1s（zhipin 首页基本进不了 networkidle，
+	  domcontentloaded 后 JS 环境即可发请求，长宽限是纯浪费）。
+	"""
+	from boss_agent_cli.api.browser_client import (
+		_CDP_AUTO_PROBE_TIMEOUT,
+		_CDP_PROBE_TIMEOUT,
+		_HEADLESS_NETWORKIDLE_GRACE_MS,
+	)
+
+	assert _CDP_AUTO_PROBE_TIMEOUT < _CDP_PROBE_TIMEOUT
+	assert _CDP_AUTO_PROBE_TIMEOUT <= 1
+	assert _HEADLESS_NETWORKIDLE_GRACE_MS <= 1000
+
+
+def test_fetch_ws_url_honors_short_auto_probe_timeout():
+	"""默认自动探测应以短超时调用 httpx，避免无调试端口时白等。"""
+	with patch("httpx.get") as mock_get:
+		mock_get.return_value = MagicMock(json=lambda: {"webSocketDebuggerUrl": "ws://x"})
+		BrowserSession._fetch_ws_url("http://127.0.0.1:9222", timeout=1)
+		assert mock_get.call_args.kwargs["timeout"] == 1

@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss search` 浏览器通道冷启动削减两处无效等待（CDP 自动探测超时 3s→1s、headless 首页 networkidle 宽限 3s→0.8s），普通搜索实测 14.3s→10.0s（约 -30%），惠及全部搜索；零新增请求、不触碰风控节流。
 - `boss export` 缺少关键词时的 `INVALID_PARAM` 信封补充可执行 `recovery_action`，Agent 可程序化恢复。
 
 ## [1.13.0] - 2026-06-11
