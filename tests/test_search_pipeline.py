@@ -1,6 +1,11 @@
 import pytest
 
-from boss_agent_cli.search_filters import SearchFilterCriteria, SearchPipelinePlatformError, resolve_welfare_keywords, run_search_pipeline
+from boss_agent_cli.search_filters import (
+	SearchFilterCriteria,
+	SearchPipelinePlatformError,
+	resolve_welfare_keywords,
+	run_search_pipeline,
+)
 
 
 class FakeLogger:
@@ -12,11 +17,20 @@ class FakeLogger:
 
 
 class FakeCache:
-	def __init__(self, greeted_ids: set[str] | None = None):
+	def __init__(self, greeted_ids: set[str] | None = None, descs: dict[str, str] | None = None):
 		self.greeted_ids = greeted_ids or set()
+		self.descs = descs or {}
+		self.put_calls: list[tuple[str, str]] = []
 
 	def is_greeted(self, security_id: str) -> bool:
 		return security_id in self.greeted_ids
+
+	def get_job_desc(self, security_id: str) -> str | None:
+		return self.descs.get(security_id)
+
+	def put_job_desc(self, security_id: str, description: str) -> None:
+		self.put_calls.append((security_id, description))
+		self.descs[security_id] = description
 
 
 class FakeClient:
@@ -304,3 +318,41 @@ def test_pipeline_reports_welfare_not_supported():
 
 	assert exc_info.value.code == "NOT_SUPPORTED"
 	assert "不支持福利详情筛选" in exc_info.value.message
+
+
+def test_pipeline_caches_fresh_job_desc_after_fetch():
+	"""首次取详情后应把描述写回缓存（put_job_desc 被调用）。"""
+	client = FakeClient(
+		pages=[{"zpData": {"hasMore": False, "jobList": [_make_job_raw(security_id="sec-1", job_id="job-1")]}}],
+		descriptions={"sec-1": "这里提供双休和五险一金"},
+	)
+	cache = FakeCache()
+	result = run_search_pipeline(
+		client,
+		cache,
+		FakeLogger(),
+		criteria=SearchFilterCriteria(query="python"),
+		welfare_conditions=_welfare_conditions(),
+	)
+	assert len(result.items) == 1
+	assert client.detail_calls == [("sec-1", "")]  # 取了一次详情（按 securityId 取）
+	assert ("job-1", "这里提供双休和五险一金") in cache.put_calls  # 写回缓存（按稳定的 job_id）
+
+
+def test_pipeline_cache_hit_skips_job_card_request():
+	"""描述缓存命中（按 job_id）时应跳过 job_card 请求（不触网、不计请求）。"""
+	client = FakeClient(
+		pages=[{"zpData": {"hasMore": False, "jobList": [_make_job_raw(security_id="sec-1", job_id="job-1")]}}],
+		descriptions={"sec-1": "不应被调用"},
+	)
+	cache = FakeCache(descs={"job-1": "这里提供双休和五险一金"})
+	result = run_search_pipeline(
+		client,
+		cache,
+		FakeLogger(),
+		criteria=SearchFilterCriteria(query="python"),
+		welfare_conditions=_welfare_conditions(),
+	)
+	assert len(result.items) == 1
+	assert client.detail_calls == []  # 命中缓存，零取详情请求
+	assert cache.put_calls == []  # 命中无需写回

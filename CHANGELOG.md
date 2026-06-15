@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+- `--welfare` 搜索的职位描述详情新增本地缓存（按稳定的 `job_id`/`encryptJobId` 键，TTL 24h）：重复或微调条件的 welfare 搜索复用已取描述，跳过对应 `job_card` 请求，减少平台请求量并加速重跑；不改变请求间隔与并发上限（合规姿态不变）。
+- `RequestThrottle` 改为线程安全：welfare 详情线程池并发调用下，加锁并预占下一次发送时刻，杜绝竞态导致的请求突发（突发更像爬虫，是合规风险）。
+
 ### Fixed
 - `boss search` 浏览器通道冷启动削减两处无效等待（CDP 自动探测超时 3s→1s、headless 首页 networkidle 宽限 3s→0.8s），普通搜索实测 14.3s→10.0s（约 -30%），惠及全部搜索；零新增请求、不触碰风控节流。
 - `boss export` 缺少关键词时的 `INVALID_PARAM` 信封补充可执行 `recovery_action`，Agent 可程序化恢复。

@@ -2,6 +2,7 @@
 
 Centralizes filtering logic shared by search, batch-greet, and export commands.
 """
+
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -14,11 +15,22 @@ from boss_agent_cli.api.models import JobItem
 # ── Ordinal lookups for threshold comparisons ───────────────────────
 
 _EXPERIENCE_ORDER: dict[str, int] = {
-	"应届": 0, "1年以内": 1, "1-3年": 2, "3-5年": 3, "5-10年": 4, "10年以上": 5,
+	"应届": 0,
+	"1年以内": 1,
+	"1-3年": 2,
+	"3-5年": 3,
+	"5-10年": 4,
+	"10年以上": 5,
 }
 
 _EDUCATION_ORDER: dict[str, int] = {
-	"初中及以下": 0, "中专/中技": 1, "高中": 2, "大专": 3, "本科": 4, "硕士": 5, "博士": 6,
+	"初中及以下": 0,
+	"中专/中技": 1,
+	"高中": 2,
+	"大专": 3,
+	"本科": 4,
+	"硕士": 5,
+	"博士": 6,
 }
 
 # ── Welfare keywords ────────────────────────────────────────────────
@@ -162,6 +174,7 @@ def resolve_search_code_params(
 		params["jobType"] = code
 	return params
 
+
 # ── Salary parsing ──────────────────────────────────────────────────
 
 _SALARY_RE = re.compile(r"(\d+)(?:\s*[-~]\s*(\d+))?\s*K", re.IGNORECASE)
@@ -184,6 +197,7 @@ def parse_salary_range(value: str) -> tuple[int, int] | None:
 
 
 # ── Threshold comparisons ───────────────────────────────────────────
+
 
 def meets_experience_threshold(candidate: str, required: str | None) -> bool:
 	"""Check if candidate experience meets or exceeds required threshold."""
@@ -212,6 +226,7 @@ def meets_education_threshold(candidate: str, required: str | None) -> bool:
 
 
 # ── Data structures ─────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class SearchFilterCriteria:
@@ -255,6 +270,7 @@ class SearchPipelinePlatformError(Exception):
 
 # ── List-page prefilter ─────────────────────────────────────────────
 
+
 def prefilter_job(raw_item: dict[str, Any], criteria: SearchFilterCriteria) -> tuple[bool, list[str]]:
 	"""Fast prefilter using list-page fields only. Returns (pass, rejection_reasons)."""
 	reasons: list[str] = []
@@ -290,6 +306,7 @@ def prefilter_job(raw_item: dict[str, Any], criteria: SearchFilterCriteria) -> t
 
 # ── Welfare matching ────────────────────────────────────────────────
 
+
 def resolve_welfare_keywords(label: str) -> list[str]:
 	"""Resolve a welfare label to matching keywords."""
 	return WELFARE_KEYWORDS.get(label, [label])
@@ -318,33 +335,47 @@ def match_all_welfare(
 	return results
 
 
-def _fetch_and_check(client: Any, welfare_conditions: list[tuple[str, list[str]]], raw_item: dict[str, Any]) -> dict[str, Any] | None:
-	"""Single job: fetch detail + welfare match. 不访问 cache（线程安全）。"""
+def _fetch_and_check(
+	client: Any,
+	welfare_conditions: list[tuple[str, list[str]]],
+	raw_item: dict[str, Any],
+	cached_desc: str | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
+	"""Single job: (复用缓存或取详情) + 福利匹配。不访问 cache（线程安全）。
+
+	返回 (匹配结果或 None, 需写回缓存的描述或 None)。
+	cached_desc 命中时跳过 job_card 请求（省一次平台请求 + throttle 等待）。
+	"""
 	welfare_list = raw_item.get("welfareList", [])
-	try:
-		card_raw = client.job_card(
-			raw_item.get("securityId", ""),
-			raw_item.get("lid", ""),
-		)
-		if not client.is_success(card_raw):
-			code, message = client.parse_error(card_raw)
-			raise SearchPipelinePlatformError(code, message or "职位详情获取失败")
-		desc = card_raw.get("zpData", {}).get("jobCard", {}).get("postDescription", "")
-	except NotImplementedError:
-		raise SearchPipelinePlatformError(
-			"NOT_SUPPORTED",
-			"当前平台暂不支持福利详情筛选，请去掉 --welfare 后重试",
-		)
-	except (OSError, KeyError, TypeError):
-		desc = ""
+	fresh_desc: str | None = None
+	if isinstance(cached_desc, str):
+		desc = cached_desc
+	else:
+		try:
+			card_raw = client.job_card(
+				raw_item.get("securityId", ""),
+				raw_item.get("lid", ""),
+			)
+			if not client.is_success(card_raw):
+				code, message = client.parse_error(card_raw)
+				raise SearchPipelinePlatformError(code, message or "职位详情获取失败")
+			desc = card_raw.get("zpData", {}).get("jobCard", {}).get("postDescription", "")
+			fresh_desc = desc  # 仅新取到的描述需写回缓存（主线程处理）
+		except NotImplementedError:
+			raise SearchPipelinePlatformError(
+				"NOT_SUPPORTED",
+				"当前平台暂不支持福利详情筛选，请去掉 --welfare 后重试",
+			)
+		except (OSError, KeyError, TypeError):
+			desc = ""
 
 	match_results = match_all_welfare(welfare_conditions, welfare_list, desc)
 	if match_results:
 		item = JobItem.from_api(raw_item)
 		d = item.to_dict()
 		d["welfare_match"] = "✅ " + ", ".join(match_results)
-		return d
-	return None
+		return d, fresh_desc
+	return None, fresh_desc
 
 
 def _check_details_parallel(
@@ -355,10 +386,21 @@ def _check_details_parallel(
 	items: list[dict[str, Any]],
 	matched: list[dict[str, Any]],
 ) -> None:
-	"""Parallel detail check, append matched to list. cache 操作在主线程完成。"""
+	"""Parallel detail check, append matched to list. cache 操作在主线程完成。
+
+	主线程先查职位描述缓存命中者跳过取详情；未命中者入线程池取详，
+	取回的新描述由主线程写回缓存——所有 cache I/O 留在主线程（sqlite 非线程安全）。
+	"""
+	# 主线程预取缓存：命中的描述随提交一并传入 worker，避免 worker 触网。
+	# 键用 encryptJobId（跨搜索稳定）；securityId 每次搜索都变，不能做键。
+	cached_by_item = {id(raw_item): cache.get_job_desc(raw_item.get("encryptJobId", "")) for raw_item in items}
+	cache_hits = sum(1 for v in cached_by_item.values() if isinstance(v, str))
+	if cache_hits:
+		logger.info(f"  详情缓存命中 {cache_hits}/{len(items)}，跳过对应取详情请求")
+
 	with ThreadPoolExecutor(max_workers=_WELFARE_WORKERS) as pool:
 		futures = {
-			pool.submit(_fetch_and_check, client, welfare_conditions, raw_item): raw_item
+			pool.submit(_fetch_and_check, client, welfare_conditions, raw_item, cached_by_item[id(raw_item)]): raw_item
 			for raw_item in items
 		}
 		for future in as_completed(futures):
@@ -366,7 +408,10 @@ def _check_details_parallel(
 			company = raw_item.get("brandName", "")
 			title = raw_item.get("jobName", "")
 			try:
-				result = future.result()
+				result, fresh_desc = future.result()
+				# 写回缓存（主线程，sqlite 安全）：仅新取到的描述，键用稳定的 encryptJobId
+				if fresh_desc:
+					cache.put_job_desc(raw_item.get("encryptJobId", ""), fresh_desc)
 				if result:
 					# is_greeted 在主线程中安全访问 cache
 					sid = result.get("security_id", "")
@@ -384,6 +429,7 @@ def _check_details_parallel(
 
 
 # ── Main pipeline ───────────────────────────────────────────────────
+
 
 def run_search_pipeline(
 	client: Any,

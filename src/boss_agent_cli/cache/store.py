@@ -31,6 +31,11 @@ class CacheStore:
 				response TEXT NOT NULL,
 				created_at REAL NOT NULL
 			);
+			CREATE TABLE IF NOT EXISTS job_desc_cache (
+				job_id TEXT PRIMARY KEY,
+				description TEXT NOT NULL,
+				created_at REAL NOT NULL
+			);
 			CREATE TABLE IF NOT EXISTS saved_searches (
 				name TEXT PRIMARY KEY,
 				params TEXT NOT NULL,
@@ -140,6 +145,38 @@ class CacheStore:
 		)
 		self._conn.commit()
 		self._evict_old_search_cache()
+
+	# ── 职位描述缓存（welfare 详情比对复用，降低重复搜索的取详情请求量）──
+	# 键用 job_id（encryptJobId，跨搜索稳定）；securityId 是每次请求重新生成的
+	# 临时令牌、跨搜索不稳定，不能做缓存键。
+	# 线程安全注意：sqlite 连接非线程安全，这两个方法只可在主线程调用，
+	# 不要在 welfare 详情线程池的 worker 内访问。
+
+	def get_job_desc(self, job_id: str) -> str | None:
+		"""返回缓存的职位描述（命中且未过期），否则 None。"""
+		if not job_id:
+			return None
+		row = self._conn.execute(
+			"SELECT description, created_at FROM job_desc_cache WHERE job_id = ?",
+			(job_id,),
+		).fetchone()
+		if row is None:
+			return None
+		if time.time() - row[1] > self._search_ttl:
+			self._conn.execute("DELETE FROM job_desc_cache WHERE job_id = ?", (job_id,))
+			self._conn.commit()
+			return None
+		return cast("str", row[0])
+
+	def put_job_desc(self, job_id: str, description: str) -> None:
+		"""缓存职位描述（仅当 job_id 与描述非空时写入）。"""
+		if not job_id or not description:
+			return
+		self._conn.execute(
+			"INSERT OR REPLACE INTO job_desc_cache (job_id, description, created_at) VALUES (?, ?, ?)",
+			(job_id, description, time.time()),
+		)
+		self._conn.commit()
 
 	def _evict_old_search_cache(self) -> None:
 		count = self._conn.execute("SELECT COUNT(*) FROM search_cache").fetchone()[0]

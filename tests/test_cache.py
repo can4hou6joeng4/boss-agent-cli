@@ -149,3 +149,25 @@ def test_resume_job_link_multiple(tmp_path):
 	store.link_resume_to_job("v2", "sec_001", "job_001", "后端", "公司甲")
 	resumes = store.get_job_resumes("sec_001", "job_001")
 	assert len(resumes) == 2
+
+
+def test_job_desc_cache_roundtrip(tmp_path):
+	store = CacheStore(tmp_path / "test.db")
+	assert store.get_job_desc("sec_001") is None
+	store.put_job_desc("sec_001", "提供双休和五险一金")
+	assert store.get_job_desc("sec_001") == "提供双休和五险一金"
+
+
+def test_job_desc_cache_expires(tmp_path):
+	store = CacheStore(tmp_path / "test.db", search_ttl_seconds=0)
+	store.put_job_desc("sec_001", "提供双休")
+	time.sleep(0.01)
+	assert store.get_job_desc("sec_001") is None
+
+
+def test_job_desc_cache_ignores_empty(tmp_path):
+	store = CacheStore(tmp_path / "test.db")
+	store.put_job_desc("", "非空描述")
+	store.put_job_desc("sec_001", "")
+	assert store.get_job_desc("sec_001") is None
+	assert store.get_job_desc("") is None
