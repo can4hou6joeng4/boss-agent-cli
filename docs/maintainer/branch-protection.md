@@ -32,7 +32,7 @@ The project may also require documentation checks when `.github/workflows/docs.y
 
 ## Verification
 
-Run:
+Run the full branch protection check first:
 
 ```bash
 gh api repos/can4hou6joeng4/boss-agent-cli/branches/master/protection
@@ -42,15 +42,26 @@ The response should show:
 
 ```json
 {
-	"required_pull_request_reviews": {
-		"required_approving_review_count": 1
-	},
 	"allow_force_pushes": {
 		"enabled": false
 	},
 	"allow_deletions": {
 		"enabled": false
 	}
+}
+```
+
+Then verify the pull request review gate through its dedicated endpoint:
+
+```bash
+gh api repos/can4hou6joeng4/boss-agent-cli/branches/master/protection/required_pull_request_reviews
+```
+
+The response should show:
+
+```json
+{
+	"required_approving_review_count": 1
 }
 ```
 
