@@ -42,7 +42,7 @@ Full release history lives in [CHANGELOG.md](CHANGELOG.md).
 
 - [ ] Web UI (React + Tailwind) for non-agent users
 - [ ] browser extension with deeper integration into the native BOSS Zhipin pages
-- [ ] multi-platform support for Lagou / Zhilian / Liepin adapters - API research is fully complete (Issue #90 closed, [docs/research/platforms/](docs/research/platforms/)). Current conclusion: **Zhilian is the v2.0 priority candidate** with a 2-3 week implementation window, while Lagou and Liepin are not recommended to pursue.
+- [ ] multi-platform support for Lagou / Zhilian / Liepin adapters - API research is fully complete (Issue #90 closed, [docs/research/platforms/](docs/research/platforms/)). Conclusion: **Zhilian candidate-side is implemented** (read-only search/detail/recommend/user_info + write greet/apply, see the Week 2-3 sub-items below); Lagou and Liepin are not pursued after evaluation; 51job remains in the research backlog.
   - [x] Week 1a: Platform ABC skeleton + `BossPlatform` adapter (#129, zero behavior change)
   - [x] Week 1b: global `--platform` CLI option + `get_platform_instance` helper + schema exposure of `current_platform`
   - [x] Week 1c: command-layer migration to the Platform interface (**20 commands**: `greet`, `apply`, `batch-greet`, `interviews`, `detail`, `show`, `me`, `recommend`, `chat`, `chatmsg`, `mark`, `exchange`, `pipeline`, `digest`, `search`, `export`, `chat_summary`, `history`, `status`, `watch`)

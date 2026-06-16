@@ -37,7 +37,7 @@
 ### 生态扩展
 - [ ] Web UI（React + Tailwind），适合非 Agent 用户
 - [ ] 浏览器扩展深度集成 BOSS 直聘原生页面
-- [ ] 多平台支持：拉勾 / 智联 / 猎聘适配器 — API 调研已全部完成（Issue #90 已闭环 · [docs/research/platforms/](docs/research/platforms/)），结论：**智联为 v2.0 优先接入候选**（2-3 周），拉勾和猎聘不建议接入
+- [ ] 多平台支持：拉勾 / 智联 / 猎聘适配器 — API 调研已全部完成（Issue #90 已闭环 · [docs/research/platforms/](docs/research/platforms/)）。结论：**智联候选者侧已接入**（只读 search/detail/recommend/user_info + 写操作 greet/apply，详见下方 Week 2-3 子项）；拉勾、猎聘经评估不建议接入；51job 仍在 research backlog。
   - [x] Week 1a：Platform ABC 骨架 + BossPlatform adapter（#129，零行为变化）
   - [x] Week 1b：`--platform` 全局 CLI 选项 + `get_platform_instance` helper + schema 暴露 current_platform
   - [x] Week 1c：命令层全量迁移到 Platform 接口（**20 个命令**：greet / apply / batch-greet / interviews / detail / show / me / recommend / chat / chatmsg / mark / exchange / pipeline / digest / search / export / chat_summary / history / status / watch）
