@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+- 修正贡献者文档中指向已迁出路径 `skills/boss-agent-cli/SKILL.md` 的陈旧引用（`CONTRIBUTING.md` / `CONTRIBUTING.en.md` 添加新命令清单第 5 步改为 `docs/commands.md`、PR 模板指向独立仓库 boss-skill），消除迁出 SKILL 后遗留的误导。
+- 合并 `docs/blog/` 进 `docs/marketing/`：发布/推广文案归拢到单一目录，去除同类内容的双目录冗余。
+
 ## [1.13.1] - 2026-06-16
 
 ### Changed

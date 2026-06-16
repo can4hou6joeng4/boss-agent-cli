@@ -78,7 +78,7 @@ Maintainers will `squash merge`, so the squash title must follow the commit conv
 2. Register it in `main.py`
 3. Describe it in `src/boss_agent_cli/commands/schema.py` (under `SCHEMA_DATA["commands"]`)
 4. Add tests in `tests/test_commands.py` or a new file matching the command name
-5. Update `skills/boss-agent-cli/SKILL.md` (command cheat-sheet)
+5. Update `docs/commands.md` and `docs/commands.en.md` (command cheat-sheet)
 6. Update `AGENTS.md` (command-count invariant)
 7. Update `README.md` and `README.en.md` (command reference table)
 8. Update the relevant module's `CLAUDE.md`

@@ -107,7 +107,7 @@ git diff --check
 2. 在 `main.py` 中注册命令
 3. 在 `schema.py`（`SCHEMA_DATA["commands"]`）中添加命令描述
 4. 在 `tests/test_commands.py` 或按命令名新建测试文件
-5. 更新 `skills/boss-agent-cli/SKILL.md`（命令速查表）
+5. 更新 `docs/commands.md` 和 `docs/commands.en.md`（命令速查表）
 6. 更新 `AGENTS.md`（CLI 不变量契约中的命令数）
 7. 更新 `README.md` 和 `README.en.md`（命令参考表）
 8. 更新对应模块的 `CLAUDE.md`
