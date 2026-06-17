@@ -67,9 +67,9 @@ Every command outputs **structured JSON** that AI Agents parse directly. Default
 | Type | Entry | Best for |
 |------|-------|----------|
 | Project showcase animation | [Homepage autoplay GIF](demo/showcase/boss-agent-cli-showcase.gif) | Quickly understanding the project positioning, schema-driven workflow, JSON envelope, and open-source engineering quality |
-| Full showcase video | [16-second MP4](demo/showcase/boss-agent-cli-showcase.mp4) | Viewing the clearer, complete project narrative |
+| Full showcase video | [31-second MP4](demo/showcase/boss-agent-cli-showcase.mp4) | Viewing the clearer, complete project narrative |
 | Terminal interaction demo | [Terminal GIF](demo/demo-en.gif) · [VHS tape](demo/demo-en.tape) | Seeing the CLI commands and output shape directly (1280×720 / 30fps) |
-| Reproducible source | [HyperFrames source](demo/hyperframes-showcase/) | Maintaining or iterating the README homepage animation |
+| Reproducible source | [HTML timeline source](demo/promo-showcase/) | Maintaining or iterating the README homepage animation |
 
 ## 🌟 Core Capabilities
 

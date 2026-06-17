@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>boss-agent-cli · 宣传视频</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+	:root{
+		--bd: oklch(15.5% 0.014 280);
+		--term: oklch(20% 0.015 280);
+		--term-top: oklch(24% 0.015 280);
+		--panel: oklch(25% 0.018 280);
+		--line: oklch(33% 0.016 280);
+		--text: oklch(94% 0.012 95);
+		--dim: oklch(72% 0.018 280);
+		--faint: oklch(56% 0.014 280);
+		--accent: oklch(73% 0.155 42);
+		--accent2: oklch(82% 0.12 205);
+		--green: oklch(84% 0.16 150);
+		--amber: oklch(86% 0.135 90);
+		--red: oklch(72% 0.18 25);
+		--purple: oklch(80% 0.13 305);
+	}
+	*{ box-sizing:border-box; }
+	html,body{ margin:0; height:100%; background:#000; }
+	#root{ position:fixed; inset:0; }
+	.mono{ font-family:"JetBrains Mono", ui-monospace, SFMono-Regular, "PingFang SC", "Noto Sans SC", monospace; font-variant-ligatures:none; }
+	.sans{ font-family:-apple-system,"SF Pro Text","PingFang SC","Noto Sans SC",system-ui,sans-serif; }
+	.grain{ position:absolute; inset:0; opacity:0.05; pointer-events:none; mix-blend-mode:overlay;
+		background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+		background-size:140px 140px; }
+	.scan{ background:repeating-linear-gradient(to bottom, rgba(255,255,255,0.022) 0 1px, transparent 1px 3px); opacity:0.55; mix-blend-mode:overlay; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="animations.jsx"></script>
+<script type="text/babel" src="lib.jsx"></script>
+<script type="text/babel" src="scenes.jsx"></script>
+<script type="text/babel" src="app.jsx"></script>
+</body>
+</html>

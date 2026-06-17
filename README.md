@@ -90,9 +90,9 @@ boss stats                                                   # 本地统计
 | 类型 | 入口 | 适合场景 |
 |------|------|----------|
 | 项目展示动图 | [首页自动播放 GIF](demo/showcase/boss-agent-cli-showcase.gif) | 快速理解项目定位、schema 驱动、JSON 信封与开源工程质量 |
-| 完整展示视频 | [16 秒 MP4](demo/showcase/boss-agent-cli-showcase.mp4) | 查看更清晰、更完整的项目叙事 |
+| 完整展示视频 | [31 秒 MP4](demo/showcase/boss-agent-cli-showcase.mp4) | 查看更清晰、更完整的项目叙事 |
 | 终端交互演示 | [终端 GIF](demo/demo-zh.gif) · [VHS 录制脚本](demo/demo-zh.tape) | 直接观察 CLI 命令和输出形态（1280×720 / 30fps） |
-| 可复现源工程 | [HyperFrames 源文件](demo/hyperframes-showcase/) | 维护或迭代 README 首页展示动画 |
+| 可复现源工程 | [HTML 时间轴源工程](demo/promo-showcase/) | 维护或迭代 README 首页展示动画 |
 
 ---
 
