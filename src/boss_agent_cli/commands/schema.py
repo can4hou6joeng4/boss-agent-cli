@@ -419,6 +419,12 @@ SCHEMA_DATA = {
 					"default": False,
 					"description": "附加匹配分和原因",
 				},
+				"--sort": {
+					"type": "string",
+					"default": "relevance",
+					"description": "排序方式：relevance 保持平台返回顺序；score 按本地 match_score 降序",
+					"choices": ["relevance", "score"],
+				},
 				"--no-cache": {
 					"type": "bool",
 					"default": False,

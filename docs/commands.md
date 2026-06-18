@@ -27,7 +27,7 @@ boss <命令> --help                      # 查看单个命令选项
 
 | 命令 | 说明 |
 |------|------|
-| `boss search <query>` | 搜索职位（支持 `--url` 网页筛选、逗号多选、`--welfare` 筛选、`--preset` 预设） |
+| `boss search <query>` | 搜索职位（支持 `--url` 网页筛选、逗号多选、`--welfare` 筛选、`--sort score` 本地排序、`--preset` 预设） |
 | `boss recommend` | 受限：默认低风险模式阻断，避免自动读取推荐流 |
 | `boss detail <security_id>` | 职位详情（`--job-id` 走快速通道） |
 | `boss show <#>` | 按编号查看上次搜索结果 |
@@ -115,7 +115,8 @@ boss search "golang" \
   --scale 100-499人 \       # 公司规模
   --industry 互联网 \       # 行业
   --stage 已上市 \          # 融资阶段
-  --welfare "双休,五险一金"  # 福利筛选（AND 逻辑）
+  --welfare "双休,五险一金" \ # 福利筛选（AND 逻辑）
+  --sort score              # 按本地 match_score 降序
 ```
 
 也可以先在 BOSS 直聘网页上手动选好筛选条件，再复制搜索页 URL 给 CLI：
@@ -130,6 +131,6 @@ boss export --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280
 1. 先检查职位福利标签（`welfareList`）
 2. 标签不匹配时自动获取职位描述全文搜索
 3. 自动翻页（最多 5 页）
-4. 每个结果带 `welfare_match` 说明匹配来源
+4. 每个结果带 `welfare_match` 说明匹配来源，并带 `match_score` 供 `--sort score` 本地排序
 
 支持关键词：`双休` `五险一金` `年终奖` `餐补` `住房补贴` `定期体检` `股票期权` `加班补助` `带薪年假`

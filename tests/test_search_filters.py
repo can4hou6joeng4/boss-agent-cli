@@ -4,6 +4,7 @@ import pytest
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	SearchUrlParseError,
+	compute_match_score,
 	parse_salary_range,
 	parse_boss_search_url,
 	meets_experience_threshold,
@@ -183,3 +184,52 @@ class TestPrefilterJob:
 		criteria = SearchFilterCriteria(query="go")
 		ok, reasons = prefilter_job(raw, criteria)
 		assert ok is True
+
+
+class TestComputeMatchScore:
+	def test_welfare_tag_scores_higher_than_description(self):
+		item = {
+			"title": "Golang 后端",
+			"salary": "20-30K",
+			"city": "广州",
+			"experience": "3-5年",
+			"education": "本科",
+			"skills": ["Golang"],
+			"welfare": ["双休"],
+		}
+		criteria = SearchFilterCriteria(
+			query="golang",
+			city="广州",
+			salary="20-50K",
+			experience="3-5年",
+			education="本科",
+		)
+
+		tag_score = compute_match_score(item, ["双休(标签)"], criteria)
+		desc_score = compute_match_score(item, ["双休(描述)"], criteria)
+
+		assert 0 <= desc_score < tag_score <= 100
+
+	def test_welfare_more_matches_score_higher(self):
+		item = {
+			"title": "Python 后端",
+			"salary": "20-30K",
+			"city": "广州",
+			"experience": "3-5年",
+			"education": "本科",
+			"skills": ["Python"],
+			"welfare": ["双休", "五险一金"],
+		}
+		criteria = SearchFilterCriteria(
+			query="python",
+			city="广州",
+			salary="20-50K",
+			experience="3-5年",
+			education="本科",
+		)
+
+		one = compute_match_score(item, ["双休(标签)"], criteria)
+		two = compute_match_score(item, ["双休(标签)", "五险一金(标签)"], criteria)
+
+		assert two > one
+		assert compute_match_score(item, ["双休(标签)", "五险一金(标签)"], criteria) == two

@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 import click
 
@@ -22,6 +23,12 @@ from boss_agent_cli.search_filters import (
 )
 
 
+def _sort_search_items(items: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
+	if sort == "score":
+		return sorted(items, key=lambda item: item.get("match_score", 0), reverse=True)
+	return items
+
+
 @click.command("search")
 @click.argument("query", required=False)
 @click.option("--url", "search_url", default=None, help="BOSS 直聘搜索页 URL（可从网页复制完整筛选条件）")
@@ -38,9 +45,28 @@ from boss_agent_cli.search_filters import (
 @click.option("--page", default=1, help="页码")
 @click.option("--no-cache", is_flag=True, default=False, help="跳过缓存")
 @click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
+@click.option("--sort", "sort_mode", default="relevance", type=click.Choice(["relevance", "score"]), help="排序方式")
 @click.pass_context
 @handle_auth_errors("search")
-def search_cmd(ctx: click.Context, query: str | None, search_url: str | None, preset: str | None, city: str | None, salary: str | None, experience: str | None, education: str | None, industry: str | None, scale: str | None, stage: str | None, job_type: str | None, welfare: str | None, page: int, no_cache: bool, with_score: bool) -> None:
+def search_cmd(
+	ctx: click.Context,
+	query: str | None,
+	search_url: str | None,
+	preset: str | None,
+	city: str | None,
+	salary: str | None,
+	experience: str | None,
+	education: str | None,
+	industry: str | None,
+	scale: str | None,
+	stage: str | None,
+	job_type: str | None,
+	welfare: str | None,
+	page: int,
+	no_cache: bool,
+	with_score: bool,
+	sort_mode: str,
+) -> None:
 	"""按关键词和筛选条件搜索职位列表"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -130,8 +156,9 @@ def search_cmd(ctx: click.Context, query: str | None, search_url: str | None, pr
 			if cached is not None:
 				logger.debug("搜索命中缓存")
 				result = json.loads(cached)
+				items = _sort_search_items(result["data"], sort_mode)
 				handle_output(
-					ctx, "search", result["data"],
+					ctx, "search", items,
 					render=lambda data: render_job_table(data, f"search: {query}"),
 					pagination=result.get("pagination"), hints=result.get("hints"),
 				)
@@ -160,7 +187,9 @@ def search_cmd(ctx: click.Context, query: str | None, search_url: str | None, pr
 			items = pipeline_result.items
 			if with_score:
 				items = [score_job_dict(item, criteria=criteria, expect_data=None) for item in items]
-			try_save_index(data_dir, items, source=f"search:{query}", logger=logger)
+			cache_items = items
+			output_items = _sort_search_items(items, sort_mode)
+			try_save_index(data_dir, output_items, source=f"search:{query}", logger=logger)
 
 			# Emit search_completed hook
 			hooks = ctx.obj.get("hooks")
@@ -169,7 +198,7 @@ def search_cmd(ctx: click.Context, query: str | None, search_url: str | None, pr
 					"query": query,
 					"url": search_url,
 					"page": page,
-					"result_count": len(items),
+					"result_count": len(output_items),
 					"stats": {
 						"pages_scanned": pipeline_result.stats.pages_scanned,
 						"jobs_seen": pipeline_result.stats.jobs_seen,
@@ -203,12 +232,12 @@ def search_cmd(ctx: click.Context, query: str | None, search_url: str | None, pr
 					"industry": industry, "scale": scale, "stage": stage,
 					"job_type": job_type, "url": search_url, "raw_params": raw_params, "page": page,
 				}
-				cache_data = {"data": items, "pagination": pagination, "hints": hints}
+				cache_data = {"data": cache_items, "pagination": pagination, "hints": hints}
 				cache.put_search(search_params, json.dumps(cache_data, ensure_ascii=False))
 
 			title_suffix = " (welfare filter)" if welfare_conditions else ""
 			handle_output(
-				ctx, "search", items,
+				ctx, "search", output_items,
 				render=lambda data: render_job_table(
 					data, f"search: {query}{title_suffix}",
 					page=page,

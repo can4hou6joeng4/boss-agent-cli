@@ -265,6 +265,11 @@ def test_build_args_search_with_options():
 	assert "2" in args
 
 
+def test_build_args_search_with_score_sort():
+	args = _build_args("boss_search", {"query": "python", "sort": "score"})
+	assert args == ["search", "python", "--sort", "score"]
+
+
 def test_build_args_search_ignores_empty_options():
 	"""空选项不应出现在参数中。"""
 	args = _build_args("boss_search", {"query": "java", "city": "", "salary": None})

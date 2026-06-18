@@ -527,6 +527,39 @@ def test_search_with_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
 @patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_sort_score_orders_by_local_match_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = None
+	_ctx_mock(mock_client_cls)
+	mock_pipeline.return_value = SimpleNamespace(
+		items=[
+			{"job_id": "low", "title": "低分", "security_id": "s1", "match_score": 10},
+			{"job_id": "high", "title": "高分", "security_id": "s2", "match_score": 90},
+		],
+		has_more=False,
+		total=2,
+		stats=SimpleNamespace(
+			pages_scanned=1,
+			jobs_seen=2,
+			jobs_prefiltered=0,
+			detail_checks=0,
+		),
+	)
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["search", "golang", "--sort", "score"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert [item["job_id"] for item in parsed["data"]] == ["high", "low"]
+	assert mock_pipeline.call_count == 1
+	assert mock_pipeline.call_args.kwargs["max_pages"] == 1
+
+
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
 def test_search_supports_url_and_multiselect_filters(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.get_search.return_value = None

@@ -143,6 +143,7 @@ TOOLS = [
 				"education": {"type": "string", "description": "学历要求（如 本科）"},
 				"welfare": {"type": "string", "description": "福利筛选，逗号分隔 AND 逻辑（如 双休,五险一金）"},
 				"page": {"type": "integer", "description": "页码", "default": 1},
+				"sort": {"type": "string", "enum": ["relevance", "score"], "description": "排序方式", "default": "relevance"},
 			},
 			"required": ["query"],
 		},
@@ -811,6 +812,8 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 				args.extend([f"--{opt}", str(arguments[opt])])
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
+		if arguments.get("sort"):
+			args.extend(["--sort", str(arguments["sort"])])
 		return args
 
 	if name == "recommend":

@@ -335,9 +335,50 @@ def match_all_welfare(
 	return results
 
 
+def compute_match_score(item: dict[str, Any], welfare_results: list[str], criteria: SearchFilterCriteria) -> int:
+	"""Compute a local 0-100 match score from already-fetched item fields."""
+	score = 0
+
+	for result in welfare_results:
+		if result.endswith("(标签)"):
+			score += 12
+		elif result.endswith("(描述)"):
+			score += 8
+
+	if criteria.city and criteria.city in str(item.get("city", "")):
+		score += 12
+
+	if criteria.salary:
+		item_range = parse_salary_range(str(item.get("salary", "")))
+		criteria_range = parse_salary_range(criteria.salary)
+		if item_range and criteria_range and item_range[1] >= criteria_range[0]:
+			score += 12
+
+	if criteria.experience and meets_experience_threshold(str(item.get("experience", "")), criteria.experience):
+		score += 10
+
+	if criteria.education and meets_education_threshold(str(item.get("education", "")), criteria.education):
+		score += 10
+
+	if criteria.query:
+		query = criteria.query.lower()
+		skills = item.get("skills", [])
+		if not isinstance(skills, list):
+			skills = []
+		searchable = f"{item.get('title', '')} {' '.join(str(skill) for skill in skills)}".lower()
+		if query and query in searchable:
+			score += 10
+
+	if item.get("welfare"):
+		score += 4
+
+	return min(score, 100)
+
+
 def _fetch_and_check(
 	client: Any,
 	welfare_conditions: list[tuple[str, list[str]]],
+	criteria: SearchFilterCriteria,
 	raw_item: dict[str, Any],
 	cached_desc: str | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
@@ -374,6 +415,7 @@ def _fetch_and_check(
 		item = JobItem.from_api(raw_item)
 		d = item.to_dict()
 		d["welfare_match"] = "✅ " + ", ".join(match_results)
+		d["match_score"] = compute_match_score(d, match_results, criteria)
 		return d, fresh_desc
 	return None, fresh_desc
 
@@ -383,6 +425,7 @@ def _check_details_parallel(
 	cache: Any,
 	logger: Any,
 	welfare_conditions: list[tuple[str, list[str]]],
+	criteria: SearchFilterCriteria,
 	items: list[dict[str, Any]],
 	matched: list[dict[str, Any]],
 ) -> None:
@@ -400,7 +443,7 @@ def _check_details_parallel(
 
 	with ThreadPoolExecutor(max_workers=_WELFARE_WORKERS) as pool:
 		futures = {
-			pool.submit(_fetch_and_check, client, welfare_conditions, raw_item, cached_by_item[id(raw_item)]): raw_item
+			pool.submit(_fetch_and_check, client, welfare_conditions, criteria, raw_item, cached_by_item[id(raw_item)]): raw_item
 			for raw_item in items
 		}
 		for future in as_completed(futures):
@@ -513,6 +556,7 @@ def run_search_pipeline(
 						continue
 					d = item.to_dict()
 					d["welfare_match"] = "✅ " + ", ".join(match_results)
+					d["match_score"] = compute_match_score(d, match_results, criteria)
 					matched.append(d)
 					stats.jobs_matched += 1
 					logger.info(f"  ✅ {item.company} - {item.title}（标签匹配）")
@@ -522,7 +566,7 @@ def run_search_pipeline(
 			if need_detail:
 				logger.info(f"  标签未命中 {len(need_detail)} 个，并行查详情...")
 				before = len(matched)
-				_check_details_parallel(client, cache, logger, welfare_conditions, need_detail, matched)
+				_check_details_parallel(client, cache, logger, welfare_conditions, criteria, need_detail, matched)
 				stats.detail_checks += len(need_detail)
 				stats.jobs_matched += len(matched) - before
 
@@ -535,7 +579,9 @@ def run_search_pipeline(
 				item.greeted = cache.is_greeted(item.security_id)
 				if skip_greeted and item.greeted:
 					continue
-				matched.append(item.to_dict())
+				d = item.to_dict()
+				d["match_score"] = compute_match_score(d, [], criteria)
+				matched.append(d)
 				stats.jobs_matched += 1
 
 		has_more = zp_data.get("hasMore", False)

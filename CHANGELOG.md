@@ -9,10 +9,11 @@
 
 ### Changed
 - 转向 MCP-first：README / landing / docs 将 MCP（`uvx --from boss-agent-cli[mcp] boss-mcp`，33 个默认低风险 MCP 工具）列为 Agent 首选接入，移除 `npx skills add` 引导；MCP server 新增 server-level `instructions` 承载低风险与错误恢复 doctrine；独立 Agent Skill 仓库 boss-skill 退役。CLI 命令、JSON 信封与错误码不变，仍以 `boss schema` 为真源。
+- `boss search` 结果新增纯本地 `match_score`，福利筛选结果可用 `--sort score` 按匹配分降序输出；评分只使用已抓取字段与福利匹配注解，不改变翻页、详情补抓、节流或并发上限。
 - 修正 ROADMAP 多平台条目的智联状态漂移：父行此前仍写"智联为 v2.0 优先接入候选（2-3 周）"，与自身已勾选的 Week 2-3 子项（只读 + 写操作已实现）及 CHANGELOG 1.12.0「候选者侧已接通」矛盾；改为如实声明"智联候选者侧已接入"，保留拉勾/猎聘不接入与 51job backlog 结论。
 
 ### Changed
-- 修正 `docs/marketing/awesome-submissions.md` 投稿模板内自相矛盾且陈旧的数字（命令数 34/33、招聘者子命令 7、MCP 工具 49/31、测试 1315、release 1.11.0），统一为当前准确值：35 顶层命令 / 9 招聘者子命令 / 33 默认低风险 MCP 工具 / 1463 测试 / release 1.13.1（其中"默认低风险 MCP 工具"取合规过滤后实际导出的 33 个，与 README.en 受测口径一致）。
+- 修正 `docs/marketing/awesome-submissions.md` 投稿模板内自相矛盾且陈旧的数字（命令数 34/33、招聘者子命令 7、MCP 工具 49/31、测试 1315、release 1.11.0），统一为当前准确值：35 顶层命令 / 9 招聘者子命令 / 33 默认低风险 MCP 工具 / 1467 测试 / release 1.13.1（其中"默认低风险 MCP 工具"取合规过滤后实际导出的 33 个，与 README.en 受测口径一致）。
 
 ### Changed
 - 修正贡献者文档中指向已迁出路径 `skills/boss-agent-cli/SKILL.md` 的陈旧引用（`CONTRIBUTING.md` / `CONTRIBUTING.en.md` 添加新命令清单第 5 步改为 `docs/commands.md`、PR 模板指向独立仓库 boss-skill），消除迁出 SKILL 后遗留的误导。
