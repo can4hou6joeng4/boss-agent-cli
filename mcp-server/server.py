@@ -11,6 +11,7 @@ if str(SRC) not in sys.path:
 
 _impl = importlib.import_module("boss_agent_cli.mcp_server")
 
+SERVER_INSTRUCTIONS = _impl.SERVER_INSTRUCTIONS
 TOOLS = _impl.TOOLS
 _build_args = _impl._build_args
 _compliance_command_for_tool = _impl._compliance_command_for_tool
