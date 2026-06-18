@@ -20,6 +20,7 @@ from boss_agent_cli.ai.prompts import (
 	RESUME_SUGGEST_PROMPT,
 )
 from boss_agent_cli.ai.service import AIService, AIServiceError
+from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.display import handle_error_output, handle_output
 from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
@@ -120,6 +121,43 @@ def _call_ai(ctx: click.Context, svc: AIService, prompt: str) -> dict[str, Any] 
 		)
 		ctx.exit(1)
 		return None
+
+
+def _fit_missing_detail_item(item: dict[str, Any]) -> dict[str, Any]:
+	security_id = str(item.get("security_id") or "")
+	hint = f"先 boss detail {security_id}" if security_id else "先 boss detail <security_id>"
+	return {
+		"job_id": item.get("job_id", ""),
+		"security_id": security_id,
+		"title": item.get("title", ""),
+		"company": item.get("company", ""),
+		"status": "缺详情",
+		"hint": hint,
+	}
+
+
+def _build_fit_prompt(resume_text: str, jobs: list[dict[str, Any]]) -> str:
+	payload = {
+		"resume": resume_text,
+		"jobs": jobs,
+		"output_schema": {
+			"results": [
+				{
+					"job_id": "string",
+					"title": "string",
+					"match_score": "0-100 integer",
+					"gaps": ["string"],
+					"keyword_hits": ["string"],
+					"recommendation": "string",
+				},
+			],
+		},
+	}
+	return (
+		"请基于本地简历和已缓存职位详情，逐岗评估匹配度。"
+		"只返回 JSON，不要包含 markdown。字段必须符合 output_schema。\n\n"
+		f"{json.dumps(payload, ensure_ascii=False)}"
+	)
 
 
 @click.group("ai")
@@ -310,6 +348,76 @@ def ai_suggest_cmd(ctx: click.Context, resume_name: str, jd_text: str) -> None:
 			f"boss ai optimize {resume_name} --jd <jd_text>",
 			f"boss resume show {resume_name}",
 		]},
+	)
+
+
+@ai_group.command("fit")
+@click.option("--resume", "resume_name", required=True, help="本地简历名称")
+@click.option("--limit", default=20, type=click.IntRange(min=1), help="最多分析的候选池职位数")
+@click.pass_context
+def ai_fit_cmd(ctx: click.Context, resume_name: str, limit: int) -> None:
+	"""基于本地简历和候选池缓存详情生成逐岗匹配报告。"""
+	svc = _require_ai_service(ctx)
+	if svc is None:
+		return
+
+	resume_text = _load_resume_text(ctx, resume_name)
+	if resume_text is None:
+		return
+
+	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
+		shortlist = cache.list_shortlist()[:limit]
+		jobs: list[dict[str, Any]] = []
+		missing: list[dict[str, Any]] = []
+		for item in shortlist:
+			job_id = str(item.get("job_id") or "")
+			description = cache.get_job_desc(job_id)
+			if description:
+				jobs.append({
+					"job_id": job_id,
+					"security_id": item.get("security_id", ""),
+					"title": item.get("title", ""),
+					"company": item.get("company", ""),
+					"city": item.get("city", ""),
+					"salary": item.get("salary", ""),
+					"description": description,
+				})
+			else:
+				missing.append(_fit_missing_detail_item(item))
+
+	if not shortlist:
+		handle_output(
+			ctx,
+			"ai-fit",
+			{"results": [], "missing": [], "summary": {"analyzed": 0, "missing_details": 0}},
+			hints={"next_actions": ["boss shortlist add <security_id> <job_id>"]},
+		)
+		return
+
+	if not jobs:
+		handle_output(
+			ctx,
+			"ai-fit",
+			{"results": [], "missing": missing, "summary": {"analyzed": 0, "missing_details": len(missing)}},
+			hints={"next_actions": ["先对候选池职位执行 boss detail <security_id> 缓存详情后重试"]},
+		)
+		return
+
+	result = _call_ai(ctx, svc, _build_fit_prompt(resume_text, jobs))
+	if result is None:
+		return
+
+	result.setdefault("results", [])
+	result["missing"] = missing
+	result["summary"] = {
+		"analyzed": len(jobs),
+		"missing_details": len(missing),
+	}
+	handle_output(
+		ctx,
+		"ai-fit",
+		result,
+		hints={"next_actions": [f"boss ai optimize {resume_name} --jd <jd_text>"]},
 	)
 
 

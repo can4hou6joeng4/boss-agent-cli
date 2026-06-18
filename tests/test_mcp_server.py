@@ -134,6 +134,7 @@ def test_required_tools_present():
 		"boss_ai_interview_prep", "boss_ai_chat_coach",
 		"boss_resume_list", "boss_resume_show",
 		"boss_ai_analyze_jd", "boss_ai_optimize", "boss_ai_suggest",
+		"boss_ai_fit",
 		"boss_watch_list",
 		"boss_preset_list", "boss_shortlist_list",
 		"boss_hr_jobs",
@@ -145,7 +146,7 @@ def test_required_tools_present():
 
 def test_tool_count():
 	"""工具总数应与当前注册一致。"""
-	assert len(TOOLS) == 32
+	assert len(TOOLS) == 33
 
 
 def test_mcp_tool_count_matches_readme():
@@ -629,6 +630,11 @@ def test_build_args_ai_suggest():
 	assert args == ["ai", "suggest", "my", "--jd", "后端岗位"]
 
 
+def test_build_args_ai_fit():
+	args = _build_args("boss_ai_fit", {"resume": "my", "limit": 3})
+	assert args == ["ai", "fit", "--resume", "my", "--limit", "3"]
+
+
 def test_build_args_watch_list():
 	assert _build_args("boss_watch_list", {}) == ["watch", "list"]
 
@@ -647,7 +653,7 @@ def test_build_args_shortlist_list():
 
 def test_tool_count_after_pr41():
 	"""协议服务工具总数应与当前 MCP 暴露能力完全一致。"""
-	assert len(TOOLS) == 32
+	assert len(TOOLS) == 33
 
 
 def test_build_args_shortlist_add():

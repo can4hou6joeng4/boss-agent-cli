@@ -502,6 +502,18 @@ TOOLS = [
 		},
 	),
 	Tool(
+		name="boss_ai_fit",
+		description="基于本地简历和候选池已缓存职位详情生成逐岗匹配度、能力缺口和关键词命中报告",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"resume": {"type": "string", "description": "简历名称"},
+				"limit": {"type": "integer", "description": "最多分析的候选池职位数", "default": 20},
+			},
+			"required": ["resume"],
+		},
+	),
+	Tool(
 		name="boss_watch_list",
 		description="列出所有已保存的监控条件",
 		inputSchema={"type": "object", "properties": {}, "required": []},
@@ -969,6 +981,12 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 
 	if name == "ai_suggest":
 		return ["ai", "suggest", arguments["resume"], "--jd", arguments["jd_text"]]
+
+	if name == "ai_fit":
+		args = ["ai", "fit", "--resume", arguments["resume"]]
+		if "limit" in arguments:
+			args.extend(["--limit", str(arguments["limit"])])
+		return args
 
 	if name == "watch_list":
 		return ["watch", "list"]

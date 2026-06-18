@@ -38,7 +38,7 @@
 - **职位发现**：关键词搜索 + 8 维筛选，按编号回看缓存结果 —— `search` `show` `detail`
 - **福利筛选（核心差异化）**：`--welfare "双休,五险一金"` 自动翻页补抓、按 AND 逻辑做**真实匹配**，而非关键词命中 —— `search --welfare`
 - **本地候选池与统计**：查看详情后本地保存 / 复盘候选岗位、查看漏斗统计；投递与沟通回到官网手动完成 —— `shortlist` `stats` `watch` `preset`
-- **AI 求职增强**：JD 分析、简历润色、定向优化、模拟面试、沟通指导 —— `ai analyze-jd` `ai polish` `ai optimize` `ai interview-prep` `ai chat-coach`
+- **AI 求职增强**：JD 分析、简历润色、定向优化、候选池匹配、模拟面试、沟通指导 —— `ai analyze-jd` `ai polish` `ai optimize` `ai fit` `ai interview-prep` `ai chat-coach`
 - **Schema 驱动 + JSON 信封**：stdout 只输出 `{ok, data, pagination, error, hints}` 信封，`boss schema` 是能力真源，适合 CLI 编排 / Shell Agent / MCP / Python SDK
 - **招聘者最小闭环**：职位列表与上下架（`hr jobs list/online/offline`）；候选人个人数据链路默认阻断
 - **多平台抽象**：`Platform` / `RecruiterPlatform` 双注册表，`--platform zhipin|zhilian|qiancheng`
@@ -108,7 +108,7 @@ with BossClient(AuthManager(...)) as client:
 - **认证**：`login` · `logout` · `status` · `doctor`
 - **职位发现**：`search` · `detail` · `show` · `cities` · `history`
 - **本地整理**：`watch` · `preset` · `shortlist` · `stats`
-- **简历 / AI**：`resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai interview-prep` · `ai chat-coach`
+- **简历 / AI**：`resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai interview-prep` · `ai chat-coach`
 - **系统**：`schema` · `platforms` · `export` · `config` · `clean`
 - **招聘者**：`hr jobs list/online/offline`
 - **受限动作（默认低风险模式阻断）**：`greet` · `batch-greet` · `apply` · `exchange` · `chat*` · `pipeline` · `digest`

@@ -824,7 +824,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"ai": {
-			"description": "AI 简历优化与聊天回复（子命令：config/analyze-jd/polish/optimize/suggest/reply/interview-prep/chat-coach）",
+			"description": "AI 简历优化与聊天回复（子命令：config/analyze-jd/polish/optimize/suggest/fit/reply/interview-prep/chat-coach）",
 			"args": [],
 			"options": {},
 			"subcommands": {
@@ -833,6 +833,7 @@ SCHEMA_DATA = {
 				"polish": "通用简历润色",
 				"optimize": "基于目标职位描述优化简历",
 				"suggest": "基于目标职位描述给出优化建议（不修改简历）",
+				"fit": "fit --resume <name> [--limit N]：本地简历 × 候选池缓存详情的匹配报告",
 				"reply": "基于招聘者消息生成回复草稿（2-3 条候选）",
 				"interview-prep": "基于目标职位生成模拟面试题与准备建议",
 				"chat-coach": "基于聊天记录诊断沟通状态并给出下一步建议",
