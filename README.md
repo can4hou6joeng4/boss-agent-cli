@@ -84,12 +84,10 @@ boss config set platform zhilian          # 设为默认
 
 推荐先读：[Agent Quickstart](docs/agent-quickstart.md) · [Capability Matrix](docs/capability-matrix.md) · [Host Examples](docs/agent-hosts.md)
 
-```bash
-# 方式一：Skill 安装（推荐）—— Agent 自动获得调用 boss 的能力
-npx skills add can4hou6joeng4/boss-skill
+```json
+// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 32 个默认低风险只读工具
+{ "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
-
-> Agent Skill 在独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill) 维护（仓库本身即 Skill），与 CLI 发版节奏解耦。
 
 ```bash
 # 方式二：subprocess —— 先让 Agent 读能力自描述，再解析 stdout JSON
@@ -101,11 +99,6 @@ boss schema
 from boss_agent_cli import AuthManager, BossClient, AuthRequired
 with BossClient(AuthManager(...)) as client:
     result = client.search_jobs("Golang", city="广州")
-```
-
-```json
-// 方式四：MCP（Claude Desktop / Cursor）
-{ "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
 ## 📚 命令

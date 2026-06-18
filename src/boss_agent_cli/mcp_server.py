@@ -19,7 +19,19 @@ from boss_agent_cli.compliance import (
 )
 from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
 
-server = Server("boss-agent-cli")
+server = Server(
+	"boss-agent-cli",
+	instructions=(
+		"boss-agent-cli over MCP: a local-assist BOSS Zhipin job-search toolset, low-risk by default — "
+		"read-only first, user-triggered, no risk-control bypass, no bulk outreach, no platform-data scraping. "
+		"Sensitive actions (greet, batch-greet, apply, contact exchange, recruiter candidate data, replies) "
+		"are not exposed and return COMPLIANCE_BLOCKED at the CLI layer; for those the user acts manually on "
+		"the official BOSS Zhipin website. Every tool returns the same JSON envelope "
+		"{ok, data, pagination, error, hints}; when ok is false, read error.code and error.recovery_action and "
+		"act on it (for example AUTH_REQUIRED means the user runs boss login). boss schema is the capability "
+		"source of truth — do not hardcode command tables."
+	),
+)
 DEFAULT_TRANSPORT = "stdio"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765

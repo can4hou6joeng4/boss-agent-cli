@@ -77,12 +77,10 @@ boss config set platform zhilian          # set as default
 
 Start here: [Agent Quickstart](docs/agent-quickstart.en.md) · [Capability Matrix](docs/capability-matrix.en.md) · [Host Examples](docs/agent-hosts.en.md)
 
-```bash
-# Option 1: Skill install (recommended) — the Agent gains the ability to call boss
-npx skills add can4hou6joeng4/boss-skill
+```json
+// Option 1: MCP (recommended) — Claude Desktop / Cursor and other MCP hosts; exposes 32 low-risk read-only tools
+{ "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
-
-> The Agent Skill is maintained in the standalone [boss-skill](https://github.com/can4hou6joeng4/boss-skill) repository (the repo itself is the skill), decoupled from the CLI release cadence.
 
 ```bash
 # Option 2: subprocess — let the Agent read the self-description, then parse stdout JSON
@@ -94,11 +92,6 @@ boss schema
 from boss_agent_cli import AuthManager, BossClient, AuthRequired
 with BossClient(AuthManager(...)) as client:
     result = client.search_jobs("Golang", city="北京")
-```
-
-```json
-// Option 4: MCP (Claude Desktop / Cursor)
-{ "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
 ## 📚 Commands

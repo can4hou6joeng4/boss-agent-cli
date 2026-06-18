@@ -4,16 +4,16 @@ Applies to the current `boss-agent-cli` low-risk CLI contract as of May 18, 2026
 
 ## Good fit when
 
-- your team distributes job-hunt capability through Skills
+- your team distributes job-hunt capability to agents via MCP
 - you want Claude Code rules to enforce a stable BOSS Zhipin workflow
 - you want `boss` exposed as a reliable shell capability for Claude Code
 
 ## Minimal integration
 
-Preferred path: install the Skill.
+Preferred path: connect the MCP server (Claude Code supports MCP).
 
 ```bash
-npx skills add can4hou6joeng4/boss-skill
+claude mcp add boss-agent -- uvx --from boss-agent-cli[mcp] boss-mcp
 ```
 
 If you prefer a rules-file workflow, you can add guidance like this:

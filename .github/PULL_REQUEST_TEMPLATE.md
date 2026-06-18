@@ -53,7 +53,7 @@ Closes #
 - [ ] 如新增 MCP 工具：已更新 `mcp-server/server.py` 和 `mcp-server/README.md`
 - [ ] 如新增错误码：已添加到 `schema.py` 的 `error_codes`
 - [ ] 已更新 `CHANGELOG.md` 的 `[Unreleased]` 段落
-- [ ] 如变更 Agent 主卖点或安装路径：已同步检查独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill) 的 `SKILL.md` / PyPI 版本 / GitHub Release 说明
+- [ ] 如变更 Agent 主卖点或安装路径：已同步更新 README / landing 的 MCP 接入说明、PyPI 版本与 GitHub Release 说明
 
 ## 安全与规范 / Safety & Convention
 

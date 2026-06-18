@@ -70,13 +70,13 @@ boss shortlist add <security_id> <job_id>
 
 Agent 调用 `boss schema` 一次，就能理解命令参数、返回格式和默认低风险阻断边界。`hints.next_actions` 告诉 Agent 下一步该做什么。错误响应包含 `recovery_action`，Agent 可以自动修复。
 
-### Claude Code 一键集成
+### Claude Code / MCP 一键集成
 
 ```bash
-npx skills add can4hou6joeng4/boss-skill
+claude mcp add boss-agent -- uvx --from boss-agent-cli[mcp] boss-mcp
 ```
 
-安装后 Agent 自动获得调用能力。你只需要说：
+接入后 Agent 自动获得调用能力。你只需要说：
 
 > "帮我搜广州的 Golang 职位，要双休五险一金，找到合适的加入候选池"
 

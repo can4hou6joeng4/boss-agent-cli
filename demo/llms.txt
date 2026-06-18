@@ -16,15 +16,13 @@ Unlike scraping or auto-apply bots, boss-agent-cli is intentionally scoped to lo
 - Four agent integrations: Skill, subprocess, MCP server, Python SDK.
 
 ## Install
-- uv: `uv tool install boss-agent-cli`
-- Agent Skill: `npx skills add can4hou6joeng4/boss-skill`
-- MCP: `uvx --from boss-agent-cli[mcp] boss-mcp`
+- MCP (recommended for agents): `uvx --from boss-agent-cli[mcp] boss-mcp`
+- uv (CLI): `uv tool install boss-agent-cli`
 
 ## License & environment
 MIT. Python >= 3.10. Browser core (patchright) only for user-triggered login and local export.
 
 ## Links
 - GitHub: https://github.com/can4hou6joeng4/boss-agent-cli
-- Agent Skill: https://github.com/can4hou6joeng4/boss-skill
 - PyPI: https://pypi.org/project/boss-agent-cli/
 - Homepage: https://can4hou6joeng4.github.io/boss-agent-cli/
