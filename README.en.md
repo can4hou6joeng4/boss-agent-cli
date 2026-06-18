@@ -30,9 +30,9 @@ Low-Risk Assistance Mode is on by default: local assistance · read-only first �
 
 - **Job discovery**: keyword search + layered filters, with cached `show` navigation — `search` `show` `detail`
 - **Welfare filtering (the differentiator)**: `--welfare "双休,五险一金"` pages, fetches details, runs **real AND matching**, and can `--sort score` by local match score — `search --welfare`
-- **Local shortlist & stats**: inspect details, organize and review candidate jobs locally, see funnel stats; apply and messaging stay on the official website — `shortlist` `stats` `watch` `preset`
+- **Local shortlist & stats**: inspect details, organize candidates with local tags and notes, compare jobs offline, and see funnel stats; apply and messaging stay on the official website — `shortlist` `stats` `watch` `preset`
 - **AI job-hunting assist**: JD analysis, resume polish, role-targeted optimization, shortlist fit reports, interview prep, chat coaching — `ai analyze-jd` `ai polish` `ai optimize` `ai fit` `ai interview-prep` `ai chat-coach`
-- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, data, pagination, error, hints}` envelope, `boss schema` is the capability source of truth, and an **MCP server with 33 tools** exposes the low-risk surface
+- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, data, pagination, error, hints}` envelope, `boss schema` is the capability source of truth, and an **MCP server with 35 tools** exposes the low-risk surface
 - **Recruiter loop**: list and bring postings online / offline (`hr jobs list/online/offline`); candidate personal-data workflows are blocked by default
 - **Cross-platform layer**: live `Platform` / `RecruiterPlatform` registries, `--platform zhipin|zhilian|qiancheng`
 
@@ -49,7 +49,8 @@ boss login                                                    # user-triggered l
 boss status                                                   # verify login
 boss search "Golang" --city 广州 --welfare "双休,五险一金"     # search + welfare filtering
 boss detail <security_id>                                     # view detail
-boss shortlist add <security_id> <job_id>                     # add to local shortlist
+boss shortlist add <security_id> <job_id> --tags backend,remote  # add to local shortlist with local tags
+boss shortlist compare --tag remote                           # compare shortlisted jobs offline
 boss stats                                                    # local stats
 
 # Recruiter mode (candidate-data workflows blocked by default)
@@ -78,7 +79,7 @@ boss config set platform zhilian          # set as default
 Start here: [Agent Quickstart](docs/agent-quickstart.en.md) · [Capability Matrix](docs/capability-matrix.en.md) · [Host Examples](docs/agent-hosts.en.md)
 
 ```json
-// Option 1: MCP (recommended) — Claude Desktop / Cursor and other MCP hosts; exposes 32 low-risk read-only tools
+// Option 1: MCP (recommended) — Claude Desktop / Cursor and other MCP hosts; exposes 35 low-risk read-only tools
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 

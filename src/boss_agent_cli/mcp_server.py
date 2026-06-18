@@ -542,14 +542,42 @@ TOOLS = [
 	),
 	Tool(
 		name="boss_shortlist_add",
-		description="将职位加入候选池",
+		description="将职位加入本地候选池，可附加本地标签和备注",
 		inputSchema={
 			"type": "object",
 			"properties": {
 				"security_id": {"type": "string", "description": "职位安全 ID"},
 				"job_id": {"type": "string", "description": "加密职位 ID"},
+				"tags": {"type": "string", "description": "本地标签，逗号分隔"},
+				"note": {"type": "string", "description": "本地备注"},
 			},
 			"required": ["security_id", "job_id"],
+		},
+	),
+	Tool(
+		name="boss_shortlist_annotate",
+		description="更新本地候选池职位的标签和备注",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"security_id": {"type": "string", "description": "职位安全 ID"},
+				"job_id": {"type": "string", "description": "加密职位 ID"},
+				"add_tags": {"type": "array", "items": {"type": "string"}, "description": "要添加的本地标签"},
+				"remove_tags": {"type": "array", "items": {"type": "string"}, "description": "要移除的本地标签"},
+				"note": {"type": "string", "description": "替换本地备注"},
+			},
+			"required": ["security_id", "job_id"],
+		},
+	),
+	Tool(
+		name="boss_shortlist_compare",
+		description="本地对比候选池职位，可按标签过滤",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"tag": {"type": "string", "description": "只比较包含该标签的本地候选职位"},
+			},
+			"required": [],
 		},
 	),
 	Tool(
@@ -1004,7 +1032,28 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 		return ["shortlist", "list"]
 
 	if name == "shortlist_add":
-		return ["shortlist", "add", arguments["security_id"], arguments["job_id"]]
+		args = ["shortlist", "add", arguments["security_id"], arguments["job_id"]]
+		if arguments.get("tags"):
+			args.extend(["--tags", str(arguments["tags"])])
+		if arguments.get("note"):
+			args.extend(["--note", str(arguments["note"])])
+		return args
+
+	if name == "shortlist_annotate":
+		args = ["shortlist", "annotate", arguments["security_id"], arguments["job_id"]]
+		for tag in arguments.get("add_tags") or []:
+			args.extend(["--add-tag", str(tag)])
+		for tag in arguments.get("remove_tags") or []:
+			args.extend(["--remove-tag", str(tag)])
+		if arguments.get("note"):
+			args.extend(["--note", str(arguments["note"])])
+		return args
+
+	if name == "shortlist_compare":
+		args = ["shortlist", "compare"]
+		if arguments.get("tag"):
+			args.extend(["--tag", str(arguments["tag"])])
+		return args
 
 	if name == "shortlist_remove":
 		return ["shortlist", "remove", arguments["security_id"], arguments["job_id"]]

@@ -64,6 +64,8 @@ class CacheStore:
 				city TEXT NOT NULL,
 				salary TEXT NOT NULL,
 				source TEXT NOT NULL,
+				tags TEXT DEFAULT '',
+				note TEXT DEFAULT '',
 				created_at REAL NOT NULL,
 				PRIMARY KEY (security_id, job_id)
 			);
@@ -96,6 +98,49 @@ class CacheStore:
 				cached_at TEXT
 			);
 		""")
+		self._migrate_shortlist_records()
+
+	def _migrate_shortlist_records(self) -> None:
+		columns = {
+			row[1]
+			for row in self._conn.execute("PRAGMA table_info(shortlist_records)").fetchall()
+		}
+		if "tags" not in columns:
+			self._conn.execute("ALTER TABLE shortlist_records ADD COLUMN tags TEXT DEFAULT ''")
+		if "note" not in columns:
+			self._conn.execute("ALTER TABLE shortlist_records ADD COLUMN note TEXT DEFAULT ''")
+		self._conn.commit()
+
+	@staticmethod
+	def _normalize_shortlist_tags(tags: list[str]) -> list[str]:
+		normalized: list[str] = []
+		seen: set[str] = set()
+		for tag in tags:
+			clean = str(tag).strip()
+			if not clean or clean in seen:
+				continue
+			normalized.append(clean)
+			seen.add(clean)
+		return normalized
+
+	@classmethod
+	def _serialize_shortlist_tags(cls, tags: list[str]) -> str:
+		normalized = cls._normalize_shortlist_tags(tags)
+		if not normalized:
+			return ""
+		return json.dumps(normalized, ensure_ascii=False, sort_keys=True)
+
+	@classmethod
+	def _deserialize_shortlist_tags(cls, raw: str | None) -> list[str]:
+		if not raw:
+			return []
+		try:
+			parsed = json.loads(raw)
+		except json.JSONDecodeError:
+			return cls._normalize_shortlist_tags(raw.split(","))
+		if not isinstance(parsed, list):
+			return []
+		return cls._normalize_shortlist_tags([str(tag) for tag in parsed])
 
 	@staticmethod
 	def _make_search_key(params: dict[str, Any]) -> str:
@@ -305,7 +350,9 @@ class CacheStore:
 
 	def add_shortlist(self, item: dict[str, Any]) -> None:
 		self._conn.execute(
-			"INSERT OR REPLACE INTO shortlist_records (security_id, job_id, title, company, city, salary, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			"INSERT OR REPLACE INTO shortlist_records "
+			"(security_id, job_id, title, company, city, salary, source, tags, note, created_at) "
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			(
 				item.get("security_id", ""),
 				item.get("job_id", ""),
@@ -314,6 +361,8 @@ class CacheStore:
 				item.get("city", ""),
 				item.get("salary", ""),
 				item.get("source", ""),
+				self._serialize_shortlist_tags(item.get("tags", [])),
+				item.get("note", ""),
 				time.time(),
 			),
 		)
@@ -321,7 +370,8 @@ class CacheStore:
 
 	def list_shortlist(self) -> list[dict[str, Any]]:
 		rows = self._conn.execute(
-			"SELECT security_id, job_id, title, company, city, salary, source, created_at FROM shortlist_records ORDER BY created_at DESC"
+			"SELECT security_id, job_id, title, company, city, salary, source, tags, note, created_at "
+			"FROM shortlist_records ORDER BY created_at DESC"
 		).fetchall()
 		return [
 			{
@@ -332,10 +382,28 @@ class CacheStore:
 				"city": row[4],
 				"salary": row[5],
 				"source": row[6],
-				"created_at": row[7],
+				"tags": self._deserialize_shortlist_tags(row[7]),
+				"note": row[8] or "",
+				"created_at": row[9],
 			}
 			for row in rows
 		]
+
+	def set_shortlist_tags(self, security_id: str, job_id: str, tags: list[str]) -> bool:
+		cursor = self._conn.execute(
+			"UPDATE shortlist_records SET tags = ? WHERE security_id = ? AND job_id = ?",
+			(self._serialize_shortlist_tags(tags), security_id, job_id),
+		)
+		self._conn.commit()
+		return cursor.rowcount > 0
+
+	def set_shortlist_note(self, security_id: str, job_id: str, note: str) -> bool:
+		cursor = self._conn.execute(
+			"UPDATE shortlist_records SET note = ? WHERE security_id = ? AND job_id = ?",
+			(note, security_id, job_id),
+		)
+		self._conn.commit()
+		return cursor.rowcount > 0
 
 	def remove_shortlist(self, security_id: str, job_id: str) -> bool:
 		cursor = self._conn.execute(

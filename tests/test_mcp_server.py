@@ -137,6 +137,7 @@ def test_required_tools_present():
 		"boss_ai_fit",
 		"boss_watch_list",
 		"boss_preset_list", "boss_shortlist_list",
+		"boss_shortlist_annotate", "boss_shortlist_compare",
 		"boss_hr_jobs",
 		"boss_hr_jobs_detail",
 	}
@@ -146,7 +147,7 @@ def test_required_tools_present():
 
 def test_tool_count():
 	"""工具总数应与当前注册一致。"""
-	assert len(TOOLS) == 33
+	assert len(TOOLS) == 35
 
 
 def test_mcp_tool_count_matches_readme():
@@ -658,12 +659,30 @@ def test_build_args_shortlist_list():
 
 def test_tool_count_after_pr41():
 	"""协议服务工具总数应与当前 MCP 暴露能力完全一致。"""
-	assert len(TOOLS) == 33
+	assert len(TOOLS) == 35
 
 
 def test_build_args_shortlist_add():
-	args = _build_args("boss_shortlist_add", {"security_id": "s1", "job_id": "j1"})
-	assert args == ["shortlist", "add", "s1", "j1"]
+	args = _build_args("boss_shortlist_add", {"security_id": "s1", "job_id": "j1", "tags": "远程,双休", "note": "优先"})
+	assert args == ["shortlist", "add", "s1", "j1", "--tags", "远程,双休", "--note", "优先"]
+
+
+def test_build_args_shortlist_annotate():
+	args = _build_args(
+		"boss_shortlist_annotate",
+		{"security_id": "s1", "job_id": "j1", "add_tags": ["远程", "双休"], "remove_tags": ["外包"], "note": "优先"},
+	)
+	assert args == [
+		"shortlist", "annotate", "s1", "j1",
+		"--add-tag", "远程", "--add-tag", "双休",
+		"--remove-tag", "外包",
+		"--note", "优先",
+	]
+
+
+def test_build_args_shortlist_compare():
+	args = _build_args("boss_shortlist_compare", {"tag": "远程"})
+	assert args == ["shortlist", "compare", "--tag", "远程"]
 
 
 def test_build_args_shortlist_remove():

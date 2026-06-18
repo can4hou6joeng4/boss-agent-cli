@@ -1,4 +1,5 @@
 import time
+import sqlite3
 
 from boss_agent_cli.cache.store import CacheStore
 
@@ -106,6 +107,8 @@ def test_shortlist_crud(tmp_path):
 		"city": "广州",
 		"salary": "20-30K",
 		"source": "search",
+		"tags": ["远程", "双休"],
+		"note": "优先沟通",
 	}
 	assert store.is_shortlisted("sec_001", "job_001") is False
 	store.add_shortlist(item)
@@ -113,8 +116,44 @@ def test_shortlist_crud(tmp_path):
 	items = store.list_shortlist()
 	assert len(items) == 1
 	assert items[0]["title"] == "Go 开发"
+	assert items[0]["tags"] == ["远程", "双休"]
+	assert items[0]["note"] == "优先沟通"
 	assert store.remove_shortlist("sec_001", "job_001") is True
 	assert store.is_shortlisted("sec_001", "job_001") is False
+
+
+def test_shortlist_migration_adds_tags_note_without_data_loss(tmp_path):
+	db_path = tmp_path / "old.db"
+	conn = sqlite3.connect(db_path)
+	conn.execute("""
+		CREATE TABLE shortlist_records (
+			security_id TEXT NOT NULL,
+			job_id TEXT NOT NULL,
+			title TEXT NOT NULL,
+			company TEXT NOT NULL,
+			city TEXT NOT NULL,
+			salary TEXT NOT NULL,
+			source TEXT NOT NULL,
+			created_at REAL NOT NULL,
+			PRIMARY KEY (security_id, job_id)
+		)
+	""")
+	conn.execute(
+		"INSERT INTO shortlist_records (security_id, job_id, title, company, city, salary, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		("sec_001", "job_001", "Go 开发", "TestCo", "广州", "20-30K", "search", 1.0),
+	)
+	conn.commit()
+	conn.close()
+
+	store = CacheStore(db_path)
+	items = store.list_shortlist()
+	assert len(items) == 1
+	assert items[0]["title"] == "Go 开发"
+	assert items[0]["tags"] == []
+	assert items[0]["note"] == ""
+
+	columns = {row[1] for row in store._conn.execute("PRAGMA table_info(shortlist_records)").fetchall()}
+	assert {"tags", "note"} <= columns
 
 
 def test_resume_job_link_crud(tmp_path):

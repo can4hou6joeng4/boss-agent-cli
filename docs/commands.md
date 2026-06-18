@@ -61,7 +61,7 @@ boss <命令> --help                      # 查看单个命令选项
 | `boss follow-up` | 受限：默认低风险模式阻断，依赖会话/面试数据 |
 | `boss digest` | 受限：默认低风险模式阻断，依赖会话/面试数据 |
 | `boss watch add/list/remove/run` | add/list/remove 为本地预设；run 默认阻断，避免自动增量拉取平台数据 |
-| `boss shortlist add/list/remove` | 候选池 |
+| `boss shortlist add/list/annotate/compare/remove` | 本地候选池：支持标签、备注和离线对比 |
 | `boss preset add/list/remove` | 搜索预设 |
 
 ## 招聘者模式

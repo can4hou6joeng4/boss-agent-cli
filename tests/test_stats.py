@@ -40,7 +40,9 @@ def _seed_cache(
 		)
 	for i in range(shortlist):
 		conn.execute(
-			"INSERT OR REPLACE INTO shortlist_records VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			"INSERT OR REPLACE INTO shortlist_records "
+			"(security_id, job_id, title, company, city, salary, source, created_at) "
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 			(f"sid-{i}", f"jid-{i}", "职位", "公司", "北京", "20-30K", "search", now),
 		)
 	for i in range(watch_hits):

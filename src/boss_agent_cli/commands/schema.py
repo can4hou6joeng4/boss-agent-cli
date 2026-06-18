@@ -46,6 +46,8 @@ def _command_to_json_schema(cmd_name: str, cmd_spec: dict[str, Any]) -> dict[str
 			required.append(arg_name)
 
 	for opt_key, opt_spec in cmd_spec.get("options", {}).items():
+		if not opt_key.startswith("-"):
+			continue
 		# 去掉短/长选项前缀，保留长选项作为参数名
 		primary_name = opt_key.split(",")[-1].strip().lstrip("-").replace("-", "_")
 		properties[primary_name] = _option_to_json_schema_property(opt_spec)
@@ -753,9 +755,29 @@ SCHEMA_DATA = {
 			},
 		},
 		"shortlist": {
-			"description": "管理职位候选池（子命令：add/list/remove）",
+			"description": "管理本地职位候选池（子命令：add/list/annotate/compare/remove），支持本地标签、备注和离线对比",
 			"args": [],
-			"options": {},
+			"options": {
+				"add": {
+					"--tags": {"type": "string", "default": "", "description": "本地标签，逗号分隔"},
+					"--note": {"type": "string", "default": "", "description": "本地备注"},
+				},
+				"annotate": {
+					"--add-tag": {"type": "string", "default": None, "description": "添加本地标签，可重复"},
+					"--remove-tag": {"type": "string", "default": None, "description": "移除本地标签，可重复"},
+					"--note": {"type": "string", "default": None, "description": "替换本地备注"},
+				},
+				"compare": {
+					"--tag": {"type": "string", "default": None, "description": "只比较包含该本地标签的候选职位"},
+				},
+			},
+			"subcommands": {
+				"add": "加入本地候选池，可附加本地标签和备注",
+				"list": "列出本地候选池职位",
+				"annotate": "更新候选职位的本地标签和备注",
+				"compare": "本地对比候选职位，可按标签过滤",
+				"remove": "从本地候选池移除职位",
+			},
 		},
 		"digest": {
 			"description": "受限能力：汇总新增职位、待跟进会话和面试项的日报。默认低风险模式会阻断。",

@@ -161,12 +161,29 @@ def test_shortlist_add_and_list(store):
 		"title": "前端工程师", "company": "字节",
 		"city": "北京", "salary": "25-40K",
 		"source": "search",
+		"tags": ["前端", "远程", "前端", ""],
+		"note": "复盘薪资结构",
 	}
 	store.add_shortlist(item)
 	result = store.list_shortlist()
 	assert len(result) == 1
 	assert result[0]["title"] == "前端工程师"
 	assert result[0]["security_id"] == "s1"
+	assert result[0]["tags"] == ["前端", "远程"]
+	assert result[0]["note"] == "复盘薪资结构"
+
+
+def test_shortlist_set_tags_and_note(store):
+	"""候选池标签和备注应能独立更新。"""
+	store.add_shortlist({"security_id": "s1", "job_id": "j1", "title": "", "company": "", "city": "", "salary": "", "source": ""})
+	assert store.set_shortlist_tags("s1", "j1", ["远程", "双休", "远程"]) is True
+	assert store.set_shortlist_note("s1", "j1", "等待 HR 回复") is True
+
+	result = store.list_shortlist()
+	assert result[0]["tags"] == ["远程", "双休"]
+	assert result[0]["note"] == "等待 HR 回复"
+	assert store.set_shortlist_tags("missing", "j1", ["x"]) is False
+	assert store.set_shortlist_note("missing", "j1", "x") is False
 
 
 def test_shortlist_is_shortlisted(store):

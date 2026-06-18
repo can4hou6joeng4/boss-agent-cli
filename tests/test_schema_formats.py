@@ -81,6 +81,15 @@ def test_tool_formats_keep_search_welfare_parameter():
 	assert "福利筛选" in anth_search["properties"]["welfare"]["description"]
 
 
+def test_tool_formats_ignore_nested_shortlist_option_groups():
+	"""分组命令的子命令 option 元数据不应被误导出为顶层工具参数。"""
+	oai = _format_openai_tools(SCHEMA_DATA)
+	shortlist = next(t["function"]["parameters"] for t in oai if t["function"]["name"] == "boss_shortlist")
+	assert "add" not in shortlist["properties"]
+	assert "annotate" not in shortlist["properties"]
+	assert "compare" not in shortlist["properties"]
+
+
 def test_command_to_json_schema_required_args():
 	"""required=True 的参数应出现在 required 数组中。"""
 	cmd_spec = {

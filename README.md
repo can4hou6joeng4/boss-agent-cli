@@ -37,7 +37,7 @@
 
 - **职位发现**：关键词搜索 + 8 维筛选，按编号回看缓存结果 —— `search` `show` `detail`
 - **福利筛选（核心差异化）**：`--welfare "双休,五险一金"` 自动翻页补抓、按 AND 逻辑做**真实匹配**，并可 `--sort score` 按本地匹配分排序 —— `search --welfare`
-- **本地候选池与统计**：查看详情后本地保存 / 复盘候选岗位、查看漏斗统计；投递与沟通回到官网手动完成 —— `shortlist` `stats` `watch` `preset`
+- **本地候选池与统计**：查看详情后本地保存 / 用标签和备注复盘候选岗位、离线对比、查看漏斗统计；投递与沟通回到官网手动完成 —— `shortlist` `stats` `watch` `preset`
 - **AI 求职增强**：JD 分析、简历润色、定向优化、候选池匹配、模拟面试、沟通指导 —— `ai analyze-jd` `ai polish` `ai optimize` `ai fit` `ai interview-prep` `ai chat-coach`
 - **Schema 驱动 + JSON 信封**：stdout 只输出 `{ok, data, pagination, error, hints}` 信封，`boss schema` 是能力真源，适合 CLI 编排 / Shell Agent / MCP / Python SDK
 - **招聘者最小闭环**：职位列表与上下架（`hr jobs list/online/offline`）；候选人个人数据链路默认阻断
@@ -56,7 +56,8 @@ boss login                                                    # 用户主动登�
 boss status                                                   # 验证登录态
 boss search "Golang" --city 广州 --welfare "双休,五险一金"     # 搜索 + 福利筛选
 boss detail <security_id>                                     # 查看详情
-boss shortlist add <security_id> <job_id>                     # 加入本地候选池
+boss shortlist add <security_id> <job_id> --tags 后端,远程    # 加入本地候选池并打本地标签
+boss shortlist compare --tag 远程                             # 离线对比候选岗位
 boss stats                                                    # 本地统计
 
 # 招聘者模式（候选人数据链路默认阻断）
@@ -85,7 +86,7 @@ boss config set platform zhilian          # 设为默认
 推荐先读：[Agent Quickstart](docs/agent-quickstart.md) · [Capability Matrix](docs/capability-matrix.md) · [Host Examples](docs/agent-hosts.md)
 
 ```json
-// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 32 个默认低风险只读工具
+// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 35 个默认低风险只读工具
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
