@@ -7,7 +7,7 @@ import click
 from boss_agent_cli.display import handle_output
 from boss_agent_cli.platforms import get_platform, list_platforms, list_recruiter_platforms
 
-_READONLY_CAPABILITIES = ["search", "detail", "recommend", "me", "status"]
+_READONLY_CAPABILITIES = ["search", "detail", "show", "history", "interviews", "recommend", "me", "status"]
 _WRITE_CAPABILITIES = ["greet", "apply"]
 _LOCAL_CAPABILITIES = ["shortlist", "stats", "config", "schema"]
 _CAPABILITY_STATUS_ALIASES = {
@@ -19,6 +19,9 @@ _PLATFORM_CAPABILITY_STATUS: dict[str, dict[str, str]] = {
 	"zhipin": {
 		"search": "available",
 		"detail": "available",
+		"show": "available",
+		"history": "available",
+		"interviews": "available",
 		"recommend": "available",
 		"me": "available",
 		"status": "available",
@@ -28,6 +31,9 @@ _PLATFORM_CAPABILITY_STATUS: dict[str, dict[str, str]] = {
 	"zhilian": {
 		"search": "available",
 		"detail": "available",
+		"show": "available",
+		"history": "available",
+		"interviews": "available",
 		"recommend": "available",
 		"me": "available",
 		"status": "available",
@@ -37,6 +43,9 @@ _PLATFORM_CAPABILITY_STATUS: dict[str, dict[str, str]] = {
 	"qiancheng": {
 		"search": "not_supported",
 		"detail": "not_supported",
+		"show": "not_supported",
+		"history": "not_supported",
+		"interviews": "not_supported",
 		"recommend": "not_supported",
 		"me": "not_supported",
 		"status": "placeholder_only",
@@ -67,7 +76,7 @@ _CAPABILITY_STATUS_LEGEND: dict[str, dict[str, str]] = {
 
 _PLATFORM_NOTES = {
 	"zhipin": "默认平台；候选者侧与招聘者侧注册表均已接入。",
-	"zhilian": "候选者侧只读链路已接入；招聘者侧暂不可用。",
+	"zhilian": "候选者侧只读 + 本地辅助链路已对等接入；写操作默认阻断，招聘者侧暂不可用。",
 	"qiancheng": "51job/前程无忧当前仅注册平台身份；真实能力返回 NOT_SUPPORTED。",
 }
 

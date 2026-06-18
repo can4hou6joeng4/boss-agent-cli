@@ -63,6 +63,21 @@ class ZhilianPlatform(Platform):
 	def apply(self, security_id: str, job_id: str, lid: str = "") -> dict[str, Any]:
 		return self._client.apply(security_id, job_id, lid)
 
+	def resume_baseinfo(self) -> dict[str, Any]:
+		return self._client.resume_baseinfo()
+
+	def resume_expect(self) -> dict[str, Any]:
+		return self._client.resume_expect()
+
+	def deliver_list(self, page: int = 1) -> dict[str, Any]:
+		return self._client.deliver_list(page=page)
+
+	def job_card(self, security_id: str, lid: str = "") -> dict[str, Any]:
+		return self._client.job_card(security_id, lid)
+
 	def interview_data(self) -> dict[str, Any]:
 		"""智联面试邀请列表。透传 client 包络，由命令层 unwrap_data 解包。"""
 		return self._client.interview_data()
+
+	def job_history(self, page: int = 1) -> dict[str, Any]:
+		return self._client.job_history(page)

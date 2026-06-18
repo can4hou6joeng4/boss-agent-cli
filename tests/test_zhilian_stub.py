@@ -144,6 +144,45 @@ class TestZhilianDelegation:
 		self.plat.apply("sid", "jid", "lid-1")
 		self.mock_client.apply.assert_called_once_with("sid", "jid", "lid-1")
 
+	def test_job_card_delegates(self) -> None:
+		self.mock_client.job_card.return_value = {"code": 200, "data": {}}
+		self.plat.job_card("sid", "lid-1")
+		self.mock_client.job_card.assert_called_once_with("sid", "lid-1")
+
+	def test_job_history_delegates(self) -> None:
+		self.mock_client.job_history.return_value = {"code": 200, "data": {}}
+		self.plat.job_history(page=3)
+		self.mock_client.job_history.assert_called_once_with(3)
+
+	def test_resume_baseinfo_delegates(self) -> None:
+		self.mock_client.resume_baseinfo.return_value = {"code": 200, "data": {}}
+		self.plat.resume_baseinfo()
+		self.mock_client.resume_baseinfo.assert_called_once_with()
+
+	def test_resume_expect_delegates(self) -> None:
+		self.mock_client.resume_expect.return_value = {"code": 200, "data": {}}
+		self.plat.resume_expect()
+		self.mock_client.resume_expect.assert_called_once_with()
+
+	def test_deliver_list_delegates(self) -> None:
+		self.mock_client.deliver_list.return_value = {"code": 200, "data": {}}
+		self.plat.deliver_list(page=4)
+		self.mock_client.deliver_list.assert_called_once_with(page=4)
+
+	def test_social_personal_data_methods_stay_unimplemented(self) -> None:
+		for method_name, args in [
+			("chat_history", ("gid-1", "sid")),
+			("friend_list", ()),
+			("friend_label", ("friend-1", 1)),
+			("exchange_contact", ("sid", "uid", "name")),
+		]:
+			try:
+				getattr(self.plat, method_name)(*args)
+			except NotImplementedError as exc:
+				assert "zhilian" in str(exc)
+			else:
+				raise AssertionError(f"{method_name} should remain unimplemented for zhilian")
+
 	def test_platform_can_enter_with_context(self) -> None:
 		mock_client = MagicMock()
 		plat = ZhilianPlatform(mock_client)

@@ -34,6 +34,11 @@ def test_platforms_outputs_local_capability_matrix() -> None:
 	assert "NOT_SUPPORTED" in platforms["qiancheng"]["notes"]
 	assert platforms["zhipin"]["recruiter"] is True
 	assert platforms["zhilian"]["capabilities"]["readonly"]["search"] == "available"
+	assert platforms["zhilian"]["capabilities"]["readonly"]["show"] == "available"
+	assert platforms["zhilian"]["capabilities"]["readonly"]["history"] == "available"
+	assert platforms["zhilian"]["capabilities"]["readonly"]["interviews"] == "available"
+	assert platforms["zhilian"]["capabilities"]["write"]["greet"] == "low_risk_blocked"
+	assert "只读 + 本地辅助" in platforms["zhilian"]["notes"]
 
 
 def test_platforms_json_payload_includes_status_legend() -> None:
