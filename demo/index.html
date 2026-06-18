@@ -1,338 +1,418 @@
 <!doctype html>
+<!-- boss-agent-cli landing page · built on Kami's parchment design system (tw93/Kami, references/design.md §11) -->
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>boss-agent-cli · 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="boss-agent-cli —— 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI。搜索、福利筛选、本地候选池、结构化 JSON 信封；默认低风险：本地辅助 · 只读优先 · 用户主动触发。">
+<meta property="og:title" content="boss-agent-cli · BOSS 直聘 AI Agent CLI">
+<meta property="og:description" content="把 BOSS 直聘求职交给你的 AI Agent。搜索 · 福利筛选 · 候选池 · JSON 信封，默认低风险合规。">
+<meta property="og:image" content="https://can4hou6joeng4.github.io/boss-agent-cli/showcase/boss-agent-cli-showcase-thumb.jpg">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://can4hou6joeng4.github.io/boss-agent-cli/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://can4hou6joeng4.github.io/boss-agent-cli/showcase/boss-agent-cli-showcase-thumb.jpg">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%231B365D'/%3E%3Cpath d='M6 8l3 4-3 4M12 16h6' stroke='%23faf9f5' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="canonical" href="https://can4hou6joeng4.github.io/boss-agent-cli/">
-<meta property="og:type" content="website">
-<meta property="og:title" content="boss-agent-cli · BOSS 直聘 AI Agent CLI">
-<meta property="og:description" content="专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI。搜索 · 福利筛选 · 候选池 · JSON 信封，默认低风险合规。">
-<meta property="og:url" content="https://can4hou6joeng4.github.io/boss-agent-cli/">
-<meta property="og:image" content="https://can4hou6joeng4.github.io/boss-agent-cli/showcase/boss-agent-cli-showcase-thumb.jpg">
-<meta name="twitter:card" content="summary_large_image">
+<link rel="alternate" type="text/plain" href="llms.txt">
 <style>
-	:root{
-		--parchment:#f5f4ed; --ivory:#faf9f5; --sand:#e8e6dc;
-		--ink:#141413; --warm:#3d3d3a; --olive:#504e49; --stone:#6b6a64;
-		--brand:#1B365D; --brand-light:#2d5a8a;
-		--border:#e3e1d6; --border-soft:#e8e6dc;
-		--ok:#3f6e4b; --tag:#1B365D; --num:#8a5a2b;
-		--serif:Charter,"Bitstream Charter","Sitka Text",Cambria,Georgia,"Songti SC","STSong","Noto Serif SC","Noto Serif CJK SC",serif;
-		--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-		--page:1000px;
-	}
-	*{box-sizing:border-box;}
-	html,body{margin:0;padding:0;}
-	body{
-		background:var(--parchment); color:var(--ink);
-		font-family:var(--serif); font-size:17px; line-height:1.65;
-		-webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
-	}
-	a{color:var(--brand); text-decoration:none;}
-	a:hover{color:var(--brand-light);}
-	.page{max-width:var(--page); margin:0 auto; padding:0 28px;}
-	.mono{font-family:var(--mono);}
-	section{padding:64px 0; border-top:1px solid var(--border);}
-	h1,h2,h3{font-weight:600; letter-spacing:-0.01em; line-height:1.2; margin:0;}
-	.eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--stone);}
+:root{
+	--parchment:#f5f4ed; --ivory:#faf9f5; --warm-sand:#e8e6dc;
+	--brand:#1B365D; --brand-light:#2D5A8A; --brand-tint:#EEF2F7;
+	--near-black:#141413; --dark-warm:#3d3d3a; --olive:#504e49; --stone:#6b6a64;
+	--border:#e8e6dc; --border-soft:#e5e3d8; --line:#d8d5c8;
+	--serif:Charter,Georgia,"TsangerJinKai02","Source Han Serif SC","Noto Serif CJK SC","Songti SC","STSong",serif;
+	--mono:"JetBrains Mono","SF Mono",Consolas,"TsangerJinKai02","Source Han Serif SC",monospace;
+	--latin-ui:"PingFang SC",system-ui,-apple-system,sans-serif;
+	--shot-bg:#141318;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{background:var(--parchment);color:var(--near-black);font-family:var(--serif);font-size:15px;line-height:1.58;letter-spacing:0.4px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+a{color:var(--brand);text-decoration:none;transition:color .15s;}
+a:hover{color:var(--brand-light);}
+.page{max-width:1120px;margin:0 auto;padding:88px 64px 120px;}
 
-	/* top bar */
-	.topbar{display:flex; align-items:center; justify-content:space-between; padding:22px 0;}
-	.brand{display:flex; align-items:center; gap:10px; font-weight:600; font-size:18px; color:var(--ink);}
-	.brand .glyph{font-family:var(--mono); color:var(--brand); font-weight:500;}
-	.topnav{display:flex; align-items:center; gap:22px; font-size:14px;}
-	.topnav a{color:var(--olive);}
-	.topnav a:hover{color:var(--brand);}
-	.lang{font-family:var(--mono); font-size:12px; color:var(--stone); background:none; border:0; cursor:pointer; padding:4px 0;}
-	.lang:hover{color:var(--brand);}
+/* Buttons */
+.btn-primary,.btn-ghost{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--latin-ui);font-weight:500;font-size:15px;font-variant-numeric:lining-nums tabular-nums;letter-spacing:.2px;padding:13px 28px;border-radius:999px;border:1.5px solid var(--brand);transition:background .15s,border-color .15s,color .15s,transform .15s;cursor:pointer;min-width:158px;}
+.btn-primary{background:var(--brand);color:var(--ivory);}
+.btn-primary:hover{background:var(--brand-light);border-color:var(--brand-light);color:var(--ivory);transform:translateY(-1px);}
+.btn-ghost{background:transparent;color:var(--brand);}
+.btn-ghost:hover{background:var(--brand-tint);color:var(--brand);transform:translateY(-1px);}
 
-	/* hero */
-	.hero{border-top:0; padding-top:34px; padding-bottom:30px;}
-	.hero .eyebrow{margin-bottom:20px;}
-	.hero h1{font-size:clamp(38px,6vw,68px); max-width:18ch;}
-	.hero .lede{font-size:clamp(18px,2.3vw,21px); color:var(--olive); max-width:60ch; margin:22px 0 30px;}
-	.cta-row{display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin-bottom:26px;}
-	.install{display:inline-flex; align-items:center; gap:14px; background:var(--ivory); border:1px solid var(--border); border-radius:10px; padding:12px 14px 12px 18px; font-family:var(--mono); font-size:15px; color:var(--ink); box-shadow:0 1px 0 rgba(20,19,19,.02);}
-	.install .dollar{color:var(--brand); user-select:none;}
-	.copy{font-family:var(--mono); font-size:12px; color:var(--stone); background:var(--parchment); border:1px solid var(--border); border-radius:7px; padding:6px 10px; cursor:pointer; transition:.15s;}
-	.copy:hover{color:var(--brand); border-color:var(--brand-light);}
-	.btn{display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:14px; padding:11px 18px; border-radius:10px; border:1px solid var(--brand); transition:.15s;}
-	.btn-primary{background:var(--brand); color:var(--ivory);}
-	.btn-primary:hover{background:var(--brand-light); color:var(--ivory);}
-	.btn-ghost{background:transparent; color:var(--brand); border-color:var(--border);}
-	.btn-ghost:hover{border-color:var(--brand-light); color:var(--brand-light);}
-	.hero-media{display:block; position:relative; margin-top:14px; border:1px solid var(--border); border-radius:14px; overflow:hidden; box-shadow:0 24px 60px rgba(20,19,19,.10); background:#11110f;}
-	.hero-media img{display:block; width:100%; height:auto;}
-	.hero-media .play{position:absolute; left:16px; bottom:14px; font-family:var(--mono); font-size:12px; color:#f5f4ed; background:rgba(20,19,19,.55); border:1px solid rgba(255,255,255,.18); border-radius:999px; padding:6px 12px; -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);}
+/* Hero */
+.hero{padding-bottom:48px;border-bottom:1px solid var(--border-soft);margin-bottom:80px;}
+.eyebrow{display:flex;justify-content:space-between;align-items:center;gap:8px;font-family:var(--latin-ui);font-size:12px;font-weight:500;letter-spacing:.4px;text-transform:uppercase;color:var(--stone);margin:0 0 28px;}
+.version-link{color:var(--brand);font-weight:600;}
+.hero-links{display:flex;gap:14px;align-items:center;}
+.hero-links a{color:var(--stone);display:flex;align-items:center;}
+.hero-links a:hover{color:var(--dark-warm);}
+.lang{font-family:var(--latin-ui);font-size:12px;font-weight:500;letter-spacing:.4px;text-transform:uppercase;color:var(--stone);background:none;border:0;cursor:pointer;padding:0;}
+.lang:hover{color:var(--brand);}
+.hero h1{font-family:var(--serif);font-weight:500;font-size:88px;line-height:1.05;letter-spacing:0;margin:0 0 18px;color:var(--near-black);opacity:0;transform:translateY(10px);filter:blur(6px);animation:hero-rise 900ms cubic-bezier(.16,1,.3,1) 120ms forwards;}
+@keyframes hero-rise{to{opacity:1;transform:translateY(0);filter:blur(0);}}
+.hero .tagline{font-family:var(--serif);font-weight:400;font-size:20px;line-height:1.55;letter-spacing:.4px;color:var(--olive);margin:0 0 28px;max-width:820px;text-wrap:pretty;}
+.hero-tokens{display:flex;flex-wrap:wrap;gap:8px 18px;margin:0 0 32px;font-family:var(--latin-ui);font-size:13px;color:var(--stone);}
+.hero-tokens span:not(:last-child)::after{content:"·";margin-left:18px;color:color-mix(in srgb,var(--stone) 58%,transparent);}
+.hero-cta{display:flex;align-items:center;gap:16px;margin-top:4px;}
 
-	/* compliance band */
-	.compliance{background:var(--ivory);}
-	.compliance .row{display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap;}
-	.compliance h2{font-size:24px; min-width:7em;}
-	.compliance p{margin:0; color:var(--olive); max-width:62ch;}
-	.chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px;}
-	.chip{font-family:var(--mono); font-size:12.5px; color:var(--brand); background:color-mix(in srgb,var(--brand) 7%,transparent); border:1px solid color-mix(in srgb,var(--brand) 22%,var(--border)); border-radius:999px; padding:5px 12px;}
+/* Section primitives */
+section{margin-bottom:72px;}
+.section-head{margin-bottom:24px;}
+.section-num{font-family:var(--latin-ui);font-weight:400;font-size:14px;color:var(--brand);letter-spacing:.4px;margin:0 0 6px;text-transform:uppercase;}
+.section-title{font-family:var(--serif);font-weight:500;font-size:34px;line-height:1.2;color:var(--near-black);margin:0;letter-spacing:1.2px;}
+.section-lede{font-family:var(--serif);font-weight:400;font-size:17px;line-height:1.55;letter-spacing:.4px;color:var(--olive);margin:14px 0 0;max-width:760px;}
 
-	/* section head */
-	.sec-head{margin-bottom:30px;}
-	.sec-head h2{font-size:clamp(26px,3.4vw,34px); margin-top:8px;}
-	.sec-head p{color:var(--stone); margin:8px 0 0; max-width:60ch;}
+/* Gallery */
+.gallery{--enter-from-x:44px;--exit-to-x:-34px;--sweep-angle:100deg;--sweep-from:-45%;--sweep-to:65%;--caption-shift:-2px;display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:24px;align-items:baseline;}
+.gallery[data-direction="prev"]{--enter-from-x:-44px;--exit-to-x:34px;--sweep-angle:260deg;--sweep-from:65%;--sweep-to:-45%;--caption-shift:2px;}
+.gallery-frame{grid-column:1 / -1;position:relative;background:var(--shot-bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(20,19,19,.10);cursor:ew-resize;}
+.gallery-frame::after{content:"";position:absolute;inset:0;z-index:4;pointer-events:none;background:linear-gradient(var(--sweep-angle),rgba(245,244,237,0) 32%,rgba(245,244,237,.16) 50%,rgba(245,244,237,0) 68%);opacity:0;transform:translate3d(var(--sweep-from),0,0);transition:opacity 540ms ease,transform 920ms cubic-bezier(.22,1,.36,1);}
+.gallery.is-switching .gallery-frame::after{opacity:1;transform:translate3d(var(--sweep-to),0,0);}
+.gallery-panel{position:absolute;inset:0;margin:0;opacity:0;visibility:hidden;z-index:1;transform:translate3d(var(--enter-from-x),0,0) scale(.985);transition:opacity 620ms cubic-bezier(.22,1,.36,1),transform 880ms cubic-bezier(.22,1,.36,1),visibility 620ms;will-change:opacity,transform;}
+.gallery-panel.is-active{opacity:1;visibility:visible;position:relative;z-index:2;transform:translate3d(0,0,0) scale(1);}
+.gallery-panel.was-active{opacity:0;visibility:visible;position:absolute;inset:0;z-index:3;transform:translate3d(var(--exit-to-x),0,0) scale(.985);pointer-events:none;}
+.gallery-panel img{width:100%;height:auto;display:block;}
+.gallery-caption{grid-column:1;grid-row:2;min-height:48px;padding:12px 2px 0;display:flex;align-items:baseline;gap:14px;transition:opacity 420ms ease,transform 520ms cubic-bezier(.22,1,.36,1);}
+.gallery.is-switching .gallery-caption{opacity:.72;transform:translate3d(var(--caption-shift),0,0);}
+.gallery-caption .title{font-family:var(--serif);font-weight:500;font-size:17px;color:var(--near-black);margin:0;letter-spacing:.1px;flex:0 0 auto;}
+.gallery-caption .line{font-family:var(--serif);font-size:14px;color:var(--olive);font-style:italic;letter-spacing:.4px;margin:0;}
+.gallery-tabs{grid-column:2;grid-row:2;display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;justify-content:flex-end;}
+.gallery-tabs button{appearance:none;border:1px solid var(--border-soft);border-radius:999px;background:transparent;color:var(--olive);font-family:var(--latin-ui);font-size:12px;line-height:1;padding:8px 12px;cursor:pointer;transition:color .18s,border-color .18s,background .18s;}
+.gallery-tabs button:hover{color:var(--brand);border-color:var(--line);}
+.gallery-tabs button.is-active{color:var(--brand);background:var(--brand-tint);border-color:var(--line);}
 
-	/* features */
-	.grid{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:14px; overflow:hidden;}
-	.card{background:var(--ivory); padding:26px 24px;}
-	.card .k{font-family:var(--mono); font-size:12px; color:var(--brand); letter-spacing:.04em;}
-	.card h3{font-size:20px; margin:10px 0 8px;}
-	.card p{margin:0; color:var(--olive); font-size:15.5px; line-height:1.6;}
-	.card code{font-family:var(--mono); font-size:13px; background:var(--parchment); border:1px solid var(--border); border-radius:5px; padding:1px 6px; color:var(--warm);}
+/* Features */
+.features{list-style:none;margin:0;padding:0;border-top:1px solid var(--border-soft);}
+.features li{display:grid;grid-template-columns:220px 1fr;column-gap:36px;padding:28px 0;border-bottom:1px solid var(--border-soft);align-items:baseline;}
+.features .name{font-family:var(--serif);font-weight:500;font-size:22px;color:var(--brand);margin:0;line-height:1.25;}
+.features .name small{display:block;margin-top:4px;font-family:var(--serif);font-size:13px;color:var(--olive);font-weight:400;font-style:italic;line-height:1.5;letter-spacing:.1px;}
+.features .what{font-family:var(--serif);font-size:15px;line-height:1.55;letter-spacing:.4px;color:var(--dark-warm);margin:0;}
 
-	/* code card */
-	.code{background:#1d1c2a; border-radius:14px; padding:24px 26px; overflow:auto; box-shadow:0 18px 44px rgba(20,19,19,.16);}
-	.code pre{margin:0; font-family:var(--mono); font-size:14px; line-height:1.7; color:#e7e5e0; white-space:pre;}
-	.code .c{color:#8b8aa0;} .code .p{color:#d98a5a;} .code .s{color:#7fae74;} .code .f{color:#c0b56a;} .code .ok{color:#7fae74;}
-	.two{display:grid; grid-template-columns:1.05fr .95fr; gap:24px; align-items:start;}
-	.json{background:var(--ivory); border:1px solid var(--border); border-radius:14px; padding:22px 24px; overflow:auto;}
-	.json pre{margin:0; font-family:var(--mono); font-size:13.5px; line-height:1.7; color:var(--warm); white-space:pre;}
-	.json .key{color:var(--brand);} .json .str{color:var(--ok);} .json .val{color:var(--num);} .json .pun{color:var(--stone);} .json .hi{background:color-mix(in srgb,var(--ok) 14%,transparent); border-radius:4px; padding:0 4px; color:var(--ok); font-weight:600;}
+/* Principles */
+.principles{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,1fr);gap:0;border-top:1px solid var(--border-soft);}
+.principles li{display:grid;grid-template-columns:32px 1fr;gap:8px;padding:22px 28px 22px 0;border-bottom:1px solid var(--border-soft);align-items:baseline;}
+.principles li:nth-child(odd){padding-right:32px;border-right:1px solid var(--border-soft);}
+.principles li:nth-child(even){padding-left:32px;}
+.principles .n{font-family:var(--serif);font-weight:500;font-size:18px;color:var(--brand);line-height:1;font-variant-numeric:lining-nums tabular-nums;}
+.principles .body b{display:block;font-family:var(--serif);font-weight:500;font-size:15px;color:var(--near-black);margin-bottom:4px;letter-spacing:.1px;}
+.principles .body span{font-size:13px;color:var(--olive);line-height:1.5;letter-spacing:.4px;font-weight:400;}
 
-	/* agent ways */
-	.ways{display:grid; grid-template-columns:repeat(2,1fr); gap:16px;}
-	.way{background:var(--ivory); border:1px solid var(--border); border-radius:12px; padding:20px 22px;}
-	.way h3{font-size:17px; margin-bottom:10px; display:flex; align-items:center; gap:8px;}
-	.way h3 .n{font-family:var(--mono); font-size:12px; color:var(--ivory); background:var(--brand); border-radius:6px; width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center;}
-	.way pre{margin:0; font-family:var(--mono); font-size:13px; line-height:1.6; color:var(--warm); white-space:pre-wrap; word-break:break-word;}
-	.way p{margin:0; color:var(--olive); font-size:14.5px;}
+/* Quickstart: code + metrics */
+pre.code{background:var(--ivory);border:1px solid var(--border);border-radius:6px;padding:18px 22px;font-family:var(--mono);font-size:13.5px;line-height:1.7;font-variant-numeric:lining-nums tabular-nums;color:var(--near-black);overflow-x:auto;margin:0 0 32px;}
+pre.code .c{color:var(--stone);} pre.code .k{color:var(--brand);}
+.metrics{display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start;}
+.metric{display:flex;flex-direction:column;gap:4px;}
+.metric-value{font-family:var(--serif);font-weight:500;font-size:36px;line-height:1;color:var(--near-black);font-variant-numeric:lining-nums tabular-nums;}
+.metric-label{font-family:var(--latin-ui);font-size:13px;color:var(--stone);}
+.qs-cta{margin-top:36px;}
 
-	/* footer */
-	footer{border-top:1px solid var(--border); padding:40px 0 60px; color:var(--stone);}
-	.foot-row{display:flex; flex-wrap:wrap; gap:22px; justify-content:space-between; align-items:center;}
-	.foot-links{display:flex; flex-wrap:wrap; gap:20px; font-family:var(--mono); font-size:13px;}
-	.foot-links a{color:var(--olive);} .foot-links a:hover{color:var(--brand);}
-	.foot-note{font-size:13px;}
+/* FAQ */
+.faq-pair{margin-bottom:24px;}
+.faq-pair:last-child{margin-bottom:0;}
+.faq dt{font-family:var(--serif);font-weight:500;font-size:16px;color:var(--near-black);margin:0 0 6px;letter-spacing:.1px;}
+.faq dd{font-family:var(--serif);font-size:14px;line-height:1.55;letter-spacing:.4px;color:var(--olive);margin:0;}
+.faq-tail{font-family:var(--serif);font-size:13px;color:var(--stone);margin:28px 0 0;}
 
-	@keyframes rise{from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:none;}}
-	.reveal{animation:rise .7s ease both;}
-	@media (prefers-reduced-motion:reduce){.reveal{animation:none;}}
+/* Footer */
+footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-soft);display:flex;justify-content:space-between;align-items:flex-end;gap:48px;font-family:var(--serif);font-size:13px;color:var(--stone);}
+.foot .mark{display:grid;grid-template-columns:56px auto;grid-template-rows:auto auto;column-gap:14px;align-items:start;}
+.foot .mark img{grid-row:1 / span 2;width:56px;height:56px;border-radius:8px;}
+.foot .mark .wm-name{font-family:var(--serif);font-weight:500;font-size:28px;color:var(--near-black);line-height:1.1;}
+.foot .mark .wm-line{font-size:13px;color:var(--olive);margin-top:2px;}
+.foot .colophon{text-align:right;max-width:480px;}
+.foot .colophon .links{font-family:var(--latin-ui);color:var(--dark-warm);margin-bottom:14px;line-height:1.55;}
+.foot .colophon .links a{color:var(--dark-warm);}
+.foot .colophon .links a:hover{color:var(--brand);}
+.foot .colophon .ethos{color:var(--olive);font-style:italic;line-height:1.55;max-width:360px;margin:0 0 10px auto;}
+.foot .colophon .facts{font-family:var(--latin-ui);font-size:12px;color:var(--stone);line-height:1.5;}
 
-	@media (max-width:820px){
-		.grid{grid-template-columns:1fr;}
-		.two,.ways{grid-template-columns:1fr;}
-		.topnav .hide-sm{display:none;}
-	}
+@media (max-width:880px){
+	.page{padding:64px 32px 80px;}
+	.hero{margin-bottom:56px;padding-bottom:32px;}
+	.hero h1{font-size:56px;}
+	.hero .tagline{font-size:17px;}
+	section{margin-bottom:56px;}
+	.section-title{font-size:30px;letter-spacing:.8px;}
+	.gallery{grid-template-columns:1fr;}
+	.gallery-caption,.gallery-tabs{grid-column:1;grid-row:auto;}
+	.gallery-tabs{gap:6px;justify-content:flex-start;}
+	.features li{grid-template-columns:1fr;row-gap:8px;padding:22px 0;}
+	.principles{grid-template-columns:1fr;}
+	.principles li:nth-child(odd){border-right:none;padding-right:0;}
+	.principles li:nth-child(even){padding-left:0;}
+	.foot{flex-direction:column;align-items:flex-start;gap:32px;padding-top:32px;margin-top:48px;}
+	.foot .colophon{text-align:left;max-width:100%;}
+	.foot .colophon .ethos{margin-left:0;}
+}
+@media (max-width:480px){
+	.hero h1{font-size:46px;}
+	.hero .tagline{font-size:16px;}
+	.btn-primary,.btn-ghost{min-width:0;flex:1;padding:13px 16px;}
+	pre.code{font-size:11.5px;}
+	.gallery-caption{min-height:auto;flex-direction:column;align-items:flex-start;gap:4px;}
+}
+@media (prefers-reduced-motion:reduce){
+	.hero h1{animation:none;opacity:1;transform:none;filter:none;}
+	.gallery-frame::after{display:none;}
+	.gallery-panel,.gallery-caption{transition:none;}
+}
 </style>
 </head>
 <body>
+<main class="page">
 
-<div class="page">
-
-	<div class="topbar">
-		<span class="brand"><span class="glyph">&gt;_</span> boss-agent-cli</span>
-		<nav class="topnav">
-			<a class="hide-sm" href="https://github.com/can4hou6joeng4/boss-agent-cli#-命令" data-zh="命令" data-en="Commands">命令</a>
-			<a class="hide-sm" href="https://github.com/can4hou6joeng4/boss-agent-cli/blob/master/docs/agent-quickstart.md" data-zh="Agent 接入" data-en="Agents">Agent 接入</a>
-			<a href="https://github.com/can4hou6joeng4/boss-agent-cli">GitHub</a>
-			<button class="lang" id="lang" type="button">EN</button>
-		</nav>
-	</div>
-
-	<!-- HERO -->
+	<!-- Hero -->
 	<header class="hero">
-		<div class="eyebrow">BOSS 直聘 · AI Agent CLI · v1.13.1 · MIT</div>
-		<h1 data-zh="把 BOSS 直聘求职，交给你的 AI Agent" data-en="Hand BOSS Zhipin job-hunting to your AI agent">把 BOSS 直聘求职，交给你的 AI Agent</h1>
-		<p class="lede" data-zh="本地辅助 CLI —— 搜索、福利筛选、候选池整理，全部输出结构化 JSON 信封，Agent 一调用就懂。默认低风险：本地辅助 · 只读优先 · 用户主动触发。" data-en="A local-assist CLI — search, welfare filtering, and shortlist organizing, all emitted as a structured JSON envelope agents parse directly. Low-risk by default: local assistance, read-only first, user-triggered.">本地辅助 CLI —— 搜索、福利筛选、候选池整理，全部输出结构化 JSON 信封，Agent 一调用就懂。默认低风险：本地辅助 · 只读优先 · 用户主动触发。</p>
-
-		<div class="cta-row">
-			<span class="install"><span class="dollar">$</span><span>uv tool install boss-agent-cli</span><button class="copy" data-copy="uv tool install boss-agent-cli" data-zh="复制" data-en="Copy">复制</button></span>
-		</div>
-		<div class="cta-row">
-			<a class="btn btn-primary" href="https://github.com/can4hou6joeng4/boss-agent-cli">GitHub ★</a>
-			<a class="btn btn-ghost" href="https://github.com/can4hou6joeng4/boss-agent-cli#readme" data-zh="阅读文档" data-en="Read the docs">阅读文档</a>
-			<a class="btn btn-ghost" href="showcase/boss-agent-cli-showcase.mp4" data-zh="观看演示" data-en="Watch demo">观看演示</a>
+		<div class="eyebrow">
+			<span>BOSS 直聘 · AI Agent CLI · <a class="version-link" href="https://github.com/can4hou6joeng4/boss-agent-cli/releases">v1.13.1</a></span>
+			<span class="hero-links">
+				<button class="lang" id="lang" type="button">EN</button>
+				<a href="https://github.com/can4hou6joeng4/boss-agent-cli" aria-label="GitHub" target="_blank" rel="noopener">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.7.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17 5 18 5.3 18 5.3c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .4.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
+				</a>
+			</span>
 		</div>
 
-		<a class="hero-media" href="showcase/boss-agent-cli-showcase.mp4" title="观看完整展示视频">
-			<img src="showcase/boss-agent-cli-showcase.gif" alt="boss-agent-cli 项目展示动图" width="900" height="506" loading="eager">
-			<span class="play" data-zh="▶  观看完整视频" data-en="▶  Watch the full video">▶  观看完整视频</span>
-		</a>
+		<h1>boss-agent-cli</h1>
+
+		<p class="tagline" data-zh="把 BOSS 直聘求职交给你的 AI Agent。搜索、福利筛选、候选池整理，全部输出结构化 JSON 信封——默认低风险：本地辅助、只读优先、用户主动触发。" data-en="Hand BOSS Zhipin job-hunting to your AI agent. Search, welfare filtering, and shortlist organizing — all emitted as a structured JSON envelope. Low-risk by default: local-assist, read-only-first, user-triggered.">把 BOSS 直聘求职交给你的 AI Agent。搜索、福利筛选、候选池整理，全部输出结构化 JSON 信封——默认低风险：本地辅助、只读优先、用户主动触发。</p>
+
+		<div class="hero-tokens">
+			<span data-zh="Agent 友好" data-en="agent-friendly">Agent 友好</span>
+			<span data-zh="结构化输出" data-en="structured output">结构化输出</span>
+			<span data-zh="低风险合规" data-en="low-risk by default">低风险合规</span>
+		</div>
+
+		<div class="hero-cta">
+			<a class="btn-ghost" href="https://github.com/can4hou6joeng4/boss-agent-cli#readme" data-zh="阅读文档" data-en="Read the docs">阅读文档</a>
+			<a class="btn-primary" href="https://github.com/can4hou6joeng4/boss-agent-cli">GitHub ★</a>
+		</div>
 	</header>
-</div>
 
-<!-- COMPLIANCE -->
-<section class="compliance">
-	<div class="page">
-		<div class="row reveal">
-			<h2 data-zh="合规边界" data-en="Compliance boundary">合规边界</h2>
-			<div>
-				<p data-zh="默认启用低风险辅助模式。打招呼（greet / batch-greet）、投递、联系方式交换、招聘者候选人搜索 / 简历 / 聊天、消息回复等敏感能力默认阻断并返回 COMPLIANCE_BLOCKED；需要时回到 BOSS 直聘平台官网由用户手动完成。" data-en="Low-Risk Assistance Mode is on by default. Greeting (greet / batch-greet), applying, contact exchange, recruiter candidate search / resumes / chats, and replies are blocked by default and return COMPLIANCE_BLOCKED; complete them manually on the official BOSS Zhipin website.">默认启用低风险辅助模式。打招呼（greet / batch-greet）、投递、联系方式交换、招聘者候选人搜索 / 简历 / 聊天、消息回复等敏感能力默认阻断并返回 COMPLIANCE_BLOCKED；需要时回到 BOSS 直聘平台官网由用户手动完成。</p>
-				<div class="chips">
-					<span class="chip" data-zh="本地辅助" data-en="local-assist">本地辅助</span>
-					<span class="chip" data-zh="只读优先" data-en="read-only first">只读优先</span>
-					<span class="chip" data-zh="用户主动触发" data-en="user-triggered">用户主动触发</span>
-					<span class="chip" data-zh="不规避风控" data-en="no risk-control bypass">不规避风控</span>
-					<span class="chip" data-zh="不批量触达" data-en="no bulk outreach">不批量触达</span>
-					<span class="chip" data-zh="不抓取数据" data-en="no data scraping">不抓取数据</span>
-				</div>
+	<!-- 00 · Gallery -->
+	<section>
+		<div class="section-head">
+			<p class="section-num">00 · <span data-zh="演示" data-en="Showcase">演示</span></p>
+			<h2 class="section-title" data-zh="看它跑起来" data-en="See it run">看它跑起来</h2>
+			<p class="section-lede" data-zh="终端原生的暗色叙事，与真实的命令交互——结构化 JSON 一调用就懂。" data-en="A terminal-native dark narrative and real command interaction — structured JSON an agent reads at a glance.">终端原生的暗色叙事，与真实的命令交互——结构化 JSON 一调用就懂。</p>
+		</div>
+		<div class="gallery" data-gallery>
+			<div class="gallery-frame" aria-live="polite">
+				<figure class="gallery-panel" data-title-zh="项目展示" data-title-en="Showcase" data-line-zh="三十一秒，终端里的一次低风险求职。" data-line-en="Thirty-one seconds of low-risk job-hunting, in a terminal.">
+					<img src="showcase/boss-agent-cli-showcase.gif" alt="boss-agent-cli 项目展示动图" width="900" height="506" loading="eager">
+				</figure>
+				<figure class="gallery-panel" data-title-zh="终端交互" data-title-en="Terminal" data-line-zh="真实命令，真实 JSON 信封。" data-line-en="Real commands, real JSON envelopes.">
+					<img src="demo-zh.gif" alt="boss-agent-cli 终端交互演示" width="1280" height="720" loading="lazy">
+				</figure>
+			</div>
+			<div class="gallery-caption">
+				<p class="title" data-gallery-title></p>
+				<p class="line" data-gallery-line></p>
+			</div>
+			<div class="gallery-tabs" aria-label="选择截图">
+				<button type="button" data-zh="项目展示" data-en="Showcase">项目展示</button>
+				<button type="button" data-zh="终端交互" data-en="Terminal">终端交互</button>
 			</div>
 		</div>
-	</div>
-</section>
+	</section>
 
-<!-- FEATURES -->
-<section>
-	<div class="page">
-		<div class="sec-head reveal">
-			<div class="eyebrow" data-zh="核心能力" data-en="Features">核心能力</div>
-			<h2 data-zh="为 Agent 设计的每一处细节" data-en="Built for agents, end to end">为 Agent 设计的每一处细节</h2>
+	<!-- 01 · Features -->
+	<section>
+		<div class="section-head">
+			<p class="section-num">01 · <span data-zh="核心能力" data-en="Features">核心能力</span></p>
+			<h2 class="section-title" data-zh="为 Agent 设计的每一处" data-en="Built for agents, end to end">为 Agent 设计的每一处</h2>
 		</div>
-		<div class="grid reveal">
-			<div class="card">
-				<div class="k">welfare</div>
-				<h3 data-zh="福利精准筛选" data-en="Welfare filtering">福利精准筛选</h3>
-				<p data-zh="--welfare 双休,五险一金 自动翻页补抓详情，按 AND 逻辑做真实匹配，而不是关键词命中。" data-en="--welfare pages and fetches details, then does real AND matching — not keyword hits.">--welfare 双休,五险一金 自动翻页补抓详情，按 AND 逻辑做真实匹配，而不是关键词命中。</p>
-			</div>
-			<div class="card">
-				<div class="k">schema · json</div>
-				<h3 data-zh="Schema 驱动 + JSON 信封" data-en="Schema-first + JSON envelope">Schema 驱动 + JSON 信封</h3>
-				<p data-zh="stdout 只输出 {ok, data, pagination, error, hints} 信封；boss schema 是能力真源。" data-en="stdout is a JSON-only {ok, data, pagination, error, hints} envelope; boss schema is the source of truth.">stdout 只输出 {ok, data, pagination, error, hints} 信封；boss schema 是能力真源。</p>
-			</div>
-			<div class="card">
-				<div class="k">shortlist</div>
-				<h3 data-zh="本地候选池" data-en="Local shortlist">本地候选池</h3>
-				<p data-zh="查看详情后本地保存、复盘候选岗位与漏斗统计；投递与沟通回到官网手动完成。" data-en="Save and review candidate jobs and funnel stats locally; applying and messaging stay on the official site.">查看详情后本地保存、复盘候选岗位与漏斗统计；投递与沟通回到官网手动完成。</p>
-			</div>
-			<div class="card">
-				<div class="k">ai</div>
-				<h3 data-zh="AI 求职增强" data-en="AI job-hunting assist">AI 求职增强</h3>
-				<p data-zh="JD 分析、简历润色、定向优化、模拟面试、沟通指导，兼容 OpenAI / Anthropic 接口。" data-en="JD analysis, resume polish, targeted optimization, interview prep — OpenAI / Anthropic compatible.">JD 分析、简历润色、定向优化、模拟面试、沟通指导，兼容 OpenAI / Anthropic 接口。</p>
-			</div>
-			<div class="card">
-				<div class="k">platforms</div>
-				<h3 data-zh="多平台抽象" data-en="Cross-platform">多平台抽象</h3>
-				<p data-zh="Platform / RecruiterPlatform 双注册表，--platform zhipin | zhilian | qiancheng。" data-en="Live Platform / RecruiterPlatform registries, --platform zhipin | zhilian | qiancheng.">Platform / RecruiterPlatform 双注册表，--platform zhipin | zhilian | qiancheng。</p>
-			</div>
-			<div class="card">
-				<div class="k">agent-ready</div>
-				<h3 data-zh="四种 Agent 接入" data-en="Four ways to integrate">四种 Agent 接入</h3>
-				<p data-zh="Skill · subprocess · MCP · Python SDK，同一套能力，四条接入路径。" data-en="Skill · subprocess · MCP · Python SDK — one capability set, four integration paths.">Skill · subprocess · MCP · Python SDK，同一套能力，四条接入路径。</p>
-			</div>
-		</div>
-	</div>
-</section>
+		<ol class="features">
+			<li>
+				<p class="name" data-zh="福利筛选" data-en="Welfare filtering">福利筛选<small data-zh="不是关键词命中，是真实匹配" data-en="not keyword hits, but real matches">不是关键词命中，是真实匹配</small></p>
+				<p class="what" data-zh="--welfare 双休,五险一金 自动翻页补抓详情，按 AND 逻辑做真实匹配。" data-en="--welfare pages and fetches details, then matches every condition with real AND logic.">--welfare 双休,五险一金 自动翻页补抓详情，按 AND 逻辑做真实匹配。</p>
+			</li>
+			<li>
+				<p class="name" data-zh="JSON 信封" data-en="JSON envelope">JSON 信封<small data-zh="一种形状，所有命令" data-en="one shape, every command">一种形状，所有命令</small></p>
+				<p class="what" data-zh="stdout 只输出 {ok, data, pagination, error, hints}；boss schema 是能力真源。" data-en="stdout is only {ok, data, pagination, error, hints}; boss schema is the capability source of truth.">stdout 只输出 {ok, data, pagination, error, hints}；boss schema 是能力真源。</p>
+			</li>
+			<li>
+				<p class="name" data-zh="本地候选池" data-en="Local shortlist">本地候选池<small data-zh="你的清单，留在你的机器" data-en="your shortlist, on your machine">你的清单，留在你的机器</small></p>
+				<p class="what" data-zh="保存、复盘候选岗位与漏斗统计；投递与沟通回到官网手动完成。" data-en="Save and review candidate jobs and funnel stats; applying and messaging stay on the official site.">保存、复盘候选岗位与漏斗统计；投递与沟通回到官网手动完成。</p>
+			</li>
+			<li>
+				<p class="name" data-zh="AI 求职增强" data-en="AI assist">AI 求职增强<small data-zh="更安静的一种帮助" data-en="a quieter kind of help">更安静的一种帮助</small></p>
+				<p class="what" data-zh="JD 分析、简历润色、定向优化、模拟面试，兼容 OpenAI / Anthropic 接口。" data-en="JD analysis, resume polish, targeted optimization, interview prep — OpenAI / Anthropic compatible.">JD 分析、简历润色、定向优化、模拟面试，兼容 OpenAI / Anthropic 接口。</p>
+			</li>
+			<li>
+				<p class="name" data-zh="多平台抽象" data-en="Cross-platform">多平台抽象<small data-zh="一套 CLI，多个平台" data-en="one cli, many boards">一套 CLI，多个平台</small></p>
+				<p class="what" data-zh="Platform / RecruiterPlatform 双注册表，--platform zhipin | zhilian | qiancheng。" data-en="Live Platform / RecruiterPlatform registries, --platform zhipin | zhilian | qiancheng.">Platform / RecruiterPlatform 双注册表，--platform zhipin | zhilian | qiancheng。</p>
+			</li>
+			<li>
+				<p class="name" data-zh="Agent 接入" data-en="Agent-ready">Agent 接入<small data-zh="四道门，同一套能力" data-en="four doors, one capability">四道门，同一套能力</small></p>
+				<p class="what" data-zh="Skill · subprocess · MCP · Python SDK，四条路径暴露同一套能力。" data-en="Skill · subprocess · MCP · Python SDK — four paths to one capability set.">Skill · subprocess · MCP · Python SDK，四条路径暴露同一套能力。</p>
+			</li>
+		</ol>
+	</section>
 
-<!-- QUICK START + JSON -->
-<section>
-	<div class="page">
-		<div class="sec-head reveal">
-			<div class="eyebrow" data-zh="快速开始" data-en="Quickstart">快速开始</div>
-			<h2 data-zh="跑通低风险闭环" data-en="Run the low-risk loop">跑通低风险闭环</h2>
+	<!-- 02 · Principles (compliance boundary as numbered invariants) -->
+	<section>
+		<div class="section-head">
+			<p class="section-num">02 · <span data-zh="合规边界" data-en="Principles">合规边界</span></p>
+			<h2 class="section-title" data-zh="默认低风险，写在骨子里" data-en="Low-risk, by construction">默认低风险，写在骨子里</h2>
+			<p class="section-lede" data-zh="敏感动作默认阻断并返回 COMPLIANCE_BLOCKED，回到 BOSS 直聘官网由用户手动完成。" data-en="Sensitive actions are blocked by default and return COMPLIANCE_BLOCKED; complete them manually on the official BOSS Zhipin website.">敏感动作默认阻断并返回 COMPLIANCE_BLOCKED，回到 BOSS 直聘官网由用户手动完成。</p>
 		</div>
-		<div class="two reveal">
-			<div class="code"><pre><span class="c"># <span data-zh="安装（浏览器内核仅用于登录 / 导出）" data-en="install (browser core: login / export only)"># 安装（浏览器内核仅用于登录 / 导出）</span></span>
-<span class="p">$</span> uv tool install boss-agent-cli
-<span class="p">$</span> patchright install chromium
+		<ol class="principles">
+			<li><span class="n">1</span><span class="body"><b data-zh="本地辅助" data-en="Local assistance">本地辅助</b><span data-zh="只做本地整理与只读辅助，不替你操作平台。" data-en="Local organizing and read-only help only — it never operates the platform for you.">只做本地整理与只读辅助，不替你操作平台。</span></span></li>
+			<li><span class="n">2</span><span class="body"><b data-zh="只读优先" data-en="Read-only first">只读优先</b><span data-zh="默认只读；写操作与敏感链路默认阻断。" data-en="Read-only by default; writes and sensitive flows are blocked.">默认只读；写操作与敏感链路默认阻断。</span></span></li>
+			<li><span class="n">3</span><span class="body"><b data-zh="用户主动触发" data-en="User-triggered">用户主动触发</b><span data-zh="每一步都由你发起，没有后台自动循环。" data-en="Every step is initiated by you — no background auto-loop.">每一步都由你发起，没有后台自动循环。</span></span></li>
+			<li><span class="n">4</span><span class="body"><b data-zh="不规避风控" data-en="No risk-control bypass">不规避风控</b><span data-zh="不伪造指纹、不绕过平台风控；命中即停。" data-en="No fingerprint forgery, no bypassing platform controls; it stops on a block.">不伪造指纹、不绕过平台风控；命中即停。</span></span></li>
+			<li><span class="n">5</span><span class="body"><b data-zh="不批量触达" data-en="No bulk outreach">不批量触达</b><span data-zh="不自动打招呼、不批量投递。" data-en="No auto-greeting, no bulk applying.">不自动打招呼、不批量投递。</span></span></li>
+			<li><span class="n">6</span><span class="body"><b data-zh="不抓取数据" data-en="No data scraping">不抓取数据</b><span data-zh="不爬取、不囤积平台数据；数据留在本机。" data-en="No scraping or hoarding of platform data; it stays on your machine.">不爬取、不囤积平台数据；数据留在本机。</span></span></li>
+		</ol>
+	</section>
 
-<span class="c"># <span data-zh="跑通闭环" data-en="run the loop"># 跑通闭环</span></span>
-<span class="p">$</span> boss doctor
-<span class="p">$</span> boss login
-<span class="p">$</span> boss search <span class="s">"Golang"</span> <span class="f">--city</span> 广州 <span class="f">--welfare</span> <span class="s">"双休,五险一金"</span>
-<span class="ok">→ ok</span>  <span class="c"><span data-zh="15 个匹配（福利已 AND 命中）" data-en="15 matches (welfare AND-matched)">15 个匹配（福利已 AND 命中）</span></span>
-<span class="p">$</span> boss shortlist add &lt;security_id&gt; &lt;job_id&gt;
-<span class="p">$</span> boss stats</pre></div>
-			<div class="json"><pre><span class="pun">{</span>
-  <span class="key">"ok"</span><span class="pun">:</span> <span class="val">true</span><span class="pun">,</span>
-  <span class="key">"command"</span><span class="pun">:</span> <span class="str">"search"</span><span class="pun">,</span>
-  <span class="key">"data"</span><span class="pun">:</span> <span class="pun">[ {</span>
-    <span class="key">"title"</span><span class="pun">:</span> <span class="str">"高级 Golang 工程师"</span><span class="pun">,</span>
-    <span class="key">"welfare"</span><span class="pun">:</span> <span class="pun">[</span><span class="hi">"双休"</span><span class="pun">,</span> <span class="hi">"五险一金"</span><span class="pun">]</span>
-  <span class="pun">} … ],</span>
-  <span class="key">"pagination"</span><span class="pun">:</span> <span class="pun">{</span> <span class="key">"total"</span><span class="pun">:</span> <span class="val">15</span> <span class="pun">},</span>
-  <span class="key">"hints"</span><span class="pun">:</span> <span class="pun">{</span> <span class="key">"next_actions"</span><span class="pun">:</span> <span class="pun">[</span><span class="str">"boss detail …"</span><span class="pun">] }</span>
-<span class="pun">}</span></pre></div>
+	<!-- 03 · Quickstart -->
+	<section>
+		<div class="section-head">
+			<p class="section-num">03 · <span data-zh="快速开始" data-en="Quickstart">快速开始</span></p>
+			<h2 class="section-title" data-zh="跑通低风险闭环" data-en="Run the low-risk loop">跑通低风险闭环</h2>
 		</div>
-	</div>
-</section>
+		<pre class="code"><span class="c"># <span data-zh="安装（浏览器内核仅用于登录 / 导出）" data-en="install (browser core: login / export only)">安装（浏览器内核仅用于登录 / 导出）</span></span>
+<span class="k">$</span> uv tool install boss-agent-cli
+<span class="k">$</span> patchright install chromium
 
-<!-- AGENT INTEGRATION -->
-<section>
-	<div class="page">
-		<div class="sec-head reveal">
-			<div class="eyebrow" data-zh="Agent 接入" data-en="Agent integration">Agent 接入</div>
-			<h2 data-zh="同一套能力，四条路径" data-en="One capability set, four paths">同一套能力，四条路径</h2>
-			<p data-zh="能力真源是 boss schema，支持导出 openai-tools / anthropic-tools 工具定义。" data-en="The capability source of truth is boss schema, with openai-tools / anthropic-tools exports.">能力真源是 boss schema，支持导出 openai-tools / anthropic-tools 工具定义。</p>
+<span class="c"># <span data-zh="跑通闭环" data-en="run the loop">跑通闭环</span></span>
+<span class="k">$</span> boss doctor
+<span class="k">$</span> boss login
+<span class="k">$</span> boss search "Golang" --city 广州 --welfare "双休,五险一金"
+<span class="k">$</span> boss shortlist add &lt;security_id&gt; &lt;job_id&gt;
+<span class="k">$</span> boss stats</pre>
+		<div class="metrics">
+			<div class="metric"><span class="metric-value">35</span><span class="metric-label" data-zh="顶层命令" data-en="top-level commands">顶层命令</span></div>
+			<div class="metric"><span class="metric-value">1400+</span><span class="metric-label" data-zh="测试用例" data-en="tests">测试用例</span></div>
+			<div class="metric"><span class="metric-value">4</span><span class="metric-label" data-zh="Agent 接入方式" data-en="agent integrations">Agent 接入方式</span></div>
 		</div>
-		<div class="ways reveal">
-			<div class="way">
-				<h3><span class="n">1</span> <span data-zh="Skill 安装（推荐）" data-en="Skill install (recommended)">Skill 安装（推荐）</span></h3>
-				<pre>npx skills add can4hou6joeng4/boss-skill</pre>
-			</div>
-			<div class="way">
-				<h3><span class="n">2</span> subprocess + JSON</h3>
-				<pre>boss schema   <span style="color:var(--stone)"># <span data-zh="先读能力，再解析 stdout" data-en="read caps, then parse stdout"># 先读能力，再解析 stdout</span></span></pre>
-			</div>
-			<div class="way">
-				<h3><span class="n">3</span> MCP (Claude Desktop / Cursor)</h3>
-				<pre>uvx --from boss-agent-cli[mcp] boss-mcp</pre>
-			</div>
-			<div class="way">
-				<h3><span class="n">4</span> <span data-zh="Python 直接嵌入" data-en="Embed in Python">Python 直接嵌入</span></h3>
-				<pre>from boss_agent_cli import BossClient</pre>
-			</div>
+		<div class="hero-cta qs-cta">
+			<a class="btn-ghost" href="https://github.com/can4hou6joeng4/boss-skill" data-zh="作为 Skill 安装" data-en="Install as a Skill">作为 Skill 安装</a>
+			<a class="btn-primary" href="https://github.com/can4hou6joeng4/boss-agent-cli#-agent-集成" data-zh="Agent 集成" data-en="Agent integration">Agent 集成</a>
 		</div>
-	</div>
-</section>
+	</section>
 
-<footer>
-	<div class="page">
-		<div class="foot-row">
-			<span class="foot-note" data-zh="boss-agent-cli —— 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI · MIT" data-en="boss-agent-cli — a local-assist BOSS Zhipin CLI for AI agents · MIT">boss-agent-cli —— 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI · MIT</span>
-			<nav class="foot-links">
-				<a href="https://github.com/can4hou6joeng4/boss-agent-cli">GitHub</a>
-				<a href="https://pypi.org/project/boss-agent-cli/">PyPI</a>
-				<a href="https://github.com/can4hou6joeng4/boss-skill">boss-skill</a>
+	<!-- 04 · FAQ -->
+	<section>
+		<div class="section-head">
+			<p class="section-num">04 · <span data-zh="常见问题" data-en="FAQ">常见问题</span></p>
+			<h2 class="section-title" data-zh="问与答" data-en="Questions">问与答</h2>
+		</div>
+		<dl class="faq">
+			<div class="faq-pair">
+				<dt data-zh="它会自动投递或打招呼吗？" data-en="Does it auto-apply or auto-greet?">它会自动投递或打招呼吗？</dt>
+				<dd data-zh="不会。greet / batch-greet / apply / 联系方式交换等默认阻断并返回 COMPLIANCE_BLOCKED，请回到 BOSS 直聘官网手动完成。" data-en="No. greet / batch-greet / apply / contact exchange are blocked by default and return COMPLIANCE_BLOCKED; complete them manually on the official BOSS Zhipin website.">不会。greet / batch-greet / apply / 联系方式交换等默认阻断并返回 COMPLIANCE_BLOCKED，请回到 BOSS 直聘官网手动完成。</dd>
+			</div>
+			<div class="faq-pair">
+				<dt data-zh="AI Agent 怎么调用？" data-en="How does an AI agent call it?">AI Agent 怎么调用？</dt>
+				<dd data-zh="通过 subprocess 调用 CLI：先 boss schema 读能力，再解析 stdout 的 JSON 信封；也支持 MCP 与 Python SDK。" data-en="Via subprocess: run boss schema to read capabilities, then parse the stdout JSON envelope. MCP and a Python SDK are also supported.">通过 subprocess 调用 CLI：先 boss schema 读能力，再解析 stdout 的 JSON 信封；也支持 MCP 与 Python SDK。</dd>
+			</div>
+			<div class="faq-pair">
+				<dt data-zh="支持哪些平台与 AI 模型？" data-en="Which platforms and AI models?">支持哪些平台与 AI 模型？</dt>
+				<dd data-zh="平台：zhipin（默认）、zhilian、qiancheng（占位，返回 NOT_SUPPORTED）。AI：任意 OpenAI / Anthropic 兼容接口。" data-en="Platforms: zhipin (default), zhilian, qiancheng (placeholder, returns NOT_SUPPORTED). AI: any OpenAI / Anthropic-compatible endpoint.">平台：zhipin（默认）、zhilian、qiancheng（占位，返回 NOT_SUPPORTED）。AI：任意 OpenAI / Anthropic 兼容接口。</dd>
+			</div>
+			<div class="faq-pair">
+				<dt data-zh="需要什么环境？" data-en="What do I need?">需要什么环境？</dt>
+				<dd data-zh="Python ≥ 3.10；浏览器内核仅用于用户主动登录与本地导出（patchright install chromium）。" data-en="Python ≥ 3.10; the browser core is only for user-triggered login and local export (patchright install chromium).">Python ≥ 3.10；浏览器内核仅用于用户主动登录与本地导出（patchright install chromium）。</dd>
+			</div>
+			<div class="faq-pair">
+				<dt data-zh="开源吗？" data-en="Is it open source?">开源吗？</dt>
+				<dd data-zh="MIT，完全开源免费。欢迎 Star、Issue 和 PR。" data-en="MIT, fully open source and free. Stars, issues, and PRs welcome.">MIT，完全开源免费。欢迎 Star、Issue 和 PR。</dd>
+			</div>
+		</dl>
+		<p class="faq-tail" data-zh="更多细节见 GitHub README 与 docs/。" data-en="More detail in the GitHub README and docs/.">更多细节见 GitHub README 与 docs/。</p>
+	</section>
+
+	<!-- Footer -->
+	<footer class="foot">
+		<div class="mark">
+			<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%231B365D'/%3E%3Cpath d='M6 8l3 4-3 4M12 16h6' stroke='%23faf9f5' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" alt="boss-agent-cli">
+			<span class="wm-name">boss-agent-cli</span>
+			<span class="wm-line" data-zh="BOSS 直聘本地辅助 CLI" data-en="local-assist BOSS Zhipin CLI">BOSS 直聘本地辅助 CLI</span>
+		</div>
+		<div class="colophon">
+			<div class="links">
+				<a href="https://github.com/can4hou6joeng4/boss-agent-cli">GitHub</a> &middot;
+				<a href="https://pypi.org/project/boss-agent-cli/">PyPI</a> &middot;
+				<a href="https://github.com/can4hou6joeng4/boss-skill">boss-skill</a> &middot;
 				<a href="https://github.com/can4hou6joeng4/boss-agent-cli/blob/master/ROADMAP.md" data-zh="路线图" data-en="Roadmap">路线图</a>
-			</nav>
+			</div>
+			<p class="ethos" data-zh="好的求职，值得交给你信任的 Agent。" data-en="Good job-hunting deserves an agent you trust.">好的求职，值得交给你信任的 Agent。</p>
+			<p class="facts">MIT · Python ≥ 3.10 · early lessons from geekgeekrun / boss-cli / opencli</p>
 		</div>
-	</div>
-</footer>
+	</footer>
+
+</main>
 
 <script>
-	(function(){
-		var KEY="bac-lang";
-		var saved=localStorage.getItem(KEY);
-		var lang=saved||((navigator.language||"").toLowerCase().indexOf("zh")===0?"zh":"en");
+(function(){
+	var KEY="bac-lang";
+	var curLang=localStorage.getItem(KEY)||((navigator.language||"").toLowerCase().indexOf("zh")===0?"zh":"en");
 
-		function apply(l){
-			document.documentElement.lang=(l==="zh"?"zh-CN":"en");
-			document.querySelectorAll("[data-en]").forEach(function(el){
-				var v=el.getAttribute("data-"+l);
-				if(v!=null) el.textContent=v;
-			});
-			var btn=document.getElementById("lang");
-			if(btn) btn.textContent=(l==="zh"?"EN":"中文");
-			document.title=(l==="zh"
-				?"boss-agent-cli · 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI"
-				:"boss-agent-cli · A local-assist BOSS Zhipin CLI for AI agents");
-			localStorage.setItem(KEY,l);
-			lang=l;
-		}
-		apply(lang);
+	function tx(el,field){ return el.getAttribute("data-"+field+"-"+curLang)||""; }
 
-		var btn=document.getElementById("lang");
-		if(btn) btn.addEventListener("click",function(){ apply(lang==="zh"?"en":"zh"); });
+	// Gallery
+	var gallery=document.querySelector("[data-gallery]");
+	var panels=gallery?Array.prototype.slice.call(gallery.querySelectorAll(".gallery-panel")):[];
+	var tabs=gallery?Array.prototype.slice.call(gallery.querySelectorAll(".gallery-tabs button")):[];
+	var capTitle=gallery?gallery.querySelector("[data-gallery-title]"):null;
+	var capLine=gallery?gallery.querySelector("[data-gallery-line]"):null;
+	var index=0,timer=null,transitionTimer=null;
+	var reduceMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-		document.querySelectorAll(".copy").forEach(function(b){
-			b.addEventListener("click",function(){
-				var t=b.getAttribute("data-copy")||"";
-				navigator.clipboard&&navigator.clipboard.writeText(t);
-				var orig=b.textContent;
-				b.textContent=(lang==="zh"?"已复制 ✓":"Copied ✓");
-				setTimeout(function(){ b.textContent=orig; },1400);
-			});
-		});
-	})();
+	function refreshCaption(){
+		if(!panels.length) return;
+		if(capTitle) capTitle.textContent=tx(panels[index],"title");
+		if(capLine) capLine.textContent=tx(panels[index],"line");
+	}
+	function activate(next){
+		if(next===index||!panels.length) return;
+		var prev=index;
+		var dir=(next-prev+panels.length)%panels.length;
+		gallery.dataset.direction=dir>panels.length/2?"prev":"next";
+		if(transitionTimer) clearTimeout(transitionTimer);
+		panels.forEach(function(p){p.classList.remove("was-active");});
+		var out=panels[prev]; if(out) out.classList.add("was-active");
+		gallery.classList.add("is-switching");
+		transitionTimer=setTimeout(function(){ gallery.classList.remove("is-switching"); if(out) out.classList.remove("was-active"); transitionTimer=null; },920);
+		index=next;
+		panels.forEach(function(p,i){ p.classList.toggle("is-active",i===index); p.setAttribute("aria-hidden",i===index?"false":"true"); });
+		tabs.forEach(function(t,i){ t.classList.toggle("is-active",i===index); t.setAttribute("aria-pressed",i===index?"true":"false"); });
+		refreshCaption();
+	}
+	function start(){ if(reduceMotion||timer||panels.length<2) return; timer=setInterval(function(){ activate((index+1)%panels.length); },4500); }
+	function stop(){ if(timer){ clearInterval(timer); timer=null; } }
+
+	if(panels.length){
+		panels[0].classList.add("is-active"); panels[0].setAttribute("aria-hidden","false");
+		if(tabs[0]) tabs[0].classList.add("is-active");
+		tabs.forEach(function(tab,i){ tab.addEventListener("click",function(){ stop(); activate(i); start(); }); });
+		var frame=gallery.querySelector(".gallery-frame");
+		if(frame&&panels.length>1) frame.addEventListener("click",function(e){ var b=frame.getBoundingClientRect(); var n=e.clientX<b.left+b.width/2?(index-1+panels.length)%panels.length:(index+1)%panels.length; stop(); activate(n); start(); });
+		gallery.addEventListener("mouseenter",stop); gallery.addEventListener("mouseleave",start);
+		gallery.addEventListener("focusin",stop); gallery.addEventListener("focusout",start);
+	}
+
+	// Language
+	function applyLang(l){
+		curLang=l;
+		document.documentElement.lang=(l==="zh"?"zh-CN":"en");
+		document.querySelectorAll("[data-en]").forEach(function(el){ var v=el.getAttribute("data-"+l); if(v!=null) el.textContent=v; });
+		var btn=document.getElementById("lang"); if(btn) btn.textContent=(l==="zh"?"EN":"中文");
+		document.title=(l==="zh"?"boss-agent-cli · 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI":"boss-agent-cli · A local-assist BOSS Zhipin CLI for AI agents");
+		localStorage.setItem(KEY,l);
+		refreshCaption();
+	}
+	applyLang(curLang);
+	var btn=document.getElementById("lang");
+	if(btn) btn.addEventListener("click",function(){ applyLang(curLang==="zh"?"en":"zh"); });
+
+	start();
+})();
 </script>
 </body>
 </html>

@@ -1,0 +1,30 @@
+# boss-agent-cli
+
+> A local-assist BOSS Zhipin CLI built for AI agents. Search, welfare filtering, and shortlist organizing emitted as a structured JSON envelope. Low-risk by default: local-assist, read-only-first, user-triggered.
+
+## What it is
+boss-agent-cli lets an AI agent help with BOSS Zhipin job-hunting without automating the platform. Every command prints a JSON envelope ({ok, data, pagination, error, hints}) to stdout; `boss schema` is the capability source of truth. 35 top-level commands plus 9 recruiter subcommands.
+
+## Positioning
+Unlike scraping or auto-apply bots, boss-agent-cli is intentionally scoped to local assistance and read-only-first workflows. Sensitive actions (greet, batch-greet, apply, contact exchange, recruiter candidate data, replies) are blocked by default and return COMPLIANCE_BLOCKED; users complete them manually on the official website. It does not bypass risk control, bulk-outreach, or scrape platform data.
+
+## Key capabilities
+- Welfare filtering: `--welfare "双休,五险一金"` pages, fetches details, and matches every condition with real AND logic.
+- Structured output: JSON-only stdout, logs on stderr, exit 0/1.
+- Local shortlist and funnel stats; AI assist (JD analysis, resume polish, interview prep).
+- Multi-platform registry: zhipin (default), zhilian, qiancheng (placeholder, NOT_SUPPORTED).
+- Four agent integrations: Skill, subprocess, MCP server, Python SDK.
+
+## Install
+- uv: `uv tool install boss-agent-cli`
+- Agent Skill: `npx skills add can4hou6joeng4/boss-skill`
+- MCP: `uvx --from boss-agent-cli[mcp] boss-mcp`
+
+## License & environment
+MIT. Python >= 3.10. Browser core (patchright) only for user-triggered login and local export.
+
+## Links
+- GitHub: https://github.com/can4hou6joeng4/boss-agent-cli
+- Agent Skill: https://github.com/can4hou6joeng4/boss-skill
+- PyPI: https://pypi.org/project/boss-agent-cli/
+- Homepage: https://can4hou6joeng4.github.io/boss-agent-cli/
