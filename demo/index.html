@@ -1,333 +1,338 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>boss-agent-cli — 让 Agent 帮你找工作</title>
-<meta name="description" content="专为 AI Agent 设计的 BOSS 直聘求职 CLI 工具。搜索职位、福利筛选、自动打招呼、求职流水线、简历管理、AI 优化。">
-<meta property="og:title" content="boss-agent-cli — 让 Agent 帮你找工作">
-<meta property="og:description" content="专为 AI Agent 设计的 BOSS 直聘求职 CLI 工具。30+ 命令覆盖搜索、投递、沟通、简历管理和 AI 优化全流程。">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>boss-agent-cli · 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI</title>
+<meta name="description" content="boss-agent-cli —— 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI。搜索、福利筛选、本地候选池、结构化 JSON 信封；默认低风险：本地辅助 · 只读优先 · 用户主动触发。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%231B365D'/%3E%3Cpath d='M6 8l3 4-3 4M12 16h6' stroke='%23faf9f5' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="canonical" href="https://can4hou6joeng4.github.io/boss-agent-cli/">
 <meta property="og:type" content="website">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<meta property="og:title" content="boss-agent-cli · BOSS 直聘 AI Agent CLI">
+<meta property="og:description" content="专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI。搜索 · 福利筛选 · 候选池 · JSON 信封，默认低风险合规。">
+<meta property="og:url" content="https://can4hou6joeng4.github.io/boss-agent-cli/">
+<meta property="og:image" content="https://can4hou6joeng4.github.io/boss-agent-cli/showcase/boss-agent-cli-showcase-thumb.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+	:root{
+		--parchment:#f5f4ed; --ivory:#faf9f5; --sand:#e8e6dc;
+		--ink:#141413; --warm:#3d3d3a; --olive:#504e49; --stone:#6b6a64;
+		--brand:#1B365D; --brand-light:#2d5a8a;
+		--border:#e3e1d6; --border-soft:#e8e6dc;
+		--ok:#3f6e4b; --tag:#1B365D; --num:#8a5a2b;
+		--serif:Charter,"Bitstream Charter","Sitka Text",Cambria,Georgia,"Songti SC","STSong","Noto Serif SC","Noto Serif CJK SC",serif;
+		--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+		--page:1000px;
+	}
+	*{box-sizing:border-box;}
+	html,body{margin:0;padding:0;}
+	body{
+		background:var(--parchment); color:var(--ink);
+		font-family:var(--serif); font-size:17px; line-height:1.65;
+		-webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+	}
+	a{color:var(--brand); text-decoration:none;}
+	a:hover{color:var(--brand-light);}
+	.page{max-width:var(--page); margin:0 auto; padding:0 28px;}
+	.mono{font-family:var(--mono);}
+	section{padding:64px 0; border-top:1px solid var(--border);}
+	h1,h2,h3{font-weight:600; letter-spacing:-0.01em; line-height:1.2; margin:0;}
+	.eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--stone);}
+
+	/* top bar */
+	.topbar{display:flex; align-items:center; justify-content:space-between; padding:22px 0;}
+	.brand{display:flex; align-items:center; gap:10px; font-weight:600; font-size:18px; color:var(--ink);}
+	.brand .glyph{font-family:var(--mono); color:var(--brand); font-weight:500;}
+	.topnav{display:flex; align-items:center; gap:22px; font-size:14px;}
+	.topnav a{color:var(--olive);}
+	.topnav a:hover{color:var(--brand);}
+	.lang{font-family:var(--mono); font-size:12px; color:var(--stone); background:none; border:0; cursor:pointer; padding:4px 0;}
+	.lang:hover{color:var(--brand);}
+
+	/* hero */
+	.hero{border-top:0; padding-top:34px; padding-bottom:30px;}
+	.hero .eyebrow{margin-bottom:20px;}
+	.hero h1{font-size:clamp(38px,6vw,68px); max-width:18ch;}
+	.hero .lede{font-size:clamp(18px,2.3vw,21px); color:var(--olive); max-width:60ch; margin:22px 0 30px;}
+	.cta-row{display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin-bottom:26px;}
+	.install{display:inline-flex; align-items:center; gap:14px; background:var(--ivory); border:1px solid var(--border); border-radius:10px; padding:12px 14px 12px 18px; font-family:var(--mono); font-size:15px; color:var(--ink); box-shadow:0 1px 0 rgba(20,19,19,.02);}
+	.install .dollar{color:var(--brand); user-select:none;}
+	.copy{font-family:var(--mono); font-size:12px; color:var(--stone); background:var(--parchment); border:1px solid var(--border); border-radius:7px; padding:6px 10px; cursor:pointer; transition:.15s;}
+	.copy:hover{color:var(--brand); border-color:var(--brand-light);}
+	.btn{display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:14px; padding:11px 18px; border-radius:10px; border:1px solid var(--brand); transition:.15s;}
+	.btn-primary{background:var(--brand); color:var(--ivory);}
+	.btn-primary:hover{background:var(--brand-light); color:var(--ivory);}
+	.btn-ghost{background:transparent; color:var(--brand); border-color:var(--border);}
+	.btn-ghost:hover{border-color:var(--brand-light); color:var(--brand-light);}
+	.hero-media{display:block; position:relative; margin-top:14px; border:1px solid var(--border); border-radius:14px; overflow:hidden; box-shadow:0 24px 60px rgba(20,19,19,.10); background:#11110f;}
+	.hero-media img{display:block; width:100%; height:auto;}
+	.hero-media .play{position:absolute; left:16px; bottom:14px; font-family:var(--mono); font-size:12px; color:#f5f4ed; background:rgba(20,19,19,.55); border:1px solid rgba(255,255,255,.18); border-radius:999px; padding:6px 12px; -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);}
+
+	/* compliance band */
+	.compliance{background:var(--ivory);}
+	.compliance .row{display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap;}
+	.compliance h2{font-size:24px; min-width:7em;}
+	.compliance p{margin:0; color:var(--olive); max-width:62ch;}
+	.chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px;}
+	.chip{font-family:var(--mono); font-size:12.5px; color:var(--brand); background:color-mix(in srgb,var(--brand) 7%,transparent); border:1px solid color-mix(in srgb,var(--brand) 22%,var(--border)); border-radius:999px; padding:5px 12px;}
+
+	/* section head */
+	.sec-head{margin-bottom:30px;}
+	.sec-head h2{font-size:clamp(26px,3.4vw,34px); margin-top:8px;}
+	.sec-head p{color:var(--stone); margin:8px 0 0; max-width:60ch;}
+
+	/* features */
+	.grid{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:14px; overflow:hidden;}
+	.card{background:var(--ivory); padding:26px 24px;}
+	.card .k{font-family:var(--mono); font-size:12px; color:var(--brand); letter-spacing:.04em;}
+	.card h3{font-size:20px; margin:10px 0 8px;}
+	.card p{margin:0; color:var(--olive); font-size:15.5px; line-height:1.6;}
+	.card code{font-family:var(--mono); font-size:13px; background:var(--parchment); border:1px solid var(--border); border-radius:5px; padding:1px 6px; color:var(--warm);}
+
+	/* code card */
+	.code{background:#1d1c2a; border-radius:14px; padding:24px 26px; overflow:auto; box-shadow:0 18px 44px rgba(20,19,19,.16);}
+	.code pre{margin:0; font-family:var(--mono); font-size:14px; line-height:1.7; color:#e7e5e0; white-space:pre;}
+	.code .c{color:#8b8aa0;} .code .p{color:#d98a5a;} .code .s{color:#7fae74;} .code .f{color:#c0b56a;} .code .ok{color:#7fae74;}
+	.two{display:grid; grid-template-columns:1.05fr .95fr; gap:24px; align-items:start;}
+	.json{background:var(--ivory); border:1px solid var(--border); border-radius:14px; padding:22px 24px; overflow:auto;}
+	.json pre{margin:0; font-family:var(--mono); font-size:13.5px; line-height:1.7; color:var(--warm); white-space:pre;}
+	.json .key{color:var(--brand);} .json .str{color:var(--ok);} .json .val{color:var(--num);} .json .pun{color:var(--stone);} .json .hi{background:color-mix(in srgb,var(--ok) 14%,transparent); border-radius:4px; padding:0 4px; color:var(--ok); font-weight:600;}
+
+	/* agent ways */
+	.ways{display:grid; grid-template-columns:repeat(2,1fr); gap:16px;}
+	.way{background:var(--ivory); border:1px solid var(--border); border-radius:12px; padding:20px 22px;}
+	.way h3{font-size:17px; margin-bottom:10px; display:flex; align-items:center; gap:8px;}
+	.way h3 .n{font-family:var(--mono); font-size:12px; color:var(--ivory); background:var(--brand); border-radius:6px; width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center;}
+	.way pre{margin:0; font-family:var(--mono); font-size:13px; line-height:1.6; color:var(--warm); white-space:pre-wrap; word-break:break-word;}
+	.way p{margin:0; color:var(--olive); font-size:14.5px;}
+
+	/* footer */
+	footer{border-top:1px solid var(--border); padding:40px 0 60px; color:var(--stone);}
+	.foot-row{display:flex; flex-wrap:wrap; gap:22px; justify-content:space-between; align-items:center;}
+	.foot-links{display:flex; flex-wrap:wrap; gap:20px; font-family:var(--mono); font-size:13px;}
+	.foot-links a{color:var(--olive);} .foot-links a:hover{color:var(--brand);}
+	.foot-note{font-size:13px;}
+
+	@keyframes rise{from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:none;}}
+	.reveal{animation:rise .7s ease both;}
+	@media (prefers-reduced-motion:reduce){.reveal{animation:none;}}
+
+	@media (max-width:820px){
+		.grid{grid-template-columns:1fr;}
+		.two,.ways{grid-template-columns:1fr;}
+		.topnav .hide-sm{display:none;}
+	}
+</style>
 </head>
 <body>
 
-<!-- SVG Sprite -->
-<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
-  <symbol id="icon-github" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
-  </symbol>
-  <symbol id="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M5 12h14M12 5l7 7-7 7"/>
-  </symbol>
-</svg>
+<div class="page">
 
-<!-- Nav: Split Centered -->
-<nav class="split-nav" id="nav">
-  <div class="nav-left">
-    <a href="#features">特性</a>
-    <a href="#faq">常见问题</a>
-  </div>
-  <a href="#" class="nav-logo"><span class="logo-prompt">&gt;_</span> boss-agent-cli</a>
-  <div class="nav-right">
-    <a href="https://github.com/can4hou6joeng4/boss-agent-cli">GitHub</a>
-    <a href="#install" class="nav-cta">快速开始</a>
-  </div>
-  <button class="nav-toggle" aria-label="菜单" aria-expanded="false">
-    <span></span><span></span><span></span>
-  </button>
-</nav>
+	<div class="topbar">
+		<span class="brand"><span class="glyph">&gt;_</span> boss-agent-cli</span>
+		<nav class="topnav">
+			<a class="hide-sm" href="https://github.com/can4hou6joeng4/boss-agent-cli#-命令" data-zh="命令" data-en="Commands">命令</a>
+			<a class="hide-sm" href="https://github.com/can4hou6joeng4/boss-agent-cli/blob/master/docs/agent-quickstart.md" data-zh="Agent 接入" data-en="Agents">Agent 接入</a>
+			<a href="https://github.com/can4hou6joeng4/boss-agent-cli">GitHub</a>
+			<button class="lang" id="lang" type="button">EN</button>
+		</nav>
+	</div>
 
-<!-- Mobile Nav Overlay -->
-<div class="mobile-nav-overlay">
-  <a href="#features" class="mobile-nav-item">特性</a>
-  <a href="#faq" class="mobile-nav-item">常见问题</a>
-  <a href="https://github.com/can4hou6joeng4/boss-agent-cli" class="mobile-nav-item">GitHub</a>
-  <a href="#install" class="mobile-nav-item">快速开始</a>
+	<!-- HERO -->
+	<header class="hero">
+		<div class="eyebrow">BOSS 直聘 · AI Agent CLI · v1.13.1 · MIT</div>
+		<h1 data-zh="把 BOSS 直聘求职，交给你的 AI Agent" data-en="Hand BOSS Zhipin job-hunting to your AI agent">把 BOSS 直聘求职，交给你的 AI Agent</h1>
+		<p class="lede" data-zh="本地辅助 CLI —— 搜索、福利筛选、候选池整理，全部输出结构化 JSON 信封，Agent 一调用就懂。默认低风险：本地辅助 · 只读优先 · 用户主动触发。" data-en="A local-assist CLI — search, welfare filtering, and shortlist organizing, all emitted as a structured JSON envelope agents parse directly. Low-risk by default: local assistance, read-only first, user-triggered.">本地辅助 CLI —— 搜索、福利筛选、候选池整理，全部输出结构化 JSON 信封，Agent 一调用就懂。默认低风险：本地辅助 · 只读优先 · 用户主动触发。</p>
+
+		<div class="cta-row">
+			<span class="install"><span class="dollar">$</span><span>uv tool install boss-agent-cli</span><button class="copy" data-copy="uv tool install boss-agent-cli" data-zh="复制" data-en="Copy">复制</button></span>
+		</div>
+		<div class="cta-row">
+			<a class="btn btn-primary" href="https://github.com/can4hou6joeng4/boss-agent-cli">GitHub ★</a>
+			<a class="btn btn-ghost" href="https://github.com/can4hou6joeng4/boss-agent-cli#readme" data-zh="阅读文档" data-en="Read the docs">阅读文档</a>
+			<a class="btn btn-ghost" href="showcase/boss-agent-cli-showcase.mp4" data-zh="观看演示" data-en="Watch demo">观看演示</a>
+		</div>
+
+		<a class="hero-media" href="showcase/boss-agent-cli-showcase.mp4" title="观看完整展示视频">
+			<img src="showcase/boss-agent-cli-showcase.gif" alt="boss-agent-cli 项目展示动图" width="900" height="506" loading="eager">
+			<span class="play" data-zh="▶  观看完整视频" data-en="▶  Watch the full video">▶  观看完整视频</span>
+		</a>
+	</header>
 </div>
 
-<!-- Hero: Minimal Descent -->
-<section class="hero" id="hero">
-  <div class="hero-inner">
-    <div class="hero-eyebrow js-hero-el">
-      <span class="hero-rule"></span>
-      <span>专为 AI Agent 设计</span>
-      <span class="hero-rule"></span>
-    </div>
-
-    <h1 class="hero-title js-hero-el">让 Agent 帮你<em>找工作</em></h1>
-
-    <p class="hero-desc js-hero-el">BOSS 直聘全链路求职 CLI 工具。结构化 JSON 输出，30+ 命令覆盖搜索、投递、沟通、简历管理和 AI 优化全流程。</p>
-
-    <div class="hero-actions js-hero-el">
-      <a href="https://github.com/can4hou6joeng4/boss-agent-cli" class="btn-primary">
-        <svg width="18" height="18"><use href="#icon-github"/></svg>
-        GitHub
-      </a>
-      <a href="#features" class="btn-ghost">探索特性</a>
-    </div>
-
-    <div class="hero-badges js-hero-el">
-      <img src="https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg" alt="CI">
-      <img src="https://img.shields.io/badge/Python-%E2%89%A53.10-3776AB?logo=python&logoColor=white" alt="Python">
-      <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
-      <img src="https://img.shields.io/github/v/release/can4hou6joeng4/boss-agent-cli" alt="Release">
-    </div>
-
-    <div class="hero-stats js-hero-el">
-      <div class="stat">
-        <span class="stat-num" data-target="30">0</span><span class="stat-suffix">+</span>
-        <span class="stat-label">CLI 命令</span>
-      </div>
-      <div class="stat">
-        <span class="stat-num" data-target="650">0</span><span class="stat-suffix">+</span>
-        <span class="stat-label">测试用例</span>
-      </div>
-      <div class="stat">
-        <span class="stat-num" data-target="0">0</span>
-        <span class="stat-label">运行时依赖</span>
-      </div>
-    </div>
-  </div>
-
-  <svg class="hero-backdrop" viewBox="0 0 1000 300" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M0,150 L1000,150" stroke="currentColor" stroke-width="0.5"/>
-    <path d="M500,0 L500,300" stroke="currentColor" stroke-width="0.5"/>
-    <circle cx="500" cy="150" r="100" fill="none" stroke="currentColor" stroke-width="0.5"/>
-  </svg>
+<!-- COMPLIANCE -->
+<section class="compliance">
+	<div class="page">
+		<div class="row reveal">
+			<h2 data-zh="合规边界" data-en="Compliance boundary">合规边界</h2>
+			<div>
+				<p data-zh="默认启用低风险辅助模式。打招呼（greet / batch-greet）、投递、联系方式交换、招聘者候选人搜索 / 简历 / 聊天、消息回复等敏感能力默认阻断并返回 COMPLIANCE_BLOCKED；需要时回到 BOSS 直聘平台官网由用户手动完成。" data-en="Low-Risk Assistance Mode is on by default. Greeting (greet / batch-greet), applying, contact exchange, recruiter candidate search / resumes / chats, and replies are blocked by default and return COMPLIANCE_BLOCKED; complete them manually on the official BOSS Zhipin website.">默认启用低风险辅助模式。打招呼（greet / batch-greet）、投递、联系方式交换、招聘者候选人搜索 / 简历 / 聊天、消息回复等敏感能力默认阻断并返回 COMPLIANCE_BLOCKED；需要时回到 BOSS 直聘平台官网由用户手动完成。</p>
+				<div class="chips">
+					<span class="chip" data-zh="本地辅助" data-en="local-assist">本地辅助</span>
+					<span class="chip" data-zh="只读优先" data-en="read-only first">只读优先</span>
+					<span class="chip" data-zh="用户主动触发" data-en="user-triggered">用户主动触发</span>
+					<span class="chip" data-zh="不规避风控" data-en="no risk-control bypass">不规避风控</span>
+					<span class="chip" data-zh="不批量触达" data-en="no bulk outreach">不批量触达</span>
+					<span class="chip" data-zh="不抓取数据" data-en="no data scraping">不抓取数据</span>
+				</div>
+			</div>
+		</div>
+	</div>
 </section>
 
-<!-- Features: Alternating Showcase -->
-<section class="features section-rule" id="features">
-
-  <!-- Block 1: 智能搜索 (text left, terminal right) -->
-  <div class="feature-block js-feature">
-    <div class="feature-content">
-      <span class="feature-eyebrow">智能搜索</span>
-      <h2 class="feature-headline">福利精准筛选，不再大海捞针</h2>
-      <p class="feature-body">--welfare "双休,五险一金" 自动翻页逐个查详情，只返回真正匹配的结果。配合城市、薪资、学历多维度过滤，一次搜索即可获得精准匹配。</p>
-      <a href="https://github.com/can4hou6joeng4/boss-agent-cli#搜索职位" class="feature-link">
-        查看文档 <svg width="14" height="14"><use href="#icon-arrow"/></svg>
-      </a>
-    </div>
-    <div class="feature-visual">
-      <div class="terminal">
-        <div class="terminal-header">
-          <span class="terminal-dot r"></span>
-          <span class="terminal-dot y"></span>
-          <span class="terminal-dot g"></span>
-          <span class="terminal-title">boss-agent-cli</span>
-        </div>
-        <div class="terminal-body">
-          <div class="tl"><span class="t-comment"># 搜索广州的 Golang 职位，要求双休+五险一金</span></div>
-          <div class="tl"><span class="t-prompt">$</span> <span class="t-cmd">boss search</span> <span class="t-str">"Golang"</span> <span class="t-flag">--city</span> <span class="t-str">广州</span> <span class="t-flag">--welfare</span> <span class="t-str">"双休,五险一金"</span></div>
-          <div class="tl"><span class="t-ok">ok</span> <span class="t-muted">找到 15 个匹配职位（已过滤福利）</span></div>
-          <div class="tl">&nbsp;</div>
-          <div class="tl"><span class="t-comment"># 查看第一个职位详情</span></div>
-          <div class="tl"><span class="t-prompt">$</span> <span class="t-cmd">boss detail</span> <span class="t-str">sec_abc123</span> <span class="t-flag">--job-id</span> <span class="t-str">enc_xyz</span></div>
-          <div class="tl"><span class="t-ok">ok</span> <span class="t-muted">Golang 高级工程师 · 某科技 · 25-50K · 广州天河</span></div>
-          <div class="tl">&nbsp;</div>
-          <div class="tl"><span class="t-comment"># 向招聘者打招呼</span></div>
-          <div class="tl"><span class="t-prompt">$</span> <span class="t-cmd">boss greet</span> <span class="t-str">sec_abc123</span> <span class="t-str">job_xyz</span></div>
-          <div class="tl"><span class="t-ok">ok</span> <span class="t-muted">打招呼成功 ✔</span></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Block 2: 结构化协议 (visual left, text right) -->
-  <div class="feature-block feature-block--reverse js-feature">
-    <div class="feature-content">
-      <span class="feature-eyebrow">结构化协议</span>
-      <h2 class="feature-headline">JSON 信封，Agent 零猜测</h2>
-      <p class="feature-body">每个命令输出标准 JSON 信封——ok、data、pagination、hints 字段固定不变。boss schema 一次调用即可理解全部命令的参数和语义，hints 引导下一步。</p>
-      <a href="https://github.com/can4hou6joeng4/boss-agent-cli#输出协议" class="feature-link">
-        查看协议 <svg width="14" height="14"><use href="#icon-arrow"/></svg>
-      </a>
-    </div>
-    <div class="feature-visual">
-      <div class="json-block"><pre>{
-  <span class="jk">"ok"</span>: <span class="jv">true</span>,
-  <span class="jk">"schema_version"</span>: <span class="js">"1.0"</span>,
-  <span class="jk">"command"</span>: <span class="js">"search"</span>,
-  <span class="jk">"data"</span>: [
-    {
-      <span class="jk">"title"</span>: <span class="js">"Golang 高级工程师"</span>,
-      <span class="jk">"company"</span>: <span class="js">"某科技有限公司"</span>,
-      <span class="jk">"salary"</span>: <span class="js">"25-50K"</span>,
-      <span class="jk">"welfare_match"</span>: {
-        <span class="jk">"双休"</span>: <span class="js">"tag"</span>,
-        <span class="jk">"五险一金"</span>: <span class="js">"tag"</span>
-      }
-    }
-  ],
-  <span class="jk">"pagination"</span>: { <span class="jk">"page"</span>: <span class="jv">1</span>, <span class="jk">"has_more"</span>: <span class="jv">true</span> },
-  <span class="jk">"hints"</span>: {
-    <span class="jk">"next_actions"</span>: [<span class="js">"boss detail &lt;sid&gt;"</span>]
-  }
-}</pre></div>
-    </div>
-  </div>
-
-  <!-- Block 3: 全链路 (focal — accent bg, text left, pipeline right) -->
-  <div class="feature-block feature-block--focal js-feature">
-    <div class="feature-content">
-      <span class="feature-eyebrow">全链路覆盖</span>
-      <h2 class="feature-headline">一条命令链闭环</h2>
-      <p class="feature-body">从搜索到入职，完整求职流程无需切换工具。30+ 命令覆盖搜索筛选、职位投递、沟通管理、简历优化、进度追踪和每日摘要。</p>
-      <a href="https://github.com/can4hou6joeng4/boss-agent-cli#命令列表" class="feature-link">
-        全部命令 <svg width="14" height="14"><use href="#icon-arrow"/></svg>
-      </a>
-    </div>
-    <div class="feature-visual">
-      <div class="pipeline-flow">
-        <div class="pipeline-step pipeline-step--active">
-          <span class="step-icon">1</span>
-          <span>search</span>
-        </div>
-        <span class="pipeline-arrow">→</span>
-        <div class="pipeline-step">
-          <span class="step-icon">2</span>
-          <span>detail</span>
-        </div>
-        <span class="pipeline-arrow">→</span>
-        <div class="pipeline-step">
-          <span class="step-icon">3</span>
-          <span>greet</span>
-        </div>
-        <span class="pipeline-arrow">→</span>
-        <div class="pipeline-step">
-          <span class="step-icon">4</span>
-          <span>apply</span>
-        </div>
-        <span class="pipeline-arrow">→</span>
-        <div class="pipeline-step">
-          <span class="step-icon">5</span>
-          <span>chat</span>
-        </div>
-        <span class="pipeline-arrow">→</span>
-        <div class="pipeline-step">
-          <span class="step-icon">6</span>
-          <span>pipeline</span>
-        </div>
-        <span class="pipeline-arrow">→</span>
-        <div class="pipeline-step">
-          <span class="step-icon">7</span>
-          <span>follow-up</span>
-        </div>
-        <span class="pipeline-arrow">→</span>
-        <div class="pipeline-step">
-          <span class="step-icon">8</span>
-          <span>digest</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
+<!-- FEATURES -->
+<section>
+	<div class="page">
+		<div class="sec-head reveal">
+			<div class="eyebrow" data-zh="核心能力" data-en="Features">核心能力</div>
+			<h2 data-zh="为 Agent 设计的每一处细节" data-en="Built for agents, end to end">为 Agent 设计的每一处细节</h2>
+		</div>
+		<div class="grid reveal">
+			<div class="card">
+				<div class="k">welfare</div>
+				<h3 data-zh="福利精准筛选" data-en="Welfare filtering">福利精准筛选</h3>
+				<p data-zh="--welfare 双休,五险一金 自动翻页补抓详情，按 AND 逻辑做真实匹配，而不是关键词命中。" data-en="--welfare pages and fetches details, then does real AND matching — not keyword hits.">--welfare 双休,五险一金 自动翻页补抓详情，按 AND 逻辑做真实匹配，而不是关键词命中。</p>
+			</div>
+			<div class="card">
+				<div class="k">schema · json</div>
+				<h3 data-zh="Schema 驱动 + JSON 信封" data-en="Schema-first + JSON envelope">Schema 驱动 + JSON 信封</h3>
+				<p data-zh="stdout 只输出 {ok, data, pagination, error, hints} 信封；boss schema 是能力真源。" data-en="stdout is a JSON-only {ok, data, pagination, error, hints} envelope; boss schema is the source of truth.">stdout 只输出 {ok, data, pagination, error, hints} 信封；boss schema 是能力真源。</p>
+			</div>
+			<div class="card">
+				<div class="k">shortlist</div>
+				<h3 data-zh="本地候选池" data-en="Local shortlist">本地候选池</h3>
+				<p data-zh="查看详情后本地保存、复盘候选岗位与漏斗统计；投递与沟通回到官网手动完成。" data-en="Save and review candidate jobs and funnel stats locally; applying and messaging stay on the official site.">查看详情后本地保存、复盘候选岗位与漏斗统计；投递与沟通回到官网手动完成。</p>
+			</div>
+			<div class="card">
+				<div class="k">ai</div>
+				<h3 data-zh="AI 求职增强" data-en="AI job-hunting assist">AI 求职增强</h3>
+				<p data-zh="JD 分析、简历润色、定向优化、模拟面试、沟通指导，兼容 OpenAI / Anthropic 接口。" data-en="JD analysis, resume polish, targeted optimization, interview prep — OpenAI / Anthropic compatible.">JD 分析、简历润色、定向优化、模拟面试、沟通指导，兼容 OpenAI / Anthropic 接口。</p>
+			</div>
+			<div class="card">
+				<div class="k">platforms</div>
+				<h3 data-zh="多平台抽象" data-en="Cross-platform">多平台抽象</h3>
+				<p data-zh="Platform / RecruiterPlatform 双注册表，--platform zhipin | zhilian | qiancheng。" data-en="Live Platform / RecruiterPlatform registries, --platform zhipin | zhilian | qiancheng.">Platform / RecruiterPlatform 双注册表，--platform zhipin | zhilian | qiancheng。</p>
+			</div>
+			<div class="card">
+				<div class="k">agent-ready</div>
+				<h3 data-zh="四种 Agent 接入" data-en="Four ways to integrate">四种 Agent 接入</h3>
+				<p data-zh="Skill · subprocess · MCP · Python SDK，同一套能力，四条接入路径。" data-en="Skill · subprocess · MCP · Python SDK — one capability set, four integration paths.">Skill · subprocess · MCP · Python SDK，同一套能力，四条接入路径。</p>
+			</div>
+		</div>
+	</div>
 </section>
 
-<!-- FAQ: Editorial (sticky anchor + accordion) -->
-<section class="faq section-rule" id="faq">
-  <div class="faq-container">
-    <div>
-      <h2 class="faq-title">常见<br>问题</h2>
-    </div>
-    <div class="faq-right">
+<!-- QUICK START + JSON -->
+<section>
+	<div class="page">
+		<div class="sec-head reveal">
+			<div class="eyebrow" data-zh="快速开始" data-en="Quickstart">快速开始</div>
+			<h2 data-zh="跑通低风险闭环" data-en="Run the low-risk loop">跑通低风险闭环</h2>
+		</div>
+		<div class="two reveal">
+			<div class="code"><pre><span class="c"># <span data-zh="安装（浏览器内核仅用于登录 / 导出）" data-en="install (browser core: login / export only)"># 安装（浏览器内核仅用于登录 / 导出）</span></span>
+<span class="p">$</span> uv tool install boss-agent-cli
+<span class="p">$</span> patchright install chromium
 
-      <div class="faq-item" data-open="false">
-        <button class="faq-trigger" aria-expanded="false">
-          <span class="faq-question">安全吗？账号会被检测吗？</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none"><line class="horizontal" x1="5" y1="12" x2="19" y2="12"/><line class="vertical" x1="12" y1="5" x2="12" y2="19"/></svg>
-        </button>
-        <div class="faq-content-grid"><div class="faq-content-inner">
-          <p class="faq-answer">基于 patchright 反检测浏览器 + 高斯分布请求延迟 + CDP 真实 Chrome 指纹三重保护。CDP 模式连接你的真实浏览器，指纹完全真实，请求频率由 RequestThrottle 统一管理，从根本上规避风控。</p>
-        </div></div>
-      </div>
-
-      <div class="faq-item" data-open="false">
-        <button class="faq-trigger" aria-expanded="false">
-          <span class="faq-question">需要哪些环境依赖？</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none"><line class="horizontal" x1="5" y1="12" x2="19" y2="12"/><line class="vertical" x1="12" y1="5" x2="12" y2="19"/></svg>
-        </button>
-        <div class="faq-content-grid"><div class="faq-content-inner">
-          <p class="faq-answer">Python ≥3.10 和 Chromium（通过 patchright install chromium 自动安装）。推荐使用 uv 作为包管理器。两行命令完成安装，无额外运行时依赖。</p>
-        </div></div>
-      </div>
-
-      <div class="faq-item" data-open="false">
-        <button class="faq-trigger" aria-expanded="false">
-          <span class="faq-question">支持哪些 AI 模型？</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none"><line class="horizontal" x1="5" y1="12" x2="19" y2="12"/><line class="vertical" x1="12" y1="5" x2="12" y2="19"/></svg>
-        </button>
-        <div class="faq-content-grid"><div class="faq-content-inner">
-          <p class="faq-answer">任何 OpenAI 兼容 API 均可使用——GPT-4o、Claude、Deepseek、Qwen、本地部署的 LLM 等。通过 boss ai config 一行命令配置提供商、模型和密钥，密钥自动加密存储。</p>
-        </div></div>
-      </div>
-
-      <div class="faq-item" data-open="false">
-        <button class="faq-trigger" aria-expanded="false">
-          <span class="faq-question">AI Agent 如何调用这个工具？</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none"><line class="horizontal" x1="5" y1="12" x2="19" y2="12"/><line class="vertical" x1="12" y1="5" x2="12" y2="19"/></svg>
-        </button>
-        <div class="faq-content-grid"><div class="faq-content-inner">
-          <p class="faq-answer">Agent 通过 subprocess 调用 CLI，读取 stdout 的 JSON 输出。先调用 boss schema 获取完整能力描述，再根据 hints.next_actions 链式执行。兼容 Claude Code、Cursor、任何支持 shell 调用的 Agent 框架。</p>
-        </div></div>
-      </div>
-
-      <div class="faq-item" data-open="false">
-        <button class="faq-trigger" aria-expanded="false">
-          <span class="faq-question">开源免费吗？</span>
-          <svg class="faq-icon" viewBox="0 0 24 24" fill="none"><line class="horizontal" x1="5" y1="12" x2="19" y2="12"/><line class="vertical" x1="12" y1="5" x2="12" y2="19"/></svg>
-        </button>
-        <div class="faq-content-grid"><div class="faq-content-inner">
-          <p class="faq-answer">MIT 协议，完全开源免费。代码托管在 GitHub，欢迎 Star、Issue 和 PR 贡献。</p>
-        </div></div>
-      </div>
-
-    </div>
-  </div>
+<span class="c"># <span data-zh="跑通闭环" data-en="run the loop"># 跑通闭环</span></span>
+<span class="p">$</span> boss doctor
+<span class="p">$</span> boss login
+<span class="p">$</span> boss search <span class="s">"Golang"</span> <span class="f">--city</span> 广州 <span class="f">--welfare</span> <span class="s">"双休,五险一金"</span>
+<span class="ok">→ ok</span>  <span class="c"><span data-zh="15 个匹配（福利已 AND 命中）" data-en="15 matches (welfare AND-matched)">15 个匹配（福利已 AND 命中）</span></span>
+<span class="p">$</span> boss shortlist add &lt;security_id&gt; &lt;job_id&gt;
+<span class="p">$</span> boss stats</pre></div>
+			<div class="json"><pre><span class="pun">{</span>
+  <span class="key">"ok"</span><span class="pun">:</span> <span class="val">true</span><span class="pun">,</span>
+  <span class="key">"command"</span><span class="pun">:</span> <span class="str">"search"</span><span class="pun">,</span>
+  <span class="key">"data"</span><span class="pun">:</span> <span class="pun">[ {</span>
+    <span class="key">"title"</span><span class="pun">:</span> <span class="str">"高级 Golang 工程师"</span><span class="pun">,</span>
+    <span class="key">"welfare"</span><span class="pun">:</span> <span class="pun">[</span><span class="hi">"双休"</span><span class="pun">,</span> <span class="hi">"五险一金"</span><span class="pun">]</span>
+  <span class="pun">} … ],</span>
+  <span class="key">"pagination"</span><span class="pun">:</span> <span class="pun">{</span> <span class="key">"total"</span><span class="pun">:</span> <span class="val">15</span> <span class="pun">},</span>
+  <span class="key">"hints"</span><span class="pun">:</span> <span class="pun">{</span> <span class="key">"next_actions"</span><span class="pun">:</span> <span class="pun">[</span><span class="str">"boss detail …"</span><span class="pun">] }</span>
+<span class="pun">}</span></pre></div>
+		</div>
+	</div>
 </section>
 
-<!-- CTA -->
-<section class="cta section-rule" id="install">
-  <div class="cta-container">
-    <div class="cta-text">
-      <h2 class="cta-headline">
-        <span>两行命令</span>
-        <span class="cta-accent">开始使用</span>
-      </h2>
-      <p class="cta-subtext">从安装到第一次搜索，不到一分钟。</p>
-    </div>
-    <div class="cta-actions-wrap">
-      <div class="install-code">
-        <span class="t-prompt">$</span> <span class="t-cmd">uv tool install</span> <span class="t-str">boss-agent-cli</span><br>
-        <span class="t-prompt">$</span> <span class="t-cmd">patchright install</span> <span class="t-str">chromium</span>
-      </div>
-      <div class="cta-buttons">
-        <a href="https://github.com/can4hou6joeng4/boss-agent-cli#安装" class="btn-primary">查看完整文档</a>
-        <a href="https://github.com/can4hou6joeng4/boss-agent-cli" class="btn-ghost-link">GitHub →</a>
-      </div>
-    </div>
-  </div>
+<!-- AGENT INTEGRATION -->
+<section>
+	<div class="page">
+		<div class="sec-head reveal">
+			<div class="eyebrow" data-zh="Agent 接入" data-en="Agent integration">Agent 接入</div>
+			<h2 data-zh="同一套能力，四条路径" data-en="One capability set, four paths">同一套能力，四条路径</h2>
+			<p data-zh="能力真源是 boss schema，支持导出 openai-tools / anthropic-tools 工具定义。" data-en="The capability source of truth is boss schema, with openai-tools / anthropic-tools exports.">能力真源是 boss schema，支持导出 openai-tools / anthropic-tools 工具定义。</p>
+		</div>
+		<div class="ways reveal">
+			<div class="way">
+				<h3><span class="n">1</span> <span data-zh="Skill 安装（推荐）" data-en="Skill install (recommended)">Skill 安装（推荐）</span></h3>
+				<pre>npx skills add can4hou6joeng4/boss-skill</pre>
+			</div>
+			<div class="way">
+				<h3><span class="n">2</span> subprocess + JSON</h3>
+				<pre>boss schema   <span style="color:var(--stone)"># <span data-zh="先读能力，再解析 stdout" data-en="read caps, then parse stdout"># 先读能力，再解析 stdout</span></span></pre>
+			</div>
+			<div class="way">
+				<h3><span class="n">3</span> MCP (Claude Desktop / Cursor)</h3>
+				<pre>uvx --from boss-agent-cli[mcp] boss-mcp</pre>
+			</div>
+			<div class="way">
+				<h3><span class="n">4</span> <span data-zh="Python 直接嵌入" data-en="Embed in Python">Python 直接嵌入</span></h3>
+				<pre>from boss_agent_cli import BossClient</pre>
+			</div>
+		</div>
+	</div>
 </section>
 
-<!-- Footer -->
-<footer class="footer">
-  <div>
-    <p>boss-agent-cli — 专为 AI Agent 设计的 BOSS 直聘求职 CLI 工具</p>
-    <div class="footer-links">
-      <a href="https://github.com/can4hou6joeng4/boss-agent-cli">GitHub</a>
-      <a href="https://github.com/can4hou6joeng4/boss-agent-cli/releases">Releases</a>
-      <a href="https://github.com/can4hou6joeng4/boss-agent-cli/blob/master/LICENSE">MIT License</a>
-    </div>
-  </div>
+<footer>
+	<div class="page">
+		<div class="foot-row">
+			<span class="foot-note" data-zh="boss-agent-cli —— 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI · MIT" data-en="boss-agent-cli — a local-assist BOSS Zhipin CLI for AI agents · MIT">boss-agent-cli —— 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI · MIT</span>
+			<nav class="foot-links">
+				<a href="https://github.com/can4hou6joeng4/boss-agent-cli">GitHub</a>
+				<a href="https://pypi.org/project/boss-agent-cli/">PyPI</a>
+				<a href="https://github.com/can4hou6joeng4/boss-skill">boss-skill</a>
+				<a href="https://github.com/can4hou6joeng4/boss-agent-cli/blob/master/ROADMAP.md" data-zh="路线图" data-en="Roadmap">路线图</a>
+			</nav>
+		</div>
+	</div>
 </footer>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" integrity="sha384-g4NTh/Iv5PPU4xPyhEWqPcwtNXOvdaDI8LLnyYfyNZOjKJeYQyjzQ9X5275eBjpt" crossorigin="anonymous"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" integrity="sha384-Z3REaz79l2IaAZqJsSABtTbhjgOUYyV3p90XNnAPCSHg3EMTz1fouunq9WZRtj3d" crossorigin="anonymous"></script>
-<script src="main.js"></script>
+<script>
+	(function(){
+		var KEY="bac-lang";
+		var saved=localStorage.getItem(KEY);
+		var lang=saved||((navigator.language||"").toLowerCase().indexOf("zh")===0?"zh":"en");
+
+		function apply(l){
+			document.documentElement.lang=(l==="zh"?"zh-CN":"en");
+			document.querySelectorAll("[data-en]").forEach(function(el){
+				var v=el.getAttribute("data-"+l);
+				if(v!=null) el.textContent=v;
+			});
+			var btn=document.getElementById("lang");
+			if(btn) btn.textContent=(l==="zh"?"EN":"中文");
+			document.title=(l==="zh"
+				?"boss-agent-cli · 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI"
+				:"boss-agent-cli · A local-assist BOSS Zhipin CLI for AI agents");
+			localStorage.setItem(KEY,l);
+			lang=l;
+		}
+		apply(lang);
+
+		var btn=document.getElementById("lang");
+		if(btn) btn.addEventListener("click",function(){ apply(lang==="zh"?"en":"zh"); });
+
+		document.querySelectorAll(".copy").forEach(function(b){
+			b.addEventListener("click",function(){
+				var t=b.getAttribute("data-copy")||"";
+				navigator.clipboard&&navigator.clipboard.writeText(t);
+				var orig=b.textContent;
+				b.textContent=(lang==="zh"?"已复制 ✓":"Copied ✓");
+				setTimeout(function(){ b.textContent=orig; },1400);
+			});
+		});
+	})();
+</script>
 </body>
 </html>
