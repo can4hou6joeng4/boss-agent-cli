@@ -1,6 +1,6 @@
 # Recommended AI Models and Providers
 
-The `boss ai` command group speaks an OpenAI-compatible protocol. This guide summarizes the recommended provider entry points and configuration examples for popular model families, so you can pick the latest or most practical option for your workflow. Updated on 2026-06-24.
+The `boss ai` command group speaks an OpenAI-compatible protocol. This guide summarizes the recommended provider entry points and configuration examples for popular model families, so you can pick the latest or most practical option for your workflow. Updated on 2026-04-20.
 
 ## Supported providers
 
@@ -67,9 +67,9 @@ boss ai config \
   --api-key <ZHIPU_KEY>
 ```
 
-### Atlas Cloud (OpenAI-compatible aggregator)
+### Atlas Cloud (one key across many model families)
 
-Atlas Cloud provides an OpenAI-compatible API. With `--provider atlas`, `boss ai` resolves the default base URL to `https://api.atlascloud.ai/v1`; supported model IDs are determined by the service:
+[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=boss-agent-cli) is a full-modal AI inference platform: a single OpenAI-compatible API gives you DeepSeek, Qwen, GLM, Kimi, MiniMax, Claude, GPT, and more — no per-vendor wiring:
 
 ```bash
 boss ai config \
@@ -79,6 +79,23 @@ boss ai config \
 ```
 
 > `deepseek-ai/deepseek-v4-pro` is a reasoning model with chain-of-thought — give it enough `max_tokens` (>= 512), otherwise tokens may be consumed by the reasoning trace and you get an empty `content` with `finish_reason=length`. The `--max-tokens` default in `boss ai config` is already 4096, so no extra tuning is needed.
+
+<details>
+<summary>Full Atlas Cloud LLM model list (59 models, matching the official <code>/zh/models/list/llm</code>)</summary>
+
+- Anthropic (Claude): `anthropic/claude-haiku-4.5-20251001`, `anthropic/claude-opus-4.8`, `anthropic/claude-sonnet-4.6`
+- OpenAI (GPT): `openai/gpt-5.4`, `openai/gpt-5.5`
+- Google (Gemini): `google/gemini-3.1-flash-lite`, `google/gemini-3.1-pro-preview`, `google/gemini-3.5-flash`
+- Alibaba Qwen: `qwen/qwen2.5-7b-instruct`, `Qwen/Qwen3-235B-A22B-Instruct-2507`, `qwen/qwen3-235b-a22b-thinking-2507`, `qwen/qwen3-30b-a3b`, `Qwen/Qwen3-30B-A3B-Instruct-2507`, `qwen/qwen3-30b-a3b-thinking-2507`, `qwen/qwen3-32b`, `qwen/qwen3-8b`, `Qwen/Qwen3-Coder`, `qwen/qwen3-coder-next`, `qwen/qwen3-max-2026-01-23`, `Qwen/Qwen3-Next-80B-A3B-Instruct`, `Qwen/Qwen3-Next-80B-A3B-Thinking`, `Qwen/Qwen3-VL-235B-A22B-Instruct`, `qwen/qwen3-vl-235b-a22b-thinking`, `qwen/qwen3-vl-30b-a3b-instruct`, `qwen/qwen3-vl-30b-a3b-thinking`, `qwen/qwen3-vl-8b-instruct`, `qwen/qwen3.5-122b-a10b`, `qwen/qwen3.5-27b`, `qwen/qwen3.5-35b-a3b`, `qwen/qwen3.5-397b-a17b`, `qwen/qwen3.6-35b-a3b`, `qwen/qwen3.6-plus`
+- DeepSeek: `deepseek-ai/deepseek-ocr`, `deepseek-ai/deepseek-r1-0528`, `deepseek-ai/DeepSeek-V3-0324`, `deepseek-ai/DeepSeek-V3.1`, `deepseek-ai/DeepSeek-V3.1-Terminus`, `deepseek-ai/deepseek-v3.2`, `deepseek-ai/DeepSeek-V3.2-Exp`, `deepseek-ai/deepseek-v4-flash`, `deepseek-ai/deepseek-v4-pro`
+- Moonshot (Kimi): `moonshotai/Kimi-K2-Instruct`, `moonshotai/Kimi-K2-Instruct-0905`, `moonshotai/Kimi-K2-Thinking`, `moonshotai/kimi-k2.5`, `moonshotai/kimi-k2.6`
+- Zhipu GLM: `zai-org/GLM-4.6`, `zai-org/glm-4.7`, `zai-org/glm-5`, `zai-org/glm-5-turbo`, `zai-org/glm-5.1`, `zai-org/glm-5v-turbo`
+- MiniMax: `MiniMaxAI/MiniMax-M2`, `minimaxai/minimax-m2.1`, `minimaxai/minimax-m2.5`, `minimaxai/minimax-m2.7`
+- xAI: `xai/grok-4.3`
+- Kuaishou KAT: `kwaipilot/kat-coder-pro-v2`
+- Other: `owl`
+
+</details>
 
 ### Self-hosted proxy via LiteLLM / OneAPI
 
