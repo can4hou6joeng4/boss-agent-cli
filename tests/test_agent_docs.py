@@ -103,6 +103,9 @@ def test_readme_documents_registered_qiancheng_placeholder():
 	matrix_en = _read("docs/capability-matrix.en.md")
 
 	assert "--platform zhipin|zhilian|qiancheng" in readme
+	assert "候选者侧只读 + 本地辅助对等" in readme
+	assert "read-only + local-assist parity" in readme_en
+	assert "read/write wired" not in readme_en
 	assert "前程无忧 / 51job (`qiancheng`)" in readme
 	assert "QianchengPlatform (51job 占位适配器，统一返回 NOT_SUPPORTED)" in readme
 

@@ -28,6 +28,19 @@ def test_response_code_constants():
 	assert CODE_ACCOUNT_RISK == 36
 
 
+def test_zhilian_spec_loads_from_yaml_and_is_cached():
+	"""智联端点必须从 zhilian.yaml 加载并缓存。"""
+	from boss_agent_cli.api.endpoints_loader import get_zhilian_spec
+
+	spec = get_zhilian_spec()
+	assert spec is get_zhilian_spec()
+	assert spec.base_url == "https://www.zhaopin.com"
+	assert spec.response_codes["success"] == 200
+	assert spec.endpoints["search"].url == "https://fe-api.zhaopin.com/api/c/salesman-search/v2"
+	assert spec.endpoints["detail"].url.endswith("/api/c/jobs/{job_id}/info")
+	assert spec.endpoints["user_info"].referer == "https://i.zhaopin.com/"
+
+
 def test_job_item_from_api():
 	raw = {
 		"encryptJobId": "abc123",

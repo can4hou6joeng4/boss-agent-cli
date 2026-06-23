@@ -50,6 +50,9 @@ class FakeClient:
 	def parse_error(self, response: dict) -> tuple[str, str]:
 		return response.get("error_code", "UNKNOWN"), response.get("message", "")
 
+	def unwrap_data(self, response: dict):
+		return response.get("zpData") if "zpData" in response else response.get("data")
+
 	def job_card(self, security_id: str, lid: str = ""):
 		self.detail_calls.append((security_id, lid))
 		value = self.descriptions[security_id]
@@ -106,6 +109,25 @@ def test_pipeline_uses_detail_fallback_and_marks_greeted():
 	assert len(result.items) == 1
 	assert result.items[0]["security_id"] == "sec-1"
 	assert result.items[0]["greeted"] is True
+	assert "双休(描述)" in result.items[0]["welfare_match"]
+
+
+def test_pipeline_supports_zhilian_data_envelope_for_welfare_detail():
+	client = FakeClient(
+		pages=[{"code": 200, "data": {"hasMore": False, "jobList": [_make_job_raw(security_id="sec-1", job_id="job-1")]}}],
+		descriptions={"sec-1": {"code": 200, "data": {"jobCard": {"postDescription": "岗位描述写明周末双休"}}}},
+	)
+
+	result = run_search_pipeline(
+		client,
+		FakeCache(),
+		FakeLogger(),
+		criteria=SearchFilterCriteria(query="python"),
+		welfare_conditions=_welfare_conditions(),
+	)
+
+	assert len(result.items) == 1
+	assert result.items[0]["security_id"] == "sec-1"
 	assert "双休(描述)" in result.items[0]["welfare_match"]
 
 

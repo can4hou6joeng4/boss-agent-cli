@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from boss_agent_cli.api.endpoints_loader import get_zhilian_spec
 from boss_agent_cli.api.httpx_helpers import browser_headers, merge_response_cookies, referer_header
 from boss_agent_cli.api.throttle import RequestThrottle
 
@@ -35,25 +36,22 @@ if TYPE_CHECKING:
 
 _MAX_RETRIES = 3
 
-SEARCH_URL = "https://fe-api.zhaopin.com/api/c/salesman-search/v2"
-DETAIL_URL_TEMPLATE = "https://fe-api.zhaopin.com/api/c/jobs/{job_id}/info"
-RECOMMEND_URL = "https://fe-api.zhaopin.com/api/c/recom-position"
-USER_INFO_URL = "https://i.zhaopin.com/api/c/account/profile"
-CSRF_BOOTSTRAP_URL = "https://www.zhaopin.com/"
-GREET_URL = "https://fe-api.zhaopin.com/c/i/liaoliao/startConversation"
-APPLY_URL = "https://fe-api.zhaopin.com/c/i/sou/deliverPosition"
-
-_DEFAULT_HEADERS: dict[str, str] = {
-	"Accept": "application/json, text/plain, */*",
-	"X-Requested-With": "XMLHttpRequest",
-	"Referer": "https://www.zhaopin.com/",
-}
-
-_REFERER_MAP: dict[str, str] = {
-	SEARCH_URL: "https://sou.zhaopin.com/",
-	RECOMMEND_URL: "https://www.zhaopin.com/",
-	USER_INFO_URL: "https://i.zhaopin.com/",
-}
+_SPEC = get_zhilian_spec()
+SEARCH_URL = _SPEC.endpoints["search"].url
+DETAIL_URL_TEMPLATE = _SPEC.endpoints["detail"].url
+RECOMMEND_URL = _SPEC.endpoints["recommend"].url
+USER_INFO_URL = _SPEC.endpoints["user_info"].url
+CSRF_BOOTSTRAP_URL = _SPEC.endpoints["csrf_bootstrap"].url
+GREET_URL = _SPEC.endpoints["greet"].url
+APPLY_URL = _SPEC.endpoints["apply"].url
+JOB_CARD_URL_TEMPLATE = _SPEC.endpoints["job_card"].url
+JOB_HISTORY_URL = _SPEC.endpoints["job_history"].url
+DELIVER_LIST_URL = _SPEC.endpoints["deliver_list"].url
+RESUME_BASEINFO_URL = _SPEC.endpoints["resume_baseinfo"].url
+RESUME_EXPECT_URL = _SPEC.endpoints["resume_expect"].url
+INTERVIEW_DATA_URL = _SPEC.endpoints["interview_data"].url
+_DEFAULT_HEADERS: dict[str, str] = dict(_SPEC.default_headers)
+_REFERER_MAP: dict[str, str] = {ep.url: ep.referer for ep in _SPEC.endpoints.values()}
 
 
 # atexit safeguard：类比 BossClient 的管理方式
@@ -127,7 +125,7 @@ class ZhilianClient:
 		return self._client
 
 	def _headers_for(self, url: str) -> dict[str, str]:
-		return referer_header(url, _REFERER_MAP, "https://www.zhaopin.com/")
+		return referer_header(url, _REFERER_MAP, f"{_SPEC.base_url}/")
 
 	def _fetch_csrf_token(self) -> str:
 		for attempt in range(_MAX_RETRIES + 1):
@@ -292,10 +290,23 @@ class ZhilianClient:
 	def user_info(self) -> dict[str, Any]:
 		return self._request("GET", USER_INFO_URL)
 
-	def interview_data(self) -> dict[str, Any]:
-		"""智联面试邀请列表占位实现。
+	def job_card(self, security_id: str, lid: str = "") -> dict[str, Any]:
+		params: dict[str, Any] = {}
+		if lid:
+			params["lid"] = lid
+		return self._request("GET", JOB_CARD_URL_TEMPLATE.format(security_id=security_id), params=params)
 
-		正式端点尚在协议侧调研中，先返回空集合保持包络结构合规，
-		使 boss --platform zhilian interviews 不再抛 NotImplementedError。
-		"""
-		return {"code": 200, "data": {"items": [], "total": 0}, "_stub": True}
+	def job_history(self, page: int = 1) -> dict[str, Any]:
+		return self._request("GET", JOB_HISTORY_URL, params={"pageNum": page})
+
+	def deliver_list(self, page: int = 1) -> dict[str, Any]:
+		return self._request("GET", DELIVER_LIST_URL, params={"pageNum": page})
+
+	def resume_baseinfo(self) -> dict[str, Any]:
+		return self._request("GET", RESUME_BASEINFO_URL)
+
+	def resume_expect(self) -> dict[str, Any]:
+		return self._request("GET", RESUME_EXPECT_URL)
+
+	def interview_data(self) -> dict[str, Any]:
+		return self._request("GET", INTERVIEW_DATA_URL)

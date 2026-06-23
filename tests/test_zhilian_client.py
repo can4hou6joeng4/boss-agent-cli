@@ -8,8 +8,14 @@ from boss_agent_cli.api.zhilian_client import (
 	APPLY_URL,
 	CSRF_BOOTSTRAP_URL,
 	DETAIL_URL_TEMPLATE,
+	DELIVER_LIST_URL,
 	GREET_URL,
+	INTERVIEW_DATA_URL,
+	JOB_CARD_URL_TEMPLATE,
+	JOB_HISTORY_URL,
 	RECOMMEND_URL,
+	RESUME_BASEINFO_URL,
+	RESUME_EXPECT_URL,
 	SEARCH_URL,
 	USER_INFO_URL,
 	ZhilianClient,
@@ -190,6 +196,39 @@ class TestZhilianClientReadonlyMethods:
 		self.client.user_info()
 		call = self.client._request.call_args
 		assert call.args == ("GET", USER_INFO_URL)
+
+	def test_job_card_uses_security_id_path_and_lid_param(self) -> None:
+		self.client.job_card("sec-1", lid="list-1")
+		call = self.client._request.call_args
+		assert call.args == ("GET", JOB_CARD_URL_TEMPLATE.format(security_id="sec-1"))
+		assert call.kwargs["params"] == {"lid": "list-1"}
+
+	def test_job_history_uses_page_num(self) -> None:
+		self.client.job_history(page=4)
+		call = self.client._request.call_args
+		assert call.args == ("GET", JOB_HISTORY_URL)
+		assert call.kwargs["params"] == {"pageNum": 4}
+
+	def test_deliver_list_uses_page_num(self) -> None:
+		self.client.deliver_list(page=5)
+		call = self.client._request.call_args
+		assert call.args == ("GET", DELIVER_LIST_URL)
+		assert call.kwargs["params"] == {"pageNum": 5}
+
+	def test_resume_baseinfo_no_params(self) -> None:
+		self.client.resume_baseinfo()
+		call = self.client._request.call_args
+		assert call.args == ("GET", RESUME_BASEINFO_URL)
+
+	def test_resume_expect_no_params(self) -> None:
+		self.client.resume_expect()
+		call = self.client._request.call_args
+		assert call.args == ("GET", RESUME_EXPECT_URL)
+
+	def test_interview_data_no_stub_and_no_params(self) -> None:
+		self.client.interview_data()
+		call = self.client._request.call_args
+		assert call.args == ("GET", INTERVIEW_DATA_URL)
 
 	def test_greet_posts_with_csrf_header(self) -> None:
 		self.client.get_csrf_token = MagicMock(return_value="csrf-123")

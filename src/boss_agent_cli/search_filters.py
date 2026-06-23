@@ -375,6 +375,20 @@ def compute_match_score(item: dict[str, Any], welfare_results: list[str], criter
 	return min(score, 100)
 
 
+def _unwrap_platform_data(client: Any, response: dict[str, Any]) -> dict[str, Any]:
+	"""Read a platform envelope while tolerating legacy test doubles."""
+	unwrap = getattr(client, "unwrap_data", None)
+	if callable(unwrap):
+		data = unwrap(response)
+		if isinstance(data, dict):
+			return data
+	for key in ("zpData", "data"):
+		data = response.get(key)
+		if isinstance(data, dict):
+			return data
+	return {}
+
+
 def _fetch_and_check(
 	client: Any,
 	welfare_conditions: list[tuple[str, list[str]]],
@@ -400,7 +414,8 @@ def _fetch_and_check(
 			if not client.is_success(card_raw):
 				code, message = client.parse_error(card_raw)
 				raise SearchPipelinePlatformError(code, message or "职位详情获取失败")
-			desc = card_raw.get("zpData", {}).get("jobCard", {}).get("postDescription", "")
+			card_data = _unwrap_platform_data(client, card_raw)
+			desc = card_data.get("jobCard", {}).get("postDescription", "")
 			fresh_desc = desc  # 仅新取到的描述需写回缓存（主线程处理）
 		except NotImplementedError:
 			raise SearchPipelinePlatformError(
@@ -524,8 +539,8 @@ def run_search_pipeline(
 				if isinstance(error, dict) and isinstance(error.get("details"), dict):
 					details = error["details"]
 			raise SearchPipelinePlatformError(code, message or "搜索结果获取失败", details=details)
-		zp_data = raw.get("zpData", {})
-		job_list = zp_data.get("jobList", [])
+		platform_data = _unwrap_platform_data(client, raw)
+		job_list = platform_data.get("jobList", [])
 		last_page_scanned = current_page
 		stats.pages_scanned += 1
 		stats.jobs_seen += len(job_list)
@@ -584,7 +599,7 @@ def run_search_pipeline(
 				matched.append(d)
 				stats.jobs_matched += 1
 
-		has_more = zp_data.get("hasMore", False)
+		has_more = platform_data.get("hasMore", False)
 		if not has_more:
 			break
 		if limit and len(matched) >= limit:

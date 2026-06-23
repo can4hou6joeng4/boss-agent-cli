@@ -1,0 +1,81 @@
+base_url: "https://www.zhaopin.com"
+
+web_pages:
+  home: "/"
+  search: "https://sou.zhaopin.com/"
+  profile: "https://i.zhaopin.com/"
+  resume: "https://i.zhaopin.com/"
+  interviews: "https://i.zhaopin.com/"
+
+default_headers:
+  User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+  sec-ch-ua: '"Chromium";v="145", "Not(A:Brand";v="99", "Google Chrome";v="145"'
+  sec-ch-ua-mobile: "?0"
+  sec-ch-ua-platform: '"macOS"'
+  Sec-Fetch-Dest: "empty"
+  Sec-Fetch-Mode: "cors"
+  Sec-Fetch-Site: "same-site"
+  Accept: "application/json, text/plain, */*"
+  Accept-Language: "zh-CN,zh;q=0.9,en;q=0.8"
+  X-Requested-With: "XMLHttpRequest"
+  DNT: "1"
+
+response_codes:
+  success: 200
+  auth_expired: 401
+  account_risk: 403
+  rate_limited: 429
+
+endpoints:
+  csrf_bootstrap:
+    method: GET
+    path: "/"
+    referer: "/"
+  search:
+    method: GET
+    url: "https://fe-api.zhaopin.com/api/c/salesman-search/v2"
+    referer: "https://sou.zhaopin.com/"
+  detail:
+    method: GET
+    url: "https://fe-api.zhaopin.com/api/c/jobs/{job_id}/info"
+    referer: "https://sou.zhaopin.com/"
+  recommend:
+    method: GET
+    url: "https://fe-api.zhaopin.com/api/c/recom-position"
+    referer: "/"
+  job_card:
+    method: GET
+    url: "https://fe-api.zhaopin.com/api/c/jobs/{security_id}/card"
+    referer: "https://sou.zhaopin.com/"
+  user_info:
+    method: GET
+    url: "https://i.zhaopin.com/api/c/account/profile"
+    referer: "https://i.zhaopin.com/"
+  resume_baseinfo:
+    method: GET
+    url: "https://i.zhaopin.com/api/cv/main-cv"
+    referer: "https://i.zhaopin.com/"
+  resume_expect:
+    method: GET
+    url: "https://i.zhaopin.com/api/cv/expect"
+    referer: "https://i.zhaopin.com/"
+  deliver_list:
+    method: GET
+    url: "https://fe-api.zhaopin.com/c/i/sou/deliver/list"
+    referer: "https://i.zhaopin.com/"
+  interview_data:
+    method: GET
+    url: "https://i.zhaopin.com/api/interview/list"
+    referer: "https://i.zhaopin.com/"
+  job_history:
+    method: GET
+    url: "https://fe-api.zhaopin.com/api/c/job/history"
+    referer: "https://i.zhaopin.com/"
+  greet:
+    method: POST
+    url: "https://fe-api.zhaopin.com/c/i/liaoliao/startConversation"
+    referer: "https://sou.zhaopin.com/"
+  apply:
+    method: POST
+    url: "https://fe-api.zhaopin.com/c/i/sou/deliverPosition"
+    referer: "https://sou.zhaopin.com/"
