@@ -198,5 +198,7 @@ def test_provider_base_urls_completeness():
 	assert "qwen" in PROVIDER_BASE_URLS
 	assert "zhipu" in PROVIDER_BASE_URLS
 	assert "siliconflow" in PROVIDER_BASE_URLS
+	assert "atlas" in PROVIDER_BASE_URLS
+	assert PROVIDER_BASE_URLS["atlas"] == "https://api.atlascloud.ai/v1"
 	assert "custom" in PROVIDER_BASE_URLS
 	assert PROVIDER_BASE_URLS["custom"] is None

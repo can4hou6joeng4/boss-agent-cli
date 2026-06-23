@@ -24,6 +24,7 @@ PROVIDER_BASE_URLS: dict[str, str | None] = {
 	"qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
 	"zhipu": "https://open.bigmodel.cn/api/paas/v4",
 	"siliconflow": "https://api.siliconflow.cn/v1",
+	"atlas": "https://api.atlascloud.ai/v1",
 	"custom": None,
 }
 
