@@ -357,7 +357,7 @@ def test_docs_workflow_runs_open_source_doc_checks():
 	docs_job = jobs["docs"]
 	assert docs_job["runs-on"] == "ubuntu-latest"
 	checkout_step = docs_job["steps"][0]
-	assert checkout_step["uses"] == "actions/checkout@v6"
+	assert checkout_step["uses"] == "actions/checkout@v7"
 	assert checkout_step["with"]["fetch-depth"] == 0
 	run_commands = [
 		step["run"]
