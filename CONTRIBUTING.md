@@ -50,6 +50,14 @@ uv run pytest tests/test_agent_docs.py tests/test_open_source_docs.py -q
 git diff --check
 ```
 
+## 采用度量与遥测原则
+
+项目采用度只参考两个被动来源：PyPI 下载量和 GitHub Insights（star / clone / traffic）。
+
+不要引入任何形式的运行时遥测、使用埋点、匿名统计回传或远程日志，即使它们是可选或匿名的。除用户显式发起的 API 调用外，数据不应离开本机；遥测会破坏这条承诺。
+
+在决定是否投入推广、示例或集成工作前，先查看上述被动信号，而不是靠遥测收集使用情况。
+
 ## 提交流程
 
 1. **Fork** 本仓库并 clone 到本地。

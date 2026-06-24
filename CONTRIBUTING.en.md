@@ -50,6 +50,14 @@ uv run pytest tests/test_agent_docs.py tests/test_open_source_docs.py -q
 git diff --check
 ```
 
+## Adoption Metrics & Telemetry
+
+Project adoption is measured only through two passive sources: PyPI downloads and GitHub Insights (stars / clones / traffic).
+
+Do not add any runtime telemetry, usage instrumentation, anonymous analytics callbacks, or remote logs, even when optional or anonymized. Except for explicit API calls initiated by the user, data should not leave the local machine; telemetry would break that commitment.
+
+Before investing in promotion, examples, or integrations, check those passive signals instead of collecting usage data through telemetry.
+
 ## Pull Request Workflow
 
 1. **Fork** the repo and clone your fork.
