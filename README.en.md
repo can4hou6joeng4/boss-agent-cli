@@ -72,7 +72,7 @@ Every command outputs structured JSON (`ok` for success, `exit 0/1`). Full walk-
 | Platform | Candidate | Recruiter | Status |
 |----------|:--:|:--:|--------|
 | BOSS Zhipin (`zhipin`) | ✅ | ✅ | default |
-| Zhaopin (`zhilian`) | 🟡 candidate-side read-only + local-assist parity | — | write/social workflows are blocked by default; recruiter side is intentionally rejected at runtime |
+| Zhaopin (`zhilian`) | ✅ candidate-side read-only + local-assist parity | — | recruiter side intentionally rejected at runtime |
 | 51job (`qiancheng`) | 🚧 registered placeholder | — | returns `NOT_SUPPORTED` until the read-only research gate is satisfied |
 
 ```bash
