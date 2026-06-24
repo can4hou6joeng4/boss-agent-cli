@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "recorded_at": "2026-06-24",
+  "purpose": "Necessary-condition sample for the T5 eval harness, kept redacted and low-volume.",
+  "mode": "manual-redacted",
+  "request_budget": {
+    "ordinary_search": 1,
+    "local_or_intercepted_checks": 1,
+    "high_volume_welfare_detail_expansion": 0
+  },
+  "checks": [
+    {
+      "name": "ordinary-search-envelope",
+      "surface": "boss search",
+      "command": "uv run boss search \"golang\" --city 广州 --page 1 --no-cache",
+      "request_count": 1,
+      "status": "pass",
+      "recorded_fields": ["ok", "schema_version", "command", "error.code", "error.recovery_action"],
+      "summary": {
+        "ok": true,
+        "schema_version": "1.0",
+        "command": "search",
+        "result_count": 15,
+        "pagination": {
+          "page": 1,
+          "has_more": true,
+          "total": 15
+        },
+        "error_code": null,
+        "recovery_action": null,
+        "has_security_ids": true
+      },
+      "redaction": "No raw job payload, account identifiers, cookies, tokens, or security_id values are stored."
+    },
+    {
+      "name": "local-mcp-compliance-boundary",
+      "surface": "boss-agent-cli MCP tool list / compliance fixture",
+      "command": "uv run pytest tests/test_mcp_server.py::test_sensitive_tools_not_exposed_by_default -q",
+      "request_count": 0,
+      "status": "pass",
+      "recorded_fields": ["COMPLIANCE_BLOCKED", "tool-not-exposed", "official-platform-handoff"],
+      "redaction": "Local or intercepted evidence only; no live sensitive action attempted."
+    }
+  ],
+  "notes": [
+    "The durable harness default remains fixture-first.",
+    "Live reruns must stay in an independent terminal and avoid ACCOUNT_RISK windows.",
+    "Harness failures must not fallback to CDP, patchright, browser scraping, or any risk-control bypass channel."
+  ]
+}
