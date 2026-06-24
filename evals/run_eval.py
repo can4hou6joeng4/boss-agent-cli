@@ -6,7 +6,7 @@ import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -170,7 +170,7 @@ def _summarize(results: list[dict[str, Any]], *, mode: str) -> dict[str, Any]:
 
 def _write_report(report: dict[str, Any], *, results_dir: Path, mode: str) -> dict[str, Any]:
 	results_dir.mkdir(parents=True, exist_ok=True)
-	stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+	stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 	path = results_dir / f"{stamp}-{mode}.json"
 	report = dict(report)
 	report["result_path"] = str(path)
@@ -400,7 +400,7 @@ def _required_list(item: dict[str, Any], key: str) -> list[Any]:
 
 
 def _utc_now() -> str:
-	return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+	return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 if __name__ == "__main__":
