@@ -208,7 +208,7 @@ wheels = [
 
 [[package]]
 name = "boss-agent-cli"
-version = "1.13.1"
+version = "1.14.0"
 source = { editable = "." }
 dependencies = [
     { name = "browser-cookie3" },

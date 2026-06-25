@@ -53,8 +53,8 @@
 - [x] README 双语（中文 + 英文）
 - [x] MIT License
 - [x] CI 全绿（pytest / ruff / mypy / CodeQL）
-- [x] 发布到 PyPI（`pip install boss-agent-cli`，当前 latest release v1.13.1）
-- [x] GitHub Release 规范（latest release v1.13.1 已发）
+- [x] 发布到 PyPI（`pip install boss-agent-cli`，当前 latest release v1.14.0）
+- [x] GitHub Release 规范（latest release v1.14.0 已发）
 - [x] CHANGELOG 完整
 - [x] Code of Conduct + Security Policy
 - [x] Issue / PR 模板

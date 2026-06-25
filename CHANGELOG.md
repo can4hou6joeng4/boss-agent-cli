@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-06-25
+
 ### Added
 - `boss shortlist` 新增本地标签、备注与离线对比能力：`shortlist add --tags/--note` 可在加入候选池时记录本地整理信息，`shortlist annotate` 支持增删标签和更新备注，`shortlist compare [--tag]` 仅从 SQLite 候选池读取并按标签本地过滤；MCP 同步新增 `boss_shortlist_annotate` / `boss_shortlist_compare`，默认低风险工具数 33 → 35。
 - 新增 `boss ai fit --resume <name> [--limit N]`：基于本地简历与候选池已缓存职位详情生成逐岗匹配度、能力缺口、关键词命中和建议；缺少详情的岗位只报告本地缺口并提示先执行 `boss detail`，不发起任何新增平台请求。
