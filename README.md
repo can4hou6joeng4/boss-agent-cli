@@ -94,7 +94,7 @@ boss config set platform zhilian          # 设为默认
 推荐先读：[Agent Quickstart](docs/agent-quickstart.md) · [Capability Matrix](docs/capability-matrix.md) · [Host Examples](docs/agent-hosts.md)
 
 ```json
-// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 35 个默认低风险只读工具
+// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 37 个默认低风险只读工具
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
@@ -117,7 +117,7 @@ with BossClient(AuthManager(...)) as client:
 - **认证**：`login` · `logout` · `status` · `doctor`
 - **职位发现**：`search` · `detail` · `show` · `cities` · `history`
 - **本地整理**：`watch` · `preset` · `shortlist` · `stats`
-- **简历 / AI**：`resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai interview-prep` · `ai chat-coach`
+- **简历 / AI**：`resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai interview-prep` · `ai chat-coach`
 - **系统**：`schema` · `platforms` · `export` · `config` · `clean`
 - **招聘者**：`hr jobs list/online/offline`
 - **受限动作（默认低风险模式阻断）**：`greet` · `batch-greet` · `apply` · `exchange` · `chat*` · `pipeline` · `digest`

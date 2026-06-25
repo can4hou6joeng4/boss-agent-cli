@@ -7,6 +7,8 @@
 ### Added
 - `boss shortlist` 新增本地标签、备注与离线对比能力：`shortlist add --tags/--note` 可在加入候选池时记录本地整理信息，`shortlist annotate` 支持增删标签和更新备注，`shortlist compare [--tag]` 仅从 SQLite 候选池读取并按标签本地过滤；MCP 同步新增 `boss_shortlist_annotate` / `boss_shortlist_compare`，默认低风险工具数 33 → 35。
 - 新增 `boss ai fit --resume <name> [--limit N]`：基于本地简历与候选池已缓存职位详情生成逐岗匹配度、能力缺口、关键词命中和建议；缺少详情的岗位只报告本地缺口并提示先执行 `boss detail`，不发起任何新增平台请求。
+- 新增 `boss ai suggest-keywords [--limit N]`：基于候选池职位分析推荐搜索关键词组合，零平台请求，纯本地 AI 辅助；MCP 同步新增 `boss_ai_suggest_keywords`。
+- 新增 `boss ai resume-optimize <name> --jd <text>|--job-id <id>`：基于目标岗位优化简历措辞（仅建议，不修改简历），支持从缓存读取职位描述，零平台请求；MCP 同步新增 `boss_ai_resume_optimize`，默认低风险工具数 35 → 37。
 
 ### Changed
 - 转向 MCP-first：README / landing / docs 将 MCP（`uvx --from boss-agent-cli[mcp] boss-mcp`，33 个默认低风险 MCP 工具）列为 Agent 首选接入，移除 `npx skills add` 引导；MCP server 新增 server-level `instructions` 承载低风险与错误恢复 doctrine；独立 Agent Skill 仓库 boss-skill 退役。CLI 命令、JSON 信封与错误码不变，仍以 `boss schema` 为真源。

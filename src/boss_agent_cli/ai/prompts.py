@@ -228,3 +228,61 @@ CHAT_COACH_PROMPT = """你是一位专注招聘场景的沟通教练。请基于
 诊断要紧贴聊天记录里出现的具体句子。message_templates 提供 2-3 条不同场景的现成文案，照顾到用户指定的沟通风格。
 
 只返回 JSON，不要包含其他内容。"""
+
+
+SUGGEST_KEYWORDS_PROMPT = """你是一位资深的求职顾问，擅长从候选池职位中提炼搜索关键词模式。
+
+## 候选池职位列表
+{shortlist_data}
+
+## 输出要求
+请分析职位的共性模式（技能栈、岗位方向、地域、薪资、公司特点），生成 5-10 组推荐搜索关键词。
+以 JSON 格式返回：
+```json
+{{
+  "keyword_groups": [
+    {{
+      "keywords": "Golang 后端",
+      "reason": "候选池有 3 个 Go 后端职位，匹配度高",
+      "priority": "high"
+    }}
+  ],
+  "patterns": ["共性模式1", "模式2"],
+  "search_suggestions": ["建议搜索 XXX 扩展候选池", "建议2"]
+}}
+```
+
+priority 取值: "high", "medium", "low"
+
+只返回 JSON，不要包含其他内容。"""
+
+
+RESUME_OPTIMIZE_SIMPLE_PROMPT = """你是一位简历优化顾问。请基于目标职位描述优化候选人简历的关键措辞。
+
+## 目标职位描述
+{jd_text}
+
+## 当前简历
+{resume_text}
+
+## 输出要求
+请以 JSON 格式返回具体优化建议：
+```json
+{{
+  "match_score": 75,
+  "key_suggestions": [
+    {{
+      "section": "模块名称",
+      "original_snippet": "原始片段",
+      "optimized_snippet": "优化后片段",
+      "reason": "优化理由"
+    }}
+  ],
+  "keywords_to_add": ["关键词1", "关键词2"],
+  "sections_to_emphasize": ["应突出的模块1"],
+  "sections_to_reduce": ["可弱化的模块1"],
+  "warnings": ["注意事项1"]
+}}
+```
+
+只返回 JSON，不要包含其他内容。"""

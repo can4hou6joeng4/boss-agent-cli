@@ -16,8 +16,10 @@ from boss_agent_cli.ai.prompts import (
 	INTERVIEW_PREP_PROMPT,
 	JD_ANALYSIS_PROMPT,
 	RESUME_OPTIMIZE_FOR_JD_PROMPT,
+	RESUME_OPTIMIZE_SIMPLE_PROMPT,
 	RESUME_POLISH_PROMPT,
 	RESUME_SUGGEST_PROMPT,
+	SUGGEST_KEYWORDS_PROMPT,
 )
 from boss_agent_cli.ai.service import AIService, AIServiceError
 from boss_agent_cli.cache.store import CacheStore
@@ -566,3 +568,113 @@ def ai_chat_coach_cmd(ctx: click.Context, chat_text: str, resume_name: str | Non
 			"message_templates 可直接复制发送",
 		]},
 	)
+
+
+@ai_group.command("suggest-keywords")
+@click.option("--limit", default=20, type=click.IntRange(min=1), help="候选池职位数上限")
+@click.pass_context
+def ai_suggest_keywords_cmd(ctx: click.Context, limit: int) -> None:
+	"""基于候选池分析推荐搜索关键词组合"""
+	svc = _require_ai_service(ctx)
+	if svc is None:
+		return
+
+	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
+		shortlist = cache.list_shortlist()[:limit]
+
+	if not shortlist:
+		handle_output(
+			ctx,
+			"ai-suggest-keywords",
+			{"keyword_groups": [], "patterns": [], "search_suggestions": []},
+			hints={"next_actions": ["boss shortlist add <security_id> <job_id>"]},
+		)
+		return
+
+	shortlist_data = json.dumps([
+		{
+			"title": item.get("title", ""),
+			"company": item.get("company", ""),
+			"city": item.get("city", ""),
+			"salary": item.get("salary", ""),
+			"tags": item.get("tags", ""),
+		}
+		for item in shortlist
+	], ensure_ascii=False)
+
+	prompt = SUGGEST_KEYWORDS_PROMPT.format(shortlist_data=shortlist_data)
+	result = _call_ai(ctx, svc, prompt)
+	if result is None:
+		return
+
+	result.setdefault("keyword_groups", [])
+	result.setdefault("patterns", [])
+	result.setdefault("search_suggestions", [])
+	handle_output(
+		ctx,
+		"ai-suggest-keywords",
+		result,
+		hints={"next_actions": [
+			"boss search <推荐关键词>",
+			"boss preset add <name> --query <关键词>",
+		]},
+	)
+
+
+@ai_group.command("resume-optimize")
+@click.argument("resume_name")
+@click.option("--jd", "jd_text", default=None, help="目标职位描述文本或 @文件路径")
+@click.option("--job-id", default=None, help="从缓存读取职位描述的 job_id")
+@click.pass_context
+def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | None, job_id: str | None) -> None:
+	"""基于目标岗位优化简历措辞（仅建议，不修改简历）"""
+	svc = _require_ai_service(ctx)
+	if svc is None:
+		return
+
+	if not jd_text and not job_id:
+		handle_error_output(ctx, "ai", code="INVALID_PARAM", message="需要指定 --jd 或 --job-id")
+		ctx.exit(1)
+		return
+
+	# 从缓存加载 JD
+	if job_id:
+		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
+			jd_text = cache.get_job_desc(job_id)
+		if not jd_text:
+			handle_error_output(
+				ctx, "ai",
+				code="CACHE_MISS",
+				message=f"job_id '{job_id}' 的职位描述未缓存",
+				recoverable=True,
+				recovery_action=f"boss detail <security_id> --job-id {job_id}",
+			)
+			ctx.exit(1)
+			return
+
+	# 支持 @file 语法
+	if jd_text and jd_text.startswith("@"):
+		file_path = Path(jd_text[1:])
+		if not file_path.exists():
+			handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
+			ctx.exit(1)
+			return
+		jd_text = file_path.read_text(encoding="utf-8")
+
+	resume_text = _load_resume_text(ctx, resume_name)
+	if resume_text is None:
+		return
+
+	prompt = RESUME_OPTIMIZE_SIMPLE_PROMPT.format(jd_text=jd_text, resume_text=resume_text)
+	result = _call_ai(ctx, svc, prompt)
+	if result is None:
+		return
+
+	handle_output(
+		ctx, "ai-resume-optimize", result,
+		hints={"next_actions": [
+			f"boss resume edit {resume_name}",
+			f"boss ai optimize {resume_name} --jd <jd_text>",
+		]},
+	)
+

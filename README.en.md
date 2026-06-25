@@ -40,7 +40,7 @@ Low-Risk Assistance Mode is on by default: local assistance · read-only first �
 - **Welfare filtering (the differentiator)**: `--welfare "双休,五险一金"` pages, fetches details, runs **real AND matching**, and can `--sort score` by local match score — `search --welfare`
 - **Local shortlist & stats**: inspect details, organize candidates with local tags and notes, compare jobs offline, and see funnel stats; apply and messaging stay on the official website — `shortlist` `stats` `watch` `preset`
 - **AI job-hunting assist**: JD analysis, resume polish, role-targeted optimization, shortlist fit reports, interview prep, chat coaching — `ai analyze-jd` `ai polish` `ai optimize` `ai fit` `ai interview-prep` `ai chat-coach`
-- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, data, pagination, error, hints}` envelope, `boss schema` is the capability source of truth, and an **MCP server with 35 tools** exposes the low-risk surface
+- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, data, pagination, error, hints}` envelope, `boss schema` is the capability source of truth, and an **MCP server with 37 tools** exposes the low-risk surface
 - **Recruiter loop**: list and bring postings online / offline (`hr jobs list/online/offline`); candidate personal-data workflows are blocked by default
 - **Cross-platform layer**: live `Platform` / `RecruiterPlatform` registries, `--platform zhipin|zhilian|qiancheng`
 
@@ -110,7 +110,7 @@ with BossClient(AuthManager(...)) as client:
 - **Auth**: `login` · `logout` · `status` · `doctor`
 - **Discover**: `search` · `detail` · `show` · `cities` · `history`
 - **Organize**: `watch` · `preset` · `shortlist` · `stats`
-- **Resume / AI**: `resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai interview-prep` · `ai chat-coach`
+- **Resume / AI**: `resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai interview-prep` · `ai chat-coach`
 - **Utility**: `schema` · `platforms` · `export` · `config` · `clean`
 - **Recruiter**: `hr jobs list/online/offline`
 - **Restricted (blocked by default in low-risk mode)**: `greet` · `batch-greet` · `apply` · `exchange` · `chat*` · `pipeline` · `digest`

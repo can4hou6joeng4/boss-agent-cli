@@ -515,6 +515,30 @@ TOOLS = [
 		},
 	),
 	Tool(
+		name="boss_ai_suggest_keywords",
+		description="基于候选池职位分析推荐搜索关键词组合",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"limit": {"type": "integer", "description": "候选池职位数上限", "default": 20},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_ai_resume_optimize",
+		description="基于目标岗位优化简历措辞（仅建议，不修改简历）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"resume": {"type": "string", "description": "简历名称"},
+				"jd_text": {"type": "string", "description": "目标职位描述文本"},
+				"job_id": {"type": "string", "description": "从缓存读取职位描述的 job_id（与 jd_text 二选一）"},
+			},
+			"required": ["resume"],
+		},
+	),
+	Tool(
 		name="boss_watch_list",
 		description="列出所有已保存的监控条件",
 		inputSchema={"type": "object", "properties": {}, "required": []},
@@ -1017,6 +1041,20 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 		args = ["ai", "fit", "--resume", arguments["resume"]]
 		if "limit" in arguments:
 			args.extend(["--limit", str(arguments["limit"])])
+		return args
+
+	if name == "ai_suggest_keywords":
+		args = ["ai", "suggest-keywords"]
+		if "limit" in arguments:
+			args.extend(["--limit", str(arguments["limit"])])
+		return args
+
+	if name == "ai_resume_optimize":
+		args = ["ai", "resume-optimize", arguments["resume"]]
+		if arguments.get("jd_text"):
+			args.extend(["--jd", arguments["jd_text"]])
+		if arguments.get("job_id"):
+			args.extend(["--job-id", arguments["job_id"]])
 		return args
 
 	if name == "watch_list":
