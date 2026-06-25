@@ -678,4 +678,3 @@ def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | 
 			f"boss ai optimize {resume_name} --jd <jd_text>",
 		]},
 	)
-
