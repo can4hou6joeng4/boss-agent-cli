@@ -219,6 +219,6 @@ These are breaking-change red lines for the platform abstraction:
 ## References
 
 - [Issue #129 - Week 1 design and implementation](https://github.com/can4hou6joeng4/boss-agent-cli/issues/129)
-- Zhilian candidate-side read-only + local-assist parity is wired; recruiter-side, social, and contact workflows remain unavailable or blocked by the low-risk boundary
+- The Zhilian candidate-side implementation is already merged into mainline through PR #157, PR #158, and follow-up fixes; recruiter-side automation is exposed through the `agent` browser/CDP adapter V1 with selector health and safety circuit breakers
 - [Issue #90 - Multi-platform API research](https://github.com/can4hou6joeng4/boss-agent-cli/issues/90)
 - PR #131 / #132 / #133 / #134 / #135 / #136 / #137 / #138 / #139 / #141 - the full Week 1 PR set

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import os
 import shutil
 from pathlib import Path
 from typing import Any
@@ -12,98 +12,14 @@ from boss_agent_cli.auth.browser import probe_cdp, _DEFAULT_CDP_URL
 from boss_agent_cli.auth.cookie_extract import extract_cookies
 from boss_agent_cli.auth.health import assess_auth_health, auth_config_for_platform
 from boss_agent_cli.auth.manager import AuthManager
-from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
+from boss_agent_cli.commands.doctor_checks import (
+	_add_live_probe_checks,
+	_add_quality_baseline_checks,
+	_evaluate_patchright_chromium,
+	_patchright_browser_cache_dirs,
+	_patchright_chromium_revision,
+)
 from boss_agent_cli.display import handle_output, render_simple_list
-
-
-def _find_project_root() -> Path:
-	"""Return the repository root when running from a source checkout."""
-	for parent in Path(__file__).resolve().parents:
-		if (parent / "pyproject.toml").exists():
-			return parent
-	return Path.cwd()
-
-
-def _patchright_chromium_revision() -> str | None:
-	"""读取 patchright 自带 browsers.json 声明的 chromium 修订版。"""
-	try:
-		import patchright
-
-		browsers_json = Path(patchright.__file__).resolve().parent / "driver" / "package" / "browsers.json"
-		data = json.loads(browsers_json.read_text(encoding="utf-8"))
-	except Exception:
-		return None
-	for browser in data.get("browsers", []):
-		if browser.get("name") == "chromium":
-			revision = browser.get("revision")
-			return str(revision) if revision else None
-	return None
-
-
-def _evaluate_patchright_chromium(required_revision: str | None, installed: list[Path]) -> tuple[str, str]:
-	"""Return (status, detail) for the patchright_chromium doctor check.
-
-	patchright 启动浏览器只认 browsers.json 声明的修订版，其他版本的缓存
-	无法替代，因此必须按所需修订版精确校验，不能只统计缓存目录个数。
-	"""
-	if required_revision:
-		expected = f"chromium-{required_revision}"
-		if any(p.name == expected for p in installed):
-			return "ok", f"已安装 patchright 所需修订版 {expected}"
-		found = "、".join(sorted(p.name for p in installed)) or "无"
-		return (
-			"warn",
-			f"patchright 需要 {expected}，本机缓存仅有：{found}；boss login 启动内置浏览器会失败",
-		)
-	if installed:
-		return "ok", f"检测到 {len(installed)} 个 Chromium 安装（无法确认 patchright 所需修订版）"
-	return "warn", "未检测到 patchright/Playwright Chromium 缓存"
-
-
-def _add_quality_baseline_checks(checks: list[dict[str, Any]]) -> None:
-	"""Report whether the local P0 quality baseline can be run offline."""
-	root = _find_project_root()
-	baseline = root / "scripts" / "quality_baseline.py"
-	pyproject = root / "pyproject.toml"
-	if baseline.exists() and pyproject.exists():
-		checks.append(
-			{
-				"name": "quality_baseline",
-				"status": "ok",
-				"detail": "可运行 scripts/quality_baseline.py 执行 CI 同款 P0 门禁：ruff、全量离线 pytest 和 mypy",
-				"hint": "python scripts/quality_baseline.py",
-			}
-		)
-	else:
-		checks.append(
-			{
-				"name": "quality_baseline",
-				"status": "warn",
-				"detail": "未检测到源码仓库质量基线入口（安装包运行时可忽略）",
-				"hint": "在项目根目录运行，或使用发布包自带的外部 CI",
-			}
-		)
-
-	for tool in ("ruff", "pytest", "mypy"):
-		path = shutil.which(tool)
-		if path:
-			checks.append(
-				{
-					"name": f"quality_tool_{tool}",
-					"status": "ok",
-					"detail": path,
-				}
-			)
-		else:
-			checks.append(
-				{
-					"name": f"quality_tool_{tool}",
-					"status": "warn",
-					"detail": f"未在 PATH 中发现 {tool}",
-					"hint": "运行 uv sync --all-extras 或通过 uv run 自动使用项目环境",
-				}
-			)
 
 
 @click.command("doctor")
@@ -151,13 +67,13 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 	)
 
 	patchright_browser_dirs = [
-		Path.home() / ".cache" / "ms-playwright",
-		Path.home() / "Library" / "Caches" / "ms-playwright",
+		*_patchright_browser_cache_dirs(),
 	]
 	chromium_candidates: list[Path] = []
 	for base in patchright_browser_dirs:
 		if base.exists():
 			chromium_candidates.extend(base.glob("chromium-*"))
+			chromium_candidates.extend(base.glob("chromium_headless_shell-*"))
 	chromium_status, chromium_detail = _evaluate_patchright_chromium(
 		_patchright_chromium_revision(), chromium_candidates
 	)
@@ -183,6 +99,16 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 		chrome_path or "未在 PATH 中发现 Chrome/Chromium/Edge",
 		"如需 CDP 登录，请先启动支持远程调试端口的浏览器；如仅用 patchright，可忽略此项",
 	)
+
+	if os.name == "nt":
+		uv_tool_bin = Path.home() / ".local" / "bin"
+		path_parts = os.environ.get("PATH", "").split(os.pathsep)
+		add_check(
+			"windows_uv_tool_path",
+			"ok" if str(uv_tool_bin) in path_parts else "warn",
+			f"{uv_tool_bin} {'已在' if str(uv_tool_bin) in path_parts else '未在'} PATH",
+			f'临时修复: $env:PATH = "{uv_tool_bin};$env:PATH"；永久修复: uv tool update-shell',
+		)
 
 	# 1.5) Local source quality baseline
 	_add_quality_baseline_checks(checks)
@@ -355,79 +281,3 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 		),
 		hints=hints,
 	)
-
-
-def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[dict[str, Any]]) -> None:
-	"""Run explicit, low-frequency read probes only when requested."""
-	try:
-		with get_platform_instance(ctx, auth) as platform:
-			info = platform.user_info()
-			if platform.is_success(info):
-				checks.append(
-					{
-						"name": "candidate_live_user_info",
-						"status": "ok",
-						"detail": "求职者只读 user_info 探测通过",
-					}
-				)
-			else:
-				code, message = platform.parse_error(info)
-				checks.append(
-					{
-						"name": "candidate_live_user_info",
-						"status": "warn",
-						"detail": f"求职者只读 user_info 探测失败: {code} {message}".strip(),
-						"recovery_action": "按错误码执行恢复；命中风控时停止自动化访问",
-					}
-				)
-	except Exception as exc:
-		checks.append(
-			{
-				"name": "candidate_live_user_info",
-				"status": "warn",
-				"detail": f"求职者只读 user_info 探测异常: {exc}",
-				"recovery_action": "先运行 boss status 检查本地登录态；命中风控时停止自动化访问",
-			}
-		)
-
-	if (ctx.obj or {}).get("platform") == "zhilian":
-		checks.append(
-			{
-				"name": "recruiter_live_read",
-				"status": "warn",
-				"detail": "zhilian 招聘者侧暂未接入；跳过招聘者只读探测",
-				"recovery_action": "切换到 boss --platform zhipin --role recruiter doctor",
-			}
-		)
-		return
-
-	try:
-		with get_recruiter_platform_instance(ctx, auth) as recruiter:
-			result = recruiter.list_jobs()
-			if recruiter.is_success(result):
-				checks.append(
-					{
-						"name": "recruiter_live_read",
-						"status": "ok",
-						"detail": "招聘者职位列表只读探测通过",
-					}
-				)
-			else:
-				code, message = recruiter.parse_error(result)
-				checks.append(
-					{
-						"name": "recruiter_live_read",
-						"status": "warn",
-						"detail": f"招聘者只读探测失败: {code} {message}".strip(),
-						"recovery_action": "确认当前账号具备招聘者身份；命中风控时停止自动化访问",
-					}
-				)
-	except Exception as exc:
-		checks.append(
-			{
-				"name": "recruiter_live_read",
-				"status": "warn",
-				"detail": f"招聘者只读探测异常: {exc}",
-				"recovery_action": "确认当前账号具备招聘者身份；zhilian 招聘者侧暂不支持",
-			}
-		)

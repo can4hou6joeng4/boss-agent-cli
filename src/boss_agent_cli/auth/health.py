@@ -87,15 +87,15 @@ PLATFORM_AUTH_CONFIG: dict[str, PlatformAuthConfig] = {
 	),
 	"zhilian": PlatformAuthConfig(
 		auth_dir_suffix=("zhilian",),
-		primary_cookie="zp_token",
+		primary_cookie="at",
 		secondary_token_label="x-zp-client-id",
 		secondary_token_key="x_zp_client_id",
-		aux_cookies=("at", "rt"),
+		aux_cookies=("rt",),
 		cookie_domain_label="zhaopin",
 		site_url="https://www.zhaopin.com/",
 		site_host="zhaopin.com",
 		login_action="boss --platform zhilian login",
-		recruiter_read_supported=False,
+		recruiter_read_supported=True,
 	),
 }
 
@@ -130,7 +130,7 @@ def assess_auth_health(
 
 	has_token = token is not None
 	has_cookies = bool(cookies)
-	has_primary = bool(cookies.get(config.primary_cookie))
+	has_primary = _has_primary_cookie(config, cookies)
 	has_secondary = _has_secondary_token(config, token)
 	login_action = config.login_action
 
@@ -201,6 +201,12 @@ def _has_secondary_token(config: PlatformAuthConfig, token: dict[str, Any] | Non
 	if config.secondary_token_key == "stoken":
 		return bool(token.get("stoken"))
 	return bool(token.get(config.secondary_token_key) or token.get("client_id"))
+
+
+def _has_primary_cookie(config: PlatformAuthConfig, cookies: dict[str, Any]) -> bool:
+	if cookies.get(config.primary_cookie):
+		return True
+	return config.cookie_domain_label == "zhaopin" and bool(cookies.get("zp_token"))
 
 
 def _stoken_presence_check(config: PlatformAuthConfig, *, has_token: bool, has_secondary: bool) -> AuthHealthCheck:
@@ -376,14 +382,19 @@ def _capability_readiness_checks(
 		checks.append(AuthHealthCheck(
 			"recruiter_read_health",
 			"warn",
-			"当前平台招聘者侧暂未接入；不会尝试招聘者只读请求",
-			"切换到 boss --platform zhipin --role recruiter doctor",
+			"当前平台未开放 recruiter_read_health 前置检查",
+			"查看 boss schema 的 role/platform availability",
 		))
 	else:
+		detail_prefix = (
+			"招聘者自动化 browser/CDP 前置条件"
+			if config.cookie_domain_label == "zhaopin"
+			else "招聘者只读流"
+		)
 		checks.append(AuthHealthCheck(
 			"recruiter_read_health",
 			read_status,
-			f"招聘者只读流：{read_detail}",
+			f"{detail_prefix}：{read_detail}",
 			recovery,
 		))
 	return checks

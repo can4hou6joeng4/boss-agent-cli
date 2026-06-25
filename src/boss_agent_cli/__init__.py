@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 	from boss_agent_cli.platforms import BossPlatform, Platform, ZhilianPlatform, get_platform, list_platforms
 	from boss_agent_cli.resume.models import ResumeData, ResumeFile
 
-__version__ = "1.12.0"
+__version__ = "1.13.1"
 
 _LAZY_EXPORT_MODULES = {
 	"AuthManager": "boss_agent_cli.auth.manager",

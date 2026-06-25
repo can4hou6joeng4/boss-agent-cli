@@ -108,7 +108,9 @@ class AuthManager:
 
 	def _has_primary_cookie(self, token: dict[str, Any]) -> bool:
 		cookies = token.get("cookies", {})
-		primary_cookie = "wt2" if self._platform == "zhipin" else "zp_token"
+		if self._platform == "zhilian":
+			return bool(cookies.get("at") or cookies.get("zp_token"))
+		primary_cookie = "wt2"
 		return bool(cookies.get(primary_cookie))
 
 	def _verify_cookie(self, token: dict[str, Any]) -> bool:

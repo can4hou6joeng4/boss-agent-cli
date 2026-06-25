@@ -168,7 +168,7 @@ def ai_group() -> None:
 
 
 @ai_group.command("config")
-@click.option("--provider", default=None, help="AI 提供商（openai/deepseek/moonshot/openrouter/qwen/zhipu/siliconflow/atlas/custom）")
+@click.option("--provider", default=None, help="AI 提供商（openai/deepseek/moonshot/openrouter/qwen/zhipu/siliconflow/ollama/vllm/custom）")
 @click.option("--model", default=None, help="模型名称（如 gpt-4o / claude-sonnet-4.5 / deepseek-chat）")
 @click.option("--api-key", default=None, help="API 密钥（将加密存储）")
 @click.option("--base-url", default=None, help="自定义 API 基础地址（provider=custom 或自建代理时使用）")
@@ -189,6 +189,7 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 			ctx, "ai-config", config,
 			hints={"next_actions": [
 				"boss ai config --provider openai --model gpt-4o --api-key <key>",
+				"boss ai local configure --runtime ollama --model qwen3:14b",
 			]},
 		)
 		return
@@ -213,7 +214,7 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 	handle_output(
 		ctx, "ai-config",
 		{"action": "update", "updated_fields": list(updates.keys()) + (["api_key"] if api_key else [])},
-		hints={"next_actions": ["boss ai config", "boss ai analyze-jd <security_id> --resume <name>"]},
+		hints={"next_actions": ["boss ai config", "boss ai local status", "boss ai analyze-jd <security_id> --resume <name>"]},
 	)
 
 

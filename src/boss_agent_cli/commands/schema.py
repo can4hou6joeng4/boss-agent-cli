@@ -125,6 +125,16 @@ def _command_availability(
 	candidate_platforms: list[str],
 	recruiter_platforms: list[str],
 ) -> dict[str, Any]:
+	if cmd_name == "agent":
+		return {
+			"roles": ["recruiter"],
+			"candidate_platforms": [],
+			"recruiter_platforms": ["zhilian", "zhipin"],
+			"note": (
+				"招聘自动化入口；智联与 BOSS 通过统一 automation adapter 接入，"
+				"智联招聘者侧使用已登录浏览器/CDP adapter V1，带 selector health 与安全熔断。"
+			),
+		}
 	if cmd_name == "hr":
 		commands = cast(dict[str, Any], SCHEMA_DATA.get("commands", {}))
 		hr_spec = commands.get("hr", {})
@@ -255,7 +265,7 @@ def _format_mcp_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 SCHEMA_DATA = {
 	"name": "boss-agent-cli",
-	"description": "BOSS直聘本地辅助工具，共 35 个顶层命令。默认低风险模式聚焦只读、本地辅助、用户主动触发；自动触达、批量操作和候选人个人信息处理默认受限。",
+	"description": "BOSS直聘本地辅助工具，共 36 个顶层命令。默认低风险模式聚焦只读、本地辅助、用户主动触发；自动触达、批量操作和候选人个人信息处理默认受限。",
 	"commands": {
 		"login": {
 			"description": "按当前平台登录（zhipin / zhilian）。默认低风险模式仅用于用户主动触发的本地辅助与只读命令，不用于规避平台风控。",
@@ -852,11 +862,12 @@ SCHEMA_DATA = {
 			},
 		},
 		"ai": {
-			"description": "AI 简历优化与聊天回复（子命令：config/analyze-jd/polish/optimize/suggest/fit/reply/interview-prep/chat-coach/suggest-keywords/resume-optimize）",
+			"description": "AI 简历优化、聊天回复与本地模型管理（子命令：config/local/analyze-jd/polish/optimize/suggest/fit/reply/interview-prep/chat-coach/suggest-keywords/resume-optimize）",
 			"args": [],
 			"options": {},
 			"subcommands": {
 				"config": "配置 AI 服务提供商和模型",
+				"local": "本地模型状态、配置、下载、导入和 smoke 测试",
 				"analyze-jd": "分析职位描述并评估简历匹配度",
 				"polish": "通用简历润色",
 				"optimize": "基于目标职位描述优化简历",
@@ -867,6 +878,37 @@ SCHEMA_DATA = {
 				"chat-coach": "基于聊天记录诊断沟通状态并给出下一步建议",
 				"suggest-keywords": "基于候选池分析推荐搜索关键词组合",
 				"resume-optimize": "基于目标岗位优化简历措辞（仅建议，不修改简历）",
+			},
+		},
+		"agent": {
+			"description": (
+				"招聘自动化主入口（run/train/review/pending/stats/control/stop）。"
+				"以自动化为默认目标，高置信自动执行，"
+				"中低置信进入人审或 pending，异常自动熔断。"
+			),
+			"args": [],
+			"options": {
+				"--dry-run": {
+					"type": "bool",
+					"default": False,
+					"description": "只演练自动化决策，不执行真实平台动作",
+				},
+				"--limit": {
+					"type": "int",
+					"default": None,
+					"description": "本轮最多处理多少个会话",
+				},
+			},
+			"subcommands": {
+				"run": "运行一轮招聘自动化",
+				"train": "训练校准模式：自动判断，动作进入人审",
+				"review list": "查看人工复核队列",
+				"review approve <id>": "批准一条人工复核动作，写入 pending 队列",
+				"review reject <id>": "拒绝一条人工复核动作并记录跳过事件",
+				"pending list": "查看待执行动作队列",
+				"stats": "查看招聘自动化统计",
+				"control": "查看本地控制台入口信息",
+				"stop": "打开招聘自动化熔断",
 			},
 		},
 		"hr": {
@@ -1091,6 +1133,36 @@ SCHEMA_DATA = {
 			"message": "当前平台不支持该角色或子命令",
 			"recoverable": True,
 			"recovery_action": "切换到支持的平台（如 boss --platform zhipin hr ...）",
+		},
+		"AUTO_EXECUTED": {
+			"message": "招聘自动化动作已执行",
+			"recoverable": False,
+			"recovery_action": None,
+		},
+		"QUEUED_FOR_REVIEW": {
+			"message": "招聘自动化动作已进入人工复核",
+			"recoverable": True,
+			"recovery_action": "boss agent review list",
+		},
+		"QUEUED_PENDING_ACTION": {
+			"message": "招聘自动化动作已进入待执行队列",
+			"recoverable": True,
+			"recovery_action": "boss agent pending list",
+		},
+		"STOPPED_BY_SAFETY": {
+			"message": "招聘自动化动作被安全额度或冷却策略停止",
+			"recoverable": True,
+			"recovery_action": "boss agent stats",
+		},
+		"CIRCUIT_BREAKER_OPEN": {
+			"message": "招聘自动化熔断已打开",
+			"recoverable": True,
+			"recovery_action": "人工确认平台状态后恢复",
+		},
+		"PLATFORM_VERIFICATION_REQUIRED": {
+			"message": "平台要求人工验证",
+			"recoverable": True,
+			"recovery_action": "回到平台官网完成人工验证",
 		},
 	},
 	"conventions": {

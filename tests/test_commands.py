@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 from click.testing import CliRunner
+from boss_agent_cli.automation.zhilian_selectors import SelectorHealthReport
 from boss_agent_cli.main import cli
 from boss_agent_cli.search_filters import SearchPipelinePlatformError
 
@@ -139,6 +140,34 @@ def test_status_reports_user_info_error(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
+
+
+@patch("boss_agent_cli.commands.status.get_platform_instance")
+@patch("boss_agent_cli.commands.status.create_zhilian_browser_session_from_cdp")
+@patch("boss_agent_cli.commands.status.AuthManager")
+def test_zhilian_recruiter_status_live_uses_cdp_health(mock_auth_cls, mock_session_factory, mock_platform_factory):
+	mock_auth_cls.return_value.check_status.return_value = {
+		"cookies": {"at": "access", "rt": "refresh"},
+		"x_zp_client_id": "cid",
+	}
+	mock_session = MagicMock()
+	mock_session.health_report.return_value = SelectorHealthReport(
+		ok=True,
+		reason="ok",
+		url="https://rd6.zhaopin.com/app/im",
+		title="智联招聘网-聊天",
+	)
+	mock_session_factory.return_value = mock_session
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "--platform", "zhilian", "--role", "recruiter", "status", "--live"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["data"]["live"] is True
+	assert parsed["data"]["user_name"] == "智联招聘网-聊天"
+	assert parsed["data"]["selector_health"]["ok"] is True
+	mock_platform_factory.assert_not_called()
 
 
 @patch("boss_agent_cli.commands.search.CacheStore")

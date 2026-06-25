@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -61,9 +62,12 @@ def run_step(name: str, command: Sequence[str]) -> StepResult:
 		return StepResult(
 			name, tuple(command), "missing", None, "", f"{command[0]} is not installed and uv is unavailable"
 		)
+	env = os.environ.copy()
+	env.setdefault("PYTHONUTF8", "1")
 	proc = subprocess.run(
 		resolved,
 		cwd=ROOT,
+		env=env,
 		text=True,
 		stdout=subprocess.PIPE,
 		stderr=subprocess.PIPE,

@@ -30,6 +30,7 @@ from server import (  # noqa: E402
 	SERVER_INSTRUCTIONS,
 	TOOLS,
 	_build_args,
+	_configure_boss_invocation,
 	_compliance_command_for_tool,
 	_LOW_RISK_BLOCKED_TOOLS,
 	_tool_availability,
@@ -130,7 +131,8 @@ def test_required_tools_present():
 		"boss_status", "boss_doctor", "boss_search", "boss_detail",
 		"boss_me", "boss_cities",
 		"boss_show", "boss_export", "boss_config", "boss_clean",
-		"boss_stats", "boss_ai_reply",
+		"boss_stats", "boss_agent_run", "boss_agent_review_approve",
+		"boss_agent_review_reject", "boss_agent_stop", "boss_ai_reply",
 		"boss_ai_interview_prep", "boss_ai_chat_coach",
 		"boss_resume_list", "boss_resume_show",
 		"boss_ai_analyze_jd", "boss_ai_optimize", "boss_ai_suggest",
@@ -147,7 +149,7 @@ def test_required_tools_present():
 
 def test_tool_count():
 	"""工具总数应与当前注册一致。"""
-	assert len(TOOLS) == 37
+	assert len(TOOLS) == 45
 
 
 def test_mcp_tool_count_matches_readme():
@@ -462,6 +464,30 @@ def test_run_boss_passes_args(mock_run):
 
 
 @patch("server.subprocess.run")
+def test_run_boss_passes_configured_global_args_before_command(mock_run):
+	"""MCP 宿主配置的全局参数应传给底层 boss CLI。"""
+	mock_run.return_value = MagicMock(stdout='{"ok": true}', stderr="")
+	_configure_boss_invocation(
+		boss_bin="/opt/boss",
+		data_dir="./.boss-agent",
+		platform="zhilian",
+		role="recruiter",
+	)
+	try:
+		_run_boss("agent", "stats")
+		cmd = mock_run.call_args[0][0]
+		assert cmd == [
+			"/opt/boss", "--json",
+			"--data-dir", "./.boss-agent",
+			"--platform", "zhilian",
+			"--role", "recruiter",
+			"agent", "stats",
+		]
+	finally:
+		_configure_boss_invocation()
+
+
+@patch("server.subprocess.run")
 def test_run_boss_timeout(mock_run):
 	"""应设置 120 秒超时。"""
 	mock_run.return_value = MagicMock(stdout='{"ok": true}', stderr="")
@@ -487,6 +513,24 @@ def test_parse_cli_args_defaults():
 	assert args.path == "/mcp"
 	assert args.sse_path == "/sse"
 	assert args.message_path == "/messages/"
+	assert args.boss_bin == "boss"
+	assert args.data_dir is None
+	assert args.platform is None
+	assert args.role is None
+
+
+def test_parse_cli_args_accepts_boss_global_options():
+	args = _parse_cli_args([
+		"--transport", "stdio",
+		"--boss-bin", "/opt/boss",
+		"--data-dir", "./.boss-agent",
+		"--platform", "zhilian",
+		"--role", "recruiter",
+	])
+	assert args.boss_bin == "/opt/boss"
+	assert args.data_dir == "./.boss-agent"
+	assert args.platform == "zhilian"
+	assert args.role == "recruiter"
 
 
 def test_parse_cli_args_http_overrides():
@@ -561,6 +605,22 @@ def test_build_args_stats_default():
 def test_build_args_stats_with_days():
 	args = _build_args("boss_stats", {"days": 7})
 	assert args == ["stats", "--days", "7"]
+
+
+def test_build_args_agent_run_and_stop():
+	assert _build_args("boss_agent_run", {"dry_run": True, "limit": 2}) == [
+		"agent", "run", "--dry-run", "--limit", "2",
+	]
+	assert _build_args("boss_agent_review_approve", {"id": "abc"}) == [
+		"agent", "review", "approve", "abc",
+	]
+	assert _build_args(
+		"boss_agent_review_reject",
+		{"id": "abc", "reason": "not-fit"},
+	) == ["agent", "review", "reject", "abc", "--reason", "not-fit"]
+	assert _build_args("boss_agent_stop", {"reason": "manual"}) == [
+		"agent", "stop", "--reason", "manual",
+	]
 
 
 def test_build_args_ai_reply_minimal():
@@ -659,7 +719,7 @@ def test_build_args_shortlist_list():
 
 def test_tool_count_after_pr41():
 	"""协议服务工具总数应与当前 MCP 暴露能力完全一致。"""
-	assert len(TOOLS) == 37
+	assert len(TOOLS) == 45
 
 
 def test_build_args_shortlist_add():

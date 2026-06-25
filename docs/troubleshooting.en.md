@@ -19,7 +19,8 @@ boss doctor --live-probe
 | Check | What it means |
 |-------|---------------|
 | `python` | Python ≥ 3.10 installed |
-| `patchright_chromium` | The Chromium revision required by patchright is installed |
+| `patchright_chromium` | The Chromium and headless shell revisions required by patchright are installed; Windows also checks `%LOCALAPPDATA%\ms-playwright` |
+| `windows_uv_tool_path` | Whether the global `uv tool` command directory is on PATH on Windows |
 | `cookie_extract` | Local browser cookies accessible |
 | `credential_file` | Encrypted credential file exists and is readable |
 | `auth_session` | Encrypted session file readable |
@@ -82,6 +83,29 @@ boss logout && boss login
 # Windows: run as admin once
 pip install --upgrade patchright
 patchright install chromium --with-deps
+# If the global tool environment reports a missing headless shell:
+patchright install chromium-headless-shell
+```
+
+### `AUTH_REQUIRED` before live tests
+
+`AUTH_REQUIRED` means the selected data directory has no usable login session. It is
+not a CLI failure. Validate local commands, schema, MCP, and doctor first; run
+`boss login` before live `search`, `detail`, or `status --live` checks.
+
+### Windows PATH and UTF-8
+
+If `uv tool update-shell` times out, temporarily expose global tools in PowerShell:
+
+```powershell
+$env:PATH = "$env:USERPROFILE\.local\bin;$env:PATH"
+```
+
+For Chinese Windows test runs, force UTF-8:
+
+```powershell
+$env:PYTHONUTF8='1'
+uv run python scripts/quality_baseline.py
 ```
 
 ### Chromium launches but stays blank
@@ -170,7 +194,21 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `AI_NOT_CONFIGURED` | AI service not set up | `boss ai config` |
 | `AI_API_ERROR` | AI provider call failed | Retry / check key |
 | `AI_PARSE_ERROR` | AI response not JSON | Retry |
-| `BROWSER_KERNEL_MISSING` | patchright browser kernel missing or mismatched | `patchright install chromium` |
+| `BROWSER_KERNEL_MISSING` | patchright browser kernel missing or mismatched | `patchright install chromium`; if the headless shell is missing, run `patchright install chromium-headless-shell` |
+
+## Windows smoke checklist
+
+```powershell
+boss --version
+boss doctor
+boss status
+boss login
+boss status --live
+boss search "Python" --page 1
+boss detail <security_id>
+```
+
+Before login, `boss status` returning `AUTH_REQUIRED` is expected and should not be counted as a live-platform failure.
 
 ## Glossary (Chinese terms kept in code)
 

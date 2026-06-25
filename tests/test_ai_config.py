@@ -152,6 +152,20 @@ def test_base_url_siliconflow(tmp_path, monkeypatch):
 	assert store.get_base_url() == "https://api.siliconflow.cn/v1"
 
 
+def test_base_url_ollama(tmp_path, monkeypatch):
+	"""Ollama 本地 OpenAI 兼容入口。"""
+	store = _make_store(tmp_path, monkeypatch)
+	store.save_config(ai_provider="ollama")
+	assert store.get_base_url() == "http://localhost:11434/v1"
+
+
+def test_base_url_vllm(tmp_path, monkeypatch):
+	"""vLLM 本地/内网 OpenAI 兼容入口。"""
+	store = _make_store(tmp_path, monkeypatch)
+	store.save_config(ai_provider="vllm")
+	assert store.get_base_url() == "http://localhost:8000/v1"
+
+
 # ── is_configured ────────────────────────────────────────────
 
 
@@ -198,7 +212,7 @@ def test_provider_base_urls_completeness():
 	assert "qwen" in PROVIDER_BASE_URLS
 	assert "zhipu" in PROVIDER_BASE_URLS
 	assert "siliconflow" in PROVIDER_BASE_URLS
-	assert "atlas" in PROVIDER_BASE_URLS
-	assert PROVIDER_BASE_URLS["atlas"] == "https://api.atlascloud.ai/v1"
+	assert "ollama" in PROVIDER_BASE_URLS
+	assert "vllm" in PROVIDER_BASE_URLS
 	assert "custom" in PROVIDER_BASE_URLS
 	assert PROVIDER_BASE_URLS["custom"] is None

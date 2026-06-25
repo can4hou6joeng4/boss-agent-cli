@@ -65,7 +65,7 @@ Recommended usage:
 - Treat the `hr` command group returned by `boss schema` as the source of truth for recruiter capabilities
 - `boss hr <subcommand>` switches to recruiter mode automatically, so you do not need to infer `--role` yourself
 - Candidate-side and recruiter-side commands share the same `stdout JSON / stderr logs` contract
-- `hr` currently supports `zhipin-recruiter` only; if the active platform is `zhilian`, recruiter commands are rejected intentionally
+- `hr` currently supports `zhipin-recruiter` only; use `boss --platform zhilian --role recruiter agent ...` for Zhaopin recruiter automation
 - Default low-risk mode blocks recruiter candidate screening commands such as `hr candidates`, `hr resume`, and `hr request-resume`; complete those candidate-data workflows manually on the official website
 - When a sensitive subcommand returns `COMPLIANCE_BLOCKED`, do not switch automation channels to continue
 - When platform responses map to `ACCOUNT_RISK` or `RATE_LIMITED`, stop automated access instead of retrying a batch

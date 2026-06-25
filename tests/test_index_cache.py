@@ -61,13 +61,15 @@ class TestTrySaveIndex:
 	def test_success(self, tmp_path):
 		assert try_save_index(tmp_path, _SAMPLE_JOBS) is True
 
-	def test_failure_returns_false(self, tmp_path):
-		# Make cache dir readonly
-		cache_dir = tmp_path / "cache"
-		cache_dir.mkdir()
-		cache_dir.chmod(0o444)
+	def test_failure_returns_false(self, tmp_path, monkeypatch):
+		"""写入失败应返回 False；不用 chmod，避免 Windows 权限语义差异。"""
+		from pathlib import Path
+
+		def fail_write_text(self, data, *args, **kwargs):
+			raise OSError("simulated write failure")
+
+		monkeypatch.setattr(Path, "write_text", fail_write_text)
 		result = try_save_index(tmp_path, _SAMPLE_JOBS)
-		cache_dir.chmod(0o755)  # restore for cleanup
 		assert result is False
 
 

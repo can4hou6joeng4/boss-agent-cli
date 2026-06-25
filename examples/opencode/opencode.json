@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "boss-agent": {
+      "type": "local",
+      "command": [
+        "uv",
+        "run",
+        "boss-mcp",
+        "--data-dir",
+        "./.boss-agent"
+      ],
+      "enabled": true,
+      "timeout": 10000
+    }
+  }
+}

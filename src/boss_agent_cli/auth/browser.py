@@ -23,10 +23,10 @@ _PLATFORM_BROWSER_CONFIG: dict[str, dict[str, str]] = {
 		"success_cookie": "wt2",
 	},
 	"zhilian": {
-		"login_page_url": "https://passport.zhaopin.com/v5/login",
-		"home_url": "https://www.zhaopin.com/",
+		"login_page_url": "https://rd6.zhaopin.com/app/im",
+		"home_url": "https://rd6.zhaopin.com/app/im",
 		"cookie_domain": "zhaopin",
-		"success_cookie": "zp_token",
+		"success_cookie": "at",
 	},
 }
 
@@ -52,6 +52,21 @@ def _extract_zhilian_client_id(page: Any) -> str:
 		"""))
 	except Exception:
 		return ""
+
+
+def _find_zhilian_recruiter_page(pages: list[Any]) -> Any | None:
+	for page in pages:
+		url = getattr(page, "url", "")
+		if "zhaopin.com" in url and any(path in url for path in ("/app/im", "/app/recommend")):
+			return page
+	for page in pages:
+		if "zhaopin.com" in getattr(page, "url", ""):
+			return page
+	return None
+
+
+def _zhilian_client_id_from(cookies: dict[str, str], page: Any) -> str:
+	return cookies.get("x-zp-client-id") or _extract_zhilian_client_id(page)
 
 
 def _warm_home_for_runtime(page: Any, home_url: str, *, stage: str) -> None:
@@ -95,16 +110,20 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 	pw = sync_playwright().start()
 	browser = pw.chromium.connect_over_cdp(ws_url)
 	ctx = browser.contexts[0] if browser.contexts else browser.new_context()
-	page = ctx.new_page()
+	page = _find_zhilian_recruiter_page(ctx.pages) if platform == "zhilian" else None
+	created_page = page is None
+	if page is None:
+		page = ctx.new_page()
 
 	try:
-		try:
-			page.goto(
-				login_page_url,
-				wait_until="commit", timeout=_NAV_TIMEOUT_MS,
-			)
-		except Exception:
-			pass
+		if created_page or platform != "zhilian":
+			try:
+				page.goto(
+					login_page_url,
+					wait_until="commit", timeout=_NAV_TIMEOUT_MS,
+				)
+			except Exception:
+				pass
 
 		print(f"[boss] 请在 Chrome 中扫码登录，等待中...（超时 {timeout}s）", file=sys.stderr)
 
@@ -120,13 +139,14 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 		else:
 			raise TimeoutError(f"CDP 扫码登录超时（{timeout}s）")
 
-		try:
-			page.goto(home_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
-		except Exception:
-			pass
+		if created_page or platform != "zhilian":
+			try:
+				page.goto(home_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+			except Exception:
+				pass
 		all_cookies = {c["name"]: c["value"] for c in ctx.cookies() if cookie_domain in c.get("domain", "")}
 		ua = page.evaluate("navigator.userAgent")
-		x_zp_client_id = _extract_zhilian_client_id(page) if platform == "zhilian" else ""
+		x_zp_client_id = _zhilian_client_id_from(all_cookies, page) if platform == "zhilian" else ""
 
 		result: dict[str, Any] = {"cookies": all_cookies, "stoken": "", "user_agent": ua}
 		if x_zp_client_id:
@@ -134,7 +154,8 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 		return result
 	finally:
 		try:
-			page.close()
+			if created_page:
+				page.close()
 		finally:
 			pw.stop()
 

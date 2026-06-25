@@ -19,7 +19,8 @@ boss doctor --live-probe
 |--------|------|
 | `python` | Python 版本 >= 3.10 |
 | `patchright` | CLI 已安装 |
-| `patchright_chromium` | patchright 所需的 Chromium 修订版已安装 |
+| `patchright_chromium` | patchright 所需的 Chromium 与 headless shell 修订版已安装；Windows 同时检查 `%LOCALAPPDATA%\ms-playwright` |
+| `windows_uv_tool_path` | Windows 全局 `uv tool` 命令目录是否在 PATH 中 |
 | `quality_baseline` | 源码仓库内的 P0 本地质量基线入口是否可用 |
 | `quality_tool_ruff` / `quality_tool_pytest` / `quality_tool_mypy` | 本机质量工具可用性；缺失时可通过 `uv run` 或 `uv sync --all-extras` 使用项目环境 |
 | `cookie_extract` | 本地浏览器 Cookie 可提取 |
@@ -37,7 +38,7 @@ boss doctor --live-probe
 | `bridge_exec` / `bridge_fetch` / `bridge_navigate` | 扩展基础执行、浏览器 fetch 与导航能力 |
 | `browser_channel` | CDP/Bridge 汇总状态；不得用于规避平台风控 |
 | `candidate_search_health` / `candidate_detail_health` | 求职者只读能力前置条件 |
-| `recruiter_read_health` | 招聘者只读能力前置条件；智联招聘者侧会明确标记暂未接入 |
+| `recruiter_read_health` | 招聘者只读能力前置条件；智联招聘者侧自动化通过 `agent` browser/CDP adapter 进入 |
 | `network` | zhipin.com 可访问 |
 
 ## 常见问题修复
@@ -45,6 +46,8 @@ boss doctor --live-probe
 ```bash
 # 安装浏览器内核
 patchright install chromium
+# 全局 tool 环境提示缺 headless shell 时再执行
+patchright install chromium-headless-shell
 
 # 重建登录态
 boss logout && boss login
@@ -59,6 +62,26 @@ boss doctor
 
 # 默认 status 只检查本地凭据；需要真实只读验证时显式加 --live
 boss status --live
+```
+
+**`AUTH_REQUIRED` 不代表 CLI 故障**：它表示当前数据目录没有可用登录态。真实平台
+`search`、`detail`、`status --live` 验证必须先执行 `boss login`；登录前只验证 CLI
+本地命令、schema、MCP 和 doctor。
+
+**Windows 全局 `boss` 命令找不到**：如果 `uv tool update-shell` 超时，可先临时修复：
+
+```powershell
+$env:PATH = "$env:USERPROFILE\.local\bin;$env:PATH"
+```
+
+永久修复仍建议在网络稳定时重跑 `uv tool update-shell`，或手动把
+`C:\Users\<你>\.local\bin` 加入用户 PATH。
+
+**Windows 中文系统跑测试**：默认 GBK 终端可能导致 UnicodeDecodeError。使用：
+
+```powershell
+$env:PYTHONUTF8='1'
+uv run python scripts/quality_baseline.py
 ```
 
 **auth_session 显示"损坏"**：登录态来自旧机器指纹或文件损坏 → `boss logout && boss login`
@@ -134,4 +157,18 @@ boss --cdp-url http://localhost:9222 login --cdp
 | `NETWORK_ERROR` | 网络错误 | 重试 |
 | `AI_NOT_CONFIGURED` | AI 未配置 | `boss ai config` |
 | `PLATFORM_NOT_SUPPORTED` | 当前平台不支持该角色或子命令 | 切换到支持的平台 |
-| `BROWSER_KERNEL_MISSING` | patchright 浏览器内核缺失或版本不匹配 | `patchright install chromium` |
+| `BROWSER_KERNEL_MISSING` | patchright 浏览器内核缺失或版本不匹配 | `patchright install chromium`；缺 headless shell 时运行 `patchright install chromium-headless-shell` |
+
+## Windows smoke checklist
+
+```powershell
+boss --version
+boss doctor
+boss status
+boss login
+boss status --live
+boss search "Python" --page 1
+boss detail <security_id>
+```
+
+未登录时 `boss status` 返回 `AUTH_REQUIRED` 属于预期；不要把未登录状态计为真实平台功能失败。

@@ -15,7 +15,7 @@ boss <命令> --help                      # 查看单个命令选项
 
 | 命令 | 说明 |
 |------|------|
-| `boss schema` | 输出完整工具能力描述 JSON（35 个顶层命令 + hr 分组展开，Agent 首先调用） |
+| `boss schema` | 输出完整工具能力描述 JSON（36 个顶层命令 + hr 分组展开，Agent 首先调用） |
 | `boss platforms` | 本地平台注册与能力状态（不触网；支持 `--platform` 单平台过滤与 `--capability` 反查，附 `capability_status_legend`） |
 | `boss login` | 用户主动登录（按平台走 Cookie / CDP / QR / 浏览器降级链路） |
 | `boss logout` | 退出登录 |
@@ -85,6 +85,10 @@ boss <命令> --help                      # 查看单个命令选项
 |------|------|
 | `boss resume init/list/show/edit/delete/export/import/clone/diff/link/applications` | 本地简历管理 |
 | `boss ai config` | 配置 AI 服务 |
+| `boss ai local status` | 查看本地模型配置、推荐模型和导入登记 |
+| `boss ai local configure --runtime ollama --model qwen3:14b` | 配置本地 Ollama OpenAI 兼容服务 |
+| `boss ai local pull --model qwen3:14b --confirm-download` | 显式下载本地模型权重 |
+| `boss ai local smoke` | 调用本地模型做一次健康检查 |
 | `boss ai analyze-jd` | 分析岗位要求 |
 | `boss ai polish` | 润色简历 |
 | `boss ai optimize` | 针对目标岗位优化 |

@@ -91,7 +91,7 @@ def test_capability_matrix_exists_and_covers_core_capabilities():
 	assert "`boss digest`" in content
 	assert "`boss config`" in content
 	assert "`boss clean`" in content
-	assert "35 个顶层命令" in content
+	assert "36 个顶层命令" in content
 	assert "9 个一级招聘者子命令" in content
 	assert "`qiancheng` / 51job" in content
 	assert "`NOT_SUPPORTED`" in content
@@ -103,9 +103,6 @@ def test_readme_documents_registered_qiancheng_placeholder():
 	matrix_en = _read("docs/capability-matrix.en.md")
 
 	assert "--platform zhipin|zhilian|qiancheng" in readme
-	assert "候选者侧只读 + 本地辅助对等" in readme
-	assert "read-only + local-assist parity" in readme_en
-	assert "read/write wired" not in readme_en
 	assert "前程无忧 / 51job (`qiancheng`)" in readme
 	assert "QianchengPlatform (51job 占位适配器，统一返回 NOT_SUPPORTED)" in readme
 
@@ -194,7 +191,7 @@ def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
 	assert "| Capability | CLI command | Login required | Transport |" in matrix
 	assert "`boss schema`" in matrix
 	assert "`boss hr candidates`" in matrix
-	assert "35 top-level commands" in matrix
+	assert "36 top-level commands" in matrix
 	assert "9 first-level recruiter subcommands" in matrix
 
 	mcp_readme = _read("mcp-server/README.en.md")

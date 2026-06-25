@@ -40,6 +40,29 @@ DEFAULT_PORT = 8765
 DEFAULT_HTTP_PATH = "/mcp"
 DEFAULT_SSE_PATH = "/sse"
 DEFAULT_MESSAGE_PATH = "/messages/"
+DEFAULT_BOSS_BIN = "boss"
+_BOSS_BIN = DEFAULT_BOSS_BIN
+_BOSS_GLOBAL_ARGS: list[str] = []
+
+
+def _configure_boss_invocation(
+	*,
+	boss_bin: str = DEFAULT_BOSS_BIN,
+	data_dir: str | None = None,
+	platform: str | None = None,
+	role: str | None = None,
+) -> None:
+	"""Configure global flags passed from the MCP host to the underlying boss CLI."""
+	global _BOSS_BIN, _BOSS_GLOBAL_ARGS
+	_BOSS_BIN = boss_bin
+	args: list[str] = []
+	if data_dir:
+		args.extend(["--data-dir", data_dir])
+	if platform:
+		args.extend(["--platform", platform])
+	if role:
+		args.extend(["--role", role])
+	_BOSS_GLOBAL_ARGS = args
 
 
 def _build_schema_with_availability() -> dict[str, Any]:
@@ -69,6 +92,8 @@ def _tool_availability(tool_name: str) -> dict[str, Any] | None:
 	if name.startswith("ai_"):
 		sub_name = name.removeprefix("ai_").replace("_", "-")
 		return commands["ai"].get("availability")
+	if name.startswith("agent_"):
+		return commands["agent"].get("availability")
 	if name.startswith("resume_"):
 		return commands["resume"].get("availability")
 	if name.startswith("watch_"):
@@ -397,6 +422,82 @@ TOOLS = [
 			"type": "object",
 			"properties": {
 				"days": {"type": "integer", "description": "统计窗口天数", "default": 30},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_agent_run",
+		description="招聘自动化：运行一轮自动扫描、决策、执行/人审/线索生成",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"dry_run": {
+					"type": "boolean",
+					"description": "只演练决策，不执行真实平台动作",
+					"default": True,
+				},
+				"limit": {"type": "integer", "description": "本轮最多处理多少个会话"},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_agent_train",
+		description="招聘自动化：训练校准模式，自动判断但动作进入人审",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"limit": {"type": "integer", "description": "本轮最多处理多少个会话"},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_agent_review",
+		description="招聘自动化：查看人工复核队列",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_agent_review_approve",
+		description="招聘自动化：批准人工复核动作并写入 pending 队列",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"id": {"type": "string", "description": "review item id"},
+			},
+			"required": ["id"],
+		},
+	),
+	Tool(
+		name="boss_agent_review_reject",
+		description="招聘自动化：拒绝人工复核动作并记录跳过事件",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"id": {"type": "string", "description": "review item id"},
+				"reason": {"type": "string", "description": "拒绝原因"},
+			},
+			"required": ["id"],
+		},
+	),
+	Tool(
+		name="boss_agent_pending",
+		description="招聘自动化：查看待执行动作队列",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_agent_stats",
+		description="招聘自动化：查看执行、人审、pending、熔断统计",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_agent_stop",
+		description="招聘自动化：打开熔断，停止后续自动执行",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"reason": {"type": "string", "description": "熔断原因", "default": "manual-stop"},
 			},
 			"required": [],
 		},
@@ -836,7 +937,7 @@ _decorate_tool_descriptions()
 
 def _run_boss(*args: str) -> dict[str, Any]:
 	"""调用 boss CLI 并返回解析后的 JSON。"""
-	cmd = ["boss", "--json", *args]
+	cmd = [_BOSS_BIN, "--json", *_BOSS_GLOBAL_ARGS, *args]
 	result = subprocess.run(
 		cmd,
 		capture_output=True,
@@ -936,6 +1037,44 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 
 	if name == "show":
 		return [name, str(arguments["number"])]
+
+	if name == "agent_run":
+		args = ["agent", "run"]
+		if arguments.get("dry_run", True):
+			args.append("--dry-run")
+		if "limit" in arguments and arguments["limit"] is not None:
+			args.extend(["--limit", str(arguments["limit"])])
+		return args
+
+	if name == "agent_train":
+		args = ["agent", "train"]
+		if "limit" in arguments and arguments["limit"] is not None:
+			args.extend(["--limit", str(arguments["limit"])])
+		return args
+
+	if name == "agent_review":
+		return ["agent", "review", "list"]
+
+	if name == "agent_review_approve":
+		return ["agent", "review", "approve", str(arguments["id"])]
+
+	if name == "agent_review_reject":
+		args = ["agent", "review", "reject", str(arguments["id"])]
+		if arguments.get("reason"):
+			args.extend(["--reason", str(arguments["reason"])])
+		return args
+
+	if name == "agent_pending":
+		return ["agent", "pending", "list"]
+
+	if name == "agent_stats":
+		return ["agent", "stats"]
+
+	if name == "agent_stop":
+		args = ["agent", "stop"]
+		if arguments.get("reason"):
+			args.extend(["--reason", str(arguments["reason"])])
+		return args
 
 	if name == "export":
 		args = [name]
@@ -1338,11 +1477,21 @@ def _parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
 	parser.add_argument("--path", default=DEFAULT_HTTP_PATH, help="HTTP streaming 路径")
 	parser.add_argument("--sse-path", default=DEFAULT_SSE_PATH, help="SSE 建链路径")
 	parser.add_argument("--message-path", default=DEFAULT_MESSAGE_PATH, help="SSE 消息回传路径")
+	parser.add_argument("--boss-bin", default=DEFAULT_BOSS_BIN, help="底层 boss CLI 可执行文件路径")
+	parser.add_argument("--data-dir", default=None, help="传给 boss CLI 的数据目录，用于项目级状态隔离")
+	parser.add_argument("--platform", default=None, help="传给 boss CLI 的默认平台，如 zhilian 或 zhipin")
+	parser.add_argument("--role", choices=("candidate", "recruiter"), default=None, help="传给 boss CLI 的默认角色")
 	return parser.parse_args(argv)
 
 
 def run(argv: list[str] | None = None) -> None:
 	args = _parse_cli_args(argv)
+	_configure_boss_invocation(
+		boss_bin=args.boss_bin,
+		data_dir=args.data_dir,
+		platform=args.platform,
+		role=args.role,
+	)
 	if args.transport == "stdio":
 		asyncio.run(main())
 		return

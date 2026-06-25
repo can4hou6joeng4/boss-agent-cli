@@ -14,6 +14,7 @@ _impl = importlib.import_module("boss_agent_cli.mcp_server")
 SERVER_INSTRUCTIONS = _impl.SERVER_INSTRUCTIONS
 TOOLS = _impl.TOOLS
 _build_args = _impl._build_args
+_configure_boss_invocation = _impl._configure_boss_invocation
 _compliance_command_for_tool = _impl._compliance_command_for_tool
 _create_sse_app = _impl._create_sse_app
 _create_streamable_http_app = _impl._create_streamable_http_app

@@ -65,7 +65,7 @@ boss hr jobs list
 - 先把 `boss schema` 里的 `hr` 命令组当作招聘者能力真源
 - `boss hr <subcommand>` 会自动切到 recruiter 角色，不需要额外推断 `--role`
 - 求职者与招聘者两端都遵守同一套 `stdout JSON / stderr 日志` 契约
-- 当前 `hr` 只支持 `zhipin-recruiter`；若当前平台切到 `zhilian`，CLI 会直接拒绝执行 recruiter 子命令
+- 当前 `hr` 只支持 `zhipin-recruiter`；智联招聘者侧自动化请使用 `boss --platform zhilian --role recruiter agent ...`
 - 敏感子命令返回 `COMPLIANCE_BLOCKED` 时，不要尝试换自动化通道继续执行
 
 ## 3) 失败恢复与排障

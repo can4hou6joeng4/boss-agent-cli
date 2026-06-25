@@ -174,6 +174,25 @@ def test_version_is_semver_string(boss_agent_cli):
 		assert part.isdigit(), f"版本各段应为数字，实际为 {part}"
 
 
+def test_package_version_matches_pyproject_and_cli(boss_agent_cli):
+	"""包版本、pyproject 版本与 CLI --version 必须同步。"""
+	import pathlib
+	import re
+
+	from click.testing import CliRunner
+	from boss_agent_cli.main import cli
+
+	root = pathlib.Path(__file__).resolve().parents[1]
+	pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+	match = re.search(r'^version = "([^"]+)"$', pyproject, re.MULTILINE)
+	assert match is not None
+	assert boss_agent_cli.__version__ == match.group(1)
+
+	result = CliRunner().invoke(cli, ["--version"])
+	assert result.exit_code == 0
+	assert boss_agent_cli.__version__ in result.output
+
+
 # ── py.typed marker ──────────────────────────────────────
 
 

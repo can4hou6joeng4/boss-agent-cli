@@ -73,6 +73,32 @@ def test_login_via_cdp_stops_playwright_when_user_agent_extraction_fails(mock_sl
 	mock_playwright.stop.assert_called_once()
 
 
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_zhilian_login_via_cdp_reuses_recruiter_page(mock_sleep, mock_probe_cdp):
+	mock_page = MagicMock()
+	mock_page.url = "https://rd6.zhaopin.com/app/im?sessionId=abc"
+	mock_page.evaluate.return_value = "UA"
+	mock_context = MagicMock()
+	mock_context.pages = [mock_page]
+	mock_context.cookies.return_value = [
+		{"name": "at", "value": "access", "domain": ".zhaopin.com"},
+		{"name": "rt", "value": "refresh", "domain": ".zhaopin.com"},
+		{"name": "x-zp-client-id", "value": "cid", "domain": ".zhaopin.com"},
+	]
+	mock_launcher, mock_playwright, _mock_new_page = _mock_cdp_playwright(mock_context)
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
+		result = login_via_cdp(timeout=1, platform="zhilian")
+
+	assert result["cookies"]["at"] == "access"
+	assert result["x_zp_client_id"] == "cid"
+	mock_context.new_page.assert_not_called()
+	mock_page.goto.assert_not_called()
+	mock_page.close.assert_not_called()
+	mock_playwright.stop.assert_called_once()
+
+
 @patch("boss_agent_cli.auth.browser._extract_stoken", return_value="fresh-stoken")
 @patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
 def test_login_via_browser_tolerates_networkidle_timeout(mock_sleep, mock_extract_stoken):

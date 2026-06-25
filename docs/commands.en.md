@@ -12,7 +12,7 @@ boss schema --format anthropic-tools   # export Claude Tool Use definitions
 boss <cmd> --help                      # options for a single command
 ```
 
-`boss schema` currently exposes 35 top-level commands, plus 9 first-level recruiter
+`boss schema` currently exposes 36 top-level commands, plus 9 first-level recruiter
 subcommands under `hr`, grouped below by workflow stage.
 
 ## Basics
@@ -79,6 +79,10 @@ subcommands under `hr`, grouped below by workflow stage.
 |---------|-------------|
 | `boss resume init/list/show/edit/delete/export/import/clone/diff/link/applications` | Local resume management |
 | `boss ai config` | Configure the AI provider |
+| `boss ai local status` | Show local model config, recommendations, and imported registry |
+| `boss ai local configure --runtime ollama --model qwen3:14b` | Configure a local Ollama OpenAI-compatible service |
+| `boss ai local pull --model qwen3:14b --confirm-download` | Explicitly download local model weights |
+| `boss ai local smoke` | Run one local model health check |
 | `boss ai analyze-jd` / `ai polish` / `ai optimize` / `ai suggest` | JD analysis, resume polish, role-targeted optimization, suggestions |
 | `boss ai reply` / `ai interview-prep` / `ai chat-coach` | Reply drafts, mock interviews, chat coaching |
 

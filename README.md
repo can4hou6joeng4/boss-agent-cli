@@ -22,14 +22,6 @@
 
 </div>
 
-<p align="center">
-  <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=boss-agent-cli">
-    <img src="docs/assets/atlas-cloud-logo.png" alt="Atlas Cloud" width="180">
-  </a>
-</p>
-
-> 🎁 **[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=boss-agent-cli)** 为 `boss ai` 提供了一个全模态、OpenAI 兼容的推理入口 —— 一个 key 即可访问 DeepSeek、Qwen、GLM、Kimi、MiniMax、Claude、GPT 等模型，无需逐家接入。在 `boss ai config` 里选用 `--provider atlas`（`base_url=https://api.atlascloud.ai/v1`、默认模型 `deepseek-ai/deepseek-v4-pro`）即可，配置详见 [AI 模型接入](docs/integrations/ai-models.md#atlas-cloud一个-key-覆盖多家模型)；预算友好的 [coding plan](https://www.atlascloud.ai/console/coding-plan)。
-
 > [!TIP]
 > <img src="https://github.com/peterfei/ai-agent-team/raw/main/examples/doloffer.png" alt="Doloffer logo" width="220">
 >
@@ -46,7 +38,7 @@
 - **职位发现**：关键词搜索 + 8 维筛选，按编号回看缓存结果 —— `search` `show` `detail`
 - **福利筛选（核心差异化）**：`--welfare "双休,五险一金"` 自动翻页补抓、按 AND 逻辑做**真实匹配**，并可 `--sort score` 按本地匹配分排序 —— `search --welfare`
 - **本地候选池与统计**：查看详情后本地保存 / 用标签和备注复盘候选岗位、离线对比、查看漏斗统计；投递与沟通回到官网手动完成 —— `shortlist` `stats` `watch` `preset`
-- **AI 求职增强**：JD 分析、简历润色、定向优化、候选池匹配、模拟面试、沟通指导 —— `ai analyze-jd` `ai polish` `ai optimize` `ai fit` `ai interview-prep` `ai chat-coach`
+- **AI 求职增强 + 本地模型**：JD 分析、简历润色、定向优化、候选池匹配、模拟面试、沟通指导；本地模型权重外置，支持 Ollama/vLLM OpenAI 兼容接口 —— `ai analyze-jd` `ai local configure` `ai local smoke`
 - **Schema 驱动 + JSON 信封**：stdout 只输出 `{ok, data, pagination, error, hints}` 信封，`boss schema` 是能力真源，适合 CLI 编排 / Shell Agent / MCP / Python SDK
 - **招聘者最小闭环**：职位列表与上下架（`hr jobs list/online/offline`）；候选人个人数据链路默认阻断
 - **多平台抽象**：`Platform` / `RecruiterPlatform` 双注册表，`--platform zhipin|zhilian|qiancheng`
@@ -79,7 +71,7 @@ boss hr jobs list
 | 平台 | 求职者 | 招聘者 | 状态 |
 |------|:--:|:--:|------|
 | BOSS 直聘 (`zhipin`) | ✅ | ✅ | 默认 |
-| 智联招聘 (`zhilian`) | ✅ 候选者侧只读 + 本地辅助对等 | — | 招聘者侧未接入，运行时直接拒绝 `hr` 子命令 |
+| 智联招聘 (`zhilian`) | ✅ 候选者侧只读 + 本地辅助对等 | 🟡 `agent` browser/CDP 自动化 V1 | `hr` 子命令仍仅限 BOSS；智联招聘者侧通过 `boss --platform zhilian --role recruiter agent ...` 进入 |
 | 前程无忧 / 51job (`qiancheng`) | 🚧 已注册占位 | — | 统一返回 `NOT_SUPPORTED`，待只读研究门槛满足后再接入 |
 
 ```bash
@@ -87,16 +79,26 @@ boss --platform zhilian search "Python"   # 指定平台（也支持 --platform 
 boss config set platform zhilian          # 设为默认
 ```
 
-`boss hr ...` 当前仅支持默认招聘者平台 `zhipin-recruiter`。设计细节见 [docs/platform-abstraction.md](docs/platform-abstraction.md)。
+`boss hr ...` 当前仅支持默认招聘者平台 `zhipin-recruiter`；智联招聘者侧自动化走 `agent` 命令和 browser/CDP adapter。设计细节见 [docs/platform-abstraction.md](docs/platform-abstraction.md)。
 
 ## 🤖 Agent 集成
 
 推荐先读：[Agent Quickstart](docs/agent-quickstart.md) · [Capability Matrix](docs/capability-matrix.md) · [Host Examples](docs/agent-hosts.md)
 
 ```json
-// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 37 个默认低风险只读工具
+// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 45 个低风险工具
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
+
+OpenCode 源码项目可直接使用仓库示例：
+
+```bash
+cp examples/opencode/opencode.json ./opencode.json
+uv sync --all-extras
+uv run boss-mcp --data-dir ./.boss-agent --help
+```
+
+portable / 全局安装后，在任意 OpenCode 项目里使用 `examples/opencode.json`，它会启动 `boss-mcp --data-dir ./.boss-agent`，让 review、pending、日志按项目隔离。
 
 ```bash
 # 方式二：subprocess —— 先让 Agent 读能力自描述，再解析 stdout JSON
@@ -112,12 +114,12 @@ with BossClient(AuthManager(...)) as client:
 
 ## 📚 命令
 
-`boss schema` 暴露 35 个顶层命令 + 9 个一级招聘者子命令，按工作流分组：
+`boss schema` 暴露 36 个顶层命令 + 9 个一级招聘者子命令，按工作流分组：
 
 - **认证**：`login` · `logout` · `status` · `doctor`
 - **职位发现**：`search` · `detail` · `show` · `cities` · `history`
 - **本地整理**：`watch` · `preset` · `shortlist` · `stats`
-- **简历 / AI**：`resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai interview-prep` · `ai chat-coach`
+- **简历 / AI**：`resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai interview-prep` · `ai chat-coach` · `ai local`
 - **系统**：`schema` · `platforms` · `export` · `config` · `clean`
 - **招聘者**：`hr jobs list/online/offline`
 - **受限动作（默认低风险模式阻断）**：`greet` · `batch-greet` · `apply` · `exchange` · `chat*` · `pipeline` · `digest`
@@ -154,7 +156,7 @@ CLI (Click)
        └─ AuthManager ── 用户主动登录态（Fernet + PBKDF2 机器绑定加密）
        └─ Platform 双注册表 ── BossPlatform / ZhilianPlatform / QianchengPlatform
        └─ BossClient ── httpx + 节流（高斯延迟）；兼容 CDP / Bridge / patchright 登录与导出
-       └─ CacheStore（SQLite WAL） · AIService（OpenAI / Anthropic）
+       └─ CacheStore（SQLite WAL） · AIService（OpenAI-compatible / Ollama / vLLM）
             └─ output.py → JSON 信封 → stdout
 ```
 
@@ -165,11 +167,11 @@ CLI (Click)
 
 ## 🔌 本地存储
 
-所有状态在 `~/.boss-agent/`：加密登录态、搜索缓存、候选池、本地简历与 AI 配置。除显式发起的 API 调用外，数据不离开本机。
+所有状态在 `~/.boss-agent/`：加密登录态、搜索缓存、候选池、本地简历、AI 配置与外置模型登记。模型权重不进入 Python 包；除显式发起的 API 调用或本地模型下载外，数据不离开本机。
 
 ## 🤝 贡献 & 致谢
 
-欢迎 Issue / PR：`git clone` → `feat/xxx` 分支 → 写测试 → `python scripts/quality_baseline.py`（ruff + 离线 pytest + mypy）→ PR。详见 [CONTRIBUTING.md](CONTRIBUTING.md)，上手路径见 [快速上手](docs/getting-started.md)。
+欢迎 Issue / PR：`git clone` → `feat/xxx` 分支 → 写测试 → `python scripts/quality_baseline.py`（Windows 中文系统可先 `$env:PYTHONUTF8='1'`）→ PR。详见 [CONTRIBUTING.md](CONTRIBUTING.md)，上手路径见 [快速上手](docs/getting-started.md)。
 
 致谢 [geekgeekrun](https://github.com/geekgeekrun/geekgeekrun) · [boss-cli](https://github.com/jackwener/boss-cli) · [opencli](https://github.com/jackwener/opencli)。
 

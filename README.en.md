@@ -22,14 +22,6 @@
 
 </div>
 
-<p align="center">
-  <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=boss-agent-cli">
-    <img src="docs/assets/atlas-cloud-logo.png" alt="Atlas Cloud" width="180">
-  </a>
-</p>
-
-> 🎁 **[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=boss-agent-cli)** gives `boss ai` a full-modal, OpenAI-compatible backend — one key for DeepSeek, Qwen, GLM, Kimi, MiniMax, Claude, GPT, and more, with no per-vendor wiring. Just pick `--provider atlas` in `boss ai config` (`base_url=https://api.atlascloud.ai/v1`, default model `deepseek-ai/deepseek-v4-pro`); see [AI model integration](docs/integrations/ai-models.en.md#atlas-cloud-one-key-across-many-model-families) for setup. Budget-friendly [coding plan](https://www.atlascloud.ai/console/coding-plan).
-
 ## ⚠️ Compliance Boundary
 
 Low-Risk Assistance Mode is on by default: local assistance · read-only first · user-triggered · no risk-control bypass · no bulk outreach · no platform-data scraping. Commands that greet (greet / batch-greet), apply, exchange contacts, search recruiter candidates, read candidate resumes / chats, or reply are blocked by default and return the `COMPLIANCE_BLOCKED` error code; perform those actions manually on the official website.
@@ -39,8 +31,8 @@ Low-Risk Assistance Mode is on by default: local assistance · read-only first �
 - **Job discovery**: keyword search + layered filters, with cached `show` navigation — `search` `show` `detail`
 - **Welfare filtering (the differentiator)**: `--welfare "双休,五险一金"` pages, fetches details, runs **real AND matching**, and can `--sort score` by local match score — `search --welfare`
 - **Local shortlist & stats**: inspect details, organize candidates with local tags and notes, compare jobs offline, and see funnel stats; apply and messaging stay on the official website — `shortlist` `stats` `watch` `preset`
-- **AI job-hunting assist**: JD analysis, resume polish, role-targeted optimization, shortlist fit reports, interview prep, chat coaching — `ai analyze-jd` `ai polish` `ai optimize` `ai fit` `ai interview-prep` `ai chat-coach`
-- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, data, pagination, error, hints}` envelope, `boss schema` is the capability source of truth, and an **MCP server with 37 tools** exposes the low-risk surface
+- **AI job-hunting assist + local models**: JD analysis, resume polish, role-targeted optimization, keyword suggestions, resume optimization, shortlist fit reports, interview prep, chat coaching; local weights stay outside the Python package via Ollama/vLLM OpenAI-compatible endpoints — `ai analyze-jd` `ai suggest-keywords` `ai resume-optimize` `ai interview-prep` `ai chat-coach` `ai local configure` `ai local smoke`
+- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, data, pagination, error, hints}` envelope, `boss schema` is the capability source of truth, and an **MCP server with 45 tools** exposes the low-risk surface
 - **Recruiter loop**: list and bring postings online / offline (`hr jobs list/online/offline`); candidate personal-data workflows are blocked by default
 - **Cross-platform layer**: live `Platform` / `RecruiterPlatform` registries, `--platform zhipin|zhilian|qiancheng`
 
@@ -72,7 +64,7 @@ Every command outputs structured JSON (`ok` for success, `exit 0/1`). Full walk-
 | Platform | Candidate | Recruiter | Status |
 |----------|:--:|:--:|--------|
 | BOSS Zhipin (`zhipin`) | ✅ | ✅ | default |
-| Zhaopin (`zhilian`) | ✅ candidate-side read-only + local-assist parity | — | recruiter side intentionally rejected at runtime |
+| Zhaopin (`zhilian`) | ✅ candidate-side read-only + local-assist parity | 🟡 `agent` browser/CDP automation V1 | `hr` remains BOSS-only; Zhaopin recruiter automation uses `boss --platform zhilian --role recruiter agent ...` |
 | 51job (`qiancheng`) | 🚧 registered placeholder | — | returns `NOT_SUPPORTED` until the read-only research gate is satisfied |
 
 ```bash
@@ -80,16 +72,28 @@ boss --platform zhilian search "Python"   # pick a platform (also --platform zhi
 boss config set platform zhilian          # set as default
 ```
 
-`boss hr ...` currently supports only the default recruiter platform `zhipin-recruiter`. Architecture notes: [docs/platform-abstraction.en.md](docs/platform-abstraction.en.md).
+`boss hr ...` currently supports only the default recruiter platform `zhipin-recruiter`; Zhaopin recruiter automation is exposed through `agent` and the browser/CDP adapter. Architecture notes: [docs/platform-abstraction.en.md](docs/platform-abstraction.en.md).
 
 ## 🤖 Agent Integration
 
 Start here: [Agent Quickstart](docs/agent-quickstart.en.md) · [Capability Matrix](docs/capability-matrix.en.md) · [Host Examples](docs/agent-hosts.en.md)
 
 ```json
-// Option 1: MCP (recommended) — Claude Desktop / Cursor and other MCP hosts; exposes 35 low-risk read-only tools
+// Option 1: MCP (recommended) — Claude Desktop / Cursor and other MCP hosts; exposes 43 low-risk and automation tools
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
+
+OpenCode can use the checked-in example directly:
+
+```bash
+cp examples/opencode/opencode.json ./opencode.json
+uv sync --all-extras
+uv run boss-mcp --data-dir ./.boss-agent --help
+```
+
+After portable/global install, copy the bundle's `examples/opencode.json` into any
+OpenCode project. It starts `boss-mcp --data-dir ./.boss-agent`, keeping review,
+pending, and logs project-local.
 
 ```bash
 # Option 2: subprocess — let the Agent read the self-description, then parse stdout JSON
@@ -105,12 +109,12 @@ with BossClient(AuthManager(...)) as client:
 
 ## 📚 Commands
 
-`boss schema` exposes 35 top-level commands + 9 first-level recruiter subcommands, grouped by workflow:
+`boss schema` exposes 36 top-level commands + 9 first-level recruiter subcommands, grouped by workflow:
 
 - **Auth**: `login` · `logout` · `status` · `doctor`
 - **Discover**: `search` · `detail` · `show` · `cities` · `history`
 - **Organize**: `watch` · `preset` · `shortlist` · `stats`
-- **Resume / AI**: `resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai interview-prep` · `ai chat-coach`
+- **Resume / AI**: `resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai interview-prep` · `ai chat-coach` · `ai local`
 - **Utility**: `schema` · `platforms` · `export` · `config` · `clean`
 - **Recruiter**: `hr jobs list/online/offline`
 - **Restricted (blocked by default in low-risk mode)**: `greet` · `batch-greet` · `apply` · `exchange` · `chat*` · `pipeline` · `digest`
@@ -147,7 +151,7 @@ CLI (Click)
        └─ AuthManager ── user-triggered login state (Fernet + PBKDF2 machine-bound encryption)
        └─ Platform registries ── zhipin / zhilian / qiancheng placeholder
        └─ BossClient ── httpx + throttle; CDP / Bridge / patchright compatible for login & export
-       └─ CacheStore (SQLite WAL) · AIService (OpenAI / Anthropic)
+       └─ CacheStore (SQLite WAL) · AIService (OpenAI-compatible / Ollama / vLLM)
             └─ output.py → JSON envelope → stdout
 ```
 
@@ -155,11 +159,11 @@ CLI (Click)
 
 ## 🔌 Local Storage
 
-All state lives under `~/.boss-agent/` — encrypted tokens, cached searches, shortlist, local resumes, AI config. Nothing leaves your machine except explicit API calls.
+All state lives under `~/.boss-agent/` — encrypted tokens, cached searches, shortlist, local resumes, AI config, and external model registry. Model weights are not bundled into the Python package; nothing leaves your machine except explicit API calls or user-confirmed model downloads.
 
 ## 🤝 Contributing
 
-See [CONTRIBUTING.en.md](CONTRIBUTING.en.md) and [Getting Started](docs/getting-started.en.md). TL;DR: fork → `feat/xxx` branch → write tests → `python scripts/quality_baseline.py` (ruff + offline pytest + mypy) → PR.
+See [CONTRIBUTING.en.md](CONTRIBUTING.en.md) and [Getting Started](docs/getting-started.en.md). TL;DR: fork → `feat/xxx` branch → write tests → `python scripts/quality_baseline.py` (on Chinese Windows, set `$env:PYTHONUTF8='1'` first) → PR.
 
 ## ⚠️ Disclaimer
 

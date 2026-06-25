@@ -365,6 +365,7 @@ def test_schema_contains_ai():
 	assert "ai" in parsed["data"]["commands"]
 	cmd = parsed["data"]["commands"]["ai"]
 	assert "config" in cmd["subcommands"]
+	assert "local" in cmd["subcommands"]
 	assert "analyze-jd" in cmd["subcommands"]
 	assert "polish" in cmd["subcommands"]
 	assert "optimize" in cmd["subcommands"]

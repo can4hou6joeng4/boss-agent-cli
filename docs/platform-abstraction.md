@@ -194,6 +194,6 @@ _REGISTRY: dict[str, type[Platform]] = {
 ## 参考
 
 - [Issue #129 — Week 1 设计 + 实施](https://github.com/can4hou6joeng4/boss-agent-cli/issues/129)
-- Zhilian 候选者侧已补齐只读 + 本地辅助对等链路；招聘者侧与社交/联系方式链路仍按低风险边界保持不可用或默认阻断
+- Zhilian 候选者侧真实现已并入主线（PR #157 / #158 及后续修复）；招聘者侧自动化通过 `agent` 的 browser/CDP adapter V1 接入，带 selector health 与安全熔断
 - [Issue #90 — 多平台 API 调研](https://github.com/can4hou6joeng4/boss-agent-cli/issues/90)
 - PR #131 / #132 / #133 / #134 / #135 / #136 / #137 / #138 / #139 / #141 — Week 1 全部 PR

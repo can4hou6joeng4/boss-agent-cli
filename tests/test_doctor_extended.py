@@ -519,16 +519,16 @@ def test_doctor_redacts_sensitive_token_values(tmp_path):
 	assert "secret-zp" not in output
 
 
-def test_doctor_marks_zhilian_recruiter_read_unsupported(tmp_path):
+def test_doctor_marks_zhilian_recruiter_agent_preflight_supported(tmp_path):
 	token = {"cookies": {"zp_token": "tok", "at": "a", "rt": "r"}, "x_zp_client_id": "cid"}
 	code, parsed = _invoke_doctor(tmp_path, platform="zhilian", token=token)
 	recruiter = _find_check(parsed["data"]["checks"], "recruiter_read_health")
-	assert recruiter["status"] == "warn"
-	assert "暂未接入" in recruiter["detail"]
+	assert recruiter["status"] == "ok"
+	assert "browser/CDP" in recruiter["detail"]
 
 
-@patch("boss_agent_cli.commands.doctor.get_recruiter_platform_instance")
-@patch("boss_agent_cli.commands.doctor.get_platform_instance")
+@patch("boss_agent_cli.commands.doctor_checks.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.doctor_checks.get_platform_instance")
 def test_doctor_live_probe_adds_readonly_probe_checks(mock_platform_cls, mock_recruiter_cls, tmp_path):
 	paths = _base_patches()
 	runner = CliRunner()
@@ -591,7 +591,7 @@ def test_zhilian_doctor_uses_platform_specific_auth_quality(tmp_path):
 	quality = _find_check(parsed["data"]["checks"], "auth_token_quality")
 	assert quality is not None
 	assert quality["status"] == "ok"
-	assert "zp_token/x-zp-client-id" in quality["detail"]
+	assert "at/x-zp-client-id" in quality["detail"]
 
 
 def test_zhilian_doctor_uses_platform_specific_cookie_and_network_messages(tmp_path):
@@ -645,11 +645,43 @@ def test_doctor_reports_quality_baseline(tmp_path):
 	assert any("quality_baseline.py" in action for action in parsed["hints"]["next_actions"])
 
 
+def test_windows_playwright_cache_dir_uses_localappdata(tmp_path, monkeypatch):
+	"""Windows 默认 ms-playwright 缓存应纳入 doctor 检测。"""
+	from boss_agent_cli.commands.doctor import _patchright_browser_cache_dirs
+
+	local_app_data = tmp_path / "AppData" / "Local"
+	monkeypatch.setenv("LOCALAPPDATA", str(local_app_data))
+
+	dirs = _patchright_browser_cache_dirs()
+
+	assert local_app_data / "ms-playwright" in dirs
+
+
+def test_resolve_quality_tool_uses_uv_run_when_tool_missing(monkeypatch):
+	"""全局 tool 环境 PATH 缺质量工具时，uv run 可用不应误报缺失。"""
+	from boss_agent_cli.commands.doctor_checks import _resolve_quality_tool
+
+	def fake_which(name):
+		return "/usr/bin/uv" if name == "uv" else None
+
+	monkeypatch.setattr("boss_agent_cli.commands.doctor_checks.shutil.which", fake_which)
+
+	status, detail, hint = _resolve_quality_tool("pytest")
+
+	assert status == "ok"
+	assert "uv run pytest" in detail
+	assert "uv run pytest" in hint
+
+
 def test_evaluate_patchright_chromium_requires_exact_revision(tmp_path):
 	"""回归：缓存里有其他修订版不代表 patchright 可用，必须精确匹配所需修订版。"""
 	from boss_agent_cli.commands.doctor import _evaluate_patchright_chromium
 
-	installed = [tmp_path / "chromium-1217", tmp_path / "chromium-1223"]
+	installed = [
+		tmp_path / "chromium-1217",
+		tmp_path / "chromium-1223",
+		tmp_path / "chromium_headless_shell-1217",
+	]
 	status, detail = _evaluate_patchright_chromium("1208", installed)
 	assert status == "warn"
 	assert "chromium-1208" in detail
@@ -658,6 +690,17 @@ def test_evaluate_patchright_chromium_requires_exact_revision(tmp_path):
 	status_ok, detail_ok = _evaluate_patchright_chromium("1217", installed)
 	assert status_ok == "ok"
 	assert "chromium-1217" in detail_ok
+
+
+def test_evaluate_patchright_chromium_reports_missing_headless_shell(tmp_path):
+	"""Windows/global tool 环境缺 headless shell 时应给出精确恢复命令。"""
+	from boss_agent_cli.commands.doctor import _evaluate_patchright_chromium
+
+	status, detail = _evaluate_patchright_chromium("1223", [tmp_path / "chromium-1223"])
+
+	assert status == "warn"
+	assert "chromium_headless_shell-1223" in detail
+	assert "patchright install chromium-headless-shell" in detail
 
 
 def test_evaluate_patchright_chromium_falls_back_without_manifest(tmp_path):

@@ -149,7 +149,7 @@ def _load_user_overrides(config_path: Path) -> dict[str, Any]:
 	"""加载用户自定义配置（不含默认值）。"""
 	if config_path.exists():
 		try:
-			with open(config_path) as f:
+			with open(config_path, encoding="utf-8") as f:
 				result: dict[str, Any] = json.load(f)
 				return result
 		except (json.JSONDecodeError, OSError):
