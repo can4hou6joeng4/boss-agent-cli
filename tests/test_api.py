@@ -155,6 +155,53 @@ def test_account_risk_error_not_raised_on_success():
 	client.close()
 
 
+def test_browser_request_defaults_to_headless_browser_session():
+	"""BossClient 默认创建禁用 CDP 的 BrowserSession。"""
+	from unittest.mock import MagicMock, patch
+	from boss_agent_cli.api.client import BossClient
+
+	auth = MagicMock()
+	auth.get_token.return_value = {"cookies": {}, "user_agent": "ua", "stoken": "s"}
+	client = BossClient(auth)
+
+	with patch("boss_agent_cli.api.client.BrowserSession") as mock_browser_cls:
+		mock_browser = MagicMock()
+		mock_browser_cls.return_value = mock_browser
+		client._get_browser()
+
+	assert mock_browser_cls.call_args.kwargs["allow_cdp"] is False
+	client.close()
+
+
+def test_browser_request_retries_in_headless_after_cdp_stoken_failure():
+	"""CDP 模式返回 code 37 时，应关闭旧会话并以 headless 重试一次。"""
+	from unittest.mock import MagicMock, patch
+	from boss_agent_cli.api.client import BossClient
+
+	auth = MagicMock()
+	auth.get_token.return_value = {"cookies": {}, "user_agent": "ua", "stoken": "s"}
+	client = BossClient(auth)
+	client._prefer_headless_browser = False
+
+	cdp_browser = MagicMock()
+	cdp_browser._is_cdp = True
+	cdp_browser.request.return_value = {"code": CODE_STOKEN_EXPIRED, "message": "您的环境存在异常.", "zpData": {}}
+
+	headless_browser = MagicMock()
+	headless_browser._is_cdp = False
+	headless_browser._is_bridge = False
+	headless_browser.request.return_value = {"code": 0, "message": "Success", "zpData": {"jobList": []}}
+
+	with patch.object(client, "_get_browser", side_effect=[cdp_browser, headless_browser]):
+		result = client._browser_request("GET", "/wapi/zpgeek/search/joblist.json")
+
+	assert result["code"] == 0
+	cdp_browser.close.assert_called_once()
+	assert client._browser_session is None
+	assert client._prefer_headless_browser is True
+	client.close()
+
+
 def test_job_card_httpx_returns_result():
 	"""job_card_httpx 成功时返回 httpx 通道结果。"""
 	from unittest.mock import MagicMock, patch

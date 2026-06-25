@@ -69,6 +69,7 @@ class BrowserSession:
 		*,
 		delay: tuple[float, float] = (1.5, 3.0),
 		cdp_url: str | None = None,
+		allow_cdp: bool = True,
 		logger: Any = None,
 	) -> None:
 		self._throttle = RequestThrottle(delay)
@@ -81,6 +82,7 @@ class BrowserSession:
 		self._user_agent = user_agent
 		self._started = False
 		self._cdp_url = cdp_url
+		self._allow_cdp = allow_cdp
 		self._is_cdp = False
 		self._own_context = False  # 是否由我们创建的 context（需要在 close 时清理）
 		self._logger = logger
@@ -105,7 +107,7 @@ class BrowserSession:
 		self._pw = sync_playwright().start()
 
 		# 第二优先：CDP 连接用户 Chrome（登录态兼容）
-		if self._try_cdp():
+		if self._allow_cdp and self._try_cdp():
 			return
 
 		# 兜底：启动 headless patchright

@@ -16,6 +16,12 @@ def test_browser_session_defaults():
 	assert session._is_cdp is False
 	assert session._started is False
 	assert session._cookies == {"wt2": "abc"}
+	assert session._allow_cdp is True
+
+
+def test_browser_session_can_disable_cdp():
+	session = BrowserSession(cookies={"wt2": "abc"}, user_agent="test-ua", allow_cdp=False)
+	assert session._allow_cdp is False
 
 
 def test_fetch_ws_url_success():
@@ -277,6 +283,32 @@ def test_ensure_started_falls_back_to_patchright_when_bridge_and_cdp_fail():
 	mock_try_bridge.assert_called_once()
 	mock_sync_playwright.assert_called_once()
 	mock_try_cdp.assert_called_once()
+	mock_start_headless.assert_called_once()
+
+
+def test_ensure_started_skips_cdp_when_disabled():
+	session = BrowserSession(cookies={}, user_agent="", allow_cdp=False)
+	mock_pw = MagicMock()
+	sentinel = {"headless_started": False}
+
+	def mark_headless_started():
+		sentinel["headless_started"] = True
+		session._started = True
+
+	with (
+		patch.object(session, "_try_bridge", return_value=False) as mock_try_bridge,
+		patch("boss_agent_cli.api.browser_client.sync_playwright") as mock_sync_playwright,
+		patch.object(session, "_try_cdp") as mock_try_cdp,
+		patch.object(session, "_start_headless", side_effect=mark_headless_started) as mock_start_headless,
+	):
+		mock_sync_playwright.return_value.start.return_value = mock_pw
+
+		session._ensure_started()
+
+	assert sentinel["headless_started"] is True
+	mock_try_bridge.assert_called_once()
+	mock_sync_playwright.assert_called_once()
+	mock_try_cdp.assert_not_called()
 	mock_start_headless.assert_called_once()
 
 

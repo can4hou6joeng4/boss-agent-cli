@@ -57,6 +57,7 @@ class BossClient:
 		self._delay = delay
 		self._client: httpx.Client | None = None
 		self._browser_session: "BrowserSession | None" = None
+		self._prefer_headless_browser = True
 		self._throttle = RequestThrottle(delay)
 		self._cdp_url = cdp_url
 		self._closed = False
@@ -84,6 +85,7 @@ class BossClient:
 				user_agent=token.get("user_agent", ""),
 				delay=self._delay,
 				cdp_url=self._cdp_url,
+				allow_cdp=not self._prefer_headless_browser,
 				logger=getattr(self._auth, '_logger', None),
 			)
 		return self._browser_session
@@ -149,13 +151,23 @@ class BossClient:
 	# ── Browser request (high-risk ops) ──────────────────────────────
 
 	def _browser_request(self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None) -> dict[str, Any]:
-		result = self._get_browser().request(method, url, params=params, data=data)
+		browser = self._get_browser()
+		result = browser.request(method, url, params=params, data=data)
 		code = result.get("code")
+		if code == endpoints.CODE_STOKEN_EXPIRED and getattr(browser, "_is_cdp", False):
+			try:
+				browser.close()
+			except Exception:
+				pass
+			self._browser_session = None
+			self._prefer_headless_browser = True
+			result = self._get_browser().request(method, url, params=params, data=data)
+			code = result.get("code")
 		if code == endpoints.CODE_ACCOUNT_RISK:
 			msg = result.get("message", "账户存在异常行为")
-			browser = self._get_browser()
-			is_cdp = getattr(browser, "_is_cdp", False)
-			mode = "CDP" if is_cdp else ("Bridge" if getattr(browser, "_is_bridge", False) else "headless patchright")
+			active_browser = self._get_browser()
+			is_cdp = getattr(active_browser, "_is_cdp", False)
+			mode = "CDP" if is_cdp else ("Bridge" if getattr(active_browser, "_is_bridge", False) else "headless patchright")
 			raise AccountRiskError(
 				f"BOSS 直聘风控拦截 (code {code}): {msg}。"
 				f"当前浏览器模式: {mode}。"
