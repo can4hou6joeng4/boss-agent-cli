@@ -1,6 +1,7 @@
 import sys
 import time
 from typing import Any, cast
+from urllib.parse import urlparse
 
 from patchright.sync_api import sync_playwright
 
@@ -29,6 +30,7 @@ _PLATFORM_BROWSER_CONFIG: dict[str, dict[str, str]] = {
 		"success_cookie": "at",
 	},
 }
+_ZHILIAN_HOST = "zhaopin.com"
 
 
 def _get_platform_config(platform: str) -> dict[str, str]:
@@ -54,13 +56,21 @@ def _extract_zhilian_client_id(page: Any) -> str:
 		return ""
 
 
+def _is_zhilian_url(url: str) -> bool:
+	host = urlparse(url).hostname
+	if host is None:
+		return False
+	host = host.rstrip(".").lower()
+	return host == _ZHILIAN_HOST or host.endswith(f".{_ZHILIAN_HOST}")
+
+
 def _find_zhilian_recruiter_page(pages: list[Any]) -> Any | None:
 	for page in pages:
 		url = getattr(page, "url", "")
-		if "zhaopin.com" in url and any(path in url for path in ("/app/im", "/app/recommend")):
+		if _is_zhilian_url(url) and any(path in url for path in ("/app/im", "/app/recommend")):
 			return page
 	for page in pages:
-		if "zhaopin.com" in getattr(page, "url", ""):
+		if _is_zhilian_url(getattr(page, "url", "")):
 			return page
 	return None
 

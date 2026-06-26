@@ -7,6 +7,8 @@ from boss_agent_cli.auth.browser import (
 	LOGIN_PAGE_URL,
 	_NAV_TIMEOUT_MS,
 	_NETWORKIDLE_GRACE_MS,
+	_find_zhilian_recruiter_page,
+	_is_zhilian_url,
 	login_via_cdp,
 	login_via_browser,
 	refresh_stoken,
@@ -37,6 +39,29 @@ def _mock_cdp_playwright(mock_context: MagicMock) -> tuple[MagicMock, MagicMock,
 	mock_launcher = MagicMock()
 	mock_launcher.start.return_value = mock_playwright
 	return mock_launcher, mock_playwright, mock_page
+
+
+class _UrlPage:
+	def __init__(self, url: str) -> None:
+		self.url = url
+
+
+def test_zhilian_url_host_validation_uses_exact_hostname() -> None:
+	assert _is_zhilian_url("https://zhaopin.com/")
+	assert _is_zhilian_url("https://RD6.ZHAOPIN.COM./app/im")
+	assert not _is_zhilian_url("https://rd6.zhaopin.com.evil.example/app/im")
+	assert not _is_zhilian_url("https://evil.example/app/im?next=https://rd6.zhaopin.com/app/im")
+	assert not _is_zhilian_url("not-a-url-with-zhaopin.com")
+
+
+def test_find_zhilian_recruiter_page_rejects_embedded_hostname() -> None:
+	fake_chat = _UrlPage("https://rd6.zhaopin.com.evil.example/app/im")
+	fake_recommend = _UrlPage("https://evil.example/app/recommend?next=https://rd6.zhaopin.com/app/im")
+	valid_page = _UrlPage("https://rd6.zhaopin.com/profile")
+
+	selected = _find_zhilian_recruiter_page([fake_chat, fake_recommend, valid_page])
+
+	assert selected is valid_page
 
 
 @patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")

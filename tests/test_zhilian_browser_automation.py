@@ -129,6 +129,22 @@ def test_zhilian_cdp_prefers_chat_page_over_recommend_page() -> None:
 	assert selected is chat
 
 
+def test_zhilian_cdp_rejects_embedded_zhaopin_hostname() -> None:
+	fake_chat = FakeCdpPage("https://rd6.zhaopin.com.evil.example/app/im")
+	fake_query = FakeCdpPage("https://evil.example/chat?next=https://rd6.zhaopin.com/app/im")
+	valid_page = FakeCdpPage("https://rd6.zhaopin.com/profile")
+
+	selected = _find_zhilian_page([fake_chat, fake_query, valid_page])
+
+	assert selected is valid_page
+
+
+def test_zhilian_cdp_ignores_invalid_zhaopin_like_url() -> None:
+	selected = _find_zhilian_page([FakeCdpPage("not-a-url-with-zhaopin.com")])
+
+	assert selected is None
+
+
 def test_zhilian_browser_session_sends_message_after_selector_health(tmp_path: Path) -> None:
 	page = FakePage()
 	session = ZhilianBrowserRecruiterSession(page, diagnostics_dir=tmp_path)
