@@ -82,3 +82,59 @@ class AIService:
 			return cast("str", data["choices"][0]["message"]["content"])
 		except (KeyError, IndexError, TypeError) as exc:
 			raise AIServiceError(f"响应格式异常: {exc}") from exc
+
+	def chat_completion(
+		self,
+		messages: list[dict[str, Any]],
+		*,
+		tools: list[dict[str, Any]] | None = None,
+		temperature: float | None = None,
+		max_tokens: int | None = None,
+	) -> dict[str, Any]:
+		"""Chat completion with optional OpenAI-compatible tool calling."""
+		url = f"{self.base_url}/chat/completions"
+		headers = {
+			"Authorization": f"Bearer {self.api_key}",
+			"Content-Type": "application/json",
+		}
+		payload: dict[str, Any] = {
+			"model": self.model,
+			"messages": messages,
+			"temperature": temperature if temperature is not None else self.temperature,
+			"max_tokens": max_tokens if max_tokens is not None else self.max_tokens,
+		}
+		if tools:
+			payload["tools"] = tools
+			payload["tool_choice"] = "auto"
+
+		try:
+			response = httpx.post(url, json=payload, headers=headers, timeout=120)
+			response.raise_for_status()
+		except httpx.HTTPStatusError as exc:
+			raise AIServiceError(
+				f"API 请求失败: HTTP {exc.response.status_code}",
+				status_code=exc.response.status_code,
+			) from exc
+		except httpx.RequestError as exc:
+			raise AIServiceError(f"网络请求失败: {exc}") from exc
+
+		try:
+			data = response.json()
+			message = data["choices"][0]["message"]
+		except (KeyError, IndexError, TypeError) as exc:
+			raise AIServiceError(f"响应格式异常: {exc}") from exc
+
+		raw_calls = message.get("tool_calls") or []
+		tool_calls = [
+			{
+				"id": call["id"],
+				"name": call["function"]["name"],
+				"arguments": call["function"].get("arguments") or "{}",
+			}
+			for call in raw_calls
+		]
+		return {
+			"content": message.get("content"),
+			"tool_calls": tool_calls,
+			"assistant_message": message,
+		}

@@ -4,6 +4,7 @@ import click
 
 from boss_agent_cli.commands import (
 	ai_cmd,
+	agent_cmd,
 	apply,
 	chat,
 	chat_summary,
@@ -82,6 +83,7 @@ def register_candidate_commands(cli: click.Group) -> None:
 	cli.add_command(clean.clean_cmd, "clean")
 	cli.add_command(resume_cmd.resume_group, "resume")
 	cli.add_command(ai_cmd.ai_group, "ai")
+	cli.add_command(agent_cmd.agent_cmd, "agent")
 	cli.add_command(stats.stats_cmd, "stats")
 
 
