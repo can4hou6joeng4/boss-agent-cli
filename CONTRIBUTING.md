@@ -95,7 +95,7 @@ git diff --check
 - `exit 0` 表示成功（`ok=true`）。
 - `exit 1` 表示失败（`ok=false`）。
 
-出错时信封必须包含 `error.code`、`error.recoverable` 和 `error.recovery_action`。可用错误码见 `src/boss_agent_cli/commands/schema.py` 中 `SCHEMA_DATA["error_codes"]`（约 line 855）。
+出错时信封必须包含 `error.code`、`error.recoverable` 和 `error.recovery_action`。可用错误码见 `src/boss_agent_cli/commands/schema.py` 中 `SCHEMA_DATA["error_codes"]`。
 
 ## 测试理念
 
@@ -112,14 +112,14 @@ git diff --check
 ## 添加新命令
 
 1. 在 `src/boss_agent_cli/commands/` 下新建文件
-2. 在 `main.py` 中注册命令
-3. 在 `schema.py`（`SCHEMA_DATA["commands"]`）中添加命令描述
+2. 在 `commands/register.py` 中注册命令（`register_candidate_commands` / `register_recruiter_commands`；`main.py` 只保留全局选项，不直接挂命令）
+3. 在 `schema.py`（`SCHEMA_DATA["commands"]`）中添加命令描述；顶层命令数变化时同步 `SCHEMA_DATA["description"]` 中的「共 N 个顶层命令」计数（有测试断言计数与命令表长度一致）
 4. 在 `tests/test_commands.py` 或按命令名新建测试文件
 5. 更新 `docs/commands.md` 和 `docs/commands.en.md`（命令速查表）
-6. 更新 `AGENTS.md`（CLI 不变量契约中的命令数）
+6. 更新 `AGENTS.md`（CLI 不变量契约中的命令数）与 `docs/capability-matrix.md` / `docs/capability-matrix.en.md` 中的命令计数；`tests/test_agent_docs.py` 对这些计数字符串有硬编码断言，需一并更新
 7. 更新 `README.md` 和 `README.en.md`（命令参考表）
 8. 更新对应模块的 `CLAUDE.md`
-9. 如果命令对 Agent 通过 MCP 调用有用，还需在 `src/boss_agent_cli/mcp_server.py` 的 `TOOLS` 列表加 Tool 定义、在 `_build_args` 函数加分支（`mcp-server/server.py` 是 thin wrapper，会自动 re-export）
+9. 如果命令对 Agent 通过 MCP 调用有用，还需在 `src/boss_agent_cli/mcp_server.py` 的 `TOOLS` 列表加 Tool 定义、在 `_build_args` 函数加分支；工具名与合规命令标识对不上时（如 `boss_hr_*` 系对应 `recruiter-*`）要登记 `_MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES`，否则低风险过滤不生效；`mcp-server/server.py` 是手工维护的 re-export 清单，新增公开符号需补一行；工具总数变化时同步 `README.en.md` 中的 "MCP server with N tools"（有测试按 `len(TOOLS)` 动态断言）
 
 ## 提交 Issue
 

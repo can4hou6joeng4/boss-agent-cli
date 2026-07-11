@@ -83,14 +83,14 @@ Maintainers will `squash merge`, so the squash title must follow the commit conv
 ## Adding a New Command
 
 1. Create a file under `src/boss_agent_cli/commands/`
-2. Register it in `main.py`
-3. Describe it in `src/boss_agent_cli/commands/schema.py` (under `SCHEMA_DATA["commands"]`)
+2. Register it in `commands/register.py` (`register_candidate_commands` / `register_recruiter_commands`; `main.py` only holds global options and does not attach commands directly)
+3. Describe it in `src/boss_agent_cli/commands/schema.py` (under `SCHEMA_DATA["commands"]`); when the top-level command count changes, also update the "共 N 个顶层命令" count inside `SCHEMA_DATA["description"]` (a test asserts the count matches the command table length)
 4. Add tests in `tests/test_commands.py` or a new file matching the command name
 5. Update `docs/commands.md` and `docs/commands.en.md` (command cheat-sheet)
-6. Update `AGENTS.md` (command-count invariant)
+6. Update `AGENTS.md` (command-count invariant) and the command counts in `docs/capability-matrix.md` / `docs/capability-matrix.en.md`; `tests/test_agent_docs.py` hard-codes these count strings, so update it in the same change
 7. Update `README.md` and `README.en.md` (command reference table)
 8. Update the relevant module's `CLAUDE.md`
-9. If the command is useful for Agents via MCP, also register it in `src/boss_agent_cli/mcp_server.py` (add a Tool to the `TOOLS` list and a branch in `_build_args`; `mcp-server/server.py` is a thin wrapper that auto re-exports both)
+9. If the command is useful for Agents via MCP, also register it in `src/boss_agent_cli/mcp_server.py` (add a Tool to the `TOOLS` list and a branch in `_build_args`); when the tool name does not map onto its compliance command identifier (e.g. `boss_hr_*` tools map to `recruiter-*`), register it in `_MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES` or the low-risk filtering will not apply; `mcp-server/server.py` is a hand-maintained re-export list — add a line for each new public symbol; when the tool count changes, update "MCP server with N tools" in `README.en.md` (a test asserts it against `len(TOOLS)`)
 
 ## Output Contract (Do Not Break)
 
@@ -113,7 +113,7 @@ Every command must output a JSON envelope to **stdout**:
 - `exit 0` — success (`ok=true`)
 - `exit 1` — failure (`ok=false`)
 
-On error, the envelope must contain `error.code`, `error.recoverable`, and `error.recovery_action`. See `SCHEMA_DATA["error_codes"]` in `src/boss_agent_cli/commands/schema.py` (around line 855) for the current enum.
+On error, the envelope must contain `error.code`, `error.recoverable`, and `error.recovery_action`. See `SCHEMA_DATA["error_codes"]` in `src/boss_agent_cli/commands/schema.py` for the current enum.
 
 ## Testing Philosophy
 
