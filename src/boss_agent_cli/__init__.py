@@ -19,7 +19,14 @@ if TYPE_CHECKING:
 	from boss_agent_cli.api.models import JobDetail, JobItem
 	from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 	from boss_agent_cli.cache.store import CacheStore
-	from boss_agent_cli.platforms import BossPlatform, Platform, ZhilianPlatform, get_platform, list_platforms
+	from boss_agent_cli.platforms import (
+		BossPlatform,
+		Platform,
+		QianchengPlatform,
+		ZhilianPlatform,
+		get_platform,
+		list_platforms,
+	)
 	from boss_agent_cli.resume.models import ResumeData, ResumeFile
 
 __version__ = "1.14.0"
