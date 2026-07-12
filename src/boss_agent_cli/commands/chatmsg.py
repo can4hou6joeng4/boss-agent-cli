@@ -6,7 +6,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
-from boss_agent_cli.commands.contact_lookup import FriendLookupLimitExceeded, find_friend_by_security_id
+from boss_agent_cli.commands.contact_lookup import resolve_friend_or_emit
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, render_simple_list
 
@@ -33,37 +33,14 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int, sho
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 
 	with get_platform_instance(ctx, auth) as platform:
-		try:
-			friend_item, friends_error = find_friend_by_security_id(platform, security_id)
-		except NotImplementedError as exc:
-			handle_not_supported(ctx, "chatmsg", exc, fallback_message="当前平台不支持沟通列表能力")
-			return
-		except FriendLookupLimitExceeded as exc:
-			handle_error_output(
-				ctx, "chatmsg",
-				code="NETWORK_ERROR",
-				message=str(exc),
-				recoverable=True,
-				recovery_action="重试",
-			)
-			return
-		if friends_error is not None:
-			code, message = platform.parse_error(friends_error)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx, "chatmsg",
-				code=code,
-				message=message or "沟通列表获取失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
-			return
+		friend_item = resolve_friend_or_emit(
+			ctx,
+			"chatmsg",
+			platform,
+			security_id,
+			not_found_message=f"未在沟通列表中找到 security_id={security_id}，请确认该联系人存在",
+		)
 		if friend_item is None:
-			handle_error_output(
-				ctx, "chatmsg",
-				code="JOB_NOT_FOUND",
-				message=f"未在沟通列表中找到 security_id={security_id}，请确认该联系人存在",
-			)
 			return
 		gid = str(friend_item.get("uid", ""))
 		friend_name = friend_item.get("name") or "-"

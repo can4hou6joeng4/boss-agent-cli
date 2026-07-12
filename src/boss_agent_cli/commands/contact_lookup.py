@@ -48,3 +48,58 @@ def find_friend_by_security_id(
 	if not terminated:
 		raise FriendLookupLimitExceeded("沟通列表分页遍历超过上限，未能确认联系人是否存在，请重试")
 	return None, None
+
+
+def resolve_friend_or_emit(
+	ctx: Any,
+	command: str,
+	platform: Any,
+	security_id: str,
+	*,
+	not_found_message: str | None = None,
+) -> dict[str, Any] | None:
+	"""按 security_id 定位联系人；失败时输出统一错误信封并返回 None。
+
+	封装 mark/exchange/chatmsg/chat-summary 共用的「解析 + 错误处理」样板：
+	NotImplementedError→NOT_SUPPORTED、FriendLookupLimitExceeded→NETWORK_ERROR、
+	平台失败→按错误码、未找到→JOB_NOT_FOUND。成功返回 friend_item；否则输出错误信封
+	并返回 None（调用方应立即 return）。
+	"""
+	from boss_agent_cli.display import error_contract_for_code, handle_error_output, handle_not_supported
+
+	try:
+		friend_item, friends_error = find_friend_by_security_id(platform, security_id)
+	except NotImplementedError as exc:
+		handle_not_supported(ctx, command, exc, fallback_message="当前平台不支持沟通列表能力")
+		return None
+	except FriendLookupLimitExceeded as exc:
+		handle_error_output(
+			ctx,
+			command,
+			code="NETWORK_ERROR",
+			message=str(exc),
+			recoverable=True,
+			recovery_action="重试",
+		)
+		return None
+	if friends_error is not None:
+		code, message = platform.parse_error(friends_error)
+		recoverable, recovery_action = error_contract_for_code(code)
+		handle_error_output(
+			ctx,
+			command,
+			code=code,
+			message=message or "沟通列表获取失败",
+			recoverable=recoverable,
+			recovery_action=recovery_action,
+		)
+		return None
+	if friend_item is None:
+		handle_error_output(
+			ctx,
+			command,
+			code="JOB_NOT_FOUND",
+			message=not_found_message or f"未在沟通列表中找到 security_id={security_id}",
+		)
+		return None
+	return friend_item
