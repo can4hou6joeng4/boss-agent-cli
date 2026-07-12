@@ -104,6 +104,16 @@ def handle_error_output(
 		raise SystemExit(1)
 
 
+def handle_not_supported(ctx: Any, command: str, exc: Exception, *, fallback_message: str) -> None:
+	"""命令因平台不支持而抛 NotImplementedError 时的统一错误信封。"""
+	_, recovery_action = error_contract_for_code("NOT_SUPPORTED")
+	handle_error_output(
+		ctx, command, code="NOT_SUPPORTED",
+		message=str(exc) or fallback_message,
+		recoverable=True, recovery_action=recovery_action,
+	)
+
+
 def handle_platform_error_output(
 	ctx,
 	command: str,

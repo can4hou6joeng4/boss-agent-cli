@@ -3,9 +3,7 @@ import click
 from boss_agent_cli.api.client import AuthError
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, handle_platform_error_output, login_action_for_ctx, render_sectioned_record
-
-NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
+from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, login_action_for_ctx, render_sectioned_record
 
 
 @click.command("me")
@@ -50,13 +48,7 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 				try:
 					resp = platform.resume_baseinfo()
 				except NotImplementedError as exc:
-					handle_error_output(
-						ctx, "me",
-						code="NOT_SUPPORTED",
-						message=str(exc) or "当前平台不支持简历基本信息能力",
-						recoverable=True,
-						recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
-					)
+					handle_not_supported(ctx, "me", exc, fallback_message="当前平台不支持简历基本信息能力")
 					return
 				if not platform.is_success(resp):
 					handle_platform_error_output(
@@ -73,13 +65,7 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 				try:
 					resp = platform.resume_expect()
 				except NotImplementedError as exc:
-					handle_error_output(
-						ctx, "me",
-						code="NOT_SUPPORTED",
-						message=str(exc) or "当前平台不支持求职期望能力",
-						recoverable=True,
-						recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
-					)
+					handle_not_supported(ctx, "me", exc, fallback_message="当前平台不支持求职期望能力")
 					return
 				if not platform.is_success(resp):
 					handle_platform_error_output(
@@ -96,13 +82,7 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 				try:
 					resp = platform.deliver_list(page=deliver_page)
 				except NotImplementedError as exc:
-					handle_error_output(
-						ctx, "me",
-						code="NOT_SUPPORTED",
-						message=str(exc) or "当前平台不支持投递记录能力",
-						recoverable=True,
-						recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
-					)
+					handle_not_supported(ctx, "me", exc, fallback_message="当前平台不支持投递记录能力")
 					return
 				if not platform.is_success(resp):
 					handle_platform_error_output(

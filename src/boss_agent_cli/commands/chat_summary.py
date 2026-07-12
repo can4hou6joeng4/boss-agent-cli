@@ -5,9 +5,7 @@ from boss_agent_cli.chat_summary import summarize_messages
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands.contact_lookup import FriendLookupLimitExceeded, find_friend_by_security_id
-from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_message_panel
-
-NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
+from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, render_message_panel
 
 
 @click.command("chat-summary")
@@ -28,14 +26,7 @@ def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int
 		try:
 			friend_item, friends_error = find_friend_by_security_id(platform, security_id)
 		except NotImplementedError as exc:
-			handle_error_output(
-				ctx,
-				"chat-summary",
-				code="NOT_SUPPORTED",
-				message=str(exc) or "当前平台不支持沟通列表能力",
-				recoverable=True,
-				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
-			)
+			handle_not_supported(ctx, "chat-summary", exc, fallback_message="当前平台不支持沟通列表能力")
 			return
 		except FriendLookupLimitExceeded as exc:
 			handle_error_output(
@@ -73,14 +64,7 @@ def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int
 		try:
 			resp = platform.chat_history(gid, security_id, page=page, count=count)
 		except NotImplementedError as exc:
-			handle_error_output(
-				ctx,
-				"chat-summary",
-				code="NOT_SUPPORTED",
-				message=str(exc) or "当前平台不支持聊天记录能力",
-				recoverable=True,
-				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
-			)
+			handle_not_supported(ctx, "chat-summary", exc, fallback_message="当前平台不支持聊天记录能力")
 			return
 		if not platform.is_success(resp):
 			code, message = platform.parse_error(resp)

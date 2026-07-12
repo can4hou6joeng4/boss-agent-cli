@@ -3,10 +3,9 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_job_detail
+from boss_agent_cli.commands.detail import build_job_from_card
+from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, render_job_detail
 from boss_agent_cli.index_cache import get_index_info, get_job_by_index
-
-NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
 
 
 @click.command("show")
@@ -50,13 +49,7 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 		try:
 			raw = platform.job_card(security_id)
 		except NotImplementedError as exc:
-			handle_error_output(
-				ctx, "show",
-				code="NOT_SUPPORTED",
-				message=str(exc) or "当前平台不支持职位详情能力",
-				recoverable=True,
-				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
-			)
+			handle_not_supported(ctx, "show", exc, fallback_message="当前平台不支持职位详情能力")
 			return
 		if not platform.is_success(raw):
 			code, message = platform.parse_error(raw)
@@ -80,29 +73,11 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 		)
 		return
 
-	job_id = card.get("encryptJobId", "")
-
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		greeted = cache.is_greeted(security_id)
 
-	result = {
-		"job_id": job_id,
-		"title": card.get("jobName", ""),
-		"company": card.get("brandName", ""),
-		"salary": card.get("salaryDesc", ""),
-		"city": card.get("cityName", ""),
-		"experience": card.get("experienceName", ""),
-		"education": card.get("degreeName", ""),
-		"description": card.get("postDescription", ""),
-		"address": card.get("address", ""),
-		"skills": card.get("jobLabels", []),
-		"boss_name": card.get("bossName", ""),
-		"boss_title": card.get("bossTitle", ""),
-		"boss_active": card.get("activeTimeDesc", "离线"),
-		"security_id": security_id,
-		"greeted": greeted,
-		"index": index,
-	}
+	result = build_job_from_card(card, security_id=security_id, greeted=greeted)
+	result["index"] = index
 
 	manual_handoff = "如需投递或沟通，请回到 BOSS 直聘官方页面由用户手动完成"
 	hints = {"next_actions": [manual_handoff, "boss search <query>"]}

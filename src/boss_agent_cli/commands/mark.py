@@ -4,9 +4,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands.contact_lookup import FriendLookupLimitExceeded, find_friend_by_security_id
-from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_message_panel
-
-NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
+from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, render_message_panel
 
 _LABEL_MAP = {
 	"新招呼": 1, "沟通中": 2, "已约面": 3, "已获取简历": 4,
@@ -53,13 +51,7 @@ def mark_cmd(ctx: click.Context, security_id: str, label: str, remove: bool) -> 
 		try:
 			friend_item, friends_error = find_friend_by_security_id(platform, security_id)
 		except NotImplementedError as exc:
-			handle_error_output(
-				ctx, "mark",
-				code="NOT_SUPPORTED",
-				message=str(exc) or "当前平台不支持沟通列表能力",
-				recoverable=True,
-				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
-			)
+			handle_not_supported(ctx, "mark", exc, fallback_message="当前平台不支持沟通列表能力")
 			return
 		except FriendLookupLimitExceeded as exc:
 			handle_error_output(
@@ -94,13 +86,7 @@ def mark_cmd(ctx: click.Context, security_id: str, label: str, remove: bool) -> 
 		try:
 			resp = platform.friend_label(friend_id, label_id, friend_source, remove=remove)
 		except NotImplementedError as exc:
-			handle_error_output(
-				ctx, "mark",
-				code="NOT_SUPPORTED",
-				message=str(exc) or "当前平台不支持联系人标签能力",
-				recoverable=True,
-				recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
-			)
+			handle_not_supported(ctx, "mark", exc, fallback_message="当前平台不支持联系人标签能力")
 			return
 		if not platform.is_success(resp):
 			code, message = platform.parse_error(resp)

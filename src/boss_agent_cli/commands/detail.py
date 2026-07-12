@@ -9,7 +9,6 @@ from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_job_detail
 from boss_agent_cli.platforms import Platform
 
-NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
 DetailError = tuple[str, str, dict[str, Any] | None]
 
 
@@ -21,6 +20,27 @@ def _platform_error_details(response: Any) -> dict[str, Any] | None:
 			if isinstance(details, dict):
 				return details
 	return None
+
+
+def build_job_from_card(card: dict[str, Any], *, security_id: str, greeted: bool) -> dict[str, Any]:
+	"""把 job_card 响应映射为统一职位字段 dict（show / detail 浏览器兜底通道共用）。"""
+	return {
+		"job_id": card.get("encryptJobId", ""),
+		"title": card.get("jobName", ""),
+		"company": card.get("brandName", ""),
+		"salary": card.get("salaryDesc", ""),
+		"city": card.get("cityName", ""),
+		"experience": card.get("experienceName", ""),
+		"education": card.get("degreeName", ""),
+		"description": card.get("postDescription", ""),
+		"address": card.get("address", ""),
+		"skills": card.get("jobLabels", []),
+		"boss_name": card.get("bossName", ""),
+		"boss_title": card.get("bossTitle", ""),
+		"boss_active": card.get("activeTimeDesc", "离线"),
+		"security_id": security_id,
+		"greeted": greeted,
+	}
 
 
 @click.command("detail")
@@ -58,13 +78,7 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 
 	if result is None:
 		if last_error:
-			recoverable: bool
-			recovery_action: str | None
-			if last_error[0] == "NOT_SUPPORTED":
-				recoverable = True
-				recovery_action = NOT_SUPPORTED_RECOVERY_ACTION
-			else:
-				recoverable, recovery_action = error_contract_for_code(last_error[0])
+			recoverable, recovery_action = error_contract_for_code(last_error[0])
 			handle_error_output(
 				ctx, "detail",
 				code=last_error[0],
@@ -142,25 +156,7 @@ def _detail_via_browser(platform: Platform, security_id: str, lid: str, data_dir
 	if not card:
 		return None, None
 
-	job_id = card.get("encryptJobId", "")
-
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		greeted = cache.is_greeted(security_id)
 
-	return {
-		"job_id": job_id,
-		"title": card.get("jobName", ""),
-		"company": card.get("brandName", ""),
-		"salary": card.get("salaryDesc", ""),
-		"city": card.get("cityName", ""),
-		"experience": card.get("experienceName", ""),
-		"education": card.get("degreeName", ""),
-		"description": card.get("postDescription", ""),
-		"address": card.get("address", ""),
-		"skills": card.get("jobLabels", []),
-		"boss_name": card.get("bossName", ""),
-		"boss_title": card.get("bossTitle", ""),
-		"boss_active": card.get("activeTimeDesc", "离线"),
-		"security_id": security_id,
-		"greeted": greeted,
-	}, None
+	return build_job_from_card(card, security_id=security_id, greeted=greeted), None

@@ -5,11 +5,9 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_job_table
+from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, render_job_table
 from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.match_score import score_job_dict
-
-NOT_SUPPORTED_RECOVERY_ACTION = "切换平台或调整命令参数后重试"
 
 
 @click.command("recommend")
@@ -33,13 +31,7 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 				try:
 					expect_resp = platform.resume_expect()
 				except NotImplementedError as exc:
-					handle_error_output(
-						ctx, "recommend",
-						code="NOT_SUPPORTED",
-						message=str(exc) or "当前平台不支持求职期望能力",
-						recoverable=True,
-						recovery_action=NOT_SUPPORTED_RECOVERY_ACTION,
-					)
+					handle_not_supported(ctx, "recommend", exc, fallback_message="当前平台不支持求职期望能力")
 					return
 				else:
 					if not platform.is_success(expect_resp):
