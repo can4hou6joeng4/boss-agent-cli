@@ -51,9 +51,7 @@ def redact_sensitive(value: Any) -> Any:
 		redacted: dict[Any, Any] = {}
 		for key, item in value.items():
 			key_text = str(key).lower()
-			if _is_error_code_metadata(item):
-				redacted[key] = redact_sensitive(item)
-			elif key_text in _PUBLIC_METADATA_KEYS:
+			if _is_error_code_metadata(item) or key_text in _PUBLIC_METADATA_KEYS:
 				redacted[key] = redact_sensitive(item)
 			elif any(part in key_text for part in _SENSITIVE_KEY_PARTS) and not isinstance(item, bool):
 				redacted[key] = _REDACTED
@@ -75,8 +73,6 @@ def redact_sensitive_text(message: str) -> str:
 	for pattern in _SENSITIVE_TEXT_PATTERNS:
 		if pattern.pattern.startswith("\\b(bearer)"):
 			redacted = pattern.sub(r"\1 [REDACTED]", redacted)
-		elif pattern.pattern.startswith("\\b(authorization)"):
-			redacted = pattern.sub(r"\1\2[REDACTED]", redacted)
 		else:
 			redacted = pattern.sub(r"\1\2[REDACTED]", redacted)
 	return redacted

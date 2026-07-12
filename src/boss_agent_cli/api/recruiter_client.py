@@ -418,6 +418,13 @@ class BossRecruiterClient:
 			payload.update(extra)
 		return payload
 
+	@staticmethod
+	def _page_error_message(result: Any) -> str:
+		"""从前端代劳返回中提取错误串（reply / exchange 失败信封共用）。"""
+		if isinstance(result, dict):
+			return str(result.get("error") or "unexpected page result")
+		return f"unexpected result: {result!r}"
+
 	# ── Public API ───────────────────────────────────────────────────
 
 	# ── 候选人列表与筛选 ────────────────────────────────
@@ -602,11 +609,7 @@ class BossRecruiterClient:
 				}
 			result.setdefault("error", "no confirmed chat websocket send detected")
 		# Surface the page-side error in CLI envelope shape
-		err_msg = (
-			str((result or {}).get("error") or "unexpected page result")
-			if isinstance(result, dict)
-			else f"unexpected result: {result!r}"
-		)
+		err_msg = self._page_error_message(result)
 		return {
 			"code": -1,
 			"message": f"send_message_by_friend failed: {err_msg}",
@@ -737,11 +740,7 @@ class BossRecruiterClient:
 					},
 				}
 			result.setdefault("error", "no confirmed chat websocket send detected")
-		err = (
-			str((result or {}).get("error") or "unexpected page result")
-			if isinstance(result, dict)
-			else f"unexpected result: {result!r}"
-		)
+		err = self._page_error_message(result)
 		return {
 			"code": -1,
 			"message": f"exchange_request_by_friend failed: {err}",

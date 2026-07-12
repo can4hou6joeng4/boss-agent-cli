@@ -54,15 +54,21 @@ def try_save_index(data_dir: Path, jobs: list[dict[str, Any]], *, source: str = 
 		return False
 
 
-def get_job_by_index(data_dir: Path, index: int) -> dict[str, Any] | None:
-	"""按 1-based 编号获取缓存的职位信息。"""
+def _load_cache(data_dir: Path) -> dict[str, Any] | None:
+	"""读取索引缓存；缺文件或解析失败返回 None。"""
 	path = _cache_path(data_dir)
 	if not path.exists():
 		return None
-
 	try:
-		cache_data = json.loads(path.read_text(encoding="utf-8"))
+		return cast("dict[str, Any]", json.loads(path.read_text(encoding="utf-8")))
 	except (json.JSONDecodeError, OSError):
+		return None
+
+
+def get_job_by_index(data_dir: Path, index: int) -> dict[str, Any] | None:
+	"""按 1-based 编号获取缓存的职位信息。"""
+	cache_data = _load_cache(data_dir)
+	if cache_data is None:
 		return None
 
 	jobs = cache_data.get("jobs", [])
@@ -74,13 +80,8 @@ def get_job_by_index(data_dir: Path, index: int) -> dict[str, Any] | None:
 
 def get_index_info(data_dir: Path) -> dict[str, Any]:
 	"""获取缓存元信息（来源、数量、保存时间）。"""
-	path = _cache_path(data_dir)
-	if not path.exists():
-		return {"exists": False, "source": "", "count": 0, "saved_at": 0}
-
-	try:
-		cache_data = json.loads(path.read_text(encoding="utf-8"))
-	except (json.JSONDecodeError, OSError):
+	cache_data = _load_cache(data_dir)
+	if cache_data is None:
 		return {"exists": False, "source": "", "count": 0, "saved_at": 0}
 
 	return {

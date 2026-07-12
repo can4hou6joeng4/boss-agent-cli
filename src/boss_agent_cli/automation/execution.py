@@ -160,17 +160,25 @@ def update_prior(prior: dict[str, str], decision: Decision) -> None:
 			return
 
 
-def _lead_status(
-	config: AutomationConfig,
-	decision: Decision,
-	dry_run: bool,
-) -> EventStatus:
+def _common_gate(config: AutomationConfig, decision: Decision) -> EventStatus | None:
+	"""_lead_status 与 _action_status 共享的前置门控；返回 None 表示放行到后续判定。"""
 	if decision.requires_human or decision.risk_flags:
 		return EventStatus.QUEUED_FOR_REVIEW
 	if config.mode in {AutomationMode.ASSIST, AutomationMode.TRAINING}:
 		return EventStatus.QUEUED_FOR_REVIEW
 	if decision.confidence < config.human_review_threshold:
 		return EventStatus.SKIPPED
+	return None
+
+
+def _lead_status(
+	config: AutomationConfig,
+	decision: Decision,
+	dry_run: bool,
+) -> EventStatus:
+	gated = _common_gate(config, decision)
+	if gated is not None:
+		return gated
 	return EventStatus.DRY_RUN if dry_run else EventStatus.AUTO_EXECUTED
 
 
@@ -179,12 +187,9 @@ def _action_status(
 	decision: Decision,
 	dry_run: bool,
 ) -> EventStatus:
-	if decision.requires_human or decision.risk_flags:
-		return EventStatus.QUEUED_FOR_REVIEW
-	if config.mode in {AutomationMode.ASSIST, AutomationMode.TRAINING}:
-		return EventStatus.QUEUED_FOR_REVIEW
-	if decision.confidence < config.human_review_threshold:
-		return EventStatus.SKIPPED
+	gated = _common_gate(config, decision)
+	if gated is not None:
+		return gated
 	if decision.confidence < config.auto_execute_threshold:
 		return EventStatus.QUEUED_FOR_REVIEW
 	if decision.action not in config.allowed_actions:

@@ -9,11 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.ai.config import AIConfigStore
+from boss_agent_cli.ai.local_models import RUNTIME_BASE_URLS
 from boss_agent_cli.ai.service import AIService, AIServiceError
 from boss_agent_cli.automation.config import AutomationConfig, ReplyStrategy
 from boss_agent_cli.automation.models import Conversation, Decision, PlatformAction
 
-_LOCAL_AI_PROVIDERS = {"ollama", "vllm"}
+# 本地 reply provider 集合 == 本地模型运行时集合（单一真源在 ai.local_models）
+_LOCAL_AI_PROVIDERS = frozenset(RUNTIME_BASE_URLS)
 
 
 @dataclass(frozen=True, slots=True)

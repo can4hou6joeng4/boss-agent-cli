@@ -13,7 +13,7 @@ from boss_agent_cli.automation.adapters import build_automation_adapter
 from boss_agent_cli.automation.boss_adapter import BossRecruiterAutomationPlatform
 from boss_agent_cli.automation.mock_adapter import MockRecruiterAutomationPlatform
 from boss_agent_cli.automation.zhilian_adapter import ZhilianRecruiterAutomationPlatform
-from boss_agent_cli.automation.config import AutomationConfig, ReplyStrategy
+from boss_agent_cli.automation.config import AutomationConfig, ReplyStrategy, automation_config_from_dict
 from boss_agent_cli.automation.decision import decide_action
 from boss_agent_cli.automation.events import stable_action_id
 from boss_agent_cli.automation.models import (
@@ -99,6 +99,11 @@ def _conversation(text: str, title: str = "张三") -> Conversation:
 		all_messages=(text,),
 		fingerprint=ConversationFingerprint(title),
 	)
+
+
+def test_automation_config_from_empty_matches_dataclass_defaults() -> None:
+	assert automation_config_from_dict({}) == AutomationConfig()
+	assert automation_config_from_dict(None) == AutomationConfig()
 
 
 def test_decision_sends_questionnaire_for_high_confidence_new_candidate() -> None:
