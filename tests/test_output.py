@@ -160,7 +160,6 @@ def test_config_defaults():
 	from boss_agent_cli.config import load_config
 	cfg = load_config(None)
 	assert cfg["request_delay"] == [1.5, 3.0]
-	assert cfg["batch_greet_max"] == 10
 	assert cfg["log_level"] == "error"
 
 
@@ -168,8 +167,8 @@ def test_config_from_file(tmp_path):
 	import json as json_mod
 	from boss_agent_cli.config import load_config
 	cfg_file = tmp_path / "config.json"
-	cfg_file.write_text(json_mod.dumps({"default_city": "杭州", "log_level": "debug"}))
+	cfg_file.write_text(json_mod.dumps({"export_dir": "/tmp/exports", "log_level": "debug"}))
 	cfg = load_config(cfg_file)
-	assert cfg["default_city"] == "杭州"
+	assert cfg["export_dir"] == "/tmp/exports"
 	assert cfg["log_level"] == "debug"
-	assert cfg["batch_greet_max"] == 10
+	assert cfg["request_delay"] == [1.5, 3.0]

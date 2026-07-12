@@ -150,11 +150,11 @@ boss doctor --live-probe
 
 ```bash
 boss config list                    # 查看所有配置
-boss config set default_city 广州   # 设置默认城市
+boss config set log_level debug     # 设置日志级别
 boss config reset                   # 恢复默认
 ```
 
-配置位于 `~/.boss-agent/config.json`：默认城市 / 薪资、请求间隔、日志级别、登录超时、CDP 地址、导出目录。
+配置位于 `~/.boss-agent/config.json`：请求间隔、批量打招呼间隔、日志级别、CDP 地址、导出目录、平台 / 角色。
 
 ## 🏗️ 技术架构
 

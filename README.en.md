@@ -145,11 +145,11 @@ Full checks, CDP launch examples, and error codes: **[Troubleshooting](docs/trou
 
 ```bash
 boss config list                      # view all settings
-boss config set default_city 广州     # set the default city
+boss config set log_level debug       # set the log level
 boss config reset                     # restore defaults
 ```
 
-Settings live in `~/.boss-agent/config.json`: default city / salary, request delays, log level, login timeout, CDP URL, export dir.
+Settings live in `~/.boss-agent/config.json`: request delays, batch-greet delay, log level, CDP URL, export dir, platform / role.
 
 ## 🏗️ Architecture
 

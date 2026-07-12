@@ -112,11 +112,12 @@ def test_config_set_string_value(tmp_path):
 	assert saved["log_level"] == "debug"
 
 
-def test_config_set_int_value(tmp_path):
-	"""设置整数类型配置项。"""
-	code, parsed = _invoke("config", "set", "batch_greet_max", "5", tmp_path=tmp_path)
-	assert code == 0
-	assert parsed["data"]["value"] == 5
+def test_parse_value_int_from_default_type():
+	"""_parse_value 按 int 默认值类型转换输入。"""
+	from boss_agent_cli.commands.config_cmd import _parse_value
+	result = _parse_value("5", 10)
+	assert result == 5
+	assert isinstance(result, int)
 
 
 def test_config_set_list_value(tmp_path):
