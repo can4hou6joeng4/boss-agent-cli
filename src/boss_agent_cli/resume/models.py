@@ -40,23 +40,6 @@ class JobIntentionSection:
 
 
 @dataclass
-class TagsRow:
-	"""标签行"""
-
-	type: str = "tags"
-	tags: list[str] = field(default_factory=list)
-
-
-@dataclass
-class RichTextRow:
-	"""富文本行"""
-
-	type: str = "richtext"
-	columns: int = 1
-	content: list[str] = field(default_factory=list)
-
-
-@dataclass
 class ResumeModule:
 	"""简历模块"""
 

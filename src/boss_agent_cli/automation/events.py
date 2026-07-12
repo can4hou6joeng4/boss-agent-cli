@@ -8,7 +8,6 @@ from typing import Any
 
 from boss_agent_cli.automation.models import (
 	AutomationEvent,
-	Decision,
 	EventStatus,
 	PlatformAction,
 )
@@ -48,12 +47,3 @@ def make_event(
 		reason=reason,
 		result=result or {},
 	)
-
-
-def decision_payload(decision: Decision) -> dict[str, Any]:
-	return {
-		"action": decision.action.value,
-		"confidence": decision.confidence,
-		"reason": decision.reason,
-		"message": decision.message,
-	}
