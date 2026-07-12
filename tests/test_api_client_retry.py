@@ -77,9 +77,9 @@ def test_request_get_adds_stoken_and_merges_cookies():
 	assert http_client.cookies.get("bst") == "cookie-from-resp"
 
 
-@patch("boss_agent_cli.api.client.random.uniform", return_value=0)
-@patch("boss_agent_cli.api.client.time.sleep")
-@patch("boss_agent_cli.api.client.httpx.Client")
+@patch("boss_agent_cli.api._base_client.random.uniform", return_value=0)
+@patch("boss_agent_cli.api._base_client.time.sleep")
+@patch("boss_agent_cli.api._base_client.httpx.Client")
 def test_request_retries_after_403_and_refreshes_token(mock_http_client_cls, mock_sleep, mock_uniform):
 	auth = FakeAuthManager()
 	first = FakeHttpxClient([FakeResponse(status_code=403, text="forbidden")])
@@ -98,9 +98,9 @@ def test_request_retries_after_403_and_refreshes_token(mock_http_client_cls, moc
 	assert second.calls[0]["kwargs"]["params"]["__zp_stoken__"] == "refreshed-1"
 
 
-@patch("boss_agent_cli.api.client.random.uniform", return_value=0)
-@patch("boss_agent_cli.api.client.time.sleep")
-@patch("boss_agent_cli.api.client.httpx.Client")
+@patch("boss_agent_cli.api._base_client.random.uniform", return_value=0)
+@patch("boss_agent_cli.api._base_client.time.sleep")
+@patch("boss_agent_cli.api._base_client.httpx.Client")
 def test_request_retries_after_stoken_expired_code(mock_http_client_cls, mock_sleep, mock_uniform):
 	auth = FakeAuthManager()
 	first = FakeHttpxClient([FakeResponse(payload={"code": endpoints.CODE_STOKEN_EXPIRED})])
@@ -119,8 +119,8 @@ def test_request_retries_after_stoken_expired_code(mock_http_client_cls, mock_sl
 	assert second.calls[0]["kwargs"]["params"]["__zp_stoken__"] == "refreshed-1"
 
 
-@patch("boss_agent_cli.api.client.time.sleep")
-@patch("boss_agent_cli.api.client.httpx.Client")
+@patch("boss_agent_cli.api._base_client.time.sleep")
+@patch("boss_agent_cli.api._base_client.httpx.Client")
 def test_request_retries_after_rate_limited_code(mock_http_client_cls, mock_sleep):
 	auth = FakeAuthManager()
 	client_with_retry = FakeHttpxClient(
@@ -142,9 +142,9 @@ def test_request_retries_after_rate_limited_code(mock_http_client_cls, mock_slee
 	assert mock_sleep.call_args_list[0].args[0] == 10
 
 
-@patch("boss_agent_cli.api.client.random.uniform", return_value=0)
-@patch("boss_agent_cli.api.client.time.sleep")
-@patch("boss_agent_cli.api.client.httpx.Client")
+@patch("boss_agent_cli.api._base_client.random.uniform", return_value=0)
+@patch("boss_agent_cli.api._base_client.time.sleep")
+@patch("boss_agent_cli.api._base_client.httpx.Client")
 def test_request_raises_auth_error_after_max_403_retries(mock_http_client_cls, mock_sleep, mock_uniform):
 	auth = FakeAuthManager()
 	mock_http_client_cls.side_effect = [

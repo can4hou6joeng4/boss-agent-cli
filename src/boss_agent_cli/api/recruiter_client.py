@@ -6,28 +6,11 @@ Endpoints sourced from newboss/boss-cli project (confirmed via reverse engineeri
 
 import atexit
 import json
-import random
-import time
 import weakref
-from types import TracebackType
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
-import httpx
-
-from boss_agent_cli.api.httpx_helpers import (
-	add_stoken_to_get_params,
-	browser_headers,
-	merge_response_cookies,
-	referer_header,
-)
 from boss_agent_cli.api import recruiter_endpoints as ep
-from boss_agent_cli.api.throttle import RequestThrottle
-
-if TYPE_CHECKING:
-	from boss_agent_cli.api.browser_client import BrowserSession
-	from boss_agent_cli.auth.manager import AuthManager
-
-_MAX_RETRIES = 3
+from boss_agent_cli.api._base_client import _BaseHttpClient
 
 _OPEN_CLIENTS: weakref.WeakSet["BossRecruiterClient"] = weakref.WeakSet()
 
@@ -187,103 +170,22 @@ class RecruiterAuthError(Exception):
 	pass
 
 
-class BossRecruiterClient:
+class BossRecruiterClient(_BaseHttpClient):
 	"""Recruiter-side hybrid API client."""
 
-	def __init__(
-		self, auth_manager: "AuthManager", *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None
-	) -> None:
-		self._auth = auth_manager
-		self._delay = delay
-		self._client: httpx.Client | None = None
-		self._browser_session: "BrowserSession | None" = None
-		self._throttle = RequestThrottle(delay)
-		self._cdp_url = cdp_url
-		self._closed = False
+	_BASE_URL = ep.BASE_URL
+	_DEFAULT_HEADERS = ep.DEFAULT_HEADERS
+	_REFERER_MAP = ep.REFERER_MAP
+	_AUTH_ERROR_CLS = RecruiterAuthError
+	_CODE_STOKEN_EXPIRED = ep.CODE_STOKEN_EXPIRED
+	_CODE_RATE_LIMITED = ep.CODE_RATE_LIMITED
+	_ADD_ENDPOINT_HINT = True
+
+	def _register(self) -> None:
 		_OPEN_CLIENTS.add(self)
 
-	def _get_client(self) -> httpx.Client:
-		if self._client is None:
-			token = self._auth.get_token()
-			headers = browser_headers(ep.DEFAULT_HEADERS, token)
-			self._client = httpx.Client(
-				base_url=ep.BASE_URL,
-				cookies=token.get("cookies", {}),
-				headers=headers,
-				follow_redirects=True,
-				timeout=30,
-			)
-		return self._client
-
-	def _get_browser(self) -> "BrowserSession":
-		if self._browser_session is None:
-			from boss_agent_cli.api.browser_client import BrowserSession
-
-			token = self._auth.get_token()
-			self._browser_session = BrowserSession(
-				cookies=token.get("cookies", {}),
-				user_agent=token.get("user_agent", ""),
-				delay=self._delay,
-				cdp_url=self._cdp_url,
-				logger=getattr(self._auth, "_logger", None),
-			)
-		return self._browser_session
-
-	def _headers_for(self, url: str) -> dict[str, str]:
-		return referer_header(url, ep.REFERER_MAP, f"{ep.BASE_URL}/")
-
-	def _merge_cookies(self, resp: httpx.Response) -> None:
-		merge_response_cookies(self._get_client(), resp)
-
-	def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
-		"""httpx request with retry loop."""
-		# extra_headers overrides yaml-driven defaults from _headers_for(url); use only when
-		# a static yaml referer can't carry per-call query params (e.g. job/edit needs encryptId).
-		extra_headers_override: dict[str, str] = kwargs.pop("extra_headers", {})
-		for attempt in range(_MAX_RETRIES + 1):
-			client = self._get_client()
-			token = self._auth.get_token()
-			stoken = token.get("stoken", "")
-
-			add_stoken_to_get_params(method, kwargs, stoken)
-
-			self._throttle.wait()
-
-			headers = {**self._headers_for(url), **extra_headers_override}
-			resp = client.request(method, url, headers=headers, **kwargs)
-			self._throttle.mark()
-			self._merge_cookies(resp)
-
-			if resp.status_code == 403 or "安全验证" in resp.text:
-				if attempt >= _MAX_RETRIES:
-					raise RecruiterAuthError("Token 刷新后仍被拒绝，请重新登录")
-				backoff = (2**attempt) + random.uniform(0.5, 1.5)
-				time.sleep(backoff)
-				self._auth.force_refresh(cdp_url=self._cdp_url)
-				self._client = None
-				continue
-
-			resp.raise_for_status()
-			data = resp.json()
-			code = data.get("code")
-
-			if code == ep.CODE_STOKEN_EXPIRED and attempt < _MAX_RETRIES:
-				backoff = (2**attempt) + random.uniform(0.5, 1.5)
-				time.sleep(backoff)
-				self._auth.force_refresh(cdp_url=self._cdp_url)
-				self._client = None
-				continue
-
-			if code == ep.CODE_RATE_LIMITED and attempt < _MAX_RETRIES:
-				cooldown = min(60, 10 * (2**attempt))
-				time.sleep(cooldown)
-				continue
-
-			if isinstance(data, dict):
-				data.setdefault("__cli_endpoint_hint__", url)
-			return cast("dict[str, Any]", data)
-
-		raise RecruiterAuthError("请求失败，已达最大重试次数")
+	def _unregister(self) -> None:
+		_OPEN_CLIENTS.discard(self)
 
 	def _browser_request(
 		self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None
@@ -774,28 +676,3 @@ class BossRecruiterClient:
 	def mark_unsuitable(self, geek_id: str, job_id: str) -> dict[str, Any]:
 		data = {"encryptGeekId": geek_id, "encryptJobId": job_id}
 		return self._browser_request("POST", ep.BOSS_MARK_UNSUITABLE_URL, data=data)
-
-	# ── Lifecycle ────────────────────────────────────────────────────
-
-	def close(self) -> None:
-		if self._closed:
-			return
-		self._closed = True
-		if self._browser_session:
-			self._browser_session.close()
-			self._browser_session = None
-		if self._client:
-			self._client.close()
-			self._client = None
-		_OPEN_CLIENTS.discard(self)
-
-	def __enter__(self) -> "BossRecruiterClient":
-		return self
-
-	def __exit__(
-		self,
-		exc_type: type[BaseException] | None,
-		exc_val: BaseException | None,
-		exc_tb: TracebackType | None,
-	) -> None:
-		self.close()
