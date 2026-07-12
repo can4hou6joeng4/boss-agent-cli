@@ -6,7 +6,7 @@ import json
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from boss_agent_cli.automation.models import AutomationEvent, PendingAction, ReviewItem
 
@@ -26,7 +26,7 @@ class AutomationStore:
 	def read_state(self) -> dict[str, Any]:
 		if not self.state_path.exists():
 			return {"conversations": {}, "autonomy": {}, "safety": {}}
-		return json.loads(self.state_path.read_text(encoding="utf-8"))
+		return cast("dict[str, Any]", json.loads(self.state_path.read_text(encoding="utf-8")))
 
 	def write_state(self, state: dict[str, Any]) -> None:
 		self.state_path.write_text(

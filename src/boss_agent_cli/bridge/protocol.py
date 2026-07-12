@@ -55,7 +55,7 @@ class BridgeResult:
 	error: str = ""
 
 	@classmethod
-	def from_dict(cls, d: dict) -> "BridgeResult":
+	def from_dict(cls, d: dict[str, Any]) -> "BridgeResult":
 		return cls(
 			id=d.get("id", ""),
 			ok=d.get("ok", False),

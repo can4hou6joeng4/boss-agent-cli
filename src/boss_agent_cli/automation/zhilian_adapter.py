@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from boss_agent_cli.automation.models import (
 	ActionResult,
@@ -145,7 +145,7 @@ class ZhilianRecruiterAutomationPlatform:
 			return None
 		method = getattr(self._client, "detect_safety_warning", None)
 		if callable(method):
-			return method()
+			return cast("str | None", method())
 		return None
 
 

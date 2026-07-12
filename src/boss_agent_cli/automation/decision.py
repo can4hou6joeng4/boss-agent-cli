@@ -11,6 +11,7 @@ from boss_agent_cli.automation.models import (
 	CandidateSnapshot,
 	Conversation,
 	Decision,
+	MatchScore,
 	PlatformAction,
 )
 from boss_agent_cli.automation.scoring import score_candidate
@@ -138,7 +139,7 @@ def _scored_decision(
 	message: str,
 	reason: str,
 	candidate_key: CandidateKey,
-	matching,
+	matching: MatchScore,
 ) -> Decision:
 	confidence = min(0.9, matching.score / 100)
 	return Decision(
@@ -153,7 +154,7 @@ def _scored_decision(
 	)
 
 
-def _skip(candidate_key: CandidateKey, reason: str, matching) -> Decision:
+def _skip(candidate_key: CandidateKey, reason: str, matching: MatchScore) -> Decision:
 	return Decision(
 		action=PlatformAction.SKIP,
 		confidence=0.9,

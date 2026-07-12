@@ -51,20 +51,20 @@ def error_contract_for_code(
 	)
 
 
-def is_json_mode(ctx) -> bool:
+def is_json_mode(ctx: Any) -> bool:
 	"""Check if --json flag is set or stdout is piped (non-TTY)."""
 	force_json = ctx.obj.get("json_output", False) if ctx and ctx.obj else False
 	return force_json or not sys.stdout.isatty()
 
 
 def handle_output(
-	ctx,
+	ctx: Any,
 	command: str,
 	data: Any,
 	*,
 	render: Callable[[Any], None] | None = None,
-	pagination: dict | None = None,
-	hints: dict | None = None,
+	pagination: dict[str, Any] | None = None,
+	hints: dict[str, Any] | None = None,
 ) -> None:
 	"""Smart output: TTY -> rich render, pipe -> JSON envelope."""
 	if is_json_mode(ctx):
@@ -77,15 +77,15 @@ def handle_output(
 
 
 def handle_error_output(
-	ctx,
+	ctx: Any,
 	command: str,
 	*,
 	code: str,
 	message: str,
 	recoverable: bool = False,
 	recovery_action: str | None = None,
-	details: dict | None = None,
-	hints: dict | None = None,
+	details: dict[str, Any] | None = None,
+	hints: dict[str, Any] | None = None,
 ) -> None:
 	"""Smart error output: TTY -> rich error, pipe -> JSON error envelope."""
 	from boss_agent_cli.output import emit_error
@@ -115,7 +115,7 @@ def handle_not_supported(ctx: Any, command: str, exc: Exception, *, fallback_mes
 
 
 def handle_platform_error_output(
-	ctx,
+	ctx: Any,
 	command: str,
 	platform: Any,
 	response: Any,
@@ -147,7 +147,7 @@ def handle_platform_error_output(
 
 
 def render_job_table(
-	items: list[dict],
+	items: list[dict[str, Any]],
 	title: str,
 	*,
 	page: int = 1,
@@ -184,7 +184,7 @@ def render_job_table(
 		console.print(f"  [dim]{hint_next}[/dim]")
 
 
-def render_job_detail(data: dict, *, greet_command: str | None = None) -> None:
+def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None) -> None:
 	"""Render job detail as a rich panel."""
 	title = data.get("title", "-")
 	salary = data.get("salary", "-")
@@ -224,7 +224,7 @@ def render_job_detail(data: dict, *, greet_command: str | None = None) -> None:
 		console.print(f"  [dim]next: {greet_command}[/dim]")
 
 
-def render_status(data: dict, *, login_action: str = "boss login") -> None:
+def render_status(data: dict[str, Any], *, login_action: str = "boss login") -> None:
 	"""Render login status."""
 	if data.get("logged_in"):
 		name = data.get("user_name", "unknown")
@@ -234,7 +234,7 @@ def render_status(data: dict, *, login_action: str = "boss login") -> None:
 
 
 def render_simple_list(
-	items: list[dict],
+	items: list[dict[str, Any]],
 	title: str,
 	columns: list[tuple[str, str, str]],
 ) -> None:
@@ -263,7 +263,7 @@ def render_simple_list(
 # ── Additional renderers ────────────────────────────────────────────
 
 
-def render_message_panel(data: dict, *, title: str = "result") -> None:
+def render_message_panel(data: dict[str, Any], *, title: str = "result") -> None:
 	"""Render a simple key-value result as a panel."""
 	lines = []
 	for k, v in data.items():
@@ -272,7 +272,7 @@ def render_message_panel(data: dict, *, title: str = "result") -> None:
 	console.print(panel)
 
 
-def render_batch_operation_summary(data: dict, *, title: str = "batch result") -> None:
+def render_batch_operation_summary(data: dict[str, Any], *, title: str = "batch result") -> None:
 	"""Render batch operation summary (greeted/failed counts + items)."""
 	greeted = data.get("greeted", [])
 	failed = data.get("failed", [])
@@ -297,7 +297,7 @@ def render_batch_operation_summary(data: dict, *, title: str = "batch result") -
 		console.print(f"  [yellow]stopped: {data['stopped_reason']}[/yellow]")
 
 
-def render_sectioned_record(data: dict, *, title: str = "info") -> None:
+def render_sectioned_record(data: dict[str, Any], *, title: str = "info") -> None:
 	"""Render multi-section record (e.g., me command) as panels."""
 	for section, content in data.items():
 		if isinstance(content, dict):
@@ -331,7 +331,7 @@ def render_string_grid(items: list[str], title: str, *, columns: int = 4) -> Non
 	console.print(table)
 
 
-def render_export_summary(data: dict) -> None:
+def render_export_summary(data: dict[str, Any]) -> None:
 	"""Render export result summary."""
 	path = data.get("path", "")
 	count = data.get("count", 0)

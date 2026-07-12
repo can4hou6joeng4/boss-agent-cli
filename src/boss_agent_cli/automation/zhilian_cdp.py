@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from boss_agent_cli.auth.browser import _DEFAULT_CDP_URL, _is_zhilian_url, probe_cdp
 from boss_agent_cli.automation.zhilian_browser import (
@@ -63,4 +63,4 @@ def _is_zhilian_chat_url(url: str) -> bool:
 
 
 def _as_page_like(page: Any) -> PageLike:
-	return page
+	return cast("PageLike", page)

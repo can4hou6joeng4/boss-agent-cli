@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
 from boss_agent_cli.automation.config import AutomationConfig
 from boss_agent_cli.automation.models import Decision, PlatformAction
@@ -25,7 +26,7 @@ class SafetyDecision:
 class SafetyGuard:
 	"""Run-scoped action quotas and circuit-breaker checks."""
 
-	def __init__(self, config: AutomationConfig, state: dict, *, dry_run: bool) -> None:
+	def __init__(self, config: AutomationConfig, state: dict[str, Any], *, dry_run: bool) -> None:
 		self._config = config
 		self._state = state
 		self._dry_run = dry_run
