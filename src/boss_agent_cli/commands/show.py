@@ -4,7 +4,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands.detail import build_job_from_card
-from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, render_job_detail
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_job_detail
 from boss_agent_cli.index_cache import get_index_info, get_job_by_index
 
 
@@ -52,15 +52,7 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 			handle_not_supported(ctx, "show", exc, fallback_message="当前平台不支持职位详情能力")
 			return
 		if not platform.is_success(raw):
-			code, message = platform.parse_error(raw)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx, "show",
-				code=code,
-				message=message or "职位详情获取失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
+			handle_platform_error_output(ctx, "show", platform, raw, fallback_message="职位详情获取失败")
 			return
 
 	platform_data = platform.unwrap_data(raw) or {}

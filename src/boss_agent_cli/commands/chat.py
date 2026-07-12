@@ -13,7 +13,7 @@ from boss_agent_cli.commands.chat_utils import (
 	RELATION_LABELS, FROM_FILTER, MSG_STATUS_LABELS,
 	sanitize_csv_cell, escape_md_cell,
 )
-from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, login_action_for_ctx, render_simple_list
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, login_action_for_ctx, render_simple_list
 
 # 向后兼容别名（旧测试引用 chat._sanitize_csv_cell 等）
 _RELATION_LABELS = RELATION_LABELS
@@ -63,15 +63,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			handle_not_supported(ctx, "chat", exc, fallback_message="当前平台不支持沟通列表能力")
 			return
 		if not platform.is_success(resp):
-			code, message = platform.parse_error(resp)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx, "chat",
-				code=code,
-				message=message or "沟通列表获取失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
+			handle_platform_error_output(ctx, "chat", platform, resp, fallback_message="沟通列表获取失败")
 			return
 		platform_data = platform.unwrap_data(resp) or {}
 		items = platform_data.get("result") or platform_data.get("friendList") or []

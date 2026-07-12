@@ -8,7 +8,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.commands.chat_utils import MSG_STATUS_LABELS
-from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output
+from boss_agent_cli.display import handle_auth_errors, handle_output, handle_platform_error_output
 
 
 _RECRUITER_MSG_STATUS_LABELS = {0: "发送中", **MSG_STATUS_LABELS}
@@ -157,15 +157,7 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		result = platform.friend_list(page=page, label_id=label_id, job_id=job_id)
 		if not platform.is_success(result):
-			code, message = platform.parse_error(result)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx, "recruiter-chat",
-				code=code,
-				message=message or "沟通列表获取失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
+			handle_platform_error_output(ctx, "recruiter-chat", platform, result, fallback_message="沟通列表获取失败")
 			return
 		data = _friend_data(platform.unwrap_data(result))
 		friend_items = _friend_items(data)
@@ -207,15 +199,7 @@ def recruiter_chatmsg_cmd(ctx: click.Context, friend_id: int, count: int, max_ms
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		result = platform.chat_history(friend_id, count=count, max_msg_id=max_msg_id)
 		if not platform.is_success(result):
-			code, message = platform.parse_error(result)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx, "recruiter-chatmsg",
-				code=code,
-				message=message or "聊天记录获取失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
+			handle_platform_error_output(ctx, "recruiter-chatmsg", platform, result, fallback_message="聊天记录获取失败")
 			return
 		data = platform.unwrap_data(result) or {}
 		handle_output(
@@ -254,15 +238,7 @@ def recruiter_last_messages_cmd(
 		if not ids:
 			ids, error = _fetch_friend_ids(platform, page=page, label_id=label_id, job_id=job_id)
 			if error is not None:
-				code, message = platform.parse_error(error)
-				recoverable, recovery_action = error_contract_for_code(code)
-				handle_error_output(
-					ctx, "recruiter-last-messages",
-					code=code,
-					message=message or "沟通列表获取失败",
-					recoverable=recoverable,
-					recovery_action=recovery_action,
-				)
+				handle_platform_error_output(ctx, "recruiter-last-messages", platform, error, fallback_message="沟通列表获取失败")
 				return
 		if not ids:
 			handle_output(ctx, "recruiter-last-messages", {"friend_ids": [], "messages": []})
@@ -270,15 +246,7 @@ def recruiter_last_messages_cmd(
 
 		result = platform.last_messages(ids)
 		if not platform.is_success(result):
-			code, message = platform.parse_error(result)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx, "recruiter-last-messages",
-				code=code,
-				message=message or "最近消息获取失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
+			handle_platform_error_output(ctx, "recruiter-last-messages", platform, result, fallback_message="最近消息获取失败")
 			return
 		data = platform.unwrap_data(result) or {}
 		messages = [_normalize_last_message(item) for item in _message_items(data)]

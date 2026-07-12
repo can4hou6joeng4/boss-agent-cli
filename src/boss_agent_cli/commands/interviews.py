@@ -2,7 +2,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, login_action_for_ctx, render_simple_list
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, login_action_for_ctx, render_simple_list
 from typing import Any
 
 
@@ -33,15 +33,7 @@ def interviews_cmd(ctx: click.Context) -> None:
 			handle_not_supported(ctx, "interviews", exc, fallback_message="当前平台不支持面试邀请能力")
 			return
 		if not platform.is_success(raw):
-			code, message = platform.parse_error(raw)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx, "interviews",
-				code=code,
-				message=message or "面试邀请获取失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
+			handle_platform_error_output(ctx, "interviews", platform, raw, fallback_message="面试邀请获取失败")
 			return
 		platform_data = platform.unwrap_data(raw) or {}
 		interview_list = platform_data.get("interviewList", [])

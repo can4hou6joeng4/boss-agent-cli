@@ -65,7 +65,7 @@ def resolve_friend_or_emit(
 	平台失败→按错误码、未找到→JOB_NOT_FOUND。成功返回 friend_item；否则输出错误信封
 	并返回 None（调用方应立即 return）。
 	"""
-	from boss_agent_cli.display import error_contract_for_code, handle_error_output, handle_not_supported
+	from boss_agent_cli.display import handle_error_output, handle_not_supported, handle_platform_error_output
 
 	try:
 		friend_item, friends_error = find_friend_by_security_id(platform, security_id)
@@ -83,16 +83,7 @@ def resolve_friend_or_emit(
 		)
 		return None
 	if friends_error is not None:
-		code, message = platform.parse_error(friends_error)
-		recoverable, recovery_action = error_contract_for_code(code)
-		handle_error_output(
-			ctx,
-			command,
-			code=code,
-			message=message or "沟通列表获取失败",
-			recoverable=recoverable,
-			recovery_action=recovery_action,
-		)
+		handle_platform_error_output(ctx, command, platform, friends_error, fallback_message="沟通列表获取失败")
 		return None
 	if friend_item is None:
 		handle_error_output(

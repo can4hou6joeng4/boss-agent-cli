@@ -7,7 +7,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands.friend_list_pages import collect_friend_list_items
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_simple_list
+from boss_agent_cli.display import handle_auth_errors, handle_output, handle_platform_error_output, render_simple_list
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
 
 
@@ -19,27 +19,11 @@ def _collect_pipeline_items(ctx: click.Context, *, command_name: str, now_ts_ms:
 	with get_platform_instance(ctx, auth) as platform:
 		chat_items, friend_error = collect_friend_list_items(platform)
 		if friend_error is not None:
-			code, message = platform.parse_error(friend_error)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx, command_name,
-				code=code,
-				message=message or "沟通列表获取失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
+			handle_platform_error_output(ctx, command_name, platform, friend_error, fallback_message="沟通列表获取失败")
 			return []
 		interview_resp = platform.interview_data()
 		if not platform.is_success(interview_resp):
-			code, message = platform.parse_error(interview_resp)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx, command_name,
-				code=code,
-				message=message or "面试列表获取失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
+			handle_platform_error_output(ctx, command_name, platform, interview_resp, fallback_message="面试列表获取失败")
 			return []
 		interview_data = platform.unwrap_data(interview_resp) or {}
 		interview_items = interview_data.get("interviewList") or []

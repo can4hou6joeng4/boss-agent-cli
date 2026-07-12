@@ -5,7 +5,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.commands.recruiter.resume_parser import parse_resume
-from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output
 
 
 @click.command("resume")
@@ -44,30 +44,14 @@ def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id
 			type_id = 2 if exchange_type == "wechat" else 1
 			result = platform.exchange_request_by_friend(friend_id, exchange_type=type_id)
 			if not platform.is_success(result):
-				code, message = platform.parse_error(result)
-				recoverable, recovery_action = error_contract_for_code(code)
-				handle_error_output(
-					ctx, "recruiter-resume",
-					code=code,
-					message=message or "联系方式交换请求失败",
-					recoverable=recoverable,
-					recovery_action=recovery_action,
-				)
+				handle_platform_error_output(ctx, "recruiter-resume", platform, result, fallback_message="联系方式交换请求失败")
 				return
 			data = platform.unwrap_data(result) or {}
 			data["message"] = "联系方式交换请求已发送"
 		elif geek_id and security_id and job_id:
 			result = platform.view_geek(geek_id, job_id, security_id=security_id)
 			if not platform.is_success(result):
-				code, message = platform.parse_error(result)
-				recoverable, recovery_action = error_contract_for_code(code)
-				handle_error_output(
-					ctx, "recruiter-resume",
-					code=code,
-					message=message or "候选人简历获取失败",
-					recoverable=recoverable,
-					recovery_action=recovery_action,
-				)
+				handle_platform_error_output(ctx, "recruiter-resume", platform, result, fallback_message="候选人简历获取失败")
 				return
 			data = result if show_raw else parse_resume(result)
 		else:

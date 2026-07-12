@@ -5,7 +5,7 @@ from boss_agent_cli.chat_summary import summarize_messages
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands.contact_lookup import resolve_friend_or_emit
-from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, render_message_panel
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_message_panel
 
 
 @click.command("chat-summary")
@@ -35,16 +35,7 @@ def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int
 			handle_not_supported(ctx, "chat-summary", exc, fallback_message="当前平台不支持聊天记录能力")
 			return
 		if not platform.is_success(resp):
-			code, message = platform.parse_error(resp)
-			recoverable, recovery_action = error_contract_for_code(code)
-			handle_error_output(
-				ctx,
-				"chat-summary",
-				code=code,
-				message=message or "聊天记录获取失败",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
+			handle_platform_error_output(ctx, "chat-summary", platform, resp, fallback_message="聊天记录获取失败")
 			return
 		msg_data = platform.unwrap_data(resp) or {}
 		messages = msg_data.get("messages") or msg_data.get("historyMsgList") or []
