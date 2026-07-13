@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import sys
-from typing import Any, Mapping, MutableMapping
+import weakref
+from typing import Any, Callable, Mapping, MutableMapping
 
 
 def browser_headers(
@@ -55,3 +56,17 @@ def add_stoken_to_get_params(method: str, kwargs: MutableMapping[str, Any], stok
 	params = kwargs.get("params", {})
 	params["__zp_stoken__"] = stoken
 	kwargs["params"] = params
+
+
+def make_client_registry() -> tuple[weakref.WeakSet[Any], Callable[[], None]]:
+	"""建一个 WeakSet 注册表 + atexit 安全的 close-all 回调；供各 client 复用。"""
+	registry: weakref.WeakSet[Any] = weakref.WeakSet()
+
+	def close_all() -> None:
+		for client in list(registry):
+			try:
+				client.close()
+			except Exception:
+				pass
+
+	return registry, close_all

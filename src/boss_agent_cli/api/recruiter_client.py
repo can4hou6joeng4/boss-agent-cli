@@ -6,13 +6,13 @@ Endpoints sourced from newboss/boss-cli project (confirmed via reverse engineeri
 
 import atexit
 import json
-import weakref
 from typing import Any, cast
 
 from boss_agent_cli.api import recruiter_endpoints as ep
 from boss_agent_cli.api._base_client import _BaseHttpClient
+from boss_agent_cli.api.httpx_helpers import make_client_registry
 
-_OPEN_CLIENTS: weakref.WeakSet["BossRecruiterClient"] = weakref.WeakSet()
+_OPEN_CLIENTS, _close_open_clients = make_client_registry()
 
 _CHAT_FRONTEND_HELPERS_JS = """
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -153,14 +153,6 @@ return {
 
 _EXCHANGE_COMPONENT_NAMES = {1: "ExchangePhone", 2: "ExchangeWx", 4: "ExchangeResume"}
 _EXCHANGE_MESSAGE_TEXT = {1: "请求交换联系方式", 2: "请求交换联系方式", 4: "方便发一份简历过来吗？"}
-
-
-def _close_open_clients() -> None:
-	for client in list(_OPEN_CLIENTS):
-		try:
-			client.close()
-		except Exception:
-			pass
 
 
 atexit.register(_close_open_clients)

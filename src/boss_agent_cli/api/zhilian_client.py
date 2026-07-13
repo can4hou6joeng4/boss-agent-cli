@@ -20,14 +20,13 @@ import atexit
 from html.parser import HTMLParser
 import random
 import time
-import weakref
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from boss_agent_cli.api.endpoints_loader import get_zhilian_spec
-from boss_agent_cli.api.httpx_helpers import browser_headers, merge_response_cookies, referer_header
+from boss_agent_cli.api.httpx_helpers import browser_headers, make_client_registry, merge_response_cookies, referer_header
 from boss_agent_cli.api.throttle import RequestThrottle
 
 if TYPE_CHECKING:
@@ -55,7 +54,7 @@ _REFERER_MAP: dict[str, str] = {ep.url: ep.referer for ep in _SPEC.endpoints.val
 
 
 # atexit safeguard：类比 BossClient 的管理方式
-_OPEN_CLIENTS: weakref.WeakSet["ZhilianClient"] = weakref.WeakSet()
+_OPEN_CLIENTS, _close_open_clients = make_client_registry()
 
 
 class _CsrfMetaParser(HTMLParser):
@@ -77,14 +76,6 @@ def _extract_csrf_token(html: str) -> str | None:
 	parser = _CsrfMetaParser()
 	parser.feed(html)
 	return parser.csrf_token
-
-
-def _close_open_clients() -> None:
-	for client in list(_OPEN_CLIENTS):
-		try:
-			client.close()
-		except Exception:
-			pass
 
 
 atexit.register(_close_open_clients)

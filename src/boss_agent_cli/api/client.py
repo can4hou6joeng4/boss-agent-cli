@@ -1,20 +1,12 @@
 import atexit
-import weakref
 from typing import Any
 
 from boss_agent_cli.api import endpoints
 from boss_agent_cli.api._base_client import _BaseHttpClient
+from boss_agent_cli.api.httpx_helpers import make_client_registry
 
 # atexit safeguard: close any BossClient instances not explicitly closed
-_OPEN_CLIENTS: weakref.WeakSet["BossClient"] = weakref.WeakSet()
-
-
-def _close_open_clients() -> None:
-	for client in list(_OPEN_CLIENTS):
-		try:
-			client.close()
-		except Exception:
-			pass
+_OPEN_CLIENTS, _close_open_clients = make_client_registry()
 
 
 atexit.register(_close_open_clients)
