@@ -640,6 +640,25 @@ TOOLS = [
 		},
 	),
 	Tool(
+		name="boss_ai_cover_letter",
+		description="基于本地简历与目标岗位起草求职信/自我介绍草稿（仅草稿，不发送）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"resume": {"type": "string", "description": "简历名称"},
+				"jd_text": {"type": "string", "description": "目标职位描述文本"},
+				"job_id": {"type": "string", "description": "从缓存读取职位描述的 job_id（与 jd_text 二选一）"},
+				"tone": {
+					"type": "string",
+					"description": "求职信语气",
+					"enum": ["简洁专业", "热情积极", "谨慎稳重"],
+				},
+				"lang": {"type": "string", "description": "输出语言（zh 中文 / en 英文）", "enum": ["zh", "en"]},
+			},
+			"required": ["resume"],
+		},
+	),
+	Tool(
 		name="boss_watch_list",
 		description="列出所有已保存的监控条件",
 		inputSchema={"type": "object", "properties": {}, "required": []},
@@ -1194,6 +1213,18 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 			args.extend(["--jd", arguments["jd_text"]])
 		if arguments.get("job_id"):
 			args.extend(["--job-id", arguments["job_id"]])
+		return args
+
+	if name == "ai_cover_letter":
+		args = ["ai", "cover-letter", arguments["resume"]]
+		if arguments.get("jd_text"):
+			args.extend(["--jd", arguments["jd_text"]])
+		if arguments.get("job_id"):
+			args.extend(["--job-id", arguments["job_id"]])
+		if arguments.get("tone"):
+			args.extend(["--tone", arguments["tone"]])
+		if arguments.get("lang"):
+			args.extend(["--lang", arguments["lang"]])
 		return args
 
 	if name == "watch_list":

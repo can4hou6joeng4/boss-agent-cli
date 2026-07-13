@@ -862,7 +862,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"ai": {
-			"description": "AI 简历优化、聊天回复与本地模型管理（子命令：config/local/analyze-jd/polish/optimize/suggest/fit/reply/interview-prep/chat-coach/suggest-keywords/resume-optimize）",
+			"description": "AI 简历优化、聊天回复与本地模型管理（子命令：config/local/analyze-jd/polish/optimize/suggest/fit/reply/interview-prep/chat-coach/suggest-keywords/resume-optimize/cover-letter）",
 			"args": [],
 			"options": {},
 			"subcommands": {
@@ -878,6 +878,7 @@ SCHEMA_DATA = {
 				"chat-coach": "基于聊天记录诊断沟通状态并给出下一步建议",
 				"suggest-keywords": "基于候选池分析推荐搜索关键词组合",
 				"resume-optimize": "基于目标岗位优化简历措辞（仅建议，不修改简历）",
+				"cover-letter": "基于本地简历与目标岗位起草求职信/自我介绍（仅草稿，不发送）",
 			},
 		},
 		"agent": {

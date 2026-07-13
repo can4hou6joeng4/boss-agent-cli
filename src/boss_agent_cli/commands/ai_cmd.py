@@ -13,6 +13,7 @@ from boss_agent_cli.ai.config import AIConfigStore
 from boss_agent_cli.ai.prompts import (
 	CHAT_COACH_PROMPT,
 	CHAT_REPLY_PROMPT,
+	COVER_LETTER_PROMPT,
 	INTERVIEW_PREP_PROMPT,
 	JD_ANALYSIS_PROMPT,
 	RESUME_OPTIMIZE_FOR_JD_PROMPT,
@@ -677,4 +678,74 @@ def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | 
 			f"boss resume edit {resume_name}",
 			f"boss ai optimize {resume_name} --jd <jd_text>",
 		]},
+	)
+
+
+@ai_group.command("cover-letter")
+@click.argument("resume_name")
+@click.option("--jd", "jd_text", default=None, help="目标职位描述文本或 @文件路径")
+@click.option("--job-id", default=None, help="从缓存读取职位描述的 job_id")
+@click.option(
+	"--tone", default="简洁专业", type=click.Choice(["简洁专业", "热情积极", "谨慎稳重"]), help="求职信语气"
+)
+@click.option("--lang", default="zh", type=click.Choice(["zh", "en"]), help="输出语言（zh 中文 / en 英文）")
+@click.pass_context
+def ai_cover_letter_cmd(
+	ctx: click.Context, resume_name: str, jd_text: str | None, job_id: str | None, tone: str, lang: str
+) -> None:
+	"""基于本地简历与目标岗位起草求职信/自我介绍（仅草稿，不发送）"""
+	svc = _require_ai_service(ctx)
+	if svc is None:
+		return
+
+	if not jd_text and not job_id:
+		handle_error_output(ctx, "ai", code="INVALID_PARAM", message="需要指定 --jd 或 --job-id")
+		ctx.exit(1)
+		return
+
+	# 从缓存加载 JD（键为 encryptJobId）
+	if job_id:
+		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
+			jd_text = cache.get_job_desc(job_id)
+		if not jd_text:
+			handle_error_output(
+				ctx, "ai",
+				code="CACHE_MISS",
+				message=f"job_id '{job_id}' 的职位描述未缓存",
+				recoverable=True,
+				recovery_action=f"boss detail <security_id> --job-id {job_id}",
+			)
+			ctx.exit(1)
+			return
+
+	# 支持 @file 语法
+	if jd_text and jd_text.startswith("@"):
+		file_path = Path(jd_text[1:])
+		if not file_path.exists():
+			handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
+			ctx.exit(1)
+			return
+		jd_text = file_path.read_text(encoding="utf-8")
+
+	resume_text = _load_resume_text(ctx, resume_name)
+	if resume_text is None:
+		return
+
+	lang_label = "英文（English）" if lang == "en" else "中文"
+	prompt = COVER_LETTER_PROMPT.format(jd_text=jd_text, resume_text=resume_text, tone=tone, lang=lang_label)
+	result = _call_ai(ctx, svc, prompt)
+	if result is None:
+		return
+
+	result.setdefault("greeting_opener", "")
+	result.setdefault("cover_letter", "")
+	result.setdefault("highlights", [])
+	handle_output(
+		ctx, "ai-cover-letter", result,
+		hints={
+			"note": "仅为 AI 生成的草稿，请自行核对真实性后再使用；本命令不发送任何消息",
+			"next_actions": [
+				f"boss ai interview-prep --jd <jd_text> --resume {resume_name}",
+			],
+		},
 	)

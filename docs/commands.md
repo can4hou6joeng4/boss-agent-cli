@@ -96,6 +96,7 @@ boss <命令> --help                      # 查看单个命令选项
 | `boss ai reply` | 生成招聘者消息回复草稿 |
 | `boss ai interview-prep` | 基于 JD 生成模拟面试题 |
 | `boss ai chat-coach` | 基于聊天记录给沟通建议 |
+| `boss ai cover-letter` | 基于本地简历与目标岗位起草求职信/自我介绍（仅草稿，不发送） |
 
 > 支持 Claude 4.7 / GPT-5 / DeepSeek-V3 / Qwen3 等最新模型，详见 [推荐模型与入口](integrations/ai-models.md)。
 
