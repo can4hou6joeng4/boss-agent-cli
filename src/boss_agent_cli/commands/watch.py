@@ -13,7 +13,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output
-from boss_agent_cli.search_filters import SearchFilterCriteria, SearchPipelinePlatformError, resolve_welfare_keywords, run_search_pipeline
+from boss_agent_cli.search_filters import SearchFilterCriteria, SearchPipelinePlatformError, build_search_params, resolve_welfare_keywords, run_search_pipeline
 
 
 def _parse_watch_filters(
@@ -28,18 +28,7 @@ def _parse_watch_filters(
 	job_type: str | None,
 	welfare: str | None,
 ) -> tuple[dict[str, str | None], list[tuple[str, list[str]]] | None]:
-	params = {
-		"query": query,
-		"city": city,
-		"salary": salary,
-		"experience": experience,
-		"education": education,
-		"industry": industry,
-		"scale": scale,
-		"stage": stage,
-		"job_type": job_type,
-		"welfare": welfare,
-	}
+	params = build_search_params(query, city, salary, experience, education, industry, scale, stage, job_type, welfare)
 	welfare_conditions = None
 	if welfare:
 		labels = [w.strip() for w in welfare.split(",") if w.strip()]

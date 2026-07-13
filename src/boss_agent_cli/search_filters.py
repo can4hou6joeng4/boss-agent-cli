@@ -146,6 +146,33 @@ def resolve_lookup_codes(value: str | None, lookup: dict[str, str], label: str) 
 	return ",".join(codes) if codes else None
 
 
+def build_search_params(
+	query: str,
+	city: str | None,
+	salary: str | None,
+	experience: str | None,
+	education: str | None,
+	industry: str | None,
+	scale: str | None,
+	stage: str | None,
+	job_type: str | None,
+	welfare: str | None,
+) -> dict[str, str | None]:
+	"""构造 search/watch/preset 共用的 10 键搜索参数字典。"""
+	return {
+		"query": query,
+		"city": city,
+		"salary": salary,
+		"experience": experience,
+		"education": education,
+		"industry": industry,
+		"scale": scale,
+		"stage": stage,
+		"job_type": job_type,
+		"welfare": welfare,
+	}
+
+
 def resolve_search_code_params(
 	*,
 	salary: str | None = None,

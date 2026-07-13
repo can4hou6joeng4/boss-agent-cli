@@ -9,6 +9,7 @@ from boss_agent_cli.api.endpoints import (
 )
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.display import handle_error_output, handle_output
+from boss_agent_cli.search_filters import build_search_params
 
 
 def _build_params(
@@ -23,18 +24,7 @@ def _build_params(
 	job_type: str | None,
 	welfare: str | None,
 ) -> dict[str, str | None]:
-	return {
-		"query": query,
-		"city": city,
-		"salary": salary,
-		"experience": experience,
-		"education": education,
-		"industry": industry,
-		"scale": scale,
-		"stage": stage,
-		"job_type": job_type,
-		"welfare": welfare,
-	}
+	return build_search_params(query, city, salary, experience, education, industry, scale, stage, job_type, welfare)
 
 
 @click.group("preset")
