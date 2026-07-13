@@ -4,11 +4,18 @@
 
 ## [Unreleased]
 
+### Added
+- 新增 `boss ai cover-letter <resume> [--jd <文本|@文件>|--job-id <id>] [--tone 简洁专业|热情积极|谨慎稳重] [--lang zh|en]`：基于本地简历与目标岗位起草求职信/自我介绍草稿，纯本地 + AIService、零平台请求，draft-only（只产出文本、不发送、不进敏感命令）；MCP 同步新增 `boss_ai_cover_letter`。
+
 ### Removed
 - 移除 `config.json` 中 6 个从未被任何命令消费的死配置键（`default_city` / `default_salary` / `batch_greet_max` / `login_timeout` / `resume_default_template` / `resume_export_format`）：此前它们可经 `boss config set` 设置却静默无效，现改为按未知键明确拒绝；同时消除 `resume_export_format` 默认 `pdf` 与 `resume export` 命令默认 `json` 的自相矛盾。
+- 移除 `interviews` 命令中恒为假的 `_stub` 占位分支：`interview_data` 端点对 zhipin/zhilian 均已接通、无任何 client 再写入 `_stub`，故删除该死码及其 `capability: stub` hint（纯内部清理，正常输出不变）。
 
 ### Changed
 - 命令层错误信封统一改用既有 `handle_platform_error_output`：当平台响应携带 `error.details`（主要是 `qiancheng` 占位响应）时，错误信封现在会带上 `details` 字段（新增字段，与已在用该 helper 的 `me` / `history` / hr `jobs` 命令口径一致）；BOSS 直聘 / 智联的真实响应不含该字段，输出不变。
+
+### Fixed
+- 修复 #334：CDP 模式下每次搜索/推荐等高风险操作都会在用户 Chrome 新开一个 BOSS 首页标签页并导航（观感为“反复自动新开/刷新页面”）。现优先复用用户已打开的 zhipin 标签页（精确 hostname 校验），不再多余新开与导航，`close()` 也不再关闭被复用的用户标签页；无已打开 zhipin 页时回退原新建行为。风控即停（code 36）逻辑不变。
 
 ## [1.14.0] - 2026-06-25
 
