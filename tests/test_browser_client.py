@@ -8,6 +8,8 @@ from boss_agent_cli.api.browser_client import (
 	_HEADLESS_NETWORKIDLE_GRACE_MS,
 	_NAV_TIMEOUT_MS,
 	BrowserSession,
+	_find_reusable_zhipin_page,
+	_is_zhipin_url,
 )
 
 
@@ -361,3 +363,96 @@ def test_fetch_ws_url_honors_short_auto_probe_timeout():
 		mock_get.return_value = MagicMock(json=lambda: {"webSocketDebuggerUrl": "ws://x"})
 		BrowserSession._fetch_ws_url("http://127.0.0.1:9222", timeout=1)
 		assert mock_get.call_args.kwargs["timeout"] == 1
+
+
+# ── issue #334: CDP 复用已打开的 zhipin 页签，不再每次新开+导航 ─────────────
+
+
+class _FakePage:
+	def __init__(self, url):
+		self.url = url
+
+
+def test_is_zhipin_url_uses_exact_hostname():
+	assert _is_zhipin_url("https://www.zhipin.com/web/geek/job")
+	assert _is_zhipin_url("https://ZHIPIN.COM./")  # 大小写 + 尾点归一化
+	assert not _is_zhipin_url("https://zhipin.com.evil.example/web/geek/job")
+	assert not _is_zhipin_url("https://evil.example/?next=https://www.zhipin.com/")
+	assert not _is_zhipin_url("not-a-url-with-zhipin.com")
+
+
+def test_find_reusable_zhipin_page_prefers_open_zhipin_tab():
+	ctx = MagicMock()
+	other = _FakePage("https://mail.google.com/")
+	fake = _FakePage("https://zhipin.com.evil.example/web/geek/job")
+	real = _FakePage("https://www.zhipin.com/web/geek/recommend")
+	ctx.pages = [other, fake, real]
+
+	assert _find_reusable_zhipin_page(ctx) is real
+
+
+def test_find_reusable_zhipin_page_none_when_no_zhipin_tab():
+	ctx = MagicMock()
+	ctx.pages = [_FakePage("https://mail.google.com/")]
+	assert _find_reusable_zhipin_page(ctx) is None
+
+
+def test_try_connect_reuses_open_zhipin_page_without_new_tab_or_nav():
+	"""CDP 复用 context 且已有 zhipin 页签时：不新开 page、不导航（修 #334）。"""
+	session = BrowserSession(cookies={}, user_agent="")
+	session._pw = MagicMock()
+
+	mock_browser = MagicMock()
+	mock_user_context = MagicMock()
+	open_zhipin_page = _FakePage("https://www.zhipin.com/web/geek/job")
+	mock_user_context.pages = [open_zhipin_page]
+	mock_browser.contexts = [mock_user_context]
+	session._pw.chromium.connect_over_cdp.return_value = mock_browser
+
+	result = session._try_connect("ws://localhost:9222/test")
+
+	assert result is True
+	assert session._is_cdp is True
+	assert session._own_context is False
+	assert session._own_page is False  # 复用用户页签
+	assert session._page is open_zhipin_page
+	mock_user_context.new_page.assert_not_called()  # 不新开标签页
+	assert open_zhipin_page.url == "https://www.zhipin.com/web/geek/job"  # 未被导航覆盖
+
+
+def test_try_connect_creates_page_when_no_open_zhipin_tab():
+	"""CDP 复用 context 但无 zhipin 页签时：仍新建 page 并导航（回退现状）。"""
+	session = BrowserSession(cookies={}, user_agent="")
+	session._pw = MagicMock()
+
+	mock_browser = MagicMock()
+	mock_user_context = MagicMock()
+	mock_user_context.pages = [_FakePage("https://mail.google.com/")]
+	mock_new_page = MagicMock()
+	mock_user_context.new_page.return_value = mock_new_page
+	mock_browser.contexts = [mock_user_context]
+	session._pw.chromium.connect_over_cdp.return_value = mock_browser
+
+	result = session._try_connect("ws://localhost:9222/test")
+
+	assert result is True
+	assert session._own_page is True
+	mock_user_context.new_page.assert_called_once()
+	mock_new_page.goto.assert_called_once_with(HOME_URL, wait_until="commit", timeout=_NAV_TIMEOUT_MS)
+
+
+def test_close_does_not_close_reused_user_page():
+	"""CDP 复用用户页签（_own_page=False）时 close() 不关闭该页。"""
+	session = BrowserSession(cookies={}, user_agent="")
+	session._is_cdp = True
+	session._own_context = False
+	session._own_page = False  # 复用用户页签
+	session._started = True
+	session._page = MagicMock()
+	session._context = MagicMock()
+	session._pw = MagicMock()
+
+	session.close()
+
+	session._page.close.assert_not_called()  # 不关用户的页签
+	session._context.close.assert_not_called()

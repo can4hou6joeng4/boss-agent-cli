@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from types import TracebackType
 from typing import Any, cast
+from urllib.parse import urlparse
 
 from patchright.sync_api import sync_playwright
 
@@ -23,6 +24,29 @@ from boss_agent_cli.api.throttle import RequestThrottle
 from boss_agent_cli.auth.browser import _DEFAULT_CDP_URL as CDP_DEFAULT_URL
 
 HOME_URL = "https://www.zhipin.com/"
+_ZHIPIN_HOST = "zhipin.com"
+
+
+def _is_zhipin_url(url: str) -> bool:
+	"""精确 hostname 校验：仅 zhipin.com 或其子域名视为 BOSS 直聘页面。
+
+	刻意不用 ``"zhipin.com" in url`` 子串判断——伪造 host（如
+	``zhipin.com.evil.example``）或带该域名的查询串都能骗过子串检查
+	（CodeQL ``py/incomplete-url-substring-sanitization``）。
+	"""
+	host = urlparse(url).hostname
+	if host is None:
+		return False
+	host = host.rstrip(".").lower()
+	return host == _ZHIPIN_HOST or host.endswith(f".{_ZHIPIN_HOST}")
+
+
+def _find_reusable_zhipin_page(context: Any) -> Any | None:
+	"""在用户 context 已打开的页面里找第一个 zhipin 页复用，找不到返回 None。"""
+	for page in getattr(context, "pages", None) or []:
+		if _is_zhipin_url(getattr(page, "url", "")):
+			return page
+	return None
 
 
 class RecruiterChatTabRequired(RuntimeError):
@@ -83,6 +107,7 @@ class BrowserSession:
 		self._cdp_url = cdp_url
 		self._is_cdp = False
 		self._own_context = False  # 是否由我们创建的 context（需要在 close 时清理）
+		self._own_page = True  # 是否由我们新建的 page（复用用户已开页签时为 False，close 不关它）
 		self._logger = logger
 		self._bridge_client: Any = None
 		self._is_bridge = False
@@ -177,6 +202,10 @@ class BrowserSession:
 				# 复用用户现有 context（保留登录态，避免额外浏览器状态）
 				self._context = contexts[0]
 				self._own_context = False  # 非我们创建，close 时不关闭
+				# 优先复用用户已打开的 zhipin 页签：避免每次高风险 op 都新开空白页 +
+				# 导航到 BOSS 首页（issue #334：用户观感是"反复自动新开/刷新页面"），
+				# 同时降低自动化足迹。请求只需 page 处于 zhipin 同源即可携带 cookie。
+				reused = _find_reusable_zhipin_page(self._context)
 			else:
 				# 没有已存在 context，创建新的并注入 cookies
 				self._context = self._browser.new_context()
@@ -188,17 +217,26 @@ class BrowserSession:
 						]
 					)
 				self._own_context = True
+				reused = None
 
-			self._page = self._context.new_page()
-			# CDP 模式下用较长超时 + commit 级等待（避免 networkidle 卡住）
-			try:
-				self._page.goto(HOME_URL, wait_until="commit", timeout=_NAV_TIMEOUT_MS)
-			except Exception:
-				pass  # 即使导航超时，页面 JS 环境已可用
+			if reused is not None:
+				# 复用已打开的 zhipin 页签：不新建 page、不导航，close 时也不关它
+				self._page = reused
+				self._own_page = False
+				page_label = "复用已打开 zhipin 页签"
+			else:
+				self._page = self._context.new_page()
+				self._own_page = True
+				# CDP 模式下用较长超时 + commit 级等待（避免 networkidle 卡住）
+				try:
+					self._page.goto(HOME_URL, wait_until="commit", timeout=_NAV_TIMEOUT_MS)
+				except Exception:
+					pass  # 即使导航超时，页面 JS 环境已可用
+				page_label = "新建 page"
 			self._started = True
 			self._is_cdp = True
 			reuse_label = "复用用户 context" if not self._own_context else "新建 context"
-			self._log(f"[boss] CDP 连接成功 ({url})，{reuse_label}")
+			self._log(f"[boss] CDP 连接成功 ({url})，{reuse_label} + {page_label}")
 			return True
 		except Exception:
 			if self._browser:
@@ -249,6 +287,7 @@ class BrowserSession:
 			timezone_id="Asia/Shanghai",
 		)
 		self._own_context = True
+		self._own_page = True
 		self._context.add_cookies(
 			[
 				{"name": name, "value": value, "domain": ".zhipin.com", "path": "/"}
@@ -404,8 +443,8 @@ class BrowserSession:
 			return
 
 		if self._is_cdp:
-			# CDP 模式：关闭我们创建的 page 和 context，不关闭用户浏览器
-			if self._page:
+			# CDP 模式：只关闭我们新建的 page 和 context，不动用户浏览器或已复用的页签
+			if self._page and self._own_page:
 				try:
 					self._page.close()
 				except Exception:
