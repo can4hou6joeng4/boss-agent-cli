@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Removed
+- 移除 `config.json` 中 6 个从未被任何命令消费的死配置键（`default_city` / `default_salary` / `batch_greet_max` / `login_timeout` / `resume_default_template` / `resume_export_format`）：此前它们可经 `boss config set` 设置却静默无效，现改为按未知键明确拒绝；同时消除 `resume_export_format` 默认 `pdf` 与 `resume export` 命令默认 `json` 的自相矛盾。
+
+### Changed
+- 命令层错误信封统一改用既有 `handle_platform_error_output`：当平台响应携带 `error.details`（主要是 `qiancheng` 占位响应）时，错误信封现在会带上 `details` 字段（新增字段，与已在用该 helper 的 `me` / `history` / hr `jobs` 命令口径一致）；BOSS 直聘 / 智联的真实响应不含该字段，输出不变。
+
 ## [1.14.0] - 2026-06-25
 
 ### Added
