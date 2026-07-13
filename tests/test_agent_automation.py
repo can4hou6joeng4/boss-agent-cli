@@ -248,7 +248,16 @@ def test_runner_creates_interview_lead_after_contact_exchange(tmp_path: Path) ->
 	assert (tmp_path / "automation" / "interview-leads.csv").exists()
 
 
-def test_agent_run_cli_returns_json_envelope(tmp_path: Path) -> None:
+def test_agent_run_cli_returns_json_envelope(tmp_path: Path, monkeypatch) -> None:
+	# 隔离真实 CDP：无论本机 9222 是否有 Chrome 在监听，都强制走「CDP 不可用」分支，
+	# 使 dry-run 稳定得到 STOPPED_BY_SAFETY（否则连到用户自己的 Chrome 会翻成 CIRCUIT_BREAKER_OPEN）。
+	def _no_cdp(*args, **kwargs):
+		raise RuntimeError("CDP unavailable in test")
+
+	monkeypatch.setattr(
+		"boss_agent_cli.automation.zhilian_cdp.create_zhilian_browser_session_from_cdp",
+		_no_cdp,
+	)
 	runner = CliRunner()
 	result = runner.invoke(
 		cli,
