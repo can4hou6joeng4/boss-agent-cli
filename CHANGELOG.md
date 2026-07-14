@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-07-14
+
 ### Added
 - 新增 `boss ai cover-letter <resume> [--jd <文本|@文件>|--job-id <id>] [--tone 简洁专业|热情积极|谨慎稳重] [--lang zh|en]`：基于本地简历与目标岗位起草求职信/自我介绍草稿，纯本地 + AIService、零平台请求，draft-only（只产出文本、不发送、不进敏感命令）；MCP 同步新增 `boss_ai_cover_letter`。
 
@@ -15,6 +17,7 @@
 - 命令层错误信封统一改用既有 `handle_platform_error_output`：当平台响应携带 `error.details`（主要是 `qiancheng` 占位响应）时，错误信封现在会带上 `details` 字段（新增字段，与已在用该 helper 的 `me` / `history` / hr `jobs` 命令口径一致）；BOSS 直聘 / 智联的真实响应不含该字段，输出不变。
 
 ### Fixed
+- 修复智联招聘 CDP / 浏览器页面选择的域名校验：此前用 `"zhaopin.com" in url` 子串判断，可能被 `zhaopin.com.evil.example` 等伪造 hostname 误判为可信页面；改为 `urlparse().hostname` 精确匹配 `zhaopin.com` 及其子域（CodeQL `py/incomplete-url-substring-sanitization`，两处页面查找共用同一 host 判断）。
 - 修复 #334：CDP 模式下每次搜索/推荐等高风险操作都会在用户 Chrome 新开一个 BOSS 首页标签页并导航（观感为“反复自动新开/刷新页面”）。现优先复用用户已打开的 zhipin 标签页（精确 hostname 校验），不再多余新开与导航，`close()` 也不再关闭被复用的用户标签页；无已打开 zhipin 页时回退原新建行为。风控即停（code 36）逻辑不变。
 
 ## [1.14.0] - 2026-06-25
