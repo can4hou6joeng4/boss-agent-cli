@@ -127,12 +127,12 @@ def _command_availability(
 ) -> dict[str, Any]:
 	if cmd_name == "agent":
 		return {
-			"roles": ["recruiter"],
-			"candidate_platforms": [],
+			"roles": ["candidate", "recruiter"],
+			"candidate_platforms": ["zhipin"],
 			"recruiter_platforms": ["zhilian", "zhipin"],
 			"note": (
-				"招聘自动化入口；智联与 BOSS 通过统一 automation adapter 接入，"
-				"智联招聘者侧使用已登录浏览器/CDP adapter V1，带 selector health 与安全熔断。"
+				"agent run/train 等为招聘者自动化；agent crawl 为候选人本地编排，"
+				"默认仅分析已完成 crawl run，只有 --allow-crawl 才会启动真实 Chrome 采集。"
 			),
 		}
 	if cmd_name == "hr":
@@ -250,6 +250,20 @@ def _format_mcp_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 	"""Model Context Protocol Tools 格式（与 Anthropic 同结构，键名 inputSchema）。"""
 	tools = []
 	for cmd_name, cmd_spec in data["commands"].items():
+		if mcp_tools := cmd_spec.get("mcp_tools"):
+			availability = cmd_spec.get("availability")
+			for tool in mcp_tools:
+				description = tool["description"]
+				if availability:
+					description = f"{description} [{_availability_note(availability)}]"
+				tools.append({
+					"name": tool["name"],
+					"description": description,
+					"inputSchema": tool["inputSchema"],
+				})
+			continue
+		if cmd_spec.get("mcp_exposed") is False:
+			continue
 		description = cmd_spec.get("description", "")
 		if availability := cmd_spec.get("availability"):
 			description = f"{description} [{_availability_note(availability)}]"
@@ -265,7 +279,7 @@ def _format_mcp_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 SCHEMA_DATA = {
 	"name": "boss-agent-cli",
-	"description": "BOSS直聘本地辅助工具，共 36 个顶层命令。默认低风险模式聚焦只读、本地辅助、用户主动触发；自动触达、批量操作和候选人个人信息处理默认受限。",
+	"description": "BOSS直聘本地辅助工具，共 37 个顶层命令。默认低风险模式聚焦只读、本地辅助、用户主动触发；自动触达、批量操作和候选人个人信息处理默认受限。",
 	"commands": {
 		"login": {
 			"description": "按当前平台登录（zhipin / zhilian）。默认低风险模式仅用于用户主动触发的本地辅助与只读命令，不用于规避平台风控。",
@@ -735,6 +749,105 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {},
 		},
+		"crawl": {
+			"description": "显式 DrissionPage 批量采集（子命令：configure/run/start/status/results/resume）。MCP 通过任务式 start/status/results/shortlist/resume 调度；风险码或安全页会保存断点后停止。",
+			"args": [],
+			"options": {
+				"run": {
+					"--city": {"type": "string", "required": True, "description": "城市名称或数字城市代码"},
+					"--pages": {"type": "int", "default": 5, "description": "最多页数；0 表示直到 hasMore=False"},
+					"--with-detail": {"type": "bool", "default": False, "description": "串行补全所有职位的 job_card"},
+					"--hook-profile": {"type": "string", "default": "screenshot-full", "enum": ["screenshot-full", "none"]},
+				},
+				"resume": {
+					"--pages": {"type": "int", "default": None, "description": "覆盖原任务页数上限；0 表示直到 hasMore=False"},
+					"--with-detail": {"type": "bool", "default": False, "description": "补全已采职位和后续职位的 job_card"},
+					"--background": {"type": "bool", "default": False, "description": "后台恢复并立即返回 run_id"},
+				},
+				"results": {
+					"--page": {"type": "int", "default": None, "description": "仅返回指定采集页"},
+					"--detail-status": {"type": "string", "default": None, "enum": ["completed", "pending"]},
+				},
+				"shortlist": {
+					"--job-id": {"type": "string", "default": None, "description": "导入指定 encryptJobId，可重复传入"},
+					"--all": {"type": "bool", "default": False, "description": "导入该 run 的全部可关联职位"},
+					"--tags": {"type": "string", "default": "", "description": "写入候选池的本地标签，逗号分隔"},
+					"--note": {"type": "string", "default": "", "description": "写入候选池的本地备注"},
+				},
+			},
+			"subcommands": {
+				"configure": "设置 DP Chrome profile、路径、端口与 Hook 档位",
+				"run <query>": "开始可恢复的批量职位采集",
+				"start <query>": "创建后台任务并立即返回 run_id（供 MCP 轮询）",
+				"status <run_id>": "读取页游标、详情进度和风险状态",
+				"results <run_id>": "读取已持久化职位结果",
+				"resume <run_id>": "从已保存页游标和详情队列继续",
+				"shortlist <run_id>": "将 crawl 结果导入本地职位候选池",
+			},
+			"mcp_tools": [
+				{
+					"name": "boss_crawl_start",
+					"description": "创建并后台运行可恢复 crawl 任务，立即返回 run_id。",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"query": {"type": "string", "description": "职位关键词"},
+							"city": {"type": "string", "description": "城市名称或数字城市代码"},
+							"pages": {"type": "integer", "default": 5},
+							"with_detail": {"type": "boolean", "default": False},
+							"hook_profile": {"type": "string", "enum": ["screenshot-full", "none"], "default": "screenshot-full"},
+						},
+						"required": ["query", "city"],
+					},
+				},
+				{
+					"name": "boss_crawl_status",
+					"description": "读取 crawl 页游标、职位数、详情进度和风险状态。",
+					"inputSchema": {"type": "object", "properties": {"run_id": {"type": "string"}}, "required": ["run_id"]},
+				},
+				{
+					"name": "boss_crawl_results",
+					"description": "读取持久化 crawl 职位，可按页码和详情状态筛选。",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"run_id": {"type": "string"},
+							"page": {"type": "integer"},
+							"detail_status": {"type": "string", "enum": ["completed", "pending"]},
+						},
+						"required": ["run_id"],
+					},
+				},
+				{
+					"name": "boss_crawl_shortlist",
+					"description": "将 crawl 结果导入本地 shortlist，不请求 BOSS。",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"run_id": {"type": "string"},
+							"job_ids": {"type": "array", "items": {"type": "string"}},
+							"all": {"type": "boolean", "default": False},
+							"tags": {"type": "string"},
+							"note": {"type": "string"},
+						},
+						"required": ["run_id"],
+					},
+				},
+				{
+					"name": "boss_crawl_resume",
+					"description": "后台恢复 crawl 任务，随后以 run_id 轮询状态。",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"run_id": {"type": "string"},
+							"pages": {"type": "integer"},
+							"with_detail": {"type": "boolean", "default": False},
+						},
+						"required": ["run_id"],
+					},
+				},
+			],
+		},
 		"preset": {
 			"description": "管理可复用搜索预设（子命令：add/list/remove）",
 			"args": [],
@@ -883,9 +996,8 @@ SCHEMA_DATA = {
 		},
 		"agent": {
 			"description": (
-				"招聘自动化主入口（run/train/review/pending/stats/control/stop）。"
-				"以自动化为默认目标，高置信自动执行，"
-				"中低置信进入人审或 pending，异常自动熔断。"
+				"招聘自动化与候选人 crawl 编排入口。招聘者侧 run/train/review/pending/stats/control/stop "
+				"维持原有自动化；候选人侧 crawl 默认只分析已完成 run，传入 --allow-crawl 才启动真实采集。"
 			),
 			"args": [],
 			"options": {
@@ -910,6 +1022,7 @@ SCHEMA_DATA = {
 				"stats": "查看招聘自动化统计",
 				"control": "查看本地控制台入口信息",
 				"stop": "打开招聘自动化熔断",
+				"crawl": "候选人链路：已完成 crawl → shortlist → ai fit；新采集需要 --allow-crawl",
 			},
 		},
 		"hr": {
@@ -1054,6 +1167,21 @@ SCHEMA_DATA = {
 			"message": "网络请求失败",
 			"recoverable": True,
 			"recovery_action": "重试",
+		},
+		"CRAWL_UNAVAILABLE": {
+			"message": "DrissionPage crawl 运行环境或 Hook 注入不可用",
+			"recoverable": True,
+			"recovery_action": "安装 boss-agent-cli[crawl] 并执行 boss crawl configure",
+		},
+		"CRAWL_PERMISSION_REQUIRED": {
+			"message": "Agent 未获授权启动新的 crawl",
+			"recoverable": True,
+			"recovery_action": "使用 --allow-crawl 明确授权，或改为分析已有 --run-id",
+		},
+		"CRAWL_NOT_COMPLETED": {
+			"message": "crawl 尚未完成，Agent 不会导入不完整结果",
+			"recoverable": True,
+			"recovery_action": "处理浏览器验证后执行 boss crawl resume <run_id>",
 		},
 		"INVALID_PARAM": {
 			"message": "参数校验失败",

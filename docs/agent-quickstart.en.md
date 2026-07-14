@@ -49,6 +49,27 @@ Parsing contract:
 - `ok=true` means success; when `ok=false`, inspect `error.code` and `error.recovery_action`
 - `boss schema` also returns `supported_platforms`, `supported_recruiter_platforms`, and per-command `availability`, so agents can route tools by `role/platform`
 
+### Candidate crawl orchestration
+
+After `uv sync --extra crawl` and a logged-in Chrome profile are configured, MCP joins a long task through short calls:
+
+```text
+boss_crawl_start(query, city, pages, with_detail)
+→ receive run_id
+→ poll boss_crawl_status(run_id)
+→ boss_crawl_results(run_id)
+→ boss_crawl_shortlist(run_id, all=true)
+→ boss_ai_fit(resume)
+```
+
+In the CLI, `boss agent crawl --run-id <run_id> --resume <resume-name>` consumes only a completed run and then performs shortlist + ai fit. Starting a real crawl through Agent requires explicit authorization:
+
+```bash
+boss agent crawl --query "AI engineer" --city 杭州 --pages 3 --with-detail --allow-crawl --resume <resume-name>
+```
+
+When `crawl_status` reports `risk_stopped`, do not recreate the task or retry in a loop. Keep the `run_id`; after the browser page is handled, use `boss_crawl_resume(run_id)` or `boss crawl resume <run_id>`.
+
 ### Recruiter boundary
 
 Default low-risk mode blocks recruiter candidate search, applications, resumes, chats, contact exchange, and replies. The low-risk recruiter surface keeps job-list management available:

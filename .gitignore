@@ -23,6 +23,7 @@ skills/*.disabled-*/
 !src/**/*.html
 !demo/**/*.html
 *.pdf
+crawl-data/
 
 # Coverage artifacts
 .coverage

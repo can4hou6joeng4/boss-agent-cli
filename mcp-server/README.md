@@ -9,7 +9,7 @@
 ## 安装
 
 ```bash
-uv tool install "boss-agent-cli[mcp]"
+uv tool install "boss-agent-cli[mcp,crawl]"  # 不需要 crawl 时可只装 [mcp]
 ```
 
 如从源码运行：
@@ -73,7 +73,7 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 
 ## 可用工具
 
-当前 MCP Server 默认暴露 **32 个低风险工具**。
+当前 MCP Server 默认暴露 **51 个低风险与本地任务工具**。
 
 ### 认证与环境
 
@@ -99,6 +99,18 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 | `boss_shortlist_remove` | 从本地候选池移除 |
 | `boss_preset_add/list/remove` | 管理本地搜索预设 |
 | `boss_watch_add/list/remove` | 管理本地监控预设；`watch run` 默认不暴露 |
+
+### 可恢复 crawl 任务
+
+| 工具 | 说明 |
+|------|------|
+| `boss_crawl_start` | 创建真实 Chrome 后台采集任务并立即返回 `run_id` |
+| `boss_crawl_status` | 读取页游标、职位数、详情进度、风险状态和恢复命令 |
+| `boss_crawl_results` | 读取一个 run 已持久化的职位，可按页面/详情状态筛选 |
+| `boss_crawl_shortlist` | 将一个 run 的职位导入本地候选池，不请求平台 |
+| `boss_crawl_resume` | 后台恢复未完成任务；随后继续用 `run_id` 轮询 |
+
+这些工具是任务式接口：调用 `start` / `resume` 后使用 `status` 轮询，任务风险停止时返回恢复命令，不会在同一次 MCP 调用中无限等待或重开浏览器。
 
 ### 用户与简历
 

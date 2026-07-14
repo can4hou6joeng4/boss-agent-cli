@@ -91,7 +91,7 @@ def test_capability_matrix_exists_and_covers_core_capabilities():
 	assert "`boss digest`" in content
 	assert "`boss config`" in content
 	assert "`boss clean`" in content
-	assert "36 个顶层命令" in content
+	assert "37 个顶层命令" in content
 	assert "9 个一级招聘者子命令" in content
 	assert "`qiancheng` / 51job" in content
 	assert "`NOT_SUPPORTED`" in content
@@ -191,7 +191,7 @@ def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
 	assert "| Capability | CLI command | Login required | Transport |" in matrix
 	assert "`boss schema`" in matrix
 	assert "`boss hr candidates`" in matrix
-	assert "36 top-level commands" in matrix
+	assert "37 top-level commands" in matrix
 	assert "9 first-level recruiter subcommands" in matrix
 
 	mcp_readme = _read("mcp-server/README.en.md")

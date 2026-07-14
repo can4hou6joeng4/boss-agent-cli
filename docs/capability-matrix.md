@@ -15,6 +15,7 @@
 | 环境诊断 | `boss doctor` | 否 | 混合 |
 | 配置管理 | `boss config` | 否 | 本地 |
 | 缓存清理 | `boss clean` | 否 | 本地 |
+| 显式批量采集 | `boss crawl configure/run/start/status/results/resume` | 是 | DrissionPage；MCP 以 run_id 任务式工具调度 |
 
 ## 职位发现
 
@@ -108,5 +109,6 @@
 - **通道**：httpx 为直接 API 请求。Assisted Mode 命中风控时停止；Research Mode 只运行显式声明的 browser/hook adapter，禁止无界重试，并要求 checkpoint 与脱敏。AI 服务为第三方大模型 API，不应输入未获授权的聊天记录、简历或联系方式。
 - 若以 CLI 直连为主，优先通过 `boss schema` 进行能力发现与参数校验；当前 schema 会同时暴露 `supported_platforms` 与 `supported_recruiter_platforms`。
 - 当前多平台状态：`boss platforms` 返回本地平台注册与能力状态，也可通过 `boss platforms --platform qiancheng` / `--platform 51job` 只查看单个平台或别名；`zhipin` 已覆盖求职者与招聘者实现，但敏感链路默认受低风险模式阻断；`zhilian` 已接通候选者侧链路，招聘者侧自动化通过 `agent` browser/CDP adapter V1 接入；`qiancheng` / 51job 仅为已注册占位适配器，真实工作流统一返回 `NOT_SUPPORTED`。
-- 当前登录状态：`zhipin` / `zhilian` 保留用户主动登录兼容链路；风控研究仅在显式 Research Mode 和声明的 adapter 中进行。
-- 以 `boss schema` 为准：当前暴露 36 个顶层命令；其中 `hr` 下还有 9 个一级招聘者子命令，`ai` / `resume` 为命令组入口。
+- 当前登录状态：`zhipin` / `zhilian` 保留用户主动登录兼容链路；风控研究仅在显式 Research Mode 和声明的 adapter 中进行，且不得用于规避平台风控。
+- `crawl` 是用户显式触发的顺序任务，使用独立 Chrome profile、跨进程速率预算和 SQLite 断点；MCP 通过 `crawl_start/status/results/shortlist/resume` 调度。候选人 `agent crawl` 默认只能消费已完成 run，只有 `--allow-crawl` 才可新建采集；风险码或安全页会停止并返回恢复命令。
+- 以 `boss schema` 为准：当前暴露 37 个顶层命令；其中 `hr` 下还有 9 个一级招聘者子命令，`ai` / `resume` 为命令组入口。

@@ -94,7 +94,7 @@ boss config set platform zhilian          # 设为默认
 推荐先读：[Agent Quickstart](docs/agent-quickstart.md) · [Capability Matrix](docs/capability-matrix.md) · [Host Examples](docs/agent-hosts.md)
 
 ```json
-// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 45 个低风险工具
+// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 51 个低风险与本地任务工具
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
@@ -122,17 +122,29 @@ with BossClient(AuthManager(...)) as client:
 
 ## 📚 命令
 
-`boss schema` 暴露 36 个顶层命令 + 9 个一级招聘者子命令，按工作流分组：
+`boss schema` 暴露 37 个顶层命令 + 9 个一级招聘者子命令，按工作流分组：
 
 - **认证**：`login` · `logout` · `status` · `doctor`
 - **职位发现**：`search` · `detail` · `show` · `cities` · `history`
 - **本地整理**：`watch` · `preset` · `shortlist` · `stats`
+- **显式批量采集**：`crawl configure/run/start/status/results/resume/shortlist`（MCP 以任务式 `crawl_start/status/results/shortlist/resume` 暴露）
 - **简历 / AI**：`resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai cover-letter` · `ai interview-prep` · `ai chat-coach` · `ai local`
 - **系统**：`schema` · `platforms` · `export` · `config` · `clean`
 - **招聘者**：`hr jobs list/online/offline`
 - **受限动作（默认低风险模式阻断）**：`greet` · `batch-greet` · `apply` · `exchange` · `chat*` · `pipeline` · `digest`
 
 完整命令表、参数与福利筛选原理见 **[命令参考](docs/commands.md)**；能力真源是 `boss schema`（支持 `--format openai-tools` / `anthropic-tools` 导出工具定义）。
+
+批量采集需要额外安装 `uv sync --extra crawl`，并由用户显式配置已登录的独立 Chrome profile：
+
+```powershell
+boss crawl configure --profile C:\dp_profile_9222
+boss crawl run "AI" --city 杭州 --pages 5 --with-detail
+boss crawl resume <run_id>
+boss agent crawl --run-id <run_id> --resume <简历名>
+```
+
+`crawl run` 顺序执行并保存 SQLite 断点和 JSON / CSV / XLSX 增量产物。MCP 使用后台任务式 `crawl_start` / `crawl_resume`，以 `run_id` 轮询 `crawl_status` 和读取 `crawl_results`，不会让一次工具调用阻塞数分钟。出现平台风险码或安全页时停止并返回恢复命令。`boss agent crawl --run-id` 只分析已完成任务；只有显式传入 `--allow-crawl` 时才会启动新的真实 Chrome 采集。
 
 ## 🩺 诊断与排障
 

@@ -17,7 +17,7 @@ boss <命令> --help                      # 查看单个命令选项
 
 | 命令 | 说明 |
 |------|------|
-| `boss schema` | 输出完整工具能力描述 JSON（36 个顶层命令 + hr 分组展开，Agent 首先调用） |
+| `boss schema` | 输出完整工具能力描述 JSON（37 个顶层命令 + hr 分组展开，Agent 首先调用） |
 | `boss platforms` | 本地平台注册与能力状态（不触网；支持 `--platform` 单平台过滤与 `--capability` 反查，附 `capability_status_legend`） |
 | `boss login` | 用户主动登录（按平台走 Cookie / CDP / QR / 浏览器降级链路） |
 | `boss logout` | 退出登录 |
@@ -34,6 +34,29 @@ boss <命令> --help                      # 查看单个命令选项
 | `boss detail <security_id>` | 职位详情（`--job-id` 走快速通道） |
 | `boss show <#>` | 按编号查看上次搜索结果 |
 | `boss cities` | 40 个支持城市 |
+
+## 显式批量采集
+
+`crawl` 是用户显式触发的独立 Chrome 任务。MCP 只暴露任务式 `start/status/results/shortlist/resume`，每次调用通过 `run_id` 衔接，不把长采集塞进单个同步工具调用。首次使用需安装 `uv sync --extra crawl`，然后指向独立 profile 或已有的 `C:\dp_profile_9222` 登录 profile。
+
+```powershell
+boss crawl configure --profile C:\dp_profile_9222
+boss crawl run "AI" --city 杭州 --pages 5 --with-detail
+boss crawl resume <run_id>
+```
+
+| 命令 | 说明 |
+|------|------|
+| `boss crawl configure [--profile PATH] [--chrome-path PATH] [--port N]` | 设置 DP Chrome 路径、profile、调试端口和 Hook 档位；默认 profile 为 `<data-dir>/crawl/chrome-profile` |
+| `boss crawl run <query> --city <城市或代码> [--pages N] [--with-detail]` | 串行采集；`--pages` 默认 `5`，`0` 表示持续到 `hasMore=False`；`--with-detail` 串行补全全部 `job_card` |
+| `boss crawl start <query> --city <城市或代码> [...]` | 创建后台任务并立即返回 `run_id`；供 MCP 或本地任务调度使用 |
+| `boss crawl status <run_id>` / `boss crawl results <run_id>` | 仅读取 SQLite 中的页游标、风险状态、详情进度和已持久化职位；不打开浏览器 |
+| `boss crawl resume <run_id> [--pages N] [--with-detail] [--background]` | 从页游标、已见职位和待补详情队列恢复；`--background` 立即返回以便轮询；可提高页数上限并补全详情，不重复写入已完成项 |
+| `boss crawl shortlist <run_id> (--all \| --job-id <id>)` | 将 crawl 结果导入原项目的本地候选池；不请求平台，保留职位 ID 和详情缓存供 `boss ai fit` 使用 |
+
+候选人侧可用 `boss agent crawl --run-id <run_id> --resume <简历名>` 执行“完成的 crawl → shortlist → ai fit → 按匹配分排序”。它不会启动浏览器；只有 `boss agent crawl --query <关键词> --city <城市> --allow-crawl --resume <简历名>` 才会启动新的真实采集。遇到 `risk_stopped` 时 Agent 只返回 `run_id` 和恢复命令，不会无限重试或重开会话。
+
+每页完成后更新 `<data-dir>/crawl/runs/<run_id>/jobs.json`、`jobs.csv` 和带筛选/冻结首行的 `jobs.xlsx`。XLSX 保留完整值但所有数据行固定为单行和统一行高，长内容仅在表格中截断显示。风险码 `37` / `38`、安全页或职位列表容器异常会立即保存断点并停止；stdout 始终只输出 JSON 信封和恢复命令。
 
 ## 求职动作
 

@@ -26,6 +26,12 @@ DEFAULTS: dict[str, Any] = {
 		"human_review_threshold": 0.65,
 		"auto_execute_threshold": 0.82,
 	},
+	"crawl": {
+		"chrome_path": None,
+		"profile_path": None,
+		"cdp_port": 9222,
+		"hook_profile": "screenshot-full",
+	},
 }
 
 

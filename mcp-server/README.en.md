@@ -9,7 +9,7 @@ Related docs:
 ## Install
 
 ```bash
-uv tool install "boss-agent-cli[mcp]"
+uv tool install "boss-agent-cli[mcp,crawl]"  # use [mcp] only when crawl tools are not needed
 ```
 
 From source:
@@ -49,7 +49,7 @@ Add the server in Cursor Settings -> MCP Servers:
 
 ## Available tools
 
-The current MCP server exposes **32 low-risk tools** by default.
+The current MCP server exposes **51 low-risk and local task tools** by default.
 
 ### Auth and environment
 
@@ -75,6 +75,18 @@ The current MCP server exposes **32 low-risk tools** by default.
 | `boss_shortlist_remove` | Remove a job from the local shortlist |
 | `boss_preset_add/list/remove` | Manage local search presets |
 | `boss_watch_add/list/remove` | Manage local watch presets; `watch run` is not exposed by default |
+
+### Resumable crawl tasks
+
+| Tool | Description |
+|------|-------------|
+| `boss_crawl_start` | Create a real-Chrome background crawl and return `run_id` immediately |
+| `boss_crawl_status` | Read cursor, job count, detail progress, risk state, and resume command |
+| `boss_crawl_results` | Read persisted jobs for a run, filtered by page/detail state if needed |
+| `boss_crawl_shortlist` | Import one run's jobs into the local shortlist without a platform call |
+| `boss_crawl_resume` | Resume an incomplete task in the background, then poll by `run_id` |
+
+These are task-shaped tools: call `status` after `start` / `resume`. A risk stop returns a resume command rather than waiting indefinitely in one MCP call or recreating the browser.
 
 ### User and resume
 

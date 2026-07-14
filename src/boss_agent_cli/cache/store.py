@@ -97,8 +97,34 @@ class CacheStore:
 				applicant_count INTEGER DEFAULT 0,
 				cached_at TEXT
 			);
+			CREATE TABLE IF NOT EXISTS crawl_runs (
+				run_id TEXT PRIMARY KEY,
+				params TEXT NOT NULL,
+				status TEXT NOT NULL,
+				next_page INTEGER NOT NULL,
+				list_finished INTEGER NOT NULL DEFAULT 0,
+				output_dir TEXT NOT NULL,
+				error TEXT NOT NULL DEFAULT '',
+				hook_results TEXT NOT NULL DEFAULT '[]',
+				created_at REAL NOT NULL,
+				updated_at REAL NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS crawl_jobs (
+				run_id TEXT NOT NULL,
+				job_key TEXT NOT NULL,
+				page_no INTEGER NOT NULL,
+				payload TEXT NOT NULL,
+				detail_done INTEGER NOT NULL DEFAULT 0,
+				updated_at REAL NOT NULL,
+				PRIMARY KEY (run_id, job_key)
+			);
+			CREATE TABLE IF NOT EXISTS crawl_budget (
+				budget_key TEXT PRIMARY KEY,
+				last_request_at REAL NOT NULL
+			);
 		""")
 		self._migrate_shortlist_records()
+		self._migrate_crawl_runs()
 
 	def _migrate_shortlist_records(self) -> None:
 		columns = {
@@ -109,6 +135,120 @@ class CacheStore:
 			self._conn.execute("ALTER TABLE shortlist_records ADD COLUMN tags TEXT DEFAULT ''")
 		if "note" not in columns:
 			self._conn.execute("ALTER TABLE shortlist_records ADD COLUMN note TEXT DEFAULT ''")
+		self._conn.commit()
+
+	def _migrate_crawl_runs(self) -> None:
+		columns = {
+			row[1]
+			for row in self._conn.execute("PRAGMA table_info(crawl_runs)").fetchall()
+		}
+		if "list_finished" not in columns:
+			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN list_finished INTEGER NOT NULL DEFAULT 0")
+		if "hook_results" not in columns:
+			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN hook_results TEXT NOT NULL DEFAULT '[]'")
+		self._conn.commit()
+
+	# ── DrissionPage crawl task state ────────────────────────────────
+
+	def create_crawl_run(
+		self,
+		run_id: str,
+		params: dict[str, Any],
+		output_dir: str,
+		*,
+		next_page: int = 1,
+		status: str = "running",
+	) -> None:
+		now = time.time()
+		self._conn.execute(
+			"INSERT INTO crawl_runs (run_id, params, status, next_page, output_dir, error, created_at, updated_at) "
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			(run_id, json.dumps(params, ensure_ascii=False, sort_keys=True), status, next_page, output_dir, "", now, now),
+		)
+		self._conn.commit()
+
+	def get_crawl_run(self, run_id: str) -> dict[str, Any] | None:
+		row = self._conn.execute(
+			"SELECT run_id, params, status, next_page, list_finished, output_dir, error, hook_results, created_at, updated_at "
+			"FROM crawl_runs WHERE run_id = ?",
+			(run_id,),
+		).fetchone()
+		if row is None:
+			return None
+		return {
+			"run_id": row[0], "params": json.loads(row[1]), "status": row[2], "next_page": row[3],
+			"list_finished": bool(row[4]), "output_dir": row[5], "error": row[6],
+			"hook_results": json.loads(row[7]), "created_at": row[8], "updated_at": row[9],
+		}
+
+	def update_crawl_run_params(self, run_id: str, params: dict[str, Any]) -> None:
+		self._conn.execute(
+			"UPDATE crawl_runs SET params = ?, updated_at = ? WHERE run_id = ?",
+			(json.dumps(params, ensure_ascii=False, sort_keys=True), time.time(), run_id),
+		)
+		self._conn.commit()
+
+	def update_crawl_run(
+		self,
+		run_id: str,
+		*,
+		status: str,
+		next_page: int,
+		error: str = "",
+		list_finished: bool | None = None,
+		hook_results: list[dict[str, Any]] | None = None,
+	) -> None:
+		assignments = ["status = ?", "next_page = ?", "error = ?", "updated_at = ?"]
+		values: list[Any] = [status, next_page, error, time.time()]
+		if list_finished is not None:
+			assignments.append("list_finished = ?")
+			values.append(int(list_finished))
+		if hook_results is not None:
+			assignments.append("hook_results = ?")
+			values.append(json.dumps(hook_results, ensure_ascii=False, sort_keys=True))
+		values.append(run_id)
+		self._conn.execute(
+			f"UPDATE crawl_runs SET {', '.join(assignments)} WHERE run_id = ?",
+			values,
+		)
+		self._conn.commit()
+
+	def put_crawl_job(self, run_id: str, job_key: str, page_no: int, payload: dict[str, Any], *, detail_done: bool) -> None:
+		self._conn.execute(
+			"INSERT OR REPLACE INTO crawl_jobs (run_id, job_key, page_no, payload, detail_done, updated_at) "
+			"VALUES (?, ?, ?, ?, ?, ?)",
+			(run_id, job_key, page_no, json.dumps(payload, ensure_ascii=False, sort_keys=True), int(detail_done), time.time()),
+		)
+		self._conn.commit()
+
+	def get_crawl_job(self, run_id: str, job_key: str) -> dict[str, Any] | None:
+		row = self._conn.execute(
+			"SELECT page_no, payload, detail_done FROM crawl_jobs WHERE run_id = ? AND job_key = ?",
+			(run_id, job_key),
+		).fetchone()
+		if row is None:
+			return None
+		return {"page_no": row[0], "payload": json.loads(row[1]), "detail_done": bool(row[2])}
+
+	def list_crawl_jobs(self, run_id: str) -> list[dict[str, Any]]:
+		rows = self._conn.execute(
+			"SELECT job_key, page_no, payload, detail_done FROM crawl_jobs WHERE run_id = ? ORDER BY page_no, rowid",
+			(run_id,),
+		).fetchall()
+		return [
+			{"job_key": row[0], "page_no": row[1], "payload": json.loads(row[2]), "detail_done": bool(row[3])}
+			for row in rows
+		]
+
+	def get_crawl_budget(self, budget_key: str) -> float | None:
+		row = self._conn.execute("SELECT last_request_at FROM crawl_budget WHERE budget_key = ?", (budget_key,)).fetchone()
+		return float(row[0]) if row is not None else None
+
+	def put_crawl_budget(self, budget_key: str, requested_at: float) -> None:
+		self._conn.execute(
+			"INSERT OR REPLACE INTO crawl_budget (budget_key, last_request_at) VALUES (?, ?)",
+			(budget_key, requested_at),
+		)
 		self._conn.commit()
 
 	@staticmethod

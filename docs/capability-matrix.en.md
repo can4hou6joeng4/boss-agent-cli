@@ -15,6 +15,7 @@ The default low-risk `assisted` mode remains local, read-only first, and user-tr
 | Environment diagnostics | `boss doctor` | No | Hybrid |
 | Config management | `boss config` | No | Local |
 | Cache cleanup | `boss clean` | No | Local |
+| Explicit bulk crawl | `boss crawl configure/run/start/status/results/resume` | Yes | DrissionPage; MCP task tools are coordinated by run_id |
 
 ## Job discovery
 
@@ -108,5 +109,6 @@ Notes:
 - **Transport**: `httpx` means a direct API call. Assisted Mode stops on risk-control blocks. Research Mode may run explicitly declared browser/hook adapters, but not unbounded retries, and must preserve checkpoints and redaction. `AI service` means a third-party model API; do not send chat records, resumes, or contact details without authorization.
 - For CLI-first integrations, prefer `boss schema` for capability discovery and parameter validation; the schema exposes both `supported_platforms` and `supported_recruiter_platforms`.
 - Current platform coverage: `zhipin` has both candidate and recruiter implementations, but sensitive workflows are blocked by default; `zhilian` supports candidate-side workflows and recruiter automation through the `agent` browser/CDP adapter V1; `qiancheng` / 51job is a registered placeholder adapter whose real workflows return `NOT_SUPPORTED`.
-- Current auth posture: `zhipin` and `zhilian` keep user-triggered login compatibility; risk-control research belongs only in explicit Research Mode adapters.
-- Use `boss schema` as the source of truth: it currently exposes 36 top-level commands, with 9 first-level recruiter subcommands under `hr`, while `ai` and `resume` remain command-group entries.
+- Current auth posture: `zhipin` and `zhilian` keep user-triggered login compatibility; risk-control research belongs only in explicit Research Mode adapters and must not bypass platform risk controls.
+- `crawl` is a user-triggered sequential task using an isolated Chrome profile, cross-process rate budget, and SQLite checkpoints; MCP coordinates it through `crawl_start/status/results/shortlist/resume`. Candidate `agent crawl` consumes only completed runs by default; only `--allow-crawl` may start a new crawl. Risk codes or a security page stop it and return a resume command.
+- Use `boss schema` as the source of truth: it currently exposes 37 top-level commands, with 9 first-level recruiter subcommands under `hr`, while `ai` and `resume` remain command-group entries.

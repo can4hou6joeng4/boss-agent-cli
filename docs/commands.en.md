@@ -12,7 +12,7 @@ boss schema --format anthropic-tools   # export Claude Tool Use definitions
 boss <cmd> --help                      # options for a single command
 ```
 
-`boss schema` currently exposes 36 top-level commands, plus 9 first-level recruiter
+`boss schema` currently exposes 37 top-level commands, plus 9 first-level recruiter
 subcommands under `hr`, grouped below by workflow stage.
 
 Operating mode: `boss config set operating_mode assisted|research`. The default is `assisted`; after switching, run `boss schema` again to inspect per-command mode, risk, and data classifications.
@@ -38,6 +38,29 @@ Operating mode: `boss config set operating_mode assisted|research`. The default 
 | `boss detail <security_id>` | Job detail (`--job-id` uses the fast path) |
 | `boss show <#>` | Re-view a numbered result from the last search |
 | `boss cities` | 40 supported cities |
+
+## Explicit bulk crawl
+
+`crawl` is an explicitly triggered Chrome task. MCP exposes only task-shaped `start/status/results/shortlist/resume`, joined by `run_id`, instead of placing a long crawl inside one synchronous tool call. Install `uv sync --extra crawl` first, then configure either an isolated profile or the existing logged-in `C:\dp_profile_9222` profile.
+
+```powershell
+boss crawl configure --profile C:\dp_profile_9222
+boss crawl run "AI" --city 杭州 --pages 5 --with-detail
+boss crawl resume <run_id>
+```
+
+| Command | Description |
+|---------|-------------|
+| `boss crawl configure [--profile PATH] [--chrome-path PATH] [--port N]` | Configure the DP Chrome path, profile, debugging port, and Hook profile; the default profile is `<data-dir>/crawl/chrome-profile` |
+| `boss crawl run <query> --city <city-or-code> [--pages N] [--with-detail]` | Sequential capture; `--pages` defaults to `5`, while `0` continues until `hasMore=False`; `--with-detail` serially completes every `job_card` |
+| `boss crawl start <query> --city <city-or-code> [...]` | Create a background task and return `run_id` immediately; used by MCP/local task orchestration |
+| `boss crawl status <run_id>` / `boss crawl results <run_id>` | Read the SQLite cursor, risk state, detail progress, and persisted jobs without opening Chrome |
+| `boss crawl resume <run_id> [--pages N] [--with-detail] [--background]` | Resume from the page cursor, seen jobs, and pending details; `--background` returns immediately for polling; can raise the page limit and fill details without duplicate writes |
+| `boss crawl shortlist <run_id> (--all \| --job-id <id>)` | Import crawl results into the project's local shortlist without a platform request, retaining job IDs and detail cache for `boss ai fit` |
+
+Candidate workflow: `boss agent crawl --run-id <run_id> --resume <resume-name>` runs “completed crawl → shortlist → ai fit → score ordering” without opening a browser. Only `boss agent crawl --query <query> --city <city> --allow-crawl --resume <resume-name>` starts a new real Chrome crawl. On `risk_stopped`, Agent returns the `run_id` and resume command instead of retrying indefinitely or recreating the session.
+
+After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a filtered/frozen `jobs.xlsx` are updated. XLSX keeps the complete values but every data row is a fixed-height single line, so long content is visually clipped rather than expanding the row. Codes `37` / `38`, a security page, or a missing job-list container checkpoint and stop immediately; stdout remains a JSON envelope containing the resume command.
 
 ## Restricted actions
 
