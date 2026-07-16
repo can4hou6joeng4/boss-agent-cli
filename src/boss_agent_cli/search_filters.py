@@ -10,7 +10,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from boss_agent_cli.api import endpoints
-from boss_agent_cli.api.models import JobItem
+from boss_agent_cli.api.models import BOSS_INTERNSHIP_RESPONSE_JOB_TYPE, JobItem
 
 # ── Ordinal lookups for threshold comparisons ───────────────────────
 
@@ -298,7 +298,12 @@ class SearchPipelinePlatformError(Exception):
 # ── List-page prefilter ─────────────────────────────────────────────
 
 
-def prefilter_job(raw_item: dict[str, Any], criteria: SearchFilterCriteria) -> tuple[bool, list[str]]:
+def prefilter_job(
+	raw_item: dict[str, Any],
+	criteria: SearchFilterCriteria,
+	*,
+	platform_name: str | None = None,
+) -> tuple[bool, list[str]]:
 	"""Fast prefilter using list-page fields only. Returns (pass, rejection_reasons)."""
 	reasons: list[str] = []
 
@@ -328,7 +333,37 @@ def prefilter_job(raw_item: dict[str, Any], criteria: SearchFilterCriteria) -> t
 		if not meets_education_threshold(item_edu, criteria.education):
 			reasons.append(f"学历不足: {item_edu} < {criteria.education}")
 
+	_, job_type_reasons = prefilter_platform_job_type(raw_item, criteria, platform_name=platform_name)
+	reasons.extend(job_type_reasons)
+
 	return (len(reasons) == 0, reasons)
+
+
+def prefilter_platform_job_type(
+	raw_item: dict[str, Any],
+	criteria: SearchFilterCriteria,
+	*,
+	platform_name: str | None = None,
+) -> tuple[bool, list[str]]:
+	"""Fail closed when a platform exposes a verified employment-type enum."""
+	reasons: list[str] = []
+	# BOSS request jobType=1902 returns a mixed campus/intern pool. For a
+	# strict internship-only search, trust the response enum rather than the
+	# title or request filter alone.
+	if platform_name == "zhipin" and _requests_internship_only(criteria):
+		raw_job_type = raw_item.get("jobType")
+		if str(raw_job_type) != str(BOSS_INTERNSHIP_RESPONSE_JOB_TYPE):
+			reasons.append(f"岗位类型不匹配: jobType={raw_job_type!r} != 实习(4)")
+
+	return (len(reasons) == 0, reasons)
+
+
+def _requests_internship_only(criteria: SearchFilterCriteria) -> bool:
+	requested = set(_split_multi_value(criteria.job_type or ""))
+	if requested in ({"实习"}, {"1902"}):
+		return True
+	raw_job_type = criteria.raw_params.get("jobType", "")
+	return not requested and set(_split_multi_value(raw_job_type)) == {"1902"}
 
 
 # ── Welfare matching ────────────────────────────────────────────────
@@ -578,7 +613,7 @@ def run_search_pipeline(
 		# Phase 1: list-page prefilter
 		survivors = []
 		for raw_item in job_list:
-			ok, reasons = prefilter_job(raw_item, criteria)
+			ok, reasons = prefilter_job(raw_item, criteria, platform_name=getattr(client, "name", None))
 			if not ok:
 				stats.jobs_prefiltered += 1
 				logger.info(f"  预筛排除: {raw_item.get('jobName', '')} ({', '.join(reasons)})")

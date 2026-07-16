@@ -163,6 +163,7 @@ def render_job_table(
 	table.add_column("title", style="bold cyan", max_width=30)
 	table.add_column("company", style="green", max_width=20)
 	table.add_column("salary", style="yellow", max_width=12)
+	table.add_column("type", max_width=8)
 	table.add_column("exp", max_width=10)
 	table.add_column("edu", max_width=8)
 	table.add_column("city", style="blue", max_width=12)
@@ -173,6 +174,7 @@ def render_job_table(
 			job.get("title", job.get("jobName", "-")),
 			job.get("company", job.get("brandName", "-")),
 			job.get("salary", job.get("salaryDesc", "-")),
+			job.get("employment_type") or "-",
 			job.get("experience", job.get("jobExperience", "-")),
 			job.get("education", job.get("jobDegree", "-")),
 			job.get("city", job.get("cityName", "-")),

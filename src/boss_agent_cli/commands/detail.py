@@ -3,6 +3,7 @@ from typing import Any
 
 import click
 
+from boss_agent_cli.api.models import employment_type_from_raw
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
@@ -24,6 +25,7 @@ def _platform_error_details(response: Any) -> dict[str, Any] | None:
 
 def build_job_from_card(card: dict[str, Any], *, security_id: str, greeted: bool) -> dict[str, Any]:
 	"""把 job_card 响应映射为统一职位字段 dict（show / detail 浏览器兜底通道共用）。"""
+	raw_job_type = card.get("jobType")
 	return {
 		"job_id": card.get("encryptJobId", ""),
 		"title": card.get("jobName", ""),
@@ -39,6 +41,11 @@ def build_job_from_card(card: dict[str, Any], *, security_id: str, greeted: bool
 		"boss_title": card.get("bossTitle", ""),
 		"boss_active": card.get("activeTimeDesc", "离线"),
 		"security_id": security_id,
+		"raw_job_type": raw_job_type,
+		"employment_type": employment_type_from_raw(raw_job_type),
+		"days_per_week": card.get("daysPerWeekDesc", ""),
+		"least_month": card.get("leastMonthDesc", ""),
+		"pay_type": card.get("payTypeDesc", ""),
 		"greeted": greeted,
 	}
 
@@ -123,6 +130,7 @@ def _detail_via_httpx(platform: Platform, security_id: str, job_id: str, data_di
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		greeted = cache.is_greeted(security_id)
 
+	raw_job_type = job_info.get("jobType")
 	return {
 		"job_id": job_id,
 		"title": job_info.get("jobName", ""),
@@ -138,6 +146,11 @@ def _detail_via_httpx(platform: Platform, security_id: str, job_id: str, data_di
 		"boss_title": boss_info.get("title", ""),
 		"boss_active": boss_info.get("activeTimeDesc", "离线"),
 		"security_id": security_id,
+		"raw_job_type": raw_job_type,
+		"employment_type": employment_type_from_raw(raw_job_type),
+		"days_per_week": job_info.get("daysPerWeekDesc", ""),
+		"least_month": job_info.get("leastMonthDesc", ""),
+		"pay_type": job_info.get("payTypeDesc", ""),
 		"greeted": greeted,
 	}, None
 

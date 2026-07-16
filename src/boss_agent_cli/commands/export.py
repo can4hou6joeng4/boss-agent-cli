@@ -15,10 +15,17 @@ from boss_agent_cli.display import (
 	render_export_summary,
 	render_job_table,
 )
-from boss_agent_cli.search_filters import SearchUrlParseError, parse_boss_search_url, resolve_search_code_params
+from boss_agent_cli.search_filters import (
+	SearchFilterCriteria,
+	SearchUrlParseError,
+	parse_boss_search_url,
+	prefilter_platform_job_type,
+	resolve_search_code_params,
+)
 
 
 _HTML_PUBLIC_EXPORT_FIELDS = ("title", "company", "city", "experience", "education", "skills", "welfare")
+_EXPORT_FILTER_PAGE_ALLOWANCE = 5
 
 
 @click.command("export")
@@ -100,6 +107,18 @@ def export_cmd(
 	except ValueError as exc:
 		handle_error_output(ctx, "export", code="INVALID_PARAM", message=str(exc))
 		return
+	criteria = SearchFilterCriteria(
+		query=query,
+		city=city,
+		salary=salary,
+		experience=experience,
+		education=education,
+		industry=industry,
+		scale=scale,
+		stage=stage,
+		job_type=job_type,
+		raw_params=raw_params,
+	)
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_platform_instance(ctx, auth) as platform:
@@ -107,7 +126,10 @@ def export_cmd(
 		html_items: list[dict[str, Any]] = []
 		html_file_output = bool(output and fmt == "html")
 		page = 1
-		max_pages = (count + 14) // 15  # 每页约 15 条
+		# 本地严格筛选可能剔除整页结果，额外扫描固定页数；上限仍由用户
+		# 显式请求的 count 决定，避免 hasMore 异常时形成无界请求。
+		estimated_pages = max(1, (count + 14) // 15)
+		max_pages = estimated_pages + _EXPORT_FILTER_PAGE_ALLOWANCE
 
 		while (
 			_export_item_count(all_items, html_items, html_file_output=html_file_output) < count and page <= max_pages
@@ -147,6 +169,9 @@ def export_cmd(
 			for raw_item in job_list:
 				if _export_item_count(all_items, html_items, html_file_output=html_file_output) >= count:
 					break
+				matches, _ = prefilter_platform_job_type(raw_item, criteria, platform_name=platform.name)
+				if not matches:
+					continue
 				if html_file_output:
 					html_items.append(_public_html_export_item_from_api(raw_item))
 				else:
@@ -259,6 +284,10 @@ def _write_to_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 			"salary",
 			"city",
 			"district",
+			"employment_type",
+			"raw_job_type",
+			"days_per_week",
+			"least_month",
 			"experience",
 			"education",
 			"skills",

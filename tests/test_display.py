@@ -280,6 +280,27 @@ class TestRenderers:
 			hint_next="next hint",
 		)
 
+	def test_render_job_table_shows_internship_type(self, monkeypatch):
+		from boss_agent_cli.display import render_job_table
+		stream = _capture_display_console(monkeypatch)
+
+		render_job_table(
+			[{
+				"title": "产品实习生",
+				"company": "测试公司",
+				"salary": "150元/天",
+				"employment_type": "实习",
+				"experience": "在校/应届",
+				"education": "本科",
+				"city": "杭州",
+				"district": "滨江区",
+			}],
+			title="jobs",
+		)
+
+		output = stream.getvalue()
+		assert "实习" in output
+
 	def test_render_job_detail_minimal(self):
 		from boss_agent_cli.display import render_job_detail
 		render_job_detail({"title": "Go", "salary": "20K"})

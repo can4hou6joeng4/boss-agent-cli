@@ -23,6 +23,9 @@ from boss_agent_cli.search_filters import (
 )
 
 
+_SEARCH_CACHE_SCHEMA = 2
+
+
 def _sort_search_items(items: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
 	if sort == "score":
 		return sorted(items, key=lambda item: item.get("match_score", 0), reverse=True)
@@ -147,6 +150,7 @@ def search_cmd(
 		# 有福利筛选时跳过缓存（因为需要逐个查详情）
 		if not welfare_conditions and not no_cache and not with_score:
 			search_params = {
+				"cache_schema": _SEARCH_CACHE_SCHEMA,
 				"query": query, "city": city, "salary": salary,
 				"experience": experience, "education": education,
 				"industry": industry, "scale": scale, "stage": stage,
@@ -227,6 +231,7 @@ def search_cmd(
 			# 缓存普通搜索结果
 			if not welfare_conditions and not with_score:
 				search_params = {
+					"cache_schema": _SEARCH_CACHE_SCHEMA,
 					"query": query, "city": city, "salary": salary,
 					"experience": experience, "education": education,
 					"industry": industry, "scale": scale, "stage": stage,

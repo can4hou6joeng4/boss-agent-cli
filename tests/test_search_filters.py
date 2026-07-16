@@ -67,7 +67,7 @@ class TestSearchUrlParsing:
 		params = resolve_search_code_params(experience="应届,3-5年", education="本科,硕士", job_type="全职,实习")
 		assert params["experience"] == "108,104"
 		assert params["degree"] == "203,204"
-		assert params["jobType"] == "1901,1903"
+		assert params["jobType"] == "1901,1902"
 
 
 # ── Experience threshold ────────────────────────────────────────────
@@ -184,6 +184,42 @@ class TestPrefilterJob:
 		criteria = SearchFilterCriteria(query="go")
 		ok, reasons = prefilter_job(raw, criteria)
 		assert ok is True
+
+	def test_boss_internship_accepts_verified_response_type(self):
+		raw = {**_make_raw(), "jobType": 4, "jobName": "产品实习生"}
+		criteria = SearchFilterCriteria(query="产品", job_type="实习")
+
+		ok, reasons = prefilter_job(raw, criteria, platform_name="zhipin")
+
+		assert ok is True
+		assert reasons == []
+
+	def test_boss_internship_rejects_non_intern_even_when_title_says_intern(self):
+		raw = {**_make_raw(), "jobType": 5, "jobName": "接受实习生"}
+		criteria = SearchFilterCriteria(query="产品", job_type="实习")
+
+		ok, reasons = prefilter_job(raw, criteria, platform_name="zhipin")
+
+		assert ok is False
+		assert any("jobType=5" in reason for reason in reasons)
+
+	def test_boss_internship_rejects_missing_response_type(self):
+		raw = {**_make_raw(), "jobName": "实习生"}
+		criteria = SearchFilterCriteria(query="产品", raw_params={"jobType": "1902"})
+
+		ok, reasons = prefilter_job(raw, criteria, platform_name="zhipin")
+
+		assert ok is False
+		assert any("jobType=None" in reason for reason in reasons)
+
+	def test_other_platform_does_not_use_boss_response_enum(self):
+		raw = {**_make_raw(), "jobName": "实习生"}
+		criteria = SearchFilterCriteria(query="产品", job_type="实习")
+
+		ok, reasons = prefilter_job(raw, criteria, platform_name="zhilian")
+
+		assert ok is True
+		assert reasons == []
 
 
 class TestComputeMatchScore:
