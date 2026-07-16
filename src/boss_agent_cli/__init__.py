@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 	)
 	from boss_agent_cli.resume.models import ResumeData, ResumeFile
 
-__version__ = "1.15.0"
+__version__ = "1.16.0"
 
 _LAZY_EXPORT_MODULES = {
 	"AuthManager": "boss_agent_cli.auth.manager",
