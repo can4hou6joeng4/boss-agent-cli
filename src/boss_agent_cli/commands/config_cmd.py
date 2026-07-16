@@ -11,6 +11,9 @@ import click
 from boss_agent_cli.config import DEFAULTS
 from boss_agent_cli.display import handle_output, render_simple_list
 
+_CONFIG_CHOICES = {
+	"operating_mode": ("assisted", "research"),
+}
 _PUBLIC_CONFIG_KEYS = tuple(
 	key for key in DEFAULTS
 	if key != "low_risk_mode"
@@ -114,7 +117,19 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 	user_cfg = _load_user_overrides(config_path)
 
 	parsed_value = _parse_value(value, DEFAULTS[key])
+	choices = _CONFIG_CHOICES.get(key)
+	if choices is not None and parsed_value not in choices:
+		from boss_agent_cli.output import emit_error
+		emit_error(
+			"config",
+			code="INVALID_PARAM",
+			message=f"{key} 必须是以下值之一: {', '.join(choices)}",
+		)
+		ctx.exit(1)
+		return
 	user_cfg[key] = parsed_value
+	if key == "operating_mode":
+		user_cfg.pop("low_risk_mode", None)
 	_save_user_overrides(config_path, user_cfg)
 
 	data = {"key": key, "value": parsed_value, "previous": ctx.obj["config"].get(key)}

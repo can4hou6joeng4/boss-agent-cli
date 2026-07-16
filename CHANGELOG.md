@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Added
+- 新增显式 `operating_mode` 双模式契约：默认 `assisted` 保持既有低风险阻断；用户主动设置 `research` 后，可启用策略注册表声明的浏览器协议、反调试、风控适配和受控采集研究能力。`boss schema` 同步暴露当前模式、可选模式和逐命令风险/数据分类。
+
+### Changed
+- 合规护栏升级为不可变能力策略注册表，CLI、schema 与默认 MCP 过滤从同一真源派生；旧内部配置 `low_risk_mode=false` 兼容映射到 `research`，但不再作为公开配置入口。
+
 ## [1.15.0] - 2026-07-14
 
 ### Added

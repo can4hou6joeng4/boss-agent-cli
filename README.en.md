@@ -32,7 +32,7 @@
 
 ## ⚠️ Compliance Boundary
 
-Low-Risk Assistance Mode is on by default: local assistance · read-only first · user-triggered · no risk-control bypass · no bulk outreach · no platform-data scraping. Commands that greet (greet / batch-greet), apply, exchange contacts, search recruiter candidates, read candidate resumes / chats, or reply are blocked by default and return the `COMPLIANCE_BLOCKED` error code; perform those actions manually on the official website.
+Assisted Mode is on by default: local assistance, read-only first, and user-triggered. Commands that greet (greet / batch-greet), apply, exchange contacts, search recruiter candidates, read candidate resumes / chats, or reply are blocked by default and return `COMPLIANCE_BLOCKED`; perform those actions manually on the official website. An explicit `boss config set operating_mode research` enables bounded browser-protocol, anti-debugging, risk-control adaptation, and controlled collection research, with redaction, checkpoints, stop controls, and auditable script provenance still required.
 
 ## ✨ Features
 
@@ -137,7 +137,7 @@ boss status --live      # optional low-frequency read-only probe
 boss doctor --live-probe
 ```
 
-Every error envelope carries `code` + `recoverable` + `recovery_action`, so agents can react programmatically. Browser Bridge local diagnostics cover `bridge_daemon` / `bridge_extension` / `bridge_protocol` / `bridge_workspace` / `bridge_exec` / `bridge_fetch` / `bridge_navigate`; start the daemon with `python -m boss_agent_cli.bridge.daemon --serve`. Bridge is only for local diagnostics, user-triggered login compatibility, and read-only assistance — do not use it to retry platform risk-control blocks.
+Every error envelope carries `code` + `recoverable` + `recovery_action`, so agents can react programmatically. Browser Bridge local diagnostics cover `bridge_daemon` / `bridge_extension` / `bridge_protocol` / `bridge_workspace` / `bridge_exec` / `bridge_fetch` / `bridge_navigate`; start the daemon with `python -m boss_agent_cli.bridge.daemon --serve`. Assisted Mode stops on platform risk-control blocks. Research Mode may run declared adapters, but work must remain bounded, checkpointed, redacted, and explicitly resumed by the user.
 
 Full checks, CDP launch examples, and error codes: **[Troubleshooting](docs/troubleshooting.en.md)**. For Cookie / CDP / patchright / request-rate / drift issues, read [Platform Risk Boundaries](docs/platform-risk.en.md) first.
 
@@ -163,7 +163,7 @@ CLI (Click)
             └─ output.py → JSON envelope → stdout
 ```
 
-**Invariants**: stdout is JSON-only · stderr holds logs · `exit 0/1` · errors carry `code/recoverable/recovery_action` · `boss schema` is the authoritative capability source. **Stack**: Python ≥ 3.10 · Click · httpx · patchright / CDP / Bridge (login & export only, **never a risk-control bypass**) · cryptography · sqlite3 (WAL) · pytest (1400+).
+**Invariants**: stdout is JSON-only · stderr holds logs · `exit 0/1` · errors carry `code/recoverable/recovery_action` · `boss schema` is the authoritative capability source. **Stack**: Python ≥ 3.10 · Click · httpx · patchright / CDP / Bridge (login, export, and explicit Research Mode adapters) · cryptography · sqlite3 (WAL) · pytest (1400+).
 
 ## 🔌 Local Storage
 

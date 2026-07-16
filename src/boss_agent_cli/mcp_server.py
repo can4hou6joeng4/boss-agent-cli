@@ -15,13 +15,15 @@ from boss_agent_cli.commands.schema import SCHEMA_DATA, _availability_note, _inj
 from boss_agent_cli.compliance import (
 	COMPLIANCE_BLOCKED_ACTION,
 	LOW_RISK_MODE_DESCRIPTION,
-	low_risk_blocked_commands,
+	restricted_commands,
 )
 from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
 
 SERVER_INSTRUCTIONS = (
-	"boss-agent-cli over MCP: a local-assist BOSS Zhipin job-search toolset, low-risk by default — "
-	"read-only first, user-triggered, no risk-control bypass, no bulk outreach, no platform-data scraping. "
+	"boss-agent-cli over MCP: a local-assist BOSS Zhipin job-search toolset in assisted mode by default — "
+	"read-only first and user-triggered. The CLI also has an explicit research operating mode for bounded "
+	"browser-protocol, anti-debugging, risk-control adaptation, and controlled collection research; the default "
+	"MCP surface remains assisted-only until mode-aware tool exposure is implemented. "
 	"Sensitive actions (greet, batch-greet, apply, contact exchange, recruiter candidate data, replies) "
 	"are not exposed and return COMPLIANCE_BLOCKED at the CLI layer; for those the user acts manually on "
 	"the official BOSS Zhipin website. Every tool returns the same JSON envelope "
@@ -142,7 +144,7 @@ def _compliance_command_for_tool(tool_name: str) -> str:
 
 
 def _is_low_risk_blocked_tool(tool_name: str) -> bool:
-	return _compliance_command_for_tool(tool_name) in low_risk_blocked_commands()
+	return _compliance_command_for_tool(tool_name) in restricted_commands("assisted")
 
 TOOLS = [
 	Tool(

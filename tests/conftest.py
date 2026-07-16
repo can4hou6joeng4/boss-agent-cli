@@ -11,14 +11,14 @@ def _restricted_surface_open_for_existing_contract_tests(request, monkeypatch):
 		return
 	from boss_agent_cli.config import DEFAULTS
 
-	monkeypatch.setitem(DEFAULTS, "low_risk_mode", False)
+	monkeypatch.setitem(DEFAULTS, "operating_mode", "research")
 
 
 @pytest.fixture
 def restricted_surface_data_dir(tmp_path: Path) -> Path:
 	"""Data dir for tests that intentionally exercise pre-guard command contracts."""
 	(tmp_path / "config.json").write_text(
-		json.dumps({"low_risk_mode": False}, ensure_ascii=False),
+		json.dumps({"operating_mode": "research"}, ensure_ascii=False),
 		encoding="utf-8",
 	)
 	return tmp_path

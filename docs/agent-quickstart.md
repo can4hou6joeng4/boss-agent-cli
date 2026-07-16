@@ -2,6 +2,8 @@
 
 面向 AI Agent 的最短上手路径：先识别能力，再跑通低风险的搜索、详情和本地整理闭环；涉及投递、沟通、候选人处理时回到平台官网由用户手动完成。
 
+默认运行在 `assisted`。需要浏览器协议、反调试或风控适配研究时，由用户显式执行 `boss config set operating_mode research`；Agent 必须重新调用 `boss schema`，按 `compliance.capabilities` 路由能力。
+
 ## 1) 安装与环境准备
 
 ```bash
@@ -66,7 +68,7 @@ boss hr jobs list
 - `boss hr <subcommand>` 会自动切到 recruiter 角色，不需要额外推断 `--role`
 - 求职者与招聘者两端都遵守同一套 `stdout JSON / stderr 日志` 契约
 - 当前 `hr` 只支持 `zhipin-recruiter`；智联招聘者侧自动化请使用 `boss --platform zhilian --role recruiter agent ...`
-- 敏感子命令返回 `COMPLIANCE_BLOCKED` 时，不要尝试换自动化通道继续执行
+- assisted 模式下敏感子命令返回 `COMPLIANCE_BLOCKED` 时，不要尝试换自动化通道；只有用户显式切换到 research 后，才能调用策略声明允许的 adapter
 
 ## 3) 失败恢复与排障
 

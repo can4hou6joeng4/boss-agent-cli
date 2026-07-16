@@ -4,7 +4,8 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from boss_agent_cli.compliance import low_risk_blocked_commands
+from boss_agent_cli.compliance import capability_policy, low_risk_blocked_commands, restricted_commands
+from boss_agent_cli.config import DEFAULTS, load_config
 from boss_agent_cli.main import cli
 
 
@@ -21,6 +22,7 @@ def _assert_compliance_block_hints(parsed: dict) -> None:
 	assert hints["manual_action_required"] is True
 	assert hints["allowed_alternatives"] == ["search", "detail", "show", "shortlist"]
 	assert hints["next_actions"]
+	assert hints["required_mode"] == "research"
 
 
 def test_default_low_risk_mode_blocks_outbound_greet():
@@ -69,10 +71,43 @@ def test_schema_exposes_current_compliance_mode():
 	assert code == 0
 	compliance = parsed["data"]["compliance"]
 	assert compliance["default_boundary"] == "low_risk_assistance"
+	assert compliance["operating_mode"] == "assisted"
+	assert compliance["available_modes"] == ["assisted", "research"]
 	assert compliance["sensitive_commands_blocked"] is True
 	assert "low_risk_mode" not in compliance
 	assert "greet" in compliance["blocked_commands"]
 	assert "pipeline" in compliance["blocked_commands"]
+	assert compliance["capabilities"]["greet"]["risk_class"] == "platform_write"
+
+
+def test_research_mode_allows_registered_sensitive_commands(restricted_surface_args):
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", *restricted_surface_args, "schema"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	compliance = parsed["data"]["compliance"]
+	assert compliance["operating_mode"] == "research"
+	assert compliance["sensitive_commands_blocked"] is False
+	assert compliance["blocked_commands"] == []
+	assert restricted_commands("research") == set()
+
+
+def test_legacy_low_risk_false_migrates_to_research(tmp_path):
+	config_path = tmp_path / "config.json"
+	config_path.write_text('{"low_risk_mode": false}', encoding="utf-8")
+	assert load_config(config_path)["operating_mode"] == "research"
+	assert capability_policy("greet") is not None
+
+
+def test_operating_mode_uses_current_default_without_user_override(monkeypatch):
+	monkeypatch.setitem(DEFAULTS, "operating_mode", "research")
+	assert load_config(None)["operating_mode"] == "research"
+
+
+def test_invalid_persisted_operating_mode_falls_back_to_assisted(tmp_path):
+	config_path = tmp_path / "config.json"
+	config_path.write_text('{"operating_mode": "invalid"}', encoding="utf-8")
+	assert load_config(config_path)["operating_mode"] == "assisted"
 
 
 def test_internal_policy_fixture_keeps_historical_contract_tests_reachable(restricted_surface_args):

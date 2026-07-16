@@ -2,7 +2,7 @@
 
 用于统一 CLI / Skill / MCP 的能力对照，方便 Agent 在不同接入面保持同一语义。
 
-默认低风险辅助模式：本地辅助、只读优先、用户主动触发、不规避风控、不批量触达、不抓取平台数据。标记为“受限”的能力会返回 `COMPLIANCE_BLOCKED`，应回到平台官网手动完成。
+默认 `assisted` 模式保持本地辅助、只读优先和用户主动触发；标记为“受限”的能力会返回 `COMPLIANCE_BLOCKED`。显式执行 `boss config set operating_mode research` 后，策略注册表声明的能力可进入 Research Mode；运行仍需有限、脱敏、可 checkpoint、可停止，并以 `boss schema` 的 `compliance.capabilities` 为准。
 
 ## 认证与环境
 
@@ -105,8 +105,8 @@
 | 职位列表与上下线 | `boss hr jobs` | 是 | httpx |
 
 说明：
-- **通道**：httpx 为直接 API 请求，浏览器通道仅作兼容保留；命中风控时不应切换自动化通道继续重试。AI 服务为第三方大模型 API，不应输入平台聊天记录、候选人简历或联系方式等未获授权的个人信息。
+- **通道**：httpx 为直接 API 请求。Assisted Mode 命中风控时停止；Research Mode 只运行显式声明的 browser/hook adapter，禁止无界重试，并要求 checkpoint 与脱敏。AI 服务为第三方大模型 API，不应输入未获授权的聊天记录、简历或联系方式。
 - 若以 CLI 直连为主，优先通过 `boss schema` 进行能力发现与参数校验；当前 schema 会同时暴露 `supported_platforms` 与 `supported_recruiter_platforms`。
 - 当前多平台状态：`boss platforms` 返回本地平台注册与能力状态，也可通过 `boss platforms --platform qiancheng` / `--platform 51job` 只查看单个平台或别名；`zhipin` 已覆盖求职者与招聘者实现，但敏感链路默认受低风险模式阻断；`zhilian` 已接通候选者侧链路，招聘者侧自动化通过 `agent` browser/CDP adapter V1 接入；`qiancheng` / 51job 仅为已注册占位适配器，真实工作流统一返回 `NOT_SUPPORTED`。
-- 当前登录状态：`zhipin` / `zhilian` 保留用户主动登录兼容链路，但不得用于规避平台风控。
+- 当前登录状态：`zhipin` / `zhilian` 保留用户主动登录兼容链路；风控研究仅在显式 Research Mode 和声明的 adapter 中进行。
 - 以 `boss schema` 为准：当前暴露 36 个顶层命令；其中 `hr` 下还有 9 个一级招聘者子命令，`ai` / `resume` 为命令组入口。

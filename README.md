@@ -2,7 +2,7 @@
 
 # boss-agent-cli
 
-*🤖 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI —— 搜索 · 福利筛选 · 候选池 · JSON 信封，默认低风险合规。*
+*🤖 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI —— 搜索 · 福利筛选 · 候选池 · JSON 信封，默认 assisted，支持显式 Research Mode。*
 
 [![CI](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli)
@@ -39,7 +39,7 @@
 
 ## ⚠️ 合规边界
 
-默认启用**低风险辅助模式**：本地辅助 · 只读优先 · 用户主动触发 · 不规避风控 · 不批量触达 · 不抓取数据。打招呼（greet / batch-greet）、投递、联系方式交换、招聘者候选人搜索 / 简历 / 聊天、消息回复等敏感能力默认阻断并返回 `COMPLIANCE_BLOCKED`；需要时请回到 BOSS 直聘平台官网由用户手动完成。
+默认启用 **Assisted Mode**：本地辅助 · 只读优先 · 用户主动触发。打招呼（greet / batch-greet）、投递、联系方式交换、招聘者候选人搜索 / 简历 / 聊天、消息回复等敏感能力默认阻断并返回 `COMPLIANCE_BLOCKED`；需要时请回到 BOSS 直聘平台官网由用户手动完成。仓库同时允许显式 `boss config set operating_mode research` 启用 **Research Mode**，用于有界的浏览器协议、反调试、风控适配和受控采集研究；该模式仍要求脱敏、checkpoint、停止开关和可审计脚本来源。
 
 ## ✨ 核心能力
 
@@ -142,7 +142,7 @@ boss status --live      # 可选：一次低频只读探测
 boss doctor --live-probe
 ```
 
-错误信封统一携带 `code` + `recoverable` + `recovery_action`，可程序化恢复。Browser Bridge 本地诊断覆盖 `bridge_daemon` / `bridge_extension` / `bridge_protocol` / `bridge_workspace` / `bridge_exec` / `bridge_fetch` / `bridge_navigate` 七项，daemon 用 `python -m boss_agent_cli.bridge.daemon --serve` 启动。Bridge 只用于本地诊断、用户主动登录兼容和只读辅助，命中平台风控时停止自动化访问，不切换通道重试。
+错误信封统一携带 `code` + `recoverable` + `recovery_action`，可程序化恢复。Browser Bridge 本地诊断覆盖 `bridge_daemon` / `bridge_extension` / `bridge_protocol` / `bridge_workspace` / `bridge_exec` / `bridge_fetch` / `bridge_navigate` 七项，daemon 用 `python -m boss_agent_cli.bridge.daemon --serve` 启动。Assisted Mode 命中平台风控时停止自动化访问；Research Mode 可运行显式声明的风控适配器，但必须有限运行、保存 checkpoint，并由用户主动决定是否继续。
 
 完整检查项、CDP 启动示例与错误码见 **[诊断与排障](docs/troubleshooting.md)**；涉及 Cookie / CDP / patchright / 请求频率 / 接口漂移的问题先读 [平台风险边界](docs/platform-risk.md)。
 
@@ -154,13 +154,13 @@ boss config set log_level debug     # 设置日志级别
 boss config reset                   # 恢复默认
 ```
 
-配置位于 `~/.boss-agent/config.json`：请求间隔、批量打招呼间隔、日志级别、CDP 地址、导出目录、平台 / 角色。
+配置位于 `~/.boss-agent/config.json`：运行模式（`operating_mode=assisted|research`）、请求间隔、批量打招呼间隔、日志级别、CDP 地址、导出目录、平台 / 角色。
 
 ## 🏗️ 技术架构
 
 ```
 CLI (Click)
-  └─ 合规护栏（默认低风险模式，阻断敏感写操作与候选人个人信息链路）
+  └─ 能力策略（默认 assisted；research 显式开放声明的研究能力）
        └─ AuthManager ── 用户主动登录态（Fernet + PBKDF2 机器绑定加密）
        └─ Platform 双注册表 ── BossPlatform / ZhilianPlatform / QianchengPlatform
        └─ BossClient ── httpx + 节流（高斯延迟）；兼容 CDP / Bridge / patchright 登录与导出
@@ -171,7 +171,7 @@ CLI (Click)
 `QianchengPlatform (51job 占位适配器，统一返回 NOT_SUPPORTED)`：仅用于平台注册与 schema 可见性，接真实接口前需满足只读研究门槛。
 
 **不变量**：stdout 仅 JSON 信封 · stderr 仅日志 · `exit 0/1` · 错误含 `code/recoverable/recovery_action` · `boss schema` 为能力真源。
-**选型**：Python ≥ 3.10 · Click · httpx · patchright / CDP / Bridge（仅登录与导出，**不得规避风控**）· cryptography（Fernet）· sqlite3（WAL）· pytest（1400+ 项）。
+**选型**：Python ≥ 3.10 · Click · httpx · patchright / CDP / Bridge（登录、导出与显式 Research Mode adapter）· cryptography（Fernet）· sqlite3（WAL）· pytest（1400+ 项）。
 
 ## 🔌 本地存储
 

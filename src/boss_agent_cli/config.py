@@ -10,6 +10,7 @@ DEFAULTS: dict[str, Any] = {
 	"export_dir": None,
 	"platform": "zhipin",
 	"role": "candidate",
+	"operating_mode": "assisted",
 	"low_risk_mode": True,
 	"automation": {
 		"mode": "autonomous",
@@ -30,8 +31,18 @@ DEFAULTS: dict[str, Any] = {
 
 def load_config(config_path: Path | None) -> dict[str, Any]:
 	cfg = dict(DEFAULTS)
+	user_cfg: dict[str, Any] = {}
 	if config_path and config_path.exists():
 		with open(config_path, encoding="utf-8") as f:
 			user_cfg = json.load(f)
 		cfg.update(user_cfg)
+	mode = user_cfg.get("operating_mode")
+	if mode not in {"assisted", "research"}:
+		if "low_risk_mode" in user_cfg:
+			mode = "research" if user_cfg["low_risk_mode"] is False else "assisted"
+		else:
+			mode = DEFAULTS.get("operating_mode", "assisted")
+	if mode not in {"assisted", "research"}:
+		mode = "assisted"
+	cfg["operating_mode"] = mode
 	return cfg

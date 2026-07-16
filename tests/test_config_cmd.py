@@ -53,6 +53,7 @@ def test_config_list_returns_all_defaults(tmp_path):
 	assert "log_level" in keys
 	assert "cdp_url" in keys
 	assert "request_delay" in keys
+	assert "operating_mode" in keys
 	assert "low_risk_mode" not in keys
 	for item in items:
 		assert item["source"] == "默认值"
@@ -110,6 +111,16 @@ def test_config_set_string_value(tmp_path):
 	config_file = tmp_path / "config.json"
 	saved = json.loads(config_file.read_text())
 	assert saved["log_level"] == "debug"
+
+
+def test_config_set_operating_mode_validates_choice(tmp_path):
+	code, parsed = _invoke("config", "set", "operating_mode", "research", tmp_path=tmp_path)
+	assert code == 0
+	assert parsed["data"]["value"] == "research"
+
+	code, parsed = _invoke("config", "set", "operating_mode", "invalid", tmp_path=tmp_path)
+	assert code == 1
+	assert parsed["error"]["code"] == "INVALID_PARAM"
 
 
 def test_parse_value_int_from_default_type():

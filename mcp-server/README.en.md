@@ -1,6 +1,6 @@
 # boss-agent-cli MCP Server
 
-Expose `boss-agent-cli` as a default low-risk MCP surface for Claude Desktop, Cursor, and other MCP-compatible hosts. The default server exposes local assistance, job search/detail, local shortlist, local resume, and AI-helper tools. Automated outreach, bulk actions, chat records, candidate personal data, and sensitive recruiter workflows are not exposed by default.
+Expose `boss-agent-cli` as an assisted-by-default MCP surface for Claude Desktop, Cursor, and other MCP-compatible hosts. The CLI supports explicit Research Mode, but MCP remains fixed to the assisted policy until mode-aware dynamic tool exposure is implemented.
 
 Related docs:
 - [Agent Quickstart](../docs/agent-quickstart.en.md)

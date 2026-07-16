@@ -2,7 +2,7 @@
 
 Use this matrix to keep CLI, skills, and MCP integrations aligned across different agent entry points.
 
-Default Low-Risk Assistance Mode: local assistance, read-only first, user-triggered, no risk-control bypass, no bulk outreach, and no platform-data scraping. Capabilities marked as restricted return `COMPLIANCE_BLOCKED` and should be completed manually on the official website.
+The default low-risk `assisted` mode remains local, read-only first, and user-triggered; restricted capabilities return `COMPLIANCE_BLOCKED`. Explicitly run `boss config set operating_mode research` to enable capabilities declared for Research Mode. Research runs must remain bounded, redacted, checkpointed, and stoppable; use `boss schema` and `compliance.capabilities` as the source of truth.
 
 ## Auth and environment
 
@@ -105,8 +105,8 @@ Default Low-Risk Assistance Mode: local assistance, read-only first, user-trigge
 | Job listing and online/offline operations | `boss hr jobs` | Yes | httpx |
 
 Notes:
-- **Transport**: `httpx` means a direct API call; browser transport remains for compatibility and must not be used to retry risk-control blocks. `AI service` means a third-party model API; do not send platform chat records, candidate resumes, or contact details without authorization.
+- **Transport**: `httpx` means a direct API call. Assisted Mode stops on risk-control blocks. Research Mode may run explicitly declared browser/hook adapters, but not unbounded retries, and must preserve checkpoints and redaction. `AI service` means a third-party model API; do not send chat records, resumes, or contact details without authorization.
 - For CLI-first integrations, prefer `boss schema` for capability discovery and parameter validation; the schema exposes both `supported_platforms` and `supported_recruiter_platforms`.
 - Current platform coverage: `zhipin` has both candidate and recruiter implementations, but sensitive workflows are blocked by default; `zhilian` supports candidate-side workflows and recruiter automation through the `agent` browser/CDP adapter V1; `qiancheng` / 51job is a registered placeholder adapter whose real workflows return `NOT_SUPPORTED`.
-- Current auth posture: `zhipin` and `zhilian` keep user-triggered login compatibility, but it must not be used to bypass platform risk controls.
+- Current auth posture: `zhipin` and `zhilian` keep user-triggered login compatibility; risk-control research belongs only in explicit Research Mode adapters.
 - Use `boss schema` as the source of truth: it currently exposes 36 top-level commands, with 9 first-level recruiter subcommands under `hr`, while `ai` and `resume` remain command-group entries.

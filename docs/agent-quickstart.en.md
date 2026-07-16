@@ -1,5 +1,7 @@
 # Agent Quickstart
 
+The CLI defaults to `assisted`. For browser-protocol, anti-debugging, or risk-control adaptation research, the user must explicitly run `boss config set operating_mode research`; the agent must call `boss schema` again and route only capabilities declared by `compliance.capabilities`.
+
 The shortest path for an AI agent to get productive with `boss-agent-cli`: discover capabilities first, then complete a low-risk search, detail, and local-organization loop. Applications, messaging, and candidate handling stay on the official website.
 
 ## 1) Install and prepare the environment
@@ -67,7 +69,7 @@ Recommended usage:
 - Candidate-side and recruiter-side commands share the same `stdout JSON / stderr logs` contract
 - `hr` currently supports `zhipin-recruiter` only; use `boss --platform zhilian --role recruiter agent ...` for Zhaopin recruiter automation
 - Default low-risk mode blocks recruiter candidate screening commands such as `hr candidates`, `hr resume`, and `hr request-resume`; complete those candidate-data workflows manually on the official website
-- When a sensitive subcommand returns `COMPLIANCE_BLOCKED`, do not switch automation channels to continue
+- In assisted mode, do not switch automation channels after `COMPLIANCE_BLOCKED`. Only an explicit user switch to research mode may enable adapters declared by the policy registry
 - When platform responses map to `ACCOUNT_RISK` or `RATE_LIMITED`, stop automated access instead of retrying a batch
 
 ## 3) Recovery flow and troubleshooting

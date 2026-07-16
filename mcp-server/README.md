@@ -1,6 +1,6 @@
 # boss-agent-cli MCP Server
 
-将 boss-agent-cli 作为默认低风险 MCP 工具接入 Claude Desktop / Cursor 等客户端。MCP 默认只暴露本地辅助、职位搜索/详情、本地候选池、简历和 AI 辅助等低风险工具；自动触达、批量操作、聊天记录、候选人个人信息和招聘者敏感工作流不会默认暴露。
+将 boss-agent-cli 作为默认 assisted MCP 工具接入 Claude Desktop / Cursor 等客户端。MCP 默认只暴露本地辅助、职位搜索/详情、本地候选池、简历和 AI 辅助工具。CLI 已支持显式 Research Mode，但 MCP 在实现 mode-aware 动态工具暴露前仍固定使用 assisted 策略。
 
 相关文档：
 - [Agent Quickstart](../docs/agent-quickstart.md)

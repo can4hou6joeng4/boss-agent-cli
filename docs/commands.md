@@ -11,6 +11,8 @@ boss schema --format anthropic-tools   # 导出 Claude Tool Use 定义
 boss <命令> --help                      # 查看单个命令选项
 ```
 
+运行模式：`boss config set operating_mode assisted|research`。默认 `assisted`；切换后重新执行 `boss schema` 查看逐命令模式、风险和数据分类。
+
 ## 基础操作
 
 | 命令 | 说明 |
