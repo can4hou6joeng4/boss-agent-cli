@@ -24,7 +24,7 @@ from boss_agent_cli.ai.service import AIServiceError
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands.ai_cmd import _build_fit_prompt, _create_ai_service
 from boss_agent_cli.commands.crawl import _settings_from_context, _transport_factory
-from boss_agent_cli.crawler.operations import crawl_results, crawl_status, import_crawl_shortlist
+from boss_agent_cli.crawler.operations import crawl_status, import_crawl_shortlist
 from boss_agent_cli.crawler.service import CrawlService
 from boss_agent_cli.display import handle_error_output, handle_output
 from boss_agent_cli.resume.models import resume_to_text
@@ -55,7 +55,7 @@ def run_cmd(ctx: click.Context, dry_run: bool, limit: int | None) -> None:
 @click.option("--run-id", default=None, help="分析指定的已完成 crawl run")
 @click.option("--query", default=None, help="新采集的职位关键词；需要 --allow-crawl")
 @click.option("--city", default=None, help="新采集城市；与 --query 同时使用")
-@click.option("--pages", default=5, type=click.IntRange(0), show_default=True, help="新采集页数；0 表示直到 hasMore=False")
+@click.option("--pages", default=5, type=click.IntRange(1), show_default=True, help="新采集严格页数上限")
 @click.option("--with-detail", is_flag=True, default=False, help="新采集时串行补职位详情")
 @click.option("--allow-crawl", is_flag=True, default=False, help="明确授权 Agent 启动新的真实 Chrome 采集")
 @click.option("--resume", "resume_name", required=True, help="用于 ai fit 的本地简历名称")
@@ -81,14 +81,14 @@ def crawl_cmd(
 			message="必须且只能使用 --run-id 或 --query",
 		)
 		return
-	if query and not allow_crawl:
+	if query and (not allow_crawl or ctx.obj["operating_mode"] != "research"):
 		handle_error_output(
 			ctx,
 			"agent.crawl",
 			code="CRAWL_PERMISSION_REQUIRED",
-			message="Agent 默认不启动新的 crawl；传入 --allow-crawl 后才会打开真实 Chrome",
+			message="Agent 默认不启动新的 crawl；需要同时传入全局 --research 和 --allow-crawl",
 			recoverable=True,
-			recovery_action="boss agent crawl --query <关键词> --city <城市> --allow-crawl --resume <简历名>",
+			recovery_action="boss --research agent crawl --query <关键词> --city <城市> --allow-crawl --resume <简历名>",
 		)
 		return
 	if query and not city:
@@ -106,9 +106,11 @@ def crawl_cmd(
 					pages=pages,
 					with_detail=with_detail,
 					hook_profile=None,
+					hook_dir=None,
 					profile_path=None,
 					chrome_path=None,
 					cdp_port=None,
+					research=True,
 				)
 				outcome = CrawlService(
 					cache,
@@ -134,7 +136,8 @@ def crawl_cmd(
 				tags=("agent", "crawl"),
 				note=f"agent:crawl:{run_id}",
 			)
-			crawl_jobs = crawl_results(cache, run_id or "")["jobs"]
+			# Agent runs locally and may use restricted identifiers for shortlist linking.
+			crawl_jobs = [item["payload"] for item in cache.list_crawl_jobs(run_id or "")]
 			jobs, missing = _crawl_fit_jobs(cache, crawl_jobs)
 	except KeyError:
 		handle_error_output(ctx, "agent.crawl", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
@@ -169,7 +172,7 @@ def crawl_cmd(
 				"missing": missing,
 				"summary": {"analyzed": 0, "missing_details": len(missing)},
 			},
-			hints={"next_actions": [f"boss crawl resume {run_id} --with-detail"]},
+			hints={"next_actions": [f"boss --research crawl resume {run_id} --with-detail"]},
 		)
 		return
 
@@ -413,7 +416,6 @@ def _crawl_fit_jobs(cache: CacheStore, crawl_jobs: list[dict[str, Any]]) -> tupl
 		if description:
 			jobs.append({
 				"job_id": job_id,
-				"security_id": item.get("security_id", ""),
 				"title": item.get("title", ""),
 				"company": item.get("company", ""),
 				"city": item.get("city", ""),
@@ -423,7 +425,6 @@ def _crawl_fit_jobs(cache: CacheStore, crawl_jobs: list[dict[str, Any]]) -> tupl
 		else:
 			missing.append({
 				"job_id": job_id,
-				"security_id": item.get("security_id", ""),
 				"title": item.get("title", ""),
 				"company": item.get("company", ""),
 				"status": "缺详情",

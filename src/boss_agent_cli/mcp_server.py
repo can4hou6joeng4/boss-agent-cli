@@ -21,8 +21,8 @@ from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
 
 SERVER_INSTRUCTIONS = (
 	"boss-agent-cli over MCP: a local-assist BOSS Zhipin job-search toolset in assisted mode by default — "
-	"read-only first and user-triggered. Explicit Research Mode may run bounded, checkpointed crawl tasks that "
-	"stop on platform risk signals and are polled by run_id. "
+	"read-only first and user-triggered. A Research Mode crawl needs shared operating_mode=research plus explicit "
+	"research=true confirmation; tasks are bounded, checkpointed, polled by run_id, and stop on risk signals. "
 	"Sensitive actions (greet, batch-greet, apply, contact exchange, recruiter candidate data, replies) "
 	"are not exposed and return COMPLIANCE_BLOCKED at the CLI layer; for those the user acts manually on "
 	"the official BOSS Zhipin website. Every tool returns the same JSON envelope "
@@ -1002,13 +1002,17 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 		return args
 
 	if name == "crawl_start":
-		args = ["crawl", "start", arguments["query"], "--city", str(arguments["city"])]
+		if arguments.get("research") is not True:
+			raise ValueError("boss_crawl_start requires research=true")
+		args = ["--research", "crawl", "start", arguments["query"], "--city", str(arguments["city"])]
 		if "pages" in arguments:
 			args.extend(["--pages", str(arguments["pages"])])
 		if arguments.get("with_detail"):
 			args.append("--with-detail")
 		if arguments.get("hook_profile"):
 			args.extend(["--hook-profile", str(arguments["hook_profile"])])
+		if arguments.get("hook_dir"):
+			args.extend(["--hook-dir", str(arguments["hook_dir"])])
 		return args
 
 	if name == "crawl_status":
@@ -1035,12 +1039,17 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 		return args
 
 	if name == "crawl_resume":
-		args = ["crawl", "resume", str(arguments["run_id"]), "--background"]
+		if arguments.get("research") is not True:
+			raise ValueError("boss_crawl_resume requires research=true")
+		args = ["--research", "crawl", "resume", str(arguments["run_id"]), "--background"]
 		if arguments.get("pages") is not None:
 			args.extend(["--pages", str(arguments["pages"])])
 		if arguments.get("with_detail"):
 			args.append("--with-detail")
 		return args
+
+	if name == "crawl_stop":
+		return ["crawl", "stop", str(arguments["run_id"])]
 
 	if name == "recommend":
 		args = [name]
@@ -1456,7 +1465,19 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 			},
 		}
 		return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
-	args = _build_args(name, arguments)
+	try:
+		args = _build_args(name, arguments)
+	except ValueError as exc:
+		result = {
+			"ok": False,
+			"schema_version": "1.0",
+			"command": name.removeprefix("boss_"),
+			"data": None,
+			"pagination": None,
+			"error": {"code": "INVALID_PARAM", "message": str(exc), "recoverable": True},
+			"hints": {"next_actions": ["仅在用户明确要求时设置 research=true"]},
+		}
+		return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 	result = _run_boss(*args)
 	return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 

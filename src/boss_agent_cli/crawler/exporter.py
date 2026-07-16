@@ -8,24 +8,25 @@ from pathlib import Path
 from typing import Any
 
 FIELDS = (
-	"query", "page", "rank", "job_id", "security_id", "title", "salary", "city", "district", "business_district",
+	"query", "page", "rank", "title", "salary", "city", "district", "business_district",
 	"company", "company_scale", "industry", "education", "experience", "labels", "benefits", "post_description",
-	"address", "boss_name", "boss_title", "detail_status",
+	"address", "detail_status",
 )
 
 
 def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str, str]:
 	"""Overwrite the three deterministic artifacts after each completed page."""
+	export_rows = [{field: row.get(field, "") for field in FIELDS} for row in rows]
 	output_dir.mkdir(parents=True, exist_ok=True)
 	json_path = output_dir / "jobs.json"
 	csv_path = output_dir / "jobs.csv"
 	xlsx_path = output_dir / "jobs.xlsx"
-	json_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+	json_path.write_text(json.dumps(export_rows, ensure_ascii=False, indent=2), encoding="utf-8")
 	with csv_path.open("w", encoding="utf-8-sig", newline="") as file:
 		writer = csv.DictWriter(file, fieldnames=FIELDS, extrasaction="ignore")
 		writer.writeheader()
-		writer.writerows(rows)
-	_write_xlsx(xlsx_path, rows)
+		writer.writerows(export_rows)
+	_write_xlsx(xlsx_path, export_rows)
 	return {"json": str(json_path), "csv": str(csv_path), "xlsx": str(xlsx_path)}
 
 

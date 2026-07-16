@@ -40,7 +40,7 @@ Assisted Mode is on by default: local assistance, read-only first, and user-trig
 - **Welfare filtering (the differentiator)**: `--welfare "双休,五险一金"` pages, fetches details, runs **real AND matching**, and can `--sort score` by local match score — `search --welfare`
 - **Local shortlist & stats**: inspect details, organize candidates with local tags and notes, compare jobs offline, and see funnel stats; apply and messaging stay on the official website — `shortlist` `stats` `watch` `preset`
 - **AI job-hunting assist + local models**: JD analysis, resume polish, role-targeted optimization, keyword suggestions, resume optimization, shortlist fit reports, interview prep, chat coaching; local weights stay outside the Python package via Ollama/vLLM OpenAI-compatible endpoints — `ai analyze-jd` `ai suggest-keywords` `ai resume-optimize` `ai interview-prep` `ai chat-coach` `ai local configure` `ai local smoke`
-- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, data, pagination, error, hints}` envelope, `boss schema` is the capability source of truth, and an **MCP server with 51 tools** exposes the low-risk and local task surface
+- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, data, pagination, error, hints}` envelope, `boss schema` is the capability source of truth, and an **MCP server with 52 tools** exposes the low-risk and local task surface
 - **Recruiter loop**: list and bring postings online / offline (`hr jobs list/online/offline`); candidate personal-data workflows are blocked by default
 - **Cross-platform layer**: live `Platform` / `RecruiterPlatform` registries, `--platform zhipin|zhilian|qiancheng`
 
@@ -87,7 +87,7 @@ boss config set platform zhilian          # set as default
 Start here: [Agent Quickstart](docs/agent-quickstart.en.md) · [Capability Matrix](docs/capability-matrix.en.md) · [Host Examples](docs/agent-hosts.en.md)
 
 ```json
-// Option 1: MCP (recommended) — Claude Desktop / Cursor and other MCP hosts; MCP server with 51 tools
+// Option 1: MCP (recommended) — Claude Desktop / Cursor and other MCP hosts; MCP server with 52 tools
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
@@ -122,7 +122,7 @@ with BossClient(AuthManager(...)) as client:
 - **Auth**: `login` · `logout` · `status` · `doctor`
 - **Discover**: `search` · `detail` · `show` · `cities` · `history`
 - **Organize**: `watch` · `preset` · `shortlist` · `stats`
-- **Explicit bulk crawl**: `crawl configure/run/start/status/results/resume/shortlist` (MCP exposes task-shaped `crawl_start/status/results/shortlist/resume`)
+- **Restricted research crawl**: `crawl configure/run/start/status/results/resume/stop/shortlist` (explicit `--research` only; MCP exposes task-shaped `crawl_start/status/results/shortlist/resume/stop`)
 - **Resume / AI**: `resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai cover-letter` · `ai interview-prep` · `ai chat-coach` · `ai local`
 - **Utility**: `schema` · `platforms` · `export` · `config` · `clean`
 - **Recruiter**: `hr jobs list/online/offline`
@@ -130,16 +130,18 @@ with BossClient(AuthManager(...)) as client:
 
 Full command tables, parameters, and welfare-matching internals: **[Command Reference](docs/commands.en.md)**. The capability source of truth is `boss schema` (with `--format openai-tools` / `anthropic-tools` exports).
 
-Bulk crawl requires `uv sync --extra crawl` and a user-configured, logged-in isolated Chrome profile:
+Bulk crawl requires `uv sync --extra crawl`. It runs only in explicit `--research` mode, creates and cleans up its own `<data-dir>/crawl/chrome-profile`, and never attaches to a daily Chrome profile. Hooks are disabled by default; if you have authorized local scripts, explicitly provide both the profile and a directory containing `SHA256SUMS`:
 
 ```powershell
-boss crawl configure --profile C:\dp_profile_9222
-boss crawl run "AI" --city 杭州 --pages 5 --with-detail
-boss crawl resume <run_id>
+boss crawl configure --max-requests 20 --max-details 50 --max-seconds 600 --max-retries 1
+boss --research crawl run "AI" --city 杭州 --pages 3 --with-detail `
+  --hook-profile screenshot-full --hook-dir E:\boss-agent-cli-local-hooks\AntiDebug_Breaker
+boss --research crawl resume <run_id>
+boss crawl stop <run_id>
 boss agent crawl --run-id <run_id> --resume <resume-name>
 ```
 
-`crawl run` is sequential, checkpoints SQLite state, and incrementally writes JSON / CSV / XLSX artifacts. MCP uses background task-shaped `crawl_start` / `crawl_resume`, then polls `crawl_status` and reads `crawl_results` by `run_id`, so one tool call does not block for minutes. A platform risk code or security page stops the task and returns a resume command. `boss agent crawl --run-id` only analyzes a completed run; a new real-Chrome crawl requires explicit `--allow-crawl`.
+`crawl run` is sequential, checkpoints SQLite state, and incrementally writes JSON / CSV / XLSX artifacts. Request, detail, wall-clock, and retry budgets are fixed; `boss crawl stop` stops at the next safe point. Exports and `crawl results` redact `security_id`, job IDs, and recruiter fields; `boss clean --privacy` removes crawl state, budgets, and exports. MCP `crawl_start` / `crawl_resume` require `research=true` and then poll `crawl_status` and read `crawl_results` by `run_id`, so one tool call does not block for minutes. A platform risk code or security page stops the task and returns a resume command. `boss agent crawl --run-id` only analyzes a completed run; a new real-Chrome crawl requires both `--research` and `--allow-crawl`.
 
 ## 🩺 Troubleshooting
 

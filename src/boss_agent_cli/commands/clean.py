@@ -55,6 +55,9 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 			freed, count = _clean_path(path, dry_run=dry_run)
 			results.append({"target": target, "cleaned": count, "bytes_freed": freed})
 			total_freed += freed
+		freed, count = _clean_crawl_data(data_dir, dry_run=dry_run)
+		results.append({"target": "crawl 任务与导出", "cleaned": count, "bytes_freed": freed})
+		total_freed += freed
 
 	# 6) 全量清理额外项
 	if clean_all:
@@ -181,6 +184,25 @@ def _clean_greet_records(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 def _clean_apply_records(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 	"""清理投递记录。"""
 	return _clean_table(data_dir, "apply_records", dry_run=dry_run)
+
+
+def _clean_crawl_data(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
+	files_size, files_count = _clean_path(data_dir / "crawl", dry_run=dry_run)
+	db_path = data_dir / "cache" / "boss_agent.db"
+	if not db_path.exists():
+		return files_size, files_count
+	conn = sqlite3.connect(str(db_path))
+	try:
+		row = conn.execute("SELECT COUNT(*) FROM crawl_runs").fetchone()
+		count = int(row[0])
+		if not dry_run:
+			conn.execute("DELETE FROM crawl_jobs")
+			conn.execute("DELETE FROM crawl_runs")
+			conn.execute("DELETE FROM crawl_budget")
+			conn.commit()
+		return files_size + count * 200, files_count + count
+	finally:
+		conn.close()
 
 
 def _clean_table(data_dir: Path, table: str, *, dry_run: bool) -> tuple[int, int]:

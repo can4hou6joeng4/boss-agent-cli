@@ -101,6 +101,10 @@ class CacheStore:
 				run_id TEXT PRIMARY KEY,
 				params TEXT NOT NULL,
 				status TEXT NOT NULL,
+				stop_requested INTEGER NOT NULL DEFAULT 0,
+				requests_attempted INTEGER NOT NULL DEFAULT 0,
+				detail_requests_attempted INTEGER NOT NULL DEFAULT 0,
+				elapsed_seconds INTEGER NOT NULL DEFAULT 0,
 				next_page INTEGER NOT NULL,
 				list_finished INTEGER NOT NULL DEFAULT 0,
 				output_dir TEXT NOT NULL,
@@ -144,6 +148,14 @@ class CacheStore:
 		}
 		if "list_finished" not in columns:
 			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN list_finished INTEGER NOT NULL DEFAULT 0")
+		if "stop_requested" not in columns:
+			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN stop_requested INTEGER NOT NULL DEFAULT 0")
+		if "requests_attempted" not in columns:
+			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN requests_attempted INTEGER NOT NULL DEFAULT 0")
+		if "detail_requests_attempted" not in columns:
+			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN detail_requests_attempted INTEGER NOT NULL DEFAULT 0")
+		if "elapsed_seconds" not in columns:
+			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN elapsed_seconds INTEGER NOT NULL DEFAULT 0")
 		if "hook_results" not in columns:
 			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN hook_results TEXT NOT NULL DEFAULT '[]'")
 		self._conn.commit()
@@ -169,16 +181,18 @@ class CacheStore:
 
 	def get_crawl_run(self, run_id: str) -> dict[str, Any] | None:
 		row = self._conn.execute(
-			"SELECT run_id, params, status, next_page, list_finished, output_dir, error, hook_results, created_at, updated_at "
+			"SELECT run_id, params, status, stop_requested, requests_attempted, detail_requests_attempted, elapsed_seconds, "
+			"next_page, list_finished, output_dir, error, hook_results, created_at, updated_at "
 			"FROM crawl_runs WHERE run_id = ?",
 			(run_id,),
 		).fetchone()
 		if row is None:
 			return None
 		return {
-			"run_id": row[0], "params": json.loads(row[1]), "status": row[2], "next_page": row[3],
-			"list_finished": bool(row[4]), "output_dir": row[5], "error": row[6],
-			"hook_results": json.loads(row[7]), "created_at": row[8], "updated_at": row[9],
+			"run_id": row[0], "params": json.loads(row[1]), "status": row[2], "stop_requested": bool(row[3]),
+			"requests_attempted": int(row[4]), "detail_requests_attempted": int(row[5]), "elapsed_seconds": int(row[6]),
+			"next_page": row[7], "list_finished": bool(row[8]), "output_dir": row[9], "error": row[10],
+			"hook_results": json.loads(row[11]), "created_at": row[12], "updated_at": row[13],
 		}
 
 	def update_crawl_run_params(self, run_id: str, params: dict[str, Any]) -> None:
@@ -210,6 +224,36 @@ class CacheStore:
 		self._conn.execute(
 			f"UPDATE crawl_runs SET {', '.join(assignments)} WHERE run_id = ?",
 			values,
+		)
+		self._conn.commit()
+
+	def request_crawl_stop(self, run_id: str) -> bool:
+		cursor = self._conn.execute(
+			"UPDATE crawl_runs SET stop_requested = 1, updated_at = ? WHERE run_id = ?",
+			(time.time(), run_id),
+		)
+		self._conn.commit()
+		return cursor.rowcount > 0
+
+	def clear_crawl_stop_request(self, run_id: str) -> None:
+		self._conn.execute(
+			"UPDATE crawl_runs SET stop_requested = 0, updated_at = ? WHERE run_id = ?",
+			(time.time(), run_id),
+		)
+		self._conn.commit()
+
+	def update_crawl_run_budget(
+		self,
+		run_id: str,
+		*,
+		requests_attempted: int,
+		detail_requests_attempted: int,
+		elapsed_seconds: int,
+	) -> None:
+		self._conn.execute(
+			"UPDATE crawl_runs SET requests_attempted = ?, detail_requests_attempted = ?, elapsed_seconds = ?, updated_at = ? "
+			"WHERE run_id = ?",
+			(requests_attempted, detail_requests_attempted, elapsed_seconds, time.time(), run_id),
 		)
 		self._conn.commit()
 

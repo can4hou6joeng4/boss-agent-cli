@@ -41,26 +41,31 @@ Operating mode: `boss config set operating_mode assisted|research`. The default 
 
 ## Explicit bulk crawl
 
-`crawl` is an explicitly triggered Chrome task. MCP exposes only task-shaped `start/status/results/shortlist/resume`, joined by `run_id`, instead of placing a long crawl inside one synchronous tool call. Install `uv sync --extra crawl` first, then configure either an isolated profile or the existing logged-in `C:\dp_profile_9222` profile.
+`crawl` is an explicitly triggered, restricted Research Mode Chrome task. `run`, `start`, and `resume` require global `--research`; MCP exposes task-shaped `start/status/results/shortlist/resume/stop` only with `research=true`, joined by `run_id`, instead of placing a long crawl inside one synchronous tool call. Install `uv sync --extra crawl` first; the crawler starts only the isolated `<data-dir>/crawl/chrome-profile` and never attaches to a daily Chrome profile.
 
 ```powershell
-boss crawl configure --profile C:\dp_profile_9222
-boss crawl run "AI" --city 杭州 --pages 5 --with-detail
-boss crawl resume <run_id>
+boss crawl configure --max-requests 20 --max-details 50 --max-seconds 600 --max-retries 1
+boss --research crawl run "AI" --city 杭州 --pages 3 --with-detail `
+  --hook-profile screenshot-full --hook-dir E:\boss-agent-cli-local-hooks\AntiDebug_Breaker
+boss --research crawl resume <run_id>
+boss crawl stop <run_id>
 ```
 
 | Command | Description |
 |---------|-------------|
-| `boss crawl configure [--profile PATH] [--chrome-path PATH] [--port N]` | Configure the DP Chrome path, profile, debugging port, and Hook profile; the default profile is `<data-dir>/crawl/chrome-profile` |
-| `boss crawl run <query> --city <city-or-code> [--pages N] [--with-detail]` | Sequential capture; `--pages` defaults to `5`, while `0` continues until `hasMore=False`; `--with-detail` serially completes every `job_card` |
-| `boss crawl start <query> --city <city-or-code> [...]` | Create a background task and return `run_id` immediately; used by MCP/local task orchestration |
+| `boss crawl configure [--chrome-path PATH] [--port N] [--max-* N]` | Configure the crawl-only Chrome and request, detail, wall-clock, and retry budgets; the profile is fixed at `<data-dir>/crawl/chrome-profile` |
+| `boss --research crawl run <query> --city <city-or-code> [--pages N] [--with-detail]` | Sequential capture; `--pages` defaults to `5` and must be positive; `--with-detail` serially completes job details |
+| `boss --research crawl start <query> --city <city-or-code> [...]` | Create a background task and return `run_id` immediately; used by MCP/local task orchestration |
 | `boss crawl status <run_id>` / `boss crawl results <run_id>` | Read the SQLite cursor, risk state, detail progress, and persisted jobs without opening Chrome |
-| `boss crawl resume <run_id> [--pages N] [--with-detail] [--background]` | Resume from the page cursor, seen jobs, and pending details; `--background` returns immediately for polling; can raise the page limit and fill details without duplicate writes |
+| `boss --research crawl resume <run_id> [--pages N] [--with-detail] [--background]` | Resume from the page cursor, seen jobs, and pending details; `--background` returns immediately for polling; can raise a positive page cap and fill details without duplicate writes |
+| `boss crawl stop <run_id>` | Request a running task to stop at its next safe point and retain its checkpoint |
 | `boss crawl shortlist <run_id> (--all \| --job-id <id>)` | Import crawl results into the project's local shortlist without a platform request, retaining job IDs and detail cache for `boss ai fit` |
 
-Candidate workflow: `boss agent crawl --run-id <run_id> --resume <resume-name>` runs “completed crawl → shortlist → ai fit → score ordering” without opening a browser. Only `boss agent crawl --query <query> --city <city> --allow-crawl --resume <resume-name>` starts a new real Chrome crawl. On `risk_stopped`, Agent returns the `run_id` and resume command instead of retrying indefinitely or recreating the session.
+The default Hook is `none`. `screenshot-full` is enabled only when the user explicitly selects `--hook-profile screenshot-full --hook-dir <directory>`; the directory must be authorized by its user and include the original seven scripts plus `SHA256SUMS`. This project no longer redistributes those third-party scripts; each source file is SHA-256 verified before injection and only its identifier and digest are recorded. Cookies, headers, and full request bodies are not recorded.
 
-After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a filtered/frozen `jobs.xlsx` are updated. XLSX keeps the complete values but every data row is a fixed-height single line, so long content is visually clipped rather than expanding the row. Codes `37` / `38`, a security page, or a missing job-list container checkpoint and stop immediately; stdout remains a JSON envelope containing the resume command.
+Candidate workflow: `boss agent crawl --run-id <run_id> --resume <resume-name>` runs “completed crawl → shortlist → ai fit → score ordering” without opening a browser. Only `boss --research agent crawl --query <query> --city <city> --allow-crawl --resume <resume-name>` starts a new real Chrome crawl. On `risk_stopped` or `budget_stopped`, Agent returns the `run_id` and resume command instead of retrying indefinitely or recreating the session.
+
+After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a filtered/frozen `jobs.xlsx` are updated. XLSX keeps the complete values but every data row is a fixed-height single line, so long content is visually clipped rather than expanding the row. JSON/CSV/XLSX and `crawl results` omit `security_id`, job IDs, recruiter names, and recruiter titles by default; those remain in restricted local SQLite state, and `boss clean --privacy` deletes crawl runs, budgets, and exports. Codes `37` / `38`, a security page, a missing job-list container, an exhausted budget, or a stop request checkpoint and stop immediately; stdout remains a JSON envelope containing the resume command.
 
 ## Restricted actions
 

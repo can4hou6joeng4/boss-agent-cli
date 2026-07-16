@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import random
+import socket
 import time
 from pathlib import Path
 from typing import Any, Protocol
@@ -38,12 +39,14 @@ class DrissionCrawlerSession:
 		chrome_path: str | None,
 		cdp_port: int,
 		hook_profile: str,
+		hook_dir: Path | None,
 		timeout: int = 20,
 	) -> None:
 		self._profile_path = profile_path
 		self._chrome_path = chrome_path
 		self._cdp_port = cdp_port
 		self._hook_profile = hook_profile
+		self._hook_dir = hook_dir
 		self._timeout = timeout
 		self._page: Any = None
 		self._details: httpx.Client | None = None
@@ -56,12 +59,16 @@ class DrissionCrawlerSession:
 		except ImportError as exc:
 			raise RuntimeError("crawl 需要 DrissionPage；请安装 boss-agent-cli[crawl]") from exc
 		options = ChromiumOptions()
+		if self._port_is_in_use(self._cdp_port):
+			raise RuntimeError(f"CDP 端口 {self._cdp_port} 已被占用；crawl 只能启动自己的独立浏览器")
+		self._profile_path = self._profile_path.resolve()
+		self._profile_path.mkdir(parents=True, exist_ok=True)
 		if self._chrome_path:
 			options.set_browser_path(self._chrome_path)
 		options.set_local_port(self._cdp_port)
 		options.set_user_data_path(str(self._profile_path))
 		self._page = ChromiumPage(options)
-		results = inject_hook_profile(self._page, self._hook_profile)
+		results = inject_hook_profile(self._page, self._hook_profile, self._hook_dir)
 		failed = [item for item in results if not item.success]
 		if failed:
 			raise HookRegistrationError(results)
@@ -113,6 +120,11 @@ class DrissionCrawlerSession:
 		if self._details is not None:
 			self._details.close()
 			self._details = None
+		if self._page is not None:
+			quit_browser = getattr(self._page, "quit", None)
+			if callable(quit_browser):
+				quit_browser()
+			self._page = None
 
 	def _detail_client(self) -> httpx.Client:
 		if self._details is not None:
@@ -147,6 +159,12 @@ class DrissionCrawlerSession:
 			time.sleep(random.uniform(1.0, 2.0))
 		self._page.scroll.to_bottom()
 		time.sleep(random.uniform(2.5, 5.0))
+
+	@staticmethod
+	def _port_is_in_use(port: int) -> bool:
+		with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
+			connection.settimeout(0.2)
+			return connection.connect_ex(("127.0.0.1", port)) == 0
 
 	def _raise_if_security_page(self, *, require_job_list: bool = False) -> None:
 		if self._page is None:

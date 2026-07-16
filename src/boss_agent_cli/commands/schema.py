@@ -750,17 +750,18 @@ SCHEMA_DATA = {
 			"options": {},
 		},
 		"crawl": {
-			"description": "显式 DrissionPage 批量采集（子命令：configure/run/start/status/results/resume）。MCP 通过任务式 start/status/results/shortlist/resume 调度；风险码或安全页会保存断点后停止。",
+			"description": "受限 Research Mode 的 DrissionPage 批量采集（子命令：configure/run/start/status/results/resume/stop）。运行和恢复必须显式传入全局 --research；MCP 通过任务式 start/status/results/shortlist/resume/stop 调度，风险码或安全页会保存断点后停止。",
 			"args": [],
 			"options": {
 				"run": {
 					"--city": {"type": "string", "required": True, "description": "城市名称或数字城市代码"},
-					"--pages": {"type": "int", "default": 5, "description": "最多页数；0 表示直到 hasMore=False"},
+					"--pages": {"type": "int", "default": 5, "minimum": 1, "description": "严格正数页数上限"},
 					"--with-detail": {"type": "bool", "default": False, "description": "串行补全所有职位的 job_card"},
-					"--hook-profile": {"type": "string", "default": "screenshot-full", "enum": ["screenshot-full", "none"]},
+					"--hook-profile": {"type": "string", "default": "none", "enum": ["screenshot-full", "none"]},
+					"--hook-dir": {"type": "string", "default": None, "description": "screenshot-full 必填：用户已授权的原始 Hook 目录，须含 SHA256SUMS"},
 				},
 				"resume": {
-					"--pages": {"type": "int", "default": None, "description": "覆盖原任务页数上限；0 表示直到 hasMore=False"},
+					"--pages": {"type": "int", "default": None, "minimum": 1, "description": "覆盖原任务的严格正数页数上限"},
 					"--with-detail": {"type": "bool", "default": False, "description": "补全已采职位和后续职位的 job_card"},
 					"--background": {"type": "bool", "default": False, "description": "后台恢复并立即返回 run_id"},
 				},
@@ -776,18 +777,19 @@ SCHEMA_DATA = {
 				},
 			},
 			"subcommands": {
-				"configure": "设置 DP Chrome profile、路径、端口与 Hook 档位",
-				"run <query>": "开始可恢复的批量职位采集",
-				"start <query>": "创建后台任务并立即返回 run_id（供 MCP 轮询）",
+				"configure": "设置 crawl 专用 Chrome 路径、端口和固定预算",
+				"run <query>": "在 --research 下开始可恢复的批量职位采集",
+				"start <query>": "在 --research 下创建后台任务并立即返回 run_id（供 MCP 轮询）",
 				"status <run_id>": "读取页游标、详情进度和风险状态",
 				"results <run_id>": "读取已持久化职位结果",
 				"resume <run_id>": "从已保存页游标和详情队列继续",
+				"stop <run_id>": "请求运行中的 crawl 在下一个安全点停止并保留断点",
 				"shortlist <run_id>": "将 crawl 结果导入本地职位候选池",
 			},
 			"mcp_tools": [
 				{
 					"name": "boss_crawl_start",
-					"description": "创建并后台运行可恢复 crawl 任务，立即返回 run_id。",
+					"description": "仅在显式 Research Mode 创建并后台运行可恢复 crawl 任务，立即返回 run_id。",
 					"inputSchema": {
 						"type": "object",
 						"properties": {
@@ -795,9 +797,11 @@ SCHEMA_DATA = {
 							"city": {"type": "string", "description": "城市名称或数字城市代码"},
 							"pages": {"type": "integer", "default": 5},
 							"with_detail": {"type": "boolean", "default": False},
-							"hook_profile": {"type": "string", "enum": ["screenshot-full", "none"], "default": "screenshot-full"},
+							"research": {"type": "boolean", "const": True, "description": "明确启用受限 Research Mode"},
+							"hook_profile": {"type": "string", "enum": ["screenshot-full", "none"], "default": "none"},
+							"hook_dir": {"type": "string", "description": "screenshot-full 所需的用户授权 Hook 目录"},
 						},
-						"required": ["query", "city"],
+						"required": ["query", "city", "research"],
 					},
 				},
 				{
@@ -835,14 +839,24 @@ SCHEMA_DATA = {
 				},
 				{
 					"name": "boss_crawl_resume",
-					"description": "后台恢复 crawl 任务，随后以 run_id 轮询状态。",
+					"description": "仅在显式 Research Mode 后台恢复 crawl 任务，随后以 run_id 轮询状态。",
 					"inputSchema": {
 						"type": "object",
 						"properties": {
 							"run_id": {"type": "string"},
 							"pages": {"type": "integer"},
 							"with_detail": {"type": "boolean", "default": False},
+							"research": {"type": "boolean", "const": True, "description": "明确启用受限 Research Mode"},
 						},
+						"required": ["run_id", "research"],
+					},
+				},
+				{
+					"name": "boss_crawl_stop",
+					"description": "请求运行中的 crawl 在下一个安全点停止并保留 checkpoint。",
+					"inputSchema": {
+						"type": "object",
+						"properties": {"run_id": {"type": "string"}},
 						"required": ["run_id"],
 					},
 				},
@@ -1075,6 +1089,11 @@ SCHEMA_DATA = {
 			"default": False,
 			"description": "强制 JSON 输出（即使在终端中，默认管道模式自动 JSON）",
 		},
+		"--research": {
+			"type": "bool",
+			"default": False,
+			"description": "显式启用受限本地 Research Mode；仅 crawl、CDP 与用户提供的 Hook 可用",
+		},
 		"--role": {
 			"type": "string",
 			"default": "candidate",
@@ -1181,7 +1200,7 @@ SCHEMA_DATA = {
 		"CRAWL_NOT_COMPLETED": {
 			"message": "crawl 尚未完成，Agent 不会导入不完整结果",
 			"recoverable": True,
-			"recovery_action": "处理浏览器验证后执行 boss crawl resume <run_id>",
+			"recovery_action": "处理浏览器验证后执行 boss --research crawl resume <run_id>",
 		},
 		"INVALID_PARAM": {
 			"message": "参数校验失败",

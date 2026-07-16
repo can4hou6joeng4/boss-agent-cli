@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -14,6 +15,7 @@ from boss_agent_cli.api.endpoints import CITY_CODES
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.config import DEFAULTS
 from boss_agent_cli.crawler.operations import crawl_results, crawl_status, import_crawl_shortlist
+from boss_agent_cli.crawler.policy import require_research
 from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
 from boss_agent_cli.display import handle_error_output, handle_output
@@ -70,26 +72,41 @@ def _settings_from_context(
 	pages: int,
 	with_detail: bool,
 	hook_profile: str | None,
+	hook_dir: str | None,
 	profile_path: str | None,
 	chrome_path: str | None,
 	cdp_port: int | None,
+	research: bool,
 ) -> CrawlSettings:
 	cfg = _crawl_config(ctx)
 	data_dir = Path(ctx.obj["data_dir"])
-	resolved_profile = profile_path or cfg.get("profile_path") or str(data_dir / "crawl" / "chrome-profile")
-	resolved_hook = hook_profile or str(cfg.get("hook_profile") or "screenshot-full")
+	resolved_profile = str(data_dir / "crawl" / "chrome-profile")
+	resolved_hook = hook_profile or "none"
 	if resolved_hook not in _HOOK_CHOICES:
 		raise ValueError(f"unknown hook profile: {resolved_hook}")
+	require_research(research, hook_profile=resolved_hook)
 	return CrawlSettings(
 		query=query,
 		city_code=_city_code(city),
 		pages=pages,
 		with_detail=with_detail,
-		profile_path=Path(resolved_profile).expanduser(),
+		profile_path=Path(resolved_profile),
 		chrome_path=chrome_path or cfg.get("chrome_path"),
-		cdp_port=int(cdp_port or cfg.get("cdp_port") or 9222),
+		cdp_port=int(cdp_port or cfg.get("cdp_port") or _unused_local_port()),
 		hook_profile=resolved_hook,
+		hook_dir=Path(hook_dir).expanduser() if hook_dir else None,
+		max_requests=int(cfg.get("max_requests") or 20),
+		max_details=int(cfg.get("max_details") or 50),
+		max_seconds=int(cfg.get("max_seconds") or 600),
+		max_retries=int(cfg.get("max_retries") or 1),
+		operating_mode=ctx.obj["operating_mode"],
 	)
+
+
+def _unused_local_port() -> int:
+	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
+		connection.bind(("127.0.0.1", 0))
+		return int(connection.getsockname()[1])
 
 
 def _transport_factory(settings: CrawlSettings) -> DrissionCrawlerSession:
@@ -98,6 +115,7 @@ def _transport_factory(settings: CrawlSettings) -> DrissionCrawlerSession:
 		chrome_path=settings.chrome_path,
 		cdp_port=settings.cdp_port,
 		hook_profile=settings.hook_profile,
+		hook_dir=settings.hook_dir,
 	)
 
 
@@ -118,7 +136,7 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 			recovery_action="安装 boss-agent-cli[crawl] 并执行 boss crawl configure",
 		)
 		return
-	hints = {"next_actions": [f"boss crawl resume {outcome.run_id}"]} if outcome.status != "completed" else {
+	hints = {"next_actions": [f"boss --research crawl resume {outcome.run_id}"]} if outcome.status != "completed" else {
 		"next_actions": ["查看 output_paths 中的 JSON、CSV 或 XLSX 结果文件"]
 	}
 	handle_output(ctx, "crawl", outcome.as_dict(), hints=hints)
@@ -138,10 +156,12 @@ def _launch_background_resume(
 		"from boss_agent_cli.main import cli; cli()",
 		"--data-dir",
 		str(data_dir),
+		"--research",
 		"--json",
 		"crawl",
 		"resume",
 		run_id,
+		"--from-queue",
 	]
 	if pages is not None:
 		command.extend(["--pages", str(pages)])
@@ -157,27 +177,33 @@ def _launch_background_resume(
 
 
 @crawl_group.command("configure")
-@click.option("--profile", "profile_path", default=None, type=click.Path(path_type=Path), help="DP Chrome user-data 目录")
 @click.option("--chrome-path", default=None, type=click.Path(path_type=Path), help="chrome.exe 路径")
 @click.option("--port", "cdp_port", default=None, type=click.IntRange(1, 65535), help="Chrome 远程调试端口")
-@click.option("--hook-profile", type=click.Choice(_HOOK_CHOICES), default=None, help="页面预注入 Hook 档位")
+@click.option("--max-requests", type=click.IntRange(1), default=None, help="每个 crawl run 的总请求上限")
+@click.option("--max-details", type=click.IntRange(1), default=None, help="每个 crawl run 的详情请求上限")
+@click.option("--max-seconds", type=click.IntRange(1), default=None, help="每个 crawl run 的墙钟秒数上限")
+@click.option("--max-retries", type=click.IntRange(0), default=None, help="单请求的重试次数上限")
 @click.pass_context
 def configure_cmd(
 	ctx: click.Context,
-	profile_path: Path | None,
 	chrome_path: Path | None,
 	cdp_port: int | None,
-	hook_profile: str | None,
+	max_requests: int | None,
+	max_details: int | None,
+	max_seconds: int | None,
+	max_retries: int | None,
 ) -> None:
 	"""设置 crawl 专用 Chrome 和 Hook 配置。"""
-	if all(value is None for value in (profile_path, chrome_path, cdp_port, hook_profile)):
+	if all(value is None for value in (chrome_path, cdp_port, max_requests, max_details, max_seconds, max_retries)):
 		handle_error_output(ctx, "crawl.configure", code="INVALID_PARAM", message="至少提供一个 crawl 配置项")
 		return
 	updates = {
-		"profile_path": str(profile_path) if profile_path is not None else None,
 		"chrome_path": str(chrome_path) if chrome_path is not None else None,
 		"cdp_port": cdp_port,
-		"hook_profile": hook_profile,
+		"max_requests": max_requests,
+		"max_details": max_details,
+		"max_seconds": max_seconds,
+		"max_retries": max_retries,
 	}
 	configured = _save_crawl_config(Path(ctx.obj["data_dir"]), updates)
 	handle_output(ctx, "crawl.configure", {"crawl": configured})
@@ -186,10 +212,10 @@ def configure_cmd(
 @crawl_group.command("run")
 @click.argument("query")
 @click.option("--city", required=True, help="城市名称或数字城市代码")
-@click.option("--pages", default=5, type=click.IntRange(0), show_default=True, help="最多页数；0 表示直到 hasMore=False")
+@click.option("--pages", default=5, type=click.IntRange(1), show_default=True, help="严格页数上限")
 @click.option("--with-detail", is_flag=True, default=False, help="串行补全所有职位的 job_card")
 @click.option("--hook-profile", type=click.Choice(_HOOK_CHOICES), default=None)
-@click.option("--profile", "profile_path", default=None, type=click.Path(path_type=Path), help="覆盖配置的 DP profile")
+@click.option("--hook-dir", type=click.Path(path_type=Path), default=None, help="与 screenshot-full 一起显式指定的用户脚本目录")
 @click.option("--chrome-path", default=None, type=click.Path(path_type=Path), help="覆盖配置的 chrome.exe")
 @click.option("--port", "cdp_port", default=None, type=click.IntRange(1, 65535), help="覆盖配置的调试端口")
 @click.pass_context
@@ -200,7 +226,7 @@ def run_cmd(
 	pages: int,
 	with_detail: bool,
 	hook_profile: str | None,
-	profile_path: Path | None,
+	hook_dir: Path | None,
 	chrome_path: Path | None,
 	cdp_port: int | None,
 ) -> None:
@@ -208,8 +234,9 @@ def run_cmd(
 	try:
 		settings = _settings_from_context(
 			ctx, query=query, city=city, pages=pages, with_detail=with_detail, hook_profile=hook_profile,
-			profile_path=str(profile_path) if profile_path else None,
+			hook_dir=str(hook_dir) if hook_dir else None, profile_path=None,
 			chrome_path=str(chrome_path) if chrome_path else None, cdp_port=cdp_port,
+			research=ctx.obj["operating_mode"] == "research",
 		)
 	except ValueError as exc:
 		handle_error_output(ctx, "crawl", code="INVALID_PARAM", message=str(exc))
@@ -220,9 +247,10 @@ def run_cmd(
 @crawl_group.command("start")
 @click.argument("query")
 @click.option("--city", required=True, help="城市名称或数字城市代码")
-@click.option("--pages", default=5, type=click.IntRange(0), show_default=True, help="最多页数；0 表示直到 hasMore=False")
+@click.option("--pages", default=5, type=click.IntRange(1), show_default=True, help="严格页数上限")
 @click.option("--with-detail", is_flag=True, default=False, help="串行补全所有职位的 job_card")
 @click.option("--hook-profile", type=click.Choice(_HOOK_CHOICES), default=None)
+@click.option("--hook-dir", type=click.Path(path_type=Path), default=None, help="与 screenshot-full 一起显式指定的用户脚本目录")
 @click.pass_context
 def start_cmd(
 	ctx: click.Context,
@@ -231,13 +259,15 @@ def start_cmd(
 	pages: int,
 	with_detail: bool,
 	hook_profile: str | None,
+	hook_dir: Path | None,
 ) -> None:
 	"""创建并后台运行一个 crawl 任务；适合 MCP 的任务式调度。"""
 	run_id: str | None = None
 	try:
 		settings = _settings_from_context(
 			ctx, query=query, city=city, pages=pages, with_detail=with_detail, hook_profile=hook_profile,
-			profile_path=None, chrome_path=None, cdp_port=None,
+			hook_dir=str(hook_dir) if hook_dir else None, profile_path=None, chrome_path=None, cdp_port=None,
+			research=ctx.obj["operating_mode"] == "research",
 		)
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			service = CrawlService(cache, data_dir=Path(ctx.obj["data_dir"]), transport_factory=_transport_factory)
@@ -264,7 +294,7 @@ def start_cmd(
 			code="CRAWL_UNAVAILABLE",
 			message=f"无法启动 crawl 后台任务: {exc}",
 			recoverable=True,
-			recovery_action="执行 boss crawl resume <run_id> 重试",
+			recovery_action="执行 boss --research crawl resume <run_id> 重试",
 		)
 		return
 	handle_output(
@@ -274,7 +304,7 @@ def start_cmd(
 			"run_id": run_id,
 			"status": "queued",
 			"background": True,
-			"checkpoint": {"resume_command": f"boss crawl resume {run_id}"},
+			"checkpoint": {"resume_command": f"boss --research crawl resume {run_id}"},
 		},
 		hints={"next_actions": [f"boss crawl status {run_id}", f"boss crawl results {run_id}"]},
 	)
@@ -282,12 +312,30 @@ def start_cmd(
 
 @crawl_group.command("resume")
 @click.argument("run_id")
-@click.option("--pages", default=None, type=click.IntRange(0), help="覆盖原任务页数上限；0 表示直到 hasMore=False")
+@click.option("--pages", default=None, type=click.IntRange(1), help="覆盖原任务页数上限")
 @click.option("--with-detail", is_flag=True, default=False, help="补全已采职位和后续职位的 job_card")
 @click.option("--background", is_flag=True, default=False, help="后台恢复，立即返回 run_id")
+@click.option("--from-queue", is_flag=True, default=False, hidden=True)
 @click.pass_context
-def resume_cmd(ctx: click.Context, run_id: str, pages: int | None, with_detail: bool, background: bool) -> None:
+def resume_cmd(
+	ctx: click.Context,
+	run_id: str,
+	pages: int | None,
+	with_detail: bool,
+	background: bool,
+	from_queue: bool,
+) -> None:
 	"""从已保存的页游标和详情队列恢复采集。"""
+	if ctx.obj["operating_mode"] != "research":
+		handle_error_output(
+			ctx,
+			"crawl.resume",
+			code="INVALID_PARAM",
+			message="crawl、CDP 和 Hook 仅可在显式 --research 模式运行",
+			recoverable=True,
+			recovery_action=f"boss --research crawl resume {run_id}",
+		)
+		return
 	if background:
 		try:
 			with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
@@ -313,7 +361,7 @@ def resume_cmd(ctx: click.Context, run_id: str, pages: int | None, with_detail: 
 				code="CRAWL_UNAVAILABLE",
 				message=f"无法启动 crawl 后台任务: {exc}",
 				recoverable=True,
-				recovery_action=f"执行 boss crawl resume {run_id} 重试",
+				recovery_action=f"执行 boss --research crawl resume {run_id} 重试",
 			)
 			return
 		handle_output(
@@ -323,7 +371,16 @@ def resume_cmd(ctx: click.Context, run_id: str, pages: int | None, with_detail: 
 			hints={"next_actions": [f"boss crawl status {run_id}"]},
 		)
 		return
-	_run_service(ctx, lambda service: service.resume(run_id, pages=pages, with_detail=with_detail))
+	_run_service(
+		ctx,
+		lambda service: service.resume(
+			run_id,
+			pages=pages,
+			with_detail=with_detail,
+			operating_mode=ctx.obj["operating_mode"],
+			clear_stop=not from_queue,
+		),
+	)
 
 
 @crawl_group.command("status")
@@ -338,6 +395,18 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 		handle_error_output(ctx, "crawl.status", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
 		return
 	handle_output(ctx, "crawl.status", payload)
+
+
+@crawl_group.command("stop")
+@click.argument("run_id")
+@click.pass_context
+def stop_cmd(ctx: click.Context, run_id: str) -> None:
+	"""请求运行中的 crawl 在下一安全点停止并保留 checkpoint。"""
+	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
+		if not cache.request_crawl_stop(run_id):
+			handle_error_output(ctx, "crawl.stop", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
+			return
+	handle_output(ctx, "crawl.stop", {"run_id": run_id, "status": "stop_requested"})
 
 
 @crawl_group.command("results")

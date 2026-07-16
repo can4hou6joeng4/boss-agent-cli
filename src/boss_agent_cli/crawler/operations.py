@@ -6,6 +6,16 @@ from typing import Any
 
 from boss_agent_cli.cache.store import CacheStore
 
+_PUBLIC_JOB_FIELDS = {
+	"query", "page", "rank", "title", "salary", "city", "district", "business_district",
+	"company", "company_scale", "industry", "education", "experience", "labels", "benefits",
+	"post_description", "address", "detail_status",
+}
+
+
+def _public_job(payload: dict[str, Any]) -> dict[str, Any]:
+	return {key: value for key, value in payload.items() if key in _PUBLIC_JOB_FIELDS}
+
 
 def crawl_status(cache: CacheStore, run_id: str) -> dict[str, Any]:
 	"""Return one run's checkpoint and detail progress without opening Chrome."""
@@ -25,12 +35,18 @@ def crawl_status(cache: CacheStore, run_id: str) -> dict[str, Any]:
 		"jobs_seen": len(jobs),
 		"details_completed": details_completed,
 		"details_pending": len(jobs) - details_completed,
+		"budget": {
+			"requests_attempted": run["requests_attempted"],
+			"detail_requests_attempted": run["detail_requests_attempted"],
+			"elapsed_seconds": run["elapsed_seconds"],
+			"limits": run["params"].get("limits", {}),
+		},
 		"output_dir": run["output_dir"],
 		"error": run["error"],
 		"hooks": run["hook_results"],
 		"checkpoint": {
 			"next_page": run["next_page"],
-			"resume_command": f"boss crawl resume {run_id}",
+			"resume_command": f"boss --research crawl resume {run_id}",
 		},
 	}
 
@@ -59,7 +75,7 @@ def crawl_results(
 		"count": len(items),
 		"jobs": [
 			{
-				**item["payload"],
+				**_public_job(item["payload"]),
 				"crawl_page": item["page_no"],
 				"detail_done": item["detail_done"],
 			}

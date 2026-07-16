@@ -92,7 +92,7 @@ def test_agent_crawl_requires_explicit_permission_for_a_new_query(tmp_path: Path
 	result = runner.invoke(
 		cli,
 		[
-			"--data-dir", str(tmp_path), "--json", "agent", "crawl",
+			"--data-dir", str(tmp_path), "--research", "--json", "agent", "crawl",
 			"--query", "AI", "--city", "杭州", "--resume", "test-resume",
 		],
 	)
@@ -121,7 +121,7 @@ def test_agent_crawl_allow_crawl_runs_then_continues_the_local_pipeline(tmp_path
 	result = runner.invoke(
 		cli,
 		[
-			"--data-dir", str(tmp_path), "--json", "agent", "crawl",
+			"--data-dir", str(tmp_path), "--research", "--json", "agent", "crawl",
 			"--query", "AI", "--city", "杭州", "--allow-crawl", "--resume", "test-resume",
 		],
 	)
@@ -147,4 +147,4 @@ def test_agent_crawl_does_not_process_risk_stopped_runs(tmp_path: Path, monkeypa
 	assert result.exit_code == 1
 	payload = json.loads(result.output)
 	assert payload["error"]["code"] == "CRAWL_NOT_COMPLETED"
-	assert payload["error"]["recovery_action"] == "boss crawl resume run-1"
+	assert payload["error"]["recovery_action"] == "boss --research crawl resume run-1"

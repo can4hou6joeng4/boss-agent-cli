@@ -28,9 +28,13 @@ DEFAULTS: dict[str, Any] = {
 	},
 	"crawl": {
 		"chrome_path": None,
-		"profile_path": None,
-		"cdp_port": 9222,
-		"hook_profile": "screenshot-full",
+		"cdp_port": None,
+		"hook_profile": "none",
+		"hook_dir": None,
+		"max_requests": 20,
+		"max_details": 50,
+		"max_seconds": 600,
+		"max_retries": 1,
 	},
 }
 

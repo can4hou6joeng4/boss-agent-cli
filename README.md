@@ -94,7 +94,7 @@ boss config set platform zhilian          # 设为默认
 推荐先读：[Agent Quickstart](docs/agent-quickstart.md) · [Capability Matrix](docs/capability-matrix.md) · [Host Examples](docs/agent-hosts.md)
 
 ```json
-// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 51 个低风险与本地任务工具
+// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 52 个低风险与本地任务工具
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
@@ -127,7 +127,7 @@ with BossClient(AuthManager(...)) as client:
 - **认证**：`login` · `logout` · `status` · `doctor`
 - **职位发现**：`search` · `detail` · `show` · `cities` · `history`
 - **本地整理**：`watch` · `preset` · `shortlist` · `stats`
-- **显式批量采集**：`crawl configure/run/start/status/results/resume/shortlist`（MCP 以任务式 `crawl_start/status/results/shortlist/resume` 暴露）
+- **受限研究采集**：`crawl configure/run/start/status/results/resume/stop/shortlist`（仅显式 `--research`；MCP 以任务式 `crawl_start/status/results/shortlist/resume/stop` 暴露）
 - **简历 / AI**：`resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai cover-letter` · `ai interview-prep` · `ai chat-coach` · `ai local`
 - **系统**：`schema` · `platforms` · `export` · `config` · `clean`
 - **招聘者**：`hr jobs list/online/offline`
@@ -135,16 +135,18 @@ with BossClient(AuthManager(...)) as client:
 
 完整命令表、参数与福利筛选原理见 **[命令参考](docs/commands.md)**；能力真源是 `boss schema`（支持 `--format openai-tools` / `anthropic-tools` 导出工具定义）。
 
-批量采集需要额外安装 `uv sync --extra crawl`，并由用户显式配置已登录的独立 Chrome profile：
+批量采集需要额外安装 `uv sync --extra crawl`。它只在显式 `--research` 模式运行，自建并退出清理 `<data-dir>/crawl/chrome-profile`，不会接管日常 Chrome profile。默认不注入 Hook；如确有已获授权的本地脚本需求，必须同时显式提供 Hook 档位和包含 `SHA256SUMS` 的目录：
 
 ```powershell
-boss crawl configure --profile C:\dp_profile_9222
-boss crawl run "AI" --city 杭州 --pages 5 --with-detail
-boss crawl resume <run_id>
+boss crawl configure --max-requests 20 --max-details 50 --max-seconds 600 --max-retries 1
+boss --research crawl run "AI" --city 杭州 --pages 3 --with-detail `
+  --hook-profile screenshot-full --hook-dir E:\boss-agent-cli-local-hooks\AntiDebug_Breaker
+boss --research crawl resume <run_id>
+boss crawl stop <run_id>
 boss agent crawl --run-id <run_id> --resume <简历名>
 ```
 
-`crawl run` 顺序执行并保存 SQLite 断点和 JSON / CSV / XLSX 增量产物。MCP 使用后台任务式 `crawl_start` / `crawl_resume`，以 `run_id` 轮询 `crawl_status` 和读取 `crawl_results`，不会让一次工具调用阻塞数分钟。出现平台风险码或安全页时停止并返回恢复命令。`boss agent crawl --run-id` 只分析已完成任务；只有显式传入 `--allow-crawl` 时才会启动新的真实 Chrome 采集。
+`crawl run` 顺序执行并保存 SQLite 断点和 JSON / CSV / XLSX 增量产物；请求数、详情数、墙钟时间和重试均受固定预算约束，`boss crawl stop` 可在下一个安全点停止。导出和 `crawl results` 默认不会暴露 `security_id`、职位 ID 或招聘者字段；执行 `boss clean --privacy` 会删除 crawl 状态、预算和导出。MCP 的 `crawl_start` / `crawl_resume` 必须传 `research=true`，并以 `run_id` 轮询 `crawl_status` 和读取 `crawl_results`，不会让一次工具调用阻塞数分钟。出现平台风险码或安全页时停止并返回恢复命令。`boss agent crawl --run-id` 只分析已完成任务；新建真实 Chrome 采集还需同时显式传入 `--research --allow-crawl`。
 
 ## 🩺 诊断与排障
 

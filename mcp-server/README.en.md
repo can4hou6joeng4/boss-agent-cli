@@ -49,7 +49,7 @@ Add the server in Cursor Settings -> MCP Servers:
 
 ## Available tools
 
-The current MCP server exposes **51 low-risk and local task tools** by default.
+The current MCP server exposes **52 low-risk and local task tools** by default.
 
 ### Auth and environment
 
@@ -85,8 +85,9 @@ The current MCP server exposes **51 low-risk and local task tools** by default.
 | `boss_crawl_results` | Read persisted jobs for a run, filtered by page/detail state if needed |
 | `boss_crawl_shortlist` | Import one run's jobs into the local shortlist without a platform call |
 | `boss_crawl_resume` | Resume an incomplete task in the background, then poll by `run_id` |
+| `boss_crawl_stop` | Request a running crawl to stop at the next safe point and retain its checkpoint |
 
-These are task-shaped tools: call `status` after `start` / `resume`. A risk stop returns a resume command rather than waiting indefinitely in one MCP call or recreating the browser.
+These are task-shaped tools: `boss_crawl_start` / `boss_crawl_resume` require `research=true`, then call `status` after start/resume. The default Hook is `none`; if the user has authorization for the scripts, explicitly pass `hook_profile="screenshot-full"` and a `hook_dir` containing `SHA256SUMS`. This project does not redistribute third-party scripts. A risk or budget stop returns a resume command rather than waiting indefinitely in one MCP call or recreating the browser.
 
 ### User and resume
 

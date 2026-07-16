@@ -1,18 +1,13 @@
-"""Register verbatim AntiDebug_Breaker snapshots for the explicit crawler only."""
+"""Load user-supplied research hooks without redistributing third-party code."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from importlib.resources import files
+from hashlib import sha256
+from pathlib import Path
 from typing import Any
 
-UPSTREAM_REPOSITORY = "https://github.com/Komikawayi/AntiDebug_Breaker"
-UPSTREAM_COMMIT = "b74db937a0825c58bfee181ae85e09fce8474467"
-UPSTREAM_SNAPSHOT_URL = f"{UPSTREAM_REPOSITORY}/tree/{UPSTREAM_COMMIT}"
-
-# The JavaScript files in hook_scripts/ are byte-for-byte copies from the
-# upstream commit above. Keep this order aligned with the enabled screenshot.
-HOOK_SNAPSHOT_FILES: tuple[tuple[str, str], ...] = (
+HOOK_SCRIPT_NAMES = (
 	("Bypass_Debugger", "Bypass_Debugger.js"),
 	("Hook_CryptoJS", "Hook_CryptoJS.js"),
 	("hook_table", "hook_table.js"),
@@ -21,39 +16,21 @@ HOOK_SNAPSHOT_FILES: tuple[tuple[str, str], ...] = (
 	("hook_history", "hook_history.js"),
 	("Fixed_window_size", "Fixed_window_size.js"),
 )
-
-HOOK_SNAPSHOT_SHA256 = {
-	"Bypass_Debugger.js": "564d86ee9a8a93453481468f01d247d6228b0f5fe75e0e4f329d255acc55ec0f",
-	"Hook_CryptoJS.js": "b1b17043f99eae7400ed8f88aedaec0dbddfa08c10772c8a784bd0c655c5ee61",
-	"hook_table.js": "14d7956abd4e00cd51fb55635c7a288944778ad0e37a66ed3cf71c499fe06c08",
-	"hook_clear.js": "0344b5e147e03b002d22281dba580ef6df8ee6dcf14b4188c4981eda607b3368",
-	"hook_close.js": "8f7915e87cb9ba409c4f3326de3bcda19aa1228413570e2b88f7ec1850c0c4f6",
-	"hook_history.js": "cb0811ff789ad8c913f6d94b05d1ccaf93fae77b736ab3bd7d96d66e6d58050c",
-	"Fixed_window_size.js": "3f0eb7fa369f0b0e69854e857daa68e61d752ffc32c0253ae379c6f533cd044f",
-}
-
-
-def _read_snapshot(filename: str) -> str:
-	return files("boss_agent_cli.crawler").joinpath("hook_scripts").joinpath(filename).read_text(encoding="utf-8")
-
-
-HOOK_PROFILES: dict[str, tuple[tuple[str, str], ...]] = {
-	"none": (),
-	"screenshot-full": tuple((name, _read_snapshot(filename)) for name, filename in HOOK_SNAPSHOT_FILES),
-}
+HOOK_MANIFEST = "SHA256SUMS"
 
 
 @dataclass(frozen=True)
 class HookInjection:
-	"""A single early-document script registration result."""
+	"""One early-document registration result; never retain source text."""
 
 	name: str
 	success: bool
+	sha256: str = ""
 	reason: str = ""
 
 
 class HookRegistrationError(RuntimeError):
-	"""Raised when an early-document profile could not be registered in full."""
+	"""Raised when a requested user-owned script cannot be verified or injected."""
 
 	def __init__(self, injections: list[HookInjection]) -> None:
 		self.injections = tuple(injections)
@@ -61,16 +38,45 @@ class HookRegistrationError(RuntimeError):
 		super().__init__("Hook 注入失败: " + "; ".join(f"{item.name}: {item.reason}" for item in failed))
 
 
-def inject_hook_profile(page: Any, profile: str) -> list[HookInjection]:
-	"""Register every unmodified snapshot in *profile* before navigation."""
-	if profile not in HOOK_PROFILES:
+def inject_hook_profile(page: Any, profile: str, hook_dir: Path | None) -> list[HookInjection]:
+	"""Verify local user scripts and register them before the first navigation."""
+	if profile == "none":
+		return []
+	if profile != "screenshot-full":
 		raise ValueError(f"unknown crawl hook profile: {profile}")
-
+	if hook_dir is None:
+		raise ValueError("screenshot-full 需要 --hook-dir 指向用户提供的原始脚本目录")
+	checksums = _read_checksums(hook_dir / HOOK_MANIFEST)
 	results: list[HookInjection] = []
-	for name, source in HOOK_PROFILES[profile]:
+	for name, filename in HOOK_SCRIPT_NAMES:
 		try:
-			page.run_cdp("Page.addScriptToEvaluateOnNewDocument", source=source)
-			results.append(HookInjection(name=name, success=True))
+			content = (hook_dir / filename).read_bytes()
+			digest = sha256(content).hexdigest()
+			expected = checksums.get(filename)
+			if expected != digest:
+				raise ValueError("SHA-256 与 SHA256SUMS 不匹配")
+			page.run_cdp("Page.addScriptToEvaluateOnNewDocument", source=content.decode("utf-8"))
+			results.append(HookInjection(name=name, success=True, sha256=expected))
 		except Exception as exc:
 			results.append(HookInjection(name=name, success=False, reason=str(exc)))
+	if any(not item.success for item in results):
+		raise HookRegistrationError(results)
 	return results
+
+
+def _read_checksums(path: Path) -> dict[str, str]:
+	if not path.is_file():
+		raise ValueError(f"缺少 Hook 完整性清单: {path.name}")
+	checksums: dict[str, str] = {}
+	for line in path.read_text(encoding="ascii").splitlines():
+		parts = line.split()
+		if len(parts) != 2:
+			continue
+		first, second = parts
+		if len(first) == 64:
+			checksums[second.lstrip("*")] = first.lower()
+		elif len(second) == 64:
+			checksums[first] = second.lower()
+	if {filename for _, filename in HOOK_SCRIPT_NAMES} - set(checksums):
+		raise ValueError("SHA256SUMS 必须包含全部 7 个 Hook 文件")
+	return checksums
