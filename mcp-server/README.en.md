@@ -49,7 +49,7 @@ Add the server in Cursor Settings -> MCP Servers:
 
 ## Available tools
 
-The current MCP server exposes **52 low-risk and local task tools** by default.
+The current MCP server exposes **49 low-risk and local task tools** by default.
 
 ### Auth and environment
 
@@ -76,18 +76,15 @@ The current MCP server exposes **52 low-risk and local task tools** by default.
 | `boss_preset_add/list/remove` | Manage local search presets |
 | `boss_watch_add/list/remove` | Manage local watch presets; `watch run` is not exposed by default |
 
-### Resumable crawl tasks
+### Existing crawl tasks
 
 | Tool | Description |
 |------|-------------|
-| `boss_crawl_start` | Create a real-Chrome background crawl and return `run_id` immediately |
 | `boss_crawl_status` | Read cursor, job count, detail progress, risk state, and resume command |
 | `boss_crawl_results` | Read persisted jobs for a run, filtered by page/detail state if needed |
 | `boss_crawl_shortlist` | Import one run's jobs into the local shortlist without a platform call |
-| `boss_crawl_resume` | Resume an incomplete task in the background, then poll by `run_id` |
-| `boss_crawl_stop` | Request a running crawl to stop at the next safe point and retain its checkpoint |
 
-These are task-shaped tools: `boss_crawl_start` / `boss_crawl_resume` require `research=true`, then call `status` after start/resume. The default Hook is `none`; if the user has authorization for the scripts, explicitly pass `hook_profile="screenshot-full"` and a `hook_dir` containing `SHA256SUMS`. This project does not redistribute third-party scripts. A risk or budget stop returns a resume command rather than waiting indefinitely in one MCP call or recreating the browser.
+MCP remains assisted-only and cannot create, resume, or stop a real-Chrome crawl. Create a task with the explicitly enabled Research Mode CLI, then use `boss_crawl_status`, `boss_crawl_results`, and `boss_crawl_shortlist` to read or locally import its `run_id`. The default Hook is `none`; if the user has authorization, select it only in the CLI with `--hook-profile screenshot-full --hook-dir <directory containing SHA256SUMS>`. This project does not redistribute third-party scripts.
 
 ### User and resume
 

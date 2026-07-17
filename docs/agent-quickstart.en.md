@@ -51,12 +51,12 @@ Parsing contract:
 
 ### Candidate crawl orchestration
 
-After `uv sync --extra crawl`, crawl uses only the isolated `<data-dir>/crawl/chrome-profile`. MCP joins a long task through short calls with `research=true`:
+After `uv sync --extra crawl`, crawl uses only the isolated `<data-dir>/crawl/chrome-profile`. MCP remains assisted-only: create the task in the CLI, then use MCP to read or locally import the existing run:
 
 ```text
-boss_crawl_start(query, city, pages, with_detail, research=true)
+boss crawl start <query> --city <city> --pages <n>
 → receive run_id
-→ poll boss_crawl_status(run_id)
+→ boss_crawl_status(run_id)
 → boss_crawl_results(run_id)
 → boss_crawl_shortlist(run_id, all=true)
 → boss_ai_fit(resume)
@@ -68,7 +68,7 @@ In the CLI, `boss agent crawl --run-id <run_id> --resume <resume-name>` consumes
 boss agent crawl --query "AI engineer" --city 杭州 --pages 3 --with-detail --allow-crawl --resume <resume-name>
 ```
 
-Hooks are disabled by default. Only when you have authorization may you explicitly pass `--hook-profile screenshot-full --hook-dir <directory containing SHA256SUMS>`; this project does not redistribute third-party scripts. To halt a task, call `boss_crawl_stop(run_id)` or `boss crawl stop <run_id>`. When `crawl_status` reports `risk_stopped` or `budget_stopped`, do not recreate the task or retry in a loop. Keep the `run_id`; after handling the page, use `boss_crawl_resume(run_id, research=true)` or `boss crawl resume <run_id>`.
+Hooks are disabled by default. Only when you have authorization may you explicitly pass `--hook-profile screenshot-full --hook-dir <directory containing SHA256SUMS>`; this project does not redistribute third-party scripts. To halt a task, run `boss crawl stop <run_id>`. When `crawl_status` reports `risk_stopped` or `budget_stopped`, do not recreate the task or retry in a loop. Keep the `run_id`; after handling the page, run `boss crawl resume <run_id>`.
 
 ### Recruiter boundary
 

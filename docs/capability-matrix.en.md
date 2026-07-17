@@ -15,7 +15,7 @@ The default low-risk `assisted` mode remains local, read-only first, and user-tr
 | Environment diagnostics | `boss doctor` | No | Hybrid |
 | Config management | `boss config` | No | Local |
 | Cache cleanup | `boss clean` | No | Local |
-| Restricted research crawl | `boss crawl run/start/resume`, plus `configure/status/results/stop` | Yes | Isolated DrissionPage profile; MCP requires `research=true` and task coordination by run_id |
+| Restricted research crawl | `boss crawl run/start/resume`, plus `configure/status/results/stop` | Yes | Isolated DrissionPage profile; MCP remains assisted-only and can only read or import an existing run |
 
 ## Job discovery
 
@@ -110,5 +110,5 @@ Notes:
 - For CLI-first integrations, prefer `boss schema` for capability discovery and parameter validation; the schema exposes both `supported_platforms` and `supported_recruiter_platforms`.
 - Current platform coverage: `zhipin` has both candidate and recruiter implementations, but sensitive workflows are blocked by default; `zhilian` supports candidate-side workflows and recruiter automation through the `agent` browser/CDP adapter V1; `qiancheng` / 51job is a registered placeholder adapter whose real workflows return `NOT_SUPPORTED`.
 - Current auth posture: `zhipin` and `zhilian` keep user-triggered login compatibility; risk-control research belongs only in explicit Research Mode adapters and must not bypass platform risk controls.
-- `crawl` is a user-triggered sequential Research Mode task using an isolated Chrome profile, cross-process rate budget, SQLite checkpoints, and the `crawl stop` kill switch; MCP coordinates it through `crawl_start/status/results/shortlist/resume/stop`, and starting or resuming also requires `research=true`. The default Hook is `none`; users may select a Hook only when they have authorization to provide the original local files and `SHA256SUMS`. Candidate `agent crawl` consumes only completed runs by default; a new crawl requires `operating_mode=research` and `--allow-crawl`. Risk codes, a security page, or an exhausted budget stop it and return a resume command.
+- `crawl` is a user-triggered sequential Research Mode task using an isolated Chrome profile, cross-process rate budget, SQLite checkpoints, and the `crawl stop` kill switch; MCP remains assisted-only and exposes only local `crawl_status/results/shortlist` operations for an existing run. The default Hook is `none`; users may select a Hook only when they have authorization to provide the original local files and `SHA256SUMS`. Candidate `agent crawl` consumes only completed runs by default; a new crawl requires `operating_mode=research` and `--allow-crawl`. Risk codes, a security page, or an exhausted budget stop it and return a resume command.
 - Use `boss schema` as the source of truth: it currently exposes 37 top-level commands, with 9 first-level recruiter subcommands under `hr`, while `ai` and `resume` remain command-group entries.

@@ -750,7 +750,7 @@ SCHEMA_DATA = {
 			"options": {},
 		},
 		"crawl": {
-			"description": "受限 Research Mode 的 DrissionPage 批量采集（子命令：configure/run/start/status/results/resume/stop）。运行和恢复必须先设置 operating_mode=research；MCP 还要求 research=true 确认，风险码或安全页会保存断点后停止。",
+			"description": "受限 Research Mode 的 DrissionPage 批量采集（子命令：configure/run/start/status/results/resume/stop）。运行和恢复必须先设置 operating_mode=research；MCP 仅可读取已有任务的本地状态和结果，风险码或安全页会保存断点后停止。",
 			"args": [],
 			"options": {
 				"run": {
@@ -788,23 +788,6 @@ SCHEMA_DATA = {
 			},
 			"mcp_tools": [
 				{
-					"name": "boss_crawl_start",
-					"description": "仅在共享 operating_mode=research 且显式 research=true 时创建并后台运行可恢复 crawl 任务，立即返回 run_id。",
-					"inputSchema": {
-						"type": "object",
-						"properties": {
-							"query": {"type": "string", "description": "职位关键词"},
-							"city": {"type": "string", "description": "城市名称或数字城市代码"},
-							"pages": {"type": "integer", "default": 5},
-							"with_detail": {"type": "boolean", "default": False},
-							"research": {"type": "boolean", "const": True, "description": "明确启用受限 Research Mode"},
-							"hook_profile": {"type": "string", "enum": ["screenshot-full", "none"], "default": "none"},
-							"hook_dir": {"type": "string", "description": "screenshot-full 所需的用户授权 Hook 目录"},
-						},
-						"required": ["query", "city", "research"],
-					},
-				},
-				{
 					"name": "boss_crawl_status",
 					"description": "读取 crawl 页游标、职位数、详情进度和风险状态。",
 					"inputSchema": {"type": "object", "properties": {"run_id": {"type": "string"}}, "required": ["run_id"]},
@@ -834,29 +817,6 @@ SCHEMA_DATA = {
 							"tags": {"type": "string"},
 							"note": {"type": "string"},
 						},
-						"required": ["run_id"],
-					},
-				},
-				{
-					"name": "boss_crawl_resume",
-					"description": "仅在共享 operating_mode=research 且显式 research=true 时后台恢复 crawl 任务，随后以 run_id 轮询状态。",
-					"inputSchema": {
-						"type": "object",
-						"properties": {
-							"run_id": {"type": "string"},
-							"pages": {"type": "integer"},
-							"with_detail": {"type": "boolean", "default": False},
-							"research": {"type": "boolean", "const": True, "description": "明确启用受限 Research Mode"},
-						},
-						"required": ["run_id", "research"],
-					},
-				},
-				{
-					"name": "boss_crawl_stop",
-					"description": "请求运行中的 crawl 在下一个安全点停止并保留 checkpoint。",
-					"inputSchema": {
-						"type": "object",
-						"properties": {"run_id": {"type": "string"}},
 						"required": ["run_id"],
 					},
 				},

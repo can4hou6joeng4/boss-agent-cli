@@ -37,7 +37,7 @@ boss <命令> --help                      # 查看单个命令选项
 
 ## 显式批量采集
 
-`crawl` 是用户显式触发的受限 Research Mode Chrome 任务。`run`、`start` 和 `resume` 必须带共享 `operating_mode=research`；MCP 仅在 `research=true` 时暴露任务式 `start/status/results/shortlist/resume/stop`，每次调用通过 `run_id` 衔接，不把长采集塞进单个同步工具调用。首次使用需安装 `uv sync --extra crawl`；采集器只启动 `<data-dir>/crawl/chrome-profile` 这个独立 profile，不接管日常 Chrome。
+`crawl` 是用户显式触发的受限 Research Mode Chrome 任务。`run`、`start` 和 `resume` 必须带共享 `operating_mode=research`；MCP 仍保持 assisted-only，只暴露已有任务的 `status/results/shortlist` 本地读取或导入接口。首次使用需安装 `uv sync --extra crawl`；采集器只启动 `<data-dir>/crawl/chrome-profile` 这个独立 profile，不接管日常 Chrome。
 
 ```powershell
 boss crawl configure --max-requests 20 --max-details 50 --max-seconds 600 --max-retries 1
@@ -51,7 +51,7 @@ boss crawl stop <run_id>
 |------|------|
 | `boss crawl configure [--chrome-path PATH] [--port N] [--max-* N]` | 设置 crawl 专用 Chrome 和请求、详情、墙钟、重试预算；profile 固定为 `<data-dir>/crawl/chrome-profile` |
 | `boss crawl run <query> --city <城市或代码> [--pages N] [--with-detail]` | 串行采集；`--pages` 默认 `5` 且必须为正数；`--with-detail` 串行补全职位详情 |
-| `boss crawl start <query> --city <城市或代码> [...]` | 创建后台任务并立即返回 `run_id`；供 MCP 或本地任务调度使用 |
+| `boss crawl start <query> --city <城市或代码> [...]` | 创建后台任务并立即返回 `run_id`；供本地任务调度使用 |
 | `boss crawl status <run_id>` / `boss crawl results <run_id>` | 仅读取 SQLite 中的页游标、风险状态、详情进度和已持久化职位；不打开浏览器 |
 | `boss crawl resume <run_id> [--pages N] [--with-detail] [--background]` | 从页游标、已见职位和待补详情队列恢复；`--background` 立即返回以便轮询；可提高正数页数上限并补全详情，不重复写入已完成项 |
 | `boss crawl stop <run_id>` | 请求运行中任务在下一个安全点停止并保留 checkpoint |

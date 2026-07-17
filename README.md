@@ -94,7 +94,7 @@ boss config set platform zhilian          # 设为默认
 推荐先读：[Agent Quickstart](docs/agent-quickstart.md) · [Capability Matrix](docs/capability-matrix.md) · [Host Examples](docs/agent-hosts.md)
 
 ```json
-// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 52 个低风险与本地任务工具
+// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 49 个低风险与本地任务工具
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
@@ -127,7 +127,7 @@ with BossClient(AuthManager(...)) as client:
 - **认证**：`login` · `logout` · `status` · `doctor`
 - **职位发现**：`search` · `detail` · `show` · `cities` · `history`
 - **本地整理**：`watch` · `preset` · `shortlist` · `stats`
-- **受限研究采集**：`crawl configure/run/start/status/results/resume/stop/shortlist`（仅显式 `operating_mode=research`；MCP 以任务式 `crawl_start/status/results/shortlist/resume/stop` 暴露）
+- **受限研究采集**：`crawl configure/run/start/status/results/resume/stop/shortlist`（仅显式 `operating_mode=research`；MCP 仅读取或本地导入已有 run）
 - **简历 / AI**：`resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai cover-letter` · `ai interview-prep` · `ai chat-coach` · `ai local`
 - **系统**：`schema` · `platforms` · `export` · `config` · `clean`
 - **招聘者**：`hr jobs list/online/offline`
@@ -146,7 +146,7 @@ boss crawl stop <run_id>
 boss agent crawl --run-id <run_id> --resume <简历名>
 ```
 
-`crawl run` 顺序执行并保存 SQLite 断点和 JSON / CSV / XLSX 增量产物；请求数、详情数、墙钟时间和重试均受固定预算约束，`boss crawl stop` 可在下一个安全点停止。导出和 `crawl results` 默认不会暴露 `security_id`、职位 ID 或招聘者字段；执行 `boss clean --privacy` 会删除 crawl 状态、预算和导出。MCP 的 `crawl_start` / `crawl_resume` 必须传 `research=true`，并以 `run_id` 轮询 `crawl_status` 和读取 `crawl_results`，不会让一次工具调用阻塞数分钟。出现平台风险码或安全页时停止并返回恢复命令。`boss agent crawl --run-id` 只分析已完成任务；新建真实 Chrome 采集还需设置 `operating_mode=research` 并传入 `--allow-crawl`。
+`crawl run` 顺序执行并保存 SQLite 断点和 JSON / CSV / XLSX 增量产物；请求数、详情数、墙钟时间和重试均受固定预算约束，`boss crawl stop` 可在下一个安全点停止。导出和 `crawl results` 默认不会暴露 `security_id`、职位 ID 或招聘者字段；执行 `boss clean --privacy` 会删除 crawl 状态、预算和导出。MCP 保持 assisted-only，只能通过 `crawl_status`、`crawl_results` 和 `crawl_shortlist` 读取或本地导入已有 `run_id`；创建、恢复和停止由显式 Research Mode CLI 完成。出现平台风险码或安全页时停止并返回恢复命令。`boss agent crawl --run-id` 只分析已完成任务；新建真实 Chrome 采集还需设置 `operating_mode=research` 并传入 `--allow-crawl`。
 
 ## 🩺 诊断与排障
 

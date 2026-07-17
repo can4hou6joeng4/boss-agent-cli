@@ -41,7 +41,7 @@ Operating mode: `boss config set operating_mode assisted|research`. The default 
 
 ## Explicit bulk crawl
 
-`crawl` is an explicitly triggered, restricted Research Mode Chrome task. `run`, `start`, and `resume` require shared `operating_mode=research`; MCP exposes task-shaped `start/status/results/shortlist/resume/stop` only with `research=true`, joined by `run_id`, instead of placing a long crawl inside one synchronous tool call. Install `uv sync --extra crawl` first; the crawler starts only the isolated `<data-dir>/crawl/chrome-profile` and never attaches to a daily Chrome profile.
+`crawl` is an explicitly triggered, restricted Research Mode Chrome task. `run`, `start`, and `resume` require shared `operating_mode=research`; MCP remains assisted-only and exposes only local `status/results/shortlist` operations for an existing run. Install `uv sync --extra crawl` first; the crawler starts only the isolated `<data-dir>/crawl/chrome-profile` and never attaches to a daily Chrome profile.
 
 ```powershell
 boss crawl configure --max-requests 20 --max-details 50 --max-seconds 600 --max-retries 1
@@ -55,7 +55,7 @@ boss crawl stop <run_id>
 |---------|-------------|
 | `boss crawl configure [--chrome-path PATH] [--port N] [--max-* N]` | Configure the crawl-only Chrome and request, detail, wall-clock, and retry budgets; the profile is fixed at `<data-dir>/crawl/chrome-profile` |
 | `boss crawl run <query> --city <city-or-code> [--pages N] [--with-detail]` | Sequential capture; `--pages` defaults to `5` and must be positive; `--with-detail` serially completes job details |
-| `boss crawl start <query> --city <city-or-code> [...]` | Create a background task and return `run_id` immediately; used by MCP/local task orchestration |
+| `boss crawl start <query> --city <city-or-code> [...]` | Create a background task and return `run_id` immediately; used by local task orchestration |
 | `boss crawl status <run_id>` / `boss crawl results <run_id>` | Read the SQLite cursor, risk state, detail progress, and persisted jobs without opening Chrome |
 | `boss crawl resume <run_id> [--pages N] [--with-detail] [--background]` | Resume from the page cursor, seen jobs, and pending details; `--background` returns immediately for polling; can raise a positive page cap and fill details without duplicate writes |
 | `boss crawl stop <run_id>` | Request a running task to stop at its next safe point and retain its checkpoint |

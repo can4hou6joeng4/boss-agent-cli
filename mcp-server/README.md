@@ -73,7 +73,7 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 
 ## 可用工具
 
-当前 MCP Server 默认暴露 **52 个低风险与本地任务工具**。
+当前 MCP Server 默认暴露 **49 个低风险与本地任务工具**。
 
 ### 认证与环境
 
@@ -100,18 +100,15 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 | `boss_preset_add/list/remove` | 管理本地搜索预设 |
 | `boss_watch_add/list/remove` | 管理本地监控预设；`watch run` 默认不暴露 |
 
-### 可恢复 crawl 任务
+### 已有 crawl 任务
 
 | 工具 | 说明 |
 |------|------|
-| `boss_crawl_start` | 创建真实 Chrome 后台采集任务并立即返回 `run_id` |
 | `boss_crawl_status` | 读取页游标、职位数、详情进度、风险状态和恢复命令 |
 | `boss_crawl_results` | 读取一个 run 已持久化的职位，可按页面/详情状态筛选 |
 | `boss_crawl_shortlist` | 将一个 run 的职位导入本地候选池，不请求平台 |
-| `boss_crawl_resume` | 后台恢复未完成任务；随后继续用 `run_id` 轮询 |
-| `boss_crawl_stop` | 请求运行中的 crawl 在下一个安全点停止并保留断点 |
 
-这些工具是任务式接口：`boss_crawl_start` / `boss_crawl_resume` 必须传 `research=true`，调用后使用 `status` 轮询。默认 Hook 为 `none`；若用户已拥有脚本授权，可明确传 `hook_profile="screenshot-full"` 和含 `SHA256SUMS` 的 `hook_dir`，项目不发布第三方脚本。任务风险、预算停止时返回恢复命令，不会在同一次 MCP 调用中无限等待或重开浏览器。
+MCP 保持 assisted-only，不能创建、恢复或停止真实 Chrome crawl。先通过显式 Research Mode CLI 创建任务，再用 `boss_crawl_status`、`boss_crawl_results` 和 `boss_crawl_shortlist` 读取或本地导入其 `run_id`。默认 Hook 为 `none`；若用户已拥有脚本授权，可仅在 CLI 明确传 `--hook-profile screenshot-full --hook-dir <含 SHA256SUMS 的目录>`，项目不发布第三方脚本。
 
 ### 用户与简历
 

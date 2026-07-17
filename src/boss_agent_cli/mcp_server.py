@@ -21,8 +21,8 @@ from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
 
 SERVER_INSTRUCTIONS = (
 	"boss-agent-cli over MCP: a local-assist BOSS Zhipin job-search toolset in assisted mode by default — "
-	"read-only first and user-triggered. A Research Mode crawl needs shared operating_mode=research plus explicit "
-	"research=true confirmation; tasks are bounded, checkpointed, polled by run_id, and stop on risk signals. "
+	"read-only first and user-triggered. MCP remains assisted-only until a dedicated mode-aware exposure contract is "
+	"implemented; it can only inspect or locally shortlist existing crawl runs by run_id. "
 	"Sensitive actions (greet, batch-greet, apply, contact exchange, recruiter candidate data, replies) "
 	"are not exposed and return COMPLIANCE_BLOCKED at the CLI layer; for those the user acts manually on "
 	"the official BOSS Zhipin website. Every tool returns the same JSON envelope "
@@ -155,7 +155,7 @@ def _compliance_command_for_tool(tool_name: str) -> str:
 
 def _is_low_risk_blocked_tool(tool_name: str) -> bool:
 	command = _compliance_command_for_tool(tool_name)
-	return command in restricted_commands("assisted") or tool_name in {"boss_crawl_start", "boss_crawl_resume"}
+	return command in restricted_commands("assisted")
 
 TOOLS = [
 	Tool(
@@ -960,7 +960,6 @@ _LOW_RISK_BLOCKED_TOOLS = {
 	tool.name
 	for tool in TOOLS
 	if _is_low_risk_blocked_tool(tool.name)
-	and tool.name not in {"boss_crawl_start", "boss_crawl_resume"}
 }
 TOOLS = [tool for tool in TOOLS if tool.name not in _LOW_RISK_BLOCKED_TOOLS]
 _decorate_tool_descriptions()
@@ -1003,20 +1002,6 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 			args.extend(["--sort", str(arguments["sort"])])
 		return args
 
-	if name == "crawl_start":
-		if arguments.get("research") is not True:
-			raise ValueError("boss_crawl_start requires research=true")
-		args = ["crawl", "start", arguments["query"], "--city", str(arguments["city"])]
-		if "pages" in arguments:
-			args.extend(["--pages", str(arguments["pages"])])
-		if arguments.get("with_detail"):
-			args.append("--with-detail")
-		if arguments.get("hook_profile"):
-			args.extend(["--hook-profile", str(arguments["hook_profile"])])
-		if arguments.get("hook_dir"):
-			args.extend(["--hook-dir", str(arguments["hook_dir"])])
-		return args
-
 	if name == "crawl_status":
 		return ["crawl", "status", str(arguments["run_id"])]
 
@@ -1039,19 +1024,6 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 		if arguments.get("note"):
 			args.extend(["--note", str(arguments["note"])])
 		return args
-
-	if name == "crawl_resume":
-		if arguments.get("research") is not True:
-			raise ValueError("boss_crawl_resume requires research=true")
-		args = ["crawl", "resume", str(arguments["run_id"]), "--background"]
-		if arguments.get("pages") is not None:
-			args.extend(["--pages", str(arguments["pages"])])
-		if arguments.get("with_detail"):
-			args.append("--with-detail")
-		return args
-
-	if name == "crawl_stop":
-		return ["crawl", "stop", str(arguments["run_id"])]
 
 	if name == "recommend":
 		args = [name]
@@ -1446,17 +1418,6 @@ async def list_tools() -> list[Tool]:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-	if name in {"boss_crawl_start", "boss_crawl_resume"} and arguments.get("research") is not True:
-		result = {
-			"ok": False,
-			"schema_version": "1.0",
-			"command": name.removeprefix("boss_"),
-			"data": None,
-			"pagination": None,
-			"error": {"code": "INVALID_PARAM", "message": f"{name} requires research=true", "recoverable": True},
-			"hints": {"next_actions": ["先设置 operating_mode=research，再以 research=true 确认本次任务"]},
-		}
-		return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 	if name in _LOW_RISK_BLOCKED_TOOLS:
 		result = {
 			"ok": False,
@@ -1478,19 +1439,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 			},
 		}
 		return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
-	try:
-		args = _build_args(name, arguments)
-	except ValueError as exc:
-		result = {
-			"ok": False,
-			"schema_version": "1.0",
-			"command": name.removeprefix("boss_"),
-			"data": None,
-			"pagination": None,
-			"error": {"code": "INVALID_PARAM", "message": str(exc), "recoverable": True},
-			"hints": {"next_actions": ["仅在用户明确要求时设置 research=true"]},
-		}
-		return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+	args = _build_args(name, arguments)
 	result = _run_boss(*args)
 	return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 

@@ -148,12 +148,10 @@ def test_required_tools_present():
 	assert not missing, f"缺少核心工具: {missing}"
 
 
-def test_crawl_tools_are_task_shaped_and_build_background_cli_commands():
+def test_crawl_tools_only_read_or_locally_shortlist_existing_runs():
 	names = {tool.name for tool in TOOLS}
-	assert {"boss_crawl_start", "boss_crawl_status", "boss_crawl_results", "boss_crawl_shortlist", "boss_crawl_resume", "boss_crawl_stop"} <= names
-	assert _build_args("boss_crawl_start", {"query": "AI", "city": "杭州", "pages": 3, "with_detail": True, "research": True}) == [
-		"crawl", "start", "AI", "--city", "杭州", "--pages", "3", "--with-detail",
-	]
+	assert {"boss_crawl_status", "boss_crawl_results", "boss_crawl_shortlist"} <= names
+	assert not {"boss_crawl_start", "boss_crawl_resume", "boss_crawl_stop"} & names
 	assert _build_args("boss_crawl_status", {"run_id": "run-1"}) == ["crawl", "status", "run-1"]
 	assert _build_args("boss_crawl_results", {"run_id": "run-1", "page": 2, "detail_status": "pending"}) == [
 		"crawl", "results", "run-1", "--page", "2", "--detail-status", "pending",
@@ -161,10 +159,6 @@ def test_crawl_tools_are_task_shaped_and_build_background_cli_commands():
 	assert _build_args("boss_crawl_shortlist", {"run_id": "run-1", "selectors": ["csel_1"], "tags": "AI"}) == [
 		"crawl", "shortlist", "run-1", "--selector", "csel_1", "--tags", "AI",
 	]
-	assert _build_args("boss_crawl_resume", {"run_id": "run-1", "pages": 2, "with_detail": True, "research": True}) == [
-		"crawl", "resume", "run-1", "--background", "--pages", "2", "--with-detail",
-	]
-	assert _build_args("boss_crawl_stop", {"run_id": "run-1"}) == ["crawl", "stop", "run-1"]
 	server_tools = {tool.name: tool.inputSchema for tool in TOOLS if tool.name.startswith("boss_crawl_")}
 	schema_tools = {
 		tool["name"]: tool["inputSchema"]
@@ -179,7 +173,7 @@ def test_crawl_tools_are_task_shaped_and_build_background_cli_commands():
 
 def test_tool_count():
 	"""工具总数应与当前注册一致。"""
-	assert len(TOOLS) == 52
+	assert len(TOOLS) == 49
 
 
 def test_mcp_tool_count_matches_readme():
@@ -193,14 +187,13 @@ def test_server_instructions_carry_doctrine():
 	assert SERVER_INSTRUCTIONS
 	assert "COMPLIANCE_BLOCKED" in SERVER_INSTRUCTIONS
 	assert "boss schema" in SERVER_INSTRUCTIONS
+	assert "MCP remains assisted-only" in SERVER_INSTRUCTIONS
 
 
 def test_every_tool_maps_to_registered_command():
 	registered_commands = set(cli.commands)
 	for tool in TOOLS:
 		arguments = _required_arguments(tool)
-		if tool.name in {"boss_crawl_start", "boss_crawl_resume"}:
-			arguments["research"] = True
 		args = _build_args(tool.name, arguments)
 		assert args, tool.name
 		assert args[0] in registered_commands, tool.name
@@ -249,7 +242,6 @@ def test_no_exposed_tool_maps_to_schema_blocked_command():
 		tool.name
 		for tool in TOOLS
 		if _compliance_command_for_tool(tool.name) in blocked_commands
-		and tool.name not in {"boss_crawl_start", "boss_crawl_resume"}
 	]
 	assert not leaked
 
@@ -753,7 +745,7 @@ def test_build_args_shortlist_list():
 
 def test_tool_count_after_pr41():
 	"""协议服务工具总数应与当前 MCP 暴露能力完全一致。"""
-	assert len(TOOLS) == 52
+	assert len(TOOLS) == 49
 
 
 def test_build_args_shortlist_add():

@@ -51,12 +51,12 @@ boss shortlist add <security_id> <job_id>
 
 ### 候选人 crawl 编排
 
-安装 `uv sync --extra crawl` 后，crawl 只使用 `<data-dir>/crawl/chrome-profile` 独立 profile。MCP 以 `research=true` 的短调用串联一个长任务：
+安装 `uv sync --extra crawl` 后，crawl 只使用 `<data-dir>/crawl/chrome-profile` 独立 profile。MCP 保持 assisted-only；先在 CLI 创建任务，再使用 MCP 读取或本地导入已有任务：
 
 ```text
-boss_crawl_start(query, city, pages, with_detail, research=true)
+boss crawl start <query> --city <city> --pages <n>
 → 得到 run_id
-→ boss_crawl_status(run_id) 轮询
+→ boss_crawl_status(run_id)
 → boss_crawl_results(run_id)
 → boss_crawl_shortlist(run_id, all=true)
 → boss_ai_fit(resume)
@@ -68,7 +68,7 @@ CLI 中，`boss agent crawl --run-id <run_id> --resume <简历名>` 只处理已
 boss agent crawl --query "AI 工程师" --city 杭州 --pages 3 --with-detail --allow-crawl --resume <简历名>
 ```
 
-默认不注入 Hook。只有拥有相应授权时，才可在 CLI 显式传 `--hook-profile screenshot-full --hook-dir <含 SHA256SUMS 的目录>`；项目不随包发布第三方脚本。需要立即终止时调用 `boss_crawl_stop(run_id)` 或 `boss crawl stop <run_id>`。当 `crawl_status` 返回 `risk_stopped` 或 `budget_stopped` 时，不要重新建任务或循环重试；保留 `run_id`，由用户处理后执行 `boss_crawl_resume(run_id, research=true)` 或 `boss crawl resume <run_id>`。
+默认不注入 Hook。只有拥有相应授权时，才可在 CLI 显式传 `--hook-profile screenshot-full --hook-dir <含 SHA256SUMS 的目录>`；项目不随包发布第三方脚本。需要立即终止时执行 `boss crawl stop <run_id>`。当 `crawl_status` 返回 `risk_stopped` 或 `budget_stopped` 时，不要重新建任务或循环重试；保留 `run_id`，由用户处理后执行 `boss crawl resume <run_id>`。
 
 ### 招聘者边界
 

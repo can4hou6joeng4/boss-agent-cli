@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- 新增受限 Research Mode 的可恢复 BOSS crawl 工作流：独立 Chrome profile、固定请求/详情/墙钟/重试预算、SQLite checkpoint、停止开关、外置 Hook 完整性校验，以及脱敏 selector 导入本地候选池。MCP 保持 assisted-only，仅可读取或本地导入已有 crawl run。
+
 ## [1.16.0] - 2026-07-17
 
 ### Added

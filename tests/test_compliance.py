@@ -143,7 +143,7 @@ def test_compliance_registry_matches_all_guarded_sensitive_commands():
 	guarded = _guarded_command_names_from_source()
 	blocked = low_risk_blocked_commands()
 	assert guarded
-	assert guarded <= blocked
+	assert guarded == blocked
 
 
 def test_schema_blocked_commands_match_guarded_sensitive_commands():
