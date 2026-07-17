@@ -10,7 +10,6 @@ from boss_agent_cli.config import load_config
 from boss_agent_cli.hooks import create_hook_bus
 from boss_agent_cli.output import emit_error, Logger
 from boss_agent_cli.platforms import list_platforms
-from boss_agent_cli.crawler.policy import ASSISTED_MODE, RESEARCH_MODE
 
 
 class BossCliGroup(click.Group):
@@ -56,15 +55,13 @@ class BossCliGroup(click.Group):
 @click.option("--role", default=None, type=click.Choice(["candidate", "recruiter"]), help="角色模式：candidate（求职者，默认）/ recruiter（招聘者）")
 @click.option("--log-level", default=None, type=click.Choice(["error", "warning", "info", "debug"]))
 @click.option("--json/--no-json", "json_output", default=False, help="强制 JSON 输出（即使在终端中）")
-@click.option("--research", is_flag=True, default=False, help="显式启用受限的本地 Research Mode（crawl/CDP/Hook）")
 @click.pass_context
-def cli(ctx: click.Context, data_dir: str, delay: str | None, cdp_url: str | None, platform_name: str | None, role: str | None, log_level: str | None, json_output: bool, research: bool) -> None:
+def cli(ctx: click.Context, data_dir: str, delay: str | None, cdp_url: str | None, platform_name: str | None, role: str | None, log_level: str | None, json_output: bool) -> None:
 	ctx.ensure_object(dict)
 	resolved_dir = Path(data_dir).expanduser()
 	resolved_dir.mkdir(parents=True, exist_ok=True)
 	ctx.obj["data_dir"] = resolved_dir
 	ctx.obj["json_output"] = json_output
-	ctx.obj["operating_mode"] = RESEARCH_MODE if research else ASSISTED_MODE
 
 	cfg = load_config(resolved_dir / "config.json")
 

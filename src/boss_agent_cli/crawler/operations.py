@@ -46,7 +46,7 @@ def crawl_status(cache: CacheStore, run_id: str) -> dict[str, Any]:
 		"hooks": run["hook_results"],
 		"checkpoint": {
 			"next_page": run["next_page"],
-			"resume_command": f"boss --research crawl resume {run_id}",
+			"resume_command": f"boss crawl resume {run_id}",
 		},
 	}
 
@@ -76,6 +76,7 @@ def crawl_results(
 		"jobs": [
 			{
 				**_public_job(item["payload"]),
+				"selector": item["selector"],
 				"crawl_page": item["page_no"],
 				"detail_done": item["detail_done"],
 			}
@@ -88,27 +89,29 @@ def import_crawl_shortlist(
 	cache: CacheStore,
 	run_id: str,
 	*,
-	job_ids: tuple[str, ...] = (),
+	selectors: tuple[str, ...] = (),
 	include_all: bool = False,
 	tags: tuple[str, ...] = (),
 	note: str = "",
 ) -> dict[str, Any]:
 	"""Import selected crawl rows into the existing shortlist without overwrites."""
-	if include_all == bool(job_ids):
-		raise ValueError("必须且只能使用 --all 或至少一个 --job-id 选择要导入的职位")
+	if include_all == bool(selectors):
+		raise ValueError("必须且只能使用 --all 或至少一个 --selector 选择要导入的职位")
+	if len(selectors) != len(set(selectors)):
+		raise ValueError("selector 不能重复")
 	if cache.get_crawl_run(run_id) is None:
 		raise KeyError(run_id)
 	crawl_items = cache.list_crawl_jobs(run_id)
-	requested_ids = set(job_ids)
+	requested_selectors = set(selectors)
 	selected = [
-		item["payload"]
+		item
 		for item in crawl_items
-		if include_all or str(item["payload"].get("job_id", "")) in requested_ids
+		if include_all or str(item["selector"]) in requested_selectors
 	]
-	found_ids = {str(item.get("job_id", "")) for item in selected}
-	missing_ids = sorted(requested_ids - found_ids)
-	if missing_ids:
-		raise ValueError(f"run {run_id} 中不存在 job_id: {', '.join(missing_ids)}")
+	found_selectors = {str(item["selector"]) for item in selected}
+	missing_selectors = sorted(requested_selectors - found_selectors)
+	if missing_selectors:
+		raise ValueError(f"run {run_id} 中不存在 selector: {', '.join(missing_selectors)}")
 
 	existing_keys = {
 		(str(item.get("security_id", "")), str(item.get("job_id", "")))
@@ -117,7 +120,8 @@ def import_crawl_shortlist(
 	imported: list[dict[str, str]] = []
 	existing_count = 0
 	skipped_count = 0
-	for item in selected:
+	for selected_item in selected:
+		item = selected_item["payload"]
 		security_id = str(item.get("security_id", ""))
 		job_id = str(item.get("job_id", ""))
 		if not security_id or not job_id:
@@ -137,7 +141,7 @@ def import_crawl_shortlist(
 			"tags": list(tags),
 			"note": note,
 		})
-		imported.append({"security_id": security_id, "job_id": job_id, "title": str(item.get("title", ""))})
+		imported.append({"selector": str(selected_item["selector"]), "title": str(item.get("title", ""))})
 	return {
 		"run_id": run_id,
 		"selected_count": len(selected),

@@ -15,7 +15,7 @@
 | 环境诊断 | `boss doctor` | 否 | 混合 |
 | 配置管理 | `boss config` | 否 | 本地 |
 | 缓存清理 | `boss clean` | 否 | 本地 |
-| 受限研究采集 | `boss --research crawl run/start/resume`，以及 `configure/status/results/stop` | 是 | 独立 DrissionPage profile；MCP 必须带 `research=true` 并以 run_id 任务式调度 |
+| 受限研究采集 | `boss crawl run/start/resume`，以及 `configure/status/results/stop` | 是 | 独立 DrissionPage profile；MCP 必须带 `research=true` 并以 run_id 任务式调度 |
 
 ## 职位发现
 
@@ -99,7 +99,7 @@
 | 沟通列表 | `boss hr chat` | 是 | 受限（默认阻断） |
 | 聊天消息历史 | `boss hr chatmsg <friend_id>` | 是 | 受限（默认阻断） |
 | 最近消息摘要 | `boss hr last-messages [--friend-id <id>]` | 是 | 受限（默认阻断） |
-| 在线简历查看 | `boss hr resume <geek_id> --job-id <id> --security-id <id>` | 是 | 受限（默认阻断） |
+| 在线简历查看 | `boss hr resume <geek_id> --selector <csel_...> --security-id <id>` | 是 | 受限（默认阻断） |
 | 联系方式交换 | `boss hr resume --exchange --friend-id <friend_id> [--type wechat]` | 是 | 受限（默认阻断） |
 | 消息回复 | `boss hr reply <friend_id> <message>` | 是 | 受限（默认阻断） |
 | 附件简历请求 | `boss hr request-resume <friend_id>` | 是 | 受限（默认阻断） |

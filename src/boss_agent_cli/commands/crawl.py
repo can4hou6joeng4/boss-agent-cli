@@ -13,9 +13,9 @@ import click
 
 from boss_agent_cli.api.endpoints import CITY_CODES
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.compliance import operating_mode, require_compliance_allowed
 from boss_agent_cli.config import DEFAULTS
 from boss_agent_cli.crawler.operations import crawl_results, crawl_status, import_crawl_shortlist
-from boss_agent_cli.crawler.policy import require_research
 from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
 from boss_agent_cli.display import handle_error_output, handle_output
@@ -64,6 +64,15 @@ def _city_code(city: str) -> str:
 	raise ValueError("city 必须是支持的城市名称或数字城市代码")
 
 
+def _require_crawl_capabilities(ctx: click.Context, hook_profile: str | None = None) -> bool:
+	"""Apply the shared policy before a crawl can open an isolated browser."""
+	if not require_compliance_allowed(ctx, "crawl"):
+		return False
+	if not require_compliance_allowed(ctx, "crawl-cdp"):
+		return False
+	return hook_profile in (None, "none") or require_compliance_allowed(ctx, "crawl-hook")
+
+
 def _settings_from_context(
 	ctx: click.Context,
 	*,
@@ -76,7 +85,6 @@ def _settings_from_context(
 	profile_path: str | None,
 	chrome_path: str | None,
 	cdp_port: int | None,
-	research: bool,
 ) -> CrawlSettings:
 	cfg = _crawl_config(ctx)
 	data_dir = Path(ctx.obj["data_dir"])
@@ -84,7 +92,6 @@ def _settings_from_context(
 	resolved_hook = hook_profile or "none"
 	if resolved_hook not in _HOOK_CHOICES:
 		raise ValueError(f"unknown hook profile: {resolved_hook}")
-	require_research(research, hook_profile=resolved_hook)
 	return CrawlSettings(
 		query=query,
 		city_code=_city_code(city),
@@ -99,7 +106,7 @@ def _settings_from_context(
 		max_details=int(cfg.get("max_details") or 50),
 		max_seconds=int(cfg.get("max_seconds") or 600),
 		max_retries=int(cfg.get("max_retries") or 1),
-		operating_mode=ctx.obj["operating_mode"],
+		operating_mode=operating_mode(ctx),
 	)
 
 
@@ -136,7 +143,7 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 			recovery_action="安装 boss-agent-cli[crawl] 并执行 boss crawl configure",
 		)
 		return
-	hints = {"next_actions": [f"boss --research crawl resume {outcome.run_id}"]} if outcome.status != "completed" else {
+	hints = {"next_actions": [f"boss crawl resume {outcome.run_id}"]} if outcome.status != "completed" else {
 		"next_actions": ["查看 output_paths 中的 JSON、CSV 或 XLSX 结果文件"]
 	}
 	handle_output(ctx, "crawl", outcome.as_dict(), hints=hints)
@@ -156,7 +163,6 @@ def _launch_background_resume(
 		"from boss_agent_cli.main import cli; cli()",
 		"--data-dir",
 		str(data_dir),
-		"--research",
 		"--json",
 		"crawl",
 		"resume",
@@ -231,12 +237,14 @@ def run_cmd(
 	cdp_port: int | None,
 ) -> None:
 	"""开始一个可恢复的 DP 批量采集任务。"""
+	if not _require_crawl_capabilities(ctx, hook_profile):
+		ctx.exit(1)
+		return
 	try:
 		settings = _settings_from_context(
 			ctx, query=query, city=city, pages=pages, with_detail=with_detail, hook_profile=hook_profile,
 			hook_dir=str(hook_dir) if hook_dir else None, profile_path=None,
 			chrome_path=str(chrome_path) if chrome_path else None, cdp_port=cdp_port,
-			research=ctx.obj["operating_mode"] == "research",
 		)
 	except ValueError as exc:
 		handle_error_output(ctx, "crawl", code="INVALID_PARAM", message=str(exc))
@@ -262,12 +270,14 @@ def start_cmd(
 	hook_dir: Path | None,
 ) -> None:
 	"""创建并后台运行一个 crawl 任务；适合 MCP 的任务式调度。"""
+	if not _require_crawl_capabilities(ctx, hook_profile):
+		ctx.exit(1)
+		return
 	run_id: str | None = None
 	try:
 		settings = _settings_from_context(
 			ctx, query=query, city=city, pages=pages, with_detail=with_detail, hook_profile=hook_profile,
 			hook_dir=str(hook_dir) if hook_dir else None, profile_path=None, chrome_path=None, cdp_port=None,
-			research=ctx.obj["operating_mode"] == "research",
 		)
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			service = CrawlService(cache, data_dir=Path(ctx.obj["data_dir"]), transport_factory=_transport_factory)
@@ -294,7 +304,7 @@ def start_cmd(
 			code="CRAWL_UNAVAILABLE",
 			message=f"无法启动 crawl 后台任务: {exc}",
 			recoverable=True,
-			recovery_action="执行 boss --research crawl resume <run_id> 重试",
+			recovery_action="设置 operating_mode=research 后执行 boss crawl resume <run_id> 重试",
 		)
 		return
 	handle_output(
@@ -304,7 +314,7 @@ def start_cmd(
 			"run_id": run_id,
 			"status": "queued",
 			"background": True,
-			"checkpoint": {"resume_command": f"boss --research crawl resume {run_id}"},
+			"checkpoint": {"resume_command": f"boss crawl resume {run_id}"},
 		},
 		hints={"next_actions": [f"boss crawl status {run_id}", f"boss crawl results {run_id}"]},
 	)
@@ -326,15 +336,8 @@ def resume_cmd(
 	from_queue: bool,
 ) -> None:
 	"""从已保存的页游标和详情队列恢复采集。"""
-	if ctx.obj["operating_mode"] != "research":
-		handle_error_output(
-			ctx,
-			"crawl.resume",
-			code="INVALID_PARAM",
-			message="crawl、CDP 和 Hook 仅可在显式 --research 模式运行",
-			recoverable=True,
-			recovery_action=f"boss --research crawl resume {run_id}",
-		)
+	if not _require_crawl_capabilities(ctx):
+		ctx.exit(1)
 		return
 	if background:
 		try:
@@ -361,7 +364,7 @@ def resume_cmd(
 				code="CRAWL_UNAVAILABLE",
 				message=f"无法启动 crawl 后台任务: {exc}",
 				recoverable=True,
-				recovery_action=f"执行 boss --research crawl resume {run_id} 重试",
+				recovery_action=f"执行 boss crawl resume {run_id} 重试",
 			)
 			return
 		handle_output(
@@ -377,7 +380,7 @@ def resume_cmd(
 			run_id,
 			pages=pages,
 			with_detail=with_detail,
-			operating_mode=ctx.obj["operating_mode"],
+			operating_mode=operating_mode(ctx),
 			clear_stop=not from_queue,
 		),
 	)
@@ -427,7 +430,7 @@ def results_cmd(ctx: click.Context, run_id: str, page: int | None, detail_status
 
 @crawl_group.command("shortlist")
 @click.argument("run_id")
-@click.option("--job-id", "job_ids", multiple=True, help="导入指定 encryptJobId，可重复传入")
+@click.option("--selector", "selectors", multiple=True, help="导入 results 返回的 selector，可重复传入")
 @click.option("--all", "include_all", is_flag=True, default=False, help="导入该 run 的全部可关联职位")
 @click.option("--tags", default="", help="写入候选池的本地标签，逗号分隔")
 @click.option("--note", default="", help="写入候选池的本地备注")
@@ -435,18 +438,18 @@ def results_cmd(ctx: click.Context, run_id: str, page: int | None, detail_status
 def shortlist_cmd(
 	ctx: click.Context,
 	run_id: str,
-	job_ids: tuple[str, ...],
+	selectors: tuple[str, ...],
 	include_all: bool,
 	tags: str,
 	note: str,
 ) -> None:
 	"""将 crawl 结果导入原项目的本地职位候选池。"""
-	if include_all == bool(job_ids):
+	if include_all == bool(selectors):
 		handle_error_output(
 			ctx,
 			"crawl.shortlist",
 			code="INVALID_PARAM",
-			message="必须且只能使用 --all 或至少一个 --job-id 选择要导入的职位",
+			message="必须且只能使用 --all 或至少一个 --selector 选择要导入的职位",
 		)
 		return
 
@@ -455,7 +458,7 @@ def shortlist_cmd(
 			payload = import_crawl_shortlist(
 				cache,
 				run_id,
-				job_ids=job_ids,
+				selectors=selectors,
 				include_all=include_all,
 				tags=tuple(tag.strip() for tag in tags.split(",") if tag.strip()),
 				note=note,

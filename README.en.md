@@ -122,7 +122,7 @@ with BossClient(AuthManager(...)) as client:
 - **Auth**: `login` · `logout` · `status` · `doctor`
 - **Discover**: `search` · `detail` · `show` · `cities` · `history`
 - **Organize**: `watch` · `preset` · `shortlist` · `stats`
-- **Restricted research crawl**: `crawl configure/run/start/status/results/resume/stop/shortlist` (explicit `--research` only; MCP exposes task-shaped `crawl_start/status/results/shortlist/resume/stop`)
+- **Restricted research crawl**: `crawl configure/run/start/status/results/resume/stop/shortlist` (explicit `operating_mode=research` only; MCP exposes task-shaped `crawl_start/status/results/shortlist/resume/stop`)
 - **Resume / AI**: `resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai cover-letter` · `ai interview-prep` · `ai chat-coach` · `ai local`
 - **Utility**: `schema` · `platforms` · `export` · `config` · `clean`
 - **Recruiter**: `hr jobs list/online/offline`
@@ -130,18 +130,18 @@ with BossClient(AuthManager(...)) as client:
 
 Full command tables, parameters, and welfare-matching internals: **[Command Reference](docs/commands.en.md)**. The capability source of truth is `boss schema` (with `--format openai-tools` / `anthropic-tools` exports).
 
-Bulk crawl requires `uv sync --extra crawl`. It runs only in explicit `--research` mode, creates and cleans up its own `<data-dir>/crawl/chrome-profile`, and never attaches to a daily Chrome profile. Hooks are disabled by default; if you have authorized local scripts, explicitly provide both the profile and a directory containing `SHA256SUMS`:
+Bulk crawl requires `uv sync --extra crawl`. It runs only in explicit `operating_mode=research` mode, creates and cleans up its own `<data-dir>/crawl/chrome-profile`, and never attaches to a daily Chrome profile. Hooks are disabled by default; if you have authorized local scripts, explicitly provide both the profile and a directory containing `SHA256SUMS`:
 
 ```powershell
 boss crawl configure --max-requests 20 --max-details 50 --max-seconds 600 --max-retries 1
-boss --research crawl run "AI" --city 杭州 --pages 3 --with-detail `
+boss crawl run "AI" --city 杭州 --pages 3 --with-detail `
   --hook-profile screenshot-full --hook-dir E:\boss-agent-cli-local-hooks\AntiDebug_Breaker
-boss --research crawl resume <run_id>
+boss crawl resume <run_id>
 boss crawl stop <run_id>
 boss agent crawl --run-id <run_id> --resume <resume-name>
 ```
 
-`crawl run` is sequential, checkpoints SQLite state, and incrementally writes JSON / CSV / XLSX artifacts. Request, detail, wall-clock, and retry budgets are fixed; `boss crawl stop` stops at the next safe point. Exports and `crawl results` redact `security_id`, job IDs, and recruiter fields; `boss clean --privacy` removes crawl state, budgets, and exports. MCP `crawl_start` / `crawl_resume` require `research=true` and then poll `crawl_status` and read `crawl_results` by `run_id`, so one tool call does not block for minutes. A platform risk code or security page stops the task and returns a resume command. `boss agent crawl --run-id` only analyzes a completed run; a new real-Chrome crawl requires both `--research` and `--allow-crawl`.
+`crawl run` is sequential, checkpoints SQLite state, and incrementally writes JSON / CSV / XLSX artifacts. Request, detail, wall-clock, and retry budgets are fixed; `boss crawl stop` stops at the next safe point. Exports and `crawl results` redact `security_id`, selectors, and recruiter fields; `boss clean --privacy` removes crawl state, budgets, and exports. MCP `crawl_start` / `crawl_resume` require `research=true` and then poll `crawl_status` and read `crawl_results` by `run_id`, so one tool call does not block for minutes. A platform risk code or security page stops the task and returns a resume command. `boss agent crawl --run-id` only analyzes a completed run; a new real-Chrome crawl requires `operating_mode=research` and `--allow-crawl`.
 
 ## 🩺 Troubleshooting
 

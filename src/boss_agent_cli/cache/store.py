@@ -1,5 +1,6 @@
 import hashlib
 import json
+import secrets
 import sqlite3
 import time
 from pathlib import Path
@@ -116,6 +117,7 @@ class CacheStore:
 			CREATE TABLE IF NOT EXISTS crawl_jobs (
 				run_id TEXT NOT NULL,
 				job_key TEXT NOT NULL,
+				selector TEXT,
 				page_no INTEGER NOT NULL,
 				payload TEXT NOT NULL,
 				detail_done INTEGER NOT NULL DEFAULT 0,
@@ -129,6 +131,7 @@ class CacheStore:
 		""")
 		self._migrate_shortlist_records()
 		self._migrate_crawl_runs()
+		self._migrate_crawl_jobs()
 
 	def _migrate_shortlist_records(self) -> None:
 		columns = {
@@ -159,6 +162,26 @@ class CacheStore:
 		if "hook_results" not in columns:
 			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN hook_results TEXT NOT NULL DEFAULT '[]'")
 		self._conn.commit()
+
+	def _migrate_crawl_jobs(self) -> None:
+		columns = {row[1] for row in self._conn.execute("PRAGMA table_info(crawl_jobs)").fetchall()}
+		if "selector" not in columns:
+			self._conn.execute("ALTER TABLE crawl_jobs ADD COLUMN selector TEXT")
+		missing = self._conn.execute(
+			"SELECT run_id, job_key FROM crawl_jobs WHERE selector IS NULL OR selector = ''"
+		).fetchall()
+		for run_id, job_key in missing:
+			self._conn.execute(
+				"UPDATE crawl_jobs SET selector = ? WHERE run_id = ? AND job_key = ?",
+				(self._new_crawl_selector(), run_id, job_key),
+			)
+		self._conn.execute(
+			"CREATE UNIQUE INDEX IF NOT EXISTS crawl_jobs_run_selector ON crawl_jobs(run_id, selector)"
+		)
+		self._conn.commit()
+
+	def _new_crawl_selector(self) -> str:
+		return f"csel_{secrets.token_urlsafe(18)}"
 
 	# ── DrissionPage crawl task state ────────────────────────────────
 
@@ -258,29 +281,33 @@ class CacheStore:
 		self._conn.commit()
 
 	def put_crawl_job(self, run_id: str, job_key: str, page_no: int, payload: dict[str, Any], *, detail_done: bool) -> None:
+		existing = self._conn.execute(
+			"SELECT selector FROM crawl_jobs WHERE run_id = ? AND job_key = ?", (run_id, job_key)
+		).fetchone()
+		selector = str(existing[0]) if existing and existing[0] else self._new_crawl_selector()
 		self._conn.execute(
-			"INSERT OR REPLACE INTO crawl_jobs (run_id, job_key, page_no, payload, detail_done, updated_at) "
-			"VALUES (?, ?, ?, ?, ?, ?)",
-			(run_id, job_key, page_no, json.dumps(payload, ensure_ascii=False, sort_keys=True), int(detail_done), time.time()),
+			"INSERT OR REPLACE INTO crawl_jobs (run_id, job_key, selector, page_no, payload, detail_done, updated_at) "
+			"VALUES (?, ?, ?, ?, ?, ?, ?)",
+			(run_id, job_key, selector, page_no, json.dumps(payload, ensure_ascii=False, sort_keys=True), int(detail_done), time.time()),
 		)
 		self._conn.commit()
 
 	def get_crawl_job(self, run_id: str, job_key: str) -> dict[str, Any] | None:
 		row = self._conn.execute(
-			"SELECT page_no, payload, detail_done FROM crawl_jobs WHERE run_id = ? AND job_key = ?",
+			"SELECT selector, page_no, payload, detail_done FROM crawl_jobs WHERE run_id = ? AND job_key = ?",
 			(run_id, job_key),
 		).fetchone()
 		if row is None:
 			return None
-		return {"page_no": row[0], "payload": json.loads(row[1]), "detail_done": bool(row[2])}
+		return {"selector": row[0], "page_no": row[1], "payload": json.loads(row[2]), "detail_done": bool(row[3])}
 
 	def list_crawl_jobs(self, run_id: str) -> list[dict[str, Any]]:
 		rows = self._conn.execute(
-			"SELECT job_key, page_no, payload, detail_done FROM crawl_jobs WHERE run_id = ? ORDER BY page_no, rowid",
+			"SELECT job_key, selector, page_no, payload, detail_done FROM crawl_jobs WHERE run_id = ? ORDER BY page_no, rowid",
 			(run_id,),
 		).fetchall()
 		return [
-			{"job_key": row[0], "page_no": row[1], "payload": json.loads(row[2]), "detail_done": bool(row[3])}
+			{"job_key": row[0], "selector": row[1], "page_no": row[2], "payload": json.loads(row[3]), "detail_done": bool(row[4])}
 			for row in rows
 		]
 

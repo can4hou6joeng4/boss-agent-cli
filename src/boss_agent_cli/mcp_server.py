@@ -154,7 +154,8 @@ def _compliance_command_for_tool(tool_name: str) -> str:
 
 
 def _is_low_risk_blocked_tool(tool_name: str) -> bool:
-	return _compliance_command_for_tool(tool_name) in restricted_commands("assisted")
+	command = _compliance_command_for_tool(tool_name)
+	return command in restricted_commands("assisted") or tool_name in {"boss_crawl_start", "boss_crawl_resume"}
 
 TOOLS = [
 	Tool(
@@ -959,6 +960,7 @@ _LOW_RISK_BLOCKED_TOOLS = {
 	tool.name
 	for tool in TOOLS
 	if _is_low_risk_blocked_tool(tool.name)
+	and tool.name not in {"boss_crawl_start", "boss_crawl_resume"}
 }
 TOOLS = [tool for tool in TOOLS if tool.name not in _LOW_RISK_BLOCKED_TOOLS]
 _decorate_tool_descriptions()
@@ -1004,7 +1006,7 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 	if name == "crawl_start":
 		if arguments.get("research") is not True:
 			raise ValueError("boss_crawl_start requires research=true")
-		args = ["--research", "crawl", "start", arguments["query"], "--city", str(arguments["city"])]
+		args = ["crawl", "start", arguments["query"], "--city", str(arguments["city"])]
 		if "pages" in arguments:
 			args.extend(["--pages", str(arguments["pages"])])
 		if arguments.get("with_detail"):
@@ -1028,8 +1030,8 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 
 	if name == "crawl_shortlist":
 		args = ["crawl", "shortlist", str(arguments["run_id"])]
-		for job_id in arguments.get("job_ids") or []:
-			args.extend(["--job-id", str(job_id)])
+		for selector in arguments.get("selectors") or []:
+			args.extend(["--selector", str(selector)])
 		if arguments.get("all"):
 			args.append("--all")
 		if arguments.get("tags"):
@@ -1041,7 +1043,7 @@ def _build_args(tool_name: str, arguments: dict) -> list[str]:
 	if name == "crawl_resume":
 		if arguments.get("research") is not True:
 			raise ValueError("boss_crawl_resume requires research=true")
-		args = ["--research", "crawl", "resume", str(arguments["run_id"]), "--background"]
+		args = ["crawl", "resume", str(arguments["run_id"]), "--background"]
 		if arguments.get("pages") is not None:
 			args.extend(["--pages", str(arguments["pages"])])
 		if arguments.get("with_detail"):
@@ -1444,6 +1446,17 @@ async def list_tools() -> list[Tool]:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+	if name in {"boss_crawl_start", "boss_crawl_resume"} and arguments.get("research") is not True:
+		result = {
+			"ok": False,
+			"schema_version": "1.0",
+			"command": name.removeprefix("boss_"),
+			"data": None,
+			"pagination": None,
+			"error": {"code": "INVALID_PARAM", "message": f"{name} requires research=true", "recoverable": True},
+			"hints": {"next_actions": ["先设置 operating_mode=research，再以 research=true 确认本次任务"]},
+		}
+		return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 	if name in _LOW_RISK_BLOCKED_TOOLS:
 		result = {
 			"ok": False,

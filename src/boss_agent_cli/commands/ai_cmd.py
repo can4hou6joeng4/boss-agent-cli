@@ -146,7 +146,7 @@ def _build_fit_prompt(resume_text: str, jobs: list[dict[str, Any]]) -> str:
 		"output_schema": {
 			"results": [
 				{
-					"job_id": "string",
+					"selector": "string",
 					"title": "string",
 					"match_score": "0-100 integer",
 					"gaps": ["string"],

@@ -68,6 +68,9 @@ _POLICY_DEFINITIONS = {
 	"recruiter-resume": ("personal_data", "candidate_profile", "候选人在线简历/联系方式涉及个人信息。"),
 	"recruiter-reply": ("platform_write", "communication", "回复候选人属于平台写操作。"),
 	"recruiter-request-resume": ("platform_write", "candidate_profile", "请求候选人附件简历涉及个人信息授权。"),
+	"crawl": ("platform_collection", "job_listing", "批量采集会读取平台职位列表和详情。"),
+	"crawl-cdp": ("browser_debug_protocol", "browser_session_metadata", "采集会启动受隔离的 Chrome 调试会话。"),
+	"crawl-hook": ("page_script_injection", "user_provided_script", "Hook 会向页面注入用户提供的脚本。"),
 }
 
 _CAPABILITY_POLICIES = {
@@ -133,6 +136,13 @@ def require_compliance_allowed(ctx: click.Context, command: str) -> bool:
 		hints={**_COMPLIANCE_BLOCK_HINTS, "required_mode": RESEARCH_MODE},
 	)
 	return False
+
+
+def require_capability_mode(mode: str, command: str) -> None:
+	"""Raise a compact error when a non-CLI caller uses a blocked capability."""
+	policy = capability_policy(command)
+	if policy is not None and mode not in policy.allowed_modes:
+		raise ValueError(f"{command} 仅可在显式 operating_mode=research 下运行")
 
 
 def compliance_mode_data(ctx: click.Context) -> dict[str, Any]:

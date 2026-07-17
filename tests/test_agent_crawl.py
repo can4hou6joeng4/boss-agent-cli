@@ -52,6 +52,11 @@ def _init_resume(runner: CliRunner, tmp_path: Path) -> None:
 	assert result.exit_code == 0, result.output
 
 
+def _enable_research(runner: CliRunner, tmp_path: Path) -> None:
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "config", "set", "operating_mode", "research"])
+	assert result.exit_code == 0, result.output
+
+
 def _complete_run(tmp_path: Path, run_id: str = "run-1") -> None:
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
 		cache.create_crawl_run(run_id, _settings(tmp_path).as_dict(), str(tmp_path / "crawl" / "runs" / run_id))
@@ -66,7 +71,7 @@ def test_agent_crawl_completed_run_imports_then_ranks_only_that_run(tmp_path: Pa
 	_complete_run(tmp_path)
 	fake_ai = _FakeAIService({
 		"results": [
-			{"job_id": "job-1", "title": "职位 job-1", "match_score": 91, "gaps": [], "keyword_hits": ["Python"], "recommendation": "优先"},
+			{"selector": "csel_placeholder", "title": "职位 job-1", "match_score": 91, "gaps": [], "keyword_hits": ["Python"], "recommendation": "优先"},
 		],
 	})
 	monkeypatch.setattr("boss_agent_cli.commands.agent._create_ai_service", lambda ctx: fake_ai)
@@ -81,6 +86,8 @@ def test_agent_crawl_completed_run_imports_then_ranks_only_that_run(tmp_path: Pa
 	assert payload["command"] == "agent.crawl"
 	assert payload["data"]["shortlist"]["imported_count"] == 1
 	assert payload["data"]["results"][0]["match_score"] == 91
+	assert payload["data"]["results"][0]["selector"].startswith("csel_")
+	assert "job_id" not in payload["data"]["results"][0]
 	assert payload["data"]["summary"] == {"analyzed": 1, "missing_details": 0, "returned": 1}
 	assert len(fake_ai.messages) == 1
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
@@ -92,7 +99,7 @@ def test_agent_crawl_requires_explicit_permission_for_a_new_query(tmp_path: Path
 	result = runner.invoke(
 		cli,
 		[
-			"--data-dir", str(tmp_path), "--research", "--json", "agent", "crawl",
+			"--data-dir", str(tmp_path), "--json", "agent", "crawl",
 			"--query", "AI", "--city", "杭州", "--resume", "test-resume",
 		],
 	)
@@ -104,6 +111,7 @@ def test_agent_crawl_requires_explicit_permission_for_a_new_query(tmp_path: Path
 def test_agent_crawl_allow_crawl_runs_then_continues_the_local_pipeline(tmp_path: Path, monkeypatch) -> None:
 	runner = CliRunner()
 	_init_resume(runner, tmp_path)
+	_enable_research(runner, tmp_path)
 
 	def fake_create_and_run(service, settings):
 		service._cache.create_crawl_run("new-run", settings.as_dict(), str(tmp_path / "crawl" / "runs" / "new-run"))
@@ -115,13 +123,13 @@ def test_agent_crawl_allow_crawl_runs_then_continues_the_local_pipeline(tmp_path
 	monkeypatch.setattr("boss_agent_cli.commands.agent.CrawlService.create_and_run", fake_create_and_run)
 	monkeypatch.setattr(
 		"boss_agent_cli.commands.agent._create_ai_service",
-		lambda ctx: _FakeAIService({"results": [{"job_id": "job-1", "match_score": 80}]}),
+		lambda ctx: _FakeAIService({"results": [{"selector": "csel_placeholder", "match_score": 80}]}),
 	)
 
 	result = runner.invoke(
 		cli,
 		[
-			"--data-dir", str(tmp_path), "--research", "--json", "agent", "crawl",
+			"--data-dir", str(tmp_path), "--json", "agent", "crawl",
 			"--query", "AI", "--city", "杭州", "--allow-crawl", "--resume", "test-resume",
 		],
 	)
@@ -147,4 +155,4 @@ def test_agent_crawl_does_not_process_risk_stopped_runs(tmp_path: Path, monkeypa
 	assert result.exit_code == 1
 	payload = json.loads(result.output)
 	assert payload["error"]["code"] == "CRAWL_NOT_COMPLETED"
-	assert payload["error"]["recovery_action"] == "boss --research crawl resume run-1"
+	assert payload["error"]["recovery_action"] == "boss crawl resume run-1"

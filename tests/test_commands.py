@@ -1333,7 +1333,7 @@ def test_chat_snapshot_page_merge(mock_auth_cls, mock_client_cls, tmp_path):
 	assert result.exit_code == 0
 
 	# 验证快照包含两页的数据
-	with open(snapshot_dir / f"{today}.json") as f:
+	with open(snapshot_dir / f"{today}.json", encoding="utf-8") as f:
 		merged = json.load(f)
 	sids = {item["security_id"] for item in merged}
 	assert "sid_a" in sids      # page 1 保留

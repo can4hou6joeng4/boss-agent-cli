@@ -23,7 +23,7 @@ from boss_agent_cli.automation.storage import AutomationStore
 from boss_agent_cli.ai.service import AIServiceError
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands.ai_cmd import _build_fit_prompt, _create_ai_service
-from boss_agent_cli.commands.crawl import _settings_from_context, _transport_factory
+from boss_agent_cli.commands.crawl import _require_crawl_capabilities, _settings_from_context, _transport_factory
 from boss_agent_cli.crawler.operations import crawl_status, import_crawl_shortlist
 from boss_agent_cli.crawler.service import CrawlService
 from boss_agent_cli.display import handle_error_output, handle_output
@@ -81,15 +81,18 @@ def crawl_cmd(
 			message="必须且只能使用 --run-id 或 --query",
 		)
 		return
-	if query and (not allow_crawl or ctx.obj["operating_mode"] != "research"):
+	if query and not allow_crawl:
 		handle_error_output(
 			ctx,
 			"agent.crawl",
 			code="CRAWL_PERMISSION_REQUIRED",
-			message="Agent 默认不启动新的 crawl；需要同时传入全局 --research 和 --allow-crawl",
+			message="Agent 默认不启动新的 crawl；需要 operating_mode=research 和 --allow-crawl",
 			recoverable=True,
-			recovery_action="boss --research agent crawl --query <关键词> --city <城市> --allow-crawl --resume <简历名>",
+			recovery_action="boss config set operating_mode research; boss agent crawl --query <关键词> --city <城市> --allow-crawl --resume <简历名>",
 		)
+		return
+	if query and not _require_crawl_capabilities(ctx):
+		ctx.exit(1)
 		return
 	if query and not city:
 		handle_error_output(ctx, "agent.crawl", code="INVALID_PARAM", message="使用 --query 时必须提供 --city")
@@ -110,7 +113,6 @@ def crawl_cmd(
 					profile_path=None,
 					chrome_path=None,
 					cdp_port=None,
-					research=True,
 				)
 				outcome = CrawlService(
 					cache,
@@ -136,8 +138,8 @@ def crawl_cmd(
 				tags=("agent", "crawl"),
 				note=f"agent:crawl:{run_id}",
 			)
-			# Agent runs locally and may use restricted identifiers for shortlist linking.
-			crawl_jobs = [item["payload"] for item in cache.list_crawl_jobs(run_id or "")]
+			# Keep raw identifiers inside the local run while returning selectors to callers.
+			crawl_jobs = cache.list_crawl_jobs(run_id or "")
 			jobs, missing = _crawl_fit_jobs(cache, crawl_jobs)
 	except KeyError:
 		handle_error_output(ctx, "agent.crawl", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
@@ -172,7 +174,7 @@ def crawl_cmd(
 				"missing": missing,
 				"summary": {"analyzed": 0, "missing_details": len(missing)},
 			},
-			hints={"next_actions": [f"boss --research crawl resume {run_id} --with-detail"]},
+			hints={"next_actions": [f"boss crawl resume {run_id} --with-detail"]},
 		)
 		return
 
@@ -202,7 +204,7 @@ def crawl_cmd(
 	results = fit.get("results", [])
 	if not isinstance(results, list):
 		results = []
-	results = sorted(results, key=_fit_score, reverse=True)[:limit]
+	results = _public_fit_results(sorted(results, key=_fit_score, reverse=True)[:limit], jobs)
 	handle_output(
 		ctx,
 		"agent.crawl",
@@ -216,8 +218,8 @@ def crawl_cmd(
 		},
 		hints={
 			"next_actions": [
-				f"boss resume link {resume_name} <security_id> <job_id>",
 				f"boss crawl results {run_id}",
+				"boss shortlist list",
 			],
 		},
 	)
@@ -410,12 +412,14 @@ def _resume_text(data_dir: Path, resume_name: str) -> str | None:
 def _crawl_fit_jobs(cache: CacheStore, crawl_jobs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 	jobs: list[dict[str, Any]] = []
 	missing: list[dict[str, Any]] = []
-	for item in crawl_jobs:
+	for crawl_job in crawl_jobs:
+		item = crawl_job["payload"]
+		selector = str(crawl_job["selector"])
 		job_id = str(item.get("job_id") or "")
 		description = cache.get_job_desc(job_id) or str(item.get("post_description") or "")
 		if description:
 			jobs.append({
-				"job_id": job_id,
+				"selector": selector,
 				"title": item.get("title", ""),
 				"company": item.get("company", ""),
 				"city": item.get("city", ""),
@@ -424,12 +428,38 @@ def _crawl_fit_jobs(cache: CacheStore, crawl_jobs: list[dict[str, Any]]) -> tupl
 			})
 		else:
 			missing.append({
-				"job_id": job_id,
+				"selector": selector,
 				"title": item.get("title", ""),
 				"company": item.get("company", ""),
 				"status": "缺详情",
 			})
 	return jobs, missing
+
+
+def _public_fit_results(results: list[Any], jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	"""Replace local identifiers in AI fit output with the run-scoped selector."""
+	selectors = {str(job["selector"]) for job in jobs}
+	selectors_by_title = {
+		str(job["title"]): str(job["selector"])
+		for job in jobs
+		if sum(str(candidate["title"]) == str(job["title"]) for candidate in jobs) == 1
+	}
+	public: list[dict[str, Any]] = []
+	for result in results:
+		if not isinstance(result, dict):
+			continue
+		selector = str(result.get("selector") or "")
+		item = {
+			key: value
+			for key, value in result.items()
+			if key not in {"job_id", "security_id", "boss_name", "boss_title", "recruiter"}
+		}
+		if selector in selectors:
+			item["selector"] = selector
+		elif str(result.get("title") or "") in selectors_by_title:
+			item["selector"] = selectors_by_title[str(result["title"])]
+		public.append(item)
+	return public
 
 
 def _fit_crawl_jobs(svc: Any, resume_text: str, jobs: list[dict[str, Any]]) -> dict[str, Any]:

@@ -137,7 +137,11 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 
 			# 路径安全校验：禁止 .. 跳转
 			resolved = os.path.realpath(output_path)
-			if ".." in os.path.relpath(resolved, os.getcwd()):
+			try:
+				relative_output = os.path.relpath(resolved, os.getcwd())
+			except ValueError:
+				relative_output = resolved
+			if ".." in relative_output:
 				safe_dir = os.path.realpath(export_dir if 'export_dir' in dir() else data_dir)
 				if not resolved.startswith(safe_dir) and not resolved.startswith(os.path.realpath(os.getcwd())):
 					handle_error_output(

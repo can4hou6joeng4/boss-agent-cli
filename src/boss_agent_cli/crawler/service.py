@@ -15,7 +15,7 @@ from boss_agent_cli.crawler.hooks import (
 	HookInjection,
 	HookRegistrationError,
 )
-from boss_agent_cli.crawler.policy import RESEARCH_MODE, require_research
+from boss_agent_cli.compliance import require_capability_mode
 from boss_agent_cli.crawler.transport import CrawlRiskError, CrawlTransport
 
 
@@ -105,7 +105,7 @@ class CrawlOutcome:
 		return {
 			"run_id": self.run_id, "status": self.status, "next_page": self.next_page,
 			"pages_completed": self.pages_completed, "jobs_seen": self.jobs_seen, "detail_checks": self.detail_checks,
-			"checkpoint": {"next_page": self.next_page, "resume_command": f"boss --research crawl resume {self.run_id}"},
+			"checkpoint": {"next_page": self.next_page, "resume_command": f"boss crawl resume {self.run_id}"},
 			"output_paths": self.output_paths,
 			"requests_attempted": self.requests_attempted,
 			"detail_requests_attempted": self.detail_requests_attempted,
@@ -208,7 +208,10 @@ class CrawlService:
 
 	def create_and_run(self, settings: CrawlSettings) -> CrawlOutcome:
 		self._validate_settings(settings)
-		require_research(settings.operating_mode == RESEARCH_MODE, hook_profile=settings.hook_profile)
+		require_capability_mode(settings.operating_mode, "crawl")
+		require_capability_mode(settings.operating_mode, "crawl-cdp")
+		if settings.hook_profile != "none":
+			require_capability_mode(settings.operating_mode, "crawl-hook")
 		run_id = self.create(settings)
 		output_dir = self._data_dir / "crawl" / "runs" / run_id
 		return self._run(run_id, settings, next_page=1, output_dir=output_dir)
@@ -216,7 +219,10 @@ class CrawlService:
 	def create(self, settings: CrawlSettings) -> str:
 		"""Persist a new task so another process may run or resume it."""
 		self._validate_settings(settings)
-		require_research(settings.operating_mode == RESEARCH_MODE, hook_profile=settings.hook_profile)
+		require_capability_mode(settings.operating_mode, "crawl")
+		require_capability_mode(settings.operating_mode, "crawl-cdp")
+		if settings.hook_profile != "none":
+			require_capability_mode(settings.operating_mode, "crawl-hook")
 		run_id = uuid.uuid4().hex[:12]
 		output_dir = self._data_dir / "crawl" / "runs" / run_id
 		self._cache.create_crawl_run(run_id, settings.as_dict(), str(output_dir), status="queued")
@@ -236,7 +242,10 @@ class CrawlService:
 			raise KeyError(run_id)
 		settings = CrawlSettings.from_dict(run["params"])
 		active_mode = operating_mode or settings.operating_mode
-		require_research(active_mode == RESEARCH_MODE, hook_profile=settings.hook_profile)
+		require_capability_mode(active_mode, "crawl")
+		require_capability_mode(active_mode, "crawl-cdp")
+		if settings.hook_profile != "none":
+			require_capability_mode(active_mode, "crawl-hook")
 		settings = replace(settings, operating_mode=active_mode)
 		if pages is not None:
 			settings = replace(settings, pages=pages)

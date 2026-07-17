@@ -62,13 +62,13 @@ boss_crawl_start(query, city, pages, with_detail, research=true)
 → boss_ai_fit(resume)
 ```
 
-In the CLI, `boss agent crawl --run-id <run_id> --resume <resume-name>` consumes only a completed run and then performs shortlist + ai fit. Starting a real crawl through Agent requires explicit `--research --allow-crawl` authorization:
+In the CLI, `boss agent crawl --run-id <run_id> --resume <resume-name>` consumes only a completed run and then performs shortlist + ai fit. Starting a real crawl through Agent requires `operating_mode=research` plus `--allow-crawl` authorization:
 
 ```bash
-boss --research agent crawl --query "AI engineer" --city 杭州 --pages 3 --with-detail --allow-crawl --resume <resume-name>
+boss agent crawl --query "AI engineer" --city 杭州 --pages 3 --with-detail --allow-crawl --resume <resume-name>
 ```
 
-Hooks are disabled by default. Only when you have authorization may you explicitly pass `--hook-profile screenshot-full --hook-dir <directory containing SHA256SUMS>`; this project does not redistribute third-party scripts. To halt a task, call `boss_crawl_stop(run_id)` or `boss crawl stop <run_id>`. When `crawl_status` reports `risk_stopped` or `budget_stopped`, do not recreate the task or retry in a loop. Keep the `run_id`; after handling the page, use `boss_crawl_resume(run_id, research=true)` or `boss --research crawl resume <run_id>`.
+Hooks are disabled by default. Only when you have authorization may you explicitly pass `--hook-profile screenshot-full --hook-dir <directory containing SHA256SUMS>`; this project does not redistribute third-party scripts. To halt a task, call `boss_crawl_stop(run_id)` or `boss crawl stop <run_id>`. When `crawl_status` reports `risk_stopped` or `budget_stopped`, do not recreate the task or retry in a loop. Keep the `run_id`; after handling the page, use `boss_crawl_resume(run_id, research=true)` or `boss crawl resume <run_id>`.
 
 ### Recruiter boundary
 

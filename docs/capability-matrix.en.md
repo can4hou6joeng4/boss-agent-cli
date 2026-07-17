@@ -15,7 +15,7 @@ The default low-risk `assisted` mode remains local, read-only first, and user-tr
 | Environment diagnostics | `boss doctor` | No | Hybrid |
 | Config management | `boss config` | No | Local |
 | Cache cleanup | `boss clean` | No | Local |
-| Restricted research crawl | `boss --research crawl run/start/resume`, plus `configure/status/results/stop` | Yes | Isolated DrissionPage profile; MCP requires `research=true` and task coordination by run_id |
+| Restricted research crawl | `boss crawl run/start/resume`, plus `configure/status/results/stop` | Yes | Isolated DrissionPage profile; MCP requires `research=true` and task coordination by run_id |
 
 ## Job discovery
 
@@ -99,7 +99,7 @@ The default low-risk `assisted` mode remains local, read-only first, and user-tr
 | Recruiter chat list | `boss hr chat` | Yes | Restricted (blocked by default) |
 | Chat message history | `boss hr chatmsg <friend_id>` | Yes | Restricted (blocked by default) |
 | Recent-message summaries | `boss hr last-messages [--friend-id <id>]` | Yes | Restricted (blocked by default) |
-| Online resume view | `boss hr resume <geek_id> --job-id <id> --security-id <id>` | Yes | Restricted (blocked by default) |
+| Online resume view | `boss hr resume <geek_id> --selector <csel_...> --security-id <id>` | Yes | Restricted (blocked by default) |
 | Contact exchange | `boss hr resume --exchange --friend-id <friend_id> [--type wechat]` | Yes | Restricted (blocked by default) |
 | Reply to candidate | `boss hr reply <friend_id> <message>` | Yes | Restricted (blocked by default) |
 | Request attached resume | `boss hr request-resume <friend_id>` | Yes | Restricted (blocked by default) |

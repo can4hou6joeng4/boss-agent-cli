@@ -42,7 +42,7 @@ class TestSaveIndex:
 	def test_content_structure(self, tmp_path):
 		save_index(tmp_path, _SAMPLE_JOBS, source="search")
 		cache_file = tmp_path / "cache" / "index_cache.json"
-		data = json.loads(cache_file.read_text())
+		data = json.loads(cache_file.read_text(encoding="utf-8"))
 		assert data["source"] == "search"
 		assert data["count"] == 2
 		assert "saved_at" in data
@@ -51,7 +51,7 @@ class TestSaveIndex:
 	def test_preserves_fields(self, tmp_path):
 		save_index(tmp_path, _SAMPLE_JOBS)
 		cache_file = tmp_path / "cache" / "index_cache.json"
-		data = json.loads(cache_file.read_text())
+		data = json.loads(cache_file.read_text(encoding="utf-8"))
 		job = data["jobs"][0]
 		assert job["security_id"] == "sid_001"
 		assert job["skills"] == ["Go", "Docker"]

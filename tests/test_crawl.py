@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import sys
 import types
 from hashlib import sha256
@@ -8,9 +9,10 @@ from click.testing import CliRunner
 from openpyxl import load_workbook
 
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.config import DEFAULTS
 from boss_agent_cli.crawler.exporter import write_run_outputs
 from boss_agent_cli.crawler.hooks import HOOK_SCRIPT_NAMES, HookInjection, HookRegistrationError, inject_hook_profile
-from boss_agent_cli.crawler.operations import crawl_results
+from boss_agent_cli.crawler.operations import crawl_results, import_crawl_shortlist
 from boss_agent_cli.crawler.service import CrawlBudget, CrawlService, CrawlSettings, CrawlStopRequested
 from boss_agent_cli.crawler.transport import JOBLIST_TARGET, DrissionCrawlerSession
 from boss_agent_cli.main import cli
@@ -124,6 +126,11 @@ def _service(tmp_path: Path, transport_factory):
 		transport_factory=transport_factory,
 		budget_factory=lambda store: _NoDelayBudget(store),
 	)
+
+
+def _enable_research(runner: CliRunner, tmp_path: Path) -> None:
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "config", "set", "operating_mode", "research"])
+	assert result.exit_code == 0, result.output
 
 
 def test_screenshot_full_hook_registers_exactly_seven_user_scripts(tmp_path):
@@ -320,14 +327,52 @@ def test_public_results_redact_identifiers(tmp_path):
 	}, detail_done=False)
 	job = crawl_results(cache, "run-1")["jobs"][0]
 	assert "job_id" not in job and "security_id" not in job and "boss_name" not in job
+	assert job["selector"].startswith("csel_")
 
 
-def test_cli_rejects_assisted_mode_and_non_positive_pages(tmp_path):
+def test_crawl_selector_import_is_stable_private_and_validated(tmp_path):
+	cache = CacheStore(tmp_path / "cache.db")
+	cache.create_crawl_run("run-1", _settings(tmp_path).as_dict(), str(tmp_path / "crawl" / "runs" / "run-1"))
+	cache.put_crawl_job("run-1", "job-1", 1, {"job_id": "job-1", "security_id": "sec-1", "title": "职位"}, detail_done=False)
+	selector = crawl_results(cache, "run-1")["jobs"][0]["selector"]
+	assert selector == crawl_results(cache, "run-1")["jobs"][0]["selector"]
+
+	imported = import_crawl_shortlist(cache, "run-1", selectors=(selector,))
+	assert imported["imported"] == [{"selector": selector, "title": "职位"}]
+	for invalid in (("missing",), (selector, selector)):
+		try:
+			import_crawl_shortlist(cache, "run-1", selectors=invalid)
+		except ValueError:
+			pass
+		else:
+			raise AssertionError("expected selector validation error")
+
+
+def test_crawl_selector_migration_backfills_legacy_rows(tmp_path):
+	db_path = tmp_path / "legacy.db"
+	with sqlite3.connect(db_path) as connection:
+		connection.execute(
+			"CREATE TABLE crawl_jobs (run_id TEXT NOT NULL, job_key TEXT NOT NULL, page_no INTEGER NOT NULL, "
+			"payload TEXT NOT NULL, detail_done INTEGER NOT NULL DEFAULT 0, updated_at REAL NOT NULL, "
+			"PRIMARY KEY (run_id, job_key))"
+		)
+		connection.execute(
+			"INSERT INTO crawl_jobs VALUES (?, ?, ?, ?, ?, ?)",
+			("run-1", "job-1", 1, json.dumps({"job_id": "job-1"}), 0, 1.0),
+		)
+	with CacheStore(db_path) as cache:
+		item = cache.list_crawl_jobs("run-1")[0]
+		assert item["selector"].startswith("csel_")
+
+
+def test_cli_rejects_assisted_mode_and_non_positive_pages(tmp_path, monkeypatch):
+	monkeypatch.setitem(DEFAULTS, "operating_mode", "assisted")
 	runner = CliRunner()
 	assisted = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "run", "AI", "--city", "杭州"])
 	assert assisted.exit_code == 1
-	assert json.loads(assisted.output)["error"]["code"] == "INVALID_PARAM"
-	invalid_pages = runner.invoke(cli, ["--data-dir", str(tmp_path), "--research", "--json", "crawl", "run", "AI", "--city", "杭州", "--pages", "0"])
+	assert json.loads(assisted.output)["error"]["code"] == "COMPLIANCE_BLOCKED"
+	_enable_research(runner, tmp_path)
+	invalid_pages = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "run", "AI", "--city", "杭州", "--pages", "0"])
 	assert invalid_pages.exit_code == 1
 
 
@@ -335,7 +380,8 @@ def test_crawl_start_and_stop_require_research_and_record_kill_switch(tmp_path, 
 	launched: list[str] = []
 	monkeypatch.setattr("boss_agent_cli.commands.crawl._launch_background_resume", lambda data_dir, run_id, **kwargs: launched.append(run_id))
 	runner = CliRunner()
-	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--research", "--json", "crawl", "start", "AI", "--city", "杭州"])
+	_enable_research(runner, tmp_path)
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "start", "AI", "--city", "杭州"])
 	assert result.exit_code == 0, result.output
 	run_id = json.loads(result.output)["data"]["run_id"]
 	assert launched == [run_id]

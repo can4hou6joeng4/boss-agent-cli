@@ -86,7 +86,7 @@ def test_all_checks_pass(tmp_path):
 	assert code == 0
 	assert parsed["ok"] is True
 	# 核心逻辑检查项（不依赖本机工具链）应全部为 ok
-	env_dependent = {"patchright", "patchright_chromium", "browser", "auth_salt", "bridge_daemon"}
+	env_dependent = {"patchright", "patchright_chromium", "browser", "auth_salt", "bridge_daemon", "windows_uv_tool_path"}
 	for check in parsed["data"]["checks"]:
 		if check["name"] in env_dependent:
 			continue
