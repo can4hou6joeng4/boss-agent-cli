@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/logo.svg" width="112" alt="boss-agent-cli logo">
+
 # boss-agent-cli
 
 *🤖 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI —— 搜索 · 福利筛选 · 候选池 · JSON 信封，默认 assisted，支持显式 Research Mode。*
