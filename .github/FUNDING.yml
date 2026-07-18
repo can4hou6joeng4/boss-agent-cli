@@ -1,0 +1,5 @@
+# 赞助配置：GitHub 需先为账号开通 Sponsors，赞助按钮才会显示；未开通时此项静默无按钮、无副作用。
+# 若使用爱发电 / Ko-fi 等平台，改用下方 custom / ko_fi 字段（可删除 github 行）。
+github: [can4hou6joeng4]
+# custom: ["https://afdian.com/a/<your-id>"]
+# ko_fi: <username>

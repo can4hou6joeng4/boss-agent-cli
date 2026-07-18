@@ -1,0 +1,25 @@
+name: Triage cleanup
+
+# Issue 表单已在开 issue 时自动贴 triage（blank issue 已关闭），这里补上另一半：
+# 当维护者（OWNER / MEMBER / COLLABORATOR）评论一个仍挂着 triage 的 issue 时，自动摘掉该标签。
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+
+jobs:
+  remove-triage:
+    if: >-
+      github.event.issue.pull_request == null &&
+      contains(github.event.issue.labels.*.name, 'triage') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove triage label after maintainer response
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: gh issue edit "$NUMBER" --repo "$REPO" --remove-label triage
