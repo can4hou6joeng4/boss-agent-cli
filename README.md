@@ -37,6 +37,10 @@
 >
 > 💡 **极速订阅**： [专属链接](https://doloffer.com/friend/BEv3yvKS)（输入优惠码 `AI8888` 享 9 折特惠）
 
+## 🧭 为什么
+
+自动投递、批量打招呼这类求职脚本，本质是在替平台做它不希望自动化的事——账号被封只是时间问题。boss-agent-cli 反其道而行：**把「低风险、只读、你主动触发」的那部分交给终端和 Agent，把打招呼 / 投递 / 沟通这类敏感动作留给你在官网手动完成。** 你描述期望，Agent 负责搜索、筛选、整理候选岗位并输出结构化 JSON；`boss schema` 是能力真源，天然适配 Claude / Cursor 等 MCP 宿主。合规不是事后补丁，而是默认姿态。
+
 ## ⚠️ 合规边界
 
 默认启用 **Assisted Mode**：本地辅助 · 只读优先 · 用户主动触发。打招呼（greet / batch-greet）、投递、联系方式交换、招聘者候选人搜索 / 简历 / 聊天、消息回复等敏感能力默认阻断并返回 `COMPLIANCE_BLOCKED`；需要时请回到 BOSS 直聘平台官网由用户手动完成。仓库同时允许显式 `boss config set operating_mode research` 启用 **Research Mode**，用于有界的浏览器协议、反调试、风控适配和受控采集研究；该模式仍要求脱敏、checkpoint、停止开关和可审计脚本来源。
@@ -182,6 +186,10 @@ CLI (Click)
 欢迎 Issue / PR：`git clone` → `feat/xxx` 分支 → 写测试 → `python scripts/quality_baseline.py`（Windows 中文系统可先 `$env:PYTHONUTF8='1'`）→ PR。详见 [CONTRIBUTING.md](CONTRIBUTING.md)，上手路径见 [快速上手](docs/getting-started.md)。
 
 致谢 [geekgeekrun](https://github.com/geekgeekrun/geekgeekrun) · [boss-cli](https://github.com/jackwener/boss-cli) · [opencli](https://github.com/jackwener/opencli)。
+
+<a href="https://github.com/can4hou6joeng4/boss-agent-cli/graphs/contributors"><img src="https://contrib.rocks/image?repo=can4hou6joeng4/boss-agent-cli" alt="贡献者" /></a>
+
+如果它帮到了你，欢迎 [Star ⭐](https://github.com/can4hou6joeng4/boss-agent-cli) 或分享给正在找工作的人。
 
 ## ⚠️ 免责声明
 

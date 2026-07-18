@@ -30,6 +30,10 @@
 
 > 🎁 **[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=boss-agent-cli)** gives `boss ai` a full-modal, OpenAI-compatible backend — one key for DeepSeek, Qwen, GLM, Kimi, MiniMax, Claude, GPT, and more, with no per-vendor wiring. Just pick `--provider atlas` in `boss ai config` (`base_url=https://api.atlascloud.ai/v1`, default model `deepseek-ai/deepseek-v4-pro`); see [AI model integration](docs/integrations/ai-models.en.md#atlas-cloud-one-key-across-many-model-families) for setup. Budget-friendly [coding plan](https://www.atlascloud.ai/console/coding-plan).
 
+## 🧭 Why
+
+Auto-apply and batch-greet scripts automate exactly what the platform doesn't want automated — a ban is only a matter of time. boss-agent-cli goes the other way: **it hands the low-risk, read-only, user-triggered part to your terminal and your agent, and leaves the sensitive actions (greeting, applying, messaging) for you to do by hand on the official site.** You describe intent; the agent searches, filters, and organizes candidate jobs into structured JSON. `boss schema` is the source of truth, so it drops straight into Claude / Cursor and other MCP hosts. Compliance isn't a patch — it's the default posture.
+
 ## ⚠️ Compliance Boundary
 
 Assisted Mode is on by default: local assistance, read-only first, and user-triggered. Commands that greet (greet / batch-greet), apply, exchange contacts, search recruiter candidates, read candidate resumes / chats, or reply are blocked by default and return `COMPLIANCE_BLOCKED`; perform those actions manually on the official website. An explicit `boss config set operating_mode research` enables bounded browser-protocol, anti-debugging, risk-control adaptation, and controlled collection research, with redaction, checkpoints, stop controls, and auditable script provenance still required.
@@ -172,6 +176,10 @@ All state lives under `~/.boss-agent/` — encrypted tokens, cached searches, sh
 ## 🤝 Contributing
 
 See [CONTRIBUTING.en.md](CONTRIBUTING.en.md) and [Getting Started](docs/getting-started.en.md). TL;DR: fork → `feat/xxx` branch → write tests → `python scripts/quality_baseline.py` (on Chinese Windows, set `$env:PYTHONUTF8='1'` first) → PR.
+
+<a href="https://github.com/can4hou6joeng4/boss-agent-cli/graphs/contributors"><img src="https://contrib.rocks/image?repo=can4hou6joeng4/boss-agent-cli" alt="contributors" /></a>
+
+If this project helps you, a [Star ⭐](https://github.com/can4hou6joeng4/boss-agent-cli) or a share goes a long way.
 
 ## ⚠️ Disclaimer
 
