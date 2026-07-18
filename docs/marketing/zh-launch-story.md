@@ -7,7 +7,7 @@
 ## 标题候选
 
 - **A**：给 Claude / Cursor 接一个低风险求职 CLI
-- **B**：boss-agent-cli：35 个顶层命令 + 35 个默认低风险 MCP 工具
+- **B**：boss-agent-cli：36 个顶层命令 + 46 个默认低风险 MCP 工具
 - **C**：Agent First 的求职 CLI：搜索、筛选、整理候选岗位
 
 推荐 A，能直接说明这是 Agent 接入工具，不暗示自动投递或自动沟通。
@@ -52,7 +52,7 @@ boss shortlist add <security_id> <job_id>
 }
 ```
 
-当前能力面以 `boss schema` 为准：35 个顶层命令，`hr` 下 9 个一级招聘者子命令，MCP 默认暴露 35 个低风险工具。
+当前能力面以 `boss schema` 为准：36 个顶层命令，`hr` 下 9 个一级招聘者子命令，MCP 默认暴露 46 个低风险工具。
 
 ### 3. 三个设计决策
 
