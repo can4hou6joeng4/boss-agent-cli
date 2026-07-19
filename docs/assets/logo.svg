@@ -1,0 +1,19 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="boss-agent-cli logo">
+  <defs>
+    <linearGradient id="bac-bg" x1="8" y1="16" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2DD4BF"/>
+      <stop offset="1" stop-color="#0D9488"/>
+    </linearGradient>
+  </defs>
+  <!-- antenna: the "agent" signal -->
+  <line x1="64" y1="18" x2="64" y2="8" stroke="#0D9488" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="64" cy="6" r="5" fill="#134E4A"/>
+  <!-- badge -->
+  <rect x="8" y="16" width="112" height="104" rx="27" fill="url(#bac-bg)"/>
+  <!-- terminal screen -->
+  <rect x="26" y="40" width="76" height="56" rx="12" fill="#0F172A"/>
+  <!-- prompt chevron ">" -->
+  <path d="M43 60 L56 70 L43 80" stroke="#5EEAD4" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- cursor "_" -->
+  <rect x="63" y="74" width="21" height="6.5" rx="3.25" fill="#5EEAD4"/>
+</svg>

@@ -7,7 +7,7 @@
 ## Title Candidates
 
 - **A**: Show HN: I built a low-risk job-search CLI for Claude and Cursor
-- **B**: boss-agent-cli — 35 top-level commands + 35 default low-risk MCP tools
+- **B**: boss-agent-cli — 36 top-level commands + 46 default low-risk MCP tools
 - **C**: An agent-first CLI for searching, filtering, and organizing job leads
 
 Recommended: **A**. It frames the project as an agent integration without implying automated applications or outreach.
@@ -18,7 +18,7 @@ Recommended: **A**. It frames the project as an agent integration without implyi
 
 ### TL;DR
 
-`boss-agent-cli` is an open-source CLI for AI agents to handle the low-risk parts of job discovery and local organization on [BOSS Zhipin](https://www.zhipin.com/). Every command outputs a structured JSON envelope, `boss schema` is the capability source of truth, and MCP exposes 35 default low-risk tools for Claude Desktop, Cursor, and other MCP-compatible hosts.
+`boss-agent-cli` is an open-source CLI for AI agents to handle the low-risk parts of job discovery and local organization on [BOSS Zhipin](https://www.zhipin.com/). Every command outputs a structured JSON envelope, `boss schema` is the capability source of truth, and MCP exposes 46 default low-risk tools for Claude Desktop, Cursor, and other MCP-compatible hosts.
 
 ```bash
 uv tool install boss-agent-cli
@@ -67,7 +67,7 @@ After connecting MCP, an agent can run a low-risk chain such as search -> detail
 
 ### Current boundaries
 
-- `boss schema` currently exposes 35 top-level commands; `hr` has 9 first-level recruiter subcommands; MCP exposes 35 default low-risk tools
+- `boss schema` currently exposes 36 top-level commands; `hr` has 9 first-level recruiter subcommands; MCP exposes 46 default low-risk tools
 - `zhipin` covers the main candidate workflow; `zhilian` supports candidate-side read-only + local-assist parity; `qiancheng` remains a `NOT_SUPPORTED` placeholder
 - CI covers Python 3.10 / 3.11 / 3.12 / 3.13, ruff, mypy, docs consistency, and CodeQL
 - No telemetry, analytics, or cloud sync; adoption is measured through PyPI downloads and GitHub Insights only
