@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/logo.svg" width="112" alt="boss-agent-cli logo">
+
 # boss-agent-cli
 
 *🤖 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI —— 搜索 · 福利筛选 · 候选池 · JSON 信封，默认 assisted，支持显式 Research Mode。*
@@ -36,6 +38,10 @@
 > **Doloffer Guide** 致力于让优质 AI 工具的获取更简单。平台主打 GPT 与 Claude 等主流 AI 服务的正版会员充值，提供一站式订阅管理，主打安全稳定与无忧售后。
 >
 > 💡 **极速订阅**： [专属链接](https://doloffer.com/friend/BEv3yvKS)（输入优惠码 `AI8888` 享 9 折特惠）
+
+## 🧭 为什么
+
+自动投递、批量打招呼这类求职脚本，本质是在替平台做它不希望自动化的事——账号被封只是时间问题。boss-agent-cli 反其道而行：**把「低风险、只读、你主动触发」的那部分交给终端和 Agent，把打招呼 / 投递 / 沟通这类敏感动作留给你在官网手动完成。** 你描述期望，Agent 负责搜索、筛选、整理候选岗位并输出结构化 JSON；`boss schema` 是能力真源，天然适配 Claude / Cursor 等 MCP 宿主。合规不是事后补丁，而是默认姿态。
 
 ## ⚠️ 合规边界
 
@@ -182,6 +188,10 @@ CLI (Click)
 欢迎 Issue / PR：`git clone` → `feat/xxx` 分支 → 写测试 → `python scripts/quality_baseline.py`（Windows 中文系统可先 `$env:PYTHONUTF8='1'`）→ PR。详见 [CONTRIBUTING.md](CONTRIBUTING.md)，上手路径见 [快速上手](docs/getting-started.md)。
 
 致谢 [geekgeekrun](https://github.com/geekgeekrun/geekgeekrun) · [boss-cli](https://github.com/jackwener/boss-cli) · [opencli](https://github.com/jackwener/opencli)。
+
+<a href="https://github.com/can4hou6joeng4/boss-agent-cli/graphs/contributors"><img src="https://contrib.rocks/image?repo=can4hou6joeng4/boss-agent-cli" alt="贡献者" /></a>
+
+如果它帮到了你，欢迎 [Star ⭐](https://github.com/can4hou6joeng4/boss-agent-cli) 或分享给正在找工作的人。
 
 ## ⚠️ 免责声明
 
