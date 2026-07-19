@@ -624,6 +624,22 @@ def test_search_supports_url_and_multiselect_filters(mock_client_cls, mock_auth_
 	}
 
 
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_cache_key_includes_current_result_schema(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = json.dumps({"data": [], "pagination": None, "hints": None})
+
+	result = CliRunner().invoke(cli, ["search", "产品", "--job-type", "实习"])
+
+	assert result.exit_code == 0
+	cache_params = mock_cache.get_search.call_args.args[0]
+	assert cache_params["cache_schema"] == 2
+	mock_pipeline.assert_not_called()
+
+
 def test_search_rejects_non_boss_url():
 	runner = CliRunner()
 	result = runner.invoke(cli, ["search", "--url", "https://example.com/jobs?query=Python"])

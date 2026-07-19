@@ -21,6 +21,7 @@ from boss_agent_cli.display import (
 	render_batch_operation_summary,
 	render_message_panel,
 )
+from boss_agent_cli.search_filters import SearchFilterCriteria, prefilter_platform_job_type
 
 
 @click.command("greet")
@@ -150,9 +151,23 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 				return
 			platform_data = platform.unwrap_data(raw) or {}
 			job_list = platform_data.get("jobList", [])
+			criteria = SearchFilterCriteria(
+				query=query,
+				city=city,
+				salary=salary,
+				experience=experience,
+				education=education,
+				industry=industry,
+				scale=scale,
+				stage=stage,
+				job_type=job_type,
+			)
 
 			candidates = []
 			for raw_item in job_list:
+				matches, _ = prefilter_platform_job_type(raw_item, criteria, platform_name=platform.name)
+				if not matches:
+					continue
 				item = JobItem.from_api(raw_item)
 				if not cache.is_greeted(item.security_id):
 					candidates.append(item)

@@ -34,6 +34,8 @@ class FakeCache:
 
 
 class FakeClient:
+	name = "zhipin"
+
 	def __init__(self, pages: list[dict], descriptions: dict[str, str | Exception]):
 		self.pages = list(pages)
 		self.descriptions = descriptions
@@ -63,8 +65,15 @@ class FakeClient:
 		return {"zpData": {"jobCard": {"postDescription": value}}}
 
 
-def _make_job_raw(*, security_id: str, job_id: str, welfare: list[str] | None = None, lid: str = ""):
-	return {
+def _make_job_raw(
+	*,
+	security_id: str,
+	job_id: str,
+	welfare: list[str] | None = None,
+	lid: str = "",
+	job_type: int | None = None,
+):
+	raw = {
 		"encryptJobId": job_id,
 		"jobName": f"Job-{job_id}",
 		"brandName": f"Company-{job_id}",
@@ -84,6 +93,36 @@ def _make_job_raw(*, security_id: str, job_id: str, welfare: list[str] | None = 
 		"securityId": security_id,
 		"lid": lid,
 	}
+	if job_type is not None:
+		raw["jobType"] = job_type
+	return raw
+
+
+def test_pipeline_strict_internship_keeps_only_verified_response_type():
+	client = FakeClient(
+		pages=[{
+			"zpData": {
+				"hasMore": False,
+				"jobList": [
+					_make_job_raw(security_id="sec-intern", job_id="job-intern", job_type=4),
+					_make_job_raw(security_id="sec-campus", job_id="job-campus", job_type=5),
+					_make_job_raw(security_id="sec-unknown", job_id="job-unknown"),
+				],
+			},
+		}],
+		descriptions={},
+	)
+
+	result = run_search_pipeline(
+		client,
+		FakeCache(),
+		FakeLogger(),
+		criteria=SearchFilterCriteria(query="实习生", job_type="实习"),
+	)
+
+	assert [item["job_id"] for item in result.items] == ["job-intern"]
+	assert result.items[0]["raw_job_type"] == 4
+	assert result.items[0]["employment_type"] == "实习"
 
 
 def _welfare_conditions():

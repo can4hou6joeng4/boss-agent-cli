@@ -1,8 +1,9 @@
 from boss_agent_cli.api.endpoints import (
 	CITY_CODES, SALARY_CODES, EXPERIENCE_CODES,
+	JOB_TYPE_CODES,
 	CODE_ACCOUNT_RISK, CODE_STOKEN_EXPIRED, CODE_RATE_LIMITED,
 )
-from boss_agent_cli.api.models import JobItem
+from boss_agent_cli.api.models import JobDetail, JobItem
 
 
 def test_city_code_lookup():
@@ -19,6 +20,13 @@ def test_salary_code_lookup():
 def test_experience_code_lookup():
 	assert EXPERIENCE_CODES["应届"] == "108"
 	assert EXPERIENCE_CODES["3-5年"] == "104"
+
+
+def test_job_type_code_lookup_distinguishes_internship_from_part_time():
+	assert JOB_TYPE_CODES["全职"] == "1901"
+	assert JOB_TYPE_CODES["实习"] == "1902"
+	assert JOB_TYPE_CODES["兼职"] == "1903"
+	assert len(set(JOB_TYPE_CODES.values())) == 3
 
 
 def test_response_code_constants():
@@ -60,6 +68,10 @@ def test_job_item_from_api():
 		"bossTitle": "技术总监",
 		"bossOnline": True,
 		"securityId": "sec_xxx",
+		"jobType": 4,
+		"daysPerWeekDesc": "4天/周",
+		"leastMonthDesc": "3个月",
+		"jobLabels": ["4天/周", "3个月", "本科"],
 	}
 	job = JobItem.from_api(raw)
 	assert job.job_id == "abc123"
@@ -71,6 +83,11 @@ def test_job_item_from_api():
 	assert "双休" in job.welfare
 	assert job.industry == "互联网"
 	assert job.scale == "10000人以上"
+	assert job.raw_job_type == 4
+	assert job.employment_type == "实习"
+	assert job.days_per_week == "4天/周"
+	assert job.least_month == "3个月"
+	assert job.job_labels == ["4天/周", "3个月", "本科"]
 
 
 def test_job_item_to_dict():
@@ -100,6 +117,31 @@ def test_job_item_to_dict():
 	assert d["greeted"] is False
 	assert d["welfare"] == ["五险一金"]
 	assert d["skills"] == ["Golang"]
+
+
+def test_job_detail_preserves_internship_metadata():
+	raw = {
+		"jobInfo": {
+			"encryptJobId": "job_intern",
+			"jobName": "产品实习生",
+			"securityId": "sec_intern",
+			"jobType": 4,
+			"daysPerWeekDesc": "5天/周",
+			"leastMonthDesc": "3个月",
+			"payTypeDesc": "按天结算",
+		},
+		"bossInfo": {},
+		"brandComInfo": {},
+	}
+
+	detail = JobDetail.from_api(raw)
+	data = detail.to_dict()
+
+	assert data["raw_job_type"] == 4
+	assert data["employment_type"] == "实习"
+	assert data["days_per_week"] == "5天/周"
+	assert data["least_month"] == "3个月"
+	assert data["pay_type"] == "按天结算"
 
 
 def test_account_risk_error_raised_on_code_36():

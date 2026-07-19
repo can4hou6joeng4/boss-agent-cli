@@ -18,6 +18,10 @@ _SAMPLE_JOBS = [
 		"experience": "3-5年",
 		"education": "本科",
 		"skills": ["Go", "Docker"],
+		"raw_job_type": 4,
+		"employment_type": "实习",
+		"days_per_week": "4天/周",
+		"least_month": "3个月",
 	},
 	{
 		"security_id": "sid_002",
@@ -55,6 +59,21 @@ class TestSaveIndex:
 		job = data["jobs"][0]
 		assert job["security_id"] == "sid_001"
 		assert job["skills"] == ["Go", "Docker"]
+		assert job["raw_job_type"] == 4
+		assert job["employment_type"] == "实习"
+		assert job["days_per_week"] == "4天/周"
+		assert job["least_month"] == "3个月"
+
+	def test_legacy_jobs_get_safe_type_defaults(self, tmp_path):
+		save_index(tmp_path, _SAMPLE_JOBS)
+
+		job = get_job_by_index(tmp_path, 2)
+
+		assert job is not None
+		assert job["raw_job_type"] is None
+		assert job["employment_type"] == ""
+		assert job["days_per_week"] == ""
+		assert job["least_month"] == ""
 
 
 class TestTrySaveIndex:

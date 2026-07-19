@@ -29,6 +29,10 @@ def save_index(data_dir: Path, jobs: list[dict[str, Any]], source: str = "search
 			"experience": job.get("experience", ""),
 			"education": job.get("education", ""),
 			"skills": job.get("skills", []),
+			"raw_job_type": job.get("raw_job_type"),
+			"employment_type": job.get("employment_type", ""),
+			"days_per_week": job.get("days_per_week", ""),
+			"least_month": job.get("least_month", ""),
 		})
 
 	cache_data = {

@@ -127,6 +127,7 @@ def _invoke_batch_greet(*args, tmp_path, search_result=None, greeted_ids=None, i
 		mock_cache_cls.return_value.__exit__ = MagicMock(return_value=False)
 
 		mock_client = MagicMock()
+		mock_client.name = "zhipin"
 		mock_client.search_jobs.return_value = search_result or {
 			"zpData": {"jobList": [
 				{"encryptJobId": "j1", "securityId": "s1", "jobName": "前端", "brandName": "字节",
@@ -159,6 +160,45 @@ def test_batch_greet_dry_run(tmp_path):
 	assert code == 0
 	assert parsed["data"]["dry_run"] is True
 	assert parsed["data"]["count"] == 2
+
+
+def test_batch_greet_internship_dry_run_rejects_unverified_types(tmp_path):
+	def raw_job(job_id, security_id, title, job_type_marker):
+		job = {
+			"encryptJobId": job_id,
+			"securityId": security_id,
+			"jobName": title,
+			"brandName": "测试公司",
+			"salaryDesc": "150元/天",
+			"cityName": "杭州",
+			"jobExperience": "在校/应届",
+			"jobDegree": "本科",
+		}
+		if job_type_marker is not None:
+			job["jobType"] = job_type_marker
+		return job
+
+	search_result = {
+		"zpData": {
+			"jobList": [
+				raw_job("j5", "s5", "接受实习生", 5),
+				raw_job("jx", "sx", "实习生", None),
+				raw_job("j4", "s4", "产品实习生", 4),
+			],
+		},
+	}
+
+	code, parsed = _invoke_batch_greet(
+		"batch-greet", "产品", "--job-type", "实习", "--dry-run",
+		tmp_path=tmp_path,
+		search_result=search_result,
+	)
+
+	assert code == 0
+	assert parsed["data"]["count"] == 1
+	assert [item["security_id"] for item in parsed["data"]["candidates"]] == ["s4"]
+	assert parsed["data"]["candidates"][0]["raw_job_type"] == 4
+	assert parsed["data"]["candidates"][0]["employment_type"] == "实习"
 
 
 def test_batch_greet_skips_greeted(tmp_path):
@@ -269,6 +309,59 @@ def test_detail_with_job_id(tmp_path):
 	code, parsed = _invoke_detail("detail", "sid1", "--job-id", "j1", tmp_path=tmp_path)
 	assert code == 0
 	assert parsed["ok"] is True
+
+
+def test_detail_with_job_id_preserves_internship_metadata(tmp_path):
+	detail_result = {
+		"zpData": {
+			"jobInfo": {
+				"encryptJobId": "j1",
+				"jobName": "产品实习生",
+				"jobType": 4,
+				"daysPerWeekDesc": "5天/周",
+				"leastMonthDesc": "3个月",
+				"payTypeDesc": "按天结算",
+			},
+			"bossInfo": {},
+			"brandComInfo": {},
+		},
+	}
+
+	code, parsed = _invoke_detail(
+		"detail", "sid1", "--job-id", "j1",
+		tmp_path=tmp_path,
+		detail_result=detail_result,
+	)
+
+	assert code == 0
+	assert parsed["data"]["raw_job_type"] == 4
+	assert parsed["data"]["employment_type"] == "实习"
+	assert parsed["data"]["days_per_week"] == "5天/周"
+	assert parsed["data"]["least_month"] == "3个月"
+	assert parsed["data"]["pay_type"] == "按天结算"
+
+
+def test_build_job_from_card_preserves_internship_metadata():
+	from boss_agent_cli.commands.detail import build_job_from_card
+
+	result = build_job_from_card(
+		{
+			"encryptJobId": "j1",
+			"jobName": "运营实习生",
+			"jobType": 4,
+			"daysPerWeekDesc": "4天/周",
+			"leastMonthDesc": "2个月",
+			"payTypeDesc": "按天结算",
+		},
+		security_id="sid1",
+		greeted=False,
+	)
+
+	assert result["raw_job_type"] == 4
+	assert result["employment_type"] == "实习"
+	assert result["days_per_week"] == "4天/周"
+	assert result["least_month"] == "2个月"
+	assert result["pay_type"] == "按天结算"
 
 
 def test_detail_json_envelope(tmp_path):

@@ -16,6 +16,7 @@ def _ctx_mock(mock_cls):
 	instance = mock_cls.return_value
 	instance.__enter__ = lambda self: self
 	instance.__exit__ = lambda self, *a: None
+	instance.name = "zhipin"
 	instance.unwrap_data.side_effect = lambda response: (
 		response.get("zpData") if "zpData" in response else response.get("data")
 	)
@@ -158,6 +159,72 @@ def test_export_json_include_private_keeps_routing_fields(mock_auth_cls, mock_cl
 	data = json.loads(out_path.read_text(encoding="utf-8"))
 	assert data[0]["security_id"] == "s1"
 	assert data[0]["boss_name"] == "李"
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_internship_filter_keeps_only_verified_response_type(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	mock_client = _ctx_mock(mock_client_cls)
+	intern = _make_raw_job("产品实习生", security_id="intern")
+	intern.update({
+		"jobType": 4,
+		"daysPerWeekDesc": "4天/周",
+		"leastMonthDesc": "3个月",
+	})
+	non_intern = _make_raw_job("接受实习生", security_id="non_intern")
+	non_intern["jobType"] = 5
+	mock_client.search_jobs.return_value = _api_response([non_intern, intern])
+
+	out_path = tmp_path / "internships.json"
+	result = CliRunner().invoke(
+		cli,
+		[
+			"export", "产品", "--job-type", "实习", "--count", "2",
+			"--format", "json", "--include-private", "-o", str(out_path),
+		],
+	)
+
+	assert result.exit_code == 0
+	data = json.loads(out_path.read_text(encoding="utf-8"))
+	assert [job["security_id"] for job in data] == ["intern"]
+	assert data[0]["raw_job_type"] == 4
+	assert data[0]["employment_type"] == "实习"
+	assert data[0]["days_per_week"] == "4天/周"
+	assert data[0]["least_month"] == "3个月"
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_internship_filter_continues_after_rejected_page(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	mock_client = _ctx_mock(mock_client_cls)
+	page1 = [_make_raw_job(f"非实习 {index}", security_id=f"other_{index}") for index in range(15)]
+	for job in page1:
+		job["jobType"] = 5
+	page2 = [
+		{**_make_raw_job("产品实习生", security_id="intern_1"), "jobType": 4},
+		{**_make_raw_job("运营实习生", security_id="intern_2"), "jobType": 4},
+	]
+
+	def search_side_effect(query, **filters):
+		if filters.get("page") == 1:
+			return _api_response(page1, has_more=True)
+		return _api_response(page2, has_more=False)
+
+	mock_client.search_jobs.side_effect = search_side_effect
+	out_path = tmp_path / "internships-paginated.json"
+
+	result = CliRunner().invoke(
+		cli,
+		[
+			"export", "产品", "--job-type", "实习", "--count", "2",
+			"--format", "json", "--include-private", "-o", str(out_path),
+		],
+	)
+
+	assert result.exit_code == 0
+	data = json.loads(out_path.read_text(encoding="utf-8"))
+	assert [job["security_id"] for job in data] == ["intern_1", "intern_2"]
+	assert mock_client.search_jobs.call_count == 2
 
 
 # ── 文件输出 · HTML ──────────────────────────────────────────────────
