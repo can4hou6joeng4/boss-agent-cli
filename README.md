@@ -204,7 +204,7 @@ CLI (Click)
 感谢每一位让 boss-agent-cli 变得更好的贡献者，去关注他们！❤️
 
 <a href="https://github.com/can4hou6joeng4/boss-agent-cli/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=can4hou6joeng4/boss-agent-cli" alt="贡献者" />
+  <img src="./CONTRIBUTORS.svg" alt="贡献者" width="1000" />
 </a>
 
 ## ❤️ 支持

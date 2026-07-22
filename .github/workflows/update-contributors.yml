@@ -1,0 +1,37 @@
+name: Update Contributors
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 0" # 每周日 00:00 UTC
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update-contributors:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate contributors SVG
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/update_contributors.py
+
+      # master 为保护分支,且 GITHUB_TOKEN 发起的 PR 不会触发必需检查,
+      # 因此有变更时开 PR,由维护者手动合并。
+      - name: Create PR if changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: update contributors [skip ci]"
+          title: "chore: update contributors"
+          body: "每周自动刷新 CONTRIBUTORS.svg(scripts/update_contributors.py)。"
+          branch: chore/update-contributors
+          add-paths: CONTRIBUTORS.svg
+          delete-branch: true
