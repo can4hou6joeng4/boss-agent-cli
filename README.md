@@ -197,25 +197,23 @@ CLI (Click)
 
 所有状态在 `~/.boss-agent/`：加密登录态、搜索缓存、候选池、本地简历、AI 配置与外置模型登记。模型权重不进入 Python 包；除显式发起的 API 调用或本地模型下载外，数据不离开本机。
 
-## 🤝 贡献 & 致谢
+## 🤝 贡献者
 
 欢迎 Issue / PR：`git clone` → `feat/xxx` 分支 → 写测试 → `python scripts/quality_baseline.py`（Windows 中文系统可先 `$env:PYTHONUTF8='1'`）→ PR。详见 [CONTRIBUTING.md](CONTRIBUTING.md)，上手路径见 [快速上手](docs/getting-started.md)。
 
-致谢 [geekgeekrun](https://github.com/geekgeekrun/geekgeekrun) · [boss-cli](https://github.com/jackwener/boss-cli) · [opencli](https://github.com/jackwener/opencli)。
+感谢每一位让 boss-agent-cli 变得更好的贡献者，去关注他们！❤️
 
-<a href="https://github.com/can4hou6joeng4/boss-agent-cli/graphs/contributors"><img src="https://contrib.rocks/image?repo=can4hou6joeng4/boss-agent-cli" alt="贡献者" /></a>
-
-如果它帮到了你，欢迎 [Star ⭐](https://github.com/can4hou6joeng4/boss-agent-cli) 或分享给正在找工作的人。
-
-## ⭐ Star History
-
-<a href="https://star-history.com/#can4hou6joeng4/boss-agent-cli&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=can4hou6joeng4/boss-agent-cli&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=can4hou6joeng4/boss-agent-cli&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=can4hou6joeng4/boss-agent-cli&type=Date" />
-  </picture>
+<a href="https://github.com/can4hou6joeng4/boss-agent-cli/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=can4hou6joeng4/boss-agent-cli" alt="贡献者" />
 </a>
+
+## ❤️ 支持
+
+- 如果它帮到了你，最直接的支持是点一个 [Star ⭐](https://github.com/can4hou6joeng4/boss-agent-cli)，或分享给正在找工作的人。
+- 用出问题、有新想法，欢迎提 [Issue](https://github.com/can4hou6joeng4/boss-agent-cli/issues)；想动手就直接上 PR。
+- 想看看船队的其他船，欢迎靠泊母港 [bobochang.cn](https://bobochang.cn) 🧭，航海记录在[掘金专栏](https://juejin.cn/user/1187904004821262)。
+
+本项目受益于 [geekgeekrun](https://github.com/geekgeekrun/geekgeekrun) · [boss-cli](https://github.com/jackwener/boss-cli) · [opencli](https://github.com/jackwener/opencli)，一并致谢。
 
 ## ⚠️ 免责声明
 
