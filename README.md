@@ -215,6 +215,15 @@ CLI (Click)
 
 本项目受益于 [geekgeekrun](https://github.com/geekgeekrun/geekgeekrun) · [boss-cli](https://github.com/jackwener/boss-cli) · [opencli](https://github.com/jackwener/opencli)，一并致谢。
 
+## ⭐ Star History
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/star-history-dark.svg">
+  <img alt="Star History" src="docs/assets/star-history.svg" width="100%">
+</picture>
+
+由 [mystarhistory](https://github.com/carsteneu/mystarhistory) 本地生成的静态 SVG，与仓库同源、不依赖第三方服务。
+
 ## ⚠️ 免责声明
 
 本项目仅用于学习交流和本地辅助，使用时请遵守相关法律法规、BOSS 直聘平台用户协议和隐私政策。默认低风险模式会阻断自动触达、批量操作、规避风控和候选人个人信息处理链路；任何投递、沟通、联系方式交换、招聘者候选人处理都应回到平台官网由用户手动完成。因不当使用产生的一切后果由使用者自行承担，与本项目作者无关。
