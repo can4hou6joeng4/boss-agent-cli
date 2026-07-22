@@ -6,6 +6,7 @@
 svgWidth=1000 avatarSize=72 avatarMargin=45 userNameHeight=20
 """
 import base64, json, math, os, urllib.request
+from urllib.parse import urlparse
 
 REPO = "can4hou6joeng4/boss-agent-cli"
 EXCLUDE = {"github-actions", "web-flow", "dependabot", "claude"}
@@ -15,7 +16,7 @@ OUT = os.path.join(os.path.dirname(__file__), "..", "CONTRIBUTORS.svg")
 def fetch(url, raw=False):
     req = urllib.request.Request(url, headers={"User-Agent": "contributors-svg"})
     token = os.environ.get("GITHUB_TOKEN")
-    if token and "api.github.com" in url:
+    if token and urlparse(url).hostname == "api.github.com":
         req.add_header("Authorization", f"Bearer {token}")
     with urllib.request.urlopen(req, timeout=30) as r:
         data = r.read()
