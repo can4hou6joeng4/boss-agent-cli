@@ -27,7 +27,7 @@ jobs:
       # master 为保护分支,且 GITHUB_TOKEN 发起的 PR 不会触发必需检查,
       # 因此有变更时开 PR,由维护者手动合并。
       - name: Create PR if changed
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: "chore: update contributors [skip ci]"
           title: "chore: update contributors"
