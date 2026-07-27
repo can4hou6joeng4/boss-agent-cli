@@ -185,6 +185,7 @@ def test_maintainer_docs_cover_open_source_governance():
 	assert "test (3.11)" in branch
 	assert "test (3.12)" in branch
 	assert "test (3.13)" in branch
+	assert "test (3.14)" in branch
 	assert "lint" in branch
 	assert "typecheck" in branch
 	assert "docs" in branch
@@ -300,14 +301,16 @@ def test_ci_workflow_runs_p0_quality_gate():
 		"uv python install 3.11",
 		"uv sync --all-extras",
 		"uv run python scripts/quality_baseline.py",
+		"uv run python scripts/smoke_p0.py",
 	]
 	assert "scripts/quality_baseline.py" in raw_workflow
+	assert "BOSS_SMOKE_DRY_RUN" in raw_workflow
 
 
 def test_quality_baseline_script_matches_blocking_p0_commands():
 	content = read("scripts/quality_baseline.py")
 
-	assert '("ruff", ("ruff", "check", "src/boss_agent_cli", "tests", "--output-format=concise"))' in content
+	assert '("ruff", ("ruff", "check", "src/boss_agent_cli", "tests", "scripts", "--output-format=concise"))' in content
 	assert '("pytest", ("pytest", "-q"))' in content
 	assert '("mypy", ("mypy", "src/boss_agent_cli"))' in content
 	assert "--skip-mypy" in content

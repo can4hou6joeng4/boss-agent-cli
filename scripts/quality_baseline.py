@@ -21,7 +21,7 @@ from typing import Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-	("ruff", ("ruff", "check", "src/boss_agent_cli", "tests", "--output-format=concise")),
+	("ruff", ("ruff", "check", "src/boss_agent_cli", "tests", "scripts", "--output-format=concise")),
 	("pytest", ("pytest", "-q")),
 	("mypy", ("mypy", "src/boss_agent_cli")),
 )

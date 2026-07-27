@@ -5,12 +5,16 @@ The default branch is `master`. Keep branch protection aligned with the quality 
 ## Required Settings
 
 - Require a pull request before merging.
-- Require at least 1 approving review.
 - Enforce rules for administrators.
 - Disable force pushes.
 - Disable branch deletions.
 - Require conversation resolution when review threads are used for blocking feedback.
 - Require status checks before merging.
+
+> Approving reviews are intentionally **not** required. This is a single-maintainer
+> repository with `enforce_admins` enabled, so requiring an approval would make the
+> maintainer's own release and fix PRs unmergeable. The blocking gate here is the
+> status-check set below plus admin enforcement, not human approval.
 
 ## Required status checks
 
@@ -21,10 +25,11 @@ Select the concrete check contexts emitted by `.github/workflows/ci.yml`:
 - `test (3.11)`
 - `test (3.12)`
 - `test (3.13)`
+- `test (3.14)`
 - `lint`
 - `typecheck`
 
-`P0 quality baseline` is the canonical blocking quality gate. It runs `scripts/quality_baseline.py`, which covers ruff, the full offline pytest suite, and mypy with the same command used locally.
+`P0 quality baseline` is the canonical blocking quality gate. It runs `scripts/quality_baseline.py`, which covers ruff (`src/boss_agent_cli`, `tests`, `scripts`), the full offline pytest suite, and mypy with the same command used locally. The same job also runs `scripts/smoke_p0.py` in offline dry-run mode so the JSON-envelope smoke contract is checked on every push and pull request.
 
 The project may also require documentation checks when `.github/workflows/docs.yml` is enabled:
 
@@ -51,18 +56,16 @@ The response should show:
 }
 ```
 
-Then verify the pull request review gate through its dedicated endpoint:
+Then verify that the required status check contexts match the CI matrix:
 
 ```bash
-gh api repos/can4hou6joeng4/boss-agent-cli/branches/master/protection/required_pull_request_reviews
+gh api repos/can4hou6joeng4/boss-agent-cli/branches/master/protection \
+  --jq '.required_status_checks.contexts'
 ```
 
-The response should show:
-
-```json
-{
-	"required_approving_review_count": 1
-}
-```
+Every `test (3.x)` entry in `.github/workflows/ci.yml` must appear in that list. When a
+Python version is added to the matrix, add its context **after** the new job has passed
+at least once on `master` — marking a context that has never reported as required will
+block every subsequent merge.
 
 If `required_status_checks` is missing, configure required status checks in GitHub repository settings before treating branch protection as complete.
