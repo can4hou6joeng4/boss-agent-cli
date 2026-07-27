@@ -104,6 +104,8 @@ boss config set platform zhilian          # 设为默认
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
+不想在本机配 Python 工具链，可用仓库自带的容器：`BOSS_UID=$(id -u) BOSS_GID=$(id -g) docker compose run --rm boss-mcp`。镜像刻意不含浏览器内核 —— 先在宿主机 `boss login`，再把 `~/.boss-agent` 挂进去，详见 [Docker 接入](docs/integrations/docker.md)。
+
 OpenCode 源码项目可直接使用仓库示例：
 
 ```bash

@@ -18,6 +18,7 @@ Current example baseline:
 | Windsurf | You use Cascade Agent with MCP or `.windsurfrules` | [Windsurf](integrations/windsurf.md) |
 | Shell Agent | You have any shell-capable agent framework or a homegrown orchestrator | [Shell Agent](integrations/shell-agent.md) |
 | Python SDK | You want business code, LangGraph, or a custom agent to call model SDKs directly | [Python SDK](integrations/python-sdk.md) |
+| Docker | You would rather not set up a local Python toolchain (Apple Silicon setups in particular); login still happens on the host | [Docker](integrations/docker.md) |
 
 ## Picking the right host
 

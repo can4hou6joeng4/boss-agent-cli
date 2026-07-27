@@ -1,0 +1,62 @@
+# 构建上下文只需要打包 boss-agent-cli 所需的最小集合。
+# 目的有二：一是让构建更快、镜像层更稳定；二是避免把本地状态、
+# Agent 工具链目录和演示素材意外带进镜像。
+
+# 版本控制与 CI
+.git
+.gitignore
+.gitattributes
+.github
+
+# Python 构建与缓存产物
+.venv*
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+
+# 本地 Agent 工具链与草稿（同时也在 .gitignore 里）
+.trellis/
+.claude/
+.codex/
+.agents/
+.ace-tool/
+.worktrees/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+my-boss-profile.md
+
+# 运行期数据，绝不能进镜像
+crawl-data/
+
+# 运行时用不到的资产与开发目录
+demo/
+designs/
+docs/
+evals/
+examples/
+extension/
+mcp-server/
+scripts/
+tests/
+CONTRIBUTORS.svg
+*.gif
+*.mp4
+*.pdf
+*.html
+
+# 容器自身的定义文件（改它们不该让依赖层失效）
+Dockerfile
+.dockerignore
+docker-compose.yml

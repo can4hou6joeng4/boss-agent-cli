@@ -1,0 +1,23 @@
+# boss-agent-cli 容器编排 —— 只跑 MCP server 与只读 / 本地命令。
+#
+# 前置：登录必须在宿主机完成。容器里刻意没有浏览器内核，`boss login` 跑不起来。
+#   uv tool install boss-agent-cli && boss login
+#
+# 常用姿势（把宿主 UID 传进去，避免挂载目录出现属主错乱的文件）：
+#   BOSS_UID=$(id -u) BOSS_GID=$(id -g) docker compose run --rm boss-mcp
+#
+# 完整说明见 docs/integrations/docker.md。
+
+services:
+  boss-mcp:
+    build:
+      context: .
+    image: boss-agent-cli:local
+    # MCP stdio 传输要求 stdin 保持打开；tty 必须关闭，否则 JSON-RPC 会被终端处理干扰。
+    stdin_open: true
+    tty: false
+    # 与宿主机用户对齐。未设置时回落到镜像内的 1000，此时挂载目录若属主不同会写不进去。
+    user: "${BOSS_UID:-1000}:${BOSS_GID:-1000}"
+    volumes:
+      - ${BOSS_DATA_DIR:-~/.boss-agent}:/data/.boss-agent
+    restart: "no"

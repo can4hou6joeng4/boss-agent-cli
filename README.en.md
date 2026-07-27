@@ -97,6 +97,8 @@ Start here: [Agent Quickstart](docs/agent-quickstart.en.md) · [Capability Matri
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
+Prefer not to set up a local Python toolchain? Use the bundled container: `BOSS_UID=$(id -u) BOSS_GID=$(id -g) docker compose run --rm boss-mcp`. The image deliberately ships no browser kernel — run `boss login` on the host first, then mount `~/.boss-agent`. See [Docker integration](docs/integrations/docker.md).
+
 OpenCode can use the checked-in example directly:
 
 ```bash

@@ -18,6 +18,7 @@
 | Windsurf | Cascade Agent + MCP 或 `.windsurfrules` | [Windsurf](integrations/windsurf.md) |
 | Shell Agent | 任意支持 shell tool 的 Agent 框架或自建编排器 | [Shell Agent](integrations/shell-agent.md) |
 | Python SDK 直调 | 自建 Agent / LangGraph / 业务代码直接驱动 OpenAI 或 Claude SDK | [Python SDK](integrations/python-sdk.md) |
+| Docker 容器 | 不想在本机配 Python 工具链（如 Apple Silicon 环境折腾）；登录仍在宿主机完成 | [Docker](integrations/docker.md) |
 
 ## 选型建议
 
