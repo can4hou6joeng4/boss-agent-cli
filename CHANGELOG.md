@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-07-27
+
 ### Added
 - 新增 `boss favorites list/sync`：读取 BOSS 职位收藏（geekGetJob?tag=4）并同步到本地候选池，让 `boss ai analyze-jd/fit/resume-optimize/chat-coach` 能处理用户真正感兴趣的职位。默认只读、assisted 放行、用户主动触发；sync 远端只读拉取后本地 upsert（按稳定 job_id 去重，刷新动态 security_id 并保留首次收藏时间），list 单页预览不落库且输出脱敏 `security_id`/`job_id` 为 `[REDACTED]`（完整值落库后从 `shortlist list` 取，遵循现有导出脱敏约定）。MCP 仅暴露 `boss_favorites_list`（只读预览），sync 不对 MCP 暴露以保持 assisted 主动触发边界。查看职位详情需 sync 落库后用 `boss --json shortlist list` 取完整 `security_id`/`job_id`，再 `boss detail <security_id> --job-id <job_id>` 查看（list 预览已脱敏；detail 以 sid 为必填位置参数，httpx 快速通道只用 job_id）。
 - 搜索结果与详情输出新增原始岗位类型、规范化用工类型、每周实习天数、最短实习周期等字段；导出与索引缓存同步保留这些元数据。
