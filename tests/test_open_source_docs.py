@@ -228,6 +228,14 @@ def test_pull_request_template_requires_quality_and_risk_checks():
 	assert "（或英文等价）" not in template
 
 
+def test_update_contributors_pr_runs_required_checks():
+	workflow = load_yaml(".github/workflows/update-contributors.yml")
+	create_pr = workflow["jobs"]["update-contributors"]["steps"][2]["with"]
+
+	assert create_pr["commit-message"] == "chore: 更新贡献者名单"
+	assert "skip ci" not in create_pr["commit-message"].lower()
+
+
 def test_issue_templates_collect_contract_and_platform_context():
 	bug = read(".github/ISSUE_TEMPLATE/bug_report.yml")
 	feature = read(".github/ISSUE_TEMPLATE/feature_request.yml")

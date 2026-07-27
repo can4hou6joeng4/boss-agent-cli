@@ -29,7 +29,7 @@ jobs:
       - name: Create PR if changed
         uses: peter-evans/create-pull-request@v8
         with:
-          commit-message: "chore: update contributors [skip ci]"
+          commit-message: "chore: 更新贡献者名单"
           title: "chore: update contributors"
           body: "每周自动刷新 CONTRIBUTORS.svg(scripts/update_contributors.py)。"
           branch: chore/update-contributors
