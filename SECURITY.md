@@ -2,10 +2,15 @@
 
 ## Supported Versions
 
+只有最新的 minor 版本会收到安全修复。项目发布频繁（见 [CHANGELOG.md](CHANGELOG.md)），
+不维护历史分支——修复以新版本形式发出，请升级到最新版而不是期待补丁回移。
+
 | Version | Supported          |
 |---------|--------------------|
-| 1.1.x   | :white_check_mark: |
-| < 1.0   | :x:                |
+| 1.17.x  | :white_check_mark: |
+| < 1.17  | :x:                |
+
+升级：`uv tool install --upgrade boss-agent-cli`（或 `pip install -U boss-agent-cli`）。
 
 ## Reporting a Vulnerability
 

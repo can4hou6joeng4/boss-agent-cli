@@ -183,7 +183,7 @@ CLI (Click)
             └─ output.py → JSON envelope → stdout
 ```
 
-**Invariants**: stdout is JSON-only · stderr holds logs · `exit 0/1` · errors carry `code/recoverable/recovery_action` · `boss schema` is the authoritative capability source. **Stack**: Python ≥ 3.10 · Click · httpx · patchright / CDP / Bridge (login, export, and explicit Research Mode adapters) · cryptography · sqlite3 (WAL) · pytest (1400+).
+**Invariants**: stdout is JSON-only · stderr holds logs · `exit 0/1` · errors carry `code/recoverable/recovery_action` · `boss schema` is the authoritative capability source. **Stack**: Python ≥ 3.10 · Click · httpx · patchright / CDP / Bridge (login, export, and explicit Research Mode adapters) · cryptography · sqlite3 (WAL) · pytest (1600+).
 
 ## 🔌 Local Storage
 
@@ -193,9 +193,28 @@ All state lives under `~/.boss-agent/` — encrypted tokens, cached searches, sh
 
 See [CONTRIBUTING.en.md](CONTRIBUTING.en.md) and [Getting Started](docs/getting-started.en.md). TL;DR: fork → `feat/xxx` branch → write tests → `python scripts/quality_baseline.py` (on Chinese Windows, set `$env:PYTHONUTF8='1'` first) → PR.
 
-<a href="https://github.com/can4hou6joeng4/boss-agent-cli/graphs/contributors"><img src="https://contrib.rocks/image?repo=can4hou6joeng4/boss-agent-cli" alt="contributors" /></a>
+Thanks to everyone who has made boss-agent-cli better — go follow them! ❤️
 
-If this project helps you, a [Star ⭐](https://github.com/can4hou6joeng4/boss-agent-cli) or a share goes a long way.
+<a href="https://github.com/can4hou6joeng4/boss-agent-cli/graphs/contributors">
+  <img src="./CONTRIBUTORS.svg" alt="contributors" width="1000" />
+</a>
+
+## ❤️ Support
+
+- If this project helps you, the most direct support is a [Star ⭐](https://github.com/can4hou6joeng4/boss-agent-cli), or sharing it with someone who is job hunting.
+- Hit a problem or have an idea? Open an [Issue](https://github.com/can4hou6joeng4/boss-agent-cli/issues) — or go straight to a PR.
+- Curious about the rest of the fleet? Drop anchor at the home port [bobochang.cn](https://bobochang.cn) 🧭.
+
+This project benefits from [geekgeekrun](https://github.com/geekgeekrun/geekgeekrun) · [boss-cli](https://github.com/jackwener/boss-cli) · [opencli](https://github.com/jackwener/opencli) — thanks to all of them.
+
+## ⭐ Star History
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/star-history-dark.svg">
+  <img alt="Star History" src="docs/assets/star-history.svg" width="100%">
+</picture>
+
+A static SVG generated locally with [mystarhistory](https://github.com/carsteneu/mystarhistory) — served from this repo, with no third-party dependency.
 
 ## ⚠️ Disclaimer
 

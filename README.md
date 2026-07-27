@@ -191,7 +191,7 @@ CLI (Click)
 `QianchengPlatform (51job 占位适配器，统一返回 NOT_SUPPORTED)`：仅用于平台注册与 schema 可见性，接真实接口前需满足只读研究门槛。
 
 **不变量**：stdout 仅 JSON 信封 · stderr 仅日志 · `exit 0/1` · 错误含 `code/recoverable/recovery_action` · `boss schema` 为能力真源。
-**选型**：Python ≥ 3.10 · Click · httpx · patchright / CDP / Bridge（登录、导出与显式 Research Mode adapter）· cryptography（Fernet）· sqlite3（WAL）· pytest（1400+ 项）。
+**选型**：Python ≥ 3.10 · Click · httpx · patchright / CDP / Bridge（登录、导出与显式 Research Mode adapter）· cryptography（Fernet）· sqlite3（WAL）· pytest（1600+ 项）。
 
 ## 🔌 本地存储
 

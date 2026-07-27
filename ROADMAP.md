@@ -4,9 +4,17 @@
 
 ## 已发布
 
-- ✅ v1.8.x（2026-04-20，patch 连发）：严格类型检查白名单 3 → 61（81% 覆盖）+ Python 嵌入 API + ai interview-prep / chat-coach + digest Markdown + Cursor/Windsurf 接入 + 4 家 AI 聚合入口 + 英文贡献指南
-- ✅ v1.8.0 (2026-04-19)：AI 沟通与面试扩展（ai interview-prep / ai chat-coach）+ 协议服务扩展至 43 工具
-- ✅ v1.7.0 (2026-04-17)：聊天回复草稿 + 投递漏斗 + 协议服务扩展至 41 工具
+- ✅ v1.17.0（2026-07-27）：`boss favorites list/sync` 职位收藏同步 + 受限 Research Mode 的可恢复 crawl 工作流 + 实习岗位类型字段与筛选映射修复
+- ✅ v1.16.0（2026-07-17）：显式 `operating_mode` 双模式契约（`assisted` / `research`）+ 合规护栏升级为不可变能力策略注册表，CLI / schema / MCP 过滤从同一真源派生
+- ✅ v1.15.0（2026-07-14）：`boss ai cover-letter` 求职信草稿 + 死配置键与死码清理 + 智联页面域名校验加固（精确 hostname 匹配）
+- ✅ v1.14.0（2026-06-25）：shortlist 本地标签 / 备注 / 离线对比 + `ai fit` / `ai suggest-keywords` / `ai resume-optimize` + 转向 MCP-first + 搜索 `match_score`
+- ✅ v1.13.x（2026-06-11 ~ 06-16）：platforms 能力状态语义 + login 链路错误码补齐 + welfare 详情本地缓存 + 双语 README 重构为导航型；Agent Skill 迁出至独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill)（Breaking Change）
+- ✅ v1.12.0（2026-06-09）：MCP 三种传输（stdio / SSE / HTTP streaming）+ `boss_export` + 51job / `qiancheng` 占位适配器
+- ✅ v1.11.0（2026-04-23）：招聘者模式（`--role recruiter`）全套 CLI 命令组 + `BossRecruiterClient` 双通道客户端 + `RecruiterPlatform` 抽象
+- ✅ v1.10.x（2026-04-21）：Platform 抽象落地 —— ABC + 注册表 + `--platform` 全局选项 + 20 个命令全量迁移，`commands/` 下不再直接引用 `BossClient`
+- ✅ v1.9.x（2026-04-20）：mypy 严格模式全量接入（66/66 业务模块）+ Python 嵌入 API + `py.typed` 类型导出
+- ✅ v1.8.x（2026-04-19 ~ 04-20）：AI 沟通与面试扩展（`ai interview-prep` / `ai chat-coach`）+ Cursor / Windsurf 接入 + 英文贡献指南
+- ✅ v1.7.0（2026-04-17）：聊天回复草稿 + 投递漏斗
 
 完整历史见 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -29,6 +37,11 @@
 
 ## 🔮 中期（v2.0）
 
+### 治理与合规
+- [x] 默认低风险辅助模式：敏感命令默认阻断并交接回平台官网（ADR 0001）
+- [x] 显式 `operating_mode` 双模式契约：`assisted` / `research` 单一真源驱动 CLI、schema 与 MCP 过滤（v1.16.0，ADR 0002）
+- [x] 受限 Research Mode 采集：固定请求 / 详情 / 墙钟 / 重试预算 + SQLite checkpoint + 停止开关（v1.17.0）
+
 ### 架构演进
 - [x] mypy 严格模式全量接入 — **100% 完成**（66/66 业务模块全部 `disallow_untyped_defs + disallow_any_generics + warn_return_any` 严格化，v1.9.1）
 - [x] 类型签名导出到 `stubs/`，供下游 IDE 使用（v1.8.6，py.typed + canonical `__all__` + 16 条契约测试）
@@ -45,12 +58,13 @@
   - [x] Week 2：ZhilianPlatform 只读实现（search / detail / recommend / user_info）
   - [x] Week 3：ZhilianPlatform 写操作（greet / apply）+ 文档 + MCP 适配
   - [x] Week 4：招聘者侧能力评估完成 → **暂不接入**（接入条件 0/4 满足，保留 RecruiterPlatform 骨架待社区信号重启；详见 `docs/research/platforms/zhaopin-recruiter-evaluation.md`）
-  - [ ] 51job / 前程无忧：先进入 research backlog，候选者侧只读入口和脱敏测试样本明确前不进入真实运行路径（详见 `docs/research/platforms/51job.md`）
+  - [ ] 51job / 前程无忧：占位适配器已落地（全量能力返回稳定 `NOT_SUPPORTED` 包络，v1.12.0–v1.13.0），但真实接口仍在 research backlog——候选者侧只读入口和脱敏测试样本明确前不进入真实运行路径（详见 `docs/research/platforms/51job.md`）
 
 ### 社区建设
 - [ ] 更完整的中文 + 英文视频 demo / 发布素材（当前已有 `demo/demo-zh.gif` / `demo/demo-en.gif` + 对应 `demo/demo-zh.tape` / `demo/demo-en.tape` 终端演示）
-- [ ] 跟进 [awesome-agents](https://github.com/kyrolabs/awesome-agents) PR #423 审阅结果
-- [ ] 视时机决定是否进入 [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code)
+- [x] [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) 收录（PR #4992，2026-04-26 合并）
+- [x] [awesome-agents](https://github.com/kyrolabs/awesome-agents) PR #423 已闭环——由 bot 无 review 直接关闭，同分区存在批量静默关单现象，结论为暂不重投（详见 `docs/marketing/awesome-submissions.md`）
+- [ ] 视时机决定是否进入 [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code)（该仓库只接受 Web UI issue 表单，禁止 gh CLI）
 - [x] 贡献者指南英文版（`CONTRIBUTING.en.md`，v1.8.3）
 
 ## 💡 长期愿景

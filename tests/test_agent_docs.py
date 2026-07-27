@@ -1,10 +1,13 @@
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 import types
 from pathlib import Path
 from unittest.mock import MagicMock
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -307,3 +310,72 @@ def test_schema_main_and_modules_command_count_consistent():
 		f"仅在 Click: {registered_set - schema_set}，仅在 schema: {schema_set - registered_set}"
 	)
 	assert len(registered) == len(set(registered)), "Click 顶层命令存在重复注册"
+
+
+# 文档中写死的能力计数与其运行时真源的映射。
+_CAPABILITY_COUNT_PATTERNS: tuple[tuple[str, str], ...] = (
+	(r"(\d+)\s*个顶层命令", "commands"),
+	(r"(\d+)\s+top-level(?:\s+CLI)?\s+commands", "commands"),
+	(r"(\d+)\s*个(?:默认)?(?:低风险)?\s*MCP\s*工具", "tools"),
+	(r"(\d+)\s*个(?:默认)?低风险工具", "tools"),
+	(r"(\d+)\s+(?:default\s+low-risk\s+)?MCP\s+tools", "tools"),
+	(r"(\d+)\s+default\s+low-risk\s+tools", "tools"),
+	(r"MCP\s+server\s+with\s+(\d+)\s+tools", "tools"),
+)
+
+# CHANGELOG 按定义记录历史事实（如「工具计数 31 → 32」），不该跟随当前值变化。
+_CAPABILITY_COUNT_EXEMPT_DOCS = frozenset({"CHANGELOG.md"})
+
+
+def _public_markdown_docs() -> list[Path]:
+	"""仅返回被 git 跟踪的 Markdown——「对外文档」的准确语义。
+
+	不能直接 glob 文件系统：`docs/blog/linuxdo-promo.md`、`docs/superpowers/` 等
+	本地草稿在 `.gitignore` 里，glob 会让这个断言随各人工作区内容而变——本地红、
+	CI 绿的环境相关假信号。
+	"""
+	result = subprocess.run(
+		["git", "ls-files", "-z", "--", "*.md"],
+		cwd=ROOT,
+		capture_output=True,
+		text=True,
+		check=False,
+	)
+	if result.returncode != 0:
+		pytest.skip("需要 git 工作副本才能确定对外文档集合")
+	paths = [ROOT / name for name in result.stdout.split("\0") if name]
+	return [
+		path
+		for path in paths
+		if path.relative_to(ROOT).as_posix() not in _CAPABILITY_COUNT_EXEMPT_DOCS and path.exists()
+	]
+
+
+def test_docs_capability_counts_match_runtime_source():
+	"""防漂移：文档里写死的顶层命令数 / MCP 工具数必须与运行时真源一致。
+
+	`docs/marketing/` 曾两次出现计数漂移（#346 校正后两周内再次漂移），根因是此前
+	只有 README 与 capability-matrix 被断言覆盖。这里改为扫描全部对外 Markdown，
+	并从 `SCHEMA_DATA` / `TOOLS` 动态取值，避免守卫本身成为下一个硬编码漂移点。
+	"""
+	from boss_agent_cli.commands.schema import SCHEMA_DATA
+
+	expected = {
+		"commands": len(SCHEMA_DATA["commands"]),
+		"tools": len(_load_mcp_tools()),
+	}
+	mismatches: list[str] = []
+
+	for path in _public_markdown_docs():
+		content = path.read_text(encoding="utf-8")
+		relative = path.relative_to(ROOT).as_posix()
+		for pattern, kind in _CAPABILITY_COUNT_PATTERNS:
+			for match in re.finditer(pattern, content):
+				found = int(match.group(1))
+				if found != expected[kind]:
+					line = content[: match.start()].count("\n") + 1
+					mismatches.append(
+						f"{relative}:{line} 写着 {found}，当前 {kind} 实际为 {expected[kind]}（命中 {match.group(0)!r}）"
+					)
+
+	assert not mismatches, "对外文档的能力计数已漂移：\n" + "\n".join(mismatches)
