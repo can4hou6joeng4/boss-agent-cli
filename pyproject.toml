@@ -246,7 +246,9 @@ module = [
 	"boss_agent_cli.crawler.operations",
 	"boss_agent_cli.crawler.service",
 	"boss_agent_cli.crawler.transport",
+	"boss_agent_cli.mcp_args",
 	"boss_agent_cli.mcp_server",
+	"boss_agent_cli.mcp_tools",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

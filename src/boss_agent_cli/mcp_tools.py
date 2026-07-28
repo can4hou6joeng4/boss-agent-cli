@@ -1,0 +1,943 @@
+"""MCP 工具目录：能力自描述注入、合规过滤与全部 Tool 定义。
+
+从 `mcp_server` 拆出。该模块只负责「有哪些工具、长什么样、哪些被合规策略挡掉」，
+不涉及服务器实例、传输层与 CLI 调用——那些仍在 `mcp_server`。
+
+`mcp_server` 会原样再导出这里的公开符号，因此 `mcp-server/server.py` wrapper 和
+既有测试的导入路径保持不变。
+"""
+
+import copy
+from typing import Any
+
+from mcp.types import Tool
+
+from boss_agent_cli.commands.schema import SCHEMA_DATA, _availability_note, _inject_availability
+from boss_agent_cli.compliance import restricted_commands
+from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
+
+
+def _build_schema_with_availability() -> dict[str, Any]:
+	data = copy.deepcopy(SCHEMA_DATA)
+	data["supported_platforms"] = list_platforms()
+	data["supported_recruiter_platforms"] = list_recruiter_platforms()
+	return _inject_availability(data)
+
+
+_SCHEMA_WITH_AVAILABILITY = _build_schema_with_availability()
+
+
+def _availability_of(command: Any) -> dict[str, Any] | None:
+	"""从单个 schema 命令条目里取 availability，非 dict 一律按「无」处理。
+
+	`SCHEMA_DATA` 是 `dict[str, Any]`，直接 `.get("availability")` 会把 `Any`
+	一路带到返回值上；这里收敛成一处运行时校验，调用点就都是有类型的了。
+	"""
+	if not isinstance(command, dict):
+		return None
+	availability = command.get("availability")
+	return availability if isinstance(availability, dict) else None
+
+
+def _tool_availability(tool_name: str) -> dict[str, Any] | None:
+	name = tool_name.removeprefix("boss_")
+	commands: dict[str, Any] = _SCHEMA_WITH_AVAILABILITY["commands"]
+
+	direct_map = {
+		"chat_summary": "chat-summary",
+		"batch_greet": "batch-greet",
+		"follow_up": "follow-up",
+	}
+	if name in direct_map:
+		return _availability_of(commands[direct_map[name]])
+	if name in commands:
+		return _availability_of(commands[name])
+
+	for prefix, command_name in (
+		("ai_", "ai"),
+		("agent_", "agent"),
+		("resume_", "resume"),
+		("watch_", "watch"),
+		("preset_", "preset"),
+		("shortlist_", "shortlist"),
+		("favorites_", "favorites"),
+		("crawl_", "crawl"),
+	):
+		if name.startswith(prefix):
+			return _availability_of(commands[command_name])
+
+	if name.startswith("hr_"):
+		sub_name = name.removeprefix("hr_").replace("_", "-")
+		hr_availability = _availability_of(commands["hr"]) or {}
+		subcommands = hr_availability.get("subcommands")
+		if isinstance(subcommands, dict):
+			sub_availability = subcommands.get(sub_name)
+			if isinstance(sub_availability, dict):
+				return sub_availability
+		return hr_availability
+	return None
+
+
+def _decorate_tool_descriptions() -> None:
+	for tool in TOOLS:
+		availability = _tool_availability(tool.name)
+		if availability:
+			tool.description = f"{tool.description} [可用性: {_availability_note(availability)}]"
+
+
+def _crawl_task_tools() -> list[Tool]:
+	"""Build crawl MCP tools from the schema instead of duplicating their contract."""
+	tools = _SCHEMA_WITH_AVAILABILITY["commands"]["crawl"].get("mcp_tools", [])
+	return [
+		Tool(name=tool["name"], description=tool["description"], inputSchema=tool["inputSchema"])
+		for tool in tools
+	]
+
+# ── Tool 定义 ──────────────────────────────────────────────────────
+
+_MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES = {
+	"boss_batch_greet": "batch-greet",
+	"boss_chat_summary": "chat-summary",
+	"boss_follow_up": "follow-up",
+	"boss_watch_run": "watch-run",
+	"boss_hr_applications": "recruiter-applications",
+	"boss_hr_candidates": "recruiter-candidates",
+	"boss_hr_chat": "recruiter-chat",
+	"boss_hr_chatmsg": "recruiter-chatmsg",
+	"boss_hr_last_messages": "recruiter-last-messages",
+	"boss_hr_resume": "recruiter-resume",
+	"boss_hr_exchange": "recruiter-resume",
+	"boss_hr_reply": "recruiter-reply",
+	"boss_hr_request_resume": "recruiter-request-resume",
+}
+
+
+def _compliance_command_for_tool(tool_name: str) -> str:
+	"""Map an MCP tool name to the CLI compliance command identifier."""
+	if override := _MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES.get(tool_name):
+		return override
+	return tool_name.removeprefix("boss_").replace("_", "-")
+
+
+def _is_low_risk_blocked_tool(tool_name: str) -> bool:
+	command = _compliance_command_for_tool(tool_name)
+	return command in restricted_commands("assisted")
+
+TOOLS = [
+	Tool(
+		name="boss_status",
+		description="检查 BOSS 直聘登录态",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_doctor",
+		description="诊断本地运行环境、依赖、登录态和网络连通性",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_search",
+		description="按关键词和筛选条件搜索 BOSS 直聘职位列表。支持城市、薪资、经验、学历、福利等多维度筛选。",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"query": {"type": "string", "description": "搜索关键词（如 Golang、Python 后端）"},
+				"city": {"type": "string", "description": "城市名称（如 北京、广州）"},
+				"salary": {"type": "string", "description": "薪资范围（如 20-50K）"},
+				"experience": {"type": "string", "description": "经验要求（如 3-5年）"},
+				"education": {"type": "string", "description": "学历要求（如 本科）"},
+				"welfare": {"type": "string", "description": "福利筛选，逗号分隔 AND 逻辑（如 双休,五险一金）"},
+				"page": {"type": "integer", "description": "页码", "default": 1},
+				"sort": {"type": "string", "enum": ["relevance", "score"], "description": "排序方式", "default": "relevance"},
+			},
+			"required": ["query"],
+		},
+	),
+	*_crawl_task_tools(),
+	Tool(
+		name="boss_recommend",
+		description="获取基于简历的个性化职位推荐",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"page": {"type": "integer", "description": "页码", "default": 1},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_detail",
+		description="查看职位详情。参数为 security_id（从 search/recommend 结果获取）。",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"security_id": {"type": "string", "description": "职位的 security_id"},
+				"job_id": {"type": "string", "description": "encrypt_job_id，传入可走快速通道"},
+			},
+			"required": ["security_id"],
+		},
+	),
+	Tool(
+		name="boss_greet",
+		description="向招聘者打招呼。需要 security_id 和 job_id。",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"security_id": {"type": "string", "description": "职位的 security_id"},
+				"job_id": {"type": "string", "description": "职位的 encrypt_job_id"},
+			},
+			"required": ["security_id", "job_id"],
+		},
+	),
+	Tool(
+		name="boss_chat",
+		description="查看沟通列表，支持按发起方和时间筛选",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"from_who": {"type": "string", "enum": ["boss", "me"], "description": "筛选发起方"},
+				"days": {"type": "integer", "description": "只显示最近 N 天的记录"},
+				"page": {"type": "integer", "description": "页码", "default": 1},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_me",
+		description="获取当前登录用户信息（基本信息、简历、求职期望、投递记录）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"section": {
+					"type": "string",
+					"enum": ["info", "resume", "expect", "deliver"],
+					"description": "指定查看的部分",
+				},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_cities",
+		description="列出支持的城市列表（约 40 个）",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_interviews",
+		description="查看面试邀请列表",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_history",
+		description="查看浏览历史",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_chatmsg",
+		description="查看与指定好友的聊天消息历史",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"security_id": {"type": "string", "description": "好友的 security_id"},
+				"page": {"type": "integer", "description": "页码", "default": 1},
+				"count": {"type": "integer", "description": "每页消息数量", "default": 20},
+				"raw": {"type": "boolean", "description": "输出保真结构化消息字段（仍受合规门控）", "default": False},
+			},
+			"required": ["security_id"],
+		},
+	),
+	Tool(
+		name="boss_chat_summary",
+		description="基于聊天历史生成结构化摘要与下一步建议",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"security_id": {"type": "string", "description": "好友的 security_id"},
+			},
+			"required": ["security_id"],
+		},
+	),
+	Tool(
+		name="boss_mark",
+		description="给联系人添加或移除标签（新招呼/沟通中/已约面/不合适/收藏等）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"security_id": {"type": "string", "description": "联系人的 security_id"},
+				"tag": {"type": "string", "description": "标签名称"},
+				"remove": {"type": "boolean", "description": "是否移除标签", "default": False},
+			},
+			"required": ["security_id", "tag"],
+		},
+	),
+	Tool(
+		name="boss_exchange",
+		description="请求交换联系方式（手机号或微信）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"security_id": {"type": "string", "description": "联系人的 security_id"},
+			},
+			"required": ["security_id"],
+		},
+	),
+	Tool(
+		name="boss_apply",
+		description="发起投递或立即沟通动作（幂等，不会重复投递）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"security_id": {"type": "string", "description": "职位的 security_id"},
+				"job_id": {"type": "string", "description": "职位的 encrypt_job_id"},
+			},
+			"required": ["security_id", "job_id"],
+		},
+	),
+	Tool(
+		name="boss_batch_greet",
+		description="搜索后批量打招呼（上限 10）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"query": {"type": "string", "description": "搜索关键词"},
+				"city": {"type": "string", "description": "城市名称"},
+				"limit": {"type": "integer", "description": "最大打招呼数量", "default": 5},
+				"dry_run": {"type": "boolean", "description": "预览模式", "default": False},
+			},
+			"required": ["query"],
+		},
+	),
+	Tool(
+		name="boss_show",
+		description="按编号快速查看上次搜索或推荐结果中的职位详情",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"number": {"type": "integer", "description": "职位编号（从搜索结果中获取）"},
+			},
+			"required": ["number"],
+		},
+	),
+	Tool(
+		name="boss_export",
+		description="导出搜索结果为 CSV / JSON / HTML 文件，支持 BOSS 直聘搜索页 URL 复用筛选条件。默认脱敏 job_id/security_id/boss_name，HTML 始终省略平台标识、招聘者姓名和薪资。",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"query": {"type": "string", "description": "搜索关键词；提供 url 时可省略"},
+				"url": {"type": "string", "description": "BOSS 直聘搜索页完整 URL（可省略 query 直接复用网页筛选）"},
+				"city": {"type": "string", "description": "城市名称（如 北京、广州）"},
+				"salary": {"type": "string", "description": "薪资范围（如 20-50K）"},
+				"experience": {"type": "string", "description": "经验要求，支持逗号分隔多选"},
+				"education": {"type": "string", "description": "学历要求，支持逗号分隔多选"},
+				"industry": {"type": "string", "description": "行业类型，支持逗号分隔多选"},
+				"scale": {"type": "string", "description": "公司规模，支持逗号分隔多选"},
+				"stage": {"type": "string", "description": "融资阶段，支持逗号分隔多选"},
+				"job_type": {"type": "string", "description": "职位类型，支持逗号分隔多选"},
+				"count": {"type": "integer", "description": "导出数量", "default": 50},
+				"format": {"type": "string", "enum": ["csv", "json", "html"], "description": "输出格式", "default": "csv"},
+				"output_file": {"type": "string", "description": "输出文件路径；不传则在 stdout 信封内 inline 返回 jobs 列表"},
+				"include_private": {"type": "boolean", "description": "CSV/JSON/stdout 保留 job_id/security_id/boss_name 明文；HTML 始终省略平台标识、招聘者姓名和薪资", "default": False},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_pipeline",
+		description="聚合聊天和面试数据，生成统一候选进度视图",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_follow_up",
+		description="筛出需要优先跟进的候选项（未读、超时未推进、面试）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"days_stale": {"type": "integer", "description": "超过 N 天未推进视为待跟进", "default": 3},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_digest",
+		description="汇总新增职位、待跟进会话和面试项的只读日报（支持 md 输出便于邮件/飞书直发）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"days_stale": {"type": "integer", "description": "超过 N 天未推进视为待跟进", "default": 3},
+				"format": {"type": "string", "description": "输出格式", "enum": ["json", "md"], "default": "json"},
+				"output": {"type": "string", "description": "Markdown 输出路径（仅 format=md 时生效）"},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_config",
+		description="查看和修改配置项",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"action": {"type": "string", "enum": ["list", "get", "set", "reset"], "description": "操作类型"},
+				"key": {"type": "string", "description": "配置项名称"},
+				"value": {"type": "string", "description": "配置值（仅 set 时需要）"},
+			},
+			"required": ["action"],
+		},
+	),
+	Tool(
+		name="boss_clean",
+		description="清理过期缓存和临时文件",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"dry_run": {"type": "boolean", "description": "仅预览不删除", "default": False},
+				"all": {"type": "boolean", "description": "全量清理", "default": False},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_stats",
+		description="投递转化漏斗统计（只读聚合打招呼、投递、候选池、监控数据）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"days": {"type": "integer", "description": "统计窗口天数", "default": 30},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_agent_run",
+		description="招聘自动化：运行一轮自动扫描、决策、执行/人审/线索生成",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"dry_run": {
+					"type": "boolean",
+					"description": "只演练决策，不执行真实平台动作",
+					"default": True,
+				},
+				"limit": {"type": "integer", "description": "本轮最多处理多少个会话"},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_agent_train",
+		description="招聘自动化：训练校准模式，自动判断但动作进入人审",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"limit": {"type": "integer", "description": "本轮最多处理多少个会话"},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_agent_review",
+		description="招聘自动化：查看人工复核队列",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_agent_review_approve",
+		description="招聘自动化：批准人工复核动作并写入 pending 队列",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"id": {"type": "string", "description": "review item id"},
+			},
+			"required": ["id"],
+		},
+	),
+	Tool(
+		name="boss_agent_review_reject",
+		description="招聘自动化：拒绝人工复核动作并记录跳过事件",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"id": {"type": "string", "description": "review item id"},
+				"reason": {"type": "string", "description": "拒绝原因"},
+			},
+			"required": ["id"],
+		},
+	),
+	Tool(
+		name="boss_agent_pending",
+		description="招聘自动化：查看待执行动作队列",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_agent_stats",
+		description="招聘自动化：查看执行、人审、pending、熔断统计",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_agent_stop",
+		description="招聘自动化：打开熔断，停止后续自动执行",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"reason": {"type": "string", "description": "熔断原因", "default": "manual-stop"},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_ai_reply",
+		description="基于招聘者消息生成回复草稿（2-3 条候选，支持简历参考和语气偏好）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"recruiter_message": {"type": "string", "description": "招聘者消息文本"},
+				"context": {"type": "string", "description": "会话上下文（可选）"},
+				"resume": {"type": "string", "description": "参考简历名称（可选）"},
+				"tone": {
+					"type": "string",
+					"description": "语气偏好",
+					"enum": ["简洁专业", "热情积极", "谨慎确认"],
+					"default": "简洁专业",
+				},
+			},
+			"required": ["recruiter_message"],
+		},
+	),
+	Tool(
+		name="boss_ai_interview_prep",
+		description="基于目标职位描述生成模拟面试题与准备建议（支持简历参考定制题目）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"jd_text": {"type": "string", "description": "目标职位描述文本"},
+				"resume": {"type": "string", "description": "参考简历名称（可选）"},
+				"count": {"type": "integer", "description": "题量，默认 10", "default": 10},
+			},
+			"required": ["jd_text"],
+		},
+	),
+	Tool(
+		name="boss_ai_chat_coach",
+		description="基于聊天记录诊断沟通状态并给出下一步行动建议与现成消息模板",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"chat_text": {"type": "string", "description": "聊天记录文本"},
+				"resume": {"type": "string", "description": "参考简历名称（可选）"},
+				"style": {
+					"type": "string",
+					"description": "沟通风格偏好（如 简洁专业/积极主动/谨慎稳重）",
+					"default": "简洁专业",
+				},
+			},
+			"required": ["chat_text"],
+		},
+	),
+	Tool(
+		name="boss_resume_list",
+		description="列出所有本地简历（名称、创建时间、关联职位数）",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_resume_show",
+		description="查看指定简历的完整内容（基本信息、教育、工作经历、技能、项目）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"name": {"type": "string", "description": "简历名称"},
+			},
+			"required": ["name"],
+		},
+	),
+	Tool(
+		name="boss_ai_analyze_jd",
+		description="分析职位描述并评估简历匹配度，输出匹配分数和差距分析",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"jd_text": {"type": "string", "description": "职位描述文本"},
+				"resume": {"type": "string", "description": "对比的本地简历名称"},
+			},
+			"required": ["jd_text", "resume"],
+		},
+	),
+	Tool(
+		name="boss_ai_optimize",
+		description="基于目标职位描述优化简历（输出优化后结构，不直接写回磁盘）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"resume": {"type": "string", "description": "简历名称"},
+				"jd_text": {"type": "string", "description": "目标职位描述"},
+			},
+			"required": ["resume", "jd_text"],
+		},
+	),
+	Tool(
+		name="boss_ai_suggest",
+		description="基于目标职位给出简历改进建议（按优先级排序，不修改简历）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"resume": {"type": "string", "description": "简历名称"},
+				"jd_text": {"type": "string", "description": "目标职位描述"},
+			},
+			"required": ["resume", "jd_text"],
+		},
+	),
+	Tool(
+		name="boss_ai_fit",
+		description="基于本地简历和候选池已缓存职位详情生成逐岗匹配度、能力缺口和关键词命中报告",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"resume": {"type": "string", "description": "简历名称"},
+				"limit": {"type": "integer", "description": "最多分析的候选池职位数", "default": 20},
+			},
+			"required": ["resume"],
+		},
+	),
+	Tool(
+		name="boss_ai_suggest_keywords",
+		description="基于候选池职位分析推荐搜索关键词组合",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"limit": {"type": "integer", "description": "候选池职位数上限", "default": 20},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_ai_resume_optimize",
+		description="基于目标岗位优化简历措辞（仅建议，不修改简历）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"resume": {"type": "string", "description": "简历名称"},
+				"jd_text": {"type": "string", "description": "目标职位描述文本"},
+				"job_id": {"type": "string", "description": "从缓存读取职位描述的 job_id（与 jd_text 二选一）"},
+			},
+			"required": ["resume"],
+		},
+	),
+	Tool(
+		name="boss_ai_cover_letter",
+		description="基于本地简历与目标岗位起草求职信/自我介绍草稿（仅草稿，不发送）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"resume": {"type": "string", "description": "简历名称"},
+				"jd_text": {"type": "string", "description": "目标职位描述文本"},
+				"job_id": {"type": "string", "description": "从缓存读取职位描述的 job_id（与 jd_text 二选一）"},
+				"tone": {
+					"type": "string",
+					"description": "求职信语气",
+					"enum": ["简洁专业", "热情积极", "谨慎稳重"],
+				},
+				"lang": {"type": "string", "description": "输出语言（zh 中文 / en 英文）", "enum": ["zh", "en"]},
+			},
+			"required": ["resume"],
+		},
+	),
+	Tool(
+		name="boss_watch_list",
+		description="列出所有已保存的监控条件",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_watch_run",
+		description="执行指定监控并返回新增职位列表",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"name": {"type": "string", "description": "监控名称"},
+			},
+			"required": ["name"],
+		},
+	),
+	Tool(
+		name="boss_preset_list",
+		description="列出所有搜索预设",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_shortlist_list",
+		description="查看候选池中的所有职位",
+		inputSchema={"type": "object", "properties": {}, "required": []},
+	),
+	Tool(
+		name="boss_favorites_list",
+		description="预览 BOSS 职位收藏单页（不落库）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"page": {"type": "integer", "description": "页码"},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_shortlist_add",
+		description="将职位加入本地候选池，可附加本地标签和备注",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"security_id": {"type": "string", "description": "职位安全 ID"},
+				"job_id": {"type": "string", "description": "加密职位 ID"},
+				"tags": {"type": "string", "description": "本地标签，逗号分隔"},
+				"note": {"type": "string", "description": "本地备注"},
+			},
+			"required": ["security_id", "job_id"],
+		},
+	),
+	Tool(
+		name="boss_shortlist_annotate",
+		description="更新本地候选池职位的标签和备注",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"security_id": {"type": "string", "description": "职位安全 ID"},
+				"job_id": {"type": "string", "description": "加密职位 ID"},
+				"add_tags": {"type": "array", "items": {"type": "string"}, "description": "要添加的本地标签"},
+				"remove_tags": {"type": "array", "items": {"type": "string"}, "description": "要移除的本地标签"},
+				"note": {"type": "string", "description": "替换本地备注"},
+			},
+			"required": ["security_id", "job_id"],
+		},
+	),
+	Tool(
+		name="boss_shortlist_compare",
+		description="本地对比候选池职位，可按标签过滤",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"tag": {"type": "string", "description": "只比较包含该标签的本地候选职位"},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_shortlist_remove",
+		description="从候选池移除职位",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"security_id": {"type": "string", "description": "职位安全 ID"},
+				"job_id": {"type": "string", "description": "加密职位 ID"},
+			},
+			"required": ["security_id", "job_id"],
+		},
+	),
+	Tool(
+		name="boss_preset_add",
+		description="保存搜索预设",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"name": {"type": "string", "description": "预设名称"},
+				"query": {"type": "string", "description": "搜索关键词"},
+				"city": {"type": "string", "description": "城市（可选）"},
+				"salary": {"type": "string", "description": "薪资范围（可选）"},
+				"experience": {"type": "string", "description": "经验要求（可选）"},
+				"education": {"type": "string", "description": "学历要求（可选）"},
+				"welfare": {"type": "string", "description": "福利筛选（可选）"},
+			},
+			"required": ["name", "query"],
+		},
+	),
+	Tool(
+		name="boss_preset_remove",
+		description="删除指定搜索预设",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"name": {"type": "string", "description": "预设名称"},
+			},
+			"required": ["name"],
+		},
+	),
+	Tool(
+		name="boss_watch_add",
+		description="保存增量监控的搜索条件",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"name": {"type": "string", "description": "监控名称"},
+				"query": {"type": "string", "description": "搜索关键词"},
+				"city": {"type": "string", "description": "城市（可选）"},
+				"salary": {"type": "string", "description": "薪资范围（可选）"},
+			},
+			"required": ["name", "query"],
+		},
+	),
+	Tool(
+		name="boss_watch_remove",
+		description="删除指定监控",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"name": {"type": "string", "description": "监控名称"},
+			},
+			"required": ["name"],
+		},
+	),
+	Tool(
+		name="boss_hr_applications",
+		description="招聘者模式：查看候选人投递申请列表",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"job_id": {"type": "string", "description": "按职位筛选（可选）"},
+				"label_id": {"type": "integer", "description": "标签筛选（0=全部, 1=新招呼, 2=沟通中）", "default": 0},
+				"page": {"type": "integer", "description": "页码", "default": 1},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_hr_candidates",
+		description="招聘者模式：搜索候选人",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"query": {"type": "string", "description": "搜索关键词（可选，不传时返回默认候选集）"},
+				"city": {"type": "string", "description": "城市筛选（cityCode，如 101020100；-2=全国）"},
+				"job_id": {"type": "string", "description": "按职位筛选"},
+				"experience": {"type": "string", "description": "经验要求，如 -3,-3（应届）/ -1,-1（不限）"},
+				"degree": {"type": "string", "description": "学历要求，如 201,201 / -1,-1"},
+				"age": {"type": "string", "description": "年龄范围，如 20,25"},
+				"school_level": {"type": "string", "description": "学校层次（如 1101）"},
+				"activeness": {"type": "string", "description": "活跃度，如 2"},
+				"source": {"type": "string", "description": "来源编码（默认 4）"},
+				"salary": {"type": "string", "description": "薪资范围，如 -1,3"},
+				"select": {"type": "boolean", "description": "是否带 select=true", "default": False},
+				"page": {"type": "integer", "description": "页码", "default": 1},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_hr_chat",
+		description="招聘者模式：查看与候选人的沟通列表（含未读数和最近消息摘要）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"page": {"type": "integer", "description": "页码", "default": 1},
+				"job_id": {"type": "string", "description": "按职位筛选"},
+				"label_id": {"type": "integer", "description": "标签筛选（0=全部, 1=新招呼, 2=沟通中）", "default": 0},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_hr_chatmsg",
+		description="招聘者模式：查看与指定候选人的聊天消息历史",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
+				"count": {"type": "integer", "description": "消息数量", "default": 20},
+				"max_msg_id": {"type": "integer", "description": "向前翻页的最大消息 ID"},
+			},
+			"required": ["friend_id"],
+		},
+	),
+	Tool(
+		name="boss_hr_last_messages",
+		description="招聘者模式：批量查看候选人最近消息摘要",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"friend_ids": {
+					"type": "array",
+					"items": {"type": "integer"},
+					"description": "候选人会话 friend_id 列表；不传时从 hr chat 页获取当前页候选人",
+				},
+				"page": {"type": "integer", "description": "沟通列表页码", "default": 1},
+				"job_id": {"type": "string", "description": "按职位筛选"},
+				"label_id": {"type": "integer", "description": "标签筛选（0=全部, 1=新招呼, 2=沟通中）", "default": 0},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_hr_resume",
+		description="招聘者模式：查看候选人在线简历",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"geek_id": {"type": "string", "description": "候选人 geek_id"},
+				"job_id": {"type": "string", "description": "关联职位 ID"},
+				"security_id": {"type": "string", "description": "候选人的 security_id"},
+				"raw": {"type": "boolean", "description": "输出原始 API 数据", "default": False},
+			},
+			"required": ["geek_id", "job_id", "security_id"],
+		},
+	),
+	Tool(
+		name="boss_hr_exchange",
+		description="招聘者模式：请求交换候选人手机号或微信",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
+				"type": {"type": "string", "description": "交换类型", "enum": ["phone", "wechat"], "default": "phone"},
+			},
+			"required": ["friend_id"],
+		},
+	),
+	Tool(
+		name="boss_hr_reply",
+		description="招聘者模式：回复候选人消息",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
+				"message": {"type": "string", "description": "回复消息内容"},
+			},
+			"required": ["friend_id", "message"],
+		},
+	),
+	Tool(
+		name="boss_hr_request_resume",
+		description="招聘者模式：请求候选人分享附件简历",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
+			},
+			"required": ["friend_id"],
+		},
+	),
+	Tool(
+		name="boss_hr_jobs",
+		description="招聘者模式：查看职位列表，或执行上线/下线操作",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"action": {"type": "string", "description": "操作类型", "enum": ["list", "online", "offline"], "default": "list"},
+				"job_id": {"type": "string", "description": "职位 ID（online/offline 时必填）"},
+			},
+			"required": [],
+		},
+	),
+	Tool(
+		name="boss_hr_jobs_detail",
+		description="招聘者模式：查看指定职位的完整详情（包括岗位描述 postDescription）",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"enc_job_id": {"type": "string", "description": "职位的加密 ID（encryptJobId）"},
+			},
+			"required": ["enc_job_id"],
+		},
+	),
+]
+
+_LOW_RISK_BLOCKED_TOOLS = {
+	tool.name
+	for tool in TOOLS
+	if _is_low_risk_blocked_tool(tool.name)
+}
+TOOLS = [tool for tool in TOOLS if tool.name not in _LOW_RISK_BLOCKED_TOOLS]
+# 必须在合规过滤之后执行：只给最终暴露的工具追加可用性说明。
+_decorate_tool_descriptions()
