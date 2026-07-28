@@ -4,6 +4,8 @@
 
 # boss-agent-cli
 
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fcan4hou6joeng4%2Fboss-agent-cli.svg)](https://mcptoplist.com/server/glama%2Fcan4hou6joeng4%2Fboss-agent-cli)
+
 *🤖 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI —— 搜索 · 福利筛选 · 候选池 · JSON 信封，默认 assisted，支持显式 Research Mode。*
 
 [![CI](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml)
