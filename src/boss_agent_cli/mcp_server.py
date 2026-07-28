@@ -729,7 +729,7 @@ TOOLS = [
 		inputSchema={
 			"type": "object",
 			"properties": {
-				"page": {"type": "int", "description": "页码"},
+				"page": {"type": "integer", "description": "页码"},
 			},
 			"required": [],
 		},
