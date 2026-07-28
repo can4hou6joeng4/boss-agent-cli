@@ -14,6 +14,8 @@
 
 ### Changed
 - mypy 逐模块严格化白名单 120 → 128：纳入 `crawler/` 全部子模块、`commands/crawl.py`、`commands/_recruiter_platform.py` 与 `mcp_server.py`（此前 #339 引入的整个 crawl 子系统与最大的 `mcp_server.py` 都在严格检查之外）。
+- `pyproject.toml` 显式钉死 ruff 规则集 `select = ["E4", "E7", "E9", "F"]`。此前未配置 `[tool.ruff.lint]`，门禁范围实际由所装 ruff 版本的隐式默认值决定——升级到 0.16.0 时默认集扩展到 I / BLE / RUF / UP / DTZ / S / PYI 等家族，同一份代码凭空多出 344 条报错。新增规则家族改为需单独提 PR 并连同修复一起评审。
+- 依赖刷新（`uv.lock`）：rich 14.3.3 → 15.0.0、uvicorn 0.46.0 → 0.51.0、pytest 9.0.3 → 9.1.1、ruff 0.15.8 → 0.16.0、websockets 16.0 → 16.1.1 等共 20 个包。rich 为大版本跨越，`display.py` 是全仓唯一使用方，已在加强断言后的渲染测试下逐项验证无行为变化。
 
 ## [1.17.0] - 2026-07-27
 

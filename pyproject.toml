@@ -88,6 +88,17 @@ pythonpath = ["src"]
 line-length = 120
 indent-width = 4
 
+[tool.ruff.lint]
+# 显式钉死规则集，不吃 ruff 的隐式默认值。
+#
+# 此前没有这一段，门禁实际由「当前装的 ruff 版本认为默认是什么」决定：升到
+# 0.16.0 时默认集扩展到 I / BLE / RUF / UP / DTZ / S / PYI 等家族，同一份代码
+# 凭空多出 344 条报错——质量门禁的定义权不该握在依赖版本手里。
+#
+# 这里保持与 0.16 之前一致的 pycodestyle 子集 + Pyflakes。要新增规则家族请单独
+# 提 PR，连同一次性修复一起评审，而不是让它随版本漂移进来。
+select = ["E4", "E7", "E9", "F"]
+
 [tool.ruff.format]
 indent-style = "tab"
 
