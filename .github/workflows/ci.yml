@@ -40,6 +40,9 @@ jobs:
           BOSS_SMOKE_DRY_RUN: "1"
         run: uv run python scripts/smoke_p0.py
 
+      - name: MCP eval scenarios (offline fixtures)
+        run: uv run python evals/run_eval.py --mode fixture --results-dir "${RUNNER_TEMP}/evals"
+
   test:
     runs-on: ubuntu-latest
     strategy:

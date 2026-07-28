@@ -303,6 +303,7 @@ def test_ci_workflow_runs_p0_quality_gate():
 		"uv sync --all-extras",
 		"uv run python scripts/quality_baseline.py",
 		"uv run python scripts/smoke_p0.py",
+		'uv run python evals/run_eval.py --mode fixture --results-dir "${RUNNER_TEMP}/evals"',
 	]
 	assert "scripts/quality_baseline.py" in raw_workflow
 	assert "BOSS_SMOKE_DRY_RUN" in raw_workflow
