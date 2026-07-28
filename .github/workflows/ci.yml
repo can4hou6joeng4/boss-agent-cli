@@ -130,21 +130,17 @@ jobs:
 
   docker:
     # 容器镜像必须每次构建，否则会像此前那个无人引用的 Dockerfile 一样静默腐烂。
+    #
+    # 刻意用 runner 自带的 docker build，不上 buildx / GHA 缓存：docker-container
+    # driver 需要额外从 Docker Hub 拉 moby/buildkit，`# syntax=` 前端又要再拉一次
+    # docker/dockerfile——两者都曾在此 job 上因 Docker Hub 超时而假红。构建本身只要
+    # 几十秒，省下的缓存收益远不及这两个外部依赖带来的偶发失败。
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v4
-
       - name: Build image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          load: true
-          tags: boss-agent-cli:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: docker build -t boss-agent-cli:ci .
 
       - name: Verify the CLI entry point and JSON envelope
         run: |

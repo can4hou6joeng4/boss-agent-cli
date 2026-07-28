@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # boss-agent-cli 容器镜像 —— 只用于运行 MCP server 与只读 / 本地命令。
 #
 # 刻意**不**包含浏览器内核：登录（扫码 / 浏览器 Cookie 提取）依赖真实浏览器，
