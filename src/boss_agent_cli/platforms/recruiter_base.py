@@ -134,6 +134,10 @@ class RecruiterPlatform(ABC):
 		"""进入聊天会话。"""
 		raise NotImplementedError(f"{self.name} does not implement session_enter")
 
+	def send_message_by_friend(self, friend_id: int, content: str) -> dict[str, Any]:
+		"""按 friend_id 发送消息（issue #217 A' 路径，`hr reply` 在用）。"""
+		raise NotImplementedError(f"{self.name} does not implement send_message_by_friend")
+
 	def job_offline(self, job_id: str) -> dict[str, Any]:
 		"""下线职位。"""
 		raise NotImplementedError(f"{self.name} does not implement job_offline")
@@ -141,6 +145,10 @@ class RecruiterPlatform(ABC):
 	def job_online(self, job_id: str) -> dict[str, Any]:
 		"""上线职位。"""
 		raise NotImplementedError(f"{self.name} does not implement job_online")
+
+	def job_detail(self, enc_job_id: str) -> dict[str, Any]:
+		"""查看职位详情（`hr jobs detail` 在用）。"""
+		raise NotImplementedError(f"{self.name} does not implement job_detail")
 
 	def exchange_request(self, exchange_type: int, uid: int, job_id: int, gid: int) -> dict[str, Any]:
 		"""请求交换联系方式。DEPRECATED — 见 exchange_request_by_friend (issue #217)。"""

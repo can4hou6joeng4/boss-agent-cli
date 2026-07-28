@@ -1,4 +1,5 @@
 import json
+import socket
 import sqlite3
 import sys
 import types
@@ -16,6 +17,19 @@ from boss_agent_cli.crawler.operations import crawl_results, import_crawl_shortl
 from boss_agent_cli.crawler.service import CrawlBudget, CrawlService, CrawlSettings, CrawlStopRequested
 from boss_agent_cli.crawler.transport import JOBLIST_TARGET, DrissionCrawlerSession
 from boss_agent_cli.main import cli
+
+
+def _free_port() -> int:
+	"""取一个当前空闲的本地端口。
+
+	不能写死 9222：`DrissionCrawlerSession.open()` 会真的检查端口占用并拒绝复用
+	（crawl 只允许启动自己的独立浏览器），而 9222 正是本项目 CDP 模式的默认调试
+	端口——开发者按文档开着 CDP Chrome 时，写死 9222 会让这些用例在本机必挂，
+	CI 上却因端口空闲而常绿。
+	"""
+	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
+		connection.bind(("127.0.0.1", 0))
+		return int(connection.getsockname()[1])
 
 
 def _job(job_id: str, security_id: str) -> dict:
@@ -108,7 +122,7 @@ def _settings(
 		with_detail=with_detail,
 		profile_path=tmp_path / "profile",
 		chrome_path=None,
-		cdp_port=9222,
+		cdp_port=_free_port(),
 		hook_profile="none",
 		max_requests=max_requests,
 		max_details=max_details,
@@ -211,7 +225,7 @@ def test_hook_registration_happens_before_first_navigation(monkeypatch, tmp_path
 	session = DrissionCrawlerSession(
 		profile_path=tmp_path / "profile",
 		chrome_path=None,
-		cdp_port=9222,
+		cdp_port=_free_port(),
 		hook_profile="screenshot-full",
 		hook_dir=_write_hooks(tmp_path / "hooks"),
 	)
@@ -250,7 +264,7 @@ def test_listener_parses_string_json_response(monkeypatch, tmp_path):
 	page = Page()
 	monkeypatch.setitem(sys.modules, "DrissionPage", types.SimpleNamespace(ChromiumOptions=Options, ChromiumPage=lambda options: page))
 	session = DrissionCrawlerSession(
-		profile_path=tmp_path / "profile", chrome_path=None, cdp_port=9222, hook_profile="none", hook_dir=None,
+		profile_path=tmp_path / "profile", chrome_path=None, cdp_port=_free_port(), hook_profile="none", hook_dir=None,
 	)
 	session.open()
 	assert session.fetch_page("AI", "101210100", 1)["zpData"]["jobList"][0]["encryptJobId"] == "job-1"

@@ -228,6 +228,14 @@ module = [
 	"boss_agent_cli.commands.register",
 	"boss_agent_cli.commands.contact_lookup",
 	"boss_agent_cli.commands.friend_list_pages",
+	"boss_agent_cli.commands._recruiter_platform",
+	"boss_agent_cli.commands.crawl",
+	"boss_agent_cli.crawler.exporter",
+	"boss_agent_cli.crawler.hooks",
+	"boss_agent_cli.crawler.operations",
+	"boss_agent_cli.crawler.service",
+	"boss_agent_cli.crawler.transport",
+	"boss_agent_cli.mcp_server",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

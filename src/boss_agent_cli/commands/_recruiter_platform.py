@@ -5,13 +5,14 @@ from typing import TYPE_CHECKING
 
 from boss_agent_cli.api.recruiter_client import BossRecruiterClient
 from boss_agent_cli.platforms import get_recruiter_platform
+from boss_agent_cli.platforms.recruiter_base import RecruiterPlatform
 
 if TYPE_CHECKING:
 	import click
 	from boss_agent_cli.auth.manager import AuthManager
 
 
-def get_recruiter_platform_instance(ctx: "click.Context", auth: "AuthManager"):
+def get_recruiter_platform_instance(ctx: "click.Context", auth: "AuthManager") -> RecruiterPlatform:
 	obj = ctx.obj or {}
 	name = obj.get("platform") or "zhipin"
 	recruiter_name = f"{name}-recruiter"

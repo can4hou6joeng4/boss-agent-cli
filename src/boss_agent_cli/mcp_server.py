@@ -5,7 +5,8 @@ import asyncio
 import copy
 import json
 import subprocess
-from typing import Any
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING, Any
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -18,6 +19,15 @@ from boss_agent_cli.compliance import (
 	restricted_commands,
 )
 from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
+
+if TYPE_CHECKING:
+	# SSE / HTTP 传输是可选路径，starlette 与 session manager 只在对应工厂函数里
+	# 惰性导入；这里仅为类型标注引入，不影响 stdio 传输的启动开销。
+	from collections.abc import AsyncIterator
+
+	from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+	from starlette.applications import Starlette
+	from starlette.types import Receive, Scope, Send
 
 SERVER_INSTRUCTIONS = (
 	"boss-agent-cli over MCP: a local-assist BOSS Zhipin job-search toolset in assisted mode by default — "
@@ -76,9 +86,21 @@ def _build_schema_with_availability() -> dict[str, Any]:
 _SCHEMA_WITH_AVAILABILITY = _build_schema_with_availability()
 
 
+def _availability_of(command: Any) -> dict[str, Any] | None:
+	"""从单个 schema 命令条目里取 availability，非 dict 一律按「无」处理。
+
+	`SCHEMA_DATA` 是 `dict[str, Any]`，直接 `.get("availability")` 会把 `Any`
+	一路带到返回值上；这里收敛成一处运行时校验，调用点就都是有类型的了。
+	"""
+	if not isinstance(command, dict):
+		return None
+	availability = command.get("availability")
+	return availability if isinstance(availability, dict) else None
+
+
 def _tool_availability(tool_name: str) -> dict[str, Any] | None:
 	name = tool_name.removeprefix("boss_")
-	commands = _SCHEMA_WITH_AVAILABILITY["commands"]
+	commands: dict[str, Any] = _SCHEMA_WITH_AVAILABILITY["commands"]
 
 	direct_map = {
 		"chat_summary": "chat-summary",
@@ -86,31 +108,32 @@ def _tool_availability(tool_name: str) -> dict[str, Any] | None:
 		"follow_up": "follow-up",
 	}
 	if name in direct_map:
-		return commands[direct_map[name]].get("availability")
+		return _availability_of(commands[direct_map[name]])
 	if name in commands:
-		return commands[name].get("availability")
+		return _availability_of(commands[name])
 
-	if name.startswith("ai_"):
-		sub_name = name.removeprefix("ai_").replace("_", "-")
-		return commands["ai"].get("availability")
-	if name.startswith("agent_"):
-		return commands["agent"].get("availability")
-	if name.startswith("resume_"):
-		return commands["resume"].get("availability")
-	if name.startswith("watch_"):
-		return commands["watch"].get("availability")
-	if name.startswith("preset_"):
-		return commands["preset"].get("availability")
-	if name.startswith("shortlist_"):
-		return commands["shortlist"].get("availability")
-	if name.startswith("favorites_"):
-		return commands["favorites"].get("availability")
-	if name.startswith("crawl_"):
-		return commands["crawl"].get("availability")
+	for prefix, command_name in (
+		("ai_", "ai"),
+		("agent_", "agent"),
+		("resume_", "resume"),
+		("watch_", "watch"),
+		("preset_", "preset"),
+		("shortlist_", "shortlist"),
+		("favorites_", "favorites"),
+		("crawl_", "crawl"),
+	):
+		if name.startswith(prefix):
+			return _availability_of(commands[command_name])
+
 	if name.startswith("hr_"):
 		sub_name = name.removeprefix("hr_").replace("_", "-")
-		hr_availability = commands["hr"].get("availability") or {}
-		return hr_availability.get("subcommands", {}).get(sub_name, hr_availability)
+		hr_availability = _availability_of(commands["hr"]) or {}
+		subcommands = hr_availability.get("subcommands")
+		if isinstance(subcommands, dict):
+			sub_availability = subcommands.get(sub_name)
+			if isinstance(sub_availability, dict):
+				return sub_availability
+		return hr_availability
 	return None
 
 
@@ -992,15 +1015,20 @@ def _run_boss(*args: str) -> dict[str, Any]:
 		stdin=subprocess.DEVNULL,
 	)
 	try:
-		return json.loads(result.stdout)
+		parsed = json.loads(result.stdout)
 	except json.JSONDecodeError:
-		return {
-			"ok": False,
-			"error": {"code": "CLI_ERROR", "message": result.stderr or "命令执行失败"},
-		}
+		parsed = None
+	if isinstance(parsed, dict):
+		return parsed
+	# CLI 契约保证 stdout 是 JSON 信封对象；拿到别的形状（解析失败或非对象）
+	# 一律按命令失败处理，而不是把非 dict 结果透传给调用方。
+	return {
+		"ok": False,
+		"error": {"code": "CLI_ERROR", "message": result.stderr or "命令执行失败"},
+	}
 
 
-def _build_args(tool_name: str, arguments: dict) -> list[str]:
+def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	"""根据 tool name 和参数构建 CLI 参数列表。"""
 	name = tool_name.replace("boss_", "")
 
@@ -1436,7 +1464,7 @@ async def list_tools() -> list[Tool]:
 
 
 @server.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 	if name in _LOW_RISK_BLOCKED_TOOLS:
 		result = {
 			"ok": False,
@@ -1466,7 +1494,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 # ── 入口 ──────────────────────────────────────────────────────────
 
 
-async def main():
+async def main() -> None:
 	async with stdio_server() as (read_stream, write_stream):
 		await server.run(read_stream, write_stream, server.create_initialization_options())
 
@@ -1477,7 +1505,7 @@ def _normalize_path(path: str) -> str:
 	return path
 
 
-def _create_sse_app(*, sse_path: str = DEFAULT_SSE_PATH, message_path: str = DEFAULT_MESSAGE_PATH):
+def _create_sse_app(*, sse_path: str = DEFAULT_SSE_PATH, message_path: str = DEFAULT_MESSAGE_PATH) -> "Starlette":
 	from mcp.server.sse import SseServerTransport
 	from starlette.applications import Starlette
 	from starlette.requests import Request
@@ -1488,7 +1516,7 @@ def _create_sse_app(*, sse_path: str = DEFAULT_SSE_PATH, message_path: str = DEF
 	message_path = _normalize_path(message_path)
 	sse = SseServerTransport(message_path)
 
-	async def handle_sse(scope, receive, send):
+	async def handle_sse(scope: "Scope", receive: "Receive", send: "Send") -> Response:
 		async with sse.connect_sse(scope, receive, send) as streams:
 			await server.run(
 				streams[0],
@@ -1509,14 +1537,14 @@ def _create_sse_app(*, sse_path: str = DEFAULT_SSE_PATH, message_path: str = DEF
 
 
 class _StreamableHTTPASGIApp:
-	def __init__(self, session_manager):
+	def __init__(self, session_manager: "StreamableHTTPSessionManager") -> None:
 		self.session_manager = session_manager
 
-	async def __call__(self, scope, receive, send) -> None:
+	async def __call__(self, scope: "Scope", receive: "Receive", send: "Send") -> None:
 		await self.session_manager.handle_request(scope, receive, send)
 
 
-def _create_streamable_http_app(*, path: str = DEFAULT_HTTP_PATH):
+def _create_streamable_http_app(*, path: str = DEFAULT_HTTP_PATH) -> "Starlette":
 	from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 	from starlette.applications import Starlette
 	from starlette.routing import Route
@@ -1525,7 +1553,10 @@ def _create_streamable_http_app(*, path: str = DEFAULT_HTTP_PATH):
 	session_manager = StreamableHTTPSessionManager(app=server)
 	http_app = _StreamableHTTPASGIApp(session_manager)
 
-	async def lifespan(app):
+	# 必须是 asynccontextmanager：Starlette 对裸 async generator lifespan 会走
+	# 弃用路径并发 DeprecationWarning。
+	@asynccontextmanager
+	async def lifespan(app: "Starlette") -> "AsyncIterator[None]":
 		async with session_manager.run():
 			yield
 
@@ -1535,7 +1566,7 @@ def _create_streamable_http_app(*, path: str = DEFAULT_HTTP_PATH):
 	)
 
 
-def _serve_asgi_app(app, *, host: str, port: int) -> None:
+def _serve_asgi_app(app: "Starlette", *, host: str, port: int) -> None:
 	import uvicorn
 
 	uvicorn.run(app, host=host, port=port, log_level="info")

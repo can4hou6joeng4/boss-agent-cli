@@ -7,6 +7,14 @@
 ### Added
 - 容器化落地：仓库自带的 `Dockerfile` 重写为多阶段 uv 构建（`uv sync --frozen` 严格按 `uv.lock` 安装，依赖不再漂移）+ 非 root 运行 + `.dockerignore` + `docker-compose.yml` + [Docker 接入文档](docs/integrations/docker.md)，并在 CI 新增 `docker` job 每次构建并验证 CLI 信封、MCP stdio 握手与非 root 身份。镜像定位刻意收窄为**只跑 MCP server 与只读 / 本地命令**：不含浏览器内核，`boss login` 仍在宿主机完成后挂载 `~/.boss-agent`（容器内 `HOME=/data`，故默认数据目录解析为 `/data/.boss-agent`）。不发布 registry 镜像。
 
+### Fixed
+- `RecruiterPlatform` 抽象基类补齐两个已被命令层实际调用、却从未写进契约的方法：`send_message_by_friend`（`hr reply` 在用）与 `job_detail`（`hr jobs detail` 在用）。此前它们只存在于 `BossRecruiterPlatform` 实现里，任何新写的招聘者平台按 ABC 实现完都能通过类型检查，却会在这两条命令上运行时抛 `AttributeError`。
+- MCP 的 HTTP streaming 传输改用 `@asynccontextmanager` 声明 lifespan：此前是裸 async generator，会走 Starlette 的弃用路径并触发 `DeprecationWarning`。
+- MCP `_run_boss` 现在只接受 JSON 对象形式的 CLI 信封：解析结果非 dict 时（契约违例）返回 `CLI_ERROR` 信封，而不是把非 dict 结果透传给调用方。
+
+### Changed
+- mypy 逐模块严格化白名单 120 → 128：纳入 `crawler/` 全部子模块、`commands/crawl.py`、`commands/_recruiter_platform.py` 与 `mcp_server.py`（此前 #339 引入的整个 crawl 子系统与最大的 `mcp_server.py` 都在严格检查之外）。
+
 ## [1.17.0] - 2026-07-27
 
 ### Added
