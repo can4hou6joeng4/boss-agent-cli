@@ -1,6 +1,6 @@
 # Docker Integration
 
-Applies to the `boss-agent-cli` low-risk CLI contract as of version 1.17.0.
+Applies to the `boss-agent-cli` low-risk CLI contract as of version 1.18.0.
 
 The repository ships a `Dockerfile` and a `docker-compose.yml` so you can run the MCP
 server without setting up a local Python toolchain. This is the answer to

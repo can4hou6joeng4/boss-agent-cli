@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v1.18.0 (2026-07-29): usable Docker / Compose image with CI build gate, MCP schema contract fixes and `mcp_server` split, offline evals in P0, pinned ruff rules, and dependency refresh (rich 15)
 - ✅ v1.17.0 (2026-07-27): `boss favorites list/sync` for syncing saved jobs, the restricted Research Mode resumable crawl workflow, and internship job-type fields plus the internship filter mapping fix
 - ✅ v1.16.0 (2026-07-17): explicit `operating_mode` two-mode contract (`assisted` / `research`) and the compliance guardrail rebuilt as an immutable capability policy registry, with CLI, schema, and MCP filtering all derived from one source of truth
 - ✅ v1.15.0 (2026-07-14): `boss ai cover-letter` drafts, removal of dead config keys and dead code, and hardened Zhilian page host validation (exact hostname matching)
