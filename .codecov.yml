@@ -11,7 +11,14 @@ coverage:
       default:
         target: 80%
         threshold: 5%
-        informational: true
+        # 新增/修改的代码必须自带覆盖。此前是 informational: true，等于新代码
+        # 低覆盖不会有任何信号——commands/crawl.py 就是这样以 49% 合进主干的。
+        #
+        # 注意效力边界：codecov 的状态**不在**分支保护的必需检查里，所以这里
+        # 只是把 PR 上的信号从灰变红，不会硬阻塞合并。刻意不加进必需检查——
+        # ci.yml 的上传用了 fail_ci_if_error: false，上传失败时状态根本不会
+        # 上报，设为必需会让 PR 永久卡在 pending。
+        informational: false
 
 comment:
   layout: "reach, diff, flags, files"
@@ -23,3 +30,8 @@ ignore:
   - "docs/"
   - "mcp-server/"
   - "scripts/"
+  # 真实浏览器 / 守护进程链路：单测只能造出无意义的桩覆盖，排除后让
+  # patch 门槛聚焦在真正可测的命令层与纯逻辑上。
+  - "src/boss_agent_cli/bridge/daemon.py"
+  - "src/boss_agent_cli/crawler/transport.py"
+  - "src/boss_agent_cli/automation/zhilian_cdp.py"

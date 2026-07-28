@@ -1,9 +1,11 @@
 """RecruiterPlatform ABC + BossRecruiterPlatform adapter 测试。"""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
+from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.platforms import get_recruiter_platform
 from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
 
@@ -185,3 +187,47 @@ def test_exit_closes_on_exception():
 def test_recruiter_platform_registry():
 	cls = get_recruiter_platform("zhipin-recruiter")
 	assert cls is BossRecruiterPlatform
+
+
+# ── get_recruiter_platform_instance ───────────────────────────────────
+# 命令层测试一律 mock 掉这个 helper，所以它本身此前从未被真实调用过。
+
+
+def _ctx(**obj):
+	return SimpleNamespace(obj=obj)
+
+
+def test_recruiter_instance_defaults_to_zhipin_and_passes_delay_and_cdp(monkeypatch):
+	captured: dict = {}
+
+	class _Client:
+		def __init__(self, auth, *, delay, cdp_url):
+			captured.update(auth=auth, delay=delay, cdp_url=cdp_url)
+
+	monkeypatch.setattr("boss_agent_cli.commands._recruiter_platform.BossRecruiterClient", _Client)
+	auth = MagicMock()
+	platform = get_recruiter_platform_instance(_ctx(delay=(2.0, 4.0), cdp_url="http://localhost:9222"), auth)
+
+	assert isinstance(platform, BossRecruiterPlatform)
+	assert captured["auth"] is auth
+	assert captured["delay"] == (2.0, 4.0)
+	assert captured["cdp_url"] == "http://localhost:9222"
+
+
+def test_recruiter_instance_falls_back_to_default_delay_when_ctx_is_empty(monkeypatch):
+	captured: dict = {}
+
+	class _Client:
+		def __init__(self, auth, *, delay, cdp_url):
+			captured.update(delay=delay, cdp_url=cdp_url)
+
+	monkeypatch.setattr("boss_agent_cli.commands._recruiter_platform.BossRecruiterClient", _Client)
+	get_recruiter_platform_instance(SimpleNamespace(obj=None), MagicMock())
+
+	assert captured["delay"] == (1.5, 3.0)
+	assert captured["cdp_url"] is None
+
+
+def test_recruiter_instance_rejects_platform_without_recruiter_adapter():
+	with pytest.raises(ValueError):
+		get_recruiter_platform_instance(_ctx(platform="zhilian"), MagicMock())
