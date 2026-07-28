@@ -791,7 +791,13 @@ SCHEMA_DATA = {
 				{
 					"name": "boss_crawl_status",
 					"description": "读取 crawl 页游标、职位数、详情进度和风险状态。",
-					"inputSchema": {"type": "object", "properties": {"run_id": {"type": "string"}}, "required": ["run_id"]},
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"run_id": {"type": "string", "description": "crawl run 标识，由 boss crawl start 返回"},
+						},
+						"required": ["run_id"],
+					},
 				},
 				{
 					"name": "boss_crawl_results",
@@ -799,9 +805,13 @@ SCHEMA_DATA = {
 					"inputSchema": {
 						"type": "object",
 						"properties": {
-							"run_id": {"type": "string"},
-							"page": {"type": "integer"},
-							"detail_status": {"type": "string", "enum": ["completed", "pending"]},
+							"run_id": {"type": "string", "description": "crawl run 标识，由 boss crawl start 返回"},
+							"page": {"type": "integer", "description": "只返回该 crawl 页的结果，省略则返回全部"},
+							"detail_status": {
+								"type": "string",
+								"enum": ["completed", "pending"],
+								"description": "按职位详情抓取状态筛选：completed 已补全详情，pending 仅有列表信息",
+							},
 						},
 						"required": ["run_id"],
 					},
@@ -812,11 +822,19 @@ SCHEMA_DATA = {
 					"inputSchema": {
 						"type": "object",
 						"properties": {
-							"run_id": {"type": "string"},
-							"selectors": {"type": "array", "items": {"type": "string"}},
-							"all": {"type": "boolean", "default": False},
-							"tags": {"type": "string"},
-							"note": {"type": "string"},
+							"run_id": {"type": "string", "description": "crawl run 标识，由 boss crawl start 返回"},
+							"selectors": {
+								"type": "array",
+								"items": {"type": "string"},
+								"description": "要导入的职位 selector 列表，取自 boss_crawl_results 的返回；与 all 二选一",
+							},
+							"all": {
+								"type": "boolean",
+								"default": False,
+								"description": "导入该 run 的全部可关联职位；与 selectors 二选一",
+							},
+							"tags": {"type": "string", "description": "写入候选池的本地标签，逗号分隔"},
+							"note": {"type": "string", "description": "写入候选池的本地备注"},
 						},
 						"required": ["run_id"],
 					},

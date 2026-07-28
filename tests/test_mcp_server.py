@@ -90,6 +90,54 @@ def test_all_tools_have_name_and_description():
 		assert tool.description, f"{tool.name} 缺少描述"
 
 
+# JSON Schema 规范定义的全部合法 type 值。注意没有 "int"——那是 Python 的写法，
+# 严格的 MCP 宿主会拒绝或误处理这样的参数 schema。
+_JSON_SCHEMA_TYPES = frozenset({"null", "boolean", "object", "array", "number", "string", "integer"})
+
+
+def test_all_tool_parameter_types_are_valid_json_schema():
+	"""参数 type 必须是 JSON Schema 合法值。
+
+	曾出现 `boss_favorites_list.page` 写成 `"int"`（其余 105 个参数都写对了）。
+	这类笔误不会让任何现有测试变红，却会让严格校验 schema 的 MCP 宿主拒掉该工具。
+	"""
+	invalid = []
+	for tool in TOOLS:
+		for name, spec in (tool.inputSchema or {}).get("properties", {}).items():
+			declared = spec.get("type")
+			if declared is not None and declared not in _JSON_SCHEMA_TYPES:
+				invalid.append(f"{tool.name}.{name} = {declared!r}")
+	assert not invalid, "非法的 JSON Schema type：\n" + "\n".join(invalid)
+
+
+def test_all_tool_parameters_are_described_for_agents():
+	"""每个参数都要有 description——Agent 靠它决定传什么值。"""
+	missing = [
+		f"{tool.name}.{name}"
+		for tool in TOOLS
+		for name, spec in (tool.inputSchema or {}).get("properties", {}).items()
+		if not spec.get("description")
+	]
+	assert not missing, "参数缺少 description：\n" + "\n".join(missing)
+
+
+def test_all_tool_schemas_are_well_formed_objects():
+	"""顶层必须是 object、required 只能引用已声明的属性、array 必须带 items。"""
+	problems = []
+	for tool in TOOLS:
+		schema = tool.inputSchema or {}
+		properties = schema.get("properties", {})
+		if schema.get("type") != "object":
+			problems.append(f"{tool.name}: 顶层 type 应为 object，实际 {schema.get('type')!r}")
+		for name in schema.get("required", []):
+			if name not in properties:
+				problems.append(f"{tool.name}: required 引用了未声明的属性 {name!r}")
+		for name, spec in properties.items():
+			if spec.get("type") == "array" and "items" not in spec:
+				problems.append(f"{tool.name}.{name}: array 缺少 items")
+	assert not problems, "工具 schema 结构问题：\n" + "\n".join(problems)
+
+
 def test_candidate_tool_description_includes_availability():
 	search = next(t for t in TOOLS if t.name == "boss_search")
 	assert "可用性:" in search.description

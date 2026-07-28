@@ -8,6 +8,7 @@
 - 容器化落地：仓库自带的 `Dockerfile` 重写为多阶段 uv 构建（`uv sync --frozen` 严格按 `uv.lock` 安装，依赖不再漂移）+ 非 root 运行 + `.dockerignore` + `docker-compose.yml` + [Docker 接入文档](docs/integrations/docker.md)，并在 CI 新增 `docker` job 每次构建并验证 CLI 信封、MCP stdio 握手与非 root 身份。镜像定位刻意收窄为**只跑 MCP server 与只读 / 本地命令**：不含浏览器内核，`boss login` 仍在宿主机完成后挂载 `~/.boss-agent`（容器内 `HOME=/data`，故默认数据目录解析为 `/data/.boss-agent`）。不发布 registry 镜像。
 
 ### Fixed
+- 修正 MCP 工具 `boss_favorites_list` 的 `page` 参数 schema：类型写成了 JSON Schema 不存在的 `"int"`（其余 105 个参数均为合法值），严格校验 schema 的 MCP 宿主可能因此拒掉该工具。同时给 `boss_crawl_status` / `boss_crawl_results` / `boss_crawl_shortlist` 的 9 个参数补上缺失的 `description`——Agent 依赖它判断该传什么值。新增三条契约测试守住这一整类问题（type 合法性、参数必须有 description、顶层结构与 required/items 完整性）。
 - `RecruiterPlatform` 抽象基类补齐两个已被命令层实际调用、却从未写进契约的方法：`send_message_by_friend`（`hr reply` 在用）与 `job_detail`（`hr jobs detail` 在用）。此前它们只存在于 `BossRecruiterPlatform` 实现里，任何新写的招聘者平台按 ABC 实现完都能通过类型检查，却会在这两条命令上运行时抛 `AttributeError`。
 - MCP 的 HTTP streaming 传输改用 `@asynccontextmanager` 声明 lifespan：此前是裸 async generator，会走 Starlette 的弃用路径并触发 `DeprecationWarning`。
 - MCP `_run_boss` 现在只接受 JSON 对象形式的 CLI 信封：解析结果非 dict 时（契约违例）返回 `CLI_ERROR` 信封，而不是把非 dict 结果透传给调用方。
