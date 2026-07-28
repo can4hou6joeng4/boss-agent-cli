@@ -35,7 +35,12 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
-          files: dist/*
+          # 只上传真正的分发产物。此前用 dist/* 会把构建后端生成的 dist/.gitignore
+          # 一并捞进去，GitHub 不允许资产以点开头，于是每个 release 都多出一个
+          # 名为 default.gitignore 的垃圾文件（v1.15.0 起可见）。
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
 
       - name: Publish to PyPI
         if: ${{ !contains(github.ref, 'rc') && !contains(github.ref, 'beta') }}

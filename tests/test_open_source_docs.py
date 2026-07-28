@@ -189,6 +189,7 @@ def test_maintainer_docs_cover_open_source_governance():
 	assert "lint" in branch
 	assert "typecheck" in branch
 	assert "docs" in branch
+	assert "docker" in branch
 	assert "allow_force_pushes" in branch
 	assert "allow_deletions" in branch
 

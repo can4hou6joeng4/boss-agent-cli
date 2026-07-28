@@ -28,8 +28,11 @@ Select the concrete check contexts emitted by `.github/workflows/ci.yml`:
 - `test (3.14)`
 - `lint`
 - `typecheck`
+- `docker`
 
 `P0 quality baseline` is the canonical blocking quality gate. It runs `scripts/quality_baseline.py`, which covers ruff (`src/boss_agent_cli`, `tests`, `scripts`), the full offline pytest suite, and mypy with the same command used locally. The same job also runs `scripts/smoke_p0.py` in offline dry-run mode so the JSON-envelope smoke contract is checked on every push and pull request.
+
+`docker` builds the container image and verifies the CLI entry point, the MCP stdio handshake, and that the image runs as non-root. It exists so the shipped `Dockerfile` cannot rot silently the way an unreferenced one did before.
 
 The project may also require documentation checks when `.github/workflows/docs.yml` is enabled:
 
