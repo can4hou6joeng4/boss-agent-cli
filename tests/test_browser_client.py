@@ -248,10 +248,10 @@ def test_start_headless_tolerates_networkidle_timeout():
 		"networkidle",
 		timeout=_HEADLESS_NETWORKIDLE_GRACE_MS,
 	)
-	logger.info.assert_any_call(
+	logger.debug.assert_any_call(
 		"[boss] CDP 不可用（提示：需以 --remote-debugging-port=9222 启动 Chrome），降级到 headless patchright"
 	)
-	assert any("headless 首页未进入 networkidle" in call.args[0] for call in logger.info.call_args_list)
+	assert any("headless 首页未进入 networkidle" in call.args[0] for call in logger.debug.call_args_list)
 
 
 def test_ensure_started_falls_back_to_patchright_when_bridge_and_cdp_fail():

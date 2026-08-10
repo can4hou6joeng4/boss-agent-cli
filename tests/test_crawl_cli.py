@@ -1,7 +1,7 @@
 """CLI-layer contract tests for the `boss crawl` command group.
 
 `tests/test_crawl.py` covers the crawler service and hook machinery. This file covers
-the command layer itself — argument validation, compliance gating, and the JSON
+the command layer itself — argument validation, capability entry, and the JSON
 envelope each subcommand emits — which previously shipped almost entirely untested
 (`commands/crawl.py` sat at 49% line coverage).
 
@@ -29,7 +29,21 @@ def _enable_research(runner: CliRunner, tmp_path: Path) -> None:
 	assert result.exit_code == 0, result.output
 
 
+def _seed_login(tmp_path: Path) -> None:
+	"""Crawl injects boss-login cookies into its isolated Chrome profile."""
+	from boss_agent_cli.auth.token_store import TokenStore
+
+	TokenStore(tmp_path / "auth").save(
+		{
+			"cookies": {"wt2": "test-wt2", "wbg": "1", "zp_at": "1"},
+			"user_agent": "test-agent",
+			"stoken": "",
+		}
+	)
+
+
 def _invoke(runner: CliRunner, tmp_path: Path, *args: str):
+	_seed_login(tmp_path)
 	return runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *args])
 
 
@@ -129,9 +143,8 @@ def test_configure_persists_budget_overrides(tmp_path):
 	assert saved["crawl"]["max_retries"] == 0
 
 
-# ── 合规门控 ──────────────────────────────────────────────────────────
-# COMPLIANCE_BLOCKED 的阻断行为测试归 tests/test_compliance.py；这里只覆盖
-# research 模式下的正常路径与参数校验。
+# ── 运行与参数校验 ────────────────────────────────────────────────────
+# assisted/research 均可进入业务层；这里只覆盖 service 结果映射与参数校验。
 
 
 def test_run_rejects_unknown_city_before_touching_the_browser(tmp_path, monkeypatch):

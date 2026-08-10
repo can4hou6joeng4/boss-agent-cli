@@ -12,6 +12,7 @@ from typing import Any
 import click
 
 from boss_agent_cli.api.endpoints import CITY_CODES
+from boss_agent_cli.auth.manager import AuthManager, AuthRequired
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import operating_mode, require_compliance_allowed
 from boss_agent_cli.config import DEFAULTS
@@ -116,20 +117,56 @@ def _unused_local_port() -> int:
 		return int(connection.getsockname()[1])
 
 
-def _transport_factory(settings: CrawlSettings) -> DrissionCrawlerSession:
+def _session_seed(ctx: click.Context) -> tuple[dict[str, str], str]:
+	"""Seed the isolated crawl Chrome profile with boss-login cookies."""
+	auth = AuthManager(
+		Path(ctx.obj["data_dir"]),
+		logger=ctx.obj.get("logger"),
+		platform=ctx.obj.get("platform", "zhipin"),
+	)
+	try:
+		token = auth.get_token()
+	except AuthRequired as exc:
+		raise RuntimeError(str(exc)) from exc
+	raw = token.get("cookies") if isinstance(token, dict) else None
+	if not isinstance(raw, dict) or not raw:
+		raise RuntimeError("本地登录态缺少 Cookie，请先 boss login")
+	cookies = {str(name): str(value) for name, value in raw.items() if name and value is not None}
+	if ctx.obj.get("platform", "zhipin") == "zhipin" and "wt2" not in cookies:
+		raise RuntimeError("登录态缺少 wt2，请先 boss login")
+	return cookies, str(token.get("user_agent") or "")
+
+
+def _transport_factory(
+	settings: CrawlSettings,
+	*,
+	seed_cookies: dict[str, str] | None = None,
+	user_agent: str | None = None,
+) -> DrissionCrawlerSession:
 	return DrissionCrawlerSession(
 		profile_path=settings.profile_path,
 		chrome_path=settings.chrome_path,
 		cdp_port=settings.cdp_port,
 		hook_profile=settings.hook_profile,
 		hook_dir=settings.hook_dir,
+		seed_cookies=seed_cookies,
+		user_agent=user_agent,
 	)
 
 
 def _run_service(ctx: click.Context, service_call: Any) -> None:
 	try:
+		seed_cookies, user_agent = _session_seed(ctx)
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
-			service = CrawlService(cache, data_dir=Path(ctx.obj["data_dir"]), transport_factory=_transport_factory)
+			service = CrawlService(
+				cache,
+				data_dir=Path(ctx.obj["data_dir"]),
+				transport_factory=lambda settings: _transport_factory(
+					settings,
+					seed_cookies=seed_cookies,
+					user_agent=user_agent,
+				),
+			)
 			outcome = service_call(service)
 	except KeyError as exc:
 		handle_error_output(ctx, "crawl", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {exc.args[0]}")
@@ -138,14 +175,31 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 		handle_error_output(ctx, "crawl", code="INVALID_PARAM", message=str(exc))
 		return
 	except RuntimeError as exc:
+		message = str(exc)
+		if "未登录" in message or "Cookie" in message or "wt2" in message:
+			handle_error_output(
+				ctx,
+				"crawl",
+				code="AUTH_REQUIRED",
+				message=message,
+				recoverable=True,
+				recovery_action="boss login",
+			)
+			return
 		handle_error_output(
-			ctx, "crawl", code="CRAWL_UNAVAILABLE", message=str(exc), recoverable=True,
+			ctx,
+			"crawl",
+			code="CRAWL_UNAVAILABLE",
+			message=message,
+			recoverable=True,
 			recovery_action="安装 boss-agent-cli[crawl] 并执行 boss crawl configure",
 		)
 		return
-	hints = {"next_actions": [f"boss crawl resume {outcome.run_id}"]} if outcome.status != "completed" else {
-		"next_actions": ["查看 output_paths 中的 JSON、CSV 或 XLSX 结果文件"]
-	}
+	hints = (
+		{"next_actions": [f"boss crawl resume {outcome.run_id}"]}
+		if outcome.status != "completed"
+		else {"next_actions": ["查看 output_paths 中的 JSON、CSV 或 XLSX 结果文件"]}
+	)
 	handle_output(ctx, "crawl", outcome.as_dict(), hints=hints)
 
 
@@ -221,7 +275,9 @@ def configure_cmd(
 @click.option("--pages", default=5, type=click.IntRange(1), show_default=True, help="严格页数上限")
 @click.option("--with-detail", is_flag=True, default=False, help="串行补全所有职位的 job_card")
 @click.option("--hook-profile", type=click.Choice(_HOOK_CHOICES), default=None)
-@click.option("--hook-dir", type=click.Path(path_type=Path), default=None, help="与 screenshot-full 一起显式指定的用户脚本目录")
+@click.option(
+	"--hook-dir", type=click.Path(path_type=Path), default=None, help="与 screenshot-full 一起显式指定的用户脚本目录"
+)
 @click.option("--chrome-path", default=None, type=click.Path(path_type=Path), help="覆盖配置的 chrome.exe")
 @click.option("--port", "cdp_port", default=None, type=click.IntRange(1, 65535), help="覆盖配置的调试端口")
 @click.pass_context
@@ -242,9 +298,16 @@ def run_cmd(
 		return
 	try:
 		settings = _settings_from_context(
-			ctx, query=query, city=city, pages=pages, with_detail=with_detail, hook_profile=hook_profile,
-			hook_dir=str(hook_dir) if hook_dir else None, profile_path=None,
-			chrome_path=str(chrome_path) if chrome_path else None, cdp_port=cdp_port,
+			ctx,
+			query=query,
+			city=city,
+			pages=pages,
+			with_detail=with_detail,
+			hook_profile=hook_profile,
+			hook_dir=str(hook_dir) if hook_dir else None,
+			profile_path=None,
+			chrome_path=str(chrome_path) if chrome_path else None,
+			cdp_port=cdp_port,
 		)
 	except ValueError as exc:
 		handle_error_output(ctx, "crawl", code="INVALID_PARAM", message=str(exc))
@@ -258,7 +321,9 @@ def run_cmd(
 @click.option("--pages", default=5, type=click.IntRange(1), show_default=True, help="严格页数上限")
 @click.option("--with-detail", is_flag=True, default=False, help="串行补全所有职位的 job_card")
 @click.option("--hook-profile", type=click.Choice(_HOOK_CHOICES), default=None)
-@click.option("--hook-dir", type=click.Path(path_type=Path), default=None, help="与 screenshot-full 一起显式指定的用户脚本目录")
+@click.option(
+	"--hook-dir", type=click.Path(path_type=Path), default=None, help="与 screenshot-full 一起显式指定的用户脚本目录"
+)
 @click.pass_context
 def start_cmd(
 	ctx: click.Context,
@@ -276,8 +341,16 @@ def start_cmd(
 	run_id: str | None = None
 	try:
 		settings = _settings_from_context(
-			ctx, query=query, city=city, pages=pages, with_detail=with_detail, hook_profile=hook_profile,
-			hook_dir=str(hook_dir) if hook_dir else None, profile_path=None, chrome_path=None, cdp_port=None,
+			ctx,
+			query=query,
+			city=city,
+			pages=pages,
+			with_detail=with_detail,
+			hook_profile=hook_profile,
+			hook_dir=str(hook_dir) if hook_dir else None,
+			profile_path=None,
+			chrome_path=None,
+			cdp_port=None,
 		)
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			service = CrawlService(cache, data_dir=Path(ctx.obj["data_dir"]), transport_factory=_transport_factory)

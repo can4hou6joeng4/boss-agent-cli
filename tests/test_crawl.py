@@ -184,7 +184,10 @@ def test_hook_requires_manifest_and_rejects_modified_file(tmp_path):
 
 
 def test_joblist_listener_target_matches_reference_endpoint():
-	assert JOBLIST_TARGET == r"wapi/zpgeek/search/joblist\.json"
+	import re
+
+	assert re.search(JOBLIST_TARGET, "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+	assert re.search(JOBLIST_TARGET, "https://www.zhipin.com/wapi/zpgeek/pc/search/joblist.json")
 
 
 def test_hook_registration_happens_before_first_navigation(monkeypatch, tmp_path):
@@ -235,6 +238,166 @@ def test_hook_registration_happens_before_first_navigation(monkeypatch, tmp_path
 	assert max(index for index, event in enumerate(events) if event == "hook") < events.index("navigate")
 
 
+def test_fetch_page_falls_back_to_in_page_fetch_when_listen_returns_html(monkeypatch, tmp_path):
+	class Options:
+		def set_local_port(self, port: int) -> None:
+			pass
+
+		def set_user_data_path(self, path: str) -> None:
+			pass
+
+		def existing_only(self, on_off: bool = True) -> None:
+			pass
+
+		def set_browser_path(self, path: str) -> None:
+			pass
+
+	class Listener:
+		def start(self, *args, **kwargs) -> None:
+			pass
+
+		def stop(self) -> None:
+			pass
+
+		def wait(self, **kwargs):
+			return types.SimpleNamespace(response=types.SimpleNamespace(body="<html>ok page but wrong packet</html>"))
+
+	class Page:
+		url = "https://www.zhipin.com/web/geek/jobs"
+		html = "<div class='job-list-box'></div>"
+		user_agent = "UA"
+		listen = Listener()
+
+		def get(self, url: str) -> None:
+			pass
+
+		def cookies(self):
+			return [{"name": "wt2", "value": "t"}, {"name": "__zp_stoken__", "value": "st"}]
+
+		def quit(self) -> None:
+			pass
+
+		def run_js(self, script, query, city, page):
+			# Must be sync-callable result (async run_js returns None in real DrissionPage).
+			assert "XMLHttpRequest" in script or "function" in script
+			return {
+				"status": 200,
+				"text": json.dumps(_page(_job("job-page", "sec-page"))),
+			}
+
+		class set:
+			@staticmethod
+			def cookies(items) -> None:
+				pass
+
+	page = Page()
+	monkeypatch.setitem(
+		sys.modules,
+		"DrissionPage",
+		types.SimpleNamespace(ChromiumOptions=Options, ChromiumPage=lambda options: page),
+	)
+	session = DrissionCrawlerSession(
+		profile_path=tmp_path / "profile",
+		chrome_path=None,
+		cdp_port=_free_port(),
+		hook_profile="none",
+		hook_dir=None,
+		seed_cookies={"wt2": "t"},
+	)
+	session.open()
+	payload = session.fetch_page("AI", "101210100", 1)
+	assert payload["zpData"]["jobList"][0]["encryptJobId"] == "job-page"
+
+
+def test_fetch_page_falls_back_to_http_when_listen_and_page_js_fail(monkeypatch, tmp_path):
+	class Options:
+		def set_local_port(self, port: int) -> None:
+			pass
+
+		def set_user_data_path(self, path: str) -> None:
+			pass
+
+		def existing_only(self, on_off: bool = True) -> None:
+			pass
+
+		def set_browser_path(self, path: str) -> None:
+			pass
+
+	class Listener:
+		def start(self, *args, **kwargs) -> None:
+			pass
+
+		def stop(self) -> None:
+			pass
+
+		def wait(self, **kwargs):
+			return types.SimpleNamespace(response=types.SimpleNamespace(body="<html>bad packet</html>"))
+
+	class Page:
+		url = "https://www.zhipin.com/web/geek/jobs"
+		html = "<div class='job-list-box'></div>"
+		user_agent = "UA"
+		listen = Listener()
+
+		def get(self, url: str) -> None:
+			pass
+
+		def cookies(self):
+			return [{"name": "wt2", "value": "t"}, {"name": "__zp_stoken__", "value": "st"}]
+
+		def quit(self) -> None:
+			pass
+
+		def run_js(self, *args, **kwargs):
+			raise RuntimeError("js unavailable")
+
+		class set:
+			@staticmethod
+			def cookies(items) -> None:
+				pass
+
+	page = Page()
+	monkeypatch.setitem(
+		sys.modules,
+		"DrissionPage",
+		types.SimpleNamespace(ChromiumOptions=Options, ChromiumPage=lambda options: page),
+	)
+
+	class _Resp:
+		status_code = 200
+		text = json.dumps(_page(_job("job-http", "sec-http")))
+
+		def raise_for_status(self) -> None:
+			return None
+
+		def json(self):
+			return _page(_job("job-http", "sec-http"))
+
+	class _Client:
+		def __init__(self, *args, **kwargs) -> None:
+			pass
+
+		def get(self, url, params=None):
+			assert "joblist.json" in url
+			return _Resp()
+
+		def close(self) -> None:
+			pass
+
+	monkeypatch.setattr("boss_agent_cli.crawler.transport.httpx.Client", _Client)
+	session = DrissionCrawlerSession(
+		profile_path=tmp_path / "profile",
+		chrome_path=None,
+		cdp_port=_free_port(),
+		hook_profile="none",
+		hook_dir=None,
+		seed_cookies={"wt2": "t"},
+	)
+	session.open()
+	payload = session.fetch_page("AI", "101210100", 1)
+	assert payload["zpData"]["jobList"][0]["encryptJobId"] == "job-http"
+
+
 def test_listener_parses_string_json_response(monkeypatch, tmp_path):
 	class Options:
 		def set_local_port(self, port: int) -> None:
@@ -254,6 +417,7 @@ def test_listener_parses_string_json_response(monkeypatch, tmp_path):
 		url = ""
 		html = ""
 		listen = Listener()
+		seeded: list = []
 
 		def get(self, url: str) -> None:
 			pass
@@ -261,13 +425,36 @@ def test_listener_parses_string_json_response(monkeypatch, tmp_path):
 		def quit(self) -> None:
 			pass
 
+		class set:
+			@staticmethod
+			def cookies(items):
+				Page.seeded.append(items)
+
 	page = Page()
 	monkeypatch.setitem(sys.modules, "DrissionPage", types.SimpleNamespace(ChromiumOptions=Options, ChromiumPage=lambda options: page))
 	session = DrissionCrawlerSession(
-		profile_path=tmp_path / "profile", chrome_path=None, cdp_port=_free_port(), hook_profile="none", hook_dir=None,
+		profile_path=tmp_path / "profile",
+		chrome_path=None,
+		cdp_port=_free_port(),
+		hook_profile="none",
+		hook_dir=None,
+		seed_cookies={"wt2": "cookie-value", "wbg": "1"},
 	)
 	session.open()
+	assert Page.seeded and any(item["name"] == "wt2" for item in Page.seeded[0])
 	assert session.fetch_page("AI", "101210100", 1)["zpData"]["jobList"][0]["encryptJobId"] == "job-1"
+
+
+def test_non_json_login_html_is_not_mislabelled_as_captcha_only():
+	session = DrissionCrawlerSession(
+		profile_path=Path("/tmp/profile"),
+		chrome_path=None,
+		cdp_port=1,
+		hook_profile="none",
+		hook_dir=None,
+	)
+	message = session._non_json_risk_message(1, "<html>请登录 BOSS</html>")
+	assert "登录" in message
 
 
 def test_crawl_writes_outputs_and_reuses_cached_detail(tmp_path):
@@ -297,6 +484,30 @@ def test_crawl_honors_page_limit_and_resume_deduplicates(tmp_path):
 	resumed = service.resume(stopped.run_id, operating_mode="research")
 	assert resumed.status == "completed"
 	assert [item["job_key"] for item in cache.list_crawl_jobs(stopped.run_id)] == ["job-1", "job-2"]
+
+
+def test_risk_stop_keeps_browser_open(tmp_path):
+	from boss_agent_cli.crawler.transport import CrawlRiskError
+
+	class _RiskTransport(_FakeTransport):
+		def __init__(self) -> None:
+			super().__init__()
+			self.closed_with: list[dict] = []
+
+		def open(self):
+			return []
+
+		def fetch_page(self, query: str, city_code: str, page_no: int):
+			raise CrawlRiskError("非 JSON / 未登录")
+
+		def close(self, *, quit_browser: bool = True) -> None:
+			self.closed_with.append({"quit_browser": quit_browser})
+
+	transport = _RiskTransport()
+	_, service = _service(tmp_path, lambda settings: transport)
+	outcome = service.create_and_run(_settings(tmp_path))
+	assert outcome.status == "risk_stopped"
+	assert transport.closed_with == [{"quit_browser": False}]
 
 
 def test_crawl_retries_once_then_checkpoints(tmp_path):
@@ -331,6 +542,34 @@ def test_stop_request_checkpoints_before_detail(tmp_path):
 	assert outcome.status == "stopped"
 	assert "stop requested" in outcome.error
 	assert transport.page_calls == []
+
+
+def test_workflow_timeout_stops_crawl_before_next_page(tmp_path):
+	transport = _FakeTransport({
+		1: _page(_job("job-1", "sec-1"), has_more=True),
+		2: _page(_job("job-2", "sec-2")),
+	})
+	created: list[str] = []
+
+	def control_probe() -> str | None:
+		return "timeout" if transport.page_calls else None
+
+	cache = CacheStore(tmp_path / "cache.db")
+	service = CrawlService(
+		cache,
+		data_dir=tmp_path,
+		transport_factory=lambda settings: transport,
+		budget_factory=lambda store: _NoDelayBudget(store),
+		control_probe=control_probe,
+		on_run_created=created.append,
+	)
+	outcome = service.create_and_run(_settings(tmp_path, pages=2))
+
+	assert outcome.status == "timeout_stopped"
+	assert outcome.error == "workflow timeout requested"
+	assert transport.page_calls == [1]
+	assert created == [outcome.run_id]
+	assert cache.get_crawl_run(outcome.run_id)["status"] == "timeout_stopped"
 
 
 def test_public_results_redact_identifiers(tmp_path):
@@ -379,22 +618,48 @@ def test_crawl_selector_migration_backfills_legacy_rows(tmp_path):
 		assert item["selector"].startswith("csel_")
 
 
-def test_cli_rejects_assisted_mode_and_non_positive_pages(tmp_path, monkeypatch):
+def _seed_login(tmp_path: Path) -> None:
+	from boss_agent_cli.auth.token_store import TokenStore
+
+	TokenStore(tmp_path / "auth").save(
+		{
+			"cookies": {"wt2": "test-wt2", "wbg": "1", "zp_at": "1"},
+			"user_agent": "test-agent",
+			"stoken": "",
+		}
+	)
+
+
+def test_cli_allows_assisted_mode_and_rejects_non_positive_pages(tmp_path, monkeypatch):
+	seen_modes: list[str] = []
+
+	class _Outcome:
+		run_id = "run-assisted"
+		status = "completed"
+
+		def as_dict(self):
+			return {"run_id": self.run_id, "status": self.status, "output_paths": {}}
+
+	def _create_and_run(self, settings):
+		seen_modes.append(settings.operating_mode)
+		return _Outcome()
+
+	_seed_login(tmp_path)
 	monkeypatch.setitem(DEFAULTS, "operating_mode", "assisted")
+	monkeypatch.setattr(CrawlService, "create_and_run", _create_and_run)
 	runner = CliRunner()
 	assisted = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "run", "AI", "--city", "杭州"])
-	assert assisted.exit_code == 1
-	assert json.loads(assisted.output)["error"]["code"] == "COMPLIANCE_BLOCKED"
-	_enable_research(runner, tmp_path)
+	assert assisted.exit_code == 0, assisted.output
+	assert seen_modes == ["assisted"]
 	invalid_pages = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "run", "AI", "--city", "杭州", "--pages", "0"])
 	assert invalid_pages.exit_code == 1
 
 
-def test_crawl_start_and_stop_require_research_and_record_kill_switch(tmp_path, monkeypatch):
+def test_crawl_start_and_stop_record_kill_switch_in_assisted_mode(tmp_path, monkeypatch):
 	launched: list[str] = []
+	_seed_login(tmp_path)
 	monkeypatch.setattr("boss_agent_cli.commands.crawl._launch_background_resume", lambda data_dir, run_id, **kwargs: launched.append(run_id))
 	runner = CliRunner()
-	_enable_research(runner, tmp_path)
 	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "start", "AI", "--city", "杭州"])
 	assert result.exit_code == 0, result.output
 	run_id = json.loads(result.output)["data"]["run_id"]

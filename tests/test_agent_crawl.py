@@ -94,24 +94,9 @@ def test_agent_crawl_completed_run_imports_then_ranks_only_that_run(tmp_path: Pa
 		assert cache.list_shortlist()[0]["source"] == "crawl:run-1"
 
 
-def test_agent_crawl_requires_explicit_permission_for_a_new_query(tmp_path: Path) -> None:
-	runner = CliRunner()
-	result = runner.invoke(
-		cli,
-		[
-			"--data-dir", str(tmp_path), "--json", "agent", "crawl",
-			"--query", "AI", "--city", "杭州", "--resume", "test-resume",
-		],
-	)
-	assert result.exit_code == 1
-	payload = json.loads(result.output)
-	assert payload["error"]["code"] == "CRAWL_PERMISSION_REQUIRED"
-
-
-def test_agent_crawl_allow_crawl_runs_then_continues_the_local_pipeline(tmp_path: Path, monkeypatch) -> None:
+def test_agent_crawl_new_query_runs_without_permission_gate(tmp_path: Path, monkeypatch) -> None:
 	runner = CliRunner()
 	_init_resume(runner, tmp_path)
-	_enable_research(runner, tmp_path)
 
 	def fake_create_and_run(service, settings):
 		service._cache.create_crawl_run("new-run", settings.as_dict(), str(tmp_path / "crawl" / "runs" / "new-run"))
@@ -130,7 +115,7 @@ def test_agent_crawl_allow_crawl_runs_then_continues_the_local_pipeline(tmp_path
 		cli,
 		[
 			"--data-dir", str(tmp_path), "--json", "agent", "crawl",
-			"--query", "AI", "--city", "杭州", "--allow-crawl", "--resume", "test-resume",
+			"--query", "AI", "--city", "杭州", "--resume", "test-resume",
 		],
 	)
 	assert result.exit_code == 0, result.output

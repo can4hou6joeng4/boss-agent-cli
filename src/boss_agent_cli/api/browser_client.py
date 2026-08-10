@@ -113,10 +113,20 @@ class BrowserSession:
 		self._is_bridge = False
 
 	def _log(self, message: str) -> None:
-		"""通过注入的 logger 输出，受 --log-level 控制。"""
-		if self._logger:
-			self._logger.info(message)
-		else:
+		"""Diagnostic channel logs: debug by default so TTY wizard stays clean."""
+		if self._logger is not None:
+			debug = getattr(self._logger, "debug", None)
+			if callable(debug):
+				debug(message)
+				return
+			info = getattr(self._logger, "info", None)
+			if callable(info):
+				# Only when logger has no debug API — keep quiet if level is error default.
+				info(message)
+				return
+		import os
+
+		if os.environ.get("BOSS_BROWSER_VERBOSE", "").strip() in {"1", "true", "yes", "on"}:
 			print(message, file=sys.stderr)
 
 	def _ensure_started(self) -> None:

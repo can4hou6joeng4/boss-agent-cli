@@ -1,3 +1,5 @@
+import logging
+import os
 import sys
 import time
 from typing import Any, cast
@@ -8,13 +10,14 @@ from patchright.sync_api import sync_playwright
 LOGIN_PAGE_URL = "https://www.zhipin.com/web/user/"
 HOME_URL = "https://www.zhipin.com/"
 _DEFAULT_CDP_URL = "http://localhost:9222"
+_logger = logging.getLogger("boss_agent_cli.auth.browser")
 
 # 超时常量（秒/毫秒）
-_CDP_PROBE_TIMEOUT = 3           # CDP 探测 HTTP 超时（秒）
-_NAV_TIMEOUT_MS = 15000          # 页面导航超时（毫秒）
-_NETWORKIDLE_GRACE_MS = 3000     # 首页进入 networkidle 的额外宽限（毫秒）
-_POST_LOGIN_WAIT = 3             # 登录成功后等待 cookie 传播（秒）
-_STOKEN_GENERATION_WAIT = 2      # stoken 生成等待（秒）
+_CDP_PROBE_TIMEOUT = 3  # CDP 探测 HTTP 超时（秒）
+_NAV_TIMEOUT_MS = 15000  # 页面导航超时（毫秒）
+_NETWORKIDLE_GRACE_MS = 3000  # 首页进入 networkidle 的额外宽限（毫秒）
+_POST_LOGIN_WAIT = 3  # 登录成功后等待 cookie 传播（秒）
+_STOKEN_GENERATION_WAIT = 2  # stoken 生成等待（秒）
 
 _PLATFORM_BROWSER_CONFIG: dict[str, dict[str, str]] = {
 	"zhipin": {
@@ -42,7 +45,9 @@ def _get_platform_config(platform: str) -> dict[str, str]:
 
 def _extract_zhilian_client_id(page: Any) -> str:
 	try:
-		return cast("str", page.evaluate("""
+		return cast(
+			"str",
+			page.evaluate("""
 			() => {
 				const keys = ["x-zp-client-id", "x_zp_client_id", "clientId"];
 				for (const key of keys) {
@@ -51,7 +56,8 @@ def _extract_zhilian_client_id(page: Any) -> str:
 				}
 				return '';
 			}
-		"""))
+		"""),
+		)
 	except Exception:
 		return ""
 
@@ -79,21 +85,30 @@ def _zhilian_client_id_from(cookies: dict[str, str], page: Any) -> str:
 	return cookies.get("x-zp-client-id") or _extract_zhilian_client_id(page)
 
 
+def _browser_diag(message: str) -> None:
+	"""Diagnostic browser messages: debug by default; stderr only when BOSS_BROWSER_VERBOSE=1."""
+	_logger.debug(message)
+	if os.environ.get("BOSS_BROWSER_VERBOSE", "").strip() in {"1", "true", "yes", "on"}:
+		print(message, file=sys.stderr)
+
+
 def _warm_home_for_runtime(page: Any, home_url: str, *, stage: str) -> None:
 	"""预热首页运行时；networkidle 只尽力等待，不作为必须条件。"""
 	try:
 		page.goto(home_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
 	except Exception as e:
-		print(f"[boss] {stage}：首页导航未在预期时间完成（{e}），继续尝试提取凭证", file=sys.stderr)
+		_browser_diag(f"[boss] {stage}：首页导航未在预期时间完成（{e}），继续尝试提取凭证")
 	try:
 		page.wait_for_load_state("networkidle", timeout=_NETWORKIDLE_GRACE_MS)
 	except Exception as e:
-		print(f"[boss] {stage}：首页未进入 networkidle（{e}），继续提取凭证", file=sys.stderr)
+		# Expected on zhipin (long-polling). Do not dump to TTY for normal users.
+		_browser_diag(f"[boss] {stage}：首页未进入 networkidle（{e}），继续提取凭证")
 
 
 def probe_cdp(cdp_url: str | None = None) -> str | None:
 	"""探测 CDP 是否可用，返回 WebSocket URL 或 None。"""
 	import httpx
+
 	base = cdp_url or _DEFAULT_CDP_URL
 	try:
 		resp = httpx.get(f"{base}/json/version", timeout=_CDP_PROBE_TIMEOUT)
@@ -130,7 +145,8 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 			try:
 				page.goto(
 					login_page_url,
-					wait_until="commit", timeout=_NAV_TIMEOUT_MS,
+					wait_until="commit",
+					timeout=_NAV_TIMEOUT_MS,
 				)
 			except Exception:
 				pass
@@ -199,9 +215,11 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 		def _on_response(response: Any) -> None:
 			nonlocal login_detected
 			url = response.url
-			if (url.startswith("https://www.zhipin.com/wapi/zppassport/qrcode/loginConfirm")
+			if (
+				url.startswith("https://www.zhipin.com/wapi/zppassport/qrcode/loginConfirm")
 				or url.startswith("https://www.zhipin.com/wapi/zppassport/qrcode/dispatcher")
-				or url.startswith("https://www.zhipin.com/wapi/zppassport/login/phoneV2")):
+				or url.startswith("https://www.zhipin.com/wapi/zppassport/login/phoneV2")
+			):
 				login_detected = True
 
 		page.on("response", _on_response)
@@ -277,10 +295,9 @@ def refresh_stoken(cookies: dict[str, Any], user_agent: str) -> str:
 	with sync_playwright() as p:
 		browser = p.chromium.launch(headless=True)
 		context = browser.new_context(user_agent=user_agent)
-		context.add_cookies([
-			{"name": name, "value": value, "domain": ".zhipin.com", "path": "/"}
-			for name, value in cookies.items()
-		])
+		context.add_cookies(
+			[{"name": name, "value": value, "domain": ".zhipin.com", "path": "/"} for name, value in cookies.items()]
+		)
 		page = context.new_page()
 		_warm_home_for_runtime(page, HOME_URL, stage="刷新 stoken")
 		stoken = _extract_stoken(page)

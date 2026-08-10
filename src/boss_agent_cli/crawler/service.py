@@ -151,6 +151,14 @@ class CrawlStopRequested(RuntimeError):
 	"""The user requested that the persisted task stop at its next safe point."""
 
 
+class CrawlWorkflowStopRequested(CrawlStopRequested):
+	"""The owning workflow requested cooperative stop."""
+
+
+class CrawlTimeoutRequested(CrawlStopRequested):
+	"""The owning workflow deadline expired."""
+
+
 class CrawlRunBudget:
 	"""Per-run hard caps for requests, detail requests, time, and retries."""
 
@@ -200,11 +208,15 @@ class CrawlService:
 		data_dir: Path,
 		transport_factory: Callable[[CrawlSettings], CrawlTransport],
 		budget_factory: Callable[[CacheStore], CrawlBudget] = CrawlBudget,
+		control_probe: Callable[[], str | None] | None = None,
+		on_run_created: Callable[[str], None] | None = None,
 	) -> None:
 		self._cache = cache
 		self._data_dir = data_dir
 		self._transport_factory = transport_factory
 		self._budget_factory = budget_factory
+		self._control_probe = control_probe
+		self._on_run_created = on_run_created
 
 	def create_and_run(self, settings: CrawlSettings) -> CrawlOutcome:
 		self._validate_settings(settings)
@@ -226,6 +238,8 @@ class CrawlService:
 		run_id = uuid.uuid4().hex[:12]
 		output_dir = self._data_dir / "crawl" / "runs" / run_id
 		self._cache.create_crawl_run(run_id, settings.as_dict(), str(output_dir), status="queued")
+		if self._on_run_created is not None:
+			self._on_run_created(run_id)
 		return run_id
 
 	def resume(
@@ -311,8 +325,12 @@ class CrawlService:
 		status = "completed"
 		error = ""
 		current_page = next_page
+		# 风控/待人工处理时保留采集 Chrome，便于用户在窗口内登录或过验证。
+		keep_browser = False
 		try:
+			self._raise_if_stop_requested(run_id)
 			hooks = tuple(transport.open())
+			self._raise_if_stop_requested(run_id)
 			self._cache.update_crawl_run(
 				run_id,
 				status="running",
@@ -361,8 +379,15 @@ class CrawlService:
 		except CrawlRiskError as exc:
 			status = "risk_stopped"
 			error = str(exc)
+			keep_browser = True
 		except CrawlLimitExceeded as exc:
 			status = "budget_stopped"
+			error = str(exc)
+		except CrawlTimeoutRequested as exc:
+			status = "timeout_stopped"
+			error = str(exc)
+		except CrawlWorkflowStopRequested as exc:
+			status = "workflow_stopped"
 			error = str(exc)
 		except CrawlStopRequested as exc:
 			status = "stopped"
@@ -371,7 +396,13 @@ class CrawlService:
 			status = "stopped"
 			error = str(exc)
 		finally:
-			transport.close()
+			close = getattr(transport, "close", None)
+			if callable(close):
+				try:
+					close(quit_browser=not keep_browser)
+				except TypeError:
+					# 旧 transport / 测试假对象可能不接受关键字参数。
+					close()
 			self._cache.update_crawl_run_budget(
 				run_id,
 				requests_attempted=run_budget.requests_attempted,
@@ -463,6 +494,7 @@ class CrawlService:
 		self._raise_if_stop_requested(run_id)
 		run_budget.claim_request("list")
 		payload = transport.fetch_page(settings.query, settings.city_code, page_no)
+		self._raise_if_stop_requested(run_id)
 		if payload.get("code") in (37, 38):
 			raise CrawlRiskError(f"第 {page_no} 页平台返回风险码 code={payload.get('code')}: {payload.get('message', '')}")
 		if payload.get("code") not in (None, 0):
@@ -481,6 +513,7 @@ class CrawlService:
 		self._raise_if_stop_requested(run_id)
 		run_budget.claim_request("detail")
 		payload = transport.fetch_detail(security_id)
+		self._raise_if_stop_requested(run_id)
 		if payload.get("code") in (37, 38):
 			raise CrawlRiskError(f"职位详情接口返回风险码 code={payload.get('code')}: {payload.get('message', '')}")
 		if payload.get("code") not in (None, 0):
@@ -488,6 +521,13 @@ class CrawlService:
 		return payload
 
 	def _raise_if_stop_requested(self, run_id: str) -> None:
+		if self._control_probe is not None:
+			signal = self._control_probe()
+			if signal == "timeout":
+				raise CrawlTimeoutRequested("workflow timeout requested")
+			if signal == "stop":
+				self._cache.request_crawl_stop(run_id)
+				raise CrawlWorkflowStopRequested("workflow stop requested")
 		run = self._cache.get_crawl_run(run_id)
 		if run is not None and run["stop_requested"]:
 			raise CrawlStopRequested("stop requested")
