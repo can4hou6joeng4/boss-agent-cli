@@ -11,18 +11,19 @@ boss schema --format anthropic-tools   # 导出 Claude Tool Use 定义
 boss <命令> --help                      # 查看单个命令选项
 ```
 
-运行模式：`boss config set operating_mode assisted|research`。默认 `assisted`；切换后重新执行 `boss schema` 查看逐命令模式、风险和数据分类。
+兼容配置：`boss config set operating_mode assisted|research`。两种模式均可调用全部已实现能力；schema 仍提供风险和数据分类，平台缺失能力返回 `NOT_SUPPORTED`。
 
 ## 基础操作
 
 | 命令 | 说明 |
 |------|------|
-| `boss schema` | 输出完整工具能力描述 JSON（38 个顶层命令 + hr 分组展开，Agent 首先调用） |
+| `boss` / `boss wizard` | TTY 下启动纯向导；`--input-json` 供 Agent 执行共享 workflow，`--status/--resume/--stop <run_id>` 管理持久化任务 |
+| `boss schema` | 输出完整工具能力描述 JSON（39 个顶层命令 + hr 分组展开，Agent 首先调用） |
 | `boss platforms` | 本地平台注册与能力状态（不触网；支持 `--platform` 单平台过滤与 `--capability` 反查，附 `capability_status_legend`） |
 | `boss login` | 用户主动登录（按平台走 Cookie / CDP / QR / 浏览器降级链路） |
 | `boss logout` | 退出登录 |
 | `boss status` | 检查登录态（默认仅本地；`--live` 才执行低频只读验证） |
-| `boss doctor` | 诊断环境、依赖、凭据完整性和网络；默认仅本地诊断，`--live-probe` 才执行低频只读探测；敏感操作或命中风控时提示回到官方页面手动完成 |
+| `boss doctor` | 诊断环境、依赖、凭据完整性和网络；默认仅本地诊断，`--live-probe` 才执行低频只读探测 |
 | `boss me` | 我的信息（用户/简历/期望/投递记录） |
 
 ## 职位搜索
@@ -30,14 +31,14 @@ boss <命令> --help                      # 查看单个命令选项
 | 命令 | 说明 |
 |------|------|
 | `boss search <query>` | 搜索职位（支持 `--url` 网页筛选、逗号多选、`--welfare` 筛选、`--sort score` 本地排序、`--preset` 预设） |
-| `boss recommend` | 受限：默认低风险模式阻断，避免自动读取推荐流 |
+| `boss recommend` | 获取个性化推荐职位 |
 | `boss detail <security_id>` | 职位详情（`--job-id` 走快速通道） |
 | `boss show <#>` | 按编号查看上次搜索结果 |
 | `boss cities` | 40 个支持城市 |
 
-## 显式批量采集
+## 可恢复批量采集
 
-`crawl` 是用户显式触发的受限 Research Mode Chrome 任务。`run`、`start` 和 `resume` 必须带共享 `operating_mode=research`；MCP 仍保持 assisted-only，只暴露已有任务的 `status/results/shortlist` 本地读取或导入接口。首次使用需安装 `uv sync --extra crawl`；采集器只启动 `<data-dir>/crawl/chrome-profile` 这个独立 profile，不接管日常 Chrome。
+`crawl` 是用户显式触发的有界 Chrome 任务。首次使用需安装 `uv sync --extra crawl`；采集器只启动 `<data-dir>/crawl/chrome-profile` 这个独立 profile，不接管日常 Chrome。请求数、详情数、墙钟时间和重试由固定预算控制，每一步持久化 checkpoint，并可用 `stop` 停止。
 
 ```powershell
 boss crawl configure --max-requests 20 --max-details 50 --max-seconds 600 --max-retries 1
@@ -59,7 +60,7 @@ boss crawl stop <run_id>
 
 默认 Hook 为 `none`。`screenshot-full` 仅在用户明确选择 `--hook-profile screenshot-full --hook-dir <目录>` 时启用；目录必须由用户拥有相应授权，并提供原始 7 个脚本及 `SHA256SUMS`。项目不再发布这些第三方脚本，运行前逐文件校验 SHA-256 并记录脚本标识与摘要；不记录 Cookie、请求头或完整请求体。
 
-候选人侧可用 `boss agent crawl --run-id <run_id> --resume <简历名>` 执行“完成的 crawl → shortlist → ai fit → 按匹配分排序”。它不会启动浏览器；只有 `boss agent crawl --query <关键词> --city <城市> --allow-crawl --resume <简历名>` 才会启动新的真实采集。遇到 `risk_stopped` 或 `budget_stopped` 时 Agent 只返回 `run_id` 和恢复命令，不会无限重试或重开会话。
+候选人侧可用 `boss agent crawl --run-id <run_id> --resume <简历名>` 执行“完成的 crawl → shortlist → ai fit → 按匹配分排序”，不会启动浏览器；`boss agent crawl --query <关键词> --city <城市> --resume <简历名>` 会新建真实采集。遇到 `risk_stopped` 或 `budget_stopped` 时 Agent 只返回 `run_id` 和恢复命令，不会无限重试或重开会话。
 
 每页完成后更新 `<data-dir>/crawl/runs/<run_id>/jobs.json`、`jobs.csv` 和带筛选/冻结首行的 `jobs.xlsx`。XLSX 保留完整值但所有数据行固定为单行和统一行高，长内容仅在表格中截断显示。JSON/CSV/XLSX 和 `crawl results` 默认不包含 `security_id`、职位 ID、selector、招聘者姓名或职位；这些仅保留在受限本地 SQLite 状态，`boss clean --privacy` 会删除 crawl 运行、预算和导出。风险码 `37` / `38`、安全页、职位列表容器异常、预算耗尽或 stop 请求都会保存断点并停止；stdout 始终只输出 JSON 信封和恢复命令。
 
@@ -67,19 +68,19 @@ boss crawl stop <run_id>
 
 | 命令 | 说明 |
 |------|------|
-| `boss greet <sid> <jid>` | 受限：默认低风险模式阻断，打招呼请回到平台官网手动完成 |
-| `boss batch-greet <query>` | 受限：默认低风险模式阻断，避免批量触达 |
-| `boss apply <sid> <jid>` | 受限：默认低风险模式阻断，投递请回到平台官网手动完成 |
-| `boss exchange <sid>` | 受限：默认低风险模式阻断，联系方式交换涉及个人信息 |
+| `boss greet <sid> <jid>` | 向指定招聘者打招呼；重复记录返回 `ALREADY_GREETED` |
+| `boss batch-greet <query>` | 搜索后按显式 `--limit` 批量打招呼，支持 `--dry-run` |
+| `boss apply <sid> <jid>` | 发起投递或立即沟通；重复记录返回 `ALREADY_APPLIED` |
+| `boss exchange <sid>` | 请求交换手机号或微信 |
 
 ## 沟通跟进
 
 | 命令 | 说明 |
 |------|------|
-| `boss chat` | 受限：默认低风险模式阻断，涉及会话数据 |
-| `boss chatmsg <sid> [--raw]` | 受限：默认低风险模式阻断；`--raw` 仅在合规放行后保留结构化 body、链接和职位卡片字段 |
-| `boss chat-summary <sid>` | 受限：默认低风险模式阻断，依赖通信内容 |
-| `boss mark <sid> --label X` | 受限：默认低风险模式阻断，涉及平台关系写入 |
+| `boss chat` | 查看沟通列表，支持分页和来源筛选 |
+| `boss chatmsg <sid> [--raw]` | 查看聊天历史；`--raw` 保留结构化 body、链接和职位卡片字段 |
+| `boss chat-summary <sid>` | 基于聊天历史生成结构化摘要 |
+| `boss mark <sid> --label X` | 添加或移除联系人标签 |
 | `boss interviews` | 面试邀请 |
 | `boss history` | 浏览历史 |
 
@@ -87,10 +88,10 @@ boss crawl stop <run_id>
 
 | 命令 | 说明 |
 |------|------|
-| `boss pipeline` | 受限：默认低风险模式阻断，依赖会话/面试数据 |
-| `boss follow-up` | 受限：默认低风险模式阻断，依赖会话/面试数据 |
-| `boss digest` | 受限：默认低风险模式阻断，依赖会话/面试数据 |
-| `boss watch add/list/remove/run` | add/list/remove 为本地预设；run 默认阻断，避免自动增量拉取平台数据 |
+| `boss pipeline` | 聚合会话和面试数据生成候选进度 |
+| `boss follow-up` | 筛选需要跟进的会话和面试项 |
+| `boss digest` | 汇总新增职位、待跟进会话和面试项 |
+| `boss watch add/list/remove/run` | 保存、列出、删除或执行增量职位监控 |
 | `boss shortlist add/list/annotate/compare/remove` | 本地候选池：支持标签、备注和离线对比 |
 | `boss favorites list/sync` | 读取 BOSS 职位收藏并同步到本地候选池（按职位去重、刷新动态访问 ID，保留首次收藏时间） |
 | `boss preset add/list/remove` | 搜索预设 |
@@ -99,16 +100,16 @@ boss crawl stop <run_id>
 
 | 命令 | 说明 |
 |------|------|
-| `boss hr applications` | 受限：默认低风险模式阻断，涉及候选人投递申请 |
-| `boss hr resume <geek_id> --selector <csel_...> --security-id <id>` | 受限：默认低风险模式阻断，涉及候选人在线简历 |
-| `boss hr resume --exchange --friend-id <friend_id> [--type wechat]` | 受限：默认低风险模式阻断，涉及联系方式交换 |
-| `boss hr chat` | 受限：默认低风险模式阻断，涉及候选人沟通列表 |
-| `boss hr chatmsg <friend_id>` | 受限：默认低风险模式阻断，涉及候选人聊天记录 |
-| `boss hr last-messages [--friend-id <id>]` | 受限：默认低风险模式阻断，涉及候选人消息摘要 |
+| `boss hr applications` | 查看候选人投递申请 |
+| `boss hr resume <geek_id> --job-id <id> --security-id <id>` | 查看候选人在线简历 |
+| `boss hr resume --exchange --friend-id <friend_id> [--type wechat]` | 请求交换手机号或微信 |
+| `boss hr chat` | 查看候选人沟通列表 |
+| `boss hr chatmsg <friend_id>` | 查看候选人聊天记录 |
+| `boss hr last-messages [--friend-id <id>]` | 批量查看候选人最近消息摘要 |
 | `boss hr jobs list/offline/online` | 职位列表与上下线管理 |
-| `boss hr candidates <keyword>` | 受限：默认低风险模式阻断，涉及候选人搜索 |
-| `boss hr reply <friend_id> <message>` | 受限：默认低风险模式阻断，回复请回到平台官网手动完成 |
-| `boss hr request-resume <friend_id>` | 受限：默认低风险模式阻断，附件简历请求请回到平台官网手动完成 |
+| `boss hr candidates <keyword>` | 搜索和筛选候选人 |
+| `boss hr reply <friend_id> <message>` | 回复候选人消息 |
+| `boss hr request-resume <friend_id>` | 请求候选人分享附件简历 |
 
 ## 简历与 AI
 

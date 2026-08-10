@@ -1,5 +1,7 @@
 # BOSS 直聘（Zhipin）适配器基线研究
 
+> **历史研究基线：** 本文保留调研时的低风险分类术语；当前执行策略已开放全部已实现能力，请以 README、`boss schema` 和现行 backend specs 为准。
+
 > **结论先行**：BOSS 直聘是 boss-agent-cli 的既有基线平台。后续扩展
 > 应以它的 `BossPlatform` 行为、JSON 信封、错误映射、缓存和低风险合规
 > 边界为对照，而不是把第三方自动化脚本当成实现模板。

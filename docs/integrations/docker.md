@@ -1,6 +1,6 @@
 # Docker Integration
 
-Applies to the `boss-agent-cli` low-risk CLI contract as of version 1.18.0.
+Applies to the current `boss-agent-cli` open-capability CLI contract.
 
 The repository ships a `Dockerfile` and a `docker-compose.yml` so you can run the MCP
 server without setting up a local Python toolchain. This is the answer to
@@ -131,12 +131,12 @@ Point the host at `docker run` instead of `uvx`:
 MCP hosts generally do not expand `$(id -u)` or `~`, so use literal values and
 absolute paths there.
 
-## Compliance boundary is unchanged
+## Capability and runtime boundary
 
-The container inherits the same defaults as the CLI: `assisted` mode blocks automated
-outreach, bulk actions, and candidate personal-data workflows, and MCP exposes only the
-low-risk tool surface. Running in a container does not widen what the tool will do —
-see [platform-risk.md](../platform-risk.md).
+The container inherits the same open-capability behavior as the CLI: assisted/research
+configuration has identical access and MCP exposes every implemented tool. Runtime budgets,
+checkpoints, stop controls, redaction, and `NOT_SUPPORTED` platform gaps remain unchanged.
+See [platform-risk.md](../platform-risk.md).
 
 ## Troubleshooting
 
@@ -152,5 +152,5 @@ see [platform-risk.md](../platform-risk.md).
 The image is built in CI on every push and pull request (`docker` job in
 `.github/workflows/ci.yml`) so it cannot rot silently the way an unreferenced
 Dockerfile does. The build was validated end to end: MCP `initialize`, `tools/list`
-returning the full low-risk tool set, and a `tools/call` round trip that shells out to
+returning the full implemented tool set, and a `tools/call` round trip that shells out to
 `boss` inside the container.

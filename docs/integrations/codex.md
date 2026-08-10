@@ -1,11 +1,11 @@
 # Codex Integration Example
 
-Applies to the current `boss-agent-cli` low-risk CLI contract as of May 18, 2026.
+Applies to the current `boss-agent-cli` open-capability CLI contract as of August 10, 2026.
 
 ## Good fit when
 
 - the agent runs terminal commands directly
-- you need a low-risk chain such as `schema -> status -> search -> detail -> shortlist`
+- you need an end-to-end chain such as `schema -> status -> search -> detail -> apply`
 - you want stdout JSON to feed the next decision step programmatically
 
 ## Minimal integration
@@ -19,8 +19,8 @@ When the task involves BOSS Zhipin search, detail inspection, or local job organ
 3. If not logged in, run `boss login` and tell the user to complete the QR flow if needed
 4. Use `boss search` for discovery
 5. Use `boss detail` after a promising hit
-6. Use `boss shortlist add` for local organization; ask the user to complete outreach manually on the official website
-7. In recruiter workflows, prefer `boss hr jobs for low-risk job-list management; candidate workflows are restricted by default`
+6. Use `boss shortlist add`, `boss apply`, or `boss greet` according to the user's goal
+7. In recruiter workflows, use the candidate, application, resume, chat, reply, and job commands exposed by `boss schema`
 8. Parse stdout JSON only; when `ok=false`, inspect `error.code` and `error.recovery_action`
 ```
 
@@ -40,7 +40,7 @@ Minimal recruiter-side chain:
 boss schema
 boss status
 boss hr jobs list
-# Candidate applications, search, resumes, chat, and replies stay manual on the official recruiter UI
+boss hr candidates "Python" --city 101010100
 ```
 
 Recommended fields to parse:

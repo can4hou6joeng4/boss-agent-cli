@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted.
+**Superseded by the 2026-08 open-capability workflow design.** Retained as historical context only; current assisted/research modes have identical capability access.
 
 ## Context
 

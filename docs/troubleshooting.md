@@ -94,8 +94,8 @@ uv run python scripts/quality_baseline.py
 
 **bridge_daemon / bridge_extension 显示 warn**：本地 daemon 未运行或扩展未连接。
 先启动 daemon，确认 19826 端口未被占用，再到 `chrome://extensions` 加载并启用
-`extension/`。Bridge 只用于本地诊断、用户主动登录兼容和只读辅助；命中平台
-风控时应停止自动化访问，不要切换到 Bridge 重试。
+`extension/`。Bridge 用于本地诊断、用户主动登录兼容和受控 workflow transport；
+命中平台风控时应停止当前 workflow 并保存 checkpoint，不要切换通道重试。
 
 ## CDP 启动示例
 
@@ -149,8 +149,11 @@ boss --cdp-url http://localhost:9222 login --cdp
 | `AUTH_EXPIRED` | 登录过期 | `boss login` |
 | `RATE_LIMITED` | 频率过高 | 等待后重试 |
 | `TOKEN_REFRESH_FAILED` | Token 刷新失败 | `boss login` |
-| `ACCOUNT_RISK` | 风控拦截 | 停止自动化访问，回到平台官网手动处理 |
-| `COMPLIANCE_BLOCKED` | 默认低风险模式阻断敏感操作 | 回到平台官网手动完成 |
+| `ACCOUNT_RISK` | 风控拦截 | 停止当前 workflow，保留 run ID/checkpoint；处理登录或安全页后再显式恢复 |
+| `COMPLIANCE_BLOCKED` | 历史版本模式策略阻断 | 升级当前版本后重试；当前版本不主动产生此错误 |
+| `WIZARD_INPUT_REQUIRED` | headless workflow 缺少 role/platform/goal/inputs | 按 `boss schema` catalog 补齐 `--input-json` |
+| `WORKFLOW_TIMEOUT` | workflow 超过显式 timeout | 保留 `run_id`，调整 timeout 后执行 `boss wizard --resume <run_id>` |
+| `WORKFLOW_PLAN_MISMATCH` | 现有 `run_id` 与请求 plan 不一致 | 使用原 plan 恢复，或不传 `run_id` 创建新任务 |
 | `INVALID_PARAM` | 参数错误 | 修正参数 |
 | `ALREADY_GREETED` | 已打过招呼 | 跳过 |
 | `GREET_LIMIT` | 今日次数用完 | 告知用户 |

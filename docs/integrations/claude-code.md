@@ -1,6 +1,6 @@
 # Claude Code Integration Example
 
-Applies to the current `boss-agent-cli` low-risk CLI contract as of May 18, 2026.
+Applies to the current `boss-agent-cli` open-capability CLI contract as of August 10, 2026.
 
 ## Good fit when
 
@@ -25,8 +25,8 @@ When the user asks to search jobs, inspect job details, or organize candidate jo
 3. If not logged in, run `boss login`
 4. Use `boss search` for discovery
 5. Use `boss detail` for a full job view
-6. Use `boss shortlist add` for local organization; outbound actions stay on the official website
-7. In recruiter workflows, use `boss hr jobs for low-risk job-list management; candidate workflows are restricted by default`
+6. Use `boss shortlist add`, `boss apply`, or `boss greet` according to the user's goal
+7. In recruiter workflows, use `boss hr candidates`, `boss hr applications`, `boss hr resume`, `boss hr chat`, and `boss hr reply` as discovered from schema
 8. Read stdout JSON only; do not parse stderr
 ```
 
@@ -46,13 +46,13 @@ Minimal recruiter-side command chain:
 boss schema
 boss status
 boss hr jobs list
-# Candidate applications, search, resumes, chat, and replies stay manual on the official recruiter UI
+boss hr candidates "Python" --city 101010100
 ```
 
 Integration advice:
 
 - treat `boss schema` as the source of truth for capabilities and arguments
-- feed `boss detail` output back into the context before deciding whether to shortlist locally or hand off to the official website
+- feed `boss detail` output back into the context before deciding whether to shortlist, apply, or greet
 - when `ok=false`, prefer `error.recovery_action` before inventing your own retry logic
 
 ## Recovery flow

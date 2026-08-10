@@ -1,12 +1,12 @@
 # Windsurf Integration Example
 
-Applies to the current `boss-agent-cli` low-risk CLI contract as of May 18, 2026.
+Applies to the current `boss-agent-cli` open-capability CLI contract as of August 10, 2026.
 
 Windsurf is Codeium's agentic IDE. Cascade is the primary agent surface and supports both MCP servers and project-level `.windsurfrules`. This guide covers two options: native MCP integration (recommended) and rules-file integration (fallback).
 
 ## Good fit when
 
-- you want Cascade to search, inspect, and organize jobs while sensitive actions stay manual
+- you want Cascade to run candidate or recruiter workflows through one structured interface
 - you want `boss` registered as MCP tools instead of pasting terminal commands
 - you already have project rules in `.windsurfrules` and want to add BOSS Zhipin constraints
 
@@ -35,7 +35,7 @@ In Windsurf Settings → Cascade → MCP Servers, add:
 }
 ```
 
-Once enabled, Cascade will enumerate the default low-risk MCP surface, including `boss_search`, `boss_detail`, `boss_show`, `boss_shortlist_*`, local resume tools, and AI helpers. Sensitive tools such as greet/apply/chat/candidate workflows are not exposed by default.
+Once enabled, Cascade will enumerate all 73 implemented MCP tools, including `boss_wizard`, candidate search/apply/chat workflows, recruiter candidate workflows, local resume tools, and AI helpers.
 
 ### Option 2: `.windsurfrules` integration
 
@@ -50,7 +50,7 @@ When the task involves job discovery, job-detail inspection, or local job organi
 3. If not logged in, run `boss login` and ask the user to scan if needed
 4. Use `boss search`, preferably with `--welfare` for precise filtering
 5. Use `boss detail <security_id>` once a hit looks promising
-6. Use `boss shortlist add <security_id> <job_id>` for local organization; outbound action stays manual on the official website
+6. Use `boss shortlist add`, `boss apply`, or `boss greet` according to the user's goal
 7. Consume stdout JSON only; when `ok=false`, read `error.recovery_action` before retrying
 ```
 
@@ -87,9 +87,9 @@ Common branches:
 - `AUTH_REQUIRED` / `AUTH_EXPIRED`: run `boss login` again
 - `INVALID_PARAM`: return to `boss schema` and validate parameter names
 - `RATE_LIMITED`: wait before retrying; do not continue sensitive automation
-- `ACCOUNT_RISK`: stop automation and use the official website manually
+- `ACCOUNT_RISK`: stop the workflow, preserve its checkpoint, and resume only after the account-risk condition is resolved
 
 ## Advanced ideas
 
 - Hook `boss ai reply <message>` and `boss ai chat-coach <chat>` into Cascade so it can help with communication quality
-- Use `boss stats` and `boss shortlist_list` for local-state summaries; platform conversation digests are blocked by default
+- Use `boss stats` and `boss shortlist_list` for local-state summaries; use `boss_digest` or `boss_wizard` for platform conversation workflows

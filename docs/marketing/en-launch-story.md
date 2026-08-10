@@ -1,5 +1,7 @@
 # Blog Draft: A Low-Risk Job-Search Toolkit for AI Agents
 
+> **Historical snapshot:** command counts and default-blocking language below are superseded by the current open-capability wizard design. Use README and `boss schema` as the source of truth.
+
 > English blog draft for Hacker News (Show HN) / Reddit r/ClaudeAI / Dev.to / LinkedIn. Trim per channel before posting.
 
 ---

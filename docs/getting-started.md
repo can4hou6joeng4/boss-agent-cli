@@ -32,9 +32,16 @@ boss schema --format native
 - `boss status` 能说明当前登录态是否可用。
 - `boss schema --format native` 返回 JSON 信封，并列出当前 CLI 能力。
 
-## 3. 第一个只读命令
+真人直接运行 `boss` 或 `boss wizard` 进入角色、平台和目标向导。非 TTY / Agent 调用使用结构化输入，不会等待交互：
 
-登录后先执行只读命令，不要从写操作开始排障。
+```bash
+boss --json wizard --input-json '{"role":"candidate","platform":"zhipin","goal":"shortlist","inputs":{}}'
+boss --json wizard --status <run_id>
+```
+
+## 3. 第一个平台命令
+
+登录后先用搜索和详情验证平台链路，再继续投递、沟通或招聘者 workflow。
 
 ```bash
 boss search "Golang" --city 广州 --welfare "双休"

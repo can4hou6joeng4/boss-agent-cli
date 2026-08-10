@@ -32,9 +32,16 @@ Expected behavior:
 - `boss status` reports whether the current login state is usable.
 - `boss schema --format native` returns the JSON envelope that describes CLI capabilities.
 
-## 3. First read-only command
+People can run `boss` or `boss wizard` for the role/platform/goal wizard. Non-TTY and agent calls use structured input and never wait for prompts:
 
-After login, start with read-only commands before debugging write actions.
+```bash
+boss --json wizard --input-json '{"role":"candidate","platform":"zhipin","goal":"shortlist","inputs":{}}'
+boss --json wizard --status <run_id>
+```
+
+## 3. First platform command
+
+After login, verify the platform path with search and detail before continuing to application, messaging, or recruiter workflows.
 
 ```bash
 boss search "Golang" --city 广州 --welfare "双休"

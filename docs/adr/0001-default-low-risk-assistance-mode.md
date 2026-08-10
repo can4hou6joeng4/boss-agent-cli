@@ -1,5 +1,5 @@
 # Default to Low-Risk Assistance Mode
 
-Status: qualified by [ADR 0002](0002-explicit-research-operating-mode.md). The low-risk posture remains the default `assisted` mode, while explicitly enabled research workflows may use the separate `research` mode.
+Status: **Superseded by the 2026-08 open-capability workflow design.** Retained as historical context only; current assisted/research modes have identical capability access.
 
-The project previously presented an end-to-end automation loop for job search, outreach, and recruiter workflows, which created platform-agreement and personal-data handling risk. We now default to **Low-Risk Assistance Mode**: local assistance, read-only first, user-triggered, no risk-control bypass, no bulk outreach, and no platform-data scraping. Sensitive commands remain present only as restricted compatibility surfaces and are blocked by default so future maintainers do not accidentally restore automated outreach or candidate personal-data processing as the default product shape.
+The project previously used **Low-Risk Assistance Mode** as an execution gate: sensitive commands remained restricted compatibility surfaces and were blocked by default. This behavior is historical; the superseding design keeps the risk metadata but gives `assisted` and `research` identical access to implemented capabilities.

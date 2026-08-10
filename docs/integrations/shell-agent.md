@@ -1,6 +1,6 @@
 # Shell Agent Integration Example
 
-Applies to the current `boss-agent-cli` low-risk CLI contract as of May 18, 2026.
+Applies to the current `boss-agent-cli` open-capability CLI contract as of August 10, 2026.
 
 ## Good fit when
 
@@ -20,7 +20,7 @@ Recommended wrapper flow:
 3. If not logged in, run `boss login`
 4. Run `boss search`
 5. Run `boss detail`
-6. When the result is promising, run `boss shortlist add`; applications and messaging stay on the official website
+6. When the result is promising, run `boss shortlist add`, `boss apply`, or `boss greet` according to the requested workflow
 ```
 
 Minimal command chain:

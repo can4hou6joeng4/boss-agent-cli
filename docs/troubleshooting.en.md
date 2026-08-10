@@ -50,7 +50,7 @@ boss logout && boss login
 
 ### BOSS detects automation (code 36 / `ACCOUNT_RISK`)
 
-Stop automated access and return to the official BOSS Zhipin website. Do not retry the blocked action through CDP, patchright, or Browser Bridge.
+Stop the current workflow and retain its run ID or checkpoint. Resolve the login or security-page state before an explicit resume; do not retry through multiple transports.
 
 ### Browser Bridge is not connected
 
@@ -151,7 +151,7 @@ boss --cdp-url http://localhost:9222 login --cdp
 
 ### `code 36` / `ACCOUNT_RISK`
 
-Risk control detected automation. Stop the automated flow and use the official website manually.
+Risk control stopped the workflow. Keep its run ID/checkpoint, resolve the account or security-page state, and resume explicitly instead of looping retries.
 
 ### `RATE_LIMITED`
 
@@ -183,8 +183,11 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `AUTH_EXPIRED` | Session expired | `boss login` |
 | `RATE_LIMITED` | Too many requests | Wait and retry |
 | `TOKEN_REFRESH_FAILED` | stoken refresh failed | `boss login` |
-| `ACCOUNT_RISK` | Risk-control block (code 36) | Stop automated access; use the official website manually |
-| `COMPLIANCE_BLOCKED` | Low-risk mode blocked a sensitive command | Use read-only/local tools or complete the action manually on the official website |
+| `ACCOUNT_RISK` | Risk-control block (code 36) | Stop the workflow, retain its run ID/checkpoint, and resume only after resolving the account or security page |
+| `COMPLIANCE_BLOCKED` | Historical mode-policy block | Upgrade to the current version and retry; current execution paths do not emit it |
+| `WIZARD_INPUT_REQUIRED` | A headless workflow lacks role/platform/goal/inputs | Complete `--input-json` from the `boss schema` catalog |
+| `WORKFLOW_TIMEOUT` | The workflow exceeded its explicit timeout | Retain `run_id`, adjust timeout, and run `boss wizard --resume <run_id>` |
+| `WORKFLOW_PLAN_MISMATCH` | An existing `run_id` is bound to a different plan | Resume with the original plan or omit `run_id` to create a new run |
 | `JOB_NOT_FOUND` | Job removed or invalid | Skip |
 | `ALREADY_GREETED` | Already messaged recruiter | Skip |
 | `ALREADY_APPLIED` | Already applied | Skip |

@@ -1,5 +1,7 @@
 # Awesome List Submissions
 
+> **Historical snapshot:** counts and default low-risk positioning below are superseded by the current open-capability wizard design. Use README and `boss schema` before submitting.
+
 本文件记录 boss-agent-cli 向各大 awesome 列表投稿的模板，供维护者提交用。最后更新：master 当前状态 (2026-07-29)。
 
 ## 项目一句话介绍

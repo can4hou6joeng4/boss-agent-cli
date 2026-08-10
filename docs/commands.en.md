@@ -12,15 +12,16 @@ boss schema --format anthropic-tools   # export Claude Tool Use definitions
 boss <cmd> --help                      # options for a single command
 ```
 
-`boss schema` currently exposes 38 top-level commands, plus 9 first-level recruiter
+`boss schema` currently exposes 39 top-level commands, plus 9 first-level recruiter
 subcommands under `hr`, grouped below by workflow stage.
 
-Operating mode: `boss config set operating_mode assisted|research`. The default is `assisted`; after switching, run `boss schema` again to inspect per-command mode, risk, and data classifications.
+Compatibility setting: `boss config set operating_mode assisted|research`. Both modes can call every implemented capability; schema still reports risk/data classifications, and missing platform implementations return `NOT_SUPPORTED`.
 
 ## Basics
 
 | Command | Description |
 |---------|-------------|
+| `boss` / `boss wizard` | Start the TTY wizard; use `--input-json` for agent workflows and `--status/--resume/--stop <run_id>` for persisted runs |
 | `boss schema` | Full tool self-description JSON (agents call this first) |
 | `boss platforms` | Local platform registry and capability status (no network; `--platform` filter, `--capability` reverse lookup, includes `capability_status_legend`) |
 | `boss login` | User-triggered login (Cookie / CDP / QR / browser fallback per platform) |
@@ -34,14 +35,14 @@ Operating mode: `boss config set operating_mode assisted|research`. The default 
 | Command | Description |
 |---------|-------------|
 | `boss search <query>` | Search jobs (`--url` web filters, comma multi-select, `--welfare` filtering, `--sort score` local sorting, `--preset`) |
-| `boss recommend` | Restricted: blocked by default in low-risk mode (avoids auto-reading recommendation streams) |
+| `boss recommend` | Fetch personalized job recommendations |
 | `boss detail <security_id>` | Job detail (`--job-id` uses the fast path) |
 | `boss show <#>` | Re-view a numbered result from the last search |
 | `boss cities` | 40 supported cities |
 
-## Explicit bulk crawl
+## Resumable bulk crawl
 
-`crawl` is an explicitly triggered, restricted Research Mode Chrome task. `run`, `start`, and `resume` require shared `operating_mode=research`; MCP remains assisted-only and exposes only local `status/results/shortlist` operations for an existing run. Install `uv sync --extra crawl` first; the crawler starts only the isolated `<data-dir>/crawl/chrome-profile` and never attaches to a daily Chrome profile.
+`crawl` is an explicitly triggered, bounded Chrome task. Install `uv sync --extra crawl` first; it starts only the isolated `<data-dir>/crawl/chrome-profile`, never attaches to a daily Chrome profile, checkpoints every stage, and applies fixed request/detail/time/retry budgets plus a stop control.
 
 ```powershell
 boss crawl configure --max-requests 20 --max-details 50 --max-seconds 600 --max-retries 1
@@ -63,27 +64,27 @@ boss crawl stop <run_id>
 
 The default Hook is `none`. `screenshot-full` is enabled only when the user explicitly selects `--hook-profile screenshot-full --hook-dir <directory>`; the directory must be authorized by its user and include the original seven scripts plus `SHA256SUMS`. This project no longer redistributes those third-party scripts; each source file is SHA-256 verified before injection and only its identifier and digest are recorded. Cookies, headers, and full request bodies are not recorded.
 
-Candidate workflow: `boss agent crawl --run-id <run_id> --resume <resume-name>` runs “completed crawl → shortlist → ai fit → score ordering” without opening a browser. Only `boss agent crawl --query <query> --city <city> --allow-crawl --resume <resume-name>` starts a new real Chrome crawl. On `risk_stopped` or `budget_stopped`, Agent returns the `run_id` and resume command instead of retrying indefinitely or recreating the session.
+Candidate workflow: `boss agent crawl --run-id <run_id> --resume <resume-name>` runs “completed crawl → shortlist → ai fit → score ordering” without opening a browser. `boss agent crawl --query <query> --city <city> --resume <resume-name>` starts a new real Chrome crawl. On `risk_stopped` or `budget_stopped`, Agent returns the `run_id` and resume command instead of retrying indefinitely or recreating the session.
 
 After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a filtered/frozen `jobs.xlsx` are updated. XLSX keeps the complete values but every data row is a fixed-height single line, so long content is visually clipped rather than expanding the row. JSON/CSV/XLSX and `crawl results` omit `security_id`, job IDs, selectors, recruiter names, and recruiter titles by default; those remain in restricted local SQLite state, and `boss clean --privacy` deletes crawl runs, budgets, and exports. Codes `37` / `38`, a security page, a missing job-list container, an exhausted budget, or a stop request checkpoint and stop immediately; stdout remains a JSON envelope containing the resume command.
 
-## Restricted actions
+## Candidate actions
 
 | Command | Description |
 |---------|-------------|
-| `boss greet <sid> <jid>` | Restricted: blocked by default; greet manually on the official website |
-| `boss batch-greet <query>` | Restricted: blocked by default to avoid bulk outreach |
-| `boss apply <sid> <jid>` | Restricted: blocked by default; apply manually on the official website |
-| `boss exchange <sid>` | Restricted: blocked by default; contact exchange involves personal information |
+| `boss greet <sid> <jid>` | Greet a recruiter; duplicates return `ALREADY_GREETED` |
+| `boss batch-greet <query>` | Search and greet up to an explicit `--limit`; supports `--dry-run` |
+| `boss apply <sid> <jid>` | Apply or start a conversation; duplicates return `ALREADY_APPLIED` |
+| `boss exchange <sid>` | Request a phone-number or WeChat exchange |
 
 ## Conversation track
 
 | Command | Description |
 |---------|-------------|
-| `boss chat` | Restricted: blocked by default (session data) |
-| `boss chatmsg <sid> [--raw]` | Restricted: blocked by default; `--raw` keeps structured body/link/card fields only after compliance allows it |
-| `boss chat-summary <sid>` | Restricted: blocked by default (depends on message content) |
-| `boss mark <sid> --label X` | Restricted: blocked by default (writes platform relationship data) |
+| `boss chat` | List conversations with pagination and source filters |
+| `boss chatmsg <sid> [--raw]` | Read message history; `--raw` preserves structured body/link/card fields |
+| `boss chat-summary <sid>` | Build a structured conversation summary |
+| `boss mark <sid> --label X` | Add or remove a contact label |
 | `boss interviews` | Interview invitations |
 | `boss history` | Browsing history |
 
@@ -91,8 +92,8 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 
 | Command | Description |
 |---------|-------------|
-| `boss pipeline` / `boss follow-up` / `boss digest` | Restricted: blocked by default (depend on session/interview data) |
-| `boss watch add/list/remove/run` | add/list/remove manage local presets; run is blocked by default (avoids automated incremental pulls) |
+| `boss pipeline` / `boss follow-up` / `boss digest` | Build progress, follow-up, and daily views from conversations/interviews |
+| `boss watch add/list/remove/run` | Save, list, remove, or run incremental job watches |
 | `boss shortlist add/list/annotate/compare/remove` | Local shortlist with tags, notes, and offline compare |
 | `boss favorites list/sync` | Read BOSS job favorites and sync to local shortlist (deduplicates jobs, refreshes dynamic access IDs, preserves first-saved time) |
 | `boss preset add/list/remove` | Search presets |
@@ -101,8 +102,8 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 
 | Command | Description |
 |---------|-------------|
-| `boss hr jobs list/offline/online` | Job listing and lifecycle management |
-| `boss hr applications` / `hr resume` / `hr chat` / `hr chatmsg` / `hr last-messages` / `hr candidates` / `hr reply` / `hr request-resume` | Restricted: blocked by default — candidate personal-data and messaging workflows belong on the official recruiter UI |
+| `boss hr jobs list/offline/online/detail` | Job listing, detail, and lifecycle management |
+| `boss hr applications` / `hr resume` / `hr chat` / `hr chatmsg` / `hr last-messages` / `hr candidates` / `hr reply` / `hr request-resume` | Candidate applications, resumes, conversations, search, replies, and attached-resume requests |
 
 ## Resume & AI
 

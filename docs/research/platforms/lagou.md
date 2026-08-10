@@ -1,5 +1,7 @@
 # 拉勾网（Lagou）API 调研报告
 
+> **历史研究基线：** 能力分类反映调研时状态，不代表当前 mode gate；以 `boss schema` 和平台注册表为准。
+
 > **结论先行**：**不建议近期接入**。主站 2023 年全面切 Next.js SSR + App Router 架构，**公开 JSON API 表面大幅收缩**，原有 `passport.lagou.com` 登录链路仍可用但 Cookie 有效期短（约 24h），**性价比不如把主精力放在智联 / 猎聘**。本报告按 Issue #90 的 7 项调研清单体例给出，同时作为其他平台调研的**样板**。
 >
 > 调研日期：2026-04-20 · 调研人：can4hou6joeng4 · 信息来源：公开观察（Web UI / DevTools / robots.txt）

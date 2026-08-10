@@ -1,27 +1,27 @@
 # 平台风险边界
 
-boss-agent-cli 默认启用 `assisted` 模式：本地辅助、只读优先、用户主动触发。项目同时允许用户显式启用 `research`，用于浏览器协议、反调试、风控适配和受控采集研究。项目不控制平台规则、账号风控、接口变更或第三方浏览器环境。使用者需要理解以下边界。
+boss-agent-cli 保留 `assisted|research` 配置兼容性，两种模式均可调用全部已实现能力。项目不控制平台规则、账号风控、接口变更或第三方浏览器环境；开放能力不取消运行预算、checkpoint、停止、脱敏和数据保管要求。
 
-## 0. 默认低风险模式
+## 0. 开放能力与运行控制
 
-默认低风险辅助模式会阻断以下敏感链路：
+候选者写操作、批量触达、招聘者候选人数据和浏览器采集均可进入各自业务层。调用方必须：
 
-- 自动打招呼、批量打招呼、投递/立即沟通、联系方式交换
-- 招聘者侧候选人搜索、投递申请、在线简历、聊天记录、最近消息摘要
-- 招聘者侧消息回复、附件简历请求、手机/微信交换
+- 使用显式输入、数量、timeout、retry 和 stop 条件；
+- 保存并复用 workflow/crawl `run_id`，不得通过扫描“最新任务”隐式恢复；
+- 对 Cookie、Token、`security_id`、联系方式、简历和聊天数据持续脱敏；
+- 遇到 `ACCOUNT_RISK`、安全页或预算耗尽时 checkpoint 并停止，不无界换通道重试。
 
-这些动作在 assisted 模式下应回到 BOSS 直聘官方页面由用户手动完成。Research Mode 只开放策略注册表明确声明的能力，不能因切换模式而取消脱敏、有限运行、checkpoint 和停止控制。
+平台未实现的能力返回 `NOT_SUPPORTED`，不得为了完成 workflow 伪造成功。`COMPLIANCE_BLOCKED` 只作为历史错误码保留，当前执行路径不主动产生。
 
-## 0.1 显式 Research Mode
+## 0.1 历史模式兼容
 
 ```bash
 boss config set operating_mode research
 boss schema --format native
 ```
 
-Research Mode 的运行约束：
+两种模式共享以下运行约束：
 
-- 必须由用户显式启用，禁止安装后静默开启。
 - 抓取页数、详情请求、重试和运行时间必须有默认上限；不得以 `0` 隐式表达无限运行。
 - 命中风险页或风险码时先保存 checkpoint；继续需要新的用户动作。
 - 浏览器 adapter 应使用独立 profile，不能关闭或污染用户原有标签页/profile。
@@ -42,9 +42,9 @@ Research Mode 的运行约束：
 
 ## 2. 登录和 Cookie 边界
 
-登录链路会使用 Cookie 提取、CDP、QR httpx 或浏览器兜底。项目只在本地读取和保存登录态，不要求用户把 Cookie、Token、手机号、微信号、姓名、公司信息或 `security_id` 提交到仓库。Assisted Mode 的登录兼容能力不得升级为风控重试通道；Research Mode adapter 必须遵守本页 0.1 节约束。
+登录链路会使用 Cookie 提取、CDP、QR httpx 或浏览器兜底。项目只在本地读取和保存登录态，不要求用户把 Cookie、Token、手机号、微信号、姓名、公司信息或 `security_id` 提交到仓库。任何 adapter 都不得把登录兼容能力升级为风控重试通道，并必须遵守本页 0.1 节约束。
 
-`boss status` 默认只检查本地加密凭据和分层健康状态，不请求真实平台；需要确认在线只读接口是否可用时，必须显式运行 `boss status --live` 或 `boss doctor --live-probe`。`boss doctor` 默认只做本地诊断，输出的 `next_actions` 会保留安全兜底：敏感操作或命中风控时停止自动化访问，并回到官方页面由用户手动完成。`wt2` 存在但 `__zp_stoken__` 缺失时属于部分登录态，通常需要通过真实页面 JS 生成；可在用户主动操作下以 Chrome CDP 远程调试端口启动浏览器后运行 `boss login --cdp`，但不得把 CDP 当成风控绕过通道。
+`boss status` 默认只检查本地加密凭据和分层健康状态，不请求真实平台；需要确认在线只读接口是否可用时，必须显式运行 `boss status --live` 或 `boss doctor --live-probe`。命中风控时停止当前 workflow 并保留 checkpoint。`wt2` 存在但 `__zp_stoken__` 缺失时属于部分登录态，通常需要通过真实页面 JS 生成；可在用户主动操作下以 Chrome CDP 远程调试端口启动浏览器后运行 `boss login --cdp`，但不得把 CDP 当成风控绕过通道。
 
 提交 Issue 前必须脱敏：
 
@@ -58,15 +58,15 @@ Research Mode 的运行约束：
 
 ## 3. 请求频率和账号责任
 
-默认请求间隔由 `--delay` 控制。Assisted Mode 不执行高频抓取或批量触达。Research Mode 的采集和写操作仍需能力策略、有限预算和显式用户动作；不得把模式切换解释为取消账号、数据和运行责任。
+默认请求间隔由 `--delay` 控制。采集、写操作和批量触达必须使用有限预算、显式用户输入与停止条件；不得把模式配置解释为取消账号、数据和运行责任。
 
 ## 4. 浏览器自动化边界
 
-patchright、CDP、Chrome 本地 profile、系统钥匙串、浏览器插件和平台风控都会影响登录与访问稳定性。浏览器能打开不代表 httpx 链路一定可用；httpx 链路可用也不代表浏览器自动化链路一定可用。Assisted Mode 命中风控时停止；Research Mode 可使用声明的 adapter 研究风控行为，但不能无界切换通道或无限重试。
+patchright、CDP、Chrome 本地 profile、系统钥匙串、浏览器插件和平台风控都会影响登录与访问稳定性。浏览器能打开不代表 httpx 链路一定可用；httpx 链路可用也不代表浏览器自动化链路一定可用。任何模式命中风控时都停止；声明的 adapter 不能无界切换通道或无限重试。
 
-Windows 客户端、可见浏览器、CloakBrowser、RPA 工具或指纹浏览器都必须经过相同的 operating-mode 策略。主线可以接纳可审计的 Research Mode adapter，但默认 assisted smoke 不得自动运行真实风控研究。
+Windows 客户端、可见浏览器、CloakBrowser、RPA 工具或指纹浏览器都必须遵守相同的预算、脱敏、checkpoint 和停止策略。普通 CI 不得自动运行真实风控研究。
 
-第三方仓库中的 stealth、response interception、自动滚动抓取、批量提取或模拟真实用户指纹实现，只有在来源、license、commit、hash、数据路径和停止行为完成审计后，才能进入 Research Mode adapter；不得进入 assisted 默认路径或真实账号 CI。新平台接入仍必须先通过 [多平台适配器研究模板](research/platforms/README.md) 的准入评估。
+第三方仓库中的 stealth、response interception、自动滚动抓取、批量提取或模拟真实用户指纹实现，只有在来源、license、commit、hash、数据路径和停止行为完成审计后，才能进入声明的 adapter；不得进入真实账号 CI。新平台接入仍必须先通过 [多平台适配器研究模板](research/platforms/README.md) 的准入评估。
 
 ## 5. 烟测边界
 

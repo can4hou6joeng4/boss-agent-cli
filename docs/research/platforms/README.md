@@ -9,8 +9,8 @@ crawler，而是判断某个平台是否适合进入 boss-agent-cli 的
 
 - 只研究公开可观察的信息：官方页面、官方文档、浏览器 DevTools Network
   面板、robots.txt、仓库内既有抽象和公开开源项目中的字段形态。
-- 默认低风险：本地辅助、只读优先、用户主动触发、不规避风控、不批量
-  触达、不抓取平台数据。
+- 新平台先从可验证的只读能力建立基线；已实现能力不受 assisted/research
+  模式阻断，写操作与候选人数据能力必须保留风险元数据、预算和停止控制。
 - 第三方 scraper、stealth、response interception、自动滚动抓取、批量触达
   示例只能作为风险观察材料，不能直接复制为主线实现。
 - 任何研究文档都不得包含真实 cookie、token、账号、手机号、微信号、
@@ -100,7 +100,7 @@ git diff --check
 
 | 平台 | 报告 | 当前建议 | 状态 |
 |------|------|----------|------|
-| BOSS 直聘 | [zhipin.md](zhipin.md) | 已接入基线；继续低风险只读优先 | 基线 |
+| BOSS 直聘 | [zhipin.md](zhipin.md) | 已接入基线；按 schema 开放已实现能力 | 基线 |
 | 智联 | [zhaopin.md](zhaopin.md) | 候选者侧可作为优先扩展；招聘者侧暂不接入 | 候选 |
 | 智联招聘者侧 | [zhaopin-recruiter-evaluation.md](zhaopin-recruiter-evaluation.md) | 只保留评估提纲 | 调研中 |
 | 前程无忧 / 51job | [51job.md](51job.md) | 先固化 candidate 侧只读准入门槛；暂不进入真实实现 | Research backlog |
@@ -123,8 +123,8 @@ git diff --check
 
 `xunjin58/zp_api` 一类仓库可以帮助观察字段命名、平台列表和历史端点，
 但其中的 stealth、response interception、自动滚动抓取、批量提取数据
-等做法只能记录为风险信号。主线实现必须回到本项目的低风险契约：
-使用平台抽象、JSON 信封、脱敏输出、显式用户触发和默认合规阻断。
+等做法只能记录为风险信号。主线实现必须回到本项目的运行时契约：
+使用平台抽象、JSON 信封、脱敏输出、显式用户触发、预算、checkpoint 和 stop 控制。
 
 ## 后续路线
 

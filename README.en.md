@@ -4,7 +4,7 @@
 
 # boss-agent-cli
 
-*🤖 A local-assist BOSS Zhipin CLI for AI agents — search · welfare filtering · shortlist · JSON envelopes, low-risk by default.*
+*🤖 A recruiting-platform CLI for people and AI agents — terminal wizard · welfare filtering · dual-role workflows · JSON envelopes.*
 
 [![CI](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/can4hou6joeng4/boss-agent-cli/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli)
@@ -35,20 +35,21 @@
 
 ## 🧭 Why
 
-Auto-apply and batch-greet scripts automate exactly what the platform doesn't want automated — a ban is only a matter of time. boss-agent-cli goes the other way: **it hands the low-risk, read-only, user-triggered part to your terminal and your agent, and leaves the sensitive actions (greeting, applying, messaging) for you to do by hand on the official site.** You describe intent; the agent searches, filters, and organizes candidate jobs into structured JSON. `boss schema` is the source of truth, so it drops straight into Claude / Cursor and other MCP hosts. Compliance isn't a patch — it's the default posture.
+boss-agent-cli unifies job discovery, welfare filtering, local resumes and AI, application and messaging, recruiter candidate workflows, and resumable crawling in one CLI. People run `boss` for a terminal wizard; agents use JSON, schema, MCP, or the Python API against the same workflow state. `boss schema` remains the capability source of truth.
 
-## ⚠️ Compliance Boundary
+## ⚠️ Runtime Boundary
 
-Assisted Mode is on by default: local assistance, read-only first, and user-triggered. Commands that greet (greet / batch-greet), apply, exchange contacts, search recruiter candidates, read candidate resumes / chats, or reply are blocked by default and return `COMPLIANCE_BLOCKED`; perform those actions manually on the official website. An explicit `boss config set operating_mode research` enables bounded browser-protocol, anti-debugging, risk-control adaptation, and controlled collection research, with redaction, checkpoints, stop controls, and auditable script provenance still required.
+Historical `operating_mode=assisted|research` configuration remains compatible, but both modes can call every implemented capability and no longer produce mode-level `COMPLIANCE_BLOCKED` errors. Missing platform implementations still return `NOT_SUPPORTED`; authentication, account-risk, and network failures keep structured recovery metadata. Long-running workflows remain bounded by timeout, retry, budget, checkpoint, and stop controls.
 
 ## ✨ Features
 
 - **Job discovery**: keyword search + layered filters, with cached `show` navigation — `search` `show` `detail`
 - **Welfare filtering (the differentiator)**: `--welfare "双休,五险一金"` pages, fetches details, runs **real AND matching**, and can `--sort score` by local match score — `search --welfare`
-- **Local shortlist & stats**: inspect details, sync web favorited jobs, organize candidates with local tags and notes, compare jobs offline, and see funnel stats; apply and messaging stay on the official website — `shortlist` `stats` `watch` `preset` `favorites`
+- **Terminal wizard**: run `boss` or `boss wizard`, select a role, platform, and goal, then resume the same workflow through JSON, run IDs, or MCP
+- **Local shortlist & stats**: inspect details, sync web favorited jobs, organize candidates with local tags and notes, compare jobs offline, and see funnel stats — `shortlist` `stats` `watch` `preset` `favorites`
 - **AI job-hunting assist + local models**: JD analysis, resume polish, role-targeted optimization, keyword suggestions, resume optimization, shortlist fit reports, interview prep, chat coaching; local weights stay outside the Python package via Ollama/vLLM OpenAI-compatible endpoints — `ai analyze-jd` `ai suggest-keywords` `ai resume-optimize` `ai interview-prep` `ai chat-coach` `ai local configure` `ai local smoke`
-- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, data, pagination, error, hints}` envelope, `boss schema` is the capability source of truth, and an **MCP server with 50 tools** exposes the low-risk and local task surface
-- **Recruiter loop**: list and bring postings online / offline (`hr jobs list/online/offline`); candidate personal-data workflows are blocked by default
+- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, data, pagination, error, hints}` envelope, `boss schema` is the capability source of truth, and an **MCP server with 73 tools** exposes every implemented capability
+- **Recruiter workflow**: candidate search, applications, resumes, chat/recent messages, replies, contact/attachment requests, and job management — `hr candidates/applications/resume/chat/last-messages/reply/request-resume/jobs`
 - **Cross-platform layer**: live `Platform` / `RecruiterPlatform` registries, `--platform zhipin|zhilian|qiancheng`
 
 ## 🚀 Quickstart
@@ -58,9 +59,12 @@ Assisted Mode is on by default: local assistance, read-only first, and user-trig
 uv tool install boss-agent-cli
 patchright install chromium
 
-# Run the low-risk loop
+# Human entrypoint: choose role, platform, and goal in the wizard
+boss
+
+# Agents and advanced users can still call commands directly
 boss doctor                                                   # environment check
-boss login                                                    # user-triggered login (platform-aware chain)
+boss login                                                    # platform-aware login
 boss status                                                   # verify login
 boss search "Golang" --city 广州 --welfare "双休,五险一金"     # search + welfare filtering
 boss detail <security_id>                                     # view detail
@@ -68,7 +72,8 @@ boss shortlist add <security_id> <job_id> --tags backend,remote  # add to local 
 boss shortlist compare --tag remote                           # compare shortlisted jobs offline
 boss stats                                                    # local stats
 
-# Recruiter mode (candidate-data workflows blocked by default)
+# Recruiter mode
+boss hr candidates "Python" --city 101010100
 boss hr jobs list
 ```
 
@@ -94,7 +99,7 @@ boss config set platform zhilian          # set as default
 Start here: [Agent Quickstart](docs/agent-quickstart.en.md) · [Capability Matrix](docs/capability-matrix.en.md) · [Host Examples](docs/agent-hosts.en.md)
 
 ```json
-// Option 1: MCP (recommended) — Claude Desktop / Cursor and other MCP hosts; MCP server with 50 tools
+// Option 1: MCP (recommended) — Claude Desktop / Cursor and other MCP hosts; MCP server with 73 tools
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
@@ -126,20 +131,20 @@ with BossClient(AuthManager(...)) as client:
 
 ## 📚 Commands
 
-`boss schema` exposes 38 top-level commands + 9 first-level recruiter subcommands, grouped by workflow:
+`boss schema` exposes 39 top-level commands + 9 first-level recruiter subcommands, grouped by workflow:
 
 - **Auth**: `login` · `logout` · `status` · `doctor`
 - **Discover**: `search` · `detail` · `show` · `cities` · `history`
 - **Organize**: `watch` · `preset` · `shortlist` · `stats` · `favorites`
-- **Restricted research crawl**: `crawl configure/run/start/status/results/resume/stop/shortlist` (explicit `operating_mode=research` only; MCP only reads or locally imports an existing run)
+- **Resumable crawl**: `crawl configure/run/start/status/results/resume/stop/shortlist`
 - **Resume / AI**: `resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai cover-letter` · `ai interview-prep` · `ai chat-coach` · `ai local`
-- **Utility**: `schema` · `platforms` · `export` · `config` · `clean`
-- **Recruiter**: `hr jobs list/online/offline`
-- **Restricted (blocked by default in low-risk mode)**: `greet` · `batch-greet` · `apply` · `exchange` · `chat*` · `pipeline` · `digest`
+- **Utility / workflow**: `wizard` · `schema` · `platforms` · `export` · `config` · `clean`
+- **Candidate actions**: `greet` · `batch-greet` · `apply` · `exchange` · `chat*` · `pipeline` · `digest`
+- **Recruiter**: `hr applications/candidates/resume/chat/chatmsg/last-messages/reply/request-resume/jobs`
 
 Full command tables, parameters, and welfare-matching internals: **[Command Reference](docs/commands.en.md)**. The capability source of truth is `boss schema` (with `--format openai-tools` / `anthropic-tools` exports).
 
-Bulk crawl requires `uv sync --extra crawl`. It runs only in explicit `operating_mode=research` mode, creates and cleans up its own `<data-dir>/crawl/chrome-profile`, and never attaches to a daily Chrome profile. Hooks are disabled by default; if you have authorized local scripts, explicitly provide both the profile and a directory containing `SHA256SUMS`:
+Bulk crawl requires `uv sync --extra crawl`. It uses its own `<data-dir>/crawl/chrome-profile` and never attaches to a daily Chrome profile. Hooks are disabled by default; local scripts require both an explicit profile and a directory containing `SHA256SUMS`:
 
 ```powershell
 boss crawl configure --max-requests 20 --max-details 50 --max-seconds 600 --max-retries 1
@@ -150,7 +155,7 @@ boss crawl stop <run_id>
 boss agent crawl --run-id <run_id> --resume <resume-name>
 ```
 
-`crawl run` is sequential, checkpoints SQLite state, and incrementally writes JSON / CSV / XLSX artifacts. Request, detail, wall-clock, and retry budgets are fixed; `boss crawl stop` stops at the next safe point. Exports and `crawl results` redact `security_id`, selectors, and recruiter fields; `boss clean --privacy` removes crawl state, budgets, and exports. MCP remains assisted-only and can only use `crawl_status`, `crawl_results`, and `crawl_shortlist` to read or locally import an existing `run_id`; creating, resuming, and stopping runs stays in the explicitly enabled Research Mode CLI. A platform risk code or security page stops the task and returns a resume command. `boss agent crawl --run-id` only analyzes a completed run; a new real-Chrome crawl requires `operating_mode=research` and `--allow-crawl`.
+`crawl run` is sequential, checkpoints SQLite state, and incrementally writes JSON / CSV / XLSX artifacts. Request, detail, wall-clock, and retry budgets are fixed; `boss crawl stop` stops at the next safe point. Exports and `crawl results` redact `security_id`, selectors, and recruiter fields; `boss clean --privacy` removes crawl state, budgets, and exports. Fine-grained MCP crawl tools read or import an existing `run_id`; `boss_wizard` can start, resume, and stop the shared workflow. A platform risk code or security page stops the task and returns a resume command.
 
 ## 🩺 Troubleshooting
 
@@ -160,7 +165,7 @@ boss status --live      # optional low-frequency read-only probe
 boss doctor --live-probe
 ```
 
-Every error envelope carries `code` + `recoverable` + `recovery_action`, so agents can react programmatically. Browser Bridge local diagnostics cover `bridge_daemon` / `bridge_extension` / `bridge_protocol` / `bridge_workspace` / `bridge_exec` / `bridge_fetch` / `bridge_navigate`; start the daemon with `python -m boss_agent_cli.bridge.daemon --serve`. Assisted Mode stops on platform risk-control blocks. Research Mode may run declared adapters, but work must remain bounded, checkpointed, redacted, and explicitly resumed by the user.
+Every error envelope carries `code` + `recoverable` + `recovery_action`, so agents can react programmatically. Browser Bridge local diagnostics cover `bridge_daemon` / `bridge_extension` / `bridge_protocol` / `bridge_workspace` / `bridge_exec` / `bridge_fetch` / `bridge_navigate`; start the daemon with `python -m boss_agent_cli.bridge.daemon --serve`. Every mode stops on platform risk-control blocks; declared adapters must remain bounded, checkpointed, redacted, and explicitly resumed.
 
 Full checks, CDP launch examples, and error codes: **[Troubleshooting](docs/troubleshooting.en.md)**. For Cookie / CDP / patchright / request-rate / drift issues, read [Platform Risk Boundaries](docs/platform-risk.en.md) first.
 
@@ -178,7 +183,8 @@ Settings live in `~/.boss-agent/config.json`: request delays, batch-greet delay,
 
 ```
 CLI (Click)
-  └─ Compliance Guardrails (low-risk by default; blocks sensitive writes & candidate personal-data flows)
+  └─ Wizard / WorkflowRunner (TTY + headless JSON + persisted run state)
+       └─ Capability metadata (assisted / research compatibility; no mode gate)
        └─ AuthManager ── user-triggered login state (Fernet + PBKDF2 machine-bound encryption)
        └─ Platform registries ── zhipin / zhilian / qiancheng placeholder
        └─ BossClient ── httpx + throttle; CDP / Bridge / patchright compatible for login & export
@@ -186,7 +192,7 @@ CLI (Click)
             └─ output.py → JSON envelope → stdout
 ```
 
-**Invariants**: stdout is JSON-only · stderr holds logs · `exit 0/1` · errors carry `code/recoverable/recovery_action` · `boss schema` is the authoritative capability source. **Stack**: Python ≥ 3.10 · Click · httpx · patchright / CDP / Bridge (login, export, and explicit Research Mode adapters) · cryptography · sqlite3 (WAL) · pytest (1600+).
+**Invariants**: stdout is JSON-only · stderr holds logs · `exit 0/1` · errors carry `code/recoverable/recovery_action` · `boss schema` is the authoritative capability source. **Stack**: Python ≥ 3.10 · Click · httpx · patchright / CDP / Bridge (login, export, and declared browser adapters) · cryptography · sqlite3 (WAL) · pytest (1600+).
 
 ## 🔌 Local Storage
 
@@ -221,7 +227,7 @@ A static SVG generated locally with [mystarhistory](https://github.com/carsteneu
 
 ## ⚠️ Disclaimer
 
-This project is for learning and local assistance only; follow applicable laws, the BOSS Zhipin user agreement, and its privacy policy. Default low-risk mode blocks automated outreach, bulk actions, risk-control bypass, and candidate personal-data workflows; any apply, messaging, contact exchange, or recruiter candidate handling should be completed manually on the official website.
+Follow applicable law, platform terms, and privacy requirements. Set explicit input, volume, timeout, and stop limits for bulk outreach, candidate data, and browser-adaptation workflows, and protect local credentials and exported artifacts.
 
 ## 📑 License & Communities
 

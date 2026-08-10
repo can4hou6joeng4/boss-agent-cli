@@ -5,7 +5,8 @@ An index of the smallest useful integration examples for each agent host, so `bo
 Current example baseline:
 - Discover capabilities via `boss schema`
 - Verify login state with `boss status`
-- Complete the low-risk local-organization loop with `boss search` / `boss detail` / `boss shortlist`
+- Advance the same workflow as the human wizard through `boss_wizard` or `boss wizard --input-json`
+- Use fine-grained candidate and recruiter capabilities through `boss search` / `boss detail` / `boss apply` and `boss hr ...`
 - Parse `ok`, `data`, `error.code`, and `error.recovery_action` from the JSON envelope
 
 ## Example list
@@ -34,6 +35,7 @@ Current example baseline:
 2. Treat the JSON envelope on `stdout` as the source of truth for success and failure; never parse `stderr`.
 3. Use `boss doctor`, `boss login`, and `boss status` as the common recovery entry points.
 4. When the user mentions benefits or welfare requirements, map them to `--welfare` first.
+5. Keep an explicit `run_id` for long workflows and use status/resume/stop instead of scanning for the latest task.
 
 ## Related docs
 

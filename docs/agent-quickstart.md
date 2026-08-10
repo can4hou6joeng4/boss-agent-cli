@@ -1,8 +1,8 @@
 # Agent Quickstart
 
-面向 AI Agent 的最短上手路径：先识别能力，再跑通低风险的搜索、详情和本地整理闭环；涉及投递、沟通、候选人处理时回到平台官网由用户手动完成。
+面向 AI Agent 的最短上手路径：先识别能力，再通过细粒度命令或 `boss wizard --input-json` 执行候选者、招聘者和长任务 workflow。
 
-默认运行在 `assisted`。需要浏览器协议、反调试或风控适配研究时，由用户显式执行 `boss config set operating_mode research`；Agent 必须重新调用 `boss schema`，按 `compliance.capabilities` 路由能力。
+历史 `assisted` / `research` 配置均开放全部已实现能力。Agent 必须调用 `boss schema`，按 role、platform、availability 和 goal catalog 路由；平台未实现分支返回 `NOT_SUPPORTED`。
 
 ## 1) 安装与环境准备
 
@@ -28,7 +28,7 @@ boss status
 
 如果你不是直接在终端里手动跑命令，而是准备把它接进 Agent 宿主，先看 [Agent Host Examples](agent-hosts.md) 选择对应接入模板。
 
-## 2) 三步跑通低风险 Agent 闭环
+## 2) 三步跑通 Agent workflow
 
 ```bash
 # Step 1: 拉取自描述能力
@@ -39,9 +39,18 @@ boss search "Golang" --city 广州 --welfare "双休,五险一金"
 # 复杂筛选可复用用户在网页上选好的 URL
 boss search --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280100&experience=104,105'
 
-# Step 3: 查看详情并本地整理；投递/沟通回到平台官网手动完成
+# Step 3: 查看详情并推进后续动作
 boss detail <security_id>
 boss shortlist add <security_id> <job_id>
+boss apply <security_id> <job_id>
+```
+
+也可一次提交共享 workflow，并用返回的 `run_id` 查询或恢复：
+
+```bash
+boss --json wizard --input-json '{"role":"candidate","platform":"zhipin","goal":"job_search","inputs":{"query":"Golang","welfare_conditions":["双休"]}}'
+boss --json wizard --status <run_id>
+boss --json wizard --resume <run_id>
 ```
 
 解析约定：
@@ -51,7 +60,7 @@ boss shortlist add <security_id> <job_id>
 
 ### 候选人 crawl 编排
 
-安装 `uv sync --extra crawl` 后，crawl 只使用 `<data-dir>/crawl/chrome-profile` 独立 profile。MCP 保持 assisted-only；先在 CLI 创建任务，再使用 MCP 读取或本地导入已有任务：
+安装 `uv sync --extra crawl` 后，crawl 只使用 `<data-dir>/crawl/chrome-profile` 独立 profile。可用细粒度 CLI 创建任务，再使用 MCP 读取或本地导入已有任务；也可通过 `boss_wizard` 直接推进共享 crawl workflow：
 
 ```text
 boss crawl start <query> --city <city> --pages <n>
@@ -62,26 +71,26 @@ boss crawl start <query> --city <city> --pages <n>
 → boss_ai_fit(resume)
 ```
 
-CLI 中，`boss agent crawl --run-id <run_id> --resume <简历名>` 只处理已完成任务并完成 shortlist 与 ai fit。要让 Agent 新开真实采集，必须设置 `operating_mode=research` 并传入 `--allow-crawl`：
+CLI 中，`boss agent crawl --run-id <run_id> --resume <简历名>` 只处理已完成任务并完成 shortlist 与 ai fit。使用 `--query` 和 `--city` 可新开真实采集：
 
 ```bash
-boss agent crawl --query "AI 工程师" --city 杭州 --pages 3 --with-detail --allow-crawl --resume <简历名>
+boss agent crawl --query "AI 工程师" --city 杭州 --pages 3 --with-detail --resume <简历名>
 ```
 
 默认不注入 Hook。只有拥有相应授权时，才可在 CLI 显式传 `--hook-profile screenshot-full --hook-dir <含 SHA256SUMS 的目录>`；项目不随包发布第三方脚本。需要立即终止时执行 `boss crawl stop <run_id>`。当 `crawl_status` 返回 `risk_stopped` 或 `budget_stopped` 时，不要重新建任务或循环重试；保留 `run_id`，由用户处理后执行 `boss crawl resume <run_id>`。
 
-### 招聘者边界
+### 招聘者 workflow
 
-默认低风险模式会阻断候选人搜索、投递申请、简历、聊天、联系方式交换和消息回复等招聘者个人信息链路。当前保留低风险的职位列表/上下线入口：
+招聘者命令覆盖候选人搜索、投递申请、简历、聊天、联系方式交换、消息回复和职位管理：
 
 ```bash
 # Step 1: 同样先做能力发现
 boss schema
 
-# Step 2: 查看招聘者侧职位能力
+# Step 2: 搜索候选人、查看沟通并管理职位
+boss hr candidates "Python" --city 101010100
+boss hr chat --page 1
 boss hr jobs list
-
-# 候选人处理、沟通和联系方式交换请回到平台官网手动完成
 ```
 
 建议做法：
@@ -89,7 +98,7 @@ boss hr jobs list
 - `boss hr <subcommand>` 会自动切到 recruiter 角色，不需要额外推断 `--role`
 - 求职者与招聘者两端都遵守同一套 `stdout JSON / stderr 日志` 契约
 - 当前 `hr` 只支持 `zhipin-recruiter`；智联招聘者侧自动化请使用 `boss --platform zhilian --role recruiter agent ...`
-- assisted 模式下敏感子命令返回 `COMPLIANCE_BLOCKED` 时，不要尝试换自动化通道；只有用户显式切换到 research 后，才能调用策略声明允许的 adapter
+- 平台返回 `ACCOUNT_RISK` 或 `RATE_LIMITED` 时停止当前批次，按 `error.recovery_action` 处理，不要无界换通道重试
 
 ## 3) 失败恢复与排障
 
@@ -106,6 +115,8 @@ boss status
 - `AUTH_REQUIRED` / `AUTH_EXPIRED` / `TOKEN_REFRESH_FAILED`：重新执行 `boss login`
 - `wt2` 存在但 `stoken` 缺失：通常为部分登录态；使用 Chrome CDP 远程调试端口后运行 `boss login --cdp`，或重新执行 `boss login`
 - `RATE_LIMITED`：等待后重试
+- `NOT_SUPPORTED`：切换 schema catalog 中支持该 goal 的平台或 workflow
+- `WORKFLOW_TIMEOUT`：保留 `run_id`，调整超时后执行 `boss wizard --resume <run_id>`
 - `INVALID_PARAM`：校正参数（城市、福利、页码等）
 
 ## 4) 工具协议直出

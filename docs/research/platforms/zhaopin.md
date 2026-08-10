@@ -1,5 +1,7 @@
 # 智联招聘（Zhaopin）API 调研报告
 
+> **历史研究基线：** 能力分类反映调研时状态；当前运行能力以 README、`boss schema` 和平台注册表为准。
+
 > **结论先行**：**中等优先级接入候选**。智联主站 `www.zhaopin.com` + API 网关 `fe-api.zhaopin.com` 架构清晰，**公开 API 表面相对丰富**，但登录链路有**极验滑块**阻塞 headless 自动化，**强依赖 Bridge 通道或 CDP 模式**。若投入资源，建议作为 v2.0 多平台首家接入，预计 2-3 周工作量。
 >
 > 调研日期：2026-04-20 · 调研人：can4hou6joeng4 · 信息来源：公开观察（Web UI / DevTools / robots.txt）
