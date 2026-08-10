@@ -1,4 +1,4 @@
-"""Operating-mode policies for platform-sensitive commands."""
+"""Capability metadata and legacy operating-mode compatibility."""
 
 from __future__ import annotations
 
@@ -7,33 +7,14 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.display import handle_error_output
-
 ASSISTED_MODE = "assisted"
 RESEARCH_MODE = "research"
 AVAILABLE_OPERATING_MODES = (ASSISTED_MODE, RESEARCH_MODE)
 
-LOW_RISK_MODE_DESCRIPTION = (
-	"默认低风险模式（assisted）：本地辅助、只读优先、用户主动触发，不自动触达、不批量处理候选人个人数据。"
-)
-RESEARCH_MODE_DESCRIPTION = (
-	"研究模式：显式启用浏览器协议、反调试、风控适配和受控采集能力；仍要求有限运行、脱敏和可停止。"
-)
+LOW_RISK_MODE_DESCRIPTION = "assisted 模式：保留历史配置名称，所有已实现能力均可调用。"
+RESEARCH_MODE_DESCRIPTION = "research 模式：保留历史配置名称，权限与 assisted 模式一致。"
 
-COMPLIANCE_BLOCKED_ACTION = (
-	"保持默认 assisted 模式并回到平台官网手动完成；如需研究能力，请显式设置 operating_mode=research。"
-)
-_COMPLIANCE_NEXT_ACTIONS = [
-	"使用只读命令确认信息，例如 boss search、boss detail、boss show、boss shortlist",
-	"仅在理解账号、数据和平台风险后显式运行 boss config set operating_mode research",
-]
-_COMPLIANCE_BLOCK_HINTS = {
-	"policy": "low_risk_assistance",
-	"blocked": True,
-	"manual_action_required": True,
-	"allowed_alternatives": ["search", "detail", "show", "shortlist"],
-	"next_actions": _COMPLIANCE_NEXT_ACTIONS,
-}
+COMPLIANCE_BLOCKED_ACTION = "升级到当前版本后重试；该错误码仅为历史协议兼容保留。"
 
 
 @dataclass(frozen=True)
@@ -76,10 +57,10 @@ _POLICY_DEFINITIONS = {
 _CAPABILITY_POLICIES = {
 	command: CapabilityPolicy(
 		command=command,
-		allowed_modes=(RESEARCH_MODE,),
+		allowed_modes=AVAILABLE_OPERATING_MODES,
 		risk_class=risk_class,
 		data_class=data_class,
-		requires_explicit_consent=True,
+		requires_explicit_consent=False,
 		blocked_reason=blocked_reason,
 	)
 	for command, (risk_class, data_class, blocked_reason) in _POLICY_DEFINITIONS.items()
@@ -101,12 +82,12 @@ def operating_mode(ctx: click.Context) -> str:
 
 
 def restricted_commands(mode: str = ASSISTED_MODE) -> set[str]:
-	"""Return commands unavailable in the requested operating mode."""
-	return {
-		command
-		for command, policy in _CAPABILITY_POLICIES.items()
-		if mode not in policy.allowed_modes
-	}
+	"""Return commands unavailable in the requested operating mode.
+
+	The parameter and return type are retained for callers that still inspect the
+	historical operating-mode surface. Current modes do not restrict commands.
+	"""
+	return set()
 
 
 def low_risk_blocked_commands() -> set[str]:
@@ -120,29 +101,13 @@ def is_low_risk_mode(ctx: click.Context) -> bool:
 
 
 def require_compliance_allowed(ctx: click.Context, command: str) -> bool:
-	"""Emit a standard error when the active mode does not allow a command."""
-	policy = capability_policy(command)
-	mode = operating_mode(ctx)
-	if policy is None or mode in policy.allowed_modes:
-		return True
-
-	handle_error_output(
-		ctx,
-		command,
-		code="COMPLIANCE_BLOCKED",
-		message=f"{policy.blocked_reason} {LOW_RISK_MODE_DESCRIPTION}",
-		recoverable=False,
-		recovery_action=COMPLIANCE_BLOCKED_ACTION,
-		hints={**_COMPLIANCE_BLOCK_HINTS, "required_mode": RESEARCH_MODE},
-	)
-	return False
+	"""Compatibility guard that allows every registered capability."""
+	return True
 
 
 def require_capability_mode(mode: str, command: str) -> None:
-	"""Raise a compact error when a non-CLI caller uses a blocked capability."""
-	policy = capability_policy(command)
-	if policy is not None and mode not in policy.allowed_modes:
-		raise ValueError(f"{command} 仅可在显式 operating_mode=research 下运行")
+	"""Compatibility hook for non-CLI callers; modes no longer gate execution."""
+	return None
 
 
 def compliance_mode_data(ctx: click.Context) -> dict[str, Any]:
@@ -150,10 +115,10 @@ def compliance_mode_data(ctx: click.Context) -> dict[str, Any]:
 	mode = operating_mode(ctx)
 	blocked = restricted_commands(mode)
 	return {
-		"default_boundary": "low_risk_assistance",
+		"default_boundary": "open_capabilities",
 		"operating_mode": mode,
 		"available_modes": list(AVAILABLE_OPERATING_MODES),
-		"sensitive_commands_blocked": bool(blocked),
+		"sensitive_commands_blocked": False,
 		"description": LOW_RISK_MODE_DESCRIPTION if mode == ASSISTED_MODE else RESEARCH_MODE_DESCRIPTION,
 		"blocked_commands": sorted(blocked),
 		"capabilities": {

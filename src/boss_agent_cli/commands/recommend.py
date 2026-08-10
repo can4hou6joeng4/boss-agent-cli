@@ -65,7 +65,7 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 		hints = {
 			"next_actions": [
 				"使用 boss detail <security_id> 查看职位详情",
-				"如需投递或沟通，请回到平台官网由用户手动完成",
+				"使用 boss apply <security_id> <job_id> 投递，或 boss greet <security_id> <job_id> 沟通",
 				f"使用 boss recommend --page {page + 1} 查看下一页",
 			],
 		}

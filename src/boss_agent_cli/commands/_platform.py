@@ -48,13 +48,25 @@ def get_platform_instance(ctx: "click.Context", auth: "AuthManager") -> Platform
 	- 按平台名分发到对应 client（zhipin→BossClient / zhilian→ZhilianClient）
 	"""
 	obj = ctx.obj or {}
-	name = obj.get("platform") or "zhipin"
-	plat_cls = get_platform(name)
+	return build_platform_instance(
+		obj.get("platform") or "zhipin",
+		auth,
+		delay=obj.get("delay", (1.5, 3.0)),
+		cdp_url=obj.get("cdp_url"),
+	)
 
-	delay = obj.get("delay", (1.5, 3.0))
-	cdp_url = obj.get("cdp_url")
+
+def build_platform_instance(
+	name: str,
+	auth: "AuthManager",
+	*,
+	delay: tuple[float, float] = (1.5, 3.0),
+	cdp_url: str | None = None,
+) -> Platform:
+	"""Build a candidate platform without requiring a Click context."""
+	plat_cls = get_platform(name)
 	client = _build_client(name, auth, delay, cdp_url)
 	return plat_cls(client)
 
 
-__all__ = ["get_platform_instance"]
+__all__ = ["build_platform_instance", "get_platform_instance"]

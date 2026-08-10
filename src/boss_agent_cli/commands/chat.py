@@ -165,9 +165,9 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				render=lambda d: click.echo(
 					f"已导出 {d['count']} 条到 {d['path']}", err=True
 				),
-				hints={"next_actions": [
-					"boss detail <security_id> — 查看职位详情",
-					"如需沟通，请回到平台官网由用户手动完成",
+					hints={"next_actions": [
+						"boss detail <security_id> — 查看职位详情",
+						"boss chatmsg <security_id> — 查看消息后继续沟通",
 				]},
 			)
 			return
@@ -201,9 +201,9 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 		handle_output(
 			ctx, "chat", friends,
 			render=_render,
-			hints={"next_actions": [
-				"boss detail <security_id> — 查看职位详情",
-				"如需沟通，请回到平台官网由用户手动完成",
+				hints={"next_actions": [
+					"boss detail <security_id> — 查看职位详情",
+					"boss chatmsg <security_id> — 查看消息后继续沟通",
 			]},
 		)
 

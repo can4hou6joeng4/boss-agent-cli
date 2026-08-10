@@ -12,7 +12,6 @@ _WRITE_CAPABILITIES = ["greet", "apply"]
 _LOCAL_CAPABILITIES = ["shortlist", "stats", "config", "schema"]
 _CAPABILITY_STATUS_ALIASES = {
 	"placeholder_only": "placeholder",
-	"low_risk_blocked": "blocked_by_policy",
 }
 
 _PLATFORM_CAPABILITY_STATUS: dict[str, dict[str, str]] = {
@@ -25,8 +24,8 @@ _PLATFORM_CAPABILITY_STATUS: dict[str, dict[str, str]] = {
 		"recommend": "available",
 		"me": "available",
 		"status": "available",
-		"greet": "low_risk_blocked",
-		"apply": "low_risk_blocked",
+		"greet": "available",
+		"apply": "available",
 	},
 	"zhilian": {
 		"search": "available",
@@ -37,8 +36,8 @@ _PLATFORM_CAPABILITY_STATUS: dict[str, dict[str, str]] = {
 		"recommend": "available",
 		"me": "available",
 		"status": "available",
-		"greet": "low_risk_blocked",
-		"apply": "low_risk_blocked",
+		"greet": "available",
+		"apply": "available",
 	},
 	"qiancheng": {
 		"search": "not_supported",
@@ -67,16 +66,12 @@ _CAPABILITY_STATUS_LEGEND: dict[str, dict[str, str]] = {
 		"label": "仅占位",
 		"description": "仅用于平台注册、别名、schema/config 可见性；不代表真实平台能力已接入。",
 	},
-	"low_risk_blocked": {
-		"label": "低风险模式阻断",
-		"description": "涉及写操作、敏感数据或平台风险边界；默认低风险模式阻断并提示回到官方页面手动处理。",
-	},
 }
 
 
 _PLATFORM_NOTES = {
 	"zhipin": "默认平台；候选者侧与招聘者侧注册表均已接入。",
-	"zhilian": "候选者侧只读 + 本地辅助链路已对等接入；写操作默认阻断，招聘者侧暂不可用。",
+	"zhilian": "候选者侧已接入搜索、详情、投递和沟通；招聘者侧暂不可用。",
 	"qiancheng": "51job/前程无忧当前仅注册平台身份；真实能力返回 NOT_SUPPORTED。",
 }
 

@@ -14,14 +14,26 @@ if TYPE_CHECKING:
 
 def get_recruiter_platform_instance(ctx: "click.Context", auth: "AuthManager") -> RecruiterPlatform:
 	obj = ctx.obj or {}
-	name = obj.get("platform") or "zhipin"
+	return build_recruiter_platform_instance(
+		obj.get("platform") or "zhipin",
+		auth,
+		delay=obj.get("delay", (1.5, 3.0)),
+		cdp_url=obj.get("cdp_url"),
+	)
+
+
+def build_recruiter_platform_instance(
+	name: str,
+	auth: "AuthManager",
+	*,
+	delay: tuple[float, float] = (1.5, 3.0),
+	cdp_url: str | None = None,
+) -> RecruiterPlatform:
+	"""Build a recruiter platform without requiring a Click context."""
 	recruiter_name = f"{name}-recruiter"
 	plat_cls = get_recruiter_platform(recruiter_name)
-
-	delay = obj.get("delay", (1.5, 3.0))
-	cdp_url = obj.get("cdp_url")
 	client = BossRecruiterClient(auth, delay=delay, cdp_url=cdp_url)
 	return plat_cls(client)
 
 
-__all__ = ["get_recruiter_platform_instance"]
+__all__ = ["build_recruiter_platform_instance", "get_recruiter_platform_instance"]

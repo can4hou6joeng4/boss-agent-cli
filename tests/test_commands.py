@@ -774,7 +774,7 @@ def test_search_ignores_index_cache_write_failure(mock_client_cls, mock_auth_cls
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
 @patch("boss_agent_cli.commands.search.get_platform_instance")
-def test_search_json_hints_keep_jobseeker_flow_read_only(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline, mock_save_index):
+def test_search_json_hints_expose_available_candidate_actions(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline, mock_save_index):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.get_search.return_value = None
 	_ctx_mock(mock_client_cls)
@@ -808,9 +808,7 @@ def test_search_json_hints_keep_jobseeker_flow_read_only(mock_client_cls, mock_a
 	assert parsed["ok"] is True
 	actions = parsed["hints"]["next_actions"]
 	assert "使用 boss detail <security_id> 查看职位详情" in actions
-	assert "如需投递或沟通，请回到平台官网由用户手动完成" in actions
-	assert all("boss greet" not in action for action in actions)
-	assert all("boss apply" not in action for action in actions)
+	assert "使用 boss apply <security_id> <job_id> 投递，或 boss greet <security_id> <job_id> 沟通" in actions
 	mock_save_index.assert_called_once()
 
 
@@ -1734,7 +1732,7 @@ def test_search_reports_welfare_not_supported(mock_client_cls, mock_auth_cls, mo
 @patch("boss_agent_cli.commands.detail.CacheStore")
 @patch("boss_agent_cli.commands.detail.AuthManager")
 @patch("boss_agent_cli.commands.detail.get_platform_instance")
-def test_detail_json_hints_keep_jobseeker_flow_read_only(mock_client_cls, mock_auth_cls, mock_cache_cls):
+def test_detail_json_hints_expose_available_candidate_actions(mock_client_cls, mock_auth_cls, mock_cache_cls):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	mock_client = _ctx_mock(mock_client_cls)
@@ -1760,16 +1758,14 @@ def test_detail_json_hints_keep_jobseeker_flow_read_only(mock_client_cls, mock_a
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	actions = parsed["hints"]["next_actions"]
-	assert "如需投递或沟通，请回到 BOSS 直聘官方页面由用户手动完成" in actions
-	assert all("boss greet" not in action for action in actions)
-	assert all("boss apply" not in action for action in actions)
+	assert "boss apply <security_id> <job_id> 或 boss greet <security_id> <job_id>" in actions
 
 
 @patch("boss_agent_cli.commands.show.CacheStore")
 @patch("boss_agent_cli.commands.show.AuthManager")
 @patch("boss_agent_cli.commands.show.get_platform_instance")
 @patch("boss_agent_cli.commands.show.get_job_by_index")
-def test_show_json_hints_keep_jobseeker_flow_read_only(mock_get_job, mock_client_cls, mock_auth_cls, mock_cache_cls):
+def test_show_json_hints_expose_available_candidate_actions(mock_get_job, mock_client_cls, mock_auth_cls, mock_cache_cls):
 	mock_get_job.return_value = {"security_id": "sec_001"}
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
@@ -1798,13 +1794,11 @@ def test_show_json_hints_keep_jobseeker_flow_read_only(mock_get_job, mock_client
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	actions = parsed["hints"]["next_actions"]
-	assert "如需投递或沟通，请回到 BOSS 直聘官方页面由用户手动完成" in actions
-	assert all("boss greet" not in action for action in actions)
-	assert all("boss apply" not in action for action in actions)
+	assert "boss apply <security_id> <job_id> 或 boss greet <security_id> <job_id>" in actions
 
 
 @patch("boss_agent_cli.commands.stats._collect_stats")
-def test_stats_json_hints_keep_application_manual_handoff(mock_collect_stats):
+def test_stats_json_hints_expose_available_application_action(mock_collect_stats):
 	mock_collect_stats.return_value = {
 		"window_days": 30,
 		"funnel": {"greeted": 1, "applied": 0, "shortlist": 0},
@@ -1819,5 +1813,4 @@ def test_stats_json_hints_keep_application_manual_handoff(mock_collect_stats):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	actions = parsed["hints"]["next_actions"]
-	assert "如需投递，请回到平台官网由用户手动完成" in actions
-	assert all("boss apply" not in action for action in actions)
+	assert "使用 boss apply <security_id> <job_id> 继续投递" in actions

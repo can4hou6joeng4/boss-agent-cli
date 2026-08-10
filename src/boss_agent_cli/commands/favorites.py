@@ -230,7 +230,7 @@ def favorites_sync_cmd(ctx: click.Context) -> None:
 			"next_actions": [
 				boss_command_for_ctx(ctx, "shortlist list"),
 				boss_command_for_ctx(ctx, "shortlist compare"),
-				"如需投递或沟通，请回到平台官网由用户手动完成",
+				"使用 boss apply <security_id> <job_id> 投递，或 boss greet <security_id> <job_id> 沟通",
 			],
 		},
 	)

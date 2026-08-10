@@ -596,7 +596,10 @@ def test_detail_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock
 	result = runner.invoke(cli, ["--platform", "zhilian", "detail", "sec_001", "--job-id", "enc_001"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["hints"]["next_actions"][0] == "如需投递或沟通，请回到 BOSS 直聘官方页面由用户手动完成"
+	assert parsed["hints"]["next_actions"][0] == (
+		"boss --platform zhilian apply <security_id> <job_id> 或 "
+		"boss --platform zhilian greet <security_id> <job_id>"
+	)
 	assert parsed["hints"]["next_actions"][1] == "boss search <query>"
 
 
@@ -687,7 +690,10 @@ def test_show_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mock_c
 	result = runner.invoke(cli, ["--platform", "zhilian", "show", "1"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["hints"]["next_actions"][0] == "如需投递或沟通，请回到 BOSS 直聘官方页面由用户手动完成"
+	assert parsed["hints"]["next_actions"][0] == (
+		"boss --platform zhilian apply <security_id> <job_id> 或 "
+		"boss --platform zhilian greet <security_id> <job_id>"
+	)
 	assert parsed["hints"]["next_actions"][1] == "boss search <query>"
 
 
@@ -927,7 +933,10 @@ def test_history_zhilian_hints_use_platform_specific_commands(mock_auth_cls, moc
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["hints"]["next_actions"][0] == "使用 boss --platform zhilian detail <security_id> 查看职位详情"
-	assert parsed["hints"]["next_actions"][1] == "如需投递或沟通，请回到平台官网由用户手动完成"
+	assert parsed["hints"]["next_actions"][1] == (
+		"使用 boss --platform zhilian apply <security_id> <job_id> 投递，"
+		"或 boss --platform zhilian greet <security_id> <job_id> 沟通"
+	)
 	assert parsed["hints"]["next_actions"][2] == "使用 boss --platform zhilian history --page 2 查看下一页"
 
 

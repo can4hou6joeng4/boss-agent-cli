@@ -20,7 +20,7 @@ _MSG_TYPE_MAP = {
 @click.argument("security_id")
 @click.option("--page", default=1, help="页码")
 @click.option("--count", default=20, help="每页消息数量")
-@click.option("--raw", "show_raw", is_flag=True, default=False, help="输出保真结构化消息字段（仍受合规门控）")
+@click.option("--raw", "show_raw", is_flag=True, default=False, help="输出保真结构化消息字段")
 @click.pass_context
 @handle_auth_errors("chatmsg")
 def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int, show_raw: bool) -> None:

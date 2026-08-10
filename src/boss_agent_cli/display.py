@@ -222,7 +222,7 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 	sid = data.get("security_id", "")
 	jid = data.get("job_id", "")
 	if sid and jid:
-		greet_command = greet_command or "回到平台官网由用户手动投递或沟通"
+		greet_command = greet_command or "boss greet <security_id> <job_id>"
 		console.print(f"  [dim]next: {greet_command}[/dim]")
 
 

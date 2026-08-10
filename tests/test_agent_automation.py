@@ -15,9 +15,11 @@ from boss_agent_cli.automation.mock_adapter import MockRecruiterAutomationPlatfo
 from boss_agent_cli.automation.zhilian_adapter import ZhilianRecruiterAutomationPlatform
 from boss_agent_cli.automation.config import AutomationConfig, ReplyStrategy, automation_config_from_dict
 from boss_agent_cli.automation.decision import decide_action
+from boss_agent_cli.automation.execution import status_for_decision
 from boss_agent_cli.automation.events import stable_action_id
 from boss_agent_cli.automation.models import (
 	ActionResult,
+	AutomationMode,
 	Conversation,
 	ConversationFingerprint,
 	ConversationRef,
@@ -119,6 +121,14 @@ def test_decision_sends_questionnaire_for_high_confidence_new_candidate() -> Non
 	assert decision.requires_human is False
 
 
+def test_assist_and_training_modes_do_not_create_approval_gate() -> None:
+	conversation = _conversation("你好，我在上海做过3年销售，擅长客户沟通，大专，想看机会")
+	for mode in (AutomationMode.ASSIST, AutomationMode.TRAINING):
+		config = AutomationConfig(mode=mode)
+		decision = decide_action(conversation, config, {})
+		assert status_for_decision(config, decision, dry_run=False) is EventStatus.AUTO_EXECUTED
+
+
 def test_hybrid_local_ai_rewrites_reply_without_changing_action(tmp_path: Path, monkeypatch) -> None:
 	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
 	store = AutomationStore(tmp_path)
@@ -162,7 +172,7 @@ def test_hybrid_local_ai_rewrites_reply_without_changing_action(tmp_path: Path, 
 	assert adapter.messages == ["您好，方便的话想确认下近期是否看新的销售机会？"]
 
 
-def test_local_ai_parse_error_queues_review_without_sending(tmp_path: Path, monkeypatch) -> None:
+def test_local_ai_parse_error_is_skipped_without_sending_or_review(tmp_path: Path, monkeypatch) -> None:
 	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
 	store = AutomationStore(tmp_path)
 	ai_store = AIConfigStore(tmp_path)
@@ -186,12 +196,12 @@ def test_local_ai_parse_error_queues_review_without_sending(tmp_path: Path, monk
 			limit=1,
 		)
 
-	assert report.events[0].status == EventStatus.QUEUED_FOR_REVIEW.value
+	assert report.events[0].status == EventStatus.SKIPPED.value
 	assert adapter.messages == []
-	assert store.read_reviews()[0].message == "您好，想确认下近期是否看机会？"
+	assert store.read_reviews() == []
 
 
-def test_runner_dry_run_writes_events_and_review_queue(tmp_path: Path) -> None:
+def test_runner_dry_run_writes_events_without_review_queue(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
 	adapter = MockRecruiterAutomationPlatform(
 		"zhilian",
@@ -214,7 +224,8 @@ def test_runner_dry_run_writes_events_and_review_queue(tmp_path: Path) -> None:
 
 	assert report.status == "OK"
 	assert any(event.status == EventStatus.DRY_RUN.value for event in report.events)
-	assert store.stats()["human_reviews"] == 1
+	assert store.stats()["human_reviews"] == 0
+	assert any(event.status == EventStatus.SKIPPED.value for event in report.events)
 	assert store.stats()["dry_run"] >= 1
 
 

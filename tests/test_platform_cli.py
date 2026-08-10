@@ -98,7 +98,7 @@ class TestPlatformGlobalOption:
 		payload = json.loads(result.output)
 		login_desc = payload["data"]["commands"]["login"]["description"]
 		assert "当前平台" in login_desc
-		assert "低风险模式" in login_desc
+		assert "两种兼容运行模式共享相同能力" in login_desc
 		assert "zhilian" in login_desc
 
 

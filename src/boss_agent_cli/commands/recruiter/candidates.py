@@ -5,6 +5,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_output, handle_platform_error_output
+from boss_agent_cli.wizard.actions import execute_recruiter_candidate_search
 
 
 @click.command("candidates")
@@ -32,13 +33,20 @@ def candidates_cmd(ctx: click.Context, query: str, city: str | None, job_id: str
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_recruiter_platform_instance(ctx, auth) as platform:
-		result = platform.search_geeks(
-			query, city=city, page=page, job_id=job_id,
-			experience=experience, degree=degree,
-			age=age, school_level=school_level,
-			activeness=activeness, source=source,
-			select=select, salary=salary,
-		)
+		result = execute_recruiter_candidate_search(platform, {
+			"query": query,
+			"city": city,
+			"page": page,
+			"job_id": job_id,
+			"experience": experience,
+			"degree": degree,
+			"age": age,
+			"school_level": school_level,
+			"activeness": activeness,
+			"source": source,
+			"select": select,
+			"salary": salary,
+		})
 		if not platform.is_success(result):
 			handle_platform_error_output(ctx, "recruiter-candidates", platform, result, fallback_message="候选人搜索失败")
 			return

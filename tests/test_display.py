@@ -332,8 +332,8 @@ class TestRenderers:
 
 		assert "next:" not in stream.getvalue()
 
-	def test_render_job_detail_hands_sensitive_action_back_to_the_platform(self, monkeypatch):
-		"""有 security_id + job_id 时给出的默认引导必须是「回官网手动完成」。"""
+	def test_render_job_detail_exposes_available_greet_action(self, monkeypatch):
+		"""有 security_id + job_id 时给出可执行的 CLI 下一步。"""
 		from boss_agent_cli.display import render_job_detail
 		stream = _capture_display_console(monkeypatch)
 
@@ -341,7 +341,7 @@ class TestRenderers:
 
 		output = stream.getvalue()
 		assert "next:" in output
-		assert "回到平台官网" in output
+		assert "boss greet <security_id> <job_id>" in output
 
 	def test_render_job_detail_truncates_long_description_at_500_chars(self, monkeypatch):
 		from boss_agent_cli.display import render_job_detail

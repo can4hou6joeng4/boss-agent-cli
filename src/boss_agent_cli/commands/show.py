@@ -4,7 +4,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands.detail import build_job_from_card
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_job_detail
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_job_detail
 from boss_agent_cli.index_cache import get_index_info, get_job_by_index
 
 
@@ -71,12 +71,15 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 	result = build_job_from_card(card, security_id=security_id, greeted=greeted)
 	result["index"] = index
 
-	manual_handoff = "如需投递或沟通，请回到 BOSS 直聘官方页面由用户手动完成"
-	hints = {"next_actions": [manual_handoff, "boss search <query>"]}
+	next_action = (
+		f"{boss_command_for_ctx(ctx, 'apply <security_id> <job_id>')} 或 "
+		f"{boss_command_for_ctx(ctx, 'greet <security_id> <job_id>')}"
+	)
+	hints = {"next_actions": [next_action, "boss search <query>"]}
 	handle_output(
 		ctx,
 		"show",
 		result,
-		render=lambda data: render_job_detail(data, greet_command=manual_handoff),
+		render=lambda data: render_job_detail(data, greet_command=next_action),
 		hints=hints,
 	)

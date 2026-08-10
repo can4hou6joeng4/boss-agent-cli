@@ -364,7 +364,7 @@ def test_favorites_schema_exposes_subcommands():
 	spec = SCHEMA_DATA["commands"]["favorites"]
 	assert set(spec["subcommands"].keys()) == {"list", "sync"}
 	assert set(spec["options"].keys()) == {"list", "sync"}
-	assert "38 个顶层命令" in SCHEMA_DATA["description"]
+	assert "39 个顶层命令" in SCHEMA_DATA["description"]
 
 
 # ── 边界与合规（维护者 #354 要求覆盖）──────────────────────────

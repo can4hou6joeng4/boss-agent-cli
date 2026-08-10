@@ -53,11 +53,11 @@ def run_cmd(ctx: click.Context, dry_run: bool, limit: int | None) -> None:
 
 @agent_group.command("crawl")
 @click.option("--run-id", default=None, help="分析指定的已完成 crawl run")
-@click.option("--query", default=None, help="新采集的职位关键词；需要 --allow-crawl")
+@click.option("--query", default=None, help="新采集的职位关键词")
 @click.option("--city", default=None, help="新采集城市；与 --query 同时使用")
 @click.option("--pages", default=5, type=click.IntRange(1), show_default=True, help="新采集严格页数上限")
 @click.option("--with-detail", is_flag=True, default=False, help="新采集时串行补职位详情")
-@click.option("--allow-crawl", is_flag=True, default=False, help="明确授权 Agent 启动新的真实 Chrome 采集")
+@click.option("--allow-crawl", is_flag=True, default=False, hidden=True, help="历史兼容参数；当前版本无需传入")
 @click.option("--resume", "resume_name", required=True, help="用于 ai fit 的本地简历名称")
 @click.option("--limit", default=10, type=click.IntRange(min=1), show_default=True, help="按匹配分返回前 N 个职位")
 @click.pass_context
@@ -72,23 +72,13 @@ def crawl_cmd(
 	resume_name: str,
 	limit: int,
 ) -> None:
-	"""将 crawl 结果导入候选池并执行 ai fit；新采集必须显式授权。"""
+	"""新建或读取 crawl 结果，导入候选池并执行 ai fit。"""
 	if bool(run_id) == bool(query):
 		handle_error_output(
 			ctx,
 			"agent.crawl",
 			code="INVALID_PARAM",
 			message="必须且只能使用 --run-id 或 --query",
-		)
-		return
-	if query and not allow_crawl:
-		handle_error_output(
-			ctx,
-			"agent.crawl",
-			code="CRAWL_PERMISSION_REQUIRED",
-			message="Agent 默认不启动新的 crawl；需要 operating_mode=research 和 --allow-crawl",
-			recoverable=True,
-			recovery_action="boss config set operating_mode research; boss agent crawl --query <关键词> --city <城市> --allow-crawl --resume <简历名>",
 		)
 		return
 	if query and not _require_crawl_capabilities(ctx):
@@ -230,12 +220,12 @@ def crawl_cmd(
 	"--dry-run/--live",
 	"dry_run",
 	default=True,
-	help="训练模式默认只写人审队列",
+	help="训练模式默认只演练；传 --live 执行满足阈值的动作",
 )
 @click.option("--limit", default=None, type=int, help="本轮最多处理多少个会话")
 @click.pass_context
 def train_cmd(ctx: click.Context, dry_run: bool, limit: int | None) -> None:
-	"""运行训练校准模式：自动判断，但动作进入人审。"""
+	"""运行训练校准模式：默认演练，--live 直接执行满足阈值的动作。"""
 	report = _run_agent(
 		ctx,
 		dry_run=dry_run,
@@ -247,7 +237,7 @@ def train_cmd(ctx: click.Context, dry_run: bool, limit: int | None) -> None:
 
 @agent_group.group("review")
 def review_group() -> None:
-	"""人工复核队列。"""
+	"""管理旧版本遗留的人工复核队列。"""
 
 
 @review_group.command("list")
@@ -266,7 +256,7 @@ def review_list_cmd(ctx: click.Context) -> None:
 @click.argument("review_id")
 @click.pass_context
 def review_approve_cmd(ctx: click.Context, review_id: str) -> None:
-	"""批准一条人工复核动作，写入 pending 队列。"""
+	"""处理旧版本复核项并写入兼容 pending 队列。"""
 	store = AutomationStore(ctx.obj["data_dir"])
 	pending = store.approve_review(review_id, now_iso())
 	if pending is None:
@@ -284,7 +274,7 @@ def review_approve_cmd(ctx: click.Context, review_id: str) -> None:
 @click.option("--reason", default="human-rejected", help="拒绝原因")
 @click.pass_context
 def review_reject_cmd(ctx: click.Context, review_id: str, reason: str) -> None:
-	"""拒绝一条人工复核动作，并记录跳过事件。"""
+	"""拒绝一条旧版本人工复核动作，并记录跳过事件。"""
 	store = AutomationStore(ctx.obj["data_dir"])
 	rejected = store.reject_review(review_id, reason, now_iso())
 	if rejected is None:

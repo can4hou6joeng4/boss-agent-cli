@@ -8,17 +8,15 @@ from typing import Any
 from boss_agent_cli.automation.adapters import RecruiterAutomationPlatform
 from boss_agent_cli.automation.config import AutomationConfig
 from boss_agent_cli.automation.decision import decide_action
-from boss_agent_cli.automation.events import make_event, now_iso, stable_action_id
+from boss_agent_cli.automation.events import make_event, now_iso
 from boss_agent_cli.automation.models import (
 	AutomationEvent,
-	AutomationMode,
 	CandidateKey,
 	ConversationRef,
 	Decision,
 	EventStatus,
 	PendingAction,
 	PlatformAction,
-	ReviewItem,
 )
 from boss_agent_cli.automation.reply_ai import apply_reply_strategy
 from boss_agent_cli.automation.safety import SafetyGuard
@@ -94,10 +92,6 @@ def process_ref(
 		status, event_reason = execute_or_dry_run(adapter, guard, decision, ref, dry_run)
 		if status in {EventStatus.AUTO_EXECUTED, EventStatus.DRY_RUN}:
 			update_prior(prior, decision)
-	elif status is EventStatus.QUEUED_FOR_REVIEW:
-		store.append_review(_review_item(platform, candidate_key, decision))
-	elif status is EventStatus.QUEUED_PENDING_ACTION:
-		store.append_pending(_pending_action(platform, candidate_key, decision, ""))
 	event = make_event(
 		platform,
 		candidate_key,
@@ -116,7 +110,7 @@ def status_for_decision(
 	dry_run: bool,
 ) -> EventStatus:
 	match decision.action:
-		case PlatformAction.SKIP:
+		case PlatformAction.SKIP | PlatformAction.QUEUE_REVIEW:
 			return EventStatus.SKIPPED
 		case PlatformAction.CREATE_INTERVIEW_LEAD:
 			return _lead_status(config, decision, dry_run)
@@ -161,11 +155,9 @@ def update_prior(prior: dict[str, str], decision: Decision) -> None:
 
 
 def _common_gate(config: AutomationConfig, decision: Decision) -> EventStatus | None:
-	"""_lead_status 与 _action_status 共享的前置门控；返回 None 表示放行到后续判定。"""
-	if decision.requires_human or decision.risk_flags:
-		return EventStatus.QUEUED_FOR_REVIEW
-	if config.mode in {AutomationMode.ASSIST, AutomationMode.TRAINING}:
-		return EventStatus.QUEUED_FOR_REVIEW
+	"""Apply decision-level risk and confidence controls without a human approval gate."""
+	if decision.risk_flags:
+		return EventStatus.SKIPPED
 	if decision.confidence < config.human_review_threshold:
 		return EventStatus.SKIPPED
 	return None
@@ -191,50 +183,10 @@ def _action_status(
 	if gated is not None:
 		return gated
 	if decision.confidence < config.auto_execute_threshold:
-		return EventStatus.QUEUED_FOR_REVIEW
+		return EventStatus.SKIPPED
 	if decision.action not in config.allowed_actions:
-		return EventStatus.QUEUED_PENDING_ACTION
+		return EventStatus.SKIPPED
 	return EventStatus.DRY_RUN if dry_run else EventStatus.AUTO_EXECUTED
-
-
-def _review_item(
-	platform: str,
-	candidate_key: str,
-	decision: Decision,
-) -> ReviewItem:
-	ts = now_iso()
-	return ReviewItem(
-		id=stable_action_id(platform, candidate_key, decision.action, ts),
-		ts=ts,
-		platform=platform,
-		candidate_key=candidate_key,
-		action=decision.action.value,
-		status="review",
-		confidence=decision.confidence,
-		reason=decision.reason,
-		message=decision.message,
-	)
-
-
-def _pending_action(
-	platform: str,
-	candidate_key: str,
-	decision: Decision,
-	approved_review_id: str,
-) -> PendingAction:
-	ts = now_iso()
-	return PendingAction(
-		id=stable_action_id(platform, candidate_key, decision.action, ts),
-		ts=ts,
-		platform=platform,
-		candidate_key=candidate_key,
-		action=decision.action.value,
-		status="pending",
-		confidence=decision.confidence,
-		reason=decision.reason,
-		message=decision.message,
-		approved_review_id=approved_review_id,
-	)
 
 
 def _pending_with_status(item: PendingAction, status: str) -> PendingAction:
