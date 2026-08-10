@@ -75,7 +75,7 @@ def test_agent_quickstart_exists_and_has_core_sections():
 	content = _read("docs/agent-quickstart.md")
 	assert "# Agent Quickstart" in content
 	assert "## 1) 安装与环境准备" in content
-	assert "## 2) 三步跑通低风险 Agent 闭环" in content
+	assert "## 2) 三步跑通 Agent workflow" in content
 	assert "## 3) 失败恢复与排障" in content
 	assert "[Capability Matrix](capability-matrix.md)" in content
 
@@ -94,7 +94,7 @@ def test_capability_matrix_exists_and_covers_core_capabilities():
 	assert "`boss digest`" in content
 	assert "`boss config`" in content
 	assert "`boss clean`" in content
-	assert "38 个顶层命令" in content
+	assert "39 个顶层命令" in content
 	assert "9 个一级招聘者子命令" in content
 	assert "`qiancheng` / 51job" in content
 	assert "`NOT_SUPPORTED`" in content
@@ -180,7 +180,7 @@ def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
 	quickstart = _read("docs/agent-quickstart.en.md")
 	assert "# Agent Quickstart" in quickstart
 	assert "## 1) Install and prepare the environment" in quickstart
-	assert "## 2) Complete the low-risk agent loop in three steps" in quickstart
+	assert "## 2) Complete an agent workflow in three steps" in quickstart
 	assert "## 3) Recovery flow and troubleshooting" in quickstart
 	assert "[Capability Matrix](capability-matrix.en.md)" in quickstart
 
@@ -194,7 +194,7 @@ def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
 	assert "| Capability | CLI command | Login required | Transport |" in matrix
 	assert "`boss schema`" in matrix
 	assert "`boss hr candidates`" in matrix
-	assert "38 top-level commands" in matrix
+	assert "39 top-level commands" in matrix
 	assert "9 first-level recruiter subcommands" in matrix
 
 	mcp_readme = _read("mcp-server/README.en.md")
@@ -245,11 +245,10 @@ def test_pyproject_exposes_boss_mcp_script():
 	assert '"mcp>=1.0.0"' in pyproject
 
 
-def test_agent_facing_docs_keep_low_risk_compliance_boundary():
-	"""Agent-facing docs must not reintroduce old automation-first guidance."""
+def test_agent_facing_docs_keep_bounded_runtime_boundary():
+	"""Open capability docs must not recommend unbounded risk-control bypasses."""
 	for path in _doc_paths_for_compliance_guardrails():
 		content = _read(path)
-		assert "低风险" in content or "low-risk" in content.lower(), path
 		assert "use cdp as a risk-control bypass" not in content.lower(), path
 		assert "use cdp to bypass" not in content.lower(), path
 		assert "启动 CDP Chrome 重试" not in content, path
@@ -267,18 +266,22 @@ def test_agent_facing_docs_keep_low_risk_compliance_boundary():
 		assert "嗅探真实" not in content, path
 
 
-def test_agent_instructions_send_sensitive_actions_to_official_platform():
+def test_agent_instructions_describe_current_open_capability_policy():
 	for path in _existing(("AGENTS.md", "CLAUDE.md", "README.md", "README.en.md")):
 		content = _read(path)
 		assert "COMPLIANCE_BLOCKED" in content, path
 		assert (
-			"平台官网" in content
-			or "官方页面" in content
-			or "官方平台" in content
-			or "official platform" in content.lower()
-			or "official website" in content.lower()
+			"全部已实现能力" in content
+			or "所有已实现能力" in content
+			or "every implemented capability" in content.lower()
+			or "identical capability access" in content.lower()
 		), path
-		assert "batch-greet  -> 默认低风险模式阻断" in content or "batch-greet" in content, path
+		assert (
+			"当前版本不主动产生" in content
+			or "不再产生模式级" in content
+			or "current execution paths" in content.lower()
+			or "no longer produce mode-level" in content.lower()
+		), path
 
 
 def test_public_docs_do_not_expose_low_risk_mode_config_key():
@@ -324,7 +327,12 @@ _CAPABILITY_COUNT_PATTERNS: tuple[tuple[str, str], ...] = (
 )
 
 # CHANGELOG 按定义记录历史事实（如「工具计数 31 → 32」），不该跟随当前值变化。
-_CAPABILITY_COUNT_EXEMPT_DOCS = frozenset({"CHANGELOG.md"})
+_CAPABILITY_COUNT_EXEMPT_DOCS = frozenset({
+	"CHANGELOG.md",
+	"docs/marketing/awesome-submissions.md",
+	"docs/marketing/en-launch-story.md",
+	"docs/marketing/zh-launch-story.md",
+})
 
 
 def _public_markdown_docs() -> list[Path]:

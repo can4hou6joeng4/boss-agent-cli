@@ -1,6 +1,6 @@
-"""MCP 工具目录：能力自描述注入、合规过滤与全部 Tool 定义。
+"""MCP 工具目录：能力自描述注入与全部 Tool 定义。
 
-从 `mcp_server` 拆出。该模块只负责「有哪些工具、长什么样、哪些被合规策略挡掉」，
+从 `mcp_server` 拆出。该模块只负责「有哪些工具、长什么样」，
 不涉及服务器实例、传输层与 CLI 调用——那些仍在 `mcp_server`。
 
 `mcp_server` 会原样再导出这里的公开符号，因此 `mcp-server/server.py` wrapper 和
@@ -124,6 +124,34 @@ def _is_low_risk_blocked_tool(tool_name: str) -> bool:
 	return command in restricted_commands("assisted")
 
 TOOLS = [
+	Tool(
+		name="boss_wizard",
+		description="执行、恢复、查询或停止与真人向导共享的持久化 workflow；先调用 boss schema 发现 wizard_catalog",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["run", "resume", "status", "stop"],
+					"default": "run",
+					"description": "workflow 操作",
+				},
+				"role": {"type": "string", "enum": ["candidate", "recruiter"], "description": "run 时的角色"},
+				"platform": {"type": "string", "description": "run 时的平台，如 zhipin"},
+				"goal": {"type": "string", "description": "run 时的 catalog goal"},
+				"inputs": {"type": "object", "description": "goal 所需的 JSON 参数"},
+				"requested_steps": {
+					"type": "array",
+					"items": {"type": "string"},
+					"description": "可选的 goal 内步骤子集",
+				},
+				"run_id": {"type": "string", "description": "resume/status/stop 的显式 workflow run_id"},
+				"timeout": {"type": "number", "description": "workflow 超时秒数"},
+				"max_retries": {"type": "integer", "minimum": 0, "description": "可恢复步骤的最大重试次数"},
+			},
+			"required": [],
+		},
+	),
 	Tool(
 		name="boss_status",
 		description="检查 BOSS 直聘登录态",
@@ -408,7 +436,7 @@ TOOLS = [
 	),
 	Tool(
 		name="boss_agent_run",
-		description="招聘自动化：运行一轮自动扫描、决策、执行/人审/线索生成",
+		description="招聘自动化：运行一轮自动扫描、决策、阈值控制、执行和线索生成",
 		inputSchema={
 			"type": "object",
 			"properties": {
@@ -424,7 +452,7 @@ TOOLS = [
 	),
 	Tool(
 		name="boss_agent_train",
-		description="招聘自动化：训练校准模式，自动判断但动作进入人审",
+		description="招聘自动化：训练校准模式，默认演练满足阈值的动作",
 		inputSchema={
 			"type": "object",
 			"properties": {
@@ -435,12 +463,12 @@ TOOLS = [
 	),
 	Tool(
 		name="boss_agent_review",
-		description="招聘自动化：查看人工复核队列",
+		description="招聘自动化兼容接口：查看旧版本遗留的人工复核队列",
 		inputSchema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_agent_review_approve",
-		description="招聘自动化：批准人工复核动作并写入 pending 队列",
+		description="招聘自动化兼容接口：处理旧版本复核项并写入 pending 队列",
 		inputSchema={
 			"type": "object",
 			"properties": {
@@ -451,7 +479,7 @@ TOOLS = [
 	),
 	Tool(
 		name="boss_agent_review_reject",
-		description="招聘自动化：拒绝人工复核动作并记录跳过事件",
+		description="招聘自动化兼容接口：拒绝旧版本复核项并记录跳过事件",
 		inputSchema={
 			"type": "object",
 			"properties": {
@@ -463,12 +491,12 @@ TOOLS = [
 	),
 	Tool(
 		name="boss_agent_pending",
-		description="招聘自动化：查看待执行动作队列",
+		description="招聘自动化兼容接口：查看旧版本遗留的待执行动作队列",
 		inputSchema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_agent_stats",
-		description="招聘自动化：查看执行、人审、pending、熔断统计",
+		description="招聘自动化：查看执行、跳过、历史队列和熔断统计",
 		inputSchema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
@@ -938,6 +966,5 @@ _LOW_RISK_BLOCKED_TOOLS = {
 	for tool in TOOLS
 	if _is_low_risk_blocked_tool(tool.name)
 }
-TOOLS = [tool for tool in TOOLS if tool.name not in _LOW_RISK_BLOCKED_TOOLS]
-# 必须在合规过滤之后执行：只给最终暴露的工具追加可用性说明。
+# 历史导出符号保留给外部 wrapper；开放策略下集合恒为空且不再过滤工具。
 _decorate_tool_descriptions()

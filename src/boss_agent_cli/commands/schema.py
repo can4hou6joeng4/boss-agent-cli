@@ -5,6 +5,7 @@ import click
 from boss_agent_cli.compliance import compliance_mode_data
 from boss_agent_cli.output import emit_success
 from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
+from boss_agent_cli.wizard.catalog import catalog_data
 
 # 类型转换：native schema → JSON Schema 基础类型
 _JSON_SCHEMA_TYPE_MAP = {
@@ -71,6 +72,7 @@ _ROLE_BOTH_COMMANDS = {
 	"clean",
 	"cities",
 	"platforms",
+	"wizard",
 }
 
 _CANDIDATE_COMMANDS = {
@@ -133,7 +135,7 @@ def _command_availability(
 			"recruiter_platforms": ["zhilian", "zhipin"],
 			"note": (
 				"agent run/train 等为招聘者自动化；agent crawl 为候选人本地编排，"
-				"默认仅分析已完成 crawl run，只有 --allow-crawl 才会启动真实 Chrome 采集。"
+				"可新建 crawl 或分析已完成的 crawl run。"
 			),
 		}
 	if cmd_name == "hr":
@@ -280,10 +282,10 @@ def _format_mcp_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 SCHEMA_DATA = {
 	"name": "boss-agent-cli",
-	"description": "BOSS直聘本地辅助工具，共 38 个顶层命令。默认低风险模式聚焦只读、本地辅助、用户主动触发；自动触达、批量操作和候选人个人信息处理默认受限。",
+	"description": "面向真人和 Agent 的招聘平台 CLI，共 39 个顶层命令；所有已实现能力均可直接调用。",
 	"commands": {
 		"login": {
-			"description": "按当前平台登录（zhipin / zhilian）。默认低风险模式仅用于用户主动触发的本地辅助与只读命令，不用于规避平台风控。",
+			"description": "按当前平台登录（zhipin / zhilian）；两种兼容运行模式共享相同能力，平台风控仍会停止当前流程。",
 			"args": [],
 			"options": {
 				"--timeout": {
@@ -310,7 +312,7 @@ SCHEMA_DATA = {
 				"--capability": {
 					"type": "string",
 					"default": None,
-					"description": "按现有本地能力矩阵反查平台状态；返回 available / placeholder / blocked_by_policy / not_supported 分组",
+					"description": "按现有本地能力矩阵反查平台状态；返回 available / placeholder / not_supported，blocked_by_policy 仅保留空兼容分组",
 					"choices": ["search", "detail", "recommend", "me", "status", "greet", "apply", "shortlist", "stats", "config", "schema"],
 				},
 			},
@@ -347,6 +349,18 @@ SCHEMA_DATA = {
 					"description": "输出格式",
 					"choices": ["native", "openai-tools", "anthropic-tools", "mcp-tools"],
 				},
+			},
+		},
+		"wizard": {
+			"description": "启动真人纯向导，或通过 JSON 执行、恢复、查询和停止共享 workflow；role/platform/goal 取值见顶层 wizard_catalog",
+			"args": [],
+			"options": {
+				"--input-json": {"type": "string", "default": None, "description": "包含 role/platform/goal/inputs/requested_steps 的 JSON object"},
+				"--resume": {"type": "string", "default": None, "description": "恢复指定 workflow run_id"},
+				"--status": {"type": "string", "default": None, "description": "查询指定 workflow run_id"},
+				"--stop": {"type": "string", "default": None, "description": "停止指定 workflow run_id"},
+				"--timeout": {"type": "float", "default": None, "description": "workflow 超时秒数"},
+				"--max-retries": {"type": "int", "default": 0, "description": "可恢复步骤的最大重试次数"},
 			},
 		},
 		"search": {
@@ -482,7 +496,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"greet": {
-			"description": "受限能力：向指定招聘者打招呼。默认低风险模式会阻断，建议回到平台官网由用户手动完成。",
+			"description": "向指定招聘者打招呼。",
 			"args": [
 				{"name": "security_id", "required": True, "description": "安全 ID"},
 				{"name": "job_id", "required": True, "description": "加密职位 ID"},
@@ -496,7 +510,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"batch-greet": {
-			"description": "受限能力：搜索后批量打招呼。默认低风险模式会阻断，避免批量触达。",
+			"description": "搜索后按显式数量上限批量打招呼。",
 			"args": [
 				{"name": "query", "required": True, "description": "搜索关键词"},
 			],
@@ -584,7 +598,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"recommend": {
-			"description": "受限能力：基于用户登录态的个性化职位推荐。默认低风险模式会阻断，避免自动读取平台推荐流。",
+			"description": "基于用户登录态获取个性化职位推荐。",
 			"args": [],
 			"options": {
 				"--page": {"type": "int", "default": 1, "description": "页码"},
@@ -653,7 +667,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"chat": {
-			"description": "受限能力：查看沟通列表或导出会话摘要。默认低风险模式会阻断，避免通过 CLI 读取会话数据。",
+			"description": "查看沟通列表或导出会话摘要。",
 			"args": [],
 			"options": {
 				"--from": {
@@ -686,18 +700,18 @@ SCHEMA_DATA = {
 			},
 		},
 		"chatmsg": {
-			"description": "受限能力：查看与指定好友的聊天消息历史。默认低风险模式会阻断；--raw 仅在合规放行后输出保真结构化消息字段。",
+			"description": "查看与指定好友的聊天消息历史；--raw 输出保真结构化消息字段。",
 			"args": [
 				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
 			],
 			"options": {
 				"--page": {"type": "int", "default": 1, "description": "页码"},
 				"--count": {"type": "int", "default": 20, "description": "每页消息数量"},
-				"--raw": {"type": "bool", "default": False, "description": "保真输出结构化 body、链接、职位卡片字段和原始消息对象；仍受合规门控"},
+				"--raw": {"type": "bool", "default": False, "description": "保真输出结构化 body、链接、职位卡片字段和原始消息对象"},
 			},
 		},
 		"chat-summary": {
-			"description": "受限能力：基于聊天历史生成结构化摘要与下一步建议。默认低风险模式会阻断，避免通过 CLI 读取通信内容。",
+			"description": "基于聊天历史生成结构化摘要与下一步建议。",
 			"args": [
 				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
 			],
@@ -707,7 +721,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"mark": {
-			"description": "受限能力：给联系人添加/移除标签。默认低风险模式会阻断，涉及平台关系数据写入时请回到平台官网手动完成。",
+			"description": "给联系人添加或移除标签。",
 			"args": [
 				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
 			],
@@ -722,7 +736,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"exchange": {
-			"description": "受限能力：请求交换联系方式（手机号或微信）。默认低风险模式会阻断，涉及个人信息处理时请回到平台官网手动完成。",
+			"description": "请求交换联系方式（手机号或微信）。",
 			"args": [
 				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
 			],
@@ -746,12 +760,12 @@ SCHEMA_DATA = {
 			"options": {},
 		},
 		"watch": {
-			"description": "本地保存搜索条件；run 子命令为受限能力，默认低风险模式会阻断自动增量拉取平台数据。",
+			"description": "本地保存搜索条件，并可通过 run 子命令增量拉取平台数据。",
 			"args": [],
 			"options": {},
 		},
 		"crawl": {
-			"description": "受限 Research Mode 的 DrissionPage 批量采集（子命令：configure/run/start/status/results/resume/stop）。运行和恢复必须先设置 operating_mode=research；MCP 仅可读取已有任务的本地状态和结果，风险码或安全页会保存断点后停止。",
+			"description": "可恢复的 DrissionPage 批量采集（子命令：configure/run/start/status/results/resume/stop）；风险码或安全页会保存断点后停止。",
 			"args": [],
 			"options": {
 				"run": {
@@ -779,8 +793,8 @@ SCHEMA_DATA = {
 			},
 			"subcommands": {
 				"configure": "设置 crawl 专用 Chrome 路径、端口和固定预算",
-				"run <query>": "在 operating_mode=research 下开始可恢复的批量职位采集",
-				"start <query>": "在 operating_mode=research 下创建后台任务并立即返回 run_id（供 MCP 轮询）",
+				"run <query>": "开始可恢复的批量职位采集",
+				"start <query>": "创建后台任务并立即返回 run_id（供 MCP 轮询）",
 				"status <run_id>": "读取页游标、详情进度和风险状态",
 				"results <run_id>": "读取已持久化职位结果",
 				"resume <run_id>": "从已保存页游标和详情队列继续",
@@ -847,21 +861,21 @@ SCHEMA_DATA = {
 			"options": {},
 		},
 		"pipeline": {
-			"description": "受限能力：聚合聊天和面试数据生成候选进度视图。默认低风险模式会阻断。",
+			"description": "聚合聊天和面试数据生成候选进度视图。",
 			"args": [],
 			"options": {
 				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则标记为 follow_up"},
 			},
 		},
 		"follow-up": {
-			"description": "受限能力：基于聊天和面试数据筛出需要跟进的候选项。默认低风险模式会阻断。",
+			"description": "基于聊天和面试数据筛出需要跟进的候选项。",
 			"args": [],
 			"options": {
 				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则视为 follow_up"},
 			},
 		},
 		"apply": {
-			"description": "受限能力：发起投递/立即沟通动作。默认低风险模式会阻断，建议回到平台官网由用户手动完成。",
+			"description": "发起投递或立即沟通动作。",
 			"args": [
 				{"name": "security_id", "required": True, "description": "安全 ID"},
 				{"name": "job_id", "required": True, "description": "加密职位 ID"},
@@ -910,7 +924,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"digest": {
-			"description": "受限能力：汇总新增职位、待跟进会话和面试项的日报。默认低风险模式会阻断。",
+			"description": "汇总新增职位、待跟进会话和面试项的日报。",
 			"args": [],
 			"options": {
 				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则视为 follow_up"},
@@ -1003,8 +1017,8 @@ SCHEMA_DATA = {
 		},
 		"agent": {
 			"description": (
-				"招聘自动化与候选人 crawl 编排入口。招聘者侧 run/train/review/pending/stats/control/stop "
-				"维持原有自动化；候选人侧 crawl 默认只分析已完成 run，传入 --allow-crawl 才启动真实采集。"
+				"招聘自动化与候选人 crawl 编排入口。run/train 可直接执行满足阈值的动作；"
+				"review/pending 仅管理旧版本遗留队列；crawl 可新建或分析已有 run。"
 			),
 			"args": [],
 			"options": {
@@ -1021,31 +1035,31 @@ SCHEMA_DATA = {
 			},
 			"subcommands": {
 				"run": "运行一轮招聘自动化",
-				"train": "训练校准模式：自动判断，动作进入人审",
-				"review list": "查看人工复核队列",
-				"review approve <id>": "批准一条人工复核动作，写入 pending 队列",
-				"review reject <id>": "拒绝一条人工复核动作并记录跳过事件",
-				"pending list": "查看待执行动作队列",
+				"train": "训练校准模式：默认演练，--live 直接执行满足阈值的动作",
+				"review list": "查看旧版本遗留的人工复核队列",
+				"review approve <id>": "处理旧版本复核项并写入兼容 pending 队列",
+				"review reject <id>": "拒绝旧版本复核项并记录跳过事件",
+				"pending list": "查看旧版本遗留的待执行动作队列",
 				"stats": "查看招聘自动化统计",
 				"control": "查看本地控制台入口信息",
 				"stop": "打开招聘自动化熔断",
-				"crawl": "候选人链路：已完成 crawl → shortlist → ai fit；新采集需要 --allow-crawl",
+				"crawl": "候选人链路：新建或读取 crawl → shortlist → ai fit",
 			},
 		},
 		"hr": {
-			"description": "招聘者模式快捷命令。默认低风险模式会阻断候选人搜索、简历、沟通、联系方式交换和消息发送等涉及个人信息或写操作的子命令。",
+			"description": "招聘者模式快捷命令。已实现的候选人搜索、简历、沟通、联系方式交换和消息发送在 assisted/research 下均可调用。",
 			"args": [],
 			"options": {},
 			"subcommands": {
-				"applications": "受限：查看候选人投递申请列表",
-				"resume": "受限：查看候选人在线简历或发起联系方式交换",
-				"chat": "受限：查看与候选人的沟通列表（含未读数和最近消息摘要）",
-				"chatmsg": "受限：查看与指定候选人的聊天消息历史",
-				"last-messages": "受限：批量查看候选人最近消息摘要",
+				"applications": "查看候选人投递申请列表",
+				"resume": "查看候选人在线简历或发起联系方式交换",
+				"chat": "查看与候选人的沟通列表（含未读数和最近消息摘要）",
+				"chatmsg": "查看与指定候选人的聊天消息历史",
+				"last-messages": "批量查看候选人最近消息摘要",
 				"jobs": "管理职位发布（list/offline/online/detail）",
-				"candidates": "受限：搜索候选人",
-				"reply": "受限：回复候选人消息",
-				"request-resume": "受限：请求候选人分享附件简历",
+				"candidates": "搜索候选人",
+				"reply": "回复候选人消息",
+				"request-resume": "请求候选人分享附件简历",
 			},
 		},
 	},
@@ -1166,9 +1180,9 @@ SCHEMA_DATA = {
 			"recovery_action": "停止自动化访问，回到平台官网手动处理，必要时联系客服",
 		},
 		"COMPLIANCE_BLOCKED": {
-			"message": "默认低风险模式已阻断该敏感操作",
+			"message": "历史版本能力策略阻断（当前版本不主动产生）",
 			"recoverable": False,
-			"recovery_action": "保持默认低风险模式；如需处理，请回到平台官网手动完成",
+			"recovery_action": "升级到当前版本后重试",
 		},
 		"GREET_LIMIT": {
 			"message": "今日打招呼次数已用完",
@@ -1186,9 +1200,29 @@ SCHEMA_DATA = {
 			"recovery_action": "安装 boss-agent-cli[crawl] 并执行 boss crawl configure",
 		},
 		"CRAWL_PERMISSION_REQUIRED": {
-			"message": "Agent 未获授权启动新的 crawl",
+			"message": "历史版本要求显式授权启动 crawl（当前版本不主动产生）",
 			"recoverable": True,
-			"recovery_action": "使用 --allow-crawl 明确授权，或改为分析已有 --run-id",
+			"recovery_action": "升级当前版本后直接使用 --query，或分析已有 --run-id",
+		},
+		"WIZARD_INPUT_REQUIRED": {
+			"message": "headless wizard 缺少结构化输入或 run_id",
+			"recoverable": True,
+			"recovery_action": "boss --json wizard --input-json '<object>'",
+		},
+		"WORKFLOW_TIMEOUT": {
+			"message": "workflow 超过调用方设置的超时",
+			"recoverable": True,
+			"recovery_action": "使用返回的 run_id 恢复 workflow",
+		},
+		"WORKFLOW_PLAN_MISMATCH": {
+			"message": "run_id 已绑定到不同的 workflow plan",
+			"recoverable": False,
+			"recovery_action": "使用原 plan 恢复，或创建新 workflow",
+		},
+		"WORKFLOW_STOPPED": {
+			"message": "workflow 已按 stop 请求停止",
+			"recoverable": True,
+			"recovery_action": "创建新 workflow，或恢复其内部可恢复任务",
 		},
 		"CRAWL_NOT_COMPLETED": {
 			"message": "crawl 尚未完成，Agent 不会导入不完整结果",
@@ -1281,12 +1315,12 @@ SCHEMA_DATA = {
 			"recovery_action": None,
 		},
 		"QUEUED_FOR_REVIEW": {
-			"message": "招聘自动化动作已进入人工复核",
+			"message": "旧版本招聘自动化动作进入人工复核（当前决策路径不主动产生）",
 			"recoverable": True,
 			"recovery_action": "boss agent review list",
 		},
 		"QUEUED_PENDING_ACTION": {
-			"message": "招聘自动化动作已进入待执行队列",
+			"message": "旧版本招聘自动化动作进入待执行队列（当前决策路径不主动产生）",
 			"recoverable": True,
 			"recovery_action": "boss agent pending list",
 		},
@@ -1335,6 +1369,7 @@ def schema_cmd(ctx: click.Context, output_format: str) -> None:
 	data["current_role"] = (ctx.obj or {}).get("role") or "candidate"
 	data["supported_platforms"] = list_platforms()
 	data["supported_recruiter_platforms"] = list_recruiter_platforms()
+	data["wizard_catalog"] = catalog_data()
 	data["compliance"] = compliance_mode_data(ctx)
 	data = _inject_availability(data)
 

@@ -61,7 +61,8 @@ def test_platform_risk_docs_exist_and_cover_sensitive_boundaries():
 		assert "Windows app" in content or "Windows 客户端" in content
 		assert "RPA" in content
 		assert "CloakBrowser" in content
-		assert "manual" in content.lower() or "手动" in content
+		assert "checkpoint" in content.lower()
+		assert "stop" in content.lower() or "停止" in content
 
 
 def test_security_and_readme_link_platform_risk_docs():

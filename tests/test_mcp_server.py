@@ -1,5 +1,6 @@
 """模型上下文协议服务测试 — 覆盖工具定义、参数构建和调用逻辑。"""
 import inspect
+import json
 import re
 import sys
 import types
@@ -221,7 +222,7 @@ def test_crawl_tools_only_read_or_locally_shortlist_existing_runs():
 
 def test_tool_count():
 	"""工具总数应与当前注册一致。"""
-	assert len(TOOLS) == 50
+	assert len(TOOLS) == 73
 
 
 def test_mcp_tool_count_matches_readme():
@@ -233,9 +234,9 @@ def test_mcp_tool_count_matches_readme():
 
 def test_server_instructions_carry_doctrine():
 	assert SERVER_INSTRUCTIONS
-	assert "COMPLIANCE_BLOCKED" in SERVER_INSTRUCTIONS
+	assert "all implemented" in SERVER_INSTRUCTIONS
 	assert "boss schema" in SERVER_INSTRUCTIONS
-	assert "MCP remains assisted-only" in SERVER_INSTRUCTIONS
+	assert "NOT_SUPPORTED" in SERVER_INSTRUCTIONS
 
 
 def test_every_tool_maps_to_registered_command():
@@ -253,29 +254,30 @@ def test_search_tool_requires_query():
 	assert "query" in search.inputSchema.get("required", [])
 
 
-def test_sensitive_tools_not_exposed_by_default():
-	"""默认低风险模式下，敏感 MCP 工具不直接暴露给 Agent。"""
+def test_all_implemented_tools_are_exposed():
+	"""历史模式不再从 MCP 目录隐藏已实现工具。"""
 	names = {t.name for t in TOOLS}
-	assert "boss_greet" not in names
-	assert "boss_batch_greet" not in names
-	assert "boss_chat" not in names
-	assert "boss_pipeline" not in names
-	assert "boss_watch_run" not in names
-	assert "boss_hr_candidates" not in names
+	assert {
+		"boss_greet",
+		"boss_batch_greet",
+		"boss_chat",
+		"boss_pipeline",
+		"boss_watch_run",
+		"boss_hr_candidates",
+		"boss_hr_reply",
+	} <= names
 
 
-def test_low_risk_blocked_tools_are_derived_from_compliance_commands():
-	"""MCP 低风险过滤集合必须从 compliance 命令集合派生，避免独立手写漂移。"""
-	blocked_commands = low_risk_blocked_commands()
-	assert _LOW_RISK_BLOCKED_TOOLS
-	for tool_name in _LOW_RISK_BLOCKED_TOOLS:
-		assert _compliance_command_for_tool(tool_name) in blocked_commands
+def test_legacy_blocked_tool_export_is_empty():
+	"""保留旧导出符号，但开放策略下不能过滤任何工具。"""
+	assert low_risk_blocked_commands() == set()
+	assert _LOW_RISK_BLOCKED_TOOLS == set()
 	assert _compliance_command_for_tool("boss_hr_exchange") == "recruiter-resume"
 	assert _compliance_command_for_tool("boss_watch_run") == "watch-run"
 
 
 def test_low_risk_blocked_tools_match_schema_blocked_commands():
-	"""MCP 隐藏工具集合必须与 schema 暴露的低风险阻断命令保持同源。"""
+	"""历史 MCP 和 schema 阻断集合在开放策略下均为空。"""
 	blocked_commands = low_risk_blocked_commands()
 	assert {
 		_compliance_command_for_tool(tool_name)
@@ -284,7 +286,7 @@ def test_low_risk_blocked_tools_match_schema_blocked_commands():
 
 
 def test_no_exposed_tool_maps_to_schema_blocked_command():
-	"""默认暴露的 MCP 工具不得映射到 schema/compliance 的低风险阻断命令。"""
+	"""开放后的 MCP 工具不映射到任何模式阻断命令。"""
 	blocked_commands = low_risk_blocked_commands()
 	leaked = [
 		tool.name
@@ -300,6 +302,33 @@ def test_no_exposed_tool_maps_to_schema_blocked_command():
 def test_build_args_status():
 	"""无参数命令应只返回命令名。"""
 	assert _build_args("boss_status", {}) == ["status"]
+
+
+def test_build_args_wizard_run_and_controls():
+	args = _build_args("boss_wizard", {
+		"role": "candidate",
+		"platform": "zhipin",
+		"goal": "job_search",
+		"inputs": {"query": "Python"},
+		"max_retries": 2,
+	})
+	assert args[:2] == ["wizard", "--input-json"]
+	assert json.loads(args[2]) == {
+		"role": "candidate",
+		"platform": "zhipin",
+		"goal": "job_search",
+		"inputs": {"query": "Python"},
+	}
+	assert args[3:] == ["--max-retries", "2"]
+	assert _build_args("boss_wizard", {"action": "status", "run_id": "run-1"}) == [
+		"wizard", "--status", "run-1",
+	]
+	assert _build_args("boss_wizard", {"action": "resume", "run_id": "run-1", "timeout": 30}) == [
+		"wizard", "--resume", "run-1", "--timeout", "30",
+	]
+	assert _build_args("boss_wizard", {"action": "stop", "run_id": "run-1"}) == [
+		"wizard", "--stop", "run-1",
+	]
 
 
 def test_build_args_doctor():
@@ -797,7 +826,7 @@ def test_build_args_favorites_list_is_fixed_to_job_favorites():
 
 def test_tool_count_after_pr41():
 	"""协议服务工具总数应与当前 MCP 暴露能力完全一致。"""
-	assert len(TOOLS) == 50
+	assert len(TOOLS) == 73
 
 
 def test_build_args_shortlist_add():

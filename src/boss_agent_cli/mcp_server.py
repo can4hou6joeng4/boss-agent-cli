@@ -1,6 +1,6 @@
 """MCP Server for boss-agent-cli — 让 Claude Desktop / Cursor 直接调用 BOSS 直聘求职工具。
 
-工具目录（`TOOLS` 及其合规过滤）在 `mcp_tools`，工具名 → CLI 参数的映射在 `mcp_args`；
+工具目录 `TOOLS` 在 `mcp_tools`，工具名 → CLI 参数的映射在 `mcp_args`；
 本模块只保留服务器实例、CLI 调用、传输层与入口。两者的公开符号在下方原样再导出，
 `mcp-server/server.py` wrapper 与既有测试的导入路径因此保持不变。
 """
@@ -16,17 +16,14 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from boss_agent_cli.compliance import (
-	COMPLIANCE_BLOCKED_ACTION,
-	LOW_RISK_MODE_DESCRIPTION,
-)
 from boss_agent_cli.mcp_args import _build_args
-from boss_agent_cli.mcp_tools import _LOW_RISK_BLOCKED_TOOLS, TOOLS
+from boss_agent_cli.mcp_tools import TOOLS
 
 # 向后兼容的再导出：这些符号在拆分前属于本模块，`mcp-server/server.py` wrapper
 # 与既有测试仍按 `boss_agent_cli.mcp_server.<name>` 取用。本模块自身不再使用它们，
 # 故显式标注 F401——删掉会静默破坏 wrapper 和测试的导入路径。
 from boss_agent_cli.mcp_tools import (  # noqa: F401
+	_LOW_RISK_BLOCKED_TOOLS,
 	_MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES,
 	_SCHEMA_WITH_AVAILABILITY,
 	_availability_of,
@@ -58,12 +55,9 @@ if TYPE_CHECKING:
 	from starlette.types import Receive, Scope, Send
 
 SERVER_INSTRUCTIONS = (
-	"boss-agent-cli over MCP: a local-assist BOSS Zhipin job-search toolset in assisted mode by default — "
-	"read-only first and user-triggered. MCP remains assisted-only until a dedicated mode-aware exposure contract is "
-	"implemented; it can only inspect or locally shortlist existing crawl runs by run_id. "
-	"Sensitive actions (greet, batch-greet, apply, contact exchange, recruiter candidate data, replies) "
-	"are not exposed and return COMPLIANCE_BLOCKED at the CLI layer; for those the user acts manually on "
-	"the official BOSS Zhipin website. Every tool returns the same JSON envelope "
+	"boss-agent-cli over MCP exposes all implemented candidate, recruiter, communication and crawl tools. "
+	"Historical assisted and research configurations have identical capability access; platform adapters may still "
+	"return NOT_SUPPORTED when an operation is not implemented. Every tool returns the same JSON envelope "
 	"{ok, data, pagination, error, hints}; when ok is false, read error.code and error.recovery_action and "
 	"act on it (for example AUTH_REQUIRED means the user runs boss login). boss schema is the capability "
 	"source of truth — do not hardcode command tables."
@@ -134,27 +128,6 @@ async def list_tools() -> list[Tool]:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-	if name in _LOW_RISK_BLOCKED_TOOLS:
-		result = {
-			"ok": False,
-			"schema_version": "1.0",
-			"command": name.removeprefix("boss_"),
-			"data": None,
-			"pagination": None,
-			"error": {
-				"code": "COMPLIANCE_BLOCKED",
-				"message": LOW_RISK_MODE_DESCRIPTION,
-				"recoverable": False,
-				"recovery_action": COMPLIANCE_BLOCKED_ACTION,
-			},
-			"hints": {
-				"next_actions": [
-					"使用只读或本地辅助工具",
-					"需要写操作或候选人个人信息处理时，请回到平台官网由用户手动完成",
-				],
-			},
-		}
-		return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 	args = _build_args(name, arguments)
 	result = _run_boss(*args)
 	return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]

@@ -6,12 +6,31 @@
 `mcp_server` 会原样再导出 `_build_args`，导入路径保持不变。
 """
 
+import json
 from typing import Any
 
 
 def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	"""根据 tool name 和参数构建 CLI 参数列表。"""
 	name = tool_name.replace("boss_", "")
+
+	if name == "wizard":
+		action = str(arguments.get("action") or "run")
+		if action in {"resume", "status", "stop"}:
+			run_id = str(arguments["run_id"])
+			args = ["wizard", f"--{action}", run_id]
+		else:
+			payload = {
+				key: arguments[key]
+				for key in ("role", "platform", "goal", "inputs", "requested_steps")
+				if key in arguments
+			}
+			args = ["wizard", "--input-json", json.dumps(payload, ensure_ascii=False, separators=(",", ":"))]
+		if arguments.get("timeout") is not None:
+			args.extend(["--timeout", str(arguments["timeout"])])
+		if arguments.get("max_retries") is not None:
+			args.extend(["--max-retries", str(arguments["max_retries"])])
+		return args
 
 	if name == "search":
 		args = [name, arguments["query"]]
