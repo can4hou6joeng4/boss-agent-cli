@@ -729,7 +729,8 @@ def _render_management_result(run: Mapping[str, Any]) -> bool:
 		preview.add_column("类型", style="cyan", no_wrap=True)
 		preview.add_column("内容", overflow="ellipsis", max_width=48)
 		for kind, key in (("新匹配", "new_matches"), ("待跟进", "follow_ups"), ("面试", "interviews")):
-			bucket = data.get(key) if isinstance(data.get(key), list) else []
+			raw_bucket = data.get(key)
+			bucket: list[Any] = raw_bucket if isinstance(raw_bucket, list) else []
 			for item in bucket[:3]:
 				if not isinstance(item, Mapping):
 					continue
@@ -1052,9 +1053,10 @@ def _render_crawl_summary(run: Mapping[str, Any]) -> bool:
 
 	# ── Headline: strongest visual weight ───────────────────────────
 	headline = Text()
+	jobs_count = int(jobs_seen or 0)
 	if success:
 		headline.append("● ", style="bold green")
-		headline.append(f"{int(jobs_seen)} 个职位", style="bold cyan")
+		headline.append(f"{jobs_count} 个职位", style="bold cyan")
 	else:
 		status_text = "已完成" if str(crawl_status) == "completed" else status_label(crawl_status)
 		if str(crawl_status) == "risk_stopped":
@@ -1062,7 +1064,7 @@ def _render_crawl_summary(run: Mapping[str, Any]) -> bool:
 		headline.append("● ", style="bold yellow")
 		headline.append(status_text, style="bold yellow")
 		if jobs_seen is not None:
-			headline.append(f"  ·  已有 {jobs_seen} 个职位", style="bold")
+			headline.append(f"  ·  已有 {jobs_count} 个职位", style="bold")
 
 	query = str(data.get("query") or "").strip()
 	city = _city_display(data.get("city_code"))

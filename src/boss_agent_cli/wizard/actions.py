@@ -708,7 +708,8 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 	if outcome.status in {"risk_stopped", "budget_stopped"}:
 		# 风控停止时 service 会 keep Chrome；把标记写入结果供向导文案使用。
 		if isinstance(data, dict):
-			browser = data.get("browser") if isinstance(data.get("browser"), dict) else {}
+			browser_raw = data.get("browser")
+			browser = browser_raw if isinstance(browser_raw, dict) else {}
 			data = {
 				**data,
 				"browser_kept_open": outcome.status == "risk_stopped",

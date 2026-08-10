@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -182,7 +183,7 @@ def enrich_run_with_live_crawl(
 
 
 def enrich_runs_with_live_crawl(
-	runs: list[Mapping[str, Any]],
+	runs: Sequence[Mapping[str, Any]],
 	cache: CacheStore,
 	*,
 	job_limit: int = LIST_ENRICH_JOB_LIMIT,
@@ -190,7 +191,7 @@ def enrich_runs_with_live_crawl(
 	return [enrich_run_with_live_crawl(run, cache, job_limit=job_limit) for run in runs]
 
 
-def sort_runs_for_status_picker(runs: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+def sort_runs_for_status_picker(runs: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
 	"""Prefer completed crawls with jobs; de-prioritize stale waiting shells."""
 
 	def rank(run: Mapping[str, Any]) -> tuple[int, float, str]:
