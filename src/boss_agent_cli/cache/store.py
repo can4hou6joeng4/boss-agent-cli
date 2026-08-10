@@ -124,11 +124,38 @@ class CacheStore:
 				updated_at REAL NOT NULL,
 				PRIMARY KEY (run_id, job_key)
 			);
-			CREATE TABLE IF NOT EXISTS crawl_budget (
-				budget_key TEXT PRIMARY KEY,
-				last_request_at REAL NOT NULL
-			);
-		""")
+				CREATE TABLE IF NOT EXISTS crawl_budget (
+					budget_key TEXT PRIMARY KEY,
+					last_request_at REAL NOT NULL
+				);
+				CREATE TABLE IF NOT EXISTS workflow_runs (
+					run_id TEXT PRIMARY KEY,
+					role TEXT NOT NULL,
+					platform TEXT NOT NULL,
+					goal TEXT NOT NULL,
+					mode TEXT NOT NULL,
+					status TEXT NOT NULL,
+					current_step TEXT,
+					params TEXT NOT NULL,
+					last_result TEXT,
+					error TEXT,
+					created_at REAL NOT NULL,
+					updated_at REAL NOT NULL
+				);
+				CREATE TABLE IF NOT EXISTS workflow_steps (
+					run_id TEXT NOT NULL,
+					step_name TEXT NOT NULL,
+					ordinal INTEGER NOT NULL,
+					status TEXT NOT NULL,
+					result TEXT,
+					error TEXT,
+					started_at REAL,
+					finished_at REAL,
+					PRIMARY KEY (run_id, step_name)
+				);
+				CREATE INDEX IF NOT EXISTS workflow_steps_run_ordinal
+					ON workflow_steps(run_id, ordinal);
+			""")
 		self._migrate_shortlist_records()
 		self._migrate_crawl_runs()
 		self._migrate_crawl_jobs()
@@ -321,6 +348,149 @@ class CacheStore:
 			(budget_key, requested_at),
 		)
 		self._conn.commit()
+
+	# ── Shared wizard / headless workflow state ─────────────────────
+
+	def create_workflow_run(
+		self,
+		run_id: str,
+		*,
+		role: str,
+		platform: str,
+		goal: str,
+		mode: str,
+		params: dict[str, Any],
+		steps: tuple[str, ...],
+	) -> None:
+		now = time.time()
+		params_json = json.dumps(params, ensure_ascii=False, sort_keys=True)
+		with self._conn:
+			self._conn.execute(
+				"INSERT INTO workflow_runs "
+				"(run_id, role, platform, goal, mode, status, current_step, params, last_result, error, created_at, updated_at) "
+				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				(run_id, role, platform, goal, mode, "pending", None, params_json, None, None, now, now),
+			)
+			self._conn.executemany(
+				"INSERT INTO workflow_steps "
+				"(run_id, step_name, ordinal, status, result, error, started_at, finished_at) "
+				"VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+				[
+					(run_id, step_name, ordinal, "pending", None, None, None, None)
+					for ordinal, step_name in enumerate(steps)
+				],
+			)
+
+	def get_workflow_run(self, run_id: str) -> dict[str, Any] | None:
+		row = self._conn.execute(
+			"SELECT run_id, role, platform, goal, mode, status, current_step, params, last_result, error, created_at, updated_at "
+			"FROM workflow_runs WHERE run_id = ?",
+			(run_id,),
+		).fetchone()
+		if row is None:
+			return None
+		return {
+			"run_id": row[0],
+			"role": row[1],
+			"platform": row[2],
+			"goal": row[3],
+			"mode": row[4],
+			"status": row[5],
+			"current_step": row[6],
+			"params": json.loads(row[7]),
+			"last_result": json.loads(row[8]) if row[8] else None,
+			"error": json.loads(row[9]) if row[9] else None,
+			"created_at": row[10],
+			"updated_at": row[11],
+		}
+
+	def list_workflow_runs(self, *, limit: int = 20) -> list[dict[str, Any]]:
+		rows = self._conn.execute(
+			"SELECT run_id FROM workflow_runs ORDER BY updated_at DESC LIMIT ?",
+			(max(1, limit),),
+		).fetchall()
+		return [run for row in rows if (run := self.get_workflow_run(str(row[0]))) is not None]
+
+	def list_workflow_steps(self, run_id: str) -> list[dict[str, Any]]:
+		rows = self._conn.execute(
+			"SELECT step_name, ordinal, status, result, error, started_at, finished_at "
+			"FROM workflow_steps WHERE run_id = ? ORDER BY ordinal",
+			(run_id,),
+		).fetchall()
+		return [
+			{
+				"step_name": row[0],
+				"ordinal": row[1],
+				"status": row[2],
+				"result": json.loads(row[3]) if row[3] else None,
+				"error": json.loads(row[4]) if row[4] else None,
+				"started_at": row[5],
+				"finished_at": row[6],
+			}
+			for row in rows
+		]
+
+	def update_workflow_run(
+		self,
+		run_id: str,
+		*,
+		status: str,
+		current_step: str | None,
+		last_result: dict[str, Any] | None = None,
+		error: dict[str, Any] | None = None,
+	) -> bool:
+		cursor = self._conn.execute(
+			"UPDATE workflow_runs SET status = ?, current_step = ?, last_result = ?, error = ?, updated_at = ? "
+			"WHERE run_id = ?",
+			(
+				status,
+				current_step,
+				json.dumps(last_result, ensure_ascii=False, sort_keys=True) if last_result is not None else None,
+				json.dumps(error, ensure_ascii=False, sort_keys=True) if error is not None else None,
+				time.time(),
+				run_id,
+			),
+		)
+		self._conn.commit()
+		return cursor.rowcount > 0
+
+	def update_workflow_step(
+		self,
+		run_id: str,
+		step_name: str,
+		*,
+		status: str,
+		result: dict[str, Any] | None = None,
+		error: dict[str, Any] | None = None,
+	) -> bool:
+		now = time.time()
+		started_at = now if status == "running" else None
+		finished_at = now if status in {"completed", "failed", "waiting_input", "stopped"} else None
+		cursor = self._conn.execute(
+			"UPDATE workflow_steps SET status = ?, result = ?, error = ?, "
+			"started_at = COALESCE(started_at, ?), finished_at = COALESCE(?, finished_at) "
+			"WHERE run_id = ? AND step_name = ?",
+			(
+				status,
+				json.dumps(result, ensure_ascii=False, sort_keys=True) if result is not None else None,
+				json.dumps(error, ensure_ascii=False, sort_keys=True) if error is not None else None,
+				started_at,
+				finished_at,
+				run_id,
+				step_name,
+			),
+		)
+		self._conn.commit()
+		return cursor.rowcount > 0
+
+	def request_workflow_stop(self, run_id: str) -> bool:
+		cursor = self._conn.execute(
+			"UPDATE workflow_runs SET status = ?, updated_at = ? WHERE run_id = ? "
+			"AND status NOT IN (?, ?)",
+			("stopped", time.time(), run_id, "completed", "stopped"),
+		)
+		self._conn.commit()
+		return cursor.rowcount > 0
 
 	@staticmethod
 	def _normalize_shortlist_tags(tags: list[str]) -> list[str]:

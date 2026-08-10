@@ -39,6 +39,7 @@ from boss_agent_cli.commands import (
 	stats,
 	status,
 	watch,
+	wizard,
 )
 from boss_agent_cli.commands.recruiter import applications as recruiter_applications
 from boss_agent_cli.commands.recruiter import candidates as recruiter_candidates
@@ -54,6 +55,7 @@ from boss_agent_cli.platforms import list_recruiter_platforms
 def register_candidate_commands(cli: click.Group) -> None:
 	"""Register candidate and shared top-level commands."""
 	cli.add_command(schema.schema_cmd, "schema")
+	cli.add_command(wizard.wizard_cmd, "wizard")
 	cli.add_command(login.login_cmd, "login")
 	cli.add_command(logout.logout_cmd, "logout")
 	cli.add_command(status.status_cmd, "status")

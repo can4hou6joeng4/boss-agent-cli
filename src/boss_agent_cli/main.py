@@ -46,7 +46,13 @@ class BossCliGroup(click.Group):
 			return None
 
 
-@click.group(name="boss", cls=BossCliGroup, context_settings={"allow_interspersed_args": False})
+@click.group(
+	name="boss",
+	cls=BossCliGroup,
+	invoke_without_command=True,
+	no_args_is_help=False,
+	context_settings={"allow_interspersed_args": False},
+)
 @click.version_option(version=__version__, prog_name="boss")
 @click.option("--data-dir", default="~/.boss-agent", help="数据存储目录")
 @click.option("--delay", default=None, help="请求间隔范围（秒），如 1.5-3.0")
@@ -96,6 +102,11 @@ def cli(ctx: click.Context, data_dir: str, delay: str | None, cdp_url: str | Non
 
 	ctx.obj["config"] = cfg
 	ctx.obj["hooks"] = create_hook_bus()
+
+	if ctx.invoked_subcommand is None:
+		from boss_agent_cli.commands.wizard import run_wizard_command
+
+		run_wizard_command(ctx)
 
 
 register_candidate_commands(cli)

@@ -9,7 +9,7 @@ from boss_agent_cli.api.endpoints import (
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, render_job_table
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, render_job_table
 from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.search_filters import (
@@ -21,6 +21,7 @@ from boss_agent_cli.search_filters import (
 	resolve_welfare_keywords,
 	run_search_pipeline,
 )
+from boss_agent_cli.wizard.actions import execute_candidate_search
 
 
 _SEARCH_CACHE_SCHEMA = 2
@@ -172,12 +173,26 @@ def search_cmd(
 		with get_platform_instance(ctx, auth) as platform:
 			max_pages = 5 if welfare_conditions else 1
 			try:
-				pipeline_result = run_search_pipeline(
-					platform, cache, logger,
-					criteria=criteria,
-					start_page=page,
-					max_pages=max_pages,
-					welfare_conditions=welfare_conditions,
+				pipeline_result = execute_candidate_search(
+					platform,
+					cache,
+					logger,
+					{
+						"query": criteria.query,
+						"city": criteria.city,
+						"salary": criteria.salary,
+						"experience": criteria.experience,
+						"education": criteria.education,
+						"industry": criteria.industry,
+						"scale": criteria.scale,
+						"stage": criteria.stage,
+						"job_type": criteria.job_type,
+						"raw_params": criteria.raw_params,
+						"page": page,
+						"max_pages": max_pages,
+						"welfare_conditions": welfare_conditions,
+					},
+					pipeline=run_search_pipeline,
 				)
 			except SearchPipelinePlatformError as exc:
 				handle_error_output(
@@ -219,8 +234,9 @@ def search_cmd(
 			}
 			hints = {
 				"next_actions": [
-					"使用 boss detail <security_id> 查看职位详情",
-					"如需投递或沟通，请回到平台官网由用户手动完成",
+					f"使用 {boss_command_for_ctx(ctx, 'detail <security_id>')} 查看职位详情",
+					f"使用 {boss_command_for_ctx(ctx, 'apply <security_id> <job_id>')} 投递，"
+					f"或 {boss_command_for_ctx(ctx, 'greet <security_id> <job_id>')} 沟通",
 				],
 			}
 			if pipeline_result.has_more and not welfare_conditions:
