@@ -416,7 +416,13 @@ def render_run(run: Mapping[str, Any]) -> None:
 			lines.append(f"内部采集编号：{inner}")
 		if int(jobs_seen or 0) > 0:
 			lines.append(f"本地已有职位：{jobs_seen} 条（可在「查看采集进度与产物」中浏览）")
-		if data.get("status") == "risk_stopped" or "非 JSON" in reason or "未登录" in reason or "环境" in reason:
+		operator_actions = last.get("operator_actions") or []
+		if operator_actions:
+			# 数据驱动：step 自己声明「人该做什么」，renderer 不再猜。
+			lines.append("")
+			lines.extend(str(item) for item in operator_actions)
+		elif data.get("status") == "risk_stopped" or "非 JSON" in reason or "未登录" in reason or "环境" in reason:
+			# 兜底：SQLite 里的历史 run 没有 operator_actions 字段，仍走旧的子串启发式。
 			lines.append("")
 			if data.get("browser_kept_open"):
 				lines.extend(

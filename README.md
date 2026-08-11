@@ -199,6 +199,8 @@ CLI (Click)
 `QianchengPlatform (51job 占位适配器，统一返回 NOT_SUPPORTED)`：仅用于平台注册与 schema 可见性，接真实接口前需满足只读研究门槛。
 
 **不变量**：stdout 仅 JSON 信封 · stderr 仅日志 · `exit 0/1` · 错误含 `code/recoverable/recovery_action` · `boss schema` 为能力真源。
+**双受众提示**：`hints.next_actions` 是给 Agent 执行的后继命令，`hints.operator_actions` 是给真人操作者的自然语言指引（扫码、在浏览器里调整条件等需要离开终端完成的动作）；TTY 下只渲染后者到 stderr，Agent 应把它转述给操作者。
+**命令还是 wizard**：单次、无状态的能力调用走顶层命令；需要跨步骤状态、可恢复、或中途要把指引递给真人的走 `boss wizard`（goal 取值见 `boss schema` 的 `wizard_catalog`）。
 **选型**：Python ≥ 3.10 · Click · httpx · patchright / CDP / Bridge（登录、导出与声明的浏览器 adapter）· cryptography（Fernet）· sqlite3（WAL）· pytest（1600+ 项）。
 
 ## 🔌 本地存储

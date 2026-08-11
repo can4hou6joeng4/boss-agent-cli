@@ -11,7 +11,7 @@ from typing import Any, Mapping, Protocol, Sequence, cast
 import click
 
 from boss_agent_cli.wizard.catalog import GOALS, catalog_data
-from boss_agent_cli.wizard.models import WizardInput
+from boss_agent_cli.wizard.models import WizardInput, WorkflowInputError
 
 
 @dataclass(frozen=True)
@@ -291,7 +291,7 @@ class PromptToolkitMenu:
 			#   ○  返回主菜单            ·  稍后再处理
 			lines: list[tuple[str, str]] = [
 				("class:title", f"{title}\n"),
-				("class:hint", "↑↓ 选择  ·  Enter 确认  ·  Esc 返回\n\n"),
+				("class:hint", "↑↓ 选择  ·  Enter 确认  ·  ←/Esc 返回\n\n"),
 			]
 			saw_nav = False
 			for index, item in enumerate(items):
@@ -349,6 +349,7 @@ class PromptToolkitMenu:
 			event.app.exit(result=items[selected].value)
 
 		@bindings.add("escape")
+		@bindings.add("left")
 		def go_back(event: Any) -> None:
 			event.app.exit(result=_BACK if allow_back else _EXIT)
 
@@ -592,12 +593,31 @@ def _collect_control(
 	return WizardControl(action=action, run_id=run_id)
 
 
+def _visible_goal_groups(
+	role: str, *, local_only: bool = False
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+	"""goal 分组；local_only 时只保留无需登录（步骤不含 auth_status）的目标。"""
+	groups = GOAL_GROUPS.get(role, ())
+	if not local_only:
+		return groups
+	from boss_agent_cli.wizard.preflight import local_goal_names
+
+	allowed = set(local_goal_names(role))
+	filtered = []
+	for name, goals in groups:
+		kept = tuple(goal for goal in goals if goal in allowed)
+		if kept:
+			filtered.append((name, kept))
+	return tuple(filtered)
+
+
 def _collect_new_plan(
 	menu: MenuDriver,
 	*,
 	default_role: str,
 	default_platform: str,
 	data_dir: Path | None = None,
+	local_only: bool = False,
 ) -> WizardInput:
 	role: str | None = None
 	platform: str | None = None
@@ -618,15 +638,18 @@ def _collect_new_plan(
 					[MenuOption(value, PLATFORM_LABELS.get(value, value)) for value in platforms],
 					default=default_platform if default_platform in platforms else platforms[0],
 				)
+			groups = _visible_goal_groups(role, local_only=local_only)
+			if not groups:
+				raise WorkflowInputError(f"{ROLE_LABELS.get(role, role)}的所有能力都需要登录")
 			if group_name is None:
 				group_name = menu.select(
 					"请选择目标分类",
 					[
 						MenuOption(name, name, GOAL_GROUP_HINTS.get(name, ""))
-						for name, _ in GOAL_GROUPS[role]
+						for name, _ in groups
 					],
 				)
-			goal_names = next(goals for name, goals in GOAL_GROUPS[role] if name == group_name)
+			goal_names = next(goals for name, goals in groups if name == group_name)
 			goal = menu.select(
 				"请选择本次要完成的事项",
 				[
@@ -741,6 +764,7 @@ def collect_wizard_input(
 	show_controls: bool = True,
 	available_runs: Sequence[Mapping[str, Any]] = (),
 	data_dir: Path | None = None,
+	local_only: bool = False,
 ) -> WizardInput | WizardControl:
 	"""Collect a plan or run-control action without executing business logic."""
 	driver = menu or _menu_driver()
@@ -760,6 +784,7 @@ def collect_wizard_input(
 				default_role=default_role,
 				default_platform=default_platform,
 				data_dir=data_dir,
+				local_only=local_only,
 			)
 		except WizardBack:
 			if not show_controls:

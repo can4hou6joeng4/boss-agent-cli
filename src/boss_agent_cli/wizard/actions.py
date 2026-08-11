@@ -326,11 +326,20 @@ def _auth_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 			_unwrap(platform, platform.user_info(), "当前平台不支持登录态检查")
 	token = context.auth().check_status()
 	if token is None:
-		raise WorkflowActionError(
-			"AUTH_REQUIRED",
-			"未登录",
-			recoverable=True,
-			recovery_action=f"boss --platform {context.platform} login",
+		# 未登录不是失败，是「在等人」。返回 WAITING_INPUT 让 run 挂起可恢复，
+		# 而不是把整个 workflow 打成 failed 逼用户从头重走向导。
+		# 刻意不阻塞轮询等待扫码——Agent 与真人都不该被卡在这里。
+		login_command = f"boss --platform {context.platform} login"
+		control = context.workflow_control
+		resume_command = f"boss wizard --resume {control.run_id}" if control else "boss wizard"
+		return StepResult(
+			{"authenticated": False, "platform": context.platform, "role": context.role},
+			status=WorkflowStatus.WAITING_INPUT,
+			next_action=resume_command,
+			operator_actions=(
+				f"运行 {login_command} 并在弹出的浏览器里扫码登录",
+				f"登录完成后回到终端，执行 {resume_command} 继续",
+			),
 		)
 	return StepResult({"authenticated": True, "platform": context.platform, "role": context.role})
 
@@ -707,19 +716,35 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 		)
 	if outcome.status in {"risk_stopped", "budget_stopped"}:
 		# 风控停止时 service 会 keep Chrome；把标记写入结果供向导文案使用。
+		browser_kept_open = outcome.status == "risk_stopped"
 		if isinstance(data, dict):
 			browser_raw = data.get("browser")
 			browser = browser_raw if isinstance(browser_raw, dict) else {}
 			data = {
 				**data,
-				"browser_kept_open": outcome.status == "risk_stopped",
+				"browser_kept_open": browser_kept_open,
 				"cdp_port": browser.get("cdp_port") or data.get("cdp_port"),
 			}
+		resume_command = f"boss crawl resume {outcome.run_id}"
+		operator_actions: tuple[str, ...]
+		if browser_kept_open:
+			operator_actions = (
+				"这通常不是账号退出登录——采集用的是独立浏览器，首次启动常被平台环境校验拦下",
+				"采集用 Chrome 已保持打开：若窗口里已是正常职位列表，直接选「继续采集」即可（会换用页面内请求重试）",
+				"若窗口提示环境异常，先在该窗口手动刷新职位搜索页，再选「继续采集」",
+				f"命令行恢复：{resume_command}",
+			)
+		else:
+			operator_actions = (
+				"本轮采集因预算上限停止，不是账号异常",
+				f"确认要继续时选「继续采集」，或在终端执行 {resume_command}",
+			)
 		return StepResult(
 			data,
 			status=WorkflowStatus.WAITING_INPUT,
-			next_action=f"boss crawl resume {outcome.run_id}",
+			next_action=resume_command,
 			artifacts=tuple(outcome.output_paths.values()),
+			operator_actions=operator_actions,
 		)
 	if outcome.status != "completed":
 		raise WorkflowActionError(

@@ -151,8 +151,8 @@ def _run_plan(
 			return run
 		if run.get("status") != "completed":
 			return run
-		render_run(run)
-		return run
+		# completed：不提前 return——落入下方 completed 处理器渲染摘要并可浏览结果。
+		# 提前 return 会让外层立刻回主菜单清屏，采集摘要一闪即逝（真实使用反馈）。
 
 	# TTY：列表结果可连续选择；职位详情后提供打招呼等操作；失败交给 _emit_run。
 	if interactive and (
@@ -297,6 +297,15 @@ def _run_interactive_session(
 	max_retries: int,
 ) -> None:
 	"""TTY multi-turn loop: main menu → execute → follow-ups → continue/exit."""
+	# 登录门：在任何目标选择之前解决登录态。已登录时零输出直接放行。
+	from boss_agent_cli.wizard.preflight import GATE_EXIT, GATE_LOCAL_ONLY, ensure_login
+
+	gate = ensure_login(ctx)
+	if gate == GATE_EXIT:
+		render_cancelled()
+		return
+	local_only = gate == GATE_LOCAL_ONLY
+
 	while True:
 		try:
 			selection = collect_wizard_input(
@@ -304,6 +313,7 @@ def _run_interactive_session(
 				default_platform=ctx.obj.get("platform") or "zhipin",
 				available_runs=store.list_recent(),
 				data_dir=ctx.obj.get("data_dir"),
+				local_only=local_only,
 			)
 		except WizardCancelled:
 			render_cancelled()

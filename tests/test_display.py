@@ -546,3 +546,123 @@ class TestRenderers:
 		assert "exported 5 jobs" in output
 		assert "json" in output
 		assert " to " not in output, "无 path 时不应出现 'to <路径>' 片段"
+
+
+# ── operator_actions 双受众渲染（TTY 分支）─────────────────
+
+
+class TestRenderOperatorActions:
+	"""render_operator_actions 只渲染面向真人的通道，且只走 stderr。"""
+
+	def _tty_ctx(self):
+		ctx = MagicMock()
+		ctx.obj = {"json_output": False}
+		return ctx
+
+	def test_operator_actions_rendered_in_tty(self, monkeypatch):
+		stream = _capture_display_console(monkeypatch)
+		rendered = []
+		with patch.object(sys, "stdout") as mock_out:
+			mock_out.isatty.return_value = True
+			handle_output(
+				self._tty_ctx(),
+				"wizard",
+				{"ok": True},
+				render=rendered.append,
+				hints={"operator_actions": ["扫码登录后回到终端"]},
+			)
+		assert rendered == [{"ok": True}]
+		assert "你需要" in stream.getvalue()
+		assert "扫码登录后回到终端" in stream.getvalue()
+
+	def test_next_actions_not_rendered_in_tty(self, monkeypatch):
+		"""A4：next_actions 是纯 Agent 通道，TTY 下不渲染。"""
+		stream = _capture_display_console(monkeypatch)
+		with patch.object(sys, "stdout") as mock_out:
+			mock_out.isatty.return_value = True
+			handle_output(
+				self._tty_ctx(),
+				"search",
+				{"items": []},
+				render=lambda _data: None,
+				hints={"next_actions": ["boss show 1", "boss shortlist add x y"]},
+			)
+		assert stream.getvalue() == ""
+
+	def test_no_hints_produces_no_output(self, monkeypatch):
+		"""A5：无 hints 的命令 TTY 输出零变化。"""
+		stream = _capture_display_console(monkeypatch)
+		with patch.object(sys, "stdout") as mock_out:
+			mock_out.isatty.return_value = True
+			handle_output(
+				self._tty_ctx(), "search", {"items": []}, render=lambda _data: None
+			)
+		assert stream.getvalue() == ""
+
+	def test_empty_operator_actions_produces_no_output(self, monkeypatch):
+		stream = _capture_display_console(monkeypatch)
+		with patch.object(sys, "stdout") as mock_out:
+			mock_out.isatty.return_value = True
+			for hints in ({}, {"operator_actions": []}, {"operator_actions": None}):
+				handle_output(
+					self._tty_ctx(),
+					"search",
+					{},
+					render=lambda _data: None,
+					hints=hints,
+				)
+		assert stream.getvalue() == ""
+
+	def test_multiple_actions_align_continuation_lines(self, monkeypatch):
+		stream = _capture_display_console(monkeypatch)
+		with patch.object(sys, "stdout") as mock_out:
+			mock_out.isatty.return_value = True
+			handle_output(
+				self._tty_ctx(),
+				"wizard",
+				{},
+				render=lambda _data: None,
+				hints={"operator_actions": ["第一步动作", "第二步动作"]},
+			)
+		output = stream.getvalue()
+		assert "↓ 你需要：第一步动作" in output
+		assert "第二步动作" in output
+		assert output.count("你需要") == 1
+
+	def test_json_mode_does_not_render(self, monkeypatch):
+		"""JSON 模式走信封，不触发 Rich 渲染。"""
+		stream = _capture_display_console(monkeypatch)
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True}
+		with patch("boss_agent_cli.display.emit_success") as mock_emit:
+			handle_output(
+				ctx,
+				"wizard",
+				{},
+				render=lambda _data: None,
+				hints={"operator_actions": ["扫码登录"]},
+			)
+			mock_emit.assert_called_once()
+		assert stream.getvalue() == ""
+
+	def test_error_output_renders_operator_actions_before_exit(self, monkeypatch):
+		import pytest
+
+		stream = _capture_display_console(monkeypatch)
+		with patch.object(sys, "stdout") as mock_out:
+			mock_out.isatty.return_value = True
+			with pytest.raises(SystemExit):
+				handle_error_output(
+					self._tty_ctx(),
+					"login",
+					code="LOGIN_TIMEOUT",
+					message="登录等待超时",
+					recovery_action="boss login",
+					hints={
+						"next_actions": ["boss login --timeout 180"],
+						"operator_actions": ["确认二维码已完成扫码"],
+					},
+				)
+		output = stream.getvalue()
+		assert "确认二维码已完成扫码" in output
+		assert "boss login --timeout 180" not in output

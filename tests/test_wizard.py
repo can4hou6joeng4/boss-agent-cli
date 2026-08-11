@@ -597,9 +597,14 @@ def test_runner_normalizes_auth_and_network_failures(tmp_path):
 			_action_context(tmp_path),
 			run_id="auth-required-run",
 		)
-	assert auth_run["error"]["code"] == "AUTH_REQUIRED"
-	assert auth_run["error"]["recoverable"] is True
-	assert "boss --platform zhipin login" == auth_run["error"]["recovery_action"]
+	# 未登录不是失败，是「在等人」：run 挂起可恢复，而不是被打成 failed。
+	assert auth_run["status"] == "waiting_input"
+	assert auth_run["error"] is None
+	last = auth_run["last_result"]
+	assert last["status"] == "waiting_input"
+	assert last["data"]["authenticated"] is False
+	assert last["next_action"] == "boss wizard --resume auth-required-run"
+	assert any("boss --platform zhipin login" in action for action in last["operator_actions"])
 
 	def broken(context, inputs, prior):
 		raise OSError("offline")
@@ -1694,7 +1699,16 @@ def test_error_message_prefers_platform_chinese_text():
 	assert "换一条" in (recovery_message("INVALID_PARAM") or "")
 
 
+def _gate_logged_in(monkeypatch):
+	"""让向导入口的登录门直接放行（模拟已登录用户）。"""
+	monkeypatch.setattr(
+		"boss_agent_cli.auth.manager.AuthManager.check_status",
+		lambda self: {"cookies": {"wt2": "x"}, "stoken": "s"},
+	)
+
+
 def test_interactive_wizard_loops_follow_up_from_original_list_results(tmp_path, monkeypatch):
+	_gate_logged_in(monkeypatch)
 	list_run = {
 		"run_id": "search-run",
 		"role": "candidate",
@@ -1844,6 +1858,7 @@ def test_interactive_wizard_exit_during_entity_follow_up_does_not_traceback(tmp_
 
 
 def test_interactive_wizard_returns_to_main_menu_after_success(tmp_path, monkeypatch):
+	_gate_logged_in(monkeypatch)
 	plans = iter(
 		[
 			WizardInput(role="candidate", platform="zhipin", goal="shortlist", inputs={}, mode="tty"),
@@ -2113,6 +2128,7 @@ def test_root_tty_and_explicit_wizard_share_prompt_collector(tmp_path, monkeypat
 
 
 def test_tty_root_and_explicit_wizard_render_only_to_stderr(tmp_path, monkeypatch):
+	_gate_logged_in(monkeypatch)
 	collected = WizardInput(
 		role="candidate",
 		platform="zhipin",
@@ -2186,3 +2202,379 @@ def test_wizard_status_and_stop_use_explicit_run_id(tmp_path):
 	)
 	assert stop.exit_code == 1
 	assert json.loads(stop.stdout)["error"]["code"] == "JOB_NOT_FOUND"
+
+
+# ── 未登录 = waiting_input（不是 failed，也不阻塞）─────────────
+
+
+def _auth_plan():
+	return WorkflowPlan(
+		role="candidate",
+		platform="zhipin",
+		goal="recommendations",
+		inputs={},
+		requested_steps=("auth_status",),
+		mode="headless",
+	)
+
+
+def test_auth_status_waiting_input_is_resumable_and_reruns_step(tmp_path):
+	"""A6：未登录挂起后，同一 run_id 可 resume，且 auth_status 会重跑而非被跳过。"""
+	run_id = "waiting-login-run"
+	with WorkflowStore(tmp_path) as store:
+		first = WorkflowRunner(store, DEFAULT_ACTIONS).run(
+			_auth_plan(), _action_context(tmp_path), run_id=run_id
+		)
+	assert first["status"] == "waiting_input"
+	assert first["error"] is None
+
+	# 人「登录完」后重跑同一条 run：auth_status 必须重新执行。
+	calls = []
+
+	def logged_in(context, inputs, prior):
+		calls.append(prior)
+		return StepResult({"authenticated": True, "platform": "zhipin", "role": "candidate"})
+
+	with WorkflowStore(tmp_path) as store:
+		resumed = WorkflowRunner(store, {"auth_status": logged_in}).run(
+			_auth_plan(), _action_context(tmp_path), run_id=run_id
+		)
+	assert len(calls) == 1, "waiting_input 步骤 resume 时必须重跑，不能被 prior_results 跳过"
+	assert resumed["status"] == "completed"
+
+
+def test_auth_status_waiting_input_does_not_block(tmp_path):
+	"""A7：未登录路径不得阻塞轮询等待扫码。"""
+	started = time.monotonic()
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, DEFAULT_ACTIONS).run(
+			_auth_plan(), _action_context(tmp_path), run_id="nonblocking-run"
+		)
+	assert run["status"] == "waiting_input"
+	assert time.monotonic() - started < 2.0
+
+
+def test_auth_status_operator_actions_are_natural_language(tmp_path):
+	"""operator_actions 面向真人；next_action 才是给 Agent 的命令。"""
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, DEFAULT_ACTIONS).run(
+			_auth_plan(), _action_context(tmp_path), run_id="operator-actions-run"
+		)
+	last = run["last_result"]
+	assert last["next_action"] == "boss wizard --resume operator-actions-run"
+	actions = last["operator_actions"]
+	assert len(actions) == 2
+	assert any("扫码" in action for action in actions)
+
+
+def test_auth_status_without_workflow_control_falls_back(tmp_path):
+	"""直接调 action（无 WorkflowControl）时 resume 命令要有兜底，不能抛 AttributeError。"""
+	result = DEFAULT_ACTIONS["auth_status"](_action_context(tmp_path), {}, {})
+	assert result.status is WorkflowStatus.WAITING_INPUT
+	assert result.next_action == "boss wizard"
+	assert result.operator_actions
+
+
+# ── waiting_input 面板：数据驱动 + 历史 run 兜底（A12）────────
+
+
+def _capture_waiting_panel(monkeypatch, run):
+	from boss_agent_cli.wizard import renderer as renderer_mod
+
+	panels = []
+	monkeypatch.setattr(renderer_mod.display.console, "print", lambda obj, *a, **k: panels.append(obj))
+	renderer_mod.render_run(run)
+	waiting = [p for p in panels if getattr(p, "title", None) == "等待继续"]
+	assert waiting, "waiting_input 应渲染「等待继续」面板"
+	return waiting[0].renderable
+
+
+def test_waiting_panel_prefers_operator_actions(monkeypatch):
+	"""有 operator_actions 时用它，不再靠 reason 子串猜文案。"""
+	body = _capture_waiting_panel(
+		monkeypatch,
+		{
+			"role": "candidate",
+			"goal": "recommendations",
+			"status": "waiting_input",
+			"last_result": {
+				"data": {"authenticated": False},
+				"next_action": "boss wizard --resume r1",
+				"operator_actions": ["运行 boss --platform zhipin login 并扫码", "登录完成后回到终端继续"],
+			},
+		},
+	)
+	assert "运行 boss --platform zhipin login 并扫码" in body
+	assert "登录完成后回到终端继续" in body
+	# 旧启发式文案不应出现
+	assert "继续采集" not in body
+
+
+def test_waiting_panel_falls_back_for_legacy_runs(monkeypatch):
+	"""SQLite 里的历史 run 没有 operator_actions 字段，必须仍走旧启发式。"""
+	body = _capture_waiting_panel(
+		monkeypatch,
+		{
+			"role": "candidate",
+			"goal": "crawl_start",
+			"status": "waiting_input",
+			"last_result": {
+				"data": {
+					"status": "risk_stopped",
+					"browser_kept_open": True,
+					"error": "环境异常",
+				},
+				"next_action": "boss crawl resume c1",
+			},
+		},
+	)
+	assert "采集用 Chrome 已保持打开" in body
+
+
+def test_crawl_risk_stop_emits_browser_operator_actions():
+	"""风控停止的文案改为由 step 声明数据，而不是 renderer 猜。"""
+	from boss_agent_cli.wizard.actions import _crawl_outcome_result
+
+	result = _crawl_outcome_result(_crawl_outcome("crawl-1", "risk_stopped"))
+	assert result.status is WorkflowStatus.WAITING_INPUT
+	assert result.next_action == "boss crawl resume crawl-1"
+	assert any("Chrome 已保持打开" in action for action in result.operator_actions)
+	assert any("boss crawl resume crawl-1" in action for action in result.operator_actions)
+
+
+def test_crawl_budget_stop_does_not_claim_risk():
+	"""预算停止不是账号异常，文案必须区分开。"""
+	from boss_agent_cli.wizard.actions import _crawl_outcome_result
+
+	result = _crawl_outcome_result(_crawl_outcome("crawl-1", "budget_stopped"))
+	assert result.status is WorkflowStatus.WAITING_INPUT
+	assert any("预算上限" in action for action in result.operator_actions)
+	assert not any("Chrome 已保持打开" in action for action in result.operator_actions)
+
+
+# ── 向导入口登录门（R6 / A13–A18）───────────────────────────
+
+
+def _gate_ctx(tmp_path, *, platform="zhipin", role="candidate"):
+	ctx = SimpleNamespace()
+	ctx.obj = {
+		"data_dir": tmp_path,
+		"logger": Logger(),
+		"platform": platform,
+		"role": role,
+		"cdp_url": None,
+	}
+	return ctx
+
+
+def test_gate_is_silent_and_free_when_logged_in(tmp_path, monkeypatch, capsys):
+	"""A13：已登录用户零输出、不预检浏览器内核、不开浏览器。"""
+	from boss_agent_cli.wizard import preflight
+
+	monkeypatch.setattr(
+		"boss_agent_cli.auth.manager.AuthManager.check_status",
+		lambda self: {"cookies": {"wt2": "x"}},
+	)
+	kernel_calls = []
+	monkeypatch.setattr(preflight, "_browser_kernel_status", lambda: kernel_calls.append(1) or ("ok", ""))
+	login_calls = []
+	monkeypatch.setattr(
+		"boss_agent_cli.auth.manager.AuthManager.login",
+		lambda self, **kw: login_calls.append(kw),
+	)
+
+	assert preflight.ensure_login(_gate_ctx(tmp_path)) == preflight.GATE_READY
+	assert kernel_calls == []
+	assert login_calls == []
+	captured = capsys.readouterr()
+	assert captured.out == ""
+	assert captured.err == ""
+
+
+def test_gate_offers_login_before_any_goal_selection(tmp_path, monkeypatch):
+	"""A14/A15：未登录时先给三选菜单；选「现在登录」直接开浏览器。"""
+	from boss_agent_cli.wizard import preflight
+
+	monkeypatch.setattr("boss_agent_cli.auth.manager.AuthManager.check_status", lambda self: None)
+	monkeypatch.setattr(preflight, "_browser_kernel_status", lambda: ("ok", ""))
+	login_calls = []
+	monkeypatch.setattr(
+		"boss_agent_cli.auth.manager.AuthManager.login",
+		lambda self, **kw: login_calls.append(kw) or {"cookies": {"wt2": "x"}},
+	)
+
+	menu = _ScriptedMenu(["login"])
+	assert preflight.ensure_login(_gate_ctx(tmp_path), menu=menu) == preflight.GATE_READY
+	assert len(login_calls) == 1
+	title, options = menu.menus[0]
+	assert "现在登录" in title or "登录" in title
+	assert [option.value for option in options] == ["login", "local", "exit"]
+
+
+def test_gate_blocks_on_missing_browser_kernel_without_opening_browser(tmp_path, monkeypatch):
+	"""A16：内核缺失时给安装指引，绝不尝试开浏览器。"""
+	from boss_agent_cli.wizard import preflight
+
+	monkeypatch.setattr("boss_agent_cli.auth.manager.AuthManager.check_status", lambda self: None)
+	monkeypatch.setattr(
+		preflight,
+		"_browser_kernel_status",
+		lambda: ("error", "patchright 需要 chromium-1234，请运行 patchright install chromium"),
+	)
+	login_calls = []
+	monkeypatch.setattr(
+		"boss_agent_cli.auth.manager.AuthManager.login",
+		lambda self, **kw: login_calls.append(kw),
+	)
+
+	# 第一次选登录 → 被内核拦住回到菜单；第二次选退出。
+	menu = _ScriptedMenu(["login", "exit"])
+	assert preflight.ensure_login(_gate_ctx(tmp_path), menu=menu) == preflight.GATE_EXIT
+	assert login_calls == [], "内核缺失时不得尝试打开浏览器"
+
+
+def test_gate_login_failure_shows_operator_actions_and_retries(tmp_path, monkeypatch, capsys):
+	"""登录失败复用 R5 的双通道文案，且可回菜单重试。"""
+	from boss_agent_cli.wizard import preflight
+
+	monkeypatch.setattr("boss_agent_cli.auth.manager.AuthManager.check_status", lambda self: None)
+	monkeypatch.setattr(preflight, "_browser_kernel_status", lambda: ("ok", ""))
+
+	def _boom(self, **kw):
+		raise TimeoutError("login timeout")
+
+	monkeypatch.setattr("boss_agent_cli.auth.manager.AuthManager.login", _boom)
+
+	menu = _ScriptedMenu(["login", "exit"])
+	assert preflight.ensure_login(_gate_ctx(tmp_path), menu=menu) == preflight.GATE_EXIT
+	assert len(menu.menus) == 2, "登录失败后应回到菜单可重试"
+
+
+def test_gate_local_only_filters_goal_menu(tmp_path, monkeypatch):
+	"""A17：仅本地功能时 goal 菜单只剩不需登录的目标。"""
+	from boss_agent_cli.wizard import preflight
+	from boss_agent_cli.wizard.prompts import _visible_goal_groups
+
+	monkeypatch.setattr("boss_agent_cli.auth.manager.AuthManager.check_status", lambda self: None)
+	menu = _ScriptedMenu(["local"])
+	assert preflight.ensure_login(_gate_ctx(tmp_path), menu=menu) == preflight.GATE_LOCAL_ONLY
+
+	groups = _visible_goal_groups("candidate", local_only=True)
+	visible = {goal for _name, goals in groups for goal in goals}
+	assert visible == set(preflight.local_goal_names("candidate"))
+	assert "job_search" not in visible and "shortlist" in visible
+
+
+def test_gate_recruiter_has_no_local_goals(tmp_path, monkeypatch):
+	"""A17：招聘者全部能力都需登录，菜单不该出现「仅看本地功能」。"""
+	from boss_agent_cli.wizard import preflight
+	from boss_agent_cli.wizard.prompts import _visible_goal_groups
+
+	assert preflight.local_goal_names("recruiter") == ()
+	assert _visible_goal_groups("recruiter", local_only=True) == ()
+
+	monkeypatch.setattr("boss_agent_cli.auth.manager.AuthManager.check_status", lambda self: None)
+	menu = _ScriptedMenu(["exit"])
+	preflight.ensure_login(_gate_ctx(tmp_path, role="recruiter"), menu=menu)
+	_title, options = menu.menus[0]
+	assert [option.value for option in options] == ["login", "exit"]
+
+
+def test_headless_paths_bypass_the_gate(tmp_path):
+	"""A18：headless / --input-json 不经登录门，仍走 R3 的 waiting_input。"""
+	result = CliRunner().invoke(
+		cli,
+		[
+			"--json",
+			"--data-dir",
+			str(tmp_path),
+			"wizard",
+			"--input-json",
+			json.dumps({"role": "candidate", "platform": "zhipin", "goal": "recommendations"}),
+		],
+	)
+	payload = json.loads(result.stdout)
+	assert payload["ok"] is True
+	assert payload["data"]["status"] == "waiting_input"
+	assert payload["data"]["error"] is None
+
+
+# ── 恢复采集完成后必须停留在结果上，而不是闪回主菜单 ─────────
+
+
+def test_recovery_completion_falls_through_to_result_browsing(tmp_path, monkeypatch):
+	"""真实使用反馈：继续采集成功后摘要一闪即逝，要进「查看任务状态」才能看到。
+
+	修复后：recovery 完成 → 落入 completed 处理器（渲染 + 可浏览列表），
+	不再提前 return 让主菜单立刻清屏。
+	"""
+	from boss_agent_cli.commands import wizard as wizard_mod
+
+	waiting_run = {
+		"run_id": "outer-1",
+		"role": "candidate",
+		"platform": "zhipin",
+		"goal": "crawl_start",
+		"status": "waiting_input",
+		"last_result": {"data": {"run_id": "crawl-inner", "status": "risk_stopped"}},
+	}
+	completed_run = {
+		"run_id": "recovery-1",
+		"role": "candidate",
+		"platform": "zhipin",
+		"goal": "crawl_resume",
+		"status": "completed",
+		"last_result": {"data": {"items": [{"title": "Golang 工程师"}]}},
+	}
+
+	class _FakeRunner:
+		def __init__(self, store, actions):
+			self.calls = 0
+
+		def run(self, plan, context, **kwargs):
+			self.calls += 1
+			return waiting_run if self.calls == 1 else completed_run
+
+	monkeypatch.setattr(wizard_mod, "WorkflowRunner", _FakeRunner)
+	monkeypatch.setattr(wizard_mod, "_build_context", lambda ctx, plan: object())
+	monkeypatch.setattr(wizard_mod, "render_run", lambda run: None)
+	monkeypatch.setattr(
+		wizard_mod,
+		"collect_waiting_recovery",
+		lambda run, **kw: WizardInput(
+			role="candidate", platform="zhipin", goal="crawl_resume",
+			inputs={"run_id": "crawl-inner"}, mode="tty",
+		),
+	)
+	browsed = []
+	monkeypatch.setattr(wizard_mod, "has_result_follow_up", lambda run: True)
+	monkeypatch.setattr(
+		wizard_mod,
+		"_browse_list_results",
+		lambda ctx, store, runner, run, **kw: browsed.append(run["run_id"]) or run,
+	)
+
+	ctx = SimpleNamespace()
+	ctx.obj = {"data_dir": tmp_path, "logger": Logger(), "platform": "zhipin",
+	           "role": "candidate", "cdp_url": None, "delay": (0, 0), "config": {}}
+	plan = build_plan(WizardInput(
+		role="candidate", platform="zhipin", goal="crawl_start",
+		inputs={"query": "Golang", "city": "广州"}, mode="tty",
+	))
+	result = wizard_mod._run_plan(
+		ctx, object(), plan,
+		interactive=True, resume_run_id=None, timeout_seconds=None, max_retries=0,
+	)
+	assert browsed == ["recovery-1"], "recovery 完成后应进入结果浏览，而不是直接返回主菜单"
+	assert result["run_id"] == "recovery-1"
+
+
+def test_menu_hint_advertises_left_arrow_back():
+	"""左方向键返回是公开交互承诺，提示行必须写出来。"""
+	import inspect
+
+	from boss_agent_cli.wizard.prompts import PromptToolkitMenu
+
+	source = inspect.getsource(PromptToolkitMenu.select)
+	assert 'bindings.add("left")' in source
+	assert "←/Esc 返回" in source

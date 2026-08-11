@@ -13,6 +13,22 @@ boss <命令> --help                      # 查看单个命令选项
 
 兼容配置：`boss config set operating_mode assisted|research`。两种模式均可调用全部已实现能力；schema 仍提供风险和数据分类，平台缺失能力返回 `NOT_SUPPORTED`。
 
+## 命令还是 wizard
+
+顶层命令和 `boss wizard` 是两套并行的能力面，分工写在 `boss schema` 的 `conventions.command_vs_wizard`：
+
+- **单次、无状态的能力调用** → 顶层命令（`boss search` / `boss detail` / `boss greet` …）
+- **需要跨步骤状态、可恢复、或中途要把指引递给真人** → `boss wizard`（goal 取值见 `wizard_catalog`）
+
+信封的 `hints` 同样按受众分成两条通道（`conventions.hints`）：
+
+| 字段 | 受众 | 形式 |
+|------|------|------|
+| `hints.next_actions` | AI Agent | `boss xxx` 命令，Agent 直接执行 |
+| `hints.operator_actions` | 真人操作者 | 自然语言，通常需要离开终端完成（扫码、在浏览器里调整筛选、处理风控验证） |
+
+TTY 下只把 `operator_actions` 渲染到 stderr；`next_actions` 是纯 Agent 通道，不渲染。Agent 拿到 `operator_actions` 时应转述给操作者，而不是自己编措辞。
+
 ## 基础操作
 
 | 命令 | 说明 |

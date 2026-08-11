@@ -172,3 +172,76 @@ def test_config_from_file(tmp_path):
 	assert cfg["export_dir"] == "/tmp/exports"
 	assert cfg["log_level"] == "debug"
 	assert cfg["request_delay"] == [1.5, 3.0]
+
+
+# --- hints 双受众通道契约（operator_actions） ---
+
+
+def test_envelope_success_preserves_operator_actions():
+	"""operator_actions 是面向真人的通道，不得被脱敏抹掉。"""
+	result = envelope_success(
+		"wizard",
+		{"authenticated": False},
+		hints={
+			"next_actions": ["boss wizard --resume wrn_x9k2"],
+			"operator_actions": ["扫码登录后回到终端"],
+		},
+	)
+	parsed = json.loads(result)
+	assert parsed["hints"]["operator_actions"] == ["扫码登录后回到终端"]
+	assert parsed["hints"]["next_actions"] == ["boss wizard --resume wrn_x9k2"]
+
+
+def test_envelope_error_preserves_operator_actions():
+	result = envelope_error(
+		"login",
+		code="LOGIN_TIMEOUT",
+		message="登录等待超时",
+		recoverable=True,
+		hints={
+			"next_actions": ["boss login --timeout 180"],
+			"operator_actions": ["确认二维码已完成扫码并在网页端授权登录"],
+		},
+	)
+	parsed = json.loads(result)
+	assert parsed["hints"]["operator_actions"] == ["确认二维码已完成扫码并在网页端授权登录"]
+	assert parsed["hints"]["next_actions"] == ["boss login --timeout 180"]
+
+
+def test_operator_actions_key_is_not_sensitive():
+	"""字段名不得命中 _SENSITIVE_KEY_PARTS，否则整个数组会变成 [REDACTED]。"""
+	from boss_agent_cli.output import redact_sensitive
+
+	redacted = redact_sensitive({"operator_actions": ["去浏览器里确认筛选条件"]})
+	assert redacted["operator_actions"] == ["去浏览器里确认筛选条件"]
+
+
+def test_operator_actions_values_still_redact_credentials():
+	"""值仍走 redact_sensitive_text——文案里别写「键：值」形式。"""
+	result = envelope_success(
+		"wizard",
+		{},
+		hints={"operator_actions": ["把 token=abc123 填进去"]},
+	)
+	parsed = json.loads(result)
+	assert parsed["hints"]["operator_actions"] == ["把 token=[REDACTED] 填进去"]
+
+
+def test_step_result_carries_operator_actions():
+	from boss_agent_cli.wizard.models import StepResult, WorkflowStatus
+
+	result = StepResult(
+		{"authenticated": False},
+		status=WorkflowStatus.WAITING_INPUT,
+		next_action="boss wizard --resume wrn_x9k2",
+		operator_actions=("扫码登录后回到终端",),
+	)
+	payload = result.to_dict()
+	assert payload["operator_actions"] == ["扫码登录后回到终端"]
+	assert payload["status"] == "waiting_input"
+
+
+def test_step_result_operator_actions_defaults_empty():
+	from boss_agent_cli.wizard.models import StepResult
+
+	assert StepResult({}).to_dict()["operator_actions"] == []

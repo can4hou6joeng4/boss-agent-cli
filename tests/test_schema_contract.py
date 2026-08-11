@@ -39,6 +39,24 @@ def test_schema_output_is_json_envelope():
 	assert isinstance(data["error_codes"], dict)
 
 
+# ── 双受众信封契约 ──────────────────────────────────────────────────
+
+
+def test_schema_conventions_declare_hints_audiences():
+	"""conventions 必须声明 next_actions / operator_actions 各自的受众。"""
+	hints = SCHEMA_DATA["conventions"]["hints"]
+	assert set(hints) == {"next_actions", "operator_actions"}
+	assert "Agent" in hints["next_actions"]
+	assert "操作者" in hints["operator_actions"]
+
+
+def test_schema_conventions_declare_command_vs_wizard():
+	"""commands 与 wizard_catalog 是两套并行能力面，必须声明何时用哪个。"""
+	declaration = SCHEMA_DATA["conventions"]["command_vs_wizard"]
+	assert "顶层命令" in declaration
+	assert "wizard" in declaration
+
+
 # ── Schema 命令集 == 注册命令集 ─────────────────────────────────────
 
 

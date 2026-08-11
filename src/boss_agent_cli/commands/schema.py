@@ -1347,6 +1347,13 @@ SCHEMA_DATA = {
 			"0": "命令成功 (ok=true)",
 			"1": "命令失败 (ok=false)",
 		},
+		"hints": {
+			"next_actions": "面向 AI Agent 的后继命令（boss xxx 形式），由 Agent 直接执行",
+			"operator_actions": "面向真人操作者的自然语言指引，通常需要离开终端完成"
+			"（扫码、在浏览器里调整条件、处理风控验证等）；Agent 应转述给操作者，TTY 下渲染到 stderr",
+		},
+		"command_vs_wizard": "单次、无状态的能力调用走顶层命令；需要跨步骤状态、可恢复、"
+		"或中途需要把指引递给真人操作者的走 boss wizard（goal 取值见 wizard_catalog）",
 	},
 }
 

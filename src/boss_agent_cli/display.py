@@ -57,6 +57,25 @@ def is_json_mode(ctx: Any) -> bool:
 	return force_json or not sys.stdout.isatty()
 
 
+def render_operator_actions(hints: dict[str, Any] | None) -> None:
+	"""把「人该做什么」渲染到 stderr。
+
+	只渲染 hints.operator_actions（面向真人操作者的自然语言指引）。
+	hints.next_actions 是面向 Agent 的命令通道，TTY 下刻意不渲染——避免给
+	每条命令的输出加噪音。无 operator_actions 时零输出，因此对既有命令的
+	TTY 行为没有影响。
+	"""
+	if not hints:
+		return
+	actions = hints.get("operator_actions")
+	if not actions or not isinstance(actions, (list, tuple)):
+		return
+	console.print()
+	for index, action in enumerate(actions):
+		prefix = "↓ 你需要：" if index == 0 else "　　　　　"
+		console.print(f"[yellow]{prefix}[/yellow]{action}")
+
+
 def handle_output(
 	ctx: Any,
 	command: str,
@@ -71,6 +90,7 @@ def handle_output(
 		emit_success(command, data, pagination=pagination, hints=hints)
 	elif render:
 		render(data)
+		render_operator_actions(hints)
 	else:
 		# Fallback: no render function, emit JSON even in TTY
 		emit_success(command, data, pagination=pagination, hints=hints)
@@ -101,6 +121,7 @@ def handle_error_output(
 		console.print(f"[red]error[/red] [{code}] {message}")
 		if recovery_action:
 			console.print(f"  [dim]recovery: {recovery_action}[/dim]")
+		render_operator_actions(hints)
 		raise SystemExit(1)
 
 

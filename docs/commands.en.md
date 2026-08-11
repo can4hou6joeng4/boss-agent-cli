@@ -17,6 +17,22 @@ subcommands under `hr`, grouped below by workflow stage.
 
 Compatibility setting: `boss config set operating_mode assisted|research`. Both modes can call every implemented capability; schema still reports risk/data classifications, and missing platform implementations return `NOT_SUPPORTED`.
 
+## Command or wizard
+
+Top-level commands and `boss wizard` are two parallel capability surfaces. The split is declared in `conventions.command_vs_wizard` from `boss schema`:
+
+- **Single-shot, stateless capability calls** → top-level commands (`boss search`, `boss detail`, `boss greet`, …)
+- **Cross-step state, resumability, or handing guidance to a human mid-flow** → `boss wizard` (goals listed under `wizard_catalog`)
+
+Envelope `hints` splits by audience the same way (`conventions.hints`):
+
+| Field | Audience | Form |
+|-------|----------|------|
+| `hints.next_actions` | AI Agent | `boss xxx` commands the agent runs directly |
+| `hints.operator_actions` | Human operator | Natural language, usually done away from the terminal (scan a QR code, adjust filters in the browser, clear a risk-control check) |
+
+In a TTY only `operator_actions` is rendered, to stderr; `next_actions` stays an agent-only channel and is not rendered. An agent receiving `operator_actions` should relay it verbatim rather than inventing its own wording.
+
 ## Basics
 
 | Command | Description |

@@ -420,7 +420,9 @@ def test_login_risk_control_error_is_not_suggested_as_plain_network_retry(mock_a
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "LOGIN_RISK_CONTROL"
 	assert "风控" in parsed["error"]["message"]
-	assert any("暂停自动化重试" in action for action in parsed["hints"]["next_actions"])
+	# 风控下没有安全的可执行命令可推荐；指引全部走面向真人的通道。
+	assert parsed["hints"]["next_actions"] == []
+	assert any("暂停自动化重试" in action for action in parsed["hints"]["operator_actions"])
 
 
 @patch("boss_agent_cli.commands.login.AuthManager")
@@ -451,3 +453,58 @@ def test_login_generic_error_keeps_network_fallback_with_doctor_hint(mock_auth_c
 	assert parsed["error"]["code"] == "NETWORK_ERROR"
 	assert "登录失败" in parsed["error"]["message"]
 	assert any("boss doctor" in action for action in parsed["hints"]["next_actions"])
+
+
+# ── login 错误 hints 的双受众通道拆分（R5 / A11）─────────────
+
+
+@pytest.mark.parametrize(
+	"side_effect,expected_code",
+	[
+		(TimeoutError("login timeout"), "LOGIN_TIMEOUT"),
+		(RuntimeError("Executable doesn't exist at /x"), "BROWSER_KERNEL_MISSING"),
+		(ConnectionError("cdp refused"), "CDP_UNAVAILABLE"),
+		(RuntimeError("HTTP 403 forbidden risk control"), "LOGIN_RISK_CONTROL"),
+		(RuntimeError("401 unauthorized"), "LOGIN_EXPIRED"),
+		(RuntimeError("cookie stoken extraction failed"), "LOGIN_CREDENTIAL_EXTRACTION_FAILED"),
+		(RuntimeError("boom"), "NETWORK_ERROR"),
+	],
+)
+@patch("boss_agent_cli.commands.login.AuthManager")
+def test_login_error_hints_split_by_audience(mock_auth_cls, side_effect, expected_code):
+	"""next_actions 只放真命令，自然语言指引一律走 operator_actions。"""
+	mock_auth = MagicMock()
+	mock_auth.login.side_effect = side_effect
+	mock_auth_cls.return_value = mock_auth
+
+	result = CliRunner().invoke(cli, ["login"])
+	assert result.exit_code == 1
+	hints = json.loads(result.output)["error"]
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == expected_code
+
+	hints = parsed["hints"]
+	assert set(hints) == {"next_actions", "operator_actions"}
+	# 每个分类都必须给真人留下可读指引。
+	assert hints["operator_actions"], f"{expected_code} 缺少 operator_actions"
+
+	# next_actions 必须是可执行命令，不是叙述句。
+	for action in hints["next_actions"]:
+		assert action.startswith(("boss", "patchright")), (
+			f"{expected_code} 的 next_actions 混入了非命令条目: {action!r}"
+		)
+		assert "，" not in action and "。" not in action
+
+
+@patch("boss_agent_cli.commands.login.AuthManager")
+def test_login_success_hints_stay_agent_only(mock_auth_cls):
+	"""登录成功是终态，不需要人再做什么——不产出 operator_actions。"""
+	mock_auth = MagicMock()
+	mock_auth.login.return_value = {"_method": "cookie", "token": "t"}
+	mock_auth_cls.return_value = mock_auth
+
+	result = CliRunner().invoke(cli, ["login"])
+	assert result.exit_code == 0
+	hints = json.loads(result.output)["hints"]
+	assert "next_actions" in hints
+	assert not hints.get("operator_actions")

@@ -72,6 +72,9 @@ class StepResult:
 	status: WorkflowStatus = WorkflowStatus.COMPLETED
 	next_action: str | None = None
 	artifacts: tuple[str, ...] = ()
+	# 面向真人操作者的自然语言指引（需要离开终端完成的动作）。
+	# 与 next_action（面向 Agent 的命令）职责互斥，见 schema conventions.hints。
+	operator_actions: tuple[str, ...] = ()
 
 	def to_dict(self) -> dict[str, Any]:
 		return {
@@ -79,4 +82,5 @@ class StepResult:
 			"status": self.status.value,
 			"next_action": self.next_action,
 			"artifacts": list(self.artifacts),
+			"operator_actions": list(self.operator_actions),
 		}
