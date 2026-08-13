@@ -666,3 +666,89 @@ class TestRenderOperatorActions:
 		output = stream.getvalue()
 		assert "确认二维码已完成扫码" in output
 		assert "boss login --timeout 180" not in output
+
+
+# ── 真人链路：下一步提示与动作确认渲染 ──────────────────────────
+
+
+class TestRenderNextSteps:
+	def test_renders_each_action(self, monkeypatch):
+		from boss_agent_cli.display import render_next_steps
+
+		stream = _capture_display_console(monkeypatch)
+		render_next_steps(["boss resume show x", "boss resume list"])
+		out = stream.getvalue()
+
+		assert "boss resume show x" in out
+		assert "boss resume list" in out
+		assert "下一步" in out
+
+	def test_empty_actions_render_nothing(self, monkeypatch):
+		from boss_agent_cli.display import render_next_steps
+
+		stream = _capture_display_console(monkeypatch)
+		render_next_steps([])
+
+		assert stream.getvalue() == ""
+
+	def test_none_renders_nothing(self, monkeypatch):
+		from boss_agent_cli.display import render_next_steps
+
+		stream = _capture_display_console(monkeypatch)
+		render_next_steps(None)
+
+		assert stream.getvalue() == ""
+
+
+class TestRenderActionResult:
+	def test_shows_fields_and_next_steps(self, monkeypatch):
+		from boss_agent_cli.display import render_action_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_action_result(
+			{"action": "init", "name": "我的简历", "template": "default"},
+			title="resume",
+			next_steps=["boss resume show 我的简历"],
+		)
+		out = stream.getvalue()
+
+		assert "init" in out
+		assert "我的简历" in out
+		assert "boss resume show" in out
+		assert "{" not in out, "不应回显 JSON"
+
+	def test_works_without_next_steps(self, monkeypatch):
+		from boss_agent_cli.display import render_action_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_action_result({"action": "remove", "name": "x", "removed": True}, title="preset")
+		out = stream.getvalue()
+
+		assert "remove" in out
+		assert "下一步" not in out
+
+
+class TestRenderListWithSteps:
+	def test_empty_list_still_gives_next_step(self, monkeypatch):
+		"""空列表必须给出可执行的下一步，而不是只说 no xxx（AC4）。"""
+		from boss_agent_cli.display import render_list_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_list_result([], "resumes", [("name", "name", "cyan")], next_steps=["boss resume init"])
+		out = stream.getvalue()
+
+		assert "boss resume init" in out
+
+	def test_non_empty_list_renders_rows(self, monkeypatch):
+		from boss_agent_cli.display import render_list_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_list_result(
+			[{"name": "简历A"}, {"name": "简历B"}],
+			"resumes",
+			[("name", "name", "cyan")],
+			next_steps=[],
+		)
+		out = stream.getvalue()
+
+		assert "简历A" in out and "简历B" in out

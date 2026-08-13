@@ -6,6 +6,7 @@ Pipe mode (Agent): JSON envelope to stdout.
 """
 
 import sys
+from collections.abc import Sequence
 from typing import Any, Callable
 
 from rich.console import Console
@@ -363,6 +364,49 @@ def render_export_summary(data: dict[str, Any]) -> None:
 		console.print(f"[green]exported[/green] {count} jobs to [bold]{path}[/bold] ({fmt})")
 	else:
 		console.print(f"[green]exported[/green] {count} jobs ({fmt})")
+
+
+def render_next_steps(actions: "Sequence[str] | None") -> None:
+	"""把「下一步可以敲什么」渲染给真人。
+
+	与 ``render_operator_actions`` 的分工：后者渲染 ``hints.operator_actions``
+	（需要离开终端才能完成的动作，如扫码），由 ``handle_output`` 自动调用；
+	本函数由各命令自己的 renderer 主动调用，把该命令的后继命令提示出来。
+
+	这样既满足「空数据态要给可执行下一步」，又不改变 hints 双通道语义
+	——``next_actions`` 仍然只是 Agent 通道，不会被自动渲染到 TTY。
+	"""
+	if not actions:
+		return
+	console.print("\n  [bold]下一步：[/bold]")
+	for action in actions:
+		console.print(f"    [dim]{action}[/dim]")
+
+
+def render_action_result(
+	data: dict[str, Any],
+	*,
+	title: str,
+	next_steps: "Sequence[str] | None" = None,
+) -> None:
+	"""动作类命令（add / remove / init / export ...）的统一确认渲染。
+
+	替代直接回显 JSON：结果字段走面板，后继命令走 next_steps。
+	"""
+	render_message_panel(data, title=title)
+	render_next_steps(next_steps)
+
+
+def render_list_result(
+	items: list[dict[str, Any]],
+	title: str,
+	columns: list[tuple[str, str, str]],
+	*,
+	next_steps: "Sequence[str] | None" = None,
+) -> None:
+	"""列表类命令的统一渲染：表格 + 下一步；空列表也会给出下一步（AC4）。"""
+	render_simple_list(items, title, columns)
+	render_next_steps(next_steps)
 
 
 # ── Auth error decorator ─────────────────────────────────────────────

@@ -12,7 +12,14 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output
+from boss_agent_cli.display import (
+	handle_auth_errors,
+	handle_error_output,
+	handle_output,
+	render_action_result,
+	render_list_result,
+	render_message_panel,
+)
 from boss_agent_cli.search_filters import SearchFilterCriteria, SearchPipelinePlatformError, build_search_params, resolve_welfare_keywords, run_search_pipeline
 
 
@@ -78,6 +85,9 @@ def watch_add_cmd(
 	handle_output(
 		ctx, "watch",
 		{"action": "add", "name": name, "params": params},
+		render=lambda d: render_action_result(
+			d, title="watch", next_steps=[f"boss watch run {name}", "boss watch list"]
+		),
 		hints={"next_actions": [f"boss watch run {name}", "boss watch list"]},
 	)
 
@@ -87,7 +97,20 @@ def watch_add_cmd(
 def watch_list_cmd(ctx: click.Context) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		items = cache.list_saved_searches()
-	handle_output(ctx, "watch", items, hints={"next_actions": ["boss watch run <name>", "boss watch remove <name>"]})
+	handle_output(
+		ctx,
+		"watch",
+		items,
+		render=lambda d: render_list_result(
+			d,
+			"watches",
+			[("名称", "name", "bold cyan"), ("条件", "params", "green"), ("创建时间", "created_at", "dim")],
+			next_steps=["boss watch add <name> --query <关键词>"]
+			if not d
+			else ["boss watch run <name>", "boss watch remove <name>"],
+		),
+		hints={"next_actions": ["boss watch run <name>", "boss watch remove <name>"]},
+	)
 
 
 @watch_group.command("remove")
@@ -96,7 +119,12 @@ def watch_list_cmd(ctx: click.Context) -> None:
 def watch_remove_cmd(ctx: click.Context, name: str) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		removed = cache.delete_saved_search(name)
-	handle_output(ctx, "watch", {"action": "remove", "name": name, "removed": removed})
+	handle_output(
+		ctx,
+		"watch",
+		{"action": "remove", "name": name, "removed": removed},
+		render=lambda d: render_action_result(d, title="watch", next_steps=["boss watch list"]),
+	)
 
 
 def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str, Any] | None:
@@ -178,6 +206,9 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 			handle_output(
 				ctx, "watch",
 				{"mode": "all", "watches": watches, "total": len(watches)},
+				render=lambda d: render_message_panel(
+					{"模式": "全部", "监控数": d.get("total", 0)}, title="watch run"
+				),
 				hints={"next_actions": ["boss watch list", "boss detail <security_id>"]},
 			)
 			return
@@ -208,5 +239,6 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 
 		handle_output(
 			ctx, "watch", summary,
+			render=lambda d: render_message_panel(d, title="watch run"),
 			hints={"next_actions": ["boss detail <security_id>", "boss watch list"]},
 		)
