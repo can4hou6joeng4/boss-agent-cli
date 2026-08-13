@@ -14,7 +14,9 @@ from pathlib import Path
 from typing import Any
 
 import click
+from rich.table import Table
 
+from boss_agent_cli import display
 from boss_agent_cli.display import handle_output
 
 
@@ -291,6 +293,48 @@ footer a {{ color: var(--accent); text-decoration: none; }}
 """
 
 
+def _render_stats(data: dict[str, Any]) -> None:
+	"""把漏斗统计渲染成终端表格（TTY 路径）。
+
+	兼容 ``_collect_stats`` 的两种形状：有缓存时含 ``window`` 段；
+	无缓存时 ``watch_hits`` 落在 ``funnel`` 内并带 ``note``。
+	"""
+	days = data.get("window_days", 30)
+	funnel = data.get("funnel", {})
+	window = data.get("window", {})
+	conversion = data.get("conversion", {})
+
+	table = Table(title=f"求职漏斗 · 最近 {days} 天")
+	table.add_column("阶段", style="bold cyan")
+	table.add_column("总计", justify="right", style="green")
+	table.add_column(f"近 {days} 天", justify="right", style="yellow")
+
+	for label, key in (("打招呼", "greeted"), ("投递", "applied"), ("候选池", "shortlist"), ("监控命中", "watch_hits")):
+		total = funnel.get(key)
+		recent = window.get(key)
+		table.add_row(label, "-" if total is None else str(total), "-" if recent is None else str(recent))
+	display.console.print(table)
+
+	display.console.print(f"  [dim]打招呼 → 投递[/dim]    {_percent(conversion.get('apply_rate'))}")
+	display.console.print(f"  [dim]打招呼 → 候选池[/dim]  {_percent(conversion.get('shortlist_rate'))}")
+
+	if note := data.get("note"):
+		display.console.print(f"\n  [yellow]{note}[/yellow]")
+
+	if hints := _build_hints(data):
+		display.console.print("\n  [bold]下一步：[/bold]")
+		for hint in hints:
+			display.console.print(f"    [dim]{hint}[/dim]")
+
+
+def _percent(value: Any) -> str:
+	"""把 0~1 的比率渲染成百分比；非数值返回占位符。"""
+	try:
+		return f"{round(float(value) * 100, 1)}%"
+	except (TypeError, ValueError):
+		return "-"
+
+
 @click.command("stats")
 @click.option("--days", default=30, type=int, help="统计窗口天数（默认 30 天）")
 @click.option(
@@ -328,4 +372,4 @@ def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Pa
 			sys.stdout.flush()
 		return
 
-	handle_output(ctx, "stats", data, hints={"next_actions": _build_hints(data)})
+	handle_output(ctx, "stats", data, render=_render_stats, hints={"next_actions": _build_hints(data)})

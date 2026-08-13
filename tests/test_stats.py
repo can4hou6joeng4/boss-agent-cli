@@ -209,3 +209,91 @@ def test_stats_html_format_invalid_raises(tmp_path):
 	"""非法 --format 值应被 Click 拦截。"""
 	result = _invoke(tmp_path, "--format", "xml")
 	assert result.exit_code != 0
+
+
+# ── TTY 渲染（真人链路）────────────────────────────────────────────
+
+
+def _capture_console(monkeypatch):
+	"""替换 display.console 为可捕获的非终端 Console，返回缓冲区。"""
+	import io
+
+	from rich.console import Console
+
+	stream = io.StringIO()
+	monkeypatch.setattr("boss_agent_cli.display.console", Console(file=stream, force_terminal=False, width=100))
+	return stream
+
+
+def test_render_stats_shows_funnel_counts(monkeypatch):
+	"""渲染应展示漏斗各阶段计数，而不是 JSON。"""
+	from boss_agent_cli.commands.stats import _render_stats
+
+	stream = _capture_console(monkeypatch)
+	_render_stats({
+		"window_days": 30,
+		"funnel": {"greeted": 12, "applied": 3, "shortlist": 8},
+		"window": {"greeted": 5, "applied": 1, "shortlist": 2, "watch_hits": 4},
+		"conversion": {"apply_rate": 0.25, "shortlist_rate": 0.6667, "apply_rate_window": 0.2},
+	})
+	out = stream.getvalue()
+
+	assert "12" in out and "3" in out and "8" in out
+	assert "打招呼" in out
+	assert "{" not in out, "TTY 渲染不应出现 JSON"
+
+
+def test_render_stats_shows_conversion_rate_as_percent(monkeypatch):
+	"""转化率应渲染为百分比，而不是裸小数。"""
+	from boss_agent_cli.commands.stats import _render_stats
+
+	stream = _capture_console(monkeypatch)
+	_render_stats({
+		"window_days": 30,
+		"funnel": {"greeted": 12, "applied": 3, "shortlist": 8},
+		"window": {"greeted": 5, "applied": 1, "shortlist": 2, "watch_hits": 4},
+		"conversion": {"apply_rate": 0.25, "shortlist_rate": 0.6667, "apply_rate_window": 0.2},
+	})
+	out = stream.getvalue()
+
+	assert "25.0%" in out
+	assert "0.25" not in out
+
+
+def test_render_stats_empty_state_gives_next_step(monkeypatch):
+	"""空数据态必须给出可执行的下一步，而不是空表骨架（AC4）。"""
+	from boss_agent_cli.commands.stats import _render_stats
+
+	stream = _capture_console(monkeypatch)
+	_render_stats({
+		"funnel": {"greeted": 0, "applied": 0, "shortlist": 0, "watch_hits": 0},
+		"conversion": {"apply_rate": 0.0, "shortlist_rate": 0.0},
+		"window_days": 30,
+		"note": "缓存尚未建立，先跑一次 search/greet/apply 再查看",
+	})
+	out = stream.getvalue()
+
+	assert "boss search" in out, "空态应提示下一步命令"
+	assert "{" not in out
+
+
+def test_stats_tty_path_writes_nothing_to_stdout(tmp_path, monkeypatch):
+	"""TTY 下 render 生效时 stdout 必须干净（AC2）。"""
+	_capture_console(monkeypatch)
+	monkeypatch.setattr("boss_agent_cli.display.is_json_mode", lambda ctx: False)
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "stats"])
+
+	assert result.exit_code == 0
+	assert result.stdout.strip() == "", f"TTY 下 stdout 应为空，实际: {result.stdout!r}"
+
+
+def test_stats_json_path_unchanged(tmp_path):
+	"""管道 / --json 路径必须仍是单行 JSON 信封（AC3）。"""
+	result = _invoke(tmp_path)
+
+	assert result.exit_code == 0
+	payload = json.loads(result.stdout)
+	assert payload["ok"] is True
+	assert payload["command"] == "stats"
+	assert "funnel" in payload["data"]
