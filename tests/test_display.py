@@ -800,3 +800,86 @@ class TestRenderAiResult:
 		render_ai_result({"x": "y"}, title="ai", next_steps=["boss ai optimize <name>"])
 
 		assert "boss ai optimize" in stream.getvalue()
+
+
+class TestSearchProgress:
+	def _progress(self, monkeypatch, **kw):
+		from boss_agent_cli.display import SearchProgress
+
+		stream = _capture_display_console(monkeypatch)
+		return SearchProgress("搜索 Golang", max_pages=3, **kw), stream
+
+	def test_duck_types_logger_interface(self, monkeypatch):
+		progress, _ = self._progress(monkeypatch)
+		for method in ("info", "debug", "warning", "error"):
+			assert callable(getattr(progress, method))
+
+	def test_counts_pages_and_matches(self, monkeypatch):
+		progress, _ = self._progress(monkeypatch)
+		progress.info("正在搜索第 1 页...")
+		progress.info("  ✅ 字节跳动 - Golang 后端（详情匹配）")
+		progress.info("  ✅ 腾讯 - 后端开发（标签匹配）")
+		progress.info("  ❌ 某某科技 - Go 工程师")
+		progress.info("  预筛排除: 前端开发 (岗位类型不符)")
+
+		assert progress.pages == 1
+		assert progress.matched == 2
+		assert progress.excluded == 2
+
+	def test_prints_matched_lines_but_not_excluded_spam(self, monkeypatch):
+		progress, stream = self._progress(monkeypatch)
+		progress.info("  ✅ 字节跳动 - Golang 后端（详情匹配）")
+		progress.info("  ❌ 某某科技 - Go 工程师")
+		out = stream.getvalue()
+
+		assert "字节跳动" in out, "匹配结果应逐条可见"
+		assert "某某科技" not in out, "逐条排除不应刷屏"
+
+	def test_status_line_reports_counters(self, monkeypatch):
+		progress, _ = self._progress(monkeypatch)
+		progress.info("正在搜索第 1 页...")
+		progress.info("  ✅ A - B（详情匹配）")
+
+		status = progress.status_text()
+		assert "1/3" in status
+		assert "匹配 1" in status
+
+	def test_thread_safe_counting(self, monkeypatch):
+		import threading
+
+		progress, _ = self._progress(monkeypatch)
+
+		def worker():
+			for _ in range(50):
+				progress.info("  ✅ A - B（详情匹配）")
+
+		threads = [threading.Thread(target=worker) for _ in range(4)]
+		for t in threads:
+			t.start()
+		for t in threads:
+			t.join()
+
+		assert progress.matched == 200
+
+	def test_debug_is_not_rendered(self, monkeypatch):
+		progress, stream = self._progress(monkeypatch)
+		progress.debug("搜索命中缓存")
+
+		assert stream.getvalue() == ""
+
+
+def test_search_pipeline_progress_markers_contract():
+	"""契约锁定：SearchProgress 依赖管线里的这些标记来分类进度消息。
+
+	改动 search_filters.py 的进度文案会让 TTY 进度静默退化，
+	因此在这里显式锁定——格式变了就让这条测试大声失败。
+	"""
+	from pathlib import Path
+
+	source = Path(__file__).resolve().parents[1] / "src/boss_agent_cli/search_filters.py"
+	content = source.read_text(encoding="utf-8")
+
+	assert '"正在搜索第 {current_page} 页..."' in content.replace("f\"", "\"")
+	assert "✅ {company} - {title}（详情匹配）" in content
+	assert "❌ {company} - {title}" in content
+	assert "预筛排除:" in content

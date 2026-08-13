@@ -6,6 +6,7 @@ Pipe mode (Agent): JSON envelope to stdout.
 """
 
 import sys
+import threading
 from collections.abc import Sequence
 from typing import Any, Callable
 
@@ -456,6 +457,77 @@ def render_ai_result(
 		body.append("")
 	console.print(Panel("\n".join(body).rstrip() or "[dim]empty[/dim]", title=title, border_style="magenta"))
 	render_next_steps(next_steps)
+
+
+class SearchProgress:
+	"""``search`` 长任务的 TTY 进度（鸭子类型兼容 ``output.Logger``）。
+
+	只在 TTY 下注入；管道 / ``--json`` 路径仍传原 Logger，行为与改造前完全一致。
+
+	为什么走 logger 注入而不是降低全局日志级别：``output.Logger`` 用裸
+	``print(file=sys.stderr)``，与 Rich 抢同一个流；而详情补抓跑在
+	``ThreadPoolExecutor`` 里，无锁裸 print 会交错。这里统一走 Rich Console
+	（内部有锁）并自带计数锁。
+
+	消息分类依赖 ``search_filters`` 的进度文案标记，该耦合由
+	``test_search_pipeline_progress_markers_contract`` 锁定。
+	"""
+
+	_PAGE_PREFIX = "正在搜索第"
+	_MATCH_MARK = "✅"
+	_EXCLUDE_MARKS = ("❌", "预筛排除")
+
+	def __init__(self, title: str, *, max_pages: int = 1) -> None:
+		self._title = title
+		self._max_pages = max(1, max_pages)
+		self._lock = threading.Lock()
+		self.pages = 0
+		self.matched = 0
+		self.excluded = 0
+
+	# ── Logger 接口 ────────────────────────────────────────
+
+	def info(self, message: str) -> None:
+		text = message.strip()
+		if text.startswith(self._PAGE_PREFIX):
+			with self._lock:
+				self.pages += 1
+			return
+		if text.startswith(self._MATCH_MARK):
+			with self._lock:
+				self.matched += 1
+			console.print(f"  [green]✓[/green] {escape(text.lstrip(self._MATCH_MARK).strip())}")
+			return
+		if any(text.startswith(mark) for mark in self._EXCLUDE_MARKS):
+			# 逐条排除只计数不打印——刷屏会把真正有用的匹配结果冲掉
+			with self._lock:
+				self.excluded += 1
+			return
+
+	def debug(self, message: str) -> None:
+		"""调试细节不进 TTY 进度。"""
+
+	def warning(self, message: str) -> None:
+		console.print(f"  [yellow]{escape(message.strip())}[/yellow]")
+
+	def error(self, message: str) -> None:
+		console.print(f"  [red]{escape(message.strip())}[/red]")
+
+	# ── 状态行 ─────────────────────────────────────────────
+
+	def status_text(self) -> str:
+		with self._lock:
+			parts = [f"第 {self.pages}/{self._max_pages} 页" if self.pages else "准备中"]
+			parts.append(f"匹配 {self.matched}")
+			if self.excluded:
+				parts.append(f"排除 {self.excluded}")
+		return " · ".join(parts)
+
+	def start(self) -> None:
+		console.print(f"[bold]{escape(self._title)}[/bold]")
+
+	def finish(self) -> None:
+		console.print(f"  [dim]{escape(self.status_text())}[/dim]")
 
 
 # ── Auth error decorator ─────────────────────────────────────────────
