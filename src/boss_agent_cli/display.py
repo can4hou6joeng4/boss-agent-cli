@@ -409,6 +409,17 @@ def render_list_result(
 	render_next_steps(next_steps)
 
 
+def render_record_result(
+	data: dict[str, Any],
+	*,
+	title: str,
+	next_steps: "Sequence[str] | None" = None,
+) -> None:
+	"""多段记录类命令（resume show / export）的统一渲染：分段面板 + 下一步。"""
+	render_sectioned_record(data, title=title)
+	render_next_steps(next_steps)
+
+
 # ── Auth error decorator ─────────────────────────────────────────────
 
 
