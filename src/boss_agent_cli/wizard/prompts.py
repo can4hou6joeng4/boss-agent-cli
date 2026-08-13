@@ -1235,6 +1235,19 @@ def has_result_follow_up(run: Mapping[str, Any]) -> bool:
 	return resolved is not None and bool(resolved[0])
 
 
+def _render_list_header(run: Mapping[str, Any]) -> None:
+	"""在结果列表菜单上方重绘任务摘要。
+
+	与「重新进入任务状态」走同一套三段式（清屏 → 摘要 → 菜单不再清屏），
+	让两个入口看到同一个框。放在翻页循环内是必需的：只靠一次渲染 + 常驻
+	不清屏会让菜单层层堆叠，翻一页就丢摘要。
+	"""
+	from boss_agent_cli.wizard import renderer
+
+	renderer.clear_wizard_screen()
+	renderer.render_run(run)
+
+
 def collect_result_follow_up(
 	run: Mapping[str, Any],
 	*,
@@ -1269,11 +1282,13 @@ def collect_result_follow_up(
 				options.append(MenuOption(_RESULT_MORE, f"› 下一页 · 还有 {remaining} 条", kind="nav"))
 			options.append(MenuOption(_RESULT_DONE, "结束浏览", "返回上一级", kind="nav"))
 			end = start + len(chunk)
+			_render_list_header(run)
 			selected = driver.select(
 				f"请选择职位（第 {start + 1}–{end} / 共 {len(items)} 条）",
 				options,
 				default=str(start) if chunk else _RESULT_DONE,
 				allow_back=True,
+				clear_before=False,
 			)
 			if selected == _RESULT_DONE:
 				return None

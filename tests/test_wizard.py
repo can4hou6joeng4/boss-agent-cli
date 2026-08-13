@@ -45,6 +45,7 @@ class _ScriptedMenu:
 		self.texts = iter(texts)
 		self.menus = []
 		self.last_kwargs = {}
+		self.kwargs_log = []
 
 	def select(self, title, options, *, default=None, allow_back=True, allow_exit=True, clear_before=True):
 		self.last_kwargs = {
@@ -52,6 +53,7 @@ class _ScriptedMenu:
 			"allow_exit": allow_exit,
 			"clear_before": clear_before,
 		}
+		self.kwargs_log.append(dict(self.last_kwargs))
 		self.menus.append((title, list(options)))
 		value = next(self.selections)
 		if value == "返回":
@@ -1817,7 +1819,9 @@ def test_interactive_wizard_loops_follow_up_from_original_list_results(tmp_path,
 	assert result.exit_code == 0
 	assert executed_goals == ["job_search", "job_detail"]
 	assert result.stdout == ""
-	assert "共 2 条结果" in result.stderr
+	# 列表摘要的渲染职责已移入 collect_result_follow_up（它才知道当前翻到第几页，
+	# 需要逐页重绘）。本用例把该函数整个 mock 掉了，因此观察不到摘要——
+	# 真实路径的渲染由 test_result_list_keeps_summary_visible_above_menu 覆盖。
 	assert "职位详情" in result.stderr
 	assert "Python 工程师" in result.stderr
 
@@ -2578,3 +2582,82 @@ def test_menu_hint_advertises_left_arrow_back():
 	source = inspect.getsource(PromptToolkitMenu.select)
 	assert 'bindings.add("left")' in source
 	assert "←/Esc 返回" in source
+
+
+# ── 采集完成后的列表：摘要必须留在菜单上方（与「查看任务状态」一致）──
+
+
+def _crawl_completed_run(job_count: int = 3) -> dict:
+	jobs = [
+		{
+			"title": f"职位{i}",
+			"company": f"公司{i}",
+			"security_id": f"sec-{i}",
+			"job_id": f"job-{i}",
+			"source": "crawl",
+		}
+		for i in range(job_count)
+	]
+	return {
+		"role": "candidate",
+		"platform": "zhipin",
+		"goal": "crawl_status",
+		"status": "completed",
+		"run_id": "wrn_demo",
+		"last_result": {"data": {"jobs": jobs, "jobs_seen": len(jobs), "status": "completed"}},
+	}
+
+
+def test_result_list_keeps_summary_visible_above_menu(monkeypatch):
+	"""采集完成后的列表必须与「重新进入任务状态」看到同一个摘要框。
+
+	此前 MenuDriver.select 的 clear_before 默认 True，会把 _run_plan 刚渲染的
+	摘要 Panel 清掉，只剩一个光秃秃的选择列表——两个入口观感不一致。
+	"""
+	from boss_agent_cli.wizard.prompts import collect_result_follow_up
+
+	rendered: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.wizard.renderer.render_run",
+		lambda run: rendered.append(str(run.get("run_id"))),
+	)
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.clear_wizard_screen", lambda: None)
+
+	menu = _ScriptedMenu(["0", "job_detail"])
+	collect_result_follow_up(_crawl_completed_run(), menu=menu)
+
+	# kwargs_log[0] 是列表菜单本身；后续是选中职位后的动作菜单
+	assert menu.kwargs_log[0]["clear_before"] is False, "列表菜单不得清屏，否则摘要被抹掉"
+	assert rendered == ["wrn_demo"], "选择菜单前应重绘任务摘要"
+
+
+def test_result_list_redraws_summary_on_every_page(monkeypatch):
+	"""翻页时摘要也要跟着重绘，否则翻一页就丢。"""
+	from boss_agent_cli.wizard.prompts import RESULT_PAGE_SIZE, collect_result_follow_up
+
+	rendered: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.wizard.renderer.render_run",
+		lambda run: rendered.append(str(run.get("run_id"))),
+	)
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.clear_wizard_screen", lambda: None)
+
+	run = _crawl_completed_run(job_count=RESULT_PAGE_SIZE + 3)
+	menu = _ScriptedMenu(["__result_more__", str(RESULT_PAGE_SIZE), "job_detail"])
+	collect_result_follow_up(run, menu=menu)
+
+	assert len(rendered) == 2, f"两页应各重绘一次摘要，实际 {len(rendered)} 次"
+
+
+def test_result_list_menu_still_returns_selection(monkeypatch):
+	"""回归护栏：加重绘不得改变选择结果。"""
+	from boss_agent_cli.wizard.prompts import collect_result_follow_up
+
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.render_run", lambda run: None)
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.clear_wizard_screen", lambda: None)
+
+	menu = _ScriptedMenu(["1", "job_detail"])
+	follow = collect_result_follow_up(_crawl_completed_run(), menu=menu)
+
+	assert isinstance(follow, WizardInput)
+	assert follow.inputs["security_id"] == "sec-1"

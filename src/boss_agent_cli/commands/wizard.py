@@ -161,7 +161,8 @@ def _run_plan(
 	):
 		list_run = run
 		if has_result_follow_up(list_run):
-			render_run(list_run)
+			# 摘要由 collect_result_follow_up 在每页菜单前重绘；这里再画一次会因为
+			# clear_wizard_screen 只清可视屏、不清 scrollback 而留下一个残框。
 			return _browse_list_results(
 				ctx,
 				store,
