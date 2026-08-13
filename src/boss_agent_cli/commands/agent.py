@@ -26,7 +26,13 @@ from boss_agent_cli.commands.ai_cmd import _build_fit_prompt, _create_ai_service
 from boss_agent_cli.commands.crawl import _require_crawl_capabilities, _settings_from_context, _transport_factory
 from boss_agent_cli.crawler.operations import crawl_status, import_crawl_shortlist
 from boss_agent_cli.crawler.service import CrawlService
-from boss_agent_cli.display import handle_error_output, handle_output
+from boss_agent_cli.display import (
+	handle_error_output,
+	handle_output,
+	render_action_result,
+	render_list_result,
+	render_record_result,
+)
 from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
 
@@ -48,7 +54,13 @@ def agent_group() -> None:
 def run_cmd(ctx: click.Context, dry_run: bool, limit: int | None) -> None:
 	"""运行一轮招聘自动化。"""
 	report = _run_agent(ctx, dry_run=dry_run, limit=limit, force_mode=None)
-	handle_output(ctx, "agent.run", _report_payload(report), hints=_agent_hints(ctx))
+	handle_output(
+		ctx,
+		"agent.run",
+		_report_payload(report),
+		render=lambda d: render_record_result(d, title="agent run", next_steps=["boss agent stats"]),
+		hints=_agent_hints(ctx),
+	)
 
 
 @agent_group.command("crawl")
@@ -164,6 +176,7 @@ def crawl_cmd(
 				"missing": missing,
 				"summary": {"analyzed": 0, "missing_details": len(missing)},
 			},
+			render=lambda d: render_record_result(d, title="agent crawl", next_steps=["boss shortlist list"]),
 			hints={"next_actions": [f"boss crawl resume {run_id} --with-detail"]},
 		)
 		return
@@ -206,6 +219,7 @@ def crawl_cmd(
 			"missing": missing,
 			"summary": {"analyzed": len(jobs), "missing_details": len(missing), "returned": len(results)},
 		},
+		render=lambda d: render_record_result(d, title="agent crawl", next_steps=["boss shortlist list"]),
 		hints={
 			"next_actions": [
 				f"boss crawl results {run_id}",
@@ -232,7 +246,13 @@ def train_cmd(ctx: click.Context, dry_run: bool, limit: int | None) -> None:
 		limit=limit,
 		force_mode=AutomationMode.TRAINING,
 	)
-	handle_output(ctx, "agent.train", _report_payload(report), hints=_agent_hints(ctx))
+	handle_output(
+		ctx,
+		"agent.train",
+		_report_payload(report),
+		render=lambda d: render_record_result(d, title="agent train", next_steps=["boss agent review list"]),
+		hints=_agent_hints(ctx),
+	)
 
 
 @agent_group.group("review")
@@ -248,6 +268,12 @@ def review_list_cmd(ctx: click.Context) -> None:
 		ctx,
 		"agent.review.list",
 		{"items": [asdict(item) for item in store.read_reviews()]},
+		render=lambda d: render_list_result(
+			d.get("items", []),
+			"reviews",
+			[("ID", "review_id", "bold cyan"), ("动作", "action", "green"), ("分数", "score", "yellow")],
+			next_steps=["boss agent review approve <id>", "boss agent review reject <id>"],
+		),
 		hints=_agent_hints(ctx),
 	)
 
@@ -265,6 +291,7 @@ def review_approve_cmd(ctx: click.Context, review_id: str) -> None:
 		ctx,
 		"agent.review.approve",
 		{"pending": asdict(pending)},
+		render=lambda d: render_record_result(d, title="agent review approve", next_steps=["boss agent pending list"]),
 		hints=_agent_hints(ctx),
 	)
 
@@ -292,6 +319,7 @@ def review_reject_cmd(ctx: click.Context, review_id: str, reason: str) -> None:
 		ctx,
 		"agent.review.reject",
 		{"review": asdict(rejected), "event": asdict(event)},
+		render=lambda d: render_record_result(d, title="agent review reject", next_steps=["boss agent review list"]),
 		hints=_agent_hints(ctx),
 	)
 
@@ -309,6 +337,12 @@ def pending_list_cmd(ctx: click.Context) -> None:
 		ctx,
 		"agent.pending.list",
 		{"items": [asdict(item) for item in store.read_pending()]},
+		render=lambda d: render_list_result(
+			d.get("items", []),
+			"pending",
+			[("ID", "review_id", "bold cyan"), ("动作", "action", "green"), ("状态", "status", "yellow")],
+			next_steps=["boss agent stats"],
+		),
 		hints=_agent_hints(ctx),
 	)
 
@@ -318,7 +352,13 @@ def pending_list_cmd(ctx: click.Context) -> None:
 def agent_stats_cmd(ctx: click.Context) -> None:
 	"""查看招聘自动化统计。"""
 	store = AutomationStore(ctx.obj["data_dir"])
-	handle_output(ctx, "agent.stats", store.stats(), hints=_agent_hints(ctx))
+	handle_output(
+		ctx,
+		"agent.stats",
+		store.stats(),
+		render=lambda d: render_record_result(d, title="agent stats", next_steps=["boss agent pending list"]),
+		hints=_agent_hints(ctx),
+	)
 
 
 @agent_group.command("control")
@@ -341,6 +381,7 @@ def control_cmd(ctx: click.Context) -> None:
 				"boss agent pending list",
 			],
 		},
+		render=lambda d: render_record_result(d, title="agent control", next_steps=["boss agent stats"]),
 		hints=_agent_hints(ctx),
 	)
 
@@ -361,6 +402,7 @@ def stop_cmd(ctx: click.Context, reason: str) -> None:
 		ctx,
 		"agent.stop",
 		{"status": "CIRCUIT_BREAKER_OPEN", "reason": reason},
+		render=lambda d: render_action_result(d, title="agent stop", next_steps=["boss agent stats"]),
 		hints=_agent_hints(ctx),
 	)
 
