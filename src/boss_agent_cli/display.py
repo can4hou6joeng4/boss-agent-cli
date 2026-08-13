@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from typing import Any, Callable
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
@@ -417,6 +418,43 @@ def render_record_result(
 ) -> None:
 	"""多段记录类命令（resume show / export）的统一渲染：分段面板 + 下一步。"""
 	render_sectioned_record(data, title=title)
+	render_next_steps(next_steps)
+
+
+def _ai_value_lines(value: Any) -> list[str]:
+	"""把单个 AI 返回值摊成可打印的行；全部转义，不截断。"""
+	if isinstance(value, list):
+		lines = []
+		for item in value:
+			if isinstance(item, dict):
+				inline = "  ".join(f"{k}={v}" for k, v in item.items())
+				lines.append(f"  · {escape(str(inline))}")
+			else:
+				lines.append(f"  · {escape(str(item))}")
+		return lines
+	if isinstance(value, dict):
+		return [f"  [bold]{escape(str(k))}:[/bold] {escape(str(v))}" for k, v in value.items()]
+	return [f"  {escape(str(value))}"]
+
+
+def render_ai_result(
+	data: dict[str, Any],
+	*,
+	title: str,
+	next_steps: "Sequence[str] | None" = None,
+) -> None:
+	"""AI 命令结果的渲染：键名作小标题，长文本整段展示。
+
+	AI 返回结构由 prompt 决定、跨命令不一致，因此不假设任何具体键名，
+	只按值类型决定呈现方式。所有值经 ``escape`` 处理——AI 输出里的方括号
+	不能被当成 Rich 标记解析。
+	"""
+	body: list[str] = []
+	for key, value in data.items():
+		body.append(f"[bold cyan]{escape(str(key))}[/bold cyan]")
+		body.extend(_ai_value_lines(value))
+		body.append("")
+	console.print(Panel("\n".join(body).rstrip() or "[dim]empty[/dim]", title=title, border_style="magenta"))
 	render_next_steps(next_steps)
 
 

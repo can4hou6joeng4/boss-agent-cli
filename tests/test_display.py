@@ -752,3 +752,51 @@ class TestRenderListWithSteps:
 		out = stream.getvalue()
 
 		assert "简历A" in out and "简历B" in out
+
+
+class TestRenderAiResult:
+	def test_renders_scalar_and_list_values(self, monkeypatch):
+		from boss_agent_cli.display import render_ai_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_ai_result(
+			{"匹配度": "85分", "优势": ["Go 经验充足", "分布式背景"], "建议": {"简历": "补充量化指标"}},
+			title="ai fit",
+		)
+		out = stream.getvalue()
+
+		assert "85分" in out
+		assert "Go 经验充足" in out
+		assert "分布式背景" in out
+		assert "补充量化指标" in out
+
+	def test_does_not_truncate_long_text(self, monkeypatch):
+		"""AI 长文本（润色后的简历等）不得被截断。"""
+		from boss_agent_cli.display import render_ai_result
+
+		unit = "补充项目量化指标。"
+		long_text = "优化建议：" + unit * 40
+		stream = _capture_display_console(monkeypatch)
+		render_ai_result({"内容": long_text}, title="ai polish")
+		# Panel 会给每行加 │ 边框并按宽度换行，比对前先去掉边框与空白
+		out = stream.getvalue().replace("│", "").replace("\n", "").replace(" ", "")
+
+		assert out.count(unit) == 40, f"长文本被截断，仅剩 {out.count(unit)} 段"
+
+	def test_escapes_rich_markup_from_ai_output(self, monkeypatch):
+		"""AI 输出里的方括号不得被当成 Rich 标记解析。"""
+		from boss_agent_cli.display import render_ai_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_ai_result({"建议": "把 [bold]重点[/bold] 写在前面"}, title="ai suggest")
+		out = stream.getvalue()
+
+		assert "[bold]" in out, "方括号应原样显示而不是被解析成样式"
+
+	def test_renders_next_steps(self, monkeypatch):
+		from boss_agent_cli.display import render_ai_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_ai_result({"x": "y"}, title="ai", next_steps=["boss ai optimize <name>"])
+
+		assert "boss ai optimize" in stream.getvalue()

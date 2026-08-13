@@ -24,7 +24,12 @@ from boss_agent_cli.ai.prompts import (
 )
 from boss_agent_cli.ai.service import AIService, AIServiceError
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.display import handle_error_output, handle_output
+from boss_agent_cli.display import (
+	handle_error_output,
+	handle_output,
+	render_action_result,
+	render_ai_result,
+)
 from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
 
@@ -188,6 +193,9 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 		config.pop("ai_api_key", None)
 		handle_output(
 			ctx, "ai-config", config,
+			render=lambda d: render_action_result(
+				d, title="ai config", next_steps=["boss ai local status", "boss ai analyze-jd <security_id>"]
+			),
 			hints={"next_actions": [
 				"boss ai config --provider openai --model gpt-4o --api-key <key>",
 				"boss ai local configure --runtime ollama --model qwen3:14b",
@@ -215,6 +223,7 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 	handle_output(
 		ctx, "ai-config",
 		{"action": "update", "updated_fields": list(updates.keys()) + (["api_key"] if api_key else [])},
+		render=lambda d: render_action_result(d, title="ai config", next_steps=["boss ai config"]),
 		hints={"next_actions": ["boss ai config", "boss ai local status", "boss ai analyze-jd <security_id> --resume <name>"]},
 	)
 
@@ -252,6 +261,7 @@ def ai_analyze_jd_cmd(ctx: click.Context, jd_text: str, resume_name: str) -> Non
 
 	handle_output(
 		ctx, "ai-analyze-jd", result,
+		render=lambda d: render_ai_result(d, title="ai-analyze-jd"),
 		hints={"next_actions": [
 			f"boss ai optimize {resume_name} --jd <jd_text>",
 			f"boss ai suggest {resume_name} --jd <jd_text>",
@@ -279,6 +289,7 @@ def ai_polish_cmd(ctx: click.Context, resume_name: str) -> None:
 
 	handle_output(
 		ctx, "ai-polish", result,
+		render=lambda d: render_ai_result(d, title="ai-polish"),
 		hints={"next_actions": [f"boss resume show {resume_name}"]},
 	)
 
@@ -312,6 +323,7 @@ def ai_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str) -> None:
 
 	handle_output(
 		ctx, "ai-optimize", result,
+		render=lambda d: render_ai_result(d, title="ai-optimize"),
 		hints={"next_actions": [
 			f"boss resume show {resume_name}",
 			f"boss resume export {resume_name} --format pdf",
@@ -348,6 +360,7 @@ def ai_suggest_cmd(ctx: click.Context, resume_name: str, jd_text: str) -> None:
 
 	handle_output(
 		ctx, "ai-suggest", result,
+		render=lambda d: render_ai_result(d, title="ai-suggest"),
 		hints={"next_actions": [
 			f"boss ai optimize {resume_name} --jd <jd_text>",
 			f"boss resume show {resume_name}",
@@ -394,6 +407,7 @@ def ai_fit_cmd(ctx: click.Context, resume_name: str, limit: int) -> None:
 			ctx,
 			"ai-fit",
 			{"results": [], "missing": [], "summary": {"analyzed": 0, "missing_details": 0}},
+			render=lambda d: render_ai_result(d, title="ai-fit"),
 			hints={"next_actions": ["boss shortlist add <security_id> <job_id>"]},
 		)
 		return
@@ -403,6 +417,7 @@ def ai_fit_cmd(ctx: click.Context, resume_name: str, limit: int) -> None:
 			ctx,
 			"ai-fit",
 			{"results": [], "missing": missing, "summary": {"analyzed": 0, "missing_details": len(missing)}},
+			render=lambda d: render_ai_result(d, title="ai-fit"),
 			hints={"next_actions": ["先对候选池职位执行 boss detail <security_id> 缓存详情后重试"]},
 		)
 		return
@@ -421,6 +436,7 @@ def ai_fit_cmd(ctx: click.Context, resume_name: str, limit: int) -> None:
 		ctx,
 		"ai-fit",
 		result,
+		render=lambda d: render_ai_result(d, title="ai-fit"),
 		hints={"next_actions": [f"boss ai optimize {resume_name} --jd <jd_text>"]},
 	)
 
@@ -471,6 +487,7 @@ def ai_reply_cmd(ctx: click.Context, recruiter_message: str, context: str, resum
 
 	handle_output(
 		ctx, "ai-reply", result,
+		render=lambda d: render_ai_result(d, title="ai-reply"),
 		hints={"next_actions": [
 			"复制草稿到 BOSS 聊天框发送",
 			"boss chatmsg <security_id> 查看完整聊天历史",
@@ -518,6 +535,7 @@ def ai_interview_prep_cmd(ctx: click.Context, jd_text: str, resume_name: str | N
 
 	handle_output(
 		ctx, "ai-interview-prep", result,
+		render=lambda d: render_ai_result(d, title="ai-interview-prep"),
 		hints={"next_actions": [
 			"对照 questions 逐题准备答案",
 			"boss ai chat-coach <chat_text> 用于沟通准备",
@@ -565,6 +583,7 @@ def ai_chat_coach_cmd(ctx: click.Context, chat_text: str, resume_name: str | Non
 
 	handle_output(
 		ctx, "ai-chat-coach", result,
+		render=lambda d: render_ai_result(d, title="ai-chat-coach"),
 		hints={"next_actions": [
 			"按 next_action_recommendation 的建议行动",
 			"message_templates 可直接复制发送",
@@ -589,6 +608,7 @@ def ai_suggest_keywords_cmd(ctx: click.Context, limit: int) -> None:
 			ctx,
 			"ai-suggest-keywords",
 			{"keyword_groups": [], "patterns": [], "search_suggestions": []},
+			render=lambda d: render_ai_result(d, title="ai-suggest-keywords"),
 			hints={"next_actions": ["boss shortlist add <security_id> <job_id>"]},
 		)
 		return
@@ -616,6 +636,7 @@ def ai_suggest_keywords_cmd(ctx: click.Context, limit: int) -> None:
 		ctx,
 		"ai-suggest-keywords",
 		result,
+		render=lambda d: render_ai_result(d, title="ai-suggest-keywords"),
 		hints={"next_actions": [
 			"boss search <推荐关键词>",
 			"boss preset add <name> --query <关键词>",
@@ -674,6 +695,7 @@ def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | 
 
 	handle_output(
 		ctx, "ai-resume-optimize", result,
+		render=lambda d: render_ai_result(d, title="ai-resume-optimize"),
 		hints={"next_actions": [
 			f"boss resume edit {resume_name}",
 			f"boss ai optimize {resume_name} --jd <jd_text>",
@@ -742,6 +764,7 @@ def ai_cover_letter_cmd(
 	result.setdefault("highlights", [])
 	handle_output(
 		ctx, "ai-cover-letter", result,
+		render=lambda d: render_ai_result(d, title="ai-cover-letter"),
 		hints={
 			"note": "仅为 AI 生成的草稿，请自行核对真实性后再使用；本命令不发送任何消息",
 			"next_actions": [
