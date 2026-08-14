@@ -45,6 +45,14 @@ def test_boss_recruiter_parse_error():
 	assert "too fast" in message
 
 
+def test_boss_recruiter_parse_error_classifies_code_37_by_message():
+	platform = BossRecruiterPlatform(_mock_client())
+
+	assert platform.parse_error({"code": 37, "message": "stoken expired"})[0] == "TOKEN_REFRESH_FAILED"
+	assert platform.parse_error({"code": 37, "message": "您的环境存在异常"})[0] == "ENVIRONMENT_RISK"
+	assert platform.parse_error({"code": 37, "message": "请求失败"})[0] == "ENVIRONMENT_RISK"
+
+
 def test_boss_recruiter_parse_error_maps_invalid_request():
 	client = _mock_client()
 	platform = BossRecruiterPlatform(client)

@@ -255,6 +255,23 @@ class TestHandleAuthErrorsAccountRisk:
 			assert kwargs["recoverable"] is False
 			assert "客服" in kwargs["recovery_action"]
 
+	def test_environment_risk_stops_without_retry_or_relogin(self):
+		from boss_agent_cli.api.client import EnvironmentRiskError
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True}
+
+		@handle_auth_errors("search")
+		def impl(ctx):
+			raise EnvironmentRiskError("环境异常", is_cdp=True)
+
+		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
+			impl(ctx)
+			kwargs = mock_err.call_args[1]
+			assert kwargs["code"] == "ENVIRONMENT_RISK"
+			assert kwargs["recoverable"] is False
+			assert "重试" not in kwargs["recovery_action"]
+			assert "登录" not in kwargs["recovery_action"]
+
 
 # ── 各 renderer 冒烟测试（调用不抛异常即可覆盖） ────────────
 

@@ -103,7 +103,9 @@ def test_request_retries_after_403_and_refreshes_token(mock_http_client_cls, moc
 @patch("boss_agent_cli.api._base_client.httpx.Client")
 def test_request_retries_after_stoken_expired_code(mock_http_client_cls, mock_sleep, mock_uniform):
 	auth = FakeAuthManager()
-	first = FakeHttpxClient([FakeResponse(payload={"code": endpoints.CODE_STOKEN_EXPIRED})])
+	first = FakeHttpxClient([
+		FakeResponse(payload={"code": endpoints.CODE_STOKEN_EXPIRED, "message": "stoken expired"})
+	])
 	second = FakeHttpxClient([FakeResponse(payload={"code": 0, "zpData": {"ok": True}})])
 	mock_http_client_cls.side_effect = [first, second]
 
@@ -117,6 +119,25 @@ def test_request_retries_after_stoken_expired_code(mock_http_client_cls, mock_sl
 	assert auth.refresh_calls == [None]
 	assert mock_sleep.call_args_list[0].args[0] == 1
 	assert second.calls[0]["kwargs"]["params"]["__zp_stoken__"] == "refreshed-1"
+
+
+@patch("boss_agent_cli.api._base_client.time.sleep")
+def test_request_does_not_refresh_environment_risk_code_37(mock_sleep):
+	auth = FakeAuthManager()
+	http_client = FakeHttpxClient([
+		FakeResponse(payload={"code": endpoints.CODE_STOKEN_EXPIRED, "message": "您的环境存在异常"})
+	])
+	client = BossClient(auth)
+	client._client = http_client
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+
+	data = client._request("GET", endpoints.USER_INFO_URL)
+
+	assert data["code"] == endpoints.CODE_STOKEN_EXPIRED
+	assert len(http_client.calls) == 1
+	assert auth.refresh_calls == []
+	mock_sleep.assert_not_called()
 
 
 @patch("boss_agent_cli.api._base_client.time.sleep")

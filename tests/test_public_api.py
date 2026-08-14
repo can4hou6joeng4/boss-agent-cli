@@ -22,6 +22,7 @@ EXPECTED_EXPORTS = {
 	"BossClient",
 	"AuthError",
 	"AccountRiskError",
+	"EnvironmentRiskError",
 	"JobItem",
 	"JobDetail",
 	"CacheStore",
@@ -133,6 +134,10 @@ def test_auth_error_is_exception(boss_agent_cli):
 
 def test_account_risk_error_is_exception(boss_agent_cli):
 	assert issubclass(boss_agent_cli.AccountRiskError, Exception)
+
+
+def test_environment_risk_error_is_exception(boss_agent_cli):
+	assert issubclass(boss_agent_cli.EnvironmentRiskError, Exception)
 
 
 def test_ai_service_error_is_exception(boss_agent_cli):

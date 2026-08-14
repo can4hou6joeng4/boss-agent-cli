@@ -62,6 +62,15 @@ class TestBossEnvelopeAdapter:
 		assert code == "TOKEN_REFRESH_FAILED"
 		assert "stoken" in msg.lower() or msg
 
+	def test_parse_error_environment_risk(self) -> None:
+		code, msg = self.plat.parse_error({"code": 37, "message": "您的环境存在异常"})
+		assert code == "ENVIRONMENT_RISK"
+		assert "环境" in msg
+
+	def test_parse_error_ambiguous_code_37_fails_closed(self) -> None:
+		code, _ = self.plat.parse_error({"code": 37, "message": "请求失败"})
+		assert code == "ENVIRONMENT_RISK"
+
 	def test_parse_error_rate_limited(self) -> None:
 		code, _ = self.plat.parse_error({"code": 9, "message": "请求频繁"})
 		assert code == "RATE_LIMITED"

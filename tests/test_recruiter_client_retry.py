@@ -123,7 +123,9 @@ def test_request_retries_after_403_and_refreshes_token(mock_http_client_cls, moc
 @patch("boss_agent_cli.api._base_client.httpx.Client")
 def test_request_retries_after_stoken_expired_code(mock_http_client_cls, mock_sleep, mock_uniform):
 	auth = FakeAuthManager()
-	first = FakeHttpxClient([FakeResponse(payload={"code": ep.CODE_STOKEN_EXPIRED})])
+	first = FakeHttpxClient([
+		FakeResponse(payload={"code": ep.CODE_STOKEN_EXPIRED, "message": "stoken expired"})
+	])
 	second = FakeHttpxClient([FakeResponse(payload={"code": 0, "zpData": {"ok": True}})])
 	mock_http_client_cls.side_effect = [first, second]
 

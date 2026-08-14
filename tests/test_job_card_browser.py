@@ -1,7 +1,7 @@
 """job_card_browser 公开方法的测试。
 
 job_card_browser 强制走 CDP 浏览器通道取 JD，不走 httpx。动机：公开的 job_card()
-httpx 优先，而 code 37（TOKEN_REFRESH_FAILED）以响应字典返回时不抛异常、不会降级
+httpx 优先，而部分平台失败以响应字典返回时不抛异常、不会降级
 浏览器，导致走 httpx 拿不到完整 JD。调用方需要一条明确强制浏览器通道的公开路径。
 """
 

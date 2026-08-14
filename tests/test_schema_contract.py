@@ -128,6 +128,7 @@ def test_schema_error_codes_cover_all_used_codes():
 		"LOGIN_EXPIRED",
 		"LOGIN_CREDENTIAL_EXTRACTION_FAILED",
 		"ACCOUNT_RISK",
+		"ENVIRONMENT_RISK",
 		"JOB_NOT_FOUND",
 		"ALREADY_GREETED",
 		"ALREADY_APPLIED",

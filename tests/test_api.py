@@ -5,6 +5,8 @@ from boss_agent_cli.api.endpoints import (
 )
 from boss_agent_cli.api.models import JobDetail, JobItem
 
+import pytest
+
 
 def test_city_code_lookup():
 	assert CITY_CODES["北京"] == "101010100"
@@ -194,6 +196,83 @@ def test_account_risk_error_not_raised_on_success():
 	result = client._browser_request("GET", "/wapi/zpgeek/search/joblist.json")
 	assert result["code"] == 0
 	assert result["zpData"]["jobList"][0]["jobName"] == "test"
+	client.close()
+
+
+def test_environment_risk_code_37_stops_without_refresh_or_retry():
+	from unittest.mock import MagicMock
+	from boss_agent_cli.api.client import BossClient, EnvironmentRiskError
+
+	auth = MagicMock()
+	client = BossClient(auth)
+	mock_browser = MagicMock()
+	mock_browser.request.return_value = {"code": 37, "message": "您的环境存在异常"}
+	mock_browser._is_cdp = True
+	client._browser_session = mock_browser
+
+	with pytest.raises(EnvironmentRiskError) as exc_info:
+		client._browser_request("GET", "/wapi/zpgeek/search/joblist.json")
+
+	assert exc_info.value.is_cdp is True
+	mock_browser.request.assert_called_once()
+	auth.force_refresh.assert_not_called()
+	client.close()
+
+
+def test_ambiguous_code_37_fails_closed_as_environment_risk():
+	from unittest.mock import MagicMock
+	from boss_agent_cli.api.client import BossClient, EnvironmentRiskError
+
+	auth = MagicMock()
+	client = BossClient(auth)
+	mock_browser = MagicMock()
+	mock_browser.request.return_value = {"code": 37, "message": "请求失败"}
+	client._browser_session = mock_browser
+
+	with pytest.raises(EnvironmentRiskError):
+		client._browser_request("GET", "/wapi/zpgeek/search/joblist.json")
+
+	mock_browser.request.assert_called_once()
+	auth.force_refresh.assert_not_called()
+	client.close()
+
+
+def test_explicit_token_code_37_refreshes_and_retries_only_once():
+	from unittest.mock import MagicMock
+	from boss_agent_cli.api.client import BossClient
+
+	auth = MagicMock()
+	client = BossClient(auth, cdp_url="http://127.0.0.1:9222")
+	mock_browser = MagicMock()
+	mock_browser.request.side_effect = [
+		{"code": 37, "message": "__zp_stoken__ 已过期"},
+		{"code": 0, "message": "Success", "zpData": {}},
+	]
+	client._browser_session = mock_browser
+
+	result = client._browser_request("GET", "/wapi/zpgeek/search/joblist.json")
+
+	assert result["code"] == 0
+	assert mock_browser.request.call_count == 2
+	auth.force_refresh.assert_called_once_with(cdp_url="http://127.0.0.1:9222")
+	client.close()
+
+
+def test_explicit_token_code_37_is_returned_after_single_failed_retry():
+	from unittest.mock import MagicMock
+	from boss_agent_cli.api.client import BossClient
+
+	auth = MagicMock()
+	client = BossClient(auth)
+	mock_browser = MagicMock()
+	mock_browser.request.return_value = {"code": 37, "message": "stoken expired"}
+	client._browser_session = mock_browser
+
+	result = client._browser_request("GET", "/wapi/zpgeek/search/joblist.json")
+
+	assert result["code"] == 37
+	assert mock_browser.request.call_count == 2
+	auth.force_refresh.assert_called_once_with(cdp_url=None)
 	client.close()
 
 
