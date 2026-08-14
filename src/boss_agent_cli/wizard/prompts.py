@@ -1245,7 +1245,7 @@ def _render_list_header(run: Mapping[str, Any]) -> None:
 	from boss_agent_cli.wizard import renderer
 
 	renderer.clear_wizard_screen()
-	renderer.render_run(run)
+	renderer.render_run(run, with_preview=False)
 
 
 def collect_result_follow_up(

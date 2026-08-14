@@ -2619,7 +2619,7 @@ def test_result_list_keeps_summary_visible_above_menu(monkeypatch):
 	rendered: list[str] = []
 	monkeypatch.setattr(
 		"boss_agent_cli.wizard.renderer.render_run",
-		lambda run: rendered.append(str(run.get("run_id"))),
+		lambda run, *, with_preview=True: rendered.append(str(run.get("run_id"))),
 	)
 	monkeypatch.setattr("boss_agent_cli.wizard.renderer.clear_wizard_screen", lambda: None)
 
@@ -2638,7 +2638,7 @@ def test_result_list_redraws_summary_on_every_page(monkeypatch):
 	rendered: list[str] = []
 	monkeypatch.setattr(
 		"boss_agent_cli.wizard.renderer.render_run",
-		lambda run: rendered.append(str(run.get("run_id"))),
+		lambda run, *, with_preview=True: rendered.append(str(run.get("run_id"))),
 	)
 	monkeypatch.setattr("boss_agent_cli.wizard.renderer.clear_wizard_screen", lambda: None)
 
@@ -2653,7 +2653,7 @@ def test_result_list_menu_still_returns_selection(monkeypatch):
 	"""回归护栏：加重绘不得改变选择结果。"""
 	from boss_agent_cli.wizard.prompts import collect_result_follow_up
 
-	monkeypatch.setattr("boss_agent_cli.wizard.renderer.render_run", lambda run: None)
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.render_run", lambda run, *, with_preview=True: None)
 	monkeypatch.setattr("boss_agent_cli.wizard.renderer.clear_wizard_screen", lambda: None)
 
 	menu = _ScriptedMenu(["1", "job_detail"])
@@ -2661,3 +2661,55 @@ def test_result_list_menu_still_returns_selection(monkeypatch):
 
 	assert isinstance(follow, WizardInput)
 	assert follow.inputs["security_id"] == "sec-1"
+
+
+# ── 浏览列表时摘要框不再重复展示职位预览 ──────────────────────
+
+
+def _capture_wizard_console(monkeypatch):
+	import io
+
+	from rich.console import Console
+
+	stream = io.StringIO()
+	monkeypatch.setattr("boss_agent_cli.display.console", Console(file=stream, force_terminal=False, width=120))
+	return stream
+
+
+def test_crawl_summary_includes_preview_by_default(monkeypatch):
+	"""状态视图（不进列表）仍需要职位预览——那时没有可选菜单。"""
+	from boss_agent_cli.wizard.renderer import render_run
+
+	stream = _capture_wizard_console(monkeypatch)
+	render_run(_crawl_completed_run(job_count=8))
+
+	assert "职位预览" in stream.getvalue()
+
+
+def test_crawl_summary_omits_preview_when_browsing(monkeypatch):
+	"""浏览列表时下方已有可选菜单，框里再列一遍职位是冗余且页码对不上。"""
+	from boss_agent_cli.wizard.renderer import render_run
+
+	stream = _capture_wizard_console(monkeypatch)
+	render_run(_crawl_completed_run(job_count=8), with_preview=False)
+	out = stream.getvalue()
+
+	assert "职位预览" not in out
+	assert "采集已完成" in out, "摘要本身仍要在"
+	assert "75" in out or "8" in out, "职位总数仍要显示"
+
+
+def test_list_header_disables_preview(monkeypatch):
+	"""结果列表上方的摘要必须关掉预览。"""
+	from boss_agent_cli.wizard.prompts import collect_result_follow_up
+
+	captured: list[bool] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.wizard.renderer.render_run",
+		lambda run, *, with_preview=True: captured.append(with_preview),
+	)
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.clear_wizard_screen", lambda: None)
+
+	collect_result_follow_up(_crawl_completed_run(), menu=_ScriptedMenu(["0", "job_detail"]))
+
+	assert captured == [False], f"列表上方摘要应关闭预览，实际 {captured}"
