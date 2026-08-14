@@ -6,7 +6,7 @@ Centralizes filtering logic shared by search, batch-greet, and export commands.
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 
 from boss_agent_cli.api import endpoints
@@ -562,6 +562,7 @@ def run_search_pipeline(
 	limit: int | None = None,
 	welfare_conditions: list[tuple[str, list[str]]] | None = None,
 	skip_greeted: bool = False,
+	before_list_request: Callable[[], None] | None = None,
 ) -> SearchPipelineResult:
 	"""Run the full search pipeline: API search → list prefilter → welfare detail fallback."""
 	stats = SearchPipelineStats()
@@ -589,6 +590,8 @@ def run_search_pipeline(
 		if criteria.raw_params:
 			search_filters["raw_params"] = criteria.raw_params
 
+		if before_list_request is not None:
+			before_list_request()
 		raw = client.search_jobs(
 			criteria.query,
 			**search_filters,

@@ -506,11 +506,12 @@ def test_recommend_with_score_reports_not_supported(mock_auth_cls, mock_client_c
 	mock_client.recommend_jobs.assert_not_called()
 
 
+@patch("boss_agent_cli.commands.search.CrawlBudget")
 @patch("boss_agent_cli.commands.search.run_search_pipeline")
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
 @patch("boss_agent_cli.commands.search.get_platform_instance")
-def test_search_with_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
+def test_search_with_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline, mock_budget_cls):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.get_search.return_value = None
 	_ctx_mock(mock_client_cls)
@@ -550,6 +551,10 @@ def test_search_with_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_
 	parsed = json.loads(result.output)
 	assert parsed["data"][0]["match_score"] >= 0
 	assert "match_reasons" in parsed["data"][0]
+	before_list_request = mock_pipeline.call_args.kwargs["before_list_request"]
+	before_list_request()
+	mock_budget_cls.assert_called_once_with(mock_cache)
+	mock_budget_cls.return_value.wait.assert_called_once_with("list")
 
 
 @patch("boss_agent_cli.commands.search.run_search_pipeline")
@@ -1692,6 +1697,7 @@ def test_search_reports_pipeline_platform_error(mock_client_cls, mock_auth_cls, 
 def test_search_reports_welfare_not_supported(mock_client_cls, mock_auth_cls, mock_cache_cls):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.get_search.return_value = None
+	mock_cache.reserve_crawl_budget.return_value = 0.0
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.search_jobs.return_value = {
 		"code": 0,

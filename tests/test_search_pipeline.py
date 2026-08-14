@@ -203,6 +203,28 @@ def test_pipeline_passes_raw_params_to_search_client():
 	}
 
 
+def test_pipeline_runs_list_budget_before_every_page_request():
+	client = FakeClient(
+		pages=[
+			{"zpData": {"hasMore": True, "jobList": [_make_job_raw(security_id="sec-1", job_id="job-1")]}},
+			{"zpData": {"hasMore": False, "jobList": [_make_job_raw(security_id="sec-2", job_id="job-2")]}},
+		],
+		descriptions={},
+	)
+	waits: list[str] = []
+
+	run_search_pipeline(
+		client,
+		FakeCache(),
+		FakeLogger(),
+		criteria=SearchFilterCriteria(query="python"),
+		max_pages=2,
+		before_list_request=lambda: waits.append("wait"),
+	)
+
+	assert waits == ["wait", "wait"]
+
+
 def test_pipeline_detail_exception_does_not_abort_other_matches():
 	client = FakeClient(
 		pages=[

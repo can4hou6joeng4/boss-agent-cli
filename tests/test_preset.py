@@ -69,6 +69,7 @@ def test_preset_add_list_remove(tmp_path):
 def test_search_can_use_preset(mock_save, mock_cache_cls, mock_auth_cls, mock_client_cls, tmp_path):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.get_search.return_value = None
+	mock_cache.reserve_crawl_budget.return_value = 0.0
 	mock_cache.get_saved_search.return_value = {
 		"name": "golang-gz",
 		"params": {"query": "golang", "city": "广州", "salary": "20-50K"},

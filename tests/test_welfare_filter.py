@@ -44,6 +44,7 @@ def test_welfare_filter_tag_match(mock_auth, mock_client_cls, mock_cache_cls, mo
 	"""福利筛选：标签直接匹配不需要查详情"""
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
+	mock_cache.reserve_crawl_budget.return_value = 0.0
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.search_jobs.return_value = {
 		"zpData": {
@@ -73,6 +74,7 @@ def test_welfare_filter_detail_fallback(mock_auth, mock_client_cls, mock_cache_c
 	"""福利筛选：标签不够时并行查详情"""
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
+	mock_cache.reserve_crawl_budget.return_value = 0.0
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.search_jobs.return_value = {
 		"zpData": {

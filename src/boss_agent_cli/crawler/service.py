@@ -116,7 +116,7 @@ class CrawlOutcome:
 
 
 class CrawlBudget:
-	"""Persistent, single-process rate budget shared by list and detail work."""
+	"""Persistent cross-process rate budget shared by list and detail work."""
 
 	def __init__(
 		self,
@@ -133,14 +133,11 @@ class CrawlBudget:
 
 	def wait(self, kind: str) -> None:
 		low, high = (5.0, 10.0) if kind == "list" else (3.0, 6.0)
-		last = self._cache.get_crawl_budget(f"zhipin:{kind}")
 		interval = self._random_delay(low, high)
 		now = self._clock()
-		if last is not None:
-			remaining = interval - (now - last)
-			if remaining > 0:
-				self._sleeper(remaining)
-		self._cache.put_crawl_budget(f"zhipin:{kind}", self._clock())
+		remaining = self._cache.reserve_crawl_budget(f"zhipin:{kind}", now=now, interval=interval)
+		if remaining > 0:
+			self._sleeper(remaining)
 
 
 class CrawlLimitExceeded(RuntimeError):

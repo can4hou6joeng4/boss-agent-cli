@@ -108,6 +108,7 @@ def execute_candidate_search(
 		start_page=int(inputs.get("page") or 1),
 		max_pages=int(inputs.get("max_pages") or (5 if welfare_conditions else 1)),
 		welfare_conditions=welfare_conditions,
+		before_list_request=inputs.get("before_list_request"),
 	)
 
 

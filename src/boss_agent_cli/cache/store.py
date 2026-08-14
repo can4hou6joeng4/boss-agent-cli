@@ -349,6 +349,31 @@ class CacheStore:
 		)
 		self._conn.commit()
 
+	def reserve_crawl_budget(self, budget_key: str, *, now: float, interval: float) -> float:
+		"""Atomically reserve the next request slot and return seconds to wait.
+
+		``BEGIN IMMEDIATE`` serializes reservations made by separate CLI processes
+		that share this SQLite database.  The stored timestamp may be in the future:
+		it represents an already-reserved request slot, not merely request history.
+		"""
+		try:
+			self._conn.execute("BEGIN IMMEDIATE")
+			row = self._conn.execute(
+				"SELECT last_request_at FROM crawl_budget WHERE budget_key = ?",
+				(budget_key,),
+			).fetchone()
+			last_reserved = float(row[0]) if row is not None else None
+			reserved_at = now if last_reserved is None else max(now, last_reserved + interval)
+			self._conn.execute(
+				"INSERT OR REPLACE INTO crawl_budget (budget_key, last_request_at) VALUES (?, ?)",
+				(budget_key, reserved_at),
+			)
+			self._conn.commit()
+		except Exception:
+			self._conn.rollback()
+			raise
+		return max(0.0, reserved_at - now)
+
 	# ── Shared wizard / headless workflow state ─────────────────────
 
 	def create_workflow_run(

@@ -65,6 +65,37 @@ class _NoDelayBudget(CrawlBudget):
 		self._cache.put_crawl_budget(f"test:{kind}", 1.0)
 
 
+def test_crawl_budget_coordinates_separate_cache_connections(tmp_path: Path) -> None:
+	db_path = tmp_path / "shared.db"
+	first_cache = CacheStore(db_path)
+	second_cache = CacheStore(db_path)
+	now = [100.0]
+	first_sleeps: list[float] = []
+	second_sleeps: list[float] = []
+	first = CrawlBudget(
+		first_cache,
+		clock=lambda: now[0],
+		sleeper=first_sleeps.append,
+		random_delay=lambda low, high: 5.0,
+	)
+	second = CrawlBudget(
+		second_cache,
+		clock=lambda: now[0],
+		sleeper=second_sleeps.append,
+		random_delay=lambda low, high: 5.0,
+	)
+
+	first.wait("list")
+	now[0] = 101.0
+	second.wait("list")
+
+	assert first_sleeps == []
+	assert second_sleeps == [4.0]
+	assert second_cache.get_crawl_budget("zhipin:list") == 105.0
+	first_cache.close()
+	second_cache.close()
+
+
 class _FakeTransport:
 	def __init__(
 		self,
