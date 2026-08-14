@@ -438,7 +438,7 @@ def test_try_connect_creates_page_when_no_open_zhipin_tab():
 	assert result is True
 	assert session._own_page is True
 	mock_user_context.new_page.assert_called_once()
-	mock_new_page.goto.assert_called_once_with(HOME_URL, wait_until="commit", timeout=_NAV_TIMEOUT_MS)
+	mock_new_page.goto.assert_called_once_with(HOME_URL, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
 
 
 def test_close_does_not_close_reused_user_page():
