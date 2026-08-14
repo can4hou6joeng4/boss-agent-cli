@@ -146,17 +146,47 @@ def render_event(kind: str, step: str, data: Mapping[str, Any] | None) -> None:
 		display.console.print(f"[yellow]正在重试[/yellow] {label}（第 {attempt} 次）")
 
 
-def clear_wizard_screen() -> None:
-	"""Clear the terminal so only the current wizard page remains visible."""
-	if (
+def _screen_control_unavailable() -> bool:
+	"""True 时一切屏幕控制都退化为 no-op：测试 / 非 TTY / dumb terminal。"""
+	return bool(
 		os.environ.get("PYTEST_CURRENT_TEST")
 		or not sys.stderr.isatty()
 		or os.environ.get("TERM", "").lower() in {"", "dumb", "unknown"}
-	):
+	)
+
+
+def clear_wizard_screen() -> None:
+	"""Clear the terminal so only the current wizard page remains visible."""
+	if _screen_control_unavailable():
 		return
 	# Home + clear scrollback-friendly clear for most terminals.
 	sys.stderr.write("\033[H\033[2J")
 	sys.stderr.flush()
+
+
+@contextmanager
+def wizard_screen() -> Iterator[None]:
+	"""让整个交互会话独占一块备用屏缓冲。
+
+	进入切 alternate screen、退出还原：向导期间终端像一个独立窗口，
+	退出后原有内容完好，全程不往 scrollback 里留残框——clear_wizard_screen
+	的 \033[2J 只清可视屏，清不掉历史，这是真人反馈里「上滚看到两个框」的根因。
+
+	必须是 context manager：commands/wizard.py 有 59 处 return，
+	外加内部会 raise SystemExit，逐点还原必然漏掉某条路径。
+
+	非 TTY / dumb terminal / 测试下是 no-op，Agent 与管道路径完全不受影响。
+	"""
+	if _screen_control_unavailable():
+		yield
+		return
+	sys.stderr.write("\033[?1049h")
+	sys.stderr.flush()
+	try:
+		yield
+	finally:
+		sys.stderr.write("\033[?1049l")
+		sys.stderr.flush()
 
 
 @contextmanager

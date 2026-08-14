@@ -1990,7 +1990,9 @@ def test_prompt_toolkit_pty_uses_stderr_and_arrow_keys(tmp_path):
 			if not chunk:
 				break
 			output.extend(chunk)
-			if "BOSS 求职助手" in output.decode("utf-8", errors="ignore"):
+			# 提示行恒在内容区，用作「菜单已渲染」的同步信号；
+			# 标题现在画在框上（D1），不再是内容区的第一行。
+			if "↑↓ 选择" in output.decode("utf-8", errors="ignore"):
 				break
 		for _ in range(5):
 			os.write(stderr_master_fd, b"\x1b[B")
@@ -2042,7 +2044,11 @@ def test_prompt_toolkit_pty_uses_stderr_and_arrow_keys(tmp_path):
 	stderr_text = output.decode("utf-8", errors="replace")
 	assert process.returncode == 0
 	assert stdout_output == b""
-	assert "BOSS 求职助手" in stderr_text
+	# 该场景首屏是登录门菜单，框标题即它的 title（D1：标题=当前步骤）
+	assert "需要先登录才能继续" in stderr_text, "框标题应为当前步骤（D1）"
+	assert "\x1b[?1049h" in stderr_text, "交互会话应进入备用屏（R1）"
+	assert stderr_text.rstrip().endswith("\x1b[?1049l"), "退出应还原备用屏（AC6）"
+	assert "BOSS 求职助手" not in stderr_text, "常驻应用名行已移除（D1）"
 	assert "退出向导" in stderr_text
 	assert "已退出向导" in stderr_text
 
@@ -2581,7 +2587,10 @@ def test_menu_hint_advertises_left_arrow_back():
 
 	source = inspect.getsource(PromptToolkitMenu.select)
 	assert 'bindings.add("left")' in source
-	assert "←/Esc 返回" in source
+	# 提示行随内容区一起抽到了 _menu_content_lines（框标题化重构）
+	from boss_agent_cli.wizard.prompts import _menu_content_lines
+
+	assert "←/Esc 返回" in inspect.getsource(_menu_content_lines)
 
 
 # ── 采集完成后的列表：摘要必须留在菜单上方（与「查看任务状态」一致）──
@@ -2713,3 +2722,161 @@ def test_list_header_disables_preview(monkeypatch):
 	collect_result_follow_up(_crawl_completed_run(), menu=_ScriptedMenu(["0", "job_detail"]))
 
 	assert captured == [False], f"列表上方摘要应关闭预览，实际 {captured}"
+
+
+# ── 整个交互会话独占一块备用屏缓冲 ────────────────────────────
+
+
+_ALT_ENTER = "\033[?1049h"
+_ALT_EXIT = "\033[?1049l"
+
+
+def _force_screen_control(monkeypatch):
+	"""解除 pytest / 非 TTY 的 no-op 守卫，让转义序列真的写出来。"""
+	import io
+
+	stream = io.StringIO()
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer._screen_control_unavailable", lambda: False)
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.sys", type("S", (), {"stderr": stream})())
+	return stream
+
+
+def test_wizard_screen_enters_and_restores_alternate_buffer(monkeypatch):
+	from boss_agent_cli.wizard.renderer import wizard_screen
+
+	stream = _force_screen_control(monkeypatch)
+	with wizard_screen():
+		assert stream.getvalue() == _ALT_ENTER, "进入时应切到备用屏"
+	assert stream.getvalue() == _ALT_ENTER + _ALT_EXIT, "退出时应还原"
+
+
+def test_wizard_screen_restores_on_exception(monkeypatch):
+	"""异常路径必须还原，否则用户终端卡在备用屏里（AC6）。"""
+	from boss_agent_cli.wizard.renderer import wizard_screen
+
+	stream = _force_screen_control(monkeypatch)
+	with pytest.raises(ValueError):
+		with wizard_screen():
+			raise ValueError("boom")
+	assert stream.getvalue().endswith(_ALT_EXIT)
+
+
+def test_wizard_screen_restores_on_system_exit(monkeypatch):
+	"""向导内部会 raise SystemExit(1)，同样必须还原。"""
+	from boss_agent_cli.wizard.renderer import wizard_screen
+
+	stream = _force_screen_control(monkeypatch)
+	with pytest.raises(SystemExit):
+		with wizard_screen():
+			raise SystemExit(1)
+	assert stream.getvalue().endswith(_ALT_EXIT)
+
+
+def test_wizard_screen_restores_on_keyboard_interrupt(monkeypatch):
+	"""Ctrl-C 也要还原（AC6）。"""
+	from boss_agent_cli.wizard.renderer import wizard_screen
+
+	stream = _force_screen_control(monkeypatch)
+	with pytest.raises(KeyboardInterrupt):
+		with wizard_screen():
+			raise KeyboardInterrupt
+	assert stream.getvalue().endswith(_ALT_EXIT)
+
+
+def test_wizard_screen_is_noop_without_tty(monkeypatch):
+	"""Agent / 管道 / dumb terminal 路径行为完全不变。"""
+	import io
+
+	from boss_agent_cli.wizard.renderer import wizard_screen
+
+	stream = io.StringIO()
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer._screen_control_unavailable", lambda: True)
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.sys", type("S", (), {"stderr": stream})())
+	with wizard_screen():
+		pass
+	assert stream.getvalue() == ""
+
+
+def test_interactive_session_runs_inside_alternate_screen(monkeypatch, tmp_path):
+	"""多轮向导必须被备用屏包裹；单次 flag 路径不得进（AC7）。"""
+	from boss_agent_cli.commands import wizard as wizard_mod
+
+	order: list[str] = []
+
+	class _FakeScreen:
+		def __enter__(self):
+			order.append("enter")
+			return self
+
+		def __exit__(self, *exc):
+			order.append("exit")
+			return False
+
+	monkeypatch.setattr(wizard_mod, "wizard_screen", lambda: _FakeScreen())
+	monkeypatch.setattr(wizard_mod, "_is_interactive", lambda ctx: True)
+	monkeypatch.setattr(
+		wizard_mod,
+		"_run_interactive_session",
+		lambda *a, **k: order.append("session"),
+	)
+
+	CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "wizard"])
+
+	assert order == ["enter", "session", "exit"]
+
+
+# ── 菜单包进带标题的边框 ──────────────────────────────────────
+
+
+def test_menu_container_is_framed_with_step_title():
+	"""框标题用当前步骤（D1），与采集摘要 Panel 同构。"""
+	from prompt_toolkit.layout.controls import FormattedTextControl
+	from prompt_toolkit.widgets import Frame
+
+	from boss_agent_cli.wizard.prompts import _build_menu_container
+
+	container = _build_menu_container("请选择职位（第 1-12 / 共 75 条）", FormattedTextControl(""))
+
+	assert isinstance(container, Frame)
+	assert container.title == "请选择职位（第 1-12 / 共 75 条）"
+
+
+def test_menu_container_holds_the_content_control():
+	"""框里装的必须是传入的菜单内容，不能丢。"""
+	from prompt_toolkit.layout.controls import FormattedTextControl
+	from prompt_toolkit.layout.containers import Window
+
+	from boss_agent_cli.wizard.prompts import _build_menu_container
+
+	control = FormattedTextControl("菜单内容")
+	container = _build_menu_container("标题", control)
+
+	found = []
+
+	def walk(node):
+		if isinstance(node, Window) and getattr(node, "content", None) is control:
+			found.append(node)
+		for child in getattr(node, "children", []) or []:
+			walk(child)
+		body = getattr(node, "body", None)
+		if body is not None:
+			walk(body)
+
+	walk(container)
+	assert found, "菜单内容控件应在框内"
+
+
+def test_menu_content_does_not_repeat_title_inside_frame(monkeypatch):
+	"""标题上了框，框内就不该再打印一遍（D1：去掉常驻应用名行）。"""
+	from boss_agent_cli.wizard.prompts import _menu_content_lines, MenuOption
+
+	lines = _menu_content_lines(
+		[MenuOption("a", "选项A"), MenuOption("b", "选项B")],
+		selected=0,
+		title="请选择职位",
+	)
+	text = "".join(part[1] for part in lines)
+
+	assert "请选择职位" not in text, "标题已在框上，内容区不应重复"
+	assert "BOSS 求职助手" not in text, "常驻应用名行应移除"
+	assert "选项A" in text and "选项B" in text
