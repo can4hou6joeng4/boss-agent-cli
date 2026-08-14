@@ -7,7 +7,10 @@ from boss_agent_cli.auth.browser import (
 	LOGIN_PAGE_URL,
 	_NAV_TIMEOUT_MS,
 	_NETWORKIDLE_GRACE_MS,
+	_find_zhipin_page,
 	_find_zhilian_recruiter_page,
+	_is_cookie_domain,
+	_is_zhipin_url,
 	_is_zhilian_url,
 	login_via_cdp,
 	login_via_browser,
@@ -44,6 +47,29 @@ def _mock_cdp_playwright(mock_context: MagicMock) -> tuple[MagicMock, MagicMock,
 class _UrlPage:
 	def __init__(self, url: str) -> None:
 		self.url = url
+
+
+def test_zhipin_url_host_validation_uses_exact_hostname() -> None:
+	assert _is_zhipin_url("https://zhipin.com/")
+	assert _is_zhipin_url("https://WWW.ZHIPIN.COM./web/geek/jobs")
+	assert not _is_zhipin_url("https://www.zhipin.com.evil.example/web/geek/jobs")
+	assert not _is_zhipin_url("https://evil.example/?next=https://www.zhipin.com/web/geek/jobs")
+	assert not _is_zhipin_url("not-a-url-with-zhipin.com")
+
+
+def test_find_zhipin_page_rejects_embedded_hostname() -> None:
+	fake_page = _UrlPage("https://www.zhipin.com.evil.example/web/geek/jobs")
+	valid_page = _UrlPage("https://www.zhipin.com/web/geek/jobs")
+
+	selected = _find_zhipin_page([fake_page, valid_page])
+
+	assert selected is valid_page
+
+
+def test_cookie_domain_validation_rejects_embedded_domain() -> None:
+	assert _is_cookie_domain(".zhipin.com", "zhipin.com")
+	assert _is_cookie_domain("www.zhipin.com", "zhipin.com")
+	assert not _is_cookie_domain("zhipin.com.evil.example", "zhipin.com")
 
 
 def test_zhilian_url_host_validation_uses_exact_hostname() -> None:
@@ -95,6 +121,44 @@ def test_login_via_cdp_stops_playwright_when_user_agent_extraction_fails(mock_sl
 			login_via_cdp(timeout=1)
 
 	mock_page.close.assert_called_once()
+	mock_playwright.stop.assert_called_once()
+
+
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_zhipin_login_via_cdp_reuses_logged_in_context_without_navigation(mock_sleep, mock_probe_cdp):
+	logged_out_context = MagicMock()
+	logged_out_context.cookies.return_value = []
+	logged_out_context.pages = [_UrlPage("https://example.com/")]
+
+	jobs_page = MagicMock()
+	jobs_page.url = "https://www.zhipin.com/web/geek/jobs"
+	jobs_page.evaluate.return_value = "UA"
+	logged_in_context = MagicMock()
+	logged_in_context.pages = [jobs_page]
+	logged_in_context.cookies.return_value = [
+		{"name": "wt2", "value": "login-cookie", "domain": ".zhipin.com"},
+		{"name": "__zp_stoken__", "value": "live-stoken", "domain": ".zhipin.com"},
+	]
+
+	mock_browser = MagicMock()
+	mock_browser.contexts = [logged_out_context, logged_in_context]
+	mock_playwright = MagicMock()
+	mock_playwright.chromium.connect_over_cdp.return_value = mock_browser
+	mock_launcher = MagicMock()
+	mock_launcher.start.return_value = mock_playwright
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
+		result = login_via_cdp(timeout=120)
+
+	assert result["cookies"]["wt2"] == "login-cookie"
+	assert result["stoken"] == "live-stoken"
+	assert result["user_agent"] == "UA"
+	logged_out_context.new_page.assert_not_called()
+	logged_in_context.new_page.assert_not_called()
+	jobs_page.goto.assert_not_called()
+	jobs_page.close.assert_not_called()
+	mock_sleep.assert_not_called()
 	mock_playwright.stop.assert_called_once()
 
 

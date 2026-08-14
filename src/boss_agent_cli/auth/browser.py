@@ -23,16 +23,17 @@ _PLATFORM_BROWSER_CONFIG: dict[str, dict[str, str]] = {
 	"zhipin": {
 		"login_page_url": LOGIN_PAGE_URL,
 		"home_url": HOME_URL,
-		"cookie_domain": "zhipin",
+		"cookie_domain": "zhipin.com",
 		"success_cookie": "wt2",
 	},
 	"zhilian": {
 		"login_page_url": "https://rd6.zhaopin.com/app/im",
 		"home_url": "https://rd6.zhaopin.com/app/im",
-		"cookie_domain": "zhaopin",
+		"cookie_domain": "zhaopin.com",
 		"success_cookie": "at",
 	},
 }
+_ZHIPIN_HOST = "zhipin.com"
 _ZHILIAN_HOST = "zhaopin.com"
 
 
@@ -63,11 +64,26 @@ def _extract_zhilian_client_id(page: Any) -> str:
 
 
 def _is_zhilian_url(url: str) -> bool:
+	return _is_platform_url(url, _ZHILIAN_HOST)
+
+
+def _is_zhipin_url(url: str) -> bool:
+	return _is_platform_url(url, _ZHIPIN_HOST)
+
+
+def _is_platform_url(url: str, expected_host: str) -> bool:
 	host = urlparse(url).hostname
 	if host is None:
 		return False
 	host = host.rstrip(".").lower()
-	return host == _ZHILIAN_HOST or host.endswith(f".{_ZHILIAN_HOST}")
+	return host == expected_host or host.endswith(f".{expected_host}")
+
+
+def _find_zhipin_page(pages: list[Any]) -> Any | None:
+	for page in pages:
+		if _is_zhipin_url(getattr(page, "url", "")):
+			return page
+	return None
 
 
 def _find_zhilian_recruiter_page(pages: list[Any]) -> Any | None:
@@ -83,6 +99,33 @@ def _find_zhilian_recruiter_page(pages: list[Any]) -> Any | None:
 
 def _zhilian_client_id_from(cookies: dict[str, str], page: Any) -> str:
 	return cookies.get("x-zp-client-id") or _extract_zhilian_client_id(page)
+
+
+def _matching_cookies(context: Any, *, cookie_domain: str) -> list[dict[str, Any]]:
+	try:
+		return [
+			cookie
+			for cookie in context.cookies()
+			if _is_cookie_domain(cookie.get("domain", ""), cookie_domain)
+		]
+	except Exception:
+		return []
+
+
+def _is_cookie_domain(domain: str, expected_domain: str) -> bool:
+	normalized = domain.lstrip(".").rstrip(".").lower()
+	expected = expected_domain.lstrip(".").rstrip(".").lower()
+	return normalized == expected or normalized.endswith(f".{expected}")
+
+
+def _find_logged_in_context(
+	contexts: list[Any], *, cookie_domain: str, success_cookie: str
+) -> tuple[Any | None, list[dict[str, Any]]]:
+	for context in contexts:
+		cookies = _matching_cookies(context, cookie_domain=cookie_domain)
+		if any(cookie.get("name") == success_cookie and cookie.get("value") for cookie in cookies):
+			return context, cookies
+	return None, []
 
 
 def _browser_diag(message: str) -> None:
@@ -131,17 +174,36 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 	if not ws_url:
 		raise ConnectionError("CDP 不可用，请先运行 boss-chrome 启动带调试端口的 Chrome")
 
-	print("[boss] 正在 CDP Chrome 中打开登录页...", file=sys.stderr)
 	pw = sync_playwright().start()
 	browser = pw.chromium.connect_over_cdp(ws_url)
-	ctx = browser.contexts[0] if browser.contexts else browser.new_context()
-	page = _find_zhilian_recruiter_page(ctx.pages) if platform == "zhilian" else None
+	contexts = list(browser.contexts)
+	logged_in_ctx, existing_cookies = _find_logged_in_context(
+		contexts,
+		cookie_domain=cookie_domain,
+		success_cookie=success_cookie,
+	)
+	already_logged_in = logged_in_ctx is not None
+	ctx = logged_in_ctx or (contexts[0] if contexts else browser.new_context())
+	if already_logged_in and platform == "zhipin":
+		page = _find_zhipin_page(ctx.pages)
+	elif platform == "zhilian":
+		page = _find_zhilian_recruiter_page(ctx.pages)
+	else:
+		page = None
 	created_page = page is None
 	if page is None:
 		page = ctx.new_page()
 
 	try:
-		if created_page or platform != "zhilian":
+		if already_logged_in:
+			print("[boss] 检测到 CDP Chrome 已登录，正在复用现有登录态...", file=sys.stderr)
+			if created_page:
+				try:
+					page.goto(home_url, wait_until="commit", timeout=_NAV_TIMEOUT_MS)
+				except Exception:
+					pass
+		else:
+			print("[boss] 正在 CDP Chrome 中打开登录页...", file=sys.stderr)
 			try:
 				page.goto(
 					login_page_url,
@@ -151,30 +213,31 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 			except Exception:
 				pass
 
-		print(f"[boss] 请在 Chrome 中扫码登录，等待中...（超时 {timeout}s）", file=sys.stderr)
+			print(f"[boss] 请在 Chrome 中扫码登录，等待中...（超时 {timeout}s）", file=sys.stderr)
 
-		for i in range(timeout):
-			time.sleep(1)
-			cookies = ctx.cookies()
-			success = [c for c in cookies if c["name"] == success_cookie and cookie_domain in c.get("domain", "")]
-			if success:
-				print("[boss] 检测到登录成功！", file=sys.stderr)
-				break
-			if i > 0 and i % 15 == 0:
-				print(f"[boss] 等待中... {i}s", file=sys.stderr)
-		else:
-			raise TimeoutError(f"CDP 扫码登录超时（{timeout}s）")
+			for i in range(timeout):
+				time.sleep(1)
+				cookies = _matching_cookies(ctx, cookie_domain=cookie_domain)
+				if any(c.get("name") == success_cookie and c.get("value") for c in cookies):
+					print("[boss] 检测到登录成功！", file=sys.stderr)
+					break
+				if i > 0 and i % 15 == 0:
+					print(f"[boss] 等待中... {i}s", file=sys.stderr)
+			else:
+				raise TimeoutError(f"CDP 扫码登录超时（{timeout}s）")
 
-		if created_page or platform != "zhilian":
+		if not already_logged_in and (created_page or platform != "zhilian"):
 			try:
 				page.goto(home_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
 			except Exception:
 				pass
-		all_cookies = {c["name"]: c["value"] for c in ctx.cookies() if cookie_domain in c.get("domain", "")}
+		cookies_list = existing_cookies if already_logged_in else _matching_cookies(ctx, cookie_domain=cookie_domain)
+		all_cookies = {c["name"]: c["value"] for c in cookies_list}
 		ua = page.evaluate("navigator.userAgent")
+		stoken = (all_cookies.get("__zp_stoken__") or _extract_stoken(page)) if platform == "zhipin" else ""
 		x_zp_client_id = _zhilian_client_id_from(all_cookies, page) if platform == "zhilian" else ""
 
-		result: dict[str, Any] = {"cookies": all_cookies, "stoken": "", "user_agent": ua}
+		result: dict[str, Any] = {"cookies": all_cookies, "stoken": stoken, "user_agent": ua}
 		if x_zp_client_id:
 			result["x_zp_client_id"] = x_zp_client_id
 		return result
