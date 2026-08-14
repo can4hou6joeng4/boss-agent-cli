@@ -38,6 +38,7 @@ class ActionContext:
 	logger: Logger
 	delay: tuple[float, float] = (1.5, 3.0)
 	cdp_url: str | None = None
+	browser_mode: str | None = None
 	config: Mapping[str, Any] | None = None
 	candidate_factory: PlatformFactory | None = None
 	recruiter_factory: PlatformFactory | None = None
@@ -57,6 +58,7 @@ class ActionContext:
 			self.auth(),
 			delay=self.delay,
 			cdp_url=self.cdp_url,
+			browser_mode=self.browser_mode,
 		)
 
 	def recruiter_platform(self) -> Any:
@@ -67,6 +69,7 @@ class ActionContext:
 			self.auth(),
 			delay=self.delay,
 			cdp_url=self.cdp_url,
+			browser_mode=self.browser_mode,
 		)
 
 

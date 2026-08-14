@@ -79,6 +79,18 @@ class TestPlatformGlobalOption:
 		global_opts = payload["data"]["global_options"]
 		assert "--platform" in global_opts
 
+	def test_schema_exposes_browser_mode_option(self, runner: CliRunner) -> None:
+		from boss_agent_cli.main import cli
+
+		result = runner.invoke(cli, ["schema"])
+		assert result.exit_code == 0
+		global_opts = json.loads(result.output)["data"]["global_options"]
+		assert global_opts["--browser-mode"]["choices"] == ["auto", "cdp-required"]
+
+		strict_result = runner.invoke(cli, ["--browser-mode", "cdp-required", "schema"])
+		assert strict_result.exit_code == 0
+		assert json.loads(strict_result.output)["data"]["current_browser_mode"] == "cdp-required"
+
 	def test_openai_tools_description_includes_availability(self, runner: CliRunner) -> None:
 		from boss_agent_cli.main import cli
 
@@ -128,6 +140,27 @@ class TestGetPlatformInstanceHelper:
 		with patch("boss_agent_cli.commands._platform.BossClient") as mock_client_cls:
 			get_platform_instance(ctx, auth)
 			mock_client_cls.assert_called_once_with(auth, delay=(2.0, 4.0), cdp_url="http://localhost:9222")
+
+	def test_helper_passes_required_cdp_browser_mode_to_client(self) -> None:
+		from boss_agent_cli.commands._platform import get_platform_instance
+
+		ctx = MagicMock()
+		ctx.obj = {
+			"platform": "zhipin",
+			"delay": (2.0, 4.0),
+			"cdp_url": "http://localhost:9222",
+			"browser_mode": "cdp_required",
+		}
+		auth = MagicMock()
+
+		with patch("boss_agent_cli.commands._platform.BossClient") as mock_client_cls:
+			get_platform_instance(ctx, auth)
+			mock_client_cls.assert_called_once_with(
+				auth,
+				delay=(2.0, 4.0),
+				cdp_url="http://localhost:9222",
+				browser_mode="cdp_required",
+			)
 
 	def test_helper_defaults_missing_platform_to_zhipin(self) -> None:
 		from boss_agent_cli.platforms import BossPlatform

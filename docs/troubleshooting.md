@@ -104,7 +104,7 @@ macOS：
 ```bash
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
   --remote-debugging-port=9222 \
-  --user-data-dir=/tmp/boss-chrome
+  --user-data-dir="$HOME/Library/Application Support/BossAgentChrome"
 ```
 
 Linux：
@@ -112,7 +112,7 @@ Linux：
 ```bash
 google-chrome \
   --remote-debugging-port=9222 \
-  --user-data-dir=/tmp/boss-chrome
+  --user-data-dir="$HOME/.local/share/boss-agent-chrome"
 ```
 
 Windows PowerShell：
@@ -137,7 +137,12 @@ if (-not $chrome) { throw "Google Chrome executable was not found" }
 
 ```bash
 boss --cdp-url http://localhost:9222 login --cdp
+boss --browser-mode cdp-required --cdp-url http://localhost:9222 search "Python" --city 广州
 ```
+
+`cdp-required` 会在 CDP 不可用时立即失败，不会静默降级到 headless。上面的专用
+profile 应长期复用并由用户手动登录；不要每次启动时重新创建，也不要在命中
+`ENVIRONMENT_RISK` 后通过切换 profile、刷新 Token 或自动重试来绕过风控。
 
 ## 错误码与自动修复
 

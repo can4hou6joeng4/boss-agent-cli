@@ -236,6 +236,19 @@ def test_recruiter_instance_falls_back_to_default_delay_when_ctx_is_empty(monkey
 	assert captured["cdp_url"] is None
 
 
+def test_recruiter_instance_passes_required_cdp_browser_mode(monkeypatch):
+	captured: dict = {}
+
+	class _Client:
+		def __init__(self, auth, *, delay, cdp_url, browser_mode):
+			captured.update(browser_mode=browser_mode)
+
+	monkeypatch.setattr("boss_agent_cli.commands._recruiter_platform.BossRecruiterClient", _Client)
+	get_recruiter_platform_instance(_ctx(browser_mode="cdp_required"), MagicMock())
+
+	assert captured["browser_mode"] == "cdp_required"
+
+
 def test_recruiter_instance_rejects_platform_without_recruiter_adapter():
 	with pytest.raises(ValueError):
 		get_recruiter_platform_instance(_ctx(platform="zhilian"), MagicMock())

@@ -115,6 +115,7 @@ boss status
 - `AUTH_REQUIRED` / `AUTH_EXPIRED` / `TOKEN_REFRESH_FAILED`：重新执行 `boss login`
 - `wt2` 存在但 `stoken` 缺失：通常为部分登录态；使用 Chrome CDP 远程调试端口后运行 `boss login --cdp`，或重新执行 `boss login`
 - `RATE_LIMITED`：等待后重试
+- `ENVIRONMENT_RISK`：立即停止；不要刷新 Token、重新登录或自动重试，保留同一专用 Chrome profile 并降低访问频率
 - `NOT_SUPPORTED`：切换 schema catalog 中支持该 goal 的平台或 workflow
 - `WORKFLOW_TIMEOUT`：保留 `run_id`，调整超时后执行 `boss wizard --resume <run_id>`
 - `INVALID_PARAM`：校正参数（城市、福利、页码等）

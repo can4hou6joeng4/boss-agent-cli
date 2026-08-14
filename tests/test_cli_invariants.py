@@ -57,6 +57,7 @@ def test_success_commands_emit_single_json_envelope(args: list[str], command: st
 	"args, command, code",
 	[
 		(["--platform", "nonexistent", "schema"], "boss", "INVALID_PARAM"),
+		(["--browser-mode", "headless", "schema"], "boss", "INVALID_PARAM"),
 		(["schema", "--format", "xml"], "schema", "INVALID_PARAM"),
 		(["search"], "search", "INVALID_PARAM"),
 	],
