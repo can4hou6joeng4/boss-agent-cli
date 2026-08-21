@@ -18,6 +18,7 @@ _NAV_TIMEOUT_MS = 15000  # 页面导航超时（毫秒）
 _NETWORKIDLE_GRACE_MS = 3000  # 首页进入 networkidle 的额外宽限（毫秒）
 _POST_LOGIN_WAIT = 3  # 登录成功后等待 cookie 传播（秒）
 _STOKEN_GENERATION_WAIT = 2  # stoken 生成等待（秒）
+_HOME_NAV_RETRIES = 2  # 首页导航超时后的重试次数（含首次）
 
 _PLATFORM_BROWSER_CONFIG: dict[str, dict[str, str]] = {
 	"zhipin": {
@@ -106,13 +107,22 @@ def _warm_home_for_runtime(page: Any, home_url: str, *, stage: str) -> bool:
 	networkidle 只尽力等待，不作为必须条件。返回 False 表示首页导航
 	超时/失败、页面仍处于未完成导航状态——此时调用方必须避免对其执行
 	evaluate（patchright 会因执行上下文无法建立而永久挂起）。
+
+	首页在自动化下偶发进入风控验证页或加载缓慢导致 goto 超时；超时后
+	先跳 about:blank 终止卡住的导航，再重试一次。
 	"""
 	loaded = False
-	try:
-		page.goto(home_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
-		loaded = True
-	except Exception as e:
-		_browser_diag(f"[boss] {stage}：首页导航未在预期时间完成（{e}），继续尝试提取凭证")
+	for attempt in range(_HOME_NAV_RETRIES):
+		try:
+			page.goto(home_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+			loaded = True
+			break
+		except Exception as e:
+			_browser_diag(f"[boss] {stage}：首页导航未在预期时间完成（{e}），重试 {attempt + 1}/{_HOME_NAV_RETRIES}...")
+			try:
+				page.goto("about:blank", wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+			except Exception:
+				pass
 	try:
 		page.wait_for_load_state("networkidle", timeout=_NETWORKIDLE_GRACE_MS)
 	except Exception as e:
@@ -184,10 +194,7 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 		# 在登录页（已加载）上先记录 UA，避免首页导航卡住后 evaluate 永久挂起
 		ua = _safe_user_agent(page)
 		if created_page or platform != "zhilian":
-			try:
-				page.goto(home_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
-			except Exception:
-				pass
+			_warm_home_for_runtime(page, home_url, stage="登录后回到首页")
 		all_cookies = {c["name"]: c["value"] for c in ctx.cookies() if cookie_domain in c.get("domain", "")}
 		if platform == "zhilian":
 			x_zp_client_id = all_cookies.get("x-zp-client-id") or _extract_zhilian_client_id(page)

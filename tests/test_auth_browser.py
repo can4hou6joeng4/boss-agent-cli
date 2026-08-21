@@ -182,9 +182,15 @@ def test_refresh_stoken_tolerates_networkidle_timeout(mock_extract_stoken):
 
 @patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
 def test_login_via_browser_falls_back_to_cookie_jar_when_home_nav_stalls(mock_sleep):
-	# 登录页 goto 成功；首页 goto 卡住（超时）→ home_loaded=False
+	# 登录页 goto 成功；首页两次 goto 均卡住（超时）→ home_loaded=False
 	mock_page = MagicMock()
-	mock_page.goto.side_effect = [None, TimeoutError("Timeout 15000ms exceeded")]
+	mock_page.goto.side_effect = [
+		None,  # 登录页
+		TimeoutError("Timeout 15000ms exceeded"),  # 首页 attempt1
+		None,  # about:blank 重置
+		TimeoutError("Timeout 15000ms exceeded"),  # 首页 attempt2
+		None,  # 最后一次 about:blank 重置
+	]
 	mock_page.wait_for_load_state.side_effect = Exception("Timeout 3000ms exceeded")
 	mock_page.evaluate.return_value = "UA"
 
@@ -246,6 +252,26 @@ def test_warm_home_for_runtime_reports_true_when_goto_succeeds():
 	mock_page.wait_for_load_state.side_effect = Exception("Timeout 3000ms exceeded")
 
 	assert _warm_home_for_runtime(mock_page, HOME_URL, stage="test") is True
+
+
+def test_warm_home_for_runtime_retries_and_recovers_when_goto_stalls_then_succeeds():
+	mock_page = MagicMock()
+	# 首次 goto 卡住超时 → about:blank 重置 → 第二次 goto 成功
+	mock_page.goto.side_effect = [TimeoutError("Timeout 15000ms exceeded"), None, None]
+	mock_page.wait_for_load_state.side_effect = Exception("Timeout 3000ms exceeded")
+
+	assert _warm_home_for_runtime(mock_page, HOME_URL, stage="test") is True
+	# home 尝试 2 次 + 1 次 about:blank 重置
+	assert mock_page.goto.call_count == 3
+
+
+def test_warm_home_for_runtime_returns_false_after_all_retries_exhausted():
+	mock_page = MagicMock()
+	# 两次 goto 均卡住；about:blank 重置成功但无法恢复首页
+	mock_page.goto.side_effect = [TimeoutError("Timeout 15000ms exceeded"), None, TimeoutError("Timeout 15000ms exceeded"), None]
+	mock_page.wait_for_load_state.side_effect = Exception("Timeout 3000ms exceeded")
+
+	assert _warm_home_for_runtime(mock_page, HOME_URL, stage="test") is False
 
 
 def test_safe_user_agent_swallows_evaluate_error():
