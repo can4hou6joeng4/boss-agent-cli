@@ -194,14 +194,21 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 		# 在登录页（已加载）上先记录 UA，避免首页导航卡住后 evaluate 永久挂起
 		ua = _safe_user_agent(page)
 		if created_page or platform != "zhilian":
-			_warm_home_for_runtime(page, home_url, stage="登录后回到首页")
+			home_loaded = _warm_home_for_runtime(page, home_url, stage="登录后回到首页")
+		else:
+			home_loaded = True
 		all_cookies = {c["name"]: c["value"] for c in ctx.cookies() if cookie_domain in c.get("domain", "")}
+		if platform == "zhipin":
+			# 首页成功加载才对其 evaluate 提取 stoken；否则回退读取 cookie jar
+			stoken = _extract_stoken(page) if home_loaded else all_cookies.get("__zp_stoken__", "")
+		else:
+			stoken = ""
 		if platform == "zhilian":
 			x_zp_client_id = all_cookies.get("x-zp-client-id") or _extract_zhilian_client_id(page)
 		else:
 			x_zp_client_id = ""
 
-		result: dict[str, Any] = {"cookies": all_cookies, "stoken": "", "user_agent": ua}
+		result: dict[str, Any] = {"cookies": all_cookies, "stoken": stoken, "user_agent": ua}
 		if x_zp_client_id:
 			result["x_zp_client_id"] = x_zp_client_id
 		return result
@@ -312,16 +319,17 @@ def refresh_stoken_via_cdp(cdp_url: str | None = None) -> str:
 	ctx = browser.contexts[0] if browser.contexts else browser.new_context()
 	page = ctx.new_page()
 
-	home_loaded = False
-	try:
-		page.goto(HOME_URL, wait_until="domcontentloaded", timeout=15000)
-		home_loaded = True
-	except Exception:
-		pass
+	home_loaded = _warm_home_for_runtime(page, HOME_URL, stage="刷新 stoken")
 	time.sleep(_STOKEN_GENERATION_WAIT)
 
 	# 页面未成功加载时跳过 evaluate，避免 patchright 永久挂起
 	stoken = _extract_stoken(page) if home_loaded else ""
+	if not stoken:
+		# 安全验证跳转期间 goto 可能未触发 domcontentloaded，但 cookie jar 已生成 stoken
+		for cookie in ctx.cookies():
+			if cookie.get("name") == "__zp_stoken__":
+				stoken = cookie.get("value", "")
+				break
 	page.close()
 	pw.stop()
 

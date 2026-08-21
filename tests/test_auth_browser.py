@@ -14,6 +14,7 @@ from boss_agent_cli.auth.browser import (
 	login_via_cdp,
 	login_via_browser,
 	refresh_stoken,
+	refresh_stoken_via_cdp,
 )
 
 
@@ -279,3 +280,57 @@ def test_safe_user_agent_swallows_evaluate_error():
 	mock_page.evaluate.side_effect = RuntimeError("user agent unavailable")
 
 	assert _safe_user_agent(mock_page) == ""
+
+
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_login_via_cdp_extracts_stoken_when_home_loads(mock_sleep, mock_probe_cdp):
+	mock_context = MagicMock()
+	mock_launcher, mock_playwright, mock_page = _mock_cdp_playwright(mock_context)
+	mock_page.evaluate.return_value = "UA"
+	mock_page.goto.return_value = None
+	mock_context.cookies.return_value = [{"name": "wt2", "value": "token", "domain": ".zhipin.com"}]
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
+		with patch("boss_agent_cli.auth.browser._extract_stoken", return_value="cdp-stoken"):
+			result = login_via_cdp(timeout=1)
+
+	assert result["stoken"] == "cdp-stoken"
+	assert result["user_agent"] == "UA"
+
+
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_login_via_cdp_falls_back_to_cookie_jar_stoken_when_home_stalls(mock_sleep, mock_probe_cdp):
+	mock_context = MagicMock()
+	mock_launcher, mock_playwright, mock_page = _mock_cdp_playwright(mock_context)
+	mock_page.evaluate.return_value = "UA"
+	mock_page.goto.side_effect = TimeoutError("Timeout 15000ms exceeded")
+	mock_page.wait_for_load_state.side_effect = Exception("Timeout 3000ms exceeded")
+	mock_context.cookies.return_value = [
+		{"name": "wt2", "value": "token", "domain": ".zhipin.com"},
+		{"name": "__zp_stoken__", "value": "jar-stoken", "domain": ".zhipin.com"},
+	]
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
+		with patch("boss_agent_cli.auth.browser._extract_stoken") as mock_extract:
+			result = login_via_cdp(timeout=1)
+
+	assert result["stoken"] == "jar-stoken"
+	mock_extract.assert_not_called()
+
+
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_refresh_stoken_via_cdp_falls_back_to_cookie_jar(mock_sleep, mock_probe_cdp):
+	mock_context = MagicMock()
+	mock_launcher, mock_playwright, mock_page = _mock_cdp_playwright(mock_context)
+	mock_page.goto.side_effect = TimeoutError("Timeout 15000ms exceeded")
+	mock_page.wait_for_load_state.side_effect = Exception("Timeout 3000ms exceeded")
+	mock_context.cookies.return_value = [{"name": "__zp_stoken__", "value": "jar-stoken", "domain": ".zhipin.com"}]
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
+		result = refresh_stoken_via_cdp()
+
+	assert result == "jar-stoken"
+	mock_playwright.stop.assert_called_once()
