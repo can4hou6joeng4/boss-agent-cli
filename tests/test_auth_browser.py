@@ -239,6 +239,27 @@ def test_refresh_stoken_returns_empty_when_home_nav_stalls():
 	mock_browser.close.assert_called_once()
 
 
+def test_refresh_stoken_falls_back_to_cookie_jar_when_home_nav_stalls():
+	mock_page = MagicMock()
+	mock_page.goto.side_effect = TimeoutError("Timeout 15000ms exceeded")
+	mock_page.wait_for_load_state.side_effect = Exception("Timeout 3000ms exceeded")
+
+	mock_context = MagicMock()
+	mock_context.new_page.return_value = mock_page
+	mock_context.cookies.return_value = [{"name": "__zp_stoken__", "value": "jar-stoken", "domain": ".zhipin.com"}]
+
+	mock_browser = MagicMock()
+	mock_browser.new_context.return_value = mock_context
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=_mock_playwright_context(mock_browser)):
+		with patch("boss_agent_cli.auth.browser._extract_stoken") as mock_extract:
+			result = refresh_stoken({"wt2": "cookie"}, "UA")
+
+	assert result == "jar-stoken"
+	mock_extract.assert_not_called()
+	mock_browser.close.assert_called_once()
+
+
 def test_warm_home_for_runtime_reports_false_when_goto_stalls():
 	mock_page = MagicMock()
 	mock_page.goto.side_effect = TimeoutError("Timeout 15000ms exceeded")

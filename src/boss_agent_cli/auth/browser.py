@@ -349,6 +349,12 @@ def refresh_stoken(cookies: dict[str, Any], user_agent: str) -> str:
 		page = context.new_page()
 		home_loaded = _warm_home_for_runtime(page, HOME_URL, stage="刷新 stoken")
 		stoken = _extract_stoken(page) if home_loaded else ""
+		if not stoken:
+			# 安全验证跳转期间 goto 可能未触发 domcontentloaded，但 cookie jar 已生成 stoken
+			for cookie in context.cookies():
+				if cookie.get("name") == "__zp_stoken__":
+					stoken = cookie.get("value", "")
+					break
 		browser.close()
 
 	return stoken
