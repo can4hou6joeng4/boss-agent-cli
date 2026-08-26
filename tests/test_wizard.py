@@ -38,6 +38,13 @@ from boss_agent_cli.wizard.prompts import (
 	collect_wizard_input,
 )
 
+# PTY 用例要真起一个 CLI 进程并等 prompt_toolkit 渲染完首屏，耗时随机器负载浮动：
+# 本机约 1s，而 CI 的 P0 baseline job 在同一个 job 里串跑 ruff / pytest / mypy，
+# 曾因 5s 硬期限超时假红并挡住 #380 的合并（同一 commit 上五个测试矩阵 job 全过）。
+# 放宽期限不会拖慢快机器——命中同步标记或进程退出就立刻跳出循环。
+_PTY_STARTUP_TIMEOUT = float(os.environ.get("BOSS_TEST_PTY_STARTUP_TIMEOUT", "30"))
+_PTY_EXIT_TIMEOUT = float(os.environ.get("BOSS_TEST_PTY_EXIT_TIMEOUT", "20"))
+
 
 class _ScriptedMenu:
 	def __init__(self, selections, texts=()):
@@ -1978,7 +1985,8 @@ def test_prompt_toolkit_pty_uses_stderr_and_arrow_keys(tmp_path):
 	output = bytearray()
 	stdout_output = bytearray()
 	try:
-		startup_deadline = time.monotonic() + 5
+		menu_rendered = False
+		startup_deadline = time.monotonic() + _PTY_STARTUP_TIMEOUT
 		while time.monotonic() < startup_deadline:
 			ready, _, _ = select.select([stderr_master_fd], [], [], 0.1)
 			if not ready:
@@ -1993,12 +2001,22 @@ def test_prompt_toolkit_pty_uses_stderr_and_arrow_keys(tmp_path):
 			# 提示行恒在内容区，用作「菜单已渲染」的同步信号；
 			# 标题现在画在框上（D1），不再是内容区的第一行。
 			if "↑↓ 选择" in output.decode("utf-8", errors="ignore"):
+				menu_rendered = True
 				break
+		# 必须确认菜单真渲染出来了再发按键。此前超时也照发，prompt_toolkit 尚未接管
+		# 输入，按键被丢掉，最终报成「没退出」——把「启动慢」误诊为「交互坏」，
+		# 而且看不到任何有用线索。
+		if not menu_rendered:
+			process.kill()
+			pytest.fail(
+				f"prompt_toolkit 菜单在 {_PTY_STARTUP_TIMEOUT}s 内未渲染；"
+				f"已捕获输出：{output.decode('utf-8', errors='replace')!r}"
+			)
 		for _ in range(5):
 			os.write(stderr_master_fd, b"\x1b[B")
 			time.sleep(0.05)
 		os.write(stderr_master_fd, b"\r")
-		completion_deadline = time.monotonic() + 5
+		completion_deadline = time.monotonic() + _PTY_EXIT_TIMEOUT
 		while process.poll() is None and time.monotonic() < completion_deadline:
 			ready, _, _ = select.select([stderr_master_fd], [], [], 0.1)
 			if ready:
@@ -2011,7 +2029,10 @@ def test_prompt_toolkit_pty_uses_stderr_and_arrow_keys(tmp_path):
 				output.extend(chunk)
 		if process.poll() is None:
 			process.kill()
-			pytest.fail("prompt_toolkit PTY did not exit after arrow-key selection")
+			pytest.fail(
+				f"prompt_toolkit PTY 在选中后 {_PTY_EXIT_TIMEOUT}s 内未退出；"
+				f"已捕获输出：{output.decode('utf-8', errors='replace')!r}"
+			)
 		process.wait(timeout=2)
 		while True:
 			ready, _, _ = select.select([stderr_master_fd], [], [], 0.05)

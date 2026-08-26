@@ -151,11 +151,28 @@ jobs:
           docker run --rm --entrypoint boss boss-agent-cli:ci --json schema --format native \
             | python3 -c "import sys, json; d = json.load(sys.stdin); assert d['ok'], d; print('schema commands:', len(d['data']['commands']))"
 
-      - name: Verify the MCP server handshake over stdio
+      # 只断言 initialize 是不够的：v1.18.0 就是带着一个未注册的 tools/list 发出去的
+      # （issue #377），握手照样成功，MCP host 一列工具才拿到 -32601。所以这里必须在
+      # 同一个 stdio 会话里把 tools/list 也真的问一遍。
+      - name: Verify the MCP server handshake and tool listing over stdio
         run: |
-          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}' \
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
             | docker run --rm -i boss-agent-cli:ci \
-            | python3 -c "import sys, json; d = json.loads(sys.stdin.readline()); assert d['result']['serverInfo']['name'] == 'boss-agent-cli', d; print('MCP initialize ok')"
+            | python3 -c "
+          import sys, json
+          initialized = json.loads(sys.stdin.readline())
+          assert initialized['result']['serverInfo']['name'] == 'boss-agent-cli', initialized
+          print('MCP initialize ok')
+          listed = json.loads(sys.stdin.readline())
+          assert 'error' not in listed, listed
+          names = [tool['name'] for tool in listed['result']['tools']]
+          assert names, listed
+          assert 'boss_status' in names, names
+          print('MCP tools/list ok:', len(names), 'tools')
+          "
 
       - name: Verify it runs as non-root
         run: |
