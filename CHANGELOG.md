@@ -4,6 +4,68 @@
 
 ## [Unreleased]
 
+### Fixed
+- **修复 MCP `tools/list` 从未注册：v1.18.0 的 MCP 入口对任何 host 都不可用。**
+  `mcp_server.list_tools` 缺失 `@server.list_tools()` 装饰器，`initialize` 握手正常，但 client
+  第一次列工具即 `-32601 Method not found`——73 个工具一个都拿不到。回归由 1.18.0 的
+  `mcp_server` 拆分引入，该拆分合并 33 分钟后即发版，没有留下暴露窗口。
+  四道门禁同时失效，故本次连门禁一起补（见下方 Added）：`tests/test_mcp_server.py` 用 mock 模块
+  顶替整个 `mcp` 包，装饰器在不在原理上观测不到；CI 的 stdio 握手只断言 `initialize`；
+  eval 跑离线 fixture 绕开协议层；`__all__` + `mcp-server/server.py` 的 re-export 让这个
+  未注册的孤儿函数在 ruff / mypy 眼里完全正常。感谢 @xie-good 报告、@LiuLin1220 修复。
+- 脱敏放宽：`_SENSITIVE_KEY_PARTS` 是子串匹配，`ai_max_tokens` / `token_expires_in` 只因键名含
+  `token` 就被替换成 `[REDACTED]`。凭据必然是字符串或容器，故把 bool 豁免补完整为
+  `(bool, int, float, None)`，并加护栏测试锁定 `stoken` / `api_key` / `cookies` 等仍被脱敏。
+- 修正三个终端呈现缺陷：结果列表菜单每页重绘任务摘要框（此前被 `clear_before` 清掉）；
+  `render_run` 新增 `with_preview` 开关，浏览列表时职位不再被摘要框与可选菜单列两遍；
+  `search` 长任务在 TTY 下注入 `SearchProgress` 显示实时进度（管道 / `--json` 仍传原 logger）。
+- 修正 `tests/test_wizard.py` 的 PTY 用例假红：启动同步循环 5s 超时后**照样发送按键**，
+  此时 prompt_toolkit 尚未接管输入，按键被丢弃，最终报成「没退出」——把「启动慢」误诊为
+  「交互坏」，且不留任何线索。现在必须确认菜单真渲染出来才发按键，否则以「菜单未渲染」
+  失败并附上已捕获输出；期限放宽到 30s / 20s 并可用环境变量覆盖（命中同步标记即跳出，
+  快机器仍约 1s）。此前它曾在 CI 的 P0 baseline job 上超时并挡住合并，而同一 commit 的
+  五个测试矩阵 job 全过。
+
+### Added
+- MCP handler 注册守卫 `tests/test_mcp_handler_registration.py`：不查装饰器语法，直接问运行时
+  注册表 `server.request_handlers`。「装饰器名 → request 类型」的映射**从 SDK 自身反推**
+  （在全新 `Server` 上应用装饰器后 diff 注册表键），因此 SDK 将来新增 `list_prompts` /
+  `read_resource` 等 handler 时守卫覆盖面自动跟上，不需人工维护。同时断言 `tools/list` 经协议
+  发出的工具集合与 `mcp_tools.TOOLS` **逐名相等**（不引入硬编码计数）。两条测试刻意在子进程里
+  跑：`tests/test_mcp_server.py` 会 `sys.modules.setdefault("mcp", <mock>)`，一旦拿到 mock，
+  `request_handlers` 就是 MagicMock，守卫会静默变成恒真。
+- CI 的 docker job 在同一个 stdio 会话里补做 `tools/list`，断言工具列表非空且含 `boss_status`。
+  只断言 `initialize` 正是让上面那个回归发出去的原因。
+- 开放 assisted / research 下全部已实现能力，移除模式级 `COMPLIANCE_BLOCKED` 执行门
+  （错误码保留作历史协议兼容）；平台未实现的能力仍返回 `NOT_SUPPORTED`。
+- 新增共享 Workflow 持久化与纯终端 `boss wizard`：无子命令时默认进入向导，TTY 向导与
+  `--input-json` / `--resume` / MCP 共用同一个确定性 runner，状态落 SQLite 的
+  `workflow_runs` / `workflow_steps`。`schema` 与 MCP 同步暴露 `wizard` 与 `wizard_catalog`。
+- 增强 crawl 传输：登录态注入、页面内请求与回退，命中风控时保留浏览器便于续跑。
+- 信封 `hints` 拆为双受众通道：`next_actions` 给 Agent 执行的后继命令，`operator_actions` 给真人的
+  自然语言指引（扫码、去浏览器操作等）。判定标准是「是否需要人离开终端」，不是「是否需要确认」。
+  TTY 下 `display.render_operator_actions` **只渲染 `operator_actions`** 到 stderr——此前 TTY 分支
+  把 `hints` 整个丢弃，真人从来看不到任何提示。无 `operator_actions` 时零输出，既有命令的 TTY
+  行为逐字节不变。`SCHEMA_DATA["conventions"]` 新增 `hints` 与 `command_vs_wizard` 两块。
+- 新增向导入口登录门 `wizard/preflight.py`：登录检查从 goal 的第一个 step 前移到收集角色 /
+  平台 / 目标 / 参数之前——此前未登录时这五层选择全部白做。已登录时零输出零开销（本地文件读，
+  不预检浏览器内核）；未登录时可内联扫码登录并无缝进向导；浏览器内核缺失时先给
+  `patchright install chromium` 指引，不再开完浏览器才失败。headless 路径保持 `WAITING_INPUT`
+  不变（TTY 下人就在终端前，阻塞等扫码是刻意的；Agent 不能卡在子进程里空等）。
+- 向导未登录时 run 状态由 `failed` 改为 `WAITING_INPUT`，可 `--resume` 且保留已选的角色 /
+  平台 / 目标，不必从头重走。
+- 补齐候选者侧九个命令组（`stats` / `preset` / `watch` / `clean` / `ai-local` / `resume` / `ai` /
+  `crawl` / `agent`）共 63 处 `handle_output` 的 TTY 渲染分支，真人不再需要自己读 JSON 信封。
+  `display.py` 新增 `render_next_steps` / `render_action_result` / `render_list_result` /
+  `render_record_result` / `render_ai_result` 五个通用件；`render_ai_result` 不假设键名、只按值类型
+  呈现，并对所有值做 escape，避免 AI 输出里的方括号被 Rich 当标记解析。stdout 仍只有单行信封。
+- 向导整个多轮交互会话跑在 alternate screen（`\033[?1049h` / `\033[?1049l`）里：进入切、退出还原，
+  终端原有内容完好，不再往 scrollback 留残框——`clear_wizard_screen` 的 `\033[2J` 只清可视屏、
+  清不掉历史，这是「上滚看到多个框」的根因。用 context manager 保证还原（`commands/wizard.py`
+  有 59 处 `return` 且内部会 `raise SystemExit`，逐点还原必然漏）。单次 flag 路径
+  （`--status` / `--resume` / `--stop`）刻意不进备用屏，否则渲染完立刻被抹掉。菜单包进 `Frame`，
+  框标题为当前步骤；菜单支持 `←` / `Esc` 返回。
+
 ## [1.18.0] - 2026-07-29
 
 ### Added
