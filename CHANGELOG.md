@@ -7,6 +7,101 @@
 ### Fixed
 - 修复扫码登录在「首页预热」阶段卡住时永久挂起：BOSS 直聘首页在自动化下偶发长时间不完成加载，`page.goto` 超时后若仍对页面执行 `page.evaluate`（取 UA / stoken），patchright 会因执行上下文无法建立而无限阻塞，导致 `boss login` 卡死且不落盘凭证。现在 UA 改在已加载的登录页上提前采集；`_warm_home_for_runtime` 返回首页是否真正加载完成，仅在确认加载后才对页面 evaluate 提取 stoken，否则回退读取 cookie jar；并对首页导航超时增加「跳 `about:blank` 重置卡死导航后重试一次」，显著降低风控验证页/加载缓慢导致的 `Page.goto: Timeout 15000ms exceeded` 误报。`login_via_cdp` / `refresh_stoken` / `refresh_stoken_via_cdp` 同步加固；CDP 登录/刷新 stoken 也改为优先页面 evaluate、失败回退 cookie jar（安全验证跳转期间 `domcontentloaded` 可能未触发，但 `__zp_stoken__` 已写入 cookie jar）。
 
+## [1.19.1] - 2026-08-27
+
+### Fixed
+- **修复全新安装的 `boss-mcp` 完全起不来。** `mcp` 此前声明为无上界的 `mcp>=1.0.0`，
+  而 mcp 2.0 重写了 `Server` API——`@server.list_tools()` / `@server.call_tool()` 全部移除，
+  改为 `add_request_handler`。`mcp_server` 在模块层就用这些装饰器，因此任何解析到 2.x 的
+  全新安装都直接 `AttributeError: 'Server' object has no attribute 'call_tool'`，
+  `boss-mcp` 连启动都做不到。已收紧为 `mcp>=1.0.0,<2.0.0`。
+  这不是 1.19.0 引入的：1.18.0 在 mcp 2.x 下有完全相同的崩溃，只是此前没人从 PyPI
+  全新装一次验过。issue #377 的报告人当时用了 `--with 'mcp<2.0'`，所以他们看到的是
+  `-32601` 而不是崩溃。
+  mcp 2.x 的适配另开 issue 跟踪，放开上界之前不做。
+
+### Added
+- CI 新增 `fresh_install` job：**刻意不走 `uv.lock`**，装构建产物、让依赖按 `pyproject`
+  的约束重新解析，再真跑一次 MCP 会话。此前所有 job 都锁着 1.x 依赖，因此
+  「CI 全绿、用户全崩」可以长期共存——这个 job 守的就是**门禁看到的与用户拿到的**
+  之间那道缝。红灯验证：移除 `mcp` 上界后该 job 以「initialize 没有收到响应」失败。
+
+## [1.19.0] - 2026-08-27
+
+### Fixed
+- 修正 CI docker job 的 `tools/list` 断言存在竞态：`printf` 写完三行就关闭 stdin，
+  MCP 服务器可能在回 `tools/list` 之前就因 EOF 退出，读端拿到空串报 `JSONDecodeError`
+  （已在 CI 上真实发生）。改为写完后保持 stdin 一段时间，并按 JSON-RPC `id` 认响应而非
+  依赖行序；`tools/list` 无响应时给出明确断言而不是解析错误。**一道会随机变红的门禁
+  等于没有门禁**——它会挡住无关的合并，正如同批修掉的 PTY 用例那样。
+- 修正 Docs 工作流的 `Check whitespace` 对**落后于 master 的 PR 一律假红**：
+  `git fetch --no-tags --depth=1 origin <base>` 只取到 base 的 tip 并留下浅克隆边界，
+  落后的 PR 分支算不出 merge base，`git diff --check A...B` 直接以
+  `fatal: origin/master...HEAD: no merge base` 退出 128——报出来像空白字符违规，
+  实际是这一步崩了。#382 / #383 / #390 三个外部 PR 的 `docs` 红灯都是这个原因，
+  且恰好是等得最久、落后最多的贡献者最容易撞上，还会被当成他们自己的问题。
+  去掉 `--depth=1` 即可（checkout 已用 `fetch-depth: 0`，这里只是补 `origin/<base>` 引用）。
+- **修复 MCP `tools/list` 从未注册：v1.18.0 的 MCP 入口对任何 host 都不可用。**
+  `mcp_server.list_tools` 缺失 `@server.list_tools()` 装饰器，`initialize` 握手正常，但 client
+  第一次列工具即 `-32601 Method not found`——73 个工具一个都拿不到。回归由 1.18.0 的
+  `mcp_server` 拆分引入，该拆分合并 33 分钟后即发版，没有留下暴露窗口。
+  四道门禁同时失效，故本次连门禁一起补（见下方 Added）：`tests/test_mcp_server.py` 用 mock 模块
+  顶替整个 `mcp` 包，装饰器在不在原理上观测不到；CI 的 stdio 握手只断言 `initialize`；
+  eval 跑离线 fixture 绕开协议层；`__all__` + `mcp-server/server.py` 的 re-export 让这个
+  未注册的孤儿函数在 ruff / mypy 眼里完全正常。感谢 @xie-good 报告、@LiuLin1220 修复。
+- 脱敏放宽：`_SENSITIVE_KEY_PARTS` 是子串匹配，`ai_max_tokens` / `token_expires_in` 只因键名含
+  `token` 就被替换成 `[REDACTED]`。凭据必然是字符串或容器，故把 bool 豁免补完整为
+  `(bool, int, float, None)`，并加护栏测试锁定 `stoken` / `api_key` / `cookies` 等仍被脱敏。
+- 修正三个终端呈现缺陷：结果列表菜单每页重绘任务摘要框（此前被 `clear_before` 清掉）；
+  `render_run` 新增 `with_preview` 开关，浏览列表时职位不再被摘要框与可选菜单列两遍；
+  `search` 长任务在 TTY 下注入 `SearchProgress` 显示实时进度（管道 / `--json` 仍传原 logger）。
+- 修正 `tests/test_wizard.py` 的 PTY 用例假红：启动同步循环 5s 超时后**照样发送按键**，
+  此时 prompt_toolkit 尚未接管输入，按键被丢弃，最终报成「没退出」——把「启动慢」误诊为
+  「交互坏」，且不留任何线索。现在必须确认菜单真渲染出来才发按键，否则以「菜单未渲染」
+  失败并附上已捕获输出；期限放宽到 30s / 20s 并可用环境变量覆盖（命中同步标记即跳出，
+  快机器仍约 1s）。此前它曾在 CI 的 P0 baseline job 上超时并挡住合并，而同一 commit 的
+  五个测试矩阵 job 全过。
+
+### Added
+- MCP handler 注册守卫 `tests/test_mcp_handler_registration.py`：不查装饰器语法，直接问运行时
+  注册表 `server.request_handlers`。「装饰器名 → request 类型」的映射**从 SDK 自身反推**
+  （在全新 `Server` 上应用装饰器后 diff 注册表键），因此 SDK 将来新增 `list_prompts` /
+  `read_resource` 等 handler 时守卫覆盖面自动跟上，不需人工维护。同时断言 `tools/list` 经协议
+  发出的工具集合与 `mcp_tools.TOOLS` **逐名相等**（不引入硬编码计数）。两条测试刻意在子进程里
+  跑：`tests/test_mcp_server.py` 会 `sys.modules.setdefault("mcp", <mock>)`，一旦拿到 mock，
+  `request_handlers` 就是 MagicMock，守卫会静默变成恒真。
+- CI 的 docker job 在同一个 stdio 会话里补做 `tools/list`，断言工具列表非空且含 `boss_status`。
+  只断言 `initialize` 正是让上面那个回归发出去的原因。
+- 开放 assisted / research 下全部已实现能力，移除模式级 `COMPLIANCE_BLOCKED` 执行门
+  （错误码保留作历史协议兼容）；平台未实现的能力仍返回 `NOT_SUPPORTED`。
+- 新增共享 Workflow 持久化与纯终端 `boss wizard`：无子命令时默认进入向导，TTY 向导与
+  `--input-json` / `--resume` / MCP 共用同一个确定性 runner，状态落 SQLite 的
+  `workflow_runs` / `workflow_steps`。`schema` 与 MCP 同步暴露 `wizard` 与 `wizard_catalog`。
+- 增强 crawl 传输：登录态注入、页面内请求与回退，命中风控时保留浏览器便于续跑。
+- 信封 `hints` 拆为双受众通道：`next_actions` 给 Agent 执行的后继命令，`operator_actions` 给真人的
+  自然语言指引（扫码、去浏览器操作等）。判定标准是「是否需要人离开终端」，不是「是否需要确认」。
+  TTY 下 `display.render_operator_actions` **只渲染 `operator_actions`** 到 stderr——此前 TTY 分支
+  把 `hints` 整个丢弃，真人从来看不到任何提示。无 `operator_actions` 时零输出，既有命令的 TTY
+  行为逐字节不变。`SCHEMA_DATA["conventions"]` 新增 `hints` 与 `command_vs_wizard` 两块。
+- 新增向导入口登录门 `wizard/preflight.py`：登录检查从 goal 的第一个 step 前移到收集角色 /
+  平台 / 目标 / 参数之前——此前未登录时这五层选择全部白做。已登录时零输出零开销（本地文件读，
+  不预检浏览器内核）；未登录时可内联扫码登录并无缝进向导；浏览器内核缺失时先给
+  `patchright install chromium` 指引，不再开完浏览器才失败。headless 路径保持 `WAITING_INPUT`
+  不变（TTY 下人就在终端前，阻塞等扫码是刻意的；Agent 不能卡在子进程里空等）。
+- 向导未登录时 run 状态由 `failed` 改为 `WAITING_INPUT`，可 `--resume` 且保留已选的角色 /
+  平台 / 目标，不必从头重走。
+- 补齐候选者侧九个命令组（`stats` / `preset` / `watch` / `clean` / `ai-local` / `resume` / `ai` /
+  `crawl` / `agent`）共 63 处 `handle_output` 的 TTY 渲染分支，真人不再需要自己读 JSON 信封。
+  `display.py` 新增 `render_next_steps` / `render_action_result` / `render_list_result` /
+  `render_record_result` / `render_ai_result` 五个通用件；`render_ai_result` 不假设键名、只按值类型
+  呈现，并对所有值做 escape，避免 AI 输出里的方括号被 Rich 当标记解析。stdout 仍只有单行信封。
+- 向导整个多轮交互会话跑在 alternate screen（`\033[?1049h` / `\033[?1049l`）里：进入切、退出还原，
+  终端原有内容完好，不再往 scrollback 留残框——`clear_wizard_screen` 的 `\033[2J` 只清可视屏、
+  清不掉历史，这是「上滚看到多个框」的根因。用 context manager 保证还原（`commands/wizard.py`
+  有 59 处 `return` 且内部会 `raise SystemExit`，逐点还原必然漏）。单次 flag 路径
+  （`--status` / `--resume` / `--stop`）刻意不进备用屏，否则渲染完立刻被抹掉。菜单包进 `Frame`，
+  框标题为当前步骤；菜单支持 `←` / `Esc` 返回。
+
 ## [1.18.0] - 2026-07-29
 
 ### Added

@@ -38,6 +38,13 @@ from boss_agent_cli.wizard.prompts import (
 	collect_wizard_input,
 )
 
+# PTY 用例要真起一个 CLI 进程并等 prompt_toolkit 渲染完首屏，耗时随机器负载浮动：
+# 本机约 1s，而 CI 的 P0 baseline job 在同一个 job 里串跑 ruff / pytest / mypy，
+# 曾因 5s 硬期限超时假红并挡住 #380 的合并（同一 commit 上五个测试矩阵 job 全过）。
+# 放宽期限不会拖慢快机器——命中同步标记或进程退出就立刻跳出循环。
+_PTY_STARTUP_TIMEOUT = float(os.environ.get("BOSS_TEST_PTY_STARTUP_TIMEOUT", "30"))
+_PTY_EXIT_TIMEOUT = float(os.environ.get("BOSS_TEST_PTY_EXIT_TIMEOUT", "20"))
+
 
 class _ScriptedMenu:
 	def __init__(self, selections, texts=()):
@@ -45,6 +52,7 @@ class _ScriptedMenu:
 		self.texts = iter(texts)
 		self.menus = []
 		self.last_kwargs = {}
+		self.kwargs_log = []
 
 	def select(self, title, options, *, default=None, allow_back=True, allow_exit=True, clear_before=True):
 		self.last_kwargs = {
@@ -52,6 +60,7 @@ class _ScriptedMenu:
 			"allow_exit": allow_exit,
 			"clear_before": clear_before,
 		}
+		self.kwargs_log.append(dict(self.last_kwargs))
 		self.menus.append((title, list(options)))
 		value = next(self.selections)
 		if value == "返回":
@@ -1817,7 +1826,9 @@ def test_interactive_wizard_loops_follow_up_from_original_list_results(tmp_path,
 	assert result.exit_code == 0
 	assert executed_goals == ["job_search", "job_detail"]
 	assert result.stdout == ""
-	assert "共 2 条结果" in result.stderr
+	# 列表摘要的渲染职责已移入 collect_result_follow_up（它才知道当前翻到第几页，
+	# 需要逐页重绘）。本用例把该函数整个 mock 掉了，因此观察不到摘要——
+	# 真实路径的渲染由 test_result_list_keeps_summary_visible_above_menu 覆盖。
 	assert "职位详情" in result.stderr
 	assert "Python 工程师" in result.stderr
 
@@ -1974,7 +1985,8 @@ def test_prompt_toolkit_pty_uses_stderr_and_arrow_keys(tmp_path):
 	output = bytearray()
 	stdout_output = bytearray()
 	try:
-		startup_deadline = time.monotonic() + 5
+		menu_rendered = False
+		startup_deadline = time.monotonic() + _PTY_STARTUP_TIMEOUT
 		while time.monotonic() < startup_deadline:
 			ready, _, _ = select.select([stderr_master_fd], [], [], 0.1)
 			if not ready:
@@ -1986,13 +1998,25 @@ def test_prompt_toolkit_pty_uses_stderr_and_arrow_keys(tmp_path):
 			if not chunk:
 				break
 			output.extend(chunk)
-			if "BOSS 求职助手" in output.decode("utf-8", errors="ignore"):
+			# 提示行恒在内容区，用作「菜单已渲染」的同步信号；
+			# 标题现在画在框上（D1），不再是内容区的第一行。
+			if "↑↓ 选择" in output.decode("utf-8", errors="ignore"):
+				menu_rendered = True
 				break
+		# 必须确认菜单真渲染出来了再发按键。此前超时也照发，prompt_toolkit 尚未接管
+		# 输入，按键被丢掉，最终报成「没退出」——把「启动慢」误诊为「交互坏」，
+		# 而且看不到任何有用线索。
+		if not menu_rendered:
+			process.kill()
+			pytest.fail(
+				f"prompt_toolkit 菜单在 {_PTY_STARTUP_TIMEOUT}s 内未渲染；"
+				f"已捕获输出：{output.decode('utf-8', errors='replace')!r}"
+			)
 		for _ in range(5):
 			os.write(stderr_master_fd, b"\x1b[B")
 			time.sleep(0.05)
 		os.write(stderr_master_fd, b"\r")
-		completion_deadline = time.monotonic() + 5
+		completion_deadline = time.monotonic() + _PTY_EXIT_TIMEOUT
 		while process.poll() is None and time.monotonic() < completion_deadline:
 			ready, _, _ = select.select([stderr_master_fd], [], [], 0.1)
 			if ready:
@@ -2005,7 +2029,10 @@ def test_prompt_toolkit_pty_uses_stderr_and_arrow_keys(tmp_path):
 				output.extend(chunk)
 		if process.poll() is None:
 			process.kill()
-			pytest.fail("prompt_toolkit PTY did not exit after arrow-key selection")
+			pytest.fail(
+				f"prompt_toolkit PTY 在选中后 {_PTY_EXIT_TIMEOUT}s 内未退出；"
+				f"已捕获输出：{output.decode('utf-8', errors='replace')!r}"
+			)
 		process.wait(timeout=2)
 		while True:
 			ready, _, _ = select.select([stderr_master_fd], [], [], 0.05)
@@ -2038,7 +2065,11 @@ def test_prompt_toolkit_pty_uses_stderr_and_arrow_keys(tmp_path):
 	stderr_text = output.decode("utf-8", errors="replace")
 	assert process.returncode == 0
 	assert stdout_output == b""
-	assert "BOSS 求职助手" in stderr_text
+	# 该场景首屏是登录门菜单，框标题即它的 title（D1：标题=当前步骤）
+	assert "需要先登录才能继续" in stderr_text, "框标题应为当前步骤（D1）"
+	assert "\x1b[?1049h" in stderr_text, "交互会话应进入备用屏（R1）"
+	assert stderr_text.rstrip().endswith("\x1b[?1049l"), "退出应还原备用屏（AC6）"
+	assert "BOSS 求职助手" not in stderr_text, "常驻应用名行已移除（D1）"
 	assert "退出向导" in stderr_text
 	assert "已退出向导" in stderr_text
 
@@ -2577,4 +2608,296 @@ def test_menu_hint_advertises_left_arrow_back():
 
 	source = inspect.getsource(PromptToolkitMenu.select)
 	assert 'bindings.add("left")' in source
-	assert "←/Esc 返回" in source
+	# 提示行随内容区一起抽到了 _menu_content_lines（框标题化重构）
+	from boss_agent_cli.wizard.prompts import _menu_content_lines
+
+	assert "←/Esc 返回" in inspect.getsource(_menu_content_lines)
+
+
+# ── 采集完成后的列表：摘要必须留在菜单上方（与「查看任务状态」一致）──
+
+
+def _crawl_completed_run(job_count: int = 3) -> dict:
+	jobs = [
+		{
+			"title": f"职位{i}",
+			"company": f"公司{i}",
+			"security_id": f"sec-{i}",
+			"job_id": f"job-{i}",
+			"source": "crawl",
+		}
+		for i in range(job_count)
+	]
+	return {
+		"role": "candidate",
+		"platform": "zhipin",
+		"goal": "crawl_status",
+		"status": "completed",
+		"run_id": "wrn_demo",
+		"last_result": {"data": {"jobs": jobs, "jobs_seen": len(jobs), "status": "completed"}},
+	}
+
+
+def test_result_list_keeps_summary_visible_above_menu(monkeypatch):
+	"""采集完成后的列表必须与「重新进入任务状态」看到同一个摘要框。
+
+	此前 MenuDriver.select 的 clear_before 默认 True，会把 _run_plan 刚渲染的
+	摘要 Panel 清掉，只剩一个光秃秃的选择列表——两个入口观感不一致。
+	"""
+	from boss_agent_cli.wizard.prompts import collect_result_follow_up
+
+	rendered: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.wizard.renderer.render_run",
+		lambda run, *, with_preview=True: rendered.append(str(run.get("run_id"))),
+	)
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.clear_wizard_screen", lambda: None)
+
+	menu = _ScriptedMenu(["0", "job_detail"])
+	collect_result_follow_up(_crawl_completed_run(), menu=menu)
+
+	# kwargs_log[0] 是列表菜单本身；后续是选中职位后的动作菜单
+	assert menu.kwargs_log[0]["clear_before"] is False, "列表菜单不得清屏，否则摘要被抹掉"
+	assert rendered == ["wrn_demo"], "选择菜单前应重绘任务摘要"
+
+
+def test_result_list_redraws_summary_on_every_page(monkeypatch):
+	"""翻页时摘要也要跟着重绘，否则翻一页就丢。"""
+	from boss_agent_cli.wizard.prompts import RESULT_PAGE_SIZE, collect_result_follow_up
+
+	rendered: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.wizard.renderer.render_run",
+		lambda run, *, with_preview=True: rendered.append(str(run.get("run_id"))),
+	)
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.clear_wizard_screen", lambda: None)
+
+	run = _crawl_completed_run(job_count=RESULT_PAGE_SIZE + 3)
+	menu = _ScriptedMenu(["__result_more__", str(RESULT_PAGE_SIZE), "job_detail"])
+	collect_result_follow_up(run, menu=menu)
+
+	assert len(rendered) == 2, f"两页应各重绘一次摘要，实际 {len(rendered)} 次"
+
+
+def test_result_list_menu_still_returns_selection(monkeypatch):
+	"""回归护栏：加重绘不得改变选择结果。"""
+	from boss_agent_cli.wizard.prompts import collect_result_follow_up
+
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.render_run", lambda run, *, with_preview=True: None)
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.clear_wizard_screen", lambda: None)
+
+	menu = _ScriptedMenu(["1", "job_detail"])
+	follow = collect_result_follow_up(_crawl_completed_run(), menu=menu)
+
+	assert isinstance(follow, WizardInput)
+	assert follow.inputs["security_id"] == "sec-1"
+
+
+# ── 浏览列表时摘要框不再重复展示职位预览 ──────────────────────
+
+
+def _capture_wizard_console(monkeypatch):
+	import io
+
+	from rich.console import Console
+
+	stream = io.StringIO()
+	monkeypatch.setattr("boss_agent_cli.display.console", Console(file=stream, force_terminal=False, width=120))
+	return stream
+
+
+def test_crawl_summary_includes_preview_by_default(monkeypatch):
+	"""状态视图（不进列表）仍需要职位预览——那时没有可选菜单。"""
+	from boss_agent_cli.wizard.renderer import render_run
+
+	stream = _capture_wizard_console(monkeypatch)
+	render_run(_crawl_completed_run(job_count=8))
+
+	assert "职位预览" in stream.getvalue()
+
+
+def test_crawl_summary_omits_preview_when_browsing(monkeypatch):
+	"""浏览列表时下方已有可选菜单，框里再列一遍职位是冗余且页码对不上。"""
+	from boss_agent_cli.wizard.renderer import render_run
+
+	stream = _capture_wizard_console(monkeypatch)
+	render_run(_crawl_completed_run(job_count=8), with_preview=False)
+	out = stream.getvalue()
+
+	assert "职位预览" not in out
+	assert "采集已完成" in out, "摘要本身仍要在"
+	assert "75" in out or "8" in out, "职位总数仍要显示"
+
+
+def test_list_header_disables_preview(monkeypatch):
+	"""结果列表上方的摘要必须关掉预览。"""
+	from boss_agent_cli.wizard.prompts import collect_result_follow_up
+
+	captured: list[bool] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.wizard.renderer.render_run",
+		lambda run, *, with_preview=True: captured.append(with_preview),
+	)
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.clear_wizard_screen", lambda: None)
+
+	collect_result_follow_up(_crawl_completed_run(), menu=_ScriptedMenu(["0", "job_detail"]))
+
+	assert captured == [False], f"列表上方摘要应关闭预览，实际 {captured}"
+
+
+# ── 整个交互会话独占一块备用屏缓冲 ────────────────────────────
+
+
+_ALT_ENTER = "\033[?1049h"
+_ALT_EXIT = "\033[?1049l"
+
+
+def _force_screen_control(monkeypatch):
+	"""解除 pytest / 非 TTY 的 no-op 守卫，让转义序列真的写出来。"""
+	import io
+
+	stream = io.StringIO()
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer._screen_control_unavailable", lambda: False)
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.sys", type("S", (), {"stderr": stream})())
+	return stream
+
+
+def test_wizard_screen_enters_and_restores_alternate_buffer(monkeypatch):
+	from boss_agent_cli.wizard.renderer import wizard_screen
+
+	stream = _force_screen_control(monkeypatch)
+	with wizard_screen():
+		assert stream.getvalue() == _ALT_ENTER, "进入时应切到备用屏"
+	assert stream.getvalue() == _ALT_ENTER + _ALT_EXIT, "退出时应还原"
+
+
+def test_wizard_screen_restores_on_exception(monkeypatch):
+	"""异常路径必须还原，否则用户终端卡在备用屏里（AC6）。"""
+	from boss_agent_cli.wizard.renderer import wizard_screen
+
+	stream = _force_screen_control(monkeypatch)
+	with pytest.raises(ValueError):
+		with wizard_screen():
+			raise ValueError("boom")
+	assert stream.getvalue().endswith(_ALT_EXIT)
+
+
+def test_wizard_screen_restores_on_system_exit(monkeypatch):
+	"""向导内部会 raise SystemExit(1)，同样必须还原。"""
+	from boss_agent_cli.wizard.renderer import wizard_screen
+
+	stream = _force_screen_control(monkeypatch)
+	with pytest.raises(SystemExit):
+		with wizard_screen():
+			raise SystemExit(1)
+	assert stream.getvalue().endswith(_ALT_EXIT)
+
+
+def test_wizard_screen_restores_on_keyboard_interrupt(monkeypatch):
+	"""Ctrl-C 也要还原（AC6）。"""
+	from boss_agent_cli.wizard.renderer import wizard_screen
+
+	stream = _force_screen_control(monkeypatch)
+	with pytest.raises(KeyboardInterrupt):
+		with wizard_screen():
+			raise KeyboardInterrupt
+	assert stream.getvalue().endswith(_ALT_EXIT)
+
+
+def test_wizard_screen_is_noop_without_tty(monkeypatch):
+	"""Agent / 管道 / dumb terminal 路径行为完全不变。"""
+	import io
+
+	from boss_agent_cli.wizard.renderer import wizard_screen
+
+	stream = io.StringIO()
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer._screen_control_unavailable", lambda: True)
+	monkeypatch.setattr("boss_agent_cli.wizard.renderer.sys", type("S", (), {"stderr": stream})())
+	with wizard_screen():
+		pass
+	assert stream.getvalue() == ""
+
+
+def test_interactive_session_runs_inside_alternate_screen(monkeypatch, tmp_path):
+	"""多轮向导必须被备用屏包裹；单次 flag 路径不得进（AC7）。"""
+	from boss_agent_cli.commands import wizard as wizard_mod
+
+	order: list[str] = []
+
+	class _FakeScreen:
+		def __enter__(self):
+			order.append("enter")
+			return self
+
+		def __exit__(self, *exc):
+			order.append("exit")
+			return False
+
+	monkeypatch.setattr(wizard_mod, "wizard_screen", lambda: _FakeScreen())
+	monkeypatch.setattr(wizard_mod, "_is_interactive", lambda ctx: True)
+	monkeypatch.setattr(
+		wizard_mod,
+		"_run_interactive_session",
+		lambda *a, **k: order.append("session"),
+	)
+
+	CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "wizard"])
+
+	assert order == ["enter", "session", "exit"]
+
+
+# ── 菜单包进带标题的边框 ──────────────────────────────────────
+
+
+def test_menu_container_is_framed_with_step_title():
+	"""框标题用当前步骤（D1），与采集摘要 Panel 同构。"""
+	from prompt_toolkit.layout.controls import FormattedTextControl
+	from prompt_toolkit.widgets import Frame
+
+	from boss_agent_cli.wizard.prompts import _build_menu_container
+
+	container = _build_menu_container("请选择职位（第 1-12 / 共 75 条）", FormattedTextControl(""))
+
+	assert isinstance(container, Frame)
+	assert container.title == "请选择职位（第 1-12 / 共 75 条）"
+
+
+def test_menu_container_holds_the_content_control():
+	"""框里装的必须是传入的菜单内容，不能丢。"""
+	from prompt_toolkit.layout.controls import FormattedTextControl
+	from prompt_toolkit.layout.containers import Window
+
+	from boss_agent_cli.wizard.prompts import _build_menu_container
+
+	control = FormattedTextControl("菜单内容")
+	container = _build_menu_container("标题", control)
+
+	found = []
+
+	def walk(node):
+		if isinstance(node, Window) and getattr(node, "content", None) is control:
+			found.append(node)
+		for child in getattr(node, "children", []) or []:
+			walk(child)
+		body = getattr(node, "body", None)
+		if body is not None:
+			walk(body)
+
+	walk(container)
+	assert found, "菜单内容控件应在框内"
+
+
+def test_menu_content_does_not_repeat_title_inside_frame(monkeypatch):
+	"""标题上了框，框内就不该再打印一遍（D1：去掉常驻应用名行）。"""
+	from boss_agent_cli.wizard.prompts import _menu_content_lines, MenuOption
+
+	lines = _menu_content_lines(
+		[MenuOption("a", "选项A"), MenuOption("b", "选项B")],
+		selected=0,
+		title="请选择职位",
+	)
+	text = "".join(part[1] for part in lines)
+
+	assert "请选择职位" not in text, "标题已在框上，内容区不应重复"
+	assert "BOSS 求职助手" not in text, "常驻应用名行应移除"
+	assert "选项A" in text and "选项B" in text

@@ -23,6 +23,11 @@ _SENSITIVE_KEY_PARTS = (
 _PUBLIC_METADATA_KEYS = {
 	"private_fields",
 }
+# 凭据必然是字符串或容器。数值 / 布尔 / None 命中关键词一律是子串误报——
+# 例如 ai_max_tokens（AI 生成长度上限）、token_expires_in（过期秒数）都含
+# 子串 "token"，脱敏后用户永远看不到自己配的值，None 更会被说成藏着秘密。
+# 已扫描全仓：不存在数值型真凭据，因此放宽不会漏脱敏。
+_NON_CREDENTIAL_TYPES = (bool, int, float, type(None))
 _SENSITIVE_TEXT_PATTERNS = tuple(
 	re.compile(pattern, re.IGNORECASE)
 	for pattern in (
@@ -53,7 +58,7 @@ def redact_sensitive(value: Any) -> Any:
 			key_text = str(key).lower()
 			if _is_error_code_metadata(item) or key_text in _PUBLIC_METADATA_KEYS:
 				redacted[key] = redact_sensitive(item)
-			elif any(part in key_text for part in _SENSITIVE_KEY_PARTS) and not isinstance(item, bool):
+			elif any(part in key_text for part in _SENSITIVE_KEY_PARTS) and not isinstance(item, _NON_CREDENTIAL_TYPES):
 				redacted[key] = _REDACTED
 			else:
 				redacted[key] = redact_sensitive(item)

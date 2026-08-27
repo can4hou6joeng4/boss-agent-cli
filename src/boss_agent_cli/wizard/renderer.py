@@ -146,17 +146,47 @@ def render_event(kind: str, step: str, data: Mapping[str, Any] | None) -> None:
 		display.console.print(f"[yellow]正在重试[/yellow] {label}（第 {attempt} 次）")
 
 
-def clear_wizard_screen() -> None:
-	"""Clear the terminal so only the current wizard page remains visible."""
-	if (
+def _screen_control_unavailable() -> bool:
+	"""True 时一切屏幕控制都退化为 no-op：测试 / 非 TTY / dumb terminal。"""
+	return bool(
 		os.environ.get("PYTEST_CURRENT_TEST")
 		or not sys.stderr.isatty()
 		or os.environ.get("TERM", "").lower() in {"", "dumb", "unknown"}
-	):
+	)
+
+
+def clear_wizard_screen() -> None:
+	"""Clear the terminal so only the current wizard page remains visible."""
+	if _screen_control_unavailable():
 		return
 	# Home + clear scrollback-friendly clear for most terminals.
 	sys.stderr.write("\033[H\033[2J")
 	sys.stderr.flush()
+
+
+@contextmanager
+def wizard_screen() -> Iterator[None]:
+	"""让整个交互会话独占一块备用屏缓冲。
+
+	进入切 alternate screen、退出还原：向导期间终端像一个独立窗口，
+	退出后原有内容完好，全程不往 scrollback 里留残框——clear_wizard_screen
+	的 \033[2J 只清可视屏，清不掉历史，这是真人反馈里「上滚看到两个框」的根因。
+
+	必须是 context manager：commands/wizard.py 有 59 处 return，
+	外加内部会 raise SystemExit，逐点还原必然漏掉某条路径。
+
+	非 TTY / dumb terminal / 测试下是 no-op，Agent 与管道路径完全不受影响。
+	"""
+	if _screen_control_unavailable():
+		yield
+		return
+	sys.stderr.write("\033[?1049h")
+	sys.stderr.flush()
+	try:
+		yield
+	finally:
+		sys.stderr.write("\033[?1049l")
+		sys.stderr.flush()
 
 
 @contextmanager
@@ -379,8 +409,12 @@ def render_result_preview(items: list[Mapping[str, Any]], *, kind: str) -> None:
 	display.console.print(Panel(table, title=f"共 {min(len(items), 20)} 条", border_style="cyan"))
 
 
-def render_run(run: Mapping[str, Any]) -> None:
-	"""Single, human-first summary: content card or one error panel — not a debug dump."""
+def render_run(run: Mapping[str, Any], *, with_preview: bool = True) -> None:
+	"""Single, human-first summary: content card or one error panel — not a debug dump.
+
+	``with_preview=False`` 用于结果列表上方：那里下方已有可选职位菜单，
+	框里再列一遍职位既冗余、页码也跟菜单对不上。
+	"""
 	status = str(run.get("status") or "")
 	if status == "failed":
 		error = run.get("error") or {}
@@ -393,7 +427,7 @@ def render_run(run: Mapping[str, Any]) -> None:
 
 	# Stale waiting_input after a later successful crawl: show results, not a yellow wait card.
 	if status == "waiting_input" and run.get("effective_completed"):
-		if _render_crawl_summary(run):
+		if _render_crawl_summary(run, with_preview=with_preview):
 			return
 
 	if status == "waiting_input":
@@ -403,7 +437,7 @@ def render_run(run: Mapping[str, Any]) -> None:
 		live = str(data.get("live_crawl_status") or data.get("status") or "")
 		jobs_seen = data.get("jobs_seen")
 		if live == "completed" and int(jobs_seen or 0) > 0:
-			if _render_crawl_summary(run):
+			if _render_crawl_summary(run, with_preview=with_preview):
 				return
 		reason = str(data.get("error") or last.get("next_action") or "需要补充信息或人工处理后才能继续")
 		inner = data.get("run_id")
@@ -447,7 +481,7 @@ def render_run(run: Mapping[str, Any]) -> None:
 		return
 
 	# Crawl goals own a dedicated summary (metadata + sample titles + paths).
-	if _render_crawl_summary(run):
+	if _render_crawl_summary(run, with_preview=with_preview):
 		return
 
 	# Management / digest / AI / empty-list friendly summaries.
@@ -1034,7 +1068,7 @@ def _render_job_preview_table(
 	return table
 
 
-def _render_crawl_summary(run: Mapping[str, Any]) -> bool:
+def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) -> bool:
 	"""Rich summary for crawl_start/resume/status results. Returns True if rendered."""
 	from rich.console import Group
 	from rich.rule import Rule
@@ -1152,7 +1186,7 @@ def _render_crawl_summary(run: Mapping[str, Any]) -> bool:
 			row("下一步", f"[bold]{next_action}[/bold]")
 
 	# ── Preview under meta: Markdown-style pipe table ───────────────
-	preview_rows = _preview_jobs_from_data(data, limit=5)
+	preview_rows = _preview_jobs_from_data(data, limit=5) if with_preview else []
 	parts: list[Any] = [headline, Text(""), meta]
 
 	if preview_rows:

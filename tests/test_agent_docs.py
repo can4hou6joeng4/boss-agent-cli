@@ -242,7 +242,10 @@ def test_glama_metadata_exists_and_declares_owner():
 def test_pyproject_exposes_boss_mcp_script():
 	pyproject = _read("pyproject.toml")
 	assert 'boss-mcp = "boss_agent_cli.mcp_server:run"' in pyproject
-	assert '"mcp>=1.0.0"' in pyproject
+	# 上界是硬要求：mcp 2.0 删掉了 `@server.list_tools()` / `@server.call_tool()`，
+	# 而 mcp_server 在模块层就用它们，装到 2.x 的用户连 boss-mcp 都起不来。
+	# 声明无上界时 CI 仍走 uv.lock 里的 1.x，全绿，用户全崩。放开前必须先适配 2.x API。
+	assert '"mcp>=1.0.0,<2.0.0"' in pyproject
 
 
 def test_agent_facing_docs_keep_bounded_runtime_boundary():

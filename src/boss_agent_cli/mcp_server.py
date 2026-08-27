@@ -122,6 +122,7 @@ def _run_boss(*args: str) -> dict[str, Any]:
 	}
 
 
+@server.list_tools()
 async def list_tools() -> list[Tool]:
 	return TOOLS
 

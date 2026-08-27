@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from dataclasses import asdict
+from typing import Any
 from pathlib import Path
 
 import click
@@ -17,7 +18,46 @@ from boss_agent_cli.ai.local_models import (
 	recommended_model_rows,
 )
 from boss_agent_cli.ai.service import AIService, AIServiceError
-from boss_agent_cli.display import handle_error_output, handle_output
+from rich.table import Table
+
+from boss_agent_cli import display
+from boss_agent_cli.display import handle_error_output, handle_output, render_action_result, render_next_steps
+
+
+def _render_local_status(data: dict[str, Any]) -> None:
+	"""本地模型配置 + 推荐清单（TTY 路径）。"""
+	state = "[green]已配置[/green]" if data.get("configured") else "[yellow]未配置[/yellow]"
+	display.console.print(f"本地模型：{state}")
+	if data.get("configured"):
+		display.console.print(f"  runtime: {data.get('provider') or '-'}    model: {data.get('model') or '-'}")
+		display.console.print(f"  base_url: {data.get('base_url') or '-'}")
+
+	rows = data.get("recommended_models") or []
+	if rows:
+		table = Table(title="推荐模型")
+		table.add_column("模型", style="bold cyan")
+		table.add_column("runtime", style="green")
+		table.add_column("最低内存", justify="right", style="yellow")
+		table.add_column("说明", style="dim", max_width=40)
+		for row in rows:
+			mark = " ★" if row.get("recommended") else ""
+			table.add_row(
+				f"{row.get('name', '-')}{mark}",
+				str(row.get("runtime", "-")),
+				f"{row.get('min_memory_gb', '-')} GB",
+				str(row.get("description", "")),
+			)
+		display.console.print(table)
+
+	imported = data.get("imported_models") or []
+	if imported:
+		display.console.print(f"  已导入 {len(imported)} 个本地模型")
+
+	render_next_steps(
+		["boss ai local smoke"]
+		if data.get("configured")
+		else ["boss ai local configure --runtime ollama --model qwen3:14b"]
+	)
 
 
 @click.group("local")
@@ -43,6 +83,7 @@ def local_status_cmd(ctx: click.Context) -> None:
 			"recommended_models": recommended_model_rows(),
 			"imported_models": [asdict(item) for item in read_imported_models(ctx.obj["data_dir"])],
 		},
+		render=_render_local_status,
 		hints={"next_actions": ["boss ai local configure --runtime ollama --model qwen3:14b"]},
 	)
 
@@ -67,6 +108,9 @@ def local_configure_cmd(ctx: click.Context, runtime: str, model: str, base_url: 
 		ctx,
 		"ai.local.configure",
 		{"runtime": runtime, "model": model, "base_url": store.get_base_url()},
+		render=lambda d: render_action_result(
+			d, title="ai local configure", next_steps=["boss ai local status", "boss ai local smoke"]
+		),
 		hints={"next_actions": ["boss ai local smoke", "boss ai local status"]},
 	)
 
@@ -101,7 +145,12 @@ def local_pull_cmd(ctx: click.Context, model: str, confirm_download: bool) -> No
 			recoverable=True,
 			recovery_action="确认 Ollama 已安装并可访问网络后重试",
 		)
-	handle_output(ctx, "ai.local.pull", {"status": "installed", "model": model})
+	handle_output(
+		ctx,
+		"ai.local.pull",
+		{"status": "installed", "model": model},
+		render=lambda d: render_action_result(d, title="ai local pull", next_steps=["boss ai local smoke"]),
+	)
 
 
 @ai_local_group.command("import")
@@ -124,7 +173,12 @@ def local_import_cmd(ctx: click.Context, source_path: Path, model: str) -> None:
 	store = AIConfigStore(ctx.obj["data_dir"])
 	store.save_config(ai_provider="custom", ai_model=model, ai_base_url=None)
 	store.save_api_key("local")
-	handle_output(ctx, "ai.local.import", asdict(imported))
+	handle_output(
+		ctx,
+		"ai.local.import",
+		asdict(imported),
+		render=lambda d: render_action_result(d, title="ai local import", next_steps=["boss ai local status"]),
+	)
 
 
 @ai_local_group.command("smoke")
@@ -167,4 +221,9 @@ def local_smoke_cmd(ctx: click.Context) -> None:
 			recoverable=True,
 			recovery_action="确认本地模型服务已启动后重试",
 		)
-	handle_output(ctx, "ai.local.smoke", {"status": "ok", "model": str(model), "reply": reply[:200]})
+	handle_output(
+		ctx,
+		"ai.local.smoke",
+		{"status": "ok", "model": str(model), "reply": reply[:200]},
+		render=lambda d: render_action_result(d, title="ai local smoke", next_steps=["boss ai analyze-jd <security_id>"]),
+	)

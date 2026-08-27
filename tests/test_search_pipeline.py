@@ -417,3 +417,59 @@ def test_pipeline_cache_hit_skips_job_card_request():
 	assert len(result.items) == 1
 	assert client.detail_calls == []  # 命中缓存，零取详情请求
 	assert cache.put_calls == []  # 命中无需写回
+
+
+# ── SearchProgress 端到端接线（真人链路）────────────────────────
+
+
+def test_real_pipeline_drives_search_progress_counters(monkeypatch):
+	"""用真实管线驱动 SearchProgress，证明进度接线端到端有效。
+
+	这是无平台账号条件下能做到的最强验证：管线是真的，只有 client/cache 是 fake。
+	"""
+	import io
+
+	from rich.console import Console
+
+	from boss_agent_cli.display import SearchProgress
+
+	stream = io.StringIO()
+	monkeypatch.setattr(
+		"boss_agent_cli.display.console",
+		Console(file=stream, force_terminal=False, width=120),
+	)
+
+	client = FakeClient(
+		pages=[{
+			"zpData": {
+				"hasMore": False,
+				"jobList": [
+					_make_job_raw(security_id="sec-a", job_id="job-a"),
+					_make_job_raw(security_id="sec-b", job_id="job-b"),
+				],
+			},
+		}],
+		descriptions={"sec-a": "福利：双休 五险一金", "sec-b": "单休，无补贴"},
+	)
+	progress = SearchProgress("搜索 Golang", max_pages=1)
+
+	result = run_search_pipeline(
+		client,
+		FakeCache(),
+		progress,
+		criteria=SearchFilterCriteria(query="Golang"),
+		welfare_conditions=_welfare_conditions(),
+	)
+
+	# 管线真的产出了一个匹配项
+	assert [item["job_id"] for item in result.items] == ["job-a"]
+
+	# 进度对象如实反映了管线过程
+	assert progress.pages == 1, "翻页应被计数"
+	assert progress.matched == 1, "匹配项应被计数"
+	assert progress.excluded >= 1, "不匹配项应被计数"
+
+	out = stream.getvalue()
+	assert "Company-job-a" in out, "匹配项应逐条打印到终端"
+	assert "Company-job-b" not in out, "排除项不应刷屏"
+	assert "1/1" in progress.status_text()

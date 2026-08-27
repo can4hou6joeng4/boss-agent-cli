@@ -6,10 +6,14 @@ import shutil
 import sqlite3
 import time
 from pathlib import Path
+from typing import Any
 
 import click
 
-from boss_agent_cli.display import handle_output
+from rich.table import Table
+
+from boss_agent_cli import display
+from boss_agent_cli.display import handle_output, render_next_steps
 
 
 @click.command("clean")
@@ -85,7 +89,41 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 	else:
 		hints["next_actions"].append("boss doctor — 检查清理后环境状态")
 
-	handle_output(ctx, "clean", data, hints=hints)
+	handle_output(
+		ctx,
+		"clean",
+		data,
+		render=lambda d: _render_clean(d, hints["next_actions"]),
+		hints=hints,
+	)
+
+
+def _render_clean(data: dict[str, Any], next_steps: list[str]) -> None:
+	"""清理结果表格（TTY 路径）。dry-run 时明确标注未真正删除。"""
+	title = "clean（预演，未实际删除）" if data.get("dry_run") else "clean"
+	table = Table(title=title)
+	table.add_column("目标", style="bold cyan")
+	table.add_column("条数", justify="right", style="green")
+	table.add_column("释放", justify="right", style="yellow")
+	for row in data.get("results", []):
+		table.add_row(
+			str(row.get("target", "-")),
+			str(row.get("cleaned", 0)),
+			_human_bytes(row.get("bytes_freed", 0)),
+		)
+	display.console.print(table)
+	display.console.print(f"  合计释放 [bold]{data.get('total_bytes_freed_display', '0 B')}[/bold]")
+	render_next_steps(next_steps)
+
+
+def _human_bytes(value: int) -> str:
+	"""字节数转人类可读；与信封里的 total_bytes_freed_display 口径一致。"""
+	size = float(value)
+	for unit in ("B", "KB", "MB", "GB"):
+		if size < 1024 or unit == "GB":
+			return f"{int(size)} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+		size /= 1024
+	return f"{size:.1f} GB"
 
 
 def _clean_search_cache(data_dir: Path, *, dry_run: bool, clean_all: bool) -> tuple[int, int]:

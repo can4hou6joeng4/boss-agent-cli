@@ -9,6 +9,7 @@ build/
 .codex/
 .worktrees/
 .claude/
+.pi/
 docs/superpowers/
 my-boss-profile.md
 CLAUDE.md
