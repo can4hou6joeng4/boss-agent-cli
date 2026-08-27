@@ -5,6 +5,11 @@
 ## [Unreleased]
 
 ### Fixed
+- 修正 CI docker job 的 `tools/list` 断言存在竞态：`printf` 写完三行就关闭 stdin，
+  MCP 服务器可能在回 `tools/list` 之前就因 EOF 退出，读端拿到空串报 `JSONDecodeError`
+  （已在 CI 上真实发生）。改为写完后保持 stdin 一段时间，并按 JSON-RPC `id` 认响应而非
+  依赖行序；`tools/list` 无响应时给出明确断言而不是解析错误。**一道会随机变红的门禁
+  等于没有门禁**——它会挡住无关的合并，正如同批修掉的 PTY 用例那样。
 - 修正 Docs 工作流的 `Check whitespace` 对**落后于 master 的 PR 一律假红**：
   `git fetch --no-tags --depth=1 origin <base>` 只取到 base 的 tip 并留下浅克隆边界，
   落后的 PR 分支算不出 merge base，`git diff --check A...B` 直接以

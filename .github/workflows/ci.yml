@@ -154,19 +154,39 @@ jobs:
       # 只断言 initialize 是不够的：v1.18.0 就是带着一个未注册的 tools/list 发出去的
       # （issue #377），握手照样成功，MCP host 一列工具才拿到 -32601。所以这里必须在
       # 同一个 stdio 会话里把 tools/list 也真的问一遍。
+      #
+      # 两处刻意的写法，都是为了不让这道门禁自己变成 flaky：
+      # 1. printf 之后 sleep：写完三行就关 stdin 的话，服务器可能在回 tools/list 之前
+      #    就因 EOF 退出，读端拿到空串——实测在 CI 上真的发生过。
+      # 2. 按 JSON-RPC id 认响应，不靠行序：任何多余输出或顺序变化都不会误判。
       - name: Verify the MCP server handshake and tool listing over stdio
         run: |
-          printf '%s\n' \
+          { printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}' \
             '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
-            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'; sleep 10; } \
             | docker run --rm -i boss-agent-cli:ci \
             | python3 -c "
           import sys, json
-          initialized = json.loads(sys.stdin.readline())
+          initialized = listed = None
+          for line in sys.stdin:
+              line = line.strip()
+              if not line:
+                  continue
+              try:
+                  message = json.loads(line)
+              except json.JSONDecodeError:
+                  continue
+              if message.get('id') == 1:
+                  initialized = message
+              elif message.get('id') == 2:
+                  listed = message
+              if initialized and listed:
+                  break
+          assert initialized, 'initialize 没有收到响应'
           assert initialized['result']['serverInfo']['name'] == 'boss-agent-cli', initialized
           print('MCP initialize ok')
-          listed = json.loads(sys.stdin.readline())
+          assert listed, 'tools/list 没有收到响应'
           assert 'error' not in listed, listed
           names = [tool['name'] for tool in listed['result']['tools']]
           assert names, listed
