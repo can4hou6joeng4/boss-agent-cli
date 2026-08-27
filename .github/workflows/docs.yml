@@ -39,7 +39,13 @@ jobs:
       - name: Check whitespace
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+            # 刻意不加 --depth=1：浅克隆只取到 base 的 tip，落后于 base 的 PR 分支
+            # 算不出 merge base，`git diff --check A...B` 会直接以
+            # `fatal: origin/<base>...HEAD: no merge base` 退出 128——看起来像空白字符
+            # 违规，实际是这一步崩了。#382 / #383 / #390 三个 PR 都因此吃到假红，
+            # 而恰好是等得最久、落后最多的贡献者最容易撞上。
+            # checkout 已用 fetch-depth: 0，这里只是补一个 origin/<base> 引用，不会多下多少。
+            git fetch --no-tags origin "${{ github.base_ref }}"
             git diff --check "origin/${{ github.base_ref }}...HEAD"
           elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then
             git diff --check HEAD^...HEAD
