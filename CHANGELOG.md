@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-08-27
+
 ### Fixed
 - 修正 CI docker job 的 `tools/list` 断言存在竞态：`printf` 写完三行就关闭 stdin，
   MCP 服务器可能在回 `tools/list` 之前就因 EOF 退出，读端拿到空串报 `JSONDecodeError`

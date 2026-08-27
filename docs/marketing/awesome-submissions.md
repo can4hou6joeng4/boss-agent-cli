@@ -2,7 +2,7 @@
 
 > **Historical snapshot:** counts and default low-risk positioning below are superseded by the current open-capability wizard design. Use README and `boss schema` before submitting.
 
-本文件记录 boss-agent-cli 向各大 awesome 列表投稿的模板，供维护者提交用。最后更新：master 当前状态 (2026-07-29)。
+本文件记录 boss-agent-cli 向各大 awesome 列表投稿的模板，供维护者提交用。最后更新：master 当前状态 (2026-08-27)。
 
 ## 项目一句话介绍
 
@@ -55,8 +55,8 @@
 - [x] README 双语（中文 + 英文）
 - [x] MIT License
 - [x] CI 全绿（pytest / ruff / mypy / CodeQL）
-- [x] 发布到 PyPI（`pip install boss-agent-cli`，当前 latest release v1.18.0）
-- [x] GitHub Release 规范（latest release v1.18.0 已发）
+- [x] 发布到 PyPI（`pip install boss-agent-cli`，当前 latest release v1.19.0）
+- [x] GitHub Release 规范（latest release v1.19.0 已发）
 - [x] CHANGELOG 完整
 - [x] Code of Conduct + Security Policy
 - [x] Issue / PR 模板
