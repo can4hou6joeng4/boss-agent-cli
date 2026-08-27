@@ -4,6 +4,25 @@
 
 ## [Unreleased]
 
+## [1.19.1] - 2026-08-27
+
+### Fixed
+- **修复全新安装的 `boss-mcp` 完全起不来。** `mcp` 此前声明为无上界的 `mcp>=1.0.0`，
+  而 mcp 2.0 重写了 `Server` API——`@server.list_tools()` / `@server.call_tool()` 全部移除，
+  改为 `add_request_handler`。`mcp_server` 在模块层就用这些装饰器，因此任何解析到 2.x 的
+  全新安装都直接 `AttributeError: 'Server' object has no attribute 'call_tool'`，
+  `boss-mcp` 连启动都做不到。已收紧为 `mcp>=1.0.0,<2.0.0`。
+  这不是 1.19.0 引入的：1.18.0 在 mcp 2.x 下有完全相同的崩溃，只是此前没人从 PyPI
+  全新装一次验过。issue #377 的报告人当时用了 `--with 'mcp<2.0'`，所以他们看到的是
+  `-32601` 而不是崩溃。
+  mcp 2.x 的适配另开 issue 跟踪，放开上界之前不做。
+
+### Added
+- CI 新增 `fresh_install` job：**刻意不走 `uv.lock`**，装构建产物、让依赖按 `pyproject`
+  的约束重新解析，再真跑一次 MCP 会话。此前所有 job 都锁着 1.x 依赖，因此
+  「CI 全绿、用户全崩」可以长期共存——这个 job 守的就是**门禁看到的与用户拿到的**
+  之间那道缝。红灯验证：移除 `mcp` 上界后该 job 以「initialize 没有收到响应」失败。
+
 ## [1.19.0] - 2026-08-27
 
 ### Fixed

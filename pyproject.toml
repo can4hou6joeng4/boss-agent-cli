@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "boss-agent-cli"
-version = "1.19.0"
+version = "1.19.1"
 description = "AI Agent 专用的 BOSS 直聘求职 CLI 工具"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -57,7 +57,14 @@ bridge = [
 	"aiohttp>=3.9",
 ]
 mcp = [
-	"mcp>=1.0.0",
+	# 上界是必须的，不是保守：mcp 2.0 重写了 Server API——装饰器 `@server.list_tools()` /
+	# `@server.call_tool()` 全部移除，改成 `add_request_handler`。`mcp_server` 在模块层
+	# 就用这些装饰器，所以装到 2.x 的用户连 `boss-mcp` 都起不来，直接
+	# `AttributeError: 'Server' object has no attribute 'call_tool'`。
+	# 此前声明是无上界的 `mcp>=1.0.0`，于是所有全新安装都解析到 2.x 并崩溃，而 CI 走
+	# uv.lock 里钉死的 1.x，永远看不到——这正是「门禁看到的和用户拿到的不是一个东西」。
+	# 放开上界之前必须先支持 2.x API（见 mcp 2.x 适配 issue）。
+	"mcp>=1.0.0,<2.0.0",
 ]
 crawl = [
 	"DrissionPage>=4.1.1.1,<4.2",

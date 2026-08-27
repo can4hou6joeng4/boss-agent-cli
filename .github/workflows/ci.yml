@@ -131,6 +131,71 @@ jobs:
       - name: Run mypy
         run: uv run mypy src/boss_agent_cli
 
+  fresh_install:
+    # 其余所有 job 都走 uv.lock 里钉死的依赖，**用户走的是全新解析**——两者从来没被对齐过。
+    # 后果是真实发生过的：`mcp` 声明为无上界的 `>=1.0.0`，mcp 2.0 重写了 Server API 并删掉
+    # `@server.list_tools()` / `@server.call_tool()`，于是每一个全新安装的用户都只能拿到
+    # `AttributeError: 'Server' object has no attribute 'call_tool'`，boss-mcp 连起都起不来，
+    # 而 CI 因为锁着 1.x 永远全绿。
+    #
+    # 所以这个 job 刻意不用 uv.lock：装构建产物、让依赖按 pyproject 的约束重新解析，
+    # 再真跑一次 MCP 会话。它守的是「门禁看到的」与「用户拿到的」之间那道缝。
+    name: Fresh install resolves to a working MCP server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Build the wheel
+        run: uv build --wheel
+
+      - name: Install it with fresh dependency resolution
+        run: |
+          uv venv /tmp/freshenv
+          VIRTUAL_ENV=/tmp/freshenv uv pip install "$(ls dist/*.whl)[mcp]"
+          /tmp/freshenv/bin/python -c "import importlib.metadata as m; print('resolved mcp:', m.version('mcp'))"
+
+      - name: Run a real MCP session against it
+        run: |
+          { printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'; sleep 10; } \
+            | /tmp/freshenv/bin/boss-mcp \
+            | python3 -c "
+          import sys, json
+          initialized = listed = None
+          for line in sys.stdin:
+              line = line.strip()
+              if not line:
+                  continue
+              try:
+                  message = json.loads(line)
+              except json.JSONDecodeError:
+                  continue
+              if message.get('id') == 1:
+                  initialized = message
+              elif message.get('id') == 2:
+                  listed = message
+              if initialized and listed:
+                  break
+          assert initialized, 'initialize 没有收到响应——多半是 boss-mcp 起不来'
+          assert initialized['result']['serverInfo']['name'] == 'boss-agent-cli', initialized
+          print('MCP initialize ok')
+          assert listed, 'tools/list 没有收到响应'
+          assert 'error' not in listed, listed
+          names = [tool['name'] for tool in listed['result']['tools']]
+          assert names and 'boss_status' in names, listed
+          print('MCP tools/list ok:', len(names), 'tools')
+          "
+
   docker:
     # 容器镜像必须每次构建，否则会像此前那个无人引用的 Dockerfile 一样静默腐烂。
     #
