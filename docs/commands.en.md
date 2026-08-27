@@ -111,7 +111,7 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 | `boss pipeline` / `boss follow-up` / `boss digest` | Build progress, follow-up, and daily views from conversations/interviews |
 | `boss watch add/list/remove/run` | Save, list, remove, or run incremental job watches |
 | `boss shortlist add/list/annotate/compare/remove` | Local shortlist with tags, notes, and offline compare |
-| `boss favorites list/sync` | Read BOSS job favorites and sync to local shortlist (deduplicates jobs, refreshes dynamic access IDs, preserves first-saved time) |
+| `boss favorites list/sync` | Read BOSS job favorites with validity status; sync imports only explicitly active jobs (deduplicates jobs, refreshes dynamic access IDs, preserves first-saved time) |
 | `boss preset add/list/remove` | Search presets |
 
 ## Recruiter mode

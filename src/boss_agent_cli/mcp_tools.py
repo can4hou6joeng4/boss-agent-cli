@@ -694,7 +694,7 @@ TOOLS = [
 	),
 	Tool(
 		name="boss_favorites_list",
-		description="预览 BOSS 职位收藏单页（不落库）",
+		description="预览 BOSS 职位收藏单页及有效状态（不落库）",
 		inputSchema={
 			"type": "object",
 			"properties": {

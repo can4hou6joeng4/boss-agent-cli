@@ -18,6 +18,7 @@ _NAV_TIMEOUT_MS = 15000  # 页面导航超时（毫秒）
 _NETWORKIDLE_GRACE_MS = 3000  # 首页进入 networkidle 的额外宽限（毫秒）
 _POST_LOGIN_WAIT = 3  # 登录成功后等待 cookie 传播（秒）
 _STOKEN_GENERATION_WAIT = 2  # stoken 生成等待（秒）
+_HOME_NAV_RETRIES = 2  # 首页导航超时后的重试次数（含首次）
 
 _PLATFORM_BROWSER_CONFIG: dict[str, dict[str, str]] = {
 	"zhipin": {
@@ -81,10 +82,6 @@ def _find_zhilian_recruiter_page(pages: list[Any]) -> Any | None:
 	return None
 
 
-def _zhilian_client_id_from(cookies: dict[str, str], page: Any) -> str:
-	return cookies.get("x-zp-client-id") or _extract_zhilian_client_id(page)
-
-
 def _browser_diag(message: str) -> None:
 	"""Diagnostic browser messages: debug by default; stderr only when BOSS_BROWSER_VERBOSE=1."""
 	_logger.debug(message)
@@ -92,17 +89,46 @@ def _browser_diag(message: str) -> None:
 		print(message, file=sys.stderr)
 
 
-def _warm_home_for_runtime(page: Any, home_url: str, *, stage: str) -> None:
-	"""预热首页运行时；networkidle 只尽力等待，不作为必须条件。"""
+def _safe_user_agent(page: Any) -> str:
+	"""获取 UA；仅在页面已确认加载（domcontentloaded 已到达）后调用。
+
+	页面处于未完成导航时，patchright 的 page.evaluate 会因执行上下文
+	无法建立而永久挂起（不抛异常），因此绝不能在导航卡住后调用本函数。
+	"""
 	try:
-		page.goto(home_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
-	except Exception as e:
-		_browser_diag(f"[boss] {stage}：首页导航未在预期时间完成（{e}），继续尝试提取凭证")
+		return cast("str", page.evaluate("navigator.userAgent"))
+	except Exception:
+		return ""
+
+
+def _warm_home_for_runtime(page: Any, home_url: str, *, stage: str) -> bool:
+	"""预热首页运行时；返回首页是否成功进入 domcontentloaded。
+
+	networkidle 只尽力等待，不作为必须条件。返回 False 表示首页导航
+	超时/失败、页面仍处于未完成导航状态——此时调用方必须避免对其执行
+	evaluate（patchright 会因执行上下文无法建立而永久挂起）。
+
+	首页在自动化下偶发进入风控验证页或加载缓慢导致 goto 超时；超时后
+	先跳 about:blank 终止卡住的导航，再重试一次。
+	"""
+	loaded = False
+	for attempt in range(_HOME_NAV_RETRIES):
+		try:
+			page.goto(home_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+			loaded = True
+			break
+		except Exception as e:
+			_browser_diag(f"[boss] {stage}：首页导航未在预期时间完成（{e}），重试 {attempt + 1}/{_HOME_NAV_RETRIES}...")
+			try:
+				page.goto("about:blank", wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+			except Exception:
+				pass
 	try:
 		page.wait_for_load_state("networkidle", timeout=_NETWORKIDLE_GRACE_MS)
 	except Exception as e:
 		# Expected on zhipin (long-polling). Do not dump to TTY for normal users.
 		_browser_diag(f"[boss] {stage}：首页未进入 networkidle（{e}），继续提取凭证")
+	return loaded
 
 
 def probe_cdp(cdp_url: str | None = None) -> str | None:
@@ -165,16 +191,24 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 		else:
 			raise TimeoutError(f"CDP 扫码登录超时（{timeout}s）")
 
+		# 在登录页（已加载）上先记录 UA，避免首页导航卡住后 evaluate 永久挂起
+		ua = _safe_user_agent(page)
 		if created_page or platform != "zhilian":
-			try:
-				page.goto(home_url, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
-			except Exception:
-				pass
+			home_loaded = _warm_home_for_runtime(page, home_url, stage="登录后回到首页")
+		else:
+			home_loaded = True
 		all_cookies = {c["name"]: c["value"] for c in ctx.cookies() if cookie_domain in c.get("domain", "")}
-		ua = page.evaluate("navigator.userAgent")
-		x_zp_client_id = _zhilian_client_id_from(all_cookies, page) if platform == "zhilian" else ""
+		if platform == "zhipin":
+			# 首页成功加载才对其 evaluate 提取 stoken；否则回退读取 cookie jar
+			stoken = _extract_stoken(page) if home_loaded else all_cookies.get("__zp_stoken__", "")
+		else:
+			stoken = ""
+		if platform == "zhilian":
+			x_zp_client_id = all_cookies.get("x-zp-client-id") or _extract_zhilian_client_id(page)
+		else:
+			x_zp_client_id = ""
 
-		result: dict[str, Any] = {"cookies": all_cookies, "stoken": "", "user_agent": ua}
+		result: dict[str, Any] = {"cookies": all_cookies, "stoken": stoken, "user_agent": ua}
 		if x_zp_client_id:
 			result["x_zp_client_id"] = x_zp_client_id
 		return result
@@ -243,14 +277,24 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 		print("检测到登录成功，正在提取凭证...", file=sys.stderr)
 		time.sleep(_POST_LOGIN_WAIT)
 
+		# UA 在已加载的登录页上记录（此时 evaluate 安全）；之后再预热首页
+		user_agent = _safe_user_agent(page)
+
 		# 跳转主站提取完整 cookies 和 stoken
-		_warm_home_for_runtime(page, home_url, stage="登录后回到首页")
+		home_loaded = _warm_home_for_runtime(page, home_url, stage="登录后回到首页")
 
 		cookies_list = context.cookies()
 		cookies = {c["name"]: c["value"] for c in cookies_list if cookie_domain in c.get("domain", "")}
-		user_agent = page.evaluate("navigator.userAgent")
-		stoken = _extract_stoken(page) if platform == "zhipin" else ""
-		x_zp_client_id = _extract_zhilian_client_id(page) if platform == "zhilian" else ""
+		if platform == "zhipin":
+			# 首页成功加载才对其 evaluate 提取 stoken；否则回退到 cookie jar，
+			# 避免页面卡在导航中导致 page.evaluate 永久挂起
+			stoken = _extract_stoken(page) if home_loaded else cookies.get("__zp_stoken__", "")
+		else:
+			stoken = ""
+		if platform == "zhilian":
+			x_zp_client_id = cookies.get("x-zp-client-id") or (_extract_zhilian_client_id(page) if home_loaded else "")
+		else:
+			x_zp_client_id = ""
 
 		browser.close()
 
@@ -275,13 +319,17 @@ def refresh_stoken_via_cdp(cdp_url: str | None = None) -> str:
 	ctx = browser.contexts[0] if browser.contexts else browser.new_context()
 	page = ctx.new_page()
 
-	try:
-		page.goto(HOME_URL, wait_until="commit", timeout=15000)
-	except Exception:
-		pass
+	home_loaded = _warm_home_for_runtime(page, HOME_URL, stage="刷新 stoken")
 	time.sleep(_STOKEN_GENERATION_WAIT)
 
-	stoken = _extract_stoken(page)
+	# 页面未成功加载时跳过 evaluate，避免 patchright 永久挂起
+	stoken = _extract_stoken(page) if home_loaded else ""
+	if not stoken:
+		# 安全验证跳转期间 goto 可能未触发 domcontentloaded，但 cookie jar 已生成 stoken
+		for cookie in ctx.cookies():
+			if cookie.get("name") == "__zp_stoken__":
+				stoken = cookie.get("value", "")
+				break
 	page.close()
 	pw.stop()
 
@@ -299,8 +347,14 @@ def refresh_stoken(cookies: dict[str, Any], user_agent: str) -> str:
 			[{"name": name, "value": value, "domain": ".zhipin.com", "path": "/"} for name, value in cookies.items()]
 		)
 		page = context.new_page()
-		_warm_home_for_runtime(page, HOME_URL, stage="刷新 stoken")
-		stoken = _extract_stoken(page)
+		home_loaded = _warm_home_for_runtime(page, HOME_URL, stage="刷新 stoken")
+		stoken = _extract_stoken(page) if home_loaded else ""
+		if not stoken:
+			# 安全验证跳转期间 goto 可能未触发 domcontentloaded，但 cookie jar 已生成 stoken
+			for cookie in context.cookies():
+				if cookie.get("name") == "__zp_stoken__":
+					stoken = cookie.get("value", "")
+					break
 		browser.close()
 
 	return stoken

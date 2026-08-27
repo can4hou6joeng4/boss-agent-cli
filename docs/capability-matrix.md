@@ -59,7 +59,7 @@
 | 增量监控 | `boss watch run` | 是 | 平台读取 + 本地状态；add/list/remove 为本地 |
 | 搜索预设 | `boss preset` | 否 | 本地 |
 | 候选池 | `boss shortlist` | 否 | 本地 |
-| 候选池 | `boss favorites` | 否 | 平台只读 + 本地 |
+| 候选池（显示收藏有效状态，仅同步有效项） | `boss favorites` | 否 | 平台只读 + 本地 |
 
 ## 用户信息
 

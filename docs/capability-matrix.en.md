@@ -59,7 +59,7 @@ Compatibility modes `assisted` and `research` can both call every implemented ca
 | Incremental watch | `boss watch run` | Yes | Platform read + local state; add/list/remove are local |
 | Search presets | `boss preset` | No | Local |
 | Shortlist management | `boss shortlist` | No | Local |
-| Shortlist management | `boss favorites` | No | Platform read-only + Local |
+| Shortlist management (shows favorite validity, syncs active only) | `boss favorites` | No | Platform read-only + Local |
 
 ## User profile
 

@@ -1,5 +1,5 @@
 {
-  "_note": "geekGetJob?tag=4&isActive=true 真实响应脱敏样本（2026-07-24 mitmproxy+CLI 实测，用于 C1 锁定 card 字段名）。securityId/encryptJobId 已替换为占位；移除 bossId/encryptBossId/brandId/encryptBrandId/lid/expectId/authorityId/bossName 等可关联账号字段；jobName/brandName 泛化为示例值。字段 key 均为真实接口字段名，值已脱敏。",
+  "_note": "geekGetJob?tag=4&isActive=true 真实字段脱敏样本：2026-07-24 mitmproxy+CLI 锁定基础 card 字段，2026-08-14 Bridge 实测同一响应可混有 jobValidStatus=1/2。securityId/encryptJobId 已替换为占位；移除可关联账号字段；职位和公司信息均泛化。",
   "code": 0,
   "zpData": {
     "cardList": [
@@ -12,7 +12,20 @@
         "jobSalary": "12-24K",
         "jobExperience": "经验不限",
         "jobDegree": "本科",
-        "jobLabels": ["北京 海淀区 中关村", "经验不限", "本科"]
+        "jobLabels": ["北京 海淀区 中关村", "经验不限", "本科"],
+        "jobValidStatus": 1
+      },
+      {
+        "securityId": "sec_inactive_REDACTED",
+        "encryptJobId": "job_inactive_REDACTED",
+        "jobName": "示例失效职位",
+        "brandName": "示例公司",
+        "cityName": "北京",
+        "jobSalary": "12-24K",
+        "jobExperience": "经验不限",
+        "jobDegree": "本科",
+        "jobLabels": ["北京", "经验不限", "本科"],
+        "jobValidStatus": 2
       }
     ],
     "hasMore": true

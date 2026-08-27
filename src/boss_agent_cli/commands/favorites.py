@@ -17,10 +17,34 @@ from boss_agent_cli.display import (
 
 MAX_FAVORITES_PAGES = 50
 FAVORITES_TAG = 4
+JOB_STATUS_ACTIVE = "active"
+JOB_STATUS_INACTIVE = "inactive"
+JOB_STATUS_UNKNOWN = "unknown"
 
 
 class FavoritesPageLimitExceeded(RuntimeError):
 	"""The remote list still has more data after the bounded page budget."""
+
+
+def _normalize_job_status(card: dict[str, Any]) -> str:
+	"""将 BOSS jobValidStatus 归一化为稳定的 Agent 输出值。"""
+	raw_status = card.get("jobValidStatus")
+	if not isinstance(raw_status, bool) and raw_status in (1, "1"):
+		return JOB_STATUS_ACTIVE
+	if not isinstance(raw_status, bool) and raw_status in (2, "2"):
+		return JOB_STATUS_INACTIVE
+	return JOB_STATUS_UNKNOWN
+
+
+def _count_job_statuses(cards: list[dict[str, Any]]) -> dict[str, int]:
+	counts = {
+		JOB_STATUS_ACTIVE: 0,
+		JOB_STATUS_INACTIVE: 0,
+		JOB_STATUS_UNKNOWN: 0,
+	}
+	for card in cards:
+		counts[_normalize_job_status(card)] += 1
+	return counts
 
 
 def _card_to_shortlist_item(card: dict[str, Any]) -> dict[str, Any]:
@@ -37,6 +61,7 @@ def _card_to_shortlist_item(card: dict[str, Any]) -> dict[str, Any]:
 		"company": str(card.get("brandName", "") or ""),
 		"city": str(card.get("cityName", "") or ""),
 		"salary": str(card.get("jobSalary", "") or ""),
+		"job_status": _normalize_job_status(card),
 		"source": "favorites",
 		"tags": list(labels) if isinstance(labels, list) else [],
 		"note": "",
@@ -66,8 +91,8 @@ def collect_favorites_items(
 	- 成功聚合：([cards...], None)
 	- 任一页平台失败：([], raw_response)
 
-	v1 固定 isActive=true（仅有效职位）；encryptJobId 做 seen_signature（比 securityId 稳定，
-	避免 securityId 跨请求变化导致重复页检测失效）。
+	v1 固定 isActive=true；平台仍可能返回 jobValidStatus=2 的失效职位，调用方必须按字段判断。
+	encryptJobId 做 seen_signature（比 securityId 稳定，避免 securityId 跨请求变化导致重复页检测失效）。
 	"""
 	items: list[dict[str, Any]] = []
 	page = 1
@@ -106,7 +131,7 @@ def collect_favorites_items(
 
 @click.group("favorites")
 def favorites_group() -> None:
-	"""读取 BOSS 职位收藏并同步到本地候选池（list 远端只读预览，sync 写入本地 shortlist）。"""
+	"""读取 BOSS 职位收藏并同步有效职位（list 远端只读预览，sync 写入本地 shortlist）。"""
 
 
 @favorites_group.command("list")
@@ -151,16 +176,19 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 			)
 			return
 
-	items = [_redact_for_display(_card_to_shortlist_item(card)) for card in cards if isinstance(card, dict)]
+	valid_cards = [card for card in cards if isinstance(card, dict)]
+	status_counts = _count_job_statuses(valid_cards)
+	items = [_redact_for_display(_card_to_shortlist_item(card)) for card in valid_cards]
 
 	pagination = {
 		"page": page,
 		"has_more": platform_data.get("hasMore", False),
 		"total": len(items),
+		"status_counts": status_counts,
 	}
 	hints = {
 		"next_actions": [
-			f"使用 {boss_command_for_ctx(ctx, 'favorites sync')} 同步全部收藏到本地候选池（完整字段落库）",
+			f"使用 {boss_command_for_ctx(ctx, 'favorites sync')} 同步明确有效的收藏到本地候选池（完整字段落库）",
 			f"使用 {boss_command_for_ctx(ctx, '--json shortlist list')} 读取完整 security_id 与 job_id（终端表格不显示 ID，需 --json）",
 			f"使用 {boss_command_for_ctx(ctx, 'detail <security_id> --job-id <job_id>')} 查看详情（httpx 快速通道只用 job_id，sid 过期不影响取 JD）",
 			f"使用 {boss_command_for_ctx(ctx, f'favorites list --page {page + 1}')} 查看下一页",
@@ -175,6 +203,7 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 				("company", "company", "green"),
 				("city", "city", "yellow"),
 				("salary", "salary", "dim"),
+				("job_status", "status", "magenta"),
 				("source", "source", "magenta"),
 			],
 		),
@@ -186,7 +215,7 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 @click.pass_context
 @handle_auth_errors("favorites-sync")
 def favorites_sync_cmd(ctx: click.Context) -> None:
-	"""同步全部职位收藏到本地候选池（远端只读，本地 upsert 并刷新访问 ID）。"""
+	"""同步明确有效的职位收藏到本地候选池（远端只读，本地 upsert 并刷新访问 ID）。"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
@@ -214,7 +243,10 @@ def favorites_sync_cmd(ctx: click.Context) -> None:
 			)
 			return
 
-		items = [_card_to_shortlist_item(card) for card in cards if isinstance(card, dict)]
+		valid_cards = [card for card in cards if isinstance(card, dict)]
+		status_counts = _count_job_statuses(valid_cards)
+		active_cards = [card for card in valid_cards if _normalize_job_status(card) == JOB_STATUS_ACTIVE]
+		items = [_card_to_shortlist_item(card) for card in active_cards]
 
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			result = cache.add_shortlist_batch(items, source="favorites")
@@ -225,6 +257,9 @@ def favorites_sync_cmd(ctx: click.Context) -> None:
 			"imported_count": result["imported_count"],
 			"existing_count": result["existing_count"],
 			"skipped_count": result["skipped_count"],
+			"active_count": status_counts[JOB_STATUS_ACTIVE],
+			"inactive_count": status_counts[JOB_STATUS_INACTIVE],
+			"unknown_count": status_counts[JOB_STATUS_UNKNOWN],
 		},
 		hints={
 			"next_actions": [

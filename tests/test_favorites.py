@@ -22,7 +22,17 @@ def _ctx_mock(mock_cls):
 	return instance
 
 
-def _make_card(sid="sec_test1", jid="job_test1", name="示例职位", company="示例公司", city="北京", salary="25-40K", labels=None, drop=()):
+def _make_card(
+	sid="sec_test1",
+	jid="job_test1",
+	name="示例职位",
+	company="示例公司",
+	city="北京",
+	salary="25-40K",
+	labels=None,
+	job_valid_status=1,
+	drop=(),
+):
 	"""构造 geekGetJob card（字段名以 mitmproxy 实测为准；drop 可删除指定 key 模拟脏数据）。"""
 	card = {
 		"securityId": sid,
@@ -32,6 +42,7 @@ def _make_card(sid="sec_test1", jid="job_test1", name="示例职位", company="�
 		"cityName": city,
 		"jobSalary": salary,
 		"jobLabels": labels if labels is not None else ["双休"],
+		"jobValidStatus": job_valid_status,
 	}
 	for key in drop:
 		card.pop(key, None)
@@ -70,9 +81,34 @@ def test_favorites_list_success(mock_auth_cls, mock_platform_cls):
 	assert item["title"] == "示例职位"
 	assert item["company"] == "示例公司"
 	assert item["salary"] == "25-40K"
+	assert item["job_status"] == "active"
 	assert item["source"] == "favorites"
 	assert parsed["pagination"]["has_more"] is False
+	assert parsed["pagination"]["status_counts"] == {"active": 1, "inactive": 0, "unknown": 0}
 	platform.job_favorites.assert_called_once_with(page=1, tag=4, is_active=True)
+
+
+@patch("boss_agent_cli.commands.favorites.get_platform_instance")
+@patch("boss_agent_cli.commands.favorites.AuthManager")
+def test_favorites_list_exposes_mixed_job_statuses(mock_auth_cls, mock_platform_cls):
+	platform = _ctx_mock(mock_platform_cls)
+	platform.job_favorites.return_value = {
+		"code": 0,
+		"zpData": {
+			"cardList": [
+				_make_card(jid="job_active", job_valid_status=1),
+				_make_card(jid="job_inactive", job_valid_status=2),
+				_make_card(jid="job_unknown", job_valid_status=99),
+				_make_card(jid="job_missing", drop=("jobValidStatus",)),
+			],
+			"hasMore": False,
+		},
+	}
+	result = CliRunner().invoke(cli, ["--json", "favorites", "list"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert [item["job_status"] for item in parsed["data"]] == ["active", "inactive", "unknown", "unknown"]
+	assert parsed["pagination"]["status_counts"] == {"active": 1, "inactive": 1, "unknown": 2}
 
 
 @patch("boss_agent_cli.commands.favorites.get_platform_instance")
@@ -122,9 +158,43 @@ def test_favorites_sync_imports_and_persists(mock_auth_cls, mock_platform_cls, t
 	assert parsed["data"]["imported_count"] == 2
 	assert parsed["data"]["existing_count"] == 0
 	assert parsed["data"]["skipped_count"] == 0
+	assert parsed["data"]["active_count"] == 2
+	assert parsed["data"]["inactive_count"] == 0
+	assert parsed["data"]["unknown_count"] == 0
 	items = _shortlist_items(tmp_path)
 	assert len(items) == 2
 	assert all(item["source"] == "favorites" for item in items)
+
+
+@patch("boss_agent_cli.commands.favorites.get_platform_instance")
+@patch("boss_agent_cli.commands.favorites.AuthManager")
+def test_favorites_sync_imports_only_explicit_active_jobs(mock_auth_cls, mock_platform_cls, tmp_path):
+	platform = _ctx_mock(mock_platform_cls)
+	platform.job_favorites.return_value = {
+		"code": 0,
+		"zpData": {
+			"cardList": [
+				_make_card(sid="sec_active", jid="job_active", job_valid_status=1),
+				_make_card(sid="sec_inactive", jid="job_inactive", job_valid_status=2),
+				_make_card(sid="sec_unknown", jid="job_unknown", job_valid_status=99),
+				_make_card(sid="sec_missing", jid="job_missing", drop=("jobValidStatus",)),
+			],
+			"hasMore": False,
+		},
+	}
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "favorites", "sync"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["data"] == {
+		"imported_count": 1,
+		"existing_count": 0,
+		"skipped_count": 0,
+		"active_count": 1,
+		"inactive_count": 1,
+		"unknown_count": 2,
+	}
+	items = _shortlist_items(tmp_path)
+	assert [item["job_id"] for item in items] == ["job_active"]
 
 
 @patch("boss_agent_cli.commands.favorites.get_platform_instance")
@@ -203,7 +273,7 @@ def test_favorites_sync_existing_skipped_preserves_created_at(mock_auth_cls, moc
 @patch("boss_agent_cli.commands.favorites.AuthManager")
 def test_favorites_sync_dirty_card_missing_keys_skipped(mock_auth_cls, mock_platform_cls, tmp_path):
 	platform = _ctx_mock(mock_platform_cls)
-	dirty = {"jobName": "无ID职位"}  # 缺 securityId/encryptJobId
+	dirty = {"jobName": "无ID职位", "jobValidStatus": 1}  # 缺 securityId/encryptJobId
 	platform.job_favorites.return_value = {
 		"code": 0,
 		"zpData": {"cardList": [dirty, _make_card(sid="sec_a", jid="job_a")], "hasMore": False},
@@ -303,7 +373,14 @@ def test_favorites_sync_null_identifiers_are_skipped(mock_auth_cls, mock_platfor
 	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "favorites", "sync"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["data"] == {"imported_count": 0, "existing_count": 0, "skipped_count": 2}
+	assert parsed["data"] == {
+		"imported_count": 0,
+		"existing_count": 0,
+		"skipped_count": 2,
+		"active_count": 2,
+		"inactive_count": 0,
+		"unknown_count": 0,
+	}
 	assert _shortlist_items(tmp_path) == []
 
 
@@ -383,6 +460,7 @@ def test_favorites_list_empty(mock_auth_cls, mock_platform_cls):
 	assert parsed["ok"] is True
 	assert parsed["data"] == []
 	assert parsed["pagination"]["total"] == 0
+	assert parsed["pagination"]["status_counts"] == {"active": 0, "inactive": 0, "unknown": 0}
 
 
 @patch("boss_agent_cli.commands.favorites.get_platform_instance")
@@ -414,15 +492,21 @@ def test_favorites_fixture_drives_card_mapping():
 	from pathlib import Path
 	from boss_agent_cli.commands.favorites import _card_to_shortlist_item
 	fixture_path = Path(__file__).parent / "fixtures" / "favorites_card.json"
-	card = json.loads(fixture_path.read_text(encoding="utf-8"))["zpData"]["cardList"][0]
-	item = _card_to_shortlist_item(card)
+	cards = json.loads(fixture_path.read_text(encoding="utf-8"))["zpData"]["cardList"]
+	item = _card_to_shortlist_item(cards[0])
 	assert item["security_id"] == "sec_sample_REDACTED"
 	assert item["job_id"] == "job_sample_REDACTED"
 	assert item["title"] == "示例职位标题"
 	assert item["company"] == "示例公司"
 	assert item["salary"] == "12-24K"
 	assert item["city"] == "北京"
+	assert item["job_status"] == "active"
 	assert item["source"] == "favorites"
 
-	card["jobLabels"] = "not-a-list"
-	assert _card_to_shortlist_item(card)["tags"] == []
+	assert _card_to_shortlist_item(cards[1])["job_status"] == "inactive"
+
+	cards[0]["jobLabels"] = "not-a-list"
+	assert _card_to_shortlist_item(cards[0])["tags"] == []
+
+	assert _card_to_shortlist_item({})["job_status"] == "unknown"
+	assert _card_to_shortlist_item({"jobValidStatus": True})["job_status"] == "unknown"

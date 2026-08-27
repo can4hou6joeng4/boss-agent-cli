@@ -910,7 +910,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"favorites": {
-			"description": "读取 BOSS 职位收藏并同步到本地候选池（子命令：list/sync）。list 远端只读预览，sync 远端只读拉取后写入本地 shortlist（upsert）；默认低风险、用户主动触发。",
+			"description": "读取 BOSS 职位收藏并同步到本地候选池（子命令：list/sync）。list 远端只读预览并呈现职位有效状态，sync 仅将明确有效职位写入本地 shortlist（upsert）；默认低风险、用户主动触发。",
 			"args": [],
 			"options": {
 				"list": {
@@ -919,8 +919,8 @@ SCHEMA_DATA = {
 				"sync": {},
 			},
 			"subcommands": {
-				"list": "预览职位收藏单页（不落库）",
-				"sync": "同步全部职位收藏到本地候选池（远端只读拉取，本地 upsert；刷新动态访问 ID 并保留首次收藏时间）",
+				"list": "预览职位收藏单页及有效状态（不落库）",
+				"sync": "同步明确有效的职位收藏到本地候选池（远端只读拉取，本地 upsert；刷新动态访问 ID 并保留首次收藏时间）",
 			},
 		},
 		"digest": {
