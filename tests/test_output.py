@@ -245,3 +245,80 @@ def test_step_result_operator_actions_defaults_empty():
 	from boss_agent_cli.wizard.models import StepResult
 
 	assert StepResult({}).to_dict()["operator_actions"] == []
+
+
+# ── 脱敏精度：数值 / None 不可能是凭据 ──────────────────────────
+
+
+def test_numeric_values_are_not_credentials_even_with_sensitive_key():
+	"""凭据必然是字符串或容器；数值命中关键词属误报。
+
+	`ai_max_tokens` / `max_tokens` 是 AI 生成长度上限（进 OpenAI 兼容请求体的
+	`max_tokens` 字段），`token_expires_in` 是过期秒数——都不是凭据，
+	却因为键名含子串 `token` 被脱敏，用户永远看不到自己配的值。
+	"""
+	from boss_agent_cli.output import redact_sensitive
+
+	result = redact_sensitive({
+		"ai_max_tokens": 4096,
+		"max_tokens": 512,
+		"token_expires_in": 3600,
+		"session_timeout": 30.5,
+	})
+
+	assert result["ai_max_tokens"] == 4096
+	assert result["max_tokens"] == 512
+	assert result["token_expires_in"] == 3600
+	assert result["session_timeout"] == 30.5
+
+
+def test_none_values_are_not_redacted():
+	"""None 里没有秘密可泄漏；把它说成 [REDACTED] 是误导。"""
+	from boss_agent_cli.output import redact_sensitive
+
+	result = redact_sensitive({"token_expires_in": None, "api_key": None, "stoken": None})
+
+	assert result["token_expires_in"] is None
+	assert result["api_key"] is None
+	assert result["stoken"] is None
+
+
+def test_real_string_credentials_still_redacted():
+	"""回归护栏：放宽数值不得放过真凭据。"""
+	from boss_agent_cli.output import redact_sensitive
+
+	result = redact_sensitive({
+		"stoken": "real-stoken-value",
+		"api_key": "sk-live-xxxx",
+		"access_token": "at-xxxx",
+		"refresh_token": "rt-xxxx",
+		"zp_token": "zp-xxxx",
+		"cookies": {"wt2": "cookie-value"},
+		"authorization": "Bearer abc",
+		"password": "hunter2",
+		"session_id": "sess-xxxx",
+	})
+
+	for key in result:
+		assert result[key] == "[REDACTED]", f"{key} 是真凭据，必须仍被脱敏"
+
+
+def test_bool_exemption_still_holds():
+	"""既有的 bool 豁免不受影响。"""
+	from boss_agent_cli.output import redact_sensitive
+
+	result = redact_sensitive({"api_key_set": False, "token_present": True})
+
+	assert result["api_key_set"] is False
+	assert result["token_present"] is True
+
+
+def test_status_envelope_exposes_token_expiry():
+	"""端到端：boss status 的过期时间必须能被用户看到。"""
+	import json
+
+	from boss_agent_cli.output import envelope_success
+
+	payload = json.loads(envelope_success("status", {"logged_in": True, "token_expires_in": 7200}))
+
+	assert payload["data"]["token_expires_in"] == 7200

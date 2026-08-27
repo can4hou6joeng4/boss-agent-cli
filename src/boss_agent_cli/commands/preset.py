@@ -8,7 +8,7 @@ from boss_agent_cli.api.endpoints import (
 	STAGE_CODES,
 )
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.display import handle_error_output, handle_output
+from boss_agent_cli.display import handle_error_output, handle_output, render_action_result, render_list_result
 from boss_agent_cli.search_filters import build_search_params
 
 
@@ -70,6 +70,9 @@ def preset_add_cmd(
 		ctx,
 		"preset",
 		{"action": "add", "name": name, "params": params},
+		render=lambda d: render_action_result(
+			d, title="preset", next_steps=[f"boss search --preset {name}", "boss preset list"]
+		),
 		hints={"next_actions": [f"boss search --preset {name}", "boss preset list"]},
 	)
 
@@ -83,6 +86,15 @@ def preset_list_cmd(ctx: click.Context) -> None:
 		ctx,
 		"preset",
 		items,
+		render=lambda d: render_list_result(
+			d,
+			"presets",
+			[("名称", "name", "bold cyan"), ("条件", "params", "green"), ("创建时间", "created_at", "dim")],
+			next_steps=["boss preset add <name> --query <关键词>"] if not d else [
+				"boss search --preset <name>",
+				"boss preset remove <name>",
+			],
+		),
 		hints={"next_actions": ["boss search --preset <name>", "boss preset remove <name>"]},
 	)
 
@@ -93,4 +105,9 @@ def preset_list_cmd(ctx: click.Context) -> None:
 def preset_remove_cmd(ctx: click.Context, name: str) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		removed = cache.delete_saved_search(name)
-	handle_output(ctx, "preset", {"action": "remove", "name": name, "removed": removed})
+	handle_output(
+		ctx,
+		"preset",
+		{"action": "remove", "name": name, "removed": removed},
+		render=lambda d: render_action_result(d, title="preset", next_steps=["boss preset list"]),
+	)

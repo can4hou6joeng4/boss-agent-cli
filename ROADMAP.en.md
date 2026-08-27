@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v1.19.1 (2026-08-27): fixed fresh installs resolving to mcp 2.x, which made `boss-mcp` crash on import (dependency now capped at `<2.0.0`), and added a `fresh_install` CI gate that deliberately bypasses `uv.lock`
+- ✅ v1.19.0 (2026-08-27): fixed the never-registered MCP `tools/list` (the MCP entry point was unusable for every host since v1.18.0) and added protocol-level plus CI gates, opened every implemented capability under assisted / research, unified the terminal-only `boss wizard` into a single interactive window, and split envelope `hints` into agent / operator channels
 - ✅ v1.18.0 (2026-07-29): usable Docker / Compose image with CI build gate, MCP schema contract fixes and `mcp_server` split, offline evals in P0, pinned ruff rules, and dependency refresh (rich 15)
 - ✅ v1.17.0 (2026-07-27): `boss favorites list/sync` for syncing saved jobs, the restricted Research Mode resumable crawl workflow, and internship job-type fields plus the internship filter mapping fix
 - ✅ v1.16.0 (2026-07-17): explicit `operating_mode` two-mode contract (`assisted` / `research`) and the compliance guardrail rebuilt as an immutable capability policy registry, with CLI, schema, and MCP filtering all derived from one source of truth

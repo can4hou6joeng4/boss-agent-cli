@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/logo.svg" width="112" alt="boss-agent-cli logo">
+<img src="docs/assets/logo.png" width="112" alt="boss-agent-cli logo">
 
 # boss-agent-cli
 

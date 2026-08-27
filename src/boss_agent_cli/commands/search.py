@@ -10,7 +10,15 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.crawler.service import CrawlBudget
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, render_job_table
+from boss_agent_cli.display import (
+	SearchProgress,
+	boss_command_for_ctx,
+	handle_auth_errors,
+	handle_error_output,
+	handle_output,
+	is_json_mode,
+	render_job_table,
+)
 from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.search_filters import (
@@ -32,6 +40,16 @@ def _sort_search_items(items: list[dict[str, Any]], sort: str) -> list[dict[str,
 	if sort == "score":
 		return sorted(items, key=lambda item: item.get("match_score", 0), reverse=True)
 	return items
+
+
+def _progress_title(criteria: SearchFilterCriteria, welfare_conditions: Any) -> str:
+	"""进度头部：把本次搜索条件浓缩成一行，让真人知道正在跑什么。"""
+	parts = [f"搜索 {criteria.query}"]
+	if criteria.city:
+		parts.append(str(criteria.city))
+	if welfare_conditions:
+		parts.append(",".join(label for label, _ in welfare_conditions))
+	return " · ".join(parts)
 
 
 @click.command("search")
@@ -174,11 +192,18 @@ def search_cmd(
 		request_budget = CrawlBudget(cache) if ctx.obj.get("platform", "zhipin") == "zhipin" else None
 		with get_platform_instance(ctx, auth) as platform:
 			max_pages = 5 if welfare_conditions else 1
+			# TTY 下把管线日志接到 Rich 进度；管道 / --json 仍用原 logger，行为不变。
+			progress = None
+			pipeline_logger: Any = logger
+			if not is_json_mode(ctx):
+				progress = SearchProgress(_progress_title(criteria, welfare_conditions), max_pages=max_pages)
+				progress.start()
+				pipeline_logger = progress
 			try:
 				pipeline_result = execute_candidate_search(
 					platform,
 					cache,
-					logger,
+					pipeline_logger,
 					{
 						"query": criteria.query,
 						"city": criteria.city,
@@ -208,6 +233,9 @@ def search_cmd(
 					details=exc.details,
 				)
 				return
+			finally:
+				if progress is not None:
+					progress.finish()
 			items = pipeline_result.items
 			if with_score:
 				items = [score_job_dict(item, criteria=criteria, expect_data=None) for item in items]

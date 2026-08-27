@@ -19,7 +19,12 @@ from boss_agent_cli.config import DEFAULTS
 from boss_agent_cli.crawler.operations import crawl_results, crawl_status, import_crawl_shortlist
 from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
-from boss_agent_cli.display import handle_error_output, handle_output
+from boss_agent_cli.display import (
+	handle_error_output,
+	handle_output,
+	render_action_result,
+	render_record_result,
+)
 
 _HOOK_CHOICES = ("screenshot-full", "none")
 
@@ -200,7 +205,13 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 		if outcome.status != "completed"
 		else {"next_actions": ["查看 output_paths 中的 JSON、CSV 或 XLSX 结果文件"]}
 	)
-	handle_output(ctx, "crawl", outcome.as_dict(), hints=hints)
+	handle_output(
+		ctx,
+		"crawl",
+		outcome.as_dict(),
+		render=lambda d: render_record_result(d, title="crawl", next_steps=hints.get("next_actions", [])),
+		hints=hints,
+	)
 
 
 def _launch_background_resume(
@@ -266,7 +277,12 @@ def configure_cmd(
 		"max_retries": max_retries,
 	}
 	configured = _save_crawl_config(Path(ctx.obj["data_dir"]), updates)
-	handle_output(ctx, "crawl.configure", {"crawl": configured})
+	handle_output(
+		ctx,
+		"crawl.configure",
+		{"crawl": configured},
+		render=lambda d: render_record_result(d, title="crawl configure", next_steps=["boss crawl run <关键词> --city <城市>"]),
+	)
 
 
 @crawl_group.command("run")
@@ -389,6 +405,9 @@ def start_cmd(
 			"background": True,
 			"checkpoint": {"resume_command": f"boss crawl resume {run_id}"},
 		},
+		render=lambda d: render_record_result(
+			d, title="crawl start", next_steps=[f"boss crawl status {run_id}", f"boss crawl stop {run_id}"]
+		),
 		hints={"next_actions": [f"boss crawl status {run_id}", f"boss crawl results {run_id}"]},
 	)
 
@@ -444,6 +463,7 @@ def resume_cmd(
 			ctx,
 			"crawl.resume",
 			{"run_id": run_id, "status": status if status in {"queued", "running"} else "queued", "background": True},
+			render=lambda d: render_action_result(d, title="crawl resume", next_steps=[f"boss crawl status {run_id}"]),
 			hints={"next_actions": [f"boss crawl status {run_id}"]},
 		)
 		return
@@ -470,7 +490,14 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 	except KeyError:
 		handle_error_output(ctx, "crawl.status", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
 		return
-	handle_output(ctx, "crawl.status", payload)
+	handle_output(
+		ctx,
+		"crawl.status",
+		payload,
+		render=lambda d: render_record_result(
+			d, title="crawl status", next_steps=[f"boss crawl results {run_id}", f"boss crawl stop {run_id}"]
+		),
+	)
 
 
 @crawl_group.command("stop")
@@ -482,7 +509,12 @@ def stop_cmd(ctx: click.Context, run_id: str) -> None:
 		if not cache.request_crawl_stop(run_id):
 			handle_error_output(ctx, "crawl.stop", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
 			return
-	handle_output(ctx, "crawl.stop", {"run_id": run_id, "status": "stop_requested"})
+	handle_output(
+		ctx,
+		"crawl.stop",
+		{"run_id": run_id, "status": "stop_requested"},
+		render=lambda d: render_action_result(d, title="crawl stop", next_steps=[f"boss crawl status {run_id}"]),
+	)
 
 
 @crawl_group.command("results")
@@ -498,7 +530,12 @@ def results_cmd(ctx: click.Context, run_id: str, page: int | None, detail_status
 	except KeyError:
 		handle_error_output(ctx, "crawl.results", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
 		return
-	handle_output(ctx, "crawl.results", payload)
+	handle_output(
+		ctx,
+		"crawl.results",
+		payload,
+		render=lambda d: render_record_result(d, title="crawl results", next_steps=[f"boss crawl shortlist {run_id}"]),
+	)
 
 
 @crawl_group.command("shortlist")
@@ -547,6 +584,7 @@ def shortlist_cmd(
 		ctx,
 		"crawl.shortlist",
 		payload,
+		render=lambda d: render_record_result(d, title="crawl shortlist", next_steps=["boss shortlist list"]),
 		hints={
 			"next_actions": [
 				"boss shortlist list",

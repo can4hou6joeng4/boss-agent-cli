@@ -254,7 +254,7 @@ wheels = [
 
 [[package]]
 name = "boss-agent-cli"
-version = "1.18.0"
+version = "1.19.1"
 source = { editable = "." }
 dependencies = [
     { name = "browser-cookie3" },
@@ -303,7 +303,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=42.0" },
     { name = "drissionpage", marker = "extra == 'crawl'", specifier = ">=4.1.1.1,<4.2" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0,<2.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.20" },
     { name = "openpyxl", marker = "extra == 'crawl'", specifier = ">=3.1" },
     { name = "patchright", specifier = ">=1.58.2" },

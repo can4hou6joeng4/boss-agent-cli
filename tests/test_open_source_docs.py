@@ -342,7 +342,9 @@ def test_docs_workflow_runs_open_source_doc_checks():
 		"uv run pytest tests/test_agent_docs.py tests/test_open_source_docs.py -q",
 		(
 			"if [ \"${{ github.event_name }}\" = \"pull_request\" ]; then\n"
-			"  git fetch --no-tags --depth=1 origin \"${{ github.base_ref }}\"\n"
+			# 刻意不带 --depth=1：浅克隆取不到 merge base，落后于 base 的 PR 会以
+			# `fatal: no merge base` 退出 128（假红）。这条断言守的就是别把它加回来。
+			"  git fetch --no-tags origin \"${{ github.base_ref }}\"\n"
 			"  git diff --check \"origin/${{ github.base_ref }}...HEAD\"\n"
 			"elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then\n"
 			"  git diff --check HEAD^...HEAD\n"

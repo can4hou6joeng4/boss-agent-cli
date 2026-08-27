@@ -254,6 +254,66 @@ def _advanced_terminal_available() -> bool:
 	return True
 
 
+def _menu_content_lines(
+	items: Sequence[MenuOption],
+	*,
+	selected: int,
+	title: str,
+) -> list[tuple[str, str]]:
+	# Same-line description, left-aligned as a column after padded labels:
+	#   ○  浏览职位列表          ·  选择职位查看详情或打招呼
+	#   ○  返回主菜单            ·  稍后再处理
+	content_label_w, nav_label_w = _menu_label_widths(items)
+	lines: list[tuple[str, str]] = [
+		("class:hint", "↑↓ 选择  ·  Enter 确认  ·  ←/Esc 返回\n\n"),
+	]
+	saw_nav = False
+	for index, item in enumerate(items):
+		is_nav = _is_nav_option(item)
+		if is_nav and not saw_nav:
+			# Separate content choices from paging / exit controls.
+			lines.append(("class:sep", "  ────────────────────────\n"))
+			saw_nav = True
+		active = index == selected
+		desc = _format_menu_description(item.description)
+		if is_nav:
+			marker = "▸" if active else " "
+			style = "class:nav-selected" if active else "class:nav"
+			label = _pad_label(item.label, nav_label_w) if desc else item.label
+			# Indent nav under content; explanations share one left edge.
+			lines.append((style, f"    {marker} {label}"))
+			if desc:
+				lines.append(("class:nav-desc", f"  ·  {desc}"))
+			lines.append(("", "\n"))
+		else:
+			marker = "●" if active else "○"
+			style = "class:selected" if active else "class:item"
+			prefix = "▌ " if active else "  "
+			label = _pad_label(item.label, content_label_w) if desc else item.label
+			# Only pad when any peer has a description; still left-align the "·" column.
+			if not desc and any(
+				(getattr(peer, "description", None) and not _is_nav_option(peer)) for peer in items
+			):
+				label = _pad_label(item.label, content_label_w)
+			lines.append((style, f"{prefix}{marker}  {label}"))
+			if desc:
+				lines.append(("class:description", f"  ·  {desc}"))
+			lines.append(("", "\n"))
+	return lines
+
+
+def _build_menu_container(title: str, control: Any) -> Any:
+	"""把菜单内容包进带标题的边框（D1：标题用当前步骤）。
+
+	抽成模块级函数是为了可测：_advanced_terminal_available() 在 pytest 下恒 False，
+	select() 整条 prompt_toolkit 分支跑不到，只能直接断言这里返回的结构。
+	"""
+	from prompt_toolkit.layout.containers import HSplit, Window
+	from prompt_toolkit.widgets import Frame
+
+	return Frame(HSplit([Window(control)]), title=title, style="class:frame")
+
+
 class PromptToolkitMenu:
 	"""Arrow-key menu whose input and rendering are bound to stderr."""
 
@@ -268,12 +328,10 @@ class PromptToolkitMenu:
 		clear_before: bool = True,
 	) -> str:
 		from prompt_toolkit.application import Application
-		from prompt_toolkit.formatted_text import HTML
 		from prompt_toolkit.input.defaults import create_input
 		from prompt_toolkit.key_binding import KeyBindings
 		from prompt_toolkit.layout import Layout
 		from prompt_toolkit.layout.controls import FormattedTextControl
-		from prompt_toolkit.layout.containers import HSplit, Window
 		from prompt_toolkit.output.defaults import create_output
 		from prompt_toolkit.styles import Style
 
@@ -286,46 +344,7 @@ class PromptToolkitMenu:
 		content_label_w, nav_label_w = _menu_label_widths(items)
 
 		def content() -> list[tuple[str, str]]:
-			# Same-line description, left-aligned as a column after padded labels:
-			#   ○  浏览职位列表          ·  选择职位查看详情或打招呼
-			#   ○  返回主菜单            ·  稍后再处理
-			lines: list[tuple[str, str]] = [
-				("class:title", f"{title}\n"),
-				("class:hint", "↑↓ 选择  ·  Enter 确认  ·  ←/Esc 返回\n\n"),
-			]
-			saw_nav = False
-			for index, item in enumerate(items):
-				is_nav = _is_nav_option(item)
-				if is_nav and not saw_nav:
-					# Separate content choices from paging / exit controls.
-					lines.append(("class:sep", "  ────────────────────────\n"))
-					saw_nav = True
-				active = index == selected
-				desc = _format_menu_description(item.description)
-				if is_nav:
-					marker = "▸" if active else " "
-					style = "class:nav-selected" if active else "class:nav"
-					label = _pad_label(item.label, nav_label_w) if desc else item.label
-					# Indent nav under content; explanations share one left edge.
-					lines.append((style, f"    {marker} {label}"))
-					if desc:
-						lines.append(("class:nav-desc", f"  ·  {desc}"))
-					lines.append(("", "\n"))
-				else:
-					marker = "●" if active else "○"
-					style = "class:selected" if active else "class:item"
-					prefix = "▌ " if active else "  "
-					label = _pad_label(item.label, content_label_w) if desc else item.label
-					# Only pad when any peer has a description; still left-align the "·" column.
-					if not desc and any(
-						(getattr(peer, "description", None) and not _is_nav_option(peer)) for peer in items
-					):
-						label = _pad_label(item.label, content_label_w)
-					lines.append((style, f"{prefix}{marker}  {label}"))
-					if desc:
-						lines.append(("class:description", f"  ·  {desc}"))
-					lines.append(("", "\n"))
-			return lines
+			return _menu_content_lines(items, selected=selected, title=title)
 
 		control = FormattedTextControl(cast(Any, content), focusable=True)
 		bindings = KeyBindings()
@@ -359,19 +378,12 @@ class PromptToolkitMenu:
 			event.app.exit(result=_EXIT)
 
 		application: Application[str] = Application(
-			layout=Layout(
-				HSplit(
-					[
-						Window(FormattedTextControl(HTML("<b>BOSS 求职助手</b>")), height=1),
-						Window(height=1),
-						Window(control),
-					]
-				)
-			),
+			layout=Layout(_build_menu_container(title, control)),
 			key_bindings=bindings,
 			style=Style.from_dict(
 				{
 					"title": "bold #00a6a6",
+					"frame": "#00a6a6",
 					"hint": "#6b7280",
 					"selected": "bold reverse #00a6a6",
 					"item": "",
@@ -1235,6 +1247,19 @@ def has_result_follow_up(run: Mapping[str, Any]) -> bool:
 	return resolved is not None and bool(resolved[0])
 
 
+def _render_list_header(run: Mapping[str, Any]) -> None:
+	"""在结果列表菜单上方重绘任务摘要。
+
+	与「重新进入任务状态」走同一套三段式（清屏 → 摘要 → 菜单不再清屏），
+	让两个入口看到同一个框。放在翻页循环内是必需的：只靠一次渲染 + 常驻
+	不清屏会让菜单层层堆叠，翻一页就丢摘要。
+	"""
+	from boss_agent_cli.wizard import renderer
+
+	renderer.clear_wizard_screen()
+	renderer.render_run(run, with_preview=False)
+
+
 def collect_result_follow_up(
 	run: Mapping[str, Any],
 	*,
@@ -1269,11 +1294,13 @@ def collect_result_follow_up(
 				options.append(MenuOption(_RESULT_MORE, f"› 下一页 · 还有 {remaining} 条", kind="nav"))
 			options.append(MenuOption(_RESULT_DONE, "结束浏览", "返回上一级", kind="nav"))
 			end = start + len(chunk)
+			_render_list_header(run)
 			selected = driver.select(
 				f"请选择职位（第 {start + 1}–{end} / 共 {len(items)} 条）",
 				options,
 				default=str(start) if chunk else _RESULT_DONE,
 				allow_back=True,
+				clear_before=False,
 			)
 			if selected == _RESULT_DONE:
 				return None
