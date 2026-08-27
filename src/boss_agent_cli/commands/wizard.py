@@ -30,6 +30,7 @@ from boss_agent_cli.wizard.renderer import (
 	render_error,
 	render_event,
 	render_run,
+	wizard_screen,
 )
 from boss_agent_cli.wizard.runner import WorkflowActionError, WorkflowRunner
 from boss_agent_cli.wizard.store import WorkflowStore
@@ -162,7 +163,8 @@ def _run_plan(
 	):
 		list_run = run
 		if has_result_follow_up(list_run):
-			render_run(list_run)
+			# 摘要由 collect_result_follow_up 在每页菜单前重绘；这里再画一次会因为
+			# clear_wizard_screen 只清可视屏、不清 scrollback 而留下一个残框。
 			return _browse_list_results(
 				ctx,
 				store,
@@ -578,12 +580,16 @@ def run_wizard_command(
 
 		# 纯 TTY 无 flag：多轮主菜单循环；flag / headless 仍是单次执行。
 		if interactive and not selectors:
-			_run_interactive_session(
-				ctx,
-				store,
-				timeout_seconds=timeout_seconds,
-				max_retries=max_retries,
-			)
+			# 整个多轮会话独占一块备用屏：退出后终端恢复原样，不留残框。
+			# 单次 flag 路径（--status/--resume/--stop）刻意不进——一进一出会把
+			# 刚渲染的内容直接抹掉，用户什么都看不到。
+			with wizard_screen():
+				_run_interactive_session(
+					ctx,
+					store,
+					timeout_seconds=timeout_seconds,
+					max_retries=max_retries,
+				)
 			return
 
 		try:

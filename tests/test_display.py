@@ -683,3 +683,220 @@ class TestRenderOperatorActions:
 		output = stream.getvalue()
 		assert "确认二维码已完成扫码" in output
 		assert "boss login --timeout 180" not in output
+
+
+# ── 真人链路：下一步提示与动作确认渲染 ──────────────────────────
+
+
+class TestRenderNextSteps:
+	def test_renders_each_action(self, monkeypatch):
+		from boss_agent_cli.display import render_next_steps
+
+		stream = _capture_display_console(monkeypatch)
+		render_next_steps(["boss resume show x", "boss resume list"])
+		out = stream.getvalue()
+
+		assert "boss resume show x" in out
+		assert "boss resume list" in out
+		assert "下一步" in out
+
+	def test_empty_actions_render_nothing(self, monkeypatch):
+		from boss_agent_cli.display import render_next_steps
+
+		stream = _capture_display_console(monkeypatch)
+		render_next_steps([])
+
+		assert stream.getvalue() == ""
+
+	def test_none_renders_nothing(self, monkeypatch):
+		from boss_agent_cli.display import render_next_steps
+
+		stream = _capture_display_console(monkeypatch)
+		render_next_steps(None)
+
+		assert stream.getvalue() == ""
+
+
+class TestRenderActionResult:
+	def test_shows_fields_and_next_steps(self, monkeypatch):
+		from boss_agent_cli.display import render_action_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_action_result(
+			{"action": "init", "name": "我的简历", "template": "default"},
+			title="resume",
+			next_steps=["boss resume show 我的简历"],
+		)
+		out = stream.getvalue()
+
+		assert "init" in out
+		assert "我的简历" in out
+		assert "boss resume show" in out
+		assert "{" not in out, "不应回显 JSON"
+
+	def test_works_without_next_steps(self, monkeypatch):
+		from boss_agent_cli.display import render_action_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_action_result({"action": "remove", "name": "x", "removed": True}, title="preset")
+		out = stream.getvalue()
+
+		assert "remove" in out
+		assert "下一步" not in out
+
+
+class TestRenderListWithSteps:
+	def test_empty_list_still_gives_next_step(self, monkeypatch):
+		"""空列表必须给出可执行的下一步，而不是只说 no xxx（AC4）。"""
+		from boss_agent_cli.display import render_list_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_list_result([], "resumes", [("name", "name", "cyan")], next_steps=["boss resume init"])
+		out = stream.getvalue()
+
+		assert "boss resume init" in out
+
+	def test_non_empty_list_renders_rows(self, monkeypatch):
+		from boss_agent_cli.display import render_list_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_list_result(
+			[{"name": "简历A"}, {"name": "简历B"}],
+			"resumes",
+			[("name", "name", "cyan")],
+			next_steps=[],
+		)
+		out = stream.getvalue()
+
+		assert "简历A" in out and "简历B" in out
+
+
+class TestRenderAiResult:
+	def test_renders_scalar_and_list_values(self, monkeypatch):
+		from boss_agent_cli.display import render_ai_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_ai_result(
+			{"匹配度": "85分", "优势": ["Go 经验充足", "分布式背景"], "建议": {"简历": "补充量化指标"}},
+			title="ai fit",
+		)
+		out = stream.getvalue()
+
+		assert "85分" in out
+		assert "Go 经验充足" in out
+		assert "分布式背景" in out
+		assert "补充量化指标" in out
+
+	def test_does_not_truncate_long_text(self, monkeypatch):
+		"""AI 长文本（润色后的简历等）不得被截断。"""
+		from boss_agent_cli.display import render_ai_result
+
+		unit = "补充项目量化指标。"
+		long_text = "优化建议：" + unit * 40
+		stream = _capture_display_console(monkeypatch)
+		render_ai_result({"内容": long_text}, title="ai polish")
+		# Panel 会给每行加 │ 边框并按宽度换行，比对前先去掉边框与空白
+		out = stream.getvalue().replace("│", "").replace("\n", "").replace(" ", "")
+
+		assert out.count(unit) == 40, f"长文本被截断，仅剩 {out.count(unit)} 段"
+
+	def test_escapes_rich_markup_from_ai_output(self, monkeypatch):
+		"""AI 输出里的方括号不得被当成 Rich 标记解析。"""
+		from boss_agent_cli.display import render_ai_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_ai_result({"建议": "把 [bold]重点[/bold] 写在前面"}, title="ai suggest")
+		out = stream.getvalue()
+
+		assert "[bold]" in out, "方括号应原样显示而不是被解析成样式"
+
+	def test_renders_next_steps(self, monkeypatch):
+		from boss_agent_cli.display import render_ai_result
+
+		stream = _capture_display_console(monkeypatch)
+		render_ai_result({"x": "y"}, title="ai", next_steps=["boss ai optimize <name>"])
+
+		assert "boss ai optimize" in stream.getvalue()
+
+
+class TestSearchProgress:
+	def _progress(self, monkeypatch, **kw):
+		from boss_agent_cli.display import SearchProgress
+
+		stream = _capture_display_console(monkeypatch)
+		return SearchProgress("搜索 Golang", max_pages=3, **kw), stream
+
+	def test_duck_types_logger_interface(self, monkeypatch):
+		progress, _ = self._progress(monkeypatch)
+		for method in ("info", "debug", "warning", "error"):
+			assert callable(getattr(progress, method))
+
+	def test_counts_pages_and_matches(self, monkeypatch):
+		progress, _ = self._progress(monkeypatch)
+		progress.info("正在搜索第 1 页...")
+		progress.info("  ✅ 字节跳动 - Golang 后端（详情匹配）")
+		progress.info("  ✅ 腾讯 - 后端开发（标签匹配）")
+		progress.info("  ❌ 某某科技 - Go 工程师")
+		progress.info("  预筛排除: 前端开发 (岗位类型不符)")
+
+		assert progress.pages == 1
+		assert progress.matched == 2
+		assert progress.excluded == 2
+
+	def test_prints_matched_lines_but_not_excluded_spam(self, monkeypatch):
+		progress, stream = self._progress(monkeypatch)
+		progress.info("  ✅ 字节跳动 - Golang 后端（详情匹配）")
+		progress.info("  ❌ 某某科技 - Go 工程师")
+		out = stream.getvalue()
+
+		assert "字节跳动" in out, "匹配结果应逐条可见"
+		assert "某某科技" not in out, "逐条排除不应刷屏"
+
+	def test_status_line_reports_counters(self, monkeypatch):
+		progress, _ = self._progress(monkeypatch)
+		progress.info("正在搜索第 1 页...")
+		progress.info("  ✅ A - B（详情匹配）")
+
+		status = progress.status_text()
+		assert "1/3" in status
+		assert "匹配 1" in status
+
+	def test_thread_safe_counting(self, monkeypatch):
+		import threading
+
+		progress, _ = self._progress(monkeypatch)
+
+		def worker():
+			for _ in range(50):
+				progress.info("  ✅ A - B（详情匹配）")
+
+		threads = [threading.Thread(target=worker) for _ in range(4)]
+		for t in threads:
+			t.start()
+		for t in threads:
+			t.join()
+
+		assert progress.matched == 200
+
+	def test_debug_is_not_rendered(self, monkeypatch):
+		progress, stream = self._progress(monkeypatch)
+		progress.debug("搜索命中缓存")
+
+		assert stream.getvalue() == ""
+
+
+def test_search_pipeline_progress_markers_contract():
+	"""契约锁定：SearchProgress 依赖管线里的这些标记来分类进度消息。
+
+	改动 search_filters.py 的进度文案会让 TTY 进度静默退化，
+	因此在这里显式锁定——格式变了就让这条测试大声失败。
+	"""
+	from pathlib import Path
+
+	source = Path(__file__).resolve().parents[1] / "src/boss_agent_cli/search_filters.py"
+	content = source.read_text(encoding="utf-8")
+
+	assert '"正在搜索第 {current_page} 页..."' in content.replace("f\"", "\"")
+	assert "✅ {company} - {title}（详情匹配）" in content
+	assert "❌ {company} - {title}" in content
+	assert "预筛排除:" in content
