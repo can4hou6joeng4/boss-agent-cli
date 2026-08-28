@@ -441,6 +441,28 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "hr_request_resume":
 		return ["hr", "request-resume", str(arguments["friend_id"])]
 
+	if name == "hr_recommendations":
+		args = ["hr", "recommendations", "--job-id", str(arguments["job_id"])]
+		if "page" in arguments:
+			args.extend(["--page", str(arguments["page"])])
+		return args
+
+	if name == "hr_greet":
+		args = [
+			"hr", "greet",
+			"--geek-id", str(arguments["geek_id"]),
+			"--job-id", str(arguments["job_id"]),
+			"--expect-id", str(arguments["expect_id"]),
+			"--lid", str(arguments["lid"]),
+			"--security-id", str(arguments["security_id"]),
+			"--message", str(arguments["message"]),
+		]
+		if arguments.get("suid"):
+			args.extend(["--suid", str(arguments["suid"])])
+		if arguments.get("yes"):
+			args.append("--yes")
+		return args
+
 	if name == "hr_jobs":
 		action = arguments.get("action", "list")
 		args = ["hr", "jobs", action]

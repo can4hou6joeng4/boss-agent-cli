@@ -126,6 +126,8 @@ boss crawl stop <run_id>
 | `boss hr candidates <keyword>` | 搜索和筛选候选人 |
 | `boss hr reply <friend_id> <message>` | 回复候选人消息 |
 | `boss hr request-resume <friend_id>` | 请求候选人分享附件简历 |
+| `boss hr recommendations --job-id <encJobId>` | 读取推荐牛人完整卡片和首次开聊参数 |
+| `boss hr greet ... --message <话术> --yes` | 建立候选人会话、发送首次招呼，并在需要时处理会话红点 |
 
 ## 简历与 AI
 

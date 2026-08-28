@@ -11,6 +11,7 @@ from typing import Any, cast
 from boss_agent_cli.api import recruiter_endpoints as ep
 from boss_agent_cli.api._base_client import _BaseHttpClient
 from boss_agent_cli.api.httpx_helpers import make_client_registry
+from boss_agent_cli.api.recruiter_mqtt import RecruiterMqttCredentials, mark_chat_read
 
 _OPEN_CLIENTS, _close_open_clients = make_client_registry()
 
@@ -172,6 +173,7 @@ class BossRecruiterClient(_BaseHttpClient):
 	_CODE_STOKEN_EXPIRED = ep.CODE_STOKEN_EXPIRED
 	_CODE_RATE_LIMITED = ep.CODE_RATE_LIMITED
 	_ADD_ENDPOINT_HINT = True
+	_INCLUDE_ZP_TOKEN_HEADER = True
 
 	def _register(self) -> None:
 		_OPEN_CLIENTS.add(self)
@@ -349,6 +351,58 @@ class BossRecruiterClient(_BaseHttpClient):
 		if job_id:
 			params["encJobId"] = job_id
 		return self._request("GET", ep.BOSS_GREET_REC_LIST_URL, params=params)
+
+	def recommend_geeks(self, job_id: str, page: int = 1) -> dict[str, Any]:
+		"""Read the rich 推荐牛人 cards used by the first-contact endpoint."""
+		params: dict[str, Any] = {
+			"age": "16,-1",
+			"school": "0",
+			"activation": "0",
+			"recentNotView": "0",
+			"gender": "0",
+			"exchangeResumeWithColleague": "0",
+			"major": "0",
+			"switchJobFrequency": "0",
+			"keyword1": "-1",
+			"degree": "0",
+			"experience": "0",
+			"intention": "0",
+			"salary": "0",
+			"jobId": job_id,
+			"page": page,
+			"coverScreenMemory": "0",
+			"cardType": "0",
+		}
+		referer = (
+			f"{ep.BASE_URL}/web/frame/recommend/?jobid={job_id}&status=0&filterParams=&t="
+			"&inspectFilterGuide=&version=11211&source=0"
+		)
+		return self._request("GET", ep.BOSS_RECOMMEND_GEEK_LIST_URL, params=params, extra_headers={"Referer": referer})
+
+	def start_chat(
+		self,
+		*,
+		geek_id: str,
+		job_id: str,
+		expect_id: str,
+		lid: str,
+		security_id: str,
+		message: str,
+		suid: str = "",
+	) -> dict[str, Any]:
+		"""Create a recruiter conversation and send its first greeting."""
+		data = {
+			"gid": geek_id,
+			"suid": suid,
+			"jid": job_id,
+			"expectId": expect_id,
+			"lid": lid,
+			"greet": message,
+			"from": "",
+			"securityId": security_id,
+			"customGreetingGuide": "-1",
+		}
+		return self._request("POST", ep.BOSS_CHAT_START_URL, data=data, retry=False)
 
 	# ── 候选人搜索与简历 ──────────────────────────────────
 
@@ -652,6 +706,43 @@ class BossRecruiterClient(_BaseHttpClient):
 	def exchange_content(self, uid: int) -> dict[str, Any]:
 		data = {"uid": uid}
 		return self._request("POST", ep.BOSS_EXCHANGE_CONTENT_URL, data=data)
+
+	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0) -> dict[str, Any]:
+		"""Publish one verified Techwolf messageRead packet through MQTT/WebSocket."""
+		batch = self._request(
+			"POST",
+			ep.BOSS_BATCH_REQUESTS_URL,
+			json={
+				"subReqs": [
+					{"method": "GET", "path": "/wapi/zppassport/get/wt"},
+					{"method": "GET", "path": "/wapi/zpuser/wap/getUserInfo.json"},
+				]
+			},
+		)
+		ws_config = self._request("GET", ep.BOSS_WS_CONFIG_URL)
+		batch_data = batch.get("zpData") or {}
+		wt_data = (batch_data.get("/wapi/zppassport/get/wt") or {}).get("zpData") or {}
+		user_data = (batch_data.get("/wapi/zpuser/wap/getUserInfo.json") or {}).get("zpData") or {}
+		servers = (ws_config.get("zpData") or {}).get("result") or []
+		if not wt_data.get("wt2") or not user_data.get("token") or not user_data.get("userId") or not servers:
+			return {"code": -1, "message": "MQTT bootstrap failed", "zpData": {"ok": False}}
+		token = self._auth.get_token()
+		result = mark_chat_read(
+			RecruiterMqttCredentials(
+				server=str(servers[0]),
+				username=str(user_data["token"]),
+				password=str(wt_data["wt2"]),
+				user_id=int(user_data["userId"]),
+				uniqid=str(user_data.get("uid") or user_data["userId"]),
+				client_ip=str(user_data.get("clientIP") or ""),
+			),
+			cookies=cast("dict[str, Any]", token.get("cookies") or {}),
+			user_agent=str(token.get("user_agent") or ep.DEFAULT_HEADERS.get("User-Agent") or ""),
+			peer_uid=peer_uid,
+			message_id=message_id,
+			user_source=user_source,
+		)
+		return {"code": 0, "message": "Success", "zpData": result}
 
 	# ── 面试 ──────────────────────────────────────────────
 

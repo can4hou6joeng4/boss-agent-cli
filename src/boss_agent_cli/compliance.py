@@ -49,6 +49,8 @@ _POLICY_DEFINITIONS = {
 	"recruiter-resume": ("personal_data", "candidate_profile", "候选人在线简历/联系方式涉及个人信息。"),
 	"recruiter-reply": ("platform_write", "communication", "回复候选人属于平台写操作。"),
 	"recruiter-request-resume": ("platform_write", "candidate_profile", "请求候选人附件简历涉及个人信息授权。"),
+	"recruiter-recommendations": ("personal_data", "candidate_profile", "推荐牛人列表涉及候选人个人信息。"),
+	"recruiter-greet": ("platform_write", "communication", "首次招呼会建立候选人会话、发送消息并按需修改已读状态。"),
 	"crawl": ("platform_collection", "job_listing", "批量采集会读取平台职位列表和详情。"),
 	"crawl-cdp": ("browser_debug_protocol", "browser_session_metadata", "采集会启动受隔离的 Chrome 调试会话。"),
 	"crawl-hook": ("page_script_injection", "user_provided_script", "Hook 会向页面注入用户提供的脚本。"),

@@ -122,6 +122,12 @@ class RecruiterPlatform(ABC):
 		"""推荐牛人招呼列表。"""
 		raise NotImplementedError(f"{self.name} does not implement greet_rec_list")
 
+	def recommend_geeks(self, job_id: str, page: int = 1) -> dict[str, Any]:
+		raise NotImplementedError(f"{self.name} does not implement recommend_geeks")
+
+	def start_chat(self, *, geek_id: str, job_id: str, expect_id: str, lid: str, security_id: str, message: str, suid: str = "") -> dict[str, Any]:
+		raise NotImplementedError(f"{self.name} does not implement start_chat")
+
 	def chat_geek_info(self, geek_id: str, security_id: str, job_id: int) -> dict[str, Any]:
 		"""获取候选人聊天信息。"""
 		raise NotImplementedError(f"{self.name} does not implement chat_geek_info")
@@ -164,6 +170,9 @@ class RecruiterPlatform(ABC):
 	def exchange_content(self, uid: int) -> dict[str, Any]:
 		"""获取交换内容。"""
 		raise NotImplementedError(f"{self.name} does not implement exchange_content")
+
+	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0) -> dict[str, Any]:
+		raise NotImplementedError(f"{self.name} does not implement mark_read")
 
 	def interview_list(self) -> dict[str, Any]:
 		"""面试列表。"""

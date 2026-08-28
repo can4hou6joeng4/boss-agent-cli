@@ -222,7 +222,7 @@ def test_crawl_tools_only_read_or_locally_shortlist_existing_runs():
 
 def test_tool_count():
 	"""工具总数应与当前注册一致。"""
-	assert len(TOOLS) == 73
+	assert len(TOOLS) == 75
 
 
 def test_mcp_tool_count_matches_readme():
@@ -826,7 +826,7 @@ def test_build_args_favorites_list_is_fixed_to_job_favorites():
 
 def test_tool_count_after_pr41():
 	"""协议服务工具总数应与当前 MCP 暴露能力完全一致。"""
-	assert len(TOOLS) == 73
+	assert len(TOOLS) == 75
 
 
 def test_build_args_shortlist_add():

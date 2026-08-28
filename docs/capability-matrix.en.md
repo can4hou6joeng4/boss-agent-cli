@@ -106,6 +106,8 @@ Compatibility modes `assisted` and `research` can both call every implemented ca
 | Reply to candidate | `boss hr reply <friend_id> <message>` | Yes | Recruiter platform adapter |
 | Request attached resume | `boss hr request-resume <friend_id>` | Yes | Recruiter platform adapter |
 | Job listing and online/offline operations | `boss hr jobs` | Yes | httpx |
+| Recommended candidates | `boss hr recommendations --job-id <id>` | Yes | httpx |
+| First-contact workflow | `boss hr greet ... --yes` | Yes | One-shot httpx POST, followed by an MQTT read receipt only when needed |
 
 Notes:
 - **Transport**: `httpx` means a direct API call. Risk-control blocks stop the workflow. Browser/hook adapters may not retry without bounds and must preserve checkpoints and redaction. `AI service` means a third-party model API; do not send chat records, resumes, or contact details without authorization.

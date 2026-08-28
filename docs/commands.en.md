@@ -120,6 +120,8 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 |---------|-------------|
 | `boss hr jobs list/offline/online/detail` | Job listing, detail, and lifecycle management |
 | `boss hr applications` / `hr resume` / `hr chat` / `hr chatmsg` / `hr last-messages` / `hr candidates` / `hr reply` / `hr request-resume` | Candidate applications, resumes, conversations, search, replies, and attached-resume requests |
+| `boss hr recommendations --job-id <encJobId>` | Read rich recommended-candidate cards and first-contact parameters |
+| `boss hr greet ... --message <text> --yes` | Create a conversation, send the first contact once, and clean up its unread state when needed |
 
 ## Resume & AI
 

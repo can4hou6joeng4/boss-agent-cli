@@ -48,6 +48,7 @@ class _BaseHttpClient:
 	_CODE_STOKEN_EXPIRED: int
 	_CODE_RATE_LIMITED: int
 	_ADD_ENDPOINT_HINT: bool = False
+	_INCLUDE_ZP_TOKEN_HEADER: bool = False
 
 	def __init__(
 		self, auth_manager: "AuthManager", *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None
@@ -74,7 +75,11 @@ class _BaseHttpClient:
 	def _get_client(self) -> httpx.Client:
 		if self._client is None:
 			token = self._auth.get_token()
-			headers = browser_headers(self._DEFAULT_HEADERS, token)
+			headers = browser_headers(
+				self._DEFAULT_HEADERS,
+				token,
+				include_zp_token=self._INCLUDE_ZP_TOKEN_HEADER,
+			)
 			self._client = httpx.Client(
 				base_url=self._BASE_URL,
 				cookies=token.get("cookies", {}),
@@ -106,12 +111,13 @@ class _BaseHttpClient:
 
 	# ── httpx request with retry (low-risk ops) ──────────────────────
 
-	def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+	def _request(self, method: str, url: str, *, retry: bool = True, **kwargs: Any) -> dict[str, Any]:
 		"""httpx 请求，循环重试（最多 _MAX_RETRIES 次）。"""
 		# extra_headers overrides yaml-driven defaults from _headers_for(url); candidate
 		# client never passes it, so the pop is a no-op there (behavior preserved).
 		extra_headers_override: dict[str, str] = kwargs.pop("extra_headers", {})
-		for attempt in range(_MAX_RETRIES + 1):
+		max_retries = _MAX_RETRIES if retry else 0
+		for attempt in range(max_retries + 1):
 			client = self._get_client()
 			token = self._auth.get_token()
 			stoken = token.get("stoken", "")
@@ -127,8 +133,13 @@ class _BaseHttpClient:
 
 			# 403 或安全验证 → 刷新 token 重试
 			if resp.status_code == 403 or "安全验证" in resp.text:
-				if attempt >= _MAX_RETRIES:
-					raise self._AUTH_ERROR_CLS("Token 刷新后仍被拒绝，请重新登录")
+				if attempt >= max_retries:
+					message = (
+						"Token 刷新后仍被拒绝，请重新登录"
+						if retry
+						else "请求被拒绝；为避免重复写入未自动重试，请检查登录态"
+					)
+					raise self._AUTH_ERROR_CLS(message)
 				backoff = (2**attempt) + random.uniform(0.5, 1.5)
 				time.sleep(backoff)
 				self._auth.force_refresh(cdp_url=self._cdp_url)
@@ -140,7 +151,7 @@ class _BaseHttpClient:
 			code = data.get("code")
 
 			# stoken 过期 → 刷新重试
-			if code == self._CODE_STOKEN_EXPIRED and attempt < _MAX_RETRIES:
+			if code == self._CODE_STOKEN_EXPIRED and attempt < max_retries:
 				backoff = (2**attempt) + random.uniform(0.5, 1.5)
 				time.sleep(backoff)
 				self._auth.force_refresh(cdp_url=self._cdp_url)
@@ -148,7 +159,7 @@ class _BaseHttpClient:
 				continue
 
 			# 频率限制 → 冷却重试
-			if code == self._CODE_RATE_LIMITED and attempt < _MAX_RETRIES:
+			if code == self._CODE_RATE_LIMITED and attempt < max_retries:
 				cooldown = min(60, 10 * (2**attempt))
 				time.sleep(cooldown)
 				continue

@@ -77,6 +77,20 @@ class BossRecruiterPlatform(RecruiterPlatform):
 	def greet_rec_list(self, page: int = 1, job_id: str | None = None) -> dict[str, Any]:
 		return self._client.greet_rec_list(page=page, job_id=job_id)
 
+	def recommend_geeks(self, job_id: str, page: int = 1) -> dict[str, Any]:
+		return self._client.recommend_geeks(job_id, page=page)
+
+	def start_chat(self, *, geek_id: str, job_id: str, expect_id: str, lid: str, security_id: str, message: str, suid: str = "") -> dict[str, Any]:
+		return self._client.start_chat(
+			geek_id=geek_id,
+			job_id=job_id,
+			expect_id=expect_id,
+			lid=lid,
+			security_id=security_id,
+			message=message,
+			suid=suid,
+		)
+
 	# ── 候选人搜索与简历 ────────────────────────────────
 
 	def search_geeks(
@@ -157,6 +171,9 @@ class BossRecruiterPlatform(RecruiterPlatform):
 
 	def exchange_content(self, uid: int) -> dict[str, Any]:
 		return self._client.exchange_content(uid)
+
+	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0) -> dict[str, Any]:
+		return self._client.mark_read(peer_uid=peer_uid, message_id=message_id, user_source=user_source)
 
 	# ── 面试 ──────────────────────────────────────────────
 

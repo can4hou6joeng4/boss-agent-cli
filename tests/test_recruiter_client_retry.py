@@ -181,3 +181,36 @@ def test_request_raises_auth_error_after_max_403_retries(mock_http_client_cls, m
 		client._request("GET", ep.BOSS_FRIEND_LABELS_URL)
 
 	assert auth.refresh_calls == [None, None, None]
+
+
+@patch("boss_agent_cli.api._base_client.time.sleep")
+def test_request_retry_false_fails_closed_after_one_403(mock_sleep):
+	auth = FakeAuthManager()
+	http_client = FakeHttpxClient([FakeResponse(status_code=403, text="forbidden")])
+	client = BossRecruiterClient(auth)
+	client._client = http_client
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+
+	with pytest.raises(RecruiterAuthError, match="为避免重复写入未自动重试"):
+		client._request("POST", ep.BOSS_CHAT_START_URL, retry=False, data={"greet": "hello"})
+
+	assert len(http_client.calls) == 1
+	assert auth.refresh_calls == []
+	mock_sleep.assert_not_called()
+
+
+@patch("boss_agent_cli.api._base_client.time.sleep")
+def test_request_retry_false_returns_rate_limit_without_retry(mock_sleep):
+	auth = FakeAuthManager()
+	http_client = FakeHttpxClient([FakeResponse(payload={"code": ep.CODE_RATE_LIMITED})])
+	client = BossRecruiterClient(auth)
+	client._client = http_client
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+
+	result = client._request("POST", ep.BOSS_CHAT_START_URL, retry=False, data={"greet": "hello"})
+
+	assert result["code"] == ep.CODE_RATE_LIMITED
+	assert len(http_client.calls) == 1
+	mock_sleep.assert_not_called()

@@ -12,6 +12,7 @@ def browser_headers(
 	token: Mapping[str, Any],
 	*,
 	include_client_id: bool = False,
+	include_zp_token: bool = False,
 	default_platform: str | None = None,
 ) -> dict[str, str]:
 	"""Build browser-like headers from persisted auth metadata."""
@@ -20,6 +21,9 @@ def browser_headers(
 		headers["User-Agent"] = str(ua)
 	if include_client_id and (client_id := token.get("x_zp_client_id") or token.get("client_id")):
 		headers["x-zp-client-id"] = str(client_id)
+	cookies = token.get("cookies")
+	if include_zp_token and isinstance(cookies, Mapping) and (bst := cookies.get("bst")):
+		headers["zp_token"] = str(bst)
 	platform_header = sec_ch_ua_platform(default_platform=default_platform)
 	if platform_header:
 		headers["sec-ch-ua-platform"] = platform_header

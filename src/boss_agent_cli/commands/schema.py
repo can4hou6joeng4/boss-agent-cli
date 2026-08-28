@@ -1060,6 +1060,8 @@ SCHEMA_DATA = {
 				"candidates": "搜索候选人",
 				"reply": "回复候选人消息",
 				"request-resume": "请求候选人分享附件简历",
+				"recommendations": "读取推荐牛人完整卡片和首次开聊参数",
+				"greet": "单次建立候选人会话、发送首次招呼并按需处理红点（需 --yes）",
 			},
 		},
 	},

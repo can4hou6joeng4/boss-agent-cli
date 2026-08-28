@@ -41,6 +41,16 @@ def test_browser_headers_applies_auth_metadata() -> None:
 	assert headers["sec-ch-ua-platform"]
 
 
+def test_browser_headers_derives_recruiter_zp_token_from_managed_bst_cookie() -> None:
+	headers = browser_headers(
+		{"Accept": "application/json"},
+		{"cookies": {"bst": "managed-token"}},
+		include_zp_token=True,
+	)
+
+	assert headers["zp_token"] == "managed-token"
+
+
 def test_referer_header_uses_map_or_fallback() -> None:
 	assert referer_header("/a", {"/a": "https://example.test/a"}, "https://example.test/") == {
 		"Referer": "https://example.test/a"

@@ -109,6 +109,8 @@ _MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES = {
 	"boss_hr_exchange": "recruiter-resume",
 	"boss_hr_reply": "recruiter-reply",
 	"boss_hr_request_resume": "recruiter-request-resume",
+	"boss_hr_recommendations": "recruiter-recommendations",
+	"boss_hr_greet": "recruiter-greet",
 }
 
 
@@ -841,6 +843,36 @@ TOOLS = [
 				"page": {"type": "integer", "description": "页码", "default": 1},
 			},
 			"required": [],
+		},
+	),
+	Tool(
+		name="boss_hr_recommendations",
+		description="招聘者模式：读取推荐牛人完整卡片和首次开聊所需参数",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"job_id": {"type": "string", "description": "招聘职位的加密 ID"},
+				"page": {"type": "integer", "description": "页码", "default": 1},
+			},
+			"required": ["job_id"],
+		},
+	),
+	Tool(
+		name="boss_hr_greet",
+		description="招聘者模式：单次建立会话、发送首次招呼，并按需处理该会话红点",
+		inputSchema={
+			"type": "object",
+			"properties": {
+				"geek_id": {"type": "string", "description": "推荐卡片 encryptGeekId"},
+				"job_id": {"type": "string", "description": "推荐卡片 encryptJobId"},
+				"expect_id": {"type": "string", "description": "推荐卡片 expectId"},
+				"lid": {"type": "string", "description": "推荐卡片 lid"},
+				"security_id": {"type": "string", "description": "推荐卡片 securityId"},
+				"suid": {"type": "string", "description": "可选 suid，当前通常为空", "default": ""},
+				"message": {"type": "string", "description": "首次招呼内容"},
+				"yes": {"type": "boolean", "description": "必须为 true 才会真实发送"},
+			},
+			"required": ["geek_id", "job_id", "expect_id", "lid", "security_id", "message", "yes"],
 		},
 	),
 	Tool(
