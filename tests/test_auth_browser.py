@@ -8,7 +8,6 @@ from boss_agent_cli.auth.browser import (
 	_NAV_TIMEOUT_MS,
 	_NETWORKIDLE_GRACE_MS,
 	_find_zhilian_recruiter_page,
-	_find_zhipin_page,
 	_is_cookie_domain,
 	_is_zhilian_url,
 	_is_zhipin_url,
