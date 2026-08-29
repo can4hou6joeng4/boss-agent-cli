@@ -50,7 +50,7 @@ class _BaseHttpClient:
 	_ADD_ENDPOINT_HINT: bool = False
 
 	def __init__(
-		self, auth_manager: "AuthManager", *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None
+		self, auth_manager: "AuthManager", *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None, browser_mode: str | None = None
 	) -> None:
 		self._auth = auth_manager
 		self._delay = delay
@@ -58,6 +58,7 @@ class _BaseHttpClient:
 		self._browser_session: "BrowserSession | None" = None
 		self._throttle = RequestThrottle(delay)
 		self._cdp_url = cdp_url
+		self._browser_mode = browser_mode
 		self._closed = False
 		self._register()
 
@@ -95,6 +96,7 @@ class _BaseHttpClient:
 				delay=self._delay,
 				cdp_url=self._cdp_url,
 				logger=getattr(self._auth, "_logger", None),
+				browser_mode=self._browser_mode,
 			)
 		return self._browser_session
 
