@@ -62,6 +62,17 @@ class TestBossEnvelopeAdapter:
 		assert code == "TOKEN_REFRESH_FAILED"
 		assert "stoken" in msg.lower() or msg
 
+	def test_parse_error_environment_risk_code_37(self) -> None:
+		"""环境异常文案的 code 37 必须归为 ENVIRONMENT_RISK，不得转回 TOKEN_REFRESH_FAILED。"""
+		code, msg = self.plat.parse_error({"code": 37, "message": "环境存在异常"})
+		assert code == "ENVIRONMENT_RISK"
+		assert msg == "环境存在异常"
+
+	def test_parse_error_ambiguous_code_37_fails_closed(self) -> None:
+		"""语义不明的 code 37 fail closed 为 ENVIRONMENT_RISK。"""
+		code, _ = self.plat.parse_error({"code": 37, "message": "请求失败"})
+		assert code == "ENVIRONMENT_RISK"
+
 	def test_parse_error_rate_limited(self) -> None:
 		code, _ = self.plat.parse_error({"code": 9, "message": "请求频繁"})
 		assert code == "RATE_LIMITED"

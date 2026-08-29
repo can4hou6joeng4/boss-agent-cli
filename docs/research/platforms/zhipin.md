@@ -68,7 +68,7 @@
 |------|-----------|
 | 成功码 | `code == 0` |
 | 数据包络 | `zpData` |
-| 常见风控码 | `code=36` 账号风险、`code=37` stoken 过期、`code=9` 限流 |
+| 常见风控码 | `code=36` 账号风险；`code=37` 需结合文案判断：环境异常为访问环境风控，明确 token/stoken 过期才是凭证失效；`code=9` 限流 |
 | 职位 ID | `encryptJobId`、`securityId` 等加密标识 |
 | 薪资字段 | `salaryDesc` |
 | 城市字段 | 数字 code |

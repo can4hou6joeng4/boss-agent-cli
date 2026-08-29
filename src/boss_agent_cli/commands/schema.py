@@ -1129,6 +1129,11 @@ SCHEMA_DATA = {
 			"recoverable": True,
 			"recovery_action": "boss login",
 		},
+		"ENVIRONMENT_RISK": {
+			"message": "访问环境存在异常",
+			"recoverable": False,
+			"recovery_action": "停止自动化访问；保留当前专用 profile，在官方页面确认并降低访问频率",
+		},
 		"LOGIN_TIMEOUT": {
 			"message": "登录等待超时（扫码未完成或网络缓慢）",
 			"recoverable": True,
