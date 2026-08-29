@@ -29,14 +29,23 @@ if TYPE_CHECKING:
 	from boss_agent_cli.auth.manager import AuthManager
 
 
-def _build_client(name: str, auth: "AuthManager", delay: tuple[float, float], cdp_url: str | None) -> Any:
+def _build_client(
+	name: str,
+	auth: "AuthManager",
+	delay: tuple[float, float],
+	cdp_url: str | None,
+	browser_mode: str | None,
+) -> Any:
 	"""按平台名构造对应的内部 client。"""
 	if name in {"qiancheng", "51job"}:
 		return None
+	kwargs: dict[str, Any] = {"delay": delay, "cdp_url": cdp_url}
+	if browser_mode is not None:
+		kwargs["browser_mode"] = browser_mode
 	if name == "zhilian":
-		return ZhilianClient(auth, delay=delay, cdp_url=cdp_url)
+		return ZhilianClient(auth, **kwargs)
 	# 默认 zhipin 走 BossClient
-	return BossClient(auth, delay=delay, cdp_url=cdp_url)
+	return BossClient(auth, **kwargs)
 
 
 def get_platform_instance(ctx: "click.Context", auth: "AuthManager") -> Platform:
@@ -53,6 +62,7 @@ def get_platform_instance(ctx: "click.Context", auth: "AuthManager") -> Platform
 		auth,
 		delay=obj.get("delay", (1.5, 3.0)),
 		cdp_url=obj.get("cdp_url"),
+		browser_mode=obj.get("browser_mode"),
 	)
 
 
@@ -62,10 +72,11 @@ def build_platform_instance(
 	*,
 	delay: tuple[float, float] = (1.5, 3.0),
 	cdp_url: str | None = None,
+	browser_mode: str | None = None,
 ) -> Platform:
 	"""Build a candidate platform without requiring a Click context."""
 	plat_cls = get_platform(name)
-	client = _build_client(name, auth, delay, cdp_url)
+	client = _build_client(name, auth, delay, cdp_url, browser_mode)
 	return plat_cls(client)
 
 

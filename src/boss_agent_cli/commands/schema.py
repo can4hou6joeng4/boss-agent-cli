@@ -1085,6 +1085,12 @@ SCHEMA_DATA = {
 			"default": None,
 			"description": "Chrome CDP 调试地址（兼容保留）。不得用于规避平台风控或重试被平台拦截的操作。",
 		},
+		"--browser-mode": {
+			"type": "string",
+			"default": "auto",
+			"choices": ["auto", "cdp-required"],
+			"description": "浏览器通道模式。cdp-required 要求连接指定 CDP，失败时禁止降级到 headless。",
+		},
 		"--platform": {
 			"type": "string",
 			"default": "zhipin",
@@ -1374,6 +1380,9 @@ def schema_cmd(ctx: click.Context, output_format: str) -> None:
 	current = (ctx.obj or {}).get("platform") or "zhipin"
 	data["current_platform"] = current
 	data["current_role"] = (ctx.obj or {}).get("role") or "candidate"
+	data["current_browser_mode"] = (
+		"cdp-required" if (ctx.obj or {}).get("browser_mode") == "cdp_required" else "auto"
+	)
 	data["supported_platforms"] = list_platforms()
 	data["supported_recruiter_platforms"] = list_recruiter_platforms()
 	data["wizard_catalog"] = catalog_data()

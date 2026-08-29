@@ -201,3 +201,10 @@ def test_schema_exposes_recruiter_chat_context_commands():
 	subcommands = SCHEMA_DATA["commands"]["hr"]["subcommands"]
 	assert "chatmsg" in subcommands
 	assert "last-messages" in subcommands
+
+
+def test_schema_documents_browser_mode_flag():
+	"""--browser-mode 必须进入 schema global_options，choices 为 auto / cdp-required。"""
+	flag = SCHEMA_DATA["global_options"]["--browser-mode"]
+	assert flag["choices"] == ["auto", "cdp-required"]
+	assert flag["default"] == "auto"

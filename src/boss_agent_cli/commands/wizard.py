@@ -108,6 +108,7 @@ def _build_context(ctx: click.Context, plan: WorkflowPlan) -> ActionContext:
 		logger=ctx.obj["logger"],
 		delay=ctx.obj.get("delay", (1.5, 3.0)),
 		cdp_url=ctx.obj.get("cdp_url"),
+		browser_mode=ctx.obj.get("browser_mode"),
 		config=ctx.obj.get("config"),
 	)
 

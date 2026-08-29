@@ -57,12 +57,28 @@ class BossCliGroup(click.Group):
 @click.option("--data-dir", default="~/.boss-agent", help="数据存储目录")
 @click.option("--delay", default=None, help="请求间隔范围（秒），如 1.5-3.0")
 @click.option("--cdp-url", default=None, help="Chrome CDP 调试地址（如 http://localhost:9222），启用则优先用用户 Chrome")
+@click.option(
+	"--browser-mode",
+	default=None,
+	type=click.Choice(["auto", "cdp-required"]),
+	help="浏览器通道模式：auto 允许降级；cdp-required 要求 CDP 可用且禁止降级 headless",
+)
 @click.option("--platform", "platform_name", default=None, help="指定招聘平台适配器（默认 zhipin，即 BOSS 直聘）")
 @click.option("--role", default=None, type=click.Choice(["candidate", "recruiter"]), help="角色模式：candidate（求职者，默认）/ recruiter（招聘者）")
 @click.option("--log-level", default=None, type=click.Choice(["error", "warning", "info", "debug"]))
 @click.option("--json/--no-json", "json_output", default=False, help="强制 JSON 输出（即使在终端中）")
 @click.pass_context
-def cli(ctx: click.Context, data_dir: str, delay: str | None, cdp_url: str | None, platform_name: str | None, role: str | None, log_level: str | None, json_output: bool) -> None:
+def cli(
+	ctx: click.Context,
+	data_dir: str,
+	delay: str | None,
+	cdp_url: str | None,
+	browser_mode: str | None,
+	platform_name: str | None,
+	role: str | None,
+	log_level: str | None,
+	json_output: bool,
+) -> None:
 	ctx.ensure_object(dict)
 	resolved_dir = Path(data_dir).expanduser()
 	resolved_dir.mkdir(parents=True, exist_ok=True)
@@ -87,6 +103,13 @@ def cli(ctx: click.Context, data_dir: str, delay: str | None, cdp_url: str | Non
 	ctx.obj["log_level"] = level
 	ctx.obj["logger"] = Logger(level)
 	ctx.obj["cdp_url"] = cdp_url or cfg.get("cdp_url")
+	configured_browser_mode = str(browser_mode or cfg.get("browser_mode") or "auto").replace("_", "-")
+	if configured_browser_mode not in {"auto", "cdp-required"}:
+		raise click.BadParameter(
+			"browser mode must be auto or cdp-required",
+			param_hint="--browser-mode",
+		)
+	ctx.obj["browser_mode"] = "cdp_required" if configured_browser_mode == "cdp-required" else None
 
 	resolved_platform = platform_name or cfg.get("platform") or "zhipin"
 	available = list_platforms()

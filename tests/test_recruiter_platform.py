@@ -214,7 +214,34 @@ def test_recruiter_instance_defaults_to_zhipin_and_passes_delay_and_cdp(monkeypa
 	assert captured["cdp_url"] == "http://localhost:9222"
 
 
-def test_recruiter_instance_falls_back_to_default_delay_when_ctx_is_empty(monkeypatch):
+def test_recruiter_instance_passes_browser_mode(monkeypatch):
+	captured: dict = {}
+
+	class _Client:
+		def __init__(self, auth, *, delay, cdp_url, browser_mode=None):
+			captured.update(delay=delay, cdp_url=cdp_url, browser_mode=browser_mode)
+
+	monkeypatch.setattr("boss_agent_cli.commands._recruiter_platform.BossRecruiterClient", _Client)
+	get_recruiter_platform_instance(
+		_ctx(delay=(2.0, 4.0), cdp_url=None, browser_mode="cdp_required"), MagicMock()
+	)
+
+	assert captured["browser_mode"] == "cdp_required"
+
+
+def test_recruiter_instance_omits_browser_mode_when_auto(monkeypatch):
+	captured: dict = {}
+
+	class _Client:
+		def __init__(self, auth, *, delay, cdp_url, browser_mode=None):
+			captured.update(browser_mode=browser_mode)
+
+	monkeypatch.setattr("boss_agent_cli.commands._recruiter_platform.BossRecruiterClient", _Client)
+	get_recruiter_platform_instance(_ctx(delay=(2.0, 4.0)), MagicMock())
+
+	assert captured["browser_mode"] is None
+
+
 	captured: dict = {}
 
 	class _Client:
