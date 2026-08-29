@@ -433,12 +433,20 @@ def test_try_connect_creates_page_when_no_open_zhipin_tab():
 	mock_browser.contexts = [mock_user_context]
 	session._pw.chromium.connect_over_cdp.return_value = mock_browser
 
+	# 回归断言：导航就绪必须发生在 _try_connect 返回之前（首次搜索不再撞上
+	# execution context destroyed）。
+	nav_order: list[str] = []
+	mock_new_page.goto.side_effect = lambda *a, **k: nav_order.append("goto")
+
 	result = session._try_connect("ws://localhost:9222/test")
 
 	assert result is True
 	assert session._own_page is True
 	mock_user_context.new_page.assert_called_once()
-	mock_new_page.goto.assert_called_once_with(HOME_URL, wait_until="commit", timeout=_NAV_TIMEOUT_MS)
+	assert nav_order == ["goto"]  # goto 已在返回前完成
+	assert session._started is True
+	# 首次 CDP 页面必须等待 DOM 就绪，而不是 commit 级等待
+	mock_new_page.goto.assert_called_once_with(HOME_URL, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
 
 
 def test_close_does_not_close_reused_user_page():

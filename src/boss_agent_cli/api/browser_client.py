@@ -237,9 +237,10 @@ class BrowserSession:
 			else:
 				self._page = self._context.new_page()
 				self._own_page = True
-				# CDP 模式下用较长超时 + commit 级等待（避免 networkidle 卡住）
+				# CDP 模式下用较长超时 + DOM 就绪等待（commit 级返回后立即
+				# evaluate 会撞上 execution context destroyed）
 				try:
-					self._page.goto(HOME_URL, wait_until="commit", timeout=_NAV_TIMEOUT_MS)
+					self._page.goto(HOME_URL, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
 				except Exception:
 					pass  # 即使导航超时，页面 JS 环境已可用
 				page_label = "新建 page"
