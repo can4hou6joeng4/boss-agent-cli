@@ -24,13 +24,13 @@ _PLATFORM_BROWSER_CONFIG: dict[str, dict[str, str]] = {
 	"zhipin": {
 		"login_page_url": LOGIN_PAGE_URL,
 		"home_url": HOME_URL,
-		"cookie_domain": "zhipin",
+		"cookie_domain": "zhipin.com",
 		"success_cookie": "wt2",
 	},
 	"zhilian": {
 		"login_page_url": "https://rd6.zhaopin.com/app/im",
 		"home_url": "https://rd6.zhaopin.com/app/im",
-		"cookie_domain": "zhaopin",
+		"cookie_domain": "zhaopin.com",
 		"success_cookie": "at",
 	},
 }
@@ -80,6 +80,57 @@ def _find_zhilian_recruiter_page(pages: list[Any]) -> Any | None:
 		if _is_zhilian_url(getattr(page, "url", "")):
 			return page
 	return None
+
+
+_ZHIPIN_HOST = "zhipin.com"
+
+
+def _is_platform_url(url: str, expected_host: str) -> bool:
+	"""精确 hostname 校验：只接受该 host 及其子域，拒绝子串陷阱。"""
+	host = urlparse(url).hostname
+	if host is None:
+		return False
+	host = host.rstrip(".").lower()
+	return host == expected_host or host.endswith(f".{expected_host}")
+
+
+def _is_zhipin_url(url: str) -> bool:
+	return _is_platform_url(url, _ZHIPIN_HOST)
+
+
+def _find_zhipin_page(pages: list[Any]) -> Any | None:
+	for page in pages:
+		if _is_zhipin_url(getattr(page, "url", "")):
+			return page
+	return None
+
+
+def _is_cookie_domain(domain: str, expected_domain: str) -> bool:
+	normalized = domain.lstrip(".").rstrip(".").lower()
+	expected = expected_domain.lstrip(".").rstrip(".").lower()
+	return normalized == expected or normalized.endswith(f".{expected}")
+
+
+def _matching_cookies(context: Any, *, cookie_domain: str) -> list[dict[str, Any]]:
+	try:
+		return [
+			cookie
+			for cookie in context.cookies()
+			if _is_cookie_domain(cookie.get("domain", ""), cookie_domain)
+		]
+	except Exception:
+		return []
+
+
+def _find_logged_in_context(
+	contexts: list[Any], *, cookie_domain: str, success_cookie: str
+) -> tuple[Any | None, list[dict[str, Any]]]:
+	"""跨所有 browser context 搜索非空成功 cookie，返回 (匹配 context, 其平台 cookie)。"""
+	for context in contexts:
+		cookies = _matching_cookies(context, cookie_domain=cookie_domain)
+		if any(cookie.get("name") == success_cookie and cookie.get("value") for cookie in cookies):
+			return context, cookies
+	return None, []
 
 
 def _browser_diag(message: str) -> None:
@@ -157,17 +208,31 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 	if not ws_url:
 		raise ConnectionError("CDP 不可用，请先运行 boss-chrome 启动带调试端口的 Chrome")
 
-	print("[boss] 正在 CDP Chrome 中打开登录页...", file=sys.stderr)
 	pw = sync_playwright().start()
 	browser = pw.chromium.connect_over_cdp(ws_url)
-	ctx = browser.contexts[0] if browser.contexts else browser.new_context()
-	page = _find_zhilian_recruiter_page(ctx.pages) if platform == "zhilian" else None
+	# 跨所有 browser context 搜索已有登录态：命中则复用该 context，不导航登录页
+	logged_in_ctx, _existing_cookies = _find_logged_in_context(
+		list(browser.contexts),
+		cookie_domain=cookie_domain,
+		success_cookie=success_cookie,
+	)
+	already_logged_in = logged_in_ctx is not None
+	ctx = logged_in_ctx or (browser.contexts[0] if browser.contexts else browser.new_context())
+	if already_logged_in and platform == "zhipin":
+		page = _find_zhipin_page(ctx.pages)
+	elif platform == "zhilian":
+		page = _find_zhilian_recruiter_page(ctx.pages)
+	else:
+		page = None
 	created_page = page is None
 	if page is None:
 		page = ctx.new_page()
 
 	try:
-		if created_page or platform != "zhilian":
+		if already_logged_in:
+			print("[boss] 检测到 CDP Chrome 已登录，正在复用现有登录态...", file=sys.stderr)
+		else:
+			print("[boss] 正在 CDP Chrome 中打开登录页...", file=sys.stderr)
 			try:
 				page.goto(
 					login_page_url,
@@ -177,30 +242,46 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 			except Exception:
 				pass
 
-		print(f"[boss] 请在 Chrome 中扫码登录，等待中...（超时 {timeout}s）", file=sys.stderr)
+			print(f"[boss] 请在 Chrome 中扫码登录，等待中...（超时 {timeout}s）", file=sys.stderr)
 
-		for i in range(timeout):
-			time.sleep(1)
-			cookies = ctx.cookies()
-			success = [c for c in cookies if c["name"] == success_cookie and cookie_domain in c.get("domain", "")]
-			if success:
-				print("[boss] 检测到登录成功！", file=sys.stderr)
-				break
-			if i > 0 and i % 15 == 0:
-				print(f"[boss] 等待中... {i}s", file=sys.stderr)
-		else:
-			raise TimeoutError(f"CDP 扫码登录超时（{timeout}s）")
+			for i in range(timeout):
+				time.sleep(1)
+				cookies = _matching_cookies(ctx, cookie_domain=cookie_domain)
+				if any(c.get("name") == success_cookie and c.get("value") for c in cookies):
+					print("[boss] 检测到登录成功！", file=sys.stderr)
+					break
+				if i > 0 and i % 15 == 0:
+					print(f"[boss] 等待中... {i}s", file=sys.stderr)
+			else:
+				raise TimeoutError(f"CDP 扫码登录超时（{timeout}s）")
 
-		# 在登录页（已加载）上先记录 UA，避免首页导航卡住后 evaluate 永久挂起
-		ua = _safe_user_agent(page)
-		if created_page or platform != "zhilian":
+		if not already_logged_in and (created_page or platform != "zhilian"):
 			home_loaded = _warm_home_for_runtime(page, home_url, stage="登录后回到首页")
+		elif already_logged_in and created_page and platform == "zhipin":
+			# 复用登录态但无既有平台页签：新建页签回首页（DOM 就绪等待）
+			home_loaded = _warm_home_for_runtime(page, home_url, stage="复用登录态回首页")
 		else:
-			home_loaded = True
-		all_cookies = {c["name"]: c["value"] for c in ctx.cookies() if cookie_domain in c.get("domain", "")}
+			# 复用既有平台页签：不导航，避免打断用户页面
+			home_loaded = False
+
+		# 任何导航之后重新读取 cookie，不依赖早期快照
+		all_cookies = {c["name"]: c["value"] for c in _matching_cookies(ctx, cookie_domain=cookie_domain)}
+		# 在已确认加载的页面上记录 UA，避免导航卡住后 evaluate 永久挂起
+		ua = _safe_user_agent(page)
 		if platform == "zhipin":
-			# 首页成功加载才对其 evaluate 提取 stoken；否则回退读取 cookie jar
-			stoken = _extract_stoken(page) if home_loaded else all_cookies.get("__zp_stoken__", "")
+			if created_page:
+				# 首页成功加载才对其 evaluate 提取 stoken；否则回退读取 cookie jar
+				stoken = _extract_stoken(page) if home_loaded else all_cookies.get("__zp_stoken__", "")
+			else:
+				# 复用既有页签：优先 cookie jar 的 stoken；缺失时有界检查后才求值页面
+				stoken = all_cookies.get("__zp_stoken__", "")
+				if not stoken:
+					try:
+						page.wait_for_load_state("domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+					except Exception:
+						stoken = ""  # 页面不可用：容忍空 stoken，不挂起
+					else:
+						stoken = _extract_stoken(page)
 		else:
 			stoken = ""
 		if platform == "zhilian":
