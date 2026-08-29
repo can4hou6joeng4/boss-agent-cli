@@ -123,7 +123,7 @@ def test_request_retries_after_403_and_refreshes_token(mock_http_client_cls, moc
 @patch("boss_agent_cli.api._base_client.httpx.Client")
 def test_request_retries_after_stoken_expired_code(mock_http_client_cls, mock_sleep, mock_uniform):
 	auth = FakeAuthManager()
-	first = FakeHttpxClient([FakeResponse(payload={"code": ep.CODE_STOKEN_EXPIRED})])
+	first = FakeHttpxClient([FakeResponse(payload={"code": ep.CODE_STOKEN_EXPIRED, "message": "stoken 已过期"})])
 	second = FakeHttpxClient([FakeResponse(payload={"code": 0, "zpData": {"ok": True}})])
 	mock_http_client_cls.side_effect = [first, second]
 
@@ -136,6 +136,25 @@ def test_request_retries_after_stoken_expired_code(mock_http_client_cls, mock_sl
 	assert data["zpData"]["ok"] is True
 	assert auth.refresh_calls == [None]
 	assert mock_sleep.call_args_list[0].args[0] == 1
+
+
+@patch("boss_agent_cli.api._base_client.time.sleep")
+@patch("boss_agent_cli.api._base_client.httpx.Client")
+def test_request_ambiguous_code_37_does_not_refresh(mock_http_client_cls, mock_sleep):
+	"""招聘者 httpx 通道与候选端共用同一分类器：语义不明的 code 37 不刷新。"""
+	auth = FakeAuthManager()
+	http_client = FakeHttpxClient([FakeResponse(payload={"code": ep.CODE_STOKEN_EXPIRED})])
+	mock_http_client_cls.return_value = http_client
+
+	client = BossRecruiterClient(auth)
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+
+	data = client._request("GET", ep.BOSS_FRIEND_LABELS_URL)
+
+	assert data["code"] == ep.CODE_STOKEN_EXPIRED
+	assert auth.refresh_calls == []
+	mock_sleep.assert_not_called()
 
 
 @patch("boss_agent_cli.api._base_client.time.sleep")

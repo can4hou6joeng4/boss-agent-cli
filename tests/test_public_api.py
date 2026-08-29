@@ -22,6 +22,7 @@ EXPECTED_EXPORTS = {
 	"BossClient",
 	"AuthError",
 	"AccountRiskError",
+	"EnvironmentRiskError",
 	"JobItem",
 	"JobDetail",
 	"CacheStore",
