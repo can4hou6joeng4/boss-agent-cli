@@ -131,12 +131,14 @@ class CrawlBudget:
 		self._clock = clock
 		self._random_delay = random_delay
 
-	def wait(self, kind: str) -> None:
+	def wait(self, kind: str, on_wait: Callable[[float], None] | None = None) -> None:
 		low, high = (5.0, 10.0) if kind == "list" else (3.0, 6.0)
 		interval = self._random_delay(low, high)
 		now = self._clock()
 		remaining = self._cache.reserve_crawl_budget(f"zhipin:{kind}", now=now, interval=interval)
 		if remaining > 0:
+			if on_wait is not None:
+				on_wait(remaining)
 			self._sleeper(remaining)
 
 
