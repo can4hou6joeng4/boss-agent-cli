@@ -114,6 +114,7 @@ boss status
 常见恢复动作：
 - `AUTH_REQUIRED` / `AUTH_EXPIRED` / `TOKEN_REFRESH_FAILED`：重新执行 `boss login`
 - `wt2` 存在但 `stoken` 缺失：通常为部分登录态；使用 Chrome CDP 远程调试端口后运行 `boss login --cdp`，或重新执行 `boss login`
+- 需要 fail-closed 的浏览器通道时使用 `--browser-mode cdp-required`：要求用户自有的已登录 CDP 会话，不可用时立即失败，绝不降级 headless，也不提供风控绕过
 - `RATE_LIMITED`：等待后重试
 - `NOT_SUPPORTED`：切换 schema catalog 中支持该 goal 的平台或 workflow
 - `WORKFLOW_TIMEOUT`：保留 `run_id`，调整超时后执行 `boss wizard --resume <run_id>`

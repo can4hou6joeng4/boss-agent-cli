@@ -46,6 +46,10 @@ boss schema --format native
 
 `boss status` 默认只检查本地加密凭据和分层健康状态，不请求真实平台；需要确认在线只读接口是否可用时，必须显式运行 `boss status --live` 或 `boss doctor --live-probe`。命中风控时停止当前 workflow 并保留 checkpoint。`wt2` 存在但 `__zp_stoken__` 缺失时属于部分登录态，通常需要通过真实页面 JS 生成；可在用户主动操作下以 Chrome CDP 远程调试端口启动浏览器后运行 `boss login --cdp`，但不得把 CDP 当成风控绕过通道。
 
+`--browser-mode cdp-required` 同样遵守上述边界：它只是把浏览器通道锁定为用户自有的 CDP 会话并
+禁止降级（fail-closed），不改变任何请求频率、重试或风控响应处理策略。命中风控响应时仍必须立即
+停止自动化访问。
+
 提交 Issue 前必须脱敏：
 
 ```json
