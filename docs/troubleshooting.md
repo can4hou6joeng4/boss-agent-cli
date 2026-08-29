@@ -139,6 +139,11 @@ if (-not $chrome) { throw "Google Chrome executable was not found" }
 boss --cdp-url http://localhost:9222 login --cdp
 ```
 
+`login --cdp` 会先扫描 CDP Chrome 中所有浏览器 context：若已存在带 BOSS 登录态
+（`wt2`）的 context，则直接复用它和既有 zhipin 页签，不导航登录页、不轮询等待；
+只在找不到登录态时才打开登录页扫码。页签清理只作用于本次调用新建的页面，
+用户已打开的页签不会被关闭。
+
 ## 错误码与自动修复
 
 每个错误信封都带 `code`、`recoverable`、`recovery_action`，Agent 可程序化恢复。
