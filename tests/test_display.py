@@ -110,6 +110,24 @@ class TestHandleAuthErrors:
 			assert call_kwargs[1]["code"] == "TOKEN_REFRESH_FAILED"
 			assert call_kwargs[1]["recovery_action"] == "boss login"
 
+	def test_environment_risk_error_is_terminal(self):
+		"""EnvironmentRiskError 必须输出 ENVIRONMENT_RISK 终止信封，不得转回 TOKEN_REFRESH_FAILED。"""
+		from boss_agent_cli.api.client import EnvironmentRiskError
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True}
+
+		@handle_auth_errors("search")
+		def impl(ctx):
+			raise EnvironmentRiskError("BOSS 直聘访问环境风控 (code 37): 环境存在异常。", is_cdp=True)
+
+		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
+			impl(ctx)
+			mock_err.assert_called_once()
+			call_kwargs = mock_err.call_args
+			assert call_kwargs[1]["code"] == "ENVIRONMENT_RISK"
+			assert call_kwargs[1]["recoverable"] is False
+			assert "降低访问频率" in call_kwargs[1]["recovery_action"]
+
 	def test_auth_required_uses_zhilian_login_action(self):
 		from boss_agent_cli.auth.manager import AuthRequired
 		ctx = MagicMock()

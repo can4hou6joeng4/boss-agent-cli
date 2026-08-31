@@ -45,6 +45,22 @@ def test_boss_recruiter_parse_error():
 	assert "too fast" in message
 
 
+def test_boss_recruiter_parse_error_code_37_by_context():
+	"""招聘端 adapter 与候选端使用同一分类器：明确 token 过期才刷新。"""
+	client = _mock_client()
+	platform = BossRecruiterPlatform(client)
+
+	unified, _ = platform.parse_error({"code": 37, "message": "登录状态已失效"})
+	assert unified == "TOKEN_REFRESH_FAILED"
+
+	unified, message = platform.parse_error({"code": 37, "message": "环境存在异常"})
+	assert unified == "ENVIRONMENT_RISK"
+	assert message == "环境存在异常"
+
+	unified, _ = platform.parse_error({"code": 37})
+	assert unified == "ENVIRONMENT_RISK"
+
+
 def test_boss_recruiter_parse_error_maps_invalid_request():
 	client = _mock_client()
 	platform = BossRecruiterPlatform(client)

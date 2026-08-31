@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
 	from boss_agent_cli.ai.service import AIService, AIServiceError
-	from boss_agent_cli.api.client import AccountRiskError, AuthError, BossClient
+	from boss_agent_cli.api.client import AccountRiskError, AuthError, BossClient, EnvironmentRiskError
 	from boss_agent_cli.api.models import JobDetail, JobItem
 	from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 	from boss_agent_cli.cache.store import CacheStore
@@ -38,6 +38,7 @@ _LAZY_EXPORT_MODULES = {
 	"BossClient": "boss_agent_cli.api.client",
 	"AuthError": "boss_agent_cli.api.client",
 	"AccountRiskError": "boss_agent_cli.api.client",
+	"EnvironmentRiskError": "boss_agent_cli.api.client",
 	"JobItem": "boss_agent_cli.api.models",
 	"JobDetail": "boss_agent_cli.api.models",
 	"CacheStore": "boss_agent_cli.cache.store",
@@ -64,6 +65,7 @@ __all__ = [
 	"BossClient",
 	"AuthError",
 	"AccountRiskError",
+	"EnvironmentRiskError",
 	# 数据模型
 	"JobItem",
 	"JobDetail",

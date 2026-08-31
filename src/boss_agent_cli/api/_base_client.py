@@ -104,6 +104,10 @@ class _BaseHttpClient:
 	def _merge_cookies(self, resp: httpx.Response) -> None:
 		merge_response_cookies(self._get_client(), resp)
 
+	def _should_refresh_token_response(self, data: dict[str, Any]) -> bool:
+		"""决定该响应是否应触发 token 刷新重试；子类按平台语义覆写。"""
+		return data.get("code") == self._CODE_STOKEN_EXPIRED
+
 	# ── httpx request with retry (low-risk ops) ──────────────────────
 
 	def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
@@ -139,8 +143,8 @@ class _BaseHttpClient:
 			data = resp.json()
 			code = data.get("code")
 
-			# stoken 过期 → 刷新重试
-			if code == self._CODE_STOKEN_EXPIRED and attempt < _MAX_RETRIES:
+			# stoken 过期 → 刷新重试（BOSS 客户端按语境分类，语义不明不刷新）
+			if self._should_refresh_token_response(data) and attempt < _MAX_RETRIES:
 				backoff = (2**attempt) + random.uniform(0.5, 1.5)
 				time.sleep(backoff)
 				self._auth.force_refresh(cdp_url=self._cdp_url)

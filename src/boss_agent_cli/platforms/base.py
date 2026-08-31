@@ -130,7 +130,7 @@ class Platform(ABC):
 		"""解析错误响应，返回 (统一错误码, 原始消息)。
 
 		统一错误码对齐 CLAUDE.md 错误码枚举：
-		AUTH_EXPIRED / RATE_LIMITED / TOKEN_REFRESH_FAILED / ACCOUNT_RISK / UNKNOWN。
+		AUTH_EXPIRED / RATE_LIMITED / TOKEN_REFRESH_FAILED / ACCOUNT_RISK / ENVIRONMENT_RISK / UNKNOWN。
 		"""
 
 	@abstractmethod

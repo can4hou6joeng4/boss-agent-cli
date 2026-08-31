@@ -121,6 +121,7 @@ def test_schema_error_codes_cover_all_used_codes():
 		"AUTH_REQUIRED",
 		"RATE_LIMITED",
 		"TOKEN_REFRESH_FAILED",
+		"ENVIRONMENT_RISK",
 		"LOGIN_TIMEOUT",
 		"CDP_UNAVAILABLE",
 		"BROWSER_KERNEL_MISSING",
@@ -201,3 +202,11 @@ def test_schema_exposes_recruiter_chat_context_commands():
 	subcommands = SCHEMA_DATA["commands"]["hr"]["subcommands"]
 	assert "chatmsg" in subcommands
 	assert "last-messages" in subcommands
+
+
+def test_schema_environment_risk_is_terminal():
+	"""ENVIRONMENT_RISK 必须是不可恢复的终止分支，恢复动作指向停止自动化。"""
+	spec = SCHEMA_DATA["error_codes"]["ENVIRONMENT_RISK"]
+	assert spec["recoverable"] is False
+	assert spec["recovery_action"] == "停止自动化访问；保留当前专用 profile，在官方页面确认并降低访问频率"
+	assert spec["message"] == "访问环境存在异常"

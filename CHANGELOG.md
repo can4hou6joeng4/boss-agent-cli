@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Breaking Changed
+- **code 37 改为按响应语境分类（对外契约变更）。** 此前所有 code 37 一律全局映射为 `TOKEN_REFRESH_FAILED`
+  （`recoverable=true`，恢复动作 `boss login`）。现在只有文案明确指向 token/stoken 过期的 code 37 保持该行为；
+  环境风险文案及语义不明确的 code 37 一律发新的 `ENVIRONMENT_RISK`（`recoverable=false`），立即停止且不刷新、
+  不重试、不提示重新登录。候选人与招聘者的 httpx 刷新判定、浏览器通道和平台 adapter 使用同一分类器
+  （`boss_agent_cli.api.zhipin_errors.classify_code_37`）。按错误码分支的下游 Agent 请新增 `ENVIRONMENT_RISK`
+  终止分支，绝不对其自动登录/刷新/重试。
+
 ### Fixed
 - 修复 TTY 下节流等待期间进度条静默不动的观感问题（#400）：`CrawlBudget.wait()` 在等待前把剩余秒数报给 `SearchProgress`，进度条显示一次性「节流等待 Ns…」提示；非 TTY / `--json` 路径与等待 0 秒场景输出完全不变。
 - 修复扫码登录在「首页预热」阶段卡住时永久挂起：BOSS 直聘首页在自动化下偶发长时间不完成加载，`page.goto` 超时后若仍对页面执行 `page.evaluate`（取 UA / stoken），patchright 会因执行上下文无法建立而无限阻塞，导致 `boss login` 卡死且不落盘凭证。现在 UA 改在已加载的登录页上提前采集；`_warm_home_for_runtime` 返回首页是否真正加载完成，仅在确认加载后才对页面 evaluate 提取 stoken，否则回退读取 cookie jar；并对首页导航超时增加「跳 `about:blank` 重置卡死导航后重试一次」，显著降低风控验证页/加载缓慢导致的 `Page.goto: Timeout 15000ms exceeded` 误报。`login_via_cdp` / `refresh_stoken` / `refresh_stoken_via_cdp` 同步加固；CDP 登录/刷新 stoken 也改为优先页面 evaluate、失败回退 cookie jar（安全验证跳转期间 `domcontentloaded` 可能未触发，但 `__zp_stoken__` 已写入 cookie jar）。

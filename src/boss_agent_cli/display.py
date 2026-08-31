@@ -551,7 +551,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 		@wraps(func)
 		def wrapper(ctx: Any, *args: Any, **kwargs: Any) -> Any:
 			from boss_agent_cli.api.browser_client import RecruiterChatTabRequired
-			from boss_agent_cli.api.client import AccountRiskError
+			from boss_agent_cli.api.client import AccountRiskError, EnvironmentRiskError
 			from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 			try:
 				return func(ctx, *args, **kwargs)
@@ -589,6 +589,17 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					hints={"next_actions": [
 						"不要通过 CDP、patchright 或 Bridge 重试该操作",
 						"只保留本地辅助和用户主动触发的只读命令",
+					]},
+				)
+			except EnvironmentRiskError as e:
+				handle_error_output(
+					ctx, command_name, code="ENVIRONMENT_RISK",
+					message=str(e),
+					recoverable=False,
+					recovery_action="停止自动化访问；保留当前专用 profile，在 BOSS 直聘官方页面确认并降低访问频率",
+					hints={"next_actions": [
+						"不要刷新 Token、重新登录或自动重试该请求",
+						"稍后由用户在同一专用 Chrome profile 中确认页面状态后再手动发起",
 					]},
 				)
 			except Exception as e:

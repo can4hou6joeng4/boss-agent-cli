@@ -4,6 +4,7 @@ from typing import Any
 from boss_agent_cli.api import endpoints
 from boss_agent_cli.api._base_client import _BaseHttpClient
 from boss_agent_cli.api.httpx_helpers import make_client_registry
+from boss_agent_cli.api.zhipin_errors import classify_code_37, response_message
 
 # atexit safeguard: close any BossClient instances not explicitly closed
 _OPEN_CLIENTS, _close_open_clients = make_client_registry()
@@ -18,6 +19,14 @@ class AuthError(Exception):
 
 class AccountRiskError(Exception):
 	"""BOSS 直聘风控拦截（code 36）：检测到异常行为。"""
+
+	def __init__(self, message: str = "", is_cdp: bool = False):
+		self.is_cdp = is_cdp
+		super().__init__(message)
+
+
+class EnvironmentRiskError(Exception):
+	"""BOSS 直聘访问环境风控（code 37），不等同于登录过期。"""
 
 	def __init__(self, message: str = "", is_cdp: bool = False):
 		self.is_cdp = is_cdp
@@ -40,23 +49,47 @@ class BossClient(_BaseHttpClient):
 	def _unregister(self) -> None:
 		_OPEN_CLIENTS.discard(self)
 
+	def _should_refresh_token_response(self, data: dict[str, Any]) -> bool:
+		return data.get("code") == endpoints.CODE_STOKEN_EXPIRED and classify_code_37(data) == "token_expired"
+
 	# ── Browser request (high-risk ops) ──────────────────────────────
 
-	def _browser_request(self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None) -> dict[str, Any]:
-		result = self._get_browser().request(method, url, params=params, data=data)
-		code = result.get("code")
-		if code == endpoints.CODE_ACCOUNT_RISK:
-			msg = result.get("message", "账户存在异常行为")
+	def _browser_request(
+		self,
+		method: str,
+		url: str,
+		*,
+		params: dict[str, Any] | None = None,
+		data: dict[str, Any] | None = None,
+	) -> dict[str, Any]:
+		for attempt in range(2):
 			browser = self._get_browser()
+			result = browser.request(method, url, params=params, data=data)
+			code = result.get("code")
 			is_cdp = getattr(browser, "_is_cdp", False)
 			mode = "CDP" if is_cdp else ("Bridge" if getattr(browser, "_is_bridge", False) else "headless patchright")
-			raise AccountRiskError(
-				f"BOSS 直聘风控拦截 (code {code}): {msg}。"
-				f"当前浏览器模式: {mode}。"
-				f"建议：停止自动化访问并回到 BOSS 直聘官方页面手动处理。",
-				is_cdp=is_cdp,
-			)
-		return result
+			if code == endpoints.CODE_ACCOUNT_RISK:
+				msg = response_message(result) or "账户存在异常行为"
+				raise AccountRiskError(
+					f"BOSS 直聘风控拦截 (code {code}): {msg}。"
+					f"当前浏览器模式: {mode}。"
+					f"建议：停止自动化访问并回到 BOSS 直聘官方页面手动处理。",
+					is_cdp=is_cdp,
+				)
+			if code == endpoints.CODE_STOKEN_EXPIRED:
+				msg = response_message(result) or "未知 code 37 响应"
+				if classify_code_37(result) == "environment_risk":
+					raise EnvironmentRiskError(
+						f"BOSS 直聘访问环境风控 (code {code}): {msg}。"
+						f"当前浏览器模式: {mode}。已停止且未刷新或重试；"
+						"请保留当前专用 profile，在官方页面确认后降低访问频率。",
+						is_cdp=is_cdp,
+					)
+				if attempt == 0:
+					self._auth.force_refresh(cdp_url=self._cdp_url)
+					continue
+			return result
+		raise AssertionError("unreachable browser retry state")
 
 	# ── Public API ───────────────────────────────────────────────────
 	# High-risk: search, recommend, greet, job_card → browser channel

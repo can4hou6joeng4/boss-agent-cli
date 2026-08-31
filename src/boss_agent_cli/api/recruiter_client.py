@@ -11,6 +11,7 @@ from typing import Any, cast
 from boss_agent_cli.api import recruiter_endpoints as ep
 from boss_agent_cli.api._base_client import _BaseHttpClient
 from boss_agent_cli.api.httpx_helpers import make_client_registry
+from boss_agent_cli.api.zhipin_errors import classify_code_37
 
 _OPEN_CLIENTS, _close_open_clients = make_client_registry()
 
@@ -178,6 +179,9 @@ class BossRecruiterClient(_BaseHttpClient):
 
 	def _unregister(self) -> None:
 		_OPEN_CLIENTS.discard(self)
+
+	def _should_refresh_token_response(self, data: dict[str, Any]) -> bool:
+		return data.get("code") == ep.CODE_STOKEN_EXPIRED and classify_code_37(data) == "token_expired"
 
 	def _browser_request(
 		self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None

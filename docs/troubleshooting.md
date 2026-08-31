@@ -143,12 +143,18 @@ boss --cdp-url http://localhost:9222 login --cdp
 
 每个错误信封都带 `code`、`recoverable`、`recovery_action`，Agent 可程序化恢复。
 
+> **Breaking change（code 37 按语境分类）：** 此前所有 code 37 都发 `TOKEN_REFRESH_FAILED`（`recoverable=true`，恢复动作 `boss login`）。
+> 现在只有文案明确指向 token/stoken 过期的 code 37 保持该行为；环境风险文案及语义不明确的 code 37 一律发 `ENVIRONMENT_RISK`
+> （`recoverable=false`），且不会刷新、重试或提示重新登录。按错误码分支的 Agent 应新增 `ENVIRONMENT_RISK` 终止分支：
+> 绝不对其自动登录、刷新 Token 或重试，先停止自动化访问，保留当前专用 profile，在官方页面确认后再由用户手动发起。
+
 | 错误码 | 含义 | Agent 自动修复 |
 |--------|------|---------------|
 | `AUTH_REQUIRED` | 未登录 | `boss login` |
 | `AUTH_EXPIRED` | 登录过期 | `boss login` |
 | `RATE_LIMITED` | 频率过高 | 等待后重试 |
 | `TOKEN_REFRESH_FAILED` | Token 刷新失败 | `boss login` |
+| `ENVIRONMENT_RISK` | 访问环境存在异常 | 停止自动化访问；保留当前专用 profile，在官方页面确认并降低访问频率 |
 | `ACCOUNT_RISK` | 风控拦截 | 停止当前 workflow，保留 run ID/checkpoint；处理登录或安全页后再显式恢复 |
 | `COMPLIANCE_BLOCKED` | 历史版本模式策略阻断 | 升级当前版本后重试；当前版本不主动产生此错误 |
 | `WIZARD_INPUT_REQUIRED` | headless workflow 缺少 role/platform/goal/inputs | 按 `boss schema` catalog 补齐 `--input-json` |
