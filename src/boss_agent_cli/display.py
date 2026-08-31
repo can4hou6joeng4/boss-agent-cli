@@ -529,6 +529,10 @@ class SearchProgress:
 	def finish(self) -> None:
 		console.print(f"  [dim]{escape(self.status_text())}[/dim]")
 
+	def waiting(self, seconds: float) -> None:
+		"""节流等待前的一次性提示（取整秒，不做倒计时刷屏）。"""
+		console.print(f"  [dim]节流等待 {seconds:.0f}s…[/dim]")
+
 
 # ── Auth error decorator ─────────────────────────────────────────────
 

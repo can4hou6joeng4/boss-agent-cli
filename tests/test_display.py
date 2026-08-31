@@ -867,6 +867,15 @@ class TestSearchProgress:
 
 		assert stream.getvalue() == ""
 
+	def test_waiting_renders_one_shot_throttle_hint(self, monkeypatch):
+		progress, stream = self._progress(monkeypatch)
+
+		progress.waiting(4.0)
+
+		lines = stream.getvalue().strip().splitlines()
+		assert len(lines) == 1, "节流提示应一次性渲染，不做倒计时刷屏"
+		assert "4" in lines[0]
+
 
 def test_search_pipeline_progress_markers_contract():
 	"""契约锁定：SearchProgress 依赖管线里的这些标记来分类进度消息。
