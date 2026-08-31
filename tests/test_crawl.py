@@ -96,6 +96,45 @@ def test_crawl_budget_coordinates_separate_cache_connections(tmp_path: Path) -> 
 	second_cache.close()
 
 
+def test_crawl_budget_reports_wait_before_sleeping(tmp_path: Path) -> None:
+	cache = CacheStore(tmp_path / "budget.db")
+	now = [100.0]
+	sleeps: list[float] = []
+	reported: list[float] = []
+	events: list[str] = []
+	budget = CrawlBudget(
+		cache,
+		clock=lambda: now[0],
+		sleeper=lambda s: (events.append("sleep"), sleeps.append(s)),
+		random_delay=lambda low, high: 5.0,
+	)
+
+	budget.wait("list")  # 首次无历史，remaining == 0，不触发 on_wait
+	now[0] = 101.0
+	budget.wait("list", on_wait=lambda s: (events.append("report"), reported.append(s)))
+
+	assert reported == [4.0]
+	assert sleeps == [4.0]
+	assert events == ["report", "sleep"], "on_wait 必须在 sleep 之前触发，进度条才能先亮出等待"
+	cache.close()
+
+
+def test_crawl_budget_skips_on_wait_when_no_wait_needed(tmp_path: Path) -> None:
+	cache = CacheStore(tmp_path / "budget.db")
+	reported: list[float] = []
+	budget = CrawlBudget(
+		cache,
+		clock=lambda: 100.0,
+		sleeper=lambda s: None,
+		random_delay=lambda low, high: 5.0,
+	)
+
+	budget.wait("list", on_wait=reported.append)  # 无历史 → remaining == 0
+
+	assert reported == [], "等待 0 秒时不应触发 on_wait（避免噪音）"
+	cache.close()
+
+
 class _FakeTransport:
 	def __init__(
 		self,

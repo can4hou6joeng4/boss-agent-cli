@@ -199,6 +199,7 @@ def search_cmd(
 				progress = SearchProgress(_progress_title(criteria, welfare_conditions), max_pages=max_pages)
 				progress.start()
 				pipeline_logger = progress
+			# 仅 TTY 下把节流等待秒数喂给进度条；管道 / --json 保持 wait("list") 逐字不变。
 			try:
 				pipeline_result = execute_candidate_search(
 					platform,
@@ -219,7 +220,11 @@ def search_cmd(
 						"max_pages": max_pages,
 						"welfare_conditions": welfare_conditions,
 						"before_list_request": (
-							(lambda: request_budget.wait("list")) if request_budget is not None else None
+							(lambda: request_budget.wait("list", on_wait=progress.waiting))
+							if request_budget is not None and progress is not None
+							else (lambda: request_budget.wait("list"))
+							if request_budget is not None
+							else None
 						),
 					},
 					pipeline=run_search_pipeline,
