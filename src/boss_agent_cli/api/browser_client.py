@@ -94,6 +94,7 @@ class BrowserSession:
 		delay: tuple[float, float] = (1.5, 3.0),
 		cdp_url: str | None = None,
 		logger: Any = None,
+		browser_mode: str | None = None,
 	) -> None:
 		self._throttle = RequestThrottle(delay)
 		# patchright / BridgeClient 运行时创建；注解为 Any 让 mypy 对外部依赖放行
@@ -105,6 +106,7 @@ class BrowserSession:
 		self._user_agent = user_agent
 		self._started = False
 		self._cdp_url = cdp_url
+		self._browser_mode = browser_mode
 		self._is_cdp = False
 		self._own_context = False  # 是否由我们创建的 context（需要在 close 时清理）
 		self._own_page = True  # 是否由我们新建的 page（复用用户已开页签时为 False，close 不关它）
@@ -133,6 +135,11 @@ class BrowserSession:
 		if self._started:
 			return
 
+		# 严格 CDP 模式：跳过 Bridge、CDP 失败立即抛错、永不 headless
+		if self._browser_mode == "cdp_required":
+			self._start_cdp_required()
+			return
+
 		# 优先尝试 Bridge 模式（Chrome 扩展 + daemon，零配置）
 		if self._try_bridge():
 			return
@@ -145,6 +152,22 @@ class BrowserSession:
 
 		# 兜底：启动 headless patchright
 		self._start_headless()
+
+	def _start_cdp_required(self) -> None:
+		"""严格 CDP 模式：跳过 Bridge、CDP 失败立即抛错、永不 headless。"""
+		self._pw = sync_playwright().start()
+		if self._try_cdp():
+			return
+		if self._pw is not None:
+			try:
+				self._pw.stop()
+			except Exception:
+				pass
+			self._pw = None
+		raise RuntimeError(
+			"CDP 不可用（browser_mode=cdp_required）："
+			"请以 --remote-debugging-port=9222 启动 Chrome 并登录 zhipin.com"
+		)
 
 	def _try_bridge(self) -> bool:
 		"""尝试通过 Browser Bridge（Chrome 扩展 + daemon）连接。"""

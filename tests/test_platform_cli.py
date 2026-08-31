@@ -129,7 +129,31 @@ class TestGetPlatformInstanceHelper:
 			get_platform_instance(ctx, auth)
 			mock_client_cls.assert_called_once_with(auth, delay=(2.0, 4.0), cdp_url="http://localhost:9222")
 
-	def test_helper_defaults_missing_platform_to_zhipin(self) -> None:
+	def test_helper_passes_browser_mode_to_client(self) -> None:
+		from boss_agent_cli.commands._platform import get_platform_instance
+
+		ctx = MagicMock()
+		ctx.obj = {"platform": "zhipin", "delay": (0.0, 0.0), "cdp_url": None, "browser_mode": "cdp_required"}
+		auth = MagicMock()
+
+		with patch("boss_agent_cli.commands._platform.BossClient") as mock_client_cls:
+			get_platform_instance(ctx, auth)
+			mock_client_cls.assert_called_once_with(
+				auth, delay=(0.0, 0.0), cdp_url=None, browser_mode="cdp_required"
+			)
+
+	def test_helper_omits_browser_mode_when_auto(self) -> None:
+		"""auto 映射为 None：既有构造函数签名保持不变（不出现 browser_mode kwarg）。"""
+		from boss_agent_cli.commands._platform import get_platform_instance
+
+		ctx = MagicMock()
+		ctx.obj = {"platform": "zhipin", "delay": (0.0, 0.0), "cdp_url": None}
+		auth = MagicMock()
+
+		with patch("boss_agent_cli.commands._platform.BossClient") as mock_client_cls:
+			get_platform_instance(ctx, auth)
+			mock_client_cls.assert_called_once_with(auth, delay=(0.0, 0.0), cdp_url=None)
+
 		from boss_agent_cli.platforms import BossPlatform
 		from boss_agent_cli.commands._platform import get_platform_instance
 

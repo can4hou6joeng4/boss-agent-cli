@@ -137,7 +137,13 @@ if (-not $chrome) { throw "Google Chrome executable was not found" }
 
 ```bash
 boss --cdp-url http://localhost:9222 login --cdp
+boss --browser-mode cdp-required --cdp-url http://localhost:9222 search "Python" --city 广州
 ```
+
+`--browser-mode cdp-required` 是 fail-closed 的严格模式：要求连接用户自有的、已在官方页面登录的
+Chrome CDP 会话，CDP 不可用时立即报错，绝不静默降级到 Bridge 或 headless。上面的专用 profile
+应长期复用并由用户手动登录；不要每次启动时重新创建，也不要在命中风控响应后通过切换 profile、
+刷新 Token 或自动重试来绕过——严格模式不提供任何风控绕过能力。
 
 ## 错误码与自动修复
 

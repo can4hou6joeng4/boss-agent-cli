@@ -7,6 +7,7 @@ DEFAULTS: dict[str, Any] = {
 	"batch_greet_delay": [2.0, 5.0],
 	"log_level": "error",
 	"cdp_url": None,
+	"browser_mode": "auto",
 	"export_dir": None,
 	"platform": "zhipin",
 	"role": "candidate",

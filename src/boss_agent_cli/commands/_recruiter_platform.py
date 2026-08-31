@@ -19,6 +19,7 @@ def get_recruiter_platform_instance(ctx: "click.Context", auth: "AuthManager") -
 		auth,
 		delay=obj.get("delay", (1.5, 3.0)),
 		cdp_url=obj.get("cdp_url"),
+		browser_mode=obj.get("browser_mode"),
 	)
 
 
@@ -28,11 +29,15 @@ def build_recruiter_platform_instance(
 	*,
 	delay: tuple[float, float] = (1.5, 3.0),
 	cdp_url: str | None = None,
+	browser_mode: str | None = None,
 ) -> RecruiterPlatform:
 	"""Build a recruiter platform without requiring a Click context."""
 	recruiter_name = f"{name}-recruiter"
 	plat_cls = get_recruiter_platform(recruiter_name)
-	client = BossRecruiterClient(auth, delay=delay, cdp_url=cdp_url)
+	if browser_mode is None:
+		client = BossRecruiterClient(auth, delay=delay, cdp_url=cdp_url)
+	else:
+		client = BossRecruiterClient(auth, delay=delay, cdp_url=cdp_url, browser_mode=browser_mode)
 	return plat_cls(client)
 
 
