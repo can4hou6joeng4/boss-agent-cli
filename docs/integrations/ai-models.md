@@ -10,6 +10,7 @@
 | `deepseek` | `https://api.deepseek.com/v1` | DeepSeek-V3、DeepSeek-R1 |
 | `moonshot` | `https://api.moonshot.cn/v1` | Kimi K2 |
 | `openrouter` | `https://openrouter.ai/api/v1` | **聚合入口**，支持 Anthropic Claude、OpenAI、Google、Meta 等全家桶 |
+| `orcarouter` | `https://api.orcarouter.ai/v1` | **自适应路由 + agent 安全网关**，200+ 模型一个入口，支持 `orcarouter/auto` 自动路由 |
 | `qwen` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 通义千问 Qwen3 系列 |
 | `zhipu` | `https://open.bigmodel.cn/api/paas/v4` | 智谱 GLM-4.6 / GLM-Z1 |
 | `siliconflow` | `https://api.siliconflow.cn/v1` | 硅基流动聚合推理 |
@@ -97,6 +98,17 @@ boss ai config \
 
 </details>
 
+### OrcaRouter（自适应路由 + agent 安全网关）
+
+[OrcaRouter](https://www.orcarouter.ai) 是一个面向模型与 Agent 的 OpenAI 兼容 AI 网关。与 OpenRouter 类似，它在一个端点下暴露 200+ 模型的 `provider/model` 命名空间；同时还提供自适应路由、自动故障转移、零加价推理、可观测性、护栏与 Agent 工具治理。其特殊模型 `orcarouter/auto` 会为每次请求自动评级并路由到最合适的模型：
+
+```bash
+boss ai config \
+  --provider orcarouter \
+  --model orcarouter/auto \
+  --api-key <ORCAROUTER_KEY>
+```
+
 ### 自建代理（LiteLLM / OneAPI）
 
 ```bash
@@ -116,6 +128,7 @@ boss ai config \
 | 国内直连不走代理 | `qwen` / `zhipu` / `deepseek` / `moonshot` |
 | 需要混用多家模型 | `openrouter` 或 `atlas` 一个 key 全覆盖 |
 | 想要全模态 + OpenAI 兼容聚合入口 | `atlas` + `deepseek-ai/deepseek-v4-pro` |
+| 想要自适应路由 + Agent 安全网关 | `orcarouter` + `orcarouter/auto` |
 | 已有自建代理 | `custom` + `--base-url` |
 
 ## 配置校验
