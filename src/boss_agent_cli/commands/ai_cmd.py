@@ -191,6 +191,11 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 		config = store.load_config()
 		config["api_key_set"] = store.get_api_key() is not None
 		config.pop("ai_api_key", None)
+		# 回显解析后的实际端点：只设 --provider 时 ai_base_url 是空的，
+		# 真正生效的地址来自 PROVIDER_BASE_URLS 查表，用户此前无从确认。
+		# provider 名相近时（如 openrouter / orcarouter）记混会把 API key 与
+		# 简历全文发到另一家，而界面上看不出任何差别。
+		config["resolved_base_url"] = store.get_base_url()
 		handle_output(
 			ctx, "ai-config", config,
 			render=lambda d: render_action_result(
@@ -222,7 +227,13 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 
 	handle_output(
 		ctx, "ai-config",
-		{"action": "update", "updated_fields": list(updates.keys()) + (["api_key"] if api_key else [])},
+		{
+			"action": "update",
+			"updated_fields": list(updates.keys()) + (["api_key"] if api_key else []),
+			# 写入后立刻回显生效的端点，让「刚配的这个 provider 会把数据发去哪」
+			# 在同一屏内可确认，而不是要再跑一次 boss ai config 才看得到。
+			"resolved_base_url": store.get_base_url(),
+		},
 		render=lambda d: render_action_result(d, title="ai config", next_steps=["boss ai config"]),
 		hints={"next_actions": ["boss ai config", "boss ai local status", "boss ai analyze-jd <security_id> --resume <name>"]},
 	)

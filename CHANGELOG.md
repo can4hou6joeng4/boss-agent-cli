@@ -17,6 +17,11 @@
   本次不暴露任何 CLI 选项、不新增任何错误码。新增 22 条结构门禁锁定上述性质。
 
 ### Fixed
+- `boss ai config` 查看与写入现在都回显 `resolved_base_url`（解析后真正生效的端点）。此前查看模式
+  直出 `load_config()`，用户只设 `--provider` 时 `ai_base_url` 为空，实际地址来自
+  `PROVIDER_BASE_URLS` 查表却从不显示；而 `--provider` 没有 `click.Choice` 校验（自由字符串），
+  名字相近的 provider 记混或拼错时，API key 与简历全文会被发到另一家而界面上看不出任何差别。
+  该命令此前零测试覆盖，一并补齐 7 条。
 - 修复 `BrowserSession` 在 `_start_headless()` 或 playwright driver 启动抛错时泄漏 driver 进程：
   `_pw` 已 `start()` 却永远不会 `stop()`，下一次 `request()` 会再起一个。现在启动失败路径统一
   释放 driver。
