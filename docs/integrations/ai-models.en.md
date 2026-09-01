@@ -10,6 +10,7 @@ The `boss ai` command group speaks an OpenAI-compatible protocol. This guide sum
 | `deepseek` | `https://api.deepseek.com/v1` | DeepSeek-V3 and DeepSeek-R1 |
 | `moonshot` | `https://api.moonshot.cn/v1` | Kimi K2 |
 | `openrouter` | `https://openrouter.ai/api/v1` | Aggregated access to Anthropic Claude, OpenAI, Google, Meta, and more |
+| `orcarouter` | `https://api.orcarouter.ai/v1` | **Adaptive routing + agent security gateway** — 200+ models behind one endpoint, including the `orcarouter/auto` router model |
 | `qwen` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | Tongyi Qwen3 models |
 | `zhipu` | `https://open.bigmodel.cn/api/paas/v4` | GLM-4.6 and GLM-Z1 |
 | `siliconflow` | `https://api.siliconflow.cn/v1` | SiliconFlow aggregated inference |
@@ -97,6 +98,17 @@ boss ai config \
 
 </details>
 
+### OrcaRouter (adaptive routing + agent security gateway)
+
+[OrcaRouter](https://www.orcarouter.ai) is an OpenAI-compatible AI gateway built for both models and agents. Like OpenRouter, it exposes a `provider/model` namespace spanning 200+ models behind a single endpoint; it also layers on adaptive routing, automatic failover, zero-markup inference, observability, guardrails, and agent-tool governance. Its special `orcarouter/auto` model grades each prompt and routes it to the best-fit model automatically:
+
+```bash
+boss ai config \
+  --provider orcarouter \
+  --model orcarouter/auto \
+  --api-key <ORCAROUTER_KEY>
+```
+
 ### Self-hosted proxy via LiteLLM / OneAPI
 
 ```bash
@@ -116,6 +128,7 @@ boss ai config \
 | You want mainland-China direct access without an extra proxy | `qwen`, `zhipu`, `deepseek`, or `moonshot` |
 | You want one key that spans many vendors | `openrouter` or `atlas` |
 | You want a full-modal, OpenAI-compatible aggregator | `atlas` + `deepseek-ai/deepseek-v4-pro` |
+| You want adaptive routing plus an agent security gateway | `orcarouter` + `orcarouter/auto` |
 | You already run your own compatible proxy | `custom` + `--base-url` |
 
 ## Validate the configuration

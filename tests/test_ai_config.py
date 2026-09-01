@@ -131,6 +131,13 @@ def test_base_url_openrouter(tmp_path, monkeypatch):
 	assert store.get_base_url() == "https://openrouter.ai/api/v1"
 
 
+def test_base_url_orcarouter(tmp_path, monkeypatch):
+	"""OrcaRouter 自适应路由 + agent 安全网关入口。"""
+	store = _make_store(tmp_path, monkeypatch)
+	store.save_config(ai_provider="orcarouter")
+	assert store.get_base_url() == "https://api.orcarouter.ai/v1"
+
+
 def test_base_url_qwen(tmp_path, monkeypatch):
 	"""通义千问 DashScope OpenAI 兼容入口。"""
 	store = _make_store(tmp_path, monkeypatch)
@@ -216,6 +223,8 @@ def test_provider_base_urls_completeness():
 	assert "deepseek" in PROVIDER_BASE_URLS
 	assert "moonshot" in PROVIDER_BASE_URLS
 	assert "openrouter" in PROVIDER_BASE_URLS
+	assert "orcarouter" in PROVIDER_BASE_URLS
+	assert PROVIDER_BASE_URLS["orcarouter"] == "https://api.orcarouter.ai/v1"
 	assert "qwen" in PROVIDER_BASE_URLS
 	assert "zhipu" in PROVIDER_BASE_URLS
 	assert "siliconflow" in PROVIDER_BASE_URLS
