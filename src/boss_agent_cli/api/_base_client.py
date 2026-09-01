@@ -50,7 +50,12 @@ class _BaseHttpClient:
 	_ADD_ENDPOINT_HINT: bool = False
 
 	def __init__(
-		self, auth_manager: "AuthManager", *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None
+		self,
+		auth_manager: "AuthManager",
+		*,
+		delay: tuple[float, float] = (1.5, 3.0),
+		cdp_url: str | None = None,
+		browser_source: str | None = None,
 	) -> None:
 		self._auth = auth_manager
 		self._delay = delay
@@ -58,6 +63,10 @@ class _BaseHttpClient:
 		self._browser_session: "BrowserSession | None" = None
 		self._throttle = RequestThrottle(delay)
 		self._cdp_url = cdp_url
+		# 浏览器通道来源意图；None = auto（默认路径行为不变）。
+		# 只在此处保存并透传给唯一的 BrowserSession 构造点，不在本类上派生
+		# 任何模式布尔——见 api/browser_source.py 的模块文档。
+		self._browser_source = browser_source
 		self._closed = False
 		self._register()
 
@@ -95,6 +104,7 @@ class _BaseHttpClient:
 				delay=self._delay,
 				cdp_url=self._cdp_url,
 				logger=getattr(self._auth, "_logger", None),
+				browser_source=self._browser_source,
 			)
 		return self._browser_session
 

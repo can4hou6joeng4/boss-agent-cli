@@ -139,6 +139,7 @@ def test_close_is_idempotent_when_cdp_resources_are_partial_and_raise():
 	session._page = MagicMock()
 	session._context = MagicMock()
 	session._pw = MagicMock()
+	pw = session._pw
 	session._page.close.side_effect = RuntimeError("page already closed")
 	session._context.close.side_effect = RuntimeError("context already closed")
 	session._pw.stop.side_effect = RuntimeError("playwright already stopped")
@@ -147,9 +148,15 @@ def test_close_is_idempotent_when_cdp_resources_are_partial_and_raise():
 	session.close()
 
 	assert session._started is False
-	assert session._page.close.call_count == 2
-	assert session._context.close.call_count == 2
-	assert session._pw.stop.call_count == 2
+	# close 现在是真幂等的：第二次调用因 _started 已为 False 直接返回，不重复拆卸。
+	# 旧实现会重跑一遍，且在 _is_cdp 被复位后走进 headless 分支执行错误的拆卸。
+	assert session._page.close.call_count == 1
+	assert session._context.close.call_count == 1
+	# playwright driver 在首次 close 时被 stop 并置空，第二次 close 不再重复 stop。
+	# 这是有意的：_ensure_playwright() 用 `_pw is None` 判断是否要起新 driver，
+	# close 不置空的话，close 后重启会复用一个已 stop 的 driver。
+	assert pw.stop.call_count == 1
+	assert session._pw is None
 
 
 def test_close_is_idempotent_when_headless_resources_are_partial_and_raise():
@@ -158,6 +165,7 @@ def test_close_is_idempotent_when_headless_resources_are_partial_and_raise():
 	session._started = True
 	session._browser = MagicMock()
 	session._pw = MagicMock()
+	pw = session._pw
 	session._browser.close.side_effect = RuntimeError("browser already closed")
 	session._pw.stop.side_effect = RuntimeError("playwright already stopped")
 
@@ -165,8 +173,10 @@ def test_close_is_idempotent_when_headless_resources_are_partial_and_raise():
 	session.close()
 
 	assert session._started is False
-	assert session._browser.close.call_count == 2
-	assert session._pw.stop.call_count == 2
+	assert session._browser.close.call_count == 1
+	# 同上：driver 首次 close 即释放并置空，避免 close 后重启复用已 stop 的 driver。
+	assert pw.stop.call_count == 1
+	assert session._pw is None
 
 
 def test_try_connect_reuses_existing_context():

@@ -4,7 +4,25 @@
 
 ## [Unreleased]
 
+### Changed
+- **浏览器通道选择收敛为策略表驱动的单一分发点**（Issue #387 seam 第 2 片的前置改造，无对外行为变更）。
+  `BrowserSession._ensure_started` 原本是硬编码的 Bridge → CDP → headless 三级降级链，
+  中间只有两处插入缝隙；两个并行 PR 各自在其中一处插模式短路时，git 三方合并会干净通过、
+  不留冲突标记，合并后类上会出现两个互不感知的模式布尔，谁生效取决于插入位置且失效方向是
+  fail-open。现新增 `api/browser_source.py`：一张冻结的 `BrowserSourcePolicy` 表声明
+  「通道白名单 / 是否读本地凭据 / 能否新建 context / 能否启动浏览器 / 是否自动探测 CDP /
+  失败发什么码」，`_ensure_started` 变成对 `policy.channels` 的单个循环，类上只保留一个
+  `_policy` 属性。此后新增来源 = 表里加一行，物理上没有第二个插入点。
+  **`auto` 为默认且行为逐字不变**（三级降级链、headless 兜底、失败仍走既有 `NETWORK_ERROR` 兜底），
+  本次不暴露任何 CLI 选项、不新增任何错误码。新增 22 条结构门禁锁定上述性质。
+
 ### Fixed
+- 修复 `BrowserSession` 在 `_start_headless()` 或 playwright driver 启动抛错时泄漏 driver 进程：
+  `_pw` 已 `start()` 却永远不会 `stop()`，下一次 `request()` 会再起一个。现在启动失败路径统一
+  释放 driver。
+- 修复 `BrowserSession.close()` 之后通道标志残留：原实现只置 `_started = False`，`_is_cdp` /
+  `_is_bridge` 保留上一轮的值，导致 close 后重启时一个 headless 轮次可能走进 CDP 拆卸分支
+  而不关闭 browser。`close()` 同时改为真正幂等（已关闭时直接返回，不重复拆卸）。
 - 修复 TTY 下节流等待期间进度条静默不动的观感问题（#400）：`CrawlBudget.wait()` 在等待前把剩余秒数报给 `SearchProgress`，进度条显示一次性「节流等待 Ns…」提示；非 TTY / `--json` 路径与等待 0 秒场景输出完全不变。
 - 修复扫码登录在「首页预热」阶段卡住时永久挂起：BOSS 直聘首页在自动化下偶发长时间不完成加载，`page.goto` 超时后若仍对页面执行 `page.evaluate`（取 UA / stoken），patchright 会因执行上下文无法建立而无限阻塞，导致 `boss login` 卡死且不落盘凭证。现在 UA 改在已加载的登录页上提前采集；`_warm_home_for_runtime` 返回首页是否真正加载完成，仅在确认加载后才对页面 evaluate 提取 stoken，否则回退读取 cookie jar；并对首页导航超时增加「跳 `about:blank` 重置卡死导航后重试一次」，显著降低风控验证页/加载缓慢导致的 `Page.goto: Timeout 15000ms exceeded` 误报。`login_via_cdp` / `refresh_stoken` / `refresh_stoken_via_cdp` 同步加固；CDP 登录/刷新 stoken 也改为优先页面 evaluate、失败回退 cookie jar（安全验证跳转期间 `domcontentloaded` 可能未触发，但 `__zp_stoken__` 已写入 cookie jar）。
 - 修复 BOSS 收藏接口在 `isActive=true` 下仍混入失效职位时的静默误判：`favorites list` 现输出规范化 `job_status` 与状态计数，`favorites sync` 仅导入明确有效职位并报告 active/inactive/unknown 数量；缺失或未知状态不再默认有效。
