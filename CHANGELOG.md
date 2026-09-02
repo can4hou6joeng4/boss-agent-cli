@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+### Fixed
+- **stoken 静默刷新现在遵守 `browser_source` 策略表（Issue #387 seam 收尾）。** #410 把浏览器通道
+  选择收进策略表后，httpx 通道的 stoken 刷新（`_base_client._request` → `AuthManager.force_refresh`）
+  仍绕过策略：`stored-cookie` 下 stoken 过期照样会「CDP 不可用，降级到 headless」，起一个 headless
+  Chromium 带着本地 Cookie 访问平台。现在 `force_refresh` 接收 `browser_source`：fail-closed 来源
+  不再自动探测默认 CDP 端口（没给 `--cdp-url` 直接失败）、CDP 不可用时不再降级 headless，
+  抛带策略错误码（`CDP_UNAVAILABLE`）的 `BrowserSourceUnavailable`；智联显式来源下本地 Cookie 失效时
+  同样 fail-closed，不再打开登录页等扫码。`auto` / 未传参行为逐字不变。该参数尚未暴露到 CLI
+  （由 PR #404 接线），当前只影响程序化调用；信封层把该异常映射为策略错误码的 `display` 分支
+  随 PR #388 落地，在此之前兜底仍为 `NETWORK_ERROR`。
+
+### Changed
+- ROADMAP 中 `BrowserSessionProvider` 条目那句「绝不启动新实例、绝不触发登录、绝不静默回退
+  CDP/headless」按 #387 的决定限定为**仅在显式来源下**成立，`auto` 保持既有降级链；中英同步。
+
 ## [1.20.0] - 2026-09-03
 
 > **升级提示（仅影响 `mcp` extra）**：`mcp` 依赖的**下界**从 `1.0.0` 提到 `2.1.0`

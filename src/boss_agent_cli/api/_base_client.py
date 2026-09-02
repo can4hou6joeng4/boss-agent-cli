@@ -141,7 +141,7 @@ class _BaseHttpClient:
 					raise self._AUTH_ERROR_CLS("Token 刷新后仍被拒绝，请重新登录")
 				backoff = (2**attempt) + random.uniform(0.5, 1.5)
 				time.sleep(backoff)
-				self._auth.force_refresh(cdp_url=self._cdp_url)
+				self._auth.force_refresh(cdp_url=self._cdp_url, browser_source=self._browser_source)
 				self._client = None
 				continue
 
@@ -153,7 +153,7 @@ class _BaseHttpClient:
 			if code == self._CODE_STOKEN_EXPIRED and attempt < _MAX_RETRIES:
 				backoff = (2**attempt) + random.uniform(0.5, 1.5)
 				time.sleep(backoff)
-				self._auth.force_refresh(cdp_url=self._cdp_url)
+				self._auth.force_refresh(cdp_url=self._cdp_url, browser_source=self._browser_source)
 				self._client = None
 				continue
 

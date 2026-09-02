@@ -149,16 +149,39 @@ class AuthManager:
 		except (httpx.HTTPError, ValueError, KeyError):
 			return False
 
-	def force_refresh(self, cdp_url: str | None = None) -> None:
+	def force_refresh(self, cdp_url: str | None = None, browser_source: str | None = None) -> None:
+		"""静默刷新登录态。
+
+		``browser_source`` 与 ``api/browser_source.py`` 的策略表同源：刷新走的是
+		httpx 通道之外的浏览器（CDP 或 headless），所以它同样受策略约束——
+		否则 ``stored-cookie`` 只锁住了浏览器通道，stoken 过期时这里照样会背着
+		用户起一个 headless Chromium 带着本地 Cookie 访问平台（Issue #387 / PR #404
+		review 第 10 条）。``None`` / ``auto`` 行为与引入该参数前逐字一致。
+		"""
+		from boss_agent_cli.api.browser_source import CHANNEL_CDP, BrowserSourceUnavailable, resolve_policy
+
+		policy = resolve_policy(browser_source)
 		with self._store.refresh_lock():
 			current = self._store.load()
 			if current is None:
 				raise TokenRefreshFailed("无法刷新 Token，请重新登录")
+			# fail-closed 来源：不自动探测默认端口、不启动 headless、不触发登录。
+			# 判定放在 try 之外，让策略错误码原样上抛，而不是被兜底包成 TokenRefreshFailed。
+			if self._platform != "zhilian" and policy.fail_closed and not policy.auto_probe_cdp and not cdp_url:
+				raise BrowserSourceUnavailable(
+					policy, attempted=(), detail="stoken 刷新需要 --cdp-url，该来源不会探测默认端口"
+				)
 			self._logger.info("Token 过期，正在静默刷新...")
 			try:
 				if self._platform == "zhilian":
+					# 本地浏览器 Cookie 提取不碰任何浏览器进程，所有来源都允许；
+					# 兜底的 login_via_cdp 会打开登录页等待扫码 = 「触发登录」，显式来源禁止。
 					refreshed = extract_cookies(None, platform=self._platform)
 					if not refreshed or not self._verify_cookie(refreshed):
+						if policy.fail_closed:
+							raise BrowserSourceUnavailable(
+								policy, attempted=(), detail="智联本地登录态失效，该来源不会触发重新登录"
+							)
 						refreshed = login_via_cdp(cdp_url=cdp_url, timeout=30, platform=self._platform)
 					if not refreshed or not self._verify_cookie(refreshed):
 						raise TokenRefreshFailed("智联登录态刷新失败，请重新登录")
@@ -167,9 +190,15 @@ class AuthManager:
 					return
 
 				# CDP 优先：指纹一致，不会被 BOSS 直聘拒绝
-				if probe_cdp(cdp_url):
+				if policy.allows(CHANNEL_CDP) and probe_cdp(cdp_url):
 					self._logger.info("检测到 CDP，使用 CDP 刷新 stoken")
 					new_stoken = refresh_stoken_via_cdp(cdp_url)
+				elif not policy.allow_browser_launch:
+					raise BrowserSourceUnavailable(
+						policy,
+						attempted=(CHANNEL_CDP,) if policy.allows(CHANNEL_CDP) else (),
+						detail="stoken 刷新不会降级到 headless",
+					)
 				else:
 					self._logger.info("CDP 不可用，降级到 headless 刷新 stoken")
 					new_stoken = refresh_stoken(
@@ -179,6 +208,8 @@ class AuthManager:
 				refreshed = {**current, "stoken": new_stoken}
 				self._store.save(refreshed)
 				self._token = refreshed
+			except BrowserSourceUnavailable:
+				raise
 			except Exception as e:
 				raise TokenRefreshFailed(f"Token 刷新失败: {e}") from e
 

@@ -59,12 +59,14 @@ class FakeAuthManager:
 	def __init__(self):
 		self.token = {"cookies": {"wt2": "cookie"}, "stoken": "initial-stoken", "user_agent": "agent-ua"}
 		self.refresh_calls: list[str | None] = []
+		self.refresh_sources: list[str | None] = []
 
 	def get_token(self):
 		return self.token
 
-	def force_refresh(self, cdp_url: str | None = None):
+	def force_refresh(self, cdp_url: str | None = None, browser_source: str | None = None):
 		self.refresh_calls.append(cdp_url)
+		self.refresh_sources.append(browser_source)
 		self.token = {**self.token, "stoken": f"refreshed-{len(self.refresh_calls)}"}
 
 
@@ -181,3 +183,22 @@ def test_request_raises_auth_error_after_max_403_retries(mock_http_client_cls, m
 		client._request("GET", ep.BOSS_FRIEND_LABELS_URL)
 
 	assert auth.refresh_calls == [None, None, None]
+
+
+@patch("boss_agent_cli.api._base_client.random.uniform", return_value=0)
+@patch("boss_agent_cli.api._base_client.time.sleep")
+@patch("boss_agent_cli.api._base_client.httpx.Client")
+def test_recruiter_refresh_passes_browser_source_to_auth_manager(mock_http_client_cls, mock_sleep, mock_uniform):
+	"""招聘者 client 共用 _BaseHttpClient 的刷新循环，browser_source 同样必须透传。"""
+	auth = FakeAuthManager()
+	first = FakeHttpxClient([FakeResponse(status_code=403, text="forbidden")])
+	second = FakeHttpxClient([FakeResponse(payload={"code": 0, "zpData": {"ok": True}})])
+	mock_http_client_cls.side_effect = [first, second]
+
+	client = BossRecruiterClient(auth, cdp_url="http://127.0.0.1:9222", browser_source="stored-cookie")
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+
+	client._request("GET", ep.BOSS_FRIEND_LABELS_URL)
+
+	assert auth.refresh_sources == ["stored-cookie"]
