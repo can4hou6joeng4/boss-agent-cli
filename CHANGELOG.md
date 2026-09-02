@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-09-03
+
+> **升级提示（仅影响 `mcp` extra）**：`mcp` 依赖的**下界**从 `1.0.0` 提到 `2.1.0`
+> （区间 `mcp>=2.1.0,<3.0.0`）。主推的 `uvx --from boss-agent-cli[mcp] boss-mcp`
+> 每次现解析临时环境，不受影响；受影响的只有「把 `boss-agent-cli[mcp]` 装进一个
+> 还钉着 `mcp<2` 的长期共享环境」这种场景——请一并放开该环境里的 `mcp` 约束。
+> **MCP 线格式与工具集合一字未变**，宿主侧无需任何改动。
+
 ### Changed
 - **适配 mcp 2.x Server API（Issue #398），依赖改为 `mcp>=2.1.0,<3.0.0`。** mcp 2.0 移除了
   `@server.list_tools()` / `@server.call_tool()` 装饰器，改为
@@ -38,7 +46,7 @@
   都用默认 `trust_env=True`，即刻意尊重用户的系统代理；但 httpx 只有装了 `socksio` 才支持
   `socks5://` scheme，否则在**构造 client 时**就抛 `ImportError`。于是设了
   `ALL_PROXY=socks5://...` 的用户，`boss status` / `detail` / `favorites` 等每一条只读命令
-  都会失败——而��个 ImportError 被 `display.handle_auth_errors` 的兜底转成
+  都会失败——而那个 ImportError 被 `display.handle_auth_errors` 的兜底转成
   `NETWORK_ERROR` + `recovery_action="重试"`，错误码与恢复动作双错，且这是个永远不会
   因重试而改变的本地环境问题。依赖改为 `httpx[socks]`（拉 `socksio`，35KB、纯 Python、
   零传递依赖），让代理**能用**而不是失败得好看。

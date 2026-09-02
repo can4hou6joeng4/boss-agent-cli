@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v1.20.0 (2026-09-03): adapted to the mcp 2.x Server API (dependency now `mcp>=2.1.0,<3.0.0`; the MCP wire format is unchanged), fixed every httpx command failing when a SOCKS system proxy is set, collapsed browser-channel selection into a single policy-table-driven dispatch point (prerequisite for the #387 seam), made `boss ai config` echo the resolved endpoint, and wrote down the AI provider admission and removal rules
 - ✅ v1.19.1 (2026-08-27): fixed fresh installs resolving to mcp 2.x, which made `boss-mcp` crash on import (dependency now capped at `<2.0.0`), and added a `fresh_install` CI gate that deliberately bypasses `uv.lock`
 - ✅ v1.19.0 (2026-08-27): fixed the never-registered MCP `tools/list` (the MCP entry point was unusable for every host since v1.18.0) and added protocol-level plus CI gates, opened every implemented capability under assisted / research, unified the terminal-only `boss wizard` into a single interactive window, and split envelope `hints` into agent / operator channels
 - ✅ v1.18.0 (2026-07-29): usable Docker / Compose image with CI build gate, MCP schema contract fixes and `mcp_server` split, offline evals in P0, pinned ruff rules, and dependency refresh (rich 15)

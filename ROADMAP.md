@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v1.20.0（2026-09-03）：适配 mcp 2.x Server API（依赖 `mcp>=2.1.0,<3.0.0`，MCP 线格式未变）+ 修复设了 SOCKS 系统代理时每一条 httpx 命令都失败 + 浏览器通道选择收敛为策略表驱动的单一分发点（#387 seam 前置）+ `boss ai config` 回显解析后的实际端点 + AI provider 准入与移除规则成文
 - ✅ v1.19.1（2026-08-27）：修复全新安装解析到 mcp 2.x 导致 `boss-mcp` 直接崩溃（依赖收紧为 `<2.0.0`），并新增不走 `uv.lock` 的 `fresh_install` CI 门禁
 - ✅ v1.19.0（2026-08-27）：修复 MCP `tools/list` 从未注册（v1.18.0 起 MCP 入口对所有 host 不可用）并补齐协议层与 CI 门禁 + 开放 assisted / research 下全部已实现能力 + 纯终端 `boss wizard` 统一为单交互窗口 + 信封 `hints` 拆分 Agent / 真人双受众通道
 - ✅ v1.18.0（2026-07-29）：可用 Docker / Compose 镜像与 CI 构建门禁 + MCP schema 契约修复与 `mcp_server` 拆分 + 离线 evals 进 P0 + ruff 规则钉死与依赖刷新（rich 15）
