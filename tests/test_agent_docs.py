@@ -46,21 +46,33 @@ def _extract_readme_badges(path: str) -> list[tuple[str, str, str]]:
 
 
 def _load_mcp_tools() -> list:
-	_mcp_mock = types.ModuleType("mcp")
-	_mcp_server = types.ModuleType("mcp.server")
-	_mcp_stdio = types.ModuleType("mcp.server.stdio")
-	_mcp_types = types.ModuleType("mcp.types")
-	_mcp_server.Server = MagicMock()
-	_mcp_stdio.stdio_server = MagicMock()
-	_mcp_types.TextContent = MagicMock()
-	_mcp_types.Tool = type("Tool", (), {"__init__": lambda self, **kw: self.__dict__.update(kw)})
-	_mcp_mock.server = _mcp_server
-	_mcp_mock.types = _mcp_types
+	# 真 SDK 装了就用真的——本文件只读 TOOLS 的名字与数量，真 SDK 完全够用，
+	# 而且这样才不会出现「单跑本文件用 mock、跟着全套跑用真 SDK」这种按收集顺序
+	# 变结果的情况（`sys.modules.setdefault` 在全套里是 no-op）。mock 只在
+	# 未安装 mcp extra 的环境里兜底。
+	try:
+		import mcp.server  # noqa: F401
+		import mcp.server.stdio  # noqa: F401
+		import mcp.types  # noqa: F401
+	except ImportError:
+		_mcp_mock = types.ModuleType("mcp")
+		_mcp_server = types.ModuleType("mcp.server")
+		_mcp_stdio = types.ModuleType("mcp.server.stdio")
+		_mcp_types = types.ModuleType("mcp.types")
+		_mcp_server.Server = MagicMock()
+		_mcp_stdio.stdio_server = MagicMock()
+		_mcp_types.TextContent = MagicMock()
+		_mcp_types.Tool = type("Tool", (), {"__init__": lambda self, **kw: self.__dict__.update(kw)})
+		# mcp 2.x 的 handler 收 (ctx, params) 并返回 Result 对象，mcp_server 因此还需这四个类型。
+		for _name in ("CallToolRequestParams", "CallToolResult", "ListToolsResult", "PaginatedRequestParams"):
+			setattr(_mcp_types, _name, type(_name, (), {"__init__": lambda self, **kw: self.__dict__.update(kw)}))
+		_mcp_mock.server = _mcp_server
+		_mcp_mock.types = _mcp_types
 
-	sys.modules.setdefault("mcp", _mcp_mock)
-	sys.modules.setdefault("mcp.server", _mcp_server)
-	sys.modules.setdefault("mcp.server.stdio", _mcp_stdio)
-	sys.modules.setdefault("mcp.types", _mcp_types)
+		sys.modules.setdefault("mcp", _mcp_mock)
+		sys.modules.setdefault("mcp.server", _mcp_server)
+		sys.modules.setdefault("mcp.server.stdio", _mcp_stdio)
+		sys.modules.setdefault("mcp.types", _mcp_types)
 
 	spec = importlib.util.spec_from_file_location("boss_mcp_server", ROOT / "mcp-server/server.py")
 	assert spec and spec.loader
@@ -245,7 +257,7 @@ def test_pyproject_exposes_boss_mcp_script():
 	# 上界是硬要求：mcp 2.0 删掉了 `@server.list_tools()` / `@server.call_tool()`，
 	# 而 mcp_server 在模块层就用它们，装到 2.x 的用户连 boss-mcp 都起不来。
 	# 声明无上界时 CI 仍走 uv.lock 里的 1.x，全绿，用户全崩。放开前必须先适配 2.x API。
-	assert '"mcp>=1.0.0,<2.0.0"' in pyproject
+	assert '"mcp>=2.1.0,<3.0.0"' in pyproject
 
 
 def test_agent_facing_docs_keep_bounded_runtime_boundary():

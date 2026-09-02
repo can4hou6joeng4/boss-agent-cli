@@ -5,6 +5,15 @@
 ## [Unreleased]
 
 ### Changed
+- **适配 mcp 2.x Server API（Issue #398），依赖改为 `mcp>=2.1.0,<3.0.0`。** mcp 2.0 移除了
+  `@server.list_tools()` / `@server.call_tool()` 装饰器，改为
+  `add_request_handler(method, params_type, handler)`，且 handler 签名与返回类型一并改变
+  （`(ctx, params)` → `ListToolsResult` / `CallToolResult`）。SSE 与 streamable HTTP 两条传输
+  实现原样保留——本次只做适配，换实现是独立决策。
+  **MCP 线格式一字未变**：`Tool` 的字段名内部从 `inputSchema` 改成 `input_schema`，但 pydantic
+  别名保留，序列化仍输出 `inputSchema`，宿主侧无感知；源码里 71 处构造 kwarg 随之改名（mypy 的
+  pydantic 插件按字段名生成 `__init__`，不认别名）。
+  **上界保留**：上一次声明无上界导致所有全新安装解析到新大版本并崩溃，而 CI 锁着旧版本永远看不到。
 - `CONTRIBUTING.md` / `.en.md` 新增「新增 AI provider」一节，把 provider 的准入与移除写成明规则：
   文档只写可用一次 API 调用证伪的陈述（不接受安全姿态、定价承诺、评级与会静默过期的规模数字）；
   服务商自荐需提供可验证归属（企业域名邮箱或官方公开双向引用，不追溯）；端点连续两个 minor
