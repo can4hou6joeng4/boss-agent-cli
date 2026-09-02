@@ -34,6 +34,16 @@
   本次不暴露任何 CLI 选项、不新增任何错误码。新增 22 条结构门禁锁定上述性质。
 
 ### Fixed
+- **修复设了 SOCKS 系统代理时每一条 httpx 命令都失败**（#412）。全仓四处 `httpx.Client`
+  都用默认 `trust_env=True`，即刻意尊重用户的系统代理；但 httpx 只有装了 `socksio` 才支持
+  `socks5://` scheme，否则在**构造 client 时**就抛 `ImportError`。于是设了
+  `ALL_PROXY=socks5://...` 的用户，`boss status` / `detail` / `favorites` 等每一条只读命令
+  都会失败——而��个 ImportError 被 `display.handle_auth_errors` 的兜底转成
+  `NETWORK_ERROR` + `recovery_action="重试"`，错误码与恢复动作双错，且这是个永远不会
+  因重试而改变的本地环境问题。依赖改为 `httpx[socks]`（拉 `socksio`，35KB、纯 Python、
+  零传递依赖），让代理**能用**而不是失败得好看。
+  CI runner 环境干净、没有代理变量，这条路径在门禁上永远是绿的，故补
+  `tests/test_system_proxy.py` 显式注入代理环境变量把它变成可观测的。
 - `boss ai config` 查看与写入现在都回显 `resolved_base_url`（解析后真正生效的端点）。此前查看模式
   直出 `load_config()`，用户只设 `--provider` 时 `ai_base_url` 为空，实际地址来自
   `PROVIDER_BASE_URLS` 查表却从不显示；而 `--provider` 没有 `click.Choice` 校验（自由字符串），

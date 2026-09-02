@@ -29,7 +29,13 @@ classifiers = [
 ]
 dependencies = [
 	"click>=8.0",
-	"httpx>=0.27",
+	# [socks] 拉的是 socksio（35KB、纯 Python、零传递依赖）。四处 httpx.Client 都用
+	# 默认 trust_env=True，即刻意尊重用户的系统代理——对这个项目的目标用户群来说，
+	# 常开代理是常态。但 httpx 只有装了 socksio 才支持 socks5:// scheme，否则在
+	# **构造 client 时**就抛 ImportError，于是 `ALL_PROXY=socks5://...` 的用户每一条
+	# 走 httpx 的命令都失败。CI runner 环境干净、没有代理变量，这条路径在门禁上
+	# 永远是绿的（同 fresh_install job 守的那道缝）。
+	"httpx[socks]>=0.27",
 	"cryptography>=42.0",
 	"patchright>=1.58.2",
 	"browser-cookie3>=0.16.2",
