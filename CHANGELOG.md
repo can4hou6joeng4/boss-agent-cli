@@ -5,6 +5,14 @@
 ## [Unreleased]
 
 ### Changed
+- `CONTRIBUTING.md` / `.en.md` 新增「新增 AI provider」一节，把 provider 的准入与移除写成明规则：
+  文档只写可用一次 API 调用证伪的陈述（不接受安全姿态、定价承诺、评级与会静默过期的规模数字）；
+  服务商自荐需提供可验证归属（企业域名邮箱或官方公开双向引用，不追溯）；端点连续两个 minor
+  版本不可用即直接移除，不走弃用周期、不算破坏性变更。第三条是前两条能够宽松的前提。
+- 按上述规则对齐既有条目：`docs/integrations/ai-models.md` / `.en.md` 的 Atlas Cloud 段落移除
+  59 个模型的全量清单（会随服务商上下线静默失真且无测试可守）与链接上的 UTM 追踪参数，
+  定性措辞压回与 `openrouter` 同一语域，并补回「可用模型以服务端实际支持为准」。
+  README 的赞助展示位不受影响——那是已披露的赞助关系，与 provider 文档条目是两回事。
 - **浏览器通道选择收敛为策略表驱动的单一分发点**（Issue #387 seam 第 2 片的前置改造，无对外行为变更）。
   `BrowserSession._ensure_started` 原本是硬编码的 Bridge → CDP → headless 三级降级链，
   中间只有两处插入缝隙；两个并行 PR 各自在其中一处插模式短路时，git 三方合并会干净通过、

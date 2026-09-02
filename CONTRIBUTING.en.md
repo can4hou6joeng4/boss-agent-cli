@@ -121,6 +121,49 @@ On error, the envelope must contain `error.code`, `error.recoverable`, and `erro
 - **Mock external I/O**: `AuthManager`, `BossClient`, `CacheStore`, and `AIService` are mock boundaries — tests should not hit the real BOSS Zhipin API.
 - **Error-path parity**: for every success path, add at least one error path test (auth expired, rate-limited, invalid param, etc.).
 
+## Adding an AI Provider
+
+`boss ai` keeps a table of OpenAI-compatible providers in `PROVIDER_BASE_URLS` (`src/boss_agent_cli/ai/config.py`). New providers are welcome, **including PRs authored by the provider's own engineers** — that is how `atlas` got here.
+
+But every row transfers a maintenance liability to this project: when a provider changes domains, changes pricing, or retires a model, the docs go stale silently and no test can catch it. Hence the three rules below.
+
+### 1. Docs carry only falsifiable claims
+
+Entries in `docs/integrations/ai-models.md` describe **capability boundaries only** — OpenAI compatibility, the `provider/model` namespace, which models are reachable, and that the authoritative model list is whatever the server actually supports.
+
+Not accepted: security-posture claims ("security gateway", "guardrails", "zero-trust", "tool governance"), pricing promises ("zero-markup", "cheapest"), ratings or rankings, and scale figures that go stale silently ("200+ models"). The test is simple: **can this sentence be falsified with a single API call?** If not, it does not belong in first-party docs.
+
+This applies to **all** entries, including ones already in the table — existing entries are being brought in line, not just new submissions.
+
+### 2. Vendor-authored entries need verifiable attribution
+
+If you work for the provider and are submitting your own company's entry, please include one verifiable link in the PR — either:
+
+- a commit authored from a corporate-domain address (`@yourcompany.com`), **or**
+- a public reference from the provider's own site or GitHub org pointing at this repo / this PR
+
+This is not about trust; it is about maintainability — when the endpoint moves, someone needs to be reachable. There is precedent: for one earlier provider, both the PR and the author's account later disappeared from GitHub, and the orphaned entry was then silently deleted by an unrelated refactor and went unnoticed for a long time.
+
+This rule is not applied retroactively.
+
+### 3. Removal policy
+
+A provider endpoint that is **unavailable across two consecutive minor releases** is removed from `PROVIDER_BASE_URLS` outright — no deprecation cycle, no advance notice, and **not treated as a breaking change**.
+
+This rule is what lets the first two stay permissive: because removal is cheap, admission does not have to be strict.
+
+### Chain updates
+
+Adding a provider touches five places (`boss schema` does not enumerate providers, so it needs no change):
+
+1. `PROVIDER_BASE_URLS` in `src/boss_agent_cli/ai/config.py`
+2. The `--provider` help text in `src/boss_agent_cli/commands/ai_cmd.py` — it is the only documentation of the value domain, because that option has no `click.Choice` validation
+3. `docs/integrations/ai-models.md` and `docs/integrations/ai-models.en.md` (both languages must stay in sync)
+4. `tests/test_ai_config.py`: a base-URL resolution test plus the membership assertion in `test_provider_base_urls_completeness`
+5. The `[Unreleased]` section of `CHANGELOG.md`
+
+> **Watch out for brand-adjacent names.** `--provider` accepts a free string, so a typo raises nothing. `boss ai config` echoes `resolved_base_url`, and `tests/test_ai_config_cmd.py` asserts that all `*router` providers resolve to distinct endpoints — if your provider's name is close to an existing one, confirm that test still passes.
+
 ## Reporting Issues
 
 Pick the matching template under `.github/ISSUE_TEMPLATE/`:
