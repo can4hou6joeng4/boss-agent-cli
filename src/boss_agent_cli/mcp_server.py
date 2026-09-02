@@ -20,7 +20,6 @@ from mcp.types import (
 	ListToolsResult,
 	PaginatedRequestParams,
 	TextContent,
-	Tool,
 )
 
 from boss_agent_cli.mcp_args import _build_args
