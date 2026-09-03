@@ -491,7 +491,7 @@ SCHEMA_DATA = {
 				"--lid": {
 					"type": "string",
 					"default": "",
-					"description": "列表项 ID（可选，提高匹配精度）",
+					"description": "列表项 ID（可选，从 search/recommend 结果的 lid 字段获取，提高匹配精度）",
 				},
 			},
 		},
@@ -881,7 +881,7 @@ SCHEMA_DATA = {
 				{"name": "job_id", "required": True, "description": "加密职位 ID"},
 			],
 			"options": {
-				"--lid": {"type": "string", "default": "", "description": "列表项 ID（可选）"},
+				"--lid": {"type": "string", "default": "", "description": "列表项 ID（可选，从 search/recommend 结果的 lid 字段获取）"},
 			},
 		},
 		"shortlist": {

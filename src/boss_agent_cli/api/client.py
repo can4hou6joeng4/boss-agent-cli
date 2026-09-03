@@ -172,6 +172,16 @@ class BossClient(_BaseHttpClient):
 		params = {"securityId": security_id, "lid": lid}
 		return self._request("GET", endpoints.JOB_CARD_URL, params=params)
 
+	def job_card_browser(self, security_id: str, lid: str = "") -> dict[str, Any]:
+		"""经浏览器通道获取职位卡片信息（强制浏览器，不走 httpx）。
+
+		与 job_card() 的区别：job_card() httpx 优先，仅 httpx 抛异常才降级浏览器；
+		而部分失败以响应字典返回时不抛异常，导致 httpx 通道拿不到完整 JD。
+		job_card_browser() 跳过 httpx，直接走浏览器通道。
+		"""
+		params = {"securityId": security_id, "lid": lid}
+		return self._browser_request("GET", endpoints.JOB_CARD_URL, params=params)
+
 	# ── Low-risk: httpx channel ──────────────────────────────────────
 
 	def job_detail(self, job_id: str) -> dict[str, Any]:

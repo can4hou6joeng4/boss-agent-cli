@@ -69,7 +69,7 @@
 | 成功码 | `code == 0` |
 | 数据包络 | `zpData` |
 | 常见风控码 | `code=36` 账号风险、`code=37` stoken 过期、`code=9` 限流 |
-| 职位 ID | `encryptJobId`、`securityId` 等加密标识 |
+| 职位 ID | `encryptJobId`、`securityId`、`lid` 等加密标识（取 JD 全文需要 `securityId` + `lid`） |
 | 薪资字段 | `salaryDesc` |
 | 城市字段 | 数字 code |
 | 输出契约 | 命令层统一转成 `{ok, schema_version, command, data, pagination, error, hints}` |

@@ -251,7 +251,7 @@ def _private_fields_state(*, fmt: str, include_private: bool) -> str:
 
 def _redact_export_item(item: dict[str, Any]) -> dict[str, Any]:
 	redacted = dict(item)
-	for key in ("job_id", "security_id", "boss_name"):
+	for key in ("job_id", "security_id", "lid", "boss_name"):
 		if key in redacted:
 			redacted[key] = "[REDACTED]"
 	return redacted
