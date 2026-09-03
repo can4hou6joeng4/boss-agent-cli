@@ -31,13 +31,13 @@ class JobItem:
 	boss_title: str
 	boss_active: str
 	security_id: str
-	lid: str = ""
 	greeted: bool = False
 	raw_job_type: int | str | None = None
 	employment_type: str = ""
 	days_per_week: str = ""
 	least_month: str = ""
 	job_labels: list[str] = field(default_factory=list)
+	lid: str = ""
 
 	@classmethod
 	def from_api(cls, raw: dict[str, Any]) -> "JobItem":

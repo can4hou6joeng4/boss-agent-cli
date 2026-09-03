@@ -11,6 +11,86 @@
   强制走浏览器通道获取职位卡片；既有 `job_card()` 的 httpx 优先行为完全不变。
 
 ### Fixed
+- **stoken 静默刷新现在遵守 `browser_source` 策略表（Issue #387 seam 收尾）。** #410 把浏览器通道
+  选择收进策略表后，httpx 通道的 stoken 刷新（`_base_client._request` → `AuthManager.force_refresh`）
+  仍绕过策略：`stored-cookie` 下 stoken 过期照样会「CDP 不可用，降级到 headless」，起一个 headless
+  Chromium 带着本地 Cookie 访问平台。现在 `force_refresh` 接收 `browser_source`：fail-closed 来源
+  不再自动探测默认 CDP 端口（没给 `--cdp-url` 直接失败）、CDP 不可用时不再降级 headless，
+  抛带策略错误码（`CDP_UNAVAILABLE`）的 `BrowserSourceUnavailable`；智联显式来源下本地 Cookie 失效时
+  同样 fail-closed，不再打开登录页等扫码。`auto` / 未传参行为逐字不变。该参数尚未暴露到 CLI
+  （由 PR #404 接线），当前只影响程序化调用；信封层把该异常映射为策略错误码的 `display` 分支
+  随 PR #388 落地，在此之前兜底仍为 `NETWORK_ERROR`。
+- 修复 Bridge 已连接日常浏览器时 `chat` / `chatmsg` 仍先要求 CLI 本地 `wt2` 的问题（#386）。
+  Bridge 连接作为本切片的现有浏览器使用信号，走 `existing-browser` 策略的 Bridge → CDP
+  白名单，不读取本地凭据、不新建 context、不启动或降级到 headless；候选耗尽返回
+  `BROWSER_SESSION_NOT_FOUND` + `boss doctor`，真人浏览器指引放在 `operator_actions`。
+  Bridge 未连接时保留原 httpx、stoken 刷新和限流重试语义；本地无凭据仍返回
+  `AUTH_REQUIRED` + `boss login`。中英文风险边界与能力矩阵同步说明：连接存在不等于已验证目标页登录。
+
+### Changed
+- ROADMAP 中 `BrowserSessionProvider` 条目那句「绝不启动新实例、绝不触发登录、绝不静默回退
+  CDP/headless」按 #387 的决定限定为**仅在显式来源下**成立，`auto` 保持既有降级链；中英同步。
+
+## [1.20.0] - 2026-09-03
+
+> **升级提示（仅影响 `mcp` extra）**：`mcp` 依赖的**下界**从 `1.0.0` 提到 `2.1.0`
+> （区间 `mcp>=2.1.0,<3.0.0`）。主推的 `uvx --from boss-agent-cli[mcp] boss-mcp`
+> 每次现解析临时环境，不受影响；受影响的只有「把 `boss-agent-cli[mcp]` 装进一个
+> 还钉着 `mcp<2` 的长期共享环境」这种场景——请一并放开该环境里的 `mcp` 约束。
+> **MCP 线格式与工具集合一字未变**，宿主侧无需任何改动。
+
+### Changed
+- **适配 mcp 2.x Server API（Issue #398），依赖改为 `mcp>=2.1.0,<3.0.0`。** mcp 2.0 移除了
+  `@server.list_tools()` / `@server.call_tool()` 装饰器，改为
+  `add_request_handler(method, params_type, handler)`，且 handler 签名与返回类型一并改变
+  （`(ctx, params)` → `ListToolsResult` / `CallToolResult`）。SSE 与 streamable HTTP 两条传输
+  实现原样保留——本次只做适配，换实现是独立决策。
+  **MCP 线格式一字未变**：`Tool` 的字段名内部从 `inputSchema` 改成 `input_schema`，但 pydantic
+  别名保留，序列化仍输出 `inputSchema`，宿主侧无感知；源码里 71 处构造 kwarg 随之改名（mypy 的
+  pydantic 插件按字段名生成 `__init__`，不认别名）。
+  **上界保留**：上一次声明无上界导致所有全新安装解析到新大版本并崩溃，而 CI 锁着旧版本永远看不到。
+- `CONTRIBUTING.md` / `.en.md` 新增「新增 AI provider」一节，把 provider 的准入与移除写成明规则：
+  文档只写可用一次 API 调用证伪的陈述（不接受安全姿态、定价承诺、评级与会静默过期的规模数字）；
+  服务商自荐需提供可验证归属（企业域名邮箱或官方公开双向引用，不追溯）；端点连续两个 minor
+  版本不可用即直接移除，不走弃用周期、不算破坏性变更。第三条是前两条能够宽松的前提。
+- 按上述规则对齐既有条目：`docs/integrations/ai-models.md` / `.en.md` 的 Atlas Cloud 段落移除
+  59 个模型的全量清单（会随服务商上下线静默失真且无测试可守）与链接上的 UTM 追踪参数，
+  定性措辞压回与 `openrouter` 同一语域，并补回「可用模型以服务端实际支持为准」。
+  README 的赞助展示位不受影响——那是已披露的赞助关系，与 provider 文档条目是两回事。
+- **浏览器通道选择收敛为策略表驱动的单一分发点**（Issue #387 seam 第 2 片的前置改造，无对外行为变更）。
+  `BrowserSession._ensure_started` 原本是硬编码的 Bridge → CDP → headless 三级降级链，
+  中间只有两处插入缝隙；两个并行 PR 各自在其中一处插模式短路时，git 三方合并会干净通过、
+  不留冲突标记，合并后类上会出现两个互不感知的模式布尔，谁生效取决于插入位置且失效方向是
+  fail-open。现新增 `api/browser_source.py`：一张冻结的 `BrowserSourcePolicy` 表声明
+  「通道白名单 / 是否读本地凭据 / 能否新建 context / 能否启动浏览器 / 是否自动探测 CDP /
+  失败发什么码」，`_ensure_started` 变成对 `policy.channels` 的单个循环，类上只保留一个
+  `_policy` 属性。此后新增来源 = 表里加一行，物理上没有第二个插入点。
+  **`auto` 为默认且行为逐字不变**（三级降级链、headless 兜底、失败仍走既有 `NETWORK_ERROR` 兜底），
+  本次不暴露任何 CLI 选项、不新增任何错误码。新增 22 条结构门禁锁定上述性质。
+
+### Fixed
+- **修复设了 SOCKS 系统代理时每一条 httpx 命令都失败**（#412）。全仓四处 `httpx.Client`
+  都用默认 `trust_env=True`，即刻意尊重用户的系统代理；但 httpx 只有装了 `socksio` 才支持
+  `socks5://` scheme，否则在**构造 client 时**就抛 `ImportError`。于是设了
+  `ALL_PROXY=socks5://...` 的用户，`boss status` / `detail` / `favorites` 等每一条只读命令
+  都会失败——而那个 ImportError 被 `display.handle_auth_errors` 的兜底转成
+  `NETWORK_ERROR` + `recovery_action="重试"`，错误码与恢复动作双错，且这是个永远不会
+  因重试而改变的本地环境问题。依赖改为 `httpx[socks]`（拉 `socksio`，35KB、纯 Python、
+  零传递依赖），让代理**能用**而不是失败得好看。
+  CI runner 环境干净、没有代理变量，这条路径在门禁上永远是绿的，故补
+  `tests/test_system_proxy.py` 显式注入代理环境变量把它变成可观测的。
+- `boss ai config` 查看与写入现在都回显 `resolved_base_url`（解析后真正生效的端点）。此前查看模式
+  直出 `load_config()`，用户只设 `--provider` 时 `ai_base_url` 为空，实际地址来自
+  `PROVIDER_BASE_URLS` 查表却从不显示；而 `--provider` 没有 `click.Choice` 校验（自由字符串），
+  名字相近的 provider 记混或拼错时，API key 与简历全文会被发到另一家而界面上看不出任何差别。
+  该命令此前零测试覆盖，一并补齐 7 条。
+- 修复 `BrowserSession` 在 `_start_headless()` 或 playwright driver 启动抛错时泄漏 driver 进程：
+  `_pw` 已 `start()` 却永远不会 `stop()`，下一次 `request()` 会再起一个。现在启动失败路径统一
+  释放 driver。
+- 修复 `BrowserSession.close()` 之后通道标志残留：原实现只置 `_started = False`，`_is_cdp` /
+  `_is_bridge` 保留上一轮的值，导致 close 后重启时一个 headless 轮次可能走进 CDP 拆卸分支
+  而不关闭 browser。`close()` 同时改为真正幂等（已关闭时直接返回，不重复拆卸）。
+- 修复 TTY 下节流等待期间进度条静默不动的观感问题（#400）：`CrawlBudget.wait()` 在等待前把剩余秒数报给 `SearchProgress`，进度条显示一次性「节流等待 Ns…」提示；非 TTY / `--json` 路径与等待 0 秒场景输出完全不变。
 - 修复扫码登录在「首页预热」阶段卡住时永久挂起：BOSS 直聘首页在自动化下偶发长时间不完成加载，`page.goto` 超时后若仍对页面执行 `page.evaluate`（取 UA / stoken），patchright 会因执行上下文无法建立而无限阻塞，导致 `boss login` 卡死且不落盘凭证。现在 UA 改在已加载的登录页上提前采集；`_warm_home_for_runtime` 返回首页是否真正加载完成，仅在确认加载后才对页面 evaluate 提取 stoken，否则回退读取 cookie jar；并对首页导航超时增加「跳 `about:blank` 重置卡死导航后重试一次」，显著降低风控验证页/加载缓慢导致的 `Page.goto: Timeout 15000ms exceeded` 误报。`login_via_cdp` / `refresh_stoken` / `refresh_stoken_via_cdp` 同步加固；CDP 登录/刷新 stoken 也改为优先页面 evaluate、失败回退 cookie jar（安全验证跳转期间 `domcontentloaded` 可能未触发，但 `__zp_stoken__` 已写入 cookie jar）。
 - 修复 BOSS 收藏接口在 `isActive=true` 下仍混入失效职位时的静默误判：`favorites list` 现输出规范化 `job_status` 与状态计数，`favorites sync` 仅导入明确有效职位并报告 active/inactive/unknown 数量；缺失或未知状态不再默认有效。
 

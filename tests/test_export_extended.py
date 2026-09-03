@@ -501,6 +501,7 @@ def test_export_stdout_default_redacts_private_fields(mock_auth_cls, mock_client
 	assert len(jobs) == 1
 	assert jobs[0]["job_id"] == "[REDACTED]"
 	assert jobs[0]["security_id"] == "[REDACTED]"
+	assert jobs[0]["lid"] == "[REDACTED]"
 	assert jobs[0]["boss_name"] == "[REDACTED]"
 
 

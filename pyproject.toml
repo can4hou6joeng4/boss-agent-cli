@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "boss-agent-cli"
-version = "1.19.1"
+version = "1.20.0"
 description = "AI Agent 专用的 BOSS 直聘求职 CLI 工具"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -29,7 +29,13 @@ classifiers = [
 ]
 dependencies = [
 	"click>=8.0",
-	"httpx>=0.27",
+	# [socks] 拉的是 socksio（35KB、纯 Python、零传递依赖）。四处 httpx.Client 都用
+	# 默认 trust_env=True，即刻意尊重用户的系统代理——对这个项目的目标用户群来说，
+	# 常开代理是常态。但 httpx 只有装了 socksio 才支持 socks5:// scheme，否则在
+	# **构造 client 时**就抛 ImportError，于是 `ALL_PROXY=socks5://...` 的用户每一条
+	# 走 httpx 的命令都失败。CI runner 环境干净、没有代理变量，这条路径在门禁上
+	# 永远是绿的（同 fresh_install job 守的那道缝）。
+	"httpx[socks]>=0.27",
 	"cryptography>=42.0",
 	"patchright>=1.58.2",
 	"browser-cookie3>=0.16.2",
@@ -57,14 +63,19 @@ bridge = [
 	"aiohttp>=3.9",
 ]
 mcp = [
-	# 上界是必须的，不是保守：mcp 2.0 重写了 Server API——装饰器 `@server.list_tools()` /
-	# `@server.call_tool()` 全部移除，改成 `add_request_handler`。`mcp_server` 在模块层
-	# 就用这些装饰器，所以装到 2.x 的用户连 `boss-mcp` 都起不来，直接
-	# `AttributeError: 'Server' object has no attribute 'call_tool'`。
-	# 此前声明是无上界的 `mcp>=1.0.0`，于是所有全新安装都解析到 2.x 并崩溃，而 CI 走
-	# uv.lock 里钉死的 1.x，永远看不到——这正是「门禁看到的和用户拿到的不是一个东西」。
-	# 放开上界之前必须先支持 2.x API（见 mcp 2.x 适配 issue）。
-	"mcp>=1.0.0,<2.0.0",
+	# 下界 2.1.0、上界 <3.0.0 都是必须的。
+	#
+	# 下界：mcp 2.0 移除了 `@server.list_tools()` / `@server.call_tool()` 装饰器，
+	# 改为 `add_request_handler(method, params_type, handler)`，且 handler 签名与返回
+	# 类型一并改变（`(ctx, params)` → `ListToolsResult` / `CallToolResult`）。
+	# `mcp_server` 已按 2.x 写，装到 1.x 会在模块层 `AttributeError:
+	# 'Server' object has no attribute 'add_request_handler'`。
+	#
+	# 上界：2.x 是当前已适配并验证过的大版本。3.0 大概率再次重写 Server API——
+	# 上一次（1.x → 2.x）的教训是：声明无上界时所有全新安装都会解析到新大版本并崩溃，
+	# 而 CI 走 uv.lock 里钉死的旧版本，永远看不到。这正是「门禁看到的和用户拿到的
+	# 不是一个东西」，也是 CI 里 fresh_install job（刻意不走 uv.lock）存在的理由。
+	"mcp>=2.1.0,<3.0.0",
 ]
 crawl = [
 	"DrissionPage>=4.1.1.1,<4.2",
@@ -192,6 +203,7 @@ module = [
 	"boss_agent_cli.api.client",
 	"boss_agent_cli.api._base_client",
 	"boss_agent_cli.api.browser_client",
+	"boss_agent_cli.api.browser_source",
 	"boss_agent_cli.auth.browser",
 	"boss_agent_cli.bridge.client",
 	"boss_agent_cli.bridge.daemon",

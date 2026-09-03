@@ -53,12 +53,14 @@ class FakeAuthManager:
 	def __init__(self):
 		self.token = {"cookies": {"wt2": "cookie"}, "stoken": "initial-stoken", "user_agent": "agent-ua"}
 		self.refresh_calls: list[str | None] = []
+		self.refresh_sources: list[str | None] = []
 
 	def get_token(self):
 		return self.token
 
-	def force_refresh(self, cdp_url: str | None = None):
+	def force_refresh(self, cdp_url: str | None = None, browser_source: str | None = None):
 		self.refresh_calls.append(cdp_url)
+		self.refresh_sources.append(browser_source)
 		self.token = {**self.token, "stoken": f"refreshed-{len(self.refresh_calls)}"}
 
 
@@ -162,3 +164,53 @@ def test_request_raises_auth_error_after_max_403_retries(mock_http_client_cls, m
 		client._request("GET", endpoints.USER_INFO_URL)
 
 	assert auth.refresh_calls == [None, None, None]
+
+
+@patch("boss_agent_cli.api._base_client.random.uniform", return_value=0)
+@patch("boss_agent_cli.api._base_client.time.sleep")
+@patch("boss_agent_cli.api._base_client.httpx.Client")
+def test_request_refresh_passes_browser_source_to_auth_manager(mock_http_client_cls, mock_sleep, mock_uniform):
+	"""stoken 刷新必须带上 browser_source，否则策略表管不到 httpx 通道的 headless 降级。"""
+	auth = FakeAuthManager()
+	first = FakeHttpxClient([FakeResponse(payload={"code": endpoints.CODE_STOKEN_EXPIRED})])
+	second = FakeHttpxClient([FakeResponse(payload={"code": 0, "zpData": {"ok": True}})])
+	mock_http_client_cls.side_effect = [first, second]
+
+	client = BossClient(auth, cdp_url="http://127.0.0.1:9222", browser_source="stored-cookie")
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+
+	client._request("GET", endpoints.USER_INFO_URL)
+
+	assert auth.refresh_calls == ["http://127.0.0.1:9222"]
+	assert auth.refresh_sources == ["stored-cookie"]
+
+
+@patch("boss_agent_cli.api._base_client.random.uniform", return_value=0)
+@patch("boss_agent_cli.api._base_client.time.sleep")
+@patch("boss_agent_cli.api._base_client.httpx.Client")
+def test_request_403_refresh_passes_browser_source_and_policy_error_escapes_unwrapped(
+	mock_http_client_cls, mock_sleep, mock_uniform
+):
+	"""403 分支同样透传 browser_source；策略错误不得被重试循环包成 AuthError。"""
+	from boss_agent_cli.api.browser_source import POLICIES, BrowserSourceUnavailable
+
+	auth = FakeAuthManager()
+
+	def _fail_closed(cdp_url=None, browser_source=None):
+		auth.refresh_calls.append(cdp_url)
+		auth.refresh_sources.append(browser_source)
+		raise BrowserSourceUnavailable(POLICIES["stored-cookie"], attempted=("cdp",))
+
+	auth.force_refresh = _fail_closed
+	mock_http_client_cls.side_effect = [FakeHttpxClient([FakeResponse(status_code=403, text="forbidden")])]
+
+	client = BossClient(auth, cdp_url="http://127.0.0.1:9222", browser_source="stored-cookie")
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+
+	with pytest.raises(BrowserSourceUnavailable) as exc_info:
+		client._request("GET", endpoints.USER_INFO_URL)
+
+	assert exc_info.value.code == "CDP_UNAVAILABLE"
+	assert auth.refresh_sources == ["stored-cookie"]

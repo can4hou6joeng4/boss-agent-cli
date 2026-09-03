@@ -50,7 +50,12 @@ class _BaseHttpClient:
 	_ADD_ENDPOINT_HINT: bool = False
 
 	def __init__(
-		self, auth_manager: "AuthManager", *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None
+		self,
+		auth_manager: "AuthManager",
+		*,
+		delay: tuple[float, float] = (1.5, 3.0),
+		cdp_url: str | None = None,
+		browser_source: str | None = None,
 	) -> None:
 		self._auth = auth_manager
 		self._delay = delay
@@ -58,6 +63,10 @@ class _BaseHttpClient:
 		self._browser_session: "BrowserSession | None" = None
 		self._throttle = RequestThrottle(delay)
 		self._cdp_url = cdp_url
+		# 浏览器通道来源意图；None = auto（默认路径行为不变）。
+		# 只在此处保存并透传给唯一的 BrowserSession 构造点，不在本类上派生
+		# 任何模式布尔——见 api/browser_source.py 的模块文档。
+		self._browser_source = browser_source
 		self._closed = False
 		self._register()
 
@@ -84,17 +93,37 @@ class _BaseHttpClient:
 			)
 		return self._client
 
-	def _get_browser(self) -> "BrowserSession":
+	def _get_browser(self, *, browser_source: str | None = None) -> "BrowserSession":
+		"""Return the single live browser session for the requested source.
+
+		A source that forbids stored credentials is constructed with an empty
+		cookie/UA payload without calling ``AuthManager.get_token()``. Switching
+		sources closes the previous session first, so the client never keeps the
+		parallel auto/existing-browser slots that #410 removed.
+		"""
+		from boss_agent_cli.api.browser_source import resolve_policy
+
+		policy = resolve_policy(self._browser_source if browser_source is None else browser_source)
+		if self._browser_session is not None:
+			current_name = getattr(getattr(self._browser_session, "_policy", None), "name", None)
+			# BrowserSession always exposes a string policy name. Test doubles and
+			# downstream injected sessions may predate the source seam; keep reusing
+			# those instead of silently replacing them with a real browser process.
+			if isinstance(current_name, str) and current_name != policy.name:
+				self._browser_session.close()
+				self._browser_session = None
+
 		if self._browser_session is None:
 			from boss_agent_cli.api.browser_client import BrowserSession
 
-			token = self._auth.get_token()
+			token = self._auth.get_token() if policy.use_stored_credentials else {}
 			self._browser_session = BrowserSession(
 				cookies=token.get("cookies", {}),
 				user_agent=token.get("user_agent", ""),
 				delay=self._delay,
 				cdp_url=self._cdp_url,
 				logger=getattr(self._auth, "_logger", None),
+				browser_source=policy.name,
 			)
 		return self._browser_session
 
@@ -131,7 +160,7 @@ class _BaseHttpClient:
 					raise self._AUTH_ERROR_CLS("Token 刷新后仍被拒绝，请重新登录")
 				backoff = (2**attempt) + random.uniform(0.5, 1.5)
 				time.sleep(backoff)
-				self._auth.force_refresh(cdp_url=self._cdp_url)
+				self._auth.force_refresh(cdp_url=self._cdp_url, browser_source=self._browser_source)
 				self._client = None
 				continue
 
@@ -143,7 +172,7 @@ class _BaseHttpClient:
 			if code == self._CODE_STOKEN_EXPIRED and attempt < _MAX_RETRIES:
 				backoff = (2**attempt) + random.uniform(0.5, 1.5)
 				time.sleep(backoff)
-				self._auth.force_refresh(cdp_url=self._cdp_url)
+				self._auth.force_refresh(cdp_url=self._cdp_url, browser_source=self._browser_source)
 				self._client = None
 				continue
 

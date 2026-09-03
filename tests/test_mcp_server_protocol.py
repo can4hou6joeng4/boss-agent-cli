@@ -22,7 +22,7 @@ async def main():
 			initialization = await session.initialize()
 			tool_list = await session.list_tools()
 			print(json.dumps({
-				"server_name": initialization.serverInfo.name,
+				"server_name": initialization.server_info.name,
 				"tool_names": [tool.name for tool in tool_list.tools],
 			}))
 

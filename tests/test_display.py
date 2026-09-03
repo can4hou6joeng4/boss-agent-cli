@@ -78,6 +78,27 @@ class TestHandleErrorOutput:
 
 
 class TestHandleAuthErrors:
+	def test_browser_source_unavailable_uses_policy_error_contract(self):
+		from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, POLICIES
+
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True}
+
+		@handle_auth_errors("chat")
+		def impl(ctx):
+			raise BrowserSourceUnavailable(POLICIES["existing-browser"], ("bridge", "cdp"))
+
+		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
+			impl(ctx)
+
+		kwargs = mock_err.call_args.kwargs
+		assert kwargs["code"] == "BROWSER_SESSION_NOT_FOUND"
+		assert kwargs["recovery_action"] == "boss doctor"
+		assert kwargs["hints"]["next_actions"] == ["boss doctor"]
+		assert kwargs["hints"]["operator_actions"] == list(
+			POLICIES["existing-browser"].operator_actions
+		)
+
 	def test_auth_required(self):
 		from boss_agent_cli.auth.manager import AuthRequired
 		ctx = MagicMock()
@@ -866,6 +887,15 @@ class TestSearchProgress:
 		progress.debug("搜索命中缓存")
 
 		assert stream.getvalue() == ""
+
+	def test_waiting_renders_one_shot_throttle_hint(self, monkeypatch):
+		progress, stream = self._progress(monkeypatch)
+
+		progress.waiting(4.0)
+
+		lines = stream.getvalue().strip().splitlines()
+		assert len(lines) == 1, "节流提示应一次性渲染，不做倒计时刷屏"
+		assert "4" in lines[0]
 
 
 def test_search_pipeline_progress_markers_contract():

@@ -165,7 +165,7 @@ boss status --live      # optional low-frequency read-only probe
 boss doctor --live-probe
 ```
 
-Every error envelope carries `code` + `recoverable` + `recovery_action`, so agents can react programmatically. Browser Bridge local diagnostics cover `bridge_daemon` / `bridge_extension` / `bridge_protocol` / `bridge_workspace` / `bridge_exec` / `bridge_fetch` / `bridge_navigate`; start the daemon with `python -m boss_agent_cli.bridge.daemon --serve`. Every mode stops on platform risk-control blocks; declared adapters must remain bounded, checkpointed, redacted, and explicitly resumed.
+Every error envelope carries `code` + `recoverable` + `recovery_action`, so agents can react programmatically. Browser Bridge local diagnostics cover `bridge_daemon` / `bridge_extension` / `bridge_protocol` / `bridge_workspace` / `bridge_exec` / `bridge_fetch` / `bridge_navigate`; start the daemon with `python -m boss_agent_cli.bridge.daemon --serve`. When Bridge is connected, BOSS `chat` and `chatmsg` prefer credential-free reads through the existing browser; without Bridge they keep the stored-credential httpx path. Exhausted existing-browser candidates return `BROWSER_SESSION_NOT_FOUND` plus `boss doctor`, while the ordinary unauthenticated path still returns `AUTH_REQUIRED` plus `boss login`. Every mode stops on platform risk-control blocks; declared adapters must remain bounded, checkpointed, redacted, and explicitly resumed.
 
 Full checks, CDP launch examples, and error codes: **[Troubleshooting](docs/troubleshooting.en.md)**. For Cookie / CDP / patchright / request-rate / drift issues, read [Platform Risk Boundaries](docs/platform-risk.en.md) first.
 
