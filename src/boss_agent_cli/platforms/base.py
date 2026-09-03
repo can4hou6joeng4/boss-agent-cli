@@ -131,6 +131,12 @@ class Platform(ABC):
 
 		统一错误码对齐 CLAUDE.md 错误码枚举：
 		AUTH_EXPIRED / RATE_LIMITED / TOKEN_REFRESH_FAILED / ACCOUNT_RISK / UNKNOWN。
+
+		这里只枚举**从平台响应体解析出来**的码。通道 / 来源类失败
+		（``CDP_UNAVAILABLE``、``BROWSER_SESSION_NOT_FOUND`` 等）由 CLI 自身的
+		浏览器或传输状态产生，走「模块层抛 typed exception →
+		``display.handle_auth_errors`` 转信封」这条路径，根本不经过本方法，
+		所以它们出现在 ``SCHEMA_DATA["error_codes"]`` 里但不应加进这个列表。
 		"""
 
 	@abstractmethod
