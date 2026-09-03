@@ -42,8 +42,8 @@ Compatibility modes `assisted` and `research` can both call every implemented ca
 
 | Capability | CLI command | Login required | Transport |
 |---|---|---|---|
-| Conversation list | `boss chat` | Yes | Platform adapter |
-| Message history | `boss chatmsg [--raw]` | Yes | Platform adapter; `--raw` preserves structured body/link/job-card fields |
+| Conversation list | `boss chat` | Yes | Existing-browser read session when Bridge is connected; otherwise httpx with stored credentials |
+| Message history | `boss chatmsg [--raw]` | Yes | Existing-browser read session when Bridge is connected; otherwise httpx with stored credentials; `--raw` preserves structured body/link/job-card fields |
 | Conversation summary | `boss chat-summary` | Yes | Platform adapter + local processing |
 | Contact labels | `boss mark` | Yes | Platform adapter |
 | Contact exchange | `boss exchange` | Yes | Platform adapter |
@@ -109,6 +109,7 @@ Compatibility modes `assisted` and `research` can both call every implemented ca
 
 Notes:
 - **Transport**: `httpx` means a direct API call. Risk-control blocks stop the workflow. Browser/hook adapters may not retry without bounds and must preserve checkpoints and redaction. `AI service` means a third-party model API; do not send chat records, resumes, or contact details without authorization.
+- **Existing-browser sessions**: a connected Bridge is this slice's explicit-use signal, but it does not prove that the target page is logged in. Exhausted candidates return `BROWSER_SESSION_NOT_FOUND` plus `boss doctor`; no Bridge plus no stored credentials still returns `AUTH_REQUIRED` plus `boss login`. The browser path does not inherit httpx stoken-refresh or rate-limit retries.
 - For CLI-first integrations, prefer `boss schema` for capability discovery and parameter validation; the schema exposes both `supported_platforms` and `supported_recruiter_platforms`.
 - Current platform coverage: `zhipin` has both candidate and recruiter implementations; `zhilian` supports candidate-side workflows and recruiter automation through the `agent` browser/CDP adapter V1; `qiancheng` / 51job is a registered placeholder adapter whose real workflows return `NOT_SUPPORTED`.
 - `crawl` uses an isolated Chrome profile, cross-process rate budgets, SQLite checkpoints, and the `crawl stop` kill switch. Fine-grained MCP crawl tools provide local `crawl_status/results/shortlist` operations for existing runs, while `boss_wizard` can start, resume, and stop the shared workflow. The default Hook is `none`; local Hook directories must provide `SHA256SUMS`. Risk codes, a security page, or an exhausted budget stop it and return a resume command.

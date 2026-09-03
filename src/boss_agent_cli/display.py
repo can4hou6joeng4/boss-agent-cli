@@ -551,10 +551,26 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 		@wraps(func)
 		def wrapper(ctx: Any, *args: Any, **kwargs: Any) -> Any:
 			from boss_agent_cli.api.browser_client import RecruiterChatTabRequired
+			from boss_agent_cli.api.browser_source import BrowserSourceUnavailable
 			from boss_agent_cli.api.client import AccountRiskError
 			from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 			try:
 				return func(ctx, *args, **kwargs)
+			except BrowserSourceUnavailable as e:
+				hints: dict[str, list[str]] = {}
+				if e.policy.operator_actions:
+					hints["operator_actions"] = list(e.policy.operator_actions)
+				if e.policy.next_actions:
+					hints["next_actions"] = list(e.policy.next_actions)
+				handle_error_output(
+					ctx,
+					command_name,
+					code=e.code,
+					message=str(e),
+					recoverable=True,
+					recovery_action=e.policy.recovery_action,
+					hints=hints or None,
+				)
 			except RecruiterChatTabRequired as e:
 				handle_error_output(
 					ctx, command_name, code="RECRUITER_CHAT_TAB_REQUIRED",

@@ -122,17 +122,26 @@ POLICIES: dict[str, BrowserSourcePolicy] = {
 		),
 		next_actions=("boss doctor",),
 	),
-	# ── existing-browser 由 PR #388 落地 ────────────────────────────────
-	# 形状（连同 BROWSER_SESSION_NOT_FOUND 一起进 SCHEMA_DATA["error_codes"]）：
-	#     channels=(CHANNEL_BRIDGE, CHANNEL_CDP)
-	#     use_stored_credentials=False   # 不读也不导出本地凭据
-	#     may_create_context=False
-	#     allow_browser_launch=False
-	#     auto_probe_cdp=True
-	#     failure_code="BROWSER_SESSION_NOT_FOUND"
+	# ── 复用用户已经运行的浏览器，不读取本地凭据 ────────────────────────
 	# channels 必须包含 CDP：_try_connect 早已在复用用户 context 与已打开的
 	# zhipin 页签（#406 还在加强这条路径），把 CDP 排除在「现有浏览器」之外
 	# 会让 CDP 里已登录的用户拿到 BROWSER_SESSION_NOT_FOUND，属错误分类。
+	"existing-browser": BrowserSourcePolicy(
+		name="existing-browser",
+		channels=(CHANNEL_BRIDGE, CHANNEL_CDP),
+		use_stored_credentials=False,
+		may_create_context=False,
+		allow_browser_launch=False,
+		auto_probe_cdp=True,
+		failure_code="BROWSER_SESSION_NOT_FOUND",
+		failure_message="未发现可复用的现有浏览器会话",
+		recovery_action="boss doctor",
+		operator_actions=(
+			"在日常浏览器中打开 BOSS 直聘并确认当前页面已经登录",
+			"连接 BOSS Agent Bridge 扩展，或确认已有 CDP 浏览器可连接后重试",
+		),
+		next_actions=("boss doctor",),
+	),
 }
 
 

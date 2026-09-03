@@ -181,6 +181,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 |------------|---------|----------------|
 | `AUTH_REQUIRED` | Not logged in | `boss login` |
 | `AUTH_EXPIRED` | Session expired | `boss login` |
+| `BROWSER_SESSION_NOT_FOUND` | An existing-browser source was selected, but its Bridge/CDP session or target page is unavailable | Run `boss doctor`; open and log in to BOSS Zhipin in the daily browser, connect Bridge, then retry |
 | `RATE_LIMITED` | Too many requests | Wait and retry |
 | `TOKEN_REFRESH_FAILED` | stoken refresh failed | `boss login` |
 | `ACCOUNT_RISK` | Risk-control block (code 36) | Stop the workflow, retain its run ID/checkpoint, and resume only after resolving the account or security page |

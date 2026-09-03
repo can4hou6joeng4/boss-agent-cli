@@ -152,6 +152,18 @@ def test_auto_keeps_the_full_fallback_chain_and_stays_fail_open():
 	assert auto.fail_closed is False
 
 
+def test_existing_browser_policy_is_fail_closed_and_credential_free():
+	policy = POLICIES["existing-browser"]
+	assert policy.channels == (CHANNEL_BRIDGE, CHANNEL_CDP)
+	assert policy.use_stored_credentials is False
+	assert policy.may_create_context is False
+	assert policy.allow_browser_launch is False
+	assert policy.auto_probe_cdp is True
+	assert policy.failure_code == "BROWSER_SESSION_NOT_FOUND"
+	assert policy.operator_actions
+	assert policy.next_actions == ("boss doctor",)
+
+
 def test_only_auto_is_fail_open():
 	"""fail-closed 是「显式命名来源」的结构性属性，不是某处 if 的副作用。"""
 	for name, policy in POLICIES.items():
@@ -327,6 +339,48 @@ def test_stored_cookie_does_not_create_context_in_an_empty_browser():
 	assert session._try_connect("ws://localhost:9222/x", explicit=True) is False
 	mock_browser.new_context.assert_not_called()
 	assert session._started is False
+
+
+def test_existing_browser_cdp_requires_an_already_open_zhipin_page():
+	"""现有浏览器来源不得在用户 context 里新建页面并主动导航。"""
+	session = BrowserSession(cookies={}, user_agent="", browser_source="existing-browser")
+	session._pw = MagicMock()
+	mock_browser = MagicMock()
+	mock_context = MagicMock()
+	mock_context.pages = []
+	mock_browser.contexts = [mock_context]
+	session._pw.chromium.connect_over_cdp.return_value = mock_browser
+
+	assert session._try_connect("ws://localhost:9222/x", explicit=True) is False
+	mock_context.new_page.assert_not_called()
+	assert session._started is False
+
+
+def test_existing_browser_maps_connected_but_unusable_bridge_to_source_error():
+	session = BrowserSession(cookies={}, user_agent="", browser_source="existing-browser")
+	session._started = True
+	session._is_bridge = True
+	session._bridge_client = MagicMock()
+	session._bridge_client.fetch_json.side_effect = RuntimeError("workspace unavailable")
+	session._throttle.wait = MagicMock()
+
+	with pytest.raises(BrowserSourceUnavailable) as excinfo:
+		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/friend/getGeekFriendList.json")
+
+	assert excinfo.value.code == "BROWSER_SESSION_NOT_FOUND"
+	assert "页面会话不可用" in str(excinfo.value)
+
+
+def test_auto_keeps_bridge_request_failure_as_network_error_input():
+	session = BrowserSession(cookies={}, user_agent="")
+	session._started = True
+	session._is_bridge = True
+	session._bridge_client = MagicMock()
+	session._bridge_client.fetch_json.side_effect = RuntimeError("bridge fetch failed")
+	session._throttle.wait = MagicMock()
+
+	with pytest.raises(RuntimeError, match="bridge fetch failed"):
+		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/friend/getGeekFriendList.json")
 
 
 def test_auto_still_creates_context_in_an_empty_browser():

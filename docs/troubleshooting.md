@@ -147,6 +147,7 @@ boss --cdp-url http://localhost:9222 login --cdp
 |--------|------|---------------|
 | `AUTH_REQUIRED` | 未登录 | `boss login` |
 | `AUTH_EXPIRED` | 登录过期 | `boss login` |
+| `BROWSER_SESSION_NOT_FOUND` | 已选择现有浏览器来源，但 Bridge/CDP 会话或目标页面不可用 | 运行 `boss doctor`；在日常浏览器中打开并登录 BOSS 直聘，连接 Bridge 后重试 |
 | `RATE_LIMITED` | 频率过高 | 等待后重试 |
 | `TOKEN_REFRESH_FAILED` | Token 刷新失败 | `boss login` |
 | `ACCOUNT_RISK` | 风控拦截 | 停止当前 workflow，保留 run ID/checkpoint；处理登录或安全页后再显式恢复 |

@@ -14,6 +14,12 @@
   同样 fail-closed，不再打开登录页等扫码。`auto` / 未传参行为逐字不变。该参数尚未暴露到 CLI
   （由 PR #404 接线），当前只影响程序化调用；信封层把该异常映射为策略错误码的 `display` 分支
   随 PR #388 落地，在此之前兜底仍为 `NETWORK_ERROR`。
+- 修复 Bridge 已连接日常浏览器时 `chat` / `chatmsg` 仍先要求 CLI 本地 `wt2` 的问题（#386）。
+  Bridge 连接作为本切片的现有浏览器使用信号，走 `existing-browser` 策略的 Bridge → CDP
+  白名单，不读取本地凭据、不新建 context、不启动或降级到 headless；候选耗尽返回
+  `BROWSER_SESSION_NOT_FOUND` + `boss doctor`，真人浏览器指引放在 `operator_actions`。
+  Bridge 未连接时保留原 httpx、stoken 刷新和限流重试语义；本地无凭据仍返回
+  `AUTH_REQUIRED` + `boss login`。中英文风险边界与能力矩阵同步说明：连接存在不等于已验证目标页登录。
 
 ### Changed
 - ROADMAP 中 `BrowserSessionProvider` 条目那句「绝不启动新实例、绝不触发登录、绝不静默回退

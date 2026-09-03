@@ -306,6 +306,13 @@ class BrowserSession:
 				self._page = reused
 				self._own_page = False
 				page_label = "复用已打开 zhipin 页签"
+			elif not self._policy.use_stored_credentials:
+				# existing-browser 不读取本地凭据，也不得在用户 context 里新建页面
+				# 再导航到目标站点。没有已打开的 zhipin 页签就视为该候选不可用，
+				# 继续策略表中的下一个通道，最终按 policy fail-closed。
+				self._log(f"[boss] CDP ({url}) 未找到已打开的 zhipin 页签，拒绝导航用户浏览器")
+				self._close_browser_quietly()
+				return False
 			else:
 				self._page = self._context.new_page()
 				self._own_page = True
@@ -415,12 +422,23 @@ class BrowserSession:
 			full_url = url
 			if params:
 				full_url = f"{url}?{urllib.parse.urlencode(params)}"
-			result = self._bridge_client.fetch_json(
-				full_url,
-				method=method,
-				data=data,
-				referer=referer,
-			)
+			try:
+				result = self._bridge_client.fetch_json(
+					full_url,
+					method=method,
+					data=data,
+					referer=referer,
+				)
+			except Exception as exc:
+				# Bridge 的连接布尔不证明 workspace/目标页可用。显式来源下把
+				# 这种会话级失败归入来源契约；auto 仍保留原异常 → NETWORK_ERROR。
+				if self._policy.fail_closed:
+					raise BrowserSourceUnavailable(
+						self._policy,
+						(CHANNEL_BRIDGE,),
+						detail="Bridge 已连接但现有页面会话不可用",
+					) from exc
+				raise
 			self._throttle.mark()
 			return cast("dict[str, Any]", result)
 

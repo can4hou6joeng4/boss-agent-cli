@@ -1139,6 +1139,11 @@ SCHEMA_DATA = {
 			"recoverable": True,
 			"recovery_action": "boss login",
 		},
+		"BROWSER_SESSION_NOT_FOUND": {
+			"message": "未发现可复用的现有浏览器会话",
+			"recoverable": True,
+			"recovery_action": "boss doctor",
+		},
 		"BROWSER_KERNEL_MISSING": {
 			"message": "patchright 浏览器内核缺失或与所需修订版不匹配",
 			"recoverable": True,

@@ -93,18 +93,37 @@ class _BaseHttpClient:
 			)
 		return self._client
 
-	def _get_browser(self) -> "BrowserSession":
+	def _get_browser(self, *, browser_source: str | None = None) -> "BrowserSession":
+		"""Return the single live browser session for the requested source.
+
+		A source that forbids stored credentials is constructed with an empty
+		cookie/UA payload without calling ``AuthManager.get_token()``. Switching
+		sources closes the previous session first, so the client never keeps the
+		parallel auto/existing-browser slots that #410 removed.
+		"""
+		from boss_agent_cli.api.browser_source import resolve_policy
+
+		policy = resolve_policy(self._browser_source if browser_source is None else browser_source)
+		if self._browser_session is not None:
+			current_name = getattr(getattr(self._browser_session, "_policy", None), "name", None)
+			# BrowserSession always exposes a string policy name. Test doubles and
+			# downstream injected sessions may predate the source seam; keep reusing
+			# those instead of silently replacing them with a real browser process.
+			if isinstance(current_name, str) and current_name != policy.name:
+				self._browser_session.close()
+				self._browser_session = None
+
 		if self._browser_session is None:
 			from boss_agent_cli.api.browser_client import BrowserSession
 
-			token = self._auth.get_token()
+			token = self._auth.get_token() if policy.use_stored_credentials else {}
 			self._browser_session = BrowserSession(
 				cookies=token.get("cookies", {}),
 				user_agent=token.get("user_agent", ""),
 				delay=self._delay,
 				cdp_url=self._cdp_url,
 				logger=getattr(self._auth, "_logger", None),
-				browser_source=self._browser_source,
+				browser_source=policy.name,
 			)
 		return self._browser_session
 

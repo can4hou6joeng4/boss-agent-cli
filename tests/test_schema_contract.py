@@ -123,6 +123,7 @@ def test_schema_error_codes_cover_all_used_codes():
 		"TOKEN_REFRESH_FAILED",
 		"LOGIN_TIMEOUT",
 		"CDP_UNAVAILABLE",
+		"BROWSER_SESSION_NOT_FOUND",
 		"BROWSER_KERNEL_MISSING",
 		"LOGIN_RISK_CONTROL",
 		"LOGIN_EXPIRED",
