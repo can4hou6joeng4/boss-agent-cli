@@ -931,6 +931,21 @@ def _make_friend_item(name, brand, relation_type, last_ts):
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_does_not_require_stored_credentials_before_platform_read(mock_auth_cls, mock_client_cls):
+	"""Bridge-backed reads must reach the platform even when no local token exists."""
+	mock_auth_cls.return_value.check_status.return_value = None
+	_ctx_mock(mock_client_cls)
+	mock_client_cls.return_value.friend_list.return_value = {"zpData": {"result": []}}
+
+	result = CliRunner().invoke(cli, ["chat"])
+
+	assert result.exit_code == 0
+	mock_auth_cls.return_value.check_status.assert_not_called()
+	mock_client_cls.return_value.friend_list.assert_called_once_with(page=1)
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_from_boss_filter(mock_auth_cls, mock_client_cls):
 	"""--from boss 只返回 relationType=1 的记录"""
 	import time

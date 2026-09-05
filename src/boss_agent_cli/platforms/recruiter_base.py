@@ -75,7 +75,7 @@ class RecruiterPlatform(ABC):
 	# ── 候选人列表与筛选 ────────────────────────────────
 
 	@abstractmethod
-	def friend_list(self, page: int = 1, label_id: int = 0, job_id: str | None = None) -> dict[str, Any]:
+	def friend_list(self, page: int = 1, label_id: int = 0, job_id: str | None = None, *, deadline: float | None = None) -> dict[str, Any]:
 		"""沟通列表（按标签/职位筛选）。"""
 
 	@abstractmethod
@@ -123,16 +123,18 @@ class RecruiterPlatform(ABC):
 		raise NotImplementedError(f"{self.name} does not implement greet_rec_list")
 
 	def recommend_geeks(self, job_id: str, page: int = 1) -> dict[str, Any]:
+		"""读取推荐候选人及首次开聊参数。"""
 		raise NotImplementedError(f"{self.name} does not implement recommend_geeks")
 
 	def start_chat(self, *, geek_id: str, job_id: str, expect_id: str, lid: str, security_id: str, message: str, suid: str = "") -> dict[str, Any]:
+		"""单次建立会话并发送首次招呼，不自动重试。"""
 		raise NotImplementedError(f"{self.name} does not implement start_chat")
 
 	def chat_geek_info(self, geek_id: str, security_id: str, job_id: int) -> dict[str, Any]:
 		"""获取候选人聊天信息。"""
 		raise NotImplementedError(f"{self.name} does not implement chat_geek_info")
 
-	def last_messages(self, friend_ids: list[int]) -> dict[str, Any]:
+	def last_messages(self, friend_ids: list[int], *, deadline: float | None = None) -> dict[str, Any]:
 		"""获取最近消息。"""
 		raise NotImplementedError(f"{self.name} does not implement last_messages")
 
@@ -171,7 +173,8 @@ class RecruiterPlatform(ABC):
 		"""获取交换内容。"""
 		raise NotImplementedError(f"{self.name} does not implement exchange_content")
 
-	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0) -> dict[str, Any]:
+	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0, deadline: float | None = None) -> dict[str, Any]:
+		"""发送已读回执；传输成功不代表未读状态已更新。"""
 		raise NotImplementedError(f"{self.name} does not implement mark_read")
 
 	def interview_list(self) -> dict[str, Any]:

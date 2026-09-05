@@ -13,7 +13,7 @@ from boss_agent_cli.commands.chat_utils import (
 	RELATION_LABELS, FROM_FILTER, MSG_STATUS_LABELS,
 	sanitize_csv_cell, escape_md_cell,
 )
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, login_action_for_ctx, render_simple_list
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_simple_list
 
 # 向后兼容别名（旧测试引用 chat._sanitize_csv_cell 等）
 _RELATION_LABELS = RELATION_LABELS
@@ -44,17 +44,6 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
-
-	token = auth.check_status()
-	if token is None:
-		login_action = login_action_for_ctx(ctx)
-		handle_error_output(
-			ctx, "chat",
-			code="AUTH_REQUIRED",
-			message=f"未登录，请先执行 {login_action}",
-			recoverable=True, recovery_action=login_action,
-		)
-		return
 
 	with get_platform_instance(ctx, auth) as platform:
 		try:

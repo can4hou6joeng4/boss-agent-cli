@@ -121,6 +121,49 @@ git diff --check
 8. 更新对应模块的 `CLAUDE.md`
 9. 如果命令对 Agent 通过 MCP 调用有用，还需在 `src/boss_agent_cli/mcp_server.py` 的 `TOOLS` 列表加 Tool 定义、在 `_build_args` 函数加分支；工具名与合规命令标识对不上时（如 `boss_hr_*` 系对应 `recruiter-*`）要登记 `_MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES`，否则低风险过滤不生效；`mcp-server/server.py` 是手工维护的 re-export 清单，新增公开符号需补一行；工具总数变化时同步 `README.en.md` 中的 "MCP server with N tools"（有测试按 `len(TOOLS)` 动态断言）
 
+## 新增 AI provider
+
+`boss ai` 通过 `src/boss_agent_cli/ai/config.py` 的 `PROVIDER_BASE_URLS` 维护一张 OpenAI 兼容服务商表。欢迎补充新的服务商，**包括由服务商自己的工程师提交**——`atlas` 就是这样进来的。
+
+但每加一行，维护责任就落到本项目：服务商改域名、调价、下线模型时，文档会静默失真，而没有任何测试守得住。所以有下面三条。
+
+### 1. 文档只写可验证陈述
+
+`docs/integrations/ai-models.md` 里的条目**只描述能力边界**——OpenAI 兼容性、`provider/model` 命名空间、能触达哪些模型、以及模型名以服务端实际支持为准。
+
+不接受：安全姿态断言（「安全网关」「护栏」「零信任」「工具治理」）、定价承诺（「零加价」「最便宜」）、评级或排名、以及会随时间静默失效的规模数字（「200+ 模型」）。判据很简单：**这句话能不能用一次 API 调用证伪？** 不能的，就不写进第一方文档。
+
+这条对**所有**条目适用，包括已经在表里的——现有条目会逐步对齐，不是只对新提交的执行。
+
+### 2. 服务商自荐需要可验证归属
+
+如果你是该服务商的员工并在提交自家的 provider，请在 PR 里提供一条可验证的关联，二选一：
+
+- 用企业域名邮箱（`@yourcompany.com`）提交 commit，**或**
+- 给出服务商官方站点或 GitHub org 指向本仓库 / 本 PR 的公开引用
+
+这不是信任问题，是可维护性问题：端点搬家时需要有人能对口。此前有过一次先例——那条 provider 的 PR 与作者账号后来双双从 GitHub 消失，留下的条目还被一次无关重构误删，很久没人发现。
+
+本条不追溯适用于已有条目。
+
+### 3. 移除机制
+
+服务商端点**连续两个 minor 版本不可用**即直接从 `PROVIDER_BASE_URLS` 移除，不走弃用周期、不提前公告、**不算破坏性变更**。
+
+这条是前两条能够宽松的前提：因为随时能删，所以准入不必苛刻。
+
+### 连锁更新
+
+新增一个 provider 需要同步五处（`boss schema` 不含 provider 枚举，无需改）：
+
+1. `src/boss_agent_cli/ai/config.py` 的 `PROVIDER_BASE_URLS`
+2. `src/boss_agent_cli/commands/ai_cmd.py` 中 `--provider` 的 help 文案（它是取值域的唯一文档，因为该选项没有 `click.Choice` 校验）
+3. `docs/integrations/ai-models.md` 与 `docs/integrations/ai-models.en.md`（中英必须同步）
+4. `tests/test_ai_config.py`：base-url 解析测试 + `test_provider_base_urls_completeness` 的成员断言
+5. `CHANGELOG.md` 的 `[Unreleased]`
+
+> **注意名字相近的服务商。** `--provider` 接受自由字符串，拼错不会报错。`boss ai config` 会回显 `resolved_base_url`，`tests/test_ai_config_cmd.py` 有一条测试断言所有 `*router` 系服务商必须解析到不同端点——新增时如果与既有条目品牌相近，请确认那条测试仍然通过。
+
 ## 提交 Issue
 
 请在 `.github/ISSUE_TEMPLATE/` 下选择对应模板：

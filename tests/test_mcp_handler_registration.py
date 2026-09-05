@@ -18,60 +18,39 @@ import subprocess
 import sys
 from typing import Any
 
-# 不硬编码「装饰器名 → request 类型」映射表：在全新 Server 上应用装饰器，diff
-# request_handlers 的键集合，多出来的那一个就是它负责的类型。SDK 将来新增
-# handler（list_prompts / read_resource / ...）时这张表自己跟着长，守卫的覆盖面
-# 不需要人工维护——这正是 #377 那类问题最需要的性质。
+# 不在测试里硬编码「本服务该注册哪些 method」：从 `mcp_server` 自己的源码里 AST 扫出
+# 所有 `add_request_handler("<method>", ...)` 的字面量，再逐个问运行时注册表。新增
+# handler 时守卫覆盖面自动跟上，不需人工维护——这正是 #377 那类问题最需要的性质。
+#
+# mcp 2.x 说明：1.x 时这段是「在全新 Server 上应用每个装饰器、diff request_handlers
+# 反推映射」。2.0 移除了全部装饰器工厂（实测 `Server` 上无参公开方法数为 0），且
+# `request_handlers` 变成私有 `_request_handlers`、公开访问器是 `get_request_handler`。
+# 因此反推的对象从「SDK 的装饰器」换成「我们自己声明的 method 字符串」，断言仍然是
+# 运行时注册表说了算，不看语法。
 _REGISTRATION_PROBE = """
+import ast
 import inspect
 import json
-import warnings
-
-from mcp.server import Server
 
 import boss_agent_cli.mcp_server as mcp_server
 
+tree = ast.parse(inspect.getsource(mcp_server))
+declared = sorted({
+	node.args[0].value
+	for node in ast.walk(tree)
+	if isinstance(node, ast.Call)
+	and isinstance(node.func, ast.Attribute)
+	and node.func.attr == "add_request_handler"
+	and node.args
+	and isinstance(node.args[0], ast.Constant)
+	and isinstance(node.args[0].value, str)
+})
 
-async def _dummy(*args, **kwargs):
-	return []
-
-
-def _handler_decorators():
-	discovered = {}
-	for name in dir(Server):
-		if name.startswith("_"):
-			continue
-		probe = Server("probe")
-		before = set(probe.request_handlers)
-		with warnings.catch_warnings():
-			warnings.simplefilter("ignore")
-			try:
-				getattr(probe, name)()(_dummy)
-			except Exception:
-				# 不是 handler 装饰器工厂（run / create_initialization_options / ...）
-				continue
-		added = set(probe.request_handlers) - before
-		if len(added) == 1:
-			discovered[name] = added.pop()
-	return discovered
-
-
-decorators = _handler_decorators()
-registered = set(mcp_server.server.request_handlers)
-declared = []
-unregistered = []
-for name in mcp_server.__all__:
-	attr = getattr(mcp_server, name, None)
-	if not inspect.iscoroutinefunction(attr) or name not in decorators:
-		continue
-	declared.append(name)
-	if decorators[name] not in registered:
-		unregistered.append(name)
+unregistered = [m for m in declared if mcp_server.server.get_request_handler(m) is None]
 
 print(json.dumps({
-	"known_decorators": sorted(decorators),
-	"declared_handlers": sorted(declared),
-	"unregistered_handlers": sorted(unregistered),
+	"declared_handlers": declared,
+	"unregistered_handlers": unregistered,
 }))
 """
 
@@ -121,17 +100,18 @@ def _run_probe(source: str) -> dict[str, Any]:
 def test_every_declared_mcp_handler_is_registered() -> None:
 	report = _run_probe(_REGISTRATION_PROBE)
 
-	# 探针自身的健全性检查。少了这条，一旦 SDK 改了内部结构导致探针什么都发现不了，
+	# 探针自身的健全性检查。少了这条，一旦 SDK 或本模块改了结构导致探针什么都发现不了，
 	# unregistered 会是空列表，守卫就静默变成恒真——比没有守卫更糟。
-	assert report["known_decorators"], "没能从 SDK 反推出任何 handler 装饰器：探针坏了"
-	assert {"call_tool", "list_tools"} <= set(report["declared_handlers"]), (
-		f"__all__ 里少了已知的 MCP handler，实际发现 {report['declared_handlers']}；"
-		"把 handler 从 __all__ 移出去会同时绕开本守卫"
+	assert report["declared_handlers"], "没能从 mcp_server 源码里扫出任何 add_request_handler 调用：探针坏了"
+	assert {"tools/list", "tools/call"} <= set(report["declared_handlers"]), (
+		f"mcp_server 少注册了已知的 MCP 方法，实际扫到 {report['declared_handlers']}；"
+		"这两个是 MCP host 列工具与调工具的最低要求"
 	)
 
 	assert report["unregistered_handlers"] == [], (
-		f"{report['unregistered_handlers']} 写进了 __all__ 却没出现在 server.request_handlers 里，"
-		"即漏了 @server.<name>() 装饰器。MCP host 调用对应方法会收到 -32601 Method not found。"
+		f"{report['unregistered_handlers']} 出现在 add_request_handler 调用里，"
+		"但运行时 server.get_request_handler() 查不到。"
+		"MCP host 调用对应方法会收到 -32601 Method not found。"
 	)
 
 

@@ -21,7 +21,7 @@ class RequestThrottle:
 		self._recent_times: deque[float] = deque(maxlen=12)
 		self._lock = threading.Lock()
 
-	def wait(self) -> None:
+	def wait(self, *, timeout: float | None = None) -> None:
 		"""Block until it's safe to send the next request.
 
 		并发安全：在锁内基于"已预约的下一次发送时刻"计算等待并预占该时刻，
@@ -41,6 +41,8 @@ class RequestThrottle:
 
 			burst = self._burst_penalty()
 			total = max(0, base_sleep + burst)
+			if timeout is not None and total >= timeout:
+				raise TimeoutError("request throttle exceeds remaining budget")
 			# 预占下一次发送时刻：并发线程会据此顺延，避免读到旧值而突发
 			self._last_request_time = now + total
 

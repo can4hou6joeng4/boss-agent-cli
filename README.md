@@ -107,7 +107,7 @@ boss config set platform zhilian          # 设为默认
 推荐先读：[Agent Quickstart](docs/agent-quickstart.md) · [Capability Matrix](docs/capability-matrix.md) · [Host Examples](docs/agent-hosts.md)
 
 ```json
-// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 73 个已实现工具
+// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 75 个已实现工具
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
@@ -171,7 +171,7 @@ boss status --live      # 可选：一次低频只读探测
 boss doctor --live-probe
 ```
 
-错误信封统一携带 `code` + `recoverable` + `recovery_action`，可程序化恢复。Browser Bridge 本地诊断覆盖 `bridge_daemon` / `bridge_extension` / `bridge_protocol` / `bridge_workspace` / `bridge_exec` / `bridge_fetch` / `bridge_navigate` 七项，daemon 用 `python -m boss_agent_cli.bridge.daemon --serve` 启动。两种兼容模式命中平台风控时都停止当前 workflow 并保存 checkpoint；适配器必须有限运行、脱敏、可停止，并只在风险状态解除后显式恢复。
+错误信封统一携带 `code` + `recoverable` + `recovery_action`，可程序化恢复。Browser Bridge 本地诊断覆盖 `bridge_daemon` / `bridge_extension` / `bridge_protocol` / `bridge_workspace` / `bridge_exec` / `bridge_fetch` / `bridge_navigate` 七项，daemon 用 `python -m boss_agent_cli.bridge.daemon --serve` 启动。Bridge 已连接时，BOSS 的 `chat` / `chatmsg` 优先复用现有浏览器做只读请求且不读取 CLI 保存的 Cookie；Bridge 未连接时保留本地凭据的 httpx 路径。现有浏览器候选耗尽返回 `BROWSER_SESSION_NOT_FOUND` + `boss doctor`，普通未登录路径仍返回 `AUTH_REQUIRED` + `boss login`。两种兼容模式命中平台风控时都停止当前 workflow 并保存 checkpoint；适配器必须有限运行、脱敏、可停止，并只在风险状态解除后显式恢复。
 
 完整检查项、CDP 启动示例与错误码见 **[诊断与排障](docs/troubleshooting.md)**；涉及 Cookie / CDP / patchright / 请求频率 / 接口漂移的问题先读 [平台风险边界](docs/platform-risk.md)。
 

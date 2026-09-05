@@ -73,7 +73,7 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 
 ## 可用工具
 
-当前 MCP Server 暴露 **73 个已实现工具**。
+当前 MCP Server 暴露 **75 个已实现工具**。
 
 ### 共享 workflow
 

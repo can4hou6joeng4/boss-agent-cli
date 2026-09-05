@@ -17,6 +17,10 @@ _mcp_server.Server = MagicMock()
 _mcp_stdio.stdio_server = MagicMock()
 _mcp_types.TextContent = MagicMock()
 _mcp_types.Tool = type("Tool", (), {"__init__": lambda self, **kw: self.__dict__.update(kw)})
+# mcp 2.x 的 handler 收 (ctx, params) 并返回 Result 对象，故 mcp_server 还需要这四个类型。
+# 用能接受任意关键字的轻量替身即可——本文件不断言它们的行为，只需让 import 成立。
+for _name in ("CallToolRequestParams", "CallToolResult", "ListToolsResult", "PaginatedRequestParams"):
+	setattr(_mcp_types, _name, type(_name, (), {"__init__": lambda self, **kw: self.__dict__.update(kw)}))
 _mcp_mock.server = _mcp_server
 _mcp_mock.types = _mcp_types
 
@@ -69,10 +73,10 @@ def _placeholder_value(schema: dict) -> object:
 
 
 def _required_arguments(tool) -> dict[str, object]:
-	properties = tool.inputSchema.get("properties", {})
+	properties = tool.input_schema.get("properties", {})
 	return {
 		name: _placeholder_value(properties.get(name, {}))
-		for name in tool.inputSchema.get("required", [])
+		for name in tool.input_schema.get("required", [])
 	}
 
 
@@ -104,7 +108,7 @@ def test_all_tool_parameter_types_are_valid_json_schema():
 	"""
 	invalid = []
 	for tool in TOOLS:
-		for name, spec in (tool.inputSchema or {}).get("properties", {}).items():
+		for name, spec in (tool.input_schema or {}).get("properties", {}).items():
 			declared = spec.get("type")
 			if declared is not None and declared not in _JSON_SCHEMA_TYPES:
 				invalid.append(f"{tool.name}.{name} = {declared!r}")
@@ -116,7 +120,7 @@ def test_all_tool_parameters_are_described_for_agents():
 	missing = [
 		f"{tool.name}.{name}"
 		for tool in TOOLS
-		for name, spec in (tool.inputSchema or {}).get("properties", {}).items()
+		for name, spec in (tool.input_schema or {}).get("properties", {}).items()
 		if not spec.get("description")
 	]
 	assert not missing, "参数缺少 description：\n" + "\n".join(missing)
@@ -126,7 +130,7 @@ def test_all_tool_schemas_are_well_formed_objects():
 	"""顶层必须是 object、required 只能引用已声明的属性、array 必须带 items。"""
 	problems = []
 	for tool in TOOLS:
-		schema = tool.inputSchema or {}
+		schema = tool.input_schema or {}
 		properties = schema.get("properties", {})
 		if schema.get("type") != "object":
 			problems.append(f"{tool.name}: 顶层 type 应为 object，实际 {schema.get('type')!r}")
@@ -157,7 +161,7 @@ def test_recruiter_tool_description_includes_availability():
 def test_all_tools_have_input_schema():
 	"""每个工具都应有输入模式定义。"""
 	for tool in TOOLS:
-		schema = tool.inputSchema
+		schema = tool.input_schema
 		assert isinstance(schema, dict), f"{tool.name} 缺少输入模式"
 		assert schema.get("type") == "object", f"{tool.name} 输入模式类型应为 object"
 
@@ -208,7 +212,7 @@ def test_crawl_tools_only_read_or_locally_shortlist_existing_runs():
 	assert _build_args("boss_crawl_shortlist", {"run_id": "run-1", "selectors": ["csel_1"], "tags": "AI"}) == [
 		"crawl", "shortlist", "run-1", "--selector", "csel_1", "--tags", "AI",
 	]
-	server_tools = {tool.name: tool.inputSchema for tool in TOOLS if tool.name.startswith("boss_crawl_")}
+	server_tools = {tool.name: tool.input_schema for tool in TOOLS if tool.name.startswith("boss_crawl_")}
 	schema_tools = {
 		tool["name"]: tool["inputSchema"]
 		for tool in _format_mcp_tools(_inject_availability({
@@ -251,7 +255,7 @@ def test_every_tool_maps_to_registered_command():
 def test_search_tool_requires_query():
 	"""搜索工具应要求 query 参数。"""
 	search = next(t for t in TOOLS if t.name == "boss_search")
-	assert "query" in search.inputSchema.get("required", [])
+	assert "query" in search.input_schema.get("required", [])
 
 
 def test_all_implemented_tools_are_exposed():

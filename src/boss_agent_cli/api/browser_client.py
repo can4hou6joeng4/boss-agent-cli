@@ -20,6 +20,14 @@ from urllib.parse import urlparse
 from patchright.sync_api import sync_playwright
 
 from boss_agent_cli.api import endpoints
+from boss_agent_cli.api.browser_source import (
+	CHANNEL_BRIDGE,
+	CHANNEL_CDP,
+	CHANNEL_HEADLESS,
+	BrowserSourcePolicy,
+	BrowserSourceUnavailable,
+	resolve_policy,
+)
 from boss_agent_cli.api.throttle import RequestThrottle
 from boss_agent_cli.auth.browser import _DEFAULT_CDP_URL as CDP_DEFAULT_URL
 
@@ -94,6 +102,7 @@ class BrowserSession:
 		delay: tuple[float, float] = (1.5, 3.0),
 		cdp_url: str | None = None,
 		logger: Any = None,
+		browser_source: str | None = None,
 	) -> None:
 		self._throttle = RequestThrottle(delay)
 		# patchright / BridgeClient 运行时创建；注解为 Any 让 mypy 对外部依赖放行
@@ -111,6 +120,11 @@ class BrowserSession:
 		self._logger = logger
 		self._bridge_client: Any = None
 		self._is_bridge = False
+		# 通道来源策略 —— 本类上**唯一**的来源/模式选择器。
+		# 禁止再加第二个模式布尔：那正是 #404 与 #388 各插一个短路、
+		# git 干净自动合并却留下两个互不感知开关的成因（见 browser_source 模块文档）。
+		# 门禁 test_browser_session_has_exactly_one_source_selector 守住这一点。
+		self._policy: BrowserSourcePolicy = resolve_policy(browser_source)
 
 	def _log(self, message: str) -> None:
 		"""Diagnostic channel logs: debug by default so TTY wizard stays clean."""
@@ -130,21 +144,64 @@ class BrowserSession:
 			print(message, file=sys.stderr)
 
 	def _ensure_started(self) -> None:
+		"""按 policy 声明的通道白名单依次尝试；耗尽即按 policy fail-closed。
+
+		这是**唯一**的通道分发点。禁止在本方法里写 ``if self._policy.name == X``
+		式的策略分支——顺序与准入全部来自 ``policy``，新增来源只加表里一行。
+		门禁 ``test_dispatcher_has_no_policy_name_branch`` 守住这一点。
+		"""
 		if self._started:
 			return
 
-		# 优先尝试 Bridge 模式（Chrome 扩展 + daemon，零配置）
-		if self._try_bridge():
-			return
+		policy = self._policy
+		attempted: list[str] = []
+		try:
+			for channel in policy.channels:
+				attempted.append(channel)
+				if channel == CHANNEL_BRIDGE:
+					# fail-closed 语义：_try_bridge 内部 except → False，从不抛。
+					# 失败 = 继续白名单里的下一个通道；白名单耗尽不降级。
+					if self._try_bridge():
+						return
+				elif channel == CHANNEL_CDP:
+					# 惰性起 driver：stored-cookie 这类不含 headless 的来源，
+					# CDP 失败时不该白留一个 playwright driver 进程。
+					self._ensure_playwright()
+					if self._try_cdp():
+						return
+				elif channel == CHANNEL_HEADLESS:
+					self._ensure_playwright()
+					# _start_headless 成功即置 _started，失败抛 playwright 原生异常
+					# 并原样上抛（→ display 兜底 NETWORK_ERROR）。这一支只出现在
+					# auto 的链尾，是「默认行为一字不改」的落点。
+					self._start_headless()
+					return
+				else:  # pragma: no cover - 由门禁 test_every_declared_channel_is_dispatchable 拦住
+					raise ValueError(f"unknown channel {channel!r} in policy {policy.name!r}")
+		except BaseException:
+			# 修既有缺陷：_start_headless / sync_playwright().start() 抛错时
+			# self._pw 已启动却永远不会 stop()，下次 request() 会再起一个 driver 进程。
+			self._release_playwright()
+			raise
 
-		self._pw = sync_playwright().start()
+		# ── 通道耗尽 ──
+		# auto 到不了这里（headless 支要么 return 要么抛）。
+		self._release_playwright()
+		if not policy.fail_closed:  # pragma: no cover - 防御：非 auto 但没声明 failure_code
+			raise RuntimeError(f"browser source {policy.name!r} exhausted without a failure_code")
+		raise BrowserSourceUnavailable(policy, tuple(attempted))
 
-		# 第二优先：CDP 连接用户 Chrome（登录态兼容）
-		if self._try_cdp():
-			return
+	def _ensure_playwright(self) -> None:
+		if self._pw is None:
+			self._pw = sync_playwright().start()
 
-		# 兜底：启动 headless patchright
-		self._start_headless()
+	def _release_playwright(self) -> None:
+		if self._pw is not None:
+			try:
+				self._pw.stop()
+			except Exception:
+				pass
+			self._pw = None
 
 	def _try_bridge(self) -> bool:
 		"""尝试通过 Browser Bridge（Chrome 扩展 + daemon）连接。"""
@@ -171,21 +228,27 @@ class BrowserSession:
 
 		Attempts in order:
 		  1. Explicit cdp_url if provided
-		  2. Default http://localhost:9222 (+ auto WS fallback)
-		  3. WebSocket URL from Chrome's DevToolsActivePort file
+		  2. Default http://localhost:9222 (+ auto WS fallback)   ← 仅当 policy.auto_probe_cdp
+		  3. WebSocket URL from Chrome's DevToolsActivePort file   ← 同上
+
+		``auto_probe_cdp=False`` 的来源只连用户显式给的 ``--cdp-url``，
+		让「指定 CDP」名副其实；没给地址就直接失败，不静默连到别的浏览器。
 		"""
-		urls_to_try = []
+		policy = self._policy
+		# (url, 是否为用户显式指定) —— 显式与否决定能否新建 context 注入凭据
+		urls_to_try: list[tuple[str, bool]] = []
 		if self._cdp_url:
-			urls_to_try.append(self._cdp_url)
-		urls_to_try.append(CDP_DEFAULT_URL)
+			urls_to_try.append((self._cdp_url, True))
+		if policy.auto_probe_cdp:
+			urls_to_try.append((CDP_DEFAULT_URL, False))
 
-		# 从 DevToolsActivePort 文件读取 WebSocket URL
-		ws_url = self._read_devtools_active_port()
-		if ws_url:
-			urls_to_try.append(ws_url)
+			# 从 DevToolsActivePort 文件读取 WebSocket URL
+			ws_url = self._read_devtools_active_port()
+			if ws_url:
+				urls_to_try.append((ws_url, False))
 
-		for url in urls_to_try:
-			if self._try_connect(url):
+		for url, explicit in urls_to_try:
+			if self._try_connect(url, explicit=explicit):
 				return True
 			# HTTP URL 连接失败时，尝试从 /json/version 获取 WS URL。
 			# 仅对用户显式提供的 --cdp-url 用较长超时；默认 localhost:9222 自动探测
@@ -193,11 +256,11 @@ class BrowserSession:
 			if url.startswith("http"):
 				probe_timeout = _CDP_PROBE_TIMEOUT if url == self._cdp_url else _CDP_AUTO_PROBE_TIMEOUT
 				ws = self._fetch_ws_url(url, timeout=probe_timeout)
-				if ws and self._try_connect(ws):
+				if ws and self._try_connect(ws, explicit=explicit):
 					return True
 		return False
 
-	def _try_connect(self, url: str) -> bool:
+	def _try_connect(self, url: str, *, explicit: bool = True) -> bool:
 		"""Attempt a single CDP connection, reusing user's existing context.
 
 		Reuses the first existing browser context to preserve the user's
@@ -216,6 +279,15 @@ class BrowserSession:
 				# 导航到 BOSS 首页（issue #334：用户观感是"反复自动新开/刷新页面"），
 				# 同时降低自动化足迹。请求只需 page 处于 zhipin 同源即可携带 cookie。
 				reused = _find_reusable_zhipin_page(self._context)
+			elif not self._policy.may_create_context or not explicit:
+				# fail-closed：不在用户浏览器里新建 context 注入本地 Cookie。
+				# Issue #387 把「把 Cookie 复制到另一个 Profile」列为反面方案
+				# （凭据暴露 + 会话竞争）。`explicit` 守卫另挡一种情况：自动探测到的
+				# 端点可能是任何在 9222 上监听的 Chromium（其他 Electron 应用、
+				# 用户自己起的隔离 profile），不该被当成用户会话注入 wt2/at。
+				self._log(f"[boss] CDP ({url}) 无可复用 context，按 browser-source={self._policy.name} 拒绝新建")
+				self._close_browser_quietly()
+				return False
 			else:
 				# 没有已存在 context，创建新的并注入 cookies
 				self._context = self._browser.new_context()
@@ -234,6 +306,13 @@ class BrowserSession:
 				self._page = reused
 				self._own_page = False
 				page_label = "复用已打开 zhipin 页签"
+			elif not self._policy.use_stored_credentials:
+				# existing-browser 不读取本地凭据，也不得在用户 context 里新建页面
+				# 再导航到目标站点。没有已打开的 zhipin 页签就视为该候选不可用，
+				# 继续策略表中的下一个通道，最终按 policy fail-closed。
+				self._log(f"[boss] CDP ({url}) 未找到已打开的 zhipin 页签，拒绝导航用户浏览器")
+				self._close_browser_quietly()
+				return False
 			else:
 				self._page = self._context.new_page()
 				self._own_page = True
@@ -249,13 +328,21 @@ class BrowserSession:
 			self._log(f"[boss] CDP 连接成功 ({url})，{reuse_label} + {page_label}")
 			return True
 		except Exception:
-			if self._browser:
-				try:
-					self._browser.close()
-				except Exception:
-					pass
-				self._browser = None
+			self._close_browser_quietly()
 			return False
+
+	def _close_browser_quietly(self) -> None:
+		"""关掉本次 connect_over_cdp 建立的 browser 句柄，失败静默。
+
+		只断开我们这一侧的连接，不影响用户浏览器本身。
+		"""
+		if self._browser:
+			try:
+				self._browser.close()
+			except Exception:
+				pass
+			self._browser = None
+		self._context = None
 
 	@staticmethod
 	def _fetch_ws_url(http_url: str, timeout: float = _CDP_PROBE_TIMEOUT) -> str | None:
@@ -335,12 +422,23 @@ class BrowserSession:
 			full_url = url
 			if params:
 				full_url = f"{url}?{urllib.parse.urlencode(params)}"
-			result = self._bridge_client.fetch_json(
-				full_url,
-				method=method,
-				data=data,
-				referer=referer,
-			)
+			try:
+				result = self._bridge_client.fetch_json(
+					full_url,
+					method=method,
+					data=data,
+					referer=referer,
+				)
+			except Exception as exc:
+				# Bridge 的连接布尔不证明 workspace/目标页可用。显式来源下把
+				# 这种会话级失败归入来源契约；auto 仍保留原异常 → NETWORK_ERROR。
+				if self._policy.fail_closed:
+					raise BrowserSourceUnavailable(
+						self._policy,
+						(CHANNEL_BRIDGE,),
+						detail="Bridge 已连接但现有页面会话不可用",
+					) from exc
+				raise
 			self._throttle.mark()
 			return cast("dict[str, Any]", result)
 
@@ -419,6 +517,7 @@ class BrowserSession:
 		"""
 		if self._is_bridge:
 			raise RuntimeError("evaluate_js requires CDP mode (bridge mode has no access to user Chrome)")
+		self._require_cdp_source("evaluate_js")
 		cdp_url = self._cdp_url or CDP_DEFAULT_URL
 		return _cdp_evaluate_in_chat_tab(cdp_url, script, arg)
 
@@ -432,8 +531,30 @@ class BrowserSession:
 			raise RuntimeError(
 				"evaluate_js_with_chat_events requires CDP mode (bridge mode has no access to user Chrome)"
 			)
+		self._require_cdp_source("evaluate_js_with_chat_events")
 		cdp_url = self._cdp_url or CDP_DEFAULT_URL
 		return _cdp_evaluate_with_chat_events_in_chat_tab(cdp_url, script, arg, listen_ms=listen_ms)
+
+	def _require_cdp_source(self, api: str) -> None:
+		"""裸 CDP 路径的来源守卫。
+
+		``evaluate_js`` 系列刻意绕过 ``_ensure_started``（见上方 docstring：
+		patchright 附着别人的 tab 会撞 'Frame was detached'），所以它不受
+		分发器约束——这是本类最大的 fail-open 面：一个禁用了 CDP 的来源，
+		在这条路上照样会直连 ``CDP_DEFAULT_URL``。此处补上等价守卫。
+		"""
+		if not self._policy.allows(CHANNEL_CDP):
+			raise BrowserSourceUnavailable(
+				self._policy,
+				(CHANNEL_CDP,),
+				detail=f"{api} 需要 CDP 通道，而 browser-source={self._policy.name} 不允许",
+			)
+		if not self._policy.auto_probe_cdp and not self._cdp_url:
+			raise BrowserSourceUnavailable(
+				self._policy,
+				(CHANNEL_CDP,),
+				detail=f"{api} 需要显式 --cdp-url（browser-source={self._policy.name} 不自动探测端点）",
+			)
 
 	# ── Lifecycle ────────────────────────────────────────────────────
 
@@ -443,13 +564,20 @@ class BrowserSession:
 		return self._is_cdp
 
 	def close(self) -> None:
+		if not self._started:
+			# 已关闭 / 从未成功启动：只确保 driver 不泄漏，不重复拆卸。
+			# 真正的幂等守卫——否则第二次 close 会因为 _reset_channel_state 已把
+			# _is_cdp 置 False 而走进 headless 分支，对一个 CDP 会话执行错误的拆卸。
+			self._release_playwright()
+			return
+
 		if self._is_bridge and self._bridge_client:
 			try:
 				self._bridge_client.close_window()
 			except Exception:
 				pass
 			self._bridge_client = None
-			self._started = False
+			self._reset_channel_state()
 			return
 
 		if self._is_cdp:
@@ -471,12 +599,25 @@ class BrowserSession:
 					self._browser.close()
 				except Exception:
 					pass
-		if self._pw:
-			try:
-				self._pw.stop()
-			except Exception:
-				pass
+		self._release_playwright()
+		self._reset_channel_state()
+
+	def _reset_channel_state(self) -> None:
+		"""close 后把**通道标志**复位到「从未启动」。
+
+		修既有缺陷：原实现只置 ``_started = False``，``_is_cdp`` / ``_is_bridge``
+		留着上一轮的值。于是 close 之后再调 ``request()`` 会带着陈旧标志重跑整条链
+		——例如上一轮走 Bridge、重连落到 CDP 时 ``_is_bridge`` 仍为 True，
+		``request()`` 就会走错分支去调一个已被置空的 ``_bridge_client``。
+
+		刻意**不**清 ``_page`` / ``_context`` / ``_browser``：它们在重启时由
+		``_try_connect`` / ``_start_headless`` 的每个分支无条件覆盖，而清空会让
+		「close 之后仍可检视上一轮句柄」这个既有性质消失（多条既有测试依赖它）。
+		``_policy`` 同样不复位：它是构造期决定的来源意图，不属于通道状态。
+		"""
 		self._started = False
+		self._is_cdp = False
+		self._is_bridge = False
 
 	def __enter__(self) -> "BrowserSession":
 		return self

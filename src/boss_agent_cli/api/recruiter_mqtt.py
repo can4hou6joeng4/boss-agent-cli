@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import random
+import re
 import struct
-import threading
 import time
 from dataclasses import dataclass
 from typing import Any
 
-import paho.mqtt.client as mqtt
+from boss_agent_cli.api.httpx_helpers import remaining_timeout
 
 
 class RecruiterMqttError(RuntimeError):
@@ -88,70 +88,78 @@ def mark_chat_read(
 	peer_uid: int,
 	message_id: int,
 	user_source: int = 0,
-	timeout: float = 15.0,
+	deadline: float | None = None,
 ) -> dict[str, Any]:
-	"""Connect once, publish presence and one read receipt, then disconnect."""
-	if peer_uid <= 0 or message_id <= 0:
-		raise ValueError("peer_uid and message_id must be positive integers")
+	"""单连接发送回执并确认传输；不重连、不把 PUBACK 当作平台已读。"""
+	try:
+		import paho.mqtt.client as mqtt
+	except ImportError as exc:
+		raise RecruiterMqttError("MQTT 依赖不可用，请重新安装 boss-agent-cli") from exc
 
-	connected = threading.Event()
-	client_id = f"ws-{random.getrandbits(64):016x}"
+	if deadline is None:
+		deadline = time.monotonic() + 25
+	if peer_uid <= 0 or message_id <= 0 or user_source < 0:
+		raise ValueError("invalid read receipt identifiers")
+	host = credentials.server.lower()
+	if not re.fullmatch(r"(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+zhipin\.com", host):
+		raise RecruiterMqttError("MQTT host must be a zhipin.com subdomain")
+
+	connected = False
+	rejected = False
 	client = mqtt.Client(
 		mqtt.CallbackAPIVersion.VERSION2,
-		client_id=client_id,
+		client_id=f"ws-{random.getrandbits(64):016x}",
 		protocol=mqtt.MQTTv31,
 		transport="websockets",
+		reconnect_on_failure=False,
 	)
 	client.username_pw_set(credentials.username, credentials.password)
 	client.tls_set()
-	cookie_header = "; ".join(f"{key}={value}" for key, value in cookies.items())
+	# 只发送登录 Cookie，wt2 使用本次 bootstrap 得到的新值。
+	handshake_cookies = {"wt2": credentials.password}
+	if cookies.get("zp_at"):
+		handshake_cookies["zp_at"] = str(cookies["zp_at"])
 	client.ws_set_options(
 		path="/chatws",
-		headers={"Origin": "https://www.zhipin.com", "Cookie": cookie_header, "User-Agent": user_agent},
+		headers={
+			"Origin": "https://www.zhipin.com",
+			"Cookie": "; ".join(f"{key}={value}" for key, value in handshake_cookies.items()),
+			"User-Agent": user_agent,
+		},
 	)
 
-	def on_connect(client_obj: mqtt.Client, userdata: Any, flags: Any, reason_code: Any, properties: Any) -> None:
-		if int(reason_code) == 0:
-			client_obj.subscribe("chat", qos=1)
-		connected.reason_code = 0  # type: ignore[attr-defined]
-		if int(reason_code) != 0:
-			connected.reason_code = int(reason_code)  # type: ignore[attr-defined]
-		connected.set()
+	def on_connect(client_obj: mqtt.Client, userdata: Any, flags: Any, reason_code: mqtt.ReasonCode, properties: Any) -> None:
+		nonlocal connected, rejected
+		connected = True
+		rejected = reason_code.is_failure
+
+	def poll() -> None:
+		code = client.loop(timeout=min(1.0, remaining_timeout(deadline)))
+		if code != mqtt.MQTT_ERR_SUCCESS:
+			raise RecruiterMqttError("MQTT connection lost")
+		remaining_timeout(deadline)
+
+	def publish(payload: bytes) -> None:
+		remaining_timeout(deadline)
+		info = client.publish("chat", payload, qos=1, retain=True)
+		if info.rc != mqtt.MQTT_ERR_SUCCESS:
+			raise RecruiterMqttError("MQTT publish rejected")
+		while not info.is_published():
+			poll()
+		remaining_timeout(deadline)
 
 	client.on_connect = on_connect
-	client.connect(credentials.server, port=443, keepalive=25)
-	client.loop_start()
+	client.connect_timeout = remaining_timeout(deadline)
 	try:
-		if not connected.wait(timeout):
-			raise RecruiterMqttError("mqtt connect timeout")
-		reason_code = getattr(connected, "reason_code", 0)
-		if reason_code:
-			raise RecruiterMqttError(f"mqtt connection rejected: {reason_code}")
-		presence = encode_presence(
-			user_id=credentials.user_id,
-			uniqid=credentials.uniqid,
-			client_ip=credentials.client_ip,
-		)
-		client.publish("chat", presence, qos=1, retain=True).wait_for_publish(timeout=timeout)
-		time.sleep(0.7)
+		# paho 的 WebSocket 握手使用 keepalive 作为 socket timeout。
+		client.connect(host, port=443, keepalive=max(1, min(25, int(remaining_timeout(deadline)))))
+		while not connected:
+			poll()
+		if rejected:
+			raise RecruiterMqttError("MQTT connection rejected")
+		publish(encode_presence(user_id=credentials.user_id, uniqid=credentials.uniqid, client_ip=credentials.client_ip))
 		read_time = int(time.time() * 1000)
-		payload = encode_message_read(
-			user_id=peer_uid,
-			message_id=message_id,
-			user_source=user_source,
-			read_time_ms=read_time,
-		)
-		info = client.publish("chat", payload, qos=1, retain=True)
-		info.wait_for_publish(timeout=timeout)
-		if not info.is_published():
-			raise RecruiterMqttError("messageRead publish was not acknowledged")
-		return {
-			"ok": True,
-			"peer_uid": peer_uid,
-			"message_id": message_id,
-			"user_source": user_source,
-			"read_time": read_time,
-		}
+		publish(encode_message_read(user_id=peer_uid, message_id=message_id, user_source=user_source, read_time_ms=read_time))
+		return {"published": True, "peer_uid": peer_uid, "message_id": message_id, "read_time": read_time}
 	finally:
 		client.disconnect()
-		client.loop_stop()

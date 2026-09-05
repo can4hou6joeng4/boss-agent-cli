@@ -46,21 +46,33 @@ def _extract_readme_badges(path: str) -> list[tuple[str, str, str]]:
 
 
 def _load_mcp_tools() -> list:
-	_mcp_mock = types.ModuleType("mcp")
-	_mcp_server = types.ModuleType("mcp.server")
-	_mcp_stdio = types.ModuleType("mcp.server.stdio")
-	_mcp_types = types.ModuleType("mcp.types")
-	_mcp_server.Server = MagicMock()
-	_mcp_stdio.stdio_server = MagicMock()
-	_mcp_types.TextContent = MagicMock()
-	_mcp_types.Tool = type("Tool", (), {"__init__": lambda self, **kw: self.__dict__.update(kw)})
-	_mcp_mock.server = _mcp_server
-	_mcp_mock.types = _mcp_types
+	# 真 SDK 装了就用真的——本文件只读 TOOLS 的名字与数量，真 SDK 完全够用，
+	# 而且这样才不会出现「单跑本文件用 mock、跟着全套跑用真 SDK」这种按收集顺序
+	# 变结果的情况（`sys.modules.setdefault` 在全套里是 no-op）。mock 只在
+	# 未安装 mcp extra 的环境里兜底。
+	try:
+		import mcp.server  # noqa: F401
+		import mcp.server.stdio  # noqa: F401
+		import mcp.types  # noqa: F401
+	except ImportError:
+		_mcp_mock = types.ModuleType("mcp")
+		_mcp_server = types.ModuleType("mcp.server")
+		_mcp_stdio = types.ModuleType("mcp.server.stdio")
+		_mcp_types = types.ModuleType("mcp.types")
+		_mcp_server.Server = MagicMock()
+		_mcp_stdio.stdio_server = MagicMock()
+		_mcp_types.TextContent = MagicMock()
+		_mcp_types.Tool = type("Tool", (), {"__init__": lambda self, **kw: self.__dict__.update(kw)})
+		# mcp 2.x 的 handler 收 (ctx, params) 并返回 Result 对象，mcp_server 因此还需这四个类型。
+		for _name in ("CallToolRequestParams", "CallToolResult", "ListToolsResult", "PaginatedRequestParams"):
+			setattr(_mcp_types, _name, type(_name, (), {"__init__": lambda self, **kw: self.__dict__.update(kw)}))
+		_mcp_mock.server = _mcp_server
+		_mcp_mock.types = _mcp_types
 
-	sys.modules.setdefault("mcp", _mcp_mock)
-	sys.modules.setdefault("mcp.server", _mcp_server)
-	sys.modules.setdefault("mcp.server.stdio", _mcp_stdio)
-	sys.modules.setdefault("mcp.types", _mcp_types)
+		sys.modules.setdefault("mcp", _mcp_mock)
+		sys.modules.setdefault("mcp.server", _mcp_server)
+		sys.modules.setdefault("mcp.server.stdio", _mcp_stdio)
+		sys.modules.setdefault("mcp.types", _mcp_types)
 
 	spec = importlib.util.spec_from_file_location("boss_mcp_server", ROOT / "mcp-server/server.py")
 	assert spec and spec.loader
@@ -195,7 +207,7 @@ def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
 	assert "`boss schema`" in matrix
 	assert "`boss hr candidates`" in matrix
 	assert "39 top-level commands" in matrix
-	assert "9 first-level recruiter subcommands" in matrix
+	assert "11 first-level recruiter subcommands" in matrix
 
 	mcp_readme = _read("mcp-server/README.en.md")
 	assert "[Agent Quickstart](../docs/agent-quickstart.en.md)" in mcp_readme
@@ -245,7 +257,7 @@ def test_pyproject_exposes_boss_mcp_script():
 	# 上界是硬要求：mcp 2.0 删掉了 `@server.list_tools()` / `@server.call_tool()`，
 	# 而 mcp_server 在模块层就用它们，装到 2.x 的用户连 boss-mcp 都起不来。
 	# 声明无上界时 CI 仍走 uv.lock 里的 1.x，全绿，用户全崩。放开前必须先适配 2.x API。
-	assert '"mcp>=1.0.0,<2.0.0"' in pyproject
+	assert '"mcp>=2.1.0,<3.0.0"' in pyproject
 
 
 def test_agent_facing_docs_keep_bounded_runtime_boundary():
@@ -320,6 +332,10 @@ def test_schema_main_and_modules_command_count_consistent():
 
 # 文档中写死的能力计数与其运行时真源的映射。
 _CAPABILITY_COUNT_PATTERNS: tuple[tuple[str, str], ...] = (
+	(r"(\d+)\s*个\s*已实现工具", "tools"),
+	(r"(\d+)\s+implemented\s+(?:MCP\s+)?tools", "tools"),
+	(r"(\d+)\s*个一级招聘者子命令", "recruiter_subcommands"),
+	(r"(\d+)\s+first-level\s+recruiter\s+subcommands", "recruiter_subcommands"),
 	(r"(\d+)\s*个顶层命令", "commands"),
 	(r"(\d+)\s+top-level(?:\s+CLI)?\s+commands", "commands"),
 	(r"(\d+)\s*个(?:默认)?(?:低风险)?\s*MCP\s*工具", "tools"),
@@ -336,6 +352,22 @@ _CAPABILITY_COUNT_EXEMPT_DOCS = frozenset({
 	"docs/marketing/en-launch-story.md",
 	"docs/marketing/zh-launch-story.md",
 })
+
+
+@pytest.mark.parametrize("text,kind,count", [
+	("暴露 **75 个已实现工具**", "tools", 75),
+	("暴露 **75** 个已实现工具", "tools", 75),
+	("exposes **75 implemented tools**", "tools", 75),
+	("all 75 implemented MCP tools", "tools", 75),
+	("11 个一级招聘者子命令", "recruiter_subcommands", 11),
+	("11 first-level recruiter\nsubcommands", "recruiter_subcommands", 11),
+])
+def test_capability_count_patterns_cover_published_wording(text, kind, count):
+	matches = [
+		int(match.group(1)) for pattern, category in _CAPABILITY_COUNT_PATTERNS if category == kind
+		for match in re.finditer(pattern, text.replace("**", ""))
+	]
+	assert matches == [count]
 
 
 def _public_markdown_docs() -> list[Path]:
@@ -374,11 +406,12 @@ def test_docs_capability_counts_match_runtime_source():
 	expected = {
 		"commands": len(SCHEMA_DATA["commands"]),
 		"tools": len(_load_mcp_tools()),
+		"recruiter_subcommands": len(SCHEMA_DATA["commands"]["hr"]["subcommands"]),
 	}
 	mismatches: list[str] = []
 
 	for path in _public_markdown_docs():
-		content = path.read_text(encoding="utf-8")
+		content = path.read_text(encoding="utf-8").replace("**", "")
 		relative = path.relative_to(ROOT).as_posix()
 		for pattern, kind in _CAPABILITY_COUNT_PATTERNS:
 			for match in re.finditer(pattern, content):

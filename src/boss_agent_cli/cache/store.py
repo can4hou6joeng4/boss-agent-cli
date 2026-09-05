@@ -27,6 +27,13 @@ class CacheStore:
 				job_id TEXT NOT NULL,
 				greeted_at REAL NOT NULL
 			);
+			CREATE TABLE IF NOT EXISTS recruiter_greet_records (
+				geek_id TEXT NOT NULL,
+				job_id TEXT NOT NULL,
+				status TEXT NOT NULL,
+				updated_at REAL NOT NULL,
+				PRIMARY KEY (geek_id, job_id)
+			);
 			CREATE TABLE IF NOT EXISTS search_cache (
 				cache_key TEXT PRIMARY KEY,
 				response TEXT NOT NULL,
@@ -559,6 +566,32 @@ class CacheStore:
 			(security_id,),
 		).fetchone()
 		return row is not None
+
+	def claim_recruiter_greet(self, geek_id: str, job_id: str) -> str | None:
+		"""原子预约首次招呼；重复调用返回状态，不依赖会轮换的 securityId。
+
+		招聘职位和候选人的加密 ID 组成业务键，与求职者 greet_records 隔离。
+		进程退出或响应丢失时保留 pending，禁止自动再次发送。
+		"""
+		with self._conn:
+			cursor = self._conn.execute(
+				"INSERT OR IGNORE INTO recruiter_greet_records VALUES (?, ?, ?, ?)",
+				(geek_id, job_id, "pending", time.time()),
+			)
+			if cursor.rowcount:
+				return None
+			row = self._conn.execute(
+				"SELECT status FROM recruiter_greet_records WHERE geek_id = ? AND job_id = ?",
+				(geek_id, job_id),
+			).fetchone()
+			return str(row[0])
+
+	def record_recruiter_greet(self, geek_id: str, job_id: str) -> None:
+		with self._conn:
+			self._conn.execute(
+				"UPDATE recruiter_greet_records SET status = ?, updated_at = ? WHERE geek_id = ? AND job_id = ?",
+				("sent", time.time(), geek_id, job_id),
+			)
 
 	def get_job_id(self, security_id: str) -> str | None:
 		row = self._conn.execute(

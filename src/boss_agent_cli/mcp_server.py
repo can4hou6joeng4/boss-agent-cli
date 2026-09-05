@@ -14,7 +14,13 @@ from typing import TYPE_CHECKING, Any
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.types import (
+	CallToolRequestParams,
+	CallToolResult,
+	ListToolsResult,
+	PaginatedRequestParams,
+	TextContent,
+)
 
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.mcp_tools import TOOLS
@@ -61,6 +67,10 @@ SERVER_INSTRUCTIONS = (
 	"{ok, data, pagination, error, hints}; when ok is false, read error.code and error.recovery_action and "
 	"act on it (for example AUTH_REQUIRED means the user runs boss login). boss schema is the capability "
 	"source of truth — do not hardcode command tables."
+	" For hr_greet, preview with dry_run and obtain explicit operator approval for that candidate and message "
+	"before setting yes=true. Never infer approval or retry a confirmation failure with yes=true on your own. "
+	"An uncertain send result requires conversation verification, not another send. "
+	"After a post-send error, inspect error.details.sent and stop; a sent greeting must not be repeated."
 )
 
 server = Server(
@@ -122,16 +132,28 @@ def _run_boss(*args: str) -> dict[str, Any]:
 	}
 
 
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-	return TOOLS
+# ── Handler 注册（mcp 2.x） ────────────────────────────────────────
+#
+# 2.0 移除了 `@server.list_tools()` / `@server.call_tool()` 装饰器，改为
+# `add_request_handler(method, params_type, handler)`。除注册方式外还有两处变化：
+#   1. handler 签名从「按需取参」变成固定的 `(ctx, params)`；
+#   2. 返回值从裸 list 变成 Result 对象（`ListToolsResult` / `CallToolResult`）。
+# 本段的形状照抄 SDK 自身在 `mcp/server/mcpserver/server.py` 的注册与 handler 写法，
+# 不是从文档推测的。
 
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-	args = _build_args(name, arguments)
+async def list_tools(ctx: Any, params: "PaginatedRequestParams | None" = None) -> ListToolsResult:
+	return ListToolsResult(tools=TOOLS)
+
+
+async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
+	args = _build_args(params.name, dict(params.arguments or {}))
 	result = _run_boss(*args)
-	return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+	return CallToolResult(content=[TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))])
+
+
+server.add_request_handler("tools/list", PaginatedRequestParams, list_tools)
+server.add_request_handler("tools/call", CallToolRequestParams, call_tool)
 
 
 # ── 入口 ──────────────────────────────────────────────────────────

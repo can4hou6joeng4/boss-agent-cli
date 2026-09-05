@@ -12,7 +12,7 @@ boss schema --format anthropic-tools   # export Claude Tool Use definitions
 boss <cmd> --help                      # options for a single command
 ```
 
-`boss schema` currently exposes 39 top-level commands, plus 9 first-level recruiter
+`boss schema` currently exposes 39 top-level commands, plus 11 first-level recruiter
 subcommands under `hr`, grouped below by workflow stage.
 
 Compatibility setting: `boss config set operating_mode assisted|research`. Both modes can call every implemented capability; schema still reports risk/data classifications, and missing platform implementations return `NOT_SUPPORTED`.
@@ -122,6 +122,12 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 | `boss hr applications` / `hr resume` / `hr chat` / `hr chatmsg` / `hr last-messages` / `hr candidates` / `hr reply` / `hr request-resume` | Candidate applications, resumes, conversations, search, replies, and attached-resume requests |
 | `boss hr recommendations --job-id <encJobId>` | Read rich recommended-candidate cards and first-contact parameters |
 | `boss hr greet ... --message <text> --yes` | Create a conversation, send the first contact once, and clean up its unread state when needed |
+
+Preview the candidate parameters and message with `--dry-run`. Replace it with `--yes` only after the operator explicitly approves that candidate and message. MCP omits `yes` by default; agents must not infer approval, and a preview is not human authorization.
+
+`greet` atomically reserves the encrypted candidate/job pair locally and records a confirmed send. A lost response, process exit, or rate limit leaves the reservation in place and blocks automatic resending. Check `boss hr chat --job-id <id>` and use the official page if needed; do not delete the reservation to resend.
+
+Read-receipt cleanup is part of the same action. `--read-receipt-timeout` defaults to 25 seconds (1–60); lookups, publish, and readback share the remaining budget. Only readback confirming zero unread messages for that conversation yields `read_state.status=cleared`. Unknown unread counts or message IDs do not trigger a receipt. Ordinary cleanup failures return `partial_success=true`; auth, account risk, and rate limits return an error envelope preserving `error.details.sent=true`, with guidance in `hints.operator_actions`. Never resend a greeting because cleanup failed.
 
 ## Resume & AI
 

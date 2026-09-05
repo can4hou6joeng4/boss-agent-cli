@@ -48,10 +48,14 @@ class _BaseHttpClient:
 	_CODE_STOKEN_EXPIRED: int
 	_CODE_RATE_LIMITED: int
 	_ADD_ENDPOINT_HINT: bool = False
-	_INCLUDE_ZP_TOKEN_HEADER: bool = False
 
 	def __init__(
-		self, auth_manager: "AuthManager", *, delay: tuple[float, float] = (1.5, 3.0), cdp_url: str | None = None
+		self,
+		auth_manager: "AuthManager",
+		*,
+		delay: tuple[float, float] = (1.5, 3.0),
+		cdp_url: str | None = None,
+		browser_source: str | None = None,
 	) -> None:
 		self._auth = auth_manager
 		self._delay = delay
@@ -59,6 +63,10 @@ class _BaseHttpClient:
 		self._browser_session: "BrowserSession | None" = None
 		self._throttle = RequestThrottle(delay)
 		self._cdp_url = cdp_url
+		# 浏览器通道来源意图；None = auto（默认路径行为不变）。
+		# 只在此处保存并透传给唯一的 BrowserSession 构造点，不在本类上派生
+		# 任何模式布尔——见 api/browser_source.py 的模块文档。
+		self._browser_source = browser_source
 		self._closed = False
 		self._register()
 
@@ -75,11 +83,7 @@ class _BaseHttpClient:
 	def _get_client(self) -> httpx.Client:
 		if self._client is None:
 			token = self._auth.get_token()
-			headers = browser_headers(
-				self._DEFAULT_HEADERS,
-				token,
-				include_zp_token=self._INCLUDE_ZP_TOKEN_HEADER,
-			)
+			headers = browser_headers(self._DEFAULT_HEADERS, token)
 			self._client = httpx.Client(
 				base_url=self._BASE_URL,
 				cookies=token.get("cookies", {}),
@@ -89,17 +93,37 @@ class _BaseHttpClient:
 			)
 		return self._client
 
-	def _get_browser(self) -> "BrowserSession":
+	def _get_browser(self, *, browser_source: str | None = None) -> "BrowserSession":
+		"""Return the single live browser session for the requested source.
+
+		A source that forbids stored credentials is constructed with an empty
+		cookie/UA payload without calling ``AuthManager.get_token()``. Switching
+		sources closes the previous session first, so the client never keeps the
+		parallel auto/existing-browser slots that #410 removed.
+		"""
+		from boss_agent_cli.api.browser_source import resolve_policy
+
+		policy = resolve_policy(self._browser_source if browser_source is None else browser_source)
+		if self._browser_session is not None:
+			current_name = getattr(getattr(self._browser_session, "_policy", None), "name", None)
+			# BrowserSession always exposes a string policy name. Test doubles and
+			# downstream injected sessions may predate the source seam; keep reusing
+			# those instead of silently replacing them with a real browser process.
+			if isinstance(current_name, str) and current_name != policy.name:
+				self._browser_session.close()
+				self._browser_session = None
+
 		if self._browser_session is None:
 			from boss_agent_cli.api.browser_client import BrowserSession
 
-			token = self._auth.get_token()
+			token = self._auth.get_token() if policy.use_stored_credentials else {}
 			self._browser_session = BrowserSession(
 				cookies=token.get("cookies", {}),
 				user_agent=token.get("user_agent", ""),
 				delay=self._delay,
 				cdp_url=self._cdp_url,
 				logger=getattr(self._auth, "_logger", None),
+				browser_source=policy.name,
 			)
 		return self._browser_session
 
@@ -111,8 +135,12 @@ class _BaseHttpClient:
 
 	# ── httpx request with retry (low-risk ops) ──────────────────────
 
-	def _request(self, method: str, url: str, *, retry: bool = True, **kwargs: Any) -> dict[str, Any]:
+	def _request(self, method: str, url: str, *, retry: bool = True, deadline: float | None = None, **kwargs: Any) -> dict[str, Any]:
 		"""httpx 请求，循环重试（最多 _MAX_RETRIES 次）。"""
+		from boss_agent_cli.api.httpx_helpers import remaining_timeout
+
+		if deadline is not None:
+			retry = False
 		# extra_headers overrides yaml-driven defaults from _headers_for(url); candidate
 		# client never passes it, so the pop is a no-op there (behavior preserved).
 		extra_headers_override: dict[str, str] = kwargs.pop("extra_headers", {})
@@ -124,12 +152,19 @@ class _BaseHttpClient:
 
 			add_stoken_to_get_params(method, kwargs, stoken)
 
-			self._throttle.wait()
+			if deadline is None:
+				self._throttle.wait()
+			else:
+				self._throttle.wait(timeout=remaining_timeout(deadline))
+				kwargs["timeout"] = remaining_timeout(deadline)
+				kwargs["follow_redirects"] = False
 
 			headers = {**self._headers_for(url), **extra_headers_override}
 			resp = client.request(method, url, headers=headers, **kwargs)
 			self._throttle.mark()
 			self._merge_cookies(resp)
+			if deadline is not None:
+				remaining_timeout(deadline)
 
 			# 403 或安全验证 → 刷新 token 重试
 			if resp.status_code == 403 or "安全验证" in resp.text:
@@ -142,7 +177,7 @@ class _BaseHttpClient:
 					raise self._AUTH_ERROR_CLS(message)
 				backoff = (2**attempt) + random.uniform(0.5, 1.5)
 				time.sleep(backoff)
-				self._auth.force_refresh(cdp_url=self._cdp_url)
+				self._auth.force_refresh(cdp_url=self._cdp_url, browser_source=self._browser_source)
 				self._client = None
 				continue
 
@@ -154,7 +189,7 @@ class _BaseHttpClient:
 			if code == self._CODE_STOKEN_EXPIRED and attempt < max_retries:
 				backoff = (2**attempt) + random.uniform(0.5, 1.5)
 				time.sleep(backoff)
-				self._auth.force_refresh(cdp_url=self._cdp_url)
+				self._auth.force_refresh(cdp_url=self._cdp_url, browser_source=self._browser_source)
 				self._client = None
 				continue
 

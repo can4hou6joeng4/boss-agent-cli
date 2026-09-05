@@ -1,6 +1,23 @@
 """Tests for AI configuration store."""
 
 from boss_agent_cli.ai.config import AIConfigStore, PROVIDER_BASE_URLS
+from boss_agent_cli.ai.local_models import RUNTIME_BASE_URLS
+
+#: registry 的期望全集。新增 / 移除 provider 时必须同步这里——这正是让
+#: 「移除」这件事无法静默发生的那道门禁，见 test_provider_registry_matches_the_declared_set_exactly。
+_EXPECTED_PROVIDERS = frozenset({
+	"openai",
+	"deepseek",
+	"moonshot",
+	"openrouter",
+	"qwen",
+	"zhipu",
+	"siliconflow",
+	"atlas",
+	"ollama",
+	"vllm",
+	"custom",
+})
 
 
 def _make_store(tmp_path, monkeypatch) -> AIConfigStore:
@@ -210,18 +227,57 @@ def test_is_configured_missing_model(tmp_path, monkeypatch):
 # ── provider base URLs ───────────────────────────────────────
 
 
-def test_provider_base_urls_completeness():
-	"""All expected providers are in the map."""
-	assert "openai" in PROVIDER_BASE_URLS
-	assert "deepseek" in PROVIDER_BASE_URLS
-	assert "moonshot" in PROVIDER_BASE_URLS
-	assert "openrouter" in PROVIDER_BASE_URLS
-	assert "qwen" in PROVIDER_BASE_URLS
-	assert "zhipu" in PROVIDER_BASE_URLS
-	assert "siliconflow" in PROVIDER_BASE_URLS
-	assert "atlas" in PROVIDER_BASE_URLS
-	assert PROVIDER_BASE_URLS["atlas"] == "https://api.atlascloud.ai/v1"
-	assert "ollama" in PROVIDER_BASE_URLS
-	assert "vllm" in PROVIDER_BASE_URLS
-	assert "custom" in PROVIDER_BASE_URLS
-	assert PROVIDER_BASE_URLS["custom"] is None
+def test_provider_registry_matches_the_declared_set_exactly():
+	"""registry 必须与下面这份清单**逐名相等**——多一个少一个都要红。
+
+	此前这条测试全是 `in` 断言、没有全集断言，于是**删掉一个 provider 条目
+	连同它那行断言，套件照样绿**。`atlas` 就是这样在一次无关重构里被静默删掉、
+	很久之后才有人发现的。
+
+	`CONTRIBUTING.md` 的「新增 AI provider」第 3 条允许直接移除失效端点、
+	不走弃用周期——那条规则成立的前提是**移除这件事必须被看见**。这条测试
+	就是那个前提。
+	"""
+	actual = set(PROVIDER_BASE_URLS)
+	removed = _EXPECTED_PROVIDERS - actual
+	added = actual - _EXPECTED_PROVIDERS
+
+	assert not removed, (
+		f"provider 被移除：{sorted(removed)}。\n"
+		"移除是允许的（CONTRIBUTING「新增 AI provider」第 3 条），但必须是有意的：\n"
+		"  1. 从本文件的 _EXPECTED_PROVIDERS 里删掉\n"
+		"  2. 同步 ai_cmd.py 的 --provider help 文案与 docs/integrations/ai-models.md（中英两份）\n"
+		"  3. 在 CHANGELOG 的 [Unreleased] 记一笔——用户的 config 里可能还存着这个值"
+	)
+	assert not added, (
+		f"新增 provider：{sorted(added)}。\n"
+		"请把它加进本文件的 _EXPECTED_PROVIDERS，并走完 CONTRIBUTING「新增 AI provider」\n"
+		"的五处连锁更新（config.py / ai_cmd.py help / ai-models 中英两份 / 本文件 / CHANGELOG）。"
+	)
+
+
+def test_local_runtimes_stay_in_sync_with_the_provider_registry():
+	"""`RUNTIME_BASE_URLS` 的每一项都必须在 registry 里且 URL 一致。
+
+	两张表各存了一份 ollama / vllm 的地址。`automation/reply_ai.py` 用
+	`frozenset(RUNTIME_BASE_URLS)` 判断「这个 provider 是不是本地模型」，
+	两表漂移会让自动回复的「仅本地」约束静默失效。
+	"""
+	for runtime, url in RUNTIME_BASE_URLS.items():
+		assert runtime in PROVIDER_BASE_URLS, f"本地运行时 {runtime} 不在 PROVIDER_BASE_URLS 里"
+		assert PROVIDER_BASE_URLS[runtime] == url, (
+			f"{runtime} 在两张表里的地址不一致："
+			f"PROVIDER_BASE_URLS={PROVIDER_BASE_URLS[runtime]!r} vs RUNTIME_BASE_URLS={url!r}"
+		)
+
+
+def test_provider_base_url_shape():
+	"""除 `custom` 外每个条目都是形状合法、无尾斜杠的 http(s) 地址。"""
+	assert PROVIDER_BASE_URLS["custom"] is None, "custom 必须为 None —— 它要求用户显式给 --base-url"
+
+	for name, url in PROVIDER_BASE_URLS.items():
+		if name == "custom":
+			continue
+		assert isinstance(url, str) and url, f"{name} 的 base_url 为空"
+		assert url.startswith(("http://", "https://")), f"{name} 的 base_url 不是 http(s)：{url!r}"
+		assert not url.endswith("/"), f"{name} 的 base_url 带尾斜杠，与表内其余条目不一致：{url!r}"

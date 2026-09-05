@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 import weakref
 from typing import Any, Callable, Mapping, MutableMapping
 
@@ -12,7 +13,6 @@ def browser_headers(
 	token: Mapping[str, Any],
 	*,
 	include_client_id: bool = False,
-	include_zp_token: bool = False,
 	default_platform: str | None = None,
 ) -> dict[str, str]:
 	"""Build browser-like headers from persisted auth metadata."""
@@ -21,13 +21,18 @@ def browser_headers(
 		headers["User-Agent"] = str(ua)
 	if include_client_id and (client_id := token.get("x_zp_client_id") or token.get("client_id")):
 		headers["x-zp-client-id"] = str(client_id)
-	cookies = token.get("cookies")
-	if include_zp_token and isinstance(cookies, Mapping) and (bst := cookies.get("bst")):
-		headers["zp_token"] = str(bst)
 	platform_header = sec_ch_ua_platform(default_platform=default_platform)
 	if platform_header:
 		headers["sec-ch-ua-platform"] = platform_header
 	return headers
+
+
+def remaining_timeout(deadline: float) -> float:
+	"""Return the remaining monotonic budget, or stop before another operation."""
+	remaining = deadline - time.monotonic()
+	if remaining <= 0:
+		raise TimeoutError("read receipt deadline exceeded")
+	return remaining
 
 
 def sec_ch_ua_platform(*, default_platform: str | None = None) -> str | None:

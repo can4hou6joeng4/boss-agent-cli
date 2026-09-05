@@ -37,6 +37,7 @@ class JobItem:
 	days_per_week: str = ""
 	least_month: str = ""
 	job_labels: list[str] = field(default_factory=list)
+	lid: str = ""
 
 	@classmethod
 	def from_api(cls, raw: dict[str, Any]) -> "JobItem":
@@ -59,6 +60,7 @@ class JobItem:
 			boss_title=raw.get("bossTitle", ""),
 			boss_active="在线" if raw.get("bossOnline") else "离线",
 			security_id=raw.get("securityId", ""),
+			lid=raw.get("lid", ""),
 			raw_job_type=raw_job_type,
 			employment_type=employment_type_from_raw(raw_job_type),
 			days_per_week=raw.get("daysPerWeekDesc", ""),
@@ -85,6 +87,7 @@ class JobItem:
 			"boss_title": self.boss_title,
 			"boss_active": self.boss_active,
 			"security_id": self.security_id,
+			"lid": self.lid,
 			"raw_job_type": self.raw_job_type,
 			"employment_type": self.employment_type,
 			"days_per_week": self.days_per_week,

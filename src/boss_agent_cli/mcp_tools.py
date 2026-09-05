@@ -89,7 +89,7 @@ def _crawl_task_tools() -> list[Tool]:
 	"""Build crawl MCP tools from the schema instead of duplicating their contract."""
 	tools = _SCHEMA_WITH_AVAILABILITY["commands"]["crawl"].get("mcp_tools", [])
 	return [
-		Tool(name=tool["name"], description=tool["description"], inputSchema=tool["inputSchema"])
+		Tool(name=tool["name"], description=tool["description"], input_schema=tool["inputSchema"])
 		for tool in tools
 	]
 
@@ -129,7 +129,7 @@ TOOLS = [
 	Tool(
 		name="boss_wizard",
 		description="执行、恢复、查询或停止与真人向导共享的持久化 workflow；先调用 boss schema 发现 wizard_catalog",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"action": {
@@ -157,17 +157,17 @@ TOOLS = [
 	Tool(
 		name="boss_status",
 		description="检查 BOSS 直聘登录态",
-		inputSchema={"type": "object", "properties": {}, "required": []},
+		input_schema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_doctor",
 		description="诊断本地运行环境、依赖、登录态和网络连通性",
-		inputSchema={"type": "object", "properties": {}, "required": []},
+		input_schema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_search",
 		description="按关键词和筛选条件搜索 BOSS 直聘职位列表。支持城市、薪资、经验、学历、福利等多维度筛选。",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"query": {"type": "string", "description": "搜索关键词（如 Golang、Python 后端）"},
@@ -186,7 +186,7 @@ TOOLS = [
 	Tool(
 		name="boss_recommend",
 		description="获取基于简历的个性化职位推荐",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"page": {"type": "integer", "description": "页码", "default": 1},
@@ -197,7 +197,7 @@ TOOLS = [
 	Tool(
 		name="boss_detail",
 		description="查看职位详情。参数为 security_id（从 search/recommend 结果获取）。",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"security_id": {"type": "string", "description": "职位的 security_id"},
@@ -209,7 +209,7 @@ TOOLS = [
 	Tool(
 		name="boss_greet",
 		description="向招聘者打招呼。需要 security_id 和 job_id。",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"security_id": {"type": "string", "description": "职位的 security_id"},
@@ -221,7 +221,7 @@ TOOLS = [
 	Tool(
 		name="boss_chat",
 		description="查看沟通列表，支持按发起方和时间筛选",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"from_who": {"type": "string", "enum": ["boss", "me"], "description": "筛选发起方"},
@@ -234,7 +234,7 @@ TOOLS = [
 	Tool(
 		name="boss_me",
 		description="获取当前登录用户信息（基本信息、简历、求职期望、投递记录）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"section": {
@@ -249,22 +249,22 @@ TOOLS = [
 	Tool(
 		name="boss_cities",
 		description="列出支持的城市列表（约 40 个）",
-		inputSchema={"type": "object", "properties": {}, "required": []},
+		input_schema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_interviews",
 		description="查看面试邀请列表",
-		inputSchema={"type": "object", "properties": {}, "required": []},
+		input_schema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_history",
 		description="查看浏览历史",
-		inputSchema={"type": "object", "properties": {}, "required": []},
+		input_schema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_chatmsg",
 		description="查看与指定好友的聊天消息历史",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"security_id": {"type": "string", "description": "好友的 security_id"},
@@ -278,7 +278,7 @@ TOOLS = [
 	Tool(
 		name="boss_chat_summary",
 		description="基于聊天历史生成结构化摘要与下一步建议",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"security_id": {"type": "string", "description": "好友的 security_id"},
@@ -289,7 +289,7 @@ TOOLS = [
 	Tool(
 		name="boss_mark",
 		description="给联系人添加或移除标签（新招呼/沟通中/已约面/不合适/收藏等）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"security_id": {"type": "string", "description": "联系人的 security_id"},
@@ -302,7 +302,7 @@ TOOLS = [
 	Tool(
 		name="boss_exchange",
 		description="请求交换联系方式（手机号或微信）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"security_id": {"type": "string", "description": "联系人的 security_id"},
@@ -313,7 +313,7 @@ TOOLS = [
 	Tool(
 		name="boss_apply",
 		description="发起投递或立即沟通动作（幂等，不会重复投递）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"security_id": {"type": "string", "description": "职位的 security_id"},
@@ -325,7 +325,7 @@ TOOLS = [
 	Tool(
 		name="boss_batch_greet",
 		description="搜索后批量打招呼（上限 10）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"query": {"type": "string", "description": "搜索关键词"},
@@ -339,7 +339,7 @@ TOOLS = [
 	Tool(
 		name="boss_show",
 		description="按编号快速查看上次搜索或推荐结果中的职位详情",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"number": {"type": "integer", "description": "职位编号（从搜索结果中获取）"},
@@ -350,7 +350,7 @@ TOOLS = [
 	Tool(
 		name="boss_export",
 		description="导出搜索结果为 CSV / JSON / HTML 文件，支持 BOSS 直聘搜索页 URL 复用筛选条件。默认脱敏 job_id/security_id/boss_name，HTML 始终省略平台标识、招聘者姓名和薪资。",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"query": {"type": "string", "description": "搜索关键词；提供 url 时可省略"},
@@ -374,12 +374,12 @@ TOOLS = [
 	Tool(
 		name="boss_pipeline",
 		description="聚合聊天和面试数据，生成统一候选进度视图",
-		inputSchema={"type": "object", "properties": {}, "required": []},
+		input_schema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_follow_up",
 		description="筛出需要优先跟进的候选项（未读、超时未推进、面试）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"days_stale": {"type": "integer", "description": "超过 N 天未推进视为待跟进", "default": 3},
@@ -390,7 +390,7 @@ TOOLS = [
 	Tool(
 		name="boss_digest",
 		description="汇总新增职位、待跟进会话和面试项的只读日报（支持 md 输出便于邮件/飞书直发）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"days_stale": {"type": "integer", "description": "超过 N 天未推进视为待跟进", "default": 3},
@@ -403,7 +403,7 @@ TOOLS = [
 	Tool(
 		name="boss_config",
 		description="查看和修改配置项",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"action": {"type": "string", "enum": ["list", "get", "set", "reset"], "description": "操作类型"},
@@ -416,7 +416,7 @@ TOOLS = [
 	Tool(
 		name="boss_clean",
 		description="清理过期缓存和临时文件",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"dry_run": {"type": "boolean", "description": "仅预览不删除", "default": False},
@@ -428,7 +428,7 @@ TOOLS = [
 	Tool(
 		name="boss_stats",
 		description="投递转化漏斗统计（只读聚合打招呼、投递、候选池、监控数据）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"days": {"type": "integer", "description": "统计窗口天数", "default": 30},
@@ -439,7 +439,7 @@ TOOLS = [
 	Tool(
 		name="boss_agent_run",
 		description="招聘自动化：运行一轮自动扫描、决策、阈值控制、执行和线索生成",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"dry_run": {
@@ -455,7 +455,7 @@ TOOLS = [
 	Tool(
 		name="boss_agent_train",
 		description="招聘自动化：训练校准模式，默认演练满足阈值的动作",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"limit": {"type": "integer", "description": "本轮最多处理多少个会话"},
@@ -466,12 +466,12 @@ TOOLS = [
 	Tool(
 		name="boss_agent_review",
 		description="招聘自动化兼容接口：查看旧版本遗留的人工复核队列",
-		inputSchema={"type": "object", "properties": {}, "required": []},
+		input_schema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_agent_review_approve",
 		description="招聘自动化兼容接口：处理旧版本复核项并写入 pending 队列",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"id": {"type": "string", "description": "review item id"},
@@ -482,7 +482,7 @@ TOOLS = [
 	Tool(
 		name="boss_agent_review_reject",
 		description="招聘自动化兼容接口：拒绝旧版本复核项并记录跳过事件",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"id": {"type": "string", "description": "review item id"},
@@ -494,17 +494,17 @@ TOOLS = [
 	Tool(
 		name="boss_agent_pending",
 		description="招聘自动化兼容接口：查看旧版本遗留的待执行动作队列",
-		inputSchema={"type": "object", "properties": {}, "required": []},
+		input_schema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_agent_stats",
 		description="招聘自动化：查看执行、跳过、历史队列和熔断统计",
-		inputSchema={"type": "object", "properties": {}, "required": []},
+		input_schema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_agent_stop",
 		description="招聘自动化：打开熔断，停止后续自动执行",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"reason": {"type": "string", "description": "熔断原因", "default": "manual-stop"},
@@ -515,7 +515,7 @@ TOOLS = [
 	Tool(
 		name="boss_ai_reply",
 		description="基于招聘者消息生成回复草稿（2-3 条候选，支持简历参考和语气偏好）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"recruiter_message": {"type": "string", "description": "招聘者消息文本"},
@@ -534,7 +534,7 @@ TOOLS = [
 	Tool(
 		name="boss_ai_interview_prep",
 		description="基于目标职位描述生成模拟面试题与准备建议（支持简历参考定制题目）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"jd_text": {"type": "string", "description": "目标职位描述文本"},
@@ -547,7 +547,7 @@ TOOLS = [
 	Tool(
 		name="boss_ai_chat_coach",
 		description="基于聊天记录诊断沟通状态并给出下一步行动建议与现成消息模板",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"chat_text": {"type": "string", "description": "聊天记录文本"},
@@ -564,12 +564,12 @@ TOOLS = [
 	Tool(
 		name="boss_resume_list",
 		description="列出所有本地简历（名称、创建时间、关联职位数）",
-		inputSchema={"type": "object", "properties": {}, "required": []},
+		input_schema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_resume_show",
 		description="查看指定简历的完整内容（基本信息、教育、工作经历、技能、项目）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"name": {"type": "string", "description": "简历名称"},
@@ -580,7 +580,7 @@ TOOLS = [
 	Tool(
 		name="boss_ai_analyze_jd",
 		description="分析职位描述并评估简历匹配度，输出匹配分数和差距分析",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"jd_text": {"type": "string", "description": "职位描述文本"},
@@ -592,7 +592,7 @@ TOOLS = [
 	Tool(
 		name="boss_ai_optimize",
 		description="基于目标职位描述优化简历（输出优化后结构，不直接写回磁盘）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"resume": {"type": "string", "description": "简历名称"},
@@ -604,7 +604,7 @@ TOOLS = [
 	Tool(
 		name="boss_ai_suggest",
 		description="基于目标职位给出简历改进建议（按优先级排序，不修改简历）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"resume": {"type": "string", "description": "简历名称"},
@@ -616,7 +616,7 @@ TOOLS = [
 	Tool(
 		name="boss_ai_fit",
 		description="基于本地简历和候选池已缓存职位详情生成逐岗匹配度、能力缺口和关键词命中报告",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"resume": {"type": "string", "description": "简历名称"},
@@ -628,7 +628,7 @@ TOOLS = [
 	Tool(
 		name="boss_ai_suggest_keywords",
 		description="基于候选池职位分析推荐搜索关键词组合",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"limit": {"type": "integer", "description": "候选池职位数上限", "default": 20},
@@ -639,7 +639,7 @@ TOOLS = [
 	Tool(
 		name="boss_ai_resume_optimize",
 		description="基于目标岗位优化简历措辞（仅建议，不修改简历）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"resume": {"type": "string", "description": "简历名称"},
@@ -652,7 +652,7 @@ TOOLS = [
 	Tool(
 		name="boss_ai_cover_letter",
 		description="基于本地简历与目标岗位起草求职信/自我介绍草稿（仅草稿，不发送）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"resume": {"type": "string", "description": "简历名称"},
@@ -671,12 +671,12 @@ TOOLS = [
 	Tool(
 		name="boss_watch_list",
 		description="列出所有已保存的监控条件",
-		inputSchema={"type": "object", "properties": {}, "required": []},
+		input_schema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_watch_run",
 		description="执行指定监控并返回新增职位列表",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"name": {"type": "string", "description": "监控名称"},
@@ -687,17 +687,17 @@ TOOLS = [
 	Tool(
 		name="boss_preset_list",
 		description="列出所有搜索预设",
-		inputSchema={"type": "object", "properties": {}, "required": []},
+		input_schema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_shortlist_list",
 		description="查看候选池中的所有职位",
-		inputSchema={"type": "object", "properties": {}, "required": []},
+		input_schema={"type": "object", "properties": {}, "required": []},
 	),
 	Tool(
 		name="boss_favorites_list",
 		description="预览 BOSS 职位收藏单页及有效状态（不落库）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"page": {"type": "integer", "description": "页码"},
@@ -708,7 +708,7 @@ TOOLS = [
 	Tool(
 		name="boss_shortlist_add",
 		description="将职位加入本地候选池，可附加本地标签和备注",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"security_id": {"type": "string", "description": "职位安全 ID"},
@@ -722,7 +722,7 @@ TOOLS = [
 	Tool(
 		name="boss_shortlist_annotate",
 		description="更新本地候选池职位的标签和备注",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"security_id": {"type": "string", "description": "职位安全 ID"},
@@ -737,7 +737,7 @@ TOOLS = [
 	Tool(
 		name="boss_shortlist_compare",
 		description="本地对比候选池职位，可按标签过滤",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"tag": {"type": "string", "description": "只比较包含该标签的本地候选职位"},
@@ -748,7 +748,7 @@ TOOLS = [
 	Tool(
 		name="boss_shortlist_remove",
 		description="从候选池移除职位",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"security_id": {"type": "string", "description": "职位安全 ID"},
@@ -760,7 +760,7 @@ TOOLS = [
 	Tool(
 		name="boss_preset_add",
 		description="保存搜索预设",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"name": {"type": "string", "description": "预设名称"},
@@ -777,7 +777,7 @@ TOOLS = [
 	Tool(
 		name="boss_preset_remove",
 		description="删除指定搜索预设",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"name": {"type": "string", "description": "预设名称"},
@@ -788,7 +788,7 @@ TOOLS = [
 	Tool(
 		name="boss_watch_add",
 		description="保存增量监控的搜索条件",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"name": {"type": "string", "description": "监控名称"},
@@ -802,7 +802,7 @@ TOOLS = [
 	Tool(
 		name="boss_watch_remove",
 		description="删除指定监控",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"name": {"type": "string", "description": "监控名称"},
@@ -813,7 +813,7 @@ TOOLS = [
 	Tool(
 		name="boss_hr_applications",
 		description="招聘者模式：查看候选人投递申请列表",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"job_id": {"type": "string", "description": "按职位筛选（可选）"},
@@ -826,7 +826,7 @@ TOOLS = [
 	Tool(
 		name="boss_hr_candidates",
 		description="招聘者模式：搜索候选人",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"query": {"type": "string", "description": "搜索关键词（可选，不传时返回默认候选集）"},
@@ -848,7 +848,7 @@ TOOLS = [
 	Tool(
 		name="boss_hr_recommendations",
 		description="招聘者模式：读取推荐牛人完整卡片和首次开聊所需参数",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"job_id": {"type": "string", "description": "招聘职位的加密 ID"},
@@ -860,7 +860,7 @@ TOOLS = [
 	Tool(
 		name="boss_hr_greet",
 		description="招聘者模式：单次建立会话、发送首次招呼，并按需处理该会话红点",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"geek_id": {"type": "string", "description": "推荐卡片 encryptGeekId"},
@@ -870,15 +870,17 @@ TOOLS = [
 				"security_id": {"type": "string", "description": "推荐卡片 securityId"},
 				"suid": {"type": "string", "description": "可选 suid，当前通常为空", "default": ""},
 				"message": {"type": "string", "description": "首次招呼内容"},
-				"yes": {"type": "boolean", "description": "必须为 true 才会真实发送"},
+				"yes": {"type": "boolean", "default": False, "description": "人工确认位；只有操作者明确批准此候选人和话术后才置 true，不得自行推断或在确认失败后自动改为 true"},
+				"dry_run": {"type": "boolean", "default": False, "description": "只预览候选人和话术，不发送"},
+				"read_receipt_timeout": {"type": "number", "minimum": 1, "maximum": 60, "default": 25, "description": "发送后清红点的总预算（秒）"},
 			},
-			"required": ["geek_id", "job_id", "expect_id", "lid", "security_id", "message", "yes"],
+			"required": ["geek_id", "job_id", "expect_id", "lid", "security_id", "message"],
 		},
 	),
 	Tool(
 		name="boss_hr_chat",
 		description="招聘者模式：查看与候选人的沟通列表（含未读数和最近消息摘要）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"page": {"type": "integer", "description": "页码", "default": 1},
@@ -891,7 +893,7 @@ TOOLS = [
 	Tool(
 		name="boss_hr_chatmsg",
 		description="招聘者模式：查看与指定候选人的聊天消息历史",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
@@ -904,7 +906,7 @@ TOOLS = [
 	Tool(
 		name="boss_hr_last_messages",
 		description="招聘者模式：批量查看候选人最近消息摘要",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"friend_ids": {
@@ -922,7 +924,7 @@ TOOLS = [
 	Tool(
 		name="boss_hr_resume",
 		description="招聘者模式：查看候选人在线简历",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"geek_id": {"type": "string", "description": "候选人 geek_id"},
@@ -936,7 +938,7 @@ TOOLS = [
 	Tool(
 		name="boss_hr_exchange",
 		description="招聘者模式：请求交换候选人手机号或微信",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
@@ -948,7 +950,7 @@ TOOLS = [
 	Tool(
 		name="boss_hr_reply",
 		description="招聘者模式：回复候选人消息",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
@@ -960,7 +962,7 @@ TOOLS = [
 	Tool(
 		name="boss_hr_request_resume",
 		description="招聘者模式：请求候选人分享附件简历",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
@@ -971,7 +973,7 @@ TOOLS = [
 	Tool(
 		name="boss_hr_jobs",
 		description="招聘者模式：查看职位列表，或执行上线/下线操作",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"action": {"type": "string", "description": "操作类型", "enum": ["list", "online", "offline"], "default": "list"},
@@ -983,7 +985,7 @@ TOOLS = [
 	Tool(
 		name="boss_hr_jobs_detail",
 		description="招聘者模式：查看指定职位的完整详情（包括岗位描述 postDescription）",
-		inputSchema={
+		input_schema={
 			"type": "object",
 			"properties": {
 				"enc_job_id": {"type": "string", "description": "职位的加密 ID（encryptJobId）"},

@@ -11,7 +11,6 @@ from typing import Any, cast
 from boss_agent_cli.api import recruiter_endpoints as ep
 from boss_agent_cli.api._base_client import _BaseHttpClient
 from boss_agent_cli.api.httpx_helpers import make_client_registry
-from boss_agent_cli.api.recruiter_mqtt import RecruiterMqttCredentials, mark_chat_read
 
 _OPEN_CLIENTS, _close_open_clients = make_client_registry()
 
@@ -173,13 +172,20 @@ class BossRecruiterClient(_BaseHttpClient):
 	_CODE_STOKEN_EXPIRED = ep.CODE_STOKEN_EXPIRED
 	_CODE_RATE_LIMITED = ep.CODE_RATE_LIMITED
 	_ADD_ENDPOINT_HINT = True
-	_INCLUDE_ZP_TOKEN_HEADER = True
 
 	def _register(self) -> None:
 		_OPEN_CLIENTS.add(self)
 
 	def _unregister(self) -> None:
 		_OPEN_CLIENTS.discard(self)
+
+	def _headers_for(self, url: str) -> dict[str, str]:
+		headers = super()._headers_for(url)
+		if url in (ep.BOSS_RECOMMEND_GEEK_LIST_URL, ep.BOSS_CHAT_START_URL):
+			# 从当前 jar 取值，包含上次响应轮换的 bst；不改变既有端点的请求头。
+			if bst := self._get_client().cookies.get("bst"):
+				headers["zp_token"] = str(bst)
+		return headers
 
 	def _browser_request(
 		self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None
@@ -325,11 +331,12 @@ class BossRecruiterClient(_BaseHttpClient):
 
 	# ── 候选人列表与筛选 ────────────────────────────────
 
-	def friend_list(self, page: int = 1, label_id: int = 0, job_id: str | None = None) -> dict[str, Any]:
+	def friend_list(self, page: int = 1, label_id: int = 0, job_id: str | None = None, *, deadline: float | None = None) -> dict[str, Any]:
 		data: dict[str, Any] = {"labelId": label_id, "page": page}
 		if job_id:
 			data["encJobId"] = job_id
-		return self._request("POST", ep.BOSS_FRIEND_LIST_URL, data=data)
+		options: dict[str, Any] = {"deadline": deadline} if deadline is not None else {}
+		return self._request("POST", ep.BOSS_FRIEND_LIST_URL, data=data, **options)
 
 	def friend_detail(self, friend_ids: list[int]) -> dict[str, Any]:
 		data = {"friendIds": ",".join(str(i) for i in friend_ids)}
@@ -477,9 +484,10 @@ class BossRecruiterClient(_BaseHttpClient):
 
 	# ── 消息 / 聊天 ──────────────────────────────────────
 
-	def last_messages(self, friend_ids: list[int]) -> dict[str, Any]:
+	def last_messages(self, friend_ids: list[int], *, deadline: float | None = None) -> dict[str, Any]:
 		data = {"friendIds": ",".join(str(i) for i in friend_ids), "src": 0}
-		return self._request("POST", ep.BOSS_LAST_MESSAGES_URL, data=data)
+		options: dict[str, Any] = {"deadline": deadline} if deadline is not None else {}
+		return self._request("POST", ep.BOSS_LAST_MESSAGES_URL, data=data, **options)
 
 	def chat_history(self, gid: int, *, count: int = 20, max_msg_id: int | None = None) -> dict[str, Any]:
 		params: dict[str, Any] = {"gid": gid, "c": count, "src": 0}
@@ -707,11 +715,18 @@ class BossRecruiterClient(_BaseHttpClient):
 		data = {"uid": uid}
 		return self._request("POST", ep.BOSS_EXCHANGE_CONTENT_URL, data=data)
 
-	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0) -> dict[str, Any]:
-		"""Publish one verified Techwolf messageRead packet through MQTT/WebSocket."""
+	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0, deadline: float | None = None) -> dict[str, Any]:
+		"""Publish one read receipt; the caller must verify the unread state."""
+		import time
+
+		from boss_agent_cli.api.recruiter_mqtt import RecruiterMqttCredentials, mark_chat_read
+
+		if deadline is None:
+			deadline = time.monotonic() + 25
 		batch = self._request(
 			"POST",
 			ep.BOSS_BATCH_REQUESTS_URL,
+			deadline=deadline,
 			json={
 				"subReqs": [
 					{"method": "GET", "path": "/wapi/zppassport/get/wt"},
@@ -719,8 +734,16 @@ class BossRecruiterClient(_BaseHttpClient):
 				]
 			},
 		)
-		ws_config = self._request("GET", ep.BOSS_WS_CONFIG_URL)
+		if batch.get("code") != 0:
+			return batch
 		batch_data = batch.get("zpData") or {}
+		for path in ("/wapi/zppassport/get/wt", "/wapi/zpuser/wap/getUserInfo.json"):
+			sub_response = batch_data.get(path) or {}
+			if sub_response.get("code") != 0:
+				return cast("dict[str, Any]", sub_response)
+		ws_config = self._request("GET", ep.BOSS_WS_CONFIG_URL, deadline=deadline)
+		if ws_config.get("code") != 0:
+			return ws_config
 		wt_data = (batch_data.get("/wapi/zppassport/get/wt") or {}).get("zpData") or {}
 		user_data = (batch_data.get("/wapi/zpuser/wap/getUserInfo.json") or {}).get("zpData") or {}
 		servers = (ws_config.get("zpData") or {}).get("result") or []
@@ -736,11 +759,12 @@ class BossRecruiterClient(_BaseHttpClient):
 				uniqid=str(user_data.get("uid") or user_data["userId"]),
 				client_ip=str(user_data.get("clientIP") or ""),
 			),
-			cookies=cast("dict[str, Any]", token.get("cookies") or {}),
+			cookies=dict(self._get_client().cookies.items()),
 			user_agent=str(token.get("user_agent") or ep.DEFAULT_HEADERS.get("User-Agent") or ""),
 			peer_uid=peer_uid,
 			message_id=message_id,
 			user_source=user_source,
+			deadline=deadline,
 		)
 		return {"code": 0, "message": "Success", "zpData": result}
 

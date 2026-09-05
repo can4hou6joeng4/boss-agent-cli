@@ -147,6 +147,7 @@ boss --cdp-url http://localhost:9222 login --cdp
 |--------|------|---------------|
 | `AUTH_REQUIRED` | 未登录 | `boss login` |
 | `AUTH_EXPIRED` | 登录过期 | `boss login` |
+| `BROWSER_SESSION_NOT_FOUND` | 已选择现有浏览器来源，但 Bridge/CDP 会话或目标页面不可用 | 运行 `boss doctor`；在日常浏览器中打开并登录 BOSS 直聘，连接 Bridge 后重试 |
 | `RATE_LIMITED` | 频率过高 | 等待后重试 |
 | `TOKEN_REFRESH_FAILED` | Token 刷新失败 | `boss login` |
 | `ACCOUNT_RISK` | 风控拦截 | 停止当前 workflow，保留 run ID/checkpoint；处理登录或安全页后再显式恢复 |
@@ -156,6 +157,8 @@ boss --cdp-url http://localhost:9222 login --cdp
 | `WORKFLOW_PLAN_MISMATCH` | 现有 `run_id` 与请求 plan 不一致 | 使用原 plan 恢复，或不传 `run_id` 创建新任务 |
 | `INVALID_PARAM` | 参数错误 | 修正参数 |
 | `ALREADY_GREETED` | 已打过招呼 | 跳过 |
+| `CONFIRMATION_REQUIRED` | 未确认具体候选人和话术 | 先用 `hr greet --dry-run` 预览；操作者明确批准后才加 `--yes`，Agent 不可自行补确认 |
+| `GREET_RESULT_UNKNOWN` | 已预约发送，但结果未确认 | 用 `boss hr chat --job-id <id>` 核对会话，禁止自动重发；本地保留预约，必要时在官方页面处理 |
 | `GREET_LIMIT` | 今日次数用完 | 告知用户 |
 | `NETWORK_ERROR` | 网络错误 | 重试 |
 | `AI_NOT_CONFIGURED` | AI 未配置 | `boss ai config` |

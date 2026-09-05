@@ -129,6 +129,12 @@ boss crawl stop <run_id>
 | `boss hr recommendations --job-id <encJobId>` | 读取推荐牛人完整卡片和首次开聊参数 |
 | `boss hr greet ... --message <话术> --yes` | 建立候选人会话、发送首次招呼，并在需要时处理会话红点 |
 
+先在同一组候选人参数和话术后加 `--dry-run` 预览；操作者明确批准该候选人和话术后，才改为 `--yes` 发送。MCP 的 `yes` 默认不传，Agent 不得自行确认；预览本身不构成人工批准。
+
+`greet` 按候选人和招聘职位的加密 ID 在本地原子预约，成功后记录已发送；响应丢失、进程退出或限流时保留预约，禁止自动重发。使用 `boss hr chat --job-id <id>` 核对会话，必要时在官方页面处理，不要删除记录来重发。
+
+清红点与发送属于同一动作，`--read-receipt-timeout` 默认为 25 秒（1–60），查询、回执和回读共用剩余预算。只有回读确认该会话未读数为零才返回 `read_state.status=cleared`；未读数或消息 ID 不明时不发送回执。普通收尾失败返回 `partial_success=true`；认证、风控或限流返回错误信封并在 `error.details.sent=true` 保留已发送事实，操作者指引在 `hints.operator_actions`，不可因收尾失败重发招呼。
+
 ## 简历与 AI
 
 | 命令 | 说明 |

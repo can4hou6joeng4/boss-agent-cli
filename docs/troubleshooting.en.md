@@ -181,6 +181,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 |------------|---------|----------------|
 | `AUTH_REQUIRED` | Not logged in | `boss login` |
 | `AUTH_EXPIRED` | Session expired | `boss login` |
+| `BROWSER_SESSION_NOT_FOUND` | An existing-browser source was selected, but its Bridge/CDP session or target page is unavailable | Run `boss doctor`; open and log in to BOSS Zhipin in the daily browser, connect Bridge, then retry |
 | `RATE_LIMITED` | Too many requests | Wait and retry |
 | `TOKEN_REFRESH_FAILED` | stoken refresh failed | `boss login` |
 | `ACCOUNT_RISK` | Risk-control block (code 36) | Stop the workflow, retain its run ID/checkpoint, and resume only after resolving the account or security page |
@@ -190,6 +191,8 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `WORKFLOW_PLAN_MISMATCH` | An existing `run_id` is bound to a different plan | Resume with the original plan or omit `run_id` to create a new run |
 | `JOB_NOT_FOUND` | Job removed or invalid | Skip |
 | `ALREADY_GREETED` | Already messaged recruiter | Skip |
+| `CONFIRMATION_REQUIRED` | Candidate and message not approved | Preview with `hr greet --dry-run`; set `--yes` only after explicit operator approval. Agents must not infer approval. |
+| `GREET_RESULT_UNKNOWN` | Send reserved, outcome unconfirmed | Check `boss hr chat --job-id <id>`; never automatically resend. Keep the local reservation and use the official page if needed. |
 | `ALREADY_APPLIED` | Already applied | Skip |
 | `GREET_LIMIT` | Daily greet quota hit | Pause until tomorrow |
 | `NETWORK_ERROR` | Connection failed | Retry with backoff |

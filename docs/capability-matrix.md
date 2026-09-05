@@ -42,8 +42,8 @@
 
 | 能力 | CLI 命令 | 需要登录 | 通道 |
 |---|---|---|---|
-| 沟通列表 | `boss chat` | 是 | 平台适配器 |
-| 聊天消息 | `boss chatmsg [--raw]` | 是 | 平台适配器；`--raw` 保留结构化 body/链接/职位卡片字段 |
+| 沟通列表 | `boss chat` | 是 | Bridge 已连接时复用现有浏览器只读会话；否则使用本地凭据的 httpx |
+| 聊天消息 | `boss chatmsg [--raw]` | 是 | Bridge 已连接时复用现有浏览器只读会话；否则使用本地凭据的 httpx；`--raw` 保留结构化 body/链接/职位卡片字段 |
 | 聊天摘要 | `boss chat-summary` | 是 | 平台适配器 + 本地处理 |
 | 联系人标签 | `boss mark` | 是 | 平台适配器 |
 | 交换联系方式 | `boss exchange` | 是 | 平台适配器 |
@@ -111,6 +111,7 @@
 
 说明：
 - **通道**：httpx 为直接 API 请求。命中风控时停止；browser/hook adapter 禁止无界重试，并要求 checkpoint 与脱敏。AI 服务为第三方大模型 API，不应输入未获授权的聊天记录、简历或联系方式。
+- **现有浏览器会话**：Bridge 已连接是本切片的显式使用信号，但不等于已验证目标页面登录。候选通道耗尽时返回 `BROWSER_SESSION_NOT_FOUND` + `boss doctor`；Bridge 未连接且本地无凭据仍返回 `AUTH_REQUIRED` + `boss login`。浏览器路径不继承 httpx 的 stoken 刷新和限流重试。
 - 若以 CLI 直连为主，优先通过 `boss schema` 进行能力发现与参数校验；当前 schema 会同时暴露 `supported_platforms` 与 `supported_recruiter_platforms`。
 - 当前多平台状态：`boss platforms` 返回本地平台注册与能力状态，也可通过 `boss platforms --platform qiancheng` / `--platform 51job` 只查看单个平台或别名；`zhipin` 已覆盖求职者与招聘者实现；`zhilian` 已接通候选者侧链路，招聘者侧通过 `agent` browser/CDP adapter V1 接入；`qiancheng` / 51job 仅为已注册占位适配器，真实工作流统一返回 `NOT_SUPPORTED`。
 - `crawl` 使用独立 Chrome profile、跨进程速率预算、SQLite 断点和 `crawl stop` kill switch。细粒度 MCP crawl tools 提供已有 run 的 `crawl_status/results/shortlist` 本地操作，`boss_wizard` 可启动、恢复和停止共享 workflow。默认 Hook 为 `none`；本地 Hook 目录必须提供 `SHA256SUMS`。风险码、安全页或预算耗尽会停止并返回恢复命令。

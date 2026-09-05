@@ -459,8 +459,12 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		]
 		if arguments.get("suid"):
 			args.extend(["--suid", str(arguments["suid"])])
-		if arguments.get("yes"):
+		if arguments.get("yes") is True:
 			args.append("--yes")
+		if arguments.get("dry_run") is True:
+			args.append("--dry-run")
+		if "read_receipt_timeout" in arguments:
+			args.extend(["--read-receipt-timeout", str(arguments["read_receipt_timeout"])])
 		return args
 
 	if name == "hr_jobs":

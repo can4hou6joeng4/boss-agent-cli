@@ -491,7 +491,7 @@ SCHEMA_DATA = {
 				"--lid": {
 					"type": "string",
 					"default": "",
-					"description": "列表项 ID（可选，提高匹配精度）",
+					"description": "列表项 ID（可选，从 search/recommend 结果的 lid 字段获取，提高匹配精度）",
 				},
 			},
 		},
@@ -881,7 +881,7 @@ SCHEMA_DATA = {
 				{"name": "job_id", "required": True, "description": "加密职位 ID"},
 			],
 			"options": {
-				"--lid": {"type": "string", "default": "", "description": "列表项 ID（可选）"},
+				"--lid": {"type": "string", "default": "", "description": "列表项 ID（可选，从 search/recommend 结果的 lid 字段获取）"},
 			},
 		},
 		"shortlist": {
@@ -1049,7 +1049,13 @@ SCHEMA_DATA = {
 		"hr": {
 			"description": "招聘者模式快捷命令。已实现的候选人搜索、简历、沟通、联系方式交换和消息发送在 assisted/research 下均可调用。",
 			"args": [],
-			"options": {},
+			"options": {
+				"greet": {
+					"--yes": {"type": "bool", "default": False, "description": "操作者明确批准该候选人和话术后才可发送"},
+					"--dry-run": {"type": "bool", "default": False, "description": "只预览，不发送"},
+					"--read-receipt-timeout": {"type": "float", "default": 25, "description": "清红点总预算（秒，1–60）"},
+				},
+			},
 			"subcommands": {
 				"applications": "查看候选人投递申请列表",
 				"resume": "查看候选人在线简历或发起联系方式交换",
@@ -1106,6 +1112,16 @@ SCHEMA_DATA = {
 		},
 	},
 	"error_codes": {
+		"CONFIRMATION_REQUIRED": {
+			"message": "尚未获得操作者对该候选人和话术的明确批准",
+			"recoverable": True,
+			"recovery_action": "确认候选人和话术后重新执行并加 --yes",
+		},
+		"GREET_RESULT_UNKNOWN": {
+			"message": "首次招呼状态未确认，禁止自动重发",
+			"recoverable": False,
+			"recovery_action": "先用 boss hr chat --job-id <id> 核对会话；保留本地预约，必要时在官方页面处理",
+		},
 		"AUTH_EXPIRED": {
 			"message": "登录态过期",
 			"recoverable": True,
@@ -1140,6 +1156,11 @@ SCHEMA_DATA = {
 			"message": "Chrome 调试连接不可用",
 			"recoverable": True,
 			"recovery_action": "boss login",
+		},
+		"BROWSER_SESSION_NOT_FOUND": {
+			"message": "未发现可复用的现有浏览器会话",
+			"recoverable": True,
+			"recovery_action": "boss doctor",
 		},
 		"BROWSER_KERNEL_MISSING": {
 			"message": "patchright 浏览器内核缺失或与所需修订版不匹配",
