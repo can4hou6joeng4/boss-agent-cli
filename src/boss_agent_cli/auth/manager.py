@@ -3,6 +3,7 @@ from typing import Any
 
 from boss_agent_cli.auth.browser import login_via_browser, login_via_cdp, probe_cdp, refresh_stoken, refresh_stoken_via_cdp
 from boss_agent_cli.auth.cookie_extract import extract_cookies
+from boss_agent_cli.auth.curl_import import parse_curl_auth
 from boss_agent_cli.auth.qr_login import qr_login_httpx
 from boss_agent_cli.auth.token_store import TokenStore
 from boss_agent_cli.output import Logger
@@ -105,6 +106,17 @@ class AuthManager:
 		self._store.save(token)
 		self._token = token
 		return {**token, "_method": method}
+
+	def import_curl(self, command: str) -> dict[str, Any]:
+		"""验证导入的 Cookie 后替换原生登录态；失败不降级、不覆盖旧会话。"""
+		if self._platform != "zhipin":
+			raise ValueError("cURL 导入目前仅支持 BOSS 直聘")
+		token = parse_curl_auth(command)
+		if not self._verify_cookie(token):
+			raise AuthRequired("导入登录态未通过验证")
+		self._store.save(token)
+		self._token = token
+		return {**token, "_method": "cURL 导入"}
 
 	def _has_primary_cookie(self, token: dict[str, Any]) -> bool:
 		cookies = token.get("cookies", {})

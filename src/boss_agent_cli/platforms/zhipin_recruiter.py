@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 # BOSS 直聘错误码 → 统一错误码映射
 _ERROR_CODE_MAP: dict[int, str] = {
+	7: "AUTH_REQUIRED",
 	9: "RATE_LIMITED",
 	36: "ACCOUNT_RISK",
 	37: "TOKEN_REFRESH_FAILED",
@@ -174,8 +175,8 @@ class BossRecruiterPlatform(RecruiterPlatform):
 	def exchange_content(self, uid: int) -> dict[str, Any]:
 		return self._client.exchange_content(uid)
 
-	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0, deadline: float | None = None) -> dict[str, Any]:
-		return self._client.mark_read(peer_uid=peer_uid, message_id=message_id, user_source=user_source, deadline=deadline)
+	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0, deadline: float | None = None, allow_mqtt_session: bool = False) -> dict[str, Any]:
+		return self._client.mark_read(peer_uid=peer_uid, message_id=message_id, user_source=user_source, deadline=deadline, allow_mqtt_session=allow_mqtt_session)
 
 	# ── 面试 ──────────────────────────────────────────────
 

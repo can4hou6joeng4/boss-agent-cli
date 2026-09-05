@@ -173,7 +173,7 @@ class RecruiterPlatform(ABC):
 		"""获取交换内容。"""
 		raise NotImplementedError(f"{self.name} does not implement exchange_content")
 
-	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0, deadline: float | None = None) -> dict[str, Any]:
+	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0, deadline: float | None = None, allow_mqtt_session: bool = False) -> dict[str, Any]:
 		"""发送已读回执；传输成功不代表未读状态已更新。"""
 		raise NotImplementedError(f"{self.name} does not implement mark_read")
 

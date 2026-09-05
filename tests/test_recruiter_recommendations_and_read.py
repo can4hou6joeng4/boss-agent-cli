@@ -167,15 +167,14 @@ def test_greet_read_state_skips_mqtt_when_conversation_has_no_unread() -> None:
 
 def test_greet_read_state_marks_latest_unread_in_same_action() -> None:
 	platform = _platform_mock()
-	platform.friend_list.side_effect = [
-		{"code": 0, "zpData": {"result": [{"securityId": "security", "uid": 123, "unreadMsgCount": unread}]}}
-		for unread in (1, 0)
-	]
+	platform.friend_list.return_value = {
+		"code": 0, "zpData": {"result": [{"securityId": "security", "uid": 123, "unreadMsgCount": 1}]},
+	}
 	platform.last_messages.return_value = {
 		"code": 0,
 		"zpData": [{"uid": 123, "lastMsgInfo": {"messageId": 456}}],
 	}
-	platform.mark_read.return_value = {"code": 0, "zpData": {"ok": True}}
+	platform.mark_read.return_value = {"code": 0, "zpData": {"published": True}}
 
 	result = _read_state_after_greet(
 		platform,
@@ -183,10 +182,12 @@ def test_greet_read_state_marks_latest_unread_in_same_action() -> None:
 		geek_id="geek",
 		job_id="job",
 		security_id="security",
+		allow_mqtt_session=True,
 	)
 
-	assert result == {"status": "cleared", "unread": 0}
-	platform.mark_read.assert_called_once_with(peer_uid=123, message_id=456, user_source=0, deadline=ANY)
+	assert result == {"status": "published"}
+	platform.mark_read.assert_called_once_with(peer_uid=123, message_id=456, user_source=0, deadline=ANY, allow_mqtt_session=True)
+	platform.friend_list.assert_called_once()
 
 
 def test_greet_read_state_failure_never_retries_greeting() -> None:
@@ -207,13 +208,15 @@ def test_greet_read_state_failure_never_retries_greeting() -> None:
 
 @patch("boss_agent_cli.commands.recruiter.recommendations.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.recommendations.AuthManager")
-def test_greet_command_returns_partial_success_without_resending(mock_auth_cls: MagicMock, mock_platform_factory: MagicMock, tmp_path: Path) -> None:
+@patch("boss_agent_cli.commands.recruiter.recommendations.run_read_receipt")
+def test_greet_command_returns_partial_success_without_resending(mock_receipt: MagicMock, mock_auth_cls: MagicMock, mock_platform_factory: MagicMock, tmp_path: Path) -> None:
 	platform = _platform_mock()
 	platform.__enter__.return_value = platform
 	platform.__exit__.return_value = None
 	platform.start_chat.return_value = {"code": 0, "zpData": {}}
 	platform.friend_list.side_effect = httpx.ReadTimeout("timeout")
 	mock_platform_factory.return_value = platform
+	mock_receipt.side_effect = lambda **kwargs: _run_mock_receipt(platform, **kwargs)
 	runner = CliRunner()
 
 	result = runner.invoke(cli, [
@@ -251,8 +254,16 @@ def greeting_platform() -> MagicMock:
 	platform = _platform_mock()
 	platform.__enter__.return_value = platform
 	platform.start_chat.return_value = {"code": 0, "zpData": {"securityId": "security", "uid": 123, "unread": 0}}
-	with patch("boss_agent_cli.commands.recruiter.recommendations.AuthManager"), patch("boss_agent_cli.commands.recruiter.recommendations.get_recruiter_platform_instance", return_value=platform):
+	with patch("boss_agent_cli.commands.recruiter.recommendations.AuthManager"), patch("boss_agent_cli.commands.recruiter.recommendations.get_recruiter_platform_instance", return_value=platform), patch(
+		"boss_agent_cli.commands.recruiter.recommendations.run_read_receipt", side_effect=lambda **kwargs: _run_mock_receipt(platform, **kwargs),
+	):
 		yield platform
+
+
+def _run_mock_receipt(platform: MagicMock, **kwargs: Any) -> dict[str, Any]:
+	for key in ("data_dir", "platform_name", "delay", "cdp_url"):
+		kwargs.pop(key)
+	return _read_state_after_greet(platform, **kwargs)
 
 
 def test_dry_run_has_no_auth_network_or_cache(greeting_args: list[str], tmp_path: Path) -> None:
@@ -274,6 +285,27 @@ def test_greet_deduplicates_when_security_id_rotates(greeting_args: list[str], g
 	greeting_platform.start_chat.assert_called_once()
 
 
+def test_greet_default_defers_mqtt_and_preserves_sent(greeting_args: list[str], greeting_platform: MagicMock) -> None:
+	greeting_platform.start_chat.return_value = {"code": 0, "zpData": {"encryptFriendId": "geek", "friendId": 123, "unread": 1}}
+	result = CliRunner().invoke(cli, greeting_args + ["--yes"])
+	body = json.loads(result.output)
+	assert result.exit_code == 0
+	assert body["data"]["sent"] is True
+	assert body["data"]["partial_success"] is True
+	assert body["data"]["read_state"]["status"] == "deferred"
+	assert any("网页连接" in action for action in body["hints"]["operator_actions"])
+	greeting_platform.mark_read.assert_not_called()
+	greeting_platform.last_messages.assert_not_called()
+
+
+def test_dry_run_discloses_mqtt_risk_without_auth(greeting_args: list[str]) -> None:
+	with patch("boss_agent_cli.commands.recruiter.recommendations.AuthManager") as auth:
+		result = CliRunner().invoke(cli, greeting_args + ["--dry-run", "--allow-mqtt-session"])
+	assert result.exit_code == 0
+	assert any("挤掉网页" in action for action in json.loads(result.output)["hints"]["operator_actions"])
+	auth.assert_not_called()
+
+
 @pytest.mark.parametrize("failure", [httpx.ReadTimeout("lost response"), {"code": 9}, {"code": 37}])
 def test_uncertain_or_rejected_send_cannot_be_automatically_retried(greeting_args: list[str], greeting_platform: MagicMock, failure: Any) -> None:
 	if isinstance(failure, Exception):
@@ -293,6 +325,7 @@ def test_uncertain_or_rejected_send_cannot_be_automatically_retried(greeting_arg
 
 
 @pytest.mark.parametrize("failure,code", [
+	({"code": 7}, "AUTH_REQUIRED"),
 	({"code": 36}, "ACCOUNT_RISK"),
 	({"code": 37}, "TOKEN_REFRESH_FAILED"),
 	({"code": 9}, "RATE_LIMITED"),
@@ -313,21 +346,92 @@ def test_post_send_errors_stop_workflow_and_preserve_sent(greeting_args: list[st
 
 
 @pytest.mark.parametrize("unread", [None, -1, True])
-def test_unknown_unread_never_sends_receipt(unread: Any) -> None:
+def test_unknown_unread_without_permission_defers_receipt(unread: Any) -> None:
 	platform = _platform_mock()
 	platform.friend_list.return_value = {"code": 0, "zpData": {"result": [{"securityId": "s", "uid": 123, "unread": unread, "messageId": 456}]}}
 	result = _read_state_after_greet(platform, start_result={"code": 0}, geek_id="g", job_id="j", security_id="s")
-	assert result["status"] == "unknown"
+	assert result == {"status": "deferred", "reason": "mqtt_session_not_authorized", "unread": None}
 	platform.mark_read.assert_not_called()
 
 
-def test_puback_without_readback_is_not_cleared() -> None:
+@pytest.mark.parametrize("published", [None, False, 1, "true"])
+def test_success_code_without_publish_confirmation_is_not_completed(published: Any) -> None:
 	platform = _platform_mock()
 	platform.friend_list.return_value = {"code": 0, "zpData": {"result": [{"securityId": "s", "uid": 123, "unread": 1, "messageId": 456}]}}
-	platform.mark_read.return_value = {"code": 0}
-	result = _read_state_after_greet(platform, start_result={"code": 0}, geek_id="g", job_id="j", security_id="s")
-	assert result == {"status": "unknown", "reason": "read_receipt_unverified"}
-	assert platform.friend_list.call_count == 2
+	platform.mark_read.return_value = {"code": 0, "zpData": {"published": published}}
+	result = _read_state_after_greet(platform, start_result={"code": 0}, geek_id="g", job_id="j", security_id="s", allow_mqtt_session=True)
+	assert result == {"status": "unknown", "reason": "read_receipt_publish_unconfirmed"}
+	platform.friend_list.assert_called_once()
+
+
+def test_missing_unread_uses_matching_latest_message_without_readback() -> None:
+	platform = _platform_mock()
+	platform.friend_list.return_value = {"code": 0, "zpData": {"result": [
+		{"encryptFriendId": "geek", "friendId": 123, "friendSource": 1},
+	]}}
+	platform.last_messages.return_value = {"code": 0, "zpData": [
+		{"uid": 999, "lastMsgInfo": {"msgId": 777}},
+		{"uid": 123, "lastMsgInfo": {"msgId": 456}},
+	]}
+	platform.mark_read.return_value = {"code": 0, "zpData": {"published": True}}
+	result = _read_state_after_greet(platform, start_result={"code": 0}, geek_id="geek", job_id="job", security_id="s", allow_mqtt_session=True)
+	assert result == {"status": "published"}
+	platform.friend_list.assert_called_once_with(job_id="job", deadline=ANY)
+	platform.last_messages.assert_called_once_with([123], deadline=ANY)
+	platform.mark_read.assert_called_once_with(peer_uid=123, message_id=456, user_source=1, deadline=ANY, allow_mqtt_session=True)
+	platform.start_chat.assert_not_called()
+
+
+def test_start_response_with_target_and_message_needs_no_lookup() -> None:
+	platform = _platform_mock()
+	platform.mark_read.return_value = {"code": 0, "zpData": {"published": True}}
+	result = _read_state_after_greet(
+		platform, start_result={"code": 0, "zpData": {"encryptFriendId": "geek", "friendId": 123, "msgId": 456}},
+		geek_id="geek", job_id="job", security_id="s", allow_mqtt_session=True,
+	)
+	assert result == {"status": "published"}
+	platform.friend_list.assert_not_called()
+	platform.last_messages.assert_not_called()
+	platform.mark_read.assert_called_once()
+
+
+@pytest.mark.parametrize("records", [[], [{"uid": 999, "lastMsgInfo": {"msgId": 456}}], [{"uid": 123}], [{"uid": 123, "msgId": 456}, {"uid": 123, "msgId": 789}]])
+def test_unresolved_latest_message_never_publishes(records: list[dict[str, Any]]) -> None:
+	platform = _platform_mock()
+	platform.last_messages.return_value = {"code": 0, "zpData": records}
+	result = _read_state_after_greet(
+		platform, start_result={"code": 0, "zpData": {"encryptFriendId": "geek", "friendId": 123}},
+		geek_id="geek", job_id="job", security_id="s", allow_mqtt_session=True,
+	)
+	assert result == {"status": "unknown", "reason": "message_id_unresolved"}
+	platform.mark_read.assert_not_called()
+
+
+def test_unresolved_conversation_never_publishes() -> None:
+	platform = _platform_mock()
+	platform.friend_list.return_value = {"code": 0, "zpData": {"result": [{"encryptFriendId": "other", "friendId": 999}]}}
+	result = _read_state_after_greet(platform, start_result={"code": 0}, geek_id="geek", job_id="job", security_id="s", allow_mqtt_session=True)
+	assert result == {"status": "unknown", "reason": "conversation_unresolved"}
+	platform.mark_read.assert_not_called()
+	platform.last_messages.assert_not_called()
+
+
+def test_greet_publish_ack_completes_cleanup_without_readback(greeting_args: list[str], greeting_platform: MagicMock) -> None:
+	greeting_platform.start_chat.return_value = {"code": 0, "zpData": {"encryptFriendId": "geek", "friendId": 123, "msgId": 456}}
+	greeting_platform.mark_read.return_value = {"code": 0, "zpData": {"published": True}}
+	result = CliRunner().invoke(cli, greeting_args + ["--yes", "--allow-mqtt-session"])
+	body = json.loads(result.output)
+	assert result.exit_code == 0
+	assert body["data"]["sent"] is True
+	assert body["data"]["partial_success"] is False
+	assert body["data"]["read_state"] == {"status": "published"}
+	greeting_platform.start_chat.assert_called_once()
+	greeting_platform.mark_read.assert_called_once()
+	greeting_platform.friend_list.assert_not_called()
+	second = CliRunner().invoke(cli, greeting_args + ["--yes", "--allow-mqtt-session"])
+	assert json.loads(second.output)["error"]["code"] == "ALREADY_GREETED"
+	greeting_platform.start_chat.assert_called_once()
+	greeting_platform.mark_read.assert_called_once()
 
 
 def test_card_id_never_overrides_message_id() -> None:
@@ -350,8 +454,8 @@ def test_recruiter_reservation_is_atomic_and_separate_from_candidate_records(tmp
 def test_budget_exhaustion_prevents_receipt():
 	platform = _platform_mock()
 	platform.friend_list.return_value = {"code": 0, "zpData": {"result": [{"securityId": "s", "uid": 123, "unread": 1, "messageId": 456}]}}
-	with patch("boss_agent_cli.api.httpx_helpers.time.monotonic", side_effect=[100, 126]):
-		result = _read_state_after_greet(platform, start_result={"code": 0}, geek_id="g", job_id="j", security_id="s", timeout=25)
+	with patch("boss_agent_cli.api.httpx_helpers.time.monotonic", side_effect=[100, 100, 126]):
+		result = _read_state_after_greet(platform, start_result={"code": 0}, geek_id="g", job_id="j", security_id="s", timeout=25, allow_mqtt_session=True)
 	assert result["status"] == "timeout"
 	platform.mark_read.assert_not_called()
 

@@ -288,6 +288,11 @@ SCHEMA_DATA = {
 			"description": "按当前平台登录（zhipin / zhilian）；两种兼容运行模式共享相同能力，平台风控仍会停止当前流程。",
 			"args": [],
 			"options": {
+				"--curl-file": {
+					"type": "string",
+					"default": None,
+					"description": "从 Copy as cURL (bash) 文件导入 BOSS 登录态，- 表示标准输入；验证后替换原生会话，不执行原请求，不能与 --cdp 或 --cookie-source 混用",
+				},
 				"--timeout": {
 					"type": "int",
 					"default": 120,
@@ -1054,6 +1059,7 @@ SCHEMA_DATA = {
 					"--yes": {"type": "bool", "default": False, "description": "操作者明确批准该候选人和话术后才可发送"},
 					"--dry-run": {"type": "bool", "default": False, "description": "只预览，不发送"},
 					"--read-receipt-timeout": {"type": "float", "default": 25, "description": "清红点总预算（秒，1–60）"},
+					"--allow-mqtt-session": {"type": "bool", "default": False, "description": "单独批准清红点新建 MQTT 会话，可能导致网页掉线"},
 				},
 			},
 			"subcommands": {
@@ -1067,7 +1073,7 @@ SCHEMA_DATA = {
 				"reply": "回复候选人消息",
 				"request-resume": "请求候选人分享附件简历",
 				"recommendations": "读取推荐牛人完整卡片和首次开聊参数",
-				"greet": "单次建立候选人会话、发送首次招呼并按需处理红点（需 --yes）",
+				"greet": "单次建立候选人会话、发送首次招呼并按需发送已读回执（需 --yes）；published 表示 MQTT 发布已确认，不回读红点状态",
 			},
 		},
 	},

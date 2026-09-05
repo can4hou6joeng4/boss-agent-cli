@@ -859,7 +859,7 @@ TOOLS = [
 	),
 	Tool(
 		name="boss_hr_greet",
-		description="招聘者模式：单次建立会话、发送首次招呼，并按需处理该会话红点",
+		description="招聘者模式：单次建立会话、发送首次招呼，并按需发送已读回执；published 表示 MQTT 发布已确认，不回读红点状态",
 		input_schema={
 			"type": "object",
 			"properties": {
@@ -873,6 +873,7 @@ TOOLS = [
 				"yes": {"type": "boolean", "default": False, "description": "人工确认位；只有操作者明确批准此候选人和话术后才置 true，不得自行推断或在确认失败后自动改为 true"},
 				"dry_run": {"type": "boolean", "default": False, "description": "只预览候选人和话术，不发送"},
 				"read_receipt_timeout": {"type": "number", "minimum": 1, "maximum": 60, "default": 25, "description": "发送后清红点的总预算（秒）"},
+				"allow_mqtt_session": {"type": "boolean", "default": False, "description": "允许清红点新建独立 MQTT 会话，可能挤掉网页连接；仅在操作者单独明确批准此风险后置 true，yes 不代表此授权"},
 			},
 			"required": ["geek_id", "job_id", "expect_id", "lid", "security_id", "message"],
 		},

@@ -715,8 +715,11 @@ class BossRecruiterClient(_BaseHttpClient):
 		data = {"uid": uid}
 		return self._request("POST", ep.BOSS_EXCHANGE_CONTENT_URL, data=data)
 
-	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0, deadline: float | None = None) -> dict[str, Any]:
-		"""Publish one read receipt; the caller must verify the unread state."""
+	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0, deadline: float | None = None, allow_mqtt_session: bool = False) -> dict[str, Any]:
+		"""Publish one read receipt and wait for MQTT acknowledgement."""
+		if allow_mqtt_session is not True:
+			raise PermissionError("Independent MQTT sessions may disconnect the webpage; explicit permission required")
+
 		import time
 
 		from boss_agent_cli.api.recruiter_mqtt import RecruiterMqttCredentials, mark_chat_read
@@ -750,16 +753,21 @@ class BossRecruiterClient(_BaseHttpClient):
 		if not wt_data.get("wt2") or not user_data.get("token") or not user_data.get("userId") or not servers:
 			return {"code": -1, "message": "MQTT bootstrap failed", "zpData": {"ok": False}}
 		token = self._auth.get_token()
+		cookies = self._get_client().cookies
+		parts = str(cookies.get("__a") or "").split(".")
+		# 网页的 uniqid 来自 __a，不是 userId；缺失时留空，不伪造用户标识。
+		uniqid = parts[1] + parts[0] if len(parts) > 1 else ""
 		result = mark_chat_read(
 			RecruiterMqttCredentials(
 				server=str(servers[0]),
 				username=str(user_data["token"]),
 				password=str(wt_data["wt2"]),
 				user_id=int(user_data["userId"]),
-				uniqid=str(user_data.get("uid") or user_data["userId"]),
+				uniqid=uniqid,
 				client_ip=str(user_data.get("clientIP") or ""),
+				model=str(cookies.get("sid") or ""),
 			),
-			cookies=dict(self._get_client().cookies.items()),
+			cookies=cookies,
 			user_agent=str(token.get("user_agent") or ep.DEFAULT_HEADERS.get("User-Agent") or ""),
 			peer_uid=peer_uid,
 			message_id=message_id,

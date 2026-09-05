@@ -16,6 +16,7 @@ from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshF
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
+from boss_agent_cli.commands.recruiter._read_receipt_worker import run_read_receipt
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output
 from boss_agent_cli.platforms.recruiter_base import RecruiterPlatform
 
@@ -52,7 +53,7 @@ def _positive_int(item: dict[str, Any], *keys: str) -> int | None:
 def _candidate_record(value: Any, *, geek_id: str, security_id: str) -> dict[str, Any] | None:
 	matches: list[dict[str, Any]] = []
 	for record in _records(value, "friendList", "result", "list"):
-		ids = {str(record[key]) for key in ("encryptGeekId", "encryptUid", "geekId") if record.get(key)}
+		ids = {str(record[key]) for key in ("encryptGeekId", "encryptFriendId", "encryptUid", "geekId") if record.get(key)}
 		matched = geek_id in ids if ids else bool(security_id and record.get("securityId") == security_id)
 		if matched:
 			matches.append(record)
@@ -93,22 +94,27 @@ def _read_state_after_greet(
 	job_id: str,
 	security_id: str,
 	timeout: float = 25,
+	allow_mqtt_session: bool = False,
+	deadline: float | None = None,
 ) -> dict[str, Any]:
-	"""在同一预算内查询、发回执和回读；已发送的招呼不重试。"""
-	deadline = time.monotonic() + timeout
+	"""在同一预算内定位会话并发送回执；收到发布确认即结束，不回读红点。"""
+	if deadline is None:
+		deadline = time.monotonic() + timeout
 	try:
+		remaining_timeout(deadline)
 		conversation = _candidate_record(platform.unwrap_data(start_result), geek_id=geek_id, security_id=security_id)
-		if conversation is None or _unread_count(conversation) is None:
+		if conversation is None or _positive_int(conversation, "uid", "friendId", "friend_id", "gid") is None:
 			result = platform.friend_list(job_id=job_id, deadline=deadline)
 			if not platform.is_success(result):
 				return _response_failure(platform, result, "conversation_lookup_failed")
 			conversation = _candidate_record(platform.unwrap_data(result), geek_id=geek_id, security_id=security_id)
+		if conversation is None:
+			return {"status": "unknown", "reason": "conversation_unresolved"}
 		unread = _unread_count(conversation)
-		if unread is None:
-			return {"status": "unknown", "reason": "unread_unresolved"}
 		if unread == 0:
 			return {"status": "not_needed", "unread": 0}
-		assert conversation is not None
+		if allow_mqtt_session is not True:
+			return {"status": "deferred", "reason": "mqtt_session_not_authorized", "unread": unread}
 		peer_uid = _positive_int(conversation, "uid", "friendId", "friend_id", "gid")
 		if peer_uid is None:
 			return {"status": "unknown", "reason": "conversation_unresolved"}
@@ -123,22 +129,12 @@ def _read_state_after_greet(
 			return {"status": "unknown", "reason": "message_id_unresolved"}
 		remaining_timeout(deadline)
 		user_source = _nonnegative_int(conversation, "userSource", "friendSource") or 0
-		result = platform.mark_read(peer_uid=peer_uid, message_id=message_id, user_source=user_source, deadline=deadline)
+		result = platform.mark_read(peer_uid=peer_uid, message_id=message_id, user_source=user_source, deadline=deadline, allow_mqtt_session=True)
 		if not platform.is_success(result):
 			return _response_failure(platform, result, "read_receipt_rejected")
-		remaining_timeout(deadline)
-		result = platform.friend_list(job_id=job_id, deadline=deadline)
-		if not platform.is_success(result):
-			return _response_failure(platform, result, "readback_failed")
-		remaining_timeout(deadline)
-		verified = _candidate_record(platform.unwrap_data(result), geek_id=geek_id, security_id=security_id)
-		if (
-			verified is not None
-			and _positive_int(verified, "uid", "friendId", "friend_id", "gid") == peer_uid
-			and _unread_count(verified) == 0
-		):
-			return {"status": "cleared", "unread": 0}
-		return {"status": "unknown", "reason": "read_receipt_unverified"}
+		if (platform.unwrap_data(result) or {}).get("published") is True:
+			return {"status": "published"}
+		return {"status": "unknown", "reason": "read_receipt_publish_unconfirmed"}
 	except BrowserSourceUnavailable as exc:
 		return {"status": "failed", "error_code": exc.code, "reason": "browser_source_unavailable"}
 	except AccountRiskError:
@@ -202,6 +198,7 @@ def _send_error(ctx: click.Context, *, code: str, job_id: str, details: dict[str
 @click.option("--message", required=True, help="首次招呼内容")
 @click.option("--yes", is_flag=True, help="操作者已明确批准此候选人和话术")
 @click.option("--dry-run", is_flag=True, help="只预览候选人和话术，不发送")
+@click.option("--allow-mqtt-session", is_flag=True, help="允许清红点新建 MQTT 会话，可能导致网页掉线；需单独批准")
 @click.option("--read-receipt-timeout", default=25.0, type=click.FloatRange(min=1, max=60), help="清红点总预算（秒）")
 @click.pass_context
 @handle_auth_errors("recruiter-greet")
@@ -216,6 +213,7 @@ def greet_cmd(
 	message: str,
 	yes: bool,
 	dry_run: bool,
+	allow_mqtt_session: bool,
 	read_receipt_timeout: float,
 ) -> None:
 	"""建立候选人会话并发送首次招呼。"""
@@ -226,9 +224,12 @@ def greet_cmd(
 		handle_error_output(ctx, "recruiter-greet", code="INVALID_PARAM", message="首次招呼内容不能为空")
 		return
 	if dry_run:
+		operator_actions = ["核对候选人和话术；明确批准后才可加 --yes 发送"]
+		if allow_mqtt_session:
+			operator_actions.append("本次已选择独立 MQTT 收尾，可能挤掉网页连接；发送前须单独批准此风险")
 		handle_output(
 			ctx, "recruiter-greet", {**data, "dry_run": True, "message": message},
-			hints={"operator_actions": ["核对候选人和话术；明确批准后才可加 --yes 发送"]},
+			hints={"operator_actions": operator_actions},
 		)
 		return
 	if not yes:
@@ -274,15 +275,17 @@ def greet_cmd(
 			_send_error(ctx, code="GREET_RESULT_UNKNOWN", job_id=job_id, details=data)
 			return
 		try:
-			read_state = _read_state_after_greet(
-				platform, start_result=result, geek_id=geek_id, job_id=job_id,
-				security_id=security_id, timeout=read_receipt_timeout,
+			read_state = run_read_receipt(
+				data_dir=ctx.obj["data_dir"], platform_name=ctx.obj.get("platform", "zhipin"),
+				delay=ctx.obj.get("delay", (1.5, 3.0)), cdp_url=ctx.obj.get("cdp_url"),
+				start_result=result, geek_id=geek_id, job_id=job_id, security_id=security_id,
+				timeout=read_receipt_timeout, allow_mqtt_session=allow_mqtt_session,
 			)
 		except Exception:
 			# 未预期的收尾异常也必须保留 sent，不能进入通用“重试”兜底。
 			_send_error(ctx, code="NETWORK_ERROR", job_id=job_id, details=data)
 			return
-		data.update(read_state=read_state, partial_success=read_state["status"] not in ("not_needed", "cleared"))
+		data.update(read_state=read_state, partial_success=read_state["status"] not in ("not_needed", "published"))
 		if read_code := read_state.get("error_code"):
 			if read_code != "UNKNOWN":
 				_send_error(ctx, code=read_code, job_id=job_id, details=data)
@@ -290,7 +293,9 @@ def greet_cmd(
 		hints = None
 		if data["partial_success"]:
 			hints = {
-				"operator_actions": ["招呼已发送，红点未确认清除；禁止重新发送招呼"],
+				"operator_actions": ["招呼已发送，已读回执未完成；禁止重新发送招呼"],
 				"next_actions": [f"boss hr chat --job-id {job_id}"],
 			}
+			if read_state.get("reason") == "mqtt_session_not_authorized":
+				hints["operator_actions"].append("未开启独立 MQTT 会话，以避免挤掉网页连接；请在官方页面处理红点，不要重发招呼")
 		handle_output(ctx, "recruiter-greet", data, hints=hints)

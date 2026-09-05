@@ -463,6 +463,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.append("--yes")
 		if arguments.get("dry_run") is True:
 			args.append("--dry-run")
+		if arguments.get("allow_mqtt_session") is True:
+			args.append("--allow-mqtt-session")
 		if "read_receipt_timeout" in arguments:
 			args.extend(["--read-receipt-timeout", str(arguments["read_receipt_timeout"])])
 		return args
