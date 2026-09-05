@@ -12,7 +12,7 @@ boss schema --format anthropic-tools   # export Claude Tool Use definitions
 boss <cmd> --help                      # options for a single command
 ```
 
-`boss schema` currently exposes 39 top-level commands, plus 9 first-level recruiter
+`boss schema` currently exposes 39 top-level commands, plus 11 first-level recruiter
 subcommands under `hr`, grouped below by workflow stage.
 
 Compatibility setting: `boss config set operating_mode assisted|research`. Both modes can call every implemented capability; schema still reports risk/data classifications, and missing platform implementations return `NOT_SUPPORTED`.
@@ -45,6 +45,20 @@ In a TTY only `operator_actions` is rendered, to stderr; `next_actions` stays an
 | `boss status` | Check login state (local-only by default; `--live` runs a low-frequency read-only probe) |
 | `boss doctor` | Diagnose environment, dependencies, credential integrity, and network; local-only by default, `--live-probe` opts into a read-only probe |
 | `boss me` | My info (profile / resume / expectations / application records) |
+
+### Import a browser cURL session
+
+If browser Cookie extraction is unavailable, use **Copy as cURL (bash)** on your own authenticated `https://www.zhipin.com` request and save the raw text in a private file:
+
+```bash
+boss login --curl-file /path/to/private-request.txt
+# macOS: read the clipboard through stdin instead of putting credentials in arguments
+pbpaste | boss login --curl-file -
+```
+
+Supports common POSIX cURL syntax, not PowerShell/cmd or Markdown-escaped text. Cannot be combined with `--cdp` / `--cookie-source`. Extracts only inline Cookies, User-Agent and the stoken Cookie; never executes cURL, reads referenced files or replays the request body. One read-only check uses the existing user-info endpoint. Only successful verification **replaces the native encrypted BOSS session**, without merging another account's old Cookies. Verification failure preserves the existing session and does not launch a browser.
+
+This is an alternative credential input, not a login/risk-control bypass or a copy of the browser fingerprint. Later refreshes still follow AuthManager and browser-source policies; browser-free operation is not guaranteed. The `zp_token` header is not persisted separately; recruiter requests derive it from the current `bst` Cookie. Source files and clipboard contents remain sensitive and are not removed by the CLI; do not commit them or paste them into chats.
 
 ## Discovery
 
@@ -120,6 +134,20 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 |---------|-------------|
 | `boss hr jobs list/offline/online/detail` | Job listing, detail, and lifecycle management |
 | `boss hr applications` / `hr resume` / `hr chat` / `hr chatmsg` / `hr last-messages` / `hr candidates` / `hr reply` / `hr request-resume` | Candidate applications, resumes, conversations, search, replies, and attached-resume requests |
+| `boss hr recommendations --job-id <encJobId>` | Read rich recommended-candidate cards and first-contact parameters |
+| `boss hr greet ... --message <text> --yes` | Create a conversation, send the first contact once, and clean up its unread state when needed |
+
+Preview the candidate parameters and message with `--dry-run`. Replace it with `--yes` only after the operator explicitly approves that candidate and message. MCP omits `yes` by default; agents must not infer approval, and a preview is not human authorization.
+
+`greet` atomically reserves the encrypted candidate/job pair locally and records a confirmed send. A lost response, process exit, or rate limit leaves the reservation in place and blocks automatic resending. Check `boss hr chat --job-id <id>` and use the official page if needed; do not delete the reservation to resend.
+
+Cleanup remains part of `greet`, not a separate command. A known zero unread count returns `not_needed`; without MQTT permission, cleanup returns `deferred`. With permission, a missing count does not block a receipt when the exact conversation and latest message ID can be resolved. An unresolved target or message ID returns `unknown` without publishing. Unknown counts in `chat` / `last-messages` remain `null`, not zero.
+
+An independent MQTT session may disconnect the active webpage. Add `--allow-mqtt-session` before sending (MCP: `allow_mqtt_session=true`) only after the operator separately approves that risk. `--yes` approves the candidate and message, not this permission. Random client IDs do not guarantee same-account coexistence; the exact cause of webpage logout remains undetermined and must not be automatically probed with live accounts.
+
+MQTT parameters follow web v11308: a `ws-` prefix with 16 uppercase hexadecimal characters, MQTT 3.1, explicit `cleanSession=true`, and a 10-second connect timeout setting. The password and WebSocket subprotocol come from `get/wt`; handshake cookies use the native jar's domain/path selection for the server's `/chatws`, without overwriting `wt2`. Presence `uniqid` joins the second and first `__a` segments; `model` comes from `sid`, with missing values left empty. The UA uses native auth metadata or the CLI default when absent. Imported cookies without domain/path metadata cannot reproduce browser cookie selection exactly. Connection reuse is not implemented, and the heartbeat calculation is unchanged; parameter alignment does not establish webpage coexistence.
+
+`--read-receipt-timeout` defaults to 25 seconds (1–60). A private short-lived subprocess reuses the native auth store; the shared budget covers startup, lookups, and publish. Timeout kills and reaps the worker to prevent continued background requests, but cannot undo operations already received by the platform. MQTT QoS 1 publish acknowledgement completes cleanup with `read_state.status=published` and `partial_success=false`, without an unread-state readback. This confirms receipt publication, not that the webpage unread count was verified as zero; `cleared` is no longer returned. Ordinary cleanup failures return `partial_success=true`; auth, account risk, and rate limits return an error envelope preserving `error.details.sent=true`, with guidance in `hints.operator_actions`. Never resend a greeting because cleanup failed or to add MQTT permission.
 
 ## Resume & AI
 

@@ -61,8 +61,8 @@ def _message_items(data: Any) -> list[dict[str, Any]]:
 
 
 def _message_status_label(item: dict[str, Any]) -> str:
-	status = item.get("msg_status") or item.get("status")
-	info = item.get("lastMessageInfo")
+	status = item.get("msg_status") if item.get("msg_status") is not None else item.get("status")
+	info = item.get("lastMsgInfo") or item.get("lastMessageInfo")
 	if isinstance(info, dict) and info.get("status") not in (None, ""):
 		status = info.get("status")
 	if isinstance(status, str):
@@ -80,14 +80,32 @@ def _message_text(item: dict[str, Any]) -> str:
 	body = item.get("body")
 	if isinstance(body, dict) and body.get("text") not in (None, ""):
 		return str(body["text"])
+	for key in ("lastMsgInfo", "lastMessageInfo"):
+		info = item.get(key)
+		if isinstance(info, dict) and info.get("showText") not in (None, ""):
+			return str(info["showText"])
 	return "-"
+
+
+def _unread_count(item: dict[str, Any]) -> int | None:
+	for key in ("unread", "unreadMsgCount", "newMsgCount"):
+		value = item.get(key)
+		if isinstance(value, bool) or value in (None, ""):
+			continue
+		try:
+			count = int(str(value))
+		except ValueError:
+			continue
+		if count >= 0:
+			return count
+	return None
 
 
 def _normalize_last_message(item: dict[str, Any]) -> dict[str, Any]:
 	friend_id = _friend_id_for(item)
 	return {
 		"friendId": friend_id,
-		"unread": item.get("unread") if item.get("unread") is not None else item.get("unreadMsgCount") or item.get("newMsgCount") or 0,
+		"unread": _unread_count(item),
 		"msg_status": _message_status_label(item),
 		"last_msg": _message_text(item),
 		"last_time": _format_chat_time(
@@ -107,7 +125,10 @@ def _merge_last_messages(friend_items: list[dict[str, Any]], message_items: list
 		message = messages_by_friend.get(friend_id) if friend_id is not None else None
 		if message is None:
 			message = _normalize_last_message(item)
+		unread = _unread_count(item)
 		item.update({key: value for key, value in message.items() if key != "friendId"})
+		if unread is not None:
+			item["unread"] = unread
 
 
 def _friend_items(data: Any) -> list[dict[str, Any]]:

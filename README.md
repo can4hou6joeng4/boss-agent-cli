@@ -56,7 +56,7 @@ boss-agent-cli 把职位发现、福利筛选、本地简历与 AI、投递沟�
 - **本地候选池与统计**：查看详情后本地保存、读取带有效状态的网页职位收藏并仅同步有效项 / 用标签和备注复盘候选岗位、离线对比、查看漏斗统计 —— `shortlist` `stats` `watch` `preset` `favorites`
 - **AI 求职增强 + 本地模型**：JD 分析、简历润色、定向优化、候选池匹配、模拟面试、沟通指导；本地模型权重外置，支持 Ollama/vLLM OpenAI 兼容接口 —— `ai analyze-jd` `ai local configure` `ai local smoke`
 - **Schema 驱动 + JSON 信封**：stdout 只输出 `{ok, data, pagination, error, hints}` 信封，`boss schema` 是能力真源，适合 CLI 编排 / Shell Agent / MCP / Python SDK
-- **招聘者完整链路**：候选人搜索、投递、简历、聊天/最近消息、回复、联系方式/附件简历请求和职位上下架 —— `hr candidates/applications/resume/chat/last-messages/reply/request-resume/jobs`
+- **招聘者完整链路**：候选人搜索、推荐牛人、首次招呼及会话红点处理、简历、聊天/最近消息、回复和职位管理 —— `hr candidates/recommendations/greet/applications/resume/chat/last-messages/reply/request-resume/jobs`
 - **多平台抽象**：`Platform` / `RecruiterPlatform` 双注册表，`--platform zhipin|zhilian|qiancheng`
 
 ## 🚀 快速开始
@@ -81,6 +81,7 @@ boss stats                                                    # 本地统计
 
 # 招聘者模式
 boss hr candidates "Python" --city 101010100
+boss hr recommendations --job-id <encJobId>
 boss hr jobs list
 ```
 
@@ -106,7 +107,7 @@ boss config set platform zhilian          # 设为默认
 推荐先读：[Agent Quickstart](docs/agent-quickstart.md) · [Capability Matrix](docs/capability-matrix.md) · [Host Examples](docs/agent-hosts.md)
 
 ```json
-// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 73 个已实现工具
+// 方式一：MCP（推荐）—— Claude Desktop / Cursor 等 MCP 宿主，暴露 75 个已实现工具
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
@@ -136,7 +137,7 @@ with BossClient(AuthManager(...)) as client:
 
 ## 📚 命令
 
-`boss schema` 暴露 39 个顶层命令 + 9 个一级招聘者子命令，按工作流分组：
+`boss schema` 暴露 39 个顶层命令 + 11 个一级招聘者子命令，按工作流分组：
 
 - **认证**：`login` · `logout` · `status` · `doctor`
 - **职位发现**：`search` · `detail` · `show` · `cities` · `history`
@@ -145,7 +146,7 @@ with BossClient(AuthManager(...)) as client:
 - **简历 / AI**：`resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai cover-letter` · `ai interview-prep` · `ai chat-coach` · `ai local`
 - **系统 / workflow**：`wizard` · `schema` · `platforms` · `export` · `config` · `clean`
 - **候选者动作**：`greet` · `batch-greet` · `apply` · `exchange` · `chat*` · `pipeline` · `digest`
-- **招聘者**：`hr applications/candidates/resume/chat/chatmsg/last-messages/reply/request-resume/jobs`
+- **招聘者**：`hr applications/candidates/recommendations/greet/resume/chat/chatmsg/last-messages/reply/request-resume/jobs`
 
 完整命令表、参数与福利筛选原理见 **[命令参考](docs/commands.md)**；能力真源是 `boss schema`（支持 `--format openai-tools` / `anthropic-tools` 导出工具定义）。
 

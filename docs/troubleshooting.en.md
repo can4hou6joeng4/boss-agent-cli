@@ -191,6 +191,8 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `WORKFLOW_PLAN_MISMATCH` | An existing `run_id` is bound to a different plan | Resume with the original plan or omit `run_id` to create a new run |
 | `JOB_NOT_FOUND` | Job removed or invalid | Skip |
 | `ALREADY_GREETED` | Already messaged recruiter | Skip |
+| `CONFIRMATION_REQUIRED` | Candidate and message not approved | Preview with `hr greet --dry-run`; set `--yes` only after explicit operator approval. Agents must not infer approval. |
+| `GREET_RESULT_UNKNOWN` | Send reserved, outcome unconfirmed | Check `boss hr chat --job-id <id>`; never automatically resend. Keep the local reservation and use the official page if needed. |
 | `ALREADY_APPLIED` | Already applied | Skip |
 | `GREET_LIMIT` | Daily greet quota hit | Pause until tomorrow |
 | `NETWORK_ERROR` | Connection failed | Retry with backoff |

@@ -5,12 +5,17 @@
 ## [Unreleased]
 
 ### Added
+- `boss login --curl-file` 支持从浏览器 cURL 文本导入 BOSS 登录态，验证后复用原生加密存储，不执行原请求或保存业务请求体。
+- 招聘者模式新增推荐牛人完整卡片和首次招呼闭环；首次招呼使用单次直连请求，成功后在单独批准 `--allow-mqtt-session` 的连接风险时按需发送 MQTT 已读回执，收尾失败不会重发招呼。
 - **公开职位 lid 与浏览器职位卡片接口。** `JobItem` 新增 `lid` 字段（解析自列表响应
   `raw.lid`，缺失时为空串，并随 `to_dict()` 序列化）——取 JD 全文需要 `securityId` + `lid`
   两个参数，此前走 CLI 的调用方拿不到 `lid`。`BossClient` 新增 `job_card_browser(security_id, lid)`，
   强制走浏览器通道获取职位卡片；既有 `job_card()` 的 httpx 优先行为完全不变。
 
 ### Fixed
+- 招呼收尾不再因未读数缺失而中断：准确匹配会话和消息后发送回执，以 MQTT 发布确认返回 `published`，不再回读红点或返回 `cleared`；保留未知状态和防重发保护。
+- MQTT 参数按网页实现对齐：`wt2` 子协议、大写客户端 ID、显式 clean session 和 10 秒连接超时配置；握手保留原生 Cookie jar 的域名/路径规则，不用 MQTT 密码覆盖 Cookie。在线状态包使用 `__a` 派生的 uniqid、`sid` model 并补齐空字段；保留心跳计算、单次连接生命周期和独立会话授权限制，网页共存仍待实测。
+- 招呼收尾识别登录失效 code 7 和会话 `encryptFriendId`；最近消息缺失未读数不再覆盖会话真实计数，支持 `lastMsgInfo.showText`。收尾超时终止私有工作进程，默认不建立可能挤掉网页的独立 MQTT 会话。
 - **stoken 静默刷新现在遵守 `browser_source` 策略表（Issue #387 seam 收尾）。** #410 把浏览器通道
   选择收进策略表后，httpx 通道的 stoken 刷新（`_base_client._request` → `AuthManager.force_refresh`）
   仍绕过策略：`stored-cookie` 下 stoken 过期照样会「CDP 不可用，降级到 headless」，起一个 headless

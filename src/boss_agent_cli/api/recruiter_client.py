@@ -179,6 +179,14 @@ class BossRecruiterClient(_BaseHttpClient):
 	def _unregister(self) -> None:
 		_OPEN_CLIENTS.discard(self)
 
+	def _headers_for(self, url: str) -> dict[str, str]:
+		headers = super()._headers_for(url)
+		if url in (ep.BOSS_RECOMMEND_GEEK_LIST_URL, ep.BOSS_CHAT_START_URL):
+			# 从当前 jar 取值，包含上次响应轮换的 bst；不改变既有端点的请求头。
+			if bst := self._get_client().cookies.get("bst"):
+				headers["zp_token"] = str(bst)
+		return headers
+
 	def _browser_request(
 		self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None
 	) -> dict[str, Any]:
@@ -323,11 +331,12 @@ class BossRecruiterClient(_BaseHttpClient):
 
 	# ── 候选人列表与筛选 ────────────────────────────────
 
-	def friend_list(self, page: int = 1, label_id: int = 0, job_id: str | None = None) -> dict[str, Any]:
+	def friend_list(self, page: int = 1, label_id: int = 0, job_id: str | None = None, *, deadline: float | None = None) -> dict[str, Any]:
 		data: dict[str, Any] = {"labelId": label_id, "page": page}
 		if job_id:
 			data["encJobId"] = job_id
-		return self._request("POST", ep.BOSS_FRIEND_LIST_URL, data=data)
+		options: dict[str, Any] = {"deadline": deadline} if deadline is not None else {}
+		return self._request("POST", ep.BOSS_FRIEND_LIST_URL, data=data, **options)
 
 	def friend_detail(self, friend_ids: list[int]) -> dict[str, Any]:
 		data = {"friendIds": ",".join(str(i) for i in friend_ids)}
@@ -349,6 +358,58 @@ class BossRecruiterClient(_BaseHttpClient):
 		if job_id:
 			params["encJobId"] = job_id
 		return self._request("GET", ep.BOSS_GREET_REC_LIST_URL, params=params)
+
+	def recommend_geeks(self, job_id: str, page: int = 1) -> dict[str, Any]:
+		"""Read the rich 推荐牛人 cards used by the first-contact endpoint."""
+		params: dict[str, Any] = {
+			"age": "16,-1",
+			"school": "0",
+			"activation": "0",
+			"recentNotView": "0",
+			"gender": "0",
+			"exchangeResumeWithColleague": "0",
+			"major": "0",
+			"switchJobFrequency": "0",
+			"keyword1": "-1",
+			"degree": "0",
+			"experience": "0",
+			"intention": "0",
+			"salary": "0",
+			"jobId": job_id,
+			"page": page,
+			"coverScreenMemory": "0",
+			"cardType": "0",
+		}
+		referer = (
+			f"{ep.BASE_URL}/web/frame/recommend/?jobid={job_id}&status=0&filterParams=&t="
+			"&inspectFilterGuide=&version=11211&source=0"
+		)
+		return self._request("GET", ep.BOSS_RECOMMEND_GEEK_LIST_URL, params=params, extra_headers={"Referer": referer})
+
+	def start_chat(
+		self,
+		*,
+		geek_id: str,
+		job_id: str,
+		expect_id: str,
+		lid: str,
+		security_id: str,
+		message: str,
+		suid: str = "",
+	) -> dict[str, Any]:
+		"""Create a recruiter conversation and send its first greeting."""
+		data = {
+			"gid": geek_id,
+			"suid": suid,
+			"jid": job_id,
+			"expectId": expect_id,
+			"lid": lid,
+			"greet": message,
+			"from": "",
+			"securityId": security_id,
+			"customGreetingGuide": "-1",
+		}
+		return self._request("POST", ep.BOSS_CHAT_START_URL, data=data, retry=False)
 
 	# ── 候选人搜索与简历 ──────────────────────────────────
 
@@ -423,9 +484,10 @@ class BossRecruiterClient(_BaseHttpClient):
 
 	# ── 消息 / 聊天 ──────────────────────────────────────
 
-	def last_messages(self, friend_ids: list[int]) -> dict[str, Any]:
+	def last_messages(self, friend_ids: list[int], *, deadline: float | None = None) -> dict[str, Any]:
 		data = {"friendIds": ",".join(str(i) for i in friend_ids), "src": 0}
-		return self._request("POST", ep.BOSS_LAST_MESSAGES_URL, data=data)
+		options: dict[str, Any] = {"deadline": deadline} if deadline is not None else {}
+		return self._request("POST", ep.BOSS_LAST_MESSAGES_URL, data=data, **options)
 
 	def chat_history(self, gid: int, *, count: int = 20, max_msg_id: int | None = None) -> dict[str, Any]:
 		params: dict[str, Any] = {"gid": gid, "c": count, "src": 0}
@@ -652,6 +714,67 @@ class BossRecruiterClient(_BaseHttpClient):
 	def exchange_content(self, uid: int) -> dict[str, Any]:
 		data = {"uid": uid}
 		return self._request("POST", ep.BOSS_EXCHANGE_CONTENT_URL, data=data)
+
+	def mark_read(self, *, peer_uid: int, message_id: int, user_source: int = 0, deadline: float | None = None, allow_mqtt_session: bool = False) -> dict[str, Any]:
+		"""Publish one read receipt and wait for MQTT acknowledgement."""
+		if allow_mqtt_session is not True:
+			raise PermissionError("Independent MQTT sessions may disconnect the webpage; explicit permission required")
+
+		import time
+
+		from boss_agent_cli.api.recruiter_mqtt import RecruiterMqttCredentials, mark_chat_read
+
+		if deadline is None:
+			deadline = time.monotonic() + 25
+		batch = self._request(
+			"POST",
+			ep.BOSS_BATCH_REQUESTS_URL,
+			deadline=deadline,
+			json={
+				"subReqs": [
+					{"method": "GET", "path": "/wapi/zppassport/get/wt"},
+					{"method": "GET", "path": "/wapi/zpuser/wap/getUserInfo.json"},
+				]
+			},
+		)
+		if batch.get("code") != 0:
+			return batch
+		batch_data = batch.get("zpData") or {}
+		for path in ("/wapi/zppassport/get/wt", "/wapi/zpuser/wap/getUserInfo.json"):
+			sub_response = batch_data.get(path) or {}
+			if sub_response.get("code") != 0:
+				return cast("dict[str, Any]", sub_response)
+		ws_config = self._request("GET", ep.BOSS_WS_CONFIG_URL, deadline=deadline)
+		if ws_config.get("code") != 0:
+			return ws_config
+		wt_data = (batch_data.get("/wapi/zppassport/get/wt") or {}).get("zpData") or {}
+		user_data = (batch_data.get("/wapi/zpuser/wap/getUserInfo.json") or {}).get("zpData") or {}
+		servers = (ws_config.get("zpData") or {}).get("result") or []
+		if not wt_data.get("wt2") or not user_data.get("token") or not user_data.get("userId") or not servers:
+			return {"code": -1, "message": "MQTT bootstrap failed", "zpData": {"ok": False}}
+		token = self._auth.get_token()
+		cookies = self._get_client().cookies
+		parts = str(cookies.get("__a") or "").split(".")
+		# 网页的 uniqid 来自 __a，不是 userId；缺失时留空，不伪造用户标识。
+		uniqid = parts[1] + parts[0] if len(parts) > 1 else ""
+		result = mark_chat_read(
+			RecruiterMqttCredentials(
+				server=str(servers[0]),
+				username=str(user_data["token"]),
+				password=str(wt_data["wt2"]),
+				user_id=int(user_data["userId"]),
+				uniqid=uniqid,
+				client_ip=str(user_data.get("clientIP") or ""),
+				model=str(cookies.get("sid") or ""),
+			),
+			cookies=cookies,
+			user_agent=str(token.get("user_agent") or ep.DEFAULT_HEADERS.get("User-Agent") or ""),
+			peer_uid=peer_uid,
+			message_id=message_id,
+			user_source=user_source,
+			deadline=deadline,
+		)
+		return {"code": 0, "message": "Success", "zpData": result}
 
 	# ── 面试 ──────────────────────────────────────────────
 

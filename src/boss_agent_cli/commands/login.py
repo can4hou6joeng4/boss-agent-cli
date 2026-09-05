@@ -1,3 +1,5 @@
+from typing import TextIO
+
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
@@ -122,8 +124,9 @@ def _classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, objec
 @click.option("--timeout", default=120, help="扫码登录超时时间（秒）")
 @click.option("--cookie-source", default=None, help="指定浏览器提取 Cookie（如 chrome/firefox/edge），不指定则自动检测")
 @click.option("--cdp", is_flag=True, default=False, help="强制 CDP 模式（跳过 Cookie 提取，CDP 不可用直接报错）")
+@click.option("--curl-file", type=click.File("r", encoding="utf-8"), default=None, help="从 Copy as cURL (bash) 文件导入 BOSS 登录态；- 表示标准输入")
 @click.pass_context
-def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: bool) -> None:
+def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: bool, curl_file: TextIO | None) -> None:
 	"""登录当前招聘平台（按平台走对应的 Cookie / CDP / 浏览器降级链路）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -132,12 +135,17 @@ def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: 
 
 	auth = AuthManager(data_dir, logger=logger, platform=platform_name)
 	try:
-		token = auth.login(
-			timeout=timeout,
-			cookie_source=cookie_source,
-			cdp_url=cdp_url,
-			force_cdp=cdp,
-		)
+		if curl_file is not None:
+			if cookie_source is not None or cdp:
+				raise ValueError("--curl-file 不能与 --cookie-source 或 --cdp 同时使用")
+			token = auth.import_curl(curl_file.read())
+		else:
+			token = auth.login(
+				timeout=timeout,
+				cookie_source=cookie_source,
+				cdp_url=cdp_url,
+				force_cdp=cdp,
+			)
 		method = token.pop("_method", "未知")
 		status_cmd = boss_command_for_ctx(ctx, "status")
 		search_cmd = boss_command_for_ctx(ctx, "search <query>")
@@ -154,4 +162,16 @@ def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: 
 			},
 		)
 	except Exception as e:
-		emit_error("login", **_classify_login_error(e, ctx))
+		if curl_file is not None:
+			# 文件解码、解析器或网络库的异常可能包含凭据，禁止透传原异常文本。
+			emit_error(
+				"login", code="INVALID_PARAM" if isinstance(e, ValueError) else "LOGIN_CREDENTIAL_EXTRACTION_FAILED",
+				message="cURL 登录态导入失败，未完成会话更新", recoverable=True,
+				recovery_action="核对 BOSS cURL 原始文本、选项及平台登录状态后重新导入",
+				hints={"operator_actions": [
+					"仅支持 BOSS 直聘 Copy as cURL (bash) 原始文本，不能与 --cdp 或 --cookie-source 混用",
+					"检查文件格式、网络和网页登录状态；导入失败不会自动打开浏览器或重放请求",
+				]},
+			)
+		else:
+			emit_error("login", **_classify_login_error(e, ctx))

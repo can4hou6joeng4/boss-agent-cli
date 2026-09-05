@@ -35,6 +35,8 @@ BOSS_SESSION_ENTER_URL = _url("boss_session_enter")
 BOSS_GREET_LIST_URL = _url("boss_greet_list")
 BOSS_GREET_REC_LIST_URL = _url("boss_greet_rec_list")
 BOSS_GREET_NEW_LIST_URL = _url("boss_greet_new_list")
+BOSS_RECOMMEND_GEEK_LIST_URL = _url("boss_recommend_geek_list")
+BOSS_CHAT_START_URL = _url("boss_chat_start")
 
 # ── 候选人搜索与简历查看 ────────────────────────────
 BOSS_SEARCH_GEEK_URL = _url("boss_search_geek")
@@ -52,6 +54,8 @@ BOSS_EXCHANGE_TEST_URL = _url("boss_exchange_test")
 BOSS_EXCHANGE_REQUEST_URL = _url("boss_exchange_request")
 BOSS_EXCHANGE_CONTENT_URL = _url("boss_exchange_content")
 BOSS_CHAT_REPLY_BLOCK_URL = f"{BASE_URL}/wapi/zpblock/chat/reply/block/v2"
+BOSS_BATCH_REQUESTS_URL = _url("boss_batch_requests")
+BOSS_WS_CONFIG_URL = _url("boss_ws_config")
 
 # ── 面试 ────────────────────────────────────────────
 BOSS_INTERVIEW_LIST_URL = _url("boss_interview_list")

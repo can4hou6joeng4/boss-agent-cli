@@ -35,7 +35,7 @@ In Cursor Settings → MCP, add a stdio server that points to this repo's `mcp-s
 }
 ```
 
-Once enabled, Composer will discover all 73 implemented MCP tools, including `boss_wizard`, candidate search/apply/chat workflows, recruiter candidate workflows, local resume tools, and AI helpers.
+Once enabled, Composer will discover all 75 implemented MCP tools, including `boss_wizard`, candidate search/apply/chat workflows, recruiter candidate workflows, local resume tools, and AI helpers.
 
 For Windows / VS Code-style `mcp.json`, use escaped backslashes in the project path:
 

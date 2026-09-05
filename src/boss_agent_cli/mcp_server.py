@@ -67,6 +67,10 @@ SERVER_INSTRUCTIONS = (
 	"{ok, data, pagination, error, hints}; when ok is false, read error.code and error.recovery_action and "
 	"act on it (for example AUTH_REQUIRED means the user runs boss login). boss schema is the capability "
 	"source of truth — do not hardcode command tables."
+	" For hr_greet, preview with dry_run and obtain explicit operator approval for that candidate and message "
+	"before setting yes=true. Never infer approval or retry a confirmation failure with yes=true on your own. "
+	"An uncertain send result requires conversation verification, not another send. "
+	"After a post-send error, inspect error.details.sent and stop; a sent greeting must not be repeated."
 )
 
 server = Server(

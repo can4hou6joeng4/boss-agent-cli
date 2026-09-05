@@ -185,6 +185,39 @@ def test_request_raises_auth_error_after_max_403_retries(mock_http_client_cls, m
 	assert auth.refresh_calls == [None, None, None]
 
 
+@patch("boss_agent_cli.api._base_client.time.sleep")
+def test_request_retry_false_fails_closed_after_one_403(mock_sleep):
+	auth = FakeAuthManager()
+	http_client = FakeHttpxClient([FakeResponse(status_code=403, text="forbidden")])
+	client = BossRecruiterClient(auth)
+	client._client = http_client
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+
+	with pytest.raises(RecruiterAuthError, match="为避免重复写入未自动重试"):
+		client._request("POST", ep.BOSS_CHAT_START_URL, retry=False, data={"greet": "hello"})
+
+	assert len(http_client.calls) == 1
+	assert auth.refresh_calls == []
+	mock_sleep.assert_not_called()
+
+
+@patch("boss_agent_cli.api._base_client.time.sleep")
+def test_request_retry_false_returns_rate_limit_without_retry(mock_sleep):
+	auth = FakeAuthManager()
+	http_client = FakeHttpxClient([FakeResponse(payload={"code": ep.CODE_RATE_LIMITED})])
+	client = BossRecruiterClient(auth)
+	client._client = http_client
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+
+	result = client._request("POST", ep.BOSS_CHAT_START_URL, retry=False, data={"greet": "hello"})
+
+	assert result["code"] == ep.CODE_RATE_LIMITED
+	assert len(http_client.calls) == 1
+	mock_sleep.assert_not_called()
+
+
 @patch("boss_agent_cli.api._base_client.random.uniform", return_value=0)
 @patch("boss_agent_cli.api._base_client.time.sleep")
 @patch("boss_agent_cli.api._base_client.httpx.Client")
@@ -202,3 +235,60 @@ def test_recruiter_refresh_passes_browser_source_to_auth_manager(mock_http_clien
 	client._request("GET", ep.BOSS_FRIEND_LABELS_URL)
 
 	assert auth.refresh_sources == ["stored-cookie"]
+
+
+@pytest.mark.parametrize("code", [37, 9])
+def test_start_chat_never_refreshes_or_retries(code):
+	auth = FakeAuthManager()
+	client = BossRecruiterClient(auth, browser_source="stored-cookie")
+	http_client = FakeHttpxClient([FakeResponse(payload={"code": code})])
+	client._client = http_client
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+	result = client.start_chat(geek_id="g", job_id="j", expect_id="e", lid="l", security_id="s", message="hello")
+	assert result["code"] == code
+	assert len(http_client.calls) == 1
+	assert auth.refresh_calls == []
+
+
+def test_zp_token_is_scoped_and_uses_rotated_cookie():
+	client = BossRecruiterClient(FakeAuthManager())
+	http_client = FakeHttpxClient([
+		FakeResponse(cookies={"bst": "new"}), FakeResponse(), FakeResponse(),
+	])
+	http_client.cookies.set("bst", "old")
+	client._client = http_client
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+	client.recommend_geeks("job")
+	client.start_chat(geek_id="g", job_id="j", expect_id="e", lid="l", security_id="s", message="hello")
+	client.friend_list()
+	assert http_client.calls[0]["headers"]["zp_token"] == "old"
+	assert http_client.calls[1]["headers"]["zp_token"] == "new"
+	assert "zp_token" not in http_client.calls[2]["headers"]
+
+
+def test_receipt_deadline_disables_read_retries():
+	import time
+	auth = FakeAuthManager()
+	client = BossRecruiterClient(auth)
+	http_client = FakeHttpxClient([FakeResponse(payload={"code": 37})])
+	client._client = http_client
+	client._throttle.wait = lambda **kwargs: None
+	client._throttle.mark = lambda: None
+	result = client.friend_list(deadline=time.monotonic() + 10)
+	assert result["code"] == 37
+	assert len(http_client.calls) == 1
+	assert 0 < http_client.calls[0]["kwargs"]["timeout"] <= 10
+	assert auth.refresh_calls == []
+
+
+def test_throttle_cannot_exceed_receipt_budget():
+	from boss_agent_cli.api.throttle import RequestThrottle
+	throttle = RequestThrottle((10, 10))
+	with patch("boss_agent_cli.api.throttle.time.time", return_value=100), patch("boss_agent_cli.api.throttle.time.sleep") as sleep:
+		throttle._last_request_time = 100
+		with pytest.raises(TimeoutError):
+			throttle.wait(timeout=1)
+		sleep.assert_not_called()
+		assert throttle._last_request_time == 100

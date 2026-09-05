@@ -117,6 +117,8 @@ def test_schema_error_codes_cover_all_used_codes():
 
 	# 代码中实际使用的所有错误码（通过审计收集）
 	used_codes = {
+		"CONFIRMATION_REQUIRED",
+		"GREET_RESULT_UNKNOWN",
 		"AUTH_EXPIRED",
 		"AUTH_REQUIRED",
 		"RATE_LIMITED",

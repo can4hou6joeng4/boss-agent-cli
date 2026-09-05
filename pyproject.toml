@@ -43,6 +43,8 @@ dependencies = [
 	"prompt-toolkit>=3.0.43",
 	"pyyaml>=6.0",
 	"websockets>=12.0",
+	# 使用 2.x 的 CallbackAPIVersion.VERSION2；升级大版本前须验证回调与传输契约。
+	"paho-mqtt>=2.1.0,<3.0.0",
 ]
 
 [project.urls]
@@ -190,6 +192,7 @@ module = [
 	"boss_agent_cli.resume.export",
 	"boss_agent_cli.auth.token_store",
 	"boss_agent_cli.auth.cookie_extract",
+	"boss_agent_cli.auth.curl_import",
 	"boss_agent_cli.api.models",
 	"boss_agent_cli.api.throttle",
 	"boss_agent_cli.api.httpx_helpers",
@@ -235,6 +238,7 @@ module = [
 	"boss_agent_cli.automation.zhilian_browser_actions",
 	"boss_agent_cli.automation.zhilian_selectors",
 	"boss_agent_cli.api.recruiter_client",
+	"boss_agent_cli.api.recruiter_mqtt",
 	"boss_agent_cli.api.recruiter_endpoints",
 	"boss_agent_cli.platforms.recruiter_base",
 	"boss_agent_cli.platforms.zhipin_recruiter",
@@ -245,6 +249,8 @@ module = [
 	"boss_agent_cli.commands.recruiter.chat",
 	"boss_agent_cli.commands.recruiter.jobs",
 	"boss_agent_cli.commands.recruiter.reply",
+	"boss_agent_cli.commands.recruiter.recommendations",
+	"boss_agent_cli.commands.recruiter._read_receipt_worker",
 	"boss_agent_cli.commands.recruiter.request_resume",
 	"boss_agent_cli.commands.recruiter.resume",
 	"boss_agent_cli.commands.recruiter.resume_parser",

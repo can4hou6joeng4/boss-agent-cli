@@ -42,6 +42,20 @@ TTY 下只把 `operator_actions` 渲染到 stderr；`next_actions` 是纯 Agent 
 | `boss doctor` | 诊断环境、依赖、凭据完整性和网络；默认仅本地诊断，`--live-probe` 才执行低频只读探测 |
 | `boss me` | 我的信息（用户/简历/期望/投递记录） |
 
+### 从浏览器 cURL 导入登录态
+
+浏览器 Cookie 自动提取不可用时，可将自己已登录的 `https://www.zhipin.com` 请求通过 **Copy as cURL (bash)** 复制为原始文本，保存为仅自己可读的文件：
+
+```bash
+boss login --curl-file /path/to/private-request.txt
+# macOS：从剪贴板通过标准输入导入，避免把凭据写入命令参数
+pbpaste | boss login --curl-file -
+```
+
+仅支持常见 POSIX cURL 格式，不支持 PowerShell/cmd 或 Markdown 转义文本；不能与 `--cdp` / `--cookie-source` 混用。只提取内联 Cookie、User-Agent 和 Cookie 中的 stoken；不会执行 cURL、读取其中引用的文件或重放请求体。使用现有用户信息接口做一次只读验证，验证通过后**替换当前 BOSS 原生加密会话**，不合并不同账号的旧 Cookie；验证失败不会覆盖原会话或自动打开浏览器。
+
+导入是登录态的另一种输入方式，不是绕过登录或风控，也不能复制浏览器指纹。后续过期刷新仍遵循原有 AuthManager / 浏览器来源策略，不能保证永远无需浏览器。`zp_token` 请求头不单独保存；招聘请求仍从当前 `bst` Cookie 派生。原始 cURL 文件和剪贴板含登录凭据，CLI 不会替你清除，请妥善处理，不要提交到仓库或发送到聊天中。
+
 ## 职位搜索
 
 | 命令 | 说明 |
@@ -126,6 +140,20 @@ boss crawl stop <run_id>
 | `boss hr candidates <keyword>` | 搜索和筛选候选人 |
 | `boss hr reply <friend_id> <message>` | 回复候选人消息 |
 | `boss hr request-resume <friend_id>` | 请求候选人分享附件简历 |
+| `boss hr recommendations --job-id <encJobId>` | 读取推荐牛人完整卡片和首次开聊参数 |
+| `boss hr greet ... --message <话术> --yes` | 建立候选人会话、发送首次招呼，并在需要时处理会话红点 |
+
+先在同一组候选人参数和话术后加 `--dry-run` 预览；操作者明确批准该候选人和话术后，才改为 `--yes` 发送。MCP 的 `yes` 默认不传，Agent 不得自行确认；预览本身不构成人工批准。
+
+`greet` 按候选人和招聘职位的加密 ID 在本地原子预约，成功后记录已发送；响应丢失、进程退出或限流时保留预约，禁止自动重发。使用 `boss hr chat --job-id <id>` 核对会话，必要时在官方页面处理，不要删除记录来重发。
+
+清红点仍是 `greet` 的收尾，不是独立命令。已知未读数为零时返回 `not_needed`；未授权 MQTT 时返回 `deferred`。授权后，即使未读数缺失，也会根据准确匹配的会话和最新消息 ID 发送一次已读回执；无法确定目标或消息 ID 时返回 `unknown`，不发送。`chat` / `last-messages` 中未知未读数仍保留为 `null`，不当作零。
+
+独立 MQTT 会话可能挤掉正在使用的网页连接。只有操作者单独批准此风险，才可在发送前加 `--allow-mqtt-session`（MCP：`allow_mqtt_session=true`）；`--yes` 仅批准候选人和话术，不包含这项授权。随机客户端 ID 不保证同账号连接共存，网页退出的具体原因尚未确定，不应以真实账号自动探测。
+
+MQTT 参数参考网页 v11308：使用 `ws-` 加 16 位大写十六进制客户端 ID、MQTT 3.1、`cleanSession=true` 和 10 秒连接超时配置；密码及 WebSocket 子协议来自 `get/wt`，Cookie 则由原生 jar 按服务器域名和 `/chatws` 路径选择，不覆盖 `wt2`。上线包的 `uniqid` 来自 `__a` 第 2 段与第 1 段拼接，`model` 来自 `sid`，缺失时留空。UA 沿用原生认证信息，缺失时仍使用 CLI 默认值；已导入的 Cookie 若没有域名/路径元数据，不能宣称与浏览器实际请求完全一致。本次不实现连接复用，不改变心跳计算；参数对齐不代表已解决网页退出。
+
+`--read-receipt-timeout` 默认为 25 秒（1–60）。收尾使用私有短生命周期子进程和原生认证存储，总预算覆盖启动、查询及回执；超时后终止并回收进程，避免后台继续请求，但不能撤回已送达平台的操作。收到 MQTT QoS 1 的发布确认后返回 `read_state.status=published`、`partial_success=false`，结束收尾，不再回读红点。此结果表示回执已发送，不表示已核验网页未读数归零；不再返回 `cleared`。普通收尾失败返回 `partial_success=true`；认证、风控或限流返回错误信封并在 `error.details.sent=true` 保留已发送事实，操作者指引在 `hints.operator_actions`，不可因收尾失败或补授权重发招呼。
 
 ## 简历与 AI
 

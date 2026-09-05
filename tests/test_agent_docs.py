@@ -107,7 +107,7 @@ def test_capability_matrix_exists_and_covers_core_capabilities():
 	assert "`boss config`" in content
 	assert "`boss clean`" in content
 	assert "39 个顶层命令" in content
-	assert "9 个一级招聘者子命令" in content
+	assert "11 个一级招聘者子命令" in content
 	assert "`qiancheng` / 51job" in content
 	assert "`NOT_SUPPORTED`" in content
 
@@ -207,7 +207,7 @@ def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
 	assert "`boss schema`" in matrix
 	assert "`boss hr candidates`" in matrix
 	assert "39 top-level commands" in matrix
-	assert "9 first-level recruiter subcommands" in matrix
+	assert "11 first-level recruiter subcommands" in matrix
 
 	mcp_readme = _read("mcp-server/README.en.md")
 	assert "[Agent Quickstart](../docs/agent-quickstart.en.md)" in mcp_readme
@@ -332,6 +332,10 @@ def test_schema_main_and_modules_command_count_consistent():
 
 # 文档中写死的能力计数与其运行时真源的映射。
 _CAPABILITY_COUNT_PATTERNS: tuple[tuple[str, str], ...] = (
+	(r"(\d+)\s*个\s*已实现工具", "tools"),
+	(r"(\d+)\s+implemented\s+(?:MCP\s+)?tools", "tools"),
+	(r"(\d+)\s*个一级招聘者子命令", "recruiter_subcommands"),
+	(r"(\d+)\s+first-level\s+recruiter\s+subcommands", "recruiter_subcommands"),
 	(r"(\d+)\s*个顶层命令", "commands"),
 	(r"(\d+)\s+top-level(?:\s+CLI)?\s+commands", "commands"),
 	(r"(\d+)\s*个(?:默认)?(?:低风险)?\s*MCP\s*工具", "tools"),
@@ -348,6 +352,22 @@ _CAPABILITY_COUNT_EXEMPT_DOCS = frozenset({
 	"docs/marketing/en-launch-story.md",
 	"docs/marketing/zh-launch-story.md",
 })
+
+
+@pytest.mark.parametrize("text,kind,count", [
+	("暴露 **75 个已实现工具**", "tools", 75),
+	("暴露 **75** 个已实现工具", "tools", 75),
+	("exposes **75 implemented tools**", "tools", 75),
+	("all 75 implemented MCP tools", "tools", 75),
+	("11 个一级招聘者子命令", "recruiter_subcommands", 11),
+	("11 first-level recruiter\nsubcommands", "recruiter_subcommands", 11),
+])
+def test_capability_count_patterns_cover_published_wording(text, kind, count):
+	matches = [
+		int(match.group(1)) for pattern, category in _CAPABILITY_COUNT_PATTERNS if category == kind
+		for match in re.finditer(pattern, text.replace("**", ""))
+	]
+	assert matches == [count]
 
 
 def _public_markdown_docs() -> list[Path]:
@@ -386,11 +406,12 @@ def test_docs_capability_counts_match_runtime_source():
 	expected = {
 		"commands": len(SCHEMA_DATA["commands"]),
 		"tools": len(_load_mcp_tools()),
+		"recruiter_subcommands": len(SCHEMA_DATA["commands"]["hr"]["subcommands"]),
 	}
 	mismatches: list[str] = []
 
 	for path in _public_markdown_docs():
-		content = path.read_text(encoding="utf-8")
+		content = path.read_text(encoding="utf-8").replace("**", "")
 		relative = path.relative_to(ROOT).as_posix()
 		for pattern, kind in _CAPABILITY_COUNT_PATTERNS:
 			for match in re.finditer(pattern, content):
