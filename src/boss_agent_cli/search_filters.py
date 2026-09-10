@@ -4,6 +4,7 @@ Centralizes filtering logic shared by search, batch-greet, and export commands.
 """
 
 import re
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -498,6 +499,30 @@ def _fetch_and_check(
 	return None, fresh_desc
 
 
+def _fetch_and_check_guarded(
+	stop: threading.Event,
+	client: Any,
+	welfare_conditions: list[tuple[str, list[str]]],
+	criteria: SearchFilterCriteria,
+	raw_item: dict[str, Any],
+	cached_desc: str | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
+	"""线程池 worker 入口：平台错误 / 风控一旦出现，同池后续任务不再触网。
+
+	停止标志由 **worker 自己** 在抛出前置位，而不是等主线程收到异常再取消队列——
+	主线程的 ``cancel_futures`` 只能取消尚未出队的任务，worker 在主线程反应过来之前
+	往往已经取出了下一项（Python 3.14 下几乎必然）。标志置位后被取出的任务直接返回
+	空结果，保证「命中风控后不再继续下一项」不依赖线程调度时机（Issue #419）。
+	"""
+	if stop.is_set():
+		return None, None
+	try:
+		return _fetch_and_check(client, welfare_conditions, criteria, raw_item, cached_desc)
+	except (SearchPipelinePlatformError, PlatformRiskError):
+		stop.set()
+		raise
+
+
 def _check_details_parallel(
 	client: Any,
 	cache: Any,
@@ -519,9 +544,13 @@ def _check_details_parallel(
 	if cache_hits:
 		logger.info(f"  详情缓存命中 {cache_hits}/{len(items)}，跳过对应取详情请求")
 
+	stop = threading.Event()
 	with ThreadPoolExecutor(max_workers=_WELFARE_WORKERS) as pool:
 		futures = {
-			pool.submit(_fetch_and_check, client, welfare_conditions, criteria, raw_item, cached_by_item[id(raw_item)]): raw_item
+			pool.submit(
+				_fetch_and_check_guarded,
+				stop, client, welfare_conditions, criteria, raw_item, cached_by_item[id(raw_item)],
+			): raw_item
 			for raw_item in items
 		}
 		for future in as_completed(futures):
@@ -544,6 +573,7 @@ def _check_details_parallel(
 					logger.info(f"  ❌ {company} - {title}")
 			except SearchPipelinePlatformError:
 				logger.info(f"  ❌ {company} - {title}（详情接口失败）")
+				stop.set()
 				pool.shutdown(wait=False, cancel_futures=True)
 				raise
 			except PlatformRiskError:
@@ -551,6 +581,7 @@ def _check_details_parallel(
 				# 响应字典形态已在 _fetch_and_check 里经 parse_error 包成 SearchPipelinePlatformError，
 				# 这一支专门堵「异常形态被 except Exception 吞掉、扫描继续跑完整页」的缺口（Issue #419）。
 				logger.info(f"  ❌ {company} - {title}（平台风控，停止扫描）")
+				stop.set()
 				pool.shutdown(wait=False, cancel_futures=True)
 				raise
 			except Exception:
