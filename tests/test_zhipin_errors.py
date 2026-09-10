@@ -12,6 +12,8 @@ from boss_agent_cli.api.zhipin_errors import classify_code_37
 		({"code": 37, "message": "环境存在异常"}, "environment_risk"),
 		({"code": 37, "message": "请求失败"}, "environment_risk"),
 		({"code": 37, "msg": "认证过期"}, "token_expired"),
+		({"code": 37, "zpData": "环境存在异常"}, "environment_risk"),
+		({"code": 37, "error": "stoken 已过期"}, "token_expired"),
 	],
 )
 def test_classify_code_37_by_message(response: dict, expected: str) -> None:

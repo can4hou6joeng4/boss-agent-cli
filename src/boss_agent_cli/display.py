@@ -537,6 +537,36 @@ class SearchProgress:
 # ── Auth error decorator ─────────────────────────────────────────────
 
 
+#: 风控类错误码的信封契约：recovery_action 与 hints 的唯一真源。
+#: ``handle_auth_errors`` 的单次命令路径与 batch-greet 等执行器的停批信封共用同一份，
+#: 保证同一个码在两条路径上给 Agent 的恢复指引逐字一致（Issue #419）。
+RISK_ERROR_CONTRACTS: dict[str, dict[str, Any]] = {
+	"ACCOUNT_RISK": {
+		"recovery_action": "停止自动化访问；回到 BOSS 直聘官方页面手动处理，必要时联系 BOSS 直聘客服",
+		"next_actions": [
+			"不要通过 CDP、patchright 或 Bridge 重试该操作",
+			"只保留本地辅助和用户主动触发的只读命令",
+		],
+	},
+	"ENVIRONMENT_RISK": {
+		"recovery_action": "停止自动化访问；保留当前专用 profile，在 BOSS 直聘官方页面确认并降低访问频率",
+		"next_actions": [
+			"不要刷新 Token、重新登录或自动重试该请求",
+			"稍后由用户在同一专用 Chrome profile 中确认页面状态后再手动发起",
+		],
+	},
+}
+
+
+def risk_error_contract(code: str) -> tuple[str, dict[str, list[str]]]:
+	"""Return ``(recovery_action, hints)`` for a platform risk error code."""
+	spec = RISK_ERROR_CONTRACTS.get(code)
+	if spec is None:
+		_, recovery = error_contract_for_code(code, fallback_recovery_action="停止自动化访问")
+		return recovery or "停止自动化访问", {}
+	return str(spec["recovery_action"]), {"next_actions": list(spec["next_actions"])}
+
+
 def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
 	"""装饰器：统一处理 AuthRequired / TokenRefreshFailed / Exception 三层捕获。
 
@@ -552,7 +582,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 		def wrapper(ctx: Any, *args: Any, **kwargs: Any) -> Any:
 			from boss_agent_cli.api.browser_client import RecruiterChatTabRequired
 			from boss_agent_cli.api.browser_source import BrowserSourceUnavailable
-			from boss_agent_cli.api.client import AccountRiskError, EnvironmentRiskError
+			from boss_agent_cli.api.client import PlatformRiskError
 			from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 			try:
 				return func(ctx, *args, **kwargs)
@@ -596,27 +626,14 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					message="Token 刷新失败，请重新登录",
 					recoverable=True, recovery_action=login_action,
 				)
-			except AccountRiskError as e:
+			except PlatformRiskError as e:
+				recovery_action, hints = risk_error_contract(e.code)
 				handle_error_output(
-					ctx, command_name, code="ACCOUNT_RISK",
+					ctx, command_name, code=e.code,
 					message=str(e),
 					recoverable=False,
-					recovery_action="停止自动化访问；回到 BOSS 直聘官方页面手动处理，必要时联系 BOSS 直聘客服",
-					hints={"next_actions": [
-						"不要通过 CDP、patchright 或 Bridge 重试该操作",
-						"只保留本地辅助和用户主动触发的只读命令",
-					]},
-				)
-			except EnvironmentRiskError as e:
-				handle_error_output(
-					ctx, command_name, code="ENVIRONMENT_RISK",
-					message=str(e),
-					recoverable=False,
-					recovery_action="停止自动化访问；保留当前专用 profile，在 BOSS 直聘官方页面确认并降低访问频率",
-					hints={"next_actions": [
-						"不要刷新 Token、重新登录或自动重试该请求",
-						"稍后由用户在同一专用 Chrome profile 中确认页面状态后再手动发起",
-					]},
+					recovery_action=recovery_action,
+					hints=hints or None,
 				)
 			except Exception as e:
 				handle_error_output(

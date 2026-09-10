@@ -10,6 +10,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 
 from boss_agent_cli.api import endpoints
+from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.models import BOSS_INTERNSHIP_RESPONSE_JOB_TYPE, JobItem
 
 # ── Ordinal lookups for threshold comparisons ───────────────────────
@@ -543,6 +544,14 @@ def _check_details_parallel(
 					logger.info(f"  ❌ {company} - {title}")
 			except SearchPipelinePlatformError:
 				logger.info(f"  ❌ {company} - {title}（详情接口失败）")
+				pool.shutdown(wait=False, cancel_futures=True)
+				raise
+			except PlatformRiskError:
+				# 风控异常形态（job_card 在 httpx 失败后降级到浏览器通道时抛出）。
+				# 响应字典形态已在 _fetch_and_check 里经 parse_error 包成 SearchPipelinePlatformError，
+				# 这一支专门堵「异常形态被 except Exception 吞掉、扫描继续跑完整页」的缺口（Issue #419）。
+				logger.info(f"  ❌ {company} - {title}（平台风控，停止扫描）")
+				pool.shutdown(wait=False, cancel_futures=True)
 				raise
 			except Exception:
 				logger.info(f"  ❌ {company} - {title}（查询失败）")

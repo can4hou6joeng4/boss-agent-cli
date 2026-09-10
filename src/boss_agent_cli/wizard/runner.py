@@ -8,7 +8,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserSourceUnsupported
+from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
+from boss_agent_cli.display import error_contract_for_code, risk_error_contract
 from boss_agent_cli.wizard.models import StepResult, WorkflowPlan, WorkflowStatus
 from boss_agent_cli.wizard.store import WorkflowStore
 
@@ -192,6 +195,29 @@ class WorkflowRunner:
 				)
 			except WorkflowActionError as exc:
 				error = exc
+			except PlatformRiskError as exc:
+				# 风控：终止语义不能被下面的 NETWORK_ERROR 兜底反转成「重试当前 run_id」。
+				# checkpoint 照常落盘（下方 update_step/update_run），恢复只能由用户在
+				# 处理完账号/安全页后显式发起（Issue #419）。
+				recovery_action, _ = risk_error_contract(exc.code)
+				error = WorkflowActionError(
+					exc.code, str(exc) or exc.code, recoverable=False, recovery_action=recovery_action
+				)
+			except BrowserSourceUnavailable as exc:
+				error = WorkflowActionError(
+					exc.code, str(exc), recoverable=True, recovery_action=exc.policy.recovery_action
+				)
+			except BrowserSourceUnsupported as exc:
+				fallback_recovery = "切换平台或 workflow goal 后重试"
+				recoverable, contract_recovery = error_contract_for_code(
+					"NOT_SUPPORTED", fallback_recoverable=True, fallback_recovery_action=fallback_recovery
+				)
+				error = WorkflowActionError(
+					"NOT_SUPPORTED",
+					str(exc),
+					recoverable=recoverable,
+					recovery_action=contract_recovery or fallback_recovery,
+				)
 			except Exception as exc:
 				error = WorkflowActionError(
 					"NETWORK_ERROR", str(exc), recoverable=True, recovery_action="重试当前 run_id"

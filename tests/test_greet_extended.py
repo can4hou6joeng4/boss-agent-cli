@@ -279,3 +279,83 @@ def test_batch_greet_respects_count_cap(mock_cache_cls, mock_auth_cls, mock_clie
 	parsed = json.loads(result.output)
 	# --count 会被 cap 到 10
 	assert parsed["data"]["count"] == 10
+
+
+# ── batch-greet 风控终止语义（Issue #419） ─────────────────
+
+
+def _three_jobs_client(mock_client_cls):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = {
+		"zpData": {"jobList": [
+			_make_raw_job("A", "s1"),
+			_make_raw_job("B", "s2"),
+			_make_raw_job("C", "s3"),
+		]}
+	}
+	return mock_client
+
+
+@patch("boss_agent_cli.commands.greet.time")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
+@patch("boss_agent_cli.commands.greet.AuthManager")
+@patch("boss_agent_cli.commands.greet.CacheStore")
+def test_batch_greet_account_risk_exception_stops_without_retry(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time, legacy_args):
+	"""异常形态的 code 36：第 2 个命中风控后立即停批，不重试、不继续第 3 个，信封 ok:false。"""
+	from boss_agent_cli.api.client import AccountRiskError
+
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _three_jobs_client(mock_client_cls)
+
+	def greet_side_effect(sid, jid, msg=""):
+		if sid == "s1":
+			return {"code": 0, "zpData": {}}
+		raise AccountRiskError("BOSS 直聘风控拦截 (code 36)", is_cdp=True)
+
+	mock_client.greet.side_effect = greet_side_effect
+	mock_client.is_success.return_value = True
+	mock_time.sleep = MagicMock()
+
+	runner = CliRunner()
+	result = runner.invoke(cli, [*legacy_args, "batch-greet", "test", "--count", "3"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["recoverable"] is False
+	assert "停止自动化访问" in parsed["error"]["recovery_action"]
+	assert parsed["error"]["details"]["total_greeted"] == 1
+	assert parsed["error"]["details"]["stopped_reason"] == "ACCOUNT_RISK"
+	assert parsed["hints"]["next_actions"]
+	# s2 只调用一次（不重试），s3 从未被调用
+	assert [call.args[0] for call in mock_client.greet.call_args_list] == ["s1", "s2"]
+	mock_cache.record_greet.assert_called_once_with("s1", "job_s1")
+
+
+@patch("boss_agent_cli.commands.greet.time")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
+@patch("boss_agent_cli.commands.greet.AuthManager")
+@patch("boss_agent_cli.commands.greet.CacheStore")
+def test_batch_greet_environment_risk_response_is_not_rate_limited(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time, legacy_args):
+	"""响应字典形态的 code 37 环境风控：文案含「频率」也不得被判成 RATE_LIMITED 的 ok:true 停批。"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _three_jobs_client(mock_client_cls)
+
+	risk_resp = {"code": 37, "message": "环境存在异常，请降低访问频率"}
+	mock_client.greet.side_effect = lambda sid, jid, msg="": {"code": 0, "zpData": {}} if sid == "s1" else risk_resp
+	mock_client.is_success.side_effect = lambda resp: resp.get("code", 0) == 0
+	mock_client.parse_error.return_value = ("ENVIRONMENT_RISK", "环境存在异常，请降低访问频率")
+	mock_time.sleep = MagicMock()
+
+	runner = CliRunner()
+	result = runner.invoke(cli, [*legacy_args, "batch-greet", "test", "--count", "3"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "ENVIRONMENT_RISK"
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["error"]["details"]["stopped_reason"] == "ENVIRONMENT_RISK"
+	assert parsed["error"]["details"]["total_greeted"] == 1
+	assert [call.args[0] for call in mock_client.greet.call_args_list] == ["s1", "s2"]

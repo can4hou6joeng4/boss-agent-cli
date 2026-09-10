@@ -130,7 +130,7 @@ Fine-grained crawl tools read or import existing tasks; `boss_wizard` goals `cra
 | `boss_hr_resume` / `boss_hr_exchange` / `boss_hr_request_resume` | Online resumes, contact exchange, and attached-resume requests |
 | `boss_hr_chat` / `boss_hr_chatmsg` / `boss_hr_last_messages` / `boss_hr_reply` | Recruiter conversation reads and replies |
 
-Every implemented tool is exposed. `ACCOUNT_RISK`, `AUTH_REQUIRED`, `RATE_LIMITED`, and `NOT_SUPPORTED` still use the standard JSON error envelope; agents should follow `error.recovery_action`.
+Every implemented tool is exposed. `ACCOUNT_RISK`, `ENVIRONMENT_RISK`, `AUTH_REQUIRED`, `RATE_LIMITED`, and `NOT_SUPPORTED` still use the standard JSON error envelope; agents should follow `error.recovery_action`.
 
 ## Example prompt
 

@@ -89,7 +89,7 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 | Command | Description |
 |---------|-------------|
 | `boss greet <sid> <jid>` | Greet a recruiter; duplicates return `ALREADY_GREETED` |
-| `boss batch-greet <query>` | Search and greet up to an explicit `--limit`; supports `--dry-run` |
+| `boss batch-greet <query>` | Search and greet up to an explicit `--limit`; supports `--dry-run`; on `ACCOUNT_RISK` / `ENVIRONMENT_RISK` the batch stops immediately with `ok:false`, and already-greeted items are returned in `error.details.greeted` |
 | `boss apply <sid> <jid>` | Apply or start a conversation; duplicates return `ALREADY_APPLIED` |
 | `boss exchange <sid>` | Request a phone-number or WeChat exchange |
 

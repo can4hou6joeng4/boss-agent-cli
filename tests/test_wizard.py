@@ -2901,3 +2901,81 @@ def test_menu_content_does_not_repeat_title_inside_frame(monkeypatch):
 	assert "请选择职位" not in text, "标题已在框上，内容区不应重复"
 	assert "BOSS 求职助手" not in text, "常驻应用名行应移除"
 	assert "选项A" in text and "选项B" in text
+
+
+# ── runner 风控终止语义（Issue #419） ─────────────────────
+
+
+def test_runner_platform_risk_is_terminal_and_never_retried(tmp_path):
+	from boss_agent_cli.api.client import AccountRiskError, EnvironmentRiskError
+
+	for exc_cls, code in ((AccountRiskError, "ACCOUNT_RISK"), (EnvironmentRiskError, "ENVIRONMENT_RISK")):
+		attempts = 0
+
+		def risky(context, inputs, prior, _exc_cls=exc_cls):
+			nonlocal attempts
+			attempts += 1
+			raise _exc_cls("平台风控", is_cdp=True)
+
+		with WorkflowStore(tmp_path) as store:
+			run = WorkflowRunner(store, {"risky": risky, "after": lambda c, i, p: StepResult({"ok": True})}).run(
+				_plan("risky", "after"),
+				object(),
+				run_id=f"risk-run-{code}",
+				max_retries=2,
+			)
+
+		steps = {step["step_name"]: step for step in run["steps"]}
+		assert attempts == 1, "风控异常不得重试"
+		assert run["status"] == "failed"
+		assert run["error"]["code"] == code
+		assert run["error"]["recoverable"] is False
+		assert "停止自动化访问" in run["error"]["recovery_action"]
+		assert run["error"]["recovery_action"] != "重试当前 run_id"
+		# checkpoint 落盘：失败步骤记录了错误，后续步骤未被执行
+		assert steps["risky"]["status"] == "failed"
+		assert steps["risky"]["error"]["code"] == code
+		assert steps["after"]["status"] != "completed"
+
+
+def test_runner_browser_source_unavailable_keeps_policy_error_code(tmp_path):
+	from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, resolve_policy
+
+	policy = resolve_policy("stored-cookie")
+
+	def no_channel(context, inputs, prior):
+		raise BrowserSourceUnavailable(policy, attempted=("cdp",), detail="CDP 不可用")
+
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, {"no_channel": no_channel}).run(_plan("no_channel"), object(), run_id="bs-run")
+
+	assert run["status"] == "failed"
+	assert run["error"]["code"] == policy.failure_code
+	assert run["error"]["code"] != "NETWORK_ERROR"
+	assert run["error"]["recovery_action"] == policy.recovery_action
+
+
+def test_classify_action_error_uses_risk_contract_for_risk_codes():
+	from boss_agent_cli.wizard.actions import _classify_action_error
+
+	for code in ("ACCOUNT_RISK", "ENVIRONMENT_RISK"):
+		mapped, recoverable, recovery = _classify_action_error(code, "任意文案")
+		assert mapped == code
+		assert recoverable is False
+		assert "停止自动化访问" in recovery
+		assert "稍后重试" not in recovery
+
+
+def test_runner_browser_source_unsupported_maps_to_not_supported(tmp_path):
+	from boss_agent_cli.api.browser_source import BrowserSourceUnsupported
+
+	def unsupported(context, inputs, prior):
+		raise BrowserSourceUnsupported("zhilian", "stored-cookie")
+
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, {"unsupported": unsupported}).run(_plan("unsupported"), object(), run_id="bsu-run")
+
+	assert run["status"] == "failed"
+	assert run["error"]["code"] == "NOT_SUPPORTED"
+	assert run["error"]["recoverable"] is True
+	assert run["error"]["recovery_action"]

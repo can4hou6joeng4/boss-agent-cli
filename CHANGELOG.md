@@ -19,6 +19,16 @@
   强制走浏览器通道获取职位卡片；既有 `job_card()` 的 httpx 优先行为完全不变。
 
 ### Fixed
+- **风控类异常在三个执行器中的终止语义收敛（Issue #419）。** `AccountRiskError` / `EnvironmentRiskError`
+  现在共享基类 `PlatformRiskError`（带稳定 `code`），新增风控码只需登记子类。此前三处执行器会反转或吞掉终止语义：
+  福利筛选线程池的 `except Exception` 会吞掉浏览器通道抛出的风控异常并继续扫描整页；`batch-greet` 靠
+  「频率」字样判停批，code 36 会被重试一次后继续下一个候选人，code 37 环境风控则被打成 `ok:true` +
+  `stopped_reason="RATE_LIMITED"`；wizard runner 的兜底把两者降级成 `NETWORK_ERROR` + 「重试当前 run_id」。
+  现在三处都立即停止、不重试、不继续下一项：线程池取消尚未开始的详情请求并原样上抛；`batch-greet` 命中风控时
+  信封改为 `ok:false` + 对应错误码 + `recoverable=false`，已成功项随 `error.details.greeted` 带回；
+  wizard runner 走专门分支，`recoverable=false`，恢复动作与单次命令路径逐字一致（`display.RISK_ERROR_CONTRACTS`
+  为唯一真源）。wizard 的 `_classify_action_error` 对风控码不再落到「稍后重试」兜底；runner 同时把
+  `BrowserSourceUnavailable` / `BrowserSourceUnsupported` 映射为策略错误码 / `NOT_SUPPORTED`，不再兜成 `NETWORK_ERROR`。
 - **stoken 静默刷新现在遵守 `browser_source` 策略表（Issue #387 seam 收尾）。** #410 把浏览器通道
   选择收进策略表后，httpx 通道的 stoken 刷新（`_base_client._request` → `AuthManager.force_refresh`）
   仍绕过策略：`stored-cookie` 下 stoken 过期照样会「CDP 不可用，降级到 headless」，起一个 headless

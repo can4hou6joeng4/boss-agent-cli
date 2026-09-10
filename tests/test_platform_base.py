@@ -68,6 +68,12 @@ class TestBossEnvelopeAdapter:
 		assert code == "ENVIRONMENT_RISK"
 		assert msg == "环境存在异常"
 
+	def test_parse_error_code_37_message_falls_back_to_zp_data(self) -> None:
+		"""只带 zpData 文案的 code 37：信封 message 不得为空（#403 review 第 4 项的退化场景）。"""
+		code, msg = self.plat.parse_error({"code": 37, "zpData": "环境存在异常"})
+		assert code == "ENVIRONMENT_RISK"
+		assert msg == "环境存在异常"
+
 	def test_parse_error_ambiguous_code_37_fails_closed(self) -> None:
 		"""语义不明的 code 37 fail closed 为 ENVIRONMENT_RISK。"""
 		code, _ = self.plat.parse_error({"code": 37, "message": "请求失败"})

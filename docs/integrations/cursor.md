@@ -112,6 +112,7 @@ Common branches:
 - `INVALID_PARAM`: return to `boss schema` and validate parameter names
 - `RATE_LIMITED`: wait before retrying; do not continue sensitive automation
 - `ACCOUNT_RISK`: stop the workflow, preserve its checkpoint, and resume only after the account-risk condition is resolved
+- `ENVIRONMENT_RISK`: stop the workflow the same way; do not refresh tokens, re-login, or retry, and resume only after the user has confirmed the page state in the same dedicated browser profile
 
 ## Advanced ideas
 

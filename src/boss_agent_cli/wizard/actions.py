@@ -19,6 +19,7 @@ from boss_agent_cli.crawler.operations import crawl_status
 from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
 from boss_agent_cli.digest import build_digest
+from boss_agent_cli.display import RISK_ERROR_CONTRACTS, risk_error_contract
 from boss_agent_cli.output import Logger
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
 from boss_agent_cli.resume.models import resume_to_text
@@ -200,6 +201,10 @@ def _classify_action_error(code: str, message: str) -> tuple[str, bool, str]:
 			code = "INVALID_PARAM"
 		else:
 			code = "NETWORK_ERROR"
+	if code in RISK_ERROR_CONTRACTS:
+		# 风控码：与单次命令路径共用同一份 recovery_action，绝不落到「稍后重试」兜底。
+		recovery, _ = risk_error_contract(code)
+		return code, False, recovery
 	recoverable = code in {
 		"AUTH_EXPIRED",
 		"RATE_LIMITED",

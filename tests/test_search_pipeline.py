@@ -495,3 +495,77 @@ def test_real_pipeline_drives_search_progress_counters(monkeypatch):
 	assert "Company-job-a" in out, "匹配项应逐条打印到终端"
 	assert "Company-job-b" not in out, "排除项不应刷屏"
 	assert "1/1" in progress.status_text()
+
+
+def test_pipeline_platform_risk_exception_stops_remaining_detail_checks(monkeypatch):
+	"""风控异常形态（浏览器通道抛 AccountRiskError）必须终止扫描，不得被吞掉继续跑完整页（Issue #419）。"""
+	from boss_agent_cli import search_filters
+	from boss_agent_cli.api.client import AccountRiskError
+
+	monkeypatch.setattr(search_filters, "_WELFARE_WORKERS", 1)
+	client = FakeClient(
+		pages=[
+			{
+				"zpData": {
+					"hasMore": False,
+					"jobList": [
+						_make_job_raw(security_id="sec-risk", job_id="job-risk"),
+						_make_job_raw(security_id="sec-2", job_id="job-2"),
+						_make_job_raw(security_id="sec-3", job_id="job-3"),
+					],
+				},
+			},
+		],
+		descriptions={
+			"sec-risk": AccountRiskError("BOSS 直聘风控拦截 (code 36)", is_cdp=True),
+			"sec-2": "岗位描述明确写了双休",
+			"sec-3": "岗位描述明确写了双休",
+		},
+	)
+
+	with pytest.raises(AccountRiskError):
+		run_search_pipeline(
+			client,
+			FakeCache(),
+			FakeLogger(),
+			criteria=SearchFilterCriteria(query="python"),
+			welfare_conditions=_welfare_conditions(),
+		)
+
+	assert client.detail_calls == [("sec-risk", "")], "风控后剩余职位不得再取详情"
+
+
+def test_pipeline_platform_error_cancels_pending_detail_checks(monkeypatch):
+	"""响应字典形态的平台错误同样取消队列里尚未开始的详情请求。"""
+	from boss_agent_cli import search_filters
+
+	monkeypatch.setattr(search_filters, "_WELFARE_WORKERS", 1)
+	client = FakeClient(
+		pages=[
+			{
+				"zpData": {
+					"hasMore": False,
+					"jobList": [
+						_make_job_raw(security_id="sec-1", job_id="job-1"),
+						_make_job_raw(security_id="sec-2", job_id="job-2"),
+					],
+				},
+			},
+		],
+		descriptions={
+			"sec-1": {"code": 36, "message": "风控", "error_code": "ACCOUNT_RISK"},
+			"sec-2": "岗位描述明确写了双休",
+		},
+	)
+
+	with pytest.raises(SearchPipelinePlatformError) as exc_info:
+		run_search_pipeline(
+			client,
+			FakeCache(),
+			FakeLogger(),
+			criteria=SearchFilterCriteria(query="python"),
+			welfare_conditions=_welfare_conditions(),
+		)
+
+	assert exc_info.value.code == "ACCOUNT_RISK"
+	assert client.detail_calls == [("sec-1", "")]

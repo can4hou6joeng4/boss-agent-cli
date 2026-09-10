@@ -17,20 +17,39 @@ class AuthError(Exception):
 	pass
 
 
-class AccountRiskError(Exception):
+class PlatformRiskError(Exception):
+	"""平台风控类异常的共同基类：命中即终止，不重试、不换通道、不继续下一项。
+
+	执行器（福利筛选线程池、batch-greet、wizard runner）统一按本基类捕获，
+	新增一个风控码只需在此登记子类，不必逐个执行器加分支（Issue #419）。
+	``code`` 是信封里的稳定错误码，与 ``SCHEMA_DATA["error_codes"]`` 一一对应。
+	"""
+
+	code: str = "ACCOUNT_RISK"
+
+	def __init__(self, message: str = "", is_cdp: bool = False):
+		self.is_cdp = is_cdp
+		super().__init__(message)
+
+
+class AccountRiskError(PlatformRiskError):
 	"""BOSS 直聘风控拦截（code 36）：检测到异常行为。"""
 
-	def __init__(self, message: str = "", is_cdp: bool = False):
-		self.is_cdp = is_cdp
-		super().__init__(message)
+	code = "ACCOUNT_RISK"
 
 
-class EnvironmentRiskError(Exception):
+class EnvironmentRiskError(PlatformRiskError):
 	"""BOSS 直聘访问环境风控（code 37），不等同于登录过期。"""
 
-	def __init__(self, message: str = "", is_cdp: bool = False):
-		self.is_cdp = is_cdp
-		super().__init__(message)
+	code = "ENVIRONMENT_RISK"
+
+
+#: 风控错误码 → 异常类。平台 adapter 的 ``parse_error`` 走响应字典路径时返回的是码，
+#: 执行器用这张表把码升格为异常，与浏览器通道抛出的异常形态走同一条终止分支。
+RISK_ERROR_BY_CODE: dict[str, type[PlatformRiskError]] = {
+	AccountRiskError.code: AccountRiskError,
+	EnvironmentRiskError.code: EnvironmentRiskError,
+}
 
 
 class BossClient(_BaseHttpClient):
