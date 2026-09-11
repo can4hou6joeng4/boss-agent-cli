@@ -149,11 +149,16 @@ boss --cdp-url http://localhost:9222 login --cdp
 浏览器窗口/无痕页或多个 profile 各登不同 BOSS 账号时，复用的是「第一个带登录态的
 context」；若指纹对应的账号不是你要的，请关闭多余窗口或只保留目标账号的登录态后重试。
 
-复用只检查登录 cookie **是否存在**，不校验服务端是否仍有效。若复用后每条命令都返回
-`AUTH_REQUIRED` / `TOKEN_REFRESH_FAILED`，而 `boss login --cdp` 仍提示「正在复用现有登录态」，
-说明浏览器里的会话已在服务端失效：用 `boss login --cdp --force` 强制重登——它不扫描、不复用
-任何已登录 context，先清掉**当前 context 内目标平台域**的 cookie（其他站点与其他 context 不动，
-但这意味着该 Chrome 里的平台账号会被登出），再打开登录页重新扫码。切换账号也用它。
+复用命中后会在同一页面里用浏览器自身的会话做**一次**只读探测（用户信息接口，不读本地凭据）：
+通过则落盘并提示「已通过只读验证」；服务端已失效则不落盘，自动改走下面的强制重登路径；探测命中
+`ACCOUNT_RISK` / `ENVIRONMENT_RISK` 立即停止，不重试、不换通道。页面未就绪或探测本身失败
+（网络 / 超时）时按「未验证」继续复用并在 stderr 提示。目前只探测 BOSS 直聘，智联复用仍只看
+cookie 是否存在。
+
+需要跳过复用时（切换账号、或未验证的复用之后命令仍报 `AUTH_REQUIRED`），用
+`boss login --cdp --force` 强制重登——它不扫描、不复用任何已登录 context，先清掉**当前 context
+内目标平台域**的 cookie（其他站点与其他 context 不动，但这意味着该 Chrome 里的平台账号会被登出），
+再打开登录页重新扫码。
 
 ## 锁定浏览器通道：`--browser-source`
 

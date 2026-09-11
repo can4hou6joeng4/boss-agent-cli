@@ -160,13 +160,19 @@ windows / incognito pages, or several profiles each logged into a different BOSS
 the reused context is the first one holding a login session. If the fingerprint is not the
 account you want, close the extra windows or keep only the target account logged in, then retry.
 
-Reuse only checks that the login cookie **exists**; it does not verify the session server-side.
-If every command returns `AUTH_REQUIRED` / `TOKEN_REFRESH_FAILED` after reuse while
-`boss login --cdp` still reports "reusing existing session", the browser session has expired
-server-side: run `boss login --cdp --force`. It scans and reuses nothing, clears the target
+After a reuse hit, the CLI runs **one** read-only probe (the user-info endpoint) from the same
+page with the browser's own session, never reading stored credentials: a pass is persisted and
+reported as "verified"; a session that has expired server-side is not persisted and the CLI falls
+through to the forced re-login path below; a probe that hits `ACCOUNT_RISK` / `ENVIRONMENT_RISK`
+stops immediately with no retry and no channel switch. If the page is not ready or the probe
+itself fails (network / timeout), reuse continues as "unverified" with a stderr hint. Only BOSS
+Zhipin is probed today; Zhilian reuse still checks cookie presence only.
+
+To skip reuse (switching accounts, or when commands still return `AUTH_REQUIRED` after an
+unverified reuse), run `boss login --cdp --force`. It scans and reuses nothing, clears the target
 platform's cookies **in the current context only** (other sites and other contexts are untouched,
 but the platform account in that Chrome is signed out), then opens the login page for a fresh QR
-scan. Use it to switch accounts as well.
+scan.
 
 ## Locking the browser channel: `--browser-source`
 

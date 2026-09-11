@@ -873,3 +873,135 @@ def test_login_via_cdp_default_still_reuses_without_clearing(mock_sleep, mock_pr
 	logged_ctx.clear_cookies.assert_not_called()
 	existing_page.goto.assert_not_called()
 	assert result["stoken"] == "jar-stoken"
+
+
+# ── 复用登录态的只读探测（Issue #424 第二步） ─────────────────
+
+
+def _evaluate_router(probe_result):
+	"""UA 采集与探测共用 page.evaluate：按脚本内容分流。"""
+	def _route(script, arg=None):
+		if "fetch(" in script:
+			return probe_result
+		return "UA"
+	return _route
+
+
+@pytest.mark.parametrize(
+	("probe_result", "expected"),
+	[
+		({"code": 0, "zpData": {"name": "x"}}, "valid"),
+		({"code": 37, "message": "stoken 已过期"}, "stale"),
+		({"code": 5, "message": "未登录"}, "stale"),
+		({"code": -1, "message": "TypeError: Failed to fetch"}, "unverified"),
+		("not-a-dict", "unverified"),
+	],
+)
+def test_probe_reused_session_classifies_user_info_response(probe_result, expected):
+	from boss_agent_cli.auth.browser import _probe_reused_session
+
+	page = MagicMock()
+	page.evaluate.return_value = probe_result
+	assert _probe_reused_session(page, platform="zhipin") == expected
+	page.evaluate.assert_called_once()
+
+
+def test_probe_reused_session_raises_on_platform_risk():
+	from boss_agent_cli.api.client import AccountRiskError, EnvironmentRiskError
+	from boss_agent_cli.auth.browser import _probe_reused_session
+
+	page = MagicMock()
+	page.evaluate.return_value = {"code": 36, "message": "检测到异常行为"}
+	with pytest.raises(AccountRiskError):
+		_probe_reused_session(page, platform="zhipin")
+
+	page.evaluate.return_value = {"code": 37, "message": "环境存在异常"}
+	with pytest.raises(EnvironmentRiskError):
+		_probe_reused_session(page, platform="zhipin")
+
+
+def test_probe_reused_session_skips_zhilian_and_evaluate_failure():
+	from boss_agent_cli.auth.browser import _probe_reused_session
+
+	page = MagicMock()
+	assert _probe_reused_session(page, platform="zhilian") == "unverified"
+	page.evaluate.assert_not_called()
+
+	page.evaluate.side_effect = RuntimeError("target closed")
+	assert _probe_reused_session(page, platform="zhipin") == "unverified"
+
+
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_login_via_cdp_reuse_stale_session_raises_and_does_not_return_credentials(mock_sleep, mock_probe_cdp, capsys):
+	"""复用命中但探测返回未登录：抛 ReusedSessionStaleError，不返回死凭证，页签清理照常。"""
+	from boss_agent_cli.auth.browser import ReusedSessionStaleError
+
+	logged_ctx, existing_page = _make_reuse_page_context(jar_stoken="stale-stoken")
+	existing_page.evaluate.side_effect = _evaluate_router({"code": 37, "message": "stoken 已过期"})
+	mock_browser = MagicMock()
+	mock_browser.contexts = [logged_ctx]
+	mock_launcher = MagicMock()
+	mock_launcher.start.return_value.chromium.connect_over_cdp.return_value = mock_browser
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
+		with pytest.raises(ReusedSessionStaleError):
+			login_via_cdp(timeout=1)
+
+	existing_page.goto.assert_not_called()  # 既有页签仍不导航
+	existing_page.close.assert_not_called()  # 不是本次创建的页签，不关
+	mock_launcher.start.return_value.stop.assert_called_once()
+
+
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_login_via_cdp_reuse_valid_session_returns_credentials(mock_sleep, mock_probe_cdp, capsys):
+	logged_ctx, existing_page = _make_reuse_page_context(jar_stoken="jar-stoken")
+	existing_page.evaluate.side_effect = _evaluate_router({"code": 0, "zpData": {}})
+	mock_browser = MagicMock()
+	mock_browser.contexts = [logged_ctx]
+	mock_launcher = MagicMock()
+	mock_launcher.start.return_value.chromium.connect_over_cdp.return_value = mock_browser
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
+		result = login_via_cdp(timeout=1)
+
+	assert result["cookies"]["wt2"] == "tok"
+	assert result["user_agent"] == "UA"
+	assert "已通过只读验证" in capsys.readouterr().err
+
+
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_login_via_cdp_reuse_stalled_page_skips_probe_and_warns(mock_sleep, mock_probe_cdp, capsys):
+	"""页面未就绪时不做探测（否则 evaluate 会挂起），按 unverified 继续并提示 --force。"""
+	logged_ctx, existing_page = _make_reuse_page_context(jar_stoken="jar-stoken")
+	existing_page.wait_for_load_state.side_effect = RuntimeError("stalled")
+	mock_browser = MagicMock()
+	mock_browser.contexts = [logged_ctx]
+	mock_launcher = MagicMock()
+	mock_launcher.start.return_value.chromium.connect_over_cdp.return_value = mock_browser
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
+		result = login_via_cdp(timeout=1)
+
+	existing_page.evaluate.assert_not_called()
+	assert result["stoken"] == "jar-stoken"
+	assert "--force" in capsys.readouterr().err
+
+
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_login_via_cdp_reuse_probe_risk_propagates(mock_sleep, mock_probe_cdp):
+	from boss_agent_cli.api.client import EnvironmentRiskError
+
+	logged_ctx, existing_page = _make_reuse_page_context(jar_stoken="jar-stoken")
+	existing_page.evaluate.side_effect = _evaluate_router({"code": 37, "message": "环境存在异常"})
+	mock_browser = MagicMock()
+	mock_browser.contexts = [logged_ctx]
+	mock_launcher = MagicMock()
+	mock_launcher.start.return_value.chromium.connect_over_cdp.return_value = mock_browser
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
+		with pytest.raises(EnvironmentRiskError):
+			login_via_cdp(timeout=1)

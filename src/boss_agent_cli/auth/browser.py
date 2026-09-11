@@ -120,6 +120,80 @@ def _ensure_page_evaluable(page: Any) -> bool:
 	return True
 
 
+class ReusedSessionStaleError(RuntimeError):
+	"""复用的 CDP 登录态在服务端已失效：cookie 还在，但只读探测返回未登录。
+
+	由 ``AuthManager.login`` 捕获后改走 ``reuse_existing=False``（即 ``--force`` 路径）
+	重新登录，不把死凭证落盘（Issue #424 第二步）。
+	"""
+
+
+_PROBE_TIMEOUT_MS = 10000  # 复用登录态只读探测的 fetch 超时（毫秒），JS 侧 AbortController 兜底
+
+_PROBE_SCRIPT = """
+async ({url, timeoutMs}) => {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		const resp = await fetch(url, {
+			method: 'GET',
+			credentials: 'include',
+			signal: controller.signal,
+			headers: {
+				'Accept': 'application/json, text/plain, */*',
+				'X-Requested-With': 'XMLHttpRequest',
+			},
+		});
+		return await resp.json();
+	} catch (e) {
+		return {code: -1, message: String((e && e.message) || e)};
+	} finally {
+		clearTimeout(timer);
+	}
+}
+"""
+
+
+def _probe_reused_session(page: Any, *, platform: str) -> str:
+	"""在已就绪的页面里用同一浏览器会话做一次只读探测，判断复用的登录态是否仍有效。
+
+	返回 ``"valid"`` / ``"stale"`` / ``"unverified"``；命中风控（code 36 / 环境类 code 37）
+	直接抛 ``AccountRiskError`` / ``EnvironmentRiskError``，由调用链按风控契约立即终止。
+
+	- 探测经页面自身的 ``fetch``（``credentials: include``）发出：用的是浏览器里的会话，
+	  不读本地凭据，与 ``existing-browser`` 来源「不读本地凭据」的约束一致。
+	- 只探测 zhipin：智联 ``getUserInfo`` 需要 ``x-zp-client-id`` 且成功码语义未在本地
+	  核实，暂按 ``unverified`` 处理（Issue #424 登记）。
+	- fetch 自身失败（网络 / 超时，``code == -1``）视为 ``unverified``：无法证明失效就不
+	  阻断登录，但会在 stderr 提示；真失效的兜底是 ``boss login --force``。
+	"""
+	if platform != "zhipin":
+		return "unverified"
+	from boss_agent_cli.api import endpoints
+	from boss_agent_cli.api.client import AccountRiskError, EnvironmentRiskError
+	from boss_agent_cli.api.zhipin_errors import classify_code_37, response_message
+
+	try:
+		data = page.evaluate(_PROBE_SCRIPT, {"url": endpoints.USER_INFO_URL, "timeoutMs": _PROBE_TIMEOUT_MS})
+	except Exception as exc:  # evaluate 本身失败（页面被关等）：无法验证，不阻断
+		_logger.debug("复用登录态探测 evaluate 失败: %s", exc)
+		return "unverified"
+	if not isinstance(data, dict):
+		return "unverified"
+	code = data.get("code")
+	if code == endpoints.CODE_SUCCESS:
+		return "valid"
+	if code == -1:
+		return "unverified"
+	if code == endpoints.CODE_ACCOUNT_RISK:
+		raise AccountRiskError(f"BOSS 直聘风控拦截 (code 36): {response_message(data)}", is_cdp=True)
+	if code == endpoints.CODE_STOKEN_EXPIRED:
+		if classify_code_37(data) == "environment_risk":
+			raise EnvironmentRiskError(f"BOSS 直聘访问环境风控 (code 37): {response_message(data)}", is_cdp=True)
+		return "stale"
+	return "stale"
+
+
 def _clear_platform_cookies(context: Any, *, cookie_domain: str) -> None:
 	"""只清除该 context 内目标平台域（含子域）的 cookie，其他站点 cookie 原样保留。
 
@@ -377,6 +451,24 @@ def login_via_cdp(
 			home_loaded = False
 			page_ready = _ensure_page_evaluable(page)
 			ua = _safe_user_agent(page) if page_ready else ""
+
+		if already_logged_in:
+			# 复用只证明 cookie 存在，不证明服务端仍认：wt2 已失效但仍在 jar 里时，
+			# 不探测就会把死凭证当「登录成功」落盘，之后每条命令都 AUTH_REQUIRED（Issue #424）。
+			probe_ready = home_loaded if created_page else page_ready
+			status = _probe_reused_session(page, platform=platform) if probe_ready else "unverified"
+			if status == "stale":
+				raise ReusedSessionStaleError(
+					"复用的登录态已在服务端失效（只读探测返回未登录），不落盘；改为重新登录"
+				)
+			if status == "unverified":
+				print(
+					"[boss] 提示：未能在线验证复用的登录态（页面未就绪或探测失败）；"
+					"若之后命令报 AUTH_REQUIRED，请用 boss login --cdp --force 强制重登。",
+					file=sys.stderr,
+				)
+			else:
+				print("[boss] 复用的登录态已通过只读验证。", file=sys.stderr)
 
 		# 任何导航之后重新读取 cookie，不依赖早期快照。这里是登录成功后的「最终读取」，
 		# 不能用吞异常的 _matching_cookies：ctx.cookies() 抛错（如 CDP target closed）若返回

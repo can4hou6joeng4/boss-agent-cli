@@ -1,7 +1,15 @@
 from pathlib import Path
 from typing import Any
 
-from boss_agent_cli.auth.browser import login_via_browser, login_via_cdp, probe_cdp, refresh_stoken, refresh_stoken_via_cdp
+from boss_agent_cli.api.client import PlatformRiskError
+from boss_agent_cli.auth.browser import (
+	ReusedSessionStaleError,
+	login_via_browser,
+	login_via_cdp,
+	probe_cdp,
+	refresh_stoken,
+	refresh_stoken_via_cdp,
+)
 from boss_agent_cli.auth.cookie_extract import extract_cookies
 from boss_agent_cli.auth.curl_import import parse_curl_auth
 from boss_agent_cli.auth.qr_login import qr_login_httpx
@@ -24,6 +32,14 @@ class AuthManager:
 		self._store = TokenStore(auth_dir)
 		self._token: dict[str, Any] | None = None
 		self._logger = logger or Logger()
+
+	def _cdp_login(self, *, cdp_url: str | None, timeout: int, reuse_existing: bool) -> dict[str, Any]:
+		"""CDP 登录；复用的登录态被在线探测判定失效时，自动改走不复用路径重登一次。"""
+		try:
+			return login_via_cdp(cdp_url=cdp_url, timeout=timeout, platform=self._platform, reuse_existing=reuse_existing)
+		except ReusedSessionStaleError as exc:
+			self._logger.warning(f"{exc}")
+			return login_via_cdp(cdp_url=cdp_url, timeout=timeout, platform=self._platform, reuse_existing=False)
 
 	def _login_action(self) -> str:
 		return "boss --platform zhilian login" if self._platform == "zhilian" else "boss login"
@@ -60,9 +76,7 @@ class AuthManager:
 		if force_cdp:
 			# --cdp 强制模式：跳过 Cookie，CDP 不可用直接抛异常
 			self._logger.info("强制 CDP 模式，跳过 Cookie 提取")
-			token = login_via_cdp(
-				cdp_url=cdp_url, timeout=timeout, platform=self._platform, reuse_existing=reuse_existing
-			)
+			token = self._cdp_login(cdp_url=cdp_url, timeout=timeout, reuse_existing=reuse_existing)
 			method = "CDP 扫码"
 			self._store.save(token)
 			self._token = token
@@ -89,13 +103,14 @@ class AuthManager:
 		if probe_cdp(cdp_url):
 			self._logger.info("检测到 CDP 可用，尝试 CDP 登录...")
 			try:
-				token = login_via_cdp(
-					cdp_url=cdp_url, timeout=timeout, platform=self._platform, reuse_existing=reuse_existing
-				)
+				token = self._cdp_login(cdp_url=cdp_url, timeout=timeout, reuse_existing=reuse_existing)
 				method = "CDP 扫码"
 				self._store.save(token)
 				self._token = token
 				return {**token, "_method": method}
+			except PlatformRiskError:
+				# 风控：立即停止，绝不降级到 patchright 再登一次（#419 / #422 契约）
+				raise
 			except Exception as e:
 				self._logger.info(f"CDP 登录失败（{e}），降级到 patchright")
 		else:

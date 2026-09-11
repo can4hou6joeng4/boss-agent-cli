@@ -534,3 +534,19 @@ def test_login_force_rejects_cookie_source(mock_auth_cls):
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert parsed["error"]["recoverable"] is False
 	mock_auth_cls.return_value.login.assert_not_called()
+
+
+@patch("boss_agent_cli.commands.login.AuthManager")
+def test_login_platform_risk_uses_shared_risk_contract(mock_auth_cls):
+	"""复用探测命中风控时，login 信封与其他命令的 ACCOUNT_RISK 契约一致，不建议重试登录。"""
+	from boss_agent_cli.api.client import AccountRiskError
+
+	mock_auth_cls.return_value.login.side_effect = AccountRiskError("BOSS 直聘风控拦截 (code 36)", is_cdp=True)
+
+	result = CliRunner().invoke(cli, ["login", "--cdp"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["recoverable"] is False
+	assert "停止自动化访问" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"]

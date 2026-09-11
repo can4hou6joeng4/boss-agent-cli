@@ -320,3 +320,56 @@ def test_login_force_cdp_and_force_relogin_compose(mock_extract, mock_login_via_
 
 	mock_extract.assert_not_called()
 	mock_login_via_cdp.assert_called_once_with(cdp_url=None, timeout=45, platform="zhipin", reuse_existing=False)
+
+
+# ── 复用登录态失效 → 自动改走不复用路径；风控不降级（Issue #424 第二步） ─────
+
+
+@patch("boss_agent_cli.auth.manager.TokenStore")
+@patch("boss_agent_cli.auth.manager.login_via_browser")
+@patch("boss_agent_cli.auth.manager.login_via_cdp")
+@patch("boss_agent_cli.auth.manager.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.manager.extract_cookies", return_value=None)
+def test_login_stale_reused_session_retries_without_reuse(
+	mock_extract, mock_probe_cdp, mock_login_via_cdp, mock_login_via_browser, mock_store_cls, tmp_path
+):
+	from boss_agent_cli.auth.browser import ReusedSessionStaleError
+
+	store = _make_store()
+	mock_store_cls.return_value = store
+	mock_login_via_cdp.side_effect = [
+		ReusedSessionStaleError("stale"),
+		{"cookies": {"wt2": "fresh"}, "stoken": "fresh-token"},
+	]
+
+	result = AuthManager(tmp_path).login(timeout=30, cdp_url="http://127.0.0.1:9222")
+
+	assert [c.kwargs["reuse_existing"] for c in mock_login_via_cdp.call_args_list] == [True, False]
+	store.save.assert_called_once_with({"cookies": {"wt2": "fresh"}, "stoken": "fresh-token"})
+	assert result["_method"] == "CDP 扫码"
+	mock_login_via_browser.assert_not_called()
+
+
+@patch("boss_agent_cli.auth.manager.TokenStore")
+@patch("boss_agent_cli.auth.manager.qr_login_httpx")
+@patch("boss_agent_cli.auth.manager.login_via_browser")
+@patch("boss_agent_cli.auth.manager.login_via_cdp")
+@patch("boss_agent_cli.auth.manager.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.manager.extract_cookies", return_value=None)
+def test_login_platform_risk_during_cdp_reuse_is_not_downgraded(
+	mock_extract, mock_probe_cdp, mock_login_via_cdp, mock_login_via_browser, mock_qr, mock_store_cls, tmp_path
+):
+	"""复用探测命中风控：立即上抛，不得降级到 QR / patchright 再登一次。"""
+	from boss_agent_cli.api.client import AccountRiskError
+
+	store = _make_store()
+	mock_store_cls.return_value = store
+	mock_login_via_cdp.side_effect = AccountRiskError("风控", is_cdp=True)
+
+	with pytest.raises(AccountRiskError):
+		AuthManager(tmp_path).login(timeout=30, cdp_url="http://127.0.0.1:9222")
+
+	mock_login_via_cdp.assert_called_once()
+	mock_qr.assert_not_called()
+	mock_login_via_browser.assert_not_called()
+	store.save.assert_not_called()

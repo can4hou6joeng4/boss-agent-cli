@@ -2,8 +2,9 @@ from typing import TextIO
 
 import click
 
+from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.auth.manager import AuthManager
-from boss_agent_cli.display import boss_command_for_ctx, login_action_for_ctx
+from boss_agent_cli.display import boss_command_for_ctx, login_action_for_ctx, risk_error_contract
 from boss_agent_cli.output import emit_error, emit_success
 
 
@@ -40,6 +41,17 @@ def _classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, objec
 				"next_actions": next_actions,
 				"operator_actions": operator_actions,
 			},
+		}
+
+	if isinstance(exc, PlatformRiskError):
+		# 复用登录态的只读探测命中风控：与其他命令共用同一份终止契约，不建议重试登录。
+		recovery, hints = risk_error_contract(exc.code)
+		return {
+			"code": exc.code,
+			"message": raw_message,
+			"recoverable": False,
+			"recovery_action": recovery,
+			"hints": hints or None,
 		}
 
 	if isinstance(exc, ValueError):
