@@ -1,5 +1,7 @@
 from unittest.mock import patch, MagicMock
 
+import pytest
+
 import httpx
 
 from boss_agent_cli.api.browser_client import (
@@ -530,3 +532,95 @@ def test_close_does_not_close_reused_user_page():
 
 	session._page.close.assert_not_called()  # 不关用户的页签
 	session._context.close.assert_not_called()
+
+
+# ── 复用页签运行期撞上用户手动导航：失败驱动的一次性恢复（Issue #423） ─────
+
+
+def _started_cdp_session_with_page(page):
+	session = BrowserSession(cookies={}, user_agent="")
+	session._is_cdp = True
+	session._started = True
+	session._page_ready = True
+	session._page = page
+	session._context = MagicMock()
+	session._pw = MagicMock()
+	session._throttle = MagicMock()
+	return session
+
+
+def test_is_context_destroyed_error_matches_navigation_races():
+	from boss_agent_cli.api.browser_client import _is_context_destroyed_error
+
+	assert _is_context_destroyed_error(RuntimeError("Execution context was destroyed, most likely because of a navigation"))
+	assert _is_context_destroyed_error(RuntimeError("Target closed"))
+	assert not _is_context_destroyed_error(RuntimeError("Evaluation failed: ReferenceError: fetch is not defined"))
+	assert not _is_context_destroyed_error(TimeoutError("Timeout 15000ms exceeded"))
+
+
+def test_request_recovers_once_after_context_destroyed_mid_navigation():
+	"""首次 evaluate 撞上 execution context destroyed：有界等待就绪后重试同一请求一次，成功返回。"""
+	page = MagicMock()
+	page.evaluate.side_effect = [
+		RuntimeError("Execution context was destroyed, most likely because of a navigation."),
+		{"code": 0, "zpData": {"ok": True}},
+	]
+	session = _started_cdp_session_with_page(page)
+
+	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+
+	assert res["code"] == 0
+	assert page.evaluate.call_count == 2
+	page.wait_for_load_state.assert_called_once_with("domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+	assert session._page_ready is True
+
+
+def test_request_returns_error_envelope_when_page_never_becomes_ready_after_navigation():
+	"""恢复等待超时：返回错误信封，不第二次 evaluate、不无界重试。"""
+	page = MagicMock()
+	page.evaluate.side_effect = RuntimeError("Execution context was destroyed")
+	page.wait_for_load_state.side_effect = TimeoutError("still navigating")
+	session = _started_cdp_session_with_page(page)
+
+	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+
+	assert res["code"] == -1
+	assert page.evaluate.call_count == 1
+	assert session._page_ready is False
+
+
+def test_request_retries_at_most_once_on_repeated_context_destroyed():
+	"""恢复后重试仍撞上同类异常：原样上抛，不进入第三次。"""
+	page = MagicMock()
+	page.evaluate.side_effect = RuntimeError("Execution context was destroyed")
+	session = _started_cdp_session_with_page(page)
+
+	with pytest.raises(RuntimeError):
+		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+
+	assert page.evaluate.call_count == 2
+
+
+def test_request_healthy_path_has_no_extra_wait():
+	"""健康路径零额外往返：不调 wait_for_load_state，只 evaluate 一次。"""
+	page = MagicMock()
+	page.evaluate.return_value = {"code": 0, "zpData": {}}
+	session = _started_cdp_session_with_page(page)
+
+	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+
+	assert res["code"] == 0
+	page.wait_for_load_state.assert_not_called()
+	page.evaluate.assert_called_once()
+
+
+def test_request_propagates_unrelated_evaluate_errors_without_retry():
+	page = MagicMock()
+	page.evaluate.side_effect = RuntimeError("Evaluation failed: ReferenceError")
+	session = _started_cdp_session_with_page(page)
+
+	with pytest.raises(RuntimeError):
+		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+
+	page.evaluate.assert_called_once()
+	page.wait_for_load_state.assert_not_called()

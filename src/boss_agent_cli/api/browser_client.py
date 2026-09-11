@@ -74,6 +74,60 @@ _CHROME_USER_DATA_CANDIDATES = [
 ]
 
 
+#: page.evaluate(fetch) 的 JS 主体，request() 首次与恢复后重试共用同一份。
+_FETCH_SCRIPT = """
+			async ({method, url, params, data, referer}) => {
+				try {
+					let fetchUrl = url;
+					if (params && Object.keys(params).length > 0) {
+						const sp = new URLSearchParams();
+						for (const [k, v] of Object.entries(params)) {
+							if (v !== null && v !== undefined) sp.append(k, String(v));
+						}
+						fetchUrl = url + '?' + sp.toString();
+					}
+
+					const options = {
+						method: method,
+						credentials: 'include',
+						headers: {
+							'Accept': 'application/json, text/plain, */*',
+							'Referer': referer,
+							'X-Requested-With': 'XMLHttpRequest',
+						},
+					};
+
+					if (method === 'POST' && data) {
+						options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+						const formData = new URLSearchParams();
+						for (const [k, v] of Object.entries(data)) {
+							formData.append(k, String(v));
+						}
+						options.body = formData.toString();
+					}
+
+					const resp = await fetch(fetchUrl, options);
+					return await resp.json();
+				} catch (e) {
+					return {code: -1, message: e.message, zpData: {}};
+				}
+			}
+		"""
+
+_CONTEXT_DESTROYED_MARKERS = (
+	"execution context was destroyed",
+	"execution context is not available",
+	"cannot find context with specified id",
+	"target closed",
+)
+
+
+def _is_context_destroyed_error(exc: BaseException) -> bool:
+	"""页面在 evaluate 期间发生导航/重载时 patchright 抛出的那一类错误。"""
+	text = str(exc).lower()
+	return any(marker in text for marker in _CONTEXT_DESTROYED_MARKERS)
+
+
 class BrowserSession:
 	"""Persistent browser session that makes API calls via page.evaluate(fetch).
 
@@ -455,47 +509,27 @@ class BrowserSession:
 				}
 			else:
 				self._page_ready = True
-		result = self._page.evaluate(
-			"""
-			async ({method, url, params, data, referer}) => {
-				try {
-					let fetchUrl = url;
-					if (params && Object.keys(params).length > 0) {
-						const sp = new URLSearchParams();
-						for (const [k, v] of Object.entries(params)) {
-							if (v !== null && v !== undefined) sp.append(k, String(v));
-						}
-						fetchUrl = url + '?' + sp.toString();
-					}
-
-					const options = {
-						method: method,
-						credentials: 'include',
-						headers: {
-							'Accept': 'application/json, text/plain, */*',
-							'Referer': referer,
-							'X-Requested-With': 'XMLHttpRequest',
-						},
-					};
-
-					if (method === 'POST' && data) {
-						options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-						const formData = new URLSearchParams();
-						for (const [k, v] of Object.entries(data)) {
-							formData.append(k, String(v));
-						}
-						options.body = formData.toString();
-					}
-
-					const resp = await fetch(fetchUrl, options);
-					return await resp.json();
-				} catch (e) {
-					return {code: -1, message: e.message, zpData: {}};
+		payload = {"method": method, "url": url, "params": params or {}, "data": data, "referer": referer}
+		try:
+			result = self._page.evaluate(_FETCH_SCRIPT, payload)
+		except Exception as exc:
+			# 复用用户页签时，用户恰好在请求那一瞬间手动导航会让执行上下文被销毁
+			#（patchright 抛 "Execution context was destroyed"）。健康路径零额外往返；只在
+			# 撞上这类异常时做一次有界就绪恢复并重试同一请求**一次**，仍失败返回错误信封
+			# 而不挂起、不无界重试（Issue #423；与 #390 / #419 规则一致）。
+			if not _is_context_destroyed_error(exc):
+				raise
+			self._page_ready = False
+			try:
+				self._page.wait_for_load_state("domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+			except Exception:
+				return {
+					"code": -1,
+					"message": "页面在请求期间发生导航且未在超时内就绪，无法发起请求；请稍后重试",
+					"zpData": {},
 				}
-			}
-		""",
-			{"method": method, "url": url, "params": params or {}, "data": data, "referer": referer},
-		)
+			self._page_ready = True
+			result = self._page.evaluate(_FETCH_SCRIPT, payload)
 
 		self._throttle.mark()
 		return cast("dict[str, Any]", result)
