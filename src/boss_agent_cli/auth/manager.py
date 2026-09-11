@@ -43,27 +43,38 @@ class AuthManager:
 		cookie_source: str | None = None,
 		cdp_url: str | None = None,
 		force_cdp: bool = False,
+		force_relogin: bool = False,
 	) -> dict[str, Any]:
 		"""三级降级登录：Cookie 提取 → CDP 自动探测 → patchright 扫码。
 
 		Args:
 			force_cdp: 为 True 时跳过 Cookie 提取，CDP 不可用直接报错。
+			force_relogin: 为 True 时（``--force``）不复用任何既有登录态：跳过本地
+				浏览器 Cookie 提取，CDP 路径不扫描已登录 context 并清掉目标平台域 cookie
+				后重新登录。与 ``force_cdp`` 正交。
 		"""
 		method = "未知"
 		token: dict[str, Any] | None = None
+		reuse_existing = not force_relogin
 
 		if force_cdp:
 			# --cdp 强制模式：跳过 Cookie，CDP 不可用直接抛异常
 			self._logger.info("强制 CDP 模式，跳过 Cookie 提取")
-			token = login_via_cdp(cdp_url=cdp_url, timeout=timeout, platform=self._platform)
+			token = login_via_cdp(
+				cdp_url=cdp_url, timeout=timeout, platform=self._platform, reuse_existing=reuse_existing
+			)
 			method = "CDP 扫码"
 			self._store.save(token)
 			self._token = token
 			return {**token, "_method": method}
 
-		# 第一步：尝试从本地浏览器提取 Cookie
-		self._logger.info("尝试从本地浏览器提取 Cookie...")
-		token = extract_cookies(cookie_source, platform=self._platform)
+		# 第一步：尝试从本地浏览器提取 Cookie（--force 下跳过：本地 Cookie 正是要放弃的旧登录态）
+		if force_relogin:
+			self._logger.info("--force：跳过本地浏览器 Cookie 提取")
+			token = None
+		else:
+			self._logger.info("尝试从本地浏览器提取 Cookie...")
+			token = extract_cookies(cookie_source, platform=self._platform)
 		if token and self._has_primary_cookie(token):
 			if self._verify_cookie(token):
 				self._store.save(token)
@@ -78,7 +89,9 @@ class AuthManager:
 		if probe_cdp(cdp_url):
 			self._logger.info("检测到 CDP 可用，尝试 CDP 登录...")
 			try:
-				token = login_via_cdp(cdp_url=cdp_url, timeout=timeout, platform=self._platform)
+				token = login_via_cdp(
+					cdp_url=cdp_url, timeout=timeout, platform=self._platform, reuse_existing=reuse_existing
+				)
 				method = "CDP 扫码"
 				self._store.save(token)
 				self._token = token

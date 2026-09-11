@@ -28,7 +28,7 @@ def test_login_force_cdp_skips_cookie_extraction(mock_extract, mock_login_via_cd
 	result = manager.login(timeout=45, cdp_url="http://127.0.0.1:9222", force_cdp=True)
 
 	mock_extract.assert_not_called()
-	mock_login_via_cdp.assert_called_once_with(cdp_url="http://127.0.0.1:9222", timeout=45, platform="zhipin")
+	mock_login_via_cdp.assert_called_once_with(cdp_url="http://127.0.0.1:9222", timeout=45, platform="zhipin", reuse_existing=True)
 	store.save.assert_called_once_with({"cookies": {"wt2": "cdp-cookie"}, "stoken": "cdp-token"})
 	assert result["_method"] == "CDP 扫码"
 	assert manager._token["stoken"] == "cdp-token"
@@ -90,7 +90,7 @@ def test_login_falls_back_to_browser_when_cdp_login_fails(
 		patch("boss_agent_cli.auth.manager.qr_login_httpx", side_effect=RuntimeError("qr failed")):
 		result = manager.login(timeout=30)
 
-	mock_login_via_cdp.assert_called_once_with(cdp_url=None, timeout=30, platform="zhipin")
+	mock_login_via_cdp.assert_called_once_with(cdp_url=None, timeout=30, platform="zhipin", reuse_existing=True)
 	mock_login_via_browser.assert_called_once_with(timeout=30, platform="zhipin")
 	store.save.assert_called_once_with({"cookies": {"wt2": "browser-cookie"}, "stoken": "browser-token"})
 	assert result["_method"] == "扫码登录"
@@ -282,3 +282,41 @@ def test_zhilian_force_refresh_falls_back_to_cdp(mock_extract, mock_login_via_cd
 		manager.force_refresh(cdp_url="http://127.0.0.1:9222")
 
 	mock_login_via_cdp.assert_called_once_with(cdp_url="http://127.0.0.1:9222", timeout=30, platform="zhilian")
+
+
+# ── login(force_relogin=True)（Issue #424） ─────────────────
+
+
+@patch("boss_agent_cli.auth.manager.TokenStore")
+@patch("boss_agent_cli.auth.manager.login_via_cdp")
+@patch("boss_agent_cli.auth.manager.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.manager.extract_cookies")
+def test_login_force_relogin_skips_cookie_extraction_and_disables_reuse(
+	mock_extract, mock_probe_cdp, mock_login_via_cdp, mock_store_cls, tmp_path
+):
+	store = _make_store()
+	mock_store_cls.return_value = store
+	mock_login_via_cdp.return_value = {"cookies": {"wt2": "fresh"}, "stoken": "fresh-token"}
+
+	result = AuthManager(tmp_path).login(timeout=30, cdp_url="http://127.0.0.1:9222", force_relogin=True)
+
+	mock_extract.assert_not_called()  # 本地 Cookie 正是要放弃的旧登录态
+	mock_login_via_cdp.assert_called_once_with(
+		cdp_url="http://127.0.0.1:9222", timeout=30, platform="zhipin", reuse_existing=False
+	)
+	store.save.assert_called_once_with({"cookies": {"wt2": "fresh"}, "stoken": "fresh-token"})
+	assert result["_method"] == "CDP 扫码"
+
+
+@patch("boss_agent_cli.auth.manager.TokenStore")
+@patch("boss_agent_cli.auth.manager.login_via_cdp")
+@patch("boss_agent_cli.auth.manager.extract_cookies")
+def test_login_force_cdp_and_force_relogin_compose(mock_extract, mock_login_via_cdp, mock_store_cls, tmp_path):
+	"""--cdp --force：CDP 必须可用，且不复用。"""
+	mock_store_cls.return_value = _make_store()
+	mock_login_via_cdp.return_value = {"cookies": {"wt2": "fresh"}, "stoken": "t"}
+
+	AuthManager(tmp_path).login(timeout=45, cdp_url=None, force_cdp=True, force_relogin=True)
+
+	mock_extract.assert_not_called()
+	mock_login_via_cdp.assert_called_once_with(cdp_url=None, timeout=45, platform="zhipin", reuse_existing=False)

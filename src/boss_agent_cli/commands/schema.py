@@ -304,6 +304,11 @@ SCHEMA_DATA = {
 					"default": False,
 					"description": "强制 CDP 模式（跳过 Cookie 提取，CDP 不可用直接报错）",
 				},
+				"--force": {
+					"type": "bool",
+					"default": False,
+					"description": "不复用任何既有登录态：跳过本地 Cookie 提取，CDP 下不扫描已登录 context 并清掉当前 context 内目标平台域 cookie 后重新登录（其他站点与其他 context 不动）；与 --cdp 正交，不能与 --curl-file / --cookie-source 混用",
+				},
 			},
 		},
 		"platforms": {

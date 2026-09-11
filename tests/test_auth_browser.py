@@ -802,3 +802,74 @@ def test_login_via_cdp_reuse_stalled_page_is_not_evaluated(mock_sleep, mock_prob
 	existing_page.evaluate.assert_not_called()  # 页面卡住：UA 也不采
 	assert result["stoken"] == ""
 	assert result["user_agent"] == ""
+
+
+# ── login --force：不复用既有登录态（Issue #424） ─────────────────
+
+
+def test_clear_platform_cookies_only_touches_target_domain_variants():
+	"""按实际存在的 domain 值逐一清除：.zhipin.com 与 www.zhipin.com 都清，evil-zhipin.com 与其他站点不动。"""
+	from boss_agent_cli.auth.browser import _clear_platform_cookies
+
+	ctx = MagicMock()
+	ctx.cookies.return_value = [
+		{"name": "wt2", "value": "tok", "domain": ".zhipin.com"},
+		{"name": "__zp_stoken__", "value": "s", "domain": "www.zhipin.com"},
+		{"name": "x", "value": "1", "domain": "evil-zhipin.com"},
+		{"name": "y", "value": "2", "domain": "zhipin.com.attacker.net"},
+		{"name": "sid", "value": "3", "domain": ".github.com"},
+	]
+
+	_clear_platform_cookies(ctx, cookie_domain="zhipin.com")
+
+	cleared = sorted(call.kwargs["domain"] for call in ctx.clear_cookies.call_args_list)
+	assert cleared == [".zhipin.com", "www.zhipin.com"]
+
+
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_login_via_cdp_force_skips_reuse_clears_platform_cookies_and_scans(mock_sleep, mock_probe_cdp, capsys):
+	"""reuse_existing=False：不扫描已登录 context、清掉目标平台 cookie、打开登录页并轮询新登录态。"""
+	logged_ctx, existing_page = _make_reuse_page_context(jar_stoken="stale-stoken")
+	# 清除后第一次轮询没有 wt2（已清），第二次出现新扫码产生的 wt2
+	logged_ctx.cookies.side_effect = [
+		[{"name": "wt2", "value": "stale", "domain": ".zhipin.com"}],  # _clear_platform_cookies 枚举
+		[],  # 轮询第 1 次：已清
+		[{"name": "wt2", "value": "fresh", "domain": ".zhipin.com"}],  # 轮询第 2 次：新登录
+		[{"name": "wt2", "value": "fresh", "domain": ".zhipin.com"}],  # 最终读取
+	]
+	mock_launcher, _, new_page = _mock_cdp_playwright(logged_ctx)
+	new_page.evaluate.return_value = "UA"
+
+	with (
+		patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher),
+		patch("boss_agent_cli.auth.browser._find_logged_in_context") as mock_find,
+		patch("boss_agent_cli.auth.browser._extract_stoken", return_value="fresh-stoken"),
+	):
+		result = login_via_cdp(timeout=3, reuse_existing=False)
+
+	mock_find.assert_not_called()  # 不扫描、不复用
+	logged_ctx.clear_cookies.assert_called_once_with(domain=".zhipin.com")
+	existing_page.goto.assert_not_called()  # 既有页签不动
+	new_page.goto.assert_any_call(LOGIN_PAGE_URL, wait_until="commit", timeout=_NAV_TIMEOUT_MS)
+	assert result["cookies"]["wt2"] == "fresh"
+	assert result["stoken"] == "fresh-stoken"
+	assert "--force" in capsys.readouterr().err
+
+
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_login_via_cdp_default_still_reuses_without_clearing(mock_sleep, mock_probe_cdp):
+	"""默认 reuse_existing=True 行为不变：复用已登录 context，绝不清 cookie。"""
+	logged_ctx, existing_page = _make_reuse_page_context(jar_stoken="jar-stoken")
+	mock_browser = MagicMock()
+	mock_browser.contexts = [logged_ctx]
+	mock_launcher = MagicMock()
+	mock_launcher.start.return_value.chromium.connect_over_cdp.return_value = mock_browser
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
+		result = login_via_cdp(timeout=1)
+
+	logged_ctx.clear_cookies.assert_not_called()
+	existing_page.goto.assert_not_called()
+	assert result["stoken"] == "jar-stoken"

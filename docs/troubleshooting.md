@@ -149,6 +149,12 @@ boss --cdp-url http://localhost:9222 login --cdp
 浏览器窗口/无痕页或多个 profile 各登不同 BOSS 账号时，复用的是「第一个带登录态的
 context」；若指纹对应的账号不是你要的，请关闭多余窗口或只保留目标账号的登录态后重试。
 
+复用只检查登录 cookie **是否存在**，不校验服务端是否仍有效。若复用后每条命令都返回
+`AUTH_REQUIRED` / `TOKEN_REFRESH_FAILED`，而 `boss login --cdp` 仍提示「正在复用现有登录态」，
+说明浏览器里的会话已在服务端失效：用 `boss login --cdp --force` 强制重登——它不扫描、不复用
+任何已登录 context，先清掉**当前 context 内目标平台域**的 cookie（其他站点与其他 context 不动，
+但这意味着该 Chrome 里的平台账号会被登出），再打开登录页重新扫码。切换账号也用它。
+
 ## 锁定浏览器通道：`--browser-source`
 
 `--browser-source stored-cookie --cdp-url <地址>` 是 fail-closed 的严格模式：把浏览器通道锁定为你指定的那个 CDP 端点并禁止降级到 Bridge 或 headless，不可用时立即返回 `CDP_UNAVAILABLE`。该端点可以是你日常 Chrome 的调试端口，也可以是长期复用的专用调试 profile——**它只保证「锁定通道」，不保证复用你日常浏览器的登录会话**。若你要的是后者，请用 `--browser-source existing-browser`。

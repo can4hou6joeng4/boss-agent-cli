@@ -508,3 +508,29 @@ def test_login_success_hints_stay_agent_only(mock_auth_cls):
 	hints = json.loads(result.output)["hints"]
 	assert "next_actions" in hints
 	assert not hints.get("operator_actions")
+
+
+@patch("boss_agent_cli.commands.login.AuthManager")
+def test_login_force_flag_propagates_force_relogin(mock_auth_cls):
+	"""--force 应把 force_relogin=True 传到 auth.login，且与 --cdp 正交。"""
+	mock_auth = MagicMock()
+	mock_auth.login.return_value = {"cookies": {}, "stoken": "", "_method": "CDP 扫码"}
+	mock_auth_cls.return_value = mock_auth
+
+	result = CliRunner().invoke(cli, ["login", "--cdp", "--force"])
+	assert result.exit_code == 0
+	kwargs = mock_auth.login.call_args.kwargs
+	assert kwargs["force_relogin"] is True
+	assert kwargs["force_cdp"] is True
+
+
+@patch("boss_agent_cli.commands.login.AuthManager")
+def test_login_force_rejects_cookie_source(mock_auth_cls):
+	"""--force 跳过 Cookie 提取，与 --cookie-source 互斥，按 INVALID_PARAM 拒绝且不触发登录。"""
+	result = CliRunner().invoke(cli, ["login", "--force", "--cookie-source", "chrome"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["recoverable"] is False
+	mock_auth_cls.return_value.login.assert_not_called()

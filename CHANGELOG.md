@@ -13,6 +13,7 @@
   按错误码分支的下游 Agent 请新增 `ENVIRONMENT_RISK` 终止分支，绝不对其自动登录/刷新/重试。
 
 ### Added
+- `boss login --force`：不复用任何既有登录态（Issue #424 第一步）。跳过本地浏览器 Cookie 提取；CDP 路径不扫描已登录 context，清掉当前 context 内目标平台域的 cookie（其他站点与其他 context 不动）后打开登录页重新扫码，堵住「服务端已失效的 `wt2` 被复用路径当成已登录、用户没有重登入口」的死循环。与 `--cdp` 正交，不能与 `--curl-file` / `--cookie-source` 混用；`login` 的选项互斥错误现在按 `INVALID_PARAM` 返回而不是 `NETWORK_ERROR`。
 - `boss login --curl-file` 支持从浏览器 cURL 文本导入 BOSS 登录态，验证后复用原生加密存储，不执行原请求或保存业务请求体。
 - 招聘者模式新增推荐牛人完整卡片和需明确批准的首次招呼；使用单次直连请求及候选人／职位原子防重，不建立 MQTT 连接或发送已读回执。
 - 新增 `hr accept-resume` / `hr download-resume` 及对应 MCP 工具：核对候选人与消息后同意请求，检查权限并下载已收到附件；复用原生认证，不自动重试写请求、不覆盖已有文件。

@@ -36,7 +36,7 @@ TTY 下只把 `operator_actions` 渲染到 stderr；`next_actions` 是纯 Agent 
 | `boss` / `boss wizard` | TTY 下启动纯向导；`--input-json` 供 Agent 执行共享 workflow，`--status/--resume/--stop <run_id>` 管理持久化任务 |
 | `boss schema` | 输出完整工具能力描述 JSON（39 个顶层命令 + hr 分组展开，Agent 首先调用） |
 | `boss platforms` | 本地平台注册与能力状态（不触网；支持 `--platform` 单平台过滤与 `--capability` 反查，附 `capability_status_legend`） |
-| `boss login` | 用户主动登录（按平台走 Cookie / CDP / QR / 浏览器降级链路） |
+| `boss login` | 用户主动登录（按平台走 Cookie / CDP / QR / 浏览器降级链路）；`--force` 不复用任何既有登录态，跳过本地 Cookie 提取、CDP 下清掉当前 context 内目标平台的 cookie 后重新扫码 |
 | `boss logout` | 退出登录 |
 | `boss status` | 检查登录态（默认仅本地；`--live` 才执行低频只读验证） |
 | `boss doctor` | 诊断环境、依赖、凭据完整性和网络；默认仅本地诊断，`--live-probe` 才执行低频只读探测 |

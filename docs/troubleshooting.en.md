@@ -160,6 +160,14 @@ windows / incognito pages, or several profiles each logged into a different BOSS
 the reused context is the first one holding a login session. If the fingerprint is not the
 account you want, close the extra windows or keep only the target account logged in, then retry.
 
+Reuse only checks that the login cookie **exists**; it does not verify the session server-side.
+If every command returns `AUTH_REQUIRED` / `TOKEN_REFRESH_FAILED` after reuse while
+`boss login --cdp` still reports "reusing existing session", the browser session has expired
+server-side: run `boss login --cdp --force`. It scans and reuses nothing, clears the target
+platform's cookies **in the current context only** (other sites and other contexts are untouched,
+but the platform account in that Chrome is signed out), then opens the login page for a fresh QR
+scan. Use it to switch accounts as well.
+
 ## Locking the browser channel: `--browser-source`
 
 `--browser-source stored-cookie --cdp-url <addr>` is a fail-closed strict mode: it locks the browser channel to the exact CDP endpoint you specify and forbids falling back to Bridge or headless, returning `CDP_UNAVAILABLE` immediately when unavailable. The endpoint can be your daily Chrome's debug port or a long-lived dedicated debug profile — **it only guarantees "locked channel", not reuse of your daily browser's login session**. For the latter, use `--browser-source existing-browser`.

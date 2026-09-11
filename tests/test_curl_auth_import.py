@@ -103,7 +103,7 @@ def test_login_curl_stdin_uses_auth_manager_without_disclosing_input(tmp_path):
 	assert "test-session" not in result.output
 
 
-@pytest.mark.parametrize("options", [["--cdp"], ["--cookie-source", "chrome"]])
+@pytest.mark.parametrize("options", [["--cdp"], ["--cookie-source", "chrome"], ["--force"]])
 def test_login_curl_conflicting_sources_are_rejected(tmp_path, options):
 	with patch("boss_agent_cli.commands.login.AuthManager") as auth:
 		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "login", "--curl-file", "-", *options], input=_CURL)
@@ -124,6 +124,7 @@ def test_login_curl_does_not_echo_unexpected_error_or_fallback(tmp_path):
 
 def test_login_curl_file_option_is_in_schema_and_reads_utf8(tmp_path):
 	assert "--curl-file" in SCHEMA_DATA["commands"]["login"]["options"]
+	assert "--force" in SCHEMA_DATA["commands"]["login"]["options"]
 	path = tmp_path / "request.txt"
 	path.write_text(_CURL, encoding="utf-8")
 	with patch("boss_agent_cli.commands.login.AuthManager") as auth:

@@ -120,6 +120,22 @@ def _ensure_page_evaluable(page: Any) -> bool:
 	return True
 
 
+def _clear_platform_cookies(context: Any, *, cookie_domain: str) -> None:
+	"""只清除该 context 内目标平台域（含子域）的 cookie，其他站点 cookie 原样保留。
+
+	``clear_cookies(domain=...)`` 的 domain 参数按精确值匹配，而登录态 cookie 的 domain
+	既可能是 ``.zhipin.com`` 也可能是 ``www.zhipin.com``，所以先按 ``_is_cookie_domain``
+	枚举出实际存在的 domain 值再逐一清除，不用正则（避免误伤 ``evil-zhipin.com``）。
+	"""
+	domains = {
+		str(cookie.get("domain", ""))
+		for cookie in context.cookies()
+		if _is_cookie_domain(str(cookie.get("domain", "")), cookie_domain)
+	}
+	for domain in sorted(domains):
+		context.clear_cookies(domain=domain)
+
+
 def _matching_cookies(context: Any, *, cookie_domain: str) -> list[dict[str, Any]]:
 	try:
 		return [
@@ -222,10 +238,23 @@ def probe_cdp(cdp_url: str | None = None) -> str | None:
 		return None
 
 
-def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: str = "zhipin") -> dict[str, Any]:
+def login_via_cdp(
+	*,
+	cdp_url: str | None = None,
+	timeout: int = 120,
+	platform: str = "zhipin",
+	reuse_existing: bool = True,
+) -> dict[str, Any]:
 	"""
 	通过 CDP 连接用户 Chrome 扫码登录。
 	返回 token dict，失败抛异常。
+
+	Args:
+		reuse_existing: 为 False 时（``boss login --force``）不扫描、不复用任何已登录
+			context，并在扫码前清掉第一个 context 内目标平台域的 cookie，让平台真正
+			弹出登录页——否则已失效但仍存在的 ``wt2`` 会被复用路径当成「已登录」落盘，
+			用户没有任何重登入口（Issue #424）。只清目标平台域、只清当前 context，
+			其他站点与其他 context 不动。
 	"""
 	config = _get_platform_config(platform)
 	login_page_url = config["login_page_url"]
@@ -240,13 +269,21 @@ def login_via_cdp(*, cdp_url: str | None = None, timeout: int = 120, platform: s
 	browser = pw.chromium.connect_over_cdp(ws_url)
 	# 跨所有 browser context 搜索已有登录态：命中则复用该 context，不导航登录页
 	all_contexts = list(browser.contexts)
-	logged_in_ctx, ctx_index, ctx_account_fp = _find_logged_in_context(
-		all_contexts,
-		cookie_domain=cookie_domain,
-		success_cookie=success_cookie,
-	)
+	if reuse_existing:
+		logged_in_ctx, ctx_index, ctx_account_fp = _find_logged_in_context(
+			all_contexts,
+			cookie_domain=cookie_domain,
+			success_cookie=success_cookie,
+		)
+	else:
+		logged_in_ctx, ctx_index, ctx_account_fp = None, -1, ""
 	already_logged_in = logged_in_ctx is not None
 	ctx = logged_in_ctx or (browser.contexts[0] if browser.contexts else browser.new_context())
+	if not reuse_existing:
+		# 强制重登：清掉当前 context 内目标平台域的 cookie。不清的话登录页会因残留
+		# 登录态直接跳回首页，轮询立刻命中旧 wt2，--force 形同虚设。
+		_clear_platform_cookies(ctx, cookie_domain=cookie_domain)
+		print(f"[boss] --force：跳过复用，已清除当前 context 的 {cookie_domain} 登录态，改为重新登录", file=sys.stderr)
 	if already_logged_in and platform == "zhipin":
 		page = _find_zhipin_page(ctx.pages)
 	elif platform == "zhilian":

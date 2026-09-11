@@ -42,6 +42,15 @@ def _classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, objec
 			},
 		}
 
+	if isinstance(exc, ValueError):
+		# 选项互斥等用法错误：不是登录链路失败，按 INVALID_PARAM 契约返回，不建议重试登录。
+		return {
+			"code": "INVALID_PARAM",
+			"message": raw_message,
+			"recoverable": False,
+			"recovery_action": "修正参数",
+		}
+
 	if isinstance(exc, TimeoutError) or "timeout" in message or "超时" in raw_message:
 		return payload(
 			"LOGIN_TIMEOUT",
@@ -124,9 +133,10 @@ def _classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, objec
 @click.option("--timeout", default=120, help="扫码登录超时时间（秒）")
 @click.option("--cookie-source", default=None, help="指定浏览器提取 Cookie（如 chrome/firefox/edge），不指定则自动检测")
 @click.option("--cdp", is_flag=True, default=False, help="强制 CDP 模式（跳过 Cookie 提取，CDP 不可用直接报错）")
+@click.option("--force", is_flag=True, default=False, help="不复用任何既有登录态：跳过本地 Cookie 提取，CDP 下不复用已登录 context 并清掉目标平台 cookie 后重新登录")
 @click.option("--curl-file", type=click.File("r", encoding="utf-8"), default=None, help="从 Copy as cURL (bash) 文件导入 BOSS 登录态；- 表示标准输入")
 @click.pass_context
-def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: bool, curl_file: TextIO | None) -> None:
+def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: bool, force: bool, curl_file: TextIO | None) -> None:
 	"""登录当前招聘平台（按平台走对应的 Cookie / CDP / 浏览器降级链路）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -136,15 +146,18 @@ def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: 
 	auth = AuthManager(data_dir, logger=logger, platform=platform_name)
 	try:
 		if curl_file is not None:
-			if cookie_source is not None or cdp:
-				raise ValueError("--curl-file 不能与 --cookie-source 或 --cdp 同时使用")
+			if cookie_source is not None or cdp or force:
+				raise ValueError("--curl-file 不能与 --cookie-source、--cdp 或 --force 同时使用")
 			token = auth.import_curl(curl_file.read())
 		else:
+			if force and cookie_source is not None:
+				raise ValueError("--force 会跳过本地 Cookie 提取，不能与 --cookie-source 同时使用")
 			token = auth.login(
 				timeout=timeout,
 				cookie_source=cookie_source,
 				cdp_url=cdp_url,
 				force_cdp=cdp,
+				force_relogin=force,
 			)
 		method = token.pop("_method", "未知")
 		status_cmd = boss_command_for_ctx(ctx, "status")
