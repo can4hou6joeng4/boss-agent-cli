@@ -219,6 +219,12 @@ def test_schema_environment_risk_is_terminal():
 def test_schema_documents_browser_source_flag():
 	"""--browser-source 必须进入 schema global_options，choices 为三类来源且标 experimental。"""
 	flag = SCHEMA_DATA["global_options"]["--browser-source"]
-	assert flag["choices"] == ["auto", "existing-browser", "stored-cookie"]
+	assert sorted(flag["choices"]) == ["auto", "existing-browser", "stored-cookie"]
+	# choices 只从策略表推导（顺序亦同）：策略表加一行，schema / CLI / MCP 三处同时看到，不会漂移
+	from boss_agent_cli.api.browser_source import POLICIES
+
+	assert flag["choices"] == list(POLICIES)
+	assert "BROWSER_SESSION_NOT_FOUND" in flag["description"]
+	assert "CDP_UNAVAILABLE" in flag["description"]
 	assert flag["default"] == "auto"
 	assert flag["stability"] == "experimental"

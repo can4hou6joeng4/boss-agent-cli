@@ -106,6 +106,24 @@ def test_browser_source_reads_config_value(tmp_path: Any) -> None:
 	assert payload["data"]["current_browser_source"] == "existing-browser"
 
 
+def test_browser_source_rejects_unknown_config_value(tmp_path: Any) -> None:
+	"""config.json 里的非法 browser_source 走 main.py 的白名单分支（不是 click.Choice），必须以 INVALID_PARAM 信封拒绝。"""
+	(tmp_path / "config.json").write_text(json.dumps({"browser_source": "cdp"}), encoding="utf-8")
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "schema"])
+	assert result.exit_code != 0
+	payload = json.loads(result.output.strip())
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "cdp" in payload["error"]["message"]
+
+
+def test_browser_source_config_value_is_normalized(tmp_path: Any) -> None:
+	"""config.json 里带大小写/空白的合法值按 resolve_policy 同样的规则归一化后接受。"""
+	(tmp_path / "config.json").write_text(json.dumps({"browser_source": " Stored-Cookie "}), encoding="utf-8")
+	payload = _invoke_schema(tmp_path)
+	assert payload["data"]["current_browser_source"] == "stored-cookie"
+
+
 def test_browser_source_rejects_unknown_value(tmp_path: Any) -> None:
 	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--browser-source", "bridge", "--json", "schema"])
 	assert result.exit_code != 0

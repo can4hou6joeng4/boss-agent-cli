@@ -2,6 +2,7 @@ from typing import Any, cast
 
 import click
 
+from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.compliance import compliance_mode_data
 from boss_agent_cli.output import emit_success
 from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
@@ -1111,9 +1112,9 @@ SCHEMA_DATA = {
 		"--browser-source": {
 			"type": "string",
 			"default": "auto",
-			"choices": ["auto", "existing-browser", "stored-cookie"],
+			"choices": list(BROWSER_SOURCES),
 			"stability": "experimental",
-			"description": "浏览器通道来源。auto 允许 Bridge→CDP→headless 降级；existing-browser 只复用现有浏览器（Bridge/CDP），不读本地凭据、不启动浏览器；stored-cookie 为 fail-closed，只连 --cdp-url 指定的 CDP 端点，不自动探测、不降级、空浏览器不新建 context，不可用发 CDP_UNAVAILABLE。不得用于规避平台风控。",
+			"description": "浏览器通道来源。auto 允许 Bridge→CDP→headless 降级；existing-browser 只复用现有浏览器（Bridge/CDP），不读本地凭据、不启动浏览器，候选耗尽发 BROWSER_SESSION_NOT_FOUND；stored-cookie 为 fail-closed，只连 --cdp-url 指定的 CDP 端点，不自动探测、不降级、空浏览器不新建 context，不可用发 CDP_UNAVAILABLE。不得用于规避平台风控。",
 		},
 		"--platform": {
 			"type": "string",

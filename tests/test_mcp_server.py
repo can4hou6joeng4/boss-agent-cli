@@ -7,6 +7,8 @@ import types
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+import pytest
+
 
 # mcp 包可能未安装，用 mock 模块替代以允许导入 server.py
 _mcp_mock = types.ModuleType("mcp")
@@ -595,6 +597,19 @@ def test_run_boss_passes_configured_global_args_before_command(mock_run):
 
 
 @patch("server.subprocess.run")
+def test_run_boss_passes_browser_source_before_command(mock_run):
+	"""--browser-source 与其他全局参数一样透传给底层 boss CLI，且位于子命令之前。"""
+	mock_run.return_value = MagicMock(stdout='{"ok": true}', stderr="")
+	_configure_boss_invocation(browser_source="stored-cookie")
+	try:
+		_run_boss("status")
+		cmd = mock_run.call_args[0][0]
+		assert cmd == ["boss", "--json", "--browser-source", "stored-cookie", "status"]
+	finally:
+		_configure_boss_invocation()
+
+
+@patch("server.subprocess.run")
 def test_run_boss_timeout(mock_run):
 	"""应设置 120 秒超时。"""
 	mock_run.return_value = MagicMock(stdout='{"ok": true}', stderr="")
@@ -624,6 +639,17 @@ def test_parse_cli_args_defaults():
 	assert args.data_dir is None
 	assert args.platform is None
 	assert args.role is None
+	assert args.browser_source is None
+
+
+def test_parse_cli_args_browser_source_choices_come_from_policy_table():
+	"""--browser-source 的取值域只从策略表推导：每个策略名都能解析，未知值被 argparse 拒绝。"""
+	from boss_agent_cli.api.browser_source import POLICIES
+
+	for name in POLICIES:
+		assert _parse_cli_args(["--browser-source", name]).browser_source == name
+	with pytest.raises(SystemExit):
+		_parse_cli_args(["--browser-source", "bridge"])
 
 
 def test_parse_cli_args_accepts_boss_global_options():
@@ -633,11 +659,13 @@ def test_parse_cli_args_accepts_boss_global_options():
 		"--data-dir", "./.boss-agent",
 		"--platform", "zhilian",
 		"--role", "recruiter",
+		"--browser-source", "existing-browser",
 	])
 	assert args.boss_bin == "/opt/boss"
 	assert args.data_dir == "./.boss-agent"
 	assert args.platform == "zhilian"
 	assert args.role == "recruiter"
+	assert args.browser_source == "existing-browser"
 
 
 def test_parse_cli_args_http_overrides():

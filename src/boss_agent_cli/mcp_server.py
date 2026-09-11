@@ -22,6 +22,7 @@ from mcp.types import (
 	TextContent,
 )
 
+from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.mcp_tools import TOOLS
 
@@ -269,7 +270,8 @@ def _parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
 	parser.add_argument("--role", choices=("candidate", "recruiter"), default=None, help="传给 boss CLI 的默认角色")
 	parser.add_argument(
 		"--browser-source",
-		choices=("auto", "existing-browser", "stored-cookie"),
+		# 取值域只从策略表推导，与 main.py / config_cmd.py 一致；新增来源不必再改这里。
+		choices=tuple(BROWSER_SOURCES),
 		default=None,
 		help="传给 boss CLI 的浏览器通道来源（默认 auto）",
 	)

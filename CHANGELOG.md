@@ -31,6 +31,7 @@
   强制走浏览器通道获取职位卡片；既有 `job_card()` 的 httpx 优先行为完全不变。
 
 ### Fixed
+- `--browser-source` 的取值域在 `boss schema` 与 `boss-mcp` 两处不再手写三元组，统一从 `api/browser_source.py` 的策略表推导（与 CLI / `config set` 一致，`schema` 里 `choices` 的顺序随之改为策略表顺序），新增来源时不会再漂移；schema 描述补上 `existing-browser` 候选耗尽发 `BROWSER_SESSION_NOT_FOUND`。补齐 config.json 非法 / 带大小写空白的 `browser_source` 值与 MCP 透传的测试。
 - 招聘者写操作在 #403 的 code 37 分类下仍不刷新、不重试；招呼遭遇环境风控时仅提示官方页面人工处理，不再建议调用聊天接口。附件同意的未知结果改用已声明的 `RESUME_ACCEPT_RESULT_UNKNOWN`，确认提示复用通用恢复契约。
 - 附件下载的登录与网络错误采用 schema 恢复指引，二进制 HTTP 401/403 映射为 `AUTH_REQUIRED`；以排他创建替代硬链接落盘，保留不覆盖与写入失败清理，补齐推荐牛人 CLI 成功和失败测试。
 - 修复招聘者首次招呼将 `code=0` 的权益拦截页误判为成功：识别开聊业务拒绝，返回 `GREET_LIMIT`、`sent=false` 及脱敏平台提示；保留拒绝状态并阻止重复发送，不影响其他端点的成功判断。
