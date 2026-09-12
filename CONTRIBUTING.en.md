@@ -123,7 +123,7 @@ On error, the envelope must contain `error.code`, `error.recoverable`, and `erro
 
 ## Adding an AI Provider
 
-`boss ai` keeps a table of OpenAI-compatible providers in `PROVIDER_BASE_URLS` (`src/boss_agent_cli/ai/config.py`). New providers are welcome, **including PRs authored by the provider's own engineers** — that is how `atlas` got here.
+`boss ai` keeps a table of OpenAI-compatible providers in `PROVIDER_BASE_URLS` (`src/boss_agent_cli/ai/config.py`). New providers are welcome, **including PRs authored by the provider's own engineers**.
 
 But every row transfers a maintenance liability to this project: when a provider changes domains, changes pricing, or retires a model, the docs go stale silently and no test can catch it. Hence the three rules below.
 

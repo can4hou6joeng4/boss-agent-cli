@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Changed（含 Breaking Change）
+- **移除 README 的赞助与推广展示位，并移除 `atlas` provider 接入。** README 两语顶部的 Atlas Cloud 展示位（含 UTM 追踪链接与 logo 资产）和 Doloffer 推广块整体删除；`PROVIDER_BASE_URLS` 移除 `atlas`，`--provider` 帮助、`docs/integrations/ai-models.md` 两语与 CONTRIBUTING 的相关表述同步。这是维护者主动移除赞助关系，不是 CONTRIBUTING「端点不可用」条款下的移除，所以按变更通知记录。**迁移**：已保存 `ai_provider=atlas` 的配置在 `boss ai config` 里会看到 `resolved_base_url` 为空，请改为 `boss ai config --provider custom --base-url https://api.atlascloud.ai/v1 --model <model> --api-key <key>`，服务本身仍可作为自定义 OpenAI 兼容端点使用。
 - **code 37 改为按响应语境分类（对外契约变更）。** 此前所有 code 37 一律全局映射为 `TOKEN_REFRESH_FAILED`
   （`recoverable=true`，恢复动作 `boss login`）。现在只有文案明确指向 token/stoken 过期的 code 37 保持该行为；
   环境风险文案及语义不明确的 code 37 一律发新的 `ENVIRONMENT_RISK`（`recoverable=false`），立即停止且不刷新、

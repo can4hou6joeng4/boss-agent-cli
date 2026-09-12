@@ -123,7 +123,7 @@ git diff --check
 
 ## 新增 AI provider
 
-`boss ai` 通过 `src/boss_agent_cli/ai/config.py` 的 `PROVIDER_BASE_URLS` 维护一张 OpenAI 兼容服务商表。欢迎补充新的服务商，**包括由服务商自己的工程师提交**——`atlas` 就是这样进来的。
+`boss ai` 通过 `src/boss_agent_cli/ai/config.py` 的 `PROVIDER_BASE_URLS` 维护一张 OpenAI 兼容服务商表。欢迎补充新的服务商，**包括由服务商自己的工程师提交**。
 
 但每加一行，维护责任就落到本项目：服务商改域名、调价、下线模型时，文档会静默失真，而没有任何测试守得住。所以有下面三条。
 

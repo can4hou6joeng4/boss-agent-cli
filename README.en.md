@@ -25,14 +25,6 @@
 
 </div>
 
-<p align="center">
-  <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=boss-agent-cli">
-    <img src="docs/assets/atlas-cloud-logo.png" alt="Atlas Cloud" width="180">
-  </a>
-</p>
-
-> 🎁 **[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=boss-agent-cli)** gives `boss ai` a full-modal, OpenAI-compatible backend — one key for DeepSeek, Qwen, GLM, Kimi, MiniMax, Claude, GPT, and more, with no per-vendor wiring. Just pick `--provider atlas` in `boss ai config` (`base_url=https://api.atlascloud.ai/v1`, default model `deepseek-ai/deepseek-v4-pro`); see [AI model integration](docs/integrations/ai-models.en.md#atlas-cloud-one-key-across-many-model-families) for setup. Budget-friendly [coding plan](https://www.atlascloud.ai/console/coding-plan).
-
 ## 🧭 Why
 
 boss-agent-cli unifies job discovery, welfare filtering, local resumes and AI, application and messaging, recruiter candidate workflows, and resumable crawling in one CLI. People run `boss` for a terminal wizard; agents use JSON, schema, MCP, or the Python API against the same workflow state. `boss schema` remains the capability source of truth.

@@ -13,7 +13,6 @@ The `boss ai` command group speaks an OpenAI-compatible protocol. This guide sum
 | `qwen` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | Tongyi Qwen3 models |
 | `zhipu` | `https://open.bigmodel.cn/api/paas/v4` | GLM-4.6 and GLM-Z1 |
 | `siliconflow` | `https://api.siliconflow.cn/v1` | SiliconFlow aggregated inference |
-| `atlas` | `https://api.atlascloud.ai/v1` | Aggregated access — one OpenAI-compatible API spanning DeepSeek, Qwen, GLM, Kimi, MiniMax, Claude, GPT, and more |
 | `custom` | set manually with `--base-url` | LiteLLM, OneAPI, self-hosted proxies, and other compatible gateways |
 
 ## Claude 4.7 / GPT-5 configuration examples
@@ -67,19 +66,6 @@ boss ai config \
   --api-key <ZHIPU_KEY>
 ```
 
-### Atlas Cloud (one key across many model families)
-
-[Atlas Cloud](https://www.atlascloud.ai/) exposes an OpenAI-compatible API: one key reaches DeepSeek, Qwen, GLM, Kimi, MiniMax, Claude, GPT, and other model families without per-vendor wiring. The authoritative model list is whatever the server actually supports:
-
-```bash
-boss ai config \
-  --provider atlas \
-  --model deepseek-ai/deepseek-v4-pro \
-  --api-key <ATLASCLOUD_KEY>
-```
-
-> `deepseek-ai/deepseek-v4-pro` is a reasoning model with chain-of-thought — give it enough `max_tokens` (>= 512), otherwise tokens may be consumed by the reasoning trace and you get an empty `content` with `finish_reason=length`. The `--max-tokens` default in `boss ai config` is already 4096, so no extra tuning is needed.
-
 ### Self-hosted proxy via LiteLLM / OneAPI
 
 ```bash
@@ -97,8 +83,7 @@ boss ai config \
 | You want the strongest reasoning models | `openrouter` + `anthropic/claude-opus-4.7`, or `openai` + `gpt-5` |
 | You are cost-sensitive | `deepseek` + `deepseek-chat` |
 | You want mainland-China direct access without an extra proxy | `qwen`, `zhipu`, `deepseek`, or `moonshot` |
-| You want one key that spans many vendors | `openrouter` or `atlas` |
-| You want a full-modal, OpenAI-compatible aggregator | `atlas` + `deepseek-ai/deepseek-v4-pro` |
+| You want one key that spans many vendors | `openrouter` |
 | You already run your own compatible proxy | `custom` + `--base-url` |
 
 ## Validate the configuration

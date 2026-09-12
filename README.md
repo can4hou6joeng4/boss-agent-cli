@@ -25,21 +25,6 @@
 
 </div>
 
-<p align="center">
-  <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=boss-agent-cli">
-    <img src="docs/assets/atlas-cloud-logo.png" alt="Atlas Cloud" width="180">
-  </a>
-</p>
-
-> 🎁 **[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=boss-agent-cli)** 为 `boss ai` 提供了一个全模态、OpenAI 兼容的推理入口 —— 一个 key 即可访问 DeepSeek、Qwen、GLM、Kimi、MiniMax、Claude、GPT 等模型，无需逐家接入。在 `boss ai config` 里选用 `--provider atlas`（`base_url=https://api.atlascloud.ai/v1`、默认模型 `deepseek-ai/deepseek-v4-pro`）即可，配置详见 [AI 模型接入](docs/integrations/ai-models.md#atlas-cloud一个-key-覆盖多家模型)；预算友好的 [coding plan](https://www.atlascloud.ai/console/coding-plan)。
-
-> [!TIP]
-> <img src="https://github.com/peterfei/ai-agent-team/raw/main/examples/doloffer.png" alt="Doloffer logo" width="220">
->
-> **Doloffer Guide** 致力于让优质 AI 工具的获取更简单。平台主打 GPT 与 Claude 等主流 AI 服务的正版会员充值，提供一站式订阅管理，主打安全稳定与无忧售后。
->
-> 💡 **极速订阅**： [专属链接](https://doloffer.com/friend/BEv3yvKS)（输入优惠码 `AI8888` 享 9 折特惠）
-
 ## 🧭 为什么
 
 boss-agent-cli 把职位发现、福利筛选、本地简历与 AI、投递沟通、招聘者候选人处理和可恢复采集统一到一个 CLI。真人直接运行 `boss` 进入纯终端向导；Agent 使用 JSON、schema、MCP 或 Python API 调用同一套 workflow 与状态。`boss schema` 始终是能力真源。

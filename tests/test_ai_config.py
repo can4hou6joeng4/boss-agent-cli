@@ -13,7 +13,6 @@ _EXPECTED_PROVIDERS = frozenset({
 	"qwen",
 	"zhipu",
 	"siliconflow",
-	"atlas",
 	"ollama",
 	"vllm",
 	"custom",
@@ -167,13 +166,6 @@ def test_base_url_siliconflow(tmp_path, monkeypatch):
 	store = _make_store(tmp_path, monkeypatch)
 	store.save_config(ai_provider="siliconflow")
 	assert store.get_base_url() == "https://api.siliconflow.cn/v1"
-
-
-def test_base_url_atlas(tmp_path, monkeypatch):
-	"""Atlas Cloud 全模态聚合入口。"""
-	store = _make_store(tmp_path, monkeypatch)
-	store.save_config(ai_provider="atlas")
-	assert store.get_base_url() == "https://api.atlascloud.ai/v1"
 
 
 def test_base_url_ollama(tmp_path, monkeypatch):
