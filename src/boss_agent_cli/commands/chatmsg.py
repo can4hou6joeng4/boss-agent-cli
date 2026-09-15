@@ -24,7 +24,10 @@ _MSG_TYPE_MAP = {
 @click.pass_context
 @handle_auth_errors("chatmsg")
 def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int, show_raw: bool) -> None:
-	"""查看与指定好友的聊天消息历史"""
+	"""查看与指定好友的聊天消息历史
+
+	SECURITY_ID 可传 boss chat 输出的 uid（推荐，跨请求稳定）或 security_id。
+	"""
 	if not require_compliance_allowed(ctx, "chatmsg"):
 		ctx.exit(1)
 
@@ -38,15 +41,21 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int, sho
 			"chatmsg",
 			platform,
 			security_id,
-			not_found_message=f"未在沟通列表中找到 security_id={security_id}，请确认该联系人存在",
+			not_found_message=(
+				f"未在沟通列表中找到联系人 {security_id}，请确认该联系人存在"
+				"（可用 boss chat 输出的 uid 或 security_id）"
+			),
 		)
 		if friend_item is None:
 			return
 		gid = str(friend_item.get("uid", ""))
 		friend_name = friend_item.get("name") or "-"
+		# securityId 是每请求轮换的令牌，必须用本次 friend_list 返回的新值，
+		# 否则会拿一个已失效的令牌去请求消息历史。
+		fresh_security_id = str(friend_item.get("securityId") or security_id or "")
 
 		try:
-			resp = platform.chat_history(gid, security_id, page=page, count=count)
+			resp = platform.chat_history(gid, fresh_security_id, page=page, count=count)
 		except NotImplementedError as exc:
 			handle_not_supported(ctx, "chatmsg", exc, fallback_message="当前平台不支持聊天记录能力")
 			return
