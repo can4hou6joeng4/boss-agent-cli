@@ -28,9 +28,11 @@ def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int
 			return
 		gid = str(friend_item.get("uid", ""))
 		friend_name = friend_item.get("name") or "-"
+		# securityId 是每请求轮换的令牌，必须用本次 friend_list 返回的新值。
+		fresh_security_id = str(friend_item.get("securityId") or security_id or "")
 
 		try:
-			resp = platform.chat_history(gid, security_id, page=page, count=count)
+			resp = platform.chat_history(gid, fresh_security_id, page=page, count=count)
 		except NotImplementedError as exc:
 			handle_not_supported(ctx, "chat-summary", exc, fallback_message="当前平台不支持聊天记录能力")
 			return

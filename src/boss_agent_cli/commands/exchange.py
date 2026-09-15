@@ -30,9 +30,11 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 			return
 		uid = str(friend_item.get("uid", ""))
 		friend_name: str = friend_item.get("name") or "-"
+		# securityId 是每请求轮换的令牌，必须用本次 friend_list 返回的新值。
+		fresh_security_id = str(friend_item.get("securityId") or security_id or "")
 
 		try:
-			resp = platform.exchange_contact(security_id, uid, friend_name, exchange_type=type_id)
+			resp = platform.exchange_contact(fresh_security_id, uid, friend_name, exchange_type=type_id)
 		except NotImplementedError as exc:
 			handle_not_supported(ctx, "exchange", exc, fallback_message=f"当前平台不支持{type_label}交换能力")
 			return

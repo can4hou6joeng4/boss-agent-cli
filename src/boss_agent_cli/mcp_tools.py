@@ -222,7 +222,7 @@ TOOLS = [
 	),
 	Tool(
 		name="boss_chat",
-		description="查看沟通列表，支持按发起方和时间筛选",
+		description="查看沟通列表，支持按发起方和时间筛选。返回项含稳定标识 uid，可用于 boss_chatmsg / boss_mark / boss_exchange。",
 		input_schema={
 			"type": "object",
 			"properties": {
@@ -269,7 +269,7 @@ TOOLS = [
 		input_schema={
 			"type": "object",
 			"properties": {
-				"security_id": {"type": "string", "description": "好友的 security_id"},
+				"security_id": {"type": "string", "description": "好友的 uid（推荐，取自 boss_chat，跨请求稳定）或 security_id"},
 				"page": {"type": "integer", "description": "页码", "default": 1},
 				"count": {"type": "integer", "description": "每页消息数量", "default": 20},
 				"raw": {"type": "boolean", "description": "输出保真结构化消息字段（仍受合规门控）", "default": False},
@@ -283,7 +283,7 @@ TOOLS = [
 		input_schema={
 			"type": "object",
 			"properties": {
-				"security_id": {"type": "string", "description": "好友的 security_id"},
+				"security_id": {"type": "string", "description": "好友的 uid（推荐，取自 boss_chat，跨请求稳定）或 security_id"},
 			},
 			"required": ["security_id"],
 		},
@@ -294,7 +294,7 @@ TOOLS = [
 		input_schema={
 			"type": "object",
 			"properties": {
-				"security_id": {"type": "string", "description": "联系人的 security_id"},
+				"security_id": {"type": "string", "description": "联系人的 uid（推荐）或 security_id"},
 				"tag": {"type": "string", "description": "标签名称"},
 				"remove": {"type": "boolean", "description": "是否移除标签", "default": False},
 			},
@@ -307,7 +307,7 @@ TOOLS = [
 		input_schema={
 			"type": "object",
 			"properties": {
-				"security_id": {"type": "string", "description": "联系人的 security_id"},
+				"security_id": {"type": "string", "description": "联系人的 uid（推荐）或 security_id"},
 			},
 			"required": ["security_id"],
 		},
