@@ -379,3 +379,101 @@ def test_find_previous_snapshot_ignores_non_json(tmp_path):
 
 	result = _find_previous_snapshot(snapshot_dir, "2026-04-13")
 	assert result is None
+
+
+# ── 稳定标识：security_id 每请求轮换，主键必须是 uid ──────────────────
+
+
+def _make_uid_item(uid=117661469, sid="sid_this_request", name="郝女士", unread=0):
+	"""构造带稳定 uid 的 friends 条目（真实 API 返回同时含 uid 与 securityId）。"""
+	return {
+		"uid": uid,
+		"name": name,
+		"security_id": sid,
+		"brand_name": "TestCo",
+		"unread": unread,
+	}
+
+
+def test_snapshot_dedupes_when_security_id_rotates(tmp_path):
+	"""同一天内 security_id 轮换不应让快照产生重复条目。
+
+	回归：原实现以 security_id 为合并键，而该值每次请求都变，
+	于是每跑一次 export 就往当日快照里追加一整份重复条目。
+	"""
+	snapshot_dir = str(tmp_path / "snapshots")
+	save_snapshot_and_diff(snapshot_dir, [_make_uid_item(sid="sid_run_1")], _make_logger())
+	save_snapshot_and_diff(snapshot_dir, [_make_uid_item(sid="sid_run_2")], _make_logger())
+	save_snapshot_and_diff(snapshot_dir, [_make_uid_item(sid="sid_run_3")], _make_logger())
+
+	today = datetime.date.today().isoformat()
+	with open(os.path.join(snapshot_dir, f"{today}.json"), encoding="utf-8") as f:
+		saved = json.load(f)
+
+	assert len(saved) == 1, f"同一联系人被重复写入 {len(saved)} 次"
+
+
+def test_snapshot_diff_stable_when_security_id_rotates(tmp_path):
+	"""跨天对比时 security_id 轮换不应产生 added/removed 抖动。"""
+	snapshot_dir = str(tmp_path / "snapshots")
+	os.makedirs(snapshot_dir)
+
+	yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+	with open(os.path.join(snapshot_dir, f"{yesterday}.json"), "w", encoding="utf-8") as f:
+		# 昨天这份快照用的是完全不同的 security_id
+		json.dump([_make_uid_item(sid="sid_yesterday")], f, ensure_ascii=False)
+
+	result = save_snapshot_and_diff(snapshot_dir, [_make_uid_item(sid="sid_today")], _make_logger())
+
+	assert result["is_first"] is False
+	assert result["added"] == [], "同一联系人不应被判为新增"
+	assert result["removed"] == [], "同一联系人不应被判为消失"
+
+
+def test_snapshot_diff_detects_real_new_contact(tmp_path):
+	"""真正的联系人变化仍要能被检出（避免修过头）。"""
+	snapshot_dir = str(tmp_path / "snapshots")
+	os.makedirs(snapshot_dir)
+
+	yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+	with open(os.path.join(snapshot_dir, f"{yesterday}.json"), "w", encoding="utf-8") as f:
+		json.dump([_make_uid_item(uid=1, sid="sid_a", name="旧联系人")], f, ensure_ascii=False)
+
+	result = save_snapshot_and_diff(
+		snapshot_dir,
+		[_make_uid_item(uid=1, sid="sid_a", name="旧联系人"), _make_uid_item(uid=2, sid="sid_b", name="新联系人")],
+		_make_logger(),
+	)
+
+	assert len(result["added"]) == 1
+	assert result["added"][0]["name"] == "新联系人"
+	assert result["removed"] == []
+
+
+def test_snapshot_new_unread_detected_across_rotating_security_id(tmp_path):
+	"""未读增量检测也必须按 uid 对齐。"""
+	snapshot_dir = str(tmp_path / "snapshots")
+	os.makedirs(snapshot_dir)
+
+	yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+	with open(os.path.join(snapshot_dir, f"{yesterday}.json"), "w", encoding="utf-8") as f:
+		json.dump([_make_uid_item(sid="sid_yesterday", unread=0)], f, ensure_ascii=False)
+
+	result = save_snapshot_and_diff(snapshot_dir, [_make_uid_item(sid="sid_today", unread=3)], _make_logger())
+
+	assert len(result["new_unread"]) == 1
+	assert result["new_unread"][0]["unread"] == 3
+
+
+def test_snapshot_falls_back_to_security_id_without_uid(tmp_path):
+	"""缺少 uid 的历史数据仍按 security_id 合并，保持向后兼容。"""
+	snapshot_dir = str(tmp_path / "snapshots")
+	friends = _make_items(("张三", "sid_a", 0), ("李四", "sid_b", 1))
+	save_snapshot_and_diff(snapshot_dir, friends, _make_logger())
+	save_snapshot_and_diff(snapshot_dir, friends, _make_logger())
+
+	today = datetime.date.today().isoformat()
+	with open(os.path.join(snapshot_dir, f"{today}.json"), encoding="utf-8") as f:
+		saved = json.load(f)
+
+	assert len(saved) == 2

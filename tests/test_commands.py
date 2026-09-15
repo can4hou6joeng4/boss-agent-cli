@@ -1085,7 +1085,7 @@ def test_chat_reports_not_supported_when_friend_list_missing(mock_auth_cls, mock
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_md(mock_auth_cls, mock_client_cls, tmp_path):
-	"""--export md 导出包含 security_id 和 diff 摘要"""
+	"""--export md 导出包含联系人标识映射表和 diff 摘要"""
 	import time
 	now_ms = int(time.time() * 1000)
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
@@ -1107,8 +1107,9 @@ def test_chat_export_md(mock_auth_cls, mock_client_cls, tmp_path):
 	assert result.exit_code == 0
 	with open(out_file, encoding="utf-8") as f:
 		content = f.read()
-	assert "security_id" in content  # 折叠映射表中包含
-	assert "sec_张HR" in content    # 完整 sid 在映射表中
+	# 映射表标题已改为「联系人标识」：展示的是可跨请求复用的 uid
+	assert "联系人标识映射表" in content
+	assert "sec_张HR" in content    # 无 uid 时回退展示 security_id
 	assert "S1" in content          # 主表用短编号
 	assert "BOSS 直聘沟通列表" in content
 	assert "对方主动" in content
