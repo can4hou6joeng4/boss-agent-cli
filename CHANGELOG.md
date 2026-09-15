@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-15
+
 ### Changed（含 Breaking Change）
 - **移除未完成的前程无忧 / 51job（`qiancheng`）占位平台。** 候选者平台注册表、`51job` 别名、`QianchengPlatform` 包级公开导出、schema 可发现性、能力矩阵、向导标签、研究文档和演示内容一并删除；`boss platforms` 同时删除闲置的 `placeholder_only` 图例和 `placeholder` 空分组。`boss --platform qiancheng ...` 与 `boss --platform 51job ...` 现在返回七键 `INVALID_PARAM` 信封，不再返回占位 `NOT_SUPPORTED`。**迁移**：将配置中的 `platform` 改为 `zhipin` 或 `zhilian`；从 Python 导入 `QianchengPlatform` 的下游代码需要移除该依赖。
 - **移除 README 的赞助与推广展示位，并移除 `atlas` provider 接入。** README 两语顶部的 Atlas Cloud 展示位（含 UTM 追踪链接与 logo 资产）和 Doloffer 推广块整体删除；`PROVIDER_BASE_URLS` 移除 `atlas`，`--provider` 帮助、`docs/integrations/ai-models.md` 两语与 CONTRIBUTING 的相关表述同步。这是维护者主动移除赞助关系，不是 CONTRIBUTING「端点不可用」条款下的移除，所以按变更通知记录。**迁移**：已保存 `ai_provider=atlas` 的配置在 `boss ai config` 里会看到 `resolved_base_url` 为空，请改为 `boss ai config --provider custom --base-url https://api.atlascloud.ai/v1 --model <model> --api-key <key>`，服务本身仍可作为自定义 OpenAI 兼容端点使用。
