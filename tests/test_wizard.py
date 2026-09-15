@@ -229,20 +229,6 @@ def test_schema_exposes_wizard_catalog_for_headless_agents(tmp_path):
 	assert "jobs_list" in payload["data"]["wizard_catalog"]["roles"]["recruiter"]["goals"]
 
 
-def test_placeholder_platform_fails_with_not_supported_before_auth(tmp_path):
-	context = _action_context(tmp_path)
-	context = ActionContext(
-		data_dir=context.data_dir,
-		platform="qiancheng",
-		role="candidate",
-		logger=context.logger,
-	)
-	with pytest.raises(WorkflowActionError) as exc_info:
-		DEFAULT_ACTIONS["auth_status"](context, {}, {})
-	assert exc_info.value.code == "NOT_SUPPORTED"
-	assert exc_info.value.recoverable is True
-
-
 class _FakeCandidatePlatform:
 	def __init__(self):
 		self.calls = []

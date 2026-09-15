@@ -49,14 +49,13 @@
 ### 架构演进
 - [x] mypy 严格模式全量接入 — **100% 完成**（66/66 业务模块全部 `disallow_untyped_defs + disallow_any_generics + warn_return_any` 严格化，v1.9.1）
 - [x] 类型签名导出到 `stubs/`，供下游 IDE 使用（v1.8.6，py.typed + canonical `__all__` + 16 条契约测试）
-- [ ] 认证来源抽象为 `BrowserSessionProvider` seam（Issue #387）：把「复用用户日常浏览器中已有的登录会话」提升为一等能力，`discover` / `verify` / `request` / `close` 四个方法，浏览器差异收在 adapter 内，返回不含凭据的不透明会话引用。**在显式来源下（`--browser-source` 非 `auto`）：只连已运行且已登录的浏览器，绝不启动新实例、绝不触发登录、绝不静默回退 CDP/headless；`auto` 保持既有降级链，是否收紧另行评估**——在另一个 CDP 浏览器里重新登录会让用户日常会话失效，因此「启动 CDP 重登」不是显式来源可接受的兜底路径。分片落地：Chrome/Bridge 只读通道先行（PR #388，新增 `BROWSER_SESSION_NOT_FOUND`），Edge/Firefox 与多 Profile/Container 发现留在本条。
 - [x] 适配 mcp 2.x Server API（Issue #398）：mcp 2.0 移除了 `@server.list_tools()` / `@server.call_tool()` 装饰器，改为 `add_request_handler(method, params_type, handler)`，且 handler 签名与返回类型一并改变（`(ctx, params)` → `ListToolsResult` / `CallToolResult`）。已切到 2.x 并把依赖改为 `mcp>=2.1.0,<3.0.0`；SSE 与 streamable HTTP 两条传输实现原样保留（换实现是独立决策）。handler 注册守卫随之重写：1.x 靠反推 SDK 的装饰器工厂，2.x 改为从 `mcp_server` 源码 AST 扫出 `add_request_handler` 的 method 字面量再问运行时注册表。**上界保留**——上一次无上界导致所有全新安装解析到新大版本并崩溃，而 CI 锁着旧版本永远看不到。
 - [ ] Bridge 协议从 HTTP/WS 升级为 gRPC — 调研已完成（Issue #96 · [docs/research/bridge-grpc.md](docs/research/bridge-grpc.md)），**结论：暂不迁移**（localhost 单用户场景无性能收益 + MV3 扩展兼容性风险高 + 依赖膨胀 8MB）。重启调研的 5 个触发条件已明确
 
 ### 生态扩展
 - [ ] Web UI（React + Tailwind），适合非 Agent 用户
 - [ ] 浏览器扩展深度集成 BOSS 直聘原生页面
-- [ ] 多平台支持：拉勾 / 智联 / 猎聘适配器 — API 调研已全部完成（Issue #90 已闭环 · [docs/research/platforms/](docs/research/platforms/)）。结论：**智联候选者侧已接入**（只读 search/detail/recommend/user_info + 写操作 greet/apply，详见下方 Week 2-3 子项）；拉勾、猎聘经评估不建议接入；51job 仍在 research backlog。
+- [ ] 多平台支持：拉勾 / 智联 / 猎聘适配器 — API 调研已全部完成（Issue #90 已闭环 · [docs/research/platforms/](docs/research/platforms/)）。结论：**智联候选者侧已接入**（只读 search/detail/recommend/user_info + 写操作 greet/apply，详见下方 Week 2-3 子项）；拉勾、猎聘经评估不建议接入。
   - [x] Week 1a：Platform ABC 骨架 + BossPlatform adapter（#129，零行为变化）
   - [x] Week 1b：`--platform` 全局 CLI 选项 + `get_platform_instance` helper + schema 暴露 current_platform
   - [x] Week 1c：命令层全量迁移到 Platform 接口（**20 个命令**：greet / apply / batch-greet / interviews / detail / show / me / recommend / chat / chatmsg / mark / exchange / pipeline / digest / search / export / chat_summary / history / status / watch）
@@ -64,7 +63,6 @@
   - [x] Week 2：ZhilianPlatform 只读实现（search / detail / recommend / user_info）
   - [x] Week 3：ZhilianPlatform 写操作（greet / apply）+ 文档 + MCP 适配
   - [x] Week 4：招聘者侧能力评估完成 → **暂不接入**（接入条件 0/4 满足，保留 RecruiterPlatform 骨架待社区信号重启；详见 `docs/research/platforms/zhaopin-recruiter-evaluation.md`）
-  - [ ] 51job / 前程无忧：占位适配器已落地（全量能力返回稳定 `NOT_SUPPORTED` 包络，v1.12.0–v1.13.0），但真实接口仍在 research backlog——候选者侧只读入口和脱敏测试样本明确前不进入真实运行路径（详见 `docs/research/platforms/51job.md`）
 
 ### 社区建设
 - [ ] 更完整的中文 + 英文视频 demo / 发布素材（当前已有 `demo/demo-zh.gif` / `demo/demo-en.gif` + 对应 `demo/demo-zh.tape` / `demo/demo-en.tape` 终端演示）

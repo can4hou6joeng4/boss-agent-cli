@@ -40,7 +40,7 @@ def _build_client(
 	"""按平台名构造对应的内部 client。
 
 	非 ``auto`` 的浏览器来源只对有浏览器通道的 client（zhipin/BossClient）有意义；
-	zhilian/qiancheng/51job 没有浏览器通道，显式抛 ``BrowserSourceUnsupported``，
+	zhilian 没有浏览器通道，显式抛 ``BrowserSourceUnsupported``，
 	由命令层转成 ``NOT_SUPPORTED`` 信封——而不是让 ``ZhilianClient`` 因意外 kwarg
 	抛 ``TypeError`` 被兜底成 ``NETWORK_ERROR``。
 	"""
@@ -52,8 +52,6 @@ def _build_client(
 	# 白名单，未来新增无浏览器通道的平台不会静默落到 BossClient。
 	if name != "zhipin" and policy.fail_closed:
 		raise BrowserSourceUnsupported(name, policy.name)
-	if name in {"qiancheng", "51job"}:
-		return None
 	if name == "zhilian":
 		return ZhilianClient(auth, delay=delay, cdp_url=cdp_url)
 	# 默认 zhipin 走 BossClient

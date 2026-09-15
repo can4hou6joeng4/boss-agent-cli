@@ -10,9 +10,6 @@ from boss_agent_cli.platforms import get_platform, list_platforms, list_recruite
 _READONLY_CAPABILITIES = ["search", "detail", "show", "history", "interviews", "recommend", "me", "status"]
 _WRITE_CAPABILITIES = ["greet", "apply"]
 _LOCAL_CAPABILITIES = ["shortlist", "stats", "config", "schema"]
-_CAPABILITY_STATUS_ALIASES = {
-	"placeholder_only": "placeholder",
-}
 
 _PLATFORM_CAPABILITY_STATUS: dict[str, dict[str, str]] = {
 	"zhipin": {
@@ -39,18 +36,6 @@ _PLATFORM_CAPABILITY_STATUS: dict[str, dict[str, str]] = {
 		"greet": "available",
 		"apply": "available",
 	},
-	"qiancheng": {
-		"search": "not_supported",
-		"detail": "not_supported",
-		"show": "not_supported",
-		"history": "not_supported",
-		"interviews": "not_supported",
-		"recommend": "not_supported",
-		"me": "not_supported",
-		"status": "placeholder_only",
-		"greet": "not_supported",
-		"apply": "not_supported",
-	},
 }
 
 _CAPABILITY_STATUS_LEGEND: dict[str, dict[str, str]] = {
@@ -62,41 +47,26 @@ _CAPABILITY_STATUS_LEGEND: dict[str, dict[str, str]] = {
 		"label": "不支持",
 		"description": "当前平台适配器没有实现该真实工作流；CLI 会稳定返回 NOT_SUPPORTED。",
 	},
-	"placeholder_only": {
-		"label": "仅占位",
-		"description": "仅用于平台注册、别名、schema/config 可见性；不代表真实平台能力已接入。",
-	},
 }
 
 
 _PLATFORM_NOTES = {
 	"zhipin": "默认平台；候选者侧与招聘者侧注册表均已接入。",
 	"zhilian": "候选者侧已接入搜索、详情、投递和沟通；招聘者侧暂不可用。",
-	"qiancheng": "51job/前程无忧当前仅注册平台身份；真实能力返回 NOT_SUPPORTED。",
 }
-
-_ALIAS_NAMES = {
-	"51job",
-}
-
-
-def _normalize_capability_status(status: str) -> str:
-	return _CAPABILITY_STATUS_ALIASES.get(status, status)
 
 
 def _resolve_platform_filter(platform_name: str | None) -> str | None:
 	if platform_name is None:
 		return None
-	aliases = {"51job": "qiancheng"}
-	resolved = aliases.get(platform_name, platform_name)
-	candidate_platforms = [name for name in list_platforms() if name not in _ALIAS_NAMES]
-	if resolved not in candidate_platforms:
-		supported = ", ".join([*candidate_platforms, *sorted(aliases)])
+	candidate_platforms = list_platforms()
+	if platform_name not in candidate_platforms:
+		supported = ", ".join(candidate_platforms)
 		raise click.BadParameter(
 			f"unknown platform {platform_name!r}, supported: {supported}",
 			param_hint="--platform",
 		)
-	return resolved
+	return platform_name
 
 
 def _capability_status_for_platform(platform_name: str, capability: str) -> str | None:
@@ -122,7 +92,7 @@ def platform_capability_data(platform_name: str | None = None, capability: str |
 	"""Return local-only platform capability metadata without creating clients."""
 	resolved_platform = _resolve_platform_filter(platform_name)
 	resolved_capability = _resolve_capability_filter(capability)
-	candidate_platforms = [name for name in list_platforms() if name not in _ALIAS_NAMES]
+	candidate_platforms = list_platforms()
 	if resolved_platform is not None:
 		candidate_platforms = [resolved_platform]
 	recruiter_platforms = list_recruiter_platforms()
@@ -136,7 +106,7 @@ def platform_capability_data(platform_name: str | None = None, capability: str |
 			"base_url": platform_cls.base_url,
 			"candidate": True,
 			"recruiter": f"{name}-recruiter" in recruiter_platforms,
-			"status": "placeholder" if name == "qiancheng" else "available",
+			"status": "available",
 			"capabilities": {
 				"readonly": {capability: statuses[capability] for capability in _READONLY_CAPABILITIES},
 				"write": {capability: statuses[capability] for capability in _WRITE_CAPABILITIES},
@@ -150,7 +120,7 @@ def platform_capability_data(platform_name: str | None = None, capability: str |
 				continue
 			item["capability_match"] = {
 				"capability": resolved_capability,
-				"status": _normalize_capability_status(raw_status),
+				"status": raw_status,
 				"raw_status": raw_status,
 			}
 		platforms.append(item)
@@ -158,7 +128,6 @@ def platform_capability_data(platform_name: str | None = None, capability: str |
 	if resolved_capability is not None:
 		status_groups: dict[str, list[str]] = {
 			"available": [],
-			"placeholder": [],
 			"blocked_by_policy": [],
 			"not_supported": [],
 		}
@@ -173,7 +142,7 @@ def platform_capability_data(platform_name: str | None = None, capability: str |
 		"count": len(platforms),
 		"capability_filter": capability_filter,
 		"default": "zhipin",
-		"aliases": {"51job": "qiancheng"},
+		"aliases": {},
 		"capability_status_legend": _CAPABILITY_STATUS_LEGEND,
 		"platforms": platforms,
 	}
@@ -200,7 +169,7 @@ def _render_platforms(data: dict[str, Any]) -> None:
 
 
 @click.command("platforms")
-@click.option("--platform", "platform_name", default=None, help="仅查看指定平台（支持 qiancheng / 51job 等已注册平台或别名）")
+@click.option("--platform", "platform_name", default=None, help="仅查看指定已注册平台")
 @click.option("--capability", "capability", default=None, help="按能力反查平台状态（如 search / apply / status / schema）")
 @click.pass_context
 def platforms_cmd(ctx: click.Context, platform_name: str | None, capability: str | None) -> None:

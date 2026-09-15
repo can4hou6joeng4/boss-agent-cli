@@ -103,7 +103,6 @@ git diff --check
 | BOSS 直聘 | [zhipin.md](zhipin.md) | 已接入基线；按 schema 开放已实现能力 | 基线 |
 | 智联 | [zhaopin.md](zhaopin.md) | 候选者侧可作为优先扩展；招聘者侧暂不接入 | 候选 |
 | 智联招聘者侧 | [zhaopin-recruiter-evaluation.md](zhaopin-recruiter-evaluation.md) | 只保留评估提纲 | 调研中 |
-| 前程无忧 / 51job | [51job.md](51job.md) | 先固化 candidate 侧只读准入门槛；暂不进入真实实现 | Research backlog |
 | 拉勾 | [lagou.md](lagou.md) | 不建议近期接入 | 风险占位 |
 | 猎聘 | [liepin.md](liepin.md) | 不建议 v2.0 接入 | 风险占位 |
 
@@ -128,7 +127,5 @@ git diff --check
 
 ## 后续路线
 
-优先维护 BOSS 直聘基线和智联候选者侧能力。前程无忧 / 51job 先保留在
-research backlog：只有在证明 candidate 侧只读入口、风险边界、字段映射和
-脱敏测试样本都清晰后，才进入平台 stub 或真实现阶段。拉勾、猎聘和其他
-平台同样必须先通过准入评估。
+优先维护 BOSS 直聘基线和智联候选者侧能力。拉勾、猎聘和其他平台必须先
+通过准入评估，再决定是否进入平台 stub 或真实现阶段。

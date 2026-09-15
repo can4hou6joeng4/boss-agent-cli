@@ -86,7 +86,7 @@ MCP 配置示例：
 ### 4. 工程侧边界
 
 - JSON 信封和 `boss schema` 是 Agent 契约源
-- zhipin 已覆盖求职者链路；zhilian 支持候选者侧只读 + 本地辅助对等；qiancheng 仍是 `NOT_SUPPORTED` 占位
+- zhipin 已覆盖求职者链路；zhilian 支持候选者侧只读 + 本地辅助对等
 - CI 覆盖 Python 3.10 / 3.11 / 3.12 / 3.13、ruff、mypy、文档一致性和 CodeQL
 - 不引入遥测、埋点或云同步；采用度量只看 PyPI 下载量和 GitHub Insights
 

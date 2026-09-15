@@ -42,7 +42,7 @@ boss-agent-cli 把职位发现、福利筛选、本地简历与 AI、投递沟�
 - **AI 求职增强 + 本地模型**：JD 分析、简历润色、定向优化、候选池匹配、模拟面试、沟通指导；本地模型权重外置，支持 Ollama/vLLM OpenAI 兼容接口 —— `ai analyze-jd` `ai local configure` `ai local smoke`
 - **Schema 驱动 + JSON 信封**：stdout 只输出 `{ok, data, pagination, error, hints}` 信封，`boss schema` 是能力真源，适合 CLI 编排 / Shell Agent / MCP / Python SDK
 - **招聘者完整链路**：候选人搜索、推荐牛人、首次招呼、附件简历接收与下载、简历、聊天/最近消息、回复和职位管理 —— `hr candidates/recommendations/greet/applications/resume/chat/last-messages/reply/request-resume/accept-resume/download-resume/jobs`
-- **多平台抽象**：`Platform` / `RecruiterPlatform` 双注册表，`--platform zhipin|zhilian|qiancheng`
+- **多平台抽象**：`Platform` / `RecruiterPlatform` 双注册表，`--platform zhipin|zhilian`
 
 ## 🚀 快速开始
 
@@ -78,10 +78,9 @@ boss hr jobs list
 |------|:--:|:--:|------|
 | BOSS 直聘 (`zhipin`) | ✅ | ✅ | 默认 |
 | 智联招聘 (`zhilian`) | ✅ 候选者侧只读 + 本地辅助对等 | 🟡 `agent` browser/CDP 自动化 V1 | `hr` 子命令仍仅限 BOSS；智联招聘者侧通过 `boss --platform zhilian --role recruiter agent ...` 进入 |
-| 前程无忧 / 51job (`qiancheng`) | 🚧 已注册占位 | — | 统一返回 `NOT_SUPPORTED`，待只读研究门槛满足后再接入 |
 
 ```bash
-boss --platform zhilian search "Python"   # 指定平台（也支持 --platform zhipin|zhilian|qiancheng）
+boss --platform zhilian search "Python"   # 指定平台（支持 --platform zhipin|zhilian）
 boss config set platform zhilian          # 设为默认
 ```
 
@@ -176,13 +175,11 @@ boss config reset                   # 恢复默认
 CLI (Click)
   └─ 兼容运行元数据（assisted / research 均开放已实现能力）
        └─ AuthManager ── 用户主动登录态（Fernet + PBKDF2 机器绑定加密）
-       └─ Platform 双注册表 ── BossPlatform / ZhilianPlatform / QianchengPlatform
+       └─ Platform 双注册表 ── BossPlatform / ZhilianPlatform
        └─ BossClient ── httpx + 节流（高斯延迟）；兼容 CDP / Bridge / patchright 登录与导出
        └─ CacheStore（SQLite WAL） · AIService（OpenAI-compatible / Ollama / vLLM）
             └─ output.py → JSON 信封 → stdout
 ```
-
-`QianchengPlatform (51job 占位适配器，统一返回 NOT_SUPPORTED)`：仅用于平台注册与 schema 可见性，接真实接口前需满足只读研究门槛。
 
 **不变量**：stdout 仅 JSON 信封 · stderr 仅日志 · `exit 0/1` · 错误含 `code/recoverable/recovery_action` · `boss schema` 为能力真源。
 **双受众提示**：`hints.next_actions` 是给 Agent 执行的后继命令，`hints.operator_actions` 是给真人操作者的自然语言指引（扫码、在浏览器里调整条件等需要离开终端完成的动作）；TTY 下只渲染后者到 stderr，Agent 应把它转述给操作者。

@@ -150,7 +150,6 @@ function Scene5() {
 			<div style={{ display: 'flex', gap: 16, marginTop: 16 }}>
 				<PlatformPill at={2.5} name="zhipin" status="✅" note="求职者 + 招聘者" tone="green" />
 				<PlatformPill at={2.65} name="zhilian" status="🟡" note="求职者读写已接通" tone="amber" />
-				<PlatformPill at={2.8} name="qiancheng" status="🚧" note="占位 · NOT_SUPPORTED" tone="faint" />
 			</div>
 			<Caption at={2.05} kicker="AI 增强 · 多平台抽象" title="求职全链路本地辅助" sub="JD 分析 · 简历润色 · 模拟面试 · Platform 双注册表" />
 		</Shot>

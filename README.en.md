@@ -42,7 +42,7 @@ Historical `operating_mode=assisted|research` configuration remains compatible, 
 - **AI job-hunting assist + local models**: JD analysis, resume polish, role-targeted optimization, keyword suggestions, resume optimization, shortlist fit reports, interview prep, chat coaching; local weights stay outside the Python package via Ollama/vLLM OpenAI-compatible endpoints — `ai analyze-jd` `ai suggest-keywords` `ai resume-optimize` `ai interview-prep` `ai chat-coach` `ai local configure` `ai local smoke`
 - **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, data, pagination, error, hints}` envelope, `boss schema` is the capability source of truth, and an **MCP server with 77 tools** exposes every implemented capability
 - **Recruiter workflow**: candidate search, recommendations, first contact with built-in read-state cleanup, resumes, chats, replies, and job management — `hr candidates/recommendations/greet/applications/resume/chat/last-messages/reply/request-resume/jobs`
-- **Cross-platform layer**: live `Platform` / `RecruiterPlatform` registries, `--platform zhipin|zhilian|qiancheng`
+- **Cross-platform layer**: live `Platform` / `RecruiterPlatform` registries, `--platform zhipin|zhilian`
 
 ## 🚀 Quickstart
 
@@ -78,10 +78,9 @@ Every command outputs structured JSON (`ok` for success, `exit 0/1`). Full walk-
 |----------|:--:|:--:|--------|
 | BOSS Zhipin (`zhipin`) | ✅ | ✅ | default |
 | Zhaopin (`zhilian`) | ✅ candidate-side read-only + local-assist parity | 🟡 `agent` browser/CDP automation V1 | `hr` remains BOSS-only; Zhaopin recruiter automation uses `boss --platform zhilian --role recruiter agent ...` |
-| 51job (`qiancheng`) | 🚧 registered placeholder | — | returns `NOT_SUPPORTED` until the read-only research gate is satisfied |
 
 ```bash
-boss --platform zhilian search "Python"   # pick a platform (also --platform zhipin|zhilian|qiancheng)
+boss --platform zhilian search "Python"   # pick a platform (`zhipin` or `zhilian`)
 boss config set platform zhilian          # set as default
 ```
 
@@ -179,7 +178,7 @@ CLI (Click)
   └─ Wizard / WorkflowRunner (TTY + headless JSON + persisted run state)
        └─ Capability metadata (assisted / research compatibility; no mode gate)
        └─ AuthManager ── user-triggered login state (Fernet + PBKDF2 machine-bound encryption)
-       └─ Platform registries ── zhipin / zhilian / qiancheng placeholder
+       └─ Platform registries ── zhipin / zhilian
        └─ BossClient ── httpx + throttle; CDP / Bridge / patchright compatible for login & export
        └─ CacheStore (SQLite WAL) · AIService (OpenAI-compatible / Ollama / vLLM)
             └─ output.py → JSON envelope → stdout

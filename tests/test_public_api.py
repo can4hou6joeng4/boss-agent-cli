@@ -32,7 +32,6 @@ EXPECTED_EXPORTS = {
 	"ResumeFile",
 	"Platform",
 	"BossPlatform",
-	"QianchengPlatform",
 	"ZhilianPlatform",
 	"get_platform",
 	"list_platforms",

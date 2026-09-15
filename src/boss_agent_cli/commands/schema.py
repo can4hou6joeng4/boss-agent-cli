@@ -105,15 +105,6 @@ _CANDIDATE_COMMANDS = {
 	"ai",
 }
 
-_QIANCHENG_PLACEHOLDER_COMMANDS = {
-	"search",
-	"detail",
-	"recommend",
-	"me",
-	"show",
-}
-
-
 def _availability_note(availability: dict[str, Any]) -> str:
 	roles = ", ".join(availability.get("roles", [])) or "none"
 	candidate_platforms = ", ".join(availability.get("candidate_platforms", [])) or "-"
@@ -161,44 +152,28 @@ def _command_availability(
 			"recruiter_platforms": recruiter_platforms,
 			"subcommands": subcommand_availability,
 		}
-	availability_candidate_platforms = list(candidate_platforms)
-	placeholder_note = "qiancheng/51job 当前为稳定 NOT_SUPPORTED 占位适配器，列入候选平台仅表示可选择与可发现。"
-	include_qiancheng_placeholder = cmd_name in _QIANCHENG_PLACEHOLDER_COMMANDS
-	if include_qiancheng_placeholder and "qiancheng" not in availability_candidate_platforms:
-		availability_candidate_platforms = ["qiancheng", *availability_candidate_platforms]
 	if cmd_name in _ROLE_BOTH_COMMANDS:
-		availability: dict[str, Any] = {
+		return {
 			"roles": ["candidate", "recruiter"],
-			"candidate_platforms": availability_candidate_platforms,
+			"candidate_platforms": candidate_platforms,
 			"recruiter_platforms": recruiter_platforms,
 		}
-		if include_qiancheng_placeholder:
-			availability["note"] = placeholder_note
-		return availability
 	if cmd_name in _CANDIDATE_COMMANDS:
-		availability = {
+		return {
 			"roles": ["candidate"],
-			"candidate_platforms": availability_candidate_platforms,
+			"candidate_platforms": candidate_platforms,
 			"recruiter_platforms": [],
 		}
-		if include_qiancheng_placeholder:
-			availability["note"] = placeholder_note
-		return availability
-	availability = {
+	return {
 		"roles": ["candidate"],
-		"candidate_platforms": availability_candidate_platforms,
+		"candidate_platforms": candidate_platforms,
 		"recruiter_platforms": [],
 	}
-	if include_qiancheng_placeholder:
-		availability["note"] = placeholder_note
-	return availability
 
 
 def _inject_availability(data: dict[str, Any]) -> dict[str, Any]:
-	# supported_platforms 表示“已注册 / 可选择”的平台；availability 表示命令真实可用的
-	# 候选者平台。qiancheng/51job 当前仍是 NOT_SUPPORTED 占位 adapter，仅在
-	# 对应占位能力命令中通过 availability.note 明示不可调度真实平台能力。
-	candidate_platforms = ["zhilian", "zhipin"]
+	# supported_platforms 与 availability 均从当前注册表派生，避免 schema 漂移。
+	candidate_platforms = list_platforms()
 	recruiter_platforms = data.get("supported_recruiter_platforms", [])
 	commands: dict[str, Any] = {}
 	for cmd_name, cmd_spec in data["commands"].items():
@@ -318,12 +293,12 @@ SCHEMA_DATA = {
 				"--platform": {
 					"type": "string",
 					"default": None,
-					"description": "仅查看指定平台（支持 qiancheng / 51job 等已注册平台或别名）",
+					"description": "仅查看指定已注册平台",
 				},
 				"--capability": {
 					"type": "string",
 					"default": None,
-					"description": "按现有本地能力矩阵反查平台状态；返回 available / placeholder / not_supported，blocked_by_policy 仅保留空兼容分组",
+					"description": "按现有本地能力矩阵反查平台状态；返回 available / not_supported，blocked_by_policy 仅保留空兼容分组",
 					"choices": ["search", "detail", "recommend", "me", "status", "greet", "apply", "shortlist", "stats", "config", "schema"],
 				},
 			},
@@ -1124,8 +1099,8 @@ SCHEMA_DATA = {
 		"--platform": {
 			"type": "string",
 			"default": "zhipin",
-			"description": "招聘平台适配器（zhipin=BOSS 直聘求职者/招聘者均可用；zhilian=智联招聘已接通求职者侧包络与命令兼容；qiancheng/51job=前程无忧占位适配器，当前稳定返回 NOT_SUPPORTED）",
-			"choices": ["51job", "qiancheng", "zhipin", "zhilian"],
+			"description": "招聘平台适配器（zhipin=BOSS 直聘求职者/招聘者均可用；zhilian=智联招聘已接通求职者侧包络与命令兼容）",
+			"choices": list_platforms(),
 		},
 		"--json": {
 			"type": "bool",

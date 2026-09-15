@@ -12,7 +12,7 @@ Unlike scraping or auto-apply bots, boss-agent-cli is intentionally scoped to lo
 - Welfare filtering: `--welfare "双休,五险一金"` pages, fetches details, and matches every condition with real AND logic.
 - Structured output: JSON-only stdout, logs on stderr, exit 0/1.
 - Local shortlist and funnel stats; AI assist (JD analysis, resume polish, interview prep).
-- Multi-platform registry: zhipin (default), zhilian, qiancheng (placeholder, NOT_SUPPORTED).
+- Multi-platform registry: zhipin (default) and zhilian.
 - Four agent integrations: Skill, subprocess, MCP server, Python SDK.
 
 ## Install

@@ -241,7 +241,6 @@ module = [
 	"boss_agent_cli.api.recruiter_endpoints",
 	"boss_agent_cli.platforms.recruiter_base",
 	"boss_agent_cli.platforms.zhipin_recruiter",
-	"boss_agent_cli.platforms.qiancheng",
 	"boss_agent_cli.commands.recruiter",
 	"boss_agent_cli.commands.recruiter.applications",
 	"boss_agent_cli.commands.recruiter.candidates",

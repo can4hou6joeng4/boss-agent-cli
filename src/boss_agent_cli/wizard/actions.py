@@ -330,9 +330,6 @@ def execute_candidate_detail(
 
 
 def _auth_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	if context.role == "candidate" and context.platform in {"qiancheng", "51job"}:
-		with context.candidate_platform() as platform:
-			_unwrap(platform, platform.user_info(), "当前平台不支持登录态检查")
 	token = context.auth().check_status()
 	if token is None:
 		# 未登录不是失败，是「在等人」。返回 WAITING_INPUT 让 run 挂起可恢复，

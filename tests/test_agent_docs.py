@@ -108,35 +108,30 @@ def test_capability_matrix_exists_and_covers_core_capabilities():
 	assert "`boss clean`" in content
 	assert "39 个顶层命令" in content
 	assert "13 个一级招聘者子命令" in content
-	assert "`qiancheng` / 51job" in content
-	assert "`NOT_SUPPORTED`" in content
+	assert "`zhipin`" in content
+	assert "`zhilian`" in content
+	assert "qiancheng" not in content
+	assert "51job" not in content
 
 
-def test_readme_documents_registered_qiancheng_placeholder():
+def test_readme_documents_current_registered_platforms():
 	readme = _read("README.md")
 	readme_en = _read("README.en.md")
 	matrix_en = _read("docs/capability-matrix.en.md")
 
-	assert "--platform zhipin|zhilian|qiancheng" in readme
-	assert "前程无忧 / 51job (`qiancheng`)" in readme
-	assert "QianchengPlatform (51job 占位适配器，统一返回 NOT_SUPPORTED)" in readme
+	assert "--platform zhipin|zhilian" in readme
+	assert "BOSS 直聘 (`zhipin`)" in readme
+	assert "智联招聘 (`zhilian`)" in readme
+	assert "qiancheng" not in readme
+	assert "51job" not in readme
 
-	assert "51job (`qiancheng`)" in readme_en
-	assert "returns `NOT_SUPPORTED`" in readme_en
-	assert "registered placeholder adapter" in matrix_en
-
-
-def test_51job_research_readiness_contract_is_documented():
-	content = _read("docs/research/platforms/51job.md")
-
-	assert "### 3.1 字段映射草案" in content
-	assert "### 3.2 Readiness checklist" in content
-	assert "`job_id`" in content
-	assert "`source_url`" in content
-	assert "不得用列表序号或分页位置代替" in content
-	assert "默认 CI 不访问真实网络" in content
-	assert "`PLATFORM_DRIFT`" in content
-	assert "写操作、批量抓取、自动投递仍处于禁止或受限状态" in content
+	assert "--platform zhipin|zhilian" in readme_en
+	assert "BOSS Zhipin (`zhipin`)" in readme_en
+	assert "Zhaopin (`zhilian`)" in readme_en
+	assert "qiancheng" not in readme_en
+	assert "51job" not in readme_en
+	assert "qiancheng" not in matrix_en
+	assert "51job" not in matrix_en
 
 
 def test_readme_links_to_new_docs():
