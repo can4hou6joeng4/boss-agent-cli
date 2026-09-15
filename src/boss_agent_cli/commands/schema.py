@@ -688,7 +688,7 @@ SCHEMA_DATA = {
 		"chatmsg": {
 			"description": "查看与指定好友的聊天消息历史；--raw 输出保真结构化消息字段。",
 			"args": [
-				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
+				{"name": "security_id", "required": True, "description": "联系人的 uid（推荐，取自 chat 命令输出，跨请求稳定）或 security_id"},
 			],
 			"options": {
 				"--page": {"type": "int", "default": 1, "description": "页码"},
@@ -699,7 +699,7 @@ SCHEMA_DATA = {
 		"chat-summary": {
 			"description": "基于聊天历史生成结构化摘要与下一步建议。",
 			"args": [
-				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
+				{"name": "security_id", "required": True, "description": "联系人的 uid（推荐，取自 chat 命令输出，跨请求稳定）或 security_id"},
 			],
 			"options": {
 				"--page": {"type": "int", "default": 1, "description": "页码"},
@@ -709,7 +709,7 @@ SCHEMA_DATA = {
 		"mark": {
 			"description": "给联系人添加或移除标签。",
 			"args": [
-				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
+				{"name": "security_id", "required": True, "description": "联系人的 uid（推荐，取自 chat 命令输出，跨请求稳定）或 security_id"},
 			],
 			"options": {
 				"--label": {
@@ -724,7 +724,7 @@ SCHEMA_DATA = {
 		"exchange": {
 			"description": "请求交换联系方式（手机号或微信）。",
 			"args": [
-				{"name": "security_id", "required": True, "description": "联系人的 security_id（从 chat 命令获取）"},
+				{"name": "security_id", "required": True, "description": "联系人的 uid（推荐，取自 chat 命令输出，跨请求稳定）或 security_id"},
 			],
 			"options": {
 				"--type": {

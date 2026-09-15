@@ -99,6 +99,9 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				"last_time": last_time_str,
 				"last_ts": last_ts,
 				"msg_status": msg_status_label,
+				# uid 是跨请求稳定的联系人标识，chatmsg/chat-summary/mark/exchange
+				# 都应优先使用它；security_id 是每请求轮换的令牌，仅作参考。
+				"uid": item.get("uid") or "",
 				"security_id": item.get("securityId") or "",
 				"encrypt_job_id": item.get("encryptJobId") or "",
 				"unread": item.get("unreadMsgCount") or 0,
@@ -156,7 +159,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				),
 					hints={"next_actions": [
 						"boss detail <security_id> — 查看职位详情",
-						"boss chatmsg <security_id> — 查看消息后继续沟通",
+						"boss chatmsg <uid> — 查看消息后继续沟通（uid 见上方输出）",
 				]},
 			)
 			return
@@ -179,6 +182,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 					("Boss", "name", "bold cyan"),
 					("职称", "title", "dim"),
 					("公司", "brand_name", "green"),
+					("uid", "uid", "dim"),
 					("发起方", "initiated_by", "magenta"),
 					("未读", "unread", "red"),
 					("已读", "msg_status", "dim"),
@@ -192,7 +196,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			render=_render,
 				hints={"next_actions": [
 					"boss detail <security_id> — 查看职位详情",
-					"boss chatmsg <security_id> — 查看消息后继续沟通",
+					"boss chatmsg <uid> — 查看消息后继续沟通（uid 见上方输出）",
 			]},
 		)
 
