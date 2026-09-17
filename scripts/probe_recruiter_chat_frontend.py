@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Probe BOSS recruiter chat frontend for sendMessage JS entry points.
 
+The host runtime is Python + Patchright + Chrome CDP. The JavaScript strings
+below run inside the attached web page; they are not Node/Electron scripts and
+must not be launched by a Codex++ script sandbox.
+
 Issue can4hou6joeng4/boss-agent-cli#217 — BOSS 招聘者发消息端点已从
 ``fastReply/sendReplyMsg`` 迁移到 WebSocket + Protobuf 双通道。本脚本通过
 CDP Chrome 在招聘者 chat 页注入 WebSocket 监听 + Vuex 探测，定位前端实际
@@ -180,7 +184,13 @@ def _find_chat_page(context: Any) -> Any:
 
 
 def _run_live_probe(report: dict[str, Any], *, friend_id: int, cdp_url: str, wait_seconds: int) -> dict[str, Any]:
-	from patchright.sync_api import sync_playwright
+	try:
+		from patchright.sync_api import sync_playwright
+	except ImportError as exc:
+		raise SystemExit(
+			"缺少 Python 依赖 patchright。请在 PowerShell 中运行："
+			" uv sync --extra dev && uv run patchright install chromium"
+		) from exc
 
 	with sync_playwright() as pw:
 		try:

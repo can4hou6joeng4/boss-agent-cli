@@ -16,6 +16,10 @@ BOSS_SMOKE_DRY_RUN=1 uv run python scripts/smoke_p0.py   # 只打印步骤不执
 issue #217 — 探测 BOSS 招聘者 chat 页前端 sendMessage JS 入口。脚本注入 WebSocket
 spy + Vuex 探测，需在 CDP Chrome 中手动配合操作。
 
+宿主运行时是 Python + Patchright + Chrome CDP；脚本中的 JavaScript 只在已连接的
+网页上下文中执行，不依赖 Node.js 或 Electron。Windows 请从 PowerShell 启动，
+不要交给 Codex++ 脚本沙箱执行：
+
 ```bash
 # 1. 启动 CDP Chrome 并登录招聘者账号
 boss-chrome
@@ -25,6 +29,12 @@ uv run python scripts/probe_recruiter_chat_frontend.py --friend-id 12345 --outpu
 
 # 3. 按脚本提示在 Chrome 中手动发一条「探测消息」
 # 4. 把 report.json 内容粘贴到 issue #217 评论
+```
+
+Windows PowerShell 等价入口：
+
+```powershell
+.\scripts\probe_recruiter_chat_frontend.ps1 --friend-id 12345 --output report.json
 ```
 
 `--dry-run` 仅打印将执行的 JS payload 用于审阅，不连 CDP。
