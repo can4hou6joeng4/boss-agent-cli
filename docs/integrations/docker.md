@@ -149,8 +149,9 @@ See [platform-risk.md](../platform-risk.md).
 
 ## Verified behavior
 
-The image is built in CI on every push and pull request (`docker` job in
-`.github/workflows/ci.yml`) so it cannot rot silently the way an unreferenced
-Dockerfile does. The build was validated end to end: MCP `initialize`, `tools/list`
-returning the full implemented tool set, and a `tools/call` round trip that shells out to
-`boss` inside the container.
+General push and pull-request CI is intentionally disabled. Maintainers must build
+the image during Docker-affecting changes and before a release so the `Dockerfile`
+cannot rot silently. The image has been validated end to end with MCP `initialize`,
+`tools/list`, a `tools/call` round trip that shells out to `boss` inside the container,
+and non-root execution; repeat the applicable checks manually when this integration
+changes.

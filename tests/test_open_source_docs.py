@@ -146,17 +146,11 @@ def test_maintainer_docs_cover_open_source_governance():
 	release = read("docs/maintainer/release-checklist.md")
 	labels = read("docs/maintainer/labels.md")
 
-	assert "required status checks" in branch
-	assert "P0 quality baseline" in branch
-	assert "test (3.10)" in branch
-	assert "test (3.11)" in branch
-	assert "test (3.12)" in branch
-	assert "test (3.13)" in branch
-	assert "test (3.14)" in branch
-	assert "lint" in branch
-	assert "typecheck" in branch
-	assert "docs" in branch
-	assert "docker" in branch
+	assert "Required status checks and approving reviews are intentionally not configured" in branch
+	assert "uv run python scripts/quality_baseline.py" in branch
+	assert "BOSS_SMOKE_DRY_RUN=1 uv run python scripts/smoke_p0.py" in branch
+	assert "uv run python evals/run_eval.py --mode fixture" in branch
+	assert "git diff --check master...HEAD" in branch
 	assert "allow_force_pushes" in branch
 	assert "allow_deletions" in branch
 
@@ -255,25 +249,9 @@ def test_issue_templates_are_valid_structured_forms():
 		assert len(ids) == len(set(ids))
 
 
-def test_ci_workflow_runs_p0_quality_gate():
-	raw_workflow = read(".github/workflows/ci.yml")
-	workflow = load_yaml(".github/workflows/ci.yml")
-
-	jobs = workflow["jobs"]
-	assert "p0_quality_gate" in jobs
-	gate = jobs["p0_quality_gate"]
-	assert gate["name"] == "P0 quality baseline"
-	assert gate["runs-on"] == "ubuntu-latest"
-	run_commands = [step["run"] for step in gate["steps"] if "run" in step]
-	assert run_commands == [
-		"uv python install 3.11",
-		"uv sync --all-extras",
-		"uv run python scripts/quality_baseline.py",
-		"uv run python scripts/smoke_p0.py",
-		'uv run python evals/run_eval.py --mode fixture --results-dir "${RUNNER_TEMP}/evals"',
-	]
-	assert "scripts/quality_baseline.py" in raw_workflow
-	assert "BOSS_SMOKE_DRY_RUN" in raw_workflow
+def test_general_ci_and_docs_workflows_are_intentionally_retired():
+	for path in (".github/workflows/ci.yml", ".github/workflows/docs.yml"):
+		assert not (ROOT / path).exists(), path
 
 
 def test_quality_baseline_script_matches_blocking_p0_commands():
@@ -283,70 +261,6 @@ def test_quality_baseline_script_matches_blocking_p0_commands():
 	assert '("pytest", ("pytest", "-q"))' in content
 	assert '("mypy", ("mypy", "src/boss_agent_cli"))' in content
 	assert "--skip-mypy" in content
-
-
-def test_docs_workflow_runs_open_source_doc_checks():
-	raw_workflow = read(".github/workflows/docs.yml")
-	workflow = load_yaml(".github/workflows/docs.yml")
-
-	expected_paths = [
-		"README.md",
-		"README.en.md",
-		"CONTRIBUTING.md",
-		"CONTRIBUTING.en.md",
-		"SECURITY.md",
-		"docs/**",
-		".github/ISSUE_TEMPLATE/**",
-		".github/PULL_REQUEST_TEMPLATE.md",
-		"tests/test_agent_docs.py",
-		"tests/test_open_source_docs.py",
-		".github/workflows/docs.yml",
-	]
-	expected_run_commands = [
-		"uv python install 3.11",
-		"uv sync --all-extras",
-		"uv run pytest tests/test_agent_docs.py tests/test_open_source_docs.py -q",
-		(
-			"if [ \"${{ github.event_name }}\" = \"pull_request\" ]; then\n"
-			# 刻意不带 --depth=1：浅克隆取不到 merge base，落后于 base 的 PR 会以
-			# `fatal: no merge base` 退出 128（假红）。这条断言守的就是别把它加回来。
-			"  git fetch --no-tags origin \"${{ github.base_ref }}\"\n"
-			"  git diff --check \"origin/${{ github.base_ref }}...HEAD\"\n"
-			"elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then\n"
-			"  git diff --check HEAD^...HEAD\n"
-			"else\n"
-			"  git diff --check\n"
-			"fi\n"
-		),
-	]
-
-	assert "name: Docs" in raw_workflow
-	assert workflow["name"] == "Docs"
-
-	triggers = workflow["on"]
-	assert {"push", "pull_request", "workflow_dispatch"} <= set(triggers)
-	assert triggers["push"]["branches"] == ["master"]
-	assert "paths" not in triggers["push"]
-	assert "push" in raw_workflow
-	assert "paths:" not in raw_workflow.split("pull_request:", 1)[0]
-	for path in expected_paths:
-		assert path not in raw_workflow.split("pull_request:", 1)[0]
-	assert triggers["pull_request"]["branches"] == ["master"]
-	assert "paths" not in triggers["pull_request"]
-
-	jobs = workflow["jobs"]
-	assert "docs" in jobs
-	docs_job = jobs["docs"]
-	assert docs_job["runs-on"] == "ubuntu-latest"
-	checkout_step = docs_job["steps"][0]
-	assert checkout_step["uses"] == "actions/checkout@v7"
-	assert checkout_step["with"]["fetch-depth"] == 0
-	run_commands = [
-		step["run"]
-		for step in docs_job["steps"]
-		if "run" in step
-	]
-	assert run_commands == expected_run_commands
 
 
 def test_contributing_clarifies_verification_and_tab_indentation():

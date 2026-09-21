@@ -44,7 +44,7 @@ python -m zipfile -l dist/*.whl | sed -n '1,80p'
 
 ## 5. Publish
 
-Create an annotated release tag only after CI is green:
+Create an annotated release tag only after the local verification above is green:
 
 ```bash
 git tag -a vX.Y.Z -m "vX.Y.Z"
