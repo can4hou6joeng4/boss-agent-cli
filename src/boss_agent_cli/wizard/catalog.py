@@ -49,7 +49,7 @@ GOALS = {
 			"candidate",
 			"查看聊天记录",
 			("auth_status", "candidate_chat_history"),
-			("gid", "security_id"),
+			("gid",),
 		),
 		"pipeline": GoalDefinition("pipeline", "candidate", "查看候选进度", ("auth_status", "candidate_pipeline")),
 		"digest": GoalDefinition("digest", "candidate", "生成求职日报", ("auth_status", "candidate_digest")),

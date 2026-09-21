@@ -43,8 +43,8 @@
 | 能力 | CLI 命令 | 需要登录 | 通道 |
 |---|---|---|---|
 | 沟通列表 | `boss chat` | 是 | Bridge 已连接时复用现有浏览器只读会话；否则使用本地凭据的 httpx |
-| 聊天消息 | `boss chatmsg [--raw]` | 是 | Bridge 已连接时复用现有浏览器只读会话；否则使用本地凭据的 httpx；`--raw` 保留结构化 body/链接/职位卡片字段 |
-| 聊天摘要 | `boss chat-summary` | 是 | 平台适配器 + 本地处理 |
+| 聊天消息 | `boss chatmsg [--raw]` | 是 | 优先接受 `boss chat` 输出的稳定 `uid`；Bridge 已连接时复用现有浏览器只读会话，否则使用本地凭据的 httpx；`--raw` 保留结构化 body/链接/职位卡片字段 |
+| 聊天摘要 | `boss chat-summary` | 是 | 优先接受稳定 `uid`；平台适配器 + 本地处理 |
 | 联系人标签 | `boss mark` | 是 | 平台适配器 |
 | 交换联系方式 | `boss exchange` | 是 | 平台适配器 |
 | 面试邀请 | `boss interviews` | 是 | httpx |

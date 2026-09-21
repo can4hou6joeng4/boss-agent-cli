@@ -31,7 +31,7 @@ def _ctx_mock(mock_cls):
 	return instance
 
 
-def _friend_item(uid=117661469, sid="sid_this_request", name="郝女士", brand="万联智链"):
+def _friend_item(uid=10001, sid="sid_this_request", name="联系人甲", brand="示例公司"):
 	return {
 		"uid": uid,
 		"securityId": sid,
@@ -65,7 +65,7 @@ def test_chat_output_exposes_uid(mock_auth_cls, mock_client_cls):
 	result = CliRunner().invoke(cli, ["chat"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
-	assert parsed["data"][0]["uid"] == 117661469
+	assert parsed["data"][0]["uid"] == 10001
 	# security_id 仍然保留（仅作参考，不是稳定句柄）
 	assert parsed["data"][0]["security_id"] == "sid_this_request"
 
@@ -94,13 +94,13 @@ def test_chatmsg_by_uid_uses_fresh_security_id(mock_auth_cls, mock_client_cls):
 	"""
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response(
-		[_friend_item(uid=117661469, sid="sid_current_request")]
+		[_friend_item(uid=10001, sid="sid_current_request")]
 	)
 	mock_client.chat_history.return_value = {
-		"zpData": {"messages": [{"from": {"uid": 117661469, "name": "郝女士"}, "type": 1, "text": "你好", "time": 1700000000000}]},
+		"zpData": {"messages": [{"from": {"uid": 10001, "name": "联系人甲"}, "type": 1, "text": "你好", "time": 1700000000000}]},
 	}
 
-	result = CliRunner().invoke(cli, ["chatmsg", "117661469"])
+	result = CliRunner().invoke(cli, ["chatmsg", "10001"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
@@ -108,7 +108,7 @@ def test_chatmsg_by_uid_uses_fresh_security_id(mock_auth_cls, mock_client_cls):
 
 	call = mock_client.chat_history.call_args
 	gid, security_id = call.args[0], call.args[1]
-	assert str(gid) == "117661469", "gid 必须是 uid"
+	assert str(gid) == "10001", "gid 必须是 uid"
 	assert security_id == "sid_current_request", "必须使用本次请求返回的 securityId"
 
 
@@ -122,7 +122,7 @@ def test_chatmsg_by_security_id_still_works(mock_auth_cls, mock_client_cls):
 	"""
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response(
-		[_friend_item(uid=117661469, sid="sid_current_request")]
+		[_friend_item(uid=10001, sid="sid_current_request")]
 	)
 	mock_client.chat_history.return_value = {"zpData": {"messages": []}}
 
@@ -137,7 +137,7 @@ def test_chatmsg_stale_security_id_still_fails_but_suggests_uid(mock_auth_cls, m
 	"""传已轮换掉的 security_id 必然失配——报错需引导改用 uid。"""
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response(
-		[_friend_item(uid=117661469, sid="sid_current_request")]
+		[_friend_item(uid=10001, sid="sid_current_request")]
 	)
 
 	result = CliRunner().invoke(cli, ["chatmsg", "sid_previous_request"])
@@ -162,6 +162,20 @@ def test_chatmsg_not_found_message_mentions_uid(mock_auth_cls, mock_client_cls):
 	assert "nobody" in parsed["error"]["message"]
 
 
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
+@patch("boss_agent_cli.commands.chatmsg.AuthManager")
+def test_chatmsg_by_uid_stops_when_current_security_id_is_missing(mock_auth_cls, mock_client_cls):
+	"""friend_list 缺少动态令牌时不得把 uid 猜作 securityId。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_friend_item(uid=10001, sid="")])
+
+	result = CliRunner().invoke(cli, ["chatmsg", "10001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	mock_client.chat_history.assert_not_called()
+
+
 # ── 3. chat-summary / exchange 同样使用本次的 securityId ─────────────
 
 
@@ -170,13 +184,16 @@ def test_chatmsg_not_found_message_mentions_uid(mock_auth_cls, mock_client_cls):
 def test_chat_summary_by_uid_uses_fresh_security_id(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response(
-		[_friend_item(uid=117661469, sid="sid_current_request")]
+		[_friend_item(uid=10001, sid="sid_current_request")]
 	)
 	mock_client.chat_history.return_value = {"zpData": {"messages": []}}
 
-	result = CliRunner().invoke(cli, ["chat-summary", "117661469"])
+	result = CliRunner().invoke(cli, ["chat-summary", "10001"])
 	assert result.exit_code == 0
 	assert mock_client.chat_history.call_args.args[1] == "sid_current_request"
+	parsed = json.loads(result.output)
+	assert parsed["data"]["uid"] == "10001"
+	assert parsed["data"]["security_id"] == "sid_current_request"
 
 
 @patch("boss_agent_cli.commands.exchange.get_platform_instance")
@@ -184,10 +201,27 @@ def test_chat_summary_by_uid_uses_fresh_security_id(mock_auth_cls, mock_client_c
 def test_exchange_by_uid_uses_fresh_security_id(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response(
-		[_friend_item(uid=117661469, sid="sid_current_request")]
+		[_friend_item(uid=10001, sid="sid_current_request")]
 	)
 	mock_client.exchange_contact.return_value = {"zpData": {}}
 
-	result = CliRunner().invoke(cli, ["exchange", "117661469"])
+	result = CliRunner().invoke(cli, ["exchange", "10001"])
 	assert result.exit_code == 0
 	assert mock_client.exchange_contact.call_args.args[0] == "sid_current_request"
+	parsed = json.loads(result.output)
+	assert parsed["data"]["uid"] == "10001"
+	assert parsed["data"]["security_id"] == "sid_current_request"
+
+
+@patch("boss_agent_cli.commands.exchange.get_platform_instance")
+@patch("boss_agent_cli.commands.exchange.AuthManager")
+def test_exchange_by_uid_stops_when_current_security_id_is_missing(mock_auth_cls, mock_client_cls):
+	"""写请求缺少动态令牌时必须 fail closed，不得把 uid 当 securityId 发送。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_friend_item(uid=10001, sid="")])
+
+	result = CliRunner().invoke(cli, ["exchange", "10001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	mock_client.exchange_contact.assert_not_called()

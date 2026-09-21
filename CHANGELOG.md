@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss chat` 现在公开跨请求稳定的联系人 `uid`，`chatmsg` / `chat-summary` / `mark` / `exchange` 优先按 `uid` 重新解析联系人并使用本次沟通列表返回的动态 `securityId`；沟通快照、diff 与导出映射同步改用 `uid` 主键，避免轮换令牌导致联系人查找必然失败和快照重复。既有 `security_id` 参数名与无 `uid` 的旧快照仍兼容，但旧令牌仅作兜底且可能已经失效。
 - 移除通用 CI / Docs workflow 后，同步清理失效的 README 状态徽章、远端门禁文档与工作流存在性断言；PR 和发版改为明确执行维护者本地质量门禁，避免主线测试固定读取已删除文件。
 
 ## [2.0.0] - 2026-09-15

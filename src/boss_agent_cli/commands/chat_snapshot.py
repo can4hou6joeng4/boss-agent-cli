@@ -12,7 +12,7 @@ from boss_agent_cli.output import Logger
 def save_snapshot_and_diff(
 	snapshot_dir: str, friends: list[dict[str, Any]], logger: Logger
 ) -> dict[str, Any]:
-	"""保存当日 JSON 快照（按 uid 合并）并与上次对比。"""
+	"""保存当日 JSON 快照（uid 优先，旧数据回退 security_id）并与上次对比。"""
 	os.makedirs(snapshot_dir, exist_ok=True)
 	today = datetime.date.today().isoformat()
 	snapshot_path = os.path.join(snapshot_dir, f"{today}.json")

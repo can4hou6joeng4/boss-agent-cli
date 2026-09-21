@@ -1000,7 +1000,11 @@ def _candidate_friend_follow_up(menu: MenuDriver, item: Mapping[str, Any], platf
 	if action == "done":
 		return None
 	inputs: dict[str, Any] = {}
-	if security_id not in (None, ""):
+	if action in {"exchange", "mark"} and gid not in (None, ""):
+		# 这两条路径会重新读取 friend_list；持久化跨请求稳定的 uid，
+		# 不把本次页面返回、下一次请求可能已轮换的 securityId 带入 workflow。
+		inputs["security_id"] = str(gid)
+	elif action != "chat_history" and security_id not in (None, ""):
 		inputs["security_id"] = str(security_id)
 	if gid not in (None, ""):
 		inputs["gid"] = str(gid)

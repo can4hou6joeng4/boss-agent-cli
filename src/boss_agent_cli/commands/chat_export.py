@@ -208,14 +208,14 @@ def _render_markdown(
 		lines.append("<details>")
 		lines.append("<summary>联系人标识映射表（点击展开）</summary>")
 		lines.append("")
-		lines.append("| 编号 | 公司/联系人 | uid |")
-		lines.append("|------|------------|-----|")
+		lines.append("| 编号 | 公司/联系人 | 联系人标识（uid 优先） |")
+		lines.append("|------|------------|--------------------------|")
 		for ref, key, label in rd["id_map"]:
 			lines.append(f"| {ref} | {label} | {key} |")
 		lines.append("")
 		lines.append("</details>")
 		lines.append("")
-		lines.append("> `boss chatmsg <uid>` 可直接使用上表的 uid。")
+		lines.append("> 优先使用 uid 调用 `boss chatmsg <uid>`；缺少 uid 的旧记录会回退展示可能已失效的 security_id。")
 
 	return "\n".join(lines) + "\n"
 
@@ -226,7 +226,7 @@ def _render_html(
 	days: int | None,
 	diff_result: dict[str, Any],
 ) -> str:
-	"""渲染为 HTML 格式，含分组、diff 标记和 security_id 映射。"""
+	"""渲染为 HTML 格式，含分组、diff 标记和联系人标识映射。"""
 	esc = _html.escape
 	rd = prepare_render_data(friends, from_who, diff_result)
 
@@ -294,9 +294,10 @@ def _render_html(
 	<details>
 		<summary>联系人标识映射表（点击展开）</summary>
 		<table>
-			<thead><tr><th>编号</th><th>公司/联系人</th><th>uid</th></tr></thead>
+			<thead><tr><th>编号</th><th>公司/联系人</th><th>联系人标识（uid 优先）</th></tr></thead>
 			<tbody>{''.join(map_rows)}</tbody>
 		</table>
+		<p>优先使用 uid；缺少 uid 的旧记录会回退展示可能已失效的 security_id。</p>
 	</details>""" if map_rows else ""
 
 	return f"""<!DOCTYPE html>

@@ -384,7 +384,7 @@ def test_find_previous_snapshot_ignores_non_json(tmp_path):
 # ── 稳定标识：security_id 每请求轮换，主键必须是 uid ──────────────────
 
 
-def _make_uid_item(uid=117661469, sid="sid_this_request", name="郝女士", unread=0):
+def _make_uid_item(uid=10001, sid="sid_this_request", name="联系人甲", unread=0):
 	"""构造带稳定 uid 的 friends 条目（真实 API 返回同时含 uid 与 securityId）。"""
 	return {
 		"uid": uid,

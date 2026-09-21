@@ -3,12 +3,12 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.commands.contact_lookup import resolve_friend_or_emit
+from boss_agent_cli.commands.contact_lookup import current_friend_security_id_or_emit, resolve_friend_or_emit
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_message_panel
 
 
 @click.command("exchange")
-@click.argument("security_id")
+@click.argument("security_id", metavar="UID_OR_SECURITY_ID")
 @click.option("--type", "exchange_type", default="phone", type=click.Choice(["phone", "wechat"]), help="交换类型：phone=手机号 / wechat=微信")
 @click.pass_context
 @handle_auth_errors("exchange")
@@ -31,7 +31,9 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 		uid = str(friend_item.get("uid", ""))
 		friend_name: str = friend_item.get("name") or "-"
 		# securityId 是每请求轮换的令牌，必须用本次 friend_list 返回的新值。
-		fresh_security_id = str(friend_item.get("securityId") or security_id or "")
+		fresh_security_id = current_friend_security_id_or_emit(ctx, "exchange", friend_item)
+		if fresh_security_id is None:
+			return
 
 		try:
 			resp = platform.exchange_contact(fresh_security_id, uid, friend_name, exchange_type=type_id)
@@ -43,7 +45,8 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 			return
 
 		data = {
-			"security_id": security_id,
+			"uid": uid,
+			"security_id": fresh_security_id,
 			"name": friend_name,
 			"type": type_label,
 			"message": f"已向 {friend_name} 发送{type_label}交换请求",
@@ -53,6 +56,6 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 			render=lambda d: render_message_panel(d, title="exchange"),
 			hints={"next_actions": [
 				f"{boss_command_for_ctx(ctx, 'chat')} — 返回沟通列表",
-				f"{boss_command_for_ctx(ctx, f'chatmsg {security_id}')} — 查看聊天记录",
+				f"{boss_command_for_ctx(ctx, f'chatmsg {uid}')} — 查看聊天记录",
 			]},
 		)

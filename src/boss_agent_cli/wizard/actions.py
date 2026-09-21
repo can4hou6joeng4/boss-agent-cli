@@ -15,6 +15,7 @@ from boss_agent_cli.ai.service import AIService, AIServiceError
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import build_platform_instance
 from boss_agent_cli.commands._recruiter_platform import build_recruiter_platform_instance
+from boss_agent_cli.commands.contact_lookup import FriendLookupLimitExceeded, find_friend
 from boss_agent_cli.crawler.operations import crawl_status
 from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
@@ -418,55 +419,83 @@ def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: M
 	return StepResult({"security_id": security_id, "job_id": job_id, "result": data})
 
 
-def _candidate_friend(platform: Any, security_id: str) -> dict[str, Any]:
-	data = _unwrap(platform, platform.friend_list(page=1), "沟通列表获取失败")
-	items = data.get("result") or data.get("friendList") or []
-	for item in items:
-		if str(item.get("securityId") or item.get("security_id") or "") == security_id:
-			return item
-	raise WorkflowActionError("JOB_NOT_FOUND", f"沟通列表中未找到联系人: {security_id}")
+def _candidate_friend(platform: Any, identifier: str) -> dict[str, Any]:
+	try:
+		friend, error_response = find_friend(platform, identifier)
+	except FriendLookupLimitExceeded as exc:
+		raise WorkflowActionError(
+			"NETWORK_ERROR",
+			str(exc),
+			recoverable=True,
+			recovery_action="缩小沟通列表范围后重试",
+		) from exc
+	if error_response is not None:
+		_unwrap(platform, error_response, "沟通列表获取失败")
+	if friend is not None:
+		return friend
+	raise WorkflowActionError("JOB_NOT_FOUND", f"沟通列表中未找到联系人: {identifier}")
+
+
+def _candidate_current_security_id(friend: Mapping[str, Any]) -> str:
+	security_id = str(friend.get("securityId") or friend.get("security_id") or "").strip()
+	if security_id:
+		return security_id
+	raise WorkflowActionError(
+		"NETWORK_ERROR",
+		"沟通列表返回的联系人缺少当前 securityId，已停止执行",
+		recoverable=True,
+		recovery_action="刷新沟通列表后重试",
+	)
 
 
 def _candidate_exchange(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	security_id = str(_required(inputs, "security_id"))
+	identifier = str(_required(inputs, "security_id"))
 	exchange_type = 2 if str(inputs.get("type") or "phone") == "wechat" else 1
 	with context.candidate_platform() as platform:
-		friend = _candidate_friend(platform, security_id)
+		friend = _candidate_friend(platform, identifier)
+		uid = str(friend.get("uid") or "")
+		security_id = _candidate_current_security_id(friend)
 		data = _unwrap(
 			platform,
 			platform.exchange_contact(
 				security_id,
-				str(friend.get("uid") or ""),
+				uid,
 				str(friend.get("name") or "-"),
 				exchange_type=exchange_type,
 			),
 			"联系方式交换失败",
 		)
-	return StepResult({"security_id": security_id, "result": data})
+	return StepResult({"uid": uid, "security_id": security_id, "result": data})
 
 
 _LABEL_IDS = {"新招呼": 1, "沟通中": 2, "已约面": 3, "已获取简历": 4, "不合适": 7, "收藏": 11}
 
 
 def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	security_id = str(_required(inputs, "security_id"))
+	identifier = str(_required(inputs, "security_id"))
 	label = str(_required(inputs, "label"))
 	label_id = int(label) if label.isdigit() else _LABEL_IDS.get(label)
 	if label_id is None:
 		raise WorkflowActionError("INVALID_PARAM", f"unknown label: {label}")
 	with context.candidate_platform() as platform:
-		friend = _candidate_friend(platform, security_id)
+		friend = _candidate_friend(platform, identifier)
+		uid = str(friend.get("uid") or "")
 		data = _unwrap(
 			platform,
 			platform.friend_label(
-				str(friend.get("uid") or ""),
+				uid,
 				label_id,
 				int(friend.get("friendSource") or 0),
 				remove=bool(inputs.get("remove", False)),
 			),
 			"联系人标签更新失败",
 		)
-	return StepResult({"security_id": security_id, "label": label, "result": data})
+	return StepResult({
+		"uid": uid,
+		"security_id": str(friend.get("securityId") or friend.get("security_id") or ""),
+		"label": label,
+		"result": data,
+	})
 
 
 def _candidate_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
@@ -478,9 +507,12 @@ def _candidate_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 
 def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	with context.candidate_platform() as platform:
+		friend = _candidate_friend(platform, str(_required(inputs, "gid")))
+		gid = str(friend.get("uid") or "")
+		security_id = _candidate_current_security_id(friend)
 		response = platform.chat_history(
-			str(_required(inputs, "gid")),
-			str(_required(inputs, "security_id")),
+			gid,
+			security_id,
 			page=int(inputs.get("page") or 1),
 			count=int(inputs.get("count") or 20),
 		)
@@ -490,8 +522,9 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 		_with_items(
 			{
 				"result": data,
-				"gid": str(inputs.get("gid") or ""),
-				"security_id": str(inputs.get("security_id") or ""),
+				"gid": gid,
+				"uid": gid,
+				"security_id": security_id,
 			},
 			items,
 		)

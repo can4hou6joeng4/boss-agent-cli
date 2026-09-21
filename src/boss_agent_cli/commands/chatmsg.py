@@ -6,7 +6,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
-from boss_agent_cli.commands.contact_lookup import resolve_friend_or_emit
+from boss_agent_cli.commands.contact_lookup import current_friend_security_id_or_emit, resolve_friend_or_emit
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_simple_list
 
@@ -17,7 +17,7 @@ _MSG_TYPE_MAP = {
 
 
 @click.command("chatmsg")
-@click.argument("security_id")
+@click.argument("security_id", metavar="UID_OR_SECURITY_ID")
 @click.option("--page", default=1, help="页码")
 @click.option("--count", default=20, help="每页消息数量")
 @click.option("--raw", "show_raw", is_flag=True, default=False, help="输出保真结构化消息字段")
@@ -52,7 +52,9 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int, sho
 		friend_name = friend_item.get("name") or "-"
 		# securityId 是每请求轮换的令牌，必须用本次 friend_list 返回的新值，
 		# 否则会拿一个已失效的令牌去请求消息历史。
-		fresh_security_id = str(friend_item.get("securityId") or security_id or "")
+		fresh_security_id = current_friend_security_id_or_emit(ctx, "chatmsg", friend_item)
+		if fresh_security_id is None:
+			return
 
 		try:
 			resp = platform.chat_history(gid, fresh_security_id, page=page, count=count)
@@ -86,7 +88,7 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int, sho
 			render=_render,
 			hints={"next_actions": [
 				f"{boss_command_for_ctx(ctx, 'chat')} — 返回沟通列表",
-				f"{boss_command_for_ctx(ctx, f'detail {security_id}')} — 查看职位详情",
+				f"{boss_command_for_ctx(ctx, f'detail {fresh_security_id}')} — 查看职位详情",
 			]},
 		)
 

@@ -142,17 +142,17 @@ def test_find_friend_matches_by_uid_when_security_id_rotates():
 			"zpData": {
 				"result": [
 					{"uid": 999, "securityId": "sid_this_request_other", "name": "其他人"},
-					{"uid": 117661469, "securityId": "sid_this_request_target", "name": "郝女士"},
+					{"uid": 10001, "securityId": "sid_this_request_target", "name": "联系人甲"},
 				],
 				"hasMore": False,
 			},
 		},
 	])
 
-	friend_item, error_response = find_friend(platform, "117661469")
+	friend_item, error_response = find_friend(platform, "10001")
 
 	assert friend_item is not None
-	assert friend_item["name"] == "郝女士"
+	assert friend_item["name"] == "联系人甲"
 	# 返回的是本次请求的新 securityId，调用方应使用它去请求消息历史
 	assert friend_item["securityId"] == "sid_this_request_target"
 	assert error_response is None
@@ -161,9 +161,9 @@ def test_find_friend_matches_by_uid_when_security_id_rotates():
 
 def test_find_friend_accepts_uid_as_int_or_str():
 	"""uid 在 API 中是整数、在命令行里是字符串，两种入参都应命中。"""
-	pages = [{"zpData": {"result": [{"uid": 117661469, "securityId": "sid_a"}], "hasMore": False}}]
+	pages = [{"zpData": {"result": [{"uid": 10001, "securityId": "sid_a"}], "hasMore": False}}]
 
-	for needle in ("117661469", 117661469):
+	for needle in ("10001", 10001):
 		platform, _ = _platform_from_pages(pages)
 		friend_item, _ = find_friend(platform, needle)
 		assert friend_item is not None, f"未命中：{needle!r}"
@@ -184,14 +184,14 @@ def test_find_friend_uid_takes_precedence_over_security_id():
 		{
 			"zpData": {
 				"result": [
-					{"uid": 1, "securityId": "111", "name": "按 uid 应命中的"},
-					{"uid": 2, "securityId": "999", "name": "不该命中"},
+					{"uid": 1, "securityId": "10001", "name": "仅 securityId 相同"},
+					{"uid": 10001, "securityId": "sid_target", "name": "按 uid 应命中的"},
 				],
 				"hasMore": False,
 			},
 		},
 	])
-	friend_item, _ = find_friend(platform, "111")
+	friend_item, _ = find_friend(platform, "10001")
 	assert friend_item["name"] == "按 uid 应命中的"
 
 

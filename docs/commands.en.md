@@ -105,16 +105,16 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 | `boss greet <sid> <jid>` | Greet a recruiter; duplicates return `ALREADY_GREETED` |
 | `boss batch-greet <query>` | Search and greet up to an explicit `--limit`; supports `--dry-run`; on `ACCOUNT_RISK` / `ENVIRONMENT_RISK` the batch stops immediately with `ok:false`, and already-greeted items are returned in `error.details.greeted` |
 | `boss apply <sid> <jid>` | Apply or start a conversation; duplicates return `ALREADY_APPLIED` |
-| `boss exchange <sid>` | Request a phone-number or WeChat exchange |
+| `boss exchange <uid-or-sid>` | Request a phone-number or WeChat exchange; prefer the stable `uid` returned by `boss chat` |
 
 ## Conversation track
 
 | Command | Description |
 |---------|-------------|
 | `boss chat` | List conversations with pagination and source filters |
-| `boss chatmsg <sid> [--raw]` | Read message history; `--raw` preserves structured body/link/card fields |
-| `boss chat-summary <sid>` | Build a structured conversation summary |
-| `boss mark <sid> --label X` | Add or remove a contact label |
+| `boss chatmsg <uid-or-sid> [--raw]` | Read message history; prefer the stable `uid` returned by `boss chat`; `--raw` preserves structured body/link/card fields |
+| `boss chat-summary <uid-or-sid>` | Build a structured conversation summary; prefer the stable `uid` |
+| `boss mark <uid-or-sid> --label X` | Add or remove a contact label; prefer the stable `uid` |
 | `boss interviews` | Interview invitations |
 | `boss history` | Browsing history |
 

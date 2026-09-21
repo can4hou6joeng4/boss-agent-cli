@@ -5,22 +5,9 @@ class FriendLookupLimitExceeded(RuntimeError):
 	"""Raised when paginated friend lookup cannot prove completion safely."""
 
 
-def _identifier_matches(item: dict[str, Any], identifier: str) -> bool:
-	"""判断沟通列表条目是否对应目标标识。
-
-	优先按数值 ``uid`` 匹配——它是跨请求稳定的唯一标识。
-	``securityId`` 仅作兜底：该值是 BOSS 每次请求轮换的加密令牌，
-	同一个联系人在两次请求中会拿到不同的 ``securityId``，
-	因此它**不能**作为唯一的匹配依据（否则必然找不到联系人）。
-	"""
-	if str(item.get("uid") or "").strip() == identifier:
-		return True
-	return str(item.get("securityId") or "") == identifier
-
-
 def find_friend(
 	platform: Any,
-	identifier: str,
+	identifier: str | int,
 	*,
 	start_page: int = 1,
 	max_pages: int = 50,
@@ -46,11 +33,18 @@ def find_friend(
 
 		platform_data = platform.unwrap_data(resp) or {}
 		items = platform_data.get("result") or platform_data.get("friendList") or []
-		for item in items:
-			if isinstance(item, dict) and _identifier_matches(item, needle):
+		dict_items = [item for item in items if isinstance(item, dict)]
+		# 同一页先完整检查稳定 uid，再回退到轮换的 securityId。这样即使某个
+		# securityId 恰好与另一条记录的 uid 文本相同，也不会命中错误联系人。
+		for item in dict_items:
+			if str(item.get("uid") or "").strip() == needle:
+				return item, None
+		for item in dict_items:
+			if str(item.get("securityId") or "") == needle:
 				return item, None
 
-		signature = tuple(str(item.get("securityId", "")) for item in items if isinstance(item, dict))
+		# securityId 会在请求间轮换，不能用于重复页判定；有 uid 时必须优先用 uid。
+		signature = tuple(str(item.get("uid") or item.get("securityId") or "") for item in dict_items)
 		if signature in seen_signatures:
 			terminated = True
 			break
@@ -69,6 +63,30 @@ def find_friend(
 
 # 向后兼容：旧名称保留为别名（匹配逻辑已放宽为 uid 或 security_id）
 find_friend_by_security_id = find_friend
+
+
+def current_friend_security_id_or_emit(
+	ctx: Any,
+	command: str,
+	friend_item: dict[str, Any],
+) -> str | None:
+	"""读取本次 friend_list 返回的 securityId；缺失时安全停止。
+
+	调用方传入的标识可能是 uid，绝不能在 securityId 缺失时把 uid 猜作
+	securityId，尤其不能用于联系方式交换等写请求。
+	"""
+	from boss_agent_cli.display import handle_error_output
+
+	security_id = str(friend_item.get("securityId") or friend_item.get("security_id") or "").strip()
+	if security_id:
+		return security_id
+	handle_error_output(
+		ctx,
+		command,
+		code="NETWORK_ERROR",
+		message="沟通列表返回的联系人缺少当前 securityId，已停止执行；请刷新沟通列表后重试",
+	)
+	return None
 
 
 def resolve_friend_or_emit(
