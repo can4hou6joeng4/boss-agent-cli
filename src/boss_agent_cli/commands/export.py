@@ -1,6 +1,3 @@
-import csv
-import html as _html
-import json
 from typing import Any
 
 import click
@@ -14,6 +11,13 @@ from boss_agent_cli.display import (
 	handle_output,
 	render_export_summary,
 	render_job_table,
+)
+from boss_agent_cli.services.job_export import (
+	prepare_export_items,
+	public_html_export_item_from_api,
+	redact_export_item,
+	write_export_file,
+	write_html_export,
 )
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
@@ -173,7 +177,7 @@ def export_cmd(
 				if not matches:
 					continue
 				if html_file_output:
-					html_items.append(_public_html_export_item_from_api(raw_item))
+					html_items.append(public_html_export_item_from_api(raw_item))
 				else:
 					item = JobItem.from_api(raw_item)
 					all_items.append(item.to_dict())
@@ -184,11 +188,11 @@ def export_cmd(
 
 		if output:
 			if html_file_output:
-				_write_html(html_items, output)
+				write_html_export(html_items, output)
 				item_count = len(html_items)
 			else:
-				write_items = _prepare_export_items(all_items, include_private=include_private)
-				_write_to_file(write_items, fmt, output)
+				write_items = prepare_export_items(all_items, include_private=include_private)
+				write_export_file(write_items, fmt, output)
 				item_count = len(all_items)
 			data = {
 				"message": f"已导出 {item_count} 条到 {output}",
@@ -210,7 +214,7 @@ def export_cmd(
 				},
 			)
 		else:
-			write_items = all_items if include_private else [_redact_export_item(item) for item in all_items]
+			write_items = all_items if include_private else [redact_export_item(item) for item in all_items]
 			data = {
 				"count": len(all_items),
 				"format": fmt,
@@ -237,154 +241,7 @@ def _export_item_count(
 	return len(all_items)
 
 
-def _prepare_export_items(items: list[dict[str, Any]], *, include_private: bool) -> list[dict[str, Any]]:
-	if include_private:
-		return items
-	return [_redact_export_item(item) for item in items]
-
-
 def _private_fields_state(*, fmt: str, include_private: bool) -> str:
 	if fmt == "html":
 		return "omitted"
 	return "included" if include_private else "redacted"
-
-
-def _redact_export_item(item: dict[str, Any]) -> dict[str, Any]:
-	redacted = dict(item)
-	for key in ("job_id", "security_id", "lid", "boss_name"):
-		if key in redacted:
-			redacted[key] = "[REDACTED]"
-	return redacted
-
-
-def _public_html_export_item_from_api(raw: dict[str, Any]) -> dict[str, Any]:
-	return {
-		"title": raw.get("jobName", ""),
-		"company": raw.get("brandName", ""),
-		"city": raw.get("cityName", ""),
-		"experience": raw.get("jobExperience", ""),
-		"education": raw.get("jobDegree", ""),
-		"skills": raw.get("skills", []),
-		"welfare": raw.get("welfareList", []),
-	}
-
-
-def _write_to_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
-	if fmt == "json":
-		with open(path, "w", encoding="utf-8") as f:
-			json.dump(items, f, ensure_ascii=False, indent=2)
-	elif fmt == "csv":
-		if not items:
-			with open(path, "w") as f:
-				f.write("")
-			return
-		fields = [
-			"title",
-			"company",
-			"salary",
-			"city",
-			"district",
-			"employment_type",
-			"raw_job_type",
-			"days_per_week",
-			"least_month",
-			"experience",
-			"education",
-			"skills",
-			"welfare",
-			"industry",
-			"scale",
-			"boss_name",
-			"boss_title",
-			"job_id",
-			"security_id",
-		]
-		with open(path, "w", encoding="utf-8", newline="") as f:
-			writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
-			writer.writeheader()
-			for item in items:
-				row = dict(item)
-				if isinstance(row.get("skills"), list):
-					row["skills"] = ", ".join(row["skills"])
-				if isinstance(row.get("welfare"), list):
-					row["welfare"] = ", ".join(row["welfare"])
-				# CSV 公式注入防护
-				row = {k: _sanitize_csv_cell(str(v)) for k, v in row.items()}
-				writer.writerow(row)
-
-
-def _sanitize_csv_cell(value: str) -> str:
-	"""防止 CSV 公式注入：以 =+@- 开头的值前置单引号。"""
-	if isinstance(value, str) and value and value[0] in ("=", "+", "-", "@"):
-		return f"'{value}"
-	return value
-
-
-def _write_html(items: list[dict[str, Any]], path: str) -> None:
-	"""将搜索结果导出为 HTML 表格。"""
-	esc = _html.escape
-	if not items:
-		with open(path, "w", encoding="utf-8") as f:
-			f.write("<html><body><p>无数据</p></body></html>")
-		return
-
-	rows = []
-	for i, item in enumerate(items, 1):
-		skills = item.get("skills", [])
-		if isinstance(skills, list):
-			skills_html = " ".join(f'<span class="tag sk">{esc(s)}</span>' for s in skills)
-		else:
-			skills_html = esc(str(skills))
-		welfare = item.get("welfare", [])
-		if isinstance(welfare, list):
-			welfare_html = " ".join(f'<span class="tag wf">{esc(w)}</span>' for w in welfare)
-		else:
-			welfare_html = esc(str(welfare))
-		rows.append(
-			f"<tr>"
-			f"<td>{i}</td>"
-			f"<td class='title'>{esc(item.get('title', ''))}</td>"
-			f"<td class='company'>{esc(item.get('company', ''))}</td>"
-			f"<td>{esc(item.get('city', ''))}</td>"
-			f"<td>{esc(item.get('experience', ''))}</td>"
-			f"<td>{esc(item.get('education', ''))}</td>"
-			f"<td>{skills_html}</td>"
-			f"<td>{welfare_html}</td>"
-			f"</tr>"
-		)
-
-	html_content = f"""<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BOSS 直聘搜索结果导出</title>
-<style>
-  :root {{ --green: #00b38a; --bg: #f8f9fa; }}
-  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{ font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
-         background: var(--bg); color: #333; line-height: 1.6; padding: 20px; max-width: 1100px; margin: 0 auto; }}
-  h1 {{ text-align: center; font-size: 20px; margin-bottom: 4px; }}
-  .sub {{ text-align: center; color: #888; font-size: 13px; margin-bottom: 16px; }}
-  table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
-  th {{ background: #f0f0f0; font-weight: 600; text-align: left; padding: 6px 8px; white-space: nowrap; }}
-  td {{ padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: top; }}
-  tr:hover {{ background: #f5faf8; }}
-  .title {{ font-weight: 600; }}
-  .company {{ color: var(--green); font-weight: 600; }}
-  .dim {{ color: #888; }}
-  .tag {{ display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px; margin: 1px; }}
-  .sk {{ background: #e8f5e9; color: #2e7d32; }}
-  .wf {{ background: #fff3e0; color: #e65100; }}
-</style></head><body>
-<h1>BOSS 直聘搜索结果</h1>
-<div class="sub">共 {len(items)} 条</div>
-<table>
-  <thead><tr>
-    <th>#</th><th>岗位</th><th>公司</th><th>城市</th>
-    <th>经验</th><th>学历</th><th>技能</th><th>福利</th>
-  </tr></thead>
-  <tbody>{"".join(rows)}</tbody>
-</table>
-</body></html>"""
-
-	with open(path, "w", encoding="utf-8") as f:
-		f.write(html_content)

@@ -328,7 +328,7 @@ class TestPlatformInstanceRoutesToClient:
 		ctx.obj = {"platform": "zhipin", "delay": (1.0, 2.0), "cdp_url": None}
 		auth = MagicMock()
 
-		with patch("boss_agent_cli.commands._platform.BossClient") as mock_boss_cls:
+		with patch("boss_agent_cli.platforms.factory.BossClient") as mock_boss_cls:
 			plat = get_platform_instance(ctx, auth)
 			assert isinstance(plat, BossPlatform)
 			mock_boss_cls.assert_called_once()
@@ -342,7 +342,7 @@ class TestPlatformInstanceRoutesToClient:
 		ctx.obj = {"platform": "zhilian", "delay": (1.0, 2.0), "cdp_url": None}
 		auth = MagicMock()
 
-		with patch("boss_agent_cli.commands._platform.ZhilianClient") as mock_zhilian_cls:
+		with patch("boss_agent_cli.platforms.factory.ZhilianClient") as mock_zhilian_cls:
 			plat = get_platform_instance(ctx, auth)
 			assert isinstance(plat, ZhilianPlatform)
 			mock_zhilian_cls.assert_called_once()

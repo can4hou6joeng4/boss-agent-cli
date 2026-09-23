@@ -7,9 +7,9 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.commands.chat_export import render_export
-from boss_agent_cli.commands.chat_snapshot import save_snapshot_and_diff, load_snapshot
-from boss_agent_cli.commands.chat_utils import (
+from boss_agent_cli.services.chat_export import render_export
+from boss_agent_cli.services.chat_snapshot import save_snapshot_and_diff, load_snapshot
+from boss_agent_cli.services.chat_utils import (
 	RELATION_LABELS, FROM_FILTER, MSG_STATUS_LABELS,
 	sanitize_csv_cell, escape_md_cell,
 )

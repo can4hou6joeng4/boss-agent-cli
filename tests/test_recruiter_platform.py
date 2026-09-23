@@ -238,7 +238,7 @@ def test_recruiter_instance_defaults_to_zhipin_and_passes_delay_and_cdp(monkeypa
 		def __init__(self, auth, *, delay, cdp_url, browser_source=None):
 			captured.update(auth=auth, delay=delay, cdp_url=cdp_url, browser_source=browser_source)
 
-	monkeypatch.setattr("boss_agent_cli.commands._recruiter_platform.BossRecruiterClient", _Client)
+	monkeypatch.setattr("boss_agent_cli.platforms.factory.BossRecruiterClient", _Client)
 	auth = MagicMock()
 	platform = get_recruiter_platform_instance(_ctx(delay=(2.0, 4.0), cdp_url="http://localhost:9222"), auth)
 
@@ -256,7 +256,7 @@ def test_recruiter_instance_falls_back_to_default_delay_when_ctx_is_empty(monkey
 		def __init__(self, auth, *, delay, cdp_url, browser_source=None):
 			captured.update(delay=delay, cdp_url=cdp_url, browser_source=browser_source)
 
-	monkeypatch.setattr("boss_agent_cli.commands._recruiter_platform.BossRecruiterClient", _Client)
+	monkeypatch.setattr("boss_agent_cli.platforms.factory.BossRecruiterClient", _Client)
 	get_recruiter_platform_instance(SimpleNamespace(obj=None), MagicMock())
 
 	assert captured["delay"] == (1.5, 3.0)
@@ -286,7 +286,7 @@ def test_recruiter_instance_passes_browser_source_to_client(monkeypatch):
 		def __init__(self, auth, *, delay, cdp_url, browser_source=None):
 			captured.update(browser_source=browser_source)
 
-	monkeypatch.setattr("boss_agent_cli.commands._recruiter_platform.BossRecruiterClient", _Client)
+	monkeypatch.setattr("boss_agent_cli.platforms.factory.BossRecruiterClient", _Client)
 	get_recruiter_platform_instance(_ctx(browser_source="stored-cookie"), MagicMock())
 
 	assert captured["browser_source"] == "stored-cookie"

@@ -4,7 +4,7 @@ from unittest.mock import patch
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
-from boss_agent_cli.commands.recruiter.resume_parser import parse_resume
+from boss_agent_cli.services.resume_parser import parse_resume
 
 
 def _ctx_mock(mock_cls):

@@ -12,14 +12,13 @@ from boss_agent_cli.auth.browser import probe_cdp, _DEFAULT_CDP_URL
 from boss_agent_cli.auth.cookie_extract import extract_cookies
 from boss_agent_cli.auth.health import assess_auth_health, auth_config_for_platform
 from boss_agent_cli.auth.manager import AuthManager
-from boss_agent_cli.commands.doctor_checks import (
-	_add_live_probe_checks,
-	_add_quality_baseline_checks,
-	_evaluate_patchright_chromium,
-	_patchright_browser_cache_dirs,
-	_patchright_chromium_revision,
-)
+from boss_agent_cli.commands._doctor_checks import _add_live_probe_checks, _add_quality_baseline_checks
 from boss_agent_cli.display import handle_output, render_simple_list
+from boss_agent_cli.services.browser_runtime import (
+	evaluate_patchright_chromium,
+	patchright_browser_cache_dirs,
+	patchright_chromium_revision,
+)
 
 
 @click.command("doctor")
@@ -67,15 +66,15 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 	)
 
 	patchright_browser_dirs = [
-		*_patchright_browser_cache_dirs(),
+		*patchright_browser_cache_dirs(),
 	]
 	chromium_candidates: list[Path] = []
 	for base in patchright_browser_dirs:
 		if base.exists():
 			chromium_candidates.extend(base.glob("chromium-*"))
 			chromium_candidates.extend(base.glob("chromium_headless_shell-*"))
-	chromium_status, chromium_detail = _evaluate_patchright_chromium(
-		_patchright_chromium_revision(), chromium_candidates
+	chromium_status, chromium_detail = evaluate_patchright_chromium(
+		patchright_chromium_revision(), chromium_candidates
 	)
 	add_check(
 		"patchright_chromium",

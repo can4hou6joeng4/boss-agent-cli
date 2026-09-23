@@ -5,7 +5,7 @@ import json
 import os
 from unittest.mock import MagicMock
 
-from boss_agent_cli.commands.chat_snapshot import (
+from boss_agent_cli.services.chat_snapshot import (
 	save_snapshot_and_diff,
 	load_snapshot,
 	_find_previous_snapshot,

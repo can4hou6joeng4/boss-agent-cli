@@ -9,6 +9,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_job_detail
 from boss_agent_cli.platforms import Platform
+from boss_agent_cli.services.job_card import build_job_from_card
 
 DetailError = tuple[str, str, dict[str, Any] | None]
 
@@ -21,33 +22,6 @@ def _platform_error_details(response: Any) -> dict[str, Any] | None:
 			if isinstance(details, dict):
 				return details
 	return None
-
-
-def build_job_from_card(card: dict[str, Any], *, security_id: str, greeted: bool) -> dict[str, Any]:
-	"""把 job_card 响应映射为统一职位字段 dict（show / detail 浏览器兜底通道共用）。"""
-	raw_job_type = card.get("jobType")
-	return {
-		"job_id": card.get("encryptJobId", ""),
-		"title": card.get("jobName", ""),
-		"company": card.get("brandName", ""),
-		"salary": card.get("salaryDesc", ""),
-		"city": card.get("cityName", ""),
-		"experience": card.get("experienceName", ""),
-		"education": card.get("degreeName", ""),
-		"description": card.get("postDescription", ""),
-		"address": card.get("address", ""),
-		"skills": card.get("jobLabels", []),
-		"boss_name": card.get("bossName", ""),
-		"boss_title": card.get("bossTitle", ""),
-		"boss_active": card.get("activeTimeDesc", "离线"),
-		"security_id": security_id,
-		"raw_job_type": raw_job_type,
-		"employment_type": employment_type_from_raw(raw_job_type),
-		"days_per_week": card.get("daysPerWeekDesc", ""),
-		"least_month": card.get("leastMonthDesc", ""),
-		"pay_type": card.get("payTypeDesc", ""),
-		"greeted": greeted,
-	}
 
 
 @click.command("detail")

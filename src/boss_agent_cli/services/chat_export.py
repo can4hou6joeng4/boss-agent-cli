@@ -7,7 +7,7 @@ import io
 import json
 from typing import Any
 
-from boss_agent_cli.commands.chat_utils import sanitize_csv_cell, escape_md_cell, contact_identity, GROUP_ORDER
+from boss_agent_cli.services.chat_utils import sanitize_csv_cell, escape_md_cell, contact_identity, GROUP_ORDER
 
 
 def prepare_render_data(

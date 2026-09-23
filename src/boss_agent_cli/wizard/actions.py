@@ -13,9 +13,8 @@ from boss_agent_cli.api.endpoints import CITY_CODES
 from boss_agent_cli.ai.config import AIConfigStore
 from boss_agent_cli.ai.service import AIService, AIServiceError
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.commands._platform import build_platform_instance
-from boss_agent_cli.commands._recruiter_platform import build_recruiter_platform_instance
-from boss_agent_cli.commands.contact_lookup import FriendLookupLimitExceeded, find_friend
+from boss_agent_cli.platforms.factory import build_platform_instance, build_recruiter_platform_instance
+from boss_agent_cli.services.contact_lookup import FriendLookupLimitExceeded, find_friend
 from boss_agent_cli.crawler.operations import crawl_status
 from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
@@ -252,7 +251,7 @@ def execute_candidate_detail(
 ) -> dict[str, Any]:
 	"""Fetch job detail with the same httpx → job_card fallback as `boss detail`."""
 	from boss_agent_cli.api.models import employment_type_from_raw
-	from boss_agent_cli.commands.detail import build_job_from_card
+	from boss_agent_cli.services.job_card import build_job_from_card
 
 	greeted = False
 	if data_dir is not None:
@@ -605,7 +604,7 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 
 
 def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	from boss_agent_cli.commands.export import _prepare_export_items, _write_to_file
+	from boss_agent_cli.services.job_export import prepare_export_items, write_export_file
 
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		with context.candidate_platform() as platform:
@@ -615,8 +614,8 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 		raise WorkflowActionError("INVALID_PARAM", "wizard export format 仅支持 json/csv")
 	output = Path(str(inputs.get("output") or context.data_dir / "exports" / f"wizard-jobs.{fmt}"))
 	output.parent.mkdir(parents=True, exist_ok=True)
-	items = _prepare_export_items(result.items, include_private=bool(inputs.get("include_private", False)))
-	_write_to_file(items, fmt, str(output))
+	items = prepare_export_items(result.items, include_private=bool(inputs.get("include_private", False)))
+	write_export_file(items, fmt, str(output))
 	return StepResult({"path": str(output), "format": fmt, "count": len(items)}, artifacts=(str(output),))
 
 

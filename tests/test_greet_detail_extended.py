@@ -342,7 +342,7 @@ def test_detail_with_job_id_preserves_internship_metadata(tmp_path):
 
 
 def test_build_job_from_card_preserves_internship_metadata():
-	from boss_agent_cli.commands.detail import build_job_from_card
+	from boss_agent_cli.services.job_card import build_job_from_card
 
 	result = build_job_from_card(
 		{

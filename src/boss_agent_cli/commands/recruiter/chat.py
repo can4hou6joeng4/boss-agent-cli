@@ -7,7 +7,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.commands.chat_utils import MSG_STATUS_LABELS
+from boss_agent_cli.services.chat_utils import MSG_STATUS_LABELS
 from boss_agent_cli.display import handle_auth_errors, handle_output, handle_platform_error_output
 
 

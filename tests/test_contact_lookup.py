@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from boss_agent_cli.commands.contact_lookup import (
+from boss_agent_cli.services.contact_lookup import (
 	FriendLookupLimitExceeded,
 	find_friend,
 	find_friend_by_security_id,

@@ -3,7 +3,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.commands.detail import build_job_from_card
+from boss_agent_cli.services.job_card import build_job_from_card
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_job_detail
 from boss_agent_cli.index_cache import get_index_info, get_job_by_index
 

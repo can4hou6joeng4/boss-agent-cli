@@ -127,7 +127,7 @@ class TestGetPlatformInstanceHelper:
 		ctx.obj = {"platform": "zhipin", "data_dir": "/tmp/fake", "delay": (0.0, 0.0), "cdp_url": None}
 		auth = MagicMock()
 
-		with patch("boss_agent_cli.commands._platform.BossClient") as mock_client_cls:
+		with patch("boss_agent_cli.platforms.factory.BossClient") as mock_client_cls:
 			plat = get_platform_instance(ctx, auth)
 			assert isinstance(plat, BossPlatform)
 			mock_client_cls.assert_called_once()
@@ -139,7 +139,7 @@ class TestGetPlatformInstanceHelper:
 		ctx.obj = {"platform": "zhipin", "delay": (2.0, 4.0), "cdp_url": "http://localhost:9222"}
 		auth = MagicMock()
 
-		with patch("boss_agent_cli.commands._platform.BossClient") as mock_client_cls:
+		with patch("boss_agent_cli.platforms.factory.BossClient") as mock_client_cls:
 			get_platform_instance(ctx, auth)
 			mock_client_cls.assert_called_once_with(
 				auth, delay=(2.0, 4.0), cdp_url="http://localhost:9222", browser_source="auto"
@@ -153,7 +153,7 @@ class TestGetPlatformInstanceHelper:
 		ctx.obj = {"delay": (0.0, 0.0)}
 		auth = MagicMock()
 
-		with patch("boss_agent_cli.commands._platform.BossClient"):
+		with patch("boss_agent_cli.platforms.factory.BossClient"):
 			plat = get_platform_instance(ctx, auth)
 			assert isinstance(plat, BossPlatform)
 
@@ -175,7 +175,7 @@ class TestGetPlatformInstanceHelper:
 		ctx.obj = {"platform": "zhipin", "delay": (0.0, 0.0), "cdp_url": None, "browser_source": "stored-cookie"}
 		auth = MagicMock()
 
-		with patch("boss_agent_cli.commands._platform.BossClient") as mock_client_cls:
+		with patch("boss_agent_cli.platforms.factory.BossClient") as mock_client_cls:
 			get_platform_instance(ctx, auth)
 			mock_client_cls.assert_called_once_with(
 				auth, delay=(0.0, 0.0), cdp_url=None, browser_source="stored-cookie"
@@ -201,7 +201,7 @@ class TestGetPlatformInstanceHelper:
 		ctx.obj = {"platform": "zhilian", "delay": (0.0, 0.0), "cdp_url": None, "browser_source": "auto"}
 		auth = MagicMock()
 
-		with patch("boss_agent_cli.commands._platform.ZhilianClient") as mock_zhilian:
+		with patch("boss_agent_cli.platforms.factory.ZhilianClient") as mock_zhilian:
 			get_platform_instance(ctx, auth)
 			mock_zhilian.assert_called_once_with(auth, delay=(0.0, 0.0), cdp_url=None)
 

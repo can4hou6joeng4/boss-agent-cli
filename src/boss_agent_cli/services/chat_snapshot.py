@@ -5,7 +5,7 @@ import json
 import os
 from typing import Any
 
-from boss_agent_cli.commands.chat_utils import contact_identity
+from boss_agent_cli.services.chat_utils import contact_identity
 from boss_agent_cli.output import Logger
 
 

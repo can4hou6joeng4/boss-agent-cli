@@ -38,16 +38,16 @@ def _browser_kernel_status() -> tuple[str, str]:
 
 	只在真要开浏览器之前调用——已登录用户不该为此付出任何启动开销。
 	"""
-	from boss_agent_cli.commands.doctor_checks import (
-		_evaluate_patchright_chromium,
-		_patchright_browser_cache_dirs,
-		_patchright_chromium_revision,
+	from boss_agent_cli.services.browser_runtime import (
+		evaluate_patchright_chromium,
+		patchright_browser_cache_dirs,
+		patchright_chromium_revision,
 	)
 
 	try:
-		return _evaluate_patchright_chromium(
-			_patchright_chromium_revision(),
-			_patchright_browser_cache_dirs(),
+		return evaluate_patchright_chromium(
+			patchright_chromium_revision(),
+			patchright_browser_cache_dirs(),
 		)
 	except Exception as exc:  # 预检本身不该阻断登录，退化成 warn
 		return "warn", f"无法确认浏览器内核状态：{exc}"
@@ -81,9 +81,9 @@ def _render_kernel_blocked(detail: str) -> None:
 
 def _render_login_failure(ctx: Any, exc: Exception) -> None:
 	"""复用 login 命令的错误分类，把双通道文案渲染给真人。"""
-	from boss_agent_cli.commands.login import _classify_login_error
+	from boss_agent_cli.commands._login_errors import classify_login_error
 
-	payload = _classify_login_error(exc, ctx)
+	payload = classify_login_error(exc, ctx)
 	raw_hints = payload.get("hints")
 	hints: dict[str, Any] = raw_hints if isinstance(raw_hints, dict) else {}
 	lines = [f"[red]{payload.get('message')}[/red]"]

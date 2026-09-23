@@ -6,6 +6,7 @@
 
 ### Changed
 - 内部重构：`boss schema` 的能力描述、错误码登记表与格式转换从命令模块 `commands/schema.py` 拆到独立的 `boss_agent_cli.schema` 包（`data` / `error_codes` / `availability` / `formats`），`display` 与 `mcp_tools` 不再反向依赖命令层；CLI 输出、`boss schema` 四种格式与 MCP 工具面均逐字节不变。
+- 内部重构：`commands/` 只保留 Click 命令与 `_` 前缀的 CLI 支撑模块；聊天导出 / 快照、联系人查找、职位导出、job_card 映射、浏览器内核探测等可复用逻辑移入 `boss_agent_cli.services`，平台实例构造移入 `platforms/factory.py`，wizard 不再调用命令模块的私有函数；行为不变。
 
 ### Fixed
 - `boss chat` 现在公开跨请求稳定的联系人 `uid`，`chatmsg` / `chat-summary` / `mark` / `exchange` 优先按 `uid` 重新解析联系人并使用本次沟通列表返回的动态 `securityId`；沟通快照、diff 与导出映射同步改用 `uid` 主键，避免轮换令牌导致联系人查找必然失败和快照重复。既有 `security_id` 参数名与无 `uid` 的旧快照仍兼容，但旧令牌仅作兜底且可能已经失效。

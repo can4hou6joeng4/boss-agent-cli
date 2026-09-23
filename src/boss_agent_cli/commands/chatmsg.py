@@ -6,7 +6,7 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
-from boss_agent_cli.commands.contact_lookup import current_friend_security_id_or_emit, resolve_friend_or_emit
+from boss_agent_cli.commands._contact_lookup import current_friend_security_id_or_emit, resolve_friend_or_emit
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_simple_list
 

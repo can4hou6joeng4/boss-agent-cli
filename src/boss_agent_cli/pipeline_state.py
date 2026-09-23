@@ -1,7 +1,7 @@
 import datetime
 from typing import Any
 
-from boss_agent_cli.commands.chat_utils import RELATION_LABELS
+from boss_agent_cli.services.chat_utils import RELATION_LABELS
 
 
 _FOLLOW_UP_STATES = {"reply_needed", "follow_up", "interview"}

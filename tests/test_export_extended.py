@@ -457,7 +457,7 @@ def test_export_stops_when_job_list_empty(mock_auth_cls, mock_client_cls, tmp_pa
 
 
 def test_sanitize_csv_cell_leaves_safe_values():
-	from boss_agent_cli.commands.export import _sanitize_csv_cell
+	from boss_agent_cli.services.job_export import _sanitize_csv_cell
 
 	assert _sanitize_csv_cell("normal value") == "normal value"
 	assert _sanitize_csv_cell("123") == "123"
@@ -465,7 +465,7 @@ def test_sanitize_csv_cell_leaves_safe_values():
 
 
 def test_sanitize_csv_cell_escapes_formula_prefixes():
-	from boss_agent_cli.commands.export import _sanitize_csv_cell
+	from boss_agent_cli.services.job_export import _sanitize_csv_cell
 
 	assert _sanitize_csv_cell("=SUM(A1)") == "'=SUM(A1)"
 	assert _sanitize_csv_cell("+1234") == "'+1234"
@@ -474,7 +474,7 @@ def test_sanitize_csv_cell_escapes_formula_prefixes():
 
 
 def test_sanitize_csv_cell_passes_other_specials():
-	from boss_agent_cli.commands.export import _sanitize_csv_cell
+	from boss_agent_cli.services.job_export import _sanitize_csv_cell
 
 	# # 和 " 不是公式前缀，不应加单引号
 	assert _sanitize_csv_cell("#test") == "#test"
