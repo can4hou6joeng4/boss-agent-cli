@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from boss_agent_cli.api.browser_urls import is_zhilian_url, is_zhipin_url
 from boss_agent_cli.auth.browser import (
 	HOME_URL,
 	LOGIN_PAGE_URL,
@@ -9,8 +10,6 @@ from boss_agent_cli.auth.browser import (
 	_NETWORKIDLE_GRACE_MS,
 	_find_zhilian_recruiter_page,
 	_is_cookie_domain,
-	_is_zhilian_url,
-	_is_zhipin_url,
 	_safe_user_agent,
 	_warm_home_for_runtime,
 	login_via_cdp,
@@ -52,11 +51,11 @@ class _UrlPage:
 
 
 def test_zhilian_url_host_validation_uses_exact_hostname() -> None:
-	assert _is_zhilian_url("https://zhaopin.com/")
-	assert _is_zhilian_url("https://RD6.ZHAOPIN.COM./app/im")
-	assert not _is_zhilian_url("https://rd6.zhaopin.com.evil.example/app/im")
-	assert not _is_zhilian_url("https://evil.example/app/im?next=https://rd6.zhaopin.com/app/im")
-	assert not _is_zhilian_url("not-a-url-with-zhaopin.com")
+	assert is_zhilian_url("https://zhaopin.com/")
+	assert is_zhilian_url("https://RD6.ZHAOPIN.COM./app/im")
+	assert not is_zhilian_url("https://rd6.zhaopin.com.evil.example/app/im")
+	assert not is_zhilian_url("https://evil.example/app/im?next=https://rd6.zhaopin.com/app/im")
+	assert not is_zhilian_url("not-a-url-with-zhaopin.com")
 
 
 def test_find_zhilian_recruiter_page_rejects_embedded_hostname() -> None:
@@ -585,9 +584,9 @@ def test_refresh_stoken_via_cdp_falls_back_to_cookie_jar(mock_sleep, mock_probe_
 
 
 def test_zhipin_url_and_cookie_domain_use_exact_host_validation() -> None:
-	assert _is_zhipin_url("https://www.zhipin.com/web/geek/job")
-	assert not _is_zhipin_url("https://not-zhipin.com/")  # 子串陷阱
-	assert not _is_zhipin_url("https://zhipin.com.evil.example/")
+	assert is_zhipin_url("https://www.zhipin.com/web/geek/job")
+	assert not is_zhipin_url("https://not-zhipin.com/")  # 子串陷阱
+	assert not is_zhipin_url("https://zhipin.com.evil.example/")
 	assert _is_cookie_domain(".zhipin.com", ".zhipin.com")
 	assert not _is_cookie_domain("not-zhipin.com", ".zhipin.com")  # 子串匹配会误放行
 

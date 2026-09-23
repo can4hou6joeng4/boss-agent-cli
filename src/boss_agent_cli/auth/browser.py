@@ -3,13 +3,13 @@ import os
 import sys
 import time
 from typing import Any, cast
-from urllib.parse import urlparse
 
 from patchright.sync_api import sync_playwright
 
+from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhilian_url, is_zhipin_url
+
 LOGIN_PAGE_URL = "https://www.zhipin.com/web/user/"
 HOME_URL = "https://www.zhipin.com/"
-_DEFAULT_CDP_URL = "http://localhost:9222"
 _logger = logging.getLogger("boss_agent_cli.auth.browser")
 
 # 超时常量（秒/毫秒）
@@ -34,7 +34,6 @@ _PLATFORM_BROWSER_CONFIG: dict[str, dict[str, str]] = {
 		"success_cookie": "at",
 	},
 }
-_ZHILIAN_HOST = "zhaopin.com"
 
 
 def _get_platform_config(platform: str) -> dict[str, str]:
@@ -63,40 +62,20 @@ def _extract_zhilian_client_id(page: Any) -> str:
 		return ""
 
 
-def _is_zhilian_url(url: str) -> bool:
-	return _is_platform_url(url, _ZHILIAN_HOST)
-
-
 def _find_zhilian_recruiter_page(pages: list[Any]) -> Any | None:
 	for page in pages:
 		url = getattr(page, "url", "")
-		if _is_zhilian_url(url) and any(path in url for path in ("/app/im", "/app/recommend")):
+		if is_zhilian_url(url) and any(path in url for path in ("/app/im", "/app/recommend")):
 			return page
 	for page in pages:
-		if _is_zhilian_url(getattr(page, "url", "")):
+		if is_zhilian_url(getattr(page, "url", "")):
 			return page
 	return None
 
 
-_ZHIPIN_HOST = "zhipin.com"
-
-
-def _is_platform_url(url: str, expected_host: str) -> bool:
-	"""精确 hostname 校验：只接受该 host 及其子域，拒绝子串陷阱。"""
-	host = urlparse(url).hostname
-	if host is None:
-		return False
-	host = host.rstrip(".").lower()
-	return host == expected_host or host.endswith(f".{expected_host}")
-
-
-def _is_zhipin_url(url: str) -> bool:
-	return _is_platform_url(url, _ZHIPIN_HOST)
-
-
 def _find_zhipin_page(pages: list[Any]) -> Any | None:
 	for page in pages:
-		if _is_zhipin_url(getattr(page, "url", "")):
+		if is_zhipin_url(getattr(page, "url", "")):
 			return page
 	return None
 
@@ -304,7 +283,7 @@ def probe_cdp(cdp_url: str | None = None) -> str | None:
 	"""探测 CDP 是否可用，返回 WebSocket URL 或 None。"""
 	import httpx
 
-	base = cdp_url or _DEFAULT_CDP_URL
+	base = cdp_url or DEFAULT_CDP_URL
 	try:
 		resp = httpx.get(f"{base}/json/version", timeout=_CDP_PROBE_TIMEOUT)
 		return cast("str | None", resp.json().get("webSocketDebuggerUrl"))

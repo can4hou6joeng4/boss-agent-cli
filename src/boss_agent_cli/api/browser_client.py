@@ -26,19 +26,18 @@ from boss_agent_cli.api.browser_source import (
 	BrowserSourceUnavailable,
 	resolve_policy,
 )
+from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
 from boss_agent_cli.api.throttle import RequestThrottle
-from boss_agent_cli.auth.browser import _DEFAULT_CDP_URL as CDP_DEFAULT_URL
-from boss_agent_cli.auth.browser import _is_zhipin_url
 
 HOME_URL = "https://www.zhipin.com/"
 
-# _is_zhipin_url 复用 auth.browser 的精确 hostname 校验（单一实现，避免三处漂移）。
+# is_zhipin_url 来自 api.browser_urls 的精确 hostname 校验（单一实现，避免多处漂移）。
 
 
 def _find_reusable_zhipin_page(context: Any) -> Any | None:
 	"""在用户 context 已打开的页面里找第一个 zhipin 页复用，找不到返回 None。"""
 	for page in getattr(context, "pages", None) or []:
-		if _is_zhipin_url(getattr(page, "url", "")):
+		if is_zhipin_url(getattr(page, "url", "")):
 			return page
 	return None
 
@@ -284,7 +283,7 @@ class BrowserSession:
 		if self._cdp_url:
 			urls_to_try.append((self._cdp_url, True))
 		if policy.auto_probe_cdp:
-			urls_to_try.append((CDP_DEFAULT_URL, False))
+			urls_to_try.append((DEFAULT_CDP_URL, False))
 
 			# 从 DevToolsActivePort 文件读取 WebSocket URL
 			ws_url = self._read_devtools_active_port()
@@ -564,7 +563,7 @@ class BrowserSession:
 		if self._is_bridge:
 			raise RuntimeError("evaluate_js requires CDP mode (bridge mode has no access to user Chrome)")
 		self._require_cdp_source("evaluate_js")
-		cdp_url = self._cdp_url or CDP_DEFAULT_URL
+		cdp_url = self._cdp_url or DEFAULT_CDP_URL
 		return _cdp_evaluate_in_chat_tab(cdp_url, script, arg)
 
 	def evaluate_js_with_chat_events(self, script: str, arg: Any = None, *, listen_ms: int = 3000) -> dict[str, Any]:
@@ -578,7 +577,7 @@ class BrowserSession:
 				"evaluate_js_with_chat_events requires CDP mode (bridge mode has no access to user Chrome)"
 			)
 		self._require_cdp_source("evaluate_js_with_chat_events")
-		cdp_url = self._cdp_url or CDP_DEFAULT_URL
+		cdp_url = self._cdp_url or DEFAULT_CDP_URL
 		return _cdp_evaluate_with_chat_events_in_chat_tab(cdp_url, script, arg, listen_ms=listen_ms)
 
 	def _require_cdp_source(self, api: str) -> None:
@@ -587,7 +586,7 @@ class BrowserSession:
 		``evaluate_js`` 系列刻意绕过 ``_ensure_started``（见上方 docstring：
 		patchright 附着别人的 tab 会撞 'Frame was detached'），所以它不受
 		分发器约束——这是本类最大的 fail-open 面：一个禁用了 CDP 的来源，
-		在这条路上照样会直连 ``CDP_DEFAULT_URL``。此处补上等价守卫。
+		在这条路上照样会直连 ``DEFAULT_CDP_URL``。此处补上等价守卫。
 		"""
 		if not self._policy.allows(CHANNEL_CDP):
 			raise BrowserSourceUnavailable(

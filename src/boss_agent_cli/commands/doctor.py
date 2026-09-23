@@ -8,7 +8,8 @@ from typing import Any
 import click
 import httpx
 
-from boss_agent_cli.auth.browser import probe_cdp, _DEFAULT_CDP_URL
+from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL
+from boss_agent_cli.auth.browser import probe_cdp
 from boss_agent_cli.auth.cookie_extract import extract_cookies
 from boss_agent_cli.auth.health import assess_auth_health, auth_config_for_platform
 from boss_agent_cli.auth.manager import AuthManager
@@ -145,10 +146,10 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 	# 4) CDP availability
 	try:
 		ws_url = probe_cdp(cdp_url)
-		cdp_detail = ws_url or f"CDP 不可用（目标: {cdp_url or _DEFAULT_CDP_URL}）"
+		cdp_detail = ws_url or f"CDP 不可用（目标: {cdp_url or DEFAULT_CDP_URL}）"
 		if ws_url:
 			try:
-				resp = httpx.get(f"{cdp_url or _DEFAULT_CDP_URL}/json/version", timeout=3)
+				resp = httpx.get(f"{cdp_url or DEFAULT_CDP_URL}/json/version", timeout=3)
 				meta = resp.json()
 				browser_name = meta.get("Browser") or "unknown-browser"
 				user_agent = meta.get("User-Agent") or "unknown-ua"

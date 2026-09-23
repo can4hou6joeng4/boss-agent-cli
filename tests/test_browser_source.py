@@ -431,4 +431,4 @@ def test_auto_probes_default_endpoint_and_devtools_port(monkeypatch):
 	)
 
 	assert session._try_cdp() is False
-	assert tried == [browser_client.CDP_DEFAULT_URL, "ws://127.0.0.1:9222/devtools/browser/x"]
+	assert tried == [browser_client.DEFAULT_CDP_URL, "ws://127.0.0.1:9222/devtools/browser/x"]

@@ -5,14 +5,13 @@ import pytest
 import httpx
 
 from boss_agent_cli.api.browser_client import (
-	CDP_DEFAULT_URL,
 	HOME_URL,
 	_HEADLESS_NETWORKIDLE_GRACE_MS,
 	_NAV_TIMEOUT_MS,
 	BrowserSession,
 	_find_reusable_zhipin_page,
-	_is_zhipin_url,
 )
+from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
 
 
 def test_browser_session_defaults():
@@ -312,13 +311,13 @@ def test_try_cdp_attempts_http_ws_and_devtools_urls_before_falling_back():
 	mock_read_port.assert_called_once()
 	assert [call.args[0] for call in mock_try_connect.call_args_list] == [
 		"http://127.0.0.1:9333",
-		CDP_DEFAULT_URL,
+		DEFAULT_CDP_URL,
 		"ws://127.0.0.1:9222/devtools/browser/default",
 		"ws://127.0.0.1:9222/devtools/browser/file",
 	]
 	assert [call.args[0] for call in mock_fetch_ws_url.call_args_list] == [
 		"http://127.0.0.1:9333",
-		CDP_DEFAULT_URL,
+		DEFAULT_CDP_URL,
 	]
 
 
@@ -386,11 +385,11 @@ class _FakePage:
 
 
 def test_is_zhipin_url_uses_exact_hostname():
-	assert _is_zhipin_url("https://www.zhipin.com/web/geek/job")
-	assert _is_zhipin_url("https://ZHIPIN.COM./")  # 大小写 + 尾点归一化
-	assert not _is_zhipin_url("https://zhipin.com.evil.example/web/geek/job")
-	assert not _is_zhipin_url("https://evil.example/?next=https://www.zhipin.com/")
-	assert not _is_zhipin_url("not-a-url-with-zhipin.com")
+	assert is_zhipin_url("https://www.zhipin.com/web/geek/job")
+	assert is_zhipin_url("https://ZHIPIN.COM./")  # 大小写 + 尾点归一化
+	assert not is_zhipin_url("https://zhipin.com.evil.example/web/geek/job")
+	assert not is_zhipin_url("https://evil.example/?next=https://www.zhipin.com/")
+	assert not is_zhipin_url("not-a-url-with-zhipin.com")
 
 
 def test_find_reusable_zhipin_page_prefers_open_zhipin_tab():

@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, cast
 
-from boss_agent_cli.auth.browser import _DEFAULT_CDP_URL, _is_zhilian_url, probe_cdp
+from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhilian_url
+from boss_agent_cli.auth.browser import probe_cdp
 from boss_agent_cli.automation.zhilian_browser import (
 	PageLike,
 	ZhilianBrowserRecruiterSession,
@@ -20,7 +21,7 @@ def create_zhilian_browser_session_from_cdp(
 ) -> ZhilianBrowserRecruiterSession:
 	from patchright.sync_api import sync_playwright
 
-	endpoint = cdp_url or _DEFAULT_CDP_URL
+	endpoint = cdp_url or DEFAULT_CDP_URL
 	ws_url = probe_cdp(endpoint) or endpoint
 	pw = sync_playwright().start()
 	try:
@@ -46,14 +47,14 @@ def create_zhilian_browser_session_from_cdp(
 def _find_zhilian_page(pages: list[Any]) -> Any | None:
 	for page in pages:
 		url = getattr(page, "url", "")
-		if _is_zhilian_url(url) and _is_zhilian_chat_url(url):
+		if is_zhilian_url(url) and _is_zhilian_chat_url(url):
 			return page
 	for page in pages:
 		url = getattr(page, "url", "")
-		if _is_zhilian_url(url) and any(token in url for token in ("im", "chat")):
+		if is_zhilian_url(url) and any(token in url for token in ("im", "chat")):
 			return page
 	for page in pages:
-		if _is_zhilian_url(getattr(page, "url", "")):
+		if is_zhilian_url(getattr(page, "url", "")):
 			return page
 	return None
 
