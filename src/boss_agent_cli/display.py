@@ -16,6 +16,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from boss_agent_cli.output import emit_success
+from boss_agent_cli.schema.error_codes import ERROR_CODES
 
 # Rich output goes to stderr so stdout stays clean for Agent JSON
 console = Console(stderr=True)
@@ -42,12 +43,7 @@ def error_contract_for_code(
 	fallback_recovery_action: str | None = None,
 ) -> tuple[bool, str | None]:
 	"""Return recoverability metadata for a known error code."""
-	from boss_agent_cli.commands.schema import SCHEMA_DATA
-
-	error_codes = SCHEMA_DATA.get("error_codes", {})
-	spec = error_codes.get(code, {}) if isinstance(error_codes, dict) else {}
-	if not isinstance(spec, dict):
-		spec = {}
+	spec = ERROR_CODES.get(code, {})
 	return (
 		bool(spec.get("recoverable", fallback_recoverable)),
 		spec.get("recovery_action", fallback_recovery_action),

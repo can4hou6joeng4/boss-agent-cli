@@ -274,6 +274,11 @@ module = [
 	"boss_agent_cli.mcp_args",
 	"boss_agent_cli.mcp_server",
 	"boss_agent_cli.mcp_tools",
+	"boss_agent_cli.schema",
+	"boss_agent_cli.schema.availability",
+	"boss_agent_cli.schema.data",
+	"boss_agent_cli.schema.error_codes",
+	"boss_agent_cli.schema.formats",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

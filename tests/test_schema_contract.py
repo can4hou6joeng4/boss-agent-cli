@@ -9,7 +9,7 @@ import json
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
-from boss_agent_cli.commands.schema import SCHEMA_DATA
+from boss_agent_cli.schema.data import SCHEMA_DATA
 
 
 # ── Schema 输出格式 ─────────────────────────────────────────────────

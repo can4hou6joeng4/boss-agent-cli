@@ -359,7 +359,7 @@ def test_removed_receipt_options_are_rejected_before_auth(greeting_args, option,
 
 
 def test_receipt_modules_and_mcp_parameters_are_removed():
-	from boss_agent_cli.commands.schema import SCHEMA_DATA
+	from boss_agent_cli.schema.data import SCHEMA_DATA
 	from boss_agent_cli.mcp_tools import TOOLS
 
 	for module in ("boss_agent_cli.api.recruiter_mqtt", "boss_agent_cli.commands.recruiter._read_receipt_worker"):

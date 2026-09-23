@@ -437,7 +437,7 @@ def test_favorites_list_not_supported(mock_auth_cls, mock_platform_cls):
 
 
 def test_favorites_schema_exposes_subcommands():
-	from boss_agent_cli.commands.schema import SCHEMA_DATA
+	from boss_agent_cli.schema.data import SCHEMA_DATA
 	spec = SCHEMA_DATA["commands"]["favorites"]
 	assert set(spec["subcommands"].keys()) == {"list", "sync"}
 	assert set(spec["options"].keys()) == {"list", "sync"}

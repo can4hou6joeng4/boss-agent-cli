@@ -6,7 +6,7 @@ from click.testing import CliRunner
 
 from boss_agent_cli.auth.curl_import import parse_curl_auth
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired
-from boss_agent_cli.commands.schema import SCHEMA_DATA
+from boss_agent_cli.schema.data import SCHEMA_DATA
 from boss_agent_cli.main import cli
 
 

@@ -84,7 +84,7 @@ Maintainers will `squash merge`, so the squash title must follow the commit conv
 
 1. Create a file under `src/boss_agent_cli/commands/`
 2. Register it in `commands/register.py` (`register_candidate_commands` / `register_recruiter_commands`; `main.py` only holds global options and does not attach commands directly)
-3. Describe it in `src/boss_agent_cli/commands/schema.py` (under `SCHEMA_DATA["commands"]`); when the top-level command count changes, also update the "共 N 个顶层命令" count inside `SCHEMA_DATA["description"]` (a test asserts the count matches the command table length)
+3. Describe it in `src/boss_agent_cli/schema/data.py` (under `SCHEMA_DATA["commands"]`); when the top-level command count changes, also update the "共 N 个顶层命令" count inside `SCHEMA_DATA["description"]` (a test asserts the count matches the command table length)
 4. Add tests in `tests/test_commands.py` or a new file matching the command name
 5. Update `docs/commands.md` and `docs/commands.en.md` (command cheat-sheet)
 6. Update `AGENTS.md` (command-count invariant) and the command counts in `docs/capability-matrix.md` / `docs/capability-matrix.en.md`; `tests/test_agent_docs.py` hard-codes these count strings, so update it in the same change
@@ -113,7 +113,7 @@ Every command must output a JSON envelope to **stdout**:
 - `exit 0` — success (`ok=true`)
 - `exit 1` — failure (`ok=false`)
 
-On error, the envelope must contain `error.code`, `error.recoverable`, and `error.recovery_action`. See `SCHEMA_DATA["error_codes"]` in `src/boss_agent_cli/commands/schema.py` for the current enum.
+On error, the envelope must contain `error.code`, `error.recoverable`, and `error.recovery_action`. See `ERROR_CODES` in `src/boss_agent_cli/schema/error_codes.py` for the current enum (the `error_codes` section of `boss schema` is generated from it).
 
 ## Testing Philosophy
 

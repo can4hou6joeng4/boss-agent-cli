@@ -95,7 +95,7 @@ git diff --check
 - `exit 0` 表示成功（`ok=true`）。
 - `exit 1` 表示失败（`ok=false`）。
 
-出错时信封必须包含 `error.code`、`error.recoverable` 和 `error.recovery_action`。可用错误码见 `src/boss_agent_cli/commands/schema.py` 中 `SCHEMA_DATA["error_codes"]`。
+出错时信封必须包含 `error.code`、`error.recoverable` 和 `error.recovery_action`。可用错误码见 `src/boss_agent_cli/schema/error_codes.py` 中的 `ERROR_CODES`（`boss schema` 输出的 `error_codes` 即由它生成）。
 
 ## 测试理念
 
@@ -113,7 +113,7 @@ git diff --check
 
 1. 在 `src/boss_agent_cli/commands/` 下新建文件
 2. 在 `commands/register.py` 中注册命令（`register_candidate_commands` / `register_recruiter_commands`；`main.py` 只保留全局选项，不直接挂命令）
-3. 在 `schema.py`（`SCHEMA_DATA["commands"]`）中添加命令描述；顶层命令数变化时同步 `SCHEMA_DATA["description"]` 中的「共 N 个顶层命令」计数（有测试断言计数与命令表长度一致）
+3. 在 `src/boss_agent_cli/schema/data.py`（`SCHEMA_DATA["commands"]`）中添加命令描述；顶层命令数变化时同步 `SCHEMA_DATA["description"]` 中的「共 N 个顶层命令」计数（有测试断言计数与命令表长度一致）
 4. 在 `tests/test_commands.py` 或按命令名新建测试文件
 5. 更新 `docs/commands.md` 和 `docs/commands.en.md`（命令速查表）
 6. 更新 `AGENTS.md`（CLI 不变量契约中的命令数）与 `docs/capability-matrix.md` / `docs/capability-matrix.en.md` 中的命令计数；`tests/test_agent_docs.py` 对这些计数字符串有硬编码断言，需一并更新

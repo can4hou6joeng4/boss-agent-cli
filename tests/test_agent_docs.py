@@ -170,7 +170,7 @@ def test_readme_homepage_badges_stay_bilingual_and_symmetric():
 
 
 def test_schema_description_mentions_current_top_level_command_count():
-	from boss_agent_cli.commands.schema import SCHEMA_DATA
+	from boss_agent_cli.schema.data import SCHEMA_DATA
 
 	count = len(SCHEMA_DATA["commands"])
 	assert f"{count} 个顶层命令" in SCHEMA_DATA["description"]
@@ -310,7 +310,7 @@ def test_config_command_does_not_document_internal_low_risk_policy_key():
 
 def test_schema_main_and_modules_command_count_consistent():
 	"""防漂移：Click 顶层命令应与 SCHEMA_DATA 完全一致。"""
-	from boss_agent_cli.commands.schema import SCHEMA_DATA
+	from boss_agent_cli.schema.data import SCHEMA_DATA
 	from boss_agent_cli.main import cli
 
 	registered = list(cli.commands)
@@ -396,7 +396,7 @@ def test_docs_capability_counts_match_runtime_source():
 	只有 README 与 capability-matrix 被断言覆盖。这里改为扫描全部对外 Markdown，
 	并从 `SCHEMA_DATA` / `TOOLS` 动态取值，避免守卫本身成为下一个硬编码漂移点。
 	"""
-	from boss_agent_cli.commands.schema import SCHEMA_DATA
+	from boss_agent_cli.schema.data import SCHEMA_DATA
 
 	expected = {
 		"commands": len(SCHEMA_DATA["commands"]),

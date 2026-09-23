@@ -47,7 +47,9 @@ from server import (  # noqa: E402
 	_run_sse_server,
 	run,
 )
-from boss_agent_cli.commands.schema import SCHEMA_DATA, _format_mcp_tools, _inject_availability  # noqa: E402
+from boss_agent_cli.schema.availability import inject_availability  # noqa: E402
+from boss_agent_cli.schema.data import SCHEMA_DATA  # noqa: E402
+from boss_agent_cli.schema.formats import format_mcp_tools  # noqa: E402
 from boss_agent_cli.compliance import low_risk_blocked_commands  # noqa: E402
 from boss_agent_cli.main import cli  # noqa: E402
 
@@ -217,7 +219,7 @@ def test_crawl_tools_only_read_or_locally_shortlist_existing_runs():
 	server_tools = {tool.name: tool.input_schema for tool in TOOLS if tool.name.startswith("boss_crawl_")}
 	schema_tools = {
 		tool["name"]: tool["inputSchema"]
-		for tool in _format_mcp_tools(_inject_availability({
+		for tool in format_mcp_tools(inject_availability({
 			"commands": dict(SCHEMA_DATA["commands"]),
 			"supported_recruiter_platforms": [],
 		}))

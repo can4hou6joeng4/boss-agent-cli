@@ -30,7 +30,7 @@ from boss_agent_cli.api.browser_source import (
 	BrowserSourceUnavailable,
 	resolve_policy,
 )
-from boss_agent_cli.commands.schema import SCHEMA_DATA
+from boss_agent_cli.schema.data import SCHEMA_DATA
 
 _CHANNEL_ENTRYPOINTS = {"_try_bridge", "_try_cdp", "_start_headless"}
 

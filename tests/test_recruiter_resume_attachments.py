@@ -12,7 +12,7 @@ from boss_agent_cli.api import recruiter_endpoints as ep
 from boss_agent_cli.api.recruiter_client import BossRecruiterClient, RecruiterAuthError
 from boss_agent_cli.api.recruiter_resume import ResumeValidationError, attachment_params, save_resume
 from boss_agent_cli.auth.manager import AuthRequired
-from boss_agent_cli.commands.schema import SCHEMA_DATA
+from boss_agent_cli.schema.data import SCHEMA_DATA
 from boss_agent_cli.display import error_contract_for_code
 from boss_agent_cli.main import cli
 from boss_agent_cli.mcp_args import _build_args
@@ -347,7 +347,7 @@ def test_download_cli_redacts_http_errors():
 
 
 def test_new_commands_are_discoverable_with_compliance():
-	from boss_agent_cli.commands.schema import SCHEMA_DATA
+	from boss_agent_cli.schema.data import SCHEMA_DATA
 	from boss_agent_cli.mcp_tools import TOOLS, _compliance_command_for_tool
 	for action in ("accept-resume", "download-resume"):
 		assert action in SCHEMA_DATA["commands"]["hr"]["subcommands"]

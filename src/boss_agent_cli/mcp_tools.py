@@ -12,16 +12,17 @@ from typing import Any
 
 from mcp.types import Tool
 
-from boss_agent_cli.commands.schema import SCHEMA_DATA, _availability_note, _inject_availability
 from boss_agent_cli.compliance import restricted_commands
 from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
+from boss_agent_cli.schema.availability import availability_note, inject_availability
+from boss_agent_cli.schema.data import SCHEMA_DATA
 
 
 def _build_schema_with_availability() -> dict[str, Any]:
 	data = copy.deepcopy(SCHEMA_DATA)
 	data["supported_platforms"] = list_platforms()
 	data["supported_recruiter_platforms"] = list_recruiter_platforms()
-	return _inject_availability(data)
+	return inject_availability(data)
 
 
 _SCHEMA_WITH_AVAILABILITY = _build_schema_with_availability()
@@ -82,7 +83,7 @@ def _decorate_tool_descriptions() -> None:
 	for tool in TOOLS:
 		availability = _tool_availability(tool.name)
 		if availability:
-			tool.description = f"{tool.description} [可用性: {_availability_note(availability)}]"
+			tool.description = f"{tool.description} [可用性: {availability_note(availability)}]"
 
 
 def _crawl_task_tools() -> list[Tool]:
