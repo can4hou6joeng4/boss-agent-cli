@@ -234,7 +234,6 @@ module = [
 	"boss_agent_cli.automation.reply_ai",
 	"boss_agent_cli.automation.runner",
 	"boss_agent_cli.automation.zhilian_browser",
-	"boss_agent_cli.automation.zhilian_browser_actions",
 	"boss_agent_cli.automation.zhilian_selectors",
 	"boss_agent_cli.api.recruiter_client",
 	"boss_agent_cli.api.recruiter_resume",

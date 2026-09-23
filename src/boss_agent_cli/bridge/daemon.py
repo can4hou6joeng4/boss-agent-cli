@@ -9,15 +9,12 @@
 import asyncio
 import json
 import os
-import signal
-import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any
 
 _PID_FILE = Path.home() / ".boss-agent" / "bridge" / "daemon.pid"
-_LOG_FILE = Path.home() / ".boss-agent" / "bridge" / "daemon.log"
 
 
 def _ensure_dirs() -> None:
@@ -48,62 +45,6 @@ def get_daemon_pid() -> int | None:
 	except (OSError, ValueError):
 		_PID_FILE.unlink(missing_ok=True)
 		return None
-
-
-def stop_daemon() -> bool:
-	"""停止 daemon 进程。"""
-	pid = get_daemon_pid()
-	if pid is None:
-		return False
-	try:
-		os.kill(pid, signal.SIGTERM)
-		for _ in range(20):
-			try:
-				os.kill(pid, 0)
-				time.sleep(0.1)
-			except OSError:
-				break
-		_PID_FILE.unlink(missing_ok=True)
-		return True
-	except OSError:
-		_PID_FILE.unlink(missing_ok=True)
-		return False
-
-
-def start_daemon_background() -> int | None:
-	"""在后台启动 daemon 进程，返回实际 daemon PID。跨平台兼容。"""
-	if is_daemon_running():
-		return get_daemon_pid()
-
-	_ensure_dirs()
-
-	# 跨平台后台启动：用 subprocess.Popen 替代 os.fork
-	kwargs: dict[str, Any] = {}
-	if sys.platform == "win32":
-		# Windows: DETACHED_PROCESS 标志
-		kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-	else:
-		# Unix: 新会话脱离终端
-		kwargs["start_new_session"] = True
-
-	with open(_LOG_FILE, "a") as log_fd:
-		proc = subprocess.Popen(
-			[sys.executable, "-m", "boss_agent_cli.bridge.daemon", "--serve"],
-			stdout=log_fd,
-			stderr=log_fd,
-			stdin=subprocess.DEVNULL,
-			**kwargs,
-		)
-
-	# 等待 PID 文件出现（daemon 启动后写入）
-	for _ in range(20):
-		time.sleep(0.25)
-		pid = get_daemon_pid()
-		if pid is not None:
-			return pid
-
-	# fallback: 返回 Popen 的 PID
-	return proc.pid
 
 
 async def _run_daemon() -> None:

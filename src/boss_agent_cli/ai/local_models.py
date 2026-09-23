@@ -8,7 +8,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Final
 
-APPROVED_LOCAL_MODEL_LICENSES: Final = frozenset({"Apache-2.0", "MIT"})
 RUNTIME_BASE_URLS: Final = {
 	"ollama": "http://localhost:11434/v1",
 	"vllm": "http://localhost:8000/v1",
@@ -65,27 +64,6 @@ RECOMMENDED_MODELS: Final = (
 		description="高配 GPU/内存机器选项；回复质量更稳。",
 	),
 )
-
-
-def parse_model_manifest(raw: dict[str, Any]) -> LocalModelManifest:
-	"""Parse a JSON-compatible local model manifest."""
-	name = str(raw.get("name", "")).strip()
-	runtime = str(raw.get("runtime", "")).strip()
-	license_name = str(raw.get("license", "")).strip()
-	if not name or not runtime or not license_name:
-		raise LocalModelManifestError("MODEL_MANIFEST_INVALID", "manifest requires name, runtime and license")
-	if runtime not in RUNTIME_BASE_URLS:
-		raise LocalModelManifestError("MODEL_RUNTIME_UNSUPPORTED", f"unsupported local runtime: {runtime}")
-	if license_name not in APPROVED_LOCAL_MODEL_LICENSES:
-		raise LocalModelManifestError("MODEL_LICENSE_UNAPPROVED", f"license is not pre-approved: {license_name}")
-	return LocalModelManifest(
-		name=name,
-		runtime=runtime,
-		license=license_name,
-		min_memory_gb=int(raw.get("min_memory_gb", 0)),
-		description=str(raw.get("description", "")),
-		recommended=bool(raw.get("recommended", False)),
-	)
 
 
 def recommended_model_rows() -> list[dict[str, Any]]:

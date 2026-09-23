@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, patch
 from click.testing import CliRunner
 
 from boss_agent_cli.ai.config import AIConfigStore
-from boss_agent_cli.ai.local_models import LocalModelManifestError, parse_model_manifest
 from boss_agent_cli.main import cli
 
 
@@ -22,38 +21,6 @@ def _mock_chat_response(content: str):
 	response.json.return_value = {"choices": [{"message": {"content": content}}]}
 	response.raise_for_status = MagicMock()
 	return response
-
-
-def test_parse_model_manifest_accepts_recommended_model() -> None:
-	manifest = parse_model_manifest({
-		"name": "qwen3:14b",
-		"runtime": "ollama",
-		"license": "Apache-2.0",
-		"min_memory_gb": 16,
-		"recommended": True,
-	})
-
-	assert manifest.name == "qwen3:14b"
-	assert manifest.runtime == "ollama"
-	assert manifest.recommended is True
-
-
-def test_parse_model_manifest_rejects_missing_name() -> None:
-	try:
-		parse_model_manifest({"runtime": "ollama", "license": "Apache-2.0"})
-	except LocalModelManifestError as exc:
-		assert exc.code == "MODEL_MANIFEST_INVALID"
-	else:
-		raise AssertionError("manifest without name should fail")
-
-
-def test_parse_model_manifest_rejects_unapproved_license() -> None:
-	try:
-		parse_model_manifest({"name": "unknown", "runtime": "ollama", "license": "unknown"})
-	except LocalModelManifestError as exc:
-		assert exc.code == "MODEL_LICENSE_UNAPPROVED"
-	else:
-		raise AssertionError("manifest with unknown license should fail")
 
 
 def test_ai_local_configure_sets_ollama_provider(tmp_path: Path, monkeypatch) -> None:

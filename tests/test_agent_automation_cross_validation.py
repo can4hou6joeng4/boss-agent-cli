@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from boss_agent_cli.automation.config import AutomationConfig
-from boss_agent_cli.automation.events import stable_action_id
 from boss_agent_cli.automation.mock_adapter import MockRecruiterAutomationPlatform
 from boss_agent_cli.automation.models import (
 	ActionResult,
@@ -84,8 +83,8 @@ class RaisingZhilianClient(FakeZhilianClient):
 
 def test_pending_actions_are_isolated_by_platform(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
-	zhilian_review = stable_action_id("zhilian", "zhilian-pending", PlatformAction.SEND_FOLLOW_UP, "ts")
-	zhipin_review = stable_action_id("zhipin", "zhipin-pending", PlatformAction.SEND_FOLLOW_UP, "ts")
+	zhilian_review = "zhilian-zhilian-pending-send_follow_up"
+	zhipin_review = "zhipin-zhipin-pending-send_follow_up"
 	for platform, review_id, candidate_key in [
 		("zhilian", zhilian_review, "zhilian-pending"),
 		("zhipin", zhipin_review, "zhipin-pending"),
@@ -123,7 +122,7 @@ def test_pending_actions_are_isolated_by_platform(tmp_path: Path) -> None:
 
 def test_pending_action_stays_pending_when_execution_is_blocked(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
-	review_id = stable_action_id("zhipin", "blocked-pending", PlatformAction.SEND_FOLLOW_UP, "ts")
+	review_id = "zhipin-blocked-pending-send_follow_up"
 	store.append_review(
 		ReviewItem(
 			id=review_id,
@@ -156,7 +155,7 @@ def test_pending_action_stays_pending_when_execution_is_blocked(tmp_path: Path) 
 
 def test_pending_action_stays_pending_when_zhilian_write_raises(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
-	review_id = stable_action_id("zhilian", "zl-raises", PlatformAction.SEND_QUESTIONNAIRE, "ts")
+	review_id = "zhilian-zl-raises-send_questionnaire"
 	store.append_review(
 		ReviewItem(
 			id=review_id,

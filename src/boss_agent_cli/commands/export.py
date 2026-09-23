@@ -28,7 +28,6 @@ from boss_agent_cli.search_filters import (
 )
 
 
-_HTML_PUBLIC_EXPORT_FIELDS = ("title", "company", "city", "experience", "education", "skills", "welfare")
 _EXPORT_FILTER_PAGE_ALLOWANCE = 5
 
 

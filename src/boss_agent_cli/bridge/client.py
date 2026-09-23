@@ -16,14 +16,6 @@ SUPPORTED_EXTENSION_MAJOR_VERSION = "1"
 DIAGNOSTIC_NAVIGATE_URL = f"http://{BRIDGE_HOST}:{BRIDGE_PORT}{DAEMON_PING_PATH}"
 
 
-class BridgeNotRunning(Exception):
-	pass
-
-
-class BridgeExtensionDisconnected(Exception):
-	pass
-
-
 class BridgeClient:
 	"""与 Bridge daemon 通信的 HTTP 客户端。"""
 

@@ -4,12 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from boss_agent_cli.automation.models import PlatformAction
+from boss_agent_cli.automation.models import ActionResult, ConversationRef, PlatformAction
+from boss_agent_cli.automation.zhilian_adapter import ZhilianRecruiterAutomationPlatform
 from boss_agent_cli.automation.zhilian_cdp import _find_zhilian_page
 from boss_agent_cli.automation.zhilian_browser import ZhilianBrowserRecruiterSession
-from boss_agent_cli.automation.zhilian_browser_actions import (
-	execute_browser_action,
-)
 
 
 class FakeLocator:
@@ -145,12 +143,23 @@ def test_zhilian_cdp_ignores_invalid_zhaopin_like_url() -> None:
 	assert selected is None
 
 
+def _execute_via_adapter(
+	session: ZhilianBrowserRecruiterSession,
+	action: PlatformAction,
+	message: str,
+	ref_id: str,
+) -> ActionResult:
+	"""走运行时同一条路径：智联自动化平台把浏览器 session 当作 client 分派动作。"""
+	adapter = ZhilianRecruiterAutomationPlatform(session)
+	return adapter.execute_action(action, message, ConversationRef(id=ref_id, tab="未读"))
+
+
 def test_zhilian_browser_session_sends_message_after_selector_health(tmp_path: Path) -> None:
 	page = FakePage()
 	session = ZhilianBrowserRecruiterSession(page, diagnostics_dir=tmp_path)
 	session.recruiter_conversations(["未读"], 1)
 
-	result = execute_browser_action(
+	result = _execute_via_adapter(
 		session,
 		PlatformAction.SEND_QUESTIONNAIRE,
 		"请问近期是否看机会？",
@@ -166,7 +175,7 @@ def test_zhilian_browser_session_sends_after_matching_ref_without_prior_scan(tmp
 	page = FakePage()
 	session = ZhilianBrowserRecruiterSession(page, diagnostics_dir=tmp_path)
 
-	result = execute_browser_action(
+	result = _execute_via_adapter(
 		session,
 		PlatformAction.SEND_QUESTIONNAIRE,
 		"请问近期是否看机会？",
@@ -182,7 +191,7 @@ def test_zhilian_browser_session_blocks_when_ref_cannot_be_selected(tmp_path: Pa
 	page = FakePage()
 	session = ZhilianBrowserRecruiterSession(page, diagnostics_dir=tmp_path)
 
-	result = execute_browser_action(
+	result = _execute_via_adapter(
 		session,
 		PlatformAction.SEND_QUESTIONNAIRE,
 		"请问近期是否看机会？",
@@ -200,7 +209,7 @@ def test_zhilian_browser_session_blocks_when_input_is_hidden(tmp_path: Path) -> 
 	session = ZhilianBrowserRecruiterSession(page, diagnostics_dir=tmp_path)
 	session.recruiter_conversations(["未读"], 1)
 
-	result = execute_browser_action(
+	result = _execute_via_adapter(
 		session,
 		PlatformAction.SEND_QUESTIONNAIRE,
 		"请问近期是否看机会？",
@@ -217,7 +226,7 @@ def test_zhilian_browser_session_exchanges_contact(tmp_path: Path) -> None:
 	session = ZhilianBrowserRecruiterSession(page, diagnostics_dir=tmp_path)
 	session.recruiter_conversations(["未读"], 1)
 
-	result = execute_browser_action(session, PlatformAction.EXCHANGE_CONTACT, "", "zl-101")
+	result = _execute_via_adapter(session, PlatformAction.EXCHANGE_CONTACT, "", "zl-101")
 
 	assert result.status == "executed"
 	assert "exchange" in page.clicked
@@ -228,7 +237,7 @@ def test_zhilian_browser_session_blocks_when_send_selector_missing(tmp_path: Pat
 	session = ZhilianBrowserRecruiterSession(page, diagnostics_dir=tmp_path)
 	session.recruiter_conversations(["未读"], 1)
 
-	result = execute_browser_action(
+	result = _execute_via_adapter(
 		session,
 		PlatformAction.SEND_FOLLOW_UP,
 		"继续沟通",

@@ -193,8 +193,3 @@ class TestDaemonUtils:
 		from boss_agent_cli.bridge import daemon
 		with patch.object(daemon, "_PID_FILE", tmp_path / "nonexistent.pid"):
 			assert daemon.get_daemon_pid() is None
-
-	def test_stop_daemon_no_process(self, tmp_path):
-		from boss_agent_cli.bridge import daemon
-		with patch.object(daemon, "_PID_FILE", tmp_path / "nonexistent.pid"):
-			assert daemon.stop_daemon() is False

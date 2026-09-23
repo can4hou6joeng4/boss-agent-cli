@@ -16,7 +16,6 @@ from boss_agent_cli.automation.zhilian_adapter import ZhilianRecruiterAutomation
 from boss_agent_cli.automation.config import AutomationConfig, ReplyStrategy, automation_config_from_dict
 from boss_agent_cli.automation.decision import decide_action
 from boss_agent_cli.automation.execution import status_for_decision
-from boss_agent_cli.automation.events import stable_action_id
 from boss_agent_cli.automation.models import (
 	ActionResult,
 	AutomationMode,
@@ -311,7 +310,7 @@ def test_agent_stats_review_and_pending_commands_are_available(tmp_path: Path) -
 
 def test_review_approve_moves_item_to_pending_queue(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
-	review_id = stable_action_id("zhilian", "candidate-1", PlatformAction.SEND_FOLLOW_UP, "ts")
+	review_id = "zhilian-candidate-1-send_follow_up"
 	store.append_review(
 		ReviewItem(
 			id=review_id,
@@ -348,7 +347,7 @@ def test_review_approve_moves_item_to_pending_queue(tmp_path: Path) -> None:
 
 def test_review_reject_marks_item_and_writes_skip_event(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
-	review_id = stable_action_id("zhipin", "candidate-2", PlatformAction.EXCHANGE_CONTACT, "ts")
+	review_id = "zhipin-candidate-2-exchange_contact"
 	store.append_review(
 		ReviewItem(
 			id=review_id,
@@ -387,7 +386,7 @@ def test_review_reject_marks_item_and_writes_skip_event(tmp_path: Path) -> None:
 
 def test_pending_actions_execute_before_new_conversation_scan(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
-	review_id = stable_action_id("zhilian", "pending-candidate", PlatformAction.SEND_FOLLOW_UP, "ts")
+	review_id = "zhilian-pending-candidate-send_follow_up"
 	store.append_review(
 		ReviewItem(
 			id=review_id,

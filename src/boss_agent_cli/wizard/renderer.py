@@ -14,7 +14,7 @@ from rich.table import Table
 
 from boss_agent_cli import display
 from boss_agent_cli.wizard.catalog import GOALS
-from boss_agent_cli.wizard.prompts import PLATFORM_LABELS, ROLE_LABELS, STATUS_LABELS
+from boss_agent_cli.wizard.prompts import STATUS_LABELS
 
 STEP_LABELS = {
 	"auth_status": "检查登录状态",
@@ -84,14 +84,6 @@ RECOVERY_LABELS = {
 
 # 这些步骤对真人噪声大，TTY 进度里默认静默。
 _SILENT_STEPS = {"auth_status"}
-
-
-def role_label(value: Any) -> str:
-	return ROLE_LABELS.get(str(value), "未知身份")
-
-
-def platform_label(value: Any) -> str:
-	return PLATFORM_LABELS.get(str(value), "其他招聘平台")
 
 
 def goal_label(role: Any, goal: Any) -> str:
@@ -384,31 +376,6 @@ def render_crawl_job_brief(job: Mapping[str, Any], *, with_description: bool = F
 			lines.append("")
 			lines.append("[dim]本地暂无职位描述（采集时未拉详情）。可再选「在线职位详情」。[/dim]")
 	display.console.print(Panel("\n".join(lines), title="采集职位（本地）", border_style="green"))
-
-
-def render_result_preview(items: list[Mapping[str, Any]], *, kind: str) -> None:
-	"""Optional compact preview (kept for tests/tools; interactive path no longer dual-renders)."""
-	if not items:
-		return
-	table = Table(show_header=True, box=None, pad_edge=False)
-	table.add_column("#", style="dim", no_wrap=True)
-	table.add_column("标题")
-	table.add_column("补充")
-	for index, item in enumerate(items[:20], start=1):
-		if kind in {"job", "shortlist"}:
-			title = str(item.get("title") or item.get("jobName") or item.get("name") or "未命名职位")
-			extra = str(item.get("company") or item.get("brandName") or "-")
-		elif kind == "friend":
-			title = str(item.get("name") or item.get("friendName") or "未命名联系人")
-			extra = str(item.get("brandName") or item.get("lastMsg") or "-")
-		elif kind == "pipeline":
-			title = str(item.get("title") or "未命名事项")
-			extra = str(item.get("company") or item.get("stage") or "-")
-		else:
-			title = str(item.get("name") or item.get("geekName") or "未命名候选人")
-			extra = str(item.get("expectPosition") or item.get("jobName") or "-")
-		table.add_row(str(index), title, extra)
-	display.console.print(Panel(table, title=f"共 {min(len(items), 20)} 条", border_style="cyan"))
 
 
 def render_run(run: Mapping[str, Any], *, with_preview: bool = True) -> None:

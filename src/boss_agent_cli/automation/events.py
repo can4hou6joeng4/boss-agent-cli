@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from hashlib import sha1
 from typing import Any
 
 from boss_agent_cli.automation.models import (
@@ -15,16 +14,6 @@ from boss_agent_cli.automation.models import (
 
 def now_iso() -> str:
 	return datetime.now(timezone.utc).isoformat()
-
-
-def stable_action_id(
-	platform: str,
-	candidate_key: str,
-	action: PlatformAction | str,
-	ts: str,
-) -> str:
-	raw = f"{platform}|{candidate_key}|{action}|{ts}"
-	return sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 
 def make_event(
