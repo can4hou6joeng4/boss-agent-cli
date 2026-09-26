@@ -2,13 +2,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from boss_agent_cli.api.browser_urls import is_zhilian_url, is_zhipin_url
+from boss_agent_cli.api.browser_urls import is_zhipin_url
 from boss_agent_cli.auth.browser import (
 	HOME_URL,
 	LOGIN_PAGE_URL,
 	_NAV_TIMEOUT_MS,
 	_NETWORKIDLE_GRACE_MS,
-	_find_zhilian_recruiter_page,
 	_is_cookie_domain,
 	_safe_user_agent,
 	_warm_home_for_runtime,
@@ -43,29 +42,6 @@ def _mock_cdp_playwright(mock_context: MagicMock) -> tuple[MagicMock, MagicMock,
 	mock_launcher = MagicMock()
 	mock_launcher.start.return_value = mock_playwright
 	return mock_launcher, mock_playwright, mock_page
-
-
-class _UrlPage:
-	def __init__(self, url: str) -> None:
-		self.url = url
-
-
-def test_zhilian_url_host_validation_uses_exact_hostname() -> None:
-	assert is_zhilian_url("https://zhaopin.com/")
-	assert is_zhilian_url("https://RD6.ZHAOPIN.COM./app/im")
-	assert not is_zhilian_url("https://rd6.zhaopin.com.evil.example/app/im")
-	assert not is_zhilian_url("https://evil.example/app/im?next=https://rd6.zhaopin.com/app/im")
-	assert not is_zhilian_url("not-a-url-with-zhaopin.com")
-
-
-def test_find_zhilian_recruiter_page_rejects_embedded_hostname() -> None:
-	fake_chat = _UrlPage("https://rd6.zhaopin.com.evil.example/app/im")
-	fake_recommend = _UrlPage("https://evil.example/app/recommend?next=https://rd6.zhaopin.com/app/im")
-	valid_page = _UrlPage("https://rd6.zhaopin.com/profile")
-
-	selected = _find_zhilian_recruiter_page([fake_chat, fake_recommend, valid_page])
-
-	assert selected is valid_page
 
 
 @patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
@@ -125,116 +101,6 @@ def test_login_via_cdp_tolerates_user_agent_extraction_failure(mock_sleep, mock_
 
 @patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
 @patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
-def test_zhilian_login_via_cdp_reuses_recruiter_page(mock_sleep, mock_probe_cdp):
-	mock_page = MagicMock()
-	mock_page.url = "https://rd6.zhaopin.com/app/im?sessionId=abc"
-	mock_page.evaluate.return_value = "UA"
-	mock_context = MagicMock()
-	mock_context.pages = [mock_page]
-	mock_context.cookies.return_value = [
-		{"name": "at", "value": "access", "domain": ".zhaopin.com"},
-		{"name": "rt", "value": "refresh", "domain": ".zhaopin.com"},
-		{"name": "x-zp-client-id", "value": "cid", "domain": ".zhaopin.com"},
-	]
-	mock_launcher, mock_playwright, _mock_new_page = _mock_cdp_playwright(mock_context)
-
-	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
-		result = login_via_cdp(timeout=1, platform="zhilian")
-
-	assert result["cookies"]["at"] == "access"
-	assert result["x_zp_client_id"] == "cid"
-	mock_context.new_page.assert_not_called()
-	mock_page.goto.assert_not_called()
-	mock_page.close.assert_not_called()
-	mock_playwright.stop.assert_called_once()
-
-
-@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
-@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
-def test_zhilian_login_via_cdp_does_not_navigate_reused_page_when_logged_out(mock_sleep, mock_probe_cdp):
-	"""智联未登录但命中用户已打开的 recruiter 页签：不得 goto 走该页（review #406 第 2 条）。
-
-	用户在 /app/recommend 筛选候选人，未登录时不应被导航到登录页 /app/im 丢失页面状态。
-	"""
-	existing_page = MagicMock()
-	existing_page.url = "https://rd6.zhaopin.com/app/recommend"
-	mock_context = MagicMock()
-	mock_context.pages = [existing_page]
-	# 无 at cookie → 未登录；扫码第一轮即出现 at
-	call = {"n": 0}
-
-	def _cookies():
-		call["n"] += 1
-		if call["n"] >= 2:
-			return [{"name": "at", "value": "access", "domain": ".zhaopin.com"}]
-		return []
-
-	mock_context.cookies.side_effect = _cookies
-	mock_launcher, _, _ = _mock_cdp_playwright(mock_context)
-
-	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
-		login_via_cdp(timeout=5, platform="zhilian")
-
-	existing_page.goto.assert_not_called()  # 用户已打开页签不被导航
-	mock_context.new_page.assert_not_called()  # 命中既有页签，不新建
-
-
-@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
-@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
-def test_zhilian_reuse_stalled_page_skips_client_id_evaluate(mock_sleep, mock_probe_cdp):
-	"""智联已登录 + 复用卡住页签 + cookie 缺 x-zp-client-id：不得对页面 evaluate（同 #390 挂起）。
-
-	回归 code-review Finding：_extract_zhilian_client_id 内部是 page.evaluate 读 localStorage，
-	复用页签卡住时无门禁会永久挂起；页面不可用时应容忍 x_zp_client_id 为空。
-	"""
-	existing_page = MagicMock()
-	existing_page.url = "https://rd6.zhaopin.com/app/recommend"
-	existing_page.wait_for_load_state.side_effect = Exception("Timeout 15000ms exceeded")
-	mock_context = MagicMock()
-	mock_context.pages = [existing_page]
-	mock_context.cookies.return_value = [{"name": "at", "value": "access", "domain": ".zhaopin.com"}]
-	mock_launcher, _, _ = _mock_cdp_playwright(mock_context)
-
-	with (
-		patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher),
-		patch("boss_agent_cli.auth.browser._extract_zhilian_client_id") as mock_extract_cid,
-	):
-		result = login_via_cdp(timeout=1, platform="zhilian")
-
-	mock_extract_cid.assert_not_called()
-	existing_page.evaluate.assert_not_called()
-	assert "x_zp_client_id" not in result  # 卡住时容忍缺失，不挂起
-
-
-@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
-@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
-def test_zhilian_empty_client_id_cookie_falls_back_to_localstorage(mock_sleep, mock_probe_cdp):
-	"""智联 cookie 里 x-zp-client-id 为**空串**时，必须落到 localStorage 兜底（truthiness，
-
-	非 key-presence）——否则 `if x_zp_client_id:` 为 False 导致结果缺该字段 → TokenRefreshFailed。
-	"""
-	existing_page = MagicMock()
-	existing_page.url = "https://rd6.zhaopin.com/app/im"
-	mock_context = MagicMock()
-	mock_context.pages = [existing_page]
-	mock_context.cookies.return_value = [
-		{"name": "at", "value": "access", "domain": ".zhaopin.com"},
-		{"name": "x-zp-client-id", "value": "", "domain": ".zhaopin.com"},  # 存在但空串
-	]
-	mock_launcher, _, _ = _mock_cdp_playwright(mock_context)
-
-	with (
-		patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher),
-		patch("boss_agent_cli.auth.browser._extract_zhilian_client_id", return_value="cid-from-ls") as mock_extract_cid,
-	):
-		result = login_via_cdp(timeout=1, platform="zhilian")
-
-	mock_extract_cid.assert_called_once()  # 空串 cookie 必须落 localStorage 兜底
-	assert result["x_zp_client_id"] == "cid-from-ls"
-
-
-@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
-@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
 def test_login_via_cdp_raises_when_final_cookie_read_fails(mock_sleep, mock_probe_cdp):
 	"""最终凭证读取阶段 ctx.cookies() 抛错必须让 login_via_cdp 抛异常，不得返回 cookies={}。
 
@@ -260,92 +126,6 @@ def test_login_via_cdp_raises_when_final_cookie_read_fails(mock_sleep, mock_prob
 	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
 		with pytest.raises(RuntimeError):
 			login_via_cdp(timeout=1, platform="zhipin")
-
-
-@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
-@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
-def test_zhilian_fresh_login_on_reused_page_extracts_client_id(mock_sleep, mock_probe_cdp):
-	"""智联**扫码后**登录 + 复用既有页签（扫码前未登录）：cookie 缺 client_id 时必须仍走
-	localStorage 兜底——就绪门禁不得用扫码前的 already_logged_in 旧值（code-review Finding）。
-
-	若误用旧值，page_ready 为 False → 跳过提取 → 结果缺 x_zp_client_id → TokenRefreshFailed。
-	"""
-	existing_page = MagicMock()
-	existing_page.url = "https://rd6.zhaopin.com/app/recommend"
-	mock_context = MagicMock()
-	mock_context.pages = [existing_page]
-	calls = {"n": 0}
-
-	def _cookies():
-		calls["n"] += 1
-		# 扫码前无 at；扫码后出现 at；始终无 x-zp-client-id cookie
-		return [{"name": "at", "value": "acc", "domain": ".zhaopin.com"}] if calls["n"] >= 2 else []
-
-	mock_context.cookies.side_effect = _cookies
-	mock_launcher, _, _ = _mock_cdp_playwright(mock_context)
-
-	with (
-		patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher),
-		patch("boss_agent_cli.auth.browser._extract_zhilian_client_id", return_value="cid-from-ls") as mock_extract_cid,
-	):
-		result = login_via_cdp(timeout=5, platform="zhilian")
-
-	existing_page.goto.assert_not_called()  # 复用页签不导航（§2）
-	mock_extract_cid.assert_called_once()  # 扫码登录后就绪，client_id 走 localStorage 兜底
-	assert result["x_zp_client_id"] == "cid-from-ls"
-
-
-@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
-@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
-def test_zhilian_logged_in_without_recruiter_page_warms_new_page(mock_sleep, mock_probe_cdp):
-	"""智联已登录但无 recruiter 页签：新建页签必须回 home（review #406 第 3 条），
-
-	否则 _extract_zhilian_client_id 在 about:blank 读 localStorage 必空 → TokenRefreshFailed。
-	"""
-	mock_context = MagicMock()
-	mock_context.pages = []  # 无既有页签
-	mock_context.cookies.return_value = [
-		{"name": "at", "value": "access", "domain": ".zhaopin.com"},
-		{"name": "x-zp-client-id", "value": "cid", "domain": ".zhaopin.com"},
-	]
-	mock_launcher, _, new_page = _mock_cdp_playwright(mock_context)
-	new_page.evaluate.return_value = "UA"
-
-	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
-		result = login_via_cdp(timeout=1, platform="zhilian")
-
-	mock_context.new_page.assert_called_once()
-	# 新建页签必须经 _warm_home_for_runtime 回 zhilian home（domcontentloaded）
-	assert new_page.goto.called
-	assert new_page.goto.call_args.kwargs["wait_until"] == "domcontentloaded"
-	assert result["x_zp_client_id"] == "cid"
-
-
-@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
-@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
-def test_zhilian_new_page_stalled_home_skips_client_id_evaluate(mock_sleep, mock_probe_cdp):
-	"""智联新建页签 + 首页卡住 + cookie 缺 x-zp-client-id：不得对卡住页面 evaluate。
-
-	回归 review #406 二审顺带项：旧判据 `created_page or page_ready` 中 created_page 一短路
-	就无视 home_loaded，首页卡住时仍会对卡住页面 page.evaluate 读 localStorage（同 #390 挂起）。
-	新建页签的就绪门禁应取 home_loaded 而非恒 True 的 created_page。
-	"""
-	mock_context = MagicMock()
-	mock_context.pages = []  # 无既有页签 → 新建
-	mock_context.cookies.return_value = [{"name": "at", "value": "access", "domain": ".zhaopin.com"}]
-	mock_launcher, _, new_page = _mock_cdp_playwright(mock_context)
-	new_page.evaluate.return_value = "UA"
-
-	with (
-		patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher),
-		# 首页卡住：_warm_home_for_runtime 返回 False（home_loaded=False）
-		patch("boss_agent_cli.auth.browser._warm_home_for_runtime", return_value=False),
-		patch("boss_agent_cli.auth.browser._extract_zhilian_client_id") as mock_extract_cid,
-	):
-		result = login_via_cdp(timeout=1, platform="zhilian")
-
-	mock_extract_cid.assert_not_called()  # 首页卡住时不对卡住页面 evaluate
-	assert "x_zp_client_id" not in result  # 容忍缺失，不挂起
 
 
 @patch("boss_agent_cli.auth.browser._extract_stoken", return_value="fresh-stoken")
@@ -919,11 +699,11 @@ def test_probe_reused_session_raises_on_platform_risk():
 		_probe_reused_session(page, platform="zhipin")
 
 
-def test_probe_reused_session_skips_zhilian_and_evaluate_failure():
+def test_probe_reused_session_skips_non_zhipin_and_evaluate_failure():
 	from boss_agent_cli.auth.browser import _probe_reused_session
 
 	page = MagicMock()
-	assert _probe_reused_session(page, platform="zhilian") == "unverified"
+	assert _probe_reused_session(page, platform="otherplat") == "unverified"
 	page.evaluate.assert_not_called()
 
 	page.evaluate.side_effect = RuntimeError("target closed")

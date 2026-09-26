@@ -24,18 +24,6 @@ _PLATFORM_CAPABILITY_STATUS: dict[str, dict[str, str]] = {
 		"greet": "available",
 		"apply": "available",
 	},
-	"zhilian": {
-		"search": "available",
-		"detail": "available",
-		"show": "available",
-		"history": "available",
-		"interviews": "available",
-		"recommend": "available",
-		"me": "available",
-		"status": "available",
-		"greet": "available",
-		"apply": "available",
-	},
 }
 
 _CAPABILITY_STATUS_LEGEND: dict[str, dict[str, str]] = {
@@ -52,7 +40,6 @@ _CAPABILITY_STATUS_LEGEND: dict[str, dict[str, str]] = {
 
 _PLATFORM_NOTES = {
 	"zhipin": "默认平台；候选者侧与招聘者侧注册表均已接入。",
-	"zhilian": "候选者侧已接入搜索、详情、投递和沟通；招聘者侧暂不可用。",
 }
 
 

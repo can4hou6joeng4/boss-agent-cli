@@ -107,7 +107,6 @@ def test_platform_research_template_covers_adapter_admission_gate():
 
 	for token in (
 		"zhipin.md",
-		"zhaopin.md",
 		"lagou.md",
 		"liepin.md",
 		"xunjin58/zp_api",
@@ -119,6 +118,9 @@ def test_platform_research_template_covers_adapter_admission_gate():
 	):
 		assert token in index
 
+	assert "zhaopin" not in index
+	assert "智联" not in index
+
 	assert "research/platforms/README.md" in abstraction_zh
 	assert "第三方 scraper" in abstraction_zh
 	assert "research/platforms/README.md" in abstraction_en
@@ -128,7 +130,6 @@ def test_platform_research_template_covers_adapter_admission_gate():
 def test_platform_research_docs_include_unified_adapter_evaluation():
 	for path in (
 		"docs/research/platforms/zhipin.md",
-		"docs/research/platforms/zhaopin.md",
 		"docs/research/platforms/lagou.md",
 		"docs/research/platforms/liepin.md",
 	):
@@ -140,6 +141,12 @@ def test_platform_research_docs_include_unified_adapter_evaluation():
 		assert "response interception" in content, path
 		assert "cookie" in content.lower(), path
 		assert "token" in content.lower(), path
+
+	for removed in (
+		"docs/research/platforms/zhaopin.md",
+		"docs/research/platforms/zhaopin-recruiter-evaluation.md",
+	):
+		assert not (ROOT / removed).exists(), removed
 
 def test_maintainer_docs_cover_open_source_governance():
 	branch = read("docs/maintainer/branch-protection.md")

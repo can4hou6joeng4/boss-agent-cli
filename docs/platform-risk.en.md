@@ -31,7 +31,7 @@ Both modes share these runtime constraints:
 
 ## 1. Platform APIs can drift
 
-The project depends on web pages, APIs, cookies, login state, and response shapes from platforms such as BOSS Zhipin and Zhaopin. These platforms can change fields, risk-control behavior, endpoint paths, or page flows at any time.
+The project depends on web pages, APIs, cookies, login state, and response shapes from recruiting platforms such as BOSS Zhipin. These platforms can change fields, risk-control behavior, endpoint paths, or page flows at any time.
 
 Treat these symptoms as possible platform drift:
 

@@ -111,7 +111,7 @@ Bug reports should include:
 - `boss --version`
 - Python version
 - Operating system
-- Platform: `zhipin` or `zhilian`
+- Platform: `zhipin`
 - Role: `candidate` or `recruiter`
 - Full redacted JSON envelope
 - Redacted `boss doctor` output

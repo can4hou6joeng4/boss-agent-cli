@@ -265,7 +265,7 @@ def test_recruiter_instance_falls_back_to_default_delay_when_ctx_is_empty(monkey
 
 def test_recruiter_instance_rejects_platform_without_recruiter_adapter():
 	with pytest.raises(ValueError):
-		get_recruiter_platform_instance(_ctx(platform="zhilian"), MagicMock())
+		get_recruiter_platform_instance(_ctx(platform="unknown"), MagicMock())
 
 
 def test_recruiter_instance_fail_closed_source_raises_unsupported_before_registry():
@@ -274,7 +274,7 @@ def test_recruiter_instance_fail_closed_source_raises_unsupported_before_registr
 
 	with pytest.raises(BrowserSourceUnsupported):
 		get_recruiter_platform_instance(
-			_ctx(platform="zhilian", browser_source="stored-cookie"), MagicMock()
+			_ctx(platform="otherplat", browser_source="stored-cookie"), MagicMock()
 		)
 
 

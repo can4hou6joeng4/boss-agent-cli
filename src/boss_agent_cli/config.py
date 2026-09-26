@@ -15,7 +15,7 @@ DEFAULTS: dict[str, Any] = {
 	"low_risk_mode": True,
 	"automation": {
 		"mode": "autonomous",
-		"platforms": ["zhilian", "zhipin"],
+		"platforms": ["zhipin"],
 		"allowed_actions": [
 			"scan_conversations",
 			"read_candidate_profile",

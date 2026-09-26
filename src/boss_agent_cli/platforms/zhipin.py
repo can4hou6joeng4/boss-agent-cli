@@ -1,7 +1,7 @@
 """BOSS 直聘平台 adapter。
 
 把现有 ``BossClient`` 包装为 ``Platform`` 实现，零行为变化。
-后续新平台（智联等）实现同一 Platform 接口，
+后续新平台实现同一 Platform 接口，
 命令层可以通过 ``get_platform(name)`` 无差别调用。
 """
 

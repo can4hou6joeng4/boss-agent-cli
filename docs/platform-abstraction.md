@@ -12,8 +12,8 @@
 
 ### 1. 基础元信息
 ```python
-name: str            # "zhipin" / "zhilian" / ...
-display_name: str    # "BOSS 直聘" / "智联招聘" / ...
+name: str            # "zhipin" / ...
+display_name: str    # "BOSS 直聘" / ...
 base_url: str
 ```
 
@@ -26,7 +26,7 @@ def parse_error(self, response: dict) -> tuple[str, str]  # (统一错误码, �
 
 不同平台的差异举例：
 - BOSS 直聘：`code == 0` 表示成功，数据在 `zpData` key
-- 智联招聘：`code == 200` 表示成功，数据在 `data` key
+- 其他平台可能使用不同的成功码与数据键（例如 `code == 200` + `data`），这类差异必须封闭在平台实现内
 - 错误码映射到统一枚举：`AUTH_EXPIRED / RATE_LIMITED / ACCOUNT_RISK / TOKEN_REFRESH_FAILED / ENVIRONMENT_RISK / UNKNOWN`
 
 ### 3. P0 只读能力（抽象方法，强制实现）
@@ -164,7 +164,6 @@ class MyPlatform(Platform):
 ```python
 _REGISTRY: dict[str, type[Platform]] = {
     "zhipin": BossPlatform,
-    "zhilian": ZhilianPlatform,
     "myname": MyPlatform,   # 新增
 }
 ```
@@ -189,11 +188,10 @@ _REGISTRY: dict[str, type[Platform]] = {
 2. **抽象方法签名不变** — 只能添加新方法，不能改现有方法签名
 3. **错误码映射枚举** — 对齐 CLAUDE.md 错误码枚举的范围
 4. **`with` 上下文语义** — `__exit__` 必须调用 `close()`
-5. **Python 嵌入 API 导出** — `Platform` / `BossPlatform` / `ZhilianPlatform` / `get_platform` / `list_platforms` 通过 `from boss_agent_cli import ...` 始终可达
+5. **Python 嵌入 API 导出** — `Platform` / `BossPlatform` / `get_platform` / `list_platforms` 通过 `from boss_agent_cli import ...` 始终可达
 
 ## 参考
 
 - [Issue #129 — Week 1 设计 + 实施](https://github.com/can4hou6joeng4/boss-agent-cli/issues/129)
-- Zhilian 候选者侧真实现已并入主线（PR #157 / #158 及后续修复）；招聘者侧自动化通过 `agent` 的 browser/CDP adapter V1 接入，带 selector health 与安全熔断
 - [Issue #90 — 多平台 API 调研](https://github.com/can4hou6joeng4/boss-agent-cli/issues/90)
 - PR #131 / #132 / #133 / #134 / #135 / #136 / #137 / #138 / #139 / #141 — Week 1 全部 PR

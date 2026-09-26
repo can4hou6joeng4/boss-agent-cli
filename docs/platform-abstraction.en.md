@@ -13,8 +13,8 @@
 ### 1. Basic metadata
 
 ```python
-name: str            # "zhipin" / "zhilian" / ...
-display_name: str    # "BOSS Zhipin" / "Zhilian" / ...
+name: str            # "zhipin" / ...
+display_name: str    # "BOSS Zhipin" / ...
 base_url: str
 ```
 
@@ -30,7 +30,7 @@ def parse_error(self, response: dict) -> tuple[str, str]  # (normalized error co
 
 Examples of platform-specific differences:
 - BOSS Zhipin: `code == 0` means success and the payload lives under `zpData`
-- Zhilian: `code == 200` means success and the payload lives under `data`
+- Other platforms may use a different success code and payload key (for example `code == 200` + `data`); keep such differences inside the platform implementation
 - Raw platform errors are normalized into shared enums such as `AUTH_EXPIRED`, `RATE_LIMITED`, `ACCOUNT_RISK`, `TOKEN_REFRESH_FAILED`, `ENVIRONMENT_RISK`, and `UNKNOWN`
 
 ### 3. P0 read-only capabilities
@@ -186,7 +186,6 @@ class MyPlatform(Platform):
 ```python
 _REGISTRY: dict[str, type[Platform]] = {
     "zhipin": BossPlatform,
-    "zhilian": ZhilianPlatform,
     "myname": MyPlatform,
 }
 ```
@@ -214,11 +213,10 @@ These are breaking-change red lines for the platform abstraction:
 2. Keep abstract-method signatures stable. Add new methods if needed, but do not mutate existing signatures.
 3. Error-code normalization must stay aligned with the shared error enums documented in `CLAUDE.md`.
 4. Preserve `with`-context semantics: `__exit__` must call `close()`.
-5. Python embedding exports must remain available through `from boss_agent_cli import ...` for `Platform`, `BossPlatform`, `ZhilianPlatform`, `get_platform`, and `list_platforms`.
+5. Python embedding exports must remain available through `from boss_agent_cli import ...` for `Platform`, `BossPlatform`, `get_platform`, and `list_platforms`.
 
 ## References
 
 - [Issue #129 - Week 1 design and implementation](https://github.com/can4hou6joeng4/boss-agent-cli/issues/129)
-- The Zhilian candidate-side implementation is already merged into mainline through PR #157, PR #158, and follow-up fixes; recruiter-side automation is exposed through the `agent` browser/CDP adapter V1 with selector health and safety circuit breakers
 - [Issue #90 - Multi-platform API research](https://github.com/can4hou6joeng4/boss-agent-cli/issues/90)
 - PR #131 / #132 / #133 / #134 / #135 / #136 / #137 / #138 / #139 / #141 - the full Week 1 PR set

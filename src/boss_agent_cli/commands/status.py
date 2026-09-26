@@ -1,10 +1,7 @@
-from dataclasses import asdict
-
 import click
 
 from boss_agent_cli.auth.health import assess_auth_health
 from boss_agent_cli.auth.manager import AuthManager
-from boss_agent_cli.automation.zhilian_cdp import create_zhilian_browser_session_from_cdp
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, login_action_for_ctx, render_status
 
@@ -51,48 +48,9 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 			data,
 			render=lambda payload: render_status(payload, login_action=login_action_for_ctx(ctx)),
 			hints={
-				"next_actions": _status_next_actions(auth_health.auth_state, platform_name=platform_name),
+				"next_actions": _status_next_actions(auth_health.auth_state, login_action=login_action_for_ctx(ctx)),
 				"live_probe": "运行 boss status --live 执行一次只读在线验证",
 			},
-		)
-		return
-
-	if platform_name == "zhilian" and ctx.obj.get("role") == "recruiter":
-		try:
-			session = create_zhilian_browser_session_from_cdp(
-				cdp_url=ctx.obj.get("cdp_url"),
-				diagnostics_dir=data_dir / "automation" / "diagnostics",
-			)
-		except RuntimeError as exc:
-			handle_error_output(
-				ctx,
-				"status",
-				code="CDP_UNAVAILABLE",
-				message=str(exc),
-				recoverable=True,
-				recovery_action="启动带 --remote-debugging-port=9222 的 Chrome 并打开智联招聘者聊天页",
-				hints={"auth_health": auth_health.public_summary(), "checks": auth_health.checks_as_dicts()},
-			)
-			return
-		report = session.health_report(require_scan=True, require_write=False)
-		if not report.ok:
-			handle_error_output(
-				ctx,
-				"status",
-				code="SELECTOR_HEALTH_FAILED",
-				message=report.reason,
-				recoverable=True,
-				recovery_action="打开智联招聘者聊天页后重试；如页面结构变化，更新 selector 配置",
-				hints={"selector_health": asdict(report), "auth_health": auth_health.public_summary()},
-			)
-			return
-		data["user_name"] = report.title
-		data["selector_health"] = asdict(report)
-		handle_output(
-			ctx,
-			"status",
-			data,
-			render=lambda payload: render_status(payload, login_action=login_action_for_ctx(ctx)),
 		)
 		return
 
@@ -120,8 +78,7 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 		)
 
 
-def _status_next_actions(auth_state: str, *, platform_name: str) -> list[str]:
-	login_action = "boss --platform zhilian login" if platform_name == "zhilian" else "boss login"
+def _status_next_actions(auth_state: str, *, login_action: str) -> list[str]:
 	if auth_state == "complete":
 		return ["boss status --live — 可选执行一次只读在线验证"]
 	if auth_state == "partial":

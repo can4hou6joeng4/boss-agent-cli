@@ -85,7 +85,6 @@ body:
       label: 招聘平台 / Platform
       options:
         - zhipin
-        - zhilian
         - unknown
     validations:
       required: true

@@ -149,7 +149,6 @@ ROLE_LABELS = {
 
 PLATFORM_LABELS = {
 	"zhipin": "BOSS 直聘",
-	"zhilian": "智联招聘",
 }
 
 STATUS_LABELS = {

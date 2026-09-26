@@ -32,7 +32,6 @@ EXPECTED_EXPORTS = {
 	"ResumeFile",
 	"Platform",
 	"BossPlatform",
-	"ZhilianPlatform",
 	"get_platform",
 	"list_platforms",
 }
@@ -71,6 +70,12 @@ def test_all_is_defined(boss_agent_cli):
 
 def test_all_matches_expected_exports(boss_agent_cli):
 	assert set(boss_agent_cli.__all__) == EXPECTED_EXPORTS
+
+
+def test_removed_zhilian_platform_is_not_exported(boss_agent_cli):
+	"""智联平台已移除：公开 API 不再提供 ZhilianPlatform。"""
+	assert "ZhilianPlatform" not in boss_agent_cli.__all__
+	assert not hasattr(boss_agent_cli, "ZhilianPlatform")
 
 
 def test_every_export_is_actually_importable(boss_agent_cli):

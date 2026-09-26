@@ -67,7 +67,7 @@ def _command_availability(
 		return {
 			"roles": ["candidate", "recruiter"],
 			"candidate_platforms": ["zhipin"],
-			"recruiter_platforms": ["zhilian", "zhipin"],
+			"recruiter_platforms": ["zhipin"],
 			"note": (
 				"agent run/train 等为招聘者自动化；agent crawl 为候选人本地编排，"
 				"可新建 crawl 或分析已完成的 crawl run。"

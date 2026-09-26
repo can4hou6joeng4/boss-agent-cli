@@ -80,7 +80,6 @@ def create_portable_bundle(config: PortableConfig) -> PortableBuildResult:
 	_write_executable(bundle_dir / "bin" / "boss", _boss_wrapper())
 	_write_executable(bundle_dir / "bin" / "boss-doctor", _boss_doctor_wrapper())
 	(bundle_dir / "README-PORTABLE.md").write_text(_portable_readme(version), encoding="utf-8")
-	_write_executable(bundle_dir / "examples" / "zhilian-recruiter.sh", _zhilian_example())
 	_write_executable(bundle_dir / "examples" / "zhipin-recruiter.sh", _zhipin_example())
 	_write_executable(bundle_dir / "examples" / "local-model.sh", _local_model_example())
 	(bundle_dir / "examples" / "opencode.json").write_text(_opencode_example(), encoding="utf-8")
@@ -199,14 +198,14 @@ Shared global state:
 
 ```bash
 boss ai local status
-boss --platform zhilian --role recruiter agent stats
+boss --role recruiter agent stats
 ```
 
 Project-local state:
 
 ```bash
 boss --data-dir ./.boss-agent ai local status
-boss --data-dir ./.boss-agent --platform zhilian --role recruiter agent run --dry-run --limit 1
+boss --data-dir ./.boss-agent --role recruiter agent run --dry-run --limit 1
 ```
 
 ## Windows notes
@@ -240,15 +239,6 @@ Copy `examples/opencode.json` into an OpenCode project to expose the installed
 `boss-mcp` server with project-local state in `./.boss-agent`.
 
 Model weights stay outside this bundle.
-"""
-
-
-def _zhilian_example() -> str:
-	return """#!/usr/bin/env bash
-set -euo pipefail
-boss --data-dir ./.boss-agent --platform zhilian --role recruiter status --live
-boss --data-dir ./.boss-agent --platform zhilian --role recruiter agent run --dry-run --limit 1
-boss --data-dir ./.boss-agent --platform zhilian --role recruiter agent stats
 """
 
 

@@ -24,7 +24,6 @@ boss status
 Success criteria:
 - `boss doctor` returns `ok=true`
 - `boss status` returns layered local login health; use `boss status --live` only when you need an online read-only probe
-- If you are using `zhilian`, pass the platform explicitly: `boss --platform zhilian doctor && boss --platform zhilian login`
 
 If you plan to wire the CLI into an agent host instead of running commands manually in a terminal, start with [Agent Host Examples](agent-hosts.en.md).
 
@@ -97,7 +96,7 @@ Recommended usage:
 - Treat the `hr` command group returned by `boss schema` as the source of truth for recruiter capabilities
 - `boss hr <subcommand>` switches to recruiter mode automatically, so you do not need to infer `--role` yourself
 - Candidate-side and recruiter-side commands share the same `stdout JSON / stderr logs` contract
-- `hr` currently supports `zhipin-recruiter` only; use `boss --platform zhilian --role recruiter agent ...` for Zhaopin recruiter automation
+- `hr` and recruiter-side `agent` automation currently support `zhipin-recruiter` only
 - When platform responses map to `ACCOUNT_RISK`, `RATE_LIMITED`, or `ENVIRONMENT_RISK`, stop automated access instead of retrying a batch
 
 ## 3) Recovery flow and troubleshooting

@@ -40,7 +40,7 @@ boss-agent-cli 把职位发现、福利筛选、本地简历与 AI、投递沟�
 - **AI 求职增强 + 本地模型**：JD 分析、简历润色、定向优化、候选池匹配、模拟面试、沟通指导；本地模型权重外置，支持 Ollama/vLLM OpenAI 兼容接口 —— `ai analyze-jd` `ai local configure` `ai local smoke`
 - **Schema 驱动 + JSON 信封**：stdout 只输出 `{ok, data, pagination, error, hints}` 信封，`boss schema` 是能力真源，适合 CLI 编排 / Shell Agent / MCP / Python SDK
 - **招聘者完整链路**：候选人搜索、推荐牛人、首次招呼、附件简历接收与下载、简历、聊天/最近消息、回复和职位管理 —— `hr candidates/recommendations/greet/applications/resume/chat/last-messages/reply/request-resume/accept-resume/download-resume/jobs`
-- **多平台抽象**：`Platform` / `RecruiterPlatform` 双注册表，`--platform zhipin|zhilian`
+- **平台抽象**：`Platform` / `RecruiterPlatform` 双注册表 + `--platform` 全局选项；当前注册平台为 `zhipin`（BOSS 直聘）
 
 ## 🚀 快速开始
 
@@ -70,19 +70,18 @@ boss hr jobs list
 
 所有命令输出结构化 JSON（`ok` 判断成败，`exit 0/1`）。完整上手见 [快速上手](docs/getting-started.md)。
 
-## 🎭 角色与多平台
+## 🎭 角色与平台
 
 | 平台 | 求职者 | 招聘者 | 状态 |
 |------|:--:|:--:|------|
 | BOSS 直聘 (`zhipin`) | ✅ | ✅ | 默认 |
-| 智联招聘 (`zhilian`) | ✅ 候选者侧只读 + 本地辅助对等 | 🟡 `agent` browser/CDP 自动化 V1 | `hr` 子命令仍仅限 BOSS；智联招聘者侧通过 `boss --platform zhilian --role recruiter agent ...` 进入 |
 
 ```bash
-boss --platform zhilian search "Python"   # 指定平台（支持 --platform zhipin|zhilian）
-boss config set platform zhilian          # 设为默认
+boss platforms                             # 查看已注册平台与能力状态（当前仅 zhipin）
+boss --platform zhipin search "Python"     # --platform 默认即 zhipin，可省略
 ```
 
-`boss hr ...` 当前仅支持默认招聘者平台 `zhipin-recruiter`；智联招聘者侧自动化走 `agent` 命令和 browser/CDP adapter。设计细节见 [docs/platform-abstraction.md](docs/platform-abstraction.md)。
+`boss hr ...` 与招聘者侧 `agent` 自动化当前均只支持 `zhipin-recruiter`。设计细节见 [docs/platform-abstraction.md](docs/platform-abstraction.md)。
 
 ## 🤖 Agent 集成
 
@@ -173,7 +172,7 @@ boss config reset                   # 恢复默认
 CLI (Click)
   └─ 兼容运行元数据（assisted / research 均开放已实现能力）
        └─ AuthManager ── 用户主动登录态（Fernet + PBKDF2 机器绑定加密）
-       └─ Platform 双注册表 ── BossPlatform / ZhilianPlatform
+       └─ Platform 双注册表 ── BossPlatform / BossRecruiterPlatform
        └─ BossClient ── httpx + 节流（高斯延迟）；兼容 CDP / Bridge / patchright 登录与导出
        └─ CacheStore（SQLite WAL） · AIService（OpenAI-compatible / Ollama / vLLM）
             └─ output.py → JSON 信封 → stdout

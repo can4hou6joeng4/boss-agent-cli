@@ -101,8 +101,6 @@ git diff --check
 | 平台 | 报告 | 当前建议 | 状态 |
 |------|------|----------|------|
 | BOSS 直聘 | [zhipin.md](zhipin.md) | 已接入基线；按 schema 开放已实现能力 | 基线 |
-| 智联 | [zhaopin.md](zhaopin.md) | 候选者侧可作为优先扩展；招聘者侧暂不接入 | 候选 |
-| 智联招聘者侧 | [zhaopin-recruiter-evaluation.md](zhaopin-recruiter-evaluation.md) | 只保留评估提纲 | 调研中 |
 | 拉勾 | [lagou.md](lagou.md) | 不建议近期接入 | 风险占位 |
 | 猎聘 | [liepin.md](liepin.md) | 不建议 v2.0 接入 | 风险占位 |
 
@@ -127,5 +125,5 @@ git diff --check
 
 ## 后续路线
 
-优先维护 BOSS 直聘基线和智联候选者侧能力。拉勾、猎聘和其他平台必须先
-通过准入评估，再决定是否进入平台 stub 或真实现阶段。
+优先维护 BOSS 直聘基线。拉勾、猎聘和其他平台必须先通过准入评估，再决定
+是否进入平台 stub 或真实现阶段。

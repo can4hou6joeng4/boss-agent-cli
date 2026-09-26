@@ -216,7 +216,7 @@ class TestPrefilterJob:
 		raw = {**_make_raw(), "jobName": "实习生"}
 		criteria = SearchFilterCriteria(query="产品", job_type="实习")
 
-		ok, reasons = prefilter_job(raw, criteria, platform_name="zhilian")
+		ok, reasons = prefilter_job(raw, criteria, platform_name="otherplat")
 
 		assert ok is True
 		assert reasons == []

@@ -151,7 +151,7 @@ def test_pipeline_uses_detail_fallback_and_marks_greeted():
 	assert "双休(描述)" in result.items[0]["welfare_match"]
 
 
-def test_pipeline_supports_zhilian_data_envelope_for_welfare_detail():
+def test_pipeline_supports_data_envelope_for_welfare_detail():
 	client = FakeClient(
 		pages=[{"code": 200, "data": {"hasMore": False, "jobList": [_make_job_raw(security_id="sec-1", job_id="job-1")]}}],
 		descriptions={"sec-1": {"code": 200, "data": {"jobCard": {"postDescription": "岗位描述写明周末双休"}}}},

@@ -8,11 +8,6 @@ _PLATFORM_COOKIE_CONFIG: dict[str, dict[str, str]] = {
 		"required_cookie": "wt2",
 		"stoken_cookie": "__zp_stoken__",
 	},
-	"zhilian": {
-		"domain": ".zhaopin.com",
-		"required_cookie": "at",
-		"stoken_cookie": "",
-	},
 }
 
 
@@ -84,7 +79,7 @@ def _try_extract(
 		cj = loader(domain_name=domain_name)
 		domain_fragment = domain_name.lstrip(".")
 		cookies = {c.name: c.value for c in cj if domain_fragment in (c.domain or "")}
-		has_required_cookie = required_cookie in cookies or (required_cookie == "at" and "zp_token" in cookies)
+		has_required_cookie = required_cookie in cookies
 		if not cookies or not has_required_cookie:
 			return None
 		return {

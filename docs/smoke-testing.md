@@ -15,7 +15,7 @@ It is intentionally manual-first. Do not run it automatically against a real acc
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `BOSS_SMOKE_PLATFORM` | `zhipin` | Platform adapter to test. Use `zhilian` for the Zhilian candidate path. |
+| `BOSS_SMOKE_PLATFORM` | `zhipin` | Platform adapter to test (`zhipin` is currently the only registered platform). |
 | `BOSS_SMOKE_QUERY` | `golang` | Query used by the `search` step. Required for live search confidence. |
 | `BOSS_SMOKE_SECURITY_ID` | `demo-security-id` | Security ID used by the `detail` step. Use a fresh value from a recent search result. |
 | `BOSS_SMOKE_TIMEOUT` | `30` | Per-command timeout in seconds. |
@@ -33,15 +33,6 @@ Zhipin live read-only smoke:
 
 ```bash
 BOSS_SMOKE_QUERY=golang \
-BOSS_SMOKE_SECURITY_ID=<security_id_from_recent_search> \
-uv run python scripts/smoke_p0.py
-```
-
-Zhilian live read-only smoke:
-
-```bash
-BOSS_SMOKE_PLATFORM=zhilian \
-BOSS_SMOKE_QUERY=java \
 BOSS_SMOKE_SECURITY_ID=<security_id_from_recent_search> \
 uv run python scripts/smoke_p0.py
 ```

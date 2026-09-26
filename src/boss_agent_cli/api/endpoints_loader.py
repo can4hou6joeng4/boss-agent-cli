@@ -100,15 +100,3 @@ def get_recruiter_spec() -> BossApiSpec:
 	if _RECRUITER_SPEC is None:
 		_RECRUITER_SPEC = _parse_api_spec(_load_yaml("recruiter.yaml"))
 	return _RECRUITER_SPEC
-
-
-# ── Zhilian spec ───────────────────────────────────────────────────────
-_ZHILIAN_SPEC: BossApiSpec | None = None
-
-
-def get_zhilian_spec() -> BossApiSpec:
-	"""Get cached Zhilian spec singleton."""
-	global _ZHILIAN_SPEC
-	if _ZHILIAN_SPEC is None:
-		_ZHILIAN_SPEC = _parse_api_spec(_load_yaml("zhilian.yaml"))
-	return _ZHILIAN_SPEC

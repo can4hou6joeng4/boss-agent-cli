@@ -34,12 +34,12 @@ def test_get_token_raises_auth_required_when_no_session(mock_store_cls, tmp_path
 
 
 @patch("boss_agent_cli.auth.manager.TokenStore")
-def test_get_token_raises_platform_specific_auth_required_for_zhilian(mock_store_cls, tmp_path):
+def test_get_token_raises_platform_specific_auth_required_for_non_default_platform(mock_store_cls, tmp_path):
 	store = _make_store(token=None)
 	mock_store_cls.return_value = store
-	manager = AuthManager(tmp_path, platform="zhilian")
+	manager = AuthManager(tmp_path, platform="otherplat")
 
-	with pytest.raises(AuthRequired, match="boss --platform zhilian login"):
+	with pytest.raises(AuthRequired, match="boss --platform otherplat login"):
 		manager.get_token()
 
 
@@ -50,9 +50,9 @@ def test_auth_manager_uses_default_zhipin_store_path(mock_store_cls, tmp_path):
 
 
 @patch("boss_agent_cli.auth.manager.TokenStore")
-def test_auth_manager_uses_platform_scoped_store_path_for_zhilian(mock_store_cls, tmp_path):
-	AuthManager(tmp_path, platform="zhilian")
-	mock_store_cls.assert_called_once_with(tmp_path / "auth" / "zhilian")
+def test_auth_manager_uses_platform_scoped_store_path_for_non_default_platform(mock_store_cls, tmp_path):
+	AuthManager(tmp_path, platform="otherplat")
+	mock_store_cls.assert_called_once_with(tmp_path / "auth" / "otherplat")
 
 
 @patch("boss_agent_cli.auth.manager.TokenStore")
@@ -221,22 +221,6 @@ def test_verify_cookie_returns_false_on_value_error(mock_get, mock_store_cls, tm
 
 	manager = AuthManager(tmp_path)
 	assert manager._verify_cookie({"cookies": {"wt2": "x"}}) is False
-
-
-@patch("boss_agent_cli.auth.manager.TokenStore")
-@patch("httpx.get")
-def test_verify_cookie_supports_zhilian_http_style_code(mock_get, mock_store_cls, tmp_path):
-	mock_store_cls.return_value = _make_store()
-	mock_resp = MagicMock()
-	mock_resp.json.return_value = {"code": 200, "data": {"name": "tester"}}
-	mock_get.return_value = mock_resp
-
-	manager = AuthManager(tmp_path, platform="zhilian")
-	result = manager._verify_cookie({"cookies": {"zp_token": "abc"}, "user_agent": "UA", "x_zp_client_id": "cid"})
-	assert result is True
-	call = mock_get.call_args
-	assert call.kwargs["cookies"] == {"zp_token": "abc"}
-	assert call.kwargs["headers"]["x-zp-client-id"] == "cid"
 
 
 # ── force_refresh 剩余分支 ────────────────────────────────
@@ -479,55 +463,3 @@ def test_force_refresh_default_sources_resolve_to_auto(
 
 	mock_refresh_stoken.assert_called_once()
 	assert manager._token["stoken"] == "fresh-token"
-
-
-@patch("boss_agent_cli.auth.manager.TokenStore")
-@patch("boss_agent_cli.auth.manager.login_via_cdp")
-@patch("boss_agent_cli.auth.manager.extract_cookies")
-def test_zhilian_force_refresh_stored_cookie_never_triggers_login(
-	mock_extract,
-	mock_login_via_cdp,
-	mock_store_cls,
-	tmp_path,
-):
-	"""智联显式来源下本地 Cookie 失效时 fail-closed，绝不打开登录页等扫码。"""
-	from boss_agent_cli.api.browser_source import BrowserSourceUnavailable
-
-	current = {"cookies": {"zp_token": "old"}, "user_agent": "UA"}
-	store = _make_store(token=current.copy())
-	mock_store_cls.return_value = store
-	mock_extract.return_value = None
-
-	manager = AuthManager(tmp_path, platform="zhilian")
-	with pytest.raises(BrowserSourceUnavailable) as exc_info:
-		manager.force_refresh(cdp_url="http://127.0.0.1:9222", browser_source="stored-cookie")
-
-	assert exc_info.value.code == "CDP_UNAVAILABLE"
-	mock_extract.assert_called_once_with(None, platform="zhilian")
-	mock_login_via_cdp.assert_not_called()
-	store.save.assert_not_called()
-
-
-@patch("boss_agent_cli.auth.manager.TokenStore")
-@patch("boss_agent_cli.auth.manager.login_via_cdp")
-@patch("boss_agent_cli.auth.manager.extract_cookies")
-def test_zhilian_force_refresh_stored_cookie_uses_local_cookie_without_cdp_url(
-	mock_extract,
-	mock_login_via_cdp,
-	mock_store_cls,
-	tmp_path,
-):
-	"""智联的本地 Cookie 提取不需要浏览器，显式来源不给 --cdp-url 也照常刷新。"""
-	current = {"cookies": {"zp_token": "old"}, "user_agent": "UA"}
-	store = _make_store(token=current.copy())
-	mock_store_cls.return_value = store
-	fresh = {"cookies": {"zp_token": "new"}, "user_agent": "UA"}
-	mock_extract.return_value = fresh
-
-	manager = AuthManager(tmp_path, platform="zhilian")
-	with patch.object(AuthManager, "_verify_cookie", return_value=True):
-		manager.force_refresh(cdp_url=None, browser_source="stored-cookie")
-
-	mock_login_via_cdp.assert_not_called()
-	store.save.assert_called_once_with(fresh)
-	assert manager._token == fresh

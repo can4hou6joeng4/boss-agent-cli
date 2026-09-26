@@ -56,14 +56,10 @@
 ### 生态扩展
 - [ ] Web UI（React + Tailwind），适合非 Agent 用户
 - [ ] 浏览器扩展深度集成 BOSS 直聘原生页面
-- [ ] 多平台支持：拉勾 / 智联 / 猎聘适配器 — API 调研已全部完成（Issue #90 已闭环 · [docs/research/platforms/](docs/research/platforms/)）。结论：**智联候选者侧已接入**（只读 search/detail/recommend/user_info + 写操作 greet/apply，详见下方 Week 2-3 子项）；拉勾、猎聘经评估不建议接入。
+- [ ] 多平台支持：Platform 抽象已落地（Week 1a–1c）；拉勾 / 猎聘 API 调研已完成（Issue #90 已闭环 · [docs/research/platforms/](docs/research/platforms/)），经评估不建议接入；智联适配器曾接入（候选者侧 + 招聘者 agent 自动化），已在 [Unreleased] 移除，BOSS 直聘为当前唯一注册平台。
   - [x] Week 1a：Platform ABC 骨架 + BossPlatform adapter（#129，零行为变化）
   - [x] Week 1b：`--platform` 全局 CLI 选项 + `get_platform_instance` helper + schema 暴露 current_platform
   - [x] Week 1c：命令层全量迁移到 Platform 接口（**20 个命令**：greet / apply / batch-greet / interviews / detail / show / me / recommend / chat / chatmsg / mark / exchange / pipeline / digest / search / export / chat_summary / history / status / watch）
-  - [x] Week 1d：ZhilianPlatform stub 接入注册表（抽象自证，包络适配完整实现，P0/P1/P2 暂 NotImplementedError）
-  - [x] Week 2：ZhilianPlatform 只读实现（search / detail / recommend / user_info）
-  - [x] Week 3：ZhilianPlatform 写操作（greet / apply）+ 文档 + MCP 适配
-  - [x] Week 4：招聘者侧能力评估完成 → **暂不接入**（接入条件 0/4 满足，保留 RecruiterPlatform 骨架待社区信号重启；详见 `docs/research/platforms/zhaopin-recruiter-evaluation.md`）
 
 ### 社区建设
 - [ ] 更完整的中文 + 英文视频 demo / 发布素材（当前已有 `demo/demo-zh.gif` / `demo/demo-en.gif` + 对应 `demo/demo-zh.tape` / `demo/demo-en.tape` 终端演示）

@@ -31,17 +31,17 @@ def test_smoke_script_step_metadata_is_complete():
 		assert step.failure_classification
 
 
-def test_smoke_script_can_build_zhilian_steps():
+def test_smoke_script_can_build_non_default_platform_steps():
 	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
 	assert spec is not None and spec.loader is not None
 	module = importlib.util.module_from_spec(spec)
 	spec.loader.exec_module(module)
 
-	steps = module.build_default_steps("zhilian", query="golang", security_id="demo-security-id")
+	steps = module.build_default_steps("otherplat", query="golang", security_id="demo-security-id")
 	assert [step.name for step in steps] == ["doctor", "status", "search", "detail"]
-	assert all(step.platform == "zhilian" for step in steps)
-	assert steps[0].command == ["boss", "--platform", "zhilian", "doctor"]
-	assert steps[1].command == ["boss", "--platform", "zhilian", "status"]
+	assert all(step.platform == "otherplat" for step in steps)
+	assert steps[0].command == ["boss", "--platform", "otherplat", "doctor"]
+	assert steps[1].command == ["boss", "--platform", "otherplat", "status"]
 
 
 def test_smoke_steps_use_configured_query_and_security_id():
@@ -61,21 +61,21 @@ def test_smoke_steps_use_configured_query_and_security_id():
 	assert commands["detail"] == ["boss", "detail", "real-security-id"]
 
 
-def test_smoke_steps_use_configured_zhilian_query_and_security_id():
+def test_smoke_steps_use_configured_platform_query_and_security_id():
 	spec = importlib.util.spec_from_file_location("smoke_p0", SMOKE_SCRIPT)
 	assert spec is not None and spec.loader is not None
 	module = importlib.util.module_from_spec(spec)
 	spec.loader.exec_module(module)
 
 	steps = module.build_default_steps(
-		"zhilian",
+		"otherplat",
 		query="java",
-		security_id="zhilian-security-id",
+		security_id="demo-other-security-id",
 	)
 
 	commands = {step.name: step.command for step in steps}
-	assert commands["search"] == ["boss", "--platform", "zhilian", "search", "java"]
-	assert commands["detail"] == ["boss", "--platform", "zhilian", "detail", "zhilian-security-id"]
+	assert commands["search"] == ["boss", "--platform", "otherplat", "search", "java"]
+	assert commands["detail"] == ["boss", "--platform", "otherplat", "detail", "demo-other-security-id"]
 
 
 def test_smoke_runner_distinguishes_step_failure_types():

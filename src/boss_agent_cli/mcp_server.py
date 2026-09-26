@@ -266,7 +266,7 @@ def _parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
 	parser.add_argument("--message-path", default=DEFAULT_MESSAGE_PATH, help="SSE 消息回传路径")
 	parser.add_argument("--boss-bin", default=DEFAULT_BOSS_BIN, help="底层 boss CLI 可执行文件路径")
 	parser.add_argument("--data-dir", default=None, help="传给 boss CLI 的数据目录，用于项目级状态隔离")
-	parser.add_argument("--platform", default=None, help="传给 boss CLI 的默认平台，如 zhilian 或 zhipin")
+	parser.add_argument("--platform", default=None, help="传给 boss CLI 的默认平台，如 zhipin")
 	parser.add_argument("--role", choices=("candidate", "recruiter"), default=None, help="传给 boss CLI 的默认角色")
 	parser.add_argument(
 		"--browser-source",

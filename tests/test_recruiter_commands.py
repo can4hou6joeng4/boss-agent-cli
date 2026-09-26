@@ -579,12 +579,11 @@ def test_parse_resume_accepts_unwrapped_payload():
 	assert result["expectation"]["position"] == "测试工程师"
 
 
-def test_hr_group_rejects_unsupported_zhilian_platform():
+def test_hr_group_rejects_removed_zhilian_platform():
 	runner = CliRunner()
 	result = runner.invoke(cli, ["--platform", "zhilian", "--json", "hr", "candidates", "python"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
-	assert parsed["error"]["code"] == "PLATFORM_NOT_SUPPORTED"
-	assert "暂不支持平台" in parsed["error"]["message"]
-	assert "boss --platform zhipin hr ..." == parsed["error"]["recovery_action"]
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "unknown platform" in parsed["error"]["message"]

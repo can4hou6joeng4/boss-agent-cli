@@ -10,7 +10,7 @@ SCHEMA_DATA = {
 	"description": "面向真人和 Agent 的招聘平台 CLI，共 39 个顶层命令；所有已实现能力均可直接调用。",
 	"commands": {
 		"login": {
-			"description": "按当前平台登录（zhipin / zhilian）；两种兼容运行模式共享相同能力，平台风控仍会停止当前流程。",
+			"description": "按当前平台登录（zhipin）；两种兼容运行模式共享相同能力，平台风控仍会停止当前流程。",
 			"args": [],
 			"options": {
 				"--curl-file": {
@@ -848,7 +848,7 @@ SCHEMA_DATA = {
 		"--platform": {
 			"type": "string",
 			"default": "zhipin",
-			"description": "招聘平台适配器（zhipin=BOSS 直聘求职者/招聘者均可用；zhilian=智联招聘已接通求职者侧包络与命令兼容）",
+			"description": "招聘平台适配器（zhipin=BOSS 直聘求职者/招聘者均可用）",
 			"choices": list_platforms(),
 		},
 		"--json": {

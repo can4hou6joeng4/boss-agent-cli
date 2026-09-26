@@ -24,7 +24,6 @@ boss status
 完成标准：
 - `boss doctor` 返回 `ok=true`
 - `boss status` 返回本地登录态的分层健康状态；如需真实只读验证，显式运行 `boss status --live`
-- 若使用 `zhilian`，请显式带上平台：`boss --platform zhilian doctor && boss --platform zhilian login`
 
 如果你不是直接在终端里手动跑命令，而是准备把它接进 Agent 宿主，先看 [Agent Host Examples](agent-hosts.md) 选择对应接入模板。
 
@@ -97,7 +96,7 @@ boss hr jobs list
 - 先把 `boss schema` 里的 `hr` 命令组当作招聘者能力真源
 - `boss hr <subcommand>` 会自动切到 recruiter 角色，不需要额外推断 `--role`
 - 求职者与招聘者两端都遵守同一套 `stdout JSON / stderr 日志` 契约
-- 当前 `hr` 只支持 `zhipin-recruiter`；智联招聘者侧自动化请使用 `boss --platform zhilian --role recruiter agent ...`
+- 当前 `hr` 与招聘者侧 `agent` 自动化只支持 `zhipin-recruiter`
 - 平台返回 `ACCOUNT_RISK`、`RATE_LIMITED` 或 `ENVIRONMENT_RISK` 时停止当前批次，按 `error.recovery_action` 处理，不要无界换通道重试
 
 ## 3) 失败恢复与排障

@@ -131,10 +131,10 @@ def test_catalog_rejects_platform_and_missing_inputs():
 		build_plan(
 			WizardInput.from_mapping(
 				{
-					"role": "recruiter",
+					"role": "candidate",
 					"platform": "zhilian",
-					"goal": "jobs_list",
-					"inputs": {},
+					"goal": "job_search",
+					"inputs": {"query": "Python"},
 				}
 			)
 		)
@@ -3018,7 +3018,7 @@ def test_runner_browser_source_unsupported_maps_to_not_supported(tmp_path):
 	from boss_agent_cli.api.browser_source import BrowserSourceUnsupported
 
 	def unsupported(context, inputs, prior):
-		raise BrowserSourceUnsupported("zhilian", "stored-cookie")
+		raise BrowserSourceUnsupported("otherplat", "stored-cookie")
 
 	with WorkflowStore(tmp_path) as store:
 		run = WorkflowRunner(store, {"unsupported": unsupported}).run(_plan("unsupported"), object(), run_id="bsu-run")

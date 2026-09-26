@@ -5,7 +5,6 @@ from urllib.parse import urlparse
 DEFAULT_CDP_URL = "http://localhost:9222"
 
 _ZHIPIN_HOST = "zhipin.com"
-_ZHILIAN_HOST = "zhaopin.com"
 
 
 def _is_platform_url(url: str, expected_host: str) -> bool:
@@ -19,7 +18,3 @@ def _is_platform_url(url: str, expected_host: str) -> bool:
 
 def is_zhipin_url(url: str) -> bool:
 	return _is_platform_url(url, _ZHIPIN_HOST)
-
-
-def is_zhilian_url(url: str) -> bool:
-	return _is_platform_url(url, _ZHILIAN_HOST)

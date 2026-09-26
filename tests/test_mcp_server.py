@@ -151,7 +151,7 @@ def test_candidate_tool_description_includes_availability():
 	search = next(t for t in TOOLS if t.name == "boss_search")
 	assert "可用性:" in search.description
 	assert "roles=candidate" in search.description
-	assert "zhilian" in search.description
+	assert "zhilian" not in search.description
 	assert "zhipin" in search.description
 
 
@@ -581,7 +581,7 @@ def test_run_boss_passes_configured_global_args_before_command(mock_run):
 	_configure_boss_invocation(
 		boss_bin="/opt/boss",
 		data_dir="./.boss-agent",
-		platform="zhilian",
+		platform="zhipin",
 		role="recruiter",
 	)
 	try:
@@ -590,7 +590,7 @@ def test_run_boss_passes_configured_global_args_before_command(mock_run):
 		assert cmd == [
 			"/opt/boss", "--json",
 			"--data-dir", "./.boss-agent",
-			"--platform", "zhilian",
+			"--platform", "zhipin",
 			"--role", "recruiter",
 			"agent", "stats",
 		]
@@ -659,13 +659,13 @@ def test_parse_cli_args_accepts_boss_global_options():
 		"--transport", "stdio",
 		"--boss-bin", "/opt/boss",
 		"--data-dir", "./.boss-agent",
-		"--platform", "zhilian",
+		"--platform", "zhipin",
 		"--role", "recruiter",
 		"--browser-source", "existing-browser",
 	])
 	assert args.boss_bin == "/opt/boss"
 	assert args.data_dir == "./.boss-agent"
-	assert args.platform == "zhilian"
+	assert args.platform == "zhipin"
 	assert args.role == "recruiter"
 	assert args.browser_source == "existing-browser"
 

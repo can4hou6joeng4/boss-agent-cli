@@ -61,7 +61,6 @@ body:
       label: 目标平台 / Target platform
       options:
         - zhipin
-        - zhilian
         - all platforms
         - not platform-specific
     validations:

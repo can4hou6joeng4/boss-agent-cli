@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any
 from boss_agent_cli.api.browser_source import BrowserSourceUnsupported, resolve_policy
 from boss_agent_cli.api.client import BossClient
 from boss_agent_cli.api.recruiter_client import BossRecruiterClient
-from boss_agent_cli.api.zhilian_client import ZhilianClient
 from boss_agent_cli.platforms import Platform, get_platform, get_recruiter_platform
 from boss_agent_cli.platforms.recruiter_base import RecruiterPlatform
 
@@ -29,20 +28,16 @@ def _build_client(
 	"""按平台名构造对应的内部 client。
 
 	非 ``auto`` 的浏览器来源只对有浏览器通道的 client（zhipin/BossClient）有意义；
-	zhilian 没有浏览器通道，显式抛 ``BrowserSourceUnsupported``，
-	由命令层转成 ``NOT_SUPPORTED`` 信封——而不是让 ``ZhilianClient`` 因意外 kwarg
-	抛 ``TypeError`` 被兜底成 ``NETWORK_ERROR``。
+	其他（未来注册的、无浏览器通道的）平台配非 auto 来源时显式抛
+	``BrowserSourceUnsupported``，由命令层转成 ``NOT_SUPPORTED`` 信封。
 	"""
 	policy = resolve_policy(browser_source)
 	# 与 build_recruiter_platform_instance 同一写法：唯一有浏览器通道的是 zhipin（BossClient）。
 	# 任何其他平台配非 auto 来源都在此抛 BrowserSourceUnsupported（→ NOT_SUPPORTED），
-	# 而不是落到占位适配器返回不带 recovery_action 的 NOT_SUPPORTED，或因意外 kwarg
-	# 抛 TypeError 被兜底成 NETWORK_ERROR。守卫写成通用式（name != "zhipin"）而非名称
+	# 而不是落到占位适配器返回不带 recovery_action 的 NOT_SUPPORTED。守卫写成通用式（name != "zhipin"）而非名称
 	# 白名单，未来新增无浏览器通道的平台不会静默落到 BossClient。
 	if name != "zhipin" and policy.fail_closed:
 		raise BrowserSourceUnsupported(name, policy.name)
-	if name == "zhilian":
-		return ZhilianClient(auth, delay=delay, cdp_url=cdp_url)
 	# 默认 zhipin 走 BossClient
 	return BossClient(auth, delay=delay, cdp_url=cdp_url, browser_source=policy.name)
 

@@ -35,7 +35,7 @@ def get_platform_instance(ctx: "click.Context", auth: "AuthManager") -> Platform
 	- 读取 ``ctx.obj`` 中的 ``platform`` / ``delay`` / ``cdp_url`` / ``browser_source`` 配置
 	- 未设 platform 时 fallback 到 "zhipin"
 	- 未知平台抛 ``ValueError``
-	- 按平台名分发到对应 client（zhipin→BossClient / zhilian→ZhilianClient）
+	- 按平台名分发到对应 client（zhipin→BossClient）
 	"""
 	obj = ctx.obj or {}
 	return build_platform_instance(

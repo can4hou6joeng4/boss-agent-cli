@@ -111,7 +111,7 @@ git diff --check
 - `boss --version`
 - Python 版本
 - 操作系统
-- 平台：`zhipin` 或 `zhilian`
+- 平台：`zhipin`
 - 角色：`candidate` 或 `recruiter`
 - 完整 JSON 信封，已脱敏
 - `boss doctor` 输出，已脱敏

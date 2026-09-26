@@ -6,9 +6,6 @@ rate-limit cooldown), lazy client/browser construction, and lifecycle.
 The per-platform differences (base URL / headers / referer map, auth-error
 class, response codes, whether to stamp `__cli_endpoint_hint__`) are exposed
 as class attributes so each subclass only sets data, not behavior.
-
-Zhilian is intentionally NOT a subclass: its client speaks a different retry
-dialect (HTTP + body 401/403/429, no stoken, CSRF bootstrap).
 """
 
 from __future__ import annotations

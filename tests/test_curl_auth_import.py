@@ -86,7 +86,7 @@ def test_import_failed_verification_does_not_replace_session(tmp_path):
 
 
 def test_import_unsupported_platform_does_not_verify(tmp_path):
-	manager = AuthManager(tmp_path, platform="zhilian")
+	manager = AuthManager(tmp_path, platform="otherplat")
 	with patch.object(manager, "_verify_cookie") as verify:
 		with pytest.raises(ValueError):
 			manager.import_curl(_CURL)

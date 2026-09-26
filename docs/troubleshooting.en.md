@@ -36,7 +36,7 @@ boss doctor --live-probe
 | `bridge_exec` / `bridge_fetch` / `bridge_navigate` | Basic extension execution, browser fetch, and navigation capabilities |
 | `browser_channel` | CDP/Bridge summary; not a risk-control bypass path |
 | `candidate_search_health` / `candidate_detail_health` | Candidate read-only prerequisites |
-| `recruiter_read_health` | Recruiter read-only prerequisites; Zhaopin recruiter mode is explicitly marked unsupported |
+| `recruiter_read_health` | Recruiter read-only prerequisites |
 | `network` | zhipin.com reachable |
 
 ## Login issues
@@ -165,8 +165,7 @@ page with the browser's own session, never reading stored credentials: a pass is
 reported as "verified"; a session that has expired server-side is not persisted and the CLI falls
 through to the forced re-login path below; a probe that hits `ACCOUNT_RISK` / `ENVIRONMENT_RISK`
 stops immediately with no retry and no channel switch. If the page is not ready or the probe
-itself fails (network / timeout), reuse continues as "unverified" with a stderr hint. Only BOSS
-Zhipin is probed today; Zhilian reuse still checks cookie presence only.
+itself fails (network / timeout), reuse continues as "unverified" with a stderr hint.
 
 To skip reuse (switching accounts, or when commands still return `AUTH_REQUIRED` after an
 unverified reuse), run `boss login --cdp --force`. It scans and reuses nothing, clears the target

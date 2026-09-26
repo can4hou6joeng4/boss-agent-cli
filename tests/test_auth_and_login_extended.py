@@ -233,26 +233,6 @@ def test_login_success(mock_auth_cls):
 
 
 @patch("boss_agent_cli.commands.login.AuthManager")
-def test_login_supports_zhilian_platform(mock_auth_cls):
-	mock_auth = MagicMock()
-	mock_auth.login.return_value = {
-		"cookies": {"zp_token": "x"},
-		"user_agent": "ua",
-		"_method": "Cookie 提取",
-	}
-	mock_auth_cls.return_value = mock_auth
-
-	runner = CliRunner()
-	result = runner.invoke(cli, ["--platform", "zhilian", "login"])
-	assert result.exit_code == 0
-	parsed = json.loads(result.output)
-	assert parsed["ok"] is True
-	assert parsed["hints"]["next_actions"][0] == "boss --platform zhilian status — 验证登录态"
-	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian search <query> — 搜索职位"
-	mock_auth.login.assert_called_once()
-
-
-@patch("boss_agent_cli.commands.login.AuthManager")
 def test_login_connection_error_recovery_is_boss_chrome(mock_auth_cls):
 	"""ConnectionError 应返回 CDP_UNAVAILABLE + 重新登录恢复建议。"""
 	mock_auth = MagicMock()
@@ -308,19 +288,6 @@ def test_login_timeout_error_recovery_is_retry(mock_auth_cls):
 
 
 @patch("boss_agent_cli.commands.login.AuthManager")
-def test_zhilian_login_timeout_uses_platform_specific_recovery(mock_auth_cls):
-	mock_auth = MagicMock()
-	mock_auth.login.side_effect = TimeoutError("扫码超时")
-	mock_auth_cls.return_value = mock_auth
-
-	runner = CliRunner()
-	result = runner.invoke(cli, ["--platform", "zhilian", "login"])
-	assert result.exit_code == 1
-	parsed = json.loads(result.output)
-	assert parsed["error"]["recovery_action"] == "boss --platform zhilian login"
-
-
-@patch("boss_agent_cli.commands.login.AuthManager")
 def test_login_generic_exception_wrapped_as_network_error(mock_auth_cls):
 	"""泛型异常也应被 wrap 成 NETWORK_ERROR，不裸泄给用户。"""
 	mock_auth = MagicMock()
@@ -333,19 +300,6 @@ def test_login_generic_exception_wrapped_as_network_error(mock_auth_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NETWORK_ERROR"
 	assert "登录失败" in parsed["error"]["message"]
-
-
-@patch("boss_agent_cli.commands.login.AuthManager")
-def test_zhilian_login_generic_exception_uses_platform_specific_recovery(mock_auth_cls):
-	mock_auth = MagicMock()
-	mock_auth.login.side_effect = RuntimeError("some unexpected error")
-	mock_auth_cls.return_value = mock_auth
-
-	runner = CliRunner()
-	result = runner.invoke(cli, ["--platform", "zhilian", "login"])
-	assert result.exit_code == 1
-	parsed = json.loads(result.output)
-	assert parsed["error"]["recovery_action"] == "boss --platform zhilian login"
 
 
 @patch("boss_agent_cli.commands.login.AuthManager")

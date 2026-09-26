@@ -53,17 +53,6 @@ def build_automation_adapter(
 
 		return MockRecruiterAutomationPlatform(platform_name, sample_conversations)
 	match platform_name:
-		case "zhilian":
-			from boss_agent_cli.automation.zhilian_adapter import (
-				ZhilianRecruiterAutomationPlatform,
-			)
-
-			return ZhilianRecruiterAutomationPlatform.from_context(
-				data_dir=data_dir,
-				delay=delay,
-				cdp_url=cdp_url,
-				live=live,
-			)
 		case "zhipin":
 			from boss_agent_cli.automation.boss_adapter import (
 				BossRecruiterAutomationPlatform,

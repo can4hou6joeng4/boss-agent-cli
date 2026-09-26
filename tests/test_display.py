@@ -109,7 +109,7 @@ class TestHandleAuthErrors:
 
 		@handle_auth_errors("search")
 		def impl(ctx):
-			raise BrowserSourceUnsupported("zhilian", "stored-cookie")
+			raise BrowserSourceUnsupported("otherplat", "stored-cookie")
 
 		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
 			impl(ctx)
@@ -173,10 +173,10 @@ class TestHandleAuthErrors:
 			assert call_kwargs[1]["recoverable"] is False
 			assert "降低访问频率" in call_kwargs[1]["recovery_action"]
 
-	def test_auth_required_uses_zhilian_login_action(self):
+	def test_auth_required_uses_platform_specific_login_action(self):
 		from boss_agent_cli.auth.manager import AuthRequired
 		ctx = MagicMock()
-		ctx.obj = {"json_output": True, "platform": "zhilian"}
+		ctx.obj = {"json_output": True, "platform": "otherplat"}
 
 		@handle_auth_errors("search")
 		def impl(ctx):
@@ -186,7 +186,7 @@ class TestHandleAuthErrors:
 			impl(ctx)
 			mock_err.assert_called_once()
 			call_kwargs = mock_err.call_args
-			assert call_kwargs[1]["recovery_action"] == "boss --platform zhilian login"
+			assert call_kwargs[1]["recovery_action"] == "boss --platform otherplat login"
 
 	def test_generic_exception(self):
 		ctx = MagicMock()
@@ -234,20 +234,20 @@ class TestLoginActionForCtx:
 		ctx.obj = {}
 		assert boss_command_for_ctx(ctx, "status") == "boss status"
 
-	def test_zhilian_platform_uses_platform_specific_boss_command(self):
+	def test_non_default_platform_uses_platform_specific_boss_command(self):
 		ctx = MagicMock()
-		ctx.obj = {"platform": "zhilian"}
-		assert boss_command_for_ctx(ctx, "status") == "boss --platform zhilian status"
+		ctx.obj = {"platform": "otherplat"}
+		assert boss_command_for_ctx(ctx, "status") == "boss --platform otherplat status"
 
 	def test_default_platform_uses_plain_login(self):
 		ctx = MagicMock()
 		ctx.obj = {}
 		assert login_action_for_ctx(ctx) == "boss login"
 
-	def test_zhilian_platform_uses_platform_specific_login(self):
+	def test_non_default_platform_uses_platform_specific_login(self):
 		ctx = MagicMock()
-		ctx.obj = {"platform": "zhilian"}
-		assert login_action_for_ctx(ctx) == "boss --platform zhilian login"
+		ctx.obj = {"platform": "otherplat"}
+		assert login_action_for_ctx(ctx) == "boss --platform otherplat login"
 
 # ── handle_error_output TTY 分支 ─────────────────────────────
 
@@ -443,11 +443,11 @@ class TestRenderers:
 		from boss_agent_cli.display import render_status
 		stream = _capture_display_console(monkeypatch)
 
-		render_status({"logged_in": False}, login_action="boss --platform zhilian login")
+		render_status({"logged_in": False}, login_action="boss --platform otherplat login")
 
 		output = stream.getvalue()
 		assert "not logged in" in output
-		assert "boss --platform zhilian login" in output
+		assert "boss --platform otherplat login" in output
 
 	def test_render_simple_list_empty(self, monkeypatch):
 		from boss_agent_cli.display import render_simple_list

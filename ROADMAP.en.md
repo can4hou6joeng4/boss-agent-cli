@@ -62,14 +62,10 @@ Full release history lives in [CHANGELOG.md](CHANGELOG.md).
 
 - [ ] Web UI (React + Tailwind) for non-agent users
 - [ ] browser extension with deeper integration into the native BOSS Zhipin pages
-- [ ] multi-platform support for Lagou / Zhilian / Liepin adapters - API research is fully complete (Issue #90 closed, [docs/research/platforms/](docs/research/platforms/)). Conclusion: **Zhilian candidate-side is implemented** (read-only search/detail/recommend/user_info + write greet/apply, see the Week 2-3 sub-items below); Lagou and Liepin are not pursued after evaluation.
+- [ ] Multi-platform support: the Platform abstraction shipped (Week 1a-1c); Lagou / Liepin API research is complete (Issue #90 closed, [docs/research/platforms/](docs/research/platforms/)) and neither is pursued; the Zhilian adapter (candidate side + recruiter agent automation) was removed in [Unreleased], so BOSS Zhipin is the only registered platform.
   - [x] Week 1a: Platform ABC skeleton + `BossPlatform` adapter (#129, zero behavior change)
   - [x] Week 1b: global `--platform` CLI option + `get_platform_instance` helper + schema exposure of `current_platform`
   - [x] Week 1c: command-layer migration to the Platform interface (**20 commands**: `greet`, `apply`, `batch-greet`, `interviews`, `detail`, `show`, `me`, `recommend`, `chat`, `chatmsg`, `mark`, `exchange`, `pipeline`, `digest`, `search`, `export`, `chat_summary`, `history`, `status`, `watch`)
-  - [x] Week 1d: `ZhilianPlatform` stub registered in the platform registry (abstraction self-proof with full envelope adaptation; P0/P1/P2 still raise `NotImplementedError`)
-  - [x] Week 2: Zhilian read-only implementation (`search`, `detail`, `recommend`, `user_info`)
-  - [x] Week 3: Zhilian write operations (`greet`, `apply`) + docs + MCP adaptation
-  - [x] Week 4: recruiter-side capability evaluation complete → **not onboarding for now** (0 of 4 onboarding conditions met; the `RecruiterPlatform` skeleton stays in place pending community signal, see `docs/research/platforms/zhaopin-recruiter-evaluation.md`)
 
 ### Community building
 

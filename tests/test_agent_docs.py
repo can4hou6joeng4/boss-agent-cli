@@ -109,7 +109,8 @@ def test_capability_matrix_exists_and_covers_core_capabilities():
 	assert "39 个顶层命令" in content
 	assert "13 个一级招聘者子命令" in content
 	assert "`zhipin`" in content
-	assert "`zhilian`" in content
+	assert "zhilian" not in content
+	assert "智联" not in content
 	assert "qiancheng" not in content
 	assert "51job" not in content
 
@@ -119,17 +120,21 @@ def test_readme_documents_current_registered_platforms():
 	readme_en = _read("README.en.md")
 	matrix_en = _read("docs/capability-matrix.en.md")
 
-	assert "--platform zhipin|zhilian" in readme
+	assert "当前注册平台为 `zhipin`（BOSS 直聘）" in readme
 	assert "BOSS 直聘 (`zhipin`)" in readme
-	assert "智联招聘 (`zhilian`)" in readme
+	assert "zhilian" not in readme
+	assert "智联" not in readme
 	assert "qiancheng" not in readme
 	assert "51job" not in readme
 
-	assert "--platform zhipin|zhilian" in readme_en
+	assert "`zhipin` (BOSS Zhipin) is the only registered platform" in readme_en
 	assert "BOSS Zhipin (`zhipin`)" in readme_en
-	assert "Zhaopin (`zhilian`)" in readme_en
+	assert "zhilian" not in readme_en
+	assert "zhaopin" not in readme_en.lower()
 	assert "qiancheng" not in readme_en
 	assert "51job" not in readme_en
+	assert "zhilian" not in matrix_en
+	assert "zhaopin" not in matrix_en.lower()
 	assert "qiancheng" not in matrix_en
 	assert "51job" not in matrix_en
 

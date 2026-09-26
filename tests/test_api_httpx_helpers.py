@@ -27,18 +27,24 @@ class _Response:
 		self.cookies = _CookieJar({"keep": "value", "skip": ""})
 
 
-def test_browser_headers_applies_auth_metadata() -> None:
+def test_browser_headers_applies_auth_metadata(monkeypatch) -> None:
+	monkeypatch.setattr("boss_agent_cli.api.httpx_helpers.sys.platform", "linux")
 	headers = browser_headers(
 		{"Accept": "application/json"},
 		{"user_agent": "UA", "client_id": "client-1"},
-		include_client_id=True,
-		default_platform="macOS",
 	)
 
 	assert headers["Accept"] == "application/json"
 	assert headers["User-Agent"] == "UA"
-	assert headers["x-zp-client-id"] == "client-1"
-	assert headers["sec-ch-ua-platform"]
+	assert headers["sec-ch-ua-platform"] == '"Linux"'
+	assert "x-zp-client-id" not in headers
+
+
+def test_browser_headers_omits_platform_hint_on_macos(monkeypatch) -> None:
+	monkeypatch.setattr("boss_agent_cli.api.httpx_helpers.sys.platform", "darwin")
+	headers = browser_headers({"Accept": "application/json"}, {"user_agent": "UA"})
+
+	assert "sec-ch-ua-platform" not in headers
 
 
 def test_browser_headers_does_not_add_recruiter_token_globally() -> None:

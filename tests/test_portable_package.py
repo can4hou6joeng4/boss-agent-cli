@@ -58,7 +58,9 @@ def test_create_portable_bundle_includes_installer_docs_and_wheel(tmp_path: Path
 	assert (result.bundle_dir / "bin" / "boss-doctor").exists()
 	assert (result.bundle_dir / "README-PORTABLE.md").exists()
 	assert (result.bundle_dir / "examples" / "opencode.json").exists()
-	assert (result.bundle_dir / "examples" / "zhilian-recruiter.sh").exists()
+	assert (result.bundle_dir / "examples" / "zhipin-recruiter.sh").exists()
+	assert not (result.bundle_dir / "examples" / "zhilian-recruiter.sh").exists()
+	assert "zhilian" not in (result.bundle_dir / "README-PORTABLE.md").read_text(encoding="utf-8")
 	assert (result.bundle_dir / "wheels" / wheel.name).exists()
 
 	install = (result.bundle_dir / "install.sh").read_text(encoding="utf-8")

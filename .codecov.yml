@@ -34,4 +34,3 @@ ignore:
   # patch 门槛聚焦在真正可测的命令层与纯逻辑上。
   - "src/boss_agent_cli/bridge/daemon.py"
   - "src/boss_agent_cli/crawler/transport.py"
-  - "src/boss_agent_cli/automation/zhilian_cdp.py"

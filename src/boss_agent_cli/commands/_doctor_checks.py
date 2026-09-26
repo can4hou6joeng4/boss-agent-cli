@@ -102,17 +102,6 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 			}
 		)
 
-	if (ctx.obj or {}).get("platform") == "zhilian":
-		checks.append(
-			{
-				"name": "recruiter_live_read",
-				"status": "warn",
-				"detail": "zhilian 招聘者侧通过 agent browser/CDP adapter 探测；doctor 不执行会话扫描或写动作",
-				"recovery_action": "运行 boss --platform zhilian --role recruiter agent run --dry-run --limit 1",
-			}
-		)
-		return
-
 	try:
 		with get_recruiter_platform_instance(ctx, auth) as recruiter:
 			result = recruiter.list_jobs()
@@ -140,6 +129,6 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 				"name": "recruiter_live_read",
 				"status": "warn",
 				"detail": f"招聘者只读探测异常: {exc}",
-				"recovery_action": "确认当前账号具备招聘者身份；zhilian 招聘者侧暂不支持",
+				"recovery_action": "确认当前账号具备招聘者身份；命中风控时停止自动化访问",
 			}
 		)

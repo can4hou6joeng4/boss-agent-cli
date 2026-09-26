@@ -142,7 +142,7 @@ def test_stats_registered_in_main_and_schema(tmp_path):
 	assert stats_schema["options"]["--format"]["default"] == "json"
 	assert stats_schema["availability"] == {
 		"roles": ["candidate"],
-		"candidate_platforms": ["zhilian", "zhipin"],
+		"candidate_platforms": ["zhipin"],
 		"recruiter_platforms": [],
 	}
 

@@ -12,7 +12,6 @@ from boss_agent_cli.ai.config import AIConfigStore
 from boss_agent_cli.automation.adapters import build_automation_adapter
 from boss_agent_cli.automation.boss_adapter import BossRecruiterAutomationPlatform
 from boss_agent_cli.automation.mock_adapter import MockRecruiterAutomationPlatform
-from boss_agent_cli.automation.zhilian_adapter import ZhilianRecruiterAutomationPlatform
 from boss_agent_cli.automation.config import AutomationConfig, ReplyStrategy, automation_config_from_dict
 from boss_agent_cli.automation.decision import decide_action
 from boss_agent_cli.automation.execution import status_for_decision
@@ -135,7 +134,7 @@ def test_hybrid_local_ai_rewrites_reply_without_changing_action(tmp_path: Path, 
 	ai_store.save_config(ai_provider="ollama", ai_model="qwen3:14b")
 	ai_store.save_api_key("local")
 	adapter = RecordingMockRecruiterAutomationPlatform(
-		"zhilian",
+		"zhipin",
 		[_conversation("你好，我在上海做过3年销售，擅长客户沟通，大专，想看机会", "高分")],
 	)
 	response = MagicMock()
@@ -161,7 +160,7 @@ def test_hybrid_local_ai_rewrites_reply_without_changing_action(tmp_path: Path, 
 			adapter,
 			store,
 			AutomationConfig(reply_strategy=ReplyStrategy.HYBRID),
-			platform="zhilian",
+			platform="zhipin",
 			dry_run=False,
 			limit=1,
 		)
@@ -178,7 +177,7 @@ def test_local_ai_parse_error_is_skipped_without_sending_or_review(tmp_path: Pat
 	ai_store.save_config(ai_provider="ollama", ai_model="qwen3:14b")
 	ai_store.save_api_key("local")
 	adapter = RecordingMockRecruiterAutomationPlatform(
-		"zhilian",
+		"zhipin",
 		[_conversation("你好，我在上海做过3年销售，擅长客户沟通，大专，想看机会", "高分")],
 	)
 	response = MagicMock()
@@ -190,7 +189,7 @@ def test_local_ai_parse_error_is_skipped_without_sending_or_review(tmp_path: Pat
 			adapter,
 			store,
 			AutomationConfig(reply_strategy=ReplyStrategy.LOCAL_AI),
-			platform="zhilian",
+			platform="zhipin",
 			dry_run=False,
 			limit=1,
 		)
@@ -203,7 +202,7 @@ def test_local_ai_parse_error_is_skipped_without_sending_or_review(tmp_path: Pat
 def test_runner_dry_run_writes_events_without_review_queue(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
 	adapter = MockRecruiterAutomationPlatform(
-		"zhilian",
+		"zhipin",
 		[
 			_conversation(
 				"你好，我在上海做过3年销售，擅长客户沟通，大专，想看机会",
@@ -217,7 +216,7 @@ def test_runner_dry_run_writes_events_without_review_queue(tmp_path: Path) -> No
 		adapter,
 		store,
 		AutomationConfig(),
-		platform="zhilian",
+		platform="zhipin",
 		dry_run=True,
 	)
 
@@ -258,16 +257,9 @@ def test_runner_creates_interview_lead_after_contact_exchange(tmp_path: Path) ->
 	assert (tmp_path / "automation" / "interview-leads.csv").exists()
 
 
-def test_agent_run_cli_returns_json_envelope(tmp_path: Path, monkeypatch) -> None:
-	# 隔离真实 CDP：无论本机 9222 是否有 Chrome 在监听，都强制走「CDP 不可用」分支，
-	# 使 dry-run 稳定得到 STOPPED_BY_SAFETY（否则连到用户自己的 Chrome 会翻成 CIRCUIT_BREAKER_OPEN）。
-	def _no_cdp(*args, **kwargs):
-		raise RuntimeError("CDP unavailable in test")
-
-	monkeypatch.setattr(
-		"boss_agent_cli.automation.zhilian_cdp.create_zhilian_browser_session_from_cdp",
-		_no_cdp,
-	)
+def test_agent_run_cli_returns_json_envelope(tmp_path: Path) -> None:
+	# --dry-run 以 live=False 构造 zhipin 适配器（不建客户端、不连 CDP），
+	# 扫描只产出诊断 ref，因此离线稳定得到 STOPPED_BY_SAFETY。
 	runner = CliRunner()
 	result = runner.invoke(
 		cli,
@@ -275,8 +267,6 @@ def test_agent_run_cli_returns_json_envelope(tmp_path: Path, monkeypatch) -> Non
 			"--data-dir",
 			str(tmp_path),
 			"--json",
-			"--platform",
-			"zhilian",
 			"--role",
 			"recruiter",
 			"agent",
@@ -291,7 +281,7 @@ def test_agent_run_cli_returns_json_envelope(tmp_path: Path, monkeypatch) -> Non
 	payload = json.loads(result.output)
 	assert payload["ok"] is True
 	assert payload["command"] == "agent.run"
-	assert payload["data"]["platform"] == "zhilian"
+	assert payload["data"]["platform"] == "zhipin"
 	assert payload["data"]["events"][0]["status"] == "STOPPED_BY_SAFETY"
 
 
@@ -310,12 +300,12 @@ def test_agent_stats_review_and_pending_commands_are_available(tmp_path: Path) -
 
 def test_review_approve_moves_item_to_pending_queue(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
-	review_id = "zhilian-candidate-1-send_follow_up"
+	review_id = "zhipin-candidate-1-send_follow_up"
 	store.append_review(
 		ReviewItem(
 			id=review_id,
 			ts="ts",
-			platform="zhilian",
+			platform="zhipin",
 			candidate_key="candidate-1",
 			action=PlatformAction.SEND_FOLLOW_UP.value,
 			status="review",
@@ -386,12 +376,12 @@ def test_review_reject_marks_item_and_writes_skip_event(tmp_path: Path) -> None:
 
 def test_pending_actions_execute_before_new_conversation_scan(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
-	review_id = "zhilian-pending-candidate-send_follow_up"
+	review_id = "zhipin-pending-candidate-send_follow_up"
 	store.append_review(
 		ReviewItem(
 			id=review_id,
 			ts="ts",
-			platform="zhilian",
+			platform="zhipin",
 			candidate_key="pending-candidate",
 			action=PlatformAction.SEND_FOLLOW_UP.value,
 			status="review",
@@ -402,7 +392,7 @@ def test_pending_actions_execute_before_new_conversation_scan(tmp_path: Path) ->
 	)
 	store.approve_review(review_id, "approved-ts")
 	adapter = MockRecruiterAutomationPlatform(
-		"zhilian",
+		"zhipin",
 		[_conversation("你好，我在上海做过3年销售，大专，想看机会", "新候选人")],
 	)
 
@@ -410,7 +400,7 @@ def test_pending_actions_execute_before_new_conversation_scan(tmp_path: Path) ->
 		adapter,
 		store,
 		AutomationConfig(),
-		platform="zhilian",
+		platform="zhipin",
 		dry_run=True,
 	)
 
@@ -460,8 +450,9 @@ def test_boss_adapter_uses_recruiter_platform_for_contact_exchange(tmp_path: Pat
 
 
 def test_adapter_factory_returns_real_platform_adapters() -> None:
-	assert isinstance(build_automation_adapter("zhilian"), ZhilianRecruiterAutomationPlatform)
 	assert isinstance(build_automation_adapter("zhipin"), BossRecruiterAutomationPlatform)
+	# 智联适配器已移除：旧名称落到通用的 mock 兜底，不再构造浏览器会话。
+	assert isinstance(build_automation_adapter("zhilian"), MockRecruiterAutomationPlatform)
 
 
 def test_schema_and_mcp_expose_agent_automation(tmp_path: Path) -> None:
@@ -470,8 +461,5 @@ def test_schema_and_mcp_expose_agent_automation(tmp_path: Path) -> None:
 	assert result.exit_code == 0
 	payload = json.loads(result.output)
 	assert "agent" in payload["data"]["commands"]
-	assert payload["data"]["commands"]["agent"]["availability"]["recruiter_platforms"] == [
-		"zhilian",
-		"zhipin",
-	]
+	assert payload["data"]["commands"]["agent"]["availability"]["recruiter_platforms"] == ["zhipin"]
 	assert "CIRCUIT_BREAKER_OPEN" in payload["data"]["error_codes"]

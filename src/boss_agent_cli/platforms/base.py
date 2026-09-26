@@ -112,8 +112,6 @@ class Platform(ABC):
 		"""判断响应是否成功。
 
 		- BOSS: ``code == 0``
-		- 智联: ``code == 200``
-		- 猎聘: ``flag == 1``
 		"""
 
 	@abstractmethod
@@ -121,8 +119,6 @@ class Platform(ABC):
 		"""从响应包络提取 data。
 
 		- BOSS: ``response["zpData"]``
-		- 智联: ``response["data"]``
-		- 猎聘: ``response["data"]``
 		"""
 
 	@abstractmethod

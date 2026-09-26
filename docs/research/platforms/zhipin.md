@@ -121,7 +121,6 @@ uv run mypy src/boss_agent_cli
 
 ## 与其他研究文档的关系
 
-- 智联候选者侧研究：[zhaopin.md](zhaopin.md)
 - 拉勾风险占位：[lagou.md](lagou.md)
 - 猎聘风险占位：[liepin.md](liepin.md)
 - 平台准入模板：[README.md](README.md)

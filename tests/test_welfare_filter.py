@@ -106,10 +106,11 @@ def test_welfare_filter_detail_fallback(mock_auth, mock_client_cls, mock_cache_c
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.get_platform_instance")
 @patch("boss_agent_cli.commands.search.AuthManager")
-def test_welfare_filter_zhilian_data_envelope_detail_fallback(mock_auth, mock_client_cls, mock_cache_cls, mock_save):
-	"""智联 data 包络应支持 search --welfare 的详情补抓。"""
+def test_welfare_filter_data_envelope_detail_fallback(mock_auth, mock_client_cls, mock_cache_cls, mock_save):
+	"""code/data 包络（非 zpData）也应支持 search --welfare 的详情补抓。"""
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
+	mock_cache.reserve_crawl_budget.return_value = 0.0
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.search_jobs.return_value = {
 		"code": 200,
@@ -130,7 +131,7 @@ def test_welfare_filter_zhilian_data_envelope_detail_fallback(mock_auth, mock_cl
 	}
 
 	runner = CliRunner()
-	result = runner.invoke(cli, ["--json", "--platform", "zhilian", "search", "golang", "--welfare", "双休"])
+	result = runner.invoke(cli, ["--json", "search", "golang", "--welfare", "双休"])
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True

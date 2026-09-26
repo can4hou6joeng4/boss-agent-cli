@@ -42,7 +42,7 @@ class AuthManager:
 			return login_via_cdp(cdp_url=cdp_url, timeout=timeout, platform=self._platform, reuse_existing=False)
 
 	def _login_action(self) -> str:
-		return "boss --platform zhilian login" if self._platform == "zhilian" else "boss login"
+		return "boss login" if self._platform == "zhipin" else f"boss --platform {self._platform} login"
 
 	def get_token(self) -> dict[str, Any]:
 		if self._token is not None:
@@ -148,8 +148,6 @@ class AuthManager:
 
 	def _has_primary_cookie(self, token: dict[str, Any]) -> bool:
 		cookies = token.get("cookies", {})
-		if self._platform == "zhilian":
-			return bool(cookies.get("at") or cookies.get("zp_token"))
 		primary_cookie = "wt2"
 		return bool(cookies.get(primary_cookie))
 
@@ -157,23 +155,6 @@ class AuthManager:
 		"""验证 Cookie 是否有效。"""
 		try:
 			import httpx
-			if self._platform == "zhilian":
-				from boss_agent_cli.api.zhilian_client import USER_INFO_URL
-				headers = {
-					"User-Agent": token.get("user_agent") or "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-					"Referer": "https://i.zhaopin.com/",
-				}
-				if client_id := token.get("x_zp_client_id") or token.get("client_id"):
-					headers["x-zp-client-id"] = str(client_id)
-				resp = httpx.get(
-					USER_INFO_URL,
-					cookies=token.get("cookies", {}),
-					headers=headers,
-					timeout=10,
-				)
-				data = resp.json()
-				return bool(data.get("code") == 200)
-
 			from boss_agent_cli.api import endpoints
 			resp = httpx.get(
 				endpoints.USER_INFO_URL,
@@ -207,28 +188,12 @@ class AuthManager:
 				raise TokenRefreshFailed("无法刷新 Token，请重新登录")
 			# fail-closed 来源：不自动探测默认端口、不启动 headless、不触发登录。
 			# 判定放在 try 之外，让策略错误码原样上抛，而不是被兜底包成 TokenRefreshFailed。
-			if self._platform != "zhilian" and policy.fail_closed and not policy.auto_probe_cdp and not cdp_url:
+			if policy.fail_closed and not policy.auto_probe_cdp and not cdp_url:
 				raise BrowserSourceUnavailable(
 					policy, attempted=(), detail="stoken 刷新需要 --cdp-url，该来源不会探测默认端口"
 				)
 			self._logger.info("Token 过期，正在静默刷新...")
 			try:
-				if self._platform == "zhilian":
-					# 本地浏览器 Cookie 提取不碰任何浏览器进程，所有来源都允许；
-					# 兜底的 login_via_cdp 会打开登录页等待扫码 = 「触发登录」，显式来源禁止。
-					refreshed = extract_cookies(None, platform=self._platform)
-					if not refreshed or not self._verify_cookie(refreshed):
-						if policy.fail_closed:
-							raise BrowserSourceUnavailable(
-								policy, attempted=(), detail="智联本地登录态失效，该来源不会触发重新登录"
-							)
-						refreshed = login_via_cdp(cdp_url=cdp_url, timeout=30, platform=self._platform)
-					if not refreshed or not self._verify_cookie(refreshed):
-						raise TokenRefreshFailed("智联登录态刷新失败，请重新登录")
-					self._store.save(refreshed)
-					self._token = refreshed
-					return
-
 				# CDP 优先：指纹一致，不会被 BOSS 直聘拒绝
 				if policy.allows(CHANNEL_CDP) and probe_cdp(cdp_url):
 					self._logger.info("检测到 CDP，使用 CDP 刷新 stoken")

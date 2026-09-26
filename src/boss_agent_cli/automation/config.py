@@ -28,7 +28,7 @@ class ReplyStrategy(str, Enum):
 @dataclass(frozen=True, slots=True)
 class AutomationConfig:
 	mode: AutomationMode = AutomationMode.AUTONOMOUS
-	platforms: tuple[str, ...] = ("zhilian", "zhipin")
+	platforms: tuple[str, ...] = ("zhipin",)
 	allowed_actions: tuple[PlatformAction, ...] = DEFAULT_ALLOWED_ACTIONS
 	human_review_threshold: float = 0.65
 	auto_execute_threshold: float = 0.82

@@ -25,14 +25,11 @@ def test_platforms_outputs_local_capability_matrix() -> None:
 	assert "NOT_SUPPORTED" in legend["not_supported"]["description"]
 
 	platforms = {item["name"]: item for item in payload["data"]["platforms"]}
-	assert set(platforms) == {"zhipin", "zhilian"}
+	assert set(platforms) == {"zhipin"}
 	assert platforms["zhipin"]["recruiter"] is True
-	assert platforms["zhilian"]["capabilities"]["readonly"]["search"] == "available"
-	assert platforms["zhilian"]["capabilities"]["readonly"]["show"] == "available"
-	assert platforms["zhilian"]["capabilities"]["readonly"]["history"] == "available"
-	assert platforms["zhilian"]["capabilities"]["readonly"]["interviews"] == "available"
-	assert platforms["zhilian"]["capabilities"]["write"]["greet"] == "available"
-	assert "投递和沟通" in platforms["zhilian"]["notes"]
+	assert platforms["zhipin"]["capabilities"]["readonly"]["search"] == "available"
+	assert platforms["zhipin"]["capabilities"]["write"]["greet"] == "available"
+	assert "默认平台" in platforms["zhipin"]["notes"]
 
 
 def test_platforms_json_payload_includes_status_legend() -> None:
@@ -60,18 +57,18 @@ def test_platforms_terminal_render_includes_status_legend(capsys) -> None:
 
 def test_platforms_can_filter_single_platform_by_registered_name() -> None:
 	runner = CliRunner()
-	result = runner.invoke(cli, ["platforms", "--platform", "zhilian"])
+	result = runner.invoke(cli, ["platforms", "--platform", "zhipin"])
 
 	assert result.exit_code == 0, result.output
 	payload = json.loads(result.output)
 	assert payload["data"]["count"] == 1
-	assert payload["data"]["platforms"][0]["name"] == "zhilian"
+	assert payload["data"]["platforms"][0]["name"] == "zhipin"
 	assert payload["data"]["platforms"][0]["status"] == "available"
 
 
 def test_platforms_removed_platform_uses_json_error_envelope() -> None:
 	runner = CliRunner()
-	for platform_name in ("qiancheng", "51job"):
+	for platform_name in ("qiancheng", "51job", "zhilian"):
 		result = runner.invoke(cli, ["platforms", "--platform", platform_name])
 		assert result.exit_code == 1, result.output
 		payload = json.loads(result.output)
@@ -98,11 +95,11 @@ def test_platforms_can_filter_by_capability_status_groups() -> None:
 	assert result.exit_code == 0, result.output
 	payload = json.loads(result.output)
 	data = payload["data"]
-	assert data["count"] == 2
+	assert data["count"] == 1
 	assert data["capability_filter"] == {
 		"capability": "status",
 		"status_groups": {
-			"available": ["zhilian", "zhipin"],
+			"available": ["zhipin"],
 			"blocked_by_policy": [],
 			"not_supported": [],
 		},
@@ -117,7 +114,7 @@ def test_platforms_can_filter_by_open_write_capability() -> None:
 	assert result.exit_code == 0, result.output
 	payload = json.loads(result.output)
 	assert payload["data"]["capability_filter"]["status_groups"] == {
-		"available": ["zhilian", "zhipin"],
+		"available": ["zhipin"],
 		"blocked_by_policy": [],
 		"not_supported": [],
 	}
@@ -125,13 +122,13 @@ def test_platforms_can_filter_by_open_write_capability() -> None:
 
 def test_platforms_capability_filter_combines_with_platform_filter() -> None:
 	runner = CliRunner()
-	result = runner.invoke(cli, ["platforms", "--platform", "zhilian", "--capability", "search"])
+	result = runner.invoke(cli, ["platforms", "--platform", "zhipin", "--capability", "search"])
 
 	assert result.exit_code == 0, result.output
 	payload = json.loads(result.output)
 	assert payload["data"]["count"] == 1
 	assert payload["data"]["capability_filter"]["status_groups"] == {
-		"available": ["zhilian"],
+		"available": ["zhipin"],
 		"blocked_by_policy": [],
 		"not_supported": [],
 	}
@@ -155,7 +152,7 @@ def test_platforms_terminal_render_includes_capability_columns(capsys) -> None:
 
 	rendered = captured.out + captured.err
 	assert "capability\tcapability_status" in rendered
-	assert rendered.count("apply\tavailable") == 2
+	assert rendered.count("apply\tavailable") == 1
 	assert "apply\tnot_supported" not in rendered
 
 

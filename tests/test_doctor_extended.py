@@ -519,14 +519,6 @@ def test_doctor_redacts_sensitive_token_values(tmp_path):
 	assert "secret-zp" not in output
 
 
-def test_doctor_marks_zhilian_recruiter_agent_preflight_supported(tmp_path):
-	token = {"cookies": {"zp_token": "tok", "at": "a", "rt": "r"}, "x_zp_client_id": "cid"}
-	code, parsed = _invoke_doctor(tmp_path, platform="zhilian", token=token)
-	recruiter = _find_check(parsed["data"]["checks"], "recruiter_read_health")
-	assert recruiter["status"] == "ok"
-	assert "browser/CDP" in recruiter["detail"]
-
-
 @patch("boss_agent_cli.commands._doctor_checks.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands._doctor_checks.get_platform_instance")
 def test_doctor_live_probe_adds_readonly_probe_checks(mock_platform_cls, mock_recruiter_cls, tmp_path):
@@ -583,26 +575,6 @@ def test_cookie_completeness_both_missing(tmp_path):
 	assert completeness["status"] == "warn"
 	assert "wbg" in completeness["detail"]
 	assert "zp_at" in completeness["detail"]
-
-
-def test_zhilian_doctor_uses_platform_specific_auth_quality(tmp_path):
-	token = {"cookies": {"zp_token": "tok"}, "x_zp_client_id": "cid"}
-	code, parsed = _invoke_doctor(tmp_path, platform="zhilian", token=token, cookie={"cookies": {"zp_token": "tok"}})
-	quality = _find_check(parsed["data"]["checks"], "auth_token_quality")
-	assert quality is not None
-	assert quality["status"] == "ok"
-	assert "at/x-zp-client-id" in quality["detail"]
-
-
-def test_zhilian_doctor_uses_platform_specific_cookie_and_network_messages(tmp_path):
-	code, parsed = _invoke_doctor(tmp_path, platform="zhilian", token=None, cookie=None, http_status=200)
-	ce = _find_check(parsed["data"]["checks"], "cookie_extract")
-	assert ce is not None
-	assert "zhaopin" in ce["detail"]
-	assert "boss --platform zhilian login" in ce["hint"]
-	network = _find_check(parsed["data"]["checks"], "network")
-	assert network is not None
-	assert network["detail"] == "访问 zhaopin.com 返回 HTTP 200"
 
 
 def test_doctor_login_preflight_blocks_missing_auth_before_platform_requests(tmp_path):
@@ -722,3 +694,11 @@ def test_patchright_chromium_revision_reads_packaged_manifest():
 	revision = patchright_chromium_revision()
 	assert revision is not None
 	assert revision.isdigit()
+
+
+def test_doctor_no_longer_probes_zhaopin(tmp_path):
+	"""智联平台已移除：doctor 不再额外访问 zhaopin.com，也不输出 network_zhilian 检查项。"""
+	_code, parsed = _invoke_doctor(tmp_path)
+	checks = parsed["data"]["checks"]
+	assert _find_check(checks, "network_zhilian") is None
+	assert not any("zhaopin" in json.dumps(check, ensure_ascii=False) for check in checks)

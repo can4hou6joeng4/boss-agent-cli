@@ -424,7 +424,7 @@ def _run_agent(
 		data_dir=ctx.obj["data_dir"],
 		delay=ctx.obj.get("delay", (1.5, 3.0)),
 		cdp_url=ctx.obj.get("cdp_url"),
-		live=not dry_run or platform == "zhilian",
+		live=not dry_run,
 	)
 	return run_automation_cycle(
 		adapter,

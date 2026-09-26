@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 	from boss_agent_cli.platforms import (
 		BossPlatform,
 		Platform,
-		ZhilianPlatform,
 		get_platform,
 		list_platforms,
 	)
@@ -47,7 +46,6 @@ _LAZY_EXPORT_MODULES = {
 	"ResumeFile": "boss_agent_cli.resume.models",
 	"Platform": "boss_agent_cli.platforms",
 	"BossPlatform": "boss_agent_cli.platforms",
-	"ZhilianPlatform": "boss_agent_cli.platforms",
 	"get_platform": "boss_agent_cli.platforms",
 	"list_platforms": "boss_agent_cli.platforms",
 }
@@ -78,7 +76,6 @@ __all__ = [
 	# 平台抽象（Week 1 ABC，详见 Issue #129）
 	"Platform",
 	"BossPlatform",
-	"ZhilianPlatform",
 	"get_platform",
 	"list_platforms",
 ]

@@ -6,7 +6,7 @@ from typing import Any, cast
 
 from patchright.sync_api import sync_playwright
 
-from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhilian_url, is_zhipin_url
+from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
 
 LOGIN_PAGE_URL = "https://www.zhipin.com/web/user/"
 HOME_URL = "https://www.zhipin.com/"
@@ -27,12 +27,6 @@ _PLATFORM_BROWSER_CONFIG: dict[str, dict[str, str]] = {
 		"cookie_domain": "zhipin.com",
 		"success_cookie": "wt2",
 	},
-	"zhilian": {
-		"login_page_url": "https://rd6.zhaopin.com/app/im",
-		"home_url": "https://rd6.zhaopin.com/app/im",
-		"cookie_domain": "zhaopin.com",
-		"success_cookie": "at",
-	},
 }
 
 
@@ -41,36 +35,6 @@ def _get_platform_config(platform: str) -> dict[str, str]:
 	if config is None:
 		raise ValueError(f"unsupported platform: {platform}")
 	return config
-
-
-def _extract_zhilian_client_id(page: Any) -> str:
-	try:
-		return cast(
-			"str",
-			page.evaluate("""
-			() => {
-				const keys = ["x-zp-client-id", "x_zp_client_id", "clientId"];
-				for (const key of keys) {
-					const value = window.localStorage.getItem(key) || window.sessionStorage.getItem(key);
-					if (value) return value;
-				}
-				return '';
-			}
-		"""),
-		)
-	except Exception:
-		return ""
-
-
-def _find_zhilian_recruiter_page(pages: list[Any]) -> Any | None:
-	for page in pages:
-		url = getattr(page, "url", "")
-		if is_zhilian_url(url) and any(path in url for path in ("/app/im", "/app/recommend")):
-			return page
-	for page in pages:
-		if is_zhilian_url(getattr(page, "url", "")):
-			return page
-	return None
 
 
 def _find_zhipin_page(pages: list[Any]) -> Any | None:
@@ -141,8 +105,7 @@ def _probe_reused_session(page: Any, *, platform: str) -> str:
 
 	- 探测经页面自身的 ``fetch``（``credentials: include``）发出：用的是浏览器里的会话，
 	  不读本地凭据，与 ``existing-browser`` 来源「不读本地凭据」的约束一致。
-	- 只探测 zhipin：智联 ``getUserInfo`` 需要 ``x-zp-client-id`` 且成功码语义未在本地
-	  核实，暂按 ``unverified`` 处理（Issue #424 登记）。
+	- 只探测 zhipin：其他平台没有在本地核实过的只读探测端点，按 ``unverified`` 处理。
 	- fetch 自身失败（网络 / 超时，``code == -1``）视为 ``unverified``：无法证明失效就不
 	  阻断登录，但会在 stderr 提示；真失效的兜底是 ``boss login --force``。
 	"""
@@ -337,12 +300,7 @@ def login_via_cdp(
 		# 登录态直接跳回首页，轮询立刻命中旧 wt2，--force 形同虚设。
 		_clear_platform_cookies(ctx, cookie_domain=cookie_domain)
 		print(f"[boss] --force：跳过复用，已清除当前 context 的 {cookie_domain} 登录态，改为重新登录", file=sys.stderr)
-	if already_logged_in and platform == "zhipin":
-		page = _find_zhipin_page(ctx.pages)
-	elif platform == "zhilian":
-		page = _find_zhilian_recruiter_page(ctx.pages)
-	else:
-		page = None
+	page = _find_zhipin_page(ctx.pages) if already_logged_in and platform == "zhipin" else None
 	created_page = page is None
 	if page is None:
 		page = ctx.new_page()
@@ -365,25 +323,16 @@ def login_via_cdp(
 				)
 		else:
 			print("[boss] 正在 CDP Chrome 中打开登录页...", file=sys.stderr)
-			# 智联复用用户已打开的 recruiter 页签时不导航（created_page=False），
-			# 避免把用户正在筛选候选人的页面 goto 走（review #406 第 2 条）。
-			if created_page or platform != "zhilian":
-				try:
-					page.goto(
-						login_page_url,
-						wait_until="commit",
-						timeout=_NAV_TIMEOUT_MS,
-					)
-				except Exception:
-					pass
+			try:
+				page.goto(
+					login_page_url,
+					wait_until="commit",
+					timeout=_NAV_TIMEOUT_MS,
+				)
+			except Exception:
+				pass
 
-			# 智联复用既有页签未登录时不导航（保护用户页面状态），页面上没有可见的扫码入口，
-			# 提示「扫码」会误导且轮询必然超时；改为引导用户在既有页签内手动完成登录，
-			# 轮询 at 保持不变——用户在页签里登录后轮询即可接上，超时也是真实的超时。
-			if platform == "zhilian" and not created_page:
-				print(f"[boss] 请在已打开的智联页签中完成登录，等待中...（超时 {timeout}s）", file=sys.stderr)
-			else:
-				print(f"[boss] 请在 Chrome 中扫码登录，等待中...（超时 {timeout}s）", file=sys.stderr)
+			print(f"[boss] 请在 Chrome 中扫码登录，等待中...（超时 {timeout}s）", file=sys.stderr)
 
 			for i in range(timeout):
 				time.sleep(1)
@@ -411,17 +360,12 @@ def login_via_cdp(
 		if not already_logged_in:
 			# 未登录：登录页 goto 用 wait_until="commit"，不保证执行上下文就绪；扫码轮询
 			# 在 cookie 出现时即 break，页面可能仍在导航。采 UA 前做有界就绪确认，卡住则
-			# 容忍 UA 为空、不挂起。复用既有页签时（created_page=False）这里已确认就绪。
+			# 容忍 UA 为空、不挂起。
 			page_ready = _ensure_page_evaluable(page)
 			ua = _safe_user_agent(page) if page_ready else ""
-			if created_page or platform != "zhilian":
-				home_loaded = _warm_home_for_runtime(page, home_url, stage="登录后回到首页")
-			else:
-				home_loaded = True  # 智联复用页签：未导航，home_loaded 仅 zhipin 分支消费
+			home_loaded = _warm_home_for_runtime(page, home_url, stage="登录后回到首页")
 		elif created_page:
-			# 复用登录态但无既有平台页签：所有平台的新建页签都回各自 home
-			# （去掉 platform=="zhipin" 限制，否则 zhilian 新建页签停在 about:blank，
-			# _extract_zhilian_client_id 读 localStorage 必空 → TokenRefreshFailed）。
+			# 复用登录态但无既有平台页签：新建页签回平台 home
 			home_loaded = _warm_home_for_runtime(page, home_url, stage="复用登录态回首页")
 			page_ready = home_loaded
 			ua = _safe_user_agent(page) if home_loaded else ""
@@ -473,21 +417,7 @@ def login_via_cdp(
 					stoken = _extract_stoken(page)
 		else:
 			stoken = ""
-		if platform == "zhilian":
-			# cookie 里 x-zp-client-id 非空才直接用（空串也要落到 localStorage 兜底）；
-			# 复用既有页签需页面就绪，否则在卡住的页面上 evaluate 会永久挂起（同 #390）。
-			x_zp_client_id = all_cookies.get("x-zp-client-id") or ""
-			# 新建页签看 home_loaded（首页卡住时不对卡住页面 evaluate），复用既有页签看 page_ready；
-			# created_page 一短路就无视 home_loaded 会对卡住页面 evaluate 读 localStorage（同 #390 挂起）。
-			if not x_zp_client_id and (home_loaded if created_page else page_ready):
-				x_zp_client_id = _extract_zhilian_client_id(page)
-		else:
-			x_zp_client_id = ""
-
-		result: dict[str, Any] = {"cookies": all_cookies, "stoken": stoken, "user_agent": ua}
-		if x_zp_client_id:
-			result["x_zp_client_id"] = x_zp_client_id
-		return result
+		return {"cookies": all_cookies, "stoken": stoken, "user_agent": ua}
 	finally:
 		try:
 			if created_page:
@@ -572,21 +502,13 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 			stoken = _extract_stoken(page) if home_loaded else cookies.get("__zp_stoken__", "")
 		else:
 			stoken = ""
-		if platform == "zhilian":
-			x_zp_client_id = cookies.get("x-zp-client-id") or (_extract_zhilian_client_id(page) if home_loaded else "")
-		else:
-			x_zp_client_id = ""
-
 		browser.close()
 
-	result: dict[str, Any] = {
+	return {
 		"cookies": cookies,
 		"stoken": stoken,
 		"user_agent": user_agent,
 	}
-	if x_zp_client_id:
-		result["x_zp_client_id"] = x_zp_client_id
-	return result
 
 
 def refresh_stoken_via_cdp(cdp_url: str | None = None) -> str:
