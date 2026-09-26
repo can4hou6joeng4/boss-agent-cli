@@ -3027,3 +3027,30 @@ def test_runner_browser_source_unsupported_maps_to_not_supported(tmp_path):
 	assert run["error"]["code"] == "NOT_SUPPORTED"
 	assert run["error"]["recoverable"] is True
 	assert run["error"]["recovery_action"]
+
+
+def test_resume_rejects_run_saved_with_removed_platform(tmp_path):
+	"""升级前以 zhilian 保存的 run 恢复时必须返回 INVALID_PARAM，不能去读遗留登录态或被兜底成可重试错误。"""
+	from boss_agent_cli.wizard.store import WorkflowStore
+
+	with WorkflowStore(tmp_path) as store:
+		store.create(
+			"legacy-zhilian-run",
+			WorkflowPlan(
+				role="candidate",
+				platform="zhilian",
+				goal="job_search",
+				inputs={"query": "Python"},
+				requested_steps=("auth_status", "candidate_search"),
+				mode="headless",
+			),
+		)
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "wizard", "--resume", "legacy-zhilian-run"])
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "zhilian" in payload["error"]["message"]
+	assert "supported: zhipin" in payload["error"]["message"]

@@ -10,7 +10,7 @@ import click
 
 from boss_agent_cli.display import handle_error_output, handle_output
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS
-from boss_agent_cli.wizard.catalog import build_plan
+from boss_agent_cli.wizard.catalog import build_plan, require_supported_platform
 from boss_agent_cli.wizard.models import WorkflowInputError, WorkflowPlan, WizardInput
 from boss_agent_cli.wizard.prompts import (
 	WizardCancelled,
@@ -79,6 +79,9 @@ def _wizard_error(
 
 
 def _plan_from_run(run: Mapping[str, Any]) -> WorkflowPlan:
+	# 历史 run 可能保存着已移除的平台（如 zhilian）；恢复前与新建 plan 走同一套校验，
+	# 否则会绕过 --platform 校验去读遗留登录态，并被兜底成可重试的 NETWORK_ERROR。
+	require_supported_platform(str(run["role"]), str(run["platform"]))
 	params = run.get("params") or {}
 	return WorkflowPlan(
 		role=str(run["role"]),

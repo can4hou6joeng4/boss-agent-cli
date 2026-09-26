@@ -104,6 +104,18 @@ class TestBossEnvelopeAdapter:
 		code, _ = self.plat.parse_error({"code": "ERR", "message": "request timeout"})
 		assert code == "NETWORK_ERROR"
 
+	def test_parse_error_message_auth_expired(self) -> None:
+		code, _ = self.plat.parse_error({"code": "ERR", "message": "token expired"})
+		assert code == "AUTH_EXPIRED"
+
+	def test_parse_error_message_rate_limited(self) -> None:
+		code, _ = self.plat.parse_error({"code": "ERR", "message": "rate limit"})
+		assert code == "RATE_LIMITED"
+
+	def test_parse_error_message_account_risk(self) -> None:
+		code, _ = self.plat.parse_error({"code": "ERR", "message": "请完成安全验证"})
+		assert code == "ACCOUNT_RISK"
+
 
 class TestBossPlatformDelegation:
 	"""BossPlatform 委托给底层 BossClient。"""

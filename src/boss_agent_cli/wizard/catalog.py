@@ -140,14 +140,22 @@ def catalog_data() -> dict[str, Any]:
 	}
 
 
+def require_supported_platform(role: str, platform: str) -> None:
+	"""校验角色与平台组合；新建 plan 与恢复历史 run 共用，已移除平台的旧 run 在此被拒。"""
+	role_spec = catalog_data()["roles"].get(role) or {}
+	platforms = list(role_spec.get("platforms") or [])
+	if platform not in platforms:
+		raise WorkflowInputError(
+			f"角色 {role} 不支持平台 {platform!r}，supported: {', '.join(platforms) or '-'}"
+		)
+
+
 def build_plan(wizard_input: WizardInput) -> WorkflowPlan:
 	role_goals = GOALS[wizard_input.role]
 	goal = role_goals.get(wizard_input.goal)
 	if goal is None:
 		raise WorkflowInputError(f"角色 {wizard_input.role} 不支持 goal {wizard_input.goal!r}")
-	platforms = catalog_data()["roles"][wizard_input.role]["platforms"]
-	if wizard_input.platform not in platforms:
-		raise WorkflowInputError(f"角色 {wizard_input.role} 不支持平台 {wizard_input.platform!r}")
+	require_supported_platform(wizard_input.role, wizard_input.platform)
 	missing = [
 		name
 		for name in goal.required_inputs

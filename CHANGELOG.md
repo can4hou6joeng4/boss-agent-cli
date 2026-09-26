@@ -8,6 +8,7 @@
 - **移除智联招聘（`zhilian`）平台。** 求职者侧适配器（`ZhilianPlatform` / `ZhilianClient` / `zhilian.yaml`）、招聘者侧 `agent` 浏览器 / CDP 自动化（`automation/zhilian_*`）、`ZhilianPlatform` 包级公开导出、schema 与 MCP 描述中的平台可用性、能力矩阵、向导标签、研究文档和演示内容一并删除；BOSS 直聘（`zhipin`）成为唯一注册平台，多平台抽象（`Platform` / `RecruiterPlatform` 注册表与 `--platform` 选项）保留。`boss --platform zhilian ...`（含 `--role recruiter agent run`、`status --live`、`hr ...`、`platforms --platform zhilian`）以及用 `boss-mcp --platform zhilian` 启动的 MCP 宿主，现在都返回七键 `INVALID_PARAM` 信封（`unknown platform 'zhilian', supported: zhipin`）。
   - 迁移：若 `config.json` 里写着 `platform: zhilian`，所有命令都会被拒绝，运行 `boss --platform zhipin config set platform zhipin` 改回默认平台。
   - `boss doctor` 不再额外探测 zhaopin.com（`network_zhilian` 检查项移除）；招聘者 `status --live` 的智联 selector 健康检查及其 `SELECTOR_HEALTH_FAILED` 错误、`selector_health` 字段随之移除。
+  - 升级前以 `zhilian` 保存的 wizard run（含 MCP `boss_wizard` 恢复）在恢复时同样返回 `INVALID_PARAM`，不再读取遗留登录态；请以 `zhipin` 新建 run。
   - 便携包不再附带 `examples/zhilian-recruiter.sh`。
   - 本地遗留的 `~/.boss-agent/auth/zhilian/` 登录态与自动化存储中的智联条目不再被读取，也不会被 zhipin 运行执行，可手动删除。
 
