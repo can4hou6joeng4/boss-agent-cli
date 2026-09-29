@@ -247,6 +247,33 @@ class _FakeCandidatePlatform:
 		self.calls.append(("greet", security_id, job_id, message))
 		return {"code": 0, "data": {"greeted": True}}
 
+	def friend_list(self, *, page=1):
+		self.calls.append(("friend_list", page))
+		return {
+			"code": 0,
+			"data": {
+				"result": [{
+					"uid": 10001,
+					"securityId": "sid_current",
+					"name": "联系人甲",
+					"friendSource": 0,
+				}],
+				"hasMore": False,
+			},
+		}
+
+	def exchange_contact(self, security_id, uid, name, exchange_type=1):
+		self.calls.append(("exchange_contact", security_id, uid, name, exchange_type))
+		return {"code": 0, "data": {"requested": True}}
+
+	def friend_label(self, uid, label_id, friend_source=0, remove=False):
+		self.calls.append(("friend_label", uid, label_id, friend_source, remove))
+		return {"code": 0, "data": {"updated": True}}
+
+	def chat_history(self, gid, security_id, *, page=1, count=20):
+		self.calls.append(("chat_history", gid, security_id, page, count))
+		return {"code": 0, "data": {"messages": [{"text": "你好"}]}}
+
 	def is_success(self, response):
 		return response["code"] == 0
 
@@ -284,6 +311,35 @@ def test_candidate_write_actions_persist_idempotence_records(tmp_path):
 	assert platform.calls == [
 		("apply", "sec-1", "job-1", "lid-1"),
 		("greet", "sec-2", "job-2", "你好"),
+	]
+
+
+def test_candidate_contact_actions_refresh_rotating_security_id(tmp_path):
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	exchanged = DEFAULT_ACTIONS["candidate_exchange"](
+		context, {"security_id": "10001", "type": "wechat"}, {}
+	)
+	marked = DEFAULT_ACTIONS["candidate_mark"](
+		context, {"security_id": "10001", "label": "沟通中"}, {}
+	)
+	history = DEFAULT_ACTIONS["candidate_chat_history"](
+		context, {"gid": "10001"}, {}
+	)
+
+	assert exchanged.data["uid"] == "10001"
+	assert exchanged.data["security_id"] == "sid_current"
+	assert marked.data["uid"] == "10001"
+	assert history.data["uid"] == "10001"
+	assert history.data["security_id"] == "sid_current"
+	assert platform.calls == [
+		("friend_list", 1),
+		("exchange_contact", "sid_current", "10001", "联系人甲", 2),
+		("friend_list", 1),
+		("friend_label", "10001", 2, 0, False),
+		("friend_list", 1),
+		("chat_history", "10001", "sid_current", 1, 20),
 	]
 
 
@@ -1022,8 +1078,14 @@ def test_candidate_communication_follow_up_uses_friend_ids():
 
 	assert isinstance(follow_up, WizardInput)
 	assert follow_up.goal == "chat_history"
-	assert follow_up.inputs == {"security_id": "sec-friend", "gid": "gid-9"}
+	assert follow_up.inputs == {"gid": "gid-9"}
 	assert "sec-friend" not in " ".join(option.label for _, options in menu.menus for option in options)
+
+	menu = _ScriptedMenu(["0", "exchange", "phone"])
+	follow_up = collect_result_follow_up(run, menu=menu)
+	assert isinstance(follow_up, WizardInput)
+	assert follow_up.goal == "exchange"
+	assert follow_up.inputs == {"security_id": "gid-9", "gid": "gid-9", "type": "phone"}
 
 
 def test_shortlist_and_pipeline_follow_ups_cover_management_paths():

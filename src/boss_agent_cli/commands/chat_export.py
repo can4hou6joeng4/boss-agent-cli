@@ -7,7 +7,7 @@ import io
 import json
 from typing import Any
 
-from boss_agent_cli.commands.chat_utils import sanitize_csv_cell, escape_md_cell, GROUP_ORDER
+from boss_agent_cli.commands.chat_utils import sanitize_csv_cell, escape_md_cell, contact_identity, GROUP_ORDER
 
 
 def prepare_render_data(
@@ -32,7 +32,7 @@ def prepare_render_data(
 	me_read = sum(1 for x in me_items if x.get("msg_status") == "已读")
 	me_unread = len(me_items) - me_read
 
-	added_ids = {item.get("security_id") for item in diff_result.get("added", [])}
+	added_ids = {contact_identity(item) for item in diff_result.get("added", [])}
 
 	# diff 摘要
 	diff_summary = None
@@ -82,12 +82,13 @@ def prepare_render_data(
 		for item in group_items:
 			global_idx += 1
 			sid = item.get("security_id", "")
-			is_new = sid in added_ids
+			key = contact_identity(item)
+			is_new = key in added_ids
 			ref = f"S{global_idx}"
 			msg = str(item.get("last_msg") or "-")
 			unread = item.get("unread") or 0
 			rows.append({
-				"ref": ref, "is_new": is_new, "sid": sid,
+				"ref": ref, "is_new": is_new, "sid": sid, "key": key,
 				"brand_name": item.get("brand_name") or "-",
 				"name": item.get("name") or "-",
 				"title": item.get("title") or "-",
@@ -96,7 +97,7 @@ def prepare_render_data(
 				"msg_status": item.get("msg_status") or "-",
 				"last_msg": msg,
 			})
-			id_map.append((ref, sid, f"{item.get('brand_name') or '-'} {item.get('name') or '-'}"))
+			id_map.append((ref, key, f"{item.get('brand_name') or '-'} {item.get('name') or '-'}"))
 
 		sections.append({"subtitle": subtitle, "rows": rows})
 
@@ -135,7 +136,7 @@ def _render_csv(friends: list[dict[str, Any]]) -> str:
 	fields = [
 		"name", "title", "brand_name", "initiated_by",
 		"msg_status", "unread", "last_msg", "last_time",
-		"security_id", "encrypt_job_id",
+		"uid", "security_id", "encrypt_job_id",
 	]
 	buf = io.StringIO(newline="")
 	writer = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
@@ -205,15 +206,16 @@ def _render_markdown(
 
 	if rd["id_map"]:
 		lines.append("<details>")
-		lines.append("<summary>security_id 映射表（点击展开）</summary>")
+		lines.append("<summary>联系人标识映射表（点击展开）</summary>")
 		lines.append("")
-		lines.append("| 编号 | 公司/联系人 | security_id |")
-		lines.append("|------|------------|-------------|")
-		for ref, sid, label in rd["id_map"]:
-			lines.append(f"| {ref} | {label} | {sid} |")
+		lines.append("| 编号 | 公司/联系人 | 联系人标识（uid 优先） |")
+		lines.append("|------|------------|--------------------------|")
+		for ref, key, label in rd["id_map"]:
+			lines.append(f"| {ref} | {label} | {key} |")
 		lines.append("")
 		lines.append("</details>")
 		lines.append("")
+		lines.append("> 优先使用 uid 调用 `boss chatmsg <uid>`；缺少 uid 的旧记录会回退展示可能已失效的 security_id。")
 
 	return "\n".join(lines) + "\n"
 
@@ -224,7 +226,7 @@ def _render_html(
 	days: int | None,
 	diff_result: dict[str, Any],
 ) -> str:
-	"""渲染为 HTML 格式，含分组、diff 标记和 security_id 映射。"""
+	"""渲染为 HTML 格式，含分组、diff 标记和联系人标识映射。"""
 	esc = _html.escape
 	rd = prepare_render_data(friends, from_who, diff_result)
 
@@ -284,17 +286,18 @@ def _render_html(
 			<tbody>{''.join(rrows)}</tbody>
 		</table>"""
 
-	# security_id 映射表
+	# 联系人标识映射表
 	map_rows = []
-	for ref, sid, label in rd["id_map"]:
-		map_rows.append(f"<tr><td>{ref}</td><td>{esc(label)}</td><td class='sid'>{esc(sid)}</td></tr>")
+	for ref, key, label in rd["id_map"]:
+		map_rows.append(f"<tr><td>{ref}</td><td>{esc(label)}</td><td class='sid'>{esc(key)}</td></tr>")
 	map_html = f"""
 	<details>
-		<summary>security_id 映射表（点击展开）</summary>
+		<summary>联系人标识映射表（点击展开）</summary>
 		<table>
-			<thead><tr><th>编号</th><th>公司/联系人</th><th>security_id</th></tr></thead>
+			<thead><tr><th>编号</th><th>公司/联系人</th><th>联系人标识（uid 优先）</th></tr></thead>
 			<tbody>{''.join(map_rows)}</tbody>
 		</table>
+		<p>优先使用 uid；缺少 uid 的旧记录会回退展示可能已失效的 security_id。</p>
 	</details>""" if map_rows else ""
 
 	return f"""<!DOCTYPE html>

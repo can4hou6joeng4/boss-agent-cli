@@ -29,7 +29,7 @@ def _resolve_label(label_input: str) -> int:
 
 
 @click.command("mark")
-@click.argument("security_id")
+@click.argument("security_id", metavar="UID_OR_SECURITY_ID")
 @click.option("--label", required=True, help="标签名称（新招呼/沟通中/已约面/已获取简历/已交换电话/已交换微信/不合适/收藏）或 ID")
 @click.option("--remove", is_flag=True, default=False, help="移除标签（默认为添加）")
 @click.pass_context
@@ -65,7 +65,8 @@ def mark_cmd(ctx: click.Context, security_id: str, label: str, remove: bool) -> 
 			return
 
 		data = {
-			"security_id": security_id,
+			"uid": friend_id,
+			"security_id": str(friend_item.get("securityId") or friend_item.get("security_id") or ""),
 			"name": friend_name,
 			"label": label_name,
 			"action": action_text,

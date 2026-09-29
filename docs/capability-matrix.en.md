@@ -43,8 +43,8 @@ Compatibility modes `assisted` and `research` can both call every implemented ca
 | Capability | CLI command | Login required | Transport |
 |---|---|---|---|
 | Conversation list | `boss chat` | Yes | Existing-browser read session when Bridge is connected; otherwise httpx with stored credentials |
-| Message history | `boss chatmsg [--raw]` | Yes | Existing-browser read session when Bridge is connected; otherwise httpx with stored credentials; `--raw` preserves structured body/link/job-card fields |
-| Conversation summary | `boss chat-summary` | Yes | Platform adapter + local processing |
+| Message history | `boss chatmsg [--raw]` | Yes | Prefer the stable `uid` returned by `boss chat`; use the existing-browser read session when Bridge is connected, otherwise httpx with stored credentials; `--raw` preserves structured body/link/job-card fields |
+| Conversation summary | `boss chat-summary` | Yes | Prefer the stable `uid`; platform adapter + local processing |
 | Contact labels | `boss mark` | Yes | Platform adapter |
 | Contact exchange | `boss exchange` | Yes | Platform adapter |
 | Interview invites | `boss interviews` | Yes | httpx |

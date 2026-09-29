@@ -452,7 +452,7 @@ def test_exchange_zhilian_hints_use_platform_specific_commands(mock_auth_cls, mo
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["hints"]["next_actions"][0] == "boss --platform zhilian chat — 返回沟通列表"
-	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian chatmsg sec_001 — 查看聊天记录"
+	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian chatmsg 12345 — 查看聊天记录"
 
 
 @patch("boss_agent_cli.commands.exchange.get_platform_instance")
@@ -1083,7 +1083,7 @@ def test_chat_summary_zhilian_hints_use_platform_specific_commands(mock_auth_cls
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["hints"]["next_actions"][0] == "boss --platform zhilian chat"
-	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian chatmsg sec_001"
+	assert parsed["hints"]["next_actions"][1] == "boss --platform zhilian chatmsg 12345"
 
 
 @patch("boss_agent_cli.commands.detail.CacheStore")

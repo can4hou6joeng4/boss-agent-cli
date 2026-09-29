@@ -87,5 +87,5 @@ def follow_up_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None) ->
 		"follow-up",
 		candidates,
 		render=lambda data: _render_pipeline(data, "follow-up"),
-		hints={"next_actions": ["boss chat", "boss mark <security_id> --label 沟通中"]},
+		hints={"next_actions": ["boss chat", "boss mark <uid> --label 沟通中"]},
 	)

@@ -101,16 +101,16 @@ boss crawl stop <run_id>
 | `boss greet <sid> <jid>` | 向指定招聘者打招呼；重复记录返回 `ALREADY_GREETED` |
 | `boss batch-greet <query>` | 搜索后按显式 `--limit` 批量打招呼，支持 `--dry-run`；命中 `ACCOUNT_RISK` / `ENVIRONMENT_RISK` 立即停批并返回 `ok:false`，已成功项随 `error.details.greeted` 带回 |
 | `boss apply <sid> <jid>` | 发起投递或立即沟通；重复记录返回 `ALREADY_APPLIED` |
-| `boss exchange <sid>` | 请求交换手机号或微信 |
+| `boss exchange <uid-or-sid>` | 请求交换手机号或微信；优先使用 `boss chat` 输出的稳定 `uid` |
 
 ## 沟通跟进
 
 | 命令 | 说明 |
 |------|------|
 | `boss chat` | 查看沟通列表，支持分页和来源筛选 |
-| `boss chatmsg <sid> [--raw]` | 查看聊天历史；`--raw` 保留结构化 body、链接和职位卡片字段 |
-| `boss chat-summary <sid>` | 基于聊天历史生成结构化摘要 |
-| `boss mark <sid> --label X` | 添加或移除联系人标签 |
+| `boss chatmsg <uid-or-sid> [--raw]` | 查看聊天历史；优先使用 `boss chat` 输出的稳定 `uid`，`--raw` 保留结构化 body、链接和职位卡片字段 |
+| `boss chat-summary <uid-or-sid>` | 基于聊天历史生成结构化摘要；优先使用稳定 `uid` |
+| `boss mark <uid-or-sid> --label X` | 添加或移除联系人标签；优先使用稳定 `uid` |
 | `boss interviews` | 面试邀请 |
 | `boss history` | 浏览历史 |
 

@@ -501,7 +501,7 @@ def ai_reply_cmd(ctx: click.Context, recruiter_message: str, context: str, resum
 		render=lambda d: render_ai_result(d, title="ai-reply"),
 		hints={"next_actions": [
 			"复制草稿到 BOSS 聊天框发送",
-			"boss chatmsg <security_id> 查看完整聊天历史",
+			"boss chatmsg <uid> 查看完整聊天历史（uid 见 boss chat 输出）",
 		]},
 	)
 

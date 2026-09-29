@@ -504,14 +504,50 @@ def test_html_long_message_truncated():
 	assert "A" * 100 not in html
 
 
-# ── MD security_id 映射表 ──────────────────────────────────────────
+# ── MD 联系人标识映射表 ────────────────────────────────────────────
 
 
 def test_md_export_contains_id_map():
-	"""MD 导出应包含 security_id 折叠映射表"""
+	"""MD 导出应包含联系人标识折叠映射表（security_id 每请求轮换，故优先展示 uid）。"""
 	friends = [_make_friend(security_id="sec_abc123")]
 	md_text = render_export(friends, "md", None, None, _NO_DIFF)
 	assert "<details>" in md_text
-	assert "security_id 映射表" in md_text
+	assert "联系人标识映射表" in md_text
+	# 无 uid 时回退到 security_id
 	assert "sec_abc123" in md_text
 	assert "S1" in md_text
+
+
+def test_md_export_id_map_prefers_stable_uid():
+	"""有 uid 时映射表应展示 uid，而不是会轮换的 security_id。"""
+	friends = [_make_friend(security_id="sec_rotating", uid=10001)]
+	md_text = render_export(friends, "md", None, None, _NO_DIFF)
+	assert "| S1 | 阿里 张HR | 10001 |" in md_text
+	assert "sec_rotating" not in md_text
+
+
+def test_html_export_id_map_prefers_stable_uid():
+	"""HTML 映射表同样应展示 uid。"""
+	friends = [_make_friend(security_id="sec_rotating", uid=10001)]
+	html = render_export(friends, "html", None, None, _NO_DIFF)
+	assert "联系人标识映射表" in html
+	assert "10001" in html
+	assert "sec_rotating" not in html
+
+
+def test_csv_export_includes_uid_column():
+	"""CSV 表头应包含 uid 列。"""
+	friends = [_make_friend(security_id="sec_rotating", uid=10001)]
+	csv_text = render_export(friends, "csv", None, None, _NO_DIFF)
+	header = csv_text.splitlines()[0]
+	assert "uid" in header
+	assert "10001" in csv_text
+
+
+def test_diff_marking_uses_uid_not_rotating_security_id():
+	"""diff 的 NEW 标记必须按 uid 判定，否则 security_id 轮换后整表都会被标成新增。"""
+	items = [_make_friend(security_id="sid_request_2", uid=10001, last_msg="新会话")]
+	diff = {"is_first": False, "prev_date": "2026-09-14", "added": [{"uid": 10001, "security_id": "sid_request_1"}],
+	        "removed": [], "new_unread": []}
+	md_text = render_export(items, "md", None, None, diff)
+	assert "NEW S1" in md_text

@@ -5,13 +5,14 @@ import json
 import os
 from typing import Any
 
+from boss_agent_cli.commands.chat_utils import contact_identity
 from boss_agent_cli.output import Logger
 
 
 def save_snapshot_and_diff(
 	snapshot_dir: str, friends: list[dict[str, Any]], logger: Logger
 ) -> dict[str, Any]:
-	"""保存当日 JSON 快照（按 security_id 合并）并与上次对比。"""
+	"""保存当日 JSON 快照（uid 优先，旧数据回退 security_id）并与上次对比。"""
 	os.makedirs(snapshot_dir, exist_ok=True)
 	today = datetime.date.today().isoformat()
 	snapshot_path = os.path.join(snapshot_dir, f"{today}.json")
@@ -24,16 +25,16 @@ def save_snapshot_and_diff(
 				prev_today = json.load(f)
 			if isinstance(prev_today, list):
 				for item in prev_today:
-					if isinstance(item, dict) and item.get("security_id"):
-						existing[item["security_id"]] = item
+					if isinstance(item, dict) and contact_identity(item):
+						existing[contact_identity(item)] = item
 		except (json.JSONDecodeError, OSError):
 			pass
 
 	# 用当前数据更新（新数据优先）
 	for item in friends:
-		sid = item.get("security_id")
-		if sid:
-			existing[sid] = item
+		key = contact_identity(item)
+		if key:
+			existing[key] = item
 
 	merged = list(existing.values())
 
@@ -50,22 +51,22 @@ def save_snapshot_and_diff(
 	if prev_friends is None:
 		return {"is_first": True, "added": [], "removed": [], "new_unread": []}
 
-	# 用 security_id 做 key 对比
-	curr_map = {item["security_id"]: item for item in merged if item.get("security_id")}
-	prev_map = {item["security_id"]: item for item in prev_friends if item.get("security_id")}
+	# 用稳定标识（uid 优先）做 key 对比
+	curr_map = {contact_identity(item): item for item in merged if contact_identity(item)}
+	prev_map = {contact_identity(item): item for item in prev_friends if contact_identity(item)}
 	curr_ids = set(curr_map)
 	prev_ids = set(prev_map)
 
-	added = [curr_map[sid] for sid in (curr_ids - prev_ids)]
-	removed = [prev_map[sid] for sid in (prev_ids - curr_ids)]
+	added = [curr_map[key] for key in (curr_ids - prev_ids)]
+	removed = [prev_map[key] for key in (prev_ids - curr_ids)]
 
 	# 新增未读：检测任何未读增量
 	new_unread = []
-	for sid in (curr_ids & prev_ids):
-		prev_unread = prev_map[sid].get("unread", 0) or 0
-		curr_unread = curr_map[sid].get("unread", 0) or 0
+	for key in (curr_ids & prev_ids):
+		prev_unread = prev_map[key].get("unread", 0) or 0
+		curr_unread = curr_map[key].get("unread", 0) or 0
 		if curr_unread > prev_unread:
-			new_unread.append(curr_map[sid])
+			new_unread.append(curr_map[key])
 
 	return {
 		"is_first": False,
