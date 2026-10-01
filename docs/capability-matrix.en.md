@@ -42,8 +42,8 @@ Compatibility modes `assisted` and `research` can both call every implemented ca
 
 | Capability | CLI command | Login required | Transport |
 |---|---|---|---|
-| Conversation list | `boss chat` | Yes | Existing-browser read session when Bridge is connected; otherwise httpx with stored credentials |
-| Message history | `boss chatmsg [--raw]` | Yes | Prefer the stable `uid` returned by `boss chat`; use the existing-browser read session when Bridge is connected, otherwise httpx with stored credentials; `--raw` preserves structured body/link/job-card fields |
+| Conversation list | `boss chat` | Yes | `auto` uses httpx with stored credentials; explicit `existing-browser` reuses an existing page through CDP |
+| Message history | `boss chatmsg [--raw]` | Yes | Prefer the stable `uid` returned by `boss chat`; `auto` uses httpx with stored credentials, while explicit `existing-browser` reuses an existing page through CDP; `--raw` preserves structured body/link/job-card fields |
 | Conversation summary | `boss chat-summary` | Yes | Prefer the stable `uid`; platform adapter + local processing |
 | Contact labels | `boss mark` | Yes | Platform adapter |
 | Contact exchange | `boss exchange` | Yes | Platform adapter |
@@ -113,7 +113,7 @@ Compatibility modes `assisted` and `research` can both call every implemented ca
 
 Notes:
 - **Transport**: `httpx` means a direct API call. Risk-control blocks stop the workflow. Browser/hook adapters may not retry without bounds and must preserve checkpoints and redaction. `AI service` means a third-party model API; do not send chat records, resumes, or contact details without authorization.
-- **Existing-browser sessions**: a connected Bridge is this slice's explicit-use signal, but it does not prove that the target page is logged in. Exhausted candidates return `BROWSER_SESSION_NOT_FOUND` plus `boss doctor`; no Bridge plus no stored credentials still returns `AUTH_REQUIRED` plus `boss login`. The browser path does not inherit httpx stoken-refresh or rate-limit retries.
+- **Existing-browser sessions**: explicitly select `--browser-source existing-browser` to reuse an already-open target-site page through CDP only, without reading stored credentials, creating contexts/pages, navigating, or launching a browser. Exhausted candidates return `BROWSER_SESSION_NOT_FOUND` plus `boss doctor`; missing credentials under `auto` still return `AUTH_REQUIRED` plus `boss login`. A reachable channel does not prove that the page is logged in, so platform unauthenticated responses remain platform errors. The browser path does not inherit httpx stoken-refresh or rate-limit retries. `stored-cookie` still connects only to an explicit CDP endpoint, with no auto-probing or fallback on failure.
 - For CLI-first integrations, prefer `boss schema` for capability discovery and parameter validation; the schema exposes both `supported_platforms` and `supported_recruiter_platforms`.
 - Current platform coverage: `boss platforms` reports the registered local adapters, and `boss platforms --platform zhipin` shows a single platform; `zhipin` is the only registered platform and has both candidate and recruiter (`zhipin-recruiter`) implementations.
 - `crawl` uses an isolated Chrome profile, cross-process rate budgets, SQLite checkpoints, and the `crawl stop` kill switch. Fine-grained MCP crawl tools provide local `crawl_status/results/shortlist` operations for existing runs, while `boss_wizard` can start, resume, and stop the shared workflow. The default Hook is `none`; local Hook directories must provide `SHA256SUMS`. Risk codes, a security page, or an exhausted budget stop it and return a resume command.

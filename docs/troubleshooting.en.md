@@ -29,12 +29,7 @@ boss doctor --live-probe
 | `auth_token_quality` | Core tokens (wt2 / stoken) present |
 | `cookie_completeness` | Auxiliary tokens (wbg / zp_at) |
 | `cdp` | Chrome DevTools Protocol reachable |
-| `bridge_daemon` | Local Browser Bridge daemon is reachable |
-| `bridge_extension` | Chrome extension is connected to the daemon |
-| `bridge_protocol` | CLI and extension version/protocol are compatible |
-| `bridge_workspace` | Current Bridge workspace/tab is usable |
-| `bridge_exec` / `bridge_fetch` / `bridge_navigate` | Basic extension execution, browser fetch, and navigation capabilities |
-| `browser_channel` | CDP/Bridge summary; not a risk-control bypass path |
+| `browser_channel` | CDP compatibility-channel status; not a risk-control bypass path |
 | `candidate_search_health` / `candidate_detail_health` | Candidate read-only prerequisites |
 | `recruiter_read_health` | Recruiter read-only prerequisites |
 | `network` | zhipin.com reachable |
@@ -52,19 +47,19 @@ boss logout && boss login
 
 Stop the current workflow and retain its run ID or checkpoint. Resolve the login or security-page state before an explicit resume; do not retry through multiple transports.
 
-### Browser Bridge is not connected
+### Migrating from Browser Bridge in v3.0.0
+
+The Browser Bridge daemon, Chrome extension, and `[bridge]` installation extra have been removed. `boss doctor` no longer probes the old daemon or reports extension checks.
+
+**Upgrading the CLI does not stop an old daemon or uninstall the browser extension.** Stop the old daemon manually, including any copy running in another Python environment, and disable or remove the old extension in `chrome://extensions`. Drop `[bridge]` from installation commands. Do not restart the removed service; migration does not require deleting credentials or your daily browser profile.
+
+For credential-free reads, open and log in to BOSS Zhipin manually in an already-running local CDP browser, keep that tab open, and explicitly select:
 
 ```bash
-python -m boss_agent_cli.bridge.daemon --serve
-# Then load and enable extension/ from chrome://extensions, and run:
-boss doctor
+boss --browser-source existing-browser --cdp-url http://localhost:9222 chat
 ```
 
-`bridge_daemon`, `bridge_extension`, `bridge_protocol`, `bridge_workspace`,
-`bridge_exec`, `bridge_fetch`, and `bridge_navigate` show the local daemon,
-extension, tab, and basic browser-command health. Bridge is only for local diagnostics,
-user-triggered login compatibility, and read-only assistance. Do not use it to
-retry platform risk-control blocks.
+This source only reuses an existing target-site tab; it does not read stored credentials, create contexts/pages, navigate, or launch a browser. If unavailable, it returns `BROWSER_SESSION_NOT_FOUND` rather than falling back. `chat` and `chatmsg` keep their httpx path under `auto`; other explicit browser sources follow their declared policy. Keep CDP debugging ports within a trusted local environment, never exposed publicly. A platform risk block stops the workflow and preserves its checkpoint; do not switch channels to retry it.
 
 ### Token expired mid-session
 
@@ -175,7 +170,7 @@ scan.
 
 ## Locking the browser channel: `--browser-source`
 
-`--browser-source stored-cookie --cdp-url <addr>` is a fail-closed strict mode: it locks the browser channel to the exact CDP endpoint you specify and forbids falling back to Bridge or headless, returning `CDP_UNAVAILABLE` immediately when unavailable. The endpoint can be your daily Chrome's debug port or a long-lived dedicated debug profile — **it only guarantees "locked channel", not reuse of your daily browser's login session**. For the latter, use `--browser-source existing-browser`.
+`--browser-source stored-cookie --cdp-url <addr>` is a fail-closed strict mode: it locks the browser channel to the exact CDP endpoint you specify and forbids falling back to headless, returning `CDP_UNAVAILABLE` immediately when unavailable. The endpoint can be your daily Chrome's debug port or a long-lived dedicated debug profile — **it only guarantees "locked channel", not reuse of your daily browser's login session**. For the latter, use `--browser-source existing-browser`.
 
 > Note: the `recovery_action` for `CDP_UNAVAILABLE` depends on context; the envelope value is authoritative, and the value declared in `boss schema` is the default suggestion.
 
@@ -183,8 +178,8 @@ Comparison of the three sources:
 
 | Source | Channels | Reads stored credentials | Auto-probes :9222 | Launches browser | Failure code |
 |---|---|---|---|---|---|
-| `auto` (default) | Bridge→CDP→headless | yes | yes | allowed | NETWORK_ERROR |
-| `existing-browser` | Bridge/CDP | no | yes | forbidden | BROWSER_SESSION_NOT_FOUND |
+| `auto` (default) | CDP→headless | yes | yes | allowed | NETWORK_ERROR |
+| `existing-browser` | existing CDP only | no | yes | forbidden | BROWSER_SESSION_NOT_FOUND |
 | `stored-cookie` | specified CDP only | yes | no | forbidden | CDP_UNAVAILABLE |
 
 ## Search / API errors
@@ -228,7 +223,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 |------------|---------|----------------|
 | `AUTH_REQUIRED` | Not logged in | `boss login` |
 | `AUTH_EXPIRED` | Session expired | `boss login` |
-| `BROWSER_SESSION_NOT_FOUND` | An existing-browser source was selected, but its Bridge/CDP session or target page is unavailable | Run `boss doctor`; open and log in to BOSS Zhipin in the daily browser, connect Bridge, then retry |
+| `BROWSER_SESSION_NOT_FOUND` | An existing-browser source was selected, but its CDP session or already-open target page is unavailable | Run `boss doctor`; manually open and log in to BOSS Zhipin in the intended local CDP browser, confirm the endpoint is reachable, then retry |
 | `RATE_LIMITED` | Too many requests | Wait and retry |
 | `TOKEN_REFRESH_FAILED` | stoken refresh failed | `boss login` |
 | `ENVIRONMENT_RISK` | The access environment was rejected | Stop automation; keep the current dedicated profile, verify it on the official site, and lower the request frequency |

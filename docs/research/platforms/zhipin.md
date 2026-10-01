@@ -1,6 +1,6 @@
 # BOSS 直聘（Zhipin）适配器基线研究
 
-> **历史研究基线：** 本文保留调研时的低风险分类术语；当前执行策略已开放全部已实现能力，请以 README、`boss schema` 和现行 backend specs 为准。
+> **历史研究基线：** 本文保留调研时的低风险分类术语；当前执行策略已开放全部已实现能力，请以 README、`boss schema` 和现行 backend specs 为准。Browser Bridge 已在 v3.0.0 移除，现有浏览器辅助通道为 CDP，默认浏览器来源可降级至 headless patchright；显式来源仍严格遵守各自的失败关闭约束。
 
 > **结论先行**：BOSS 直聘是 boss-agent-cli 的既有基线平台。后续扩展
 > 应以它的 `BossPlatform` 行为、JSON 信封、错误映射、缓存和低风险合规
@@ -28,7 +28,7 @@
 | Cookie 登录态 | 本地加密存储，只输出脱敏健康状态 | `AuthManager` 统一读取，不在命令层解析 |
 | `wt2` | 主 Cookie 字段之一 | 只记录存在性，不输出原值 |
 | `__zp_stoken__` | 页面 JS 生成的动态字段 | 缺失时属于部分登录态，需用户主动浏览器恢复 |
-| CDP / Bridge | 用户主动启动的浏览器辅助通道 | 用于登录兼容，不作为风控重试通道 |
+| CDP | 用户主动启动的浏览器辅助通道 | 用于登录兼容，不作为风控重试通道 |
 | patchright | 浏览器兼容依赖 | 命中风控时停止自动化，不切换通道继续重试 |
 
 `boss status` 默认只做本地健康诊断；`boss status --live` 和
@@ -57,7 +57,7 @@
 ## 5. 禁止能力
 
 - 不实现自动打招呼、批量打招呼、自动投递、自动消息回复的默认放行路径。
-- 不通过 CDP、patchright、Bridge 或其他通道重试已经被平台风控拦截的请求。
+- 不通过 CDP、patchright 或其他通道重试已经被平台风控拦截的请求。
 - 不复制 stealth、response interception、自动滚动抓取或批量导出脚本。
 - 不在文档、测试、日志或 JSON 信封中保存真实 cookie、token、手机号、微信号、
   真实聊天记录、候选人简历或真实 `security_id`。

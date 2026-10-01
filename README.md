@@ -152,7 +152,15 @@ boss status --live      # 可选：一次低频只读探测
 boss doctor --live-probe
 ```
 
-错误信封统一携带 `code` + `recoverable` + `recovery_action`，可程序化恢复。Browser Bridge 本地诊断覆盖 `bridge_daemon` / `bridge_extension` / `bridge_protocol` / `bridge_workspace` / `bridge_exec` / `bridge_fetch` / `bridge_navigate` 七项，daemon 用 `python -m boss_agent_cli.bridge.daemon --serve` 启动。Bridge 已连接时，BOSS 的 `chat` / `chatmsg` 优先复用现有浏览器做只读请求且不读取 CLI 保存的 Cookie；Bridge 未连接时保留本地凭据的 httpx 路径。现有浏览器候选耗尽返回 `BROWSER_SESSION_NOT_FOUND` + `boss doctor`，普通未登录路径仍返回 `AUTH_REQUIRED` + `boss login`。两种兼容模式命中平台风控时都停止当前 workflow 并保存 checkpoint；适配器必须有限运行、脱敏、可停止，并只在风险状态解除后显式恢复。
+错误信封统一携带 `code` + `recoverable` + `recovery_action`，可程序化恢复。`boss doctor` 检查 CDP 可达性并汇总 `browser_channel` 状态。`chat` / `chatmsg` 在默认 `auto` 来源下使用本地凭据的 httpx；显式选择 `--browser-source existing-browser` 才会通过 CDP 复用已有目标页，且不读取 CLI 保存的 Cookie。现有浏览器候选耗尽返回 `BROWSER_SESSION_NOT_FOUND` + `boss doctor`，普通未登录路径仍返回 `AUTH_REQUIRED` + `boss login`。所有来源命中平台风控时都停止当前 workflow 并保存 checkpoint；适配器必须有限运行、脱敏、可停止，并只在风险状态解除后显式恢复。
+
+**v3.0.0 迁移：Browser Bridge daemon、Chrome 扩展和 `[bridge]` 安装 extra 已移除。升级 CLI 不会停止旧 daemon，也不会卸载浏览器扩展。** 请手动停止旧 daemon，禁用或移除旧扩展，并从安装命令中去掉 `[bridge]`。浏览器默认降级链为 CDP → headless；若要只复用已有会话，先在本机 CDP 浏览器的官方页面手动登录，再运行：
+
+```bash
+boss --browser-source existing-browser --cdp-url http://localhost:9222 chat
+```
+
+该来源不新建页面、不导航、不注入 Cookie，也不启动浏览器。CDP 调试端口仅用于本机可信环境，不要暴露到公网或用来绕过平台风控。
 
 完整检查项、CDP 启动示例与错误码见 **[诊断与排障](docs/troubleshooting.md)**；涉及 Cookie / CDP / patchright / 请求频率 / 接口漂移的问题先读 [平台风险边界](docs/platform-risk.md)。
 
@@ -173,7 +181,7 @@ CLI (Click)
   └─ 兼容运行元数据（assisted / research 均开放已实现能力）
        └─ AuthManager ── 用户主动登录态（Fernet + PBKDF2 机器绑定加密）
        └─ Platform 双注册表 ── BossPlatform / BossRecruiterPlatform
-       └─ BossClient ── httpx + 节流（高斯延迟）；兼容 CDP / Bridge / patchright 登录与导出
+       └─ BossClient ── httpx + 节流（高斯延迟）；兼容 CDP / patchright 登录与导出
        └─ CacheStore（SQLite WAL） · AIService（OpenAI-compatible / Ollama / vLLM）
             └─ output.py → JSON 信封 → stdout
 ```
@@ -181,7 +189,7 @@ CLI (Click)
 **不变量**：stdout 仅 JSON 信封 · stderr 仅日志 · `exit 0/1` · 错误含 `code/recoverable/recovery_action` · `boss schema` 为能力真源。
 **双受众提示**：`hints.next_actions` 是给 Agent 执行的后继命令，`hints.operator_actions` 是给真人操作者的自然语言指引（扫码、在浏览器里调整条件等需要离开终端完成的动作）；TTY 下只渲染后者到 stderr，Agent 应把它转述给操作者。
 **命令还是 wizard**：单次、无状态的能力调用走顶层命令；需要跨步骤状态、可恢复、或中途要把指引递给真人的走 `boss wizard`（goal 取值见 `boss schema` 的 `wizard_catalog`）。
-**选型**：Python ≥ 3.10 · Click · httpx · patchright / CDP / Bridge（登录、导出与声明的浏览器 adapter）· cryptography（Fernet）· sqlite3（WAL）· pytest（1600+ 项）。
+**选型**：Python ≥ 3.10 · Click · httpx · patchright / CDP（登录、导出与声明的浏览器 adapter）· cryptography（Fernet）· sqlite3（WAL）· pytest（1600+ 项）。
 
 ## 🔌 本地存储
 

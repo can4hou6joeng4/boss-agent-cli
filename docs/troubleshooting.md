@@ -31,12 +31,7 @@ boss doctor --live-probe
 | `auth_token_quality` | 核心凭据（wt2 / stoken） |
 | `cookie_completeness` | 辅助凭据（wbg / zp_at） |
 | `cdp` | Chrome 调试端口可连 |
-| `bridge_daemon` | 本地 Browser Bridge daemon 是否运行 |
-| `bridge_extension` | Chrome 扩展是否连接 daemon |
-| `bridge_protocol` | CLI 与扩展版本/协议是否兼容 |
-| `bridge_workspace` | Bridge 当前 workspace/tab 是否可用 |
-| `bridge_exec` / `bridge_fetch` / `bridge_navigate` | 扩展基础执行、浏览器 fetch 与导航能力 |
-| `browser_channel` | CDP/Bridge 汇总状态；不得用于规避平台风控 |
+| `browser_channel` | CDP 兼容通道状态；不得用于规避平台风控 |
 | `candidate_search_health` / `candidate_detail_health` | 求职者只读能力前置条件 |
 | `recruiter_read_health` | 招聘者只读能力前置条件 |
 | `network` | zhipin.com 可访问 |
@@ -54,11 +49,6 @@ boss logout && boss login
 
 # CDP 诊断
 boss --cdp-url http://localhost:9222 doctor
-
-# Browser Bridge 诊断
-python -m boss_agent_cli.bridge.daemon --serve
-# 在 Chrome 的 chrome://extensions 中加载并启用 extension/ 后，再运行：
-boss doctor
 
 # 默认 status 只检查本地凭据；需要真实只读验证时显式加 --live
 boss status --live
@@ -92,10 +82,19 @@ uv run python scripts/quality_baseline.py
 - `wt2 存在，stoken 缺失`：部分可用，通常是二维码或 Cookie 提取只拿到部分登录态；建议以 Chrome CDP 远程调试端口启动浏览器后运行 `boss login --cdp`，或重新执行 `boss login`
 - `wt2 缺失`：无效 → `boss logout && boss login`
 
-**bridge_daemon / bridge_extension 显示 warn**：本地 daemon 未运行或扩展未连接。
-先启动 daemon，确认 19826 端口未被占用，再到 `chrome://extensions` 加载并启用
-`extension/`。Bridge 用于本地诊断、用户主动登录兼容和受控 workflow transport；
-命中平台风控时应停止当前 workflow 并保存 checkpoint，不要切换通道重试。
+## v3.0.0：从 Browser Bridge 迁移
+
+Browser Bridge daemon、Chrome 扩展及 `[bridge]` 安装 extra 已移除。`boss doctor` 不再探测旧 daemon，也不再输出扩展检查项。
+
+**升级 CLI 不会停止旧 daemon，也不会卸载浏览器扩展。** 请手动停止旧 daemon（包括其他 Python 环境中仍运行的副本），并在 `chrome://extensions` 中禁用或移除旧扩展；从安装命令中去掉 `[bridge]`，不要重新启动已移除的服务。迁移不要求删除凭据或日常浏览器 profile。
+
+如果需要不读取本地凭据的只读访问，请先在已运行的本机 CDP 浏览器中手动打开并登录 BOSS 直聘，保留该页签，然后显式选择：
+
+```bash
+boss --browser-source existing-browser --cdp-url http://localhost:9222 chat
+```
+
+该来源只复用已有目标页，不读本地凭据、不新建 context/页面、不导航或启动浏览器；不可用时返回 `BROWSER_SESSION_NOT_FOUND`，不降级。`chat` / `chatmsg` 在 `auto` 下仍走 httpx，其他显式浏览器来源遵循各自策略。CDP 调试端口仅用于本机可信环境，不应暴露到公网。命中平台风控时停止 workflow 并保存 checkpoint，不要切换通道重试。
 
 ## CDP 启动示例
 
@@ -161,7 +160,7 @@ context」；若指纹对应的账号不是你要的，请关闭多余窗口或�
 
 ## 锁定浏览器通道：`--browser-source`
 
-`--browser-source stored-cookie --cdp-url <地址>` 是 fail-closed 的严格模式：把浏览器通道锁定为你指定的那个 CDP 端点并禁止降级到 Bridge 或 headless，不可用时立即返回 `CDP_UNAVAILABLE`。该端点可以是你日常 Chrome 的调试端口，也可以是长期复用的专用调试 profile——**它只保证「锁定通道」，不保证复用你日常浏览器的登录会话**。若你要的是后者，请用 `--browser-source existing-browser`。
+`--browser-source stored-cookie --cdp-url <地址>` 是 fail-closed 的严格模式：把浏览器通道锁定为你指定的那个 CDP 端点并禁止降级到 headless，不可用时立即返回 `CDP_UNAVAILABLE`。该端点可以是你日常 Chrome 的调试端口，也可以是长期复用的专用调试 profile——**它只保证「锁定通道」，不保证复用你日常浏览器的登录会话**。若你要的是后者，请用 `--browser-source existing-browser`。
 
 > 注：`CDP_UNAVAILABLE` 的 `recovery_action` 依上下文而定，信封里的值是权威值，`boss schema` 里声明的是默认建议。
 
@@ -169,8 +168,8 @@ context」；若指纹对应的账号不是你要的，请关闭多余窗口或�
 
 | 来源 | 通道 | 读本地凭据 | 自动探测 9222 | 启动浏览器 | 失败错误码 |
 |---|---|---|---|---|---|
-| `auto`（默认） | Bridge→CDP→headless | 是 | 是 | 允许 | NETWORK_ERROR |
-| `existing-browser` | Bridge/CDP | 否 | 是 | 禁止 | BROWSER_SESSION_NOT_FOUND |
+| `auto`（默认） | CDP→headless | 是 | 是 | 允许 | NETWORK_ERROR |
+| `existing-browser` | 仅已有 CDP | 否 | 是 | 禁止 | BROWSER_SESSION_NOT_FOUND |
 | `stored-cookie` | 仅指定 CDP | 是 | 否 | 禁止 | CDP_UNAVAILABLE |
 
 ## 错误码与自动修复
@@ -186,7 +185,7 @@ context」；若指纹对应的账号不是你要的，请关闭多余窗口或�
 |--------|------|---------------|
 | `AUTH_REQUIRED` | 未登录 | `boss login` |
 | `AUTH_EXPIRED` | 登录过期 | `boss login` |
-| `BROWSER_SESSION_NOT_FOUND` | 已选择现有浏览器来源，但 Bridge/CDP 会话或目标页面不可用 | 运行 `boss doctor`；在日常浏览器中打开并登录 BOSS 直聘，连接 Bridge 后重试 |
+| `BROWSER_SESSION_NOT_FOUND` | 已选择现有浏览器来源，但 CDP 会话或已打开的目标页面不可用 | 运行 `boss doctor`；在目标本机 CDP 浏览器中手动打开并登录 BOSS 直聘，确认端点可连接后重试 |
 | `RATE_LIMITED` | 频率过高 | 等待后重试 |
 | `TOKEN_REFRESH_FAILED` | Token 刷新失败 | `boss login` |
 | `ENVIRONMENT_RISK` | 访问环境存在异常 | 停止自动化访问；保留当前专用 profile，在官方页面确认并降低访问频率 |

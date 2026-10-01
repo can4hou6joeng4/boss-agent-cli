@@ -51,12 +51,11 @@
 - [x] mypy 严格模式全量接入 — **100% 完成**（66/66 业务模块全部 `disallow_untyped_defs + disallow_any_generics + warn_return_any` 严格化，v1.9.1）
 - [x] 类型签名导出到 `stubs/`，供下游 IDE 使用（v1.8.6，py.typed + canonical `__all__` + 16 条契约测试）
 - [x] 适配 mcp 2.x Server API（Issue #398）：mcp 2.0 移除了 `@server.list_tools()` / `@server.call_tool()` 装饰器，改为 `add_request_handler(method, params_type, handler)`，且 handler 签名与返回类型一并改变（`(ctx, params)` → `ListToolsResult` / `CallToolResult`）。已切到 2.x 并把依赖改为 `mcp>=2.1.0,<3.0.0`；SSE 与 streamable HTTP 两条传输实现原样保留（换实现是独立决策）。handler 注册守卫随之重写：1.x 靠反推 SDK 的装饰器工厂，2.x 改为从 `mcp_server` 源码 AST 扫出 `add_request_handler` 的 method 字面量再问运行时注册表。**上界保留**——上一次无上界导致所有全新安装解析到新大版本并崩溃，而 CI 锁着旧版本永远看不到。
-- [ ] Bridge 协议从 HTTP/WS 升级为 gRPC — 调研已完成（Issue #96 · [docs/research/bridge-grpc.md](docs/research/bridge-grpc.md)），**结论：暂不迁移**（localhost 单用户场景无性能收益 + MV3 扩展兼容性风险高 + 依赖膨胀 8MB）。重启调研的 5 个触发条件已明确
+- [x] 移除 Browser Bridge daemon、Chrome 扩展及可选依赖（v3.0.0）；保留 CDP / headless 浏览器通道，不再推进 Bridge 协议升级
 
 ### 生态扩展
 - [ ] Web UI（React + Tailwind），适合非 Agent 用户
-- [ ] 浏览器扩展深度集成 BOSS 直聘原生页面
-- [ ] 多平台支持：Platform 抽象已落地（Week 1a–1c）；拉勾 / 猎聘 API 调研已完成（Issue #90 已闭环 · [docs/research/platforms/](docs/research/platforms/)），经评估不建议接入；智联适配器曾接入（候选者侧 + 招聘者 agent 自动化），已在 [Unreleased] 移除，BOSS 直聘为当前唯一注册平台。
+- [ ] 多平台支持：Platform 抽象已落地（Week 1a–1c）；拉勾 / 猎聘 API 调研已完成（Issue #90 已闭环 · [docs/research/platforms/](docs/research/platforms/)），经评估不建议接入；智联适配器曾接入（候选者侧 + 招聘者 agent 自动化），已在 v3.0.0 移除，BOSS 直聘为当前唯一注册平台。
   - [x] Week 1a：Platform ABC 骨架 + BossPlatform adapter（#129，零行为变化）
   - [x] Week 1b：`--platform` 全局 CLI 选项 + `get_platform_instance` helper + schema 暴露 current_platform
   - [x] Week 1c：命令层全量迁移到 Platform 接口（**20 个命令**：greet / apply / batch-greet / interviews / detail / show / me / recommend / chat / chatmsg / mark / exchange / pipeline / digest / search / export / chat_summary / history / status / watch）

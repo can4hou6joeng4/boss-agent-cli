@@ -25,7 +25,7 @@ boss schema --format native
 - 抓取页数、详情请求、重试和运行时间必须有默认上限；不得以 `0` 隐式表达无限运行。
 - 命中风险页或风险码时先保存 checkpoint；继续需要新的用户动作。
 - **专用 profile 通道**（crawl、research、`boss login --cdp` 的新登录）：必须使用独立 profile，不得关闭或污染用户日常 profile 与原有标签页。
-- **现有浏览器只读通道**（Bridge 已连接的日常浏览器，或已在运行的 CDP Chrome）：只复用已打开的目标站点页面，不导航、关闭、写入、注入 Cookie 或新建 context；通道不可用时返回 `BROWSER_SESSION_NOT_FOUND`，不得降级到 headless、临时 profile 或登录流程。复用登录会话不等于授权发送消息、打招呼或投递。
+- **现有浏览器只读通道**（显式选择 `--browser-source existing-browser` 的已有 CDP 浏览器）：只复用已打开的目标站点页面，不导航、关闭、写入、读取或注入本地凭据、新建 context/页面或启动浏览器；通道不可用时返回 `BROWSER_SESSION_NOT_FOUND`，不得降级到 headless、临时 profile 或登录流程。复用登录会话不等于授权发送消息、打招呼或投递。
 - 两类通道都必须遵守本页其余约束。profile 隔离要求的放宽不构成对第 4 节可见浏览器、RPA 或指纹浏览器约束的豁免。
 - Cookie、Token、`__zp_stoken__`、`security_id` 和真实个人信息不得进入日志、错误、导出、fixture 或公开 PR 证据。
 - vendored hook 必须记录上游 repository、commit、license 和内容 hash，并提供逐项开关。
@@ -46,7 +46,9 @@ boss schema --format native
 
 登录链路会使用 Cookie 提取、CDP、QR httpx 或浏览器兜底。项目只在本地读取和保存登录态，不要求用户把 Cookie、Token、手机号、微信号、姓名、公司信息或 `security_id` 提交到仓库。任何 adapter 都不得把登录兼容能力升级为风控重试通道，并必须遵守本页 0.1 节约束。
 
-`chat` / `chatmsg` 在 Bridge 扩展已连接时优先使用 `existing-browser` 只读来源，不读取或导出 CLI 保存的 Cookie；Bridge 未连接时保留原有 httpx 路径，本地没有凭据则返回 `AUTH_REQUIRED` + `boss login`。已连接只证明 daemon 与扩展通道存在，当前切片尚不验证目标页面是否已经登录；平台返回的未登录响应仍按平台错误解析。若已选择现有浏览器来源但 Bridge/CDP 候选都不可用，则返回 `BROWSER_SESSION_NOT_FOUND` + `boss doctor`，不会启动 headless 或登录流程。浏览器通道不继承 httpx 的 stoken 刷新和限流重试语义。
+`chat` / `chatmsg` 在默认 `auto` 来源下保留 httpx 路径，本地没有凭据则返回 `AUTH_REQUIRED` + `boss login`。只有显式选择 `--browser-source existing-browser` 才会通过 CDP 复用已有目标页，不读取或导出 CLI 保存的 Cookie。CDP 可连接不等于已验证目标页面登录，平台返回的未登录响应仍按平台错误解析；CDP 会话或已有目标页不可用时返回 `BROWSER_SESSION_NOT_FOUND` + `boss doctor`，不会启动 headless 或登录流程。`stored-cookie` 只连接显式 `--cdp-url`，不自动探测或降级。浏览器通道不继承 httpx 的 stoken 刷新和限流重试语义。
+
+Browser Bridge daemon 与扩展已在 v3.0.0 移除；升级 CLI 不会停止旧 daemon 或卸载旧扩展，需由用户手动清理。CDP 调试端口仅用于本机可信环境，不应暴露到公网；在官方页面手动完成登录，不得把迁移到 CDP 当成风控绕过路径。
 
 `boss status` 默认只检查本地加密凭据和分层健康状态，不请求真实平台；需要确认在线只读接口是否可用时，必须显式运行 `boss status --live` 或 `boss doctor --live-probe`。命中风控时停止当前 workflow 并保留 checkpoint。`wt2` 存在但 `__zp_stoken__` 缺失时属于部分登录态，通常需要通过真实页面 JS 生成；可在用户主动操作下以 Chrome CDP 远程调试端口启动浏览器后运行 `boss login --cdp`，但不得把 CDP 当成风控绕过通道。
 

@@ -154,7 +154,15 @@ boss status --live      # optional low-frequency read-only probe
 boss doctor --live-probe
 ```
 
-Every error envelope carries `code` + `recoverable` + `recovery_action`, so agents can react programmatically. Browser Bridge local diagnostics cover `bridge_daemon` / `bridge_extension` / `bridge_protocol` / `bridge_workspace` / `bridge_exec` / `bridge_fetch` / `bridge_navigate`; start the daemon with `python -m boss_agent_cli.bridge.daemon --serve`. When Bridge is connected, BOSS `chat` and `chatmsg` prefer credential-free reads through the existing browser; without Bridge they keep the stored-credential httpx path. Exhausted existing-browser candidates return `BROWSER_SESSION_NOT_FOUND` plus `boss doctor`, while the ordinary unauthenticated path still returns `AUTH_REQUIRED` plus `boss login`. Every mode stops on platform risk-control blocks; declared adapters must remain bounded, checkpointed, redacted, and explicitly resumed.
+Every error envelope carries `code` + `recoverable` + `recovery_action`, so agents can react programmatically. `boss doctor` checks CDP reachability and reports the `browser_channel` summary. With the default `auto` source, `chat` and `chatmsg` use httpx with stored credentials; explicitly selecting `--browser-source existing-browser` reuses an existing target-site tab through CDP without reading CLI-stored cookies. Exhausted existing-browser candidates return `BROWSER_SESSION_NOT_FOUND` plus `boss doctor`, while the ordinary unauthenticated path still returns `AUTH_REQUIRED` plus `boss login`. Every source stops on platform risk-control blocks and checkpoints the workflow; declared adapters must remain bounded, redacted, stoppable, and explicitly resumed only after the risk condition is resolved.
+
+**v3.0.0 migration: the Browser Bridge daemon, Chrome extension, and `[bridge]` installation extra have been removed. Upgrading the CLI does not stop an old daemon or uninstall the browser extension.** Manually stop the old daemon, disable or remove the old extension, and drop `[bridge]` from installation commands. The default browser fallback chain is CDP → headless. To reuse an existing session only, first log in manually on the official site in a local CDP browser, then run:
+
+```bash
+boss --browser-source existing-browser --cdp-url http://localhost:9222 chat
+```
+
+This source does not create pages, navigate, inject cookies, or launch a browser. Keep the CDP debugging port within a trusted local environment; never expose it publicly or use it to bypass platform risk controls.
 
 Full checks, CDP launch examples, and error codes: **[Troubleshooting](docs/troubleshooting.en.md)**. For Cookie / CDP / patchright / request-rate / drift issues, read [Platform Risk Boundaries](docs/platform-risk.en.md) first.
 
@@ -176,7 +184,7 @@ CLI (Click)
        └─ Capability metadata (assisted / research compatibility; no mode gate)
        └─ AuthManager ── user-triggered login state (Fernet + PBKDF2 machine-bound encryption)
        └─ Platform registries ── zhipin / zhipin-recruiter
-       └─ BossClient ── httpx + throttle; CDP / Bridge / patchright compatible for login & export
+       └─ BossClient ── httpx + throttle; CDP / patchright compatible for login & export
        └─ CacheStore (SQLite WAL) · AIService (OpenAI-compatible / Ollama / vLLM)
             └─ output.py → JSON envelope → stdout
 ```
@@ -184,7 +192,7 @@ CLI (Click)
 **Invariants**: stdout is JSON-only · stderr holds logs · `exit 0/1` · errors carry `code/recoverable/recovery_action` · `boss schema` is the authoritative capability source.
 **Two audiences, one envelope**: `hints.next_actions` holds follow-up commands for the Agent to run; `hints.operator_actions` holds natural-language guidance for the human operator (scan a QR code, adjust filters in the browser — anything done away from the terminal). TTY renders only the latter, to stderr; an Agent should relay it to the operator.
 **Command or wizard**: single-shot, stateless capability calls go through top-level commands; anything needing cross-step state, resumability, or handing guidance to a human goes through `boss wizard` (goals listed under `wizard_catalog` in `boss schema`).
-**Stack**: Python ≥ 3.10 · Click · httpx · patchright / CDP / Bridge (login, export, and declared browser adapters) · cryptography · sqlite3 (WAL) · pytest (1600+).
+**Stack**: Python ≥ 3.10 · Click · httpx · patchright / CDP (login, export, and declared browser adapters) · cryptography · sqlite3 (WAL) · pytest (1600+).
 
 ## 🔌 Local Storage
 

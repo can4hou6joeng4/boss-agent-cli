@@ -42,8 +42,8 @@
 
 | 能力 | CLI 命令 | 需要登录 | 通道 |
 |---|---|---|---|
-| 沟通列表 | `boss chat` | 是 | Bridge 已连接时复用现有浏览器只读会话；否则使用本地凭据的 httpx |
-| 聊天消息 | `boss chatmsg [--raw]` | 是 | 优先接受 `boss chat` 输出的稳定 `uid`；Bridge 已连接时复用现有浏览器只读会话，否则使用本地凭据的 httpx；`--raw` 保留结构化 body/链接/职位卡片字段 |
+| 沟通列表 | `boss chat` | 是 | `auto` 使用本地凭据的 httpx；显式 `existing-browser` 通过 CDP 复用已有页面 |
+| 聊天消息 | `boss chatmsg [--raw]` | 是 | 优先接受 `boss chat` 输出的稳定 `uid`；`auto` 使用本地凭据的 httpx，显式 `existing-browser` 通过 CDP 复用已有页面；`--raw` 保留结构化 body/链接/职位卡片字段 |
 | 聊天摘要 | `boss chat-summary` | 是 | 优先接受稳定 `uid`；平台适配器 + 本地处理 |
 | 联系人标签 | `boss mark` | 是 | 平台适配器 |
 | 交换联系方式 | `boss exchange` | 是 | 平台适配器 |
@@ -113,7 +113,7 @@
 
 说明：
 - **通道**：httpx 为直接 API 请求。命中风控时停止；browser/hook adapter 禁止无界重试，并要求 checkpoint 与脱敏。AI 服务为第三方大模型 API，不应输入未获授权的聊天记录、简历或联系方式。
-- **现有浏览器会话**：Bridge 已连接是本切片的显式使用信号，但不等于已验证目标页面登录。候选通道耗尽时返回 `BROWSER_SESSION_NOT_FOUND` + `boss doctor`；Bridge 未连接且本地无凭据仍返回 `AUTH_REQUIRED` + `boss login`。浏览器路径不继承 httpx 的 stoken 刷新和限流重试。
+- **现有浏览器会话**：需显式选择 `--browser-source existing-browser`，只通过 CDP 复用已打开的目标页，不读取本地凭据、不新建 context/页面、不导航或启动浏览器。候选耗尽返回 `BROWSER_SESSION_NOT_FOUND` + `boss doctor`；`auto` 下本地无凭据仍返回 `AUTH_REQUIRED` + `boss login`。通道可连接不等于已验证页面登录，平台未登录响应仍按平台错误解析；浏览器路径不继承 httpx 的 stoken 刷新和限流重试。`stored-cookie` 仍只连接显式 CDP 端点，失败时不自动探测或降级。
 - 若以 CLI 直连为主，优先通过 `boss schema` 进行能力发现与参数校验；当前 schema 会同时暴露 `supported_platforms` 与 `supported_recruiter_platforms`。
 - 当前平台状态：`boss platforms` 返回本地平台注册与能力状态，也可通过 `boss platforms --platform zhipin` 查看单个平台；`zhipin` 是当前唯一注册平台，已覆盖求职者与招聘者（`zhipin-recruiter`）实现。
 - `crawl` 使用独立 Chrome profile、跨进程速率预算、SQLite 断点和 `crawl stop` kill switch。细粒度 MCP crawl tools 提供已有 run 的 `crawl_status/results/shortlist` 本地操作，`boss_wizard` 可启动、恢复和停止共享 workflow。默认 Hook 为 `none`；本地 Hook 目录必须提供 `SHA256SUMS`。风险码、安全页或预算耗尽会停止并返回恢复命令。

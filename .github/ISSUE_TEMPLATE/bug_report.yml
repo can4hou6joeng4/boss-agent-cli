@@ -135,7 +135,6 @@ body:
       description: 影响风控和登录表现
       options:
         - 不涉及（login/status 等命令）
-        - Bridge（Chrome 扩展）
         - CDP（用户 Chrome）
         - patchright headless
         - 不确定
