@@ -175,38 +175,17 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 
 	# 5.5) Browser channel risk assessment
 	cdp_ok = any(item["name"] == "cdp" and item["status"] == "ok" for item in checks)
-	bridge_ok = False
-	bridge_checks: list[dict[str, Any]] = []
-	try:
-		from boss_agent_cli.bridge.client import BridgeClient
-
-		bc = BridgeClient()
-		bridge_checks = bc.diagnose(workspace="boss", run_probes=True)
-		bridge_ok = any(item["name"] == "bridge_extension" and item["status"] == "ok" for item in bridge_checks)
-	except Exception as exc:
-		bridge_checks = [
-			{
-				"name": "bridge_daemon",
-				"status": "warn",
-				"detail": f"Bridge 诊断失败: {exc}",
-				"recovery_action": "检查 Bridge daemon、扩展安装状态和本地端口占用",
-				"hint": "检查 Bridge daemon、扩展安装状态和本地端口占用",
-			}
-		]
-	checks.extend(bridge_checks)
-
-	if cdp_ok or bridge_ok:
-		mode = "CDP + Bridge" if cdp_ok and bridge_ok else ("CDP" if cdp_ok else "Bridge")
+	if cdp_ok:
 		add_check(
 			"browser_channel",
 			"ok",
-			f"{mode} 兼容通道可用；默认低风险模式下不得用于规避平台风控",
+			"CDP 兼容通道可用；不得用于规避平台风控",
 		)
 	else:
 		add_check(
 			"browser_channel",
 			"warn",
-			"CDP 和 Bridge 均不可用；默认低风险模式不依赖它们执行敏感操作",
+			"CDP 不可用；普通 httpx 读取不依赖浏览器通道",
 			"如需登录，请使用 boss login；命中风控时停止自动化访问",
 		)
 

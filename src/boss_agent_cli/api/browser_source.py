@@ -1,49 +1,22 @@
 """浏览器会话来源（browser source）策略表 —— 通道选择的唯一真源。
 
-## 为什么存在这个模块
-
-`BrowserSession._ensure_started()` 原本是一条硬编码的三级降级链
-（Bridge → CDP → headless），中间只有两处插入缝隙。两个并行的 PR 各自在其中
-一处插了一个模式短路（#404 的 ``browser_mode`` 插在 ``_try_bridge()`` 之前、
-#388 的 ``existing_browser_only`` 插在它之后），中间隔着三行谁都没改的代码 ——
-git 三方合并会干净通过、不留任何冲突标记，合并后类上就有了两个互不感知的模式
-布尔，谁生效取决于插入位置的先后，且失效方向是 fail-open。
-
 本模块把「用哪些通道、按什么顺序、要不要读本地凭据、能不能新建 context、
-能不能启动浏览器、失败发什么错误码」全部收进一张冻结的策略表，
-``_ensure_started`` 变成对 ``policy.channels`` 的单个循环。
-此后新增来源 = 表里加一行，**物理上没有第二个插入点**。
+能不能启动浏览器、失败发什么错误码」收进一张冻结的策略表，
+``_ensure_started`` 只按 ``policy.channels`` 分发，避免多处模式开关造成 fail-open。
 
-契约详见 Issue #387 的 seam 回复。
-
-## 取值是「来源类别」，不是传输名
-
-``auto`` / ``existing-browser`` / ``stored-cookie`` 描述的是**登录态从哪来**，
-不含 ``cdp`` / ``bridge`` 这类传输名。原因：Edge 走 Bridge 或另一个 CDP 端口、
-Firefox 走 Marionette，一旦枚举里出现传输名，Firefox 落地那天必然要争
-「是不是也该有个 marionette」——而枚举取值是删不掉的。
-浏览器品牌与具体实例由后续的 ``--session <ref>`` 表达，永不进本枚举。
-
-## 本模块不做的事
-
-- **不暴露 CLI 选项。** ``--browser-source`` 由 PR #404 接线（含 ``main.py`` /
-  ``config.py`` / ``SCHEMA_DATA["global_options"]`` / ``config_cmd`` 校验 /
-  MCP 透传五处）。本模块只提供程序化入口，默认 ``auto``。
-- **不新增错误码。** ``stored-cookie`` 复用早已在枚举里的 ``CDP_UNAVAILABLE``
-  （``commands/schema.py``）。``existing-browser`` 那一行连同
-  ``BROWSER_SESSION_NOT_FOUND`` 由 PR #388 一起落地（ROADMAP 已点名），
-  在此之前不预先声明一个发不出来的死契约。
+``auto`` / ``existing-browser`` / ``stored-cookie`` 描述登录态来源，不是传输名。
+默认浏览器通道为 CDP → headless；显式来源只能尝试各自白名单内的通道。
+CLI、配置与 MCP 复用这张表的取值域；错误码仍由 schema.error_codes 登记。
 """
 
 from dataclasses import dataclass
 
-CHANNEL_BRIDGE = "bridge"
 CHANNEL_CDP = "cdp"
 CHANNEL_HEADLESS = "headless"
 
 #: 分发器认识的全部通道。新增通道要同时在 ``_ensure_started`` 的循环里加分支，
 #: 门禁 ``test_every_declared_channel_is_dispatchable`` 会守住这一点。
-KNOWN_CHANNELS = (CHANNEL_BRIDGE, CHANNEL_CDP, CHANNEL_HEADLESS)
+KNOWN_CHANNELS = (CHANNEL_CDP, CHANNEL_HEADLESS)
 
 DEFAULT_BROWSER_SOURCE = "auto"
 
@@ -88,23 +61,17 @@ class BrowserSourcePolicy:
 
 
 POLICIES: dict[str, BrowserSourcePolicy] = {
-	# ── 默认路径：行为与本模块引入前逐字一致 ────────────────────────────
-	# 任何对这一行的改动都是破坏性变更：它决定了所有存量用户与所有无浏览器
-	# CI 环境的行为。失败时 failure_code=None 保证信封仍是既有的 NETWORK_ERROR。
+	# 默认浏览器路径：CDP → headless；失败仍由 NETWORK_ERROR 兜底。
 	"auto": BrowserSourcePolicy(
 		name="auto",
-		channels=(CHANNEL_BRIDGE, CHANNEL_CDP, CHANNEL_HEADLESS),
+		channels=(CHANNEL_CDP, CHANNEL_HEADLESS),
 		use_stored_credentials=True,
 		may_create_context=True,
 		allow_browser_launch=True,
 		auto_probe_cdp=True,
 		failure_code=None,
 	),
-	# ── 只用存储凭据 + 用户显式指定的 CDP 端点 ──────────────────────────
-	# 服务于「专用调试 profile」工作流（原 #404 的 --browser-mode cdp-required）。
-	# 与它的区别有三：不跳过 Bridge 这件事被写进了 channels 而不是藏在实现里；
-	# 不自动探测端点（auto_probe_cdp=False），所以「指定 CDP」名副其实；
-	# 空浏览器不新建 context 注入 Cookie（may_create_context=False）。
+	# 只用存储凭据 + 用户显式指定的 CDP 端点；不探测、不启动、不新建 context。
 	"stored-cookie": BrowserSourcePolicy(
 		name="stored-cookie",
 		channels=(CHANNEL_CDP,),
@@ -113,7 +80,7 @@ POLICIES: dict[str, BrowserSourcePolicy] = {
 		allow_browser_launch=False,
 		auto_probe_cdp=False,
 		failure_code="CDP_UNAVAILABLE",
-		failure_message="CDP 不可用（browser-source=stored-cookie 不会降级到 Bridge 或 headless）",
+		failure_message="CDP 不可用（browser-source=stored-cookie 不会降级到 headless）",
 		recovery_action="以 --remote-debugging-port=9222 启动 Chrome 并在官方页面登录后重试",
 		operator_actions=(
 			"用 --remote-debugging-port=9222 启动 Chrome，并在该窗口内手动登录 BOSS 直聘",
@@ -122,13 +89,10 @@ POLICIES: dict[str, BrowserSourcePolicy] = {
 		),
 		next_actions=("boss doctor",),
 	),
-	# ── 复用用户已经运行的浏览器，不读取本地凭据 ────────────────────────
-	# channels 必须包含 CDP：_try_connect 早已在复用用户 context 与已打开的
-	# zhipin 页签（#406 还在加强这条路径），把 CDP 排除在「现有浏览器」之外
-	# 会让 CDP 里已登录的用户拿到 BROWSER_SESSION_NOT_FOUND，属错误分类。
+	# 只复用已有 CDP context 和目标页签，不读取本地凭据。
 	"existing-browser": BrowserSourcePolicy(
 		name="existing-browser",
-		channels=(CHANNEL_BRIDGE, CHANNEL_CDP),
+		channels=(CHANNEL_CDP,),
 		use_stored_credentials=False,
 		may_create_context=False,
 		allow_browser_launch=False,
@@ -137,8 +101,8 @@ POLICIES: dict[str, BrowserSourcePolicy] = {
 		failure_message="未发现可复用的现有浏览器会话",
 		recovery_action="boss doctor",
 		operator_actions=(
-			"在日常浏览器中打开 BOSS 直聘并确认当前页面已经登录",
-			"连接 BOSS Agent Bridge 扩展，或确认已有 CDP 浏览器可连接后重试",
+			"在已有 CDP 浏览器中打开 BOSS 直聘并确认当前页面已经登录",
+			"确认本机 CDP 浏览器可连接，必要时通过 --cdp-url 指定其地址后重试",
 		),
 		next_actions=("boss doctor",),
 	),

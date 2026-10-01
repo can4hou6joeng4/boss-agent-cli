@@ -19,7 +19,6 @@ from patchright.sync_api import sync_playwright
 
 from boss_agent_cli.api import endpoints
 from boss_agent_cli.api.browser_source import (
-	CHANNEL_BRIDGE,
 	CHANNEL_CDP,
 	CHANNEL_HEADLESS,
 	BrowserSourcePolicy,
@@ -144,7 +143,7 @@ class BrowserSession:
 		browser_source: str | None = None,
 	) -> None:
 		self._throttle = RequestThrottle(delay)
-		# patchright / BridgeClient 运行时创建；注解为 Any 让 mypy 对外部依赖放行
+		# patchright 对象运行时创建；注解为 Any 让 mypy 对外部依赖放行
 		self._pw: Any = None
 		self._browser: Any = None
 		self._context: Any = None
@@ -161,8 +160,6 @@ class BrowserSession:
 		# request() 据此在 evaluate(fetch) 前做有界恢复，避免对仍在导航的页面挂起。
 		self._page_ready = True
 		self._logger = logger
-		self._bridge_client: Any = None
-		self._is_bridge = False
 		# 通道来源策略 —— 本类上**唯一**的来源/模式选择器。
 		# 禁止再加第二个模式布尔：那正是 #404 与 #388 各插一个短路、
 		# git 干净自动合并却留下两个互不感知开关的成因（见 browser_source 模块文档）。
@@ -201,12 +198,7 @@ class BrowserSession:
 		try:
 			for channel in policy.channels:
 				attempted.append(channel)
-				if channel == CHANNEL_BRIDGE:
-					# fail-closed 语义：_try_bridge 内部 except → False，从不抛。
-					# 失败 = 继续白名单里的下一个通道；白名单耗尽不降级。
-					if self._try_bridge():
-						return
-				elif channel == CHANNEL_CDP:
+				if channel == CHANNEL_CDP:
 					# 惰性起 driver：stored-cookie 这类不含 headless 的来源，
 					# CDP 失败时不该白留一个 playwright driver 进程。
 					self._ensure_playwright()
@@ -216,7 +208,7 @@ class BrowserSession:
 					self._ensure_playwright()
 					# _start_headless 成功即置 _started，失败抛 playwright 原生异常
 					# 并原样上抛（→ display 兜底 NETWORK_ERROR）。这一支只出现在
-					# auto 的链尾，是「默认行为一字不改」的落点。
+					# auto 的链尾；显式来源不允许此兜底。
 					self._start_headless()
 					return
 				else:  # pragma: no cover - 由门禁 test_every_declared_channel_is_dispatchable 拦住
@@ -245,26 +237,6 @@ class BrowserSession:
 			except Exception:
 				pass
 			self._pw = None
-
-	def _try_bridge(self) -> bool:
-		"""尝试通过 Browser Bridge（Chrome 扩展 + daemon）连接。"""
-		try:
-			from boss_agent_cli.bridge.client import BridgeClient
-
-			client = BridgeClient()
-			if not client.is_running():
-				return False
-			if not client.is_extension_connected():
-				self._log("[boss] Bridge daemon 运行中但扩展未连接")
-				return False
-			self._bridge_client = client
-			self._started = True
-			self._is_cdp = False
-			self._is_bridge = True
-			self._log("[boss] Bridge 模式连接成功（Chrome 扩展 + daemon）")
-			return True
-		except Exception:
-			return False
 
 	def _try_cdp(self) -> bool:
 		"""Try connecting to user's Chrome via CDP.
@@ -466,33 +438,6 @@ class BrowserSession:
 
 		referer = endpoints.REFERER_MAP.get(url, f"{endpoints.BASE_URL}/")
 
-		# Bridge 模式：通过扩展 fetch
-		if self._is_bridge and self._bridge_client:
-			import urllib.parse
-
-			full_url = url
-			if params:
-				full_url = f"{url}?{urllib.parse.urlencode(params)}"
-			try:
-				result = self._bridge_client.fetch_json(
-					full_url,
-					method=method,
-					data=data,
-					referer=referer,
-				)
-			except Exception as exc:
-				# Bridge 的连接布尔不证明 workspace/目标页可用。显式来源下把
-				# 这种会话级失败归入来源契约；auto 仍保留原异常 → NETWORK_ERROR。
-				if self._policy.fail_closed:
-					raise BrowserSourceUnavailable(
-						self._policy,
-						(CHANNEL_BRIDGE,),
-						detail="Bridge 已连接但现有页面会话不可用",
-					) from exc
-				raise
-			self._throttle.mark()
-			return cast("dict[str, Any]", result)
-
 		# Playwright 模式（CDP 或 headless）
 		# 新建 CDP 页签若 goto 超时（_page_ready=False），页面可能仍在导航、执行上下文
 		# 未建立；此时直接 evaluate(fetch) 会永久挂起（同 #390）。先做有界就绪恢复，
@@ -556,12 +501,8 @@ class BrowserSession:
 		Node driver before we even get to our evaluate call. evaluate_js
 		only needs the CDP HTTP endpoint reachable — not patchright.
 
-		Only works in CDP mode (user has chrome://<devtools port>/json
-		reachable and the recruiter chat tab open). Bridge/headless modes
-		have no access to the user's Vue runtime.
+		仅通过已有 CDP 浏览器及其招聘者聊天页执行；headless 实例无法访问用户的 Vue 运行时。
 		"""
-		if self._is_bridge:
-			raise RuntimeError("evaluate_js requires CDP mode (bridge mode has no access to user Chrome)")
 		self._require_cdp_source("evaluate_js")
 		cdp_url = self._cdp_url or DEFAULT_CDP_URL
 		return _cdp_evaluate_in_chat_tab(cdp_url, script, arg)
@@ -572,10 +513,6 @@ class BrowserSession:
 		Used by recruiter send_message verification to distinguish a real chat send
 		from UI-only draft mutation or suggestion traffic.
 		"""
-		if self._is_bridge:
-			raise RuntimeError(
-				"evaluate_js_with_chat_events requires CDP mode (bridge mode has no access to user Chrome)"
-			)
 		self._require_cdp_source("evaluate_js_with_chat_events")
 		cdp_url = self._cdp_url or DEFAULT_CDP_URL
 		return _cdp_evaluate_with_chat_events_in_chat_tab(cdp_url, script, arg, listen_ms=listen_ms)
@@ -616,15 +553,6 @@ class BrowserSession:
 			self._release_playwright()
 			return
 
-		if self._is_bridge and self._bridge_client:
-			try:
-				self._bridge_client.close_window()
-			except Exception:
-				pass
-			self._bridge_client = None
-			self._reset_channel_state()
-			return
-
 		if self._is_cdp:
 			# CDP 模式：只关闭我们新建的 page 和 context，不动用户浏览器或已复用的页签
 			if self._page and self._own_page:
@@ -650,10 +578,8 @@ class BrowserSession:
 	def _reset_channel_state(self) -> None:
 		"""close 后把**通道标志**复位到「从未启动」。
 
-		修既有缺陷：原实现只置 ``_started = False``，``_is_cdp`` / ``_is_bridge``
-		留着上一轮的值。于是 close 之后再调 ``request()`` 会带着陈旧标志重跑整条链
-		——例如上一轮走 Bridge、重连落到 CDP 时 ``_is_bridge`` 仍为 True，
-		``request()`` 就会走错分支去调一个已被置空的 ``_bridge_client``。
+		同时复位 ``_started`` 和 ``_is_cdp``，避免重新启动或重复 close 时
+		带着上一轮通道标志走错资源清理分支。
 
 		刻意**不**清 ``_page`` / ``_context`` / ``_browser``：它们在重启时由
 		``_try_connect`` / ``_start_headless`` 的每个分支无条件覆盖，而清空会让
@@ -662,7 +588,6 @@ class BrowserSession:
 		"""
 		self._started = False
 		self._is_cdp = False
-		self._is_bridge = False
 
 	def __enter__(self) -> "BrowserSession":
 		return self

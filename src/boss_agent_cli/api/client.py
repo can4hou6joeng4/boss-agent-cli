@@ -88,7 +88,7 @@ class BossClient(_BaseHttpClient):
 		result = browser.request(method, url, params=params, data=data)
 		code = result.get("code")
 		is_cdp = getattr(browser, "_is_cdp", False)
-		mode = "CDP" if is_cdp else ("Bridge" if getattr(browser, "_is_bridge", False) else "headless patchright")
+		mode = "CDP" if is_cdp else "headless patchright"
 		if code == endpoints.CODE_ACCOUNT_RISK:
 			msg = response_message(result) or "账户存在异常行为"
 			raise AccountRiskError(
@@ -107,36 +107,23 @@ class BossClient(_BaseHttpClient):
 			)
 		return result
 
-	@staticmethod
-	def _bridge_is_connected() -> bool:
-		"""Treat an attached extension as slice 1's existing-browser intent."""
-		from boss_agent_cli.bridge.client import BridgeClient
-
-		status = BridgeClient().status()
-		return bool(status and status.get("extensionConnected"))
-
 	def _read_request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
-		"""Use an existing browser only when explicitly configured or Bridge is connected.
+		"""显式非 auto 来源才走浏览器；默认保留 httpx 的认证与重试语义。
 
-		The normal no-Bridge path keeps the established httpx semantics, including
-		``AUTH_REQUIRED + boss login`` when no stored token exists. The browser path
-		does not inherit httpx's stoken refresh/rate-limit retry loop; it is selected
-		only for these user-triggered read calls.
+		缺少本地凭据仍返回 AUTH_REQUIRED，浏览器请求不继承 httpx 的
+		stoken 刷新或限流重试循环。
 		"""
 		from boss_agent_cli.api.browser_source import resolve_policy
 
 		configured = resolve_policy(self._browser_source)
 		if configured.name != "auto":
 			return self._browser_request(method, url, browser_source=configured.name, **kwargs)
-		if self._bridge_is_connected():
-			return self._browser_request(method, url, browser_source="existing-browser", **kwargs)
 		return self._request(method, url, **kwargs)
 
 	# ── Public API ───────────────────────────────────────────────────
 	# High-risk: search, recommend, greet, job_card → browser channel
 	# Low-risk: status, me, cities, schema, detail → httpx channel.
-	# friend_list/chat_history select an attached existing-browser read channel
-	# when Bridge is connected; otherwise they retain the httpx retry semantics.
+	# friend_list/chat_history 仅在显式非 auto 来源下走浏览器读取；默认使用 httpx。
 
 	def search_jobs(self, query: str, **filters: Any) -> dict[str, Any]:
 		params: dict[str, Any] = {"query": query, "page": filters.get("page", 1)}

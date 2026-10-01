@@ -540,7 +540,7 @@ RISK_ERROR_CONTRACTS: dict[str, dict[str, Any]] = {
 	"ACCOUNT_RISK": {
 		"recovery_action": "停止自动化访问；回到 BOSS 直聘官方页面手动处理，必要时联系 BOSS 直聘客服",
 		"next_actions": [
-			"不要通过 CDP、patchright 或 Bridge 重试该操作",
+			"不要通过 CDP、patchright 或其他通道重试该操作",
 			"只保留本地辅助和用户主动触发的只读命令",
 		],
 	},

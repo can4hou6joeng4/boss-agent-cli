@@ -4,7 +4,12 @@
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-02
+
 ### Changed（含 Breaking Change）
+- **移除 Browser Bridge。** 删除本地 daemon、Chrome 扩展、Python `boss_agent_cli.bridge` 包与 `[bridge]` extra，移除 `boss doctor` 的七项 `bridge_*` 诊断；不再探测或连接旧 Bridge 服务。浏览器来源 `auto` 的通道顺序改为 CDP → headless，`existing-browser` 仅复用已有 CDP 浏览器中的目标页；`stored-cookie` 仍只连接显式指定的 CDP 端点，来源约束和风控停止契约不变。
+  - `chat` / `chatmsg` 默认继续使用本地凭据的 httpx 通道；需要不读取本地凭据的现有浏览器会话时，请显式使用 `boss --browser-source existing-browser --cdp-url http://localhost:9222 chat`，并在该浏览器中手动打开和登录 BOSS 直聘。
+  - **升级 CLI 不会停止旧 daemon，也不会卸载浏览器扩展。** 请手动停止旧 daemon（包括其他虚拟环境中的实例），在 `chrome://extensions` 禁用或移除旧扩展，并从安装配置中删除 `[bridge]` extra。CDP 调试端口仅限本机可信环境使用，不得用于规避平台风控。
 - **移除智联招聘（`zhilian`）平台。** 求职者侧适配器（`ZhilianPlatform` / `ZhilianClient` / `zhilian.yaml`）、招聘者侧 `agent` 浏览器 / CDP 自动化（`automation/zhilian_*`）、`ZhilianPlatform` 包级公开导出、schema 与 MCP 描述中的平台可用性、能力矩阵、向导标签、研究文档和演示内容一并删除；BOSS 直聘（`zhipin`）成为唯一注册平台，多平台抽象（`Platform` / `RecruiterPlatform` 注册表与 `--platform` 选项）保留。`boss --platform zhilian ...`（含 `--role recruiter agent run`、`status --live`、`hr ...`、`platforms --platform zhilian`）以及用 `boss-mcp --platform zhilian` 启动的 MCP 宿主，现在都返回七键 `INVALID_PARAM` 信封（`unknown platform 'zhilian', supported: zhipin`）。
   - 迁移：若 `config.json` 里写着 `platform: zhilian`，所有命令都会被拒绝，运行 `boss --platform zhipin config set platform zhipin` 改回默认平台。
   - `boss doctor` 不再额外探测 zhaopin.com（`network_zhilian` 检查项移除）；招聘者 `status --live` 的智联 selector 健康检查及其 `SELECTOR_HEALTH_FAILED` 错误、`selector_health` 字段随之移除。
@@ -21,6 +26,11 @@
 ### Fixed
 - `boss chat` 现在公开跨请求稳定的联系人 `uid`，`chatmsg` / `chat-summary` / `mark` / `exchange` 优先按 `uid` 重新解析联系人并使用本次沟通列表返回的动态 `securityId`；沟通快照、diff 与导出映射同步改用 `uid` 主键，避免轮换令牌导致联系人查找必然失败和快照重复。既有 `security_id` 参数名与无 `uid` 的旧快照仍兼容，但旧令牌仅作兜底且可能已经失效。
 - 移除通用 CI / Docs workflow 后，同步清理失效的 README 状态徽章、远端门禁文档与工作流存在性断言；PR 和发版改为明确执行维护者本地质量门禁，避免主线测试固定读取已删除文件。
+
+## [2.0.1] - 2026-09-29
+
+### Fixed
+- `boss chat` 现在公开跨请求稳定的联系人 `uid`，`chatmsg` / `chat-summary` / `mark` / `exchange` 优先按 `uid` 重新解析联系人并使用本次沟通列表返回的动态 `securityId`；沟通快照、diff 与导出映射同步改用 `uid` 主键，避免轮换令牌导致联系人查找必然失败和快照重复。既有 `security_id` 参数名与无 `uid` 的旧快照仍兼容，但旧令牌仅作兜底且可能已经失效。
 
 ## [2.0.0] - 2026-09-15
 

@@ -32,5 +32,4 @@ ignore:
   - "scripts/"
   # 真实浏览器 / 守护进程链路：单测只能造出无意义的桩覆盖，排除后让
   # patch 门槛聚焦在真正可测的命令层与纯逻辑上。
-  - "src/boss_agent_cli/bridge/daemon.py"
   - "src/boss_agent_cli/crawler/transport.py"

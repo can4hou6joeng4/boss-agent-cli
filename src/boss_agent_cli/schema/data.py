@@ -64,7 +64,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"doctor": {
-			"description": "诊断本地运行环境、依赖、分层认证健康、CDP/Bridge 可达性和网络连通性；默认不做真实业务探测，浏览器桥仅用于用户主动的本地诊断与登录兼容，不得用于规避平台风控",
+			"description": "诊断本地运行环境、依赖、分层认证健康、CDP 可达性和网络连通性；默认不做真实业务探测，浏览器通道不得用于规避平台风控",
 			"args": [],
 			"options": {
 				"--live-probe": {
@@ -843,7 +843,7 @@ SCHEMA_DATA = {
 			"default": "auto",
 			"choices": list(BROWSER_SOURCES),
 			"stability": "experimental",
-			"description": "浏览器通道来源。auto 允许 Bridge→CDP→headless 降级；existing-browser 只复用现有浏览器（Bridge/CDP），不读本地凭据、不启动浏览器，候选耗尽发 BROWSER_SESSION_NOT_FOUND；stored-cookie 为 fail-closed，只连 --cdp-url 指定的 CDP 端点，不自动探测、不降级、空浏览器不新建 context，不可用发 CDP_UNAVAILABLE。不得用于规避平台风控。",
+			"description": "浏览器通道来源。auto 允许 CDP→headless 降级；existing-browser 只复用现有 CDP 浏览器中已打开的目标页，不读本地凭据、不导航、不启动浏览器，候选耗尽发 BROWSER_SESSION_NOT_FOUND；stored-cookie 为 fail-closed，只连 --cdp-url 指定的 CDP 端点，不自动探测、不降级、空浏览器不新建 context，不可用发 CDP_UNAVAILABLE。不得用于规避平台风控。",
 		},
 		"--platform": {
 			"type": "string",
