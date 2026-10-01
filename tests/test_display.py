@@ -86,7 +86,7 @@ class TestHandleAuthErrors:
 
 		@handle_auth_errors("chat")
 		def impl(ctx):
-			raise BrowserSourceUnavailable(POLICIES["existing-browser"], ("bridge", "cdp"))
+			raise BrowserSourceUnavailable(POLICIES["existing-browser"], ("cdp",))
 
 		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
 			impl(ctx)

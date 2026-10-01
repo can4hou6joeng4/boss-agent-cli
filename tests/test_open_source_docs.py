@@ -1,3 +1,4 @@
+from importlib.metadata import metadata
 from pathlib import Path
 
 import yaml
@@ -71,21 +72,39 @@ def test_security_and_readme_link_platform_risk_docs():
 	assert "docs/platform-risk.md" in read("SECURITY.md")
 
 
-def test_readme_documents_browser_bridge_diagnostics():
+def test_readme_documents_browser_bridge_removal_and_manual_cleanup():
 	zh = read("README.md")
 	en = read("README.en.md")
 
 	for content in (zh, en):
-		assert "bridge_daemon" in content
-		assert "bridge_extension" in content
-		assert "bridge_protocol" in content
-		assert "bridge_workspace" in content
-		assert "bridge_exec" in content
-		assert "bridge_fetch" in content
-		assert "bridge_navigate" in content
-		assert "python -m boss_agent_cli.bridge.daemon --serve" in content
+		assert "3.0.0" in content
 		assert "Bridge" in content
+		assert "daemon" in content
+		assert "existing-browser" in content
+		assert "CDP" in content
+		assert "python -m boss_agent_cli.bridge.daemon --serve" not in content
 		assert "风控" in content or "risk-control" in content.lower()
+	assert "停止" in zh
+	assert "扩展" in zh
+	assert "移除" in zh or "卸载" in zh
+	assert "stop" in en.lower()
+	assert "extension" in en.lower()
+	assert "remove" in en.lower() or "uninstall" in en.lower()
+
+
+def test_removed_bridge_is_not_shipped_or_advertised_as_an_extra():
+	"""源码、扩展入口及安装元数据均不得继续提供已下线组件。"""
+	for path in (
+		"src/boss_agent_cli/bridge/__init__.py",
+		"src/boss_agent_cli/bridge/client.py",
+		"src/boss_agent_cli/bridge/daemon.py",
+		"src/boss_agent_cli/bridge/protocol.py",
+		"extension/manifest.json",
+		"extension/background.js",
+		"extension/popup.html",
+	):
+		assert not (ROOT / path).exists(), path
+	assert "bridge" not in metadata("boss-agent-cli").get_all("Provides-Extra", [])
 
 
 def test_platform_research_template_covers_adapter_admission_gate():

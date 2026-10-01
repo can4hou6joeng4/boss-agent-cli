@@ -34,17 +34,7 @@ def _invoke_doctor(tmp_path=None, platform="zhipin", **overrides):
 		patch(paths["cdp"]) as mock_cdp,
 		patch(paths["httpx"]) as mock_httpx,
 		patch(paths["cookie"]) as mock_cookie,
-		patch("boss_agent_cli.bridge.client.BridgeClient") as mock_bridge,
 	):
-		# BridgeClient 构造不抛异常，但 is_running 返回 False
-		mock_bridge.return_value.diagnose.return_value = [
-			{
-				"name": "bridge_daemon",
-				"status": "warn",
-				"detail": "Bridge daemon 未运行或无法访问 http://127.0.0.1:19826",
-				"recovery_action": "运行 Bridge daemon 或检查端口占用",
-			}
-		]
 		# 默认值
 		mock_auth.return_value.check_status.return_value = overrides.get("token", None)
 		mock_cdp.return_value = overrides.get("cdp_ws", None)
@@ -86,7 +76,7 @@ def test_all_checks_pass(tmp_path):
 	assert code == 0
 	assert parsed["ok"] is True
 	# 核心逻辑检查项（不依赖本机工具链）应全部为 ok
-	env_dependent = {"patchright", "patchright_chromium", "browser", "auth_salt", "bridge_daemon", "windows_uv_tool_path"}
+	env_dependent = {"patchright", "patchright_chromium", "browser", "auth_salt", "windows_uv_tool_path"}
 	for check in parsed["data"]["checks"]:
 		if check["name"] in env_dependent:
 			continue
@@ -259,9 +249,7 @@ def test_cdp_probe_exception(tmp_path):
 		patch(paths["cdp"]) as mock_cdp,
 		patch(paths["httpx"]) as mock_httpx,
 		patch(paths["cookie"]) as mock_cookie,
-		patch("boss_agent_cli.bridge.client.BridgeClient") as mock_bridge,
 	):
-		mock_bridge.return_value.is_running.return_value = False
 		mock_auth.return_value.check_status.return_value = None
 		mock_cdp.side_effect = RuntimeError("probe boom")
 		mock_cookie.return_value = None
@@ -274,86 +262,38 @@ def test_cdp_probe_exception(tmp_path):
 	assert "probe boom" in cdp_check["detail"]
 
 
-def test_bridge_diagnostics_are_included(tmp_path):
-	"""doctor 应输出拆分后的 Bridge daemon/extension/protocol/workspace 检查。"""
-	bridge_checks = [
-		{"name": "bridge_daemon", "status": "ok", "detail": "Bridge daemon 运行中 pid=123 uptime=7s"},
-		{"name": "bridge_extension", "status": "ok", "detail": "Chrome 扩展已连接 version=1.0.0"},
-		{"name": "bridge_protocol", "status": "ok", "detail": "扩展协议版本 1.0.0；CLI 期望 major=1"},
-		{
-			"name": "bridge_workspace",
-			"status": "ok",
-			"detail": "Bridge workspace/tab 可用: https://www.zhipin.com/web/geek/job",
-		},
-		{"name": "bridge_exec", "status": "ok", "detail": "Bridge exec 基础能力可用"},
-		{"name": "bridge_fetch", "status": "ok", "detail": "Bridge fetch 基础能力可用"},
-		{"name": "bridge_navigate", "status": "ok", "detail": "Bridge navigate 基础能力可用"},
-	]
-	paths = _base_patches()
-	runner = CliRunner()
-	with (
-		patch(paths["auth"]) as mock_auth,
-		patch(paths["cdp"]) as mock_cdp,
-		patch(paths["httpx"]) as mock_httpx,
-		patch(paths["cookie"]) as mock_cookie,
-		patch("boss_agent_cli.bridge.client.BridgeClient") as mock_bridge,
-	):
-		mock_auth.return_value.check_status.return_value = None
-		mock_cdp.return_value = None
-		mock_cookie.return_value = None
-		mock_httpx.return_value = MagicMock(status_code=200)
-		mock_bridge.return_value.diagnose.return_value = bridge_checks
+def test_doctor_reports_only_supported_browser_diagnostics(tmp_path):
+	"""CDP 可用即可通过浏览器通道检查，不再生成已移除组件的诊断项。"""
+	code, parsed = _invoke_doctor(tmp_path, cdp_ws="ws://127.0.0.1:9222/devtools/browser/abc")
 
-		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "doctor"])
-
-	parsed = json.loads(result.output)
+	assert code == 0
 	checks = parsed["data"]["checks"]
-	for name in (
-		"bridge_daemon",
-		"bridge_extension",
-		"bridge_protocol",
-		"bridge_workspace",
-		"bridge_exec",
-		"bridge_fetch",
-		"bridge_navigate",
-	):
-		assert _find_check(checks, name) is not None
+	assert not any(check["name"].startswith("bridge_") for check in checks)
 	browser_channel = _find_check(checks, "browser_channel")
 	assert browser_channel["status"] == "ok"
-	assert "Bridge" in browser_channel["detail"]
+	assert "CDP" in browser_channel["detail"]
+	assert "Bridge" not in json.dumps(parsed, ensure_ascii=False)
 
 
-def test_bridge_diagnostics_do_not_expose_secrets(tmp_path):
-	"""doctor 输出不应泄漏 Bridge 诊断中的 cookie/header/token 字样值。"""
-	bridge_checks = [
-		{
-			"name": "bridge_workspace",
-			"status": "ok",
-			"detail": "Bridge workspace/tab 可用: https://www.zhipin.com/web/geek/job",
-			"tab_url": "https://www.zhipin.com/web/geek/job",
-		}
-	]
+def test_doctor_does_not_contact_removed_bridge(tmp_path):
+	"""诊断不向旧 daemon 发起状态探测或执行请求，所有 HTTP 均由替身接收。"""
 	paths = _base_patches()
-	runner = CliRunner()
 	with (
 		patch(paths["auth"]) as mock_auth,
-		patch(paths["cdp"]) as mock_cdp,
+		patch(paths["cdp"], return_value=None),
 		patch(paths["httpx"]) as mock_httpx,
-		patch(paths["cookie"]) as mock_cookie,
-		patch("boss_agent_cli.bridge.client.BridgeClient") as mock_bridge,
+		patch(paths["cookie"], return_value=None),
+		patch("httpx.post") as mock_post,
 	):
 		mock_auth.return_value.check_status.return_value = None
-		mock_cdp.return_value = None
-		mock_cookie.return_value = None
 		mock_httpx.return_value = MagicMock(status_code=200)
-		mock_bridge.return_value.diagnose.return_value = bridge_checks
 
-		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "doctor"])
+		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "doctor"])
 
-	raw = result.output.lower()
-	assert "cookie_value" not in raw
-	assert "authorization" not in raw
-	assert "secret_token" not in raw
+	assert result.exit_code == 0
+	assert mock_httpx.call_count > 0
+	assert all("19826" not in str(call.args[0]) for call in mock_httpx.call_args_list)
+	mock_post.assert_not_called()
 
 
 # ── 7. 输出 JSON 格式正确性 ─────────────────────────────────────────
@@ -419,13 +359,14 @@ def test_browser_channel_ok_with_cdp(tmp_path):
 	assert "CDP" in ch["detail"]
 
 
-def test_browser_channel_warn_without_cdp_or_bridge(tmp_path):
-	"""CDP 和 Bridge 均不可用时 browser_channel 应为 warn。"""
+def test_browser_channel_warn_without_cdp(tmp_path):
+	"""CDP 不可用时 browser_channel 应为 warn。"""
 	code, parsed = _invoke_doctor(tmp_path, cdp_ws=None)
 	ch = _find_check(parsed["data"]["checks"], "browser_channel")
 	assert ch is not None
 	assert ch["status"] == "warn"
-	assert "默认低风险模式" in ch["detail"]
+	assert "httpx" in ch["detail"]
+	assert "Bridge" not in ch["detail"]
 
 
 # ── 9. cookie 提取检查 ───────────────────────────────────────────────
@@ -529,9 +470,7 @@ def test_doctor_live_probe_adds_readonly_probe_checks(mock_platform_cls, mock_re
 		patch(paths["cdp"]) as mock_cdp,
 		patch(paths["httpx"]) as mock_httpx,
 		patch(paths["cookie"]) as mock_cookie,
-		patch("boss_agent_cli.bridge.client.BridgeClient") as mock_bridge,
 	):
-		mock_bridge.return_value.is_running.return_value = False
 		mock_auth.return_value.check_status.return_value = {"cookies": {"wt2": "tok"}, "stoken": "st"}
 		mock_cdp.return_value = None
 		mock_cookie.return_value = None

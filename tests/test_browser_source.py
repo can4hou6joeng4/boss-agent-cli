@@ -21,7 +21,6 @@ import pytest
 from boss_agent_cli.api import browser_client
 from boss_agent_cli.api.browser_client import BrowserSession
 from boss_agent_cli.api.browser_source import (
-	CHANNEL_BRIDGE,
 	CHANNEL_CDP,
 	CHANNEL_HEADLESS,
 	DEFAULT_BROWSER_SOURCE,
@@ -32,14 +31,14 @@ from boss_agent_cli.api.browser_source import (
 )
 from boss_agent_cli.schema.data import SCHEMA_DATA
 
-_CHANNEL_ENTRYPOINTS = {"_try_bridge", "_try_cdp", "_start_headless"}
+_CHANNEL_ENTRYPOINTS = {"_try_cdp", "_start_headless"}
 
 
 # ── T1：通道方法只能从分发器调用 ────────────────────────────────────────
 
 
 def test_channel_entrypoints_are_only_called_from_the_dispatcher():
-	"""``_try_bridge`` / ``_try_cdp`` / ``_start_headless`` 只能由 ``_ensure_started`` 调用。
+	"""``_try_cdp`` / ``_start_headless`` 只能由 ``_ensure_started`` 调用。
 
 	一旦有人在别处直接调用其中之一（#404 的 ``_start_cdp_required`` 就是这么做的），
 	就等于开了第二个分发点，本 seam 的全部保证立刻失效。
@@ -101,7 +100,7 @@ def test_every_declared_channel_is_dispatchable():
 	declared = {ch for p in POLICIES.values() for ch in p.channels}
 	assert declared <= set(KNOWN_CHANNELS)
 	src = inspect.getsource(BrowserSession._ensure_started)
-	for channel_const in ("CHANNEL_BRIDGE", "CHANNEL_CDP", "CHANNEL_HEADLESS"):
+	for channel_const in ("CHANNEL_CDP", "CHANNEL_HEADLESS"):
 		assert channel_const in src, f"分发器缺少 {channel_const} 分支"
 
 
@@ -129,6 +128,25 @@ def test_default_source_is_auto():
 	assert resolve_policy("  AUTO  ") is POLICIES["auto"]
 
 
+def test_removed_bridge_has_no_runtime_entrypoints_or_imports():
+	"""组件移除后不得保留可被自动发现的通道或静态导入。"""
+	assert set(KNOWN_CHANNELS) == {CHANNEL_CDP, CHANNEL_HEADLESS}
+	session = BrowserSession(cookies={}, user_agent="")
+	for attribute in ("_try_bridge", "_is_bridge", "_bridge_client"):
+		assert not hasattr(session, attribute)
+
+	package_root = Path(browser_client.__file__).resolve().parents[1]
+	for path in package_root.rglob("*.py"):
+		for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+			if isinstance(node, ast.Import):
+				imports = [alias.name for alias in node.names]
+			elif isinstance(node, ast.ImportFrom):
+				imports = [f"{node.module or ''}.{alias.name}" for alias in node.names]
+			else:
+				continue
+			assert not any("bridge" in name.split(".") for name in imports), path
+
+
 def test_unknown_source_raises_instead_of_silently_falling_back():
 	"""静默回落到 auto 正是本 seam 要消灭的东西。"""
 	with pytest.raises(KeyError):
@@ -138,13 +156,10 @@ def test_unknown_source_raises_instead_of_silently_falling_back():
 # ── T3：枚举对齐 + 安全属性作为可执行不变量 ─────────────────────────────
 
 
-def test_auto_keeps_the_full_fallback_chain_and_stays_fail_open():
-	"""默认路径行为不变：三级降级链 + 失败仍走既有 NETWORK_ERROR 兜底。
-
-	改这条断言等于对所有存量用户和所有无浏览器 CI 环境做破坏性变更。
-	"""
+def test_auto_keeps_cdp_headless_fallback_and_stays_fail_open():
+	"""移除 Bridge 后按 CDP → headless 降级，失败仍走既有 NETWORK_ERROR 兜底。"""
 	auto = POLICIES["auto"]
-	assert auto.channels == (CHANNEL_BRIDGE, CHANNEL_CDP, CHANNEL_HEADLESS)
+	assert auto.channels == (CHANNEL_CDP, CHANNEL_HEADLESS)
 	assert auto.allow_browser_launch is True
 	assert auto.may_create_context is True
 	assert auto.auto_probe_cdp is True
@@ -154,7 +169,7 @@ def test_auto_keeps_the_full_fallback_chain_and_stays_fail_open():
 
 def test_existing_browser_policy_is_fail_closed_and_credential_free():
 	policy = POLICIES["existing-browser"]
-	assert policy.channels == (CHANNEL_BRIDGE, CHANNEL_CDP)
+	assert policy.channels == (CHANNEL_CDP,)
 	assert policy.use_stored_credentials is False
 	assert policy.may_create_context is False
 	assert policy.allow_browser_launch is False
@@ -210,12 +225,8 @@ def test_policies_are_frozen():
 
 
 def _instrument(session: BrowserSession, monkeypatch, *, all_fail: bool = True) -> list[str]:
-	"""把三个通道入口换成只记录调用名的替身，默认全部失败。"""
+	"""把两个通道入口换成只记录调用名的替身，默认全部失败。"""
 	calls: list[str] = []
-
-	def fake_bridge() -> bool:
-		calls.append(CHANNEL_BRIDGE)
-		return False
 
 	def fake_cdp() -> bool:
 		calls.append(CHANNEL_CDP)
@@ -230,7 +241,6 @@ def _instrument(session: BrowserSession, monkeypatch, *, all_fail: bool = True) 
 	def fake_driver() -> None:
 		session._pw = MagicMock()
 
-	monkeypatch.setattr(session, "_try_bridge", fake_bridge)
 	monkeypatch.setattr(session, "_try_cdp", fake_cdp)
 	monkeypatch.setattr(session, "_start_headless", fake_headless)
 	monkeypatch.setattr(session, "_ensure_playwright", fake_driver)
@@ -288,7 +298,7 @@ def test_auto_still_reaches_headless_when_earlier_channels_fail(monkeypatch):
 
 	session._ensure_started()
 
-	assert calls == [CHANNEL_BRIDGE, CHANNEL_CDP, CHANNEL_HEADLESS]
+	assert calls == [CHANNEL_CDP, CHANNEL_HEADLESS]
 	assert session._started is True
 
 
@@ -299,8 +309,8 @@ def test_evaluate_js_is_blocked_when_source_forbids_cdp():
 	"""``evaluate_js`` 刻意绕过分发器，必须自带等价守卫，否则是最大的 fail-open 面。"""
 	session = BrowserSession(cookies={}, user_agent="")
 	session._policy = POLICIES["auto"].__class__(
-		name="bridge-only-probe",
-		channels=(CHANNEL_BRIDGE,),
+		name="headless-only-probe",
+		channels=(CHANNEL_HEADLESS,),
 		use_stored_credentials=False,
 		may_create_context=False,
 		allow_browser_launch=False,
@@ -356,31 +366,44 @@ def test_existing_browser_cdp_requires_an_already_open_zhipin_page():
 	assert session._started is False
 
 
-def test_existing_browser_maps_connected_but_unusable_bridge_to_source_error():
+def test_existing_browser_unusable_cdp_session_is_fail_closed(monkeypatch):
+	"""CDP 能连接但没有目标页时仍拒绝请求，不导航、不注入凭据、不启动浏览器。"""
 	session = BrowserSession(cookies={}, user_agent="", browser_source="existing-browser")
-	session._started = True
-	session._is_bridge = True
-	session._bridge_client = MagicMock()
-	session._bridge_client.fetch_json.side_effect = RuntimeError("workspace unavailable")
-	session._throttle.wait = MagicMock()
+	session._pw = MagicMock()
+	mock_context = MagicMock()
+	mock_context.pages = []
+	mock_browser = MagicMock()
+	mock_browser.contexts = [mock_context]
+	session._pw.chromium.connect_over_cdp.return_value = mock_browser
+	monkeypatch.setattr(session, "_try_cdp", lambda: session._try_connect("ws://localhost:9222/test"))
+	mock_headless = MagicMock()
+	monkeypatch.setattr(session, "_start_headless", mock_headless)
 
 	with pytest.raises(BrowserSourceUnavailable) as excinfo:
 		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/friend/getGeekFriendList.json")
 
 	assert excinfo.value.code == "BROWSER_SESSION_NOT_FOUND"
-	assert "页面会话不可用" in str(excinfo.value)
+	assert excinfo.value.attempted == (CHANNEL_CDP,)
+	mock_context.new_page.assert_not_called()
+	mock_context.add_cookies.assert_not_called()
+	mock_browser.new_context.assert_not_called()
+	mock_headless.assert_not_called()
+	assert session._pw is None
 
 
-def test_auto_keeps_bridge_request_failure_as_network_error_input():
+def test_auto_keeps_cdp_request_failure_as_network_error_input():
 	session = BrowserSession(cookies={}, user_agent="")
 	session._started = True
-	session._is_bridge = True
-	session._bridge_client = MagicMock()
-	session._bridge_client.fetch_json.side_effect = RuntimeError("bridge fetch failed")
+	session._is_cdp = True
+	session._page = MagicMock()
+	session._page.evaluate.side_effect = RuntimeError("cdp fetch failed")
 	session._throttle.wait = MagicMock()
 
-	with pytest.raises(RuntimeError, match="bridge fetch failed"):
+	with pytest.raises(RuntimeError, match="cdp fetch failed"):
 		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/friend/getGeekFriendList.json")
+
+	session._page.evaluate.assert_called_once()
+	session._page.wait_for_load_state.assert_not_called()
 
 
 def test_auto_still_creates_context_in_an_empty_browser():

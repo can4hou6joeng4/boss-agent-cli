@@ -838,12 +838,12 @@ def _make_friend_item(name, brand, relation_type, last_ts):
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_does_not_require_stored_credentials_before_platform_read(mock_auth_cls, mock_client_cls):
-	"""Bridge-backed reads must reach the platform even when no local token exists."""
+	"""显式现有浏览器读取不应被命令层的本地凭据预检阻止。"""
 	mock_auth_cls.return_value.check_status.return_value = None
 	_ctx_mock(mock_client_cls)
 	mock_client_cls.return_value.friend_list.return_value = {"zpData": {"result": []}}
 
-	result = CliRunner().invoke(cli, ["chat"])
+	result = CliRunner().invoke(cli, ["--browser-source", "existing-browser", "chat"])
 
 	assert result.exit_code == 0
 	mock_auth_cls.return_value.check_status.assert_not_called()

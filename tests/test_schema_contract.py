@@ -96,12 +96,22 @@ def test_schema_commands_have_descriptions():
 	)
 
 
-def test_doctor_schema_documents_bridge_risk_boundary():
-	"""doctor schema 应说明 Bridge 是诊断/登录兼容入口，不是风控绕过入口。"""
+def test_doctor_schema_documents_cdp_risk_boundary():
+	"""doctor schema 只描述保留的 CDP 通道，不提供风控绕过入口。"""
 	description = SCHEMA_DATA["commands"]["doctor"]["description"]
-	assert "Bridge" in description
-	assert "浏览器桥" in description
+	assert "CDP" in description
+	assert "Bridge" not in description
+	assert "浏览器桥" not in description
 	assert "不得用于规避平台风控" in description
+
+
+def test_browser_source_schema_only_describes_supported_channels():
+	description = SCHEMA_DATA["global_options"]["--browser-source"]["description"]
+	assert "Bridge" not in description
+	assert "CDP" in description
+	assert "headless" in description
+	assert "BROWSER_SESSION_NOT_FOUND" in description
+	assert "CDP_UNAVAILABLE" in description
 
 
 # ── 错误码一致性 ────────────────────────────────────────────────────

@@ -180,6 +180,49 @@ def test_close_is_idempotent_when_headless_resources_are_partial_and_raise():
 	assert session._pw is None
 
 
+@pytest.mark.parametrize("initial_cdp", [True, False])
+def test_close_then_restart_does_not_reuse_previous_channel_state(initial_cdp):
+	"""CDP/headless 相互重连时重置旧通道状态，不复用已经释放的 driver。"""
+	session = BrowserSession(cookies={}, user_agent="")
+	session._started = True
+	session._is_cdp = initial_cdp
+	session._own_context = True
+	session._own_page = True
+	session._page = MagicMock()
+	session._context = MagicMock()
+	session._browser = MagicMock()
+	session._pw = MagicMock()
+	previous_driver = session._pw
+
+	session.close()
+
+	assert session._started is False
+	assert session._is_cdp is False
+	assert session._pw is None
+	previous_driver.stop.assert_called_once()
+
+	with (
+		patch("boss_agent_cli.api.browser_client.sync_playwright") as mock_playwright,
+		patch.object(session, "_try_cdp", return_value=False) if initial_cdp else patch.object(
+			BrowserSession, "_read_devtools_active_port", return_value=None
+		),
+	):
+		driver = mock_playwright.return_value.start.return_value
+		if not initial_cdp:
+			driver.chromium.connect_over_cdp.return_value.contexts = [MagicMock()]
+		session._ensure_started()
+
+	assert session._started is True
+	assert session._is_cdp is not initial_cdp
+	assert session._pw is driver
+	assert driver is not previous_driver
+	if initial_cdp:
+		driver.chromium.launch.assert_called_once()
+	else:
+		driver.chromium.launch.assert_not_called()
+	session.close()
+
+
 def test_try_connect_reuses_existing_context():
 	"""CDP 连接应复用用户现有 context，避免创建额外浏览器状态。"""
 	session = BrowserSession(cookies={}, user_agent="")
@@ -265,7 +308,7 @@ def test_start_headless_tolerates_networkidle_timeout():
 	assert any("headless 首页未进入 networkidle" in call.args[0] for call in logger.debug.call_args_list)
 
 
-def test_ensure_started_falls_back_to_patchright_when_bridge_and_cdp_fail():
+def test_ensure_started_falls_back_to_patchright_when_cdp_fails():
 	session = BrowserSession(cookies={}, user_agent="")
 	mock_pw = MagicMock()
 	sentinel = {"headless_started": False}
@@ -275,7 +318,6 @@ def test_ensure_started_falls_back_to_patchright_when_bridge_and_cdp_fail():
 		session._started = True
 
 	with (
-		patch.object(session, "_try_bridge", return_value=False) as mock_try_bridge,
 		patch("boss_agent_cli.api.browser_client.sync_playwright") as mock_sync_playwright,
 		patch.object(session, "_try_cdp", return_value=False) as mock_try_cdp,
 		patch.object(session, "_start_headless", side_effect=mark_headless_started) as mock_start_headless,
@@ -287,7 +329,6 @@ def test_ensure_started_falls_back_to_patchright_when_bridge_and_cdp_fail():
 	assert sentinel["headless_started"] is True
 	assert session._started is True
 	assert session._pw is mock_pw
-	mock_try_bridge.assert_called_once()
 	mock_sync_playwright.assert_called_once()
 	mock_try_cdp.assert_called_once()
 	mock_start_headless.assert_called_once()

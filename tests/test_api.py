@@ -151,7 +151,6 @@ def test_account_risk_error_raised_on_code_36():
 		"zpData": {},
 	}
 	mock_browser._is_cdp = False
-	mock_browser._is_bridge = False
 	client._browser_session = mock_browser
 
 	import pytest
