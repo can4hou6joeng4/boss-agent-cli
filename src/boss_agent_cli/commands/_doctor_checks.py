@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import re
+import shlex
 import shutil
 from pathlib import Path
 from typing import Any
@@ -11,12 +14,38 @@ from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 
 
-def _find_project_root() -> Path:
-	"""Return the repository root when running from a source checkout."""
-	for parent in Path(__file__).resolve().parents:
-		if (parent / "pyproject.toml").exists():
+def _find_project_root() -> Path | None:
+	"""仅识别当前模块所属的本项目源码，不借用安装包用户的工作目录。"""
+	source = Path(__file__).resolve()
+	for parent in source.parents:
+		if (
+			parent / "src" / "boss_agent_cli" / "commands" / source.name == source
+			and (parent / "pyproject.toml").is_file()
+		):
 			return parent
-	return Path.cwd()
+	return None
+
+
+def _doctor_command(ctx: click.Context, *args: str, cdp_url: str | None = None) -> str:
+	"""构造保留诊断上下文的命令，参数独立引用，不混入真人说明。"""
+	argv = [
+		"boss", "--data-dir", str(ctx.obj["data_dir"].resolve()),
+		"--platform", ctx.obj.get("platform", "zhipin"),
+	]
+	if role := ctx.obj.get("role"):
+		argv.extend(["--role", role])
+	if source := ctx.obj.get("browser_source"):
+		argv.extend(["--browser-source", source])
+	if address := cdp_url or ctx.obj.get("cdp_url"):
+		argv.extend(["--cdp-url", address])
+	argv.extend(args)
+	if os.name == "nt":
+		# Windows 指引面向 PowerShell；单引号也保护路径里的 &, $, ; 等字符。
+		return " ".join(
+			arg if re.fullmatch(r"[A-Za-z0-9_./:=+-]+", arg) else "'" + arg.replace("'", "''") + "'"
+			for arg in argv
+		)
+	return shlex.join(argv)
 
 
 def _resolve_quality_tool(tool: str) -> tuple[str, str, str]:
@@ -33,18 +62,19 @@ def _resolve_quality_tool(tool: str) -> tuple[str, str, str]:
 	)
 
 
-def _add_quality_baseline_checks(checks: list[dict[str, Any]]) -> None:
-	"""Report whether the local P0 quality baseline can be run offline."""
+def _add_quality_baseline_checks(checks: list[dict[str, Any]]) -> Path | None:
+	"""只为源码运行加入开发者门禁检查，返回可执行门禁的源码根目录。"""
 	root = _find_project_root()
+	if root is None:
+		return None
 	baseline = root / "scripts" / "quality_baseline.py"
-	pyproject = root / "pyproject.toml"
-	if baseline.exists() and pyproject.exists():
+	if baseline.is_file():
 		checks.append(
 			{
 				"name": "quality_baseline",
 				"status": "ok",
-				"detail": "可运行 scripts/quality_baseline.py 执行 CI 同款 P0 门禁：ruff、全量离线 pytest 和 mypy",
-				"hint": "python scripts/quality_baseline.py",
+				"detail": "可运行 scripts/quality_baseline.py 执行本地 P0 门禁：ruff、全量离线 pytest 和 mypy",
+				"hint": f"在源码根目录 {root} 运行 uv run python scripts/quality_baseline.py",
 			}
 		)
 	else:
@@ -52,8 +82,8 @@ def _add_quality_baseline_checks(checks: list[dict[str, Any]]) -> None:
 			{
 				"name": "quality_baseline",
 				"status": "warn",
-				"detail": "未检测到源码仓库质量基线入口（安装包运行时可忽略）",
-				"hint": "在项目根目录运行，或使用发布包自带的外部 CI",
+				"detail": "当前源码仓库缺少 scripts/quality_baseline.py",
+				"hint": "请先恢复源码仓库的质量门禁脚本",
 			}
 		)
 
@@ -67,6 +97,7 @@ def _add_quality_baseline_checks(checks: list[dict[str, Any]]) -> None:
 				"hint": hint,
 			}
 		)
+	return root if baseline.is_file() else None
 
 
 def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[dict[str, Any]]) -> None:

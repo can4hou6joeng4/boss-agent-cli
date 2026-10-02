@@ -3,6 +3,7 @@
 import json
 from typing import Any
 
+import pytest
 from click.testing import CliRunner, Result
 
 from boss_agent_cli.main import cli
@@ -121,6 +122,39 @@ def test_config_set_operating_mode_validates_choice(tmp_path):
 	code, parsed = _invoke("config", "set", "operating_mode", "invalid", tmp_path=tmp_path)
 	assert code == 1
 	assert parsed["error"]["code"] == "INVALID_PARAM"
+
+
+def test_config_set_platform_uses_current_registry(tmp_path, monkeypatch):
+	"""写入时读取注册表，允许合法平台及调用前新增的适配器。"""
+	from boss_agent_cli import platforms
+
+	for name in ("zhipin", "candidate-only"):
+		if name == "candidate-only":
+			monkeypatch.setitem(platforms._REGISTRY, name, platforms.BossPlatform)
+		code, parsed = _invoke("config", "set", "platform", name, tmp_path=tmp_path)
+		assert code == 0
+		assert parsed["data"]["value"] == name
+		assert json.loads((tmp_path / "config.json").read_text())["platform"] == name
+		code, parsed = _invoke("config", "get", "platform", tmp_path=tmp_path)
+		assert code == 0
+		assert parsed["data"]["value"] == name
+
+
+@pytest.mark.parametrize("value", ["zhilian", "qiancheng", "51job", "unknown", "", " ZHIPIN "])
+@pytest.mark.parametrize("existing", [False, True])
+def test_config_set_invalid_platform_does_not_write(tmp_path, value, existing):
+	config_file = tmp_path / "config.json"
+	original = b'{"log_level": "debug", "request_delay": [2, 4]}\n'
+	if existing:
+		config_file.write_bytes(original)
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "config", "set", "platform", value])
+	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
+	assert "zhipin" in parsed["error"]["message"]
+	if existing:
+		assert config_file.read_bytes() == original
+	else:
+		assert not config_file.exists()
 
 
 def test_config_set_browser_source_validates_choice(tmp_path):

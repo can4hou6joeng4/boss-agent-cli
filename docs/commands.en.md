@@ -184,6 +184,20 @@ Both commands reuse native CLI authentication. This implementation follows stati
 | `boss stats` | Funnel stats from local state (greeted/applied/shortlist) |
 | `boss export <query>` | Export results (CSV/JSON/HTML, supports `--url` web filters) |
 
+### Platform configuration validation
+
+`boss config set platform <name>` validates against the current platform registry; the built-in value is `zhipin`. Removed platforms, unknown names, and empty values return `INVALID_PARAM` without creating or modifying the configuration file.
+
+```bash
+boss config set platform zhipin
+```
+
+If an older configuration already contains an unsupported platform, explicitly select a supported platform to repair it. The CLI does not silently switch platforms or read another platform's credentials:
+
+```bash
+boss --platform zhipin config set platform zhipin
+```
+
 ## Search filter parameters
 
 ```bash

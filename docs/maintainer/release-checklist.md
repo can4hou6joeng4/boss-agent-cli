@@ -32,15 +32,25 @@ git diff --check
 ## 4. Package check
 
 ```bash
-uv build
+uv build --out-dir dist/release-check
+uv run python scripts/verify_release.py --artifacts dist/release-check --json
+uv run python scripts/verify_release.py --artifacts dist/release-check --fresh-install --python 3.11 --require-clean --json
 ```
 
-Inspect generated artifacts:
+Use a dedicated output directory containing exactly one wheel and one sdist for the
+current version. The default verification reads archives without extracting them,
+checks versions/metadata/file paths, and reports SHA-256 hashes. It does not install
+packages or contact a package index. `--fresh-install` explicitly enables dependency
+resolution in a temporary environment without `uv.lock`, then checks installed CLI
+and MCP behavior without calling the recruitment platform.
 
-```bash
-python -m tarfile -l dist/*.tar.gz | sed -n '1,80p'
-python -m zipfile -l dist/*.whl | sed -n '1,80p'
-```
+The report distinguishes `passed`, `failed`, and `not_run`. A successful default
+check with `git.clean=false` is development evidence, not release readiness. Before
+publishing, use `--require-clean`; when the local tag already exists, also pass
+`--tag vX.Y.Z` to verify its version and commit. The script never creates or pushes
+Git tags and does not replace the local quality baseline or fixture eval. Run
+`uv run python evals/run_eval.py --mode fixture` in an independent terminal, not
+inside an active agent session.
 
 ## 5. Publish
 
@@ -62,4 +72,12 @@ uv publish
 - Confirm the GitHub Release exists.
 - Confirm PyPI shows the new version.
 - Confirm `uv tool install --upgrade boss-agent-cli` can install the release.
+- Verify the published version in a fresh temporary environment (replace `X.Y.Z`):
+
+  ```bash
+  uv run python scripts/verify_release.py --pypi-version X.Y.Z --python 3.11 --json
+  ```
+
+  This explicitly downloads packages from PyPI, checks CLI/MCP contracts, and
+  leaves the user's installed tools and credentials unchanged.
 - Create follow-up issues for known limitations instead of hiding them in release notes.

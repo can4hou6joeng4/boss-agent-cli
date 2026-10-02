@@ -13,7 +13,7 @@ from boss_agent_cli.auth.browser import probe_cdp
 from boss_agent_cli.auth.cookie_extract import extract_cookies
 from boss_agent_cli.auth.health import assess_auth_health, auth_config_for_platform
 from boss_agent_cli.auth.manager import AuthManager
-from boss_agent_cli.commands._doctor_checks import _add_live_probe_checks, _add_quality_baseline_checks
+from boss_agent_cli.commands._doctor_checks import _add_live_probe_checks, _add_quality_baseline_checks, _doctor_command
 from boss_agent_cli.display import handle_output, render_simple_list
 from boss_agent_cli.services.browser_runtime import (
 	evaluate_patchright_chromium,
@@ -111,7 +111,7 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 		)
 
 	# 1.5) Local source quality baseline
-	_add_quality_baseline_checks(checks)
+	source_root = _add_quality_baseline_checks(checks)
 
 	# 2) Auth storage
 	token = auth.check_status()
@@ -208,23 +208,32 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 	summary = "healthy" if worst == 0 else ("degraded" if worst == 1 else "broken")
 
 	next_actions = []
+	operator_actions = []
+	login_command = _doctor_command(ctx, "login")
 	if not has_token:
-		next_actions.append(f"{config.login_action} — 建立登录态")
+		next_actions.append(login_command)
+		operator_actions.append(f"尚未建立登录态；执行 {login_command}，按提示在官方页面完成登录")
 	else:
 		auth_quality = next((item for item in checks if item["name"] == "auth_token_quality"), None)
-		if auth_quality and auth_quality["status"] == "warn":
-			next_actions.append(f"boss status --live — 验证缺失 {config.secondary_token_label} 的登录态是否仍可用")
-			next_actions.append(f"如状态异常，执行 {config.login_action} — 重建或刷新登录态")
-		elif auth_quality and auth_quality["status"] == "error":
-			next_actions.append(f"boss logout && {config.login_action} — 重建损坏的登录态")
+		if auth_quality and auth_quality["status"] == "error":
+			operator_actions.append(
+				f"本地登录态损坏；确认需要重建后，先执行 {_doctor_command(ctx, 'logout')}，再执行 {login_command}"
+			)
 		else:
-			next_actions.append("boss status --live — 可选执行一次只读在线验证")
-	if not any(item["name"] == "cdp" and item["status"] == "ok" for item in checks):
-		next_actions.append("boss --cdp-url http://localhost:9222 doctor — 检查指定 CDP 地址")
+			next_actions.append(_doctor_command(ctx, "status", "--live"))
+			operator_actions.append("可选择执行一次 status --live，只读验证当前登录态；不是诊断时自动发起的请求")
+			if auth_quality and auth_quality["status"] == "warn":
+				operator_actions.append(
+					f"缺少 {config.secondary_token_label}；若状态异常，先在官方页面确认，再决定是否执行 {login_command} 重建登录态"
+				)
+	if not cdp_ok:
+		next_actions.append(_doctor_command(ctx, "doctor", cdp_url=cdp_url or DEFAULT_CDP_URL))
+		operator_actions.append("如需 CDP，请先确认目标浏览器及调试端口已就绪，再重新诊断；不要反复重试")
 	if not any(item["name"] == "cookie_extract" and item["status"] == "ok" for item in checks):
-		next_actions.append(f"先在本机浏览器登录 {config.site_host}，再重试 {config.login_action}")
-	next_actions.append("python scripts/quality_baseline.py — 提交前运行本地 P0 质量基线")
-	next_actions.append("敏感操作或命中风控时，停止自动化访问并回到官方页面由用户手动完成")
+		operator_actions.append(f"需要提取本地登录态时，先在本机浏览器的 {config.site_host} 官方页面完成登录")
+	if source_root is not None:
+		operator_actions.append(f"源码维护者：在 {source_root} 运行 uv run python scripts/quality_baseline.py 检查本地门禁")
+	operator_actions.append("涉及敏感操作或命中平台风控时，停止自动化访问并回到官方页面由用户手动完成")
 
 	data = {
 		"summary": summary,
@@ -236,6 +245,7 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 	}
 	hints = {
 		"next_actions": next_actions,
+		"operator_actions": operator_actions,
 	}
 	handle_output(
 		ctx,

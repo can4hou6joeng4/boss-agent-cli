@@ -11,6 +11,7 @@ import click
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.config import DEFAULTS
 from boss_agent_cli.display import handle_output, render_simple_list
+from boss_agent_cli.platforms import list_platforms
 
 _CONFIG_CHOICES = {
 	"operating_mode": ("assisted", "research"),
@@ -119,7 +120,7 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 	user_cfg = _load_user_overrides(config_path)
 
 	parsed_value = _parse_value(value, DEFAULTS[key])
-	choices = _CONFIG_CHOICES.get(key)
+	choices = list_platforms() if key == "platform" else _CONFIG_CHOICES.get(key)
 	if choices is not None and parsed_value not in choices:
 		from boss_agent_cli.output import emit_error
 		emit_error(

@@ -16,11 +16,17 @@ boss doctor --live-probe
 
 ## Doctor checks
 
+`hints.next_actions` contains executable follow-up commands that preserve the current data directory, platform, browser source, and explicitly configured CDP address. QR scans, official-page interactions, conditional login-state rebuilding, and risk-control stop instructions belong in `hints.operator_actions`. TTY renders those human instructions to stderr; agents should relay them rather than execute them automatically.
+
+`quality_baseline` and `quality_tool_*` apply only when the CLI runs from this project's source checkout. Installed-package users do not need the source repository or ruff/pytest/mypy and are not advised to run repository-relative scripts. Maintainer instructions identify the repository root to use; other browser and authentication checks retain their existing behavior.
+
 | Check | What it means |
 |-------|---------------|
 | `python` | Python ≥ 3.10 installed |
 | `patchright_chromium` | The Chromium and headless shell revisions required by patchright are installed; Windows also checks `%LOCALAPPDATA%\ms-playwright` |
 | `windows_uv_tool_path` | Whether the global `uv tool` command directory is on PATH on Windows |
+| `quality_baseline` | Source checkout only: whether the local P0 quality script exists |
+| `quality_tool_ruff` / `quality_tool_pytest` / `quality_tool_mypy` | Source checkout only: whether developer tools are available directly or through uv |
 | `cookie_extract` | Local browser cookies accessible |
 | `credential_file` | Encrypted credential file exists and is readable |
 | `auth_session` | Encrypted session file readable |

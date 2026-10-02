@@ -238,7 +238,7 @@ def test_doctor_command(mock_auth_cls, mock_probe_cdp, mock_httpx_get, mock_extr
 	assert any(item["name"] == "credential_file" for item in parsed["data"]["checks"])
 	assert any(item["name"] == "candidate_search_health" for item in parsed["data"]["checks"])
 	assert parsed["hints"]["next_actions"]
-	assert any("官方页面" in action and "手动完成" in action for action in parsed["hints"]["next_actions"])
+	assert any("官方页面" in action and "手动完成" in action for action in parsed["hints"]["operator_actions"])
 
 
 @patch("boss_agent_cli.commands.doctor.extract_cookies")
@@ -258,7 +258,7 @@ def test_doctor_with_partial_token_quality_warn(mock_auth_cls, mock_probe_cdp, m
 	quality = next(item for item in parsed["data"]["checks"] if item["name"] == "auth_token_quality")
 	assert quality["status"] == "warn"
 	assert "stoken 缺失" in quality["detail"]
-	assert any("boss status" in action for action in parsed["hints"]["next_actions"])
+	assert any(action.endswith(" status --live") for action in parsed["hints"]["next_actions"])
 
 
 @patch("boss_agent_cli.commands.recommend.CacheStore")

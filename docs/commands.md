@@ -202,6 +202,20 @@ boss hr download-resume <friend_id> --message-id <attachment_mid> --output ./res
 | `boss stats` | 投递转化漏斗统计（greeted/applied/shortlist） |
 | `boss export <query>` | 导出结果（CSV/JSON/HTML，支持 `--url` 网页筛选） |
 
+### 平台配置校验
+
+`boss config set platform <名称>` 按当前平台注册表校验，内置可用值为 `zhipin`。已移除的平台、未知值和空值返回 `INVALID_PARAM`，不会创建或修改配置文件。
+
+```bash
+boss config set platform zhipin
+```
+
+若旧配置已经包含不支持的平台，仍需显式选择可用平台后修复，不会自动切换平台或读取其他平台的凭据：
+
+```bash
+boss --platform zhipin config set platform zhipin
+```
+
 ## 搜索筛选参数详解
 
 ```bash

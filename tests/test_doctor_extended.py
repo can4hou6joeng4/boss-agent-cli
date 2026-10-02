@@ -1,10 +1,15 @@
 """doctor.py 扩展测试 — 覆盖各检查项的正常/异常路径。"""
 
+import io
 import json
+import shlex
 import sys
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
+import pytest
 from click.testing import CliRunner
+from rich.console import Console
 from boss_agent_cli.main import cli
 
 
@@ -50,6 +55,9 @@ def _invoke_doctor(tmp_path=None, platform="zhipin", **overrides):
 			cli_args.extend(["--data-dir", str(tmp_path)])
 		if platform != "zhipin":
 			cli_args.extend(["--platform", platform])
+		for key in ("cdp_url", "browser_source"):
+			if key in overrides:
+				cli_args.extend(["--" + key.replace("_", "-"), overrides[key]])
 		cli_args.append("doctor")
 		result = runner.invoke(cli, cli_args)
 	parsed = json.loads(result.output)
@@ -209,7 +217,7 @@ def test_auth_not_logged_in(tmp_path):
 	quality = _find_check(parsed["data"]["checks"], "auth_token_quality")
 	assert quality["status"] == "warn"
 	# next_actions 应包含 login 提示
-	assert any("boss login" in a for a in parsed["hints"]["next_actions"])
+	assert any(a.endswith(" login") for a in parsed["hints"]["next_actions"])
 
 
 def test_auth_session_file_exists_but_undecryptable(tmp_path):
@@ -393,7 +401,7 @@ def test_cookie_extract_not_available(tmp_path):
 def test_next_actions_suggests_login_when_not_logged_in(tmp_path):
 	code, parsed = _invoke_doctor(tmp_path, token=None)
 	actions = parsed["hints"]["next_actions"]
-	assert any("boss login" in a for a in actions)
+	assert any(a.endswith(" login") for a in actions)
 
 
 def test_next_actions_suggests_cdp_when_cdp_unavailable(tmp_path):
@@ -406,7 +414,127 @@ def test_next_actions_suggests_status_when_logged_in(tmp_path):
 	token = {"cookies": {"wt2": "tok"}, "stoken": "st"}
 	code, parsed = _invoke_doctor(tmp_path, token=token, cdp_ws="ws://x")
 	actions = parsed["hints"]["next_actions"]
-	assert any("boss status --live" in a for a in actions)
+	assert any(a.endswith(" status --live") for a in actions)
+
+
+@pytest.mark.parametrize("token", [None, {"cookies": {"wt2": "fixture"}}, {"cookies": {"wt2": "fixture"}, "stoken": "fixture"}])
+def test_doctor_hints_separate_executable_commands_and_human_steps(tmp_path, token):
+	code, parsed = _invoke_doctor(tmp_path, token=token)
+	assert code == 0
+	hints = parsed["hints"]
+	assert hints["operator_actions"]
+	for action in hints["next_actions"]:
+		assert action.startswith("boss ")
+		assert " — " not in action
+		assert "&&" not in action
+		assert action.endswith((" login", " status --live", " doctor"))
+	assert any("平台风控" in action for action in hints["operator_actions"])
+
+
+def test_doctor_damaged_auth_requires_human_confirmation(tmp_path):
+	with patch("boss_agent_cli.commands.doctor.assess_auth_health") as assess:
+		health = assess.return_value
+		health.token_present = True
+		health.auth_state = "invalid"
+		health.salt_path = tmp_path / "salt"
+		health.checks_as_dicts.return_value = [{"name": "auth_token_quality", "status": "error", "detail": "损坏"}]
+		code, parsed = _invoke_doctor(tmp_path, cdp_ws="ws://fixture")
+	assert code == 0
+	assert not any(action.endswith((" login", " logout")) for action in parsed["hints"]["next_actions"])
+	assert any("确认需要重建" in action for action in parsed["hints"]["operator_actions"])
+
+
+@pytest.mark.parametrize("windows", [False, True])
+def test_doctor_command_preserves_context_and_quotes_paths(tmp_path, monkeypatch, windows):
+	from boss_agent_cli.commands import _doctor_checks
+
+	monkeypatch.setattr(_doctor_checks, "os", SimpleNamespace(name="nt" if windows else "posix"))
+	data_dir = tmp_path / "owner's & data"
+	ctx = SimpleNamespace(obj={
+		"data_dir": data_dir, "platform": "candidate-only", "role": "recruiter",
+		"browser_source": "existing-browser", "cdp_url": "http://localhost:9444",
+	})
+	command = _doctor_checks._doctor_command(ctx, "doctor")
+	argv = [
+		"boss", "--data-dir", str(data_dir.resolve()), "--platform", "candidate-only",
+		"--role", "recruiter", "--browser-source", "existing-browser",
+		"--cdp-url", "http://localhost:9444", "doctor",
+	]
+	if windows:
+		quoted_path = "'" + str(data_dir.resolve()).replace("'", "''") + "'"
+		assert command == "boss --data-dir " + quoted_path + " " + " ".join(argv[3:])
+	else:
+		assert shlex.split(command) == argv
+
+
+def test_doctor_recovery_keeps_explicit_cdp_address(tmp_path):
+	code, parsed = _invoke_doctor(tmp_path, cdp_url="http://localhost:9444", browser_source="existing-browser")
+	assert code == 0
+	actions = parsed["hints"]["next_actions"]
+	diagnostic = next(action for action in actions if action.endswith(" doctor"))
+	assert "--cdp-url http://localhost:9444" in diagnostic
+	assert "--browser-source existing-browser" in diagnostic
+	assert "localhost:9222" not in diagnostic
+
+
+def test_installed_doctor_omits_developer_checks_and_hints(tmp_path):
+	with (
+		patch("boss_agent_cli.commands._doctor_checks._find_project_root", return_value=None),
+		patch("boss_agent_cli.commands._doctor_checks._resolve_quality_tool") as resolve,
+	):
+		code, parsed = _invoke_doctor(tmp_path)
+	assert code == 0
+	resolve.assert_not_called()
+	assert not any(item["name"].startswith("quality_") for item in parsed["data"]["checks"])
+	assert "quality_baseline.py" not in json.dumps(parsed["hints"])
+
+
+def test_source_detection_does_not_use_installed_users_current_project(tmp_path, monkeypatch):
+	from boss_agent_cli.commands import _doctor_checks
+
+	project = tmp_path / "unrelated"
+	(project / "scripts").mkdir(parents=True)
+	(project / "pyproject.toml").write_text('[project]\nname="unrelated"\n', encoding="utf-8")
+	(project / "scripts" / "quality_baseline.py").touch()
+	monkeypatch.chdir(project)
+	monkeypatch.setattr(_doctor_checks, "__file__", str(tmp_path / "site-packages" / "boss_agent_cli" / "commands" / "_doctor_checks.py"))
+	assert _doctor_checks._find_project_root() is None
+
+
+def test_source_detection_and_missing_baseline_are_explicit(tmp_path, monkeypatch):
+	from boss_agent_cli.commands import _doctor_checks
+
+	source = tmp_path / "src" / "boss_agent_cli" / "commands" / "_doctor_checks.py"
+	source.parent.mkdir(parents=True)
+	source.touch()
+	(tmp_path / "pyproject.toml").write_text('[project]\nname="boss-agent-cli"\n', encoding="utf-8")
+	monkeypatch.setattr(_doctor_checks, "__file__", str(source))
+	assert _doctor_checks._find_project_root() == tmp_path
+	checks = []
+	assert _doctor_checks._add_quality_baseline_checks(checks) is None
+	assert _find_check(checks, "quality_baseline")["status"] == "warn"
+
+
+def test_doctor_tty_renders_human_steps_without_agent_command_list(tmp_path, monkeypatch):
+	from boss_agent_cli import display
+
+	stream = io.StringIO()
+	monkeypatch.setattr(display, "console", Console(file=stream, width=200, force_terminal=False))
+	monkeypatch.setattr(display, "is_json_mode", lambda ctx: False)
+	paths = _base_patches()
+	with (
+		patch(paths["auth"]) as auth,
+		patch(paths["cdp"], return_value="ws://fixture"),
+		patch(paths["httpx"], return_value=MagicMock(status_code=200)),
+		patch(paths["cookie"], return_value=None),
+	):
+		auth.return_value.check_status.return_value = {"cookies": {"wt2": "fixture"}, "stoken": "fixture"}
+		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "doctor"])
+	assert result.exit_code == 0, result.output
+	assert result.stdout == ""
+	assert "你需要" in stream.getvalue()
+	assert "平台风控" in stream.getvalue()
+	assert "boss --data-dir" not in stream.getvalue()
 
 
 # ── Cookie 完整性检查（wbg/zp_at） ─────────────────────────────────
@@ -553,7 +681,8 @@ def test_doctor_reports_quality_baseline(tmp_path):
 	assert "scripts/quality_baseline.py" in baseline["detail"]
 	for tool in ("ruff", "pytest", "mypy"):
 		assert _find_check(checks, f"quality_tool_{tool}")["status"] in {"ok", "warn"}
-	assert any("quality_baseline.py" in action for action in parsed["hints"]["next_actions"])
+	assert not any("quality_baseline.py" in action for action in parsed["hints"]["next_actions"])
+	assert any("quality_baseline.py" in action for action in parsed["hints"]["operator_actions"])
 
 
 def test_windows_playwright_cache_dir_uses_localappdata(tmp_path, monkeypatch):

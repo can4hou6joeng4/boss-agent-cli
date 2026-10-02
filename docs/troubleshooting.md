@@ -15,6 +15,10 @@ boss doctor --live-probe
 
 ## doctor 检查项
 
+`hints.next_actions` 只提供可执行的后继命令，保留当前数据目录、平台、浏览器来源和已指定的 CDP 地址。扫码、官方页面操作、条件性重建登录态与风控停止提醒放在 `hints.operator_actions`；TTY 将这些真人指引显示到 stderr，Agent 应转述而不是自动执行。
+
+`quality_baseline` 与 `quality_tool_*` 仅在当前 CLI 从本项目源码运行时检查。普通安装包用户不需要源码仓库或 ruff/pytest/mypy，也不会收到运行仓库相对路径脚本的建议。源码维护者指引会明确应进入的仓库根目录；其余浏览器和认证检查的语义不变。
+
 | 检查项 | 说明 |
 |--------|------|
 | `python` | Python 版本 >= 3.10 |
