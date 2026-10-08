@@ -1,8 +1,12 @@
-# boss-agent-cli 宣传片源工程
+# boss-agent-cli 历史宣传片源工程
 
-README 首页展示动画（`demo/showcase/`）的可复现源：一个基于 **HTML 时间轴**的动效工程，
+2026-10-08 前的 31 秒展示动画源：一个基于 **HTML 时间轴**的动效工程，
 终端原生暗色风格，1920×1080 / 31s，覆盖四个叙事段落——
 搜索 + 福利筛选 · `schema` + JSON 信封 · 合规护栏 · AI 增强 + 多平台。
+
+当前 README 与项目站点的 48 秒发布会动画来自 [../keynote-animation/](../keynote-animation/README.md)。本目录保留作历史参考，文案不代表当前能力；导出历史片请使用临时输出目录。
+
+[English](README.en.md)
 
 ## 结构
 
@@ -24,7 +28,7 @@ python3 -m http.server 4311 --directory demo
 # 空格播放 · ←/→ 逐帧 · 0 复位（播放位置持久化到 localStorage）
 ```
 
-## 重新导出 `demo/showcase/`
+## 重新导出历史片（使用临时目录）
 
 `<Stage>` 暴露 `window.__animStage` 桥接（`setTime` / `setPlaying` / `duration`），
 可被无头浏览器逐帧驱动：

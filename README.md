@@ -15,11 +15,11 @@
 
 [快速上手](docs/getting-started.md) · [Agent 集成](#-agent-集成) · [命令](#-命令) · [排障](docs/troubleshooting.md) · [路线图](ROADMAP.md) · **中文** | [English](README.en.md)
 
-<a href="demo/showcase/boss-agent-cli-showcase.mp4" title="观看完整项目展示视频">
-  <img src="demo/showcase/boss-agent-cli-showcase.gif" alt="boss-agent-cli 项目展示动图" width="100%">
+<a href="demo/showcase/boss-agent-cli-showcase.mp4" title="观看 48 秒产品发布会动画">
+  <img src="demo/showcase/boss-agent-cli-showcase.gif?v=keynote-20261008" alt="boss-agent-cli 极光发布会动画：福利筛选、双角色工作流与 Agent 接入" width="100%">
 </a>
 
-**[观看完整展示视频](demo/showcase/boss-agent-cli-showcase.mp4)** · [终端交互演示](demo/demo-zh.gif) · schema 驱动 · 福利筛选 · JSON 信封
+**[观看 48 秒发布会动画](demo/showcase/boss-agent-cli-showcase.mp4)** · [交互版](https://can4hou6joeng4.github.io/boss-agent-cli/keynote-animation/) · [终端交互演示](demo/demo-zh.gif) · 福利筛选 · 双角色工作流 · Agent 接入
 
 </div>
 

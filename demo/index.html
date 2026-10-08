@@ -8,11 +8,11 @@
 <meta name="description" content="boss-agent-cli —— 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI。搜索、福利筛选、本地候选池、结构化 JSON 信封；默认低风险：本地辅助 · 只读优先 · 用户主动触发。">
 <meta property="og:title" content="boss-agent-cli · BOSS 直聘 AI Agent CLI">
 <meta property="og:description" content="把 BOSS 直聘求职交给你的 AI Agent。搜索 · 福利筛选 · 候选池 · JSON 信封，默认低风险合规。">
-<meta property="og:image" content="https://can4hou6joeng4.github.io/boss-agent-cli/showcase/boss-agent-cli-showcase-thumb.jpg">
+<meta property="og:image" content="https://can4hou6joeng4.github.io/boss-agent-cli/showcase/boss-agent-cli-showcase-thumb.jpg?v=keynote-20261008">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://can4hou6joeng4.github.io/boss-agent-cli/">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://can4hou6joeng4.github.io/boss-agent-cli/showcase/boss-agent-cli-showcase-thumb.jpg">
+<meta name="twitter:image" content="https://can4hou6joeng4.github.io/boss-agent-cli/showcase/boss-agent-cli-showcase-thumb.jpg?v=keynote-20261008">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%231B365D'/%3E%3Cpath d='M6 8l3 4-3 4M12 16h6' stroke='%23faf9f5' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="canonical" href="https://can4hou6joeng4.github.io/boss-agent-cli/">
 <link rel="alternate" type="text/plain" href="llms.txt">
@@ -67,13 +67,14 @@ section{margin-bottom:72px;}
 /* Gallery */
 .gallery{--enter-from-x:44px;--exit-to-x:-34px;--sweep-angle:100deg;--sweep-from:-45%;--sweep-to:65%;--caption-shift:-2px;display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:24px;align-items:baseline;}
 .gallery[data-direction="prev"]{--enter-from-x:-44px;--exit-to-x:34px;--sweep-angle:260deg;--sweep-from:65%;--sweep-to:-45%;--caption-shift:2px;}
-.gallery-frame{grid-column:1 / -1;position:relative;background:var(--shot-bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(20,19,19,.10);cursor:ew-resize;}
+.gallery-frame{grid-column:1 / -1;position:relative;background:var(--shot-bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(20,19,19,.10);}
 .gallery-frame::after{content:"";position:absolute;inset:0;z-index:4;pointer-events:none;background:linear-gradient(var(--sweep-angle),rgba(245,244,237,0) 32%,rgba(245,244,237,.16) 50%,rgba(245,244,237,0) 68%);opacity:0;transform:translate3d(var(--sweep-from),0,0);transition:opacity 540ms ease,transform 920ms cubic-bezier(.22,1,.36,1);}
 .gallery.is-switching .gallery-frame::after{opacity:1;transform:translate3d(var(--sweep-to),0,0);}
 .gallery-panel{position:absolute;inset:0;margin:0;opacity:0;visibility:hidden;z-index:1;transform:translate3d(var(--enter-from-x),0,0) scale(.985);transition:opacity 620ms cubic-bezier(.22,1,.36,1),transform 880ms cubic-bezier(.22,1,.36,1),visibility 620ms;will-change:opacity,transform;}
 .gallery-panel.is-active{opacity:1;visibility:visible;position:relative;z-index:2;transform:translate3d(0,0,0) scale(1);}
 .gallery-panel.was-active{opacity:0;visibility:visible;position:absolute;inset:0;z-index:3;transform:translate3d(var(--exit-to-x),0,0) scale(.985);pointer-events:none;}
-.gallery-panel img{width:100%;height:auto;display:block;}
+.gallery-panel img,.gallery-panel video{width:100%;height:auto;display:block;}
+.gallery-links{grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:8px 20px;margin:10px 2px 0;font-family:var(--latin-ui);font-size:13px;}
 .gallery-caption{grid-column:1;grid-row:2;min-height:48px;padding:12px 2px 0;display:flex;align-items:baseline;gap:14px;transition:opacity 420ms ease,transform 520ms cubic-bezier(.22,1,.36,1);}
 .gallery.is-switching .gallery-caption{opacity:.72;transform:translate3d(var(--caption-shift),0,0);}
 .gallery-caption .title{font-family:var(--serif);font-weight:500;font-size:17px;color:var(--near-black);margin:0;letter-spacing:.1px;flex:0 0 auto;}
@@ -196,12 +197,15 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 		<div class="section-head">
 			<p class="section-num">00 · <span data-zh="演示" data-en="Showcase">演示</span></p>
 			<h2 class="section-title" data-zh="看它跑起来" data-en="See it run">看它跑起来</h2>
-			<p class="section-lede" data-zh="终端原生的暗色叙事，与真实的命令交互——结构化 JSON 一调用就懂。" data-en="A terminal-native dark narrative and real command interaction — structured JSON an agent reads at a glance.">终端原生的暗色叙事，与真实的命令交互——结构化 JSON 一调用就懂。</p>
+			<p class="section-lede" data-zh="一句命令，连接机会。48 秒了解福利筛选、双角色工作流与 Agent 接入。" data-en="One command. A connection to opportunity. Explore welfare filtering, dual-role workflows and agent integration in 48 seconds.">一句命令，连接机会。48 秒了解福利筛选、双角色工作流与 Agent 接入。</p>
 		</div>
 		<div class="gallery" data-gallery>
 			<div class="gallery-frame" aria-live="polite">
-				<figure class="gallery-panel" data-title-zh="项目展示" data-title-en="Showcase" data-line-zh="三十一秒，终端里的一次低风险求职。" data-line-en="Thirty-one seconds of low-risk job-hunting, in a terminal.">
-					<img src="showcase/boss-agent-cli-showcase.gif" alt="boss-agent-cli 项目展示动图" width="800" height="450" loading="eager">
+				<figure class="gallery-panel" data-title-zh="产品发布会" data-title-en="Product keynote" data-line-zh="48 秒 · 极光舞台 · 原创电子配乐。职位与流程为示意。" data-line-en="48 seconds · Aurora stage · Original electronic score. Jobs and workflows are illustrative.">
+					<video controls playsinline preload="metadata" poster="showcase/boss-agent-cli-showcase-thumb.jpg?v=keynote-20261008" width="1920" height="1080" aria-label="boss-agent-cli 产品发布会动画">
+						<source src="showcase/boss-agent-cli-showcase.mp4?v=keynote-20261008" type="video/mp4">
+						<a href="showcase/boss-agent-cli-showcase.mp4" data-zh="下载发布会视频" data-en="Download the keynote video">下载发布会视频</a>
+					</video>
 				</figure>
 				<figure class="gallery-panel" data-title-zh="终端交互" data-title-en="Terminal" data-line-zh="真实命令，真实 JSON 信封。" data-line-en="Real commands, real JSON envelopes.">
 					<img src="demo-zh.gif" alt="boss-agent-cli 终端交互演示" width="1280" height="720" loading="lazy">
@@ -212,8 +216,12 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 				<p class="line" data-gallery-line></p>
 			</div>
 			<div class="gallery-tabs" aria-label="选择截图">
-				<button type="button" data-zh="项目展示" data-en="Showcase">项目展示</button>
+				<button type="button" data-zh="产品发布会" data-en="Product keynote">产品发布会</button>
 				<button type="button" data-zh="终端交互" data-en="Terminal">终端交互</button>
+			</div>
+			<div class="gallery-links">
+				<a href="keynote-animation/" data-zh="观看交互版 →" data-en="Watch the interactive edition →">观看交互版 →</a>
+				<a href="showcase/boss-agent-cli-showcase.mp4" download data-zh="下载 48 秒 MP4" data-en="Download the 48-second MP4">下载 48 秒 MP4</a>
 			</div>
 		</div>
 	</section>
@@ -380,11 +388,11 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 		gallery.classList.add("is-switching");
 		transitionTimer=setTimeout(function(){ gallery.classList.remove("is-switching"); if(out) out.classList.remove("was-active"); transitionTimer=null; },920);
 		index=next;
-		panels.forEach(function(p,i){ p.classList.toggle("is-active",i===index); p.setAttribute("aria-hidden",i===index?"false":"true"); });
+		panels.forEach(function(p,i){ p.classList.toggle("is-active",i===index); p.setAttribute("aria-hidden",i===index?"false":"true"); if(i!==index) p.querySelectorAll("video").forEach(function(v){ v.pause(); }); });
 		tabs.forEach(function(t,i){ t.classList.toggle("is-active",i===index); t.setAttribute("aria-pressed",i===index?"true":"false"); });
 		refreshCaption();
 	}
-	function start(){ if(reduceMotion||timer||panels.length<2) return; timer=setInterval(function(){ activate((index+1)%panels.length); },4500); }
+	function start(){ if(reduceMotion||timer||panels.length<2||panels[index].querySelector("video")) return; timer=setInterval(function(){ activate((index+1)%panels.length); if(panels[index].querySelector("video")) stop(); },4500); }
 	function stop(){ if(timer){ clearInterval(timer); timer=null; } }
 
 	if(panels.length){
@@ -392,7 +400,7 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 		if(tabs[0]) tabs[0].classList.add("is-active");
 		tabs.forEach(function(tab,i){ tab.addEventListener("click",function(){ stop(); activate(i); start(); }); });
 		var frame=gallery.querySelector(".gallery-frame");
-		if(frame&&panels.length>1) frame.addEventListener("click",function(e){ var b=frame.getBoundingClientRect(); var n=e.clientX<b.left+b.width/2?(index-1+panels.length)%panels.length:(index+1)%panels.length; stop(); activate(n); start(); });
+		if(frame&&panels.length>1) frame.addEventListener("click",function(e){ if(e.target.closest("video,a,button")) return; var b=frame.getBoundingClientRect(); var n=e.clientX<b.left+b.width/2?(index-1+panels.length)%panels.length:(index+1)%panels.length; stop(); activate(n); start(); });
 		gallery.addEventListener("mouseenter",stop); gallery.addEventListener("mouseleave",start);
 		gallery.addEventListener("focusin",stop); gallery.addEventListener("focusout",start);
 	}

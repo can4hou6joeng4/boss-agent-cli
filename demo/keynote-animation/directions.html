@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>boss-agent-cli · 发布会视觉方向</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:48px 5vw 70px;background:#14191e;color:#eff3f5;font-family:Inter,"PingFang SC",sans-serif}header{max-width:1440px;margin:0 auto 36px}h1{font-size:32px;letter-spacing:-1px;margin:12px 0}p{color:#a3b0b9;font-size:16px;line-height:1.7}small{color:#00d7b1;letter-spacing:3px}main{max-width:1440px;margin:auto;display:grid;gap:36px}section{border:1px solid #ffffff1a;border-radius:22px;overflow:hidden;background:#0b1117}.caption{display:flex;justify-content:space-between;align-items:center;padding:22px 28px}.caption h2{font-size:20px;margin:0}.caption span{font-size:14px;color:#9eacb5}canvas{width:100%;display:block;aspect-ratio:16/9}.tag{color:#00d7b1!important}@media(min-width:1700px){main{grid-template-columns:repeat(3,1fr);max-width:none}.caption{padding:18px}.caption span{display:none}}@media(max-width:600px){body{padding:28px 16px}.caption{padding:18px}.caption span{display:none}}
+</style></head><body>
+<header><small>VISUAL DIRECTION / 01</small><h1>一句命令，连接机会。</h1><p>同一开场、同一时刻的三种视觉方向。成片计划：48 秒 · 1920 × 1080 · 原创电子配乐。</p></header>
+<main>
+<section><div class="caption"><h2>A · 极光发布会</h2><span class="tag">推荐 / 品牌青绿 × 珊瑚橙</span></div><canvas id="A" width="1920" height="1080"></canvas></section>
+<section><div class="caption"><h2>B · 白昼产品剧场</h2><span>暖白空间 / 克制的产品感</span></div><canvas id="B" width="1920" height="1080"></canvas></section>
+<section><div class="caption"><h2>C · 终端信号</h2><span>暗色网格 / 开发者发布现场</span></div><canvas id="C" width="1920" height="1080"></canvas></section>
+</main>
+<script src="visuals.js"></script><script>KEYNOTE.load().then(()=>{for(const id of ['A','B','C'])KEYNOTE.hero(document.getElementById(id).getContext('2d'),4,id);window.__ready=true;}).catch(e=>{window.__bootFailed=String(e);console.error(e)});</script>
+</body></html>

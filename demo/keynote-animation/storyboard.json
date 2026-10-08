@@ -1,0 +1,22 @@
+{
+  "title": "boss-agent-cli · 一句命令，连接机会",
+  "version": "3.0.0",
+  "direction": "A / 极光发布会（用户已选择）",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 48,
+  "bpm": 120,
+  "platform": "zhipin",
+  "source": "Current local README, schema/data.py, mcp_tools.py, commands/search.py and CLAUDE.md. Verified 2026-10-08.",
+  "metrics": {"commands": 39, "recruiter_subcommands": 13, "mcp_tools": 77},
+  "data_policy": "All illustrative jobs and UI states are synthetic. No login, platform request or real candidate data.",
+  "scenes": [
+    {"id": "hero", "t0": 0, "dur": 8, "headline": "一句命令，连接机会。", "action": "Brand logo arrives inside moving orbit paths; terminal prompt resolves below.", "loops": ["orbit markers", "aurora drift and emblem float"]},
+    {"id": "search", "t0": 8, "dur": 8, "headline": "你在意的，才是条件。", "action": "A real command is typed; illustrative cards are checked against both welfare criteria; the unmatched card retreats.", "loops": ["detail-check scan", "aurora drift and card float"], "command": "boss search \"Python\" --city 上海 --welfare \"双休,五险一金\""},
+    {"id": "roles", "t0": 16, "dur": 8, "headline": "两种角色，一个工作流。", "action": "Two connected workflow rails unfold from the product emblem and reveal seeker and recruiter stages.", "loops": ["workflow packets", "aurora drift and card float"]},
+    {"id": "agent", "t0": 24, "dur": 8, "headline": "让 Agent，接得住。", "action": "CLI / JSON / MCP / Python ports converge on the same product core; 77 implemented MCP tools appear once.", "loops": ["routing packets", "aurora drift and orbit"]},
+    {"id": "control", "t0": 32, "dur": 8, "headline": "每一步，都有掌控。", "action": "A progress rail reaches a checkpoint; stop and explicit resume are demonstrated with five constraints.", "loops": ["checkpoint light", "aurora drift and workflow packets"], "facts": ["timeout", "retry", "budget", "checkpoint", "stop"], "risk_boundary": "A platform risk code or security page stops the workflow and saves a checkpoint. Resume is explicit after risk is cleared."},
+    {"id": "outro", "t0": 40, "dur": 8, "headline": "下一次机会，从这里开始。", "action": "Product emblem resolves over the install command; closing call to action remains legible for at least four seconds.", "loops": ["slow orbit", "aurora drift and cursor breath"], "command": "uv tool install boss-agent-cli", "url": "github.com/can4hou6joeng4/boss-agent-cli"}
+  ]
+}

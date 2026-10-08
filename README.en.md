@@ -15,11 +15,11 @@
 
 [Getting Started](docs/getting-started.en.md) · [Agent Integration](#-agent-integration) · [Commands](#-commands) · [Troubleshooting](docs/troubleshooting.en.md) · [Roadmap](ROADMAP.en.md) · [中文](README.md) | **English**
 
-<a href="demo/showcase/boss-agent-cli-showcase.mp4" title="Watch the full project showcase video">
-  <img src="demo/showcase/boss-agent-cli-showcase.gif" alt="boss-agent-cli project showcase animation" width="100%">
+<a href="demo/showcase/boss-agent-cli-showcase.mp4" title="Watch the 48-second product keynote">
+  <img src="demo/showcase/boss-agent-cli-showcase.gif?v=keynote-20261008" alt="boss-agent-cli Aurora Keynote: welfare filtering, dual-role workflows and agent integration" width="100%">
 </a>
 
-**[Watch the full showcase video](demo/showcase/boss-agent-cli-showcase.mp4)** · [terminal demo](demo/demo-en.gif) · schema-driven · welfare filtering · JSON envelope
+**[Watch the 48-second keynote](demo/showcase/boss-agent-cli-showcase.mp4)** · [interactive edition](https://can4hou6joeng4.github.io/boss-agent-cli/keynote-animation/) · [terminal demo](demo/demo-en.gif) · welfare filtering · dual-role workflows · agent integration
 
 </div>
 
