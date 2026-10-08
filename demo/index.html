@@ -3,11 +3,11 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>boss-agent-cli · 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI</title>
+<title>boss-agent-cli · 面向真人与 AI Agent 的 BOSS 直聘 CLI</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="boss-agent-cli —— 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI。搜索、福利筛选、本地候选池、结构化 JSON 信封；默认低风险：本地辅助 · 只读优先 · 用户主动触发。">
+<meta name="description" content="boss-agent-cli —— 面向真人与 AI Agent 的 BOSS 直聘 CLI。福利筛选、双角色工作流、MCP 与结构化 JSON；有限运行、可停止、可恢复。">
 <meta property="og:title" content="boss-agent-cli · BOSS 直聘 AI Agent CLI">
-<meta property="og:description" content="把 BOSS 直聘求职交给你的 AI Agent。搜索 · 福利筛选 · 候选池 · JSON 信封，默认低风险合规。">
+<meta property="og:description" content="职位发现、福利筛选、双角色工作流与 Agent 接入。有限运行、可停止、可恢复。">
 <meta property="og:image" content="https://can4hou6joeng4.github.io/boss-agent-cli/showcase/boss-agent-cli-showcase-thumb.jpg?v=keynote-20261008">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://can4hou6joeng4.github.io/boss-agent-cli/">
@@ -167,7 +167,7 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 	<!-- Hero -->
 	<header class="hero">
 		<div class="eyebrow">
-			<span>BOSS 直聘 · AI Agent CLI · <a class="version-link" href="https://github.com/can4hou6joeng4/boss-agent-cli/releases">v1.13.1</a></span>
+			<span>BOSS 直聘 · AI Agent CLI · <a class="version-link" href="https://github.com/can4hou6joeng4/boss-agent-cli/releases">v3.0.0</a></span>
 			<span class="hero-links">
 				<button class="lang" id="lang" type="button">EN</button>
 				<a href="https://github.com/can4hou6joeng4/boss-agent-cli" aria-label="GitHub" target="_blank" rel="noopener">
@@ -178,12 +178,12 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 
 		<h1>boss-agent-cli</h1>
 
-		<p class="tagline" data-zh="把 BOSS 直聘求职交给你的 AI Agent。搜索、福利筛选、候选池整理，全部输出结构化 JSON 信封——默认低风险：本地辅助、只读优先、用户主动触发。" data-en="Hand BOSS Zhipin job-hunting to your AI agent. Search, welfare filtering, and shortlist organizing — all emitted as a structured JSON envelope. Low-risk by default: local-assist, read-only-first, user-triggered.">把 BOSS 直聘求职交给你的 AI Agent。搜索、福利筛选、候选池整理，全部输出结构化 JSON 信封——默认低风险：本地辅助、只读优先、用户主动触发。</p>
+		<p class="tagline" data-zh="从职位发现、福利筛选到简历与沟通，把求职者和招聘者的工作流接进同一个 CLI。真人使用终端向导，AI Agent 通过 JSON、MCP 或 Python API 调用。" data-en="Connect job discovery, welfare filtering, resumes and communication in one CLI for job seekers and recruiters. Humans use the terminal wizard; AI agents call JSON, MCP or the Python API.">从职位发现、福利筛选到简历与沟通，把求职者和招聘者的工作流接进同一个 CLI。真人使用终端向导，AI Agent 通过 JSON、MCP 或 Python API 调用。</p>
 
 		<div class="hero-tokens">
 			<span data-zh="Agent 友好" data-en="agent-friendly">Agent 友好</span>
 			<span data-zh="结构化输出" data-en="structured output">结构化输出</span>
-			<span data-zh="低风险合规" data-en="low-risk by default">低风险合规</span>
+			<span data-zh="可恢复工作流" data-en="recoverable workflows">可恢复工作流</span>
 		</div>
 
 		<div class="hero-cta">
@@ -239,15 +239,15 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 			</li>
 			<li>
 				<p class="name" data-zh="JSON 信封" data-en="JSON envelope">JSON 信封<small data-zh="一种形状，所有命令" data-en="one shape, every command">一种形状，所有命令</small></p>
-				<p class="what" data-zh="stdout 只输出 {ok, data, pagination, error, hints}；boss schema 是能力真源。" data-en="stdout is only {ok, data, pagination, error, hints}; boss schema is the capability source of truth.">stdout 只输出 {ok, data, pagination, error, hints}；boss schema 是能力真源。</p>
+				<p class="what" data-zh="stdout 只输出统一 JSON 信封；boss schema 提供当前能力与后继动作。" data-en="stdout returns one consistent JSON envelope; boss schema describes current capabilities and next actions.">stdout 只输出统一 JSON 信封；boss schema 提供当前能力与后继动作。</p>
 			</li>
 			<li>
 				<p class="name" data-zh="本地候选池" data-en="Local shortlist">本地候选池<small data-zh="你的清单，留在你的机器" data-en="your shortlist, on your machine">你的清单，留在你的机器</small></p>
-				<p class="what" data-zh="保存、复盘候选岗位与漏斗统计；投递与沟通回到官网手动完成。" data-en="Save and review candidate jobs and funnel stats; applying and messaging stay on the official site.">保存、复盘候选岗位与漏斗统计；投递与沟通回到官网手动完成。</p>
+				<p class="what" data-zh="保存、标记、离线对比候选岗位，并用漏斗统计复盘求职进展。" data-en="Save, tag and compare candidate jobs offline, then review progress with funnel stats.">保存、标记、离线对比候选岗位，并用漏斗统计复盘求职进展。</p>
 			</li>
 			<li>
 				<p class="name" data-zh="AI 求职增强" data-en="AI assist">AI 求职增强<small data-zh="更安静的一种帮助" data-en="a quieter kind of help">更安静的一种帮助</small></p>
-				<p class="what" data-zh="JD 分析、简历润色、定向优化、模拟面试，兼容 OpenAI / Anthropic 接口。" data-en="JD analysis, resume polish, targeted optimization, interview prep — OpenAI / Anthropic compatible.">JD 分析、简历润色、定向优化、模拟面试，兼容 OpenAI / Anthropic 接口。</p>
+				<p class="what" data-zh="JD 分析、简历润色、定向优化、模拟面试，支持 OpenAI 兼容接口与 Ollama / vLLM 本地模型。" data-en="JD analysis, resume polish, targeted optimization and interview prep through OpenAI-compatible APIs or local Ollama / vLLM models.">JD 分析、简历润色、定向优化、模拟面试，支持 OpenAI 兼容接口与 Ollama / vLLM 本地模型。</p>
 			</li>
 			<li>
 				<p class="name" data-zh="平台抽象" data-en="Platform layer">平台抽象<small data-zh="一套 CLI，可扩展平台" data-en="one cli, pluggable boards">一套 CLI，可扩展平台</small></p>
@@ -255,7 +255,7 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 			</li>
 			<li>
 				<p class="name" data-zh="Agent 接入" data-en="Agent-ready">Agent 接入<small data-zh="四道门，同一套能力" data-en="four doors, one capability">四道门，同一套能力</small></p>
-				<p class="what" data-zh="Skill · subprocess · MCP · Python SDK，四条路径暴露同一套能力。" data-en="Skill · subprocess · MCP · Python SDK — four paths to one capability set.">Skill · subprocess · MCP · Python SDK，四条路径暴露同一套能力。</p>
+				<p class="what" data-zh="CLI · JSON · MCP · Python API，四条入口调用同一套能力与状态。" data-en="CLI · JSON · MCP · Python API — four entry points sharing capabilities and state.">CLI · JSON · MCP · Python API，四条入口调用同一套能力与状态。</p>
 			</li>
 		</ol>
 	</section>
@@ -263,17 +263,17 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 	<!-- 02 · Principles (compliance boundary as numbered invariants) -->
 	<section>
 		<div class="section-head">
-			<p class="section-num">02 · <span data-zh="合规边界" data-en="Principles">合规边界</span></p>
-			<h2 class="section-title" data-zh="默认低风险，写在骨子里" data-en="Low-risk, by construction">默认低风险，写在骨子里</h2>
-			<p class="section-lede" data-zh="敏感动作默认阻断并返回 COMPLIANCE_BLOCKED，回到 BOSS 直聘官网由用户手动完成。" data-en="Sensitive actions are blocked by default and return COMPLIANCE_BLOCKED; complete them manually on the official BOSS Zhipin website.">敏感动作默认阻断并返回 COMPLIANCE_BLOCKED，回到 BOSS 直聘官网由用户手动完成。</p>
+			<p class="section-num">02 · <span data-zh="运行边界" data-en="Principles">运行边界</span></p>
+			<h2 class="section-title" data-zh="每一步，都有掌控" data-en="Control at every step">每一步，都有掌控</h2>
+			<p class="section-lede" data-zh="已实现的工作流开放使用；未支持能力会明确返回。遇平台风险立即停止并保存断点，风险解除后由用户显式恢复。" data-en="Implemented workflows are available, while unsupported capabilities return a clear error. Platform risk stops the workflow and saves a checkpoint; the user explicitly resumes after the risk clears.">已实现的工作流开放使用；未支持能力会明确返回。遇平台风险立即停止并保存断点，风险解除后由用户显式恢复。</p>
 		</div>
 		<ol class="principles">
-			<li><span class="n">1</span><span class="body"><b data-zh="本地辅助" data-en="Local assistance">本地辅助</b><span data-zh="只做本地整理与只读辅助，不替你操作平台。" data-en="Local organizing and read-only help only — it never operates the platform for you.">只做本地整理与只读辅助，不替你操作平台。</span></span></li>
-			<li><span class="n">2</span><span class="body"><b data-zh="只读优先" data-en="Read-only first">只读优先</b><span data-zh="默认只读；写操作与敏感链路默认阻断。" data-en="Read-only by default; writes and sensitive flows are blocked.">默认只读；写操作与敏感链路默认阻断。</span></span></li>
-			<li><span class="n">3</span><span class="body"><b data-zh="用户主动触发" data-en="User-triggered">用户主动触发</b><span data-zh="每一步都由你发起，没有后台自动循环。" data-en="Every step is initiated by you — no background auto-loop.">每一步都由你发起，没有后台自动循环。</span></span></li>
-			<li><span class="n">4</span><span class="body"><b data-zh="不规避风控" data-en="No risk-control bypass">不规避风控</b><span data-zh="不伪造指纹、不绕过平台风控；命中即停。" data-en="No fingerprint forgery, no bypassing platform controls; it stops on a block.">不伪造指纹、不绕过平台风控；命中即停。</span></span></li>
-			<li><span class="n">5</span><span class="body"><b data-zh="不批量触达" data-en="No bulk outreach">不批量触达</b><span data-zh="不自动打招呼、不批量投递。" data-en="No auto-greeting, no bulk applying.">不自动打招呼、不批量投递。</span></span></li>
-			<li><span class="n">6</span><span class="body"><b data-zh="不抓取数据" data-en="No data scraping">不抓取数据</b><span data-zh="不爬取、不囤积平台数据；数据留在本机。" data-en="No scraping or hoarding of platform data; it stays on your machine.">不爬取、不囤积平台数据；数据留在本机。</span></span></li>
+			<li><span class="n">1</span><span class="body"><b data-zh="本地状态" data-en="Local state">本地状态</b><span data-zh="登录态、缓存、简历和候选池保存在本机。" data-en="Login state, cache, resumes and shortlists are stored locally.">登录态、缓存、简历和候选池保存在本机。</span></span></li>
+			<li><span class="n">2</span><span class="body"><b data-zh="双角色工作流" data-en="Two roles">双角色工作流</b><span data-zh="求职者与招聘者调用已实现的搜索、简历与沟通能力。" data-en="Job seekers and recruiters use implemented search, resume and communication workflows.">求职者与招聘者调用已实现的搜索、简历与沟通能力。</span></span></li>
+			<li><span class="n">3</span><span class="body"><b data-zh="有限运行" data-en="Bounded execution">有限运行</b><span data-zh="长流程受超时、重试、预算、断点与停止条件约束。" data-en="Long workflows are bounded by timeout, retry, budget, checkpoint and stop controls.">长流程受超时、重试、预算、断点与停止条件约束。</span></span></li>
+			<li><span class="n">4</span><span class="body"><b data-zh="不规避风控" data-en="No risk-control bypass">不规避风控</b><span data-zh="命中风险码或安全页即停止当前流程并保存断点。" data-en="A risk code or security page stops the current workflow and saves a checkpoint.">命中风险码或安全页即停止当前流程并保存断点。</span></span></li>
+			<li><span class="n">5</span><span class="body"><b data-zh="显式恢复" data-en="Explicit recovery">显式恢复</b><span data-zh="风险状态解除后，由用户显式恢复任务。" data-en="After platform risk clears, the user explicitly resumes the task.">风险状态解除后，由用户显式恢复任务。</span></span></li>
+			<li><span class="n">6</span><span class="body"><b data-zh="状态可复用" data-en="Reusable state">状态可复用</b><span data-zh="向导、CLI 与 Agent 共用工作流和本地状态。" data-en="The wizard, CLI and agents share workflows and local state.">向导、CLI 与 Agent 共用工作流和本地状态。</span></span></li>
 		</ol>
 	</section>
 
@@ -281,7 +281,7 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 	<section>
 		<div class="section-head">
 			<p class="section-num">03 · <span data-zh="快速开始" data-en="Quickstart">快速开始</span></p>
-			<h2 class="section-title" data-zh="跑通低风险闭环" data-en="Run the low-risk loop">跑通低风险闭环</h2>
+			<h2 class="section-title" data-zh="跑通一个工作流" data-en="Run a workflow">跑通一个工作流</h2>
 		</div>
 		<pre class="code"><span class="c"># <span data-zh="安装（浏览器内核仅用于登录 / 导出）" data-en="install (browser core: login / export only)">安装（浏览器内核仅用于登录 / 导出）</span></span>
 <span class="k">$</span> uv tool install boss-agent-cli
@@ -294,8 +294,8 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 <span class="k">$</span> boss shortlist add &lt;security_id&gt; &lt;job_id&gt;
 <span class="k">$</span> boss stats</pre>
 		<div class="metrics">
-			<div class="metric"><span class="metric-value">35</span><span class="metric-label" data-zh="顶层命令" data-en="top-level commands">顶层命令</span></div>
-			<div class="metric"><span class="metric-value">1400+</span><span class="metric-label" data-zh="测试用例" data-en="tests">测试用例</span></div>
+			<div class="metric"><span class="metric-value">39</span><span class="metric-label" data-zh="顶层命令" data-en="top-level commands">顶层命令</span></div>
+			<div class="metric"><span class="metric-value">77</span><span class="metric-label" data-zh="MCP 工具" data-en="MCP tools">MCP 工具</span></div>
 			<div class="metric"><span class="metric-value">4</span><span class="metric-label" data-zh="Agent 接入方式" data-en="agent integrations">Agent 接入方式</span></div>
 		</div>
 		<div class="hero-cta qs-cta">
@@ -313,7 +313,7 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 		<dl class="faq">
 			<div class="faq-pair">
 				<dt data-zh="它会自动投递或打招呼吗？" data-en="Does it auto-apply or auto-greet?">它会自动投递或打招呼吗？</dt>
-				<dd data-zh="不会。greet / batch-greet / apply / 联系方式交换等默认阻断并返回 COMPLIANCE_BLOCKED，请回到 BOSS 直聘官网手动完成。" data-en="No. greet / batch-greet / apply / contact exchange are blocked by default and return COMPLIANCE_BLOCKED; complete them manually on the official BOSS Zhipin website.">不会。greet / batch-greet / apply / 联系方式交换等默认阻断并返回 COMPLIANCE_BLOCKED，请回到 BOSS 直聘官网手动完成。</dd>
+				<dd data-zh="支持已实现的沟通与投递能力，具体参数以 boss schema 为准。批量和长流程受固定预算、超时与停止条件约束；遇平台风险立即停止并保存断点。" data-en="Implemented messaging and application capabilities are supported; boss schema describes their parameters. Batch and long workflows have fixed budgets, timeouts and stop conditions. Platform risk stops execution and saves a checkpoint.">支持已实现的沟通与投递能力，具体参数以 boss schema 为准。批量和长流程受固定预算、超时与停止条件约束；遇平台风险立即停止并保存断点。</dd>
 			</div>
 			<div class="faq-pair">
 				<dt data-zh="AI Agent 怎么调用？" data-en="How does an AI agent call it?">AI Agent 怎么调用？</dt>
@@ -321,7 +321,7 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 			</div>
 			<div class="faq-pair">
 				<dt data-zh="支持哪些平台与 AI 模型？" data-en="Which platforms and AI models?">支持哪些平台与 AI 模型？</dt>
-				<dd data-zh="平台：zhipin（BOSS 直聘）。AI：任意 OpenAI / Anthropic 兼容接口。" data-en="Platform: zhipin (BOSS Zhipin). AI: any OpenAI / Anthropic-compatible endpoint.">平台：zhipin（BOSS 直聘）。AI：任意 OpenAI / Anthropic 兼容接口。</dd>
+				<dd data-zh="当前平台为 zhipin（BOSS 直聘），支持求职者与招聘者。AI 可配置 OpenAI 兼容接口或 Ollama / vLLM 本地模型。" data-en="The current platform is zhipin (BOSS Zhipin), with job-seeker and recruiter roles. AI can use OpenAI-compatible APIs or local Ollama / vLLM models.">当前平台为 zhipin（BOSS 直聘），支持求职者与招聘者。AI 可配置 OpenAI 兼容接口或 Ollama / vLLM 本地模型。</dd>
 			</div>
 			<div class="faq-pair">
 				<dt data-zh="需要什么环境？" data-en="What do I need?">需要什么环境？</dt>
@@ -340,7 +340,7 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 		<div class="mark">
 			<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%231B365D'/%3E%3Cpath d='M6 8l3 4-3 4M12 16h6' stroke='%23faf9f5' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" alt="boss-agent-cli">
 			<span class="wm-name">boss-agent-cli</span>
-			<span class="wm-line" data-zh="BOSS 直聘本地辅助 CLI" data-en="local-assist BOSS Zhipin CLI">BOSS 直聘本地辅助 CLI</span>
+			<span class="wm-line" data-zh="BOSS 直聘招聘平台 CLI" data-en="BOSS Zhipin recruitment CLI">BOSS 直聘招聘平台 CLI</span>
 		</div>
 		<div class="colophon">
 			<div class="links">
@@ -411,7 +411,7 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 		document.documentElement.lang=(l==="zh"?"zh-CN":"en");
 		document.querySelectorAll("[data-en]").forEach(function(el){ var v=el.getAttribute("data-"+l); if(v!=null) el.textContent=v; });
 		var btn=document.getElementById("lang"); if(btn) btn.textContent=(l==="zh"?"EN":"中文");
-		document.title=(l==="zh"?"boss-agent-cli · 专为 AI Agent 设计的 BOSS 直聘本地辅助 CLI":"boss-agent-cli · A local-assist BOSS Zhipin CLI for AI agents");
+		document.title=(l==="zh"?"boss-agent-cli · 面向真人与 AI Agent 的 BOSS 直聘 CLI":"boss-agent-cli · A BOSS Zhipin CLI for people and AI agents");
 		localStorage.setItem(KEY,l);
 		refreshCaption();
 	}

@@ -1,28 +1,36 @@
 # boss-agent-cli
 
-> A local-assist BOSS Zhipin CLI built for AI agents. Search, welfare filtering, and shortlist organizing emitted as a structured JSON envelope. Low-risk by default: local-assist, read-only-first, user-triggered.
+> A BOSS Zhipin CLI for people and AI agents. Welfare filtering, dual-role workflows, local shortlists, resumes and communication share one capability set. Current version: 3.0.0.
 
 ## What it is
-boss-agent-cli lets an AI agent help with BOSS Zhipin job-hunting without automating the platform. Every command prints a JSON envelope ({ok, data, pagination, error, hints}) to stdout; `boss schema` is the capability source of truth. 35 top-level commands plus 9 recruiter subcommands.
+Humans run `boss` to enter a terminal wizard. Agents call the same workflows through JSON, MCP or the Python API. `boss schema` is the capability source of truth: 39 top-level commands, 13 recruiter subcommands, and 77 implemented MCP tools. The sole registered platform is zhipin (BOSS Zhipin).
 
-## Positioning
-Unlike scraping or auto-apply bots, boss-agent-cli is intentionally scoped to local assistance and read-only-first workflows. Sensitive actions (greet, batch-greet, apply, contact exchange, recruiter candidate data, replies) are blocked by default and return COMPLIANCE_BLOCKED; users complete them manually on the official website. It does not bypass risk control, bulk-outreach, or scrape platform data.
+Every command emits one JSON envelope to stdout: {ok, schema_version, command, data, pagination, error, hints}. Logs and terminal displays go to stderr; exit 0 means ok=true and exit 1 means ok=false.
+
+## Execution boundaries
+All implemented capabilities are available in both historical operating modes, assisted and research. Mode-level COMPLIANCE_BLOCKED is no longer emitted; the code remains only for historical protocol compatibility. Unsupported platform capabilities return NOT_SUPPORTED.
+
+Long workflows are bounded by timeout, retry, budget, checkpoint and stop controls. Platform risk codes or security pages stop execution and save a checkpoint. Do not bypass risk controls or retry indefinitely. The user explicitly resumes only after the risk clears. Authentication and network errors retain structured recovery actions.
 
 ## Key capabilities
-- Welfare filtering: `--welfare "双休,五险一金"` pages, fetches details, and matches every condition with real AND logic.
-- Structured output: JSON-only stdout, logs on stderr, exit 0/1.
-- Local shortlist and funnel stats; AI assist (JD analysis, resume polish, interview prep).
-- Platform registry: zhipin (BOSS Zhipin); the Platform abstraction stays open for future adapters.
-- Four agent integrations: Skill, subprocess, MCP server, Python SDK.
+- Welfare filtering: `--welfare "双休,五险一金"` fetches job details and matches all conditions with AND logic.
+- Local shortlists, tags, offline comparison and funnel statistics.
+- Terminal wizard and recoverable workflows shared by humans and agents.
+- Recruiter search, recommendations, resume handling, chat and job management.
+- AI assistance: JD analysis, resume polish, targeted optimization, interview preparation and configurable local model endpoints.
+- Four entry points: CLI, JSON, MCP and Python API.
 
 ## Install
-- MCP (recommended for agents): `uvx --from boss-agent-cli[mcp] boss-mcp`
-- uv (CLI): `uv tool install boss-agent-cli`
+- MCP: `uvx --from boss-agent-cli[mcp] boss-mcp`
+- CLI: `uv tool install boss-agent-cli`
+- Browser core when needed: `patchright install chromium`
 
 ## License & environment
-MIT. Python >= 3.10. Browser core (patchright) only for user-triggered login and local export.
+MIT. Python >= 3.10. Login state, cache, resumes and shortlists are stored locally. No runtime telemetry is included.
 
 ## Links
 - GitHub: https://github.com/can4hou6joeng4/boss-agent-cli
 - PyPI: https://pypi.org/project/boss-agent-cli/
 - Homepage: https://can4hou6joeng4.github.io/boss-agent-cli/
+- 48-second keynote: https://can4hou6joeng4.github.io/boss-agent-cli/showcase/boss-agent-cli-showcase.mp4
+- Interactive keynote: https://can4hou6joeng4.github.io/boss-agent-cli/keynote-animation/
