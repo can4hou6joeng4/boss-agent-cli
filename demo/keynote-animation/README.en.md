@@ -17,8 +17,8 @@ Content is grounded in the local v3.0.0 code and schema checked on 2026-10-08: B
 Serve the preview over local HTTP:
 
 ```bash
-python3 -m http.server 4318 --bind 127.0.0.1 --directory demo/keynote-animation
-# Open http://127.0.0.1:4318/index.html
+python3 -m http.server 4318 --bind 127.0.0.1 --directory demo
+# Open http://127.0.0.1:4318/keynote-animation/
 ```
 
 ## Six scenes

@@ -17,8 +17,8 @@
 预览须通过本地 HTTP 服务加载：
 
 ```bash
-python3 -m http.server 4318 --bind 127.0.0.1 --directory demo/keynote-animation
-# 打开 http://127.0.0.1:4318/index.html
+python3 -m http.server 4318 --bind 127.0.0.1 --directory demo
+# 打开 http://127.0.0.1:4318/keynote-animation/
 ```
 
 ## 六个镜头
