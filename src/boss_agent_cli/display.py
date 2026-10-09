@@ -256,6 +256,13 @@ def render_status(data: dict[str, Any], *, login_action: str = "boss login") -> 
 		console.print(f"[green]logged in[/green] as [bold]{name}[/bold]")
 	else:
 		console.print(f"[yellow]not logged in[/yellow] - run: {login_action}")
+	lock = data.get("cdp_risk_lock")
+	if isinstance(lock, dict) and lock.get("locked"):
+		since = lock.get("locked_at") or "unknown"
+		console.print(
+			f"[yellow]CDP code 37 风控锁定中[/yellow]（{since} 起）：在该 Chrome 里打开职位列表页确认能正常加载，"
+			"等几分钟后重试；必要时 boss clean --risk-lock"
+		)
 
 
 def render_simple_list(
@@ -554,6 +561,14 @@ RISK_ERROR_CONTRACTS: dict[str, dict[str, Any]] = {
 			"稍后由用户在同一专用 Chrome profile 中确认页面状态后再手动发起",
 		],
 	},
+	"ENVIRONMENT_RISK_LOCKED": {
+		"recovery_action": "在该 CDP Chrome 中手动打开 BOSS 直聘职位列表页确认能正常加载，等几分钟后再重试；必要时 boss clean --risk-lock",
+		"next_actions": [
+			"不要刷新 Token、重新登录或换通道重试；本次请求未发出",
+			"由用户在同一 CDP Chrome 里打开职位列表页、确认加载正常并等待几分钟后再手动发起",
+			"boss doctor — 查看本地风控锁状态",
+		],
+	},
 }
 
 
@@ -580,6 +595,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 		@wraps(func)
 		def wrapper(ctx: Any, *args: Any, **kwargs: Any) -> Any:
 			from boss_agent_cli.api.browser_client import RecruiterChatTabRequired
+			from boss_agent_cli.api._base_client import BrowserChannelRequired
 			from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserSourceUnsupported
 			from boss_agent_cli.api.client import PlatformRiskError
 			from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
@@ -612,6 +628,17 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recoverable=True,
 					recovery_action=e.policy.recovery_action,
 					hints=hints or None,
+				)
+			except BrowserChannelRequired as e:
+				recoverable, not_supported_recovery = error_contract_for_code("NOT_SUPPORTED")
+				handle_error_output(
+					ctx, command_name, code="NOT_SUPPORTED",
+					message=str(e),
+					recoverable=recoverable,
+					recovery_action=not_supported_recovery,
+					hints={"operator_actions": [
+						"CDP 模式下所有平台请求只走浏览器通道；该操作暂无浏览器实现，请在 BOSS 直聘官方页面手动完成",
+					]},
 				)
 			except RecruiterChatTabRequired as e:
 				handle_error_output(

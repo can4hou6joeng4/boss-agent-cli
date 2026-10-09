@@ -6,6 +6,7 @@ import types
 from hashlib import sha256
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 from openpyxl import load_workbook
 
@@ -15,7 +16,7 @@ from boss_agent_cli.crawler.exporter import write_run_outputs
 from boss_agent_cli.crawler.hooks import HOOK_SCRIPT_NAMES, HookInjection, HookRegistrationError, inject_hook_profile
 from boss_agent_cli.crawler.operations import crawl_results, import_crawl_shortlist
 from boss_agent_cli.crawler.service import CrawlBudget, CrawlService, CrawlSettings, CrawlStopRequested
-from boss_agent_cli.crawler.transport import JOBLIST_TARGET, DrissionCrawlerSession
+from boss_agent_cli.crawler.transport import JOBLIST_TARGET, CrawlRiskError, DrissionCrawlerSession
 from boss_agent_cli.main import cli
 
 
@@ -347,9 +348,11 @@ def test_fetch_page_falls_back_to_in_page_fetch_when_listen_returns_html(monkeyp
 		def quit(self) -> None:
 			pass
 
-		def run_js(self, script, query, city, page):
+		def run_js(self, script, path, params):
 			# Must be sync-callable result (async run_js returns None in real DrissionPage).
 			assert "XMLHttpRequest" in script or "function" in script
+			assert path == "/wapi/zpgeek/search/joblist.json"
+			assert params == {"query": "AI", "city": "101210100", "page": "1"}
 			return {
 				"status": 200,
 				"text": json.dumps(_page(_job("job-page", "sec-page"))),
@@ -379,7 +382,7 @@ def test_fetch_page_falls_back_to_in_page_fetch_when_listen_returns_html(monkeyp
 	assert payload["zpData"]["jobList"][0]["encryptJobId"] == "job-page"
 
 
-def test_fetch_page_falls_back_to_http_when_listen_and_page_js_fail(monkeypatch, tmp_path):
+def test_fetch_page_never_falls_back_to_httpx_when_listen_and_page_js_fail(monkeypatch, tmp_path):
 	class Options:
 		def set_local_port(self, port: int) -> None:
 			pass
@@ -433,28 +436,13 @@ def test_fetch_page_falls_back_to_http_when_listen_and_page_js_fail(monkeypatch,
 		types.SimpleNamespace(ChromiumOptions=Options, ChromiumPage=lambda options: page),
 	)
 
-	class _Resp:
-		status_code = 200
-		text = json.dumps(_page(_job("job-http", "sec-http")))
+	import httpx
 
-		def raise_for_status(self) -> None:
-			return None
+	def _no_httpx(*args, **kwargs):
+		raise AssertionError("crawl 不得把采集浏览器的 Cookie / stoken 拷给 httpx")
 
-		def json(self):
-			return _page(_job("job-http", "sec-http"))
-
-	class _Client:
-		def __init__(self, *args, **kwargs) -> None:
-			pass
-
-		def get(self, url, params=None):
-			assert "joblist.json" in url
-			return _Resp()
-
-		def close(self) -> None:
-			pass
-
-	monkeypatch.setattr("boss_agent_cli.crawler.transport.httpx.Client", _Client)
+	monkeypatch.setattr(httpx, "Client", _no_httpx)
+	monkeypatch.setattr(httpx, "get", _no_httpx)
 	session = DrissionCrawlerSession(
 		profile_path=tmp_path / "profile",
 		chrome_path=None,
@@ -464,8 +452,58 @@ def test_fetch_page_falls_back_to_http_when_listen_and_page_js_fail(monkeypatch,
 		seed_cookies={"wt2": "t"},
 	)
 	session.open()
-	payload = session.fetch_page("AI", "101210100", 1)
-	assert payload["zpData"]["jobList"][0]["encryptJobId"] == "job-http"
+	with pytest.raises(CrawlRiskError) as exc_info:
+		session.fetch_page("AI", "101210100", 1)
+	assert "页面内 fetch 失败" in str(exc_info.value)
+	assert "HTTP 回退" not in str(exc_info.value)
+
+
+def test_fetch_detail_requests_job_card_inside_page_not_httpx(monkeypatch, tmp_path):
+	import httpx
+
+	def _no_httpx(*args, **kwargs):
+		raise AssertionError("crawl 详情不得走 httpx")
+
+	monkeypatch.setattr(httpx, "Client", _no_httpx)
+	calls = []
+
+	class Page:
+		url = "https://www.zhipin.com/web/geek/jobs"
+
+		def run_js(self, script, path, params):
+			calls.append((path, params))
+			return {"status": 200, "text": json.dumps({"code": 0, "zpData": {"jobCard": {"postDescription": "jd"}}})}
+
+	session = DrissionCrawlerSession(
+		profile_path=tmp_path / "profile",
+		chrome_path=None,
+		cdp_port=_free_port(),
+		hook_profile="none",
+		hook_dir=None,
+	)
+	session._page = Page()
+	payload = session.fetch_detail("sec-1")
+	assert payload["zpData"]["jobCard"]["postDescription"] == "jd"
+	assert calls == [("/wapi/zpgeek/job/card.json", {"securityId": "sec-1"})]
+
+
+def test_fetch_detail_in_page_risk_code_stops(tmp_path):
+	class Page:
+		url = "https://www.zhipin.com/web/geek/jobs"
+
+		def run_js(self, script, path, params):
+			return {"status": 200, "text": json.dumps({"code": 37, "message": "您的访问环境存在异常"})}
+
+	session = DrissionCrawlerSession(
+		profile_path=tmp_path / "profile",
+		chrome_path=None,
+		cdp_port=_free_port(),
+		hook_profile="none",
+		hook_dir=None,
+	)
+	session._page = Page()
+	with pytest.raises(CrawlRiskError):
+		session.fetch_detail("sec-1")
 
 
 def test_listener_parses_string_json_response(monkeypatch, tmp_path):

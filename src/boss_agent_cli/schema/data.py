@@ -64,7 +64,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"doctor": {
-			"description": "诊断本地运行环境、依赖、分层认证健康、CDP 可达性和网络连通性；默认不做真实业务探测，浏览器通道不得用于规避平台风控",
+			"description": "诊断本地运行环境、依赖、分层认证健康、CDP 可达性、CDP code 37 风控锁状态和网络连通性；默认不做真实业务探测，浏览器通道不得用于规避平台风控",
 			"args": [],
 			"options": {
 				"--live-probe": {
@@ -705,6 +705,11 @@ SCHEMA_DATA = {
 				"--dry-run": {"type": "bool", "default": False, "description": "仅预览将清理的内容"},
 				"--all": {"type": "bool", "default": False, "description": "清理全部缓存"},
 				"--days": {"type": "int", "default": 30, "description": "清理超过指定天数的快照和导出"},
+				"--risk-lock": {
+					"type": "bool",
+					"default": False,
+					"description": "手动解除 CDP code 37 风控锁；仅在用户已于该 Chrome 页面确认恢复后使用，Agent 不应自行执行",
+				},
 			},
 		},
 		"stats": {

@@ -13,6 +13,7 @@ import click
 from rich.table import Table
 
 from boss_agent_cli import display
+from boss_agent_cli.api.cdp_risk_lock import lock_path
 from boss_agent_cli.display import handle_output, render_next_steps
 
 
@@ -21,12 +22,19 @@ from boss_agent_cli.display import handle_output, render_next_steps
 @click.option("--all", "clean_all", is_flag=True, default=False, help="清理全部缓存（包括未过期的搜索缓存和打招呼记录）")
 @click.option("--privacy", is_flag=True, default=False, help="清理本地敏感数据（登录会话、简历、聊天快照和导出文件）")
 @click.option("--days", default=30, help="清理超过指定天数的快照和导出文件")
+@click.option("--risk-lock", "risk_lock", is_flag=True, default=False, help="手动解除 CDP code 37 风控锁（确认已在该 Chrome 页面里恢复后使用）")
 @click.pass_context
-def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool, days: int) -> None:
+def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool, days: int, risk_lock: bool) -> None:
 	"""清理过期缓存和临时文件。"""
 	data_dir = ctx.obj["data_dir"]
 	results = []
 	total_freed = 0
+
+	# 0) CDP code 37 风控锁：显式 opt-in，只删本地锁文件，不连浏览器
+	if risk_lock:
+		freed, count = _clean_path(lock_path(Path(data_dir)), dry_run=dry_run)
+		results.append({"target": "CDP 风控锁", "cleaned": count, "bytes_freed": freed})
+		total_freed += freed
 
 	# 1) 搜索缓存
 	freed, count = _clean_search_cache(data_dir, dry_run=dry_run, clean_all=clean_all)

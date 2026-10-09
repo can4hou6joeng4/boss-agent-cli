@@ -48,6 +48,16 @@ class Platform(ABC):
 		if callable(close_fn):
 			close_fn()
 
+	def is_browser_only(self) -> bool:
+		"""平台请求是否只能走浏览器通道（CDP 模式）；为 True 时调用方不得并发发请求。
+
+		默认委托 client 的同名方法；client 没有该能力（纯 httpx 平台）时为 False。
+		"""
+		check = getattr(self._client, "is_browser_only", None)
+		if not callable(check):
+			return False
+		return check() is True
+
 	def __enter__(self) -> "Platform":
 		return self
 

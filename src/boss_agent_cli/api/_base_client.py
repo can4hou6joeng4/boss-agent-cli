@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import random
 import time
+from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
@@ -30,6 +31,10 @@ if TYPE_CHECKING:
 	from boss_agent_cli.auth.manager import AuthManager
 
 _MAX_RETRIES = 3
+
+
+class BrowserChannelRequired(RuntimeError):
+	"""CDP / 显式浏览器来源下，该操作只有 httpx 实现，拒绝用 httpx 携带浏览器凭据发送。"""
 
 _SelfT = TypeVar("_SelfT", bound="_BaseHttpClient")
 
@@ -77,7 +82,108 @@ class _BaseHttpClient:
 
 	# ── Lazy channels ────────────────────────────────────────────────
 
+	# ── Channel selection ────────────────────────────────────────────
+
+	def is_browser_only(self) -> bool:
+		"""平台请求是否只能走浏览器通道。
+
+		配了 ``--cdp-url``、显式非 auto 的浏览器来源，或本进程的浏览器会话已经接上
+		CDP Chrome 时为 True。此时 Chrome 里的 ``__zp_stoken__`` 由页面 JS 维护，
+		再用 httpx 带着从浏览器拷来的 Cookie + stoken 并发打平台，会让这个 stoken
+		被判异常（之后浏览器通道一律 code 37）。所以这些模式下所有平台读写都走浏览器。
+		纯 httpx / headless 场景不受影响。
+		"""
+		# getattr 兜底：部分调用方 / 测试用 __new__ 构造实例，不经 __init__。
+		if getattr(self, "_cdp_url", None):
+			return True
+		from boss_agent_cli.api.browser_source import resolve_policy
+
+		if resolve_policy(getattr(self, "_browser_source", None)).name != "auto":
+			return True
+		session = getattr(self, "_browser_session", None)
+		return session is not None and getattr(session, "_is_cdp", False) is True
+
+	def _browser_request(
+		self,
+		method: str,
+		url: str,
+		*,
+		params: dict[str, Any] | None = None,
+		data: dict[str, Any] | None = None,
+	) -> dict[str, Any]:  # pragma: no cover - 子类实现
+		raise NotImplementedError
+
+	def _request_via_browser(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+		"""browser-only 模式下 ``_request`` 的落点：同一请求改走浏览器通道，单次、不重试。
+
+		``extra_headers``（Referer）在页面 fetch 里本来就设不了，``follow_redirects``
+		由浏览器处理；其余 httpx 专属参数说明该调用没有浏览器等价实现，直接拒绝。
+		"""
+		kwargs.pop("extra_headers", None)
+		kwargs.pop("follow_redirects", None)
+		params = kwargs.pop("params", None)
+		data = kwargs.pop("data", None)
+		if kwargs:
+			raise BrowserChannelRequired(
+				f"CDP 模式下该请求无法改走浏览器通道（不支持参数: {', '.join(sorted(kwargs))}）"
+			)
+		return self._browser_request(method, url, params=params, data=data)
+
+	# ── CDP code 37 lock ─────────────────────────────────────────────
+
+	def _risk_lock_dir(self) -> Path | None:
+		data_dir = getattr(getattr(self, "_auth", None), "data_dir", None)
+		if isinstance(data_dir, Path):
+			return data_dir
+		if isinstance(data_dir, str) and data_dir:
+			return Path(data_dir)
+		return None
+
+	def _check_cdp_risk_lock(self, browser: Any) -> None:
+		"""有 code 37 锁时，发请求前核对 Chrome 当前 stoken 摘要；没变就拒绝发送。"""
+		from boss_agent_cli.api import cdp_risk_lock
+
+		data_dir = self._risk_lock_dir()
+		if data_dir is None:
+			return
+		lock = cdp_risk_lock.read_lock(data_dir)
+		if lock is None:
+			return
+		ensure_started = getattr(browser, "ensure_started", None)
+		if callable(ensure_started):
+			ensure_started()
+		if getattr(browser, "_is_cdp", False) is not True:
+			# 锁针对的是 CDP Chrome 里的 stoken；headless 会话不受影响，也不解锁。
+			return
+		read_hash = getattr(browser, "current_stoken_hash", None)
+		current = read_hash() if callable(read_hash) else None
+		if lock.matches(current):
+			from boss_agent_cli.api.client import EnvironmentRiskLockedError
+
+			raise EnvironmentRiskLockedError.from_lock(lock)
+		cdp_risk_lock.clear_lock(data_dir)
+
+	def _record_cdp_risk_lock(self, browser: Any) -> None:
+		"""CDP 浏览器请求命中环境类 code 37：记下当前 stoken 的摘要（不存原值）。"""
+		from boss_agent_cli.api import cdp_risk_lock
+
+		data_dir = self._risk_lock_dir()
+		if data_dir is None or getattr(browser, "_is_cdp", False) is not True:
+			return
+		read_hash = getattr(browser, "current_stoken_hash", None)
+		current = read_hash() if callable(read_hash) else None
+		try:
+			cdp_risk_lock.write_lock(data_dir, current if isinstance(current, str) else None, cdp_url=self._cdp_url)
+		except OSError:
+			pass
+
 	def _get_client(self) -> httpx.Client:
+		if self.is_browser_only():
+			# 兜底闸门：任何漏网的 httpx 路径在 CDP 模式下都不能带着浏览器凭据发出去。
+			raise BrowserChannelRequired(
+				"CDP 模式下不会用 httpx 携带浏览器登录态访问平台，而该操作暂无浏览器通道实现；"
+				"如确需执行，请去掉 --cdp-url / --browser-source 后在非 CDP 模式下运行"
+			)
 		if self._client is None:
 			token = self._auth.get_token()
 			headers = browser_headers(self._DEFAULT_HEADERS, token)
@@ -140,6 +246,8 @@ class _BaseHttpClient:
 		"""httpx 请求，循环重试（最多 _MAX_RETRIES 次）。"""
 		# extra_headers overrides yaml-driven defaults from _headers_for(url); candidate
 		# client never passes it, so the pop is a no-op there (behavior preserved).
+		if self.is_browser_only():
+			return self._request_via_browser(method, url, **kwargs)
 		extra_headers_override: dict[str, str] = kwargs.pop("extra_headers", {})
 		max_retries = _MAX_RETRIES if retry else 0
 		for attempt in range(max_retries + 1):

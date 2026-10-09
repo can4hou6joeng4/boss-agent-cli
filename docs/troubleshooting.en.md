@@ -35,6 +35,7 @@ boss doctor --live-probe
 | `auth_token_quality` | Core tokens (wt2 / stoken) present |
 | `cookie_completeness` | Auxiliary tokens (wbg / zp_at) |
 | `cdp` | Chrome DevTools Protocol reachable |
+| `cdp_risk_lock` | Whether a CDP code 37 lock is recorded (reads a local file only; no browser or network access) |
 | `browser_channel` | CDP compatibility-channel status; not a risk-control bypass path |
 | `candidate_search_health` / `candidate_detail_health` | Candidate read-only prerequisites |
 | `recruiter_read_health` | Recruiter read-only prerequisites |
@@ -214,6 +215,39 @@ boss config set request_delay "[3.0, 7.0]"
 - Always check `boss doctor` first — often an auth problem surfacing as zero results
 - Add `--log-level debug` to see the actual request going out on stderr
 
+### Persistent code 37 in CDP mode (`ENVIRONMENT_RISK` / `ENVIRONMENT_RISK_LOCKED`)
+
+Symptom: with `--cdp-url` (or `--browser-source existing-browser` / `stored-cookie`), every CLI browser request returns
+code 37 ("access environment is abnormal"), while browsing BOSS manually in the same Chrome works fine.
+
+Cause: the `__zp_stoken__` cookie in Chrome is maintained by the BOSS frontend's security script. Older versions, in CDP
+mode, sent reads such as `job_card` through httpx first, using cookies copied out of Chrome and `__zp_stoken__` as a query
+parameter, concurrently with the browser channel. The same stoken showing up from two different client environments gets
+flagged, and every later request carrying it receives code 37. Manual browsing recovers because the page reruns its
+security check and mints a new stoken; the CLI has no such step.
+
+Current behavior:
+
+- In CDP / explicit browser-source mode, every platform read and write goes through the browser channel only (in-page
+  `fetch` with Chrome's own cookies). httpx is never used with the browser's credentials; operations with no browser
+  implementation (e.g. recruiter attachment download) return `NOT_SUPPORTED`.
+- Detail requests are never concurrent in CDP mode (welfare / activity detail lookups run sequentially) and are spaced
+  by `CrawlBudget`.
+- When a browser request hits environment-risk code 37, the CLI writes `cdp_risk_lock.json` in the data directory with
+  only the SHA-256 hash of the current `__zp_stoken__` and a timestamp — never the value. Before each later CDP browser
+  request it reads Chrome's cookies over the local CDP connection and compares hashes:
+  - unchanged: the request is refused locally with `ENVIRONMENT_RISK_LOCKED` (`recoverable=false`) and nothing is sent;
+  - changed: the page has minted a new stoken, so the lock is removed and the request proceeds.
+
+To recover:
+
+1. In that CDP Chrome, open a BOSS job list page manually (e.g. `https://www.zhipin.com/web/geek/jobs`) and confirm it loads.
+2. Wait a few minutes so the page completes its security check and rotates `__zp_stoken__`.
+3. Retry the command. The lock clears itself once the stoken changes; `boss doctor` / `boss status` show the lock state
+   (`cdp_risk_lock`) offline.
+4. Only if the page has recovered but the lock is corrupt or recorded no stoken, run `boss clean --risk-lock`. This is the
+   user's call; agents should not run it on their own.
+
 ## Error codes & agent-friendly recovery
 
 Every error response contains `code`, `recoverable`, and `recovery_action`, so agents can react programmatically.
@@ -233,6 +267,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `RATE_LIMITED` | Too many requests | Wait and retry |
 | `TOKEN_REFRESH_FAILED` | stoken refresh failed | `boss login` |
 | `ENVIRONMENT_RISK` | The access environment was rejected | Stop automation; keep the current dedicated profile, verify it on the official site, and lower the request frequency |
+| `ENVIRONMENT_RISK_LOCKED` | The CDP Chrome's stoken already hit code 37 and has not rotated; the request was not sent | Stop automation; have the user open a job list page in that Chrome, confirm it loads, wait a few minutes, then retry (see above) |
 | `ACCOUNT_RISK` | Risk-control block (code 36) | Stop the workflow, retain its run ID/checkpoint, and resume only after resolving the account or security page |
 | `COMPLIANCE_BLOCKED` | Historical mode-policy block | Upgrade to the current version and retry; current execution paths do not emit it |
 | `WIZARD_INPUT_REQUIRED` | A headless workflow lacks role/platform/goal/inputs | Complete `--input-json` from the `boss schema` catalog |

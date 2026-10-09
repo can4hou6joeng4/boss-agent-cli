@@ -429,6 +429,26 @@ class BrowserSession:
 			"[boss] CDP 不可用（提示：需以 --remote-debugging-port=9222 启动 Chrome），降级到 headless patchright"
 		)
 
+	def ensure_started(self) -> None:
+		"""按来源策略建立浏览器通道（不发平台请求）；供请求前的本地检查使用。"""
+		self._ensure_started()
+
+	def current_stoken_hash(self) -> str | None:
+		"""CDP 模式下读取 Chrome 当前 ``__zp_stoken__`` 的 SHA-256 摘要。
+
+		走 ``context.cookies()``，只是本机 CDP 调用，不访问平台；返回值只有摘要，
+		原值不离开本函数。非 CDP 会话或读取失败返回 ``None``（调用方按「无法确认」处理）。
+		"""
+		from boss_agent_cli.api.cdp_risk_lock import stoken_hash_from_cookies
+
+		if not self._is_cdp or self._context is None:
+			return None
+		try:
+			cookies = self._context.cookies(HOME_URL)
+		except Exception:
+			return None
+		return stoken_hash_from_cookies(cookies)
+
 	# ── Core request via browser fetch() ─────────────────────────────
 
 	def request(

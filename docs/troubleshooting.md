@@ -35,6 +35,7 @@ boss doctor --live-probe
 | `auth_token_quality` | 核心凭据（wt2 / stoken） |
 | `cookie_completeness` | 辅助凭据（wbg / zp_at） |
 | `cdp` | Chrome 调试端口可连 |
+| `cdp_risk_lock` | 是否记录了 CDP code 37 风控锁（只读本地文件，不连浏览器、不访问网络） |
 | `browser_channel` | CDP 兼容通道状态；不得用于规避平台风控 |
 | `candidate_search_health` / `candidate_detail_health` | 求职者只读能力前置条件 |
 | `recruiter_read_health` | 招聘者只读能力前置条件 |
@@ -176,6 +177,34 @@ context」；若指纹对应的账号不是你要的，请关闭多余窗口或�
 | `existing-browser` | 仅已有 CDP | 否 | 是 | 禁止 | BROWSER_SESSION_NOT_FOUND |
 | `stored-cookie` | 仅指定 CDP | 是 | 否 | 禁止 | CDP_UNAVAILABLE |
 
+## CDP 模式下一直报 code 37（`ENVIRONMENT_RISK` / `ENVIRONMENT_RISK_LOCKED`）
+
+现象：配了 `--cdp-url`（或 `--browser-source existing-browser` / `stored-cookie`）后，CLI 的每个浏览器请求都返回
+code 37「访问环境存在异常」，但在同一个 Chrome 里手动浏览 BOSS 直聘一切正常。
+
+原因：Chrome 里的 `__zp_stoken__` 由 BOSS 前端页面的安全脚本维护。旧版本在 CDP 模式下，`job_card` 等读取会先用
+httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数发出去，同时浏览器通道也在发请求。同一个 stoken
+从两种不同的客户端环境并发出现，平台会把它标成异常；之后用这个 stoken 的请求一律 code 37。手动浏览之所以正常，是因为
+页面会重新跑安全校验、换出新的 stoken，而 CLI 自己没有这一步。
+
+现在的行为：
+
+- CDP / 显式浏览器来源下，所有平台读写都只走浏览器通道（页面内 `fetch`，用 Chrome 自己的 Cookie），不再用 httpx
+  带着浏览器登录态访问平台；没有浏览器实现的操作（如招聘者附件下载）直接返回 `NOT_SUPPORTED`。
+- CDP 模式下详情请求不并发（福利 / 活跃度补详情都改为串行），并按 `CrawlBudget` 间隔。
+- 浏览器请求一旦拿到环境类 code 37，会在数据目录写 `cdp_risk_lock.json`，里面只有当前 `__zp_stoken__` 的 SHA-256
+  摘要和时间戳，不存原值。之后每次 CDP 浏览器请求前，CLI 通过本机 CDP 读 Chrome 的 cookie 计算摘要：
+  - 摘要没变：本地拒绝，返回 `ENVIRONMENT_RISK_LOCKED`（`recoverable=false`），请求不会发出；
+  - 摘要变了：说明页面已经换了新 stoken，自动删除锁并继续。
+
+解除步骤：
+
+1. 在这个 CDP Chrome 里手动打开一个 BOSS 直聘职位列表页（如 `https://www.zhipin.com/web/geek/jobs`），确认能正常加载；
+2. 等几分钟，让页面完成安全校验并换出新的 `__zp_stoken__`；
+3. 重新执行命令。stoken 变化后锁会自动解除；`boss doctor` / `boss status` 可以离线查看锁状态（`cdp_risk_lock`）。
+4. 确认已经在页面里恢复、但锁文件损坏或记录时没读到 stoken 导致仍被拦时，再执行 `boss clean --risk-lock` 手动解除。
+   这一步应由用户决定，Agent 不要自行执行。
+
 ## 错误码与自动修复
 
 每个错误信封都带 `code`、`recoverable`、`recovery_action`，Agent 可程序化恢复。
@@ -193,6 +222,7 @@ context」；若指纹对应的账号不是你要的，请关闭多余窗口或�
 | `RATE_LIMITED` | 频率过高 | 等待后重试 |
 | `TOKEN_REFRESH_FAILED` | Token 刷新失败 | `boss login` |
 | `ENVIRONMENT_RISK` | 访问环境存在异常 | 停止自动化访问；保留当前专用 profile，在官方页面确认并降低访问频率 |
+| `ENVIRONMENT_RISK_LOCKED` | CDP Chrome 的 stoken 此前命中 code 37 且尚未更新，本次请求未发送 | 停止自动化；由用户在该 Chrome 打开职位列表页确认能正常加载，等几分钟后再重试（见上文） |
 | `ACCOUNT_RISK` | 风控拦截 | 停止当前 workflow，保留 run ID/checkpoint；处理登录或安全页后再显式恢复 |
 | `COMPLIANCE_BLOCKED` | 历史版本模式策略阻断 | 升级当前版本后重试；当前版本不主动产生此错误 |
 | `WIZARD_INPUT_REQUIRED` | headless workflow 缺少 role/platform/goal/inputs | 按 `boss schema` catalog 补齐 `--input-json` |

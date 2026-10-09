@@ -195,6 +195,18 @@ def detail_channel_for(obj: Any) -> str:
 		return "browser"
 	return "auto"
 
+
+def client_is_browser_only(client: Any) -> bool:
+	"""平台 / client 是否处于只走浏览器通道的 CDP 模式（测试替身一律视为否）。"""
+	check = getattr(client, "is_browser_only", None)
+	if not callable(check):
+		return False
+	try:
+		return check() is True
+	except Exception:
+		return False
+
+
 _BOSS_SEARCH_HOSTS = {"www.zhipin.com", "zhipin.com"}
 _BOSS_SEARCH_PATHS = {"/web/geek/job", "/web/geek/jobs"}
 _URL_PARAM_ALIASES = {
@@ -916,6 +928,8 @@ def run_search_pipeline(
 	  本页仍有职位需要查详情」时才翻下一页；
 	- 需要查详情时串行取详情，每次请求前调用 before_detail_request 做间隔；
 	  detail_channel=browser 时只走浏览器通道取 job_card。
+	- CDP 模式（client.is_browser_only()，或 detail_channel=browser）下福利补详情也串行，
+	  不开线程池，避免多个请求同时打到用户 Chrome。
 	"""
 	stats = SearchPipelineStats()
 	matched: list[dict[str, Any]] = []
@@ -1028,8 +1042,11 @@ def run_search_pipeline(
 			if need_detail:
 				page_needed_detail = True
 				reason = "标签未命中" if not active_level else "列表信息不足"
-				# 有 --active 时串行 + 间隔取详情（单独或叠加 --welfare 都一样保守）
-				sequential = bool(active_level)
+				# CDP 模式（配置或本进程已接上 CDP Chrome）：详情只走浏览器 job_card，且不并发。
+				if detail_channel != "browser" and client_is_browser_only(client):
+					detail_channel = "browser"
+				# 有 --active 或 CDP 模式时串行 + 间隔取详情（单独或叠加 --welfare 都一样保守）
+				sequential = bool(active_level) or detail_channel == "browser"
 				logger.info(f"  {reason} {len(need_detail)} 个，{'逐个' if sequential else '并行'}查详情...")
 				before = len(matched)
 				_check_details_parallel(

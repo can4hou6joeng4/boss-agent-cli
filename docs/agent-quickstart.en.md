@@ -113,6 +113,7 @@ boss status
 Common recovery actions:
 - `AUTH_REQUIRED` / `AUTH_EXPIRED` / `TOKEN_REFRESH_FAILED`: run `boss login` again
 - `ENVIRONMENT_RISK`: stop automated access; keep the current dedicated profile, confirm on the official page, and reduce access frequency
+- `ENVIRONMENT_RISK_LOCKED`: the CDP Chrome's stoken is still the one that hit code 37, so nothing was sent; stop automation and ask the user to open a job list page in that Chrome, confirm it loads, and wait a few minutes before retrying — do not run `boss clean --risk-lock` on your own
 - `wt2` present but `stoken` missing: treat it as partial auth; start Chrome with a CDP debugging port and run `boss login --cdp`, or run `boss login` again
 - `RATE_LIMITED`: wait and retry
 - `NOT_SUPPORTED`: switch to a platform or workflow goal reported as available by schema

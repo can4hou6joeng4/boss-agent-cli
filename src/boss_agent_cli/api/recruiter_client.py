@@ -241,8 +241,13 @@ class BossRecruiterClient(_BaseHttpClient):
 	def _browser_request(
 		self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None
 	) -> dict[str, Any]:
-		result = self._get_browser().request(method, url, params=params, data=data)
+		browser = self._get_browser()
+		# 与候选人侧同一把 CDP code 37 锁：stoken 未换新就不发出去。
+		self._check_cdp_risk_lock(browser)
+		result = browser.request(method, url, params=params, data=data)
 		if isinstance(result, dict):
+			if result.get("code") == ep.CODE_STOKEN_EXPIRED and classify_code_37(result) == "environment_risk":
+				self._record_cdp_risk_lock(browser)
 			result.setdefault("__cli_endpoint_hint__", url)
 		return result
 

@@ -172,12 +172,13 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	active = params.get("active")
 	extra: dict[str, Any] = {}
-	if active:
-		# 活跃度要查详情时串行 + 间隔，CDP 下只走浏览器 job_card（#451 回归修复）
+	detail_channel = detail_channel_for(ctx.obj)
+	if active or detail_channel == "browser":
+		# 活跃度要查详情或 CDP 模式时串行 + 间隔，CDP 下只走浏览器 job_card（#451 回归修复）
 		if ctx.obj.get("platform", "zhipin") == "zhipin":
 			budget = CrawlBudget(cache)
 			extra["before_detail_request"] = lambda: budget.wait("list")
-		extra["detail_channel"] = detail_channel_for(ctx.obj)
+		extra["detail_channel"] = detail_channel
 	with get_platform_instance(ctx, auth) as platform:
 		pipeline_result = run_search_pipeline(
 			platform,

@@ -3,6 +3,7 @@ from typing import Any
 
 import click
 
+from boss_agent_cli.api.client import RISK_ERROR_BY_CODE, PlatformRiskError
 from boss_agent_cli.api.models import employment_type_from_raw
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
@@ -49,10 +50,14 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 		if job_id:
 			try:
 				result, last_error = _detail_via_httpx(platform, security_id, job_id, data_dir)
+			except PlatformRiskError:
+				# 风控命中即终止：不再换浏览器通道补一次请求
+				raise
 			except Exception as e:
 				logger.info(f"httpx 快速通道失败（{e}），降级到浏览器通道")
 				result = None
-		if result is None:
+		# 风控码以响应字典形态返回时同样终止，不换通道再取一次
+		if result is None and not (last_error and last_error[0] in RISK_ERROR_BY_CODE):
 			result, browser_error = _detail_via_browser(platform, security_id, lid, data_dir)
 			if browser_error and (last_error is None or browser_error[0] != "NOT_SUPPORTED"):
 				last_error = browser_error

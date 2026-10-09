@@ -88,14 +88,14 @@ def test_request_retries_after_403_and_refreshes_token(mock_http_client_cls, moc
 	second = FakeHttpxClient([FakeResponse(payload={"code": 0, "zpData": {"ok": True}})])
 	mock_http_client_cls.side_effect = [first, second]
 
-	client = BossClient(auth, cdp_url="http://127.0.0.1:9222")
+	client = BossClient(auth)
 	client._throttle.wait = lambda: None
 	client._throttle.mark = lambda: None
 
 	data = client._request("GET", endpoints.USER_INFO_URL)
 
 	assert data["zpData"]["ok"] is True
-	assert auth.refresh_calls == ["http://127.0.0.1:9222"]
+	assert auth.refresh_calls == [None]
 	assert mock_sleep.call_args_list[0].args[0] == 1
 	assert second.calls[0]["kwargs"]["params"]["__zp_stoken__"] == "refreshed-1"
 
@@ -185,52 +185,31 @@ def test_request_raises_auth_error_after_max_403_retries(mock_http_client_cls, m
 	assert auth.refresh_calls == [None, None, None]
 
 
-@patch("boss_agent_cli.api._base_client.random.uniform", return_value=0)
-@patch("boss_agent_cli.api._base_client.time.sleep")
 @patch("boss_agent_cli.api._base_client.httpx.Client")
-def test_request_refresh_passes_browser_source_to_auth_manager(mock_http_client_cls, mock_sleep, mock_uniform):
-	"""stoken 刷新必须带上 browser_source，否则策略表管不到 httpx 通道的 headless 降级。"""
+def test_request_in_browser_source_mode_goes_to_browser_without_httpx_or_refresh(mock_http_client_cls):
+	"""显式浏览器来源 / CDP 下 _request 改走浏览器：不建 httpx client、不刷新 stoken。"""
 	auth = FakeAuthManager()
-	# 文案明确指向 stoken 过期，分类器才会判为 token_expired 并触发刷新（语义不明则 fail closed 不刷新）。
-	first = FakeHttpxClient([FakeResponse(payload={"code": endpoints.CODE_STOKEN_EXPIRED, "message": "stoken 已过期"})])
-	second = FakeHttpxClient([FakeResponse(payload={"code": 0, "zpData": {"ok": True}})])
-	mock_http_client_cls.side_effect = [first, second]
-
 	client = BossClient(auth, cdp_url="http://127.0.0.1:9222", browser_source="stored-cookie")
-	client._throttle.wait = lambda: None
-	client._throttle.mark = lambda: None
+	with patch.object(client, "_browser_request", return_value={"code": 0, "zpData": {"ok": True}}) as mock_browser:
+		data = client._request("GET", endpoints.USER_INFO_URL, params={"page": 1})
 
-	client._request("GET", endpoints.USER_INFO_URL)
+	assert data["zpData"]["ok"] is True
+	mock_browser.assert_called_once_with("GET", endpoints.USER_INFO_URL, params={"page": 1}, data=None)
+	mock_http_client_cls.assert_not_called()
+	assert auth.refresh_calls == []
 
-	assert auth.refresh_calls == ["http://127.0.0.1:9222"]
-	assert auth.refresh_sources == ["stored-cookie"]
 
-
-@patch("boss_agent_cli.api._base_client.random.uniform", return_value=0)
-@patch("boss_agent_cli.api._base_client.time.sleep")
-@patch("boss_agent_cli.api._base_client.httpx.Client")
-def test_request_403_refresh_passes_browser_source_and_policy_error_escapes_unwrapped(
-	mock_http_client_cls, mock_sleep, mock_uniform
-):
-	"""403 分支同样透传 browser_source；策略错误不得被重试循环包成 AuthError。"""
+def test_request_in_browser_source_mode_lets_policy_error_escape_unwrapped():
+	"""浏览器通道的策略错误原样上抛，不被 httpx 重试循环包成 AuthError。"""
 	from boss_agent_cli.api.browser_source import POLICIES, BrowserSourceUnavailable
 
 	auth = FakeAuthManager()
-
-	def _fail_closed(cdp_url=None, browser_source=None):
-		auth.refresh_calls.append(cdp_url)
-		auth.refresh_sources.append(browser_source)
-		raise BrowserSourceUnavailable(POLICIES["stored-cookie"], attempted=("cdp",))
-
-	auth.force_refresh = _fail_closed
-	mock_http_client_cls.side_effect = [FakeHttpxClient([FakeResponse(status_code=403, text="forbidden")])]
-
 	client = BossClient(auth, cdp_url="http://127.0.0.1:9222", browser_source="stored-cookie")
-	client._throttle.wait = lambda: None
-	client._throttle.mark = lambda: None
-
-	with pytest.raises(BrowserSourceUnavailable) as exc_info:
-		client._request("GET", endpoints.USER_INFO_URL)
+	with patch.object(
+		client, "_browser_request", side_effect=BrowserSourceUnavailable(POLICIES["stored-cookie"], attempted=("cdp",))
+	):
+		with pytest.raises(BrowserSourceUnavailable) as exc_info:
+			client._request("GET", endpoints.USER_INFO_URL)
 
 	assert exc_info.value.code == "CDP_UNAVAILABLE"
-	assert auth.refresh_sources == ["stored-cookie"]
+	assert auth.refresh_calls == []

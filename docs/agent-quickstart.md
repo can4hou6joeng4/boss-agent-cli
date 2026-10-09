@@ -113,6 +113,7 @@ boss status
 常见恢复动作：
 - `AUTH_REQUIRED` / `AUTH_EXPIRED` / `TOKEN_REFRESH_FAILED`：重新执行 `boss login`
 - `ENVIRONMENT_RISK`：停止自动化访问；保留当前专用 profile，在官方页面确认并降低访问频率
+- `ENVIRONMENT_RISK_LOCKED`：CDP Chrome 的 stoken 仍是此前命中 code 37 的那一个，请求未发出；停止自动化，请用户在该 Chrome 打开职位列表页、确认加载后等几分钟再试，不要自行执行 `boss clean --risk-lock`
 - `wt2` 存在但 `stoken` 缺失：通常为部分登录态；使用 Chrome CDP 远程调试端口后运行 `boss login --cdp`，或重新执行 `boss login`
 - `RATE_LIMITED`：等待后重试
 - `NOT_SUPPORTED`：切换 schema catalog 中支持该 goal 的平台或 workflow

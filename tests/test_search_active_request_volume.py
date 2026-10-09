@@ -382,7 +382,7 @@ def test_search_command_active_passes_detail_spacing_and_channel(tmp_path):
 
 def test_search_command_without_active_keeps_detail_defaults(tmp_path):
 	outcome, mock_pipeline = _invoke_search([
-		"--data-dir", str(tmp_path), "--cdp-url", "http://localhost:9222",
+		"--data-dir", str(tmp_path),
 		"--json", "search", "Python", "--welfare", "双休", "--no-cache",
 	])
 	assert outcome.exit_code == 0, outcome.output
@@ -390,6 +390,19 @@ def test_search_command_without_active_keeps_detail_defaults(tmp_path):
 	assert kwargs["max_pages"] == 5
 	assert "before_detail_request" not in kwargs
 	assert "detail_channel" not in kwargs
+
+
+def test_search_command_cdp_welfare_uses_browser_channel_and_spacing(tmp_path):
+	"""CDP 模式下福利兜底取详情也只走浏览器、串行并按 CrawlBudget 间隔。"""
+	outcome, mock_pipeline = _invoke_search([
+		"--data-dir", str(tmp_path), "--cdp-url", "http://localhost:9222",
+		"--json", "search", "Python", "--welfare", "双休", "--no-cache",
+	])
+	assert outcome.exit_code == 0, outcome.output
+	kwargs = mock_pipeline.call_args.kwargs
+	assert kwargs["max_pages"] == 5
+	assert callable(kwargs["before_detail_request"])
+	assert kwargs["detail_channel"] == "browser"
 
 
 def test_search_command_reports_detail_lookup_count(tmp_path):

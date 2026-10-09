@@ -1,5 +1,8 @@
+from pathlib import Path
+
 import click
 
+from boss_agent_cli.api.cdp_risk_lock import lock_status
 from boss_agent_cli.auth.health import assess_auth_health
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
@@ -39,6 +42,8 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 		"auth_summary": auth_health.summary,
 		"auth_health": auth_health.public_summary(),
 		"checks": auth_health.checks_as_dicts(),
+		# 只读本地锁文件，不连浏览器、不访问网络
+		"cdp_risk_lock": lock_status(Path(data_dir)),
 	}
 
 	if not live:

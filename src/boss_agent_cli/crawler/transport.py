@@ -10,14 +10,14 @@ from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import quote
 
-import httpx
-
 from boss_agent_cli.crawler.hooks import HookInjection, HookRegistrationError, inject_hook_profile
 
-# 兼容 search / pc 等变体；监听只作主路径，失败时回退 httpx。
+# 兼容 search / pc 等变体；监听只作主路径，失败时退到页面内同源请求（不走 httpx）。
 JOBLIST_TARGET = r"wapi/zpgeek/[^?\s]*joblist\.json"
 JOBLIST_URL = "https://www.zhipin.com/wapi/zpgeek/search/joblist.json"
 JOB_CARD_URL = "https://www.zhipin.com/wapi/zpgeek/job/card.json"
+JOBLIST_PATH = "/wapi/zpgeek/search/joblist.json"
+JOB_CARD_PATH = "/wapi/zpgeek/job/card.json"
 
 
 class CrawlRiskError(RuntimeError):
@@ -55,8 +55,6 @@ class DrissionCrawlerSession:
 		self._seed_cookies = dict(seed_cookies or {})
 		self._user_agent = user_agent or ""
 		self._page: Any = None
-		self._details: httpx.Client | None = None
-		self._detail_stoken = str(self._seed_cookies.get("__zp_stoken__") or "")
 		self._started = False
 
 	def open(self) -> list[HookInjection]:
@@ -150,8 +148,9 @@ class DrissionCrawlerSession:
 		except Exception as exc:
 			listen_error = exc
 
-		# 页面 UI 已登录时仍可能监听失败。优先在页面上下文 fetch（同浏览器指纹），
-		# 再退到进程内 httpx（可能被环境检测 code=37）。
+		# 页面 UI 已登录时仍可能监听失败：退到页面上下文请求（同浏览器指纹与 Cookie）。
+		# 不再退到进程内 httpx——把浏览器的 Cookie + __zp_stoken__ 拷出去另发请求，
+		# 会让这个 stoken 被判异常，之后页面里的请求也一律 code 37。
 		errors: list[str] = []
 		if listen_error is not None:
 			errors.append(str(listen_error))
@@ -161,37 +160,36 @@ class DrissionCrawlerSession:
 			return payload
 		except Exception as page_exc:
 			errors.append(f"页面内 fetch 失败：{page_exc}")
-		try:
-			payload = self._fetch_joblist_http(query=query, city_code=city_code, page_no=page_no)
-			self._raise_if_risk_response(payload)
-			return payload
-		except Exception as http_exc:
-			errors.append(f"HTTP 回退失败：{http_exc}")
 		self._raise_if_security_page(require_job_list=True)
 		raise CrawlRiskError("；".join(errors) if errors else f"第 {page_no} 页职位列表获取失败")
 
 	def _fetch_joblist_in_page(self, *, query: str, city_code: str, page_no: int) -> dict[str, Any]:
-		"""Request joblist inside the open tab (same cookies/fingerprint as visible UI).
+		"""Request joblist inside the open tab (same cookies/fingerprint as visible UI)."""
+		if self._page is None:
+			raise RuntimeError("Drission crawler session is not open")
+		url = str(getattr(self._page, "url", "") or "")
+		if "zhipin.com" not in url:
+			self._page.get(f"https://www.zhipin.com/web/geek/jobs?city={city_code}&query={quote(query)}")
+		return self._fetch_json_in_page(
+			JOBLIST_PATH,
+			{"query": str(query or ""), "city": str(city_code or ""), "page": str(page_no or 1)},
+		)
+
+	def _fetch_json_in_page(self, path: str, params: dict[str, str]) -> dict[str, Any]:
+		"""在已打开的 zhipin 页签里发同源 GET（浏览器自带 Cookie / 指纹，不经 httpx）。
 
 		Note: DrissionPage.run_async_js does NOT await promises (returns immediately),
 		so we use synchronous XHR via run_js, then CDP awaitPromise as a second try.
 		"""
 		if self._page is None:
 			raise RuntimeError("Drission crawler session is not open")
-		url = str(getattr(self._page, "url", "") or "")
-		if "zhipin.com" not in url:
-			self._page.get(f"https://www.zhipin.com/web/geek/jobs?city={city_code}&query={quote(query)}")
 
 		# 1) sync XHR — works with run_js (async fetch + run_js yields NoneType).
 		sync_script = """
-			function (query, city, page) {
-				const params = new URLSearchParams({
-					query: String(query || ''),
-					city: String(city || ''),
-					page: String(page || 1),
-				});
+			function (path, params) {
+				const query = new URLSearchParams(params || {});
 				const xhr = new XMLHttpRequest();
-				xhr.open('GET', '/wapi/zpgeek/search/joblist.json?' + params.toString(), false);
+				xhr.open('GET', path + '?' + query.toString(), false);
 				xhr.withCredentials = true;
 				xhr.setRequestHeader('Accept', 'application/json, text/plain, */*');
 				try {
@@ -206,13 +204,13 @@ class DrissionCrawlerSession:
 		run_js = getattr(self._page, "run_js", None)
 		if callable(run_js):
 			try:
-				raw = run_js(sync_script, query, city_code, page_no)
+				raw = run_js(sync_script, path, params)
 			except Exception:
 				raw = None
 
 		# 2) CDP evaluate + awaitPromise for async fetch if sync path unavailable.
 		if raw is None:
-			raw = self._fetch_joblist_via_cdp_evaluate(query=query, city_code=city_code, page_no=page_no)
+			raw = self._fetch_json_via_cdp_evaluate(path, params)
 
 		if isinstance(raw, str):
 			try:
@@ -238,9 +236,7 @@ class DrissionCrawlerSession:
 			raise CrawlRiskError("页面内请求响应不是对象")
 		return payload
 
-	def _fetch_joblist_via_cdp_evaluate(
-		self, *, query: str, city_code: str, page_no: int
-	) -> dict[str, Any] | None:
+	def _fetch_json_via_cdp_evaluate(self, path: str, params: dict[str, str]) -> dict[str, Any] | None:
 		"""Fallback: Runtime.evaluate with awaitPromise=true."""
 		if self._page is None:
 			return None
@@ -249,12 +245,8 @@ class DrissionCrawlerSession:
 			return None
 		expression = f"""
 		(async () => {{
-			const params = new URLSearchParams({{
-				query: {json.dumps(query)},
-				city: {json.dumps(city_code)},
-				page: {json.dumps(str(page_no))},
-			}});
-			const resp = await fetch('/wapi/zpgeek/search/joblist.json?' + params.toString(), {{
+			const params = new URLSearchParams({json.dumps(params, ensure_ascii=False)});
+			const resp = await fetch({json.dumps(path)} + '?' + params.toString(), {{
 				method: 'GET',
 				credentials: 'include',
 				headers: {{ 'Accept': 'application/json, text/plain, */*' }},
@@ -285,53 +277,18 @@ class DrissionCrawlerSession:
 			return value
 		return None
 
-	def _fetch_joblist_http(self, *, query: str, city_code: str, page_no: int) -> dict[str, Any]:
-		"""Direct joblist request using cookies from the crawl browser session."""
-		# Force rebuild client so cookies match the kept-open browser after user actions.
-		if self._details is not None:
-			self._details.close()
-			self._details = None
-		client = self._detail_client()
-		params: dict[str, Any] = {
-			"query": query,
-			"city": city_code,
-			"page": page_no,
-		}
-		if self._detail_stoken:
-			params["__zp_stoken__"] = self._detail_stoken
-		response = client.get(JOBLIST_URL, params=params)
-		response.raise_for_status()
-		try:
-			payload = response.json()
-		except json.JSONDecodeError as exc:
-			preview = (response.text or "")[:180].replace("\n", " ")
-			raise CrawlRiskError(
-				f"HTTP 拉取 joblist 仍非 JSON（HTTP {response.status_code}）：{preview}"
-			) from exc
-		if not isinstance(payload, dict):
-			raise CrawlRiskError("HTTP 拉取 joblist 响应不是对象")
-		return payload
-
 	def fetch_detail(self, security_id: str) -> dict[str, Any]:
+		"""在采集页签里取 job_card（同源请求，不把浏览器 Cookie / stoken 拷给 httpx）。"""
 		if not security_id:
 			return {"code": 0, "zpData": {"jobCard": {}}}
-		client = self._detail_client()
-		params = {"securityId": security_id}
-		if self._detail_stoken:
-			params["__zp_stoken__"] = self._detail_stoken
-		response = client.get(JOB_CARD_URL, params=params)
-		response.raise_for_status()
-		payload = response.json()
-		if not isinstance(payload, dict):
-			raise RuntimeError("job_card 响应不是对象")
+		if self._page is None:
+			raise RuntimeError("Drission crawler session is not open")
+		payload = self._fetch_json_in_page(JOB_CARD_PATH, {"securityId": security_id})
 		self._raise_if_risk_response(payload)
 		return payload
 
 	def close(self, *, quit_browser: bool = True) -> None:
 		"""Release helpers; optionally leave Chrome running for human verification."""
-		if self._details is not None:
-			self._details.close()
-			self._details = None
 		if self._page is not None:
 			if quit_browser:
 				quit_browser_fn = getattr(self._page, "quit", None)
@@ -341,31 +298,6 @@ class DrissionCrawlerSession:
 					except Exception:
 						pass
 			self._page = None
-
-	def _detail_client(self) -> httpx.Client:
-		if self._details is not None:
-			return self._details
-		if self._page is None:
-			raise RuntimeError("Drission crawler session is not open")
-		cookies: dict[str, str] = {}
-		for cookie in self._page.cookies():
-			name = cookie.get("name")
-			value = cookie.get("value")
-			if name and value:
-				cookies[str(name)] = str(value)
-			if name == "__zp_stoken__" and value:
-				self._detail_stoken = str(value)
-		self._details = httpx.Client(
-			cookies=cookies,
-			headers={
-				"User-Agent": str(getattr(self._page, "user_agent", "")),
-				"Referer": "https://www.zhipin.com/web/geek/job",
-				"Accept": "application/json, text/plain, */*",
-			},
-			follow_redirects=True,
-			timeout=20,
-		)
-		return self._details
 
 	def _trigger_next_page(self) -> None:
 		if self._page is None:

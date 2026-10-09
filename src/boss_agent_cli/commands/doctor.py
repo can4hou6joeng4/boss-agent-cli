@@ -9,6 +9,7 @@ import click
 import httpx
 
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL
+from boss_agent_cli.api.cdp_risk_lock import UNLOCK_OPERATOR_ACTIONS, lock_status
 from boss_agent_cli.auth.browser import probe_cdp
 from boss_agent_cli.auth.cookie_extract import extract_cookies
 from boss_agent_cli.auth.health import assess_auth_health, auth_config_for_platform
@@ -165,6 +166,23 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 	except Exception as e:
 		add_check("cdp", "error", f"CDP 探测失败: {e}", "检查浏览器和调试端口配置")
 
+	# 4.5) CDP code 37 风控锁（只读本地文件，不连浏览器、不访问网络）
+	risk_lock = lock_status(Path(data_dir))
+	if risk_lock["locked"]:
+		since = risk_lock.get("locked_at", "未知时间")
+		detail = f"CDP Chrome 自 {since} 起处于 code 37 风控锁定，浏览器请求会在本地被拒绝"
+		if risk_lock.get("corrupt"):
+			detail = "CDP 风控锁文件无法解析，浏览器请求会在本地被拒绝"
+		add_check(
+			"cdp_risk_lock",
+			"warn",
+			detail,
+			"在该 CDP Chrome 中打开 BOSS 直聘职位列表页，确认能正常加载，等几分钟后重试（stoken 更新后自动解锁）；"
+			"确认已恢复仍被拦时运行 boss clean --risk-lock",
+		)
+	else:
+		add_check("cdp_risk_lock", "ok", "未记录 CDP code 37 风控锁")
+
 	# 5) Network probe
 	try:
 		resp = httpx.get(config.site_url, timeout=5, follow_redirects=True)
@@ -229,6 +247,8 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 	if not cdp_ok:
 		next_actions.append(_doctor_command(ctx, "doctor", cdp_url=cdp_url or DEFAULT_CDP_URL))
 		operator_actions.append("如需 CDP，请先确认目标浏览器及调试端口已就绪，再重新诊断；不要反复重试")
+	if risk_lock["locked"]:
+		operator_actions.extend(UNLOCK_OPERATOR_ACTIONS)
 	if not any(item["name"] == "cookie_extract" and item["status"] == "ok" for item in checks):
 		operator_actions.append(f"需要提取本地登录态时，先在本机浏览器的 {config.site_host} 官方页面完成登录")
 	if source_root is not None:
@@ -240,6 +260,7 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 		"auth_state": auth_health.auth_state,
 		"data_dir": str(data_dir),
 		"live_probe": live_probe,
+		"cdp_risk_lock": risk_lock,
 		"check_count": len(checks),
 		"checks": checks,
 	}

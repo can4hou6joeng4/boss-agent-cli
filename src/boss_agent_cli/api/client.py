@@ -44,11 +44,43 @@ class EnvironmentRiskError(PlatformRiskError):
 	code = "ENVIRONMENT_RISK"
 
 
+class EnvironmentRiskLockedError(EnvironmentRiskError):
+	"""CDP Chrome 的 stoken 已吃过 code 37 且尚未更新：本地拒绝发送，不触网。
+
+	继承 ``EnvironmentRiskError``，所有按风控终止的执行器无需改动即可停下。
+	"""
+
+	code = "ENVIRONMENT_RISK_LOCKED"
+
+	@classmethod
+	def from_lock(cls, lock: Any) -> "EnvironmentRiskLockedError":
+		from boss_agent_cli.api.cdp_risk_lock import UNLOCK_OPERATOR_ACTIONS
+
+		since = ""
+		locked_at = getattr(lock, "locked_at", 0) or 0
+		if locked_at > 0:
+			import time
+
+			since = f"（{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(locked_at))} 起）"
+		if getattr(lock, "corrupt", False):
+			reason = "本地风控锁文件无法解析"
+		elif getattr(lock, "stoken_sha256", None) is None:
+			reason = "上次命中 code 37 时未能读取 Chrome 的 stoken"
+		else:
+			reason = "Chrome 里的 __zp_stoken__ 仍是被拦截的那一个"
+		steps = "；".join(UNLOCK_OPERATOR_ACTIONS)
+		return cls(
+			f"CDP 浏览器此前命中访问环境风控 (code 37){since}，{reason}，本次请求未发送。{steps}。",
+			is_cdp=True,
+		)
+
+
 #: 风控错误码 → 异常类。平台 adapter 的 ``parse_error`` 走响应字典路径时返回的是码，
 #: 执行器用这张表把码升格为异常，与浏览器通道抛出的异常形态走同一条终止分支。
 RISK_ERROR_BY_CODE: dict[str, type[PlatformRiskError]] = {
 	AccountRiskError.code: AccountRiskError,
 	EnvironmentRiskError.code: EnvironmentRiskError,
+	EnvironmentRiskLockedError.code: EnvironmentRiskLockedError,
 }
 
 
@@ -85,6 +117,8 @@ class BossClient(_BaseHttpClient):
 		# 单次请求，不重试：浏览器通道的 stoken 由页面 JS 生成，force_refresh 拿不到新凭证，
 		# 重试只是对已被风控拦截的高风险端点再打一次（见 docs/research/platforms/zhipin.md 红线）。
 		browser = self._get_browser(browser_source=browser_source)
+		# CDP Chrome 的 stoken 此前吃过 code 37 且没换新：本地拒绝，不再发出去。
+		self._check_cdp_risk_lock(browser)
 		result = browser.request(method, url, params=params, data=data)
 		code = result.get("code")
 		is_cdp = getattr(browser, "_is_cdp", False)
@@ -98,6 +132,7 @@ class BossClient(_BaseHttpClient):
 				is_cdp=is_cdp,
 			)
 		if code == endpoints.CODE_STOKEN_EXPIRED and classify_code_37(result) == "environment_risk":
+			self._record_cdp_risk_lock(browser)
 			msg = response_message(result) or "未知 code 37 响应"
 			raise EnvironmentRiskError(
 				f"BOSS 直聘访问环境风控 (code {code}): {msg}。"
@@ -123,7 +158,8 @@ class BossClient(_BaseHttpClient):
 	# ── Public API ───────────────────────────────────────────────────
 	# High-risk: search, recommend, greet, job_card → browser channel
 	# Low-risk: status, me, cities, schema, detail → httpx channel.
-	# friend_list/chat_history 仅在显式非 auto 来源下走浏览器读取；默认使用 httpx。
+	# CDP / 显式浏览器来源下（is_browser_only），httpx 通道的请求统一改走浏览器，
+	# 见 _BaseHttpClient._request。
 
 	def search_jobs(self, query: str, **filters: Any) -> dict[str, Any]:
 		params: dict[str, Any] = {"query": query, "page": filters.get("page", 1)}
@@ -187,7 +223,9 @@ class BossClient(_BaseHttpClient):
 		return self._browser_request("POST", endpoints.GREET_URL, data=data)
 
 	def job_card(self, security_id: str, lid: str = "") -> dict[str, Any]:
-		"""httpx 优先 + 浏览器降级获取职位卡片信息。"""
+		"""httpx 优先 + 浏览器降级获取职位卡片信息；CDP 模式下只走浏览器。"""
+		if self.is_browser_only():
+			return self.job_card_browser(security_id, lid)
 		try:
 			return self.job_card_httpx(security_id, lid)
 		except Exception:

@@ -108,14 +108,14 @@ def test_request_retries_after_403_and_refreshes_token(mock_http_client_cls, moc
 	second = FakeHttpxClient([FakeResponse(payload={"code": 0, "zpData": {"ok": True}})])
 	mock_http_client_cls.side_effect = [first, second]
 
-	client = BossRecruiterClient(auth, cdp_url="http://127.0.0.1:9222")
+	client = BossRecruiterClient(auth)
 	client._throttle.wait = lambda: None
 	client._throttle.mark = lambda: None
 
 	data = client._request("GET", ep.BOSS_FRIEND_LABELS_URL)
 
 	assert data["zpData"]["ok"] is True
-	assert auth.refresh_calls == ["http://127.0.0.1:9222"]
+	assert auth.refresh_calls == [None]
 	assert mock_sleep.call_args_list[0].args[0] == 1
 	assert second.calls[0]["kwargs"]["params"]["__zp_stoken__"] == "refreshed-1"
 
@@ -237,29 +237,23 @@ def test_request_retry_false_returns_rate_limit_without_retry(mock_sleep):
 	mock_sleep.assert_not_called()
 
 
-@patch("boss_agent_cli.api._base_client.random.uniform", return_value=0)
-@patch("boss_agent_cli.api._base_client.time.sleep")
 @patch("boss_agent_cli.api._base_client.httpx.Client")
-def test_recruiter_refresh_passes_browser_source_to_auth_manager(mock_http_client_cls, mock_sleep, mock_uniform):
-	"""招聘者 client 共用 _BaseHttpClient 的刷新循环，browser_source 同样必须透传。"""
+def test_recruiter_browser_source_mode_routes_reads_to_browser(mock_http_client_cls):
+	"""招聘者 client 共用 _BaseHttpClient：CDP / 显式来源下读请求同样只走浏览器。"""
 	auth = FakeAuthManager()
-	first = FakeHttpxClient([FakeResponse(status_code=403, text="forbidden")])
-	second = FakeHttpxClient([FakeResponse(payload={"code": 0, "zpData": {"ok": True}})])
-	mock_http_client_cls.side_effect = [first, second]
-
 	client = BossRecruiterClient(auth, cdp_url="http://127.0.0.1:9222", browser_source="stored-cookie")
-	client._throttle.wait = lambda: None
-	client._throttle.mark = lambda: None
+	with patch.object(client, "_browser_request", return_value={"code": 0}) as mock_browser:
+		client._request("GET", ep.BOSS_FRIEND_LABELS_URL, extra_headers={"Referer": "x"})
 
-	client._request("GET", ep.BOSS_FRIEND_LABELS_URL)
-
-	assert auth.refresh_sources == ["stored-cookie"]
+	mock_browser.assert_called_once_with("GET", ep.BOSS_FRIEND_LABELS_URL, params=None, data=None)
+	mock_http_client_cls.assert_not_called()
+	assert auth.refresh_calls == []
 
 
 @pytest.mark.parametrize("code,message", [(37, ""), (37, "stoken expired"), (37, "环境异常"), (9, "")])
 def test_start_chat_never_refreshes_or_retries(code, message):
 	auth = FakeAuthManager()
-	client = BossRecruiterClient(auth, browser_source="stored-cookie")
+	client = BossRecruiterClient(auth)
 	http_client = FakeHttpxClient([FakeResponse(payload={"code": code, "message": message})])
 	client._client = http_client
 	client._throttle.wait = lambda: None

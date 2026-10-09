@@ -27,11 +27,17 @@ class TokenRefreshFailed(Exception):
 
 class AuthManager:
 	def __init__(self, data_dir: Path, *, logger: Logger | None = None, platform: str = "zhipin") -> None:
+		self._data_dir = data_dir
 		self._platform = platform or "zhipin"
 		auth_dir = data_dir / "auth" if self._platform == "zhipin" else data_dir / "auth" / self._platform
 		self._store = TokenStore(auth_dir)
 		self._token: dict[str, Any] | None = None
 		self._logger = logger or Logger()
+
+	@property
+	def data_dir(self) -> Path:
+		"""CLI 数据目录（CDP 风控锁等进程间状态落在这里）。"""
+		return self._data_dir
 
 	def _cdp_login(self, *, cdp_url: str | None, timeout: int, reuse_existing: bool) -> dict[str, Any]:
 		"""CDP 登录；复用的登录态被在线探测判定失效时，自动改走不复用路径重登一次。"""

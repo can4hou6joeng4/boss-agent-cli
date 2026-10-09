@@ -234,6 +234,8 @@ def search_cmd(
 
 		auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 		request_budget = CrawlBudget(cache) if ctx.obj.get("platform", "zhipin") == "zhipin" else None
+		# CDP 模式下详情（--active / --welfare 兜底）只走浏览器、串行并按 CrawlBudget 间隔
+		detail_channel = detail_channel_for(ctx.obj)
 		with get_platform_instance(ctx, auth) as platform:
 			max_pages = detail_filter_max_pages(welfare_conditions, active_level)
 			# TTY 下把管线日志接到 Rich 进度；管道 / --json 仍用原 logger，行为不变。
@@ -270,8 +272,8 @@ def search_cmd(
 							else (lambda: request_budget.wait("list"))
 							if request_budget is not None
 							else None
-						) if active_level else None,
-						"detail_channel": detail_channel_for(ctx.obj) if active_level else "auto",
+						) if active_level or detail_channel == "browser" else None,
+						"detail_channel": detail_channel,
 						"before_list_request": (
 							(lambda: request_budget.wait("list", on_wait=progress.waiting))
 							if request_budget is not None and progress is not None

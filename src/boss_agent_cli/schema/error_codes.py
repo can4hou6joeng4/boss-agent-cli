@@ -54,6 +54,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": "停止自动化访问；保留当前专用 profile，在官方页面确认并降低访问频率",
 	},
+	"ENVIRONMENT_RISK_LOCKED": {
+		"message": "CDP Chrome 的 stoken 此前命中 code 37 且尚未更新，本次请求未发送",
+		"recoverable": False,
+		"recovery_action": "在该 CDP Chrome 中手动打开 BOSS 直聘职位列表页确认能正常加载，等几分钟后再重试；必要时 boss clean --risk-lock",
+	},
 	"LOGIN_TIMEOUT": {
 		"message": "登录等待超时（扫码未完成或网络缓慢）",
 		"recoverable": True,

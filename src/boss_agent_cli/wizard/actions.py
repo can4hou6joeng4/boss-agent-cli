@@ -16,7 +16,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.platforms.factory import build_platform_instance, build_recruiter_platform_instance
 from boss_agent_cli.services.contact_lookup import FriendLookupLimitExceeded, find_friend
 from boss_agent_cli.crawler.operations import crawl_status
-from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
+from boss_agent_cli.crawler.service import CrawlBudget, CrawlService, CrawlSettings
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
 from boss_agent_cli.digest import build_digest
 from boss_agent_cli.display import RISK_ERROR_CONTRACTS, risk_error_contract
@@ -25,7 +25,7 @@ from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up
 from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
 from boss_agent_cli.schema.error_codes import ERROR_CODES
-from boss_agent_cli.search_filters import SearchFilterCriteria, detail_filter_max_pages, resolve_active_level, resolve_welfare_keywords, run_search_pipeline
+from boss_agent_cli.search_filters import SearchFilterCriteria, client_is_browser_only, detail_filter_max_pages, resolve_active_level, resolve_welfare_keywords, run_search_pipeline
 from boss_agent_cli.wizard.models import StepResult, WorkflowStatus
 from boss_agent_cli.wizard.runner import Action, WorkflowActionError, WorkflowControl
 
@@ -110,11 +110,18 @@ def execute_candidate_search(
 		raw_params=dict(inputs.get("raw_params") or {}),
 	)
 	extra: dict[str, Any] = {"active": active} if active else {}
-	if active:
-		# 只有 --active 时才透传详情节流 / 通道，保持其他调用方（含测试替身）签名不变
+	browser_detail = inputs.get("detail_channel") == "browser" or client_is_browser_only(platform)
+	if active or browser_detail:
+		# 只有 --active 或 CDP 模式时才透传详情节流 / 通道，保持其他调用方（含测试替身）签名不变
 		for key in ("before_detail_request", "detail_channel"):
 			if inputs.get(key) is not None:
 				extra[key] = inputs[key]
+	if browser_detail:
+		# CDP 模式：详情只走浏览器、串行，并按 CrawlBudget 间隔（wizard 等调用方没传节流时补上）
+		extra["detail_channel"] = "browser"
+		if extra.get("before_detail_request") is None and isinstance(cache, CacheStore) and getattr(platform, "name", None) == "zhipin":
+			budget = CrawlBudget(cache)
+			extra["before_detail_request"] = lambda: budget.wait("list")
 	return pipeline(
 		platform,
 		cache,
@@ -264,7 +271,11 @@ def execute_candidate_detail(
 	lid: str = "",
 	data_dir: Path | None = None,
 ) -> dict[str, Any]:
-	"""Fetch job detail with the same httpx → job_card fallback as `boss detail`."""
+	"""Fetch job detail with the same httpx → job_card fallback as `boss detail`.
+
+	CDP 模式下 client 会把 job_detail / job_card 都改走浏览器通道（不碰 httpx），
+	风控异常原样上抛，不再换通道补请求。
+	"""
 	from boss_agent_cli.api.models import employment_type_from_raw
 	from boss_agent_cli.services.job_card import build_job_from_card
 
