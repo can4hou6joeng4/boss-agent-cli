@@ -1,0 +1,38 @@
+name: Stale
+
+# 保守的过期清理：60 天无动静标记 stale，再 14 天无回应才关闭。
+# 有负责人、草稿 PR、带豁免标签的不处理；任何新评论或更新都会摘掉 stale。
+on:
+  schedule:
+    - cron: "17 2 * * 1"  # 每周一 10:17（北京时间）
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@v11
+        with:
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-label: stale
+          stale-pr-label: stale
+          exempt-issue-labels: "pinned,security,bug,in-progress,blocked,triage,needs-repro,research"
+          exempt-pr-labels: "pinned,security,bug,in-progress,blocked,triage,needs-repro,research"
+          exempt-all-assignees: true
+          exempt-draft-pr: true
+          operations-per-run: 30
+          stale-issue-message: >-
+            这个 issue 已经 60 天没有动静，先标记为 stale；如果 14 天内仍无更新会自动关闭。还需要的话留言即可保留。
+            / This issue has had no activity for 60 days and is now marked stale. It will be closed in 14 days unless there is new activity — just leave a comment to keep it open.
+          stale-pr-message: >-
+            这个 PR 已经 60 天没有动静，先标记为 stale；如果 14 天内仍无更新会自动关闭。还在推进的话推个提交或留言即可。
+            / This PR has had no activity for 60 days and is now marked stale. It will be closed in 14 days unless there is new activity — push a commit or comment to keep it open.
+          close-issue-message: "因长期无更新自动关闭，需要时可随时重新打开。/ Closed due to inactivity — feel free to reopen."
+          close-pr-message: "因长期无更新自动关闭，需要时可随时重新打开。/ Closed due to inactivity — feel free to reopen."

@@ -1,0 +1,25 @@
+name: Labeler
+
+# 用 pull_request_target 才能给 fork 来的 PR 打标签。
+# 这里不 checkout、不运行 PR 里的任何代码，只读取默认分支上的 .github/labeler.yml，
+# 因此不会把写权限暴露给 PR 代码。
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: labeler-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@v7
+        with:
+          sync-labels: false

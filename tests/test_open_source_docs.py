@@ -291,6 +291,30 @@ def test_ci_workflow_is_safe_for_fork_pull_requests():
 	assert not (ROOT / ".github/workflows/docs.yml").exists()
 
 
+def test_labeler_workflow_never_runs_pull_request_code():
+	workflow = load_yaml(".github/workflows/labeler.yml")
+	triggers = workflow.get("on", workflow.get(True))
+	assert "pull_request_target" in triggers
+	# pull_request_target 拿得到写权限，所以绝不能 checkout 或执行 PR 里的代码
+	text = read(".github/workflows/labeler.yml")
+	assert "actions/checkout" not in text
+	assert "run:" not in text
+	assert "secrets." not in text
+	assert workflow["permissions"] == {}
+	job = workflow["jobs"]["label"]
+	assert job["permissions"] == {"contents": "read", "pull-requests": "write"}
+
+
+def test_dependabot_stays_low_noise():
+	config = load_yaml(".github/dependabot.yml")
+	ecosystems = {update["package-ecosystem"]: update for update in config["updates"]}
+	assert set(ecosystems) == {"uv", "github-actions"}
+	for update in ecosystems.values():
+		assert update["schedule"]["interval"] == "weekly"
+		assert update["open-pull-requests-limit"] <= 3
+		assert update["groups"]
+
+
 def test_quality_baseline_script_matches_blocking_p0_commands():
 	content = read("scripts/quality_baseline.py")
 

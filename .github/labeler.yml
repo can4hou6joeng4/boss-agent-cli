@@ -1,0 +1,25 @@
+# 按改动路径给 PR 打标签（actions/labeler）。标签需事先存在于仓库。
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "**/*.md"
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "pyproject.toml"
+          - "uv.lock"
+test:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
+recruiter:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/boss_agent_cli/commands/recruiter/**"
+          - "src/boss_agent_cli/api/recruiter*"
+          - "src/boss_agent_cli/platforms/*recruiter*"

@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit 配置：安静模式，只做中文审查与概要，不发诗、不发装饰性内容。
+language: zh-CN
+early_access: false
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: false
+  review_details: false
+  poem: false
+  in_progress_fortune: false
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  related_prs: false
+  suggested_labels: false
+  suggested_reviewers: false
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+      - "[skip review]"
+  path_filters:
+    - "!docs/assets/star-history*.svg"
+    - "!CONTRIBUTORS.svg"
+    - "!demo/**/*.tape"
+    - "!**/package-lock.json"
+    - "!**/*.lock"
+    - "!**/go.sum"
+    - "!**/*.min.js"
+    - "!**/*.png"
+    - "!**/*.jpg"
+    - "!**/*.jpeg"
+    - "!**/*.gif"
+    - "!**/*.webp"
+    - "!**/*.ico"
+    - "!**/*.mp4"
+    - "!**/*.m4a"
+    - "!**/*.woff"
+    - "!**/*.woff2"
+    - "!**/*.ttf"
+  path_instructions:
+    - path: "src/boss_agent_cli/**"
+      instructions: |
+        这是 BOSS 直聘的 Agent CLI，平台风控很敏感，评审时重点看：
+        - 命令输出必须守 JSON 信封契约：stdout 只输出 JSON 信封（ok / data / error / hints），日志与进度走 stderr；出错要带 error.code、recoverable、recovery_action。
+        - CDP / 浏览器通道下不要改用 httpx 直连平台接口；平台请求只能串行，不能并发或批量并行。
+        - 遇到风控码 36/37 必须立即停止并返回可恢复错误，不能重试或绕过。
+        - 不得新增任何会主动向真实候选人/招聘方发消息、打招呼、交换联系方式的默认行为；这类动作必须由用户显式发起。
+        - 不要引入运行时遥测或远程日志。Python 源码用 tab 缩进，类型需通过 mypy。
+    - path: "tests/**"
+      instructions: |
+        测试必须完全离线：mock AuthManager / BossClient / CacheStore / AIService，不访问网络、不启动真实浏览器、不使用真实账号，绝不向真实候选人发送消息。每条成功路径至少对应一条错误路径。
+chat:
+  art: false
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    # 默认已包含 AGENTS.md / CLAUDE.md 等；这里补充仓库自己的贡献规范
+    filePatterns:
+      - "**/AGENTS.md"
+      - "CONTRIBUTING.md"
