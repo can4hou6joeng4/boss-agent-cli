@@ -135,6 +135,10 @@ class RecruiterPlatform(ABC):
 		"""获取候选人聊天信息。"""
 		raise NotImplementedError(f"{self.name} does not implement chat_geek_info")
 
+	def chat_list_snapshot(self) -> dict[str, Any] | None:
+		"""读取聊天页已加载的会话列表摘要（不发请求）；不支持时返回 None。"""
+		return None
+
 	def last_messages(self, friend_ids: list[int]) -> dict[str, Any]:
 		"""获取最近消息。"""
 		raise NotImplementedError(f"{self.name} does not implement last_messages")

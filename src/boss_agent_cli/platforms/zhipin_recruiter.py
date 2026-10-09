@@ -158,6 +158,9 @@ class BossRecruiterPlatform(RecruiterPlatform):
 
 	# ── 消息 / 聊天 ──────────────────────────────────────
 
+	def chat_list_snapshot(self) -> dict[str, Any] | None:
+		return self._client.chat_list_snapshot()
+
 	def last_messages(self, friend_ids: list[int]) -> dict[str, Any]:
 		return self._client.last_messages(friend_ids)
 

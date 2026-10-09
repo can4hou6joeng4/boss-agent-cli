@@ -181,6 +181,60 @@ const exchangeAvailability = (vm) => {
 };
 """
 
+# 只读聊天页 geek-list 组件里已经加载好的会话列表（页面自己拉过的数据），不发任何请求。
+# 字段名没有官方文档：按常见命名白名单挑字段，避免把整条大对象（简历等）带出来。
+_CHAT_LIST_SNAPSHOT_JS = """
+() => {
+	const chatUser = document.querySelector('.chat-user');
+	const root = chatUser && chatUser.__vue__;
+	if (!root) return {ok: false, error: 'geek-list Vue component not found'};
+	const KEYS = ['friendId', 'uid', 'friendSource', 'newMsgCount', 'unreadMsgCount', 'unreadCount', 'unread',
+		'lastMsg', 'lastText', 'lastTime', 'lastTS', 'lastMsgTime', 'updateTime', 'time'];
+	const INFO_KEYS = ['showText', 'text', 'status', 'msgTime', 'fromId'];
+	const looksLikeFriends = (value) => Array.isArray(value) && value.length > 0
+		&& value.some((item) => item && typeof item === 'object' && ('friendId' in item || 'uid' in item));
+	const candidates = [];
+	const consider = (path, value) => { if (looksLikeFriends(value)) candidates.push([path, value]); };
+	const scan = (prefix, obj, depth) => {
+		if (!obj || typeof obj !== 'object' || depth > 3) return;
+		for (const key of Object.keys(obj)) {
+			let value;
+			try { value = obj[key]; } catch (e) { continue; }
+			consider(prefix + key, value);
+			if (value && typeof value === 'object' && !Array.isArray(value) && depth < 3) scan(prefix + key + '.', value, depth + 1);
+		}
+	};
+	scan('data.', root.$data, 1);
+	for (const key of Object.keys(root._computedWatchers || {})) {
+		try { consider('computed.' + key, root[key]); } catch (e) {}
+	}
+	if (root.$store && root.$store.state) scan('store.', root.$store.state, 1);
+	if (!candidates.length) return {ok: false, error: 'no friend list found in geek-list'};
+	candidates.sort((a, b) => b[1].length - a[1].length);
+	const [source, list] = candidates[0];
+	const items = [];
+	for (const raw of list) {
+		if (!raw || typeof raw !== 'object') continue;
+		const item = {};
+		for (const key of KEYS) {
+			const value = raw[key];
+			if (value === undefined || value === null) continue;
+			if (typeof value === 'object') continue;
+			item[key] = value;
+		}
+		for (const infoKey of ['lastMsgInfo', 'lastMessageInfo']) {
+			const info = raw[infoKey];
+			if (!info || typeof info !== 'object') continue;
+			const picked = {};
+			for (const key of INFO_KEYS) if (info[key] !== undefined && info[key] !== null && typeof info[key] !== 'object') picked[key] = info[key];
+			item[infoKey] = picked;
+		}
+		items.push(item);
+	}
+	return {ok: true, source, count: items.length, items};
+}
+"""
+
 _SEND_MESSAGE_ACTION_JS = """
 const escaped = escapeHtml(args.content);
 editor.disabled = false;
@@ -666,6 +720,19 @@ class BossRecruiterClient(_BaseHttpClient):
 		return self._request("GET", ep.BOSS_CHAT_GEEK_INFO_URL, params=params)
 
 	# ── 消息 / 聊天 ──────────────────────────────────────
+
+	def chat_list_snapshot(self) -> dict[str, Any] | None:
+		"""CDP 模式下读取聊天页已加载的会话列表摘要（未读数、最后一条消息、时间）。
+
+		只在页面里执行只读脚本，不发平台请求；非 CDP 模式、没开聊天页或页面结构不符时返回 None。
+		"""
+		if not self.is_browser_only():
+			return None
+		try:
+			result = self._get_browser().evaluate_js(_CHAT_LIST_SNAPSHOT_JS)
+		except Exception:  # noqa: BLE001 — 页面快照只是增强，失败时调用方退回接口数据
+			return None
+		return result if isinstance(result, dict) and result.get("ok") else None
 
 	def last_messages(self, friend_ids: list[int]) -> dict[str, Any]:
 		data = {"friendIds": ",".join(str(i) for i in friend_ids), "src": 0}

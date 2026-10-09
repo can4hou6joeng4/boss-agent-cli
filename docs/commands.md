@@ -149,6 +149,8 @@ boss crawl stop <run_id>
 
 `greet` 按候选人和招聘职位的加密 ID 在本地原子预约，成功后记录已发送；响应丢失、进程退出或限流时保留预约，禁止自动重发。使用 `boss hr chat --job-id <id>` 核对会话，必要时在官方页面处理，不要删除记录来重发。
 
+`hr chat` 的沟通列表接口只返回基础会话信息（friendId、姓名、updateTime 等），未读数、最后一条消息和时间按以下顺序补全：CDP 模式下先读聊天页里已加载的会话列表（只读页面内存，不发请求）；页面里没有覆盖到的会话再调用一次最近消息接口（单次、串行）；都拿不到时 `unread` / `msg_status` / `last_msg` 为 `null`，`last_time` 退回会话的 `updateTime` 并标注 `last_time_source: "updateTime"`（这是会话更新时间，不一定是最后一条消息的时间）。每条记录的 `summary_source` 标明来源（`page` / `last_messages` / `friend_list`），`hints.summary_sources` 给出各来源条数和最近消息接口的错误（如有）。不再输出 `-`、`未知` 这类占位。
+
 `greet` 只发送首次招呼，不建立 MQTT 连接、不清理红点。成功返回 `sent=true`；若发送后本地记录失败，错误信封仍在 `error.details.sent=true` 保留已发送事实，不能因此重发。BOSS 外层 `code=0` 也可能返回权益拦截页；CLI 会识别这类业务拒绝，返回 `GREET_LIMIT`、`error.details.sent=false` 和脱敏平台提示，保留拒绝状态以阻止重发。平台可能按职位限制免费沟通人数，不能把调用方配置的日额度当作平台保证。`chat` / `last-messages` 中未知未读数保留为 `null`，不当作零。
 
 `request-resume` 与 `resume --exchange` 在聊天页里调用官方组件完成动作，只点击本次动作新弹出的确认框。成功需要发送证据：聊天 WS 帧里出现已知请求文案，或动作后回读聊天记录看到新的请求消息。页面动作执行了但两者都没看到时返回 `ACTION_UNCONFIRMED`（`recoverable=false`），`error.details` 附带页面日志、确认按钮状态和 WS 统计。此时动作可能已经生效，先用 `boss hr chatmsg <friend_id>` 核实，不要直接重试。换手机或微信时如果同时看到了求简历消息，成功结果会带 `side_effects: ["resume_request_detected"]`。
