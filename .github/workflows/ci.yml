@@ -1,0 +1,91 @@
+name: CI
+
+# 外部贡献者的 PR 也要跑：用 pull_request（不是 pull_request_target），
+# fork 的 PR 只拿到只读 token、拿不到任何 secret，本工作流也不需要 secret。
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUTF8: "1"
+  UV_LOCKED: "1"
+
+jobs:
+  lint:
+    name: Lint & typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      UV_PYTHON: "3.12"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: |
+          uv python install
+          uv sync --all-extras
+
+      - name: Ruff
+        run: uv run ruff check src/boss_agent_cli tests scripts --output-format=github
+
+      - name: Mypy
+        run: uv run mypy src/boss_agent_cli
+
+      - name: Cache pre-commit hooks
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Pre-commit
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
+      - name: CLI loads and schema envelope is valid
+        run: |
+          uv run boss --help > /dev/null
+          uv run boss --json schema --format native \
+            | python3 -c "import sys, json; d = json.load(sys.stdin); assert d['ok'], d; print('schema commands:', len(d['data']['commands']))"
+
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # 最低支持版本、主力版本、最新版本
+        python-version: ["3.10", "3.12", "3.14"]
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: |
+          uv python install
+          uv sync --all-extras
+
+      # 测试全部离线：平台接口、浏览器、CDP 都是 mock，不需要网络和真实浏览器。
+      - name: Pytest
+        run: uv run pytest -q

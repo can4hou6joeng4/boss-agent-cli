@@ -11,6 +11,7 @@
 - 新增维护者发布验证脚本：默认离线核对版本、wheel/sdist 元数据与分发文件，显式启用后可在临时环境全新解析依赖、验证 CLI/MCP，或从 PyPI 安装指定版本复验；输出结构化步骤结果，不执行发布或真实平台请求。
 
 ### Changed
+- 恢复面向 PR 的 `CI` 工作流（参照 Wholiver/metis 的 Test 工作流）：`pull_request` 与推送 `master` 时运行 ruff、mypy、pre-commit、CLI/schema 冒烟和 Python 3.10 / 3.12 / 3.14 测试矩阵；只读权限、同一 PR 新推送取消旧运行、不使用任何 secret，外部贡献者的 fork PR 可直接运行。pre-commit 的 end-of-file-fixer 排除 star-history 自动生成的 SVG，并补上 `wizard/renderer.py` 结尾换行，使 `pre-commit run --all-files` 在 master 上可以通过；贡献指南同步更新 CI 说明，去掉已失效的 Codecov 描述。
 - 同步项目站点中英文正文与 `llms.txt` 的 v3.0.0 版本、命令与 MCP 数量、双角色工作流及平台风险停止／显式恢复说明，移除过时的模式级阻断宣传；修正发布会源工程的本地预览服务目录。
 
 ### Fixed

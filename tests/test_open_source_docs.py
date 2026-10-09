@@ -275,9 +275,20 @@ def test_issue_templates_are_valid_structured_forms():
 		assert len(ids) == len(set(ids))
 
 
-def test_general_ci_and_docs_workflows_are_intentionally_retired():
-	for path in (".github/workflows/ci.yml", ".github/workflows/docs.yml"):
-		assert not (ROOT / path).exists(), path
+def test_ci_workflow_is_safe_for_fork_pull_requests():
+	workflow = load_yaml(".github/workflows/ci.yml")
+	triggers = workflow.get("on", workflow.get(True))
+	assert isinstance(triggers, dict)
+	# fork PR 必须能跑，且不能用拿得到 secret / 写权限的 pull_request_target
+	assert "pull_request" in triggers
+	assert "pull_request_target" not in triggers
+	assert workflow["permissions"] == {"contents": "read"}
+	assert workflow["concurrency"]["cancel-in-progress"] is True
+	text = read(".github/workflows/ci.yml")
+	assert "secrets." not in text
+	for command in ("ruff check", "mypy src/boss_agent_cli", "pre-commit run --all-files", "pytest"):
+		assert command in text, command
+	assert not (ROOT / ".github/workflows/docs.yml").exists()
 
 
 def test_quality_baseline_script_matches_blocking_p0_commands():

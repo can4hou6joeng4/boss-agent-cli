@@ -11,6 +11,8 @@ repos:
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
+        # star-history 工作流自动生成，不带结尾换行
+        exclude: ^docs/assets/star-history(-dark)?\.svg$
       - id: check-yaml
       - id: check-added-large-files
         args: [--maxkb=500]

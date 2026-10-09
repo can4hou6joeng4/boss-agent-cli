@@ -70,7 +70,7 @@ Before investing in promotion, examples, or integrations, check those passive si
    ```
 5. **Commit** atomically — one logical change per commit.
 6. **Push** and open a PR against `master`.
-7. **CI green** is a hard prerequisite before merge (4 Python versions × lint × security scan).
+7. **CI green** is a hard prerequisite before merge: the `CI` workflow runs ruff / mypy / pre-commit and tests on Python 3.10, 3.12 and 3.14 for every PR (fork PRs included, no secrets needed), plus CodeQL and GitGuardian scans. Tests are fully offline; don't add tests that need the network, a real browser or a real account.
 
 Maintainers will `squash merge`, so the squash title must follow the commit convention above.
 
@@ -117,7 +117,7 @@ On error, the envelope must contain `error.code`, `error.recoverable`, and `erro
 
 ## Testing Philosophy
 
-- **TDD encouraged**: write the test before the implementation. CI coverage is tracked on [Codecov](https://codecov.io/gh/can4hou6joeng4/boss-agent-cli), baseline 80%.
+- **TDD encouraged**: write the test before the implementation. For coverage, run `uv run pytest --cov=boss_agent_cli` locally.
 - **Mock external I/O**: `AuthManager`, `BossClient`, `CacheStore`, and `AIService` are mock boundaries — tests should not hit the real BOSS Zhipin API.
 - **Error-path parity**: for every success path, add at least one error path test (auth expired, rate-limited, invalid param, etc.).
 
