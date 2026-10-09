@@ -229,6 +229,17 @@ _CHAT_LIST_SNAPSHOT_JS = """
 	const [source, list] = candidates[0];
 	let hasMore = null;
 	try { if (typeof root.hasMore$ === 'boolean') hasMore = root.hasMore$; } catch (e) {}
+	// 聊天页左上角的未读总数：geek-list 的 uncountTab$（实测 {1: 总未读, 2: ?, 3: ?}），只取数字计数。
+	let unreadByTab = null;
+	try {
+		const tabs = root.uncountTab$;
+		if (tabs && typeof tabs === 'object' && !Array.isArray(tabs)) {
+			unreadByTab = {};
+			for (const key of Object.keys(tabs)) {
+				if (typeof tabs[key] === 'number' && Number.isFinite(tabs[key])) unreadByTab[key] = tabs[key];
+			}
+		}
+	} catch (e) {}
 	const items = [];
 	for (const raw of list) {
 		if (!raw || typeof raw !== 'object') continue;
@@ -248,7 +259,7 @@ _CHAT_LIST_SNAPSHOT_JS = """
 		}
 		items.push(item);
 	}
-	return {ok: true, source, count: items.length, has_more: hasMore, items};
+	return {ok: true, source, count: items.length, has_more: hasMore, unread_by_tab: unreadByTab, items};
 }
 """
 

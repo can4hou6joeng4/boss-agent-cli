@@ -186,7 +186,7 @@ const row = (id, n) => ({friendId: id, uid: id, uniqueId: id + '-0', name: '不�
 const all = [row(1, 3), row(2, 0), row(3, 1)];
 const parent = {allList$: all, $observables: {allList$: {_value: all}}};
 const vm = {$data: {showSearch: false, currentGeek: {}}, _computedWatchers: {topList: 1}, topList: [],
-	list$: all.slice(0, 2), hasMore$: true, filter$: {labelId: 0}, $parent: parent,
+	list$: all.slice(0, 2), hasMore$: true, filter$: {labelId: 0}, $parent: parent, uncountTab$: {1: 325, 2: 3, 3: 0, x: 'n'},
 	$observables: {list$: {_value: all.slice(0, 2)}, hiddenOnly$: {_value: [row(9, 0)]}}};
 global.document = {querySelector: (sel) => sel === '.chat-user' ? {__vue__: vm} : null};
 const fn = __SCRIPT__;
@@ -203,6 +203,7 @@ def test_snapshot_script_reads_vue_rx_subscriptions(tmp_path):
 	assert out["source"] == "parent.rx.allList$"
 	assert out["count"] == 3
 	assert out["has_more"] is True
+	assert out["unread_by_tab"] == {"1": 325, "2": 3, "3": 0}
 	first = out["items"][0]
 	assert first["newMsgCount"] == 3 and first["lastText"] == "最后一条" and first["lastIsSelf"] is False
 	assert "name" not in first and "securityId" not in first and "unreadMidArr" not in first
@@ -248,3 +249,31 @@ def test_snapshot_expression_as_sent_returns_snapshot(tmp_path):
 	script.write_text(page.replace("__EXPR__", expression), encoding="utf-8")
 	out = json.loads(subprocess.run(["node", str(script)], capture_output=True, text=True, check=True, timeout=30).stdout)
 	assert out["ok"] is True and out["count"] == 3
+
+
+def test_total_unread_from_page_uncount_tab():
+	snapshot = {"ok": True, "source": "rx.list$", "has_more": True,
+		"unread_by_tab": {"1": 325, "2": 3, "3": 0, "4": -1, "5": True, "6": 1.5},
+		"items": [{"friendId": 66001, "newMsgCount": 4, "lastText": "在吗"}]}
+	parsed = _run(_platform([dict(LIVE_ITEM)], snapshot=snapshot))
+	hints = parsed["hints"]
+	assert hints["total_unread"] == 325
+	assert hints["unread_by_tab"] == {"1": 325, "2": 3, "3": 0}
+	assert hints["total_unread_source"] == "page.uncountTab$[1]"
+	assert hints["summary_sources"]["page_snapshot"]["unread_by_tab"] == {"1": 325, "2": 3, "3": 0}
+
+
+def test_total_unread_null_without_page():
+	parsed = _run(_platform([dict(LIVE_ITEM)], snapshot=None))
+	hints = parsed["hints"]
+	assert hints["total_unread"] is None
+	assert hints["unread_by_tab"] is None
+	assert hints["total_unread_source"] is None
+
+
+def test_total_unread_reported_even_with_empty_list():
+	snapshot = {"ok": True, "items": [], "unread_by_tab": {"1": 7}}
+	platform = _platform([], snapshot=snapshot)
+	hints = _run(platform)["hints"]
+	assert hints["total_unread"] == 7
+	platform.last_messages.assert_not_called()

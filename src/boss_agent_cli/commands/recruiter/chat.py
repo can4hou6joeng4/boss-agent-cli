@@ -263,6 +263,35 @@ def _fetch_friend_ids(
 	return _friend_ids_from_items(items), _friend_sources(items), None
 
 
+UNREAD_TOTAL_TAB = "1"
+UNREAD_TOTAL_SOURCE = "page.uncountTab$[1]"
+
+
+def _clean_unread_by_tab(value: Any) -> dict[str, int] | None:
+	"""页面 uncountTab$ 原始计数：只留非负整数，键统一成字符串。"""
+	if not isinstance(value, dict):
+		return None
+	cleaned: dict[str, int] = {}
+	for key, count in value.items():
+		if isinstance(count, bool) or not isinstance(count, int | float):
+			continue
+		if count < 0 or count != int(count):
+			continue
+		cleaned[str(key)] = int(count)
+	return cleaned
+
+
+def _unread_totals(page_meta: dict[str, Any] | None) -> dict[str, Any]:
+	"""聊天页显示的未读总数（uncountTab$ 第 1 项，实测与页面 UI 一致）；页面不可用时为 null。"""
+	by_tab = (page_meta or {}).get("unread_by_tab")
+	total = by_tab.get(UNREAD_TOTAL_TAB) if isinstance(by_tab, dict) else None
+	return {
+		"total_unread": total,
+		"unread_by_tab": by_tab if isinstance(by_tab, dict) else None,
+		"total_unread_source": UNREAD_TOTAL_SOURCE if total is not None else None,
+	}
+
+
 def _page_summaries(platform: Any) -> tuple[dict[int, dict[str, Any]], dict[str, Any] | None]:
 	"""CDP 模式下读聊天页已加载的会话列表（只读页面内存，不发请求）；拿不到返回空。
 
@@ -279,6 +308,9 @@ def _page_summaries(platform: Any) -> tuple[dict[int, dict[str, Any]], dict[str,
 		return {}, None
 	summaries = _summaries_by_friend(_list_dict_items(snapshot.get("items")))
 	meta: dict[str, Any] = {"loaded": len(summaries)}
+	unread_by_tab = _clean_unread_by_tab(snapshot.get("unread_by_tab"))
+	if unread_by_tab is not None:
+		meta["unread_by_tab"] = unread_by_tab
 	if isinstance(snapshot.get("source"), str):
 		meta["source"] = snapshot["source"]
 	if isinstance(snapshot.get("has_more"), bool):
@@ -349,9 +381,9 @@ def _enrich_chat_summaries(
 	按 50 个一批串行调 userLastMsg（默认最多 2 次请求），其余会话只保留列表自带字段。
 	"""
 	friend_ids = _friend_ids_from_items(friend_items)
-	if not friend_ids:
-		return {}
 	page, page_meta = _page_summaries(platform)
+	if not friend_ids:
+		return {"page_snapshot": page_meta} if page_meta is not None else {}
 	missing = [fid for fid in friend_ids if fid not in page]
 	limit = max(0, min(summary_limit, MAX_SUMMARY_LIMIT))
 	wanted = missing[:limit]
@@ -406,6 +438,8 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 			"boss hr resume <geek_id> --job-id <id> --security-id <id> — 查看候选人简历",
 			"boss hr chatmsg <friend_id> — 查看候选人沟通上下文",
 		]}
+		# 未读总数只读页面内存（uncountTab$），不额外发请求；放在 hints 顶层，拿不到为 null。
+		hints.update(_unread_totals(summary_hint.get("page_snapshot")))
 		if summary_hint:
 			hints["summary_sources"] = summary_hint
 		handle_output(ctx, "recruiter-chat", data, hints=hints)

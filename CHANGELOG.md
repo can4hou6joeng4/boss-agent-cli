@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- 招聘者 `hr chat` 的 hints 新增 `total_unread`：聊天页显示的未读总数，读自页面 geek-list 组件的 `uncountTab$` 第 1 项（实测与页面 UI 一致，覆盖全部会话，不限于已加载的部分）；同时给出原始分项计数 `unread_by_tab` 和来源 `total_unread_source`（`page.uncountTab$[1]`）。只读页面内存，不额外发请求；页面不可用（非 CDP 或没打开聊天页）时三项均为 `null`（Refs #456）。
 - `boss search` 新增 `--active <档位>`，按 HR 活跃度筛选职位（#442）。档位 `online` / `today` / `3d` / `week` / `2w` / `month` / `half-year`，也认 `3day`、`3日` 等写法；平台文案按「在线/刚刚活跃 > 今日活跃 > 3日内活跃 > 本周活跃 > 2周内活跃 > 本月活跃 > 近半年活跃 > 半年前活跃」比较。列表带 `activeTimeDesc` 或 `bossOnline` 为在线时直接判断，否则查 job_card；和 `--welfare` 同用时一次详情请求同时判断两项。启用后跳过搜索缓存，无法识别的文案被排除并写进 `hints.active_filter`。职位结果新增 `boss_active_desc` 字段（`boss_active` 不变，搜索缓存 schema 升到 3），`preset add`、MCP `boss_search` / `boss_preset_add` 与向导求职流程同步支持。
 - 替换仓库 README 与项目站点的展示动画为 48 秒极光发布会成片，提供 MP4、轻量动图、新封面和可交互源工程；站点播放期间保持当前画面，切换到终端演示时暂停视频。
 - 新增维护者发布验证脚本：默认离线核对版本、wheel/sdist 元数据与分发文件，显式启用后可在临时环境全新解析依赖、验证 CLI/MCP，或从 PyPI 安装指定版本复验；输出结构化步骤结果，不执行发布或真实平台请求。
