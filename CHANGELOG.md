@@ -12,6 +12,7 @@
 - 同步项目站点中英文正文与 `llms.txt` 的 v3.0.0 版本、命令与 MCP 数量、双角色工作流及平台风险停止／显式恢复说明，移除过时的模式级阻断宣传；修正发布会源工程的本地预览服务目录。
 
 ### Fixed
+- 招聘者 `hr request-resume` / `hr resume --exchange` 不再把已生效的动作误报为 `unexpected page result`，换微信也不再顺带发出求附件简历请求（#443）。确认按钮只在当前组件和本次动作新弹出的可见弹层里按文字「确定」查找，没有新弹层就不点；求简历同时认新旧两种文案（含「想要一份您的附件简历」），并在动作后只读回查聊天记录。页面动作执行但找不到发送证据时返回新错误码 `ACTION_UNCONFIRMED`（`recoverable=false`，先 `boss hr chatmsg <friend_id>` 核实、勿直接重试），页面日志、确认状态和 WS 统计放进 `error.details`；同时修正 CDP 文本帧被当作 base64 解码的问题。
 - 定向更新安全依赖：`[mcp]` 的 PyJWT 锁定到 2.15.1、`[crawl]` 的 urllib3 锁定到 2.8.0、`[dev]` 的 virtualenv 锁定到 21.7.13，并仅连带更新 python-discovery 到 1.6.1。在对应 extra 中声明安全版本下界，避免全新安装回退到已知风险版本，不扩大基础运行依赖；补齐依赖作用域和 JWT 调用者选项隔离/过期声明校验回归。
 - `boss config set platform` 在写入前按当前注册表拒绝已移除、未知或空平台值；失败不创建配置文件，也不改写已有内容，保留显式 `--platform zhipin` 修复旧配置的入口。
 - `boss doctor` 将可执行后继命令与真人操作指引分别放入 `next_actions` / `operator_actions`，命令保留数据目录、平台、浏览器来源和 CDP 上下文；TTY 显示真人指引。源码质量工具检查和维护脚本建议仅面向本项目源码运行，安装包用户不再被要求拥有开发工具链。

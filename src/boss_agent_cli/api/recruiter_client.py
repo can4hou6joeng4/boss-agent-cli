@@ -6,6 +6,7 @@ Endpoints sourced from newboss/boss-cli project (confirmed via reverse engineeri
 
 import atexit
 import json
+import time
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
@@ -13,7 +14,16 @@ from urllib.parse import quote
 from boss_agent_cli.api import recruiter_endpoints as ep
 from boss_agent_cli.api._base_client import _BaseHttpClient
 from boss_agent_cli.api.httpx_helpers import make_client_registry
-from boss_agent_cli.api.recruiter_resume import ResumeValidationError, attachment_params, incoming_message, resume_friend, save_resume
+from boss_agent_cli.api.recruiter_resume import (
+	ResumeValidationError,
+	attachment_params,
+	history_messages,
+	incoming_message,
+	message_mid,
+	new_messages_matching,
+	resume_friend,
+	save_resume,
+)
 from boss_agent_cli.api.zhipin_errors import classify_code_37
 
 _OPEN_CLIENTS, _close_open_clients = make_client_registry()
@@ -86,25 +96,50 @@ const findVueComponent = (name) => {
 	}
 	return null;
 };
-const clickPrimaryConfirm = () => {
-	const roots = Array.from(document.querySelectorAll('.exchange-tooltip, .popover, .ui-dialog'));
-	roots.push(document.body);
-	const candidates = [];
+const isVisibleElement = (el) => {
+	if (!el || !el.isConnected) return false;
+	const style = window.getComputedStyle(el);
+	if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+	const rect = el.getBoundingClientRect();
+	return rect.width > 0 && rect.height > 0 && el.getClientRects().length > 0;
+};
+const POPUP_SELECTOR = '.exchange-tooltip, .popover, .ui-dialog, .dialog-wrap, .boss-dialog, .boss-popup__wrapper, [role="dialog"]';
+const visiblePopups = () => Array.from(document.querySelectorAll(POPUP_SELECTOR)).filter(isVisibleElement);
+const confirmButtonsIn = (root) => {
+	// 只认文字恰好是「确定」的最内层可见元素，不再按 class 名兜底。
+	const found = [];
+	for (const el of root.querySelectorAll('button, a, span, div')) {
+		if (squashText(el.innerText || el.textContent || '') !== '确定') continue;
+		if (Array.from(el.children).some((child) => squashText(child.innerText || child.textContent || '') === '确定')) continue;
+		if (isVisibleElement(el)) found.push(el);
+	}
+	return found;
+};
+const snapshotConfirmState = (vm) => {
+	const popups = visiblePopups();
+	const buttons = new Set();
+	const roots = vm && vm.$el && vm.$el.querySelectorAll ? [vm.$el, ...popups] : popups;
 	for (const root of roots) {
-		const rootText = squashText(root.innerText || root.textContent || '');
-		if (!rootText || !/确定|取消|请求|交换|简历|电话|手机|微信/.test(rootText)) continue;
-		for (const el of root.querySelectorAll('button, a, span, div')) {
-			const text = squashText(el.innerText || el.textContent || '');
-			const cls = String(el.className || '');
-			if (text === '确定' || /confirm|sure|primary/.test(cls)) {
-				candidates.push({el, text});
-			}
+		for (const el of confirmButtonsIn(root)) buttons.add(el);
+	}
+	return {popups: new Set(popups), buttons};
+};
+const clickPrimaryConfirm = (vm, before) => {
+	// 只在当前组件和本次动作后新出现的弹层里找确认按钮；
+	// 页面上其他组件（例如隐藏的附件简历确认框）一律不碰。
+	const roots = [];
+	if (vm && vm.$el && vm.$el.querySelectorAll) roots.push(vm.$el);
+	for (const popup of visiblePopups()) {
+		if (!before.popups.has(popup)) roots.push(popup);
+	}
+	for (const root of roots) {
+		for (const el of confirmButtonsIn(root)) {
+			if (before.buttons.has(el)) continue;
+			el.click();
+			return true;
 		}
 	}
-	const candidate = candidates.find((item) => item.text === '确定') || candidates[0];
-	if (!candidate) return false;
-	candidate.el.click();
-	return true;
+	return 'not_required';
 };
 const chatConversationText = () => squashText(document.querySelector('.chat-conversation')?.innerText || '');
 """
@@ -131,21 +166,19 @@ const vm = findVueComponent(args.componentName);
 if (!vm) return {ok: false, error: args.componentName + ' Vue component not found', log};
 log.push('found ' + args.componentName + ' type=' + vm.type);
 
+const beforeConfirm = snapshotConfirmState(vm);
 try {
 	const ret = vm.handleExChange();
 	if (ret && typeof ret.then === 'function') await ret;
 	log.push('handleExChange returned');
 } catch (e) {
-	return {ok: false, error: 'handleExChange threw: ' + e.message, log};
+	return {ok: false, error: 'handleExChange threw: ' + e.message, log, componentName: args.componentName};
 }
 
 await sleep(args.preConfirmUiWaitMs);
-const confirmed = clickPrimaryConfirm();
+const confirmed = clickPrimaryConfirm(vm, beforeConfirm);
 log.push('confirm clicked=' + confirmed);
-if (!confirmed) {
-	return {ok: false, error: args.componentName + ' confirm button not found', log, confirmed, componentName: args.componentName};
-}
-await sleep(args.postConfirmUiWaitMs);
+if (confirmed === true) await sleep(args.postConfirmUiWaitMs);
 return {
 	ok: true,
 	error: null,
@@ -156,7 +189,16 @@ return {
 """
 
 _EXCHANGE_COMPONENT_NAMES = {1: "ExchangePhone", 2: "ExchangeWx", 4: "ExchangeResume"}
-_EXCHANGE_MESSAGE_TEXT = {1: "请求交换联系方式", 2: "请求交换联系方式", 4: "方便发一份简历过来吗？"}
+# 平台改过文案（#443：求简历从「方便发一份简历过来吗？」变成「想要一份您的附件简历」），
+# 这里按类型列出所有已知文案，任意一条命中即算有发送证据。
+_CONTACT_EXCHANGE_TEXTS: tuple[str, ...] = ("请求交换联系方式",)
+_RESUME_REQUEST_TEXTS: tuple[str, ...] = ("方便发一份简历过来吗", "想要一份您的附件简历")
+_EXCHANGE_MESSAGE_TEXTS: dict[int, tuple[str, ...]] = {
+	1: _CONTACT_EXCHANGE_TEXTS,
+	2: _CONTACT_EXCHANGE_TEXTS,
+	4: _RESUME_REQUEST_TEXTS,
+}
+_ACTION_UNCONFIRMED_HINT = "动作可能已生效，请先 `boss hr chatmsg {friend_id}` 核实，勿直接重试"
 _RESUME_REQUEST_DIALOG_TYPE = 2
 _RESUME_ACCEPT_TYPE = 3
 
@@ -335,6 +377,27 @@ class BossRecruiterClient(_BaseHttpClient):
 		if isinstance(result, dict):
 			return str(result.get("error") or "unexpected page result")
 		return f"unexpected result: {result!r}"
+
+	@staticmethod
+	def _chat_action_failure_response(
+		*, message: str, payload: dict[str, Any], error_code: str | None = None
+	) -> dict[str, Any]:
+		"""聊天页写操作失败信封：zpData 保留完整诊断，同时作为 error.details 透出。"""
+		details = {
+			key: payload[key]
+			for key in ("action", "error", "log", "confirmed", "componentName", "exchange_type", "ws_evidence",
+				"history_checked", "history_matched_count", "history_error", "side_effects")
+			if key in payload
+		}
+		response: dict[str, Any] = {
+			"code": -1,
+			"message": message,
+			"zpData": payload,
+			"__cli_error_details__": details,
+		}
+		if error_code:
+			response["__cli_error_code__"] = error_code
+		return response
 
 	# ── Public API ───────────────────────────────────────────────────
 
@@ -572,13 +635,14 @@ class BossRecruiterClient(_BaseHttpClient):
 						"matched_ws_count": len(matched_ws),
 					},
 				}
-			result.setdefault("error", "no confirmed chat websocket send detected")
+			# 页面脚本成功时会显式返回 error: null，setdefault 不会覆盖它。
+			if not result.get("error"):
+				result["error"] = "no confirmed chat websocket send detected"
 		# Surface the page-side error in CLI envelope shape
 		err_msg = self._page_error_message(result)
-		return {
-			"code": -1,
-			"message": f"send_message_by_friend failed: {err_msg}",
-			"zpData": self._chat_action_failure_data(
+		return self._chat_action_failure_response(
+			message=f"send_message_by_friend failed: {err_msg}",
+			payload=self._chat_action_failure_data(
 				action="reply",
 				friend_id=friend_id,
 				error=err_msg,
@@ -586,7 +650,7 @@ class BossRecruiterClient(_BaseHttpClient):
 				result=result,
 				events=events,
 			),
-		}
+		)
 
 	def session_enter(self, geek_id: str, expect_id: str, job_id: str, security_id: str) -> dict[str, Any]:
 		data = {"geekId": geek_id, "expectId": expect_id, "jobId": job_id, "securityId": security_id}
@@ -643,6 +707,7 @@ class BossRecruiterClient(_BaseHttpClient):
 		  - ❌ 旧 exchange_request(type, uid, jobId, gid) → 121 (参数协议错位)
 		  - ❌ CLI 复刻四步 HTTP → exchange/test 仍 121
 		  - ✅ ExchangeResume.handleExChange() → 发送"方便发一份简历过来吗？"
+		    （#443：平台现已改为"想要一份您的附件简历"，两种文案都认）
 		  - ✅ ExchangePhone.handleExChange() → 发送"请求交换联系方式"
 		  - ✅ ExchangeWx.handleExChange() → 发送"请求交换联系方式"
 		"""
@@ -675,7 +740,11 @@ class BossRecruiterClient(_BaseHttpClient):
 				),
 			}
 
-		expected_text = _EXCHANGE_MESSAGE_TEXT[exchange_type]
+		expected_texts = _EXCHANGE_MESSAGE_TEXTS[exchange_type]
+		expected_bits = list(expected_texts)
+		# 动作前先记下已有消息，事后只认新出现的那条（只读请求，不影响写操作）。
+		baseline_mids = self._chat_history_mids(friend_id)
+		started_ms = int(time.time() * 1000)
 		result, events = self._run_chat_frontend_action(
 			friend_data=friend_data,
 			action_js=_EXCHANGE_ACTION_JS,
@@ -689,36 +758,107 @@ class BossRecruiterClient(_BaseHttpClient):
 			listen_ms=3000,
 		)
 
-		if isinstance(result, dict) and result.get("ok"):
-			matched_ws = self._matching_chat_send_events(events, [expected_text])
-			if matched_ws:
-				return {
-					"code": 0,
-					"message": "Success",
-					"zpData": {
-						"friendId": friend_id,
-						"exchange_type": exchange_type,
-						"componentName": result.get("componentName"),
-						"confirmed": result.get("confirmed"),
-						"log": result.get("log"),
-						"matched_ws_count": len(matched_ws),
-					},
-				}
-			result.setdefault("error", "no confirmed chat websocket send detected")
-		err = self._page_error_message(result)
-		return {
-			"code": -1,
-			"message": f"exchange_request_by_friend failed: {err}",
-			"zpData": self._chat_action_failure_data(
+		if not (isinstance(result, dict) and result.get("ok")):
+			err = self._page_error_message(result)
+			return self._chat_action_failure_response(
+				message=f"exchange_request_by_friend failed: {err}",
+				payload=self._chat_action_failure_data(
+					action="exchange",
+					friend_id=friend_id,
+					error=err,
+					expected_bits=expected_bits,
+					result=result,
+					events=events,
+					extra={"exchange_type": exchange_type, "componentName": component_name},
+				),
+			)
+
+		matched_ws = self._matching_chat_send_events(events, expected_bits)
+		history = self._exchange_history_evidence(
+			friend_id, expected_texts, baseline_mids=baseline_mids, since_ms=started_ms,
+		)
+		side_effects = self._exchange_side_effects(exchange_type, events, history)
+		evidence = {
+			"matched_ws_count": len(matched_ws),
+			"history_checked": history["checked"],
+			"history_matched_count": history["matched_count"],
+		}
+		if matched_ws or history["matched_count"]:
+			data: dict[str, Any] = {
+				"friendId": friend_id,
+				"exchange_type": exchange_type,
+				"componentName": result.get("componentName"),
+				"confirmed": result.get("confirmed"),
+				"log": result.get("log"),
+				**evidence,
+			}
+			if side_effects:
+				data["side_effects"] = side_effects
+			return {"code": 0, "message": "Success", "zpData": data}
+
+		err = "页面动作已执行，但未在聊天 WS 帧或聊天记录中确认发送"
+		extra: dict[str, Any] = {
+			"exchange_type": exchange_type,
+			"componentName": result.get("componentName") or component_name,
+			"history_checked": history["checked"],
+			"history_matched_count": 0,
+		}
+		if history.get("error"):
+			extra["history_error"] = history["error"]
+		if side_effects:
+			extra["side_effects"] = side_effects
+		return self._chat_action_failure_response(
+			message=f"exchange_request_by_friend unconfirmed: {err}；{_ACTION_UNCONFIRMED_HINT.format(friend_id=friend_id)}",
+			payload=self._chat_action_failure_data(
 				action="exchange",
 				friend_id=friend_id,
 				error=err,
-				expected_bits=[expected_text],
+				expected_bits=expected_bits,
 				result=result,
 				events=events,
-				extra={"exchange_type": exchange_type, "componentName": component_name},
+				extra=extra,
 			),
-		}
+			error_code="ACTION_UNCONFIRMED",
+		)
+
+	def _chat_history_mids(self, friend_id: int) -> set[int] | None:
+		"""读取动作前的消息 mid 快照；读不到时返回 None，事后改按时间判断。"""
+		response = self.chat_history(friend_id, count=20, retry=False)
+		if not isinstance(response, dict) or response.get("code") != 0:
+			return None
+		return {mid for message in history_messages(response.get("zpData")) if (mid := message_mid(message)) is not None}
+
+	def _exchange_history_evidence(
+		self,
+		friend_id: int,
+		texts: tuple[str, ...],
+		*,
+		baseline_mids: set[int] | None,
+		since_ms: int,
+	) -> dict[str, Any]:
+		"""动作后回读聊天记录，统计新出现的请求消息；只读、失败不抛出。"""
+		try:
+			response = self.chat_history(friend_id, count=20, retry=False)
+		except Exception as exc:  # noqa: BLE001 — 写操作已发生，回读失败只能记为未确认
+			return {"checked": False, "matched_count": 0, "resume_matched_count": 0, "error": type(exc).__name__}
+		if not isinstance(response, dict) or response.get("code") != 0:
+			code = response.get("code") if isinstance(response, dict) else None
+			return {"checked": False, "matched_count": 0, "resume_matched_count": 0, "error": f"chat_history code={code}"}
+		data = response.get("zpData")
+		matched = new_messages_matching(data, texts, baseline_mids=baseline_mids, since_ms=since_ms)
+		resume = new_messages_matching(data, _RESUME_REQUEST_TEXTS, baseline_mids=baseline_mids, since_ms=since_ms)
+		return {"checked": True, "matched_count": len(matched), "resume_matched_count": len(resume)}
+
+	def _exchange_side_effects(
+		self, exchange_type: int, events: list[dict[str, Any]], history: dict[str, Any]
+	) -> list[str]:
+		"""换手机/微信时如果同时出现了求简历消息，明确告诉调用方（#443）。"""
+		if exchange_type == 4:
+			return []
+		resume_ws = self._matching_chat_send_events(events, list(_RESUME_REQUEST_TEXTS))
+		if resume_ws or history.get("resume_matched_count"):
+			return ["resume_request_detected"]
+		return []
 
 	def accept_resume_by_friend(self, friend_id: int, message_id: int) -> dict[str, Any]:
 		"""同意指定会话中的附件简历请求；验证目标后仅发送一次 HTTP POST。

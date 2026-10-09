@@ -352,7 +352,8 @@ def test_exchange_request_by_friend_without_real_ws_send_returns_error():
 
 		result = client.exchange_request_by_friend(1, exchange_type=4)
 		assert result["code"] == -1
-		assert "no confirmed chat websocket send detected" in result["message"]
+		assert result["__cli_error_code__"] == "ACTION_UNCONFIRMED"
+		assert "boss hr chatmsg 1" in result["message"]
 		assert result["zpData"]["action"] == "exchange"
 		assert result["zpData"]["ws_evidence"]["matched_ws_count"] == 0
 	client.close()

@@ -202,6 +202,7 @@ context」；若指纹对应的账号不是你要的，请关闭多余窗口或�
 | `ALREADY_GREETED` | 已打过招呼 | 跳过 |
 | `CONFIRMATION_REQUIRED` | 未确认操作目标与内容 | 先用 `hr greet --dry-run` 或 `hr accept-resume <friend_id> --message-id <mid> --dry-run` 预览；操作者明确批准后才加 `--yes`，Agent 不可自行补确认 |
 | `RESUME_ACCEPT_RESULT_UNKNOWN` | 同意附件简历请求的结果未确认 | 保留 `accepted=null`，在官方页面核对请求状态；禁止自动重试同意操作 |
+| `ACTION_UNCONFIRMED` | 招聘者交换联系方式或求简历的页面动作已执行，但未确认是否发出 | 动作可能已生效，先用 `boss hr chatmsg <friend_id>` 核实，勿直接重试；`error.details` 里有页面日志和 WS 统计 |
 | `GREET_RESULT_UNKNOWN` | 已预约发送，但结果未确认 | 用 `boss hr chat --job-id <id>` 核对会话，禁止自动重发；本地保留预约，必要时在官方页面处理 |
 | `GREET_LIMIT` | 今日次数用完 | 告知用户 |
 | `NETWORK_ERROR` | 网络错误 | 重试 |

@@ -151,6 +151,8 @@ boss crawl stop <run_id>
 
 `greet` 只发送首次招呼，不建立 MQTT 连接、不清理红点。成功返回 `sent=true`；若发送后本地记录失败，错误信封仍在 `error.details.sent=true` 保留已发送事实，不能因此重发。BOSS 外层 `code=0` 也可能返回权益拦截页；CLI 会识别这类业务拒绝，返回 `GREET_LIMIT`、`error.details.sent=false` 和脱敏平台提示，保留拒绝状态以阻止重发。平台可能按职位限制免费沟通人数，不能把调用方配置的日额度当作平台保证。`chat` / `last-messages` 中未知未读数保留为 `null`，不当作零。
 
+`request-resume` 与 `resume --exchange` 在聊天页里调用官方组件完成动作，只点击本次动作新弹出的确认框。成功需要发送证据：聊天 WS 帧里出现已知请求文案，或动作后回读聊天记录看到新的请求消息。页面动作执行了但两者都没看到时返回 `ACTION_UNCONFIRMED`（`recoverable=false`），`error.details` 附带页面日志、确认按钮状态和 WS 统计。此时动作可能已经生效，先用 `boss hr chatmsg <friend_id>` 核实，不要直接重试。换手机或微信时如果同时看到了求简历消息，成功结果会带 `side_effects: ["resume_request_detected"]`。
+
 ### 接收与下载附件简历
 
 先用 `boss hr chatmsg <friend_id>` 核对消息。`accept-resume` 的 `--message-id` 是“对方想发送附件简历”的请求消息 `mid`，不是候选人 ID，也不是附件 ID。先加 `--dry-run` 可离线预览目标（不验证消息状态）；操作者批准后才加 `--yes`。命令重新读取消息和当前会话，确认发送方、请求类型及未处理状态后，单次调用 `exchange/accept`，不自动重试写请求、不新建 MQTT。只有外层 `code=0` 且 `zpData.status=0` 才返回 `accepted=true`；异常或额外确认状态不能当作已同意，需在官方页面核对。

@@ -152,6 +152,9 @@ def handle_platform_error_output(
 			raw_details = error.get("details")
 			if isinstance(raw_details, dict):
 				details = raw_details
+		cli_details = response.get("__cli_error_details__")
+		if details is None and isinstance(cli_details, dict) and cli_details:
+			details = cli_details
 	handle_error_output(
 		ctx,
 		command,

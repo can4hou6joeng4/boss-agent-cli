@@ -24,6 +24,7 @@ from boss_agent_cli.output import Logger
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
 from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
+from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.search_filters import SearchFilterCriteria, resolve_welfare_keywords, run_search_pipeline
 from boss_agent_cli.wizard.models import StepResult, WorkflowStatus
 from boss_agent_cli.wizard.runner import Action, WorkflowActionError, WorkflowControl
@@ -204,6 +205,9 @@ def _classify_action_error(code: str, message: str) -> tuple[str, bool, str]:
 			code = "INVALID_PARAM"
 		else:
 			code = "NETWORK_ERROR"
+	if code == "ACTION_UNCONFIRMED":
+		# 写操作可能已生效：沿用登记表的「先核实、勿重试」契约，不落到「稍后重试」兜底。
+		return code, False, str(ERROR_CODES[code]["recovery_action"])
 	if code in RISK_ERROR_CONTRACTS:
 		# 风控码：与单次命令路径共用同一份 recovery_action，绝不落到「稍后重试」兜底。
 		recovery, _ = risk_error_contract(code)

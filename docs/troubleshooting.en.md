@@ -242,6 +242,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `ALREADY_GREETED` | Already messaged recruiter | Skip |
 | `CONFIRMATION_REQUIRED` | Operation target and content not approved | Preview with `hr greet --dry-run` or `hr accept-resume <friend_id> --message-id <mid> --dry-run`; set `--yes` only after explicit operator approval. Agents must not infer approval. |
 | `RESUME_ACCEPT_RESULT_UNKNOWN` | Resume acceptance result is unconfirmed | Keep `accepted=null` and check the request on the official page; never automatically retry acceptance. |
+| `ACTION_UNCONFIRMED` | A recruiter contact-exchange or resume-request page action ran, but sending was not confirmed | The action may already have taken effect; check `boss hr chatmsg <friend_id>` before doing anything and never retry blindly. `error.details` contains the page log and WebSocket counts. |
 | `GREET_RESULT_UNKNOWN` | Send reserved, outcome unconfirmed | Check `boss hr chat --job-id <id>`; never automatically resend. Keep the local reservation and use the official page if needed. |
 | `ALREADY_APPLIED` | Already applied | Skip |
 | `GREET_LIMIT` | Daily greet quota hit | Pause until tomorrow |

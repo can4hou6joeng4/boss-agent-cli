@@ -3014,6 +3014,16 @@ def test_classify_action_error_uses_risk_contract_for_risk_codes():
 		assert "稍后重试" not in recovery
 
 
+def test_classify_action_error_keeps_action_unconfirmed_no_retry_contract():
+	from boss_agent_cli.wizard.actions import _classify_action_error
+
+	mapped, recoverable, recovery = _classify_action_error("ACTION_UNCONFIRMED", "任意文案")
+	assert mapped == "ACTION_UNCONFIRMED"
+	assert recoverable is False
+	assert "boss hr chatmsg" in recovery
+	assert "稍后重试" not in recovery
+
+
 def test_runner_browser_source_unsupported_maps_to_not_supported(tmp_path):
 	from boss_agent_cli.api.browser_source import BrowserSourceUnsupported
 

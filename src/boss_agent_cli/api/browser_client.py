@@ -10,6 +10,7 @@ Supports two modes:
   2. Patchright mode (fallback): launches a headless Chromium instance
 """
 
+import base64
 import sys
 import time
 from pathlib import Path
@@ -701,10 +702,22 @@ def _cdp_evaluate_in_chat_tab(cdp_http_url: str, script: str, arg: Any) -> Any:
 		raise RuntimeError("CDP Runtime.evaluate timed out after 30s")
 
 
+def _ws_frame_payload_bytes(frame: dict[str, Any]) -> bytes:
+	"""CDP 对文本帧（opcode 1）给原文、二进制帧（opcode 2）给 base64，分别还原。"""
+	payload_data = frame.get("payloadData", "")
+	if not isinstance(payload_data, str):
+		return b""
+	if frame.get("opcode") == 1:
+		return payload_data.encode("utf-8", errors="ignore")
+	try:
+		return base64.b64decode(payload_data, validate=False)
+	except Exception:
+		return payload_data.encode("utf-8", errors="ignore")
+
+
 def _cdp_evaluate_with_chat_events_in_chat_tab(
 	cdp_http_url: str, script: str, arg: Any, *, listen_ms: int
 ) -> dict[str, Any]:
-	import base64 as _base64
 	import json as _json
 
 	import websockets.sync.client as _ws_client
@@ -772,11 +785,7 @@ def _cdp_evaluate_with_chat_events_in_chat_tab(
 			if frame.get("opcode") not in (1, 2):
 				continue
 
-			payload_data = frame.get("payloadData", "")
-			try:
-				bs = _base64.b64decode(payload_data, validate=False)
-			except Exception:
-				bs = payload_data.encode("utf-8", errors="ignore")
+			bs = _ws_frame_payload_bytes(frame)
 			if len(bs) < 30:
 				continue
 

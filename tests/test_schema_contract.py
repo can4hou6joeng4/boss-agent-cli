@@ -130,6 +130,7 @@ def test_schema_error_codes_cover_all_used_codes():
 		"CONFIRMATION_REQUIRED",
 		"RESUME_ACCEPT_RESULT_UNKNOWN",
 		"GREET_RESULT_UNKNOWN",
+		"ACTION_UNCONFIRMED",
 		"AUTH_EXPIRED",
 		"AUTH_REQUIRED",
 		"RATE_LIMITED",
