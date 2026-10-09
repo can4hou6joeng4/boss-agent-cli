@@ -454,13 +454,44 @@ class BossRecruiterClient(_BaseHttpClient):
 			args.update(extra_args)
 
 		browser = self._get_browser()
+		# 聊天页动作会让页面自己发平台请求：动作前先核对 code 37 风控锁（裸 CDP 读 stoken，不附着 patchright）。
+		self._check_cdp_risk_lock_raw()
 		if listen_ms is None:
 			return browser.evaluate_js(script, args), []
 
 		capture = browser.evaluate_js_with_chat_events(script, args, listen_ms=listen_ms)
 		result = capture.get("value") if isinstance(capture, dict) else capture
-		events = capture.get("events", []) if isinstance(capture, dict) else []
-		return result, cast("list[dict[str, Any]]", events)
+		events = cast("list[dict[str, Any]]", capture.get("events", []) if isinstance(capture, dict) else [])
+		risk = self._page_risk_response(events)
+		if risk is not None and risk.get("code") == ep.CODE_STOKEN_EXPIRED and classify_code_37(risk) == "environment_risk":
+			self._record_cdp_risk_lock_raw()
+		return result, events
+
+	@staticmethod
+	def _page_risk_response(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+		"""页面动作期间页面请求命中的第一条风控响应（code 36/37），整理成平台响应形状。"""
+		for event in events:
+			if event.get("kind") == "http_risk" and event.get("code") in (ep.CODE_ACCOUNT_RISK, ep.CODE_STOKEN_EXPIRED):
+				return {"code": event["code"], "message": event.get("message") or "", "path": event.get("path")}
+		return None
+
+	def _page_risk_failure(self, *, action: str, friend_id: int, risk: dict[str, Any], result: Any,
+			events: list[dict[str, Any]], expected_bits: list[str], extra: dict[str, Any] | None = None) -> dict[str, Any]:
+		"""页面请求命中风控：按平台风控码返回（parse_error 映射到 ENVIRONMENT_RISK / ACCOUNT_RISK），立即停止。"""
+		message = risk.get("message") or ("访问环境存在异常" if risk["code"] == ep.CODE_STOKEN_EXPIRED else "账户存在异常行为")
+		payload = self._chat_action_failure_data(
+			action=action, friend_id=friend_id,
+			error=f"页面请求 {risk.get('path')} 返回 code {risk['code']}",
+			expected_bits=expected_bits, result=result, events=events, extra=extra,
+		)
+		payload["page_risk"] = {"path": risk.get("path"), "code": risk["code"]}
+		response = self._chat_action_failure_response(
+			message=f"BOSS 直聘风控拦截 (code {risk['code']}): {message}；聊天页动作已停止，勿重试",
+			payload=payload,
+		)
+		response["code"] = risk["code"]
+		response["__cli_error_details__"]["page_risk"] = payload["page_risk"]
+		return response
 
 	def _matching_chat_send_events(self, events: list[dict[str, Any]], expected_bits: list[str]) -> list[dict[str, Any]]:
 		return [
@@ -801,6 +832,10 @@ class BossRecruiterClient(_BaseHttpClient):
 			listen_ms=3000,
 		)
 
+		if (risk := self._page_risk_response(events)) is not None:
+			return self._page_risk_failure(
+				action="reply", friend_id=friend_id, risk=risk, result=result, events=events, expected_bits=[content],
+			)
 		if isinstance(result, dict) and result.get("ok"):
 			matched_ws = self._matching_chat_send_events(events, [content])
 			if matched_ws:
@@ -941,6 +976,11 @@ class BossRecruiterClient(_BaseHttpClient):
 			listen_ms=3000,
 		)
 
+		if (risk := self._page_risk_response(events)) is not None:
+			return self._page_risk_failure(
+				action="exchange", friend_id=friend_id, risk=risk, result=result, events=events,
+				expected_bits=expected_bits, extra={"exchange_type": exchange_type, "componentName": component_name},
+			)
 		if isinstance(result, dict) and result.get("unavailable") and check_availability:
 			# 按钮未解锁：handleExChange 没有被调用，什么都没发出去，可以放心先回复再重试。
 			return self._chat_action_failure_response(

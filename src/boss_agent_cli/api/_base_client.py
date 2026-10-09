@@ -177,6 +177,47 @@ class _BaseHttpClient:
 		except OSError:
 			pass
 
+	def _cdp_http_url(self) -> str:
+		from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL
+
+		return getattr(self, "_cdp_url", None) or DEFAULT_CDP_URL
+
+	def _check_cdp_risk_lock_raw(self) -> None:
+		"""聊天页动作（裸 CDP、不附着 patchright）前的锁检查：经 ``Storage.getCookies`` 读 stoken 摘要。
+
+		与 ``_check_cdp_risk_lock`` 同一契约：摘要没变（或读不到）就拒绝，变了就解锁。
+		"""
+		from boss_agent_cli.api import cdp_risk_lock
+
+		data_dir = self._risk_lock_dir()
+		if data_dir is None:
+			return
+		lock = cdp_risk_lock.read_lock(data_dir)
+		if lock is None:
+			return
+		from boss_agent_cli.api.browser_client import read_cdp_stoken_hash
+
+		if lock.matches(read_cdp_stoken_hash(self._cdp_http_url())):
+			from boss_agent_cli.api.client import EnvironmentRiskLockedError
+
+			raise EnvironmentRiskLockedError.from_lock(lock)
+		cdp_risk_lock.clear_lock(data_dir)
+
+	def _record_cdp_risk_lock_raw(self) -> None:
+		"""聊天页动作期间页面请求命中环境类 code 37：经裸 CDP 读摘要后记锁（不存原值）。"""
+		from boss_agent_cli.api import cdp_risk_lock
+		from boss_agent_cli.api.browser_client import read_cdp_stoken_hash
+
+		data_dir = self._risk_lock_dir()
+		if data_dir is None:
+			return
+		try:
+			cdp_risk_lock.write_lock(
+				data_dir, read_cdp_stoken_hash(self._cdp_http_url()), cdp_url=getattr(self, "_cdp_url", None),
+			)
+		except OSError:
+			pass
+
 	def _get_client(self) -> httpx.Client:
 		if self.is_browser_only():
 			# 兜底闸门：任何漏网的 httpx 路径在 CDP 模式下都不能带着浏览器凭据发出去。

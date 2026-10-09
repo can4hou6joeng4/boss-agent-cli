@@ -13,9 +13,13 @@ from boss_agent_cli.output import emit_error, emit_success
 @click.option("--cookie-source", default=None, help="指定浏览器提取 Cookie（如 chrome/firefox/edge），不指定则自动检测")
 @click.option("--cdp", is_flag=True, default=False, help="强制 CDP 模式（跳过 Cookie 提取，CDP 不可用直接报错）")
 @click.option("--force", is_flag=True, default=False, help="不复用任何既有登录态：跳过本地 Cookie 提取，CDP 下不复用已登录 context 并清掉目标平台 cookie 后重新登录")
+@click.option("--ignore-risk-lock", is_flag=True, default=False, help="CDP 风控锁（code 37）未解除时仍继续登录；不会解除锁")
 @click.option("--curl-file", type=click.File("r", encoding="utf-8"), default=None, help="从 Copy as cURL (bash) 文件导入 BOSS 登录态；- 表示标准输入")
 @click.pass_context
-def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: bool, force: bool, curl_file: TextIO | None) -> None:
+def login_cmd(
+	ctx: click.Context, timeout: int, cookie_source: str | None, cdp: bool, force: bool,
+	ignore_risk_lock: bool, curl_file: TextIO | None,
+) -> None:
 	"""登录当前招聘平台（按平台走对应的 Cookie / CDP / 浏览器降级链路）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -37,6 +41,7 @@ def login_cmd(ctx: click.Context, timeout: int, cookie_source: str | None, cdp: 
 				cdp_url=cdp_url,
 				force_cdp=cdp,
 				force_relogin=force,
+				ignore_risk_lock=ignore_risk_lock,
 			)
 		method = token.pop("_method", "未知")
 		status_cmd = boss_command_for_ctx(ctx, "status")

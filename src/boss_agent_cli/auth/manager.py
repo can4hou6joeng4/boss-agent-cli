@@ -40,12 +40,58 @@ class AuthManager:
 		return self._data_dir
 
 	def _cdp_login(self, *, cdp_url: str | None, timeout: int, reuse_existing: bool) -> dict[str, Any]:
-		"""CDP 登录；复用的登录态被在线探测判定失效时，自动改走不复用路径重登一次。"""
+		"""CDP 登录；复用的登录态被在线探测判定失效时，自动改走不复用路径重登一次。
+
+		登录过程中的只读探测命中环境类 code 37 时，与其他 CDP 请求一样记下风控锁。
+		"""
+		from boss_agent_cli.api.client import EnvironmentRiskError, EnvironmentRiskLockedError
+
 		try:
-			return login_via_cdp(cdp_url=cdp_url, timeout=timeout, platform=self._platform, reuse_existing=reuse_existing)
-		except ReusedSessionStaleError as exc:
-			self._logger.warning(f"{exc}")
-			return login_via_cdp(cdp_url=cdp_url, timeout=timeout, platform=self._platform, reuse_existing=False)
+			try:
+				return login_via_cdp(cdp_url=cdp_url, timeout=timeout, platform=self._platform, reuse_existing=reuse_existing)
+			except ReusedSessionStaleError as exc:
+				self._logger.warning(f"{exc}")
+				return login_via_cdp(cdp_url=cdp_url, timeout=timeout, platform=self._platform, reuse_existing=False)
+		except EnvironmentRiskError as exc:
+			if not isinstance(exc, EnvironmentRiskLockedError):
+				self._record_cdp_risk_lock(cdp_url)
+			raise
+
+	def _record_cdp_risk_lock(self, cdp_url: str | None) -> None:
+		from boss_agent_cli.api import cdp_risk_lock
+		from boss_agent_cli.api.browser_client import read_cdp_stoken_hash
+		from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL
+
+		try:
+			cdp_risk_lock.write_lock(self._data_dir, read_cdp_stoken_hash(cdp_url or DEFAULT_CDP_URL), cdp_url=cdp_url)
+		except OSError:
+			pass
+
+	def _check_cdp_login_risk_lock(self, cdp_url: str | None) -> None:
+		"""CDP 登录前核对 code 37 风控锁。
+
+		登录会打开平台页面并做一次在线只读探测，同样会带着那个被拦的 stoken 访问平台。
+		Chrome 里的 stoken 已经变了（用户在页面里恢复过）就自动解锁继续；没变或读不到就拒绝，
+		提示先手动浏览恢复、再 ``boss clean --risk-lock``，或显式加 ``--ignore-risk-lock``。
+		"""
+		from boss_agent_cli.api import cdp_risk_lock
+		from boss_agent_cli.api.browser_client import read_cdp_stoken_hash
+		from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL
+		from boss_agent_cli.api.client import EnvironmentRiskLockedError
+
+		lock = cdp_risk_lock.read_lock(self._data_dir)
+		if lock is None:
+			return
+		if not lock.matches(read_cdp_stoken_hash(cdp_url or DEFAULT_CDP_URL)):
+			cdp_risk_lock.clear_lock(self._data_dir)
+			return
+		raise EnvironmentRiskLockedError(
+			"CDP 浏览器此前命中访问环境风控 (code 37)，Chrome 里的 __zp_stoken__ 还没更新，"
+			"login 已停止（未打开登录页、未做在线探测）。请先在这个 Chrome 里手动打开 BOSS 直聘职位列表页，"
+			"确认能正常加载并等几分钟；stoken 变化后再登录会自动解锁，或执行 boss clean --risk-lock 手动解除。"
+			"确需立即登录可加 --ignore-risk-lock（不解除锁）。",
+			is_cdp=True,
+		)
 
 	def _login_action(self) -> str:
 		return "boss login" if self._platform == "zhipin" else f"boss --platform {self._platform} login"
@@ -66,6 +112,7 @@ class AuthManager:
 		cdp_url: str | None = None,
 		force_cdp: bool = False,
 		force_relogin: bool = False,
+		ignore_risk_lock: bool = False,
 	) -> dict[str, Any]:
 		"""三级降级登录：Cookie 提取 → CDP 自动探测 → patchright 扫码。
 
@@ -74,6 +121,7 @@ class AuthManager:
 			force_relogin: 为 True 时（``--force``）不复用任何既有登录态：跳过本地
 				浏览器 Cookie 提取，CDP 路径不扫描已登录 context 并清掉目标平台域 cookie
 				后重新登录。与 ``force_cdp`` 正交。
+			ignore_risk_lock: 为 True 时（``--ignore-risk-lock``）跳过 CDP 风控锁检查；锁本身保留。
 		"""
 		method = "未知"
 		token: dict[str, Any] | None = None
@@ -82,6 +130,8 @@ class AuthManager:
 		if force_cdp:
 			# --cdp 强制模式：跳过 Cookie，CDP 不可用直接抛异常
 			self._logger.info("强制 CDP 模式，跳过 Cookie 提取")
+			if not ignore_risk_lock and probe_cdp(cdp_url):
+				self._check_cdp_login_risk_lock(cdp_url)
 			token = self._cdp_login(cdp_url=cdp_url, timeout=timeout, reuse_existing=reuse_existing)
 			method = "CDP 扫码"
 			self._store.save(token)
@@ -108,6 +158,8 @@ class AuthManager:
 		# 第二步：CDP 自动探测
 		if probe_cdp(cdp_url):
 			self._logger.info("检测到 CDP 可用，尝试 CDP 登录...")
+			if not ignore_risk_lock:
+				self._check_cdp_login_risk_lock(cdp_url)
 			try:
 				token = self._cdp_login(cdp_url=cdp_url, timeout=timeout, reuse_existing=reuse_existing)
 				method = "CDP 扫码"

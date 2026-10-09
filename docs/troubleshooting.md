@@ -196,6 +196,13 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
   摘要和时间戳，不存原值。之后每次 CDP 浏览器请求前，CLI 通过本机 CDP 读 Chrome 的 cookie 计算摘要：
   - 摘要没变：本地拒绝，返回 `ENVIRONMENT_RISK_LOCKED`（`recoverable=false`），请求不会发出；
   - 摘要变了：说明页面已经换了新 stoken，自动删除锁并继续。
+- 锁也覆盖招聘者聊天页动作（`hr reply`、`hr request-resume`、`hr resume --exchange` 这类由页面代发请求的操作）：动作前经
+  本机 CDP（`Storage.getCookies`，不附着 patchright）核对摘要；动作期间页面自己发出的 `/wapi/` 请求如果返回 code 37，
+  同样记锁并返回 `ENVIRONMENT_RISK`（code 36 返回 `ACCOUNT_RISK`），`error.details.page_risk` 标明是哪个接口。
+  `hr chat` 读取聊天页已加载列表只读页面内存、不发请求，不受锁限制（列表接口本身仍受锁限制）。
+- `boss login`（`--cdp` 或自动探测到 CDP 时）有锁且 stoken 没变就直接停止，不打开登录页、不做在线探测，返回
+  `ENVIRONMENT_RISK_LOCKED`；登录过程中的只读探测命中 code 37 也会记锁。确需立即登录可加 `--ignore-risk-lock`（只跳过检查，
+  不解除锁）。
 
 解除步骤：
 

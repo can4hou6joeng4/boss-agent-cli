@@ -238,6 +238,15 @@ Current behavior:
   request it reads Chrome's cookies over the local CDP connection and compares hashes:
   - unchanged: the request is refused locally with `ENVIRONMENT_RISK_LOCKED` (`recoverable=false`) and nothing is sent;
   - changed: the page has minted a new stoken, so the lock is removed and the request proceeds.
+- The lock also covers recruiter chat-page actions (`hr reply`, `hr request-resume`, `hr resume --exchange`, where the
+  page itself sends the platform requests): the hash is checked before the action over local CDP (`Storage.getCookies`,
+  without attaching patchright), and if any `/wapi/` request the page sends during the action returns code 37, the lock is
+  recorded and the command returns `ENVIRONMENT_RISK` (code 36 returns `ACCOUNT_RISK`); `error.details.page_risk` names the
+  endpoint. Reading the already-loaded list in the chat page for `hr chat` only reads page memory and sends nothing, so it
+  is not gated (the list endpoint itself still is).
+- `boss login` (with `--cdp`, or when CDP is auto-detected) stops immediately while locked with an unchanged stoken: it
+  does not open the login page or run the online probe, and returns `ENVIRONMENT_RISK_LOCKED`. A code 37 from the login
+  probe also records the lock. To log in anyway, pass `--ignore-risk-lock` (skips the check only; the lock stays).
 
 To recover:
 

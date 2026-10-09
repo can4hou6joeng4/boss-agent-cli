@@ -11,6 +11,7 @@ Supports two modes:
 """
 
 import base64
+import json
 import sys
 import time
 from pathlib import Path
@@ -735,6 +736,114 @@ def _ws_frame_payload_bytes(frame: dict[str, Any]) -> bytes:
 		return payload_data.encode("utf-8", errors="ignore")
 
 
+#: 平台业务风控码：36 = 账号风控，37 = 访问环境风控 / stoken 失效。
+_PAGE_RISK_CODES = (36, 37)
+_MAX_TRACKED_RESPONSES = 64
+
+
+class _PageRiskResponseTracker:
+	"""跟踪聊天页在页面动作期间自己发出的 ``/wapi/`` JSON 响应。
+
+	页面动作（换微信、求简历、发消息）由 BOSS 前端代发请求，CLI 看不到这些响应；
+	这里借同一条 CDP 连接的 Network 事件读回响应体，只保留命中风控码（36/37）的
+	极简记录（路径、码、截断后的文案），其余响应不留任何内容。
+	"""
+
+	def __init__(self) -> None:
+		self._pending: dict[str, str] = {}
+		self._body_requests: dict[int, str] = {}
+		self._next_id = 1000
+		self.events: list[dict[str, Any]] = []
+
+	def handles(self, msg: dict[str, Any]) -> bool:
+		return msg.get("method") in ("Network.responseReceived", "Network.loadingFinished") or (
+			isinstance(msg.get("id"), int) and msg["id"] in self._body_requests
+		)
+
+	def on_message(self, msg: dict[str, Any]) -> dict[str, Any] | None:
+		"""处理一条 CDP 消息；需要读响应体时返回要发出的 CDP 命令。"""
+		from urllib.parse import urlsplit
+
+		method = msg.get("method")
+		params = msg.get("params") or {}
+		if method == "Network.responseReceived":
+			response = params.get("response") or {}
+			url = str(response.get("url") or "")
+			mime = str(response.get("mimeType") or "").lower()
+			request_id = params.get("requestId")
+			if "/wapi/" in url and "json" in mime and isinstance(request_id, str):
+				if len(self._pending) < _MAX_TRACKED_RESPONSES:
+					self._pending[request_id] = urlsplit(url).path
+			return None
+		if method == "Network.loadingFinished":
+			request_id = params.get("requestId")
+			path = self._pending.pop(request_id, None) if isinstance(request_id, str) else None
+			if path is None:
+				return None
+			command_id = self._next_id
+			self._next_id += 1
+			self._body_requests[command_id] = path
+			return {"id": command_id, "method": "Network.getResponseBody", "params": {"requestId": request_id}}
+		msg_id = msg.get("id")
+		if isinstance(msg_id, int) and msg_id in self._body_requests:
+			path = self._body_requests.pop(msg_id)
+			result = msg.get("result") or {}
+			body = result.get("body")
+			if not isinstance(body, str):
+				return None
+			if result.get("base64Encoded"):
+				try:
+					body = base64.b64decode(body).decode("utf-8", errors="ignore")
+				except Exception:
+					return None
+			try:
+				data = json.loads(body)
+			except ValueError:
+				return None
+			if isinstance(data, dict) and data.get("code") in _PAGE_RISK_CODES:
+				from boss_agent_cli.api.zhipin_errors import response_message
+
+				self.events.append({
+					"kind": "http_risk",
+					"path": path,
+					"code": data["code"],
+					"message": response_message(data)[:120],
+				})
+		return None
+
+
+def read_cdp_stoken_hash(cdp_http_url: str) -> str | None:
+	"""经裸 CDP（``Storage.getCookies``）读取 Chrome 当前 ``__zp_stoken__`` 的摘要。
+
+	只连本机 CDP 端点、不访问平台、不附着 patchright（聊天页动作刻意不走 patchright）；
+	读不到时返回 ``None``，调用方按「无法确认」处理（风控锁 fail-closed）。
+	"""
+	import urllib.request
+
+	import websockets.sync.client as _ws_client
+
+	from boss_agent_cli.api.cdp_risk_lock import stoken_hash_from_cookies
+
+	try:
+		with urllib.request.urlopen(cdp_http_url.rstrip("/") + "/json/version", timeout=3) as resp:
+			ws_url = json.load(resp).get("webSocketDebuggerUrl")
+		if not ws_url:
+			return None
+		with _ws_client.connect(ws_url, max_size=16 * 1024 * 1024) as ws:
+			ws.send(json.dumps({"id": 1, "method": "Storage.getCookies"}))
+			deadline = time.time() + 5.0
+			while time.time() < deadline:
+				msg = json.loads(ws.recv(timeout=max(0.1, deadline - time.time())))
+				if msg.get("id") != 1:
+					continue
+				if msg.get("error"):
+					return None
+				return stoken_hash_from_cookies((msg.get("result") or {}).get("cookies"))
+	except Exception:
+		return None
+	return None
+
+
 def _cdp_evaluate_with_chat_events_in_chat_tab(
 	cdp_http_url: str, script: str, arg: Any, *, listen_ms: int
 ) -> dict[str, Any]:
@@ -762,6 +871,7 @@ def _cdp_evaluate_with_chat_events_in_chat_tab(
 		)
 
 		events: list[dict[str, Any]] = []
+		risk_tracker = _PageRiskResponseTracker()
 		eval_value: Any = None
 		eval_done = False
 		deadline = time.time() + 30.0
@@ -770,7 +880,7 @@ def _cdp_evaluate_with_chat_events_in_chat_tab(
 		while True:
 			now = time.time()
 			if eval_done and listen_deadline is not None and now >= listen_deadline:
-				return {"value": eval_value, "events": events}
+				return {"value": eval_value, "events": events + risk_tracker.events}
 			if now >= deadline:
 				raise RuntimeError("CDP Runtime.evaluate timed out after 30s")
 
@@ -796,6 +906,12 @@ def _cdp_evaluate_with_chat_events_in_chat_tab(
 				eval_value = result.get("value", result)
 				eval_done = True
 				listen_deadline = time.time() + (listen_ms / 1000.0)
+				continue
+
+			if risk_tracker.handles(msg):
+				command = risk_tracker.on_message(msg)
+				if command is not None:
+					ws.send(_json.dumps(command))
 				continue
 
 			method = msg.get("method")
