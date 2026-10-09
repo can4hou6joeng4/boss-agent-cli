@@ -140,6 +140,8 @@ def test_snapshot_uses_page_eval_in_cdp_mode_and_swallows_errors():
 	with patch.object(BossRecruiterClient, "is_browser_only", return_value=True):
 		assert client.chat_list_snapshot() == {"ok": True, "items": [{"friendId": 1}]}
 		assert browser.evaluate_js.call_args[0][0] is rc._CHAT_LIST_SNAPSHOT_JS
+		# 不带参数时 evaluate_js 不会调用这个函数表达式，只会拿回函数对象
+		assert browser.evaluate_js.call_args[0][1] is not None
 		browser.evaluate_js.side_effect = RuntimeError("no chat tab")
 		assert client.chat_list_snapshot() is None
 		browser.evaluate_js.side_effect = None
@@ -227,3 +229,22 @@ def test_page_rx_rows_map_unread_text_and_status():
 	hint = parsed["hints"]["summary_sources"]
 	assert hint["page_snapshot"] == {"loaded": 1, "source": "parent.rx.allList$", "has_more": True}
 	assert hint["counts"]["page"] == 1
+
+
+def test_snapshot_expression_is_invoked_not_returned():
+	from boss_agent_cli.api.browser_client import _build_eval_expression
+
+	expression = _build_eval_expression(rc._CHAT_LIST_SNAPSHOT_JS, {})
+	assert expression.startswith("(") and expression.rstrip().endswith(")({})")
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行页面脚本")
+def test_snapshot_expression_as_sent_returns_snapshot(tmp_path):
+	from boss_agent_cli.api.browser_client import _build_eval_expression
+
+	expression = _build_eval_expression(rc._CHAT_LIST_SNAPSHOT_JS, {})
+	page = _RX_PAGE_JS.replace("const fn = __SCRIPT__;\nconsole.log(JSON.stringify(fn()));", "console.log(JSON.stringify(__EXPR__));")
+	script = tmp_path / "expr.js"
+	script.write_text(page.replace("__EXPR__", expression), encoding="utf-8")
+	out = json.loads(subprocess.run(["node", str(script)], capture_output=True, text=True, check=True, timeout=30).stdout)
+	assert out["ok"] is True and out["count"] == 3

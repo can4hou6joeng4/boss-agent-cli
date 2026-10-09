@@ -777,7 +777,9 @@ class BossRecruiterClient(_BaseHttpClient):
 		if not self.is_browser_only():
 			return None
 		try:
-			result = self._get_browser().evaluate_js(_CHAT_LIST_SNAPSHOT_JS)
+			# 必须带参数：evaluate_js 只有 arg 不为 None 时才包成 (fn)(arg) 调用，
+			# 否则 Runtime.evaluate 拿回的是函数对象本身，快照永远为空（#456 后续实测）。
+			result = self._get_browser().evaluate_js(_CHAT_LIST_SNAPSHOT_JS, {})
 		except Exception:  # noqa: BLE001 — 页面快照只是增强，失败时调用方退回接口数据
 			return None
 		return result if isinstance(result, dict) and result.get("ok") else None
