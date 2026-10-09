@@ -26,6 +26,7 @@ LOCK_FILENAME = "cdp_risk_lock.json"
 STOKEN_COOKIE = "__zp_stoken__"
 #: 记录时 Chrome 里没有 stoken cookie 的占位摘要；之后出现任何 stoken 都算「已变化」。
 ABSENT_STOKEN = "absent"
+_ZHIPIN_HOST = "zhipin.com"
 
 _LOCK_VERSION = 1
 
@@ -46,8 +47,8 @@ def stoken_hash_from_cookies(cookies: Any) -> str:
 	for cookie in cookies or []:
 		if not isinstance(cookie, dict) or cookie.get("name") != STOKEN_COOKIE:
 			continue
-		domain = str(cookie.get("domain") or "")
-		if domain and not domain.lstrip(".").endswith("zhipin.com"):
+		host = str(cookie.get("domain") or "").lstrip(".").lower()
+		if host and host != _ZHIPIN_HOST and not host.endswith("." + _ZHIPIN_HOST):
 			continue
 		return hash_stoken(str(cookie.get("value") or ""))
 	return ABSENT_STOKEN

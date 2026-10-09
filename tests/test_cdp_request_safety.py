@@ -394,9 +394,16 @@ def test_browser_session_stoken_hash_reads_context_cookies_only():
 	session._is_cdp = False
 
 
-def test_hash_ignores_foreign_domain_cookie():
-	cookies = [{"name": "__zp_stoken__", "value": "x", "domain": ".example.com"}]
+@pytest.mark.parametrize("domain", [".example.com", "evilzhipin.com", "zhipin.com.evil.io"])
+def test_hash_ignores_foreign_domain_cookie(domain):
+	cookies = [{"name": "__zp_stoken__", "value": "x", "domain": domain}]
 	assert cdp_risk_lock.stoken_hash_from_cookies(cookies) == cdp_risk_lock.ABSENT_STOKEN
+
+
+@pytest.mark.parametrize("domain", [".zhipin.com", "zhipin.com", "www.zhipin.com"])
+def test_hash_reads_zhipin_cookie(domain):
+	cookies = [{"name": "__zp_stoken__", "value": "x", "domain": domain}]
+	assert cdp_risk_lock.stoken_hash_from_cookies(cookies) == cdp_risk_lock.hash_stoken("x")
 
 
 def test_locked_error_envelope(tmp_path):
