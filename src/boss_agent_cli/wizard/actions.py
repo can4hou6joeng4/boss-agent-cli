@@ -226,6 +226,9 @@ def _classify_action_error(code: str, message: str) -> tuple[str, bool, str]:
 	if code == "ACTION_UNCONFIRMED":
 		# 写操作可能已生效：沿用登记表的「先核实、勿重试」契约，不落到「稍后重试」兜底。
 		return code, False, str(ERROR_CODES[code]["recovery_action"])
+	if code == "EXCHANGE_NOT_AVAILABLE":
+		# 预检拦下、未发出任何请求：先回复候选人即可重试。
+		return code, True, str(ERROR_CODES[code]["recovery_action"])
 	if code in RISK_ERROR_CONTRACTS:
 		# 风控码：与单次命令路径共用同一份 recovery_action，绝不落到「稍后重试」兜底。
 		recovery, _ = risk_error_contract(code)

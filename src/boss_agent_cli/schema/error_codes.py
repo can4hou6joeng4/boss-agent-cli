@@ -19,6 +19,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": "动作可能已生效，请先 `boss hr chatmsg <friend_id>` 核实，勿直接重试",
 	},
+	"EXCHANGE_NOT_AVAILABLE": {
+		"message": "换电话/换微信按钮未解锁（招聘者尚未在会话中发过消息），本次未发出任何请求",
+		"recoverable": True,
+		"recovery_action": "先回复候选人（boss hr reply <friend_id> <消息> 或 boss hr request-resume <friend_id>），再重新执行交换",
+	},
 	"GREET_RESULT_UNKNOWN": {
 		"message": "首次招呼状态未确认，禁止自动重发",
 		"recoverable": False,

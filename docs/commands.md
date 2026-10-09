@@ -153,6 +153,8 @@ boss crawl stop <run_id>
 
 `request-resume` 与 `resume --exchange` 在聊天页里调用官方组件完成动作，只点击本次动作新弹出的确认框。成功需要发送证据：聊天 WS 帧里出现已知请求文案，或动作后回读聊天记录看到新的请求消息。页面动作执行了但两者都没看到时返回 `ACTION_UNCONFIRMED`（`recoverable=false`），`error.details` 附带页面日志、确认按钮状态和 WS 统计。此时动作可能已经生效，先用 `boss hr chatmsg <friend_id>` 核实，不要直接重试。换手机或微信时如果同时看到了求简历消息，成功结果会带 `side_effects: ["resume_request_detected"]`。
 
+平台要求招聘者先在会话里发过消息，换电话/换微信按钮才会解锁（求简历不受限）。交换前会先看按钮组件是否处于禁用状态（`disabled` 属性、`aria-disabled`、`disabled`/`gray` 等 class、`pointer-events: none`，或组件 props/data 里的禁用标记）；页面上判断不了时，再看动作前读到的完整聊天记录里有没有你发出的消息。确定未解锁时不调用页面交换动作，直接返回 `EXCHANGE_NOT_AVAILABLE`（`recoverable=true`），先回复候选人再试即可；信号拿不准时不拦截，按原流程执行。
+
 ### 接收与下载附件简历
 
 先用 `boss hr chatmsg <friend_id>` 核对消息。`accept-resume` 的 `--message-id` 是“对方想发送附件简历”的请求消息 `mid`，不是候选人 ID，也不是附件 ID。先加 `--dry-run` 可离线预览目标（不验证消息状态）；操作者批准后才加 `--yes`。命令重新读取消息和当前会话，确认发送方、请求类型及未处理状态后，单次调用 `exchange/accept`，不自动重试写请求、不新建 MQTT。只有外层 `code=0` 且 `zpData.status=0` 才返回 `accepted=true`；异常或额外确认状态不能当作已同意，需在官方页面核对。

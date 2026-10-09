@@ -19,6 +19,7 @@ from boss_agent_cli.api.recruiter_resume import (
 	ResumeValidationError,
 	attachment_params,
 	history_messages,
+	history_self_message_state,
 	incoming_message,
 	message_mid,
 	new_action_cards_matching,
@@ -144,6 +145,40 @@ const clickPrimaryConfirm = (vm, before) => {
 	return 'not_required';
 };
 const chatConversationText = () => squashText(document.querySelector('.chat-conversation')?.innerText || '');
+// 换电话/换微信按钮在招聘者没发过消息前是置灰的，此时 handleExChange 不会真的发请求。
+// 只看组件自身状态和它自己的按钮元素：命中任一禁用信号 → disabled；
+// 根元素可见且没有禁用信号 → enabled；其余（拿不到元素、不可见）→ unknown。
+const EXCHANGE_DISABLED_CLASSES = ['disabled', 'is-disabled', 'disable', 'btn-disabled', 'unable'];
+const EXCHANGE_DISABLED_ROOT_CLASSES = ['gray', 'grey'];
+const EXCHANGE_DISABLED_KEYS = ['disabled', 'isDisabled', 'btnDisabled'];
+const EXCHANGE_ENABLED_KEYS = ['canExchange', 'enable', 'enabled', 'available', 'isAvailable', 'canClick'];
+const exchangeAvailability = (vm) => {
+	const signals = [];
+	for (const [label, state] of [['props', vm.$props], ['data', vm.$data]]) {
+		if (!state || typeof state !== 'object') continue;
+		for (const key of EXCHANGE_DISABLED_KEYS) if (state[key] === true) signals.push(label + '.' + key + '=true');
+		for (const key of EXCHANGE_ENABLED_KEYS) if (state[key] === false) signals.push(label + '.' + key + '=false');
+	}
+	const root = vm.$el;
+	if (!root || root.nodeType !== 1) return {state: signals.length ? 'disabled' : 'unknown', signals};
+	const classTokens = (el) => Array.from(el.classList || []).map((token) => String(token).toLowerCase());
+	const rootTokens = classTokens(root);
+	for (const token of EXCHANGE_DISABLED_ROOT_CLASSES) if (rootTokens.includes(token)) signals.push('root.class=' + token);
+	try {
+		if (window.getComputedStyle(root).pointerEvents === 'none') signals.push('root.pointer-events=none');
+	} catch (e) {}
+	const elements = [root, ...Array.from(root.querySelectorAll('button, a, [class*="btn"]'))];
+	for (const el of elements) {
+		const tag = el === root ? 'root' : 'btn';
+		if (el.disabled === true || (el.hasAttribute && el.hasAttribute('disabled'))) signals.push(tag + '.disabled');
+		if (el.getAttribute && el.getAttribute('aria-disabled') === 'true') signals.push(tag + '.aria-disabled');
+		for (const token of classTokens(el)) {
+			if (EXCHANGE_DISABLED_CLASSES.includes(token)) signals.push(tag + '.class=' + token);
+		}
+	}
+	if (signals.length) return {state: 'disabled', signals: Array.from(new Set(signals))};
+	return {state: isVisibleElement(root) ? 'enabled' : 'unknown', signals};
+};
 """
 
 _SEND_MESSAGE_ACTION_JS = """
@@ -167,6 +202,23 @@ _EXCHANGE_ACTION_JS = """
 const vm = findVueComponent(args.componentName);
 if (!vm) return {ok: false, error: args.componentName + ' Vue component not found', log};
 log.push('found ' + args.componentName + ' type=' + vm.type);
+
+if (args.checkAvailability) {
+	const availability = exchangeAvailability(vm);
+	log.push('availability=' + availability.state + (availability.signals.length ? ' [' + availability.signals.join(',') + ']' : ''));
+	const blockedByHistory = availability.state === 'unknown' && args.selfMessageInHistory === false;
+	if (availability.state === 'disabled' || blockedByHistory) {
+		return {
+			ok: false,
+			unavailable: true,
+			error: 'exchange button not available',
+			availability: availability.state,
+			availability_signals: availability.signals,
+			log,
+			componentName: args.componentName,
+		};
+	}
+}
 
 const beforeConfirm = snapshotConfirmState(vm);
 try {
@@ -212,6 +264,14 @@ _EXCHANGE_ACTION_AIDS: dict[int, frozenset[int] | None] = {
 	4: frozenset({_RESUME_REQUEST_AID}),
 }
 _WS_AID_RE = re.compile(r'"aid"\s*:\s*"?(\d+)')
+# 换电话/换微信要求招聘者先在会话里发过消息；求简历（type 4）不受限制，不做预检。
+_EXCHANGE_AVAILABILITY_CHECK_TYPES = frozenset({1, 2})
+_EXCHANGE_TYPE_LABELS = {1: "换电话", 2: "换微信", 4: "求简历"}
+_EXCHANGE_NOT_AVAILABLE_MESSAGE = (
+	"对方还未与你互相沟通，{label}按钮未解锁；请先回复候选人"
+	"（如 boss hr request-resume {friend_id} 或 boss hr reply {friend_id} <消息>）后再试"
+)
+_HISTORY_PAGE_SIZE = 20
 _ACTION_UNCONFIRMED_HINT = "动作可能已生效，请先 `boss hr chatmsg {friend_id}` 核实，勿直接重试"
 _RESUME_REQUEST_DIALOG_TYPE = 2
 _RESUME_ACCEPT_TYPE = 3
@@ -436,7 +496,8 @@ class BossRecruiterClient(_BaseHttpClient):
 		details = {
 			key: payload[key]
 			for key in ("action", "error", "log", "confirmed", "componentName", "exchange_type", "ws_evidence",
-				"history_checked", "history_matched_count", "history_attempts", "history_error", "side_effects")
+				"history_checked", "history_matched_count", "history_attempts", "history_error", "side_effects",
+				"availability", "availability_signals", "history_self_message")
 			if key in payload
 		}
 		response: dict[str, Any] = {
@@ -795,7 +856,8 @@ class BossRecruiterClient(_BaseHttpClient):
 		expected_texts = _EXCHANGE_MESSAGE_TEXTS[exchange_type]
 		expected_bits = list(expected_texts)
 		# 动作前先记下已有消息，事后只认新出现的那条（只读请求，不影响写操作）。
-		baseline_mids = self._chat_history_mids(friend_id)
+		baseline_mids, self_message = self._chat_history_snapshot(friend_id)
+		check_availability = exchange_type in _EXCHANGE_AVAILABILITY_CHECK_TYPES
 		started_ms = int(time.time() * 1000)
 		result, events = self._run_chat_frontend_action(
 			friend_data=friend_data,
@@ -804,11 +866,37 @@ class BossRecruiterClient(_BaseHttpClient):
 			settle_ms=1000,
 			extra_args={
 				"componentName": component_name,
+				"checkAvailability": check_availability,
+				"selfMessageInHistory": self_message,
 				"preConfirmUiWaitMs": 1000,
 				"postConfirmUiWaitMs": 800,
 			},
 			listen_ms=3000,
 		)
+
+		if isinstance(result, dict) and result.get("unavailable") and check_availability:
+			# 按钮未解锁：handleExChange 没有被调用，什么都没发出去，可以放心先回复再重试。
+			return self._chat_action_failure_response(
+				message=_EXCHANGE_NOT_AVAILABLE_MESSAGE.format(
+					label=_EXCHANGE_TYPE_LABELS[exchange_type], friend_id=friend_id,
+				),
+				payload=self._chat_action_failure_data(
+					action="exchange",
+					friend_id=friend_id,
+					error=self._page_error_message(result),
+					expected_bits=[],
+					result=result,
+					events=events,
+					extra={
+						"exchange_type": exchange_type,
+						"componentName": component_name,
+						"availability": result.get("availability"),
+						"availability_signals": result.get("availability_signals") or [],
+						"history_self_message": self_message,
+					},
+				),
+				error_code="EXCHANGE_NOT_AVAILABLE",
+			)
 
 		if not (isinstance(result, dict) and result.get("ok")):
 			err = self._page_error_message(result)
@@ -862,6 +950,11 @@ class BossRecruiterClient(_BaseHttpClient):
 			return {"code": 0, "message": "Success", "zpData": data}
 
 		err = "页面动作已执行，但未在聊天 WS 帧或聊天记录中确认发送"
+		if check_availability and self_message is False:
+			# 按钮看起来可用但聊天记录里没有自己的消息：信号冲突时不拦截，只在提示里点出最可能的原因。
+			err += "；聊天记录里还没有你发出的消息，{label}按钮可能尚未解锁".format(
+				label=_EXCHANGE_TYPE_LABELS[exchange_type],
+			)
 		extra: dict[str, Any] = {
 			"exchange_type": exchange_type,
 			"componentName": result.get("componentName") or component_name,
@@ -869,6 +962,8 @@ class BossRecruiterClient(_BaseHttpClient):
 			"history_matched_count": 0,
 			"history_attempts": history_attempts,
 		}
+		if check_availability:
+			extra["history_self_message"] = self_message
 		if history.get("error"):
 			extra["history_error"] = history["error"]
 		if side_effects:
@@ -887,12 +982,17 @@ class BossRecruiterClient(_BaseHttpClient):
 			error_code="ACTION_UNCONFIRMED",
 		)
 
-	def _chat_history_mids(self, friend_id: int) -> set[int] | None:
-		"""读取动作前的消息 mid 快照；读不到时返回 None，事后改按时间判断。"""
-		response = self.chat_history(friend_id, count=20, retry=False)
+	def _chat_history_snapshot(self, friend_id: int) -> tuple[set[int] | None, bool | None]:
+		"""读取动作前的聊天记录快照：(消息 mid 集合, 是否有自己发过的消息)。
+
+		mid 读不到时返回 None，事后改按时间判断；自己是否发过消息拿不准时返回 None。
+		"""
+		response = self.chat_history(friend_id, count=_HISTORY_PAGE_SIZE, retry=False)
 		if not isinstance(response, dict) or response.get("code") != 0:
-			return None
-		return {mid for message in history_messages(response.get("zpData")) if (mid := message_mid(message)) is not None}
+			return None, None
+		data = response.get("zpData")
+		mids = {mid for message in history_messages(data) if (mid := message_mid(message)) is not None}
+		return mids, history_self_message_state(data, friend_id, page_size=_HISTORY_PAGE_SIZE)
 
 	def _exchange_history_evidence(
 		self,

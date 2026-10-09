@@ -146,12 +146,28 @@ def action_card_aid(message: dict[str, Any]) -> int | None:
 		return None
 
 
-def _sent_by_self(message: dict[str, Any], friend_id: int) -> bool:
-	"""招聘者自己发出的消息：from.uid 存在且不是对方候选人。"""
+def sent_by_self(message: dict[str, Any], friend_id: int) -> bool:
+	"""招聘者自己发出的消息：from.uid 存在、不是 0（系统消息），也不是对方候选人。"""
 	sender = message.get("from")
-	if not isinstance(sender, dict) or sender.get("uid") in (None, ""):
+	if not isinstance(sender, dict) or sender.get("uid") in (None, "", 0, "0"):
 		return False
 	return str(sender.get("uid")) != str(friend_id)
+
+
+def history_self_message_state(data: Any, friend_id: int, *, page_size: int) -> bool | None:
+	"""聊天记录里是否有自己发过的消息：True / False / None（判断不了）。
+
+	只有确定拿到了整段会话（返回条数少于 page_size，或平台明确 hasMore=false）
+	且里面一条自己的消息都没有，才返回 False；其余拿不准的情况都返回 None。
+	"""
+	messages = history_messages(data)
+	if any(sent_by_self(message, friend_id) for message in messages):
+		return True
+	if not messages:
+		return None
+	has_more = data.get("hasMore") if isinstance(data, dict) else None
+	complete = has_more is False or (has_more is None and len(messages) < page_size)
+	return False if complete else None
 
 
 def new_action_cards_matching(
@@ -173,7 +189,7 @@ def new_action_cards_matching(
 		aid = action_card_aid(message)
 		if aid is None or aid in exclude_aids or (aids is not None and aid not in aids):
 			continue
-		if not _sent_by_self(message, friend_id):
+		if not sent_by_self(message, friend_id):
 			continue
 		if not _is_new_message(message, baseline_mids=baseline_mids, since_ms=since_ms):
 			continue

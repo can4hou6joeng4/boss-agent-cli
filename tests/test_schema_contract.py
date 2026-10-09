@@ -131,6 +131,7 @@ def test_schema_error_codes_cover_all_used_codes():
 		"RESUME_ACCEPT_RESULT_UNKNOWN",
 		"GREET_RESULT_UNKNOWN",
 		"ACTION_UNCONFIRMED",
+		"EXCHANGE_NOT_AVAILABLE",
 		"AUTH_EXPIRED",
 		"AUTH_REQUIRED",
 		"RATE_LIMITED",
