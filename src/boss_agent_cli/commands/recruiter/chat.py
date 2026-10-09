@@ -263,18 +263,27 @@ def _fetch_friend_ids(
 	return _friend_ids_from_items(items), _friend_sources(items), None
 
 
-def _page_summaries(platform: Any) -> dict[int, dict[str, Any]]:
-	"""CDP 模式下读聊天页已加载的会话列表（只读页面内存，不发请求）；拿不到返回空。"""
+def _page_summaries(platform: Any) -> tuple[dict[int, dict[str, Any]], dict[str, Any] | None]:
+	"""CDP 模式下读聊天页已加载的会话列表（只读页面内存，不发请求）；拿不到返回空。
+
+	返回 (按 friendId 的摘要, 快照元信息)；元信息含数据来源路径、已加载条数、页面是否还有更多。
+	"""
 	snapshot_fn = getattr(platform, "chat_list_snapshot", None)
 	if not callable(snapshot_fn):
-		return {}
+		return {}, None
 	try:
 		snapshot = snapshot_fn()
 	except Exception:  # noqa: BLE001 — 页面快照只是增强，失败退回接口/列表字段
-		return {}
+		return {}, None
 	if not isinstance(snapshot, dict) or not snapshot.get("ok"):
-		return {}
-	return _summaries_by_friend(_list_dict_items(snapshot.get("items")))
+		return {}, None
+	summaries = _summaries_by_friend(_list_dict_items(snapshot.get("items")))
+	meta: dict[str, Any] = {"loaded": len(summaries)}
+	if isinstance(snapshot.get("source"), str):
+		meta["source"] = snapshot["source"]
+	if isinstance(snapshot.get("has_more"), bool):
+		meta["has_more"] = snapshot["has_more"]
+	return summaries, meta
 
 
 def _fetch_last_messages(
@@ -342,12 +351,14 @@ def _enrich_chat_summaries(
 	friend_ids = _friend_ids_from_items(friend_items)
 	if not friend_ids:
 		return {}
-	page = _page_summaries(platform)
+	page, page_meta = _page_summaries(platform)
 	missing = [fid for fid in friend_ids if fid not in page]
 	limit = max(0, min(summary_limit, MAX_SUMMARY_LIMIT))
 	wanted = missing[:limit]
 	message_items: list[dict[str, Any]] = []
 	hint: dict[str, Any] = {}
+	if page_meta is not None:
+		hint["page_snapshot"] = page_meta
 	if wanted:
 		message_items, stats = _fetch_last_messages(platform, wanted, sources=_friend_sources(friend_items))
 		hint["last_messages_requests"] = stats["requests"]

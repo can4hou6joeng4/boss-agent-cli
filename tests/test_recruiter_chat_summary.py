@@ -173,3 +173,57 @@ def test_snapshot_script_picks_largest_friend_list_and_whitelists_fields(tmp_pat
 		"lastMessageInfo": {"showText": "你好", "status": 1, "msgTime": 7},
 	}
 	assert out["items"][1] == {"friendId": 2, "unreadMsgCount": 0}
+
+
+# 实测聊天页（Vue 2 + vue-rx）：会话列表挂在 geek-list 实例的 list$ 与父组件 chat 的 allList$ 上，
+# $data / computed / $store 里都没有；早先的快照只扫这三处，所以 page 来源一直是 0。
+_RX_PAGE_JS = r"""
+const row = (id, n) => ({friendId: id, uid: id, uniqueId: id + '-0', name: '不应带出', avatar: 'a', newMsgCount: n,
+	lastText: '最后一条', lastTS: 1791518413490, lastMsgStatus: 2, lastIsSelf: n === 0, updateTime: 1791518413490,
+	formateTime: '12:00', unreadMidArr: [1, 2], securityId: 'secret'});
+const all = [row(1, 3), row(2, 0), row(3, 1)];
+const parent = {allList$: all, $observables: {allList$: {_value: all}}};
+const vm = {$data: {showSearch: false, currentGeek: {}}, _computedWatchers: {topList: 1}, topList: [],
+	list$: all.slice(0, 2), hasMore$: true, filter$: {labelId: 0}, $parent: parent,
+	$observables: {list$: {_value: all.slice(0, 2)}, hiddenOnly$: {_value: [row(9, 0)]}}};
+global.document = {querySelector: (sel) => sel === '.chat-user' ? {__vue__: vm} : null};
+const fn = __SCRIPT__;
+console.log(JSON.stringify(fn()));
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行页面脚本")
+def test_snapshot_script_reads_vue_rx_subscriptions(tmp_path):
+	script = tmp_path / "snap.js"
+	script.write_text(_RX_PAGE_JS.replace("__SCRIPT__", rc._CHAT_LIST_SNAPSHOT_JS), encoding="utf-8")
+	out = json.loads(subprocess.run(["node", str(script)], capture_output=True, text=True, check=True, timeout=30).stdout)
+	assert out["ok"] is True
+	assert out["source"] == "parent.rx.allList$"
+	assert out["count"] == 3
+	assert out["has_more"] is True
+	first = out["items"][0]
+	assert first["newMsgCount"] == 3 and first["lastText"] == "最后一条" and first["lastIsSelf"] is False
+	assert "name" not in first and "securityId" not in first and "unreadMidArr" not in first
+
+
+def test_page_rx_rows_map_unread_text_and_status():
+	snapshot = {"ok": True, "source": "parent.rx.allList$", "has_more": True, "items": [
+		{"friendId": 66001, "uid": 66001, "newMsgCount": 4, "lastText": "在吗", "lastTS": UPDATE_TIME,
+			"lastMsgStatus": 2, "lastIsSelf": False, "updateTime": UPDATE_TIME},
+	]}
+	other = dict(LIVE_ITEM, friendId=66002)
+	platform = _platform([dict(LIVE_ITEM), other], snapshot=snapshot)
+	parsed = _run(platform)
+	first, second = parsed["data"]["friendList"]
+	assert first["summary_source"] == "page"
+	assert first["unread"] == 4
+	assert first["last_msg"] == "在吗"
+	assert first["last_time"] == _expected_time(UPDATE_TIME)
+	# 候选人发来的最后一条不给已读/未读状态
+	assert first["msg_status"] is None
+	assert second["summary_source"] != "page"
+	platform.last_messages.assert_called_once()
+	assert platform.last_messages.call_args.args[0] == [66002]
+	hint = parsed["hints"]["summary_sources"]
+	assert hint["page_snapshot"] == {"loaded": 1, "source": "parent.rx.allList$", "has_more": True}
+	assert hint["counts"]["page"] == 1

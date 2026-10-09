@@ -204,6 +204,21 @@ _CHAT_LIST_SNAPSHOT_JS = """
 			if (value && typeof value === 'object' && !Array.isArray(value) && depth < 3) scan(prefix + key + '.', value, depth + 1);
 		}
 	};
+	// 实测会话列表在 vue-rx 订阅里：geek-list 的 list$、父组件 chat 的 allList$（实例属性 + $observables），
+	// 不在 $data / computed / $store；虚拟列表 dataSources 也是同一份已加载数据（不只是可见行）。
+	const scanRx = (prefix, vm) => {
+		if (!vm) return;
+		for (const key of Object.keys(vm)) {
+			if (!key.endsWith('$')) continue;
+			try { consider(prefix + key, vm[key]); } catch (e) {}
+		}
+		for (const key of Object.keys(vm.$observables || {})) {
+			if (key in vm) continue;
+			try { consider(prefix + 'observables.' + key, vm.$observables[key]._value); } catch (e) {}
+		}
+	};
+	scanRx('rx.', root);
+	scanRx('parent.rx.', root.$parent);
 	scan('data.', root.$data, 1);
 	for (const key of Object.keys(root._computedWatchers || {})) {
 		try { consider('computed.' + key, root[key]); } catch (e) {}
@@ -212,6 +227,8 @@ _CHAT_LIST_SNAPSHOT_JS = """
 	if (!candidates.length) return {ok: false, error: 'no friend list found in geek-list'};
 	candidates.sort((a, b) => b[1].length - a[1].length);
 	const [source, list] = candidates[0];
+	let hasMore = null;
+	try { if (typeof root.hasMore$ === 'boolean') hasMore = root.hasMore$; } catch (e) {}
 	const items = [];
 	for (const raw of list) {
 		if (!raw || typeof raw !== 'object') continue;
@@ -231,7 +248,7 @@ _CHAT_LIST_SNAPSHOT_JS = """
 		}
 		items.push(item);
 	}
-	return {ok: true, source, count: items.length, items};
+	return {ok: true, source, count: items.length, has_more: hasMore, items};
 }
 """
 
