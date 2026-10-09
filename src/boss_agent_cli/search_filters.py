@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlparse
 
 from boss_agent_cli.api import endpoints
 from boss_agent_cli.api.client import PlatformRiskError
-from boss_agent_cli.api.models import BOSS_INTERNSHIP_RESPONSE_JOB_TYPE, JobItem
+from boss_agent_cli.api.models import BOSS_INTERNSHIP_RESPONSE_JOB_TYPE, JobItem, is_boss_online
 
 # ── Ordinal lookups for threshold comparisons ───────────────────────
 
@@ -145,24 +145,55 @@ def active_desc_rank(desc: Any) -> int | None:
 def list_active_decision(raw_item: dict[str, Any], level: str) -> tuple[str, str]:
 	"""只看列表字段判断活跃度：返回 (pass|reject|unknown|detail, 文案)。
 
+	- bossOnline 为在线（True / 1 / "1"）：满足任何等级，不查详情
 	- 列表带 activeTimeDesc 且认识：直接按等级判断
 	- 列表带 activeTimeDesc 但不认识：unknown（详情里也是同一个字段，不再多查）
-	- 列表没有文案但 bossOnline=true：在线，满足任何等级
+	- level=online 且列表既不在线也没有文案：直接排除——在线状态只看列表，永不查详情
 	- 其余情况需要查详情
 	"""
+	if is_boss_online(raw_item.get("bossOnline")):
+		return ("pass", "在线")
 	desc = raw_item.get("activeTimeDesc")
 	if isinstance(desc, str) and desc.strip():
 		rank = active_desc_rank(desc)
 		if rank is None:
 			return ("unknown", desc.strip())
 		return ("pass" if rank >= ACTIVE_LEVELS[level] else "reject", desc.strip())
-	if raw_item.get("bossOnline") is True:
-		return ("pass", "在线")
+	if level == "online":
+		return ("reject", "离线")
 	return ("detail", "")
 
 
 _MAX_FILTER_PAGES = 5
 _WELFARE_WORKERS = 3
+# --active（不带 --welfare）的翻页硬上限：online 只看列表，和普通搜索一样只翻 1 页；
+# 其余档位先看 1 页，结果不够且仍有职位要查详情时才继续，最多 3 页。
+_ACTIVE_MAX_PAGES = 3
+# 没有显式 limit 时，--active 的目标条数（凑够就不再翻页）。
+_ACTIVE_DEFAULT_TARGET = 10
+
+
+def detail_filter_max_pages(welfare: Any, active: str | None) -> int:
+	"""search / watch / wizard 共用的默认翻页上限。
+
+	--welfare 维持原来的 5 页；只有 --active 时 online 为 1 页，其余档位 3 页。
+	"""
+	if welfare:
+		return _MAX_FILTER_PAGES
+	if active == "online":
+		return 1
+	if active:
+		return _ACTIVE_MAX_PAGES
+	return 1
+
+
+def detail_channel_for(obj: Any) -> str:
+	"""按 click ctx.obj 选详情通道：配了 CDP 或指定了浏览器来源时只走浏览器 job_card。"""
+	if not isinstance(obj, dict):
+		return "auto"
+	if obj.get("cdp_url") or (obj.get("browser_source") or "auto") != "auto":
+		return "browser"
+	return "auto"
 
 _BOSS_SEARCH_HOSTS = {"www.zhipin.com", "zhipin.com"}
 _BOSS_SEARCH_PATHS = {"/web/geek/job", "/web/geek/jobs"}
@@ -388,6 +419,8 @@ class SearchPipelineStats:
 	jobs_seen: int = 0
 	jobs_prefiltered: int = 0
 	detail_checks: int = 0
+	# 实际发出的 job_card 请求数（福利描述缓存命中不算）。
+	detail_requests: int = 0
 	jobs_matched: int = 0
 	active_rejected: int = 0
 	active_unknown: int = 0
@@ -574,6 +607,17 @@ class _DetailOutcome:
 	fresh_desc: str | None = None
 	active_state: str = ""
 	active_desc: str = ""
+	requested: bool = False
+
+
+def _job_card_fetcher(client: Any, detail_channel: str) -> Callable[[str, str], dict[str, Any]]:
+	"""detail_channel=browser 时只走浏览器通道（CDP 模式），平台没有该方法再退回 job_card。"""
+	fetch: Callable[[str, str], dict[str, Any]] = client.job_card
+	if detail_channel == "browser":
+		browser_fetch = getattr(client, "job_card_browser", None)
+		if callable(browser_fetch):
+			fetch = browser_fetch
+	return fetch
 
 
 def _fetch_and_check(
@@ -587,6 +631,8 @@ def _fetch_and_check(
 	need_active: bool = False,
 	list_welfare: list[str] | None = None,
 	list_active_desc: str = "",
+	before_detail_request: Callable[[], None] | None = None,
+	detail_channel: str = "auto",
 ) -> _DetailOutcome:
 	"""Single job: (复用缓存或取详情) + 福利 / 活跃度判断。不访问 cache（线程安全）。
 
@@ -600,8 +646,11 @@ def _fetch_and_check(
 	card_active = ""
 	need_desc = bool(welfare_conditions) and not list_welfare
 	if need_active or (need_desc and not isinstance(cached_desc, str)):
+		if before_detail_request is not None:
+			before_detail_request()
+		outcome.requested = True
 		try:
-			card_raw = client.job_card(
+			card_raw = _job_card_fetcher(client, detail_channel)(
 				raw_item.get("securityId", ""),
 				raw_item.get("lid", ""),
 			)
@@ -692,6 +741,46 @@ class _DetailTask:
 	list_active_desc: str = ""
 
 
+def _record_detail_outcome(
+	outcome: _DetailOutcome,
+	raw_item: dict[str, Any],
+	cache: Any,
+	logger: Any,
+	matched: list[dict[str, Any]],
+	stats: SearchPipelineStats | None,
+	unknown_descs: dict[str, int] | None,
+) -> None:
+	"""主线程处理单个详情结果：写回描述缓存、统计活跃度、收集匹配项。"""
+	company = raw_item.get("brandName", "")
+	title = raw_item.get("jobName", "")
+	if outcome.requested and stats is not None:
+		stats.detail_requests += 1
+	# 写回缓存（主线程，sqlite 安全）：仅新取到的描述，键用稳定的 encryptJobId
+	if outcome.fresh_desc:
+		cache.put_job_desc(raw_item.get("encryptJobId", ""), outcome.fresh_desc)
+	result = outcome.item
+	if outcome.active_state == "reject":
+		if stats is not None:
+			stats.active_rejected += 1
+		logger.info(f"  ❌ {company} - {title}（HR 活跃度不足: {outcome.active_desc}）")
+	elif outcome.active_state == "unknown":
+		if stats is not None:
+			stats.active_unknown += 1
+		if unknown_descs is not None:
+			key = outcome.active_desc or "(空)"
+			unknown_descs[key] = unknown_descs.get(key, 0) + 1
+		logger.info(f"  ❌ {company} - {title}（HR 活跃度未知: {outcome.active_desc or '详情未返回'}）")
+	elif result:
+		# is_greeted 在主线程中安全访问 cache
+		sid = result.get("security_id", "")
+		if sid:
+			result["greeted"] = cache.is_greeted(sid)
+		matched.append(result)
+		logger.info(f"  ✅ {company} - {title}（详情匹配）")
+	else:
+		logger.info(f"  ❌ {company} - {title}")
+
+
 def _check_details_parallel(
 	client: Any,
 	cache: Any,
@@ -704,12 +793,18 @@ def _check_details_parallel(
 	active_level: str | None = None,
 	stats: SearchPipelineStats | None = None,
 	unknown_descs: dict[str, int] | None = None,
+	sequential: bool = False,
+	before_detail_request: Callable[[], None] | None = None,
+	detail_channel: str = "auto",
 ) -> None:
-	"""Parallel detail check, append matched to list. cache 操作在主线程完成。
+	"""Detail check, append matched to list. cache 操作在主线程完成。
 
 	主线程先查职位描述缓存命中者跳过取详情；未命中者入线程池取详，
 	取回的新描述由主线程写回缓存——所有 cache I/O 留在主线程（sqlite 非线程安全）。
 	需要查活跃度的任务总是重新取详情，描述缓存只对福利判断有用。
+
+	sequential=True（--active 需要查详情时）：不开线程池，主线程逐个取详情，
+	每次真正发请求前调用 before_detail_request 做间隔（CrawlBudget 也在主线程用 sqlite）。
 	"""
 	# 主线程预取缓存：命中的描述随提交一并传入 worker，避免 worker 触网。
 	# 键用 encryptJobId（跨搜索稳定）；securityId 每次搜索都变，不能做键。
@@ -725,6 +820,37 @@ def _check_details_parallel(
 	if cache_hits:
 		logger.info(f"  详情缓存命中 {cache_hits}/{len(tasks)}，跳过对应取详情请求")
 
+	if sequential:
+		for task in tasks:
+			raw_item = task.raw_item
+			company = raw_item.get("brandName", "")
+			title = raw_item.get("jobName", "")
+			try:
+				outcome = _fetch_and_check(
+					client, welfare_conditions, criteria, raw_item, cached_by_item[id(raw_item)],
+					active_level=active_level,
+					need_active=task.need_active,
+					list_welfare=task.list_welfare,
+					list_active_desc=task.list_active_desc,
+					before_detail_request=before_detail_request,
+					detail_channel=detail_channel,
+				)
+			except SearchPipelinePlatformError:
+				if stats is not None:
+					stats.detail_requests += 1
+				logger.info(f"  ❌ {company} - {title}（详情接口失败）")
+				raise
+			except PlatformRiskError:
+				if stats is not None:
+					stats.detail_requests += 1
+				logger.info(f"  ❌ {company} - {title}（平台风控，停止扫描）")
+				raise
+			except Exception:
+				logger.info(f"  ❌ {company} - {title}（查询失败）")
+				continue
+			_record_detail_outcome(outcome, raw_item, cache, logger, matched, stats, unknown_descs)
+		return
+
 	stop = threading.Event()
 	with ThreadPoolExecutor(max_workers=_WELFARE_WORKERS) as pool:
 		futures = {
@@ -735,6 +861,7 @@ def _check_details_parallel(
 				need_active=task.need_active,
 				list_welfare=task.list_welfare,
 				list_active_desc=task.list_active_desc,
+				detail_channel=detail_channel,
 			): task.raw_item
 			for task in tasks
 		}
@@ -744,30 +871,7 @@ def _check_details_parallel(
 			title = raw_item.get("jobName", "")
 			try:
 				outcome = future.result()
-				result, fresh_desc = outcome.item, outcome.fresh_desc
-				# 写回缓存（主线程，sqlite 安全）：仅新取到的描述，键用稳定的 encryptJobId
-				if fresh_desc:
-					cache.put_job_desc(raw_item.get("encryptJobId", ""), fresh_desc)
-				if outcome.active_state == "reject":
-					if stats is not None:
-						stats.active_rejected += 1
-					logger.info(f"  ❌ {company} - {title}（HR 活跃度不足: {outcome.active_desc}）")
-				elif outcome.active_state == "unknown":
-					if stats is not None:
-						stats.active_unknown += 1
-					if unknown_descs is not None:
-						key = outcome.active_desc or "(空)"
-						unknown_descs[key] = unknown_descs.get(key, 0) + 1
-					logger.info(f"  ❌ {company} - {title}（HR 活跃度未知: {outcome.active_desc or '详情未返回'}）")
-				elif result:
-					# is_greeted 在主线程中安全访问 cache
-					sid = result.get("security_id", "")
-					if sid:
-						result["greeted"] = cache.is_greeted(sid)
-					matched.append(result)
-					logger.info(f"  ✅ {company} - {title}（详情匹配）")
-				else:
-					logger.info(f"  ❌ {company} - {title}")
+				_record_detail_outcome(outcome, raw_item, cache, logger, matched, stats, unknown_descs)
 			except SearchPipelinePlatformError:
 				logger.info(f"  ❌ {company} - {title}（详情接口失败）")
 				stop.set()
@@ -801,8 +905,18 @@ def run_search_pipeline(
 	skip_greeted: bool = False,
 	before_list_request: Callable[[], None] | None = None,
 	active: str | None = None,
+	before_detail_request: Callable[[], None] | None = None,
+	detail_channel: str = "auto",
 ) -> SearchPipelineResult:
-	"""Run the full search pipeline: API search → list prefilter → welfare / active detail fallback."""
+	"""Run the full search pipeline: API search → list prefilter → welfare / active detail fallback.
+
+	--active 的请求量控制（#451 回归修复）：
+	- online 只看列表，永不查详情，只翻 1 页；
+	- 其余档位不带 --welfare 时最多 _ACTIVE_MAX_PAGES 页，且只有「结果不足目标条数、
+	  本页仍有职位需要查详情」时才翻下一页；
+	- 需要查详情时串行取详情，每次请求前调用 before_detail_request 做间隔；
+	  detail_channel=browser 时只走浏览器通道取 job_card。
+	"""
 	stats = SearchPipelineStats()
 	matched: list[dict[str, Any]] = []
 	unknown_descs: dict[str, int] = {}
@@ -810,6 +924,10 @@ def run_search_pipeline(
 	current_page = start_page
 	last_page_scanned = 0
 	has_more = False
+	active_only = bool(active_level) and not welfare_conditions
+	if active_only:
+		max_pages = min(max_pages, detail_filter_max_pages(None, active_level))
+	active_target = limit or _ACTIVE_DEFAULT_TARGET
 
 	for _ in range(max_pages):
 		if limit and len(matched) >= limit:
@@ -864,6 +982,7 @@ def run_search_pipeline(
 			survivors.append(raw_item)
 
 		# Phase 2: welfare / active filtering or direct collection
+		page_needed_detail = False
 		if welfare_conditions or active_level:
 			need_detail: list[_DetailTask] = []
 			for raw_item in survivors:
@@ -907,12 +1026,18 @@ def run_search_pipeline(
 				logger.info(f"  ✅ {item.company} - {item.title}（{'标签匹配' if match_results else '列表活跃度匹配'}）")
 
 			if need_detail:
+				page_needed_detail = True
 				reason = "标签未命中" if not active_level else "列表信息不足"
-				logger.info(f"  {reason} {len(need_detail)} 个，并行查详情...")
+				# 有 --active 时串行 + 间隔取详情（单独或叠加 --welfare 都一样保守）
+				sequential = bool(active_level)
+				logger.info(f"  {reason} {len(need_detail)} 个，{'逐个' if sequential else '并行'}查详情...")
 				before = len(matched)
 				_check_details_parallel(
 					client, cache, logger, welfare_conditions or [], criteria, need_detail, matched,
 					active_level=active_level, stats=stats, unknown_descs=unknown_descs,
+					sequential=sequential,
+					before_detail_request=before_detail_request if sequential else None,
+					detail_channel=detail_channel,
 				)
 				stats.detail_checks += len(need_detail)
 				stats.jobs_matched += len(matched) - before
@@ -935,6 +1060,9 @@ def run_search_pipeline(
 		if not has_more:
 			break
 		if limit and len(matched) >= limit:
+			break
+		if active_only and (len(matched) >= active_target or not page_needed_detail):
+			# 已凑够，或本页全靠列表字段判定完——不再为活跃度多翻页
 			break
 		current_page += 1
 

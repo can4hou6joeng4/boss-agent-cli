@@ -12,6 +12,21 @@ def employment_type_from_raw(raw_job_type: Any) -> str:
 	return ""
 
 
+def is_boss_online(value: Any) -> bool:
+	"""列表项 bossOnline 归一化：True / 1 / "1"（及 "true"）视为在线，其余一律离线。
+
+	平台在不同通道里给过布尔和数字两种形态；JobItem 和 --active 判断共用这里，
+	避免一处按真值、一处按 ``is True`` 判断导致结论不一致。
+	"""
+	if isinstance(value, bool):
+		return value
+	if isinstance(value, int):
+		return value == 1
+	if isinstance(value, str):
+		return value.strip().lower() in {"1", "true"}
+	return False
+
+
 def _active_desc(value: Any) -> str:
 	"""列表项里的 HR 活跃度文案（如「刚刚活跃」「本周活跃」）；没有时为空串。"""
 	return value.strip() if isinstance(value, str) else ""
@@ -64,7 +79,7 @@ class JobItem:
 			stage=raw.get("brandStageName", ""),
 			boss_name=raw.get("bossName", ""),
 			boss_title=raw.get("bossTitle", ""),
-			boss_active="在线" if raw.get("bossOnline") else "离线",
+			boss_active="在线" if is_boss_online(raw.get("bossOnline")) else "离线",
 			security_id=raw.get("securityId", ""),
 			lid=raw.get("lid", ""),
 			raw_job_type=raw_job_type,

@@ -94,6 +94,10 @@ class BossPlatform(Platform):
 	def job_card(self, security_id: str, lid: str = "") -> dict[str, Any]:
 		return self._client.job_card(security_id, lid)
 
+	def job_card_browser(self, security_id: str, lid: str = "") -> dict[str, Any]:
+		"""强制走浏览器通道取职位卡片（CDP 模式下不和 httpx 混用）。"""
+		return self._client.job_card_browser(security_id, lid)
+
 	def interview_data(self) -> dict[str, Any]:
 		return self._client.interview_data()
 

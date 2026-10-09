@@ -35,7 +35,7 @@ boss-agent-cli 把职位发现、福利筛选、本地简历与 AI、投递沟�
 
 - **职位发现**：关键词搜索 + 8 维筛选，按编号回看缓存结果 —— `search` `show` `detail`
 - **福利筛选（核心差异化）**：`--welfare "双休,五险一金"` 自动翻页补抓、按 AND 逻辑做**真实匹配**，并可 `--sort score` 按本地匹配分排序 —— `search --welfare`
-- **HR 活跃度筛选**：`--active 3d` 只留最近活跃的 HR，列表看不出时再查详情，避免把投递次数浪费在长期不上线的岗位上 —— `search --active`
+- **HR 活跃度筛选**：`--active 3d` 只留最近活跃的 HR，避免把投递次数浪费在长期不上线的岗位上；`online` 只看列表、请求量与普通搜索相同，其余档位可能要逐个查职位详情，更慢、风控风险更高，低风险场景建议用 `--active online` —— `search --active`
 - **纯终端向导**：直接运行 `boss` 或 `boss wizard`，选择角色、平台和目标；同一 workflow 也可用 `--input-json`、run ID 或 MCP 推进和恢复
 - **本地候选池与统计**：查看详情后本地保存、读取带有效状态的网页职位收藏并仅同步有效项 / 用标签和备注复盘候选岗位、离线对比、查看漏斗统计 —— `shortlist` `stats` `watch` `preset` `favorites`
 - **AI 求职增强 + 本地模型**：JD 分析、简历润色、定向优化、候选池匹配、模拟面试、沟通指导；本地模型权重外置，支持 Ollama/vLLM OpenAI 兼容接口 —— `ai analyze-jd` `ai local configure` `ai local smoke`

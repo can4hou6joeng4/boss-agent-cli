@@ -26,6 +26,8 @@ from boss_agent_cli.search_filters import (
 	SearchPipelinePlatformError,
 	SearchUrlParseError,
 	ACTIVE_LEVELS,
+	detail_channel_for,
+	detail_filter_max_pages,
 	parse_boss_search_url,
 	resolve_active_level,
 	resolve_search_code_params,
@@ -69,6 +71,13 @@ def _active_filter_hint(level: str, pipeline_result: Any) -> dict[str, Any]:
 	if unknown:
 		hint["unknown_descs"] = dict(unknown)
 		hint["note"] = "活跃度文案无法识别或详情未返回的职位已排除"
+	detail_requests = getattr(stats, "detail_requests", 0) or 0
+	if detail_requests:
+		hint["detail_lookups"] = detail_requests
+		hint["detail_note"] = (
+			f"列表看不出活跃度，逐个查了 {detail_requests} 个职位详情；"
+			"非 online 档位更慢、风控风险更高，低风险场景建议用 --active online"
+		)
 	return hint
 
 
@@ -88,7 +97,7 @@ def _active_filter_hint(level: str, pipeline_result: Any) -> dict[str, Any]:
 @click.option(
 	"--active",
 	default=None,
-	help="只保留 HR 活跃度不低于该档的职位：" + " / ".join(ACTIVE_LEVELS) + "（也认 3day、3日 等写法）；列表看不出时会查职位详情",
+	help="只保留 HR 活跃度不低于该档的职位：" + " / ".join(ACTIVE_LEVELS) + "（也认 3day、3日 等写法）；online 只看列表，其余档位列表看不出时会逐个查职位详情（更慢、风险更高）",
 )
 @click.option("--page", default=1, help="页码")
 @click.option("--no-cache", is_flag=True, default=False, help="跳过缓存")
@@ -184,7 +193,7 @@ def search_cmd(
 	except ValueError as exc:
 		handle_error_output(ctx, "search", code="INVALID_PARAM", message=str(exc))
 		return
-	# 福利和活跃度都可能要逐个查详情，结果不进搜索缓存、默认多翻几页
+	# 福利和活跃度都可能要逐个查详情（活跃度也会变），结果不进搜索缓存
 	detail_filter = bool(welfare or active_level)
 
 	# 解析福利关键词（支持逗号分隔的多条件组合）
@@ -226,7 +235,7 @@ def search_cmd(
 		auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 		request_budget = CrawlBudget(cache) if ctx.obj.get("platform", "zhipin") == "zhipin" else None
 		with get_platform_instance(ctx, auth) as platform:
-			max_pages = 5 if detail_filter else 1
+			max_pages = detail_filter_max_pages(welfare_conditions, active_level)
 			# TTY 下把管线日志接到 Rich 进度；管道 / --json 仍用原 logger，行为不变。
 			progress = None
 			pipeline_logger: Any = logger
@@ -255,6 +264,14 @@ def search_cmd(
 						"max_pages": max_pages,
 						"welfare_conditions": welfare_conditions,
 						"active": active_level,
+						"before_detail_request": (
+							(lambda: request_budget.wait("list", on_wait=progress.waiting))
+							if request_budget is not None and progress is not None
+							else (lambda: request_budget.wait("list"))
+							if request_budget is not None
+							else None
+						) if active_level else None,
+						"detail_channel": detail_channel_for(ctx.obj) if active_level else "auto",
 						"before_list_request": (
 							(lambda: request_budget.wait("list", on_wait=progress.waiting))
 							if request_budget is not None and progress is not None

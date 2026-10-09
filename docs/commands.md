@@ -256,10 +256,11 @@ boss export --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280
 
 在线 / 刚刚活跃 > 今日活跃 > 3日内活跃 > 本周活跃 > 2周内活跃 > 本月活跃 > 近半年活跃 > 半年前活跃
 
-1. 列表里带 `activeTimeDesc` 或 `bossOnline=true` 时直接判断，不查详情
-2. 看不出来的再查职位详情里的活跃度；和 `--welfare` 同时用时一次详情请求同时判断两项
-3. 和 `--welfare` 一样会自动翻页（最多 5 页）、不读写搜索缓存，请求量会比普通搜索多
-4. 文案无法识别或详情没返回活跃度的职位会被排除，数量和原文写在 `hints.active_filter`
-5. 结果新增 `boss_active_desc`（如“本周活跃”）；原有 `boss_active`（在线/离线）保持不变
+1. HR 在线（列表 `bossOnline` 为 `true` / `1`）直接满足任何档位；列表带 `activeTimeDesc` 时直接按文案判断，都不查详情
+2. **`online` 只看列表**：不查详情、只翻 1 页，请求量和普通搜索一样，**低风险场景推荐用它**
+3. 其余档位遇到列表看不出的离线职位，需要**逐个**查职位详情（串行，每次间隔 5–10 秒；CDP 模式只走浏览器通道），明显更慢、触发平台风控的风险也更高。实测 BOSS 列表通常不带 `activeTimeDesc`，所以离线职位基本都要查详情；和 `--welfare` 同时用时一次详情请求同时判断两项
+4. 翻页更克制：先看 1 页，结果不足 10 条且本页还有职位查过详情才继续，最多 3 页（和 `--welfare` 同用时沿用福利筛选的 5 页）；不读写搜索缓存。实际查了多少个详情写在 `hints.active_filter.detail_lookups`
+5. 文案无法识别或详情没返回活跃度的职位会被排除，数量和原文写在 `hints.active_filter`
+6. 结果新增 `boss_active_desc`（如“本周活跃”）；原有 `boss_active`（在线/离线）保持不变
 
 `boss preset add <name> <query> --active 3d` 可以把档位存进预设。

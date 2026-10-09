@@ -20,7 +20,16 @@ from boss_agent_cli.display import (
 	render_list_result,
 	render_message_panel,
 )
-from boss_agent_cli.search_filters import SearchFilterCriteria, SearchPipelinePlatformError, build_search_params, resolve_welfare_keywords, run_search_pipeline
+from boss_agent_cli.crawler.service import CrawlBudget
+from boss_agent_cli.search_filters import (
+	SearchFilterCriteria,
+	SearchPipelinePlatformError,
+	build_search_params,
+	detail_channel_for,
+	detail_filter_max_pages,
+	resolve_welfare_keywords,
+	run_search_pipeline,
+)
 
 
 def _parse_watch_filters(
@@ -161,6 +170,14 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
+	active = params.get("active")
+	extra: dict[str, Any] = {}
+	if active:
+		# 活跃度要查详情时串行 + 间隔，CDP 下只走浏览器 job_card（#451 回归修复）
+		if ctx.obj.get("platform", "zhipin") == "zhipin":
+			budget = CrawlBudget(cache)
+			extra["before_detail_request"] = lambda: budget.wait("list")
+		extra["detail_channel"] = detail_channel_for(ctx.obj)
 	with get_platform_instance(ctx, auth) as platform:
 		pipeline_result = run_search_pipeline(
 			platform,
@@ -168,9 +185,10 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 			logger,
 			criteria=criteria,
 			start_page=1,
-			max_pages=5 if welfare_conditions or params.get("active") else 1,
+			max_pages=detail_filter_max_pages(welfare_conditions, active),
 			welfare_conditions=welfare_conditions,
-			active=params.get("active"),
+			active=active,
+			**extra,
 		)
 	watch_result = cache.record_watch_results(name, pipeline_result.items)
 	return {

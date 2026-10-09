@@ -203,7 +203,23 @@ def test_combined_with_welfare_uses_one_detail_call_and_bypasses_desc_cache_for_
 	assert sorted(client.detail_calls) == ["desc", "tag"]
 
 
-def test_active_filter_scans_multiple_pages_until_limit():
+def test_active_filter_turns_page_only_when_short_and_detail_was_needed():
+	client = FakeClient(
+		[
+			_page(_job("p1"), has_more=True),
+			_page(_job("p2", active_desc="今日活跃"), has_more=False),
+		],
+		cards={"p1": {"activeTimeDesc": "本月活跃", "postDescription": ""}},
+	)
+	result = run_search_pipeline(
+		client, FakeCache(), FakeLogger(),
+		criteria=SearchFilterCriteria(query="go"), max_pages=5, active="today",
+	)
+	assert [item["security_id"] for item in result.items] == ["p2"]
+	assert result.stats.pages_scanned == 2
+
+
+def test_active_filter_does_not_turn_page_when_list_decided_everything():
 	client = FakeClient([
 		_page(_job("p1", active_desc="本月活跃"), has_more=True),
 		_page(_job("p2", active_desc="今日活跃"), has_more=False),
@@ -212,8 +228,9 @@ def test_active_filter_scans_multiple_pages_until_limit():
 		client, FakeCache(), FakeLogger(),
 		criteria=SearchFilterCriteria(query="go"), max_pages=5, active="today",
 	)
-	assert [item["security_id"] for item in result.items] == ["p2"]
-	assert result.stats.pages_scanned == 2
+	assert result.items == []
+	assert result.stats.pages_scanned == 1
+	assert len(client.pages) == 1
 
 
 def _ctx_mock(mock_cls):
@@ -245,7 +262,7 @@ def test_search_command_active_bypasses_cache_and_reports_hints(mock_platform_cl
 	mock_cache.put_search.assert_not_called()
 	kwargs = mock_pipeline.call_args.kwargs
 	assert kwargs["active"] == "3d"
-	assert kwargs["max_pages"] == 5
+	assert kwargs["max_pages"] == 3
 	parsed = json.loads(result.output)
 	assert parsed["hints"]["active_filter"] == {
 		"level": "3d",
@@ -297,7 +314,7 @@ def test_wizard_search_action_passes_active_and_validates():
 
 	execute_candidate_search(None, None, None, {"query": "go", "active": "3天"}, pipeline=fake_pipeline)
 	assert calls[0]["active"] == "3d"
-	assert calls[0]["max_pages"] == 5
+	assert calls[0]["max_pages"] == 3
 	execute_candidate_search(None, None, None, {"query": "go"}, pipeline=fake_pipeline)
 	assert "active" not in calls[1]
 	with pytest.raises(WorkflowActionError) as exc:

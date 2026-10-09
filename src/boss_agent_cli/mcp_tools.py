@@ -182,7 +182,7 @@ TOOLS = [
 				"active": {
 					"type": "string",
 					"enum": ["online", "today", "3d", "week", "2w", "month", "half-year"],
-					"description": "只保留 HR 活跃度不低于该档的职位；列表看不出时会查详情，活跃度未知的职位会被排除并写进 hints.active_filter",
+					"description": "只保留 HR 活跃度不低于该档的职位；online 只看列表、请求量与普通搜索相同，其余档位列表看不出时会逐个查详情（更慢、风控风险更高），活跃度未知的职位会被排除并写进 hints.active_filter",
 				},
 				"page": {"type": "integer", "description": "页码", "default": 1},
 				"sort": {"type": "string", "enum": ["relevance", "score"], "description": "排序方式", "default": "relevance"},

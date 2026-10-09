@@ -5,7 +5,7 @@
 ## [Unreleased]
 
 ### Added
-- `boss search` 新增 `--active <档位>`，按 HR 活跃度筛选职位（#442）。档位 `online` / `today` / `3d` / `week` / `2w` / `month` / `half-year`，也认 `3day`、`3日` 等写法；平台文案按「在线/刚刚活跃 > 今日活跃 > 3日内活跃 > 本周活跃 > 2周内活跃 > 本月活跃 > 近半年活跃 > 半年前活跃」比较。列表带 `activeTimeDesc` 或 `bossOnline=true` 时直接判断，否则查 job_card；和 `--welfare` 同用时一次详情请求同时判断两项。启用后与 `--welfare` 一样自动翻页、跳过搜索缓存，无法识别的文案被排除并写进 `hints.active_filter`。职位结果新增 `boss_active_desc` 字段（`boss_active` 不变，搜索缓存 schema 升到 3），`preset add`、MCP `boss_search` / `boss_preset_add` 与向导求职流程同步支持。
+- `boss search` 新增 `--active <档位>`，按 HR 活跃度筛选职位（#442）。档位 `online` / `today` / `3d` / `week` / `2w` / `month` / `half-year`，也认 `3day`、`3日` 等写法；平台文案按「在线/刚刚活跃 > 今日活跃 > 3日内活跃 > 本周活跃 > 2周内活跃 > 本月活跃 > 近半年活跃 > 半年前活跃」比较。列表带 `activeTimeDesc` 或 `bossOnline` 为在线时直接判断，否则查 job_card；和 `--welfare` 同用时一次详情请求同时判断两项。启用后跳过搜索缓存，无法识别的文案被排除并写进 `hints.active_filter`。职位结果新增 `boss_active_desc` 字段（`boss_active` 不变，搜索缓存 schema 升到 3），`preset add`、MCP `boss_search` / `boss_preset_add` 与向导求职流程同步支持。
 - 替换仓库 README 与项目站点的展示动画为 48 秒极光发布会成片，提供 MP4、轻量动图、新封面和可交互源工程；站点播放期间保持当前画面，切换到终端演示时暂停视频。
 - 新增维护者发布验证脚本：默认离线核对版本、wheel/sdist 元数据与分发文件，显式启用后可在临时环境全新解析依赖、验证 CLI/MCP，或从 PyPI 安装指定版本复验；输出结构化步骤结果，不执行发布或真实平台请求。
 
@@ -13,6 +13,7 @@
 - 同步项目站点中英文正文与 `llms.txt` 的 v3.0.0 版本、命令与 MCP 数量、双角色工作流及平台风险停止／显式恢复说明，移除过时的模式级阻断宣传；修正发布会源工程的本地预览服务目录。
 
 ### Fixed
+- 收紧 `boss search --active` 的请求量（#451 回归，#442）。实测列表项不带 `activeTimeDesc`，原实现会固定翻 5 页并对离线 HR 的职位 3 线程并发取 job_card，`--active 3d` 跑约 28 秒后触发平台风控 code 37。现在 `--active online` 只看列表的 `bossOnline`，不查详情、只翻 1 页，请求量与普通搜索相同；其余档位先看 1 页，结果不足 10 条（或 `limit`）且本页仍有职位要查详情才继续，最多 3 页；在线行直接通过任何档位。需要查详情时改为串行，每次请求前按列表请求的节奏（5–10 秒）间隔，CDP / 指定浏览器来源时只走浏览器 job_card，不再 httpx 与浏览器混用；与 `--welfare` 同用时同样保守，单独 `--welfare` 行为不变。`bossOnline` 统一按 `True` / `1` / `"1"` 判为在线（`JobItem.boss_active` 与活跃度判断共用），`hints.active_filter` 新增 `detail_lookups` 提示实际查了多少个详情。`boss watch` 和向导求职流程的默认翻页同步调整。
 - 招聘者 `hr request-resume` / `hr resume --exchange` 不再把已生效的动作误报为 `unexpected page result`，换微信也不再顺带发出求附件简历请求（#443）。确认按钮只在当前组件和本次动作新弹出的可见弹层里按文字「确定」查找，没有新弹层就不点；求简历同时认新旧两种文案（含「想要一份您的附件简历」），并在动作后只读回查聊天记录。页面动作执行但找不到发送证据时返回新错误码 `ACTION_UNCONFIRMED`（`recoverable=false`，先 `boss hr chatmsg <friend_id>` 核实、勿直接重试），页面日志、确认状态和 WS 统计放进 `error.details`；同时修正 CDP 文本帧被当作 base64 解码的问题。
 - 定向更新安全依赖：`[mcp]` 的 PyJWT 锁定到 2.15.1、`[crawl]` 的 urllib3 锁定到 2.8.0、`[dev]` 的 virtualenv 锁定到 21.7.13，并仅连带更新 python-discovery 到 1.6.1。在对应 extra 中声明安全版本下界，避免全新安装回退到已知风险版本，不扩大基础运行依赖；补齐依赖作用域和 JWT 调用者选项隔离/过期声明校验回归。
 - `boss config set platform` 在写入前按当前注册表拒绝已移除、未知或空平台值；失败不创建配置文件，也不改写已有内容，保留显式 `--platform zhipin` 修复旧配置的入口。

@@ -25,7 +25,7 @@ from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up
 from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
 from boss_agent_cli.schema.error_codes import ERROR_CODES
-from boss_agent_cli.search_filters import SearchFilterCriteria, resolve_active_level, resolve_welfare_keywords, run_search_pipeline
+from boss_agent_cli.search_filters import SearchFilterCriteria, detail_filter_max_pages, resolve_active_level, resolve_welfare_keywords, run_search_pipeline
 from boss_agent_cli.wizard.models import StepResult, WorkflowStatus
 from boss_agent_cli.wizard.runner import Action, WorkflowActionError, WorkflowControl
 
@@ -110,13 +110,18 @@ def execute_candidate_search(
 		raw_params=dict(inputs.get("raw_params") or {}),
 	)
 	extra: dict[str, Any] = {"active": active} if active else {}
+	if active:
+		# 只有 --active 时才透传详情节流 / 通道，保持其他调用方（含测试替身）签名不变
+		for key in ("before_detail_request", "detail_channel"):
+			if inputs.get(key) is not None:
+				extra[key] = inputs[key]
 	return pipeline(
 		platform,
 		cache,
 		logger,
 		criteria=criteria,
 		start_page=int(inputs.get("page") or 1),
-		max_pages=int(inputs.get("max_pages") or (5 if welfare_conditions or active else 1)),
+		max_pages=int(inputs.get("max_pages") or detail_filter_max_pages(welfare_conditions, active)),
 		welfare_conditions=welfare_conditions,
 		before_list_request=inputs.get("before_list_request"),
 		**extra,

@@ -236,10 +236,11 @@ Levels are `online` / `today` / `3d` / `week` / `2w` / `month` / `half-year`; al
 
 在线 / 刚刚活跃 > 今日活跃 > 3日内活跃 > 本周活跃 > 2周内活跃 > 本月活跃 > 近半年活跃 > 半年前活跃
 
-1. When the list item carries `activeTimeDesc` or `bossOnline=true`, the decision is made without a detail request
-2. Otherwise the activity text is read from the job detail; combined with `--welfare`, one detail request answers both
-3. Like `--welfare`, it auto-paginates (up to 5 pages) and skips the search cache, so it sends more requests than a plain search
-4. Jobs whose activity text is unrecognized or missing are excluded; counts and raw texts are reported in `hints.active_filter`
-5. Results gain `boss_active_desc` (for example “本周活跃”); the existing `boss_active` (online/offline) field is unchanged
+1. An online recruiter (list `bossOnline` is `true` / `1`) passes every level; when the list item carries `activeTimeDesc` the text decides directly — neither needs a detail request
+2. **`online` is list-only**: no detail requests and a single page, the same request volume as a plain search — **recommended for low-risk use**
+3. Other levels must fetch job details **one by one** for offline rows the list can't decide (sequential, 5–10 s apart; browser channel only in CDP mode). This is noticeably slower and carries a higher risk of platform risk control. In practice BOSS list items usually lack `activeTimeDesc`, so most offline rows need a detail request; combined with `--welfare`, one detail request answers both
+4. Paging is conservative: one page first, the next only while fewer than 10 results were kept and the page still needed detail requests, capped at 3 pages (5 when combined with `--welfare`, matching the welfare filter); the search cache is skipped. The number of detail requests is reported as `hints.active_filter.detail_lookups`
+5. Jobs whose activity text is unrecognized or missing are excluded; counts and raw texts are reported in `hints.active_filter`
+6. Results gain `boss_active_desc` (for example “本周活跃”); the existing `boss_active` (online/offline) field is unchanged
 
 `boss preset add <name> <query> --active 3d` stores the level in a preset.
