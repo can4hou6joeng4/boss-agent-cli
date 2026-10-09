@@ -26,11 +26,26 @@ def _history(*messages):
 	return {"code": 0, "zpData": {"messages": list(messages)}}
 
 
+@pytest.fixture(autouse=True)
+def _no_retry_sleep(monkeypatch):
+	sleeps: list[float] = []
+	monkeypatch.setattr(rc.time, "sleep", sleeps.append)
+	return sleeps
+
+
 def _client(*, page, events=(), histories=(_history(OLD_MESSAGE), _history(OLD_MESSAGE))):
-	"""friend_detail 与两次 chat_history（动作前快照 + 动作后回读）都走 mock。"""
+	"""friend_detail 与 chat_history（动作前快照 + 动作后回读/轮询）都走 mock；回读次数超出时重复最后一份。"""
 	client = BossRecruiterClient(MagicMock())
 	client.friend_detail = MagicMock(return_value=FRIEND_DETAIL)
-	client.chat_history = MagicMock(side_effect=list(histories))
+	queue = list(histories)
+
+	def _chat_history(*_args, **_kwargs):
+		item = queue.pop(0) if len(queue) > 1 else queue[0]
+		if isinstance(item, Exception):
+			raise item
+		return item
+
+	client.chat_history = MagicMock(side_effect=_chat_history)
 	browser = MagicMock()
 	browser.evaluate_js_with_chat_events.return_value = {"value": page, "events": list(events)}
 	client._get_browser = MagicMock(return_value=browser)
@@ -82,6 +97,7 @@ def test_chat_history_confirms_when_ws_frame_has_no_text():
 	assert result["code"] == 0
 	assert result["zpData"]["matched_ws_count"] == 0
 	assert result["zpData"]["history_matched_count"] == 1
+	assert result["zpData"]["history_attempts"] == 1
 	assert client.chat_history.call_count == 2
 	client.close()
 
@@ -231,4 +247,124 @@ def test_page_failure_still_surfaces_real_error_in_details():
 	assert "__cli_error_code__" not in result
 	assert result["__cli_error_details__"]["log"] == ["geekClick called"]
 	assert BossRecruiterPlatform(client).parse_error(result)[0] == "UNKNOWN"
+	client.close()
+
+
+RECRUITER_UID = 66826625
+
+
+def _card(mid, aid, *, sender=RECRUITER_UID, time_ms=None):
+	"""聊天记录里的动作卡片：没有文案，只有 body.type=4 + action.aid。"""
+	return {
+		"mid": mid,
+		"time": time_ms if time_ms is not None else int(rc.time.time() * 1000) + 500,
+		"type": 1,
+		"from": {"uid": sender, "source": 0},
+		"to": {"uid": FRIEND_ID, "source": 0},
+		"body": {"action": {"extend": "{}", "aid": aid}, "type": 4, "templateId": 1},
+	}
+
+
+def test_wechat_exchange_confirmed_by_aid_32_action_card_in_history():
+	# 实测：换微信实际已发出，但聊天记录里只有 aid=32 的动作卡片，WS 帧也没有可读文案。
+	client, _ = _client(
+		page=_page("ExchangeWx", "not_required"),
+		events=[_ws("binary-only")],
+		histories=[_history(OLD_MESSAGE), _history(OLD_MESSAGE, _card(101, 32))],
+	)
+	result = client.exchange_request_by_friend(FRIEND_ID, exchange_type=2)
+	assert result["code"] == 0
+	assert result["zpData"]["history_matched_count"] == 1
+	assert "side_effects" not in result["zpData"]
+	client.close()
+
+
+def test_resume_request_confirmed_by_aid_37_action_card_in_history():
+	client, _ = _client(page=_page(), histories=[_history(OLD_MESSAGE), _history(OLD_MESSAGE, _card(101, 37))])
+	result = client.exchange_request_by_friend(FRIEND_ID, exchange_type=4)
+	assert result["code"] == 0
+	assert result["zpData"]["history_matched_count"] == 1
+	client.close()
+
+
+def test_history_is_polled_until_action_card_lands(_no_retry_sleep):
+	# 消息落库晚于 WS 监听窗口：前两次回读还没有，第三次出现。
+	client, _ = _client(
+		page=_page("ExchangeWx", "not_required"),
+		histories=[_history(OLD_MESSAGE), _history(OLD_MESSAGE), _history(OLD_MESSAGE),
+			_history(OLD_MESSAGE, _card(101, 32))],
+	)
+	result = client.exchange_request_by_friend(FRIEND_ID, exchange_type=2)
+	assert result["code"] == 0
+	assert result["zpData"]["history_attempts"] == 3
+	assert _no_retry_sleep == [1.5, 2.0]
+	client.close()
+
+
+def test_unconfirmed_after_all_history_retries(_no_retry_sleep):
+	client, _ = _client(page=_page("ExchangeWx", "not_required"))
+	result = client.exchange_request_by_friend(FRIEND_ID, exchange_type=2)
+	assert result["__cli_error_code__"] == "ACTION_UNCONFIRMED"
+	assert result["__cli_error_details__"]["history_attempts"] == 4
+	assert client.chat_history.call_count == 5  # 1 次快照 + 4 次回读
+	assert sum(_no_retry_sleep) == pytest.approx(6.0)
+	client.close()
+
+
+def test_no_history_retry_when_ws_already_confirms(_no_retry_sleep):
+	client, _ = _client(page=_page("ExchangeWx"), events=[_ws("请求交换联系方式")])
+	assert client.exchange_request_by_friend(FRIEND_ID, exchange_type=2)["code"] == 0
+	assert _no_retry_sleep == []
+	client.close()
+
+
+@pytest.mark.parametrize(
+	("card", "reason"),
+	[
+		(_card(101, 37), "求简历卡片不能当作换微信成功"),
+		(_card(101, 32, sender=FRIEND_ID), "对方发来的卡片不算"),
+		(_card(100, 32), "动作前已存在的 mid 不算"),
+		(_card(101, 32, time_ms=1), "时间远早于动作开始的不算"),
+		({**_card(101, 32), "from": None}, "没有发送者信息的不算"),
+	],
+)
+def test_wechat_action_card_matching_is_strict(card, reason):
+	client, _ = _client(page=_page("ExchangeWx", "not_required"), histories=[_history(OLD_MESSAGE), _history(OLD_MESSAGE, card)])
+	result = client.exchange_request_by_friend(FRIEND_ID, exchange_type=2)
+	assert result["__cli_error_code__"] == "ACTION_UNCONFIRMED", reason
+	client.close()
+
+
+def test_wechat_exchange_reports_resume_card_as_side_effect():
+	client, _ = _client(
+		page=_page("ExchangeWx", "not_required"),
+		histories=[_history(OLD_MESSAGE), _history(OLD_MESSAGE, _card(101, 32), _card(102, 37))],
+	)
+	result = client.exchange_request_by_friend(FRIEND_ID, exchange_type=2)
+	assert result["code"] == 0
+	assert result["zpData"]["history_matched_count"] == 1
+	assert result["zpData"]["side_effects"] == ["resume_request_detected"]
+	client.close()
+
+
+def test_phone_exchange_accepts_unknown_aid_but_not_known_other_types():
+	client, _ = _client(page=_page("ExchangePhone"), histories=[_history(OLD_MESSAGE), _history(OLD_MESSAGE, _card(101, 31))])
+	assert client.exchange_request_by_friend(FRIEND_ID, exchange_type=1)["code"] == 0
+	client.close()
+	for aid in (32, 37):
+		client, _ = _client(page=_page("ExchangePhone"), histories=[_history(OLD_MESSAGE), _history(OLD_MESSAGE, _card(101, aid))])
+		assert client.exchange_request_by_friend(FRIEND_ID, exchange_type=1)["__cli_error_code__"] == "ACTION_UNCONFIRMED"
+		client.close()
+
+
+def test_action_card_json_in_ws_frame_counts_as_evidence():
+	frame = '{"action":{"extend":"{}","aid":32},"type":4,"templateId":1}'
+	client, _ = _client(page=_page("ExchangeWx", "not_required"), events=[_ws(frame)])
+	result = client.exchange_request_by_friend(FRIEND_ID, exchange_type=2)
+	assert result["code"] == 0
+	assert result["zpData"]["matched_ws_count"] == 1
+	client.close()
+
+	client, _ = _client(page=_page("ExchangeWx", "not_required"), events=[_ws(frame.replace("32", "37"))])
+	assert client.exchange_request_by_friend(FRIEND_ID, exchange_type=2)["__cli_error_code__"] == "ACTION_UNCONFIRMED"
 	client.close()

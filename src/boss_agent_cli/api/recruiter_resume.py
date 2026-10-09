@@ -1,5 +1,6 @@
 """附件简历消息校验与安全落盘；不执行聊天写操作。"""
 from io import BytesIO
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -85,6 +86,15 @@ def message_time_ms(message: dict[str, Any]) -> int | None:
 		return None
 
 
+def _is_new_message(message: dict[str, Any], *, baseline_mids: set[int] | None, since_ms: int) -> bool:
+	"""有动作前的 mid 快照时按 mid 判新旧（不受本机时钟偏差影响），否则按消息时间。"""
+	if baseline_mids is not None:
+		mid = message_mid(message)
+		return mid is not None and mid not in baseline_mids
+	sent_at = message_time_ms(message)
+	return sent_at is not None and sent_at >= since_ms
+
+
 def new_messages_matching(
 	data: Any,
 	texts: tuple[str, ...],
@@ -97,18 +107,80 @@ def new_messages_matching(
 	有动作前的消息快照时按 mid 判新旧（不受本机时钟偏差影响）；
 	没有快照时退回按消息时间与动作开始时间比较。
 	"""
+	return [
+		message
+		for message in history_messages(data)
+		if _is_new_message(message, baseline_mids=baseline_mids, since_ms=since_ms)
+		and any(text in candidate for candidate in message_texts(message) for text in texts)
+	]
+
+
+# 动作卡片的时间兜底容差：有 mid 快照时仍要求消息时间不早于动作开始太多，
+# 留出本机与服务端的时钟偏差。
+_ACTION_CARD_CLOCK_SKEW_MS = 60_000
+
+
+def action_card_aid(message: dict[str, Any]) -> int | None:
+	"""读取动作卡片（body.type == 4）的 action.aid；不是动作卡片时返回 None。
+
+	例：换微信请求在聊天记录里是 {"type": 4, "action": {"aid": 32, "extend": "{}"}, "templateId": 1}，
+	没有任何可匹配的文案。
+	"""
+	body = message.get("body")
+	if isinstance(body, str):
+		try:
+			body = json.loads(body)
+		except ValueError:
+			return None
+	if not isinstance(body, dict) or str(body.get("type")) != "4":
+		return None
+	action = body.get("action")
+	if not isinstance(action, dict):
+		return None
+	aid = action.get("aid")
+	if isinstance(aid, bool):
+		return None
+	try:
+		return int(str(aid))
+	except (TypeError, ValueError):
+		return None
+
+
+def _sent_by_self(message: dict[str, Any], friend_id: int) -> bool:
+	"""招聘者自己发出的消息：from.uid 存在且不是对方候选人。"""
+	sender = message.get("from")
+	if not isinstance(sender, dict) or sender.get("uid") in (None, ""):
+		return False
+	return str(sender.get("uid")) != str(friend_id)
+
+
+def new_action_cards_matching(
+	data: Any,
+	*,
+	friend_id: int,
+	aids: frozenset[int] | None,
+	exclude_aids: frozenset[int] = frozenset(),
+	baseline_mids: set[int] | None,
+	since_ms: int,
+) -> list[dict[str, Any]]:
+	"""找出动作之后由自己发出、aid 命中的动作卡片消息。
+
+	aids 为 None 表示该类型的 aid 未知：接受任意不在 exclude_aids 里的动作卡片。
+	除了 mid/时间判新，还要求消息时间（如有）不早于动作开始减去时钟容差。
+	"""
 	matches: list[dict[str, Any]] = []
 	for message in history_messages(data):
-		mid = message_mid(message)
-		if baseline_mids is not None:
-			if mid is None or mid in baseline_mids:
-				continue
-		else:
-			sent_at = message_time_ms(message)
-			if sent_at is None or sent_at < since_ms:
-				continue
-		if any(text in candidate for candidate in message_texts(message) for text in texts):
-			matches.append(message)
+		aid = action_card_aid(message)
+		if aid is None or aid in exclude_aids or (aids is not None and aid not in aids):
+			continue
+		if not _sent_by_self(message, friend_id):
+			continue
+		if not _is_new_message(message, baseline_mids=baseline_mids, since_ms=since_ms):
+			continue
+		sent_at = message_time_ms(message)
+		if sent_at is not None and sent_at < since_ms - _ACTION_CARD_CLOCK_SKEW_MS:
+			continue
+		matches.append(message)
 	return matches
 
 

@@ -6,6 +6,7 @@ Endpoints sourced from newboss/boss-cli project (confirmed via reverse engineeri
 
 import atexit
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any, cast
@@ -20,6 +21,7 @@ from boss_agent_cli.api.recruiter_resume import (
 	history_messages,
 	incoming_message,
 	message_mid,
+	new_action_cards_matching,
 	new_messages_matching,
 	resume_friend,
 	save_resume,
@@ -198,6 +200,18 @@ _EXCHANGE_MESSAGE_TEXTS: dict[int, tuple[str, ...]] = {
 	2: _CONTACT_EXCHANGE_TEXTS,
 	4: _RESUME_REQUEST_TEXTS,
 }
+# 部分请求在聊天记录/WS 帧里是不带文案的动作卡片：body = {"type": 4, "action": {"aid": N}}。
+# 已实测：aid 37 = 求附件简历，aid 32 = 换微信请求。换手机号的 aid 还没抓到样本，
+# 先记为 None：接受任意「自己发出、动作开始后新出现、且不是已知其他类型 aid」的动作卡片。
+_RESUME_REQUEST_AID = 37
+_WECHAT_EXCHANGE_AID = 32
+_KNOWN_ACTION_AIDS: frozenset[int] = frozenset({_RESUME_REQUEST_AID, _WECHAT_EXCHANGE_AID})
+_EXCHANGE_ACTION_AIDS: dict[int, frozenset[int] | None] = {
+	1: None,
+	2: frozenset({_WECHAT_EXCHANGE_AID}),
+	4: frozenset({_RESUME_REQUEST_AID}),
+}
+_WS_AID_RE = re.compile(r'"aid"\s*:\s*"?(\d+)')
 _ACTION_UNCONFIRMED_HINT = "动作可能已生效，请先 `boss hr chatmsg {friend_id}` 核实，勿直接重试"
 _RESUME_REQUEST_DIALOG_TYPE = 2
 _RESUME_ACCEPT_TYPE = 3
@@ -220,6 +234,8 @@ class BossRecruiterClient(_BaseHttpClient):
 	_CODE_STOKEN_EXPIRED = ep.CODE_STOKEN_EXPIRED
 	_CODE_RATE_LIMITED = ep.CODE_RATE_LIMITED
 	_ADD_ENDPOINT_HINT = True
+	# exchange 动作后没有 WS 证据时，聊天记录回读的重试间隔（秒）；首读 + 3 次重试，约 6s。
+	_EXCHANGE_HISTORY_RETRY_DELAYS_S: tuple[float, ...] = (1.5, 2.0, 2.5)
 
 	def _register(self) -> None:
 		_OPEN_CLIENTS.add(self)
@@ -341,6 +357,35 @@ class BossRecruiterClient(_BaseHttpClient):
 			and any(expected in bit for expected in expected_bits for bit in event.get("utf8_bits", []))
 		]
 
+	@staticmethod
+	def _exchange_aid_filter(exchange_type: int) -> tuple[frozenset[int] | None, frozenset[int]]:
+		"""返回 (aids, exclude_aids)；aid 未知的类型排除掉已知属于其他类型的 aid。"""
+		aids = _EXCHANGE_ACTION_AIDS.get(exchange_type)
+		exclude = _KNOWN_ACTION_AIDS if aids is None else frozenset()
+		return aids, exclude
+
+	def _matching_action_card_events(
+		self, events: list[dict[str, Any]], aids: frozenset[int] | None, exclude_aids: frozenset[int] = frozenset()
+	) -> list[dict[str, Any]]:
+		"""WS 发送帧里如果带有动作卡片的 JSON（"aid": N），按 aid 认定发送证据。"""
+		matched: list[dict[str, Any]] = []
+		for event in events:
+			if event.get("kind") != "ws_send" or int(event.get("bytes", 0)) < 100:
+				continue
+			found = {int(m) for bit in event.get("utf8_bits", []) for m in _WS_AID_RE.findall(bit)}
+			found -= exclude_aids
+			if found and (aids is None or found & aids):
+				matched.append(event)
+		return matched
+
+	def _exchange_ws_matches(
+		self, events: list[dict[str, Any]], expected_bits: list[str], exchange_type: int
+	) -> list[dict[str, Any]]:
+		aids, exclude = self._exchange_aid_filter(exchange_type)
+		cards = self._matching_action_card_events(events, aids, exclude)
+		texts = self._matching_chat_send_events(events, expected_bits)
+		return texts + [event for event in cards if not any(event is t for t in texts)]
+
 	def _chat_ws_evidence(self, events: list[dict[str, Any]], expected_bits: list[str]) -> dict[str, Any]:
 		ws_send = [event for event in events if event.get("kind") == "ws_send"]
 		return {
@@ -391,7 +436,7 @@ class BossRecruiterClient(_BaseHttpClient):
 		details = {
 			key: payload[key]
 			for key in ("action", "error", "log", "confirmed", "componentName", "exchange_type", "ws_evidence",
-				"history_checked", "history_matched_count", "history_error", "side_effects")
+				"history_checked", "history_matched_count", "history_attempts", "history_error", "side_effects")
 			if key in payload
 		}
 		response: dict[str, Any] = {
@@ -715,6 +760,8 @@ class BossRecruiterClient(_BaseHttpClient):
 		    （#443：平台现已改为"想要一份您的附件简历"，两种文案都认）
 		  - ✅ ExchangePhone.handleExChange() → 发送"请求交换联系方式"
 		  - ✅ ExchangeWx.handleExChange() → 发送"请求交换联系方式"
+		    （实测聊天记录里可能只有动作卡片 body={type:4, action:{aid:32}}，没有文案，
+		    所以也按自己发出的新动作卡片 aid 判定；求简历卡片是 aid 37）
 		"""
 		try:
 			friend_data = self._require_chat_friend_data(friend_id)
@@ -778,14 +825,27 @@ class BossRecruiterClient(_BaseHttpClient):
 				),
 			)
 
-		matched_ws = self._matching_chat_send_events(events, expected_bits)
+		matched_ws = self._exchange_ws_matches(events, expected_bits, exchange_type)
 		history = self._exchange_history_evidence(
-			friend_id, expected_texts, baseline_mids=baseline_mids, since_ms=started_ms,
+			friend_id, expected_texts, exchange_type=exchange_type, baseline_mids=baseline_mids, since_ms=started_ms,
 		)
+		history_attempts = 1
+		if not matched_ws:
+			# 消息落库可能晚于 WS 监听窗口：没有 WS 证据时短暂轮询聊天记录再下结论。
+			for delay in self._EXCHANGE_HISTORY_RETRY_DELAYS_S:
+				if history["matched_count"]:
+					break
+				time.sleep(delay)
+				history_attempts += 1
+				history = self._exchange_history_evidence(
+					friend_id, expected_texts, exchange_type=exchange_type,
+					baseline_mids=baseline_mids, since_ms=started_ms,
+				)
 		side_effects = self._exchange_side_effects(exchange_type, events, history)
 		evidence = {
 			"matched_ws_count": len(matched_ws),
 			"history_checked": history["checked"],
+			"history_attempts": history_attempts,
 			"history_matched_count": history["matched_count"],
 		}
 		if matched_ws or history["matched_count"]:
@@ -807,6 +867,7 @@ class BossRecruiterClient(_BaseHttpClient):
 			"componentName": result.get("componentName") or component_name,
 			"history_checked": history["checked"],
 			"history_matched_count": 0,
+			"history_attempts": history_attempts,
 		}
 		if history.get("error"):
 			extra["history_error"] = history["error"]
@@ -838,10 +899,11 @@ class BossRecruiterClient(_BaseHttpClient):
 		friend_id: int,
 		texts: tuple[str, ...],
 		*,
+		exchange_type: int,
 		baseline_mids: set[int] | None,
 		since_ms: int,
 	) -> dict[str, Any]:
-		"""动作后回读聊天记录，统计新出现的请求消息；只读、失败不抛出。"""
+		"""动作后回读聊天记录，统计新出现的请求消息（文案或动作卡片）；只读、失败不抛出。"""
 		try:
 			response = self.chat_history(friend_id, count=20, retry=False)
 		except Exception as exc:  # noqa: BLE001 — 写操作已发生，回读失败只能记为未确认
@@ -850,9 +912,20 @@ class BossRecruiterClient(_BaseHttpClient):
 			code = response.get("code") if isinstance(response, dict) else None
 			return {"checked": False, "matched_count": 0, "resume_matched_count": 0, "error": f"chat_history code={code}"}
 		data = response.get("zpData")
-		matched = new_messages_matching(data, texts, baseline_mids=baseline_mids, since_ms=since_ms)
-		resume = new_messages_matching(data, _RESUME_REQUEST_TEXTS, baseline_mids=baseline_mids, since_ms=since_ms)
-		return {"checked": True, "matched_count": len(matched), "resume_matched_count": len(resume)}
+		aids, exclude = self._exchange_aid_filter(exchange_type)
+
+		def _new_matches(match_texts: tuple[str, ...], card_aids: frozenset[int] | None,
+				card_exclude: frozenset[int]) -> int:
+			found = new_messages_matching(data, match_texts, baseline_mids=baseline_mids, since_ms=since_ms)
+			found += new_action_cards_matching(
+				data, friend_id=friend_id, aids=card_aids, exclude_aids=card_exclude,
+				baseline_mids=baseline_mids, since_ms=since_ms,
+			)
+			return len({id(message) for message in found})
+
+		matched_count = _new_matches(texts, aids, exclude)
+		resume_count = _new_matches(_RESUME_REQUEST_TEXTS, frozenset({_RESUME_REQUEST_AID}), frozenset())
+		return {"checked": True, "matched_count": matched_count, "resume_matched_count": resume_count}
 
 	def _exchange_side_effects(
 		self, exchange_type: int, events: list[dict[str, Any]], history: dict[str, Any]
@@ -860,7 +933,8 @@ class BossRecruiterClient(_BaseHttpClient):
 		"""换手机/微信时如果同时出现了求简历消息，明确告诉调用方（#443）。"""
 		if exchange_type == 4:
 			return []
-		resume_ws = self._matching_chat_send_events(events, list(_RESUME_REQUEST_TEXTS))
+		resume_ws = self._matching_chat_send_events(events, list(_RESUME_REQUEST_TEXTS)) or \
+			self._matching_action_card_events(events, frozenset({_RESUME_REQUEST_AID}))
 		if resume_ws or history.get("resume_matched_count"):
 			return ["resume_request_detected"]
 		return []

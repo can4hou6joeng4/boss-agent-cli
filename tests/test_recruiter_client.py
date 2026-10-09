@@ -342,7 +342,8 @@ def test_exchange_request_by_friend_without_real_ws_send_returns_error():
 		"zpData": {"friendList": [{"uid": 1, "encryptUid": "u", "encryptJobId": "j", "securityId": "s", "friendSource": 0}]},
 	}
 	with patch.object(client, "_request", return_value=friend_detail_resp), \
-		patch.object(client, "_get_browser") as mock_get_browser:
+		patch.object(client, "_get_browser") as mock_get_browser, \
+		patch("boss_agent_cli.api.recruiter_client.time.sleep"):
 		mock_browser = MagicMock()
 		mock_browser.evaluate_js_with_chat_events.return_value = {
 			"value": {"ok": True, "componentName": "ExchangeResume", "confirmed": True, "log": ["handleExChange returned"]},
