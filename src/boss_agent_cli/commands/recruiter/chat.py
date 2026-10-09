@@ -13,6 +13,12 @@ from boss_agent_cli.display import handle_auth_errors, handle_output, handle_pla
 
 _RECRUITER_MSG_STATUS_LABELS = {0: "发送中", **MSG_STATUS_LABELS}
 
+# userLastMsg 批量：前端自己每页最多 100 个；一次塞 300+ 个会被拒（「未知的非法参数」）。
+# CDP 模式下请求串行，这里再保守一点：每批 50 个，默认只补前 100 个会话（最多 2 次请求）。
+LAST_MESSAGES_BATCH_SIZE = 50
+DEFAULT_SUMMARY_LIMIT = 100
+MAX_SUMMARY_LIMIT = 300
+
 
 def _format_chat_time(value: Any) -> str | None:
 	"""毫秒时间戳格式化为本地 MM-DD HH:MM；平台给的字符串原样返回；没有就返回 None。"""
@@ -96,8 +102,24 @@ def _last_info(item: dict[str, Any]) -> dict[str, Any]:
 	return {}
 
 
-def _message_status_label(item: dict[str, Any]) -> str | None:
+def _last_is_self(item: dict[str, Any], friend_id: int | None) -> bool | None:
+	"""最后一条是不是招聘者自己发的；前端同样用 lastMsgInfo.fromId !== friendId 判断。"""
+	flag = item.get("lastIsSelf")
+	if isinstance(flag, bool):
+		return flag
+	from_id = _as_int(_last_info(item).get("fromId"))
+	if from_id is None or friend_id is None:
+		return None
+	return from_id != friend_id
+
+
+def _message_status_label(item: dict[str, Any], friend_id: int | None = None) -> str | None:
+	# 已读/送达只对招聘者自己发出的消息有意义；候选人发来的消息 status 恒为 0，不能当「发送中」。
+	if _last_is_self(item, friend_id) is False:
+		return None
 	status = item.get("msg_status") if item.get("msg_status") is not None else item.get("status")
+	if item.get("lastMsgStatus") not in (None, ""):
+		status = item.get("lastMsgStatus")
 	info = _last_info(item)
 	if info.get("status") not in (None, ""):
 		status = info.get("status")
@@ -138,18 +160,21 @@ def _unread_count(item: dict[str, Any]) -> int | None:
 
 
 def _message_time(item: dict[str, Any]) -> str | None:
-	for key in ("last_time", "lastTime", "lastTS", "lastMsgTime", "time", "timestamp"):
-		formatted = _format_chat_time(item.get(key))
+	# 先用毫秒时间戳（lastTS / lastMsgInfo.msgTime），userLastMsg 的 lastTime 只是「12:00」这种展示串。
+	for value in (item.get("last_time"), item.get("lastTS"), item.get("lastMsgTime"), _last_info(item).get("msgTime"),
+			item.get("lastTime"), item.get("time"), item.get("timestamp")):
+		formatted = _format_chat_time(value)
 		if formatted is not None:
 			return formatted
-	return _format_chat_time(_last_info(item).get("msgTime"))
+	return None
 
 
 def _normalize_last_message(item: dict[str, Any], known_ids: set[int] | None = None) -> dict[str, Any]:
+	friend_id = _friend_id_for(item, known_ids)
 	return {
-		"friendId": _friend_id_for(item, known_ids),
+		"friendId": friend_id,
 		"unread": _unread_count(item),
-		"msg_status": _message_status_label(item),
+		"msg_status": _message_status_label(item, friend_id),
 		"last_msg": _message_text(item),
 		"last_time": _message_time(item),
 	}
@@ -228,12 +253,14 @@ def _friend_ids_from_items(items: list[dict[str, Any]]) -> list[int]:
 	return ids
 
 
-def _fetch_friend_ids(platform: Any, *, page: int, label_id: int, job_id: str | None) -> tuple[list[int], dict[str, Any] | None]:
+def _fetch_friend_ids(
+	platform: Any, *, page: int, label_id: int, job_id: str | None,
+) -> tuple[list[int], dict[int, int], dict[str, Any] | None]:
 	result = platform.friend_list(page=page, label_id=label_id, job_id=job_id)
 	if not platform.is_success(result):
-		return [], result
-	data = _friend_data(platform.unwrap_data(result))
-	return _friend_ids_from_items(_friend_items(data)), None
+		return [], {}, result
+	items = _friend_items(_friend_data(platform.unwrap_data(result)))
+	return _friend_ids_from_items(items), _friend_sources(items), None
 
 
 def _page_summaries(platform: Any) -> dict[int, dict[str, Any]]:
@@ -250,28 +277,87 @@ def _page_summaries(platform: Any) -> dict[int, dict[str, Any]]:
 	return _summaries_by_friend(_list_dict_items(snapshot.get("items")))
 
 
-def _enrich_chat_summaries(platform: Any, friend_items: list[dict[str, Any]]) -> dict[str, Any]:
+def _fetch_last_messages(
+	platform: Any,
+	friend_ids: list[int],
+	*,
+	sources: dict[int, int] | None = None,
+	batch_size: int = LAST_MESSAGES_BATCH_SIZE,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+	"""按 friendSource 分组、按批串行调 userLastMsg；任一批失败立即停止，不再继续发请求。
+
+	返回 (消息条目, 统计)；统计里带 requests，失败时另带 error/error_code/failed_response。
+	"""
+	groups: dict[int, list[int]] = {}
+	for fid in friend_ids:
+		src = 1 if (sources or {}).get(fid) == 1 else 0
+		groups.setdefault(src, []).append(fid)
+	items: list[dict[str, Any]] = []
+	stats: dict[str, Any] = {"requests": 0}
+	for src in sorted(groups):
+		ids = groups[src]
+		for start in range(0, len(ids), batch_size):
+			batch = ids[start:start + batch_size]
+			try:
+				result = platform.last_messages(batch, src=src) if src else platform.last_messages(batch)
+			except NotImplementedError:
+				return items, stats
+			stats["requests"] += 1
+			if isinstance(result, dict) and platform.is_success(result):
+				items.extend(_message_items(platform.unwrap_data(result) or {}))
+				continue
+			stats["failed_response"] = result
+			if isinstance(result, dict):
+				code, message = platform.parse_error(result)
+				stats["error"] = message or f"code={result.get('code')}"
+				if code is not None:
+					stats["error_code"] = code
+			else:
+				stats["error"] = "最近消息接口无响应"
+			return items, stats
+	return items, stats
+
+
+def _friend_sources(friend_items: list[dict[str, Any]]) -> dict[int, int]:
+	sources: dict[int, int] = {}
+	for item in friend_items:
+		fid = _friend_id_for(item)
+		src = _as_int(item.get("friendSource"))
+		if fid is not None and src is not None:
+			sources[fid] = src
+	return sources
+
+
+def _enrich_chat_summaries(
+	platform: Any,
+	friend_items: list[dict[str, Any]],
+	*,
+	summary_limit: int = DEFAULT_SUMMARY_LIMIT,
+) -> dict[str, Any]:
 	"""给沟通列表补未读数 / 最后一条消息 / 时间，返回来源统计（放进 hints）。
 
-	请求量：页面快照不发请求；只有页面里没覆盖到的会话才调一次 userLastMsg（单次、串行）。
+	请求量：页面快照不发请求；页面没覆盖到的会话里只取列表前 summary_limit 个，
+	按 50 个一批串行调 userLastMsg（默认最多 2 次请求），其余会话只保留列表自带字段。
 	"""
 	friend_ids = _friend_ids_from_items(friend_items)
 	if not friend_ids:
 		return {}
 	page = _page_summaries(platform)
 	missing = [fid for fid in friend_ids if fid not in page]
+	limit = max(0, min(summary_limit, MAX_SUMMARY_LIMIT))
+	wanted = missing[:limit]
 	message_items: list[dict[str, Any]] = []
 	hint: dict[str, Any] = {}
-	if missing:
-		try:
-			last_messages = platform.last_messages(missing)
-		except NotImplementedError:
-			last_messages = None
-		if isinstance(last_messages, dict) and platform.is_success(last_messages):
-			message_items = _message_items(platform.unwrap_data(last_messages) or {})
-		elif isinstance(last_messages, dict):
-			_code, message = platform.parse_error(last_messages)
-			hint["last_messages_error"] = message or f"code={last_messages.get('code')}"
+	if wanted:
+		message_items, stats = _fetch_last_messages(platform, wanted, sources=_friend_sources(friend_items))
+		hint["last_messages_requests"] = stats["requests"]
+		if "error" in stats:
+			hint["last_messages_error"] = stats["error"]
+			if "error_code" in stats:
+				hint["last_messages_error_code"] = stats["error_code"]
+	if len(missing) > len(wanted):
+		hint["last_messages_skipped"] = len(missing) - len(wanted)
+		hint["summary_limit"] = limit
 	counts = _merge_last_messages(friend_items, message_items, page_summaries=page)
 	hint.update({"counts": counts})
 	return hint
@@ -281,9 +367,14 @@ def _enrich_chat_summaries(platform: Any, friend_items: list[dict[str, Any]]) ->
 @click.option("--page", default=1, type=int, help="页码")
 @click.option("--job-id", default=None, help="按职位筛选")
 @click.option("--label-id", default=0, type=int, help="按标签筛选（0=全部, 1=新招呼, 2=沟通中）")
+@click.option(
+	"--summary-limit", default=DEFAULT_SUMMARY_LIMIT, show_default=True,
+	type=click.IntRange(0, MAX_SUMMARY_LIMIT),
+	help="最多给前多少个会话补最近消息（每 50 个一次串行请求；0=不请求）",
+)
 @click.pass_context
 @handle_auth_errors("recruiter-chat")
-def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_id: int) -> None:
+def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_id: int, summary_limit: int) -> None:
 	"""查看与候选人的沟通列表"""
 	if not require_compliance_allowed(ctx, "recruiter-chat"):
 		return
@@ -299,7 +390,7 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 			return
 		data = _friend_data(platform.unwrap_data(result))
 		friend_items = _friend_items(data)
-		summary_hint = _enrich_chat_summaries(platform, friend_items)
+		summary_hint = _enrich_chat_summaries(platform, friend_items, summary_limit=summary_limit)
 		hints: dict[str, Any] = {"next_actions": [
 			"boss hr resume <geek_id> --job-id <id> --security-id <id> — 查看候选人简历",
 			"boss hr chatmsg <friend_id> — 查看候选人沟通上下文",
@@ -344,6 +435,11 @@ def recruiter_chatmsg_cmd(ctx: click.Context, friend_id: int, count: int, max_ms
 @click.option("--job-id", default=None, help="按职位筛选")
 @click.option("--label-id", default=0, type=int, help="按标签筛选（0=全部, 1=新招呼, 2=沟通中）")
 @click.option("--friend-id", "friend_ids", multiple=True, type=int, help="指定候选人会话 friend_id，可重复")
+@click.option(
+	"--limit", default=DEFAULT_SUMMARY_LIMIT, show_default=True,
+	type=click.IntRange(1, MAX_SUMMARY_LIMIT),
+	help="最多查询多少个会话（每 50 个一次串行请求）",
+)
 @click.pass_context
 @handle_auth_errors("recruiter-last-messages")
 def recruiter_last_messages_cmd(
@@ -352,6 +448,7 @@ def recruiter_last_messages_cmd(
 	job_id: str | None,
 	label_id: int,
 	friend_ids: tuple[int, ...],
+	limit: int,
 ) -> None:
 	"""批量查看候选人最近消息摘要"""
 	if not require_compliance_allowed(ctx, "recruiter-last-messages"):
@@ -363,8 +460,9 @@ def recruiter_last_messages_cmd(
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		ids = list(dict.fromkeys(friend_ids))
+		sources: dict[int, int] = {}
 		if not ids:
-			ids, error = _fetch_friend_ids(platform, page=page, label_id=label_id, job_id=job_id)
+			ids, sources, error = _fetch_friend_ids(platform, page=page, label_id=label_id, job_id=job_id)
 			if error is not None:
 				handle_platform_error_output(ctx, "recruiter-last-messages", platform, error, fallback_message="沟通列表获取失败")
 				return
@@ -372,16 +470,26 @@ def recruiter_last_messages_cmd(
 			handle_output(ctx, "recruiter-last-messages", {"friend_ids": [], "messages": []})
 			return
 
-		result = platform.last_messages(ids)
-		if not platform.is_success(result):
-			handle_platform_error_output(ctx, "recruiter-last-messages", platform, result, fallback_message="最近消息获取失败")
+		skipped = max(0, len(ids) - limit)
+		ids = ids[:limit]
+		items, stats = _fetch_last_messages(platform, ids, sources=sources)
+		if "error" in stats and not items:
+			handle_platform_error_output(
+				ctx, "recruiter-last-messages", platform,
+				stats["failed_response"],
+				fallback_message="最近消息获取失败",
+			)
 			return
-		data = platform.unwrap_data(result) or {}
 		known = set(ids)
-		messages = [_normalize_last_message(item, known) for item in _message_items(data)]
+		messages = [_normalize_last_message(item, known) for item in items]
+		output: dict[str, Any] = {"friend_ids": ids, "messages": messages, "requests": stats["requests"]}
+		if skipped:
+			output["skipped"] = skipped
+		if "error" in stats:
+			output["partial_error"] = stats["error"]
 		handle_output(
 			ctx, "recruiter-last-messages",
-			{"friend_ids": ids, "messages": messages},
+			output,
 			hints={"next_actions": [
 				"boss hr chatmsg <friend_id> — 查看候选人沟通上下文",
 				"boss hr reply <friend_id> <message> — 回复候选人消息",

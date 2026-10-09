@@ -189,7 +189,7 @@ _CHAT_LIST_SNAPSHOT_JS = """
 	const root = chatUser && chatUser.__vue__;
 	if (!root) return {ok: false, error: 'geek-list Vue component not found'};
 	const KEYS = ['friendId', 'uid', 'friendSource', 'newMsgCount', 'unreadMsgCount', 'unreadCount', 'unread',
-		'lastMsg', 'lastText', 'lastTime', 'lastTS', 'lastMsgTime', 'updateTime', 'time'];
+		'lastMsg', 'lastText', 'lastTime', 'lastTS', 'lastMsgTime', 'lastMsgStatus', 'lastIsSelf', 'updateTime', 'time'];
 	const INFO_KEYS = ['showText', 'text', 'status', 'msgTime', 'fromId'];
 	const looksLikeFriends = (value) => Array.isArray(value) && value.length > 0
 		&& value.some((item) => item && typeof item === 'object' && ('friendId' in item || 'uid' in item));
@@ -765,8 +765,12 @@ class BossRecruiterClient(_BaseHttpClient):
 			return None
 		return result if isinstance(result, dict) and result.get("ok") else None
 
-	def last_messages(self, friend_ids: list[int]) -> dict[str, Any]:
-		data = {"friendIds": ",".join(str(i) for i in friend_ids), "src": 0}
+	def last_messages(self, friend_ids: list[int], *, src: int = 0) -> dict[str, Any]:
+		"""userLastMsg：前端按 friendSource 分组（BOSS 好友 src=0，店长直聘 src=1），每批 ≤100。
+
+		一次塞几百个 friendId 会被平台拒绝（「未知的非法参数」），批量切分由调用方负责。
+		"""
+		data = {"friendIds": ",".join(str(i) for i in friend_ids), "src": src}
 		return self._request("POST", ep.BOSS_LAST_MESSAGES_URL, data=data)
 
 	def chat_history(self, gid: int, *, count: int = 20, max_msg_id: int | None = None, retry: bool = True) -> dict[str, Any]:

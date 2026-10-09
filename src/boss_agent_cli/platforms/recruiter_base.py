@@ -139,8 +139,8 @@ class RecruiterPlatform(ABC):
 		"""读取聊天页已加载的会话列表摘要（不发请求）；不支持时返回 None。"""
 		return None
 
-	def last_messages(self, friend_ids: list[int]) -> dict[str, Any]:
-		"""获取最近消息。"""
+	def last_messages(self, friend_ids: list[int], *, src: int = 0) -> dict[str, Any]:
+		"""获取最近消息（src=0 普通好友，src=1 店长直聘好友）。"""
 		raise NotImplementedError(f"{self.name} does not implement last_messages")
 
 	def session_enter(self, geek_id: str, expect_id: str, job_id: str, security_id: str) -> dict[str, Any]:

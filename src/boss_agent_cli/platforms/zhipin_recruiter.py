@@ -161,8 +161,8 @@ class BossRecruiterPlatform(RecruiterPlatform):
 	def chat_list_snapshot(self) -> dict[str, Any] | None:
 		return self._client.chat_list_snapshot()
 
-	def last_messages(self, friend_ids: list[int]) -> dict[str, Any]:
-		return self._client.last_messages(friend_ids)
+	def last_messages(self, friend_ids: list[int], *, src: int = 0) -> dict[str, Any]:
+		return self._client.last_messages(friend_ids, src=src)
 
 	def chat_history(self, gid: int, *, count: int = 20, max_msg_id: int | None = None) -> dict[str, Any]:
 		return self._client.chat_history(gid, count=count, max_msg_id=max_msg_id)
