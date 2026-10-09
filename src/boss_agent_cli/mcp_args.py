@@ -34,7 +34,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "search":
 		args = [name, arguments["query"]]
-		for opt in ("city", "salary", "experience", "education", "welfare"):
+		for opt in ("city", "salary", "experience", "education", "welfare", "active"):
 			if opt in arguments and arguments[opt]:
 				args.extend([f"--{opt}", str(arguments[opt])])
 		if "page" in arguments:
@@ -352,7 +352,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "preset_add":
 		args = ["preset", "add", arguments["name"], arguments["query"]]
-		for opt in ("city", "salary", "experience", "education", "welfare"):
+		for opt in ("city", "salary", "experience", "education", "welfare", "active"):
 			if arguments.get(opt):
 				args.extend([f"--{opt}", str(arguments[opt])])
 		return args

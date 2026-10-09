@@ -175,6 +175,7 @@ INPUT_LABELS = {
 	"run_id": "任务编号",
 	"name": "监控名称",
 	"welfare": "福利条件（多个条件用逗号分隔）",
+	"active": "HR 活跃度下限（online/today/3d/week/2w/month/half-year，可留空）",
 }
 
 GOAL_GROUPS: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
@@ -722,6 +723,10 @@ def _collect_inputs(
 		welfare = menu.text(INPUT_LABELS["welfare"], required=False)
 		if welfare:
 			inputs["welfare"] = welfare
+		if goal == "job_search":
+			active = menu.text(INPUT_LABELS["active"], required=False)
+			if active:
+				inputs["active"] = active
 	if goal in {"exchange", "exchange_contact"}:
 		inputs["type"] = menu.select(
 			"请选择联系方式",

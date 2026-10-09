@@ -9,7 +9,7 @@ from boss_agent_cli.api.endpoints import (
 )
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.display import handle_error_output, handle_output, render_action_result, render_list_result
-from boss_agent_cli.search_filters import build_search_params
+from boss_agent_cli.search_filters import ACTIVE_LEVELS, build_search_params, resolve_active_level
 
 
 def _build_params(
@@ -44,6 +44,7 @@ def preset_group() -> None:
 @click.option("--stage", default=None, type=click.Choice(list(STAGE_CODES.keys()), case_sensitive=False), help="融资阶段")
 @click.option("--job-type", default=None, type=click.Choice(list(JOB_TYPE_CODES.keys()), case_sensitive=False), help="职位类型")
 @click.option("--welfare", default=None, help="福利筛选")
+@click.option("--active", default=None, help="HR 活跃度下限：" + " / ".join(ACTIVE_LEVELS))
 @click.pass_context
 def preset_add_cmd(
 	ctx: click.Context,
@@ -58,12 +59,21 @@ def preset_add_cmd(
 	stage: str | None,
 	job_type: str | None,
 	welfare: str | None,
+	active: str | None,
 ) -> None:
 	if city and city not in CITY_CODES:
 		handle_error_output(ctx, "preset", code="INVALID_PARAM", message=f"未知城市: {city}")
 		return
+	try:
+		active_level = resolve_active_level(active)
+	except ValueError as exc:
+		handle_error_output(ctx, "preset", code="INVALID_PARAM", message=str(exc))
+		return
 
 	params = _build_params(query, city, salary, experience, education, industry, scale, stage, job_type, welfare)
+	if active_level:
+		# 只在设置时写入，旧预设和不带 --active 的预设保持原有 10 个键
+		params["active"] = active_level
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		cache.save_saved_search(name, params)
 	handle_output(

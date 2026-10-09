@@ -25,7 +25,9 @@ from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	SearchPipelinePlatformError,
 	SearchUrlParseError,
+	ACTIVE_LEVELS,
 	parse_boss_search_url,
+	resolve_active_level,
 	resolve_search_code_params,
 	resolve_welfare_keywords,
 	run_search_pipeline,
@@ -33,7 +35,8 @@ from boss_agent_cli.search_filters import (
 from boss_agent_cli.wizard.actions import execute_candidate_search
 
 
-_SEARCH_CACHE_SCHEMA = 2
+# 3：职位条目新增 boss_active_desc 字段，旧缓存不再复用。
+_SEARCH_CACHE_SCHEMA = 3
 
 
 def _sort_search_items(items: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
@@ -42,14 +45,31 @@ def _sort_search_items(items: list[dict[str, Any]], sort: str) -> list[dict[str,
 	return items
 
 
-def _progress_title(criteria: SearchFilterCriteria, welfare_conditions: Any) -> str:
+def _progress_title(criteria: SearchFilterCriteria, welfare_conditions: Any, active: str | None = None) -> str:
 	"""进度头部：把本次搜索条件浓缩成一行，让真人知道正在跑什么。"""
 	parts = [f"搜索 {criteria.query}"]
 	if criteria.city:
 		parts.append(str(criteria.city))
 	if welfare_conditions:
 		parts.append(",".join(label for label, _ in welfare_conditions))
+	if active:
+		parts.append(f"HR 活跃 ≥ {active}")
 	return " · ".join(parts)
+
+
+def _active_filter_hint(level: str, pipeline_result: Any) -> dict[str, Any]:
+	"""把活跃度筛选的统计写进 hints，未知文案单独列出，方便调用方判断是否放宽条件。"""
+	stats = pipeline_result.stats
+	hint: dict[str, Any] = {
+		"level": level,
+		"rejected": stats.active_rejected,
+		"unknown_excluded": stats.active_unknown,
+	}
+	unknown = getattr(pipeline_result, "active_unknown_descs", None) or {}
+	if unknown:
+		hint["unknown_descs"] = dict(unknown)
+		hint["note"] = "活跃度文案无法识别或详情未返回的职位已排除"
+	return hint
 
 
 @click.command("search")
@@ -65,6 +85,11 @@ def _progress_title(criteria: SearchFilterCriteria, welfare_conditions: Any) -> 
 @click.option("--stage", default=None, help="融资阶段（如 已上市、A轮），支持逗号分隔多选")
 @click.option("--job-type", default=None, help="职位类型（全职/兼职/实习），支持逗号分隔多选")
 @click.option("--welfare", default=None, help="福利筛选（如 双休、五险一金），会逐个检查职位详情")
+@click.option(
+	"--active",
+	default=None,
+	help="只保留 HR 活跃度不低于该档的职位：" + " / ".join(ACTIVE_LEVELS) + "（也认 3day、3日 等写法）；列表看不出时会查职位详情",
+)
 @click.option("--page", default=1, help="页码")
 @click.option("--no-cache", is_flag=True, default=False, help="跳过缓存")
 @click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
@@ -85,6 +110,7 @@ def search_cmd(
 	stage: str | None,
 	job_type: str | None,
 	welfare: str | None,
+	active: str | None,
 	page: int,
 	no_cache: bool,
 	with_score: bool,
@@ -112,6 +138,7 @@ def search_cmd(
 		stage = stage or params.get("stage")
 		job_type = job_type or params.get("job_type")
 		welfare = welfare or params.get("welfare")
+		active = active or params.get("active")
 
 	if search_url:
 		try:
@@ -152,6 +179,14 @@ def search_cmd(
 		return
 	raw_params.update({key: value for key, value in code_params.items() if value})
 
+	try:
+		active_level = resolve_active_level(active)
+	except ValueError as exc:
+		handle_error_output(ctx, "search", code="INVALID_PARAM", message=str(exc))
+		return
+	# 福利和活跃度都可能要逐个查详情，结果不进搜索缓存、默认多翻几页
+	detail_filter = bool(welfare or active_level)
+
 	# 解析福利关键词（支持逗号分隔的多条件组合）
 	welfare_conditions = None
 	if welfare:
@@ -167,8 +202,8 @@ def search_cmd(
 	)
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
-		# 有福利筛选时跳过缓存（因为需要逐个查详情）
-		if not welfare_conditions and not no_cache and not with_score:
+		# 有福利 / 活跃度筛选时跳过缓存（需要逐个查详情，活跃度也会变）
+		if not detail_filter and not no_cache and not with_score:
 			search_params = {
 				"cache_schema": _SEARCH_CACHE_SCHEMA,
 				"query": query, "city": city, "salary": salary,
@@ -191,12 +226,12 @@ def search_cmd(
 		auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 		request_budget = CrawlBudget(cache) if ctx.obj.get("platform", "zhipin") == "zhipin" else None
 		with get_platform_instance(ctx, auth) as platform:
-			max_pages = 5 if welfare_conditions else 1
+			max_pages = 5 if detail_filter else 1
 			# TTY 下把管线日志接到 Rich 进度；管道 / --json 仍用原 logger，行为不变。
 			progress = None
 			pipeline_logger: Any = logger
 			if not is_json_mode(ctx):
-				progress = SearchProgress(_progress_title(criteria, welfare_conditions), max_pages=max_pages)
+				progress = SearchProgress(_progress_title(criteria, welfare_conditions, active_level), max_pages=max_pages)
 				progress.start()
 				pipeline_logger = progress
 			# 仅 TTY 下把节流等待秒数喂给进度条；管道 / --json 保持 wait("list") 逐字不变。
@@ -219,6 +254,7 @@ def search_cmd(
 						"page": page,
 						"max_pages": max_pages,
 						"welfare_conditions": welfare_conditions,
+						"active": active_level,
 						"before_list_request": (
 							(lambda: request_budget.wait("list", on_wait=progress.waiting))
 							if request_budget is not None and progress is not None
@@ -270,20 +306,22 @@ def search_cmd(
 				"has_more": pipeline_result.has_more,
 				"total": pipeline_result.total or len(items),
 			}
-			hints = {
+			hints: dict[str, Any] = {
 				"next_actions": [
 					f"使用 {boss_command_for_ctx(ctx, 'detail <security_id>')} 查看职位详情",
 					f"使用 {boss_command_for_ctx(ctx, 'apply <security_id> <job_id>')} 投递，"
 					f"或 {boss_command_for_ctx(ctx, 'greet <security_id> <job_id>')} 沟通",
 				],
 			}
-			if pipeline_result.has_more and not welfare_conditions:
+			if active_level:
+				hints["active_filter"] = _active_filter_hint(active_level, pipeline_result)
+			if pipeline_result.has_more and not detail_filter:
 				hints["next_actions"].append(
 					f"使用 boss search <query> --page {page + 1} 查看下一页"
 				)
 
 			# 缓存普通搜索结果
-			if not welfare_conditions and not with_score:
+			if not detail_filter and not with_score:
 				search_params = {
 					"cache_schema": _SEARCH_CACHE_SCHEMA,
 					"query": query, "city": city, "salary": salary,
@@ -295,12 +333,14 @@ def search_cmd(
 				cache.put_search(search_params, json.dumps(cache_data, ensure_ascii=False))
 
 			title_suffix = " (welfare filter)" if welfare_conditions else ""
+			if active_level:
+				title_suffix += f" (active>={active_level})"
 			handle_output(
 				ctx, "search", output_items,
 				render=lambda data: render_job_table(
 					data, f"search: {query}{title_suffix}",
 					page=page,
-					hint_next=f"more: boss search \"{query}\" --page {page + 1}" if pipeline_result.has_more and not welfare_conditions else "",
+					hint_next=f"more: boss search \"{query}\" --page {page + 1}" if pipeline_result.has_more and not detail_filter else "",
 				),
 				pagination=pagination, hints=hints,
 			)

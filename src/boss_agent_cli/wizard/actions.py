@@ -25,7 +25,7 @@ from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up
 from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
 from boss_agent_cli.schema.error_codes import ERROR_CODES
-from boss_agent_cli.search_filters import SearchFilterCriteria, resolve_welfare_keywords, run_search_pipeline
+from boss_agent_cli.search_filters import SearchFilterCriteria, resolve_active_level, resolve_welfare_keywords, run_search_pipeline
 from boss_agent_cli.wizard.models import StepResult, WorkflowStatus
 from boss_agent_cli.wizard.runner import Action, WorkflowActionError, WorkflowControl
 
@@ -93,6 +93,10 @@ def execute_candidate_search(
 			else [item.strip() for item in str(raw_welfare).split(",")]
 		)
 		welfare_conditions = [(label, resolve_welfare_keywords(label)) for label in labels if label]
+	try:
+		active = resolve_active_level(_optional_str(inputs.get("active")))
+	except ValueError as exc:
+		raise WorkflowActionError("INVALID_PARAM", str(exc), recoverable=True, recovery_action="修正 active 取值后重试") from exc
 	criteria = SearchFilterCriteria(
 		query=str(inputs.get("query") or ""),
 		city=_optional_str(inputs.get("city")),
@@ -105,15 +109,17 @@ def execute_candidate_search(
 		job_type=_optional_str(inputs.get("job_type")),
 		raw_params=dict(inputs.get("raw_params") or {}),
 	)
+	extra: dict[str, Any] = {"active": active} if active else {}
 	return pipeline(
 		platform,
 		cache,
 		logger,
 		criteria=criteria,
 		start_page=int(inputs.get("page") or 1),
-		max_pages=int(inputs.get("max_pages") or (5 if welfare_conditions else 1)),
+		max_pages=int(inputs.get("max_pages") or (5 if welfare_conditions or active else 1)),
 		welfare_conditions=welfare_conditions,
 		before_list_request=inputs.get("before_list_request"),
+		**extra,
 	)
 
 
@@ -646,6 +652,8 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 					"welfare",
 				)
 			}
+			if inputs.get("active"):
+				params["active"] = inputs.get("active")
 			_required(inputs, "query")
 			cache.save_saved_search(name, params)
 			return StepResult({"action": "add", "name": name, "params": params})

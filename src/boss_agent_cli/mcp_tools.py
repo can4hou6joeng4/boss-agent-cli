@@ -179,6 +179,11 @@ TOOLS = [
 				"experience": {"type": "string", "description": "经验要求（如 3-5年）"},
 				"education": {"type": "string", "description": "学历要求（如 本科）"},
 				"welfare": {"type": "string", "description": "福利筛选，逗号分隔 AND 逻辑（如 双休,五险一金）"},
+				"active": {
+					"type": "string",
+					"enum": ["online", "today", "3d", "week", "2w", "month", "half-year"],
+					"description": "只保留 HR 活跃度不低于该档的职位；列表看不出时会查详情，活跃度未知的职位会被排除并写进 hints.active_filter",
+				},
 				"page": {"type": "integer", "description": "页码", "default": 1},
 				"sort": {"type": "string", "enum": ["relevance", "score"], "description": "排序方式", "default": "relevance"},
 			},
@@ -773,6 +778,11 @@ TOOLS = [
 				"experience": {"type": "string", "description": "经验要求（可选）"},
 				"education": {"type": "string", "description": "学历要求（可选）"},
 				"welfare": {"type": "string", "description": "福利筛选（可选）"},
+				"active": {
+					"type": "string",
+					"enum": ["online", "today", "3d", "week", "2w", "month", "half-year"],
+					"description": "HR 活跃度下限（可选）",
+				},
 			},
 			"required": ["name", "query"],
 		},

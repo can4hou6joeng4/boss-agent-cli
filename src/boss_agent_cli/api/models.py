@@ -12,6 +12,11 @@ def employment_type_from_raw(raw_job_type: Any) -> str:
 	return ""
 
 
+def _active_desc(value: Any) -> str:
+	"""列表项里的 HR 活跃度文案（如「刚刚活跃」「本周活跃」）；没有时为空串。"""
+	return value.strip() if isinstance(value, str) else ""
+
+
 @dataclass
 class JobItem:
 	job_id: str
@@ -38,6 +43,7 @@ class JobItem:
 	least_month: str = ""
 	job_labels: list[str] = field(default_factory=list)
 	lid: str = ""
+	boss_active_desc: str = ""
 
 	@classmethod
 	def from_api(cls, raw: dict[str, Any]) -> "JobItem":
@@ -66,6 +72,7 @@ class JobItem:
 			days_per_week=raw.get("daysPerWeekDesc", ""),
 			least_month=raw.get("leastMonthDesc", ""),
 			job_labels=raw.get("jobLabels", []),
+			boss_active_desc=_active_desc(raw.get("activeTimeDesc")),
 		)
 
 	def to_dict(self) -> dict[str, Any]:
@@ -86,6 +93,7 @@ class JobItem:
 			"boss_name": self.boss_name,
 			"boss_title": self.boss_title,
 			"boss_active": self.boss_active,
+			"boss_active_desc": self.boss_active_desc,
 			"security_id": self.security_id,
 			"lid": self.lid,
 			"raw_job_type": self.raw_job_type,

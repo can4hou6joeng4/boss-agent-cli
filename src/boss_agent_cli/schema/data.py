@@ -185,6 +185,17 @@ SCHEMA_DATA = {
 					"description": "福利筛选关键词（如 双休、五险一金）。启用后会逐个检查职位详情，自动翻页直到找到匹配结果",
 					"examples": ["双休", "五险一金", "年终奖", "餐补", "住房补贴"],
 				},
+				"--active": {
+					"type": "string",
+					"default": None,
+					"description": (
+						"HR 活跃度下限，只保留不低于该档的职位。档位从高到低：在线/刚刚活跃 > 今日活跃 > 3日内活跃 > 本周活跃 > "
+						"2周内活跃 > 本月活跃 > 近半年活跃 > 半年前活跃。列表里看不出时会查职位详情，因此和 --welfare 一样会翻页、跳过缓存；"
+						"活跃度文案无法识别的职位被排除并计入 hints.active_filter。结果带 boss_active_desc 字段"
+					),
+					"choices": ["online", "today", "3d", "week", "2w", "month", "half-year"],
+					"examples": ["3d", "week", "3day", "3日"],
+				},
 				"--page": {
 					"type": "int",
 					"default": 1,

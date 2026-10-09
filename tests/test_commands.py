@@ -586,7 +586,7 @@ def test_search_cache_key_includes_current_result_schema(mock_client_cls, mock_a
 
 	assert result.exit_code == 0
 	cache_params = mock_cache.get_search.call_args.args[0]
-	assert cache_params["cache_schema"] == 2
+	assert cache_params["cache_schema"] == 3
 	mock_pipeline.assert_not_called()
 
 

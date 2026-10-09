@@ -168,8 +168,9 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 			logger,
 			criteria=criteria,
 			start_page=1,
-			max_pages=5 if welfare_conditions else 1,
+			max_pages=5 if welfare_conditions or params.get("active") else 1,
 			welfare_conditions=welfare_conditions,
+			active=params.get("active"),
 		)
 	watch_result = cache.record_watch_results(name, pipeline_result.items)
 	return {

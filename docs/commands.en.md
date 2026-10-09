@@ -64,7 +64,7 @@ This is an alternative credential input, not a login/risk-control bypass or a co
 
 | Command | Description |
 |---------|-------------|
-| `boss search <query>` | Search jobs (`--url` web filters, comma multi-select, `--welfare` filtering, `--sort score` local sorting, `--preset`) |
+| `boss search <query>` | Search jobs (`--url` web filters, comma multi-select, `--welfare` filtering, `--active` HR activity filtering, `--sort score` local sorting, `--preset`) |
 | `boss recommend` | Fetch personalized job recommendations |
 | `boss detail <security_id>` | Job detail (`--job-id` uses the fast path) |
 | `boss show <#>` | Re-view a numbered result from the last search |
@@ -212,6 +212,7 @@ boss search "golang" \
   --industry 互联网 \
   --stage 已上市 \
   --welfare "双休,五险一金" \
+  --active 3d \
   --sort score
 ```
 
@@ -228,3 +229,17 @@ boss export --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280
 2. Fall back to full-text search of the job description when tags don't match
 3. Auto-paginate (up to 5 pages)
 4. Every result carries `welfare_match` explaining the match source and `match_score` for `--sort score` local sorting
+
+**HR activity filter (`--active`)**:
+
+Levels are `online` / `today` / `3d` / `week` / `2w` / `month` / `half-year`; aliases such as `3day`, `3日`, `本周`, `两周` and `半年` also work. Platform texts are ranked as follows, and only jobs at or above the chosen level are kept:
+
+在线 / 刚刚活跃 > 今日活跃 > 3日内活跃 > 本周活跃 > 2周内活跃 > 本月活跃 > 近半年活跃 > 半年前活跃
+
+1. When the list item carries `activeTimeDesc` or `bossOnline=true`, the decision is made without a detail request
+2. Otherwise the activity text is read from the job detail; combined with `--welfare`, one detail request answers both
+3. Like `--welfare`, it auto-paginates (up to 5 pages) and skips the search cache, so it sends more requests than a plain search
+4. Jobs whose activity text is unrecognized or missing are excluded; counts and raw texts are reported in `hints.active_filter`
+5. Results gain `boss_active_desc` (for example “本周活跃”); the existing `boss_active` (online/offline) field is unchanged
+
+`boss preset add <name> <query> --active 3d` stores the level in a preset.

@@ -35,6 +35,7 @@ Historical `operating_mode=assisted|research` configuration remains compatible, 
 
 - **Job discovery**: keyword search + layered filters, with cached `show` navigation — `search` `show` `detail`
 - **Welfare filtering (the differentiator)**: `--welfare "双休,五险一金"` pages, fetches details, runs **real AND matching**, and can `--sort score` by local match score — `search --welfare`
+- **HR activity filter**: `--active 3d` keeps only jobs whose recruiter was active recently, checking details only when the list can't tell, so you don't spend applications on recruiters who never log in — `search --active`
 - **Terminal wizard**: run `boss` or `boss wizard`, select a role, platform, and goal, then resume the same workflow through JSON, run IDs, or MCP
 - **Local shortlist & stats**: inspect details, read web favorited jobs with validity status and sync only active entries, organize candidates with local tags and notes, compare jobs offline, and see funnel stats — `shortlist` `stats` `watch` `preset` `favorites`
 - **AI job-hunting assist + local models**: JD analysis, resume polish, role-targeted optimization, keyword suggestions, resume optimization, shortlist fit reports, interview prep, chat coaching; local weights stay outside the Python package via Ollama/vLLM OpenAI-compatible endpoints — `ai analyze-jd` `ai suggest-keywords` `ai resume-optimize` `ai interview-prep` `ai chat-coach` `ai local configure` `ai local smoke`
@@ -57,6 +58,7 @@ boss doctor                                                   # environment chec
 boss login                                                    # platform-aware login
 boss status                                                   # verify login
 boss search "Golang" --city 广州 --welfare "双休,五险一金"     # search + welfare filtering
+boss search "Golang" --city 广州 --active 3d                  # only recruiters active in the last 3 days
 boss detail <security_id>                                     # view detail
 boss shortlist add <security_id> <job_id> --tags backend,remote  # add to local shortlist with local tags
 boss shortlist compare --tag remote                           # compare shortlisted jobs offline

@@ -1,4 +1,4 @@
-"""Reusable search pipeline — list-page prefiltering + welfare detail fallback.
+"""Reusable search pipeline — list-page prefiltering + welfare / HR-active detail fallback.
 
 Centralizes filtering logic shared by search, batch-greet, and export commands.
 """
@@ -49,6 +49,117 @@ WELFARE_KEYWORDS: dict[str, list[str]] = {
 	"股票期权": ["股票期权"],
 	"加班补助": ["加班补助"],
 }
+
+# ── HR active level ─────────────────────────────────────────────────
+
+# 平台 activeTimeDesc 文案 → 活跃度等级（越大越活跃）。列表页有时直接给这个字段，
+# 没有时从 job_card 的 activeTimeDesc 取。
+_ACTIVE_DESC_RANK: dict[str, int] = {
+	"在线": 7,
+	"刚刚活跃": 7,
+	"今日活跃": 6,
+	"3日内活跃": 5,
+	"本周活跃": 4,
+	"2周内活跃": 3,
+	"本月活跃": 2,
+	"近半年活跃": 1,
+	"半年前活跃": 0,
+}
+
+# --active 取值 → 最低等级。
+ACTIVE_LEVELS: dict[str, int] = {
+	"online": 7,
+	"today": 6,
+	"3d": 5,
+	"week": 4,
+	"2w": 3,
+	"month": 2,
+	"half-year": 1,
+}
+
+_ACTIVE_LEVEL_ALIASES: dict[str, str] = {
+	"在线": "online",
+	"刚刚活跃": "online",
+	"now": "online",
+	"1d": "today",
+	"1day": "today",
+	"今日": "today",
+	"今天": "today",
+	"今日活跃": "today",
+	"3day": "3d",
+	"3days": "3d",
+	"3日": "3d",
+	"3天": "3d",
+	"三天": "3d",
+	"3日内": "3d",
+	"3日内活跃": "3d",
+	"1w": "week",
+	"7d": "week",
+	"本周": "week",
+	"一周": "week",
+	"本周活跃": "week",
+	"2week": "2w",
+	"2weeks": "2w",
+	"14d": "2w",
+	"2周": "2w",
+	"两周": "2w",
+	"2周内": "2w",
+	"2周内活跃": "2w",
+	"1m": "month",
+	"30d": "month",
+	"本月": "month",
+	"一个月": "month",
+	"本月活跃": "month",
+	"halfyear": "half-year",
+	"half_year": "half-year",
+	"6m": "half-year",
+	"半年": "half-year",
+	"近半年": "half-year",
+	"近半年活跃": "half-year",
+}
+
+
+def resolve_active_level(value: str | None) -> str | None:
+	"""把 --active 的取值（含别名）规范成 ACTIVE_LEVELS 的键；空值返回 None。"""
+	if value is None:
+		return None
+	text = re.sub(r"\s+", "", str(value)).lower()
+	if not text:
+		return None
+	if text in ACTIVE_LEVELS:
+		return text
+	level = _ACTIVE_LEVEL_ALIASES.get(text)
+	if level is None:
+		choices = ", ".join(ACTIVE_LEVELS)
+		raise ValueError(f"未知活跃度: {value}，可选 {choices}（也认 3day、3日 等写法）")
+	return level
+
+
+def active_desc_rank(desc: Any) -> int | None:
+	"""activeTimeDesc 文案对应的等级；不认识的文案返回 None。"""
+	if not isinstance(desc, str):
+		return None
+	return _ACTIVE_DESC_RANK.get(re.sub(r"\s+", "", desc))
+
+
+def list_active_decision(raw_item: dict[str, Any], level: str) -> tuple[str, str]:
+	"""只看列表字段判断活跃度：返回 (pass|reject|unknown|detail, 文案)。
+
+	- 列表带 activeTimeDesc 且认识：直接按等级判断
+	- 列表带 activeTimeDesc 但不认识：unknown（详情里也是同一个字段，不再多查）
+	- 列表没有文案但 bossOnline=true：在线，满足任何等级
+	- 其余情况需要查详情
+	"""
+	desc = raw_item.get("activeTimeDesc")
+	if isinstance(desc, str) and desc.strip():
+		rank = active_desc_rank(desc)
+		if rank is None:
+			return ("unknown", desc.strip())
+		return ("pass" if rank >= ACTIVE_LEVELS[level] else "reject", desc.strip())
+	if raw_item.get("bossOnline") is True:
+		return ("pass", "在线")
+	return ("detail", "")
+
 
 _MAX_FILTER_PAGES = 5
 _WELFARE_WORKERS = 3
@@ -278,6 +389,8 @@ class SearchPipelineStats:
 	jobs_prefiltered: int = 0
 	detail_checks: int = 0
 	jobs_matched: int = 0
+	active_rejected: int = 0
+	active_unknown: int = 0
 
 
 @dataclass
@@ -287,6 +400,8 @@ class SearchPipelineResult:
 	total: int | None = None
 	last_page: int = 0
 	stats: SearchPipelineStats = field(default_factory=SearchPipelineStats)
+	# 活跃度文案不认识或拿不到而被排除的职位（文案 → 次数），供命令层写进 hints。
+	active_unknown_descs: dict[str, int] = field(default_factory=dict)
 
 
 class SearchPipelinePlatformError(Exception):
@@ -453,23 +568,38 @@ def _unwrap_platform_data(client: Any, response: dict[str, Any]) -> dict[str, An
 	return {}
 
 
+@dataclass
+class _DetailOutcome:
+	item: dict[str, Any] | None = None
+	fresh_desc: str | None = None
+	active_state: str = ""
+	active_desc: str = ""
+
+
 def _fetch_and_check(
 	client: Any,
 	welfare_conditions: list[tuple[str, list[str]]],
 	criteria: SearchFilterCriteria,
 	raw_item: dict[str, Any],
 	cached_desc: str | None = None,
-) -> tuple[dict[str, Any] | None, str | None]:
-	"""Single job: (复用缓存或取详情) + 福利匹配。不访问 cache（线程安全）。
+	*,
+	active_level: str | None = None,
+	need_active: bool = False,
+	list_welfare: list[str] | None = None,
+	list_active_desc: str = "",
+) -> _DetailOutcome:
+	"""Single job: (复用缓存或取详情) + 福利 / 活跃度判断。不访问 cache（线程安全）。
 
-	返回 (匹配结果或 None, 需写回缓存的描述或 None)。
-	cached_desc 命中时跳过 job_card 请求（省一次平台请求 + throttle 等待）。
+	cached_desc 命中且不需要查活跃度时跳过 job_card 请求；活跃度会变，
+	need_active=True 时总是取一次新详情（描述缓存只省福利那部分）。
+	list_welfare 是列表标签已经命中的福利结果，此时只需要补活跃度。
 	"""
 	welfare_list = raw_item.get("welfareList", [])
-	fresh_desc: str | None = None
-	if isinstance(cached_desc, str):
-		desc = cached_desc
-	else:
+	outcome = _DetailOutcome()
+	desc = ""
+	card_active = ""
+	need_desc = bool(welfare_conditions) and not list_welfare
+	if need_active or (need_desc and not isinstance(cached_desc, str)):
 		try:
 			card_raw = client.job_card(
 				raw_item.get("securityId", ""),
@@ -479,24 +609,54 @@ def _fetch_and_check(
 				code, message = client.parse_error(card_raw)
 				raise SearchPipelinePlatformError(code, message or "职位详情获取失败")
 			card_data = _unwrap_platform_data(client, card_raw)
-			desc = card_data.get("jobCard", {}).get("postDescription", "")
-			fresh_desc = desc  # 仅新取到的描述需写回缓存（主线程处理）
+			card = card_data.get("jobCard", {}) or {}
+			desc = card.get("postDescription", "") or ""
+			raw_active = card.get("activeTimeDesc")
+			card_active = raw_active.strip() if isinstance(raw_active, str) else ""
+			outcome.fresh_desc = desc  # 仅新取到的描述需写回缓存（主线程处理）
 		except NotImplementedError:
 			raise SearchPipelinePlatformError(
 				"NOT_SUPPORTED",
-				"当前平台暂不支持福利详情筛选，请去掉 --welfare 后重试",
+				"当前平台暂不支持活跃度详情筛选，请去掉 --active 后重试"
+				if need_active else "当前平台暂不支持福利详情筛选，请去掉 --welfare 后重试",
 			)
-		except (OSError, KeyError, TypeError):
+		except (OSError, KeyError, TypeError, AttributeError):
 			desc = ""
+		if isinstance(cached_desc, str) and not desc:
+			desc = cached_desc
+	elif isinstance(cached_desc, str):
+		desc = cached_desc
 
-	match_results = match_all_welfare(welfare_conditions, welfare_list, desc)
+	active_desc = list_active_desc
+	if need_active and active_level is not None:
+		active_desc = card_active
+		rank = active_desc_rank(card_active)
+		if rank is None:
+			outcome.active_state = "unknown"
+			outcome.active_desc = card_active
+			return outcome
+		outcome.active_desc = card_active
+		if rank < ACTIVE_LEVELS[active_level]:
+			outcome.active_state = "reject"
+			return outcome
+		outcome.active_state = "pass"
+
+	if welfare_conditions:
+		match_results = list_welfare or match_all_welfare(welfare_conditions, welfare_list, desc)
+		if not match_results:
+			return outcome
+	else:
+		match_results = []
+
+	item = JobItem.from_api(raw_item)
+	d = item.to_dict()
+	if active_desc:
+		d["boss_active_desc"] = active_desc
 	if match_results:
-		item = JobItem.from_api(raw_item)
-		d = item.to_dict()
 		d["welfare_match"] = "✅ " + ", ".join(match_results)
-		d["match_score"] = compute_match_score(d, match_results, criteria)
-		return d, fresh_desc
-	return None, fresh_desc
+	d["match_score"] = compute_match_score(d, match_results, criteria)
+	outcome.item = d
+	return outcome
 
 
 def _fetch_and_check_guarded(
@@ -506,7 +666,8 @@ def _fetch_and_check_guarded(
 	criteria: SearchFilterCriteria,
 	raw_item: dict[str, Any],
 	cached_desc: str | None = None,
-) -> tuple[dict[str, Any] | None, str | None]:
+	**kwargs: Any,
+) -> _DetailOutcome:
 	"""线程池 worker 入口：平台错误 / 风控一旦出现，同池后续任务不再触网。
 
 	停止标志由 **worker 自己** 在抛出前置位，而不是等主线程收到异常再取消队列——
@@ -515,12 +676,20 @@ def _fetch_and_check_guarded(
 	空结果，保证「命中风控后不再继续下一项」不依赖线程调度时机（Issue #419）。
 	"""
 	if stop.is_set():
-		return None, None
+		return _DetailOutcome()
 	try:
-		return _fetch_and_check(client, welfare_conditions, criteria, raw_item, cached_desc)
+		return _fetch_and_check(client, welfare_conditions, criteria, raw_item, cached_desc, **kwargs)
 	except (SearchPipelinePlatformError, PlatformRiskError):
 		stop.set()
 		raise
+
+
+@dataclass
+class _DetailTask:
+	raw_item: dict[str, Any]
+	need_active: bool = False
+	list_welfare: list[str] | None = None
+	list_active_desc: str = ""
 
 
 def _check_details_parallel(
@@ -529,40 +698,68 @@ def _check_details_parallel(
 	logger: Any,
 	welfare_conditions: list[tuple[str, list[str]]],
 	criteria: SearchFilterCriteria,
-	items: list[dict[str, Any]],
+	tasks: list[_DetailTask],
 	matched: list[dict[str, Any]],
+	*,
+	active_level: str | None = None,
+	stats: SearchPipelineStats | None = None,
+	unknown_descs: dict[str, int] | None = None,
 ) -> None:
 	"""Parallel detail check, append matched to list. cache 操作在主线程完成。
 
 	主线程先查职位描述缓存命中者跳过取详情；未命中者入线程池取详，
 	取回的新描述由主线程写回缓存——所有 cache I/O 留在主线程（sqlite 非线程安全）。
+	需要查活跃度的任务总是重新取详情，描述缓存只对福利判断有用。
 	"""
 	# 主线程预取缓存：命中的描述随提交一并传入 worker，避免 worker 触网。
 	# 键用 encryptJobId（跨搜索稳定）；securityId 每次搜索都变，不能做键。
-	cached_by_item = {id(raw_item): cache.get_job_desc(raw_item.get("encryptJobId", "")) for raw_item in items}
-	cache_hits = sum(1 for v in cached_by_item.values() if isinstance(v, str))
+	cached_by_item = {
+		id(task.raw_item): cache.get_job_desc(task.raw_item.get("encryptJobId", ""))
+		if welfare_conditions and not task.list_welfare else None
+		for task in tasks
+	}
+	cache_hits = sum(
+		1 for task in tasks
+		if isinstance(cached_by_item[id(task.raw_item)], str) and not task.need_active
+	)
 	if cache_hits:
-		logger.info(f"  详情缓存命中 {cache_hits}/{len(items)}，跳过对应取详情请求")
+		logger.info(f"  详情缓存命中 {cache_hits}/{len(tasks)}，跳过对应取详情请求")
 
 	stop = threading.Event()
 	with ThreadPoolExecutor(max_workers=_WELFARE_WORKERS) as pool:
 		futures = {
 			pool.submit(
 				_fetch_and_check_guarded,
-				stop, client, welfare_conditions, criteria, raw_item, cached_by_item[id(raw_item)],
-			): raw_item
-			for raw_item in items
+				stop, client, welfare_conditions, criteria, task.raw_item, cached_by_item[id(task.raw_item)],
+				active_level=active_level,
+				need_active=task.need_active,
+				list_welfare=task.list_welfare,
+				list_active_desc=task.list_active_desc,
+			): task.raw_item
+			for task in tasks
 		}
 		for future in as_completed(futures):
 			raw_item = futures[future]
 			company = raw_item.get("brandName", "")
 			title = raw_item.get("jobName", "")
 			try:
-				result, fresh_desc = future.result()
+				outcome = future.result()
+				result, fresh_desc = outcome.item, outcome.fresh_desc
 				# 写回缓存（主线程，sqlite 安全）：仅新取到的描述，键用稳定的 encryptJobId
 				if fresh_desc:
 					cache.put_job_desc(raw_item.get("encryptJobId", ""), fresh_desc)
-				if result:
+				if outcome.active_state == "reject":
+					if stats is not None:
+						stats.active_rejected += 1
+					logger.info(f"  ❌ {company} - {title}（HR 活跃度不足: {outcome.active_desc}）")
+				elif outcome.active_state == "unknown":
+					if stats is not None:
+						stats.active_unknown += 1
+					if unknown_descs is not None:
+						key = outcome.active_desc or "(空)"
+						unknown_descs[key] = unknown_descs.get(key, 0) + 1
+					logger.info(f"  ❌ {company} - {title}（HR 活跃度未知: {outcome.active_desc or '详情未返回'}）")
+				elif result:
 					# is_greeted 在主线程中安全访问 cache
 					sid = result.get("security_id", "")
 					if sid:
@@ -603,10 +800,13 @@ def run_search_pipeline(
 	welfare_conditions: list[tuple[str, list[str]]] | None = None,
 	skip_greeted: bool = False,
 	before_list_request: Callable[[], None] | None = None,
+	active: str | None = None,
 ) -> SearchPipelineResult:
-	"""Run the full search pipeline: API search → list prefilter → welfare detail fallback."""
+	"""Run the full search pipeline: API search → list prefilter → welfare / active detail fallback."""
 	stats = SearchPipelineStats()
 	matched: list[dict[str, Any]] = []
+	unknown_descs: dict[str, int] = {}
+	active_level = resolve_active_level(active)
 	current_page = start_page
 	last_page_scanned = 0
 	has_more = False
@@ -663,30 +863,57 @@ def run_search_pipeline(
 				continue
 			survivors.append(raw_item)
 
-		# Phase 2: welfare filtering or direct collection
-		if welfare_conditions:
-			need_detail = []
+		# Phase 2: welfare / active filtering or direct collection
+		if welfare_conditions or active_level:
+			need_detail: list[_DetailTask] = []
 			for raw_item in survivors:
-				welfare_list = raw_item.get("welfareList", [])
-				match_results = match_all_welfare(welfare_conditions, welfare_list, "")
-				if match_results:
-					item = JobItem.from_api(raw_item)
-					item.greeted = cache.is_greeted(item.security_id)
-					if skip_greeted and item.greeted:
+				active_desc = ""
+				need_active = False
+				if active_level:
+					decision, active_desc = list_active_decision(raw_item, active_level)
+					if decision == "reject":
+						stats.active_rejected += 1
+						logger.info(f"  活跃度排除: {raw_item.get('jobName', '')} ({active_desc})")
 						continue
-					d = item.to_dict()
+					if decision == "unknown":
+						stats.active_unknown += 1
+						unknown_descs[active_desc] = unknown_descs.get(active_desc, 0) + 1
+						logger.info(f"  活跃度未知，排除: {raw_item.get('jobName', '')} ({active_desc})")
+						continue
+					need_active = decision == "detail"
+				match_results: list[str] = []
+				if welfare_conditions:
+					match_results = match_all_welfare(welfare_conditions, raw_item.get("welfareList", []), "")
+				if need_active or (welfare_conditions and not match_results):
+					need_detail.append(_DetailTask(
+						raw_item,
+						need_active=need_active,
+						list_welfare=match_results or None,
+						list_active_desc=active_desc,
+					))
+					continue
+				item = JobItem.from_api(raw_item)
+				item.greeted = cache.is_greeted(item.security_id)
+				if skip_greeted and item.greeted:
+					continue
+				d = item.to_dict()
+				if active_desc:
+					d["boss_active_desc"] = active_desc
+				if match_results:
 					d["welfare_match"] = "✅ " + ", ".join(match_results)
-					d["match_score"] = compute_match_score(d, match_results, criteria)
-					matched.append(d)
-					stats.jobs_matched += 1
-					logger.info(f"  ✅ {item.company} - {item.title}（标签匹配）")
-				else:
-					need_detail.append(raw_item)
+				d["match_score"] = compute_match_score(d, match_results, criteria)
+				matched.append(d)
+				stats.jobs_matched += 1
+				logger.info(f"  ✅ {item.company} - {item.title}（{'标签匹配' if match_results else '列表活跃度匹配'}）")
 
 			if need_detail:
-				logger.info(f"  标签未命中 {len(need_detail)} 个，并行查详情...")
+				reason = "标签未命中" if not active_level else "列表信息不足"
+				logger.info(f"  {reason} {len(need_detail)} 个，并行查详情...")
 				before = len(matched)
-				_check_details_parallel(client, cache, logger, welfare_conditions, criteria, need_detail, matched)
+				_check_details_parallel(
+					client, cache, logger, welfare_conditions or [], criteria, need_detail, matched,
+					active_level=active_level, stats=stats, unknown_descs=unknown_descs,
+				)
 				stats.detail_checks += len(need_detail)
 				stats.jobs_matched += len(matched) - before
 
@@ -720,4 +947,5 @@ def run_search_pipeline(
 		total=len(matched),
 		last_page=last_page_scanned,
 		stats=stats,
+		active_unknown_descs=unknown_descs,
 	)
