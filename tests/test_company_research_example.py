@@ -3,10 +3,28 @@
 import asyncio
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
-import httpx2
 import pytest
+
+httpx2 = pytest.importorskip("httpx2")
+
+
+@pytest.fixture(autouse=True)
+def isolate_mcp_imports():
+	# Other offline tests install an MCP server stub at collection time. These
+	# client tests need the real optional SDK without changing those tests' state.
+	saved = {name: module for name, module in sys.modules.items() if name == "mcp" or name.startswith("mcp.")}
+	for name in saved:
+		del sys.modules[name]
+	try:
+		yield
+	finally:
+		for name in list(sys.modules):
+			if name == "mcp" or name.startswith("mcp."):
+				del sys.modules[name]
+		sys.modules.update(saved)
 
 
 def load_example():
