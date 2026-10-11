@@ -1,0 +1,3 @@
+# Install alongside the source checkout's MCP extra; see the bilingual guide.
+mcp>=2.3.0,<3.0.0
+httpx2>=2.12.0,<3.0.0
