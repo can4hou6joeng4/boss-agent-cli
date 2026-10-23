@@ -374,6 +374,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "watch_remove":
 		return ["watch", "remove", arguments["name"]]
 
+	if name == "hr_whoami":
+		return ["hr", "whoami"]
+
 	if name == "hr_applications":
 		args = ["hr", "applications"]
 		if arguments.get("job_id"):

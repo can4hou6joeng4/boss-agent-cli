@@ -49,7 +49,7 @@ Add the server in Cursor Settings -> MCP Servers:
 
 ## Available tools
 
-The current MCP server exposes **77 implemented tools**.
+The current MCP server exposes **78 implemented tools**.
 
 ### Shared workflow
 
@@ -124,6 +124,7 @@ Fine-grained crawl tools read or import existing tasks; `boss_wizard` goals `cra
 
 | Tool | Description |
 |------|-------------|
+| `boss_hr_whoami` | Check whether the current login is on the recruiter side; ready only when identity is 1, without switching identity |
 | `boss_hr_jobs` | Manage job listings and online/offline state |
 | `boss_hr_jobs_detail` | View recruiter-side job details |
 | `boss_hr_applications` / `boss_hr_candidates` | Applications and candidate search |

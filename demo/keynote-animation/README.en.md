@@ -2,7 +2,7 @@
 
 **One command. A connection to opportunity.** A 48-second, 1920 × 1080, 30 fps release film in the selected A “Aurora Keynote” direction. It uses the project's existing PNG logo and an original 120 BPM electronic score.
 
-Content is grounded in the local v3.0.0 code and schema checked on 2026-10-08: BOSS Zhipin is the sole registered platform; 39 top-level commands, 13 recruiter subcommands, and 77 MCP tools. Jobs, salaries, and workflow states are explicitly illustrative. Rendering makes no platform calls and accesses no login state.
+Content is grounded in the local code and schema: BOSS Zhipin is the sole registered platform; 39 top-level commands, 14 recruiter subcommands, and 78 MCP tools. The rendered film still uses an earlier on-screen count. Jobs, salaries, and workflow states are explicitly illustrative. Rendering makes no platform calls and accesses no login state.
 
 [中文](README.md)
 
@@ -28,7 +28,7 @@ python3 -m http.server 4318 --bind 127.0.0.1 --directory demo
 | 00:00–00:08 | One command, opportunity | Logo and orbital paths emerge; terminal prompt lands |
 | 00:08–00:16 | Welfare filtering | A real command is typed; two criteria are checked; a nonmatching job retreats |
 | 00:16–00:24 | Two roles | Seeker and recruiter workflows unfold with moving signals |
-| 00:24–00:32 | Agent integration | Four entry points converge; 77 MCP tools count up once |
+| 00:24–00:32 | Agent integration | Four entry points converge; the MCP tool count settles once |
 | 00:32–00:40 | Recoverable control | Progress reaches a checkpoint, stops, and explicitly resumes |
 | 00:40–00:48 | Install and closing | Logo, install command, and repository URL remain readable |
 

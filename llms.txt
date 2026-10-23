@@ -4,7 +4,7 @@
 
 ## Capability source of truth
 
-Run `boss schema` (also supports `--format native | openai-tools | anthropic-tools | mcp-tools`). 39 top-level commands, 13 first-level recruiter subcommands, 77 implemented MCP tools. The sole registered platform is zhipin (BOSS Zhipin).
+Run `boss schema` (also supports `--format native | openai-tools | anthropic-tools | mcp-tools`). 39 top-level commands, 14 first-level recruiter subcommands, 78 implemented MCP tools. The sole registered platform is zhipin (BOSS Zhipin).
 
 ## Start here
 

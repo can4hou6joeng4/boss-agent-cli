@@ -96,6 +96,7 @@
 
 | 能力 | CLI 命令 | 需要登录 | 通道 |
 |---|---|---|---|
+| 招聘者身份 | `boss hr whoami` | 是 | httpx；`identity` 为 1 才就绪，不切换身份 |
 | 投递申请列表 | `boss hr applications` | 是 | 招聘者平台适配器 |
 | 候选人搜索 | `boss hr candidates` | 是 | 招聘者平台适配器 |
 | 沟通列表 | `boss hr chat` | 是 | 招聘者平台适配器 |
@@ -117,4 +118,4 @@
 - 若以 CLI 直连为主，优先通过 `boss schema` 进行能力发现与参数校验；当前 schema 会同时暴露 `supported_platforms` 与 `supported_recruiter_platforms`。
 - 当前平台状态：`boss platforms` 返回本地平台注册与能力状态，也可通过 `boss platforms --platform zhipin` 查看单个平台；`zhipin` 是当前唯一注册平台，已覆盖求职者与招聘者（`zhipin-recruiter`）实现。
 - `crawl` 使用独立 Chrome profile、跨进程速率预算、SQLite 断点和 `crawl stop` kill switch。细粒度 MCP crawl tools 提供已有 run 的 `crawl_status/results/shortlist` 本地操作，`boss_wizard` 可启动、恢复和停止共享 workflow。默认 Hook 为 `none`；本地 Hook 目录必须提供 `SHA256SUMS`。风险码、安全页或预算耗尽会停止并返回恢复命令。
-- 以 `boss schema` 为准：当前暴露 39 个顶层命令；其中 `hr` 下还有 13 个一级招聘者子命令，`ai` / `resume` 为命令组入口。
+- 以 `boss schema` 为准：当前暴露 39 个顶层命令；其中 `hr` 下还有 14 个一级招聘者子命令，`ai` / `resume` 为命令组入口。

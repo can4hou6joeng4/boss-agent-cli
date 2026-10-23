@@ -3,7 +3,7 @@
 > A BOSS Zhipin CLI for people and AI agents. Welfare filtering, dual-role workflows, local shortlists, resumes and communication share one capability set. Current version: 3.0.0.
 
 ## What it is
-Humans run `boss` to enter a terminal wizard. Agents call the same workflows through JSON, MCP or the Python API. `boss schema` is the capability source of truth: 39 top-level commands, 13 recruiter subcommands, and 77 implemented MCP tools. The sole registered platform is zhipin (BOSS Zhipin).
+Humans run `boss` to enter a terminal wizard. Agents call the same workflows through JSON, MCP or the Python API. `boss schema` is the capability source of truth: 39 top-level commands, 14 recruiter subcommands, and 78 implemented MCP tools. The sole registered platform is zhipin (BOSS Zhipin).
 
 Every command emits one JSON envelope to stdout: {ok, schema_version, command, data, pagination, error, hints}. Logs and terminal displays go to stderr; exit 0 means ok=true and exit 1 means ok=false.
 

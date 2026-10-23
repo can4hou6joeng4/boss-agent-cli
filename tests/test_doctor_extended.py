@@ -621,6 +621,62 @@ def test_doctor_live_probe_adds_readonly_probe_checks(mock_platform_cls, mock_re
 	parsed = json.loads(result.output)
 	assert _find_check(parsed["data"]["checks"], "candidate_live_user_info")["status"] == "ok"
 	assert _find_check(parsed["data"]["checks"], "recruiter_live_read")["status"] == "ok"
+	assert _find_check(parsed["data"]["checks"], "recruiter_identity")["status"] == "warn"
+	recruiter.list_jobs.assert_called_once()
+
+
+def _live_probe(tmp_path, payload):
+	paths = _base_patches()
+	runner = CliRunner()
+	with (
+		patch(paths["auth"]) as mock_auth,
+		patch(paths["cdp"]) as mock_cdp,
+		patch(paths["httpx"]) as mock_httpx,
+		patch(paths["cookie"]) as mock_cookie,
+		patch("boss_agent_cli.commands._doctor_checks.get_platform_instance") as mock_platform_cls,
+		patch("boss_agent_cli.commands._doctor_checks.get_recruiter_platform_instance") as mock_recruiter_cls,
+	):
+		mock_auth.return_value.check_status.return_value = {"cookies": {"wt2": "tok"}, "stoken": "st"}
+		mock_cdp.return_value = None
+		mock_cookie.return_value = None
+		mock_httpx.return_value = MagicMock(status_code=200)
+		platform = mock_platform_cls.return_value
+		platform.__enter__ = lambda self: self
+		platform.__exit__ = lambda self, *a: None
+		platform.user_info.return_value = {"zpData": payload}
+		platform.is_success.return_value = True
+		recruiter = mock_recruiter_cls.return_value
+		recruiter.__enter__ = lambda self: self
+		recruiter.__exit__ = lambda self, *a: None
+		recruiter.list_jobs.return_value = {"zpData": {"list": []}}
+		recruiter.is_success.return_value = True
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "doctor", "--live-probe"])
+	return json.loads(result.output), recruiter
+
+
+def test_doctor_live_probe_skips_recruiter_api_on_candidate_side(tmp_path):
+	parsed, recruiter = _live_probe(tmp_path, {
+		"identity": 0,
+		"doubleIdentity": True,
+		"recruit": False,
+		"name": "hidden",
+	})
+	identity = _find_check(parsed["data"]["checks"], "recruiter_identity")
+	read = _find_check(parsed["data"]["checks"], "recruiter_live_read")
+	assert identity["status"] == "warn"
+	assert "求职者侧" in identity["detail"]
+	assert "双身份" in identity["detail"]
+	assert read["detail"] == "当前登录态在求职者侧，未请求招聘者接口"
+	assert "hidden" not in json.dumps(parsed, ensure_ascii=False)
+	recruiter.list_jobs.assert_not_called()
+
+
+def test_doctor_live_probe_reads_recruiter_api_when_identity_is_recruiter(tmp_path):
+	parsed, recruiter = _live_probe(tmp_path, {"identity": 1, "recruit": False, "phone": "hidden"})
+	assert _find_check(parsed["data"]["checks"], "recruiter_identity")["status"] == "ok"
+	assert _find_check(parsed["data"]["checks"], "recruiter_live_read")["status"] == "ok"
+	assert "hidden" not in json.dumps(parsed, ensure_ascii=False)
+	recruiter.list_jobs.assert_called_once()
 
 
 def test_cookie_completeness_missing_zp_at(tmp_path):

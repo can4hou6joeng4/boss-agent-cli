@@ -12,6 +12,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
+from boss_agent_cli.services.recruiter_identity import interpret_recruiter_identity
 
 
 def _find_project_root() -> Path | None:
@@ -102,6 +103,7 @@ def _add_quality_baseline_checks(checks: list[dict[str, Any]]) -> Path | None:
 
 def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[dict[str, Any]]) -> None:
 	"""Run explicit, low-frequency read probes only when requested."""
+	identity: dict[str, Any] | None = None
 	try:
 		with get_platform_instance(ctx, auth) as platform:
 			info = platform.user_info()
@@ -113,6 +115,8 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 						"detail": "求职者只读 user_info 探测通过",
 					}
 				)
+				identity = interpret_recruiter_identity(_user_info_payload(platform, info))
+				checks.append(_recruiter_identity_check(identity))
 			else:
 				code, message = platform.parse_error(info)
 				checks.append(
@@ -132,6 +136,17 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 				"recovery_action": "先运行 boss status 检查本地登录态；命中风控时停止自动化访问",
 			}
 		)
+
+	if identity is not None and identity.get("side") == "candidate":
+		checks.append(
+			{
+				"name": "recruiter_live_read",
+				"status": "warn",
+				"detail": "当前登录态在求职者侧，未请求招聘者接口",
+				"recovery_action": "在官方页面切换到「我要招聘」后执行 boss hr whoami；命中风控时停止自动化访问",
+			}
+		)
+		return
 
 	try:
 		with get_recruiter_platform_instance(ctx, auth) as recruiter:
@@ -163,3 +178,41 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 				"recovery_action": "确认当前账号具备招聘者身份；命中风控时停止自动化访问",
 			}
 		)
+
+
+def _user_info_payload(platform: Any, info: Any) -> dict[str, Any]:
+	unwrap = getattr(platform, "unwrap_data", None)
+	if callable(unwrap):
+		data = unwrap(info)
+		if isinstance(data, dict):
+			return data
+	if isinstance(info, dict):
+		payload = info.get("zpData")
+		if isinstance(payload, dict):
+			return payload
+	return {}
+
+
+def _recruiter_identity_check(identity: dict[str, Any]) -> dict[str, Any]:
+	if identity.get("ready") is True:
+		return {
+			"name": "recruiter_identity",
+			"status": "ok",
+			"detail": "当前登录态在招聘者侧（identity=1）",
+		}
+	if identity.get("side") == "candidate":
+		detail = "当前登录态在求职者侧（identity=0）"
+		if identity.get("double_identity") is True:
+			detail += "；账号具备双身份"
+		return {
+			"name": "recruiter_identity",
+			"status": "warn",
+			"detail": detail,
+			"recovery_action": "在官方页面切换到「我要招聘」后执行 boss hr whoami",
+		}
+	return {
+		"name": "recruiter_identity",
+		"status": "warn",
+		"detail": "getUserInfo 的 identity 不是 0 或 1，继续做招聘者只读探测",
+		"recovery_action": "执行 boss hr whoami 核对身份",
+	}

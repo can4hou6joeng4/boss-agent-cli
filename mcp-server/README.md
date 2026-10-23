@@ -73,7 +73,7 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 
 ## 可用工具
 
-当前 MCP Server 暴露 **77 个已实现工具**。
+当前 MCP Server 暴露 **78 个已实现工具**。
 
 ### 共享 workflow
 
@@ -148,6 +148,7 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 
 | 工具 | 说明 |
 |------|------|
+| `boss_hr_whoami` | 查看当前登录态是否处于招聘者侧；identity 为 1 才就绪，不切换身份 |
 | `boss_hr_jobs` | 职位列表与上下线管理 |
 | `boss_hr_jobs_detail` | 查看招聘者职位详情 |
 | `boss_hr_applications` / `boss_hr_candidates` | 投递申请与候选人搜索 |

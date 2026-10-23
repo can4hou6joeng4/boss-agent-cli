@@ -35,7 +35,7 @@ In Windsurf Settings → Cascade → MCP Servers, add:
 }
 ```
 
-Once enabled, Cascade will enumerate all 77 implemented MCP tools, including `boss_wizard`, candidate search/apply/chat workflows, recruiter candidate workflows, local resume tools, and AI helpers.
+Once enabled, Cascade will enumerate all 78 implemented MCP tools, including `boss_wizard`, candidate search/apply/chat workflows, recruiter candidate workflows, local resume tools, and AI helpers.
 
 ### Option 2: `.windsurfrules` integration
 

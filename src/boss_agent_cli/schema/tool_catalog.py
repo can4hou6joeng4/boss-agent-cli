@@ -792,6 +792,11 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			},
 		),
 		ToolDefinition(
+			name="boss_hr_whoami",
+			description="招聘者模式：查看当前登录态是否处于招聘者侧。identity 为 1 才算就绪；profile_recruit 只回显，不切换身份",
+			input_schema={"type": "object", "properties": {}, "required": []},
+		),
+		ToolDefinition(
 			name="boss_hr_applications",
 			description="招聘者模式：查看候选人投递申请列表",
 			input_schema={

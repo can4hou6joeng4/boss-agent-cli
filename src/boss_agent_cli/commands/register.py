@@ -51,6 +51,7 @@ from boss_agent_cli.commands.recruiter import reply as recruiter_reply
 from boss_agent_cli.commands.recruiter import request_resume as recruiter_request_resume
 from boss_agent_cli.commands.recruiter import recommendations as recruiter_recommendations
 from boss_agent_cli.commands.recruiter import resume as recruiter_resume
+from boss_agent_cli.commands.recruiter import whoami as recruiter_whoami
 from boss_agent_cli.display import handle_error_output
 from boss_agent_cli.platforms import list_recruiter_platforms
 
@@ -123,6 +124,7 @@ def hr_group(ctx: click.Context) -> None:
 def register_recruiter_commands(cli: click.Group) -> None:
 	"""Register recruiter shortcut commands."""
 	cli.add_command(hr_group, "hr")
+	hr_group.add_command(recruiter_whoami.whoami_cmd, "whoami")
 	hr_group.add_command(recruiter_applications.applications_cmd, "applications")
 	hr_group.add_command(recruiter_resume.resume_cmd, "resume")
 	hr_group.add_command(recruiter_chat.recruiter_chat_cmd, "chat")

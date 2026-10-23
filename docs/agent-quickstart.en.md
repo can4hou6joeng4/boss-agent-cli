@@ -133,7 +133,7 @@ boss schema --format anthropic-tools
 boss schema --format mcp-tools
 ```
 
-All three tool formats use the shared runtime catalog of 77 MCP tools, with matching names and input parameters. Native schema continues to describe the CLI's 39 top-level commands.
+All three tool formats use the shared runtime catalog of 78 MCP tools, with matching names and input parameters. Native schema continues to describe the CLI's 39 top-level commands.
 
 Further reading:
 - [Agent Host Examples](agent-hosts.en.md)

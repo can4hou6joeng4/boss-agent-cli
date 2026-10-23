@@ -46,6 +46,7 @@ _MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES = {
 	"boss_chat_summary": "chat-summary",
 	"boss_follow_up": "follow-up",
 	"boss_watch_run": "watch-run",
+	"boss_hr_whoami": "recruiter-whoami",
 	"boss_hr_applications": "recruiter-applications",
 	"boss_hr_candidates": "recruiter-candidates",
 	"boss_hr_chat": "recruiter-chat",

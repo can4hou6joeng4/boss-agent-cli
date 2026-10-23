@@ -39,8 +39,8 @@ Historical `operating_mode=assisted|research` configuration remains compatible, 
 - **Terminal wizard**: run `boss` or `boss wizard`, select a role, platform, and goal, then resume the same workflow through JSON, run IDs, or MCP
 - **Local shortlist & stats**: inspect details, read web favorited jobs with validity status and sync only active entries, organize candidates with local tags and notes, compare jobs offline, and see funnel stats — `shortlist` `stats` `watch` `preset` `favorites`
 - **AI job-hunting assist + local models**: JD analysis, resume polish, role-targeted optimization, keyword suggestions, resume optimization, shortlist fit reports, interview prep, chat coaching; local weights stay outside the Python package via Ollama/vLLM OpenAI-compatible endpoints — `ai analyze-jd` `ai suggest-keywords` `ai resume-optimize` `ai interview-prep` `ai chat-coach` `ai local configure` `ai local smoke`
-- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, data, pagination, error, hints}` envelope, `boss schema` is the capability source of truth, and an **MCP server with 77 tools** exposes every implemented capability
-- **Recruiter workflow**: candidate search, recommendations, first contact with built-in read-state cleanup, resumes, chats, replies, and job management — `hr candidates/recommendations/greet/applications/resume/chat/last-messages/reply/request-resume/jobs`
+- **Schema-first + JSON envelope**: stdout is a JSON-only `{ok, data, pagination, error, hints}` envelope, `boss schema` is the capability source of truth, and an **MCP server with 78 tools** exposes every implemented capability
+- **Recruiter workflow**: confirm recruiter identity, then candidate search, recommendations, first contact with built-in read-state cleanup, resumes, chats, replies, and job management — `hr whoami/candidates/recommendations/greet/applications/resume/chat/last-messages/reply/request-resume/jobs`
 - **Platform layer**: live `Platform` / `RecruiterPlatform` registries behind the global `--platform` option; `zhipin` (BOSS Zhipin) is the only registered platform
 
 ## 🚀 Quickstart
@@ -90,7 +90,7 @@ boss --platform zhipin search "Python"     # zhipin is the default, so --platfor
 Start here: [Agent Quickstart](docs/agent-quickstart.en.md) · [Capability Matrix](docs/capability-matrix.en.md) · [Host Examples](docs/agent-hosts.en.md)
 
 ```json
-// Option 1: MCP (recommended) — Claude Desktop / Cursor and other MCP hosts; MCP server with 77 tools
+// Option 1: MCP (recommended) — Claude Desktop / Cursor and other MCP hosts; MCP server with 78 tools
 { "mcpServers": { "boss-agent": { "command": "uvx", "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"] } } }
 ```
 
@@ -122,7 +122,7 @@ with BossClient(AuthManager(...)) as client:
 
 ## 📚 Commands
 
-`boss schema` exposes 39 top-level commands + 13 first-level recruiter subcommands, grouped by workflow:
+`boss schema` exposes 39 top-level commands + 14 first-level recruiter subcommands, grouped by workflow:
 
 - **Auth**: `login` · `logout` · `status` · `doctor`
 - **Discover**: `search` · `detail` · `show` · `cities` · `history`
@@ -131,7 +131,7 @@ with BossClient(AuthManager(...)) as client:
 - **Resume / AI**: `resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai cover-letter` · `ai interview-prep` · `ai chat-coach` · `ai local`
 - **Utility / workflow**: `wizard` · `schema` · `platforms` · `export` · `config` · `clean`
 - **Candidate actions**: `greet` · `batch-greet` · `apply` · `exchange` · `chat*` · `pipeline` · `digest`
-- **Recruiter**: `hr applications/candidates/recommendations/greet/resume/chat/chatmsg/last-messages/reply/request-resume/accept-resume/download-resume/jobs`
+- **Recruiter**: `hr whoami/applications/candidates/recommendations/greet/resume/chat/chatmsg/last-messages/reply/request-resume/accept-resume/download-resume/jobs`
 
 Full command tables, parameters, and welfare-matching internals: **[Command Reference](docs/commands.en.md)**. The capability source of truth is `boss schema` (with `--format openai-tools` / `anthropic-tools` exports).
 

@@ -41,7 +41,7 @@ TTY 下只把 `operator_actions` 渲染到 stderr；`next_actions` 是纯 Agent 
 | `boss login` | 用户主动登录（按平台走 Cookie / CDP / QR / 浏览器降级链路）；`--force` 不复用任何既有登录态，跳过本地 Cookie 提取、CDP 下清掉当前 context 内目标平台的 cookie 后重新扫码；BOSS 本地风险锁未解除时拒绝登录，`--ignore-risk-lock` 仅保留参数兼容，不能放行 |
 | `boss logout` | 退出登录 |
 | `boss status` | 检查登录态（默认仅本地；`--live` 才执行低频只读验证） |
-| `boss doctor` | 诊断环境、依赖、凭据完整性和网络；默认仅本地诊断，`--live-probe` 才执行低频只读探测 |
+| `boss doctor` | 诊断环境、依赖、凭据完整性和网络；默认仅本地诊断，`--live-probe` 才执行低频只读探测。探测到求职者侧登录态时先标出身份，不继续请求招聘者接口 |
 | `boss me` | 我的信息（用户/简历/期望/投递记录） |
 
 BOSS 的 code `31`（IP/环境限制）/ `32`（账号限制）/ `35` / `36`、环境类或含糊的 code `37`、HTTP 403 和官方 `403.html` 访问受限页及 `verify.html` / `security.html` 安全页会停止请求并锁存本地状态。明确的凭据过期才能进入有限刷新；仅出现 `token` / `stoken` 或同时要求安全验证时不能刷新。风险锁沿用 `cdp_risk_lock.json` 文件名，覆盖候选人与招聘者的 httpx、CDP、headless、聊天页动作、登录、导入、刷新和同 `data_dir` 的独立 crawl；更换令牌或通道不会自动清除锁。`error.details.risk_lock` 保留原始风险原因、可用业务码与 `explicit_resume_required`；账号风险仍返回 `ACCOUNT_RISK`，历史环境锁继续返回 `ENVIRONMENT_RISK_LOCKED`。
@@ -140,8 +140,11 @@ boss crawl stop <run_id>
 
 ## 招聘者模式
 
+`boss hr whoami` 只读 `getUserInfo`。`identity` 为 1 表示当前登录态在招聘者侧，`ready` 为 true。`profile_recruit` 对应账号资料里的 `recruit`，只回显，不参与判断。双身份账号停在求职者侧时 `ready` 为 false，需要在官方页面切换到「我要招聘」后再查；命令本身不切换身份。
+
 | 命令 | 说明 |
 |------|------|
+| `boss hr whoami` | 查看当前登录态是否处于招聘者侧；`identity` 为 1 才算就绪，不切换身份 |
 | `boss hr applications` | 查看候选人投递申请 |
 | `boss hr resume <geek_id> --job-id <id> --security-id <id>` | 查看候选人在线简历 |
 | `boss hr resume --exchange --friend-id <friend_id> [--type wechat]` | 请求交换手机号或微信 |
