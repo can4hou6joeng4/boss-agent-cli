@@ -247,6 +247,10 @@ const pending = {
 	querySelectorAll() {
 		return [{__vue__: inner}];
 	},
+	querySelector(selector) {
+		if (selector === '.close-btn') return {click() { pending.closed = true; }};
+		return null;
+	},
 };
 dialogs.push(wrong, pending);
 global.document = {
@@ -292,8 +296,11 @@ def test_online_resume_script_reads_official_dialog_fields(tmp_path):
 	assert "securityId" not in info
 	assert "其他人" not in completed.stdout
 	assert "sec-token-should-not-leak" not in completed.stdout
+	assert result["closed"] is True
 	assert "sigx" not in _ONLINE_RESUME_JS
 	assert "getFingerprint" not in _ONLINE_RESUME_JS
+	assert "view/geek/info/v2" not in _ONLINE_RESUME_JS
+	assert "wasm-auth/challenge" not in _ONLINE_RESUME_JS
 
 
 def test_send_message_calls_browser():

@@ -267,9 +267,9 @@ _CHAT_LIST_SNAPSHOT_JS = """
 }
 """
 
-# 官方沟通页「在线简历」按钮调用 iBossRoot.resume.newChatResumeViewer，第二参 source=1。
-# sigx 由页面自己的 axios 拦截器替换，本脚本不计算、不写入指纹。
-# 只回传 parse_resume 会读的字段；联系方式等其余字段留在页面里。
+# 官方沟通页打开在线简历后，由页面自己请求 /wapi/zpjob/view/geek/info/v2
+# （参数含 challenge，来自 wasm-auth/challenge）。本脚本不复刻该请求，
+# 也不计算 sigx。只回传 parse_resume 会读的字段。
 _ONLINE_RESUME_JS = """
 async (args) => {
 	const resumeApi = window.top && window.top.iBossRoot && window.top.iBossRoot.resume;
@@ -324,7 +324,8 @@ async (args) => {
 			seen.add(vm);
 			if (usable(vm.resumeInfo)) {
 				const sid = securityOf(vm);
-				if (!securityId || !sid || sid === securityId) return vm.resumeInfo;
+				// 指定了 securityId 时，未绑定身份的弹层不能当成目标，避免读到上一位候选人。
+				if (!securityId || sid === securityId) return vm.resumeInfo;
 			}
 			const kids = vm.$children || [];
 			for (let i = 0; i < kids.length; i += 1) stack.push(kids[i]);
@@ -358,7 +359,15 @@ async (args) => {
 				}
 				picked[key] = JSON.parse(JSON.stringify(value));
 			}
-			return {ok: true, geekDetailInfo: picked};
+			let closed = false;
+			if (nodes[i] && typeof nodes[i].querySelector === 'function') {
+				const closeBtn = nodes[i].querySelector('.close-btn');
+				if (closeBtn && closeBtn.click) {
+					closeBtn.click();
+					closed = true;
+				}
+			}
+			return {ok: true, closed: closed, geekDetailInfo: picked};
 		}
 		await new Promise((resolve) => setTimeout(resolve, 50));
 	}
@@ -1014,8 +1023,10 @@ class BossRecruiterClient(_BaseHttpClient):
 
 		查询参数对齐当前官方沟通页简历面板：``uid`` 是 encryptGeekId，
 		``encryptJid`` 是 encryptJobId。不发送已下线的插件参数名，也不生成 sigx。
-		CDP 且聊天页已打开时，只有该请求仍返回「旧简历接口已下线」才让页面自己的
-		``newChatResumeViewer`` 再读一次，并只取页面已经解开的 ``resumeInfo``。
+		登录态抓包里，完整简历由页面自己请求 ``/wapi/zpjob/view/geek/info/v2``，
+		并带 wasm 产生的 ``challenge``。CDP 且聊天页已打开时，只有旧接口仍返回
+		「旧简历接口已下线」才让页面自己的 ``newChatResumeViewer`` 再读一次，
+		并只取已经解开、且 securityId 对得上的 ``resumeInfo``。
 		页面没有可读正文时，把原响应交给平台层映射为 ``ENDPOINT_DEPRECATED``。
 		"""
 		params: dict[str, Any] = {"uid": geek_id, "encryptJid": job_id}
