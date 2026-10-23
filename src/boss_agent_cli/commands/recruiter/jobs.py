@@ -14,16 +14,17 @@ def jobs_group(ctx: click.Context) -> None:
 
 
 @jobs_group.command("list")
+@click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
 @click.pass_context
 @handle_auth_errors("recruiter-jobs-list")
-def jobs_list_cmd(ctx: click.Context) -> None:
+def jobs_list_cmd(ctx: click.Context, page: int) -> None:
 	"""查看已发布的职位列表"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_recruiter_platform_instance(ctx, auth) as platform:
-		result = platform.list_jobs()
+		result = platform.list_jobs(page=page)
 		if not platform.is_success(result):
 			handle_platform_error_output(ctx, "recruiter-jobs-list", platform, result, fallback_message="职位列表获取失败")
 			return

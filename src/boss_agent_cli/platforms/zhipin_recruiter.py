@@ -207,8 +207,8 @@ class BossRecruiterPlatform(RecruiterPlatform):
 
 	# ── 职位管理 ──────────────────────────────────────────
 
-	def list_jobs(self) -> dict[str, Any]:
-		return self._client.list_jobs()
+	def list_jobs(self, page: int = 1) -> dict[str, Any]:
+		return self._client.list_jobs(page=page)
 
 	def job_offline(self, job_id: str) -> dict[str, Any]:
 		return self._client.job_offline(job_id)

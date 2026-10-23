@@ -488,6 +488,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = ["hr", "jobs", action]
 		if action in {"online", "offline"}:
 			args.append(str(arguments["job_id"]))
+		elif arguments.get("page") is not None:
+			args.extend(["--page", str(arguments["page"])])
 		return args
 
 	if name == "hr_jobs_detail":

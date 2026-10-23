@@ -957,12 +957,13 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_hr_jobs",
-			description="招聘者模式：查看职位列表，或执行上线/下线操作",
+			description="招聘者模式：查看职位管理列表，或执行上线/下线操作",
 			input_schema={
 				"type": "object",
 				"properties": {
 					"action": {"type": "string", "description": "操作类型", "enum": ["list", "online", "offline"], "default": "list"},
 					"job_id": {"type": "string", "description": "职位 ID（online/offline 时必填）"},
+					"page": {"type": "integer", "description": "职位管理列表页码，仅 list 使用", "default": 1},
 				},
 				"required": [],
 			},

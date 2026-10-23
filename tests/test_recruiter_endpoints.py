@@ -73,6 +73,8 @@ def test_recruiter_endpoint_urls_are_unique_and_referers_are_mapped():
 	assert set(REFERER_MAP) == set(urls)
 	assert REFERER_MAP[BOSS_SEARCH_GEEK_URL] == "https://www.zhipin.com/web/frame/search/"
 	assert REFERER_MAP[BOSS_SEND_MESSAGE_URL] == "https://www.zhipin.com/web/chat/index"
+	assert BOSS_JOB_LIST_URL == "https://www.zhipin.com/wapi/zpjob/job/data/list"
+	assert REFERER_MAP[BOSS_JOB_LIST_URL] == "https://www.zhipin.com/web/frame/job_v2/list"
 
 
 def test_recruiter_default_headers_include_browser_origin_contract():

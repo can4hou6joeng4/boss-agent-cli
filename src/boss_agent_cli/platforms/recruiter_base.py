@@ -106,7 +106,7 @@ class RecruiterPlatform(ABC):
 	# ── 职位管理 ──────────────────────────────────────────
 
 	@abstractmethod
-	def list_jobs(self) -> dict[str, Any]:
+	def list_jobs(self, page: int = 1) -> dict[str, Any]:
 		"""查看职位列表。"""
 
 	# ── 可选操作（默认抛 NotImplementedError）──────

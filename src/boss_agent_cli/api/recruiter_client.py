@@ -1244,8 +1244,8 @@ class BossRecruiterClient(_BaseHttpClient):
 
 	# ── 职位管理 ──────────────────────────────────────────
 
-	def list_jobs(self) -> dict[str, Any]:
-		return self._request("GET", ep.BOSS_JOB_LIST_URL)
+	def list_jobs(self, page: int = 1) -> dict[str, Any]:
+		return self._request("GET", ep.BOSS_JOB_LIST_URL, params={"page": page})
 
 	def job_offline(self, job_id: str) -> dict[str, Any]:
 		data = {"encryptJobId": job_id}

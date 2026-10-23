@@ -135,8 +135,8 @@ endpoints:
     method: GET
     effect: read
     replay_safe: true
-    path: "/wapi/zpjob/job/chatted/jobList"
-    referer: "/web/chat/index"
+    path: "/wapi/zpjob/job/data/list"
+    referer: "/web/frame/job_v2/list"
   boss_job_offline:
     method: POST
     effect: write

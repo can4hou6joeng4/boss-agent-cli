@@ -503,6 +503,30 @@ def test_recruiter_action_uses_injected_platform_and_returns_structured_data(tmp
 	assert result.data["result"]["jobs"][0]["id"] == "job-1"
 
 
+def test_recruiter_jobs_list_recognizes_management_data_rows(tmp_path):
+	class ManagementJobs(_FakeRecruiterPlatform):
+		def list_jobs(self, page: int = 1):
+			self.calls.append(("list_jobs", page))
+			return self._response(
+				{
+					"page": page,
+					"hasMore": False,
+					"totalSize": 1,
+					"data": [{"encryptJobId": "j1", "jobName": "role"}],
+				}
+			)
+
+	platform = ManagementJobs()
+	context = _action_context(tmp_path, role="recruiter", recruiter=platform)
+	result = DEFAULT_ACTIONS["recruiter_jobs_list"](context, {}, {})
+	assert result.data["items"] == [{"encryptJobId": "j1", "jobName": "role"}]
+	assert result.data["result"]["data"][0]["encryptJobId"] == "j1"
+	assert result.data["result"]["hasMore"] is False
+	assert result.data["result"]["totalSize"] == 1
+	assert result.data["result"]["page"] == 1
+	assert platform.calls == [("list_jobs", 1)]
+
+
 def test_recruiter_read_write_and_job_actions_preserve_arguments(tmp_path):
 	platform = _FakeRecruiterPlatform()
 	context = _action_context(tmp_path, role="recruiter", recruiter=platform)

@@ -1049,7 +1049,7 @@ def _recruiter_jobs_list(context: ActionContext, inputs: Mapping[str, Any], prio
 		context,
 		lambda platform: platform.list_jobs(),
 		"职位列表获取失败",
-		list_keys=("jobs", "jobList", "items", "list", "result"),
+		list_keys=("data", "jobs", "jobList", "items", "list", "result"),
 	)
 
 
