@@ -18,7 +18,7 @@
 - 新增全局 `--exit-codes {envelope,sysexits}`（默认 envelope，0/1 契约不变）：sysexits 模式按错误类别返回语义化退出码（77 认证；75 限流/预算/超时；78 参数/配置；69 风控/平台不支持；其余 1），usage error 通过解析前预扫描同一选项；stdout 信封不受影响。
 
 ### Changed
-- `hr jobs list` 改为读取职位管理页的 `data/list` 接口，并用 `--page` 分页。MCP `boss_hr_jobs` 的 `page` 只在 list 时传给该分页。
+- `hr jobs list` 改为读取职位管理页的 `data/list` 接口，并用 `--page` 分页。MCP `boss_hr_jobs` 的 `page` 只在 list 时传给该分页。`boss schema` 同步登记该选项。
 - 招聘者 `chat_geek_info` 改为沟通页当前参数：`uid`、`securityId`，以及调用方提供时的 `geekSource`。没有命令调用这个方法。
 - `boss doctor --live-probe` 复用 `hr whoami` 的身份判断：`identity` 为 0 时先记下求职者侧登录态，不继续请求招聘者接口；`identity` 为 1 时才做招聘者只读探测。命令不切换身份。
 - MCP、OpenAI 和 Anthropic 工具格式统一使用不依赖 MCP SDK 的共享目录，工具导出由旧的不完整命令映射改为与运行时一致的 77 个工具；原生 schema 保留 39 个顶层命令。保留工具参数结构的脱敏例外仅限 schema 明确声明的内置参数路径，真实业务数据和敏感默认值/示例仍脱敏。

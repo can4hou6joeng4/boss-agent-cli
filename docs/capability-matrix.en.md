@@ -108,7 +108,7 @@ Compatibility modes `assisted` and `research` can both call every implemented ca
 | Request attached resume | `boss hr request-resume <friend_id>` | Yes | Recruiter platform adapter |
 | Accept attached resume | `boss hr accept-resume <friend_id> --message-id <mid> --yes` | Yes | One-shot HTTP with explicit approval; requires business status zero; offline regression coverage |
 | Download received attachment | `boss hr download-resume <friend_id> --message-id <mid> --output <path>` | Yes | Access check, fixed official host, size limit, no overwrite; offline regression coverage |
-| Job listing and online/offline operations | `boss hr jobs` | Yes | httpx |
+| Job listing and online/offline operations | `boss hr jobs list [--page N]` | Yes | httpx; job-management `data/list` |
 | Recommended candidates | `boss hr recommendations --job-id <id>` | Yes | httpx |
 | First contact | `boss hr greet ... --yes` | Yes | One-shot httpx POST; does not change read status |
 

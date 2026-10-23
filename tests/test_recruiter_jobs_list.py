@@ -8,6 +8,7 @@ from click.testing import CliRunner
 from boss_agent_cli.api import recruiter_endpoints as ep
 from boss_agent_cli.api.recruiter_client import BossRecruiterClient
 from boss_agent_cli.main import cli
+from boss_agent_cli.schema.data import SCHEMA_DATA
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
 
@@ -92,6 +93,12 @@ def test_hr_jobs_list_defaults_page_to_one() -> None:
 	assert payload["data"]["page"] == 1
 	assert payload["data"]["data"] == []
 	client.list_jobs.assert_called_once_with(page=1)
+
+
+def test_schema_records_jobs_list_page() -> None:
+	page = SCHEMA_DATA["commands"]["hr"]["options"]["jobs"]["--page"]
+	assert page["type"] == "int"
+	assert page["default"] == 1
 
 
 def test_hr_jobs_mcp_page_is_only_forwarded_for_list() -> None:

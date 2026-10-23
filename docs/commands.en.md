@@ -147,7 +147,7 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 | Command | Description |
 |---------|-------------|
 | `boss hr whoami` | Check whether the current login is on the recruiter side; ready only when `identity` is 1, without switching identity |
-| `boss hr jobs list/offline/online/detail` | Job listing, detail, and lifecycle management |
+| `boss hr jobs list [--page N]` / `offline` / `online` / `detail` | Job-management listing, detail, and lifecycle. `list` reads `data/list` and defaults to page 1 |
 | `boss hr applications` / `hr resume` / `hr chat` / `hr chatmsg` / `hr last-messages` / `hr candidates` / `hr reply` / `hr request-resume` | Candidate applications, resumes, conversations, search, replies, and attached-resume requests |
 | `boss hr recommendations --job-id <encJobId>` | Read rich recommended-candidate cards and first-contact parameters |
 | `boss hr accept-resume <friend_id> --message-id <mid> --yes` | Accept a specific incoming attached-resume request |

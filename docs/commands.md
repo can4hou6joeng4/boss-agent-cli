@@ -151,7 +151,7 @@ boss crawl stop <run_id>
 | `boss hr chat` | 查看候选人沟通列表 |
 | `boss hr chatmsg <friend_id>` | 查看候选人聊天记录 |
 | `boss hr last-messages [--friend-id <id>]` | 批量查看候选人最近消息摘要 |
-| `boss hr jobs list/offline/online` | 职位列表与上下线管理 |
+| `boss hr jobs list [--page N]` / `offline` / `online` | 职位管理列表与上下线。`list` 读取 `data/list`，默认第 1 页 |
 | `boss hr candidates <keyword>` | 搜索和筛选候选人 |
 | `boss hr reply <friend_id> <message>` | 回复候选人消息 |
 | `boss hr request-resume <friend_id>` | 请求候选人分享附件简历 |

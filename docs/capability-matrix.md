@@ -108,7 +108,7 @@
 | 附件简历请求 | `boss hr request-resume <friend_id>` | 是 | 招聘者平台适配器 |
 | 同意附件简历 | `boss hr accept-resume <friend_id> --message-id <mid> --yes` | 是 | 单次 HTTP；需明确授权，业务状态为零才确认同意；离线回归覆盖 |
 | 下载已收附件 | `boss hr download-resume <friend_id> --message-id <mid> --output <path>` | 是 | 权限检查、固定官方域名、限大小、不覆盖；离线回归覆盖 |
-| 职位列表与上下线 | `boss hr jobs` | 是 | httpx |
+| 职位列表与上下线 | `boss hr jobs list [--page N]` | 是 | httpx；职位管理 `data/list` |
 | 推荐牛人 | `boss hr recommendations --job-id <id>` | 是 | httpx |
 | 首次招呼 | `boss hr greet ... --yes` | 是 | 单次 httpx POST；不修改已读状态 |
 

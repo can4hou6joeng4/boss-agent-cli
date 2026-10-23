@@ -890,6 +890,13 @@ SCHEMA_DATA = {
 					},
 					"--output": {"type": "string", "required": True, "description": "本地输出文件路径，不覆盖已有文件"},
 				},
+				"jobs": {
+					"--page": {
+						"type": "int",
+						"default": 1,
+						"description": "仅 list：职位管理列表页码，读取 data/list",
+					},
+				},
 			},
 			"subcommands": {
 				"whoami": "查看当前登录态是否处于招聘者侧；identity 为 1 才算就绪，不切换身份",
@@ -898,7 +905,7 @@ SCHEMA_DATA = {
 				"chat": "查看与候选人的沟通列表（含未读数和最近消息摘要）",
 				"chatmsg": "查看与指定候选人的聊天消息历史",
 				"last-messages": "批量查看候选人最近消息摘要",
-				"jobs": "管理职位发布（list/offline/online/detail）",
+				"jobs": "管理职位发布（list 读取职位管理 data/list，可用 --page；offline/online/detail）",
 				"candidates": "搜索候选人",
 				"reply": "回复候选人消息",
 				"request-resume": "请求候选人分享附件简历",
