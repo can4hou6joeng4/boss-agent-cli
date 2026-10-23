@@ -21,7 +21,11 @@ from boss_agent_cli.display import handle_auth_errors, handle_error_output, hand
 @click.pass_context
 @handle_auth_errors("recruiter-resume")
 def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id: str | None, exchange_contact: bool, exchange_type: str, uid: int | None, gid: int | None, friend_id: int | None, show_raw: bool) -> None:
-	"""查看候选人简历或请求交换联系方式"""
+	"""查看候选人简历或请求交换联系方式。
+
+	在线简历的 geek_id 使用候选人 encryptGeekId（请求参数 uid），
+	--job-id 使用 encryptJobId（请求参数 encryptJid）。
+	"""
 	if not require_compliance_allowed(ctx, "recruiter-resume"):
 		return
 

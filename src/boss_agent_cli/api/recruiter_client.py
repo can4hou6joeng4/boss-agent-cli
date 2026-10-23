@@ -31,7 +31,7 @@ from boss_agent_cli.api.recruiter_resume import (
 	save_resume,
 	sent_by_self,
 )
-from boss_agent_cli.api.zhipin_errors import classify_code_37, raise_platform_risk_response
+from boss_agent_cli.api.zhipin_errors import classify_code_37, raise_platform_risk_response, response_message
 
 _OPEN_CLIENTS, _close_open_clients = make_client_registry()
 
@@ -266,6 +266,108 @@ _CHAT_LIST_SNAPSHOT_JS = """
 	return {ok: true, source, count: items.length, has_more: hasMore, unread_by_tab: unreadByTab, items};
 }
 """
+
+# 官方沟通页「在线简历」按钮调用 iBossRoot.resume.newChatResumeViewer，第二参 source=1。
+# sigx 由页面自己的 axios 拦截器替换，本脚本不计算、不写入指纹。
+# 只回传 parse_resume 会读的字段；联系方式等其余字段留在页面里。
+_ONLINE_RESUME_JS = """
+async (args) => {
+	const resumeApi = window.top && window.top.iBossRoot && window.top.iBossRoot.resume;
+	if (!resumeApi || typeof resumeApi.newChatResumeViewer !== 'function') {
+		return {ok: false, error: 'page_resume_api_missing'};
+	}
+	const geekId = args && args.geek_id ? String(args.geek_id) : '';
+	const jobId = args && args.job_id ? String(args.job_id) : '';
+	const securityId = args && args.security_id ? String(args.security_id) : '';
+	try {
+		resumeApi.newChatResumeViewer({
+			encryptGeekId: geekId,
+			encryptUid: geekId,
+			encryptJobId: jobId,
+			encryptJid: jobId,
+			securityId: securityId,
+		}, {from: 'new-chat', source: 1});
+	} catch (e) {
+		return {ok: false, error: 'page_resume_open_failed'};
+	}
+	const detailKeys = ['geekBaseInfo', 'showExpectPosition', 'geekWorkExpList', 'geekProjExpList', 'geekEduExpList', 'jobCompetitive', 'geekCertificationList'];
+	const usable = (info) => {
+		if (!info || typeof info !== 'object') return false;
+		const base = info.geekBaseInfo;
+		if (base && typeof base === 'object' && (base.name || base.ageDesc || base.degreeCategory || base.workYearDesc)) return true;
+		return ['geekWorkExpList', 'geekEduExpList', 'geekProjExpList'].some((key) => Array.isArray(info[key]) && info[key].length > 0);
+	};
+	const securityOf = (vm) => {
+		const sources = [vm, vm && vm.$parent];
+		for (let i = 0; i < sources.length; i += 1) {
+			const item = sources[i];
+			if (!item) continue;
+			const sid = (item.geekInfo && item.geekInfo.securityId) || (item.geek && item.geek.securityId);
+			if (sid) return String(sid);
+		}
+		return '';
+	};
+	const walkDown = (rootVm) => {
+		const stack = [rootVm];
+		const seen = new Set();
+		while (stack.length) {
+			const vm = stack.pop();
+			if (!vm || seen.has(vm)) continue;
+			seen.add(vm);
+			if (usable(vm.resumeInfo)) {
+				const sid = securityOf(vm);
+				if (!securityId || !sid || sid === securityId) return vm.resumeInfo;
+			}
+			const kids = vm.$children || [];
+			for (let i = 0; i < kids.length; i += 1) stack.push(kids[i]);
+		}
+		return null;
+	};
+	const deadline = Date.now() + 15000;
+	while (Date.now() < deadline) {
+		const nodes = document.querySelectorAll('.new-chat-resume-dialog-main-ui');
+		for (let i = 0; i < nodes.length; i += 1) {
+			let node = nodes[i];
+			let rootVm = null;
+			for (let depth = 0; node && depth < 4; depth += 1, node = node.parentElement) {
+				if (node.__vue__) { rootVm = node.__vue__; break; }
+			}
+			const info = walkDown(rootVm);
+			if (!info) continue;
+			const picked = {};
+			for (let k = 0; k < detailKeys.length; k += 1) {
+				const key = detailKeys[k];
+				if (info[key] != null) picked[key] = JSON.parse(JSON.stringify(info[key]));
+			}
+			return {ok: true, geekDetailInfo: picked};
+		}
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+	return {ok: false, error: 'page_resume_timeout'};
+}
+"""
+
+
+def _retired_view_geek_response(response: dict[str, Any]) -> bool:
+	"""服务端仍把这次简历详情判成旧接口。只在这个结果上再试官方页面。"""
+	hint = response.get("__cli_endpoint_hint__")
+	if not isinstance(hint, str) or "zpjob/view/geek/info" not in hint:
+		return False
+	return "旧简历接口已下线" in response_message(response)
+
+
+def _readable_geek_detail(info: Any) -> bool:
+	"""页面或接口回包里是否有可解析的简历正文，避免把空对象当成成功。"""
+	if not isinstance(info, dict):
+		return False
+	base = info.get("geekBaseInfo")
+	if isinstance(base, dict) and any(base.get(key) for key in ("name", "ageDesc", "degreeCategory", "workYearDesc")):
+		return True
+	for key in ("geekWorkExpList", "geekEduExpList", "geekProjExpList"):
+		rows = info.get(key)
+		if isinstance(rows, list) and rows:
+			return True
+	return False
 
 _SEND_MESSAGE_ACTION_JS = """
 const escaped = escapeHtml(args.content);
@@ -889,10 +991,52 @@ class BossRecruiterClient(_BaseHttpClient):
 		return self._request("GET", ep.BOSS_SEARCH_GEEK_URL, params=params)
 
 	def view_geek(self, geek_id: str, job_id: str, security_id: str | None = None) -> dict[str, Any]:
-		params: dict[str, Any] = {"encryptGeekId": geek_id, "encryptJobId": job_id}
+		"""读取在线简历。
+
+		查询参数对齐当前官方沟通页简历面板：``uid`` 是 encryptGeekId，
+		``encryptJid`` 是 encryptJobId。不发送已下线的插件参数名，也不生成 sigx。
+		CDP 且聊天页已打开时，只有该请求仍返回「旧简历接口已下线」才让页面自己的
+		``newChatResumeViewer`` 再读一次，并只取页面已经解开的 ``resumeInfo``。
+		页面没有可读正文时，把原响应交给平台层映射为 ``ENDPOINT_DEPRECATED``。
+		"""
+		params: dict[str, Any] = {"uid": geek_id, "encryptJid": job_id}
 		if security_id:
 			params["securityId"] = security_id
-		return self._request("GET", ep.BOSS_VIEW_GEEK_URL, params=params)
+		response = self._request(
+			"GET",
+			ep.BOSS_VIEW_GEEK_URL,
+			params=params,
+			extra_headers={"x-requested-with": "XMLHttpRequest"},
+		)
+		if self.is_browser_only() and _retired_view_geek_response(response):
+			page_resume = self._view_geek_from_page(geek_id, job_id, security_id)
+			if page_resume is not None:
+				return page_resume
+		return response
+
+	def _view_geek_from_page(self, geek_id: str, job_id: str, security_id: str | None) -> dict[str, Any] | None:
+		"""让官方聊天页打开在线简历并读出白名单字段。打不开时返回 None，由调用方走 HTTP。"""
+		from boss_agent_cli.api.browser_client import RecruiterChatTabRequired
+
+		try:
+			result = self._get_browser().evaluate_js(
+				_ONLINE_RESUME_JS,
+				{"geek_id": geek_id, "job_id": job_id, "security_id": security_id or ""},
+			)
+		except RecruiterChatTabRequired:
+			return None
+		except PlatformRiskError:
+			raise
+		except Exception as error:  # noqa: BLE001 — 页面简历只是官方页面通道，失败时退回参数已对齐的请求
+			if is_request_stop(error):
+				raise
+			return None
+		if not isinstance(result, dict) or result.get("ok") is not True:
+			return None
+		info = result.get("geekDetailInfo")
+		if not _readable_geek_detail(info):
+			return None
+		return {"code": 0, "zpData": {"geekDetailInfo": info}}
 
 	def chat_geek_info(self, geek_id: str, security_id: str, job_id: int) -> dict[str, Any]:
 		params = {"encryptGeekId": geek_id, "securityId": security_id, "jobId": job_id}

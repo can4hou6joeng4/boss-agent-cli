@@ -1,7 +1,11 @@
 """BossRecruiterClient unit tests — mock httpx + browser channels."""
 
 import json
+import shutil
+import subprocess
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from boss_agent_cli.api.recruiter_client import BossRecruiterClient
 from boss_agent_cli.api import recruiter_endpoints as ep
@@ -130,16 +134,159 @@ def test_search_geeks_filter_params_city_defaults_to_nationwide():
 def test_view_geek_calls_get():
 	auth = _make_auth()
 	client = BossRecruiterClient(auth)
-	mock_result = {"code": 0, "zpData": {"name": "张三"}}
+	mock_result = {"code": 0, "zpData": {"name": "测试候选人"}}
 	with patch.object(client, "_request", return_value=mock_result) as mock_req:
 		result = client.view_geek("g1", "j1", security_id="s1")
 		mock_req.assert_called_once_with(
 			"GET",
 			ep.BOSS_VIEW_GEEK_URL,
-			params={"encryptGeekId": "g1", "encryptJobId": "j1", "securityId": "s1"},
+			params={"uid": "g1", "encryptJid": "j1", "securityId": "s1"},
+			extra_headers={"x-requested-with": "XMLHttpRequest"},
 		)
 		assert result == mock_result
 	client.close()
+
+
+def _retired_view_geek_payload():
+	return {
+		"code": 0,
+		"message": "旧简历接口已下线，请关闭相关插件后刷新页面重试",
+		"zpData": {},
+		"__cli_endpoint_hint__": ep.BOSS_VIEW_GEEK_URL,
+	}
+
+
+def test_view_geek_cdp_reads_page_after_retired_response():
+	auth = _make_auth()
+	client = BossRecruiterClient(auth, cdp_url="http://127.0.0.1:9333")
+	browser = MagicMock()
+	browser.evaluate_js.return_value = {
+		"ok": True,
+		"geekDetailInfo": {"geekBaseInfo": {"name": "测试候选人", "ageDesc": "3年"}},
+	}
+	with (
+		patch.object(client, "_get_browser", return_value=browser),
+		patch.object(client, "_request", return_value=_retired_view_geek_payload()) as mock_req,
+	):
+		result = client.view_geek("g1", "j1", security_id="s1")
+	assert result["code"] == 0
+	assert result["zpData"]["geekDetailInfo"]["geekBaseInfo"]["name"] == "测试候选人"
+	mock_req.assert_called_once()
+	assert mock_req.call_args.kwargs["params"] == {"uid": "g1", "encryptJid": "j1", "securityId": "s1"}
+	script, arg = browser.evaluate_js.call_args.args
+	assert "sigx" not in script and "getFingerprint" not in script
+	assert arg == {"geek_id": "g1", "job_id": "j1", "security_id": "s1"}
+	client.close()
+
+
+def test_view_geek_cdp_keeps_direct_response_when_it_is_not_retired():
+	auth = _make_auth()
+	client = BossRecruiterClient(auth, cdp_url="http://127.0.0.1:9333")
+	browser = MagicMock()
+	mock_result = {"code": 0, "zpData": {"geekDetailInfo": {"geekBaseInfo": {"name": "测试候选人"}}}}
+	with (
+		patch.object(client, "_get_browser", return_value=browser),
+		patch.object(client, "_request", return_value=mock_result),
+	):
+		result = client.view_geek("g1", "j1", security_id="s1")
+	assert result == mock_result
+	browser.evaluate_js.assert_not_called()
+	client.close()
+
+
+def test_view_geek_cdp_keeps_retired_response_when_page_has_no_resume():
+	auth = _make_auth()
+	client = BossRecruiterClient(auth, cdp_url="http://127.0.0.1:9333")
+	browser = MagicMock()
+	browser.evaluate_js.return_value = {"ok": False, "error": "page_resume_api_missing"}
+	retired = _retired_view_geek_payload()
+	with (
+		patch.object(client, "_get_browser", return_value=browser),
+		patch.object(client, "_request", return_value=retired),
+	):
+		result = client.view_geek("g1", "j1", security_id="s1")
+	assert result == retired
+	client.close()
+
+
+def test_view_geek_cdp_ignores_empty_page_payload():
+	auth = _make_auth()
+	client = BossRecruiterClient(auth, cdp_url="http://127.0.0.1:9333")
+	browser = MagicMock()
+	browser.evaluate_js.return_value = {"ok": True, "geekDetailInfo": {"geekBaseInfo": {}}}
+	retired = _retired_view_geek_payload()
+	with (
+		patch.object(client, "_get_browser", return_value=browser),
+		patch.object(client, "_request", return_value=retired),
+	):
+		result = client.view_geek("g1", "j1", security_id="s1")
+	assert result == retired
+	client.close()
+
+
+_PAGE_RESUME_HARNESS = r"""
+const dialogs = [];
+const wrong = {
+	__vue__: {
+		geekInfo: {securityId: 'other-security'},
+		resumeInfo: {geekBaseInfo: {name: '其他人'}, mobile: 'SHOULD_NOT_COPY'},
+		$children: [],
+	},
+};
+const pending = {
+	__vue__: {
+		geekInfo: {securityId: 'sec-token-should-not-leak'},
+		resumeInfo: {},
+		$children: [{
+			resumeInfo: {},
+			geek: {},
+			$children: [],
+		}],
+	},
+};
+dialogs.push(wrong, pending);
+global.document = {
+	querySelectorAll: () => dialogs,
+};
+global.window = {top: {iBossRoot: {resume: {
+	newChatResumeViewer(geek, option) {
+		if (option.source !== 1 || option.from !== 'new-chat') throw new Error('unexpected option');
+		if (geek.securityId !== 'sec-token-should-not-leak') throw new Error('unexpected geek');
+		setTimeout(() => {
+			pending.__vue__.$children[0].resumeInfo = {
+				geekBaseInfo: {name: '测试候选人', ageDesc: '5年', phone: '000'},
+				geekWorkExpList: [{company: '示例公司'}],
+				mobile: 'SHOULD_NOT_COPY',
+				securityId: 'sec-token-should-not-leak',
+			};
+		}, 30);
+	},
+}}}};
+const fn = __SCRIPT__;
+fn({geek_id: 'geek-1', job_id: 'job-1', security_id: 'sec-token-should-not-leak'}).then((result) => {
+	console.log(JSON.stringify(result));
+});
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行页面脚本")
+def test_online_resume_script_reads_official_dialog_fields(tmp_path):
+	from boss_agent_cli.api.recruiter_client import _ONLINE_RESUME_JS
+
+	script = tmp_path / "resume-page.js"
+	script.write_text(_PAGE_RESUME_HARNESS.replace("__SCRIPT__", _ONLINE_RESUME_JS), encoding="utf-8")
+	completed = subprocess.run(["node", str(script)], capture_output=True, text=True, check=True, timeout=10)
+	result = json.loads(completed.stdout)
+	assert result["ok"] is True
+	info = result["geekDetailInfo"]
+	assert info["geekBaseInfo"]["name"] == "测试候选人"
+	assert info["geekWorkExpList"][0]["company"] == "示例公司"
+	assert "mobile" not in info
+	assert "securityId" not in info
+	assert "其他人" not in completed.stdout
+	assert "sec-token-should-not-leak" not in completed.stdout
+	assert "sigx" not in _ONLINE_RESUME_JS
+	assert "getFingerprint" not in _ONLINE_RESUME_JS
 
 
 def test_send_message_calls_browser():

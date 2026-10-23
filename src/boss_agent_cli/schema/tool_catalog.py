@@ -907,8 +907,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"geek_id": {"type": "string", "description": "候选人 geek_id"},
-					"job_id": {"type": "string", "description": "关联职位 ID"},
+					"geek_id": {"type": "string", "description": "候选人 encryptGeekId（请求参数 uid）"},
+					"job_id": {"type": "string", "description": "职位 encryptJobId（请求参数 encryptJid）"},
 					"security_id": {"type": "string", "description": "候选人的 security_id"},
 					"raw": {"type": "boolean", "description": "输出原始 API 数据", "default": False},
 				},
