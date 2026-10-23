@@ -8,7 +8,8 @@ from boss_agent_cli.api.endpoints import (
 	CODE_RATE_LIMITED,
 	USER_INFO_URL,
 )
-from boss_agent_cli.api.models import JobDetail, JobItem
+from boss_agent_cli.api.models import JobDetail, JobItem, job_public_url
+from boss_agent_cli.services.job_export import redact_export_item
 
 import pytest
 
@@ -22,6 +23,16 @@ def test_city_code_lookup():
 def test_salary_code_lookup():
 	assert SALARY_CODES["10-20K"] == "405"
 	assert SALARY_CODES["20-50K"] == "406"
+
+
+def test_job_public_url_uses_encrypt_job_id_only():
+	assert job_public_url("") == ""
+	item = JobItem.from_api({"encryptJobId": "abc", "jobName": "后端"})
+	assert item.job_url == "https://www.zhipin.com/job_detail/abc.html"
+	assert item.to_dict()["job_url"] == item.job_url
+	redacted = redact_export_item(item.to_dict())
+	assert redacted["job_url"] == "[REDACTED]"
+	assert "abc" not in redacted["job_url"]
 
 
 def test_experience_code_lookup():

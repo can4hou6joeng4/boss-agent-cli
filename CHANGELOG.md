@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- 搜索结果新增 `job_url`：由 `encryptJobId` 拼出 `https://www.zhipin.com/job_detail/<id>.html`，不额外请求平台。导出脱敏时与 `job_id` 一起替换为 `[REDACTED]`。
 - 新增 `boss hr whoami` / MCP `boss_hr_whoami`：只读 `getUserInfo`，用 `identity` 判断当前登录态是否在招聘者侧。`identity` 为 1 时 `ready` 为 true；账号资料字段 `recruit` 只以 `profile_recruit` 回显，不参与判断。双身份账号停在求职者侧时返回 `ready: false` 和官方页面切换指引，命令本身不切换身份。
 - 新增跨实例、CLI/MCP 子进程与 crawl 的本地共享请求预算：默认单个主动操作持锁至响应分类完成，滑动 60 秒最多 20 次，总等待上限 30 秒；`request_budget_dir` 可显式分组，组内采用统一限制并共享风险阻断。HTTP 429 / code 9 和有效 `Retry-After` 持久化冷却，进程退出只释放执行锁；预算超限返回 `REQUEST_BUDGET_EXHAUSTED`，保留 checkpoint 后显式恢复。主动操作计量不覆盖浏览器自主资源、轮询、自动重定向或认证内部的每条网络请求，不按公网 IP 自动合并任务。
 - 招聘者 `agent run --resume` / MCP `boss_agent_run.resume` 提供显式恢复入口，保留确认结果与队列，普通运行不清除停止状态。
