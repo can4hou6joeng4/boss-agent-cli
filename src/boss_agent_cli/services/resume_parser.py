@@ -74,9 +74,9 @@ def _parse_education(info: dict[str, Any]) -> list[dict[str, Any]]:
 		result.append({
 			"school": e.get("school", ""),
 			"major": e.get("major", ""),
-			"degree": e.get("degreeDesc", ""),
-			"start": e.get("startYearMonStr", ""),
-			"end": e.get("endYearMonStr", ""),
+			"degree": e.get("degreeDesc") or e.get("degreeName") or "",
+			"start": e.get("startYearMonStr") or e.get("startDateDesc") or "",
+			"end": e.get("endYearMonStr") or e.get("endDateDesc") or "",
 		})
 	return result
 

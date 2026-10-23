@@ -291,8 +291,9 @@ async (args) => {
 		return {ok: false, error: 'page_resume_open_failed'};
 	}
 	const detailKeys = ['geekBaseInfo', 'showExpectPosition', 'geekWorkExpList', 'geekProjExpList', 'geekEduExpList', 'jobCompetitive', 'geekCertificationList'];
+	const baseFields = ['name', 'gender', 'ageDesc', 'degreeCategory', 'workYearDesc', 'activeTimeDesc', 'large'];
 	const usable = (info) => {
-		if (!info || typeof info !== 'object') return false;
+		if (!info || typeof info !== 'object' || info.hiddenResume === true) return false;
 		const base = info.geekBaseInfo;
 		if (base && typeof base === 'object' && (base.name || base.ageDesc || base.degreeCategory || base.workYearDesc)) return true;
 		return ['geekWorkExpList', 'geekEduExpList', 'geekProjExpList'].some((key) => Array.isArray(info[key]) && info[key].length > 0);
@@ -307,8 +308,15 @@ async (args) => {
 		}
 		return '';
 	};
-	const walkDown = (rootVm) => {
-		const stack = [rootVm];
+	const collect = (rootVm, el) => {
+		const stack = [];
+		if (rootVm) stack.push(rootVm);
+		// wasm 在线简历的 resumeInfo 挂在弹层内部 new-chat-resume 上，
+		// 外层 transition 的 $children 是空的，必须再扫弹层里的 Vue 实例。
+		if (el && typeof el.querySelectorAll === 'function') {
+			const inner = el.querySelectorAll('*');
+			for (let i = 0; i < inner.length; i += 1) if (inner[i].__vue__) stack.push(inner[i].__vue__);
+		}
 		const seen = new Set();
 		while (stack.length) {
 			const vm = stack.pop();
@@ -332,12 +340,23 @@ async (args) => {
 			for (let depth = 0; node && depth < 4; depth += 1, node = node.parentElement) {
 				if (node.__vue__) { rootVm = node.__vue__; break; }
 			}
-			const info = walkDown(rootVm);
+			const info = collect(rootVm, nodes[i]);
 			if (!info) continue;
 			const picked = {};
 			for (let k = 0; k < detailKeys.length; k += 1) {
 				const key = detailKeys[k];
-				if (info[key] != null) picked[key] = JSON.parse(JSON.stringify(info[key]));
+				const value = info[key];
+				if (value == null) continue;
+				if (key === 'geekBaseInfo' && typeof value === 'object') {
+					const base = {};
+					for (let f = 0; f < baseFields.length; f += 1) {
+						const field = baseFields[f];
+						if (value[field] != null && value[field] !== '') base[field] = value[field];
+					}
+					if (Object.keys(base).length) picked[key] = base;
+					continue;
+				}
+				picked[key] = JSON.parse(JSON.stringify(value));
 			}
 			return {ok: true, geekDetailInfo: picked};
 		}

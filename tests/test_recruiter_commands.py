@@ -605,6 +605,32 @@ def test_parse_resume_accepts_unwrapped_payload():
 	assert result["expectation"]["position"] == "测试工程师"
 
 
+def test_parse_resume_reads_wasm_education_field_names():
+	result = parse_resume(
+		{
+			"zpData": {
+				"geekDetailInfo": {
+					"geekEduExpList": [
+						{
+							"school": "示例大学",
+							"major": "计算机",
+							"degreeName": "本科",
+							"startDateDesc": "2016.09",
+							"endDateDesc": "2020.06",
+						}
+					],
+				},
+			},
+		}
+	)
+	education = result["education"][0]
+	assert education["school"] == "示例大学"
+	assert education["major"] == "计算机"
+	assert education["degree"] == "本科"
+	assert education["start"] == "2016.09"
+	assert education["end"] == "2020.06"
+
+
 def test_hr_group_rejects_removed_zhilian_platform():
 	runner = CliRunner()
 	result = runner.invoke(cli, ["--platform", "zhilian", "--json", "hr", "candidates", "python"])

@@ -24,6 +24,7 @@
 
 ### Fixed
 - 招聘者在线简历接口 `/wapi/zpjob/view/geek/info` 返回「旧简历接口已下线」时，`hr resume` 与 wizard 改为 `ENDPOINT_DEPRECATED`（不可恢复，停止重试），并在 `error.details.tracking_issue` 指向 #472。聊天发送旧端点 #217 仍走同一错误码，跟踪链接改到各自的 `details`，不再写死在 `recovery_action`。
+- CDP 回读在线简历时，已解开的 `resumeInfo` 在弹层内部的 `new-chat-resume` 上，外层 `transition` 的 `$children` 为空。读取改为同时扫描弹层里的 Vue 实例；`geekBaseInfo` 只保留解析器会用到的字段。官方请求仍返回下线文案时，才能从页面拿到简历正文。教育经历同时认 `degreeName` / `startDateDesc` / `endDateDesc`。
 - `hr resume` 的在线简历请求改为当前官方沟通页简历面板的参数：`uid`（传入的 encryptGeekId）、`encryptJid`（传入的 encryptJobId）、`securityId`，并带 `X-Requested-With: XMLHttpRequest`。不再发送插件时期的 `encryptGeekId` / `encryptJobId` 参数名，也不生成 `sigx` 或指纹。CDP 下若该请求仍返回「旧简历接口已下线」，且已打开 `/web/chat/index`，再调用页面自己的 `iBossRoot.resume.newChatResumeViewer`（与「在线简历」按钮相同，指纹仍由页面拦截器处理），只读取页面已经解开的 `resumeInfo` 白名单字段。页面没有聊天页或没有可读正文时，仍返回原来的下线响应，错误码维持 `ENDPOINT_DEPRECATED`。#472 在真实账号确认简历正文之前保持打开。
 - 修正节流完成时间覆盖后续预约、高斯采样突破间隔下限及 crawl 分类别预算边界；使用单调时钟保持预约，crawl 首页种子导航、分页、页面 fetch 和 CDP fallback 分别申请预算。等待及发送前检查停止、风险和截止时间，停止信号不触发重试或通道降级；写后确认受阻保留 `ACTION_UNCONFIRMED` 和 `confirmation_stop`，失败下载仍记节流，429 下载不读正文或创建文件。crawl 在中断或清理失败前保存进度，清理异常保留原风险或预算停止状态。
 - 校验 `--delay`、延迟范围和共享预算配置的有限数值、正整数及绝对路径约束；非法配置不落盘，保留配置修复入口。预算组有效风险状态进入 `status` / `doctor`，显式清风险锁保留预算及冷却，风险写盘失败仍阻断当前实例。

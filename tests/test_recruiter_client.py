@@ -233,15 +233,19 @@ const wrong = {
 		$children: [],
 	},
 };
+const inner = {
+	geekInfo: {securityId: 'sec-token-should-not-leak'},
+	resumeInfo: {},
+	$children: [],
+};
 const pending = {
 	__vue__: {
-		geekInfo: {securityId: 'sec-token-should-not-leak'},
+		$options: {name: 'transition'},
 		resumeInfo: {},
-		$children: [{
-			resumeInfo: {},
-			geek: {},
-			$children: [],
-		}],
+		$children: [],
+	},
+	querySelectorAll() {
+		return [{__vue__: inner}];
 	},
 };
 dialogs.push(wrong, pending);
@@ -253,8 +257,8 @@ global.window = {top: {iBossRoot: {resume: {
 		if (option.source !== 1 || option.from !== 'new-chat') throw new Error('unexpected option');
 		if (geek.securityId !== 'sec-token-should-not-leak') throw new Error('unexpected geek');
 		setTimeout(() => {
-			pending.__vue__.$children[0].resumeInfo = {
-				geekBaseInfo: {name: '测试候选人', ageDesc: '5年', phone: '000'},
+			inner.resumeInfo = {
+				geekBaseInfo: {name: '测试候选人', ageDesc: '5年', phone: '000', userId: 1},
 				geekWorkExpList: [{company: '示例公司'}],
 				mobile: 'SHOULD_NOT_COPY',
 				securityId: 'sec-token-should-not-leak',
@@ -280,6 +284,9 @@ def test_online_resume_script_reads_official_dialog_fields(tmp_path):
 	assert result["ok"] is True
 	info = result["geekDetailInfo"]
 	assert info["geekBaseInfo"]["name"] == "测试候选人"
+	assert info["geekBaseInfo"]["ageDesc"] == "5年"
+	assert "phone" not in info["geekBaseInfo"]
+	assert "userId" not in info["geekBaseInfo"]
 	assert info["geekWorkExpList"][0]["company"] == "示例公司"
 	assert "mobile" not in info
 	assert "securityId" not in info
