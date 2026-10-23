@@ -26,8 +26,9 @@ from boss_agent_cli.services.browser_runtime import (
 
 @click.command("doctor")
 @click.option("--live-probe", is_flag=True, default=False, help="执行低频只读平台探测（默认仅做本地诊断）")
+@click.option("--probe-cookies", is_flag=True, default=False, help="显式从本地浏览器提取 Cookie。macOS 可能弹出钥匙串授权，默认不读取")
 @click.pass_context
-def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
+def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> None:
 	"""诊断本地运行环境、依赖和登录条件。"""
 	data_dir = ctx.obj["data_dir"]
 	platform_name = ctx.obj.get("platform", "zhipin")
@@ -128,22 +129,31 @@ def doctor_cmd(ctx: click.Context, live_probe: bool) -> None:
 		"首次保存登录态后会自动生成，可忽略",
 	)
 
-	# 3) Cookie extraction support
-	cookie_probe = extract_cookies(None, platform=platform_name)
-	if cookie_probe:
-		cookie_sources = ",".join(sorted(cookie_probe.get("cookies", {}).keys())[:5])
+	# 3) Cookie extraction support. Default doctor stays local and does not touch
+	# the browser cookie store; on macOS that read can raise a Keychain prompt.
+	if not probe_cookies:
 		add_check(
 			"cookie_extract",
 			"ok",
-			f"可从本地浏览器提取 Cookie（示例键: {cookie_sources or 'n/a'}）",
+			"未读取浏览器 Cookie",
+			f"需要核对浏览器登录态时执行 boss doctor --probe-cookies，或 {config.login_action}",
 		)
 	else:
-		add_check(
-			"cookie_extract",
-			"warn",
-			f"未从本地浏览器提取到 {config.cookie_domain_label} Cookie",
-			f"请先在本机浏览器登录 {config.site_host}，或使用 {config.login_action}",
-		)
+		cookie_probe = extract_cookies(None, platform=platform_name)
+		if cookie_probe:
+			cookie_sources = ",".join(sorted(cookie_probe.get("cookies", {}).keys())[:5])
+			add_check(
+				"cookie_extract",
+				"ok",
+				f"可从本地浏览器提取 Cookie（示例键: {cookie_sources or 'n/a'}）",
+			)
+		else:
+			add_check(
+				"cookie_extract",
+				"warn",
+				f"未从本地浏览器提取到 {config.cookie_domain_label} Cookie",
+				f"请先在本机浏览器登录 {config.site_host}，或使用 {config.login_action}",
+			)
 
 	# 4) CDP availability
 	try:

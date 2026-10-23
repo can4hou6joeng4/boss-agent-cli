@@ -84,6 +84,11 @@ SCHEMA_DATA = {
 					"default": False,
 					"description": "显式执行低频只读平台探测，用于区分本地凭据完整但接口不可用的状态",
 				},
+				"--probe-cookies": {
+					"type": "bool",
+					"default": False,
+					"description": "显式从本地浏览器提取 Cookie。默认不读取，避免 macOS 钥匙串弹窗",
+				},
 			},
 		},
 		"schema": {

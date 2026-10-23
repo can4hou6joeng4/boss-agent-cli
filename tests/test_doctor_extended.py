@@ -59,6 +59,8 @@ def _invoke_doctor(tmp_path=None, platform="zhipin", **overrides):
 			if key in overrides:
 				cli_args.extend(["--" + key.replace("_", "-"), overrides[key]])
 		cli_args.append("doctor")
+		if overrides.get("probe_cookies"):
+			cli_args.append("--probe-cookies")
 		result = runner.invoke(cli, cli_args)
 	parsed = json.loads(result.output)
 	return result.exit_code, parsed
@@ -80,6 +82,7 @@ def test_all_checks_pass(tmp_path):
 		cdp_ws="ws://127.0.0.1:9222/devtools/browser/abc",
 		cookie={"cookies": {"wt2": "tok"}},
 		http_status=200,
+		probe_cookies=True,
 	)
 	assert code == 0
 	assert parsed["ok"] is True
@@ -381,18 +384,29 @@ def test_browser_channel_warn_without_cdp(tmp_path):
 
 
 def test_cookie_extract_ok(tmp_path):
-	"""本地浏览器可提取 Cookie 时应为 ok。"""
-	code, parsed = _invoke_doctor(tmp_path, cookie={"cookies": {"wt2": "v", "token": "t"}})
+	"""显式探测时，本地浏览器可提取 Cookie 应为 ok。"""
+	code, parsed = _invoke_doctor(tmp_path, cookie={"cookies": {"wt2": "v", "token": "t"}}, probe_cookies=True)
 	ce = _find_check(parsed["data"]["checks"], "cookie_extract")
 	assert ce["status"] == "ok"
 	assert "提取" in ce["detail"]
 
 
 def test_cookie_extract_not_available(tmp_path):
-	"""无法从本地浏览器提取 Cookie 时应为 warn。"""
-	code, parsed = _invoke_doctor(tmp_path, cookie=None)
+	"""显式探测但仍提取不到 Cookie 时应为 warn。"""
+	code, parsed = _invoke_doctor(tmp_path, cookie=None, probe_cookies=True)
 	ce = _find_check(parsed["data"]["checks"], "cookie_extract")
+	assert code == 0
 	assert ce["status"] == "warn"
+
+
+def test_doctor_does_not_read_browser_cookies_by_default(tmp_path):
+	"""默认诊断不碰浏览器 Cookie，避免 macOS 钥匙串弹窗。"""
+	code, parsed = _invoke_doctor(tmp_path, cookie={"cookies": {"wt2": "v"}})
+	ce = _find_check(parsed["data"]["checks"], "cookie_extract")
+	assert code == 0
+	assert ce["status"] == "ok"
+	assert ce["detail"] == "未读取浏览器 Cookie"
+	assert "--probe-cookies" in ce["hint"]
 
 
 # ── 10. next_actions 提示逻辑 ────────────────────────────────────────
