@@ -3029,6 +3029,17 @@ def test_classify_action_error_keeps_action_unconfirmed_no_retry_contract():
 	assert "稍后重试" not in recovery
 
 
+def test_classify_action_error_keeps_endpoint_deprecated_no_retry_contract():
+	from boss_agent_cli.schema.error_codes import ERROR_CODES
+	from boss_agent_cli.wizard.actions import _classify_action_error
+
+	mapped, recoverable, recovery = _classify_action_error("ENDPOINT_DEPRECATED", "旧简历接口已下线")
+	assert mapped == "ENDPOINT_DEPRECATED"
+	assert recoverable is False
+	assert recovery == ERROR_CODES["ENDPOINT_DEPRECATED"]["recovery_action"]
+	assert "稍后重试" not in recovery
+
+
 def test_runner_browser_source_unsupported_maps_to_not_supported(tmp_path):
 	from boss_agent_cli.api.browser_source import BrowserSourceUnsupported
 

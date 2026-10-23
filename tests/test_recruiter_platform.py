@@ -91,15 +91,58 @@ def test_parse_error_send_message_121_maps_to_endpoint_deprecated():
 	"""issue #217 — sendReplyMsg 端点 121 重映射为 ENDPOINT_DEPRECATED，引导用户跟 issue。"""
 	client = _mock_client()
 	platform = BossRecruiterPlatform(client)
-	unified, message = platform.parse_error(
-		{
-			"code": 121,
-			"message": "请求不合法(121)",
-			"__cli_endpoint_hint__": "https://www.zhipin.com/wapi/zpchat/fastReply/sendReplyMsg",
-		}
-	)
+	response = {
+		"code": 121,
+		"message": "请求不合法(121)",
+		"__cli_endpoint_hint__": "https://www.zhipin.com/wapi/zpchat/fastReply/sendReplyMsg",
+	}
+	unified, message = platform.parse_error(response)
 	assert unified == "ENDPOINT_DEPRECATED"
 	assert "请求不合法" in message
+	assert response["__cli_error_details__"]["tracking_issue"].endswith("/issues/217")
+
+
+def test_parse_error_view_geek_retired_message_maps_to_endpoint_deprecated():
+	"""issue #472 — 旧简历详情接口下线文案映射为 ENDPOINT_DEPRECATED。"""
+	client = _mock_client()
+	platform = BossRecruiterPlatform(client)
+	response = {
+		"code": "1",
+		"message": "旧简历接口已下线，请关闭相关插件后刷新页面重试",
+		"__cli_endpoint_hint__": "https://www.zhipin.com/wapi/zpjob/view/geek/info",
+	}
+	assert platform.is_success(response) is False
+	unified, message = platform.parse_error(response)
+	assert unified == "ENDPOINT_DEPRECATED"
+	assert message.startswith("旧简历接口已下线")
+	assert response["__cli_error_details__"]["tracking_issue"].endswith("/issues/472")
+	assert "view/geek/info" in response["__cli_error_details__"]["endpoint"]
+
+
+def test_parse_error_retired_resume_message_on_other_endpoint_stays_unknown():
+	"""同一句下线文案出现在其他接口时，不误判成简历端点废弃。"""
+	client = _mock_client()
+	platform = BossRecruiterPlatform(client)
+	response = {
+		"code": "1",
+		"message": "旧简历接口已下线，请关闭相关插件后刷新页面重试",
+		"__cli_endpoint_hint__": "https://www.zhipin.com/wapi/zpjob/chat/geek/info",
+	}
+	unified, _ = platform.parse_error(response)
+	assert unified == "UNKNOWN"
+	assert "__cli_error_details__" not in response
+
+
+def test_is_success_rejects_code_zero_retired_view_geek():
+	client = _mock_client()
+	platform = BossRecruiterPlatform(client)
+	response = {
+		"code": 0,
+		"message": "旧简历接口已下线",
+		"__cli_endpoint_hint__": "https://www.zhipin.com/wapi/zpjob/view/geek/info",
+	}
+	assert platform.is_success(response) is False
+	assert platform.parse_error(response)[0] == "ENDPOINT_DEPRECATED"
 
 
 def test_parse_error_exchange_121_keeps_invalid_param():

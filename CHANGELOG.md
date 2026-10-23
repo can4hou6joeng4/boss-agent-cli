@@ -23,6 +23,7 @@
 - 文档对齐：`CLAUDE.md` 与 `docs/maintainer/branch-protection.md` 同步 2026-10-09 已恢复的 PR CI（lint + Python 3.10 / 3.12 / 3.14 测试矩阵；required status checks 仍未配置）；`pyproject.toml` 注释改指本地 `scripts/verify_release.py --fresh-install`；中英文 README 与 `CLAUDE.md` 的测试计数更新为 2900+。
 
 ### Fixed
+- 招聘者在线简历接口 `/wapi/zpjob/view/geek/info` 返回「旧简历接口已下线」时，`hr resume` 与 wizard 改为 `ENDPOINT_DEPRECATED`（不可恢复，停止重试），并在 `error.details.tracking_issue` 指向 #472。聊天发送旧端点 #217 仍走同一错误码，跟踪链接改到各自的 `details`，不再写死在 `recovery_action`。简历详情的替代请求尚未接入。
 - 修正节流完成时间覆盖后续预约、高斯采样突破间隔下限及 crawl 分类别预算边界；使用单调时钟保持预约，crawl 首页种子导航、分页、页面 fetch 和 CDP fallback 分别申请预算。等待及发送前检查停止、风险和截止时间，停止信号不触发重试或通道降级；写后确认受阻保留 `ACTION_UNCONFIRMED` 和 `confirmation_stop`，失败下载仍记节流，429 下载不读正文或创建文件。crawl 在中断或清理失败前保存进度，清理异常保留原风险或预算停止状态。
 - 校验 `--delay`、延迟范围和共享预算配置的有限数值、正整数及绝对路径约束；非法配置不落盘，保留配置修复入口。预算组有效风险状态进入 `status` / `doctor`，显式清风险锁保留预算及冷却，风险写盘失败仍阻断当前实例。
 - 浏览器风险识别续查：聊天页 `/wapi/` 的 HTTP 403 在响应头事件立即停止，不等正文；错误/缺失 Content-Type 的受限 HTML 仍生成脱敏分类元数据。业务 JSON 先解析原码，避免成功响应中的 HTML 说明触发误锁；纯文本业务响应同样检查风险，外站和普通静态资源不误锁。

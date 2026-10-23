@@ -182,7 +182,7 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 	"ENDPOINT_DEPRECATED": {
 		"message": "服务端端点已迁移，CLI 当前实现无法直接发送",
 		"recoverable": False,
-		"recovery_action": "跟进 https://github.com/can4hou6joeng4/boss-agent-cli/issues/217",
+		"recovery_action": "停止重试。该平台端点已下线，查看 error.details.tracking_issue",
 	},
 	"RECRUITER_CHAT_TAB_REQUIRED": {
 		"message": "招聘者操作需要 Chrome 已打开聊天页 (chat/index)",

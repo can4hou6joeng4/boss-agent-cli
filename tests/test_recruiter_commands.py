@@ -1,9 +1,11 @@
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
+from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
+from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.services.resume_parser import parse_resume
 
 
@@ -440,6 +442,30 @@ def test_recruiter_resume_exchange_reports_error_when_platform_rejects(mock_auth
 		recoverable=True,
 		recovery_action="boss login",
 	)
+
+
+@patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
+def test_recruiter_resume_retired_endpoint_envelope(mock_auth_cls, mock_platform_cls):
+	client = MagicMock()
+	platform = BossRecruiterPlatform(client)
+	client.view_geek.return_value = {
+		"code": 1,
+		"message": "旧简历接口已下线，请关闭相关插件后刷新页面重试",
+		"__cli_endpoint_hint__": "https://www.zhipin.com/wapi/zpjob/view/geek/info",
+	}
+	mock_platform_cls.return_value = platform
+	result = _invoke("hr", "resume", "geek-1", "--job-id", "job-1", "--security-id", "sec-1")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_contract(
+		parsed,
+		code="ENDPOINT_DEPRECATED",
+		message="旧简历接口已下线，请关闭相关插件后刷新页面重试",
+		recoverable=False,
+		recovery_action=ERROR_CODES["ENDPOINT_DEPRECATED"]["recovery_action"],
+	)
+	assert parsed["error"]["details"]["tracking_issue"].endswith("/issues/472")
 
 
 @patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")

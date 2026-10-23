@@ -26,9 +26,30 @@ _ERROR_CODE_MAP: dict[int, str] = {
 	121: "INVALID_PARAM",
 }
 
-# 端点路径片段 → 已知端点漂移场景（命中后将该路径下的 121 重映射为 ENDPOINT_DEPRECATED）
-# 真源：issue #217 — qianjunye 抓包确认 fastReply/sendReplyMsg 已被 BOSS 替换为 WS+Protobuf 双通道。
-_DEPRECATED_ENDPOINT_FRAGMENTS: tuple[str, ...] = ("fastReply/sendReplyMsg",)
+# 端点路径片段 → 已知端点漂移场景。
+# #217：fastReply/sendReplyMsg 的 121 已由 qianjunye 抓包确认迁移到 WS+Protobuf。
+# #472：view/geek/info 对简历详情固定返回「旧简历接口已下线」。
+_SEND_REPLY_FRAGMENT = "fastReply/sendReplyMsg"
+_VIEW_GEEK_FRAGMENT = "zpjob/view/geek/info"
+_VIEW_GEEK_RETIRED_MESSAGE = "旧简历接口已下线"
+_ISSUE_217 = "https://github.com/can4hou6joeng4/boss-agent-cli/issues/217"
+_ISSUE_472 = "https://github.com/can4hou6joeng4/boss-agent-cli/issues/472"
+
+
+def _endpoint_hint(response: dict[str, Any]) -> str:
+	hint = response.get("__cli_endpoint_hint__")
+	return hint if isinstance(hint, str) else ""
+
+
+def _view_geek_retired(response: dict[str, Any]) -> bool:
+	return _VIEW_GEEK_FRAGMENT in _endpoint_hint(response) and _VIEW_GEEK_RETIRED_MESSAGE in response_message(response)
+
+
+def _remember_deprecated_endpoint(response: dict[str, Any], tracking_issue: str) -> None:
+	response["__cli_error_details__"] = {
+		"endpoint": _endpoint_hint(response) or None,
+		"tracking_issue": tracking_issue,
+	}
 
 
 def _greet_business_error(response: dict[str, Any]) -> tuple[str, str] | None:
@@ -59,6 +80,8 @@ class BossRecruiterPlatform(RecruiterPlatform):
 	# ── 包络适配 ────────────────────────────────────────
 
 	def is_success(self, response: dict[str, Any]) -> bool:
+		if _view_geek_retired(response):
+			return False
 		return response.get("code") == 0 and _greet_business_error(response) is None
 
 	def unwrap_data(self, response: dict[str, Any]) -> Any:
@@ -81,13 +104,15 @@ class BossRecruiterPlatform(RecruiterPlatform):
 		cli_code = response.get("__cli_error_code__")
 		if isinstance(cli_code, str) and cli_code:
 			return cli_code, message
+		if _view_geek_retired(response):
+			_remember_deprecated_endpoint(response, _ISSUE_472)
+			return "ENDPOINT_DEPRECATED", message
 		unified = _ERROR_CODE_MAP.get(code, "UNKNOWN") if isinstance(code, int) else "UNKNOWN"
 		# 端点漂移场景下重映射 121：调用方（_browser_request / _request）在 response dict 注入
 		# __cli_endpoint_hint__ 字段（CLI 内部命名空间，避免与服务端字段冲突）。
-		if code == 121:
-			hint = response.get("__cli_endpoint_hint__")
-			if isinstance(hint, str) and any(frag in hint for frag in _DEPRECATED_ENDPOINT_FRAGMENTS):
-				unified = "ENDPOINT_DEPRECATED"
+		if code == 121 and _SEND_REPLY_FRAGMENT in _endpoint_hint(response):
+			_remember_deprecated_endpoint(response, _ISSUE_217)
+			unified = "ENDPOINT_DEPRECATED"
 		return unified, message
 
 	# ── 候选人列表与筛选 ────────────────────────────────
