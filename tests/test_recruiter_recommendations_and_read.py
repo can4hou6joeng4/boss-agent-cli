@@ -108,6 +108,23 @@ def test_start_chat_uses_verified_first_contact_payload() -> None:
 	client._browser_request.assert_not_called()
 
 
+@pytest.mark.parametrize(
+	"geek_source,params",
+	[
+		(None, {"uid": "friend-1", "securityId": "sec-1"}),
+		(0, {"uid": "friend-1", "securityId": "sec-1", "geekSource": 0}),
+		(1, {"uid": "friend-1", "securityId": "sec-1", "geekSource": 1}),
+	],
+)
+def test_chat_geek_info_sends_uid_and_optional_geek_source(geek_source: int | None, params: dict[str, Any]) -> None:
+	client = object.__new__(BossRecruiterClient)
+	client._request = MagicMock(return_value={"code": 0})
+
+	result = client.chat_geek_info("friend-1", "sec-1", geek_source)
+
+	assert result == {"code": 0}
+	client._request.assert_called_once_with("GET", ep.BOSS_CHAT_GEEK_INFO_URL, params=params)
+
 
 def test_recruiter_write_commands_refuse_without_yes() -> None:
 	runner = CliRunner()

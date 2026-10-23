@@ -182,8 +182,8 @@ class BossRecruiterPlatform(RecruiterPlatform):
 	def view_geek(self, geek_id: str, job_id: str, security_id: str | None = None) -> dict[str, Any]:
 		return self._client.view_geek(geek_id, job_id=job_id, security_id=security_id)
 
-	def chat_geek_info(self, geek_id: str, security_id: str, job_id: int) -> dict[str, Any]:
-		return self._client.chat_geek_info(geek_id, security_id, job_id)
+	def chat_geek_info(self, uid: str, security_id: str, geek_source: int | None = None) -> dict[str, Any]:
+		return self._client.chat_geek_info(uid, security_id, geek_source)
 
 	# ── 消息 / 聊天 ──────────────────────────────────────
 

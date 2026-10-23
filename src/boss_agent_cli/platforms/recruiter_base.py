@@ -131,7 +131,7 @@ class RecruiterPlatform(ABC):
 		"""单次建立会话并发送首次招呼，不自动重试。"""
 		raise NotImplementedError(f"{self.name} does not implement start_chat")
 
-	def chat_geek_info(self, geek_id: str, security_id: str, job_id: int) -> dict[str, Any]:
+	def chat_geek_info(self, uid: str, security_id: str, geek_source: int | None = None) -> dict[str, Any]:
 		"""获取候选人聊天信息。"""
 		raise NotImplementedError(f"{self.name} does not implement chat_geek_info")
 
