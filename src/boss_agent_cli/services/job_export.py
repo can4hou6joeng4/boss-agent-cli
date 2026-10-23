@@ -14,7 +14,7 @@ def prepare_export_items(items: list[dict[str, Any]], *, include_private: bool) 
 
 def redact_export_item(item: dict[str, Any]) -> dict[str, Any]:
 	redacted = dict(item)
-	for key in ("job_id", "security_id", "lid", "boss_name"):
+	for key in ("job_id", "job_url", "security_id", "lid", "boss_name"):
 		if key in redacted:
 			redacted[key] = "[REDACTED]"
 	return redacted

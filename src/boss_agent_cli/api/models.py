@@ -5,6 +5,13 @@ from typing import Any
 BOSS_INTERNSHIP_RESPONSE_JOB_TYPE = 4
 
 
+def job_public_url(job_id: str) -> str:
+	"""职位详情页地址。只由 encryptJobId 拼出，不额外请求平台。"""
+	if not job_id:
+		return ""
+	return f"https://www.zhipin.com/job_detail/{job_id}.html"
+
+
 def employment_type_from_raw(raw_job_type: Any) -> str:
 	"""Normalize verified BOSS response job types without guessing unknown codes."""
 	if str(raw_job_type) == str(BOSS_INTERNSHIP_RESPONSE_JOB_TYPE):
@@ -59,12 +66,14 @@ class JobItem:
 	job_labels: list[str] = field(default_factory=list)
 	lid: str = ""
 	boss_active_desc: str = ""
+	job_url: str = ""
 
 	@classmethod
 	def from_api(cls, raw: dict[str, Any]) -> "JobItem":
 		raw_job_type = raw.get("jobType")
 		return cls(
 			job_id=raw.get("encryptJobId", ""),
+			job_url=job_public_url(str(raw.get("encryptJobId") or "")),
 			title=raw.get("jobName", ""),
 			company=raw.get("brandName", ""),
 			salary=raw.get("salaryDesc", ""),
@@ -117,6 +126,7 @@ class JobItem:
 			"least_month": self.least_month,
 			"job_labels": self.job_labels,
 			"greeted": self.greeted,
+			"job_url": self.job_url,
 		}
 
 
