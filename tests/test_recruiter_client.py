@@ -634,7 +634,7 @@ def test_list_jobs_calls_get():
 	mock_result = {"code": 0, "zpData": {"list": []}}
 	with patch.object(client, "_request", return_value=mock_result) as mock_req:
 		result = client.list_jobs()
-		mock_req.assert_called_once_with("GET", ep.BOSS_JOB_LIST_URL)
+		mock_req.assert_called_once_with("GET", ep.BOSS_JOB_LIST_URL, params={"page": 1})
 		assert result == mock_result
 	client.close()
 
