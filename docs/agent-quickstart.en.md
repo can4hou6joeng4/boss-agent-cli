@@ -38,10 +38,9 @@ boss search "Golang" --city 广州 --welfare "双休,五险一金"
 # Complex filters can reuse a URL selected manually on the web UI
 boss search --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280100&experience=104,105'
 
-# Step 3: inspect details and continue the workflow
+# Step 3: inspect details and organize the local shortlist
 boss detail <security_id>
 boss shortlist add <security_id> <job_id>
-boss apply <security_id> <job_id>
 ```
 
 Or submit a shared workflow and use its explicit `run_id` for status and recovery:
@@ -56,6 +55,12 @@ Parsing contract:
 - Read JSON envelopes from `stdout` only
 - `ok=true` means success; when `ok=false`, inspect `error.code` and `error.recovery_action`
 - `boss schema` also returns `supported_platforms`, `supported_recruiter_platforms`, and per-command `availability`, so agents can route tools by `role/platform`
+
+### Agent authorization boundary
+
+Default to search, detail inspection, local shortlist management, local exports, and drafts based on confirmed facts. A general request to find work does not authorize `boss apply`, `boss greet`, `boss batch-greet`, or any other platform write.
+
+An agent may perform one outreach or application only when the user names the specific job in the current conversation and confirms again immediately before the action. After each external action, read the explicit platform result and ask before the next one. Do not create outreach queues, run unattended batches, reuse identical greetings, or retry a write whose outcome is unknown. On `ACCOUNT_RISK`, `ENVIRONMENT_RISK`, a CAPTCHA/security page, or a rate limit, preserve the checkpoint and stop; never bypass the platform control.
 
 ### Candidate crawl orchestration
 

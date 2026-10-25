@@ -38,10 +38,9 @@ boss search "Golang" --city 广州 --welfare "双休,五险一金"
 # 复杂筛选可复用用户在网页上选好的 URL
 boss search --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280100&experience=104,105'
 
-# Step 3: 查看详情并推进后续动作
+# Step 3: 查看详情并整理本地候选池
 boss detail <security_id>
 boss shortlist add <security_id> <job_id>
-boss apply <security_id> <job_id>
 ```
 
 也可一次提交共享 workflow，并用返回的 `run_id` 查询或恢复：
@@ -56,6 +55,12 @@ boss --json wizard --resume <run_id>
 - `stdout` 只读 JSON 信封
 - `ok=true` 代表成功，`ok=false` 时读取 `error.code` 与 `error.recovery_action`
 - `boss schema` 除了返回 `supported_platforms` / `supported_recruiter_platforms`，还会给每个命令附带 `availability`，可直接按 `role/platform` 做工具路由
+
+### Agent 授权边界
+
+默认只做搜岗、读取详情、管理本地候选池、导出本地报告和基于已确认事实的草稿。不得因用户泛泛表示“想找工作”就调用 `boss apply`、`boss greet`、`boss batch-greet` 或任何平台写操作。
+
+只有用户在当前对话点名具体岗位，并在点击前再次确认时，才可执行一次沟通或投递。每次外部动作后必须读取平台明确结果，再询问是否继续下一个；不得建立外发队列、无人值守批量操作、复用同一话术或重试结果不明的写操作。遇到 `ACCOUNT_RISK`、`ENVIRONMENT_RISK`、验证码/安全页或限流时，保存 checkpoint 并停止，不得绕过平台控制。
 
 ### 候选人 crawl 编排
 
