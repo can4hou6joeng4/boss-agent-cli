@@ -77,3 +77,9 @@ Common recovery actions:
 - login expired: run `boss login` again
 - invalid parameters: go back to `boss schema` or `boss cities`
 - environment issue: run `boss doctor` first; do not continue sensitive actions through automation
+
+### Message view loads, then turns blank
+
+When a BOSS message view stays loading and then becomes blank without a login page, verification prompt, access restriction, or a clear browser crash, treat it as a client-side message-view loop. It is not proof of account risk or message delivery.
+
+Keep only the actual message-list URL and a local conversation reference. Restore that list once, wait until it is stable, then reopen the target conversation once for read-only verification. If the loop repeats, stop automatic message-view recovery, leave any pending send as outcome unknown, and do not reload the conversation, guess a conversation URL, create repeated tabs, or resend a message.

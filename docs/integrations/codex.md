@@ -73,3 +73,9 @@ Common branches:
 - `AUTH_REQUIRED` / `AUTH_EXPIRED`: run `boss login` again
 - `INVALID_PARAM`: return to `boss schema` and validate arguments
 - `RATE_LIMITED`: stop external actions, keep the checkpoint, and wait for an explicit user decision before any retry
+
+### Message view loads, then turns blank
+
+If a BOSS message view stays loading and then becomes blank without a login page, verification prompt, access restriction, or a clear browser crash, treat it as a client-side message-view loop rather than evidence of account risk or message delivery.
+
+Keep only the actual message-list URL and the local conversation reference. Return to that recorded list once, wait until it is stable, then reopen the target conversation once for read-only verification. If the same loop happens again, stop automatic message-view recovery, leave any pending send as outcome unknown, and do not reload the conversation, guess a conversation URL, create repeated tabs, or resend a message.
