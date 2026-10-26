@@ -29,7 +29,7 @@ boss <命令> --help                      # 查看单个命令选项
 
 TTY 下只把 `operator_actions` 渲染到 stderr；`next_actions` 是纯 Agent 通道，不渲染。Agent 拿到 `operator_actions` 时应转述给操作者，而不是自己编措辞。
 
-**信封与退出码**：每条命令在 stdout 只输出一个七键 JSON 信封；默认 `exit 0` ⇔ `ok=true`、`exit 1` ⇔ `ok=false`。可选全局 `--exit-codes sysexits` 按错误类别返回语义化退出码（77 认证；75 限流/预算/超时；78 参数/配置；69 风控/平台不支持；其余 1），供脚本按失败类型分支；信封内容不变。
+**信封与退出码**：每条命令在 stdout 只输出一个七键 JSON 信封；默认 `exit 0` ⇔ `ok=true`、`exit 1` ⇔ `ok=false`。可选全局 `--exit-codes sysexits` 按错误类别返回语义化退出码（77 认证；75 限流/预算/超时；78 参数/配置；69 风控/平台不支持；其余 1），供脚本按失败类型分支；信封内容不变。全局选项（`--json`、`--data-dir`、`--platform`、`--cdp-url` 等）必须写在子命令之前，例如 `boss --json search 关键词`；写在子命令后面会返回 `INVALID_PARAM`，并说明该选项是全局的。
 
 ## 基础操作
 

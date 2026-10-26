@@ -33,7 +33,7 @@ Envelope `hints` splits by audience the same way (`conventions.hints`):
 
 In a TTY only `operator_actions` is rendered, to stderr; `next_actions` stays an agent-only channel and is not rendered. An agent receiving `operator_actions` should relay it verbatim rather than inventing its own wording.
 
-**Envelope and exit codes**: every command writes exactly one seven-key JSON envelope to stdout; by default `exit 0` ⇔ `ok=true` and `exit 1` ⇔ `ok=false`. The optional global `--exit-codes sysexits` returns semantic exit codes per error class (77 auth; 75 rate-limit/budget/timeout; 78 params/config; 69 risk/platform-unsupported; otherwise 1) so scripts can branch on failure type; the envelope itself is unchanged.
+**Envelope and exit codes**: every command writes exactly one seven-key JSON envelope to stdout; by default `exit 0` ⇔ `ok=true` and `exit 1` ⇔ `ok=false`. The optional global `--exit-codes sysexits` returns semantic exit codes per error class (77 auth; 75 rate-limit/budget/timeout; 78 params/config; 69 risk/platform-unsupported; otherwise 1) so scripts can branch on failure type; the envelope itself is unchanged. Global options (`--json`, `--data-dir`, `--platform`, `--cdp-url`, and the rest) must come before the subcommand, for example `boss --json search golang`. Placing one after the subcommand returns `INVALID_PARAM` and says that the option is global.
 
 ## Basics
 

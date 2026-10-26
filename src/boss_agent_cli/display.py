@@ -610,7 +610,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 	def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
 		@wraps(func)
 		def wrapper(ctx: Any, *args: Any, **kwargs: Any) -> Any:
-			from boss_agent_cli.api.browser_client import RecruiterChatTabRequired
+			from boss_agent_cli.api.browser_client import BrowserNavigationError, RecruiterChatTabRequired
 			from boss_agent_cli.api._base_client import BrowserChannelRequired
 			from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserSourceUnsupported
 			from boss_agent_cli.api.client import PlatformRiskError
@@ -724,6 +724,25 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recovery_action=budget_recovery,
 					details=e.details,
 					hints={"operator_actions": ["等待冷却并检查并发任务；确认后显式恢复，不自动清理风险锁"]},
+				)
+			except BrowserNavigationError as e:
+				nav_recoverable, nav_recovery = error_contract_for_code(e.code)
+				handle_error_output(
+					ctx,
+					command_name,
+					code=e.code,
+					message=str(e),
+					recoverable=nav_recoverable,
+					recovery_action=nav_recovery,
+					details=e.details(),
+					hints={
+						"next_actions": ["boss doctor", "boss login"],
+						"operator_actions": [
+							"浏览器通道会先打开 https://www.zhipin.com/ 再请求接口；--url 只解析筛选条件，不会改走搜索页",
+							"首页在自动化下偶发加载卡住，CLI 已跳到空白页并重试。仍失败时，用带调试端口的 Chrome 打开官网并确认首页能加载，再执行 boss --cdp-url http://127.0.0.1:9222 <命令>",
+							"若 boss status 显示登录态 degraded 或 stoken 很久未更新，先执行 boss login",
+						],
+					},
 				)
 			except Exception as e:
 				handle_error_output(

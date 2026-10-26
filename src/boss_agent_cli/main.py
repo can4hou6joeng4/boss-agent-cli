@@ -15,6 +15,44 @@ from boss_agent_cli.output import emit_error, Logger, set_exit_codes_mode
 from boss_agent_cli.platforms import list_platforms
 
 
+def _command_path(ctx: click.Context | None) -> str:
+	names: list[str] = []
+	current = ctx
+	while current is not None and current.parent is not None:
+		if current.info_name:
+			names.append(current.info_name)
+		current = current.parent
+	return " ".join(reversed(names))
+
+
+def _misplaced_global_option(group: click.Group, exc: click.ClickException) -> tuple[str, str] | None:
+	"""Return a clearer message when a root option was parsed by a subcommand.
+
+	``allow_interspersed_args`` stays false so Click's option ownership does not
+	change. Users who write ``boss search --json`` otherwise only see
+	``No such option '--json'``.
+	"""
+	if not isinstance(exc, click.NoSuchOption):
+		return None
+	ctx = exc.ctx
+	if ctx is None or ctx.parent is None:
+		return None
+	raw = exc.option_name or ""
+	token = raw if raw.startswith("-") else f"--{raw}"
+	matched: click.Option | None = None
+	for param in group.params:
+		if isinstance(param, click.Option) and token in (*param.opts, *param.secondary_opts):
+			matched = param
+			break
+	if matched is None:
+		return None
+	command = _command_path(ctx) or "<command>"
+	option_usage = token if matched.is_flag else f"{token} <value>"
+	example = f"boss {option_usage} {command} ..."
+	message = f"选项 {token} 是全局选项，必须写在子命令之前，例如：{example}"
+	return message, example
+
+
 def _prescan_exit_codes(args: Sequence[str] | None) -> None:
 	"""Usage errors are raised before the group callback runs; scan raw argv so an
 	explicit `--exit-codes sysexits` still governs their exit code. Unknown values
@@ -52,12 +90,25 @@ class BossCliGroup(click.Group):
 				raise
 			ctx = getattr(exc, "ctx", None)
 			command = getattr(ctx, "info_name", None) or self.name or "boss"
+			message = exc.format_message()
+			recovery_action = "修正参数"
+			hints = None
+			misplaced = _misplaced_global_option(self, exc)
+			if misplaced is not None:
+				message, recovery_action = misplaced
+				hints = {
+					"next_actions": [recovery_action.replace(" ...", " --help")],
+					"operator_actions": [
+						"全局选项（--json、--data-dir、--platform、--cdp-url 等）写在子命令前面",
+					],
+				}
 			emit_error(
 				command,
 				code="INVALID_PARAM",
-				message=exc.format_message(),
+				message=message,
 				recoverable=False,
-				recovery_action="修正参数",
+				recovery_action=recovery_action,
+				hints=hints,
 			)
 			return None
 
@@ -89,7 +140,12 @@ class BossCliGroup(click.Group):
 	help="角色模式：candidate（求职者，默认）/ recruiter（招聘者）",
 )
 @click.option("--log-level", default=None, type=click.Choice(["error", "warning", "info", "debug"]))
-@click.option("--json/--no-json", "json_output", default=False, help="强制 JSON 输出（即使在终端中）")
+@click.option(
+	"--json/--no-json",
+	"json_output",
+	default=False,
+	help="强制 JSON 输出（全局选项，必须写在子命令之前，例如 boss --json search …）",
+)
 @click.option(
 	"--exit-codes",
 	default="envelope",

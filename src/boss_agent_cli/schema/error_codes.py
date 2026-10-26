@@ -89,6 +89,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "patchright install chromium",
 	},
+	"BROWSER_NAV_TIMEOUT": {
+		"message": "浏览器首页导航超时",
+		"recoverable": True,
+		"recovery_action": "用已登录 Chrome 的调试端口重试，或先执行 boss login",
+	},
 	"LOGIN_RISK_CONTROL": {
 		"message": "登录请求可能触发平台风控",
 		"recoverable": False,

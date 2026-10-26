@@ -3032,6 +3032,29 @@ def test_runner_browser_source_unavailable_keeps_policy_error_code(tmp_path):
 	assert run["error"]["recovery_action"] == policy.recovery_action
 
 
+def test_runner_browser_navigation_timeout_is_not_generic_network_error(tmp_path):
+	from boss_agent_cli.api.browser_client import BrowserNavigationError
+
+	def stalled(context, inputs, prior):
+		raise BrowserNavigationError(
+			"https://www.zhipin.com/",
+			attempts=2,
+			timeout_ms=15000,
+			channel="headless",
+			cause=TimeoutError("Page.goto: Timeout 15000ms exceeded"),
+		)
+
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, {"stalled": stalled}).run(_plan("stalled"), object(), run_id="nav-run", max_retries=2)
+
+	assert run["status"] == "failed"
+	assert run["error"]["code"] == "BROWSER_NAV_TIMEOUT"
+	assert run["error"]["code"] != "NETWORK_ERROR"
+	assert run["error"]["details"]["channel"] == "headless"
+	assert "Page.goto" not in run["error"]["message"]
+	assert "boss login" in run["error"]["recovery_action"]
+
+
 def test_classify_action_error_uses_risk_contract_for_risk_codes():
 	from boss_agent_cli.wizard.actions import _classify_action_error
 

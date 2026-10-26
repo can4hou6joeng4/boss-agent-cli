@@ -959,7 +959,7 @@ SCHEMA_DATA = {
 		"--json": {
 			"type": "bool",
 			"default": False,
-			"description": "强制 JSON 输出（即使在终端中，默认管道模式自动 JSON）",
+			"description": "强制 JSON 输出（即使在终端中，默认管道模式自动 JSON）。全局选项，必须写在子命令之前，例如 boss --json search <关键词>",
 		},
 		"--exit-codes": {
 			"type": "string",
