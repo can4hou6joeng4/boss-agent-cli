@@ -123,6 +123,36 @@ class TestHandleAuthErrors:
 			"该平台没有浏览器通道，改用默认 --browser-source auto 或切换到 zhipin",
 		]
 
+	def test_browser_navigation_error_uses_nav_timeout_contract(self):
+		from boss_agent_cli.api.browser_client import BrowserNavigationError
+
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True}
+		error = BrowserNavigationError(
+			"https://www.zhipin.com/",
+			attempts=2,
+			timeout_ms=15000,
+			channel="headless",
+			cause=TimeoutError("Page.goto: Timeout 15000ms exceeded"),
+		)
+
+		@handle_auth_errors("search")
+		def impl(ctx):
+			raise error
+
+		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
+			impl(ctx)
+
+		kwargs = mock_err.call_args.kwargs
+		assert kwargs["code"] == "BROWSER_NAV_TIMEOUT"
+		assert kwargs["recoverable"] is True
+		assert "boss login" in kwargs["recovery_action"]
+		assert "Page.goto" not in kwargs["message"]
+		assert kwargs["details"]["channel"] == "headless"
+		assert kwargs["details"]["attempts"] == 2
+		assert "boss doctor" in kwargs["hints"]["next_actions"]
+		assert any("www.zhipin.com" in action for action in kwargs["hints"]["operator_actions"])
+
 	def test_auth_required(self):
 		from boss_agent_cli.auth.manager import AuthRequired
 		ctx = MagicMock()

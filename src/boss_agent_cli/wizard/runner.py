@@ -8,6 +8,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from boss_agent_cli.api.browser_client import BrowserNavigationError
 from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserSourceUnsupported
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded, request_control
@@ -218,6 +219,16 @@ class WorkflowRunner:
 				recovery_action, _ = risk_error_contract(exc.code)
 				error = WorkflowActionError(
 					exc.code, str(exc) or exc.code, recoverable=False, recovery_action=recovery_action
+				)
+			except BrowserNavigationError as exc:
+				# 首页导航已经在会话内重试过。这里不再把同一步骤立刻重跑一遍。
+				recoverable, recovery = error_contract_for_code(exc.code)
+				error = WorkflowActionError(
+					exc.code,
+					str(exc),
+					recoverable=recoverable,
+					recovery_action=recovery,
+					details=exc.details(),
 				)
 			except BrowserSourceUnavailable as exc:
 				error = WorkflowActionError(

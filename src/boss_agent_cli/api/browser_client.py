@@ -45,6 +45,48 @@ def _find_reusable_zhipin_page(context: Any) -> Any | None:
 	return None
 
 
+class BrowserNavigationError(RuntimeError):
+	"""首页在有界重试后仍未进入 domcontentloaded。
+
+	用户可见文案不转发 Playwright 的 ``Page.goto`` 调用日志。``details()`` 只保留
+	公开 URL、次数、通道和原因的第一行，供信封诊断。
+	"""
+
+	code = "BROWSER_NAV_TIMEOUT"
+
+	def __init__(
+		self,
+		url: str,
+		*,
+		attempts: int,
+		timeout_ms: int,
+		channel: str,
+		cause: BaseException | None = None,
+	) -> None:
+		self.url = url
+		self.attempts = attempts
+		self.timeout_ms = timeout_ms
+		self.channel = channel
+		self.cause = cause
+		super().__init__(
+			f"浏览器首页导航超时：连续 {attempts} 次均未在 {timeout_ms}ms 内到达 domcontentloaded（{url}）"
+		)
+
+	def details(self) -> dict[str, Any]:
+		cause_text = ""
+		if self.cause is not None:
+			cause_text = str(self.cause).splitlines()[0][:240]
+		payload: dict[str, Any] = {
+			"url": self.url,
+			"attempts": self.attempts,
+			"timeout_ms": self.timeout_ms,
+			"channel": self.channel,
+		}
+		if cause_text:
+			payload["cause"] = cause_text
+		return payload
+
+
 class RecruiterChatTabRequired(RuntimeError):
 	"""招聘者操作（issue #217 修复路径）需要用户已打开 chat/index 页。
 
@@ -64,6 +106,9 @@ class RecruiterChatTabRequired(RuntimeError):
 _CDP_PROBE_TIMEOUT = 3  # 显式 --cdp-url 的 CDP 探测 HTTP 超时（秒）
 _CDP_AUTO_PROBE_TIMEOUT = 1  # 默认自动探测 localhost:9222 的超时（无调试端口时快速失败，省 ~2s）
 _NAV_TIMEOUT_MS = 15000  # 页面导航超时（毫秒）
+# 含首次。与 auth.browser._HOME_NAV_RETRIES 对齐：首页在自动化下偶发卡住，
+# 跳 about:blank 重置卡死导航后再试一次（Discussion #250）。
+_HOME_NAV_RETRIES = 2
 # zhipin 首页常驻请求多、headless 下基本进不了 networkidle；domcontentloaded 后 JS
 # 环境即可发 fetch，故宽限缩到 0.8s（实测每次都会耗满，缩短直接省 ~2s/搜索）。
 _HEADLESS_NETWORKIDLE_GRACE_MS = 800
@@ -208,6 +253,7 @@ class BrowserSession:
 		# 页面已就绪（默认 True）；仅 _try_connect 新建页签 goto 超时才置 False，
 		# request() 据此在 evaluate(fetch) 前做有界恢复，避免对仍在导航的页面挂起。
 		self._page_ready = True
+		self._home_nav_error: BrowserNavigationError | None = None
 		self._logger = logger
 		# 通道来源策略 —— 本类上**唯一**的来源/模式选择器。
 		# 禁止再加第二个模式布尔：那正是 #404 与 #388 各插一个短路、
@@ -269,17 +315,57 @@ class BrowserSession:
 					return self._interrupted_request_response(endpoint)
 			return result
 
-	def _navigate_home(self) -> None:
+	def _navigate_home(self, *, channel: str | None = None) -> None:
+		"""打开首页并确认 domcontentloaded。
+
+		单次 ``goto`` 在 headless / 新建 CDP 页签上会把偶发的首页卡死直接变成
+		``Page.goto`` 超时（Discussion #250）。这里与登录预热一致：失败后先确认
+		不是安全页，再跳 ``about:blank`` 重置导航并重试，全部失败才抛
+		``BrowserNavigationError``。重试留在同一次 browser-navigation 预算窗口里。
+		"""
 		from contextlib import nullcontext
 
+		resolved_channel = channel or ("cdp" if self._is_cdp else "headless")
 		budget = getattr(self, "_request_budget", None)
 		window = (
 			budget.attempt("browser-navigation", check=self._check_request) if budget is not None else nullcontext()
 		)
+		last_error: BaseException | None = None
 		with window:
 			check_request_control(self._check_request)
-			self._page.goto(HOME_URL, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
-			self._raise_if_security_page()
+			for attempt in range(_HOME_NAV_RETRIES):
+				try:
+					self._page.goto(HOME_URL, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+					self._raise_if_security_page()
+					self._home_nav_error = None
+					return
+				except Exception as error:
+					if is_request_stop(error):
+						raise
+					# 超时后页面可能已经停在安全验证页；先抛风险，不要 about:blank 把验证页清掉。
+					self._raise_if_security_page()
+					last_error = error
+					self._log(
+						f"[boss] 首页导航未在预期时间完成（{resolved_channel}，"
+						f"{attempt + 1}/{_HOME_NAV_RETRIES}）：{error}"
+					)
+					if attempt + 1 >= _HOME_NAV_RETRIES:
+						break
+					try:
+						self._page.goto("about:blank", wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+					except Exception as reset_error:
+						if is_request_stop(reset_error):
+							raise
+						self._raise_if_security_page()
+			if last_error is None:
+				last_error = RuntimeError("homepage navigation failed")
+			raise BrowserNavigationError(
+				HOME_URL,
+				attempts=_HOME_NAV_RETRIES,
+				timeout_ms=_NAV_TIMEOUT_MS,
+				channel=resolved_channel,
+				cause=last_error,
+			) from last_error
 
 	def _log(self, message: str) -> None:
 		"""Diagnostic channel logs: debug by default so TTY wizard stays clean."""
@@ -400,6 +486,7 @@ class BrowserSession:
 		# 每次连接尝试都重置就绪标志：复用页签分支不碰 _page_ready，若上一次尝试
 		# 在新建页签 goto 超时留下 False，会污染本次复用的健康页签（review Finding）。
 		self._page_ready = True
+		self._home_nav_error = None
 		try:
 			self._browser = self._pw.chromium.connect_over_cdp(url)
 			contexts = self._browser.contexts
@@ -452,13 +539,13 @@ class BrowserSession:
 				# CDP 模式下用较长超时 + DOM 就绪等待（commit 级返回后立即
 				# evaluate 会撞上 execution context destroyed）
 				try:
-					self._navigate_home()
-				except Exception as error:
-					if is_request_stop(error):
-						raise
-					# 导航超时：页面可能仍在导航、执行上下文未建立。标记未就绪，
-					# 由 request() 在 evaluate 前有界恢复，避免永久挂起（同 #390）。
+					self._navigate_home(channel="cdp")
+				except BrowserNavigationError as error:
+					# 有界重试后仍未就绪：保留 CDP 会话，request() 再等一次 load，
+					# 仍失败则抛出同一错误，而不是降级到另一个浏览器会话。
+					# 风控异常不在这里捕获，交给外层按 request stop 原样上抛。
 					self._page_ready = False
+					self._home_nav_error = error
 					page_label = "新建 page（首页未就绪）"
 				else:
 					page_label = "新建 page"
@@ -534,7 +621,7 @@ class BrowserSession:
 			]
 		)
 		self._page = self._context.new_page()
-		self._navigate_home()
+		self._navigate_home(channel="headless")
 		try:
 			self._page.wait_for_load_state("networkidle", timeout=_HEADLESS_NETWORKIDLE_GRACE_MS)
 		except Exception as e:
@@ -589,14 +676,23 @@ class BrowserSession:
 		if not self._page_ready:
 			try:
 				self._page.wait_for_load_state("domcontentloaded", timeout=_NAV_TIMEOUT_MS)
-			except Exception:
-				return {
-					"code": -1,
-					"message": "页面导航未完成（CDP 首页加载超时），无法发起请求；请检查浏览器后重试",
-					"zpData": {},
-				}
+			except Exception as error:
+				if is_request_stop(error):
+					raise
+				self._raise_if_security_page()
+				pending = self._home_nav_error
+				if pending is not None:
+					raise pending
+				raise BrowserNavigationError(
+					HOME_URL,
+					attempts=1,
+					timeout_ms=_NAV_TIMEOUT_MS,
+					channel="cdp" if self._is_cdp else "headless",
+					cause=error,
+				) from error
 			else:
 				self._page_ready = True
+				self._home_nav_error = None
 				self._raise_if_security_page()
 		payload = {
 			"method": method.upper(),

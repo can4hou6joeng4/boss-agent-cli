@@ -9,7 +9,9 @@ import httpx
 from boss_agent_cli.api.browser_client import (
 	HOME_URL,
 	_HEADLESS_NETWORKIDLE_GRACE_MS,
+	_HOME_NAV_RETRIES,
 	_NAV_TIMEOUT_MS,
+	BrowserNavigationError,
 	BrowserSession,
 	_find_reusable_zhipin_page,
 )
@@ -505,7 +507,7 @@ def test_try_connect_creates_page_when_no_open_zhipin_tab():
 
 def test_request_does_not_hang_when_new_page_navigation_stalled():
 	"""新建 CDP 页签 goto 超时（_page_ready=False）时，request() 不得对仍在导航的页面
-	evaluate（永久挂起，同 #390）；先有界恢复，仍卡住则返回错误信封。"""
+	evaluate（永久挂起，同 #390）；先有界恢复，仍卡住则抛出 BrowserNavigationError。"""
 	session = BrowserSession(cookies={}, user_agent="")
 	session._pw = MagicMock()
 	mock_browser = MagicMock()
@@ -519,11 +521,14 @@ def test_request_does_not_hang_when_new_page_navigation_stalled():
 
 	assert session._try_connect("ws://localhost:9222/test") is True
 	assert session._page_ready is False
+	assert isinstance(session._home_nav_error, BrowserNavigationError)
+	assert session._home_nav_error.channel == "cdp"
+	assert session._home_nav_error.attempts == _HOME_NAV_RETRIES
 
-	# 页面仍卡住：request 返回错误信封，不调 evaluate
+	# 页面仍卡住：抛出导航超时，不调 evaluate（永久挂起，同 #390）
 	mock_new_page.wait_for_load_state.side_effect = TimeoutError("still stuck")
-	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
-	assert res["code"] == -1
+	with pytest.raises(BrowserNavigationError):
+		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
 	mock_new_page.evaluate.assert_not_called()
 
 	# 页面恢复：有界 wait 成功后正常 evaluate，_page_ready 复位
@@ -677,3 +682,79 @@ def test_request_propagates_unrelated_evaluate_errors_without_retry():
 
 	page.evaluate.assert_called_once()
 	page.wait_for_load_state.assert_not_called()
+
+
+def test_navigate_home_resets_blank_and_retries_after_timeout():
+	"""首页第一次 goto 超时后跳 about:blank，下一次成功则不抛错。"""
+	page = MagicMock()
+	page.url = HOME_URL
+	page.goto.side_effect = [TimeoutError("Timeout 15000ms exceeded"), None, None]
+	session = BrowserSession(cookies={}, user_agent="UA")
+	session._page = page
+
+	session._navigate_home(channel="headless")
+
+	assert [call.args[0] for call in page.goto.call_args_list] == [HOME_URL, "about:blank", HOME_URL]
+	assert session._home_nav_error is None
+
+
+def test_navigate_home_raises_clear_error_when_retries_exhausted():
+	"""两次首页导航都超时：错误文案不再是裸的 Page.goto，诊断里保留原因首行。"""
+	page = MagicMock()
+	page.url = "about:blank"
+	page.goto.side_effect = TimeoutError("Page.goto: Timeout 15000ms exceeded")
+	session = BrowserSession(cookies={}, user_agent="UA")
+	session._page = page
+
+	with pytest.raises(BrowserNavigationError) as captured:
+		session._navigate_home(channel="headless")
+
+	error = captured.value
+	assert error.code == "BROWSER_NAV_TIMEOUT"
+	assert error.attempts == _HOME_NAV_RETRIES
+	assert error.channel == "headless"
+	assert "Page.goto" not in str(error)
+	assert error.details()["cause"].startswith("Page.goto")
+	assert [call.args[0] for call in page.goto.call_args_list] == [HOME_URL, "about:blank", HOME_URL]
+
+
+def test_navigate_home_does_not_reset_a_security_page():
+	"""超时后若已经停在安全验证页，立刻抛风险，不用 about:blank 把验证页清掉。"""
+	from boss_agent_cli.api.client import AccountRiskError
+
+	page = MagicMock()
+	page.url = "about:blank"
+
+	def land_on_security(url: str, **kwargs: object) -> None:
+		if url == HOME_URL:
+			page.url = "https://www.zhipin.com/web/passport/zp/verify.html"
+			raise TimeoutError("Timeout 15000ms exceeded")
+
+	page.goto.side_effect = land_on_security
+	session = BrowserSession(cookies={}, user_agent="UA")
+	session._page = page
+
+	with pytest.raises(AccountRiskError):
+		session._navigate_home(channel="headless")
+
+	page.goto.assert_called_once_with(HOME_URL, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+
+
+def test_start_headless_raises_navigation_error_instead_of_raw_goto_timeout():
+	session = BrowserSession(cookies={"wt2": "abc"}, user_agent="UA")
+	session._pw = MagicMock()
+	browser = MagicMock()
+	context = MagicMock()
+	page = MagicMock()
+	page.url = "about:blank"
+	page.goto.side_effect = TimeoutError("Page.goto: Timeout 15000ms exceeded")
+	context.new_page.return_value = page
+	browser.new_context.return_value = context
+	session._pw.chromium.launch.return_value = browser
+
+	with pytest.raises(BrowserNavigationError) as captured:
+		session._start_headless()
+
+	assert session._started is False
+	assert captured.value.channel == "headless"
+	assert captured.value.attempts == _HOME_NAV_RETRIES

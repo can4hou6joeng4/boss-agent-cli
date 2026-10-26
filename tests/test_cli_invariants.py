@@ -124,6 +124,55 @@ def test_browser_source_config_value_is_normalized(tmp_path: Any) -> None:
 	assert payload["data"]["current_browser_source"] == "stored-cookie"
 
 
+def test_json_after_subcommand_explains_global_option(tmp_path: Any) -> None:
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "search", "实习", "--json"])
+	assert result.exit_code == 1
+	payload = _parse_single_envelope(result)
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "全局选项" in payload["error"]["message"]
+	assert "boss --json search" in payload["error"]["message"]
+	assert payload["hints"]["operator_actions"]
+
+
+def test_json_before_subcommand_still_parses(tmp_path: Any) -> None:
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "schema"])
+	assert result.exit_code == 0
+	payload = _parse_single_envelope(result)
+	assert payload["ok"] is True
+	assert payload["command"] == "schema"
+
+
+def test_valued_global_option_hint_includes_placeholder(tmp_path: Any) -> None:
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "schema", "--delay", "1-2"])
+	assert result.exit_code == 1
+	payload = _parse_single_envelope(result)
+	assert "boss --delay <value> schema" in payload["error"]["message"]
+
+
+def test_no_json_after_subcommand_is_also_global(tmp_path: Any) -> None:
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "schema", "--no-json"])
+	assert result.exit_code == 1
+	payload = _parse_single_envelope(result)
+	assert "boss --no-json schema" in payload["error"]["message"]
+
+
+def test_unknown_subcommand_option_stays_a_plain_usage_error(tmp_path: Any) -> None:
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "schema", "--not-a-real-option"])
+	assert result.exit_code == 1
+	payload = _parse_single_envelope(result)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "全局选项" not in payload["error"]["message"]
+
+
+def test_nested_global_option_hint_includes_group_path(tmp_path: Any) -> None:
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "hr", "whoami", "--json"])
+	assert result.exit_code == 1
+	payload = _parse_single_envelope(result)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "boss --json hr whoami" in payload["error"]["message"]
+
+
 def test_browser_source_rejects_unknown_value(tmp_path: Any) -> None:
 	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--browser-source", "bridge", "--json", "schema"])
 	assert result.exit_code != 0
