@@ -6,7 +6,7 @@
 
 *🤖 A recruiting-platform CLI for people and AI agents — terminal wizard · welfare filtering · dual-role workflows · JSON envelopes.*
 
-[![Python](https://img.shields.io/badge/Python-≥3.10-3776AB?logo=python&logoColor=white&style=flat-square)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-≥3.11-3776AB?logo=python&logoColor=white&style=flat-square)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/can4hou6joeng4/boss-agent-cli?style=flat-square)](https://github.com/can4hou6joeng4/boss-agent-cli/releases)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/boss-agent-cli?style=flat-square)](https://pypi.org/project/boss-agent-cli/)
@@ -194,7 +194,7 @@ CLI (Click)
 **Invariants**: stdout is JSON-only · stderr holds logs · `exit 0/1` (optional `--exit-codes sysexits` for semantic codes) · errors carry `code/recoverable/recovery_action` · `boss schema` is the authoritative capability source.
 **Two audiences, one envelope**: `hints.next_actions` holds follow-up commands for the Agent to run; `hints.operator_actions` holds natural-language guidance for the human operator (scan a QR code, adjust filters in the browser — anything done away from the terminal). TTY renders only the latter, to stderr; an Agent should relay it to the operator.
 **Command or wizard**: single-shot, stateless capability calls go through top-level commands; anything needing cross-step state, resumability, or handing guidance to a human goes through `boss wizard` (goals listed under `wizard_catalog` in `boss schema`).
-**Stack**: Python ≥ 3.10 · Click · httpx · patchright / CDP (login, export, and declared browser adapters) · cryptography · sqlite3 (WAL) · pytest (2900+).
+**Stack**: Python ≥ 3.11 · Click · httpx · patchright / CDP (login, export, and declared browser adapters) · cryptography · sqlite3 (WAL) · pytest (2900+).
 
 ## 🔌 Local Storage
 

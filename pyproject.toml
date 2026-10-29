@@ -7,7 +7,7 @@ name = "boss-agent-cli"
 version = "3.0.1"
 description = "AI Agent 专用的 BOSS 直聘求职 CLI 工具"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 authors = [
 	{name = "can4hou6joeng4"},
@@ -19,7 +19,6 @@ classifiers = [
 	"Intended Audience :: Developers",
 	"License :: OSI Approved :: MIT License",
 	"Programming Language :: Python :: 3",
-	"Programming Language :: Python :: 3.10",
 	"Programming Language :: Python :: 3.11",
 	"Programming Language :: Python :: 3.12",
 	"Programming Language :: Python :: 3.13",
@@ -58,6 +57,8 @@ dev = [
 	"pre-commit>=3.0",
 	# pre-commit 的传递依赖：避开激活脚本与种子包处理的已知安全问题。
 	"virtualenv>=21.7.13,<22.0.0",
+	# virtualenv / 工具链传递依赖：filelock 4.2.1+ 修复多项本地锁文件安全问题，且要求 Python ≥3.11。
+	"filelock>=4.2.1,<5.0.0",
 	"mypy>=1.20",
 	"types-PyYAML>=6.0",
 ]
@@ -125,7 +126,7 @@ select = ["E4", "E7", "E9", "F"]
 indent-style = "tab"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 # 渐进接入：仅跑基础类型检查，允许现有未注解函数存在
 # 目标：先覆盖报错→逐模块消化→最终切 --strict
 ignore_missing_imports = true

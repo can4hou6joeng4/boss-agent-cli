@@ -26,7 +26,7 @@ Long workflows are bounded by timeout, retry, budget, checkpoint and stop contro
 - Browser core when needed: `patchright install chromium`
 
 ## License & environment
-MIT. Python >= 3.10. Login state, cache, resumes and shortlists are stored locally. No runtime telemetry is included.
+MIT. Python >= 3.11. Login state, cache, resumes and shortlists are stored locally. No runtime telemetry is included.
 
 ## Links
 - GitHub: https://github.com/can4hou6joeng4/boss-agent-cli

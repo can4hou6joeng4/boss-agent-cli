@@ -87,7 +87,7 @@ MCP 配置示例：
 
 - JSON 信封和 `boss schema` 是 Agent 契约源
 - zhipin（BOSS 直聘）为唯一注册平台，已覆盖求职者链路
-- CI 覆盖 Python 3.10 / 3.11 / 3.12 / 3.13、ruff、mypy、文档一致性和 CodeQL
+- CI 覆盖 Python 3.11 / 3.12 / 3.14、ruff、mypy、文档一致性和 CodeQL
 - 不引入遥测、埋点或云同步；采用度量只看 PyPI 下载量和 GitHub Insights
 
 ### 5. 链接

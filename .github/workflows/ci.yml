@@ -69,7 +69,7 @@ jobs:
       fail-fast: false
       matrix:
         # 最低支持版本、主力版本、最新版本
-        python-version: ["3.10", "3.12", "3.14"]
+        python-version: ["3.11", "3.12", "3.14"]
     env:
       UV_PYTHON: ${{ matrix.python-version }}
     steps:

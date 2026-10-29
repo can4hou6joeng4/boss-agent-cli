@@ -21,7 +21,7 @@ boss doctor --live-probe
 
 | 检查项 | 说明 |
 |--------|------|
-| `python` | Python 版本 >= 3.10 |
+| `python` | Python 版本 >= 3.11 |
 | `patchright` | CLI 已安装 |
 | `patchright_chromium` | patchright 所需的 Chromium 与 headless shell 修订版已安装；Windows 同时检查 `%LOCALAPPDATA%\ms-playwright` |
 | `windows_uv_tool_path` | Windows 全局 `uv tool` 命令目录是否在 PATH 中 |

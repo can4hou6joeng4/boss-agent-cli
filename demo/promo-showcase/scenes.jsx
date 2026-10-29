@@ -34,7 +34,7 @@ function Scene1() {
 					<Chip tone="green" at={2.3}>用户主动触发</Chip>
 				</div>
 				<Appear at={2.65} dur={0.5}>
-					<div className="mono" style={{ fontSize: 20, color: C.faint, marginTop: 30, letterSpacing: '0.04em' }}>v1.13.1 · MIT · Python ≥ 3.10</div>
+					<div className="mono" style={{ fontSize: 20, color: C.faint, marginTop: 30, letterSpacing: '0.04em' }}>v1.13.1 · MIT · Python ≥ 3.11</div>
 				</Appear>
 			</div>
 		</Shot>

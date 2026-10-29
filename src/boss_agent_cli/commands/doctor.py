@@ -52,13 +52,13 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 	import sys
 
 	py_version = sys.version_info
-	python_ok = py_version >= (3, 10)
+	python_ok = py_version >= (3, 11)
 	py_detail = f"Python {py_version.major}.{py_version.minor}.{py_version.micro}"
 	add_check(
 		"python",
 		"ok" if python_ok else "error",
-		f"{py_detail}" if python_ok else f"{py_detail}（需要 >=3.10）",
-		None if python_ok else "升级 Python 到 3.10+",
+		f"{py_detail}" if python_ok else f"{py_detail}（需要 >=3.11）",
+		None if python_ok else "升级 Python 到 3.11+",
 	)
 
 	patchright_bin = shutil.which("patchright")

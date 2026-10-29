@@ -97,18 +97,18 @@ def test_all_checks_pass(tmp_path):
 # ── 2. Python 版本不满足 ─────────────────────────────────────────────
 
 
-def test_python_version_below_310(tmp_path):
-	"""Python 版本低于 3.10 时 python 检查应为 error。"""
+def test_python_version_below_311(tmp_path):
+	"""Python 版本低于 3.11 时 python 检查应为 error。"""
 
 	class FakeVersionInfo(tuple):
 		"""模拟 sys.version_info：同时支持元组比较和属性访问。"""
 
 		major = 3
-		minor = 9
+		minor = 10
 		micro = 1
 
 		def __new__(cls):
-			return tuple.__new__(cls, (3, 9, 1))
+			return tuple.__new__(cls, (3, 10, 1))
 
 	original = sys.version_info
 	sys.version_info = FakeVersionInfo()
@@ -119,11 +119,11 @@ def test_python_version_below_310(tmp_path):
 	python_check = _find_check(parsed["data"]["checks"], "python")
 	assert python_check is not None
 	assert python_check["status"] == "error"
-	assert "3.10" in python_check["detail"]
+	assert "3.11" in python_check["detail"]
 
 
 def test_python_version_satisfies(tmp_path):
-	"""当前测试运行的 Python 应满足 >=3.10。"""
+	"""当前测试运行的 Python 应满足 >=3.11。"""
 	code, parsed = _invoke_doctor(tmp_path)
 	python_check = _find_check(parsed["data"]["checks"], "python")
 	assert python_check["status"] == "ok"

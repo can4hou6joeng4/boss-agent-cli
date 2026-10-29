@@ -22,7 +22,7 @@ boss doctor --live-probe
 
 | Check | What it means |
 |-------|---------------|
-| `python` | Python ≥ 3.10 installed |
+| `python` | Python ≥ 3.11 installed |
 | `patchright_chromium` | The Chromium and headless shell revisions required by patchright are installed; Windows also checks `%LOCALAPPDATA%\ms-playwright` |
 | `windows_uv_tool_path` | Whether the global `uv tool` command directory is on PATH on Windows |
 | `quality_baseline` | Source checkout only: whether the local P0 quality script exists |
