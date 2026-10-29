@@ -6,16 +6,18 @@ web_pages:
   boss_search: "/web/chat/search"
 
 default_headers:
-  User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
-  sec-ch-ua: '"Chromium";v="145", "Not(A:Brand";v="99", "Google Chrome";v="145"'
+  # 与 boss.yaml 同源：2026-10-29 在本机 Chrome 156 真实招聘者页面上抓包
+  # （scripts/capture_request_identity.py）。两套 header 必须与各自 UA 自洽。
+  User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+  sec-ch-ua: '"Not:A-Brand";v="8", "Chromium";v="156", "Google Chrome";v="156"'
   sec-ch-ua-mobile: "?0"
   sec-ch-ua-platform: '"macOS"'
   Sec-Fetch-Dest: "empty"
   Sec-Fetch-Mode: "cors"
   Sec-Fetch-Site: "same-origin"
   Accept: "application/json, text/plain, */*"
-  Accept-Language: "zh-CN,zh;q=0.9,en;q=0.8"
-  DNT: "1"
+  Accept-Language: "zh-CN,zh;q=0.9"
+  X-Requested-With: "XMLHttpRequest"
 
 response_codes:
   success: 0
