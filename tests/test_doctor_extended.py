@@ -58,6 +58,9 @@ def _invoke_doctor(tmp_path=None, platform="zhipin", **overrides):
 		for key in ("cdp_url", "browser_source"):
 			if key in overrides:
 				cli_args.extend(["--" + key.replace("_", "-"), overrides[key]])
+		# 默认给一个高于实测可持续节奏的间隔：request_delay 检查只在配置确实
+		# 偏低时才 warn（见 docs/research/zhipin-cdp-free-read-path-2026-10-29.md）。
+		cli_args.extend(["--delay", overrides.get("delay", "45-90")])
 		cli_args.append("doctor")
 		if overrides.get("probe_cookies"):
 			cli_args.append("--probe-cookies")
