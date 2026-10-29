@@ -1,3 +1,4 @@
+import re
 import sys
 from pathlib import Path
 from collections.abc import Sequence
@@ -65,8 +66,57 @@ def _prescan_exit_codes(args: Sequence[str] | None) -> None:
 			set_exit_codes_mode(token.split("=", 1)[1])
 
 
+_SECURITY_ID_LIKE = re.compile(r"^-[A-Za-z0-9_-]{19,}$")
+
+
+def _declare_dash_prefixed_positionals(
+	group: click.Group, ctx: click.Context | None, args: list[str]
+) -> list[str]:
+	"""在形如 security_id 的横杠开头位置参数前插入 ``--``。
+
+	BOSS 的 ``security_id`` 是 base64url，**可以合法地以 ``-`` 开头**（实测样本
+	``-`` 开头的长 base64url 串，实测 328 字符）。Click 会把它当成未知选项，于是
+	``boss detail`` 直接传该值时报告 ``No such option``，用户只能自己想到加 ``--``。
+
+	限定两件事以免掩盖真正的拼写错误：
+
+	- 只处理**看起来像 security_id** 的取值（``-`` 开头 + ≥20 个 base64url 字符）；
+	- 只处理命令**未声明**的选项名，且命令行里还没有 ``--`` 分隔符。
+	"""
+	if "--" in args:
+		return args
+
+	command_index = next((i for i, token in enumerate(args) if not token.startswith("-")), None)
+	if command_index is None:
+		return args
+	if ctx is None:
+		command = group.commands.get(args[command_index])
+	else:
+		command = group.get_command(ctx, args[command_index])
+	if command is None or not isinstance(command, click.Command):
+		return args
+
+	declared: set[str] = set()
+	for param in command.params:
+		if isinstance(param, click.Option):
+			declared.update(param.opts)
+			declared.update(param.secondary_opts)
+
+	for index in range(command_index + 1, len(args)):
+		token = args[index]
+		if token in declared:
+			continue
+		if _SECURITY_ID_LIKE.match(token):
+			return [*args[:index], "--", *args[index:]]
+	return args
+
+
 class BossCliGroup(click.Group):
 	"""Click group that preserves the JSON envelope contract for usage errors."""
+
+	def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+		"""先给横杠开头的 security_id 补 ``--``，再交给 Click 解析。"""
+		return super().parse_args(ctx, _declare_dash_prefixed_positionals(self, ctx, list(args)))
 
 	def main(
 		self,
