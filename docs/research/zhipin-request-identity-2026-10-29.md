@@ -183,3 +183,37 @@ GET 用查询串、POST 用 `application/x-www-form-urlencoded`，与 `boss.yaml
 同一会话中访问招聘者页面后，求职者页面的 URL 带上了 `_security_check=1_<ts>` 查询参数。
 此前三次抓包的 `final_url` 都没有这个参数。业务接口当时全部返回 200，因此目前只能记录现象，
 不能断言它是风控标记还是实验参数。记录在此供后续对照。
+
+## 招聘者侧（2026-10-29 追加，真实招聘者账号）
+
+用户提供招聘者账号后，用独立 profile（`~/.boss-agent/cdp-chrome-profile-recruiter`）
+扫码登录，采集 `/web/chat/index`（40 条业务请求）。候选者登录态在采集前已备份，
+采集全程未写入 CLI 的 token store。
+
+### 与候选者侧的差异
+
+| 头 | 候选者（搜索/聊天/简历） | 招聘者（沟通页） | 说明 |
+|---|---|---|---|
+| `token` | 24–25/36，16 字符，会话常量 | **0/40** | 招聘者侧页面**不发** `token` |
+| `zp_token` | 28–32/36，67 字符，会话常量 | 34/40，67 字符，1 个唯一值 | 形态与生命周期完全一致 |
+| `traceid` | 每请求不同，18–36 字符 | 35/40，35 个唯一值，20–36 字符 | 一致 |
+| `X-Requested-With` | `XMLHttpRequest` | 33/40，`XMLHttpRequest` | 一致 |
+| `with-common-headers` | 无 | 1/40（仅 `set/zpToken`，值 `true`） | 招聘者独有的单点头 |
+
+其余 24 个 header 名集合两侧相同（`accept*`、`cookie`、`origin`、`priority`、
+`referer`、`sec-ch-ua*`、`sec-fetch-*`、`user-agent`）。
+
+### 结论
+
+1. `zp_token` 两侧同形同义，回放策略对两侧都成立，`status --live` 已验证。
+2. `token` 只在候选者侧出现。因此 `PAGE_IDENTITY_HEADERS` 保持为"有则回放、无则不伪造"：
+   招聘者会话里采不到 `token` 时，回放集合自然只剩 `zp_token`，不会补一个假值。
+3. `with-common-headers: true` 只出现在 `set/zpToken` 单条请求上，是那一个接口的局部参数，
+   不是会话级身份，未纳入回放。
+4. `recruiter.yaml` 此前仍停在旧模板（UA Chrome/145、`Not(A:Brand` v=145、
+   `Accept-Language` 多 `en`、多发 `DNT: 1`），与 `boss.yaml` 改前的问题完全相同，已一并修正。
+
+### 边界更新
+
+上一节记录的"招聘者侧未验证"到此解除：招聘者沟通页的身份头已有一手证据。
+仍未采集的招聘者页面是职位管理与推荐牛人页；方法学相同，需要时重跑同一脚本即可。
