@@ -15,7 +15,7 @@ import sys
 import time
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Callable, cast
+from typing import Any, Callable, Mapping, cast
 from patchright.sync_api import sync_playwright
 
 from boss_agent_cli.api import endpoints
@@ -26,6 +26,7 @@ from boss_agent_cli.api.browser_source import (
 	BrowserSourceUnavailable,
 	resolve_policy,
 )
+from boss_agent_cli.api.proxy import WEBRTC_LEAK_GUARD_ARGS, resolve_proxy
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
 from boss_agent_cli.api.endpoints_loader import EndpointSpec, endpoint_for_request
 from boss_agent_cli.api.throttle import RequestThrottle
@@ -125,7 +126,7 @@ _CHROME_USER_DATA_CANDIDATES = [
 
 #: Runtime.evaluate(fetch) 的 JS 主体，request() 首次与只读恢复共用同一份。
 _FETCH_SCRIPT = r"""
-			async ({method, url, params, data, referer, timeoutMs}) => {
+			async ({method, url, params, data, referer, timeoutMs, identity}) => {
 				const controller = new AbortController();
 				let timer;
 				const deadline = new Promise((_, reject) => {
@@ -149,11 +150,11 @@ _FETCH_SCRIPT = r"""
 						method: method,
 						signal: controller.signal,
 						credentials: 'include',
-						headers: {
+						headers: Object.assign({
 							'Accept': 'application/json, text/plain, */*',
 							'Referer': referer,
 							'X-Requested-With': 'XMLHttpRequest',
-						},
+						}, identity || {}),
 					};
 
 					if (method === 'POST' && data) {
@@ -233,6 +234,7 @@ class BrowserSession:
 		browser_source: str | None = None,
 		request_budget: RequestBudget | None = None,
 		request_check: Callable[[], None] | None = None,
+		identity: Mapping[str, str] | None = None,
 	) -> None:
 		self._request_budget = request_budget
 		self._request_check = request_check
@@ -244,6 +246,7 @@ class BrowserSession:
 		self._page: Any = None
 		self._cookies = cookies
 		self._user_agent = user_agent
+		self._identity = dict(identity or {})
 		self._started = False
 		self._cdp_url = cdp_url
 		self._is_cdp = False
@@ -510,7 +513,7 @@ class BrowserSession:
 				return False
 			else:
 				# 没有已存在 context，创建新的并注入 cookies
-				self._context = self._browser.new_context()
+				self._context = self._browser.new_context(proxy=resolve_proxy())
 				if self._cookies:
 					self._context.add_cookies(
 						[
@@ -605,12 +608,17 @@ class BrowserSession:
 
 	def _start_headless(self) -> None:
 		"""Fallback: launch headless patchright Chromium."""
-		self._browser = self._pw.chromium.launch(headless=True)
+		self._browser = self._pw.chromium.launch(
+			headless=True,
+			proxy=resolve_proxy(),
+			args=list(WEBRTC_LEAK_GUARD_ARGS),
+		)
 		self._context = self._browser.new_context(
 			user_agent=self._user_agent,
 			viewport={"width": 1280, "height": 800},
 			locale="zh-CN",
 			timezone_id="Asia/Shanghai",
+			proxy=resolve_proxy(),
 		)
 		self._own_context = True
 		self._own_page = True
@@ -701,6 +709,9 @@ class BrowserSession:
 			"data": data,
 			"referer": referer,
 			"timeoutMs": _REQUEST_TIMEOUT_MS,
+			# 页面自己给业务 XHR 加的 token/zp_token；缺了它浏览器通道就和 httpx 通道
+			# 不是同一个客户端（见 docs/research/zhipin-request-identity-2026-10-29.md）。
+			"identity": dict(self._identity),
 		}
 		try:
 			result = self._send_fetch(payload, endpoint)

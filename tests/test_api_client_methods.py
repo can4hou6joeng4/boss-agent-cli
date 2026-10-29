@@ -410,6 +410,7 @@ def test_existing_browser_construction_does_not_read_stored_credentials(mock_ses
 		browser_source="existing-browser",
 		request_budget=None,
 		request_check=client._check_cdp_risk_lock,
+		identity={},
 	)
 
 

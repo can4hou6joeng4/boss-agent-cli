@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 import httpx
 
 from boss_agent_cli.api.httpx_helpers import (
+	PAGE_IDENTITY_HEADERS,
 	add_stoken_to_get_params,
 	browser_headers,
 	merge_response_cookies,
@@ -312,6 +313,7 @@ class _BaseHttpClient:
 				browser_source=policy.name,
 				request_budget=getattr(self, "_request_budget", None),
 				request_check=self._check_cdp_risk_lock,
+				identity={name: token[name] for name in PAGE_IDENTITY_HEADERS if token.get(name)},
 			)
 		return self._browser_session
 

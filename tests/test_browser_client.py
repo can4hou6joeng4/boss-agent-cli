@@ -397,6 +397,7 @@ def test_request_returns_browser_evaluation_json_and_marks_throttle():
 		"data": {"city": "101020100"},
 		"referer": "https://www.zhipin.com/web/geek/job",
 		"timeoutMs": 20000,
+		"identity": {},
 	}
 
 
@@ -758,3 +759,19 @@ def test_start_headless_raises_navigation_error_instead_of_raw_goto_timeout():
 	assert session._started is False
 	assert captured.value.channel == "headless"
 	assert captured.value.attempts == _HOME_NAV_RETRIES
+def test_request_injects_page_identity_headers() -> None:
+	"""浏览器通道也要带页面自己的 token/zp_token，否则与 httpx 通道是两个客户端。"""
+	session = BrowserSession(cookies={}, user_agent="UA", identity={"token": "abc", "zp_token": "a~|b~"})
+	session._started = True
+	session._page = MagicMock()
+	session._throttle = MagicMock()
+	session._context = MagicMock()
+	cdp = session._context.new_cdp_session.return_value
+	cdp.send.return_value = {"result": {"value": {"code": 0, "zpData": {}}}}
+
+	session.request("GET", "https://www.zhipin.com/wapi/test.json")
+
+	method, args = cdp.send.call_args.args
+	assert method == "Runtime.evaluate"
+	payload = json.loads(args["expression"].rsplit(")(", 1)[1][:-1])
+	assert payload["identity"] == {"token": "abc", "zp_token": "a~|b~"}
