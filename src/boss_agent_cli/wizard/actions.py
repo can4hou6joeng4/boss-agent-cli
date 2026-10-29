@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.api.endpoints import CITY_CODES
 from boss_agent_cli.ai.config import AIConfigStore
@@ -38,7 +39,7 @@ class ActionContext:
 	platform: str
 	role: str
 	logger: Logger
-	delay: tuple[float, float] = (1.5, 3.0)
+	delay: tuple[float, float] = DEFAULT_REQUEST_DELAY
 	cdp_url: str | None = None
 	browser_source: str | None = None
 	config: Mapping[str, Any] | None = None

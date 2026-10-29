@@ -302,7 +302,7 @@ def test_recruiter_instance_falls_back_to_default_delay_when_ctx_is_empty(monkey
 	monkeypatch.setattr("boss_agent_cli.platforms.factory.BossRecruiterClient", _Client)
 	get_recruiter_platform_instance(SimpleNamespace(obj=None), MagicMock())
 
-	assert captured["delay"] == (1.5, 3.0)
+	assert captured["delay"] == (30.0, 60.0)
 	assert captured["cdp_url"] is None
 
 

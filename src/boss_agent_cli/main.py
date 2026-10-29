@@ -9,7 +9,7 @@ import click
 from boss_agent_cli import __version__
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.commands.register import register_candidate_commands, register_recruiter_commands
-from boss_agent_cli.config import load_config, validate_request_config
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY, load_config, validate_request_config
 from boss_agent_cli.api.request_budget import validate_delay
 from boss_agent_cli.hooks import create_hook_bus
 from boss_agent_cli.output import emit_error, Logger, set_exit_codes_mode
@@ -241,7 +241,7 @@ def cli(
 	else:
 		# Config inspection/reset must remain available to repair an invalid limit.
 		ctx.obj["delay"] = (
-			tuple(cfg["request_delay"]) if isinstance(cfg["request_delay"], (list, tuple)) else (1.5, 3.0)
+			tuple(cfg["request_delay"]) if isinstance(cfg["request_delay"], (list, tuple)) else DEFAULT_REQUEST_DELAY
 		)
 	if ctx.invoked_subcommand != "config":
 		try:

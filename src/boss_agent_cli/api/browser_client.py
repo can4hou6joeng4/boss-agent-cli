@@ -18,6 +18,7 @@ from types import TracebackType
 from typing import Any, Callable, Mapping, cast
 from patchright.sync_api import sync_playwright
 
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.api import endpoints
 from boss_agent_cli.api.browser_source import (
 	CHANNEL_CDP,
@@ -243,7 +244,7 @@ class BrowserSession:
 		cookies: dict[str, Any],
 		user_agent: str,
 		*,
-		delay: tuple[float, float] = (1.5, 3.0),
+		delay: tuple[float, float] = DEFAULT_REQUEST_DELAY,
 		cdp_url: str | None = None,
 		logger: Any = None,
 		browser_source: str | None = None,

@@ -3,8 +3,14 @@ import math
 from pathlib import Path
 from typing import Any
 
+#: 请求间隔默认值。来源：实测评测显示 15 秒间隔连续 3 次 search 会在第 3 次命中
+#: code 37（「您的环境存在异常」），90 秒间隔 3/3 通过
+#: （docs/research/zhipin-cdp-free-read-path-2026-10-29.md 第七节）。
+#: 单条只读命令只发 1 次请求，因此不受影响；受影响的是分页、批量详情这类多请求流程。
+DEFAULT_REQUEST_DELAY: tuple[float, float] = (30.0, 60.0)
+
 DEFAULTS: dict[str, Any] = {
-	"request_delay": [1.5, 3.0],
+	"request_delay": list(DEFAULT_REQUEST_DELAY),
 	"request_budget_dir": None,
 	"request_max_per_minute": 20,
 	"request_wait_timeout": 30.0,

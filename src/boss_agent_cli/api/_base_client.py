@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import httpx
 
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.api.httpx_helpers import (
 	PAGE_IDENTITY_HEADERS,
 	add_stoken_to_get_params,
@@ -74,7 +75,7 @@ class _BaseHttpClient:
 		self,
 		auth_manager: "AuthManager",
 		*,
-		delay: tuple[float, float] = (1.5, 3.0),
+		delay: tuple[float, float] = DEFAULT_REQUEST_DELAY,
 		cdp_url: str | None = None,
 		browser_source: str | None = None,
 	) -> None:

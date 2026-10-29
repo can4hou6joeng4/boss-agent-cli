@@ -8,6 +8,7 @@ from typing import Any, Mapping, NoReturn
 
 import click
 
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.display import handle_error_output, handle_output
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS
 from boss_agent_cli.wizard.catalog import build_plan, require_supported_platform
@@ -109,7 +110,7 @@ def _build_context(ctx: click.Context, plan: WorkflowPlan) -> ActionContext:
 		platform=plan.platform,
 		role=plan.role,
 		logger=ctx.obj["logger"],
-		delay=ctx.obj.get("delay", (1.5, 3.0)),
+		delay=ctx.obj.get("delay", DEFAULT_REQUEST_DELAY),
 		cdp_url=ctx.obj.get("cdp_url"),
 		browser_source=ctx.obj.get("browser_source"),
 		config=ctx.obj.get("config"),

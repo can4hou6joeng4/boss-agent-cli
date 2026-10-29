@@ -85,13 +85,14 @@ def test_doctor_warns_when_delay_is_below_the_observed_cadence() -> None:
 	from boss_agent_cli.commands.doctor import _RISK_FREE_DELAY_FLOOR
 	from boss_agent_cli.main import cli
 
-	result = CliRunner().invoke(cli, ["doctor"])
+	result = CliRunner().invoke(cli, ["--delay", "5-10", "doctor"])
 	payload = json.loads(result.output.splitlines()[-1])
 	check = next(c for c in payload["data"]["checks"] if c["name"] == "request_delay")
 
 	assert check["status"] == "warn"
 	assert "--delay 30-60" in check["hint"]
 	assert _RISK_FREE_DELAY_FLOOR == 30.0
+	assert "--delay 5-10" not in check["hint"]
 
 
 def test_doctor_accepts_a_cadence_above_the_floor() -> None:

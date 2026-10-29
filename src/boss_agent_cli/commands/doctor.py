@@ -8,6 +8,7 @@ from typing import Any
 import click
 import httpx
 
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL
 from boss_agent_cli.api.cdp_risk_lock import UNLOCK_OPERATOR_ACTIONS
 from boss_agent_cli.api.request_budget import risk_lock_status as lock_status
@@ -69,7 +70,7 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 	# 1b) 请求节奏：默认 1.5-3.0 秒远低于实测可持续节奏（见
 	# docs/research/zhipin-cdp-free-read-path-2026-10-29.md 第七节）。这里只提示，
 	# 不改用户配置、不发任何请求。
-	delay = ctx.obj.get("delay") or (1.5, 3.0)
+	delay = ctx.obj.get("delay") or DEFAULT_REQUEST_DELAY
 	low_delay = float(delay[0])
 	if low_delay < _RISK_FREE_DELAY_FLOOR:
 		add_check(

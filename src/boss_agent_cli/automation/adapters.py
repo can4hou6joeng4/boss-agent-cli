@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.automation.models import (
 	ActionResult,
 	Conversation,
@@ -40,7 +41,7 @@ def build_automation_adapter(
 	platform_name: str,
 	*,
 	data_dir: Path | None = None,
-	delay: tuple[float, float] = (1.5, 3.0),
+	delay: tuple[float, float] = DEFAULT_REQUEST_DELAY,
 	cdp_url: str | None = None,
 	live: bool = False,
 	sample_conversations: list[Conversation] | None = None,

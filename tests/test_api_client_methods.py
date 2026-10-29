@@ -410,7 +410,7 @@ def test_existing_browser_construction_does_not_read_stored_credentials(mock_ses
 	mock_session_cls.assert_called_once_with(
 		cookies={},
 		user_agent="",
-		delay=(1.5, 3.0),
+		delay=(30.0, 60.0),
 		cdp_url=None,
 		logger=auth._logger,
 		browser_source="existing-browser",

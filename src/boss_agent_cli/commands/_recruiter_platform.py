@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.platforms.factory import build_recruiter_platform_instance
 from boss_agent_cli.platforms.recruiter_base import RecruiterPlatform
 
@@ -16,7 +17,7 @@ def get_recruiter_platform_instance(ctx: "click.Context", auth: "AuthManager") -
 	return build_recruiter_platform_instance(
 		obj.get("platform") or "zhipin",
 		auth,
-		delay=obj.get("delay", (1.5, 3.0)),
+		delay=obj.get("delay", DEFAULT_REQUEST_DELAY),
 		cdp_url=obj.get("cdp_url"),
 		browser_source=obj.get("browser_source"),
 	)
