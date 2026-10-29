@@ -395,7 +395,7 @@ def test_request_returns_browser_evaluation_json_and_marks_throttle():
 		"url": "https://www.zhipin.com/wapi/zpgeek/search/joblist.json",
 		"params": {"query": "python", "page": 1},
 		"data": {"city": "101020100"},
-		"referer": "https://www.zhipin.com/web/geek/job",
+		"referer": "https://www.zhipin.com/web/geek/jobs",
 		"timeoutMs": 20000,
 		"identity": {},
 		"traceId": evaluate_args["traceId"],

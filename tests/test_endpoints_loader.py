@@ -73,3 +73,24 @@ class TestGetSpec:
 		s2 = get_spec()
 		assert s1 is s2
 		mod._spec = None  # Clean up
+
+
+def test_candidate_referers_use_the_real_jobs_page():
+	"""候选者侧 referer 必须指向真实页面 ``/web/geek/jobs``（带 s）。
+
+改前写的是 ``/web/geek/job``：抓包显示浏览器实际停在 ``/web/geek/jobs?query=…``，
+真实请求的 Referer 也是它。``web_pages.geek_job`` 当年跟着一起写错，所以两边一致、
+看不出来；这里直接钉住路径本身。
+
+不对全部 referer 做白名单断言：招聘者侧与扫码相关端点确实会引用
+``/web/frame/recommend/``、``/web/user/`` 这类不在 web_pages 里的页面，
+维护一份例外清单只会变成噪音。
+"""
+	spec = load_boss_api_spec()
+
+	assert spec.web_pages["geek_job"].endswith("/web/geek/jobs")
+	for name in ("search", "detail", "recommend"):
+		referer = spec.endpoints[name].referer
+		assert "/web/geek/job" not in referer.rstrip("s") or referer.endswith("/web/geek/jobs"), name
+	for name, endpoint in spec.endpoints.items():
+		assert not endpoint.referer.endswith("/web/geek/job"), f"{name} 的 referer 少了 s"
