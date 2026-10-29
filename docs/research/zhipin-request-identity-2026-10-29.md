@@ -131,6 +131,21 @@ uv run boss status --live
 - 抓包只用于对齐身份，不用于生成或绕过任何平台凭证。
 - 命中 `code 31/32` 或安全页时仍按既有契约 checkpoint 并停止，不因本轮改动而放宽。
 
+## 观测请求 ↔ 项目声明 endpoint 的对照
+
+四份抓包共 147 条业务请求，与仓库里声明的 endpoint 对得上的是少数——原因很直接：
+采集发生在页面加载与首屏阶段，命中的是初始化和列表接口，而不是所有业务动作。
+
+| 声明位置 | 声明数 | 本次观测到 |
+|---|---|---|
+| `boss.yaml` | 23 | 4：`search`、`detail`、`user_info`、`friend_list` |
+| `recruiter.yaml` | 31 | 4：`boss_friend_list`、`boss_friend_detail`、`boss_friend_labels`、`boss_last_messages` |
+
+**这 8 个命中的 endpoint 是唯一有"真实页面确实这样发"证据的部分。** 其余 42 个声明
+（`greet`、`apply`、`chat_history`、`exchange_request`、`resume_*` 等写操作与深层读）
+本次没有观测到，其 header 形态属于**未知**，不是"已验证一致"。写一条请求做对照就足够，
+但那需要真实触发写操作，超出本轮范围，也不该为了取证去做。
+
 ## 跨页面复核（2026-10-29 追加）
 
 在 `/web/geek/chat`（36 条业务请求）与 `/web/geek/resume`（35 条）上重复同一次采集，
