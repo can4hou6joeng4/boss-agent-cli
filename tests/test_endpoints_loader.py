@@ -45,7 +45,7 @@ class TestLoadBossApiSpec:
 		search = spec.endpoints["search"]
 		assert isinstance(search, EndpointSpec)
 		assert search.name == "search"
-		assert search.method == "GET"
+		assert search.method == "POST"
 		assert "joblist" in search.url
 
 	def test_response_codes(self):

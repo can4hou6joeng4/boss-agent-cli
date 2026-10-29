@@ -538,7 +538,7 @@ def test_request_does_not_hang_when_new_page_navigation_stalled():
 	mock_new_page.wait_for_load_state.side_effect = None
 	mock_new_page.wait_for_load_state.return_value = None
 	mock_ctx.new_cdp_session.return_value.send.return_value = {"result": {"value": {"code": 0, "zpData": {}}}}
-	res2 = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+	res2 = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/job/detail.json")
 	assert res2["code"] == 0
 
 
@@ -628,7 +628,7 @@ def test_request_recovers_once_after_context_destroyed_mid_navigation():
 	]
 	session = _started_cdp_session_with_page(page)
 
-	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/job/detail.json")
 
 	assert res["code"] == 0
 	assert page.evaluate.call_count == 2
@@ -643,7 +643,7 @@ def test_request_returns_error_envelope_when_page_never_becomes_ready_after_navi
 	page.wait_for_load_state.side_effect = TimeoutError("still navigating")
 	session = _started_cdp_session_with_page(page)
 
-	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/job/detail.json")
 
 	assert res["code"] == -1
 	assert page.evaluate.call_count == 1
@@ -657,7 +657,7 @@ def test_request_retries_at_most_once_on_repeated_context_destroyed():
 	session = _started_cdp_session_with_page(page)
 
 	with pytest.raises(RuntimeError):
-		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/job/detail.json")
 
 	assert page.evaluate.call_count == 2
 
@@ -668,7 +668,7 @@ def test_request_healthy_path_has_no_extra_wait():
 	page.evaluate.return_value = {"code": 0, "zpData": {}}
 	session = _started_cdp_session_with_page(page)
 
-	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/job/detail.json")
 
 	assert res["code"] == 0
 	page.wait_for_load_state.assert_not_called()
@@ -681,7 +681,7 @@ def test_request_propagates_unrelated_evaluate_errors_without_retry():
 	session = _started_cdp_session_with_page(page)
 
 	with pytest.raises(RuntimeError):
-		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/job/detail.json")
 
 	page.evaluate.assert_called_once()
 	page.wait_for_load_state.assert_not_called()

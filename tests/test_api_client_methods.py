@@ -40,16 +40,21 @@ def test_search_jobs_minimal_params():
 	client = _make_client()
 	client.search_jobs("python")
 	call = client._browser_request.call_args
-	assert call.args == ("GET", endpoints.SEARCH_URL)
-	assert call.kwargs["params"]["query"] == "python"
-	assert call.kwargs["params"]["page"] == 1
+	assert call.args == ("POST", endpoints.SEARCH_URL)
+	data = call.kwargs["data"]
+	assert data["query"] == "python"
+	assert data["page"] == 1
+	# 真机把缺省筛选项也一起发出去（空串），不是省略
+	assert data["city"] == ""
+	assert data["scene"] == 1
+	assert data["pageSize"] == 15
 
 
 def test_search_jobs_with_page():
 	client = _make_client()
 	client.search_jobs("python", page=3)
 	call = client._browser_request.call_args
-	assert call.kwargs["params"]["page"] == 3
+	assert call.kwargs["data"]["page"] == 3
 
 
 def test_search_jobs_all_filter_codes_applied():
@@ -67,7 +72,7 @@ def test_search_jobs_all_filter_codes_applied():
 		stage="A轮",
 		job_type="全职",
 	)
-	params = client._browser_request.call_args.kwargs["params"]
+	params = client._browser_request.call_args.kwargs["data"]
 	assert params["query"] == "python"
 	# 每个映射都应该生成一个 code 字段，code 非空
 	assert params.get("city") is not None
@@ -88,7 +93,7 @@ def test_search_jobs_raw_params_and_multiselect_codes_applied():
 		experience="应届,3-5年",
 		experience_code="108,104",
 	)
-	params = client._browser_request.call_args.kwargs["params"]
+	params = client._browser_request.call_args.kwargs["data"]
 	assert params["city"] == "101280100"
 	assert params["degree"] == "203,204"
 	assert params["experience"] == "108,104"
@@ -104,8 +109,9 @@ def test_search_jobs_unknown_salary_does_not_crash():
 	"""未知 salary 不生成 code，但不抛异常（静默跳过）。"""
 	client = _make_client()
 	client.search_jobs("python", salary="unknown-range")
-	params = client._browser_request.call_args.kwargs["params"]
-	assert "salary" not in params
+	params = client._browser_request.call_args.kwargs["data"]
+	# 未知取值不生成 code：字段保留为空串（真机也发空串），不塞入未解析的原值
+	assert params["salary"] == ""
 
 
 def test_recommend_jobs_default_page():
@@ -478,3 +484,52 @@ def test_atexit_safeguard_ignores_close_errors(mock_atexit):
 	_close_open_clients()
 	# good 依然能被关闭
 	assert good._closed is True
+
+
+#: 2026-10-29 抓包得到的真机表单字段顺序（docs/research/zhipin-request-identity-2026-10-29.md）
+_OBSERVED_SEARCH_FORM_FIELDS = (
+	"page",
+	"pageSize",
+	"city",
+	"query",
+	"expectInfo",
+	"multiSubway",
+	"multiBusinessDistrict",
+	"position",
+	"jobType",
+	"salary",
+	"experience",
+	"degree",
+	"industry",
+	"scale",
+	"stage",
+	"scene",
+	"encryptExpectId",
+)
+
+
+def test_search_jobs_form_body_matches_the_observed_field_order():
+	"""字段集合与顺序都要与真机一致：多一个少一个都是可观察的差异。"""
+	client = _make_client()
+	client.search_jobs("python", city="广州")
+
+	data = client._browser_request.call_args.kwargs["data"]
+
+	assert tuple(data) == _OBSERVED_SEARCH_FORM_FIELDS
+
+
+def test_search_spec_is_post_and_still_a_replay_safe_read():
+	from boss_agent_cli.api.endpoints_loader import endpoint_for_request
+
+	spec = endpoint_for_request("POST", endpoints.SEARCH_URL)
+
+	assert spec is not None
+	assert spec.effect == "read"
+	assert spec.replay_safe is True
+
+
+def test_search_is_not_reachable_as_get_anymore():
+	"""改方法后 GET 不再解析成 search 端点——避免留下两条语义不同的路径。"""
+	from boss_agent_cli.api.endpoints_loader import endpoint_for_request
+
+	assert endpoint_for_request("GET", endpoints.SEARCH_URL) is None

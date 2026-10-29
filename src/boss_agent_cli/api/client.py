@@ -154,11 +154,11 @@ class BossClient(_BaseHttpClient):
 			return self._browser_request(method, url, browser_source=self._browser_source, **kwargs)
 		return self._request(method, url, **kwargs)
 
-	def _search_request(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
-		"""搜索与推荐默认走浏览器通道，``httpx-only`` 时改走 httpx。"""
+	def _form_request(self, method: str, url: str, data: dict[str, Any]) -> dict[str, Any]:
+		"""表单体请求：默认走浏览器通道，``httpx-only`` 时改走 httpx。"""
 		if self.browser_enabled():
-			return self._browser_request("GET", url, params=params)
-		return self._request("GET", url, params=params)
+			return self._browser_request(method, url, data=data)
+		return self._request(method, url, data=data)
 
 	# ── Public API ───────────────────────────────────────────────────
 	# High-risk: search, recommend, greet, job_card → browser channel
@@ -167,47 +167,70 @@ class BossClient(_BaseHttpClient):
 	# 见 _BaseHttpClient._request。
 
 	def search_jobs(self, query: str, **filters: Any) -> dict[str, Any]:
-		params: dict[str, Any] = {"query": query, "page": filters.get("page", 1)}
+		# 真机是 POST + application/x-www-form-urlencoded，字段集合与顺序按 2026-10-29
+		# 抓包对齐（docs/research/zhipin-request-identity-2026-10-29.md）。缺省项留空串，
+		# 不用省略——页面自己也是把这些字段全部发出去的。
+		data: dict[str, Any] = {
+			"page": filters.get("page", 1),
+			"pageSize": filters.get("page_size", 15),
+			"city": "",
+			"query": query,
+			"expectInfo": "",
+			"multiSubway": "",
+			"multiBusinessDistrict": "",
+			"position": "",
+			"jobType": "",
+			"salary": "",
+			"experience": "",
+			"degree": "",
+			"industry": "",
+			"scale": "",
+			"stage": "",
+			"scene": 1,
+			"encryptExpectId": "",
+		}
 		if raw_params := filters.get("raw_params"):
-			params.update(raw_params)
+			data.update(raw_params)
 		if city := filters.get("city"):
 			code = endpoints.CITY_CODES.get(city)
 			if code is None:
 				raise ValueError(f"未知城市: {city}")
-			params["city"] = code
+			data["city"] = code
 		if salary := filters.get("salary"):
 			code = filters.get("salary_code") or endpoints.SALARY_CODES.get(salary)
 			if code:
-				params["salary"] = code
+				data["salary"] = code
 		if exp := filters.get("experience"):
 			code = filters.get("experience_code") or endpoints.EXPERIENCE_CODES.get(exp)
 			if code:
-				params["experience"] = code
+				data["experience"] = code
 		if edu := filters.get("education"):
 			code = filters.get("education_code") or endpoints.EDUCATION_CODES.get(edu)
 			if code:
-				params["degree"] = code
+				data["degree"] = code
 		if scale := filters.get("scale"):
 			code = filters.get("scale_code") or endpoints.SCALE_CODES.get(scale)
 			if code:
-				params["scale"] = code
+				data["scale"] = code
 		if industry := filters.get("industry"):
 			code = filters.get("industry_code") or endpoints.INDUSTRY_CODES.get(industry)
 			if code:
-				params["industry"] = code
+				data["industry"] = code
 		if stage := filters.get("stage"):
 			code = filters.get("stage_code") or endpoints.STAGE_CODES.get(stage)
 			if code:
-				params["stage"] = code
+				data["stage"] = code
 		if job_type := filters.get("job_type"):
 			code = filters.get("job_type_code") or endpoints.JOB_TYPE_CODES.get(job_type)
 			if code:
-				params["jobType"] = code
-		return self._search_request(endpoints.SEARCH_URL, params)
+				data["jobType"] = code
+		return self._form_request("POST", endpoints.SEARCH_URL, data)
 
 	def recommend_jobs(self, page: int = 1) -> dict[str, Any]:
 		params = {"page": page}
-		return self._search_request(endpoints.RECOMMEND_URL, params)
+		if self.browser_enabled():
+			return self._browser_request("GET", endpoints.RECOMMEND_URL, params=params)
+		return self._request("GET", endpoints.RECOMMEND_URL, params=params)
 
 	def greet(self, security_id: str, job_id: str, message: str = "") -> dict[str, Any]:
 		data = {

@@ -32,7 +32,8 @@ response_codes:
 
 endpoints:
   search:
-    method: GET
+    # 真机是 POST + 表单体（2026-10-29 抓包）；GET 同样可用，但这里以真机为准。
+    method: POST
     effect: read
     replay_safe: true
     path: "/wapi/zpgeek/search/joblist.json"
