@@ -115,6 +115,19 @@ _HOME_NAV_RETRIES = 2
 # 环境即可发 fetch，故宽限缩到 0.8s（实测每次都会耗满，缩短直接省 ~2s/搜索）。
 _HEADLESS_NETWORKIDLE_GRACE_MS = 800
 _REQUEST_TIMEOUT_MS = 20000
+# zhipin 的主登录态 cookie：同一账号值稳定、不同账号不同，用于判定复用到的浏览器
+# 属于哪个账号（与 auth/login 的「账号指纹」同源）。
+_PRIMARY_COOKIE = "wt2"
+_PRIMARY_COOKIE_DOMAIN = ".zhipin.com"
+
+
+def _cookie_domain_matches(cookie_domain: str, expected: str) -> bool:
+	"""cookie domain 是否落在 expected 上（忽略前导点与大小写）。"""
+	left = (cookie_domain or "").lstrip(".").lower()
+	right = (expected or "").lstrip(".").lower()
+	if not left or not right:
+		return False
+	return left == right or left.endswith("." + right)
 _EVALUATE_TIMEOUT_MS = 30000
 
 # macOS / Linux / Windows Chrome user data 默认路径
@@ -481,6 +494,46 @@ class BrowserSession:
 					return True
 		return False
 
+	def _reused_context_matches_stored_account(self) -> bool:
+		"""探测到的浏览器是否属于本地保存的那个账号。
+
+		``auto`` 会自动探测 ``localhost:9222``，而 9222 上监听的可能是任何一个
+		Chromium：别的 Electron 应用、用户隔离出来的另一个 profile，甚至**同一个
+		项目的另一个账号**。复用这种 context 意味着拿着招聘者会话去执行候选者的
+		请求，平台侧看到的是账号与调用意图错位（实测会得到 code 37）。
+
+		只在本地确实存有凭据时校验；``existing-browser`` 这类不读本地凭据的来源没有
+		可比对象，保持原样复用。校验失败返回 False，让调用方落到下一个通道（用本地
+		凭据自己起浏览器），而不是把别人的会话据为己有。
+		"""
+		primary = self._cookies.get(_PRIMARY_COOKIE, "")
+		if not primary:
+			return True
+		context_value = self._context_cookie_value(_PRIMARY_COOKIE)
+		if not context_value:
+			# 该 context 未登录：没有可冲突的账号身份，保持既有复用行为。
+			return True
+		if context_value == primary:
+			return True
+		self._log(
+			"[boss] 探测到的浏览器登录的是另一个账号，拒绝复用其会话；"
+			"改用本地凭据自建浏览器"
+		)
+		return False
+
+	def _context_cookie_value(self, name: str) -> str:
+		"""读取当前 context 中某个 cookie 的值；读不到返回空串。"""
+		try:
+			target = _PRIMARY_COOKIE_DOMAIN
+			for cookie in self._context.cookies():
+				if cookie.get("name") != name:
+					continue
+				if _cookie_domain_matches(cookie.get("domain", ""), target):
+					return str(cookie.get("value") or "")
+		except Exception as exc:  # pragma: no cover - 取决于实时 CDP 状态
+			self._log(f"[boss] 读取复用 context 的 cookie 失败：{type(exc).__name__}")
+		return ""
+
 	def _try_connect(self, url: str, *, explicit: bool = True) -> bool:
 		"""Attempt a single CDP connection, reusing user's existing context.
 
@@ -500,6 +553,9 @@ class BrowserSession:
 				# 复用用户现有 context（保留登录态，避免额外浏览器状态）
 				self._context = contexts[0]
 				self._own_context = False  # 非我们创建，close 时不关闭
+				if not self._reused_context_matches_stored_account():
+					self._close_browser_quietly()
+					return False
 				# 优先复用用户已打开的 zhipin 页签：避免每次高风险 op 都新开空白页 +
 				# 导航到 BOSS 首页（issue #334：用户观感是"反复自动新开/刷新页面"），
 				# 同时降低自动化足迹。请求只需 page 处于 zhipin 同源即可携带 cookie。
