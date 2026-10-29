@@ -287,6 +287,8 @@ class _BaseHttpClient:
 				headers=headers,
 				follow_redirects=True,
 				timeout=30,
+				# 真机全是 HTTP/2；HTTP/1.1 的请求在协议层就与浏览器不同。
+				http2=True,
 			)
 		return self._client
 
