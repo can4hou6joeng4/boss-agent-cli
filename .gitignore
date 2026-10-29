@@ -46,3 +46,6 @@ docs/blog/linuxdo-promo.md
 
 # baoyu-design working dir (canonical promo source lives in demo/promo-showcase/)
 designs/
+
+# 真实平台抓包的原始产物（含 Cookie 头与响应体，永不入库）
+.capture/
