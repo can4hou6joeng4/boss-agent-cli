@@ -21,6 +21,8 @@ default_headers:
   Accept: "application/json, text/plain, */*"
   # 真机发的是这四项；brotli / zstandard 已在必装依赖里，声明即能解码。
   Accept-Encoding: "gzip, deflate, br, zstd"
+  # HTTP/2 流优先级；真机 147 条业务请求里 143 条带它，取值固定。
+  priority: "u=1, i"
   Accept-Language: "zh-CN,zh;q=0.9"
   X-Requested-With: "XMLHttpRequest"
 

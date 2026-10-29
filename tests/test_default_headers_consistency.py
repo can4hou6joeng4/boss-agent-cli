@@ -64,3 +64,14 @@ def test_repeated_builds_match_the_user_agent_claims(name: str) -> None:
 	rebuilt = sec_ch_ua_brands(headers["User-Agent"], headers["sec-ch-ua"])
 
 	assert rebuilt == headers["sec-ch-ua"], name
+
+
+@pytest.mark.parametrize("name", sorted(_HEADER_SETS))
+def test_headers_carry_the_observed_http2_priority(name: str) -> None:
+	"""真机 147 条业务请求里 143 条带 ``priority: u=1, i``，是固定值。"""
+	assert _HEADER_SETS[name]["priority"] == "u=1, i"
+
+
+@pytest.mark.parametrize("name", sorted(_HEADER_SETS))
+def test_headers_carry_the_observed_encoding_set(name: str) -> None:
+	assert _HEADER_SETS[name]["Accept-Encoding"] == "gzip, deflate, br, zstd"
