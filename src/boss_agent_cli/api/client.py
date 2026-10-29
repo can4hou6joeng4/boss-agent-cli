@@ -144,17 +144,21 @@ class BossClient(_BaseHttpClient):
 		return result
 
 	def _read_request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
-		"""显式非 auto 来源才走浏览器；默认保留 httpx 的认证与重试语义。
+		"""只读请求：来源要求走浏览器时走浏览器，否则保留 httpx 的认证与重试语义。
 
 		缺少本地凭据仍返回 AUTH_REQUIRED，浏览器请求不继承 httpx 的
-		stoken 刷新或限流重试循环。
+		stoken 刷新或限流重试循环。``httpx-only`` 的 ``is_browser_only()`` 恒为
+		False，因此它永远走 httpx。
 		"""
-		from boss_agent_cli.api.browser_source import resolve_policy
-
-		configured = resolve_policy(self._browser_source)
-		if configured.name != "auto":
-			return self._browser_request(method, url, browser_source=configured.name, **kwargs)
+		if self.is_browser_only():
+			return self._browser_request(method, url, browser_source=self._browser_source, **kwargs)
 		return self._request(method, url, **kwargs)
+
+	def _search_request(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
+		"""搜索与推荐默认走浏览器通道，``httpx-only`` 时改走 httpx。"""
+		if self.browser_enabled():
+			return self._browser_request("GET", url, params=params)
+		return self._request("GET", url, params=params)
 
 	# ── Public API ───────────────────────────────────────────────────
 	# High-risk: search, recommend, greet, job_card → browser channel
@@ -199,11 +203,11 @@ class BossClient(_BaseHttpClient):
 			code = filters.get("job_type_code") or endpoints.JOB_TYPE_CODES.get(job_type)
 			if code:
 				params["jobType"] = code
-		return self._browser_request("GET", endpoints.SEARCH_URL, params=params)
+		return self._search_request(endpoints.SEARCH_URL, params)
 
 	def recommend_jobs(self, page: int = 1) -> dict[str, Any]:
 		params = {"page": page}
-		return self._browser_request("GET", endpoints.RECOMMEND_URL, params=params)
+		return self._search_request(endpoints.RECOMMEND_URL, params)
 
 	def greet(self, security_id: str, job_id: str, message: str = "") -> dict[str, Any]:
 		data = {

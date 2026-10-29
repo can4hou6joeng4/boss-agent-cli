@@ -44,6 +44,7 @@ from boss_agent_cli.api.zhipin_errors import (
 
 if TYPE_CHECKING:
 	from boss_agent_cli.api.browser_client import BrowserSession
+	from boss_agent_cli.api.browser_source import BrowserSourcePolicy
 	from boss_agent_cli.api.client import PlatformRiskError
 	from boss_agent_cli.auth.manager import AuthManager
 
@@ -117,12 +118,21 @@ class _BaseHttpClient:
 		# getattr 兜底：部分调用方 / 测试用 __new__ 构造实例，不经 __init__。
 		if getattr(self, "_cdp_url", None):
 			return True
-		from boss_agent_cli.api.browser_source import resolve_policy
-
-		if resolve_policy(getattr(self, "_browser_source", None)).name != "auto":
-			return True
+		policy = self._resolve_policy()
+		if policy.name != "auto":
+			# 显式来源按各自通道白名单判定：httpx-only 是空白名单，永远为 False。
+			return bool(policy.channels)
 		session = getattr(self, "_browser_session", None)
 		return session is not None and getattr(session, "_is_cdp", False) is True
+
+	def _resolve_policy(self) -> "BrowserSourcePolicy":
+		from boss_agent_cli.api.browser_source import resolve_policy
+
+		return resolve_policy(getattr(self, "_browser_source", None))
+
+	def browser_enabled(self) -> bool:
+		"""本来源是否可能构造浏览器会话；``httpx-only`` 恒为 False。"""
+		return bool(self._resolve_policy().channels)
 
 	def _browser_request(
 		self,

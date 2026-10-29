@@ -79,6 +79,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "boss login",
 	},
+	"BROWSER_DISABLED": {
+		"message": "当前 browser-source 不打开浏览器，该能力需要页面通道",
+		"recoverable": True,
+		"recovery_action": "改用 --browser-source auto 后重试",
+	},
 	"BROWSER_SESSION_NOT_FOUND": {
 		"message": "未发现可复用的现有浏览器会话",
 		"recoverable": True,

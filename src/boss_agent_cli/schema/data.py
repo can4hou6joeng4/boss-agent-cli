@@ -948,7 +948,7 @@ SCHEMA_DATA = {
 			"default": "auto",
 			"choices": list(BROWSER_SOURCES),
 			"stability": "experimental",
-			"description": "浏览器通道来源。auto 允许 CDP→headless 降级；existing-browser 只复用现有 CDP 浏览器中已打开的目标页，不读本地凭据、不导航、不启动浏览器，候选耗尽发 BROWSER_SESSION_NOT_FOUND；stored-cookie 为 fail-closed，只连 --cdp-url 指定的 CDP 端点，不自动探测、不降级、空浏览器不新建 context，不可用发 CDP_UNAVAILABLE。不得用于规避平台风控。",
+			"description": "浏览器通道来源。auto 允许 CDP→headless 降级；existing-browser 只复用现有 CDP 浏览器中已打开的目标页，不读本地凭据、不导航、不启动浏览器，候选耗尽发 BROWSER_SESSION_NOT_FOUND；stored-cookie 为 fail-closed，只连 --cdp-url 指定的 CDP 端点，不自动探测、不降级、空浏览器不新建 context，不可用发 CDP_UNAVAILABLE；httpx-only 不打开任何浏览器，全部只读走 httpx，需要页面的能力发 BROWSER_DISABLED，且不得与浏览器通道共用同一 stoken（会得到 code 37）。不得用于规避平台风控。",
 		},
 		"--platform": {
 			"type": "string",

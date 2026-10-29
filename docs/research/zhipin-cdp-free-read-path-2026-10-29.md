@@ -123,3 +123,55 @@ PY
 - 本节所有数据来自真实账号的一次性只读请求，未包含任何 Cookie 或 token 值。
 - 命中 37 之后按既有契约停止并保留 checkpoint，没有通过换通道或重登绕过。
 - 恢复需要操作者在官方页面确认可用后显式执行 `boss clean --risk-lock`，本文件不代表已恢复。
+
+## 六、已实现：`--browser-source httpx-only`
+
+策略表新增第四个来源，通道白名单为空——它在结构上就不可能打开浏览器：
+
+| 项 | 值 |
+|---|---|
+| `channels` | `()` |
+| `use_stored_credentials` | `True` |
+| `allow_browser_launch` / `may_create_context` / `auto_probe_cdp` | 全部 `False` |
+| `failure_code` | `BROWSER_DISABLED`（已登记进 `SCHEMA_DATA["error_codes"]`） |
+
+行为：
+
+- `search` / `recommend` / `detail` / `friend_list` / `chat_history` 全部走 httpx；
+  `browser_enabled()` 为 `False` 时 `search`/`recommend` 直接改走 httpx（此前它们无条件走浏览器）。
+- 需要页面的能力（`greet`、`exchange_request`、`job_card` 等）抛
+  `BrowserSourceUnavailable`，错误码 `BROWSER_DISABLED`，不会启动任何浏览器。
+- `--cdp-url` 仍然是"显式要求走 CDP"，但 `httpx-only` 下 `_try_connect` 根本不会被调用。
+- CLI help、schema `global_options.--browser-source` 的 choices 与描述随策略表自动更新，
+  另有断言守住三处不漂移。
+
+现场实测（9222 上确有 CDP Chrome 在监听）：`--browser-source httpx-only boss search` 返回
+15 条，全程未触碰该浏览器。
+
+## 七、代价的精确刻画与已验证的恢复步骤
+
+上一节说"排他"，但触发条件比"任何 httpx 请求"更窄。实测区分：
+
+| 操作 | 是否毒化浏览器通道 |
+|---|---|
+| `boss status --live`（httpx，**不带** `__zp_stoken__`） | **否**，之后 `search` 仍 15 条 |
+| `boss --browser-source httpx-only search`（httpx，**带** `__zp_stoken__`） | **是**，之后浏览器通道 `code 37` |
+
+所以触发条件是**同一个 `__zp_stoken__` 被两种客户端使用**，而不是"用过 httpx"。
+
+恢复步骤（已逐步验证，全部成功）：
+
+1. 在 Chrome 里**重载目标页** —— `__zp_stoken__` 由页面 JS 重新生成
+   （实测重载后该值确实变化，此处不保留任何取值片段）。页面本身始终正常渲染，没有出现过 403/验证页。
+2. `boss clean --risk-lock`
+3. `boss login --cdp`（重新读取新 stoken）
+4. `boss search` 恢复返回 15 条
+
+注意第 1 步是必需的：只做 2–3 步不复位页面时，重登拿到的仍是已被标记的 stoken，
+浏览器通道继续 `code 37`（本次实测）。
+
+## 八、仍未做
+
+- 把 `search` 的 HTTP 方法与真机对齐为 `POST` + 表单（两种都可用，属行为差异而非缺陷）。
+- HTTP/2：`h2` 未安装，`httpx.Client(http2=True)` 不可用，协议层差异仍在。
+- 写操作在 `httpx-only` 下的具体错误体验（目前统一 `BROWSER_DISABLED`，尚未逐命令打磨提示语）。
