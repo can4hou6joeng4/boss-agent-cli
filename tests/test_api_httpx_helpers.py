@@ -2,6 +2,7 @@ from boss_agent_cli.api.httpx_helpers import (
 	add_stoken_to_get_params,
 	browser_headers,
 	merge_response_cookies,
+	new_trace_id,
 	referer_header,
 	sec_ch_ua_brands,
 	sec_ch_ua_platform,
@@ -148,3 +149,22 @@ def test_browser_headers_omits_page_identity_headers_when_absent() -> None:
 
 	assert "token" not in headers
 	assert "zp_token" not in headers
+
+
+def test_new_trace_id_matches_observed_shape() -> None:
+	trace = new_trace_id()
+
+	assert trace.startswith("F-")
+	assert len(trace) == len("F-") + 24
+	assert trace[2:].isalnum()
+	assert trace[2:].islower()
+
+
+def test_new_trace_id_is_unique_per_request() -> None:
+	ids = {new_trace_id() for _ in range(200)}
+
+	assert len(ids) == 200
+
+
+def test_new_trace_id_accepts_injected_randomness() -> None:
+	assert new_trace_id(rand=lambda bound: 0) == "F-" + "0" * 24

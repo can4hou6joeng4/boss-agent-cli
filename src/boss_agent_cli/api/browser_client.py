@@ -29,6 +29,7 @@ from boss_agent_cli.api.browser_source import (
 from boss_agent_cli.api.proxy import WEBRTC_LEAK_GUARD_ARGS, resolve_proxy
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
 from boss_agent_cli.api.endpoints_loader import EndpointSpec, endpoint_for_request
+from boss_agent_cli.api.httpx_helpers import new_trace_id
 from boss_agent_cli.api.throttle import RequestThrottle
 from boss_agent_cli.api.request_budget import RequestBudget, check_request_control, is_request_stop, retry_after_seconds
 from boss_agent_cli.api.zhipin_errors import platform_risk_page_response, raise_platform_risk_response
@@ -126,7 +127,7 @@ _CHROME_USER_DATA_CANDIDATES = [
 
 #: Runtime.evaluate(fetch) 的 JS 主体，request() 首次与只读恢复共用同一份。
 _FETCH_SCRIPT = r"""
-			async ({method, url, params, data, referer, timeoutMs, identity}) => {
+			async ({method, url, params, data, referer, timeoutMs, identity, traceId}) => {
 				const controller = new AbortController();
 				let timer;
 				const deadline = new Promise((_, reject) => {
@@ -154,6 +155,7 @@ _FETCH_SCRIPT = r"""
 							'Accept': 'application/json, text/plain, */*',
 							'Referer': referer,
 							'X-Requested-With': 'XMLHttpRequest',
+							'traceid': traceId,
 						}, identity || {}),
 					};
 
@@ -712,6 +714,8 @@ class BrowserSession:
 			# 页面自己给业务 XHR 加的 token/zp_token；缺了它浏览器通道就和 httpx 通道
 			# 不是同一个客户端（见 docs/research/zhipin-request-identity-2026-10-29.md）。
 			"identity": dict(self._identity),
+			# 页面每个请求换一个 traceid；浏览器通道同样按请求生成。
+			"traceId": new_trace_id(),
 		}
 		try:
 			result = self._send_fetch(payload, endpoint)

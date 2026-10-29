@@ -23,6 +23,7 @@ import httpx
 from boss_agent_cli.api.httpx_helpers import (
 	PAGE_IDENTITY_HEADERS,
 	add_stoken_to_get_params,
+	new_trace_id,
 	browser_headers,
 	merge_response_cookies,
 	referer_header,
@@ -361,7 +362,8 @@ class _BaseHttpClient:
 
 				add_stoken_to_get_params(method, kwargs, stoken)
 
-				headers = {**self._headers_for(url), **extra_headers_override}
+				# traceid 是请求级的：真实页面每个请求都换一个，不能放进客户端级默认头。
+				headers = {**self._headers_for(url), "traceid": new_trace_id(), **extra_headers_override}
 				check_request_control(self._check_cdp_risk_lock)
 				try:
 					resp = client.request(method, url, headers=headers, **kwargs)

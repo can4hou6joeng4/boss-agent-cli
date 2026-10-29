@@ -68,6 +68,23 @@ def sec_ch_ua_platform(user_agent: str = "") -> str | None:
 	return None
 
 
+_TRACE_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz"
+
+
+def new_trace_id(rand: Callable[[int], int] | None = None) -> str:
+	"""Return a request-scoped ``traceid`` in the shape the real page produces.
+
+	Observed samples are ``F-`` followed by 16–36 lowercase alphanumerics, and no
+	two requests ever share a value. This function never claims to reproduce the
+	page's generator: it emits a value of the same shape so the header is present
+	on the requests where the page would have set one.
+	"""
+	pick = rand if rand is not None else (lambda bound: __import__("secrets").randbelow(bound))
+	head = "".join(_TRACE_ALPHABET[pick(10)] for _ in range(8))
+	tail = "".join(_TRACE_ALPHABET[pick(36)] for _ in range(16))
+	return f"F-{head}{tail}"
+
+
 def sec_ch_ua_brands(user_agent: str, template: str) -> str:
 	"""Align the brand versions in ``template`` with the User-Agent's major version.
 

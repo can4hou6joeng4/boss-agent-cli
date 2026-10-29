@@ -25,6 +25,27 @@ CLI 的 httpx 通道又带了什么，以及两者差距如何收敛。
 | 业务请求样本 | 36 条 `/wapi/` 请求 |
 | 记录粒度 | 完整请求头与响应体（本地留存，未入库） |
 
+## 逐 header 规则总表（四份抓包，147 条业务请求）
+
+| Header | 观察到的规则 | 类型 | 本项目处理 |
+|---|---|---|---|
+| `User-Agent` | 固定 `Chrome/156.0.0.0` + macOS 10_15_7 | 常量 | `boss.yaml`/`recruiter.yaml` 已对齐 |
+| `sec-ch-ua` | `"Not:A-Brand";v="8", "Chromium";v="156", "Google Chrome";v="156"` | 常量，版本随 UA | 由 UA 主版本重写，greasing 品牌保留 |
+| `sec-ch-ua-mobile` | `?0` | 常量 | 由 UA 是否含 `Mobile` 推导 |
+| `sec-ch-ua-platform` | `"macOS"` | 常量，随 UA | 由 UA 推导（不再用宿主 OS） |
+| `Accept-Language` | `zh-CN,zh;q=0.9`，无 `en` | 常量 | 两条通道同源 |
+| `Referer` | 发起页完整 URL，含查询串 | 每请求 | 沿用 endpoint→referer 映射 |
+| `X-Requested-With` | `XMLHttpRequest`（聊天页有 1 条 `XMLHttpRequest, XMLHttpRequest`） | 常量 | 默认头 + 浏览器 fetch 都发送 |
+| `traceid` | `F-` 前缀，请求级唯一，长度 16–36，多种生成器 | 每请求 | 见下一节 |
+| `token` | 16 字符，会话级常量；**仅候选者侧出现**（招聘者 0/40） | 会话 | 采到则回放，采不到不伪造 |
+| `zp_token` | 67 字符，两段各以 `~` 结尾、`\|` 连接；两侧同形 | 会话 | 同上 |
+| `Content-Type` | 仅 POST：`application/x-www-form-urlencoded`（16）、`application/json`（9+5）、`text/plain;charset=UTF-8`（4） | 随请求体 | 沿用现有实现 |
+| `Sec-Fetch-Dest` | `empty` | 常量 | 默认头 |
+| `Sec-Fetch-Mode` | `cors` | 常量 | 默认头 |
+| `Sec-Fetch-Site` | `same-origin`（131）/ `same-site`（12，跨子域如 `shink.zhipin.com`、`apm-fe.zhipin.com`） | 随目标域 | 默认 `same-origin`；跨子域请求由浏览器自行决定 |
+| `priority` | `u=1, i` | 常量 | 未发送（HTTP/2 语义，见未解决） |
+| `Accept-Encoding` | `gzip, deflate, br, zstd` | 常量 | 未改，见未解决 |
+
 ## 观察：页面业务请求携带的头
 
 单位是“出现该头的请求数 / 本页业务请求总数”。
@@ -155,16 +176,24 @@ GET 用查询串、POST 用 `application/x-www-form-urlencoded`，与 `boss.yaml
 `PAGE_IDENTITY_HEADERS` 传入，`fetch` 的 `headers` 用 `Object.assign` 合并。
 两条通道都回放同一组值。
 
-## `traceid` 结案：不发送
+## `traceid`：按请求生成，不假装复现页面生成器
 
-证据：
+先记录一个**已推翻的早期判断**：本条最初写成"不发送"，理由是两条通道都不发 `traceid` 时
+`detail` 与 `search` 仍返回正常数据，说明平台不校验它。
 
-- `detail`（httpx 通道，不带 `traceid`）返回正常业务数据。
-- `search`（浏览器通道，同样不带 `traceid`）返回 15 条职位、`has_more=true`。
+推翻它的是"缺席率"这个更直接的事实：真实页面在 147 条业务请求里发了 130 次 `traceid`
+（约 88%）。也就是说，不发 `traceid` 的客户端在这件事上比真实浏览器更显眼，而不是更自然。
+"平台不拒绝"与"平台看不出差别"是两件不同的事，把前者当成后者是错的。
 
-结论：当前两条通道都不发 `traceid`，平台照常响应。它是链路追踪用途，不是访问凭证。
-既然不存在"必须发送"的证据，伪造一个每请求长度都在变的随机串只会增加不一致风险，
-所以本轮**明确不实现**，并把这个判断写进文档而不是留成 TODO。
+实现方式与其边界：
+
+- `new_trace_id()` 只保证**形态**一致：`F-` + 8 位 0-9a-z + 16 位 0-9a-z，共 26 字符，
+  落在实测 16–36 的区间内，且每次调用都不同。
+- 它**不**声称复现页面生成器。实测存在至少三种不同前缀与长度（本次不保留具体取值），
+  说明页面侧本身就有多个来源，
+  因此"与某一个生成器逐位对齐"既不可得也无意义。
+- httpx 通道与浏览器通道都按请求生成，位置一致：前者在 `_base_client` 的每请求头，
+  后者在 `fetch` 的 `headers`。客户端级默认头里不放 `traceid`，否则同一会话会重复同一个值。
 
 ## 招聘者侧边界：当前账号不具备
 

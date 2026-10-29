@@ -398,7 +398,9 @@ def test_request_returns_browser_evaluation_json_and_marks_throttle():
 		"referer": "https://www.zhipin.com/web/geek/job",
 		"timeoutMs": 20000,
 		"identity": {},
+		"traceId": evaluate_args["traceId"],
 	}
+	assert evaluate_args["traceId"].startswith("F-")
 
 
 def test_cold_start_wait_constants_stay_lean():
