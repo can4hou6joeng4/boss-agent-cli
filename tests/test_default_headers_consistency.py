@@ -1,5 +1,6 @@
 """默认头必须自洽：UA 声称的平台/版本要和 Client Hints、语言声明一致。"""
 
+import json
 import re
 
 import pytest
@@ -75,3 +76,31 @@ def test_headers_carry_the_observed_http2_priority(name: str) -> None:
 @pytest.mark.parametrize("name", sorted(_HEADER_SETS))
 def test_headers_carry_the_observed_encoding_set(name: str) -> None:
 	assert _HEADER_SETS[name]["Accept-Encoding"] == "gzip, deflate, br, zstd"
+
+
+def test_doctor_warns_when_delay_is_below_the_observed_cadence() -> None:
+	"""实测 15s 间隔连续 3 次会撞 37，90s 则通过；低于 30s 时必须给出提示。"""
+	from click.testing import CliRunner
+
+	from boss_agent_cli.commands.doctor import _RISK_FREE_DELAY_FLOOR
+	from boss_agent_cli.main import cli
+
+	result = CliRunner().invoke(cli, ["doctor"])
+	payload = json.loads(result.output.splitlines()[-1])
+	check = next(c for c in payload["data"]["checks"] if c["name"] == "request_delay")
+
+	assert check["status"] == "warn"
+	assert "--delay 30-60" in check["hint"]
+	assert _RISK_FREE_DELAY_FLOOR == 30.0
+
+
+def test_doctor_accepts_a_cadence_above_the_floor() -> None:
+	from click.testing import CliRunner
+
+	from boss_agent_cli.main import cli
+
+	result = CliRunner().invoke(cli, ["--delay", "45-90", "doctor"])
+	payload = json.loads(result.output.splitlines()[-1])
+	check = next(c for c in payload["data"]["checks"] if c["name"] == "request_delay")
+
+	assert check["status"] == "ok"
