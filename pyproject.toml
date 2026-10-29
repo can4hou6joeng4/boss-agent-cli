@@ -39,6 +39,11 @@ dependencies = [
 	# http2=True 会在**构造 client 时**抛 ImportError，与上面 socks 同一类风险，
 	# 所以放进必装依赖而不是 extra。
 	"httpx[socks,http2]>=0.27",
+	# 声明 Accept-Encoding: br, zstd 就必须真的能解码：否则服务端一旦按 br 返回，
+	# httpx 会拿不到解码器而报错。真机发的是 gzip, deflate, br, zstd，这两个包
+	# 让 httpx 的解码器集合与之匹配，而不是只声明不实现。
+	"brotli>=1.1",
+	"zstandard>=0.22",
 	"cryptography>=42.0",
 	"patchright>=1.58.2",
 	"browser-cookie3>=0.16.2",
