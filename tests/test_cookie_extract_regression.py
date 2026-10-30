@@ -1,5 +1,6 @@
 """cookie_extract.py 回归测试 — 守护 PR #74 的 broad except 不被未来误改回去。"""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from boss_agent_cli.auth.cookie_extract import _try_extract, extract_cookies
@@ -247,3 +248,62 @@ def test_extract_cookies_supports_extended_browser_set():
 			result = extract_cookies(source=source)
 			assert result is not None, source
 			assert result["cookies"]["wt2"] == expected
+
+
+# ── 旧版 browser_cookie3 缺 loader（arc 自 0.20.0 起，librewolf 自 0.19.0 起） ──
+
+
+def _old_browser_cookie3(**loaders):
+	"""只带指定属性的假模块；MagicMock 会凭空造出任何属性，模拟不了旧版缺函数。"""
+	return SimpleNamespace(**loaders)
+
+
+def test_extract_cookies_auto_detect_skips_loaders_missing_from_old_browser_cookie3():
+	"""0.19.x 没有 arc / librewolf：构造 loader 表不能抛 AttributeError，
+	自动检测越过缺的浏览器，继续找到排在它们后面的 safari。"""
+
+	def no_cookie(domain_name=None):
+		return []
+
+	def safari_loader(domain_name=None):
+		return [_fake_cookie("wt2", "from-safari"), _fake_cookie("__zp_stoken__", "s")]
+
+	old_module = _old_browser_cookie3(
+		chrome=no_cookie,
+		firefox=no_cookie,
+		edge=no_cookie,
+		brave=no_cookie,
+		opera=no_cookie,
+		chromium=no_cookie,
+		vivaldi=no_cookie,
+		safari=safari_loader,
+	)
+
+	with patch.dict("sys.modules", {"browser_cookie3": old_module}):
+		result = extract_cookies()
+
+	assert result is not None
+	assert result["cookies"]["wt2"] == "from-safari"
+
+
+def test_extract_cookies_explicit_loader_missing_from_old_browser_cookie3(capsys):
+	"""显式指定旧版没有的浏览器：返回 None 并提示升级，而不是报「不支持的浏览器」。"""
+	old_module = _old_browser_cookie3(chrome=lambda domain_name=None: [])
+
+	with patch.dict("sys.modules", {"browser_cookie3": old_module}):
+		assert extract_cookies(source="Arc") is None
+
+	err = capsys.readouterr().err
+	assert "升级 browser-cookie3" in err
+	assert "不支持的浏览器" not in err
+
+
+def test_extract_cookies_unknown_browser_lists_full_supported_set(capsys):
+	old_module = _old_browser_cookie3(chrome=lambda domain_name=None: [])
+
+	with patch.dict("sys.modules", {"browser_cookie3": old_module}):
+		assert extract_cookies(source="netscape-navigator") is None
+
+	err = capsys.readouterr().err
+	assert "不支持的浏览器: netscape-navigator" in err
+	assert "arc" in err and "safari" in err
