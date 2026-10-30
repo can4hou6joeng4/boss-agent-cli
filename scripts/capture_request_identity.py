@@ -29,15 +29,30 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 _DEFAULT_CDP_URL = "http://localhost:9222"
 _DEFAULT_OUTPUT = ".capture/request-identity.json"
 _SEARCH_URL_TPL = "https://www.zhipin.com/web/geek/jobs?query={query}&city={city}"
 
 
+def _is_boss_url(url: str) -> bool:
+	"""按 host 判断，而不是子串匹配。
+
+	`"zhipin.com" in url` 会把 `https://evil.example/?zhipin.com` 也当成目标站点
+	（CodeQL 的 py/incomplete-url-substring-sanitization）。这里显式解析 host。
+	"""
+	try:
+		host = urlsplit(url or "").hostname or ""
+	except ValueError:
+		return False
+	host = host.lower()
+	return host == "zhipin.com" or host.endswith(".zhipin.com")
+
+
 def _find_boss_page(context: Any) -> Any:
 	for page in context.pages:
-		if "zhipin.com" in (page.url or ""):
+		if _is_boss_url(page.url):
 			return page
 	raise SystemExit("当前 context 里没有 zhipin.com 页面，请先在 Chrome 中打开并登录")
 
