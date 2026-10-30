@@ -89,6 +89,25 @@ POLICIES: dict[str, BrowserSourcePolicy] = {
 		),
 		next_actions=("boss doctor",),
 	),
+	# 绝不打开浏览器：全部只读走 httpx，需要页面的能力直接拒绝。
+	"httpx-only": BrowserSourcePolicy(
+		name="httpx-only",
+		channels=(),
+		use_stored_credentials=True,
+		may_create_context=False,
+		allow_browser_launch=False,
+		auto_probe_cdp=False,
+		failure_code="BROWSER_DISABLED",
+		failure_message="browser-source=httpx-only 不打开任何浏览器，该能力需要页面通道",
+		recovery_action="改用 --browser-source auto 走浏览器通道后重试",
+		operator_actions=(
+			"该来源只走 httpx 只读链路（search/detail/friend_list/chat_history），不做任何页面操作",
+			"需要写操作或页面能力时，改用 --browser-source auto",
+			"同一 stoken 不要既被 httpx 使用又被浏览器通道使用，否则浏览器通道会得到 code 37",
+			"恢复：在 Chrome 里重载目标页生成新的 __zp_stoken__，再 boss clean --risk-lock + boss login --cdp",
+		),
+		next_actions=("boss status --live",),
+	),
 	# 只复用已有 CDP context 和目标页签，不读取本地凭据。
 	"existing-browser": BrowserSourcePolicy(
 		name="existing-browser",

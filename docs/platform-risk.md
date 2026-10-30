@@ -27,6 +27,7 @@ boss schema --format native
 - **专用 profile 通道**（crawl、research、`boss login --cdp` 的新登录）：必须使用独立 profile，不得关闭或污染用户日常 profile 与原有标签页。
 - **现有浏览器只读通道**（显式选择 `--browser-source existing-browser` 的已有 CDP 浏览器）：只复用已打开的目标站点页面，不导航、关闭、写入、读取或注入本地凭据、新建 context/页面或启动浏览器；通道不可用时返回 `BROWSER_SESSION_NOT_FOUND`，不得降级到 headless、临时 profile 或登录流程。复用登录会话不等于授权发送消息、打招呼或投递。
 - 两类通道都必须遵守本页其余约束。profile 隔离要求的放宽不构成对第 4 节可见浏览器、RPA 或指纹浏览器约束的豁免。
+- `--browser-source httpx-only` 是第三类：它不打开任何浏览器，只读全部走 httpx，需要页面的能力返回 `BROWSER_DISABLED`；它的线上稳定性尚未证实，见 4.2。
 - Cookie、Token、`__zp_stoken__`、`security_id` 和真实个人信息不得进入日志、错误、导出、fixture 或公开 PR 证据。
 - vendored hook 必须记录上游 repository、commit、license 和内容 hash，并提供逐项开关。
 - 输出数据必须有本地清理和 retention 机制；不得默认全量导入 shortlist 或其他工作流。
@@ -70,13 +71,70 @@ BOSS 职位列表请求还共享 SQLite 中的持久预算：普通 `boss search
 跨 CLI 进程串行预留 5–10 秒请求窗口。搜索缓存命中不会占用请求窗口；删除
 本地缓存或并行启动多个进程不得用于绕过该预算。
 
+### 3.1 请求节奏的实测边界
+
+2026-10-29 在本机对真实账号做过一次受控对照（单变量、足冷却、每档至多 3 次）：
+
+| 间隔 | 结果 |
+|---|---|
+| 15 秒 | 连续第 3 次 `search` 命中 code 37「您的环境存在异常」 |
+| 30 秒 | 两轮共 6 次通过 |
+| 60 秒 / 90 秒 | 各 3 次通过 |
+
+因此默认值已是 `--delay 30-60`（`config.DEFAULT_REQUEST_DELAY`）。单条只读命令
+只发一次请求、首次调用不等待，实测 `boss status` 仍是 0.3 秒左右；受影响的是
+分页、批量详情、crawl 这类多请求流程。
+
+`boss doctor` 会在间隔下限低于 30 秒时给出 warn 与建议值。这个下限来自上面那一组
+观测，**不是平台公布的安全阈值**：样本每档只有一条序列，真实阈值可能随账号、出口
+和时段变化。完整数据见 [只读链路能否不碰 CDP](research/zhipin-cdp-free-read-path-2026-10-29.md)。
+
+### 3.2 命中 code 37 之后的恢复
+
+不要换通道重试、不要刷新 Token 或重新登录来绕过；先停，再按顺序恢复：
+
+1. 在 Chrome 里重载目标业务页 —— `__zp_stoken__` 由页面脚本重新生成；
+2. `boss clean --risk-lock`（只清本地锁，不解除服务器侧限制）；
+3. `boss login --cdp` 重新读取新 stoken；
+4. 用单条只读命令确认恢复。
+
+第 1 步不能省：不复位页面时，重登读到的仍是已失效的 stoken，浏览器通道会继续返回 37。
+
 ## 4. 浏览器自动化边界
+
 
 patchright、CDP、Chrome 本地 profile、系统钥匙串、浏览器插件和平台风控都会影响登录与访问稳定性。浏览器能打开不代表 httpx 链路一定可用；httpx 链路可用也不代表浏览器自动化链路一定可用。任何模式命中风控时都停止；声明的 adapter 不能无界切换通道或无限重试。
 
 Windows 客户端、可见浏览器、CloakBrowser、RPA 工具或指纹浏览器都必须遵守相同的预算、脱敏、checkpoint 和停止策略。普通 CI 不得自动运行真实风控研究。
 
 第三方仓库中的 stealth、response interception、自动滚动抓取、批量提取或模拟真实用户指纹实现，只有在来源、license、commit、hash、数据路径和停止行为完成审计后，才能进入声明的 adapter；不得进入真实账号 CI。新平台接入仍必须先通过 [多平台适配器研究模板](research/platforms/README.md) 的准入评估。
+
+### 4.1 两条通道必须是同一个客户端
+
+httpx 通道与浏览器通道对外呈现的身份必须一致，否则同一个 Cookie 在几十秒内交替
+出现两种实现形态。2026-10-29 用真实页面抓包对齐了这些项：User-Agent、
+`sec-ch-ua*`、Accept-Language、Accept-Encoding、`priority`，以及页面自带的
+`token` / `zp_token` / `traceid`。抓包原始产物只留在本地 `.capture/`（已在
+.gitignore 内），逐项结论见 [请求身份一致性](research/zhipin-request-identity-2026-10-29.md)。
+
+配套的三条约束：
+
+- **出口唯一**：`resolve_proxy()` 解析环境里的代理，httpx 与每个 Chromium 启动点
+  共用同一个出口；Chromium 启动时加禁用非代理 UDP 的参数，避免 WebRTC 泄露真实地址。
+- **账号同源**：自动探测到 CDP 浏览器时，先比对 `wt2` 与本地凭据；不同账号则拒绝
+  复用其会话，改用本地凭据自建浏览器。把 A 账号的登录态拿去做 B 账号的请求，实测会
+  立刻得到 37。
+- **只读优先**：低风险只读走 httpx，写操作与需要页面的能力走浏览器。
+
+### 4.2 `--browser-source httpx-only`
+
+一个不打开任何浏览器的来源：通道白名单为空，`search` / `recommend` / `detail` /
+`friend_list` / `chat_history` 全部走 httpx；需要页面的能力返回 `BROWSER_DISABLED`。
+
+它的**线上稳定性尚未证实**：同一天内既有成功记录也有 code 37 记录，成因未定性。
+因此它只适合作为显式选择，不能充当默认路径或自动降级目标 —— 自动降级正好会造出
+半混用状态。失败时命令信封的 `hints.operator_actions` 会提示回退到
+`--browser-source auto`。
 
 ## 5. 烟测边界
 

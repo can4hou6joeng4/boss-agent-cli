@@ -18,7 +18,9 @@ from boss_agent_cli.main import cli
 def _invoke(*args: str, data_dir: Path | None = None):
 	runner = CliRunner()
 	global_args = ["--data-dir", str(data_dir)] if data_dir is not None else []
-	result = runner.invoke(cli, ["--json", *global_args, *args])
+	# 同一 data_dir 连续调用会命中跨进程请求预算；默认间隔现在按实测评测是 30-60 秒，
+	# 测试不该真的等，所以显式归零——测的是命令分发，不是节流。
+	result = runner.invoke(cli, ["--json", "--delay", "0-0", *global_args, *args])
 	return result.exit_code, json.loads(result.output)
 
 

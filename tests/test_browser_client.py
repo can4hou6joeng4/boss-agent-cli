@@ -395,9 +395,12 @@ def test_request_returns_browser_evaluation_json_and_marks_throttle():
 		"url": "https://www.zhipin.com/wapi/zpgeek/search/joblist.json",
 		"params": {"query": "python", "page": 1},
 		"data": {"city": "101020100"},
-		"referer": "https://www.zhipin.com/web/geek/job",
+		"referer": "https://www.zhipin.com/web/geek/jobs",
 		"timeoutMs": 20000,
+		"identity": {},
+		"traceId": evaluate_args["traceId"],
 	}
+	assert evaluate_args["traceId"].startswith("F-")
 
 
 def test_cold_start_wait_constants_stay_lean():
@@ -535,7 +538,7 @@ def test_request_does_not_hang_when_new_page_navigation_stalled():
 	mock_new_page.wait_for_load_state.side_effect = None
 	mock_new_page.wait_for_load_state.return_value = None
 	mock_ctx.new_cdp_session.return_value.send.return_value = {"result": {"value": {"code": 0, "zpData": {}}}}
-	res2 = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+	res2 = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/job/detail.json")
 	assert res2["code"] == 0
 
 
@@ -625,7 +628,7 @@ def test_request_recovers_once_after_context_destroyed_mid_navigation():
 	]
 	session = _started_cdp_session_with_page(page)
 
-	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/job/detail.json")
 
 	assert res["code"] == 0
 	assert page.evaluate.call_count == 2
@@ -640,7 +643,7 @@ def test_request_returns_error_envelope_when_page_never_becomes_ready_after_navi
 	page.wait_for_load_state.side_effect = TimeoutError("still navigating")
 	session = _started_cdp_session_with_page(page)
 
-	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/job/detail.json")
 
 	assert res["code"] == -1
 	assert page.evaluate.call_count == 1
@@ -654,7 +657,7 @@ def test_request_retries_at_most_once_on_repeated_context_destroyed():
 	session = _started_cdp_session_with_page(page)
 
 	with pytest.raises(RuntimeError):
-		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/job/detail.json")
 
 	assert page.evaluate.call_count == 2
 
@@ -665,7 +668,7 @@ def test_request_healthy_path_has_no_extra_wait():
 	page.evaluate.return_value = {"code": 0, "zpData": {}}
 	session = _started_cdp_session_with_page(page)
 
-	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/job/detail.json")
 
 	assert res["code"] == 0
 	page.wait_for_load_state.assert_not_called()
@@ -678,7 +681,7 @@ def test_request_propagates_unrelated_evaluate_errors_without_retry():
 	session = _started_cdp_session_with_page(page)
 
 	with pytest.raises(RuntimeError):
-		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/search/joblist.json")
+		session.request("GET", "https://www.zhipin.com/wapi/zpgeek/job/detail.json")
 
 	page.evaluate.assert_called_once()
 	page.wait_for_load_state.assert_not_called()
@@ -758,3 +761,19 @@ def test_start_headless_raises_navigation_error_instead_of_raw_goto_timeout():
 	assert session._started is False
 	assert captured.value.channel == "headless"
 	assert captured.value.attempts == _HOME_NAV_RETRIES
+def test_request_injects_page_identity_headers() -> None:
+	"""浏览器通道也要带页面自己的 token/zp_token，否则与 httpx 通道是两个客户端。"""
+	session = BrowserSession(cookies={}, user_agent="UA", identity={"token": "abc", "zp_token": "a~|b~"})
+	session._started = True
+	session._page = MagicMock()
+	session._throttle = MagicMock()
+	session._context = MagicMock()
+	cdp = session._context.new_cdp_session.return_value
+	cdp.send.return_value = {"result": {"value": {"code": 0, "zpData": {}}}}
+
+	session.request("GET", "https://www.zhipin.com/wapi/test.json")
+
+	method, args = cdp.send.call_args.args
+	assert method == "Runtime.evaluate"
+	payload = json.loads(args["expression"].rsplit(")(", 1)[1][:-1])
+	assert payload["identity"] == {"token": "abc", "zp_token": "a~|b~"}

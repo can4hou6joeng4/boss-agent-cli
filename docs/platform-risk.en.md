@@ -27,6 +27,7 @@ Both modes share these runtime constraints:
 - **Dedicated-profile channels** (crawl, research, and a new login through `boss login --cdp`) must use an isolated profile and must not close or alter the user's daily profile or tabs.
 - **Existing-browser read channels** (an already-running CDP browser explicitly selected with `--browser-source existing-browser`) may reuse only an already-open target-site page. They must not navigate, close, write, read or inject stored credentials, create contexts/pages, or launch a browser. If all allowed channels are unavailable, return `BROWSER_SESSION_NOT_FOUND` rather than falling back to headless, a temporary profile, or a login flow. Reusing a session does not authorize sending messages, greeting recruiters, or applying.
 - Both channel categories remain subject to every other rule on this page. Relaxing profile isolation does not exempt visible browsers, RPA tools, or fingerprint browsers from section 4.
+- `--browser-source httpx-only` is a third category: it opens no browser, routes every read through httpx, and returns `BROWSER_DISABLED` for page-only capabilities. Its live stability is unproven; see 4.2.
 - Credentials and identifiers must remain redacted; vendored hooks need auditable repository/commit/license/hash metadata; outputs need local retention and cleanup controls.
 
 ## 1. Platform APIs can drift
@@ -64,13 +65,81 @@ Redact issue payloads:
 
 The default request interval is controlled by `--delay`. Collection, writes, and bulk outreach require bounded budgets, explicit inputs, and stop conditions; mode configuration does not remove account, data, or runtime responsibility.
 
+### 3.1 Measured request-rate boundary
+
+A controlled run against a real account on 2026-10-29 (one variable, long cooldowns,
+at most three calls per condition) produced:
+
+| Interval | Result |
+|---|---|
+| 15 s | the third consecutive `search` hit code 37 ("your environment looks abnormal") |
+| 30 s | 6/6 across two runs |
+| 60 s / 90 s | 3/3 each |
+
+The default is therefore `--delay 30-60` (`config.DEFAULT_REQUEST_DELAY`). A single
+read-only command issues one request and the throttle does not wait on first use —
+`boss status` still runs in about 0.3 s. What slows down is pagination, bulk detail
+fan-out, and crawl.
+
+`boss doctor` warns when the lower bound is below 30 s. That bound comes from the run
+above and is **not a published platform threshold**: each condition was a single
+three-call sequence, and the real limit may vary with account, egress, and time of day.
+Full data: [can read-only work without CDP](research/zhipin-cdp-free-read-path-2026-10-29.md).
+
+### 3.2 Recovering from code 37
+
+Do not switch channels to retry, and do not refresh the token or log in again to get
+around it. Stop, then recover in order:
+
+1. reload the target page in Chrome so the page script regenerates `__zp_stoken__`;
+2. `boss clean --risk-lock` (clears the local lock only, not the server-side limit);
+3. `boss login --cdp` to read the new token;
+4. confirm with a single read-only command.
+
+Step 1 is not optional: without it the re-login reads the already-invalidated token and
+the browser channel keeps returning 37.
+
 ## 4. Browser automation boundaries
+
 
 patchright, CDP, local Chrome profiles, system keychains, browser extensions, and platform risk-control systems all affect login and access stability. Every mode stops when the platform flags automation. Declared adapters must not switch channels or retry without bounds.
 
 Windows app clients, visible browsers, CloakBrowser, RPA tools, and fingerprint browsers all follow the same budget, redaction, checkpoint, and stop policy. Regular CI must never run live risk-control research automatically.
 
 Third-party implementations using stealth, response interception, auto-scroll collection, bulk extraction, or simulated real-user fingerprints may enter a declared adapter only after repository, license, commit, hash, data-path, and stop-behavior review. They must not enter real-account CI. Every new platform must first pass the [platform adapter research template](research/platforms/README.md) gate.
+
+### 4.1 Both channels must look like one client
+
+The httpx channel and the browser channel must present the same identity, otherwise a
+single cookie jar alternates between two implementations within seconds. A capture of
+the real pages on 2026-10-29 aligned User-Agent, `sec-ch-ua*`, Accept-Language,
+Accept-Encoding, `priority`, and the page-owned `token` / `zp_token` / `traceid`.
+Raw captures stay local in `.capture/` (gitignored); the per-header conclusions are in
+[request identity consistency](research/zhipin-request-identity-2026-10-29.md).
+
+Three supporting constraints:
+
+- **One egress**: `resolve_proxy()` reads the environment proxy and every Chromium
+  launch plus httpx share it; Chromium starts with non-proxied UDP disabled so WebRTC
+  cannot leak the real address.
+- **Same account**: when a CDP browser is auto-discovered, its `wt2` is compared with
+  the stored credential. A different account means the session is not reused; the CLI
+  falls back to its own browser with local credentials. Using account A's login state
+  for account B's request was measured to return 37 immediately.
+- **Read-first**: low-risk reads go through httpx; writes and page-only capabilities go
+  through the browser.
+
+### 4.2 `--browser-source httpx-only`
+
+A source that never opens a browser: its channel allowlist is empty, so `search`,
+`recommend`, `detail`, `friend_list`, and `chat_history` all use httpx, while page-only
+capabilities return `BROWSER_DISABLED`.
+
+Its **live stability is unproven**: the same day produced both successes and code 37,
+and the cause is not established. It is therefore an explicit choice, never a default
+or an automatic fallback — an automatic fallback is exactly what produces a
+half-mixed state. On failure, `hints.operator_actions` tells the caller to fall back
+to `--browser-source auto`.
 
 ## 5. Smoke-test boundaries
 

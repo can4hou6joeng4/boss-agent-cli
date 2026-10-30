@@ -597,6 +597,30 @@ def risk_error_contract(code: str) -> tuple[str, dict[str, list[str]]]:
 	return str(spec["recovery_action"]), {"next_actions": list(spec["next_actions"])}
 
 
+def httpx_only_fallback_hint(ctx: Any) -> list[str]:
+	"""``--browser-source httpx-only`` 失败时给真人的回退指引。
+
+	该来源的线上稳定性尚未证实（同一天内既有成功也有 code 37），所以失败时的
+	第一建议不是重试，而是回到默认的浏览器通道——那是本项目一直在用的路径。
+	"""
+	browser_source = (getattr(ctx, "obj", None) or {}).get("browser_source")
+	if browser_source != "httpx-only":
+		return []
+	return [
+		"httpx-only 的线上稳定性未证实；失败后先回退到默认 --browser-source auto 再试",
+		"若已命中风控，按提示保留 checkpoint，不要靠切换通道绕过",
+	]
+
+
+def _with_httpx_only_hint(ctx: Any, hints: dict[str, list[str]] | None) -> dict[str, list[str]] | None:
+	extra = httpx_only_fallback_hint(ctx)
+	if not extra:
+		return hints
+	merged = dict(hints or {})
+	merged["operator_actions"] = [*merged.get("operator_actions", []), *extra]
+	return merged
+
+
 def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
 	"""装饰器：统一处理 AuthRequired / TokenRefreshFailed / Exception 三层捕获。
 
@@ -711,7 +735,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recoverable=False,
 					recovery_action=recovery_action,
 					details=e.details or None,
-					hints=hints or None,
+					hints=_with_httpx_only_hint(ctx, hints),
 				)
 			except RequestBudgetExceeded as e:
 				budget_recoverable, budget_recovery = error_contract_for_code(e.code)
@@ -723,7 +747,9 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recoverable=budget_recoverable,
 					recovery_action=budget_recovery,
 					details=e.details,
-					hints={"operator_actions": ["等待冷却并检查并发任务；确认后显式恢复，不自动清理风险锁"]},
+					hints=_with_httpx_only_hint(
+						ctx, {"operator_actions": ["等待冷却并检查并发任务；确认后显式恢复，不自动清理风险锁"]}
+					),
 				)
 			except BrowserNavigationError as e:
 				nav_recoverable, nav_recovery = error_contract_for_code(e.code)
@@ -752,6 +778,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					message=f"{command_name} 失败: {e}",
 					recoverable=True,
 					recovery_action="重试",
+					hints=_with_httpx_only_hint(ctx, None),
 				)
 
 		return wrapper

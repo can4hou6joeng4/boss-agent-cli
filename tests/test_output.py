@@ -241,7 +241,7 @@ def test_emit_error_redacts_sensitive_text_at_stdout_boundary(capsys):
 def test_config_defaults():
 	from boss_agent_cli.config import load_config
 	cfg = load_config(None)
-	assert cfg["request_delay"] == [1.5, 3.0]
+	assert cfg["request_delay"] == [30.0, 60.0]
 	assert cfg["log_level"] == "error"
 
 
@@ -253,7 +253,7 @@ def test_config_from_file(tmp_path):
 	cfg = load_config(cfg_file)
 	assert cfg["export_dir"] == "/tmp/exports"
 	assert cfg["log_level"] == "debug"
-	assert cfg["request_delay"] == [1.5, 3.0]
+	assert cfg["request_delay"] == [30.0, 60.0]
 
 
 # --- hints 双受众通道契约（operator_actions） ---

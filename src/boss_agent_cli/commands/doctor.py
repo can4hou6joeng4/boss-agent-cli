@@ -8,6 +8,7 @@ from typing import Any
 import click
 import httpx
 
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL
 from boss_agent_cli.api.cdp_risk_lock import UNLOCK_OPERATOR_ACTIONS
 from boss_agent_cli.api.request_budget import risk_lock_status as lock_status
@@ -22,6 +23,11 @@ from boss_agent_cli.services.browser_runtime import (
 	patchright_browser_cache_dirs,
 	patchright_chromium_revision,
 )
+
+
+#: 实测：15 秒间隔连续 3 次 search 会在第 3 次命中 code 37，90 秒间隔 3/3 通过。
+#: 阈值取 30 秒——低于它给出的提示仍然成立，又不是在做精确的安全承诺。
+_RISK_FREE_DELAY_FLOOR = 30.0
 
 
 @click.command("doctor")
@@ -60,6 +66,21 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 		f"{py_detail}" if python_ok else f"{py_detail}（需要 >=3.11）",
 		None if python_ok else "升级 Python 到 3.11+",
 	)
+
+	# 1b) 请求节奏：默认 1.5-3.0 秒远低于实测可持续节奏（见
+	# docs/research/zhipin-cdp-free-read-path-2026-10-29.md 第七节）。这里只提示，
+	# 不改用户配置、不发任何请求。
+	delay = ctx.obj.get("delay") or DEFAULT_REQUEST_DELAY
+	low_delay = float(delay[0])
+	if low_delay < _RISK_FREE_DELAY_FLOOR:
+		add_check(
+			"request_delay",
+			"warn",
+			f"当前请求间隔下限 {low_delay:g}s，低于实测可持续节奏；连续多条命令容易命中 code 37",
+			f"交互式连续运行时建议 --delay {int(_RISK_FREE_DELAY_FLOOR)}-{int(_RISK_FREE_DELAY_FLOOR) * 2}",
+		)
+	else:
+		add_check("request_delay", "ok", f"请求间隔下限 {low_delay:g}s")
 
 	patchright_bin = shutil.which("patchright")
 	add_check(
