@@ -50,6 +50,10 @@ BOSS 的 code `31`（IP/环境限制）/ `32`（账号限制）/ `35` / `36`、�
 
 访问受限页展示的恢复时间只作平台提示，不触发定时刷新或自动清锁；移动端可用也不能证明网页端限制已解除。已有受限页时，`login --force` 在清除 Cookie 前同样停止。
 
+### 浏览器 Cookie 提取与 macOS 钥匙串
+
+`boss login` 默认先从本机浏览器提取 BOSS Cookie，按 chrome、firefox、edge、brave、opera、chromium、vivaldi、arc、librewolf、safari 的顺序尝试，`--cookie-source` 可只指定一个。macOS 上 Chromium 系浏览器的 Cookie 由钥匙串里的「<浏览器> Safe Storage」加密，读取时系统会弹出授权框。CLI 会先以只读方式查看 Cookie 库中明文的域名和名称两列：确认某个浏览器没有 `zhipin.com` 的 `wt2` 登录记录，就直接跳过它，不读取钥匙串；找不到 Cookie 库或无法读取时，仍按原方式交给 browser-cookie3。这一步不读取任何 Cookie 值。`boss doctor` 默认不读取浏览器 Cookie，`--probe-cookies` 走同一套逻辑。
+
 ### 从浏览器 cURL 导入登录态
 
 浏览器 Cookie 自动提取不可用时，可将自己已登录的 `https://www.zhipin.com` 请求通过 **Copy as cURL (bash)** 复制为原始文本，保存为仅自己可读的文件：

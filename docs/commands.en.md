@@ -54,6 +54,10 @@ After confirming recovery on the intended official business page in the original
 
 A recovery time displayed by the restriction page is a platform hint, not a trigger for scheduled refresh or automatic unlocking. Mobile availability does not establish web recovery. With an existing restricted page, `login --force` also stops before clearing Cookies.
 
+### Browser Cookie extraction and the macOS Keychain
+
+By default `boss login` first extracts BOSS Cookies from local browsers, trying chrome, firefox, edge, brave, opera, chromium, vivaldi, arc, librewolf and safari in that order; `--cookie-source` selects a single one. On macOS, Chromium-based browsers encrypt Cookies with the "<Browser> Safe Storage" Keychain item, and reading it raises a system authorization prompt. The CLI first opens the Cookie database read-only and checks only its plaintext domain and name columns. A browser confirmed to have no `wt2` login record for `zhipin.com` is skipped without touching the Keychain. When the database cannot be found or read, extraction falls back to browser-cookie3 as before. No Cookie value is read during this check. `boss doctor` does not read browser Cookies by default; `--probe-cookies` uses the same logic.
+
 ### Import a browser cURL session
 
 If browser Cookie extraction is unavailable, use **Copy as cURL (bash)** on your own authenticated `https://www.zhipin.com` request and save the raw text in a private file:
