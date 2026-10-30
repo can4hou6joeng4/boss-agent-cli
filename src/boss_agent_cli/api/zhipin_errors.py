@@ -116,8 +116,19 @@ def platform_risk_page_response(*, url: str = "", content_type: str = "", body: 
 		return {
 			"code": 36, "message": "平台返回官方安全验证页，请在官方页面处理后显式恢复",
 			"__cli_platform_code__": None, "__cli_risk_source__": "security_page",
+			# 带上命中的路径：否则用户和报告者都无法区分 verify.html（安全校验）
+			# 与 security.html（风险页），Issue #488 就是卡在这一步。
+			"path": _url_path(url),
 		}
 	return None
+
+
+def _url_path(url: str) -> str:
+	"""返回 URL 的 path；解析失败返回空串，绝不因为展示信息再抛一次。"""
+	try:
+		return urlsplit(url or "").path
+	except ValueError:
+		return ""
 
 
 def raise_platform_risk_response(response: dict[str, Any], *, is_cdp: bool = False) -> None:
@@ -129,6 +140,8 @@ def raise_platform_risk_response(response: dict[str, Any], *, is_cdp: bool = Fal
 	details: dict[str, Any] = {"platform_code": normalize_risk_code(response.get("__cli_platform_code__", code))}
 	if response.get("__cli_risk_source__") in ("access_restricted_page", "security_page"):
 		details["risk_source"] = response["__cli_risk_source__"]
+	if path := response.get("path"):
+		details["path"] = str(path)
 	if code in (CODE_ACCOUNT_RESTRICTED, 35, 36):
 		raise AccountRiskError(
 			response_message(response) or "平台要求完成安全验证", is_cdp=is_cdp,
