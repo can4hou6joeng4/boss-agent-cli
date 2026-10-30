@@ -221,7 +221,7 @@ def test_pipeline_passes_raw_params_to_search_client():
 		FakeLogger(),
 		criteria=SearchFilterCriteria(
 			query="python",
-			raw_params={"city": "101280100", "experience": "108,104"},
+			raw_params={"city": "101280100", "experience": "102,105"},
 		),
 	)
 
@@ -237,7 +237,7 @@ def test_pipeline_passes_raw_params_to_search_client():
 			"stage": None,
 			"job_type": None,
 			"page": 1,
-			"raw_params": {"city": "101280100", "experience": "108,104"},
+			"raw_params": {"city": "101280100", "experience": "102,105"},
 		},
 	}
 

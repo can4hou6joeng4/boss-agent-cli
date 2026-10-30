@@ -65,7 +65,7 @@ class TestSearchUrlParsing:
 
 	def test_resolve_search_code_params_supports_multiselect(self):
 		params = resolve_search_code_params(experience="应届,3-5年", education="本科,硕士", job_type="全职,实习")
-		assert params["experience"] == "108,104"
+		assert params["experience"] == "102,105"
 		assert params["degree"] == "203,204"
 		assert params["jobType"] == "1901,1902"
 
