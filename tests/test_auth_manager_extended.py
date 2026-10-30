@@ -76,15 +76,13 @@ def test_get_token_loads_from_store_and_caches(mock_store_cls, tmp_path):
 
 @patch("boss_agent_cli.auth.manager.TokenStore")
 @patch("boss_agent_cli.auth.manager.login_via_browser")
-@patch("boss_agent_cli.auth.manager.qr_login_httpx")
 @patch("boss_agent_cli.auth.manager.login_via_cdp")
 @patch("boss_agent_cli.auth.manager.probe_cdp")
 @patch("boss_agent_cli.auth.manager.extract_cookies")
-def test_login_falls_back_to_qr_when_cdp_login_raises(
+def test_login_falls_back_to_browser_when_cdp_login_raises(
 	mock_extract,
 	mock_probe_cdp,
 	mock_login_via_cdp,
-	mock_qr_login,
 	mock_login_via_browser,
 	mock_store_cls,
 	tmp_path,
@@ -94,42 +92,37 @@ def test_login_falls_back_to_qr_when_cdp_login_raises(
 	mock_extract.return_value = None
 	mock_probe_cdp.return_value = True
 	mock_login_via_cdp.side_effect = RuntimeError("cdp dead")
-	mock_qr_login.return_value = {"cookies": {"wt2": "qr"}, "stoken": "qr-token"}
+	mock_login_via_browser.return_value = {"cookies": {"wt2": "b"}, "stoken": "bt"}
 
 	manager = AuthManager(tmp_path)
 	result = manager.login(timeout=30)
 
 	mock_login_via_cdp.assert_called_once()
-	mock_qr_login.assert_called_once_with(timeout=30)
-	mock_login_via_browser.assert_not_called()
-	assert result["_method"] == "QR httpx 登录"
+	mock_login_via_browser.assert_called_once_with(timeout=30, platform="zhipin")
+	assert result["_method"] == "扫码登录"
 
 
 @patch("boss_agent_cli.auth.manager.TokenStore")
 @patch("boss_agent_cli.auth.manager.login_via_browser")
-@patch("boss_agent_cli.auth.manager.qr_login_httpx")
 @patch("boss_agent_cli.auth.manager.probe_cdp")
 @patch("boss_agent_cli.auth.manager.extract_cookies")
-def test_login_falls_back_to_patchright_when_qr_fails(
+def test_login_uses_patchright_directly_when_cdp_unavailable(
 	mock_extract,
 	mock_probe_cdp,
-	mock_qr_login,
 	mock_login_via_browser,
 	mock_store_cls,
 	tmp_path,
 ):
-	"""CDP 不可用 + QR httpx 失败 → 兜底 patchright 扫码。"""
+	"""CDP 不可用 → 直接 patchright 扫码，令牌与 stoken 原样保存。"""
 	store = _make_store()
 	mock_store_cls.return_value = store
 	mock_extract.return_value = None
 	mock_probe_cdp.return_value = False
-	mock_qr_login.side_effect = TimeoutError("qr timeout")
 	mock_login_via_browser.return_value = {"cookies": {"wt2": "b"}, "stoken": "bt"}
 
 	manager = AuthManager(tmp_path)
 	result = manager.login(timeout=20)
 
-	mock_qr_login.assert_called_once()
 	mock_login_via_browser.assert_called_once_with(timeout=20, platform="zhipin")
 	assert result["_method"] == "扫码登录"
 	assert manager._token["stoken"] == "bt"
@@ -137,24 +130,21 @@ def test_login_falls_back_to_patchright_when_qr_fails(
 
 @patch("boss_agent_cli.auth.manager.TokenStore")
 @patch("boss_agent_cli.auth.manager.login_via_browser")
-@patch("boss_agent_cli.auth.manager.qr_login_httpx")
 @patch("boss_agent_cli.auth.manager.probe_cdp")
 @patch("boss_agent_cli.auth.manager.extract_cookies")
-def test_login_falls_back_to_patchright_when_cookie_invalid_and_cdp_down_and_qr_fails(
+def test_login_falls_back_to_patchright_when_cookie_invalid_and_cdp_down(
 	mock_extract,
 	mock_probe_cdp,
-	mock_qr_login,
 	mock_login_via_browser,
 	mock_store_cls,
 	tmp_path,
 ):
-	"""Cookie 提取有 wt2 但验证失效 → CDP 不可用 → QR 失败 → patchright 兜底。"""
+	"""Cookie 提取有 wt2 但验证失效 → CDP 不可用 → patchright 兜底。"""
 	store = _make_store()
 	mock_store_cls.return_value = store
 	# 返回一个带 wt2 的 cookie，但 verify 返回 False
 	mock_extract.return_value = {"cookies": {"wt2": "stale"}, "stoken": ""}
 	mock_probe_cdp.return_value = False
-	mock_qr_login.side_effect = RuntimeError("qr died")
 	mock_login_via_browser.return_value = {"cookies": {"wt2": "good"}, "stoken": "good-t"}
 
 	manager = AuthManager(tmp_path)

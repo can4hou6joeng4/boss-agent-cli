@@ -43,7 +43,7 @@ Treat these symptoms as possible platform drift:
 
 ## 2. Login and Cookie boundaries
 
-Login can use Cookie extraction, CDP, QR httpx, or browser fallback. The project reads and stores login state locally. Users should never submit cookies, tokens, phone numbers, WeChat IDs, names, company-private information, or real `security_id` values to the repository. No adapter may turn login compatibility into a risk-control retry channel; all adapters follow section 0.1.
+Login can use Cookie extraction, CDP, or a browser QR fallback. The project reads and stores login state locally. Users should never submit cookies, tokens, phone numbers, WeChat IDs, names, company-private information, or real `security_id` values to the repository. No adapter may turn login compatibility into a risk-control retry channel; all adapters follow section 0.1.
 
 With the default `auto` source, `chat` and `chatmsg` retain the httpx path; missing stored credentials return `AUTH_REQUIRED` plus `boss login`. Only explicitly selecting `--browser-source existing-browser` reuses an existing target-site tab through CDP without reading or exporting CLI-stored cookies. A reachable CDP endpoint does not prove that the target page is logged in, so platform unauthenticated responses remain platform errors. An unavailable CDP session or existing target page returns `BROWSER_SESSION_NOT_FOUND` plus `boss doctor`, without starting headless or a login flow. `stored-cookie` connects only to an explicit `--cdp-url`, with no auto-probing or fallback. The browser path does not inherit httpx stoken-refresh or rate-limit retries.
 

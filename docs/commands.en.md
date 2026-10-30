@@ -42,7 +42,7 @@ In a TTY only `operator_actions` is rendered, to stderr; `next_actions` stays an
 | `boss` / `boss wizard` | Start the TTY wizard; use `--input-json` for agent workflows and `--status/--resume/--stop <run_id>` for persisted runs |
 | `boss schema` | Full tool self-description JSON (agents call this first) |
 | `boss platforms` | Local platform registry and capability status (no network; `--platform` filter, `--capability` reverse lookup, includes `capability_status_legend`) |
-| `boss login` | User-triggered login (Cookie / CDP / QR / browser fallback per platform); `--force` reuses no existing session: skips local Cookie extraction and, under CDP, clears the target platform cookies in the current context before a fresh QR login; refused while the local BOSS risk lock is active; `--ignore-risk-lock` remains accepted for compatibility and cannot bypass the lock |
+| `boss login` | User-triggered login (Cookie / CDP / browser QR fallback per platform); `--force` reuses no existing session: skips local Cookie extraction and, under CDP, clears the target platform cookies in the current context before a fresh QR login; refused while the local BOSS risk lock is active; `--ignore-risk-lock` remains accepted for compatibility and cannot bypass the lock |
 | `boss logout` | Log out |
 | `boss status` | Check login state (local-only by default; `--live` runs a low-frequency read-only probe) |
 | `boss doctor` | Diagnose environment, dependencies, credential integrity, and network; local-only by default and does not read browser cookies. `--probe-cookies` opts into browser cookie extraction, and `--live-probe` opts into a read-only probe. A candidate-side login is reported before any recruiter request |
