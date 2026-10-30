@@ -100,34 +100,47 @@ def extract_cookies(source: str | None = None, *, platform: str = "zhipin") -> d
 				file=sys.stderr,
 			)
 			return None
-		return _try_extract(
-			loader,
-			domain_name=domain_name,
-			required_cookie=required_cookie,
-			stoken_cookie=stoken_cookie,
-		)
-
-	# 自动检测：按优先级尝试
-	skipped: list[str] = []
-	for name, loader in loaders.items():
-		if _keychain_read_avoidable(name, domain_name=domain_name, cookie_name=required_cookie):
-			skipped.append(name)
-			continue
+		failures: list[str] = []
 		result = _try_extract(
 			loader,
 			domain_name=domain_name,
 			required_cookie=required_cookie,
 			stoken_cookie=stoken_cookie,
+			failures=failures,
+		)
+		if result is None:
+			print(_explain_extract_failure(source, failures, domain_name, required_cookie), file=sys.stderr)
+		return result
+
+	# 自动检测：按优先级尝试
+	skipped: list[str] = []
+	undecryptable: list[str] = []
+	for name, loader in loaders.items():
+		if _keychain_read_avoidable(name, domain_name=domain_name, cookie_name=required_cookie):
+			skipped.append(name)
+			continue
+		attempt_failures: list[str] = []
+		result = _try_extract(
+			loader,
+			domain_name=domain_name,
+			required_cookie=required_cookie,
+			stoken_cookie=stoken_cookie,
+			failures=attempt_failures,
 		)
 		if result:
 			print(f"从 {name} 提取到 {platform} Cookie", file=sys.stderr)
 			return result
+		# 浏览器没装、库被锁之类的失败很常见，不逐个报；只汇总拿不到解密密钥的浏览器
+		if any(_is_decryption_failure(reason) for reason in attempt_failures):
+			undecryptable.append(name)
 
 	if skipped:
 		print(
 			f"{', '.join(skipped)} 的 Cookie 库中没有 {domain_name.lstrip('.')} 的登录记录，已跳过钥匙串读取",
 			file=sys.stderr,
 		)
+	if undecryptable:
+		print(f"{', '.join(undecryptable)} 的 Cookie 无法解密：{_decryption_hint()}", file=sys.stderr)
 	return None
 
 
@@ -139,7 +152,52 @@ def _keychain_read_avoidable(browser: str, *, domain_name: str, cookie_name: str
 
 
 def _is_macos() -> bool:
-	return sys.platform == "darwin"
+	return _current_platform() == "darwin"
+
+
+def _current_platform() -> str:
+	return sys.platform
+
+
+# browser_cookie3 拿不到解密密钥时的报错特征：macOS 钥匙串被拒、Linux 密钥环未解锁、
+# Windows DPAPI 或新版 Chrome / Edge 的 App-Bound 加密。其余多是浏览器没装、库被锁。
+_DECRYPTION_ERROR_KEYWORDS: tuple[str, ...] = (
+	"key for cookie decryption",
+	"safe storage",
+	"keychain",
+	"secretstorage",
+	"dpapi",
+	"cryptunprotectdata",
+	"win32crypt",
+)
+
+
+def _is_decryption_failure(reason: str) -> bool:
+	lowered = reason.lower()
+	return any(keyword in lowered for keyword in _DECRYPTION_ERROR_KEYWORDS)
+
+
+def _decryption_hint() -> str:
+	platform = _current_platform()
+	if platform == "darwin":
+		return "macOS 钥匙串未授权读取浏览器的 Safe Storage，可在授权弹窗中选择允许后重试，或改用 boss login --cdp / --curl-file"
+	if platform == "win32":
+		return (
+			"Windows 上新版 Chrome / Edge 的 App-Bound 加密（Chrome 127 起）无法从磁盘解密，"
+			"请改用 boss login --cdp 连接已登录的浏览器，或用 --curl-file 导入"
+		)
+	return "系统密钥环未解锁或不可用（无头 / SSH 会话常见），请先解锁密钥环，或改用 boss login --cdp / --curl-file"
+
+
+def _explain_extract_failure(source: str, failures: list[str], domain_name: str, required_cookie: str) -> str:
+	"""显式指定浏览器却没提取到时，说明是读取失败还是根本没有登录 Cookie。"""
+	if not failures:
+		return f"{source} 中没有 {domain_name.lstrip('.')} 的登录 Cookie（{required_cookie}）"
+	reason = failures[0]
+	message = f"{source} 的 Cookie 读取失败（{reason}）"
+	if _is_decryption_failure(reason):
+		message += f"：{_decryption_hint()}"
+	return message
 
 
 def _macos_app_support_dir() -> Path:
@@ -211,8 +269,12 @@ def _try_extract(
 	domain_name: str = ".zhipin.com",
 	required_cookie: str = "wt2",
 	stoken_cookie: str = "__zp_stoken__",
+	failures: list[str] | None = None,
 ) -> dict[str, Any] | None:
-	"""尝试从单个浏览器提取指定域名 cookies。"""
+	"""尝试从单个浏览器提取指定域名 cookies。
+
+	failures 非空时追加失败原因（异常类型与截断后的消息，不含 Cookie 值），供调用方给出诊断。
+	"""
 	try:
 		cj = loader(domain_name=domain_name)
 		domain_fragment = domain_name.lstrip(".")
@@ -225,9 +287,11 @@ def _try_extract(
 			"user_agent": "",  # browser-cookie3 无法获取 UA，后续由 httpx 默认 UA 补充
 			"stoken": cookies.get(stoken_cookie, "") if stoken_cookie else "",
 		}
-	except Exception:
+	except Exception as exc:
 		# 故意捕获所有异常：browser_cookie3 在浏览器未安装、profile 路径不可访问、
 		# 数据库被锁定等场景会抛库自定义的 BrowserCookieError 等异常，这些不在 stdlib
 		# 异常树里。本函数是 best-effort 降级链路的一环，任何失败都应静默返回 None
 		# 让上层尝试下一个浏览器/通道，而非中断整条调用链。
+		if failures is not None:
+			failures.append(f"{type(exc).__name__}: {str(exc)[:160]}")
 		return None

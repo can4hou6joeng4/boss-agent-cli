@@ -545,3 +545,87 @@ def test_macos_data_roots_cover_browser_cookie3_osx_paths(monkeypatch):
 				)
 			]
 			assert covered, (name, pattern)
+
+
+# ── 提取失败诊断：说明原因并按平台给出出路 ────────────────────────
+
+
+_DECRYPTION_ERROR = "Unable to get key for cookie decryption"
+
+
+def _raising(message):
+	class BrowserCookieError(Exception):
+		pass
+
+	def loader(domain_name=None):
+		raise BrowserCookieError(message)
+
+	return loader
+
+
+@pytest.mark.parametrize(
+	("platform_name", "expected_hint"),
+	[
+		("darwin", "钥匙串"),
+		("win32", "App-Bound"),
+		("linux", "密钥环"),
+	],
+)
+def test_explicit_source_decryption_failure_explains_platform_cause(monkeypatch, capsys, platform_name, expected_hint):
+	monkeypatch.setattr(cookie_extract, "_current_platform", lambda: platform_name)
+	module = SimpleNamespace(chrome=_raising(_DECRYPTION_ERROR))
+
+	with patch.dict("sys.modules", {"browser_cookie3": module}):
+		assert extract_cookies(source="chrome") is None
+
+	err = capsys.readouterr().err
+	assert "chrome 的 Cookie 读取失败（BrowserCookieError: Unable to get key for cookie decryption）" in err
+	assert expected_hint in err
+	assert "--cdp" in err and "--curl-file" in err
+
+
+def test_explicit_source_other_failure_reports_reason_without_decryption_hint(monkeypatch, capsys):
+	monkeypatch.setattr(cookie_extract, "_current_platform", lambda: "darwin")
+	module = SimpleNamespace(chrome=_raising("Failed to find Chrome cookie"))
+
+	with patch.dict("sys.modules", {"browser_cookie3": module}):
+		assert extract_cookies(source="chrome") is None
+
+	err = capsys.readouterr().err
+	assert "chrome 的 Cookie 读取失败（BrowserCookieError: Failed to find Chrome cookie）" in err
+	assert "钥匙串" not in err
+
+
+def test_explicit_source_without_login_cookie_says_so(capsys):
+	module = SimpleNamespace(firefox=lambda domain_name=None: [_fake_cookie("lastCity", "101010100")])
+
+	with patch.dict("sys.modules", {"browser_cookie3": module}):
+		assert extract_cookies(source="firefox") is None
+
+	assert "firefox 中没有 zhipin.com 的登录 Cookie（wt2）" in capsys.readouterr().err
+
+
+def test_auto_detect_summarizes_only_decryption_failures(monkeypatch, capsys):
+	monkeypatch.setattr(cookie_extract, "_current_platform", lambda: "win32")
+	module = SimpleNamespace(
+		chrome=_raising(_DECRYPTION_ERROR),
+		firefox=_raising("Failed to find Firefox cookie"),
+		edge=_raising("Failed to decrypt the cipher text with DPAPI and no AES key."),
+		brave=lambda domain_name=None: [],
+	)
+
+	with patch.dict("sys.modules", {"browser_cookie3": module}):
+		assert extract_cookies() is None
+
+	err = capsys.readouterr().err
+	assert "chrome, edge 的 Cookie 无法解密" in err
+	assert "App-Bound" in err
+	assert "firefox" not in err
+
+
+def test_try_extract_records_failure_reason_without_cookie_values():
+	failures: list[str] = []
+	assert _try_extract(_raising("x" * 400), failures=failures) is None
+	assert failures == ["BrowserCookieError: " + "x" * 160]
+	assert _try_extract(lambda domain_name=None: [_fake_cookie("wt2", "secret-value")], failures=failures) is not None
+	assert len(failures) == 1
