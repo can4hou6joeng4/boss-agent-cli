@@ -394,7 +394,7 @@ def login_via_cdp(
 				# 而不是被吞成 [] 继续空转到超时，误报成「扫码超时」（与最终读取同一规则）。
 				cookies = [c for c in ctx.cookies() if _is_cookie_domain(c.get("domain", ""), cookie_domain)]
 				if any(c.get("name") == success_cookie and c.get("value") for c in cookies):
-					print("[boss] 检测到登录成功！", file=sys.stderr)
+					print("[boss] 已识别到扫码确认，正在校验并保存凭证…", file=sys.stderr)
 					break
 				if i > 0 and i % 15 == 0:
 					print(f"[boss] 等待中... {i}s", file=sys.stderr)
@@ -618,7 +618,7 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 				raise TimeoutError(f"扫码登录超时（{timeout}秒）")
 
 			_raise_if_security_page(page)
-			print("检测到登录成功，正在提取凭证...", file=sys.stderr)
+			print("[boss] 已识别到扫码确认，正在校验并保存凭证…", file=sys.stderr)
 			time.sleep(_POST_LOGIN_WAIT)
 			if response_risk is not None:
 				raise response_risk
