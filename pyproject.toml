@@ -216,7 +216,6 @@ module = [
 	"boss_agent_cli.commands.chat_summary",
 	"boss_agent_cli.cache.store",
 	"boss_agent_cli.auth.manager",
-	"boss_agent_cli.auth.qr_login",
 	"boss_agent_cli.api.client",
 	"boss_agent_cli.api._base_client",
 	"boss_agent_cli.api.browser_client",

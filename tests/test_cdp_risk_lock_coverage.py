@@ -261,12 +261,10 @@ def test_login_auto_path_blocked_before_cdp_login(tmp_path):
 	with patch("boss_agent_cli.auth.manager.extract_cookies", return_value=None), \
 		patch("boss_agent_cli.auth.manager.probe_cdp", return_value="ws://x"), \
 		patch.object(browser_client, "read_cdp_stoken_hash", return_value=OLD_HASH), \
-		patch("boss_agent_cli.auth.manager.login_via_cdp") as login_via_cdp, \
-		patch("boss_agent_cli.auth.manager.qr_login_httpx") as qr:
+		patch("boss_agent_cli.auth.manager.login_via_cdp") as login_via_cdp:
 		with pytest.raises(EnvironmentRiskLockedError):
 			_auth(tmp_path).login()
 	login_via_cdp.assert_not_called()
-	qr.assert_not_called()
 
 
 def test_login_cdp_keeps_lock_when_stoken_changed(tmp_path):

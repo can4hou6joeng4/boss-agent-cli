@@ -45,7 +45,7 @@ boss schema --format native
 
 ## 2. 登录和 Cookie 边界
 
-登录链路会使用 Cookie 提取、CDP、QR httpx 或浏览器兜底。项目只在本地读取和保存登录态，不要求用户把 Cookie、Token、手机号、微信号、姓名、公司信息或 `security_id` 提交到仓库。任何 adapter 都不得把登录兼容能力升级为风控重试通道，并必须遵守本页 0.1 节约束。
+登录链路会使用 Cookie 提取、CDP 或浏览器扫码兜底。项目只在本地读取和保存登录态，不要求用户把 Cookie、Token、手机号、微信号、姓名、公司信息或 `security_id` 提交到仓库。任何 adapter 都不得把登录兼容能力升级为风控重试通道，并必须遵守本页 0.1 节约束。
 
 `chat` / `chatmsg` 在默认 `auto` 来源下保留 httpx 路径，本地没有凭据则返回 `AUTH_REQUIRED` + `boss login`。只有显式选择 `--browser-source existing-browser` 才会通过 CDP 复用已有目标页，不读取或导出 CLI 保存的 Cookie。CDP 可连接不等于已验证目标页面登录，平台返回的未登录响应仍按平台错误解析；CDP 会话或已有目标页不可用时返回 `BROWSER_SESSION_NOT_FOUND` + `boss doctor`，不会启动 headless 或登录流程。`stored-cookie` 只连接显式 `--cdp-url`，不自动探测或降级。浏览器通道不继承 httpx 的 stoken 刷新和限流重试语义。
 
