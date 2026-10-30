@@ -295,12 +295,15 @@ def resolve_lookup_codes(value: str | None, lookup: dict[str, str], label: str) 
 	codes: list[str] = []
 	for part in _split_multi_value(value):
 		if part.isdigit():
-			codes.append(part)
-			continue
-		code = lookup.get(part)
-		if code is None:
-			raise ValueError(f"未知{label}: {part}")
-		codes.append(code)
+			code = part
+		else:
+			found = lookup.get(part)
+			if found is None:
+				raise ValueError(f"未知{label}: {part}")
+			code = found
+		# 兼容标签可能与正式标签同码（如 10-15K 与 10-20K），按首次出现去重
+		if code not in codes:
+			codes.append(code)
 	return ",".join(codes) if codes else None
 
 

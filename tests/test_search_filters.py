@@ -69,6 +69,16 @@ class TestSearchUrlParsing:
 		assert params["degree"] == "203,204"
 		assert params["jobType"] == "1901,1902"
 
+	def test_resolve_search_code_params_salary_and_low_degrees(self):
+		params = resolve_search_code_params(salary="3K以下,5-10K", education="初中及以下,中专/中技,高中")
+		assert params["salary"] == "402,404"
+		assert params["degree"] == "209,208,206"
+
+	def test_resolve_search_code_params_dedupes_labels_sharing_a_code(self):
+		"""兼容标签 10-15K 与 10-20K 同码，多选时只发一次，顺序保持首次出现。"""
+		params = resolve_search_code_params(salary="10-15K,10-20K,20-50K,405")
+		assert params["salary"] == "405,406"
+
 
 # ── Experience threshold ────────────────────────────────────────────
 

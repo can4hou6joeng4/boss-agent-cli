@@ -1,5 +1,6 @@
 from boss_agent_cli.api.endpoints import (
 	CITY_CODES,
+	EDUCATION_CODES,
 	SALARY_CODES,
 	EXPERIENCE_CODES,
 	JOB_TYPE_CODES,
@@ -21,8 +22,31 @@ def test_city_code_lookup():
 
 
 def test_salary_code_lookup():
+	# 网页筛选器的 salary= 取值 402–407；401 不是网页档位
+	assert SALARY_CODES["3K以下"] == "402"
+	assert SALARY_CODES["3-5K"] == "403"
+	assert SALARY_CODES["5-10K"] == "404"
 	assert SALARY_CODES["10-20K"] == "405"
 	assert SALARY_CODES["20-50K"] == "406"
+	assert SALARY_CODES["50K以上"] == "407"
+	assert "401" not in SALARY_CODES.values()
+
+
+def test_salary_legacy_10_15k_label_requests_enclosing_tier():
+	"""10-15K 不是网页档位，保留给旧预设，按包含它的 10-20K 档请求。"""
+	assert SALARY_CODES["10-15K"] == SALARY_CODES["10-20K"]
+
+
+def test_education_code_lookup_covers_all_web_degrees():
+	assert EDUCATION_CODES == {
+		"初中及以下": "209",
+		"中专/中技": "208",
+		"高中": "206",
+		"大专": "202",
+		"本科": "203",
+		"硕士": "204",
+		"博士": "205",
+	}
 
 
 def test_job_public_url_uses_encrypt_job_id_only():
