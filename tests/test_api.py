@@ -1,6 +1,7 @@
 from boss_agent_cli.api.endpoints import (
 	CITY_CODES,
 	EDUCATION_CODES,
+	INDUSTRY_CODES,
 	SALARY_CODES,
 	EXPERIENCE_CODES,
 	JOB_TYPE_CODES,
@@ -47,6 +48,26 @@ def test_education_code_lookup_covers_all_web_degrees():
 		"硕士": "204",
 		"博士": "205",
 	}
+
+
+def test_industry_codes_follow_platform_taxonomy():
+	"""行业码取自职位数据里 industry 与 brandIndustry 的成对取值，抽查几个大类。"""
+	assert INDUSTRY_CODES["不限"] == "0"
+	assert INDUSTRY_CODES["互联网"] == "100020"
+	assert INDUSTRY_CODES["电子商务"] == "100001"
+	assert INDUSTRY_CODES["计算机软件"] == "100021"
+	assert INDUSTRY_CODES["人工智能"] == "100028"
+	assert INDUSTRY_CODES["银行"] == "100201"
+	assert INDUSTRY_CODES["新能源汽车"] == "100804"
+	assert INDUSTRY_CODES["机械设备/机电/重工"] == "100901"
+	assert len(set(INDUSTRY_CODES.values())) == len(INDUSTRY_CODES)
+
+
+def test_industry_codes_drop_unverified_category_labels():
+	"""旧表的类目标签与码错开一个大类（如 100101 实为广告/公关/会展，却标成金融），已移除。"""
+	for label in ("金融", "软件/信息服务", "区块链", "证券/基金", "教育培训", "汽车", "制造业", "农业"):
+		assert label not in INDUSTRY_CODES
+	assert "100200" not in INDUSTRY_CODES.values()
 
 
 def test_job_public_url_uses_encrypt_job_id_only():

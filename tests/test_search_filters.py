@@ -79,6 +79,21 @@ class TestSearchUrlParsing:
 		params = resolve_search_code_params(salary="10-15K,10-20K,20-50K,405")
 		assert params["salary"] == "405,406"
 
+	def test_unknown_industry_label_suggests_close_matches(self):
+		with pytest.raises(ValueError) as exc:
+			resolve_search_code_params(industry="汽车")
+		message = str(exc.value)
+		assert message.startswith("未知行业类型: 汽车，相近的可选值: ")
+		assert "新能源汽车" in message
+
+	def test_unknown_label_without_close_match_keeps_plain_message(self):
+		with pytest.raises(ValueError, match=r"^未知行业类型: 区块链$"):
+			resolve_search_code_params(industry="区块链")
+
+	def test_salary_typo_suggests_canonical_label(self):
+		with pytest.raises(ValueError, match="相近的可选值: 5-10K"):
+			resolve_search_code_params(salary="5-10k")
+
 
 # ── Experience threshold ────────────────────────────────────────────
 
