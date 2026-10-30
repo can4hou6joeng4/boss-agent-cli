@@ -91,12 +91,12 @@ def test_search_jobs_raw_params_and_multiselect_codes_applied():
 		"python",
 		raw_params={"city": "101280100", "degree": "203,204"},
 		experience="应届,3-5年",
-		experience_code="108,104",
+		experience_code="102,105",
 	)
 	params = client._browser_request.call_args.kwargs["data"]
 	assert params["city"] == "101280100"
 	assert params["degree"] == "203,204"
-	assert params["experience"] == "108,104"
+	assert params["experience"] == "102,105"
 
 
 def test_search_jobs_unknown_city_raises():

@@ -36,8 +36,12 @@ def test_job_public_url_uses_encrypt_job_id_only():
 
 
 def test_experience_code_lookup():
-	assert EXPERIENCE_CODES["应届"] == "108"
-	assert EXPERIENCE_CODES["3-5年"] == "104"
+	assert EXPERIENCE_CODES["应届"] == "102"
+	assert EXPERIENCE_CODES["在校生"] == "108"
+	assert EXPERIENCE_CODES["经验不限"] == "101"
+	assert EXPERIENCE_CODES["1年以内"] == "103"
+	assert EXPERIENCE_CODES["3-5年"] == "105"
+	assert EXPERIENCE_CODES["10年以上"] == "107"
 
 
 def test_job_type_code_lookup_distinguishes_internship_from_part_time():
