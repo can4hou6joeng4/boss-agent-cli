@@ -10,6 +10,22 @@ _PLATFORM_COOKIE_CONFIG: dict[str, dict[str, str]] = {
 	},
 }
 
+# 元组顺序即自动检测优先级；新增浏览器追加在末尾作为后备，
+# 不改变既有浏览器的优先级。macOS Safari 需要完全磁盘访问，
+# 读取失败会被 _try_extract 静默跳过并继续下一个。
+_BROWSER_LOADER_NAMES: tuple[str, ...] = (
+	"chrome",
+	"firefox",
+	"edge",
+	"brave",
+	"opera",
+	"chromium",
+	"vivaldi",
+	"arc",
+	"librewolf",
+	"safari",
+)
+
 
 def extract_cookies(source: str | None = None, *, platform: str = "zhipin") -> dict[str, Any] | None:
 	"""
@@ -29,27 +45,25 @@ def extract_cookies(source: str | None = None, *, platform: str = "zhipin") -> d
 	required_cookie = config["required_cookie"]
 	stoken_cookie = config["stoken_cookie"]
 
-	# 字典顺序即自动检测优先级；新增浏览器追加在末尾作为后备，
-	# 不改变既有浏览器的优先级。macOS Safari 需要完全磁盘访问，
-	# 读取失败会被 _try_extract 静默跳过并继续下一个。
-	loaders = {
-		"chrome": browser_cookie3.chrome,
-		"firefox": browser_cookie3.firefox,
-		"edge": browser_cookie3.edge,
-		"brave": browser_cookie3.brave,
-		"opera": browser_cookie3.opera,
-		"chromium": browser_cookie3.chromium,
-		"vivaldi": browser_cookie3.vivaldi,
-		"arc": browser_cookie3.arc,
-		"librewolf": browser_cookie3.librewolf,
-		"safari": browser_cookie3.safari,
-	}
+	# 按名字取 loader，旧版 browser_cookie3 缺的（0.20 前没有 arc）不进字典，
+	# 自动检测跳过它，而不是在这里抛 AttributeError 打断整条登录降级链。
+	loaders: dict[str, Callable[..., Any]] = {}
+	for name in _BROWSER_LOADER_NAMES:
+		loader = getattr(browser_cookie3, name, None)
+		if callable(loader):
+			loaders[name] = loader
 
 	if source:
 		# 指定浏览器
 		loader = loaders.get(source.lower())
 		if loader is None:
-			print(f"不支持的浏览器: {source}，支持: {', '.join(loaders.keys())}", file=sys.stderr)
+			if source.lower() in _BROWSER_LOADER_NAMES:
+				print(
+					f"当前 browser_cookie3 版本不提供 {source} 加载器，请升级 browser-cookie3",
+					file=sys.stderr,
+				)
+				return None
+			print(f"不支持的浏览器: {source}，支持: {', '.join(_BROWSER_LOADER_NAMES)}", file=sys.stderr)
 			return None
 		return _try_extract(
 			loader,
