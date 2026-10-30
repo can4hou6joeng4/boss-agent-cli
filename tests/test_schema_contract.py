@@ -243,3 +243,12 @@ def test_schema_documents_browser_source_flag():
 	assert "BROWSER_DISABLED" in flag["description"]
 	assert flag["default"] == "auto"
 	assert flag["stability"] == "experimental"
+
+
+def test_industry_choices_derive_from_lookup_table():
+	"""--industry 的 choices 直接取自码表：码表增删一行，schema 与 CLI 的 Choice 同时看到。"""
+	from boss_agent_cli.api.endpoints import INDUSTRY_CODES
+
+	commands = SCHEMA_DATA["commands"]
+	for name in ("search", "batch-greet"):
+		assert commands[name]["options"]["--industry"]["choices"] == list(INDUSTRY_CODES), name

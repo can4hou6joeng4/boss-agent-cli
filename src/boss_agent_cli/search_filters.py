@@ -3,6 +3,7 @@
 Centralizes filtering logic shared by search, batch-greet, and export commands.
 """
 
+import difflib
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -299,12 +300,20 @@ def resolve_lookup_codes(value: str | None, lookup: dict[str, str], label: str) 
 		else:
 			found = lookup.get(part)
 			if found is None:
-				raise ValueError(f"未知{label}: {part}")
+				raise ValueError(_unknown_lookup_message(part, lookup, label))
 			code = found
 		# 兼容标签可能与正式标签同码（如 10-15K 与 10-20K），按首次出现去重
 		if code not in codes:
 			codes.append(code)
 	return ",".join(codes) if codes else None
+
+
+def _unknown_lookup_message(part: str, lookup: dict[str, str], label: str) -> str:
+	"""未知标签附上字面最接近的可选值，调用方（人或 Agent）据此改参数而不是猜。"""
+	close = difflib.get_close_matches(part, list(lookup), n=5, cutoff=0.4)
+	if close:
+		return f"未知{label}: {part}，相近的可选值: {'、'.join(close)}"
+	return f"未知{label}: {part}"
 
 
 def build_search_params(
