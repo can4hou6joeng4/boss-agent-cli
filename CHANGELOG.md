@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- `boss login --cookie-source <浏览器>` 没提取到时，stderr 会说明是读取失败（附异常类型与原因）还是该浏览器没有登录 Cookie。拿不到解密密钥时按平台说明原因（macOS 钥匙串未授权、Windows 上新版 Chrome / Edge 的 App-Bound 加密、Linux 密钥环未解锁），并提示改用 `--cdp` 或 `--curl-file`。自动探测全部落空时，只汇总无法解密的浏览器。参考 jackwener/boss-cli 的提取诊断及其 #9、#15。
+
 ### Fixed
 - `--experience` 的经验码整体错位一档：`1年以内` 原发 `101`（平台含义为「经验不限」），`1-3年` 原发 `103`（实为「1 年以内」），依此类推。现按 zhipin.com 搜索页 `experience=` 参数改为 `1年以内=103` … `10年以上=107`，`应届=102`，并新增 `在校生=108`、`经验不限=101`。参考 jackwener/boss-cli#6。
 - 已装 browser-cookie3 0.20.0 以前版本的环境里，`boss login` 与 `boss doctor --probe-cookies` 的 Cookie 提取直接抛 `AttributeError`：3.0.1 起加入的 Arc 加载器在 0.20.0 才出现，旧版缺失，登录因此走不到 CDP / 扫码降级。`pip install -U boss-agent-cli` 默认不升级已满足旧下限 `>=0.16.2` 的依赖，老用户升级后会命中这个问题。依赖下限改为 `>=0.20.0`；加载器改为按名字获取，缺失的浏览器在自动检测中跳过，显式指定时提示升级。

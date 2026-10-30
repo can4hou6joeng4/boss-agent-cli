@@ -52,7 +52,7 @@ BOSS 的 code `31`（IP/环境限制）/ `32`（账号限制）/ `35` / `36`、�
 
 ### 浏览器 Cookie 提取与 macOS 钥匙串
 
-`boss login` 默认先从本机浏览器提取 BOSS Cookie，按 chrome、firefox、edge、brave、opera、chromium、vivaldi、arc、librewolf、safari 的顺序尝试，`--cookie-source` 可只指定一个。macOS 上 Chromium 系浏览器的 Cookie 由钥匙串里的「<浏览器> Safe Storage」加密，读取时系统会弹出授权框。CLI 会先以只读方式查看 Cookie 库中明文的域名和名称两列：确认某个浏览器没有 `zhipin.com` 的 `wt2` 登录记录，就直接跳过它，不读取钥匙串；找不到 Cookie 库或无法读取时，仍按原方式交给 browser-cookie3。这一步不读取任何 Cookie 值。`boss doctor` 默认不读取浏览器 Cookie，`--probe-cookies` 走同一套逻辑。
+`boss login` 默认先从本机浏览器提取 BOSS Cookie，按 chrome、firefox、edge、brave、opera、chromium、vivaldi、arc、librewolf、safari 的顺序尝试，`--cookie-source` 可只指定一个。macOS 上 Chromium 系浏览器的 Cookie 由钥匙串里的「<浏览器> Safe Storage」加密，读取时系统会弹出授权框。CLI 会先以只读方式查看 Cookie 库中明文的域名和名称两列：确认某个浏览器没有 `zhipin.com` 的 `wt2` 登录记录，就直接跳过它，不读取钥匙串；找不到 Cookie 库或无法读取时，仍按原方式交给 browser-cookie3。这一步不读取任何 Cookie 值。`boss doctor` 默认不读取浏览器 Cookie，`--probe-cookies` 走同一套逻辑。显式用 `--cookie-source` 指定浏览器却没提取到时，stderr 会说明是读取失败还是该浏览器没有登录 Cookie；拿不到解密密钥（macOS 钥匙串未授权、Windows 上新版 Chrome / Edge 的 App-Bound 加密、Linux 密钥环未解锁）时，提示改用 `--cdp` 或 `--curl-file`。自动探测全部落空时，只汇总无法解密的浏览器。
 
 ### 从浏览器 cURL 导入登录态
 
