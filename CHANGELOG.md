@@ -2,9 +2,16 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.1.0] - 2026-10-30
 
 ### Added
+- 新增 `--browser-source httpx-only`：通道白名单为空，结构上不打开任何浏览器；`search` / `recommend` / `detail` / `friend_list` / `chat_history` 全部走 httpx，需要页面的能力返回 `BROWSER_DISABLED`。线上稳定性尚未证实，只作为显式选择，不做默认也不做自动降级；失败时 `hints.operator_actions` 提示回退 `auto`。
+- 新增 `api/proxy.py` 的 `resolve_proxy()`：httpx 与每个 Chromium 启动点共用同一出口。此前 Chromium 完全忽略 `HTTPS_PROXY`/`ALL_PROXY`，登录走真实 IP 而请求走代理 IP。
+- 新增 `auth/page_identity.py`：从真实页面请求采集 `token` / `zp_token` 并随会话加密落盘，httpx 与浏览器两条通道回放同一组值。
+- 新增 `api/egress.py` 与 `BOSS_EGRESS_PROBE_URL`：出口地区与声明的语言/时区矛盾时 `CrawlService.create()` 拒绝开跑；未配置时不发任何探测流量，判为 `unknown` 且不阻断。
+- `boss doctor` 新增 `request_delay` 检查：请求间隔下限低于 30 秒时 warn 并给出建议值。
+- 新增三份研究文档：`docs/research/zhipin-request-identity-2026-10-29.md`（147 条业务请求的逐 header 规则）、`zhipin-cdp-free-read-path-2026-10-29.md`（只读链路脱离 CDP 的可行性、code 37 受控对照与恢复步骤）、`upstream-antidetection-evaluation-2026-10-29.md`（ruyijs / Safarier 的评估与不集成理由）。
+
 - 搜索结果新增 `job_url`：由 `encryptJobId` 拼出 `https://www.zhipin.com/job_detail/<id>.html`，不额外请求平台。导出脱敏时与 `job_id` 一起替换为 `[REDACTED]`。
 - 新增 `boss hr whoami` / MCP `boss_hr_whoami`：只读 `getUserInfo`，用 `identity` 判断当前登录态是否在招聘者侧。`identity` 为 1 时 `ready` 为 true；账号资料字段 `recruit` 只以 `profile_recruit` 回显，不参与判断。双身份账号停在求职者侧时返回 `ready: false` 和官方页面切换指引，命令本身不切换身份。
 - 新增跨实例、CLI/MCP 子进程与 crawl 的本地共享请求预算：默认单个主动操作持锁至响应分类完成，滑动 60 秒最多 20 次，总等待上限 30 秒；`request_budget_dir` 可显式分组，组内采用统一限制并共享风险阻断。HTTP 429 / code 9 和有效 `Retry-After` 持久化冷却，进程退出只释放执行锁；预算超限返回 `REQUEST_BUDGET_EXHAUSTED`，保留 checkpoint 后显式恢复。主动操作计量不覆盖浏览器自主资源、轮询、自动重定向或认证内部的每条网络请求，不按公网 IP 自动合并任务。
@@ -19,6 +26,12 @@
 - 新增全局 `--exit-codes {envelope,sysexits}`（默认 envelope，0/1 契约不变）：sysexits 模式按错误类别返回语义化退出码（77 认证；75 限流/预算/超时；78 参数/配置；69 风控/平台不支持；其余 1），usage error 通过解析前预扫描同一选项；stdout 信封不受影响。
 
 ### Changed
+- **行为变更：默认请求间隔 `--delay` 从 `1.5-3.0` 改为 `30-60`**（`config.DEFAULT_REQUEST_DELAY`，原先 10 处字面量收敛为一个常量）。受控对照：15 秒间隔连续 3 次 `search` 会在第 3 次命中 code 37「您的环境存在异常」，30 秒起两轮共 6/6 通过。单条只读命令只发一次请求、首次调用不等待（`boss status` 仍约 0.3 秒）；受影响的是分页、批量详情与 crawl。该下限来自本机观测，不是平台公布阈值。
+- 请求身份对齐真实页面抓包：`User-Agent`、`sec-ch-ua*`、`Accept-Language`、`Accept-Encoding`、`priority`，补上页面自带的 `token`、`zp_token`、`traceid` 与 `X-Requested-With`；`sec-ch-ua-platform` 改由 User-Agent 推导（原先按宿主操作系统，Windows 上会发出「UA 说 macOS、Client Hint 说 Windows」的矛盾组合）。
+- `search` 改为真机的 `POST` + `application/x-www-form-urlencoded` 表单体，字段集合与顺序按抓包固定，缺省筛选项发空串而非省略；`recommend` 保持 GET。
+- httpx 通道改用 HTTP/2（依赖改为 `httpx[socks,http2]`，新增 `brotli`、`zstandard`），`Accept-Encoding` 的声明与可解码能力保持一致。
+- Chromium 启动加入 `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` 与 `--enforce-webrtc-ip-permission-check`，避免 WebRTC 用真实地址发送 UDP。
+
 - `boss doctor` 默认不再读取浏览器 Cookie，避免 macOS 钥匙串授权弹窗。需要核对浏览器登录态时使用 `boss doctor --probe-cookies`。`boss status` 与 `boss search` 本来就只看本地凭据。
 - `hr jobs list` 改为读取职位管理页的 `data/list` 接口，并用 `--page` 分页。MCP `boss_hr_jobs` 的 `page` 只在 list 时传给该分页。`boss schema` 同步登记该选项。
 - 招聘者 `chat_geek_info` 改为沟通页当前参数：`uid`、`securityId`，以及调用方提供时的 `geekSource`。没有命令调用这个方法。
@@ -29,6 +42,11 @@
 - 文档对齐：`CLAUDE.md` 与 `docs/maintainer/branch-protection.md` 同步 2026-10-09 已恢复的 PR CI（lint + Python 3.10 / 3.12 / 3.14 测试矩阵；required status checks 仍未配置）；`pyproject.toml` 注释改指本地 `scripts/verify_release.py --fresh-install`；中英文 README 与 `CLAUDE.md` 的测试计数更新为 2900+。
 
 ### Fixed
+- 复用自动探测到的 CDP 浏览器前，先比对 `wt2` 与本地凭据：不同账号时拒绝复用其会话，改用本地凭据自建浏览器，避免拿 A 账号的登录态执行 B 账号的请求（实测会立刻得到 code 37）。
+- `security_id` 可以合法以 `-` 开头（实测 328 字符的 base64url 取值），此前会被 Click 当成未知选项，`boss detail` 直接传时报 `No such option`；现在为未声明的横杠开头取值补 `--`。
+- 候选者侧 referer 由 `/web/geek/job` 更正为真实页面 `/web/geek/jobs`（`web_pages` 与 5 处 referer 一并修正）。
+- 抓包脚本判定目标页改用 host 解析，不再用子串匹配（CodeQL `py/incomplete-url-substring-sanitization`）。
+
 - `boss login` 的中间提示不再宣称「检测到登录成功」：扫码确认到 `wt2` 出现只是**识别**，之后还要校验页面、等 3 秒、回首页提取，任一步命中官方验证页都会停下。现在统一为「已识别到扫码确认，正在校验并保存凭证…」，真正的「登录成功（…）」仍由命令层在凭据落盘后输出（#488）。
 - `security_page` / 访问受限页的错误详情补上 `risk_source` 命中的页面路径（`error.details.path`）：此前只有 `risk_source`，用户无法区分 `verify.html`（安全校验）与 `security.html`（风险页），维护者也拿不到定位依据（#488）。
 - `boss search` 等浏览器通道在冷启动时只对首页做一次 15 秒 `page.goto`，首页卡住就以 `NETWORK_ERROR` 原样抛出 `Page.goto Timeout 15000ms`（Discussion #250）。现在与登录预热对齐：超时后若不是安全验证页，就跳到 `about:blank` 再试一次；仍然失败则返回 `BROWSER_NAV_TIMEOUT`，说明要先打开官网首页或刷新登录态。`--url` 仍只解析筛选条件，搜索请求之前还是要先打开首页。把 `--json` 等全局选项写在子命令后面时，`INVALID_PARAM` 会提示该选项必须写在子命令之前。
