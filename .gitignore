@@ -47,5 +47,8 @@ docs/blog/linuxdo-promo.md
 # baoyu-design working dir (canonical promo source lives in demo/promo-showcase/)
 designs/
 
+# 30 秒宣传片工作目录：含 .om 渲染缓存、revisions、out/qa 母版与原始音轨，仅本地保留
+demo/launch-film-30s-*/
+
 # 真实平台抓包的原始产物（含 Cookie 头与响应体，永不入库）
 .capture/
