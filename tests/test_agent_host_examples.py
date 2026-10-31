@@ -50,3 +50,12 @@ def test_readme_and_quickstart_link_to_host_examples():
 
 	assert "docs/agent-hosts.md" in readme_text
 	assert "agent-hosts.md" in quickstart_text
+
+
+def test_agent_host_examples_share_authorization_boundary():
+	"""每个宿主示例写明同一条授权边界，不再按目标直接调用平台写操作。"""
+	for host_name, path in HOST_DOCS.items():
+		text = _read(path)
+		assert "## Authorization boundary" in text, host_name
+		assert "specific job" in text, host_name
+		assert "`boss apply`, or `boss greet` according to" not in text, host_name

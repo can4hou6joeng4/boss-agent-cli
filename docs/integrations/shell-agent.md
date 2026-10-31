@@ -20,7 +20,7 @@ Recommended wrapper flow:
 3. If not logged in, run `boss login`
 4. Run `boss search`
 5. Run `boss detail`
-6. When the result is promising, run `boss shortlist add`, `boss apply`, or `boss greet` according to the requested workflow
+6. When the result is promising, run `boss shortlist add` for local organization; draft job-specific materials from verified user facts
 ```
 
 Minimal command chain:
@@ -43,6 +43,12 @@ def run_boss(*args: str) -> dict:
 
 Then let the upper layer depend only on the returned JSON envelope.
 
+## Authorization boundary
+
+Keep the default workflow read-only: search, inspect details, organize the local shortlist, export local reports, and draft materials from confirmed facts. Do not run `boss apply`, `boss greet`, `boss batch-greet`, or any platform write unless the user names the specific job in the current conversation and confirms immediately before the action.
+
+Perform one external action at a time, read the explicit platform result, then ask before the next job. Do not create outreach queues, run unattended bulk actions, reuse identical greetings, or retry an action with an unknown result. On `ACCOUNT_RISK`, `ENVIRONMENT_RISK`, a verification page, or a rate limit, stop and retain the checkpoint; do not bypass platform controls.
+
 ## Recovery flow
 
 Standard order:
@@ -58,4 +64,4 @@ General advice:
 
 - do not continue follow-up actions when `ok=false`
 - on `AUTH_REQUIRED`, restore login first and only then retry `boss search`
-- on `RATE_LIMITED`, pause instead of continuing sensitive automation
+- on `RATE_LIMITED`, stop external actions, keep the checkpoint, and wait for an explicit user decision before any retry
