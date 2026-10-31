@@ -8,10 +8,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.api.endpoints import CITY_CODES
 from boss_agent_cli.ai.config import AIConfigStore
-from boss_agent_cli.ai.service import AIService, AIServiceError
+from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action_for
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.platforms.factory import build_platform_instance, build_recruiter_platform_instance
 from boss_agent_cli.services.contact_lookup import FriendLookupLimitExceeded, find_friend
@@ -38,7 +39,7 @@ class ActionContext:
 	platform: str
 	role: str
 	logger: Logger
-	delay: tuple[float, float] = (1.5, 3.0)
+	delay: tuple[float, float] = DEFAULT_REQUEST_DELAY
 	cdp_url: str | None = None
 	browser_source: str | None = None
 	config: Mapping[str, Any] | None = None
@@ -621,7 +622,13 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 			recoverable=True,
 			recovery_action="boss ai config --provider <provider> --model <model> --api-key <key>",
 		)
-	service = AIService(str(base_url), api_key, str(model))
+	service = AIService(
+		str(base_url),
+		api_key,
+		str(model),
+		temperature=config.get("ai_temperature", 0.7),
+		max_tokens=config.get("ai_max_tokens", 4096),
+	)
 	try:
 		result = service.chat(
 			[
@@ -631,7 +638,7 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 		)
 	except AIServiceError as exc:
 		raise WorkflowActionError(
-			"AI_API_ERROR", str(exc), recoverable=True, recovery_action="检查 AI 配置后重试"
+			"AI_API_ERROR", str(exc), recoverable=True, recovery_action=recovery_action_for(exc, "检查 AI 配置后重试")
 		) from exc
 	return StepResult({"resume": resume_name, "result": result})
 

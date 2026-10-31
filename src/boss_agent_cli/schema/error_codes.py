@@ -79,6 +79,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "boss login",
 	},
+	"BROWSER_DISABLED": {
+		"message": "当前 browser-source 不打开浏览器，该能力需要页面通道",
+		"recoverable": True,
+		"recovery_action": "改用 --browser-source auto 后重试",
+	},
 	"BROWSER_SESSION_NOT_FOUND": {
 		"message": "未发现可复用的现有浏览器会话",
 		"recoverable": True,
@@ -88,6 +93,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"message": "patchright 浏览器内核缺失或与所需修订版不匹配",
 		"recoverable": True,
 		"recovery_action": "patchright install chromium",
+	},
+	"BROWSER_NAV_TIMEOUT": {
+		"message": "浏览器首页导航超时",
+		"recoverable": True,
+		"recovery_action": "用已登录 Chrome 的调试端口重试，或先执行 boss login",
 	},
 	"LOGIN_RISK_CONTROL": {
 		"message": "登录请求可能触发平台风控",

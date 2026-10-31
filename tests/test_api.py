@@ -1,5 +1,7 @@
 from boss_agent_cli.api.endpoints import (
 	CITY_CODES,
+	EDUCATION_CODES,
+	INDUSTRY_CODES,
 	SALARY_CODES,
 	EXPERIENCE_CODES,
 	JOB_TYPE_CODES,
@@ -8,7 +10,8 @@ from boss_agent_cli.api.endpoints import (
 	CODE_RATE_LIMITED,
 	USER_INFO_URL,
 )
-from boss_agent_cli.api.models import JobDetail, JobItem
+from boss_agent_cli.api.models import JobDetail, JobItem, job_public_url
+from boss_agent_cli.services.job_export import redact_export_item
 
 import pytest
 
@@ -20,13 +23,70 @@ def test_city_code_lookup():
 
 
 def test_salary_code_lookup():
+	# 网页筛选器的 salary= 取值 402–407；401 不是网页档位
+	assert SALARY_CODES["3K以下"] == "402"
+	assert SALARY_CODES["3-5K"] == "403"
+	assert SALARY_CODES["5-10K"] == "404"
 	assert SALARY_CODES["10-20K"] == "405"
 	assert SALARY_CODES["20-50K"] == "406"
+	assert SALARY_CODES["50K以上"] == "407"
+	assert "401" not in SALARY_CODES.values()
+
+
+def test_salary_legacy_10_15k_label_requests_enclosing_tier():
+	"""10-15K 不是网页档位，保留给旧预设，按包含它的 10-20K 档请求。"""
+	assert SALARY_CODES["10-15K"] == SALARY_CODES["10-20K"]
+
+
+def test_education_code_lookup_covers_all_web_degrees():
+	assert EDUCATION_CODES == {
+		"初中及以下": "209",
+		"中专/中技": "208",
+		"高中": "206",
+		"大专": "202",
+		"本科": "203",
+		"硕士": "204",
+		"博士": "205",
+	}
+
+
+def test_industry_codes_follow_platform_taxonomy():
+	"""行业码取自职位数据里 industry 与 brandIndustry 的成对取值，抽查几个大类。"""
+	assert INDUSTRY_CODES["不限"] == "0"
+	assert INDUSTRY_CODES["互联网"] == "100020"
+	assert INDUSTRY_CODES["电子商务"] == "100001"
+	assert INDUSTRY_CODES["计算机软件"] == "100021"
+	assert INDUSTRY_CODES["人工智能"] == "100028"
+	assert INDUSTRY_CODES["银行"] == "100201"
+	assert INDUSTRY_CODES["新能源汽车"] == "100804"
+	assert INDUSTRY_CODES["机械设备/机电/重工"] == "100901"
+	assert len(set(INDUSTRY_CODES.values())) == len(INDUSTRY_CODES)
+
+
+def test_industry_codes_drop_unverified_category_labels():
+	"""旧表的类目标签与码错开一个大类（如 100101 实为广告/公关/会展，却标成金融），已移除。"""
+	for label in ("金融", "软件/信息服务", "区块链", "证券/基金", "教育培训", "汽车", "制造业", "农业"):
+		assert label not in INDUSTRY_CODES
+	assert "100200" not in INDUSTRY_CODES.values()
+
+
+def test_job_public_url_uses_encrypt_job_id_only():
+	assert job_public_url("") == ""
+	item = JobItem.from_api({"encryptJobId": "abc", "jobName": "后端"})
+	assert item.job_url == "https://www.zhipin.com/job_detail/abc.html"
+	assert item.to_dict()["job_url"] == item.job_url
+	redacted = redact_export_item(item.to_dict())
+	assert redacted["job_url"] == "[REDACTED]"
+	assert "abc" not in redacted["job_url"]
 
 
 def test_experience_code_lookup():
-	assert EXPERIENCE_CODES["应届"] == "108"
-	assert EXPERIENCE_CODES["3-5年"] == "104"
+	assert EXPERIENCE_CODES["应届"] == "102"
+	assert EXPERIENCE_CODES["在校生"] == "108"
+	assert EXPERIENCE_CODES["经验不限"] == "101"
+	assert EXPERIENCE_CODES["1年以内"] == "103"
+	assert EXPERIENCE_CODES["3-5年"] == "105"
+	assert EXPERIENCE_CODES["10年以上"] == "107"
 
 
 def test_job_type_code_lookup_distinguishes_internship_from_part_time():

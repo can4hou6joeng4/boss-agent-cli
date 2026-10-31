@@ -20,8 +20,11 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import httpx
 
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.api.httpx_helpers import (
+	PAGE_IDENTITY_HEADERS,
 	add_stoken_to_get_params,
+	new_trace_id,
 	browser_headers,
 	merge_response_cookies,
 	referer_header,
@@ -42,6 +45,7 @@ from boss_agent_cli.api.zhipin_errors import (
 
 if TYPE_CHECKING:
 	from boss_agent_cli.api.browser_client import BrowserSession
+	from boss_agent_cli.api.browser_source import BrowserSourcePolicy
 	from boss_agent_cli.api.client import PlatformRiskError
 	from boss_agent_cli.auth.manager import AuthManager
 
@@ -71,7 +75,7 @@ class _BaseHttpClient:
 		self,
 		auth_manager: "AuthManager",
 		*,
-		delay: tuple[float, float] = (1.5, 3.0),
+		delay: tuple[float, float] = DEFAULT_REQUEST_DELAY,
 		cdp_url: str | None = None,
 		browser_source: str | None = None,
 	) -> None:
@@ -115,12 +119,21 @@ class _BaseHttpClient:
 		# getattr 兜底：部分调用方 / 测试用 __new__ 构造实例，不经 __init__。
 		if getattr(self, "_cdp_url", None):
 			return True
-		from boss_agent_cli.api.browser_source import resolve_policy
-
-		if resolve_policy(getattr(self, "_browser_source", None)).name != "auto":
-			return True
+		policy = self._resolve_policy()
+		if policy.name != "auto":
+			# 显式来源按各自通道白名单判定：httpx-only 是空白名单，永远为 False。
+			return bool(policy.channels)
 		session = getattr(self, "_browser_session", None)
 		return session is not None and getattr(session, "_is_cdp", False) is True
+
+	def _resolve_policy(self) -> "BrowserSourcePolicy":
+		from boss_agent_cli.api.browser_source import resolve_policy
+
+		return resolve_policy(getattr(self, "_browser_source", None))
+
+	def browser_enabled(self) -> bool:
+		"""本来源是否可能构造浏览器会话；``httpx-only`` 恒为 False。"""
+		return bool(self._resolve_policy().channels)
 
 	def _browser_request(
 		self,
@@ -275,6 +288,8 @@ class _BaseHttpClient:
 				headers=headers,
 				follow_redirects=True,
 				timeout=30,
+				# 真机全是 HTTP/2；HTTP/1.1 的请求在协议层就与浏览器不同。
+				http2=True,
 			)
 		return self._client
 
@@ -312,6 +327,7 @@ class _BaseHttpClient:
 				browser_source=policy.name,
 				request_budget=getattr(self, "_request_budget", None),
 				request_check=self._check_cdp_risk_lock,
+				identity={name: token[name] for name in PAGE_IDENTITY_HEADERS if token.get(name)},
 			)
 		return self._browser_session
 
@@ -359,7 +375,8 @@ class _BaseHttpClient:
 
 				add_stoken_to_get_params(method, kwargs, stoken)
 
-				headers = {**self._headers_for(url), **extra_headers_override}
+				# traceid 是请求级的：真实页面每个请求都换一个，不能放进客户端级默认头。
+				headers = {**self._headers_for(url), "traceid": new_trace_id(), **extra_headers_override}
 				check_request_control(self._check_cdp_risk_lock)
 				try:
 					resp = client.request(method, url, headers=headers, **kwargs)

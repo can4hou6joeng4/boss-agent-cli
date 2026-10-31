@@ -29,7 +29,7 @@ boss <命令> --help                      # 查看单个命令选项
 
 TTY 下只把 `operator_actions` 渲染到 stderr；`next_actions` 是纯 Agent 通道，不渲染。Agent 拿到 `operator_actions` 时应转述给操作者，而不是自己编措辞。
 
-**信封与退出码**：每条命令在 stdout 只输出一个七键 JSON 信封；默认 `exit 0` ⇔ `ok=true`、`exit 1` ⇔ `ok=false`。可选全局 `--exit-codes sysexits` 按错误类别返回语义化退出码（77 认证；75 限流/预算/超时；78 参数/配置；69 风控/平台不支持；其余 1），供脚本按失败类型分支；信封内容不变。
+**信封与退出码**：每条命令在 stdout 只输出一个七键 JSON 信封；默认 `exit 0` ⇔ `ok=true`、`exit 1` ⇔ `ok=false`。可选全局 `--exit-codes sysexits` 按错误类别返回语义化退出码（77 认证；75 限流/预算/超时；78 参数/配置；69 风控/平台不支持；其余 1），供脚本按失败类型分支；信封内容不变。全局选项（`--json`、`--data-dir`、`--platform`、`--cdp-url` 等）必须写在子命令之前，例如 `boss --json search 关键词`；写在子命令后面会返回 `INVALID_PARAM`，并说明该选项是全局的。
 
 ## 基础操作
 
@@ -38,7 +38,7 @@ TTY 下只把 `operator_actions` 渲染到 stderr；`next_actions` 是纯 Agent 
 | `boss` / `boss wizard` | TTY 下启动纯向导；`--input-json` 供 Agent 执行共享 workflow，`--status/--resume/--stop <run_id>` 管理持久化任务 |
 | `boss schema` | 输出完整工具能力描述 JSON（39 个顶层命令 + hr 分组展开，Agent 首先调用） |
 | `boss platforms` | 本地平台注册与能力状态（不触网；支持 `--platform` 单平台过滤与 `--capability` 反查，附 `capability_status_legend`） |
-| `boss login` | 用户主动登录（按平台走 Cookie / CDP / QR / 浏览器降级链路）；`--force` 不复用任何既有登录态，跳过本地 Cookie 提取、CDP 下清掉当前 context 内目标平台的 cookie 后重新扫码；BOSS 本地风险锁未解除时拒绝登录，`--ignore-risk-lock` 仅保留参数兼容，不能放行 |
+| `boss login` | 用户主动登录（按平台走 Cookie / CDP / 浏览器扫码降级链路）；`--force` 不复用任何既有登录态，跳过本地 Cookie 提取、CDP 下清掉当前 context 内目标平台的 cookie 后重新扫码；BOSS 本地风险锁未解除时拒绝登录，`--ignore-risk-lock` 仅保留参数兼容，不能放行 |
 | `boss logout` | 退出登录 |
 | `boss status` | 检查登录态（默认仅本地；`--live` 才执行低频只读验证） |
 | `boss doctor` | 诊断环境、依赖、凭据完整性和网络；默认仅本地诊断，不读取浏览器 Cookie。`--probe-cookies` 才提取浏览器 Cookie，`--live-probe` 才执行低频只读探测。探测到求职者侧登录态时先标出身份，不继续请求招聘者接口 |
@@ -49,6 +49,10 @@ BOSS 的 code `31`（IP/环境限制）/ `32`（账号限制）/ `35` / `36`、�
 由用户在原会话的官方目标业务页确认恢复后，执行 `boss clean --risk-lock` 解除本地阻断，再显式恢复原任务。主页可访问不代表职位页或聊天页已恢复；该清理命令不解除服务器风险，也不验证线上恢复。`--dry-run` 仅预览；再次命中风险会立即重锁。Agent 不应自行执行清锁。
 
 访问受限页展示的恢复时间只作平台提示，不触发定时刷新或自动清锁；移动端可用也不能证明网页端限制已解除。已有受限页时，`login --force` 在清除 Cookie 前同样停止。
+
+### 浏览器 Cookie 提取与 macOS 钥匙串
+
+`boss login` 默认先从本机浏览器提取 BOSS Cookie，按 chrome、firefox、edge、brave、opera、chromium、vivaldi、arc、librewolf、safari 的顺序尝试，`--cookie-source` 可只指定一个。macOS 上 Chromium 系浏览器的 Cookie 由钥匙串里的「<浏览器> Safe Storage」加密，读取时系统会弹出授权框。CLI 会先以只读方式查看 Cookie 库中明文的域名和名称两列：确认某个浏览器没有 `zhipin.com` 的 `wt2` 登录记录，就直接跳过它，不读取钥匙串；找不到 Cookie 库或无法读取时，仍按原方式交给 browser-cookie3。这一步不读取任何 Cookie 值。`boss doctor` 默认不读取浏览器 Cookie，`--probe-cookies` 走同一套逻辑。显式用 `--cookie-source` 指定浏览器却没提取到时，stderr 会说明是读取失败还是该浏览器没有登录 Cookie；拿不到解密密钥（macOS 钥匙串未授权、Windows 上新版 Chrome / Edge 的 App-Bound 加密、Linux 密钥环未解锁）时，提示改用 `--cdp` 或 `--curl-file`。自动探测全部落空时，只汇总无法解密的浏览器。
 
 ### 从浏览器 cURL 导入登录态
 

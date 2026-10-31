@@ -11,13 +11,14 @@ import time
 from collections import deque
 from collections.abc import Callable
 
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.api.request_budget import cancellable_sleep, validate_delay
 
 
 class RequestThrottle:
 	"""Rate limiter with Gaussian-distributed delays and burst detection."""
 
-	def __init__(self, delay: tuple[float, float] = (1.5, 3.0), *, check: Callable[[], None] | None = None) -> None:
+	def __init__(self, delay: tuple[float, float] = DEFAULT_REQUEST_DELAY, *, check: Callable[[], None] | None = None) -> None:
 		validate_delay(delay)
 		self._delay = delay
 		self._check = check

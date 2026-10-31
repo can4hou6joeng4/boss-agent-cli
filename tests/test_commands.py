@@ -571,7 +571,7 @@ def test_search_supports_url_and_multiselect_filters(mock_client_cls, mock_auth_
 	assert criteria.raw_params == {
 		"city": "101280100",
 		"degree": "203",
-		"experience": "108,104",
+		"experience": "102,105",
 	}
 
 

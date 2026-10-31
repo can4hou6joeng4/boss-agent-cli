@@ -7,11 +7,13 @@ import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import click
 import pytest
 from click.testing import CliRunner
 
+from boss_agent_cli.ai.config import AIConfigStore
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.crawler.service import CrawlOutcome
 from boss_agent_cli.resume.models import ResumeData
@@ -3032,6 +3034,29 @@ def test_runner_browser_source_unavailable_keeps_policy_error_code(tmp_path):
 	assert run["error"]["recovery_action"] == policy.recovery_action
 
 
+def test_runner_browser_navigation_timeout_is_not_generic_network_error(tmp_path):
+	from boss_agent_cli.api.browser_client import BrowserNavigationError
+
+	def stalled(context, inputs, prior):
+		raise BrowserNavigationError(
+			"https://www.zhipin.com/",
+			attempts=2,
+			timeout_ms=15000,
+			channel="headless",
+			cause=TimeoutError("Page.goto: Timeout 15000ms exceeded"),
+		)
+
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, {"stalled": stalled}).run(_plan("stalled"), object(), run_id="nav-run", max_retries=2)
+
+	assert run["status"] == "failed"
+	assert run["error"]["code"] == "BROWSER_NAV_TIMEOUT"
+	assert run["error"]["code"] != "NETWORK_ERROR"
+	assert run["error"]["details"]["channel"] == "headless"
+	assert "Page.goto" not in run["error"]["message"]
+	assert "boss login" in run["error"]["recovery_action"]
+
+
 def test_classify_action_error_uses_risk_contract_for_risk_codes():
 	from boss_agent_cli.wizard.actions import _classify_action_error
 
@@ -3104,3 +3129,44 @@ def test_resume_rejects_run_saved_with_removed_platform(tmp_path):
 	assert payload["error"]["code"] == "INVALID_PARAM"
 	assert "zhilian" in payload["error"]["message"]
 	assert "supported: zhipin" in payload["error"]["message"]
+
+
+def _ai_reply(payload):
+	response = MagicMock()
+	response.raise_for_status = MagicMock()
+	response.json.return_value = payload
+	return response
+
+
+def _configure_ai(tmp_path, monkeypatch, **config):
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	ResumeStore(tmp_path / "resumes").save(ResumeData(name="default", title="后端工程师"))
+	store = AIConfigStore(tmp_path)
+	store.save_config(**config)
+	store.save_api_key("sk-test")
+
+
+def test_ai_assist_uses_configured_temperature_and_max_tokens(tmp_path, monkeypatch):
+	_configure_ai(tmp_path, monkeypatch, ai_provider="moonshot", ai_model="moonshot-v1-8k", ai_temperature=0.2, ai_max_tokens=1536)
+	reply = _ai_reply({"choices": [{"message": {"content": "建议"}}]})
+
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=reply) as post:
+		result = DEFAULT_ACTIONS["ai_assist"](_action_context(tmp_path), {"resume": "default", "prompt": "优化"}, {})
+
+	assert result.data["result"] == "建议"
+	payload = post.call_args.kwargs["json"]
+	assert payload["temperature"] == 0.2
+	assert payload["max_tokens"] == 1536
+
+
+def test_ai_assist_truncation_recovery_points_to_max_tokens(tmp_path, monkeypatch):
+	_configure_ai(tmp_path, monkeypatch, ai_provider="openai", ai_model="gpt-5")
+	reply = _ai_reply({"choices": [{"finish_reason": "length", "message": {"content": ""}}]})
+
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=reply):
+		with pytest.raises(WorkflowActionError) as exc_info:
+			DEFAULT_ACTIONS["ai_assist"](_action_context(tmp_path), {"resume": "default", "prompt": "优化"}, {})
+
+	assert exc_info.value.code == "AI_API_ERROR"
+	assert "max_completion_tokens=4096" in str(exc_info.value)
+	assert "--max-tokens" in exc_info.value.recovery_action

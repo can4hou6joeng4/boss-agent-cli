@@ -8,6 +8,8 @@ from typing import Any, cast
 from patchright.sync_api import sync_playwright
 
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
+from boss_agent_cli.api.proxy import WEBRTC_LEAK_GUARD_ARGS, resolve_proxy
+from boss_agent_cli.auth.page_identity import PageIdentityCapture
 
 LOGIN_PAGE_URL = "https://www.zhipin.com/web/user/"
 HOME_URL = "https://www.zhipin.com/"
@@ -18,6 +20,7 @@ _CDP_PROBE_TIMEOUT = 3  # CDP 探测 HTTP 超时（秒）
 _NAV_TIMEOUT_MS = 15000  # 页面导航超时（毫秒）
 _NETWORKIDLE_GRACE_MS = 3000  # 首页进入 networkidle 的额外宽限（毫秒）
 _POST_LOGIN_WAIT = 3  # 登录成功后等待 cookie 传播（秒）
+_PAGE_IDENTITY_WAIT_MS = 5000  # 抓 token/zp_token 时等待页面自己发一条业务请求（毫秒）
 _STOKEN_GENERATION_WAIT = 2  # stoken 生成等待（秒）
 _HOME_NAV_RETRIES = 2  # 首页导航超时后的重试次数（含首次）
 
@@ -391,7 +394,7 @@ def login_via_cdp(
 				# 而不是被吞成 [] 继续空转到超时，误报成「扫码超时」（与最终读取同一规则）。
 				cookies = [c for c in ctx.cookies() if _is_cookie_domain(c.get("domain", ""), cookie_domain)]
 				if any(c.get("name") == success_cookie and c.get("value") for c in cookies):
-					print("[boss] 检测到登录成功！", file=sys.stderr)
+					print("[boss] 已识别到扫码确认，正在校验并保存凭证…", file=sys.stderr)
 					break
 				if i > 0 and i % 15 == 0:
 					print(f"[boss] 等待中... {i}s", file=sys.stderr)
@@ -406,6 +409,9 @@ def login_via_cdp(
 		# _warm_home_for_runtime 的返回值 home_loaded 表达。
 		ua = ""
 		page_ready = False
+		# 页面自己给每条业务 XHR 加的 token/zp_token 只能在导航前挂监听才抓得到：
+		# 首次 SPA 启动的那批请求就是携带者。
+		identity_capture = PageIdentityCapture(page)
 		if not already_logged_in:
 			# 未登录：登录页 goto 用 wait_until="commit"，不保证执行上下文就绪；扫码轮询
 			# 在 cookie 出现时即 break，页面可能仍在导航。采 UA 前做有界就绪确认，卡住则
@@ -461,13 +467,52 @@ def login_via_cdp(
 					stoken = _extract_stoken(page)
 		else:
 			stoken = ""
-		return {"cookies": all_cookies, "stoken": stoken, "user_agent": ua}
+		# 复用既有页签时页面已启动完，只能有界等它自己发一条业务请求。
+		identity_capture.wait_for_identity(_PAGE_IDENTITY_WAIT_MS)
+		page_identity = identity_capture.result()
+		if platform == "zhipin" and not page_identity and not created_page:
+			# 新建页签的路径已经在 _warm_home_for_runtime 里导航过，监听器抓到了启动请求；
+			# 复用已有页签时页面早已启动完且不再发请求，才需要临时页签补采一次。
+			page_identity = _capture_identity_from_probe_page(ctx, home_url, existing=page)
+		return {"cookies": all_cookies, "stoken": stoken, "user_agent": ua, **page_identity}
 	finally:
+		with suppress(Exception):
+			identity_capture.close()
 		if created_page:
 			with suppress(Exception):
 				page.close()
 		with suppress(Exception):
 			pw.stop()
+
+
+def _capture_identity_from_probe_page(ctx: Any, home_url: str, *, existing: Any = None) -> dict[str, str]:
+	"""Load a throwaway tab in the same context and harvest page identity headers.
+
+	The page's own bootstrap XHRs are the only reliable source for ``token`` and
+	``zp_token``; the CLI cannot recompute them. Returns an empty mapping on any
+	failure so a login never fails because identity capture did.
+	"""
+	probe = None
+	capture = None
+	try:
+		probe = ctx.new_page()
+		if probe is existing:
+			# 绝不把用户的页签当临时页签关闭。
+			return {}
+		capture = PageIdentityCapture(probe)
+		# 首页常年在 domcontentloaded 上超时；commit 已足够，随后靠 wait_for_identity 驱动事件循环。
+		probe.goto(home_url, wait_until="commit", timeout=_NAV_TIMEOUT_MS)
+		return capture.wait_for_identity(_PAGE_IDENTITY_WAIT_MS)
+	except Exception as exc:
+		_logger.info("未能采集页面身份头（token/zp_token）：%s", exc)
+		return {}
+	finally:
+		if capture is not None:
+			with suppress(Exception):
+				capture.close()
+		if probe is not None:
+			with suppress(Exception):
+				probe.close()
 
 
 def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[str, Any]:
@@ -483,7 +528,11 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 	cookie_domain = config["cookie_domain"]
 	success_cookie = config["success_cookie"]
 	with sync_playwright() as p:
-		browser = p.chromium.launch(headless=False)
+		browser = p.chromium.launch(
+				headless=False,
+				proxy=resolve_proxy(),
+				args=list(WEBRTC_LEAK_GUARD_ARGS),
+			)
 		try:
 			context = browser.new_context(
 				viewport={"width": 1280, "height": 800},
@@ -569,7 +618,7 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 				raise TimeoutError(f"扫码登录超时（{timeout}秒）")
 
 			_raise_if_security_page(page)
-			print("检测到登录成功，正在提取凭证...", file=sys.stderr)
+			print("[boss] 已识别到扫码确认，正在校验并保存凭证…", file=sys.stderr)
 			time.sleep(_POST_LOGIN_WAIT)
 			if response_risk is not None:
 				raise response_risk
@@ -644,7 +693,11 @@ def refresh_stoken_via_cdp(cdp_url: str | None = None) -> str:
 def refresh_stoken(cookies: dict[str, Any], user_agent: str) -> str:
 	"""通过 headless patchright 刷新 stoken（兜底方案）。"""
 	with sync_playwright() as p:
-		browser = p.chromium.launch(headless=True)
+		browser = p.chromium.launch(
+			headless=True,
+			proxy=resolve_proxy(),
+			args=list(WEBRTC_LEAK_GUARD_ARGS),
+		)
 		context = browser.new_context(user_agent=user_agent)
 		context.add_cookies(
 			[{"name": name, "value": value, "domain": ".zhipin.com", "path": "/"} for name, value in cookies.items()]

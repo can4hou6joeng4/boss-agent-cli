@@ -6,7 +6,7 @@
 
 *🤖 面向真人与 AI Agent 的招聘平台 CLI —— 纯终端向导 · 福利筛选 · 双角色工作流 · JSON 信封。*
 
-[![Python](https://img.shields.io/badge/Python-≥3.10-3776AB?logo=python&logoColor=white&style=flat-square)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-≥3.11-3776AB?logo=python&logoColor=white&style=flat-square)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/can4hou6joeng4/boss-agent-cli?style=flat-square)](https://github.com/can4hou6joeng4/boss-agent-cli/releases)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/boss-agent-cli?style=flat-square)](https://pypi.org/project/boss-agent-cli/)
@@ -191,7 +191,7 @@ CLI (Click)
 **不变量**：stdout 仅 JSON 信封 · stderr 仅日志 · `exit 0/1`（可选 `--exit-codes sysexits` 语义化退出码） · 错误含 `code/recoverable/recovery_action` · `boss schema` 为能力真源。
 **双受众提示**：`hints.next_actions` 是给 Agent 执行的后继命令，`hints.operator_actions` 是给真人操作者的自然语言指引（扫码、在浏览器里调整条件等需要离开终端完成的动作）；TTY 下只渲染后者到 stderr，Agent 应把它转述给操作者。
 **命令还是 wizard**：单次、无状态的能力调用走顶层命令；需要跨步骤状态、可恢复、或中途要把指引递给真人的走 `boss wizard`（goal 取值见 `boss schema` 的 `wizard_catalog`）。
-**选型**：Python ≥ 3.10 · Click · httpx · patchright / CDP（登录、导出与声明的浏览器 adapter）· cryptography（Fernet）· sqlite3（WAL）· pytest（2900+ 项）。
+**选型**：Python ≥ 3.11 · Click · httpx · patchright / CDP（登录、导出与声明的浏览器 adapter）· cryptography（Fernet）· sqlite3（WAL）· pytest（2900+ 项）。
 
 ## 🔌 本地存储
 

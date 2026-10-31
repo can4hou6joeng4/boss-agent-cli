@@ -39,6 +39,10 @@ boss ai config \
   --api-key <OPENAI_KEY>
 ```
 
+The o series and gpt-5 or later are reasoning models: they accept only the default `temperature` and require `max_completion_tokens` instead of `max_tokens`. The CLI switches by model name. It sends no `temperature` for these models (`--temperature` has no effect) and sends the `--max-tokens` value as `max_completion_tokens`. Reasoning tokens count toward this limit; when an error says the model used up `max_completion_tokens` before writing its answer, raise it with `boss ai config --max-tokens`. Calls through OpenRouter (such as `openai/gpt-5`) still send `max_tokens`, which OpenRouter translates.
+
+Newer Kimi models (such as `kimi-k2.6`, `kimi-k2.7-code`, and `kimi-k3`) have a platform-fixed temperature and reject other values. The CLI sends no `temperature` for Kimi K2.5 or later.
+
 ### DeepSeek-V3
 
 ```bash
@@ -99,7 +103,7 @@ boss ai polish my-resume
 Error codes you may see:
 
 - `AI_NOT_CONFIGURED`: provider, model, or API key is missing
-- `AI_API_ERROR`: the model API call failed, such as auth, network, or rate-limit issues
+- `AI_API_ERROR`: the model API call failed, such as auth, network, rate-limit, unsupported-parameter, or output-limit issues. `error.message` includes the reason returned by the service (key-like strings are masked), and `recovery_action` suggests a next step for that kind of failure
 - `AI_PARSE_ERROR`: the model returned JSON that does not match the expected schema, so retrying is usually enough
 
 ## Related commands

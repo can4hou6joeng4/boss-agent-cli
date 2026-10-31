@@ -13,7 +13,6 @@ from boss_agent_cli.auth.browser import (
 )
 from boss_agent_cli.auth.cookie_extract import extract_cookies
 from boss_agent_cli.auth.curl_import import parse_curl_auth
-from boss_agent_cli.auth.qr_login import qr_login_httpx
 from boss_agent_cli.auth.token_store import TokenStore
 from boss_agent_cli.output import Logger
 
@@ -191,24 +190,9 @@ class AuthManager:
 			except Exception as e:
 				self._logger.info(f"CDP 登录失败（{e}），降级到 patchright")
 		else:
-			self._logger.info("CDP 不可用，尝试 QR 纯 httpx 登录")
+			self._logger.info("CDP 不可用，改用浏览器扫码登录")
 
-		# 第三步：QR 纯 httpx 登录（仅 zhipin）
-		if self._platform == "zhipin":
-			try:
-				self._logger.info("尝试 QR 纯 httpx 登录...")
-				token = qr_login_httpx(timeout=timeout)
-				method = "QR httpx 登录"
-				self._store.save(token)
-				self._token = token
-				return {**token, "_method": method}
-			except PlatformRiskError as error:
-				self._record_cdp_risk_lock(cdp_url, error=error)
-				raise
-			except Exception as e:
-				self._logger.info(f"QR httpx 登录失败（{e}），降级到 patchright")
-
-		# 第四步：patchright 扫码（兜底）
+		# 第三步：patchright 扫码（兜底）
 		try:
 			token = login_via_browser(timeout=timeout, platform=self._platform)
 		except PlatformRiskError as error:

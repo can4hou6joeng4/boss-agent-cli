@@ -22,7 +22,7 @@ from boss_agent_cli.ai.prompts import (
 	RESUME_SUGGEST_PROMPT,
 	SUGGEST_KEYWORDS_PROMPT,
 )
-from boss_agent_cli.ai.service import AIService, AIServiceError
+from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action_for
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.display import (
 	handle_error_output,
@@ -105,7 +105,7 @@ def _call_ai(ctx: click.Context, svc: AIService, prompt: str) -> dict[str, Any] 
 			code="AI_API_ERROR",
 			message=f"AI 服务调用失败: {exc}",
 			recoverable=True,
-			recovery_action="检查网络连接和密钥配置，重试",
+			recovery_action=recovery_action_for(exc, "检查网络连接和密钥配置，重试"),
 		)
 		ctx.exit(1)
 		return None

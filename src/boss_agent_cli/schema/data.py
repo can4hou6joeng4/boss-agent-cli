@@ -1,6 +1,7 @@
 """`boss schema` 的静态能力描述：命令、全局选项、错误码与约定。"""
 
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
+from boss_agent_cli.api.endpoints import INDUSTRY_CODES
 from boss_agent_cli.platforms import list_platforms
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 
@@ -154,33 +155,7 @@ SCHEMA_DATA = {
 					"type": "string",
 					"default": None,
 					"description": "行业类型，支持逗号分隔多选",
-					"choices": [
-						"不限",
-						"互联网",
-						"电子商务",
-						"游戏",
-						"软件/信息服务",
-						"人工智能",
-						"大数据",
-						"云计算",
-						"区块链",
-						"物联网",
-						"金融",
-						"银行",
-						"保险",
-						"证券/基金",
-						"教育培训",
-						"医疗健康",
-						"房地产",
-						"汽车",
-						"物流/运输",
-						"广告/传媒",
-						"消费品",
-						"制造业",
-						"能源/环保",
-						"政府/非营利",
-						"农业",
-					],
+					"choices": list(INDUSTRY_CODES),
 				},
 				"--scale": {
 					"type": "string",
@@ -307,33 +282,7 @@ SCHEMA_DATA = {
 					"type": "string",
 					"default": None,
 					"description": "行业类型",
-					"choices": [
-						"不限",
-						"互联网",
-						"电子商务",
-						"游戏",
-						"软件/信息服务",
-						"人工智能",
-						"大数据",
-						"云计算",
-						"区块链",
-						"物联网",
-						"金融",
-						"银行",
-						"保险",
-						"证券/基金",
-						"教育培训",
-						"医疗健康",
-						"房地产",
-						"汽车",
-						"物流/运输",
-						"广告/传媒",
-						"消费品",
-						"制造业",
-						"能源/环保",
-						"政府/非营利",
-						"农业",
-					],
+					"choices": list(INDUSTRY_CODES),
 				},
 				"--scale": {
 					"type": "string",
@@ -948,7 +897,7 @@ SCHEMA_DATA = {
 			"default": "auto",
 			"choices": list(BROWSER_SOURCES),
 			"stability": "experimental",
-			"description": "浏览器通道来源。auto 允许 CDP→headless 降级；existing-browser 只复用现有 CDP 浏览器中已打开的目标页，不读本地凭据、不导航、不启动浏览器，候选耗尽发 BROWSER_SESSION_NOT_FOUND；stored-cookie 为 fail-closed，只连 --cdp-url 指定的 CDP 端点，不自动探测、不降级、空浏览器不新建 context，不可用发 CDP_UNAVAILABLE。不得用于规避平台风控。",
+			"description": "浏览器通道来源。auto 允许 CDP→headless 降级；existing-browser 只复用现有 CDP 浏览器中已打开的目标页，不读本地凭据、不导航、不启动浏览器，候选耗尽发 BROWSER_SESSION_NOT_FOUND；stored-cookie 为 fail-closed，只连 --cdp-url 指定的 CDP 端点，不自动探测、不降级、空浏览器不新建 context，不可用发 CDP_UNAVAILABLE；httpx-only 不打开任何浏览器，全部只读走 httpx，需要页面的能力发 BROWSER_DISABLED，且不得与浏览器通道共用同一 stoken（会得到 code 37）。不得用于规避平台风控。",
 		},
 		"--platform": {
 			"type": "string",
@@ -959,7 +908,7 @@ SCHEMA_DATA = {
 		"--json": {
 			"type": "bool",
 			"default": False,
-			"description": "强制 JSON 输出（即使在终端中，默认管道模式自动 JSON）",
+			"description": "强制 JSON 输出（即使在终端中，默认管道模式自动 JSON）。全局选项，必须写在子命令之前，例如 boss --json search <关键词>",
 		},
 		"--exit-codes": {
 			"type": "string",

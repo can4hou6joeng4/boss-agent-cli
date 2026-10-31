@@ -16,13 +16,13 @@ uv run pytest tests/ -v
 uv run pre-commit install
 ```
 
-Python **≥ 3.10** is required. We use [`uv`](https://github.com/astral-sh/uv) for dependency management — `uv sync --all-extras` installs runtime + dev deps in a local `.venv`.
+Python **≥ 3.11** is required. We use [`uv`](https://github.com/astral-sh/uv) for dependency management — `uv sync --all-extras` installs runtime + dev deps in a local `.venv`.
 
 ## Coding Standards
 
 - Python source indentation uses **tabs**.
 - `indent-width = 4` in `pyproject.toml` is the formatter display width. It does not mean Python files should switch to spaces.
-- Use Python >= 3.10 and `X | Y` union syntax.
+- Use Python >= 3.11 and `X | Y` union syntax.
 - Command output must preserve the JSON envelope contract: stdout is agent-readable JSON only, stderr is logs and progress.
 - Commit messages use the repository Chinese format `type: 中文描述`.
 - Type checking is blocking in CI. New code must pass `uv run mypy src/boss_agent_cli`.
@@ -70,7 +70,7 @@ Before investing in promotion, examples, or integrations, check those passive si
    ```
 5. **Commit** atomically — one logical change per commit.
 6. **Push** and open a PR against `master`.
-7. **CI green** is a hard prerequisite before merge: the `CI` workflow runs ruff / mypy / pre-commit and tests on Python 3.10, 3.12 and 3.14 for every PR (fork PRs included, no secrets needed), plus CodeQL and GitGuardian scans. Tests are fully offline; don't add tests that need the network, a real browser or a real account.
+7. **CI green** is a hard prerequisite before merge: the `CI` workflow runs ruff / mypy / pre-commit and tests on Python 3.11, 3.12 and 3.14 for every PR (fork PRs included, no secrets needed), plus CodeQL and GitGuardian scans. Tests are fully offline; don't add tests that need the network, a real browser or a real account.
 
 Maintainers will `squash merge`, so the squash title must follow the commit convention above.
 

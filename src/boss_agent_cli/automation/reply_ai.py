@@ -73,12 +73,13 @@ def _draft_with_local_ai(
 		api_key=api_key,
 		model=str(model),
 		temperature=0.3,
-		max_tokens=512,
+		# 上限跟随配置（ai local configure 写入 512）：思考模型写不完时可用 boss ai config --max-tokens 调大
+		max_tokens=int(ai_config.get("ai_max_tokens") or 512),
 	)
 	try:
 		raw = service.chat(_reply_messages(decision, conversation))
-	except AIServiceError:
-		return replace(decision, reason=f"{decision.reason}; local ai unavailable, template fallback")
+	except AIServiceError as exc:
+		return replace(decision, reason=f"{decision.reason}; local ai unavailable ({exc}), template fallback")
 	try:
 		draft = parse_reply_draft(raw)
 	except (JSONDecodeError, KeyError, TypeError):

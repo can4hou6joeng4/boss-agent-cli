@@ -5,6 +5,30 @@
 ## [Unreleased]
 
 ### Added
+- `boss login --cookie-source <浏览器>` 没提取到时，stderr 会说明是读取失败（附异常类型与原因）还是该浏览器没有登录 Cookie。拿不到解密密钥时按平台说明原因（macOS 钥匙串未授权、Windows 上新版 Chrome / Edge 的 App-Bound 加密、Linux 密钥环未解锁），并提示改用 `--cdp` 或 `--curl-file`。自动探测全部落空时，只汇总无法解密的浏览器。参考 jackwener/boss-cli 的提取诊断及其 #9、#15。
+
+### Fixed
+- `--experience` 的经验码整体错位一档：`1年以内` 原发 `101`（平台含义为「经验不限」），`1-3年` 原发 `103`（实为「1 年以内」），依此类推。现按 zhipin.com 搜索页 `experience=` 参数改为 `1年以内=103` … `10年以上=107`，`应届=102`，并新增 `在校生=108`、`经验不限=101`。参考 jackwener/boss-cli#6。
+- 已装 browser-cookie3 0.20.0 以前版本的环境里，`boss login` 与 `boss doctor --probe-cookies` 的 Cookie 提取直接抛 `AttributeError`：3.0.1 起加入的 Arc 加载器在 0.20.0 才出现，旧版缺失，登录因此走不到 CDP / 扫码降级。`pip install -U boss-agent-cli` 默认不升级已满足旧下限 `>=0.16.2` 的依赖，老用户升级后会命中这个问题。依赖下限改为 `>=0.20.0`；加载器改为按名字获取，缺失的浏览器在自动检测中跳过，显式指定时提示升级。
+- macOS 上 `boss login` 的自动探测不再为没有登录记录的 Chromium 系浏览器逐个弹出钥匙串授权框。browser-cookie3 在找 Cookie 文件之前就读钥匙串，而且不设超时，装了几个 Chromium 浏览器就可能弹几次。现在先以只读方式查看 Cookie 库中明文的域名和名称两列，确认没有 `zhipin.com` 的 `wt2` 时跳过该浏览器，并在 stderr 说明跳过了哪些；找不到库或无法读取时保持原行为。参考 jackwener/boss-cli#35。
+- `--salary` 的低三档错位一档：`3K以下` 原发 `401`（不是网页档位），`3-5K` 原发 `402`（实为「3K以下」），`5-10K` 原发 `403`（实为「3-5K」），`10-15K` 原发 `404`（实为「5-10K」，且网页没有 10-15K 档）。现按网页筛选器改为 `3K以下=402`、`3-5K=403`、`5-10K=404`，`10-20K=405`、`20-50K=406`、`50K以上=407` 不变；`10-15K` 保留给旧预设，按包含它的 10-20K 档请求，本地预筛仍按 10K 下限过滤。`--education` 补上 `初中及以下=209`、`中专/中技=208`、`高中=206`：这三档此前在本地阈值比较里存在，却不能作为筛选条件。多选时同码标签只发一次。依据为公开爬虫项目 ThisZhouS/jobwork 从筛选器 `ka` 属性取值并做过在线探测的码表，学历码与 jackwener/boss-cli 一致。
+- `--industry` 的行业码表大面积错误：25 个标签里只有「互联网」对得上平台，例如「人工智能」发出的 `100901` 实为「机械设备/机电/重工」，「金融」发出的 `100101` 实为「广告/公关/会展」，整百的类目码则与标签整体错开一个大类。现改为平台行业码：职位数据里 `industry` 与 `brandIndustry` 成对出现的 96 条取值，`industry=` 搜索参数接受同一套码，取自 ThisZhouS/jobwork 从真实职位列表整理并在线探测过的结果。无法对应到这套码的 14 个旧标签（金融、软件/信息服务、区块链、证券/基金、教育培训、房地产、汽车、物流/运输、广告/传媒、消费品、制造业、能源/环保、政府/非营利、农业）已移除，用到它们的预设与 watch 会返回 `INVALID_PARAM`，而不是继续静默搜出别的行业；仍可直接传数字行业码或用 `--url`。`search` / `batch-greet` 在 schema 中的 `--industry` 可选值改为直接取自码表；`batch-greet` / `preset` / `watch` 的 help 不再展开整张表。
+- 未知的筛选标签（行业、薪资、经验等）报错时附上字面最接近的可选值，例如 `未知行业类型: 汽车，相近的可选值: 汽车零部件、汽车经销商…`。
+- `boss login` 在 CDP 不可用时不再先走「QR 纯 httpx」通道。该通道只在终端打印二维码 ID，从不展示可扫描的二维码，任何一次登录都不可能经由它完成，却会先向登录服务发出 randkey / getqrcode 请求；过期提示里提到的 `boss login --qr` 选项也并不存在。纯 httpx 扫码即使走通，也拿不到页面 JS 生成的 `__zp_stoken__`（参考 jackwener/boss-cli#2、#16）。现在 CDP 不可用时直接打开浏览器扫码；`auth/qr_login.py` 随之删除，YAML 中的 QR 端点保留为声明。
+- 按文档配置 `boss ai config --provider openai --model gpt-5` 后，`boss ai` 的请求全部被拒（HTTP 400）：请求体固定带 `max_tokens` 和 `temperature: 0.7`，而 OpenAI 推理模型（o 系列、gpt-5 及之后）要求 `max_completion_tokens`，temperature 只接受默认值。现在按模型名切换：这些模型改发 `max_completion_tokens`、不发 `temperature`；Kimi K2.5 及之后的型号（temperature 由平台固定）也不再发送 `temperature`；经 OpenRouter 的 `vendor/model` 形式仍发 `max_tokens`。HTTP 错误的 `error.message` 带上服务端返回的原因（遮掉疑似密钥、截断到 200 字），`recovery_action` 按 401/403、400/404/422、429、5xx 给出对应的下一步，不再一律提示检查网络和密钥。(#499)
+- 模型返回 `content: null` 时（例如 vLLM 开 `--reasoning-parser` 后思考阶段就用完输出上限），`boss ai` 各命令与 `boss ai local smoke` 抛出 traceback、stdout 没有 JSON 信封；招聘自动化的 `run_automation_cycle` 被 `AttributeError` 打断，排在后面的会话都没有处理。现在 `AIService.chat` 只返回字符串：正文为 null，或因 `finish_reason=length` 为空时抛 `AIServiceError`，命令输出 `AI_API_ERROR` 信封，自动化按「本地 AI 不可用」回退模板、在原因里写明，并继续处理后面的会话；返回 200 但响应体不是 JSON 时同样输出 `AI_API_ERROR`。`ai local smoke`、自动化回复与 wizard 的 AI 步骤改为使用 `boss ai config` 配置的输出上限（smoke 原先写死 32、自动化写死 512，wizard 还忽略了 temperature 配置），「调大 max_tokens」的建议才对它们生效。(#500)
+
+## [3.1.0] - 2026-10-30
+
+### Added
+- 新增 `--browser-source httpx-only`：通道白名单为空，结构上不打开任何浏览器；`search` / `recommend` / `detail` / `friend_list` / `chat_history` 全部走 httpx，需要页面的能力返回 `BROWSER_DISABLED`。线上稳定性尚未证实，只作为显式选择，不做默认也不做自动降级；失败时 `hints.operator_actions` 提示回退 `auto`。
+- 新增 `api/proxy.py` 的 `resolve_proxy()`：httpx 与每个 Chromium 启动点共用同一出口。此前 Chromium 完全忽略 `HTTPS_PROXY`/`ALL_PROXY`，登录走真实 IP 而请求走代理 IP。
+- 新增 `auth/page_identity.py`：从真实页面请求采集 `token` / `zp_token` 并随会话加密落盘，httpx 与浏览器两条通道回放同一组值。
+- 新增 `api/egress.py` 与 `BOSS_EGRESS_PROBE_URL`：出口地区与声明的语言/时区矛盾时 `CrawlService.create()` 拒绝开跑；未配置时不发任何探测流量，判为 `unknown` 且不阻断。
+- `boss doctor` 新增 `request_delay` 检查：请求间隔下限低于 30 秒时 warn 并给出建议值。
+- 新增三份研究文档：`docs/research/zhipin-request-identity-2026-10-29.md`（147 条业务请求的逐 header 规则）、`zhipin-cdp-free-read-path-2026-10-29.md`（只读链路脱离 CDP 的可行性、code 37 受控对照与恢复步骤）、`upstream-antidetection-evaluation-2026-10-29.md`（ruyijs / Safarier 的评估与不集成理由）。
+
+- 搜索结果新增 `job_url`：由 `encryptJobId` 拼出 `https://www.zhipin.com/job_detail/<id>.html`，不额外请求平台。导出脱敏时与 `job_id` 一起替换为 `[REDACTED]`。
 - 新增 `boss hr whoami` / MCP `boss_hr_whoami`：只读 `getUserInfo`，用 `identity` 判断当前登录态是否在招聘者侧。`identity` 为 1 时 `ready` 为 true；账号资料字段 `recruit` 只以 `profile_recruit` 回显，不参与判断。双身份账号停在求职者侧时返回 `ready: false` 和官方页面切换指引，命令本身不切换身份。
 - 新增跨实例、CLI/MCP 子进程与 crawl 的本地共享请求预算：默认单个主动操作持锁至响应分类完成，滑动 60 秒最多 20 次，总等待上限 30 秒；`request_budget_dir` 可显式分组，组内采用统一限制并共享风险阻断。HTTP 429 / code 9 和有效 `Retry-After` 持久化冷却，进程退出只释放执行锁；预算超限返回 `REQUEST_BUDGET_EXHAUSTED`，保留 checkpoint 后显式恢复。主动操作计量不覆盖浏览器自主资源、轮询、自动重定向或认证内部的每条网络请求，不按公网 IP 自动合并任务。
 - 招聘者 `agent run --resume` / MCP `boss_agent_run.resume` 提供显式恢复入口，保留确认结果与队列，普通运行不清除停止状态。
@@ -18,6 +42,12 @@
 - 新增全局 `--exit-codes {envelope,sysexits}`（默认 envelope，0/1 契约不变）：sysexits 模式按错误类别返回语义化退出码（77 认证；75 限流/预算/超时；78 参数/配置；69 风控/平台不支持；其余 1），usage error 通过解析前预扫描同一选项；stdout 信封不受影响。
 
 ### Changed
+- **行为变更：默认请求间隔 `--delay` 从 `1.5-3.0` 改为 `30-60`**（`config.DEFAULT_REQUEST_DELAY`，原先 10 处字面量收敛为一个常量）。受控对照：15 秒间隔连续 3 次 `search` 会在第 3 次命中 code 37「您的环境存在异常」，30 秒起两轮共 6/6 通过。单条只读命令只发一次请求、首次调用不等待（`boss status` 仍约 0.3 秒）；受影响的是分页、批量详情与 crawl。该下限来自本机观测，不是平台公布阈值。
+- 请求身份对齐真实页面抓包：`User-Agent`、`sec-ch-ua*`、`Accept-Language`、`Accept-Encoding`、`priority`，补上页面自带的 `token`、`zp_token`、`traceid` 与 `X-Requested-With`；`sec-ch-ua-platform` 改由 User-Agent 推导（原先按宿主操作系统，Windows 上会发出「UA 说 macOS、Client Hint 说 Windows」的矛盾组合）。
+- `search` 改为真机的 `POST` + `application/x-www-form-urlencoded` 表单体，字段集合与顺序按抓包固定，缺省筛选项发空串而非省略；`recommend` 保持 GET。
+- httpx 通道改用 HTTP/2（依赖改为 `httpx[socks,http2]`，新增 `brotli`、`zstandard`），`Accept-Encoding` 的声明与可解码能力保持一致。
+- Chromium 启动加入 `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` 与 `--enforce-webrtc-ip-permission-check`，避免 WebRTC 用真实地址发送 UDP。
+
 - `boss doctor` 默认不再读取浏览器 Cookie，避免 macOS 钥匙串授权弹窗。需要核对浏览器登录态时使用 `boss doctor --probe-cookies`。`boss status` 与 `boss search` 本来就只看本地凭据。
 - `hr jobs list` 改为读取职位管理页的 `data/list` 接口，并用 `--page` 分页。MCP `boss_hr_jobs` 的 `page` 只在 list 时传给该分页。`boss schema` 同步登记该选项。
 - 招聘者 `chat_geek_info` 改为沟通页当前参数：`uid`、`securityId`，以及调用方提供时的 `geekSource`。没有命令调用这个方法。
@@ -28,6 +58,14 @@
 - 文档对齐：`CLAUDE.md` 与 `docs/maintainer/branch-protection.md` 同步 2026-10-09 已恢复的 PR CI（lint + Python 3.10 / 3.12 / 3.14 测试矩阵；required status checks 仍未配置）；`pyproject.toml` 注释改指本地 `scripts/verify_release.py --fresh-install`；中英文 README 与 `CLAUDE.md` 的测试计数更新为 2900+。
 
 ### Fixed
+- 复用自动探测到的 CDP 浏览器前，先比对 `wt2` 与本地凭据：不同账号时拒绝复用其会话，改用本地凭据自建浏览器，避免拿 A 账号的登录态执行 B 账号的请求（实测会立刻得到 code 37）。
+- `security_id` 可以合法以 `-` 开头（实测 328 字符的 base64url 取值），此前会被 Click 当成未知选项，`boss detail` 直接传时报 `No such option`；现在为未声明的横杠开头取值补 `--`。
+- 候选者侧 referer 由 `/web/geek/job` 更正为真实页面 `/web/geek/jobs`（`web_pages` 与 5 处 referer 一并修正）。
+- 抓包脚本判定目标页改用 host 解析，不再用子串匹配（CodeQL `py/incomplete-url-substring-sanitization`）。
+
+- `boss login` 的中间提示不再宣称「检测到登录成功」：扫码确认到 `wt2` 出现只是**识别**，之后还要校验页面、等 3 秒、回首页提取，任一步命中官方验证页都会停下。现在统一为「已识别到扫码确认，正在校验并保存凭证…」，真正的「登录成功（…）」仍由命令层在凭据落盘后输出（#488）。
+- `security_page` / 访问受限页的错误详情补上 `risk_source` 命中的页面路径（`error.details.path`）：此前只有 `risk_source`，用户无法区分 `verify.html`（安全校验）与 `security.html`（风险页），维护者也拿不到定位依据（#488）。
+- `boss search` 等浏览器通道在冷启动时只对首页做一次 15 秒 `page.goto`，首页卡住就以 `NETWORK_ERROR` 原样抛出 `Page.goto Timeout 15000ms`（Discussion #250）。现在与登录预热对齐：超时后若不是安全验证页，就跳到 `about:blank` 再试一次；仍然失败则返回 `BROWSER_NAV_TIMEOUT`，说明要先打开官网首页或刷新登录态。`--url` 仍只解析筛选条件，搜索请求之前还是要先打开首页。把 `--json` 等全局选项写在子命令后面时，`INVALID_PARAM` 会提示该选项必须写在子命令之前。
 - 修正节流完成时间覆盖后续预约、高斯采样突破间隔下限及 crawl 分类别预算边界；使用单调时钟保持预约，crawl 首页种子导航、分页、页面 fetch 和 CDP fallback 分别申请预算。等待及发送前检查停止、风险和截止时间，停止信号不触发重试或通道降级；写后确认受阻保留 `ACTION_UNCONFIRMED` 和 `confirmation_stop`，失败下载仍记节流，429 下载不读正文或创建文件。crawl 在中断或清理失败前保存进度，清理异常保留原风险或预算停止状态。
 - 校验 `--delay`、延迟范围和共享预算配置的有限数值、正整数及绝对路径约束；非法配置不落盘，保留配置修复入口。预算组有效风险状态进入 `status` / `doctor`，显式清风险锁保留预算及冷却，风险写盘失败仍阻断当前实例。
 - 浏览器风险识别续查：聊天页 `/wapi/` 的 HTTP 403 在响应头事件立即停止，不等正文；错误/缺失 Content-Type 的受限 HTML 仍生成脱敏分类元数据。业务 JSON 先解析原码，避免成功响应中的 HTML 说明触发误锁；纯文本业务响应同样检查风险，外站和普通静态资源不误锁。
@@ -971,7 +1009,7 @@
 - 浏览器超时从裸数字提取为命名常量
 - search_filters 异常捕获从 Exception 收窄为具体类型
 - client.py 根据运行平台动态设置请求头
-- daemon.py 文件句柄改为 with ���句防泄漏
+- daemon.py 文件句柄改为 with 语句防泄漏
 - 安装命令改为从 GitHub 源码安装
 
 ### Fixed

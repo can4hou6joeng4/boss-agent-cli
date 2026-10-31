@@ -9,6 +9,7 @@ from typing import Any
 
 import click
 
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.api.cdp_risk_lock import UNLOCK_OPERATOR_ACTIONS, raise_if_locked
 from boss_agent_cli.automation.adapters import build_automation_adapter
 from boss_agent_cli.automation.config import automation_config_from_dict
@@ -435,7 +436,7 @@ def _run_agent(
 	adapter = build_automation_adapter(
 		platform,
 		data_dir=ctx.obj["data_dir"],
-		delay=ctx.obj.get("delay", (1.5, 3.0)),
+		delay=ctx.obj.get("delay", DEFAULT_REQUEST_DELAY),
 		cdp_url=ctx.obj.get("cdp_url"),
 		live=not dry_run,
 	)

@@ -244,7 +244,7 @@ if not output["ok"]:
 
 ## Environment prerequisites
 
-- Python ≥ 3.10
+- Python ≥ 3.11
 - `boss-agent-cli` installed via `uv tool install` or `pipx install`
 - `boss login` already completed so a local session exists
 - OpenAI / Anthropic API keys configured via the standard SDK environment variables

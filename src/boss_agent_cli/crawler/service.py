@@ -271,6 +271,7 @@ class CrawlService:
 	def create(self, settings: CrawlSettings) -> str:
 		"""Persist a new task so another process may run or resume it."""
 		self._check_risk_lock()
+		self._check_egress_consistency()
 		self._validate_settings(settings)
 		require_capability_mode(settings.operating_mode, "crawl")
 		require_capability_mode(settings.operating_mode, "crawl-cdp")
@@ -282,6 +283,24 @@ class CrawlService:
 		if self._on_run_created is not None:
 			self._on_run_created(run_id)
 		return run_id
+
+	def _check_egress_consistency(self) -> None:
+		"""Refuse to start a run whose exit contradicts the locale it declares.
+
+		Inert unless ``BOSS_EGRESS_PROBE_URL`` is configured, so no probe traffic
+		happens by default and an unknown exit never blocks work.
+		"""
+		from boss_agent_cli.api.egress import ensure_egress_consistent, probe_egress
+		from boss_agent_cli.api.endpoints import DEFAULT_HEADERS
+
+		verdict = probe_egress()
+		if not verdict.exit_country:
+			return
+		ensure_egress_consistent(
+			exit_country=verdict.exit_country,
+			accept_language=str(DEFAULT_HEADERS.get("Accept-Language", "")),
+			timezone="Asia/Shanghai",
+		)
 
 	def resume(
 		self,

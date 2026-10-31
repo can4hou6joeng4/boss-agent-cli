@@ -16,13 +16,13 @@ uv run pytest tests/ -v
 uv run pre-commit install
 ```
 
-Python **≥ 3.10** 是最低要求。项目使用 [`uv`](https://github.com/astral-sh/uv) 管理依赖，`uv sync --all-extras` 会在本地 `.venv` 中安装运行时和开发依赖。
+Python **≥ 3.11** 是最低要求。项目使用 [`uv`](https://github.com/astral-sh/uv) 管理依赖，`uv sync --all-extras` 会在本地 `.venv` 中安装运行时和开发依赖。
 
 ## 编码规范
 
 - Python 源码缩进使用 **tab**。
 - `pyproject.toml` 中的 `indent-width = 4` 表示格式工具的视觉宽度，不表示改为空格缩进。
-- Python >= 3.10，使用 `X | Y` 联合类型。
+- Python >= 3.11，使用 `X | Y` 联合类型。
 - 命令输出必须保持 JSON 信封契约：stdout 只输出 Agent 可读 JSON，stderr 输出日志和进度。
 - commit message：`type: 中文描述`（feat / fix / refactor / docs / test / chore / ci）。
 - 类型检查：`uv run mypy src/boss_agent_cli`，CI 阻塞式门禁，新代码必须零 mypy 错误。
@@ -70,7 +70,7 @@ git diff --check
    ```
 5. **原子提交**：每个 commit 只做一件事。
 6. **Push** 并向 `master` 发起 Pull Request。
-7. **CI 全绿**才能合并：`CI` 工作流在 PR 上跑 ruff / mypy / pre-commit 和 Python 3.10、3.12、3.14 的测试（fork 的 PR 同样会跑，不需要任何 secret），另有 CodeQL 和 GitGuardian 安全扫描。测试全部离线，不要写需要网络、真实浏览器或真实账号的测试。
+7. **CI 全绿**才能合并：`CI` 工作流在 PR 上跑 ruff / mypy / pre-commit 和 Python 3.11、3.12、3.14 的测试（fork 的 PR 同样会跑，不需要任何 secret），另有 CodeQL 和 GitGuardian 安全扫描。测试全部离线，不要写需要网络、真实浏览器或真实账号的测试。
 
 维护者会使用 squash merge，所以最终 squash 标题也要遵守上面的 commit 格式。
 

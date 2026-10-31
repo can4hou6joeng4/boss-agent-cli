@@ -2,7 +2,7 @@
 
 The default branch is `master`. Pull requests and pushes to `master` run the
 `CI` workflow (`.github/workflows/ci.yml`): ruff, mypy, pre-commit, a CLI/schema
-smoke check, and the offline pytest matrix on Python 3.10 / 3.12 / 3.14. It uses
+smoke check, and the offline pytest matrix on Python 3.11 / 3.12 / 3.14. It uses
 a read-only token, no secrets, and works for fork PRs. Maintainers must still run
 the local quality gate below before merging.
 

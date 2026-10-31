@@ -1,11 +1,14 @@
 """Tests for display.py — TTY detection, renderers, auth error decorator."""
 
 import io
+import re
 import sys
 from unittest.mock import patch, MagicMock
+from urllib.parse import urlparse
 
 from rich.console import Console
 
+from boss_agent_cli.api.browser_urls import is_zhipin_url
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	is_json_mode,
@@ -14,6 +17,23 @@ from boss_agent_cli.display import (
 	handle_auth_errors,
 	login_action_for_ctx,
 )
+
+
+_HTTP_URL = re.compile(r"https?://[^\s<>\"']+")
+
+
+def _has_official_zhipin_url(text: str) -> bool:
+	"""操作提示里的官网地址按 hostname 判断，不用子串包含。
+
+	``"www.zhipin.com" in text`` 会把 ``www.zhipin.com.evil.example`` 或查询参数里的
+	同名片段也算进去。这里只接受抽出来的 URL，再交给 ``is_zhipin_url``。
+	"""
+	for raw in _HTTP_URL.findall(text):
+		url = raw.rstrip("，。；、,.)]")
+		host = urlparse(url).hostname
+		if host and is_zhipin_url(url):
+			return True
+	return False
 
 
 def _capture_display_console(monkeypatch):
@@ -122,6 +142,42 @@ class TestHandleAuthErrors:
 		assert kwargs["hints"]["operator_actions"] == [
 			"该平台没有浏览器通道，改用默认 --browser-source auto 或切换到 zhipin",
 		]
+
+	def test_browser_navigation_error_uses_nav_timeout_contract(self):
+		from boss_agent_cli.api.browser_client import BrowserNavigationError
+
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True}
+		error = BrowserNavigationError(
+			"https://www.zhipin.com/",
+			attempts=2,
+			timeout_ms=15000,
+			channel="headless",
+			cause=TimeoutError("Page.goto: Timeout 15000ms exceeded"),
+		)
+
+		@handle_auth_errors("search")
+		def impl(ctx):
+			raise error
+
+		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
+			impl(ctx)
+
+		kwargs = mock_err.call_args.kwargs
+		assert kwargs["code"] == "BROWSER_NAV_TIMEOUT"
+		assert kwargs["recoverable"] is True
+		assert "boss login" in kwargs["recovery_action"]
+		assert "Page.goto" not in kwargs["message"]
+		assert kwargs["details"]["channel"] == "headless"
+		assert kwargs["details"]["attempts"] == 2
+		assert "boss doctor" in kwargs["hints"]["next_actions"]
+		assert any(_has_official_zhipin_url(action) for action in kwargs["hints"]["operator_actions"])
+
+	def test_official_zhipin_url_check_rejects_lookalike_hosts(self):
+		assert _has_official_zhipin_url("打开 https://www.zhipin.com/ 再请求")
+		assert not _has_official_zhipin_url("打开 https://www.zhipin.com.evil.example/ 再请求")
+		assert not _has_official_zhipin_url("打开 https://evil.example/?next=https://www.zhipin.com/")
+		assert not _has_official_zhipin_url("文本里出现 www.zhipin.com 但不是 URL")
 
 	def test_auth_required(self):
 		from boss_agent_cli.auth.manager import AuthRequired

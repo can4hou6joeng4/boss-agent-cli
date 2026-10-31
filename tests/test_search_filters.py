@@ -65,9 +65,34 @@ class TestSearchUrlParsing:
 
 	def test_resolve_search_code_params_supports_multiselect(self):
 		params = resolve_search_code_params(experience="应届,3-5年", education="本科,硕士", job_type="全职,实习")
-		assert params["experience"] == "108,104"
+		assert params["experience"] == "102,105"
 		assert params["degree"] == "203,204"
 		assert params["jobType"] == "1901,1902"
+
+	def test_resolve_search_code_params_salary_and_low_degrees(self):
+		params = resolve_search_code_params(salary="3K以下,5-10K", education="初中及以下,中专/中技,高中")
+		assert params["salary"] == "402,404"
+		assert params["degree"] == "209,208,206"
+
+	def test_resolve_search_code_params_dedupes_labels_sharing_a_code(self):
+		"""兼容标签 10-15K 与 10-20K 同码，多选时只发一次，顺序保持首次出现。"""
+		params = resolve_search_code_params(salary="10-15K,10-20K,20-50K,405")
+		assert params["salary"] == "405,406"
+
+	def test_unknown_industry_label_suggests_close_matches(self):
+		with pytest.raises(ValueError) as exc:
+			resolve_search_code_params(industry="汽车")
+		message = str(exc.value)
+		assert message.startswith("未知行业类型: 汽车，相近的可选值: ")
+		assert "新能源汽车" in message
+
+	def test_unknown_label_without_close_match_keeps_plain_message(self):
+		with pytest.raises(ValueError, match=r"^未知行业类型: 区块链$"):
+			resolve_search_code_params(industry="区块链")
+
+	def test_salary_typo_suggests_canonical_label(self):
+		with pytest.raises(ValueError, match="相近的可选值: 5-10K"):
+			resolve_search_code_params(salary="5-10k")
 
 
 # ── Experience threshold ────────────────────────────────────────────

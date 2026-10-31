@@ -141,6 +141,7 @@ def test_schema_error_codes_cover_all_used_codes():
 		"CDP_UNAVAILABLE",
 		"BROWSER_SESSION_NOT_FOUND",
 		"BROWSER_KERNEL_MISSING",
+		"BROWSER_NAV_TIMEOUT",
 		"LOGIN_RISK_CONTROL",
 		"LOGIN_EXPIRED",
 		"LOGIN_CREDENTIAL_EXTRACTION_FAILED",
@@ -229,14 +230,25 @@ def test_schema_environment_risk_is_terminal():
 
 
 def test_schema_documents_browser_source_flag():
-	"""--browser-source 必须进入 schema global_options，choices 为三类来源且标 experimental。"""
+	"""--browser-source 必须进入 schema global_options，choices 覆盖全部来源且标 experimental。"""
 	flag = SCHEMA_DATA["global_options"]["--browser-source"]
-	assert sorted(flag["choices"]) == ["auto", "existing-browser", "stored-cookie"]
+	assert sorted(flag["choices"]) == ["auto", "existing-browser", "httpx-only", "stored-cookie"]
 	# choices 只从策略表推导（顺序亦同）：策略表加一行，schema / CLI / MCP 三处同时看到，不会漂移
 	from boss_agent_cli.api.browser_source import POLICIES
 
 	assert flag["choices"] == list(POLICIES)
 	assert "BROWSER_SESSION_NOT_FOUND" in flag["description"]
 	assert "CDP_UNAVAILABLE" in flag["description"]
+	assert "httpx-only" in flag["description"]
+	assert "BROWSER_DISABLED" in flag["description"]
 	assert flag["default"] == "auto"
 	assert flag["stability"] == "experimental"
+
+
+def test_industry_choices_derive_from_lookup_table():
+	"""--industry 的 choices 直接取自码表：码表增删一行，schema 与 CLI 的 Choice 同时看到。"""
+	from boss_agent_cli.api.endpoints import INDUSTRY_CODES
+
+	commands = SCHEMA_DATA["commands"]
+	for name in ("search", "batch-greet"):
+		assert commands[name]["options"]["--industry"]["choices"] == list(INDUSTRY_CODES), name

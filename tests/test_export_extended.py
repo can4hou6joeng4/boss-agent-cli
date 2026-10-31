@@ -418,7 +418,7 @@ def test_export_supports_url_and_multiselect_filters(mock_auth_cls, mock_client_
 	assert kwargs["raw_params"] == {
 		"city": "101280100",
 		"degree": "203",
-		"experience": "108,104",
+		"experience": "102,105",
 	}
 	assert json.loads(out_path.read_text(encoding="utf-8"))[0]["title"] == "Go"
 

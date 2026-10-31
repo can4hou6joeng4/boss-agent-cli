@@ -86,8 +86,7 @@ def test_login_falls_back_to_browser_when_cdp_login_fails(
 
 	manager = AuthManager(tmp_path)
 
-	with patch.object(manager, "_verify_cookie", return_value=False), \
-		patch("boss_agent_cli.auth.manager.qr_login_httpx", side_effect=RuntimeError("qr failed")):
+	with patch.object(manager, "_verify_cookie", return_value=False):
 		result = manager.login(timeout=30)
 
 	mock_login_via_cdp.assert_called_once_with(cdp_url=None, timeout=30, platform="zhipin", reuse_existing=True)
@@ -100,30 +99,29 @@ def test_login_falls_back_to_browser_when_cdp_login_fails(
 @patch("boss_agent_cli.auth.manager.login_via_browser")
 @patch("boss_agent_cli.auth.manager.probe_cdp")
 @patch("boss_agent_cli.auth.manager.extract_cookies")
-def test_login_uses_qr_httpx_when_cdp_unavailable(
+def test_login_goes_straight_to_browser_when_cdp_unavailable(
 	mock_extract,
 	mock_probe_cdp,
 	mock_login_via_browser,
 	mock_store_cls,
 	tmp_path,
 ):
-	"""Cookie 失败 + CDP 不可用时，应尝试 QR httpx 登录。"""
+	"""Cookie 失败 + CDP 不可用时直接走浏览器扫码，之前不再发任何 httpx 登录请求。"""
 	store = _make_store()
 	mock_store_cls.return_value = store
 	mock_extract.return_value = None
 	mock_probe_cdp.return_value = False
+	browser_token = {"cookies": {"wt2": "browser-cookie"}, "stoken": "browser-token"}
+	mock_login_via_browser.return_value = browser_token
 
-	qr_token = {"cookies": {"wt2": "qr-cookie"}, "stoken": "", "user_agent": "ua"}
+	with patch("httpx.Client") as http_client, patch("httpx.get") as http_get:
+		result = AuthManager(tmp_path).login(timeout=30)
 
-	manager = AuthManager(tmp_path)
-
-	with patch("boss_agent_cli.auth.manager.qr_login_httpx", return_value=qr_token) as mock_qr:
-		result = manager.login(timeout=30)
-
-	mock_qr.assert_called_once_with(timeout=30)
-	mock_login_via_browser.assert_not_called()
-	store.save.assert_called_once_with(qr_token)
-	assert result["_method"] == "QR httpx 登录"
+	http_client.assert_not_called()
+	http_get.assert_not_called()
+	mock_login_via_browser.assert_called_once_with(timeout=30, platform="zhipin")
+	store.save.assert_called_once_with(browser_token)
+	assert result["_method"] == "扫码登录"
 
 
 @patch("boss_agent_cli.auth.manager.TokenStore")
@@ -261,15 +259,14 @@ def test_login_stale_reused_session_retries_without_reuse(
 
 
 @patch("boss_agent_cli.auth.manager.TokenStore")
-@patch("boss_agent_cli.auth.manager.qr_login_httpx")
 @patch("boss_agent_cli.auth.manager.login_via_browser")
 @patch("boss_agent_cli.auth.manager.login_via_cdp")
 @patch("boss_agent_cli.auth.manager.probe_cdp", return_value="ws://localhost/devtools/browser")
 @patch("boss_agent_cli.auth.manager.extract_cookies", return_value=None)
 def test_login_platform_risk_during_cdp_reuse_is_not_downgraded(
-	mock_extract, mock_probe_cdp, mock_login_via_cdp, mock_login_via_browser, mock_qr, mock_store_cls, tmp_path
+	mock_extract, mock_probe_cdp, mock_login_via_cdp, mock_login_via_browser, mock_store_cls, tmp_path
 ):
-	"""复用探测命中风控：立即上抛，不得降级到 QR / patchright 再登一次。"""
+	"""复用探测命中风控：立即上抛，不得降级到 patchright 再登一次。"""
 	from boss_agent_cli.api.client import AccountRiskError
 
 	store = _make_store()
@@ -280,6 +277,5 @@ def test_login_platform_risk_during_cdp_reuse_is_not_downgraded(
 		AuthManager(tmp_path).login(timeout=30, cdp_url="http://127.0.0.1:9222")
 
 	mock_login_via_cdp.assert_called_once()
-	mock_qr.assert_not_called()
 	mock_login_via_browser.assert_not_called()
 	store.save.assert_not_called()

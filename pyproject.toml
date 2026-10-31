@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "boss-agent-cli"
-version = "3.0.1"
+version = "3.1.0"
 description = "AI Agent 专用的 BOSS 直聘求职 CLI 工具"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 authors = [
 	{name = "can4hou6joeng4"},
@@ -19,7 +19,6 @@ classifiers = [
 	"Intended Audience :: Developers",
 	"License :: OSI Approved :: MIT License",
 	"Programming Language :: Python :: 3",
-	"Programming Language :: Python :: 3.10",
 	"Programming Language :: Python :: 3.11",
 	"Programming Language :: Python :: 3.12",
 	"Programming Language :: Python :: 3.13",
@@ -35,10 +34,19 @@ dependencies = [
 	# **构造 client 时**就抛 ImportError，于是 `ALL_PROXY=socks5://...` 的用户每一条
 	# 走 httpx 的命令都失败。CI runner 环境干净、没有代理变量，这条路径在门禁上
 	# 永远是绿的（同 scripts/verify_release.py --fresh-install 守的那道缝）。
-	"httpx[socks]>=0.27",
+	# [http2] 拉的是 h2（纯 Python）。真实页面的所有业务请求都是 HTTP/2，而 httpx
+	# 默认 http2=False 走 HTTP/1.1——协议版本本身就是可观察的差异。缺 h2 时
+	# http2=True 会在**构造 client 时**抛 ImportError，与上面 socks 同一类风险，
+	# 所以放进必装依赖而不是 extra。
+	"httpx[socks,http2]>=0.27",
+	# 声明 Accept-Encoding: br, zstd 就必须真的能解码：否则服务端一旦按 br 返回，
+	# httpx 会拿不到解码器而报错。真机发的是 gzip, deflate, br, zstd，这两个包
+	# 让 httpx 的解码器集合与之匹配，而不是只声明不实现。
+	"brotli>=1.1",
+	"zstandard>=0.22",
 	"cryptography>=42.0",
 	"patchright>=1.58.2",
-	"browser-cookie3>=0.16.2",
+	"browser-cookie3>=0.20.0",
 	"rich>=13.0",
 	"prompt-toolkit>=3.0.43",
 	"pyyaml>=6.0",
@@ -58,6 +66,8 @@ dev = [
 	"pre-commit>=3.0",
 	# pre-commit 的传递依赖：避开激活脚本与种子包处理的已知安全问题。
 	"virtualenv>=21.7.13,<22.0.0",
+	# virtualenv / 工具链传递依赖：filelock 4.2.1+ 修复多项本地锁文件安全问题，且要求 Python ≥3.11。
+	"filelock>=4.2.1,<5.0.0",
 	"mypy>=1.20",
 	"types-PyYAML>=6.0",
 ]
@@ -125,7 +135,7 @@ select = ["E4", "E7", "E9", "F"]
 indent-style = "tab"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 # 渐进接入：仅跑基础类型检查，允许现有未注解函数存在
 # 目标：先覆盖报错→逐模块消化→最终切 --strict
 ignore_missing_imports = true
@@ -206,7 +216,6 @@ module = [
 	"boss_agent_cli.commands.chat_summary",
 	"boss_agent_cli.cache.store",
 	"boss_agent_cli.auth.manager",
-	"boss_agent_cli.auth.qr_login",
 	"boss_agent_cli.api.client",
 	"boss_agent_cli.api._base_client",
 	"boss_agent_cli.api.browser_client",

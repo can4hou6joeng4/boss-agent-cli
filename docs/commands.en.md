@@ -33,7 +33,7 @@ Envelope `hints` splits by audience the same way (`conventions.hints`):
 
 In a TTY only `operator_actions` is rendered, to stderr; `next_actions` stays an agent-only channel and is not rendered. An agent receiving `operator_actions` should relay it verbatim rather than inventing its own wording.
 
-**Envelope and exit codes**: every command writes exactly one seven-key JSON envelope to stdout; by default `exit 0` ⇔ `ok=true` and `exit 1` ⇔ `ok=false`. The optional global `--exit-codes sysexits` returns semantic exit codes per error class (77 auth; 75 rate-limit/budget/timeout; 78 params/config; 69 risk/platform-unsupported; otherwise 1) so scripts can branch on failure type; the envelope itself is unchanged.
+**Envelope and exit codes**: every command writes exactly one seven-key JSON envelope to stdout; by default `exit 0` ⇔ `ok=true` and `exit 1` ⇔ `ok=false`. The optional global `--exit-codes sysexits` returns semantic exit codes per error class (77 auth; 75 rate-limit/budget/timeout; 78 params/config; 69 risk/platform-unsupported; otherwise 1) so scripts can branch on failure type; the envelope itself is unchanged. Global options (`--json`, `--data-dir`, `--platform`, `--cdp-url`, and the rest) must come before the subcommand, for example `boss --json search golang`. Placing one after the subcommand returns `INVALID_PARAM` and says that the option is global.
 
 ## Basics
 
@@ -42,7 +42,7 @@ In a TTY only `operator_actions` is rendered, to stderr; `next_actions` stays an
 | `boss` / `boss wizard` | Start the TTY wizard; use `--input-json` for agent workflows and `--status/--resume/--stop <run_id>` for persisted runs |
 | `boss schema` | Full tool self-description JSON (agents call this first) |
 | `boss platforms` | Local platform registry and capability status (no network; `--platform` filter, `--capability` reverse lookup, includes `capability_status_legend`) |
-| `boss login` | User-triggered login (Cookie / CDP / QR / browser fallback per platform); `--force` reuses no existing session: skips local Cookie extraction and, under CDP, clears the target platform cookies in the current context before a fresh QR login; refused while the local BOSS risk lock is active; `--ignore-risk-lock` remains accepted for compatibility and cannot bypass the lock |
+| `boss login` | User-triggered login (Cookie / CDP / browser QR fallback per platform); `--force` reuses no existing session: skips local Cookie extraction and, under CDP, clears the target platform cookies in the current context before a fresh QR login; refused while the local BOSS risk lock is active; `--ignore-risk-lock` remains accepted for compatibility and cannot bypass the lock |
 | `boss logout` | Log out |
 | `boss status` | Check login state (local-only by default; `--live` runs a low-frequency read-only probe) |
 | `boss doctor` | Diagnose environment, dependencies, credential integrity, and network; local-only by default and does not read browser cookies. `--probe-cookies` opts into browser cookie extraction, and `--live-probe` opts into a read-only probe. A candidate-side login is reported before any recruiter request |
@@ -53,6 +53,10 @@ BOSS codes `31` (IP/environment restriction) / `32` (account restriction) / `35`
 After confirming recovery on the intended official business page in the original session, the user runs `boss clean --risk-lock` to remove the local block, then explicitly resumes the task. A working homepage does not prove the job or chat page has recovered. Local cleanup neither removes server restrictions nor verifies online recovery. `--dry-run` only previews cleanup; another risk immediately relatches the lock. Agents must not clear it on their own.
 
 A recovery time displayed by the restriction page is a platform hint, not a trigger for scheduled refresh or automatic unlocking. Mobile availability does not establish web recovery. With an existing restricted page, `login --force` also stops before clearing Cookies.
+
+### Browser Cookie extraction and the macOS Keychain
+
+By default `boss login` first extracts BOSS Cookies from local browsers, trying chrome, firefox, edge, brave, opera, chromium, vivaldi, arc, librewolf and safari in that order; `--cookie-source` selects a single one. On macOS, Chromium-based browsers encrypt Cookies with the "<Browser> Safe Storage" Keychain item, and reading it raises a system authorization prompt. The CLI first opens the Cookie database read-only and checks only its plaintext domain and name columns. A browser confirmed to have no `wt2` login record for `zhipin.com` is skipped without touching the Keychain. When the database cannot be found or read, extraction falls back to browser-cookie3 as before. No Cookie value is read during this check. `boss doctor` does not read browser Cookies by default; `--probe-cookies` uses the same logic. When `--cookie-source` names a browser but nothing is extracted, stderr says whether reading failed or the browser has no login Cookie. When the decryption key is unavailable (macOS Keychain not authorized, App-Bound encryption in newer Chrome / Edge on Windows, or a locked Linux keyring), it suggests `--cdp` or `--curl-file` instead. When automatic detection finds nothing, only browsers that could not be decrypted are summarized.
 
 ### Import a browser cURL session
 

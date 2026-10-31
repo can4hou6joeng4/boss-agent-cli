@@ -71,7 +71,7 @@ After connecting MCP, an agent can run a low-risk chain such as search -> detail
 
 - `boss schema` currently exposes 38 top-level commands; `hr` has 9 first-level recruiter subcommands; MCP exposes 50 default low-risk tools
 - `zhipin` (BOSS Zhipin) is the only registered platform and covers the main candidate workflow
-- CI covers Python 3.10 / 3.11 / 3.12 / 3.13, ruff, mypy, docs consistency, and CodeQL
+- CI covers Python 3.11 / 3.12 / 3.14, ruff, mypy, docs consistency, and CodeQL
 - No telemetry, analytics, or cloud sync; adoption is measured through PyPI downloads and GitHub Insights only
 
 ### Links
