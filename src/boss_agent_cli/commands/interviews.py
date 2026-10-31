@@ -1,5 +1,6 @@
 import click
 
+from boss_agent_cli.api.models import field_list
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, login_action_for_ctx, render_simple_list
@@ -36,7 +37,7 @@ def interviews_cmd(ctx: click.Context) -> None:
 			handle_platform_error_output(ctx, "interviews", platform, raw, fallback_message="面试邀请获取失败")
 			return
 		platform_data = platform.unwrap_data(raw) or {}
-		interview_list = platform_data.get("interviewList", [])
+		interview_list = field_list(platform_data, "interviewList")
 
 	items = [
 		{

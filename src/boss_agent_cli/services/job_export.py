@@ -5,6 +5,8 @@ import html as _html
 import json
 from typing import Any
 
+from boss_agent_cli.api.models import field_list
+
 
 def prepare_export_items(items: list[dict[str, Any]], *, include_private: bool) -> list[dict[str, Any]]:
 	if include_private:
@@ -27,8 +29,8 @@ def public_html_export_item_from_api(raw: dict[str, Any]) -> dict[str, Any]:
 		"city": raw.get("cityName", ""),
 		"experience": raw.get("jobExperience", ""),
 		"education": raw.get("jobDegree", ""),
-		"skills": raw.get("skills", []),
-		"welfare": raw.get("welfareList", []),
+		"skills": field_list(raw, "skills"),
+		"welfare": field_list(raw, "welfareList"),
 	}
 
 

@@ -5,6 +5,29 @@ from typing import Any
 BOSS_INTERNSHIP_RESPONSE_JOB_TYPE = 4
 
 
+# 平台响应里的字段可能是显式的 null（"welfareList": null、"bossInfo": null）。
+# dict.get(key, default) 只在键不存在时用默认值，值为 null 时照样返回 None，
+# 下游一 join / 遍历 / 取子字段就崩，所以平台数据在边界处统一归一化。
+def field_text(data: Any, key: str, default: str = "") -> str:
+	"""取文本字段：缺失或为 null 时用默认值，数字等标量转成字符串。"""
+	value = data.get(key) if isinstance(data, dict) else None
+	if value is None:
+		return default
+	return value if isinstance(value, str) else str(value)
+
+
+def field_list(data: Any, key: str) -> list[Any]:
+	"""取列表字段：缺失、为 null 或不是列表时返回空列表。"""
+	value = data.get(key) if isinstance(data, dict) else None
+	return value if isinstance(value, list) else []
+
+
+def field_dict(data: Any, key: str) -> dict[str, Any]:
+	"""取对象字段：缺失、为 null 或不是对象时返回空字典。"""
+	value = data.get(key) if isinstance(data, dict) else None
+	return value if isinstance(value, dict) else {}
+
+
 def job_public_url(job_id: str) -> str:
 	"""职位详情页地址。只由 encryptJobId 拼出，不额外请求平台。"""
 	if not job_id:
@@ -72,30 +95,30 @@ class JobItem:
 	def from_api(cls, raw: dict[str, Any]) -> "JobItem":
 		raw_job_type = raw.get("jobType")
 		return cls(
-			job_id=raw.get("encryptJobId", ""),
+			job_id=field_text(raw, "encryptJobId"),
 			job_url=job_public_url(str(raw.get("encryptJobId") or "")),
-			title=raw.get("jobName", ""),
-			company=raw.get("brandName", ""),
-			salary=raw.get("salaryDesc", ""),
-			city=raw.get("cityName", ""),
-			district=raw.get("areaDistrict", ""),
-			experience=raw.get("jobExperience", ""),
-			education=raw.get("jobDegree", ""),
-			skills=raw.get("skills", []),
-			welfare=raw.get("welfareList", []),
-			industry=raw.get("brandIndustry", ""),
-			scale=raw.get("brandScaleName", ""),
-			stage=raw.get("brandStageName", ""),
-			boss_name=raw.get("bossName", ""),
-			boss_title=raw.get("bossTitle", ""),
+			title=field_text(raw, "jobName"),
+			company=field_text(raw, "brandName"),
+			salary=field_text(raw, "salaryDesc"),
+			city=field_text(raw, "cityName"),
+			district=field_text(raw, "areaDistrict"),
+			experience=field_text(raw, "jobExperience"),
+			education=field_text(raw, "jobDegree"),
+			skills=field_list(raw, "skills"),
+			welfare=field_list(raw, "welfareList"),
+			industry=field_text(raw, "brandIndustry"),
+			scale=field_text(raw, "brandScaleName"),
+			stage=field_text(raw, "brandStageName"),
+			boss_name=field_text(raw, "bossName"),
+			boss_title=field_text(raw, "bossTitle"),
 			boss_active="在线" if is_boss_online(raw.get("bossOnline")) else "离线",
-			security_id=raw.get("securityId", ""),
-			lid=raw.get("lid", ""),
+			security_id=field_text(raw, "securityId"),
+			lid=field_text(raw, "lid"),
 			raw_job_type=raw_job_type,
 			employment_type=employment_type_from_raw(raw_job_type),
-			days_per_week=raw.get("daysPerWeekDesc", ""),
-			least_month=raw.get("leastMonthDesc", ""),
-			job_labels=raw.get("jobLabels", []),
+			days_per_week=field_text(raw, "daysPerWeekDesc"),
+			least_month=field_text(raw, "leastMonthDesc"),
+			job_labels=field_list(raw, "jobLabels"),
 			boss_active_desc=_active_desc(raw.get("activeTimeDesc")),
 		)
 
@@ -154,32 +177,32 @@ class JobDetail:
 
 	@classmethod
 	def from_api(cls, raw: dict[str, Any]) -> "JobDetail":
-		job_info = raw.get("jobInfo", {})
-		boss_info = raw.get("bossInfo", {})
-		brand_info = raw.get("brandComInfo", {})
+		job_info = field_dict(raw, "jobInfo")
+		boss_info = field_dict(raw, "bossInfo")
+		brand_info = field_dict(raw, "brandComInfo")
 		raw_job_type = job_info.get("jobType")
 		return cls(
-			job_id=job_info.get("encryptJobId", ""),
-			title=job_info.get("jobName", ""),
-			company=brand_info.get("brandName", ""),
-			salary=job_info.get("salaryDesc", ""),
-			city=job_info.get("cityName", ""),
-			experience=job_info.get("experienceName", ""),
-			education=job_info.get("degreeName", ""),
-			description=raw.get("jobDetail", ""),
-			boss_name=boss_info.get("name", ""),
-			boss_title=boss_info.get("title", ""),
-			boss_active=boss_info.get("activeTimeDesc", "离线"),
-			security_id=job_info.get("securityId", ""),
+			job_id=field_text(job_info, "encryptJobId"),
+			title=field_text(job_info, "jobName"),
+			company=field_text(brand_info, "brandName"),
+			salary=field_text(job_info, "salaryDesc"),
+			city=field_text(job_info, "cityName"),
+			experience=field_text(job_info, "experienceName"),
+			education=field_text(job_info, "degreeName"),
+			description=field_text(raw, "jobDetail"),
+			boss_name=field_text(boss_info, "name"),
+			boss_title=field_text(boss_info, "title"),
+			boss_active=field_text(boss_info, "activeTimeDesc", "离线"),
+			security_id=field_text(job_info, "securityId"),
 			raw_job_type=raw_job_type,
 			employment_type=employment_type_from_raw(raw_job_type),
-			days_per_week=job_info.get("daysPerWeekDesc", ""),
-			least_month=job_info.get("leastMonthDesc", ""),
-			pay_type=job_info.get("payTypeDesc", ""),
+			days_per_week=field_text(job_info, "daysPerWeekDesc"),
+			least_month=field_text(job_info, "leastMonthDesc"),
+			pay_type=field_text(job_info, "payTypeDesc"),
 			company_info={
-				"industry": brand_info.get("industryName", ""),
-				"scale": brand_info.get("scaleName", ""),
-				"stage": brand_info.get("stageName", ""),
+				"industry": field_text(brand_info, "industryName"),
+				"scale": field_text(brand_info, "scaleName"),
+				"stage": field_text(brand_info, "stageName"),
 			},
 		)
 

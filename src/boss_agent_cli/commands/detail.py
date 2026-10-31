@@ -4,7 +4,7 @@ from typing import Any
 import click
 
 from boss_agent_cli.api.client import RISK_ERROR_BY_CODE, PlatformRiskError
-from boss_agent_cli.api.models import employment_type_from_raw
+from boss_agent_cli.api.models import employment_type_from_raw, field_dict, field_list, field_text
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import get_platform_instance
@@ -102,9 +102,9 @@ def _detail_via_httpx(platform: Platform, security_id: str, job_id: str, data_di
 		code, message = platform.parse_error(raw)
 		return None, (code, message or "职位详情获取失败", _platform_error_details(raw))
 	platform_data = platform.unwrap_data(raw) or {}
-	job_info = platform_data.get("jobInfo", {})
-	boss_info = platform_data.get("bossInfo", {})
-	brand_info = platform_data.get("brandComInfo", {})
+	job_info = field_dict(platform_data, "jobInfo")
+	boss_info = field_dict(platform_data, "bossInfo")
+	brand_info = field_dict(platform_data, "brandComInfo")
 
 	if not job_info:
 		return None, None
@@ -115,24 +115,24 @@ def _detail_via_httpx(platform: Platform, security_id: str, job_id: str, data_di
 	raw_job_type = job_info.get("jobType")
 	return {
 		"job_id": job_id,
-		"title": job_info.get("jobName", ""),
-		"company": brand_info.get("brandName", ""),
-		"salary": job_info.get("salaryDesc", ""),
-		"city": job_info.get("cityName", ""),
-		"experience": job_info.get("experienceName", ""),
-		"education": job_info.get("degreeName", ""),
-		"description": platform_data.get("jobDetail", "") or job_info.get("postDescription", ""),
-		"address": job_info.get("address", ""),
-		"skills": job_info.get("jobLabels", []) or job_info.get("skills", []),
-		"boss_name": boss_info.get("name", ""),
-		"boss_title": boss_info.get("title", ""),
-		"boss_active": boss_info.get("activeTimeDesc", "离线"),
+		"title": field_text(job_info, "jobName"),
+		"company": field_text(brand_info, "brandName"),
+		"salary": field_text(job_info, "salaryDesc"),
+		"city": field_text(job_info, "cityName"),
+		"experience": field_text(job_info, "experienceName"),
+		"education": field_text(job_info, "degreeName"),
+		"description": field_text(platform_data, "jobDetail") or field_text(job_info, "postDescription"),
+		"address": field_text(job_info, "address"),
+		"skills": field_list(job_info, "jobLabels") or field_list(job_info, "skills"),
+		"boss_name": field_text(boss_info, "name"),
+		"boss_title": field_text(boss_info, "title"),
+		"boss_active": field_text(boss_info, "activeTimeDesc", "离线"),
 		"security_id": security_id,
 		"raw_job_type": raw_job_type,
 		"employment_type": employment_type_from_raw(raw_job_type),
-		"days_per_week": job_info.get("daysPerWeekDesc", ""),
-		"least_month": job_info.get("leastMonthDesc", ""),
-		"pay_type": job_info.get("payTypeDesc", ""),
+		"days_per_week": field_text(job_info, "daysPerWeekDesc"),
+		"least_month": field_text(job_info, "leastMonthDesc"),
+		"pay_type": field_text(job_info, "payTypeDesc"),
 		"greeted": greeted,
 	}, None
 
@@ -147,7 +147,7 @@ def _detail_via_browser(platform: Platform, security_id: str, lid: str, data_dir
 		code, message = platform.parse_error(raw)
 		return None, (code, message or "职位详情获取失败", _platform_error_details(raw))
 	platform_data = platform.unwrap_data(raw) or {}
-	card = platform_data.get("jobCard", {})
+	card = field_dict(platform_data, "jobCard")
 	if not card:
 		return None, None
 

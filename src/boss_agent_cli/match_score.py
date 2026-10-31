@@ -1,6 +1,6 @@
 from typing import Any
 
-from boss_agent_cli.api.models import JobItem
+from boss_agent_cli.api.models import JobItem, field_list, field_text
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	city_constraint,
@@ -87,23 +87,23 @@ def score_job_item(job: JobItem, *, criteria: SearchFilterCriteria | None, expec
 
 def score_job_dict(item: dict[str, Any], *, criteria: SearchFilterCriteria | None, expect_data: dict[str, Any] | None) -> dict[str, Any]:
 	job = JobItem(
-		job_id=item.get("job_id", ""),
-		title=item.get("title", ""),
-		company=item.get("company", ""),
-		salary=item.get("salary", ""),
-		city=item.get("city", ""),
-		district=item.get("district", ""),
-		experience=item.get("experience", ""),
-		education=item.get("education", ""),
-		skills=item.get("skills", []),
-		welfare=item.get("welfare", []),
-		industry=item.get("industry", ""),
-		scale=item.get("scale", ""),
-		stage=item.get("stage", ""),
-		boss_name=item.get("boss_name", ""),
-		boss_title=item.get("boss_title", ""),
-		boss_active=item.get("boss_active", ""),
-		security_id=item.get("security_id", ""),
+		job_id=field_text(item, "job_id"),
+		title=field_text(item, "title"),
+		company=field_text(item, "company"),
+		salary=field_text(item, "salary"),
+		city=field_text(item, "city"),
+		district=field_text(item, "district"),
+		experience=field_text(item, "experience"),
+		education=field_text(item, "education"),
+		skills=field_list(item, "skills"),
+		welfare=field_list(item, "welfare"),
+		industry=field_text(item, "industry"),
+		scale=field_text(item, "scale"),
+		stage=field_text(item, "stage"),
+		boss_name=field_text(item, "boss_name"),
+		boss_title=field_text(item, "boss_title"),
+		boss_active=field_text(item, "boss_active"),
+		security_id=field_text(item, "security_id"),
 		greeted=item.get("greeted", False),
 	)
 	return {**item, **score_job_item(job, criteria=criteria, expect_data=expect_data)}

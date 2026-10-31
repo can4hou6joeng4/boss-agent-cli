@@ -2,7 +2,7 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.models import JobItem
+from boss_agent_cli.api.models import JobItem, field_list
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import (
@@ -165,7 +165,7 @@ def export_cmd(
 				)
 				return
 			platform_data = platform.unwrap_data(raw) or {}
-			job_list = platform_data.get("jobList", [])
+			job_list = field_list(platform_data, "jobList")
 			if not job_list:
 				break
 
