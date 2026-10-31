@@ -621,6 +621,11 @@ def _with_httpx_only_hint(ctx: Any, hints: dict[str, list[str]] | None) -> dict[
 	return merged
 
 
+# 解析平台数据或 CLI 自身的缺陷：同样的输入必然得到同样的结果。归为 NETWORK_ERROR
+# 并建议「重试」会让 Agent 反复重试，重试的若是平台请求，还会白白消耗请求预算。
+INTERNAL_ERROR_TYPES: tuple[type[Exception], ...] = (TypeError, AttributeError, KeyError, IndexError)
+
+
 def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
 	"""装饰器：统一处理 AuthRequired / TokenRefreshFailed / Exception 三层捕获。
 
@@ -769,6 +774,16 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 							"若 boss status 显示登录态 degraded 或 stoken 很久未更新，先执行 boss login",
 						],
 					},
+				)
+			except INTERNAL_ERROR_TYPES as e:
+				internal_recoverable, internal_recovery = error_contract_for_code("INTERNAL_ERROR")
+				handle_error_output(
+					ctx,
+					command_name,
+					code="INTERNAL_ERROR",
+					message=f"{command_name} 失败: {type(e).__name__}: {e}",
+					recoverable=internal_recoverable,
+					recovery_action=internal_recovery,
 				)
 			except Exception as e:
 				handle_error_output(

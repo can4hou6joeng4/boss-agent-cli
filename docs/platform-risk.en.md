@@ -36,7 +36,7 @@ The project depends on web pages, APIs, cookies, login state, and response shape
 
 Treat these symptoms as possible platform drift:
 
-- Previously working read-only commands suddenly return `NETWORK_ERROR`, `AUTH_EXPIRED`, `TOKEN_REFRESH_FAILED`, or malformed structures.
+- Previously working read-only commands suddenly return `NETWORK_ERROR`, `INTERNAL_ERROR`, `AUTH_EXPIRED`, `TOKEN_REFRESH_FAILED`, or malformed structures.
 - `search` returns results but `detail` fails.
 - `boss schema --format native` works, but live commands fail.
 - Mock tests pass while real-account commands fail.

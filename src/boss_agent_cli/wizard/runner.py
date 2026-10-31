@@ -13,7 +13,7 @@ from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserS
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded, request_control
 from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
-from boss_agent_cli.display import error_contract_for_code, risk_error_contract
+from boss_agent_cli.display import INTERNAL_ERROR_TYPES, error_contract_for_code, risk_error_contract
 from boss_agent_cli.wizard.models import StepResult, WorkflowPlan, WorkflowStatus
 from boss_agent_cli.wizard.store import WorkflowStore
 
@@ -244,6 +244,14 @@ class WorkflowRunner:
 					str(exc),
 					recoverable=recoverable,
 					recovery_action=contract_recovery or fallback_recovery,
+				)
+			except INTERNAL_ERROR_TYPES as exc:
+				internal_recoverable, internal_recovery = error_contract_for_code("INTERNAL_ERROR")
+				error = WorkflowActionError(
+					"INTERNAL_ERROR",
+					f"{type(exc).__name__}: {exc}",
+					recoverable=internal_recoverable,
+					recovery_action=internal_recovery,
 				)
 			except Exception as exc:
 				error = WorkflowActionError(

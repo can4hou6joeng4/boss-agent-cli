@@ -3170,3 +3170,16 @@ def test_ai_assist_truncation_recovery_points_to_max_tokens(tmp_path, monkeypatc
 	assert exc_info.value.code == "AI_API_ERROR"
 	assert "max_completion_tokens=4096" in str(exc_info.value)
 	assert "--max-tokens" in exc_info.value.recovery_action
+
+
+def test_runner_reports_deterministic_action_bug_as_internal_error(tmp_path):
+	"""KeyError 之类的确定性错误重试也一样失败，不能报成可重试的 NETWORK_ERROR。"""
+
+	def broken(context, inputs, prior):
+		raise KeyError("jobList")
+
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, {"broken": broken}).run(_plan("broken"), object(), run_id="internal-run")
+	assert run["error"]["code"] == "INTERNAL_ERROR"
+	assert run["error"]["recoverable"] is False
+	assert run["error"]["message"] == "KeyError: 'jobList'"
