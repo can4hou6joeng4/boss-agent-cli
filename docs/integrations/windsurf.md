@@ -50,7 +50,7 @@ When the task involves job discovery, job-detail inspection, or local job organi
 3. If not logged in, run `boss login` and ask the user to scan if needed
 4. Use `boss search`, preferably with `--welfare` for precise filtering
 5. Use `boss detail <security_id>` once a hit looks promising
-6. Use `boss shortlist add`, `boss apply`, or `boss greet` according to the user's goal
+6. Use `boss shortlist add` for local organization; draft job-specific materials from verified user facts
 7. Consume stdout JSON only; when `ok=false`, read `error.recovery_action` before retrying
 ```
 
@@ -72,6 +72,12 @@ boss shortlist add <security_id> <job_id>
 - `error.code`: recovery routing
 - `error.recovery_action`: how Cascade should recover
 
+## Authorization boundary
+
+Keep the default workflow read-only: search, inspect details, organize the local shortlist, export local reports, and draft materials from confirmed facts. Do not run `boss apply`, `boss greet`, `boss batch-greet`, or any platform write unless the user names the specific job in the current conversation and confirms immediately before the action.
+
+Perform one external action at a time, read the explicit platform result, then ask before the next job. Do not create outreach queues, run unattended bulk actions, reuse identical greetings, or retry an action with an unknown result. On `ACCOUNT_RISK`, `ENVIRONMENT_RISK`, a verification page, or a rate limit, stop and retain the checkpoint; do not bypass platform controls.
+
 ## Recovery flow
 
 Recommended order:
@@ -86,7 +92,7 @@ Common branches:
 
 - `AUTH_REQUIRED` / `AUTH_EXPIRED`: run `boss login` again
 - `INVALID_PARAM`: return to `boss schema` and validate parameter names
-- `RATE_LIMITED`: wait before retrying; do not continue sensitive automation
+- `RATE_LIMITED`: stop external actions, keep the checkpoint, and wait for an explicit user decision before any retry
 - `ACCOUNT_RISK`: stop the workflow, preserve its checkpoint, and resume only after the account-risk condition is resolved
 - `ENVIRONMENT_RISK`: stop the workflow the same way; do not refresh tokens, re-login, or retry, and resume only after the user has confirmed the page state in the same dedicated browser profile
 
