@@ -25,7 +25,7 @@ When the user asks to search jobs, inspect job details, or organize candidate jo
 3. If not logged in, run `boss login`
 4. Use `boss search` for discovery
 5. Use `boss detail` for a full job view
-6. Use `boss shortlist add`, `boss apply`, or `boss greet` according to the user's goal
+6. Use `boss shortlist add` for local organization; draft job-specific materials from verified user facts
 7. In recruiter workflows, use `boss hr candidates`, `boss hr applications`, `boss hr resume`, `boss hr chat`, and `boss hr reply` as discovered from schema
 8. Read stdout JSON only; do not parse stderr
 ```
@@ -55,6 +55,12 @@ Integration advice:
 - feed `boss detail` output back into the context before deciding whether to shortlist, apply, or greet
 - when `ok=false`, prefer `error.recovery_action` before inventing your own retry logic
 
+## Authorization boundary
+
+Keep the default workflow read-only: search, inspect details, organize the local shortlist, export local reports, and draft materials from confirmed facts. Do not run `boss apply`, `boss greet`, `boss batch-greet`, or any platform write unless the user names the specific job in the current conversation and confirms immediately before the action.
+
+Perform one external action at a time, read the explicit platform result, then ask before the next job. Do not create outreach queues, run unattended bulk actions, reuse identical greetings, or retry an action with an unknown result. On `ACCOUNT_RISK`, `ENVIRONMENT_RISK`, a verification page, or a rate limit, stop and retain the checkpoint; do not bypass platform controls.
+
 ## Recovery flow
 
 Recommended order:
@@ -71,3 +77,9 @@ Common recovery actions:
 - login expired: run `boss login` again
 - invalid parameters: go back to `boss schema` or `boss cities`
 - environment issue: run `boss doctor` first; do not continue sensitive actions through automation
+
+### Message view loads, then turns blank
+
+When a BOSS message view stays loading and then becomes blank without a login page, verification prompt, access restriction, or a clear browser crash, treat it as a client-side message-view loop. It is not proof of account risk or message delivery.
+
+Keep only the actual message-list URL and a local conversation reference. Restore that list once, wait until it is stable, then reopen the target conversation once for read-only verification. If the loop repeats, stop automatic message-view recovery, leave any pending send as outcome unknown, and do not reload the conversation, guess a conversation URL, create repeated tabs, or resend a message.
