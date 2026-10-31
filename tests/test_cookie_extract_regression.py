@@ -350,17 +350,20 @@ def macos_profiles(monkeypatch, tmp_path) -> Path:
 
 
 def _recording_module(**loaders):
-	"""loader 被调用即记名；被调用意味着真实环境会去读钥匙串。"""
+	"""loader 被调用即记名，并记下传入的 cookie_file；被调用意味着真实环境会去读钥匙串。"""
 	calls: list[str] = []
+	cookie_files: list[str | None] = []
 
 	def wrap(name, fn):
-		def loader(domain_name=None):
+		def loader(domain_name=None, cookie_file=None):
 			calls.append(name)
+			cookie_files.append(cookie_file)
 			return fn(domain_name)
 
 		return loader
 
 	module = SimpleNamespace(**{name: wrap(name, fn) for name, fn in loaders.items()})
+	module.recorded_cookie_files = cookie_files
 	return module, calls
 
 
@@ -386,10 +389,13 @@ def test_macos_auto_detect_skips_chromium_browser_whose_db_lacks_login_cookie(ma
 	assert calls == ["firefox"]
 
 
-def test_macos_calls_loader_when_any_profile_has_login_cookie(macos_profiles):
-	"""Default 没有、Profile 1 有：判定为「有」，仍交给 loader 按它自己的规则读。"""
+def test_macos_reads_the_profile_that_holds_the_login_cookie(macos_profiles, capsys):
+	"""Default 没有、Profile 1 有：把 Profile 1 的库交给 loader，钥匙串只读一次。
+
+	browser_cookie3 默认只读 Default，此前这里永远提取不到（参考 jackwener/boss-cli#12、#14）。
+	"""
 	_write_cookie_db(macos_profiles / "Google/Chrome/Default/Cookies", [(".example.com", "sid")])
-	_write_cookie_db(macos_profiles / "Google/Chrome/Profile 1/Cookies", [("www.zhipin.com", "wt2")])
+	profile_db = _write_cookie_db(macos_profiles / "Google/Chrome/Profile 1/Cookies", [("www.zhipin.com", "wt2")])
 	module, calls = _recording_module(chrome=_with_wt2("from-chrome"))
 
 	with patch.dict("sys.modules", {"browser_cookie3": module}):
@@ -397,14 +403,17 @@ def test_macos_calls_loader_when_any_profile_has_login_cookie(macos_profiles):
 
 	assert result["cookies"]["wt2"] == "from-chrome"
 	assert calls == ["chrome"]
+	assert module.recorded_cookie_files == [str(profile_db)]
+	assert "从 chrome（Profile 1）提取到 zhipin Cookie" in capsys.readouterr().err
 
 
 def test_macos_recognizes_network_subdirectory_cookie_db(macos_profiles):
-	_write_cookie_db(macos_profiles / "Microsoft Edge/Default/Network/Cookies", [(".zhipin.com", "wt2")])
+	db = _write_cookie_db(macos_profiles / "Microsoft Edge/Default/Network/Cookies", [(".zhipin.com", "wt2")])
 
-	presence = cookie_extract._chromium_cookie_presence("edge", domain_name=".zhipin.com", cookie_name="wt2")
+	found = cookie_extract._login_cookie_dbs("edge", domain_name=".zhipin.com", cookie_name="wt2")
 
-	assert presence is True
+	assert found == [str(db)]
+	assert cookie_extract._profile_label(found[0]) == "Default"
 
 
 def test_macos_explicit_source_without_login_cookie_skips_keychain(macos_profiles, capsys):
@@ -455,14 +464,50 @@ def test_macos_unreadable_db_keeps_presence_undetermined_even_if_another_lacks_c
 	broken.parent.mkdir(parents=True)
 	broken.write_bytes(b"garbage")
 
-	presence = cookie_extract._chromium_cookie_presence("chrome", domain_name=".zhipin.com", cookie_name="wt2")
+	found = cookie_extract._login_cookie_dbs("chrome", domain_name=".zhipin.com", cookie_name="wt2")
 
-	assert presence is None
+	assert found is None
+
+
+def test_macos_unreadable_db_does_not_hide_a_profile_that_has_the_cookie(macos_profiles):
+	broken = macos_profiles / "Google/Chrome/Default/Cookies"
+	broken.parent.mkdir(parents=True)
+	broken.write_bytes(b"garbage")
+	good = _write_cookie_db(macos_profiles / "Google/Chrome/Profile 2/Cookies", [(".zhipin.com", "wt2")])
+
+	found = cookie_extract._login_cookie_dbs("chrome", domain_name=".zhipin.com", cookie_name="wt2")
+
+	assert found == [str(good)]
+
+
+def test_macos_prefers_default_when_several_profiles_hold_the_cookie(macos_profiles):
+	"""与 browser_cookie3 同序：Default 有登录记录时读的仍是原来那个库，行为不变。"""
+	default_db = _write_cookie_db(macos_profiles / "Google/Chrome/Default/Cookies", [(".zhipin.com", "wt2")])
+	_write_cookie_db(macos_profiles / "Google/Chrome/Profile 1/Cookies", [(".zhipin.com", "wt2")])
+	module, _calls = _recording_module(chrome=_with_wt2("from-chrome"))
+
+	with patch.dict("sys.modules", {"browser_cookie3": module}):
+		assert extract_cookies(source="chrome") is not None
+
+	assert module.recorded_cookie_files == [str(default_db)]
+
+
+def test_macos_stable_channel_before_beta_and_beta_used_when_stable_lacks_login(macos_profiles):
+	_write_cookie_db(macos_profiles / "Google/Chrome/Default/Cookies", [(".example.com", "sid")])
+	beta_db = _write_cookie_db(macos_profiles / "Google/Chrome Beta/Default/Cookies", [(".zhipin.com", "wt2")])
+
+	assert cookie_extract._login_cookie_dbs("chrome", domain_name=".zhipin.com", cookie_name="wt2") == [str(beta_db)]
+
+	stable_db = _write_cookie_db(macos_profiles / "Google/Chrome/Profile 3/Cookies", [(".zhipin.com", "wt2")])
+	assert cookie_extract._login_cookie_dbs("chrome", domain_name=".zhipin.com", cookie_name="wt2") == [
+		str(stable_db),
+		str(beta_db),
+	]
 
 
 def test_precheck_ignores_non_chromium_browsers(macos_profiles):
 	for browser in ("firefox", "librewolf", "safari"):
-		assert cookie_extract._chromium_cookie_presence(browser, domain_name=".zhipin.com", cookie_name="wt2") is None
+		assert cookie_extract._login_cookie_dbs(browser, domain_name=".zhipin.com", cookie_name="wt2") is None
 
 
 def test_precheck_is_inactive_outside_macos(monkeypatch, tmp_path):
@@ -477,6 +522,7 @@ def test_precheck_is_inactive_outside_macos(monkeypatch, tmp_path):
 
 	assert result["cookies"]["wt2"] == "from-chrome"
 	assert calls == ["chrome"]
+	assert module.recorded_cookie_files == [None]
 
 
 # ── 数据根目录必须覆盖 browser_cookie3 实际读取的 macOS 路径 ──────────
