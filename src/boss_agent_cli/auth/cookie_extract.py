@@ -94,12 +94,14 @@ def extract_cookies(source: str | None = None, *, platform: str = "zhipin") -> d
 				return None
 			print(f"不支持的浏览器: {source}，支持: {', '.join(_BROWSER_LOADER_NAMES)}", file=sys.stderr)
 			return None
-		if _keychain_read_avoidable(source.lower(), domain_name=domain_name, cookie_name=required_cookie):
+		login_dbs = _macos_login_cookie_dbs(source.lower(), domain_name=domain_name, cookie_name=required_cookie)
+		if login_dbs == []:
 			print(
 				f"{source} 的 Cookie 库中没有 {domain_name.lstrip('.')} 的登录记录，未读取钥匙串",
 				file=sys.stderr,
 			)
 			return None
+		cookie_file = login_dbs[0] if login_dbs else None
 		failures: list[str] = []
 		result = _try_extract(
 			loader,
@@ -107,18 +109,23 @@ def extract_cookies(source: str | None = None, *, platform: str = "zhipin") -> d
 			required_cookie=required_cookie,
 			stoken_cookie=stoken_cookie,
 			failures=failures,
+			cookie_file=cookie_file,
 		)
 		if result is None:
 			print(_explain_extract_failure(source, failures, domain_name, required_cookie), file=sys.stderr)
+		elif cookie_file is not None:
+			print(f"从 {source}（{_profile_label(cookie_file)}）提取到 {platform} Cookie", file=sys.stderr)
 		return result
 
 	# 自动检测：按优先级尝试
 	skipped: list[str] = []
 	undecryptable: list[str] = []
 	for name, loader in loaders.items():
-		if _keychain_read_avoidable(name, domain_name=domain_name, cookie_name=required_cookie):
+		login_dbs = _macos_login_cookie_dbs(name, domain_name=domain_name, cookie_name=required_cookie)
+		if login_dbs == []:
 			skipped.append(name)
 			continue
+		cookie_file = login_dbs[0] if login_dbs else None
 		attempt_failures: list[str] = []
 		result = _try_extract(
 			loader,
@@ -126,9 +133,11 @@ def extract_cookies(source: str | None = None, *, platform: str = "zhipin") -> d
 			required_cookie=required_cookie,
 			stoken_cookie=stoken_cookie,
 			failures=attempt_failures,
+			cookie_file=cookie_file,
 		)
 		if result:
-			print(f"从 {name} 提取到 {platform} Cookie", file=sys.stderr)
+			profile = f"（{_profile_label(cookie_file)}）" if cookie_file is not None else ""
+			print(f"从 {name}{profile} 提取到 {platform} Cookie", file=sys.stderr)
 			return result
 		# 浏览器没装、库被锁之类的失败很常见，不逐个报；只汇总拿不到解密密钥的浏览器
 		if any(_is_decryption_failure(reason) for reason in attempt_failures):
@@ -144,11 +153,15 @@ def extract_cookies(source: str | None = None, *, platform: str = "zhipin") -> d
 	return None
 
 
-def _keychain_read_avoidable(browser: str, *, domain_name: str, cookie_name: str) -> bool:
-	"""macOS 上已确认该浏览器的 Cookie 库里没有目标 Cookie 时返回 True，调用方跳过 loader。"""
+def _macos_login_cookie_dbs(browser: str, *, domain_name: str, cookie_name: str) -> list[str] | None:
+	"""macOS 上不碰钥匙串，列出该浏览器里含目标 Cookie 的库；其他系统一律判断不了。
+
+	browser_cookie3 只读每个浏览器的第一个配置（通常是 Default），登录在 Profile 1 等
+	其他配置里就永远读不到。调用方把列表第一项作为 cookie_file 交给 loader，钥匙串仍只读一次。
+	"""
 	if not _is_macos():
-		return False
-	return _chromium_cookie_presence(browser, domain_name=domain_name, cookie_name=cookie_name) is False
+		return None
+	return _login_cookie_dbs(browser, domain_name=domain_name, cookie_name=cookie_name)
 
 
 def _is_macos() -> bool:
@@ -204,32 +217,44 @@ def _macos_app_support_dir() -> Path:
 	return Path.home() / "Library" / "Application Support"
 
 
-def _chromium_cookie_presence(browser: str, *, domain_name: str, cookie_name: str) -> bool | None:
-	"""不碰钥匙串，判断该浏览器的 Cookie 库里有没有目标 Cookie 行。
+def _login_cookie_dbs(browser: str, *, domain_name: str, cookie_name: str) -> list[str] | None:
+	"""不碰钥匙串，按 browser_cookie3 的查找顺序列出含目标 Cookie 行的库。
 
-	True：至少一个库里有；False：找到了库且逐个确认都没有；None：判断不了
-	（不是 Chromium 系、没找到任何库、有库读不了），调用方照旧交给 loader。
+	非空列表：这些库里有；空列表：找到了库且逐个确认都没有，调用方跳过 loader；
+	None：判断不了（不是 Chromium 系、没找到任何库，或没有库确认有、但有库读不了），
+	调用方照旧让 loader 按默认规则读。
 	"""
 	roots = _MACOS_CHROMIUM_DATA_ROOTS.get(browser)
 	if roots is None:
 		return None
 	base = _macos_app_support_dir()
-	db_files = sorted({
-		match
-		for root in roots
-		for pattern in _CHROMIUM_COOKIE_DB_GLOBS
-		for match in glob.glob(f"{glob.escape(str(base / root))}/{pattern}")
-	})
+	# 与 browser_cookie3 同序：稳定版在测试版之前，同一数据根目录里 Default 在 Profile N 之前，
+	# Default 有登录记录时读的仍是原来那个库
+	db_files: list[str] = []
+	for root in roots:
+		for pattern in _CHROMIUM_COOKIE_DB_GLOBS:
+			for match in sorted(glob.glob(f"{glob.escape(str(base / root))}/{pattern}")):
+				if match not in db_files:
+					db_files.append(match)
 	if not db_files:
 		return None
+	found: list[str] = []
 	undetermined = False
 	for db_file in db_files:
 		present = _cookie_row_present(db_file, domain_name=domain_name, cookie_name=cookie_name)
 		if present:
-			return True
-		if present is None:
+			found.append(db_file)
+		elif present is None:
 			undetermined = True
-	return None if undetermined else False
+	if found:
+		return found
+	return None if undetermined else []
+
+
+def _profile_label(cookie_file: str) -> str:
+	"""Cookie 库所在的配置目录名（Default、Profile 1…）；新版放在 Network/ 下时取上一级。"""
+	parent = Path(cookie_file).parent
+	return parent.parent.name if parent.name == "Network" else parent.name
 
 
 def _cookie_row_present(db_file: str, *, domain_name: str, cookie_name: str) -> bool | None:
@@ -270,13 +295,15 @@ def _try_extract(
 	required_cookie: str = "wt2",
 	stoken_cookie: str = "__zp_stoken__",
 	failures: list[str] | None = None,
+	cookie_file: str | None = None,
 ) -> dict[str, Any] | None:
 	"""尝试从单个浏览器提取指定域名 cookies。
 
 	failures 非空时追加失败原因（异常类型与截断后的消息，不含 Cookie 值），供调用方给出诊断。
+	cookie_file 指定要读的 Cookie 库；不给时由 browser_cookie3 按默认规则选。
 	"""
 	try:
-		cj = loader(domain_name=domain_name)
+		cj = loader(domain_name=domain_name, cookie_file=cookie_file) if cookie_file else loader(domain_name=domain_name)
 		domain_fragment = domain_name.lstrip(".")
 		cookies = {c.name: c.value for c in cj if domain_fragment in (c.domain or "")}
 		has_required_cookie = required_cookie in cookies
