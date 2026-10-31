@@ -76,7 +76,7 @@ pbpaste | boss login --curl-file -
 | `boss recommend` | 获取个性化推荐职位 |
 | `boss detail <security_id>` | 职位详情（`--job-id` 走快速通道） |
 | `boss show <#>` | 按编号查看上次搜索结果 |
-| `boss cities` | 40 个支持城市 |
+| `boss cities` | 44 个支持城市（含不限城市的「全国」） |
 
 `recommend` 的 `pagination.has_more` 只在平台返回布尔 `hasMore` 时取 `true` 或 `false`；缺失或类型不明确时为 `null`，`has_more_source=unknown`，不会给出下一页执行提示。仅 `true` 提示翻页；`false` 与 `null` 不触发额外探测。兼容字段 `total` 仍是本次返回条数，`total_kind=returned_page_count`，不代表全量职位数。
 
@@ -280,7 +280,7 @@ HTTP `429` 或业务 code `9` 会保存共享冷却，支持 `Retry-After` 的�
 
 ```bash
 boss search "golang" \
-  --city 广州 \             # 城市（40 个可选）
+  --city 广州 \             # 城市（44 个可选，含「全国」）
   --salary 20-50K \         # 薪资范围
   --experience 3-5年,5-10年 \ # 经验要求（支持逗号多选）
   --education 本科,硕士 \    # 学历要求（支持逗号多选）

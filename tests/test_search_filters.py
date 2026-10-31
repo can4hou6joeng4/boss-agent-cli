@@ -1,9 +1,11 @@
 """Tests for search_filters module — list-page prefiltering and pipeline."""
 import pytest
 
+from boss_agent_cli.api import endpoints
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	SearchUrlParseError,
+	city_constraint,
 	compute_match_score,
 	parse_salary_range,
 	parse_boss_search_url,
@@ -294,3 +296,32 @@ class TestComputeMatchScore:
 
 		assert two > one
 		assert compute_match_score(item, ["双休(标签)", "五险一金(标签)"], criteria) == two
+
+
+# ── 全国：不限城市 ──────────────────────────────────────────
+
+
+def test_nationwide_city_resolves_to_platform_code():
+	assert endpoints.CITY_CODES["全国"] == "100010000"
+	for city, code in (("嘉兴", "101210300"), ("徐州", "101190800"), ("香港", "101320100")):
+		assert endpoints.CITY_CODES[city] == code
+
+
+def test_nationwide_city_is_no_local_city_constraint():
+	assert city_constraint("全国") is None
+	assert city_constraint("杭州") == "杭州"
+	assert city_constraint(None) is None
+
+
+def test_nationwide_search_does_not_prefilter_every_job_by_city():
+	"""全国不是具体城市名：本地预筛不能因为 cityName 不含「全国」就把职位全排除。"""
+	criteria = SearchFilterCriteria(query="后端", city="全国")
+	ok, reasons = prefilter_job({"jobName": "后端", "cityName": "杭州"}, criteria)
+	assert ok, reasons
+
+
+def test_specific_city_prefilter_still_rejects_other_cities():
+	criteria = SearchFilterCriteria(query="后端", city="杭州")
+	ok, reasons = prefilter_job({"jobName": "后端", "cityName": "上海"}, criteria)
+	assert not ok
+	assert reasons == ["城市不匹配: 上海 != 杭州"]

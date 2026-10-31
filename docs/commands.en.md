@@ -80,7 +80,7 @@ This is an alternative credential input, not a login/risk-control bypass or a co
 | `boss recommend` | Fetch personalized job recommendations |
 | `boss detail <security_id>` | Job detail (`--job-id` uses the fast path) |
 | `boss show <#>` | Re-view a numbered result from the last search |
-| `boss cities` | 40 supported cities |
+| `boss cities` | 44 supported cities, including 全国 for no city limit |
 
 `recommend` sets `pagination.has_more` to `true` or `false` only when the platform returns a boolean `hasMore`. A missing or ambiguous value produces `null` with `has_more_source=unknown` and no next-page action. Only `true` suggests another page; neither `false` nor `null` triggers an additional probe. The compatible `total` field remains the number of returned items, with `total_kind=returned_page_count`, rather than an overall job count.
 

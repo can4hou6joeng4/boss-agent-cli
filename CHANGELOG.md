@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- `--city` 新增「全国」（平台的不限城市码 `100010000`）和嘉兴、徐州、香港，共 44 个城市。「全国」的码在 jackwener/boss-cli 与 ThisZhouS/jobwork 中一致，后者在真实搜索请求里用过；另外三个取自 jackwener/boss-cli，其城市表与本项目共有的 38 项完全一致。本地预筛与匹配评分把「全国」当作没有城市条件：此前就算平台支持，本地预筛也会因为职位城市名不含「全国」而把结果全部排除，评分里也会给每个职位记一条「城市不匹配」。
 - `boss login --cookie-source <浏览器>` 没提取到时，stderr 会说明是读取失败（附异常类型与原因）还是该浏览器没有登录 Cookie。拿不到解密密钥时按平台说明原因（macOS 钥匙串未授权、Windows 上新版 Chrome / Edge 的 App-Bound 加密、Linux 密钥环未解锁），并提示改用 `--cdp` 或 `--curl-file`。自动探测全部落空时，只汇总无法解密的浏览器。参考 jackwener/boss-cli 的提取诊断及其 #9、#15。
 
 ### Changed

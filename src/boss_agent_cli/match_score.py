@@ -3,6 +3,7 @@ from typing import Any
 from boss_agent_cli.api.models import JobItem
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
+	city_constraint,
 	meets_education_threshold,
 	meets_experience_threshold,
 	parse_salary_range,
@@ -39,7 +40,7 @@ def score_job_item(job: JobItem, *, criteria: SearchFilterCriteria | None, expec
 	mismatch_reasons: list[str] = []
 	score = 0
 
-	city_target = criteria.city if criteria and criteria.city else preferences.get("city")
+	city_target = (city_constraint(criteria.city) if criteria else None) or preferences.get("city")
 	if city_target:
 		if city_target in job.city:
 			score += 25

@@ -182,7 +182,8 @@ def test_cities_command():
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	assert parsed["command"] == "cities"
-	assert parsed["data"]["count"] == 40
+	assert parsed["data"]["count"] == 44
+	assert "全国" in parsed["data"]["cities"]
 	assert "广州" in parsed["data"]["cities"]
 	assert "北京" in parsed["data"]["cities"]
 	assert parsed["hints"] is not None

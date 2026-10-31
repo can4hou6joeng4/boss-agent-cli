@@ -218,7 +218,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_cities",
-			description="列出支持的城市列表（约 40 个）",
+			description="列出支持的城市列表（约 44 个，含不限城市的「全国」）",
 			input_schema={"type": "object", "properties": {}, "required": []},
 		),
 		ToolDefinition(
