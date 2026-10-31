@@ -172,7 +172,9 @@ def test_maintainer_docs_cover_open_source_governance():
 	release = read("docs/maintainer/release-checklist.md")
 	labels = read("docs/maintainer/labels.md")
 
-	assert "Required status checks and approving reviews are intentionally not configured" in branch
+	assert "Approving reviews are intentionally not required" in branch
+	assert "Squash merge only" in branch
+	assert "actions/runs/<run_id>/approve" in branch
 	assert "uv run python scripts/quality_baseline.py" in branch
 	assert "BOSS_SMOKE_DRY_RUN=1 uv run python scripts/smoke_p0.py" in branch
 	assert "uv run python evals/run_eval.py --mode fixture" in branch
@@ -192,6 +194,19 @@ def test_maintainer_docs_cover_open_source_governance():
 	assert "platform-drift" in labels
 	assert "contract" in labels
 	assert "triage" in labels
+
+
+def test_branch_protection_required_checks_match_ci_job_names():
+	"""规则集按任务名匹配必需检查：文档列出的检查必须与 ci.yml 的任务名和 Python 矩阵一致。"""
+	jobs = load_yaml(".github/workflows/ci.yml")["jobs"]
+	expected = [jobs["lint"]["name"]] + [
+		jobs["test"]["name"].replace("${{ matrix.python-version }}", version)
+		for version in jobs["test"]["strategy"]["matrix"]["python-version"]
+	]
+	branch = read("docs/maintainer/branch-protection.md")
+	listed = branch.split("Required status checks, matched by CI job name:", 1)[1].split("```text\n", 1)[1].split("```", 1)[0]
+
+	assert [line.strip() for line in listed.strip().splitlines()] == expected
 
 
 def test_contributing_links_maintainer_governance_docs():
