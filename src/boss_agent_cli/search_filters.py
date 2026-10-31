@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlparse
 from boss_agent_cli.api import endpoints
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded, is_request_stop, request_control, request_controls_active
-from boss_agent_cli.api.models import BOSS_INTERNSHIP_RESPONSE_JOB_TYPE, JobItem, is_boss_online
+from boss_agent_cli.api.models import BOSS_INTERNSHIP_RESPONSE_JOB_TYPE, JobItem, field_list, is_boss_online
 from boss_agent_cli.services.job_identity import deduplicate_job_result
 
 # ── Ordinal lookups for threshold comparisons ───────────────────────
@@ -677,7 +677,7 @@ def _fetch_and_check(
 	need_active=True 时总是取一次新详情（描述缓存只省福利那部分）。
 	list_welfare 是列表标签已经命中的福利结果，此时只需要补活跃度。
 	"""
-	welfare_list = raw_item.get("welfareList", [])
+	welfare_list = field_list(raw_item, "welfareList")
 	outcome = _DetailOutcome()
 	desc = ""
 	card_active = ""
@@ -1031,7 +1031,7 @@ def run_search_pipeline(
 					details = error["details"]
 			raise SearchPipelinePlatformError(code, message or "搜索结果获取失败", details=details)
 		platform_data = _unwrap_platform_data(client, raw)
-		job_list = platform_data.get("jobList", [])
+		job_list = field_list(platform_data, "jobList")
 		last_page_scanned = current_page
 		stats.pages_scanned += 1
 		stats.jobs_seen += len(job_list)
@@ -1073,7 +1073,7 @@ def run_search_pipeline(
 					need_active = decision == "detail"
 				match_results: list[str] = []
 				if welfare_conditions:
-					match_results = match_all_welfare(welfare_conditions, raw_item.get("welfareList", []), "")
+					match_results = match_all_welfare(welfare_conditions, field_list(raw_item, "welfareList"), "")
 				if need_active or (welfare_conditions and not match_results):
 					need_detail.append(_DetailTask(
 						raw_item,
