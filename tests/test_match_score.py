@@ -57,3 +57,16 @@ def test_score_job_item_can_use_expect_data_when_criteria_missing():
 	result = score_job_item(job, criteria=None, expect_data=expect_data)
 	assert result["match_score"] >= 60
 	assert result["match_reasons"]
+
+
+def test_score_job_item_nationwide_search_falls_back_to_expected_city():
+	"""全国不是具体城市：不能给每个职位都记「城市不匹配」，城市评分改看求职期望。"""
+	job = _job(cityName="上海")
+	criteria = SearchFilterCriteria(query="golang", city="全国")
+
+	without_expect = score_job_item(job, criteria=criteria, expect_data=None)
+	assert "城市不匹配" not in without_expect["mismatch_reasons"]
+	assert "城市匹配" not in without_expect["match_reasons"]
+
+	with_expect = score_job_item(job, criteria=criteria, expect_data={"city": "上海"})
+	assert "城市匹配" in with_expect["match_reasons"]

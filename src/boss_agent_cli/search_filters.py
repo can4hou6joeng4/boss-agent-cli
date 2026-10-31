@@ -19,6 +19,15 @@ from boss_agent_cli.services.job_identity import deduplicate_job_result
 
 # ── Ordinal lookups for threshold comparisons ───────────────────────
 
+# 城市码表里的「全国」是平台的不限城市码，不是具体城市
+NATIONWIDE_CITY = "全国"
+
+
+def city_constraint(city: str | None) -> str | None:
+	"""本地比较用的城市条件；全国视为没有城市条件。"""
+	return None if city == NATIONWIDE_CITY else city
+
+
 _EXPERIENCE_ORDER: dict[str, int] = {
 	"应届": 0,
 	"1年以内": 1,
@@ -484,10 +493,11 @@ def prefilter_job(
 	reasons: list[str] = []
 
 	# City filter
-	if criteria.city:
+	city = city_constraint(criteria.city)
+	if city:
 		item_city = raw_item.get("cityName", "")
-		if item_city and criteria.city not in item_city:
-			reasons.append(f"城市不匹配: {item_city} != {criteria.city}")
+		if item_city and city not in item_city:
+			reasons.append(f"城市不匹配: {item_city} != {city}")
 
 	# Salary filter — reject only if candidate max is below required min
 	if criteria.salary:
@@ -583,7 +593,8 @@ def compute_match_score(item: dict[str, Any], welfare_results: list[str], criter
 		elif result.endswith("(描述)"):
 			score += 8
 
-	if criteria.city and criteria.city in str(item.get("city", "")):
+	city = city_constraint(criteria.city)
+	if city and city in str(item.get("city", "")):
 		score += 12
 
 	if criteria.salary:
