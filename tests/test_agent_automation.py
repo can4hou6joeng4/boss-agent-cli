@@ -463,3 +463,46 @@ def test_schema_and_mcp_expose_agent_automation(tmp_path: Path) -> None:
 	assert "agent" in payload["data"]["commands"]
 	assert payload["data"]["commands"]["agent"]["availability"]["recruiter_platforms"] == ["zhipin"]
 	assert "CIRCUIT_BREAKER_OPEN" in payload["data"]["error_codes"]
+
+
+def test_local_ai_null_content_falls_back_to_template_and_cycle_continues(tmp_path: Path, monkeypatch) -> None:
+	"""#500：模型返回 content null 不再让整轮中断，排在后面的会话照常处理；上限跟随配置。"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	store = AutomationStore(tmp_path)
+	ai_store = AIConfigStore(tmp_path)
+	ai_store.save_config(ai_provider="vllm", ai_model="Qwen/Qwen3-8B", ai_max_tokens=2048)
+	ai_store.save_api_key("local")
+	text = "你好，我在上海做过3年销售，擅长客户沟通，大专，想看机会"
+	adapter = RecordingMockRecruiterAutomationPlatform(
+		"zhipin",
+		[_conversation(text, "候选人一"), _conversation(text, "候选人二")],
+	)
+	response = MagicMock()
+	response.raise_for_status = MagicMock()
+	response.json.return_value = {
+		"choices": [
+			{
+				"index": 0,
+				"finish_reason": "length",
+				"message": {"role": "assistant", "content": None, "reasoning": "Okay"},
+			}
+		]
+	}
+
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=response) as post:
+		report = run_automation_cycle(
+			adapter,
+			store,
+			AutomationConfig(reply_strategy=ReplyStrategy.LOCAL_AI),
+			platform="zhipin",
+			dry_run=True,
+			limit=2,
+		)
+
+	assert len(report.events) == 2
+	assert post.call_count == 2
+	assert post.call_args.kwargs["json"]["max_tokens"] == 2048
+	for event in report.events:
+		assert "local ai unavailable" in event.reason
+		assert "max_tokens=2048" in event.reason
+		assert "template fallback" in event.reason

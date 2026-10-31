@@ -891,3 +891,61 @@ def test_chat_coach_with_resume_success(tmp_path, monkeypatch):
 	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)):
 		result = _invoke(runner, tmp_path, ["chat-coach", "聊天", "--resume", "test-resume"])
 	assert result.exit_code == 0
+
+
+# ── #499 / #500：模型参数与异常回复形状 ─────────────────────
+
+import httpx  # noqa: E402
+
+
+def _mock_ai_raw(payload: dict):
+	mock_resp = MagicMock()
+	mock_resp.status_code = 200
+	mock_resp.json.return_value = payload
+	mock_resp.raise_for_status = MagicMock()
+	return mock_resp
+
+
+def test_interview_prep_null_content_returns_ai_api_error_envelope(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	reply = {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": None}}]}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_raw(reply)):
+		result = _invoke(runner, tmp_path, ["interview-prep", "Python 后端开发"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AI_API_ERROR"
+	assert "没有返回文本内容" in parsed["error"]["message"]
+
+
+def test_documented_gpt5_config_sends_reasoning_params(tmp_path, monkeypatch):
+	"""docs/integrations/ai-models.md 的 gpt-5 示例配置要能直接用。"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine-id")
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["config", "--provider", "openai", "--model", "gpt-5", "--api-key", "sk-test-key"])
+	mock_result = {"job_summary": "后端工程师岗位", "questions": [], "preparation_tips": []}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)) as post:
+		result = _invoke(runner, tmp_path, ["interview-prep", "Python 后端开发"])
+	assert result.exit_code == 0, result.output
+	payload = post.call_args.kwargs["json"]
+	assert payload["model"] == "gpt-5"
+	assert payload["max_completion_tokens"] == 4096
+	assert "max_tokens" not in payload
+	assert "temperature" not in payload
+
+
+def test_ai_http_400_surfaces_provider_reason_and_param_hint(tmp_path, monkeypatch):
+	_setup_ai_config(tmp_path, monkeypatch)
+	runner = CliRunner()
+	response = httpx.Response(
+		400,
+		json={"error": {"message": "Unsupported value: 'temperature' does not support 0.7 with this model."}},
+		request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
+	)
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=response):
+		result = _invoke(runner, tmp_path, ["interview-prep", "Python 后端开发"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AI_API_ERROR"
+	assert "does not support 0.7" in parsed["error"]["message"]
+	assert "--model" in parsed["error"]["recovery_action"]
