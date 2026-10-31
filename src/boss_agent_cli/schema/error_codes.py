@@ -144,6 +144,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": None,
 	},
+	"INTERNAL_ERROR": {
+		"message": "CLI 内部错误，或平台返回了未预期的数据结构",
+		"recoverable": False,
+		"recovery_action": "不要重试：同样的输入会得到同样的结果。先升级到最新版本；仍出现时附上命令与 error.message 提交 issue",
+	},
 	"NETWORK_ERROR": {
 		"message": "网络请求失败",
 		"recoverable": True,

@@ -38,7 +38,7 @@ boss schema --format native
 
 当出现以下现象时，优先按平台漂移处理：
 
-- 之前正常的只读命令突然返回 `NETWORK_ERROR`、`AUTH_EXPIRED`、`TOKEN_REFRESH_FAILED` 或结构异常。
+- 之前正常的只读命令突然返回 `NETWORK_ERROR`、`INTERNAL_ERROR`、`AUTH_EXPIRED`、`TOKEN_REFRESH_FAILED` 或结构异常。
 - `search` 有结果但 `detail` 失败。
 - `boss schema --format native` 正常，但 live 命令失败。
 - 同一命令在 mock 测试中通过，在真实账号中失败。

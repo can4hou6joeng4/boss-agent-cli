@@ -178,6 +178,7 @@ SYSEXITS_EXIT_CODES: dict[str, int] = {
 	"LOGIN_RISK_CONTROL": 69,
 	"NOT_SUPPORTED": 69,
 	"PLATFORM_NOT_SUPPORTED": 69,
+	"INTERNAL_ERROR": 70,  # EX_SOFTWARE
 }
 _EXIT_CODES_MODES = ("envelope", "sysexits")
 _exit_codes_mode = "envelope"

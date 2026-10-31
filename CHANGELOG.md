@@ -9,6 +9,7 @@
 - `boss login --cookie-source <浏览器>` 没提取到时，stderr 会说明是读取失败（附异常类型与原因）还是该浏览器没有登录 Cookie。拿不到解密密钥时按平台说明原因（macOS 钥匙串未授权、Windows 上新版 Chrome / Edge 的 App-Bound 加密、Linux 密钥环未解锁），并提示改用 `--cdp` 或 `--curl-file`。自动探测全部落空时，只汇总无法解密的浏览器。参考 jackwener/boss-cli 的提取诊断及其 #9、#15。
 
 ### Changed
+- 命令兜底不再把 `TypeError` / `AttributeError` / `KeyError` / `IndexError` 报成 `NETWORK_ERROR`（`recoverable: true`、建议「重试」）。这类错误来自 CLI 缺陷或平台返回了未预期的数据结构，同样的输入必然得到同样的结果；重试的若是平台请求，还会白白消耗请求预算。现在归为新错误码 `INTERNAL_ERROR`（不可恢复，`error.message` 带异常类型），`--exit-codes sysexits` 下退出码为 70（EX_SOFTWARE）。命令装饰器、wizard 运行器与 `me` 的兜底都已区分；其他异常仍为 `NETWORK_ERROR`，行为不变。
 - Agent 集成文档（`docs/agent-quickstart.md`、Claude Code、Codex、Cursor、Windsurf、Shell Agent）默认改为只读流程：搜岗、看详情、整理本地候选池、导出与基于已确认事实写草稿。`boss apply` / `boss greet` / `boss batch-greet` 等平台写操作，只在用户当前对话点名具体岗位、并在操作前再次确认时执行一次；不建外发队列、不无人值守批量、不复用同一话术、不重试结果不明的写操作；遇到风控、验证页或限流时保存 checkpoint 并停止。`tests/test_agent_host_examples.py` 断言各宿主文档都写明这条边界。(#480)
 
 ### Fixed

@@ -292,6 +292,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `ALREADY_APPLIED` | Already applied | Skip |
 | `GREET_LIMIT` | Daily greet quota hit | Pause until tomorrow |
 | `NETWORK_ERROR` | Connection failed | Retry with backoff |
+| `INTERNAL_ERROR` | CLI bug or unexpected platform data shape | Do not retry; upgrade, and if it persists open an issue with the command and error.message |
 | `INVALID_PARAM` | Bad argument | Fix parameter |
 | `AI_NOT_CONFIGURED` | AI service not set up | `boss ai config` |
 | `AI_API_ERROR` | AI provider call failed | Retry / check key |

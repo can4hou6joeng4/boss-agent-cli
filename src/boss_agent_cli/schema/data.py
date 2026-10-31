@@ -914,7 +914,7 @@ SCHEMA_DATA = {
 			"type": "string",
 			"default": "envelope",
 			"choices": ["envelope", "sysexits"],
-			"description": "退出码风格。envelope（默认）保持 0=成功/1=失败；sysexits 按错误类别返回语义化退出码（77 认证；75 限流/预算/超时；78 参数/配置；69 风控/平台不支持），stdout 信封不变",
+			"description": "退出码风格。envelope（默认）保持 0=成功/1=失败；sysexits 按错误类别返回语义化退出码（77 认证；75 限流/预算/超时；78 参数/配置；69 风控/平台不支持；70 内部错误），stdout 信封不变",
 		},
 		"--role": {
 			"type": "string",
@@ -930,7 +930,7 @@ SCHEMA_DATA = {
 		"exit_code": {
 			"0": "命令成功 (ok=true)",
 			"1": "命令失败 (ok=false)",
-			"sysexits": "可选 --exit-codes sysexits：0 成功；77 认证；75 限流/预算/超时；78 参数/配置；69 风控/平台不支持；其余 1",
+			"sysexits": "可选 --exit-codes sysexits：0 成功；77 认证；75 限流/预算/超时；78 参数/配置；69 风控/平台不支持；70 内部错误；其余 1",
 		},
 		"hints": {
 			"next_actions": "面向 AI Agent 的后继命令（boss xxx 形式），由 Agent 直接执行",
