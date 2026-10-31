@@ -17,7 +17,7 @@ from boss_agent_cli.ai.local_models import (
 	read_imported_models,
 	recommended_model_rows,
 )
-from boss_agent_cli.ai.service import AIService, AIServiceError
+from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action_for
 from rich.table import Table
 
 from boss_agent_cli import display
@@ -200,12 +200,14 @@ def local_smoke_cmd(ctx: click.Context) -> None:
 			recovery_action="boss ai local configure --runtime ollama --model qwen3:14b",
 		)
 		return
+	# 输出上限用配置值而不是写死的小数：思考模型在几十个 token 内写不完思考，
+	# 健康检查应和自动化用同一个上限，「调大 max_tokens」的建议才对它生效
 	service = AIService(
 		base_url=base_url,
 		api_key=api_key,
 		model=str(model),
 		temperature=0.1,
-		max_tokens=32,
+		max_tokens=int(config.get("ai_max_tokens") or 512),
 	)
 	try:
 		reply = service.chat([
@@ -219,8 +221,9 @@ def local_smoke_cmd(ctx: click.Context) -> None:
 			code="AI_API_ERROR",
 			message=f"本地 AI 服务调用失败: {exc}",
 			recoverable=True,
-			recovery_action="确认本地模型服务已启动后重试",
+			recovery_action=recovery_action_for(exc, "确认本地模型服务已启动后重试"),
 		)
+		return
 	handle_output(
 		ctx,
 		"ai.local.smoke",

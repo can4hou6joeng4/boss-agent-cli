@@ -39,6 +39,10 @@ boss ai config \
   --api-key <OPENAI_KEY>
 ```
 
+o 系列与 gpt-5 及之后的型号是推理模型，只接受默认的 `temperature`，并要求用 `max_completion_tokens` 代替 `max_tokens`。CLI 按模型名自动切换：对这些模型不发送 `temperature`（`--temperature` 不生效），`--max-tokens` 的值改用 `max_completion_tokens` 发送。推理过程的 token 也计入这个上限，报错提示「模型在输出正文前用完了 max_completion_tokens」时，用 `boss ai config --max-tokens` 调大。经 OpenRouter 调用（如 `openai/gpt-5`）时仍发送 `max_tokens`，由 OpenRouter 转换。
+
+Kimi 新型号（如 `kimi-k2.6`、`kimi-k2.7-code`、`kimi-k3`）的 temperature 由平台固定，传入其他值会报错；CLI 对 Kimi K2.5 及之后的型号都不发送这个参数。
+
 ### DeepSeek-V3（国内直连）
 
 ```bash
@@ -99,7 +103,7 @@ boss ai polish my-resume
 配置错误会返回错误码：
 
 - `AI_NOT_CONFIGURED`：未配置 provider / model / api_key
-- `AI_API_ERROR`：API 调用失败（鉴权/网络/限速等）
+- `AI_API_ERROR`：API 调用失败（鉴权、网络、限速、模型不支持的参数、输出上限不够写完正文等）。`error.message` 带上服务端返回的原因（疑似密钥会被遮掉），`recovery_action` 按失败类型给出下一步
 - `AI_PARSE_ERROR`：模型返回不符合预期 JSON 格式（重试即可）
 
 ## 相关命令
