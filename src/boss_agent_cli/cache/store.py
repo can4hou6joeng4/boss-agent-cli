@@ -60,15 +60,24 @@ class CacheRecordInvalid(ValueError):
 		self.column = column
 
 
-def _decode_record(kind: str, record_id: str, column: str, raw: Any) -> Any:
+def _decode_record(kind: str, record_id: str, column: str, raw: Any, *, expected: type | None = None) -> Any:
 	try:
-		return json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
+		parsed = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
 	except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as exc:
 		raise CacheRecordInvalid(kind, record_id, column, str(exc)) from exc
+	# 结构漂移（合法 JSON 但不是预期的容器）与语法损坏等价：后续按 dict / list
+	# 使用时同样是 AttributeError traceback，必须在读取边界一次拦下。
+	if expected is dict and not isinstance(parsed, dict):
+		raise CacheRecordInvalid(kind, record_id, column, "顶层必须是 JSON object")
+	if expected is list and not isinstance(parsed, list):
+		raise CacheRecordInvalid(kind, record_id, column, "顶层必须是 JSON array")
+	return parsed
 
 
-def _decode_optional_record(kind: str, record_id: str, column: str, raw: Any) -> Any:
-	return None if not raw else _decode_record(kind, record_id, column, raw)
+def _decode_optional_record(
+	kind: str, record_id: str, column: str, raw: Any, *, expected: type | None = None
+) -> Any:
+	return None if not raw else _decode_record(kind, record_id, column, raw, expected=expected)
 
 
 class CacheStore:
@@ -368,11 +377,13 @@ class CacheStore:
 		if row is None:
 			return None
 		return {
-			"run_id": row[0], "params": _decode_record("crawl_run", run_id, "params", row[1]), "status": row[2],
+			"run_id": row[0],
+			"params": _decode_record("crawl_run", run_id, "params", row[1], expected=dict),
+			"status": row[2],
 			"stop_requested": bool(row[3]),
 			"requests_attempted": int(row[4]), "detail_requests_attempted": int(row[5]), "elapsed_seconds": int(row[6]),
 			"next_page": row[7], "list_finished": bool(row[8]), "output_dir": row[9], "error": row[10],
-			"hook_results": _decode_record("crawl_run", run_id, "hook_results", row[11]),
+			"hook_results": _decode_record("crawl_run", run_id, "hook_results", row[11], expected=list),
 			"created_at": row[12], "updated_at": row[13],
 		}
 
@@ -459,7 +470,7 @@ class CacheStore:
 			return None
 		return {
 			"selector": row[0], "page_no": row[1],
-			"payload": _decode_record("crawl_job", job_key, "payload", row[2]), "detail_done": bool(row[3]),
+			"payload": _decode_record("crawl_job", job_key, "payload", row[2], expected=dict), "detail_done": bool(row[3]),
 		}
 
 	def list_crawl_jobs(self, run_id: str) -> list[dict[str, Any]]:
@@ -470,7 +481,7 @@ class CacheStore:
 		return [
 			{
 				"job_key": row[0], "selector": row[1], "page_no": row[2],
-				"payload": _decode_record("crawl_job", str(row[0]), "payload", row[3]), "detail_done": bool(row[4]),
+				"payload": _decode_record("crawl_job", str(row[0]), "payload", row[3], expected=dict), "detail_done": bool(row[4]),
 			}
 			for row in rows
 		]
@@ -559,9 +570,9 @@ class CacheStore:
 			"mode": row[4],
 			"status": row[5],
 			"current_step": row[6],
-			"params": _decode_record("workflow_run", run_id, "params", row[7]),
-			"last_result": _decode_optional_record("workflow_run", run_id, "last_result", row[8]),
-			"error": _decode_optional_record("workflow_run", run_id, "error", row[9]),
+			"params": _decode_record("workflow_run", run_id, "params", row[7], expected=dict),
+			"last_result": _decode_optional_record("workflow_run", run_id, "last_result", row[8], expected=dict),
+			"error": _decode_optional_record("workflow_run", run_id, "error", row[9], expected=dict),
 			"created_at": row[10],
 			"updated_at": row[11],
 		}
@@ -604,8 +615,8 @@ class CacheStore:
 				"step_name": row[0],
 				"ordinal": row[1],
 				"status": row[2],
-				"result": _decode_optional_record("workflow_step", f"{run_id}/{row[0]}", "result", row[3]),
-				"error": _decode_optional_record("workflow_step", f"{run_id}/{row[0]}", "error", row[4]),
+				"result": _decode_optional_record("workflow_step", f"{run_id}/{row[0]}", "result", row[3], expected=dict),
+				"error": _decode_optional_record("workflow_step", f"{run_id}/{row[0]}", "error", row[4], expected=dict),
 				"started_at": row[5],
 				"finished_at": row[6],
 			}

@@ -641,10 +641,12 @@ def test_resume_background_maps_launch_failure_to_crawl_unavailable(tmp_path, mo
 # ── 本地记录损坏 ──────────────────────────────────────────────────────
 
 
-def _break_column(tmp_path: Path, table: str, column: str, run_id: str = "run-1") -> None:
+def _break_column(
+	tmp_path: Path, table: str, column: str, run_id: str = "run-1", *, value: str = "{not json"
+) -> None:
 	db_path = tmp_path / "cache" / "boss_agent.db"
 	with sqlite3.connect(db_path) as conn:
-		conn.execute(f"UPDATE {table} SET {column} = ? WHERE run_id = ?", ("{not json", run_id))
+		conn.execute(f"UPDATE {table} SET {column} = ? WHERE run_id = ?", (value, run_id))
 
 
 @pytest.mark.parametrize(
@@ -701,3 +703,22 @@ def test_corrupt_run_record_in_foreground_resume_is_not_invalid_param(tmp_path, 
 	result = _invoke(runner, tmp_path, "crawl", "resume", "run-1")
 	assert result.exit_code == 1, result.output
 	assert _envelope(result)["error"]["code"] == "CACHE_RECORD_INVALID"
+
+
+def test_structurally_drifted_params_reports_envelope(tmp_path):
+	"""合法 JSON 但不是 object 时，后续 .get() 会抛 AttributeError，同样必须在读取边界拦下。"""
+	_seed_run(tmp_path, "run-1")
+	_break_column(tmp_path, "crawl_runs", "params", value='"not-an-object"')
+	result = _invoke(CliRunner(), tmp_path, "crawl", "status", "run-1")
+	assert result.exit_code == 1, result.output
+	error = _envelope(result)["error"]
+	assert error["code"] == "CACHE_RECORD_INVALID"
+	assert "JSON object" in error["message"]
+
+
+def test_structurally_drifted_hook_results_reports_envelope(tmp_path):
+	_seed_run(tmp_path, "run-1")
+	_break_column(tmp_path, "crawl_runs", "hook_results", value='{"not": "a list"}')
+	result = _invoke(CliRunner(), tmp_path, "crawl", "status", "run-1")
+	assert result.exit_code == 1, result.output
+	assert "JSON array" in _envelope(result)["error"]["message"]
