@@ -174,6 +174,37 @@ def test_config_set_browser_source_validates_choice(tmp_path):
 	assert parsed["data"]["value"] == "auto"
 
 
+@pytest.mark.parametrize("value", [5, True, ["auto"], {"name": "auto"}])
+def test_non_string_browser_source_in_config_returns_envelope(tmp_path, value):
+	"""config.json 里 browser_source 不是字符串时不能 traceback，要按参数错误给信封。"""
+	(tmp_path / "config.json").write_text(json.dumps({"browser_source": value}), encoding="utf-8")
+
+	code, parsed = _invoke("config", "list", tmp_path=tmp_path)
+
+	assert code == 1
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	message = parsed["error"]["message"]
+	assert "不支持的浏览器通道" in message
+	assert repr(value) in message
+	assert "auto" in message
+
+
+def test_browser_source_override_recovers_from_non_string_config(tmp_path):
+	"""启动期校验挡住坏配置时，--browser-source 覆盖仍要能执行修复命令。"""
+	(tmp_path / "config.json").write_text(json.dumps({"browser_source": 5}), encoding="utf-8")
+
+	runner = CliRunner()
+	result = runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--browser-source", "auto", "config", "reset", "browser_source"],
+	)
+
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert json.loads((tmp_path / "config.json").read_text(encoding="utf-8")) == {}
+
+
 def test_parse_value_int_from_default_type():
 	"""_parse_value 按 int 默认值类型转换输入。"""
 	from boss_agent_cli.commands.config_cmd import _parse_value
