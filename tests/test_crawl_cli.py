@@ -515,3 +515,5 @@ def test_resume_background_maps_launch_failure_to_crawl_unavailable(tmp_path, mo
 	assert error["code"] == "CRAWL_UNAVAILABLE"
 	assert error["recoverable"] is True
 	assert "boss crawl resume run-1" in error["recovery_action"]
+	# OSError 多来自磁盘满或目录权限，指引必须先查这两项，与 crawl start 一致。
+	assert "检查磁盘空间与数据目录权限" in error["recovery_action"]
