@@ -80,6 +80,23 @@ def _decode_optional_record(
 	return None if not raw else _decode_record(kind, record_id, column, raw, expected=expected)
 
 
+def _validate_workflow_params(run_id: str, params: dict[str, Any]) -> dict[str, Any]:
+	"""workflow_runs.params 的嵌套结构同样要在读取边界校验。
+
+	顶层是合法 JSON object 但 `inputs` 被写成数组 / `requested_steps` 被写成
+	字符串时，恢复任务会在 `dict(params["inputs"])` 抛 TypeError（traceback、
+	没有信封），或把 `"auth_status"` 拆成单字符步骤。这类结构漂移与顶层损坏
+	等价，统一按记录损坏处理。
+	"""
+	inputs = params.get("inputs")
+	if inputs is not None and not isinstance(inputs, dict):
+		raise CacheRecordInvalid("workflow_run", run_id, "params.inputs", "必须是 JSON object")
+	steps = params.get("requested_steps")
+	if steps is not None and (not isinstance(steps, list) or not all(isinstance(item, str) for item in steps)):
+		raise CacheRecordInvalid("workflow_run", run_id, "params.requested_steps", "必须是字符串数组")
+	return params
+
+
 _SQLITE_HEADER = b"SQLite format 3\x00"
 
 
@@ -604,7 +621,9 @@ class CacheStore:
 			"mode": row[4],
 			"status": row[5],
 			"current_step": row[6],
-			"params": _decode_record("workflow_run", run_id, "params", row[7], expected=dict),
+			"params": _validate_workflow_params(
+				run_id, _decode_record("workflow_run", run_id, "params", row[7], expected=dict)
+			),
 			"last_result": _decode_optional_record("workflow_run", run_id, "last_result", row[8], expected=dict),
 			"error": _decode_optional_record("workflow_run", run_id, "error", row[9], expected=dict),
 			"created_at": row[10],

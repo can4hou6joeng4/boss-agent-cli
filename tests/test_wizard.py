@@ -3682,3 +3682,26 @@ def test_structurally_drifted_workflow_params_reports_envelope(tmp_path):
 	payload = json.loads(result.output)
 	assert payload["error"]["code"] == "CACHE_RECORD_INVALID"
 	assert "JSON object" in payload["error"]["message"]
+
+
+@pytest.mark.parametrize(
+	("params", "field"),
+	[
+		({"inputs": [1, 2], "requested_steps": ["auth_status"]}, "inputs"),
+		({"inputs": {"query": "Python"}, "requested_steps": "auth_status"}, "requested_steps"),
+	],
+)
+def test_structurally_drifted_workflow_params_nested_fields_report_envelope(tmp_path, params, field):
+	"""params 顶层是 object、但 inputs / requested_steps 结构漂移时同样不能 traceback。
+
+	`dict(params["inputs"])` 对数组抛 TypeError（没有任何信封），
+	`tuple("auth_status")` 则会把步骤名静默拆成单个字符。
+	"""
+	_seed_corrupt_workflow_run(tmp_path)
+	_break_workflow_column(tmp_path, "workflow_runs", "params", value=json.dumps(params))
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "wizard", "--resume", "corrupt-run"])
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "CACHE_RECORD_INVALID"
+	assert payload["error"]["recoverable"] is True
+	assert field in payload["error"]["message"]
