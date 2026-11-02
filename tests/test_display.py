@@ -15,6 +15,7 @@ from boss_agent_cli.display import (
 	handle_output,
 	handle_error_output,
 	handle_auth_errors,
+	handle_platform_error_output,
 	login_action_for_ctx,
 	risk_error_message,
 )
@@ -384,6 +385,40 @@ class TestHandleAuthErrorsAccountRisk:
 			kwargs = mock_err.call_args[1]
 			assert kwargs["message"] == risk_error_message("ACCOUNT_RISK")
 			assert "fixture-platform-response-token" not in kwargs["message"]
+
+
+# ── handle_platform_error_output 风控分支 ─────────────────────
+
+
+class TestHandlePlatformErrorOutput:
+	def test_risk_code_message_uses_registry_text(self):
+		"""响应字典形态的风控码同样不透传平台响应原文。"""
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True}
+		platform = MagicMock()
+		platform.parse_error.return_value = ("ACCOUNT_RISK", "fixture-platform-response-token")
+
+		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
+			handle_platform_error_output(
+				ctx, "search", platform, {"code": 36}, fallback_message="搜索失败"
+			)
+			kwargs = mock_err.call_args[1]
+			assert kwargs["code"] == "ACCOUNT_RISK"
+			assert kwargs["message"] == risk_error_message("ACCOUNT_RISK")
+			assert "fixture-platform-response-token" not in kwargs["message"]
+
+	def test_non_risk_code_keeps_platform_message(self):
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True}
+		platform = MagicMock()
+		platform.parse_error.return_value = ("RATE_LIMITED", "请求过于频繁")
+
+		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
+			handle_platform_error_output(
+				ctx, "search", platform, {"code": 9}, fallback_message="搜索失败"
+			)
+			kwargs = mock_err.call_args[1]
+			assert kwargs["message"] == "请求过于频繁"
 
 
 # ── 各 renderer 冒烟测试（调用不抛异常即可覆盖） ────────────

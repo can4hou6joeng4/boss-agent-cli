@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 from click.testing import CliRunner
+from boss_agent_cli.display import risk_error_message
 from boss_agent_cli.main import cli
 from boss_agent_cli.search_filters import SearchPipelinePlatformError
 
@@ -899,7 +900,8 @@ def test_export_reports_search_error(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
-	assert parsed["error"]["message"] == "account risk"
+	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
+	assert "account risk" not in parsed["error"]["message"]
 
 
 def _make_friend_item(name, brand, relation_type, last_ts):
@@ -1708,13 +1710,15 @@ def test_search_pipeline_risk_uses_stop_contract(mock_client_cls, mock_auth_cls,
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.get_search.return_value = None
 	_ctx_mock(mock_client_cls)
-	mock_pipeline.side_effect = SearchPipelinePlatformError("ACCOUNT_RISK", "blocked")
+	mock_pipeline.side_effect = SearchPipelinePlatformError("ACCOUNT_RISK", "fixture-platform-response-token")
 
 	runner = CliRunner()
 	result = runner.invoke(cli, ["search", "golang"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
+	assert "fixture-platform-response-token" not in parsed["error"]["message"]
 	assert parsed["error"]["recoverable"] is False
 	assert "停止自动化访问" in parsed["error"]["recovery_action"]
 	assert parsed["hints"]["next_actions"]

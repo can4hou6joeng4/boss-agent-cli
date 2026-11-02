@@ -17,6 +17,7 @@
 - `boss doctor --live-probe` 的在线探测命中风控时，异常会落进通用兜底被记成「探测异常」并原样带出平台响应文本，随后还继续向另一个身份发招聘者接口请求；报告里的 `cdp_risk_lock` 仍是探测前的快照，`hints.next_actions` 还会建议再跑 `status --live` / `doctor`。现在 `PlatformRiskError` 与响应字典形态的风控码都在第一条命中处停止，检查项与 `hints` 按 `RISK_ERROR_CONTRACTS` 给出停止指引，不再透传异常文本；探测后重读本地风险锁，`data.live_probe_risk` 标记命中码，并抑制后续任何会触发平台请求的建议。
 - `hr chat` 读取聊天页快照（`chat_list_snapshot`）时把包括风控与预算停止在内的所有异常都当成「增强失败」吞掉，随后继续发 `userLastMsg` 请求；`boss wizard` 的登录门在 `login` 命中风控后也只显示失败面板，然后回到「现在登录 / 仅看本地功能 / 退出」菜单，等于邀请用户重试已被风控拦截的登录。现在两处都按 `is_request_stop` / `PlatformRiskError` 立即停止：`hr chat` 直接输出风控信封且不再请求最近消息，登录门展示停止指引后退出向导。
 - 共享错误装饰器与 `boss login` 的风控信封仍用 `str(exc)` 作为 `error.message`，而风控异常的消息来自平台响应原文（`raise_platform_risk_response` 直接取平台 `message`），可能带临时凭据。现在两处都改用 `risk_error_message()`：`error.message` 只含错误码登记表文案，停止指引仍由 `recovery_action` / `hints` 承载，与 `me`、`hr download-resume` 等命令一致。
+- 风控信封的消息脱敏只覆盖了异常路径：`search`、`watch`、`detail` 与共用 `handle_platform_error_output` 的三十余条命令在平台以响应字典返回风控码时，仍把平台响应原文当作 `error.message`。现在由 `platform_error_message()` 统一决定文案：风控码只给错误码登记表内容，普通错误码继续保留平台消息或命令兜底文案。
 
 ## [3.2.0] - 2026-11-01
 

@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
 import pytest
 
-from boss_agent_cli.display import error_contract_for_code
+from boss_agent_cli.display import error_contract_for_code, risk_error_message
 from boss_agent_cli.main import cli
 
 
@@ -265,7 +265,7 @@ def test_mark_reports_error_when_platform_rejects(mock_auth_cls, mock_client_cls
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
-	assert parsed["error"]["message"] == "account risk"
+	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
 	assert parsed["error"]["recoverable"] is False
 	assert parsed["error"]["recovery_action"] == "停止自动化访问，回到平台官网手动处理；确认目标业务页风险解除后，由用户执行 boss clean --risk-lock 并显式恢复任务，必要时联系客服"
 
@@ -442,7 +442,7 @@ def test_exchange_reports_friend_list_error(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
-	assert parsed["error"]["message"] == "account risk"
+	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
 	assert parsed["error"]["recoverable"] is False
 	assert parsed["error"]["recovery_action"] == "停止自动化访问，回到平台官网手动处理；确认目标业务页风险解除后，由用户执行 boss clean --risk-lock 并显式恢复任务，必要时联系客服"
 
@@ -891,7 +891,7 @@ def test_interviews_reports_platform_error(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
-	assert parsed["error"]["message"] == "account risk"
+	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
 	assert parsed["error"]["recoverable"] is False
 	assert parsed["error"]["recovery_action"] == "停止自动化访问，回到平台官网手动处理；确认目标业务页风险解除后，由用户执行 boss clean --risk-lock 并显式恢复任务，必要时联系客服"
 

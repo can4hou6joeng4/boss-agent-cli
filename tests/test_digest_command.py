@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
+from boss_agent_cli.display import risk_error_message
 from boss_agent_cli.main import cli
 
 
@@ -228,7 +229,7 @@ def test_digest_reports_interview_error(mock_auth_cls, mock_client_cls, legacy_a
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
-	assert parsed["error"]["message"] == "account risk"
+	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
 
 
 @patch("boss_agent_cli.commands.digest.get_platform_instance")

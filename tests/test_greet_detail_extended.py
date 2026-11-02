@@ -5,6 +5,7 @@ from unittest.mock import patch, MagicMock
 
 from click.testing import CliRunner
 
+from boss_agent_cli.display import risk_error_message
 from boss_agent_cli.main import cli
 
 
@@ -426,12 +427,14 @@ def test_detail_risk_uses_stop_contract(tmp_path):
 	"""detail 的风控错误信封也要带停止指引，而不是只有空白 hints。"""
 	code, parsed = _invoke_detail(
 		"detail", "sid1", "--job-id", "j1", tmp_path=tmp_path,
-		detail_result={"code": 36, "message": "risk"},
+		detail_result={"code": 36, "message": "fixture-platform-response-token"},
 		is_success=False,
-		parse_error=("ACCOUNT_RISK", "risk"),
+		parse_error=("ACCOUNT_RISK", "fixture-platform-response-token"),
 	)
 	assert code == 1
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
+	assert "fixture-platform-response-token" not in parsed["error"]["message"]
 	assert parsed["error"]["recoverable"] is False
 	assert "停止自动化访问" in parsed["error"]["recovery_action"]
 	assert parsed["hints"]["next_actions"]
