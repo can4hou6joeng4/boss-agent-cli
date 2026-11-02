@@ -762,7 +762,8 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					ctx,
 					command_name,
 					code=e.code,
-					message=str(e),
+					# 风控信封不透传平台响应文本（可能带临时凭据），只给登记表文案。
+					message=risk_error_message(e.code),
 					recoverable=False,
 					recovery_action=recovery_action,
 					details=e.details or None,

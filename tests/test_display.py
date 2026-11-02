@@ -16,6 +16,7 @@ from boss_agent_cli.display import (
 	handle_error_output,
 	handle_auth_errors,
 	login_action_for_ctx,
+	risk_error_message,
 )
 
 
@@ -366,6 +367,23 @@ class TestHandleAuthErrorsAccountRisk:
 			kwargs = mock_err.call_args[1]
 			assert kwargs["recoverable"] is False
 			assert "客服" in kwargs["recovery_action"]
+
+	def test_account_risk_message_uses_registry_text(self):
+		"""风控信封不透传平台响应文本，只给错误码登记表里的稳定文案。"""
+		from boss_agent_cli.api.client import AccountRiskError
+
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True}
+
+		@handle_auth_errors("search")
+		def impl(ctx):
+			raise AccountRiskError("fixture-platform-response-token", is_cdp=True)
+
+		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
+			impl(ctx)
+			kwargs = mock_err.call_args[1]
+			assert kwargs["message"] == risk_error_message("ACCOUNT_RISK")
+			assert "fixture-platform-response-token" not in kwargs["message"]
 
 
 # ── 各 renderer 冒烟测试（调用不抛异常即可覆盖） ────────────

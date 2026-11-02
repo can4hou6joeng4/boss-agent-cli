@@ -494,13 +494,18 @@ def test_login_force_rejects_cookie_source(mock_auth_cls):
 def test_login_platform_risk_uses_shared_risk_contract(mock_auth_cls):
 	"""复用探测命中风控时，login 信封与其他命令的 ACCOUNT_RISK 契约一致，不建议重试登录。"""
 	from boss_agent_cli.api.client import AccountRiskError
+	from boss_agent_cli.display import risk_error_message
 
-	mock_auth_cls.return_value.login.side_effect = AccountRiskError("BOSS 直聘风控拦截 (code 36)", is_cdp=True)
+	mock_auth_cls.return_value.login.side_effect = AccountRiskError(
+		"BOSS 直聘风控拦截 fixture-platform-response (code 36)", is_cdp=True
+	)
 
 	result = CliRunner().invoke(cli, ["login", "--cdp"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
 	assert parsed["error"]["recoverable"] is False
+	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
+	assert "fixture-platform-response" not in parsed["error"]["message"]
 	assert "停止自动化访问" in parsed["error"]["recovery_action"]
 	assert parsed["hints"]["next_actions"]
