@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
+from boss_agent_cli.schema.error_codes import ERROR_CODES
 
 
 def _ctx_mock(mock_cls):
@@ -395,3 +396,63 @@ def test_batch_greet_environment_risk_response_is_not_rate_limited(mock_cache_cl
 	assert parsed["error"]["details"]["stopped_reason"] == "ENVIRONMENT_RISK"
 	assert parsed["error"]["details"]["total_greeted"] == 1
 	assert [call.args[0] for call in mock_client.greet.call_args_list] == ["s1", "s2"]
+
+
+# ── 本地记账失败：写操作已生效，不得提示重试 ─────────────
+
+
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
+@patch("boss_agent_cli.commands.greet.AuthManager")
+@patch("boss_agent_cli.commands.greet.CacheStore")
+def test_greet_cache_write_failure_is_not_retryable(mock_cache_cls, mock_auth_cls, mock_get_platform, legacy_args):
+	"""平台已确认招呼发出后记账失败：信封必须不可重试，且说明动作已生效。"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_cache.record_greet.side_effect = OSError("disk full")
+	mock_platform = _ctx_mock(mock_get_platform)
+	mock_platform.greet.return_value = {"code": 0, "zpData": {}}
+	mock_platform.is_success.return_value = True
+
+	runner = CliRunner()
+	result = runner.invoke(cli, [*legacy_args, "greet", "sec_001", "job_001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "LOCAL_STATE_WRITE_FAILED"
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["error"]["recovery_action"] == ERROR_CODES["LOCAL_STATE_WRITE_FAILED"]["recovery_action"]
+	assert "不要自动重发" in parsed["error"]["message"]
+	assert parsed["error"]["details"]["greeted"] is True
+	assert parsed["error"]["details"]["recorded"] is False
+
+
+@patch("boss_agent_cli.commands.greet.time")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
+@patch("boss_agent_cli.commands.greet.AuthManager")
+@patch("boss_agent_cli.commands.greet.CacheStore")
+def test_batch_greet_cache_write_failure_stops_without_resending(
+	mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time, legacy_args
+):
+	"""记账失败不能落进通用重试分支：不重发已成功的招呼，也不继续下一个候选人。"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_cache.record_greet.side_effect = OSError("disk full")
+	mock_client = _three_jobs_client(mock_client_cls)
+	mock_client.greet.return_value = {"code": 0, "zpData": {}}
+	mock_client.is_success.return_value = True
+	mock_time.sleep = MagicMock()
+
+	runner = CliRunner()
+	result = runner.invoke(cli, [*legacy_args, "batch-greet", "test", "--count", "3"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "LOCAL_STATE_WRITE_FAILED"
+	assert parsed["error"]["recoverable"] is False
+	details = parsed["error"]["details"]
+	assert details["total_greeted"] == 1
+	assert details["stopped_reason"] == "LOCAL_STATE_WRITE_FAILED"
+	assert details["greeted"][0]["recorded"] is False
+	# 只发出第一个招呼：不重发、不继续；记账失败后也不再节流等待。
+	assert [call.args[0] for call in mock_client.greet.call_args_list] == ["s1"]
+	mock_time.sleep.assert_not_called()

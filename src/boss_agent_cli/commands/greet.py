@@ -1,5 +1,6 @@
 import random
 import time
+from typing import Any
 
 import click
 
@@ -90,7 +91,22 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 				)
 				return
 
-			cache.record_greet(security_id, job_id, account=account)
+			try:
+				cache.record_greet(security_id, job_id, account=account)
+			except Exception:
+				# 平台已确认招呼发出，本地记账失败不能降级成 NETWORK_ERROR「重试」：
+				# 重跑会绕过 is_greeted 检查，把同一个人再打一次招呼。
+				recoverable, recovery_action = error_contract_for_code("LOCAL_STATE_WRITE_FAILED")
+				handle_error_output(
+					ctx, "greet",
+					code="LOCAL_STATE_WRITE_FAILED",
+					message="已向该招聘者打招呼，但本地状态保存失败；不要自动重发",
+					recoverable=recoverable,
+					recovery_action=recovery_action,
+					details={"security_id": security_id, "job_id": job_id, "greeted": True, "recorded": False},
+					hints={"operator_actions": ["先在 BOSS 直聘官方页面核对是否已打过招呼；不要自动重发本次招呼"]},
+				)
+				return
 
 			# greet_after hook
 			if hooks:
@@ -204,6 +220,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 			stopped_reason = None
 			risk_error: PlatformRiskError | None = None
 			stop_error: Exception | None = None
+			cache_write_failed = False
 
 			for idx, item in enumerate(candidates):
 				retry_count = 0
@@ -220,14 +237,22 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 								# 不再靠 message 里的「频率」字样误判成 RATE_LIMITED（Issue #419）。
 								raise risk_cls(error_message or error_code)
 							raise RuntimeError(error_code if error_code != "UNKNOWN" else (resp.get("message") or "greet failed"))
-						cache.record_greet(item.security_id, item.job_id, account=account)
-						results.append({
+						entry: dict[str, Any] = {
 							"security_id": item.security_id,
 							"job_id": item.job_id,
 							"title": item.title,
 							"company": item.company,
 							"status": "success",
-						})
+						}
+						try:
+							cache.record_greet(item.security_id, item.job_id, account=account)
+						except Exception:
+							# 记账失败不能落进下面的通用失败分支：那会 sleep 后重发同一个招呼。
+							# 标记后停止批次，由收尾逻辑输出不可重试的本地状态错误。
+							entry["recorded"] = False
+							cache_write_failed = True
+							logger.warning(f"本地记账失败，停止批量打招呼: {item.title} @ {item.company}")
+						results.append(entry)
 						success = True
 						logger.info(f"打招呼成功: {item.title} @ {item.company}")
 						break
@@ -269,6 +294,9 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 				if stopped_reason:
 					break
 
+				if cache_write_failed:
+					break
+
 				if success and idx < len(candidates) - 1:
 					bg_delay = ctx.obj.get("config", {}).get("batch_greet_delay", [2.0, 5.0])
 					time.sleep(random.uniform(bg_delay[0], bg_delay[1]))
@@ -281,6 +309,26 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 			}
 			if stopped_reason:
 				data["stopped_reason"] = stopped_reason
+
+			if cache_write_failed:
+				# 已发出的招呼不能因为本地记账失败被重发；先停下来让操作者核对。
+				data["stopped_reason"] = "LOCAL_STATE_WRITE_FAILED"
+				recoverable, recovery_action = error_contract_for_code("LOCAL_STATE_WRITE_FAILED")
+				handle_error_output(
+					ctx, "batch-greet",
+					code="LOCAL_STATE_WRITE_FAILED",
+					message="部分招呼已发送，但本地状态保存失败；已停止剩余候选人，不要自动重发",
+					recoverable=recoverable,
+					recovery_action=recovery_action,
+					details=data,
+					hints={
+						"operator_actions": [
+							"先在 BOSS 直聘官方页面核对已发送的招呼；不要自动重发本次批次",
+							"确认磁盘空间与缓存目录权限后，再用 boss chat 核对会话",
+						]
+					},
+				)
+				return
 
 			if stop_error is not None:
 				# 预算/时限停止必须回 ok:false，不能让 Agent 把 stopped_reason 当成「稍后重试」。

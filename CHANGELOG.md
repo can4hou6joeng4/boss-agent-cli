@@ -23,6 +23,7 @@
 - 招聘者侧还有两条风控路径会把平台原文或成功信封带出去：`hr greet` 在平台以响应字典返回风控码时把 `platform_message` 原样写进 `error.details`；`hr chat` 的 `userLastMsg` 补充摘要在命中风控码时只记成 `partial_error` / `last_messages_error`，仍输出 `ok:true`，审计 `hr last-messages` 也继续返回部分结果。现在 `hr greet` 的风控错误不再保留平台原文，`userLastMsg` 的风控码与异常形态一样立即终止，输出风控信封并停止后续请求。
 - `boss wizard` 的动作层 `_unwrap()` 在平台以响应字典返回风控码时，虽然已经按 `RISK_ERROR_CONTRACTS` 给出不可恢复与停止指引，但 `WorkflowActionError.message` 仍是 `parse_error()` 返回的平台原文，最终写进 workflow 的 `error.message`。现在风控码改用 `risk_error_message()`，只保留错误码登记表文案；非风控码（参数错误、鉴权失败等）仍保留平台说明。
 - `hr accept-resume` 与 `hr greet` 把「请求在调度前就被预算 / 通道挡下」也报成结果未知：`RequestBudgetExceeded` 明确标注 `request_sent: false`，前者却回 `RESUME_ACCEPT_RESULT_UNKNOWN` 让人去官方页面核对一个不存在的操作，后者还保留 pending 预约，把这个候选人永久锁成「结果未知」——通道恢复、预算冷却结束后也无法重试。现在两条写路径都按停止契约输出 `REQUEST_BUDGET_EXHAUSTED` / `WORKFLOW_TIMEOUT`；`hr greet` 在预算停止与 `BrowserSourceUnavailable`（通道全部不可用）时撤销尚未发出的预约（只删 pending，已发送与结果未知的记录保持不动）。
+- 求职者侧的 `greet` / `apply` 在平台已确认成功、随后本地记账（`record_greet` / `record_apply`）失败时，会把整个命令降级成 `NETWORK_ERROR`（`recoverable: true`、「重试」）：重跑会绕过 `is_greeted` / `is_applied` 检查，把同一次打招呼或投递再提交一遍。`batch-greet` 更直接——记账异常落在打招呼的重试分支里，1～2 秒后就会把同一个招呼再发一次。现在本地记账失败输出新错误码 `LOCAL_STATE_WRITE_FAILED`（不可恢复，说明操作已生效、禁止自动重发）；`batch-greet` 停止剩余候选人，已发出的条目带 `recorded: false`，不再重试或继续。
 
 ## [3.2.0] - 2026-11-01
 

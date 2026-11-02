@@ -19,6 +19,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": "动作可能已生效，请先 `boss hr chatmsg <friend_id>` 核实，勿直接重试",
 	},
+	"LOCAL_STATE_WRITE_FAILED": {
+		"message": "平台操作已完成，但本地状态保存失败，禁止自动重发",
+		"recoverable": False,
+		"recovery_action": "先在官方页面核对本次操作是否已生效；不要自动重发，确认磁盘空间与缓存目录权限后再继续",
+	},
 	"EXCHANGE_NOT_AVAILABLE": {
 		"message": "换电话/换微信按钮未解锁（招聘者尚未在会话中发过消息），本次未发出任何请求",
 		"recoverable": True,
