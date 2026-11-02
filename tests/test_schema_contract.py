@@ -8,11 +8,13 @@ import ast
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
 from boss_agent_cli.schema.data import SCHEMA_DATA
+from boss_agent_cli.schema.error_codes import ERROR_CODES
 
 
 # ── Schema 输出格式 ─────────────────────────────────────────────────
@@ -272,10 +274,87 @@ def test_cli_error_envelope_metadata_matches_registry():
 	`recovery_action`，信封里两者落成 `false` / `null`，Agent 拿不到
 	`schema.error_codes` 中已经声明好的「修正参数」指引。
 	"""
-	from boss_agent_cli.schema.error_codes import ERROR_CODES
-
 	result = CliRunner().invoke(cli, ["--json", "export", "--url", "https://example.com/not-boss"])
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert parsed["error"]["recoverable"] is ERROR_CODES["INVALID_PARAM"]["recoverable"]
 	assert parsed["error"]["recovery_action"] == ERROR_CODES["INVALID_PARAM"]["recovery_action"]
+
+
+# 恢复指引里的 `boss` 命令片段：只吃 ASCII 命令 token，遇到选项 / 占位符 /
+# 中文自然语言即停止，避免把整句中文当成命令的一部分。
+_BOSS_COMMAND_PATTERN = re.compile(r"\bboss((?: (?:--platform \S+|--json|[a-z][a-z0-9-]*))*)")
+_BACKTICK_FRAGMENT_PATTERN = re.compile(r"`([^`]+)`")
+
+
+def _resolve_command(tokens: list[str]) -> Any:
+	"""按 Click 命令树解析 token，返回 (完整路径, 叶子命令, 未知 token)。"""
+	node: Any = cli
+	path: list[str] = []
+	for token in tokens:
+		if token == "--json":
+			continue
+		if token == "--platform":
+			# 平台名之后无法继续按命令树校验，视为已解析。
+			return path, node, None
+		commands = getattr(node, "commands", None)
+		if commands is None:
+			return path, node, None
+		sub = commands.get(token)
+		if sub is None:
+			return path, node, token
+		node = sub
+		path.append(token)
+	return path, node, None
+
+
+def _option_names(command: Any) -> set[str]:
+	names: set[str] = set()
+	for param in getattr(command, "params", ()):
+		for opt in getattr(param, "opts", ()):
+			names.add(opt)
+			if "/" in opt:
+				names.add("--" + opt.rsplit("/", 1)[-1].lstrip("-"))
+	return names
+
+
+def _recovery_command_problems() -> list[str]:
+	problems: list[str] = []
+	for code, spec in ERROR_CODES.items():
+		action = str(spec.get("recovery_action") or "")
+		for match in _BOSS_COMMAND_PATTERN.finditer(action):
+			tokens = match.group(1).split()
+			if tokens[:1] == ["--platform"]:
+				tokens = tokens[2:]
+			_, _, unknown = _resolve_command(tokens)
+			if unknown is not None:
+				problems.append(f"{code}: 未知命令 {unknown!r}（{action}）")
+		# 选项只在反引号包裹的完整命令片段里校验：自然语言里裸写的 --xxx
+		# 可能属于别的上下文，误报会逼着文案迁就测试。
+		for fragment in _BACKTICK_FRAGMENT_PATTERN.findall(action):
+			fragment = fragment.strip()
+			if not fragment.startswith("boss "):
+				continue
+			tokens = fragment.split()[1:]
+			if tokens[:1] == ["--platform"]:
+				tokens = tokens[2:]
+			_, leaf, unknown = _resolve_command(tokens)
+			if unknown is not None:
+				problems.append(f"{code}: 未知命令 {unknown!r}（{fragment}）")
+				continue
+			options = _option_names(leaf)
+			for token in tokens:
+				if token.startswith("--") and token not in options:
+					problems.append(f"{code}: 未知选项 {token!r}（{fragment}）")
+	return problems
+
+
+def test_error_recovery_actions_reference_real_commands_and_options():
+	"""恢复指引必须能被照做：引用的 boss 命令 / 选项都存在。
+
+	#540 的两条无效指引（要求设置已无作用的 operating_mode、提示
+	`uv run playwright install chromium` 而实际用 patchright）说明登记表
+	文案会随命令演进而失效。这里把 `boss ...` 引用钉在 Click 命令树上。
+	"""
+	problems = _recovery_command_problems()
+	assert not problems, "恢复指引引用了不存在或已改名的命令/选项:\n" + "\n".join(problems)
