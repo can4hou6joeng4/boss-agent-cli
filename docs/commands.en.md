@@ -231,7 +231,7 @@ If an older configuration already contains an unsupported platform, explicitly s
 boss --platform zhipin config set platform zhipin
 ```
 
-Structured settings `automation` and `crawl` require a JSON object, e.g. `boss config set automation '{"mode": "training"}'`; scalar text is rejected with `INVALID_PARAM` and nothing is written. If a hand-edited `config.json` holds a non-object value, `boss agent run` / `train` return `INVALID_PARAM` with a `boss config reset automation` repair path instead of exiting with a traceback.
+Structured settings `automation` and `crawl` require a JSON object, e.g. `boss config set automation '{"mode": "training"}'`; scalar text is rejected with `INVALID_PARAM` and nothing is written. The `automation` contents are also validated with the runtime parser, so invalid enum values or numbers (a misspelled `mode`, a non-numeric threshold) are rejected with `INVALID_PARAM` without writing anything. If a hand-edited `config.json` holds a non-object value or invalid `automation` contents, `boss agent run` / `train` return `INVALID_PARAM` with a `boss config reset automation` repair path instead of exiting with a traceback.
 
 ### Shared request budget and cooldown
 
