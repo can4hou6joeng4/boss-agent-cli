@@ -412,6 +412,8 @@ def test_config_set_structured_value_accepts_json_object(tmp_path):
 		'{"mode": "nonsense"}',
 		'{"reply_strategy": "nonsense"}',
 		'{"human_review_threshold": "high"}',
+		'{"auto_execute_threshold": -1}',
+		'{"max_per_tab": -1}',
 		'{"allowed_actions": 5}',
 	],
 )
