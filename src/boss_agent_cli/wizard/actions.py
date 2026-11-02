@@ -657,7 +657,11 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		with context.candidate_platform() as platform:
-			result = execute_candidate_search(platform, cache, context.logger, inputs)
+			# 与 candidate_search / candidate_watch 一致：导出时的 greeted 标记
+			# 必须按当前账号计算，否则登录态下会把所有职位都标成未打招呼。
+			result = execute_candidate_search(
+				platform, cache, context.logger, {**inputs, "account": account_scope(context.auth())}
+			)
 	fmt = str(inputs.get("format") or "json")
 	if fmt not in {"json", "csv"}:
 		raise WorkflowActionError("INVALID_PARAM", "wizard export format 仅支持 json/csv")
