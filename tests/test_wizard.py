@@ -19,6 +19,7 @@ from boss_agent_cli.crawler.service import CrawlOutcome
 from boss_agent_cli.resume.models import ResumeData
 from boss_agent_cli.resume.store import ResumeStore
 from boss_agent_cli.display import risk_error_message
+from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.wizard.models import StepResult, WorkflowInputError, WorkflowPlan, WorkflowStatus, WizardInput
 from boss_agent_cli.wizard.catalog import GOALS, build_plan, catalog_data
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS, execute_candidate_search
@@ -313,6 +314,48 @@ def test_candidate_write_actions_persist_idempotence_records(tmp_path):
 	assert greeted.value.code == "ALREADY_GREETED"
 	assert platform.calls == [
 		("apply", "sec-1", "job-1", "lid-1"),
+		("greet", "sec-2", "job-2", "你好"),
+	]
+
+
+def test_candidate_write_actions_mark_local_state_failure_as_not_retryable(tmp_path, monkeypatch):
+	"""平台确认成功、本地记账失败时不能回成可重试的 NETWORK_ERROR。"""
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	def fail_record(*args, **kwargs):
+		raise OSError("disk full")
+
+	monkeypatch.setattr(CacheStore, "record_apply", fail_record)
+	with pytest.raises(WorkflowActionError) as applied:
+		DEFAULT_ACTIONS["candidate_apply"](context, {"security_id": "sec-1", "job_id": "job-1"}, {})
+	assert applied.value.code == "LOCAL_STATE_WRITE_FAILED"
+	assert applied.value.recoverable is False
+	assert applied.value.recovery_action == ERROR_CODES["LOCAL_STATE_WRITE_FAILED"]["recovery_action"]
+	assert applied.value.details == {
+		"security_id": "sec-1",
+		"job_id": "job-1",
+		"applied": True,
+		"recorded": False,
+	}
+
+	monkeypatch.setattr(CacheStore, "record_greet", fail_record)
+	with pytest.raises(WorkflowActionError) as greeted:
+		DEFAULT_ACTIONS["candidate_greet"](
+			context, {"security_id": "sec-2", "job_id": "job-2", "message": "你好"}, {}
+		)
+	assert greeted.value.code == "LOCAL_STATE_WRITE_FAILED"
+	assert greeted.value.recoverable is False
+	assert greeted.value.details == {
+		"security_id": "sec-2",
+		"job_id": "job-2",
+		"greeted": True,
+		"recorded": False,
+	}
+
+	# 平台动作各只发生一次，失败只来自本地记账。
+	assert platform.calls == [
+		("apply", "sec-1", "job-1", ""),
 		("greet", "sec-2", "job-2", "你好"),
 	]
 
