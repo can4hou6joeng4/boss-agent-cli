@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-11-01
+
+**升级须知**
+
+- `--industry` 改用平台行业码，14 个对不上平台的旧标签已移除：保存过这些标签的预设和 watch 会返回 `INVALID_PARAM`，报错会给出相近的可选值；也可以直接传数字行业码，或用 `--url`。
+- `--experience`、`--salary` 的码已按网页筛选器校正，同样的标签现在搜到的是正确的档位，结果会和以前不同。预设和 watch 存的是标签，升级后自动使用新码。
+- CLI 缺陷与平台数据结构异常改报 `INTERNAL_ERROR`（不可恢复），不再是可重试的 `NETWORK_ERROR`。按错误码决定是否重试的 Agent 需要相应调整。
+- 依赖下限改为 `browser-cookie3>=0.20.0`，`pip install -U boss-agent-cli` 会一并升级它。
+
 ### Added
 - `--city` 新增「全国」（平台的不限城市码 `100010000`）和嘉兴、徐州、香港，共 44 个城市。「全国」的码在 jackwener/boss-cli 与 ThisZhouS/jobwork 中一致，后者在真实搜索请求里用过；另外三个取自 jackwener/boss-cli，其城市表与本项目共有的 38 项完全一致。本地预筛与匹配评分把「全国」当作没有城市条件：此前就算平台支持，本地预筛也会因为职位城市名不含「全国」而把结果全部排除，评分里也会给每个职位记一条「城市不匹配」。
 - `boss login --cookie-source <浏览器>` 没提取到时，stderr 会说明是读取失败（附异常类型与原因）还是该浏览器没有登录 Cookie。拿不到解密密钥时按平台说明原因（macOS 钥匙串未授权、Windows 上新版 Chrome / Edge 的 App-Bound 加密、Linux 密钥环未解锁），并提示改用 `--cdp` 或 `--curl-file`。自动探测全部落空时，只汇总无法解密的浏览器。参考 jackwener/boss-cli 的提取诊断及其 #9、#15。
