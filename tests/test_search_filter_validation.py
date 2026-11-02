@@ -69,3 +69,11 @@ def test_city_validation_still_reports_param_error(tmp_path, argv):
 
 	assert payload["error"]["code"] == "INVALID_PARAM"
 	assert "未知城市" in payload["error"]["message"]
+
+
+def test_watch_add_rejects_unknown_filter_values(tmp_path):
+	"""watch 保存的就是之后每次 run 的筛选条件，未知取值不能先存下来再静默丢弃。"""
+	payload = _invoke(tmp_path, ["watch", "add", "w1", "golang", "--salary", "一百块"])
+
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "未知薪资范围" in payload["error"]["message"]
