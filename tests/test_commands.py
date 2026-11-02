@@ -626,6 +626,41 @@ def test_search_cache_key_includes_current_result_schema(mock_client_cls, mock_a
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
 @patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_corrupt_cache_entry_falls_back_to_live_search(
+	mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline,
+):
+	"""缓存条目损坏或结构漂移时按未命中处理，而不是 traceback。"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	_ctx_mock(mock_client_cls)
+	mock_auth_cls.return_value.account_fingerprint.return_value = "acct_a"
+	mock_pipeline.return_value = SimpleNamespace(
+		items=[],
+		has_more=False,
+		total=0,
+		stats=SimpleNamespace(
+			pages_scanned=1,
+			jobs_seen=0,
+			jobs_prefiltered=0,
+			detail_checks=0,
+		),
+	)
+
+	for cached in ("{not json", json.dumps({"items": []}), json.dumps({"data": {}})):
+		mock_cache.get_search.return_value = cached
+		mock_pipeline.reset_mock()
+
+		result = CliRunner().invoke(cli, ["search", "产品"])
+
+		assert result.exit_code == 0, result.output
+		mock_pipeline.assert_called_once()
+		# 重新搜索会用新结果覆盖同键的坏条目。
+		mock_cache.put_search.assert_called()
+
+
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
 def test_search_cache_scope_uses_current_account(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.get_search.return_value = None

@@ -44,6 +44,22 @@ from boss_agent_cli.wizard.actions import execute_candidate_search
 _SEARCH_CACHE_SCHEMA = 4
 
 
+def _parse_cached_result(raw: str) -> dict[str, Any] | None:
+	"""解析搜索缓存；内容损坏或结构不对时按未命中处理。
+
+	缓存写坏（手工改库、磁盘异常）或结构漂移时，`json.loads` 会抛
+	`JSONDecodeError`、`result["data"]` 会抛 `KeyError`，两者都会让
+	`boss search` 直接 traceback；重新搜索会覆盖同键的坏条目。
+	"""
+	try:
+		parsed = json.loads(raw)
+	except json.JSONDecodeError:
+		return None
+	if not isinstance(parsed, dict) or not isinstance(parsed.get("data"), list):
+		return None
+	return parsed
+
+
 def _sort_search_items(items: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
 	if sort == "score":
 		return sorted(items, key=lambda item: item.get("match_score", 0), reverse=True)
@@ -247,17 +263,19 @@ def search_cmd(
 			}
 			cached = cache.get_search(search_params)
 			if cached is not None:
-				logger.debug("搜索命中缓存")
-				result = json.loads(cached)
-				items = _refresh_greeted(result["data"], cache, account)
-				items = _sort_search_items(items, sort_mode)
-				try_save_index(data_dir, items, source=f"search:{query}", logger=logger)
-				handle_output(
-					ctx, "search", items,
-					render=lambda data: render_job_table(data, f"search: {query}"),
-					pagination=result.get("pagination"), hints=result.get("hints"),
-				)
-				return
+				result = _parse_cached_result(cached)
+				if result is not None:
+					logger.debug("搜索命中缓存")
+					items = _refresh_greeted(result["data"], cache, account)
+					items = _sort_search_items(items, sort_mode)
+					try_save_index(data_dir, items, source=f"search:{query}", logger=logger)
+					handle_output(
+						ctx, "search", items,
+						render=lambda data: render_job_table(data, f"search: {query}"),
+						pagination=result.get("pagination"), hints=result.get("hints"),
+					)
+					return
+				logger.debug("搜索缓存内容不可用，按未命中处理")
 
 		request_budget = CrawlBudget(cache) if ctx.obj.get("platform", "zhipin") == "zhipin" else None
 		# CDP 模式下详情（--active / --welfare 兜底）只走浏览器、串行并按 CrawlBudget 间隔
