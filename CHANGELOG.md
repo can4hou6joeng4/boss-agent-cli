@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss agent review approve/reject` 处理不存在的复核项时用 `raise click.ClickException`，被组层兜底成 `command: "boss"`、英文消息（`review item not found or not reviewable: ...`），与其它子命令的信封不一致。现在按实际命令名输出 `INVALID_PARAM` 与中文消息，并给出 `boss agent review list` 的后继指引。
 - 搜索缓存条目损坏时 `boss search` 直接 traceback：`search_cache.response` 被写坏（手工改库、磁盘异常）时 `json.loads` 抛 `JSONDecodeError`，结构漂移（缺少 `data` 或 `data` 不是数组）时 `result["data"]` 抛 `KeyError`，同一条查询会一直失败且没有清理指引。现在坏条目按缓存未命中处理，重新搜索后用新结果覆盖同键条目。
 - 招聘自动化状态文件损坏时没有信封：`automation/state.json` 被手工编辑写坏或在旧版本留下半截内容后，`boss agent run` / `agent stats` 直接抛 `JSONDecodeError` traceback；`action-log.jsonl` 等日志里有一行坏数据就会让 `stats` / `pending list` 整体失败。更严重的是 `automation/stop.json`（独立熔断开关）读不出来时被当作「没有熔断」，自动化会在状态未知的情况下继续向平台发送消息。现在状态文件损坏返回新登记的 `AUTOMATION_STATE_INVALID`（可恢复，指明文件与备份建议），单行损坏的 JSONL 跳过该行，熔断开关读不出来一律按已熔断处理并带上 `corrupt` 标记与原因。
 - `boss ai` 各命令的 `@文件路径` 参数只检查文件是否存在：GBK 保存的 JD / 聊天记录、误选的 PDF 或图片会抛 `UnicodeDecodeError` traceback，传目录抛 `IsADirectoryError`，权限不足抛 `PermissionError`，stdout 没有任何信封。现在八条支持 `@文件` 的命令（`analyze-jd`、`optimize`、`suggest`、`reply`、`interview-prep`、`chat-coach`、`resume-optimize`、`cover-letter`）共用同一个读取入口：非 UTF-8 给 `INVALID_PARAM` 并提示转存为 UTF-8，目录给 `INVALID_PARAM`，读取失败给 `LOCAL_IO_ERROR`。
