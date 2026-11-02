@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `config.json` 里的 `cdp_url` 不是字符串（手工改成数字，或旧版本写坏结构）时，`boss doctor` 在拼接诊断命令时对值执行 `shlex.quote`，直接抛 `TypeError: expected string or bytes-like object, got 'int'`，stdout 没有任何信封。现在启动期就按参数错误返回中文信封（`参数 --cdp-url 的值无效: 必须是调试地址字符串或 null，收到 9`），`--cdp-url` 覆盖后仍可执行 `boss config reset cdp_url` 修复。
 - `config.json` 里的 `browser_source` 不是字符串（手工改成数字、数组，或旧版本写坏）时，启动阶段直接对值调用 `.strip()`，所有命令都抛 `AttributeError: 'int' object has no attribute 'strip'` traceback，连用来修复它的 `boss config reset browser_source` 也跑不了。现在非字符串值按参数错误返回中文信封（`不支持的浏览器通道 5，可选: auto, stored-cookie, httpx-only, existing-browser`），`--browser-source auto` 覆盖后仍可执行修复命令。
 - `boss platforms` 的过滤参数与 wizard 的平台校验仍有英文：`platforms --platform zhilian` 返回 `unknown platform 'zhilian', supported: zhipin`，`platforms --capability nope` 返回 `unknown capability ...`，`boss wizard` 对已移除平台的旧 run 返回 `... supported: zhipin`，与 `--platform` 全局选项已改好的中文文案不一致。现在统一为「不支持的平台 'zhilian'，可选: zhipin」「不支持的能力 ...」「角色 candidate 不支持平台 ...，可选: ...」。
 - 启动期与 `config set` 的参数校验把英文原文漏进信封：`boss --delay 5-1 status` 的消息是 `Invalid value for --delay: delay must be a finite range like 1.5-3.0 with 0 <= low <= high`，`boss config set request_delay abc` / `request_max_per_minute abc` 会直接透出 `could not convert string to float: 'abc'`，既不中文也没点名配置项；`--platform` 写成已移除的平台时消息同样以 `unknown platform ...` 开头。现在这些自写文案统一为中文（`参数 --delay 的值无效: 必须是形如 1.5-3.0 的数值区间，且满足 0 <= 下限 <= 上限`、`request_max_per_minute 必须是整数，收到 'abc'`、`不支持的平台 'zhilian'，可选: zhipin`），Click 自带的英文校验文案保持原样、不会被拼上中文前缀。

@@ -205,6 +205,37 @@ def test_browser_source_override_recovers_from_non_string_config(tmp_path):
 	assert json.loads((tmp_path / "config.json").read_text(encoding="utf-8")) == {}
 
 
+@pytest.mark.parametrize("value", [9, True, ["http://127.0.0.1:9222"]])
+def test_non_string_cdp_url_in_config_returns_envelope(tmp_path, value):
+	"""config.json 的 cdp_url 不是字符串时，doctor 等命令不能抛 shlex TypeError。"""
+	(tmp_path / "config.json").write_text(json.dumps({"cdp_url": value}), encoding="utf-8")
+
+	code, parsed = _invoke("doctor", tmp_path=tmp_path)
+
+	assert code == 1
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	message = parsed["error"]["message"]
+	assert "--cdp-url" in message
+	assert "调试地址字符串或 null" in message
+	assert repr(value) in message
+
+
+def test_cdp_url_override_recovers_from_non_string_config(tmp_path):
+	"""坏 cdp_url 挡住启动时，--cdp-url 覆盖仍要能执行修复命令。"""
+	(tmp_path / "config.json").write_text(json.dumps({"cdp_url": 9}), encoding="utf-8")
+
+	runner = CliRunner()
+	result = runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--cdp-url", "http://127.0.0.1:9222", "config", "reset", "cdp_url"],
+	)
+
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert json.loads((tmp_path / "config.json").read_text(encoding="utf-8")) == {}
+
+
 def test_parse_value_int_from_default_type():
 	"""_parse_value 按 int 默认值类型转换输入。"""
 	from boss_agent_cli.commands.config_cmd import _parse_value
