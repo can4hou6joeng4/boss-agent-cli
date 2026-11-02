@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss clean --days -1` 会把 cutoff 算到未来（`time.time() - days * 86400`），目录里所有文件都被当成「超过 -1 天」，一次执行删光 `chat-history` 与 `chat-export` 下的全部快照和导出文件。现在 `--days` 用 `IntRange(0)` 拒绝负数，按参数错误返回信封且不动任何文件。
 - `boss config set log_level verbose` 报成功，而 `Logger` 对未知级别静默回退到 `error` 阈值：配置里写着 `verbose`，实际什么日志都不显示。现在 `config set` 校验 `log_level`（与 `--log-level` 的 `Choice` 共用 `output.LOG_LEVELS`），非法值返回 `log_level 必须是以下值之一: error, warning, info, debug` 且不落盘。
 - `boss config set role admin` 返回 `ok: true` 并把值写进 `config.json`，而启动期校验只接受 `candidate` / `recruiter`：之后每条命令都在启动阶段返回 `INVALID_PARAM`，连 `boss config reset role` 也一样，只能靠 `boss --role candidate config reset role` 脱困。现在 `config set` 与 `--role` 的 `Choice`、启动期校验共用 `config.ROLES`，写入非法值直接返回 `role 必须是以下值之一: candidate, recruiter` 且不落盘。
 - 招聘者聊天页写操作的失败信封是中英混排：`boss hr chat` 发消息未确认时 `error.message` 以 `send_message_by_friend unconfirmed:` 开头，交换联系方式失败 / 未确认时是 `exchange_request_by_friend failed:` / `unconfirmed:`，紧跟着的却是中文恢复指引；页面返回结构异常时的默认文案同样是英文（`unexpected page result`、`unexpected result: ...`）。现在统一为中文（`发送消息未确认: ...`、`交换联系方式请求失败: ...`、`页面未返回可用的结果`），并新增源码扫描测试，防止新增的聊天页失败文案再混入英文。

@@ -24,7 +24,9 @@ from boss_agent_cli.display import handle_output, render_next_steps
 	"--all", "clean_all", is_flag=True, default=False, help="清理全部缓存（包括未过期的搜索缓存和打招呼记录）"
 )
 @click.option("--privacy", is_flag=True, default=False, help="清理本地敏感数据（登录会话、简历、聊天快照和导出文件）")
-@click.option("--days", default=30, help="清理超过指定天数的快照和导出文件")
+# 负数会让 cutoff 落到未来（time.time() - days * 86400），目录里所有文件都算「过期」，
+# 一次 `clean --days -1` 就把聊天快照和导出全部删掉。
+@click.option("--days", default=30, type=click.IntRange(0), help="清理超过指定天数的快照和导出文件")
 @click.option(
 	"--risk-lock",
 	"risk_lock",

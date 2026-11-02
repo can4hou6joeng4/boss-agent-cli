@@ -138,6 +138,25 @@ def test_clean_old_snapshots(tmp_path):
 	assert new_file.exists()
 
 
+def test_clean_rejects_negative_days_without_deleting(tmp_path):
+	"""`--days -1` 会把 cutoff 推到未来，目录里所有文件都算过期：必须按参数错误拒绝。"""
+	snap_dir = tmp_path / "chat-history"
+	snap_dir.mkdir(parents=True)
+	export_dir = tmp_path / "chat-export"
+	export_dir.mkdir(parents=True)
+	snapshot = snap_dir / "snapshot.json"
+	snapshot.write_text("[]", encoding="utf-8")
+	export = export_dir / "沟通列表-2020-01-01.json"
+	export.write_text("{}", encoding="utf-8")
+
+	code, parsed = _invoke("clean", "--days", "-1", tmp_path=tmp_path)
+	assert code == 1
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert snapshot.exists()
+	assert export.exists()
+
+
 # ── JSON 信封 ──────────────────────────────────────────────────────
 
 
