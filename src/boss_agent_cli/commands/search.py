@@ -18,6 +18,7 @@ from boss_agent_cli.display import (
 	handle_output,
 	is_json_mode,
 	platform_error_contract,
+	platform_error_message,
 	render_job_table,
 )
 from boss_agent_cli.index_cache import try_save_index
@@ -317,7 +318,7 @@ def search_cmd(
 				handle_error_output(
 					ctx, "search",
 					code=exc.code,
-					message=exc.message or "搜索结果获取失败",
+					message=platform_error_message(exc.code, exc.message, "搜索结果获取失败"),
 					recoverable=recoverable,
 					recovery_action=recovery_action,
 					details=exc.details,

@@ -8,7 +8,15 @@ from boss_agent_cli.api.models import employment_type_from_raw, field_dict, fiel
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, platform_error_contract, render_job_detail
+from boss_agent_cli.display import (
+	boss_command_for_ctx,
+	handle_auth_errors,
+	handle_error_output,
+	handle_output,
+	platform_error_contract,
+	platform_error_message,
+	render_job_detail,
+)
 from boss_agent_cli.platforms import Platform
 from boss_agent_cli.services.job_card import build_job_from_card
 
@@ -69,7 +77,7 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 			handle_error_output(
 				ctx, "detail",
 				code=last_error[0],
-				message=last_error[1],
+				message=platform_error_message(last_error[0], last_error[1], "职位详情获取失败"),
 				recoverable=recoverable,
 				recovery_action=recovery_action,
 				details=last_error[2],

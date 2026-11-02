@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
+from boss_agent_cli.display import risk_error_message
 from boss_agent_cli.main import cli
 from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
 from boss_agent_cli.schema.error_codes import ERROR_CODES
@@ -297,7 +298,7 @@ def test_recruiter_applications_reports_error_when_platform_rejects(mock_auth_cl
 	_assert_error_contract(
 		parsed,
 		code="ACCOUNT_RISK",
-		message="account risk",
+		message=risk_error_message("ACCOUNT_RISK"),
 		recoverable=False,
 		recovery_action="停止自动化访问，回到平台官网手动处理；确认目标业务页风险解除后，由用户执行 boss clean --risk-lock 并显式恢复任务，必要时联系客服",
 	)
@@ -570,7 +571,7 @@ def test_recruiter_request_resume_reports_error_when_platform_rejects(mock_auth_
 	_assert_error_contract(
 		parsed,
 		code="ACCOUNT_RISK",
-		message="account risk",
+		message=risk_error_message("ACCOUNT_RISK"),
 		recoverable=False,
 		recovery_action="停止自动化访问，回到平台官网手动处理；确认目标业务页风险解除后，由用户执行 boss clean --risk-lock 并显式恢复任务，必要时联系客服",
 	)

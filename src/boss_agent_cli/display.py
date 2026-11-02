@@ -73,6 +73,16 @@ def risk_error_message(code: str) -> str:
 	return f"{label}；停止自动化访问并在官方页面处理"
 
 
+def platform_error_message(code: str, message: str | None, fallback_message: str) -> str:
+	"""Return the envelope message for a platform error code.
+
+	风控码只输出登记表文案：平台响应原文可能带临时凭据，不进信封。
+	"""
+	if code in RISK_ERROR_CONTRACTS:
+		return risk_error_message(code)
+	return message or fallback_message
+
+
 def is_json_mode(ctx: Any) -> bool:
 	"""Check if --json flag is set or stdout is piped (non-TTY)."""
 	force_json = ctx.obj.get("json_output", False) if ctx and ctx.obj else False
@@ -199,7 +209,7 @@ def handle_platform_error_output(
 		ctx,
 		command,
 		code=code,
-		message=message or fallback_message,
+		message=platform_error_message(code, message, fallback_message),
 		recoverable=recoverable,
 		recovery_action=recovery_action,
 		details=details,

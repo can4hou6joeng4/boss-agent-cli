@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
+from boss_agent_cli.display import risk_error_message
 from boss_agent_cli.main import cli
 from boss_agent_cli.search_filters import SearchPipelinePlatformError
 
@@ -257,6 +258,8 @@ def test_watch_run_risk_uses_stop_contract(mock_auth_cls, mock_client_cls, tmp_p
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
+	assert "blocked" not in parsed["error"]["message"]
 	assert parsed["error"]["recoverable"] is False
 	assert "停止自动化访问" in parsed["error"]["recovery_action"]
 	assert parsed["hints"]["next_actions"]
@@ -304,6 +307,8 @@ def test_watch_run_all_stops_on_risk(mock_auth_cls, mock_client_cls, mock_pipeli
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
+	assert "blocked" not in parsed["error"]["message"]
 	assert parsed["error"]["recoverable"] is False
 	assert "停止自动化访问" in parsed["error"]["recovery_action"]
 	assert parsed["hints"]["next_actions"]
