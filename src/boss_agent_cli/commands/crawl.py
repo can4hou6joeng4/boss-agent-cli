@@ -470,13 +470,14 @@ def resume_cmd(
 			handle_error_output(ctx, "crawl.resume", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
 			return
 		except OSError as exc:
+			# 与 crawl start 同一类失败：OSError 多来自磁盘满或目录权限，直接重试不会好转。
 			handle_error_output(
 				ctx,
 				"crawl.resume",
 				code="CRAWL_UNAVAILABLE",
 				message=f"无法启动 crawl 后台任务: {exc}",
 				recoverable=True,
-				recovery_action=f"执行 boss crawl resume {run_id} 重试",
+				recovery_action=f"检查磁盘空间与数据目录权限后执行 boss crawl resume {run_id} 重试",
 			)
 			return
 		handle_output(

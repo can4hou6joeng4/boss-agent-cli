@@ -36,6 +36,7 @@
 - 错误码登记表的 `recovery_action` 文案会随命令演进失效（#540 修过两条指向无效操作的指引），但此前没有测试守住。现在 `tests/test_schema_contract.py` 把恢复指引引用的 `boss ...` 命令与反引号片段中的选项钉在 Click 命令树上：登记表写了不存在的命令或已改名的选项，测试直接失败。
 - `boss wizard` 的风控恢复文案与错误码登记表矛盾：`ACCOUNT_RISK` / `ENVIRONMENT_RISK` / `ENVIRONMENT_RISK_LOCKED` 只说「检查账号状态」「等几分钟后再继续」，没有提到本地风险锁需要由用户执行 `boss clean --risk-lock` 才会解除——用户照做会在锁未解除时反复重试同一个必然失败的步骤。现在三条向导文案都给出显式解锁命令。登记表里 `CIRCUIT_BREAKER_OPEN` 的「人工确认平台状态后恢复」和 `WORKFLOW_TIMEOUT` 的「使用返回的 run_id 恢复 workflow」也没有给出入口，现在分别指向 `boss agent run --resume` 与 `boss wizard --resume <run_id>`。
 - `boss schema` 中 `crawl` 的子命令声明漏了 `shortlist`：Agent 读 schema 时看不到「把 crawl 结果导入本地候选池」这条能力，只能从 `boss crawl --help` 或文档里发现。现在声明与实际注册的 8 个子命令一致，并新增测试把 description 里「子命令：a/b/c」的声明与 `hr.subcommands` 结构化字段都钉在 Click 命令树上，防止后续增删子命令时再次漂移。
+- `boss crawl resume --background` 在后台上拉失败（`OSError`，通常来自磁盘满或数据目录权限）时只提示「执行 boss crawl resume 重试」，同一环境下重试大概率再次失败；`crawl start` 的同类失败已经改为先检查磁盘空间与目录权限。现在两条路径给出同一份恢复指引。
 
 ## [3.2.0] - 2026-11-01
 
