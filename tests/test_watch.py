@@ -4,6 +4,7 @@ from unittest.mock import patch
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
+from boss_agent_cli.search_filters import SearchPipelinePlatformError
 
 
 def _ctx_mock(mock_cls):
@@ -235,3 +236,76 @@ def test_watch_schema_is_exposed():
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert "watch" in parsed["data"]["commands"]
+
+
+@patch("boss_agent_cli.commands.watch.get_platform_instance")
+@patch("boss_agent_cli.commands.watch.AuthManager")
+def test_watch_run_risk_uses_stop_contract(mock_auth_cls, mock_client_cls, tmp_path, legacy_args):
+	"""watch run 命中风控时信封必须是停止指引，而不是可恢复的普通失败。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.is_success.return_value = False
+	mock_client.parse_error.return_value = ("ACCOUNT_RISK", "blocked")
+	mock_client.search_jobs.return_value = {"code": 36, "message": "blocked"}
+
+	runner = CliRunner()
+	runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "watch", "add", "golang-gz", "golang"],
+	)
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", "golang-gz"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["recoverable"] is False
+	assert "停止自动化访问" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"]
+
+
+@patch("boss_agent_cli.commands.watch.get_platform_instance")
+@patch("boss_agent_cli.commands.watch.AuthManager")
+def test_watch_run_auth_expired_is_recoverable(mock_auth_cls, mock_client_cls, tmp_path, legacy_args):
+	"""登录过期是可恢复错误，不能硬编码成不可恢复。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.is_success.return_value = False
+	mock_client.parse_error.return_value = ("AUTH_EXPIRED", "expired")
+	mock_client.search_jobs.return_value = {"code": 401, "message": "expired"}
+
+	runner = CliRunner()
+	runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "watch", "add", "golang-gz", "golang"],
+	)
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", "golang-gz"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AUTH_EXPIRED"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "boss login"
+
+
+@patch("boss_agent_cli.commands.watch.run_search_pipeline")
+@patch("boss_agent_cli.commands.watch.get_platform_instance")
+@patch("boss_agent_cli.commands.watch.AuthManager")
+def test_watch_run_all_stops_on_risk(mock_auth_cls, mock_client_cls, mock_pipeline, tmp_path, legacy_args):
+	"""--all 里任一 watch 命中风控后必须停批，不能再向平台请求下一个 watch。"""
+	_ctx_mock(mock_client_cls)
+	mock_pipeline.side_effect = SearchPipelinePlatformError("ACCOUNT_RISK", "blocked")
+
+	runner = CliRunner()
+	for name in ("risk-first", "safe-second"):
+		runner.invoke(
+			cli,
+			["--data-dir", str(tmp_path), "--json", "watch", "add", name, "golang"],
+		)
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", "--all"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["recoverable"] is False
+	assert "停止自动化访问" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"]
+	assert parsed["error"]["details"]["stopped_watch"] in {"risk-first", "safe-second"}
+	assert mock_pipeline.call_count == 1
