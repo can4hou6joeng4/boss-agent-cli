@@ -55,6 +55,29 @@ def _misplaced_global_option(group: click.Group, exc: click.ClickException) -> t
 	return message, example
 
 
+def _has_cjk(text: str) -> bool:
+	"""消息里出现中日韩统一表意文字，就认为是我们自己写的中文文案。"""
+	return any(0x4E00 <= ord(char) <= 0x9FFF for char in text)
+
+
+def _click_error_message(exc: click.ClickException) -> str:
+	"""把本仓库自己写的参数文案拼成中文信封消息。
+
+	Click 的 ``BadParameter`` 会在正文前拼英文 ``Invalid value for ...``；正文是中文时
+	（也就是我们自己 raise 的那些），前缀也换成中文。Click 自带的校验（类型转换、
+	Choice、IntRange）正文仍是英文，保持原样，免得把英文正文混进中文前缀。
+	"""
+	if isinstance(exc, click.BadParameter) and _has_cjk(exc.message):
+		hint: str | Sequence[str] | None = exc.param_hint
+		if hint is None and exc.param is not None and exc.ctx is not None:
+			hint = exc.param.get_error_hint(exc.ctx)
+		if isinstance(hint, (list, tuple)):
+			hint = " / ".join(hint)
+		if hint:
+			return f"参数 {hint} 的值无效: {exc.message}"
+	return exc.format_message()
+
+
 def _prescan_exit_codes(args: Sequence[str] | None) -> None:
 	"""Usage errors are raised before the group callback runs; scan raw argv so an
 	explicit `--exit-codes sysexits` still governs their exit code. Unknown values
@@ -173,7 +196,7 @@ class BossCliGroup(click.Group):
 				raise
 			ctx = getattr(exc, "ctx", None)
 			command = getattr(ctx, "info_name", None) or self.name or "boss"
-			message = exc.format_message()
+			message = _click_error_message(exc)
 			recovery_action = "修正参数"
 			hints = None
 			misplaced = _misplaced_global_option(self, exc)
@@ -307,7 +330,7 @@ def cli(
 			validate_delay(ctx.obj["delay"])
 		except ValueError as exc:
 			raise click.BadParameter(
-				"delay must be a finite range like 1.5-3.0 with 0 <= low <= high",
+				"必须是形如 1.5-3.0 的数值区间，且满足 0 <= 下限 <= 上限",
 				param_hint="--delay",
 			) from exc
 	else:
@@ -331,7 +354,7 @@ def cli(
 	resolved_browser_source = (browser_source or cfg.get("browser_source") or "auto").strip().lower()
 	if resolved_browser_source not in BROWSER_SOURCES:
 		raise click.BadParameter(
-			f"unknown browser source {resolved_browser_source!r}, supported: {', '.join(BROWSER_SOURCES)}",
+			f"不支持的浏览器通道 {resolved_browser_source!r}，可选: {', '.join(BROWSER_SOURCES)}",
 			param_hint="--browser-source",
 		)
 	ctx.obj["browser_source"] = resolved_browser_source
@@ -340,7 +363,7 @@ def cli(
 	available = list_platforms()
 	if resolved_platform not in available:
 		raise click.BadParameter(
-			f"unknown platform {resolved_platform!r}, supported: {', '.join(available)}",
+			f"不支持的平台 {resolved_platform!r}，可选: {', '.join(available)}",
 			param_hint="--platform",
 		)
 	ctx.obj["platform"] = resolved_platform

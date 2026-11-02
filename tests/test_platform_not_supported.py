@@ -36,8 +36,8 @@ def test_hr_on_removed_zhilian_platform_returns_invalid_param(tmp_path: Path) ->
 	envelope = json.loads(result.output)
 	assert envelope["ok"] is False
 	assert envelope["error"]["code"] == "INVALID_PARAM"
-	assert "unknown platform" in envelope["error"]["message"]
-	assert "supported: zhipin" in envelope["error"]["message"]
+	assert "不支持的平台" in envelope["error"]["message"]
+	assert "可选: zhipin" in envelope["error"]["message"]
 
 
 def test_schema_includes_platform_not_supported_error_code(tmp_path: Path) -> None:

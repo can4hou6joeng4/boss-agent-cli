@@ -49,3 +49,16 @@ def test_agent_facing_usage_errors_emit_stdout_json_envelope(tmp_path, args, com
 
 	parsed = _assert_single_stdout_json_error(result, command=command)
 	assert message_fragment in parsed["error"]["message"]
+
+
+def test_invalid_delay_reports_chinese_message(tmp_path):
+	"""--delay 的范围错误要给出中文说明和示例，而不是 Click 的英文原文。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--delay", "5-1", "status"])
+
+	parsed = _assert_single_stdout_json_error(result, command="boss")
+	message = parsed["error"]["message"]
+	assert "Invalid value" not in message
+	assert message.startswith("参数 --delay 的值无效: ")
+	assert "1.5-3.0" in message
+	assert "0 <= 下限 <= 上限" in message

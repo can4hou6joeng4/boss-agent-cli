@@ -639,4 +639,4 @@ def test_hr_group_rejects_removed_zhilian_platform():
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "INVALID_PARAM"
-	assert "unknown platform" in parsed["error"]["message"]
+	assert "不支持的平台" in parsed["error"]["message"]
