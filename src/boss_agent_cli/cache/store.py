@@ -36,6 +36,41 @@ def _decode_saved_params(name: str, raw: Any) -> dict[str, Any]:
 	return cast("dict[str, Any]", parsed)
 
 
+_RECORD_LABELS = {
+	"crawl_run": "crawl 任务",
+	"crawl_job": "crawl 结果",
+	"workflow_run": "workflow 任务",
+	"workflow_step": "workflow 步骤",
+}
+
+
+class CacheRecordInvalid(ValueError):
+	"""本地任务记录里的 JSON 列无法解析（写坏或结构漂移）。
+
+	crawl / workflow 的断点只存在本地：读不出记录就无法安全恢复，重试同样的
+	命令只会再失败一次。调用方应输出信封并提示重新创建任务，而不是让
+	`json.loads` 抛 traceback。
+	"""
+
+	def __init__(self, kind: str, record_id: str, column: str, detail: str) -> None:
+		label = _RECORD_LABELS.get(kind, kind)
+		super().__init__(f"本地 {label} {record_id} 的 {column} 无法解析（{detail}）")
+		self.kind = kind
+		self.record_id = record_id
+		self.column = column
+
+
+def _decode_record(kind: str, record_id: str, column: str, raw: Any) -> Any:
+	try:
+		return json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
+	except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as exc:
+		raise CacheRecordInvalid(kind, record_id, column, str(exc)) from exc
+
+
+def _decode_optional_record(kind: str, record_id: str, column: str, raw: Any) -> Any:
+	return None if not raw else _decode_record(kind, record_id, column, raw)
+
+
 class CacheStore:
 	def __init__(self, db_path: Path, *, search_ttl_seconds: int = _SEARCH_TTL) -> None:
 		self._db_path = db_path
@@ -333,10 +368,12 @@ class CacheStore:
 		if row is None:
 			return None
 		return {
-			"run_id": row[0], "params": json.loads(row[1]), "status": row[2], "stop_requested": bool(row[3]),
+			"run_id": row[0], "params": _decode_record("crawl_run", run_id, "params", row[1]), "status": row[2],
+			"stop_requested": bool(row[3]),
 			"requests_attempted": int(row[4]), "detail_requests_attempted": int(row[5]), "elapsed_seconds": int(row[6]),
 			"next_page": row[7], "list_finished": bool(row[8]), "output_dir": row[9], "error": row[10],
-			"hook_results": json.loads(row[11]), "created_at": row[12], "updated_at": row[13],
+			"hook_results": _decode_record("crawl_run", run_id, "hook_results", row[11]),
+			"created_at": row[12], "updated_at": row[13],
 		}
 
 	def update_crawl_run_params(self, run_id: str, params: dict[str, Any]) -> None:
@@ -420,7 +457,10 @@ class CacheStore:
 		).fetchone()
 		if row is None:
 			return None
-		return {"selector": row[0], "page_no": row[1], "payload": json.loads(row[2]), "detail_done": bool(row[3])}
+		return {
+			"selector": row[0], "page_no": row[1],
+			"payload": _decode_record("crawl_job", job_key, "payload", row[2]), "detail_done": bool(row[3]),
+		}
 
 	def list_crawl_jobs(self, run_id: str) -> list[dict[str, Any]]:
 		rows = self._conn.execute(
@@ -428,7 +468,10 @@ class CacheStore:
 			(run_id,),
 		).fetchall()
 		return [
-			{"job_key": row[0], "selector": row[1], "page_no": row[2], "payload": json.loads(row[3]), "detail_done": bool(row[4])}
+			{
+				"job_key": row[0], "selector": row[1], "page_no": row[2],
+				"payload": _decode_record("crawl_job", str(row[0]), "payload", row[3]), "detail_done": bool(row[4]),
+			}
 			for row in rows
 		]
 
@@ -516,19 +559,39 @@ class CacheStore:
 			"mode": row[4],
 			"status": row[5],
 			"current_step": row[6],
-			"params": json.loads(row[7]),
-			"last_result": json.loads(row[8]) if row[8] else None,
-			"error": json.loads(row[9]) if row[9] else None,
+			"params": _decode_record("workflow_run", run_id, "params", row[7]),
+			"last_result": _decode_optional_record("workflow_run", run_id, "last_result", row[8]),
+			"error": _decode_optional_record("workflow_run", run_id, "error", row[9]),
 			"created_at": row[10],
 			"updated_at": row[11],
 		}
 
 	def list_workflow_runs(self, *, limit: int = 20) -> list[dict[str, Any]]:
+		runs, _ = self.list_workflow_runs_with_corrupt(limit=limit)
+		return runs
+
+	def list_workflow_runs_with_corrupt(self, *, limit: int = 20) -> tuple[list[dict[str, Any]], list[str]]:
+		"""按更新时间列出 workflow，跳过记录损坏的行并回报它们的 run_id。
+
+		单行写坏不该让整个任务列表不可用：坏行本身也无法恢复，保留条目名称
+		交给调用方提示重建。
+		"""
 		rows = self._conn.execute(
 			"SELECT run_id FROM workflow_runs ORDER BY updated_at DESC LIMIT ?",
 			(max(1, limit),),
 		).fetchall()
-		return [run for row in rows if (run := self.get_workflow_run(str(row[0]))) is not None]
+		runs: list[dict[str, Any]] = []
+		corrupt: list[str] = []
+		for row in rows:
+			run_id = str(row[0])
+			try:
+				run = self.get_workflow_run(run_id)
+			except CacheRecordInvalid:
+				corrupt.append(run_id)
+				continue
+			if run is not None:
+				runs.append(run)
+		return runs, corrupt
 
 	def list_workflow_steps(self, run_id: str) -> list[dict[str, Any]]:
 		rows = self._conn.execute(
@@ -541,8 +604,8 @@ class CacheStore:
 				"step_name": row[0],
 				"ordinal": row[1],
 				"status": row[2],
-				"result": json.loads(row[3]) if row[3] else None,
-				"error": json.loads(row[4]) if row[4] else None,
+				"result": _decode_optional_record("workflow_step", f"{run_id}/{row[0]}", "result", row[3]),
+				"error": _decode_optional_record("workflow_step", f"{run_id}/{row[0]}", "error", row[4]),
 				"started_at": row[5],
 				"finished_at": row[6],
 			}

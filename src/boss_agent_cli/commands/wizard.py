@@ -8,8 +8,9 @@ from typing import Any, Mapping, NoReturn
 
 import click
 
+from boss_agent_cli.cache.store import CacheRecordInvalid
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
-from boss_agent_cli.display import handle_error_output, handle_output
+from boss_agent_cli.display import console, handle_error_output, handle_output
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS
 from boss_agent_cli.wizard.catalog import build_plan, require_supported_platform
 from boss_agent_cli.wizard.models import WorkflowInputError, WorkflowPlan, WizardInput
@@ -315,10 +316,17 @@ def _run_interactive_session(
 
 	while True:
 		try:
+			available_runs = store.list_recent()
+			if store.corrupt_run_ids:
+				# 坏记录会被列表跳过；不说明会让用户以为任务凭空消失。
+				console.print(
+					f"[yellow]跳过 {len(store.corrupt_run_ids)} 条损坏的任务记录"
+					f"（{', '.join(store.corrupt_run_ids)}）：断点无法恢复，需重新创建任务[/yellow]"
+				)
 			selection = collect_wizard_input(
 				default_role=ctx.obj.get("role") or "candidate",
 				default_platform=ctx.obj.get("platform") or "zhipin",
-				available_runs=store.list_recent(),
+				available_runs=available_runs,
 				data_dir=ctx.obj.get("data_dir"),
 				local_only=local_only,
 			)
@@ -531,6 +539,39 @@ def _run_interactive_session(
 
 
 def run_wizard_command(
+	ctx: click.Context,
+	*,
+	input_json: str | None = None,
+	resume_run_id: str | None = None,
+	status_run_id: str | None = None,
+	stop_run_id: str | None = None,
+	timeout_seconds: float | None = None,
+	max_retries: int = 0,
+) -> None:
+	try:
+		_run_wizard_command(
+			ctx,
+			input_json=input_json,
+			resume_run_id=resume_run_id,
+			status_run_id=status_run_id,
+			stop_run_id=stop_run_id,
+			timeout_seconds=timeout_seconds,
+			max_retries=max_retries,
+		)
+	except CacheRecordInvalid as exc:
+		# 本地 run 记录写坏后断点读不出来：重试同样的 run_id 只会再失败一次，
+		# 统一在这里给信封和重建指引，不让古老的坏行把 TTY 也打成 traceback。
+		_wizard_error(
+			ctx,
+			_is_interactive(ctx),
+			code="CACHE_RECORD_INVALID",
+			message=str(exc),
+			recoverable=True,
+			recovery_action="boss wizard --input-json '<object>' 重新创建任务；原记录无法恢复，已导出的文件不会自动删除",
+		)
+
+
+def _run_wizard_command(
 	ctx: click.Context,
 	*,
 	input_json: str | None = None,

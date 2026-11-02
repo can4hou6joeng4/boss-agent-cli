@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 本地 crawl / workflow 记录损坏时直接 traceback：`crawl_runs.params` / `hook_results`、`crawl_jobs.payload`、`workflow_runs.params` / `last_result` / `error`、`workflow_steps.result` 被写坏（手工改库、磁盘异常、旧版本中断）后，`boss crawl status` / `crawl results` / `crawl resume` / `crawl shortlist` 与 `boss wizard --status` / `--resume` / `--stop` 都抛 `JSONDecodeError`，stdout 没有任何信封；`boss wizard` 的任务列表遇到一条坏记录就整体不可用。现在这些读取统一走类型化异常并返回新登记的 `CACHE_RECORD_INVALID`（可恢复，指明重建任务的方式），任务列表跳过坏记录并在 stderr 点名，交给用户重建而不是静默消失。
 - 本地保存的预设 / watch 参数（`saved_searches.params`）被写坏后，`boss preset list` / `boss watch list` 直接抛 `JSONDecodeError` traceback、stdout 没有任何信封；`boss search --preset` / `boss watch run` 被兜成 `NETWORK_ERROR` +「重试」，Agent 会针对一条本地数据问题无限重试，wizard 复用 watch 时也落进通用兜底。现在列表命令跳过坏条目并在 `hints.corrupt` / `operator_actions` 里点名；按名称使用坏条目时返回新登记的 `SAVED_SEARCH_INVALID`（可恢复，提示删除后重建），wizard 返回同一错误码，`watch run --all` 只跑参数可用的条目。
 - 预算 / 时限停止的默认文案仍是英文，会原样进入信封 `error.message`：`RequestBudgetExceeded` 的 message 形如 `request pacing exhausted its wait timeout before dispatch`，紧邻的 `recovery_action` 却是登记表里的中文，Agent 与真人看到的是混排文案；`boss wizard` 的 `WORKFLOW_TIMEOUT`、`boss ai local import` 的来源缺失、招聘者自动化的熔断默认原因（`circuit breaker is open`）同样如此。现在这些默认文案统一为中文（如「请求节流等待超时，请求未发出」「workflow 超过 60 秒未完成」「模型路径不存在」「熔断已打开」），并新增源码扫描测试，保证 `RequestBudgetExceeded` 的新抛错点不会把英文文案漏进信封。
 - `boss agent review approve/reject` 处理不存在的复核项时用 `raise click.ClickException`，被组层兜底成 `command: "boss"`、英文消息（`review item not found or not reviewable: ...`），与其它子命令的信封不一致。现在按实际命令名输出 `INVALID_PARAM` 与中文消息，并给出 `boss agent review list` 的后继指引。

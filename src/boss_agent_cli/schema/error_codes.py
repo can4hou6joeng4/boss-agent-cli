@@ -294,6 +294,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "执行对应的数据获取命令以填充缓存",
 	},
+	"CACHE_RECORD_INVALID": {
+		"message": "本地任务记录损坏，断点无法恢复",
+		"recoverable": True,
+		"recovery_action": "该 run 的记录只存在本地缓存：重新创建任务（crawl 用 boss crawl start，workflow 用 boss wizard --input-json）后重试；已导出的文件不会自动删除",
+	},
 	"RECRUITER_NOT_AUTHORIZED": {
 		"message": "当前账号非招聘者账号",
 		"recoverable": True,

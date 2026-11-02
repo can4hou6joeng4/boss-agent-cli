@@ -636,3 +636,68 @@ def test_resume_background_maps_launch_failure_to_crawl_unavailable(tmp_path, mo
 	assert "boss crawl resume run-1" in error["recovery_action"]
 	# OSError 多来自磁盘满或目录权限，指引必须先查这两项，与 crawl start 一致。
 	assert "检查磁盘空间与数据目录权限" in error["recovery_action"]
+
+
+# ── 本地记录损坏 ──────────────────────────────────────────────────────
+
+
+def _break_column(tmp_path: Path, table: str, column: str, run_id: str = "run-1") -> None:
+	db_path = tmp_path / "cache" / "boss_agent.db"
+	with sqlite3.connect(db_path) as conn:
+		conn.execute(f"UPDATE {table} SET {column} = ? WHERE run_id = ?", ("{not json", run_id))
+
+
+@pytest.mark.parametrize(
+	"command",
+	[
+		("crawl", "status", "run-1"),
+		("crawl", "results", "run-1"),
+		("crawl", "resume", "run-1", "--background"),
+		("crawl", "shortlist", "run-1", "--all"),
+	],
+)
+def test_corrupt_run_params_reports_envelope_instead_of_traceback(tmp_path, command):
+	"""run 的 params 写坏后，每个只读子命令都要给信封，而不是 json.loads traceback。"""
+	_seed_run(tmp_path, "run-1", status="stopped")
+	_break_column(tmp_path, "crawl_runs", "params")
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, *command)
+	assert result.exit_code == 1, result.output
+	error = _envelope(result)["error"]
+	assert error["code"] == "CACHE_RECORD_INVALID"
+	assert error["recoverable"] is True
+	assert "params" in error["message"]
+	assert _envelope(result)["hints"]["next_actions"][0] == "boss crawl start <关键词>"
+
+
+def test_corrupt_hook_results_reports_envelope(tmp_path):
+	_seed_run(tmp_path, "run-1")
+	_break_column(tmp_path, "crawl_runs", "hook_results")
+	result = _invoke(CliRunner(), tmp_path, "crawl", "status", "run-1")
+	assert result.exit_code == 1, result.output
+	assert _envelope(result)["error"]["code"] == "CACHE_RECORD_INVALID"
+
+
+def test_corrupt_job_payload_reports_envelope(tmp_path):
+	"""职位行写坏时 results 也要给信封：payload 是唯一真源，读不出就不能假装成功。"""
+	_seed_run(tmp_path, "run-1")
+	db_path = tmp_path / "cache" / "boss_agent.db"
+	with sqlite3.connect(db_path) as conn:
+		conn.execute("UPDATE crawl_jobs SET payload = ? WHERE rowid = 1", ("{not json",))
+	result = _invoke(CliRunner(), tmp_path, "crawl", "results", "run-1")
+	assert result.exit_code == 1, result.output
+	error = _envelope(result)["error"]
+	assert error["code"] == "CACHE_RECORD_INVALID"
+	assert "payload" in error["message"]
+
+
+def test_corrupt_run_record_in_foreground_resume_is_not_invalid_param(tmp_path, monkeypatch):
+	"""CacheRecordInvalid 是 ValueError 子类，必须排在 INVALID_PARAM 兜底之前。"""
+	_seed_run(tmp_path, "run-1", status="stopped")
+	_break_column(tmp_path, "crawl_runs", "params")
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, "crawl", "resume", "run-1")
+	assert result.exit_code == 1, result.output
+	assert _envelope(result)["error"]["code"] == "CACHE_RECORD_INVALID"

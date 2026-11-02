@@ -6,13 +6,14 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any
 
-from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
 from boss_agent_cli.wizard.models import WorkflowPlan
 
 
 class WorkflowStore:
 	def __init__(self, data_dir: Path) -> None:
 		self._cache = CacheStore(data_dir / "cache" / "boss_agent.db")
+		self._corrupt_run_ids: list[str] = []
 
 	def create(self, run_id: str, plan: WorkflowPlan) -> None:
 		self._cache.create_workflow_run(
@@ -38,16 +39,27 @@ class WorkflowStore:
 	def list_recent(self, *, limit: int = 20) -> list[dict[str, Any]]:
 		from boss_agent_cli.wizard.live_crawl import (
 			LIST_ENRICH_JOB_LIMIT,
-			enrich_runs_with_live_crawl,
+			enrich_run_with_live_crawl,
 			sort_runs_for_status_picker,
 		)
 
-		runs = self._cache.list_workflow_runs(limit=limit)
+		runs, corrupt = self._cache.list_workflow_runs_with_corrupt(limit=limit)
+		enriched: list[dict[str, Any]] = []
 		for run in runs:
-			run["steps"] = self._cache.list_workflow_steps(str(run["run_id"]))
-		# List menu: counts + sample titles only — no full 75-row dump.
-		enriched = enrich_runs_with_live_crawl(runs, self._cache, job_limit=LIST_ENRICH_JOB_LIMIT)
+			run_id = str(run["run_id"])
+			try:
+				run["steps"] = self._cache.list_workflow_steps(run_id)
+				# 绑定的 crawl 记录写坏时同样读不出状态，与 run 本体损坏同等对待。
+				enriched.append(enrich_run_with_live_crawl(run, self._cache, job_limit=LIST_ENRICH_JOB_LIMIT))
+			except CacheRecordInvalid:
+				corrupt.append(run_id)
+		self._corrupt_run_ids = corrupt
 		return sort_runs_for_status_picker(enriched)
+
+	@property
+	def corrupt_run_ids(self) -> list[str]:
+		"""上一次 list_recent 跳过的损坏 run_id（读不出断点，只能重建）。"""
+		return list(self._corrupt_run_ids)
 
 	@property
 	def cache(self) -> CacheStore:
