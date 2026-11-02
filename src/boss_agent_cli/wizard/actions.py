@@ -829,14 +829,14 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 	if outcome.status == "timeout_stopped":
 		raise WorkflowActionError(
 			"WORKFLOW_TIMEOUT",
-			outcome.error or "workflow exceeded its timeout",
+			outcome.error or "workflow 超过设定时限",
 			recoverable=True,
 			recovery_action=f"boss crawl resume {outcome.run_id}",
 		)
 	if outcome.status in {"workflow_stopped", "stopped"} and "stop requested" in str(outcome.error or ""):
 		raise WorkflowActionError(
 			"WORKFLOW_STOPPED",
-			outcome.error or "crawl stopped",
+			outcome.error or "crawl 已停止",
 			recoverable=True,
 			recovery_action=f"boss crawl resume {outcome.run_id}",
 		)
@@ -875,7 +875,7 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 	if outcome.status != "completed":
 		raise WorkflowActionError(
 			"NETWORK_ERROR",
-			outcome.error or f"crawl stopped with status {outcome.status}",
+			outcome.error or f"crawl 以状态 {outcome.status} 停止",
 			recoverable=True,
 			recovery_action=f"boss crawl resume {outcome.run_id}",
 		)

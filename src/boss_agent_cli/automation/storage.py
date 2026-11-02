@@ -120,7 +120,7 @@ class AutomationStore:
 			breaker = state.get("autonomy", {}).get("circuit_breaker", {})
 			stop = self.read_stop()
 			if breaker.get("open") and not stop:
-				self._set_stop(str(breaker.get("reason", "circuit breaker is open")))
+				self._set_stop(str(breaker.get("reason", "熔断已打开")))
 				stop = self.read_stop()
 			if "open" in stop:
 				state.setdefault("autonomy", {})["circuit_breaker"] = stop

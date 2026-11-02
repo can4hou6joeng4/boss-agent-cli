@@ -50,7 +50,7 @@ class SafetyGuard:
 			if breaker.get("open"):
 				self._state["autonomy"]["circuit_breaker"] = breaker
 		breaker = self._state.get("autonomy", {}).get("circuit_breaker", {})
-		return str(breaker.get("reason") or "circuit breaker is open") if breaker.get("open") else None
+		return str(breaker.get("reason") or "熔断已打开") if breaker.get("open") else None
 
 	def checkpoint(self) -> None:
 		if self._store is not None:
@@ -89,7 +89,7 @@ class SafetyGuard:
 		safety["consecutive_errors"] = current
 		safety["last_error"] = reason
 		if current >= self._config.max_consecutive_errors:
-			self.open_circuit_breaker(f"max consecutive errors reached: {reason}")
+			self.open_circuit_breaker(f"连续错误次数达到上限：{reason}")
 
 	def open_circuit_breaker(self, reason: str) -> None:
 		self._state.setdefault("autonomy", {})["circuit_breaker"] = {

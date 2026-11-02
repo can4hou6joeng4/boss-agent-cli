@@ -118,7 +118,7 @@ def read_imported_models(data_dir: Path, *, strict: bool = False) -> list[Import
 def import_local_model(data_dir: Path, source: Path, model: str) -> ImportedLocalModel:
 	"""Copy an external model artifact into the user data directory and register it."""
 	if not source.exists():
-		raise LocalModelManifestError("MODEL_SOURCE_NOT_FOUND", f"model source does not exist: {source}")
+		raise LocalModelManifestError("MODEL_SOURCE_NOT_FOUND", f"模型路径不存在: {source}")
 	# 先读登记表再复制：登记表损坏时直接报错，不留下一份复制了却没登记进来的模型目录。
 	rows = [item for item in read_imported_models(data_dir, strict=True) if item.model != model]
 	target_dir = data_dir / "models" / _safe_model_dir(model)

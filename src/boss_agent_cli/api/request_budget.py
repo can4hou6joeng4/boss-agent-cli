@@ -78,7 +78,7 @@ def check_request_control(check: Callable[[], None] | None = None) -> None:
 	if control.check is not None:
 		control.check()
 	if control.deadline is not None and time.monotonic() >= control.deadline:
-		raise RequestBudgetExceeded("workflow deadline reached before dispatch", code="WORKFLOW_TIMEOUT")
+		raise RequestBudgetExceeded("工作流已超过截止时间，请求未发出", code="WORKFLOW_TIMEOUT")
 
 
 def request_controls_active() -> bool:
@@ -95,7 +95,7 @@ def cancellable_sleep(
 	control = _CONTROL.get()
 	if control.deadline is not None and seconds > max(0.0, control.deadline - time.monotonic()):
 		raise RequestBudgetExceeded(
-			"request wait exceeds the workflow deadline", code="WORKFLOW_TIMEOUT", retry_after=seconds
+			"等待时间会超出工作流截止时间，请求未发出", code="WORKFLOW_TIMEOUT", retry_after=seconds
 		)
 	if check is None and control.check is None and control.deadline is None:
 		if seconds > 0:
@@ -267,13 +267,13 @@ class RequestBudget:
 				else "REQUEST_BUDGET_EXHAUSTED"
 			)
 			raise RequestBudgetExceeded(
-				"request budget/cooldown cannot be acquired within the remaining time", code=code, retry_after=seconds
+				"剩余时间内拿不到请求预算或等不完冷却，请求未发出", code=code, retry_after=seconds
 			)
 		cancellable_sleep(seconds, check=lambda: self._check(check))
 
 	def _check_wait_timeout(self, started: float) -> None:
 		if time.monotonic() - started >= self.wait_timeout:
-			raise RequestBudgetExceeded("request pacing exhausted its wait timeout before dispatch")
+			raise RequestBudgetExceeded("请求节流等待超时，请求未发出")
 
 	@staticmethod
 	def _try_lease(handle: BinaryIO) -> bool:
@@ -385,7 +385,7 @@ class RequestBudget:
 					if wait <= 0:
 						self._check(check)
 						if self._remaining(started) <= 0:
-							raise RequestBudgetExceeded("request pacing exhausted its wait timeout before dispatch")
+							raise RequestBudgetExceeded("请求节流等待超时，请求未发出")
 						if claim is not None:
 							claim()
 						db.execute("INSERT INTO request_attempts(requested_at,kind) VALUES(?,?)", (now, kind))
