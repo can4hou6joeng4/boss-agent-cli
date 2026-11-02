@@ -49,6 +49,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "boss login",
 	},
+	"LOGOUT_FAILED": {
+		"message": "退出登录失败",
+		"recoverable": True,
+		"recovery_action": "检查数据目录权限与磁盘空间后重试 boss logout",
+	},
 	"RATE_LIMITED": {
 		"message": "请求频率过高",
 		"recoverable": True,

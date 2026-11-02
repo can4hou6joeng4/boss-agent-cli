@@ -90,7 +90,7 @@ def export_cmd(
 			"export",
 			code="INVALID_PARAM",
 			message="未提供 query，请传入搜索关键词或 --url",
-			recoverable=True,
+			recoverable=False,
 			recovery_action="boss export <query> 或 boss export --url <搜索页URL>",
 		)
 		return

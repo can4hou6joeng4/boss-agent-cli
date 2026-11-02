@@ -27,7 +27,9 @@ def test_logout_handles_exception(mock_auth_cls):
 	# emit_error 不主动 exit，输出 JSON 后正常返回
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
-	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	assert parsed["error"]["code"] == "LOGOUT_FAILED"
+	assert parsed["error"]["recoverable"] is True
+	assert "boss logout" in parsed["error"]["recovery_action"]
 
 
 # ── show 错误分支 ──────────────────────────────────────────
