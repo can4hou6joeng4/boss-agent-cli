@@ -554,6 +554,35 @@ def test_crawl_action_rejects_invalid_pages(tmp_path, pages):
 	assert "pages" in str(excinfo.value)
 
 
+@pytest.mark.parametrize("hook_profile", ["screenshot-full", "weird"])
+def test_crawl_action_rejects_unsupported_hook_profile(tmp_path, monkeypatch, hook_profile):
+	service = _FakeCrawlService()
+	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache: service)
+	context = _action_context(tmp_path)
+	with pytest.raises(WorkflowActionError) as excinfo:
+		DEFAULT_ACTIONS["crawl_start"](
+			context,
+			{"query": "Python", "city": "北京", "hook_profile": hook_profile},
+			{},
+		)
+	assert excinfo.value.code == "INVALID_PARAM"
+	assert "hook_profile" in str(excinfo.value)
+	assert "boss crawl run" in str(excinfo.value.recovery_action)
+	assert service.created_settings is None
+
+
+@pytest.mark.parametrize("pages", ["abc", 0])
+def test_crawl_resume_rejects_invalid_pages(tmp_path, monkeypatch, pages):
+	service = _FakeCrawlService()
+	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache: service)
+	context = _action_context(tmp_path)
+	with pytest.raises(WorkflowActionError) as excinfo:
+		DEFAULT_ACTIONS["crawl_resume"](context, {"run_id": "crawl-existing", "pages": pages}, {})
+	assert excinfo.value.code == "INVALID_PARAM"
+	assert "pages" in str(excinfo.value)
+	assert service.resumed == []
+
+
 class _FakeRecruiterPlatform:
 	def __init__(self, *, fail=False):
 		self.fail = fail

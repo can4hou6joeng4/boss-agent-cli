@@ -92,7 +92,7 @@ boss crawl resume <run_id>
 boss crawl stop <run_id>
 ```
 
-配置值在开始运行时按类型与范围校验：`max_requests` / `max_details` / `max_seconds` 必须 ≥ 1，`max_retries` 可以设为 `0` 表示不重试，`cdp_port` 必须在 1-65535 之间，`chrome_path` 必须是字符串或 `null`。`config set crawl` 或手工编辑写入错误类型 / 越界值时，`crawl run` / `start` 与 `boss wizard` 的采集动作返回 `INVALID_PARAM` 并指出配置项，不会悄悄套用默认值或落到 `INTERNAL_ERROR`；向导的 `pages` 输入同样要求 ≥ 1 的整数。
+配置值在开始运行时按类型与范围校验：`max_requests` / `max_details` / `max_seconds` 必须 ≥ 1，`max_retries` 可以设为 `0` 表示不重试，`cdp_port` 必须在 1-65535 之间，`chrome_path` 必须是字符串或 `null`。`config set crawl` 或手工编辑写入错误类型 / 越界值时，`crawl run` / `start` 与 `boss wizard` 的采集动作返回 `INVALID_PARAM` 并指出配置项，不会悄悄套用默认值或落到 `INTERNAL_ERROR`。向导的采集动作只接受 `hook_profile=none`（自定义 Hook 需显式运行 `boss crawl run --hook-profile screenshot-full --hook-dir`），`pages` 输入（含恢复）要求 ≥ 1 的整数，非法值返回 `INVALID_PARAM`。
 
 | 命令 | 说明 |
 |------|------|
