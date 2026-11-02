@@ -21,7 +21,7 @@ from boss_agent_cli.crawler.operations import crawl_status
 from boss_agent_cli.crawler.service import CrawlBudget, CrawlService, CrawlSettings
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
 from boss_agent_cli.digest import build_digest
-from boss_agent_cli.display import RISK_ERROR_CONTRACTS, risk_error_contract
+from boss_agent_cli.display import RISK_ERROR_CONTRACTS, risk_error_contract, risk_error_message
 from boss_agent_cli.output import Logger
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
 from boss_agent_cli.resume.models import resume_to_text
@@ -265,6 +265,9 @@ def _unwrap(platform: Any, response: dict[str, Any], fallback: str) -> Any:
 	code, message = platform.parse_error(response)
 	text = message or fallback
 	code, recoverable, recovery = _classify_action_error(code, text)
+	if code in RISK_ERROR_CONTRACTS:
+		# 风控响应原文可能带临时凭据，不进 workflow 结果；停止指引由 recovery_action 承载。
+		text = risk_error_message(code)
 	details = response.get("__cli_error_details__") if isinstance(response, dict) else None
 	raise WorkflowActionError(
 		code,

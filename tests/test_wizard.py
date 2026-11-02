@@ -3114,6 +3114,20 @@ def test_classify_action_error_uses_risk_contract_for_risk_codes():
 		assert "稍后重试" not in recovery
 
 
+def test_unwrap_risk_response_uses_registry_message():
+	from boss_agent_cli.wizard.actions import _unwrap
+
+	platform = MagicMock()
+	platform.is_success.return_value = False
+	platform.parse_error.return_value = ("ENVIRONMENT_RISK", "fixture-platform-response-token")
+	with pytest.raises(WorkflowActionError) as caught:
+		_unwrap(platform, {"code": 37, "message": "fixture-platform-response-token"}, "最近消息获取失败")
+	assert caught.value.code == "ENVIRONMENT_RISK"
+	assert str(caught.value) == risk_error_message("ENVIRONMENT_RISK")
+	assert "fixture-platform-response-token" not in str(caught.value)
+	assert caught.value.recoverable is False
+
+
 def test_classify_action_error_keeps_action_unconfirmed_no_retry_contract():
 	from boss_agent_cli.wizard.actions import _classify_action_error
 
