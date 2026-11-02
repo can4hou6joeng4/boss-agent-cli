@@ -6,7 +6,7 @@ import socket
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, NoReturn
 
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.auth.identity import account_scope
@@ -436,6 +436,18 @@ def _candidate_detail(context: ActionContext, inputs: Mapping[str, Any], prior: 
 	return StepResult({"job": data, "result": data})
 
 
+def _raise_local_state_write_failed(message: str, details: dict[str, Any]) -> NoReturn:
+	"""平台已确认成功、本地记账失败：不得回成可重试的 NETWORK_ERROR。"""
+	contract = ERROR_CODES["LOCAL_STATE_WRITE_FAILED"]
+	raise WorkflowActionError(
+		"LOCAL_STATE_WRITE_FAILED",
+		message,
+		recoverable=bool(contract["recoverable"]),
+		recovery_action=str(contract["recovery_action"]),
+		details=details,
+	)
+
+
 def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	security_id = str(_required(inputs, "security_id"))
 	job_id = str(_required(inputs, "job_id"))
@@ -445,7 +457,14 @@ def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 			raise WorkflowActionError("ALREADY_APPLIED", "已对该职位发起过投递/立即沟通")
 		with context.candidate_platform() as platform:
 			data = _unwrap(platform, platform.apply(security_id, job_id, lid=str(inputs.get("lid") or "")), "投递失败")
-		cache.record_apply(security_id, job_id, account=account)
+		try:
+			cache.record_apply(security_id, job_id, account=account)
+		except Exception:
+			# 重试或 --resume 会绕过 is_applied 检查，把同一次投递再提交一遍。
+			_raise_local_state_write_failed(
+				"投递/立即沟通已提交，但本地状态保存失败；不要自动重发",
+				{"security_id": security_id, "job_id": job_id, "applied": True, "recorded": False},
+			)
 	return StepResult({"security_id": security_id, "job_id": job_id, "result": data})
 
 
@@ -460,7 +479,14 @@ def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: M
 			data = _unwrap(
 				platform, platform.greet(security_id, job_id, str(inputs.get("message") or "")), "打招呼失败"
 			)
-		cache.record_greet(security_id, job_id, account=account)
+		try:
+			cache.record_greet(security_id, job_id, account=account)
+		except Exception:
+			# 重试或 --resume 会绕过 is_greeted 检查，把同一个招呼再发一次。
+			_raise_local_state_write_failed(
+				"已向该招聘者打招呼，但本地状态保存失败；不要自动重发",
+				{"security_id": security_id, "job_id": job_id, "greeted": True, "recorded": False},
+			)
 	return StepResult({"security_id": security_id, "job_id": job_id, "result": data})
 
 

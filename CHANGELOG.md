@@ -25,6 +25,7 @@
 - `hr accept-resume` 与 `hr greet` 把「请求在调度前就被预算 / 通道挡下」也报成结果未知：`RequestBudgetExceeded` 明确标注 `request_sent: false`，前者却回 `RESUME_ACCEPT_RESULT_UNKNOWN` 让人去官方页面核对一个不存在的操作，后者还保留 pending 预约，把这个候选人永久锁成「结果未知」——通道恢复、预算冷却结束后也无法重试。现在两条写路径都按停止契约输出 `REQUEST_BUDGET_EXHAUSTED` / `WORKFLOW_TIMEOUT`；`hr greet` 在预算停止与 `BrowserSourceUnavailable`（通道全部不可用）时撤销尚未发出的预约（只删 pending，已发送与结果未知的记录保持不动）。
 - 求职者侧的 `greet` / `apply` 在平台已确认成功、随后本地记账（`record_greet` / `record_apply`）失败时，会把整个命令降级成 `NETWORK_ERROR`（`recoverable: true`、「重试」）：重跑会绕过 `is_greeted` / `is_applied` 检查，把同一次打招呼或投递再提交一遍。`batch-greet` 更直接——记账异常落在打招呼的重试分支里，1～2 秒后就会把同一个招呼再发一次。现在本地记账失败输出新错误码 `LOCAL_STATE_WRITE_FAILED`（不可恢复，说明操作已生效、禁止自动重发）；`batch-greet` 停止剩余候选人，已发出的条目带 `recorded: false`，不再重试或继续。
 - 招聘者自动化的页面写动作返回 `ACTION_UNCONFIRMED`（动作可能已生效、发送未确认）时，适配器把它当成普通 `blocked`：本轮事件落成 `STOPPED_BY_SAFETY`，已登记的 `PLATFORM_VERIFICATION_REQUIRED` 状态从未产生；对应的待执行项又保留为 `pending`，下一轮 `agent run` 会对同一候选人自动重发招呼或换联系方式，`--resume` 之后也一样。现在未确认结果记为 `PLATFORM_VERIFICATION_REQUIRED` 并打开熔断，待执行项标记为 `verification-required`、不再回到待执行队列，`agent stats` 的近期错误也包含该状态。
+- `boss wizard` 的 `candidate_apply` / `candidate_greet` 在平台已确认成功、随后本地记账（`record_apply` / `record_greet`）失败时，异常落进 runner 的通用兜底，workflow 报成 `NETWORK_ERROR`（`recoverable: true`，「重试当前 run_id」）：重试或 `--resume` 会绕过 `is_applied` / `is_greeted` 检查，把同一次投递或打招呼再提交一遍。现在与单次命令一致，输出 `LOCAL_STATE_WRITE_FAILED`（不可恢复，说明操作已生效、禁止自动重发），`error.details` 带 `applied` / `greeted` 与 `recorded: false`。
 
 ## [3.2.0] - 2026-11-01
 
