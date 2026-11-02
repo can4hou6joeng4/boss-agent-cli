@@ -43,6 +43,7 @@
 - `boss crawl status` 对 `risk_stopped` 的 run 只给出 `checkpoint.resume_command`，而风险锁会先于浏览器构造阻断 `resume`（`raise_if_locked`）：Agent 照 checkpoint 重试只会再次撞锁，用户也看不到解锁入口。现在 `checkpoint.resume_requires_operator_unlock` 标记该前置条件（不把解锁命令写进机器可执行的 `resume_command`），`hints.operator_actions` 给出 `boss clean --risk-lock` 等人工解锁指引与恢复后的显式 resume 命令；TTY 的下一步也不再展示无效的 `crawl stop`。
 - `boss schema` 的位置参数只在部分顶层命令声明：`watch add/remove/run`、`preset add/remove`、`config get/set/reset`、`crawl run/start/resume/status/stop/results/shortlist`、`shortlist add/annotate/remove`、`resume show/edit/delete/export/import/clone/diff/link/applications`、`ai analyze-jd/polish/optimize/suggest/reply/interview-prep/chat-coach/resume-optimize/cover-letter`、`agent review approve/reject` 以及 `hr` 的简历、沟通、候选人、职位管理子命令都没有 `args` 声明，Agent 读 schema 时看不到必填的位置参数，照 schema 构造的 argv 会被 Click 拒绝。现在全部补齐（含 `hr jobs` 与 `agent review` 这种不带 `options` 的分组），并新增测试双向校验声明的参数名、顺序与 `required` 都必须与 Click 命令树一致。
 - `boss ai cover-letter` 在推荐语生成后给出的后继命令是 `boss ai interview-prep --jd <jd_text> --resume <name>`，而 `interview-prep` 的 JD 是位置参数、没有 `--jd` 选项：Agent 照 `hints.next_actions` 执行会被 Click 以参数非法拒绝。现在改为 `boss ai interview-prep <jd_text> --resume <name>`，并在 `tests/test_ai_cover_letter.py` 钉住该后继命令可执行。
+- MCP 的 `boss_mark` 工具把 CLI 的 `--label` 选项写成 `--tag`：任何一次真实调用都会被 Click 以 `NoSuchOption` 拒绝，工具自发布起不可用。原先的测试只断言 `args[0]` 是已注册命令、参数断言又照抄了错误选项，所以一直没发现。现在映射改为 `--label`，并新增测试用 Click 命令树实际解析全部 78 个工具生成的 argv（覆盖未知选项、缺失参数与非法取值），不再只看首个子命令名。
 
 ## [3.2.0] - 2026-11-01
 
