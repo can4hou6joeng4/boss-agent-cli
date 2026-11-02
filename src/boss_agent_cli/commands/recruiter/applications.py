@@ -9,7 +9,7 @@ from boss_agent_cli.display import handle_auth_errors, handle_output, handle_pla
 
 @click.command("applications")
 @click.option("--job-id", default=None, help="按职位筛选")
-@click.option("--label-id", default=0, type=int, help="按标签筛选（0=全部, 1=新招呼, 2=沟通中）")
+@click.option("--label-id", default=0, type=click.IntRange(min=0), help="按标签筛选（0=全部, 1=新招呼, 2=沟通中）")
 @click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
 @click.pass_context
 @handle_auth_errors("recruiter-applications")
