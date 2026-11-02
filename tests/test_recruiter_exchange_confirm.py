@@ -80,11 +80,11 @@ def _ws(*bits):
 
 
 def test_page_ok_without_evidence_is_action_unconfirmed_not_unexpected_page_result():
-	# 页面脚本显式返回 error: null，以前 setdefault 不生效，信封只剩 unexpected page result。
+	# 页面脚本显式返回 error: null，以前 setdefault 不生效，信封只剩页面错误默认文案。
 	client, _ = _client(page=_page(), events=[_ws("/message/suggest")])
 	result = client.exchange_request_by_friend(FRIEND_ID, exchange_type=4)
 	assert result["code"] == -1
-	assert "unexpected page result" not in result["message"]
+	assert "页面未返回可用的结果" not in result["message"]
 	assert result["__cli_error_code__"] == "ACTION_UNCONFIRMED"
 	assert f"boss hr chatmsg {FRIEND_ID}" in result["message"]
 	details = result["__cli_error_details__"]
@@ -273,7 +273,7 @@ def test_cli_envelope_carries_action_unconfirmed_and_details():
 	error = json.loads(result.output)["error"]
 	assert error["code"] == "ACTION_UNCONFIRMED"
 	assert error["recoverable"] is False
-	assert "unexpected page result" not in error["message"]
+	assert "页面未返回可用的结果" not in error["message"]
 	assert error["details"]["componentName"] == "ExchangeResume"
 	assert error["details"]["ws_evidence"]["matched_ws_count"] == 0
 	assert "log" in error["details"]
@@ -283,7 +283,7 @@ def test_cli_envelope_carries_action_unconfirmed_and_details():
 def test_page_failure_still_surfaces_real_error_in_details():
 	client, _ = _client(page={"ok": False, "error": "ExchangeWx Vue component not found", "log": ["geekClick called"]})
 	result = client.exchange_request_by_friend(FRIEND_ID, exchange_type=2)
-	assert result["message"] == "exchange_request_by_friend failed: ExchangeWx Vue component not found"
+	assert result["message"] == "交换联系方式请求失败: ExchangeWx Vue component not found"
 	assert "__cli_error_code__" not in result
 	assert result["__cli_error_details__"]["log"] == ["geekClick called"]
 	assert BossRecruiterPlatform(client).parse_error(result)[0] == "UNKNOWN"

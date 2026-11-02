@@ -833,8 +833,8 @@ class BossRecruiterClient(_BaseHttpClient):
 	def _page_error_message(result: Any) -> str:
 		"""从前端代劳返回中提取错误串（reply / exchange 失败信封共用）。"""
 		if isinstance(result, dict):
-			return str(result.get("error") or "unexpected page result")
-		return f"unexpected result: {result!r}"
+			return str(result.get("error") or "页面未返回可用的结果")
+		return f"页面返回了非预期结果: {result!r}"
 
 	@staticmethod
 	def _chat_action_failure_response(
@@ -1220,13 +1220,13 @@ class BossRecruiterClient(_BaseHttpClient):
 				}
 			# 页面脚本成功时会显式返回 error: null，setdefault 不会覆盖它。
 			if not result.get("error"):
-				result["error"] = "outgoing frame or page action does not confirm acceptance in target chat history"
+				result["error"] = "页面动作未在目标聊天记录中得到确认"
 			if history.get("control_stop"):
 				result["confirmation_stop"] = history["control_stop"]
 		# Surface the page-side error in CLI envelope shape
 		err_msg = self._page_error_message(result)
 		return self._chat_action_failure_response(
-			message=f"send_message_by_friend unconfirmed: {err_msg}；{_ACTION_UNCONFIRMED_HINT.format(friend_id=friend_id)}",
+			message=f"发送消息未确认: {err_msg}；{_ACTION_UNCONFIRMED_HINT.format(friend_id=friend_id)}",
 			payload=self._chat_action_failure_data(
 				action="reply",
 				friend_id=friend_id,
@@ -1389,7 +1389,7 @@ class BossRecruiterClient(_BaseHttpClient):
 		if not (isinstance(result, dict) and result.get("ok")):
 			err = self._page_error_message(result)
 			return self._chat_action_failure_response(
-				message=f"exchange_request_by_friend failed: {err}",
+				message=f"交换联系方式请求失败: {err}",
 				payload=self._chat_action_failure_data(
 					action="exchange",
 					friend_id=friend_id,
@@ -1476,7 +1476,7 @@ class BossRecruiterClient(_BaseHttpClient):
 		if side_effects:
 			extra["side_effects"] = side_effects
 		return self._chat_action_failure_response(
-			message=f"exchange_request_by_friend unconfirmed: {err}；{_ACTION_UNCONFIRMED_HINT.format(friend_id=friend_id)}",
+			message=f"交换联系方式请求未确认: {err}；{_ACTION_UNCONFIRMED_HINT.format(friend_id=friend_id)}",
 			payload=self._chat_action_failure_data(
 				action="exchange",
 				friend_id=friend_id,

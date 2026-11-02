@@ -31,6 +31,42 @@ def _budget_raise_sites() -> list[tuple[Path, int, ast.expr]]:
 	return sites
 
 
+def test_chat_action_messages_are_chinese():
+	"""`_chat_action_failure_response(message=...)` 的文案会原样进入信封 error.message。
+
+	招聘者聊天页写操作（发消息、交换联系方式）失败时直接用这句当 message；
+	残留英文函数名（如 send_message_by_friend unconfirmed）会和中文的
+	recovery_action / hints 混排。
+	"""
+	path = _SOURCE_ROOT / "boss_agent_cli" / "api" / "recruiter_client.py"
+	tree = ast.parse(path.read_text(encoding="utf-8"))
+	sites: list[tuple[int, str]] = []
+	for node in ast.walk(tree):
+		if not isinstance(node, ast.Call):
+			continue
+		func = node.func
+		name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+		if name != "_chat_action_failure_response":
+			continue
+		for keyword in node.keywords:
+			if keyword.arg != "message":
+				continue
+			value = keyword.value
+			if isinstance(value, ast.Constant) and isinstance(value.value, str):
+				text = value.value
+			elif isinstance(value, ast.JoinedStr):
+				text = "".join(
+					part.value for part in value.values
+					if isinstance(part, ast.Constant) and isinstance(part.value, str)
+				)
+			else:
+				continue  # 由寄存器变量拼出来的文案（如 _EXCHANGE_NOT_AVAILABLE_MESSAGE）由各自的用例覆盖
+			sites.append((node.lineno, text))
+	assert len(sites) >= 3  # 扫描器有效性：当前至少发消息 / 交换联系方式两条失败路径
+	offenders = [f"recruiter_client.py:{lineno}" for lineno, text in sites if not _CJK.search(text)]
+	assert not offenders, f"以下聊天页失败文案会进入信封 error.message，必须中文: {offenders}"
+
+
 def test_request_budget_messages_are_chinese():
 	"""`RequestBudgetExceeded` 的默认文案会原样进入信封，必须是中文。
 
