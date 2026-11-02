@@ -28,6 +28,7 @@ from boss_agent_cli.automation.models import (
 	PlatformAction,
 )
 from boss_agent_cli.automation.runner import run_automation_cycle
+from boss_agent_cli.automation.safety import SafetyGuard
 from boss_agent_cli.automation.storage import AutomationStore
 from boss_agent_cli.main import cli
 
@@ -548,6 +549,16 @@ def test_corrupt_stop_latch_fails_closed(tmp_path: Path) -> None:
 
 	assert report.status == EventStatus.CIRCUIT_BREAKER_OPEN.value
 	assert adapter.executed == []
+
+
+def test_circuit_breaker_without_reason_reports_chinese_default(tmp_path: Path) -> None:
+	"""熔断原因缺省时会写进 stop.json 并回显给用户，默认文案必须是中文。"""
+	store = AutomationStore(tmp_path)
+	store.write_state({"autonomy": {"circuit_breaker": {"open": True}}})
+	assert store.read_stop()["reason"] == "熔断已打开"
+
+	guard = SafetyGuard(AutomationConfig(), {"autonomy": {"circuit_breaker": {"open": True}}}, dry_run=True)
+	assert guard.stop_reason() == "熔断已打开"
 
 
 def test_corrupt_jsonl_lines_are_skipped(tmp_path: Path) -> None:

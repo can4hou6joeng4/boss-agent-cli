@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 预算 / 时限停止的默认文案仍是英文，会原样进入信封 `error.message`：`RequestBudgetExceeded` 的 message 形如 `request pacing exhausted its wait timeout before dispatch`，紧邻的 `recovery_action` 却是登记表里的中文，Agent 与真人看到的是混排文案；`boss wizard` 的 `WORKFLOW_TIMEOUT`、`boss ai local import` 的来源缺失、招聘者自动化的熔断默认原因（`circuit breaker is open`）同样如此。现在这些默认文案统一为中文（如「请求节流等待超时，请求未发出」「workflow 超过 60 秒未完成」「模型路径不存在」「熔断已打开」），并新增源码扫描测试，保证 `RequestBudgetExceeded` 的新抛错点不会把英文文案漏进信封。
 - `boss agent review approve/reject` 处理不存在的复核项时用 `raise click.ClickException`，被组层兜底成 `command: "boss"`、英文消息（`review item not found or not reviewable: ...`），与其它子命令的信封不一致。现在按实际命令名输出 `INVALID_PARAM` 与中文消息，并给出 `boss agent review list` 的后继指引。
 - 搜索缓存条目损坏时 `boss search` 直接 traceback：`search_cache.response` 被写坏（手工改库、磁盘异常）时 `json.loads` 抛 `JSONDecodeError`，结构漂移（缺少 `data` 或 `data` 不是数组）时 `result["data"]` 抛 `KeyError`，同一条查询会一直失败且没有清理指引。现在坏条目按缓存未命中处理，重新搜索后用新结果覆盖同键条目。
 - 招聘自动化状态文件损坏时没有信封：`automation/state.json` 被手工编辑写坏或在旧版本留下半截内容后，`boss agent run` / `agent stats` 直接抛 `JSONDecodeError` traceback；`action-log.jsonl` 等日志里有一行坏数据就会让 `stats` / `pending list` 整体失败。更严重的是 `automation/stop.json`（独立熔断开关）读不出来时被当作「没有熔断」，自动化会在状态未知的情况下继续向平台发送消息。现在状态文件损坏返回新登记的 `AUTOMATION_STATE_INVALID`（可恢复，指明文件与备份建议），单行损坏的 JSONL 跳过该行，熔断开关读不出来一律按已熔断处理并带上 `corrupt` 标记与原因。

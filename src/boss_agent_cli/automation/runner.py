@@ -77,7 +77,7 @@ def run_automation_cycle(
 		)
 		raise
 	except KeyboardInterrupt:
-		guard.open_circuit_breaker("execution interrupted; verify any unfinished action before resuming")
+		guard.open_circuit_breaker("执行被中断，恢复前请先核对未完成的操作")
 		raise
 	except RequestBudgetExceeded as exc:
 		guard.open_circuit_breaker(exc.code)

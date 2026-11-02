@@ -90,14 +90,14 @@ class WorkflowControl:
 		if signal == "stop":
 			raise WorkflowActionError(
 				"WORKFLOW_STOPPED",
-				"workflow stop requested",
+				"已按 stop 请求停止 workflow",
 				recoverable=True,
 				recovery_action="创建新 workflow，或恢复其内部可恢复任务",
 			)
 		if signal == "timeout":
 			raise WorkflowActionError(
 				"WORKFLOW_TIMEOUT",
-				"workflow exceeded its timeout",
+				"workflow 超过设定时限",
 				recoverable=True,
 				recovery_action=f"boss wizard --resume {self.run_id}",
 			)
@@ -181,7 +181,7 @@ class WorkflowRunner:
 					run_id,
 					step_name,
 					code="WORKFLOW_TIMEOUT",
-					message=f"workflow exceeded {timeout_seconds:g} seconds",
+					message=f"workflow 超过 {timeout_seconds:g} 秒未完成",
 					recovery_action=f"boss wizard --resume {run_id}",
 				)
 			if on_event:
@@ -319,7 +319,7 @@ class WorkflowRunner:
 						run_id,
 						step_name,
 						code="WORKFLOW_TIMEOUT",
-						message=f"workflow exceeded {timeout_seconds:g} seconds",
+						message=f"workflow 超过 {timeout_seconds:g} 秒未完成",
 						recovery_action=f"boss wizard --resume {run_id}",
 						preserve_result=True,
 					)

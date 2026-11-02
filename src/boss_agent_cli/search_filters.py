@@ -765,7 +765,7 @@ def _fetch_and_check_guarded(
 		return _DetailOutcome()
 	def check_stopped() -> None:
 		if stop.is_set():
-			raise RequestBudgetExceeded("detail batch stopped before dispatch", code="WORKFLOW_STOPPED")
+			raise RequestBudgetExceeded("详情批次已停止，请求未发出", code="WORKFLOW_STOPPED")
 	try:
 		with request_control(check=check_stopped):
 			return _fetch_and_check(client, welfare_conditions, criteria, raw_item, cached_desc, **kwargs)

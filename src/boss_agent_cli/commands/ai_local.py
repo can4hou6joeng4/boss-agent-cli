@@ -141,7 +141,7 @@ def local_pull_cmd(ctx: click.Context, model: str, confirm_download: bool) -> No
 			ctx,
 			"ai.local.pull",
 			code="LOCAL_MODEL_PULL_FAILED",
-			message=result.stderr.strip() or "ollama pull failed",
+			message=result.stderr.strip() or "ollama pull 未返回错误输出，退出码非零",
 			recoverable=True,
 			recovery_action="确认 Ollama 已安装并可访问网络后重试",
 		)
