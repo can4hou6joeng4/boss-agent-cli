@@ -1,6 +1,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
@@ -271,6 +272,42 @@ def test_import_file_not_found(tmp_path):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
+
+
+def test_import_non_utf8_file_returns_invalid_param(tmp_path):
+	"""GBK 保存的 JSON、误选的 PDF/图片都会读成非 UTF-8：要给信封和转码指引，而不是 traceback。"""
+	bad_file = tmp_path / "gbk.json"
+	bad_file.write_bytes('{"name": "张三"}'.encode("gbk"))
+	result = _invoke(CliRunner(), tmp_path, ["import", str(bad_file)])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "INVALID_PARAM")
+	assert str(bad_file) in parsed["error"]["message"]
+	assert "UTF-8" in parsed["error"]["message"]
+
+
+@pytest.mark.parametrize("content", ["[]", '"just a string"', "42", "null"])
+def test_import_non_object_json_returns_invalid_param(tmp_path, content):
+	"""顶层不是 JSON 对象时不能到模型解析层才抛 AttributeError。"""
+	bad_file = tmp_path / "not_object.json"
+	bad_file.write_text(content, encoding="utf-8")
+	result = _invoke(CliRunner(), tmp_path, ["import", str(bad_file)])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "INVALID_PARAM")
+	assert "顶层必须是 JSON 对象" in parsed["error"]["message"]
+
+
+@pytest.mark.parametrize("content", ["{}", '{"name": 123}', '{"name": "  "}'])
+def test_import_missing_name_returns_invalid_param(tmp_path, content):
+	"""name 缺失或不是字符串时，save() 里的 _safe_filename 会崩在 int.replace 上。"""
+	bad_file = tmp_path / "no_name.json"
+	bad_file.write_text(content, encoding="utf-8")
+	result = _invoke(CliRunner(), tmp_path, ["import", str(bad_file)])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "INVALID_PARAM")
+	assert "name" in parsed["error"]["message"]
 
 
 # ── clone ─────────────────────────────────────────────────────

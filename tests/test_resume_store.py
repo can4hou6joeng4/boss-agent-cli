@@ -149,3 +149,24 @@ def test_save_preserves_full_data(tmp_path):
 	assert loaded.personal_info.items[1].icon == "mdi:email"
 	assert loaded.modules[0].icon == "mdi:briefcase"
 	assert loaded.avatar == "https://example.com/avatar.jpg"
+
+
+def test_list_all_skips_unreadable_or_non_object_files(tmp_path):
+	"""一个坏文件（非 UTF-8 / 顶层不是对象）不该让整份简历列表都报错。"""
+	store = ResumeStore(tmp_path / "resumes")
+	store.save(ResumeData(name="张三", title="Python 开发"))
+	(store._dir / "gbk.json").write_bytes('{"name": "李四"}'.encode("gbk"))
+	(store._dir / "array.json").write_text('["x"]', encoding="utf-8")
+	(store._dir / "broken.json").write_text('{"name":', encoding="utf-8")
+
+	items = store.list_all()
+	assert [item["name"] for item in items] == ["张三"]
+
+
+def test_get_returns_none_for_unreadable_resume(tmp_path):
+	store = ResumeStore(tmp_path / "resumes")
+	(store._dir / "gbk.json").write_bytes('{"name": "李四"}'.encode("gbk"))
+	(store._dir / "bad_shape.json").write_text('{"name": "王五", "personal_info": [1]}', encoding="utf-8")
+
+	assert store.get("gbk") is None
+	assert store.get("bad_shape") is None
