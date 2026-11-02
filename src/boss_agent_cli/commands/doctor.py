@@ -17,7 +17,7 @@ from boss_agent_cli.auth.cookie_extract import extract_cookies
 from boss_agent_cli.auth.health import assess_auth_health, auth_config_for_platform
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._doctor_checks import _add_live_probe_checks, _add_quality_baseline_checks, _doctor_command
-from boss_agent_cli.display import handle_output, render_simple_list
+from boss_agent_cli.display import handle_output, platform_error_contract, render_simple_list
 from boss_agent_cli.services.browser_runtime import (
 	evaluate_patchright_chromium,
 	patchright_browser_cache_dirs,
@@ -28,6 +28,22 @@ from boss_agent_cli.services.browser_runtime import (
 #: 实测：15 秒间隔连续 3 次 search 会在第 3 次命中 code 37，90 秒间隔 3/3 通过。
 #: 阈值取 30 秒——低于它给出的提示仍然成立，又不是在做精确的安全承诺。
 _RISK_FREE_DELAY_FLOOR = 30.0
+
+
+def _risk_lock_check_payload(risk_lock: dict[str, Any]) -> dict[str, Any]:
+	"""本地风险锁的检查项；初次读取和探测命中后的复读共用同一份文案。"""
+	since = risk_lock.get("locked_at", "未知时间")
+	if risk_lock.get("corrupt"):
+		detail = "BOSS 本地风控锁文件无法解析，所有平台请求会在本地被拒绝"
+	else:
+		detail = f"BOSS 自 {since} 起记录 {risk_lock.get('reason', 'ENVIRONMENT_RISK')}，所有平台请求会在本地被拒绝"
+	return {
+		"name": "cdp_risk_lock",
+		"status": "warn",
+		"detail": detail,
+		"hint": "在原会话的 BOSS 官方目标业务页确认风险解除后，由用户运行 boss clean --risk-lock 再显式恢复任务；"
+		"令牌变化不会自动解锁，本地清理不解除服务器风险",
+	}
 
 
 @click.command("doctor")
@@ -201,17 +217,7 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 	# 4.5) BOSS 本地风险锁（沿用历史字段，只读本地文件）
 	risk_lock = lock_status(Path(data_dir)) if platform_name == "zhipin" else {"locked": False}
 	if risk_lock["locked"]:
-		since = risk_lock.get("locked_at", "未知时间")
-		detail = f"BOSS 自 {since} 起记录 {risk_lock.get('reason', 'ENVIRONMENT_RISK')}，所有平台请求会在本地被拒绝"
-		if risk_lock.get("corrupt"):
-			detail = "BOSS 本地风控锁文件无法解析，所有平台请求会在本地被拒绝"
-		add_check(
-			"cdp_risk_lock",
-			"warn",
-			detail,
-			"在原会话的 BOSS 官方目标业务页确认风险解除后，由用户运行 boss clean --risk-lock 再显式恢复任务；"
-			"令牌变化不会自动解锁，本地清理不解除服务器风险",
-		)
+		checks.append(_risk_lock_check_payload(risk_lock))
 	else:
 		add_check("cdp_risk_lock", "ok", "未记录 BOSS 本地风控锁")
 
@@ -243,10 +249,21 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 		)
 
 	# 5.6) Optional low-frequency live read probes
+	live_probe_risk: str | None = None
 	if live_probe and risk_lock["locked"]:
 		add_check("live_probe", "warn", "本地风险锁未解除，未执行在线只读探测")
 	elif live_probe:
-		_add_live_probe_checks(ctx, auth, checks)
+		live_probe_risk = _add_live_probe_checks(ctx, auth, checks)
+		if live_probe_risk is not None:
+			# 风控异常会把本地锁写进 data_dir；刷新快照，避免报告里仍显示“未记录风控锁”。
+			fresh_lock = lock_status(Path(data_dir)) if platform_name == "zhipin" else {"locked": False}
+			if fresh_lock.get("locked"):
+				risk_lock = fresh_lock
+				updated = _risk_lock_check_payload(fresh_lock)
+				for index, item in enumerate(checks):
+					if item["name"] == "cdp_risk_lock":
+						checks[index] = updated
+						break
 
 	# 6) Data dir writable
 	try:
@@ -274,16 +291,21 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 			operator_actions.append(
 				f"本地登录态损坏；确认需要重建后，先执行 {_doctor_command(ctx, 'logout')}，再执行 {login_command}"
 			)
-		else:
+		elif live_probe_risk is None:
 			next_actions.append(_doctor_command(ctx, "status", "--live"))
 			operator_actions.append("可选择执行一次 status --live，只读验证当前登录态；不是诊断时自动发起的请求")
 			if auth_quality and auth_quality["status"] == "warn":
 				operator_actions.append(
 					f"缺少 {config.secondary_token_label}；若状态异常，先在官方页面确认，再决定是否执行 {login_command} 重建登录态"
 				)
-	if not cdp_ok:
+	if not cdp_ok and live_probe_risk is None:
 		next_actions.append(_doctor_command(ctx, "doctor", cdp_url=cdp_url or DEFAULT_CDP_URL))
 		operator_actions.append("如需 CDP，请先确认目标浏览器及调试端口已就绪，再重新诊断；不要反复重试")
+	if live_probe_risk is not None:
+		# 风控命中后不再建议任何会触发平台请求的后续动作，停止指引以统一契约为准。
+		_, recovery_action, risk_hints = platform_error_contract(live_probe_risk)
+		next_actions.extend((risk_hints or {}).get("next_actions") or [])
+		operator_actions.append(f"在线只读探测命中平台风控（{live_probe_risk}）：{recovery_action}")
 	if risk_lock["locked"]:
 		operator_actions.extend(UNLOCK_OPERATOR_ACTIONS)
 	if not any(item["name"] == "cookie_extract" and item["status"] == "ok" for item in checks):
@@ -297,6 +319,7 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 		"auth_state": auth_health.auth_state,
 		"data_dir": str(data_dir),
 		"live_probe": live_probe,
+		"live_probe_risk": live_probe_risk,
 		"cdp_risk_lock": risk_lock,
 		"check_count": len(checks),
 		"checks": checks,
