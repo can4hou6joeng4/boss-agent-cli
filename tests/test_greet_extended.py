@@ -64,7 +64,7 @@ def test_greet_success_renders_message_and_records_cache(mock_cache_cls, mock_au
 	assert "打招呼成功" in parsed["data"]["message"]
 
 	mock_platform.greet.assert_called_once_with("sec_001", "job_001", "")
-	mock_cache.record_greet.assert_called_once_with("sec_001", "job_001")
+	mock_cache.record_greet.assert_called_once_with("sec_001", "job_001", account="")
 
 
 # Note: hook veto 分支已由 tests/test_hooks.py 独立覆盖，Click runner
@@ -239,8 +239,8 @@ def test_batch_greet_network_error_first_retry_succeeds(mock_cache_cls, mock_aut
 def test_batch_greet_skips_already_greeted(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
 	"""已打过招呼的职位应被 candidates 过滤掉。"""
 	mock_cache = _ctx_mock(mock_cache_cls)
-	# s1 已打过招呼，s2 没
-	mock_cache.is_greeted.side_effect = lambda sid: sid == "s1"
+	# s1 已打过招呼，s2 没（job_id 是关键参数，仍需接受）
+	mock_cache.is_greeted.side_effect = lambda sid, *, job_id="", account="": sid == "s1"
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.search_jobs.return_value = {
 		"zpData": {"jobList": [_make_raw_job("A", "s1"), _make_raw_job("B", "s2")]}
@@ -330,7 +330,7 @@ def test_batch_greet_account_risk_exception_stops_without_retry(mock_cache_cls, 
 	assert parsed["hints"]["next_actions"]
 	# s2 只调用一次（不重试），s3 从未被调用
 	assert [call.args[0] for call in mock_client.greet.call_args_list] == ["s1", "s2"]
-	mock_cache.record_greet.assert_called_once_with("s1", "job_s1")
+	mock_cache.record_greet.assert_called_once_with("s1", "job_s1", account="")
 
 
 @patch("boss_agent_cli.commands.greet.time")

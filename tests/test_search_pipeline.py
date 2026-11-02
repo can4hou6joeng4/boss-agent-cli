@@ -22,7 +22,7 @@ class FakeCache:
 		self.descs = descs or {}
 		self.put_calls: list[tuple[str, str]] = []
 
-	def is_greeted(self, security_id: str) -> bool:
+	def is_greeted(self, security_id: str = "", *, job_id: str = "", account: str = "") -> bool:
 		return security_id in self.greeted_ids
 
 	def get_job_desc(self, security_id: str) -> str | None:

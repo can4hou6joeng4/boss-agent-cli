@@ -30,7 +30,7 @@ def test_apply_success(mock_cache_cls, mock_auth_cls, mock_get_platform):
 	assert parsed["data"]["security_id"] == "sec_001"
 	assert parsed["data"]["job_id"] == "job_001"
 	assert parsed["data"]["mode"] == "immediate_chat_apply"
-	mock_cache.record_apply.assert_called_once_with("sec_001", "job_001")
+	mock_cache.record_apply.assert_called_once_with("sec_001", "job_001", account="")
 
 
 @patch("boss_agent_cli.commands.apply.get_platform_instance")

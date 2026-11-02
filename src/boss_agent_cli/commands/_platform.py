@@ -48,4 +48,15 @@ def get_platform_instance(ctx: "click.Context", auth: "AuthManager") -> Platform
 	)
 
 
-__all__ = ["get_platform_instance"]
+def account_scope(auth: "AuthManager") -> str:
+	"""返回当前登录态的账号指纹，用于本地操作记录的去重作用域。
+
+	未登录或缺少主 Cookie 时返回空串；此时本地记录退化为只按 ``security_id``
+	匹配，与引入账号作用域之前的行为一致。非字符串的返回值（测试替身）同样
+	按空串处理，避免把 Mock 对象写进 SQLite。
+	"""
+	value = auth.account_fingerprint()
+	return value if isinstance(value, str) else ""
+
+
+__all__ = ["account_scope", "get_platform_instance"]

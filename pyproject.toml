@@ -201,6 +201,7 @@ module = [
 	"boss_agent_cli.ai.prompts",
 	"boss_agent_cli.resume.templates",
 	"boss_agent_cli.resume.export",
+	"boss_agent_cli.auth.identity",
 	"boss_agent_cli.auth.token_store",
 	"boss_agent_cli.auth.cookie_extract",
 	"boss_agent_cli.auth.curl_import",

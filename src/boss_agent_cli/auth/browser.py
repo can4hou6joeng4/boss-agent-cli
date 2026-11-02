@@ -9,6 +9,7 @@ from patchright.sync_api import sync_playwright
 
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
 from boss_agent_cli.api.proxy import WEBRTC_LEAK_GUARD_ARGS, resolve_proxy
+from boss_agent_cli.auth.identity import account_fingerprint
 from boss_agent_cli.auth.page_identity import PageIdentityCapture
 
 LOGIN_PAGE_URL = "https://www.zhipin.com/web/user/"
@@ -225,9 +226,7 @@ def _account_fingerprint(cookie_value: str) -> str:
 	但同一账号的 cookie 值稳定、不同账号不同，故用哈希前缀作为「账号指纹」——
 	既能让用户在多 context 下区分选中的是不是目标账号，又不泄露 cookie 本身。
 	"""
-	import hashlib
-
-	return hashlib.sha256(cookie_value.encode("utf-8")).hexdigest()[:8]
+	return account_fingerprint(cookie_value, length=8)
 
 
 def _browser_diag(message: str) -> None:

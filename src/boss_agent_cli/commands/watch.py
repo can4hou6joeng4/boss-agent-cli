@@ -11,7 +11,7 @@ from boss_agent_cli.api.endpoints import (
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
-from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_error_output,
@@ -170,6 +170,7 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
+	account = account_scope(auth)
 	active = params.get("active")
 	extra: dict[str, Any] = {}
 	detail_channel = detail_channel_for(ctx.obj)
@@ -189,6 +190,7 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 			max_pages=detail_filter_max_pages(welfare_conditions, active),
 			welfare_conditions=welfare_conditions,
 			active=active,
+			account=account,
 			**extra,
 		)
 	watch_result = cache.record_watch_results(name, pipeline_result.items)

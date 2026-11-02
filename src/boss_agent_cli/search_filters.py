@@ -794,6 +794,8 @@ def _record_detail_outcome(
 	matched: list[dict[str, Any]],
 	stats: SearchPipelineStats | None,
 	unknown_descs: dict[str, int] | None,
+	*,
+	account: str = "",
 ) -> None:
 	"""主线程处理单个详情结果：写回描述缓存、统计活跃度、收集匹配项。"""
 	company = raw_item.get("brandName", "")
@@ -816,10 +818,12 @@ def _record_detail_outcome(
 			unknown_descs[key] = unknown_descs.get(key, 0) + 1
 		logger.info(f"  ❌ {company} - {title}（HR 活跃度未知: {outcome.active_desc or '详情未返回'}）")
 	elif result:
-		# is_greeted 在主线程中安全访问 cache
+		# is_greeted 在主线程中安全访问 cache；job_id（encryptJobId）跨请求稳定，
+		# securityId 每次搜索都会轮换，但两者都要有账号指纹才作为去重依据。
 		sid = result.get("security_id", "")
-		if sid:
-			result["greeted"] = cache.is_greeted(sid)
+		job_key = str(result.get("job_id") or "")
+		if sid or job_key:
+			result["greeted"] = cache.is_greeted(sid, job_id=job_key, account=account)
 		matched.append(result)
 		logger.info(f"  ✅ {company} - {title}（详情匹配）")
 	else:
@@ -842,6 +846,7 @@ def _check_details_parallel(
 	before_detail_request: Callable[[], None] | None = None,
 	detail_channel: str = "auto",
 	max_matches: int | None = None,
+	account: str = "",
 ) -> int:
 	"""Detail check, append matched to list. cache 操作在主线程完成。
 
@@ -907,7 +912,7 @@ def _check_details_parallel(
 					raise
 				logger.info(f"  ❌ {company} - {title}（查询失败）")
 				continue
-			_record_detail_outcome(outcome, raw_item, cache, logger, matched, stats, unknown_descs)
+			_record_detail_outcome(outcome, raw_item, cache, logger, matched, stats, unknown_descs, account=account)
 		return checked
 
 	stop = threading.Event()
@@ -930,7 +935,7 @@ def _check_details_parallel(
 			title = raw_item.get("jobName", "")
 			try:
 				outcome = future.result()
-				_record_detail_outcome(outcome, raw_item, cache, logger, matched, stats, unknown_descs)
+				_record_detail_outcome(outcome, raw_item, cache, logger, matched, stats, unknown_descs, account=account)
 			except SearchPipelinePlatformError:
 				logger.info(f"  ❌ {company} - {title}（详情接口失败）")
 				stop.set()
@@ -971,6 +976,7 @@ def run_search_pipeline(
 	active: str | None = None,
 	before_detail_request: Callable[[], None] | None = None,
 	detail_channel: str = "auto",
+	account: str = "",
 ) -> SearchPipelineResult:
 	"""Run the full search pipeline: API search → list prefilter → welfare / active detail fallback.
 
@@ -1047,7 +1053,11 @@ def run_search_pipeline(
 				stats.jobs_prefiltered += 1
 				logger.info(f"  预筛排除: {raw_item.get('jobName', '')} ({', '.join(reasons)})")
 				continue
-			if skip_greeted and cache.is_greeted(raw_item.get("securityId", "")):
+			if skip_greeted and cache.is_greeted(
+				str(raw_item.get("securityId") or ""),
+				job_id=str(raw_item.get("encryptJobId") or ""),
+				account=account,
+			):
 				continue
 			survivors.append(raw_item)
 
@@ -1083,7 +1093,7 @@ def run_search_pipeline(
 					))
 					continue
 				item = JobItem.from_api(raw_item)
-				item.greeted = cache.is_greeted(item.security_id)
+				item.greeted = cache.is_greeted(item.security_id, job_id=item.job_id, account=account)
 				if skip_greeted and item.greeted:
 					continue
 				d = item.to_dict()
@@ -1117,6 +1127,7 @@ def run_search_pipeline(
 						before_detail_request=before_detail_request if sequential else None,
 						detail_channel=detail_channel,
 						max_matches=remaining,
+						account=account,
 					)
 					page_needed_detail = checked > 0
 					stats.detail_checks += checked
@@ -1128,7 +1139,7 @@ def run_search_pipeline(
 		else:
 			for raw_item in survivors:
 				item = JobItem.from_api(raw_item)
-				item.greeted = cache.is_greeted(item.security_id)
+				item.greeted = cache.is_greeted(item.security_id, job_id=item.job_id, account=account)
 				if skip_greeted and item.greeted:
 					continue
 				d = item.to_dict()

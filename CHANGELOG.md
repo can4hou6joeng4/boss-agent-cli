@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 本地「已打招呼 / 已投递」去重以每次请求都会轮换的 `securityId` 为主键，跨请求必然失效：`batch-greet` 换个 `securityId` 就会把同一职位再打一次招呼，`search --skip-greeted` 与职位结果里的 `greeted` 标记也查不到上次的记录。现在去重键改为「账号指纹 + 稳定 `encryptJobId`」：账号指纹取登录 `wt2` Cookie 的 SHA-256 前 16 位（不落盘 Cookie 本身），`greet` / `apply` / `batch-greet` / `search` / `detail` / `show` / `recommend` 与求职者 wizard 共用同一作用域。同一台机器上换账号不会误命中另一个账号的记录；没有登录态时保留旧的 `securityId` 匹配行为。旧缓存库在打开时自动迁移，迁移在单个写事务里完成；旧记录没有账号归属，仍可按原 `securityId` 查到，但不会当作当前账号的去重依据，升级后同一职位最多重新记录一次。
+
 ## [3.2.0] - 2026-11-01
 
 **升级须知**

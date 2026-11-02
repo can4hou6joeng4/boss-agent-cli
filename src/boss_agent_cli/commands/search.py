@@ -8,7 +8,7 @@ from boss_agent_cli.api.endpoints import (
 )
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.crawler.service import CrawlBudget
 from boss_agent_cli.display import (
 	SearchProgress,
@@ -234,6 +234,7 @@ def search_cmd(
 				return
 
 		auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
+		account = account_scope(auth)
 		request_budget = CrawlBudget(cache) if ctx.obj.get("platform", "zhipin") == "zhipin" else None
 		# CDP 模式下详情（--active / --welfare 兜底）只走浏览器、串行并按 CrawlBudget 间隔
 		detail_channel = detail_channel_for(ctx.obj)
@@ -275,6 +276,7 @@ def search_cmd(
 							else None
 						) if active_level or detail_channel == "browser" else None,
 						"detail_channel": detail_channel,
+						"account": account,
 						"before_list_request": (
 							(lambda: request_budget.wait("list", on_wait=progress.waiting))
 							if request_budget is not None and progress is not None

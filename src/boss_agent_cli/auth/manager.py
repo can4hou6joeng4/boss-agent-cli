@@ -13,6 +13,7 @@ from boss_agent_cli.auth.browser import (
 )
 from boss_agent_cli.auth.cookie_extract import extract_cookies
 from boss_agent_cli.auth.curl_import import parse_curl_auth
+from boss_agent_cli.auth.identity import account_fingerprint
 from boss_agent_cli.auth.token_store import TokenStore
 from boss_agent_cli.output import Logger
 
@@ -124,6 +125,23 @@ class AuthManager:
 		if self._token is None:
 			raise AuthRequired(f"未登录，请先执行 {self._login_action()}")
 		return self._token
+
+	def account_fingerprint(self) -> str:
+		"""当前登录态的账号指纹（``wt2`` 的 SHA-256 前 16 位）；未登录或缺少主 Cookie 时返回空串。
+
+		本地操作记录（打招呼、投递）用它与稳定职位 ID 一起做去重，避免把另一个
+		账号的操作算到当前账号头上。同一账号的 ``wt2`` 稳定，重新登录若换发新值，
+		旧记录只会少命中一次，不会误拦。
+		"""
+		try:
+			token = self.get_token()
+		except AuthRequired:
+			return ""
+		cookies = token.get("cookies") if isinstance(token, dict) else None
+		if not isinstance(cookies, dict):
+			return ""
+		value = cookies.get("wt2")
+		return account_fingerprint(str(value)) if value else ""
 
 	def login(
 		self,
