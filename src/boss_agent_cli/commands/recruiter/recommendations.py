@@ -9,6 +9,7 @@ import click
 from boss_agent_cli.api.browser_source import BrowserSourceUnavailable
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.recruiter_client import RecruiterAuthError
+from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
@@ -70,6 +71,14 @@ def _send_error(ctx: click.Context, *, code: str, job_id: str, details: dict[str
 		ctx, "recruiter-greet", code=code, message=message, recoverable=False,
 		recovery_action=action, details=details, hints=hints,
 	)
+
+
+def _release_unsent_reservation(cache: CacheStore, geek_id: str, job_id: str) -> None:
+	"""撤销确定未发出请求的预约；撤销失败保留 pending（安全侧），不掩盖原始停止原因。"""
+	try:
+		cache.release_recruiter_greet(geek_id, job_id)
+	except Exception:
+		pass
 
 
 @click.command("greet")
@@ -138,15 +147,22 @@ def greet_cmd(
 			# AccountRiskError 平级，只捕账号风控会把环境风控误报成结果未知。
 			_send_error(ctx, code=exc.code, job_id=job_id, details=data)
 			return
-		except BrowserSourceUnavailable as exc:
-			_send_error(ctx, code=exc.code, job_id=job_id, details=data)
-			return
+		except BrowserSourceUnavailable:
+			# 通道全部不可用意味着请求从未发出：撤销预约后交给装饰器按来源政策输出指引；
+			# 保留 pending 会让修正通道后的重试被误判成「结果未知」。
+			_release_unsent_reservation(cache, geek_id, job_id)
+			raise
 		except TokenRefreshFailed:
 			_send_error(ctx, code="TOKEN_REFRESH_FAILED", job_id=job_id, details=data)
 			return
 		except (AuthRequired, RecruiterAuthError):
 			_send_error(ctx, code="AUTH_REQUIRED", job_id=job_id, details=data)
 			return
+		except RequestBudgetExceeded:
+			# 预算/时限只在调度前抛出（request_sent=False）：请求没有发出，撤销预约，
+			# 否则一次瞬态预算耗尽就会把该候选人永久锁成「结果未知」。停止契约由装饰器输出。
+			_release_unsent_reservation(cache, geek_id, job_id)
+			raise
 		except Exception:
 			# 仅此不可逆写入边界兜底未知异常：响应丢失也可能已建联，保留 pending。
 			_send_error(ctx, code="GREET_RESULT_UNKNOWN", job_id=job_id, details=data)

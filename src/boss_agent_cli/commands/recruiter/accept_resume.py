@@ -7,6 +7,7 @@ import click
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.recruiter_client import RecruiterAuthError
 from boss_agent_cli.api.recruiter_resume import ResumeValidationError
+from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.compliance import require_compliance_allowed
@@ -107,6 +108,10 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 				hints=hints,
 			)
 			return
+		except RequestBudgetExceeded:
+			# 预算/时限只在调度前抛出（request_sent=False）：同意请求没有发出，
+			# 不能报成「结果未知」让人去核对一个不存在的操作；停止契约由装饰器输出。
+			raise
 		except Exception:
 			# 写请求响应丢失时不能宣称失败或建议重发，也不透传可能含凭据的异常。
 			_, recovery_action = error_contract_for_code("RESUME_ACCEPT_RESULT_UNKNOWN")

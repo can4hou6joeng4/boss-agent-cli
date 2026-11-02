@@ -290,6 +290,24 @@ def test_accept_response_decode_failure_is_unknown_and_redacted():
 		platform.accept_resume_by_friend.assert_called_once()
 
 
+def test_accept_budget_stop_is_not_result_unknown():
+	"""预算/时限在调度前停止：同意请求没有发出，不能报成「结果未知」。"""
+	from boss_agent_cli.api.request_budget import RequestBudgetExceeded
+
+	module = "boss_agent_cli.commands.recruiter.accept_resume"
+	with patch(module + ".AuthManager"), patch(module + ".get_recruiter_platform_instance") as factory:
+		platform = factory.return_value.__enter__.return_value
+		platform.accept_resume_by_friend.side_effect = RequestBudgetExceeded("fixture budget stop")
+		result = _invoke("accept-resume", "123", "--message-id", "456", "--yes")
+	payload = json.loads(result.output)
+	assert result.exit_code == 1
+	assert payload["error"]["code"] == "REQUEST_BUDGET_EXHAUSTED"
+	assert payload["error"]["details"] == {"request_sent": False}
+	assert (payload["error"]["recoverable"], payload["error"]["recovery_action"]) == error_contract_for_code(
+		"REQUEST_BUDGET_EXHAUSTED"
+	)
+
+
 def test_platform_adapter_and_mcp_mapping(tmp_path):
 	client = MagicMock()
 	platform = BossRecruiterPlatform(client)
