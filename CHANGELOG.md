@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss ai` 各命令的 `@文件路径` 参数只检查文件是否存在：GBK 保存的 JD / 聊天记录、误选的 PDF 或图片会抛 `UnicodeDecodeError` traceback，传目录抛 `IsADirectoryError`，权限不足抛 `PermissionError`，stdout 没有任何信封。现在八条支持 `@文件` 的命令（`analyze-jd`、`optimize`、`suggest`、`reply`、`interview-prep`、`chat-coach`、`resume-optimize`、`cover-letter`）共用同一个读取入口：非 UTF-8 给 `INVALID_PARAM` 并提示转存为 UTF-8，目录给 `INVALID_PARAM`，读取失败给 `LOCAL_IO_ERROR`。
 - 本地 JSON 状态仍是「直接覆盖写目标文件」：`config.json`、简历、模型登记表、索引缓存、聊天快照在写入中途被 Ctrl-C、进程被杀或磁盘写满时，会留下半截文件或空文件——`config.json` 坏掉会让之后每条命令都卡在启动阶段，简历/登记表/缓存坏掉则要人工修复。现在这些写入统一走 `services/json_files.write_json_atomic`：同目录临时文件写满并 `fsync` 后再 `os.replace` 原子替换，失败时原文件保持不变、临时文件被清理；`config set/reset` 写盘失败仍返回 `LOCAL_IO_ERROR`。
 - 搜索/推荐结果缓存 `cache/index_cache.json` 结构损坏（顶层不是对象、`jobs` 不是数组、条目不是对象、非 UTF-8）时，`boss show <编号>` 把 `AttributeError` 兜成 `INTERNAL_ERROR`，恢复指引是「先升级到最新版本；仍出现时提交 issue」——真正该做的是重新搜索一次。现在这类缓存按「没有缓存」处理：`show` 返回 `INVALID_PARAM` 并提示先执行 `boss search` / `boss recommend`。
 - 本地模型登记表 `models/registry.json` 损坏（`ai local import` 写文件时被中断、手工编辑写坏）后，`boss ai local status` 与 `ai local import` 都直接抛 `JSONDecodeError` traceback；写入方还会用空表覆盖原文件，把还能人工修复的登记条目丢掉。现在 `ai local status` 按空表降级显示，`ai local import` 在复制模型文件前先校验登记表，损坏时返回新登记的 `MODEL_REGISTRY_INVALID`（可恢复，指明文件与重建方式）且不改动原文件；登记表改为先写临时文件再 `os.replace`，中断不会留下半截 JSON。
