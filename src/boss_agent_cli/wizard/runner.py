@@ -13,7 +13,12 @@ from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserS
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded, request_control
 from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
-from boss_agent_cli.display import INTERNAL_ERROR_TYPES, error_contract_for_code, risk_error_contract
+from boss_agent_cli.display import (
+	INTERNAL_ERROR_TYPES,
+	error_contract_for_code,
+	risk_error_contract,
+	risk_error_message,
+)
 from boss_agent_cli.wizard.models import StepResult, WorkflowPlan, WorkflowStatus
 from boss_agent_cli.wizard.store import WorkflowStore
 
@@ -218,7 +223,10 @@ class WorkflowRunner:
 				# 处理完账号/安全页后显式发起（Issue #419）。
 				recovery_action, _ = risk_error_contract(exc.code)
 				error = WorkflowActionError(
-					exc.code, str(exc) or exc.code, recoverable=False, recovery_action=recovery_action
+					exc.code,
+					risk_error_message(exc.code),
+					recoverable=False,
+					recovery_action=recovery_action,
 				)
 			except BrowserNavigationError as exc:
 				# 首页导航已经在会话内重试过。这里不再把同一步骤立刻重跑一遍。

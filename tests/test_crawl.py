@@ -597,6 +597,33 @@ def test_crawl_honors_page_limit_and_resume_deduplicates(tmp_path):
 	assert [item["job_key"] for item in cache.list_crawl_jobs(stopped.run_id)] == ["job-1", "job-2"]
 
 
+def test_crawl_risk_error_does_not_embed_platform_message():
+	"""CrawlRiskError.from_response 不能把平台响应 message 拼进异常文本。"""
+	from boss_agent_cli.crawler.transport import CrawlRiskError
+	from boss_agent_cli.display import risk_error_message
+
+	error = CrawlRiskError.from_response({"code": 36, "message": "fixture-platform-response-token"})
+	assert "fixture-platform-response-token" not in str(error)
+	assert risk_error_message("ACCOUNT_RISK") in str(error)
+
+
+def test_crawl_platform_risk_error_uses_registry_message(tmp_path):
+	"""爬虫运行结果里的 error 字段只保留登记表文案，不透传异常原文。"""
+	from boss_agent_cli.api.client import AccountRiskError
+	from boss_agent_cli.display import risk_error_message
+
+	class _RiskTransport(_FakeTransport):
+		def fetch_page(self, query: str, city_code: str, page_no: int):
+			raise AccountRiskError("fixture-platform-response-token", is_cdp=True)
+
+	transport = _RiskTransport()
+	_, service = _service(tmp_path, lambda settings: transport)
+	outcome = service.create_and_run(_settings(tmp_path))
+	assert outcome.status == "risk_stopped"
+	assert outcome.error == risk_error_message("ACCOUNT_RISK")
+	assert "fixture-platform-response-token" not in outcome.error
+
+
 def test_risk_stop_keeps_browser_open(tmp_path):
 	from boss_agent_cli.crawler.transport import CrawlRiskError
 
