@@ -1931,6 +1931,19 @@ def test_error_message_prefers_platform_chinese_text():
 	assert "换一条" in (recovery_message("INVALID_PARAM") or "")
 
 
+def test_wizard_risk_recovery_requires_explicit_unlock_command():
+	"""风控锁不会自动解除：向导恢复文案必须给出本人执行的显式解锁命令。
+
+	登记表对 ACCOUNT_RISK / ENVIRONMENT_RISK / ENVIRONMENT_RISK_LOCKED 都要求
+	`boss clean --risk-lock`；向导文案若只说「等几分钟后再继续」，用户会在锁
+	未解除时反复重试同一个必然失败的步骤。
+	"""
+	from boss_agent_cli.wizard.renderer import RECOVERY_LABELS
+
+	for code in ("ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_LOCKED"):
+		assert "boss clean --risk-lock" in RECOVERY_LABELS[code], code
+
+
 def _gate_logged_in(monkeypatch):
 	"""让向导入口的登录门直接放行（模拟已登录用户）。"""
 	monkeypatch.setattr(

@@ -34,6 +34,7 @@
 - 命令层大量错误信封只传 `code` / `message`，`recoverable` 与 `recovery_action` 因此落成 `false` / `null`，与 `boss schema` 的错误码登记表矛盾：例如 `INVALID_PARAM` 已登记「修正参数」，Agent 却拿不到任何指引；联系人查找的网络错误被标成不可恢复；招聘者 `accept-resume` / `download-resume` 的平台不支持同样被标成不可恢复。现在 `envelope_error` 与 `handle_error_output` 在调用方未显式声明时从登记表补齐元数据，TTY 与 JSON 两条路径看到同一份恢复契约；显式传入的 `recoverable: false`（如写操作结果未知）仍优先，不会被登记表覆盖。
 - `boss wizard` 的 TTY 菜单只要存在失败任务就显示「恢复已有任务 / 重试失败任务」，包括失败步骤标记 `replay_safe: false`、动作可能已生效的 run：选中后 `--resume` 只会返回原失败，用户得不到任何进展。现在这类 run 不再进入恢复 / 重试选择器（`boss wizard --resume <run_id>` 仍按原规则返回核对指引），只在「查看任务状态」里标注「结果未确认，需人工核对」。
 - 错误码登记表的 `recovery_action` 文案会随命令演进失效（#540 修过两条指向无效操作的指引），但此前没有测试守住。现在 `tests/test_schema_contract.py` 把恢复指引引用的 `boss ...` 命令与反引号片段中的选项钉在 Click 命令树上：登记表写了不存在的命令或已改名的选项，测试直接失败。
+- `boss wizard` 的风控恢复文案与错误码登记表矛盾：`ACCOUNT_RISK` / `ENVIRONMENT_RISK` / `ENVIRONMENT_RISK_LOCKED` 只说「检查账号状态」「等几分钟后再继续」，没有提到本地风险锁需要由用户执行 `boss clean --risk-lock` 才会解除——用户照做会在锁未解除时反复重试同一个必然失败的步骤。现在三条向导文案都给出显式解锁命令。登记表里 `CIRCUIT_BREAKER_OPEN` 的「人工确认平台状态后恢复」和 `WORKFLOW_TIMEOUT` 的「使用返回的 run_id 恢复 workflow」也没有给出入口，现在分别指向 `boss agent run --resume` 与 `boss wizard --resume <run_id>`。
 
 ## [3.2.0] - 2026-11-01
 
