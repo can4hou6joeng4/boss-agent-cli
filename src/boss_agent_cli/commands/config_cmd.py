@@ -124,7 +124,7 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 	user_cfg = _load_user_overrides(config_path)
 
 	try:
-		parsed_value = _parse_value(value, DEFAULTS[key])
+		parsed_value = _parse_value(key, value, DEFAULTS[key])
 		if key == "automation":
 			# config.json 是 agent run/train 的直接输入，先用正式解析器校验内容，
 			# 避免把非法枚举或数值写进去后，运行时才在依赖内部抛 traceback。
@@ -237,8 +237,12 @@ def _emit_write_error(config_path: Path, exc: OSError) -> None:
 	)
 
 
-def _parse_value(raw: str, default: Any) -> Any:
-	"""根据默认值类型推断并转换输入值。"""
+def _parse_value(key: str, raw: str, default: Any) -> Any:
+	"""根据默认值类型推断并转换输入值。
+
+	转换失败要说明是哪个配置项、收到的是什么：裸的 ``int(raw)`` / ``float(raw)``
+	只会把 ``could not convert string to float: 'abc'`` 这种英文原文抛给用户。
+	"""
 	if default is None:
 		if raw.lower() in ("null", "none", ""):
 			return None
@@ -246,9 +250,15 @@ def _parse_value(raw: str, default: Any) -> Any:
 	if isinstance(default, bool):
 		return raw.lower() in ("true", "1", "yes")
 	if isinstance(default, int):
-		return int(raw)
+		try:
+			return int(raw)
+		except ValueError as exc:
+			raise ValueError(f"{key} 必须是整数，收到 {raw!r}") from exc
 	if isinstance(default, float):
-		return float(raw)
+		try:
+			return float(raw)
+		except ValueError as exc:
+			raise ValueError(f"{key} 必须是数值，收到 {raw!r}") from exc
 	if isinstance(default, dict):
 		# automation / crawl 这类结构化配置不是标量：直接存字符串会让后续读取方
 		# （如 automation_config_from_dict）在 .get() 上崩溃。这里只接受 JSON object。
@@ -264,6 +274,9 @@ def _parse_value(raw: str, default: Any) -> Any:
 	if isinstance(default, list):
 		parts = raw.split(",")
 		if all(isinstance(d, (int, float)) for d in default):
-			return [float(p.strip()) for p in parts]
+			try:
+				return [float(p.strip()) for p in parts]
+			except ValueError as exc:
+				raise ValueError(f"{key} 必须是逗号分隔的数值列表，例如 '1.5,3.0'，收到 {raw!r}") from exc
 		return [p.strip() for p in parts]
 	return raw

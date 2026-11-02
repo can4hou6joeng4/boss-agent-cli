@@ -177,9 +177,51 @@ def test_config_set_browser_source_validates_choice(tmp_path):
 def test_parse_value_int_from_default_type():
 	"""_parse_value 按 int 默认值类型转换输入。"""
 	from boss_agent_cli.commands.config_cmd import _parse_value
-	result = _parse_value("5", 10)
+	result = _parse_value("request_max_per_minute", "5", 10)
 	assert result == 5
 	assert isinstance(result, int)
+
+
+@pytest.mark.parametrize(
+	("key", "raw", "default", "fragment"),
+	[
+		("request_max_per_minute", "abc", 10, "必须是整数"),
+		("request_wait_timeout", "abc", 30.0, "必须是数值"),
+		("request_delay", "1.5;3", [1.5, 3.0], "必须是逗号分隔的数值列表"),
+	],
+)
+def test_parse_value_reports_chinese_message_with_key(key, raw, default, fragment):
+	"""转换失败要点名配置项并给中文说明，而不是裸 int()/float() 的英文报错。"""
+	from boss_agent_cli.commands.config_cmd import _parse_value
+
+	with pytest.raises(ValueError) as excinfo:
+		_parse_value(key, raw, default)
+
+	message = str(excinfo.value)
+	assert key in message
+	assert raw in message
+	assert fragment in message
+
+
+@pytest.mark.parametrize(
+	("key", "value"),
+	[
+		("request_max_per_minute", "abc"),
+		("request_wait_timeout", "abc"),
+		("request_delay", "abc"),
+	],
+)
+def test_config_set_numeric_parse_error_returns_chinese_envelope(tmp_path, key, value):
+	"""数值配置项写错时信封里的 message 是中文，且点名配置项。"""
+	code, parsed = _invoke("config", "set", key, value, tmp_path=tmp_path)
+
+	assert code == 1
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	message = parsed["error"]["message"]
+	assert key in message
+	assert value in message
+	assert "could not convert" not in message
+	assert "invalid literal" not in message
 
 
 def test_config_set_list_value(tmp_path):
