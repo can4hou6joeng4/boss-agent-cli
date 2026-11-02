@@ -35,15 +35,18 @@ class WorkflowActionError(Exception):
 		recoverable: bool = False,
 		recovery_action: str | None = None,
 		details: dict[str, Any] | None = None,
+		replay_safe: bool = True,
 	) -> None:
 		super().__init__(message)
 		self.code = code
 		self.recoverable = recoverable
 		self.recovery_action = recovery_action
 		self.details = details
+		# replay_safe=False 表示动作可能已经生效：--resume 不得重跑该步骤。
+		self.replay_safe = replay_safe
 
 	def to_dict(self) -> dict[str, Any]:
-		result = {
+		result: dict[str, Any] = {
 			"code": self.code,
 			"message": str(self),
 			"recoverable": self.recoverable,
@@ -51,6 +54,8 @@ class WorkflowActionError(Exception):
 		}
 		if self.details:
 			result["details"] = self.details
+		if not self.replay_safe:
+			result["replay_safe"] = False
 		return result
 
 
@@ -130,13 +135,23 @@ class WorkflowRunner:
 		stored_run = self._store.get(run_id)
 		if stored_run is None:
 			raise RuntimeError(f"workflow run {run_id!r} was not persisted")
+		blocked_steps: dict[str, dict[str, Any]] = {}
 		for step in stored_run["steps"]:
+			error = step.get("error") or {}
+			if step["status"] == WorkflowStatus.FAILED.value and error.get("replay_safe") is False:
+				# 动作可能已经生效：--resume 不得再执行一次。
+				blocked_steps[step["step_name"]] = error
+				continue
 			if not step["result"]:
 				continue
 			if step["status"] == WorkflowStatus.COMPLETED.value:
 				prior_results[step["step_name"]] = step["result"]
 			elif step["status"] == WorkflowStatus.WAITING_INPUT.value:
 				waiting_priors[step["step_name"]] = step["result"]
+		pending_steps = [name for name in plan.requested_steps if name not in prior_results]
+		if pending_steps and pending_steps[0] in blocked_steps:
+			# 保持原失败状态与 recovery_action，让操作者先核对官方页面。
+			return stored_run
 
 		self._store.update_run(
 			run_id,
@@ -146,6 +161,17 @@ class WorkflowRunner:
 		for step_name in plan.requested_steps:
 			if step_name in prior_results:
 				continue
+			if step_name in blocked_steps:
+				# 正常路径已在循环前返回；持久化状态异常时也不重放，恢复原失败状态。
+				persisted = self._store.get(run_id) or {}
+				self._store.update_run(
+					run_id,
+					status=WorkflowStatus.FAILED.value,
+					current_step=step_name,
+					last_result=persisted.get("last_result"),
+					error=blocked_steps[step_name],
+				)
+				return self._store.get(run_id) or {}
 			current = self._store.get(run_id) or {}
 			if current.get("status") == WorkflowStatus.STOPPED.value:
 				return current
@@ -186,7 +212,7 @@ class WorkflowRunner:
 							result = action(action_context, plan.inputs, action_prior)
 						break
 					except WorkflowActionError as exc:
-						if not exc.recoverable or attempt >= max_retries:
+						if not exc.recoverable or not exc.replay_safe or attempt >= max_retries:
 							raise
 						attempt += 1
 						control.raise_if_requested()
