@@ -779,7 +779,7 @@ def ai_cover_letter_cmd(
 		hints={
 			"note": "仅为 AI 生成的草稿，请自行核对真实性后再使用；本命令不发送任何消息",
 			"next_actions": [
-				f"boss ai interview-prep --jd <jd_text> --resume {resume_name}",
+				f"boss ai interview-prep <jd_text> --resume {resume_name}",
 			],
 		},
 	)
