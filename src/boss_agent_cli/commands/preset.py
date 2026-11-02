@@ -1,4 +1,5 @@
 import click
+from typing import Any
 
 from boss_agent_cli.api.endpoints import (
 	CITY_CODES,
@@ -91,7 +92,14 @@ def preset_add_cmd(
 @click.pass_context
 def preset_list_cmd(ctx: click.Context) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
-		items = cache.list_saved_searches()
+		items, corrupt = cache.list_saved_searches_with_corrupt()
+	hints: dict[str, Any] = {"next_actions": ["boss search --preset <name>", "boss preset remove <name>"]}
+	if corrupt:
+		# 坏条目不能假装不存在：列表照常返回可用项，同时指明该删哪个。
+		hints["corrupt"] = corrupt
+		hints["operator_actions"] = [
+			f"以下预设的参数已损坏，先执行 boss preset remove <名称> 再重新 preset add：{', '.join(corrupt)}"
+		]
 	handle_output(
 		ctx,
 		"preset",
@@ -105,7 +113,7 @@ def preset_list_cmd(ctx: click.Context) -> None:
 				"boss preset remove <name>",
 			],
 		),
-		hints={"next_actions": ["boss search --preset <name>", "boss preset remove <name>"]},
+		hints=hints,
 	)
 
 

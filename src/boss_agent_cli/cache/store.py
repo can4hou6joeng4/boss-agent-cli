@@ -13,6 +13,29 @@ _SEARCH_TTL = 86400  # 24 hours
 _MAX_SEARCH_CACHE = 100
 
 
+class SavedSearchParamsError(ValueError):
+	"""`saved_searches.params` 不是可用的 JSON object（写坏或结构漂移）。
+
+	预设 / watch 都是本地可重建数据：条目本身还在，但读不出参数就无法执行。
+	调用方应输出信封并提示删除后重建，而不是让 `json.loads` 抛 traceback。
+	"""
+
+	def __init__(self, name: str, detail: str) -> None:
+		super().__init__(f"预设 '{name}' 的参数无法解析（{detail}）")
+		self.name = name
+		self.detail = detail
+
+
+def _decode_saved_params(name: str, raw: Any) -> dict[str, Any]:
+	try:
+		parsed = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
+	except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as exc:
+		raise SavedSearchParamsError(name, str(exc)) from exc
+	if not isinstance(parsed, dict):
+		raise SavedSearchParamsError(name, "顶层必须是 JSON object")
+	return cast("dict[str, Any]", parsed)
+
+
 class CacheStore:
 	def __init__(self, db_path: Path, *, search_ttl_seconds: int = _SEARCH_TTL) -> None:
 		self._db_path = db_path
@@ -789,24 +812,41 @@ class CacheStore:
 			return None
 		return {
 			"name": row[0],
-			"params": json.loads(row[1]),
+			"params": _decode_saved_params(str(row[0]), row[1]),
 			"created_at": row[2],
 			"updated_at": row[3],
 		}
 
 	def list_saved_searches(self) -> list[dict[str, Any]]:
+		items, _ = self.list_saved_searches_with_corrupt()
+		return items
+
+	def list_saved_searches_with_corrupt(self) -> tuple[list[dict[str, Any]], list[str]]:
+		"""列出参数可用的预设，并单独返回参数损坏的条目标记。
+
+		列表命令不能因为一条坏数据整体失败，也不能让坏条目假装不存在：
+		调用方据此提示删除重建。
+		"""
 		rows = self._conn.execute(
 			"SELECT name, params, created_at, updated_at FROM saved_searches ORDER BY updated_at DESC"
 		).fetchall()
-		return [
-			{
-				"name": row[0],
-				"params": json.loads(row[1]),
-				"created_at": row[2],
-				"updated_at": row[3],
-			}
-			for row in rows
-		]
+		items: list[dict[str, Any]] = []
+		corrupt: list[str] = []
+		for row in rows:
+			try:
+				params = _decode_saved_params(str(row[0]), row[1])
+			except SavedSearchParamsError:
+				corrupt.append(str(row[0]))
+				continue
+			items.append(
+				{
+					"name": row[0],
+					"params": params,
+					"created_at": row[2],
+					"updated_at": row[3],
+				}
+			)
+		return items, corrupt
 
 	def delete_saved_search(self, name: str) -> bool:
 		cursor = self._conn.execute(

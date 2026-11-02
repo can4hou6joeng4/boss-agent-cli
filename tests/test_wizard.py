@@ -2,6 +2,7 @@ import json
 import os
 import pty
 import select
+import sqlite3
 import subprocess
 import sys
 import time
@@ -440,6 +441,25 @@ def test_local_and_ai_actions_return_structured_recovery(tmp_path):
 		DEFAULT_ACTIONS["ai_assist"](context, {"resume": "default", "prompt": "优化"}, {})
 	assert exc_info.value.code == "AI_NOT_CONFIGURED"
 	assert exc_info.value.recoverable is True
+
+
+def test_candidate_watch_corrupt_params_reports_recovery(tmp_path):
+	"""wizard 复用本地 watch 时参数写坏要给删除重建指引，而不是 NETWORK_ERROR。"""
+	context = _action_context(tmp_path)
+	DEFAULT_ACTIONS["candidate_watch"](context, {"action": "add", "name": "daily", "query": "Python"}, {})
+	conn = sqlite3.connect(tmp_path / "cache" / "boss_agent.db")
+	conn.execute("UPDATE saved_searches SET params = ? WHERE name = ?", ("{not json", "daily"))
+	conn.commit()
+	conn.close()
+
+	listed = DEFAULT_ACTIONS["candidate_watch"](context, {"action": "list"}, {})
+	assert listed.data["total"] == 0
+	assert listed.data["corrupt"] == ["daily"]
+
+	with pytest.raises(WorkflowActionError) as exc_info:
+		DEFAULT_ACTIONS["candidate_watch"](context, {"action": "run", "name": "daily"}, {})
+	assert exc_info.value.code == "SAVED_SEARCH_INVALID"
+	assert "boss watch remove daily" in exc_info.value.recovery_action
 
 
 def _crawl_outcome(run_id, status="completed"):

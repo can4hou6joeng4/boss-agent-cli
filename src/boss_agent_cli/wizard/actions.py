@@ -13,7 +13,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.api.endpoints import CITY_CODES
 from boss_agent_cli.ai.config import AIConfigStore
 from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action_for
-from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.cache.store import CacheStore, SavedSearchParamsError
 from boss_agent_cli.platforms.factory import build_platform_instance, build_recruiter_platform_instance
 from boss_agent_cli.services.contact_lookup import FriendLookupLimitExceeded, find_friend
 from boss_agent_cli.crawler.operations import crawl_status
@@ -714,8 +714,11 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 	action = str(inputs.get("action") or "list")
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		if action == "list":
-			items = cache.list_saved_searches()
-			return StepResult({"items": items, "total": len(items)})
+			items, corrupt = cache.list_saved_searches_with_corrupt()
+			data: dict[str, Any] = {"items": items, "total": len(items)}
+			if corrupt:
+				data["corrupt"] = corrupt
+			return StepResult(data)
 		name = str(_required(inputs, "name"))
 		if action == "add":
 			params = {
@@ -742,7 +745,15 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 			return StepResult({"action": "remove", "name": name, "removed": cache.delete_saved_search(name)})
 		if action != "run":
 			raise WorkflowActionError("INVALID_PARAM", f"unknown watch action: {action}")
-		record = cache.get_saved_search(name)
+		try:
+			record = cache.get_saved_search(name)
+		except SavedSearchParamsError as exc:
+			raise WorkflowActionError(
+				"SAVED_SEARCH_INVALID",
+				str(exc),
+				recoverable=True,
+				recovery_action=f"boss watch remove {name} 后重新 watch add {name} <关键词>",
+			) from exc
 		if record is None:
 			raise WorkflowActionError("JOB_NOT_FOUND", f"未找到 watch: {name}")
 		account = account_scope(context.auth())
