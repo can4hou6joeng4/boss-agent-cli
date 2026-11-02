@@ -113,6 +113,34 @@ def test_status_reports_user_info_error(mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "boss login"
+	assert parsed["hints"]["auth_health"]["primary_name"] == "wt2"
+
+
+@patch("boss_agent_cli.commands.status.get_platform_instance")
+@patch("boss_agent_cli.commands.status.AuthManager")
+def test_status_live_risk_uses_stop_contract_and_keeps_auth_health(mock_auth_cls, mock_client_cls):
+	"""风控码要带回停止指引，同时保留 status 自己的诊断字段。"""
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "x"}, "stoken": "s"}
+	mock_client = mock_client_cls.return_value
+	mock_client.__enter__ = lambda self: self
+	mock_client.__exit__ = lambda self, *a: None
+	mock_client.is_success.return_value = False
+	mock_client.user_info.return_value = {"code": 36, "message": "risk"}
+	mock_client.parse_error.return_value = ("ACCOUNT_RISK", "risk")
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "status", "--live"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["recoverable"] is False
+	assert "停止自动化访问" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"]
+	assert parsed["hints"]["auth_health"]["primary_name"] == "wt2"
+	assert "checks" in parsed["hints"]
 
 
 @patch("boss_agent_cli.commands.search.CacheStore")

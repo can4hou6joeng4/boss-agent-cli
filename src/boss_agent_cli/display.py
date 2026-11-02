@@ -50,6 +50,19 @@ def error_contract_for_code(
 	)
 
 
+def platform_error_contract(code: str) -> tuple[bool, str | None, dict[str, Any] | None]:
+	"""Return ``(recoverable, recovery_action, hints)`` for a platform error code.
+
+	风控码的恢复指引与 ``next_actions`` 一律以 ``RISK_ERROR_CONTRACTS`` 为准，
+	避免各命令手工拼装出互相矛盾的停止指令。
+	"""
+	recoverable, recovery_action = error_contract_for_code(code)
+	if code in RISK_ERROR_CONTRACTS:
+		recovery_action, hints = risk_error_contract(code)
+		return recoverable, recovery_action, hints
+	return recoverable, recovery_action, None
+
+
 def is_json_mode(ctx: Any) -> bool:
 	"""Check if --json flag is set or stdout is piped (non-TTY)."""
 	force_json = ctx.obj.get("json_output", False) if ctx and ctx.obj else False
@@ -148,15 +161,18 @@ def handle_platform_error_output(
 	*,
 	fallback_message: str,
 	unknown_error_code: str | None = None,
+	extra_hints: dict[str, Any] | None = None,
 ) -> None:
-	"""Emit a schema-backed error envelope for an unsuccessful platform response."""
+	"""Emit a schema-backed error envelope for an unsuccessful platform response.
+
+	``extra_hints`` 承载命令自身的诊断字段（如 status 的 ``auth_health``）；
+	风控码的 ``next_actions`` 由 ``RISK_ERROR_CONTRACTS`` 覆盖，调用方不能改写。
+	"""
 	code, message = platform.parse_error(response)
 	if code == "UNKNOWN" and unknown_error_code is not None:
 		code = unknown_error_code
-	recoverable, recovery_action = error_contract_for_code(code)
-	hints = None
-	if code in RISK_ERROR_CONTRACTS:
-		recovery_action, hints = risk_error_contract(code)
+	recoverable, recovery_action, risk_hints = platform_error_contract(code)
+	hints = {**(extra_hints or {}), **(risk_hints or {})} or None
 	details = None
 	if isinstance(response, dict):
 		error = response.get("error")

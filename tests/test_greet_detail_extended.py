@@ -292,7 +292,7 @@ _DETAIL_RESULT = {
 }
 
 
-def _invoke_detail(*args, tmp_path, detail_result=None, cache_job_id=None):
+def _invoke_detail(*args, tmp_path, detail_result=None, cache_job_id=None, is_success=None, parse_error=("UNKNOWN", "")):
 	runner = CliRunner()
 	with (
 		patch(_DETAIL_PATCHES["auth"]),
@@ -307,6 +307,9 @@ def _invoke_detail(*args, tmp_path, detail_result=None, cache_job_id=None):
 
 		mock_client = MagicMock()
 		mock_client.job_detail.return_value = detail_result or _DETAIL_RESULT
+		if is_success is not None:
+			mock_client.is_success.return_value = is_success
+		mock_client.parse_error.return_value = parse_error
 		mock_client.job_card.return_value = {"zpData": {"jobCard": {
 			"encryptJobId": "j1", "jobName": "前端工程师",
 			"postDescription": "负责前端开发",
@@ -402,3 +405,33 @@ def test_detail_json_envelope(tmp_path):
 	assert "command" in parsed
 	assert "data" in parsed
 	assert parsed["command"] == "detail"
+
+
+def test_batch_greet_search_risk_uses_stop_contract(tmp_path):
+	"""搜索阶段返回风控码时不能输出可重试的普通失败。"""
+	code, parsed = _invoke_batch_greet(
+		"batch-greet", "python", "--dry-run", tmp_path=tmp_path,
+		search_result={"code": 36, "message": "risk"},
+		is_success=False,
+		parse_error=("ACCOUNT_RISK", "risk"),
+	)
+	assert code == 1
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["recoverable"] is False
+	assert "停止自动化访问" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"]
+
+
+def test_detail_risk_uses_stop_contract(tmp_path):
+	"""detail 的风控错误信封也要带停止指引，而不是只有空白 hints。"""
+	code, parsed = _invoke_detail(
+		"detail", "sid1", "--job-id", "j1", tmp_path=tmp_path,
+		detail_result={"code": 36, "message": "risk"},
+		is_success=False,
+		parse_error=("ACCOUNT_RISK", "risk"),
+	)
+	assert code == 1
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["recoverable"] is False
+	assert "停止自动化访问" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"]

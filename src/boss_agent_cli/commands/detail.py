@@ -8,7 +8,7 @@ from boss_agent_cli.api.models import employment_type_from_raw, field_dict, fiel
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
-from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_job_detail
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, platform_error_contract, render_job_detail
 from boss_agent_cli.platforms import Platform
 from boss_agent_cli.services.job_card import build_job_from_card
 
@@ -65,7 +65,7 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 
 	if result is None:
 		if last_error:
-			recoverable, recovery_action = error_contract_for_code(last_error[0])
+			recoverable, recovery_action, hints = platform_error_contract(last_error[0])
 			handle_error_output(
 				ctx, "detail",
 				code=last_error[0],
@@ -73,6 +73,7 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 				recoverable=recoverable,
 				recovery_action=recovery_action,
 				details=last_error[2],
+				hints=hints,
 			)
 			return
 		handle_error_output(

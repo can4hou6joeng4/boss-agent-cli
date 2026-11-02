@@ -535,3 +535,41 @@ def test_export_without_query_returns_actionable_recovery():
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert parsed["error"]["recoverable"] is True
 	assert "boss export" in parsed["error"]["recovery_action"]
+
+
+# ── 平台错误契约 ─────────────────────────────────────────────────────
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_search_auth_expired_is_recoverable(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	"""登录过期是用户可恢复的错误，不能硬编码成不可恢复。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = {"code": 401, "message": "expired"}
+	mock_client.parse_error.return_value = ("AUTH_EXPIRED", "expired")
+
+	result = CliRunner().invoke(cli, ["export", "golang", "-o", str(tmp_path / "jobs.csv")])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AUTH_EXPIRED"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "boss login"
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_search_risk_uses_stop_contract(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	"""搜索阶段命中风控时信封必须是停止指引，而不是可恢复的普通失败。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = {"code": 36, "message": "risk"}
+	mock_client.parse_error.return_value = ("ACCOUNT_RISK", "risk")
+
+	result = CliRunner().invoke(cli, ["export", "golang", "-o", str(tmp_path / "jobs.csv")])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["recoverable"] is False
+	assert "停止自动化访问" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"]
