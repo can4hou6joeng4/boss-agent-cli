@@ -3,7 +3,12 @@
 import click
 
 from boss_agent_cli.api.client import PlatformRiskError
-from boss_agent_cli.display import boss_command_for_ctx, login_action_for_ctx, risk_error_contract
+from boss_agent_cli.display import (
+	boss_command_for_ctx,
+	login_action_for_ctx,
+	risk_error_contract,
+	risk_error_message,
+)
 
 
 def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object]:
@@ -46,7 +51,8 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 		recovery, hints = risk_error_contract(exc.code)
 		return {
 			"code": exc.code,
-			"message": raw_message,
+			# 风控信封不透传平台响应文本（可能带临时凭据），只给登记表文案。
+			"message": risk_error_message(exc.code),
 			"recoverable": False,
 			"recovery_action": recovery,
 			"hints": hints or None,
