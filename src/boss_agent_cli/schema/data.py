@@ -506,7 +506,7 @@ SCHEMA_DATA = {
 			"options": {},
 		},
 		"crawl": {
-			"description": "可恢复的 DrissionPage 批量采集（子命令：configure/run/start/status/results/resume/stop）；同 data_dir 风险锁在浏览器构造前阻断启动/恢复，新风险锁存并保存断点；仅读取/本地导入不受影响。",
+			"description": "可恢复的 DrissionPage 批量采集（子命令：configure/run/shortlist/start/status/results/resume/stop）；同 data_dir 风险锁在浏览器构造前阻断启动/恢复，新风险锁存并保存断点；仅读取/本地导入不受影响。",
 			"args": [],
 			"options": {
 				"run": {

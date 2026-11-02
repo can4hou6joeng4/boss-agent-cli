@@ -101,6 +101,40 @@ def test_schema_commands_have_descriptions():
 	)
 
 
+# ── 子命令声明 == 实际注册子命令 ─────────────────────────────────────
+
+_SUBCOMMAND_LIST_PATTERN = re.compile(r"子命令：([^）)]+)")
+
+
+def test_schema_subcommand_lists_match_click_tree():
+	"""description 里「子命令：a/b/c」的声明必须与实际 Click 组一致。
+
+	crawl 曾漏掉 shortlist：`boss schema` 是 Agent 的能力真源，声明不全
+	等于把导入候选池的能力藏了起来。
+	"""
+	problems: list[str] = []
+	for name, spec in SCHEMA_DATA["commands"].items():
+		match = _SUBCOMMAND_LIST_PATTERN.search(str(spec.get("description", "")))
+		if match is None:
+			continue
+		declared = sorted(item.strip() for item in match.group(1).split("/"))
+		command = cli.commands.get(name)
+		actual = sorted(getattr(command, "commands", {}) or {})
+		if declared != actual:
+			problems.append(f"{name}: 声明 {declared} != 实际 {actual}")
+
+	assert not problems, "schema 子命令声明与实际注册不一致:\n" + "\n".join(problems)
+
+
+def test_schema_hr_subcommands_match_click_tree():
+	"""hr 的结构化 subcommands 必须是实际子命令的完整镜像。"""
+	declared = set(SCHEMA_DATA["commands"]["hr"]["subcommands"])
+	actual = set(cli.commands["hr"].commands)
+	assert declared == actual, (
+		f"hr subcommands 声明与实际不一致: 缺 {sorted(actual - declared)} 多 {sorted(declared - actual)}"
+	)
+
+
 def test_doctor_schema_documents_cdp_risk_boundary():
 	"""doctor schema 只描述保留的 CDP 通道，不提供风控绕过入口。"""
 	description = SCHEMA_DATA["commands"]["doctor"]["description"]
