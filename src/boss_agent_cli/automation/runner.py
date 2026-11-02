@@ -53,7 +53,11 @@ def run_automation_cycle(
 			if guard.stop_reason() is None:
 				events.extend(process_pending(adapter, store, guard, platform, dry_run, state=state))
 			if guard.stop_reason() is None:
-				refs = adapter.scan_conversations(list(config.tabs), limit or config.max_per_tab)
+				# 用 is None 而不是 or：limit=0 表示「本轮不处理任何会话」，
+				# 而 `0 or max_per_tab` 会静默放大成默认的 20 个；负数在这里归一为 0，
+				# 否则 `items[:负数]` 会反转成「去掉最后 N 个」。
+				max_per_tab = config.max_per_tab if limit is None else max(0, limit)
+				refs = adapter.scan_conversations(list(config.tabs), max_per_tab)
 				for ref in refs:
 					if guard.stop_reason() is not None:
 						break

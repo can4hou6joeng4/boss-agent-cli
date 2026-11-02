@@ -53,7 +53,7 @@ def agent_group() -> None:
 	default=False,
 	help="只演练自动化决策，不执行真实平台动作",
 )
-@click.option("--limit", default=None, type=int, help="本轮最多处理多少个会话")
+@click.option("--limit", default=None, type=click.IntRange(min=1), help="本轮最多处理多少个会话")
 @click.option(
 	"--resume",
 	is_flag=True,
@@ -253,7 +253,7 @@ def crawl_cmd(
 	default=True,
 	help="训练模式默认只演练；传 --live 执行满足阈值的动作",
 )
-@click.option("--limit", default=None, type=int, help="本轮最多处理多少个会话")
+@click.option("--limit", default=None, type=click.IntRange(min=1), help="本轮最多处理多少个会话")
 @click.pass_context
 def train_cmd(ctx: click.Context, dry_run: bool, limit: int | None) -> None:
 	"""运行训练校准模式：默认演练，--live 直接执行满足阈值的动作。"""

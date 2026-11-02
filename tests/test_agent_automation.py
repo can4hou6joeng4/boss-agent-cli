@@ -288,6 +288,61 @@ def test_agent_run_cli_returns_json_envelope(tmp_path: Path) -> None:
 	assert payload["data"]["events"][0]["status"] == "STOPPED_BY_SAFETY"
 
 
+def test_agent_run_rejects_non_positive_limit(tmp_path: Path) -> None:
+	"""`--limit` 为 0 或负数时不能进入扫描。
+
+	负数会传到适配器的 `items[:limit]`，切片语义反转成「去掉最后 N 个」，
+	等于处理除末尾 N 个以外的全部会话；0 则被 `limit or max_per_tab` 静默放大。
+	两者都必须按参数错误拒绝。
+	"""
+	runner = CliRunner()
+	for value in ("-1", "0"):
+		result = runner.invoke(
+			cli,
+			[
+				"--data-dir", str(tmp_path), "--json",
+				"--role", "recruiter",
+				"agent", "run", "--dry-run", "--limit", value,
+			],
+		)
+		assert result.exit_code == 1, value
+		payload = json.loads(result.output)
+		assert payload["error"]["code"] == "INVALID_PARAM", value
+
+
+def test_agent_train_rejects_non_positive_limit(tmp_path: Path) -> None:
+	"""训练模式与 run 共用同一条扫描路径，同样拒绝非正的 `--limit`。"""
+	runner = CliRunner()
+	result = runner.invoke(
+		cli,
+		[
+			"--data-dir", str(tmp_path), "--json",
+			"--role", "recruiter",
+			"agent", "train", "--limit", "-1",
+		],
+	)
+	assert result.exit_code == 1
+	assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"
+
+
+def test_runner_limit_zero_scans_nothing(tmp_path: Path) -> None:
+	"""Python API 直接传 limit=0 时也不得回退到 max_per_tab。"""
+	store = AutomationStore(tmp_path)
+	adapter = MockRecruiterAutomationPlatform("zhipin")
+
+	report = run_automation_cycle(
+		adapter,
+		store,
+		AutomationConfig(),
+		platform="zhipin",
+		dry_run=True,
+		limit=0,
+	)
+
+	assert report.events == ()
+	assert adapter.executed == []
+
+
 def test_agent_stats_review_and_pending_commands_are_available(tmp_path: Path) -> None:
 	runner = CliRunner()
 	for args, command in [
