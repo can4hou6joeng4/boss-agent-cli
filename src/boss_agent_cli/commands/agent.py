@@ -304,7 +304,8 @@ def review_approve_cmd(ctx: click.Context, review_id: str) -> None:
 	store = AutomationStore(ctx.obj["data_dir"])
 	pending = store.approve_review(review_id, now_iso())
 	if pending is None:
-		raise click.ClickException(f"review item not found or not reviewable: {review_id}")
+		_emit_review_missing(ctx, "agent.review.approve", review_id)
+		return
 	handle_output(
 		ctx,
 		"agent.review.approve",
@@ -323,7 +324,8 @@ def review_reject_cmd(ctx: click.Context, review_id: str, reason: str) -> None:
 	store = AutomationStore(ctx.obj["data_dir"])
 	rejected = store.reject_review(review_id, reason, now_iso())
 	if rejected is None:
-		raise click.ClickException(f"review item not found or not reviewable: {review_id}")
+		_emit_review_missing(ctx, "agent.review.reject", review_id)
+		return
 	event = make_event(
 		rejected.platform,
 		rejected.candidate_key,
@@ -423,6 +425,22 @@ def stop_cmd(ctx: click.Context, reason: str) -> None:
 		render=lambda d: render_action_result(d, title="agent stop", next_steps=["boss agent stats"]),
 		hints=_agent_hints(ctx),
 	)
+
+
+def _emit_review_missing(ctx: click.Context, command: str, review_id: str) -> NoReturn:
+	"""复核项不存在或已处理时给信封。
+
+	`raise click.ClickException` 会被组层兜底成 `command: "boss"`、`INVALID_PARAM`
+	和英文消息；这里直接按命令名输出，与其它子命令的信封一致。
+	"""
+	handle_error_output(
+		ctx,
+		command,
+		code="INVALID_PARAM",
+		message=f"复核项 '{review_id}' 不存在或已处理",
+		hints={"next_actions": ["boss agent review list — 查看待复核项"]},
+	)
+	ctx.exit(1)
 
 
 def _emit_state_error(ctx: click.Context, command: str, exc: AutomationStateError) -> NoReturn:

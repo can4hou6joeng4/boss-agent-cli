@@ -376,6 +376,35 @@ def test_review_reject_marks_item_and_writes_skip_event(tmp_path: Path) -> None:
 	assert store.read_jsonl("action-log.jsonl")[0]["status"] == EventStatus.SKIPPED.value
 
 
+def test_review_approve_missing_item_returns_envelope(tmp_path: Path) -> None:
+	runner = CliRunner()
+	result = runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "agent", "review", "approve", "missing-id"],
+	)
+
+	assert result.exit_code == 1
+	payload = json.loads(result.output)
+	assert payload["command"] == "agent.review.approve"
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "不存在或已处理" in payload["error"]["message"]
+	assert payload["hints"]["next_actions"]
+
+
+def test_review_reject_missing_item_returns_envelope(tmp_path: Path) -> None:
+	runner = CliRunner()
+	result = runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "agent", "review", "reject", "missing-id"],
+	)
+
+	assert result.exit_code == 1
+	payload = json.loads(result.output)
+	assert payload["command"] == "agent.review.reject"
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "不存在或已处理" in payload["error"]["message"]
+
+
 def test_pending_actions_execute_before_new_conversation_scan(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
 	review_id = "zhipin-pending-candidate-send_follow_up"
