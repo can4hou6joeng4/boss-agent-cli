@@ -7,6 +7,9 @@ import click
 
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 
+#: 日志级别取值域：`--log-level` 的 Choice 与 `config set log_level` 共用，
+#: 未知级别不会被 Logger 拒绝，而是静默回退到 error 阈值。
+LOG_LEVELS: tuple[str, ...] = ("error", "warning", "info", "debug")
 _LEVEL_ORDER = {"debug": 0, "info": 1, "warning": 2, "error": 3}
 _REDACTED = "[REDACTED]"
 _SENSITIVE_KEY_PARTS = (
