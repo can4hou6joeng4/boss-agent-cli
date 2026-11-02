@@ -58,7 +58,7 @@ def test_greet_success(tmp_path):
 	assert parsed["ok"] is True
 	assert parsed["data"]["security_id"] == "sid1"
 	mock_client.greet.assert_called_once_with("sid1", "jid1", "")
-	mock_cache.record_greet.assert_called_once_with("sid1", "jid1")
+	mock_cache.record_greet.assert_called_once_with("sid1", "jid1", account="")
 
 
 def test_greet_failure_does_not_record_cache(tmp_path):
@@ -122,7 +122,7 @@ def _invoke_batch_greet(*args, tmp_path, search_result=None, greeted_ids=None, i
 		patch(_PATCHES["cache"]) as mock_cache_cls,
 	):
 		mock_cache = MagicMock()
-		mock_cache.is_greeted.side_effect = lambda sid: sid in greeted
+		mock_cache.is_greeted.side_effect = lambda sid, *, job_id="", account="": sid in greeted
 		mock_cache_cls.return_value.__enter__ = lambda s: mock_cache
 		mock_cache_cls.return_value.__exit__ = MagicMock(return_value=False)
 

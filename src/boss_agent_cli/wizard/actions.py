@@ -111,6 +111,9 @@ def execute_candidate_search(
 		raw_params=dict(inputs.get("raw_params") or {}),
 	)
 	extra: dict[str, Any] = {"active": active} if active else {}
+	account = str(inputs.get("account") or "")
+	if account:
+		extra["account"] = account
 	browser_detail = inputs.get("detail_channel") == "browser" or client_is_browser_only(platform)
 	if active or browser_detail:
 		# 只有 --active 或 CDP 模式时才透传详情节流 / 通道，保持其他调用方（含测试替身）签名不变
@@ -278,6 +281,7 @@ def execute_candidate_detail(
 	job_id: str | None = None,
 	lid: str = "",
 	data_dir: Path | None = None,
+	account: str = "",
 ) -> dict[str, Any]:
 	"""Fetch job detail with the same httpx → job_card fallback as `boss detail`.
 
@@ -290,7 +294,7 @@ def execute_candidate_detail(
 	greeted = False
 	if data_dir is not None:
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
-			greeted = cache.is_greeted(security_id)
+			greeted = cache.is_greeted(security_id, job_id=job_id or "", account=account)
 
 	last_error: WorkflowActionError | None = None
 	if job_id:
@@ -386,9 +390,10 @@ def _auth_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 
 def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	_required(inputs, "query")
+	account = context.auth().account_fingerprint()
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		with context.candidate_platform() as platform:
-			result = execute_candidate_search(platform, cache, context.logger, inputs)
+			result = execute_candidate_search(platform, cache, context.logger, {**inputs, "account": account})
 	return StepResult(
 		{
 			"items": result.items,
@@ -422,6 +427,7 @@ def _candidate_detail(context: ActionContext, inputs: Mapping[str, Any], prior: 
 				job_id=job_id,
 				lid=lid,
 				data_dir=context.data_dir,
+				account=context.auth().account_fingerprint(),
 			)
 	return StepResult({"job": data, "result": data})
 
@@ -429,26 +435,28 @@ def _candidate_detail(context: ActionContext, inputs: Mapping[str, Any], prior: 
 def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	security_id = str(_required(inputs, "security_id"))
 	job_id = str(_required(inputs, "job_id"))
+	account = context.auth().account_fingerprint()
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
-		if cache.is_applied(security_id, job_id):
+		if cache.is_applied(security_id, job_id, account=account):
 			raise WorkflowActionError("ALREADY_APPLIED", "已对该职位发起过投递/立即沟通")
 		with context.candidate_platform() as platform:
 			data = _unwrap(platform, platform.apply(security_id, job_id, lid=str(inputs.get("lid") or "")), "投递失败")
-		cache.record_apply(security_id, job_id)
+		cache.record_apply(security_id, job_id, account=account)
 	return StepResult({"security_id": security_id, "job_id": job_id, "result": data})
 
 
 def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	security_id = str(_required(inputs, "security_id"))
 	job_id = str(_required(inputs, "job_id"))
+	account = context.auth().account_fingerprint()
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
-		if cache.is_greeted(security_id):
+		if cache.is_greeted(security_id, job_id=job_id, account=account):
 			raise WorkflowActionError("ALREADY_GREETED", "已向该招聘者打过招呼")
 		with context.candidate_platform() as platform:
 			data = _unwrap(
 				platform, platform.greet(security_id, job_id, str(inputs.get("message") or "")), "打招呼失败"
 			)
-		cache.record_greet(security_id, job_id)
+		cache.record_greet(security_id, job_id, account=account)
 	return StepResult({"security_id": security_id, "job_id": job_id, "result": data})
 
 

@@ -30,12 +30,12 @@ def _seed_cache(
 	now = time.time()
 	for i in range(greet):
 		conn.execute(
-			"INSERT OR REPLACE INTO greet_records VALUES (?, ?, ?)",
+			"INSERT OR REPLACE INTO greet_records (security_id, job_id, greeted_at) VALUES (?, ?, ?)",
 			(f"sid-{i}", f"jid-{i}", now),
 		)
 	for i in range(applied):
 		conn.execute(
-			"INSERT OR REPLACE INTO apply_records VALUES (?, ?, ?)",
+			"INSERT OR REPLACE INTO apply_records (security_id, job_id, applied_at) VALUES (?, ?, ?)",
 			(f"sid-{i}", f"jid-{i}", now),
 		)
 	for i in range(shortlist):

@@ -3,7 +3,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
-from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output, render_message_panel
 
 
@@ -21,8 +21,11 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
+	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
+	account = account_scope(auth)
+
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
-		if cache.is_applied(security_id, job_id):
+		if cache.is_applied(security_id, job_id, account=account):
 			handle_error_output(
 				ctx,
 				"apply",
@@ -37,7 +40,6 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 			)
 			return
 
-		auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 		with get_platform_instance(ctx, auth) as platform:
 			resp = platform.apply(security_id, job_id, lid=lid)
 			if not platform.is_success(resp):
@@ -50,7 +52,7 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 					unknown_error_code="NETWORK_ERROR",
 				)
 				return
-			cache.record_apply(security_id, job_id)
+			cache.record_apply(security_id, job_id, account=account)
 
 	handle_output(
 		ctx,

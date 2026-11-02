@@ -7,7 +7,7 @@ from boss_agent_cli.api.client import RISK_ERROR_BY_CODE, PlatformRiskError
 from boss_agent_cli.api.models import employment_type_from_raw, field_dict, field_list, field_text
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, render_job_detail
 from boss_agent_cli.platforms import Platform
 from boss_agent_cli.services.job_card import build_job_from_card
@@ -37,6 +37,7 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 	logger = ctx.obj["logger"]
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
+	account = account_scope(auth)
 	with get_platform_instance(ctx, auth) as platform:
 		# 优先走 httpx 快速通道：显式传入 > 缓存查找 > 降级浏览器通道
 		if not job_id:
@@ -49,7 +50,7 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 		last_error: DetailError | None = None
 		if job_id:
 			try:
-				result, last_error = _detail_via_httpx(platform, security_id, job_id, data_dir)
+				result, last_error = _detail_via_httpx(platform, security_id, job_id, data_dir, account=account)
 			except PlatformRiskError:
 				# 风控命中即终止：不再换浏览器通道补一次请求
 				raise
@@ -58,7 +59,7 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 				result = None
 		# 风控码以响应字典形态返回时同样终止，不换通道再取一次
 		if result is None and not (last_error and last_error[0] in RISK_ERROR_BY_CODE):
-			result, browser_error = _detail_via_browser(platform, security_id, lid, data_dir)
+			result, browser_error = _detail_via_browser(platform, security_id, lid, data_dir, job_id=job_id, account=account)
 			if browser_error and (last_error is None or browser_error[0] != "NOT_SUPPORTED"):
 				last_error = browser_error
 
@@ -95,7 +96,9 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 	)
 
 
-def _detail_via_httpx(platform: Platform, security_id: str, job_id: str, data_dir: Path) -> tuple[dict[str, Any] | None, DetailError | None]:
+def _detail_via_httpx(
+	platform: Platform, security_id: str, job_id: str, data_dir: Path, *, account: str = "",
+) -> tuple[dict[str, Any] | None, DetailError | None]:
 	"""快速通道：通过 httpx 获取职位详情（不需要浏览器）"""
 	raw = platform.job_detail(job_id)
 	if not platform.is_success(raw):
@@ -110,7 +113,7 @@ def _detail_via_httpx(platform: Platform, security_id: str, job_id: str, data_di
 		return None, None
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
-		greeted = cache.is_greeted(security_id)
+		greeted = cache.is_greeted(security_id, job_id=job_id, account=account)
 
 	raw_job_type = job_info.get("jobType")
 	return {
@@ -137,7 +140,9 @@ def _detail_via_httpx(platform: Platform, security_id: str, job_id: str, data_di
 	}, None
 
 
-def _detail_via_browser(platform: Platform, security_id: str, lid: str, data_dir: Path) -> tuple[dict[str, Any] | None, DetailError | None]:
+def _detail_via_browser(
+	platform: Platform, security_id: str, lid: str, data_dir: Path, job_id: str = "", *, account: str = "",
+) -> tuple[dict[str, Any] | None, DetailError | None]:
 	"""兜底通道：通过浏览器 job_card 获取职位详情"""
 	try:
 		raw = platform.job_card(security_id, lid)
@@ -152,6 +157,6 @@ def _detail_via_browser(platform: Platform, security_id: str, lid: str, data_dir
 		return None, None
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
-		greeted = cache.is_greeted(security_id)
+		greeted = cache.is_greeted(security_id, job_id=job_id, account=account)
 
 	return build_job_from_card(card, security_id=security_id, greeted=greeted, lid=lid), None

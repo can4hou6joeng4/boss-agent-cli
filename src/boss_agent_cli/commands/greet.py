@@ -14,7 +14,7 @@ from boss_agent_cli.api.models import JobItem, field_list
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
-from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_error_output,
@@ -41,8 +41,11 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
+	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
+	account = account_scope(auth)
+
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
-		if cache.is_greeted(security_id):
+		if cache.is_greeted(security_id, job_id=job_id, account=account):
 			handle_error_output(
 				ctx, "greet",
 				code="ALREADY_GREETED",
@@ -51,7 +54,6 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 			)
 			return
 
-		auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 		with get_platform_instance(ctx, auth) as platform:
 			# greet_before hook — allows veto
 			hooks = ctx.obj.get("hooks")
@@ -82,7 +84,7 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 				)
 				return
 
-			cache.record_greet(security_id, job_id)
+			cache.record_greet(security_id, job_id, account=account)
 
 			# greet_after hook
 			if hooks:
@@ -135,8 +137,10 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 
 	count = min(count, 10)
 
+	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
+	account = account_scope(auth)
+
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
-		auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 		with get_platform_instance(ctx, auth) as platform:
 			raw = platform.search_jobs(
 				query, city=city, salary=salary, experience=experience,
@@ -172,7 +176,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 				if not matches:
 					continue
 				item = JobItem.from_api(raw_item)
-				if not cache.is_greeted(item.security_id):
+				if not cache.is_greeted(item.security_id, job_id=item.job_id, account=account):
 					candidates.append(item)
 				if len(candidates) >= count:
 					break
@@ -208,7 +212,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 								# 不再靠 message 里的「频率」字样误判成 RATE_LIMITED（Issue #419）。
 								raise risk_cls(error_message or error_code)
 							raise RuntimeError(error_code if error_code != "UNKNOWN" else (resp.get("message") or "greet failed"))
-						cache.record_greet(item.security_id, item.job_id)
+						cache.record_greet(item.security_id, item.job_id, account=account)
 						results.append({
 							"security_id": item.security_id,
 							"job_id": item.job_id,

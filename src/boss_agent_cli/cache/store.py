@@ -25,9 +25,11 @@ class CacheStore:
 	def _init_tables(self) -> None:
 		self._conn.executescript("""
 			CREATE TABLE IF NOT EXISTS greet_records (
-				security_id TEXT PRIMARY KEY,
 				job_id TEXT NOT NULL,
-				greeted_at REAL NOT NULL
+				account TEXT NOT NULL DEFAULT '',
+				security_id TEXT NOT NULL,
+				greeted_at REAL NOT NULL,
+				PRIMARY KEY (account, job_id, security_id)
 			);
 			CREATE TABLE IF NOT EXISTS recruiter_greet_records (
 				geek_id TEXT NOT NULL,
@@ -61,10 +63,11 @@ class CacheStore:
 				PRIMARY KEY (search_name, job_key)
 			);
 			CREATE TABLE IF NOT EXISTS apply_records (
-				security_id TEXT NOT NULL,
 				job_id TEXT NOT NULL,
+				account TEXT NOT NULL DEFAULT '',
+				security_id TEXT NOT NULL,
 				applied_at REAL NOT NULL,
-				PRIMARY KEY (security_id, job_id)
+				PRIMARY KEY (account, job_id, security_id)
 			);
 			CREATE TABLE IF NOT EXISTS shortlist_records (
 				security_id TEXT NOT NULL,
@@ -169,6 +172,61 @@ class CacheStore:
 		self._migrate_shortlist_records()
 		self._migrate_crawl_runs()
 		self._migrate_crawl_jobs()
+		self._migrate_dedupe_keys()
+
+	def _migrate_dedupe_keys(self) -> None:
+		"""把 greet/apply 记录的键换成「账号指纹 + 稳定 job_id」。
+
+		平台在每次搜索、推荐或列表请求里都会换发新的 securityId，
+		encryptJobId（JobItem.job_id）才跨请求稳定。旧表以 security_id
+		为主键，第二次请求拿到的令牌查不到上次的记录，跨会话去重因此必然
+		失效，同一职位会被重复打招呼、重复投递。
+
+		旧记录没有账号归属，account 留空；它们仍可按 security_id 命中，
+		但不会被当成当前账号已验证的去重依据，避免跨账号误拦。
+		"""
+		tables = (("greet_records", "greeted_at"), ("apply_records", "applied_at"))
+
+		def current_pk(table: str) -> set[str]:
+			return {row[1] for row in self._conn.execute(f"PRAGMA table_info({table})").fetchall() if row[5]}
+
+		wanted = {"account", "job_id", "security_id"}
+		if all(current_pk(table) == wanted for table, _ in tables):
+			return
+		# 需要迁移时才取写锁。整个重建过程放在一个写事务里：迁移中途崩溃不会留下
+		# 缺表或半迁移状态，并发的第二个进程拿到锁后会看到新主键，不会重复迁移
+		# 把账号指纹抹掉。
+		self._conn.execute("BEGIN IMMEDIATE")
+		try:
+			for table, time_column in (("greet_records", "greeted_at"), ("apply_records", "applied_at")):
+				columns = self._conn.execute(f"PRAGMA table_info({table})").fetchall()
+				# table_info 按建表列序返回，pk 字段是该列在主键中的序号，不是主键顺序；
+				# 必须按集合比较，否则每次打开都会重建表并把 account 抹回空串。
+				pk_columns = {row[1] for row in columns if row[5]}
+				if pk_columns == {"account", "job_id", "security_id"}:
+					continue
+				account_select = "COALESCE(account, '')" if any(row[1] == "account" for row in columns) else "''"
+				self._conn.execute(f"DROP TABLE IF EXISTS {table}_new")
+				self._conn.execute(f"""
+					CREATE TABLE {table}_new (
+						job_id TEXT NOT NULL,
+						account TEXT NOT NULL DEFAULT '',
+						security_id TEXT NOT NULL,
+						{time_column} REAL NOT NULL,
+						PRIMARY KEY (account, job_id, security_id)
+					)
+				""")
+				self._conn.execute(f"""
+					INSERT OR REPLACE INTO {table}_new (job_id, account, security_id, {time_column})
+						SELECT job_id, {account_select}, security_id, {time_column}
+						FROM {table} WHERE job_id != ''
+				""")
+				self._conn.execute(f"DROP TABLE {table}")
+				self._conn.execute(f"ALTER TABLE {table}_new RENAME TO {table}")
+			self._conn.commit()
+		except Exception:
+			self._conn.rollback()
+			raise
 
 	def _migrate_shortlist_records(self) -> None:
 		columns = {
@@ -569,11 +627,25 @@ class CacheStore:
 		raw = json.dumps(params, sort_keys=True, ensure_ascii=False)
 		return hashlib.sha256(raw.encode()).hexdigest()
 
-	def is_greeted(self, security_id: str) -> bool:
-		row = self._conn.execute(
-			"SELECT 1 FROM greet_records WHERE security_id = ?",
-			(security_id,),
-		).fetchone()
+	def is_greeted(self, security_id: str = "", *, job_id: str = "", account: str = "") -> bool:
+		"""查询招呼记录：有账号作用域和 job_id 时按两者查，否则按 security_id。
+
+		securityId 每次请求都会轮换，不能用于跨请求去重；encryptJobId 稳定，
+		但只按它合并会把另一个账号对同一职位的打招呼算到当前账号上，所以
+		两者必须同时有账号指纹（AuthManager.account_fingerprint）。
+		"""
+		if account and job_id:
+			row = self._conn.execute(
+				"SELECT 1 FROM greet_records WHERE account = ? AND job_id = ?",
+				(account, job_id),
+			).fetchone()
+		elif security_id:
+			row = self._conn.execute(
+				"SELECT 1 FROM greet_records WHERE security_id = ?",
+				(security_id,),
+			).fetchone()
+		else:
+			return False
 		return row is not None
 
 	def claim_recruiter_greet(self, geek_id: str, job_id: str) -> str | None:
@@ -604,15 +676,15 @@ class CacheStore:
 
 	def get_job_id(self, security_id: str) -> str | None:
 		row = self._conn.execute(
-			"SELECT job_id FROM greet_records WHERE security_id = ?",
+			"SELECT job_id FROM greet_records WHERE security_id = ? ORDER BY greeted_at DESC LIMIT 1",
 			(security_id,),
 		).fetchone()
 		return row[0] if row else None
 
-	def record_greet(self, security_id: str, job_id: str) -> None:
+	def record_greet(self, security_id: str, job_id: str, *, account: str = "") -> None:
 		self._conn.execute(
-			"INSERT OR REPLACE INTO greet_records (security_id, job_id, greeted_at) VALUES (?, ?, ?)",
-			(security_id, job_id, time.time()),
+			"INSERT OR REPLACE INTO greet_records (account, job_id, security_id, greeted_at) VALUES (?, ?, ?, ?)",
+			(account, job_id, security_id, time.time()),
 		)
 		self._conn.commit()
 
@@ -777,17 +849,35 @@ class CacheStore:
 			"total_count": len(items),
 		}
 
-	def is_applied(self, security_id: str, job_id: str) -> bool:
-		row = self._conn.execute(
-			"SELECT 1 FROM apply_records WHERE security_id = ? AND job_id = ?",
-			(security_id, job_id),
-		).fetchone()
+	def is_applied(self, security_id: str, job_id: str, *, account: str = "") -> bool:
+		"""判断是否已投递：有账号作用域和 job_id 时按两者查，否则按 security_id。
+
+		理由同 is_greeted：securityId 每次请求轮换，job_id 稳定但不能跨账号合并。
+		"""
+		if account and job_id:
+			row = self._conn.execute(
+				"SELECT 1 FROM apply_records WHERE account = ? AND job_id = ?",
+				(account, job_id),
+			).fetchone()
+		elif security_id and job_id:
+			# 没有账号作用域时保留旧语义：(security_id, job_id) 组合命中
+			row = self._conn.execute(
+				"SELECT 1 FROM apply_records WHERE security_id = ? AND job_id = ?",
+				(security_id, job_id),
+			).fetchone()
+		elif security_id:
+			row = self._conn.execute(
+				"SELECT 1 FROM apply_records WHERE security_id = ?",
+				(security_id,),
+			).fetchone()
+		else:
+			row = None
 		return row is not None
 
-	def record_apply(self, security_id: str, job_id: str) -> None:
+	def record_apply(self, security_id: str, job_id: str, *, account: str = "") -> None:
 		self._conn.execute(
-			"INSERT OR REPLACE INTO apply_records (security_id, job_id, applied_at) VALUES (?, ?, ?)",
-			(security_id, job_id, time.time()),
+			"INSERT OR REPLACE INTO apply_records (account, job_id, security_id, applied_at) VALUES (?, ?, ?, ?)",
+			(account, job_id, security_id, time.time()),
 		)
 		self._conn.commit()
 

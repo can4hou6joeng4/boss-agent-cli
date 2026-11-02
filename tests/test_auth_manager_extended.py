@@ -453,3 +453,41 @@ def test_force_refresh_default_sources_resolve_to_auto(
 
 	mock_refresh_stoken.assert_called_once()
 	assert manager._token["stoken"] == "fresh-token"
+
+
+# ── account_fingerprint ──────────────────────────────────
+
+
+@patch("boss_agent_cli.auth.manager.TokenStore")
+def test_account_fingerprint_is_stable_hash_of_primary_cookie(mock_store_cls, tmp_path):
+	from boss_agent_cli.auth.identity import account_fingerprint
+
+	mock_store_cls.return_value = _make_store({"cookies": {"wt2": "synthetic-cookie-value"}})
+	manager = AuthManager(tmp_path)
+
+	fingerprint = manager.account_fingerprint()
+	assert fingerprint == account_fingerprint("synthetic-cookie-value")
+	assert len(fingerprint) == 16
+	assert "synthetic-cookie-value" not in fingerprint
+	assert manager.account_fingerprint() == fingerprint
+
+
+@patch("boss_agent_cli.auth.manager.TokenStore")
+def test_account_fingerprint_empty_when_not_logged_in(mock_store_cls, tmp_path):
+	mock_store_cls.return_value = _make_store(None)
+	assert AuthManager(tmp_path).account_fingerprint() == ""
+
+
+@patch("boss_agent_cli.auth.manager.TokenStore")
+@pytest.mark.parametrize("token", [{"cookies": None}, {"cookies": {}}, {"cookies": {"wt2": ""}}, {"stoken": "x"}])
+def test_account_fingerprint_empty_without_primary_cookie(mock_store_cls, tmp_path, token):
+	mock_store_cls.return_value = _make_store(token)
+	assert AuthManager(tmp_path).account_fingerprint() == ""
+
+
+def test_identity_fingerprint_empty_for_empty_value_and_respects_length():
+	from boss_agent_cli.auth.identity import account_fingerprint
+
+	assert account_fingerprint("") == ""
+	assert len(account_fingerprint("synthetic", length=8)) == 8
+	assert account_fingerprint("synthetic", length=8) == account_fingerprint("synthetic")[:8]

@@ -33,7 +33,7 @@ class FakeLogger:
 
 
 class FakeCache:
-	def is_greeted(self, security_id: str) -> bool:
+	def is_greeted(self, security_id: str = "", *, job_id: str = "", account: str = "") -> bool:
 		return False
 
 	def get_job_desc(self, job_id: str):
