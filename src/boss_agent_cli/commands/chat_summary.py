@@ -10,8 +10,8 @@ from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, han
 
 @click.command("chat-summary")
 @click.argument("security_id", metavar="UID_OR_SECURITY_ID")
-@click.option("--page", default=1, help="页码")
-@click.option("--count", default=20, help="每页消息数量")
+@click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
+@click.option("--count", default=20, type=click.IntRange(min=1), help="每页消息数量")
 @click.pass_context
 @handle_auth_errors("chat-summary")
 def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> None:

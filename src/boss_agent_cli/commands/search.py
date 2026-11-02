@@ -135,7 +135,7 @@ def _active_filter_hint(level: str, pipeline_result: Any) -> dict[str, Any]:
 	default=None,
 	help="只保留 HR 活跃度不低于该档的职位：" + " / ".join(ACTIVE_LEVELS) + "（也认 3day、3日 等写法）；online 只看列表，其余档位列表看不出时会逐个查职位详情（更慢、风险更高）",
 )
-@click.option("--page", default=1, help="页码")
+@click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
 @click.option("--no-cache", is_flag=True, default=False, help="跳过缓存")
 @click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
 @click.option("--sort", "sort_mode", default="relevance", type=click.Choice(["relevance", "score"]), help="排序方式")

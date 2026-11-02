@@ -20,7 +20,7 @@ from boss_agent_cli.wizard.actions import execute_recruiter_candidate_search
 @click.option("--source", default=None, help="来源编码（默认 4）")
 @click.option("--salary", default=None, help="薪资范围，如 -1,3")
 @click.option("--select", is_flag=True, default=False, help="是否带 select=true")
-@click.option("--page", default=1, type=int, help="页码")
+@click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
 @click.pass_context
 @handle_auth_errors("recruiter-candidates")
 def candidates_cmd(ctx: click.Context, query: str, city: str | None, job_id: str | None, experience: str | None, degree: str | None, age: str | None, school_level: str | None, activeness: str | None, source: str | None, salary: str | None, select: bool, page: int) -> None:

@@ -336,7 +336,7 @@ def _percent(value: Any) -> str:
 
 
 @click.command("stats")
-@click.option("--days", default=30, type=int, help="统计窗口天数（默认 30 天）")
+@click.option("--days", default=30, type=click.IntRange(min=0), help="统计窗口天数（默认 30 天）")
 @click.option(
 	"--format", "output_format",
 	type=click.Choice(["json", "html"]),

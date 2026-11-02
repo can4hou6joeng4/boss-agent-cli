@@ -12,7 +12,7 @@ from boss_agent_cli.services.job_identity import deduplicate_job_result
 
 
 @click.command("recommend")
-@click.option("--page", default=1, type=int, help="页码")
+@click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
 @click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
 @click.pass_context
 @handle_auth_errors("recommend")

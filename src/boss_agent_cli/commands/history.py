@@ -7,7 +7,7 @@ from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, han
 
 
 @click.command("history")
-@click.option("--page", default=1, help="页码")
+@click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
 @click.pass_context
 @handle_auth_errors("history")
 def history_cmd(ctx: click.Context, page: int) -> None:
