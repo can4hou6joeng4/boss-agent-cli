@@ -92,6 +92,48 @@ def _load_resume_text(ctx: click.Context, resume_name: str) -> str | None:
 	return resume_to_text(resume)
 
 
+def _read_text_argument(ctx: click.Context, value: str) -> str | None:
+	"""展开 `@文件路径` 参数；读不出来时输出信封并返回 None。
+
+	`read_text` 对 GBK 保存的 JD、误选的 PDF/图片会抛 `UnicodeDecodeError`，
+	传目录会抛 `IsADirectoryError`，权限不足会抛 `PermissionError`；
+	这些都不该变成 traceback。
+	"""
+	if not value.startswith("@"):
+		return value
+	file_path = Path(value[1:])
+	if not file_path.exists():
+		handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
+		ctx.exit(1)
+		return None
+	if file_path.is_dir():
+		handle_error_output(
+			ctx, "ai",
+			code="INVALID_PARAM",
+			message=f"'{file_path}' 是目录，需要传入文件路径",
+		)
+		ctx.exit(1)
+		return None
+	try:
+		return file_path.read_text(encoding="utf-8")
+	except UnicodeDecodeError:
+		handle_error_output(
+			ctx, "ai",
+			code="INVALID_PARAM",
+			message=f"文件 '{file_path}' 不是 UTF-8 编码的文本；请先转存为 UTF-8 后重试",
+		)
+		ctx.exit(1)
+		return None
+	except OSError as exc:
+		handle_error_output(
+			ctx, "ai",
+			code="LOCAL_IO_ERROR",
+			message=f"读取 {file_path} 失败: {exc.strerror or exc}",
+		)
+		ctx.exit(1)
+		return None
+
+
 def _call_ai(ctx: click.Context, svc: AIService, prompt: str) -> dict[str, Any] | None:
 	"""调用 AI 并解析 JSON 结果，失败时输出错误信封。"""
 	try:
@@ -253,13 +295,10 @@ def ai_analyze_jd_cmd(ctx: click.Context, jd_text: str, resume_name: str) -> Non
 		return
 
 	# 支持 @file 语法读取文件
-	if jd_text.startswith("@"):
-		file_path = Path(jd_text[1:])
-		if not file_path.exists():
-			handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
-			ctx.exit(1)
-			return
-		jd_text = file_path.read_text(encoding="utf-8")
+	resolved = _read_text_argument(ctx, jd_text)
+	if resolved is None:
+		return
+	jd_text = resolved
 
 	resume_text = _load_resume_text(ctx, resume_name)
 	if resume_text is None:
@@ -315,13 +354,10 @@ def ai_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str) -> None:
 	if svc is None:
 		return
 
-	if jd_text.startswith("@"):
-		file_path = Path(jd_text[1:])
-		if not file_path.exists():
-			handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
-			ctx.exit(1)
-			return
-		jd_text = file_path.read_text(encoding="utf-8")
+	resolved = _read_text_argument(ctx, jd_text)
+	if resolved is None:
+		return
+	jd_text = resolved
 
 	resume_text = _load_resume_text(ctx, resume_name)
 	if resume_text is None:
@@ -352,13 +388,10 @@ def ai_suggest_cmd(ctx: click.Context, resume_name: str, jd_text: str) -> None:
 	if svc is None:
 		return
 
-	if jd_text.startswith("@"):
-		file_path = Path(jd_text[1:])
-		if not file_path.exists():
-			handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
-			ctx.exit(1)
-			return
-		jd_text = file_path.read_text(encoding="utf-8")
+	resolved = _read_text_argument(ctx, jd_text)
+	if resolved is None:
+		return
+	jd_text = resolved
 
 	resume_text = _load_resume_text(ctx, resume_name)
 	if resume_text is None:
@@ -468,13 +501,10 @@ def ai_reply_cmd(ctx: click.Context, recruiter_message: str, context: str, resum
 		return
 
 	def _resolve_text(value: str) -> str:
-		if value.startswith("@"):
-			file_path = Path(value[1:])
-			if not file_path.exists():
-				handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
-				ctx.exit(1)
-			return file_path.read_text(encoding="utf-8")
-		return value
+		resolved = _read_text_argument(ctx, value)
+		if resolved is None:
+			ctx.exit(1)
+		return resolved
 
 	recruiter_message = _resolve_text(recruiter_message)
 	context_text = _resolve_text(context) if context else "（无）"
@@ -520,13 +550,10 @@ def ai_interview_prep_cmd(ctx: click.Context, jd_text: str, resume_name: str | N
 	if svc is None:
 		return
 
-	if jd_text.startswith("@"):
-		file_path = Path(jd_text[1:])
-		if not file_path.exists():
-			handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
-			ctx.exit(1)
-			return
-		jd_text = file_path.read_text(encoding="utf-8")
+	resolved = _read_text_argument(ctx, jd_text)
+	if resolved is None:
+		return
+	jd_text = resolved
 
 	resume_text = "（未指定）"
 	if resume_name:
@@ -568,13 +595,10 @@ def ai_chat_coach_cmd(ctx: click.Context, chat_text: str, resume_name: str | Non
 	if svc is None:
 		return
 
-	if chat_text.startswith("@"):
-		file_path = Path(chat_text[1:])
-		if not file_path.exists():
-			handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
-			ctx.exit(1)
-			return
-		chat_text = file_path.read_text(encoding="utf-8")
+	resolved = _read_text_argument(ctx, chat_text)
+	if resolved is None:
+		return
+	chat_text = resolved
 
 	resume_text = "（未指定）"
 	if resume_name:
@@ -687,13 +711,11 @@ def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | 
 			return
 
 	# 支持 @file 语法
-	if jd_text and jd_text.startswith("@"):
-		file_path = Path(jd_text[1:])
-		if not file_path.exists():
-			handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
-			ctx.exit(1)
+	if jd_text:
+		resolved = _read_text_argument(ctx, jd_text)
+		if resolved is None:
 			return
-		jd_text = file_path.read_text(encoding="utf-8")
+		jd_text = resolved
 
 	resume_text = _load_resume_text(ctx, resume_name)
 	if resume_text is None:
@@ -752,13 +774,11 @@ def ai_cover_letter_cmd(
 			return
 
 	# 支持 @file 语法
-	if jd_text and jd_text.startswith("@"):
-		file_path = Path(jd_text[1:])
-		if not file_path.exists():
-			handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
-			ctx.exit(1)
+	if jd_text:
+		resolved = _read_text_argument(ctx, jd_text)
+		if resolved is None:
 			return
-		jd_text = file_path.read_text(encoding="utf-8")
+		jd_text = resolved
 
 	resume_text = _load_resume_text(ctx, resume_name)
 	if resume_text is None:
