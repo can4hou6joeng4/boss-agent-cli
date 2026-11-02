@@ -145,7 +145,7 @@ def test_greet_hints_present(tmp_path):
 # ── batch-greet 命令 ────────────────────────────────────────────────
 
 
-def _invoke_batch_greet(*args, tmp_path, search_result=None, greeted_ids=None, is_success=True, parse_error=("UNKNOWN", "")):
+def _invoke_batch_greet(*args, tmp_path, search_result=None, greeted_ids=None, is_success=True, parse_error=("UNKNOWN", ""), client_sink=None):
 	runner = CliRunner()
 	greeted = set(greeted_ids or [])
 	with (
@@ -177,6 +177,8 @@ def _invoke_batch_greet(*args, tmp_path, search_result=None, greeted_ids=None, i
 		mock_client.unwrap_data.side_effect = lambda payload: payload.get("zpData") if "zpData" in payload else payload.get("data")
 		mock_client_cls.return_value.__enter__ = lambda s: mock_client
 		mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
+		if client_sink is not None:
+			client_sink.append(mock_client)
 
 		cli_args = ["--data-dir", str(tmp_path), *args]
 		result = runner.invoke(cli, cli_args)
@@ -248,6 +250,32 @@ def test_batch_greet_respects_count_limit(tmp_path):
 		"batch-greet", "python", "--dry-run", "--count", "1", tmp_path=tmp_path,
 	)
 	assert parsed["data"]["count"] == 1
+
+
+def test_batch_greet_count_zero_sends_nothing(tmp_path):
+	"""`--count 0` 必须一条招呼都不发。
+
+	旧实现把「到上限就停」放在 append 之后，count=0 时仍会收进 1 个候选，
+	非 dry-run 下就是一次真实的招呼写操作。
+	"""
+	clients: list[MagicMock] = []
+	code, parsed = _invoke_batch_greet(
+		"batch-greet", "python", "--count", "0", tmp_path=tmp_path, client_sink=clients,
+	)
+	assert code == 0
+	assert parsed["data"]["total_greeted"] == 0
+	assert parsed["data"]["greeted"] == []
+	clients[0].greet.assert_not_called()
+
+
+def test_batch_greet_rejects_negative_count(tmp_path):
+	"""负数上限会让「到上限就停」永远不成立，应按参数错误拒绝。"""
+	code, parsed = _invoke_batch_greet(
+		"batch-greet", "python", "--count", "-1", tmp_path=tmp_path,
+	)
+	assert code == 1
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "INVALID_PARAM"
 
 
 def test_batch_greet_reports_platform_error(tmp_path):
