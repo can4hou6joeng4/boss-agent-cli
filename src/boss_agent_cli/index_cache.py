@@ -4,7 +4,7 @@
 import json
 import time
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from boss_agent_cli.output import Logger
 
@@ -60,14 +60,25 @@ def try_save_index(data_dir: Path, jobs: list[dict[str, Any]], *, source: str = 
 
 
 def _load_cache(data_dir: Path) -> dict[str, Any] | None:
-	"""读取索引缓存；缺文件或解析失败返回 None。"""
+	"""读取索引缓存；缺文件、解析失败或结构不对都返回 None。
+
+	缓存是 `boss show <编号>` 的唯一数据源，结构损坏时按「没有缓存」处理，
+	让用户重新 `boss search`，而不是把 AttributeError 兜成 INTERNAL_ERROR
+	（那条指引会让人去升级版本 / 提 issue，而真正该做的是重跑搜索）。
+	"""
 	path = _cache_path(data_dir)
 	if not path.exists():
 		return None
 	try:
-		return cast("dict[str, Any]", json.loads(path.read_text(encoding="utf-8")))
-	except (json.JSONDecodeError, OSError):
+		loaded = json.loads(path.read_text(encoding="utf-8"))
+	except (json.JSONDecodeError, UnicodeDecodeError, OSError):
 		return None
+	if not isinstance(loaded, dict):
+		return None
+	jobs = loaded.get("jobs", [])
+	if not isinstance(jobs, list) or not all(isinstance(job, dict) for job in jobs):
+		return None
+	return loaded
 
 
 def get_job_by_index(data_dir: Path, index: int) -> dict[str, Any] | None:
@@ -77,10 +88,11 @@ def get_job_by_index(data_dir: Path, index: int) -> dict[str, Any] | None:
 		return None
 
 	jobs = cache_data.get("jobs", [])
-	if index < 1 or index > len(jobs):
+	if not isinstance(jobs, list) or index < 1 or index > len(jobs):
 		return None
 
-	return cast("dict[str, Any]", jobs[index - 1])
+	job = jobs[index - 1]
+	return job if isinstance(job, dict) else None
 
 
 def get_index_info(data_dir: Path) -> dict[str, Any]:

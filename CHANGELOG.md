@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 搜索/推荐结果缓存 `cache/index_cache.json` 结构损坏（顶层不是对象、`jobs` 不是数组、条目不是对象、非 UTF-8）时，`boss show <编号>` 把 `AttributeError` 兜成 `INTERNAL_ERROR`，恢复指引是「先升级到最新版本；仍出现时提交 issue」——真正该做的是重新搜索一次。现在这类缓存按「没有缓存」处理：`show` 返回 `INVALID_PARAM` 并提示先执行 `boss search` / `boss recommend`。
 - 本地模型登记表 `models/registry.json` 损坏（`ai local import` 写文件时被中断、手工编辑写坏）后，`boss ai local status` 与 `ai local import` 都直接抛 `JSONDecodeError` traceback；写入方还会用空表覆盖原文件，把还能人工修复的登记条目丢掉。现在 `ai local status` 按空表降级显示，`ai local import` 在复制模型文件前先校验登记表，损坏时返回新登记的 `MODEL_REGISTRY_INVALID`（可恢复，指明文件与重建方式）且不改动原文件；登记表改为先写临时文件再 `os.replace`，中断不会留下半截 JSON。
 - `boss resume import` 对上不合法的输入文件会直接抛 traceback、stdout 没有任何信封：GBK 保存的 JSON（或误选的 PDF / 图片）触发 `UnicodeDecodeError`，顶层是数组或字符串触发 `AttributeError`，`name` 写成数字时崩在 `_safe_filename` 的 `int.replace` 上；`boss resume list` / `resume show` 遇到非 UTF-8 或字段类型写错的简历文件同样 traceback。现在导入失败返回 `INVALID_PARAM` 信封并给出文件路径与具体原因（UTF-8 转码、顶层必须是 JSON 对象、缺少字符串 `name`、JSON 语法错误的行列），列表跳过读不出来的文件，单份读取出错按 `RESUME_NOT_FOUND` 处理。
 - `config.json` 内容损坏（写一半被中断、手工编辑写坏语法）时报错只说 `Invalid value for config.json: Expecting value: line 1 column 14`：既没有文件路径，也没有说明「所有命令都卡在启动阶段，`config set/reset` 也用不了」。现在启动阶段的错误消息给出配置文件路径、出错行列与修复指引（修正或删除该文件，删除后配置回到默认值）；文件不是 JSON 对象时同样带上路径。
