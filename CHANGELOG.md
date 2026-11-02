@@ -13,6 +13,7 @@
 - `boss wizard` 的导出动作（`candidate_export`）没有把账号指纹传给搜索管线，登录态下 JSON 导出里的 `greeted` 全部是 `false`，与 `search` / `candidate_search` 的结果不一致。现在与其它求职者动作一样传入当前账号作用域。
 - `search` 与 `watch run` 捕获 `SearchPipelinePlatformError` 后同样把 `recoverable` 硬编码为 `false` 且不给 `recovery_action`：响应字典形态的风控码（如 code 36）没有停止指引，登录过期也无法提示重新登录。`watch run --all` 还会把单个 watch 的风控收进汇总结果继续跑下一个 watch，向平台继续发请求。现在两条命令都按错误契约输出；`--all` 遇到风控立即停批，已完成的 watch 结果随 `error.details` 带回。
 - 招聘者侧的 `hr download-resume` / `hr accept-resume` / `hr greet` 只捕获 `AccountRiskError`，而 `EnvironmentRiskError` / `EnvironmentRiskLockedError` 与其平级：环境风控会掉进兜底分支——`download-resume` 回 `NETWORK_ERROR` 并提示“检查网络后重试”，`accept-resume` 误报成“结果未知”，`hr greet` 也把风控当成未确认结果。现在三条写路径都按 `PlatformRiskError` 基类捕获，风控码的 `recoverable` / `recovery_action` / `next_actions` 统一取自 `RISK_ERROR_CONTRACTS`；响应字典形态的风控码与异常形态给同一份停止指引，非风控写失败仍保留“先核对、勿重试”的原有约束。
+- `me` 没有 `@handle_auth_errors` 包裹，平台在获取个人信息 / 简历 / 求职期望 / 投递记录时抛出的风控异常会落到 `NETWORK_ERROR` 兜底：`recoverable: true` +「重试」。现在按 `PlatformRiskError` 单独输出，`recovery_action` / `next_actions` 取自 `RISK_ERROR_CONTRACTS`，不再提示重试。
 
 ## [3.2.0] - 2026-11-01
 
