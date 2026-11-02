@@ -161,6 +161,56 @@ def test_run_rejects_unknown_city_before_touching_the_browser(tmp_path, monkeypa
 	assert "城市" in error["message"]
 
 
+def test_run_honors_configured_zero_max_retries(tmp_path, monkeypatch):
+	"""configure 接受 --max-retries 0；运行时不能被 `or` 悄悄改回 1。"""
+	from boss_agent_cli.commands import crawl as crawl_module
+
+	captured = {}
+
+	class _Outcome:
+		run_id = "run-ok"
+		status = "completed"
+
+		def as_dict(self):
+			return {"run_id": self.run_id, "status": self.status, "output_paths": {}}
+
+	def _capture(self, settings):
+		captured["settings"] = settings
+		return _Outcome()
+
+	monkeypatch.setattr(crawl_module.CrawlService, "create_and_run", _capture)
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	configured = _invoke(runner, tmp_path, "crawl", "configure", "--max-retries", "0")
+	assert configured.exit_code == 0, configured.output
+	result = _invoke(runner, tmp_path, "crawl", "run", "AI", "--city", "杭州")
+	assert result.exit_code == 0, result.output
+	assert captured["settings"].max_retries == 0
+
+
+@pytest.mark.parametrize(
+	("crawl_config", "field"),
+	[
+		({"max_requests": [1]}, "max_requests"),
+		({"max_requests": 0}, "max_requests"),
+		({"max_retries": -1}, "max_retries"),
+		({"cdp_port": "abc"}, "cdp_port"),
+		({"cdp_port": 70000}, "cdp_port"),
+		({"chrome_path": 5}, "chrome_path"),
+	],
+)
+def test_run_rejects_invalid_crawl_config(tmp_path, crawl_config, field):
+	"""手工 / config set 写入的错误值要按 INVALID_PARAM 返回，而不是 INTERNAL_ERROR。"""
+	_save_crawl_config(tmp_path, crawl_config)
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, "crawl", "run", "AI", "--city", "杭州")
+	assert result.exit_code == 1
+	error = _envelope(result)["error"]
+	assert error["code"] == "INVALID_PARAM"
+	assert field in error["message"]
+
+
 def test_run_maps_service_runtime_error_to_crawl_unavailable(tmp_path, monkeypatch):
 	from boss_agent_cli.commands import crawl as crawl_module
 

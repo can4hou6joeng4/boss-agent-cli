@@ -92,6 +92,8 @@ boss crawl resume <run_id>
 boss crawl stop <run_id>
 ```
 
+配置值在开始运行时按类型与范围校验：`max_requests` / `max_details` / `max_seconds` 必须 ≥ 1，`max_retries` 可以设为 `0` 表示不重试，`cdp_port` 必须在 1-65535 之间，`chrome_path` 必须是字符串或 `null`。`config set crawl` 或手工编辑写入错误类型 / 越界值时，`crawl run` / `start` 返回 `INVALID_PARAM` 并指出配置项，不会悄悄套用默认值或落到 `INTERNAL_ERROR`。
+
 | 命令 | 说明 |
 |------|------|
 | `boss crawl configure [--chrome-path PATH] [--port N] [--max-* N]` | 设置 crawl 专用 Chrome 和请求、详情、墙钟、重试预算；profile 固定为 `<data-dir>/crawl/chrome-profile` |

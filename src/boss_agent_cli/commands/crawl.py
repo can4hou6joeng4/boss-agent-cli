@@ -81,6 +81,24 @@ def _require_crawl_capabilities(ctx: click.Context, hook_profile: str | None = N
 	return hook_profile in (None, "none") or require_compliance_allowed(ctx, "crawl-hook")
 
 
+def _crawl_int_setting(cfg: dict[str, Any], key: str, default: int, *, minimum: int = 1) -> int:
+	"""读取整数型 crawl 配置；显式值优先于默认值。
+
+	不能用 `value or default`：`max_retries=0` 是 `crawl configure` 明确接受的值，
+	用 or 会把 0 当成缺省并悄悄改回 1。
+	"""
+	value = cfg.get(key)
+	if value is None:
+		return default
+	try:
+		parsed = int(value)
+	except (TypeError, ValueError) as exc:
+		raise ValueError(f"crawl 配置项 {key} 必须是整数") from exc
+	if parsed < minimum:
+		raise ValueError(f"crawl 配置项 {key} 不能小于 {minimum}")
+	return parsed
+
+
 def _settings_from_context(
 	ctx: click.Context,
 	*,
@@ -100,20 +118,35 @@ def _settings_from_context(
 	resolved_hook = hook_profile or "none"
 	if resolved_hook not in _HOOK_CHOICES:
 		raise ValueError(f"unknown hook profile: {resolved_hook}")
+	resolved_chrome = chrome_path or cfg.get("chrome_path")
+	if resolved_chrome is not None and not isinstance(resolved_chrome, str):
+		raise ValueError("crawl 配置项 chrome_path 必须是字符串或 null")
+	resolved_port = cdp_port
+	if resolved_port is None:
+		raw_port = cfg.get("cdp_port")
+		if raw_port is None:
+			resolved_port = _unused_local_port()
+		else:
+			try:
+				resolved_port = int(raw_port)
+			except (TypeError, ValueError) as exc:
+				raise ValueError("crawl 配置项 cdp_port 必须是整数") from exc
+			if not 1 <= resolved_port <= 65535:
+				raise ValueError("crawl 配置项 cdp_port 必须在 1-65535 之间")
 	return CrawlSettings(
 		query=query,
 		city_code=_city_code(city),
 		pages=pages,
 		with_detail=with_detail,
 		profile_path=Path(resolved_profile),
-		chrome_path=chrome_path or cfg.get("chrome_path"),
-		cdp_port=int(cdp_port or cfg.get("cdp_port") or _unused_local_port()),
+		chrome_path=resolved_chrome,
+		cdp_port=resolved_port,
 		hook_profile=resolved_hook,
 		hook_dir=Path(hook_dir).expanduser() if hook_dir else None,
-		max_requests=int(cfg.get("max_requests") or 20),
-		max_details=int(cfg.get("max_details") or 50),
-		max_seconds=int(cfg.get("max_seconds") or 600),
-		max_retries=int(cfg.get("max_retries") or 1),
+		max_requests=_crawl_int_setting(cfg, "max_requests", 20),
+		max_details=_crawl_int_setting(cfg, "max_details", 50),
+		max_seconds=_crawl_int_setting(cfg, "max_seconds", 600),
+		max_retries=_crawl_int_setting(cfg, "max_retries", 1, minimum=0),
 		operating_mode=operating_mode(ctx),
 	)
 
