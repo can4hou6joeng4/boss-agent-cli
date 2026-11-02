@@ -146,7 +146,7 @@ def require_supported_platform(role: str, platform: str) -> None:
 	platforms = list(role_spec.get("platforms") or [])
 	if platform not in platforms:
 		raise WorkflowInputError(
-			f"角色 {role} 不支持平台 {platform!r}，supported: {', '.join(platforms) or '-'}"
+			f"角色 {role} 不支持平台 {platform!r}，可选: {', '.join(platforms) or '-'}"
 		)
 
 
