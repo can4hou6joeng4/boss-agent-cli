@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 招聘者聊天页写操作的失败信封是中英混排：`boss hr chat` 发消息未确认时 `error.message` 以 `send_message_by_friend unconfirmed:` 开头，交换联系方式失败 / 未确认时是 `exchange_request_by_friend failed:` / `unconfirmed:`，紧跟着的却是中文恢复指引；页面返回结构异常时的默认文案同样是英文（`unexpected page result`、`unexpected result: ...`）。现在统一为中文（`发送消息未确认: ...`、`交换联系方式请求失败: ...`、`页面未返回可用的结果`），并新增源码扫描测试，防止新增的聊天页失败文案再混入英文。
 - 顶层文件读写兜底把所有子命令的 `OSError` 都记成 `command: "boss"`：`boss stats --format html -o /不存在/x.html` 的信封是 `{"command": "boss", "error": {"message": "boss 本地文件读写失败: ..."}}`，按 `command` 过滤日志或分发的调用方认不出是哪个子命令。现在与启动期的缓存库兜底一样，从 argv 取实际子命令名（`command: "stats"`、`stats 本地文件读写失败: ...`）。
 - `boss chat --export json -o <路径>` 只接受当前目录或数据目录下的文件：`-o ~/Desktop/chat.json`、`-o /tmp/chat.json` 这类绝对路径被 `os.path.relpath` 算出的 `..` 判成「输出路径不安全」并拒绝（`recoverable: false`），与 `digest` / `stats` 的 `-o` 行为不一致。现在显式给出的 `-o` 一律照写，同时补上 `~` 展开——旧代码对 `-o ~/chat.json` 会在当前目录建一个名叫 `~` 的目录。
 - `config.json` 的 `export_dir` 写成数字 / 数组时，`boss chat --export json` 在 `os.path.expanduser` 上抛 `TypeError` traceback，stdout 没有任何信封。现在按参数错误返回中文信封（`export_dir 必须是目录路径字符串或 null，收到 9`），`recovery_action` 直接给出只修这一项的 `boss config reset export_dir`。

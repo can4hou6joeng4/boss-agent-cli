@@ -468,7 +468,7 @@ class UnconfirmedFakeBossRecruiter(FakeBossRecruiter):
 		self.sent.append((friend_id, content))
 		return {
 			"code": -1,
-			"message": "send_message_by_friend unconfirmed: page did not confirm acceptance",
+			"message": "发送消息未确认: 页面未确认送达",
 			"__cli_error_code__": "ACTION_UNCONFIRMED",
 			"__cli_error_details__": {"action": "reply"},
 		}

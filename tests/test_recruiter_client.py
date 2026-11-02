@@ -585,7 +585,7 @@ def test_send_message_by_friend_without_real_ws_send_returns_error():
 
 		result = client.send_message_by_friend(1, "x")
 		assert result["code"] == -1
-		assert "does not confirm acceptance in target chat history" in result["message"]
+		assert "页面动作未在目标聊天记录中得到确认" in result["message"]
 		assert result["zpData"]["ws_evidence"]["matched_ws_count"] == 0
 		assert "sample_bits" not in result["zpData"]["ws_evidence"]
 		assert private_message not in json.dumps(result, ensure_ascii=False)
