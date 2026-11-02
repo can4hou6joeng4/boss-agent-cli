@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
+from boss_agent_cli.auth.identity import account_scope
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.api.endpoints import CITY_CODES
 from boss_agent_cli.ai.config import AIConfigStore
@@ -390,7 +391,7 @@ def _auth_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 
 def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	_required(inputs, "query")
-	account = context.auth().account_fingerprint()
+	account = account_scope(context.auth())
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		with context.candidate_platform() as platform:
 			result = execute_candidate_search(platform, cache, context.logger, {**inputs, "account": account})
@@ -427,7 +428,7 @@ def _candidate_detail(context: ActionContext, inputs: Mapping[str, Any], prior: 
 				job_id=job_id,
 				lid=lid,
 				data_dir=context.data_dir,
-				account=context.auth().account_fingerprint(),
+				account=account_scope(context.auth()),
 			)
 	return StepResult({"job": data, "result": data})
 
@@ -435,7 +436,7 @@ def _candidate_detail(context: ActionContext, inputs: Mapping[str, Any], prior: 
 def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	security_id = str(_required(inputs, "security_id"))
 	job_id = str(_required(inputs, "job_id"))
-	account = context.auth().account_fingerprint()
+	account = account_scope(context.auth())
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		if cache.is_applied(security_id, job_id, account=account):
 			raise WorkflowActionError("ALREADY_APPLIED", "已对该职位发起过投递/立即沟通")
@@ -448,7 +449,7 @@ def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	security_id = str(_required(inputs, "security_id"))
 	job_id = str(_required(inputs, "job_id"))
-	account = context.auth().account_fingerprint()
+	account = account_scope(context.auth())
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		if cache.is_greeted(security_id, job_id=job_id, account=account):
 			raise WorkflowActionError("ALREADY_GREETED", "已向该招聘者打过招呼")
@@ -702,9 +703,10 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 		record = cache.get_saved_search(name)
 		if record is None:
 			raise WorkflowActionError("JOB_NOT_FOUND", f"未找到 watch: {name}")
+		account = account_scope(context.auth())
 		with context.candidate_platform() as platform:
-			result = execute_candidate_search(platform, cache, context.logger, record["params"])
-		watch_result = cache.record_watch_results(name, result.items)
+			result = execute_candidate_search(platform, cache, context.logger, {**record["params"], "account": account})
+		watch_result = cache.record_watch_results(name, result.items, account=account)
 		return StepResult({"name": name, **watch_result})
 
 

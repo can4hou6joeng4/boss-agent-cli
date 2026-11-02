@@ -98,6 +98,30 @@ def test_watch_seen_items(store):
 	assert result["seen_count"] == 1
 
 
+def test_watch_dedupes_across_security_id_rotation_with_account(store):
+	"""有账号指纹时，securityId 轮换后同一职位仍算已见。"""
+	first = store.record_watch_results("search1", [{"security_id": "s1", "job_id": "j1"}], account="acct_a")
+	assert first["new_count"] == 1
+	result = store.record_watch_results("search1", [{"security_id": "s2", "job_id": "j1"}], account="acct_a")
+	assert result["new_count"] == 0
+	assert result["seen_count"] == 1
+
+
+def test_watch_accounts_are_isolated(store):
+	"""不同账号看到同一职位时不应共享已见记录。"""
+	store.record_watch_results("search1", [{"security_id": "s1", "job_id": "j1"}], account="acct_a")
+	result = store.record_watch_results("search1", [{"security_id": "s8", "job_id": "j1"}], account="acct_b")
+	assert result["new_count"] == 1
+	assert result["seen_count"] == 0
+
+
+def test_watch_without_account_keeps_legacy_key(store):
+	"""没有账号归属时保留旧复合键，不跨 securityId 轮换合并。"""
+	store.record_watch_results("search1", [{"security_id": "s1", "job_id": "j1"}])
+	result = store.record_watch_results("search1", [{"security_id": "s2", "job_id": "j1"}])
+	assert result["new_count"] == 1
+
+
 def test_watch_mixed_items(store):
 	"""混合新旧项目应分别计数。"""
 	store.record_watch_results("search1", [{"security_id": "s1", "job_id": "j1"}])

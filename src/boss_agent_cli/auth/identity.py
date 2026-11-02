@@ -9,6 +9,10 @@ zhipin 的 ``wt2`` 等成功 cookie 是加密 token，没有可直接展示的�
 from __future__ import annotations
 
 import hashlib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+	from boss_agent_cli.auth.manager import AuthManager
 
 
 def account_fingerprint(cookie_value: str, *, length: int = 16) -> str:
@@ -16,3 +20,14 @@ def account_fingerprint(cookie_value: str, *, length: int = 16) -> str:
 	if not cookie_value:
 		return ""
 	return hashlib.sha256(cookie_value.encode("utf-8")).hexdigest()[:length]
+
+
+def account_scope(auth: "AuthManager") -> str:
+	"""返回当前登录态的账号指纹，用于本地操作记录的去重作用域。
+
+	未登录或缺少主 Cookie 时返回空串；此时本地记录退化为只按 ``security_id``
+	匹配，与引入账号作用域之前的行为一致。非字符串的返回值（测试替身）同样
+	按空串处理，避免把 Mock 对象写进 SQLite。
+	"""
+	value = auth.account_fingerprint()
+	return value if isinstance(value, str) else ""

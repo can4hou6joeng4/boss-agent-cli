@@ -99,6 +99,48 @@ def test_watch_run_marks_only_new_items(mock_auth_cls, mock_client_cls, tmp_path
 
 @patch("boss_agent_cli.commands.watch.get_platform_instance")
 @patch("boss_agent_cli.commands.watch.AuthManager")
+def test_watch_run_dedupes_across_security_id_rotation(mock_auth_cls, mock_client_cls, tmp_path, legacy_args):
+	mock_auth_cls.return_value.account_fingerprint.return_value = "acct_a"
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.is_success.return_value = True
+	mock_client.search_jobs.return_value = {
+		"zpData": {
+			"hasMore": False,
+			"jobList": [_job("sec-1", "job-1")],
+		},
+	}
+
+	runner = CliRunner()
+	runner.invoke(
+		cli,
+		[
+			"--data-dir", str(tmp_path),
+			"--json",
+			"watch", "add", "golang-gz", "golang",
+			"--city", "广州",
+		],
+	)
+
+	first = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", "golang-gz"])
+	assert first.exit_code == 0
+	assert json.loads(first.output)["data"]["new_count"] == 1
+
+	# 平台换发新的 securityId，但 encryptJobId 不变：同一账号下仍算已见。
+	mock_client.search_jobs.return_value = {
+		"zpData": {
+			"hasMore": False,
+			"jobList": [_job("sec-2", "job-1")],
+		},
+	}
+	second = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", "golang-gz"])
+	assert second.exit_code == 0
+	second_parsed = json.loads(second.output)
+	assert second_parsed["data"]["new_count"] == 0
+	assert second_parsed["data"]["seen_count"] == 1
+
+
+@patch("boss_agent_cli.commands.watch.get_platform_instance")
+@patch("boss_agent_cli.commands.watch.AuthManager")
 def test_watch_run_reports_platform_error(mock_auth_cls, mock_client_cls, tmp_path, legacy_args):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.is_success.return_value = False
