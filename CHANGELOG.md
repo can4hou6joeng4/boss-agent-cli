@@ -15,6 +15,7 @@
 - 招聘者侧的 `hr download-resume` / `hr accept-resume` / `hr greet` 只捕获 `AccountRiskError`，而 `EnvironmentRiskError` / `EnvironmentRiskLockedError` 与其平级：环境风控会掉进兜底分支——`download-resume` 回 `NETWORK_ERROR` 并提示“检查网络后重试”，`accept-resume` 误报成“结果未知”，`hr greet` 也把风控当成未确认结果。现在三条写路径都按 `PlatformRiskError` 基类捕获，风控码的 `recoverable` / `recovery_action` / `next_actions` 统一取自 `RISK_ERROR_CONTRACTS`；响应字典形态的风控码与异常形态给同一份停止指引，非风控写失败仍保留“先核对、勿重试”的原有约束。
 - `me` 没有 `@handle_auth_errors` 包裹，平台在获取个人信息 / 简历 / 求职期望 / 投递记录时抛出的风控异常会落到 `NETWORK_ERROR` 兜底：`recoverable: true` +「重试」。现在按 `PlatformRiskError` 单独输出，`recovery_action` / `next_actions` 取自 `RISK_ERROR_CONTRACTS`，不再提示重试。
 - `boss doctor --live-probe` 的在线探测命中风控时，异常会落进通用兜底被记成「探测异常」并原样带出平台响应文本，随后还继续向另一个身份发招聘者接口请求；报告里的 `cdp_risk_lock` 仍是探测前的快照，`hints.next_actions` 还会建议再跑 `status --live` / `doctor`。现在 `PlatformRiskError` 与响应字典形态的风控码都在第一条命中处停止，检查项与 `hints` 按 `RISK_ERROR_CONTRACTS` 给出停止指引，不再透传异常文本；探测后重读本地风险锁，`data.live_probe_risk` 标记命中码，并抑制后续任何会触发平台请求的建议。
+- `hr chat` 读取聊天页快照（`chat_list_snapshot`）时把包括风控与预算停止在内的所有异常都当成「增强失败」吞掉，随后继续发 `userLastMsg` 请求；`boss wizard` 的登录门在 `login` 命中风控后也只显示失败面板，然后回到「现在登录 / 仅看本地功能 / 退出」菜单，等于邀请用户重试已被风控拦截的登录。现在两处都按 `is_request_stop` / `PlatformRiskError` 立即停止：`hr chat` 直接输出风控信封且不再请求最近消息，登录门展示停止指引后退出向导。
 
 ## [3.2.0] - 2026-11-01
 

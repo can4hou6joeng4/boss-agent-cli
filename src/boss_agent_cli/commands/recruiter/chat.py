@@ -4,6 +4,7 @@ from typing import Any
 
 import click
 
+from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
@@ -302,7 +303,11 @@ def _page_summaries(platform: Any) -> tuple[dict[int, dict[str, Any]], dict[str,
 		return {}, None
 	try:
 		snapshot = snapshot_fn()
-	except Exception:  # noqa: BLE001 — 页面快照只是增强，失败退回接口/列表字段
+	except Exception as exc:  # noqa: BLE001 — 页面快照只是增强，失败退回接口/列表字段
+		# 风控 / 预算停止不是“快照不可用”：吞掉后调用方还会继续发 userLastMsg 请求，
+		# 违反「命中风控立即停止」的硬边界。页面快照的普通失败仍按增强项降级。
+		if is_request_stop(exc):
+			raise
 		return {}, None
 	if not isinstance(snapshot, dict) or not snapshot.get("ok"):
 		return {}, None
