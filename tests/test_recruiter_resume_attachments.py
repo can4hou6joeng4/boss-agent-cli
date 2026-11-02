@@ -370,12 +370,21 @@ def test_new_commands_are_discoverable_with_compliance():
 	("RecruiterAuthError", "AUTH_REQUIRED"),
 	("TokenRefreshFailed", "TOKEN_REFRESH_FAILED"),
 	("AccountRiskError", "ACCOUNT_RISK"),
+	("EnvironmentRiskError", "ENVIRONMENT_RISK"),
+	("EnvironmentRiskLockedError", "ENVIRONMENT_RISK_LOCKED"),
 ])
 def test_resume_auth_and_risk_failures_stop_without_leaking(action, error_type, code):
-	from boss_agent_cli.api.client import AccountRiskError
+	from boss_agent_cli.api.client import AccountRiskError, EnvironmentRiskError, EnvironmentRiskLockedError
 	from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 
-	errors = {"AuthRequired": AuthRequired, "RecruiterAuthError": RecruiterAuthError, "TokenRefreshFailed": TokenRefreshFailed, "AccountRiskError": AccountRiskError}
+	errors = {
+		"AuthRequired": AuthRequired,
+		"RecruiterAuthError": RecruiterAuthError,
+		"TokenRefreshFailed": TokenRefreshFailed,
+		"AccountRiskError": AccountRiskError,
+		"EnvironmentRiskError": EnvironmentRiskError,
+		"EnvironmentRiskLockedError": EnvironmentRiskLockedError,
+	}
 	module = "boss_agent_cli.commands.recruiter." + action
 	with patch(module + ".AuthManager"), patch(module + ".get_recruiter_platform_instance") as factory:
 		platform = factory.return_value.__enter__.return_value
@@ -383,12 +392,18 @@ def test_resume_auth_and_risk_failures_stop_without_leaking(action, error_type, 
 		method.side_effect = errors[error_type]("private-token")
 		args = ["--yes"] if action == "accept_resume" else ["--output", "resume.pdf"]
 		result = _invoke(action.replace("_", "-"), "123", "--message-id", "456", *args)
-		error = json.loads(result.output)["error"]
+		payload = json.loads(result.output)
+		error = payload["error"]
 		assert error["code"] == code
-		if action == "download_resume" and code != "ACCOUNT_RISK":
+		if action == "download_resume":
 			assert (error["recoverable"], error["recovery_action"]) == error_contract_for_code(code)
 		else:
 			assert error["recoverable"] is False
+			assert error["recovery_action"]
+		if code in {"ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_LOCKED"}:
+			# 风控异常必须走统一停止契约，不能漏进 NETWORK_ERROR / 结果未知兜底。
+			assert error["recovery_action"] == error_contract_for_code(code)[1]
+			assert payload["hints"]["next_actions"]
 		assert "private-token" not in result.output
 		if action == "accept_resume":
 			assert error["details"]["accepted"] is None
@@ -413,7 +428,8 @@ def test_resume_platform_errors_use_declared_codes_and_safe_recovery(action, res
 		factory.return_value.__enter__.return_value = BossRecruiterPlatform(client)
 		args = ["--yes"] if action == "accept_resume" else ["--output", "resume.pdf"]
 		result = _invoke(action.replace("_", "-"), "123", "--message-id", "456", *args)
-		error = json.loads(result.output)["error"]
+		payload = json.loads(result.output)
+		error = payload["error"]
 		if code == "UNKNOWN":
 			code = "RESUME_ACCEPT_RESULT_UNKNOWN" if action == "accept_resume" else "NETWORK_ERROR"
 		assert error["code"] == code
@@ -422,9 +438,16 @@ def test_resume_platform_errors_use_declared_codes_and_safe_recovery(action, res
 		if action == "accept_resume":
 			assert error["details"]["accepted"] is None
 			assert error["recoverable"] is False
-			assert "不要自动重试" in error["recovery_action"]
+			if code in {"ACCOUNT_RISK", "ENVIRONMENT_RISK"}:
+				# 响应字典形态的风控码同样给统一停止指引，不只让用户核对本次请求。
+				assert error["recovery_action"] == error_contract_for_code(code)[1]
+				assert payload["hints"]["next_actions"]
+			else:
+				assert "不要自动重试" in error["recovery_action"]
 		else:
 			assert (error["recoverable"], error["recovery_action"]) == error_contract_for_code(code)
+			if code in {"ACCOUNT_RISK", "ENVIRONMENT_RISK"}:
+				assert payload["hints"]["next_actions"]
 		method.assert_called_once()
 
 

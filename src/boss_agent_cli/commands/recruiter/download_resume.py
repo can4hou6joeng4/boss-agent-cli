@@ -4,13 +4,20 @@ from pathlib import Path
 
 import click
 
-from boss_agent_cli.api.client import AccountRiskError
+from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.recruiter_client import RecruiterAuthError
 from boss_agent_cli.api.recruiter_resume import ResumeValidationError
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.compliance import require_compliance_allowed
-from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output
+from boss_agent_cli.display import (
+	error_contract_for_code,
+	handle_auth_errors,
+	handle_error_output,
+	handle_output,
+	platform_error_contract,
+	risk_error_message,
+)
 
 
 @click.command("download-resume")
@@ -73,14 +80,20 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 				recovery_action=recovery_action,
 			)
 			return
-		except AccountRiskError:
+		except PlatformRiskError as exc:
+			# 风控异常是多子类结构：EnvironmentRiskError / EnvironmentRiskLockedError
+			# 与 AccountRiskError 平级。只捕账号风控会把环境风控漏进下面的
+			# NETWORK_ERROR 兜底，反而提示“检查网络后重试”，违反风控硬边界。
+			_, recovery_action, risk_hints = platform_error_contract(exc.code)
 			handle_error_output(
 				ctx,
 				command,
-				code="ACCOUNT_RISK",
-				message="账号已触发风控，停止自动化访问并在官方页面处理",
+				code=exc.code,
+				message=risk_error_message(exc.code),
 				recoverable=False,
-				hints={"operator_actions": ["账号已触发风控，停止自动化访问并在官方页面处理"]},
+				recovery_action=recovery_action,
+				details=exc.details or None,
+				hints=risk_hints,
 			)
 			return
 		except Exception:
@@ -98,7 +111,7 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 		if not platform.is_success(result):
 			code, _ = platform.parse_error(result)
 			code = code if code != "UNKNOWN" else "NETWORK_ERROR"
-			recoverable, recovery_action = error_contract_for_code(code)
+			recoverable, recovery_action, risk_hints = platform_error_contract(code)
 			handle_error_output(
 				ctx,
 				command,
@@ -106,6 +119,7 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 				message="平台未允许获取附件，请在官方页面核对登录态与附件权限",
 				recoverable=recoverable,
 				recovery_action=recovery_action,
+				hints=risk_hints,
 			)
 			return
 		handle_output(

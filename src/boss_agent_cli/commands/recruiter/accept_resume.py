@@ -4,13 +4,20 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.client import AccountRiskError
+from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.recruiter_client import RecruiterAuthError
 from boss_agent_cli.api.recruiter_resume import ResumeValidationError
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.compliance import require_compliance_allowed
-from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output
+from boss_agent_cli.display import (
+	error_contract_for_code,
+	handle_auth_errors,
+	handle_error_output,
+	handle_output,
+	platform_error_contract,
+	risk_error_message,
+)
 
 
 @click.command("accept-resume")
@@ -65,6 +72,7 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 				code="AUTH_REQUIRED",
 				message="登录态不可用，请在官方页面核对后重新登录；不要自动重试",
 				recoverable=False,
+				recovery_action="重新登录后在官方页面核对本次请求状态，不要自动重试",
 				details={**data, "accepted": None},
 				hints={"operator_actions": ["登录态不可用，请在官方页面核对后重新登录；不要自动重试"]},
 			)
@@ -76,19 +84,27 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 				code="TOKEN_REFRESH_FAILED",
 				message="登录态刷新失败，停止本次操作；不要自动重试",
 				recoverable=False,
+				recovery_action="重新登录后在官方页面核对本次请求状态，不要自动重试",
 				details={**data, "accepted": None},
 				hints={"operator_actions": ["登录态刷新失败，停止本次操作；不要自动重试"]},
 			)
 			return
-		except AccountRiskError:
+		except PlatformRiskError as exc:
+			# 风控异常是多子类结构：EnvironmentRiskError / EnvironmentRiskLockedError
+			# 与 AccountRiskError 平级。只捕账号风控会把环境风控漏进下面的兜底，
+			# 误报成「结果未知」，也不会给出停止自动化的指引。
+			_, recovery_action, risk_hints = platform_error_contract(exc.code)
+			hints: dict[str, Any] = dict(risk_hints or {})
+			hints["operator_actions"] = ["本次同意请求的结果未知或未发出；先在官方页面核对，不要自动重试"]
 			handle_error_output(
 				ctx,
 				command,
-				code="ACCOUNT_RISK",
-				message="账号已触发风控，停止自动化访问并在官方页面处理",
+				code=exc.code,
+				message=risk_error_message(exc.code),
 				recoverable=False,
-				details={**data, "accepted": None},
-				hints={"operator_actions": ["账号已触发风控，停止自动化访问并在官方页面处理"]},
+				recovery_action=recovery_action,
+				details={**data, "accepted": None, **(exc.details or {})},
+				hints=hints,
 			)
 			return
 		except Exception:
@@ -107,14 +123,20 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 		if not platform.is_success(result):
 			code, _ = platform.parse_error(result)
 			code = code if code != "UNKNOWN" else "RESUME_ACCEPT_RESULT_UNKNOWN"
+			# 响应字典形态的风控码同样走停止契约；普通失败保留写操作的
+			# 「先核对、勿重试」指引，不能按可恢复错误处理。
+			_, recovery_action, risk_hints = platform_error_contract(code)
+			if risk_hints is None:
+				recovery_action = "在官方页面核对请求状态，不要自动重试"
 			handle_error_output(
 				ctx,
 				command,
 				code=code,
 				message="同意附件简历请求未获成功确认，请在官方页面核对",
 				recoverable=False,
-				recovery_action="在官方页面核对请求状态，不要自动重试",
+				recovery_action=recovery_action,
 				details={**data, "accepted": None},
+				hints=risk_hints,
 			)
 			return
 		response = platform.unwrap_data(result)

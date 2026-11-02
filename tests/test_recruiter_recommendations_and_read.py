@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from boss_agent_cli.api import recruiter_endpoints as ep
-from boss_agent_cli.api.client import AccountRiskError
+from boss_agent_cli.api.client import AccountRiskError, EnvironmentRiskError, EnvironmentRiskLockedError
 from boss_agent_cli.api.recruiter_client import BossRecruiterClient, RecruiterAuthError
 from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 from boss_agent_cli.display import error_contract_for_code
@@ -255,7 +255,10 @@ def test_greet_environment_risk_does_not_suggest_more_requests(
 	assert body["error"]["details"]["sent"] is None
 	assert error_contract_for_code("ENVIRONMENT_RISK")[1] in body["error"]["recovery_action"]
 	assert "不要自动重发" in body["error"]["recovery_action"]
-	assert not body["hints"].get("next_actions")
+	# 机器可读提示只能是「停止 / 不要重试」，不能出现任何继续请求平台的命令。
+	next_actions = body["hints"]["next_actions"]
+	assert next_actions
+	assert all("boss " not in action for action in next_actions)
 	assert "boss hr chat" not in json.dumps(body["hints"])
 	greeting_platform.start_chat.assert_called_once()
 	greeting_platform.friend_list.assert_not_called()
@@ -354,12 +357,19 @@ def test_cache_write_failure_preserves_sent_and_blocks_resend(greeting_args, gre
 	(AuthRequired("private"), "AUTH_REQUIRED"),
 	(TokenRefreshFailed("private"), "TOKEN_REFRESH_FAILED"),
 	(AccountRiskError("private"), "ACCOUNT_RISK"),
+	(EnvironmentRiskError("private"), "ENVIRONMENT_RISK"),
+	(EnvironmentRiskLockedError("private"), "ENVIRONMENT_RISK_LOCKED"),
 ])
 def test_greeting_auth_and_risk_are_not_network_errors(greeting_args, greeting_platform, failure, code):
 	greeting_platform.start_chat.side_effect = failure
 	result = CliRunner().invoke(cli, greeting_args + ["--yes"])
 	body = json.loads(result.output)
 	assert body["error"]["code"] == code
+	if code in {"ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_LOCKED"}:
+		# 风控异常走统一停止契约，且保留「不要重发本次招呼」的写操作约束。
+		assert error_contract_for_code(code)[1] in body["error"]["recovery_action"]
+		assert "不要自动重发" in body["error"]["recovery_action"]
+		assert body["hints"]["next_actions"]
 	assert body["error"]["details"]["sent"] is None
 	assert body["error"]["recoverable"] is False
 	assert "private" not in result.output
