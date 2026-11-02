@@ -331,6 +331,7 @@ def test_candidate_write_actions_mark_local_state_failure_as_not_retryable(tmp_p
 		DEFAULT_ACTIONS["candidate_apply"](context, {"security_id": "sec-1", "job_id": "job-1"}, {})
 	assert applied.value.code == "LOCAL_STATE_WRITE_FAILED"
 	assert applied.value.recoverable is False
+	assert applied.value.replay_safe is False
 	assert applied.value.recovery_action == ERROR_CODES["LOCAL_STATE_WRITE_FAILED"]["recovery_action"]
 	assert applied.value.details == {
 		"security_id": "sec-1",
@@ -346,6 +347,7 @@ def test_candidate_write_actions_mark_local_state_failure_as_not_retryable(tmp_p
 		)
 	assert greeted.value.code == "LOCAL_STATE_WRITE_FAILED"
 	assert greeted.value.recoverable is False
+	assert greeted.value.replay_safe is False
 	assert greeted.value.details == {
 		"security_id": "sec-2",
 		"job_id": "job-2",
@@ -855,6 +857,39 @@ def test_runner_persists_recoverable_failure_and_resumes_completed_steps(tmp_pat
 
 	assert second["status"] == "completed"
 	assert calls == ["done", "fail", "done"]
+
+
+def test_runner_resume_does_not_replay_unconfirmed_write_step(tmp_path):
+	calls = []
+
+	def done(context, inputs, prior):
+		calls.append("done")
+		return StepResult({"ok": True})
+
+	def unconfirmed(context, inputs, prior):
+		calls.append("unconfirmed")
+		raise WorkflowActionError(
+			"ACTION_UNCONFIRMED",
+			"发送结果未确认",
+			recoverable=False,
+			recovery_action="先核对平台实际记录；不要重试",
+			replay_safe=False,
+		)
+
+	with WorkflowStore(tmp_path) as store:
+		first = WorkflowRunner(store, {"one": done, "two": unconfirmed}).run(
+			_plan("one", "two"), object(), run_id="run-unconfirmed"
+		)
+		assert first["status"] == "failed"
+		assert first["steps"][1]["error"]["replay_safe"] is False
+		second = WorkflowRunner(store, {"one": done, "two": done}).run(
+			_plan("one", "two"), object(), run_id="run-unconfirmed"
+		)
+
+	assert second["status"] == "failed"
+	assert second["error"]["code"] == "ACTION_UNCONFIRMED"
+	assert second["error"]["recovery_action"] == "先核对平台实际记录；不要重试"
+	assert calls == ["done", "unconfirmed"]
 
 
 def test_runner_rejects_mismatched_plan_for_existing_run_id(tmp_path):
@@ -3169,6 +3204,26 @@ def test_unwrap_risk_response_uses_registry_message():
 	assert str(caught.value) == risk_error_message("ENVIRONMENT_RISK")
 	assert "fixture-platform-response-token" not in str(caught.value)
 	assert caught.value.recoverable is False
+
+
+def test_unwrap_marks_action_unconfirmed_as_not_replay_safe():
+	from boss_agent_cli.wizard.actions import _unwrap
+
+	platform = MagicMock()
+	platform.is_success.return_value = False
+	platform.parse_error.return_value = ("ACTION_UNCONFIRMED", "发送结果未确认")
+	response = {
+		"code": -1,
+		"message": "发送结果未确认",
+		"__cli_error_code__": "ACTION_UNCONFIRMED",
+		"__cli_error_details__": {"outcome": "unknown", "replay_safe": False},
+	}
+	with pytest.raises(WorkflowActionError) as caught:
+		_unwrap(platform, response, "消息发送失败")
+	assert caught.value.code == "ACTION_UNCONFIRMED"
+	assert caught.value.recoverable is False
+	assert caught.value.replay_safe is False
+	assert caught.value.to_dict()["replay_safe"] is False
 
 
 def test_classify_action_error_keeps_action_unconfirmed_no_retry_contract():

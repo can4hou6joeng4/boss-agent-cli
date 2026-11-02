@@ -275,6 +275,7 @@ def _unwrap(platform: Any, response: dict[str, Any], fallback: str) -> Any:
 		recoverable=recoverable,
 		recovery_action=recovery,
 		details=details if isinstance(details, dict) and details else None,
+		replay_safe=code != "ACTION_UNCONFIRMED",
 	)
 
 
@@ -445,6 +446,7 @@ def _raise_local_state_write_failed(message: str, details: dict[str, Any]) -> No
 		recoverable=bool(contract["recoverable"]),
 		recovery_action=str(contract["recovery_action"]),
 		details=details,
+		replay_safe=False,
 	)
 
 
