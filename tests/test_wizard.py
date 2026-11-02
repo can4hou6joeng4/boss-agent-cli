@@ -316,6 +316,31 @@ def test_candidate_write_actions_persist_idempotence_records(tmp_path):
 	]
 
 
+def test_candidate_export_scopes_search_to_current_account(tmp_path):
+	"""导出动作必须把账号指纹传给搜索管线，否则 greeted 标记会全部失真。"""
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+	captured: dict = {}
+
+	class _Result:
+		items: list = []
+
+	def fake_search(platform_arg, cache, logger, inputs):
+		captured.update(inputs)
+		return _Result()
+
+	with (
+		patch("boss_agent_cli.wizard.actions.account_scope", return_value="acct-1"),
+		patch("boss_agent_cli.wizard.actions.execute_candidate_search", side_effect=fake_search),
+	):
+		result = DEFAULT_ACTIONS["candidate_export"](
+			context, {"query": "golang", "output": str(tmp_path / "out.json")}, {}
+		)
+
+	assert captured["account"] == "acct-1"
+	assert result.data["count"] == 0
+
+
 def test_candidate_contact_actions_refresh_rotating_security_id(tmp_path):
 	platform = _FakeCandidatePlatform()
 	context = _action_context(tmp_path, candidate=platform)
