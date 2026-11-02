@@ -264,6 +264,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "检查 --path 指向的模型文件或目录后重试",
 	},
+	"MODEL_REGISTRY_INVALID": {
+		"message": "本地模型登记表损坏",
+		"recoverable": True,
+		"recovery_action": "修正或删除数据目录下的 models/registry.json 后重试；模型文件仍在磁盘上，重新导入即可重建登记",
+	},
 	"AI_API_ERROR": {
 		"message": "AI 服务调用失败",
 		"recoverable": True,

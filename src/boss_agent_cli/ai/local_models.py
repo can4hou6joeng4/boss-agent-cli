@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -75,12 +76,32 @@ def model_registry_path(data_dir: Path) -> Path:
 	return data_dir / "models" / "registry.json"
 
 
-def read_imported_models(data_dir: Path) -> list[ImportedLocalModel]:
+def _registry_corrupt_error(path: Path, detail: str) -> LocalModelManifestError:
+	return LocalModelManifestError(
+		"MODEL_REGISTRY_INVALID",
+		f"{path} 无法解析（{detail}）：修正或删除该文件后重试；模型文件仍在 models/ 目录下，重新 import 即可重建登记",
+	)
+
+
+def read_imported_models(data_dir: Path, *, strict: bool = False) -> list[ImportedLocalModel]:
+	"""读取已导入模型登记表。
+
+	登记表只是本机的 bookkeeping，模型文件仍在 `models/` 下，重新 import 即可重建；
+	所以默认在文件损坏时按空表处理，`ai local status` 不因一个坏文件整体失败。
+	写入方必须传 strict=True：用空表覆盖掉原文件会丢掉还能人工修复的登记。
+	"""
 	path = model_registry_path(data_dir)
 	if not path.exists():
 		return []
-	rows = json.loads(path.read_text(encoding="utf-8"))
+	try:
+		rows = json.loads(path.read_text(encoding="utf-8"))
+	except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+		if strict:
+			raise _registry_corrupt_error(path, str(exc)) from exc
+		return []
 	if not isinstance(rows, list):
+		if strict:
+			raise _registry_corrupt_error(path, "顶层必须是数组")
 		return []
 	return [
 		ImportedLocalModel(
@@ -93,10 +114,25 @@ def read_imported_models(data_dir: Path) -> list[ImportedLocalModel]:
 	]
 
 
+def _write_registry_atomic(path: Path, rows: list[ImportedLocalModel]) -> None:
+	"""tmp + os.replace：写一半被中断时不会留下半截 JSON 把后续 status/import 全部卡死。"""
+	temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+	try:
+		temporary.write_text(
+			json.dumps([asdict(item) for item in rows], ensure_ascii=False, indent=2),
+			encoding="utf-8",
+		)
+		os.replace(temporary, path)
+	finally:
+		temporary.unlink(missing_ok=True)
+
+
 def import_local_model(data_dir: Path, source: Path, model: str) -> ImportedLocalModel:
 	"""Copy an external model artifact into the user data directory and register it."""
 	if not source.exists():
 		raise LocalModelManifestError("MODEL_SOURCE_NOT_FOUND", f"model source does not exist: {source}")
+	# 先读登记表再复制：登记表损坏时直接报错，不留下一份复制了却没登记进来的模型目录。
+	rows = [item for item in read_imported_models(data_dir, strict=True) if item.model != model]
 	target_dir = data_dir / "models" / _safe_model_dir(model)
 	target_dir.mkdir(parents=True, exist_ok=True)
 	target = target_dir / source.name
@@ -107,15 +143,10 @@ def import_local_model(data_dir: Path, source: Path, model: str) -> ImportedLoca
 	else:
 		shutil.copy2(source, target)
 	imported = ImportedLocalModel(model=model, path=str(target), runtime="custom")
-	rows = read_imported_models(data_dir)
-	rows = [item for item in rows if item.model != model]
 	rows.append(imported)
 	registry = model_registry_path(data_dir)
 	registry.parent.mkdir(parents=True, exist_ok=True)
-	registry.write_text(
-		json.dumps([asdict(item) for item in rows], ensure_ascii=False, indent=2),
-		encoding="utf-8",
-	)
+	_write_registry_atomic(registry, rows)
 	return imported
 
 
