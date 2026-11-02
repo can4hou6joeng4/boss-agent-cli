@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from unittest.mock import patch
 
 from click.testing import CliRunner
@@ -314,3 +315,60 @@ def test_watch_run_all_stops_on_risk(mock_auth_cls, mock_client_cls, mock_pipeli
 	assert parsed["hints"]["next_actions"]
 	assert parsed["error"]["details"]["stopped_watch"] in {"risk-first", "safe-second"}
 	assert mock_pipeline.call_count == 1
+
+
+def _break_params(tmp_path, name):
+	conn = sqlite3.connect(tmp_path / "cache" / "boss_agent.db")
+	conn.execute("UPDATE saved_searches SET params = ? WHERE name = ?", ("{not json", name))
+	conn.commit()
+	conn.close()
+
+
+def test_watch_list_reports_corrupt_params(tmp_path):
+	"""坏条目从列表里剔除，但要在 hints 里点名，避免用户以为 watch 丢了。"""
+	runner = CliRunner()
+	for name in ("good", "broken"):
+		runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "add", name, "golang"])
+	_break_params(tmp_path, "broken")
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "list"])
+
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	names = [item["name"] for item in parsed["data"]]
+	assert "good" in names and "broken" not in names
+	assert parsed["hints"]["corrupt"] == ["broken"]
+	assert "boss watch remove" in parsed["hints"]["operator_actions"][0]
+
+
+def test_watch_run_corrupt_params_reports_envelope(tmp_path):
+	"""watch 参数写坏时给删除重建指引，不能兜成 NETWORK_ERROR「重试」。"""
+	runner = CliRunner()
+	runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "add", "broken", "golang"])
+	_break_params(tmp_path, "broken")
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", "broken"])
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "SAVED_SEARCH_INVALID"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["hints"]["next_actions"][0] == "boss watch remove broken"
+
+
+@patch("boss_agent_cli.commands.watch._execute_single_watch")
+def test_watch_run_all_skips_corrupt_params(mock_execute, tmp_path):
+	"""--all 只跑参数可用的条目，坏记录留给 list 提示用户处理。"""
+	mock_execute.return_value = {
+		"name": "good", "new_count": 0, "seen_count": 0, "total_count": 0, "new_items": [],
+	}
+	runner = CliRunner()
+	for name in ("good", "broken"):
+		runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "add", name, "golang"])
+	_break_params(tmp_path, "broken")
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", "--all"])
+
+	assert result.exit_code == 0, result.output
+	executed = [call.args[2] for call in mock_execute.call_args_list]
+	assert "good" in executed and "broken" not in executed

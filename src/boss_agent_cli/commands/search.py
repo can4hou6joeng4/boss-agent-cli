@@ -7,7 +7,7 @@ from boss_agent_cli.api.endpoints import (
 	CITY_CODES,
 )
 from boss_agent_cli.auth.manager import AuthManager
-from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.cache.store import CacheStore, SavedSearchParamsError
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.crawler.service import CrawlBudget
 from boss_agent_cli.display import (
@@ -168,7 +168,16 @@ def search_cmd(
 
 	if preset:
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
-			record = cache.get_saved_search(preset)
+			try:
+				record = cache.get_saved_search(preset)
+			except SavedSearchParamsError as exc:
+				# 预设参数写坏时给可执行的删除重建指引，而不是把 JSON 解析错误
+				# 兜成 NETWORK_ERROR 让 Agent 无限重试。
+				handle_error_output(
+					ctx, "search", code="SAVED_SEARCH_INVALID", message=str(exc),
+					hints={"next_actions": [f"boss preset remove {preset}", f"boss preset add {preset} <关键词>"]},
+				)
+				return
 		if record is None:
 			handle_error_output(ctx, "search", code="JOB_NOT_FOUND", message=f"未找到 preset: {preset}")
 			return

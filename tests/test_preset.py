@@ -1,9 +1,17 @@
 import json
+import sqlite3
 from unittest.mock import patch
 
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
+
+
+def _break_params(tmp_path, name):
+	conn = sqlite3.connect(tmp_path / "cache" / "boss_agent.db")
+	conn.execute("UPDATE saved_searches SET params = ? WHERE name = ?", ("{not json", name))
+	conn.commit()
+	conn.close()
 
 
 def _ctx_mock(mock_cls):
@@ -106,3 +114,37 @@ def test_preset_schema_is_exposed():
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert "preset" in parsed["data"]["commands"]
+
+
+def test_preset_list_reports_corrupt_params(tmp_path):
+	"""一条坏数据不能拖垮整张列表，也不能让坏条目假装不存在。"""
+	runner = CliRunner()
+	runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "add", "good", "golang"])
+	runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "add", "broken", "python"])
+	_break_params(tmp_path, "broken")
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "list"])
+
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	names = [item["name"] for item in parsed["data"]]
+	assert "good" in names and "broken" not in names
+	assert parsed["hints"]["corrupt"] == ["broken"]
+	assert "boss preset remove" in parsed["hints"]["operator_actions"][0]
+
+
+def test_search_with_corrupt_preset_reports_envelope(tmp_path):
+	"""预设参数写坏时给可执行的删除重建指引，而不是 NETWORK_ERROR「重试」。"""
+	runner = CliRunner()
+	runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "add", "broken", "python"])
+	_break_params(tmp_path, "broken")
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "search", "--preset", "broken"])
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "SAVED_SEARCH_INVALID"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"]
+	assert "broken" in parsed["error"]["message"]
+	assert parsed["hints"]["next_actions"][0] == "boss preset remove broken"

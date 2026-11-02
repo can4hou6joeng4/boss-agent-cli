@@ -274,6 +274,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "修正或删除数据目录下的 models/registry.json 后重试；模型文件仍在磁盘上，重新导入即可重建登记",
 	},
+	"SAVED_SEARCH_INVALID": {
+		"message": "本地预设的参数损坏",
+		"recoverable": True,
+		"recovery_action": "执行 boss preset remove <名称>（watch 用 boss watch remove）后重新添加；参数只存在本地缓存，删除不影响平台数据",
+	},
 	"AI_API_ERROR": {
 		"message": "AI 服务调用失败",
 		"recoverable": True,

@@ -9,7 +9,7 @@ from boss_agent_cli.api.endpoints import (
 	STAGE_CODES,
 )
 from boss_agent_cli.auth.manager import AuthManager
-from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.cache.store import CacheStore, SavedSearchParamsError
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.display import (
@@ -108,7 +108,13 @@ def watch_add_cmd(
 @click.pass_context
 def watch_list_cmd(ctx: click.Context) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
-		items = cache.list_saved_searches()
+		items, corrupt = cache.list_saved_searches_with_corrupt()
+	hints: dict[str, Any] = {"next_actions": ["boss watch run <name>", "boss watch remove <name>"]}
+	if corrupt:
+		hints["corrupt"] = corrupt
+		hints["operator_actions"] = [
+			f"以下条目的参数已损坏，先执行 boss watch remove <名称> 再重新 watch add：{', '.join(corrupt)}"
+		]
 	handle_output(
 		ctx,
 		"watch",
@@ -121,7 +127,7 @@ def watch_list_cmd(ctx: click.Context) -> None:
 			if not d
 			else ["boss watch run <name>", "boss watch remove <name>"],
 		),
-		hints={"next_actions": ["boss watch run <name>", "boss watch remove <name>"]},
+		hints=hints,
 	)
 
 
@@ -269,6 +275,16 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 
 		try:
 			summary = _execute_single_watch(ctx, cache, name)
+		except SavedSearchParamsError as exc:
+			# 参数写坏的是本地记录：给删除重建指引，不能兜成 NETWORK_ERROR 让它重试。
+			handle_error_output(
+				ctx,
+				"watch",
+				code="SAVED_SEARCH_INVALID",
+				message=str(exc),
+				hints={"next_actions": [f"boss watch remove {name}", f"boss watch add {name} <关键词>"]},
+			)
+			return
 		except SearchPipelinePlatformError as exc:
 			# 与 search 一致：风控码给停止指引，登录过期等可恢复错误给恢复动作。
 			recoverable, recovery_action, hints = platform_error_contract(exc.code)

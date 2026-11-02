@@ -246,6 +246,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `LOCAL_IO_ERROR` | 本地文件读写失败（导出路径、`config.json`、缓存等） | 不要自动重试：确认目标路径是可写目录（而不是同名的已有文件）、权限与磁盘空间正常后再执行 |
 | `MODEL_REGISTRY_INVALID` | 本地模型登记表 `models/registry.json` 损坏（写一半被中断、手工编辑写坏） | 修正或删除该文件后重试；删除只会丢失已导入模型的登记，模型文件仍在磁盘上，重新执行 `boss ai local import` 即可重建 |
 | `AUTOMATION_STATE_INVALID` | 招聘自动化状态 `automation/state.json` 损坏，`boss agent run` / `stats` 无法读取（`stop.json` 损坏时按已熔断处理） | 修正或删除该文件后重试；删除会丢失自动化去重与历史进度，建议先备份 |
+| `SAVED_SEARCH_INVALID` | 本地预设 / watch 的参数损坏（`saved_searches.params` 不是 JSON 对象），`boss search --preset`、`boss watch run` 无法执行 | 执行 `boss preset remove <名称>`（watch 用 `boss watch remove`）后重新添加；参数只存在本地缓存，删除不影响平台数据 |
 | `GREET_LIMIT` | 今日次数用完 | 告知用户 |
 | `NETWORK_ERROR` | 网络错误 | 重试 |
 | `INTERNAL_ERROR` | CLI 内部错误或平台返回了未预期的数据结构 | 不要重试；升级到最新版本，仍出现时附上命令与 error.message 提交 issue |

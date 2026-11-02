@@ -293,6 +293,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `LOCAL_IO_ERROR` | A local file could not be read or written (export path, `config.json`, cache) | Do not retry automatically: make sure the target path is a writable directory (not an existing file of the same name) with enough disk space, then run the command again |
 | `MODEL_REGISTRY_INVALID` | The local model registry `models/registry.json` is unreadable (interrupted write, broken manual edit) | Fix or delete the file and retry; deleting it only drops the registry entries — the model files stay on disk, and re-running `boss ai local import` rebuilds them |
 | `AUTOMATION_STATE_INVALID` | The recruiter automation state `automation/state.json` is unreadable, so `boss agent run` / `stats` cannot continue (a broken `stop.json` is treated as an open circuit breaker) | Fix or delete the file and retry; deleting it loses automation deduplication and progress history, so back it up first |
+| `SAVED_SEARCH_INVALID` | A local preset / watch has unreadable params (`saved_searches.params` is not a JSON object), so `boss search --preset` / `boss watch run` cannot continue | Run `boss preset remove <name>` (or `boss watch remove`) and add it again; the params live only in the local cache, so deleting them does not touch platform data |
 | `ALREADY_APPLIED` | Already applied | Skip |
 | `GREET_LIMIT` | Daily greet quota hit | Pause until tomorrow |
 | `NETWORK_ERROR` | Connection failed | Retry with backoff |
