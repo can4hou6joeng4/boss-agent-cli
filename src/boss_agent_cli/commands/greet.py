@@ -11,11 +11,13 @@ from boss_agent_cli.api.endpoints import (
 	STAGE_CODES,
 )
 from boss_agent_cli.api.models import JobItem, field_list
+from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.display import (
+	error_contract_for_code,
 	handle_auth_errors,
 	handle_error_output,
 	handle_output,
@@ -23,6 +25,7 @@ from boss_agent_cli.display import (
 	render_batch_operation_summary,
 	render_message_panel,
 	risk_error_contract,
+	risk_error_message,
 )
 from boss_agent_cli.search_filters import SearchFilterCriteria, prefilter_platform_job_type
 from boss_agent_cli.services.job_identity import deduplicate_job_result
@@ -200,6 +203,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 			results = []
 			stopped_reason = None
 			risk_error: PlatformRiskError | None = None
+			stop_error: Exception | None = None
 
 			for idx, item in enumerate(candidates):
 				retry_count = 0
@@ -234,6 +238,12 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 						logger.warning(f"平台风控，停止批量打招呼: {item.title} @ {item.company}")
 						break
 					except Exception as e:
+						if is_request_stop(e):
+							# 预算/超时不是普通失败：不 sleep、不重试、不继续下一个候选人。
+							stop_error = e
+							stopped_reason = getattr(e, "code", None) or "REQUEST_BUDGET_EXHAUSTED"
+							logger.warning(f"请求预算耗尽，停止批量打招呼: {item.title} @ {item.company}")
+							break
 						error_msg = str(e)
 						if "RATE_LIMITED" in error_msg or "频率" in error_msg:
 							stopped_reason = "RATE_LIMITED"
@@ -272,6 +282,20 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 			if stopped_reason:
 				data["stopped_reason"] = stopped_reason
 
+			if stop_error is not None:
+				# 预算/时限停止必须回 ok:false，不能让 Agent 把 stopped_reason 当成「稍后重试」。
+				stop_code = getattr(stop_error, "code", None) or "REQUEST_BUDGET_EXHAUSTED"
+				recoverable, recovery_action = error_contract_for_code(stop_code)
+				handle_error_output(
+					ctx, "batch-greet",
+					code=stop_code,
+					message=str(stop_error),
+					recoverable=recoverable,
+					recovery_action=recovery_action,
+					details=data,
+				)
+				return
+
 			if risk_error is not None:
 				# 停批原因是风控时信封必须是 ok:false + 对应错误码 + recoverable=false，
 				# 而不是 ok:true + stopped_reason——后者会让 Agent 当成「等一会儿重试」。
@@ -280,7 +304,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 				handle_error_output(
 					ctx, "batch-greet",
 					code=risk_error.code,
-					message=str(risk_error) or risk_error.code,
+					message=risk_error_message(risk_error.code),
 					recoverable=False,
 					recovery_action=recovery_action,
 					details=data,

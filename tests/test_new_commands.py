@@ -704,6 +704,24 @@ def test_me_risk_uses_stop_contract(mock_auth_cls, mock_client_cls, error_cls, c
 
 @patch("boss_agent_cli.commands.me.get_platform_instance")
 @patch("boss_agent_cli.commands.me.AuthManager")
+def test_me_budget_stop_uses_contract(mock_auth_cls, mock_client_cls):
+	"""me 没有 @handle_auth_errors：预算/时限停止不能降级成可重试的 NETWORK_ERROR。"""
+	from boss_agent_cli.api.request_budget import RequestBudgetExceeded
+
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.user_info.side_effect = RequestBudgetExceeded("fixture budget stop")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["me", "--section", "user"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "REQUEST_BUDGET_EXHAUSTED"
+	assert (parsed["error"]["recoverable"], parsed["error"]["recovery_action"]) == error_contract_for_code(
+		"REQUEST_BUDGET_EXHAUSTED"
+	)
+
+
+@patch("boss_agent_cli.commands.me.get_platform_instance")
+@patch("boss_agent_cli.commands.me.AuthManager")
 def test_me_resume_reports_not_supported(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.resume_baseinfo.side_effect = NotImplementedError("resume_baseinfo is not supported")

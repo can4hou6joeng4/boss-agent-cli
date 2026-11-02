@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 
 from boss_agent_cli.api.client import PlatformRiskError
+from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.api.recruiter_client import RecruiterAuthError
 from boss_agent_cli.api.recruiter_resume import ResumeValidationError
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
@@ -96,7 +97,10 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 				hints=risk_hints,
 			)
 			return
-		except Exception:
+		except Exception as exc:
+			# 预算/超时停止不是下载失败：不能提示「检查网络后重试」，交给装饰器按停止契约输出。
+			if is_request_stop(exc):
+				raise
 			# httpx 异常可能带有含临时凭据的 URL，不透传异常文本。
 			recoverable, recovery_action = error_contract_for_code("NETWORK_ERROR")
 			handle_error_output(

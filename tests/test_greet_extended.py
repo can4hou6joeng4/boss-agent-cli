@@ -337,6 +337,42 @@ def test_batch_greet_account_risk_exception_stops_without_retry(mock_cache_cls, 
 @patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
+def test_batch_greet_budget_stop_does_not_retry_or_continue(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time, legacy_args):
+	"""预算/时限停止是停止信号：不 sleep、不重试，也不继续下一个候选人。"""
+	from boss_agent_cli.api.request_budget import RequestBudgetExceeded
+
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _three_jobs_client(mock_client_cls)
+
+	def greet_side_effect(sid, jid, msg=""):
+		if sid == "s1":
+			return {"code": 0, "zpData": {}}
+		raise RequestBudgetExceeded("fixture budget stop", code="REQUEST_BUDGET_EXHAUSTED")
+
+	mock_client.greet.side_effect = greet_side_effect
+	mock_client.is_success.return_value = True
+	mock_time.sleep = MagicMock()
+
+	runner = CliRunner()
+	result = runner.invoke(cli, [*legacy_args, "batch-greet", "test", "--count", "3"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "REQUEST_BUDGET_EXHAUSTED"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"]
+	assert parsed["error"]["details"]["total_greeted"] == 1
+	assert parsed["error"]["details"]["stopped_reason"] == "REQUEST_BUDGET_EXHAUSTED"
+	assert [call.args[0] for call in mock_client.greet.call_args_list] == ["s1", "s2"]
+	# 失败候选人后面不再 sleep：只有 s1 成功后的那一次节流等待。
+	mock_time.sleep.assert_called_once()
+
+
+@patch("boss_agent_cli.commands.greet.time")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
+@patch("boss_agent_cli.commands.greet.AuthManager")
+@patch("boss_agent_cli.commands.greet.CacheStore")
 def test_batch_greet_environment_risk_response_is_not_rate_limited(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time, legacy_args):
 	"""响应字典形态的 code 37 环境风控：文案含「频率」也不得被判成 RATE_LIMITED 的 ok:true 停批。"""
 	mock_cache = _ctx_mock(mock_cache_cls)

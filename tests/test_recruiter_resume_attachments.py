@@ -410,6 +410,22 @@ def test_resume_auth_and_risk_failures_stop_without_leaking(action, error_type, 
 		method.assert_called_once()
 
 
+def test_download_budget_stop_is_not_network_error():
+	"""下载遇到预算/时限停止时不能提示「检查网络后重试」。"""
+	from boss_agent_cli.api.request_budget import RequestBudgetExceeded
+
+	module = "boss_agent_cli.commands.recruiter.download_resume"
+	with patch(module + ".AuthManager"), patch(module + ".get_recruiter_platform_instance") as factory:
+		platform = factory.return_value.__enter__.return_value
+		platform.download_resume_by_friend.side_effect = RequestBudgetExceeded("fixture budget stop")
+		result = _invoke("download-resume", "123", "--message-id", "456", "--output", "resume.pdf")
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "REQUEST_BUDGET_EXHAUSTED"
+	assert (payload["error"]["recoverable"], payload["error"]["recovery_action"]) == error_contract_for_code(
+		"REQUEST_BUDGET_EXHAUSTED"
+	)
+
+
 @pytest.mark.parametrize("action", ["accept_resume", "download_resume"])
 @pytest.mark.parametrize("response,code", [
 	({"code": -1, "message": "private-token"}, "UNKNOWN"),
