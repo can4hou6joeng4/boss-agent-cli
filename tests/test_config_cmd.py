@@ -174,6 +174,28 @@ def test_config_set_browser_source_validates_choice(tmp_path):
 	assert parsed["data"]["value"] == "auto"
 
 
+def test_config_set_role_validates_choice(tmp_path):
+	"""role 进 _CONFIG_CHOICES：写进非法值时命令本身就该失败。
+
+	以前 `config set role admin` 返回 ok=true，落盘后每条命令都在启动阶段
+	返回 INVALID_PARAM，连 `config reset role` 也一样（只能靠 `--role` 覆盖）。
+	"""
+	code, parsed = _invoke("config", "set", "role", "recruiter", tmp_path=tmp_path)
+	assert code == 0
+	assert parsed["data"]["value"] == "recruiter"
+	assert json.loads((tmp_path / "config.json").read_text())["role"] == "recruiter"
+
+	code, parsed = _invoke("config", "set", "role", "admin", tmp_path=tmp_path)
+	assert code == 1
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "candidate, recruiter" in parsed["error"]["message"]
+	# 非法值没有落盘：之后的命令（含 config reset）仍然可用。
+	assert json.loads((tmp_path / "config.json").read_text())["role"] == "recruiter"
+	code, parsed = _invoke("config", "get", "role", tmp_path=tmp_path)
+	assert code == 0
+	assert parsed["data"]["value"] == "recruiter"
+
+
 @pytest.mark.parametrize("value", [5, True, ["auto"], {"name": "auto"}])
 def test_non_string_browser_source_in_config_returns_envelope(tmp_path, value):
 	"""config.json 里 browser_source 不是字符串时不能 traceback，要按参数错误给信封。"""

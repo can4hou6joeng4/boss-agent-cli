@@ -10,7 +10,7 @@ import click
 
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.automation.config import automation_config_from_dict
-from boss_agent_cli.config import DEFAULTS, validate_request_config
+from boss_agent_cli.config import DEFAULTS, ROLES, validate_request_config
 from boss_agent_cli.crawler.service import crawl_cdp_port, crawl_chrome_path, crawl_int_setting
 from boss_agent_cli.display import handle_output, render_simple_list
 from boss_agent_cli.platforms import list_platforms
@@ -19,6 +19,9 @@ from boss_agent_cli.services.json_files import write_json_atomic
 _CONFIG_CHOICES = {
 	"operating_mode": ("assisted", "research"),
 	"browser_source": tuple(BROWSER_SOURCES),
+	# 启动期会拒绝取值域之外的 role；写入时不校验的话，`config set role admin`
+	# 会报成功，之后每条命令（连 config reset 也一样）都在启动阶段失败。
+	"role": ROLES,
 }
 _PUBLIC_CONFIG_KEYS = tuple(key for key in DEFAULTS if key != "low_risk_mode")
 _AVAILABLE_CONFIG_MESSAGE = f"可用项: {', '.join(sorted(_PUBLIC_CONFIG_KEYS))}"

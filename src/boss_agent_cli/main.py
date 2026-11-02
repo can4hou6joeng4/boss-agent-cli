@@ -10,7 +10,7 @@ from boss_agent_cli import __version__
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.cache.store import CacheDatabaseInvalid
 from boss_agent_cli.commands.register import register_candidate_commands, register_recruiter_commands
-from boss_agent_cli.config import DEFAULT_REQUEST_DELAY, load_config, validate_request_config
+from boss_agent_cli.config import DEFAULT_REQUEST_DELAY, ROLES, load_config, validate_request_config
 from boss_agent_cli.api.request_budget import validate_delay
 from boss_agent_cli.hooks import create_hook_bus
 from boss_agent_cli.output import emit_error, is_local_io_error, Logger, set_exit_codes_mode
@@ -91,9 +91,6 @@ def _prescan_exit_codes(args: Sequence[str] | None) -> None:
 
 
 _SECURITY_ID_LIKE = re.compile(r"^-[A-Za-z0-9_-]{19,}$")
-
-# candidate / recruiter 的取值域：--role 的 Choice 与 config.json 的启动期校验共用。
-_ROLES = ("candidate", "recruiter")
 
 _GLOBAL_OPTIONS_WITH_VALUE = frozenset({
 	"--data-dir",
@@ -278,7 +275,7 @@ class BossCliGroup(click.Group):
 @click.option(
 	"--role",
 	default=None,
-	type=click.Choice(_ROLES),
+	type=click.Choice(ROLES),
 	help="角色模式：candidate（求职者，默认）/ recruiter（招聘者）",
 )
 @click.option("--log-level", default=None, type=click.Choice(["error", "warning", "info", "debug"]))
@@ -387,9 +384,9 @@ def cli(
 	resolved_role = role or cfg.get("role") or "candidate"
 	# config.json 的 role 写成数字或拼错时，下游会把非字符串塞进诊断命令的
 	# shlex.quote（doctor）或静默按求职者处理；启动期就按参数错误挡住。
-	if resolved_role not in _ROLES:
+	if resolved_role not in ROLES:
 		raise click.BadParameter(
-			f"不支持的角色 {resolved_role!r}，可选: {', '.join(_ROLES)}",
+			f"不支持的角色 {resolved_role!r}，可选: {', '.join(ROLES)}",
 			param_hint="--role",
 		)
 	ctx.obj["role"] = resolved_role
