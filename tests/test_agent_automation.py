@@ -431,6 +431,110 @@ def test_boss_adapter_uses_recruiter_platform_for_message_execution(tmp_path: Pa
 	assert "近期是否看机会" in recruiter.sent[0][1]
 
 
+class UnconfirmedFakeBossRecruiter(FakeBossRecruiter):
+	"""页面动作已执行但结果未确认：可能已发出，禁止自动重试。"""
+
+	def send_message_by_friend(self, friend_id: int, content: str) -> dict:
+		self.sent.append((friend_id, content))
+		return {
+			"code": -1,
+			"message": "send_message_by_friend unconfirmed: page did not confirm acceptance",
+			"__cli_error_code__": "ACTION_UNCONFIRMED",
+			"__cli_error_details__": {"action": "reply"},
+		}
+
+
+class UnconfirmedEmptyScanBossRecruiter(UnconfirmedFakeBossRecruiter):
+	def greet_list(self, page: int = 1, job_id: str | None = None) -> dict:
+		return {"code": 0, "zpData": {"result": []}}
+
+	def friend_list(
+		self,
+		page: int = 1,
+		label_id: int = 0,
+		job_id: str | None = None,
+	) -> dict:
+		return {"code": 0, "zpData": {"result": []}}
+
+
+def test_boss_adapter_stops_when_send_result_is_unconfirmed(tmp_path: Path) -> None:
+	store = AutomationStore(tmp_path)
+	recruiter = UnconfirmedFakeBossRecruiter()
+	adapter = BossRecruiterAutomationPlatform(recruiter)
+
+	report = run_automation_cycle(
+		adapter,
+		store,
+		AutomationConfig(),
+		platform="zhipin",
+		dry_run=False,
+		limit=1,
+	)
+
+	assert len(recruiter.sent) == 1
+	assert report.events[0].status == EventStatus.PLATFORM_VERIFICATION_REQUIRED.value
+	assert report.events[0].reason == "ACTION_UNCONFIRMED"
+	assert report.status == EventStatus.CIRCUIT_BREAKER_OPEN.value
+	assert store.read_stop()["open"] is True
+
+	# 未人工核对、未 --resume 时，新一轮必须直接停止，不得重发。
+	retry_report = run_automation_cycle(
+		BossRecruiterAutomationPlatform(recruiter),
+		store,
+		AutomationConfig(),
+		platform="zhipin",
+		dry_run=False,
+		limit=1,
+	)
+	assert len(recruiter.sent) == 1
+	assert retry_report.status == EventStatus.CIRCUIT_BREAKER_OPEN.value
+
+
+def test_unconfirmed_pending_action_is_not_replayed_after_resume(tmp_path: Path) -> None:
+	store = AutomationStore(tmp_path)
+	review_id = "zhipin-unconfirmed-pending-send_follow_up"
+	store.append_review(
+		ReviewItem(
+			id=review_id,
+			ts="ts",
+			platform="zhipin",
+			candidate_key="101",
+			action=PlatformAction.SEND_FOLLOW_UP.value,
+			status="review",
+			confidence=0.9,
+			reason="approved follow-up",
+			message="继续沟通",
+		)
+	)
+	store.approve_review(review_id, "approved-ts")
+	recruiter = UnconfirmedEmptyScanBossRecruiter()
+
+	report = run_automation_cycle(
+		BossRecruiterAutomationPlatform(recruiter),
+		store,
+		AutomationConfig(),
+		platform="zhipin",
+		dry_run=False,
+	)
+
+	assert report.events[0].status == EventStatus.PLATFORM_VERIFICATION_REQUIRED.value
+	assert recruiter.sent == [(101, "继续沟通")]
+	pending = store.read_pending()[0]
+	assert pending.status == "verification-required"
+
+	# 人工核对后显式 resume 也不能把未确认动作当成 pending 重发。
+	assert store.resume() is True
+	resumed = run_automation_cycle(
+		BossRecruiterAutomationPlatform(recruiter),
+		store,
+		AutomationConfig(),
+		platform="zhipin",
+		dry_run=False,
+	)
+	assert resumed.events == ()
+	assert recruiter.sent == [(101, "继续沟通")]
+
+
 def test_boss_adapter_uses_recruiter_platform_for_contact_exchange(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
 	store.write_state({"conversations": {"101": {"follow_up_sent_at": "ts"}}})

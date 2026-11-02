@@ -150,6 +150,12 @@ def execute_or_dry_run(
 	if dry_run:
 		return EventStatus.DRY_RUN, decision.reason
 	result = adapter.execute_action(decision.action, decision.message, ref)
+	if result.status == "unconfirmed":
+		# 结果可能已生效：不重试、不继续处理其他候选人，
+		# 先停下来让操作者在官方页面核对后再显式 --resume。
+		reason = str(result.details.get("reason") or "ACTION_UNCONFIRMED")
+		guard.open_circuit_breaker(f"platform verification required: {reason}")
+		return EventStatus.PLATFORM_VERIFICATION_REQUIRED, reason
 	if result.status != "executed":
 		reason = str(result.details.get("reason", result.status))
 		guard.record_failure(reason)
@@ -218,10 +224,12 @@ def _next_pending_status(status: EventStatus) -> str:
 			return "executed"
 		case EventStatus.DRY_RUN:
 			return "dry-run"
+		case EventStatus.PLATFORM_VERIFICATION_REQUIRED:
+			# 动作可能已经生效：退出 pending 队列，避免下一轮自动重发。
+			return "verification-required"
 		case (
 			EventStatus.STOPPED_BY_SAFETY
 			| EventStatus.CIRCUIT_BREAKER_OPEN
-			| EventStatus.PLATFORM_VERIFICATION_REQUIRED
 			| EventStatus.SKIPPED
 			| EventStatus.QUEUED_FOR_REVIEW
 			| EventStatus.QUEUED_PENDING_ACTION
