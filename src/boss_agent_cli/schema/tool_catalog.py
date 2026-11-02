@@ -417,7 +417,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 						"description": "只演练决策，不执行真实平台动作",
 						"default": True,
 					},
-					"limit": {"type": "integer", "description": "本轮最多处理多少个会话"},
+					"limit": {"type": "integer", "minimum": 1, "description": "本轮最多处理多少个会话"},
 					"resume": {
 						"type": "boolean",
 						"default": False,
@@ -433,7 +433,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"limit": {"type": "integer", "description": "本轮最多处理多少个会话"},
+					"limit": {"type": "integer", "minimum": 1, "description": "本轮最多处理多少个会话"},
 				},
 				"required": [],
 			},
