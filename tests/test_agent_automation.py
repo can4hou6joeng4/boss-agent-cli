@@ -109,6 +109,38 @@ def test_automation_config_from_empty_matches_dataclass_defaults() -> None:
 	assert automation_config_from_dict(None) == AutomationConfig()
 
 
+@pytest.mark.parametrize(
+	"raw, fragment",
+	[
+		({"max_per_tab": -1}, "max_per_tab"),
+		({"max_actions_per_run": -5}, "max_actions_per_run"),
+		({"max_consecutive_errors": -1}, "max_consecutive_errors"),
+		({"auto_execute_threshold": -0.1}, "auto_execute_threshold"),
+		({"auto_execute_threshold": 1.5}, "auto_execute_threshold"),
+		({"human_review_threshold": -1}, "human_review_threshold"),
+		(
+			{"human_review_threshold": 0.9, "auto_execute_threshold": 0.5},
+			"human_review_threshold",
+		),
+	],
+)
+def test_automation_config_rejects_out_of_range_numbers(raw, fragment) -> None:
+	"""负数 max_per_tab 会让 `items[:max_per_tab]` 反转成「去掉末尾 N 个」；
+	负数 auto_execute_threshold 则让所有通过初筛的写操作自动执行。"""
+	with pytest.raises(ValueError, match=fragment):
+		automation_config_from_dict(raw)
+
+
+def test_automation_config_accepts_zero_limits() -> None:
+	"""0 有明确语义（本轮不扫描 / 不执行 / 首次错误即熔断），不能被范围校验误伤。"""
+	config = automation_config_from_dict(
+		{"max_per_tab": 0, "max_actions_per_run": 0, "max_consecutive_errors": 0}
+	)
+	assert config.max_per_tab == 0
+	assert config.max_actions_per_run == 0
+	assert config.max_consecutive_errors == 0
+
+
 def test_decision_sends_questionnaire_for_high_confidence_new_candidate() -> None:
 	config = AutomationConfig()
 	conversation = _conversation(

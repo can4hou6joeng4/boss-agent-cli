@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `config.json` 里 `automation` 的数值字段没有范围校验，写坏后直接改变写操作行为：`auto_execute_threshold` 为负数时所有通过初筛的动作都自动执行（发问卷、交换联系方式），`human_review_threshold` 为负数时连低置信度决策也放行，`max_per_tab` 为负数会让 `items[:max_per_tab]` 反转成「去掉末尾 N 个」。现在两个置信度阈值必须落在 [0, 1] 且 `human_review_threshold <= auto_execute_threshold`，`max_per_tab` / `max_actions_per_run` / `max_consecutive_errors` 必须是非负整数（0 仍表示「不扫描 / 不执行 / 首次错误即熔断」）；`config set automation` 写入时即返回 `automation 配置无效: ...` 且不落盘，`agent run/train` 读到坏配置时给同一个修复入口。
 - `boss agent run --limit -1` 会处理除最后 1 个以外的全部会话：`--limit` 透传到适配器的 `items[:max_per_tab]`，负数切片语义反转成「去掉末尾 N 个」，而这是会自动发问卷、交换联系方式的写操作路径；`--limit 0` 又被 `limit or config.max_per_tab` 静默放大成默认的 20 个。现在 `agent run` / `agent train` 的 `--limit` 用 `IntRange(min=1)` 拒绝 0 与负数（MCP 工具 schema 同步加 `minimum: 1`），`run_automation_cycle` 按 `is None` 判断默认值并把负数归一为 0，Python API 直接传 `limit=0` 也不会回退。
 - `boss batch-greet --count 0` 仍会真实发出 1 条招呼：候选收集先 `append` 再判断 `len(candidates) >= count`，上限为 0 时第一个候选已经进列表，非 dry-run 下就是一次写操作；负数上限永远不成立，同样会走完整批。现在上限在下一次收集之前判断（`--count 0` 收集到 0 个候选），负数按参数错误返回 `INVALID_PARAM` 信封且不发任何请求。
 - `boss clean --days -1` 会把 cutoff 算到未来（`time.time() - days * 86400`），目录里所有文件都被当成「超过 -1 天」，一次执行删光 `chat-history` 与 `chat-export` 下的全部快照和导出文件。现在 `--days` 用 `IntRange(0)` 拒绝负数，按参数错误返回信封且不动任何文件。
