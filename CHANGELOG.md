@@ -45,6 +45,7 @@
 - `boss ai cover-letter` 在推荐语生成后给出的后继命令是 `boss ai interview-prep --jd <jd_text> --resume <name>`，而 `interview-prep` 的 JD 是位置参数、没有 `--jd` 选项：Agent 照 `hints.next_actions` 执行会被 Click 以参数非法拒绝。现在改为 `boss ai interview-prep <jd_text> --resume <name>`，并在 `tests/test_ai_cover_letter.py` 钉住该后继命令可执行。
 - MCP 的 `boss_mark` 工具把 CLI 的 `--label` 选项写成 `--tag`：任何一次真实调用都会被 Click 以 `NoSuchOption` 拒绝，工具自发布起不可用。原先的测试只断言 `args[0]` 是已注册命令、参数断言又照抄了错误选项，所以一直没发现。现在映射改为 `--label`，并新增测试用 Click 命令树实际解析全部 78 个工具生成的 argv（覆盖未知选项、缺失参数与非法取值），不再只看首个子命令名。
 - 另外两处 MCP 工具 schema 与 CLI 不一致：`boss_batch_greet` 的 `limit` 被映射到不存在的 `--limit`（CLI 选项是 `--count`），调用方只要传 `limit` 就会被 Click 拒绝，且不传时会落到 CLI 默认的 10、比工具声明的 5 多一倍；`boss_me` 的 `section` 枚举把 `user` 写成 `info`，客户端按 schema 取第一个值同样被拒绝。现在 `limit` 落到 `--count` 并显式下发默认 5，`section` 枚举改为 `user`；`docs/commands.md` 与 `.en.md` 中 batch-greet 的 `--limit` 同步改为 `--count`，并新增测试逐个校验工具 schema 声明的枚举值都能被对应 CLI 接受。
+- MCP 客户端漏传条件必填参数时（如 `boss_wizard` 的 `action=resume/status/stop` 少了 `run_id`、`boss_hr_jobs` 的 `online/offline` 少了 `job_id`），参数映射直接按下标取值抛 `KeyError`，SDK 把它变成 JSON-RPC 的 `Internal server error`：Agent 既看不到缺了哪个参数，也拿不到恢复指引。现在 `call_tool` 捕获该异常并按 CLI 错误信封返回工具错误（`INVALID_PARAM`、缺失参数名、`recoverable` / `recovery_action` 取自错误码登记表）。同时所有工具结果的 `is_error` 改为镜像信封的 `ok`：以前 CLI 返回 `ok:false`（登录过期、风控停止、命中确认门等）时 MCP 客户端看到的是一次成功的工具调用。
 
 ## [3.2.0] - 2026-11-01
 

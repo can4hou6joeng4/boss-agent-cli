@@ -1,4 +1,5 @@
 """模型上下文协议服务测试 — 覆盖工具定义、参数构建和调用逻辑。"""
+import asyncio
 import inspect
 import json
 import re
@@ -318,6 +319,58 @@ def test_every_tool_enum_value_parses_on_click_tree():
 					pytest.fail(
 						f"{tool.name}.{name}={value!r} 生成的 argv {args} 无法被 Click 解析：{exc}"
 					)
+
+
+@pytest.mark.parametrize(
+	("tool_name", "arguments", "missing"),
+	[
+		("boss_wizard", {"action": "status"}, "run_id"),
+		("boss_hr_jobs", {"action": "offline"}, "job_id"),
+	],
+)
+def test_call_tool_reports_missing_conditional_argument(monkeypatch, tool_name, arguments, missing):
+	"""漏传条件必填参数时返回 INVALID_PARAM 工具错误，而不是 JSON-RPC 内部错误。"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	# 本文件顶部的 mcp 替身只用来让 import 成立，TextContent 是 MagicMock 实例，
+	# 调用它不会保留 kwargs；换成可读的轻量替身来断言结果形状。
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+
+	result = asyncio.run(mcp_server.call_tool(None, CallToolRequestParams(name=tool_name, arguments=arguments)))
+
+	assert result.is_error is True
+	payload = json.loads(result.content[0].text)
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert missing in payload["error"]["message"]
+	assert payload["error"]["recoverable"] is False
+	assert payload["error"]["recovery_action"] == "修正参数"
+
+
+@pytest.mark.parametrize(("ok", "expected"), [(True, False), (False, True)])
+def test_call_tool_is_error_mirrors_envelope_ok(monkeypatch, ok, expected):
+	"""CLI 返回 ok:false 时，工具结果必须标成 is_error，否则客户端会当成成功调用。"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+
+	async def fake_run(*args):
+		return {"ok": ok, "error": None if ok else {"code": "AUTH_REQUIRED"}}
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+
+	result = asyncio.run(mcp_server.call_tool(None, CallToolRequestParams(name="boss_status", arguments={})))
+
+	assert result.is_error is expected
+	assert json.loads(result.content[0].text)["ok"] is ok
 
 
 def test_search_tool_requires_query():
