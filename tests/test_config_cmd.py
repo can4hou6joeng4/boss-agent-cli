@@ -1,6 +1,7 @@
 """config 命令测试 — 覆盖查看、设置、重置配置项。"""
 
 import json
+import os
 from typing import Any
 
 import pytest
@@ -340,6 +341,41 @@ def test_config_reset_unknown_key(tmp_path):
 	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "config", "reset", "bad_key"])
 	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
 	assert "可用项" in parsed["error"]["message"]
+
+
+def test_unreadable_config_file_returns_envelope_instead_of_traceback(tmp_path):
+	"""config.json 读不出来时，连 config list 都要给信封和修复路径。"""
+	(tmp_path / "config.json").mkdir()
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "config", "list"])
+	parsed = _assert_single_stdout_json_error(result, command="boss", code="INVALID_PARAM")
+	assert "无法读取" in parsed["error"]["message"]
+	assert "config.json" in parsed["error"]["message"]
+
+
+_READ_ONLY_UNSUPPORTED = os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0)
+
+
+@pytest.mark.skipif(_READ_ONLY_UNSUPPORTED, reason="只读目录在 Windows 与 root 下不生效")
+@pytest.mark.parametrize(
+	"args",
+	[
+		("set", "log_level", "debug"),
+		("reset", "log_level"),
+	],
+)
+def test_config_write_failure_returns_local_io_error(tmp_path, args):
+	"""配置文件写不进去时报本地 IO 错误（不可自动重试），而不是 traceback。"""
+	data_dir = tmp_path / "readonly"
+	data_dir.mkdir()
+	data_dir.chmod(0o500)
+	try:
+		result = CliRunner().invoke(cli, ["--data-dir", str(data_dir), "config", *args])
+	finally:
+		data_dir.chmod(0o700)
+	parsed = _assert_single_stdout_json_error(result, command="config", code="LOCAL_IO_ERROR")
+	assert "写入" in parsed["error"]["message"]
+	assert parsed["error"]["recoverable"] is False
+	assert "不要自动重试" in parsed["error"]["recovery_action"]
 
 
 # ── JSON 信封格式 ──────────────────────────────────────────────────

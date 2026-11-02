@@ -168,7 +168,11 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 	user_cfg[key] = parsed_value
 	if key == "operating_mode":
 		user_cfg.pop("low_risk_mode", None)
-	_save_user_overrides(config_path, user_cfg)
+	try:
+		_save_user_overrides(config_path, user_cfg)
+	except OSError as exc:
+		_emit_write_error(config_path, exc)
+		return
 
 	data = {"key": key, "value": parsed_value, "previous": ctx.obj["config"].get(key)}
 	handle_output(ctx, "config", data, render=lambda d: None)
@@ -193,7 +197,11 @@ def config_reset_cmd(ctx: click.Context, key: str) -> None:
 	config_path = ctx.obj["data_dir"] / "config.json"
 	user_cfg = _load_user_overrides(config_path)
 	user_cfg.pop(key, None)
-	_save_user_overrides(config_path, user_cfg)
+	try:
+		_save_user_overrides(config_path, user_cfg)
+	except OSError as exc:
+		_emit_write_error(config_path, exc)
+		return
 
 	data = {"key": key, "value": DEFAULTS[key], "restored": True}
 	handle_output(ctx, "config", data, render=lambda d: None)
@@ -217,6 +225,17 @@ def _save_user_overrides(config_path: Path, user_cfg: dict[str, Any]) -> None:
 	with open(config_path, "w", encoding="utf-8") as f:
 		json.dump(user_cfg, f, ensure_ascii=False, indent=2)
 		f.write("\n")
+
+
+def _emit_write_error(config_path: Path, exc: OSError) -> None:
+	"""配置文件写不进去时给信封：目录只读、路径被同名文件占用都不该变成 traceback。"""
+	from boss_agent_cli.output import emit_error
+
+	emit_error(
+		"config",
+		code="LOCAL_IO_ERROR",
+		message=f"写入 {config_path} 失败: {exc.strerror or exc}",
+	)
 
 
 def _parse_value(raw: str, default: Any) -> Any:

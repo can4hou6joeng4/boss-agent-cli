@@ -15,7 +15,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
-from boss_agent_cli.output import emit_success
+from boss_agent_cli.output import emit_success, is_local_io_error
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 
 # Rich output goes to stderr so stdout stays clean for Agent JSON
@@ -830,6 +830,26 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recoverable=internal_recoverable,
 					recovery_action=internal_recovery,
 				)
+			except OSError as e:
+				if is_local_io_error(e):
+					# 路径不可写、目标被同名文件占用、磁盘满：重试同一条命令永远修不好，
+					# 落成可重试的 NETWORK_ERROR 只会让 Agent 无限重试。
+					handle_error_output(
+						ctx,
+						command_name,
+						code="LOCAL_IO_ERROR",
+						message=f"{command_name} 本地文件读写失败: {e}",
+					)
+				else:
+					handle_error_output(
+						ctx,
+						command_name,
+						code="NETWORK_ERROR",
+						message=f"{command_name} 失败: {e}",
+						recoverable=True,
+						recovery_action="重试",
+						hints=_with_httpx_only_hint(ctx, None),
+					)
 			except Exception as e:
 				handle_error_output(
 					ctx,

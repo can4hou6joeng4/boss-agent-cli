@@ -3476,3 +3476,16 @@ def test_runner_reports_deterministic_action_bug_as_internal_error(tmp_path):
 	assert run["error"]["code"] == "INTERNAL_ERROR"
 	assert run["error"]["recoverable"] is False
 	assert run["error"]["message"] == "KeyError: 'jobList'"
+
+
+def test_runner_reports_local_file_error_as_local_io_error(tmp_path):
+	"""导出路径不可写时重试同一 run_id 也不会成功，不能报成可重试的 NETWORK_ERROR。"""
+
+	def broken(context, inputs, prior):
+		raise PermissionError(13, "Permission denied", str(tmp_path / "export.json"))
+
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, {"broken": broken}).run(_plan("broken"), object(), run_id="io-run")
+	assert run["error"]["code"] == "LOCAL_IO_ERROR"
+	assert run["error"]["recoverable"] is False
+	assert "不要自动重试" in run["error"]["recovery_action"]
