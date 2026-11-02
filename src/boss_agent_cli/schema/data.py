@@ -121,8 +121,8 @@ SCHEMA_DATA = {
 				"--resume": {"type": "string", "default": None, "description": "恢复指定 workflow run_id"},
 				"--status": {"type": "string", "default": None, "description": "查询指定 workflow run_id"},
 				"--stop": {"type": "string", "default": None, "description": "停止指定 workflow run_id"},
-				"--timeout": {"type": "float", "default": None, "description": "workflow 超时秒数"},
-				"--max-retries": {"type": "int", "default": 0, "description": "可恢复步骤的最大重试次数"},
+				"--timeout": {"type": "float", "default": None, "minimum": 0.001, "description": "workflow 超时秒数"},
+				"--max-retries": {"type": "int", "default": 0, "minimum": 0, "description": "可恢复步骤的最大重试次数"},
 			},
 		},
 		"search": {
@@ -206,6 +206,7 @@ SCHEMA_DATA = {
 				"--page": {
 					"type": "int",
 					"default": 1,
+					"minimum": 1,
 					"description": "页码",
 				},
 				"--with-score": {
@@ -315,6 +316,7 @@ SCHEMA_DATA = {
 				"--count": {
 					"type": "int",
 					"default": 10,
+					"minimum": 0,
 					"description": "打招呼数量上限（最大 10）",
 				},
 				"--dry-run": {
@@ -328,7 +330,7 @@ SCHEMA_DATA = {
 			"description": "基于用户登录态获取个性化职位推荐。",
 			"args": [],
 			"options": {
-				"--page": {"type": "int", "default": 1, "description": "页码"},
+				"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 				"--with-score": {"type": "bool", "default": False, "description": "附加匹配分和原因"},
 			},
 		},
@@ -351,7 +353,7 @@ SCHEMA_DATA = {
 				"--scale": {"type": "string", "default": None, "description": "公司规模，支持逗号分隔多选"},
 				"--stage": {"type": "string", "default": None, "description": "融资阶段，支持逗号分隔多选"},
 				"--job-type": {"type": "string", "default": None, "description": "职位类型，支持逗号分隔多选"},
-				"--count": {"type": "int", "default": 50, "description": "导出数量"},
+				"--count": {"type": "int", "default": 50, "minimum": 1, "description": "导出数量"},
 				"--format": {
 					"type": "string",
 					"default": "csv",
@@ -400,7 +402,7 @@ SCHEMA_DATA = {
 			"description": "查看最近浏览过的职位",
 			"args": [],
 			"options": {
-				"--page": {"type": "int", "default": 1, "description": "页码"},
+				"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 			},
 		},
 		"chat": {
@@ -416,6 +418,7 @@ SCHEMA_DATA = {
 				"--days": {
 					"type": "int",
 					"default": None,
+					"minimum": 0,
 					"description": "只显示最近 N 天的记录",
 				},
 				"--export": {
@@ -432,6 +435,7 @@ SCHEMA_DATA = {
 				"--page": {
 					"type": "int",
 					"default": 1,
+					"minimum": 1,
 					"description": "页码",
 				},
 			},
@@ -446,8 +450,8 @@ SCHEMA_DATA = {
 				},
 			],
 			"options": {
-				"--page": {"type": "int", "default": 1, "description": "页码"},
-				"--count": {"type": "int", "default": 20, "description": "每页消息数量"},
+				"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
+				"--count": {"type": "int", "default": 20, "minimum": 1, "description": "每页消息数量"},
 				"--raw": {
 					"type": "bool",
 					"default": False,
@@ -465,8 +469,8 @@ SCHEMA_DATA = {
 				},
 			],
 			"options": {
-				"--page": {"type": "int", "default": 1, "description": "页码"},
-				"--count": {"type": "int", "default": 20, "description": "每页消息数量"},
+				"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
+				"--count": {"type": "int", "default": 20, "minimum": 1, "description": "每页消息数量"},
 			},
 		},
 		"mark": {
@@ -574,11 +578,11 @@ SCHEMA_DATA = {
 			"options": {
 				"configure": {
 					"--chrome-path": {"type": "string", "default": None, "description": "chrome.exe 路径"},
-					"--port": {"type": "int", "default": None, "description": "Chrome 远程调试端口（1-65535）"},
-					"--max-requests": {"type": "int", "default": None, "description": "每个 crawl run 的总请求上限（≥1）"},
-					"--max-details": {"type": "int", "default": None, "description": "每个 crawl run 的详情请求上限（≥1）"},
-					"--max-seconds": {"type": "int", "default": None, "description": "每个 crawl run 的墙钟秒数上限（≥1）"},
-					"--max-retries": {"type": "int", "default": None, "description": "单请求的重试次数上限（≥0）"},
+					"--port": {"type": "int", "default": None, "minimum": 1, "description": "Chrome 远程调试端口（1-65535）"},
+					"--max-requests": {"type": "int", "default": None, "minimum": 1, "description": "每个 crawl run 的总请求上限（≥1）"},
+					"--max-details": {"type": "int", "default": None, "minimum": 1, "description": "每个 crawl run 的详情请求上限（≥1）"},
+					"--max-seconds": {"type": "int", "default": None, "minimum": 1, "description": "每个 crawl run 的墙钟秒数上限（≥1）"},
+					"--max-retries": {"type": "int", "default": None, "minimum": 0, "description": "单请求的重试次数上限（≥0）"},
 				},
 				"run": {
 					"args": [
@@ -601,6 +605,7 @@ SCHEMA_DATA = {
 					"--port": {
 						"type": "int",
 						"default": None,
+						"minimum": 1,
 						"description": "覆盖配置的 Chrome 远程调试端口（1-65535）",
 					},
 				},
@@ -625,7 +630,7 @@ SCHEMA_DATA = {
 					"args": [
 						{"name": "run_id", "required": True, "description": "crawl run 标识"},
 					],
-					"--page": {"type": "int", "default": None, "description": "仅返回指定采集页"},
+					"--page": {"type": "int", "default": None, "minimum": 1, "description": "仅返回指定采集页"},
 					"--detail-status": {"type": "string", "default": None, "enum": ["completed", "pending"]},
 				},
 				"shortlist": {
@@ -786,14 +791,14 @@ SCHEMA_DATA = {
 			"description": "聚合聊天和面试数据生成候选进度视图。",
 			"args": [],
 			"options": {
-				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则标记为 follow_up"},
+				"--days-stale": {"type": "int", "default": 3, "minimum": 0, "description": "超过 N 天未推进则标记为 follow_up"},
 			},
 		},
 		"follow-up": {
 			"description": "基于聊天和面试数据筛出需要跟进的候选项。",
 			"args": [],
 			"options": {
-				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则视为 follow_up"},
+				"--days-stale": {"type": "int", "default": 3, "minimum": 0, "description": "超过 N 天未推进则视为 follow_up"},
 			},
 		},
 		"apply": {
@@ -860,7 +865,7 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"list": {
-					"--page": {"type": "int", "default": 1, "description": "页码"},
+					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 				},
 				"sync": {},
 			},
@@ -873,7 +878,7 @@ SCHEMA_DATA = {
 			"description": "汇总新增职位、待跟进会话和面试项的日报。",
 			"args": [],
 			"options": {
-				"--days-stale": {"type": "int", "default": 3, "description": "超过 N 天未推进则视为 follow_up"},
+				"--days-stale": {"type": "int", "default": 3, "minimum": 0, "description": "超过 N 天未推进则视为 follow_up"},
 				"--format": {
 					"type": "string",
 					"default": "json",
@@ -920,7 +925,7 @@ SCHEMA_DATA = {
 			"options": {
 				"--dry-run": {"type": "bool", "default": False, "description": "仅预览将清理的内容"},
 				"--all": {"type": "bool", "default": False, "description": "清理全部缓存"},
-				"--days": {"type": "int", "default": 30, "description": "清理超过指定天数的快照和导出"},
+				"--days": {"type": "int", "default": 30, "minimum": 0, "description": "清理超过指定天数的快照和导出"},
 				"--privacy": {
 					"type": "bool",
 					"default": False,
@@ -937,7 +942,7 @@ SCHEMA_DATA = {
 			"description": "投递转化漏斗统计（只读聚合打招呼/投递/候选池/监控）",
 			"args": [],
 			"options": {
-				"--days": {"type": "int", "default": 30, "description": "统计窗口天数"},
+				"--days": {"type": "int", "default": 30, "minimum": 0, "description": "统计窗口天数"},
 				"--format": {
 					"type": "string",
 					"default": "json",
@@ -1102,7 +1107,7 @@ SCHEMA_DATA = {
 				},
 				"fit": {
 					"--resume": {"type": "string", "required": True, "description": "本地简历名称"},
-					"--limit": {"type": "int", "default": 20, "description": "最多分析的候选池职位数"},
+					"--limit": {"type": "int", "default": 20, "minimum": 1, "description": "最多分析的候选池职位数"},
 				},
 				"reply": {
 					"args": [
@@ -1136,7 +1141,7 @@ SCHEMA_DATA = {
 					},
 				},
 				"suggest-keywords": {
-					"--limit": {"type": "int", "default": 20, "description": "候选池职位数上限"},
+					"--limit": {"type": "int", "default": 20, "minimum": 1, "description": "候选池职位数上限"},
 				},
 				"resume-optimize": {
 					"args": [
@@ -1202,6 +1207,7 @@ SCHEMA_DATA = {
 					"--limit": {
 						"type": "int",
 						"default": None,
+						"minimum": 1,
 						"description": "本轮最多处理多少个会话",
 					},
 				},
@@ -1217,7 +1223,7 @@ SCHEMA_DATA = {
 				"train": {
 					"--dry-run": {"type": "bool", "default": True, "description": "训练模式默认只演练；与 --live 互斥"},
 					"--live": {"type": "bool", "default": False, "description": "直接执行满足阈值的动作；只有操作者明确授权时才可用"},
-					"--limit": {"type": "int", "default": None, "description": "本轮最多处理多少个会话"},
+					"--limit": {"type": "int", "default": None, "minimum": 1, "description": "本轮最多处理多少个会话"},
 				},
 				"stop": {
 					"--reason": {"type": "string", "default": "manual-stop", "description": "熔断原因"},
@@ -1326,11 +1332,11 @@ SCHEMA_DATA = {
 					"--source": {"type": "string", "default": None, "description": "来源编码（默认 4）"},
 					"--salary": {"type": "string", "default": None, "description": "薪资范围，如 -1,3"},
 					"--select": {"type": "bool", "default": False, "description": "是否带 select=true"},
-					"--page": {"type": "int", "default": 1, "description": "页码"},
+					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 				},
 				"recommendations": {
 					"--job-id": {"type": "string", "required": True, "description": "招聘职位的加密 ID"},
-					"--page": {"type": "int", "default": 1, "description": "页码"},
+					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 				},
 				"greet": {
 					"--geek-id": {"type": "string", "required": True, "description": "recommendations 返回的 encryptGeekId"},
@@ -1351,7 +1357,7 @@ SCHEMA_DATA = {
 					"args": [
 						{"name": "friend_id", "required": True, "description": "候选人会话 friend_id"},
 					],
-					"--message-id": {"type": "int", "required": True, "description": "候选人发来的附件简历请求 mid"},
+					"--message-id": {"type": "int", "required": True, "minimum": 1, "description": "候选人发来的附件简历请求 mid"},
 					"--yes": {"type": "bool", "default": False, "description": "操作者明确批准同意这条请求"},
 					"--dry-run": {"type": "bool", "default": False, "description": "只预览，不请求平台"},
 				},
@@ -1362,6 +1368,7 @@ SCHEMA_DATA = {
 					"--message-id": {
 						"type": "int",
 						"required": True,
+						"minimum": 1,
 						"description": "已收到的附件消息 mid，不是请求 mid",
 					},
 					"--output": {"type": "string", "required": True, "description": "本地输出文件路径，不覆盖已有文件"},
@@ -1371,6 +1378,7 @@ SCHEMA_DATA = {
 						"--page": {
 							"type": "int",
 							"default": 1,
+							"minimum": 1,
 							"description": "职位管理列表页码，读取 data/list",
 						},
 					},
