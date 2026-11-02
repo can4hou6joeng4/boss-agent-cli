@@ -23,6 +23,7 @@ from boss_agent_cli.services.job_export import (
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	SearchUrlParseError,
+	ensure_supported_city,
 	parse_boss_search_url,
 	prefilter_platform_job_type,
 	resolve_search_code_params,
@@ -43,7 +44,7 @@ _EXPORT_FILTER_PAGE_ALLOWANCE = 5
 @click.option("--scale", default=None, help="公司规模，支持逗号分隔多选")
 @click.option("--stage", default=None, help="融资阶段，支持逗号分隔多选")
 @click.option("--job-type", default=None, help="职位类型，支持逗号分隔多选")
-@click.option("--count", default=50, type=int, help="导出数量")
+@click.option("--count", default=50, type=click.IntRange(min=1), help="导出数量")
 @click.option("--format", "fmt", default="csv", type=click.Choice(["html", "csv", "json"]), help="输出格式")
 @click.option("--output", "-o", default=None, help="输出文件路径（不指定则输出到 stdout JSON 信封）")
 @click.option(
@@ -95,6 +96,18 @@ def export_cmd(
 		)
 		return
 	query = query or ""
+
+	try:
+		ensure_supported_city(city)
+	except ValueError as exc:
+		handle_error_output(
+			ctx,
+			"export",
+			code="INVALID_PARAM",
+			message=str(exc),
+			hints={"next_actions": ["boss cities — 查看支持的城市名"]},
+		)
+		return
 
 	try:
 		raw_params.update(

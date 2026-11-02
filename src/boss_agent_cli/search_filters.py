@@ -28,6 +28,16 @@ def city_constraint(city: str | None) -> str | None:
 	return None if city == NATIONWIDE_CITY else city
 
 
+def ensure_supported_city(city: str | None) -> None:
+	"""校验城市名；未知城市必须在命令层报参数错误。
+
+	留到 ``search_jobs`` 里才发现时，`ValueError` 会被兜底成可重试的
+	`NETWORK_ERROR`，拿同一个非法城市重试永远修不好。
+	"""
+	if city and city not in endpoints.CITY_CODES:
+		raise ValueError(f"未知城市: {city}，请使用 CITY_CODES 中的城市名")
+
+
 _EXPERIENCE_ORDER: dict[str, int] = {
 	"应届": 0,
 	"1年以内": 1,

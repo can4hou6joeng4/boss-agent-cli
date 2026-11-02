@@ -3,9 +3,6 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.endpoints import (
-	CITY_CODES,
-)
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore, SavedSearchParamsError
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
@@ -30,6 +27,7 @@ from boss_agent_cli.search_filters import (
 	ACTIVE_LEVELS,
 	detail_channel_for,
 	detail_filter_max_pages,
+	ensure_supported_city,
 	parse_boss_search_url,
 	resolve_active_level,
 	resolve_search_code_params,
@@ -210,12 +208,10 @@ def search_cmd(
 		return
 	query = query or ""
 
-	if city and city not in CITY_CODES:
-		handle_error_output(
-			ctx, "search",
-			code="INVALID_PARAM",
-			message=f"未知城市: {city}，请使用 CITY_CODES 中的城市名",
-		)
+	try:
+		ensure_supported_city(city)
+	except ValueError as exc:
+		handle_error_output(ctx, "search", code="INVALID_PARAM", message=str(exc))
 		return
 
 	try:

@@ -2,7 +2,6 @@ import click
 from typing import Any
 
 from boss_agent_cli.api.endpoints import (
-	CITY_CODES,
 	INDUSTRY_CODES,
 	JOB_TYPE_CODES,
 	SCALE_CODES,
@@ -30,6 +29,8 @@ from boss_agent_cli.search_filters import (
 	build_search_params,
 	detail_channel_for,
 	detail_filter_max_pages,
+	ensure_supported_city,
+	resolve_search_code_params,
 	resolve_welfare_keywords,
 	run_search_pipeline,
 )
@@ -87,8 +88,17 @@ def watch_add_cmd(
 	job_type: str | None,
 	welfare: str | None,
 ) -> None:
-	if city and city not in CITY_CODES:
-		handle_error_output(ctx, "watch", code="INVALID_PARAM", message=f"未知城市: {city}")
+	# 保存时就把筛选条件校验掉：watch run 直接把存下来的参数交给平台客户端，
+	# 未知薪资 / 经验 / 学历在 `*_CODES.get(...)` 处返回 None，参数被静默丢弃，
+	# 之后每次 run 都在「没有筛选」的结果上报告新职位。
+	try:
+		ensure_supported_city(city)
+		resolve_search_code_params(
+			salary=salary, experience=experience, education=education,
+			industry=industry, scale=scale, stage=stage, job_type=job_type,
+		)
+	except ValueError as exc:
+		handle_error_output(ctx, "watch", code="INVALID_PARAM", message=str(exc))
 		return
 
 	params, _ = _parse_watch_filters(query, city, salary, experience, education, industry, scale, stage, job_type, welfare)
