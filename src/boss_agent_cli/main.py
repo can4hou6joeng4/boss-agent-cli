@@ -12,7 +12,7 @@ from boss_agent_cli.commands.register import register_candidate_commands, regist
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY, load_config, validate_request_config
 from boss_agent_cli.api.request_budget import validate_delay
 from boss_agent_cli.hooks import create_hook_bus
-from boss_agent_cli.output import emit_error, Logger, set_exit_codes_mode
+from boss_agent_cli.output import emit_error, is_local_io_error, Logger, set_exit_codes_mode
 from boss_agent_cli.platforms import list_platforms
 
 
@@ -161,6 +161,21 @@ class BossCliGroup(click.Group):
 				hints=hints,
 			)
 			return None
+		except OSError as exc:
+			# 网兜：导出、保存配置这类直接写文件的路径没有统一装饰器，
+			# 写失败时必须给信封，而不是把 traceback 甩给 Agent。
+			if not standalone_mode:
+				raise
+			command = self.name or "boss"
+			code = "LOCAL_IO_ERROR" if is_local_io_error(exc) else "NETWORK_ERROR"
+			emit_error(
+				command,
+				code=code,
+				message=f"{command} 本地文件读写失败: {exc}"
+				if code == "LOCAL_IO_ERROR"
+				else f"{command} 失败: {exc}",
+			)
+			return None
 
 
 @click.group(
@@ -225,6 +240,12 @@ def cli(
 
 	try:
 		cfg = load_config(resolved_dir / "config.json")
+	except OSError as exc:
+		raise click.BadParameter(
+			f"无法读取 {resolved_dir / 'config.json'}: {exc.strerror or exc}；"
+			"修正文件权限或删除该文件后重试",
+			param_hint="config.json",
+		) from exc
 	except (ValueError, TypeError) as exc:
 		raise click.BadParameter(str(exc), param_hint="config.json") from exc
 

@@ -57,6 +57,38 @@ def test_other_errors_keep_network_error(exc):
 	assert payload["error"]["recoverable"] is True
 
 
+@pytest.mark.parametrize(
+	"exc",
+	[
+		PermissionError(13, "Permission denied", "/tmp/boss-agent/config.json"),
+		IsADirectoryError(21, "Is a directory", "/tmp/boss-agent/config.json"),
+		FileNotFoundError(2, "No such file or directory", "/tmp/boss-agent/export.json"),
+		OSError(28, "No space left on device", "/tmp/boss-agent/export.json"),
+	],
+)
+def test_local_filesystem_errors_become_local_io_error(exc):
+	"""文件不可写不是网络问题：报成可重试的 NETWORK_ERROR 会让 Agent 无限重试同一命令。"""
+	payload = json.loads(_recommend_raising(exc).output)
+	assert payload["error"]["code"] == "LOCAL_IO_ERROR"
+	assert payload["error"]["recoverable"] is False
+	assert "不要自动重试" in payload["error"]["recovery_action"]
+	assert "本地文件读写失败" in payload["error"]["message"]
+
+
+@pytest.mark.parametrize("exc", [ConnectionResetError(104, "Connection reset by peer"), TimeoutError("timed out")])
+def test_socket_errors_stay_network_error(exc):
+	"""ConnectionError / TimeoutError 是 OSError 子类，但仍是网络问题，保持可重试语义。"""
+	payload = json.loads(_recommend_raising(exc).output)
+	assert payload["error"]["code"] == "NETWORK_ERROR"
+	assert payload["error"]["recoverable"] is True
+
+
+def test_local_io_error_is_registered_as_not_recoverable():
+	spec = ERROR_CODES["LOCAL_IO_ERROR"]
+	assert spec["recoverable"] is False
+	assert "不要自动重试" in spec["recovery_action"]
+
+
 def test_internal_error_exits_70_in_sysexits_mode():
 	try:
 		result = _recommend_raising(TypeError("x"), "--exit-codes", "sysexits")

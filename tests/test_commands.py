@@ -1144,6 +1144,34 @@ def test_chat_export_csv(mock_auth_cls, mock_client_cls, tmp_path):
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_export_unwritable_export_dir_returns_local_io_error(mock_auth_cls, mock_client_cls, tmp_path):
+	"""export_dir 指向同名文件时是本地 IO 错误，不能报成可重试的 NETWORK_ERROR。"""
+	import time
+	now_ms = int(time.time() * 1000)
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
+	mock_client_cls.return_value.friend_list.return_value = {
+		"zpData": {
+			"result": [
+				_make_friend_item("张HR", "阿里", 1, now_ms),
+			],
+		},
+	}
+	blocker = tmp_path / "blocked"
+	blocker.write_text("not a directory", encoding="utf-8")
+	(tmp_path / "config.json").write_text(json.dumps({"export_dir": str(blocker)}), encoding="utf-8")
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "chat", "--export", "json"])
+	parsed = json.loads(result.output)
+	assert result.exit_code == 1
+	assert parsed["error"]["code"] == "LOCAL_IO_ERROR"
+	assert parsed["error"]["recoverable"] is False
+	assert "本地文件读写失败" in parsed["error"]["message"]
+	assert "不要自动重试" in parsed["error"]["recovery_action"]
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_json_default_path(mock_auth_cls, mock_client_cls, tmp_path):
 	"""--export json 不指定 -o 时自动保存到 export_dir"""
 	import time

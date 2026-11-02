@@ -55,6 +55,27 @@ def _is_error_code_metadata(value: Any) -> bool:
 	})
 
 
+_FILESYSTEM_ERROR_TYPES: tuple[type[OSError], ...] = (
+	FileNotFoundError,
+	PermissionError,
+	FileExistsError,
+	IsADirectoryError,
+	NotADirectoryError,
+)
+
+
+def is_local_io_error(exc: BaseException) -> bool:
+	"""判断异常来自本地文件系统，还是套接字层。
+
+	`OSError` 同时覆盖文件和网络：`ConnectionError` / `TimeoutError` / `socket.gaierror`
+	/ `ssl.SSLError` 是网络问题，重试有意义；`open()` / `os.makedirs()` 抛出的
+	`PermissionError` / `IsADirectoryError` 等带 `filename`，重试同一条命令只会再失败一次。
+	"""
+	if not isinstance(exc, OSError) or isinstance(exc, (ConnectionError, TimeoutError)):
+		return False
+	return isinstance(exc, _FILESYSTEM_ERROR_TYPES) or getattr(exc, "filename", None) is not None
+
+
 def redact_sensitive(value: Any) -> Any:
 	"""Return a JSON-safe copy with credential-like fields redacted."""
 	return _redact_sensitive(value, {}, ())

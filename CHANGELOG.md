@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 本地文件读写失败被当成可重试的网络错误：`boss chat --export json` 的 `export_dir` 指向同名文件时信封是 `NETWORK_ERROR` + `recoverable:true`，Agent 会无限重试同一条命令；`boss config set` 遇到只读数据目录、`resume export` 写文件失败则直接抛 traceback；`config.json` 本身读不出来（权限不足、路径被同名目录占用）时，异常发生在 CLI 启动阶段，所有命令都拿不到信封，连 `boss config reset` 也跑不了。现在新增错误码 `LOCAL_IO_ERROR`（`recoverable:false`，提示检查路径、权限与磁盘空间）：文件系统异常按它返回，`ConnectionError` / `TimeoutError` 等套接字错误仍按 `NETWORK_ERROR`；`config.json` 读取失败在启动阶段返回 `INVALID_PARAM` 并给出文件路径；没有统一装饰器覆盖的写文件路径由 CLI 顶层兜底成信封。
 - 本地「已打招呼 / 已投递」去重以每次请求都会轮换的 `securityId` 为主键，跨请求必然失效：`batch-greet` 换个 `securityId` 就会把同一职位再打一次招呼，`search --skip-greeted` 与职位结果里的 `greeted` 标记也查不到上次的记录。现在去重键改为「账号指纹 + 稳定 `encryptJobId`」：账号指纹取登录 `wt2` Cookie 的 SHA-256 前 16 位（不落盘 Cookie 本身），`greet` / `apply` / `batch-greet` / `search` / `detail` / `show` / `recommend` 与求职者 wizard 共用同一作用域。同一台机器上换账号不会误命中另一个账号的记录；没有登录态时保留旧的 `securityId` 匹配行为。旧缓存库在打开时自动迁移，迁移在单个写事务里完成；旧记录没有账号归属，仍可按原 `securityId` 查到，但不会当作当前账号的去重依据，升级后同一职位最多重新记录一次。
 - `search` 的 24 小时结果缓存键不含账号：同一台机器换账号后会直接看到上一个账号缓存的结果与 `greeted` 标记；缓存命中又不重算 `greeted`，打完招呼的职位在缓存过期前仍然显示未打招呼。现在缓存键带上账号指纹（搜索缓存 schema 升到 4，旧缓存自然失效），命中后按当前账号、稳定 `encryptJobId` 重新计算每个职位的 `greeted`，其余字段仍复用缓存、不额外请求平台。
 - `watch` 的已见记录仍以 `securityId` + `jobId` 复合键保存，而 `securityId` 每轮搜索都会轮换：同一职位每次 `watch run` 都被当作新职位重复通知。现在登录态下按「账号指纹 + 稳定 `encryptJobId`」去重，换账号后各自的已见记录互不影响；没有登录态时保留旧的复合键行为。旧记录没有账号归属，升级后每个职位会重新通知一次。

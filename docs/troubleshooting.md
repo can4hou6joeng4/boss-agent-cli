@@ -243,6 +243,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `EXCHANGE_NOT_AVAILABLE` | 换电话/换微信按钮还没解锁（你还没在这个会话里发过消息），本次未发出任何请求 | 先回复候选人（`boss hr reply <friend_id> <消息>` 或 `boss hr request-resume <friend_id>`），再重新交换；`error.details` 里有命中的禁用信号 |
 | `GREET_RESULT_UNKNOWN` | 已预约发送，但结果未确认 | 用 `boss hr chat --job-id <id>` 核对会话，禁止自动重发；本地保留预约，必要时在官方页面处理 |
 | `LOCAL_STATE_WRITE_FAILED` | 平台操作已完成，但本地状态保存失败 | 先在官方页面核对本次操作是否已生效；不要自动重发，确认磁盘空间与缓存目录权限后再继续 |
+| `LOCAL_IO_ERROR` | 本地文件读写失败（导出路径、`config.json`、缓存等） | 不要自动重试：确认目标路径是可写目录（而不是同名的已有文件）、权限与磁盘空间正常后再执行 |
 | `GREET_LIMIT` | 今日次数用完 | 告知用户 |
 | `NETWORK_ERROR` | 网络错误 | 重试 |
 | `INTERNAL_ERROR` | CLI 内部错误或平台返回了未预期的数据结构 | 不要重试；升级到最新版本，仍出现时附上命令与 error.message 提交 issue |

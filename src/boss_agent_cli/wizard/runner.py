@@ -19,6 +19,7 @@ from boss_agent_cli.display import (
 	risk_error_contract,
 	risk_error_message,
 )
+from boss_agent_cli.output import is_local_io_error
 from boss_agent_cli.wizard.models import StepResult, WorkflowPlan, WorkflowStatus
 from boss_agent_cli.wizard.store import WorkflowStore
 
@@ -287,6 +288,21 @@ class WorkflowRunner:
 					recoverable=internal_recoverable,
 					recovery_action=internal_recovery,
 				)
+			except OSError as exc:
+				# 本地文件读写失败（导出路径不可写、磁盘满）重试同一 run_id 也不会成功；
+				# 套接字层的 ConnectionError / TimeoutError 仍是网络问题，保持可重试语义。
+				if is_local_io_error(exc):
+					io_recoverable, io_recovery = error_contract_for_code("LOCAL_IO_ERROR")
+					error = WorkflowActionError(
+						"LOCAL_IO_ERROR",
+						f"本地文件读写失败: {exc}",
+						recoverable=io_recoverable,
+						recovery_action=io_recovery,
+					)
+				else:
+					error = WorkflowActionError(
+						"NETWORK_ERROR", str(exc), recoverable=True, recovery_action="重试当前 run_id"
+					)
 			except Exception as exc:
 				error = WorkflowActionError(
 					"NETWORK_ERROR", str(exc), recoverable=True, recovery_action="重试当前 run_id"

@@ -29,6 +29,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": "先在官方页面核对本次操作是否已生效；不要自动重发，确认磁盘空间与缓存目录权限后再继续",
 	},
+	"LOCAL_IO_ERROR": {
+		"message": "本地文件读写失败",
+		"recoverable": False,
+		"recovery_action": "不要自动重试：确认目标路径是可写目录（而不是同名的已有文件）、目录权限与磁盘空间正常，修正后再执行",
+	},
 	"EXCHANGE_NOT_AVAILABLE": {
 		"message": "换电话/换微信按钮未解锁（招聘者尚未在会话中发过消息），本次未发出任何请求",
 		"recoverable": True,
