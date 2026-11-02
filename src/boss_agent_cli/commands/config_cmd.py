@@ -9,6 +9,7 @@ from typing import Any
 import click
 
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
+from boss_agent_cli.automation.config import automation_config_from_dict
 from boss_agent_cli.config import DEFAULTS, validate_request_config
 from boss_agent_cli.display import handle_output, render_simple_list
 from boss_agent_cli.platforms import list_platforms
@@ -122,6 +123,13 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 
 	try:
 		parsed_value = _parse_value(value, DEFAULTS[key])
+		if key == "automation":
+			# config.json 是 agent run/train 的直接输入，先用正式解析器校验内容，
+			# 避免把非法枚举或数值写进去后，运行时才在依赖内部抛 traceback。
+			try:
+				automation_config_from_dict(parsed_value)
+			except (TypeError, ValueError) as exc:
+				raise ValueError(f"automation 配置无效: {exc}") from exc
 		if key.startswith("request_") or key == "batch_greet_delay":
 			# Validate the edited field without preventing repairs of other bad fields.
 			validate_request_config({**DEFAULTS, key: parsed_value})

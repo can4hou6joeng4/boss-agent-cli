@@ -442,7 +442,20 @@ def _run_agent(
 			recovery_action=boss_command_for_ctx(ctx, "config reset automation"),
 		)
 		ctx.exit(1)
-	cfg = automation_config_from_dict(raw_config)
+	try:
+		cfg = automation_config_from_dict(raw_config)
+	except (TypeError, ValueError) as exc:
+		# 枚举值或数值字段写错（如 mode=nonsense）同样不能抛 traceback，
+		# 与形状错误走同一个修复入口。
+		handle_error_output(
+			ctx,
+			command,
+			code="INVALID_PARAM",
+			message=f"automation 配置无效: {exc}",
+			recoverable=True,
+			recovery_action=boss_command_for_ctx(ctx, "config reset automation"),
+		)
+		ctx.exit(1)
 	if force_mode is not None:
 		cfg = replace(cfg, mode=force_mode)
 	platform = ctx.obj.get("platform") or "zhipin"

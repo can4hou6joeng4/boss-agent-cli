@@ -216,12 +216,53 @@ def test_config_set_structured_value_accepts_json_object(tmp_path):
 	assert saved["automation"] == {"mode": "training"}
 
 
+@pytest.mark.parametrize(
+	"value",
+	[
+		'{"mode": "nonsense"}',
+		'{"reply_strategy": "nonsense"}',
+		'{"human_review_threshold": "high"}',
+		'{"allowed_actions": 5}',
+	],
+)
+def test_config_set_automation_rejects_invalid_values(tmp_path, value):
+	"""枚举 / 数值字段写错时不能先落盘，否则 agent run/train 运行时才炸。"""
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "config", "set", "automation", value])
+	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
+	assert "automation 配置无效" in parsed["error"]["message"]
+	assert not (tmp_path / "config.json").exists()
+
+
+def test_config_set_automation_accepts_partial_object(tmp_path):
+	"""缺省字段由解析器补默认值，内容校验不能误伤部分配置。"""
+	code, parsed = _invoke("config", "set", "automation", '{"max_per_tab": 5}', tmp_path=tmp_path)
+	assert code == 0
+	assert parsed["data"]["value"] == {"max_per_tab": 5}
+
+
 def test_agent_run_rejects_non_object_automation_config(tmp_path):
 	"""手工编辑 config.json 写成字符串时，agent 也要给信封与修复入口，而不是 traceback。"""
 	(tmp_path / "config.json").write_text('{"automation": "foo"}', encoding="utf-8")
 	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "agent", "run", "--dry-run"])
 	parsed = _assert_single_stdout_json_error(result, command="agent.run", code="INVALID_PARAM")
 	assert "JSON object" in parsed["error"]["message"]
+	assert parsed["error"]["recoverable"] is True
+	assert "config reset automation" in (parsed["error"]["recovery_action"] or "")
+
+
+@pytest.mark.parametrize(
+	("args", "command"),
+	[
+		(("agent", "run", "--dry-run"), "agent.run"),
+		(("agent", "train"), "agent.train"),
+	],
+)
+def test_agent_rejects_invalid_automation_value(tmp_path, args, command):
+	"""手工写入非法枚举值时，agent run/train 同样要给信封而不是 traceback。"""
+	(tmp_path / "config.json").write_text('{"automation": {"mode": "nonsense"}}', encoding="utf-8")
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), *args])
+	parsed = _assert_single_stdout_json_error(result, command=command, code="INVALID_PARAM")
+	assert "automation 配置无效" in parsed["error"]["message"]
 	assert parsed["error"]["recoverable"] is True
 	assert "config reset automation" in (parsed["error"]["recovery_action"] or "")
 
