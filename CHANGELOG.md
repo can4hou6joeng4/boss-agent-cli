@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `config.json` 里的 `role` 写成数字或无效值（如 `"admin"`）时没有校验：`boss doctor` 把它拼进诊断命令时 `shlex.quote` 抛 `TypeError: expected string or bytes-like object, got 'int'`，其它命令则静默按求职者处理，与 `--role` 只接受 `candidate` / `recruiter` 不一致。现在启动期统一按参数错误返回中文信封（`参数 --role 的值无效: 不支持的角色 5，可选: candidate, recruiter`），`--role` 覆盖后仍可执行 `boss config reset role` 修复；`--role` 的 `Choice` 与该校验共用同一取值域常量。
 - `config.json` 里的 `cdp_url` 不是字符串（手工改成数字，或旧版本写坏结构）时，`boss doctor` 在拼接诊断命令时对值执行 `shlex.quote`，直接抛 `TypeError: expected string or bytes-like object, got 'int'`，stdout 没有任何信封。现在启动期就按参数错误返回中文信封（`参数 --cdp-url 的值无效: 必须是调试地址字符串或 null，收到 9`），`--cdp-url` 覆盖后仍可执行 `boss config reset cdp_url` 修复。
 - `config.json` 里的 `browser_source` 不是字符串（手工改成数字、数组，或旧版本写坏）时，启动阶段直接对值调用 `.strip()`，所有命令都抛 `AttributeError: 'int' object has no attribute 'strip'` traceback，连用来修复它的 `boss config reset browser_source` 也跑不了。现在非字符串值按参数错误返回中文信封（`不支持的浏览器通道 5，可选: auto, stored-cookie, httpx-only, existing-browser`），`--browser-source auto` 覆盖后仍可执行修复命令。
 - `boss platforms` 的过滤参数与 wizard 的平台校验仍有英文：`platforms --platform zhilian` 返回 `unknown platform 'zhilian', supported: zhipin`，`platforms --capability nope` 返回 `unknown capability ...`，`boss wizard` 对已移除平台的旧 run 返回 `... supported: zhipin`，与 `--platform` 全局选项已改好的中文文案不一致。现在统一为「不支持的平台 'zhilian'，可选: zhipin」「不支持的能力 ...」「角色 candidate 不支持平台 ...，可选: ...」。

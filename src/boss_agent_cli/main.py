@@ -92,6 +92,9 @@ def _prescan_exit_codes(args: Sequence[str] | None) -> None:
 
 _SECURITY_ID_LIKE = re.compile(r"^-[A-Za-z0-9_-]{19,}$")
 
+# candidate / recruiter 的取值域：--role 的 Choice 与 config.json 的启动期校验共用。
+_ROLES = ("candidate", "recruiter")
+
 _GLOBAL_OPTIONS_WITH_VALUE = frozenset({
 	"--data-dir",
 	"--delay",
@@ -275,7 +278,7 @@ class BossCliGroup(click.Group):
 @click.option(
 	"--role",
 	default=None,
-	type=click.Choice(["candidate", "recruiter"]),
+	type=click.Choice(_ROLES),
 	help="角色模式：candidate（求职者，默认）/ recruiter（招聘者）",
 )
 @click.option("--log-level", default=None, type=click.Choice(["error", "warning", "info", "debug"]))
@@ -382,6 +385,13 @@ def cli(
 	ctx.obj["platform"] = resolved_platform
 
 	resolved_role = role or cfg.get("role") or "candidate"
+	# config.json 的 role 写成数字或拼错时，下游会把非字符串塞进诊断命令的
+	# shlex.quote（doctor）或静默按求职者处理；启动期就按参数错误挡住。
+	if resolved_role not in _ROLES:
+		raise click.BadParameter(
+			f"不支持的角色 {resolved_role!r}，可选: {', '.join(_ROLES)}",
+			param_hint="--role",
+		)
 	ctx.obj["role"] = resolved_role
 
 	ctx.obj["config"] = cfg
