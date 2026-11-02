@@ -20,7 +20,7 @@ from boss_agent_cli.display import (
 	risk_error_message,
 )
 from boss_agent_cli.output import is_local_io_error
-from boss_agent_cli.wizard.models import StepResult, WorkflowPlan, WorkflowStatus
+from boss_agent_cli.wizard.models import StepResult, WorkflowInputError, WorkflowPlan, WorkflowStatus
 from boss_agent_cli.wizard.store import WorkflowStore
 
 Action = Callable[[Any, Mapping[str, Any], Mapping[str, Any]], StepResult]
@@ -234,6 +234,16 @@ class WorkflowRunner:
 				)
 			except WorkflowActionError as exc:
 				error = exc
+			except WorkflowInputError as exc:
+				# inputs 写错（类型不对）不是网络问题：落到下面的通用兜底会变成
+				# NETWORK_ERROR +「重试当前 run_id」，而重试同一条输入必然复现。
+				recoverable, recovery = error_contract_for_code("INVALID_PARAM")
+				error = WorkflowActionError(
+					"INVALID_PARAM",
+					str(exc),
+					recoverable=recoverable,
+					recovery_action=recovery,
+				)
 			except RequestBudgetExceeded as exc:
 				recoverable, recovery = error_contract_for_code(exc.code)
 				error = WorkflowActionError(exc.code, str(exc), recoverable=recoverable, recovery_action=recovery, details=exc.details)
