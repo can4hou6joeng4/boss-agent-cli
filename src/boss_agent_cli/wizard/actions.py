@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import socket
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -18,7 +17,15 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.platforms.factory import build_platform_instance, build_recruiter_platform_instance
 from boss_agent_cli.services.contact_lookup import FriendLookupLimitExceeded, find_friend
 from boss_agent_cli.crawler.operations import crawl_status
-from boss_agent_cli.crawler.service import CrawlBudget, CrawlService, CrawlSettings
+from boss_agent_cli.crawler.service import (
+	CrawlBudget,
+	CrawlService,
+	CrawlSettings,
+	crawl_cdp_port,
+	crawl_chrome_path,
+	crawl_int_setting,
+	unused_local_port,
+)
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
 from boss_agent_cli.digest import build_digest
 from boss_agent_cli.display import RISK_ERROR_CONTRACTS, risk_error_contract, risk_error_message
@@ -745,12 +752,6 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 		return StepResult({"name": name, **watch_result})
 
 
-def _unused_port() -> int:
-	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
-		connection.bind(("127.0.0.1", 0))
-		return int(connection.getsockname()[1])
-
-
 def _crawl_seed_session(context: ActionContext) -> tuple[dict[str, str], str]:
 	"""Load boss-login cookies for the isolated crawl browser profile."""
 	from boss_agent_cli.auth.manager import AuthRequired
@@ -898,20 +899,41 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 	city_code = CITY_CODES.get(city, city if city.isdigit() else None)
 	if city_code is None:
 		raise WorkflowActionError("INVALID_PARAM", f"unknown city: {city}")
-	settings = CrawlSettings(
-		query=str(_required(inputs, "query")),
-		city_code=city_code,
-		pages=int(inputs.get("pages") or 5),
-		with_detail=bool(inputs.get("with_detail", False)),
-		profile_path=context.data_dir / "crawl" / "chrome-profile",
-		chrome_path=crawl_config.get("chrome_path"),
-		cdp_port=int(crawl_config.get("cdp_port") or _unused_port()),
-		hook_profile=str(inputs.get("hook_profile") or "none"),
-		max_requests=int(crawl_config.get("max_requests") or 20),
-		max_details=int(crawl_config.get("max_details") or 50),
-		max_seconds=int(crawl_config.get("max_seconds") or 600),
-		max_retries=int(crawl_config.get("max_retries") or 1),
-	)
+	raw_pages = inputs.get("pages")
+	try:
+		pages = 5 if raw_pages is None else int(raw_pages)
+	except (TypeError, ValueError) as exc:
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"pages 必须是整数: {raw_pages!r}",
+			recovery_action="传入 1 以上的整数 pages",
+		) from exc
+	if pages < 1:
+		raise WorkflowActionError("INVALID_PARAM", f"pages 必须大于等于 1: {pages}", recovery_action="传入 1 以上的整数 pages")
+	raw_port = crawl_config.get("cdp_port")
+	try:
+		settings = CrawlSettings(
+			query=str(_required(inputs, "query")),
+			city_code=city_code,
+			pages=pages,
+			with_detail=bool(inputs.get("with_detail", False)),
+			profile_path=context.data_dir / "crawl" / "chrome-profile",
+			chrome_path=crawl_chrome_path(crawl_config.get("chrome_path")),
+			cdp_port=unused_local_port() if raw_port is None else crawl_cdp_port(raw_port),
+			hook_profile=str(inputs.get("hook_profile") or "none"),
+			max_requests=crawl_int_setting(crawl_config, "max_requests", 20),
+			max_details=crawl_int_setting(crawl_config, "max_details", 50),
+			max_seconds=crawl_int_setting(crawl_config, "max_seconds", 600),
+			max_retries=crawl_int_setting(crawl_config, "max_retries", 1, minimum=0),
+		)
+	except (TypeError, ValueError) as exc:
+		# 手工编辑 config.json 写坏 crawl 段时不能落成可重试的 NETWORK_ERROR：
+		# 重试同一个 run_id 永远修不好配置。与 CLI 路径一致，指向 config reset。
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"crawl 配置无效: {exc}",
+			recovery_action="boss config reset crawl",
+		) from exc
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		outcome = _crawl_service(context, cache).create_and_run(settings)
 		return _crawl_outcome_result(outcome, cache)

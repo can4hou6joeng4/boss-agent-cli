@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -18,7 +17,14 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import operating_mode, require_compliance_allowed
 from boss_agent_cli.config import DEFAULTS
 from boss_agent_cli.crawler.operations import crawl_results, crawl_status, import_crawl_shortlist
-from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
+from boss_agent_cli.crawler.service import (
+	CrawlService,
+	CrawlSettings,
+	crawl_cdp_port,
+	crawl_chrome_path,
+	crawl_int_setting,
+	unused_local_port,
+)
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
 from boss_agent_cli.display import (
 	handle_auth_errors,
@@ -81,24 +87,6 @@ def _require_crawl_capabilities(ctx: click.Context, hook_profile: str | None = N
 	return hook_profile in (None, "none") or require_compliance_allowed(ctx, "crawl-hook")
 
 
-def _crawl_int_setting(cfg: dict[str, Any], key: str, default: int, *, minimum: int = 1) -> int:
-	"""读取整数型 crawl 配置；显式值优先于默认值。
-
-	不能用 `value or default`：`max_retries=0` 是 `crawl configure` 明确接受的值，
-	用 or 会把 0 当成缺省并悄悄改回 1。
-	"""
-	value = cfg.get(key)
-	if value is None:
-		return default
-	try:
-		parsed = int(value)
-	except (TypeError, ValueError) as exc:
-		raise ValueError(f"crawl 配置项 {key} 必须是整数") from exc
-	if parsed < minimum:
-		raise ValueError(f"crawl 配置项 {key} 不能小于 {minimum}")
-	return parsed
-
-
 def _settings_from_context(
 	ctx: click.Context,
 	*,
@@ -118,21 +106,11 @@ def _settings_from_context(
 	resolved_hook = hook_profile or "none"
 	if resolved_hook not in _HOOK_CHOICES:
 		raise ValueError(f"unknown hook profile: {resolved_hook}")
-	resolved_chrome = chrome_path or cfg.get("chrome_path")
-	if resolved_chrome is not None and not isinstance(resolved_chrome, str):
-		raise ValueError("crawl 配置项 chrome_path 必须是字符串或 null")
+	resolved_chrome = crawl_chrome_path(chrome_path or cfg.get("chrome_path"))
 	resolved_port = cdp_port
 	if resolved_port is None:
 		raw_port = cfg.get("cdp_port")
-		if raw_port is None:
-			resolved_port = _unused_local_port()
-		else:
-			try:
-				resolved_port = int(raw_port)
-			except (TypeError, ValueError) as exc:
-				raise ValueError("crawl 配置项 cdp_port 必须是整数") from exc
-			if not 1 <= resolved_port <= 65535:
-				raise ValueError("crawl 配置项 cdp_port 必须在 1-65535 之间")
+		resolved_port = unused_local_port() if raw_port is None else crawl_cdp_port(raw_port)
 	return CrawlSettings(
 		query=query,
 		city_code=_city_code(city),
@@ -143,18 +121,12 @@ def _settings_from_context(
 		cdp_port=resolved_port,
 		hook_profile=resolved_hook,
 		hook_dir=Path(hook_dir).expanduser() if hook_dir else None,
-		max_requests=_crawl_int_setting(cfg, "max_requests", 20),
-		max_details=_crawl_int_setting(cfg, "max_details", 50),
-		max_seconds=_crawl_int_setting(cfg, "max_seconds", 600),
-		max_retries=_crawl_int_setting(cfg, "max_retries", 1, minimum=0),
+		max_requests=crawl_int_setting(cfg, "max_requests", 20),
+		max_details=crawl_int_setting(cfg, "max_details", 50),
+		max_seconds=crawl_int_setting(cfg, "max_seconds", 600),
+		max_retries=crawl_int_setting(cfg, "max_retries", 1, minimum=0),
 		operating_mode=operating_mode(ctx),
 	)
-
-
-def _unused_local_port() -> int:
-	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
-		connection.bind(("127.0.0.1", 0))
-		return int(connection.getsockname()[1])
 
 
 def _session_seed(ctx: click.Context) -> tuple[dict[str, str], str]:

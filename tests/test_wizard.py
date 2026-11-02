@@ -5,6 +5,7 @@ import select
 import subprocess
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -504,6 +505,53 @@ def test_crawl_actions_use_fixture_service_and_persist_stop(tmp_path, monkeypatc
 	assert stopped.data == {"run_id": "crawl-existing", "status": "stop_requested"}
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
 		assert cache.get_crawl_run("crawl-existing")["stop_requested"] is True
+
+
+def test_crawl_action_honors_configured_zero_max_retries(tmp_path, monkeypatch):
+	service = _FakeCrawlService()
+	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache: service)
+	context = replace(
+		_action_context(tmp_path),
+		config={"crawl": {"max_retries": 0, "cdp_port": 9333, "chrome_path": "/opt/chrome"}},
+	)
+	DEFAULT_ACTIONS["crawl_start"](context, {"query": "Python", "city": "北京"}, {})
+	settings = service.created_settings
+	assert settings is not None
+	assert settings.max_retries == 0
+	assert settings.cdp_port == 9333
+	assert settings.chrome_path == "/opt/chrome"
+
+
+@pytest.mark.parametrize(
+	("crawl_config", "field"),
+	[
+		({"max_requests": [1]}, "max_requests"),
+		({"max_requests": 0}, "max_requests"),
+		({"max_retries": -1}, "max_retries"),
+		({"cdp_port": "abc"}, "cdp_port"),
+		({"cdp_port": 70000}, "cdp_port"),
+		({"chrome_path": 5}, "chrome_path"),
+	],
+)
+def test_crawl_action_rejects_invalid_config(tmp_path, monkeypatch, crawl_config, field):
+	service = _FakeCrawlService()
+	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache: service)
+	context = replace(_action_context(tmp_path), config={"crawl": crawl_config})
+	with pytest.raises(WorkflowActionError) as excinfo:
+		DEFAULT_ACTIONS["crawl_start"](context, {"query": "Python", "city": "北京"}, {})
+	assert excinfo.value.code == "INVALID_PARAM"
+	assert field in str(excinfo.value)
+	assert excinfo.value.recovery_action == "boss config reset crawl"
+	assert service.created_settings is None
+
+
+@pytest.mark.parametrize("pages", ["abc", 0])
+def test_crawl_action_rejects_invalid_pages(tmp_path, pages):
+	context = replace(_action_context(tmp_path), config={})
+	with pytest.raises(WorkflowActionError) as excinfo:
+		DEFAULT_ACTIONS["crawl_start"](context, {"query": "Python", "city": "北京", "pages": pages}, {})
+	assert excinfo.value.code == "INVALID_PARAM"
+	assert "pages" in str(excinfo.value)
 
 
 class _FakeRecruiterPlatform:
