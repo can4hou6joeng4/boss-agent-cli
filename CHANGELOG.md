@@ -20,6 +20,7 @@
 - 风控信封的消息脱敏只覆盖了异常路径：`search`、`watch`、`detail` 与共用 `handle_platform_error_output` 的三十余条命令在平台以响应字典返回风控码时，仍把平台响应原文当作 `error.message`。现在由 `platform_error_message()` 统一决定文案：风控码只给错误码登记表内容，普通错误码继续保留平台消息或命令兜底文案。
 - 预算 / 时限停止（`RequestBudgetExceeded`、请求控制停止、`WORKFLOW_STOPPED` / `WORKFLOW_TIMEOUT`）在四条命令里被当成普通失败：`detail` 的 httpx 快速通道失败后会改用浏览器通道再发一次请求；`batch-greet` 会 sleep 后重试并向下一批候选人继续打招呼；`hr download-resume` 回 `NETWORK_ERROR` 并提示“检查网络后重试”；`me` 同样落进 `NETWORK_ERROR` 兜底。停止信号本应终止当前 workflow、不产生新请求。现在四处都按 `is_request_stop` / `RequestBudgetExceeded` 立即停止：`batch-greet` 输出 `ok:false` 信封并带上已完成的 `details`，`detail` 不再降级通道，`hr download-resume` 与 `me` 按错误码登记表给出 `recoverable` / `recovery_action`。
 - 风控信封的消息脱敏还漏了三处会进入 JSON 输出的路径：`boss wizard` 运行器把 `PlatformRiskError` 的 `str(exc)` 写进 `error.message`；招聘者自动化适配器把同类文本存进健康检查的 `warning`（进而成为 `hr agent run` 事件原因）；爬虫的运行结果 `error` 字段与 `CrawlRiskError.from_response()` 直接拼接平台响应 `message`。这些文本来自平台响应原文，可能带临时凭据。现在四处都改用 `risk_error_message()`，只保留错误码登记表文案与停止指引；爬虫本地产生的风险提示（如未登录）不受影响。
+- 招聘者侧还有两条风控路径会把平台原文或成功信封带出去：`hr greet` 在平台以响应字典返回风控码时把 `platform_message` 原样写进 `error.details`；`hr chat` 的 `userLastMsg` 补充摘要在命中风控码时只记成 `partial_error` / `last_messages_error`，仍输出 `ok:true`，审计 `hr last-messages` 也继续返回部分结果。现在 `hr greet` 的风控错误不再保留平台原文，`userLastMsg` 的风控码与异常形态一样立即终止，输出风控信封并停止后续请求。
 
 ## [3.2.0] - 2026-11-01
 

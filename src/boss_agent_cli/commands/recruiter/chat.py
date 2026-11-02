@@ -4,6 +4,7 @@ from typing import Any
 
 import click
 
+from boss_agent_cli.api.client import RISK_ERROR_BY_CODE
 from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
@@ -355,6 +356,10 @@ def _fetch_last_messages(
 			stats["failed_response"] = result
 			if isinstance(result, dict):
 				code, message = platform.parse_error(result)
+				risk_cls = RISK_ERROR_BY_CODE.get(code)
+				if risk_cls is not None:
+					# 响应字典形态的风控同样是停止信号：不能降级成 partial_error 后继续输出 ok:true。
+					raise risk_cls(message or code)
 				stats["error"] = message or f"code={result.get('code')}"
 				if code is not None:
 					stats["error_code"] = code

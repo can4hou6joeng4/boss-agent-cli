@@ -265,6 +265,19 @@ def test_greet_environment_risk_does_not_suggest_more_requests(
 
 
 
+def test_greet_risk_response_keeps_platform_message_out_of_details(
+	greeting_args: list[str], greeting_platform: MagicMock,
+) -> None:
+	"""响应字典形态的风控：平台原文可能带临时凭据，不能写进 error.details。"""
+	greeting_platform.start_chat.return_value = {"code": 37, "message": "fixture-platform-response-token"}
+	result = CliRunner().invoke(cli, greeting_args + ["--yes"])
+	body = json.loads(result.output)
+	assert result.exit_code == 1
+	assert body["error"]["code"] == "ENVIRONMENT_RISK"
+	assert "platform_message" not in body["error"]["details"]
+	assert "fixture-platform-response-token" not in result.output
+
+
 def test_compliance_precedes_confirmation(greeting_args):
 	with patch("boss_agent_cli.commands.recruiter.recommendations.require_compliance_allowed", return_value=False) as compliance:
 		result = CliRunner().invoke(cli, greeting_args)

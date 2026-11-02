@@ -101,6 +101,22 @@ def test_page_snapshot_stop_errors_abort_before_last_messages_request(failure, c
 	platform.last_messages.assert_not_called()
 
 
+def test_last_messages_risk_response_aborts_instead_of_partial_success():
+	"""userLastMsg 返回风控码时不能记成 partial_error 后继续输出 ok:true。"""
+	platform = _platform([dict(LIVE_ITEM)], last_messages={"code": 36, "message": "fixture-platform-response-token"})
+	platform.parse_error.side_effect = lambda response: ("ACCOUNT_RISK", response.get("message"))
+	with patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance", return_value=platform), \
+		patch("boss_agent_cli.commands.recruiter.chat.AuthManager"):
+		result = CliRunner().invoke(cli, ["--role", "recruiter", "--json", "hr", "chat"])
+
+	assert result.exit_code == 1
+	body = json.loads(result.output)
+	assert body["error"]["code"] == "ACCOUNT_RISK"
+	assert body["error"]["recoverable"] is False
+	assert "fixture-platform-response-token" not in result.output
+	platform.last_messages.assert_called_once()
+
+
 def test_only_friends_missing_from_page_hit_last_messages():
 	other = {**LIVE_ITEM, "friendId": 66002}
 	snapshot = {"ok": True, "items": [{"friendId": 66001, "lastMsg": "你好", "newMsgCount": 0}]}

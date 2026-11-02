@@ -153,7 +153,9 @@ def greet_cmd(
 			return
 		if not platform.is_success(result):
 			code, platform_message = platform.parse_error(result)
-			data["platform_message"] = platform_message
+			if code not in RISK_ERROR_CONTRACTS:
+				# 风控码的平台原文可能带临时凭据，不落 details；GREET_LIMIT 等仍需原样诊断。
+				data["platform_message"] = platform_message
 			if type(result.get("code")) is int:
 				data["platform_code"] = result["code"]
 			if code == "GREET_LIMIT":
