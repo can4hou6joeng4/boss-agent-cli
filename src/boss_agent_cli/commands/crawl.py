@@ -452,14 +452,23 @@ def resume_cmd(
 		return
 	raise_if_locked(Path(ctx.obj["data_dir"]))
 	if background:
+		already_complete = False
 		try:
 			with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 				run = cache.get_crawl_run(run_id)
 				if run is None:
 					raise KeyError(run_id)
 				status = str(run["status"])
-			should_launch = status not in {"queued", "running"}
-			if should_launch:
+				# 与 CrawlService.resume 的前置条件保持一致：完成的 run 只有在
+				# 请求了更多页或还有待补详情时才有可恢复的工作。
+				needs_more_pages = (
+					not bool(run["list_finished"]) and pages is not None and pages >= int(run["next_page"])
+				)
+				pending_details = with_detail and any(
+					not item["detail_done"] for item in cache.list_crawl_jobs(run_id)
+				)
+				already_complete = status == "completed" and not (needs_more_pages or pending_details)
+			if not already_complete and status not in {"queued", "running"}:
 				_launch_background_resume(
 					Path(ctx.obj["data_dir"]),
 					run_id,
@@ -478,6 +487,16 @@ def resume_cmd(
 				message=f"无法启动 crawl 后台任务: {exc}",
 				recoverable=True,
 				recovery_action=f"检查磁盘空间与数据目录权限后执行 boss crawl resume {run_id} 重试",
+			)
+			return
+		if already_complete:
+			# 拉起一个没有工作的后台进程只会让它立即退出，却让调用方以为任务重新排队。
+			handle_output(
+				ctx,
+				"crawl.resume",
+				{"run_id": run_id, "status": "completed", "background": True},
+				render=lambda d: render_action_result(d, title="crawl resume", next_steps=[f"boss crawl results {run_id}"]),
+				hints={"next_actions": [f"boss crawl results {run_id}"]},
 			)
 			return
 		handle_output(

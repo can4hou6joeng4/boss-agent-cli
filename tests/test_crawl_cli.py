@@ -290,6 +290,53 @@ def test_resume_background_does_not_relaunch_an_already_running_job(tmp_path, mo
 	assert launched == [], "已在运行的任务重复拉起会产生并发采集，属风控风险"
 
 
+def test_resume_background_returns_completed_without_relaunch(tmp_path, monkeypatch):
+	launched: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._launch_background_resume",
+		lambda data_dir, run_id, **kwargs: launched.append(run_id),
+	)
+	_seed_run(tmp_path, "run-done", status="completed")
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, "crawl", "resume", "run-done", "--background")
+	assert result.exit_code == 0, result.output
+	payload = _envelope(result)
+	assert payload["data"] == {"run_id": "run-done", "status": "completed", "background": True}
+	assert payload["hints"]["next_actions"] == ["boss crawl results run-done"]
+	assert launched == [], "已完成的 run 没有可恢复的工作，拉起后台进程只会立即退出并谎报 queued"
+
+
+def test_resume_background_relaunches_completed_run_when_detail_pending(tmp_path, monkeypatch):
+	launched: list[tuple[str, bool]] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._launch_background_resume",
+		lambda data_dir, run_id, **kwargs: launched.append((run_id, bool(kwargs.get("with_detail")))),
+	)
+	_seed_run(tmp_path, "run-done", status="completed", jobs=2)
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, "crawl", "resume", "run-done", "--background", "--with-detail")
+	assert result.exit_code == 0, result.output
+	assert _envelope(result)["data"]["status"] == "queued"
+	assert launched == [("run-done", True)], "还有待补详情时必须真正恢复"
+
+
+def test_resume_background_relaunches_completed_run_when_more_pages_requested(tmp_path, monkeypatch):
+	launched: list[tuple[str, int | None]] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._launch_background_resume",
+		lambda data_dir, run_id, **kwargs: launched.append((run_id, kwargs.get("pages"))),
+	)
+	_seed_run(tmp_path, "run-done", status="completed")
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, "crawl", "resume", "run-done", "--background", "--pages", "10")
+	assert result.exit_code == 0, result.output
+	assert _envelope(result)["data"]["status"] == "queued"
+	assert launched == [("run-done", 10)], "列表未采完且请求了更多页时必须真正恢复"
+
+
 # ── status / stop / results ───────────────────────────────────────────
 
 
