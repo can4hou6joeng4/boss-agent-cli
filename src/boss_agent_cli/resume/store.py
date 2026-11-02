@@ -6,6 +6,10 @@ from typing import Any
 from boss_agent_cli.resume.models import ResumeData, ResumeFile, dict_to_resume, resume_to_dict
 
 
+class ResumeImportError(ValueError):
+	"""导入文件不是可用的简历 JSON；消息是给用户看的修复指引。"""
+
+
 def _safe_filename(name: str) -> str:
 	"""将简历名称转为安全的文件名"""
 	return name.replace("/", "_").replace("\\", "_").replace("\0", "_")
@@ -27,12 +31,15 @@ class ResumeStore:
 		for path in sorted(self._dir.glob("*.json")):
 			try:
 				raw = json.loads(path.read_text(encoding="utf-8"))
+				if not isinstance(raw, dict):
+					# 手写坏的简历文件不该让整份列表都打不开。
+					continue
 				results.append({
 					"name": raw.get("name", ""),
 					"title": raw.get("title", ""),
 					"updated_at": raw.get("updated_at", ""),
 				})
-			except (json.JSONDecodeError, OSError):
+			except (json.JSONDecodeError, UnicodeDecodeError, OSError):
 				continue
 		return results
 
@@ -43,8 +50,12 @@ class ResumeStore:
 			return None
 		try:
 			raw = json.loads(path.read_text(encoding="utf-8"))
+			if not isinstance(raw, dict):
+				return None
 			return dict_to_resume(raw)
-		except (json.JSONDecodeError, OSError):
+		except (json.JSONDecodeError, UnicodeDecodeError, OSError, AttributeError, TypeError):
+			# 字段类型写错（如 personal_info 写成数组）时模型解析会抛 AttributeError：
+			# 与语法损坏同样按「读不出来」处理，避免 resume show 甩 traceback。
 			return None
 
 	def save(self, resume: ResumeData) -> None:
@@ -68,11 +79,24 @@ class ResumeStore:
 
 	def import_file(self, file_path: Path) -> ResumeData:
 		"""导入 JSON 文件（兼容 wzdnzd/zine0 camelCase 格式）"""
-		raw_text = file_path.read_text(encoding="utf-8")
-		raw = json.loads(raw_text)
+		try:
+			raw_text = file_path.read_text(encoding="utf-8")
+		except UnicodeDecodeError as exc:
+			# GBK 保存的 JSON、误选的 PDF / 图片都会走到这里：报一句能指导操作的话，
+			# 而不是把 codecs 的 traceback 甩给调用方。
+			raise ResumeImportError("文件不是 UTF-8 编码的文本；请先转存为 UTF-8 的 JSON 再导入") from exc
+		try:
+			raw = json.loads(raw_text)
+		except json.JSONDecodeError as exc:
+			raise ResumeImportError(f"不是合法 JSON（第 {exc.lineno} 行第 {exc.colno} 列：{exc.msg}）") from exc
 
-		if "version" in raw and "data" in raw and isinstance(raw["data"], dict):
+		if isinstance(raw, dict) and "version" in raw and "data" in raw and isinstance(raw["data"], dict):
 			raw = raw["data"]
+		if not isinstance(raw, dict):
+			raise ResumeImportError("顶层必须是 JSON 对象")
+		name = raw.get("name")
+		if not isinstance(name, str) or not name.strip():
+			raise ResumeImportError("缺少非空字符串字段 name")
 
 		resume = dict_to_resume(raw)
 		self.save(resume)

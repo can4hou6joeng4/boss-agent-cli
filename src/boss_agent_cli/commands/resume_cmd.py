@@ -13,7 +13,7 @@ from boss_agent_cli.display import (
 	render_record_result,
 )
 from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, resume_to_dict
-from boss_agent_cli.resume.store import ResumeStore
+from boss_agent_cli.resume.store import ResumeImportError, ResumeStore
 
 
 def _get_store(ctx: click.Context) -> ResumeStore:
@@ -283,11 +283,21 @@ def resume_import_cmd(ctx: click.Context, file_path: Path) -> None:
 	store = _get_store(ctx)
 	try:
 		resume = store.import_file(path)
-	except (json.JSONDecodeError, KeyError, TypeError) as exc:
+	except ResumeImportError as exc:
 		handle_error_output(
 			ctx, "resume",
 			code="INVALID_PARAM",
-			message=f"文件解析失败: {exc}",
+			message=f"文件 '{file_path}' 导入失败: {exc}",
+		)
+		ctx.exit(1)
+		return
+	except (KeyError, TypeError, AttributeError, ValueError) as exc:
+		# 结构不对的 JSON（字段类型写错、嵌套层不是对象）只在模型解析时暴露：
+		# 这是用户输入边界，兜底成 INVALID_PARAM，而不是把 traceback 甩出去。
+		handle_error_output(
+			ctx, "resume",
+			code="INVALID_PARAM",
+			message=f"文件 '{file_path}' 解析失败: {exc}",
 		)
 		ctx.exit(1)
 		return
