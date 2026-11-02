@@ -533,7 +533,8 @@ def test_export_without_query_returns_actionable_recovery():
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "INVALID_PARAM"
-	assert parsed["error"]["recoverable"] is True
+	# 用法错误不可恢复：原样重试只会再次失败，应按 recovery_action 修正参数
+	assert parsed["error"]["recoverable"] is False
 	assert "boss export" in parsed["error"]["recovery_action"]
 
 
