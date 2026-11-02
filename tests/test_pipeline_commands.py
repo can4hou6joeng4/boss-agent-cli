@@ -26,11 +26,12 @@ def _chat_item(
 	relation_type=1,
 	unread=0,
 	last_ts=1700000000000,
+	uid=12345,
 ):
 	return {
 		"name": "张HR",
 		"securityId": security_id,
-		"uid": 12345,
+		"uid": uid,
 		"title": "HR",
 		"brandName": "TestCo",
 		"friendSource": 0,
@@ -99,7 +100,7 @@ def test_follow_up_command_aggregates_items_from_second_page(mock_auth_cls, mock
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.side_effect = [
 		_friend_list_response([_chat_item(unread=1, security_id="sec_001", job_id="job_001")]),
-		_friend_list_response([_chat_item(unread=0, security_id="sec_page2", job_id="job_page2", last_ts=1700000000000)]),
+		_friend_list_response([_chat_item(unread=0, security_id="sec_page2", job_id="job_page2", last_ts=1700000000000, uid=67890)]),
 		_friend_list_response([]),
 	]
 	mock_client.interview_data.return_value = {"zpData": {"interviewList": []}}
