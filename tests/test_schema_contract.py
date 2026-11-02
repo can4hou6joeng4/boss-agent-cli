@@ -263,3 +263,19 @@ def test_industry_choices_derive_from_lookup_table():
 	commands = SCHEMA_DATA["commands"]
 	for name in ("search", "batch-greet"):
 		assert commands[name]["options"]["--industry"]["choices"] == list(INDUSTRY_CODES), name
+
+
+def test_cli_error_envelope_metadata_matches_registry():
+	"""端到端：命令只传 code / message 时，信封元数据由登记表补齐。
+
+	曾经的缺口：命令层大量 `INVALID_PARAM` 调用点不传 `recoverable` /
+	`recovery_action`，信封里两者落成 `false` / `null`，Agent 拿不到
+	`schema.error_codes` 中已经声明好的「修正参数」指引。
+	"""
+	from boss_agent_cli.schema.error_codes import ERROR_CODES
+
+	result = CliRunner().invoke(cli, ["--json", "export", "--url", "https://example.com/not-boss"])
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["recoverable"] is ERROR_CODES["INVALID_PARAM"]["recoverable"]
+	assert parsed["error"]["recovery_action"] == ERROR_CODES["INVALID_PARAM"]["recovery_action"]

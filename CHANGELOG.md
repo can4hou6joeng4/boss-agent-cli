@@ -31,6 +31,7 @@
 - `boss ai local import` 的 `MODEL_SOURCE_NOT_FOUND`（模型源路径不存在）会出现在错误信封里，却未登记在 `boss schema` 的错误码表。同时 `tests/test_schema_contract.py` 的覆盖率断言依赖一份手工错误码清单，新增码不会自动被检查——上一轮的 `HOOK_BLOCKED` 等三码正是这样漏掉的。现在该码已登记，`ai.local.import` 的 `recoverable` / `recovery_action` 取自登记表；测试改为扫描源码中形如错误码的字符串字面量，任何未登记的新码都会让测试失败。
 - 两条恢复指引指向了无效操作：`crawl start` 后台任务拉起失败（OSError）时要求「设置 operating_mode=research」，但该模式门槛已不再限制任何能力，照做不会改变结果；`resume export --format pdf` 失败时提示 `uv run playwright install chromium`，而 PDF 导出实际用 patchright 渲染。现在 crawl 的指引改为检查磁盘空间与数据目录权限后按 run_id 恢复（没有 run_id 时重新 `boss crawl start`），PDF 导出的 `recoverable` / `recovery_action` 取自错误码登记表，提示 `patchright install chromium`。
 - `boss logout` 的异常路径把本地登录态清除失败（如磁盘满、权限不足）报成 `NETWORK_ERROR`，还标记 `recoverable: false` 且不给 `recovery_action`：Agent 既不会重试也不知道该检查什么。现在改用新登记的 `LOGOUT_FAILED`（可恢复，指引检查数据目录权限与磁盘空间后重试）。`boss export` 未提供 query / `--url` 时返回的 `INVALID_PARAM` 却被标成 `recoverable: true`，Agent 原样重试只会再次失败；现在与登记表一致标为不可恢复，保留修正参数的恢复指引。
+- 命令层大量错误信封只传 `code` / `message`，`recoverable` 与 `recovery_action` 因此落成 `false` / `null`，与 `boss schema` 的错误码登记表矛盾：例如 `INVALID_PARAM` 已登记「修正参数」，Agent 却拿不到任何指引；联系人查找的网络错误被标成不可恢复；招聘者 `accept-resume` / `download-resume` 的平台不支持同样被标成不可恢复。现在 `envelope_error` 与 `handle_error_output` 在调用方未显式声明时从登记表补齐元数据，TTY 与 JSON 两条路径看到同一份恢复契约；显式传入的 `recoverable: false`（如写操作结果未知）仍优先，不会被登记表覆盖。
 
 ## [3.2.0] - 2026-11-01
 

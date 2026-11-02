@@ -176,6 +176,39 @@ def test_envelope_error():
 	assert parsed["hints"]["cookie"] == "[REDACTED]"
 
 
+def test_envelope_error_fills_contract_from_registry():
+	"""只传 code / message 时按错误码登记表补齐元数据。"""
+	from boss_agent_cli.schema.error_codes import ERROR_CODES
+
+	parsed = json.loads(envelope_error("search", code="NETWORK_ERROR", message="请求失败"))
+	assert parsed["error"]["recoverable"] is ERROR_CODES["NETWORK_ERROR"]["recoverable"]
+	assert parsed["error"]["recovery_action"] == ERROR_CODES["NETWORK_ERROR"]["recovery_action"]
+
+
+def test_envelope_error_explicit_contract_wins_over_registry():
+	"""显式 False 表示调用方判定不可重试，不能被登记表的 True 覆盖。"""
+	from boss_agent_cli.schema.error_codes import ERROR_CODES
+
+	assert ERROR_CODES["NETWORK_ERROR"]["recoverable"] is True
+	parsed = json.loads(
+		envelope_error(
+			"search",
+			code="NETWORK_ERROR",
+			message="请求失败",
+			recoverable=False,
+			recovery_action="不要自动重试",
+		)
+	)
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["error"]["recovery_action"] == "不要自动重试"
+
+
+def test_envelope_error_unknown_code_keeps_empty_contract():
+	parsed = json.loads(envelope_error("search", code="NOT_REGISTERED_CODE", message="未知错误"))
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["error"]["recovery_action"] is None
+
+
 def test_envelope_error_redacts_sensitive_values_inside_message():
 	result = envelope_error(
 		"search",
