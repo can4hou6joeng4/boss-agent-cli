@@ -351,8 +351,13 @@ def cli(
 
 	# 归一化（大小写/首尾空白）后再校验，与下游 resolve_policy 的 .strip().lower() 一致，
 	# 避免 config.json 里 "Auto" / " stored-cookie " 这类值被 CLI 拒绝、策略层却接受的不一致。
-	resolved_browser_source = (browser_source or cfg.get("browser_source") or "auto").strip().lower()
-	if resolved_browser_source not in BROWSER_SOURCES:
+	# config.json 被手改成数字 / 数组时不能直接 .strip()：那会在每条命令启动期抛
+	# AttributeError traceback，连 `config reset browser_source` 都跑不了。
+	raw_browser_source = browser_source or cfg.get("browser_source") or "auto"
+	resolved_browser_source = (
+		raw_browser_source.strip().lower() if isinstance(raw_browser_source, str) else raw_browser_source
+	)
+	if not isinstance(resolved_browser_source, str) or resolved_browser_source not in BROWSER_SOURCES:
 		raise click.BadParameter(
 			f"不支持的浏览器通道 {resolved_browser_source!r}，可选: {', '.join(BROWSER_SOURCES)}",
 			param_hint="--browser-source",
