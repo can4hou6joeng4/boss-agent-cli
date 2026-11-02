@@ -198,6 +198,34 @@ def test_config_set_null_value(tmp_path):
 	assert parsed["data"]["value"] is None
 
 
+@pytest.mark.parametrize("key", ["automation", "crawl"])
+@pytest.mark.parametrize("value", ["foo", "[]", "42", "null"])
+def test_config_set_structured_value_requires_json_object(tmp_path, key, value):
+	"""structured key 不接受标量文本：写进去会让后续读取方在 .get() 上崩溃。"""
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "config", "set", key, value])
+	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
+	assert "JSON object" in parsed["error"]["message"]
+	assert not (tmp_path / "config.json").exists()
+
+
+def test_config_set_structured_value_accepts_json_object(tmp_path):
+	code, parsed = _invoke("config", "set", "automation", '{"mode": "training"}', tmp_path=tmp_path)
+	assert code == 0
+	assert parsed["data"]["value"] == {"mode": "training"}
+	saved = json.loads((tmp_path / "config.json").read_text())
+	assert saved["automation"] == {"mode": "training"}
+
+
+def test_agent_run_rejects_non_object_automation_config(tmp_path):
+	"""手工编辑 config.json 写成字符串时，agent 也要给信封与修复入口，而不是 traceback。"""
+	(tmp_path / "config.json").write_text('{"automation": "foo"}', encoding="utf-8")
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "agent", "run", "--dry-run"])
+	parsed = _assert_single_stdout_json_error(result, command="agent.run", code="INVALID_PARAM")
+	assert "JSON object" in parsed["error"]["message"]
+	assert parsed["error"]["recoverable"] is True
+	assert "config reset automation" in (parsed["error"]["recovery_action"] or "")
+
+
 def test_config_set_unknown_key(tmp_path):
 	"""设置未知配置项应返回 Agent 可消费的 stdout JSON 错误包络。"""
 	runner = CliRunner()

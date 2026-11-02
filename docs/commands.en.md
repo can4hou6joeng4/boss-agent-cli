@@ -231,6 +231,8 @@ If an older configuration already contains an unsupported platform, explicitly s
 boss --platform zhipin config set platform zhipin
 ```
 
+Structured settings `automation` and `crawl` require a JSON object, e.g. `boss config set automation '{"mode": "training"}'`; scalar text is rejected with `INVALID_PARAM` and nothing is written. If a hand-edited `config.json` holds a non-object value, `boss agent run` / `train` return `INVALID_PARAM` with a `boss config reset automation` repair path instead of exiting with a traceback.
+
 ### Shared request budget and cooldown
 
 CLI calls, Python clients, MCP subprocesses and crawl using the same `data_dir` share a local execution lease and a rolling 60-second budget. An active operation holds the lease through response classification. Failed attempts and permitted read replays consume slots too. Process exit releases the lease without resetting budgets, cooldowns or platform risk locks.

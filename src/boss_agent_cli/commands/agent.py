@@ -29,6 +29,7 @@ from boss_agent_cli.commands.crawl import _require_crawl_capabilities, _settings
 from boss_agent_cli.crawler.operations import crawl_status, import_crawl_shortlist
 from boss_agent_cli.crawler.service import CrawlService
 from boss_agent_cli.display import (
+	boss_command_for_ctx,
 	handle_auth_errors,
 	handle_error_output,
 	handle_output,
@@ -62,7 +63,7 @@ def agent_group() -> None:
 @click.pass_context
 def run_cmd(ctx: click.Context, dry_run: bool, limit: int | None, resume: bool) -> None:
 	"""运行一轮招聘自动化。"""
-	report = _run_agent(ctx, dry_run=dry_run, limit=limit, force_mode=None, resume=resume)
+	report = _run_agent(ctx, dry_run=dry_run, limit=limit, force_mode=None, command="agent.run", resume=resume)
 	handle_output(
 		ctx,
 		"agent.run",
@@ -261,6 +262,7 @@ def train_cmd(ctx: click.Context, dry_run: bool, limit: int | None) -> None:
 		dry_run=dry_run,
 		limit=limit,
 		force_mode=AutomationMode.TRAINING,
+		command="agent.train",
 	)
 	handle_output(
 		ctx,
@@ -424,9 +426,23 @@ def _run_agent(
 	dry_run: bool,
 	limit: int | None,
 	force_mode: AutomationMode | None,
+	command: str,
 	resume: bool = False,
 ) -> RunReport:
-	cfg = automation_config_from_dict((ctx.obj.get("config") or {}).get("automation"))
+	raw_config = (ctx.obj.get("config") or {}).get("automation")
+	if raw_config is not None and not isinstance(raw_config, dict):
+		# 手工编辑 config.json 把 automation 写成字符串时，不能带着 traceback 退出：
+		# 按信封契约给出修复入口，用户执行后即可恢复。
+		handle_error_output(
+			ctx,
+			command,
+			code="INVALID_PARAM",
+			message="automation 配置必须是 JSON object",
+			recoverable=True,
+			recovery_action=boss_command_for_ctx(ctx, "config reset automation"),
+		)
+		ctx.exit(1)
+	cfg = automation_config_from_dict(raw_config)
 	if force_mode is not None:
 		cfg = replace(cfg, mode=force_mode)
 	platform = ctx.obj.get("platform") or "zhipin"

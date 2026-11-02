@@ -249,6 +249,8 @@ boss config set platform zhipin
 boss --platform zhipin config set platform zhipin
 ```
 
+结构化配置项 `automation`、`crawl` 必须以 JSON object 传值，例如 `boss config set automation '{"mode": "training"}'`；标量文本会被拒绝并返回 `INVALID_PARAM`，不会写入配置文件。手工编辑 `config.json` 造成该键不是对象时，`boss agent run` / `train` 返回 `INVALID_PARAM` 并给出 `boss config reset automation` 修复入口，不再以 traceback 退出。
+
 ### 共享请求预算与冷却
 
 同一 `data_dir` 的 CLI、Python 客户端、MCP 子进程与 crawl 共用本地执行锁和滑动 60 秒预算。一次主动操作持锁至响应分类结束；失败尝试与允许的只读重放也消耗预算。进程退出释放执行锁，但不重置预算、冷却或平台风险锁。
