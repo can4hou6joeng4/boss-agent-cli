@@ -299,6 +299,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `ALREADY_APPLIED` | Already applied | Skip |
 | `GREET_LIMIT` | Daily greet quota hit | Pause until tomorrow |
 | `NETWORK_ERROR` | Connection failed | Retry with backoff |
+| `UNKNOWN` | The platform returned an unrecognized error (it does not match expired session, rate limit or risk control) | Do not retry automatically: check the official page for the actual result, run `boss doctor` to verify session and network, then run the command once more; if it still fails, open an issue with the command and `error.message` |
 | `INTERNAL_ERROR` | CLI bug or unexpected platform data shape | Do not retry; upgrade, and if it persists open an issue with the command and error.message |
 | `INVALID_PARAM` | Bad argument | Fix parameter |
 | `AI_NOT_CONFIGURED` | AI service not set up | `boss ai config` |

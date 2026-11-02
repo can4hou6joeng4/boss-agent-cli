@@ -251,6 +251,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `CACHE_DATABASE_INVALID` | 本地缓存库 `cache/boss_agent.db` 损坏或被别的文件占位（`file is not a database`），几乎所有读写本地状态的命令都受影响 | 先备份该文件，再删除后重试，命令会自动重建空库；库里的候选池、预设、watch 历史与任务断点会一起作废，平台数据不受影响。并发锁等可重试错误不会报这个码 |
 | `GREET_LIMIT` | 今日次数用完 | 告知用户 |
 | `NETWORK_ERROR` | 网络错误 | 重试 |
+| `UNKNOWN` | 平台返回了未识别的错误（无法按登录过期 / 限流 / 风控归类） | 不自动重试：先在官方页面核对本次操作是否生效，用 `boss doctor` 检查登录态与网络，确认后再执行一次；仍失败请附上命令与 `error.message` 提交 issue |
 | `INTERNAL_ERROR` | CLI 内部错误或平台返回了未预期的数据结构 | 不要重试；升级到最新版本，仍出现时附上命令与 error.message 提交 issue |
 | `AI_NOT_CONFIGURED` | AI 未配置 | `boss ai config` |
 | `PLATFORM_NOT_SUPPORTED` | 当前平台不支持该角色或子命令 | 切换到支持的平台 |
