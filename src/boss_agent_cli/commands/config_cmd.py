@@ -11,6 +11,7 @@ import click
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.automation.config import automation_config_from_dict
 from boss_agent_cli.config import DEFAULTS, validate_request_config
+from boss_agent_cli.crawler.service import crawl_cdp_port, crawl_chrome_path, crawl_int_setting
 from boss_agent_cli.display import handle_output, render_simple_list
 from boss_agent_cli.platforms import list_platforms
 
@@ -130,6 +131,20 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 				automation_config_from_dict(parsed_value)
 			except (TypeError, ValueError) as exc:
 				raise ValueError(f"automation 配置无效: {exc}") from exc
+		if key == "crawl":
+			# 与 crawl run/start 和向导采集共用同一组校验：注定被拒绝的值在写入时
+			# 就报错，而不是落盘后每次运行都返回 INVALID_PARAM。
+			try:
+				crawl_int_setting(parsed_value, "max_requests", 20)
+				crawl_int_setting(parsed_value, "max_details", 50)
+				crawl_int_setting(parsed_value, "max_seconds", 600)
+				crawl_int_setting(parsed_value, "max_retries", 1, minimum=0)
+				crawl_chrome_path(parsed_value.get("chrome_path"))
+				raw_port = parsed_value.get("cdp_port")
+				if raw_port is not None:
+					crawl_cdp_port(raw_port)
+			except (TypeError, ValueError) as exc:
+				raise ValueError(f"crawl 配置无效: {exc}") from exc
 		if key.startswith("request_") or key == "batch_greet_delay":
 			# Validate the edited field without preventing repairs of other bad fields.
 			validate_request_config({**DEFAULTS, key: parsed_value})

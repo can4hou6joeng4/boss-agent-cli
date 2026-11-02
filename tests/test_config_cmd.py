@@ -240,6 +240,34 @@ def test_config_set_automation_accepts_partial_object(tmp_path):
 	assert parsed["data"]["value"] == {"max_per_tab": 5}
 
 
+@pytest.mark.parametrize(
+	"value",
+	[
+		'{"max_requests": 0}',
+		'{"max_requests": [1]}',
+		'{"max_retries": -1}',
+		'{"cdp_port": 70000}',
+		'{"cdp_port": "abc"}',
+		'{"chrome_path": 5}',
+	],
+)
+def test_config_set_crawl_rejects_invalid_values(tmp_path, value):
+	"""采集配置写错时不能先落盘，否则每次 crawl run/start 都要报一次 INVALID_PARAM。"""
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "config", "set", "crawl", value])
+	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
+	assert "crawl 配置无效" in parsed["error"]["message"]
+	assert not (tmp_path / "config.json").exists()
+
+
+def test_config_set_crawl_accepts_partial_object(tmp_path):
+	"""显式 0 重试与部分对象都必须保留，不能被默认值覆盖。"""
+	code, parsed = _invoke("config", "set", "crawl", '{"max_retries": 0}', tmp_path=tmp_path)
+	assert code == 0
+	assert parsed["data"]["value"] == {"max_retries": 0}
+	saved = json.loads((tmp_path / "config.json").read_text())
+	assert saved["crawl"] == {"max_retries": 0}
+
+
 def test_agent_run_rejects_non_object_automation_config(tmp_path):
 	"""手工编辑 config.json 写成字符串时，agent 也要给信封与修复入口，而不是 traceback。"""
 	(tmp_path / "config.json").write_text('{"automation": "foo"}', encoding="utf-8")
