@@ -17,6 +17,7 @@ from typing import Any
 from rich.panel import Panel
 
 from boss_agent_cli import display
+from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.wizard.catalog import GOALS
 
@@ -158,6 +159,11 @@ def ensure_login(ctx: Any, *, menu: Any = None, role: str | None = None) -> str:
 
 			with busy_status("正在打开浏览器，请在弹出的窗口中扫码登录…"):
 				auth.login(timeout=_LOGIN_TIMEOUT_SECONDS, cdp_url=ctx.obj.get("cdp_url"))
+		except PlatformRiskError as exc:
+			# 风控是硬边界：展示停止指引后退出登录门，不再回到「重试登录」菜单。
+			# 登录失败会写本地风险锁，继续重试只会撞锁，也违反不绕过的约定。
+			_render_login_failure(ctx, exc)
+			return GATE_EXIT
 		except Exception as exc:
 			_render_login_failure(ctx, exc)
 			continue

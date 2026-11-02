@@ -2568,6 +2568,24 @@ def test_gate_blocks_on_missing_browser_kernel_without_opening_browser(tmp_path,
 	assert login_calls == [], "内核缺失时不得尝试打开浏览器"
 
 
+def test_gate_login_risk_stops_without_offering_retry(tmp_path, monkeypatch):
+	"""风控是硬边界：登录门展示停止指引后退出，不再回到「重试登录」菜单。"""
+	from boss_agent_cli.api.client import AccountRiskError
+	from boss_agent_cli.wizard import preflight
+
+	monkeypatch.setattr("boss_agent_cli.auth.manager.AuthManager.check_status", lambda self: None)
+	monkeypatch.setattr(preflight, "_browser_kernel_status", lambda: ("ok", ""))
+
+	def _boom(self, **kw):
+		raise AccountRiskError("fixture risk", is_cdp=True)
+
+	monkeypatch.setattr("boss_agent_cli.auth.manager.AuthManager.login", _boom)
+
+	menu = _ScriptedMenu(["login", "exit"])
+	assert preflight.ensure_login(_gate_ctx(tmp_path), menu=menu) == preflight.GATE_EXIT
+	assert len(menu.menus) == 1, "风控后不应再给重试登录的菜单"
+
+
 def test_gate_login_failure_shows_operator_actions_and_retries(tmp_path, monkeypatch, capsys):
 	"""登录失败复用 R5 的双通道文案，且可回菜单重试。"""
 	from boss_agent_cli.wizard import preflight
