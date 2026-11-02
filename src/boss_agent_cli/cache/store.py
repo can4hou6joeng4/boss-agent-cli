@@ -674,6 +674,19 @@ class CacheStore:
 				(status, time.time(), geek_id, job_id),
 			)
 
+	def release_recruiter_greet(self, geek_id: str, job_id: str) -> bool:
+		"""撤销确定未发出的预约；只删 pending，已发送或结果未知的记录保持原样。
+
+		仅用于「请求在调度前就被预算/通道挡下」的路径：调用方已证明请求没有离开本机，
+		保留 pending 只会让这个候选人在瞬态故障后永久不可重试。
+		"""
+		with self._conn:
+			cursor = self._conn.execute(
+				"DELETE FROM recruiter_greet_records WHERE geek_id = ? AND job_id = ? AND status = 'pending'",
+				(geek_id, job_id),
+			)
+			return bool(cursor.rowcount)
+
 	def get_job_id(self, security_id: str) -> str | None:
 		row = self._conn.execute(
 			"SELECT job_id FROM greet_records WHERE security_id = ? ORDER BY greeted_at DESC LIMIT 1",
