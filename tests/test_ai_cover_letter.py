@@ -70,6 +70,10 @@ def test_ai_cover_letter_with_jd_text_drafts_letter(tmp_path):
 	assert "Kubernetes" in parsed["data"]["highlights"][1]
 	# draft-only 声明存在
 	assert "不发送" in parsed["hints"]["note"]
+	# 后继命令必须真的可执行：interview-prep 的 JD 是位置参数，没有 --jd 选项
+	next_action = parsed["hints"]["next_actions"][0]
+	assert next_action.startswith("boss ai interview-prep <jd_text> --resume test-resume")
+	assert "--jd" not in next_action
 
 	# prompt 含 JD、简历与语气
 	prompt = service.messages[1]["content"]
