@@ -216,4 +216,8 @@ def _action_result(response: dict[str, Any]) -> ActionResult:
 	code = response.get("code")
 	if code == 0 or response.get("ok") is True:
 		return ActionResult("executed", {"response": response})
+	if response.get("__cli_error_code__") == "ACTION_UNCONFIRMED":
+		# 页面动作可能已经生效：这不是「确定没发出」的普通失败，
+		# 标成 blocked 会让待执行队列在下一轮自动重发。
+		return ActionResult("unconfirmed", {"reason": "ACTION_UNCONFIRMED"})
 	return ActionResult("blocked", {"reason": str(response.get("message", code))})

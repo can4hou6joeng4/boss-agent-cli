@@ -253,7 +253,8 @@ class AutomationStore:
 		recent_errors = [
 			item
 			for item in events[-20:]
-			if item.get("status") in {"STOPPED_BY_SAFETY", "CIRCUIT_BREAKER_OPEN"}
+			if item.get("status")
+			in {"STOPPED_BY_SAFETY", "CIRCUIT_BREAKER_OPEN", "PLATFORM_VERIFICATION_REQUIRED"}
 		]
 		return {
 			"events": len(events),
