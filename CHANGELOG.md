@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss chat --export json -o <路径>` 只接受当前目录或数据目录下的文件：`-o ~/Desktop/chat.json`、`-o /tmp/chat.json` 这类绝对路径被 `os.path.relpath` 算出的 `..` 判成「输出路径不安全」并拒绝（`recoverable: false`），与 `digest` / `stats` 的 `-o` 行为不一致。现在显式给出的 `-o` 一律照写，同时补上 `~` 展开——旧代码对 `-o ~/chat.json` 会在当前目录建一个名叫 `~` 的目录。
 - `config.json` 的 `export_dir` 写成数字 / 数组时，`boss chat --export json` 在 `os.path.expanduser` 上抛 `TypeError` traceback，stdout 没有任何信封。现在按参数错误返回中文信封（`export_dir 必须是目录路径字符串或 null，收到 9`），`recovery_action` 直接给出只修这一项的 `boss config reset export_dir`。
 - `config.json` 里的 `role` 写成数字或无效值（如 `"admin"`）时没有校验：`boss doctor` 把它拼进诊断命令时 `shlex.quote` 抛 `TypeError: expected string or bytes-like object, got 'int'`，其它命令则静默按求职者处理，与 `--role` 只接受 `candidate` / `recruiter` 不一致。现在启动期统一按参数错误返回中文信封（`参数 --role 的值无效: 不支持的角色 5，可选: candidate, recruiter`），`--role` 覆盖后仍可执行 `boss config reset role` 修复；`--role` 的 `Choice` 与该校验共用同一取值域常量。
 - `config.json` 里的 `cdp_url` 不是字符串（手工改成数字，或旧版本写坏结构）时，`boss doctor` 在拼接诊断命令时对值执行 `shlex.quote`，直接抛 `TypeError: expected string or bytes-like object, got 'int'`，stdout 没有任何信封。现在启动期就按参数错误返回中文信封（`参数 --cdp-url 的值无效: 必须是调试地址字符串或 null，收到 9`），`--cdp-url` 覆盖后仍可执行 `boss config reset cdp_url` 修复。
