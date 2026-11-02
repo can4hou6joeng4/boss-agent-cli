@@ -9,6 +9,7 @@ from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_error_output,
 	handle_output,
+	handle_platform_error_output,
 	render_export_summary,
 	render_job_table,
 )
@@ -155,13 +156,13 @@ def export_cmd(
 				search_filters["raw_params"] = raw_params
 			raw = platform.search_jobs(query, **search_filters)
 			if not platform.is_success(raw):
-				code, message = platform.parse_error(raw)
-				handle_error_output(
+				# 搜索结果失败同样走登记表：登录过期可重新登录，风控码带回停止指引。
+				handle_platform_error_output(
 					ctx,
 					"export",
-					code=code,
-					message=message or "搜索结果获取失败",
-					recoverable=False,
+					platform,
+					raw,
+					fallback_message="搜索结果获取失败",
 				)
 				return
 			platform_data = platform.unwrap_data(raw) or {}

@@ -151,12 +151,13 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 				stage=stage, job_type=job_type,
 			)
 			if not platform.is_success(raw):
-				code, message = platform.parse_error(raw)
-				handle_error_output(
-					ctx, "batch-greet",
-					code=code,
-					message=message or "搜索结果获取失败",
-					recoverable=False,
+				# 搜索阶段就命中风控时同样要走风险契约：不可恢复、不提示重试。
+				handle_platform_error_output(
+					ctx,
+					"batch-greet",
+					platform,
+					raw,
+					fallback_message="搜索结果获取失败",
 				)
 				return
 			platform_data = platform.unwrap_data(raw) or {}
