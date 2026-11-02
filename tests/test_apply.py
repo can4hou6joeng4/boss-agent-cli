@@ -4,6 +4,7 @@ from unittest.mock import patch
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
+from boss_agent_cli.schema.error_codes import ERROR_CODES
 
 
 def _ctx_mock(mock_cls):
@@ -64,6 +65,30 @@ def test_apply_failure_does_not_record_local_state(mock_cache_cls, mock_auth_cls
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NETWORK_ERROR"
 	mock_cache.record_apply.assert_not_called()
+
+
+@patch("boss_agent_cli.commands.apply.get_platform_instance")
+@patch("boss_agent_cli.commands.apply.AuthManager")
+@patch("boss_agent_cli.commands.apply.CacheStore")
+def test_apply_cache_write_failure_is_not_retryable(mock_cache_cls, mock_auth_cls, mock_get_platform):
+	"""平台已接受投递后本地记账失败：不得提示重试，否则会重复提交。"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_applied.return_value = False
+	mock_cache.record_apply.side_effect = OSError("disk full")
+	mock_platform = _ctx_mock(mock_get_platform)
+	mock_platform.apply.return_value = {"code": 0, "zpData": {}}
+	mock_platform.is_success.return_value = True
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "apply", "sec_001", "job_001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "LOCAL_STATE_WRITE_FAILED"
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["error"]["recovery_action"] == ERROR_CODES["LOCAL_STATE_WRITE_FAILED"]["recovery_action"]
+	assert parsed["error"]["details"]["applied"] is True
+	assert parsed["error"]["details"]["recorded"] is False
 
 
 def test_apply_is_exposed_in_schema():

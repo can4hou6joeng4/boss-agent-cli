@@ -4,7 +4,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output, render_message_panel
+from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output, render_message_panel
 
 
 @click.command("apply")
@@ -52,7 +52,30 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 					unknown_error_code="NETWORK_ERROR",
 				)
 				return
-			cache.record_apply(security_id, job_id, account=account)
+			try:
+				cache.record_apply(security_id, job_id, account=account)
+			except Exception:
+				# 平台已接受投递，本地记账失败不能降级成 NETWORK_ERROR「重试」：
+				# 重跑会绕过 is_applied 检查，把同一次投递再提交一遍。
+				recoverable, recovery_action = error_contract_for_code("LOCAL_STATE_WRITE_FAILED")
+				handle_error_output(
+					ctx,
+					"apply",
+					code="LOCAL_STATE_WRITE_FAILED",
+					message="投递/立即沟通已提交，但本地状态保存失败；不要自动重发",
+					recoverable=recoverable,
+					recovery_action=recovery_action,
+					details={
+						"security_id": security_id,
+						"job_id": job_id,
+						"lid": lid,
+						"mode": "immediate_chat_apply",
+						"applied": True,
+						"recorded": False,
+					},
+					hints={"operator_actions": ["先在 BOSS 直聘官方页面核对投递状态；不要自动重发本次投递"]},
+				)
+				return
 
 	handle_output(
 		ctx,

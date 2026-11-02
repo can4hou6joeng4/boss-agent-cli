@@ -289,6 +289,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `ACTION_UNCONFIRMED` | A recruiter contact-exchange or resume-request page action ran, but sending was not confirmed | The action may already have taken effect; check `boss hr chatmsg <friend_id>` before doing anything and never retry blindly. `error.details` contains the page log and WebSocket counts. |
 | `EXCHANGE_NOT_AVAILABLE` | The phone/WeChat exchange button is still locked (you have not sent a message in this conversation yet); nothing was sent | Reply to the candidate first (`boss hr reply <friend_id> <message>` or `boss hr request-resume <friend_id>`), then retry the exchange. `error.details` lists the disabled signals that were hit. |
 | `GREET_RESULT_UNKNOWN` | Send reserved, outcome unconfirmed | Check `boss hr chat --job-id <id>`; never automatically resend. Keep the local reservation and use the official page if needed. |
+| `LOCAL_STATE_WRITE_FAILED` | The platform action completed but local state could not be saved | Check the official page for the actual result first; never automatically resend, and confirm disk space and cache-directory permissions before continuing |
 | `ALREADY_APPLIED` | Already applied | Skip |
 | `GREET_LIMIT` | Daily greet quota hit | Pause until tomorrow |
 | `NETWORK_ERROR` | Connection failed | Retry with backoff |
