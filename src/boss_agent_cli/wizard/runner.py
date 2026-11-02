@@ -250,7 +250,7 @@ class WorkflowRunner:
 			except KeyboardInterrupt:
 				error = WorkflowActionError(
 					"WORKFLOW_STOPPED",
-					"workflow interrupted; verify any unfinished operation before starting another run",
+					"workflow 被中断；开始新的运行前请先核对未完成的操作",
 					recoverable=True,
 					recovery_action="检查 checkpoint 与平台实际结果，再显式创建或恢复内部任务",
 				)

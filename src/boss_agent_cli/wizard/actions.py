@@ -236,7 +236,7 @@ def _required(inputs: Mapping[str, Any], name: str) -> Any:
 	if value is None or value == "":
 		raise WorkflowActionError(
 			"WIZARD_INPUT_REQUIRED",
-			f"workflow input {name!r} is required",
+			f"workflow 缺少输入 {name}",
 			recoverable=True,
 			recovery_action=f"在 inputs 中提供 {name} 后用同一 run_id 重试",
 		)
@@ -580,7 +580,7 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 	label = str(_required(inputs, "label"))
 	label_id = int(label) if label.isdigit() else _LABEL_IDS.get(label)
 	if label_id is None:
-		raise WorkflowActionError("INVALID_PARAM", f"unknown label: {label}")
+		raise WorkflowActionError("INVALID_PARAM", f"未知标签: {label}（可选: 新招呼、沟通中、已约面、已获取简历、不合适、收藏）")
 	with context.candidate_platform() as platform:
 		friend = _candidate_friend(platform, identifier)
 		uid = str(friend.get("uid") or "")
@@ -768,7 +768,7 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 		if action == "remove":
 			return StepResult({"action": "remove", "name": name, "removed": cache.delete_saved_search(name)})
 		if action != "run":
-			raise WorkflowActionError("INVALID_PARAM", f"unknown watch action: {action}")
+			raise WorkflowActionError("INVALID_PARAM", f"未知的 watch 动作: {action}（可选: add、remove、run）")
 		try:
 			record = cache.get_saved_search(name)
 		except SavedSearchParamsError as exc:
@@ -933,7 +933,7 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 	city = str(_required(inputs, "city"))
 	city_code = CITY_CODES.get(city, city if city.isdigit() else None)
 	if city_code is None:
-		raise WorkflowActionError("INVALID_PARAM", f"unknown city: {city}")
+		raise WorkflowActionError("INVALID_PARAM", f"未知城市: {city}")
 	hook_profile = str(inputs.get("hook_profile") or "none")
 	if hook_profile != "none":
 		# 向导没有 hook-dir 输入，screenshot-full 在这里必然失败；提前按参数错误返回，

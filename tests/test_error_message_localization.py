@@ -67,6 +67,62 @@ def test_chat_action_messages_are_chinese():
 	assert not offenders, f"以下聊天页失败文案会进入信封 error.message，必须中文: {offenders}"
 
 
+_WIZARD_ROOT = _SOURCE_ROOT / "boss_agent_cli" / "wizard"
+
+
+def _wizard_error_messages() -> list[tuple[Path, int, str]]:
+	"""收集 wizard 中会原样进入信封的 `WorkflowActionError` / `WorkflowInputError` 文案。
+
+	`WorkflowActionError` 的首参是错误码、次参才是 message；`WorkflowInputError`
+	的首参就是 message。扫描全部构造点（不只 `raise`），因为 runner 里还有
+	`error = WorkflowActionError(...)` 的赋值形式。变量拼出来的文案（如
+	`str(exc)`）跳过，由各自的用例覆盖。
+	"""
+	sites: list[tuple[Path, int, str]] = []
+	for path in sorted(_WIZARD_ROOT.rglob("*.py")):
+		tree = ast.parse(path.read_text(encoding="utf-8"))
+		for node in ast.walk(tree):
+			if not isinstance(node, ast.Call):
+				continue
+			func = node.func
+			name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+			args = node.args
+			if name == "WorkflowActionError" and len(args) >= 2:
+				code = args[0].value if isinstance(args[0], ast.Constant) else None
+				if code == "INTERNAL_ERROR":
+					# 内部错误要把异常类型与原始文案带进信封用于排障，不能套中文模板。
+					continue
+				message = args[1]
+			elif name == "WorkflowInputError" and args:
+				message = args[0]
+			else:
+				continue
+			if isinstance(message, ast.Constant) and isinstance(message.value, str):
+				text = message.value
+			elif isinstance(message, ast.JoinedStr):
+				text = "".join(
+					part.value for part in message.values
+					if isinstance(part, ast.Constant) and isinstance(part.value, str)
+				)
+			else:
+				continue
+			if text.strip():
+				sites.append((path, node.lineno, text))
+	return sites
+
+
+def test_wizard_error_messages_are_chinese():
+	"""wizard 的失败文案会直接进入信封 `error.message`，紧邻的 recovery_action 是中文。"""
+	sites = _wizard_error_messages()
+	assert len(sites) >= 5  # 扫描器有效性：wizard 至少有 5 条静态失败文案
+	offenders = [
+		f"{path.relative_to(_SOURCE_ROOT.parent)}:{lineno}"
+		for path, lineno, text in sites
+		if not _CJK.search(text)
+	]
+	assert not offenders, f"以下 wizard 失败文案会进入信封 error.message，必须中文: {offenders}"
+
+
 def test_request_budget_messages_are_chinese():
 	"""`RequestBudgetExceeded` 的默认文案会原样进入信封，必须是中文。
 
