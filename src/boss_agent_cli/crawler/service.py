@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import random
+import socket
 import time
 import uuid
 from dataclasses import dataclass, replace
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, Callable
@@ -120,6 +121,50 @@ class CrawlSettings:
 			max_retries=int(raw.get("max_retries") or limits.get("max_retries", 1)),
 			operating_mode=str(raw.get("operating_mode", "assisted")),
 		)
+
+
+def crawl_int_setting(cfg: Mapping[str, Any], key: str, default: int, *, minimum: int = 1) -> int:
+	"""读取整数型 crawl 配置；显式值优先于默认值。
+
+	不能用 `value or default`：`max_retries=0` 是 `crawl configure` 明确接受的值，
+	用 or 会把 0 当成缺省并悄悄改回 1。
+	"""
+	value = cfg.get(key)
+	if value is None:
+		return default
+	try:
+		parsed = int(value)
+	except (TypeError, ValueError) as exc:
+		raise ValueError(f"crawl 配置项 {key} 必须是整数") from exc
+	if parsed < minimum:
+		raise ValueError(f"crawl 配置项 {key} 不能小于 {minimum}")
+	return parsed
+
+
+def crawl_chrome_path(value: Any) -> str | None:
+	"""校验 crawl 配置中的 chrome_path：字符串路径或 null。"""
+	if value is None:
+		return None
+	if not isinstance(value, str):
+		raise ValueError("crawl 配置项 chrome_path 必须是字符串或 null")
+	return value
+
+
+def crawl_cdp_port(value: Any) -> int:
+	"""校验 crawl 配置中的 cdp_port：1-65535 的整数。"""
+	try:
+		port = int(value)
+	except (TypeError, ValueError) as exc:
+		raise ValueError("crawl 配置项 cdp_port 必须是整数") from exc
+	if not 1 <= port <= 65535:
+		raise ValueError("crawl 配置项 cdp_port 必须在 1-65535 之间")
+	return port
+
+
+def unused_local_port() -> int:
+	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
+		connection.bind(("127.0.0.1", 0))
+		return int(connection.getsockname()[1])
 
 
 @dataclass(frozen=True)
