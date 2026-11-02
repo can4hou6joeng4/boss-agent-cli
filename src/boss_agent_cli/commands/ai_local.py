@@ -21,7 +21,7 @@ from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action
 from rich.table import Table
 
 from boss_agent_cli import display
-from boss_agent_cli.display import handle_error_output, handle_output, render_action_result, render_next_steps
+from boss_agent_cli.display import error_contract_for_code, handle_error_output, handle_output, render_action_result, render_next_steps
 
 
 def _render_local_status(data: dict[str, Any]) -> None:
@@ -162,13 +162,14 @@ def local_import_cmd(ctx: click.Context, source_path: Path, model: str) -> None:
 	try:
 		imported = import_local_model(ctx.obj["data_dir"], source_path, model)
 	except LocalModelManifestError as exc:
+		recoverable, recovery_action = error_contract_for_code(exc.code)
 		handle_error_output(
 			ctx,
 			"ai.local.import",
 			code=exc.code,
 			message=exc.message,
-			recoverable=True,
-			recovery_action="检查模型路径和 manifest 后重试",
+			recoverable=recoverable,
+			recovery_action=recovery_action,
 		)
 	store = AIConfigStore(ctx.obj["data_dir"])
 	store.save_config(ai_provider="custom", ai_model=model, ai_base_url=None)

@@ -28,6 +28,7 @@
 - `boss wizard` 的 `candidate_apply` / `candidate_greet` 在平台已确认成功、随后本地记账（`record_apply` / `record_greet`）失败时，异常落进 runner 的通用兜底，workflow 报成 `NETWORK_ERROR`（`recoverable: true`，「重试当前 run_id」）：重试或 `--resume` 会绕过 `is_applied` / `is_greeted` 检查，把同一次投递或打招呼再提交一遍。现在与单次命令一致，输出 `LOCAL_STATE_WRITE_FAILED`（不可恢复，说明操作已生效、禁止自动重发），`error.details` 带 `applied` / `greeted` 与 `recorded: false`。
 - `boss wizard --resume <run_id>` 会重跑失败步骤，包括结果未知的写动作：`candidate_apply` / `candidate_greet` 的本地记账失败，以及招聘者的 `recruiter_reply` / `recruiter_request_resume` / `recruiter_exchange_contact` 返回 `ACTION_UNCONFIRMED`，恢复时会再次执行同一动作。现在这类步骤错误带 `replay_safe: false`，`--resume` 保持原失败状态并返回原核对指引，不再重跑；该标记同时阻止 runner 的步骤内重试。
 - `boss schema` 的错误码登记表漏了三个实际会出现在信封里的错误码：钩子阻止 `HOOK_BLOCKED`、模型下载确认 `CONFIRM_DOWNLOAD_REQUIRED` 与 Ollama 拉取失败 `LOCAL_MODEL_PULL_FAILED`；其中 `HOOK_BLOCKED` 的 `recovery_action` 还是 `null`。现在三码都已登记，钩子阻止时按登记表返回可执行的恢复指引。
+- `boss ai local import` 的 `MODEL_SOURCE_NOT_FOUND`（模型源路径不存在）会出现在错误信封里，却未登记在 `boss schema` 的错误码表。同时 `tests/test_schema_contract.py` 的覆盖率断言依赖一份手工错误码清单，新增码不会自动被检查——上一轮的 `HOOK_BLOCKED` 等三码正是这样漏掉的。现在该码已登记，`ai.local.import` 的 `recoverable` / `recovery_action` 取自登记表；测试改为扫描源码中形如错误码的字符串字面量，任何未登记的新码都会让测试失败。
 
 ## [3.2.0] - 2026-11-01
 
