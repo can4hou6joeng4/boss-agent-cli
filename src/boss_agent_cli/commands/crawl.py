@@ -530,13 +530,28 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 	except KeyError:
 		handle_error_output(ctx, "crawl.status", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
 		return
+	hints: dict[str, list[str]] | None = None
+	if payload["status"] == "risk_stopped":
+		# 风险锁会先于浏览器构造阻断 resume：直接照 checkpoint.resume_command
+		# 重试只会再次撞锁。解锁必须由用户确认官方页面恢复后显式执行。
+		hints = {
+			"operator_actions": [
+				*UNLOCK_OPERATOR_ACTIONS,
+				f"完成人工恢复后，显式执行 {payload['checkpoint']['resume_command']} 从原断点继续",
+			],
+		}
 	handle_output(
 		ctx,
 		"crawl.status",
 		payload,
 		render=lambda d: render_record_result(
-			d, title="crawl status", next_steps=[f"boss crawl results {run_id}", f"boss crawl stop {run_id}"]
+			d,
+			title="crawl status",
+			next_steps=[f"boss crawl results {run_id}"]
+			if payload["status"] == "risk_stopped"
+			else [f"boss crawl results {run_id}", f"boss crawl stop {run_id}"],
 		),
+		hints=hints,
 	)
 
 

@@ -357,6 +357,28 @@ def test_status_reports_job_not_found(tmp_path):
 	assert _envelope(result)["error"]["code"] == "JOB_NOT_FOUND"
 
 
+def test_status_risk_stopped_reports_operator_unlock(tmp_path):
+	"""risk_stopped 的 checkpoint 不能只给 resume 命令：风险锁会先阻断它。"""
+	_seed_run(tmp_path, "run-1", status="risk_stopped")
+	payload = _envelope(_invoke(CliRunner(), tmp_path, "crawl", "status", "run-1"))
+	data = payload["data"]
+	assert data["status"] == "risk_stopped"
+	assert data["checkpoint"]["resume_requires_operator_unlock"] is True
+	assert data["checkpoint"]["resume_command"] == "boss crawl resume run-1"
+
+	actions = payload["hints"]["operator_actions"]
+	assert any("boss clean --risk-lock" in action for action in actions)
+	assert any("boss crawl resume run-1" in action for action in actions)
+	assert "next_actions" not in payload["hints"]
+
+
+def test_status_completed_has_no_unlock_flag(tmp_path):
+	_seed_run(tmp_path, "run-1")
+	payload = _envelope(_invoke(CliRunner(), tmp_path, "crawl", "status", "run-1"))
+	assert "resume_requires_operator_unlock" not in payload["data"]["checkpoint"]
+	assert "hints" not in payload or "operator_actions" not in (payload.get("hints") or {})
+
+
 def test_stop_reports_job_not_found(tmp_path):
 	result = _invoke(CliRunner(), tmp_path, "crawl", "stop", "missing")
 	assert result.exit_code == 1
