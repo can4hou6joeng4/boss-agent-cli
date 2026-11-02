@@ -808,22 +808,27 @@ class CacheStore:
 		return cursor.rowcount > 0
 
 	@staticmethod
-	def _make_watch_job_key(item: dict[str, Any]) -> str:
+	def _make_watch_job_key(item: dict[str, Any], *, account: str = "") -> str:
 		security_id = item.get("security_id") or item.get("securityId") or ""
 		job_id = item.get("job_id") or item.get("encryptJobId") or ""
+		# 有账号指纹时按稳定的 encryptJobId 去重：securityId 每次搜索都会轮换，
+		# 旧的复合键会让同一职位在每轮 watch 里反复算作新增。没有账号指纹时
+		# 保留旧复合键，避免把无归属的旧记录当成当前账号的已见记录。
+		if account and job_id:
+			return f"{account}:{job_id}"
 		if security_id or job_id:
 			return f"{security_id}:{job_id}"
 		raw = json.dumps(item, sort_keys=True, ensure_ascii=False)
 		return hashlib.sha256(raw.encode()).hexdigest()
 
-	def record_watch_results(self, search_name: str, items: list[dict[str, Any]]) -> dict[str, Any]:
-		# 只去重本轮完整列表项；旧记录保留访问上下文复合键，未验证账号前不跨轮按 job_id 合并。
+	def record_watch_results(self, search_name: str, items: list[dict[str, Any]], *, account: str = "") -> dict[str, Any]:
+		# 只去重本轮完整列表项；有账号指纹时跨 securityId 轮换按稳定 job_id 合并。
 		items = deduplicate_job_result(items)
 		now = time.time()
 		new_items = []
 		seen_count = 0
 		for item in items:
-			job_key = self._make_watch_job_key(item)
+			job_key = self._make_watch_job_key(item, account=account)
 			payload = json.dumps(item, ensure_ascii=False, sort_keys=True)
 			row = self._conn.execute(
 				"SELECT 1 FROM watch_hits WHERE search_name = ? AND job_key = ?",

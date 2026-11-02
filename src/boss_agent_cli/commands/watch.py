@@ -193,7 +193,7 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 			account=account,
 			**extra,
 		)
-	watch_result = cache.record_watch_results(name, pipeline_result.items)
+	watch_result = cache.record_watch_results(name, pipeline_result.items, account=account)
 	return {
 		"name": name,
 		"new_count": watch_result["new_count"],
