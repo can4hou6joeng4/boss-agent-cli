@@ -13,7 +13,7 @@ import click
 from boss_agent_cli.api.cdp_risk_lock import UNLOCK_OPERATOR_ACTIONS, raise_if_locked
 from boss_agent_cli.api.endpoints import CITY_CODES
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired
-from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
 from boss_agent_cli.compliance import operating_mode, require_compliance_allowed
 from boss_agent_cli.config import DEFAULTS
 from boss_agent_cli.crawler.operations import crawl_results, crawl_status, import_crawl_shortlist
@@ -167,6 +167,17 @@ def _transport_factory(
 	)
 
 
+def _report_corrupt_run(ctx: click.Context, command: str, run_id: str, exc: CacheRecordInvalid) -> None:
+	"""本地 run 记录写坏：断点读不出来，给「重新创建任务」指引而不是 traceback。"""
+	handle_error_output(
+		ctx,
+		command,
+		code="CACHE_RECORD_INVALID",
+		message=str(exc),
+		hints={"next_actions": ["boss crawl start <关键词>", f"boss crawl status {run_id}"]},
+	)
+
+
 def _run_service(ctx: click.Context, service_call: Any) -> None:
 	try:
 		raise_if_locked(Path(ctx.obj["data_dir"]))
@@ -184,6 +195,9 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 			outcome = service_call(service)
 	except KeyError as exc:
 		handle_error_output(ctx, "crawl", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {exc.args[0]}")
+		return
+	except CacheRecordInvalid as exc:
+		_report_corrupt_run(ctx, "crawl", exc.record_id, exc)
 		return
 	except ValueError as exc:
 		handle_error_output(ctx, "crawl", code="INVALID_PARAM", message=str(exc))
@@ -396,7 +410,11 @@ def start_cmd(
 	except OSError as exc:
 		if run_id is not None:
 			with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
-				run = cache.get_crawl_run(run_id)
+				try:
+					run = cache.get_crawl_run(run_id)
+				except CacheRecordInvalid:
+					# 记录已损坏时无法回写状态：下面仍按启动失败回报，重建任务即可。
+					run = None
 				if run is not None:
 					cache.update_crawl_run(
 						run_id,
@@ -484,6 +502,9 @@ def resume_cmd(
 		except KeyError:
 			handle_error_output(ctx, "crawl.resume", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
 			return
+		except CacheRecordInvalid as exc:
+			_report_corrupt_run(ctx, "crawl.resume", run_id, exc)
+			return
 		except OSError as exc:
 			# 与 crawl start 同一类失败：OSError 多来自磁盘满或目录权限，直接重试不会好转。
 			handle_error_output(
@@ -535,6 +556,9 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 			payload = crawl_status(cache, run_id)
 	except KeyError:
 		handle_error_output(ctx, "crawl.status", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
+		return
+	except CacheRecordInvalid as exc:
+		_report_corrupt_run(ctx, "crawl.status", run_id, exc)
 		return
 	hints: dict[str, list[str]] | None = None
 	if payload["status"] == "risk_stopped":
@@ -591,6 +615,9 @@ def results_cmd(ctx: click.Context, run_id: str, page: int | None, detail_status
 	except KeyError:
 		handle_error_output(ctx, "crawl.results", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
 		return
+	except CacheRecordInvalid as exc:
+		_report_corrupt_run(ctx, "crawl.results", run_id, exc)
+		return
 	handle_output(
 		ctx,
 		"crawl.results",
@@ -636,6 +663,9 @@ def shortlist_cmd(
 			)
 	except KeyError:
 		handle_error_output(ctx, "crawl.shortlist", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
+		return
+	except CacheRecordInvalid as exc:
+		_report_corrupt_run(ctx, "crawl.shortlist", run_id, exc)
 		return
 	except ValueError as exc:
 		handle_error_output(ctx, "crawl.shortlist", code="INVALID_PARAM", message=str(exc))

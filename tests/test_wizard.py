@@ -3509,3 +3509,98 @@ def test_runner_reports_local_file_error_as_local_io_error(tmp_path):
 	assert run["error"]["code"] == "LOCAL_IO_ERROR"
 	assert run["error"]["recoverable"] is False
 	assert "不要自动重试" in run["error"]["recovery_action"]
+
+
+# ── 本地记录损坏 ──────────────────────────────────────────────────────
+
+
+def _break_workflow_column(
+	tmp_path,
+	table: str,
+	column: str,
+	run_id: str = "corrupt-run",
+	step_name: str = "auth_status",
+	*,
+	value: str = "{not json",
+):
+	db_path = tmp_path / "cache" / "boss_agent.db"
+	with sqlite3.connect(db_path) as conn:
+		if table == "workflow_steps":
+			conn.execute(
+				f"UPDATE workflow_steps SET {column} = ? WHERE run_id = ? AND step_name = ?",
+				(value, run_id, step_name),
+			)
+		else:
+			conn.execute(f"UPDATE {table} SET {column} = ? WHERE run_id = ?", (value, run_id))
+
+
+def _seed_corrupt_workflow_run(tmp_path, run_id: str = "corrupt-run") -> None:
+	with WorkflowStore(tmp_path) as store:
+		store.create(
+			run_id,
+			WorkflowPlan(
+				role="candidate",
+				platform="zhipin",
+				goal="job_search",
+				inputs={"query": "Python"},
+				requested_steps=("auth_status", "candidate_search"),
+				mode="headless",
+			),
+		)
+
+
+@pytest.mark.parametrize("flag", [["--status"], ["--resume"], ["--stop"]])
+@pytest.mark.parametrize("column", ["params", "last_result"])
+def test_corrupt_workflow_run_reports_envelope(tmp_path, flag, column):
+	"""workflow 记录写坏时不能 traceback，也不能被兜底成可重试的 NETWORK_ERROR。"""
+	_seed_corrupt_workflow_run(tmp_path)
+	_break_workflow_column(tmp_path, "workflow_runs", column)
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "wizard", *flag, "corrupt-run"])
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "CACHE_RECORD_INVALID"
+	assert payload["error"]["recoverable"] is True
+	assert "workflow" in payload["error"]["message"]
+
+
+def test_corrupt_workflow_step_reports_envelope(tmp_path):
+	_seed_corrupt_workflow_run(tmp_path)
+	_break_workflow_column(tmp_path, "workflow_steps", "result")
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "wizard", "--status", "corrupt-run"])
+	assert result.exit_code == 1, result.output
+	assert json.loads(result.output)["error"]["code"] == "CACHE_RECORD_INVALID"
+
+
+def test_list_recent_skips_corrupt_runs_and_reports_them(tmp_path):
+	"""一条坏记录不该让整个任务列表不可用：跳过并点名，交给用户重建。"""
+	_seed_corrupt_workflow_run(tmp_path, "good-run")
+	_seed_corrupt_workflow_run(tmp_path, "corrupt-run")
+	_break_workflow_column(tmp_path, "workflow_runs", "params")
+	with WorkflowStore(tmp_path) as store:
+		runs = store.list_recent()
+		corrupt = store.corrupt_run_ids
+	assert [run["run_id"] for run in runs] == ["good-run"]
+	assert corrupt == ["corrupt-run"]
+
+
+def test_list_recent_skips_runs_with_corrupt_steps(tmp_path):
+	_seed_corrupt_workflow_run(tmp_path, "good-run")
+	_seed_corrupt_workflow_run(tmp_path, "corrupt-run")
+	_break_workflow_column(tmp_path, "workflow_steps", "result")
+	with WorkflowStore(tmp_path) as store:
+		runs = store.list_recent()
+		corrupt = store.corrupt_run_ids
+	assert [run["run_id"] for run in runs] == ["good-run"]
+	assert corrupt == ["corrupt-run"]
+
+
+def test_structurally_drifted_workflow_params_reports_envelope(tmp_path):
+	"""params 是合法 JSON 但不是 object 时，_plan_from_run 会抛 AttributeError。"""
+	_seed_corrupt_workflow_run(tmp_path)
+	_break_workflow_column(tmp_path, "workflow_runs", "params", value='"not-an-object"')
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "wizard", "--resume", "corrupt-run"])
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "CACHE_RECORD_INVALID"
+	assert "JSON object" in payload["error"]["message"]
