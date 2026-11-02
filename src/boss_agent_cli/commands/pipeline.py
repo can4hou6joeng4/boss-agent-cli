@@ -53,7 +53,7 @@ def _render_pipeline(data: list[dict[str, Any]], title: str) -> None:
 
 
 @click.command("pipeline")
-@click.option("--days-stale", default=3, type=int, help="超过 N 天未推进则标记为 follow_up")
+@click.option("--days-stale", default=3, type=click.IntRange(min=0), help="超过 N 天未推进则标记为 follow_up")
 @click.option("--now-ts-ms", default=None, type=int, help="测试用：覆盖当前时间戳（毫秒）")
 @click.pass_context
 @handle_auth_errors("pipeline")
@@ -72,7 +72,7 @@ def pipeline_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None) -> 
 
 
 @click.command("follow-up")
-@click.option("--days-stale", default=3, type=int, help="超过 N 天未推进则视为 follow_up")
+@click.option("--days-stale", default=3, type=click.IntRange(min=0), help="超过 N 天未推进则视为 follow_up")
 @click.option("--now-ts-ms", default=None, type=int, help="测试用：覆盖当前时间戳（毫秒）")
 @click.pass_context
 @handle_auth_errors("follow-up")
