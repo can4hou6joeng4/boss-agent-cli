@@ -70,10 +70,12 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 					"source": "greet",
 				})
 				if veto:
+					recoverable, recovery_action = error_contract_for_code("HOOK_BLOCKED")
 					handle_error_output(
 						ctx, "greet", code="HOOK_BLOCKED",
 						message=f"打招呼被钩子阻止: {veto}",
-						recoverable=True,
+						recoverable=recoverable,
+						recovery_action=recovery_action,
 					)
 					return
 

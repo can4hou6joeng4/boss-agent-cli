@@ -27,6 +27,7 @@
 - 招聘者自动化的页面写动作返回 `ACTION_UNCONFIRMED`（动作可能已生效、发送未确认）时，适配器把它当成普通 `blocked`：本轮事件落成 `STOPPED_BY_SAFETY`，已登记的 `PLATFORM_VERIFICATION_REQUIRED` 状态从未产生；对应的待执行项又保留为 `pending`，下一轮 `agent run` 会对同一候选人自动重发招呼或换联系方式，`--resume` 之后也一样。现在未确认结果记为 `PLATFORM_VERIFICATION_REQUIRED` 并打开熔断，待执行项标记为 `verification-required`、不再回到待执行队列，`agent stats` 的近期错误也包含该状态。
 - `boss wizard` 的 `candidate_apply` / `candidate_greet` 在平台已确认成功、随后本地记账（`record_apply` / `record_greet`）失败时，异常落进 runner 的通用兜底，workflow 报成 `NETWORK_ERROR`（`recoverable: true`，「重试当前 run_id」）：重试或 `--resume` 会绕过 `is_applied` / `is_greeted` 检查，把同一次投递或打招呼再提交一遍。现在与单次命令一致，输出 `LOCAL_STATE_WRITE_FAILED`（不可恢复，说明操作已生效、禁止自动重发），`error.details` 带 `applied` / `greeted` 与 `recorded: false`。
 - `boss wizard --resume <run_id>` 会重跑失败步骤，包括结果未知的写动作：`candidate_apply` / `candidate_greet` 的本地记账失败，以及招聘者的 `recruiter_reply` / `recruiter_request_resume` / `recruiter_exchange_contact` 返回 `ACTION_UNCONFIRMED`，恢复时会再次执行同一动作。现在这类步骤错误带 `replay_safe: false`，`--resume` 保持原失败状态并返回原核对指引，不再重跑；该标记同时阻止 runner 的步骤内重试。
+- `boss schema` 的错误码登记表漏了三个实际会出现在信封里的错误码：钩子阻止 `HOOK_BLOCKED`、模型下载确认 `CONFIRM_DOWNLOAD_REQUIRED` 与 Ollama 拉取失败 `LOCAL_MODEL_PULL_FAILED`；其中 `HOOK_BLOCKED` 的 `recovery_action` 还是 `null`。现在三码都已登记，钩子阻止时按登记表返回可执行的恢复指引。
 
 ## [3.2.0] - 2026-11-01
 
