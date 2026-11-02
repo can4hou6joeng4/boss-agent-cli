@@ -231,10 +231,14 @@ def test_start_marks_run_stopped_when_background_launch_fails(tmp_path, monkeypa
 	error = _envelope(result)["error"]
 	assert error["code"] == "CRAWL_UNAVAILABLE"
 	assert error["recoverable"] is True
+	# operating_mode 已不再限制能力，恢复指引不能要求用户改它。
+	assert "operating_mode" not in error["recovery_action"]
 
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
-		runs = [cache.get_crawl_run(run_id) for run_id in _all_run_ids(tmp_path)]
+		run_ids = _all_run_ids(tmp_path)
+		runs = [cache.get_crawl_run(run_id) for run_id in run_ids]
 	assert runs and runs[0] is not None
+	assert f"boss crawl resume {run_ids[0]}" in error["recovery_action"]
 	assert runs[0]["status"] == "stopped", "后台拉起失败必须把 run 落成 stopped，否则会留下永久 queued 的幽灵任务"
 	assert "无法启动后台任务" in runs[0]["error"]
 

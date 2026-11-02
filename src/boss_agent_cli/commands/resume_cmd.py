@@ -5,6 +5,7 @@ from typing import Any
 import click
 
 from boss_agent_cli.display import (
+	error_contract_for_code,
 	handle_error_output,
 	handle_output,
 	render_action_result,
@@ -235,12 +236,13 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: Path
 			else:
 				export_pdf(resume, out)
 		except Exception as exc:
+			recoverable, recovery_action = error_contract_for_code("EXPORT_FAILED")
 			handle_error_output(
 				ctx, "resume",
 				code="EXPORT_FAILED",
 				message=f"{fmt.upper()} 导出失败: {exc}",
-				recoverable=True,
-				recovery_action="请确认 patchright 已安装并执行 uv run playwright install chromium",
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
 			ctx.exit(1)
 			return
