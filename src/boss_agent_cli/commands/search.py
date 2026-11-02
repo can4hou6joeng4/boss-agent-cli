@@ -38,12 +38,30 @@ from boss_agent_cli.wizard.actions import execute_candidate_search
 
 
 # 3：职位条目新增 boss_active_desc 字段，旧缓存不再复用。
-_SEARCH_CACHE_SCHEMA = 3
+# 4：缓存键带上账号作用域，且命中后按当前账号重算 greeted；旧缓存不再复用。
+_SEARCH_CACHE_SCHEMA = 4
 
 
 def _sort_search_items(items: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
 	if sort == "score":
 		return sorted(items, key=lambda item: item.get("match_score", 0), reverse=True)
+	return items
+
+
+def _refresh_greeted(items: list[dict[str, Any]], cache: CacheStore, account: str) -> list[dict[str, Any]]:
+	"""缓存命中后按当前账号重算 ``greeted``。
+
+	缓存写入后本地可能又打过招呼，直接复用旧标记会让 ``greeted`` 一直停留在
+	写入时的状态；账号作用域也要求这里用当前账号查询，而不是沿用缓存里的值。
+	"""
+	for item in items:
+		if not isinstance(item, dict):
+			continue
+		item["greeted"] = cache.is_greeted(
+			str(item.get("security_id") or ""),
+			job_id=str(item.get("job_id") or ""),
+			account=account,
+		)
 	return items
 
 
@@ -210,6 +228,10 @@ def search_cmd(
 		raw_params=raw_params,
 	)
 
+	# 账号作用域要在读缓存之前确定：缓存按账号隔离，命中后也要按当前账号重算 greeted。
+	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
+	account = account_scope(auth)
+
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		# 有福利 / 活跃度筛选时跳过缓存（需要逐个查详情，活跃度也会变）
 		if not detail_filter and not no_cache and not with_score:
@@ -219,12 +241,14 @@ def search_cmd(
 				"experience": experience, "education": education,
 				"industry": industry, "scale": scale, "stage": stage,
 				"job_type": job_type, "url": search_url, "raw_params": raw_params, "page": page,
+				"account": account,
 			}
 			cached = cache.get_search(search_params)
 			if cached is not None:
 				logger.debug("搜索命中缓存")
 				result = json.loads(cached)
-				items = _sort_search_items(result["data"], sort_mode)
+				items = _refresh_greeted(result["data"], cache, account)
+				items = _sort_search_items(items, sort_mode)
 				try_save_index(data_dir, items, source=f"search:{query}", logger=logger)
 				handle_output(
 					ctx, "search", items,
@@ -233,8 +257,6 @@ def search_cmd(
 				)
 				return
 
-		auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
-		account = account_scope(auth)
 		request_budget = CrawlBudget(cache) if ctx.obj.get("platform", "zhipin") == "zhipin" else None
 		# CDP 模式下详情（--active / --welfare 兜底）只走浏览器、串行并按 CrawlBudget 间隔
 		detail_channel = detail_channel_for(ctx.obj)
@@ -350,6 +372,7 @@ def search_cmd(
 					"experience": experience, "education": education,
 					"industry": industry, "scale": scale, "stage": stage,
 					"job_type": job_type, "url": search_url, "raw_params": raw_params, "page": page,
+					"account": account,
 				}
 				cache_data = {"data": cache_items, "pagination": pagination, "hints": hints}
 				cache.put_search(search_params, json.dumps(cache_data, ensure_ascii=False))
