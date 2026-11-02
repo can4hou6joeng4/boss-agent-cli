@@ -2,7 +2,6 @@ import click
 from typing import Any
 
 from boss_agent_cli.api.endpoints import (
-	CITY_CODES,
 	INDUSTRY_CODES,
 	JOB_TYPE_CODES,
 	SCALE_CODES,
@@ -30,6 +29,7 @@ from boss_agent_cli.search_filters import (
 	build_search_params,
 	detail_channel_for,
 	detail_filter_max_pages,
+	ensure_supported_city,
 	resolve_welfare_keywords,
 	run_search_pipeline,
 )
@@ -87,8 +87,10 @@ def watch_add_cmd(
 	job_type: str | None,
 	welfare: str | None,
 ) -> None:
-	if city and city not in CITY_CODES:
-		handle_error_output(ctx, "watch", code="INVALID_PARAM", message=f"未知城市: {city}")
+	try:
+		ensure_supported_city(city)
+	except ValueError as exc:
+		handle_error_output(ctx, "watch", code="INVALID_PARAM", message=str(exc))
 		return
 
 	params, _ = _parse_watch_filters(query, city, salary, experience, education, industry, scale, stage, job_type, welfare)

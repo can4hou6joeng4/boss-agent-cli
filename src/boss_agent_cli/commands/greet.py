@@ -28,7 +28,12 @@ from boss_agent_cli.display import (
 	risk_error_contract,
 	risk_error_message,
 )
-from boss_agent_cli.search_filters import SearchFilterCriteria, prefilter_platform_job_type
+from boss_agent_cli.search_filters import (
+	SearchFilterCriteria,
+	ensure_supported_city,
+	prefilter_platform_job_type,
+	resolve_search_code_params,
+)
 from boss_agent_cli.services.job_identity import deduplicate_job_result
 
 
@@ -160,6 +165,25 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 	logger = ctx.obj["logger"]
 
 	count = min(count, 10)
+
+	# 筛选条件必须在搜索之前校验：非法城市会抛 ValueError 被兜成可重试的
+	# NETWORK_ERROR；未知薪资 / 经验 / 学历会被静默丢弃，等于不筛选就直接打招呼。
+	try:
+		ensure_supported_city(city)
+	except ValueError as exc:
+		handle_error_output(
+			ctx, "batch-greet", code="INVALID_PARAM", message=str(exc),
+			hints={"next_actions": ["boss cities — 查看支持的城市名"]},
+		)
+		return
+	try:
+		resolve_search_code_params(
+			salary=salary, experience=experience, education=education,
+			industry=industry, scale=scale, stage=stage, job_type=job_type,
+		)
+	except ValueError as exc:
+		handle_error_output(ctx, "batch-greet", code="INVALID_PARAM", message=str(exc))
+		return
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	account = account_scope(auth)
