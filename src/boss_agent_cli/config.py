@@ -9,6 +9,10 @@ from typing import Any
 #: 单条只读命令只发 1 次请求，因此不受影响；受影响的是分页、批量详情这类多请求流程。
 DEFAULT_REQUEST_DELAY: tuple[float, float] = (30.0, 60.0)
 
+#: 角色取值域：``--role`` 的 ``Choice``、启动期校验与 ``config set role`` 共用。
+#: 三处必须一致，否则 ``config set`` 能写进一个让之后每条命令都启动失败的值。
+ROLES: tuple[str, str] = ("candidate", "recruiter")
+
 DEFAULTS: dict[str, Any] = {
 	"request_delay": list(DEFAULT_REQUEST_DELAY),
 	"request_budget_dir": None,
