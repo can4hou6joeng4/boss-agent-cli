@@ -74,7 +74,7 @@ def test_platforms_removed_platform_uses_json_error_envelope() -> None:
 		payload = json.loads(result.output)
 		assert payload["ok"] is False
 		assert payload["error"]["code"] == "INVALID_PARAM"
-		assert "unknown platform" in payload["error"]["message"]
+		assert "不支持的平台" in payload["error"]["message"]
 
 
 def test_platforms_unknown_platform_uses_json_error_envelope() -> None:
@@ -85,7 +85,7 @@ def test_platforms_unknown_platform_uses_json_error_envelope() -> None:
 	payload = json.loads(result.output)
 	assert payload["ok"] is False
 	assert payload["error"]["code"] == "INVALID_PARAM"
-	assert "unknown platform" in payload["error"]["message"]
+	assert "不支持的平台" in payload["error"]["message"]
 
 
 def test_platforms_can_filter_by_capability_status_groups() -> None:
@@ -143,7 +143,7 @@ def test_platforms_unknown_capability_uses_json_error_envelope() -> None:
 	payload = json.loads(result.output)
 	assert payload["ok"] is False
 	assert payload["error"]["code"] == "INVALID_PARAM"
-	assert "unknown capability" in payload["error"]["message"]
+	assert "不支持的能力" in payload["error"]["message"]
 
 
 def test_platforms_terminal_render_includes_capability_columns(capsys) -> None:

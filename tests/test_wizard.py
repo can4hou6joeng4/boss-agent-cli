@@ -3441,7 +3441,7 @@ def test_resume_rejects_run_saved_with_removed_platform(tmp_path):
 	assert payload["ok"] is False
 	assert payload["error"]["code"] == "INVALID_PARAM"
 	assert "zhilian" in payload["error"]["message"]
-	assert "supported: zhipin" in payload["error"]["message"]
+	assert "可选: zhipin" in payload["error"]["message"]
 
 
 def _ai_reply(payload):

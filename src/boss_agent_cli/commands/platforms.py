@@ -50,7 +50,7 @@ def _resolve_platform_filter(platform_name: str | None) -> str | None:
 	if platform_name not in candidate_platforms:
 		supported = ", ".join(candidate_platforms)
 		raise click.BadParameter(
-			f"unknown platform {platform_name!r}, supported: {supported}",
+			f"不支持的平台 {platform_name!r}，可选: {supported}",
 			param_hint="--platform",
 		)
 	return platform_name
@@ -69,7 +69,7 @@ def _resolve_capability_filter(capability: str | None) -> str | None:
 	if capability not in known_capabilities:
 		supported = ", ".join(known_capabilities)
 		raise click.BadParameter(
-			f"unknown capability {capability!r}, supported: {supported}",
+			f"不支持的能力 {capability!r}，可选: {supported}",
 			param_hint="--capability",
 		)
 	return capability
