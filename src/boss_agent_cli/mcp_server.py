@@ -282,28 +282,46 @@ async def list_tools(ctx: Any, params: "PaginatedRequestParams | None" = None) -
 	return ListToolsResult(tools=TOOLS)
 
 
+def _tool_argument_error(tool_name: str, message: str) -> CallToolResult:
+	return CallToolResult(
+		content=[
+			TextContent(
+				type="text",
+				text=envelope_error(tool_name, code="INVALID_PARAM", message=message),
+			)
+		],
+		is_error=True,
+	)
+
+
+def _declared_arguments(tool_name: str) -> set[str] | None:
+	tool = next((item for item in TOOLS if item.name == tool_name), None)
+	if tool is None:
+		return None
+	return set(tool.input_schema.get("properties", {}))
+
+
 async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
+	arguments = dict(params.arguments or {})
+	declared = _declared_arguments(params.name)
+	if declared is not None:
+		unknown = sorted(set(arguments) - declared)
+		if unknown:
+			# 未知参数不能静默丢弃：给写工具多传一个 dry_run 也会被忽略，然后真实执行
+			# 投递/打招呼。与 CLI 对未知选项的处理一致，直接拒绝并指出参数名。
+			return _tool_argument_error(
+				params.name,
+				f"未知参数：{', '.join(unknown)}；请按 tools/list 的 inputSchema 传参",
+			)
 	try:
-		args = _build_args(params.name, dict(params.arguments or {}))
+		args = _build_args(params.name, arguments)
 	except KeyError as exc:
 		# 参数映射按 schema 直接取值；客户端漏传条件必填参数（如 resume/status 的
 		# run_id、online/offline 的 job_id）时会抛 KeyError。交给 SDK 只会变成
 		# JSON-RPC 的 "Internal server error"，Agent 拿不到任何可执行信息。这里按
 		# CLI 的错误信封返回，至少带上 INVALID_PARAM、缺失参数名与恢复指引。
 		missing = str(exc.args[0]) if exc.args else "参数"
-		return CallToolResult(
-			content=[
-				TextContent(
-					type="text",
-					text=envelope_error(
-						params.name,
-						code="INVALID_PARAM",
-						message=f"缺少必填参数：{missing}",
-					),
-				)
-			],
-			is_error=True,
-		)
+		return _tool_argument_error(params.name, f"缺少必填参数：{missing}")
 	result = await _run_boss_async(*args)
 	# 信封的 ok 是唯一真源，但 MCP 客户端还需要 is_error 才能把失败标成工具错误；
 	# 两者不一致时，ok:false 会被当成一次成功的工具调用。
