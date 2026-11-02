@@ -24,6 +24,15 @@ def crawl_status(cache: CacheStore, run_id: str) -> dict[str, Any]:
 		raise KeyError(run_id)
 	jobs = cache.list_crawl_jobs(run_id)
 	details_completed = sum(1 for item in jobs if item["detail_done"])
+	checkpoint: dict[str, Any] = {
+		"next_page": run["next_page"],
+		"resume_command": f"boss crawl resume {run_id}",
+	}
+	if run["status"] == "risk_stopped":
+		# 风险锁会先于浏览器构造阻断 resume（raise_if_locked）。这里只标记前置条件，
+		# 不把解锁命令写进机器可执行的 resume_command：风险锁必须由用户确认官方
+		# 页面恢复后显式解除。
+		checkpoint["resume_requires_operator_unlock"] = True
 	return {
 		"run_id": run_id,
 		"status": run["status"],
@@ -44,10 +53,7 @@ def crawl_status(cache: CacheStore, run_id: str) -> dict[str, Any]:
 		"output_dir": run["output_dir"],
 		"error": run["error"],
 		"hooks": run["hook_results"],
-		"checkpoint": {
-			"next_page": run["next_page"],
-			"resume_command": f"boss crawl resume {run_id}",
-		},
+		"checkpoint": checkpoint,
 	}
 
 
