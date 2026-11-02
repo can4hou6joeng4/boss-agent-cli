@@ -187,7 +187,7 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 	"WORKFLOW_TIMEOUT": {
 		"message": "workflow 超过调用方设置的超时",
 		"recoverable": True,
-		"recovery_action": "使用返回的 run_id 恢复 workflow",
+		"recovery_action": "使用返回的 run_id 执行 boss wizard --resume <run_id> 恢复 workflow",
 	},
 	"WORKFLOW_PLAN_MISMATCH": {
 		"message": "run_id 已绑定到不同的 workflow plan",
@@ -322,7 +322,7 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 	"CIRCUIT_BREAKER_OPEN": {
 		"message": "招聘自动化熔断已打开",
 		"recoverable": True,
-		"recovery_action": "人工确认平台状态后恢复",
+		"recovery_action": "人工确认平台状态并核实未确认动作后，执行 boss agent run --resume 显式恢复",
 	},
 	"PLATFORM_VERIFICATION_REQUIRED": {
 		"message": "平台要求人工验证",
