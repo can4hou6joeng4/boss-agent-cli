@@ -591,3 +591,64 @@ def test_resume_schema_marks_uid_gid_deprecated():
 		description = options[name]["description"]
 		assert "已弃用" in description, f"{name} 应标明已弃用: {description}"
 		assert "需要" not in description, f"{name} 不应再声称是必需参数: {description}"
+
+def test_schema_option_minimums_match_click_ranges():
+	"""schema 的 `minimum` 必须与 Click 的 `IntRange` / `FloatRange` 下界双向一致。
+
+	`boss schema` 是能力真源：不写下界，Agent 就会尝试 `--page -1`，换回一个
+	`INVALID_PARAM`；下界写错（schema 允许 0、Click 只收 1）则让 schema 本身
+	不可信。缺下界、多下界、数值不一致都算失败。
+	"""
+	problems: list[str] = []
+
+	def walk(path: str, node: Any, group: dict[str, Any]) -> None:
+		params: dict[str, click.Parameter] = {}
+		for param in getattr(node, "params", ()):
+			if isinstance(param, click.Argument):
+				continue
+			for opt in getattr(param, "opts", ()):
+				params[opt] = param
+				if "/" in opt:
+					params["--" + opt.rsplit("/", 1)[-1].lstrip("-")] = param
+			for opt in getattr(param, "secondary_opts", ()):
+				params[opt] = param
+
+		subgroups: dict[str, dict[str, Any]] = {}
+		for key, value in group.items():
+			if not isinstance(value, dict):
+				continue
+			if not str(key).startswith("-"):
+				subgroups[str(key)] = value
+				continue
+			for spelling in _schema_option_spellings(str(key)):
+				param = params.get(spelling)
+				if param is None:
+					continue
+				param_type = param.type
+				if not isinstance(param_type, (click.IntRange, click.FloatRange)):
+					continue
+				if param_type.min is None:
+					if "minimum" in value:
+						problems.append(f"{path} {spelling}: schema 声明了下界，Click 没有")
+					continue
+				if "minimum" not in value:
+					problems.append(f"{path} {spelling}: 缺少 minimum（Click 下界 {param_type.min}）")
+				elif value["minimum"] != param_type.min:
+					problems.append(
+						f"{path} {spelling}: minimum={value['minimum']} 与 Click 下界 {param_type.min} 不一致"
+					)
+
+		subcommands = getattr(node, "commands", {}) or {}
+		for key, value in subgroups.items():
+			if key in subcommands:
+				walk(f"{path}.{key}", subcommands[key], value)
+		for name, sub in subcommands.items():
+			if name not in subgroups:
+				walk(f"{path}.{name}", sub, {})
+
+	for name, spec in SCHEMA_DATA["commands"].items():
+		node = cli.commands.get(name)
+		if node is not None:
+			walk(name, node, spec.get("options") or {})
+
+	assert not problems, "schema minimum 与 Click 取值域不一致:\n" + "\n".join(problems)
