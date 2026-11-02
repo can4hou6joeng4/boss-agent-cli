@@ -2,9 +2,13 @@
 
 import json
 
+import pytest
+from click.testing import CliRunner
+
 from boss_agent_cli.index_cache import (
 	save_index, try_save_index, get_job_by_index, get_index_info,
 )
+from boss_agent_cli.main import cli
 
 
 _SAMPLE_JOBS = [
@@ -132,3 +136,38 @@ class TestGetIndexInfo:
 		info = get_index_info(tmp_path)
 		assert info["exists"] is False
 		assert info["count"] == 0
+
+
+class TestMalformedCache:
+	"""结构损坏的缓存按「没有缓存」处理，而不是把 AttributeError 兜成 INTERNAL_ERROR。"""
+
+	def _write(self, tmp_path, content: str):
+		cache_dir = tmp_path / "cache"
+		cache_dir.mkdir(exist_ok=True)
+		(cache_dir / "index_cache.json").write_text(content, encoding="utf-8")
+
+	@pytest.mark.parametrize("content", ["[]", '"jobs"', "42", "null"])
+	def test_non_object_cache_counts_as_missing(self, tmp_path, content):
+		self._write(tmp_path, content)
+		assert get_job_by_index(tmp_path, 1) is None
+		assert get_index_info(tmp_path)["exists"] is False
+
+	@pytest.mark.parametrize("content", ['{"jobs": "abc"}', '{"jobs": {"1": {}}}', '{"jobs": [1, null]}'])
+	def test_invalid_jobs_list_counts_as_missing(self, tmp_path, content):
+		self._write(tmp_path, content)
+		assert get_job_by_index(tmp_path, 1) is None
+		assert get_index_info(tmp_path)["exists"] is False
+
+	def test_non_utf8_cache_counts_as_missing(self, tmp_path):
+		(tmp_path / "cache").mkdir()
+		(tmp_path / "cache" / "index_cache.json").write_bytes(b'{"jobs": "\xd5\xc5"}')
+		assert get_job_by_index(tmp_path, 1) is None
+		assert get_index_info(tmp_path)["exists"] is False
+
+	def test_show_reports_missing_cache_instead_of_internal_error(self, tmp_path):
+		self._write(tmp_path, '{"jobs": "abc"}')
+		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "show", "1"])
+		assert result.exit_code == 1
+		parsed = json.loads(result.output)
+		assert parsed["error"]["code"] == "INVALID_PARAM"
+		assert "没有缓存的搜索结果" in parsed["error"]["message"]
