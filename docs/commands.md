@@ -251,7 +251,7 @@ boss config set platform zhipin
 boss --platform zhipin config set platform zhipin
 ```
 
-结构化配置项 `automation`、`crawl` 必须以 JSON object 传值，例如 `boss config set automation '{"mode": "training"}'`；标量文本会被拒绝并返回 `INVALID_PARAM`，不会写入配置文件。`automation` 的内容还会按运行时解析器校验，非法枚举或数值（如 `mode` 拼错、阈值不是数字）同样返回 `INVALID_PARAM` 且不落盘。手工编辑 `config.json` 造成该键不是对象或 `automation` 内容非法时，`boss agent run` / `train` 返回 `INVALID_PARAM` 并给出 `boss config reset automation` 修复入口，不再以 traceback 退出。`config.json` 本身读不出来（权限不足、路径被同名目录占用）时，任何命令都在启动阶段返回 `INVALID_PARAM` 并在消息里给出文件路径；写配置失败（目录只读、磁盘已满）返回 `LOCAL_IO_ERROR`，同样不落盘、不以 traceback 退出。
+结构化配置项 `automation`、`crawl` 必须以 JSON object 传值，例如 `boss config set automation '{"mode": "training"}'`；标量文本会被拒绝并返回 `INVALID_PARAM`，不会写入配置文件。`automation` 的内容还会按运行时解析器校验，非法枚举或数值（如 `mode` 拼错、阈值不是数字）同样返回 `INVALID_PARAM` 且不落盘。手工编辑 `config.json` 造成该键不是对象或 `automation` 内容非法时，`boss agent run` / `train` 返回 `INVALID_PARAM` 并给出 `boss config reset automation` 修复入口，不再以 traceback 退出。`config.json` 本身读不出来（权限不足、路径被同名目录占用）时，任何命令都在启动阶段返回 `INVALID_PARAM` 并在消息里给出文件路径；写配置失败（目录只读、磁盘已满）返回 `LOCAL_IO_ERROR`，同样不落盘、不以 traceback 退出。文件内容不是合法 JSON 或不是对象时同样在启动阶段返回 `INVALID_PARAM`，消息给出文件路径与出错行列；这类损坏需要手动修正或删除该文件（删除后所有配置回到默认值），`config set/reset` 本身也依赖可读取的配置文件。
 
 ### 共享请求预算与冷却
 

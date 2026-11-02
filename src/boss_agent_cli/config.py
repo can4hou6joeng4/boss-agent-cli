@@ -81,9 +81,17 @@ def load_config(config_path: Path | None) -> dict[str, Any]:
 	user_cfg: dict[str, Any] = {}
 	if config_path and config_path.exists():
 		with open(config_path, encoding="utf-8") as f:
-			user_cfg = json.load(f)
+			try:
+				user_cfg = json.load(f)
+			except json.JSONDecodeError as exc:
+				# 这份文件坏掉时所有命令都在启动阶段退出，连 config reset 也跑不了：
+				# 消息必须给出文件路径和行列，让用户知道要改哪份文件、怎么恢复。
+				raise ValueError(
+					f"{config_path} 不是合法 JSON（第 {exc.lineno} 行第 {exc.colno} 列：{exc.msg}）："
+					"修正该文件或删除它后重试；删除后所有配置回到默认值"
+				) from exc
 		if not isinstance(user_cfg, dict):
-			raise ValueError("config.json 必须是 JSON 对象")
+			raise ValueError(f"{config_path} 必须是 JSON 对象")
 		cfg.update(user_cfg)
 	mode = user_cfg.get("operating_mode")
 	if mode not in {"assisted", "research"}:
