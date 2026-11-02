@@ -47,6 +47,7 @@
 - 另外两处 MCP 工具 schema 与 CLI 不一致：`boss_batch_greet` 的 `limit` 被映射到不存在的 `--limit`（CLI 选项是 `--count`），调用方只要传 `limit` 就会被 Click 拒绝，且不传时会落到 CLI 默认的 10、比工具声明的 5 多一倍；`boss_me` 的 `section` 枚举把 `user` 写成 `info`，客户端按 schema 取第一个值同样被拒绝。现在 `limit` 落到 `--count` 并显式下发默认 5，`section` 枚举改为 `user`；`docs/commands.md` 与 `.en.md` 中 batch-greet 的 `--limit` 同步改为 `--count`，并新增测试逐个校验工具 schema 声明的枚举值都能被对应 CLI 接受。
 - MCP 客户端漏传条件必填参数时（如 `boss_wizard` 的 `action=resume/status/stop` 少了 `run_id`、`boss_hr_jobs` 的 `online/offline` 少了 `job_id`），参数映射直接按下标取值抛 `KeyError`，SDK 把它变成 JSON-RPC 的 `Internal server error`：Agent 既看不到缺了哪个参数，也拿不到恢复指引。现在 `call_tool` 捕获该异常并按 CLI 错误信封返回工具错误（`INVALID_PARAM`、缺失参数名、`recoverable` / `recovery_action` 取自错误码登记表）。同时所有工具结果的 `is_error` 改为镜像信封的 `ok`：以前 CLI 返回 `ok:false`（登录过期、风控停止、命中确认门等）时 MCP 客户端看到的是一次成功的工具调用。
 - MCP 工具会静默丢弃 inputSchema 之外的参数：`boss_apply` / `boss_greet` 没有 `dry_run` 属性，调用方多传这个参数时它被忽略，命令照常真实提交投递或打招呼——把「预览」变成写操作。现在 `call_tool` 按 `tools/list` 声明的属性校验参数，未知参数直接返回 `INVALID_PARAM` 工具错误并列出参数名，不再触达 CLI。
+- 工具描述把可用性说明拼成「可用性: 可用性: roles=...」：`availability_note()` 返回值已带前缀，`build_tool_catalog()` 与 `_decorate_tool_descriptions()` 又各自加了一层。MCP `tools/list` 与 `boss schema --format openai-tools/anthropic-tools/mcp-tools` 导出给 Agent 的描述都带着重复前缀，按前缀解析可用性元数据会出错。现在两处都只拼接一次；兼容入口 `_decorate_tool_descriptions()` 改为幂等，重复调用不再叠加说明。
 
 ## [3.2.0] - 2026-11-01
 

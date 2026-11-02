@@ -1016,6 +1016,8 @@ def build_tool_catalog(data: dict[str, Any] | None = None) -> list[ToolDefinitio
 	for tool in _tool_definitions(schema):
 		availability = tool_availability(tool.name, schema)
 		if availability:
-			tool = replace(tool, description=f"{tool.description} [可用性: {availability_note(availability)}]")
+			# availability_note 自带「可用性: 」前缀，这里不能再拼一次，
+			# 否则导出给 Agent 的描述会出现「可用性: 可用性: ...」。
+			tool = replace(tool, description=f"{tool.description} [{availability_note(availability)}]")
 		tools.append(tool)
 	return tools
