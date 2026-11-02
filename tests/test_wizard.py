@@ -35,6 +35,7 @@ from boss_agent_cli.wizard.prompts import (
 	WizardCancelled,
 	WizardControl,
 	WizardReturnHome,
+	_collect_control,
 	_main_menu_options,
 	ask_continue_session,
 	collect_entity_follow_up,
@@ -1303,6 +1304,50 @@ def test_main_menu_shows_resume_and_retry_for_failed_runs():
 	labels = [item.label for item in options]
 	assert "恢复已有任务" in labels
 	assert "重试失败任务" in labels
+
+
+def _blocked_failed_run(run_id: str = "f") -> dict:
+	"""动作可能已生效、结果未确认的失败 run（--resume 只会返回原失败）。"""
+	return {
+		"run_id": run_id,
+		"status": "failed",
+		"steps": [
+			{
+				"step_name": "candidate_apply",
+				"status": "failed",
+				"error": {"code": "LOCAL_STATE_WRITE_FAILED", "replay_safe": False},
+			}
+		],
+	}
+
+
+def test_main_menu_hides_resume_and_retry_when_only_blocked_failed_runs():
+	options = _main_menu_options([_blocked_failed_run()])
+	labels = [item.label for item in options]
+	assert "恢复已有任务" not in labels
+	assert "重试失败任务" not in labels
+	assert "查看任务状态" in labels
+
+
+def test_main_menu_keeps_resume_when_a_replayable_failed_run_exists():
+	options = _main_menu_options([_blocked_failed_run(), {"run_id": "ok", "status": "failed"}])
+	labels = [item.label for item in options]
+	assert "恢复已有任务" in labels
+	assert "重试失败任务" in labels
+
+
+def test_collect_control_excludes_blocked_runs_from_resume_picker():
+	menu = _ScriptedMenu(["ok"])
+	control = _collect_control(menu, "resume", [_blocked_failed_run(), {"run_id": "ok", "status": "failed"}])
+	assert control.run_id == "ok"
+	assert [option.value for option in menu.menus[0][1]] == ["ok"]
+
+
+def test_collect_control_status_view_marks_blocked_run_for_manual_check():
+	menu = _ScriptedMenu(["f"])
+	control = _collect_control(menu, "status", [_blocked_failed_run()])
+	assert control.run_id == "f"
+	assert "人工核对" in menu.menus[0][1][0].description
 
 
 def test_entity_follow_up_offers_greet_after_job_detail():
