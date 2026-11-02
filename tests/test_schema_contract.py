@@ -255,6 +255,91 @@ def test_browser_source_schema_only_describes_supported_channels():
 	assert "CDP_UNAVAILABLE" in description
 
 
+# ── 位置参数声明 == 实际可执行参数 ───────────────────────────────────
+
+
+def _click_param_args(node: Any) -> list[tuple[str, bool]]:
+	return [(param.name, param.required) for param in getattr(node, "params", ()) if isinstance(param, click.Argument)]
+
+
+def _schema_arg_entries(spec: dict[str, Any]) -> list[tuple[str, bool]]:
+	return [
+		(str(entry.get("name")), bool(entry.get("required")))
+		for entry in spec.get("args", [])
+		if isinstance(entry, dict)
+	]
+
+
+#: 刻意不进入 native schema 的位置参数（内部隐藏 / 测试专用）。
+_UNDECLARED_SCHEMA_ARGS: dict[str, set[str]] = {}
+
+
+def _schema_subcommand_specs(spec: dict[str, Any]) -> dict[str, dict[str, Any]]:
+	"""返回某个规范节点下直接挂着的子命令分组。
+
+	schema 有两种形状：命令级 `options` 下的非选项键（`crawl.run`、`watch.add`），
+	以及不带 `options` 的分组里直接挂子命令（`hr.jobs`、`agent.review`、
+	`ai.local`）。两种都要递归，否则深层位置参数会漏检。
+	"""
+	if isinstance(spec.get("options"), dict):
+		return {
+			str(key): value
+			for key, value in spec["options"].items()
+			if not str(key).startswith("-") and isinstance(value, dict)
+		}
+	reserved = {"description", "args", "options", "subcommands", "mcp_tools"}
+	return {
+		str(key): value
+		for key, value in spec.items()
+		if str(key) not in reserved and not str(key).startswith("-") and isinstance(value, dict)
+	}
+
+
+def test_schema_arg_declarations_are_executable():
+	"""schema 的 args 必须与 Click 命令树双向一致。
+
+	位置参数按声明顺序绑定，Agent 照 schema 构造 `boss watch add <name> <query>`
+	时顺序或必填性错了都会被 Click 拒绝。声明的参数必须真的落在对应命令上；
+	可执行的位置参数也必须声明；两者顺序与 required 都要一致。
+	"""
+	problems: list[str] = []
+
+	def walk(path: str, node: Any, spec: dict[str, Any]) -> None:
+		declared = _schema_arg_entries(spec)
+		actual = _click_param_args(node)
+		allowed = _UNDECLARED_SCHEMA_ARGS.get(path, set())
+
+		declared_names = [name for name, _ in declared]
+		actual_names = [name for name, _ in actual]
+		if declared_names != actual_names:
+			problems.append(f"{path}: schema args {declared_names} != click args {actual_names}")
+		for name, required in declared:
+			actual_required = dict(actual).get(name)
+			if actual_required is not None and actual_required != required:
+				problems.append(f"{path}: 参数 {name} required 声明为 {required}，实际为 {actual_required}")
+		for name in actual_names:
+			if name not in declared_names and name not in allowed:
+				problems.append(f"{path}: 可执行但未声明位置参数 {name}")
+
+		subcommands = getattr(node, "commands", {}) or {}
+		children = _schema_subcommand_specs(spec)
+		for key, value in children.items():
+			sub = subcommands.get(key)
+			if sub is None:
+				continue  # 未注册分组由选项一致性测试报告
+			walk(f"{path}.{key}", sub, value)
+		for sub_name, sub in subcommands.items():
+			if sub_name not in children:
+				walk(f"{path}.{sub_name}", sub, {})
+
+	for name, spec in SCHEMA_DATA["commands"].items():
+		node = cli.commands.get(name)
+		if node is not None:
+			walk(name, node, spec)
+
+	assert not problems, "schema 位置参数声明与 Click 命令树不一致:\n" + "\n".join(problems)
+
+
 # ── 错误码一致性 ────────────────────────────────────────────────────
 
 _SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src" / "boss_agent_cli"
