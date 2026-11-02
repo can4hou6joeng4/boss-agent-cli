@@ -68,8 +68,28 @@ def test_greet_success_renders_message_and_records_cache(mock_cache_cls, mock_au
 	mock_cache.record_greet.assert_called_once_with("sec_001", "job_001", account="")
 
 
-# Note: hook veto 分支已由 tests/test_hooks.py 独立覆盖，Click runner
-# 不便注入 ctx.obj["hooks"]，此处不重复测试。
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
+@patch("boss_agent_cli.commands.greet.AuthManager")
+@patch("boss_agent_cli.commands.greet.CacheStore")
+@patch("boss_agent_cli.main.create_hook_bus")
+def test_greet_hook_veto_returns_registered_recovery_action(
+	mock_hook_bus, mock_cache_cls, mock_auth_cls, mock_get_platform, legacy_args
+):
+	"""钩子阻止信封必须带登记表的 recovery_action，而不是 null。"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_platform = _ctx_mock(mock_get_platform)
+	mock_hook_bus.return_value.greet_before.call.return_value = "company blocked"
+
+	result = CliRunner().invoke(cli, [*legacy_args, "greet", "sec_001", "job_001"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "HOOK_BLOCKED"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == ERROR_CODES["HOOK_BLOCKED"]["recovery_action"]
+	mock_platform.greet.assert_not_called()
 
 
 # ── batch-greet 真实执行路径 ─────────────────────────────

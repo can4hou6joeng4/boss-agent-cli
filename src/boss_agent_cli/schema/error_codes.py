@@ -9,6 +9,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "确认操作目标与内容后重新执行并加 --yes",
 	},
+	"HOOK_BLOCKED": {
+		"message": "操作被本地钩子阻止",
+		"recoverable": True,
+		"recovery_action": "检查 greet_before 钩子的返回内容，调整或移除阻止后重试",
+	},
 	"RESUME_ACCEPT_RESULT_UNKNOWN": {
 		"message": "同意附件简历请求的结果未确认，禁止自动重试",
 		"recoverable": False,
@@ -233,6 +238,16 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"message": "AI 服务未配置",
 		"recoverable": True,
 		"recovery_action": "boss ai config --provider <provider> --model <model> --api-key <key>",
+	},
+	"CONFIRM_DOWNLOAD_REQUIRED": {
+		"message": "下载模型权重需要显式确认",
+		"recoverable": True,
+		"recovery_action": "确认模型与下载量后重新执行并加 --confirm-download",
+	},
+	"LOCAL_MODEL_PULL_FAILED": {
+		"message": "Ollama 拉取模型失败",
+		"recoverable": True,
+		"recovery_action": "确认 Ollama 已安装并可访问网络后重试",
 	},
 	"AI_API_ERROR": {
 		"message": "AI 服务调用失败",

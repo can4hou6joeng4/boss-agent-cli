@@ -118,11 +118,7 @@ def test_browser_source_schema_only_describes_supported_channels():
 
 
 def test_schema_error_codes_cover_all_used_codes():
-	"""代码中实际使用的错误码应全部在 schema error_codes 中声明。
-
-	已知例外:
-	- HOOK_BLOCKED: 仅在启用钩子系统时出现，属于扩展机制，不在公开 schema 中声明。
-	"""
+	"""代码中实际使用的错误码应全部在 schema error_codes 中声明。"""
 	schema_codes = set(SCHEMA_DATA["error_codes"].keys())
 
 	# 代码中实际使用的所有错误码（通过审计收集）
@@ -155,13 +151,11 @@ def test_schema_error_codes_cover_all_used_codes():
 		"NOT_SUPPORTED",
 		"COMPLIANCE_BLOCKED",
 		"HOOK_BLOCKED",
+		"CONFIRM_DOWNLOAD_REQUIRED",
+		"LOCAL_MODEL_PULL_FAILED",
 	}
 
-	# HOOK_BLOCKED 是内部扩展机制，允许不在公开 schema 中
-	allowed_internal = {"HOOK_BLOCKED"}
-	must_be_in_schema = used_codes - allowed_internal
-
-	missing = must_be_in_schema - schema_codes
+	missing = used_codes - schema_codes
 	assert not missing, (
 		f"以下错误码在代码中使用但未在 schema 中声明: {missing}"
 	)
