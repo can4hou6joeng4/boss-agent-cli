@@ -13,7 +13,7 @@ from boss_agent_cli.services.chat_utils import (
 	RELATION_LABELS, FROM_FILTER, MSG_STATUS_LABELS,
 	sanitize_csv_cell, escape_md_cell,
 )
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_simple_list
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_simple_list
 
 # 向后兼容别名（旧测试引用 chat._sanitize_csv_cell 等）
 _RELATION_LABELS = RELATION_LABELS
@@ -120,6 +120,19 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				today = datetime.date.today().isoformat()
 				# 优先读 config 中的 export_dir，否则 fallback 到 data_dir/chat-export
 				export_dir = ctx.obj.get("config", {}).get("export_dir")
+				if export_dir and not isinstance(export_dir, str):
+					# config.json 被手改成数字 / 数组时 os.path.expanduser 会抛 TypeError：
+					# 按参数错误给信封，并指出只改这一项的修复命令。
+					handle_error_output(
+						ctx,
+						"chat",
+						code="INVALID_PARAM",
+						message=f"export_dir 必须是目录路径字符串或 null，收到 {export_dir!r}",
+						recoverable=True,
+						recovery_action=boss_command_for_ctx(ctx, "config reset export_dir"),
+					)
+					ctx.exit(1)
+					return
 				if export_dir:
 					export_dir = os.path.expanduser(export_dir)
 				else:

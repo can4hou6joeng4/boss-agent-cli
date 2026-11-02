@@ -1207,6 +1207,54 @@ def test_chat_export_unwritable_export_dir_returns_local_io_error(mock_auth_cls,
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_export_non_string_export_dir_returns_invalid_param(mock_auth_cls, mock_client_cls, tmp_path):
+	"""config.json 的 export_dir 不是字符串时不能抛 os.path.expanduser 的 TypeError。"""
+	import time
+	now_ms = int(time.time() * 1000)
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
+	mock_client_cls.return_value.friend_list.return_value = {
+		"zpData": {
+			"result": [
+				_make_friend_item("张HR", "阿里", 1, now_ms),
+			],
+		},
+	}
+	(tmp_path / "config.json").write_text(json.dumps({"export_dir": 9}), encoding="utf-8")
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "chat", "--export", "json"])
+	parsed = json.loads(result.output)
+	assert result.exit_code == 1
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "export_dir" in parsed["error"]["message"]
+	assert "9" in parsed["error"]["message"]
+	assert parsed["error"]["recoverable"] is True
+	assert "config reset export_dir" in parsed["error"]["recovery_action"]
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_export_container_export_dir_returns_invalid_param(mock_auth_cls, mock_client_cls, tmp_path):
+	"""数组 / 对象形态的 export_dir 同样按参数错误处理。"""
+	import time
+	now_ms = int(time.time() * 1000)
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
+	mock_client_cls.return_value.friend_list.return_value = {
+		"zpData": {"result": [_make_friend_item("张HR", "阿里", 1, now_ms)]},
+	}
+	for value in (["/tmp/exports"], {"path": "/tmp/exports"}):
+		(tmp_path / "config.json").write_text(json.dumps({"export_dir": value}), encoding="utf-8")
+
+		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "chat", "--export", "json"])
+		parsed = json.loads(result.output)
+		assert result.exit_code == 1
+		assert parsed["error"]["code"] == "INVALID_PARAM"
+		assert repr(value) in parsed["error"]["message"]
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_json_default_path(mock_auth_cls, mock_client_cls, tmp_path):
 	"""--export json 不指定 -o 时自动保存到 export_dir"""
 	import time
