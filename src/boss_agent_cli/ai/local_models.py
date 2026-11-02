@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Final
+
+from boss_agent_cli.services.json_files import write_json_atomic
 
 RUNTIME_BASE_URLS: Final = {
 	"ollama": "http://localhost:11434/v1",
@@ -114,19 +115,6 @@ def read_imported_models(data_dir: Path, *, strict: bool = False) -> list[Import
 	]
 
 
-def _write_registry_atomic(path: Path, rows: list[ImportedLocalModel]) -> None:
-	"""tmp + os.replace：写一半被中断时不会留下半截 JSON 把后续 status/import 全部卡死。"""
-	temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-	try:
-		temporary.write_text(
-			json.dumps([asdict(item) for item in rows], ensure_ascii=False, indent=2),
-			encoding="utf-8",
-		)
-		os.replace(temporary, path)
-	finally:
-		temporary.unlink(missing_ok=True)
-
-
 def import_local_model(data_dir: Path, source: Path, model: str) -> ImportedLocalModel:
 	"""Copy an external model artifact into the user data directory and register it."""
 	if not source.exists():
@@ -144,9 +132,7 @@ def import_local_model(data_dir: Path, source: Path, model: str) -> ImportedLoca
 		shutil.copy2(source, target)
 	imported = ImportedLocalModel(model=model, path=str(target), runtime="custom")
 	rows.append(imported)
-	registry = model_registry_path(data_dir)
-	registry.parent.mkdir(parents=True, exist_ok=True)
-	_write_registry_atomic(registry, rows)
+	write_json_atomic(model_registry_path(data_dir), [asdict(item) for item in rows])
 	return imported
 
 

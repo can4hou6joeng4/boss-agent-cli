@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.output import Logger
+from boss_agent_cli.services.json_files import write_json_atomic
 
 _CACHE_FILE = "index_cache.json"
 
@@ -44,8 +45,7 @@ def save_index(data_dir: Path, jobs: list[dict[str, Any]], source: str = "search
 	}
 
 	path = _cache_path(data_dir)
-	path.parent.mkdir(parents=True, exist_ok=True)
-	path.write_text(json.dumps(cache_data, ensure_ascii=False, indent=2), encoding="utf-8")
+	write_json_atomic(path, cache_data)
 
 
 def try_save_index(data_dir: Path, jobs: list[dict[str, Any]], *, source: str = "search", logger: Logger | None = None) -> bool:
