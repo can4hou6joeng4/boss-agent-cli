@@ -139,8 +139,10 @@ def execute_candidate_search(
 		cache,
 		logger,
 		criteria=criteria,
-		start_page=_int_input(inputs, "page", 1),
-		max_pages=_int_input(inputs, "max_pages", detail_filter_max_pages(welfare_conditions, active)),
+		start_page=_int_input(inputs, "page", 1, minimum=1),
+		max_pages=_int_input(
+			inputs, "max_pages", detail_filter_max_pages(welfare_conditions, active), minimum=1
+		),
 		welfare_conditions=welfare_conditions,
 		before_list_request=inputs.get("before_list_request"),
 		**extra,
@@ -152,7 +154,7 @@ def execute_recruiter_candidate_search(platform: Any, inputs: Mapping[str, Any])
 	return platform.search_geeks(
 		str(inputs.get("query") or ""),
 		city=_optional_str(inputs.get("city")),
-		page=_int_input(inputs, "page", 1),
+		page=_int_input(inputs, "page", 1, minimum=1),
 		job_id=_optional_str(inputs.get("job_id")),
 		experience=_optional_str(inputs.get("experience")),
 		degree=_optional_str(inputs.get("degree")),
@@ -215,20 +217,41 @@ def _optional_str(value: Any) -> str | None:
 	return str(value) if value is not None and value != "" else None
 
 
-def _int_input(inputs: Mapping[str, Any], name: str, default: int) -> int:
-	"""读取整数输入，类型错误必须点名字段。
+def _coerce_int(raw: Any, name: str) -> int:
+	"""把 wizard 输入转成整数；类型错误必须点名字段。
 
 	wizard inputs 来自 `--input-json` / MCP，写成非数字字符串时 `int()` 抛的裸
 	ValueError 会落到 runner 的通用兜底，被映射成 NETWORK_ERROR +「重试当前
-	run_id」——同一条输入重试多少次都是同一个错误。
+	run_id」——同一条输入重试多少次都是同一个错误。bool 与小数同样不是「页码 /
+	条数」的合法取值：`int(True)` 会静默当成 1，`int(2.5)` 会静默截断成 2。
 	"""
-	raw = inputs.get(name)
-	if not raw:
-		return default
+	if isinstance(raw, bool) or (isinstance(raw, float) and not raw.is_integer()):
+		raise WorkflowInputError(f"wizard 输入 {name} 必须是整数，收到 {raw!r}")
 	try:
 		return int(raw)
 	except (TypeError, ValueError) as exc:
 		raise WorkflowInputError(f"wizard 输入 {name} 必须是整数，收到 {raw!r}") from exc
+
+
+def _check_minimum(value: int, raw: Any, name: str, minimum: int) -> int:
+	if value < minimum:
+		raise WorkflowInputError(f"wizard 输入 {name} 必须是不小于 {minimum} 的整数，收到 {raw!r}")
+	return value
+
+
+def _int_input(inputs: Mapping[str, Any], name: str, default: int, *, minimum: int = 0) -> int:
+	"""读取整数输入并校验下界。
+
+	下游把这些值直接当页码 / 翻页次数 / 条数用：`max_pages=-3` 会让
+	`range(max_pages)` 一次都不循环，workflow 以「成功」收尾但结果为空；
+	负数页码则会原样作为 page 参数发给平台。这类输入重试多少次都是同一个结果。
+	"""
+	raw = inputs.get(name)
+	# 只有「没给」才用默认值；显式写的 0 不能被当成缺省悄悄换成默认值
+	# （`0 or default` 会让 `count: 0` 变成 20 条）。
+	if raw is None or raw == "":
+		return default
+	return _check_minimum(_coerce_int(raw, name), raw, name, minimum)
 
 
 def _required(inputs: Mapping[str, Any], name: str) -> Any:
@@ -243,12 +266,9 @@ def _required(inputs: Mapping[str, Any], name: str) -> Any:
 	return value
 
 
-def _required_int(inputs: Mapping[str, Any], name: str) -> int:
+def _required_int(inputs: Mapping[str, Any], name: str, *, minimum: int = 0) -> int:
 	raw = _required(inputs, name)
-	try:
-		return int(raw)
-	except (TypeError, ValueError) as exc:
-		raise WorkflowInputError(f"wizard 输入 {name} 必须是整数，收到 {raw!r}") from exc
+	return _check_minimum(_coerce_int(raw, name), raw, name, minimum)
 
 
 def _classify_action_error(code: str, message: str) -> tuple[str, bool, str]:
@@ -434,7 +454,7 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 		{
 			"items": result.items,
 			"pagination": {
-				"page": _int_input(inputs, "page", 1),
+				"page": _int_input(inputs, "page", 1, minimum=1),
 				"has_more": result.has_more,
 				"total": result.total or len(result.items),
 			},
@@ -444,7 +464,7 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 
 def _candidate_recommend(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	with context.candidate_platform() as platform:
-		data = _unwrap(platform, platform.recommend_jobs(page=_int_input(inputs, "page", 1)), "推荐职位获取失败")
+		data = _unwrap(platform, platform.recommend_jobs(page=_int_input(inputs, "page", 1, minimum=1)), "推荐职位获取失败")
 	items = _extract_list_items(data, ("recommendList", "jobList", "list", "items", "result"))
 	return StepResult(_with_items({"result": data}, items))
 
@@ -604,7 +624,7 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 
 def _candidate_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	with context.candidate_platform() as platform:
-		data = _unwrap(platform, platform.friend_list(page=_int_input(inputs, "page", 1)), "沟通列表获取失败")
+		data = _unwrap(platform, platform.friend_list(page=_int_input(inputs, "page", 1, minimum=1)), "沟通列表获取失败")
 	items = _extract_list_items(data, ("result", "friendList", "list", "items"))
 	return StepResult(_with_items({"result": data}, items))
 
@@ -617,8 +637,8 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 		response = platform.chat_history(
 			gid,
 			security_id,
-			page=_int_input(inputs, "page", 1),
-			count=_int_input(inputs, "count", 20),
+			page=_int_input(inputs, "page", 1, minimum=1),
+			count=_int_input(inputs, "count", 20, minimum=1),
 		)
 		data = _unwrap(platform, response, "聊天记录获取失败")
 	items = _extract_list_items(data, ("messageList", "messages", "list", "items", "result"))
@@ -1058,7 +1078,7 @@ def _recruiter_applications(context: ActionContext, inputs: Mapping[str, Any], p
 	return _recruiter_call(
 		context,
 		lambda platform: platform.friend_list(
-			page=_int_input(inputs, "page", 1),
+			page=_int_input(inputs, "page", 1, minimum=1),
 			label_id=_int_input(inputs, "label_id", 0),
 			job_id=_optional_str(inputs.get("job_id")),
 		),
@@ -1088,7 +1108,7 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 		friend_data = _unwrap(
 			platform,
 			platform.friend_list(
-				page=_int_input(inputs, "page", 1),
+				page=_int_input(inputs, "page", 1, minimum=1),
 				label_id=_int_input(inputs, "label_id", 0),
 				job_id=_optional_str(inputs.get("job_id")),
 			),
@@ -1130,7 +1150,7 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 
 
 def _recruiter_reply(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	friend_id = _required_int(inputs, "friend_id")
+	friend_id = _required_int(inputs, "friend_id", minimum=1)
 	message = str(_required(inputs, "message"))
 	return _recruiter_call(
 		context, lambda platform: platform.send_message_by_friend(friend_id, message), "消息发送失败"
@@ -1138,12 +1158,12 @@ def _recruiter_reply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 
 
 def _recruiter_chat_history(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	friend_id = _required_int(inputs, "friend_id")
+	friend_id = _required_int(inputs, "friend_id", minimum=1)
 	return _recruiter_call(
 		context,
 		lambda platform: platform.chat_history(
 			friend_id,
-			count=_int_input(inputs, "count", 20),
+			count=_int_input(inputs, "count", 20, minimum=1),
 			max_msg_id=_int_input(inputs, "max_msg_id", 0) if inputs.get("max_msg_id") else None,
 		),
 		"聊天记录获取失败",
@@ -1154,7 +1174,7 @@ def _recruiter_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 def _recruiter_request_resume(
 	context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]
 ) -> StepResult:
-	friend_id = _required_int(inputs, "friend_id")
+	friend_id = _required_int(inputs, "friend_id", minimum=1)
 	return _recruiter_call(
 		context,
 		lambda platform: platform.exchange_request_by_friend(friend_id, exchange_type=4),
@@ -1165,7 +1185,7 @@ def _recruiter_request_resume(
 def _recruiter_exchange_contact(
 	context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]
 ) -> StepResult:
-	friend_id = _required_int(inputs, "friend_id")
+	friend_id = _required_int(inputs, "friend_id", minimum=1)
 	exchange_type = 2 if str(inputs.get("type") or "phone") == "wechat" else 1
 	return _recruiter_call(
 		context,
