@@ -898,6 +898,55 @@ def test_recruiter_search_rejects_non_integer_page_input():
 		execute_recruiter_candidate_search(_Platform(), {"query": "Python", "page": "abc"})
 
 
+@pytest.mark.parametrize("page", [0, -1])
+def test_recruiter_search_rejects_non_positive_page_input(page):
+	"""页码 0 / 负数会被原样发给平台；这类输入重试多少次都是同一个结果。"""
+	from boss_agent_cli.wizard.actions import execute_recruiter_candidate_search
+
+	class _Platform:
+		def search_geeks(self, *args, **kwargs):
+			raise AssertionError("输入校验失败时不应调用平台")
+
+	with pytest.raises(WorkflowInputError, match="page"):
+		execute_recruiter_candidate_search(_Platform(), {"query": "Python", "page": page})
+
+
+@pytest.mark.parametrize("max_pages", [0, -3])
+def test_candidate_search_rejects_non_positive_max_pages(max_pages):
+	"""`max_pages=-3` 会让 `range(max_pages)` 一次都不循环：workflow 以成功收尾但结果为空。"""
+	from boss_agent_cli.wizard.actions import execute_candidate_search
+
+	def _pipeline(*args, **kwargs):
+		raise AssertionError("输入校验失败时不应发起搜索请求")
+
+	with pytest.raises(WorkflowInputError, match="max_pages"):
+		execute_candidate_search(
+			object(),
+			None,  # type: ignore[arg-type]
+			object(),  # type: ignore[arg-type]
+			{"query": "Python", "max_pages": max_pages},
+			pipeline=_pipeline,
+		)
+
+
+def test_int_input_does_not_turn_explicit_zero_into_default():
+	"""显式写的 0 不能被当成缺省悄悄换成默认值（`0 or default` 会让 count: 0 变成 20 条）。"""
+	from boss_agent_cli.wizard.actions import _int_input
+
+	assert _int_input({"days_stale": 0}, "days_stale", 3) == 0
+	assert _int_input({}, "days_stale", 3) == 3
+	with pytest.raises(WorkflowInputError, match="count"):
+		_int_input({"count": 0}, "count", 20, minimum=1)
+
+
+@pytest.mark.parametrize("value", ["abc", True, 2.5])
+def test_int_input_rejects_non_integer_values(value):
+	from boss_agent_cli.wizard.actions import _int_input
+
+	with pytest.raises(WorkflowInputError, match="page"):
+		_int_input({"page": value}, "page", 1, minimum=1)
+
+
 def test_wizard_models_import_on_python_310_compatible_surface():
 	result = subprocess.run(
 		[
