@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+import click
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
@@ -141,10 +142,14 @@ def test_schema_hr_subcommands_match_click_tree():
 def _click_param_options(node: Any) -> set[str]:
 	names: set[str] = set()
 	for param in getattr(node, "params", ()):
+		if isinstance(param, click.Argument):
+			continue
 		for opt in getattr(param, "opts", ()):
 			names.add(opt)
 			if "/" in opt:
 				names.add("--" + opt.rsplit("/", 1)[-1].lstrip("-"))
+		for opt in getattr(param, "secondary_opts", ()):
+			names.add(opt)
 	return names
 
 
@@ -153,44 +158,83 @@ def _schema_option_spellings(key: str) -> set[str]:
 	return {part.strip() for part in key.split(",") if part.strip().startswith("-")}
 
 
-def _subcommand_option_names(node: Any) -> set[str]:
-	names = _click_param_options(node)
-	for sub in (getattr(node, "commands", {}) or {}).values():
-		names |= _click_param_options(sub)
-		names |= _subcommand_option_names(sub)
-	return names
+#: 刻意不进入 native schema 的可执行选项：内部隐藏 / 历史兼容 / 测试专用 / 与全局重复。
+#: 键是 Click 命令路径（`命令.分组.子分组`），值是该路径下允许未声明的选项。
+_UNDECLARED_SCHEMA_OPTIONS: dict[str, set[str]] = {
+	"login": {"--ignore-risk-lock"},  # 历史兼容，已明确不再跳过本地风控锁
+	"wizard": {"--json"},  # 与全局 --json 重复
+	"pipeline": {"--now-ts-ms"},  # 测试专用时间戳覆盖
+	"follow-up": {"--now-ts-ms"},
+	"digest": {"--now-ts-ms"},
+	"crawl.resume": {"--from-queue"},  # 后台恢复子进程内部使用，Click hidden
+	"agent.crawl": {"--allow-crawl"},  # 历史兼容，当前版本无需传入
+}
 
 
 def test_schema_option_declarations_are_executable():
-	"""schema 里声明的选项必须落在实际命令或子命令上。
+	"""schema 的 options 必须与 Click 命令树双向一致。
+
+	声明的选项要真的落在对应命令/子命令上（Agent 照 schema 构造 argv 不能
+	被 Click 拒绝）；可执行的公开选项也必须声明（否则 Agent 从 schema 里
+	看不到能力）。分组按 CLI 子命令名递归，`hr jobs list --page` 这种深层
+	选项要写进 `jobs.list`，不能平铺在 `jobs` 上。
 
 	`agent` 曾把 `agent run` 的三个选项写成 `agent` 的命令级选项：Agent 按
-	schema 构造 `boss agent --resume` 会直接被 Click 拒绝。命令级选项只能
-	出现在命令自身，子命令选项必须放进分组。
+	schema 构造 `boss agent --resume` 会直接被 Click 拒绝。
 	"""
 	problems: list[str] = []
-	for name, spec in SCHEMA_DATA["commands"].items():
-		node = cli.commands.get(name)
-		if node is None:
-			continue
-		for key, value in (spec.get("options") or {}).items():
-			if key.startswith("-"):
-				missing = _schema_option_spellings(key) - _click_param_options(node)
-				if missing:
-					problems.append(f"{name}: 命令级选项 {sorted(missing)} 不在命令自身参数中")
-				continue
+
+	def walk(path: str, node: Any, group: dict[str, Any]) -> None:
+		declared: set[str] = set()
+		subgroups: dict[str, dict[str, Any]] = {}
+		for key, value in group.items():
 			if not isinstance(value, dict):
 				continue
-			sub = (getattr(node, "commands", {}) or {}).get(key)
+			if str(key).startswith("-"):
+				declared |= _schema_option_spellings(str(key))
+			else:
+				subgroups[str(key)] = value
+
+		actual = _click_param_options(node)
+		allowed = _UNDECLARED_SCHEMA_OPTIONS.get(path, set())
+		undeclared = actual - declared - allowed
+		if undeclared:
+			problems.append(f"{path}: 可执行但未声明 {sorted(undeclared)}")
+		unexecutable = declared - actual
+		if unexecutable:
+			problems.append(f"{path}: 声明了不可执行 {sorted(unexecutable)}")
+
+		subcommands = getattr(node, "commands", {}) or {}
+		for key, value in subgroups.items():
+			sub = subcommands.get(key)
 			if sub is None:
-				problems.append(f"{name}: 选项分组 {key!r} 不是已注册子命令")
+				problems.append(f"{path}: 选项分组 {key!r} 不是已注册子命令")
 				continue
-			available = _subcommand_option_names(sub)
-			for opt_key in value:
-				missing = _schema_option_spellings(opt_key) - available
-				if missing:
-					problems.append(f"{name}.{key}: 选项 {sorted(missing)} 不在子命令参数中")
-	assert not problems, "schema 声明了不可执行的选项:\n" + "\n".join(problems)
+			walk(f"{path}.{key}", sub, value)
+		for sub_name, sub in subcommands.items():
+			if sub_name not in subgroups:
+				walk(f"{path}.{sub_name}", sub, {})
+
+	for name, spec in SCHEMA_DATA["commands"].items():
+		node = cli.commands.get(name)
+		if node is not None:
+			walk(name, node, spec.get("options") or {})
+
+	# 豁免项若已经声明，说明豁免清单过期，应删掉而不是继续跳过
+	for path, options in _UNDECLARED_SCHEMA_OPTIONS.items():
+		group: Any = SCHEMA_DATA["commands"].get(path.split(".")[0], {}).get("options")
+		for token in path.split(".")[1:]:
+			group = group.get(token) if isinstance(group, dict) else None
+		declared = {
+			spelling
+			for key in (group or {})
+			if str(key).startswith("-")
+			for spelling in _schema_option_spellings(str(key))
+		}
+		for option in sorted(options & declared):
+			problems.append(f"豁免项 {path} {option} 已可声明，请从 _UNDECLARED_SCHEMA_OPTIONS 删除")
+
+	assert not problems, "schema 选项声明与 Click 命令树不一致:\n" + "\n".join(problems)
 
 
 def test_doctor_schema_documents_cdp_risk_boundary():

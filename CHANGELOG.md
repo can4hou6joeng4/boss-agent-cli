@@ -39,6 +39,7 @@
 - `boss crawl resume --background` 在后台上拉失败（`OSError`，通常来自磁盘满或数据目录权限）时只提示「执行 boss crawl resume 重试」，同一环境下重试大概率再次失败；`crawl start` 的同类失败已经改为先检查磁盘空间与目录权限。现在两条路径给出同一份恢复指引。
 - `boss crawl resume --background` 对已完成的 run 仍会拉起后台进程并报告 `status: queued`：后台进程发现没有更多页和待补详情后立即退出，调用方却以为任务重新排队。现在与 `CrawlService.resume` 的前置条件一致——没有更多页、也没有 `--with-detail` 待补详情时直接返回 `status: completed` 并指向 `boss crawl results`，不拉起进程；请求更多页或仍有待补详情时照常恢复。
 - `boss schema` 中 `agent` 把 `agent run` 的 `--resume` / `--dry-run` / `--limit` 写成命令级选项：Agent 按 schema 构造 `boss agent --resume` 会被 Click 直接拒绝。现在与 `crawl` 一样放进 `run` 分组。同时 `chat` 的输出路径键写成 `-o/--output`，与 `digest` / `stats` 的 `-o, --output` 不一致，转 JSON Schema 时会得到错误的参数名；现在统一。新增测试校验 schema 声明的每个选项都落在实际命令或子命令上，防止再次声明不可执行的用法。
+- `boss schema` 的选项声明只覆盖了部分命令：`login --cookie-source`、`search --preset`、`export --include-private`、`clean --privacy`、`shortlist add` 的职位字段、`crawl configure/start` 与 `hr greet` 的开聊参数等公开能力没有进入能力真源，Agent 读 schema 时看不到；`hr jobs --page` 又平铺在 `jobs` 分组上，按 schema 构造 `boss hr jobs --page` 会被 Click 拒绝。现在 `boss schema` 递归声明各层子命令选项（`hr jobs list --page` 落到 `jobs.list`），并加测试双向校验：声明的选项必须可执行，可执行的公开选项必须声明（测试专用、历史兼容与内部隐藏项显式豁免）。
 
 ## [3.2.0] - 2026-11-01
 
