@@ -14,6 +14,7 @@ from boss_agent_cli.config import DEFAULTS, validate_request_config
 from boss_agent_cli.crawler.service import crawl_cdp_port, crawl_chrome_path, crawl_int_setting
 from boss_agent_cli.display import handle_output, render_simple_list
 from boss_agent_cli.platforms import list_platforms
+from boss_agent_cli.services.json_files import write_json_atomic
 
 _CONFIG_CHOICES = {
 	"operating_mode": ("assisted", "research"),
@@ -221,10 +222,8 @@ def _load_user_overrides(config_path: Path) -> dict[str, Any]:
 
 def _save_user_overrides(config_path: Path, user_cfg: dict[str, Any]) -> None:
 	"""保存用户配置到文件。"""
-	config_path.parent.mkdir(parents=True, exist_ok=True)
-	with open(config_path, "w", encoding="utf-8") as f:
-		json.dump(user_cfg, f, ensure_ascii=False, indent=2)
-		f.write("\n")
+	# 原子写：写一半被中断的 config.json 会让所有命令卡在启动阶段。
+	write_json_atomic(config_path, user_cfg, trailing_newline=True)
 
 
 def _emit_write_error(config_path: Path, exc: OSError) -> None:

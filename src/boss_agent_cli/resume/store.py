@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.resume.models import ResumeData, ResumeFile, dict_to_resume, resume_to_dict
+from boss_agent_cli.services.json_files import write_json_atomic
 
 
 class ResumeImportError(ValueError):
@@ -62,8 +63,8 @@ class ResumeStore:
 		"""保存/更新简历，自动更新 updated_at"""
 		resume.updated_at = datetime.now().isoformat()
 		d = resume_to_dict(resume)
-		path = self._path_for(resume.name)
-		path.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+		# 原子写：编辑到一半被中断不能把用户唯一一份简历写成半截 JSON。
+		write_json_atomic(self._path_for(resume.name), d)
 
 	def delete(self, name: str) -> bool:
 		"""删除简历，返回是否成功"""

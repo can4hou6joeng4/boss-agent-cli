@@ -401,6 +401,22 @@ def test_config_write_failure_returns_local_io_error(tmp_path, args):
 	assert "不要自动重试" in parsed["error"]["recovery_action"]
 
 
+def test_config_write_failure_keeps_previous_file(tmp_path, monkeypatch):
+	"""原子写失败时保留原配置：半截 config.json 会让所有命令都卡在启动阶段。"""
+	config_file = tmp_path / "config.json"
+	config_file.write_text('{"log_level": "debug"}\n', encoding="utf-8")
+	original = config_file.read_bytes()
+
+	def fail_replace(source, destination):
+		raise OSError("disk full")
+
+	monkeypatch.setattr(os, "replace", fail_replace)
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "config", "set", "log_level", "info"])
+
+	_assert_single_stdout_json_error(result, command="config", code="LOCAL_IO_ERROR")
+	assert config_file.read_bytes() == original
+
+
 # ── JSON 信封格式 ──────────────────────────────────────────────────
 
 

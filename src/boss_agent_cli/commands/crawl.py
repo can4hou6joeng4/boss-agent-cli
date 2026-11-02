@@ -26,6 +26,7 @@ from boss_agent_cli.crawler.service import (
 	unused_local_port,
 )
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
+from boss_agent_cli.services.json_files import write_json_atomic
 from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_error_output,
@@ -58,15 +59,15 @@ def _save_crawl_config(data_dir: Path, updates: dict[str, Any]) -> dict[str, Any
 			loaded = json.loads(config_path.read_text(encoding="utf-8"))
 			if isinstance(loaded, dict):
 				user_cfg = loaded
-		except (OSError, json.JSONDecodeError):
+		except (OSError, json.JSONDecodeError, UnicodeDecodeError):
 			pass
 	crawl_cfg = user_cfg.get("crawl", {})
 	if not isinstance(crawl_cfg, dict):
 		crawl_cfg = {}
 	crawl_cfg.update({key: value for key, value in updates.items() if value is not None})
 	user_cfg["crawl"] = crawl_cfg
-	config_path.parent.mkdir(parents=True, exist_ok=True)
-	config_path.write_text(json.dumps(user_cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+	# 原子写：写一半被中断的 config.json 会让所有命令卡在启动阶段。
+	write_json_atomic(config_path, user_cfg, trailing_newline=True)
 	return crawl_cfg
 
 

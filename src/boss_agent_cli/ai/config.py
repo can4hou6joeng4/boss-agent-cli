@@ -16,6 +16,8 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+from boss_agent_cli.services.json_files import write_json_atomic
+
 PROVIDER_BASE_URLS: dict[str, str | None] = {
 	"openai": "https://api.openai.com/v1",
 	"deepseek": "https://api.deepseek.com/v1",
@@ -104,10 +106,7 @@ class AIConfigStore:
 		"""Save configuration, merging with existing values."""
 		current = self.load_config()
 		current.update(kwargs)
-		self._config_path.write_text(
-			json.dumps(current, ensure_ascii=False, indent=2),
-			encoding="utf-8",
-		)
+		write_json_atomic(self._config_path, current)
 
 	def load_config(self) -> dict[str, Any]:
 		"""Load configuration with defaults for missing keys."""
@@ -115,8 +114,9 @@ class AIConfigStore:
 		if self._config_path.exists():
 			try:
 				saved = json.loads(self._config_path.read_text(encoding="utf-8"))
-				config.update(saved)
-			except (json.JSONDecodeError, OSError):
+				if isinstance(saved, dict):
+					config.update(saved)
+			except (json.JSONDecodeError, UnicodeDecodeError, OSError):
 				pass
 		return config
 

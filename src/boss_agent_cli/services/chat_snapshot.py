@@ -3,9 +3,11 @@
 import datetime
 import json
 import os
+from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.services.chat_utils import contact_identity
+from boss_agent_cli.services.json_files import write_json_atomic
 from boss_agent_cli.output import Logger
 
 
@@ -27,7 +29,7 @@ def save_snapshot_and_diff(
 				for item in prev_today:
 					if isinstance(item, dict) and contact_identity(item):
 						existing[contact_identity(item)] = item
-		except (json.JSONDecodeError, OSError):
+		except (json.JSONDecodeError, UnicodeDecodeError, OSError):
 			pass
 
 	# 用当前数据更新（新数据优先）
@@ -38,9 +40,8 @@ def save_snapshot_and_diff(
 
 	merged = list(existing.values())
 
-	# 保存合并后的快照
-	with open(snapshot_path, "w", encoding="utf-8") as f:
-		json.dump(merged, f, ensure_ascii=False, indent=2)
+	# 保存合并后的快照；原子写避免中断后当日快照变成半截 JSON（下次读取会整个丢弃）。
+	write_json_atomic(Path(snapshot_path), merged)
 
 	# 查找上一次快照
 	prev_path = _find_previous_snapshot(snapshot_dir, today)
@@ -82,7 +83,7 @@ def load_snapshot(path: str, logger: Logger) -> list[dict[str, Any]] | None:
 	try:
 		with open(path, encoding="utf-8") as f:
 			data = json.load(f)
-	except (json.JSONDecodeError, OSError):
+	except (json.JSONDecodeError, UnicodeDecodeError, OSError):
 		logger.warning(f"无法读取快照: {path}")
 		return None
 

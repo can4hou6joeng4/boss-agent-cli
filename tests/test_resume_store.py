@@ -1,4 +1,7 @@
 import json
+import os
+
+import pytest
 
 from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, PersonalInfoItem, ResumeModule
 from boss_agent_cli.resume.store import ResumeStore
@@ -170,3 +173,21 @@ def test_get_returns_none_for_unreadable_resume(tmp_path):
 
 	assert store.get("gbk") is None
 	assert store.get("bad_shape") is None
+
+
+def test_save_failure_keeps_previous_resume(tmp_path, monkeypatch):
+	"""保存中断（磁盘满、替换失败）不能把上一版简历写成半截 JSON。"""
+	store = ResumeStore(tmp_path / "resumes")
+	store.save(ResumeData(name="张三", title="Python 开发"))
+	path = store._dir / "张三.json"
+	original = path.read_bytes()
+
+	def fail_replace(source, destination):
+		raise OSError("disk full")
+
+	monkeypatch.setattr(os, "replace", fail_replace)
+	with pytest.raises(OSError):
+		store.save(ResumeData(name="张三", title="Go 开发"))
+
+	assert path.read_bytes() == original
+	assert store.get("张三") is not None

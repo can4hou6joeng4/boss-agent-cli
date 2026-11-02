@@ -1,6 +1,7 @@
 """Tests for index_cache.py — save, load, get by index."""
 
 import json
+import os
 
 import pytest
 from click.testing import CliRunner
@@ -86,12 +87,11 @@ class TestTrySaveIndex:
 
 	def test_failure_returns_false(self, tmp_path, monkeypatch):
 		"""写入失败应返回 False；不用 chmod，避免 Windows 权限语义差异。"""
-		from pathlib import Path
 
-		def fail_write_text(self, data, *args, **kwargs):
+		def fail_replace(source, destination):
 			raise OSError("simulated write failure")
 
-		monkeypatch.setattr(Path, "write_text", fail_write_text)
+		monkeypatch.setattr(os, "replace", fail_replace)
 		result = try_save_index(tmp_path, _SAMPLE_JOBS)
 		assert result is False
 
