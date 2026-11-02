@@ -208,6 +208,18 @@ def _parse_value(raw: str, default: Any) -> Any:
 		return int(raw)
 	if isinstance(default, float):
 		return float(raw)
+	if isinstance(default, dict):
+		# automation / crawl 这类结构化配置不是标量：直接存字符串会让后续读取方
+		# （如 automation_config_from_dict）在 .get() 上崩溃。这里只接受 JSON object。
+		try:
+			parsed = json.loads(raw)
+		except json.JSONDecodeError as exc:
+			raise ValueError(
+				"结构化配置项必须以 JSON object 传值，例如 '{\"mode\": \"training\"}'"
+			) from exc
+		if not isinstance(parsed, dict):
+			raise ValueError("结构化配置项的值必须是 JSON object")
+		return parsed
 	if isinstance(default, list):
 		parts = raw.split(",")
 		if all(isinstance(d, (int, float)) for d in default):

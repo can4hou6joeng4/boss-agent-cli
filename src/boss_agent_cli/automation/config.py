@@ -56,6 +56,10 @@ _DEFAULT = AutomationConfig()
 def automation_config_from_dict(raw: dict[str, Any] | None) -> AutomationConfig:
 	"""Parse automation config from config.json-compatible data."""
 	data = raw or {}
+	if not isinstance(data, dict):
+		# 手工编辑过的 config.json 可能把 automation 写成字符串；这里给出可读错误，
+		# 而不是在 .get() 上抛 AttributeError。
+		raise ValueError("automation 配置必须是 JSON object")
 	default_actions = [action.value for action in DEFAULT_ALLOWED_ACTIONS]
 	allowed_action_values = {action.value for action in PlatformAction}
 	actions = tuple(
