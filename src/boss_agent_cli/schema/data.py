@@ -1271,9 +1271,9 @@ SCHEMA_DATA = {
 						"description": "交换类型：phone=手机号 / wechat=微信",
 						"enum": ["phone", "wechat"],
 					},
-					"--uid": {"type": "int", "default": None, "description": "候选人 uid（交换联系方式时需要）"},
-					"--gid": {"type": "int", "default": None, "description": "会话 gid（交换联系方式时需要）"},
-					"--friend-id": {"type": "int", "default": None, "description": "候选人 friendId（交换联系方式新路径）"},
+					"--uid": {"type": "int", "default": None, "description": "已弃用：旧的交换联系方式参数，当前被忽略"},
+					"--gid": {"type": "int", "default": None, "description": "已弃用：旧的交换联系方式参数，当前被忽略"},
+					"--friend-id": {"type": "int", "default": None, "minimum": 1, "description": "候选人 friendId（交换联系方式新路径）"},
 					"--raw": {"type": "bool", "default": False, "description": "输出原始 API 数据（不解析）"},
 				},
 				"chat": {
@@ -1298,7 +1298,7 @@ SCHEMA_DATA = {
 					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "沟通列表页码"},
 					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
 					"--label-id": {"type": "int", "default": 0, "minimum": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
-					"--friend-id": {"type": "int", "default": None, "description": "指定候选人会话 friend_id，可重复"},
+					"--friend-id": {"type": "int", "default": None, "minimum": 1, "description": "指定候选人会话 friend_id，可重复"},
 					"--limit": {"type": "int", "default": 100, "minimum": 1, "description": "最多查询多少个会话（每 50 个一次串行请求）"},
 				},
 				"reply": {

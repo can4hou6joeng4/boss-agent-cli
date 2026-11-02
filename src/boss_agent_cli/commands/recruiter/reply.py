@@ -8,7 +8,7 @@ from boss_agent_cli.display import handle_auth_errors, handle_output, handle_pla
 
 
 @click.command("reply")
-@click.argument("friend_id", type=int)
+@click.argument("friend_id", type=click.IntRange(min=1))
 @click.argument("message")
 @click.pass_context
 @handle_auth_errors("recruiter-reply")

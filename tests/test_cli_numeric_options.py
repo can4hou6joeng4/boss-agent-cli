@@ -49,6 +49,12 @@ from boss_agent_cli.main import cli
 		["--json", "ai", "interview-prep", "jd", "--count", "-2"],
 		["--json", "ai", "config", "--max-tokens", "-1"],
 		["--json", "ai", "config", "--temperature", "-0.5"],
+		["--json", "hr", "chatmsg", "0"],
+		["--json", "hr", "chatmsg", "-1"],
+		["--json", "hr", "reply", "-1", "hi"],
+		["--json", "hr", "request-resume", "0"],
+		["--json", "hr", "last-messages", "--friend-id", "0"],
+		["--json", "hr", "resume", "--exchange", "--friend-id", "-2"],
 		["--json", "digest", "--days-stale", "-1"],
 		["--json", "pipeline", "--days-stale", "-1"],
 		["--json", "follow-up", "--days-stale", "-1"],
@@ -76,6 +82,8 @@ def test_numeric_options_reject_out_of_range_values(tmp_path, argv):
 		["--json", "hr", "chatmsg", "1", "--max-msg-id", "100"],
 		["--json", "ai", "config", "--temperature", "0"],
 		["--json", "ai", "config", "--max-tokens", "1"],
+		["--json", "hr", "chatmsg", "1"],
+		["--json", "hr", "last-messages", "--friend-id", "1"],
 	],
 )
 def test_numeric_options_accept_valid_values(tmp_path, argv):

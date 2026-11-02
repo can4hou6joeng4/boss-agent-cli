@@ -456,7 +456,7 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 
 
 @click.command("chatmsg")
-@click.argument("friend_id", type=int)
+@click.argument("friend_id", type=click.IntRange(min=1))
 @click.option("--count", default=20, type=click.IntRange(min=1), help="消息数量")
 @click.option("--max-msg-id", default=None, type=click.IntRange(min=1), help="向前翻页的最大消息 ID")
 @click.pass_context
@@ -489,7 +489,7 @@ def recruiter_chatmsg_cmd(ctx: click.Context, friend_id: int, count: int, max_ms
 @click.option("--page", default=1, type=click.IntRange(min=1), help="沟通列表页码")
 @click.option("--job-id", default=None, help="按职位筛选")
 @click.option("--label-id", default=0, type=click.IntRange(min=0), help="按标签筛选（0=全部, 1=新招呼, 2=沟通中）")
-@click.option("--friend-id", "friend_ids", multiple=True, type=int, help="指定候选人会话 friend_id，可重复")
+@click.option("--friend-id", "friend_ids", multiple=True, type=click.IntRange(min=1), help="指定候选人会话 friend_id，可重复")
 @click.option(
 	"--limit", default=DEFAULT_SUMMARY_LIMIT, show_default=True,
 	type=click.IntRange(1, MAX_SUMMARY_LIMIT),
