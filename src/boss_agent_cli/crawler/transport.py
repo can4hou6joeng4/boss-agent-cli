@@ -19,6 +19,7 @@ from boss_agent_cli.api.request_budget import (
 	retry_after_seconds,
 )
 from boss_agent_cli.crawler.hooks import HookInjection, HookRegistrationError, inject_hook_profile
+from boss_agent_cli.display import risk_error_message
 
 # 兼容 search / pc 等变体；监听只作主路径，失败时退到页面内同源请求（不走 httpx）。
 JOBLIST_TARGET = r"wapi/zpgeek/[^?\s]*joblist\.json"
@@ -76,7 +77,8 @@ class CrawlRiskError(RuntimeError):
 		reason = "ENVIRONMENT_RISK" if classification_code in (31, 37) else "ACCOUNT_RISK"
 		cause = "身份资料流程" if code == 38 else "风险流程"
 		hint = "当前采集已停止并保存断点；请在官方目标业务页确认恢复后，由用户执行 boss clean --risk-lock 再显式继续。"
-		message = "访问环境受限" if code == 31 else "账号访问受限" if code == 32 else str(payload.get("message") or "")
+		# 平台 message 可能带临时凭据，不进入异常文本与运行结果。
+		message = risk_error_message(reason)
 		return cls(f"平台返回{cause} code={code}: {message}。{hint}", reason=reason, platform_code=code)
 
 

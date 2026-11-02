@@ -18,6 +18,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.crawler.service import CrawlOutcome
 from boss_agent_cli.resume.models import ResumeData
 from boss_agent_cli.resume.store import ResumeStore
+from boss_agent_cli.display import risk_error_message
 from boss_agent_cli.wizard.models import StepResult, WorkflowInputError, WorkflowPlan, WorkflowStatus, WizardInput
 from boss_agent_cli.wizard.catalog import GOALS, build_plan, catalog_data
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS, execute_candidate_search
@@ -3051,6 +3052,8 @@ def test_runner_platform_risk_is_terminal_and_never_retried(tmp_path):
 		assert attempts == 1, "风控异常不得重试"
 		assert run["status"] == "failed"
 		assert run["error"]["code"] == code
+		assert run["error"]["message"] == risk_error_message(code)
+		assert "平台风控" not in run["error"]["message"]
 		assert run["error"]["recoverable"] is False
 		assert "停止自动化访问" in run["error"]["recovery_action"]
 		assert run["error"]["recovery_action"] != "重试当前 run_id"

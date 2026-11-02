@@ -23,19 +23,20 @@ from boss_agent_cli.api.request_budget import (
 )
 from boss_agent_cli.api.zhipin_errors import normalize_risk_code
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.crawler.exporter import write_run_outputs
-from boss_agent_cli.crawler.hooks import (
-	HookInjection,
-	HookRegistrationError,
-)
 from boss_agent_cli.compliance import require_capability_mode
-from boss_agent_cli.crawler.transport import CrawlRiskError, CrawlTransport
 from boss_agent_cli.crawler.controls import (
 	CrawlLimitExceeded as CrawlLimitExceeded,
 	CrawlStopRequested as CrawlStopRequested,
 	CrawlWorkflowStopRequested as CrawlWorkflowStopRequested,
 	CrawlTimeoutRequested as CrawlTimeoutRequested,
 )
+from boss_agent_cli.crawler.exporter import write_run_outputs
+from boss_agent_cli.crawler.hooks import (
+	HookInjection,
+	HookRegistrationError,
+)
+from boss_agent_cli.crawler.transport import CrawlRiskError, CrawlTransport
+from boss_agent_cli.display import risk_error_message
 
 
 @dataclass(frozen=True)
@@ -462,7 +463,8 @@ class CrawlService:
 			risk_lock = self._record_risk_lock(exc)
 		except PlatformRiskError as exc:
 			status = "risk_stopped"
-			error = str(exc)
+			# 平台响应原文可能带临时凭据，运行结果里只留登记表文案。
+			error = risk_error_message(exc.code)
 			keep_browser = True
 			risk_lock = exc.details.get("risk_lock")
 		except CrawlLimitExceeded as exc:

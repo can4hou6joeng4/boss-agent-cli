@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+
+import pytest
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
@@ -447,6 +449,23 @@ def test_boss_adapter_uses_recruiter_platform_for_contact_exchange(tmp_path: Pat
 	assert report.events[0].action == PlatformAction.EXCHANGE_CONTACT.value
 	assert report.events[0].status == EventStatus.AUTO_EXECUTED.value
 	assert recruiter.exchanges == [(101, 2)]
+
+
+def test_boss_adapter_risk_warning_uses_registry_text() -> None:
+	"""风控异常的平台响应原文可能带临时凭据，健康检查与事件原因只留登记表文案。"""
+	from boss_agent_cli.api.client import AccountRiskError
+	from boss_agent_cli.display import risk_error_message
+
+	recruiter = MagicMock()
+	recruiter.greet_list.side_effect = AccountRiskError("fixture-platform-response-token", is_cdp=True)
+	adapter = BossRecruiterAutomationPlatform(recruiter)
+
+	with pytest.raises(AccountRiskError):
+		adapter.scan_conversations(["新招呼"], 5)
+
+	warning = adapter.detect_safety_warning()
+	assert warning == risk_error_message("ACCOUNT_RISK")
+	assert "fixture-platform-response-token" not in warning
 
 
 def test_adapter_factory_returns_real_platform_adapters() -> None:
