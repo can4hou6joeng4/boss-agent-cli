@@ -588,7 +588,63 @@ def test_search_cache_key_includes_current_result_schema(mock_client_cls, mock_a
 
 	assert result.exit_code == 0
 	cache_params = mock_cache.get_search.call_args.args[0]
-	assert cache_params["cache_schema"] == 3
+	assert cache_params["cache_schema"] == 4
+	assert "account" in cache_params
+	mock_pipeline.assert_not_called()
+
+
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_cache_scope_uses_current_account(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = None
+	_ctx_mock(mock_client_cls)
+	mock_auth_cls.return_value.account_fingerprint.return_value = "acct_a"
+	mock_pipeline.return_value = SimpleNamespace(
+		items=[],
+		has_more=False,
+		total=0,
+		stats=SimpleNamespace(
+			pages_scanned=1,
+			jobs_seen=0,
+			jobs_prefiltered=0,
+			detail_checks=0,
+		),
+	)
+
+	result = CliRunner().invoke(cli, ["search", "产品"])
+
+	assert result.exit_code == 0
+	assert mock_cache.get_search.call_args.args[0]["account"] == "acct_a"
+	assert mock_cache.put_search.call_args.args[0]["account"] == "acct_a"
+
+
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_cache_hit_recomputes_greeted_for_current_account(
+	mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline,
+):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = json.dumps({
+		"data": [
+			{"security_id": "sec_1", "job_id": "job_1", "greeted": False},
+			{"security_id": "sec_2", "job_id": "job_2", "greeted": True},
+		],
+		"pagination": {"page": 1, "has_more": False, "total": 2},
+		"hints": None,
+	})
+	mock_auth_cls.return_value.account_fingerprint.return_value = "acct_a"
+	mock_cache.is_greeted.side_effect = lambda sid, *, job_id="", account="": job_id == "job_1"
+
+	result = CliRunner().invoke(cli, ["search", "产品"])
+
+	assert result.exit_code == 0
+	assert [item["greeted"] for item in json.loads(result.output)["data"]] == [True, False]
+	assert mock_cache.is_greeted.call_args_list[0].kwargs == {"job_id": "job_1", "account": "acct_a"}
 	mock_pipeline.assert_not_called()
 
 
