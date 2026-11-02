@@ -74,6 +74,37 @@ def test_greet_failure_does_not_record_cache(tmp_path):
 	mock_cache.record_greet.assert_not_called()
 
 
+def test_greet_account_risk_uses_stop_contract(tmp_path):
+	"""响应字典形态的风控码不能提示重试，应走统一风险契约。"""
+	code, parsed, mock_cache, mock_client = _invoke_greet(
+		"greet", "sid1", "jid1", tmp_path=tmp_path,
+		greet_result={"code": 36, "message": "您的账户存在异常行为"},
+		is_success=False,
+		parse_error=("ACCOUNT_RISK", "您的账户存在异常行为"),
+	)
+	assert code == 1
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["recoverable"] is False
+	assert "停止自动化访问" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"]
+	mock_cache.record_greet.assert_not_called()
+
+
+def test_greet_unknown_error_stays_retryable(tmp_path):
+	"""无法识别的业务失败仍按 NETWORK_ERROR 提示重试，不被风险契约吞掉。"""
+	code, parsed, mock_cache, mock_client = _invoke_greet(
+		"greet", "sid1", "jid1", tmp_path=tmp_path,
+		greet_result={"code": -1, "message": "boom"},
+		is_success=False,
+		parse_error=("UNKNOWN", "boom"),
+	)
+	assert code == 1
+	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	assert parsed["error"]["recoverable"] is True
+	mock_cache.record_greet.assert_not_called()
+
+
 def test_greet_already_greeted(tmp_path):
 	"""已打招呼应返回错误码。"""
 	code, parsed, _, _ = _invoke_greet(

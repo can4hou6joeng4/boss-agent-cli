@@ -8,6 +8,7 @@
 - 本地「已打招呼 / 已投递」去重以每次请求都会轮换的 `securityId` 为主键，跨请求必然失效：`batch-greet` 换个 `securityId` 就会把同一职位再打一次招呼，`search --skip-greeted` 与职位结果里的 `greeted` 标记也查不到上次的记录。现在去重键改为「账号指纹 + 稳定 `encryptJobId`」：账号指纹取登录 `wt2` Cookie 的 SHA-256 前 16 位（不落盘 Cookie 本身），`greet` / `apply` / `batch-greet` / `search` / `detail` / `show` / `recommend` 与求职者 wizard 共用同一作用域。同一台机器上换账号不会误命中另一个账号的记录；没有登录态时保留旧的 `securityId` 匹配行为。旧缓存库在打开时自动迁移，迁移在单个写事务里完成；旧记录没有账号归属，仍可按原 `securityId` 查到，但不会当作当前账号的去重依据，升级后同一职位最多重新记录一次。
 - `search` 的 24 小时结果缓存键不含账号：同一台机器换账号后会直接看到上一个账号缓存的结果与 `greeted` 标记；缓存命中又不重算 `greeted`，打完招呼的职位在缓存过期前仍然显示未打招呼。现在缓存键带上账号指纹（搜索缓存 schema 升到 4，旧缓存自然失效），命中后按当前账号、稳定 `encryptJobId` 重新计算每个职位的 `greeted`，其余字段仍复用缓存、不额外请求平台。
 - `watch` 的已见记录仍以 `securityId` + `jobId` 复合键保存，而 `securityId` 每轮搜索都会轮换：同一职位每次 `watch run` 都被当作新职位重复通知。现在登录态下按「账号指纹 + 稳定 `encryptJobId`」去重，换账号后各自的已见记录互不影响；没有登录态时保留旧的复合键行为。旧记录没有账号归属，升级后每个职位会重新通知一次。
+- 单条 `boss greet` 在平台返回风控码（如 code 36）时仍输出 `recoverable: true` 和「重试」，与「命中风控立即停止、不无界重试」的硬边界相反，Agent 可能据此重试写操作。现在与 `apply` / `batch-greet` 一样走 `RISK_ERROR_CONTRACTS`：风控时 `recoverable: false`，`recovery_action` 与 `hints` 给出停止和人工处理指引；无法识别的业务失败仍按 `NETWORK_ERROR` 提示重试。
 
 ## [3.2.0] - 2026-11-01
 

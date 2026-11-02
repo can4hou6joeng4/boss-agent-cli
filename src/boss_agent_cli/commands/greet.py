@@ -19,6 +19,7 @@ from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_error_output,
 	handle_output,
+	handle_platform_error_output,
 	render_batch_operation_summary,
 	render_message_panel,
 	risk_error_contract,
@@ -74,13 +75,15 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 
 			resp = platform.greet(security_id, job_id, message)
 			if not platform.is_success(resp):
-				error_code, _ = platform.parse_error(resp)
-				handle_error_output(
-					ctx, "greet",
-					code=error_code if error_code != "UNKNOWN" else "NETWORK_ERROR",
-					message=resp.get("message") or "打招呼失败",
-					recoverable=True,
-					recovery_action="重试",
+				# 风控码必须走 RISK_ERROR_CONTRACTS：不可恢复、不提示重试，
+				# 与 apply / batch-greet 的风险终止语义保持一致。
+				handle_platform_error_output(
+					ctx,
+					"greet",
+					platform,
+					resp,
+					fallback_message="打招呼失败",
+					unknown_error_code="NETWORK_ERROR",
 				)
 				return
 
