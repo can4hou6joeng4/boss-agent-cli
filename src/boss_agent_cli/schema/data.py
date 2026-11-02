@@ -384,6 +384,7 @@ SCHEMA_DATA = {
 				"--deliver-page": {
 					"type": "int",
 					"default": 1,
+					"minimum": 1,
 					"description": "投递记录页码",
 				},
 			},
@@ -1049,8 +1050,8 @@ SCHEMA_DATA = {
 						"default": None,
 						"description": "自定义 API 基础地址（provider=custom 或自建代理时使用）",
 					},
-					"--temperature": {"type": "float", "default": None, "description": "生成温度"},
-					"--max-tokens": {"type": "int", "default": None, "description": "最大令牌数"},
+					"--temperature": {"type": "float", "default": None, "minimum": 0, "description": "生成温度"},
+					"--max-tokens": {"type": "int", "default": None, "minimum": 1, "description": "最大令牌数"},
 				},
 				"local": {
 					"configure": {
@@ -1121,7 +1122,7 @@ SCHEMA_DATA = {
 						{"name": "jd_text", "required": True, "description": "职位描述文本或 @文件路径"},
 					],
 					"--resume": {"type": "string", "default": None, "description": "参考简历名称（可选，根据简历真实经历定制问题）"},
-					"--count": {"type": "int", "default": 10, "description": "题量"},
+					"--count": {"type": "int", "default": 10, "minimum": 1, "description": "题量"},
 				},
 				"chat-coach": {
 					"args": [
@@ -1254,8 +1255,8 @@ SCHEMA_DATA = {
 			"options": {
 				"applications": {
 					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
-					"--label-id": {"type": "int", "default": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
-					"--page": {"type": "int", "default": 1, "description": "页码"},
+					"--label-id": {"type": "int", "default": 0, "minimum": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
+					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 				},
 				"resume": {
 					"args": [
@@ -1276,12 +1277,13 @@ SCHEMA_DATA = {
 					"--raw": {"type": "bool", "default": False, "description": "输出原始 API 数据（不解析）"},
 				},
 				"chat": {
-					"--page": {"type": "int", "default": 1, "description": "页码"},
+					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
-					"--label-id": {"type": "int", "default": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
+					"--label-id": {"type": "int", "default": 0, "minimum": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
 					"--summary-limit": {
 						"type": "int",
 						"default": 100,
+						"minimum": 0,
 						"description": "最多给前多少个会话补最近消息（每 50 个一次串行请求；0=不请求）",
 					},
 				},
@@ -1289,15 +1291,15 @@ SCHEMA_DATA = {
 					"args": [
 						{"name": "friend_id", "required": True, "description": "候选人会话 friend_id"},
 					],
-					"--count": {"type": "int", "default": 20, "description": "消息数量"},
-					"--max-msg-id": {"type": "int", "default": None, "description": "向前翻页的最大消息 ID"},
+					"--count": {"type": "int", "default": 20, "minimum": 1, "description": "消息数量"},
+					"--max-msg-id": {"type": "int", "default": None, "minimum": 1, "description": "向前翻页的最大消息 ID"},
 				},
 				"last-messages": {
-					"--page": {"type": "int", "default": 1, "description": "沟通列表页码"},
+					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "沟通列表页码"},
 					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
-					"--label-id": {"type": "int", "default": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
+					"--label-id": {"type": "int", "default": 0, "minimum": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
 					"--friend-id": {"type": "int", "default": None, "description": "指定候选人会话 friend_id，可重复"},
-					"--limit": {"type": "int", "default": 100, "description": "最多查询多少个会话（每 50 个一次串行请求）"},
+					"--limit": {"type": "int", "default": 100, "minimum": 1, "description": "最多查询多少个会话（每 50 个一次串行请求）"},
 				},
 				"reply": {
 					"args": [

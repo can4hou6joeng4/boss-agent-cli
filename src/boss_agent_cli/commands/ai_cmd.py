@@ -220,8 +220,8 @@ def ai_group() -> None:
 @click.option("--model", default=None, help="模型名称（如 gpt-4o / claude-sonnet-4.5 / deepseek-chat）")
 @click.option("--api-key", default=None, help="API 密钥（将加密存储）")
 @click.option("--base-url", default=None, help="自定义 API 基础地址（provider=custom 或自建代理时使用）")
-@click.option("--temperature", default=None, type=float, help="生成温度")
-@click.option("--max-tokens", default=None, type=int, help="最大令牌数")
+@click.option("--temperature", default=None, type=click.FloatRange(min=0), help="生成温度")
+@click.option("--max-tokens", default=None, type=click.IntRange(min=1), help="最大令牌数")
 @click.pass_context
 def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, api_key: str | None, base_url: str | None, temperature: float | None, max_tokens: int | None) -> None:
 	"""查看或设置 AI 服务配置"""
@@ -539,7 +539,7 @@ def ai_reply_cmd(ctx: click.Context, recruiter_message: str, context: str, resum
 @ai_group.command("interview-prep")
 @click.argument("jd_text")
 @click.option("--resume", "resume_name", default=None, help="参考简历名称（可选，根据简历真实经历定制问题）")
-@click.option("--count", default=10, type=int, help="题量，默认 10")
+@click.option("--count", default=10, type=click.IntRange(min=1), help="题量，默认 10")
 @click.pass_context
 def ai_interview_prep_cmd(ctx: click.Context, jd_text: str, resume_name: str | None, count: int) -> None:
 	"""基于目标职位生成模拟面试题

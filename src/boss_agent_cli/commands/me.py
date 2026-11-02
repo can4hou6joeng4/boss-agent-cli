@@ -22,7 +22,7 @@ from boss_agent_cli.display import (
 @click.command("me")
 @click.option("--section", default=None, type=click.Choice(["user", "resume", "expect", "deliver"]),
 	help="只获取指定部分（不指定则获取全部）")
-@click.option("--deliver-page", default=1, type=int, help="投递记录页码")
+@click.option("--deliver-page", default=1, type=click.IntRange(min=1), help="投递记录页码")
 @click.pass_context
 def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 	"""获取当前登录用户的个人信息、简历、求职期望、投递记录"""
