@@ -287,6 +287,39 @@ def test_every_tool_generated_argv_parses_on_click_tree():
 			pytest.fail(f"{tool.name} 生成的 argv {args} 无法被 Click 解析：{exc}")
 
 
+# 部分操作类型会要求额外参数；校验枚举值时补上，避免把条件必填误报成取值非法。
+_CONDITIONAL_ARGS = {
+	("boss_wizard", "action"): {"run_id": "run-1"},
+	("boss_hr_jobs", "action"): {"job_id": "job-1"},
+	("boss_config", "action"): {"key": "platform", "value": "zhipin"},
+}
+
+
+def test_every_tool_enum_value_parses_on_click_tree():
+	"""工具 schema 声明的每个枚举值都必须能被对应 CLI 接受。
+
+	boss_me 曾把 `--section user` 写成 `info`：客户端按 schema 选第一个枚举值就会被
+	Click 拒绝。只校验必填参数或首个枚举值都看不出这类漂移。
+	"""
+	for tool in TOOLS:
+		properties = tool.input_schema.get("properties", {})
+		for name, schema in properties.items():
+			for value in schema.get("enum") or ():
+				arguments = {
+					**_required_arguments(tool),
+					**_CONDITIONAL_ARGS.get((tool.name, name), {}),
+					name: value,
+				}
+				args = _build_args(tool.name, arguments)
+				command, command_name, remaining = _resolve_click_command(args)
+				try:
+					command.make_context(command_name, remaining)
+				except click.UsageError as exc:
+					pytest.fail(
+						f"{tool.name}.{name}={value!r} 生成的 argv {args} 无法被 Click 解析：{exc}"
+					)
+
+
 def test_search_tool_requires_query():
 	"""搜索工具应要求 query 参数。"""
 	search = next(t for t in TOOLS if t.name == "boss_search")
@@ -510,11 +543,12 @@ def test_build_args_apply():
 
 
 def test_build_args_batch_greet():
+	"""MCP 的 limit 要落到 CLI 的 --count，并按 schema 默认值显式下发。"""
 	args = _build_args("boss_batch_greet", {"query": "python", "limit": 3, "dry_run": True})
-	assert "batch-greet" in args
-	assert "python" in args
-	assert "--limit" in args
-	assert "--dry-run" in args
+	assert args == ["batch-greet", "python", "--count", "3", "--dry-run"]
+
+	default_args = _build_args("boss_batch_greet", {"query": "python"})
+	assert default_args == ["batch-greet", "python", "--count", "5"]
 
 
 def test_build_args_show():
