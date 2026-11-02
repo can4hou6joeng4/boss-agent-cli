@@ -121,6 +121,31 @@ class TestBossEnvelopeAdapter:
 		code, _ = self.plat.parse_error({"code": "ERR", "message": "请完成安全验证"})
 		assert code == "ACCOUNT_RISK"
 
+	def test_platform_layer_error_codes_are_registered(self) -> None:
+		"""平台层能返回的每个码都必须在 `boss schema` 的错误码登记表里。
+
+		未登记的码（历史上就是 `UNKNOWN`）在信封里拿不到 recovery_action，
+		调用方只能看到一个不可恢复却没有下一步的错误。
+		"""
+		from boss_agent_cli.platforms.zhipin import _ERROR_CODE_MAP as GEEK_CODES
+		from boss_agent_cli.platforms.zhipin_recruiter import _ERROR_CODE_MAP as RECRUITER_CODES
+		from boss_agent_cli.schema.error_codes import ERROR_CODES
+
+		responses = [
+			{"code": 999, "message": "unrecognized failure"},
+			{"code": "ERR", "message": "request timeout"},
+			{"code": "ERR", "message": "token expired"},
+			{"code": "ERR", "message": "rate limit"},
+			{"code": "ERR", "message": "请完成安全验证"},
+			{"status_code": 401},
+			{"status_code": 502},
+		]
+		emitted = {self.plat.parse_error(response)[0] for response in responses}
+		emitted |= set(GEEK_CODES.values()) | set(RECRUITER_CODES.values())
+
+		missing = sorted(emitted - set(ERROR_CODES))
+		assert not missing, f"平台层会返回未登记的错误码：{missing}"
+
 
 class TestBossPlatformDelegation:
 	"""BossPlatform 委托给底层 BossClient。"""

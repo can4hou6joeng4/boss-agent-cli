@@ -435,6 +435,24 @@ class TestHandlePlatformErrorOutput:
 			kwargs = mock_err.call_args[1]
 			assert kwargs["message"] == "请求过于频繁"
 
+	def test_unknown_code_uses_registered_recovery_action(self):
+		"""未识别的平台错误也要给出登记表里的恢复指引，不能是 null。"""
+		from boss_agent_cli.schema.error_codes import ERROR_CODES
+
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True}
+		platform = MagicMock()
+		platform.parse_error.return_value = ("UNKNOWN", "服务开小差了")
+
+		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
+			handle_platform_error_output(
+				ctx, "search", platform, {"code": 999}, fallback_message="搜索失败"
+			)
+			kwargs = mock_err.call_args[1]
+		assert kwargs["code"] == "UNKNOWN"
+		assert kwargs["recoverable"] is False
+		assert kwargs["recovery_action"] == ERROR_CODES["UNKNOWN"]["recovery_action"]
+
 
 # ── 各 renderer 冒烟测试（调用不抛异常即可覆盖） ────────────
 

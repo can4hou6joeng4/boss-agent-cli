@@ -179,6 +179,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "重试",
 	},
+	"UNKNOWN": {
+		"message": "平台返回了未识别的错误",
+		"recoverable": False,
+		"recovery_action": "不要自动重试：先在 BOSS 官方页面核对本次操作是否生效，并用 boss doctor 检查登录态、浏览器通道与网络；确认后重新执行一次，仍失败请附上命令与 error.message 提交 issue",
+	},
 	"CRAWL_UNAVAILABLE": {
 		"message": "DrissionPage crawl 运行环境或 Hook 注入不可用",
 		"recoverable": True,
