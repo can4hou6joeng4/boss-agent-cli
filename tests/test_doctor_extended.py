@@ -10,6 +10,9 @@ from unittest.mock import patch, MagicMock
 import pytest
 from click.testing import CliRunner
 from rich.console import Console
+from boss_agent_cli.api import cdp_risk_lock
+from boss_agent_cli.api.client import AccountRiskError, EnvironmentRiskError
+from boss_agent_cli.display import error_contract_for_code
 from boss_agent_cli.main import cli
 
 
@@ -694,6 +697,135 @@ def test_doctor_live_probe_reads_recruiter_api_when_identity_is_recruiter(tmp_pa
 	assert _find_check(parsed["data"]["checks"], "recruiter_live_read")["status"] == "ok"
 	assert "hidden" not in json.dumps(parsed, ensure_ascii=False)
 	recruiter.list_jobs.assert_called_once()
+
+
+def _run_live_probe(
+	tmp_path,
+	*,
+	platform_user_info=None,
+	platform_side_effect=None,
+	platform_is_success=True,
+	platform_parse_error=None,
+	recruiter_side_effect=None,
+):
+	"""执行 doctor --live-probe，返回 (信封, platform mock, recruiter mock, 原始输出)。"""
+	paths = _base_patches()
+	runner = CliRunner()
+	with (
+		patch(paths["auth"]) as mock_auth,
+		patch(paths["cdp"]) as mock_cdp,
+		patch(paths["httpx"]) as mock_httpx,
+		patch(paths["cookie"]) as mock_cookie,
+		patch("boss_agent_cli.commands._doctor_checks.get_platform_instance") as mock_platform_cls,
+		patch("boss_agent_cli.commands._doctor_checks.get_recruiter_platform_instance") as mock_recruiter_cls,
+	):
+		mock_auth.return_value.check_status.return_value = {"cookies": {"wt2": "tok"}, "stoken": "st"}
+		mock_cdp.return_value = None
+		mock_cookie.return_value = None
+		mock_httpx.return_value = MagicMock(status_code=200)
+
+		platform = mock_platform_cls.return_value
+		platform.__enter__ = lambda self: self
+		platform.__exit__ = lambda self, *a: None
+		platform.is_success.return_value = platform_is_success
+		if platform_side_effect is not None:
+			platform.user_info.side_effect = platform_side_effect
+		else:
+			platform.user_info.return_value = (
+				platform_user_info if platform_user_info is not None else {"zpData": {"identity": 1, "recruit": False}}
+			)
+		if platform_parse_error is not None:
+			platform.parse_error.return_value = platform_parse_error
+
+		recruiter = mock_recruiter_cls.return_value
+		recruiter.__enter__ = lambda self: self
+		recruiter.__exit__ = lambda self, *a: None
+		recruiter.is_success.return_value = True
+		if recruiter_side_effect is not None:
+			recruiter.list_jobs.side_effect = recruiter_side_effect
+		else:
+			recruiter.list_jobs.return_value = {"zpData": {"list": []}}
+
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "doctor", "--live-probe"])
+
+	assert result.exit_code == 0, result.output
+	return json.loads(result.output), platform, recruiter, result.output
+
+
+def test_doctor_live_probe_stops_after_candidate_risk(tmp_path):
+	"""求职者探测命中风控后不得再请求招聘者接口，也不透传异常文本。"""
+	parsed, _, recruiter, output = _run_live_probe(
+		tmp_path,
+		platform_side_effect=EnvironmentRiskError("平台响应包含 secret-risk-text"),
+	)
+
+	check = _find_check(parsed["data"]["checks"], "candidate_live_user_info")
+	assert check["status"] == "warn"
+	assert "ENVIRONMENT_RISK" in check["detail"]
+	assert check["recovery_action"] == error_contract_for_code("ENVIRONMENT_RISK")[1]
+	assert "secret-risk-text" not in output
+
+	skipped = _find_check(parsed["data"]["checks"], "recruiter_live_read")
+	assert skipped is not None and "风控" in skipped["detail"]
+	recruiter.list_jobs.assert_not_called()
+
+	assert parsed["data"]["live_probe_risk"] == "ENVIRONMENT_RISK"
+	next_actions = parsed["hints"]["next_actions"]
+	assert not any("--live" in action for action in next_actions)
+	assert any("不要刷新 Token" in action for action in next_actions)
+	assert any("在线只读探测命中平台风控" in action for action in parsed["hints"]["operator_actions"])
+
+
+def test_doctor_live_probe_stops_after_recruiter_risk(tmp_path):
+	"""招聘者探测命中账号风控时同样立即停止，并按统一契约给出停止指引。"""
+	parsed, _, recruiter, output = _run_live_probe(
+		tmp_path,
+		recruiter_side_effect=AccountRiskError("平台响应包含 secret-account-text"),
+	)
+
+	check = _find_check(parsed["data"]["checks"], "recruiter_live_read")
+	assert check["status"] == "warn"
+	assert "ACCOUNT_RISK" in check["detail"]
+	assert check["recovery_action"] == error_contract_for_code("ACCOUNT_RISK")[1]
+	assert "secret-account-text" not in output
+	assert parsed["data"]["live_probe_risk"] == "ACCOUNT_RISK"
+	assert any("不要通过 CDP" in action for action in parsed["hints"]["next_actions"])
+	recruiter.list_jobs.assert_called_once()
+
+
+def test_doctor_live_probe_risk_response_does_not_continue(tmp_path):
+	"""探测返回风控响应码（而非抛异常）时，同样不再发下一条请求。"""
+	parsed, platform, recruiter, _ = _run_live_probe(
+		tmp_path,
+		platform_user_info={"code": 37, "message": "环境异常"},
+		platform_is_success=False,
+		platform_parse_error=("ENVIRONMENT_RISK", "环境异常"),
+	)
+
+	check = _find_check(parsed["data"]["checks"], "candidate_live_user_info")
+	assert check["status"] == "warn"
+	assert "ENVIRONMENT_RISK" in check["detail"]
+	assert _find_check(parsed["data"]["checks"], "recruiter_live_read") is not None
+	recruiter.list_jobs.assert_not_called()
+	assert parsed["data"]["live_probe_risk"] == "ENVIRONMENT_RISK"
+	assert any("不要刷新 Token" in action for action in parsed["hints"]["next_actions"])
+	platform.is_success.assert_called_once()
+
+
+def test_doctor_live_probe_refreshes_risk_lock_after_risk(tmp_path):
+	"""风控异常会写本地锁；doctor 的报告和解锁指引必须反映这次写入。"""
+
+	def _write_lock_then_raise():
+		cdp_risk_lock.write_lock(tmp_path, None, now=1, reason="ENVIRONMENT_RISK", platform_code=37)
+		raise EnvironmentRiskError("boom")
+
+	parsed, _, _, _ = _run_live_probe(tmp_path, platform_side_effect=_write_lock_then_raise)
+
+	assert parsed["data"]["cdp_risk_lock"]["locked"] is True
+	lock_check = _find_check(parsed["data"]["checks"], "cdp_risk_lock")
+	assert lock_check["status"] == "warn"
+	assert "ENVIRONMENT_RISK" in lock_check["detail"]
+	assert any("boss clean --risk-lock" in action for action in parsed["hints"]["operator_actions"])
 
 
 def test_cookie_completeness_missing_zp_at(tmp_path):
