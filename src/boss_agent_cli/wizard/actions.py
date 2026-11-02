@@ -899,17 +899,17 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 	city_code = CITY_CODES.get(city, city if city.isdigit() else None)
 	if city_code is None:
 		raise WorkflowActionError("INVALID_PARAM", f"unknown city: {city}")
-	raw_pages = inputs.get("pages")
-	try:
-		pages = 5 if raw_pages is None else int(raw_pages)
-	except (TypeError, ValueError) as exc:
+	hook_profile = str(inputs.get("hook_profile") or "none")
+	if hook_profile != "none":
+		# 向导没有 hook-dir 输入，screenshot-full 在这里必然失败；提前按参数错误返回，
+		# 而不是让 create_and_run 里的 ValueError 落成可重试的 NETWORK_ERROR。
 		raise WorkflowActionError(
 			"INVALID_PARAM",
-			f"pages 必须是整数: {raw_pages!r}",
-			recovery_action="传入 1 以上的整数 pages",
-		) from exc
-	if pages < 1:
-		raise WorkflowActionError("INVALID_PARAM", f"pages 必须大于等于 1: {pages}", recovery_action="传入 1 以上的整数 pages")
+			f"向导采集不支持 hook_profile={hook_profile!r}：workflow 没有 hook-dir 输入，请显式运行 boss crawl run/start",
+			recovery_action="boss crawl run <query> --city <城市> --hook-profile screenshot-full --hook-dir <脚本目录>",
+		)
+	raw_pages = inputs.get("pages")
+	pages = 5 if raw_pages is None else _positive_int(raw_pages, name="pages")
 	raw_port = crawl_config.get("cdp_port")
 	try:
 		settings = CrawlSettings(
@@ -920,7 +920,7 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 			profile_path=context.data_dir / "crawl" / "chrome-profile",
 			chrome_path=crawl_chrome_path(crawl_config.get("chrome_path")),
 			cdp_port=unused_local_port() if raw_port is None else crawl_cdp_port(raw_port),
-			hook_profile=str(inputs.get("hook_profile") or "none"),
+			hook_profile=hook_profile,
 			max_requests=crawl_int_setting(crawl_config, "max_requests", 20),
 			max_details=crawl_int_setting(crawl_config, "max_details", 50),
 			max_seconds=crawl_int_setting(crawl_config, "max_seconds", 600),
@@ -939,6 +939,25 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 		return _crawl_outcome_result(outcome, cache)
 
 
+def _positive_int(value: Any, *, name: str) -> int:
+	"""解析 workflow 输入的正整数；非法值按参数错误返回，不落成可重试的网络错误。"""
+	try:
+		parsed = int(value)
+	except (TypeError, ValueError) as exc:
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"{name} 必须是整数: {value!r}",
+			recovery_action=f"传入 1 以上的整数 {name}",
+		) from exc
+	if parsed < 1:
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"{name} 必须大于等于 1: {parsed}",
+			recovery_action=f"传入 1 以上的整数 {name}",
+		)
+	return parsed
+
+
 def _crawl_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		try:
@@ -952,11 +971,13 @@ def _crawl_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 
 def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	run_id = str(_required(inputs, "run_id"))
+	raw_pages = inputs.get("pages")
+	pages = None if raw_pages is None else _positive_int(raw_pages, name="pages")
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		try:
 			outcome = _crawl_service(context, cache).resume(
 				run_id,
-				pages=int(inputs["pages"]) if inputs.get("pages") else None,
+				pages=pages,
 				with_detail=bool(inputs.get("with_detail", False)),
 				clear_stop=True,
 			)

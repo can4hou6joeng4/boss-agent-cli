@@ -96,7 +96,7 @@ boss crawl resume <run_id>
 boss crawl stop <run_id>
 ```
 
-Settings are validated by type and range when a run starts: `max_requests` / `max_details` / `max_seconds` must be at least 1, `max_retries` may be `0` to disable retries, `cdp_port` must be within 1-65535, and `chrome_path` must be a string or `null`. If `config set crawl` or a hand-edited file contains a wrong type or an out-of-range value, `crawl run` / `start` and the `boss wizard` crawl action return `INVALID_PARAM` naming the setting instead of silently applying defaults or falling back to `INTERNAL_ERROR`; the wizard's `pages` input likewise requires an integer of at least 1.
+Settings are validated by type and range when a run starts: `max_requests` / `max_details` / `max_seconds` must be at least 1, `max_retries` may be `0` to disable retries, `cdp_port` must be within 1-65535, and `chrome_path` must be a string or `null`. If `config set crawl` or a hand-edited file contains a wrong type or an out-of-range value, `crawl run` / `start` and the `boss wizard` crawl action return `INVALID_PARAM` naming the setting instead of silently applying defaults or falling back to `INTERNAL_ERROR`. The wizard crawl action accepts only `hook_profile=none` (custom hooks require an explicit `boss crawl run --hook-profile screenshot-full --hook-dir`), and its `pages` input, including on resume, requires an integer of at least 1; invalid values return `INVALID_PARAM`.
 
 | Command | Description |
 |---------|-------------|
