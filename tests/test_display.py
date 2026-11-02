@@ -332,6 +332,21 @@ class TestHandleErrorOutputTTY:
 			with pytest.raises(SystemExit):
 				handle_error_output(ctx, "test", code="ERR", message="bad")
 
+	def test_tty_mode_recovery_falls_back_to_registry(self, monkeypatch):
+		"""只传 code / message 时 TTY 也要展示登记表里的恢复指引。"""
+		import pytest
+		from boss_agent_cli.schema.error_codes import ERROR_CODES
+
+		ctx = MagicMock()
+		ctx.obj = {"json_output": False}
+		stream = _capture_display_console(monkeypatch)
+		with patch.object(sys, "stdout") as mock_out:
+			mock_out.isatty.return_value = True
+			with pytest.raises(SystemExit):
+				handle_error_output(ctx, "test", code="NETWORK_ERROR", message="请求失败")
+
+		assert ERROR_CODES["NETWORK_ERROR"]["recovery_action"] in stream.getvalue()
+
 
 # ── handle_auth_errors AccountRiskError 分支 ─────────────────
 

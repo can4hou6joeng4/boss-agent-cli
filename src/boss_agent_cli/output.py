@@ -5,6 +5,8 @@ from typing import Any
 
 import click
 
+from boss_agent_cli.schema.error_codes import ERROR_CODES
+
 _LEVEL_ORDER = {"debug": 0, "info": 1, "warning": 2, "error": 3}
 _REDACTED = "[REDACTED]"
 _SENSITIVE_KEY_PARTS = (
@@ -125,11 +127,18 @@ def envelope_error(
 	*,
 	code: str,
 	message: str,
-	recoverable: bool = False,
+	recoverable: bool | None = None,
 	recovery_action: str | None = None,
 	details: dict[str, Any] | None = None,
 	hints: dict[str, Any] | None = None,
 ) -> str:
+	# 调用方未显式给出时按错误码登记表补齐，保证信封元数据与 schema 真源一致。
+	# None 表示「未声明」，显式 False 仍表示不可恢复，不会被登记表覆盖。
+	spec = ERROR_CODES.get(code, {})
+	if recoverable is None:
+		recoverable = bool(spec.get("recoverable", False))
+	if recovery_action is None:
+		recovery_action = spec.get("recovery_action")
 	error = {
 		"code": code,
 		"message": redact_sensitive_text(message),

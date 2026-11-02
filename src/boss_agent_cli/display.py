@@ -134,13 +134,21 @@ def handle_error_output(
 	*,
 	code: str,
 	message: str,
-	recoverable: bool = False,
+	recoverable: bool | None = None,
 	recovery_action: str | None = None,
 	details: dict[str, Any] | None = None,
 	hints: dict[str, Any] | None = None,
 ) -> None:
 	"""Smart error output: TTY -> rich error, pipe -> JSON error envelope."""
 	from boss_agent_cli.output import emit_error
+
+	# 调用方未显式声明时按登记表补齐，TTY 与 JSON 两条路径看到同一份恢复契约。
+	if recoverable is None or recovery_action is None:
+		registered_recoverable, registered_recovery_action = error_contract_for_code(code)
+		if recoverable is None:
+			recoverable = registered_recoverable
+		if recovery_action is None:
+			recovery_action = registered_recovery_action
 
 	if is_json_mode(ctx):
 		emit_error(
