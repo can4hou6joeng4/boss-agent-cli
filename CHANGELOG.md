@@ -38,6 +38,7 @@
 - `boss schema` 中 `crawl` 的子命令声明漏了 `shortlist`：Agent 读 schema 时看不到「把 crawl 结果导入本地候选池」这条能力，只能从 `boss crawl --help` 或文档里发现。现在声明与实际注册的 8 个子命令一致，并新增测试把 description 里「子命令：a/b/c」的声明与 `hr.subcommands` 结构化字段都钉在 Click 命令树上，防止后续增删子命令时再次漂移。
 - `boss crawl resume --background` 在后台上拉失败（`OSError`，通常来自磁盘满或数据目录权限）时只提示「执行 boss crawl resume 重试」，同一环境下重试大概率再次失败；`crawl start` 的同类失败已经改为先检查磁盘空间与目录权限。现在两条路径给出同一份恢复指引。
 - `boss crawl resume --background` 对已完成的 run 仍会拉起后台进程并报告 `status: queued`：后台进程发现没有更多页和待补详情后立即退出，调用方却以为任务重新排队。现在与 `CrawlService.resume` 的前置条件一致——没有更多页、也没有 `--with-detail` 待补详情时直接返回 `status: completed` 并指向 `boss crawl results`，不拉起进程；请求更多页或仍有待补详情时照常恢复。
+- `boss schema` 中 `agent` 把 `agent run` 的 `--resume` / `--dry-run` / `--limit` 写成命令级选项：Agent 按 schema 构造 `boss agent --resume` 会被 Click 直接拒绝。现在与 `crawl` 一样放进 `run` 分组。同时 `chat` 的输出路径键写成 `-o/--output`，与 `digest` / `stats` 的 `-o, --output` 不一致，转 JSON Schema 时会得到错误的参数名；现在统一。新增测试校验 schema 声明的每个选项都落在实际命令或子命令上，防止再次声明不可执行的用法。
 
 ## [3.2.0] - 2026-11-01
 
