@@ -579,3 +579,15 @@ def test_error_recovery_actions_reference_real_commands_and_options():
 	"""
 	problems = _recovery_command_problems()
 	assert not problems, "恢复指引引用了不存在或已改名的命令/选项:\n" + "\n".join(problems)
+
+def test_resume_schema_marks_uid_gid_deprecated():
+	"""`--uid` / `--gid` 自 #217 起被忽略，schema 不能再说「交换联系方式时需要」。
+
+	Agent 以 `boss schema` 为真源构造 argv：照旧描述会先传 `--uid` / `--gid`，
+	然后收到「交换联系方式需要 --friend-id」的参数错误，白跑一次。
+	"""
+	options = SCHEMA_DATA["commands"]["hr"]["options"]["resume"]
+	for name in ("--uid", "--gid"):
+		description = options[name]["description"]
+		assert "已弃用" in description, f"{name} 应标明已弃用: {description}"
+		assert "需要" not in description, f"{name} 不应再声称是必需参数: {description}"
