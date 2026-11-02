@@ -13,7 +13,7 @@ from boss_agent_cli.commands.register import register_candidate_commands, regist
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY, ROLES, load_config, validate_request_config
 from boss_agent_cli.api.request_budget import validate_delay
 from boss_agent_cli.hooks import create_hook_bus
-from boss_agent_cli.output import emit_error, is_local_io_error, Logger, set_exit_codes_mode
+from boss_agent_cli.output import LOG_LEVELS, emit_error, is_local_io_error, Logger, set_exit_codes_mode
 from boss_agent_cli.platforms import list_platforms
 
 
@@ -278,7 +278,7 @@ class BossCliGroup(click.Group):
 	type=click.Choice(ROLES),
 	help="角色模式：candidate（求职者，默认）/ recruiter（招聘者）",
 )
-@click.option("--log-level", default=None, type=click.Choice(["error", "warning", "info", "debug"]))
+@click.option("--log-level", default=None, type=click.Choice(LOG_LEVELS))
 @click.option(
 	"--json/--no-json",
 	"json_output",

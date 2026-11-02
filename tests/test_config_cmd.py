@@ -196,6 +196,27 @@ def test_config_set_role_validates_choice(tmp_path):
 	assert parsed["data"]["value"] == "recruiter"
 
 
+def test_config_set_log_level_validates_choice(tmp_path):
+	"""log_level 进 _CONFIG_CHOICES：Logger 对未知级别静默回退到 error 阈值，
+	所以写入期必须拒绝拼错的级别，而不是报成功却什么都不记。"""
+	code, parsed = _invoke("config", "set", "log_level", "debug", tmp_path=tmp_path)
+	assert code == 0
+	assert parsed["data"]["value"] == "debug"
+
+	code, parsed = _invoke("config", "set", "log_level", "verbose", tmp_path=tmp_path)
+	assert code == 1
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "error, warning, info, debug" in parsed["error"]["message"]
+	assert json.loads((tmp_path / "config.json").read_text())["log_level"] == "debug"
+
+
+def test_config_choices_cover_enum_valued_defaults():
+	"""有固定取值域的配置项都要进 _CONFIG_CHOICES，否则 config set 能把非法值写进配置。"""
+	from boss_agent_cli.commands.config_cmd import _CONFIG_CHOICES
+
+	assert {"operating_mode", "browser_source", "role", "log_level"} <= set(_CONFIG_CHOICES)
+
+
 @pytest.mark.parametrize("value", [5, True, ["auto"], {"name": "auto"}])
 def test_non_string_browser_source_in_config_returns_envelope(tmp_path, value):
 	"""config.json 里 browser_source 不是字符串时不能 traceback，要按参数错误给信封。"""
