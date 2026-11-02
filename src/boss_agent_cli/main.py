@@ -347,7 +347,15 @@ def cli(
 	level = log_level or cfg["log_level"]
 	ctx.obj["log_level"] = level
 	ctx.obj["logger"] = Logger(level)
-	ctx.obj["cdp_url"] = cdp_url or cfg.get("cdp_url")
+	resolved_cdp_url = cdp_url or cfg.get("cdp_url")
+	# 与 browser_source 同理：config.json 被手改成数字后，doctor 等命令会在 shlex.quote
+	# 上抛 TypeError traceback，启动期就要按参数错误挡住。
+	if resolved_cdp_url is not None and not isinstance(resolved_cdp_url, str):
+		raise click.BadParameter(
+			f"必须是调试地址字符串或 null，收到 {resolved_cdp_url!r}",
+			param_hint="--cdp-url",
+		)
+	ctx.obj["cdp_url"] = resolved_cdp_url
 
 	# 归一化（大小写/首尾空白）后再校验，与下游 resolve_policy 的 .strip().lower() 一致，
 	# 避免 config.json 里 "Auto" / " stored-cookie " 这类值被 CLI 拒绝、策略层却接受的不一致。
