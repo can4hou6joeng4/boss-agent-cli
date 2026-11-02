@@ -373,6 +373,40 @@ def test_call_tool_is_error_mirrors_envelope_ok(monkeypatch, ok, expected):
 	assert json.loads(result.content[0].text)["ok"] is ok
 
 
+def test_call_tool_rejects_unknown_arguments(monkeypatch):
+	"""未知参数必须拒绝，不能被静默丢弃。
+
+	`boss_apply` 的 schema 没有 `dry_run`，过去多传这个参数会被忽略并真实提交投递。
+	"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+
+	async def fake_run(*args):
+		raise AssertionError("未知参数不应触达 CLI")
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+
+	result = asyncio.run(
+		mcp_server.call_tool(
+			None,
+			CallToolRequestParams(
+				name="boss_apply",
+				arguments={"security_id": "s", "job_id": "j", "dry_run": True},
+			),
+		)
+	)
+
+	payload = json.loads(result.content[0].text)
+	assert result.is_error is True
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "dry_run" in payload["error"]["message"]
+
+
 def test_search_tool_requires_query():
 	"""搜索工具应要求 query 参数。"""
 	search = next(t for t in TOOLS if t.name == "boss_search")
