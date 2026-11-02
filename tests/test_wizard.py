@@ -869,6 +869,35 @@ def test_runner_normalizes_auth_and_network_failures(tmp_path):
 	}
 
 
+def test_runner_reports_invalid_input_as_invalid_param(tmp_path):
+	"""inputs 类型写错时不能兜成 NETWORK_ERROR：重试同一条输入必然复现。"""
+
+	def bad_input(context, inputs, prior):
+		raise WorkflowInputError("wizard 输入 page 必须是整数，收到 'abc'")
+
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, {"bad_input": bad_input}).run(
+			_plan("bad_input"),
+			object(),
+			run_id="invalid-input-run",
+		)
+	assert run["status"] == "failed"
+	assert run["error"]["code"] == "INVALID_PARAM"
+	assert "page" in run["error"]["message"]
+
+
+def test_recruiter_search_rejects_non_integer_page_input():
+	"""`--input-json` 把 page 写成字符串时，错误要指向 inputs 而不是被当成平台故障。"""
+	from boss_agent_cli.wizard.actions import execute_recruiter_candidate_search
+
+	class _Platform:
+		def search_geeks(self, *args, **kwargs):
+			raise AssertionError("输入校验失败时不应调用平台")
+
+	with pytest.raises(WorkflowInputError, match="page"):
+		execute_recruiter_candidate_search(_Platform(), {"query": "Python", "page": "abc"})
+
+
 def test_wizard_models_import_on_python_310_compatible_surface():
 	result = subprocess.run(
 		[

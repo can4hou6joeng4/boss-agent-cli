@@ -35,7 +35,7 @@ from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.search_filters import SearchFilterCriteria, client_is_browser_only, detail_filter_max_pages, resolve_active_level, resolve_welfare_keywords, run_search_pipeline
-from boss_agent_cli.wizard.models import StepResult, WorkflowStatus
+from boss_agent_cli.wizard.models import StepResult, WorkflowInputError, WorkflowStatus
 from boss_agent_cli.wizard.runner import Action, WorkflowActionError, WorkflowControl
 
 PlatformFactory = Callable[[str, AuthManager, tuple[float, float], str | None, str | None], Any]
@@ -139,8 +139,8 @@ def execute_candidate_search(
 		cache,
 		logger,
 		criteria=criteria,
-		start_page=int(inputs.get("page") or 1),
-		max_pages=int(inputs.get("max_pages") or detail_filter_max_pages(welfare_conditions, active)),
+		start_page=_int_input(inputs, "page", 1),
+		max_pages=_int_input(inputs, "max_pages", detail_filter_max_pages(welfare_conditions, active)),
 		welfare_conditions=welfare_conditions,
 		before_list_request=inputs.get("before_list_request"),
 		**extra,
@@ -152,7 +152,7 @@ def execute_recruiter_candidate_search(platform: Any, inputs: Mapping[str, Any])
 	return platform.search_geeks(
 		str(inputs.get("query") or ""),
 		city=_optional_str(inputs.get("city")),
-		page=int(inputs.get("page") or 1),
+		page=_int_input(inputs, "page", 1),
 		job_id=_optional_str(inputs.get("job_id")),
 		experience=_optional_str(inputs.get("experience")),
 		degree=_optional_str(inputs.get("degree")),
@@ -215,6 +215,22 @@ def _optional_str(value: Any) -> str | None:
 	return str(value) if value is not None and value != "" else None
 
 
+def _int_input(inputs: Mapping[str, Any], name: str, default: int) -> int:
+	"""读取整数输入，类型错误必须点名字段。
+
+	wizard inputs 来自 `--input-json` / MCP，写成非数字字符串时 `int()` 抛的裸
+	ValueError 会落到 runner 的通用兜底，被映射成 NETWORK_ERROR +「重试当前
+	run_id」——同一条输入重试多少次都是同一个错误。
+	"""
+	raw = inputs.get(name)
+	if not raw:
+		return default
+	try:
+		return int(raw)
+	except (TypeError, ValueError) as exc:
+		raise WorkflowInputError(f"wizard 输入 {name} 必须是整数，收到 {raw!r}") from exc
+
+
 def _required(inputs: Mapping[str, Any], name: str) -> Any:
 	value = inputs.get(name)
 	if value is None or value == "":
@@ -225,6 +241,14 @@ def _required(inputs: Mapping[str, Any], name: str) -> Any:
 			recovery_action=f"在 inputs 中提供 {name} 后用同一 run_id 重试",
 		)
 	return value
+
+
+def _required_int(inputs: Mapping[str, Any], name: str) -> int:
+	raw = _required(inputs, name)
+	try:
+		return int(raw)
+	except (TypeError, ValueError) as exc:
+		raise WorkflowInputError(f"wizard 输入 {name} 必须是整数，收到 {raw!r}") from exc
 
 
 def _classify_action_error(code: str, message: str) -> tuple[str, bool, str]:
@@ -410,7 +434,7 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 		{
 			"items": result.items,
 			"pagination": {
-				"page": int(inputs.get("page") or 1),
+				"page": _int_input(inputs, "page", 1),
 				"has_more": result.has_more,
 				"total": result.total or len(result.items),
 			},
@@ -420,7 +444,7 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 
 def _candidate_recommend(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	with context.candidate_platform() as platform:
-		data = _unwrap(platform, platform.recommend_jobs(page=int(inputs.get("page") or 1)), "推荐职位获取失败")
+		data = _unwrap(platform, platform.recommend_jobs(page=_int_input(inputs, "page", 1)), "推荐职位获取失败")
 	items = _extract_list_items(data, ("recommendList", "jobList", "list", "items", "result"))
 	return StepResult(_with_items({"result": data}, items))
 
@@ -580,7 +604,7 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 
 def _candidate_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	with context.candidate_platform() as platform:
-		data = _unwrap(platform, platform.friend_list(page=int(inputs.get("page") or 1)), "沟通列表获取失败")
+		data = _unwrap(platform, platform.friend_list(page=_int_input(inputs, "page", 1)), "沟通列表获取失败")
 	items = _extract_list_items(data, ("result", "friendList", "list", "items"))
 	return StepResult(_with_items({"result": data}, items))
 
@@ -593,8 +617,8 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 		response = platform.chat_history(
 			gid,
 			security_id,
-			page=int(inputs.get("page") or 1),
-			count=int(inputs.get("count") or 20),
+			page=_int_input(inputs, "page", 1),
+			count=_int_input(inputs, "count", 20),
 		)
 		data = _unwrap(platform, response, "聊天记录获取失败")
 	items = _extract_list_items(data, ("messageList", "messages", "list", "items", "result"))
@@ -620,8 +644,8 @@ def _candidate_pipeline_data(context: ActionContext, inputs: Mapping[str, Any]) 
 	return build_pipeline_items(
 		chat_items=chat_items,
 		interview_items=interview_items,
-		now_ts_ms=int(inputs.get("now_ts_ms") or time.time() * 1000),
-		stale_days=int(inputs.get("days_stale") or 3),
+		now_ts_ms=_int_input(inputs, "now_ts_ms", int(time.time() * 1000)),
+		stale_days=_int_input(inputs, "days_stale", 3),
 	)
 
 
@@ -1034,8 +1058,8 @@ def _recruiter_applications(context: ActionContext, inputs: Mapping[str, Any], p
 	return _recruiter_call(
 		context,
 		lambda platform: platform.friend_list(
-			page=int(inputs.get("page") or 1),
-			label_id=int(inputs.get("label_id") or 0),
+			page=_int_input(inputs, "page", 1),
+			label_id=_int_input(inputs, "label_id", 0),
 			job_id=_optional_str(inputs.get("job_id")),
 		),
 		"投递申请获取失败",
@@ -1064,8 +1088,8 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 		friend_data = _unwrap(
 			platform,
 			platform.friend_list(
-				page=int(inputs.get("page") or 1),
-				label_id=int(inputs.get("label_id") or 0),
+				page=_int_input(inputs, "page", 1),
+				label_id=_int_input(inputs, "label_id", 0),
 				job_id=_optional_str(inputs.get("job_id")),
 			),
 			"沟通列表获取失败",
@@ -1106,7 +1130,7 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 
 
 def _recruiter_reply(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	friend_id = int(_required(inputs, "friend_id"))
+	friend_id = _required_int(inputs, "friend_id")
 	message = str(_required(inputs, "message"))
 	return _recruiter_call(
 		context, lambda platform: platform.send_message_by_friend(friend_id, message), "消息发送失败"
@@ -1114,13 +1138,13 @@ def _recruiter_reply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 
 
 def _recruiter_chat_history(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	friend_id = int(_required(inputs, "friend_id"))
+	friend_id = _required_int(inputs, "friend_id")
 	return _recruiter_call(
 		context,
 		lambda platform: platform.chat_history(
 			friend_id,
-			count=int(inputs.get("count") or 20),
-			max_msg_id=int(inputs["max_msg_id"]) if inputs.get("max_msg_id") else None,
+			count=_int_input(inputs, "count", 20),
+			max_msg_id=_int_input(inputs, "max_msg_id", 0) if inputs.get("max_msg_id") else None,
 		),
 		"聊天记录获取失败",
 		list_keys=("messageList", "messages", "list", "items", "result"),
@@ -1130,7 +1154,7 @@ def _recruiter_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 def _recruiter_request_resume(
 	context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]
 ) -> StepResult:
-	friend_id = int(_required(inputs, "friend_id"))
+	friend_id = _required_int(inputs, "friend_id")
 	return _recruiter_call(
 		context,
 		lambda platform: platform.exchange_request_by_friend(friend_id, exchange_type=4),
@@ -1141,7 +1165,7 @@ def _recruiter_request_resume(
 def _recruiter_exchange_contact(
 	context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]
 ) -> StepResult:
-	friend_id = int(_required(inputs, "friend_id"))
+	friend_id = _required_int(inputs, "friend_id")
 	exchange_type = 2 if str(inputs.get("type") or "phone") == "wechat" else 1
 	return _recruiter_call(
 		context,
