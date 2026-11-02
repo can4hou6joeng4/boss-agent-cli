@@ -13,9 +13,11 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.display import (
+	RISK_ERROR_CONTRACTS,
 	handle_auth_errors,
 	handle_error_output,
 	handle_output,
+	platform_error_contract,
 	render_action_result,
 	render_list_result,
 	render_message_panel,
@@ -218,13 +220,33 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 		if run_all:
 			records = cache.list_saved_searches()
 			watches: list[dict[str, Any]] = []
+			risk_error: SearchPipelinePlatformError | None = None
+			stopped_watch: str | None = None
 			for record in records:
 				try:
 					summary = _execute_single_watch(ctx, cache, record["name"])
 				except SearchPipelinePlatformError as exc:
+					if exc.code in RISK_ERROR_CONTRACTS:
+						# 风控是整条 workflow 的硬边界：停止后续 watch，
+						# 不再向平台发起请求；已完成的部分随 details 带回。
+						risk_error = exc
+						stopped_watch = record["name"]
+						break
 					summary = {"name": record["name"], "error": exc.code, "message": exc.message}
 				if summary is not None:
 					watches.append(summary)
+			if risk_error is not None:
+				recoverable, recovery_action, risk_hints = platform_error_contract(risk_error.code)
+				handle_error_output(
+					ctx, "watch",
+					code=risk_error.code,
+					message=risk_error.message or "搜索触发平台风控",
+					recoverable=recoverable,
+					recovery_action=recovery_action,
+					details={"watches": watches, "stopped_watch": stopped_watch},
+					hints=risk_hints,
+				)
+				return
 			handle_output(
 				ctx, "watch",
 				{"mode": "all", "watches": watches, "total": len(watches)},
@@ -247,11 +269,17 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 		try:
 			summary = _execute_single_watch(ctx, cache, name)
 		except SearchPipelinePlatformError as exc:
+			# 与 search 一致：风控码给停止指引，登录过期等可恢复错误给恢复动作。
+			recoverable, recovery_action, hints = platform_error_contract(exc.code)
 			handle_error_output(
-				ctx, "watch",
+				ctx,
+				"watch",
 				code=exc.code,
 				message=exc.message or "搜索结果获取失败",
-				recoverable=False,
+				recoverable=recoverable,
+				recovery_action=recovery_action,
+				details=exc.details,
+				hints=hints,
 			)
 			return
 

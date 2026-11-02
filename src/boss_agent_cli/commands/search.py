@@ -17,6 +17,7 @@ from boss_agent_cli.display import (
 	handle_error_output,
 	handle_output,
 	is_json_mode,
+	platform_error_contract,
 	render_job_table,
 )
 from boss_agent_cli.index_cache import try_save_index
@@ -310,12 +311,17 @@ def search_cmd(
 					pipeline=run_search_pipeline,
 				)
 			except SearchPipelinePlatformError as exc:
+				# 风控码必须走风险契约：不可恢复、不提示重试；登录过期等
+				# 可恢复错误按登记表给出 recovery_action，而不是一律 false。
+				recoverable, recovery_action, error_hints = platform_error_contract(exc.code)
 				handle_error_output(
 					ctx, "search",
 					code=exc.code,
 					message=exc.message or "搜索结果获取失败",
-					recoverable=False,
+					recoverable=recoverable,
+					recovery_action=recovery_action,
 					details=exc.details,
+					hints=error_hints,
 				)
 				return
 			finally:

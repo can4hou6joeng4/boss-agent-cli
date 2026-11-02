@@ -11,6 +11,7 @@
 - 单条 `boss greet` 在平台返回风控码（如 code 36）时仍输出 `recoverable: true` 和「重试」，与「命中风控立即停止、不无界重试」的硬边界相反，Agent 可能据此重试写操作。现在与 `apply` / `batch-greet` 一样走 `RISK_ERROR_CONTRACTS`：风控时 `recoverable: false`，`recovery_action` 与 `hints` 给出停止和人工处理指引；无法识别的业务失败仍按 `NETWORK_ERROR` 提示重试。
 - `export` 搜索失败、`status --live` 用户信息失败与 `batch-greet` 搜索失败三条路径把 `recoverable` 硬编码为 `false`，也不给 `recovery_action`：登录过期（`AUTH_EXPIRED` / `AUTH_REQUIRED`）或限流（`RATE_LIMITED`）时 Agent 被告知不可恢复，风控码则缺少停止指引。现在统一走 `handle_platform_error_output`，按错误码登记表给出 `recoverable` / `recovery_action`，风控码的 `next_actions` 取自 `RISK_ERROR_CONTRACTS`；`status` 的 `auth_health` / `checks` 诊断字段随 `extra_hints` 保留，`detail` 的风控信封也补上同一份停止指引。
 - `boss wizard` 的导出动作（`candidate_export`）没有把账号指纹传给搜索管线，登录态下 JSON 导出里的 `greeted` 全部是 `false`，与 `search` / `candidate_search` 的结果不一致。现在与其它求职者动作一样传入当前账号作用域。
+- `search` 与 `watch run` 捕获 `SearchPipelinePlatformError` 后同样把 `recoverable` 硬编码为 `false` 且不给 `recovery_action`：响应字典形态的风控码（如 code 36）没有停止指引，登录过期也无法提示重新登录。`watch run --all` 还会把单个 watch 的风控收进汇总结果继续跑下一个 watch，向平台继续发请求。现在两条命令都按错误契约输出；`--all` 遇到风控立即停批，已完成的 watch 结果随 `error.details` 带回。
 
 ## [3.2.0] - 2026-11-01
 

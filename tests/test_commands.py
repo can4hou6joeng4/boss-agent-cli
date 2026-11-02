@@ -1699,6 +1699,47 @@ def test_search_reports_pipeline_platform_error(mock_client_cls, mock_auth_cls, 
 	assert parsed["error"]["message"] == "service unavailable"
 
 
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_pipeline_risk_uses_stop_contract(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
+	"""响应字典形态的风控码被包成 SearchPipelinePlatformError 时也要停止。"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = None
+	_ctx_mock(mock_client_cls)
+	mock_pipeline.side_effect = SearchPipelinePlatformError("ACCOUNT_RISK", "blocked")
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["search", "golang"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "ACCOUNT_RISK"
+	assert parsed["error"]["recoverable"] is False
+	assert "停止自动化访问" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"]
+
+
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_pipeline_auth_expired_is_recoverable(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline):
+	"""登录过期是可恢复错误，不能硬编码成不可恢复。"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = None
+	_ctx_mock(mock_client_cls)
+	mock_pipeline.side_effect = SearchPipelinePlatformError("AUTH_EXPIRED", "expired")
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["search", "golang"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AUTH_EXPIRED"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "boss login"
+
+
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
 @patch("boss_agent_cli.commands.search.get_platform_instance")
