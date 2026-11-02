@@ -34,6 +34,11 @@ SCHEMA_DATA = {
 					"default": False,
 					"description": "不复用任何既有登录态：跳过本地 Cookie 提取，CDP 下不扫描已登录 context 并清掉当前 context 内目标平台域 cookie 后重新登录（其他站点与其他 context 不动）；与 --cdp 正交，不能与 --curl-file / --cookie-source 混用",
 				},
+				"--cookie-source": {
+					"type": "string",
+					"default": None,
+					"description": "指定浏览器提取 Cookie（如 chrome/firefox/edge），不指定则自动检测；不能与 --curl-file 或 --force 混用",
+				},
 			},
 		},
 		"platforms": {
@@ -130,6 +135,11 @@ SCHEMA_DATA = {
 					"type": "string",
 					"default": None,
 					"description": "BOSS 直聘搜索页 URL（可从网页复制完整筛选条件）",
+				},
+				"--preset": {
+					"type": "string",
+					"default": None,
+					"description": "预设名称（从 boss preset add 保存）；显式筛选参数优先，preset 只补未提供的项",
 				},
 				"--city": {
 					"type": "string",
@@ -348,7 +358,12 @@ SCHEMA_DATA = {
 					"description": "输出格式",
 					"enum": ["html", "csv", "json"],
 				},
-				"--output": {"type": "string", "default": None, "description": "输出文件路径（不指定则输出到 stdout）"},
+				"-o, --output": {"type": "string", "default": None, "description": "输出文件路径（不指定则输出到 stdout JSON 信封）"},
+				"--include-private": {
+					"type": "bool",
+					"default": False,
+					"description": "CSV/JSON/stdout 保留明文平台标识和招聘者姓名；HTML 省略平台标识、招聘者和薪资",
+				},
 			},
 		},
 		"cities": {
@@ -503,12 +518,55 @@ SCHEMA_DATA = {
 		"watch": {
 			"description": "本地保存搜索条件，并可通过 run 子命令增量拉取平台数据。",
 			"args": [],
-			"options": {},
+			"options": {
+				"add": {
+					"--city": {"type": "string", "default": None, "description": "城市名称"},
+					"--salary": {"type": "string", "default": None, "description": "薪资范围"},
+					"--experience": {"type": "string", "default": None, "description": "经验要求"},
+					"--education": {"type": "string", "default": None, "description": "学历要求"},
+					"--industry": {
+						"type": "string",
+						"default": None,
+						"description": "行业类型（可选值见 boss schema）",
+						"choices": list(INDUSTRY_CODES),
+					},
+					"--scale": {
+						"type": "string",
+						"default": None,
+						"description": "公司规模",
+						"choices": ["0-20人", "20-99人", "100-499人", "500-999人", "1000-9999人", "10000人以上"],
+					},
+					"--stage": {
+						"type": "string",
+						"default": None,
+						"description": "融资阶段",
+						"choices": ["不限", "未融资", "天使轮", "A轮", "B轮", "C轮", "D轮及以上", "已上市", "不需要融资"],
+					},
+					"--job-type": {
+						"type": "string",
+						"default": None,
+						"description": "职位类型",
+						"choices": ["全职", "兼职", "实习"],
+					},
+					"--welfare": {"type": "string", "default": None, "description": "福利筛选"},
+				},
+				"run": {
+					"--all": {"type": "bool", "default": False, "description": "跑所有已保存 watch；风控命中时停止后续 watch"},
+				},
+			},
 		},
 		"crawl": {
 			"description": "可恢复的 DrissionPage 批量采集（子命令：configure/run/shortlist/start/status/results/resume/stop）；同 data_dir 风险锁在浏览器构造前阻断启动/恢复，新风险锁存并保存断点；仅读取/本地导入不受影响。",
 			"args": [],
 			"options": {
+				"configure": {
+					"--chrome-path": {"type": "string", "default": None, "description": "chrome.exe 路径"},
+					"--port": {"type": "int", "default": None, "description": "Chrome 远程调试端口（1-65535）"},
+					"--max-requests": {"type": "int", "default": None, "description": "每个 crawl run 的总请求上限（≥1）"},
+					"--max-details": {"type": "int", "default": None, "description": "每个 crawl run 的详情请求上限（≥1）"},
+					"--max-seconds": {"type": "int", "default": None, "description": "每个 crawl run 的墙钟秒数上限（≥1）"},
+					"--max-retries": {"type": "int", "default": None, "description": "单请求的重试次数上限（≥0）"},
+				},
 				"run": {
 					"--city": {"type": "string", "required": True, "description": "城市名称或数字城市代码"},
 					"--pages": {"type": "int", "default": 5, "minimum": 1, "description": "严格正数页数上限"},
@@ -518,6 +576,16 @@ SCHEMA_DATA = {
 						"type": "string",
 						"default": None,
 						"description": "screenshot-full 必填：用户已授权的原始 Hook 目录，须含 SHA256SUMS",
+					},
+					"--chrome-path": {
+						"type": "string",
+						"default": None,
+						"description": "覆盖配置的 Chrome 可执行文件路径",
+					},
+					"--port": {
+						"type": "int",
+						"default": None,
+						"description": "覆盖配置的 Chrome 远程调试端口（1-65535）",
 					},
 				},
 				"resume": {
@@ -547,6 +615,17 @@ SCHEMA_DATA = {
 					"--all": {"type": "bool", "default": False, "description": "导入该 run 的全部可关联职位"},
 					"--tags": {"type": "string", "default": "", "description": "写入候选池的本地标签，逗号分隔"},
 					"--note": {"type": "string", "default": "", "description": "写入候选池的本地备注"},
+				},
+				"start": {
+					"--city": {"type": "string", "required": True, "description": "城市名称或数字城市代码"},
+					"--pages": {"type": "int", "default": 5, "minimum": 1, "description": "严格正数页数上限"},
+					"--with-detail": {"type": "bool", "default": False, "description": "串行补全所有职位的 job_card"},
+					"--hook-profile": {"type": "string", "default": None, "enum": ["screenshot-full", "none"]},
+					"--hook-dir": {
+						"type": "string",
+						"default": None,
+						"description": "与 screenshot-full 一起显式指定的用户脚本目录，须含 SHA256SUMS",
+					},
 				},
 			},
 			"subcommands": {
@@ -616,7 +695,45 @@ SCHEMA_DATA = {
 		"preset": {
 			"description": "管理可复用搜索预设（子命令：add/list/remove）",
 			"args": [],
-			"options": {},
+			"options": {
+				"add": {
+					"--city": {"type": "string", "default": None, "description": "城市名称"},
+					"--salary": {"type": "string", "default": None, "description": "薪资范围"},
+					"--experience": {"type": "string", "default": None, "description": "经验要求"},
+					"--education": {"type": "string", "default": None, "description": "学历要求"},
+					"--industry": {
+						"type": "string",
+						"default": None,
+						"description": "行业类型（可选值见 boss schema）",
+						"choices": list(INDUSTRY_CODES),
+					},
+					"--scale": {
+						"type": "string",
+						"default": None,
+						"description": "公司规模",
+						"choices": ["0-20人", "20-99人", "100-499人", "500-999人", "1000-9999人", "10000人以上"],
+					},
+					"--stage": {
+						"type": "string",
+						"default": None,
+						"description": "融资阶段",
+						"choices": ["不限", "未融资", "天使轮", "A轮", "B轮", "C轮", "D轮及以上", "已上市", "不需要融资"],
+					},
+					"--job-type": {
+						"type": "string",
+						"default": None,
+						"description": "职位类型",
+						"choices": ["全职", "兼职", "实习"],
+					},
+					"--welfare": {"type": "string", "default": None, "description": "福利筛选"},
+					"--active": {
+						"type": "string",
+						"default": None,
+						"description": "HR 活跃度下限：online / today / 3d / week / 2w / month / half-year",
+						"choices": ["online", "today", "3d", "week", "2w", "month", "half-year"],
+					},
+				},
+			},
 		},
 		"pipeline": {
 			"description": "聚合聊天和面试数据生成候选进度视图。",
@@ -651,6 +768,11 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"add": {
+					"--title": {"type": "string", "default": "", "description": "职位名称"},
+					"--company": {"type": "string", "default": "", "description": "公司名称"},
+					"--city": {"type": "string", "default": "", "description": "城市"},
+					"--salary": {"type": "string", "default": "", "description": "薪资"},
+					"--source": {"type": "string", "default": "manual", "description": "来源，如 search/recommend/show/manual"},
 					"--lid": {"type": "string", "default": "", "description": "与 security_id 同一列表项的访问上下文（可选；不推断有效期）"},
 					"--tags": {"type": "string", "default": "", "description": "本地标签，逗号分隔"},
 					"--note": {"type": "string", "default": "", "description": "本地备注"},
@@ -721,6 +843,11 @@ SCHEMA_DATA = {
 				"--dry-run": {"type": "bool", "default": False, "description": "仅预览将清理的内容"},
 				"--all": {"type": "bool", "default": False, "description": "清理全部缓存"},
 				"--days": {"type": "int", "default": 30, "description": "清理超过指定天数的快照和导出"},
+				"--privacy": {
+					"type": "bool",
+					"default": False,
+					"description": "清理本地敏感数据（登录会话、简历、聊天快照和导出文件）；清理后需要重新登录",
+				},
 				"--risk-lock": {
 					"type": "bool",
 					"default": False,
@@ -748,7 +875,29 @@ SCHEMA_DATA = {
 		"resume": {
 			"description": "本地简历管理（子命令：init/list/show/edit/delete/export/import/clone/diff/link/applications）",
 			"args": [],
-			"options": {},
+			"options": {
+				"init": {
+					"--name": {"type": "string", "default": None, "description": "简历名称"},
+					"--template": {"type": "string", "default": None, "description": "模板名称（如 default）"},
+				},
+				"edit": {
+					"--field": {"type": "string", "required": True, "description": "字段路径（如 title, personal_info.layout）"},
+					"--value": {"type": "string", "required": True, "description": "新值"},
+				},
+				"export": {
+					"--format": {
+						"type": "string",
+						"default": "json",
+						"description": "导出格式",
+						"enum": ["pdf", "json", "html"],
+					},
+					"-o, --output": {"type": "string", "default": None, "description": "输出文件路径"},
+				},
+				"link": {
+					"--title": {"type": "string", "default": "", "description": "职位名称"},
+					"--company": {"type": "string", "default": "", "description": "公司名称"},
+				},
+			},
 			"subcommands": {
 				"init": "从 BOSS 直聘简历或默认模板初始化本地简历",
 				"list": "列出所有本地简历",
@@ -766,7 +915,106 @@ SCHEMA_DATA = {
 		"ai": {
 			"description": "AI 简历优化、聊天回复与本地模型管理（子命令：config/local/analyze-jd/polish/optimize/suggest/fit/reply/interview-prep/chat-coach/suggest-keywords/resume-optimize/cover-letter）",
 			"args": [],
-			"options": {},
+			"options": {
+				"config": {
+					"--provider": {
+						"type": "string",
+						"default": None,
+						"description": "AI 提供商（openai/deepseek/moonshot/openrouter/qwen/zhipu/siliconflow/ollama/vllm/custom）",
+					},
+					"--model": {"type": "string", "default": None, "description": "模型名称（如 gpt-4o / deepseek-chat）"},
+					"--api-key": {"type": "string", "default": None, "description": "API 密钥（将加密存储）"},
+					"--base-url": {
+						"type": "string",
+						"default": None,
+						"description": "自定义 API 基础地址（provider=custom 或自建代理时使用）",
+					},
+					"--temperature": {"type": "float", "default": None, "description": "生成温度"},
+					"--max-tokens": {"type": "int", "default": None, "description": "最大令牌数"},
+				},
+				"local": {
+					"configure": {
+						"--runtime": {
+							"type": "string",
+							"required": True,
+							"description": "本地运行时",
+							"enum": ["ollama", "vllm"],
+						},
+						"--model": {"type": "string", "required": True, "description": "本地模型名称"},
+						"--base-url": {"type": "string", "default": None, "description": "本地服务基础地址"},
+					},
+					"pull": {
+						"--model": {"type": "string", "required": True, "description": "要下载的模型名称"},
+						"--confirm-download": {
+							"type": "bool",
+							"default": False,
+							"description": "确认下载并接受模型体积与来源",
+						},
+					},
+					"import": {
+						"--path": {"type": "string", "required": True, "description": "本地模型文件路径"},
+						"--model": {"type": "string", "required": True, "description": "导入后的模型名称"},
+					},
+				},
+				"analyze-jd": {
+					"--resume": {"type": "string", "required": True, "description": "对比的本地简历名称"},
+				},
+				"optimize": {
+					"--jd": {"type": "string", "required": True, "description": "目标职位描述文本或 @文件路径"},
+				},
+				"suggest": {
+					"--jd": {"type": "string", "required": True, "description": "目标职位描述文本或 @文件路径"},
+				},
+				"fit": {
+					"--resume": {"type": "string", "required": True, "description": "本地简历名称"},
+					"--limit": {"type": "int", "default": 20, "description": "最多分析的候选池职位数"},
+				},
+				"reply": {
+					"--context": {"type": "string", "default": "", "description": "会话上下文（可选，或 @文件路径）"},
+					"--resume": {"type": "string", "default": None, "description": "参考简历名称（可选）"},
+					"--tone": {
+						"type": "string",
+						"default": "简洁专业",
+						"description": "语气偏好",
+						"enum": ["简洁专业", "热情积极", "谨慎确认"],
+					},
+				},
+				"interview-prep": {
+					"--resume": {"type": "string", "default": None, "description": "参考简历名称（可选，根据简历真实经历定制问题）"},
+					"--count": {"type": "int", "default": 10, "description": "题量"},
+				},
+				"chat-coach": {
+					"--resume": {"type": "string", "default": None, "description": "参考简历名称（可选）"},
+					"--style": {
+						"type": "string",
+						"default": "简洁专业",
+						"description": "沟通风格偏好（如 简洁专业/积极主动/谨慎稳重）",
+					},
+				},
+				"suggest-keywords": {
+					"--limit": {"type": "int", "default": 20, "description": "候选池职位数上限"},
+				},
+				"resume-optimize": {
+					"--jd": {"type": "string", "default": None, "description": "目标职位描述文本或 @文件路径"},
+					"--job-id": {"type": "string", "default": None, "description": "从缓存读取职位描述的 job_id"},
+				},
+				"cover-letter": {
+					"--jd": {"type": "string", "default": None, "description": "目标职位描述文本或 @文件路径"},
+					"--job-id": {"type": "string", "default": None, "description": "从缓存读取职位描述的 job_id"},
+					"--tone": {
+						"type": "string",
+						"default": "简洁专业",
+						"description": "求职信语气",
+						"enum": ["简洁专业", "热情积极", "谨慎稳重"],
+					},
+					"--lang": {
+						"type": "string",
+						"default": "zh",
+						"description": "输出语言（zh 中文 / en 英文）",
+						"enum": ["zh", "en"],
+					},
+				},
+			},
 			"subcommands": {
 				"config": "配置 AI 服务提供商和模型",
 				"local": "本地模型状态、配置、下载、导入和 smoke 测试",
@@ -807,6 +1055,28 @@ SCHEMA_DATA = {
 						"description": "本轮最多处理多少个会话",
 					},
 				},
+				"crawl": {
+					"--run-id": {"type": "string", "default": None, "description": "分析指定的已完成 crawl run"},
+					"--query": {"type": "string", "default": None, "description": "新采集的职位关键词"},
+					"--city": {"type": "string", "default": None, "description": "新采集城市；与 --query 同时使用"},
+					"--pages": {"type": "int", "default": 5, "minimum": 1, "description": "新采集严格页数上限"},
+					"--with-detail": {"type": "bool", "default": False, "description": "新采集时串行补职位详情"},
+					"--resume": {"type": "string", "required": True, "description": "用于 ai fit 的本地简历名称"},
+					"--limit": {"type": "int", "default": 10, "minimum": 1, "description": "按匹配分返回前 N 个职位"},
+				},
+				"train": {
+					"--dry-run": {"type": "bool", "default": True, "description": "训练模式默认只演练；与 --live 互斥"},
+					"--live": {"type": "bool", "default": False, "description": "直接执行满足阈值的动作；只有操作者明确授权时才可用"},
+					"--limit": {"type": "int", "default": None, "description": "本轮最多处理多少个会话"},
+				},
+				"stop": {
+					"--reason": {"type": "string", "default": "manual-stop", "description": "熔断原因"},
+				},
+				"review": {
+					"reject": {
+						"--reason": {"type": "string", "default": "human-rejected", "description": "拒绝原因"},
+					},
+				},
 			},
 			"subcommands": {
 				"run": "运行一轮招聘自动化；--resume 显式恢复停止状态并保留断点",
@@ -825,7 +1095,72 @@ SCHEMA_DATA = {
 			"description": "招聘者模式快捷命令。已实现的候选人搜索、简历、沟通、联系方式交换和消息发送在 assisted/research 下均可调用。",
 			"args": [],
 			"options": {
+				"applications": {
+					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
+					"--label-id": {"type": "int", "default": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
+					"--page": {"type": "int", "default": 1, "description": "页码"},
+				},
+				"resume": {
+					"--job-id": {"type": "string", "default": "", "description": "职位 ID"},
+					"--security-id": {"type": "string", "default": None, "description": "安全 ID"},
+					"--exchange": {"type": "bool", "default": False, "description": "请求交换联系方式"},
+					"--type": {
+						"type": "string",
+						"default": "phone",
+						"description": "交换类型：phone=手机号 / wechat=微信",
+						"enum": ["phone", "wechat"],
+					},
+					"--uid": {"type": "int", "default": None, "description": "候选人 uid（交换联系方式时需要）"},
+					"--gid": {"type": "int", "default": None, "description": "会话 gid（交换联系方式时需要）"},
+					"--friend-id": {"type": "int", "default": None, "description": "候选人 friendId（交换联系方式新路径）"},
+					"--raw": {"type": "bool", "default": False, "description": "输出原始 API 数据（不解析）"},
+				},
+				"chat": {
+					"--page": {"type": "int", "default": 1, "description": "页码"},
+					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
+					"--label-id": {"type": "int", "default": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
+					"--summary-limit": {
+						"type": "int",
+						"default": 100,
+						"description": "最多给前多少个会话补最近消息（每 50 个一次串行请求；0=不请求）",
+					},
+				},
+				"chatmsg": {
+					"--count": {"type": "int", "default": 20, "description": "消息数量"},
+					"--max-msg-id": {"type": "int", "default": None, "description": "向前翻页的最大消息 ID"},
+				},
+				"last-messages": {
+					"--page": {"type": "int", "default": 1, "description": "沟通列表页码"},
+					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
+					"--label-id": {"type": "int", "default": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
+					"--friend-id": {"type": "int", "default": None, "description": "指定候选人会话 friend_id，可重复"},
+					"--limit": {"type": "int", "default": 100, "description": "最多查询多少个会话（每 50 个一次串行请求）"},
+				},
+				"candidates": {
+					"--city": {"type": "string", "default": None, "description": "城市筛选（cityCode，如 101020100；-2=全国）"},
+					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
+					"--experience": {"type": "string", "default": None, "description": "经验要求，如 -3,-3（应届）/ -1,-1（不限）"},
+					"--degree": {"type": "string", "default": None, "description": "学历要求，如 201,201 / -1,-1"},
+					"--age": {"type": "string", "default": None, "description": "年龄范围，如 20,25"},
+					"--school-level": {"type": "string", "default": None, "description": "学校层次（如 1101）"},
+					"--activeness": {"type": "string", "default": None, "description": "活跃度，如 2"},
+					"--source": {"type": "string", "default": None, "description": "来源编码（默认 4）"},
+					"--salary": {"type": "string", "default": None, "description": "薪资范围，如 -1,3"},
+					"--select": {"type": "bool", "default": False, "description": "是否带 select=true"},
+					"--page": {"type": "int", "default": 1, "description": "页码"},
+				},
+				"recommendations": {
+					"--job-id": {"type": "string", "required": True, "description": "招聘职位的加密 ID"},
+					"--page": {"type": "int", "default": 1, "description": "页码"},
+				},
 				"greet": {
+					"--geek-id": {"type": "string", "required": True, "description": "recommendations 返回的 encryptGeekId"},
+					"--job-id": {"type": "string", "required": True, "description": "recommendations 返回的 encryptJobId"},
+					"--expect-id": {"type": "string", "required": True, "description": "recommendations 返回的 expectId"},
+					"--lid": {"type": "string", "required": True, "description": "recommendations 返回的 lid"},
+					"--security-id": {"type": "string", "required": True, "description": "recommendations 返回的 securityId"},
+					"--suid": {"type": "string", "default": "", "description": "可选 suid；当前推荐接口通常为空"},
+					"--message": {"type": "string", "required": True, "description": "首次招呼内容，不能为空"},
 					"--yes": {
 						"type": "bool",
 						"default": False,
@@ -847,10 +1182,12 @@ SCHEMA_DATA = {
 					"--output": {"type": "string", "required": True, "description": "本地输出文件路径，不覆盖已有文件"},
 				},
 				"jobs": {
-					"--page": {
-						"type": "int",
-						"default": 1,
-						"description": "仅 list：职位管理列表页码，读取 data/list",
+					"list": {
+						"--page": {
+							"type": "int",
+							"default": 1,
+							"description": "职位管理列表页码，读取 data/list",
+						},
 					},
 				},
 			},

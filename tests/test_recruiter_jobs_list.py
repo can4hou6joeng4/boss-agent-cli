@@ -96,7 +96,7 @@ def test_hr_jobs_list_defaults_page_to_one() -> None:
 
 
 def test_schema_records_jobs_list_page() -> None:
-	page = SCHEMA_DATA["commands"]["hr"]["options"]["jobs"]["--page"]
+	page = SCHEMA_DATA["commands"]["hr"]["options"]["jobs"]["list"]["--page"]
 	assert page["type"] == "int"
 	assert page["default"] == 1
 
