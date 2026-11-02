@@ -199,6 +199,12 @@ def test_cli_export_pdf_chromium_unavailable(tmp_path):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "EXPORT_FAILED"
+	# 导出用 patchright 渲染，恢复指引必须指向 patchright 而不是 playwright
+	from boss_agent_cli.schema.error_codes import ERROR_CODES
+
+	action = parsed["error"]["recovery_action"]
+	assert action == ERROR_CODES["EXPORT_FAILED"]["recovery_action"]
+	assert "playwright install" not in action
 
 
 def test_cli_export_not_found(tmp_path):

@@ -399,13 +399,19 @@ def start_cmd(
 						error=f"无法启动后台任务: {exc}",
 						list_finished=bool(run["list_finished"]),
 					)
+		# operating_mode 在新版本不再限制能力，指引应指向真正的启动失败原因。
+		recovery_action = (
+			f"检查磁盘空间与数据目录权限后执行 boss crawl resume {run_id} 重试"
+			if run_id is not None
+			else "检查磁盘空间与数据目录权限后重新执行 boss crawl start"
+		)
 		handle_error_output(
 			ctx,
 			"crawl.start",
 			code="CRAWL_UNAVAILABLE",
 			message=f"无法启动 crawl 后台任务: {exc}",
 			recoverable=True,
-			recovery_action="设置 operating_mode=research 后执行 boss crawl resume <run_id> 重试",
+			recovery_action=recovery_action,
 		)
 		return
 	handle_output(
