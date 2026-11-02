@@ -352,6 +352,29 @@ def test_unreadable_config_file_returns_envelope_instead_of_traceback(tmp_path):
 	assert "config.json" in parsed["error"]["message"]
 
 
+def test_corrupt_config_json_names_the_file_and_position(tmp_path):
+	"""语法坏掉的 config.json 会挡住所有命令，消息必须给出要修的文件与行列。"""
+	config_file = tmp_path / "config.json"
+	config_file.write_text('{"log_level":', encoding="utf-8")
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "config", "reset", "log_level"])
+	parsed = _assert_single_stdout_json_error(result, command="boss", code="INVALID_PARAM")
+	message = parsed["error"]["message"]
+	assert str(config_file) in message
+	assert "不是合法 JSON" in message
+	assert "第 1 行" in message
+	assert "删除" in message
+
+
+@pytest.mark.parametrize("content", ["[]", '"debug"', "null", "42"])
+def test_non_object_config_json_names_the_file(tmp_path, content):
+	config_path = tmp_path / "config.json"
+	config_path.write_text(content, encoding="utf-8")
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "config", "list"])
+	parsed = _assert_single_stdout_json_error(result, command="boss", code="INVALID_PARAM")
+	assert "必须是 JSON 对象" in parsed["error"]["message"]
+	assert str(config_path) in parsed["error"]["message"]
+
+
 _READ_ONLY_UNSUPPORTED = os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0)
 
 
