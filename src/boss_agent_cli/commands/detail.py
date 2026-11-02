@@ -3,7 +3,8 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.client import RISK_ERROR_BY_CODE, PlatformRiskError
+from boss_agent_cli.api.client import RISK_ERROR_BY_CODE
+from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.api.models import employment_type_from_raw, field_dict, field_list, field_text
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
@@ -59,10 +60,10 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 		if job_id:
 			try:
 				result, last_error = _detail_via_httpx(platform, security_id, job_id, data_dir, account=account)
-			except PlatformRiskError:
-				# 风控命中即终止：不再换浏览器通道补一次请求
-				raise
 			except Exception as e:
+				# 风控、预算与超时都是停止信号：继续降级会再发一次请求。
+				if is_request_stop(e):
+					raise
 				logger.info(f"httpx 快速通道失败（{e}），降级到浏览器通道")
 				result = None
 		# 风控码以响应字典形态返回时同样终止，不换通道再取一次

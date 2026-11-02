@@ -438,3 +438,23 @@ def test_detail_risk_uses_stop_contract(tmp_path):
 	assert parsed["error"]["recoverable"] is False
 	assert "停止自动化访问" in parsed["error"]["recovery_action"]
 	assert parsed["hints"]["next_actions"]
+
+
+def test_detail_budget_stop_does_not_fall_back_to_browser(tmp_path):
+	"""httpx 快速通道遇到预算/时限停止时不能再换浏览器通道补一次请求。"""
+	from boss_agent_cli.api.request_budget import RequestBudgetExceeded
+
+	runner = CliRunner()
+	with (
+		patch(_DETAIL_PATCHES["auth"]),
+		patch(_DETAIL_PATCHES["client"]),
+		patch("boss_agent_cli.commands.detail._detail_via_httpx", side_effect=RequestBudgetExceeded("fixture budget stop")),
+		patch("boss_agent_cli.commands.detail._detail_via_browser") as browser,
+	):
+		result = runner.invoke(cli, ["detail", "sid1", "--job-id", "j1"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "REQUEST_BUDGET_EXHAUSTED"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"]
+	browser.assert_not_called()

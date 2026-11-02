@@ -1,6 +1,7 @@
 import click
 
 from boss_agent_cli.api.client import AuthError, PlatformRiskError
+from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import (
@@ -133,6 +134,12 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 			recovery_action=recovery_action,
 			details=e.details or None,
 			hints=hints,
+		)
+	except RequestBudgetExceeded as e:
+		recoverable, recovery_action = error_contract_for_code(e.code)
+		handle_error_output(
+			ctx, "me", code=e.code, message=str(e), recoverable=recoverable,
+			recovery_action=recovery_action, details=e.details,
 		)
 	except INTERNAL_ERROR_TYPES as e:
 		recoverable, recovery_action = error_contract_for_code("INTERNAL_ERROR")
