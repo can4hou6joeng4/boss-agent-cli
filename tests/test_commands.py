@@ -1936,3 +1936,20 @@ def test_stats_json_hints_expose_available_application_action(mock_collect_stats
 	assert parsed["ok"] is True
 	actions = parsed["hints"]["next_actions"]
 	assert "使用 boss apply <security_id> <job_id> 继续投递" in actions
+
+
+def test_corrupt_cache_database_returns_envelope_not_traceback(tmp_path):
+	"""库文件被写坏时，异常发生在命令自己的 try 之外，启动期兜底也要给信封。"""
+	db = tmp_path / "cache" / "boss_agent.db"
+	db.parent.mkdir(parents=True)
+	db.write_bytes(b"not a sqlite database")
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "list"])
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["ok"] is False
+	assert payload["command"] == "preset"
+	assert payload["error"]["code"] == "CACHE_DATABASE_INVALID"
+	assert payload["error"]["recoverable"] is True
+	assert str(db) in payload["error"]["message"]
+	assert str(db) in payload["hints"]["operator_actions"][0]
+	assert "备份" in payload["error"]["recovery_action"]

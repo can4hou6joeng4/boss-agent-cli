@@ -8,6 +8,7 @@ import click
 
 from boss_agent_cli import __version__
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
+from boss_agent_cli.cache.store import CacheDatabaseInvalid
 from boss_agent_cli.commands.register import register_candidate_commands, register_recruiter_commands
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY, load_config, validate_request_config
 from boss_agent_cli.api.request_budget import validate_delay
@@ -67,6 +68,38 @@ def _prescan_exit_codes(args: Sequence[str] | None) -> None:
 
 
 _SECURITY_ID_LIKE = re.compile(r"^-[A-Za-z0-9_-]{19,}$")
+
+_GLOBAL_OPTIONS_WITH_VALUE = frozenset({
+	"--data-dir",
+	"--delay",
+	"--cdp-url",
+	"--browser-source",
+	"--platform",
+	"--role",
+	"--log-level",
+	"--exit-codes",
+})
+
+
+def _invoked_command_name(args: Sequence[str] | None, fallback: str) -> str:
+	"""从原始 argv 取子命令名，给「启动期就失败」的信封用。
+
+	这类异常在 Click 完成 context 解析前抛出，拿不到 ``ctx.info_name``；
+	这里只做最小解析：跳过已知带值的全局选项与其它选项，第一个非选项
+	token 就是子命令。
+	"""
+	tokens = list(args) if args is not None else sys.argv[1:]
+	index = 0
+	while index < len(tokens):
+		token = tokens[index]
+		if token in _GLOBAL_OPTIONS_WITH_VALUE:
+			index += 2
+			continue
+		if token.startswith("-"):
+			index += 1
+			continue
+		return token
+	return fallback
 
 
 def _declare_dash_prefixed_positionals(
@@ -159,6 +192,24 @@ class BossCliGroup(click.Group):
 				recoverable=False,
 				recovery_action=recovery_action,
 				hints=hints,
+			)
+			return None
+		except CacheDatabaseInvalid as exc:
+			# 缓存在每条命令启动时就会打开：库文件被写坏或被别的文件占位时，
+			# 异常发生在命令自己的 try 之外，只能在这里统一给信封。
+			if not standalone_mode:
+				raise
+			emit_error(
+				_invoked_command_name(args, self.name or "boss"),
+				code="CACHE_DATABASE_INVALID",
+				message=str(exc),
+				recoverable=True,
+				recovery_action="缓存库只存本地数据：先备份 cache/boss_agent.db（--data-dir 指定时在对应目录下），再删除该文件后重试，命令会自动重建一个空库",
+				hints={
+					"operator_actions": [
+						f"备份后删除 {exc.path}；候选池、预设、watch 历史与任务断点都随旧库一起作废",
+					],
+				},
 			)
 			return None
 		except OSError as exc:

@@ -1,7 +1,9 @@
 import time
 import sqlite3
 
-from boss_agent_cli.cache.store import CacheStore
+import pytest
+
+from boss_agent_cli.cache.store import CacheDatabaseInvalid, CacheStore
 
 
 def test_greet_record(tmp_path):
@@ -210,3 +212,31 @@ def test_job_desc_cache_ignores_empty(tmp_path):
 	store.put_job_desc("sec_001", "")
 	assert store.get_job_desc("sec_001") is None
 	assert store.get_job_desc("") is None
+
+
+# ── 缓存库文件本身损坏 ────────────────────────────────────────────────
+
+
+def test_cache_store_reports_invalid_database_file(tmp_path):
+	"""库文件被写成非 SQLite 内容时抛类型化异常，而不是裸 sqlite3.DatabaseError。"""
+	db = tmp_path / "cache" / "boss_agent.db"
+	db.parent.mkdir(parents=True)
+	db.write_bytes(b"this is not a sqlite database")
+	with pytest.raises(CacheDatabaseInvalid) as excinfo:
+		CacheStore(db)
+	assert excinfo.value.path == db
+	assert "file is not a database" in str(excinfo.value)
+
+
+def test_locked_database_is_not_reported_as_corrupt(tmp_path, monkeypatch):
+	"""并发锁（OperationalError）在上层可重试，不能被说成库文件损坏。"""
+	db = tmp_path / "cache.db"
+	CacheStore(db).close()
+
+	class _LockedConnection:
+		def execute(self, sql, *args, **kwargs):
+			raise sqlite3.OperationalError("database is locked")
+
+	monkeypatch.setattr("boss_agent_cli.cache.store.sqlite3.connect", lambda *a, **k: _LockedConnection())
+	with pytest.raises(sqlite3.OperationalError):
+		CacheStore(db)

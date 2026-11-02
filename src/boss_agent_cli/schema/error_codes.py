@@ -299,6 +299,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "该 run 的记录只存在本地缓存：重新创建任务（crawl 用 boss crawl start，workflow 用 boss wizard --input-json）后重试；已导出的文件不会自动删除",
 	},
+	"CACHE_DATABASE_INVALID": {
+		"message": "本地缓存数据库损坏或不是 SQLite 文件",
+		"recoverable": True,
+		"recovery_action": "缓存库只存本地数据：先备份 cache/boss_agent.db（--data-dir 指定时在对应目录下），再删除该文件后重试，命令会自动重建一个空库",
+	},
 	"RECRUITER_NOT_AUTHORIZED": {
 		"message": "当前账号非招聘者账号",
 		"recoverable": True,

@@ -248,6 +248,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `AUTOMATION_STATE_INVALID` | 招聘自动化状态 `automation/state.json` 损坏，`boss agent run` / `stats` 无法读取（`stop.json` 损坏时按已熔断处理） | 修正或删除该文件后重试；删除会丢失自动化去重与历史进度，建议先备份 |
 | `SAVED_SEARCH_INVALID` | 本地预设 / watch 的参数损坏（`saved_searches.params` 不是 JSON 对象），`boss search --preset`、`boss watch run` 无法执行 | 执行 `boss preset remove <名称>`（watch 用 `boss watch remove`）后重新添加；参数只存在本地缓存，删除不影响平台数据 |
 | `CACHE_RECORD_INVALID` | 本地 crawl / workflow 任务记录损坏（`crawl_runs`、`crawl_jobs`、`workflow_runs`、`workflow_steps` 的 JSON 列读不出来），断点无法恢复 | 重新创建任务（crawl 用 `boss crawl start`，workflow 用 `boss wizard --input-json`）；记录只存在本地缓存，已导出的文件不会自动删除，`boss wizard` 的任务列表会跳过坏记录并点名 |
+| `CACHE_DATABASE_INVALID` | 本地缓存库 `cache/boss_agent.db` 损坏或被别的文件占位（`file is not a database`），几乎所有读写本地状态的命令都受影响 | 先备份该文件，再删除后重试，命令会自动重建空库；库里的候选池、预设、watch 历史与任务断点会一起作废，平台数据不受影响。并发锁等可重试错误不会报这个码 |
 | `GREET_LIMIT` | 今日次数用完 | 告知用户 |
 | `NETWORK_ERROR` | 网络错误 | 重试 |
 | `INTERNAL_ERROR` | CLI 内部错误或平台返回了未预期的数据结构 | 不要重试；升级到最新版本，仍出现时附上命令与 error.message 提交 issue |

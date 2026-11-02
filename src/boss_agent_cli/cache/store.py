@@ -80,14 +80,48 @@ def _decode_optional_record(
 	return None if not raw else _decode_record(kind, record_id, column, raw, expected=expected)
 
 
+_SQLITE_HEADER = b"SQLite format 3\x00"
+
+
+class CacheDatabaseInvalid(Exception):
+	"""`cache/boss_agent.db` 不是可用的 SQLite 库（磁盘损坏、被别的文件占位）。
+
+	缓存库只保存本地数据：打不开时命令应输出信封并提示备份后重建，而不是把
+	`sqlite3.DatabaseError` traceback 甩给 Agent。用独立基类（不是 ValueError /
+	RuntimeError）是为了不被命令层的兜底分类误吞。
+	"""
+
+	def __init__(self, path: Path, detail: str) -> None:
+		super().__init__(f"本地缓存库 {path} 无法打开（{detail}）")
+		self.path = path
+		self.detail = detail
+
+
+def _has_sqlite_header(path: Path) -> bool:
+	try:
+		with path.open("rb") as handle:
+			return handle.read(len(_SQLITE_HEADER)) == _SQLITE_HEADER
+	except OSError:
+		return False
+
+
 class CacheStore:
 	def __init__(self, db_path: Path, *, search_ttl_seconds: int = _SEARCH_TTL) -> None:
 		self._db_path = db_path
 		self._search_ttl = search_ttl_seconds
 		db_path.parent.mkdir(parents=True, exist_ok=True)
-		self._conn = sqlite3.connect(str(db_path))
-		self._conn.execute("PRAGMA journal_mode=WAL")
-		self._init_tables()
+		try:
+			self._conn = sqlite3.connect(str(db_path))
+			self._conn.execute("PRAGMA journal_mode=WAL")
+			self._init_tables()
+		except sqlite3.OperationalError as exc:
+			# 库文件头正常时多为并发锁或磁盘压力，按原错误上抛（重试可能有效）；
+			# 头不对才说明这个文件根本不是 SQLite 库，只能备份后重建。
+			if _has_sqlite_header(db_path):
+				raise
+			raise CacheDatabaseInvalid(db_path, str(exc)) from exc
+		except sqlite3.DatabaseError as exc:
+			raise CacheDatabaseInvalid(db_path, str(exc)) from exc
 
 	def _init_tables(self) -> None:
 		self._conn.executescript("""
