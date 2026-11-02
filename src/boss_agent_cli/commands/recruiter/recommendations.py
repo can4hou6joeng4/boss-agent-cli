@@ -7,13 +7,20 @@ from typing import Any
 import click
 
 from boss_agent_cli.api.browser_source import BrowserSourceUnavailable
-from boss_agent_cli.api.client import AccountRiskError
+from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.recruiter_client import RecruiterAuthError
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.display import error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output
+from boss_agent_cli.display import (
+	RISK_ERROR_CONTRACTS,
+	handle_auth_errors,
+	handle_error_output,
+	handle_output,
+	handle_platform_error_output,
+	risk_error_contract,
+)
 
 
 @click.command("recommendations")
@@ -47,12 +54,15 @@ def _send_error(ctx: click.Context, *, code: str, job_id: str, details: dict[str
 		message = str(details.get("platform_message") or "该职位的主动沟通权益已用完，本次未发送")
 		action = "停止该职位的新招呼，等待平台权益恢复；不要自动重发本次招呼"
 		hints = {"operator_actions": [action]}
-	elif code == "ACCOUNT_RISK":
-		action = "账号已触发风控，停止自动化访问；回到 BOSS 直聘官方页面处理"
-		hints = {"operator_actions": [action, "禁止重新发送本次招呼"]}
-	elif code == "ENVIRONMENT_RISK":
-		action = (error_contract_for_code(code)[1] or "停止自动化访问") + "；不要自动重发本次招呼"
-		hints = {"operator_actions": [action, "不要刷新 Token、重新登录或自动重试该请求"]}
+	elif code in RISK_ERROR_CONTRACTS:
+		# 风控码（含环境风险与本地风险锁）统一取登记表的停止指引；
+		# 命令自身的「不要重发本次招呼」作为操作者补充，不覆盖机器可读的 next_actions。
+		recovery, risk_hints = risk_error_contract(code)
+		action = f"{recovery}；不要自动重发本次招呼"
+		hints = {
+			**(risk_hints or {}),
+			"operator_actions": [action, "不要刷新 Token、重新登录或换通道重试该请求"],
+		}
 	else:
 		action = f"先用 {check} 确认该候选人会话是否已建立；不要自动重发"
 		hints = {"operator_actions": [message, action], "next_actions": [check]}
@@ -123,8 +133,10 @@ def greet_cmd(
 				geek_id=geek_id, job_id=job_id, expect_id=expect_id, lid=lid,
 				security_id=security_id, message=message, suid=suid,
 			)
-		except AccountRiskError:
-			_send_error(ctx, code="ACCOUNT_RISK", job_id=job_id, details=data)
+		except PlatformRiskError as exc:
+			# 按基类捕获：EnvironmentRiskError / EnvironmentRiskLockedError 与
+			# AccountRiskError 平级，只捕账号风控会把环境风控误报成结果未知。
+			_send_error(ctx, code=exc.code, job_id=job_id, details=data)
 			return
 		except BrowserSourceUnavailable as exc:
 			_send_error(ctx, code=exc.code, job_id=job_id, details=data)

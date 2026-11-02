@@ -63,6 +63,16 @@ def platform_error_contract(code: str) -> tuple[bool, str | None, dict[str, Any]
 	return recoverable, recovery_action, None
 
 
+def risk_error_message(code: str) -> str:
+	"""Return a stop-oriented message for a risk code.
+
+	风控信封不透传异常或平台响应文本（可能带临时凭据），只暴露稳定错误码与
+	登记表文案；具体停止指引由 ``recovery_action`` / ``hints`` 承载。
+	"""
+	label = str(ERROR_CODES.get(code, {}).get("message") or "命中平台风控")
+	return f"{label}；停止自动化访问并在官方页面处理"
+
+
 def is_json_mode(ctx: Any) -> bool:
 	"""Check if --json flag is set or stdout is piped (non-TTY)."""
 	force_json = ctx.obj.get("json_output", False) if ctx and ctx.obj else False
