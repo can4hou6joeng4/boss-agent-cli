@@ -83,6 +83,21 @@ def test_socket_errors_stay_network_error(exc):
 	assert payload["error"]["recoverable"] is True
 
 
+def test_uncaught_oserror_reports_actual_command_name(tmp_path):
+	"""顶层 IO 兜底以前把所有写文件失败都记成 command=boss：看不出是哪个子命令，
+	按 command 过滤日志或按信封分发的调用方也会认错命令。"""
+	result = CliRunner().invoke(cli, [
+		"--data-dir", str(tmp_path),
+		"stats", "--format", "html", "-o", str(tmp_path / "missing" / "report.html"),
+	])
+	payload = json.loads(result.output)
+	assert result.exit_code == 1
+	assert payload["command"] == "stats"
+	assert payload["error"]["code"] == "LOCAL_IO_ERROR"
+	assert payload["error"]["message"].startswith("stats 本地文件读写失败: ")
+	assert payload["error"]["recoverable"] is False
+
+
 def test_local_io_error_is_registered_as_not_recoverable():
 	spec = ERROR_CODES["LOCAL_IO_ERROR"]
 	assert spec["recoverable"] is False
