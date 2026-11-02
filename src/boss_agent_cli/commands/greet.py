@@ -147,7 +147,7 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 @click.option("--scale", default=None, type=click.Choice(list(SCALE_CODES.keys()), case_sensitive=False), help="公司规模（如 100-499人）")
 @click.option("--stage", default=None, type=click.Choice(list(STAGE_CODES.keys()), case_sensitive=False), help="融资阶段（如 已上市、A轮）")
 @click.option("--job-type", default=None, type=click.Choice(list(JOB_TYPE_CODES.keys()), case_sensitive=False), help="职位类型（全职/兼职/实习）")
-@click.option("--count", default=10, help="打招呼数量上限（最大 10）")
+@click.option("--count", default=10, type=click.IntRange(0), help="打招呼数量上限（最大 10）")
 @click.option("--dry-run", is_flag=True, default=False, help="仅模拟执行，不实际打招呼")
 @click.pass_context
 @handle_auth_errors("batch-greet")
@@ -195,16 +195,18 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 				job_type=job_type,
 			)
 
-			candidates = []
+			candidates: list[JobItem] = []
 			for raw_item in deduplicate_job_result(job_list):
+				# 上限必须在下一次收集之前判断：放在 append 之后时 --count 0 仍会
+				# 收进 1 个候选并真实发出招呼（写操作）。
+				if len(candidates) >= count:
+					break
 				matches, _ = prefilter_platform_job_type(raw_item, criteria, platform_name=platform.name)
 				if not matches:
 					continue
 				item = JobItem.from_api(raw_item)
 				if not cache.is_greeted(item.security_id, job_id=item.job_id, account=account):
 					candidates.append(item)
-				if len(candidates) >= count:
-					break
 
 			if dry_run:
 				items = [item.to_dict() for item in candidates]
