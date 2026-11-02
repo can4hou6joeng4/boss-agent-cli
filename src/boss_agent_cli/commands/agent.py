@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import click
 
@@ -21,7 +21,7 @@ from boss_agent_cli.automation.models import (
 	RunReport,
 )
 from boss_agent_cli.automation.runner import run_automation_cycle
-from boss_agent_cli.automation.storage import AutomationStore
+from boss_agent_cli.automation.storage import AutomationStateError, AutomationStore
 from boss_agent_cli.ai.service import AIServiceError
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands.ai_cmd import _build_fit_prompt, _create_ai_service
@@ -370,10 +370,15 @@ def pending_list_cmd(ctx: click.Context) -> None:
 def agent_stats_cmd(ctx: click.Context) -> None:
 	"""查看招聘自动化统计。"""
 	store = AutomationStore(ctx.obj["data_dir"])
+	try:
+		stats = store.stats()
+	except AutomationStateError as exc:
+		_emit_state_error(ctx, "agent.stats", exc)
+		return
 	handle_output(
 		ctx,
 		"agent.stats",
-		store.stats(),
+		stats,
 		render=lambda d: render_record_result(d, title="agent stats", next_steps=["boss agent pending list"]),
 		hints=_agent_hints(ctx),
 	)
@@ -420,6 +425,17 @@ def stop_cmd(ctx: click.Context, reason: str) -> None:
 	)
 
 
+def _emit_state_error(ctx: click.Context, command: str, exc: AutomationStateError) -> NoReturn:
+	"""状态文件损坏时输出信封：自动化不能带着未知状态继续发送。"""
+	handle_error_output(
+		ctx,
+		command,
+		code="AUTOMATION_STATE_INVALID",
+		message=f"{exc.path} 无法解析：{exc.detail}",
+	)
+	ctx.exit(1)
+
+
 def _run_agent(
 	ctx: click.Context,
 	*,
@@ -460,23 +476,26 @@ def _run_agent(
 		cfg = replace(cfg, mode=force_mode)
 	platform = ctx.obj.get("platform") or "zhipin"
 	store = AutomationStore(ctx.obj["data_dir"])
-	if resume:
-		store.resume()
-	adapter = build_automation_adapter(
-		platform,
-		data_dir=ctx.obj["data_dir"],
-		delay=ctx.obj.get("delay", DEFAULT_REQUEST_DELAY),
-		cdp_url=ctx.obj.get("cdp_url"),
-		live=not dry_run,
-	)
-	return run_automation_cycle(
-		adapter,
-		store,
-		cfg,
-		platform=platform,
-		dry_run=dry_run,
-		limit=limit,
-	)
+	try:
+		if resume:
+			store.resume()
+		adapter = build_automation_adapter(
+			platform,
+			data_dir=ctx.obj["data_dir"],
+			delay=ctx.obj.get("delay", DEFAULT_REQUEST_DELAY),
+			cdp_url=ctx.obj.get("cdp_url"),
+			live=not dry_run,
+		)
+		return run_automation_cycle(
+			adapter,
+			store,
+			cfg,
+			platform=platform,
+			dry_run=dry_run,
+			limit=limit,
+		)
+	except AutomationStateError as exc:
+		_emit_state_error(ctx, command, exc)
 
 
 def _resume_text(data_dir: Path, resume_name: str) -> str | None:

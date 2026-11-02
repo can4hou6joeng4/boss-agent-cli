@@ -457,6 +457,82 @@ class UnconfirmedEmptyScanBossRecruiter(UnconfirmedFakeBossRecruiter):
 		return {"code": 0, "zpData": {"result": []}}
 
 
+def test_agent_stats_reports_corrupt_state(tmp_path: Path) -> None:
+	state_dir = tmp_path / "automation"
+	state_dir.mkdir()
+	(state_dir / "state.json").write_text('{"conversations": ', encoding="utf-8")
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "agent", "stats"])
+
+	assert result.exit_code == 1
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "AUTOMATION_STATE_INVALID"
+	assert "state.json" in payload["error"]["message"]
+	assert payload["error"]["recoverable"] is True
+	assert payload["error"]["recovery_action"]
+
+
+def test_agent_run_reports_corrupt_state(tmp_path: Path) -> None:
+	state_dir = tmp_path / "automation"
+	state_dir.mkdir()
+	(state_dir / "state.json").write_text("[]", encoding="utf-8")
+
+	runner = CliRunner()
+	result = runner.invoke(
+		cli,
+		[
+			"--data-dir", str(tmp_path), "--json",
+			"--role", "recruiter",
+			"agent", "run", "--dry-run", "--limit", "1",
+		],
+	)
+
+	assert result.exit_code == 1
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "AUTOMATION_STATE_INVALID"
+	assert "顶层必须是 JSON object" in payload["error"]["message"]
+
+
+def test_corrupt_stop_latch_fails_closed(tmp_path: Path) -> None:
+	store = AutomationStore(tmp_path)
+	(store.root / "stop.json").write_text("not json", encoding="utf-8")
+
+	stop = store.read_stop()
+	assert stop["open"] is True
+	assert stop["corrupt"] is True
+	assert "无法解析" in stop["reason"]
+
+	state = store.read_state()
+	assert state["autonomy"]["circuit_breaker"]["open"] is True
+
+	# 熔断开关未知时，新一轮自动化必须直接停下，不执行任何平台动作。
+	adapter = MockRecruiterAutomationPlatform("zhipin")
+	report = run_automation_cycle(
+		adapter,
+		store,
+		AutomationConfig(),
+		platform="zhipin",
+		dry_run=False,
+		limit=1,
+	)
+
+	assert report.status == EventStatus.CIRCUIT_BREAKER_OPEN.value
+	assert adapter.executed == []
+
+
+def test_corrupt_jsonl_lines_are_skipped(tmp_path: Path) -> None:
+	store = AutomationStore(tmp_path)
+	(store.root / "action-log.jsonl").write_text(
+		'{"status": "AUTO_EXECUTED"}\nnot json\n[]\n',
+		encoding="utf-8",
+	)
+
+	rows = store.read_jsonl("action-log.jsonl")
+
+	assert rows == [{"status": "AUTO_EXECUTED"}]
+
+
 def test_boss_adapter_stops_when_send_result_is_unconfirmed(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
 	recruiter = UnconfirmedFakeBossRecruiter()
