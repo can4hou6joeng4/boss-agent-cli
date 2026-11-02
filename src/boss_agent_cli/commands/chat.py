@@ -140,21 +140,10 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				os.makedirs(export_dir, exist_ok=True)
 				output_path = os.path.join(export_dir, f"沟通列表-{today}.{export_fmt}")
 
-			# 路径安全校验：禁止 .. 跳转
-			resolved = os.path.realpath(output_path)
-			try:
-				relative_output = os.path.relpath(resolved, os.getcwd())
-			except ValueError:
-				relative_output = resolved
-			if ".." in relative_output:
-				safe_dir = os.path.realpath(export_dir if 'export_dir' in dir() else data_dir)
-				if not resolved.startswith(safe_dir) and not resolved.startswith(os.path.realpath(os.getcwd())):
-					handle_error_output(
-						ctx, "chat", code="INVALID_PARAM",
-						message=f"输出路径不安全: {output_path}",
-					)
-					return
-
+			# 旧的「禁止 .. 跳转」校验把任何不在当前目录或数据目录下的绝对路径
+			# （如 -o ~/Desktop/chat.json）都判成「输出路径不安全」，与 digest / stats
+			# 的 -o 行为不一致。显式指定的写入位置由用户负责，这里只展开 ~ 并建好父目录。
+			output_path = os.path.expanduser(output_path)
 			os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 			with open(output_path, "w", encoding="utf-8", newline="") as f:
 				f.write(content)

@@ -1255,6 +1255,56 @@ def test_chat_export_container_export_dir_returns_invalid_param(mock_auth_cls, m
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_export_output_path_outside_data_dir_is_written(mock_auth_cls, mock_client_cls, tmp_path):
+	"""-o 指定的绝对路径不在当前目录或数据目录下时也要照写，不能报「输出路径不安全」。"""
+	import time
+	now_ms = int(time.time() * 1000)
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
+	mock_client_cls.return_value.friend_list.return_value = {
+		"zpData": {"result": [_make_friend_item("张HR", "阿里", 1, now_ms)]},
+	}
+	data_dir = tmp_path / "data"
+	data_dir.mkdir()
+	output_path = tmp_path / "elsewhere" / "chat.json"
+
+	result = CliRunner().invoke(cli, [
+		"--data-dir", str(data_dir), "chat", "--export", "json", "-o", str(output_path),
+	])
+	parsed = json.loads(result.output)
+	assert result.exit_code == 0
+	assert parsed["ok"] is True
+	assert parsed["data"]["path"] == str(output_path)
+	assert output_path.exists()
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_export_output_path_expands_home(mock_auth_cls, mock_client_cls, tmp_path, monkeypatch):
+	"""-o ~/chat.json 要展开到用户主目录，而不是在当前目录建一个名叫 ~ 的目录。"""
+	import time
+	now_ms = int(time.time() * 1000)
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
+	mock_client_cls.return_value.friend_list.return_value = {
+		"zpData": {"result": [_make_friend_item("张HR", "阿里", 1, now_ms)]},
+	}
+	home = tmp_path / "home"
+	home.mkdir()
+	monkeypatch.setenv("HOME", str(home))
+
+	result = CliRunner().invoke(cli, [
+		"--data-dir", str(tmp_path / "data"), "chat", "--export", "json", "-o", "~/chat.json",
+	])
+	parsed = json.loads(result.output)
+	assert result.exit_code == 0
+	assert parsed["data"]["path"] == str(home / "chat.json")
+	assert (home / "chat.json").exists()
+	assert not (tmp_path / "~").exists()
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_json_default_path(mock_auth_cls, mock_client_cls, tmp_path):
 	"""--export json 不指定 -o 时自动保存到 export_dir"""
 	import time
