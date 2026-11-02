@@ -243,7 +243,7 @@ class BossCliGroup(click.Group):
 			# 写失败时必须给信封，而不是把 traceback 甩给 Agent。
 			if not standalone_mode:
 				raise
-			command = self.name or "boss"
+			command = _invoked_command_name(args, self.name or "boss")
 			code = "LOCAL_IO_ERROR" if is_local_io_error(exc) else "NETWORK_ERROR"
 			emit_error(
 				command,
