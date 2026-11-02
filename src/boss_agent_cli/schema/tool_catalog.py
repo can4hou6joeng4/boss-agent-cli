@@ -209,7 +209,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"section": {
 						"type": "string",
-						"enum": ["info", "resume", "expect", "deliver"],
+						"enum": ["user", "resume", "expect", "deliver"],
 						"description": "指定查看的部分",
 					},
 				},
