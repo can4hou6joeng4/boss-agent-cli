@@ -135,6 +135,64 @@ def test_schema_hr_subcommands_match_click_tree():
 	)
 
 
+# ── 选项声明 == 实际可执行选项 ───────────────────────────────────────
+
+
+def _click_param_options(node: Any) -> set[str]:
+	names: set[str] = set()
+	for param in getattr(node, "params", ()):
+		for opt in getattr(param, "opts", ()):
+			names.add(opt)
+			if "/" in opt:
+				names.add("--" + opt.rsplit("/", 1)[-1].lstrip("-"))
+	return names
+
+
+def _schema_option_spellings(key: str) -> set[str]:
+	"""把 `-o, --output` / `--output` 拆成 Click 使用的拼写形式。"""
+	return {part.strip() for part in key.split(",") if part.strip().startswith("-")}
+
+
+def _subcommand_option_names(node: Any) -> set[str]:
+	names = _click_param_options(node)
+	for sub in (getattr(node, "commands", {}) or {}).values():
+		names |= _click_param_options(sub)
+		names |= _subcommand_option_names(sub)
+	return names
+
+
+def test_schema_option_declarations_are_executable():
+	"""schema 里声明的选项必须落在实际命令或子命令上。
+
+	`agent` 曾把 `agent run` 的三个选项写成 `agent` 的命令级选项：Agent 按
+	schema 构造 `boss agent --resume` 会直接被 Click 拒绝。命令级选项只能
+	出现在命令自身，子命令选项必须放进分组。
+	"""
+	problems: list[str] = []
+	for name, spec in SCHEMA_DATA["commands"].items():
+		node = cli.commands.get(name)
+		if node is None:
+			continue
+		for key, value in (spec.get("options") or {}).items():
+			if key.startswith("-"):
+				missing = _schema_option_spellings(key) - _click_param_options(node)
+				if missing:
+					problems.append(f"{name}: 命令级选项 {sorted(missing)} 不在命令自身参数中")
+				continue
+			if not isinstance(value, dict):
+				continue
+			sub = (getattr(node, "commands", {}) or {}).get(key)
+			if sub is None:
+				problems.append(f"{name}: 选项分组 {key!r} 不是已注册子命令")
+				continue
+			available = _subcommand_option_names(sub)
+			for opt_key in value:
+				missing = _schema_option_spellings(opt_key) - available
+				if missing:
+					problems.append(f"{name}.{key}: 选项 {sorted(missing)} 不在子命令参数中")
+	assert not problems, "schema 声明了不可执行的选项:\n" + "\n".join(problems)
+
+
 def test_doctor_schema_documents_cdp_risk_boundary():
 	"""doctor schema 只描述保留的 CDP 通道，不提供风控绕过入口。"""
 	description = SCHEMA_DATA["commands"]["doctor"]["description"]

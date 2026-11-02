@@ -408,7 +408,7 @@ SCHEMA_DATA = {
 					"description": "导出格式：html=HTML / md=Markdown / csv=CSV / json=JSON",
 					"choices": ["html", "md", "csv", "json"],
 				},
-				"-o/--output": {
+				"-o, --output": {
 					"type": "string",
 					"default": None,
 					"description": "输出文件路径（不指定则自动保存到 config.export_dir，默认 ~/Documents/files/boss，按日期命名同天覆盖）",
@@ -790,20 +790,22 @@ SCHEMA_DATA = {
 			),
 			"args": [],
 			"options": {
-				"--resume": {
-					"type": "bool",
-					"default": False,
-					"description": "仅用于 agent run：操作者确认官方验证完成后显式解除停止状态，保留已确认动作与断点；Agent 不应自行添加",
-				},
-				"--dry-run": {
-					"type": "bool",
-					"default": False,
-					"description": "只演练自动化决策，不执行真实平台动作",
-				},
-				"--limit": {
-					"type": "int",
-					"default": None,
-					"description": "本轮最多处理多少个会话",
+				"run": {
+					"--resume": {
+						"type": "bool",
+						"default": False,
+						"description": "操作者确认官方验证完成后显式解除停止状态，保留已确认动作与断点；Agent 不应自行添加",
+					},
+					"--dry-run": {
+						"type": "bool",
+						"default": False,
+						"description": "只演练自动化决策，不执行真实平台动作",
+					},
+					"--limit": {
+						"type": "int",
+						"default": None,
+						"description": "本轮最多处理多少个会话",
+					},
 				},
 			},
 			"subcommands": {

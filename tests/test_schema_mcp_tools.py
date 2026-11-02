@@ -50,7 +50,7 @@ def test_native_schema_describes_explicit_agent_resume(tmp_path: Path) -> None:
 	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "schema"])
 	assert result.exit_code == 0, result.output
 	data = json.loads(result.output)["data"]
-	option = data["commands"]["agent"]["options"]["--resume"]
+	option = data["commands"]["agent"]["options"]["run"]["--resume"]
 	assert option["type"] == "bool"
 	assert option["default"] is False
 	assert "操作者确认官方验证" in option["description"]
