@@ -7,6 +7,7 @@ import types
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+import click
 import pytest
 
 
@@ -256,6 +257,36 @@ def test_every_tool_maps_to_registered_command():
 		assert args[0] in registered_commands, tool.name
 
 
+def _resolve_click_command(argv: list[str]):
+	"""沿 argv 走到最深一层的 Click 命令，返回 (命令, 名称, 剩余参数)。"""
+	command = cli
+	name = command.name
+	remaining = list(argv)
+	while isinstance(command, click.Group) and remaining and not remaining[0].startswith("-"):
+		candidate = remaining[0]
+		if candidate not in command.commands:
+			break
+		command = command.commands[candidate]
+		name = candidate
+		remaining = remaining[1:]
+	return command, name, remaining
+
+
+def test_every_tool_generated_argv_parses_on_click_tree():
+	"""工具生成的 argv 必须能被 Click 实际解析，而不只是首个子命令名存在。
+
+	boss_mark 曾把 CLI 的 `--label` 写成 `--tag`：只查 args[0] 的测试看不出问题，
+	任何一次真实工具调用都会被 Click 以 NoSuchOption 拒绝。
+	"""
+	for tool in TOOLS:
+		args = _build_args(tool.name, _required_arguments(tool))
+		command, name, remaining = _resolve_click_command(args)
+		try:
+			command.make_context(name, remaining)
+		except click.UsageError as exc:
+			pytest.fail(f"{tool.name} 生成的 argv {args} 无法被 Click 解析：{exc}")
+
+
 def test_search_tool_requires_query():
 	"""搜索工具应要求 query 参数。"""
 	search = next(t for t in TOOLS if t.name == "boss_search")
@@ -460,8 +491,9 @@ def test_build_args_chat_summary():
 
 
 def test_build_args_mark():
+	"""MCP 参数名是 tag，CLI 选项名是 --label，映射必须落到真实选项上。"""
 	args = _build_args("boss_mark", {"security_id": "s1", "tag": "收藏"})
-	assert args == ["mark", "s1", "--tag", "收藏"]
+	assert args == ["mark", "s1", "--label", "收藏"]
 
 
 def test_build_args_mark_remove():

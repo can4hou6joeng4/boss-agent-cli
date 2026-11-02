@@ -111,7 +111,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return ["chat-summary", arguments["security_id"]]
 
 	if name == "mark":
-		args = [name, arguments["security_id"], "--tag", arguments["tag"]]
+		# MCP 侧参数名是 tag，CLI 的选项名是 --label；两者不是同一个词，写错会让
+		# Click 以 NoSuchOption 拒绝整个工具调用。
+		args = [name, arguments["security_id"], "--label", arguments["tag"]]
 		if arguments.get("remove"):
 			args.append("--remove")
 		return args
