@@ -249,6 +249,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "确认 Ollama 已安装并可访问网络后重试",
 	},
+	"MODEL_SOURCE_NOT_FOUND": {
+		"message": "本地模型源文件或目录不存在",
+		"recoverable": True,
+		"recovery_action": "检查 --path 指向的模型文件或目录后重试",
+	},
 	"AI_API_ERROR": {
 		"message": "AI 服务调用失败",
 		"recoverable": True,

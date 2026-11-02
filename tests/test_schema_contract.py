@@ -4,7 +4,10 @@
 并验证代码中使用的每个错误码都在 schema 中声明。
 """
 
+import ast
 import json
+import re
+from pathlib import Path
 
 from click.testing import CliRunner
 
@@ -116,49 +119,63 @@ def test_browser_source_schema_only_describes_supported_channels():
 
 # ── 错误码一致性 ────────────────────────────────────────────────────
 
+_SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src" / "boss_agent_cli"
+_ERROR_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
+
+#: 源码中形如错误码、但不属于 CLI 信封错误码的全大写字面量。
+#: 新增环境变量名等会触发扫描失败；确认不是错误码后加到这里。
+_NON_ERROR_CODE_LITERALS = {
+	"ALL_PROXY", "HTTPS_PROXY", "HTTP_PROXY",  # 代理环境变量名
+	"BOSS_AGENT_MACHINE_ID", "BOSS_BROWSER_VERBOSE", "BOSS_DATA_DIR", "BOSS_EGRESS_PROBE_URL",  # 环境变量名
+	"CLI_ERROR",  # MCP 层「CLI 输出不可解析」分类，不进入 CLI 信封
+	"CREATE_NO_WINDOW",  # Windows 子进程常量
+	"DRY_RUN",  # 招聘自动化事件状态，不是错误码
+	"HOOK_SCRIPT_NAMES",  # crawler 常量名
+	"PYTEST_CURRENT_TEST",  # pytest 环境变量
+	"SERVER_INSTRUCTIONS",  # MCP server 常量名
+	"UID_OR_SECURITY_ID",  # click metavar
+}
+
+
+def _literal_error_codes() -> set[str]:
+	"""收集源码中形如错误码的字符串字面量（错误码定义文件自身除外）。"""
+	codes: set[str] = set()
+	for path in sorted(_SOURCE_ROOT.rglob("*.py")):
+		if path == _SOURCE_ROOT / "schema" / "error_codes.py":
+			continue
+		tree = ast.parse(path.read_text(encoding="utf-8"))
+		for node in ast.walk(tree):
+			if (
+				isinstance(node, ast.Constant)
+				and isinstance(node.value, str)
+				and _ERROR_CODE_PATTERN.match(node.value)
+			):
+				codes.add(node.value)
+	return codes
+
 
 def test_schema_error_codes_cover_all_used_codes():
-	"""代码中实际使用的错误码应全部在 schema error_codes 中声明。"""
-	schema_codes = set(SCHEMA_DATA["error_codes"].keys())
+	"""源码中出现的错误码字面量应全部在 schema error_codes 中声明。
 
-	# 代码中实际使用的所有错误码（通过审计收集）
-	used_codes = {
-		"CONFIRMATION_REQUIRED",
-		"RESUME_ACCEPT_RESULT_UNKNOWN",
-		"GREET_RESULT_UNKNOWN",
-		"ACTION_UNCONFIRMED",
-		"EXCHANGE_NOT_AVAILABLE",
-		"AUTH_EXPIRED",
-		"AUTH_REQUIRED",
-		"RATE_LIMITED",
-		"TOKEN_REFRESH_FAILED",
-		"ENVIRONMENT_RISK",
-		"LOGIN_TIMEOUT",
-		"CDP_UNAVAILABLE",
-		"BROWSER_SESSION_NOT_FOUND",
-		"BROWSER_KERNEL_MISSING",
-		"BROWSER_NAV_TIMEOUT",
-		"LOGIN_RISK_CONTROL",
-		"LOGIN_EXPIRED",
-		"LOGIN_CREDENTIAL_EXTRACTION_FAILED",
-		"ACCOUNT_RISK",
-		"JOB_NOT_FOUND",
-		"ALREADY_GREETED",
-		"ALREADY_APPLIED",
-		"GREET_LIMIT",
-		"NETWORK_ERROR",
-		"INVALID_PARAM",
-		"NOT_SUPPORTED",
-		"COMPLIANCE_BLOCKED",
-		"HOOK_BLOCKED",
-		"CONFIRM_DOWNLOAD_REQUIRED",
-		"LOCAL_MODEL_PULL_FAILED",
-	}
+	扫描源码而非维护手工清单：任何新增错误码只要以字面量出现在生产代码里，
+	这里就会失败，避免 HOOK_BLOCKED / MODEL_SOURCE_NOT_FOUND 那类漏登记复发。
+	"""
+	schema_codes = set(SCHEMA_DATA["error_codes"].keys())
+	used_codes = _literal_error_codes() - _NON_ERROR_CODE_LITERALS
 
 	missing = used_codes - schema_codes
 	assert not missing, (
-		f"以下错误码在代码中使用但未在 schema 中声明: {missing}"
+		f"以下错误码在代码中使用但未在 schema 中声明: {sorted(missing)}"
 	)
+
+	# 豁免项若同时是已登记错误码，说明真实错误码被悄悄跳过
+	overlap = _NON_ERROR_CODE_LITERALS & schema_codes
+	assert not overlap, (
+		f"以下豁免项已登记为错误码，不应出现在 _NON_ERROR_CODE_LITERALS: {sorted(overlap)}"
+	)
+
+	# 扫描器有效性自检：这些码必须以字面量出现在生产代码中
+	assert {"INVALID_PARAM", "HOOK_BLOCKED", "MODEL_SOURCE_NOT_FOUND"} <= used_codes
 
 
 def test_schema_error_codes_all_have_message():
