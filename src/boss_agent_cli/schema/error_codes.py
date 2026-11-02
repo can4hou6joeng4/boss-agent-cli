@@ -34,6 +34,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": "不要自动重试：确认目标路径是可写目录（而不是同名的已有文件）、目录权限与磁盘空间正常，修正后再执行",
 	},
+	"AUTOMATION_STATE_INVALID": {
+		"message": "招聘自动化状态文件损坏",
+		"recoverable": True,
+		"recovery_action": "修正或删除数据目录下的 automation/state.json 后重试；删除会丢失自动化去重与历史进度，建议先备份该文件",
+	},
 	"EXCHANGE_NOT_AVAILABLE": {
 		"message": "换电话/换微信按钮未解锁（招聘者尚未在会话中发过消息），本次未发出任何请求",
 		"recoverable": True,

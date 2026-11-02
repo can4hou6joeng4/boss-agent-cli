@@ -16,6 +16,15 @@ from typing import Any, cast
 from boss_agent_cli.automation.models import AutomationEvent, PendingAction, ReviewItem
 
 
+class AutomationStateError(ValueError):
+	"""`automation/state.json` 读不出来；调用方应输出信封并停止自动化。"""
+
+	def __init__(self, path: Path, detail: str) -> None:
+		super().__init__(f"{path} 无法解析（{detail}）")
+		self.path = path
+		self.detail = detail
+
+
 class AutomationStore:
 	"""Small JSONL-backed store for the recruiter automation engine."""
 
@@ -33,10 +42,20 @@ class AutomationStore:
 		return self.root / "stop.json"
 
 	def read_stop(self) -> dict[str, Any]:
-		"""Read the independent stop latch; business snapshots cannot clear it."""
+		"""Read the independent stop latch; business snapshots cannot clear it.
+
+		熔断开关读不出来时按「已熔断」处理：状态未知时宁可停下等人工核对，
+		也不能让自动化继续向平台发送消息。
+		"""
 		if not self.stop_path.exists():
 			return {}
-		return cast("dict[str, Any]", json.loads(self.stop_path.read_text(encoding="utf-8")))
+		try:
+			loaded = json.loads(self.stop_path.read_text(encoding="utf-8"))
+		except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+			return {"open": True, "reason": f"stop.json 无法解析，已按熔断处理：{exc}", "corrupt": True}
+		if not isinstance(loaded, dict):
+			return {"open": True, "reason": "stop.json 顶层不是 JSON object，已按熔断处理", "corrupt": True}
+		return cast("dict[str, Any]", loaded)
 
 	def request_stop(self, reason: str) -> None:
 		with self._control_lock():
@@ -82,7 +101,13 @@ class AutomationStore:
 		if not self.state_path.exists():
 			state: dict[str, Any] = {"conversations": {}, "autonomy": {}, "safety": {}}
 		else:
-			state = cast("dict[str, Any]", json.loads(self.state_path.read_text(encoding="utf-8")))
+			try:
+				loaded = json.loads(self.state_path.read_text(encoding="utf-8"))
+			except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+				raise AutomationStateError(self.state_path, str(exc)) from exc
+			if not isinstance(loaded, dict):
+				raise AutomationStateError(self.state_path, "顶层必须是 JSON object")
+			state = cast("dict[str, Any]", loaded)
 		stop = self.read_stop()
 		if "open" in stop:
 			state.setdefault("autonomy", {})["circuit_breaker"] = stop
@@ -209,11 +234,20 @@ class AutomationStore:
 		if not path.exists():
 			return []
 		rows: list[dict[str, Any]] = []
-		for line in path.read_text(encoding="utf-8").splitlines():
-			if line.strip():
+		try:
+			lines = path.read_text(encoding="utf-8").splitlines()
+		except (UnicodeDecodeError, OSError):
+			return rows
+		for line in lines:
+			if not line.strip():
+				continue
+			try:
 				parsed = json.loads(line)
-				if isinstance(parsed, dict):
-					rows.append(parsed)
+			except json.JSONDecodeError:
+				# 单行损坏（手工编辑、外部写入）不该让 stats / pending 整体失败。
+				continue
+			if isinstance(parsed, dict):
+				rows.append(parsed)
 		return rows
 
 	def write_jsonl(self, name: str, rows: list[dict[str, Any]]) -> None:
