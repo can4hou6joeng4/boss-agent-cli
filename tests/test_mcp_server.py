@@ -52,6 +52,7 @@ from server import (  # noqa: E402
 from boss_agent_cli.schema.availability import inject_availability  # noqa: E402
 from boss_agent_cli.schema.data import SCHEMA_DATA  # noqa: E402
 from boss_agent_cli.schema.formats import format_mcp_tools  # noqa: E402
+from boss_agent_cli.mcp_tools import _decorate_tool_descriptions  # noqa: E402
 from boss_agent_cli.compliance import low_risk_blocked_commands  # noqa: E402
 from boss_agent_cli.main import cli  # noqa: E402
 
@@ -152,6 +153,8 @@ def test_all_tool_schemas_are_well_formed_objects():
 def test_candidate_tool_description_includes_availability():
 	search = next(t for t in TOOLS if t.name == "boss_search")
 	assert "可用性:" in search.description
+	assert search.description.count("可用性:") == 1
+	assert "可用性: 可用性:" not in search.description
 	assert "roles=candidate" in search.description
 	assert "zhilian" not in search.description
 	assert "zhipin" in search.description
@@ -160,8 +163,23 @@ def test_candidate_tool_description_includes_availability():
 def test_recruiter_tool_description_includes_availability():
 	tool = next(t for t in TOOLS if t.name == "boss_hr_jobs")
 	assert "可用性:" in tool.description
+	assert tool.description.count("可用性:") == 1
+	assert "可用性: 可用性:" not in tool.description
 	assert "roles=recruiter" in tool.description
 	assert "zhipin-recruiter" in tool.description
+
+
+def test_no_tool_description_repeats_availability_prefix():
+	"""可用性前缀由 availability_note 自带，装饰时不能再拼一次。"""
+	broken = [tool.name for tool in TOOLS if "可用性: 可用性:" in tool.description]
+	assert not broken, "可用性前缀重复：" + ", ".join(broken)
+
+
+def test_decorate_tool_descriptions_is_idempotent():
+	"""兼容入口重复调用不得叠加可用性说明。"""
+	before = {tool.name: tool.description for tool in TOOLS}
+	_decorate_tool_descriptions()
+	assert {tool.name: tool.description for tool in TOOLS} == before
 
 
 def test_all_tools_have_input_schema():
