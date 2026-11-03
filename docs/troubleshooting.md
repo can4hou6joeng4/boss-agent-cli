@@ -240,6 +240,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `CONTACT_NOT_FOUND` | 沟通列表里没有这个联系人：`security_id` 可能已轮换，或对方已不在列表 | 先 `boss chat` 查看会话；已知 uid 时改用 uid 重试 |
 | `SAVED_SEARCH_NOT_FOUND` | 本地预设或 watch 不存在：`boss search --preset` / `boss watch run` 引用了没保存过的名字 | `boss preset list` / `boss watch list` 查看已有条目，需要时用 `boss preset add` / `boss watch add` 重建 |
 | `SHORTLIST_ENTRY_NOT_FOUND` | 候选池里没有这个职位（`security_id` / `job_id` 组合），`boss shortlist annotate` 没有可标注的记录 | 先 `boss shortlist add <security_id> <job_id>` 加入候选池，或 `boss shortlist list` 核对已有条目 |
+| `RESUME_FILE_INVALID` | 本地简历文件损坏或字段类型不正确，`boss resume show` / `edit` / `export` / `clone` / `diff` 读不出来（`boss resume list` 会把这些文件列在 `hints.corrupt`） | 修正 `resumes/` 下对应的 `.json` 后重试，或 `boss resume delete <name>` 后重新创建；文件只在本机 |
 | `INVALID_PARAM` | 参数错误 | 修正参数 |
 | `ALREADY_GREETED` | 已打过招呼 | 跳过 |
 | `CONFIRMATION_REQUIRED` | 未确认操作目标与内容 | 先用 `hr greet --dry-run` 或 `hr accept-resume <friend_id> --message-id <mid> --dry-run` 预览；操作者明确批准后才加 `--yes`，Agent 不可自行补确认 |

@@ -269,6 +269,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": "boss resume list",
 	},
+	"RESUME_FILE_INVALID": {
+		"message": "本地简历文件损坏或字段类型不正确，无法读取",
+		"recoverable": True,
+		"recovery_action": "修正 resumes/<name>.json 的 JSON 内容后重试，或执行 boss resume delete <name> 后重新创建；该文件只存在本机",
+	},
 	"RESUME_ALREADY_EXISTS": {
 		"message": "简历名称已存在",
 		"recoverable": False,
