@@ -100,6 +100,29 @@ def test_status_live_logged_in_unknown_user(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.status.get_platform_instance")
 @patch("boss_agent_cli.commands.status.AuthManager")
+def test_status_live_success_points_at_business_commands(mock_auth_cls, mock_client_cls):
+	"""在线验证通过不是终点：非 live 的下一步就是 --live，live 成功后
+	信封必须给出可直接执行的业务命令，终端也要说明可以开始了。"""
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "x"}, "stoken": "s"}
+	mock_client = mock_client_cls.return_value
+	mock_client.__enter__ = lambda self: self
+	mock_client.__exit__ = lambda self, *a: None
+	mock_client.is_success.return_value = True
+	mock_client.user_info.return_value = {"zpData": {"name": "tester"}}
+	mock_client.unwrap_data.return_value = {"name": "tester"}
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "status", "--live"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["data"]["user_name"] == "tester"
+	assert parsed["hints"]["next_actions"] == ["boss recommend", "boss search <关键词>"]
+	assert parsed["hints"]["operator_actions"]
+
+
+@patch("boss_agent_cli.commands.status.get_platform_instance")
+@patch("boss_agent_cli.commands.status.AuthManager")
 def test_status_reports_user_info_error(mock_auth_cls, mock_client_cls):
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "x"}, "stoken": "s"}
 	mock_client = mock_client_cls.return_value

@@ -7,7 +7,15 @@ from boss_agent_cli.api.request_budget import risk_lock_status as lock_status
 from boss_agent_cli.auth.health import assess_auth_health
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output, login_action_for_ctx, render_status
+from boss_agent_cli.display import (
+	boss_command_for_ctx,
+	handle_auth_errors,
+	handle_error_output,
+	handle_output,
+	handle_platform_error_output,
+	login_action_for_ctx,
+	render_status,
+)
 
 
 @click.command("status")
@@ -81,11 +89,21 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 		user_info = platform.unwrap_data(info) or {}
 		user_name = user_info.get("name", "未知用户")
 		data["user_name"] = user_name
+		# 非 live 的下一步正是 `--live`；在线验证本身成功后不能到此为止，
+		# 否则 Agent 做完健康检查拿不到任何可执行的业务命令（TTY 里也只有一行
+		# 「logged in」，真人同样不知道该干什么）。
 		handle_output(
 			ctx,
 			"status",
 			data,
 			render=lambda payload: render_status(payload, login_action=login_action_for_ctx(ctx)),
+			hints={
+				"next_actions": [
+					boss_command_for_ctx(ctx, "recommend"),
+					boss_command_for_ctx(ctx, "search <关键词>"),
+				],
+				"operator_actions": ["登录态在线验证通过，可以直接开始浏览推荐职位或搜索职位"],
+			},
 		)
 
 
