@@ -112,7 +112,12 @@ def preset_add_cmd(
 def preset_list_cmd(ctx: click.Context) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		items, corrupt = cache.list_saved_searches_with_corrupt()
-	hints: dict[str, Any] = {"next_actions": ["boss search --preset <name>", "boss preset remove <name>"]}
+	hints: dict[str, Any] = {
+		# 空列表里没有 name 可搜索 / 删除：照抄只会换回一个不存在的预设。
+		"next_actions": ["boss preset add <name> <关键词>"]
+		if not items
+		else ["boss search --preset <name>", "boss preset remove <name>"]
+	}
 	if corrupt:
 		# 坏条目不能假装不存在：列表照常返回可用项，同时指明该删哪个。
 		hints["corrupt"] = corrupt
