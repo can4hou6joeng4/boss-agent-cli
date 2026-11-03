@@ -102,7 +102,15 @@ def export_cmd(
 		try:
 			parsed_url = parse_boss_search_url(search_url)
 		except SearchUrlParseError as exc:
-			handle_error_output(ctx, "export", code="INVALID_PARAM", message=str(exc))
+			export_cmd = boss_command_for_ctx(ctx, "export <关键词>")
+			handle_error_output(
+				ctx,
+				"export",
+				code="INVALID_PARAM",
+				message=str(exc),
+				recovery_action=f"换成完整的 BOSS 直聘搜索页链接，或改用关键词重试，例如 {export_cmd}",
+				hints={"next_actions": [export_cmd]},
+			)
 			return
 		query = query or parsed_url.query
 		raw_params.update(parsed_url.params)

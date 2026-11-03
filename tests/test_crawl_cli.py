@@ -563,7 +563,11 @@ def test_shortlist_requires_exactly_one_selection_mode(tmp_path):
 
 	neither = _invoke(runner, tmp_path, "crawl", "shortlist", "run-1")
 	assert neither.exit_code == 1
-	assert _envelope(neither)["error"]["code"] == "INVALID_PARAM"
+	neither_error = _envelope(neither)["error"]
+	assert neither_error["code"] == "INVALID_PARAM"
+	assert "--all" in neither_error["recovery_action"]
+	assert "--selector" in neither_error["recovery_action"]
+	assert _envelope(neither)["hints"]["next_actions"] == ["boss crawl results run-1"]
 
 	both = _invoke(runner, tmp_path, "crawl", "shortlist", "run-1", "--all", "--selector", selectors[0])
 	assert both.exit_code == 1
