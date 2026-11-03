@@ -315,3 +315,33 @@ def test_agent_param_errors_point_at_recovery_command(tmp_path, args, command, r
 	parsed = _assert_single_stdout_json_error(result, command=command)
 	assert recovery_fragment in parsed["error"]["recovery_action"]
 	assert parsed["hints"]["next_actions"]
+
+
+@pytest.mark.parametrize(
+	("args", "command", "message", "help_path"),
+	[
+		(("search", "--city"), "search", "boss search 的选项 --city 缺少取值", "boss search"),
+		(("crawl", "start", "--city"), "crawl", "boss crawl start 的选项 --city 缺少取值", "boss crawl start"),
+	],
+)
+def test_missing_option_value_is_reported_in_chinese(tmp_path, args, command, message, help_path):
+	"""``boss search --city`` 原来把 Click 的英文原文直接交给 Agent，``recovery_action``
+	也只有「修正参数」；解析器层异常不挂 ctx，命令路径要从 argv 推断。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *args])
+
+	parsed = _assert_single_stdout_json_error(result, command=command)
+	assert parsed["error"]["message"] == message
+	assert "requires an argument" not in parsed["error"]["message"]
+	assert "--city" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [f"{help_path} --help"]
+
+
+def test_empty_extra_argument_is_reported_in_chinese(tmp_path):
+	"""``boss chat ""`` 也是多给了一个参数：Click 的括号里为空，翻译不能漏掉这条路径。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "chat", ""])
+
+	parsed = _assert_single_stdout_json_error(result, command="chat")
+	assert parsed["error"]["message"] == "boss chat 不接受额外的空参数"
+	assert parsed["hints"]["next_actions"] == ["boss chat --help"]
