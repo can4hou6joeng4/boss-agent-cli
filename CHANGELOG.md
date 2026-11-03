@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss wizard --status <run_id>` / `boss wizard --stop <run_id>` 成功后没有任何下一步：两处 `handle_output` 都不带 `hints`，Agent 查完状态、或停掉一个运行中的 workflow 之后，看不出该恢复、继续等待还是新建（主执行路径跑完反而会提示 `boss wizard --status <run_id>`）。现在按 run 状态给出可直接执行的后继命令：`stopped` / `failed` / `waiting_input` 给出 `boss wizard --resume <run_id>` 与 `--status <run_id>`，`running` / `pending` 给出 `--status` 与 `--stop`，`completed` 给出 `boss wizard` 新建与 `--status` 复检。
 - `boss status --live` 在线验证通过后没有任何下一步：非 live 分支的 `hints.next_actions` 就是 `boss status --live`（`_status_next_actions` 的 complete 分支），而真正跑到 `--live` 且验证成功的那一端 `hints` 为 `null`、终端只打印一行 `logged in as …`——Agent 做完健康检查拿不到任何可执行的业务命令，真人也不知道可以开始浏览职位了。现在 live 成功的信封带上 `boss recommend` 与 `boss search <关键词>`，TTY 额外说明「登录态在线验证通过，可以直接开始浏览推荐职位或搜索职位」。
 - `boss greet` 命中平台额度时 `recovery_action` 为 `null`：候选人侧的 `GREET_LIMIT` 由 `handle_platform_error_output` 按登记表补齐，而登记表里这个码的 `recovery_action` 是 `null`——Agent 只看到「今日打招呼次数已用完」，不知道能不能重试、要不要换渠道（招聘者侧的 `hr greet` 在 `_send_error` 里有自己的文案，不受影响）。现在补成「今日主动沟通额度已用完：停止自动打招呼，等平台权益恢复后再试；不要自动重发本次招呼」。
 - `boss greet` / `boss apply` 的「已打过招呼 / 已投递过」只给错误码不给恢复指引：`ALREADY_GREETED` / `ALREADY_APPLIED` 的登记表元数据 `recovery_action` 是 `null`，而这两个调用点只传了 `hints`——Agent 读到 `recovery_action: null` 会当成不可恢复的死胡同，实际上会话已经建立、投递记录已经存在，下一步是跟进而不是停住。现在 `ALREADY_GREETED` 的 `recovery_action` 为「用 boss chat 查看会话，或用 boss search <关键词> 换一批职位」，`ALREADY_APPLIED` 为「用 boss me --section deliver 查看投递记录，或用 boss chat 跟进」；招聘者侧的 `hr greet` 仍用命令自己的更具体文案，不受影响。

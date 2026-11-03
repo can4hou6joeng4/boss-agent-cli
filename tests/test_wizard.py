@@ -2752,6 +2752,56 @@ def test_wizard_status_and_stop_use_explicit_run_id(tmp_path):
 	assert envelope["hints"]["next_actions"] == ["boss wizard"]
 
 
+def test_wizard_status_reports_resume_next_action(tmp_path):
+	"""`--status` 成功后不能到此为止：挂起/停止的 run 要给出恢复入口，
+	否则 Agent 查完状态就断了（主执行路径跑完反而提示 `--status`）。"""
+	created = CliRunner().invoke(
+		cli,
+		["--json", "--data-dir", str(tmp_path), "wizard", "--input-json", _shortlist_input()],
+	)
+	run_id = json.loads(created.stdout)["data"]["run_id"]
+	status = CliRunner().invoke(
+		cli,
+		["--json", "--data-dir", str(tmp_path), "wizard", "--status", run_id],
+	)
+
+	assert status.exit_code == 0
+	envelope = json.loads(status.stdout)
+	assert envelope["data"]["run_id"] == run_id
+	assert envelope["data"]["status"] == "completed"
+	assert envelope["hints"]["next_actions"] == ["boss wizard", f"boss wizard --status {run_id}"]
+
+
+def test_wizard_status_and_stop_after_stop_report_resume(tmp_path):
+	"""被停掉的 run 断点还在本地：`--stop` 与随后的 `--status` 都要给出 `--resume`。"""
+	plan = WorkflowPlan(
+		role="candidate",
+		platform="zhipin",
+		goal="shortlist",
+		inputs={},
+		requested_steps=(),
+		mode="headless",
+	)
+	with WorkflowStore(tmp_path) as store:
+		store.create("wrn_stopped", plan)
+
+	stop = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), "wizard", "--stop", "wrn_stopped"])
+	assert stop.exit_code == 0
+	stopped = json.loads(stop.stdout)
+	assert stopped["data"]["status"] == "stopped"
+	assert stopped["hints"]["next_actions"] == [
+		"boss wizard --resume wrn_stopped",
+		"boss wizard --status wrn_stopped",
+	]
+
+	status = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), "wizard", "--status", "wrn_stopped"])
+	envelope = json.loads(status.stdout)
+	assert envelope["hints"]["next_actions"] == [
+		"boss wizard --resume wrn_stopped",
+		"boss wizard --status wrn_stopped",
+	]
+
+
 # ── 未登录 = waiting_input（不是 failed，也不阻塞）─────────────
 
 
