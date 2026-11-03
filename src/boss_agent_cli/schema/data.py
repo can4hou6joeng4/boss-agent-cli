@@ -527,6 +527,7 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"add": {
+				"description": "保存一条可复用的搜索条件（名称 + 关键词 + 筛选），之后用 run 增量拉取。",
 					"args": [
 						{"name": "name", "required": True, "description": "watch 名称"},
 						{"name": "query", "required": True, "description": "搜索关键词"},
@@ -563,11 +564,13 @@ SCHEMA_DATA = {
 				},
 				"list": {},
 				"remove": {
+				"description": "删除一条本地 watch；名字不存在时保持幂等（不报错）。",
 					"args": [
 						{"name": "name", "required": True, "description": "要删除的 watch 名称"},
 					],
 				},
 				"run": {
+				"description": "执行一条或全部 watch，把新增职位写入本地缓存。",
 					"args": [
 						{"name": "name", "required": False, "description": "只运行指定 watch；省略时运行全部"},
 					],
@@ -586,6 +589,7 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"configure": {
+				"description": "设置 crawl 专用 Chrome 和 Hook 配置。",
 					"--chrome-path": {"type": "string", "default": None, "description": "chrome.exe 路径"},
 					"--port": {"type": "int", "default": None, "minimum": 1, "maximum": 65535, "description": "Chrome 远程调试端口（1-65535）"},
 					"--max-requests": {"type": "int", "default": None, "minimum": 1, "description": "每个 crawl run 的总请求上限（≥1）"},
@@ -594,6 +598,7 @@ SCHEMA_DATA = {
 					"--max-retries": {"type": "int", "default": None, "minimum": 0, "description": "单请求的重试次数上限（≥0）"},
 				},
 				"run": {
+				"description": "开始一个可恢复的 DP 批量采集任务。",
 					"args": [
 						{"name": "query", "required": True, "description": "搜索关键词"},
 					],
@@ -625,6 +630,7 @@ SCHEMA_DATA = {
 					},
 				},
 				"resume": {
+				"description": "从已保存的页游标和详情队列恢复采集。",
 					"args": [
 						{"name": "run_id", "required": True, "description": "要恢复的 crawl run 标识"},
 					],
@@ -642,6 +648,7 @@ SCHEMA_DATA = {
 					"--background": {"type": "bool", "default": False, "description": "后台恢复并立即返回 run_id"},
 				},
 				"results": {
+				"description": "读取 crawl 已采集结果，不打开浏览器。",
 					"args": [
 						{"name": "run_id", "required": True, "description": "crawl run 标识"},
 					],
@@ -649,6 +656,7 @@ SCHEMA_DATA = {
 					"--detail-status": {"type": "string", "default": None, "enum": ["completed", "pending"]},
 				},
 				"shortlist": {
+				"description": "将 crawl 结果导入原项目的本地职位候选池。",
 					"args": [
 						{"name": "run_id", "required": True, "description": "crawl run 标识"},
 					],
@@ -662,6 +670,7 @@ SCHEMA_DATA = {
 					"--note": {"type": "string", "default": "", "description": "写入候选池的本地备注"},
 				},
 				"start": {
+				"description": "创建并后台运行一个 crawl 任务；适合 MCP 的任务式调度。",
 					"args": [
 						{"name": "query", "required": True, "description": "搜索关键词"},
 					],
@@ -681,11 +690,13 @@ SCHEMA_DATA = {
 					},
 				},
 				"status": {
+				"description": "读取 crawl 任务状态，不打开浏览器。",
 					"args": [
 						{"name": "run_id", "required": True, "description": "crawl run 标识"},
 					],
 				},
 				"stop": {
+				"description": "请求运行中的 crawl 在下一安全点停止并保留 checkpoint。",
 					"args": [
 						{"name": "run_id", "required": True, "description": "要停止的 crawl run 标识"},
 					],
@@ -760,6 +771,7 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"add": {
+				"description": "保存一组可复用的搜索参数，之后用 `boss search --preset <名称>` 调用。",
 					"args": [
 						{"name": "name", "required": True, "description": "预设名称"},
 						{"name": "query", "required": True, "description": "搜索关键词"},
@@ -802,6 +814,7 @@ SCHEMA_DATA = {
 				},
 				"list": {},
 				"remove": {
+				"description": "删除一条本地搜索预设；名字不存在时保持幂等（不报错）。",
 					"args": [
 						{"name": "name", "required": True, "description": "要删除的预设名称"},
 					],
@@ -847,6 +860,7 @@ SCHEMA_DATA = {
 			"options": {
 				"list": {},
 				"add": {
+				"description": "把一个职位加入本地候选池，可同时写标签与备注。",
 					"args": [
 						{"name": "security_id", "required": True, "description": "安全 ID"},
 						{"name": "job_id", "required": True, "description": "加密职位 ID"},
@@ -861,6 +875,7 @@ SCHEMA_DATA = {
 					"--note": {"type": "string", "default": "", "description": "本地备注"},
 				},
 				"annotate": {
+				"description": "给候选池条目增删标签或替换备注；条目不存在时报错而不是静默成功。",
 					"args": [
 						{"name": "security_id", "required": True, "description": "安全 ID"},
 						{"name": "job_id", "required": True, "description": "加密职位 ID"},
@@ -870,9 +885,11 @@ SCHEMA_DATA = {
 					"--note": {"type": "string", "default": None, "description": "替换本地备注"},
 				},
 				"compare": {
+				"description": "并排比较候选池条目（可按标签过滤）。",
 					"--tag": {"type": "string", "default": None, "description": "只比较包含该本地标签的候选职位"},
 				},
 				"remove": {
+				"description": "从本地候选池中移除一个职位。",
 					"args": [
 						{"name": "security_id", "required": True, "description": "安全 ID"},
 						{"name": "job_id", "required": True, "description": "加密职位 ID"},
@@ -892,6 +909,7 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"list": {
+				"description": "预览职位收藏单页（不落库）。",
 					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 				},
 				"sync": {},
@@ -925,17 +943,20 @@ SCHEMA_DATA = {
 			"options": {
 				"list": {},
 				"get": {
+				"description": "查看单个配置项的值。",
 					"args": [
 						{"name": "key", "required": True, "description": "配置项键名"},
 					],
 				},
 				"set": {
+				"description": "修改配置项。",
 					"args": [
 						{"name": "key", "required": True, "description": "配置项键名"},
 						{"name": "value", "required": True, "description": "新的配置值"},
 					],
 				},
 				"reset": {
+				"description": "将配置项恢复为默认值。",
 					"args": [
 						{"name": "key", "required": True, "description": "要恢复默认值的配置项键名"},
 					],
@@ -991,15 +1012,18 @@ SCHEMA_DATA = {
 			"options": {
 				"list": {},
 				"init": {
+				"description": "从默认模板初始化本地简历。",
 					"--name": {"type": "string", "default": None, "description": "简历名称"},
 					"--template": {"type": "string", "default": None, "description": "模板名称（如 default）"},
 				},
 				"show": {
+				"description": "查看简历详情。",
 					"args": [
 						{"name": "name", "required": True, "description": "简历名称"},
 					],
 				},
 				"edit": {
+				"description": "编辑简历字段。",
 					"args": [
 						{"name": "name", "required": True, "description": "简历名称"},
 					],
@@ -1007,11 +1031,13 @@ SCHEMA_DATA = {
 					"--value": {"type": "string", "required": True, "description": "新值"},
 				},
 				"delete": {
+				"description": "删除简历。",
 					"args": [
 						{"name": "name", "required": True, "description": "要删除的简历名称"},
 					],
 				},
 				"export": {
+				"description": "导出简历。",
 					"args": [
 						{"name": "name", "required": True, "description": "简历名称"},
 					],
@@ -1024,24 +1050,28 @@ SCHEMA_DATA = {
 					"-o, --output": {"type": "string", "default": None, "description": "输出文件路径"},
 				},
 				"import": {
+				"description": "导入 JSON 简历。",
 					"args": [
 						{"name": "file_path", "required": True, "description": "JSON 简历文件路径"},
 					],
 					"--force": {"type": "bool", "default": False, "description": "覆盖同名简历（会丢弃本地已有的编辑）"},
 				},
 				"clone": {
+				"description": "复制简历为新版本。",
 					"args": [
 						{"name": "name", "required": True, "description": "源简历名称"},
 						{"name": "new_name", "required": True, "description": "新简历名称"},
 					],
 				},
 				"diff": {
+				"description": "对比两份简历差异。",
 					"args": [
 						{"name": "name1", "required": True, "description": "第一份简历名称"},
 						{"name": "name2", "required": True, "description": "第二份简历名称"},
 					],
 				},
 				"link": {
+				"description": "关联简历与职位。",
 					"args": [
 						{"name": "name", "required": True, "description": "简历名称"},
 						{"name": "security_id", "required": True, "description": "安全 ID"},
@@ -1051,6 +1081,7 @@ SCHEMA_DATA = {
 					"--company": {"type": "string", "default": "", "description": "公司名称"},
 				},
 				"applications": {
+				"description": "查看简历关联的所有职位。",
 					"args": [
 						{"name": "name", "required": True, "description": "简历名称"},
 					],
@@ -1075,6 +1106,7 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"config": {
+				"description": "查看或设置 AI 服务配置。",
 					"--provider": {
 						"type": "string",
 						"default": None,
@@ -1091,8 +1123,10 @@ SCHEMA_DATA = {
 					"--max-tokens": {"type": "int", "default": None, "minimum": 1, "description": "最大令牌数"},
 				},
 				"local": {
+				"description": "本地模型管理：查看配置、下载、导入与健康检查。",
 					"status": {},
 					"configure": {
+					"description": "配置本地 OpenAI-compatible 模型服务。",
 						"--runtime": {
 							"type": "string",
 							"required": True,
@@ -1103,6 +1137,7 @@ SCHEMA_DATA = {
 						"--base-url": {"type": "string", "default": None, "description": "本地服务基础地址"},
 					},
 					"pull": {
+					"description": "通过 Ollama 下载模型权重。",
 						"--model": {"type": "string", "required": True, "description": "要下载的模型名称"},
 						"--confirm-download": {
 							"type": "bool",
@@ -1111,39 +1146,46 @@ SCHEMA_DATA = {
 						},
 					},
 					"import": {
+					"description": "导入离线模型文件或目录到本地数据目录。",
 						"--path": {"type": "string", "required": True, "description": "本地模型文件路径"},
 						"--model": {"type": "string", "required": True, "description": "导入后的模型名称"},
 					},
 					"smoke": {},
 				},
 				"analyze-jd": {
+				"description": "分析职位描述并评估简历匹配度。",
 					"args": [
 						{"name": "jd_text", "required": True, "description": "职位描述文本或 @文件路径"},
 					],
 					"--resume": {"type": "string", "required": True, "description": "对比的本地简历名称"},
 				},
 				"polish": {
+				"description": "通用简历润色优化。",
 					"args": [
 						{"name": "resume_name", "required": True, "description": "要润色的本地简历名称"},
 					],
 				},
 				"optimize": {
+				"description": "基于目标职位描述优化简历。",
 					"args": [
 						{"name": "resume_name", "required": True, "description": "要优化的本地简历名称"},
 					],
 					"--jd": {"type": "string", "required": True, "description": "目标职位描述文本或 @文件路径"},
 				},
 				"suggest": {
+				"description": "基于目标职位描述给出改进建议（不修改简历）。",
 					"args": [
 						{"name": "resume_name", "required": True, "description": "要分析的本地简历名称"},
 					],
 					"--jd": {"type": "string", "required": True, "description": "目标职位描述文本或 @文件路径"},
 				},
 				"fit": {
+				"description": "基于本地简历和候选池缓存详情生成逐岗匹配报告。",
 					"--resume": {"type": "string", "required": True, "description": "本地简历名称"},
 					"--limit": {"type": "int", "default": 20, "minimum": 1, "description": "最多分析的候选池职位数"},
 				},
 				"reply": {
+				"description": "基于招聘者消息生成回复草稿（2-3 条候选）。",
 					"args": [
 						{"name": "recruiter_message", "required": True, "description": "招聘者发来的消息文本"},
 					],
@@ -1157,6 +1199,7 @@ SCHEMA_DATA = {
 					},
 				},
 				"interview-prep": {
+				"description": "基于目标职位生成模拟面试题。",
 					"args": [
 						{"name": "jd_text", "required": True, "description": "职位描述文本或 @文件路径"},
 					],
@@ -1164,6 +1207,7 @@ SCHEMA_DATA = {
 					"--count": {"type": "int", "default": 10, "minimum": 1, "description": "题量"},
 				},
 				"chat-coach": {
+				"description": "基于聊天记录给出沟通技巧诊断与下一步建议。",
 					"args": [
 						{"name": "chat_text", "required": True, "description": "聊天记录文本或 @文件路径"},
 					],
@@ -1175,9 +1219,11 @@ SCHEMA_DATA = {
 					},
 				},
 				"suggest-keywords": {
+				"description": "基于候选池分析推荐搜索关键词组合。",
 					"--limit": {"type": "int", "default": 20, "minimum": 1, "description": "候选池职位数上限"},
 				},
 				"resume-optimize": {
+				"description": "基于目标岗位优化简历措辞（仅建议，不修改简历）。",
 					"args": [
 						{"name": "resume_name", "required": True, "description": "要优化的本地简历名称"},
 					],
@@ -1185,6 +1231,7 @@ SCHEMA_DATA = {
 					"--job-id": {"type": "string", "default": None, "description": "从缓存读取职位描述的 job_id"},
 				},
 				"cover-letter": {
+				"description": "基于本地简历与目标岗位起草求职信/自我介绍（仅草稿，不发送）。",
 					"args": [
 						{"name": "resume_name", "required": True, "description": "本地简历名称"},
 					],
@@ -1228,6 +1275,7 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"run": {
+				"description": "运行一轮招聘自动化。",
 					"--resume": {
 						"type": "bool",
 						"default": False,
@@ -1246,6 +1294,7 @@ SCHEMA_DATA = {
 					},
 				},
 				"crawl": {
+				"description": "新建或读取 crawl 结果，导入候选池并执行 ai fit。",
 					"--run-id": {"type": "string", "default": None, "description": "分析指定的已完成 crawl run"},
 					"--query": {"type": "string", "default": None, "description": "新采集的职位关键词"},
 					"--city": {"type": "string", "default": None, "description": "新采集城市；与 --query 同时使用"},
@@ -1255,24 +1304,32 @@ SCHEMA_DATA = {
 					"--limit": {"type": "int", "default": 10, "minimum": 1, "description": "按匹配分返回前 N 个职位"},
 				},
 				"train": {
+				"description": "运行训练校准模式：默认演练，--live 直接执行满足阈值的动作。",
 					"--dry-run": {"type": "bool", "default": True, "description": "训练模式默认只演练；与 --live 互斥"},
 					"--live": {"type": "bool", "default": False, "description": "直接执行满足阈值的动作；只有操作者明确授权时才可用"},
 					"--limit": {"type": "int", "default": None, "minimum": 1, "description": "本轮最多处理多少个会话"},
 				},
 				"stop": {
+				"description": "打开招聘自动化熔断。",
 					"--reason": {"type": "string", "default": "manual-stop", "description": "熔断原因"},
 				},
 				"control": {},
-				"pending": {"list": {}},
+				"pending": {
+					"description": "待执行动作队列。",
+					"list": {},
+				},
 				"stats": {},
 				"review": {
+				"description": "管理旧版本遗留的人工复核队列。",
 					"list": {},
 					"approve": {
+					"description": "处理旧版本复核项并写入兼容 pending 队列。",
 						"args": [
 							{"name": "review_id", "required": True, "description": "旧版本复核项 ID"},
 						],
 					},
 					"reject": {
+					"description": "拒绝一条旧版本人工复核动作，并记录跳过事件。",
 						"args": [
 							{"name": "review_id", "required": True, "description": "旧版本复核项 ID"},
 						],
@@ -1298,11 +1355,13 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"applications": {
+				"description": "查看候选人投递申请列表。",
 					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
 					"--label-id": {"type": "int", "default": 0, "minimum": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
 					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 				},
 				"resume": {
+				"description": "查看候选人简历或请求交换联系方式。",
 					"args": [
 						{"name": "geek_id", "required": False, "description": "候选人 geek ID；省略时使用 --security-id"},
 					],
@@ -1321,6 +1380,7 @@ SCHEMA_DATA = {
 					"--raw": {"type": "bool", "default": False, "description": "输出原始 API 数据（不解析）"},
 				},
 				"chat": {
+				"description": "查看与候选人的沟通列表。",
 					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
 					"--label-id": {"type": "int", "default": 0, "minimum": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
@@ -1333,6 +1393,7 @@ SCHEMA_DATA = {
 					},
 				},
 				"chatmsg": {
+				"description": "与指定候选人的聊天消息历史。",
 					"args": [
 						{"name": "friend_id", "required": True, "description": "候选人会话 friend_id"},
 					],
@@ -1340,6 +1401,7 @@ SCHEMA_DATA = {
 					"--max-msg-id": {"type": "int", "default": None, "minimum": 1, "description": "向前翻页的最大消息 ID"},
 				},
 				"last-messages": {
+				"description": "批量查看候选人最近消息摘要。",
 					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "沟通列表页码"},
 					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
 					"--label-id": {"type": "int", "default": 0, "minimum": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
@@ -1347,17 +1409,20 @@ SCHEMA_DATA = {
 					"--limit": {"type": "int", "default": 100, "minimum": 1, "maximum": 300, "description": "最多查询多少个会话（每 50 个一次串行请求，上限 300）"},
 				},
 				"reply": {
+				"description": "回复候选人消息（friend_id 可从 chat/applications 获取）。",
 					"args": [
 						{"name": "friend_id", "required": True, "description": "候选人会话 friend_id"},
 						{"name": "message", "required": True, "description": "回复内容"},
 					],
 				},
 				"request-resume": {
+				"description": "请求候选人分享附件简历。",
 					"args": [
 						{"name": "friend_id", "required": True, "description": "候选人会话 friend_id"},
 					],
 				},
 				"candidates": {
+				"description": "搜索候选人。",
 					"args": [
 						{"name": "query", "required": False, "description": "按关键词过滤候选人摘要；省略时列出全部"},
 					],
@@ -1374,10 +1439,12 @@ SCHEMA_DATA = {
 					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 				},
 				"recommendations": {
+				"description": "读取推荐牛人完整卡片和首次开聊参数。",
 					"--job-id": {"type": "string", "required": True, "description": "招聘职位的加密 ID"},
 					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 				},
 				"greet": {
+				"description": "建立候选人会话并发送首次招呼。",
 					"--geek-id": {"type": "string", "required": True, "description": "recommendations 返回的 encryptGeekId"},
 					"--job-id": {"type": "string", "required": True, "description": "recommendations 返回的 encryptJobId"},
 					"--expect-id": {"type": "string", "required": True, "description": "recommendations 返回的 expectId"},
@@ -1393,6 +1460,7 @@ SCHEMA_DATA = {
 					"--dry-run": {"type": "bool", "default": False, "description": "只预览，不发送"},
 				},
 				"accept-resume": {
+				"description": "同意接收指定附件简历请求，不主动索要、不下载附件。",
 					"args": [
 						{"name": "friend_id", "required": True, "description": "候选人会话 friend_id"},
 					],
@@ -1401,6 +1469,7 @@ SCHEMA_DATA = {
 					"--dry-run": {"type": "bool", "default": False, "description": "只预览，不请求平台"},
 				},
 				"download-resume": {
+				"description": "检查权限后下载指定附件；不自动同意、不索要简历、不发送已读回执。",
 					"args": [
 						{"name": "friend_id", "required": True, "description": "候选人会话 friend_id"},
 					],
@@ -1413,7 +1482,9 @@ SCHEMA_DATA = {
 					"--output": {"type": "string", "required": True, "description": "本地输出文件路径，不覆盖已有文件"},
 				},
 				"jobs": {
+				"description": "管理职位发布。",
 					"list": {
+					"description": "查看已发布的职位列表。",
 						"--page": {
 							"type": "int",
 							"default": 1,
@@ -1422,16 +1493,19 @@ SCHEMA_DATA = {
 						},
 					},
 					"offline": {
+					"description": "下线职位。",
 						"args": [
 							{"name": "job_id", "required": True, "description": "职位 ID"},
 						],
 					},
 					"online": {
+					"description": "上线职位。",
 						"args": [
 							{"name": "job_id", "required": True, "description": "职位 ID"},
 						],
 					},
 					"detail": {
+					"description": "查看职位详情（含完整 JD）。",
 						"args": [
 							{"name": "enc_job_id", "required": True, "description": "招聘职位的加密 ID"},
 						],
