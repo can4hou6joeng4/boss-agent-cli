@@ -45,7 +45,8 @@ def test_init_with_template(tmp_path):
 	assert parsed["hints"]["next_actions"] == [
 		"boss resume show myresume",
 		"boss resume edit myresume --field title --value <新标题>",
-		"boss me 然后用 boss resume import 导入平台真实简历",
+		"boss me",
+		"boss resume import <path>",
 	]
 
 

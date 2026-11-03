@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -47,15 +48,19 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 	}
 
 	if not live:
+		status_hints: dict[str, Any] = {
+			"next_actions": _status_next_actions(auth_health.auth_state, login_action=login_action_for_ctx(ctx)),
+			"live_probe": "运行 boss status --live 执行一次只读在线验证",
+		}
+		status_operator_actions = _status_operator_actions(auth_health.auth_state)
+		if status_operator_actions:
+			status_hints["operator_actions"] = status_operator_actions
 		handle_output(
 			ctx,
 			"status",
 			data,
 			render=lambda payload: render_status(payload, login_action=login_action_for_ctx(ctx)),
-			hints={
-				"next_actions": _status_next_actions(auth_health.auth_state, login_action=login_action_for_ctx(ctx)),
-				"live_probe": "运行 boss status --live 执行一次只读在线验证",
-			},
+			hints=status_hints,
 		)
 		return
 
@@ -85,10 +90,18 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 
 
 def _status_next_actions(auth_state: str, *, login_action: str) -> list[str]:
+	# hints.next_actions 只放能直接执行的命令；`&&` 组合与「先启动带调试端口的
+	# 浏览器」这类前置条件属于操作者指引，见 _status_operator_actions。
 	if auth_state == "complete":
-		return ["boss status --live — 可选执行一次只读在线验证"]
+		return ["boss status --live"]
 	if auth_state == "partial":
-		return ["以 Chrome 远程调试端口启动浏览器后运行 boss login --cdp", "boss status --live — 验证部分登录态是否仍可读"]
+		return ["boss login --cdp", "boss status --live"]
 	if auth_state == "broken":
-		return [f"boss logout && {login_action} — 重建登录态"]
-	return [f"{login_action} — 建立登录态"]
+		return ["boss logout", login_action]
+	return [login_action]
+
+
+def _status_operator_actions(auth_state: str) -> list[str]:
+	if auth_state == "partial":
+		return ["想走 CDP 复用浏览器时，先用远程调试端口启动 Chrome，再执行 boss login --cdp"]
+	return []

@@ -6,6 +6,7 @@ import click
 
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.display import (
+	boss_command_for_ctx,
 	error_contract_for_code,
 	handle_error_output,
 	handle_output,
@@ -111,7 +112,8 @@ def resume_init_cmd(ctx: click.Context, name: str | None, template: str | None) 
 		hints={"next_actions": [
 			f"boss resume show {name}",
 			f"boss resume edit {name} --field title --value <新标题>",
-			"boss me 然后用 boss resume import 导入平台真实简历",
+			boss_command_for_ctx(ctx, "me"),
+			boss_command_for_ctx(ctx, "resume import <path>"),
 		]},
 	)
 

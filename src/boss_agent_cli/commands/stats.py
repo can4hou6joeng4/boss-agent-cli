@@ -18,7 +18,7 @@ from rich.table import Table
 
 from boss_agent_cli import display
 from boss_agent_cli.cache.store import CacheDatabaseInvalid
-from boss_agent_cli.display import handle_output, json_forced, render_action_result
+from boss_agent_cli.display import boss_command_for_ctx, handle_output, json_forced, render_action_result
 from boss_agent_cli.services.output_path import prepare_output_path
 
 
@@ -102,15 +102,21 @@ def _build_hints(data: dict[str, Any]) -> list[str]:
 	greeted_total = funnel.get("greeted", 0)
 	applied_total = funnel.get("applied", 0)
 	if greeted_total == 0:
-		hints.append("boss search <query> 搜索职位")
+		hints.append("boss search <query>")
 	elif applied_total == 0 and greeted_total > 0:
-		hints.append("使用 boss apply <security_id> <job_id> 继续投递")
-	apply_rate = data.get("conversion", {}).get("apply_rate", 0)
-	if apply_rate < 0.1 and greeted_total >= 20:
-		hints.append("打招呼转投递率偏低，考虑调整目标岗位或优化简历（boss ai optimize）")
-	hints.append("boss pipeline 查看候选进度")
-	hints.append("boss follow-up 查看需要跟进的联系人")
+		hints.append("boss apply <security_id> <job_id>")
+	hints.append("boss pipeline")
+	hints.append("boss follow-up")
 	return hints
+
+
+def _build_operator_actions(data: dict[str, Any]) -> list[str]:
+	"""转化率建议属于操作者判断，放 operator_actions，不能混进可执行命令。"""
+	funnel = data.get("funnel", {})
+	apply_rate = data.get("conversion", {}).get("apply_rate", 0)
+	if apply_rate < 0.1 and funnel.get("greeted", 0) >= 20:
+		return ["打招呼转投递率偏低，考虑调整目标岗位或优化简历（boss ai optimize）"]
+	return []
 
 
 def _render_html(data: dict[str, Any]) -> str:
@@ -380,7 +386,8 @@ def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Pa
 			handle_output(
 				ctx, "stats",
 				{"format": "html", "content": html_text, "bytes": len(html_text.encode("utf-8"))},
-				hints={"next_actions": ["把 data.content 写成 .html 文件后打开", "boss stats --format html -o <path> 直接落盘"]},
+				hints={"next_actions": [boss_command_for_ctx(ctx, "stats --format html -o <path>")],
+				"operator_actions": ["把 data.content 写成 .html 文件后打开"]},
 			)
 		else:
 			# stdout 直出 HTML（便于管道重定向）
@@ -388,4 +395,8 @@ def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Pa
 			sys.stdout.flush()
 		return
 
-	handle_output(ctx, "stats", data, render=_render_stats, hints={"next_actions": _build_hints(data)})
+	stats_hints: dict[str, Any] = {"next_actions": _build_hints(data)}
+	stats_operator_actions = _build_operator_actions(data)
+	if stats_operator_actions:
+		stats_hints["operator_actions"] = stats_operator_actions
+	handle_output(ctx, "stats", data, render=_render_stats, hints=stats_hints)

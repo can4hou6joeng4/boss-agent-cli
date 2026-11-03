@@ -18,6 +18,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.display import (
+	boss_command_for_ctx,
 	error_contract_for_code,
 	handle_auth_errors,
 	handle_error_output,
@@ -60,7 +61,7 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 				ctx, "greet",
 				code="ALREADY_GREETED",
 				message="已向该招聘者打过招呼",
-				hints={"next_actions": ["boss search <query> — 搜索其他职位"]},
+				hints={"next_actions": [boss_command_for_ctx(ctx, "search <query>")]},
 			)
 			return
 
@@ -131,8 +132,8 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 			}
 			hints = {
 				"next_actions": [
-					"boss search <query> — 继续搜索其他职位",
-					"boss recommend — 获取个性化推荐",
+					boss_command_for_ctx(ctx, "search <query>"),
+					boss_command_for_ctx(ctx, "recommend"),
 				],
 			}
 			handle_output(
@@ -173,7 +174,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 	except ValueError as exc:
 		handle_error_output(
 			ctx, "batch-greet", code="INVALID_PARAM", message=str(exc),
-			hints={"next_actions": ["boss cities — 查看支持的城市名"]},
+			hints={"next_actions": [boss_command_for_ctx(ctx, "cities")]},
 		)
 		return
 	try:

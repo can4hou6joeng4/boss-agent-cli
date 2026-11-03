@@ -118,19 +118,23 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 		}
 
 	hints: dict[str, list[str]] = {"next_actions": []}
+	operator_actions: list[str] = []
 	if risk_lock:
-		hints["operator_actions"] = [
-			"本地清锁不解除服务器风险；请确认官方目标业务页已恢复，再由用户显式恢复原任务，若再次命中风险立即停止",
-		]
+		operator_actions.append(
+			"本地清锁不解除服务器风险；请确认官方目标业务页已恢复，再由用户显式恢复原任务，若再次命中风险立即停止"
+		)
 	if dry_run and risk_lock:
-		hints["operator_actions"].append("预演未解除锁；确认恢复后由用户执行 boss clean --risk-lock")
+		operator_actions.append("预演未解除锁；确认恢复后由用户执行 boss clean --risk-lock")
 	elif dry_run:
-		hints["next_actions"].append("boss clean — 执行实际清理")
+		hints["next_actions"].append("boss clean")
 	elif privacy:
-		hints["next_actions"].append("boss login — 隐私清理后需要重新登录")
-		hints["next_actions"].append("boss doctor — 检查清理后环境状态")
+		hints["next_actions"].append("boss login")
+		hints["next_actions"].append("boss doctor")
+		operator_actions.append("隐私清理会清除本地登录态，需要重新登录后再继续")
 	else:
-		hints["next_actions"].append("boss doctor — 检查清理后环境状态")
+		hints["next_actions"].append("boss doctor")
+	if operator_actions:
+		hints["operator_actions"] = operator_actions
 
 	handle_output(
 		ctx,

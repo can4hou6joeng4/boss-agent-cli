@@ -263,7 +263,7 @@ def test_run_hints_point_at_output_files_when_completed(tmp_path, monkeypatch):
 	_enable_research(runner, tmp_path)
 	result = _invoke(runner, tmp_path, "crawl", "run", "AI", "--city", "杭州")
 	assert result.exit_code == 0, result.output
-	assert "output_paths" in _envelope(result)["hints"]["next_actions"][0]
+	assert "output_paths" in _envelope(result)["hints"]["operator_actions"][0]
 
 
 # ── start ─────────────────────────────────────────────────────────────

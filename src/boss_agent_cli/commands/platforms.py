@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import click
 
-from boss_agent_cli.display import handle_output
+from boss_agent_cli.display import boss_command_for_ctx, handle_output
 from boss_agent_cli.platforms import get_platform, list_platforms, list_recruiter_platforms
 
 _READONLY_CAPABILITIES = ["search", "detail", "show", "history", "interviews", "recommend", "me", "status"]
@@ -168,8 +168,8 @@ def platforms_cmd(ctx: click.Context, platform_name: str | None, capability: str
 		render=_render_platforms,
 		hints={
 			"next_actions": [
-				"boss --platform <name> status — 检查指定平台本地登录态",
-				"boss schema — 查看命令级可用性矩阵",
+				"boss --platform <name> status",
+				boss_command_for_ctx(ctx, "schema"),
 			],
 		},
 	)

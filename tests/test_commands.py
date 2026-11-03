@@ -840,8 +840,13 @@ def test_search_json_hints_expose_available_candidate_actions(mock_client_cls, m
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	actions = parsed["hints"]["next_actions"]
-	assert "使用 boss detail <security_id> 查看职位详情" in actions
-	assert "使用 boss apply <security_id> <job_id> 投递，或 boss greet <security_id> <job_id> 沟通" in actions
+	# next_actions 的每条都必须能直接执行：说明性文字放 operator_actions。
+	assert actions == [
+		"boss detail <security_id>",
+		"boss apply <security_id> <job_id>",
+		"boss greet <security_id> <job_id>",
+	]
+	assert all("使用 " not in action and " — " not in action for action in actions)
 	mock_save_index.assert_called_once()
 
 
@@ -1978,7 +1983,8 @@ def test_detail_json_hints_expose_available_candidate_actions(mock_client_cls, m
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	actions = parsed["hints"]["next_actions"]
-	assert "boss apply <security_id> <job_id> 或 boss greet <security_id> <job_id>" in actions
+	assert "boss apply <security_id> <job_id>" in actions
+	assert "boss greet <security_id> <job_id>" in actions
 
 
 @patch("boss_agent_cli.commands.show.CacheStore")
@@ -2014,7 +2020,8 @@ def test_show_json_hints_expose_available_candidate_actions(mock_get_job, mock_c
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	actions = parsed["hints"]["next_actions"]
-	assert "boss apply <security_id> <job_id> 或 boss greet <security_id> <job_id>" in actions
+	assert "boss apply <security_id> <job_id>" in actions
+	assert "boss greet <security_id> <job_id>" in actions
 
 
 @patch("boss_agent_cli.commands.stats._collect_stats")
@@ -2033,7 +2040,7 @@ def test_stats_json_hints_expose_available_application_action(mock_collect_stats
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	actions = parsed["hints"]["next_actions"]
-	assert "使用 boss apply <security_id> <job_id> 继续投递" in actions
+	assert "boss apply <security_id> <job_id>" in actions
 
 
 def test_corrupt_cache_database_returns_envelope_not_traceback(tmp_path):

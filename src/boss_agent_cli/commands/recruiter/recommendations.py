@@ -16,6 +16,7 @@ from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.display import (
 	RISK_ERROR_CONTRACTS,
+	boss_command_for_ctx,
 	handle_auth_errors,
 	handle_error_output,
 	handle_output,
@@ -41,7 +42,13 @@ def recommendations_cmd(ctx: click.Context, job_id: str, page: int) -> None:
 			return
 		handle_output(
 			ctx, "recruiter-recommendations", platform.unwrap_data(result) or {},
-			hints={"next_actions": ["boss hr greet --help — 先预览候选人和话术，再由操作者确认"]},
+			hints={"next_actions": [
+				boss_command_for_ctx(
+					ctx,
+					"hr greet --geek-id <geek_id> --job-id <id> --expect-id <id> --lid <id> "
+					"--security-id <id> --message <话术> --dry-run",
+				),
+			], "operator_actions": ["先 dry-run 预览候选人和话术，由操作者确认后去掉 --dry-run 并加 --yes 再发送"]},
 		)
 
 

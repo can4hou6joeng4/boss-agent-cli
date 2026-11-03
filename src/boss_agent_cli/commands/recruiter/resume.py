@@ -5,7 +5,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.services.resume_parser import parse_resume
-from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output
 
 
 @click.command("resume")
@@ -70,6 +70,6 @@ def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id
 		handle_output(
 			ctx, "recruiter-resume", data,
 			hints={"next_actions": [
-				"boss hr applications — 返回候选人列表",
+				boss_command_for_ctx(ctx, "hr applications"),
 			]},
 		)
