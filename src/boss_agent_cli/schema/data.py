@@ -653,7 +653,12 @@ SCHEMA_DATA = {
 						{"name": "run_id", "required": True, "description": "crawl run 标识"},
 					],
 					"--page": {"type": "int", "default": None, "minimum": 1, "description": "仅返回指定采集页"},
-					"--detail-status": {"type": "string", "default": None, "enum": ["completed", "pending"]},
+					"--detail-status": {
+						"type": "string",
+						"default": None,
+						"enum": ["completed", "pending"],
+						"description": "按详情抓取状态筛选：completed=已抓取完整详情，pending=仅列表数据待抓取",
+					},
 				},
 				"shortlist": {
 				"description": "将 crawl 结果导入原项目的本地职位候选池。",
