@@ -210,10 +210,23 @@ def shortlist_compare_cmd(ctx: click.Context, tag: str | None) -> None:
 	"""并排比较候选池条目（可按标签过滤）。"""
 	normalized_tag = tag.strip() if tag else None
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
-		items = cache.list_shortlist()
+		pool = cache.list_shortlist()
+	items = pool
 	if normalized_tag:
 		items = [item for item in items if normalized_tag in item.get("tags", [])]
 	compare_items = [_compare_item(item) for item in items]
+	# 带 --tag 时为空有两种原因：候选池本来就是空的，或者只是没有条目带这个标签。
+	# 后者再提示 `shortlist add` 是错的——池子里明明有条目，缺的是标签或一次不带
+	# 过滤的比较。按池子是否为空分别给下一步。
+	if not compare_items and normalized_tag and pool:
+		next_actions = [
+			boss_command_for_ctx(ctx, "shortlist compare"),
+			boss_command_for_ctx(ctx, "shortlist list"),
+		]
+	elif not compare_items:
+		next_actions = [boss_command_for_ctx(ctx, "shortlist add <security_id> <job_id>")]
+	else:
+		next_actions = [boss_command_for_ctx(ctx, "shortlist annotate <security_id> <job_id>")]
 	handle_output(
 		ctx,
 		"shortlist",
@@ -233,9 +246,7 @@ def shortlist_compare_cmd(ctx: click.Context, tag: str | None) -> None:
 				("note", "note", "white"),
 			],
 		),
-		hints={"next_actions": [boss_command_for_ctx(ctx, "shortlist add <security_id> <job_id>")]
-		if not compare_items
-		else [boss_command_for_ctx(ctx, "shortlist annotate <security_id> <job_id>")]},
+		hints={"next_actions": next_actions},
 	)
 
 

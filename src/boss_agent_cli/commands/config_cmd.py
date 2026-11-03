@@ -29,6 +29,18 @@ _PUBLIC_CONFIG_KEYS = tuple(key for key in DEFAULTS if key != "low_risk_mode")
 _AVAILABLE_CONFIG_MESSAGE = f"可用项: {', '.join(sorted(_PUBLIC_CONFIG_KEYS))}"
 
 
+def _emit_unknown_key(ctx: click.Context) -> None:
+	"""未知配置项：消息里列出可用项，hints 给出能看到当前值的 config list。"""
+	from boss_agent_cli.output import emit_error
+
+	emit_error(
+		"config",
+		code="INVALID_PARAM",
+		message=f"未知配置项。{_AVAILABLE_CONFIG_MESSAGE}",
+		hints={"next_actions": [boss_command_for_ctx(ctx, "config list")]},
+	)
+
+
 @click.group("config", invoke_without_command=True)
 @click.pass_context
 def config_group(ctx: click.Context) -> None:
@@ -90,13 +102,7 @@ def config_get_cmd(ctx: click.Context, key: str) -> None:
 	"""查看单个配置项的值。"""
 	cfg = ctx.obj["config"]
 	if key not in _PUBLIC_CONFIG_KEYS:
-		from boss_agent_cli.output import emit_error
-
-		emit_error(
-			"config",
-			code="INVALID_PARAM",
-			message=f"未知配置项。{_AVAILABLE_CONFIG_MESSAGE}",
-		)
+		_emit_unknown_key(ctx)
 		ctx.exit(1)
 		return
 
@@ -127,13 +133,7 @@ def config_get_cmd(ctx: click.Context, key: str) -> None:
 def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 	"""修改配置项。"""
 	if key not in _PUBLIC_CONFIG_KEYS:
-		from boss_agent_cli.output import emit_error
-
-		emit_error(
-			"config",
-			code="INVALID_PARAM",
-			message=f"未知配置项。{_AVAILABLE_CONFIG_MESSAGE}",
-		)
+		_emit_unknown_key(ctx)
 		ctx.exit(1)
 		return
 
@@ -212,13 +212,7 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 def config_reset_cmd(ctx: click.Context, key: str) -> None:
 	"""将配置项恢复为默认值。"""
 	if key not in _PUBLIC_CONFIG_KEYS:
-		from boss_agent_cli.output import emit_error
-
-		emit_error(
-			"config",
-			code="INVALID_PARAM",
-			message=f"未知配置项。{_AVAILABLE_CONFIG_MESSAGE}",
-		)
+		_emit_unknown_key(ctx)
 		ctx.exit(1)
 		return
 
