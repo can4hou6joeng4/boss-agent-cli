@@ -300,3 +300,30 @@ def test_success_hints_match_tty_next_steps() -> None:
 	信封里却是 ``hints: null``，Agent 拿不到任何后继动作。
 	"""
 	assert _success_calls_without_hints() == []
+
+
+def _leaf_commands_without_help() -> list[str]:
+	"""收集没有任何帮助描述的叶子命令（分组命令先生成子命令再递归）。"""
+	import click
+
+	def walk(command: Any, path: tuple[str, ...]) -> list[str]:
+		if isinstance(command, click.Group):
+			found: list[str] = []
+			for name, sub in command.commands.items():
+				found.extend(walk(sub, (*path, name)))
+			return found
+		if command.get_short_help_str(limit=200).strip():
+			return []
+		return [" ".join(path)]
+
+	return walk(cli, ())
+
+
+def test_every_command_has_help_text() -> None:
+	"""``boss --help`` 与各个命令组的 ``--help`` 是能力发现入口。
+
+	没有 docstring 的命令在帮助里只剩一个名字：真人看不出它做什么，Agent 用
+	``--help`` 探测能力时也读不到任何说明（同样的说明在 ``boss schema`` 里有，
+	但 CLI 帮助不该只对读 schema 的调用方可见）。
+	"""
+	assert _leaf_commands_without_help() == []

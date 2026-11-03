@@ -289,6 +289,7 @@ def review_group() -> None:
 @review_group.command("list")
 @click.pass_context
 def review_list_cmd(ctx: click.Context) -> None:
+	"""列出旧版本遗留的待人工复核动作。"""
 	store = AutomationStore(ctx.obj["data_dir"])
 	handle_output(
 		ctx,
@@ -360,6 +361,7 @@ def pending_group() -> None:
 @pending_group.command("list")
 @click.pass_context
 def pending_list_cmd(ctx: click.Context) -> None:
+	"""列出旧版本遗留的待执行动作队列。"""
 	store = AutomationStore(ctx.obj["data_dir"])
 	handle_output(
 		ctx,

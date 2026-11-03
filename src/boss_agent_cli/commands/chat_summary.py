@@ -15,6 +15,7 @@ from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, han
 @click.pass_context
 @handle_auth_errors("chat-summary")
 def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> None:
+	"""基于聊天历史生成结构化摘要与下一步建议。"""
 	if not require_compliance_allowed(ctx, "chat-summary"):
 		ctx.exit(1)
 

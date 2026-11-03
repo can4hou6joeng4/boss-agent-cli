@@ -88,6 +88,7 @@ def watch_add_cmd(
 	job_type: str | None,
 	welfare: str | None,
 ) -> None:
+	"""保存一条可复用的搜索条件（名称 + 关键词 + 筛选），之后用 run 增量拉取。"""
 	# 空字符串是合法 argv，但存下来的记录既没法点名（`boss watch run ` 缺参数），
 	# 也没法搜到目标（空关键词等于不筛选）。必须在写盘前拒绝。
 	if not name.strip() or not query.strip():
@@ -122,6 +123,7 @@ def watch_add_cmd(
 @watch_group.command("list")
 @click.pass_context
 def watch_list_cmd(ctx: click.Context) -> None:
+	"""列出本地已保存的 watch，并提示下一步可执行命令。"""
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		items, corrupt = cache.list_saved_searches_with_corrupt()
 	hints: dict[str, Any] = {
@@ -155,6 +157,7 @@ def watch_list_cmd(ctx: click.Context) -> None:
 @click.argument("name")
 @click.pass_context
 def watch_remove_cmd(ctx: click.Context, name: str) -> None:
+	"""删除一条本地 watch；名字不存在时保持幂等（不报错）。"""
 	# 与 add / run 同口径：空名字不可能命中任何本地记录，却会以
 	# `{"removed": false}` 的 `ok: true` 报成功，Agent 会以为已经删掉了。
 	if not name.strip():
@@ -244,6 +247,7 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 @click.pass_context
 @handle_auth_errors("watch")
 def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
+	"""执行一条或全部 watch，把新增职位写入本地缓存。"""
 	if not require_compliance_allowed(ctx, "watch-run"):
 		ctx.exit(1)
 

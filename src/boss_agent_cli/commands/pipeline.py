@@ -58,6 +58,7 @@ def _render_pipeline(data: list[dict[str, Any]], title: str) -> None:
 @click.pass_context
 @handle_auth_errors("pipeline")
 def pipeline_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None) -> None:
+	"""聚合聊天与面试数据，生成候选人进度视图。"""
 	if not require_compliance_allowed(ctx, "pipeline"):
 		ctx.exit(1)
 
@@ -77,6 +78,7 @@ def pipeline_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None) -> 
 @click.pass_context
 @handle_auth_errors("follow-up")
 def follow_up_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None) -> None:
+	"""筛出超过 N 天未推进、需要跟进的候选人与会话。"""
 	if not require_compliance_allowed(ctx, "follow-up"):
 		ctx.exit(1)
 
