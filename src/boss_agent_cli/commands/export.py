@@ -77,6 +77,10 @@ def export_cmd(
 	include_private: bool,
 ) -> None:
 	"""导出搜索结果为 HTML / CSV / JSON 文件"""
+	# 与 search 同一口径：纯空白的 query 仍是「没给关键词」，不能当成一次
+	# 合法的全量导出——那会翻页抓取大量无关职位，并写出一份内容可疑的文件。
+	if query is not None and not query.strip():
+		query = None
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	raw_params: dict[str, str] = {}

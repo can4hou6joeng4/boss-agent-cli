@@ -160,6 +160,10 @@ def search_cmd(
 	sort_mode: str,
 ) -> None:
 	"""按关键词和筛选条件搜索职位列表"""
+	# 纯空白的 query 与空串等价：`boss search " "` 能绕过下面的「未提供 query」
+	# 检查，进入一次没有关键词的搜索——既消耗请求预算，也把账号放在更宽的风控面里。
+	if query is not None and not query.strip():
+		query = None
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	raw_params: dict[str, str] = {}
