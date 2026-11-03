@@ -83,6 +83,29 @@ def _unknown_subcommand_error(exc: click.ClickException) -> tuple[str, str, dict
 	)
 
 
+def _unknown_option_error(exc: click.ClickException) -> tuple[str, str, dict[str, Any]] | None:
+	"""把 ``No such option '--limit'. Did you mean '--city'?`` 换成中文说明。
+
+	与 ``_unknown_subcommand_error`` 同口径：Agent 最常踩的 ``boss search golang
+	--limit 10`` 只拿到 Click 的英文原文，拼写建议还按编辑距离把 ``--limit`` 猜成
+	``--city``，与「限制结果数」的意图毫无关系。这里只指向命令自己的帮助。
+	"""
+	if not isinstance(exc, click.NoSuchOption):
+		return None
+	ctx = getattr(exc, "ctx", None)
+	if ctx is None:
+		return None
+	raw = exc.option_name or ""
+	token = raw if raw.startswith("-") else f"--{raw}"
+	root = ctx.find_root().info_name or "boss"
+	path = f"{root} {_command_path(ctx)}".strip()
+	return (
+		f"{path} 没有选项 '{token}'",
+		f"用 {path} --help 查看可用选项",
+		{"next_actions": [f"{path} --help"]},
+	)
+
+
 def _misplaced_global_option(group: click.Group, exc: click.ClickException) -> tuple[str, str] | None:
 	"""Return a clearer message when a root option was parsed by a subcommand.
 
@@ -295,6 +318,10 @@ class BossCliGroup(click.Group):
 						"全局选项（--json、--data-dir、--platform、--cdp-url 等）写在子命令前面",
 					],
 				}
+			else:
+				unknown_option = _unknown_option_error(exc)
+				if unknown_option is not None:
+					message, recovery_action, hints = unknown_option
 			emit_error(
 				command,
 				code="INVALID_PARAM",
