@@ -183,7 +183,9 @@ def test_invalid_format_raises():
 	assert payload["command"] == "schema"
 	assert payload["error"]["code"] == "INVALID_PARAM"
 	assert payload["error"]["recoverable"] is False
-	assert payload["error"]["recovery_action"] == "修正参数"
+	assert payload["error"]["message"] == "boss schema 的 --format 取值无效：'xml' 不在可选值 'native', 'openai-tools', 'anthropic-tools', 'mcp-tools' 中"
+	assert payload["error"]["recovery_action"] == "用 boss schema --help 查看参数说明"
+	assert payload["hints"]["next_actions"] == ["boss schema --help"]
 	assert result.stderr == ""
 
 
