@@ -166,6 +166,52 @@ def test_edit_nested_field(tmp_path):
 	assert parsed["ok"] is True
 
 
+def test_edit_container_field_is_rejected(tmp_path):
+	"""--field 点到容器时不能整体替换成字符串再炸成 INTERNAL_ERROR。"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "container", "--template", "default"])
+	for field in ("personal_info", "modules", "job_intention"):
+		result = _invoke(runner, tmp_path, ["edit", "container", "--field", field, "--value", "x"])
+		assert result.exit_code == 1, field
+		parsed = json.loads(result.output)
+		_assert_error_envelope(parsed, "INVALID_PARAM")
+		assert "不是文本字段" in parsed["error"]["message"]
+		assert parsed["hints"]["next_actions"] == [
+			"boss resume export container --format json",
+			"boss resume show container",
+		]
+
+	# 简历本身没有被写坏：仍然可以正常展示与导出。
+	shown = _invoke(runner, tmp_path, ["show", "container"])
+	assert shown.exit_code == 0, shown.output
+
+
+def test_edit_unknown_field_lists_next_steps(tmp_path):
+	"""字段名拼错时给出「怎么看到完整结构」的下一步，而不是一句「不存在」。"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "typo", "--template", "default"])
+	result = _invoke(runner, tmp_path, ["edit", "typo", "--field", "titl", "--value", "x"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "INVALID_PARAM")
+	assert "不存在" in parsed["error"]["message"]
+	assert parsed["hints"]["next_actions"][0] == "boss resume export typo --format json"
+
+
+def test_edit_name_field_points_to_clone(tmp_path):
+	"""--field name 会被后面的 updated.name 覆盖，成功信封与实际内容不符，必须拒绝。"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "oldname", "--template", "default"])
+	result = _invoke(runner, tmp_path, ["edit", "oldname", "--field", "name", "--value", "newname"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "INVALID_PARAM")
+	assert parsed["hints"]["next_actions"] == ["boss resume clone oldname <新名>"]
+
+	shown = json.loads(_invoke(runner, tmp_path, ["show", "oldname"]).output)
+	assert shown["data"]["name"] == "oldname"
+
+
 def test_edit_not_found(tmp_path):
 	runner = CliRunner()
 	result = _invoke(runner, tmp_path, ["edit", "ghost", "--field", "title", "--value", "X"])

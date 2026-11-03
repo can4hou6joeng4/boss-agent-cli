@@ -96,6 +96,17 @@ def _set_nested(data: dict[str, Any], path: str, value: str) -> bool:
 	return False
 
 
+def _lookup_nested(data: dict[str, Any], path: str) -> tuple[bool, Any]:
+	"""按 . 分隔路径取字段，返回 (是否存在, 当前值)。"""
+	current: Any = data
+	for key in path.split("."):
+		if isinstance(current, dict) and key in current:
+			current = current[key]
+		else:
+			return False, None
+	return True, current
+
+
 def _flat_diff(left: dict[str, Any], right: dict[str, Any], prefix: str = "") -> list[dict[str, Any]]:
 	"""对比两个 dict 的差异，返回 [{field, left, right}, ...]"""
 	diffs: list[dict[str, Any]] = []
@@ -232,15 +243,35 @@ def resume_edit_cmd(ctx: click.Context, name: str, field: str, value: str) -> No
 	if resume is None:
 		return
 	data = resume_to_dict(resume)
-	ok = _set_nested(data, field, value)
-	if not ok:
+	# --field 只接受文本叶子字段。用路径点到容器（personal_info / modules）或 null
+	# （job_intention）时，_set_nested 会把整个子对象换成字符串，dict_to_resume 随后
+	# 抛 AttributeError，被兜成不可重试的 INTERNAL_ERROR——参数错误看起来像程序缺陷。
+	# name 则会被后面的 updated.name = name 覆盖回去，成功信封与实际内容不符。
+	if field == "name":
 		handle_error_output(
 			ctx, "resume",
 			code="INVALID_PARAM",
-			message=f"字段 '{field}' 不存在",
+			message="简历名称不能用 --field 修改；先 boss resume clone <旧名> <新名> 再删除旧简历",
+			hints={"next_actions": [f"boss resume clone {shell_argument(name)} <新名>"]},
 		)
 		ctx.exit(1)
 		return
+	found, current = _lookup_nested(data, field)
+	if not found or not isinstance(current, str):
+		detail = (
+			f"字段 '{field}' 不是文本字段，请点到具体子字段（如 personal_info.layout）"
+			if found
+			else f"字段 '{field}' 不存在"
+		)
+		handle_error_output(
+			ctx, "resume",
+			code="INVALID_PARAM",
+			message=f"{detail}；可用 --field title 之类的文本字段，完整结构见 boss resume export {name} --format json",
+			hints={"next_actions": [f"boss resume export {shell_argument(name)} --format json", f"boss resume show {shell_argument(name)}"]},
+		)
+		ctx.exit(1)
+		return
+	_set_nested(data, field, value)
 	from boss_agent_cli.resume.models import dict_to_resume
 	updated = dict_to_resume(data)
 	updated.name = name
