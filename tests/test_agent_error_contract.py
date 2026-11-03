@@ -84,6 +84,28 @@ def test_group_without_subcommand_reports_subcommand_hints(tmp_path):
 	)["hints"]["next_actions"]
 
 
+def test_unknown_subcommand_reports_available_commands(tmp_path):
+	"""写错子命令时不能只回 Click 的英文原文。
+
+	`boss resume bogus` 的信封只有 `No such command 'bogus'.`：Agent 看不出属于哪个
+	命令组、有哪些可选值，`hints` 也是 null，只能再猜一次；`boss agent review bogus`
+	这类二级组同样如此。
+	"""
+	runner = CliRunner()
+	for args, command, path in (
+		(("resume", "bogus"), "resume", "boss resume"),
+		(("agent", "review", "bogus"), "agent", "boss agent review"),
+	):
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *args])
+		parsed = _assert_single_stdout_json_error(result, command=command)
+		message = parsed["error"]["message"]
+		assert "No such command" not in message
+		assert f"{path} 没有子命令 'bogus'" in message
+		assert "可选：" in message
+		next_actions = parsed["hints"]["next_actions"]
+		assert all(action.startswith(f"{path} ") for action in next_actions)
+
+
 def test_agent_run_requires_login_returns_envelope_not_traceback(tmp_path):
 	"""未登录的 `agent run` 必须返回 AUTH_REQUIRED 信封，而不是 traceback。
 

@@ -53,6 +53,36 @@ def _missing_subcommand_error(ctx: click.Context | None) -> tuple[str, str, dict
 	)
 
 
+def _unknown_subcommand_error(exc: click.ClickException) -> tuple[str, str, dict[str, Any]] | None:
+	"""把 ``No such command 'bogus'.`` 换成点名可选子命令的中文消息。
+
+	与 ``_missing_subcommand_error`` 同一主题的另一半：``boss resume bogus`` /
+	``boss crawl bogus`` 这类写错子命令的调用只拿到 Click 的英文原文，Agent 看
+	不出是哪个命令组、有哪些可选值，``hints`` 也是 null，只能再猜一次。
+	"""
+	name = getattr(exc, "command_name", None)
+	if name is None:
+		# NoSuchCommand 在 Click 8.4 才出现，依赖声明是 click>=8.0：旧版本用普通
+		# UsageError 抛同一条英文消息，只能从消息里取名字。
+		matched = re.match(r"No such command '(.+)'\.$", str(getattr(exc, "message", "")))
+		if matched is None:
+			return None
+		name = matched.group(1)
+	ctx = getattr(exc, "ctx", None)
+	if ctx is None or not isinstance(ctx.command, click.Group):
+		return None
+	names = sorted(ctx.command.list_commands(ctx))
+	if not names:
+		return None
+	root = ctx.find_root().info_name or "boss"
+	path = f"{root} {_command_path(ctx)}".strip()
+	return (
+		f"{path} 没有子命令 '{name}'（可选：{', '.join(names)}）",
+		f"从子命令中选一个后重试，例如 {path} {names[0]} --help",
+		{"next_actions": [f"{path} {name}" for name in names]},
+	)
+
+
 def _misplaced_global_option(group: click.Group, exc: click.ClickException) -> tuple[str, str] | None:
 	"""Return a clearer message when a root option was parsed by a subcommand.
 
@@ -252,6 +282,10 @@ class BossCliGroup(click.Group):
 			missing = _missing_subcommand_error(ctx) if type(exc).__name__ == "NoArgsIsHelpError" else None
 			if missing is not None:
 				message, recovery_action, hints = missing
+			else:
+				unknown = _unknown_subcommand_error(exc)
+				if unknown is not None:
+					message, recovery_action, hints = unknown
 			misplaced = _misplaced_global_option(self, exc)
 			if misplaced is not None:
 				message, recovery_action = misplaced
