@@ -136,6 +136,61 @@ def test_schema_hr_subcommands_match_click_tree():
 	)
 
 
+def test_schema_struct_subcommands_match_click_tree():
+	"""结构化 subcommands 的键集合必须与实际一级子命令一致。
+
+	`boss schema` 是能力真源。`watch` / `preset` 原先没有 `subcommands`，
+	`watch list` / `preset list` 在 options 里也缺席，Agent 据此枚举只能看到
+	add/remove，列不出已保存的条件。agent 用平铺的「review list」形式描述
+	嵌套子命令，不适用集合比较，跳过。
+	"""
+	problems: list[str] = []
+	for name, spec in SCHEMA_DATA["commands"].items():
+		declared = spec.get("subcommands")
+		if not isinstance(declared, dict):
+			continue
+		if any(" " in str(key) for key in declared):
+			continue
+		command = cli.commands.get(name)
+		if command is None:
+			continue
+		actual = set(getattr(command, "commands", {}) or {})
+		if set(declared) != actual:
+			problems.append(
+				f"{name}: 声明 {sorted(declared)} != 实际 {sorted(actual)}"
+			)
+
+	assert not problems, "schema 结构化子命令声明与实际注册不一致:\n" + "\n".join(problems)
+
+
+def test_schema_options_declare_every_subcommand():
+	"""每个已注册子命令都必须在 options 里出现（无参数时用空对象占位）。
+
+	Agent 通过 options 的非选项键枚举可执行子命令。`shortlist` / `config` /
+	`resume` 的 list、`agent` 的 control/pending/stats、`ai local` 的
+	status/smoke、`hr whoami` 原先只在 `subcommands` 描述里出现，遍历 options
+	的调用方会漏掉这些能力。
+	"""
+	problems: list[str] = []
+
+	def walk(path: str, node: Any, options: dict[str, Any]) -> None:
+		for sub_name, sub_node in (getattr(node, "commands", {}) or {}).items():
+			if sub_name not in options:
+				problems.append(f"{path}.{sub_name}")
+				continue
+			sub_spec = options[sub_name]
+			if isinstance(sub_spec, dict):
+				walk(f"{path}.{sub_name}", sub_node, sub_spec)
+
+	for name, spec in SCHEMA_DATA["commands"].items():
+		node = cli.commands.get(name)
+		options = spec.get("options")
+		if node is not None and isinstance(options, dict):
+			walk(name, node, options)
+
+	assert not problems, "schema 未在 options 中声明子命令: " + ", ".join(problems)
+
+
 # ── 选项声明 == 实际可执行选项 ───────────────────────────────────────
 
 

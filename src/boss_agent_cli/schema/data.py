@@ -560,6 +560,7 @@ SCHEMA_DATA = {
 					},
 					"--welfare": {"type": "string", "default": None, "description": "福利筛选"},
 				},
+				"list": {},
 				"remove": {
 					"args": [
 						{"name": "name", "required": True, "description": "要删除的 watch 名称"},
@@ -571,6 +572,12 @@ SCHEMA_DATA = {
 					],
 					"--all": {"type": "bool", "default": False, "description": "跑所有已保存 watch；风控命中时停止后续 watch"},
 				},
+			},
+			"subcommands": {
+				"add": "保存一组搜索条件为 watch",
+				"list": "列出已保存的 watch",
+				"remove": "删除指定 watch",
+				"run": "增量执行 watch 并报告新职位",
 			},
 		},
 		"crawl": {
@@ -781,11 +788,17 @@ SCHEMA_DATA = {
 						"choices": ["online", "today", "3d", "week", "2w", "month", "half-year"],
 					},
 				},
+				"list": {},
 				"remove": {
 					"args": [
 						{"name": "name", "required": True, "description": "要删除的预设名称"},
 					],
 				},
+			},
+			"subcommands": {
+				"add": "保存一组搜索筛选为可复用预设",
+				"list": "列出已保存的预设",
+				"remove": "删除指定预设",
 			},
 		},
 		"pipeline": {
@@ -820,6 +833,7 @@ SCHEMA_DATA = {
 			"description": "管理本地职位候选池（子命令：add/list/annotate/compare/remove），支持本地标签、备注和离线对比",
 			"args": [],
 			"options": {
+				"list": {},
 				"add": {
 					"args": [
 						{"name": "security_id", "required": True, "description": "安全 ID"},
@@ -897,6 +911,7 @@ SCHEMA_DATA = {
 			"description": "查看和修改配置项（子命令：list/get/set/reset）",
 			"args": [],
 			"options": {
+				"list": {},
 				"get": {
 					"args": [
 						{"name": "key", "required": True, "description": "配置项键名"},
@@ -962,6 +977,7 @@ SCHEMA_DATA = {
 			"description": "本地简历管理（子命令：init/list/show/edit/delete/export/import/clone/diff/link/applications）",
 			"args": [],
 			"options": {
+				"list": {},
 				"init": {
 					"--name": {"type": "string", "default": None, "description": "简历名称"},
 					"--template": {"type": "string", "default": None, "description": "模板名称（如 default）"},
@@ -1062,6 +1078,7 @@ SCHEMA_DATA = {
 					"--max-tokens": {"type": "int", "default": None, "minimum": 1, "description": "最大令牌数"},
 				},
 				"local": {
+					"status": {},
 					"configure": {
 						"--runtime": {
 							"type": "string",
@@ -1084,6 +1101,7 @@ SCHEMA_DATA = {
 						"--path": {"type": "string", "required": True, "description": "本地模型文件路径"},
 						"--model": {"type": "string", "required": True, "description": "导入后的模型名称"},
 					},
+					"smoke": {},
 				},
 				"analyze-jd": {
 					"args": [
@@ -1231,7 +1249,11 @@ SCHEMA_DATA = {
 				"stop": {
 					"--reason": {"type": "string", "default": "manual-stop", "description": "熔断原因"},
 				},
+				"control": {},
+				"pending": {"list": {}},
+				"stats": {},
 				"review": {
+					"list": {},
 					"approve": {
 						"args": [
 							{"name": "review_id", "required": True, "description": "旧版本复核项 ID"},
@@ -1401,6 +1423,7 @@ SCHEMA_DATA = {
 						],
 					},
 				},
+				"whoami": {},
 			},
 			"subcommands": {
 				"whoami": "查看当前登录态是否处于招聘者侧；identity 为 1 才算就绪，不切换身份",

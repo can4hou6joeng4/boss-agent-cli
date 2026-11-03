@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss schema` 的能力清单漏了多个已实现的子命令：`watch list` / `preset list` 在 `options` 与 `subcommands` 里都不存在（`preset` 的描述却宣称有 add/list/remove），`shortlist` / `config` / `resume` 的 `list`、`agent` 的 `control` / `pending` / `stats`、`ai local` 的 `status` / `smoke`、`hr whoami` 则只在 `subcommands` 描述里出现或完全缺席。Agent 按 `boss schema` 枚举能力时会以为这些命令不存在。现在无参数子命令以空对象占位补齐，`watch` / `preset` 补上结构化的 `subcommands`，并新增两条契约测试：结构化 `subcommands` 的键集合必须与实际一级子命令一致，`options` 必须覆盖每个已注册子命令。
 - `boss chat` 的跨天 diff 找「上一次快照」时只看 `.json` 后缀再按文件名倒序：同目录里手动备份出来的 `backup.json`（`"b…"` 排在 `"2026-…"` 之后）会被选中，读到非数组内容后整次对比静默退化成「首份快照」，`added` / `removed` / `new_unread` 全是空；未来日期的快照文件（从别处拷入的、系统时钟回拨留下的）同样会被当成「上一次」。现在只接受 `YYYY-MM-DD.json` 命名、日期合法且早于今天的文件，非快照 JSON 与未来日期一律跳过。
 - `boss schema` 里有两处与可执行行为不符：全局 `--delay` 的默认值仍写着 `1.5-3.0`，而实际生效的是 `config.DEFAULT_REQUEST_DELAY`（30-60），`--delay` 的帮助与错误示例也停在低节奏取值；`boss digest --format` / `boss stats --format` 在 Click 层只接受 `json` / `md` 与 `json` / `html`，schema 却没声明 `enum`，Agent 照 schema 可能构造 `--format markdown` 并换回 `INVALID_PARAM`。现在默认值与示例统一为 `30-60`，两个 `--format` 补上 `enum`，并新增契约测试：Click 用 `Choice` 限制的选项必须在 schema 里声明同一组取值，全局 `--delay` 默认值必须由 `DEFAULT_REQUEST_DELAY` 推导。
 - `boss login --timeout` 由 `default=120` 让 Click 推断成整数，没有下界：`--timeout 0` / `--timeout -5` 会直接进入登录流程，扫码等待的 `range(timeout)` 一次都不循环，立即以「扫码登录超时（0秒）」收尾（负数原样进文案），用户看到的是登录超时而不是参数错误。现在用 `IntRange(min=1)` 在解析阶段拒绝，返回 `INVALID_PARAM` 且不构造 `AuthManager`、不启动浏览器；`boss schema` 的 `minimum` 同步补齐。
