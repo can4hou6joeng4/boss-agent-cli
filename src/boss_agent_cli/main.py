@@ -129,7 +129,9 @@ def _parameter_display_name(exc: click.BadParameter) -> str:
 		hint = exc.param.get_error_hint(exc.ctx) if exc.ctx is not None else exc.param.human_readable_name
 	if isinstance(hint, (list, tuple)):
 		hint = " / ".join(hint)
-	return str(hint or "").strip().strip("'\"")
+	# 多别名选项的 hint 是 ``'-o' / '--output'``：逐个去引号，只剥首尾会留下
+	# ``-o' / '--output`` 这种半截引号。
+	return str(hint or "").replace("'", "").replace('"', "").strip()
 
 
 def _missing_parameter_error(exc: click.ClickException) -> tuple[str, str, dict[str, Any]] | None:
@@ -178,8 +180,10 @@ def _unexpected_extra_argument_error(exc: click.ClickException) -> tuple[str, st
 _RANGE_INVALID_RE = re.compile(r"^(.+) is not in the range (.+)\.$")
 _CHOICE_INVALID_RE = re.compile(r"^(.+) is not one of (.+)\.$")
 _TYPE_INVALID_RE = re.compile(r"^(.+) is not a valid (.+)\.$")
-_PATH_MISSING_RE = re.compile(r"^Path '(.*)' does not exist\.$")
-_PATH_INVALID_RE = re.compile(r"^Path '(.*)' is (a file|a directory|not readable|not writable|not executable)\.$")
+_PATH_MISSING_RE = re.compile(r"^(?:Path|File|Directory) '(.*)' does not exist\.$")
+_PATH_INVALID_RE = re.compile(
+	r"^(?:Path|File|Directory) '(.*)' is (a file|a directory|not readable|not writable|not executable)\.$"
+)
 _PATH_PROBLEMS = {
 	"a file": "是文件，但这里需要目录",
 	"a directory": "是目录，但这里需要文件",
@@ -243,6 +247,10 @@ def _invalid_path_error(exc: click.ClickException) -> tuple[str, str, dict[str, 
 	``boss ai local import --path ""`` 原来回 ``Invalid value for '--path':
 	Path '' does not exist.``：正文英文、``hints`` 为 null，Agent 读不出是路径
 	不存在还是类型不对。
+
+	Click 按 ``dir_okay`` / ``file_okay`` 决定前缀：只收文件时是 ``File '/tmp' is
+	a directory.``（``boss stats --output <目录>``），只收目录时是 ``Directory …``，
+	两种都收才是 ``Path …``——三种前缀都要认。
 	"""
 	if not isinstance(exc, click.BadParameter) or _has_cjk(exc.message):
 		return None
