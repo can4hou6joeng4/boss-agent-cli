@@ -152,4 +152,5 @@ def preset_remove_cmd(ctx: click.Context, name: str) -> None:
 		"preset",
 		{"action": "remove", "name": name, "removed": removed},
 		render=lambda d: render_action_result(d, title="preset", next_steps=["boss preset list"]),
+		hints={"next_actions": ["boss preset list"]},
 	)

@@ -65,6 +65,14 @@ def test_watch_add_list_remove(tmp_path):
 	assert remove_result.exit_code == 0
 	remove_parsed = json.loads(remove_result.output)
 	assert remove_parsed["data"]["removed"] is True
+	# TTY 渲染给了「boss watch list」的下一步，信封必须同样给出。
+	assert remove_parsed["hints"]["next_actions"] == ["boss watch list"]
+
+	missing_result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "remove", "nope"])
+	assert missing_result.exit_code == 0
+	missing_parsed = json.loads(missing_result.output)
+	assert missing_parsed["data"]["removed"] is False
+	assert missing_parsed["hints"]["next_actions"] == ["boss watch list"]
 
 
 def test_watch_list_empty_next_step_is_executable(tmp_path, monkeypatch):

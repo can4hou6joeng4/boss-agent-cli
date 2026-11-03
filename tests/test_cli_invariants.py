@@ -268,3 +268,35 @@ def test_local_record_lookups_do_not_report_job_not_found() -> None:
 		if '"JOB_NOT_FOUND"' in (root / name).read_text(encoding="utf-8")
 	]
 	assert offenders == [], f"本地记录查找仍复用 JOB_NOT_FOUND：{offenders}"
+
+
+def _success_calls_without_hints() -> list[str]:
+	"""收集 render 里有 next_steps、却没给 ``hints`` 的 ``handle_output`` 调用。"""
+	import ast
+
+	root = Path(__file__).resolve().parents[1] / "src" / "boss_agent_cli" / "commands"
+	offenders: list[str] = []
+	for path in sorted(root.glob("*.py")):
+		source = path.read_text(encoding="utf-8")
+		for node in ast.walk(ast.parse(source)):
+			if not isinstance(node, ast.Call) or getattr(node.func, "id", "") != "handle_output":
+				continue
+			keywords = {kw.arg for kw in node.keywords if kw.arg}
+			render = next((kw.value for kw in node.keywords if kw.arg == "render"), None)
+			if render is None:
+				continue
+			if "next_steps" not in (ast.get_source_segment(source, render) or ""):
+				continue
+			if "hints" not in keywords:
+				offenders.append(f"{path.name}:{node.lineno}")
+	return offenders
+
+
+def test_success_hints_match_tty_next_steps() -> None:
+	"""TTY 展示的下一步必须同时进入信封 ``hints.next_actions``。
+
+	``render`` 只在 TTY 生效，管道 / ``--json`` / MCP 只能看到 ``hints``。只写
+	render 会让两条路径看到相反的结果：终端提示「下一步执行 boss preset list」，
+	信封里却是 ``hints: null``，Agent 拿不到任何后继动作。
+	"""
+	assert _success_calls_without_hints() == []

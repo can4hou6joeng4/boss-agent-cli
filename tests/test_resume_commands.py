@@ -94,7 +94,8 @@ def test_list_empty(tmp_path):
 	parsed = json.loads(result.output)
 	_assert_success_envelope(parsed)
 	assert parsed["data"] == []
-	assert parsed["hints"]["next_actions"] == ["boss resume show <name>", "boss resume init --template default"]
+	# 空列表里没有简历名可 show：照抄只会换回 RESUME_NOT_FOUND。
+	assert parsed["hints"]["next_actions"] == ["boss resume init --template default"]
 
 
 def test_list_with_items(tmp_path):
@@ -531,6 +532,17 @@ def test_applications_list(tmp_path):
 	assert all(item["resume_name"] == "apptest" for item in parsed["data"])
 	assert all(item["status"] == "prepared" for item in parsed["data"])
 	assert parsed["hints"]["next_actions"] == ["boss resume show apptest"]
+
+
+def test_applications_empty_hints_point_to_link(tmp_path):
+	"""没有关联职位时下一步是关联一个职位，而不是再 show 一次简历。"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "apptest", "--template", "default"])
+	result = _invoke(runner, tmp_path, ["applications", "apptest"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["data"] == []
+	assert parsed["hints"]["next_actions"] == ["boss resume link apptest <security_id> <job_id>"]
 
 
 def test_relink_resume_keeps_title_company_and_tracking(tmp_path):
