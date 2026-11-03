@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss chat` 的跨天 diff 找「上一次快照」时只看 `.json` 后缀再按文件名倒序：同目录里手动备份出来的 `backup.json`（`"b…"` 排在 `"2026-…"` 之后）会被选中，读到非数组内容后整次对比静默退化成「首份快照」，`added` / `removed` / `new_unread` 全是空；未来日期的快照文件（从别处拷入的、系统时钟回拨留下的）同样会被当成「上一次」。现在只接受 `YYYY-MM-DD.json` 命名、日期合法且早于今天的文件，非快照 JSON 与未来日期一律跳过。
 - `boss schema` 里有两处与可执行行为不符：全局 `--delay` 的默认值仍写着 `1.5-3.0`，而实际生效的是 `config.DEFAULT_REQUEST_DELAY`（30-60），`--delay` 的帮助与错误示例也停在低节奏取值；`boss digest --format` / `boss stats --format` 在 Click 层只接受 `json` / `md` 与 `json` / `html`，schema 却没声明 `enum`，Agent 照 schema 可能构造 `--format markdown` 并换回 `INVALID_PARAM`。现在默认值与示例统一为 `30-60`，两个 `--format` 补上 `enum`，并新增契约测试：Click 用 `Choice` 限制的选项必须在 schema 里声明同一组取值，全局 `--delay` 默认值必须由 `DEFAULT_REQUEST_DELAY` 推导。
 - `boss login --timeout` 由 `default=120` 让 Click 推断成整数，没有下界：`--timeout 0` / `--timeout -5` 会直接进入登录流程，扫码等待的 `range(timeout)` 一次都不循环，立即以「扫码登录超时（0秒）」收尾（负数原样进文案），用户看到的是登录超时而不是参数错误。现在用 `IntRange(min=1)` 在解析阶段拒绝，返回 `INVALID_PARAM` 且不构造 `AuthManager`、不启动浏览器；`boss schema` 的 `minimum` 同步补齐。
 - 多页聚合的重复页守卫会误伤缺字段的条目：`boss digest` / `pipeline` / `follow-up` 用 `securityId` 序列判断「平台又返回了同一页」，但 `securityId` 每次请求都会轮换（`services/contact_lookup.py` 早已据此改用 `uid`），签名永远命中不了，平台一旦不认 `page` 参数就会把同一页抓满 50 次，结果里全是重复联系人；而条目里没有 `securityId` 时签名恒为空元组，第二页会被当成重复页直接丢掉，`hasMore` 仍为 true 也不再翻页。`boss favorites list` / `sync` 的 `encryptJobId` 签名有同样的空签名误判。现在沟通列表按 `uid`（缺失时回退 `securityId`）生成签名，两处签名全为空时都不再据此早停，交给 `hasMore` / 页数上限收尾；新增 `tests/test_friend_list_pages.py` 与收藏页回归用例固定这些情况。
