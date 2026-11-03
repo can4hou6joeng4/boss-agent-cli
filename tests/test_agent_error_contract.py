@@ -170,6 +170,35 @@ def test_unexpected_extra_argument_is_reported_in_chinese(tmp_path):
 		assert parsed["hints"]["next_actions"] == [f"{path} --help"]
 
 
+def test_invalid_option_value_is_reported_in_chinese(tmp_path):
+	"""Click 自带校验（范围 / 枚举 / 数值转换）的英文正文不能原样透出。
+
+	``boss search golang --page 0``、``boss export golang --format ""``、
+	``boss hr reply u1 hi`` 原来分别回 ``Invalid value for '--page': 0 is not in
+	the range x>=1.`` / ``'' is not one of 'html', 'csv', 'json'.`` /
+	``'u1' is not a valid integer.``：错误码正确，但正文英文、``hints`` 为 null，
+	Agent 读不出该把参数改成什么。
+	"""
+	runner = CliRunner()
+	for args, command, expected, path in (
+		(("search", "golang", "--page", "0"), "search", "boss search 的 --page 取值无效：0 不在范围 x>=1 内", "boss search"),
+		(
+			("export", "golang", "--format", "pdf"),
+			"export",
+			"boss export 的 --format 取值无效：'pdf' 不在可选值 'html', 'csv', 'json' 中",
+			"boss export",
+		),
+		(("hr", "reply", "u1", "hi"), "hr", "boss hr reply 的 FRIEND_ID 取值无效：'u1' 不是整数", "boss hr reply"),
+	):
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *args])
+		parsed = _assert_single_stdout_json_error(result, command=command)
+		message = parsed["error"]["message"]
+		assert "Invalid value for" not in message
+		assert message == expected
+		assert parsed["error"]["recovery_action"] == f"用 {path} --help 查看参数说明"
+		assert parsed["hints"]["next_actions"] == [f"{path} --help"]
+
+
 def test_agent_run_requires_login_returns_envelope_not_traceback(tmp_path):
 	"""未登录的 `agent run` 必须返回 AUTH_REQUIRED 信封，而不是 traceback。
 

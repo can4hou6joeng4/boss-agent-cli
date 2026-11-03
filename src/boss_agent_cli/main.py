@@ -118,6 +118,20 @@ def _usage_path(exc: click.ClickException) -> str | None:
 	return f"{root} {_command_path(ctx)}".strip()
 
 
+def _parameter_display_name(exc: click.BadParameter) -> str:
+	"""参数 / 选项在消息里的展示名，与 Click 自己的英文消息同源。
+
+	位置参数是 metavar（``NAME2``），选项是 ``'--label'``；直接用 ``param.name``
+	会退化成小写的内部名（``name2`` / ``label``）。
+	"""
+	hint = exc.param_hint
+	if hint is None and exc.param is not None:
+		hint = exc.param.get_error_hint(exc.ctx) if exc.ctx is not None else exc.param.human_readable_name
+	if isinstance(hint, (list, tuple)):
+		hint = " / ".join(hint)
+	return str(hint or "").strip().strip("'\"")
+
+
 def _missing_parameter_error(exc: click.ClickException) -> tuple[str, str, dict[str, Any]] | None:
 	"""把 ``Missing option '--label'.`` 换成点明命令与参数的中文消息。
 
@@ -131,14 +145,7 @@ def _missing_parameter_error(exc: click.ClickException) -> tuple[str, str, dict[
 	path = _usage_path(exc)
 	if path is None:
 		return None
-	hint = exc.param_hint
-	if hint is None and exc.param is not None:
-		# 与 Click 自己的英文消息取同一个展示名：位置参数是 metavar（NAME2），
-		# 选项是 ``'--label'``。直接用 param.name 会得到小写的内部名。
-		hint = exc.param.get_error_hint(exc.ctx) if exc.ctx is not None else exc.param.human_readable_name
-	if isinstance(hint, (list, tuple)):
-		hint = " / ".join(hint)
-	hint = str(hint or "").strip().strip("'\"")
+	hint = _parameter_display_name(exc)
 	kind = "选项" if isinstance(exc.param, click.Option) else "参数"
 	shown = f" '{hint}'" if hint else ""
 	return (
@@ -166,6 +173,67 @@ def _unexpected_extra_argument_error(exc: click.ClickException) -> tuple[str, st
 		f"去掉多余的参数后重试；用 {path} --help 查看用法",
 		{"next_actions": [f"{path} --help"]},
 	)
+
+
+_RANGE_INVALID_RE = re.compile(r"^(.+) is not in the range (.+)\.$")
+_CHOICE_INVALID_RE = re.compile(r"^(.+) is not one of (.+)\.$")
+_TYPE_INVALID_RE = re.compile(r"^(.+) is not a valid (.+)\.$")
+
+
+def _invalid_value_error(exc: click.ClickException) -> tuple[str, str, dict[str, Any]] | None:
+	"""把 Click 自带校验（范围 / 枚举 / 数值转换）的英文正文换成中文。
+
+	``boss search golang --page 0`` 回 ``Invalid value for '--page': 0 is not in
+	the range x>=1.``，``boss export golang --format ""`` 回 ``'' is not one of
+	'html', 'csv', 'json'.``，``boss hr reply u1 hi`` 回 ``'u1' is not a valid
+	integer.``：错误码是对的，但正文是英文、``recovery_action`` 只有「修正参数」、
+	``hints`` 为 null。这里按消息里的取值与范围 / 可选值重排成中文，正文格式不
+	认识（例如已本地化）时保持原样。
+	"""
+	if not isinstance(exc, click.BadParameter) or _has_cjk(exc.message):
+		return None
+	path = _usage_path(exc)
+	if path is None:
+		return None
+	hint = _parameter_display_name(exc)
+	label = f"{hint}" if hint else "参数"
+	raw = str(exc.message)
+	matched = _RANGE_INVALID_RE.match(raw)
+	if matched is not None:
+		message = f"{path} 的 {label} 取值无效：{matched.group(1)} 不在范围 {matched.group(2)} 内"
+	elif (matched := _CHOICE_INVALID_RE.match(raw)) is not None:
+		message = f"{path} 的 {label} 取值无效：{matched.group(1)} 不在可选值 {matched.group(2)} 中"
+	else:
+		matched = _TYPE_INVALID_RE.match(raw)
+		if matched is None:
+			return None
+		kind = "整数" if "integer" in matched.group(2) else "数字"
+		message = f"{path} 的 {label} 取值无效：{matched.group(1)} 不是{kind}"
+	return (
+		message,
+		f"用 {path} --help 查看参数说明",
+		{"next_actions": [f"{path} --help"]},
+	)
+
+
+def _usage_error_detail(exc: click.ClickException, ctx: click.Context | None) -> tuple[str, str, dict[str, Any]] | None:
+	"""按异常类型给用法错误配中文说明；不认识时返回 ``None``，保留 Click 原文。"""
+	if type(exc).__name__ == "NoArgsIsHelpError":
+		# NoArgsIsHelpError 在 Click 8.2 才出现，依赖声明是 click>=8.0：
+		# 按类名判断，避免为它把最低版本抬上去。
+		missing = _missing_subcommand_error(ctx)
+		if missing is not None:
+			return missing
+	for converter in (
+		_unknown_subcommand_error,
+		_missing_parameter_error,
+		_unexpected_extra_argument_error,
+		_invalid_value_error,
+	):
+		detail = converter(exc)
+		if detail is not None:
+			return detail
+	return None
 
 
 def _misplaced_global_option(group: click.Group, exc: click.ClickException) -> tuple[str, str] | None:
@@ -364,21 +432,9 @@ class BossCliGroup(click.Group):
 			message = _click_error_message(exc)
 			recovery_action = "修正参数"
 			hints = None
-			missing = _missing_subcommand_error(ctx) if type(exc).__name__ == "NoArgsIsHelpError" else None
-			if missing is not None:
-				message, recovery_action, hints = missing
-			else:
-				unknown = _unknown_subcommand_error(exc)
-				if unknown is not None:
-					message, recovery_action, hints = unknown
-				else:
-					missing_param = _missing_parameter_error(exc)
-					if missing_param is not None:
-						message, recovery_action, hints = missing_param
-					else:
-						extra_args = _unexpected_extra_argument_error(exc)
-						if extra_args is not None:
-							message, recovery_action, hints = extra_args
+			detail = _usage_error_detail(exc, ctx)
+			if detail is not None:
+				message, recovery_action, hints = detail
 			misplaced = _misplaced_global_option(self, exc)
 			if misplaced is not None:
 				message, recovery_action = misplaced
