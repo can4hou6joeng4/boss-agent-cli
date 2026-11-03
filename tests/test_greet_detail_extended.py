@@ -194,6 +194,21 @@ def test_batch_greet_dry_run(tmp_path):
 	assert code == 0
 	assert parsed["data"]["dry_run"] is True
 	assert parsed["data"]["count"] == 2
+	# 预览完不是终点：要给出同参数、只去掉 --dry-run 的真实执行命令。
+	assert parsed["hints"]["next_actions"] == ["boss batch-greet python --count 10"]
+	assert parsed["hints"]["operator_actions"]
+
+
+def test_batch_greet_dry_run_rerun_keeps_filters(tmp_path):
+	"""重建的真实执行命令要保留本次筛选条件；关键词含空格时要能安全粘贴。"""
+	code, parsed = _invoke_batch_greet(
+		"batch-greet", "后端 开发", "--city", "北京", "--job-type", "实习", "--count", "3",
+		"--dry-run", tmp_path=tmp_path,
+	)
+	assert code == 0
+	assert parsed["hints"]["next_actions"] == [
+		"boss batch-greet '后端 开发' --city 北京 --job-type 实习 --count 3"
+	]
 
 
 def test_batch_greet_internship_dry_run_rejects_unverified_types(tmp_path):

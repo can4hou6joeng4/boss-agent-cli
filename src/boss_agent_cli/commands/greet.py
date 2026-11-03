@@ -143,6 +143,36 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 			)
 
 
+def _shell_argument(value: str) -> str:
+	# 不用 shlex.join：它按 ASCII 安全字符集判断，会把中文城市名也包成引号。
+	if not any(ch.isspace() for ch in value):
+		return value
+	return "'" + value.replace("'", "'\\''") + "'"
+
+
+def _batch_greet_dry_run_rerun(ctx: click.Context, query: str) -> str:
+	"""dry-run 之后真正要执行的那条命令：与本次调用同参数，只去掉 --dry-run。"""
+	params = ctx.params or {}
+	argv = boss_command_for_ctx(ctx, "batch-greet").split(" ") + [query]
+	for flag, key in (
+		("--city", "city"),
+		("--salary", "salary"),
+		("--experience", "experience"),
+		("--education", "education"),
+		("--industry", "industry"),
+		("--scale", "scale"),
+		("--stage", "stage"),
+		("--job-type", "job_type"),
+	):
+		value = params.get(key)
+		if value:
+			argv.extend([flag, str(value)])
+	count = params.get("count")
+	if count is not None:
+		argv.extend(["--count", str(count)])
+	return " ".join(_shell_argument(part) for part in argv)
+
+
 @click.command("batch-greet")
 @click.argument("query")
 @click.option("--city", default=None, help="城市名称")
@@ -235,6 +265,8 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 
 			if dry_run:
 				items = [item.to_dict() for item in candidates]
+				# dry-run 的意义是「先看候选、再决定发不发」；不给如何去重的命令，
+				# Agent 预览完 30 个候选人就断了，不知道去掉 --dry-run 就能真发。
 				handle_output(
 					ctx, "batch-greet", {
 						"dry_run": True,
@@ -242,6 +274,10 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 						"count": len(items),
 					},
 					render=lambda d: render_batch_operation_summary(d, title="batch-greet"),
+					hints={
+						"next_actions": [_batch_greet_dry_run_rerun(ctx, query)],
+						"operator_actions": ["确认候选名单后去掉 --dry-run 重新执行，才会真实发出招呼"],
+					},
 				)
 				return
 
@@ -392,4 +428,9 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 			handle_output(
 				ctx, "batch-greet", data,
 				render=lambda d: render_batch_operation_summary(d, title="batch-greet"),
+				# 招呼已经发出，下一步是跟进会话；`me` 没有 greet 分区，不能提示去那里看。
+				hints={
+					"next_actions": [boss_command_for_ctx(ctx, "chat")],
+					"operator_actions": ["到 BOSS 直聘会话列表跟进已打招呼的招聘者"],
+				},
 			)

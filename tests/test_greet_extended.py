@@ -122,6 +122,8 @@ def test_batch_greet_success_all(mock_cache_cls, mock_auth_cls, mock_client_cls,
 	# 应调用 2 次 greet + 2 次 record_greet
 	assert mock_client.greet.call_count == 2
 	assert mock_cache.record_greet.call_count == 2
+	# 招呼发完的下一步是跟进会话（`me` 没有 greet 分区）。
+	assert parsed["hints"]["next_actions"] == ["boss chat"]
 
 
 @patch("boss_agent_cli.commands.greet.time")
