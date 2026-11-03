@@ -68,6 +68,34 @@ def test_import_local_model_reports_corrupt_registry(tmp_path):
 	assert not (tmp_path / "models" / "qwen-local").exists()
 
 
+@pytest.mark.parametrize("model", ["..", ".", "---", ""])
+def test_import_local_model_rejects_dot_only_model_names(tmp_path, model):
+	"""`.` 是允许字符，所以只由点组成的模型名会指回 models/ 的上级目录。"""
+	source_dir = tmp_path / "artifact"
+	source_dir.mkdir()
+	(source_dir / "w.bin").write_bytes(b"weights")
+	data_dir = tmp_path / "data"
+	# 数据目录根上放一个同名目录：`--model ..` 会把它当成目标并 rmtree 掉。
+	victim = data_dir / "artifact"
+	victim.mkdir(parents=True)
+	(victim / "important.txt").write_text("keep me", encoding="utf-8")
+
+	with pytest.raises(LocalModelManifestError) as excinfo:
+		import_local_model(data_dir, source_dir, model)
+
+	assert excinfo.value.code == "INVALID_PARAM"
+	assert victim.joinpath("important.txt").read_text(encoding="utf-8") == "keep me"
+	assert not model_registry_path(data_dir).exists()
+
+
+def test_import_local_model_keeps_dots_inside_the_name(tmp_path):
+	"""正常带点的模型名（qwen3.5）不受影响，仍折成 models/ 下的单层目录。"""
+	source = _make_model_source(tmp_path)
+	imported = import_local_model(tmp_path, source, "qwen3.5")
+
+	assert imported.path == str(tmp_path / "models" / "qwen3.5" / "model.bin")
+
+
 def test_import_local_model_writes_registry_without_leftover_temp(tmp_path):
 	source = _make_model_source(tmp_path)
 	import_local_model(tmp_path, source, "qwen-local")
@@ -94,6 +122,23 @@ def test_local_status_survives_corrupt_registry(tmp_path, monkeypatch):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	assert parsed["data"]["imported_models"] == []
+
+
+def test_local_import_rejects_dot_dot_model_name(tmp_path, monkeypatch):
+	"""`--model ..` 不能把源目录写到数据目录根，更不能删掉那里的同名目录。"""
+	source_dir = tmp_path / "src" / "artifact"
+	source_dir.mkdir(parents=True)
+	(source_dir / "w.bin").write_bytes(b"weights")
+	victim = tmp_path / "artifact"
+	victim.mkdir()
+	(victim / "session.enc").write_text("keep me", encoding="utf-8")
+
+	result = _invoke(tmp_path, "import", "--path", str(source_dir), "--model", "..", monkeypatch=monkeypatch)
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert (victim / "session.enc").read_text(encoding="utf-8") == "keep me"
 
 
 def test_local_import_reports_registry_error_instead_of_traceback(tmp_path, monkeypatch):
