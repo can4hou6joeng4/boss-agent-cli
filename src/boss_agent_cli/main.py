@@ -408,7 +408,7 @@ class BossCliGroup(click.Group):
 	type=click.Choice(ROLES),
 	help="角色模式：candidate（求职者，默认）/ recruiter（招聘者）",
 )
-@click.option("--log-level", default=None, type=click.Choice(LOG_LEVELS))
+@click.option("--log-level", default=None, type=click.Choice(LOG_LEVELS), help="运行日志级别（全局选项，日志只写 stderr）；省略时用默认级别")
 @click.option(
 	"--json/--no-json",
 	"json_output",

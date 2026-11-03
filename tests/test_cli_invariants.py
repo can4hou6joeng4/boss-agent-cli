@@ -327,3 +327,33 @@ def test_every_command_has_help_text() -> None:
 	但 CLI 帮助不该只对读 schema 的调用方可见）。
 	"""
 	assert _leaf_commands_without_help() == []
+
+
+def _public_options_without_help() -> list[str]:
+	"""收集没有任何 help 文本的公开（非 hidden）选项。"""
+	import click
+
+	def walk(command: click.Command, path: tuple[str, ...]) -> list[str]:
+		found: list[str] = []
+		if isinstance(command, click.Group):
+			for name, sub in command.commands.items():
+				found.extend(walk(sub, (*path, name)))
+		for param in command.params:
+			if not isinstance(param, click.Option) or param.hidden:
+				continue
+			# is_flag 的布尔开关在 Click 8 里同样走 help；空的就说明没写。
+			if not str(param.help or "").strip():
+				found.append(f"{' '.join(path)} {param.opts[0] if param.opts else param.name}")
+		return found
+
+	return walk(cli, ())
+
+
+def test_every_public_option_has_help_text() -> None:
+	"""每个公开选项都要有说明，否则 ``--help`` 里只剩一个裸开关名。
+
+	``--hook-profile`` 曾只列出 ``[screenshot-full|none]`` 而不说什么时候用、
+	和 ``--hook-dir`` 什么关系；``ai local *`` 的 ``--runtime`` / ``--model``
+	同样没有说明。用户和 Agent 都只能靠猜，猜错就落到 INVALID_PARAM 上。
+	"""
+	assert _public_options_without_help() == []

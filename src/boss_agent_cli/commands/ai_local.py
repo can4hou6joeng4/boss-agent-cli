@@ -89,9 +89,9 @@ def local_status_cmd(ctx: click.Context) -> None:
 
 
 @ai_local_group.command("configure")
-@click.option("--runtime", required=True, type=click.Choice(["ollama", "vllm"]))
-@click.option("--model", required=True)
-@click.option("--base-url", default=None)
+@click.option("--runtime", required=True, type=click.Choice(["ollama", "vllm"]), help="本地运行时")
+@click.option("--model", required=True, help="本地模型名称")
+@click.option("--base-url", default=None, help="本地服务基础地址；省略时按 runtime 取默认值")
 @click.pass_context
 def local_configure_cmd(ctx: click.Context, runtime: str, model: str, base_url: str | None) -> None:
 	"""配置本地 OpenAI-compatible 模型服务。"""
@@ -116,8 +116,8 @@ def local_configure_cmd(ctx: click.Context, runtime: str, model: str, base_url: 
 
 
 @ai_local_group.command("pull")
-@click.option("--model", required=True)
-@click.option("--confirm-download", is_flag=True, default=False)
+@click.option("--model", required=True, help="要下载的模型名称")
+@click.option("--confirm-download", is_flag=True, default=False, help="确认下载并接受模型体积与来源")
 @click.pass_context
 def local_pull_cmd(ctx: click.Context, model: str, confirm_download: bool) -> None:
 	"""通过 Ollama 下载模型权重。"""
@@ -169,8 +169,8 @@ def local_pull_cmd(ctx: click.Context, model: str, confirm_download: bool) -> No
 
 
 @ai_local_group.command("import")
-@click.option("--path", "source_path", required=True, type=click.Path(exists=True, path_type=Path))
-@click.option("--model", required=True)
+@click.option("--path", "source_path", required=True, type=click.Path(exists=True, path_type=Path), help="本地模型文件或目录路径")
+@click.option("--model", required=True, help="导入后登记的模型名称")
 @click.pass_context
 def local_import_cmd(ctx: click.Context, source_path: Path, model: str) -> None:
 	"""导入离线模型文件或目录到本地数据目录。"""
