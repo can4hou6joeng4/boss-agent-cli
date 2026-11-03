@@ -70,6 +70,37 @@ def test_preset_add_list_remove(tmp_path):
 	assert remove_parsed["data"]["removed"] is True
 
 
+def test_preset_add_rejects_unknown_filters(tmp_path):
+	"""未知薪资 / 经验 / 学历在保存时就拒绝，不能存下一条之后每次 search 都失败的预设。"""
+	runner = CliRunner()
+	for option, value in (("--salary", "天价"), ("--experience", "十年"), ("--education", "幼儿园")):
+		result = runner.invoke(
+			cli,
+			["--data-dir", str(tmp_path), "--json", "preset", "add", "bad", "golang", option, value],
+		)
+		assert result.exit_code == 1, result.output
+		parsed = json.loads(result.output)
+		assert parsed["error"]["code"] == "INVALID_PARAM"
+
+	listed = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "list"]).output)
+	assert listed["data"] == []
+
+
+def test_search_with_invalid_preset_names_the_preset(tmp_path):
+	"""旧版本存下的非法预设：filter 校验失败时要点名是哪条预设，用户才知道删哪条。"""
+	runner = CliRunner()
+	runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "add", "legacy", "golang"])
+	_break_params(tmp_path, "legacy", json.dumps({"query": "golang", "salary": "天价"}))
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "search", "--preset", "legacy"])
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "来自 preset 'legacy'" in parsed["error"]["message"]
+	assert "boss preset remove legacy" in parsed["error"]["message"]
+
+
 @patch("boss_agent_cli.commands.search.get_platform_instance")
 @patch("boss_agent_cli.commands.search.AuthManager")
 @patch("boss_agent_cli.commands.search.CacheStore")
