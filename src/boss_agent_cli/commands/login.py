@@ -9,6 +9,44 @@ from boss_agent_cli.display import boss_command_for_ctx
 from boss_agent_cli.output import emit_error, emit_success
 
 
+def _reject_conflicting_options(
+	ctx: click.Context, *, cookie_source: str | None, cdp: bool, force: bool, curl_file: TextIO | None,
+) -> None:
+	"""选项互斥是用法错误，必须在使用任何登录链路前判定。
+
+	原来这两条检查在 ``try`` 里抛 ``ValueError``，而 ``except`` 对带 ``--curl-file``
+	的调用统一回「cURL 登录态导入失败、可重试」：真正要改的 ``--cdp`` / ``--force``
+	被藏起来，Agent 还会拿同一组选项重试。
+	"""
+	login_path = boss_command_for_ctx(ctx, "login")
+	curl_conflicts = [
+		name for name, enabled in (
+			("--cookie-source", cookie_source is not None),
+			("--cdp", cdp),
+			("--force", force),
+		) if enabled
+	]
+	if curl_file is not None and curl_conflicts:
+		joined = "、".join(curl_conflicts)
+		emit_error(
+			"login",
+			code="INVALID_PARAM",
+			message=f"--curl-file 不能与 {joined} 同时使用",
+			recoverable=False,
+			recovery_action=f"去掉 {joined} 后重试；用 {login_path} --help 查看可用组合",
+			hints={"next_actions": [f"{login_path} --help"]},
+		)
+	if force and cookie_source is not None:
+		emit_error(
+			"login",
+			code="INVALID_PARAM",
+			message="--force 会跳过本地 Cookie 提取，不能与 --cookie-source 同时使用",
+			recoverable=False,
+			recovery_action=f"去掉 --cookie-source 或 --force 后重试；用 {login_path} --help 查看可用组合",
+			hints={"next_actions": [f"{login_path} --help"]},
+		)
+
+
 @click.command("login")
 @click.option("--timeout", default=120, type=click.IntRange(min=1), help="扫码登录超时时间（秒）")
 @click.option("--cookie-source", default=None, help="指定浏览器提取 Cookie（如 chrome/firefox/edge），不指定则自动检测")
@@ -28,14 +66,11 @@ def login_cmd(
 	platform_name = ctx.obj.get("platform") or "zhipin"
 
 	auth = AuthManager(data_dir, logger=logger, platform=platform_name)
+	_reject_conflicting_options(ctx, cookie_source=cookie_source, cdp=cdp, force=force, curl_file=curl_file)
 	try:
 		if curl_file is not None:
-			if cookie_source is not None or cdp or force:
-				raise ValueError("--curl-file 不能与 --cookie-source、--cdp 或 --force 同时使用")
 			token = auth.import_curl(curl_file.read())
 		else:
-			if force and cookie_source is not None:
-				raise ValueError("--force 会跳过本地 Cookie 提取，不能与 --cookie-source 同时使用")
 			token = auth.login(
 				timeout=timeout,
 				cookie_source=cookie_source,
