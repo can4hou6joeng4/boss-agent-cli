@@ -56,6 +56,15 @@ def login_action_for_ctx(ctx: Any) -> str:
 	return boss_command_for_ctx(ctx, "login")
 
 
+def auth_required_hints(ctx: Any) -> dict[str, list[str]]:
+	"""登录类错误附带的下一步：命令给 Agent 执行，说明给真人扫码。"""
+	login_action = login_action_for_ctx(ctx)
+	return {
+		"next_actions": [login_action],
+		"operator_actions": [f"在终端执行 {login_action}，按提示用 BOSS 直聘 App 扫码完成登录后重试"],
+	}
+
+
 def error_contract_for_code(
 	code: str,
 	*,
@@ -793,6 +802,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					message=f"未登录，请先执行 {login_action}",
 					recoverable=True,
 					recovery_action=login_action,
+					hints=auth_required_hints(ctx),
 				)
 			except TokenRefreshFailed:
 				login_action = login_action_for_ctx(ctx)
@@ -803,6 +813,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					message="Token 刷新失败，请重新登录",
 					recoverable=True,
 					recovery_action=login_action,
+					hints=auth_required_hints(ctx),
 				)
 			except PlatformRiskError as e:
 				recovery_action, hints = risk_error_contract(e.code)

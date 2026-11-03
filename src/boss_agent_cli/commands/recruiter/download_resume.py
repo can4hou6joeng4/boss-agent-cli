@@ -13,11 +13,13 @@ from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_i
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.display import (
+	auth_required_hints,
 	boss_command_for_ctx,
 	error_contract_for_code,
 	handle_auth_errors,
 	handle_error_output,
 	handle_output,
+	login_action_for_ctx,
 	platform_error_contract,
 	risk_error_message,
 )
@@ -65,25 +67,27 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 			handle_error_output(ctx, command, code="INVALID_PARAM", message="无法保存文件，请检查目标目录与写入权限")
 			return
 		except (AuthRequired, RecruiterAuthError):
-			recoverable, recovery_action = error_contract_for_code("AUTH_REQUIRED")
+			recoverable, _ = error_contract_for_code("AUTH_REQUIRED")
 			handle_error_output(
 				ctx,
 				command,
 				code="AUTH_REQUIRED",
 				message="登录态不可用，请重新登录后下载",
 				recoverable=recoverable,
-				recovery_action=recovery_action,
+				recovery_action=login_action_for_ctx(ctx),
+				hints=auth_required_hints(ctx),
 			)
 			return
 		except TokenRefreshFailed:
-			recoverable, recovery_action = error_contract_for_code("TOKEN_REFRESH_FAILED")
+			recoverable, _ = error_contract_for_code("TOKEN_REFRESH_FAILED")
 			handle_error_output(
 				ctx,
 				command,
 				code="TOKEN_REFRESH_FAILED",
 				message="登录态刷新失败，请重新登录后下载",
 				recoverable=recoverable,
-				recovery_action=recovery_action,
+				recovery_action=login_action_for_ctx(ctx),
+				hints=auth_required_hints(ctx),
 			)
 			return
 		except PlatformRiskError as exc:

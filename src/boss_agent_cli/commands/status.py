@@ -8,6 +8,7 @@ from boss_agent_cli.auth.health import assess_auth_health
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import (
+	auth_required_hints,
 	boss_command_for_ctx,
 	handle_auth_errors,
 	handle_error_output,
@@ -38,7 +39,7 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 			code="AUTH_REQUIRED",
 			message=f"未登录，请先执行 {login_action}",
 			recoverable=True, recovery_action=login_action,
-			hints={"auth_health": auth_health.public_summary(), "checks": auth_health.checks_as_dicts()},
+			hints={"auth_health": auth_health.public_summary(), "checks": auth_health.checks_as_dicts(), **auth_required_hints(ctx)},
 		)
 		return
 
