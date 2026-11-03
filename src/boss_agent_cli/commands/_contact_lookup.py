@@ -50,6 +50,18 @@ def resolve_friend_or_emit(
 	"""
 	from boss_agent_cli.display import handle_error_output, handle_not_supported, handle_platform_error_output
 
+	# 空标识不可能命中任何联系人：继续下去会先把整个沟通列表翻一遍再报
+	# CONTACT_NOT_FOUND，既浪费一次受限流的请求，也让真正的原因（argv 少了
+	# 参数）看起来像「联系人不在这份列表里」。
+	if not str(identifier or "").strip():
+		handle_error_output(
+			ctx,
+			command,
+			code="INVALID_PARAM",
+			message="联系人标识不能为空；先用 boss chat 取到 uid 或 security_id",
+			hints={"next_actions": ["boss chat"]},
+		)
+		return None
 	try:
 		friend_item, friends_error = find_friend(platform, identifier)
 	except NotImplementedError as exc:
