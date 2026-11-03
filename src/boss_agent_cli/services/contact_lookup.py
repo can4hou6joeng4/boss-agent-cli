@@ -44,11 +44,15 @@ def find_friend(
 				return item, None
 
 		# securityId 会在请求间轮换，不能用于重复页判定；有 uid 时必须优先用 uid。
-		signature = tuple(str(item.get("uid") or item.get("securityId") or "") for item in dict_items)
-		if signature in seen_signatures:
-			terminated = True
-			break
-		seen_signatures.add(signature)
+		# 签名全为空时无法判断是否重复页，继续翻页，避免把缺字段的新页面
+		# 当成重复页提前结束（与 services/friend_list_pages 的聚合守卫一致）。
+		identities = [str(item.get("uid") or item.get("securityId") or "") for item in dict_items]
+		if any(identities):
+			signature = tuple(identities)
+			if signature in seen_signatures:
+				terminated = True
+				break
+			seen_signatures.add(signature)
 
 		has_more = platform_data.get("hasMore")
 		if not items or has_more is False:
