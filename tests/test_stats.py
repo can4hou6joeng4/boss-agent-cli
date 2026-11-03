@@ -117,6 +117,20 @@ def test_stats_window_days_option(tmp_path):
 	}
 
 
+def test_stats_rejects_overflowing_days(tmp_path):
+	"""无界天数值要变成 INVALID_PARAM 信封，而不是 float 转换的 traceback。
+
+	``since = time.time() - days * 86400`` 会把天数转成 float，10**400 这类整数
+	直接抛 OverflowError，stdout 连信封都没有。
+	"""
+	_seed_cache(tmp_path)
+	result = _invoke(tmp_path, "--days", "9" * 400)
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["data"] is None
+
+
 def test_stats_zero_greet_no_divide_by_zero(tmp_path):
 	"""无打招呼记录时转化率为 0，不抛异常。"""
 	_seed_cache(tmp_path, greet=0, applied=0, shortlist=0)

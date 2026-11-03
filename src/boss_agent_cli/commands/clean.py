@@ -26,8 +26,9 @@ from boss_agent_cli.display import handle_output, render_next_steps
 )
 @click.option("--privacy", is_flag=True, default=False, help="清理本地敏感数据（登录会话、简历、聊天快照和导出文件）")
 # 负数会让 cutoff 落到未来（time.time() - days * 86400），目录里所有文件都算「过期」，
-# 一次 `clean --days -1` 就把聊天快照和导出全部删掉。
-@click.option("--days", default=30, type=click.IntRange(0), help="清理超过指定天数的快照和导出文件")
+# 一次 `clean --days -1` 就把聊天快照和导出全部删掉。上限 100 年则挡住整数溢出：
+# 天数要转成 float，10**400 这类无界整数会抛 OverflowError 而不是给出信封。
+@click.option("--days", default=30, type=click.IntRange(0, 36500), help="清理超过指定天数的快照和导出文件")
 @click.option(
 	"--risk-lock",
 	"risk_lock",

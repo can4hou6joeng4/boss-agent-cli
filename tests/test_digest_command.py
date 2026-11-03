@@ -131,6 +131,15 @@ def test_digest_is_exposed_in_schema():
 	assert "digest" in parsed["data"]["commands"]
 
 
+def test_digest_rejects_overflowing_days_stale():
+	"""`--days-stale` 是无界整数时会在时间运算里溢出，必须按参数错误提前拒绝。"""
+	result = CliRunner().invoke(cli, ["digest", "--days-stale", "9" * 400])
+	assert result.exit_code == 1
+	payload = json.loads(result.output)
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "INVALID_PARAM"
+
+
 # ── --format md 支持 ────────────────────────────────────────
 
 

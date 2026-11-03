@@ -1030,6 +1030,16 @@ def test_chat_days_filter(mock_auth_cls, mock_client_cls):
 	assert parsed["data"][0]["brand_name"] == "阿里"
 
 
+def test_chat_rejects_overflowing_days():
+	"""天数值大到 timedelta / float 转换溢出时，参数错误在 fetch 前就返回信封。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["chat", "--days", "9" * 400])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+
+
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_handles_null_last_message_info(mock_auth_cls, mock_client_cls):

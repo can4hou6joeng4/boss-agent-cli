@@ -157,6 +157,20 @@ def test_clean_rejects_negative_days_without_deleting(tmp_path):
 	assert export.exists()
 
 
+def test_clean_rejects_overflowing_days(tmp_path):
+	"""天数值大到把 `time.time() - days * 86400` 溢出时，也要给 INVALID_PARAM 信封。"""
+	snap_dir = tmp_path / "chat-history"
+	snap_dir.mkdir(parents=True)
+	snapshot = snap_dir / "snapshot.json"
+	snapshot.write_text("[]", encoding="utf-8")
+
+	code, parsed = _invoke("clean", "--days", "9" * 400, tmp_path=tmp_path)
+	assert code == 1
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert snapshot.exists()
+
+
 # ── JSON 信封 ──────────────────────────────────────────────────────
 
 
