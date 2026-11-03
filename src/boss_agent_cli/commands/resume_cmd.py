@@ -375,7 +375,30 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 @click.pass_context
 def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 	"""导入 JSON 简历"""
+	# 空路径会被 click.Path() 解析成当前目录（Path("") == "."），既存在又是目录，
+	# 于是绕过「文件不存在」检查，在打开文件时抛 IsADirectoryError，被顶层兜成
+	# LOCAL_IO_ERROR「本地文件读写失败」——参数少写一个值看起来像磁盘或权限问题。
+	if not str(file_path).strip():
+		handle_error_output(
+			ctx, "resume",
+			code="INVALID_PARAM",
+			message="文件路径不能为空",
+			recovery_action="boss resume import <简历JSON路径>",
+			hints={"next_actions": ["boss resume import <file>", "boss resume list"]},
+		)
+		ctx.exit(1)
+		return
 	path = Path(file_path)
+	if path.is_dir():
+		handle_error_output(
+			ctx, "resume",
+			code="INVALID_PARAM",
+			message=f"文件 '{file_path}' 是目录，不是简历 JSON 文件",
+			recovery_action="boss resume import <简历JSON路径>",
+			hints={"next_actions": ["boss resume import <file>", "boss resume list"]},
+		)
+		ctx.exit(1)
+		return
 	if not path.exists():
 		handle_error_output(
 			ctx, "resume",

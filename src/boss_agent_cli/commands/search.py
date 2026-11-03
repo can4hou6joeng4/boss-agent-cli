@@ -171,6 +171,29 @@ def search_cmd(
 	sort_mode: str,
 ) -> None:
 	"""按关键词和筛选条件搜索职位列表"""
+	# 传了 flag 但值是空串 / 纯空白时，下面的「未提供 query」会回
+	# 「请传入搜索关键词、--preset 或 --url」——用户明明传了 --preset，读到的
+	# 却是「你没传」。先点明是哪个选项的值空了。
+	if preset is not None and not preset.strip():
+		handle_error_output(
+			ctx,
+			"search",
+			code="INVALID_PARAM",
+			message="--preset 的值不能为空",
+			recovery_action="用 boss preset list 查看已保存的预设，或改用搜索关键词",
+			hints={"next_actions": ["boss preset list"]},
+		)
+		return
+	if search_url is not None and not search_url.strip():
+		handle_error_output(
+			ctx,
+			"search",
+			code="INVALID_PARAM",
+			message="--url 的值不能为空",
+			recovery_action="boss search <关键词> 或 boss search --url <搜索页URL>",
+			hints={"next_actions": ["boss search <关键词>"]},
+		)
+		return
 	# 纯空白的 query 与空串等价：`boss search " "` 能绕过下面的「未提供 query」
 	# 检查，进入一次没有关键词的搜索——既消耗请求预算，也把账号放在更宽的风控面里。
 	if query is not None and not query.strip():

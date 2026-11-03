@@ -434,6 +434,28 @@ def test_import_file_not_found(tmp_path):
 	assert parsed["ok"] is False
 
 
+def test_import_rejects_blank_path(tmp_path):
+	"""空路径会被 Path("") 解析成当前目录，原来报成 LOCAL_IO_ERROR「本地文件读写失败」。
+
+	真正的原因是 argv 少传了一个值，却让人去查磁盘和权限。
+	"""
+	result = _invoke(CliRunner(), tmp_path, ["import", ""])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "INVALID_PARAM")
+	assert parsed["error"]["message"] == "文件路径不能为空"
+	assert parsed["hints"]["next_actions"]
+
+
+def test_import_rejects_directory_path(tmp_path):
+	"""目录同样能通过 exists() 检查，随后在打开文件时抛 IsADirectoryError。"""
+	result = _invoke(CliRunner(), tmp_path, ["import", str(tmp_path)])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "INVALID_PARAM")
+	assert "是目录" in parsed["error"]["message"]
+
+
 def test_import_non_utf8_file_returns_invalid_param(tmp_path):
 	"""GBK 保存的 JSON、误选的 PDF/图片都会读成非 UTF-8：要给信封和转码指引，而不是 traceback。"""
 	bad_file = tmp_path / "gbk.json"
