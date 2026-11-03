@@ -449,10 +449,12 @@ def test_local_and_ai_actions_return_structured_recovery(tmp_path):
 
 	added = DEFAULT_ACTIONS["candidate_watch"](
 		context,
-		{"action": "add", "name": "daily", "query": "Python", "welfare": ["双休"]},
+		{"action": "add", "name": "daily", "query": "Python", "welfare": ["双休", "五险一金"]},
 		{},
 	)
-	assert added.data["params"]["welfare"] == ["双休"]
+	# 存储格式与 CLI `watch add --welfare` 一致：逗号分隔字符串。写成数组会让
+	# 之后 `boss watch run` 在 `.split(",")` 上抛 AttributeError。
+	assert added.data["params"]["welfare"] == "双休,五险一金"
 	listed = DEFAULT_ACTIONS["candidate_watch"](context, {"action": "list"}, {})
 	assert listed.data["items"][0]["name"] == "daily"
 
@@ -461,6 +463,26 @@ def test_local_and_ai_actions_return_structured_recovery(tmp_path):
 		DEFAULT_ACTIONS["ai_assist"](context, {"resume": "default", "prompt": "优化"}, {})
 	assert exc_info.value.code == "AI_NOT_CONFIGURED"
 	assert exc_info.value.recoverable is True
+
+
+def test_candidate_watch_stores_string_params(tmp_path):
+	"""wizard 写入的 watch 参数必须是字符串，坏类型在写入时就拒绝。"""
+	context = _action_context(tmp_path)
+	DEFAULT_ACTIONS["candidate_watch"](
+		context, {"action": "add", "name": "daily", "query": "Python", "welfare": ["双休"]}, {}
+	)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		record = cache.get_saved_search("daily")
+	assert record is not None
+	assert record["params"]["welfare"] == "双休"
+	assert all(isinstance(v, (str, type(None))) for v in record["params"].values())
+
+	with pytest.raises(WorkflowActionError) as exc_info:
+		DEFAULT_ACTIONS["candidate_watch"](
+			context, {"action": "add", "name": "bad", "query": ["Python"]}, {}
+		)
+	assert exc_info.value.code == "INVALID_PARAM"
+	assert "query" in str(exc_info.value)
 
 
 def test_candidate_watch_corrupt_params_reports_recovery(tmp_path):

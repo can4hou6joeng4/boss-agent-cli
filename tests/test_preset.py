@@ -7,9 +7,9 @@ from click.testing import CliRunner
 from boss_agent_cli.main import cli
 
 
-def _break_params(tmp_path, name):
+def _break_params(tmp_path, name, payload="{not json"):
 	conn = sqlite3.connect(tmp_path / "cache" / "boss_agent.db")
-	conn.execute("UPDATE saved_searches SET params = ? WHERE name = ?", ("{not json", name))
+	conn.execute("UPDATE saved_searches SET params = ? WHERE name = ?", (payload, name))
 	conn.commit()
 	conn.close()
 
@@ -131,6 +131,21 @@ def test_preset_list_reports_corrupt_params(tmp_path):
 	assert "good" in names and "broken" not in names
 	assert parsed["hints"]["corrupt"] == ["broken"]
 	assert "boss preset remove" in parsed["hints"]["operator_actions"][0]
+
+
+def test_search_with_type_drifted_preset_reports_envelope(tmp_path):
+	"""合法 JSON 但值类型漂移同样按预设损坏处理，而不是把 AttributeError 兜成内部错误。"""
+	runner = CliRunner()
+	runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "add", "drifted", "python"])
+	_break_params(tmp_path, "drifted", '{"query": {"a": 1}}')
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "search", "--preset", "drifted"])
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "SAVED_SEARCH_INVALID"
+	assert parsed["error"]["recoverable"] is True
+	assert "query" in parsed["error"]["message"]
 
 
 def test_search_with_corrupt_preset_reports_envelope(tmp_path):

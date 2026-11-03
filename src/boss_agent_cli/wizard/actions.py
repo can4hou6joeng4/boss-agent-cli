@@ -765,23 +765,34 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 			return StepResult(data)
 		name = str(_required(inputs, "name"))
 		if action == "add":
-			params = {
-				key: inputs.get(key)
-				for key in (
-					"query",
-					"city",
-					"salary",
-					"experience",
-					"education",
-					"industry",
-					"scale",
-					"stage",
-					"job_type",
-					"welfare",
-				)
-			}
+			params: dict[str, Any] = {}
+			for key in (
+				"query",
+				"city",
+				"salary",
+				"experience",
+				"education",
+				"industry",
+				"scale",
+				"stage",
+				"job_type",
+				"welfare",
+			):
+				value = inputs.get(key)
+				if key == "welfare" and isinstance(value, (list, tuple)):
+					# 存储格式与 CLI `watch add --welfare` 一致（逗号分隔字符串）：
+					# 直接写数组会让后续 `watch run` 在 `.split(",")` 上抛 AttributeError。
+					value = ",".join(str(item).strip() for item in value if str(item).strip())
+				elif value is not None and not isinstance(value, str):
+					raise WorkflowActionError(
+						"INVALID_PARAM", f"watch 参数 {key} 必须是字符串（收到 {type(value).__name__}）"
+					)
+				params[key] = value
 			if inputs.get("active"):
-				params["active"] = inputs.get("active")
+				try:
+					params["active"] = resolve_active_level(str(inputs.get("active")))
+				except ValueError as exc:
+					raise WorkflowActionError("INVALID_PARAM", str(exc)) from exc
 			_required(inputs, "query")
 			cache.save_saved_search(name, params)
 			return StepResult({"action": "add", "name": name, "params": params})

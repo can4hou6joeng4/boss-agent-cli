@@ -26,6 +26,25 @@ class SavedSearchParamsError(ValueError):
 		self.detail = detail
 
 
+# saved_searches.params 的已知键全部是字符串或 null（`active` 也一样）。
+# 合法 JSON 但值类型漂移（数组、数字、对象）时，后续 `.split()` / `.strip()`
+# 会抛 AttributeError，被顶层兜成 INTERNAL_ERROR；那既不是内部缺陷，也没有
+# 「删掉重建」这条唯一可行的修复路径，必须在读取边界按结构损坏处理。
+_SAVED_SEARCH_STRING_KEYS = (
+	"query",
+	"city",
+	"salary",
+	"experience",
+	"education",
+	"industry",
+	"scale",
+	"stage",
+	"job_type",
+	"welfare",
+	"active",
+)
+
+
 def _decode_saved_params(name: str, raw: Any) -> dict[str, Any]:
 	try:
 		parsed = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
@@ -33,6 +52,17 @@ def _decode_saved_params(name: str, raw: Any) -> dict[str, Any]:
 		raise SavedSearchParamsError(name, str(exc)) from exc
 	if not isinstance(parsed, dict):
 		raise SavedSearchParamsError(name, "顶层必须是 JSON object")
+	for key in _SAVED_SEARCH_STRING_KEYS:
+		value = parsed.get(key)
+		if value is None or isinstance(value, str):
+			continue
+		if key == "welfare" and isinstance(value, (list, tuple)) and all(isinstance(item, str) for item in value):
+			# `boss wizard candidate_watch` 早期版本会把福利条件按数组写进来，
+			# `watch run` 随后在 `.split(",")` 上抛 AttributeError。读的时候按
+			# CLI `--welfare` 的逗号分隔写法归一，旧记录仍然可用。
+			parsed[key] = ",".join(item.strip() for item in value if item and item.strip())
+			continue
+		raise SavedSearchParamsError(name, f"{key} 必须是字符串（收到 {type(value).__name__}）")
 	return cast("dict[str, Any]", parsed)
 
 
