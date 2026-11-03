@@ -130,12 +130,26 @@ def local_pull_cmd(ctx: click.Context, model: str, confirm_download: bool) -> No
 			recoverable=True,
 			recovery_action=f"boss ai local pull --model {model} --confirm-download",
 		)
-	result = subprocess.run(
-		["ollama", "pull", model],
-		check=False,
-		capture_output=True,
-		text=True,
-	)
+	try:
+		result = subprocess.run(
+			["ollama", "pull", model],
+			check=False,
+			capture_output=True,
+			text=True,
+		)
+	except OSError as exc:
+		# 没装 ollama 时 subprocess 抛 FileNotFoundError，顶层 OSError 网兜会把它归成
+		# LOCAL_IO_ERROR（不可恢复、指引去检查目标路径是否可写），而这里已有专门的拉取
+		# 失败契约：按 LOCAL_MODEL_PULL_FAILED 返回，指引装好 Ollama 后再试。
+		handle_error_output(
+			ctx,
+			"ai.local.pull",
+			code="LOCAL_MODEL_PULL_FAILED",
+			message=f"无法启动 ollama：{exc}",
+			recoverable=True,
+			recovery_action="确认已安装 Ollama 且 ollama 在 PATH 中，然后重新执行",
+		)
+		return
 	if result.returncode != 0:
 		handle_error_output(
 			ctx,

@@ -76,6 +76,21 @@ def test_ai_local_pull_runs_ollama_pull_when_confirmed(tmp_path: Path) -> None:
 	assert payload["data"]["status"] == "installed"
 
 
+def test_ai_local_pull_reports_missing_ollama_as_pull_failure(tmp_path: Path) -> None:
+	"""没装 ollama 时应返回 LOCAL_MODEL_PULL_FAILED，而不是顶层网兜的 LOCAL_IO_ERROR。"""
+	runner = CliRunner()
+
+	with patch("boss_agent_cli.commands.ai_local.subprocess.run") as run:
+		run.side_effect = FileNotFoundError(2, "No such file or directory", "ollama")
+		result = _invoke(runner, tmp_path, ["pull", "--model", "qwen3:14b", "--confirm-download"])
+
+	assert result.exit_code == 1
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "LOCAL_MODEL_PULL_FAILED"
+	assert payload["error"]["recoverable"] is True
+	assert "ollama" in payload["error"]["message"]
+
+
 def test_ai_local_import_registers_external_model(tmp_path: Path, monkeypatch) -> None:
 	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
 	source = tmp_path / "source.gguf"
