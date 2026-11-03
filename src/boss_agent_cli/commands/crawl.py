@@ -331,7 +331,7 @@ def configure_cmd(
 @click.option("--city", required=True, help="城市名称或数字城市代码")
 @click.option("--pages", default=5, type=click.IntRange(1), show_default=True, help="严格页数上限")
 @click.option("--with-detail", is_flag=True, default=False, help="串行补全所有职位的 job_card")
-@click.option("--hook-profile", type=click.Choice(_HOOK_CHOICES), default=None)
+@click.option("--hook-profile", type=click.Choice(_HOOK_CHOICES), default=None, help="页面 Hook 配置：none（默认，不注入脚本）/ screenshot-full（注入用户授权脚本，需同时给 --hook-dir）")
 @click.option(
 	"--hook-dir", type=click.Path(path_type=Path), default=None, help="与 screenshot-full 一起显式指定的用户脚本目录"
 )
@@ -379,7 +379,7 @@ def run_cmd(
 @click.option("--city", required=True, help="城市名称或数字城市代码")
 @click.option("--pages", default=5, type=click.IntRange(1), show_default=True, help="严格页数上限")
 @click.option("--with-detail", is_flag=True, default=False, help="串行补全所有职位的 job_card")
-@click.option("--hook-profile", type=click.Choice(_HOOK_CHOICES), default=None)
+@click.option("--hook-profile", type=click.Choice(_HOOK_CHOICES), default=None, help="页面 Hook 配置：none（默认，不注入脚本）/ screenshot-full（注入用户授权脚本，需同时给 --hook-dir）")
 @click.option(
 	"--hook-dir", type=click.Path(path_type=Path), default=None, help="与 screenshot-full 一起显式指定的用户脚本目录"
 )

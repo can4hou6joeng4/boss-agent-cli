@@ -600,7 +600,12 @@ SCHEMA_DATA = {
 					"--city": {"type": "string", "required": True, "description": "城市名称或数字城市代码"},
 					"--pages": {"type": "int", "default": 5, "minimum": 1, "description": "严格正数页数上限"},
 					"--with-detail": {"type": "bool", "default": False, "description": "串行补全所有职位的 job_card"},
-					"--hook-profile": {"type": "string", "default": "none", "enum": ["screenshot-full", "none"]},
+					"--hook-profile": {
+						"type": "string",
+						"default": "none",
+						"enum": ["screenshot-full", "none"],
+						"description": "页面 Hook 配置；none 不注入脚本，screenshot-full 需同时给 --hook-dir",
+					},
 					"--hook-dir": {
 						"type": "string",
 						"default": None,
@@ -663,7 +668,12 @@ SCHEMA_DATA = {
 					"--city": {"type": "string", "required": True, "description": "城市名称或数字城市代码"},
 					"--pages": {"type": "int", "default": 5, "minimum": 1, "description": "严格正数页数上限"},
 					"--with-detail": {"type": "bool", "default": False, "description": "串行补全所有职位的 job_card"},
-					"--hook-profile": {"type": "string", "default": None, "enum": ["screenshot-full", "none"]},
+					"--hook-profile": {
+						"type": "string",
+						"default": None,
+						"enum": ["screenshot-full", "none"],
+						"description": "页面 Hook 配置；none 不注入脚本，screenshot-full 需同时给 --hook-dir",
+					},
 					"--hook-dir": {
 						"type": "string",
 						"default": None,
