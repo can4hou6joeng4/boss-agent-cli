@@ -70,9 +70,9 @@ def test_stats_empty_cache(tmp_path):
 	assert parsed["data"]["window_days"] == 30
 	assert "缓存尚未建立" in parsed["data"]["note"]
 	assert parsed["hints"]["next_actions"] == [
-		"boss search <query> 搜索职位",
-		"boss pipeline 查看候选进度",
-		"boss follow-up 查看需要跟进的联系人",
+		"boss search <query>",
+		"boss pipeline",
+		"boss follow-up",
 	]
 
 
@@ -97,8 +97,8 @@ def test_stats_funnel_counts(tmp_path):
 	assert conv["shortlist_rate"] == 0.2
 	assert conv["apply_rate_window"] == 0.3
 	assert parsed["hints"]["next_actions"] == [
-		"boss pipeline 查看候选进度",
-		"boss follow-up 查看需要跟进的联系人",
+		"boss pipeline",
+		"boss follow-up",
 	]
 
 

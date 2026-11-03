@@ -1,7 +1,7 @@
 import click
 
 from boss_agent_cli.api.endpoints import CITY_CODES
-from boss_agent_cli.display import handle_output, render_string_grid
+from boss_agent_cli.display import boss_command_for_ctx, handle_output, render_string_grid
 
 
 @click.command("cities")
@@ -17,7 +17,7 @@ def cities_cmd(ctx: click.Context) -> None:
 		render=lambda d: render_string_grid(d["cities"], "cities"),
 		hints={
 			"next_actions": [
-				"boss search <query> --city <城市名> — 搜索指定城市的职位",
+				boss_command_for_ctx(ctx, "search <query> --city <城市名>"),
 			],
 		},
 	)

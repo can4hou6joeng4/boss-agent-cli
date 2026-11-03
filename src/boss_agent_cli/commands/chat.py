@@ -160,8 +160,8 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 					f"已导出 {d['count']} 条到 {d['path']}", err=True
 				),
 					hints={"next_actions": [
-						"boss detail <security_id> — 查看职位详情",
-						"boss chatmsg <uid> — 查看消息后继续沟通（uid 见上方输出）",
+						boss_command_for_ctx(ctx, "detail <security_id>"),
+						boss_command_for_ctx(ctx, "chatmsg <uid>"),
 				]},
 			)
 			return
@@ -197,8 +197,8 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			ctx, "chat", friends,
 			render=_render,
 				hints={"next_actions": [
-					"boss detail <security_id> — 查看职位详情",
-					"boss chatmsg <uid> — 查看消息后继续沟通（uid 见上方输出）",
+					boss_command_for_ctx(ctx, "detail <security_id>"),
+					boss_command_for_ctx(ctx, "chatmsg <uid>"),
 			]},
 		)
 

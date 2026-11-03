@@ -73,11 +73,18 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 	result = build_job_from_card(card, security_id=security_id, greeted=greeted, lid=lid)
 	result["index"] = index
 
+	# TTY 的 next 行可以写「A 或 B」，但 hints.next_actions 的每条都必须能直接执行。
 	next_action = (
 		f"{boss_command_for_ctx(ctx, 'apply <security_id> <job_id>')} 或 "
 		f"{boss_command_for_ctx(ctx, 'greet <security_id> <job_id>')}"
 	)
-	hints = {"next_actions": [next_action, "boss search <query>"]}
+	hints = {
+		"next_actions": [
+			boss_command_for_ctx(ctx, "apply <security_id> <job_id>"),
+			boss_command_for_ctx(ctx, "greet <security_id> <job_id>"),
+			boss_command_for_ctx(ctx, "search <query>"),
+		],
+	}
 	handle_output(
 		ctx,
 		"show",

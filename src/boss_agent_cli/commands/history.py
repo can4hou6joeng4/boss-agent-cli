@@ -39,14 +39,14 @@ def history_cmd(ctx: click.Context, page: int) -> None:
 		"total": len(items),
 	}
 	next_actions = [
-		f"使用 {boss_command_for_ctx(ctx, 'detail <security_id>')} 查看职位详情",
-		f"使用 {boss_command_for_ctx(ctx, 'apply <security_id> <job_id>')} 投递，"
-		f"或 {boss_command_for_ctx(ctx, 'greet <security_id> <job_id>')} 沟通",
+		boss_command_for_ctx(ctx, "detail <security_id>"),
+		boss_command_for_ctx(ctx, "apply <security_id> <job_id>"),
+		boss_command_for_ctx(ctx, "greet <security_id> <job_id>"),
 	]
 	# 没有下一页时不能建议 --page N+1：Agent 照着执行只会拿到空页，
 	# 与 TTY 的 hint_next 守卫（hasMore 为假时不显示 more）保持一致。
 	if pagination["has_more"]:
-		next_actions.append(f"使用 {boss_command_for_ctx(ctx, f'history --page {page + 1}')} 查看下一页")
+		next_actions.append(boss_command_for_ctx(ctx, f"history --page {page + 1}"))
 	hints = {"next_actions": next_actions}
 
 	handle_output(

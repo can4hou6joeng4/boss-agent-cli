@@ -12,6 +12,7 @@ from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshF
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.display import (
+	boss_command_for_ctx,
 	error_contract_for_code,
 	handle_auth_errors,
 	handle_error_output,
@@ -162,5 +163,6 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 			ctx,
 			command,
 			{**data, "accepted": True},
-			hints={"next_actions": [f"boss hr chatmsg {friend_id} — 查看后续附件消息；同意不代表附件已下载"]},
+			hints={"next_actions": [boss_command_for_ctx(ctx, f"hr chatmsg {friend_id}")],
+				"operator_actions": ["同意不代表附件已下载，可在该会话里查看后续附件消息"]},
 		)

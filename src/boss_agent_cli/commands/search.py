@@ -387,16 +387,16 @@ def search_cmd(
 			}
 			hints: dict[str, Any] = {
 				"next_actions": [
-					f"使用 {boss_command_for_ctx(ctx, 'detail <security_id>')} 查看职位详情",
-					f"使用 {boss_command_for_ctx(ctx, 'apply <security_id> <job_id>')} 投递，"
-					f"或 {boss_command_for_ctx(ctx, 'greet <security_id> <job_id>')} 沟通",
+					boss_command_for_ctx(ctx, "detail <security_id>"),
+					boss_command_for_ctx(ctx, "apply <security_id> <job_id>"),
+					boss_command_for_ctx(ctx, "greet <security_id> <job_id>"),
 				],
 			}
 			if active_level:
 				hints["active_filter"] = _active_filter_hint(active_level, pipeline_result)
 			if pipeline_result.has_more and not detail_filter:
 				hints["next_actions"].append(
-					f"使用 boss search <query> --page {page + 1} 查看下一页"
+					boss_command_for_ctx(ctx, f"search <query> --page {page + 1}")
 				)
 
 			# 缓存普通搜索结果

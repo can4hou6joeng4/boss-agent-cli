@@ -440,7 +440,7 @@ def _emit_review_missing(ctx: click.Context, command: str, review_id: str) -> No
 		command,
 		code="INVALID_PARAM",
 		message=f"复核项 '{review_id}' 不存在或已处理",
-		hints={"next_actions": ["boss agent review list — 查看待复核项"]},
+		hints={"next_actions": [_agent_review_list_command(ctx)]},
 	)
 	ctx.exit(1)
 
@@ -606,6 +606,12 @@ def _report_payload(report: RunReport) -> dict[str, Any]:
 	payload = asdict(report)
 	payload["mode"] = report.mode.value
 	return payload
+
+
+def _agent_review_list_command(ctx: click.Context) -> str:
+	platform = ctx.obj.get("platform") or "zhipin"
+	prefix = "boss" if platform == "zhipin" else f"boss --platform {platform}"
+	return f"{prefix} --role recruiter agent review list"
 
 
 def _agent_hints(ctx: click.Context) -> dict[str, Any]:

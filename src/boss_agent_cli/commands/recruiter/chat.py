@@ -10,7 +10,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.services.chat_utils import MSG_STATUS_LABELS
-from boss_agent_cli.display import handle_auth_errors, handle_output, handle_platform_error_output
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output
 
 
 _RECRUITER_MSG_STATUS_LABELS = {0: "发送中", **MSG_STATUS_LABELS}
@@ -445,8 +445,8 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 		friend_items = _friend_items(data)
 		summary_hint = _enrich_chat_summaries(platform, friend_items, summary_limit=summary_limit)
 		hints: dict[str, Any] = {"next_actions": [
-			"boss hr resume <geek_id> --job-id <id> --security-id <id> — 查看候选人简历",
-			"boss hr chatmsg <friend_id> — 查看候选人沟通上下文",
+			boss_command_for_ctx(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
+			boss_command_for_ctx(ctx, "hr chatmsg <friend_id>"),
 		]}
 		# 未读总数只读页面内存（uncountTab$），不额外发请求；放在 hints 顶层，拿不到为 null。
 		hints.update(_unread_totals(summary_hint.get("page_snapshot")))
@@ -479,8 +479,8 @@ def recruiter_chatmsg_cmd(ctx: click.Context, friend_id: int, count: int, max_ms
 		handle_output(
 			ctx, "recruiter-chatmsg", data,
 			hints={"next_actions": [
-				f"boss hr reply {friend_id} <message> — 回复候选人消息",
-				"boss hr chat — 返回沟通列表",
+				boss_command_for_ctx(ctx, f"hr reply {friend_id} <message>"),
+				boss_command_for_ctx(ctx, "hr chat"),
 			]},
 		)
 
@@ -546,7 +546,7 @@ def recruiter_last_messages_cmd(
 			ctx, "recruiter-last-messages",
 			output,
 			hints={"next_actions": [
-				"boss hr chatmsg <friend_id> — 查看候选人沟通上下文",
-				"boss hr reply <friend_id> <message> — 回复候选人消息",
+				boss_command_for_ctx(ctx, "hr chatmsg <friend_id>"),
+				boss_command_for_ctx(ctx, "hr reply <friend_id> <message>"),
 			]},
 		)

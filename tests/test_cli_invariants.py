@@ -180,3 +180,65 @@ def test_nested_global_option_hint_includes_group_path(tmp_path: Any) -> None:
 def test_browser_source_rejects_unknown_value(tmp_path: Any) -> None:
 	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--browser-source", "bridge", "--json", "schema"])
 	assert result.exit_code != 0
+
+
+def _next_action_literals() -> list[tuple[str, int, str]]:
+	"""收集源码里能静态求值的 ``hints.next_actions`` 条目（字面量与 f-string 片段）。"""
+	import ast
+	from pathlib import Path
+
+	def render(node: ast.AST) -> str | None:
+		if isinstance(node, ast.Constant) and isinstance(node.value, str):
+			return node.value
+		if isinstance(node, ast.JoinedStr):
+			parts: list[str] = []
+			for value in node.values:
+				if isinstance(value, ast.Constant):
+					parts.append(str(value.value))
+				else:
+					parts.append("{}")
+			return "".join(parts)
+		return None
+
+	def from_list(node: ast.AST) -> list[str]:
+		if not isinstance(node, ast.List):
+			return []
+		return [text for item in node.elts if (text := render(item)) is not None]
+
+	found: list[tuple[str, int, str]] = []
+	root = Path(__file__).resolve().parent.parent / "src" / "boss_agent_cli"
+	for path in sorted(root.rglob("*.py")):
+		tree = ast.parse(path.read_text(encoding="utf-8"))
+		for node in ast.walk(tree):
+			if isinstance(node, ast.Dict):
+				for key, value in zip(node.keys, node.values):
+					if isinstance(key, ast.Constant) and key.value == "next_actions":
+						for text in from_list(value):
+							found.append((str(path.relative_to(root)), node.lineno, text))
+			elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "append":
+				target = node.func.value
+				if (
+					isinstance(target, ast.Subscript)
+					and isinstance(target.slice, ast.Constant)
+					and target.slice.value == "next_actions"
+				):
+					for arg in node.args:
+						text = render(arg)
+						if text is not None:
+							found.append((str(path.relative_to(root)), node.lineno, text))
+	return found
+
+
+def test_next_actions_hold_executable_commands_only() -> None:
+	"""``hints.next_actions`` 是 Agent 直接执行的通道，条目不能夹带说明文字。
+
+	历史上多处写成「boss xxx — 说明」「使用 boss xxx 查看…」「A 或 B」，Agent
+	原样执行只会换回 INVALID_PARAM。带自然语言说明的条目应改放
+	``hints.operator_actions``（见 ``docs/commands.md``）。
+	"""
+	offenders = [
+		(f"{path}:{line}", text)
+		for path, line, text in _next_action_literals()
+		if " — " in text or text.startswith("使用 ") or (text.startswith("boss ") and " 或 " in text)
+	]
+	assert offenders == []

@@ -231,7 +231,10 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 	elif outcome.status != "completed":
 		hints = {"next_actions": [f"boss crawl resume {outcome.run_id}"]}
 	else:
-		hints = {"next_actions": ["查看 output_paths 中的 JSON、CSV 或 XLSX 结果文件"]}
+		hints = {
+			"next_actions": [],
+			"operator_actions": ["查看 output_paths 中的 JSON、CSV 或 XLSX 结果文件"],
+		}
 	handle_output(
 		ctx,
 		"crawl",

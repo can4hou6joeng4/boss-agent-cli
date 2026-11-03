@@ -16,7 +16,7 @@ def logout_cmd(ctx: click.Context) -> None:
 		auth.logout()
 		emit_success("logout", {"message": "已退出登录"}, hints={
 			"next_actions": [
-				f"{login_action_for_ctx(ctx)} — 重新登录",
+				login_action_for_ctx(ctx),
 			],
 		})
 	except Exception as e:

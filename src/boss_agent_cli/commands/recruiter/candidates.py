@@ -4,7 +4,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_output, handle_platform_error_output
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output
 from boss_agent_cli.wizard.actions import execute_recruiter_candidate_search
 
 
@@ -54,7 +54,7 @@ def candidates_cmd(ctx: click.Context, query: str, city: str | None, job_id: str
 		handle_output(
 			ctx, "recruiter-candidates", data,
 			hints={"next_actions": [
-				"boss hr resume <geek_id> --job-id <id> --security-id <id> — 查看简历",
-				"boss hr chat — 查看沟通",
+				boss_command_for_ctx(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
+				boss_command_for_ctx(ctx, "hr chat"),
 			]},
 		)

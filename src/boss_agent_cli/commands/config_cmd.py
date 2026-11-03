@@ -12,7 +12,7 @@ from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.automation.config import automation_config_from_dict
 from boss_agent_cli.config import DEFAULTS, ROLES, validate_request_config
 from boss_agent_cli.crawler.service import crawl_cdp_port, crawl_chrome_path, crawl_int_setting
-from boss_agent_cli.display import handle_output, render_simple_list
+from boss_agent_cli.display import boss_command_for_ctx, handle_output, render_simple_list
 from boss_agent_cli.output import LOG_LEVELS
 from boss_agent_cli.platforms import list_platforms
 from boss_agent_cli.services.json_files import write_json_atomic
@@ -61,9 +61,9 @@ def config_list_cmd(ctx: click.Context) -> None:
 	data = {"config_path": str(config_path), "items": items}
 	hints = {
 		"next_actions": [
-			"boss config set <键> <值> — 修改配置项",
-			"boss config get <键> — 查看单个配置项",
-			"boss config reset <键> — 恢复默认值",
+			boss_command_for_ctx(ctx, "config set <键> <值>"),
+			boss_command_for_ctx(ctx, "config get <键>"),
+			boss_command_for_ctx(ctx, "config reset <键>"),
 		],
 	}
 	handle_output(

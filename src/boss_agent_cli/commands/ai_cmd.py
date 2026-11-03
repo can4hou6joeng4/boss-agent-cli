@@ -25,6 +25,7 @@ from boss_agent_cli.ai.prompts import (
 from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action_for
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.display import (
+	boss_command_for_ctx,
 	handle_error_output,
 	handle_output,
 	render_action_result,
@@ -475,7 +476,8 @@ def ai_fit_cmd(ctx: click.Context, resume_name: str, limit: int) -> None:
 			"ai-fit",
 			{"results": [], "missing": missing, "summary": {"analyzed": 0, "missing_details": len(missing)}},
 			render=lambda d: render_ai_result(d, title="ai-fit"),
-			hints={"next_actions": ["先对候选池职位执行 boss detail <security_id> 缓存详情后重试"]},
+			hints={"next_actions": [boss_command_for_ctx(ctx, "detail <security_id>")],
+				"operator_actions": ["候选池职位缺少详情缓存，先逐个 detail 后再重试 ai fit"]},
 		)
 		return
 
@@ -543,8 +545,10 @@ def ai_reply_cmd(ctx: click.Context, recruiter_message: str, context: str, resum
 		ctx, "ai-reply", result,
 		render=lambda d: render_ai_result(d, title="ai-reply"),
 		hints={"next_actions": [
-			"复制草稿到 BOSS 聊天框发送",
-			"boss chatmsg <uid> 查看完整聊天历史（uid 见 boss chat 输出）",
+			boss_command_for_ctx(ctx, "chatmsg <uid>"),
+		], "operator_actions": [
+			"复制草稿到 BOSS 聊天框手动发送",
+			"uid 见 boss chat 输出",
 		]},
 	)
 
@@ -588,8 +592,9 @@ def ai_interview_prep_cmd(ctx: click.Context, jd_text: str, resume_name: str | N
 		ctx, "ai-interview-prep", result,
 		render=lambda d: render_ai_result(d, title="ai-interview-prep"),
 		hints={"next_actions": [
+			boss_command_for_ctx(ctx, "ai chat-coach <chat_text>"),
+		], "operator_actions": [
 			"对照 questions 逐题准备答案",
-			"boss ai chat-coach <chat_text> 用于沟通准备",
 		]},
 	)
 
@@ -632,7 +637,7 @@ def ai_chat_coach_cmd(ctx: click.Context, chat_text: str, resume_name: str | Non
 	handle_output(
 		ctx, "ai-chat-coach", result,
 		render=lambda d: render_ai_result(d, title="ai-chat-coach"),
-		hints={"next_actions": [
+		hints={"operator_actions": [
 			"按 next_action_recommendation 的建议行动",
 			"message_templates 可直接复制发送",
 		]},

@@ -52,11 +52,7 @@ def login_cmd(
 			"login",
 			{"message": f"登录成功（{method}）"},
 			hints={
-				"next_actions": [
-					f"{status_cmd} — 验证登录态",
-					f"{search_cmd} — 搜索职位",
-					f"{recommend_cmd} — 获取个性化推荐",
-				],
+				"next_actions": [status_cmd, search_cmd, recommend_cmd],
 			},
 		)
 	except Exception as e:

@@ -87,8 +87,8 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int, sho
 			ctx, "chatmsg", result,
 			render=_render,
 			hints={"next_actions": [
-				f"{boss_command_for_ctx(ctx, 'chat')} — 返回沟通列表",
-				f"{boss_command_for_ctx(ctx, f'detail {fresh_security_id}')} — 查看职位详情",
+				boss_command_for_ctx(ctx, "chat"),
+				boss_command_for_ctx(ctx, f"detail {fresh_security_id}"),
 			]},
 		)
 

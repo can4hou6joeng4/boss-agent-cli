@@ -5,7 +5,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_job_table
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_job_table
 from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.services.job_identity import deduplicate_job_result
@@ -70,12 +70,13 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 		}
 		hints = {
 			"next_actions": [
-				"使用 boss detail <security_id> 查看职位详情",
-				"使用 boss apply <security_id> <job_id> 建立会话，或 boss greet <security_id> <job_id> 沟通",
+				boss_command_for_ctx(ctx, "detail <security_id>"),
+				boss_command_for_ctx(ctx, "apply <security_id> <job_id>"),
+				boss_command_for_ctx(ctx, "greet <security_id> <job_id>"),
 			],
 		}
 		if has_more is True:
-			hints["next_actions"].append(f"使用 boss recommend --page {page + 1} 查看下一页")
+			hints["next_actions"].append(boss_command_for_ctx(ctx, f"recommend --page {page + 1}"))
 		elif has_more is None:
 			hints["operator_actions"] = ["平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有结果"]
 		handle_output(

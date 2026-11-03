@@ -7,6 +7,7 @@ from boss_agent_cli.api.models import JobItem, field_list
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import (
+	boss_command_for_ctx,
 	handle_auth_errors,
 	handle_error_output,
 	handle_output,
@@ -109,7 +110,7 @@ def export_cmd(
 			"export",
 			code="INVALID_PARAM",
 			message=str(exc),
-			hints={"next_actions": ["boss cities — 查看支持的城市名"]},
+			hints={"next_actions": [boss_command_for_ctx(ctx, "cities")]},
 		)
 		return
 
@@ -225,8 +226,8 @@ def export_cmd(
 				render=lambda d: render_export_summary(d),
 				hints={
 					"next_actions": [
-						"boss search <query> — 继续搜索",
-						"boss recommend — 获取个性化推荐",
+						boss_command_for_ctx(ctx, "search <query>"),
+						boss_command_for_ctx(ctx, "recommend"),
 					],
 				},
 			)
@@ -245,7 +246,8 @@ def export_cmd(
 						"count": len(html_items),
 						"private_fields": "omitted",
 					},
-					hints={"next_actions": ["把 data.content 写成 .html 文件后打开", "boss export <query> --format html -o <path> 直接落盘"]},
+					hints={"next_actions": [boss_command_for_ctx(ctx, "export <query> --format html -o <path>")],
+						"operator_actions": ["把 data.content 写成 .html 文件后打开"]},
 				)
 			else:
 				# stdout 直出 HTML（便于 `boss export <query> --format html > jobs.html`）
@@ -265,7 +267,7 @@ def export_cmd(
 				render=lambda d: render_job_table(d.get("jobs", []), "export"),
 				hints={
 					"next_actions": [
-						"boss export <query> -o file.csv — 导出到文件",
+						boss_command_for_ctx(ctx, "export <query> -o file.csv"),
 					],
 				},
 			)

@@ -636,7 +636,7 @@ RISK_ERROR_CONTRACTS: dict[str, dict[str, Any]] = {
 		"next_actions": [
 			"不要刷新 Token、重新登录或换通道重试；本次请求未发出",
 			"由用户在原会话确认官方目标业务页恢复后，执行 boss clean --risk-lock 并显式恢复任务；令牌变化不放行",
-			"boss doctor — 查看本地风控锁状态",
+			"boss doctor",
 		],
 	},
 }
@@ -758,7 +758,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recoverable=True,
 					recovery_action="回到 BOSS 直聘官方招聘者页面手动处理",
 					hints={
-						"next_actions": [
+						"operator_actions": [
 							"在 BOSS 直聘官方页面确认候选人和沟通上下文",
 							"保持 CLI 默认低风险模式，不通过自动化链路发送消息或请求简历",
 						]
