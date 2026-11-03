@@ -55,6 +55,25 @@ def test_platforms_terminal_render_includes_status_legend(capsys) -> None:
 	assert "not_supported" in rendered
 
 
+def test_platforms_next_actions_name_every_listed_platform() -> None:
+	"""``next_actions`` 要按本次列出的平台生成：``--platform`` 只接受真实平台名。
+
+	原来固定写成 ``boss --platform <name> status``，Agent 原样执行只会拿到
+	``INVALID_PARAM``（可选值只有 ``zhipin``），提示等于空转。
+	"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["platforms"])
+
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.output)
+	platform_names = [item["name"] for item in payload["data"]["platforms"]]
+	assert payload["hints"]["next_actions"] == [
+		*(f"boss --platform {name} status" for name in platform_names),
+		"boss schema",
+	]
+	assert "<name>" not in " ".join(payload["hints"]["next_actions"])
+
+
 def test_platforms_can_filter_single_platform_by_registered_name() -> None:
 	runner = CliRunner()
 	result = runner.invoke(cli, ["platforms", "--platform", "zhipin"])
