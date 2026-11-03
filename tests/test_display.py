@@ -12,6 +12,7 @@ from boss_agent_cli.api.browser_urls import is_zhipin_url
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	is_json_mode,
+	json_forced,
 	handle_output,
 	handle_error_output,
 	handle_auth_errors,
@@ -70,6 +71,25 @@ class TestIsJsonMode:
 		with patch.object(sys, "stdout") as mock_out:
 			mock_out.isatty.return_value = False
 			assert is_json_mode(None) is True
+
+
+class TestJsonForced:
+	"""`--json` 与「stdout 被管道接走」必须区分：前者是硬契约，后者是人工重定向。"""
+
+	def test_explicit_flag(self):
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True}
+		assert json_forced(ctx) is True
+
+	def test_piped_stdout_alone_does_not_count(self):
+		ctx = MagicMock()
+		ctx.obj = {"json_output": False}
+		with patch.object(sys, "stdout") as mock_out:
+			mock_out.isatty.return_value = False
+			assert json_forced(ctx) is False
+
+	def test_none_ctx(self):
+		assert json_forced(None) is False
 
 
 class TestHandleOutput:

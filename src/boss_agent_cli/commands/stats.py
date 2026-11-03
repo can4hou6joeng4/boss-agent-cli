@@ -17,7 +17,7 @@ import click
 from rich.table import Table
 
 from boss_agent_cli import display
-from boss_agent_cli.display import handle_output, render_action_result
+from boss_agent_cli.display import handle_output, json_forced, render_action_result
 from boss_agent_cli.services.output_path import prepare_output_path
 
 
@@ -348,7 +348,7 @@ def _percent(value: Any) -> str:
 	"-o", "--output", "output_path",
 	type=click.Path(dir_okay=False, writable=True, path_type=Path),
 	default=None,
-	help="HTML 输出路径（仅 --format html 时有效，未指定时写到 stdout）",
+	help="HTML 输出路径（仅 --format html 时有效，未指定时写到 stdout；--json 时放进信封 data.content）",
 )
 @click.pass_context
 def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Path | None) -> None:
@@ -368,6 +368,13 @@ def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Pa
 				{"format": "html", "path": str(target), "bytes": len(html_text)},
 				render=lambda d: render_action_result(d, title="stats（HTML 报表）", next_steps=[f"open {target}"]),
 				hints={"next_actions": [f"open {target}"]},
+			)
+		elif json_forced(ctx):
+			# 同 digest：`--json` 下 stdout 必须是信封，把 HTML 放进 data.content。
+			handle_output(
+				ctx, "stats",
+				{"format": "html", "content": html_text, "bytes": len(html_text)},
+				hints={"next_actions": ["把 data.content 写成 .html 文件后打开", "boss stats --format html -o <path> 直接落盘"]},
 			)
 		else:
 			# stdout 直出 HTML（便于管道重定向）

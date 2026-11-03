@@ -151,7 +151,7 @@ def test_stats_registered_in_main_and_schema(tmp_path):
 
 
 def test_stats_html_format_to_stdout(tmp_path):
-	"""--format html 无 -o 时 HTML 直出 stdout。"""
+	"""未强制 --json 且无 -o 时 HTML 直出 stdout，供管道重定向。"""
 	_seed_cache(tmp_path, greet=3, applied=1, shortlist=1)
 	runner = CliRunner()
 	result = runner.invoke(cli, [
@@ -163,6 +163,22 @@ def test_stats_html_format_to_stdout(tmp_path):
 	# 数据点应嵌入到 HTML
 	assert ">3<" in result.output  # greeted 显示
 	assert "33.33%" in result.output or "0.3333%" in result.output or "33.33" in result.output  # apply_rate
+
+
+def test_stats_html_format_with_json_flag_returns_envelope(tmp_path):
+	"""--json 下 stdout 必须是信封：MCP 不能靠解析裸 HTML 拿到报表。"""
+	_seed_cache(tmp_path, greet=3, applied=1, shortlist=1)
+	runner = CliRunner()
+	result = runner.invoke(cli, [
+		"--data-dir", str(tmp_path), "--json", "stats", "--format", "html",
+	])
+	assert result.exit_code == 0
+
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["format"] == "html"
+	assert parsed["data"]["content"].startswith("<!doctype html>")
+	assert parsed["data"]["bytes"] == len(parsed["data"]["content"])
 
 
 def test_stats_html_format_to_file(tmp_path):

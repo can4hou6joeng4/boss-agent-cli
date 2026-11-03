@@ -83,10 +83,20 @@ def platform_error_message(code: str, message: str | None, fallback_message: str
 	return message or fallback_message
 
 
+def json_forced(ctx: Any) -> bool:
+	"""Only the explicit ``--json`` flag, not merely piped stdout.
+
+	``digest --format md`` 与 ``stats --format html`` 刻意把正文直出到管道，
+	方便用户 ``> 文件``；那是人工路径，不能改成信封。但 ``--json`` 是硬契约
+	（MCP 子进程总是带 ``--json`` 调用 CLI），这两条直出路径必须让位给信封，
+	否则 stdout 不是 JSON，MCP 侧只能报 CLI_ERROR。
+	"""
+	return bool(ctx.obj.get("json_output", False)) if ctx and ctx.obj else False
+
+
 def is_json_mode(ctx: Any) -> bool:
 	"""Check if --json flag is set or stdout is piped (non-TTY)."""
-	force_json = ctx.obj.get("json_output", False) if ctx and ctx.obj else False
-	return force_json or not sys.stdout.isatty()
+	return json_forced(ctx) or not sys.stdout.isatty()
 
 
 def render_operator_actions(hints: dict[str, Any] | None) -> None:
