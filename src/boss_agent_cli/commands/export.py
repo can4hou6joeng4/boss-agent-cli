@@ -33,6 +33,7 @@ from boss_agent_cli.search_filters import (
 	prefilter_platform_job_type,
 	resolve_search_code_params,
 )
+from boss_agent_cli.commands._filter_errors import emit_filter_error
 
 
 _EXPORT_FILTER_PAGE_ALLOWANCE = 5
@@ -121,13 +122,7 @@ def export_cmd(
 	try:
 		ensure_supported_city(city)
 	except ValueError as exc:
-		handle_error_output(
-			ctx,
-			"export",
-			code="INVALID_PARAM",
-			message=str(exc),
-			hints={"next_actions": [boss_command_for_ctx(ctx, "cities")]},
-		)
+		emit_filter_error(ctx, "export", exc)
 		return
 
 	try:
@@ -143,7 +138,7 @@ def export_cmd(
 			)
 		)
 	except ValueError as exc:
-		handle_error_output(ctx, "export", code="INVALID_PARAM", message=str(exc))
+		emit_filter_error(ctx, "export", exc)
 		return
 	criteria = SearchFilterCriteria(
 		query=query,

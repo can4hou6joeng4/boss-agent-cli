@@ -35,6 +35,7 @@ from boss_agent_cli.search_filters import (
 	resolve_welfare_keywords,
 	run_search_pipeline,
 )
+from boss_agent_cli.commands._filter_errors import emit_filter_error
 
 
 def _parse_watch_filters(
@@ -105,7 +106,7 @@ def watch_add_cmd(
 			industry=industry, scale=scale, stage=stage, job_type=job_type,
 		)
 	except ValueError as exc:
-		handle_error_output(ctx, "watch", code="INVALID_PARAM", message=str(exc))
+		emit_filter_error(ctx, "watch", exc)
 		return
 
 	params, _ = _parse_watch_filters(query, city, salary, experience, education, industry, scale, stage, job_type, welfare)

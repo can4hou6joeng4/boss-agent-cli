@@ -28,6 +28,14 @@ def city_constraint(city: str | None) -> str | None:
 	return None if city == NATIONWIDE_CITY else city
 
 
+class UnsupportedCityError(ValueError):
+	"""城市名不在支持列表内。
+
+	单列一个类型，命令层才能把城市错误和「薪资 / 经验写错」分开给出指引
+	（前者指向 ``boss cities``，后者消息里已列出可选值）。
+	"""
+
+
 def ensure_supported_city(city: str | None) -> None:
 	"""校验城市名；未知城市必须在命令层报参数错误。
 
@@ -35,7 +43,7 @@ def ensure_supported_city(city: str | None) -> None:
 	`NETWORK_ERROR`，拿同一个非法城市重试永远修不好。
 	"""
 	if city and city not in endpoints.CITY_CODES:
-		raise ValueError(f"未知城市: {city}，请使用 CITY_CODES 中的城市名")
+		raise UnsupportedCityError(f"未知城市: {city}，请换成支持的城市名（boss cities 可查看）")
 
 
 _EXPERIENCE_ORDER: dict[str, int] = {
@@ -327,12 +335,24 @@ def resolve_lookup_codes(value: str | None, lookup: dict[str, str], label: str) 
 	return ",".join(codes) if codes else None
 
 
+_LOOKUP_LIST_LIMIT = 10
+_LOOKUP_SAMPLE_SIZE = 8
+
+
 def _unknown_lookup_message(part: str, lookup: dict[str, str], label: str) -> str:
-	"""未知标签附上字面最接近的可选值，调用方（人或 Agent）据此改参数而不是猜。"""
+	"""未知标签附上可选值，调用方（人或 Agent）据此改参数而不是猜。
+
+	字面相近的值优先（``计箅机`` → ``计算机软件``）；完全没有相近值时列出可选值：
+	小表全列，大表（如 97 个行业）给出总数和前几项。
+	"""
 	close = difflib.get_close_matches(part, list(lookup), n=5, cutoff=0.4)
 	if close:
 		return f"未知{label}: {part}，相近的可选值: {'、'.join(close)}"
-	return f"未知{label}: {part}"
+	options = list(lookup)
+	if len(options) <= _LOOKUP_LIST_LIMIT:
+		return f"未知{label}: {part}，可选值: {'、'.join(options)}"
+	sample = "、".join(options[:_LOOKUP_SAMPLE_SIZE])
+	return f"未知{label}: {part}，共 {len(options)} 个可选值，例如: {sample}"
 
 
 def build_search_params(

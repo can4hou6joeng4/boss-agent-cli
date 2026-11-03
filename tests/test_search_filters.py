@@ -88,9 +88,12 @@ class TestSearchUrlParsing:
 		assert message.startswith("未知行业类型: 汽车，相近的可选值: ")
 		assert "新能源汽车" in message
 
-	def test_unknown_label_without_close_match_keeps_plain_message(self):
-		with pytest.raises(ValueError, match=r"^未知行业类型: 区块链$"):
+	def test_unknown_label_without_close_match_lists_choices(self):
+		"""没有相近值时不能只回「未知」，大表给出总数和样例，小表可直接全列。"""
+		with pytest.raises(ValueError, match=r"^未知行业类型: 区块链，共 97 个可选值，例如: "):
 			resolve_search_code_params(industry="区块链")
+		with pytest.raises(ValueError, match=r"^未知公司规模: 巨型企业，可选值: "):
+			resolve_search_code_params(scale="巨型企业")
 
 	def test_salary_typo_suggests_canonical_label(self):
 		with pytest.raises(ValueError, match="相近的可选值: 5-10K"):
