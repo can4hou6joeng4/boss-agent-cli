@@ -22,14 +22,22 @@ from boss_agent_cli.schema.error_codes import ERROR_CODES
 console = Console(stderr=True)
 
 
+_SHELL_METACHARACTERS = frozenset("'\"`$\\!*?[]{}()<>|&;#")
+
+
 def shell_argument(value: str) -> str:
 	"""Quote *value* so it survives being copied into a runnable hint verbatim.
 
-	只按空白判断：shlex.quote 用 ASCII 安全字符集，会把中文名也包上引号。
-	带空格 / 制表符 / 换行的名字（简历名、watch 名、预设名都是自由文本）不转义
-	就会在 ``next_actions`` 里被拆成多个参数，Agent 照抄只会换回参数错误。
+	只在需要时加引号：shlex.quote 用 ASCII 安全字符集，会把中文名也包上引号。
+	除空白外还要挡 shell 元字符——简历名、watch 名、预设名都是自由文本：
+
+	- 空白会把一个名字拆成多个参数；
+	- ``its'fine`` 这种落单的单引号会让整条提示变成非法 shell（引号没闭合）；
+	- ``*`` / ``$HOME`` / 开头的 ``~`` 会在终端里被展开成别的东西。
+
+	以上情况统一加 POSIX 单引号（内部的单引号按 ``'\\''`` 转义）。
 	"""
-	if not any(ch.isspace() for ch in value):
+	if not any(ch.isspace() or ch in _SHELL_METACHARACTERS for ch in value) and not value.startswith("~"):
 		return value
 	return "'" + value.replace("'", "'\\''") + "'"
 
