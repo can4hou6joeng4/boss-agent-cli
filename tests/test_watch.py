@@ -317,9 +317,9 @@ def test_watch_run_all_stops_on_risk(mock_auth_cls, mock_client_cls, mock_pipeli
 	assert mock_pipeline.call_count == 1
 
 
-def _break_params(tmp_path, name):
+def _break_params(tmp_path, name, payload="{not json"):
 	conn = sqlite3.connect(tmp_path / "cache" / "boss_agent.db")
-	conn.execute("UPDATE saved_searches SET params = ? WHERE name = ?", ("{not json", name))
+	conn.execute("UPDATE saved_searches SET params = ? WHERE name = ?", (payload, name))
 	conn.commit()
 	conn.close()
 
@@ -358,7 +358,7 @@ def test_watch_run_corrupt_params_reports_envelope(tmp_path):
 
 @patch("boss_agent_cli.commands.watch._execute_single_watch")
 def test_watch_run_all_skips_corrupt_params(mock_execute, tmp_path):
-	"""--all 只跑参数可用的条目，坏记录留给 list 提示用户处理。"""
+	"""--all 只跑参数可用的条目，坏记录写进 data.skipped 让调用方看得见。"""
 	mock_execute.return_value = {
 		"name": "good", "new_count": 0, "seen_count": 0, "total_count": 0, "new_items": [],
 	}
@@ -370,5 +370,30 @@ def test_watch_run_all_skips_corrupt_params(mock_execute, tmp_path):
 	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", "--all"])
 
 	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
 	executed = [call.args[2] for call in mock_execute.call_args_list]
 	assert "good" in executed and "broken" not in executed
+	assert parsed["data"]["skipped"] == ["broken"]
+	assert parsed["hints"]["corrupt"] == ["broken"]
+
+
+def test_watch_run_params_type_drift_reports_saved_search_invalid(tmp_path):
+	"""参数是合法 JSON 但值类型漂移时不能兜成 INTERNAL_ERROR。
+
+	`{"query": ["golang"]}` 能通过 `json.loads`，旧实现到 `_parse_watch_filters`
+	的 `.split()` 才抛 AttributeError，报成 `INTERNAL_ERROR`「不要重试」，而实际
+	修复方式是删掉重建这条本地记录。
+	"""
+	runner = CliRunner()
+	runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "add", "drifted", "golang"])
+	_break_params(tmp_path, "drifted", '{"query": ["golang"], "city": 123}')
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", "drifted"])
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "SAVED_SEARCH_INVALID"
+	assert parsed["error"]["recoverable"] is True
+	assert "query" in parsed["error"]["message"]
+	assert "list" in parsed["error"]["message"]
+	assert parsed["hints"]["next_actions"][0] == "boss watch remove drifted"

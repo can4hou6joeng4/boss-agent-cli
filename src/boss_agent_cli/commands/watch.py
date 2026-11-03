@@ -235,7 +235,9 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		if run_all:
-			records = cache.list_saved_searches()
+			# 参数损坏的条目不能静默跳过：--all 返回 ok: true 却少跑一个 watch，
+			# 用户看不出任何异常。与 `watch list` 一样单独列出，并给出删除重建指引。
+			records, corrupt = cache.list_saved_searches_with_corrupt()
 			watches: list[dict[str, Any]] = []
 			risk_error: SearchPipelinePlatformError | None = None
 			stopped_watch: str | None = None
@@ -264,13 +266,19 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 					hints=risk_hints,
 				)
 				return
+			all_hints: dict[str, Any] = {"next_actions": ["boss watch list", "boss detail <security_id>"]}
+			if corrupt:
+				all_hints["corrupt"] = corrupt
+				all_hints["operator_actions"] = [
+					f"以下 watch 的参数已损坏、本次未执行，先执行 boss watch remove <名称> 再重新 watch add：{', '.join(corrupt)}"
+				]
 			handle_output(
 				ctx, "watch",
-				{"mode": "all", "watches": watches, "total": len(watches)},
+				{"mode": "all", "watches": watches, "total": len(watches), "skipped": corrupt},
 				render=lambda d: render_message_panel(
 					{"模式": "全部", "监控数": d.get("total", 0)}, title="watch run"
 				),
-				hints={"next_actions": ["boss watch list", "boss detail <security_id>"]},
+				hints=all_hints,
 			)
 			return
 
