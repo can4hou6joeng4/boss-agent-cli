@@ -16,6 +16,7 @@ from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action
 from boss_agent_cli.cache.store import CacheStore, SavedSearchParamsError
 from boss_agent_cli.platforms.factory import build_platform_instance, build_recruiter_platform_instance
 from boss_agent_cli.services.contact_lookup import FriendLookupLimitExceeded, find_friend
+from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.crawler.operations import crawl_status
 from boss_agent_cli.crawler.service import (
 	CrawlBudget,
@@ -747,8 +748,7 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 	fmt = str(inputs.get("format") or "json")
 	if fmt not in {"json", "csv"}:
 		raise WorkflowActionError("INVALID_PARAM", "wizard export format 仅支持 json/csv")
-	output = Path(str(inputs.get("output") or context.data_dir / "exports" / f"wizard-jobs.{fmt}"))
-	output.parent.mkdir(parents=True, exist_ok=True)
+	output = prepare_output_path(inputs.get("output") or context.data_dir / "exports" / f"wizard-jobs.{fmt}")
 	items = prepare_export_items(result.items, include_private=bool(inputs.get("include_private", False)))
 	write_export_file(items, fmt, str(output))
 	return StepResult({"path": str(output), "format": fmt, "count": len(items)}, artifacts=(str(output),))
