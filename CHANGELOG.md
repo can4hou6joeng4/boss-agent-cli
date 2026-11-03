@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss resume import <file>` 在文件里的 `name` 与已有简历同名时静默整份覆盖：`import_file` 解析后直接 `save()`，用户在当前简历上做的编辑全部丢掉，命令仍返回 `ok: true`、`action: "import"`，看不出发生了替换（`resume init` / `resume clone` 遇到同名都是 `RESUME_ALREADY_EXISTS`）。现在默认拒绝同名导入，返回 `RESUME_ALREADY_EXISTS` 并提示改 `name` 字段或加 `--force`；`--force` 显式覆盖时才写盘，`boss schema` 同步声明该选项。
 - `boss resume delete` 只删简历文件、不清理该简历的职位关联：`resume_job_links` 以简历名为业务键且没有外键约束，删掉 `default` 后用同一个名字重建（`resume init` 的默认名就是 `default`），`boss resume applications default` 会把旧简历投过的职位连同 `applied` 状态和备注一起报成新简历的记录。现在删除时同步清理该简历的全部关联，信封里的 `data.removed_links` 给出清理条数；其它简历的关联不受影响。
 - `boss resume link` 重复关联同一职位会静默清空投递状态和备注：`link_resume_to_job` 用 `INSERT OR REPLACE` 整行替换，主键 `(resume_name, security_id, job_id)` 命中时先删后插，已经推进到 `applied` 的 `status` 打回 `prepared`、`notes` 清空、`linked_at` 改成当前时间；第二次关联没带 `--title` / `--company` 时还会用空串覆盖原有的职位名和公司名。现在冲突时改为按字段更新：本次显式给出非空值的 `job_title` / `company` 才覆盖，`status` / `notes` / `linked_at` 始终保留，只刷新 `updated_at`。
 - `boss agent run`（以及 `agent train --live`）在未登录时抛出 `AuthRequired` traceback，stdout 没有任何信封：`run_cmd` / `train_cmd` 没有挂 `handle_auth_errors`（同组的 `agent crawl` 挂了），自动化适配器扫描会话时抛出的登录异常一路冒到顶层，`exit 1` 却只有 stderr 的堆栈，MCP 子进程解析失败后统一回成 `CLI_ERROR`，Agent 完全看不到「先登录」这个真正原因。现在两者与其它命令走同一个装饰器，返回 `AUTH_REQUIRED` 信封（可恢复，`recovery_action` 为 `boss login`），`agent train` 默认的 dry-run 行为不变。

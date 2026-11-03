@@ -14,7 +14,7 @@ from boss_agent_cli.display import (
 	render_record_result,
 )
 from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, resume_to_dict
-from boss_agent_cli.resume.store import ResumeImportError, ResumeStore
+from boss_agent_cli.resume.store import ResumeAlreadyExistsError, ResumeImportError, ResumeStore
 from boss_agent_cli.services.output_path import prepare_output_path
 
 
@@ -276,8 +276,9 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 
 @resume_group.command("import")
 @click.argument("file_path", type=click.Path())
+@click.option("--force", is_flag=True, help="覆盖同名简历（会丢弃本地已有的编辑）")
 @click.pass_context
-def resume_import_cmd(ctx: click.Context, file_path: Path) -> None:
+def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 	"""导入 JSON 简历"""
 	path = Path(file_path)
 	if not path.exists():
@@ -290,7 +291,16 @@ def resume_import_cmd(ctx: click.Context, file_path: Path) -> None:
 		return
 	store = _get_store(ctx)
 	try:
-		resume = store.import_file(path)
+		resume = store.import_file(path, overwrite=force)
+	except ResumeAlreadyExistsError as exc:
+		handle_error_output(
+			ctx, "resume",
+			code="RESUME_ALREADY_EXISTS",
+			message=f"简历 '{exc.name}' 已存在",
+			recovery_action="修改文件里的 name 字段后重试，或加 --force 覆盖（会丢弃本地已有的编辑）",
+		)
+		ctx.exit(1)
+		return
 	except ResumeImportError as exc:
 		handle_error_output(
 			ctx, "resume",

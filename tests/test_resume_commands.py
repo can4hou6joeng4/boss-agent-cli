@@ -294,6 +294,42 @@ def test_import_valid(tmp_path):
 	assert parsed["hints"]["next_actions"] == ["boss resume show imported"]
 
 
+def test_import_refuses_to_overwrite_existing_resume(tmp_path):
+	"""文件里的 name 与已有简历同名时默认拒绝，不静默覆盖本地编辑。
+
+	`import_file` 最终走整份 `save()`：导入一份旧备份会把用户后来的编辑全部丢掉，
+	而 `resume init` / `resume clone` 遇到同名都是 `RESUME_ALREADY_EXISTS`。
+	"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "mine", "--template", "default"])
+	_invoke(runner, tmp_path, ["edit", "mine", "--field", "title", "--value", "本地改过的标题"])
+
+	src = tmp_path / "backup.json"
+	src.write_text('{"name": "mine", "title": "备份里的旧标题"}', encoding="utf-8")
+	result = _invoke(runner, tmp_path, ["import", str(src)])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "RESUME_ALREADY_EXISTS")
+	assert "--force" in parsed["error"]["recovery_action"]
+
+	show = json.loads(_invoke(runner, tmp_path, ["show", "mine"]).output)
+	assert show["data"]["title"] == "本地改过的标题"
+
+
+def test_import_force_overwrites_existing_resume(tmp_path):
+	"""显式 --force 时才覆盖同名简历。"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "mine", "--template", "default"])
+
+	src = tmp_path / "backup.json"
+	src.write_text('{"name": "mine", "title": "备份里的旧标题"}', encoding="utf-8")
+	result = _invoke(runner, tmp_path, ["import", str(src), "--force"])
+	assert result.exit_code == 0, result.output
+
+	show = json.loads(_invoke(runner, tmp_path, ["show", "mine"]).output)
+	assert show["data"]["title"] == "备份里的旧标题"
+
+
 def test_import_invalid_file(tmp_path):
 	runner = CliRunner()
 	bad_file = tmp_path / "bad.json"
@@ -500,6 +536,7 @@ def test_schema_contains_resume():
 	assert "subcommands" in cmd
 	assert "init" in cmd["subcommands"]
 	assert "diff" in cmd["subcommands"]
+	assert cmd["options"]["import"]["--force"]["default"] is False
 
 
 def test_schema_contains_resume_error_codes():
