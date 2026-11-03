@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
+from boss_agent_cli import display
 from boss_agent_cli.display import risk_error_message
 from boss_agent_cli.main import cli
 from boss_agent_cli.search_filters import SearchPipelinePlatformError
@@ -64,6 +65,23 @@ def test_watch_add_list_remove(tmp_path):
 	assert remove_result.exit_code == 0
 	remove_parsed = json.loads(remove_result.output)
 	assert remove_parsed["data"]["removed"] is True
+
+
+def test_watch_list_empty_next_step_is_executable(tmp_path, monkeypatch):
+	"""TTY 空列表的下一步提示必须是可执行形式：query 是位置参数。"""
+	captured: dict[str, list[str]] = {}
+	monkeypatch.setattr(display, "is_json_mode", lambda ctx: False)
+	monkeypatch.setattr(display, "render_next_steps", lambda steps: captured.setdefault("steps", steps))
+
+	runner = CliRunner()
+	list_result = runner.invoke(cli, ["--data-dir", str(tmp_path), "watch", "list"])
+	assert list_result.exit_code == 0, list_result.output
+	steps = captured["steps"]
+	assert steps == ["boss watch add <name> <关键词>"]
+
+	hint_args = steps[0].replace("<name>", "hint-watch").replace("<关键词>", "golang").split(" ")[1:]
+	added = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *hint_args])
+	assert added.exit_code == 0, added.output
 
 
 @patch("boss_agent_cli.commands.watch.get_platform_instance")

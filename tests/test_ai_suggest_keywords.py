@@ -101,6 +101,13 @@ def test_ai_suggest_keywords_analyzes_shortlist_and_returns_keyword_groups(tmp_p
 	assert "Golang 后端" in prompt
 	assert "广州" in prompt
 
+	# 预设提示必须能直接执行：query 是位置参数，写成 --query 会被 Click 拒绝
+	preset_hint = next(action for action in parsed["hints"]["next_actions"] if action.startswith("boss preset add"))
+	assert preset_hint == "boss preset add <name> <关键词>"
+	hint_args = preset_hint.replace("<name>", "ai-preset").replace("<关键词>", "golang").split(" ")[1:]
+	preset_result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *hint_args])
+	assert preset_result.exit_code == 0, preset_result.output
+
 	# Zero platform requests
 	get_platform.assert_not_called()
 	boss_client.assert_not_called()
