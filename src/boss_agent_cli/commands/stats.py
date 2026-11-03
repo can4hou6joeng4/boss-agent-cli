@@ -365,7 +365,7 @@ def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Pa
 			target.write_text(html_text, encoding="utf-8")
 			handle_output(
 				ctx, "stats",
-				{"format": "html", "path": str(target), "bytes": len(html_text)},
+				{"format": "html", "path": str(target), "bytes": len(html_text.encode("utf-8"))},
 				render=lambda d: render_action_result(d, title="stats（HTML 报表）", next_steps=[f"open {target}"]),
 				hints={"next_actions": [f"open {target}"]},
 			)
@@ -373,7 +373,7 @@ def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Pa
 			# 同 digest：`--json` 下 stdout 必须是信封，把 HTML 放进 data.content。
 			handle_output(
 				ctx, "stats",
-				{"format": "html", "content": html_text, "bytes": len(html_text)},
+				{"format": "html", "content": html_text, "bytes": len(html_text.encode("utf-8"))},
 				hints={"next_actions": ["把 data.content 写成 .html 文件后打开", "boss stats --format html -o <path> 直接落盘"]},
 			)
 		else:
