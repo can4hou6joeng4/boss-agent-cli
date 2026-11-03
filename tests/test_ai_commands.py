@@ -168,6 +168,25 @@ def test_polish_success(tmp_path, monkeypatch):
 	assert "general_suggestions" in parsed["data"]
 
 
+def test_cover_letter_non_object_ai_json_returns_parse_error(tmp_path, monkeypatch):
+	"""AI 返回合法 JSON 但不是对象时按解析失败返回，而不是 setdefault 的 AttributeError。"""
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+
+	mock_resp = MagicMock()
+	mock_resp.status_code = 200
+	mock_resp.json.return_value = {"choices": [{"message": {"content": '["建议一", "建议二"]'}}]}
+	mock_resp.raise_for_status = MagicMock()
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=mock_resp):
+		result = _invoke(runner, tmp_path, ["cover-letter", "test-resume", "--jd", "目标岗位"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AI_PARSE_ERROR"
+	assert "JSON 对象" in parsed["error"]["message"]
+
+
 # ── optimize 成功路径 ─────────────────────────────────────
 
 
