@@ -103,13 +103,41 @@ def test_login_curl_stdin_uses_auth_manager_without_disclosing_input(tmp_path):
 	assert "test-session" not in result.output
 
 
-@pytest.mark.parametrize("options", [["--cdp"], ["--cookie-source", "chrome"], ["--force"]])
-def test_login_curl_conflicting_sources_are_rejected(tmp_path, options):
+@pytest.mark.parametrize(
+	("options", "conflict"),
+	[(["--cdp"], "--cdp"), (["--cookie-source", "chrome"], "--cookie-source"), (["--force"], "--force")],
+)
+def test_login_curl_conflicting_sources_are_rejected(tmp_path, options, conflict):
+	"""互斥选项要报出具体冲突项，而不是被兜成「导入失败、可重试」。
+
+	原来带 ``--curl-file`` 时所有异常都落到「cURL 登录态导入失败，未完成会话更新」，
+	``recoverable=True`` 且没有 ``next_actions``：Agent 会拿同一组互斥选项重试，
+	真正该删的 ``--cdp`` / ``--force`` / ``--cookie-source`` 从来没被点名。
+	"""
 	with patch("boss_agent_cli.commands.login.AuthManager") as auth:
 		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "login", "--curl-file", "-", *options], input=_CURL)
 		auth.return_value.import_curl.assert_not_called()
 		auth.return_value.login.assert_not_called()
-	assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert payload["error"]["message"] == f"--curl-file 不能与 {conflict} 同时使用"
+	assert payload["error"]["recoverable"] is False
+	assert conflict in payload["error"]["recovery_action"]
+	assert payload["hints"]["next_actions"] == ["boss login --help"]
+
+
+def test_login_force_with_cookie_source_reports_conflict(tmp_path):
+	"""``--force --cookie-source`` 是同一类用法错误，同样要给出下一步。"""
+	with patch("boss_agent_cli.commands.login.AuthManager") as auth:
+		result = CliRunner().invoke(
+			cli, ["--data-dir", str(tmp_path), "login", "--force", "--cookie-source", "chrome"]
+		)
+		auth.return_value.login.assert_not_called()
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "--force" in payload["error"]["message"] and "--cookie-source" in payload["error"]["message"]
+	assert payload["error"]["recoverable"] is False
+	assert payload["hints"]["next_actions"] == ["boss login --help"]
 
 
 def test_login_curl_does_not_echo_unexpected_error_or_fallback(tmp_path):
