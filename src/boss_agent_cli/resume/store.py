@@ -62,7 +62,6 @@ class ResumeStore:
 			except (json.JSONDecodeError, UnicodeDecodeError, OSError):
 				corrupt.append(path.stem)
 		return results, corrupt
-		return results
 
 	def get(self, name: str) -> ResumeData | None:
 		"""按名称读取简历"""
