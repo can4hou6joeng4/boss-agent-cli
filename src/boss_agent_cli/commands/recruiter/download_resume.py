@@ -11,6 +11,7 @@ from boss_agent_cli.api.recruiter_resume import ResumeValidationError
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.compliance import require_compliance_allowed
+from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.display import (
 	error_contract_for_code,
 	handle_auth_errors,
@@ -42,6 +43,9 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 	if not require_compliance_allowed(ctx, "recruiter-download-resume"):
 		return
 	command = "recruiter-download-resume"
+	# MCP 子进程调用不经 shell，`~` 不会被展开；父目录也可能尚不存在。
+	# 与其他 `-o` 命令一致，先展开并建好父目录；是否覆盖已有文件仍由客户端判断。
+	output = prepare_output_path(output)
 	auth = AuthManager(ctx.obj["data_dir"], logger=ctx.obj["logger"], platform=ctx.obj.get("platform", "zhipin"))
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		auth.get_token()

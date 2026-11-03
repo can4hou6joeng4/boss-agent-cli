@@ -359,6 +359,22 @@ def test_download_cli_returns_only_file_metadata(tmp_path):
 		platform.download_resume_by_friend.assert_called_once_with(123, 456, tmp_path / "resume.pdf")
 
 
+def test_download_cli_expands_tilde_and_creates_parent(tmp_path, monkeypatch):
+	"""MCP 子进程调用不经 shell，`~` 不会被展开；父目录也可能尚不存在。"""
+	monkeypatch.setenv("HOME", str(tmp_path))
+	monkeypatch.setenv("USERPROFILE", str(tmp_path))
+	with patch("boss_agent_cli.commands.recruiter.download_resume.AuthManager"), patch("boss_agent_cli.commands.recruiter.download_resume.get_recruiter_platform_instance") as factory:
+		platform = factory.return_value.__enter__.return_value
+		platform.download_resume_by_friend.return_value = {"code": 0, "zpData": {"path": "x", "bytes": 100, "format": "pdf"}}
+		platform.is_success.return_value = True
+		platform.unwrap_data.side_effect = lambda response: response["zpData"]
+		result = _invoke("download-resume", "123", "--message-id", "456", "--output", "~/resumes/2026/resume.pdf")
+		assert result.exit_code == 0
+		expected = tmp_path / "resumes" / "2026" / "resume.pdf"
+		platform.download_resume_by_friend.assert_called_once_with(123, 456, expected)
+		assert expected.parent.is_dir()
+
+
 def test_download_cli_redacts_http_errors():
 	with patch("boss_agent_cli.commands.recruiter.download_resume.AuthManager"), patch("boss_agent_cli.commands.recruiter.download_resume.get_recruiter_platform_instance") as factory:
 		platform = factory.return_value.__enter__.return_value
