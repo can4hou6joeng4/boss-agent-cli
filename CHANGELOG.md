@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss batch-greet --dry-run` 与真实批量打招呼成功后都没有下一步：dry-run 只列候选、`hints` 为 `null`，终端表格下方也没有任何提示，Agent 预览完一批候选人不知道去掉 `--dry-run` 就能真发；真实执行成功后同样为 `null`，而 `boss me` 并没有 greet 分区，Agent 只能自己猜 `boss chat`。现在 dry-run 的 `hints.next_actions` 给出与本次调用同参数、只去掉 `--dry-run` 的命令（关键词含空格时加引号），`operator_actions` 说明「确认候选名单后去掉 --dry-run 重新执行」；真实执行成功后给出 `boss chat` 与到会话列表跟进的提示。
 - `boss wizard --status <run_id>` / `boss wizard --stop <run_id>` 成功后没有任何下一步：两处 `handle_output` 都不带 `hints`，Agent 查完状态、或停掉一个运行中的 workflow 之后，看不出该恢复、继续等待还是新建（主执行路径跑完反而会提示 `boss wizard --status <run_id>`）。现在按 run 状态给出可直接执行的后继命令：`stopped` / `failed` / `waiting_input` 给出 `boss wizard --resume <run_id>` 与 `--status <run_id>`，`running` / `pending` 给出 `--status` 与 `--stop`，`completed` 给出 `boss wizard` 新建与 `--status` 复检。
 - `boss status --live` 在线验证通过后没有任何下一步：非 live 分支的 `hints.next_actions` 就是 `boss status --live`（`_status_next_actions` 的 complete 分支），而真正跑到 `--live` 且验证成功的那一端 `hints` 为 `null`、终端只打印一行 `logged in as …`——Agent 做完健康检查拿不到任何可执行的业务命令，真人也不知道可以开始浏览职位了。现在 live 成功的信封带上 `boss recommend` 与 `boss search <关键词>`，TTY 额外说明「登录态在线验证通过，可以直接开始浏览推荐职位或搜索职位」。
 - `boss greet` 命中平台额度时 `recovery_action` 为 `null`：候选人侧的 `GREET_LIMIT` 由 `handle_platform_error_output` 按登记表补齐，而登记表里这个码的 `recovery_action` 是 `null`——Agent 只看到「今日打招呼次数已用完」，不知道能不能重试、要不要换渠道（招聘者侧的 `hr greet` 在 `_send_error` 里有自己的文案，不受影响）。现在补成「今日主动沟通额度已用完：停止自动打招呼，等平台权益恢复后再试；不要自动重发本次招呼」。
