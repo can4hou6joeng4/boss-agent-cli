@@ -189,6 +189,19 @@ def test_shortlist_add_rejects_blank_identifiers(tmp_path):
 	assert listed["data"] == []
 
 
+def test_shortlist_remove_and_annotate_reject_blank_identifiers(tmp_path):
+	"""空标识既不会命中条目，也不该被当成「删掉了」或「条目不存在」。"""
+	runner = CliRunner()
+	for action in ("remove", "annotate"):
+		result = runner.invoke(
+			cli,
+			["--data-dir", str(tmp_path), "--json", "shortlist", action, "", "  "],
+		)
+		assert result.exit_code == 1, result.output
+		parsed = json.loads(result.output)
+		assert parsed["error"]["code"] == "INVALID_PARAM", action
+
+
 def test_shortlist_schema_is_exposed():
 	runner = CliRunner()
 	result = runner.invoke(cli, ["schema"])

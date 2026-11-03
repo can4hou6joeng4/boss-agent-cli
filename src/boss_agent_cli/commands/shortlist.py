@@ -159,6 +159,13 @@ def shortlist_annotate_cmd(
 	note: str | None,
 ) -> None:
 	"""给候选池条目增删标签或替换备注；条目不存在时报错而不是静默成功。"""
+	# 空标识不可能命中候选池里的任何条目：继续查下去会报 SHORTLIST_ENTRY_NOT_FOUND
+	# 「候选池中没有该职位:  / 」，把 argv 少传参数说成「这条职位不在池子里」。
+	if not security_id.strip() or not job_id.strip():
+		handle_error_output(
+			ctx, "shortlist", code="INVALID_PARAM", message="security_id 与 job_id 不能为空"
+		)
+		return
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		current = _find_shortlist_item(cache.list_shortlist(), security_id, job_id)
 		if current is None:
@@ -238,6 +245,13 @@ def shortlist_compare_cmd(ctx: click.Context, tag: str | None) -> None:
 @click.pass_context
 def shortlist_remove_cmd(ctx: click.Context, security_id: str, job_id: str) -> None:
 	"""从本地候选池中移除一个职位。"""
+	# watch remove / preset remove 早已拒绝空名字：同样的空标识在候选池里既不
+	# 会命中条目，又会返回 ok:true + removed:false，Agent 只看 ok 会以为删掉了。
+	if not security_id.strip() or not job_id.strip():
+		handle_error_output(
+			ctx, "shortlist", code="INVALID_PARAM", message="security_id 与 job_id 不能为空"
+		)
+		return
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		removed = cache.remove_shortlist(security_id, job_id)
 	handle_output(
