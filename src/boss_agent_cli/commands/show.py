@@ -17,6 +17,18 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
+	# 索引是 1-based 的编号：0 或负数永远不可能命中，先按参数错误拒绝，
+	# 不要让「先 search 再 show」的提示把 Agent 送进一个必然失败的循环。
+	if index < 1:
+		handle_error_output(
+			ctx,
+			"show",
+			code="INVALID_PARAM",
+			message=f"编号必须从 1 开始，收到 {index}",
+			hints={"next_actions": [boss_command_for_ctx(ctx, "search <关键词>"), boss_command_for_ctx(ctx, "recommend")]},
+		)
+		return
+
 	# 从索引缓存获取职位信息
 	job = get_job_by_index(data_dir, index)
 	if job is None:
