@@ -42,6 +42,17 @@ def _platform_error_details(response: Any) -> dict[str, Any] | None:
 @handle_auth_errors("detail")
 def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> None:
 	"""查看职位完整信息（职位描述、地址、招聘者信息）"""
+	# 空 security_id 不是「查不到」，而是参数本身就构造错了：照常发请求只会
+	# 换来一次无意义的平台往返，Agent 还会以为是缓存或登录的问题。
+	if not security_id.strip():
+		handle_error_output(
+			ctx,
+			"detail",
+			code="INVALID_PARAM",
+			message="security_id 不能为空；先用 boss search 或 boss show 取到编号再查询",
+			hints={"next_actions": [boss_command_for_ctx(ctx, "search <关键词>"), boss_command_for_ctx(ctx, "show <编号>")]},
+		)
+		return
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
