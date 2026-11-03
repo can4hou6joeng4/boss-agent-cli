@@ -37,6 +37,35 @@ def _require_resume_name(ctx: click.Context, name: str) -> bool:
 	return False
 
 
+def _load_resume(ctx: click.Context, store: ResumeStore, name: str) -> ResumeData | None:
+	"""读取简历；文件存在但读不出来时按「文件损坏」上报，而不是「不存在」。
+
+	以前两者共用 RESUME_NOT_FOUND +「boss resume list」：列表会隐藏坏文件，
+	Agent 照提示只能看到一份空列表，再 `resume init` 又被同名文件挡住
+	（RESUME_ALREADY_EXISTS），恢复链在这里断掉。
+	"""
+	resume = store.get(name)
+	if resume is not None:
+		return resume
+	if store.is_corrupt(name):
+		handle_error_output(
+			ctx,
+			"resume",
+			code="RESUME_FILE_INVALID",
+			message=f"简历文件 '{name}.json' 损坏，无法读取",
+			hints={
+				"next_actions": [
+					boss_command_for_ctx(ctx, f"resume delete {name}"),
+					boss_command_for_ctx(ctx, "resume list"),
+				]
+			},
+		)
+	else:
+		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
+	ctx.exit(1)
+	return None
+
+
 def _build_default_template(name: str) -> ResumeData:
 	"""从默认模板创建空白简历"""
 	return ResumeData(
@@ -136,7 +165,19 @@ def resume_init_cmd(ctx: click.Context, name: str | None, template: str | None) 
 def resume_list_cmd(ctx: click.Context) -> None:
 	"""列出所有本地简历"""
 	store = _get_store(ctx)
-	items = store.list_all()
+	items, corrupt = store.list_all_with_corrupt()
+	hints: dict[str, Any] = {
+		# 空列表里没有简历名可 show：照抄只会换回 RESUME_NOT_FOUND。
+		"next_actions": ["boss resume init --template default"]
+		if not items
+		else ["boss resume show <name>", "boss resume init --template default"]
+	}
+	if corrupt:
+		# 读不出来的文件不能假装不存在：列表隐藏了它，init 又会被同名文件挡住。
+		hints["corrupt"] = corrupt
+		hints["operator_actions"] = [
+			f"以下简历文件已损坏，先执行 boss resume delete <名称> 后重新创建，或直接修正 resumes/ 下对应的 .json：{', '.join(corrupt)}"
+		]
 	handle_output(
 		ctx, "resume", items,
 		render=lambda d: render_list_result(
@@ -147,10 +188,7 @@ def resume_list_cmd(ctx: click.Context) -> None:
 			if not d
 			else ["boss resume show <name>", "boss resume init --template default"],
 		),
-		# 空列表里没有简历名可 show：照抄只会换回 RESUME_NOT_FOUND。
-		hints={"next_actions": ["boss resume init --template default"]
-		if not items
-		else ["boss resume show <name>", "boss resume init --template default"]},
+		hints=hints,
 	)
 
 
@@ -162,10 +200,8 @@ def resume_show_cmd(ctx: click.Context, name: str) -> None:
 	store = _get_store(ctx)
 	if not _require_resume_name(ctx, name):
 		return
-	resume = store.get(name)
+	resume = _load_resume(ctx, store, name)
 	if resume is None:
-		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
-		ctx.exit(1)
 		return
 	handle_output(
 		ctx, "resume", resume_to_dict(resume),
@@ -191,10 +227,8 @@ def resume_edit_cmd(ctx: click.Context, name: str, field: str, value: str) -> No
 	store = _get_store(ctx)
 	if not _require_resume_name(ctx, name):
 		return
-	resume = store.get(name)
+	resume = _load_resume(ctx, store, name)
 	if resume is None:
-		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
-		ctx.exit(1)
 		return
 	data = resume_to_dict(resume)
 	ok = _set_nested(data, field, value)
@@ -259,10 +293,8 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 	# 其它子命令都是这样。json 导出若交给 export_json 内部的 FileNotFoundError，
 	# 会被顶层 OSError 网兜报成 LOCAL_IO_ERROR「本地文件读写失败」，指引用户去查
 	# 磁盘与权限，而真正该做的是重建这份简历。
-	resume = store.get(name)
+	resume = _load_resume(ctx, store, name)
 	if resume is None:
-		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
-		ctx.exit(1)
 		return
 	if fmt in ("pdf", "html"):
 		if output_path is None:
@@ -371,9 +403,7 @@ def resume_clone_cmd(ctx: click.Context, name: str, new_name: str) -> None:
 	if not new_name.strip():
 		handle_error_output(ctx, "resume", code="INVALID_PARAM", message="新简历名称不能为空")
 		return
-	if not store.exists(name):
-		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
-		ctx.exit(1)
+	if _load_resume(ctx, store, name) is None:
 		return
 	if store.exists(new_name):
 		handle_error_output(
@@ -406,15 +436,11 @@ def resume_diff_cmd(ctx: click.Context, name1: str, name2: str) -> None:
 		return
 	if not _require_resume_name(ctx, name2):
 		return
-	r1 = store.get(name1)
+	r1 = _load_resume(ctx, store, name1)
 	if r1 is None:
-		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name1}' 不存在")
-		ctx.exit(1)
 		return
-	r2 = store.get(name2)
+	r2 = _load_resume(ctx, store, name2)
 	if r2 is None:
-		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name2}' 不存在")
-		ctx.exit(1)
 		return
 	d1 = resume_to_dict(r1)
 	d2 = resume_to_dict(r2)

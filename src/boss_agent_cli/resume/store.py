@@ -36,12 +36,23 @@ class ResumeStore:
 
 	def list_all(self) -> list[dict[str, Any]]:
 		"""列出所有简历摘要（name, title, updated_at）"""
+		return self.list_all_with_corrupt()[0]
+
+	def list_all_with_corrupt(self) -> tuple[list[dict[str, Any]], list[str]]:
+		"""列出可读的简历摘要，并单独返回读不出来的文件名标记。
+
+		列表命令不能因为一份手写坏的文件整体失败，也不能让坏文件假装不存在：
+		调用方据此提示修复或删除重建（`resume init` 遇到同名文件会报
+		``RESUME_ALREADY_EXISTS``，用户否则无从得知该删哪一份）。
+		"""
 		results: list[dict[str, Any]] = []
+		corrupt: list[str] = []
 		for path in sorted(self._dir.glob("*.json")):
 			try:
 				raw = json.loads(path.read_text(encoding="utf-8"))
 				if not isinstance(raw, dict):
 					# 手写坏的简历文件不该让整份列表都打不开。
+					corrupt.append(path.stem)
 					continue
 				results.append({
 					"name": raw.get("name", ""),
@@ -49,7 +60,8 @@ class ResumeStore:
 					"updated_at": raw.get("updated_at", ""),
 				})
 			except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-				continue
+				corrupt.append(path.stem)
+		return results, corrupt
 		return results
 
 	def get(self, name: str) -> ResumeData | None:
@@ -85,6 +97,10 @@ class ResumeStore:
 	def exists(self, name: str) -> bool:
 		"""检查简历是否存在"""
 		return self._path_for(name).exists()
+
+	def is_corrupt(self, name: str) -> bool:
+		"""文件存在但读不出来（JSON 语法损坏、字段类型写错）。"""
+		return self.exists(name) and self.get(name) is None
 
 	def import_file(self, file_path: Path, *, overwrite: bool = False) -> ResumeData:
 		"""导入 JSON 文件（兼容 wzdnzd/zine0 camelCase 格式）。

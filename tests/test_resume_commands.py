@@ -652,3 +652,57 @@ def test_resume_not_found_gives_executable_recovery(tmp_path):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
 	assert parsed["error"]["recovery_action"] == "boss resume list"
+
+
+# ── 损坏的简历文件 ────────────────────────────────────────────
+
+
+def _write_corrupt_resume(tmp_path, name: str = "broken") -> None:
+	resumes = tmp_path / "resumes"
+	resumes.mkdir(parents=True, exist_ok=True)
+	(resumes / f"{name}.json").write_text("{bad json", encoding="utf-8")
+
+
+def test_list_reports_corrupt_resume_files(tmp_path):
+	"""读不出来的简历文件不能被列表隐藏：init 会被同名文件挡住。"""
+	_write_corrupt_resume(tmp_path)
+	result = _invoke(CliRunner(), tmp_path, ["list"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["data"] == []
+	assert parsed["hints"]["corrupt"] == ["broken"]
+	assert any("boss resume delete" in text for text in parsed["hints"]["operator_actions"])
+
+
+def test_show_corrupt_resume_reports_file_invalid(tmp_path):
+	"""文件存在但读不出来不是「简历不存在」：LIST 里也没有它，照提示会空转。"""
+	_write_corrupt_resume(tmp_path)
+	result = _invoke(CliRunner(), tmp_path, ["show", "broken"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "RESUME_FILE_INVALID")
+	assert parsed["error"]["recoverable"] is True
+	assert "boss resume delete" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == ["boss resume delete broken", "boss resume list"]
+
+
+def test_clone_corrupt_resume_not_local_io_error(tmp_path):
+	"""clone 以前把 FileNotFoundError 漏到顶层，报成「本地文件读写失败」+ 查磁盘。"""
+	_write_corrupt_resume(tmp_path)
+	result = _invoke(CliRunner(), tmp_path, ["clone", "broken", "newone"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "RESUME_FILE_INVALID")
+	assert not (tmp_path / "resumes" / "newone.json").exists()
+
+
+def test_delete_corrupt_resume_still_removes_file(tmp_path):
+	"""损坏文件必须能被删除，否则它会一直挡着同名 init。"""
+	_write_corrupt_resume(tmp_path)
+	runner = CliRunner()
+	deleted = _invoke(runner, tmp_path, ["delete", "broken"])
+	assert deleted.exit_code == 0
+	assert json.loads(deleted.output)["data"]["deleted"] is True
+	assert not (tmp_path / "resumes" / "broken.json").exists()
+	listed = json.loads(_invoke(runner, tmp_path, ["list"]).output)
+	assert "corrupt" not in listed["hints"]
