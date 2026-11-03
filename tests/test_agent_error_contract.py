@@ -52,6 +52,33 @@ def test_agent_facing_usage_errors_emit_stdout_json_envelope(tmp_path, args, com
 	assert message_fragment in parsed["error"]["message"]
 
 
+def test_group_without_subcommand_reports_subcommand_hints(tmp_path):
+	"""只写命令组时不能把整份英文帮助塞进 error.message。
+
+	Click 的 ``NoArgsIsHelpError`` 消息就是 usage/help 全文（「Usage: …」
+	「Options: …」几百字符），Agent 既读不到「缺子命令」这个原因，也没有
+	可执行的下一步。现在换成一句中文说明，并把子命令清单放进 hints。
+	"""
+	runner = CliRunner()
+	for args, command, path in (
+		(("resume",), "resume", "boss resume"),
+		(("agent", "pending"), "agent", "boss agent pending"),
+	):
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), *args])
+		parsed = _assert_single_stdout_json_error(result, command=command)
+		message = parsed["error"]["message"]
+		assert "Usage:" not in message
+		assert "缺少子命令" in message
+		assert parsed["error"]["recovery_action"]
+		next_actions = parsed["hints"]["next_actions"]
+		assert next_actions
+		assert all(action.startswith(f"{path} ") for action in next_actions)
+
+	assert "boss agent pending list" in json.loads(
+		runner.invoke(cli, ["--data-dir", str(tmp_path), "agent", "pending"]).output
+	)["hints"]["next_actions"]
+
+
 def test_agent_run_requires_login_returns_envelope_not_traceback(tmp_path):
 	"""未登录的 `agent run` 必须返回 AUTH_REQUIRED 信封，而不是 traceback。
 
