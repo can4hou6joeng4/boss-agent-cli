@@ -296,3 +296,22 @@ def test_invalid_delay_reports_chinese_message(tmp_path):
 	assert message.startswith("参数 --delay 的值无效: ")
 	assert "30-60" in message
 	assert "0 <= 下限 <= 上限" in message
+
+
+@pytest.mark.parametrize(
+	("args", "command", "recovery_fragment"),
+	[
+		(("agent", "review", "approve", "missing"), "agent.review.approve", "agent review list"),
+		(("agent", "review", "reject", "missing"), "agent.review.reject", "agent review list"),
+		(("agent", "crawl", "--run-id", "x", "--query", "y", "--resume", "r"), "agent.crawl", "--run-id"),
+		(("agent", "crawl", "--query", "golang", "--resume", "r"), "agent.crawl", "--city"),
+	],
+)
+def test_agent_param_errors_point_at_recovery_command(tmp_path, args, command, recovery_fragment):
+	"""复核项不存在、crawl 参数冲突原来只回登记表的「修正参数」，Agent 拿不到下一步。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *args])
+
+	parsed = _assert_single_stdout_json_error(result, command=command)
+	assert recovery_fragment in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"]
