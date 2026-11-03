@@ -17,6 +17,7 @@ from boss_agent_cli.display import (
 	platform_error_contract,
 	platform_error_message,
 	render_job_table,
+	shell_argument,
 )
 from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.match_score import score_job_dict
@@ -182,13 +183,13 @@ def search_cmd(
 				# 兜成 NETWORK_ERROR 让 Agent 无限重试。
 				handle_error_output(
 					ctx, "search", code="SAVED_SEARCH_INVALID", message=str(exc),
-					hints={"next_actions": [f"boss preset remove {preset}", f"boss preset add {preset} <关键词>"]},
+					hints={"next_actions": [f"boss preset remove {shell_argument(preset)}", f"boss preset add {shell_argument(preset)} <关键词>"]},
 				)
 				return
 		if record is None:
 			handle_error_output(
 				ctx, "search", code="SAVED_SEARCH_NOT_FOUND", message=f"未找到 preset: {preset}",
-				hints={"next_actions": ["boss preset list", f"boss preset add {preset} <关键词>"]},
+				hints={"next_actions": ["boss preset list", f"boss preset add {shell_argument(preset)} <关键词>"]},
 			)
 			return
 		params = record["params"]

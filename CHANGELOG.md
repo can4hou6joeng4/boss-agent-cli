@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `shell_argument()` 还漏了两处「下一步」：`boss search --preset <名>` 在预设参数损坏或预设不存在时，`hints.next_actions` 仍原样拼预设名（`boss preset remove 我的 列表` / `boss preset add 我的 列表 <关键词>`），`boss ai local pull` 的 `recovery_action` 与 `boss ai local import` 的下一步同样直接拼模型名（`--model 我的 模型`）——名字带空格时 Agent 照抄会把一个名字拆成两个参数，删除/重建命中错误的名字、下载与配置的也不是导入的那个模型。现在这四处统一走 `display.shell_argument()`。
 - 两条「下一步」提示与实际情况相反：`boss shortlist compare --tag <未命中的标签>` 在候选池非空时仍提示 `boss shortlist add`——池子里明明有条目，缺的只是标签或一次不带过滤的比较，现在改提示 `boss shortlist compare` 与 `boss shortlist list`；`boss config get/set/reset <未知键>` 的错误信封 `hints` 为 `null`，消息里列了可用项却不再给出能查看当前值的 `boss config list`，现在三者统一带上。
 - `boss resume edit --field` 只校验路径存在、不校验目标是不是文本叶子：`--field personal_info --value x` 会把整个子对象换成字符串，`dict_to_resume` 随后抛 `AttributeError`，被兜成不可重试的 `INTERNAL_ERROR`「resume 失败: 'str' object has no attribute 'get'」——参数错误看起来像程序缺陷；`--field name` 更糟：写入后立即被 `updated.name = name` 覆盖，返回 `ok: true` 而内容没变。现在容器 / null 字段按 `INVALID_PARAM` 拒绝并提示点到具体子字段，`name` 改指 `boss resume clone <旧名> <新名>`，字段不存在时的消息与 hints 给出 `boss resume export <name> --format json` 查看完整结构。
 - `hints.next_actions` 里的用户输入没有 shell 转义：简历名 / 预设名 / watch 名都是自由文本，`boss resume init --name "我的 简历"` 之后的提示是 `boss resume show 我的 简历`，Agent 照抄会把一个名字拆成两个参数换回 `INVALID_PARAM`；`boss ai` 系命令的 `resume_name`、`digest` / `stats` / `resume export` 的 `open <文件路径>` 同样受影响（路径里有空格时打不开）。现在新增 `display.shell_argument()`（只按空白判断，中文名不加引号），所有插入用户输入的 hint 与 TTY `next_steps` 统一走它；`greet` 原有的私有实现改为复用同一函数。
