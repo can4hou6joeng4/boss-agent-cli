@@ -175,6 +175,31 @@ def test_delete_existing(tmp_path):
 	assert show_result.exit_code == 1
 
 
+def test_delete_resume_clears_job_links(tmp_path):
+	"""删除简历时一并清理职位关联，同名重建的简历不继承旧投递状态。
+
+	关联表没有外键约束；不同步清理的话，`resume delete default` 再 `resume init`
+	（默认名就是 default）之后，`resume applications default` 会把旧简历投过的职位
+	连同 `applied` 状态一起报出来。
+	"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "default", "--template", "default"])
+	_invoke(runner, tmp_path, ["link", "default", "sid-001", "jid-001", "--title", "后端", "--company", "公司甲"])
+
+	from boss_agent_cli.cache.store import CacheStore
+
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.update_job_link_status("default", "sid-001", "jid-001", "applied", "已投递") is True
+
+	delete_result = _invoke(runner, tmp_path, ["delete", "default"])
+	assert delete_result.exit_code == 0, delete_result.output
+
+	_invoke(runner, tmp_path, ["init", "--template", "default"])
+	result = _invoke(runner, tmp_path, ["applications", "default"])
+	assert json.loads(result.output)["data"] == []
+	assert json.loads(delete_result.output)["data"]["removed_links"] == 1
+
+
 def test_delete_not_found(tmp_path):
 	runner = CliRunner()
 	result = _invoke(runner, tmp_path, ["delete", "nope"])

@@ -1374,6 +1374,19 @@ class CacheStore:
 		self._conn.commit()
 		return cursor.rowcount > 0
 
+	def remove_resume_links(self, resume_name: str) -> int:
+		"""删除一份简历的全部职位关联，返回删除条数。
+
+		关联表以简历名为业务键、没有外键约束：简历文件被删除后这些行仍然存在，
+		同名重建简历会直接继承旧的投递状态。
+		"""
+		cursor = self._conn.execute(
+			"DELETE FROM resume_job_links WHERE resume_name = ?",
+			(resume_name,),
+		)
+		self._conn.commit()
+		return cursor.rowcount
+
 	def close(self) -> None:
 		self._conn.close()
 
