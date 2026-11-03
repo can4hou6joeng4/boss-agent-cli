@@ -3,12 +3,15 @@
 import datetime
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.services.chat_utils import contact_identity
 from boss_agent_cli.services.json_files import write_json_atomic
 from boss_agent_cli.output import Logger
+
+_SNAPSHOT_NAME_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def save_snapshot_and_diff(
@@ -96,11 +99,25 @@ def load_snapshot(path: str, logger: Logger) -> list[dict[str, Any]] | None:
 
 
 def _find_previous_snapshot(snapshot_dir: str, today: str) -> str | None:
-	"""找到 today 之前最近的一份快照文件路径。"""
+	"""找到 today 之前最近的一份快照文件路径。
+
+	只接受 `YYYY-MM-DD.json` 命名的文件。同目录里手动备份出来的 `backup.json`
+	之类一旦混进来，旧实现会按字符串排序选中它（"b…" 排在 "2026-…" 之后），
+	读到非快照内容后整次 diff 静默退化成「首份快照」。未来日期的文件
+	（拷入的、系统时钟回拨留下的）同样跳过，否则会被当成「上一次」。
+	"""
 	snapshots = []
 	for fname in os.listdir(snapshot_dir):
-		if fname.endswith(".json") and fname[:10] != today:
-			snapshots.append(fname)
+		if not fname.endswith(".json"):
+			continue
+		stem = fname[: -len(".json")]
+		if not _SNAPSHOT_NAME_RE.fullmatch(stem) or stem >= today:
+			continue
+		try:
+			datetime.date.fromisoformat(stem)
+		except ValueError:
+			continue
+		snapshots.append(fname)
 	if not snapshots:
 		return None
 	snapshots.sort(reverse=True)
