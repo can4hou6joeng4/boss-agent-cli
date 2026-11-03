@@ -170,6 +170,25 @@ def test_greet_already_greeted(mock_cache_cls, mock_auth_cls, mock_client_cls):
 	assert "boss chat" in parsed["error"]["recovery_action"]
 
 
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
+@patch("boss_agent_cli.commands.greet.AuthManager")
+@patch("boss_agent_cli.commands.greet.CacheStore")
+def test_greet_limit_reports_recovery_action(mock_cache_cls, mock_auth_cls, mock_client_cls):
+	"""额度用完不是死胡同：信封要说明停止自动招呼、等待权益恢复。"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.greet.return_value = {"code": 99}
+	mock_client.is_success.return_value = False
+	mock_client.parse_error.return_value = ("GREET_LIMIT", "今日主动沟通人数已达上限")
+	runner = CliRunner()
+	result = runner.invoke(cli, ["greet", "sec_001", "job_001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "GREET_LIMIT"
+	assert "不要自动重发" in parsed["error"]["recovery_action"]
+
+
 @patch("boss_agent_cli.commands.greet.time")
 @patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
