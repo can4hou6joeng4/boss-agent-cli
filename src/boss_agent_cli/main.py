@@ -12,6 +12,7 @@ from boss_agent_cli.cache.store import CacheDatabaseInvalid
 from boss_agent_cli.commands.register import register_candidate_commands, register_recruiter_commands
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY, ROLES, load_config, validate_request_config
 from boss_agent_cli.api.request_budget import validate_delay
+from boss_agent_cli.display import INTERNAL_ERROR_TYPES, error_contract_for_code
 from boss_agent_cli.hooks import create_hook_bus
 from boss_agent_cli.output import LOG_LEVELS, emit_error, is_local_io_error, Logger, set_exit_codes_mode
 from boss_agent_cli.platforms import list_platforms
@@ -279,6 +280,22 @@ class BossCliGroup(click.Group):
 						f"备份后删除 {exc.path}；候选池、预设、watch 历史与任务断点都随旧库一起作废",
 					],
 				},
+			)
+			return None
+		except INTERNAL_ERROR_TYPES as exc:
+			# 与 handle_auth_errors 的兜底同口径：确定性异常（类型错误、索引越界、
+			# 整数溢出）不是网络问题。stats / cities / config 这类没有统一装饰器的
+			# 本地命令以前会把 traceback 直接甩给 Agent，连信封都没有。
+			if not standalone_mode:
+				raise
+			command = _invoked_command_name(args, self.name or "boss")
+			internal_recoverable, internal_recovery_action = error_contract_for_code("INTERNAL_ERROR")
+			emit_error(
+				command,
+				code="INTERNAL_ERROR",
+				message=f"{command} 失败: {type(exc).__name__}: {exc}",
+				recoverable=internal_recoverable,
+				recovery_action=internal_recovery_action,
 			)
 			return None
 		except OSError as exc:

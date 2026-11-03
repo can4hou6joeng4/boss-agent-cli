@@ -349,7 +349,9 @@ def _percent(value: Any) -> str:
 
 
 @click.command("stats")
-@click.option("--days", default=30, type=click.IntRange(min=0), help="统计窗口天数（默认 30 天）")
+# 上限 100 年：`since = time.time() - days * 86400` 要把天数转成 float，
+# 无界的整数（如 10**400）会抛 OverflowError，命令连信封都发不出来。
+@click.option("--days", default=30, type=click.IntRange(min=0, max=36500), help="统计窗口天数（默认 30 天）")
 @click.option(
 	"--format", "output_format",
 	type=click.Choice(["json", "html"]),

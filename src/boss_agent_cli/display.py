@@ -677,7 +677,7 @@ def _with_httpx_only_hint(ctx: Any, hints: dict[str, list[str]] | None) -> dict[
 
 # 解析平台数据或 CLI 自身的缺陷：同样的输入必然得到同样的结果。归为 NETWORK_ERROR
 # 并建议「重试」会让 Agent 反复重试，重试的若是平台请求，还会白白消耗请求预算。
-INTERNAL_ERROR_TYPES: tuple[type[Exception], ...] = (TypeError, AttributeError, KeyError, IndexError)
+INTERNAL_ERROR_TYPES: tuple[type[Exception], ...] = (TypeError, AttributeError, KeyError, IndexError, OverflowError)
 
 
 def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:

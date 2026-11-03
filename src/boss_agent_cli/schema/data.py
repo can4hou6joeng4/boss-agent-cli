@@ -420,6 +420,7 @@ SCHEMA_DATA = {
 					"type": "int",
 					"default": None,
 					"minimum": 0,
+					"maximum": 36500,
 					"description": "只显示最近 N 天的记录",
 				},
 				"--export": {
@@ -894,7 +895,7 @@ SCHEMA_DATA = {
 			"description": "汇总新增职位、待跟进会话和面试项的日报。",
 			"args": [],
 			"options": {
-				"--days-stale": {"type": "int", "default": 3, "minimum": 0, "description": "超过 N 天未推进则视为 follow_up"},
+				"--days-stale": {"type": "int", "default": 3, "minimum": 0, "maximum": 36500, "description": "超过 N 天未推进则视为 follow_up"},
 				"--format": {
 					"type": "string",
 					"default": "json",
@@ -943,7 +944,7 @@ SCHEMA_DATA = {
 			"options": {
 				"--dry-run": {"type": "bool", "default": False, "description": "仅预览将清理的内容"},
 				"--all": {"type": "bool", "default": False, "description": "清理全部缓存"},
-				"--days": {"type": "int", "default": 30, "minimum": 0, "description": "清理超过指定天数的快照和导出"},
+				"--days": {"type": "int", "default": 30, "minimum": 0, "maximum": 36500, "description": "清理超过指定天数的快照和导出"},
 				"--privacy": {
 					"type": "bool",
 					"default": False,
@@ -960,7 +961,7 @@ SCHEMA_DATA = {
 			"description": "投递转化漏斗统计（只读聚合打招呼/投递/候选池/监控）",
 			"args": [],
 			"options": {
-				"--days": {"type": "int", "default": 30, "minimum": 0, "description": "统计窗口天数"},
+				"--days": {"type": "int", "default": 30, "minimum": 0, "maximum": 36500, "description": "统计窗口天数"},
 				"--format": {
 					"type": "string",
 					"default": "json",

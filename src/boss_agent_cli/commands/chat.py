@@ -29,7 +29,7 @@ _escape_md_cell = escape_md_cell
 @click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
 @click.option("--from", "from_who", default=None, type=click.Choice(["boss", "me"]),
 	help="筛选发起方：boss=对方主动联系 / me=我主动打招呼")
-@click.option("--days", default=None, type=click.IntRange(min=0), help="只显示最近 N 天的记录")
+@click.option("--days", default=None, type=click.IntRange(min=0, max=36500), help="只显示最近 N 天的记录")
 @click.option("--export", "export_fmt", default=None,
 	type=click.Choice(["html", "md", "csv", "json"]),
 	help="导出格式：html=HTML / md=Markdown / csv=CSV / json=JSON")

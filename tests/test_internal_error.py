@@ -1,6 +1,6 @@
 """兜底异常分类：确定性错误归为 INTERNAL_ERROR，其他异常仍是 NETWORK_ERROR。
 
-TypeError / AttributeError / KeyError / IndexError 来自 CLI 缺陷或平台返回了未预期的
+TypeError / AttributeError / KeyError / IndexError / OverflowError 来自 CLI 缺陷或平台返回了未预期的
 数据结构，同样的输入必然得到同样的结果。以前一律报成可重试的 NETWORK_ERROR，Agent
 会反复重试，重试的若是平台请求还会白白消耗请求预算。
 """
@@ -40,7 +40,9 @@ def test_internal_error_is_registered_as_not_recoverable():
 	assert "不要重试" in spec["recovery_action"]
 
 
-@pytest.mark.parametrize("exc", [TypeError("x"), AttributeError("x"), KeyError("x"), IndexError("x")])
+@pytest.mark.parametrize(
+	"exc", [TypeError("x"), AttributeError("x"), KeyError("x"), IndexError("x"), OverflowError("x")]
+)
 def test_deterministic_errors_become_internal_error(exc):
 	result = _recommend_raising(exc)
 	payload = json.loads(result.output)
@@ -128,3 +130,23 @@ def test_me_reports_internal_error():
 	assert payload["error"]["code"] == "INTERNAL_ERROR"
 	assert payload["error"]["message"].startswith("AttributeError: ")
 	assert payload["error"]["recoverable"] is False
+
+
+def test_overflow_in_undecorated_command_becomes_internal_error(tmp_path):
+	"""没有 ``handle_auth_errors`` 包装的本地命令（stats）也要给信封。
+
+	``stats --days 10**400`` 会让 ``time.time() - days * 86400`` 抛 OverflowError；
+	这条路径既没有装饰器、也不在 main.py 的 OSError 网兜里，以前 stdout 只有
+	traceback，违反「每条命令只输出一个信封」的契约。
+	"""
+	with patch(
+		"boss_agent_cli.commands.stats._collect_stats",
+		side_effect=OverflowError("int too large to convert to float"),
+	):
+		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "stats"])
+	assert result.exit_code == 1
+	payload = json.loads(result.output)
+	assert payload["command"] == "stats"
+	assert payload["error"]["code"] == "INTERNAL_ERROR"
+	assert payload["error"]["recoverable"] is False
+	assert payload["error"]["message"].startswith("stats 失败: OverflowError: ")

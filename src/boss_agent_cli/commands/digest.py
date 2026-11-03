@@ -15,7 +15,7 @@ from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up
 
 
 @click.command("digest")
-@click.option("--days-stale", default=3, type=click.IntRange(min=0), help="超过 N 天未推进则视为 follow_up")
+@click.option("--days-stale", default=3, type=click.IntRange(min=0, max=36500), help="超过 N 天未推进则视为 follow_up")
 @click.option("--now-ts-ms", default=None, type=int, help="测试用：覆盖当前时间戳（毫秒）")
 @click.option(
 	"--format", "output_format",
