@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
+from boss_agent_cli import display
 from boss_agent_cli.main import cli
 
 
@@ -68,6 +69,26 @@ def test_preset_add_list_remove(tmp_path):
 	assert remove_result.exit_code == 0
 	remove_parsed = json.loads(remove_result.output)
 	assert remove_parsed["data"]["removed"] is True
+
+
+def test_preset_list_empty_next_step_is_executable(tmp_path, monkeypatch):
+	"""TTY 空列表的下一步提示必须是可执行形式：query 是位置参数。
+
+	提示里写成 `--query` 时，照抄只会换回「No such option '--query'」。
+	"""
+	captured: dict[str, list[str]] = {}
+	monkeypatch.setattr(display, "is_json_mode", lambda ctx: False)
+	monkeypatch.setattr(display, "render_next_steps", lambda steps: captured.setdefault("steps", steps))
+
+	runner = CliRunner()
+	list_result = runner.invoke(cli, ["--data-dir", str(tmp_path), "preset", "list"])
+	assert list_result.exit_code == 0, list_result.output
+	steps = captured["steps"]
+	assert steps == ["boss preset add <name> <关键词>"]
+
+	hint_args = steps[0].replace("<name>", "hint-preset").replace("<关键词>", "golang").split(" ")[1:]
+	added = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *hint_args])
+	assert added.exit_code == 0, added.output
 
 
 def test_preset_add_rejects_unknown_filters(tmp_path):

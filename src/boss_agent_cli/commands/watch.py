@@ -138,7 +138,7 @@ def watch_list_cmd(ctx: click.Context) -> None:
 			d,
 			"watches",
 			[("名称", "name", "bold cyan"), ("条件", "params", "green"), ("创建时间", "created_at", "dim")],
-			next_steps=["boss watch add <name> --query <关键词>"]
+			next_steps=["boss watch add <name> <关键词>"]
 			if not d
 			else ["boss watch run <name>", "boss watch remove <name>"],
 		),

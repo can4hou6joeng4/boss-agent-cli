@@ -127,7 +127,7 @@ def preset_list_cmd(ctx: click.Context) -> None:
 			d,
 			"presets",
 			[("名称", "name", "bold cyan"), ("条件", "params", "green"), ("创建时间", "created_at", "dim")],
-			next_steps=["boss preset add <name> --query <关键词>"] if not d else [
+			next_steps=["boss preset add <name> <关键词>"] if not d else [
 				"boss search --preset <name>",
 				"boss preset remove <name>",
 			],

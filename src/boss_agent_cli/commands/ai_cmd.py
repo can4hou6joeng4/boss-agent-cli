@@ -687,7 +687,7 @@ def ai_suggest_keywords_cmd(ctx: click.Context, limit: int) -> None:
 		render=lambda d: render_ai_result(d, title="ai-suggest-keywords"),
 		hints={"next_actions": [
 			"boss search <推荐关键词>",
-			"boss preset add <name> --query <关键词>",
+			"boss preset add <name> <关键词>",
 		]},
 	)
 
