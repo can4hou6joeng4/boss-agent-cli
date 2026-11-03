@@ -102,6 +102,37 @@ def test_schema_commands_have_descriptions():
 	)
 
 
+def _iter_schema_subcommands(entries: dict[str, Any], prefix: str):
+	"""遍历 schema options 里的子命令条目，返回 ``(路径, 条目)``。
+
+	两种形态并存：`watch` / `crawl` 的子命令条目带 ``args``/``options`` 包装，
+	`ai.local` 则直接是「子命令名 → 声明」的字典。空对象是「无参数子命令」的
+	占位（见 ``test_schema_options_declare_every_subcommand``），跳过。
+	"""
+	for name, spec in entries.items():
+		if name.startswith("-") or not isinstance(spec, dict) or not spec:
+			continue
+		yield prefix + name, spec
+		if "args" not in spec and "options" not in spec:
+			yield from _iter_schema_subcommands(spec, prefix + name + " ")
+
+
+def test_schema_subcommands_have_descriptions():
+	"""schema 中每个子命令都应有非空的 description 字段。
+
+	`boss schema` 是 Agent 的能力真源：子命令只列参数和选项、不写它做什么，
+	Agent 就只知道 `watch add` 收 name + query，不知道它会保存下来供 `run`
+	增量拉取。原先 43 个子命令缺描述。
+	"""
+	missing: list[str] = []
+	for name, spec in SCHEMA_DATA["commands"].items():
+		for path, entry in _iter_schema_subcommands(spec.get("options") or {}, f"{name} "):
+			if not str(entry.get("description") or "").strip():
+				missing.append(path)
+
+	assert not missing, f"以下子命令缺少 description: {missing}"
+
+
 # ── 子命令声明 == 实际注册子命令 ─────────────────────────────────────
 
 _SUBCOMMAND_LIST_PATTERN = re.compile(r"子命令：([^）)]+)")
