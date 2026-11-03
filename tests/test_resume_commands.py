@@ -428,6 +428,32 @@ def test_applications_list(tmp_path):
 	assert parsed["hints"]["next_actions"] == ["boss resume show apptest"]
 
 
+def test_relink_resume_keeps_title_company_and_tracking(tmp_path):
+	"""重复 `resume link` 同一职位不抹掉已有标题、公司和投递状态。
+
+	第二次关联只给必要参数（不带 `--title` / `--company`）时，旧实现会用空串覆盖
+	职位名与公司名，并把状态打回 `prepared`。
+	"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "relink", "--template", "default"])
+	_invoke(runner, tmp_path, ["link", "relink", "sid-001", "jid-001", "--title", "后端工程师", "--company", "测试公司"])
+
+	from boss_agent_cli.cache.store import CacheStore
+
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.update_job_link_status("relink", "sid-001", "jid-001", "applied", "已投递") is True
+
+	result = _invoke(runner, tmp_path, ["link", "relink", "sid-001", "jid-001"])
+	assert result.exit_code == 0, result.output
+
+	result = _invoke(runner, tmp_path, ["applications", "relink"])
+	items = json.loads(result.output)["data"]
+	assert items[0]["job_title"] == "后端工程师"
+	assert items[0]["company"] == "测试公司"
+	assert items[0]["status"] == "applied"
+	assert items[0]["notes"] == "已投递"
+
+
 def test_applications_resume_not_found(tmp_path):
 	runner = CliRunner()
 	result = _invoke(runner, tmp_path, ["applications", "ghost"])

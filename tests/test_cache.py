@@ -184,6 +184,40 @@ def test_resume_job_link_crud(tmp_path):
 	assert store.get_resume_applications("default") == []
 
 
+def test_resume_job_link_repeat_preserves_tracking(tmp_path):
+	"""重复关联同一职位不能把投递状态、备注和首次关联时间抹掉。
+
+	`INSERT OR REPLACE` 整行替换：脚本重跑一次 `resume link`，已经推进到
+	`applied` 的记录会悄悄退回 `prepared`，备注清空，`linked_at` 也被改成当前时间。
+	"""
+	store = CacheStore(tmp_path / "test.db")
+	store.link_resume_to_job("default", "sec_001", "job_001", "后端工程师", "测试公司")
+	assert store.update_job_link_status("default", "sec_001", "job_001", "applied", "已投递") is True
+	linked_at = store.get_resume_applications("default")[0]["linked_at"]
+
+	time.sleep(0.01)
+	store.link_resume_to_job("default", "sec_001", "job_001", "", "")
+
+	app = store.get_resume_applications("default")[0]
+	assert app["status"] == "applied"
+	assert app["notes"] == "已投递"
+	assert app["linked_at"] == linked_at
+	assert app["job_title"] == "后端工程师"
+	assert app["company"] == "测试公司"
+
+
+def test_resume_job_link_repeat_applies_explicit_values(tmp_path):
+	"""本次显式给出的标题/公司仍然覆盖旧值。"""
+	store = CacheStore(tmp_path / "test.db")
+	store.link_resume_to_job("default", "sec_001", "job_001", "旧标题", "旧公司")
+	store.link_resume_to_job("default", "sec_001", "job_001", "新标题", "新公司")
+
+	app = store.get_resume_applications("default")[0]
+	assert app["job_title"] == "新标题"
+	assert app["company"] == "新公司"
+	assert app["status"] == "prepared"
+
+
 def test_resume_job_link_multiple(tmp_path):
 	store = CacheStore(tmp_path / "test.db")
 	store.link_resume_to_job("v1", "sec_001", "job_001", "后端", "公司甲")

@@ -1283,12 +1283,22 @@ class CacheStore:
 		job_title: str,
 		company: str,
 	) -> None:
-		"""将简历与职位关联"""
+		"""将简历与职位关联；同一主键重复关联只刷新本次给出的字段。
+
+		`INSERT OR REPLACE` 会整行替换：重复 `resume link` 同一职位（脚本重跑、先把
+		职位批量关联一遍再补标题）会把投递状态打回 `prepared`、清空备注，并把首次
+		关联时间改成当前时间；本次没传 `--title` / `--company` 时还会用空串覆盖原值。
+		冲突时按字段更新，`status` / `notes` / `linked_at` 始终保留。
+		"""
 		now = time.time()
 		self._conn.execute(
-			"INSERT OR REPLACE INTO resume_job_links "
+			"INSERT INTO resume_job_links "
 			"(resume_name, security_id, job_id, job_title, company, status, notes, linked_at, updated_at) "
-			"VALUES (?, ?, ?, ?, ?, 'prepared', '', ?, ?)",
+			"VALUES (?, ?, ?, ?, ?, 'prepared', '', ?, ?) "
+			"ON CONFLICT(resume_name, security_id, job_id) DO UPDATE SET "
+			"job_title = COALESCE(NULLIF(excluded.job_title, ''), resume_job_links.job_title), "
+			"company = COALESCE(NULLIF(excluded.company, ''), resume_job_links.company), "
+			"updated_at = excluded.updated_at",
 			(resume_name, security_id, job_id, job_title, company, now, now),
 		)
 		self._conn.commit()
