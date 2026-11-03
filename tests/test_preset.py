@@ -270,6 +270,42 @@ def test_search_with_missing_preset_reports_saved_search_not_found(tmp_path):
 	assert parsed["hints"]["next_actions"] == ["boss preset list", "boss preset add ghost <关键词>"]
 
 
+def test_search_with_missing_preset_quotes_name_with_spaces(tmp_path):
+	"""预设名带空格时，重建它的 hint 必须整体加引号，否则 `add 我的 列表 <关键词>`
+	会被拆成「我的」和「列表」两个位置参数。"""
+	result = CliRunner().invoke(
+		cli, ["--data-dir", str(tmp_path), "--json", "search", "--preset", "我的 列表"]
+	)
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "SAVED_SEARCH_NOT_FOUND"
+	add_hint = parsed["hints"]["next_actions"][1]
+	assert add_hint == "boss preset add '我的 列表' <关键词>"
+	assert shlex.split(add_hint)[3] == "我的 列表"
+
+
+def test_search_with_corrupt_preset_quotes_name_with_spaces(tmp_path):
+	"""删除重建指引同样要保住带空格的预设名。"""
+	runner = CliRunner()
+	runner.invoke(
+		cli, ["--data-dir", str(tmp_path), "--json", "preset", "add", "我的 列表", "python"]
+	)
+	_break_params(tmp_path, "我的 列表")
+
+	result = runner.invoke(
+		cli, ["--data-dir", str(tmp_path), "--json", "search", "--preset", "我的 列表"]
+	)
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "SAVED_SEARCH_INVALID"
+	assert parsed["hints"]["next_actions"] == [
+		"boss preset remove '我的 列表'",
+		"boss preset add '我的 列表' <关键词>",
+	]
+
+
 def test_preset_list_json_hints_follow_the_actual_list(tmp_path):
 	"""JSON 的 next_actions 也要按列表状态切换：空列表没有可搜索 / 可删除的名字。
 

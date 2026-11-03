@@ -21,7 +21,7 @@ from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action
 from rich.table import Table
 
 from boss_agent_cli import display
-from boss_agent_cli.display import error_contract_for_code, handle_error_output, handle_output, render_action_result, render_next_steps
+from boss_agent_cli.display import error_contract_for_code, handle_error_output, handle_output, render_action_result, render_next_steps, shell_argument
 
 
 def _render_local_status(data: dict[str, Any]) -> None:
@@ -128,7 +128,7 @@ def local_pull_cmd(ctx: click.Context, model: str, confirm_download: bool) -> No
 			code="CONFIRM_DOWNLOAD_REQUIRED",
 			message="下载模型权重需要显式传 --confirm-download",
 			recoverable=True,
-			recovery_action=f"boss ai local pull --model {model} --confirm-download",
+			recovery_action=f"boss ai local pull --model {shell_argument(model)} --confirm-download",
 		)
 	try:
 		result = subprocess.run(
@@ -195,11 +195,11 @@ def local_import_cmd(ctx: click.Context, source_path: Path, model: str) -> None:
 		"ai.local.import",
 		asdict(imported),
 		render=lambda d: render_action_result(
-			d, title="ai local import", next_steps=[f"boss ai local configure --runtime vllm --model {model}"]
+			d, title="ai local import", next_steps=[f"boss ai local configure --runtime vllm --model {shell_argument(model)}"]
 		),
 		hints={
 			"next_actions": [
-				f"boss ai local configure --runtime vllm --model {model}",
+				f"boss ai local configure --runtime vllm --model {shell_argument(model)}",
 				"boss ai local status",
 			],
 			"operator_actions": [
