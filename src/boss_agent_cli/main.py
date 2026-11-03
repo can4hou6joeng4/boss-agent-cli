@@ -106,6 +106,68 @@ def _unknown_option_error(exc: click.ClickException) -> tuple[str, str, dict[str
 	)
 
 
+_EXTRA_ARGUMENT_RE = re.compile(r"^Got unexpected extra arguments? \((.+)\)$")
+
+
+def _usage_path(exc: click.ClickException) -> str | None:
+	"""用法错误所在命令的完整路径（``boss resume diff``）。"""
+	ctx = getattr(exc, "ctx", None)
+	if ctx is None:
+		return None
+	root = ctx.find_root().info_name or "boss"
+	return f"{root} {_command_path(ctx)}".strip()
+
+
+def _missing_parameter_error(exc: click.ClickException) -> tuple[str, str, dict[str, Any]] | None:
+	"""把 ``Missing option '--label'.`` 换成点明命令与参数的中文消息。
+
+	``boss mark <uid>`` 漏掉 ``--label``、``boss resume diff <旧名>`` 漏掉第二个
+	名字时，信封里只有 Click 的英文原文和笼统的「修正参数」，Agent 既看不出
+	是哪个命令、缺的是选项还是位置参数，也没有可执行的下一步。这里按类型
+	分成「缺少必填选项」与「缺少必填参数」，并指向该命令的 ``--help``。
+	"""
+	if not isinstance(exc, click.MissingParameter):
+		return None
+	path = _usage_path(exc)
+	if path is None:
+		return None
+	hint = exc.param_hint
+	if hint is None and exc.param is not None:
+		# 与 Click 自己的英文消息取同一个展示名：位置参数是 metavar（NAME2），
+		# 选项是 ``'--label'``。直接用 param.name 会得到小写的内部名。
+		hint = exc.param.get_error_hint(exc.ctx) if exc.ctx is not None else exc.param.human_readable_name
+	if isinstance(hint, (list, tuple)):
+		hint = " / ".join(hint)
+	hint = str(hint or "").strip().strip("'\"")
+	kind = "选项" if isinstance(exc.param, click.Option) else "参数"
+	shown = f" '{hint}'" if hint else ""
+	return (
+		f"{path} 缺少必填{kind}{shown}",
+		f"用 {path} --help 查看用法",
+		{"next_actions": [f"{path} --help"]},
+	)
+
+
+def _unexpected_extra_argument_error(exc: click.ClickException) -> tuple[str, str, dict[str, Any]] | None:
+	"""把 ``Got unexpected extra argument (x)`` 换成中文说明。
+
+	``boss search golang extra`` / ``boss resume init extra`` 这类多给参数的调用
+	只拿到英文原文，Agent 读到的原因（多余的参数）与真正该做的动作（去掉它）
+	都对不上。Click 8.x 没有专门的异常类，按消息格式识别，未知格式保持原样。
+	"""
+	matched = _EXTRA_ARGUMENT_RE.match(str(getattr(exc, "message", "") or ""))
+	if matched is None:
+		return None
+	path = _usage_path(exc)
+	if path is None:
+		return None
+	return (
+		f"{path} 收到了多余的参数 '{matched.group(1).strip()}'",
+		f"去掉多余的参数后重试；用 {path} --help 查看用法",
+		{"next_actions": [f"{path} --help"]},
+	)
+
+
 def _misplaced_global_option(group: click.Group, exc: click.ClickException) -> tuple[str, str] | None:
 	"""Return a clearer message when a root option was parsed by a subcommand.
 
@@ -309,6 +371,14 @@ class BossCliGroup(click.Group):
 				unknown = _unknown_subcommand_error(exc)
 				if unknown is not None:
 					message, recovery_action, hints = unknown
+				else:
+					missing_param = _missing_parameter_error(exc)
+					if missing_param is not None:
+						message, recovery_action, hints = missing_param
+					else:
+						extra_args = _unexpected_extra_argument_error(exc)
+						if extra_args is not None:
+							message, recovery_action, hints = extra_args
 			misplaced = _misplaced_global_option(self, exc)
 			if misplaced is not None:
 				message, recovery_action = misplaced
