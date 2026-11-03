@@ -298,6 +298,30 @@ def _all_run_ids(tmp_path: Path) -> list[str]:
 		return [str(row[0]) for row in conn.execute("SELECT run_id FROM crawl_runs")]
 
 
+@pytest.mark.parametrize("query", ["", "   "])
+def test_start_rejects_blank_query_without_creating_a_run(tmp_path, query):
+	"""空关键词等于不筛选：会抓城市默认列表，消耗预算并放大风控面。"""
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, "crawl", "start", query, "--city", "杭州")
+	assert result.exit_code == 1
+	error = _envelope(result)["error"]
+	assert error["code"] == "INVALID_PARAM"
+	assert "关键词" in error["message"]
+	db = tmp_path / "cache" / "boss_agent.db"
+	if db.exists():
+		assert _all_run_ids(tmp_path) == [], "空关键词不该留下 run 或拉起后台进程"
+
+
+def test_run_rejects_blank_query(tmp_path):
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, "crawl", "run", "", "--city", "杭州")
+	assert result.exit_code == 1
+	assert _envelope(result)["error"]["code"] == "INVALID_PARAM"
+	assert "关键词" in _envelope(result)["error"]["message"]
+
+
 # ── resume ────────────────────────────────────────────────────────────
 
 
