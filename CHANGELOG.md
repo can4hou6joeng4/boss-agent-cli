@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `display.shell_argument()` 只在有空白时加引号，漏掉其它会被 shell 解释的字符：简历 / 预设 / watch 名里出现落单单引号时（`boss resume init --name "it's"`），提示是 `boss resume show it's`——引号没闭合，照抄到终端直接语法错误；名字里带 `*`、`$HOME` 或以 `~` 开头时则会被 glob / 变量 / 家目录展开成完全不同的参数。现在空白与 shell 元字符（引号、`$`、`*?[]{}`、`|&;#<>` 等）以及开头的 `~` 统一按 POSIX 单引号转义，普通中文名与 `qwen3:14b` 这类名字的提示保持不变。
 - `shell_argument()` 仍有两条自由文本路径直接拼名字：`boss search --preset <名>` 的筛选项校验错误消息里写着 `boss preset remove 我的 列表`（预设名带空格时删不到正确的条目），wizard 的 `candidate_watch` 在本地 watch 参数损坏时 `recovery_action` 为 `boss watch remove 我的 监控 后重新 watch add 我的 监控 <关键词>`（Agent 照抄两个命令都会拆错名字）。现在两处统一走 `display.shell_argument()`，并把恢复指引写成两条完整命令。
 - `shell_argument()` 还漏了两处「下一步」：`boss search --preset <名>` 在预设参数损坏或预设不存在时，`hints.next_actions` 仍原样拼预设名（`boss preset remove 我的 列表` / `boss preset add 我的 列表 <关键词>`），`boss ai local pull` 的 `recovery_action` 与 `boss ai local import` 的下一步同样直接拼模型名（`--model 我的 模型`）——名字带空格时 Agent 照抄会把一个名字拆成两个参数，删除/重建命中错误的名字、下载与配置的也不是导入的那个模型。现在这四处统一走 `display.shell_argument()`。
 - 两条「下一步」提示与实际情况相反：`boss shortlist compare --tag <未命中的标签>` 在候选池非空时仍提示 `boss shortlist add`——池子里明明有条目，缺的只是标签或一次不带过滤的比较，现在改提示 `boss shortlist compare` 与 `boss shortlist list`；`boss config get/set/reset <未知键>` 的错误信封 `hints` 为 `null`，消息里列了可用项却不再给出能查看当前值的 `boss config list`，现在三者统一带上。
