@@ -163,6 +163,11 @@ def search_cmd(
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	raw_params: dict[str, str] = {}
+	# 校验失败的筛选项若完全来自 preset，错误消息要点名是哪条本地预设：
+	# 用户这次没传任何筛选参数，只说「未知薪资范围」看不出该改哪里。
+	preset_origin = ""
+	if preset and not any((city, salary, experience, education, industry, scale, stage, job_type)):
+		preset_origin = f"（来自 preset '{preset}'，可用 boss preset remove {preset} 删除后重建）"
 
 	if preset:
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
@@ -211,7 +216,7 @@ def search_cmd(
 	try:
 		ensure_supported_city(city)
 	except ValueError as exc:
-		handle_error_output(ctx, "search", code="INVALID_PARAM", message=str(exc))
+		handle_error_output(ctx, "search", code="INVALID_PARAM", message=f"{exc}{preset_origin}")
 		return
 
 	try:
@@ -225,14 +230,14 @@ def search_cmd(
 			job_type=job_type,
 		)
 	except ValueError as exc:
-		handle_error_output(ctx, "search", code="INVALID_PARAM", message=str(exc))
+		handle_error_output(ctx, "search", code="INVALID_PARAM", message=f"{exc}{preset_origin}")
 		return
 	raw_params.update({key: value for key, value in code_params.items() if value})
 
 	try:
 		active_level = resolve_active_level(active)
 	except ValueError as exc:
-		handle_error_output(ctx, "search", code="INVALID_PARAM", message=str(exc))
+		handle_error_output(ctx, "search", code="INVALID_PARAM", message=f"{exc}{preset_origin}")
 		return
 	# 福利和活跃度都可能要逐个查详情（活跃度也会变），结果不进搜索缓存
 	detail_filter = bool(welfare or active_level)

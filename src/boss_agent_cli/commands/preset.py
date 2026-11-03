@@ -2,7 +2,6 @@ import click
 from typing import Any
 
 from boss_agent_cli.api.endpoints import (
-	CITY_CODES,
 	INDUSTRY_CODES,
 	JOB_TYPE_CODES,
 	SCALE_CODES,
@@ -10,7 +9,13 @@ from boss_agent_cli.api.endpoints import (
 )
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.display import handle_error_output, handle_output, render_action_result, render_list_result
-from boss_agent_cli.search_filters import ACTIVE_LEVELS, build_search_params, resolve_active_level
+from boss_agent_cli.search_filters import (
+	ACTIVE_LEVELS,
+	build_search_params,
+	ensure_supported_city,
+	resolve_active_level,
+	resolve_search_code_params,
+)
 
 
 def _build_params(
@@ -62,8 +67,17 @@ def preset_add_cmd(
 	welfare: str | None,
 	active: str | None,
 ) -> None:
-	if city and city not in CITY_CODES:
-		handle_error_output(ctx, "preset", code="INVALID_PARAM", message=f"未知城市: {city}")
+	# 与 `watch add` 一致：保存时就把筛选条件校验掉。未知薪资 / 经验 / 学历
+	# 写进预设后，`search --preset` 每次都要先在参数解析处失败，而预设本身
+	# 仍显示为「已保存」，用户很难看出该改的是这条本地记录。
+	try:
+		ensure_supported_city(city)
+		resolve_search_code_params(
+			salary=salary, experience=experience, education=education,
+			industry=industry, scale=scale, stage=stage, job_type=job_type,
+		)
+	except ValueError as exc:
+		handle_error_output(ctx, "preset", code="INVALID_PARAM", message=str(exc))
 		return
 	try:
 		active_level = resolve_active_level(active)
