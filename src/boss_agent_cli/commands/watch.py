@@ -155,6 +155,11 @@ def watch_list_cmd(ctx: click.Context) -> None:
 @click.argument("name")
 @click.pass_context
 def watch_remove_cmd(ctx: click.Context, name: str) -> None:
+	# 与 add / run 同口径：空名字不可能命中任何本地记录，却会以
+	# `{"removed": false}` 的 `ok: true` 报成功，Agent 会以为已经删掉了。
+	if not name.strip():
+		handle_error_output(ctx, "watch", code="INVALID_PARAM", message="watch 名称不能为空")
+		return
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		removed = cache.delete_saved_search(name)
 	handle_output(
