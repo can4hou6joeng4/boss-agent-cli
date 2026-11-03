@@ -815,6 +815,32 @@ def test_history_success(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.history.get_platform_instance")
 @patch("boss_agent_cli.commands.history.AuthManager")
+def test_history_hints_omit_next_page_when_no_more(mock_auth_cls, mock_client_cls):
+	"""hasMore=false 时不能建议 --page N+1：Agent 照着执行只会拿到空页。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.job_history.return_value = {"code": 0, "zpData": {"hasMore": False, "jobList": []}}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["history", "--page", "3"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert all("--page" not in action for action in parsed["hints"]["next_actions"])
+
+
+@patch("boss_agent_cli.commands.history.get_platform_instance")
+@patch("boss_agent_cli.commands.history.AuthManager")
+def test_history_hints_include_next_page_when_has_more(mock_auth_cls, mock_client_cls):
+	"""hasMore=true 时保留下一页提示，页码基于当前页 +1。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.job_history.return_value = {"code": 0, "zpData": {"hasMore": True, "jobList": []}}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["history", "--page", "2"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert any("history --page 3" in action for action in parsed["hints"]["next_actions"])
+
+
+@patch("boss_agent_cli.commands.history.get_platform_instance")
+@patch("boss_agent_cli.commands.history.AuthManager")
 def test_history_uses_client_context_manager(mock_auth_cls, mock_client_cls):
 	instance = mock_client_cls.return_value
 	instance.__enter__ = MagicMock(return_value=instance)

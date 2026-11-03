@@ -192,14 +192,15 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 		"total": len(items),
 		"status_counts": status_counts,
 	}
-	hints = {
-		"next_actions": [
-			f"使用 {boss_command_for_ctx(ctx, 'favorites sync')} 同步明确有效的收藏到本地候选池（完整字段落库）",
-			f"使用 {boss_command_for_ctx(ctx, '--json shortlist list')} 读取完整 security_id 与 job_id（终端表格不显示 ID，需 --json）",
-			f"使用 {boss_command_for_ctx(ctx, 'detail <security_id> --job-id <job_id>')} 查看详情（httpx 快速通道只用 job_id，sid 过期不影响取 JD）",
-			f"使用 {boss_command_for_ctx(ctx, f'favorites list --page {page + 1}')} 查看下一页",
-		],
-	}
+	next_actions = [
+		f"使用 {boss_command_for_ctx(ctx, 'favorites sync')} 同步明确有效的收藏到本地候选池（完整字段落库）",
+		f"使用 {boss_command_for_ctx(ctx, '--json shortlist list')} 读取完整 security_id 与 job_id（终端表格不显示 ID，需 --json）",
+		f"使用 {boss_command_for_ctx(ctx, 'detail <security_id> --job-id <job_id>')} 查看详情（httpx 快速通道只用 job_id，sid 过期不影响取 JD）",
+	]
+	# 与 history 同一口径：hasMore 为假时再给 --page N+1 只会把 Agent 送进空页。
+	if pagination["has_more"]:
+		next_actions.append(f"使用 {boss_command_for_ctx(ctx, f'favorites list --page {page + 1}')} 查看下一页")
+	hints = {"next_actions": next_actions}
 	handle_output(
 		ctx, "favorites-list", items,
 		render=lambda data: render_simple_list(
