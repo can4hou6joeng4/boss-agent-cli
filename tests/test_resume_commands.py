@@ -1,4 +1,5 @@
 import json
+import shlex
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -196,6 +197,29 @@ def test_edit_unknown_field_lists_next_steps(tmp_path):
 	_assert_error_envelope(parsed, "INVALID_PARAM")
 	assert "不存在" in parsed["error"]["message"]
 	assert parsed["hints"]["next_actions"][0] == "boss resume export typo --format json"
+
+
+def test_edit_error_message_quotes_resume_name_with_spaces(tmp_path):
+	"""message 里让人「照抄」的 export 命令同样要转义。
+
+	hints 早已走 shell_argument，消息正文却直接拼名字：简历名带空格时
+	``boss resume export 我的 简历 --format json`` 会被拆成两个参数。
+	"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "我的 简历", "--template", "default"])
+	result = _invoke(runner, tmp_path, ["edit", "我的 简历", "--field", "titl", "--value", "x"])
+
+	assert result.exit_code == 1
+	message = json.loads(result.output)["error"]["message"]
+	assert "boss resume export '我的 简历' --format json" in message
+	assert shlex.split(message.split("完整结构见 ", 1)[1]) == [
+		"boss",
+		"resume",
+		"export",
+		"我的 简历",
+		"--format",
+		"json",
+	]
 
 
 def test_edit_name_field_points_to_clone(tmp_path):

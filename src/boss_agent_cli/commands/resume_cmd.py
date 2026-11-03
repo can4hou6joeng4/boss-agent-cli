@@ -266,7 +266,7 @@ def resume_edit_cmd(ctx: click.Context, name: str, field: str, value: str) -> No
 		handle_error_output(
 			ctx, "resume",
 			code="INVALID_PARAM",
-			message=f"{detail}；可用 --field title 之类的文本字段，完整结构见 boss resume export {name} --format json",
+			message=f"{detail}；可用 --field title 之类的文本字段，完整结构见 boss resume export {shell_argument(name)} --format json",
 			hints={"next_actions": [f"boss resume export {shell_argument(name)} --format json", f"boss resume show {shell_argument(name)}"]},
 		)
 		ctx.exit(1)
