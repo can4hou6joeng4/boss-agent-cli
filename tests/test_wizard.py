@@ -158,6 +158,41 @@ def test_catalog_rejects_platform_and_missing_inputs():
 		)
 
 
+def test_catalog_unknown_goal_lists_available_goals():
+	"""未知 goal 的报错要带可选值，Agent 不必再调一次 boss schema 才能猜对。"""
+	with pytest.raises(WorkflowInputError) as excinfo:
+		build_plan(
+			WizardInput.from_mapping(
+				{"role": "candidate", "platform": "zhipin", "goal": "bogus", "inputs": {}}
+			)
+		)
+	message = str(excinfo.value)
+	assert "不支持 goal 'bogus'" in message
+	assert "可选:" in message
+	assert "job_search" in message
+	assert "crawl_start" in message
+
+
+def test_catalog_unknown_steps_list_valid_steps():
+	"""requested_steps 写错时同时列出该 goal 的合法步骤。"""
+	with pytest.raises(WorkflowInputError) as excinfo:
+		build_plan(
+			WizardInput.from_mapping(
+				{
+					"role": "candidate",
+					"platform": "zhipin",
+					"goal": "job_search",
+					"inputs": {"query": "Python"},
+					"requested_steps": ["bogus_step"],
+				}
+			)
+		)
+	message = str(excinfo.value)
+	assert "bogus_step" in message
+	assert "可选:" in message
+	assert "candidate_search" in message
+
+
 def test_catalog_goals_reference_exactly_the_registered_actions():
 	catalog_steps = {step for goals in GOALS.values() for goal in goals.values() for step in goal.steps}
 	assert catalog_steps == set(DEFAULT_ACTIONS)
@@ -234,6 +269,26 @@ def test_schema_exposes_wizard_catalog_for_headless_agents(tmp_path):
 	assert payload["data"]["wizard_catalog"] == catalog_data()
 	assert "job_search" in payload["data"]["wizard_catalog"]["roles"]["candidate"]["goals"]
 	assert "jobs_list" in payload["data"]["wizard_catalog"]["roles"]["recruiter"]["goals"]
+
+
+def test_wizard_unknown_goal_envelope_lists_goals_and_schema_hint(tmp_path):
+	"""非交互模式输入未知 goal：消息列出可选 goal，hints 给出可执行的 boss schema。"""
+	result = CliRunner().invoke(
+		cli,
+		[
+			"--json",
+			"--data-dir",
+			str(tmp_path),
+			"wizard",
+			"--input-json",
+			json.dumps({"role": "candidate", "platform": "zhipin", "goal": "bogus"}),
+		],
+	)
+	assert result.exit_code == 1
+	payload = json.loads(result.stdout)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "job_search" in payload["error"]["message"]
+	assert payload["hints"]["next_actions"] == ["boss schema"]
 
 
 class _FakeCandidatePlatform:

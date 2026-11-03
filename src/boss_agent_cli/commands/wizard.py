@@ -66,6 +66,7 @@ def _wizard_error(
 	recoverable: bool = False,
 	recovery_action: str | None = None,
 	details: dict[str, Any] | None = None,
+	hints: dict[str, Any] | None = None,
 ) -> None:
 	if interactive:
 		_interactive_error(code=code, message=message, recovery_action=recovery_action)
@@ -77,6 +78,7 @@ def _wizard_error(
 		recoverable=recoverable,
 		recovery_action=recovery_action,
 		details=details,
+		hints=hints,
 	)
 
 
@@ -668,6 +670,8 @@ def _run_wizard_command(
 				code="INVALID_PARAM",
 				message=str(exc),
 				recovery_action="根据 boss schema 中的 wizard catalog 修正输入",
+				# recovery_action 是给真人的说明；Agent 需要一条能直接执行的动作。
+				hints={"next_actions": ["boss schema"]},
 			)
 			return
 
