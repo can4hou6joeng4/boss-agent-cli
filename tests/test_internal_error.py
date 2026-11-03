@@ -85,10 +85,16 @@ def test_socket_errors_stay_network_error(exc):
 
 def test_uncaught_oserror_reports_actual_command_name(tmp_path):
 	"""顶层 IO 兜底以前把所有写文件失败都记成 command=boss：看不出是哪个子命令，
-	按 command 过滤日志或按信封分发的调用方也会认错命令。"""
+	按 command 过滤日志或按信封分发的调用方也会认错命令。
+
+	父目录不存在已不再是失败条件（`-o` 会自动建父目录），这里用同名普通文件
+	占住父路径触发 mkdir 的 OSError。
+	"""
+	blocker = tmp_path / "missing"
+	blocker.write_text("not a directory", encoding="utf-8")
 	result = CliRunner().invoke(cli, [
 		"--data-dir", str(tmp_path),
-		"stats", "--format", "html", "-o", str(tmp_path / "missing" / "report.html"),
+		"stats", "--format", "html", "-o", str(blocker / "report.html"),
 	])
 	payload = json.loads(result.output)
 	assert result.exit_code == 1

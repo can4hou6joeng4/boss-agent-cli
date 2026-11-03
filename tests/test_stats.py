@@ -184,6 +184,19 @@ def test_stats_html_format_to_file(tmp_path):
 	assert "50.0%" in html_content  # apply_rate
 
 
+def test_stats_output_path_expands_tilde_and_creates_parent(tmp_path, monkeypatch):
+	"""MCP 子进程调用不经 shell，`~` 不会被展开；-o 必须自己展开并建父目录。"""
+	_seed_cache(tmp_path, greet=2)
+	monkeypatch.setenv("HOME", str(tmp_path))
+	monkeypatch.setenv("USERPROFILE", str(tmp_path))
+	result = _invoke(tmp_path, "--format", "html", "-o", "~/reports/nested/report.html")
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	expected = tmp_path / "reports" / "nested" / "report.html"
+	assert parsed["data"]["path"] == str(expected)
+	assert "<!doctype html>" in expected.read_text(encoding="utf-8")
+
+
 def test_stats_html_empty_cache(tmp_path):
 	"""无缓存时 HTML 也能生成，显示 note。"""
 	result = _invoke(tmp_path, "--format", "html", "-o", str(tmp_path / "r.html"))
