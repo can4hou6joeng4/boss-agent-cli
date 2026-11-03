@@ -30,6 +30,7 @@ from boss_agent_cli.display import (
 	handle_output,
 	render_action_result,
 	render_ai_result,
+	shell_argument,
 )
 from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
@@ -362,8 +363,8 @@ def ai_analyze_jd_cmd(ctx: click.Context, jd_text: str, resume_name: str) -> Non
 		ctx, "ai-analyze-jd", result,
 		render=lambda d: render_ai_result(d, title="ai-analyze-jd"),
 		hints={"next_actions": [
-			f"boss ai optimize {resume_name} --jd <jd_text>",
-			f"boss ai suggest {resume_name} --jd <jd_text>",
+			f"boss ai optimize {shell_argument(resume_name)} --jd <jd_text>",
+			f"boss ai suggest {shell_argument(resume_name)} --jd <jd_text>",
 		]},
 	)
 
@@ -389,7 +390,7 @@ def ai_polish_cmd(ctx: click.Context, resume_name: str) -> None:
 	handle_output(
 		ctx, "ai-polish", result,
 		render=lambda d: render_ai_result(d, title="ai-polish"),
-		hints={"next_actions": [f"boss resume show {resume_name}"]},
+		hints={"next_actions": [f"boss resume show {shell_argument(resume_name)}"]},
 	)
 
 
@@ -421,8 +422,8 @@ def ai_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str) -> None:
 		ctx, "ai-optimize", result,
 		render=lambda d: render_ai_result(d, title="ai-optimize"),
 		hints={"next_actions": [
-			f"boss resume show {resume_name}",
-			f"boss resume export {resume_name} --format pdf",
+			f"boss resume show {shell_argument(resume_name)}",
+			f"boss resume export {shell_argument(resume_name)} --format pdf",
 		]},
 	)
 
@@ -455,8 +456,8 @@ def ai_suggest_cmd(ctx: click.Context, resume_name: str, jd_text: str) -> None:
 		ctx, "ai-suggest", result,
 		render=lambda d: render_ai_result(d, title="ai-suggest"),
 		hints={"next_actions": [
-			f"boss ai optimize {resume_name} --jd <jd_text>",
-			f"boss resume show {resume_name}",
+			f"boss ai optimize {shell_argument(resume_name)} --jd <jd_text>",
+			f"boss resume show {shell_argument(resume_name)}",
 		]},
 	)
 
@@ -531,7 +532,7 @@ def ai_fit_cmd(ctx: click.Context, resume_name: str, limit: int) -> None:
 		"ai-fit",
 		result,
 		render=lambda d: render_ai_result(d, title="ai-fit"),
-		hints={"next_actions": [f"boss ai optimize {resume_name} --jd <jd_text>"]},
+		hints={"next_actions": [f"boss ai optimize {shell_argument(resume_name)} --jd <jd_text>"]},
 	)
 
 
@@ -783,8 +784,8 @@ def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | 
 		ctx, "ai-resume-optimize", result,
 		render=lambda d: render_ai_result(d, title="ai-resume-optimize"),
 		hints={"next_actions": [
-			f"boss resume edit {resume_name}",
-			f"boss ai optimize {resume_name} --jd <jd_text>",
+			f"boss resume edit {shell_argument(resume_name)}",
+			f"boss ai optimize {shell_argument(resume_name)} --jd <jd_text>",
 		]},
 	)
 
@@ -852,7 +853,7 @@ def ai_cover_letter_cmd(
 		hints={
 			"note": "仅为 AI 生成的草稿，请自行核对真实性后再使用；本命令不发送任何消息",
 			"next_actions": [
-				f"boss ai interview-prep <jd_text> --resume {resume_name}",
+				f"boss ai interview-prep <jd_text> --resume {shell_argument(resume_name)}",
 			],
 		},
 	)

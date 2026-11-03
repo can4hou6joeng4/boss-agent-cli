@@ -21,6 +21,7 @@ from boss_agent_cli.display import (
 	render_action_result,
 	render_list_result,
 	render_message_panel,
+	shell_argument,
 )
 from boss_agent_cli.crawler.service import CrawlBudget
 from boss_agent_cli.search_filters import (
@@ -114,9 +115,9 @@ def watch_add_cmd(
 		ctx, "watch",
 		{"action": "add", "name": name, "params": params},
 		render=lambda d: render_action_result(
-			d, title="watch", next_steps=[f"boss watch run {name}", "boss watch list"]
+			d, title="watch", next_steps=[f"boss watch run {shell_argument(name)}", "boss watch list"]
 		),
-		hints={"next_actions": [f"boss watch run {name}", "boss watch list"]},
+		hints={"next_actions": [f"boss watch run {shell_argument(name)}", "boss watch list"]},
 	)
 
 
@@ -326,7 +327,7 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 				"watch",
 				code="SAVED_SEARCH_INVALID",
 				message=str(exc),
-				hints={"next_actions": [f"boss watch remove {name}", f"boss watch add {name} <关键词>"]},
+				hints={"next_actions": [f"boss watch remove {shell_argument(name)}", f"boss watch add {shell_argument(name)} <关键词>"]},
 			)
 			return
 		except SearchPipelinePlatformError as exc:
@@ -347,7 +348,7 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 		if summary is None:
 			handle_error_output(
 				ctx, "watch", code="SAVED_SEARCH_NOT_FOUND", message=f"未找到 watch: {name}",
-				hints={"next_actions": ["boss watch list", f"boss watch add {name} <关键词>"]},
+				hints={"next_actions": ["boss watch list", f"boss watch add {shell_argument(name)} <关键词>"]},
 			)
 			return
 

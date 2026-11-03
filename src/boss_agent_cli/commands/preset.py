@@ -8,7 +8,7 @@ from boss_agent_cli.api.endpoints import (
 	STAGE_CODES,
 )
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.display import handle_error_output, handle_output, render_action_result, render_list_result
+from boss_agent_cli.display import handle_error_output, handle_output, render_action_result, render_list_result, shell_argument
 from boss_agent_cli.search_filters import (
 	ACTIVE_LEVELS,
 	build_search_params,
@@ -102,9 +102,9 @@ def preset_add_cmd(
 		"preset",
 		{"action": "add", "name": name, "params": params},
 		render=lambda d: render_action_result(
-			d, title="preset", next_steps=[f"boss search --preset {name}", "boss preset list"]
+			d, title="preset", next_steps=[f"boss search --preset {shell_argument(name)}", "boss preset list"]
 		),
-		hints={"next_actions": [f"boss search --preset {name}", "boss preset list"]},
+		hints={"next_actions": [f"boss search --preset {shell_argument(name)}", "boss preset list"]},
 	)
 
 

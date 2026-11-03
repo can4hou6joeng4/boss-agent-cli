@@ -10,7 +10,7 @@ from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_items
 from boss_agent_cli.digest import build_digest, render_digest_markdown
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output, json_forced, render_message_panel
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output, json_forced, render_message_panel, shell_argument
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
 
 
@@ -76,7 +76,7 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 				ctx,
 				"digest",
 				{"format": "md", "path": str(target), "bytes": len(md_text.encode("utf-8"))},
-				hints={"next_actions": [f"open {target}"],
+				hints={"next_actions": [f"open {shell_argument(str(target))}"],
 					"operator_actions": ["用 cat 或邮件客户端直接发送该文件"]},
 			)
 		elif json_forced(ctx):

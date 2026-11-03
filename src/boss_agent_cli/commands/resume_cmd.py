@@ -13,6 +13,7 @@ from boss_agent_cli.display import (
 	render_action_result,
 	render_list_result,
 	render_record_result,
+	shell_argument,
 )
 from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, resume_to_dict
 from boss_agent_cli.resume.store import ResumeAlreadyExistsError, ResumeImportError, ResumeStore
@@ -149,11 +150,11 @@ def resume_init_cmd(ctx: click.Context, name: str | None, template: str | None) 
 		ctx, "resume",
 		{"action": "init", "name": name, "template": template},
 		render=lambda d: render_action_result(
-			d, title="resume init", next_steps=[f"boss resume show {name}", f"boss resume edit {name} --field title --value <新标题>"]
+			d, title="resume init", next_steps=[f"boss resume show {shell_argument(name)}", f"boss resume edit {shell_argument(name)} --field title --value <新标题>"]
 		),
 		hints={"next_actions": [
-			f"boss resume show {name}",
-			f"boss resume edit {name} --field title --value <新标题>",
+			f"boss resume show {shell_argument(name)}",
+			f"boss resume edit {shell_argument(name)} --field title --value <新标题>",
 			boss_command_for_ctx(ctx, "me"),
 			boss_command_for_ctx(ctx, "resume import <path>"),
 		]},
@@ -208,11 +209,11 @@ def resume_show_cmd(ctx: click.Context, name: str) -> None:
 		render=lambda d: render_record_result(
 			d,
 			title="resume",
-			next_steps=[f"boss resume edit {name} --field title --value <新标题>", f"boss resume export {name} --format json"],
+			next_steps=[f"boss resume edit {shell_argument(name)} --field title --value <新标题>", f"boss resume export {shell_argument(name)} --format json"],
 		),
 		hints={"next_actions": [
-			f"boss resume edit {name} --field title --value <新标题>",
-			f"boss resume export {name} --format json",
+			f"boss resume edit {shell_argument(name)} --field title --value <新标题>",
+			f"boss resume export {shell_argument(name)} --format json",
 		]},
 	)
 
@@ -247,8 +248,8 @@ def resume_edit_cmd(ctx: click.Context, name: str, field: str, value: str) -> No
 	handle_output(
 		ctx, "resume",
 		{"action": "edit", "name": name, "field": field, "value": value},
-		render=lambda d: render_action_result(d, title="resume edit", next_steps=[f"boss resume show {name}"]),
-		hints={"next_actions": [f"boss resume show {name}"]},
+		render=lambda d: render_action_result(d, title="resume edit", next_steps=[f"boss resume show {shell_argument(name)}"]),
+		hints={"next_actions": [f"boss resume show {shell_argument(name)}"]},
 	)
 
 
@@ -320,8 +321,8 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 		handle_output(
 			ctx, "resume",
 			{"action": "export", "name": name, "format": fmt, "path": str(out.resolve())},
-			render=lambda d: render_action_result(d, title="resume export", next_steps=[f"open {out.resolve()}"]),
-			hints={"next_actions": [f"boss resume show {name}"]},
+			render=lambda d: render_action_result(d, title="resume export", next_steps=[f"open {shell_argument(str(out.resolve()))}"]),
+			hints={"next_actions": [f"boss resume show {shell_argument(name)}"]},
 		)
 		return
 	json_str = store.export_json(name)
@@ -331,9 +332,9 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 	handle_output(
 		ctx, "resume", export_data,
 		render=lambda d: render_record_result(
-			d, title="resume export", next_steps=[f"boss resume show {name}"]
+			d, title="resume export", next_steps=[f"boss resume show {shell_argument(name)}"]
 		),
-		hints={"next_actions": [f"boss resume show {name}"]},
+		hints={"next_actions": [f"boss resume show {shell_argument(name)}"]},
 	)
 
 
@@ -385,8 +386,8 @@ def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 	handle_output(
 		ctx, "resume",
 		{"action": "import", "name": resume.name, "title": resume.title},
-		render=lambda d: render_action_result(d, title="resume import", next_steps=[f"boss resume show {resume.name}"]),
-		hints={"next_actions": [f"boss resume show {resume.name}"]},
+		render=lambda d: render_action_result(d, title="resume import", next_steps=[f"boss resume show {shell_argument(resume.name)}"]),
+		hints={"next_actions": [f"boss resume show {shell_argument(resume.name)}"]},
 	)
 
 
@@ -419,9 +420,9 @@ def resume_clone_cmd(ctx: click.Context, name: str, new_name: str) -> None:
 		ctx, "resume",
 		{"action": "clone", "name": resume.name, "source": name},
 		render=lambda d: render_action_result(
-			d, title="resume clone", next_steps=[f"boss resume show {new_name}", f"boss resume diff {name} {new_name}"]
+			d, title="resume clone", next_steps=[f"boss resume show {shell_argument(new_name)}", f"boss resume diff {shell_argument(name)} {shell_argument(new_name)}"]
 		),
-		hints={"next_actions": [f"boss resume show {new_name}", f"boss resume diff {name} {new_name}"]},
+		hints={"next_actions": [f"boss resume show {shell_argument(new_name)}", f"boss resume diff {shell_argument(name)} {shell_argument(new_name)}"]},
 	)
 
 
@@ -452,9 +453,9 @@ def resume_diff_cmd(ctx: click.Context, name1: str, name2: str) -> None:
 			d.get("diffs", []),
 			f"diff: {name1} ↔ {name2}",
 			[("字段", "field", "bold cyan"), (name1, "left", "green"), (name2, "right", "yellow")],
-			next_steps=[f"boss resume show {name1}", f"boss resume show {name2}"],
+			next_steps=[f"boss resume show {shell_argument(name1)}", f"boss resume show {shell_argument(name2)}"],
 		),
-		hints={"next_actions": [f"boss resume show {name1}", f"boss resume show {name2}"]},
+		hints={"next_actions": [f"boss resume show {shell_argument(name1)}", f"boss resume show {shell_argument(name2)}"]},
 	)
 
 
@@ -486,9 +487,9 @@ def resume_link_cmd(ctx: click.Context, name: str, security_id: str, job_id: str
 		ctx, "resume",
 		{"action": "link", "name": name, "security_id": security_id, "job_id": job_id},
 		render=lambda d: render_action_result(
-			d, title="resume link", next_steps=[f"boss resume applications {name}", f"boss apply {security_id} {job_id}"]
+			d, title="resume link", next_steps=[f"boss resume applications {shell_argument(name)}", f"boss apply {security_id} {job_id}"]
 		),
-		hints={"next_actions": [f"boss resume applications {name}", f"boss apply {security_id} {job_id}"]},
+		hints={"next_actions": [f"boss resume applications {shell_argument(name)}", f"boss apply {security_id} {job_id}"]},
 	)
 
 
@@ -514,10 +515,10 @@ def resume_applications_cmd(ctx: click.Context, name: str) -> None:
 			d,
 			f"{name} 关联职位",
 			[("职位", "job_title", "bold cyan"), ("公司", "company", "green"), ("状态", "status", "yellow"), ("更新", "updated_at", "dim")],
-			next_steps=[f"boss resume link {name} <security_id> <job_id>"] if not d else [f"boss resume show {name}"],
+			next_steps=[f"boss resume link {shell_argument(name)} <security_id> <job_id>"] if not d else [f"boss resume show {shell_argument(name)}"],
 		),
 		# 与 TTY 同一口径：没有关联职位时 show 只能看到简历本身，下一步是关联一个职位。
-		hints={"next_actions": [f"boss resume link {name} <security_id> <job_id>"]
+		hints={"next_actions": [f"boss resume link {shell_argument(name)} <security_id> <job_id>"]
 		if not items
-		else [f"boss resume show {name}"]},
+		else [f"boss resume show {shell_argument(name)}"]},
 	)
