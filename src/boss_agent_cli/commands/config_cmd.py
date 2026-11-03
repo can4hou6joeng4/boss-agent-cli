@@ -41,6 +41,29 @@ def _emit_unknown_key(ctx: click.Context) -> None:
 	)
 
 
+def _emit_invalid_value(ctx: click.Context, key: str, message: str) -> None:
+	"""取值不合法：消息已说明原因，再给出查看当前值与可用项的下一步。
+
+	``config set log_level bogus`` / ``config set request_delay abc`` 原来只有中文
+	message，``recovery_action`` 是笼统的「修正参数」、``hints`` 为 null；Agent 拿不到
+	结构化的 ``config get <键>`` / ``config list``。
+	"""
+	from boss_agent_cli.output import emit_error
+
+	emit_error(
+		"config",
+		code="INVALID_PARAM",
+		message=message,
+		recovery_action=f"按提示修正 {key} 的取值；用 {boss_command_for_ctx(ctx, 'config list')} 查看当前值与可用项",
+		hints={
+			"next_actions": [
+				boss_command_for_ctx(ctx, f"config get {key}"),
+				boss_command_for_ctx(ctx, "config list"),
+			]
+		},
+	)
+
+
 @click.group("config", invoke_without_command=True)
 @click.pass_context
 def config_group(ctx: click.Context) -> None:
@@ -167,20 +190,12 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 			# Validate the edited field without preventing repairs of other bad fields.
 			validate_request_config({**DEFAULTS, key: parsed_value})
 	except (TypeError, ValueError) as exc:
-		from boss_agent_cli.output import emit_error
-
-		emit_error("config", code="INVALID_PARAM", message=str(exc))
+		_emit_invalid_value(ctx, key, str(exc))
 		ctx.exit(1)
 		return
 	choices = list_platforms() if key == "platform" else _CONFIG_CHOICES.get(key)
 	if choices is not None and parsed_value not in choices:
-		from boss_agent_cli.output import emit_error
-
-		emit_error(
-			"config",
-			code="INVALID_PARAM",
-			message=f"{key} 必须是以下值之一: {', '.join(choices)}",
-		)
+		_emit_invalid_value(ctx, key, f"{key} 必须是以下值之一: {', '.join(choices)}")
 		ctx.exit(1)
 		return
 	user_cfg[key] = parsed_value
