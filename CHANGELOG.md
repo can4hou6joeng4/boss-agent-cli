@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss resume edit --field` 只校验路径存在、不校验目标是不是文本叶子：`--field personal_info --value x` 会把整个子对象换成字符串，`dict_to_resume` 随后抛 `AttributeError`，被兜成不可重试的 `INTERNAL_ERROR`「resume 失败: 'str' object has no attribute 'get'」——参数错误看起来像程序缺陷；`--field name` 更糟：写入后立即被 `updated.name = name` 覆盖，返回 `ok: true` 而内容没变。现在容器 / null 字段按 `INVALID_PARAM` 拒绝并提示点到具体子字段，`name` 改指 `boss resume clone <旧名> <新名>`，字段不存在时的消息与 hints 给出 `boss resume export <name> --format json` 查看完整结构。
 - `hints.next_actions` 里的用户输入没有 shell 转义：简历名 / 预设名 / watch 名都是自由文本，`boss resume init --name "我的 简历"` 之后的提示是 `boss resume show 我的 简历`，Agent 照抄会把一个名字拆成两个参数换回 `INVALID_PARAM`；`boss ai` 系命令的 `resume_name`、`digest` / `stats` / `resume export` 的 `open <文件路径>` 同样受影响（路径里有空格时打不开）。现在新增 `display.shell_argument()`（只按空白判断，中文名不加引号），所有插入用户输入的 hint 与 TTY `next_steps` 统一走它；`greet` 原有的私有实现改为复用同一函数。
 - `boss search " "` 与 `boss export " "` 把纯空白的关键词当成合法输入：只有空字符串会被「未提供 query」拦下，`strip()` 后为空的一串空格照样进入一次没有关键词的搜索 / 导出——既消耗请求预算（`export` 还会翻页抓取），也把账号放在更宽的风控面里，`boss crawl start ""` 早已拒绝同类输入。现在两个命令在解析 preset / `--url` 之前把纯空白 query 归一成空值，按 `INVALID_PARAM` 返回。
 - `boss shortlist remove "" ""` 把空标识当成「候选池里没有」静默成功：返回 `ok: true` 与 `removed: false`，Agent 只看 `ok` 会以为已经删除；同一组里的 `shortlist add "" ""` 早已按 `INVALID_PARAM` 拒绝空值；`shortlist annotate "" ""` 更把空标识说成 `SHORTLIST_ENTRY_NOT_FOUND`「候选池中没有该职位:  / 」，让 argv 少传参数看起来像条目不存在。现在两者在打开缓存之前按 `strip()` 判空，返回 `INVALID_PARAM`「security_id 与 job_id 不能为空」。
