@@ -135,7 +135,9 @@ def shortlist_list_cmd(ctx: click.Context) -> None:
 				("source", "source", "magenta"),
 			],
 		),
-		hints={"next_actions": [boss_command_for_ctx(ctx, "detail <security_id> --job-id <job_id>")]},
+		hints={"next_actions": [boss_command_for_ctx(ctx, "shortlist add <security_id> <job_id>")]
+		if not items
+		else [boss_command_for_ctx(ctx, "detail <security_id> --job-id <job_id>")]},
 	)
 
 
@@ -156,13 +158,27 @@ def shortlist_annotate_cmd(
 ) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		current = _find_shortlist_item(cache.list_shortlist(), security_id, job_id)
-		updated = current is not None
-		if current:
-			tags = _merge_tags(current.get("tags", []), add_tag, remove_tag)
-			cache.set_shortlist_tags(security_id, job_id, tags)
-			if note is not None:
-				cache.set_shortlist_note(security_id, job_id, note)
-			current = _find_shortlist_item(cache.list_shortlist(), security_id, job_id)
+		if current is None:
+			# 不在候选池里的职位没有可标注的记录：以前返回 ok:true / updated:false，
+			# Agent 会以为标签和备注已经写进去了。
+			handle_error_output(
+				ctx,
+				"shortlist",
+				code="SHORTLIST_ENTRY_NOT_FOUND",
+				message=f"候选池中没有该职位: {security_id} / {job_id}",
+				hints={
+					"next_actions": [
+						boss_command_for_ctx(ctx, f"shortlist add {security_id} {job_id}"),
+						boss_command_for_ctx(ctx, "shortlist list"),
+					]
+				},
+			)
+			return
+		tags = _merge_tags(current.get("tags", []), add_tag, remove_tag)
+		cache.set_shortlist_tags(security_id, job_id, tags)
+		if note is not None:
+			cache.set_shortlist_note(security_id, job_id, note)
+		current = _find_shortlist_item(cache.list_shortlist(), security_id, job_id)
 	handle_output(
 		ctx,
 		"shortlist",
@@ -170,7 +186,7 @@ def shortlist_annotate_cmd(
 			"action": "annotate",
 			"security_id": security_id,
 			"job_id": job_id,
-			"updated": updated,
+			"updated": True,
 			"item": current,
 		},
 		hints={"next_actions": [boss_command_for_ctx(ctx, "shortlist compare")]},
@@ -206,7 +222,9 @@ def shortlist_compare_cmd(ctx: click.Context, tag: str | None) -> None:
 				("note", "note", "white"),
 			],
 		),
-		hints={"next_actions": [boss_command_for_ctx(ctx, "shortlist annotate <security_id> <job_id>")]},
+		hints={"next_actions": [boss_command_for_ctx(ctx, "shortlist add <security_id> <job_id>")]
+		if not compare_items
+		else [boss_command_for_ctx(ctx, "shortlist annotate <security_id> <job_id>")]},
 	)
 
 
