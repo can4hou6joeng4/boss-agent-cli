@@ -117,7 +117,15 @@ def greet_cmd(
 		return
 	data: dict[str, Any] = {"geek_id": geek_id, "job_id": job_id, "sent": False}
 	if not message.strip():
-		handle_error_output(ctx, "recruiter-greet", code="INVALID_PARAM", message="首次招呼内容不能为空")
+		rec_cmd = boss_command_for_ctx(ctx, f"hr recommendations --job-id {job_id}")
+		handle_error_output(
+			ctx,
+			"recruiter-greet",
+			code="INVALID_PARAM",
+			message="首次招呼内容不能为空",
+			recovery_action=f"补上首次招呼内容后重试；候选人与职位可用 {rec_cmd} 核对",
+			hints={"next_actions": [rec_cmd]},
+		)
 		return
 	if dry_run:
 		operator_actions = ["核对候选人和话术；明确批准后才可加 --yes 发送"]

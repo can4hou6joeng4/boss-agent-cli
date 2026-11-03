@@ -184,6 +184,9 @@ def test_shortlist_add_rejects_blank_identifiers(tmp_path):
 		assert result.exit_code == 1, result.output
 		parsed = json.loads(result.output)
 		assert parsed["error"]["code"] == "INVALID_PARAM"
+		# 空编号的恢复指引要能直接执行：编号从搜索结果里取，而不是让 Agent 猜。
+		assert parsed["hints"]["next_actions"] == ["boss search <关键词>"]
+		assert "boss search <关键词>" in parsed["error"]["recovery_action"]
 
 	listed = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "shortlist", "list"]).output)
 	assert listed["data"] == []
@@ -200,6 +203,9 @@ def test_shortlist_remove_and_annotate_reject_blank_identifiers(tmp_path):
 		assert result.exit_code == 1, result.output
 		parsed = json.loads(result.output)
 		assert parsed["error"]["code"] == "INVALID_PARAM", action
+		# 候选池条目的编号来自本地列表：空编号时要指回 shortlist list。
+		assert parsed["hints"]["next_actions"] == ["boss shortlist list"]
+		assert "boss shortlist list" in parsed["error"]["recovery_action"]
 
 
 def test_shortlist_schema_is_exposed():

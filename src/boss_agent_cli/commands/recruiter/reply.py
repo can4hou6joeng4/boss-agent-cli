@@ -26,12 +26,14 @@ def reply_cmd(ctx: click.Context, friend_id: int, message: str) -> None:
 	# 空消息会作为一条空白回复真正发到候选人会话里，既不可撤回也没有信息量；
 	# 招聘者侧的首次招呼（recommendations.py）早有同样的拦截，这里补齐。
 	if not message.strip():
+		chat_cmd = boss_command_for_ctx(ctx, "hr chat")
 		handle_error_output(
 			ctx,
 			"recruiter-reply",
 			code="INVALID_PARAM",
 			message="回复内容不能为空；空白消息会作为一条空消息发送给候选人",
-			hints={"next_actions": [boss_command_for_ctx(ctx, "hr chat")]},
+			recovery_action=f"补上回复内容后重试；对话上下文可用 {chat_cmd} 查看",
+			hints={"next_actions": [chat_cmd]},
 		)
 		return
 

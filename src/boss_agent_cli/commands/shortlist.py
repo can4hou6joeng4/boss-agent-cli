@@ -79,8 +79,14 @@ def shortlist_add_cmd(
 	# 会多出一行全空数据，提示里的 `boss shortlist remove ` 也没有可执行的参数。
 	# Agent 从搜索结果里取字段失败时最容易走到这里，必须在写盘前拒绝。
 	if not security_id.strip() or not job_id.strip():
+		search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
 		handle_error_output(
-			ctx, "shortlist", code="INVALID_PARAM", message="security_id 与 job_id 不能为空"
+			ctx,
+			"shortlist",
+			code="INVALID_PARAM",
+			message="security_id 与 job_id 不能为空",
+			recovery_action=f"补上两个编号后重试；编号可从 {search_cmd} 的结果中取到",
+			hints={"next_actions": [search_cmd]},
 		)
 		return
 	parsed_tags = _parse_tags(tags)
@@ -162,8 +168,14 @@ def shortlist_annotate_cmd(
 	# 空标识不可能命中候选池里的任何条目：继续查下去会报 SHORTLIST_ENTRY_NOT_FOUND
 	# 「候选池中没有该职位:  / 」，把 argv 少传参数说成「这条职位不在池子里」。
 	if not security_id.strip() or not job_id.strip():
+		list_cmd = boss_command_for_ctx(ctx, "shortlist list")
 		handle_error_output(
-			ctx, "shortlist", code="INVALID_PARAM", message="security_id 与 job_id 不能为空"
+			ctx,
+			"shortlist",
+			code="INVALID_PARAM",
+			message="security_id 与 job_id 不能为空",
+			recovery_action=f"补上两个编号后重试；候选池条目的编号可用 {list_cmd} 查看",
+			hints={"next_actions": [list_cmd]},
 		)
 		return
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
@@ -259,8 +271,14 @@ def shortlist_remove_cmd(ctx: click.Context, security_id: str, job_id: str) -> N
 	# watch remove / preset remove 早已拒绝空名字：同样的空标识在候选池里既不
 	# 会命中条目，又会返回 ok:true + removed:false，Agent 只看 ok 会以为删掉了。
 	if not security_id.strip() or not job_id.strip():
+		list_cmd = boss_command_for_ctx(ctx, "shortlist list")
 		handle_error_output(
-			ctx, "shortlist", code="INVALID_PARAM", message="security_id 与 job_id 不能为空"
+			ctx,
+			"shortlist",
+			code="INVALID_PARAM",
+			message="security_id 与 job_id 不能为空",
+			recovery_action=f"补上两个编号后重试；候选池条目的编号可用 {list_cmd} 查看",
+			hints={"next_actions": [list_cmd]},
 		)
 		return
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
