@@ -795,6 +795,15 @@ def test_search_rejects_non_boss_url():
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 
 
+def test_search_rejects_blank_query():
+	"""纯空白的 query 等于没给关键词，不能变成一次无关键词搜索。"""
+	for query in ("", " ", "\t"):
+		result = CliRunner().invoke(cli, ["search", query])
+		assert result.exit_code == 1, repr(query)
+		parsed = json.loads(result.output)
+		assert parsed["error"]["code"] == "INVALID_PARAM", repr(query)
+
+
 @patch("boss_agent_cli.index_cache.save_index", side_effect=PermissionError("readonly"))
 @patch("boss_agent_cli.commands.recommend.CacheStore")
 @patch("boss_agent_cli.commands.recommend.get_platform_instance")
@@ -1016,6 +1025,15 @@ def test_export_reports_search_error(mock_auth_cls, mock_client_cls):
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
 	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
 	assert "account risk" not in parsed["error"]["message"]
+
+
+def test_export_rejects_blank_query():
+	"""纯空白的 query 不能变成一次无关键词的全量导出。"""
+	for query in ("", " "):
+		result = CliRunner().invoke(cli, ["export", query])
+		assert result.exit_code == 1, repr(query)
+		parsed = json.loads(result.output)
+		assert parsed["error"]["code"] == "INVALID_PARAM", repr(query)
 
 
 def _make_friend_item(name, brand, relation_type, last_ts):

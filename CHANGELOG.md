@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss search " "` 与 `boss export " "` 把纯空白的关键词当成合法输入：只有空字符串会被「未提供 query」拦下，`strip()` 后为空的一串空格照样进入一次没有关键词的搜索 / 导出——既消耗请求预算（`export` 还会翻页抓取），也把账号放在更宽的风控面里，`boss crawl start ""` 早已拒绝同类输入。现在两个命令在解析 preset / `--url` 之前把纯空白 query 归一成空值，按 `INVALID_PARAM` 返回。
 - `boss shortlist remove "" ""` 把空标识当成「候选池里没有」静默成功：返回 `ok: true` 与 `removed: false`，Agent 只看 `ok` 会以为已经删除；同一组里的 `shortlist add "" ""` 早已按 `INVALID_PARAM` 拒绝空值；`shortlist annotate "" ""` 更把空标识说成 `SHORTLIST_ENTRY_NOT_FOUND`「候选池中没有该职位:  / 」，让 argv 少传参数看起来像条目不存在。现在两者在打开缓存之前按 `strip()` 判空，返回 `INVALID_PARAM`「security_id 与 job_id 不能为空」。
 - `boss apply "" <job_id>` 不校验空参数：投递是写操作，空 `security_id` / `job_id` 既不可能命中职位，又会带着空参数真的发起一次投递请求，失败后看起来像登录过期或职位失效，真正的原因（argv 拼错）被掩盖。`greet` / `detail` / `mark` 等命令都已拒绝空标识，`apply` 补齐同一类校验——在查本地已投递记录和调用平台之前返回 `INVALID_PARAM`，`hints.next_actions` 指向 `boss search <关键词>`。
 - 招聘者侧 `boss hr reply <friend_id> ""` 与 `boss hr jobs offline/online/detail ""` 不校验空参数：空白回复会作为一条空消息真正发到候选人会话里（不可撤回），空 `job_id` 的上下线请求也会照常发给平台。`hr greet` 早已拒绝空招呼内容，现在回复与职位管理补齐同一类校验，均返回 `INVALID_PARAM` 并指向 `boss hr chat` / `boss hr jobs list`。
