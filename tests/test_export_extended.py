@@ -57,6 +57,24 @@ def _api_response(jobs: list[dict], has_more: bool = False) -> dict:
 
 @patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_output_path_expands_tilde_and_creates_parent(mock_auth_cls, mock_client_cls, tmp_path: Path, monkeypatch):
+	"""MCP 子进程调用不经 shell，`~` 不会被展开；-o 必须自己展开并建父目录。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = _api_response([_make_raw_job("Go")])
+	monkeypatch.setenv("HOME", str(tmp_path))
+	monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+	result = CliRunner().invoke(cli, ["export", "golang", "--count", "1", "-o", "~/nested/jobs.csv"])
+
+	assert result.exit_code == 0
+	payload = json.loads(result.output)
+	expected = tmp_path / "nested" / "jobs.csv"
+	assert payload["data"]["path"] == str(expected)
+	assert expected.exists()
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
 def test_export_csv_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.search_jobs.return_value = _api_response([_make_raw_job("Go")])

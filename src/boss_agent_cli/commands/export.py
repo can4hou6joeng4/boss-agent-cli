@@ -20,6 +20,7 @@ from boss_agent_cli.services.job_export import (
 	write_export_file,
 	write_html_export,
 )
+from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
 	SearchUrlParseError,
@@ -200,6 +201,7 @@ def export_cmd(
 			page += 1
 
 		if output:
+			output = str(prepare_output_path(output))
 			if html_file_output:
 				write_html_export(html_items, output)
 				item_count = len(html_items)

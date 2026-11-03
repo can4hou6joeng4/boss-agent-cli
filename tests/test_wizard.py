@@ -390,6 +390,26 @@ def test_candidate_export_scopes_search_to_current_account(tmp_path):
 	assert result.data["count"] == 0
 
 
+def test_candidate_export_expands_tilde_in_output_path(tmp_path, monkeypatch):
+	"""wizard 的 output 来自 JSON 输入（MCP），`~` 不会经 shell 展开。"""
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+	monkeypatch.setenv("HOME", str(tmp_path))
+	monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+	class _Result:
+		items: list = []
+
+	with patch("boss_agent_cli.wizard.actions.execute_candidate_search", return_value=_Result()):
+		result = DEFAULT_ACTIONS["candidate_export"](
+			context, {"query": "golang", "output": "~/wizard/out.json"}, {}
+		)
+
+	expected = tmp_path / "wizard" / "out.json"
+	assert result.data["path"] == str(expected)
+	assert expected.exists()
+
+
 def test_candidate_contact_actions_refresh_rotating_security_id(tmp_path):
 	platform = _FakeCandidatePlatform()
 	context = _action_context(tmp_path, candidate=platform)
