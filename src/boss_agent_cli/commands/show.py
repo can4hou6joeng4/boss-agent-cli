@@ -16,6 +16,10 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 	"""按编号查看搜索/推荐结果中的职位详情（如 boss show 3）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
+	search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
+	recommend_cmd = boss_command_for_ctx(ctx, "recommend")
+	show_cmd = boss_command_for_ctx(ctx, "show <编号>")
+	rerun_hints = {"next_actions": [search_cmd, recommend_cmd]}
 
 	# 索引是 1-based 的编号：0 或负数永远不可能命中，先按参数错误拒绝，
 	# 不要让「先 search 再 show」的提示把 Agent 送进一个必然失败的循环。
@@ -25,7 +29,8 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 			"show",
 			code="INVALID_PARAM",
 			message=f"编号必须从 1 开始，收到 {index}",
-			hints={"next_actions": [boss_command_for_ctx(ctx, "search <关键词>"), boss_command_for_ctx(ctx, "recommend")]},
+			recovery_action=f"按 1 到结果数之间的编号重试，例如 {show_cmd}",
+			hints=rerun_hints,
 		)
 		return
 
@@ -38,12 +43,16 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 				ctx, "show",
 				code="INVALID_PARAM",
 				message="没有缓存的搜索结果，请先执行 boss search 或 boss recommend",
+				recovery_action=f"先执行 {search_cmd} 或 {recommend_cmd} 建立结果缓存",
+				hints=rerun_hints,
 			)
 		else:
 			handle_error_output(
 				ctx, "show",
 				code="INVALID_PARAM",
 				message=f"编号 {index} 超出范围，当前缓存共 {info['count']} 条结果（来源: {info['source']}）",
+				recovery_action=f"改用当前结果数以内的编号，或用 {search_cmd} 重新搜索",
+				hints=rerun_hints,
 			)
 		return
 
@@ -54,6 +63,8 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 			ctx, "show",
 			code="INVALID_PARAM",
 			message=f"编号 {index} 的职位缺少 security_id",
+			recovery_action=f"这条缓存缺少平台标识；用 {search_cmd} 重新搜索后再查看",
+			hints=rerun_hints,
 		)
 		return
 
