@@ -592,3 +592,51 @@ def test_schema_contains_resume_error_codes():
 	assert "RESUME_NOT_FOUND" in codes
 	assert "RESUME_ALREADY_EXISTS" in codes
 	assert "EXPORT_FAILED" in codes
+
+
+# ── 空简历名 / 错误恢复动作 ─────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+	"args",
+	[
+		["show", ""],
+		["edit", "", "--field", "title", "--value", "x"],
+		["delete", ""],
+		["export", ""],
+		["clone", "", "dst"],
+		["diff", "", "other"],
+		["diff", "other", ""],
+		["link", "", "sid", "jid"],
+		["applications", ""],
+	],
+)
+def test_name_commands_reject_blank_resume_name(tmp_path, args):
+	"""空简历名是漏填参数，不是「简历不存在」。
+
+	以前这些命令都报 RESUME_NOT_FOUND「简历 '' 不存在」：错误码不可恢复，
+	也看不出要补 NAME；同一类输入在 `resume init --name ""` 里是 INVALID_PARAM。
+	"""
+	result = _invoke(CliRunner(), tmp_path, args)
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "名称不能为空" in parsed["error"]["message"]
+
+
+def test_blank_name_rejected_for_whitespace_only(tmp_path):
+	"""纯空格同样没有可点名的简历。"""
+	result = _invoke(CliRunner(), tmp_path, ["show", "   "])
+
+	assert result.exit_code == 1
+	assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"
+
+
+def test_resume_not_found_gives_executable_recovery(tmp_path):
+	"""RESUME_NOT_FOUND 的 recovery_action 以前是 null，Agent 读到错误却无动作可执行。"""
+	result = _invoke(CliRunner(), tmp_path, ["show", "missing"])
+
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
+	assert parsed["error"]["recovery_action"] == "boss resume list"

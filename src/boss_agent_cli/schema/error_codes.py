@@ -242,7 +242,7 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 	"RESUME_NOT_FOUND": {
 		"message": "简历不存在",
 		"recoverable": False,
-		"recovery_action": None,
+		"recovery_action": "boss resume list",
 	},
 	"RESUME_ALREADY_EXISTS": {
 		"message": "简历名称已存在",

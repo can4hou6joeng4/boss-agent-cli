@@ -24,6 +24,19 @@ def _get_store(ctx: click.Context) -> ResumeStore:
 	return ResumeStore(resumes_dir)
 
 
+def _require_resume_name(ctx: click.Context, name: str) -> bool:
+	"""空简历名按参数错误拒绝。
+
+	空字符串是合法 argv，但拿它查 store 只会得到「简历 '' 不存在」：错误码是
+	RESUME_NOT_FOUND（不可恢复、看不出是漏填了名字），而同一类输入在
+	`resume init --name ""` / `resume clone <源> ""` 里都是 INVALID_PARAM。
+	"""
+	if name.strip():
+		return True
+	handle_error_output(ctx, "resume", code="INVALID_PARAM", message="简历名称不能为空")
+	return False
+
+
 def _build_default_template(name: str) -> ResumeData:
 	"""从默认模板创建空白简历"""
 	return ResumeData(
@@ -144,6 +157,8 @@ def resume_list_cmd(ctx: click.Context) -> None:
 def resume_show_cmd(ctx: click.Context, name: str) -> None:
 	"""查看简历详情"""
 	store = _get_store(ctx)
+	if not _require_resume_name(ctx, name):
+		return
 	resume = store.get(name)
 	if resume is None:
 		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
@@ -171,6 +186,8 @@ def resume_show_cmd(ctx: click.Context, name: str) -> None:
 def resume_edit_cmd(ctx: click.Context, name: str, field: str, value: str) -> None:
 	"""编辑简历字段"""
 	store = _get_store(ctx)
+	if not _require_resume_name(ctx, name):
+		return
 	resume = store.get(name)
 	if resume is None:
 		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
@@ -204,6 +221,8 @@ def resume_edit_cmd(ctx: click.Context, name: str, field: str, value: str) -> No
 def resume_delete_cmd(ctx: click.Context, name: str) -> None:
 	"""删除简历"""
 	store = _get_store(ctx)
+	if not _require_resume_name(ctx, name):
+		return
 	if not store.exists(name):
 		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
 		ctx.exit(1)
@@ -231,6 +250,8 @@ def resume_delete_cmd(ctx: click.Context, name: str) -> None:
 def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str | None) -> None:
 	"""导出简历"""
 	store = _get_store(ctx)
+	if not _require_resume_name(ctx, name):
+		return
 	# 文件存在但读不出来（手写坏、字段类型写错）与「不存在」走同一个契约：
 	# 其它子命令都是这样。json 导出若交给 export_json 内部的 FileNotFoundError，
 	# 会被顶层 OSError 网兜报成 LOCAL_IO_ERROR「本地文件读写失败」，指引用户去查
@@ -341,6 +362,8 @@ def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 def resume_clone_cmd(ctx: click.Context, name: str, new_name: str) -> None:
 	"""复制简历为新版本"""
 	store = _get_store(ctx)
+	if not _require_resume_name(ctx, name):
+		return
 	# 空新名称会复制出一份无法点名的简历，`resume show ` 缺参数。
 	if not new_name.strip():
 		handle_error_output(ctx, "resume", code="INVALID_PARAM", message="新简历名称不能为空")
@@ -376,6 +399,10 @@ def resume_clone_cmd(ctx: click.Context, name: str, new_name: str) -> None:
 def resume_diff_cmd(ctx: click.Context, name1: str, name2: str) -> None:
 	"""对比两份简历差异"""
 	store = _get_store(ctx)
+	if not _require_resume_name(ctx, name1):
+		return
+	if not _require_resume_name(ctx, name2):
+		return
 	r1 = store.get(name1)
 	if r1 is None:
 		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name1}' 不存在")
@@ -412,6 +439,8 @@ def resume_diff_cmd(ctx: click.Context, name1: str, name2: str) -> None:
 def resume_link_cmd(ctx: click.Context, name: str, security_id: str, job_id: str, title: str, company: str) -> None:
 	"""关联简历与职位"""
 	store = _get_store(ctx)
+	if not _require_resume_name(ctx, name):
+		return
 	if not store.exists(name):
 		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
 		ctx.exit(1)
@@ -440,6 +469,8 @@ def resume_link_cmd(ctx: click.Context, name: str, security_id: str, job_id: str
 def resume_applications_cmd(ctx: click.Context, name: str) -> None:
 	"""查看简历关联的所有职位"""
 	store = _get_store(ctx)
+	if not _require_resume_name(ctx, name):
+		return
 	if not store.exists(name):
 		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
 		ctx.exit(1)
