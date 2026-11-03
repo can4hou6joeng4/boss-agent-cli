@@ -160,7 +160,7 @@ def _call_ai(ctx: click.Context, svc: AIService, prompt: str) -> dict[str, Any] 
 		text = "\n".join(lines).strip()
 
 	try:
-		return cast("dict[str, Any]", json.loads(text))
+		parsed = json.loads(text)
 	except json.JSONDecodeError:
 		handle_error_output(
 			ctx, "ai",
@@ -171,6 +171,19 @@ def _call_ai(ctx: click.Context, svc: AIService, prompt: str) -> dict[str, Any] 
 		)
 		ctx.exit(1)
 		return None
+	if not isinstance(parsed, dict):
+		# 顶层是数组 / 字符串 / 数字同样是解析失败：调用方会在
+		# `result.setdefault(...)` 处抛 AttributeError，把信封变成 traceback。
+		handle_error_output(
+			ctx, "ai",
+			code="AI_PARSE_ERROR",
+			message=f"AI 返回结果不是 JSON 对象（收到 {type(parsed).__name__}）",
+			recoverable=True,
+			recovery_action="重试（模型输出不稳定时可能发生）",
+		)
+		ctx.exit(1)
+		return None
+	return cast("dict[str, Any]", parsed)
 
 
 def _fit_missing_detail_item(item: dict[str, Any]) -> dict[str, Any]:

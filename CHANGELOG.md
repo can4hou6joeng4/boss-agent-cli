@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss ai` 系列命令在模型返回合法 JSON 但不是对象时抛 `AttributeError` traceback：`_call_ai` 只处理了 `JSONDecodeError`，对顶层是数组 / 字符串 / 数字的结果直接 `cast` 成 dict；`ai fit`、`ai keywords`、`ai cover-letter` 随后的 `result.setdefault(...)` 会崩掉，stdout 没有信封。现在非对象结果同样按 `AI_PARSE_ERROR` 返回（可恢复，提示重试），消息里点名收到的类型。
 - `boss stats` 与 `stats --format html` 在缓存库损坏时抛 `sqlite3.DatabaseError` traceback：`_collect_stats` 直接 `sqlite3.connect` 打开库，`_safe_count` / `_count_since` 只吞缺表的 `OperationalError`，文件被别的格式占位时 `SELECT` 抛出的 `DatabaseError` 一路冒到顶层，stdout 没有信封（`--format html -o` 同样如此）。现在在读取边界把 `sqlite3.DatabaseError` 归一成 `CacheDatabaseInvalid`，由 `main.py` 统一返回 `CACHE_DATABASE_INVALID` 与备份重建指引；损坏库不会留下半份 HTML 报表。
 - `boss clean` 绕过 `CacheStore` 直接操作 SQLite，遇到旧版本数据目录或损坏的库时抛 traceback 而不是信封：`clean --privacy` 在只有 `search_cache` 的旧库上会因 `crawl_runs` 不存在抛 `sqlite3.OperationalError`，`--all` 同理；库文件损坏时则更糟——登录态、简历、聊天快照已经先被删掉，命令才在 `sqlite3.execute` 处崩掉，用户既看不到错误码也不知道哪些文件已清理。现在打开库时把 `sqlite3.DatabaseError` 归一成 `CACHE_DATABASE_INVALID`（命令启动先做一次只读探测，删除动作之前就失败），缺表按「没有可清理项」处理，`clean` 在旧库上正常返回结果。
 - `boss stats --format html` 的 `data.bytes` 报的是字符数而不是字节数：同一份中文报表实际落盘 12KB，信封里却写 4KB 左右，与 digest / export 的 UTF-8 字节数口径不一致，Agent 据此判断载荷大小时会低估 3 倍。现在 `-o` 与 `--json` 两条路径都按 `len(html_text.encode("utf-8"))` 返回，并与文件实际大小一致。
