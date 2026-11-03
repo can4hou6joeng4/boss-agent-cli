@@ -137,7 +137,7 @@ def test_digest_is_exposed_in_schema():
 @patch("boss_agent_cli.commands.digest.get_platform_instance")
 @patch("boss_agent_cli.commands.digest.AuthManager")
 def test_digest_format_md_writes_markdown_to_stdout(mock_auth_cls, mock_client_cls, legacy_args):
-	"""--format md 未指定 -o 时把 Markdown 写到 stdout，不套 JSON 信封"""
+	"""未指定 -o 且未强制 --json 时把 Markdown 写到 stdout，供管道重定向，不套 JSON 信封"""
 	_setup_digest_mocks(mock_client_cls)
 
 	runner = CliRunner()
@@ -149,6 +149,24 @@ def test_digest_format_md_writes_markdown_to_stdout(mock_auth_cls, mock_client_c
 	assert "## 面试" in result.output
 	# 不是 JSON 信封
 	assert not result.output.lstrip().startswith("{")
+
+
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
+@patch("boss_agent_cli.commands.digest.AuthManager")
+def test_digest_format_md_with_json_flag_returns_envelope(mock_auth_cls, mock_client_cls, legacy_args):
+	"""--json 下 stdout 必须是信封：MCP 总是带 --json 调用，直出 Markdown 只会被判成 CLI_ERROR。"""
+	_setup_digest_mocks(mock_client_cls)
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", *legacy_args, "digest", "--format", "md"])
+	assert result.exit_code == 0
+
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["format"] == "md"
+	assert parsed["data"]["content"].startswith("# 每日求职摘要")
+	assert "## 待跟进" in parsed["data"]["content"]
+	assert parsed["data"]["bytes"] == len(parsed["data"]["content"].encode("utf-8"))
 
 
 @patch("boss_agent_cli.commands.digest.get_platform_instance")
