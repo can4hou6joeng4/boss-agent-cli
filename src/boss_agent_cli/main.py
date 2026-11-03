@@ -187,6 +187,18 @@ _PATH_PROBLEMS = {
 	"not writable": "不可写",
 	"not executable": "不可执行",
 }
+# click.File 打不开文件时抛出的正文形如 ``'/tmp/x': No such file or directory``，
+# 后半段是 OSError.strerror（英文）。
+_FILE_ERROR_RE = re.compile(r"^'(.*)': ([^:]+)$")
+_FILE_ERROR_PROBLEMS = {
+	"No such file or directory": "不存在",
+	"Is a directory": "是目录，但这里需要文件",
+	"Permission denied": "没有读取权限",
+	"File name too long": "路径过长",
+	"Too many open files": "打开的文件过多",
+	"Too many open files in system": "系统打开的文件过多",
+	"Too many levels of symbolic links": "符号链接层级过深",
+}
 
 
 def _invalid_value_error(exc: click.ClickException) -> tuple[str, str, dict[str, Any]] | None:
@@ -255,6 +267,39 @@ def _invalid_path_error(exc: click.ClickException) -> tuple[str, str, dict[str, 
 	)
 
 
+def _invalid_file_error(exc: click.ClickException) -> tuple[str, str, dict[str, Any]] | None:
+	"""``click.File`` 打不开文件时的英文正文同样要换成中文。
+
+	``boss login --curl-file ''`` 回 ``Invalid value for '--curl-file': '':
+	No such file or directory``，``--curl-file /tmp`` 回 ``'/tmp': Is a directory``：
+	错误码对，但正文是 OSError 的英文 strerror，``recovery_action`` 只有「修正参数」、
+	``hints`` 为 null。只翻译认识的 strerror，其余（含已本地化的消息）保持原样。
+	"""
+	if not isinstance(exc, click.BadParameter) or _has_cjk(exc.message):
+		return None
+	raw = str(exc.message)
+	matched = _FILE_ERROR_RE.match(raw)
+	if matched is None:
+		return None
+	problem = _FILE_ERROR_PROBLEMS.get(matched.group(2))
+	if problem is None:
+		return None
+	path = _usage_path(exc)
+	if path is None:
+		return None
+	hint = _parameter_display_name(exc)
+	label = hint or "参数"
+	if not matched.group(1).strip():
+		message = f"{path} 的 {label} 的值不能为空"
+	else:
+		message = f"{path} 的 {label} 无效：路径 '{matched.group(1)}' {problem}"
+	return (
+		message,
+		f"用 {path} --help 查看参数说明",
+		{"next_actions": [f"{path} --help"]},
+	)
+
+
 def _usage_error_detail(exc: click.ClickException, ctx: click.Context | None) -> tuple[str, str, dict[str, Any]] | None:
 	"""按异常类型给用法错误配中文说明；不认识时返回 ``None``，保留 Click 原文。"""
 	if type(exc).__name__ == "NoArgsIsHelpError":
@@ -269,6 +314,7 @@ def _usage_error_detail(exc: click.ClickException, ctx: click.Context | None) ->
 		_unexpected_extra_argument_error,
 		_invalid_value_error,
 		_invalid_path_error,
+		_invalid_file_error,
 	):
 		detail = converter(exc)
 		if detail is not None:
