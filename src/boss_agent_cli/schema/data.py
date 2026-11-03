@@ -1016,6 +1016,7 @@ SCHEMA_DATA = {
 					"args": [
 						{"name": "file_path", "required": True, "description": "JSON 简历文件路径"},
 					],
+					"--force": {"type": "bool", "default": False, "description": "覆盖同名简历（会丢弃本地已有的编辑）"},
 				},
 				"clone": {
 					"args": [

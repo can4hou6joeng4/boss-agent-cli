@@ -11,6 +11,14 @@ class ResumeImportError(ValueError):
 	"""导入文件不是可用的简历 JSON；消息是给用户看的修复指引。"""
 
 
+class ResumeAlreadyExistsError(ValueError):
+	"""导入时遇到同名简历，且没有显式要求覆盖。"""
+
+	def __init__(self, name: str):
+		super().__init__(name)
+		self.name = name
+
+
 def _safe_filename(name: str) -> str:
 	"""将简历名称转为安全的文件名"""
 	return name.replace("/", "_").replace("\\", "_").replace("\0", "_")
@@ -78,8 +86,13 @@ class ResumeStore:
 		"""检查简历是否存在"""
 		return self._path_for(name).exists()
 
-	def import_file(self, file_path: Path) -> ResumeData:
-		"""导入 JSON 文件（兼容 wzdnzd/zine0 camelCase 格式）"""
+	def import_file(self, file_path: Path, *, overwrite: bool = False) -> ResumeData:
+		"""导入 JSON 文件（兼容 wzdnzd/zine0 camelCase 格式）。
+
+		文件里的 `name` 与已有简历同名时默认抛 `ResumeAlreadyExistsError`：
+		`save()` 是整份覆盖，导入一份旧备份会静默丢掉本地已有的编辑（`resume init` /
+		`resume clone` 都拒绝同名）。只有调用方显式要求覆盖时才继续。
+		"""
 		try:
 			raw_text = file_path.read_text(encoding="utf-8")
 		except UnicodeDecodeError as exc:
@@ -98,6 +111,8 @@ class ResumeStore:
 		name = raw.get("name")
 		if not isinstance(name, str) or not name.strip():
 			raise ResumeImportError("缺少非空字符串字段 name")
+		if not overwrite and self.exists(name):
+			raise ResumeAlreadyExistsError(name)
 
 		resume = dict_to_resume(raw)
 		self.save(resume)
