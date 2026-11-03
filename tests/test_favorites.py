@@ -134,6 +134,36 @@ def test_favorites_list_hints_avoid_detail_with_redacted_sid(mock_auth_cls, mock
 	assert not any(re.search(r"detail <security_id>(?! --job-id)", a) for a in next_actions)
 
 
+@patch("boss_agent_cli.commands.favorites.get_platform_instance")
+@patch("boss_agent_cli.commands.favorites.AuthManager")
+def test_favorites_list_hints_omit_next_page_when_no_more(mock_auth_cls, mock_platform_cls):
+	"""hasMore=false 时不能建议 --page N+1：Agent 照着执行只会拿到空页。"""
+	platform = _ctx_mock(mock_platform_cls)
+	platform.job_favorites.return_value = {
+		"code": 0,
+		"zpData": {"cardList": [_make_card()], "hasMore": False},
+	}
+	result = CliRunner().invoke(cli, ["--json", "favorites", "list", "--page", "3"])
+	assert result.exit_code == 0
+	next_actions = json.loads(result.output)["hints"]["next_actions"]
+	assert all("--page" not in action for action in next_actions)
+
+
+@patch("boss_agent_cli.commands.favorites.get_platform_instance")
+@patch("boss_agent_cli.commands.favorites.AuthManager")
+def test_favorites_list_hints_include_next_page_when_has_more(mock_auth_cls, mock_platform_cls):
+	"""hasMore=true 时保留下一页提示，页码基于当前页 +1。"""
+	platform = _ctx_mock(mock_platform_cls)
+	platform.job_favorites.return_value = {
+		"code": 0,
+		"zpData": {"cardList": [_make_card()], "hasMore": True},
+	}
+	result = CliRunner().invoke(cli, ["--json", "favorites", "list", "--page", "2"])
+	assert result.exit_code == 0
+	next_actions = json.loads(result.output)["hints"]["next_actions"]
+	assert any("favorites list --page 3" in action for action in next_actions)
+
+
 # ── sync ──────────────────────────────────────────────────────────
 
 
