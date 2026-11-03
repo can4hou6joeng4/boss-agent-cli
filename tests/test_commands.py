@@ -212,6 +212,26 @@ def test_greet_limit_reports_recovery_action(mock_cache_cls, mock_auth_cls, mock
 	assert "不要自动重发" in parsed["error"]["recovery_action"]
 
 
+def test_greet_rejects_blank_identifiers():
+	"""空 security_id / job_id 是 argv 构造错误，不该发平台请求。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["greet", "", "job_001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["hints"]["next_actions"] == ["boss search <关键词>"]
+
+
+def test_detail_rejects_blank_security_id():
+	"""空 security_id 不该换来一次无意义的平台往返。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["detail", ""])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["hints"]["next_actions"] == ["boss search <关键词>", "boss show <编号>"]
+
+
 @patch("boss_agent_cli.commands.greet.time")
 @patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")

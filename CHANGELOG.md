@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss detail ""` 与 `boss greet "" <job_id>` 不校验空参数：空 `security_id` / `job_id` 会照常查缓存并发起平台请求，错误看起来像网络或登录问题，真正的原因（argv 拼错）被掩盖，还白白消耗一次请求。`watch` / `preset` / `shortlist` / `resume` 早已拒绝空参数，这两个核心命令补齐后同一类错误都以 `INVALID_PARAM` 返回并给出取编号/搜索关键词的下一步。
 - `ResumeStore.list_all_with_corrupt` 在 `return results, corrupt` 之后还留着一行不可达的 `return results`：它永远执行不到，却让人以为列表分支还有别的出口，且一旦未来调整代码顺序会让该函数在不同路径上返回 `list` 而不是 `tuple`，调用方解包时直接报错。ruff 规则集（E4/E7/E9/F）与 mypy 都不检查不可达语句，因此新增 `tests/test_code_hygiene.py::test_no_unreachable_statements` 静态守卫：`src/` 里任何终止语句（return/raise/continue/break）之后再有同块语句都会失败。
 - `boss schema` 中 72 个子命令没有 `description`：`watch` / `crawl` / `preset` / `shortlist` / `config` / `resume` / `ai` / `agent` / `hr` 下的 `add`、`run`、`resume`、`analyze-jd`、`jobs list` 等——schema 是 Agent 的能力真源，只列参数和选项而不说该子命令做什么，Agent 就无法据此选择能力（`boss <cmd> --help` 里有说明，但只对读 CLI 帮助的调用方可见）。现在按 Click 帮助补齐全部 72 处描述，并新增 `tests/test_schema_contract.py::test_schema_subcommands_have_descriptions` 守卫：新增子命令漏写描述会直接失败。
 - `boss --help` 里 10 个公开选项没有说明：顶层 `--log-level`，`crawl run` / `crawl start` 的 `--hook-profile`，以及 `ai local configure` / `pull` / `import` 的 `--runtime`、`--model`、`--base-url`、`--confirm-download`、`--path`——帮助里只剩裸开关名（`--hook-profile` 连 `screenshot-full` 需要配 `--hook-dir` 都没写），用户和 Agent 只能靠猜，猜错就落到 `INVALID_PARAM` 上。现在补齐 help 文本，`boss schema` 中 `crawl.run` / `crawl.start` 的 `--hook-profile` 也补上对应 `description`，并新增 `tests/test_cli_invariants.py::test_every_public_option_has_help_text` 静态守卫：新增公开选项漏写说明会直接失败。

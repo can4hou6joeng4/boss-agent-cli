@@ -49,6 +49,18 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 	if not require_compliance_allowed(ctx, "greet"):
 		return
 
+	# 空 ID 无法定位任何职位或招聘者：继续下去只会先查一次本地缓存、再带着空参数
+	# 发平台请求，错误看起来像网络或登录问题，真正的原因（argv 拼错）被掩盖。
+	if not security_id.strip() or not job_id.strip():
+		handle_error_output(
+			ctx,
+			"greet",
+			code="INVALID_PARAM",
+			message="security_id 与 job_id 不能为空；先用 boss search 取到完整职位参数再打招呼",
+			hints={"next_actions": [boss_command_for_ctx(ctx, "search <关键词>")]},
+		)
+		return
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
