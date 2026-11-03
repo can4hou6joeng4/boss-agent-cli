@@ -86,6 +86,11 @@ def resume_init_cmd(ctx: click.Context, name: str | None, template: str | None) 
 		template = "default"
 	if name is None:
 		name = "default"
+	# 空名称的简历能被写出来，却没法点名：`resume show ` / `resume edit ` 都缺参数，
+	# `resume list` 里也只显示一行没有名字的记录。
+	if not name.strip():
+		handle_error_output(ctx, "resume", code="INVALID_PARAM", message="简历名称不能为空")
+		return
 	if store.exists(name):
 		handle_error_output(
 			ctx, "resume",
@@ -334,6 +339,10 @@ def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 def resume_clone_cmd(ctx: click.Context, name: str, new_name: str) -> None:
 	"""复制简历为新版本"""
 	store = _get_store(ctx)
+	# 空新名称会复制出一份无法点名的简历，`resume show ` 缺参数。
+	if not new_name.strip():
+		handle_error_output(ctx, "resume", code="INVALID_PARAM", message="新简历名称不能为空")
+		return
 	if not store.exists(name):
 		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
 		ctx.exit(1)
