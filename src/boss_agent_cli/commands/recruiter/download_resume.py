@@ -55,16 +55,36 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 		try:
 			result = platform.download_resume_by_friend(friend_id, message_id, output)
 		except ResumeValidationError as exc:
-			handle_error_output(ctx, command, code="INVALID_PARAM", message=str(exc))
+			chat_cmd = boss_command_for_ctx(ctx, "hr chat")
+			handle_error_output(
+				ctx,
+				command,
+				code="INVALID_PARAM",
+				message=str(exc),
+				recovery_action=f"按提示核对 friend_id、message_id 与附件状态后重试；不确定时用 {chat_cmd} 核对会话",
+				hints={"next_actions": [chat_cmd]},
+			)
 			return
 		except FileExistsError:
-			handle_error_output(ctx, command, code="INVALID_PARAM", message="输出文件已存在，请指定新文件名；不会覆盖")
+			handle_error_output(
+				ctx,
+				command,
+				code="INVALID_PARAM",
+				message="输出文件已存在，请指定新文件名；不会覆盖",
+				recovery_action="换一个 --output 文件名后重试；已有文件不会被覆盖",
+			)
 			return
 		except NotImplementedError:
 			handle_error_output(ctx, command, code="PLATFORM_NOT_SUPPORTED", message="当前平台不支持下载附件简历")
 			return
 		except OSError:
-			handle_error_output(ctx, command, code="INVALID_PARAM", message="无法保存文件，请检查目标目录与写入权限")
+			handle_error_output(
+				ctx,
+				command,
+				code="INVALID_PARAM",
+				message="无法保存文件，请检查目标目录与写入权限",
+				recovery_action="确认 --output 的父目录存在且可写后重试",
+			)
 			return
 		except (AuthRequired, RecruiterAuthError):
 			recoverable, _ = error_contract_for_code("AUTH_REQUIRED")

@@ -2174,4 +2174,6 @@ def test_mark_rejects_blank_identifier(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["hints"]["next_actions"] == ["boss chat"]
+	assert "boss chat" in parsed["error"]["recovery_action"]
 	mock_client.friend_list.assert_not_called()

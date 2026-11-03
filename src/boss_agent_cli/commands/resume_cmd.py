@@ -270,6 +270,7 @@ def resume_edit_cmd(ctx: click.Context, name: str, field: str, value: str) -> No
 			ctx, "resume",
 			code="INVALID_PARAM",
 			message="简历名称不能用 --field 修改；先 boss resume clone <旧名> <新名> 再删除旧简历",
+			recovery_action="先用 boss resume clone 复制出改名后的简历，再删除旧简历",
 			hints={"next_actions": [f"boss resume clone {shell_argument(name)} <新名>"]},
 		)
 		ctx.exit(1)
@@ -285,6 +286,7 @@ def resume_edit_cmd(ctx: click.Context, name: str, field: str, value: str) -> No
 			ctx, "resume",
 			code="INVALID_PARAM",
 			message=f"{detail}；可用 --field title 之类的文本字段，完整结构见 boss resume export {shell_argument(name)} --format json",
+			recovery_action="用 --field 指向存在的文本子字段后重试；先 export 导出 JSON 查看完整结构",
 			hints={"next_actions": [f"boss resume export {shell_argument(name)} --format json", f"boss resume show {shell_argument(name)}"]},
 		)
 		ctx.exit(1)
@@ -453,6 +455,8 @@ def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 			ctx, "resume",
 			code="INVALID_PARAM",
 			message=f"文件 '{file_path}' 解析失败: {exc}",
+			recovery_action=f"按提示修正 JSON 字段后重试；可用 {boss_command_for_ctx(ctx, 'resume export <简历> --format json')} 对照结构",
+			hints={"next_actions": [boss_command_for_ctx(ctx, "resume export <简历> --format json"), boss_command_for_ctx(ctx, "resume list")]},
 		)
 		ctx.exit(1)
 		return
