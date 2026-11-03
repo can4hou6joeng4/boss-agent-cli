@@ -330,7 +330,14 @@ def configure_cmd(
 ) -> None:
 	"""设置 crawl 专用 Chrome 和 Hook 配置。"""
 	if all(value is None for value in (chrome_path, cdp_port, max_requests, max_details, max_seconds, max_retries)):
-		handle_error_output(ctx, "crawl.configure", code="INVALID_PARAM", message="至少提供一个 crawl 配置项")
+		handle_error_output(
+			ctx,
+			"crawl.configure",
+			code="INVALID_PARAM",
+			message="至少提供一个 crawl 配置项",
+			recovery_action="补上要调整的配置项后重试；可用 boss crawl configure --help 查看可配置项",
+			hints={"next_actions": ["boss crawl configure --help"]},
+		)
 		return
 	updates = {
 		"chrome_path": str(chrome_path) if chrome_path is not None else None,

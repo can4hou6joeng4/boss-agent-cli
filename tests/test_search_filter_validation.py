@@ -125,3 +125,21 @@ def test_blank_selector_values_are_param_errors(tmp_path, argv, message):
 	assert payload["error"]["code"] == "INVALID_PARAM"
 	assert payload["error"]["message"] == message
 	assert payload["hints"]["next_actions"]
+
+
+def test_search_without_any_selector_points_at_keyword_and_presets(tmp_path):
+	"""什么都没传时给出可执行的下一步，而不是笼统的「修正参数」。"""
+	payload = _invoke(tmp_path, ["search"])
+
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert payload["hints"]["next_actions"] == ["boss search <关键词>", "boss preset list"]
+	assert "boss search <关键词>" in payload["error"]["recovery_action"]
+
+
+def test_search_url_parse_error_points_at_keyword_search(tmp_path):
+	"""非 BOSS 直聘链接要给出可执行替代，而不是重试同一条链接。"""
+	payload = _invoke(tmp_path, ["search", "--url", "https://example.com/web/geek/jobs?query=Python"])
+
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert payload["hints"]["next_actions"] == ["boss search <关键词>"]
+	assert "search <关键词>" in payload["error"]["recovery_action"]

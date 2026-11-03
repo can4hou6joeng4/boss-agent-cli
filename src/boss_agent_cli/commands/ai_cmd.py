@@ -117,14 +117,22 @@ def _read_text_argument(ctx: click.Context, value: str) -> str | None:
 		return value
 	file_path = Path(value[1:])
 	if not file_path.exists():
-		handle_error_output(ctx, "ai", code="INVALID_PARAM", message=f"文件 '{file_path}' 不存在")
+		handle_error_output(
+			ctx,
+			"ai",
+			code="INVALID_PARAM",
+			message=f"文件 '{file_path}' 不存在",
+			recovery_action="检查 @ 后面的文件路径是否存在后重试",
+		)
 		ctx.exit(1)
 		return None
 	if file_path.is_dir():
 		handle_error_output(
-			ctx, "ai",
+			ctx,
+			"ai",
 			code="INVALID_PARAM",
 			message=f"'{file_path}' 是目录，需要传入文件路径",
+			recovery_action="把 @ 后面的目录换成具体的 UTF-8 文本文件路径后重试",
 		)
 		ctx.exit(1)
 		return None
@@ -132,9 +140,11 @@ def _read_text_argument(ctx: click.Context, value: str) -> str | None:
 		return file_path.read_text(encoding="utf-8")
 	except UnicodeDecodeError:
 		handle_error_output(
-			ctx, "ai",
+			ctx,
+			"ai",
 			code="INVALID_PARAM",
 			message=f"文件 '{file_path}' 不是 UTF-8 编码的文本；请先转存为 UTF-8 后重试",
+			recovery_action="先把文件转存为 UTF-8 文本，再重新传入 @<文件> 路径",
 		)
 		ctx.exit(1)
 		return None
@@ -292,6 +302,7 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 				ctx, "ai-config",
 				code="INVALID_PARAM",
 				message=message,
+				recovery_action="按 next_actions 选择可用的 provider 参数后重试",
 				hints={"next_actions": [
 					"boss ai config --provider custom --base-url <url> --model <model> --api-key <key>",
 					"boss ai config",
@@ -745,7 +756,15 @@ def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | 
 		return
 
 	if not jd_text and not job_id:
-		handle_error_output(ctx, "ai", code="INVALID_PARAM", message="需要指定 --jd 或 --job-id")
+		search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
+		handle_error_output(
+			ctx,
+			"ai",
+			code="INVALID_PARAM",
+			message="需要指定 --jd 或 --job-id",
+			recovery_action=f"补上 --jd <职位描述> 或 --job-id <编号> 后重试；编号可从 {search_cmd} 的结果中取到",
+			hints={"next_actions": [search_cmd]},
+		)
 		ctx.exit(1)
 		return
 
@@ -808,7 +827,15 @@ def ai_cover_letter_cmd(
 		return
 
 	if not jd_text and not job_id:
-		handle_error_output(ctx, "ai", code="INVALID_PARAM", message="需要指定 --jd 或 --job-id")
+		search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
+		handle_error_output(
+			ctx,
+			"ai",
+			code="INVALID_PARAM",
+			message="需要指定 --jd 或 --job-id",
+			recovery_action=f"补上 --jd <职位描述> 或 --job-id <编号> 后重试；编号可从 {search_cmd} 的结果中取到",
+			hints={"next_actions": [search_cmd]},
+		)
 		ctx.exit(1)
 		return
 
