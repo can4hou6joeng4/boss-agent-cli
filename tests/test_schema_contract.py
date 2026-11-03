@@ -611,8 +611,18 @@ def test_cli_error_envelope_metadata_matches_registry():
 	曾经的缺口：命令层大量 `INVALID_PARAM` 调用点不传 `recoverable` /
 	`recovery_action`，信封里两者落成 `false` / `null`，Agent 拿不到
 	`schema.error_codes` 中已经声明好的「修正参数」指引。
+
+	这里用最小探针命令验证兜底路径本身；不绑定某个尚未补专属指引的真实
+	命令，避免专用文案一补齐，这个契约测试就跟着红。
 	"""
-	result = CliRunner().invoke(cli, ["--json", "export", "--url", "https://example.com/not-boss"])
+	from boss_agent_cli.display import handle_error_output
+
+	@click.command("probe")
+	@click.pass_context
+	def probe(ctx: click.Context) -> None:
+		handle_error_output(ctx, "probe", code="INVALID_PARAM", message="probe")
+
+	result = CliRunner().invoke(probe, [])
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert parsed["error"]["recoverable"] is ERROR_CODES["INVALID_PARAM"]["recoverable"]

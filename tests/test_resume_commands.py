@@ -454,6 +454,21 @@ def test_import_invalid_file(tmp_path):
 	assert parsed["ok"] is False
 
 
+def test_import_parse_failure_points_at_export_template(tmp_path):
+	"""无法解析的 JSON 也要给出可执行的修复入口，而不只是「导入失败」。"""
+	bad_file = tmp_path / "bad.json"
+	bad_file.write_text("not json at all", encoding="utf-8")
+	result = _invoke(CliRunner(), tmp_path, ["import", str(bad_file)])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "INVALID_PARAM")
+	assert "UTF-8" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [
+		"boss resume export <简历> --format json",
+		"boss resume list",
+	]
+
+
 def test_import_malformed_structure_points_at_export_template(tmp_path):
 	"""结构对不上模型的 JSON 要给出对照模板，而不是只报一句「解析失败」。"""
 	bad_file = tmp_path / "bad_structure.json"

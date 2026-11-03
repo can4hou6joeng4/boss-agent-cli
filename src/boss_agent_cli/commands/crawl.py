@@ -29,6 +29,7 @@ from boss_agent_cli.crawler.transport import DrissionCrawlerSession
 from boss_agent_cli.services.json_files import write_json_atomic
 from boss_agent_cli.display import (
 	auth_required_hints,
+	boss_command_for_ctx,
 	handle_auth_errors,
 	handle_error_output,
 	handle_output,
@@ -704,11 +705,14 @@ def shortlist_cmd(
 ) -> None:
 	"""将 crawl 结果导入原项目的本地职位候选池。"""
 	if include_all == bool(selectors):
+		results_cmd = boss_command_for_ctx(ctx, f"crawl results {run_id}")
 		handle_error_output(
 			ctx,
 			"crawl.shortlist",
 			code="INVALID_PARAM",
 			message="必须且只能使用 --all 或至少一个 --selector 选择要导入的职位",
+			recovery_action=f"用 --all 导入该 run 的全部结果，或改用至少一个 --selector 指定要导入的职位；候选 selector 可用 {results_cmd} 查看",
+			hints={"next_actions": [results_cmd]},
 		)
 		return
 

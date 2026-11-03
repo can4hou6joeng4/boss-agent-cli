@@ -441,10 +441,13 @@ def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 		ctx.exit(1)
 		return
 	except ResumeImportError as exc:
+		export_cmd = boss_command_for_ctx(ctx, "resume export <简历> --format json")
 		handle_error_output(
 			ctx, "resume",
 			code="INVALID_PARAM",
 			message=f"文件 '{file_path}' 导入失败: {exc}",
+			recovery_action=f"按提示修正 JSON 文件（UTF-8 编码、合法 JSON、顶层对象、非空 name 字段）后重试；可用 {export_cmd} 对照结构",
+			hints={"next_actions": [export_cmd, boss_command_for_ctx(ctx, "resume list")]},
 		)
 		ctx.exit(1)
 		return

@@ -600,6 +600,17 @@ def test_export_without_query_returns_actionable_recovery():
 	assert "boss export" in parsed["error"]["recovery_action"]
 
 
+def test_export_invalid_search_url_points_at_keyword_export():
+	"""URL 解析失败要指出改用关键词的修复路径，而不是落到默认「修正参数」。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "export", "--url", "not-a-boss-url"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "完整的 BOSS 直聘搜索页链接" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == ["boss export <关键词>"]
+
+
 # ── 平台错误契约 ─────────────────────────────────────────────────────
 
 
