@@ -405,6 +405,11 @@ def resume_link_cmd(ctx: click.Context, name: str, security_id: str, job_id: str
 		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
 		ctx.exit(1)
 		return
+	# 空字符串仍是合法 argv，但不构成一条职位关联：存进去之后 `resume applications`
+	# 会多出一行空 ID，提示里的 `boss apply  ` 也没有可执行参数。
+	if not security_id.strip() or not job_id.strip():
+		handle_error_output(ctx, "resume", code="INVALID_PARAM", message="security_id 与 job_id 不能为空")
+		return
 	cache = CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db")
 	cache.link_resume_to_job(name, security_id, job_id, title, company)
 	cache.close()

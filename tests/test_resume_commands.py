@@ -471,6 +471,20 @@ def test_link_resume_not_found(tmp_path):
 	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
 
 
+def test_link_rejects_blank_identifiers(tmp_path):
+	"""空 security_id / job_id 会存下一条无法点名的空关联，必须在写盘前拒绝。"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "blanktest", "--template", "default"])
+	result = _invoke(runner, tmp_path, ["link", "blanktest", "", "  "])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "security_id" in parsed["error"]["message"]
+
+	applications = _invoke(runner, tmp_path, ["applications", "blanktest"])
+	assert json.loads(applications.output)["data"] == []
+
+
 def test_applications_list(tmp_path):
 	runner = CliRunner()
 	_invoke(runner, tmp_path, ["init", "--name", "apptest", "--template", "default"])

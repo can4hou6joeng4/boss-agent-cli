@@ -173,6 +173,22 @@ def test_shortlist_local_flows_do_not_construct_platform_clients(tmp_path):
 		platform.assert_not_called()
 
 
+def test_shortlist_add_rejects_blank_identifiers(tmp_path):
+	"""空 security_id / job_id 会存下一条全空候选，remove 提示也没有可执行参数。"""
+	runner = CliRunner()
+	for security_id, job_id in (("", ""), ("  ", "job_001"), ("sec_001", "")):
+		result = runner.invoke(
+			cli,
+			["--data-dir", str(tmp_path), "--json", "shortlist", "add", security_id, job_id],
+		)
+		assert result.exit_code == 1, result.output
+		parsed = json.loads(result.output)
+		assert parsed["error"]["code"] == "INVALID_PARAM"
+
+	listed = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "shortlist", "list"]).output)
+	assert listed["data"] == []
+
+
 def test_shortlist_schema_is_exposed():
 	runner = CliRunner()
 	result = runner.invoke(cli, ["schema"])
