@@ -34,7 +34,15 @@ def _require_resume_name(ctx: click.Context, name: str) -> bool:
 	"""
 	if name.strip():
 		return True
-	handle_error_output(ctx, "resume", code="INVALID_PARAM", message="简历名称不能为空")
+	list_cmd = boss_command_for_ctx(ctx, "resume list")
+	handle_error_output(
+		ctx,
+		"resume",
+		code="INVALID_PARAM",
+		message="简历名称不能为空",
+		recovery_action=f"补上简历名称后重试；用 {list_cmd} 查看已有简历",
+		hints={"next_actions": [list_cmd]},
+	)
 	return False
 
 
@@ -154,8 +162,7 @@ def resume_init_cmd(ctx: click.Context, name: str | None, template: str | None) 
 		name = "default"
 	# 空名称的简历能被写出来，却没法点名：`resume show ` / `resume edit ` 都缺参数，
 	# `resume list` 里也只显示一行没有名字的记录。
-	if not name.strip():
-		handle_error_output(ctx, "resume", code="INVALID_PARAM", message="简历名称不能为空")
+	if not _require_resume_name(ctx, name):
 		return
 	if store.exists(name):
 		handle_error_output(
@@ -468,7 +475,14 @@ def resume_clone_cmd(ctx: click.Context, name: str, new_name: str) -> None:
 		return
 	# 空新名称会复制出一份无法点名的简历，`resume show ` 缺参数。
 	if not new_name.strip():
-		handle_error_output(ctx, "resume", code="INVALID_PARAM", message="新简历名称不能为空")
+		handle_error_output(
+			ctx,
+			"resume",
+			code="INVALID_PARAM",
+			message="新简历名称不能为空",
+			recovery_action=f"补上新简历名称后重试，例如 {boss_command_for_ctx(ctx, 'resume clone <源简历> <新名称>')}",
+			hints={"next_actions": [boss_command_for_ctx(ctx, "resume list")]},
+		)
 		return
 	if _load_resume(ctx, store, name) is None:
 		return
@@ -543,7 +557,15 @@ def resume_link_cmd(ctx: click.Context, name: str, security_id: str, job_id: str
 	# 空字符串仍是合法 argv，但不构成一条职位关联：存进去之后 `resume applications`
 	# 会多出一行空 ID，提示里的 `boss apply  ` 也没有可执行参数。
 	if not security_id.strip() or not job_id.strip():
-		handle_error_output(ctx, "resume", code="INVALID_PARAM", message="security_id 与 job_id 不能为空")
+		search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
+		handle_error_output(
+			ctx,
+			"resume",
+			code="INVALID_PARAM",
+			message="security_id 与 job_id 不能为空",
+			recovery_action=f"先用 {search_cmd} 取到完整的职位参数，再关联到简历",
+			hints={"next_actions": [search_cmd]},
+		)
 		return
 	cache = CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db")
 	cache.link_resume_to_job(name, security_id, job_id, title, company)

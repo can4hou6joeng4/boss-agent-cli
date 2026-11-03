@@ -56,6 +56,7 @@ def _require_run_id(ctx: click.Context, command: str, run_id: str) -> bool:
 		command,
 		code="INVALID_PARAM",
 		message="run_id 不能为空；先用 boss crawl status <run_id> 核对已有任务",
+		recovery_action="补上已有的 run_id 后重试；没有任务时先用 boss crawl start <query> 新建",
 		hints=_RUN_NOT_FOUND_HINTS,
 	)
 	return False

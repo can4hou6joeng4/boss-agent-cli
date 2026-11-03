@@ -366,6 +366,8 @@ def test_empty_run_id_is_invalid_param_not_run_not_found(tmp_path):
 		assert payload["error"]["code"] == "INVALID_PARAM", command
 		assert "run_id 不能为空" in payload["error"]["message"], command
 		assert payload["hints"]["next_actions"] == ["boss crawl start <query>", "boss crawl status <run_id>"]
+		# 恢复动作要说明「补上已存在的 run_id」或新建任务，而不是「修正参数」。
+		assert "run_id" in payload["error"]["recovery_action"], command
 
 
 def test_resume_background_relaunches_stopped_run(tmp_path, monkeypatch):
