@@ -85,13 +85,11 @@ def _sanitize_csv_cell(value: str) -> str:
 	return value
 
 
-def write_html_export(items: list[dict[str, Any]], path: str) -> None:
-	"""将搜索结果导出为 HTML 表格。"""
+def render_html_export(items: list[dict[str, Any]]) -> str:
+	"""将搜索结果渲染为自包含 HTML 表格字符串（export 的 -o 与 stdout 共用）。"""
 	esc = _html.escape
 	if not items:
-		with open(path, "w", encoding="utf-8") as f:
-			f.write("<html><body><p>无数据</p></body></html>")
-		return
+		return "<html><body><p>无数据</p></body></html>"
 
 	rows = []
 	for i, item in enumerate(items, 1):
@@ -150,6 +148,10 @@ def write_html_export(items: list[dict[str, Any]], path: str) -> None:
   <tbody>{"".join(rows)}</tbody>
 </table>
 </body></html>"""
+	return html_content
 
+
+def write_html_export(items: list[dict[str, Any]], path: str) -> None:
+	"""将搜索结果导出为 HTML 表格文件。"""
 	with open(path, "w", encoding="utf-8") as f:
-		f.write(html_content)
+		f.write(render_html_export(items))
