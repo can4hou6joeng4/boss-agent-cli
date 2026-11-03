@@ -566,6 +566,26 @@ def test_detail_reports_not_supported_when_browser_fallback_missing(mock_auth_cl
 @patch("boss_agent_cli.commands.detail.CacheStore")
 @patch("boss_agent_cli.commands.detail.get_platform_instance")
 @patch("boss_agent_cli.commands.detail.AuthManager")
+def test_detail_empty_job_card_reports_not_found_with_next_steps(mock_auth_cls, mock_client_cls, mock_cache_cls):
+	"""「下架」不是死胡同：恢复指引与下一步必须能直接换线索。"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_cache.get_job_id.return_value = ""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.job_card.return_value = {"zpData": {"jobCard": {}}}
+	mock_client.unwrap_data.return_value = {"jobCard": {}}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["detail", "sec_001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "JOB_NOT_FOUND"
+	assert parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == ["boss search <关键词>", "boss recommend"]
+
+
+@patch("boss_agent_cli.commands.detail.CacheStore")
+@patch("boss_agent_cli.commands.detail.get_platform_instance")
+@patch("boss_agent_cli.commands.detail.AuthManager")
 def test_detail_preserves_httpx_platform_error_when_browser_fallback_not_supported(mock_auth_cls, mock_client_cls, mock_cache_cls):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
