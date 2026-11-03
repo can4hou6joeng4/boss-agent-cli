@@ -559,6 +559,24 @@ def test_candidate_watch_corrupt_params_reports_recovery(tmp_path):
 	assert "boss watch remove daily" in exc_info.value.recovery_action
 
 
+def test_candidate_watch_corrupt_params_quotes_name_with_spaces(tmp_path):
+	"""watch 名是 wizard 的自由文本输入：恢复指引里的名字带空格时必须整体加引号。"""
+	context = _action_context(tmp_path)
+	DEFAULT_ACTIONS["candidate_watch"](
+		context, {"action": "add", "name": "我的 监控", "query": "Python"}, {}
+	)
+	conn = sqlite3.connect(tmp_path / "cache" / "boss_agent.db")
+	conn.execute("UPDATE saved_searches SET params = ? WHERE name = ?", ("{not json", "我的 监控"))
+	conn.commit()
+	conn.close()
+
+	with pytest.raises(WorkflowActionError) as exc_info:
+		DEFAULT_ACTIONS["candidate_watch"](context, {"action": "run", "name": "我的 监控"}, {})
+	assert exc_info.value.code == "SAVED_SEARCH_INVALID"
+	assert "boss watch remove '我的 监控'" in exc_info.value.recovery_action
+	assert "boss watch add '我的 监控' <关键词>" in exc_info.value.recovery_action
+
+
 def _crawl_outcome(run_id, status="completed"):
 	return CrawlOutcome(
 		run_id=run_id,

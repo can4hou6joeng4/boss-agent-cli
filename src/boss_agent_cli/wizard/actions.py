@@ -29,7 +29,7 @@ from boss_agent_cli.crawler.service import (
 )
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
 from boss_agent_cli.digest import build_digest
-from boss_agent_cli.display import RISK_ERROR_CONTRACTS, risk_error_contract, risk_error_message
+from boss_agent_cli.display import RISK_ERROR_CONTRACTS, risk_error_contract, risk_error_message, shell_argument
 from boss_agent_cli.output import Logger
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
 from boss_agent_cli.resume.models import resume_to_text
@@ -807,7 +807,9 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 				"SAVED_SEARCH_INVALID",
 				str(exc),
 				recoverable=True,
-				recovery_action=f"boss watch remove {name} 后重新 watch add {name} <关键词>",
+				# watch 名来自 wizard 的 name 输入、是自由文本：带空格时不加引号，
+				# 照抄 `watch remove 我的 监控` 会把一个名字拆成两个参数。
+				recovery_action=f"boss watch remove {shell_argument(name)}；再用 boss watch add {shell_argument(name)} <关键词> 重建",
 			) from exc
 		if record is None:
 			raise WorkflowActionError("SAVED_SEARCH_NOT_FOUND", f"未找到 watch: {name}")

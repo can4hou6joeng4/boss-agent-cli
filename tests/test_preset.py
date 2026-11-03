@@ -158,6 +158,28 @@ def test_search_with_invalid_preset_names_the_preset(tmp_path):
 	assert "boss preset remove legacy" in parsed["error"]["message"]
 
 
+def test_search_with_invalid_preset_quotes_name_in_message(tmp_path):
+	"""消息里的删除命令同样要保住带空格的预设名。
+
+	`boss preset remove 我的 列表` 拆成两个参数后命中错误的名字，另外两条
+	hints.next_actions 已走 shell_argument()，这条正文是同一类残留。
+	"""
+	runner = CliRunner()
+	runner.invoke(
+		cli, ["--data-dir", str(tmp_path), "--json", "preset", "add", "我的 列表", "golang"]
+	)
+	_break_params(tmp_path, "我的 列表", json.dumps({"query": "golang", "salary": "天价"}))
+
+	result = runner.invoke(
+		cli, ["--data-dir", str(tmp_path), "--json", "search", "--preset", "我的 列表"]
+	)
+
+	assert result.exit_code == 1, result.output
+	message = json.loads(result.output)["error"]["message"]
+	assert "boss preset remove '我的 列表'" in message
+	assert "boss preset remove 我的 列表" not in message
+
+
 @patch("boss_agent_cli.commands.search.get_platform_instance")
 @patch("boss_agent_cli.commands.search.AuthManager")
 @patch("boss_agent_cli.commands.search.CacheStore")

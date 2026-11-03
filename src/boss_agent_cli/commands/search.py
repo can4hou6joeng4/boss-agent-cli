@@ -172,7 +172,7 @@ def search_cmd(
 	# 用户这次没传任何筛选参数，只说「未知薪资范围」看不出该改哪里。
 	preset_origin = ""
 	if preset and not any((city, salary, experience, education, industry, scale, stage, job_type)):
-		preset_origin = f"（来自 preset '{preset}'，可用 boss preset remove {preset} 删除后重建）"
+		preset_origin = f"（来自 preset '{preset}'，可用 boss preset remove {shell_argument(preset)} 删除后重建）"
 
 	if preset:
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
