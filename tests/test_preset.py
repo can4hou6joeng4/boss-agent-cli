@@ -89,6 +89,9 @@ def test_preset_remove_rejects_blank_name(tmp_path):
 		parsed = json.loads(result.output)
 		assert parsed["error"]["code"] == "INVALID_PARAM"
 		assert "名称不能为空" in parsed["error"]["message"]
+		# 空名字的恢复指引要能直接执行：空串既没有名字也查不到记录。
+		assert parsed["hints"]["next_actions"] == ["boss preset list"]
+		assert "boss preset list" in parsed["error"]["recovery_action"]
 
 
 def test_preset_list_empty_next_step_is_executable(tmp_path, monkeypatch):

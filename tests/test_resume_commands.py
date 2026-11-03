@@ -563,6 +563,7 @@ def test_clone_rejects_blank_new_name(tmp_path):
 		parsed = json.loads(result.output)
 		assert parsed["error"]["code"] == "INVALID_PARAM"
 		assert "名称" in parsed["error"]["message"]
+		assert parsed["hints"]["next_actions"] == ["boss resume list"]
 
 	listed = json.loads(_invoke(runner, tmp_path, ["list"]).output)
 	assert [item["name"] for item in listed["data"]] == ["original"]
@@ -767,6 +768,8 @@ def test_name_commands_reject_blank_resume_name(tmp_path, args):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert "名称不能为空" in parsed["error"]["message"]
+	# 空名字的下一步是列出已有简历，而不是笼统的「修正参数」。
+	assert parsed["hints"]["next_actions"] == ["boss resume list"]
 
 
 def test_blank_name_rejected_for_whitespace_only(tmp_path):

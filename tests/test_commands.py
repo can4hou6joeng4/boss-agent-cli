@@ -230,6 +230,7 @@ def test_detail_rejects_blank_security_id():
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert parsed["hints"]["next_actions"] == ["boss search <关键词>", "boss show <编号>"]
+	assert "boss search <关键词>" in parsed["error"]["recovery_action"]
 
 
 def test_apply_rejects_blank_identifiers():

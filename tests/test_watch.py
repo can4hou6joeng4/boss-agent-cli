@@ -84,6 +84,19 @@ def test_watch_remove_rejects_blank_name(tmp_path):
 		parsed = json.loads(result.output)
 		assert parsed["error"]["code"] == "INVALID_PARAM"
 		assert "名称不能为空" in parsed["error"]["message"]
+		# 空名字的恢复指引要能直接执行：空串既没有名字也查不到记录。
+		assert parsed["hints"]["next_actions"] == ["boss watch list"]
+		assert "boss watch list" in parsed["error"]["recovery_action"]
+
+
+def test_watch_run_blank_name_points_at_list_and_all(tmp_path):
+	"""``boss watch run ""`` 也要给出可选的两条路径：点名运行或 --all。"""
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", ""])
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["hints"]["next_actions"] == ["boss watch list", "boss watch run --all"]
 
 
 def test_watch_list_empty_next_step_is_executable(tmp_path, monkeypatch):

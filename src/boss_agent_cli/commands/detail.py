@@ -50,6 +50,7 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 			"detail",
 			code="INVALID_PARAM",
 			message="security_id 不能为空；先用 boss search 或 boss show 取到编号再查询",
+			recovery_action=f"先执行 {boss_command_for_ctx(ctx, 'search <关键词>')} 或 {boss_command_for_ctx(ctx, 'show <编号>')} 取到编号后重试",
 			hints={"next_actions": [boss_command_for_ctx(ctx, "search <关键词>"), boss_command_for_ctx(ctx, "show <编号>")]},
 		)
 		return
