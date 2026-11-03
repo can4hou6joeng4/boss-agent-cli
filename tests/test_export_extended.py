@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 from boss_agent_cli.main import cli
 
@@ -279,6 +280,49 @@ def test_export_html_to_file(mock_auth_cls, mock_client_cls, tmp_path: Path):
 	assert "双休" in content
 	# 共 1 条应显示
 	assert "共 1 条" in content
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_html_without_output_writes_html_to_stdout(mock_auth_cls, mock_client_cls):
+	"""`--format html` 不指定 -o 时应直出 HTML，而不是退化成职位记录数组。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = _api_response([_make_raw_job("Full-Stack", skills=["Python"])])
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["export", "fullstack", "--count", "1", "--format", "html"])
+
+	assert result.exit_code == 0
+	assert result.output.lstrip().startswith("<!DOCTYPE html>")
+	assert "Full-Stack" in result.output
+	assert "TestCo" in result.output
+	assert "20K" not in result.output
+	# 直出路径下 stdout 是报表本身，不是 JSON 信封。
+	with pytest.raises(json.JSONDecodeError):
+		json.loads(result.output)
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_html_with_json_flag_returns_envelope(mock_auth_cls, mock_client_cls):
+	"""--json 是硬契约：HTML 正文要进 data.content，stdout 只留信封。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = _api_response([_make_raw_job("Full-Stack", skills=["Python"])])
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "export", "fullstack", "--count", "1", "--format", "html"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["format"] == "html"
+	assert parsed["data"]["count"] == 1
+	assert parsed["data"]["private_fields"] == "omitted"
+	content = parsed["data"]["content"]
+	assert content.lstrip().startswith("<!DOCTYPE html>")
+	assert "Full-Stack" in content
+	assert "20K" not in content
+	assert parsed["data"]["bytes"] == len(content.encode("utf-8"))
 
 
 @patch("boss_agent_cli.commands.export.get_platform_instance")
