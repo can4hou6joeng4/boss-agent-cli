@@ -42,6 +42,22 @@ def _invoke(*args, tmp_path=None):
 	return result.exit_code, json.loads(result.output) if result.output.strip() else None
 
 
+def _invoke_tty(tmp_path, monkeypatch, *args):
+	"""按 TTY 口径执行命令，返回 (exit_code, 渲染到终端的文本)。"""
+	import io
+
+	from rich.console import Console
+
+	stream = io.StringIO()
+	monkeypatch.setattr(
+		"boss_agent_cli.display.console",
+		Console(file=stream, force_terminal=False, width=120),
+	)
+	monkeypatch.setattr("boss_agent_cli.display.is_json_mode", lambda ctx: False)
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), *args])
+	return result.exit_code, stream.getvalue()
+
+
 # ── config list ─────────────────────────────────────────────────────
 
 
@@ -89,6 +105,16 @@ def test_config_get_valid_key(tmp_path):
 	assert parsed["data"]["key"] == "log_level"
 	assert parsed["data"]["value"] == "error"
 	assert parsed["data"]["default"] == "error"
+	assert parsed["hints"]["next_actions"] == ["boss config set log_level <值>", "boss config list"]
+
+
+def test_config_get_renders_value_in_tty(tmp_path, monkeypatch):
+	"""TTY 下 `config get` 必须显示值：之前的 render 是空 lambda，终端一个字都不打。"""
+	code, text = _invoke_tty(tmp_path, monkeypatch, "config", "get", "role")
+	assert code == 0
+	assert "role" in text
+	assert "candidate" in text
+	assert "boss config set role <值>" in text
 
 
 def test_config_get_unknown_key(tmp_path):
@@ -112,6 +138,17 @@ def test_config_set_string_value(tmp_path):
 	# 验证持久化
 	config_file = tmp_path / "config.json"
 	saved = json.loads(config_file.read_text())
+	assert saved["log_level"] == "debug"
+	assert parsed["hints"]["next_actions"] == ["boss config get log_level", "boss config list"]
+
+
+def test_config_set_renders_confirmation_in_tty(tmp_path, monkeypatch):
+	"""TTY 下 `config set` 静默成功时，真人只能怀疑自己没按回车。"""
+	code, text = _invoke_tty(tmp_path, monkeypatch, "config", "set", "log_level", "debug")
+	assert code == 0
+	assert "log_level" in text
+	assert "debug" in text
+	saved = json.loads((tmp_path / "config.json").read_text())
 	assert saved["log_level"] == "debug"
 
 
@@ -520,10 +557,20 @@ def test_config_reset_restores_default(tmp_path):
 	assert code == 0
 	assert parsed["data"]["value"] == "error"
 	assert parsed["data"]["restored"] is True
+	assert parsed["hints"]["next_actions"] == ["boss config get log_level", "boss config list"]
 	# 验证文件中已移除
 	config_file = tmp_path / "config.json"
 	saved = json.loads(config_file.read_text())
 	assert "log_level" not in saved
+
+
+def test_config_reset_renders_confirmation_in_tty(tmp_path, monkeypatch):
+	"""TTY 下 `config reset` 同样要确认恢复成了哪个值。"""
+	_invoke("config", "set", "log_level", "debug", tmp_path=tmp_path)
+	code, text = _invoke_tty(tmp_path, monkeypatch, "config", "reset", "log_level")
+	assert code == 0
+	assert "log_level" in text
+	assert "restored" in text
 
 
 def test_config_reset_unknown_key(tmp_path):

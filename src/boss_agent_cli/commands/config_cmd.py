@@ -12,7 +12,7 @@ from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.automation.config import automation_config_from_dict
 from boss_agent_cli.config import DEFAULTS, ROLES, validate_request_config
 from boss_agent_cli.crawler.service import crawl_cdp_port, crawl_chrome_path, crawl_int_setting
-from boss_agent_cli.display import boss_command_for_ctx, handle_output, render_simple_list
+from boss_agent_cli.display import boss_command_for_ctx, handle_output, render_action_result, render_simple_list
 from boss_agent_cli.output import LOG_LEVELS
 from boss_agent_cli.platforms import list_platforms
 from boss_agent_cli.services.json_files import write_json_atomic
@@ -105,7 +105,19 @@ def config_get_cmd(ctx: click.Context, key: str) -> None:
 		"value": cfg.get(key, DEFAULTS[key]),
 		"default": DEFAULTS[key],
 	}
-	handle_output(ctx, "config", data, render=lambda d: None)
+	# `render=lambda d: None` 让 TTY 下的 get / set / reset 什么都不打印：真人在终端
+	# 改完配置看不到任何确认，只能再跑一次 config list 才能确认是否生效。
+	next_actions = [
+		boss_command_for_ctx(ctx, f"config set {key} <值>"),
+		boss_command_for_ctx(ctx, "config list"),
+	]
+	handle_output(
+		ctx,
+		"config",
+		data,
+		render=lambda d: render_action_result(d, title="config get", next_steps=next_actions),
+		hints={"next_actions": next_actions},
+	)
 
 
 @config_group.command("set")
@@ -181,7 +193,17 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 		return
 
 	data = {"key": key, "value": parsed_value, "previous": ctx.obj["config"].get(key)}
-	handle_output(ctx, "config", data, render=lambda d: None)
+	next_actions = [
+		boss_command_for_ctx(ctx, f"config get {key}"),
+		boss_command_for_ctx(ctx, "config list"),
+	]
+	handle_output(
+		ctx,
+		"config",
+		data,
+		render=lambda d: render_action_result(d, title="config set", next_steps=next_actions),
+		hints={"next_actions": next_actions},
+	)
 
 
 @config_group.command("reset")
@@ -210,7 +232,17 @@ def config_reset_cmd(ctx: click.Context, key: str) -> None:
 		return
 
 	data = {"key": key, "value": DEFAULTS[key], "restored": True}
-	handle_output(ctx, "config", data, render=lambda d: None)
+	next_actions = [
+		boss_command_for_ctx(ctx, f"config get {key}"),
+		boss_command_for_ctx(ctx, "config list"),
+	]
+	handle_output(
+		ctx,
+		"config",
+		data,
+		render=lambda d: render_action_result(d, title="config reset", next_steps=next_actions),
+		hints={"next_actions": next_actions},
+	)
 
 
 def _load_user_overrides(config_path: Path) -> dict[str, Any]:
