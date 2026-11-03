@@ -239,7 +239,9 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 		hints = {"next_actions": [f"boss crawl resume {outcome.run_id}"]}
 	else:
 		hints = {
-			"next_actions": [],
+			# 采集跑完后 output_paths 只是落盘文件；Agent 要继续筛选得先按 run_id 读结果，
+			# 空 next_actions 会让它只能自己猜命令（crawl status 的 completed 分支同此口径）。
+			"next_actions": [f"boss crawl results {outcome.run_id}"],
 			"operator_actions": ["查看 output_paths 中的 JSON、CSV 或 XLSX 结果文件"],
 		}
 	handle_output(
@@ -449,6 +451,9 @@ def start_cmd(
 			recovery_action=recovery_action,
 		)
 		return
+	# 终端里看到的下一步必须与信封 hints 同口径：此前终端只提示 stop、
+	# 信封只提示 results，真人不知道去哪里看结果，Agent 不知道可以中止。
+	next_steps = [f"boss crawl status {run_id}", f"boss crawl results {run_id}", f"boss crawl stop {run_id}"]
 	handle_output(
 		ctx,
 		"crawl.start",
@@ -458,10 +463,8 @@ def start_cmd(
 			"background": True,
 			"checkpoint": {"resume_command": f"boss crawl resume {run_id}"},
 		},
-		render=lambda d: render_record_result(
-			d, title="crawl start", next_steps=[f"boss crawl status {run_id}", f"boss crawl stop {run_id}"]
-		),
-		hints={"next_actions": [f"boss crawl status {run_id}", f"boss crawl results {run_id}"]},
+		render=lambda d: render_record_result(d, title="crawl start", next_steps=next_steps),
+		hints={"next_actions": next_steps},
 	)
 
 
