@@ -218,6 +218,19 @@ def test_resume_job_link_repeat_applies_explicit_values(tmp_path):
 	assert app["status"] == "prepared"
 
 
+def test_remove_resume_links_clears_only_that_resume(tmp_path):
+	"""删除简历的全部分关联只影响同名简历，其它简历的关联保留。"""
+	store = CacheStore(tmp_path / "test.db")
+	store.link_resume_to_job("default", "sec_001", "job_001", "后端", "公司甲")
+	store.link_resume_to_job("default", "sec_002", "job_002", "前端", "公司乙")
+	store.link_resume_to_job("v2", "sec_001", "job_001", "后端", "公司甲")
+
+	assert store.remove_resume_links("default") == 2
+	assert store.get_resume_applications("default") == []
+	assert len(store.get_resume_applications("v2")) == 1
+	assert store.remove_resume_links("default") == 0
+
+
 def test_resume_job_link_multiple(tmp_path):
 	store = CacheStore(tmp_path / "test.db")
 	store.link_resume_to_job("v1", "sec_001", "job_001", "后端", "公司甲")

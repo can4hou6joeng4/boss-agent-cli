@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss resume delete` 只删简历文件、不清理该简历的职位关联：`resume_job_links` 以简历名为业务键且没有外键约束，删掉 `default` 后用同一个名字重建（`resume init` 的默认名就是 `default`），`boss resume applications default` 会把旧简历投过的职位连同 `applied` 状态和备注一起报成新简历的记录。现在删除时同步清理该简历的全部关联，信封里的 `data.removed_links` 给出清理条数；其它简历的关联不受影响。
 - `boss resume link` 重复关联同一职位会静默清空投递状态和备注：`link_resume_to_job` 用 `INSERT OR REPLACE` 整行替换，主键 `(resume_name, security_id, job_id)` 命中时先删后插，已经推进到 `applied` 的 `status` 打回 `prepared`、`notes` 清空、`linked_at` 改成当前时间；第二次关联没带 `--title` / `--company` 时还会用空串覆盖原有的职位名和公司名。现在冲突时改为按字段更新：本次显式给出非空值的 `job_title` / `company` 才覆盖，`status` / `notes` / `linked_at` 始终保留，只刷新 `updated_at`。
 - `boss agent run`（以及 `agent train --live`）在未登录时抛出 `AuthRequired` traceback，stdout 没有任何信封：`run_cmd` / `train_cmd` 没有挂 `handle_auth_errors`（同组的 `agent crawl` 挂了），自动化适配器扫描会话时抛出的登录异常一路冒到顶层，`exit 1` 却只有 stderr 的堆栈，MCP 子进程解析失败后统一回成 `CLI_ERROR`，Agent 完全看不到「先登录」这个真正原因。现在两者与其它命令走同一个装饰器，返回 `AUTH_REQUIRED` 信封（可恢复，`recovery_action` 为 `boss login`），`agent train` 默认的 dry-run 行为不变。
 - `boss shortlist add` 重复加入同一职位会静默清空本地标签、备注和首次加入时间：`add_shortlist` 用 `INSERT OR REPLACE` 整行替换，主键 `(security_id, job_id)` 命中时先删后插，用户在 `shortlist annotate` 里打的标签、写的备注和 `created_at` 一起没了，命令仍返回 `action: "add"` 和一份看起来正常的记录——脚本重跑一次 `shortlist add`、或换设备后再导一次就会遇到。现在冲突时改为按字段更新：本次显式给出非空值的列才覆盖（`title` / `company` / `city` / `salary` / `source` / `tags` / `note` / `lid`），`created_at` 保留首次加入时间；响应改为回显存储后的整行，重复 add 时能看到保留下来的标注。

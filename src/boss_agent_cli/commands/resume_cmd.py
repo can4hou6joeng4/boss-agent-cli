@@ -4,6 +4,7 @@ from typing import Any
 
 import click
 
+from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.display import (
 	error_contract_for_code,
 	handle_error_output,
@@ -201,9 +202,15 @@ def resume_delete_cmd(ctx: click.Context, name: str) -> None:
 		ctx.exit(1)
 		return
 	store.delete(name)
+	# 关联表以简历名为外键，但没有任何外键约束：不同步清理的话，之后用同一个名字
+	# 重建简历（`resume init` 默认就叫 default）会继承旧简历的职位关联，包括已经
+	# 标成 applied 的状态和备注，`resume applications` 也就报出这份简历从没关联过的职位。
+	removed_links = 0
+	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
+		removed_links = cache.remove_resume_links(name)
 	handle_output(
 		ctx, "resume",
-		{"action": "delete", "name": name, "deleted": True},
+		{"action": "delete", "name": name, "deleted": True, "removed_links": removed_links},
 		render=lambda d: render_action_result(d, title="resume delete", next_steps=["boss resume list"]),
 		hints={"next_actions": ["boss resume list"]},
 	)
@@ -388,7 +395,6 @@ def resume_link_cmd(ctx: click.Context, name: str, security_id: str, job_id: str
 		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
 		ctx.exit(1)
 		return
-	from boss_agent_cli.cache.store import CacheStore
 	cache = CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db")
 	cache.link_resume_to_job(name, security_id, job_id, title, company)
 	cache.close()
@@ -412,7 +418,6 @@ def resume_applications_cmd(ctx: click.Context, name: str) -> None:
 		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
 		ctx.exit(1)
 		return
-	from boss_agent_cli.cache.store import CacheStore
 	cache = CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db")
 	items = cache.get_resume_applications(name)
 	cache.close()
