@@ -38,6 +38,17 @@ def _require_resume_name(ctx: click.Context, name: str) -> bool:
 	return False
 
 
+def _emit_resume_not_found(ctx: click.Context, name: str) -> None:
+	"""简历不存在：给出列出可选简历的命令，别让 Agent 再猜一次名字。"""
+	handle_error_output(
+		ctx, "resume",
+		code="RESUME_NOT_FOUND",
+		message=f"简历 '{name}' 不存在",
+		hints={"next_actions": [boss_command_for_ctx(ctx, "resume list")]},
+	)
+	ctx.exit(1)
+
+
 def _load_resume(ctx: click.Context, store: ResumeStore, name: str) -> ResumeData | None:
 	"""读取简历；文件存在但读不出来时按「文件损坏」上报，而不是「不存在」。
 
@@ -61,9 +72,9 @@ def _load_resume(ctx: click.Context, store: ResumeStore, name: str) -> ResumeDat
 				]
 			},
 		)
-	else:
-		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
-	ctx.exit(1)
+		ctx.exit(1)
+		return None
+	_emit_resume_not_found(ctx, name)
 	return None
 
 
@@ -293,8 +304,7 @@ def resume_delete_cmd(ctx: click.Context, name: str) -> None:
 	if not _require_resume_name(ctx, name):
 		return
 	if not store.exists(name):
-		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
-		ctx.exit(1)
+		_emit_resume_not_found(ctx, name)
 		return
 	store.delete(name)
 	# 关联表以简历名为外键，但没有任何外键约束：不同步清理的话，之后用同一个名字
@@ -528,8 +538,7 @@ def resume_link_cmd(ctx: click.Context, name: str, security_id: str, job_id: str
 	if not _require_resume_name(ctx, name):
 		return
 	if not store.exists(name):
-		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
-		ctx.exit(1)
+		_emit_resume_not_found(ctx, name)
 		return
 	# 空字符串仍是合法 argv，但不构成一条职位关联：存进去之后 `resume applications`
 	# 会多出一行空 ID，提示里的 `boss apply  ` 也没有可执行参数。
@@ -558,8 +567,7 @@ def resume_applications_cmd(ctx: click.Context, name: str) -> None:
 	if not _require_resume_name(ctx, name):
 		return
 	if not store.exists(name):
-		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
-		ctx.exit(1)
+		_emit_resume_not_found(ctx, name)
 		return
 	cache = CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db")
 	items = cache.get_resume_applications(name)

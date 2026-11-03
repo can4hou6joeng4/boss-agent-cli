@@ -139,6 +139,31 @@ def test_show_not_found(tmp_path):
 	_assert_error_envelope(parsed, "RESUME_NOT_FOUND")
 
 
+@pytest.mark.parametrize(
+	"args",
+	[
+		["show", "ghost"],
+		["edit", "ghost", "--field", "title", "--value", "X"],
+		["delete", "ghost"],
+		["diff", "ghost", "other"],
+		["applications", "ghost"],
+		["clone", "ghost", "new"],
+		["link", "ghost", "sid1", "job1"],
+	],
+)
+def test_not_found_points_at_resume_list(tmp_path, args):
+	"""简历不存在时 ``recovery_action`` 已指向 resume list，``hints`` 却是 null。
+
+	Agent 只从自然语言的 recovery_action 里抽命令，拿不到结构化的
+	``next_actions``；列出可选简历是唯一能把错误名字换成正确名字的入口。
+	"""
+	result = _invoke(CliRunner(), tmp_path, args)
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "RESUME_NOT_FOUND")
+	assert parsed["hints"]["next_actions"] == ["boss resume list"]
+
+
 # ── edit ──────────────────────────────────────────────────────
 
 
