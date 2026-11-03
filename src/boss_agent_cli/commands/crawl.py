@@ -28,9 +28,11 @@ from boss_agent_cli.crawler.service import (
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
 from boss_agent_cli.services.json_files import write_json_atomic
 from boss_agent_cli.display import (
+	auth_required_hints,
 	handle_auth_errors,
 	handle_error_output,
 	handle_output,
+	login_action_for_ctx,
 	render_action_result,
 	render_record_result,
 )
@@ -239,7 +241,8 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 				code="AUTH_REQUIRED",
 				message=message,
 				recoverable=True,
-				recovery_action="boss login",
+				recovery_action=login_action_for_ctx(ctx),
+				hints=auth_required_hints(ctx),
 			)
 			return
 		handle_error_output(

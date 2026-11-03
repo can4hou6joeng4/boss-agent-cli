@@ -276,6 +276,21 @@ def test_agent_run_requires_login_returns_envelope_not_traceback(tmp_path):
 	assert parsed["error"]["recovery_action"]
 
 
+@pytest.mark.parametrize("args", [("search", "golang"), ("status",), ("interviews",)])
+def test_auth_required_points_at_login_with_operator_hint(tmp_path, args):
+	"""未登录信封不能只有「boss login」：还要给出可执行的下一步与真人扫码说明。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *args])
+
+	parsed = _assert_single_stdout_json_error(result, command=args[0], code="AUTH_REQUIRED")
+	assert parsed["error"]["recovery_action"] == "boss login"
+	assert parsed["hints"]["next_actions"] == ["boss login"]
+	operator_actions = parsed["hints"]["operator_actions"]
+	assert len(operator_actions) == 1
+	assert "boss login" in operator_actions[0]
+	assert "扫码" in operator_actions[0]
+
+
 def test_agent_train_live_requires_login_returns_envelope(tmp_path):
 	"""`agent train --live` 的登录态检查同样走信封。"""
 	runner = CliRunner()

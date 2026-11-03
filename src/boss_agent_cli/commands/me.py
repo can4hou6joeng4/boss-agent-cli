@@ -6,6 +6,7 @@ from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshF
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import (
 	INTERNAL_ERROR_TYPES,
+	auth_required_hints,
 	boss_command_for_ctx,
 	error_contract_for_code,
 	handle_error_output,
@@ -118,9 +119,9 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 			)
 
 	except (AuthRequired, TokenRefreshFailed):
-		handle_error_output(ctx, "me", code="AUTH_REQUIRED", message="未登录", recoverable=True, recovery_action=login_action_for_ctx(ctx))
+		handle_error_output(ctx, "me", code="AUTH_REQUIRED", message="未登录", recoverable=True, recovery_action=login_action_for_ctx(ctx), hints=auth_required_hints(ctx))
 	except AuthError:
-		handle_error_output(ctx, "me", code="AUTH_EXPIRED", message="登录态过期", recoverable=True, recovery_action=login_action_for_ctx(ctx))
+		handle_error_output(ctx, "me", code="AUTH_EXPIRED", message="登录态过期", recoverable=True, recovery_action=login_action_for_ctx(ctx), hints=auth_required_hints(ctx))
 	except PlatformRiskError as e:
 		# me 没有 @handle_auth_errors 包裹：风控异常原本会掉进下面的
 		# NETWORK_ERROR 兜底，变成 recoverable=true +「重试」，违反风控硬边界。
