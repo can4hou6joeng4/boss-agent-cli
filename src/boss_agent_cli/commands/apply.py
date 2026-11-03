@@ -21,12 +21,14 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 	# apply 是写操作：空标识既不可能命中职位，又会带着空参数真的发出一次投递
 	# 请求，失败后看起来像登录或职位失效，真正的原因（argv 少了参数）被掩盖。
 	if not security_id.strip() or not job_id.strip():
+		search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
 		handle_error_output(
 			ctx,
 			"apply",
 			code="INVALID_PARAM",
 			message="security_id 与 job_id 不能为空；先用 boss search 取到完整职位参数再投递",
-			hints={"next_actions": [boss_command_for_ctx(ctx, "search <关键词>")]},
+			recovery_action=f"补上两个编号后重试；完整职位参数可从 {search_cmd} 的结果中取到",
+			hints={"next_actions": [search_cmd]},
 		)
 		return
 

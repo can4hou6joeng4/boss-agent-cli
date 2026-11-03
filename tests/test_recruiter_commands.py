@@ -739,3 +739,33 @@ def test_recruiter_jobs_detail_rejects_blank_enc_job_id(mock_auth_cls, mock_plat
 	assert parsed["hints"]["next_actions"] == ["boss hr jobs list"]
 	assert "boss hr jobs list" in parsed["error"]["recovery_action"]
 	mock_platform.job_detail.assert_not_called()
+
+
+@patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
+def test_recruiter_resume_exchange_without_friend_id_points_at_chat(mock_auth_cls, mock_platform_cls):
+	"""缺 --friend-id 时给出可执行来源命令，而不是笼统的「修正参数」。"""
+	mock_platform = _ctx_mock(mock_platform_cls)
+	result = _invoke("hr", "resume", "--exchange")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["hints"]["next_actions"] == ["boss hr chat"]
+	assert "boss hr chat" in parsed["error"]["recovery_action"]
+	mock_platform.exchange_request_by_friend.assert_not_called()
+
+
+@patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
+def test_recruiter_resume_without_ids_points_at_applications(mock_auth_cls, mock_platform_cls):
+	"""缺 --job-id / --security-id 时给出可执行来源命令。"""
+	mock_platform = _ctx_mock(mock_platform_cls)
+	result = _invoke("hr", "resume")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["hints"]["next_actions"] == ["boss hr applications"]
+	assert "boss hr applications" in parsed["error"]["recovery_action"]
+	mock_platform.view_geek.assert_not_called()

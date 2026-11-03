@@ -38,11 +38,14 @@ def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id
 			# issue #217 修复路径：只要 friend_id 即可，不再要求占位 geek_id。
 			# 旧的 uid/gid/jobId 路径已 121 弃用，保留参数仅作过渡兼容。
 			if friend_id is None:
+				chat_cmd = boss_command_for_ctx(ctx, "hr chat")
 				handle_error_output(
 					ctx, "recruiter-resume",
 					code="INVALID_PARAM",
 					message="交换联系方式需要 --friend-id 参数（从 hr chat 获取）",
 					recoverable=False,
+					recovery_action=f"用 {chat_cmd} 取到候选人的 friendId，再补 --friend-id 重试",
+					hints={"next_actions": [chat_cmd]},
 				)
 				return
 			type_id = 2 if exchange_type == "wechat" else 1
@@ -59,11 +62,14 @@ def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id
 				return
 			data = result if show_raw else parse_resume(result)
 		else:
+			apps_cmd = boss_command_for_ctx(ctx, "hr applications")
 			handle_error_output(
 				ctx, "recruiter-resume",
 				code="INVALID_PARAM",
 				message="查看简历需要 --job-id 和 --security-id 参数",
 				recoverable=False,
+				recovery_action=f"补上 --job-id 与 --security-id 后重试；两个编号可从 {apps_cmd} 的结果中取到",
+				hints={"next_actions": [apps_cmd]},
 			)
 			return
 
