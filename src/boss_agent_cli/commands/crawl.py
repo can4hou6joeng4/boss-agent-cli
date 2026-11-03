@@ -104,6 +104,10 @@ def _settings_from_context(
 	chrome_path: str | None,
 	cdp_port: int | None,
 ) -> CrawlSettings:
+	# 空关键词不是「不限关键词」，而是不筛选：采集会按城市默认列表逐页抓取，
+	# 既消耗请求预算，也把任务暴露在更宽的风控面里；watch / preset 早已在写盘前拒绝。
+	if not query.strip():
+		raise ValueError("搜索关键词不能为空")
 	cfg = _crawl_config(ctx)
 	data_dir = Path(ctx.obj["data_dir"])
 	resolved_profile = str(data_dir / "crawl" / "chrome-profile")
