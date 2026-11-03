@@ -647,12 +647,13 @@ def test_resume_schema_marks_uid_gid_deprecated():
 		assert "已弃用" in description, f"{name} 应标明已弃用: {description}"
 		assert "需要" not in description, f"{name} 不应再声称是必需参数: {description}"
 
-def test_schema_option_minimums_match_click_ranges():
-	"""schema 的 `minimum` 必须与 Click 的 `IntRange` / `FloatRange` 下界双向一致。
+def test_schema_option_ranges_match_click_ranges():
+	"""schema 的 `minimum` / `maximum` 必须与 Click 的 `IntRange` / `FloatRange` 双向一致。
 
 	`boss schema` 是能力真源：不写下界，Agent 就会尝试 `--page -1`，换回一个
-	`INVALID_PARAM`；下界写错（schema 允许 0、Click 只收 1）则让 schema 本身
-	不可信。缺下界、多下界、数值不一致都算失败。
+	`INVALID_PARAM`；不写上界（`--port 70000`、`--summary-limit 999`）同样会
+	在解析阶段被拒。下界或上界写错（schema 允许 0、Click 只收 1）则让 schema
+	本身不可信。缺界、多界、数值不一致都算失败。
 	"""
 	problems: list[str] = []
 
@@ -682,16 +683,15 @@ def test_schema_option_minimums_match_click_ranges():
 				param_type = param.type
 				if not isinstance(param_type, (click.IntRange, click.FloatRange)):
 					continue
-				if param_type.min is None:
-					if "minimum" in value:
-						problems.append(f"{path} {spelling}: schema 声明了下界，Click 没有")
-					continue
-				if "minimum" not in value:
-					problems.append(f"{path} {spelling}: 缺少 minimum（Click 下界 {param_type.min}）")
-				elif value["minimum"] != param_type.min:
-					problems.append(
-						f"{path} {spelling}: minimum={value['minimum']} 与 Click 下界 {param_type.min} 不一致"
-					)
+				for bound, click_value in (("minimum", param_type.min), ("maximum", param_type.max)):
+					if click_value is None:
+						if bound in value:
+							problems.append(f"{path} {spelling}: schema 声明了 {bound}，Click 没有")
+						continue
+					if bound not in value:
+						problems.append(f"{path} {spelling}: 缺少 {bound}（Click 取值 {click_value}）")
+					elif value[bound] != click_value:
+						problems.append(f"{path} {spelling}: {bound}={value[bound]} 与 Click 取值 {click_value} 不一致")
 
 		subcommands = getattr(node, "commands", {}) or {}
 		for key, value in subgroups.items():
@@ -706,7 +706,7 @@ def test_schema_option_minimums_match_click_ranges():
 		if node is not None:
 			walk(name, node, spec.get("options") or {})
 
-	assert not problems, "schema minimum 与 Click 取值域不一致:\n" + "\n".join(problems)
+	assert not problems, "schema 取值域与 Click 不一致:\n" + "\n".join(problems)
 
 def test_schema_choice_options_match_click_choices():
 	"""Click 用 `Choice` 限制的选项，schema 必须声明同一组取值。

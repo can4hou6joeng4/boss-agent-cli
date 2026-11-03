@@ -123,7 +123,7 @@ SCHEMA_DATA = {
 				"--status": {"type": "string", "default": None, "description": "查询指定 workflow run_id"},
 				"--stop": {"type": "string", "default": None, "description": "停止指定 workflow run_id"},
 				"--timeout": {"type": "float", "default": None, "minimum": 0.001, "description": "workflow 超时秒数"},
-				"--max-retries": {"type": "int", "default": 0, "minimum": 0, "description": "可恢复步骤的最大重试次数"},
+				"--max-retries": {"type": "int", "default": 0, "minimum": 0, "maximum": 10, "description": "可恢复步骤的最大重试次数"},
 			},
 		},
 		"search": {
@@ -586,7 +586,7 @@ SCHEMA_DATA = {
 			"options": {
 				"configure": {
 					"--chrome-path": {"type": "string", "default": None, "description": "chrome.exe 路径"},
-					"--port": {"type": "int", "default": None, "minimum": 1, "description": "Chrome 远程调试端口（1-65535）"},
+					"--port": {"type": "int", "default": None, "minimum": 1, "maximum": 65535, "description": "Chrome 远程调试端口（1-65535）"},
 					"--max-requests": {"type": "int", "default": None, "minimum": 1, "description": "每个 crawl run 的总请求上限（≥1）"},
 					"--max-details": {"type": "int", "default": None, "minimum": 1, "description": "每个 crawl run 的详情请求上限（≥1）"},
 					"--max-seconds": {"type": "int", "default": None, "minimum": 1, "description": "每个 crawl run 的墙钟秒数上限（≥1）"},
@@ -614,6 +614,7 @@ SCHEMA_DATA = {
 						"type": "int",
 						"default": None,
 						"minimum": 1,
+						"maximum": 65535,
 						"description": "覆盖配置的 Chrome 远程调试端口（1-65535）",
 					},
 				},
@@ -1315,7 +1316,8 @@ SCHEMA_DATA = {
 						"type": "int",
 						"default": 100,
 						"minimum": 0,
-						"description": "最多给前多少个会话补最近消息（每 50 个一次串行请求；0=不请求）",
+						"maximum": 300,
+						"description": "最多给前多少个会话补最近消息（每 50 个一次串行请求；0=不请求，上限 300）",
 					},
 				},
 				"chatmsg": {
@@ -1330,7 +1332,7 @@ SCHEMA_DATA = {
 					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
 					"--label-id": {"type": "int", "default": 0, "minimum": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
 					"--friend-id": {"type": "int", "default": None, "minimum": 1, "description": "指定候选人会话 friend_id，可重复"},
-					"--limit": {"type": "int", "default": 100, "minimum": 1, "description": "最多查询多少个会话（每 50 个一次串行请求）"},
+					"--limit": {"type": "int", "default": 100, "minimum": 1, "maximum": 300, "description": "最多查询多少个会话（每 50 个一次串行请求，上限 300）"},
 				},
 				"reply": {
 					"args": [
