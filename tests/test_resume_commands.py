@@ -197,6 +197,19 @@ def test_export_json(tmp_path):
 	assert parsed["data"]["data"]["name"] == "exportme"
 
 
+def test_export_json_creates_parent_directories(tmp_path):
+	"""`-o` 指向尚不存在的目录时自动建父目录（与 digest / stats 一致）。"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "exportme", "--template", "default"])
+	out = tmp_path / "deep" / "nested" / "export.json"
+
+	result = _invoke(runner, tmp_path, ["export", "exportme", "--format", "json", "-o", str(out)])
+
+	assert result.exit_code == 0
+	assert out.exists()
+	assert json.loads(out.read_text(encoding="utf-8"))["data"]["name"] == "exportme"
+
+
 def test_export_pdf_success(tmp_path):
 	"""PDF 导出使用 mock patchright 验证成功路径"""
 	runner = CliRunner()

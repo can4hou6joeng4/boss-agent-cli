@@ -176,6 +176,25 @@ def test_digest_format_md_with_output_path_writes_file(mock_auth_cls, mock_clien
 
 @patch("boss_agent_cli.commands.digest.get_platform_instance")
 @patch("boss_agent_cli.commands.digest.AuthManager")
+def test_digest_output_path_expands_tilde_and_creates_parent(mock_auth_cls, mock_client_cls, tmp_path, monkeypatch, legacy_args):
+	"""MCP 子进程调用不经 shell，`~` 不会被展开；-o 必须自己展开并建父目录。"""
+	_setup_digest_mocks(mock_client_cls)
+	monkeypatch.setenv("HOME", str(tmp_path))
+	monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+	result = CliRunner().invoke(cli, [
+		"--json", *legacy_args, "digest", "--format", "md", "-o", "~/nested/digest.md",
+	])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	expected = tmp_path / "nested" / "digest.md"
+	assert parsed["data"]["path"] == str(expected)
+	assert expected.read_text(encoding="utf-8").startswith("# 每日求职摘要")
+
+
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
+@patch("boss_agent_cli.commands.digest.AuthManager")
 def test_digest_format_md_contains_interview_details(mock_auth_cls, mock_client_cls, legacy_args):
 	"""Markdown 中面试条目应含岗位名 / 公司 / 时间"""
 	_setup_digest_mocks(mock_client_cls)

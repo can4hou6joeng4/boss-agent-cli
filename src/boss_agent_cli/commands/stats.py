@@ -18,6 +18,7 @@ from rich.table import Table
 
 from boss_agent_cli import display
 from boss_agent_cli.display import handle_output, render_action_result
+from boss_agent_cli.services.output_path import prepare_output_path
 
 
 def _safe_count(conn: sqlite3.Connection, table: str) -> int:
@@ -360,12 +361,13 @@ def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Pa
 	if output_format == "html":
 		html_text = _render_html(data)
 		if output_path:
-			output_path.write_text(html_text, encoding="utf-8")
+			target = prepare_output_path(output_path)
+			target.write_text(html_text, encoding="utf-8")
 			handle_output(
 				ctx, "stats",
-				{"format": "html", "path": str(output_path), "bytes": len(html_text)},
-				render=lambda d: render_action_result(d, title="stats（HTML 报表）", next_steps=[f"open {output_path}"]),
-				hints={"next_actions": [f"open {output_path}"]},
+				{"format": "html", "path": str(target), "bytes": len(html_text)},
+				render=lambda d: render_action_result(d, title="stats（HTML 报表）", next_steps=[f"open {target}"]),
+				hints={"next_actions": [f"open {target}"]},
 			)
 		else:
 			# stdout 直出 HTML（便于管道重定向）

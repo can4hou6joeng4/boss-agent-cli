@@ -7,6 +7,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_items
 from boss_agent_cli.digest import build_digest, render_digest_markdown
 from boss_agent_cli.display import handle_auth_errors, handle_output, handle_platform_error_output, render_message_panel
@@ -68,12 +69,13 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 	if output_format == "md":
 		md_text = render_digest_markdown(data)
 		if output_path:
-			output_path.write_text(md_text, encoding="utf-8")
+			target = prepare_output_path(output_path)
+			target.write_text(md_text, encoding="utf-8")
 			handle_output(
 				ctx,
 				"digest",
-				{"format": "md", "path": str(output_path), "bytes": len(md_text.encode("utf-8"))},
-				hints={"next_actions": [f"open {output_path}", "cat 或邮件客户端直接发送"]},
+				{"format": "md", "path": str(target), "bytes": len(md_text.encode("utf-8"))},
+				hints={"next_actions": [f"open {target}", "cat 或邮件客户端直接发送"]},
 			)
 		else:
 			sys.stdout.write(md_text)

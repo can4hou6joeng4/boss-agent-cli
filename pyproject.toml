@@ -270,6 +270,7 @@ module = [
 	"boss_agent_cli.commands.register",
 	"boss_agent_cli.services.contact_lookup",
 	"boss_agent_cli.services.friend_list_pages",
+	"boss_agent_cli.services.output_path",
 	"boss_agent_cli.commands._recruiter_platform",
 	"boss_agent_cli.commands.crawl",
 	"boss_agent_cli.crawler.exporter",

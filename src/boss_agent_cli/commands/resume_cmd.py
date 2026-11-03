@@ -14,6 +14,7 @@ from boss_agent_cli.display import (
 )
 from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, resume_to_dict
 from boss_agent_cli.resume.store import ResumeImportError, ResumeStore
+from boss_agent_cli.services.output_path import prepare_output_path
 
 
 def _get_store(ctx: click.Context) -> ResumeStore:
@@ -213,7 +214,7 @@ def resume_delete_cmd(ctx: click.Context, name: str) -> None:
 @click.option("--format", "fmt", default="json", type=click.Choice(["pdf", "json", "html"]), help="导出格式")
 @click.option("-o", "--output", "output_path", default=None, help="输出文件路径")
 @click.pass_context
-def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: Path | None) -> None:
+def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str | None) -> None:
 	"""导出简历"""
 	store = _get_store(ctx)
 	if not store.exists(name):
@@ -227,8 +228,8 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: Path
 			ctx.exit(1)
 			return
 		if output_path is None:
-			output_path = Path(f"{name}.{fmt}")
-		out = Path(output_path)
+			output_path = f"{name}.{fmt}"
+		out = prepare_output_path(output_path)
 		try:
 			from boss_agent_cli.resume.export import export_html, export_pdf
 			if fmt == "html":
@@ -256,7 +257,7 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: Path
 	json_str = store.export_json(name)
 	export_data = json.loads(json_str)
 	if output_path:
-		Path(output_path).write_text(json_str, encoding="utf-8")
+		prepare_output_path(output_path).write_text(json_str, encoding="utf-8")
 	handle_output(
 		ctx, "resume", export_data,
 		render=lambda d: render_record_result(
