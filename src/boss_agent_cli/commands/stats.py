@@ -17,6 +17,7 @@ import click
 from rich.table import Table
 
 from boss_agent_cli import display
+from boss_agent_cli.cache.store import CacheDatabaseInvalid
 from boss_agent_cli.display import handle_output, json_forced, render_action_result
 from boss_agent_cli.services.output_path import prepare_output_path
 
@@ -58,14 +59,19 @@ def _collect_stats(db_path: Path, days: int) -> dict[str, Any]:
 	since = time.time() - days * 86400
 	conn = sqlite3.connect(str(db_path))
 	try:
-		greeted_total = _safe_count(conn, "greet_records")
-		applied_total = _safe_count(conn, "apply_records")
-		shortlist_total = _safe_count(conn, "shortlist_records")
+		try:
+			greeted_total = _safe_count(conn, "greet_records")
+			applied_total = _safe_count(conn, "apply_records")
+			shortlist_total = _safe_count(conn, "shortlist_records")
 
-		greeted_window = _count_since(conn, "greet_records", "greeted_at", since)
-		applied_window = _count_since(conn, "apply_records", "applied_at", since)
-		shortlist_window = _count_since(conn, "shortlist_records", "created_at", since)
-		watch_window = _count_since(conn, "watch_hits", "first_seen_at", since)
+			greeted_window = _count_since(conn, "greet_records", "greeted_at", since)
+			applied_window = _count_since(conn, "apply_records", "applied_at", since)
+			shortlist_window = _count_since(conn, "shortlist_records", "created_at", since)
+			watch_window = _count_since(conn, "watch_hits", "first_seen_at", since)
+		except sqlite3.DatabaseError as exc:
+			# 只读聚合直接开 SQLite，不经过 CacheStore 的启动校验；库文件损坏时
+			# 交给 main.py 统一出 CACHE_DATABASE_INVALID 信封，而不是 traceback。
+			raise CacheDatabaseInvalid(db_path, str(exc)) from exc
 	finally:
 		conn.close()
 
