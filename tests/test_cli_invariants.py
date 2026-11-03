@@ -299,16 +299,39 @@ def test_local_record_lookups_do_not_report_job_not_found() -> None:
 	assert offenders == [], f"本地记录查找仍复用 JOB_NOT_FOUND：{offenders}"
 
 
+def _commands_root() -> Path:
+	return Path(__file__).resolve().parents[1] / "src" / "boss_agent_cli" / "commands"
+
+
+def _success_output_sources() -> list[Path]:
+	"""守卫要扫描的源码：``commands`` 下所有模块，含 ``recruiter`` 子包。
+
+	只 ``glob("*.py")`` 会漏掉 ``commands/recruiter/*.py``——招聘者侧的
+	``boss hr jobs offline/online`` 同样是 ``render=`` + ``next_steps`` 的
+	``handle_output``，同样的漂移在那一半命令里不会被发现。
+	"""
+	return sorted(_commands_root().rglob("*.py"))
+
+
+def _call_name(func: Any) -> str:
+	"""``handle_output(...)`` 与 ``display.handle_output(...)`` 两种写法都算。"""
+	import ast
+
+	if isinstance(func, ast.Attribute):
+		return func.attr
+	return getattr(func, "id", "")
+
+
 def _success_calls_without_hints() -> list[str]:
 	"""收集 render 里有 next_steps、却没给 ``hints`` 的 ``handle_output`` 调用。"""
 	import ast
 
-	root = Path(__file__).resolve().parents[1] / "src" / "boss_agent_cli" / "commands"
+	package_root = _commands_root().parent
 	offenders: list[str] = []
-	for path in sorted(root.glob("*.py")):
+	for path in _success_output_sources():
 		source = path.read_text(encoding="utf-8")
 		for node in ast.walk(ast.parse(source)):
-			if not isinstance(node, ast.Call) or getattr(node.func, "id", "") != "handle_output":
+			if not isinstance(node, ast.Call) or _call_name(node.func) != "handle_output":
 				continue
 			keywords = {kw.arg for kw in node.keywords if kw.arg}
 			render = next((kw.value for kw in node.keywords if kw.arg == "render"), None)
@@ -317,8 +340,16 @@ def _success_calls_without_hints() -> list[str]:
 			if "next_steps" not in (ast.get_source_segment(source, render) or ""):
 				continue
 			if "hints" not in keywords:
-				offenders.append(f"{path.name}:{node.lineno}")
+				offenders.append(f"{path.relative_to(package_root)}:{node.lineno}")
 	return offenders
+
+
+def test_success_hints_guard_covers_recruiter_package() -> None:
+	"""守卫必须扫到 ``commands/recruiter/``，否则招聘者侧的成功路径不受约束。"""
+	package_root = _commands_root().parent
+	scanned = {path.relative_to(package_root).as_posix() for path in _success_output_sources()}
+	assert "commands/recruiter/jobs.py" in scanned
+	assert "commands/recruiter/chat.py" in scanned
 
 
 def test_success_hints_match_tty_next_steps() -> None:
