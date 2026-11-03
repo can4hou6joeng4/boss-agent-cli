@@ -263,10 +263,28 @@ def test_run_hints_point_at_output_files_when_completed(tmp_path, monkeypatch):
 	_enable_research(runner, tmp_path)
 	result = _invoke(runner, tmp_path, "crawl", "run", "AI", "--city", "杭州")
 	assert result.exit_code == 0, result.output
-	assert "output_paths" in _envelope(result)["hints"]["operator_actions"][0]
+	payload = _envelope(result)
+	assert "output_paths" in payload["hints"]["operator_actions"][0]
+	# 跑完后唯一能把结果落地的下一步就是按 run_id 读；空列表会让 Agent 自己猜命令。
+	assert payload["hints"]["next_actions"] == ["boss crawl results run-done"]
 
 
 # ── start ─────────────────────────────────────────────────────────────
+
+
+def test_start_hints_cover_status_results_and_stop(tmp_path, monkeypatch):
+	"""启动后 Agent 要能查看进度、取结果、必要时中止；终端 next_steps 与信封同口径。"""
+	monkeypatch.setattr("boss_agent_cli.commands.crawl._launch_background_resume", lambda data_dir, run_id, **kwargs: None)
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, "crawl", "start", "AI", "--city", "杭州")
+	assert result.exit_code == 0, result.output
+	run_id = _envelope(result)["data"]["run_id"]
+	assert _envelope(result)["hints"]["next_actions"] == [
+		f"boss crawl status {run_id}",
+		f"boss crawl results {run_id}",
+		f"boss crawl stop {run_id}",
+	]
 
 
 def test_start_marks_run_stopped_when_background_launch_fails(tmp_path, monkeypatch):
