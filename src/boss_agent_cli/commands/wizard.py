@@ -10,7 +10,7 @@ import click
 
 from boss_agent_cli.cache.store import CacheRecordInvalid
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
-from boss_agent_cli.display import console, handle_error_output, handle_output
+from boss_agent_cli.display import boss_command_for_ctx, console, handle_error_output, handle_output
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS
 from boss_agent_cli.wizard.catalog import build_plan, require_supported_platform
 from boss_agent_cli.wizard.models import WorkflowInputError, WorkflowPlan, WizardInput
@@ -80,6 +80,27 @@ def _wizard_error(
 		details=details,
 		hints=hints,
 	)
+
+
+def _workflow_next_actions(ctx: click.Context, run: Mapping[str, Any]) -> list[str]:
+	"""按 run 状态给出可直接执行的后继命令。
+
+	``--status`` / ``--stop`` 成功后此前不带 hints：Agent 查完状态或停掉任务
+	就断了，看不出该恢复、继续等待还是新建（主执行路径跑完反而给了
+	``--status <run_id>``）。这里按状态补齐，取值来自 ``WorkflowStatus``。
+	"""
+	prefix = boss_command_for_ctx(ctx, "wizard")
+	run_id = str(run.get("run_id") or "").strip()
+	if not run_id:
+		return [prefix]
+	status_cmd = f"{prefix} --status {run_id}"
+	status = str(run.get("status") or "")
+	if status in {"stopped", "failed", "waiting_input"}:
+		# 断点仍在本地：恢复是唯一能接着往下跑的动作，status 方便先核对。
+		return [f"{prefix} --resume {run_id}", status_cmd]
+	if status in {"running", "pending"}:
+		return [status_cmd, f"{prefix} --stop {run_id}"]
+	return [prefix, status_cmd]
 
 
 def _plan_from_run(run: Mapping[str, Any]) -> WorkflowPlan:
@@ -611,7 +632,7 @@ def _run_wizard_command(
 					hints={"next_actions": ["boss wizard"]},
 				)
 				return
-			handle_output(ctx, "wizard", run, render=render_run)
+			handle_output(ctx, "wizard", run, render=render_run, hints={"next_actions": _workflow_next_actions(ctx, run)})
 			return
 		if stop_run_id:
 			if not store.request_stop(stop_run_id):
@@ -624,7 +645,7 @@ def _run_wizard_command(
 				)
 				return
 			run = store.get(stop_run_id) or {}
-			handle_output(ctx, "wizard", run, render=render_run)
+			handle_output(ctx, "wizard", run, render=render_run, hints={"next_actions": _workflow_next_actions(ctx, run)})
 			return
 
 		# 纯 TTY 无 flag：多轮主菜单循环；flag / headless 仍是单次执行。
