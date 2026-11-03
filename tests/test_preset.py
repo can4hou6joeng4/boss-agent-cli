@@ -248,3 +248,22 @@ def test_search_with_missing_preset_reports_saved_search_not_found(tmp_path):
 	assert parsed["error"]["code"] == "SAVED_SEARCH_NOT_FOUND"
 	assert parsed["error"]["recovery_action"] == "boss preset list（预设）或 boss watch list（watch）"
 	assert parsed["hints"]["next_actions"] == ["boss preset list", "boss preset add ghost <关键词>"]
+
+
+def test_preset_list_json_hints_follow_the_actual_list(tmp_path):
+	"""JSON 的 next_actions 也要按列表状态切换：空列表没有可搜索 / 可删除的名字。
+
+	TTY 提示早已按空列表给出 `preset add`，但 `hints.next_actions` 仍是
+	`boss search --preset <name>` / `boss preset remove <name>`——Agent 照抄
+	只会把一份从没存在过的预设名传给命令，再换回 SAVED_SEARCH_NOT_FOUND。
+	"""
+	runner = CliRunner()
+
+	empty = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "list"]).output)
+	assert empty["data"] == []
+	assert empty["hints"]["next_actions"] == ["boss preset add <name> <关键词>"]
+
+	runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "add", "golang", "golang"])
+	filled = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "list"]).output)
+	assert [item["name"] for item in filled["data"]] == ["golang"]
+	assert filled["hints"]["next_actions"] == ["boss search --preset <name>", "boss preset remove <name>"]

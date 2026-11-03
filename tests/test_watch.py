@@ -442,3 +442,17 @@ def test_watch_run_missing_reports_saved_search_not_found(tmp_path):
 	assert parsed["error"]["code"] == "SAVED_SEARCH_NOT_FOUND"
 	assert parsed["error"]["recovery_action"] == "boss preset list（预设）或 boss watch list（watch）"
 	assert parsed["hints"]["next_actions"] == ["boss watch list", "boss watch add ghost <关键词>"]
+
+
+def test_watch_list_json_hints_follow_the_actual_list(tmp_path):
+	"""JSON 的 next_actions 也要按列表状态切换：空列表没有可运行 / 可删除的名字。"""
+	runner = CliRunner()
+
+	empty = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "list"]).output)
+	assert empty["data"] == []
+	assert empty["hints"]["next_actions"] == ["boss watch add <name> <关键词>"]
+
+	runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "add", "golang", "golang"])
+	filled = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "list"]).output)
+	assert [item["name"] for item in filled["data"]] == ["golang"]
+	assert filled["hints"]["next_actions"] == ["boss watch run <name>", "boss watch remove <name>"]

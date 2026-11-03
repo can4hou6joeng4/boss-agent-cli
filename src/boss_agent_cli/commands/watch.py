@@ -124,7 +124,12 @@ def watch_add_cmd(
 def watch_list_cmd(ctx: click.Context) -> None:
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		items, corrupt = cache.list_saved_searches_with_corrupt()
-	hints: dict[str, Any] = {"next_actions": ["boss watch run <name>", "boss watch remove <name>"]}
+	hints: dict[str, Any] = {
+		# 空列表没有任何 name 可 run / remove：照抄只会换回一个不存在的 watch。
+		"next_actions": ["boss watch add <name> <关键词>"]
+		if not items
+		else ["boss watch run <name>", "boss watch remove <name>"]
+	}
 	if corrupt:
 		hints["corrupt"] = corrupt
 		hints["operator_actions"] = [
