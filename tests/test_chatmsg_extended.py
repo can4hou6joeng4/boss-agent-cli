@@ -486,3 +486,17 @@ def test_chatmsg_uses_client_context_manager(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 0
 	instance.__enter__.assert_called_once()
 	instance.__exit__.assert_called_once()
+
+
+@patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
+@patch("boss_agent_cli.commands.chatmsg.AuthManager")
+def test_chatmsg_rejects_blank_security_id(mock_auth_cls, mock_client_cls):
+	"""空标识不该先把整个沟通列表翻一遍再报「联系人未找到」。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	runner = CliRunner()
+	result = runner.invoke(cli, ["chatmsg", ""])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["hints"]["next_actions"] == ["boss chat"]
+	mock_client.friend_list.assert_not_called()

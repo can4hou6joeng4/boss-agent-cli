@@ -2132,3 +2132,16 @@ def test_corrupt_cache_database_returns_envelope_not_traceback(tmp_path):
 	assert str(db) in payload["error"]["message"]
 	assert str(db) in payload["hints"]["operator_actions"][0]
 	assert "备份" in payload["error"]["recovery_action"]
+
+
+@patch("boss_agent_cli.commands.mark.get_platform_instance")
+@patch("boss_agent_cli.commands.mark.AuthManager")
+def test_mark_rejects_blank_identifier(mock_auth_cls, mock_client_cls):
+	"""mark 与其他联系人命令共用解析：空标识在拉取沟通列表之前就被拒绝。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	runner = CliRunner()
+	result = runner.invoke(cli, ["mark", "", "--label", "沟通中"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	mock_client.friend_list.assert_not_called()
