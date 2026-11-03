@@ -277,7 +277,13 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 					hints=risk_hints,
 				)
 				return
-			all_hints: dict[str, Any] = {"next_actions": ["boss watch list", "boss detail <security_id>"]}
+			all_hints: dict[str, Any] = {
+				# 一个 watch 都没跑成时没有任何 security_id 可 detail：照抄只会换回一个
+				# 必然失败的编号，下一步应该是先建一个 watch。
+				"next_actions": ["boss watch add <name> <关键词>"]
+				if not watches
+				else ["boss watch list", "boss detail <security_id>"]
+			}
 			if corrupt:
 				all_hints["corrupt"] = corrupt
 				all_hints["operator_actions"] = [

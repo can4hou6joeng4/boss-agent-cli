@@ -45,6 +45,7 @@ def test_watch_run_all_aggregates_all_watches(tmp_path: Path) -> None:
 	watches = envelope["data"].get("watches", [])
 	names = {w["name"] for w in watches}
 	assert names == {"p1", "p2"}
+	assert envelope["hints"]["next_actions"] == ["boss watch list", "boss detail <security_id>"]
 
 
 def test_watch_run_all_with_no_watches(tmp_path: Path) -> None:
@@ -55,6 +56,8 @@ def test_watch_run_all_with_no_watches(tmp_path: Path) -> None:
 	envelope = json.loads(result.output)
 	assert envelope["ok"] is True
 	assert envelope["data"]["watches"] == []
+	# 没有跑出任何职位时 detail 没有 security_id 可填，下一步应该是先建一个 watch。
+	assert envelope["hints"]["next_actions"] == ["boss watch add <name> <关键词>"]
 
 
 def test_watch_run_requires_name_or_all(tmp_path: Path) -> None:

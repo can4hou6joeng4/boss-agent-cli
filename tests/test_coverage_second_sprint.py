@@ -49,6 +49,23 @@ def test_show_index_out_of_range(mock_get_job, mock_get_info):
 
 @patch("boss_agent_cli.commands.show.get_index_info")
 @patch("boss_agent_cli.commands.show.get_job_by_index")
+def test_show_non_positive_index_rejected_before_cache(mock_get_job, mock_get_info):
+	"""编号从 1 开始：0 / 负数不该被引去先 search 一次，等回来还是同一个错误。"""
+	runner = CliRunner()
+	for argv in (["0"], ["--", "-3"]):
+		result = runner.invoke(cli, ["--json", "show", *argv])
+		parsed = json.loads(result.output)
+		assert result.exit_code == 1
+		assert parsed["ok"] is False
+		assert parsed["error"]["code"] == "INVALID_PARAM"
+		assert "编号必须从 1 开始" in parsed["error"]["message"]
+		assert parsed["hints"]["next_actions"] == ["boss search <关键词>", "boss recommend"]
+	mock_get_job.assert_not_called()
+	mock_get_info.assert_not_called()
+
+
+@patch("boss_agent_cli.commands.show.get_index_info")
+@patch("boss_agent_cli.commands.show.get_job_by_index")
 def test_show_no_cached_results(mock_get_job, mock_get_info):
 	mock_get_job.return_value = None
 	mock_get_info.return_value = {"exists": False, "count": 0, "source": None}
