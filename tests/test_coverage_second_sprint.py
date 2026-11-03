@@ -45,6 +45,8 @@ def test_show_index_out_of_range(mock_get_job, mock_get_info):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert "超出范围" in parsed["error"]["message"]
+	assert "结果数以内的编号" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == ["boss search <关键词>", "boss recommend"]
 
 
 @patch("boss_agent_cli.commands.show.get_index_info")
@@ -74,6 +76,8 @@ def test_show_no_cached_results(mock_get_job, mock_get_info):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert "没有缓存的搜索结果" in parsed["error"]["message"]
+	assert "建立结果缓存" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == ["boss search <关键词>", "boss recommend"]
 
 
 @patch("boss_agent_cli.commands.show.get_job_by_index")
@@ -84,6 +88,8 @@ def test_show_missing_security_id(mock_get_job):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert "security_id" in parsed["error"]["message"]
+	assert "重新搜索后再查看" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == ["boss search <关键词>", "boss recommend"]
 
 
 @patch("boss_agent_cli.commands.show.get_platform_instance")
