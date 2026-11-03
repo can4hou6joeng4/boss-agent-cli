@@ -79,6 +79,17 @@ def test_preset_add_list_remove(tmp_path):
 	assert missing_parsed["hints"]["next_actions"] == ["boss preset list"]
 
 
+def test_preset_remove_rejects_blank_name(tmp_path):
+	"""空名字不可能命中任何预设：不能以 removed=false 的 ok:true 报成功。"""
+	runner = CliRunner()
+	for name in ("", "  "):
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "remove", name])
+		assert result.exit_code == 1, result.output
+		parsed = json.loads(result.output)
+		assert parsed["error"]["code"] == "INVALID_PARAM"
+		assert "名称不能为空" in parsed["error"]["message"]
+
+
 def test_preset_list_empty_next_step_is_executable(tmp_path, monkeypatch):
 	"""TTY 空列表的下一步提示必须是可执行形式：query 是位置参数。
 
