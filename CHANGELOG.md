@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 未登录时的调用会占用共享请求预算，把下一条命令卡住 30 秒并报错成限流：`_request` 在预算窗口内才读取凭据，所以一次根本不会发出请求、只会得到 `AUTH_REQUIRED` 的调用，也记了一个名额并把 `next_at` 推后一个 interval（`request_delay` 下限 30 秒）。例如 `boss pipeline`（未登录，`AUTH_REQUIRED`）之后 30 秒内再跑 `boss digest`，会先阻塞到 `request_wait_timeout` 超时，再以「请求节流等待超时，请求未发出」的 `REQUEST_BUDGET_EXHAUSTED` 失败——原因不对，还白等半分钟。现在在申请预算之前先取一次凭据（成功时命中缓存），未登录直接返回 `AUTH_REQUIRED`，不登记名额、不影响后续命令。
 - `boss history` 与 `boss favorites list` 在 `hasMore` 为假时仍在 `hints.next_actions` 里建议 `--page N+1`：Agent 按提示执行只会拿到空页，再看到同样的提示，形成空转循环；同一命令的终端渲染（`hint_next`）早已按 `hasMore` 隐藏「more」，两条路径口径相反。`search` / `recommend` 一直是对的。现在两处都只在 `pagination.has_more` 为真时追加下一页提示，`history` 的 TTY 守卫也改用同一个变量。
 - `boss ai` 系列命令在模型返回合法 JSON 但不是对象时抛 `AttributeError` traceback：`_call_ai` 只处理了 `JSONDecodeError`，对顶层是数组 / 字符串 / 数字的结果直接 `cast` 成 dict；`ai fit`、`ai keywords`、`ai cover-letter` 随后的 `result.setdefault(...)` 会崩掉，stdout 没有信封。现在非对象结果同样按 `AI_PARSE_ERROR` 返回（可恢复，提示重试），消息里点名收到的类型。
 - `boss stats` 与 `stats --format html` 在缓存库损坏时抛 `sqlite3.DatabaseError` traceback：`_collect_stats` 直接 `sqlite3.connect` 打开库，`_safe_count` / `_count_since` 只吞缺表的 `OperationalError`，文件被别的格式占位时 `SELECT` 抛出的 `DatabaseError` 一路冒到顶层，stdout 没有信封（`--format html -o` 同样如此）。现在在读取边界把 `sqlite3.DatabaseError` 归一成 `CacheDatabaseInvalid`，由 `main.py` 统一返回 `CACHE_DATABASE_INVALID` 与备份重建指引；损坏库不会留下半份 HTML 报表。

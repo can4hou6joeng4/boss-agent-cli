@@ -368,6 +368,11 @@ class _BaseHttpClient:
 		max_retries = _MAX_RETRIES if retry and operation is not None and operation.replay_safe else 0
 		budget = getattr(self, "_request_budget", None)
 		for attempt in range(max_retries + 1):
+			# 凭据在预算窗口内才读取，于是未登录时也会先记一个名额、把 next_at 推后
+			# 一个 interval（默认 30 秒）：请求根本没发出，却让紧接着的下一条命令
+			# 阻塞到超时并以 REQUEST_BUDGET_EXHAUSTED 失败，掩盖真正的 AUTH_REQUIRED。
+			# 这里先做一次取凭据的预检（成功时命中缓存，近乎零成本）。
+			self._auth.get_token()
 			with self._request_window():
 				client = self._get_client()
 				token = self._auth.get_token()
