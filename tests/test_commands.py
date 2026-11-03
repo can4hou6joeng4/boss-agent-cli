@@ -232,6 +232,16 @@ def test_detail_rejects_blank_security_id():
 	assert parsed["hints"]["next_actions"] == ["boss search <关键词>", "boss show <编号>"]
 
 
+def test_apply_rejects_blank_identifiers():
+	"""空标识的投递是 argv 构造错误，必须在碰本地缓存和平台之前拒绝。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["apply", "", "job_001"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["hints"]["next_actions"] == ["boss search <关键词>"]
+
+
 @patch("boss_agent_cli.commands.greet.time")
 @patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
