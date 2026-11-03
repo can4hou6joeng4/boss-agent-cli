@@ -30,10 +30,19 @@ def collect_friend_list_items(
 		if not page_items:
 			break
 
-		signature = tuple(str(item.get("securityId", "")) for item in page_items if isinstance(item, dict))
-		if signature in seen_signatures:
-			break
-		seen_signatures.add(signature)
+		# securityId 在每次请求间都会轮换（见 services/contact_lookup.py），
+		# 只能作为 uid 缺失时的回退标识；签名全为空时无法判断是否重复，
+		# 继续聚合，避免把缺字段的新页面当成重复页丢掉。
+		identities = [
+			str(item.get("uid") or item.get("securityId") or "")
+			for item in page_items
+			if isinstance(item, dict)
+		]
+		if any(identities):
+			signature = tuple(identities)
+			if signature in seen_signatures:
+				break
+			seen_signatures.add(signature)
 		items.extend(page_items)
 
 		if platform_data.get("hasMore") is False:
