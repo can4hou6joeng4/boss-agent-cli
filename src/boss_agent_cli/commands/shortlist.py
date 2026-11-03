@@ -2,7 +2,7 @@ import click
 from typing import Any
 
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.display import boss_command_for_ctx, handle_output, render_simple_list
+from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, render_simple_list
 
 
 def _parse_tags(value: str) -> list[str]:
@@ -74,6 +74,14 @@ def shortlist_add_cmd(
 	tags: str,
 	note: str,
 ) -> None:
+	# 空字符串仍是合法的 argv，但不构成一条候选记录：存进去之后 `shortlist list`
+	# 会多出一行全空数据，提示里的 `boss shortlist remove ` 也没有可执行的参数。
+	# Agent 从搜索结果里取字段失败时最容易走到这里，必须在写盘前拒绝。
+	if not security_id.strip() or not job_id.strip():
+		handle_error_output(
+			ctx, "shortlist", code="INVALID_PARAM", message="security_id 与 job_id 不能为空"
+		)
+		return
 	parsed_tags = _parse_tags(tags)
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		stored = cache.add_shortlist(

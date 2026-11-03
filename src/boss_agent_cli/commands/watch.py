@@ -88,6 +88,11 @@ def watch_add_cmd(
 	job_type: str | None,
 	welfare: str | None,
 ) -> None:
+	# 空字符串是合法 argv，但存下来的记录既没法点名（`boss watch run ` 缺参数），
+	# 也没法搜到目标（空关键词等于不筛选）。必须在写盘前拒绝。
+	if not name.strip() or not query.strip():
+		handle_error_output(ctx, "watch", code="INVALID_PARAM", message="watch 名称与搜索关键词不能为空")
+		return
 	# 保存时就把筛选条件校验掉：watch run 直接把存下来的参数交给平台客户端，
 	# 未知薪资 / 经验 / 学历在 `*_CODES.get(...)` 处返回 None，参数被静默丢弃，
 	# 之后每次 run 都在「没有筛选」的结果上报告新职位。

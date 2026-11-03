@@ -86,6 +86,11 @@ def resume_init_cmd(ctx: click.Context, name: str | None, template: str | None) 
 		template = "default"
 	if name is None:
 		name = "default"
+	# 空名称的简历能被写出来，却没法点名：`resume show ` / `resume edit ` 都缺参数，
+	# `resume list` 里也只显示一行没有名字的记录。
+	if not name.strip():
+		handle_error_output(ctx, "resume", code="INVALID_PARAM", message="简历名称不能为空")
+		return
 	if store.exists(name):
 		handle_error_output(
 			ctx, "resume",
@@ -334,6 +339,10 @@ def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 def resume_clone_cmd(ctx: click.Context, name: str, new_name: str) -> None:
 	"""复制简历为新版本"""
 	store = _get_store(ctx)
+	# 空新名称会复制出一份无法点名的简历，`resume show ` 缺参数。
+	if not new_name.strip():
+		handle_error_output(ctx, "resume", code="INVALID_PARAM", message="新简历名称不能为空")
+		return
 	if not store.exists(name):
 		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
 		ctx.exit(1)
@@ -404,6 +413,11 @@ def resume_link_cmd(ctx: click.Context, name: str, security_id: str, job_id: str
 	if not store.exists(name):
 		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
 		ctx.exit(1)
+		return
+	# 空字符串仍是合法 argv，但不构成一条职位关联：存进去之后 `resume applications`
+	# 会多出一行空 ID，提示里的 `boss apply  ` 也没有可执行参数。
+	if not security_id.strip() or not job_id.strip():
+		handle_error_output(ctx, "resume", code="INVALID_PARAM", message="security_id 与 job_id 不能为空")
 		return
 	cache = CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db")
 	cache.link_resume_to_job(name, security_id, job_id, title, company)

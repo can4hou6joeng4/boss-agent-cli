@@ -86,6 +86,22 @@ def test_preset_add_rejects_unknown_filters(tmp_path):
 	assert listed["data"] == []
 
 
+def test_preset_add_rejects_blank_name_or_query(tmp_path):
+	"""空名称 / 空关键词存不下可用的预设：既没法点名，也等于不筛选。"""
+	runner = CliRunner()
+	for name, query in (("blank", ""), ("", "golang"), ("  ", "golang")):
+		result = runner.invoke(
+			cli,
+			["--data-dir", str(tmp_path), "--json", "preset", "add", name, query],
+		)
+		assert result.exit_code == 1, result.output
+		parsed = json.loads(result.output)
+		assert parsed["error"]["code"] == "INVALID_PARAM"
+
+	listed = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "list"]).output)
+	assert listed["data"] == []
+
+
 def test_search_with_invalid_preset_names_the_preset(tmp_path):
 	"""旧版本存下的非法预设：filter 校验失败时要点名是哪条预设，用户才知道删哪条。"""
 	runner = CliRunner()

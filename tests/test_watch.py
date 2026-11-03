@@ -232,6 +232,22 @@ def test_watch_run_reports_welfare_not_supported(mock_auth_cls, mock_client_cls,
 	assert parsed["error"]["code"] == "NOT_SUPPORTED"
 
 
+def test_watch_add_rejects_blank_name_or_query(tmp_path):
+	"""空名称 / 空关键词存不下可用的 watch：`watch run ` 缺参数，空关键词等于不筛选。"""
+	runner = CliRunner()
+	for name, query in (("blank", ""), ("", "golang"), ("  ", "golang")):
+		result = runner.invoke(
+			cli,
+			["--data-dir", str(tmp_path), "--json", "watch", "add", name, query],
+		)
+		assert result.exit_code == 1, result.output
+		parsed = json.loads(result.output)
+		assert parsed["error"]["code"] == "INVALID_PARAM"
+
+	listed = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "list"]).output)
+	assert listed["data"] == []
+
+
 def test_watch_schema_is_exposed():
 	runner = CliRunner()
 	result = runner.invoke(cli, ["schema"])

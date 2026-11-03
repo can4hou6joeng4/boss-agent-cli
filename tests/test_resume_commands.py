@@ -69,6 +69,20 @@ def test_init_already_exists(tmp_path):
 	assert parsed["error"]["code"] == "RESUME_ALREADY_EXISTS"
 
 
+def test_init_rejects_blank_name(tmp_path):
+	"""空名称的简历没法点名，`resume show ` 缺参数，必须在写盘前拒绝。"""
+	runner = CliRunner()
+	for name in ("", "   "):
+		result = _invoke(runner, tmp_path, ["init", "--name", name, "--template", "default"])
+		assert result.exit_code == 1, result.output
+		parsed = json.loads(result.output)
+		assert parsed["error"]["code"] == "INVALID_PARAM"
+		assert "名称" in parsed["error"]["message"]
+
+	listed = json.loads(_invoke(runner, tmp_path, ["list"]).output)
+	assert listed["data"] == []
+
+
 # ── list ──────────────────────────────────────────────────────
 
 
@@ -405,6 +419,21 @@ def test_clone_source_not_found(tmp_path):
 	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
 
 
+def test_clone_rejects_blank_new_name(tmp_path):
+	"""空新名称会复制出一份无法点名的简历，必须在写盘前拒绝。"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "original", "--template", "default"])
+	for new_name in ("", "   "):
+		result = _invoke(runner, tmp_path, ["clone", "original", new_name])
+		assert result.exit_code == 1, result.output
+		parsed = json.loads(result.output)
+		assert parsed["error"]["code"] == "INVALID_PARAM"
+		assert "名称" in parsed["error"]["message"]
+
+	listed = json.loads(_invoke(runner, tmp_path, ["list"]).output)
+	assert [item["name"] for item in listed["data"]] == ["original"]
+
+
 def test_clone_target_already_exists(tmp_path):
 	runner = CliRunner()
 	_invoke(runner, tmp_path, ["init", "--name", "src", "--template", "default"])
@@ -469,6 +498,20 @@ def test_link_resume_not_found(tmp_path):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
+
+
+def test_link_rejects_blank_identifiers(tmp_path):
+	"""空 security_id / job_id 会存下一条无法点名的空关联，必须在写盘前拒绝。"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "blanktest", "--template", "default"])
+	result = _invoke(runner, tmp_path, ["link", "blanktest", "", "  "])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "security_id" in parsed["error"]["message"]
+
+	applications = _invoke(runner, tmp_path, ["applications", "blanktest"])
+	assert json.loads(applications.output)["data"] == []
 
 
 def test_applications_list(tmp_path):
