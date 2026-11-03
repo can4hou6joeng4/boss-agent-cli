@@ -106,7 +106,8 @@ def _unknown_option_error(exc: click.ClickException) -> tuple[str, str, dict[str
 	)
 
 
-_EXTRA_ARGUMENT_RE = re.compile(r"^Got unexpected extra arguments? \((.+)\)$")
+_EXTRA_ARGUMENT_RE = re.compile(r"^Got unexpected extra arguments? \((.*)\)$")
+_OPTION_VALUE_MISSING_RE = re.compile(r"^Option '(.+)' requires an argument\.$")
 
 
 def _usage_path(exc: click.ClickException) -> str | None:
@@ -163,6 +164,7 @@ def _unexpected_extra_argument_error(exc: click.ClickException) -> tuple[str, st
 	``boss search golang extra`` / ``boss resume init extra`` 这类多给参数的调用
 	只拿到英文原文，Agent 读到的原因（多余的参数）与真正该做的动作（去掉它）
 	都对不上。Click 8.x 没有专门的异常类，按消息格式识别，未知格式保持原样。
+	括号里为空是 ``boss chat ""``：空字符串也是 argv 里的一个额外参数。
 	"""
 	matched = _EXTRA_ARGUMENT_RE.match(str(getattr(exc, "message", "") or ""))
 	if matched is None:
@@ -170,9 +172,38 @@ def _unexpected_extra_argument_error(exc: click.ClickException) -> tuple[str, st
 	path = _usage_path(exc)
 	if path is None:
 		return None
+	extra = matched.group(1).strip()
+	if extra:
+		message = f"{path} 收到了多余的参数 '{extra}'"
+	else:
+		message = f"{path} 不接受额外的空参数"
 	return (
-		f"{path} 收到了多余的参数 '{matched.group(1).strip()}'",
+		message,
 		f"去掉多余的参数后重试；用 {path} --help 查看用法",
+		{"next_actions": [f"{path} --help"]},
+	)
+
+
+def _missing_option_value_error(
+	exc: click.ClickException, fallback_path: str = ""
+) -> tuple[str, str, dict[str, Any]] | None:
+	"""把 ``Option '--city' requires an argument.`` 换成中文说明。
+
+	``boss search --city``（选项后面没跟取值）原来把 Click 的英文原文直接交给
+	用户和 Agent，``recovery_action`` 也停在「修正参数」；真正的原因是选项后面
+	少了值。这类错误在 parser 层抛出、异常上不挂 ``ctx``，命令路径只能由调用方
+	从 argv 推断后作为 ``fallback_path`` 传入。
+	"""
+	matched = _OPTION_VALUE_MISSING_RE.match(str(getattr(exc, "message", "") or ""))
+	if matched is None:
+		return None
+	path = _usage_path(exc) or (fallback_path or None)
+	if path is None:
+		return None
+	option = matched.group(1)
+	return (
+		f"{path} 的选项 {option} 缺少取值",
+		f"在 {option} 后面补上取值后重试；用 {path} --help 查看用法",
 		{"next_actions": [f"{path} --help"]},
 	)
 
@@ -428,6 +459,33 @@ def _invoked_command_name(args: Sequence[str] | None, fallback: str) -> str:
 	return fallback
 
 
+def _argv_command_path(group: click.Group, args: Sequence[str] | None, root: str) -> str:
+	"""从 argv 推断出错命令的完整路径（``boss crawl start``）。
+
+	解析器层抛出的异常不挂 ``ctx``，``_usage_path`` 拿不到命令层级；信封的
+	``command`` 仍按顶层命令口径，这里只给 message 里的示例命令用完整路径。
+	"""
+	tokens = list(args) if args is not None else sys.argv[1:]
+	path = [root]
+	current: click.Command = group
+	index = 0
+	while index < len(tokens):
+		token = tokens[index]
+		if token in _GLOBAL_OPTIONS_WITH_VALUE:
+			index += 2
+			continue
+		if token.startswith("-"):
+			index += 1
+			continue
+		if isinstance(current, click.Group) and token in current.commands:
+			path.append(token)
+			current = current.commands[token]
+			index += 1
+			continue
+		break
+	return " ".join(path)
+
+
 def _top_level_command_name(ctx: click.Context | None, fallback: str) -> str:
 	"""用法错误落到最外层子命令上，与成功信封的 command 口径一致。
 
@@ -527,6 +585,9 @@ class BossCliGroup(click.Group):
 			recovery_action = "修正参数"
 			hints = None
 			detail = _usage_error_detail(exc, ctx)
+			if detail is None:
+				# 选项缺取值的异常不挂 ctx，命令路径从 argv 推断。
+				detail = _missing_option_value_error(exc, _argv_command_path(self, args, self.name or "boss"))
 			if detail is not None:
 				message, recovery_action, hints = detail
 			misplaced = _misplaced_global_option(self, exc)
