@@ -166,6 +166,8 @@ def test_greet_already_greeted(mock_cache_cls, mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ALREADY_GREETED"
+	# 已打招呼不是死胡同：恢复指引要给出跟进会话的路径。
+	assert "boss chat" in parsed["error"]["recovery_action"]
 
 
 @patch("boss_agent_cli.commands.greet.time")

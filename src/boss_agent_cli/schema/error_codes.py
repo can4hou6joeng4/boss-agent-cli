@@ -174,12 +174,14 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 	"ALREADY_GREETED": {
 		"message": "已向该招聘者打过招呼",
 		"recoverable": False,
-		"recovery_action": None,
+		# 重复打招呼被本地去重拦下：会话其实已建立，下一步是跟进而不是停住。
+		"recovery_action": "该招聘者已打过招呼：用 boss chat 查看会话，或用 boss search <关键词> 换一批职位",
 	},
 	"ALREADY_APPLIED": {
 		"message": "已发起过投递/立即沟通",
 		"recoverable": False,
-		"recovery_action": None,
+		# 与 greet 同理：投递记录已经存在，给出查看与跟进的路径。
+		"recovery_action": "该职位已投递过：用 boss me --section deliver 查看投递记录，或用 boss chat 跟进",
 	},
 	"ACCOUNT_RISK": {
 		"message": "风控拦截",
