@@ -219,6 +219,25 @@ def test_invalid_path_value_is_reported_in_chinese(tmp_path):
 		assert parsed["hints"]["next_actions"] == ["boss ai local import --help"]
 
 
+def test_file_typed_path_error_is_reported_in_chinese(tmp_path):
+	"""只收文件的 ``click.Path`` 前缀是 ``File``，同样要被路径转换器接住。
+
+	``boss stats --output <目录>`` 原来回 ``Invalid value for '-o' / '--output':
+	File '/tmp' is a directory.``：错误码正确，但正文英文、``hints`` 为 null。
+	Click 的 ``Path`` 按 ``dir_okay`` / ``file_okay`` 生成 ``Path`` / ``File`` /
+	``Directory`` 三种前缀。
+	"""
+	result = CliRunner().invoke(
+		cli, ["--data-dir", str(tmp_path), "--json", "stats", "--output", str(tmp_path)]
+	)
+	parsed = _assert_single_stdout_json_error(result, command="stats")
+	message = parsed["error"]["message"]
+	assert "Invalid value for" not in message
+	assert message == f"boss stats 的 -o / --output 无效：路径 '{tmp_path}' 是目录，但这里需要文件"
+	assert parsed["error"]["recovery_action"] == "用 boss stats --help 查看参数说明"
+	assert parsed["hints"]["next_actions"] == ["boss stats --help"]
+
+
 def test_unopenable_file_error_is_reported_in_chinese(tmp_path):
 	"""``click.File`` 打不开文件时透出的是 OSError 的英文 strerror。
 
