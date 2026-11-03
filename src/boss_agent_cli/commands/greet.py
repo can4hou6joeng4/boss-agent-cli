@@ -36,6 +36,7 @@ from boss_agent_cli.search_filters import (
 	prefilter_platform_job_type,
 	resolve_search_code_params,
 )
+from boss_agent_cli.commands._filter_errors import emit_filter_error
 from boss_agent_cli.services.job_identity import deduplicate_job_result
 
 
@@ -208,10 +209,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 	try:
 		ensure_supported_city(city)
 	except ValueError as exc:
-		handle_error_output(
-			ctx, "batch-greet", code="INVALID_PARAM", message=str(exc),
-			hints={"next_actions": [boss_command_for_ctx(ctx, "cities")]},
-		)
+		emit_filter_error(ctx, "batch-greet", exc)
 		return
 	try:
 		resolve_search_code_params(
@@ -219,7 +217,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 			industry=industry, scale=scale, stage=stage, job_type=job_type,
 		)
 	except ValueError as exc:
-		handle_error_output(ctx, "batch-greet", code="INVALID_PARAM", message=str(exc))
+		emit_filter_error(ctx, "batch-greet", exc)
 		return
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))

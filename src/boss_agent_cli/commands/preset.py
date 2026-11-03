@@ -16,6 +16,7 @@ from boss_agent_cli.search_filters import (
 	resolve_active_level,
 	resolve_search_code_params,
 )
+from boss_agent_cli.commands._filter_errors import emit_filter_error
 
 
 def _build_params(
@@ -83,12 +84,12 @@ def preset_add_cmd(
 			industry=industry, scale=scale, stage=stage, job_type=job_type,
 		)
 	except ValueError as exc:
-		handle_error_output(ctx, "preset", code="INVALID_PARAM", message=str(exc))
+		emit_filter_error(ctx, "preset", exc)
 		return
 	try:
 		active_level = resolve_active_level(active)
 	except ValueError as exc:
-		handle_error_output(ctx, "preset", code="INVALID_PARAM", message=str(exc))
+		emit_filter_error(ctx, "preset", exc)
 		return
 
 	params = _build_params(query, city, salary, experience, education, industry, scale, stage, job_type, welfare)

@@ -69,6 +69,9 @@ def test_city_validation_still_reports_param_error(tmp_path, argv):
 
 	assert payload["error"]["code"] == "INVALID_PARAM"
 	assert "未知城市" in payload["error"]["message"]
+	# 城市错误要指向完整城市列表，而不是让 Agent 照着正文再猜一次。
+	assert payload["hints"]["next_actions"] == ["boss cities"]
+	assert "boss cities" in payload["error"]["recovery_action"]
 
 
 def test_watch_add_rejects_unknown_filter_values(tmp_path):
@@ -77,6 +80,27 @@ def test_watch_add_rejects_unknown_filter_values(tmp_path):
 
 	assert payload["error"]["code"] == "INVALID_PARAM"
 	assert "未知薪资范围" in payload["error"]["message"]
+
+
+def test_unknown_filter_value_lists_choices_and_recovery_action(tmp_path):
+	"""没有字面相近值时列出可选值：小表全列，大表给总数和样例。
+
+	``未知薪资范围: 一百块`` 原来既不说有哪些合法取值，``recovery_action`` 也只是
+	登记表里的「修正参数」，Agent 只能原样重试。
+	"""
+	payload = _invoke(tmp_path, ["watch", "add", "w1", "golang", "--salary", "一百块"])
+	message = payload["error"]["message"]
+	assert "可选值" in message
+	assert "10-20K" in message
+	assert "修正参数" not in payload["error"]["recovery_action"]
+	assert "筛选项" in payload["error"]["recovery_action"]
+
+	# search / export 的 --industry 支持逗号多选，不走 click.Choice，才轮到这里的提示。
+	payload = _invoke(tmp_path, ["export", "golang", "--industry", "zzz"])
+	message = payload["error"]["message"]
+	assert "未知行业类型: zzz" in message
+	assert "共 97 个可选值" in message
+	assert "例如" in message
 
 
 @pytest.mark.parametrize(

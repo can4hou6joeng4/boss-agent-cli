@@ -35,6 +35,7 @@ from boss_agent_cli.search_filters import (
 	resolve_welfare_keywords,
 	run_search_pipeline,
 )
+from boss_agent_cli.commands._filter_errors import emit_filter_error
 from boss_agent_cli.wizard.actions import execute_candidate_search
 
 
@@ -257,7 +258,7 @@ def search_cmd(
 	try:
 		ensure_supported_city(city)
 	except ValueError as exc:
-		handle_error_output(ctx, "search", code="INVALID_PARAM", message=f"{exc}{preset_origin}")
+		emit_filter_error(ctx, "search", exc, preset_origin)
 		return
 
 	try:
@@ -271,14 +272,14 @@ def search_cmd(
 			job_type=job_type,
 		)
 	except ValueError as exc:
-		handle_error_output(ctx, "search", code="INVALID_PARAM", message=f"{exc}{preset_origin}")
+		emit_filter_error(ctx, "search", exc, preset_origin)
 		return
 	raw_params.update({key: value for key, value in code_params.items() if value})
 
 	try:
 		active_level = resolve_active_level(active)
 	except ValueError as exc:
-		handle_error_output(ctx, "search", code="INVALID_PARAM", message=f"{exc}{preset_origin}")
+		emit_filter_error(ctx, "search", exc, preset_origin)
 		return
 	# 福利和活跃度都可能要逐个查详情（活跃度也会变），结果不进搜索缓存
 	detail_filter = bool(welfare or active_level)

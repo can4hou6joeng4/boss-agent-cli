@@ -296,6 +296,7 @@ module = [
 	"boss_agent_cli.platforms.factory",
 	"boss_agent_cli.commands._login_errors",
 	"boss_agent_cli.commands._contact_lookup",
+	"boss_agent_cli.commands._filter_errors",
 	"boss_agent_cli.api.browser_urls",
 ]
 disallow_untyped_defs = true
