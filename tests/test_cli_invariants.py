@@ -59,6 +59,10 @@ def test_success_commands_emit_single_json_envelope(args: list[str], command: st
 		(["--platform", "nonexistent", "schema"], "boss", "INVALID_PARAM"),
 		(["schema", "--format", "xml"], "schema", "INVALID_PARAM"),
 		(["search"], "search", "INVALID_PARAM"),
+		# 子命令的用法错误归到最外层命令上，与同一命令成功信封的 command 一致
+		(["resume", "show"], "resume", "INVALID_PARAM"),
+		(["shortlist", "list", "--bogus"], "shortlist", "INVALID_PARAM"),
+		(["hr", "whoami", "--bogus"], "hr", "INVALID_PARAM"),
 	],
 )
 def test_failure_commands_emit_single_json_error_envelope(

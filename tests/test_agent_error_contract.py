@@ -38,8 +38,9 @@ def _assert_single_stdout_json_error(result: Result, *, command: str, code: str 
 		(("--delay", "fast", "status"), "boss", "--delay"),
 		(("--role", "admin", "status"), "boss", "--role"),
 		(("detail",), "detail", "SECURITY_ID"),
-		(("config", "get"), "get", "KEY"),
-		(("shortlist", "add"), "add", "SECURITY_ID"),
+		# 子命令的用法错误归到最外层命令上，与同一命令成功信封的 command 一致
+		(("config", "get"), "config", "KEY"),
+		(("shortlist", "add"), "shortlist", "SECURITY_ID"),
 	],
 )
 def test_agent_facing_usage_errors_emit_stdout_json_envelope(tmp_path, args, command, message_fragment):
