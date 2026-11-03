@@ -267,3 +267,18 @@ def test_shortlist_list_and_compare_empty_hints_point_to_add(tmp_path):
 	)
 	filled = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "shortlist", "list"]).output)
 	assert filled["hints"]["next_actions"] == ["boss detail <security_id> --job-id <job_id>"]
+
+
+def test_shortlist_compare_tag_without_match_does_not_point_to_add(tmp_path):
+	"""带 --tag 没有命中时池子里明明有条目：下一步是不带过滤的比较，不是再加一条。"""
+	runner = CliRunner()
+	runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "shortlist", "add", "sec_001", "job_001", "--tags", "后端"],
+	)
+
+	compared = json.loads(
+		runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "shortlist", "compare", "--tag", "前端"]).output
+	)
+	assert compared["data"]["items"] == []
+	assert compared["hints"]["next_actions"] == ["boss shortlist compare", "boss shortlist list"]

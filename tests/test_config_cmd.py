@@ -123,7 +123,8 @@ def test_config_get_unknown_key(tmp_path):
 	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "config", "get", "nonexistent"])
 	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
 	assert "可用项" in parsed["error"]["message"]
-	assert parsed["hints"] is None
+	# 消息里已经列了可用项，hints 再给出能看到当前值的 config list。
+	assert parsed["hints"]["next_actions"] == ["boss config list"]
 
 
 # ── config set ──────────────────────────────────────────────────────
@@ -530,6 +531,7 @@ def test_config_set_unknown_key(tmp_path):
 	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "config", "set", "bad_key", "val"])
 	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
 	assert "可用项" in parsed["error"]["message"]
+	assert parsed["hints"]["next_actions"] == ["boss config list"]
 
 
 def test_config_commands_do_not_expose_internal_low_risk_policy(tmp_path):
@@ -579,6 +581,7 @@ def test_config_reset_unknown_key(tmp_path):
 	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "config", "reset", "bad_key"])
 	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
 	assert "可用项" in parsed["error"]["message"]
+	assert parsed["hints"]["next_actions"] == ["boss config list"]
 
 
 def test_unreadable_config_file_returns_envelope_instead_of_traceback(tmp_path):
