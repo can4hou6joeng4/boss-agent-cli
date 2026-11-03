@@ -144,6 +144,26 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": None,
 	},
+	"CONTACT_NOT_FOUND": {
+		"message": "沟通列表中未找到该联系人",
+		"recoverable": False,
+		"recovery_action": "boss chat",
+	},
+	"CRAWL_RUN_NOT_FOUND": {
+		"message": "本地采集任务不存在或 run_id 有误",
+		"recoverable": False,
+		"recovery_action": "boss crawl start <query>（新建任务），或 boss crawl status <run_id> 核对 ID",
+	},
+	"SAVED_SEARCH_NOT_FOUND": {
+		"message": "本地预设或 watch 不存在",
+		"recoverable": False,
+		"recovery_action": "boss preset list（预设）或 boss watch list（watch）",
+	},
+	"WORKFLOW_NOT_FOUND": {
+		"message": "本地 workflow 任务不存在或 run_id 有误",
+		"recoverable": False,
+		"recovery_action": "boss wizard（新建 workflow），或 boss wizard --status <run_id> 核对 ID",
+	},
 	"ALREADY_GREETED": {
 		"message": "已向该招聘者打过招呼",
 		"recoverable": False,

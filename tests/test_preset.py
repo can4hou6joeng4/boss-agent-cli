@@ -231,3 +231,20 @@ def test_search_with_corrupt_preset_reports_envelope(tmp_path):
 	assert parsed["error"]["recovery_action"]
 	assert "broken" in parsed["error"]["message"]
 	assert parsed["hints"]["next_actions"][0] == "boss preset remove broken"
+
+
+def test_search_with_missing_preset_reports_saved_search_not_found(tmp_path):
+	"""预设在本地缓存里不存在，不是平台职位下架。
+
+	以前报 JOB_NOT_FOUND（登记表文案「职位不存在或已下架」、recovery_action 为
+	null）：Agent 会以为职位被撤下而跳过，既看不出是预设名写错，也没有下一步。
+	"""
+	result = CliRunner().invoke(
+		cli, ["--data-dir", str(tmp_path), "--json", "search", "--preset", "ghost"]
+	)
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "SAVED_SEARCH_NOT_FOUND"
+	assert parsed["error"]["recovery_action"] == "boss preset list（预设）或 boss watch list（watch）"
+	assert parsed["hints"]["next_actions"] == ["boss preset list", "boss preset add ghost <关键词>"]

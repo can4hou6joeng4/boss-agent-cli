@@ -182,7 +182,10 @@ def search_cmd(
 				)
 				return
 		if record is None:
-			handle_error_output(ctx, "search", code="JOB_NOT_FOUND", message=f"未找到 preset: {preset}")
+			handle_error_output(
+				ctx, "search", code="SAVED_SEARCH_NOT_FOUND", message=f"未找到 preset: {preset}",
+				hints={"next_actions": ["boss preset list", f"boss preset add {preset} <关键词>"]},
+			)
 			return
 		params = record["params"]
 		query = params.get("query") or query

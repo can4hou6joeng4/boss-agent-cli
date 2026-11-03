@@ -350,7 +350,7 @@ def _run_interactive_session(
 				if selection.action == "status":
 					run = store.get(str(selection.run_id))
 					if run is None:
-						render_error(code="JOB_NOT_FOUND")
+						render_error(code="WORKFLOW_NOT_FOUND")
 						if not ask_continue_session(clear_before=False):
 							return
 						continue
@@ -388,7 +388,7 @@ def _run_interactive_session(
 						continue
 				elif selection.action == "stop":
 					if not store.request_stop(str(selection.run_id)):
-						render_error(code="JOB_NOT_FOUND")
+						render_error(code="WORKFLOW_NOT_FOUND")
 					else:
 						clear_wizard_screen()
 						render_run(store.get(str(selection.run_id)) or {})
@@ -401,7 +401,7 @@ def _run_interactive_session(
 						turn_retries = max(1, max_retries)
 					existing = store.get(str(resume_run_id))
 					if existing is None:
-						render_error(code="JOB_NOT_FOUND")
+						render_error(code="WORKFLOW_NOT_FOUND")
 						if not ask_continue_session():
 							return
 						continue
@@ -410,7 +410,7 @@ def _run_interactive_session(
 				source_id = str(selection.inputs.get("source_run_id") or "")
 				browse_run = store.get(source_id) if source_id else None
 				if browse_run is None:
-					render_error(code="JOB_NOT_FOUND", message="找不到可浏览的采集结果")
+					render_error(code="WORKFLOW_NOT_FOUND", message="找不到可浏览的采集结果")
 					if not ask_continue_session():
 						return
 					continue
@@ -606,8 +606,9 @@ def _run_wizard_command(
 				_wizard_error(
 					ctx,
 					interactive,
-					code="JOB_NOT_FOUND",
+					code="WORKFLOW_NOT_FOUND",
 					message=f"未找到任务: {status_run_id}",
+					hints={"next_actions": ["boss wizard"]},
 				)
 				return
 			handle_output(ctx, "wizard", run, render=render_run)
@@ -617,8 +618,9 @@ def _run_wizard_command(
 				_wizard_error(
 					ctx,
 					interactive,
-					code="JOB_NOT_FOUND",
+					code="WORKFLOW_NOT_FOUND",
 					message=f"未找到可停止的任务: {stop_run_id}",
+					hints={"next_actions": ["boss wizard"]},
 				)
 				return
 			run = store.get(stop_run_id) or {}
@@ -646,8 +648,9 @@ def _run_wizard_command(
 					_wizard_error(
 						ctx,
 						interactive,
-						code="JOB_NOT_FOUND",
+						code="WORKFLOW_NOT_FOUND",
 						message=f"未找到任务: {resume_run_id}",
+						hints={"next_actions": ["boss wizard"]},
 					)
 					return
 				plan = _plan_from_run(existing)

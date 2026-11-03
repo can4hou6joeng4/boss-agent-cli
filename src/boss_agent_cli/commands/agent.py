@@ -162,7 +162,13 @@ def crawl_cmd(
 			crawl_jobs = cache.list_crawl_jobs(run_id or "")
 			jobs, missing = _crawl_fit_jobs(cache, crawl_jobs)
 	except KeyError:
-		handle_error_output(ctx, "agent.crawl", code="JOB_NOT_FOUND", message=f"未找到 crawl run: {run_id}")
+		handle_error_output(
+			ctx,
+			"agent.crawl",
+			code="CRAWL_RUN_NOT_FOUND",
+			message=f"未找到 crawl run: {run_id}",
+			hints={"next_actions": ["boss crawl start <query>", "boss crawl status <run_id>"]},
+		)
 		return
 	except ValueError as exc:
 		handle_error_output(ctx, "agent.crawl", code="INVALID_PARAM", message=str(exc))

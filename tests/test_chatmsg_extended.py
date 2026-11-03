@@ -177,7 +177,7 @@ def test_chatmsg_uses_history_msg_list_fallback(mock_auth_cls, mock_client_cls):
 @patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_invalid_security_id(mock_auth_cls, mock_client_cls):
-	"""不存在的 security_id 应返回 JOB_NOT_FOUND 错误"""
+	"""不存在的 security_id 应返回 CONTACT_NOT_FOUND 错误"""
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response([_make_friend()])
 	runner = CliRunner()
@@ -185,21 +185,21 @@ def test_chatmsg_invalid_security_id(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
-	assert parsed["error"]["code"] == "JOB_NOT_FOUND"
+	assert parsed["error"]["code"] == "CONTACT_NOT_FOUND"
 	assert "sec_nonexistent" in parsed["error"]["message"]
 
 
 @patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
 @patch("boss_agent_cli.commands.chatmsg.AuthManager")
 def test_chatmsg_empty_friend_list(mock_auth_cls, mock_client_cls):
-	"""好友列表为空时应返回 JOB_NOT_FOUND"""
+	"""好友列表为空时应返回 CONTACT_NOT_FOUND"""
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response([])
 	runner = CliRunner()
 	result = runner.invoke(cli, ["chatmsg", "sec_001"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "JOB_NOT_FOUND"
+	assert parsed["error"]["code"] == "CONTACT_NOT_FOUND"
 
 
 # ── 消息格式化逻辑 ─────────────────────────────────────────────────

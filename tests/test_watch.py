@@ -431,3 +431,14 @@ def test_watch_run_params_type_drift_reports_saved_search_invalid(tmp_path):
 	assert "query" in parsed["error"]["message"]
 	assert "list" in parsed["error"]["message"]
 	assert parsed["hints"]["next_actions"][0] == "boss watch remove drifted"
+
+
+def test_watch_run_missing_reports_saved_search_not_found(tmp_path):
+	"""watch 名不存在是本地记录缺失：给出已有条目与重建命令。"""
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", "ghost"])
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "SAVED_SEARCH_NOT_FOUND"
+	assert parsed["error"]["recovery_action"] == "boss preset list（预设）或 boss watch list（watch）"
+	assert parsed["hints"]["next_actions"] == ["boss watch list", "boss watch add ghost <关键词>"]
