@@ -212,3 +212,23 @@ def test_find_friend_ignores_non_dict_items():
 	friend_item, error_response = find_friend(platform, "7")
 	assert friend_item == {"uid": 7, "securityId": "sec_7"}
 	assert error_response is None
+
+
+def test_find_friend_keeps_paging_when_pages_lack_identifiers():
+	"""条目缺少 uid / securityId 时不能据此判定重复页。
+
+	空签名恒等于 `("",)`（或空元组），旧实现会在第二页判定「重复页」并终止，
+	后续页里的联系人永远找不到，上层把 uid 报成「联系人不存在」。
+	"""
+	pages = [
+		{"zpData": {"result": [{"name": "缺字段甲"}], "hasMore": True}},
+		{"zpData": {"result": [{"name": "缺字段乙"}], "hasMore": True}},
+		{"zpData": {"result": [{"uid": 10001, "securityId": "sid_target"}], "hasMore": False}},
+	]
+	platform, calls = _platform_from_pages(pages)
+
+	friend_item, error_response = find_friend(platform, "10001")
+
+	assert friend_item == {"uid": 10001, "securityId": "sid_target"}
+	assert error_response is None
+	assert calls == [1, 2, 3]
