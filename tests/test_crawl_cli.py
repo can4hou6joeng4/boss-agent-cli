@@ -395,10 +395,22 @@ def test_status_returns_checkpoint_and_detail_progress(tmp_path):
 	runner = CliRunner()
 	result = _invoke(runner, tmp_path, "crawl", "status", "run-1")
 	assert result.exit_code == 0, result.output
-	data = _envelope(result)["data"]
+	payload = _envelope(result)
+	data = payload["data"]
 	assert data["run_id"] == "run-1"
 	assert data["query"] == "AI"
 	assert data["status"] == "completed"
+	# 已结束的 run 上 stop 什么都不会停：只提示读取结果。
+	assert payload["hints"]["next_actions"] == ["boss crawl results run-1"]
+
+
+def test_status_running_points_to_results_and_stop(tmp_path):
+	_seed_run(tmp_path, "run-1", status="running")
+	payload = _envelope(_invoke(CliRunner(), tmp_path, "crawl", "status", "run-1"))
+	assert payload["hints"]["next_actions"] == [
+		"boss crawl results run-1",
+		"boss crawl stop run-1",
+	]
 
 
 def test_status_reports_run_not_found(tmp_path):

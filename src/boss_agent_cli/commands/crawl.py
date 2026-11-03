@@ -568,6 +568,11 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 		_report_corrupt_run(ctx, "crawl.status", run_id, exc)
 		return
 	hints: dict[str, list[str]] | None = None
+	# TTY 的下一步与信封 hints 必须同一口径：只有还在跑的 run 才值得提示 stop，
+	# 已结束的 run 上 `crawl stop` 仍会返回 stop_requested，但什么都不会停。
+	next_steps = [f"boss crawl results {run_id}"]
+	if payload["status"] in ("queued", "running"):
+		next_steps.append(f"boss crawl stop {run_id}")
 	if payload["status"] == "risk_stopped":
 		# 风险锁会先于浏览器构造阻断 resume：直接照 checkpoint.resume_command
 		# 重试只会再次撞锁。解锁必须由用户确认官方页面恢复后显式执行。
@@ -577,6 +582,8 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 				f"完成人工恢复后，显式执行 {payload['checkpoint']['resume_command']} 从原断点继续",
 			],
 		}
+	else:
+		hints = {"next_actions": next_steps}
 	handle_output(
 		ctx,
 		"crawl.status",
@@ -584,9 +591,7 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 		render=lambda d: render_record_result(
 			d,
 			title="crawl status",
-			next_steps=[f"boss crawl results {run_id}"]
-			if payload["status"] == "risk_stopped"
-			else [f"boss crawl results {run_id}", f"boss crawl stop {run_id}"],
+			next_steps=next_steps,
 		),
 		hints=hints,
 	)
