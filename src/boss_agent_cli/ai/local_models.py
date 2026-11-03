@@ -123,9 +123,24 @@ def import_local_model(data_dir: Path, source: Path, model: str) -> ImportedLoca
 	target_dir = data_dir / "models" / _safe_model_dir(model)
 	# 先读登记表再复制：登记表损坏时直接报错，不留下一份复制了却没登记进来的模型目录。
 	rows = [item for item in read_imported_models(data_dir, strict=True) if item.model != model]
-	target_dir.mkdir(parents=True, exist_ok=True)
 	target = target_dir / source.name
-	if source.is_dir():
+	src_resolved = source.resolve()
+	tgt_resolved = target.resolve()
+	if source.is_dir() and src_resolved != tgt_resolved and (
+		src_resolved in tgt_resolved.parents or tgt_resolved in src_resolved.parents
+	):
+		# 源目录包含目标、或目标包含源目录：copytree 会把已写出的副本再当成源一路
+		# 复制下去（直到 File name too long），或先 rmtree 掉源目录再复制失败。
+		# 例如 `--path ~/.boss-agent --model qwen3`，目标就在源目录里面。
+		raise LocalModelManifestError(
+			"INVALID_PARAM",
+			f"源目录与导入目标互相包含: {source} -> {target}；复制会递归到自身或先删掉源目录，请换一个源目录或 --model 名",
+		)
+	target_dir.mkdir(parents=True, exist_ok=True)
+	if src_resolved == tgt_resolved:
+		# 已经在目标位置（例如重复导入同一路径）：不复制、只登记。
+		pass
+	elif source.is_dir():
 		if target.exists():
 			shutil.rmtree(target)
 		shutil.copytree(source, target)

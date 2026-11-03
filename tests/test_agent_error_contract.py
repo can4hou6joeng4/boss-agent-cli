@@ -199,6 +199,26 @@ def test_invalid_option_value_is_reported_in_chinese(tmp_path):
 		assert parsed["hints"]["next_actions"] == [f"{path} --help"]
 
 
+def test_invalid_path_value_is_reported_in_chinese(tmp_path):
+	"""Click 的路径校验（``Path '' does not exist.``）同样是英文正文 + 无 hints。
+
+	``boss ai local import --path ""`` 原来只回 ``Invalid value for '--path':
+	Path '' does not exist.``，Agent 看不出是路径为空、不存在还是类型不对。
+	"""
+	runner = CliRunner()
+	for value in ("", str(tmp_path / "missing.gguf")):
+		result = runner.invoke(
+			cli,
+			["--data-dir", str(tmp_path), "--json", "ai", "local", "import", "--path", value, "--model", "qwen3"],
+		)
+		parsed = _assert_single_stdout_json_error(result, command="ai")
+		message = parsed["error"]["message"]
+		assert "Invalid value for" not in message
+		assert message == f"boss ai local import 的 --path 无效：路径 '{value}' 不存在"
+		assert parsed["error"]["recovery_action"] == "用 boss ai local import --help 查看参数说明"
+		assert parsed["hints"]["next_actions"] == ["boss ai local import --help"]
+
+
 def test_agent_run_requires_login_returns_envelope_not_traceback(tmp_path):
 	"""未登录的 `agent run` 必须返回 AUTH_REQUIRED 信封，而不是 traceback。
 
