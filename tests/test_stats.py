@@ -183,6 +183,35 @@ def test_stats_html_format_with_json_flag_returns_envelope(tmp_path):
 	assert parsed["data"]["bytes"] > len(parsed["data"]["content"])
 
 
+def test_stats_corrupt_cache_database_returns_envelope(tmp_path):
+	"""缓存库损坏时返回 CACHE_DATABASE_INVALID 信封，而不是 sqlite traceback。"""
+	db_dir = tmp_path / "cache"
+	db_dir.mkdir(parents=True, exist_ok=True)
+	(db_dir / "boss_agent.db").write_bytes(b"not a database")
+
+	result = _invoke(tmp_path)
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "CACHE_DATABASE_INVALID"
+	assert "boss_agent.db" in parsed["error"]["message"]
+
+
+def test_stats_html_output_does_not_write_file_when_database_corrupt(tmp_path):
+	"""损坏库在渲染 HTML 之前就失败：不能留下半份报表文件。"""
+	db_dir = tmp_path / "cache"
+	db_dir.mkdir(parents=True, exist_ok=True)
+	(db_dir / "boss_agent.db").write_bytes(b"not a database")
+	out_path = tmp_path / "report.html"
+
+	result = _invoke(tmp_path, "--format", "html", "-o", str(out_path))
+
+	assert result.exit_code == 1
+	assert json.loads(result.output)["error"]["code"] == "CACHE_DATABASE_INVALID"
+	assert not out_path.exists()
+
+
 def test_stats_html_format_to_file(tmp_path):
 	"""--format html -o 写文件时 stdout 返回 JSON 信封。"""
 	_seed_cache(tmp_path, greet=10, applied=5, shortlist=3)
