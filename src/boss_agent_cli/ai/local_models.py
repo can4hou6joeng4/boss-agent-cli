@@ -120,8 +120,9 @@ def import_local_model(data_dir: Path, source: Path, model: str) -> ImportedLoca
 	if not source.exists():
 		raise LocalModelManifestError("MODEL_SOURCE_NOT_FOUND", f"模型路径不存在: {source}")
 	# 先读登记表再复制：登记表损坏时直接报错，不留下一份复制了却没登记进来的模型目录。
-	rows = [item for item in read_imported_models(data_dir, strict=True) if item.model != model]
 	target_dir = data_dir / "models" / _safe_model_dir(model)
+	# 先读登记表再复制：登记表损坏时直接报错，不留下一份复制了却没登记进来的模型目录。
+	rows = [item for item in read_imported_models(data_dir, strict=True) if item.model != model]
 	target_dir.mkdir(parents=True, exist_ok=True)
 	target = target_dir / source.name
 	if source.is_dir():
@@ -137,4 +138,17 @@ def import_local_model(data_dir: Path, source: Path, model: str) -> ImportedLoca
 
 
 def _safe_model_dir(model: str) -> str:
-	return "".join(char if char.isalnum() or char in {"-", "_", "."} else "-" for char in model).strip("-") or "model"
+	"""把模型名折成 `models/` 下的单层目录名。
+
+	`.` 在允许字符里（`qwen3.5` 这类名字要保留），所以只由点组成的名字必须单独
+	拒绝：`--model ..` 会让目标目录变成 `models/..`（即数据目录根），源目录同名时
+	还会先 `rmtree` 掉那里的同名目录——`~/.boss-agent` 下的 `auth`、`resumes`、
+	`cache` 都可能这样被删掉。
+	"""
+	safe = "".join(char if char.isalnum() or char in {"-", "_", "."} else "-" for char in model).strip("-")
+	if not safe.strip("."):
+		raise LocalModelManifestError(
+			"INVALID_PARAM",
+			f"模型名无效: {model!r}；不能为空，也不能只由 . 和 - 组成",
+		)
+	return safe
