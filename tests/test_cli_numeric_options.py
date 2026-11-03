@@ -59,6 +59,8 @@ from boss_agent_cli.main import cli
 		["--json", "pipeline", "--days-stale", "-1"],
 		["--json", "follow-up", "--days-stale", "-1"],
 		["--json", "stats", "--days", "-1"],
+		["--json", "login", "--timeout", "0"],
+		["--json", "login", "--timeout", "-5"],
 	],
 )
 def test_numeric_options_reject_out_of_range_values(tmp_path, argv):
@@ -94,6 +96,23 @@ def test_numeric_options_accept_valid_values(tmp_path, argv):
 	payload = json.loads(result.output)
 	if payload["ok"] is False:
 		assert payload["error"]["code"] != "INVALID_PARAM", payload["error"]
+
+def test_login_timeout_rejects_non_positive_values_before_login(tmp_path, monkeypatch):
+	"""`login --timeout 0/-5` 原先会直接进入登录流程：`for i in range(timeout)`
+	一次都不循环，以「扫码登录超时（0秒）」收尾（负数原样进文案），而不是参数错误。
+	"""
+	from boss_agent_cli.commands import login as login_module
+
+	constructed = []
+	monkeypatch.setattr(login_module, "AuthManager", lambda *a, **k: constructed.append(1))
+
+	for value in ("0", "-5"):
+		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "login", "--timeout", value])
+		assert result.exit_code == 1, result.output
+		assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"
+
+	assert constructed == []
+
 
 def test_ai_config_invalid_values_are_not_persisted(tmp_path):
 	"""`ai config --max-tokens -1` / `--temperature -0.5` 原先会被写进本机配置。
