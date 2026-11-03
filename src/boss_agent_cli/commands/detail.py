@@ -89,6 +89,9 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 			ctx, "detail",
 			code="JOB_NOT_FOUND",
 			message="职位不存在或已下架",
+			# 职位没了不等于线索断了：Agent 要能直接换关键词重搜，而不是停在
+			# 「下架」上（与 show 的同类提示保持一致）。
+			hints={"next_actions": [boss_command_for_ctx(ctx, "search <关键词>"), boss_command_for_ctx(ctx, "recommend")]},
 		)
 		return
 

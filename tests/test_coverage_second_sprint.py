@@ -98,6 +98,9 @@ def test_show_job_card_empty_returns_not_found(mock_get_job, mock_auth_cls, mock
 	result = runner.invoke(cli, ["--json", "show", "1"])
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "JOB_NOT_FOUND"
+	# 「下架」不是死胡同：恢复指引与下一步必须能直接换线索。
+	assert parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == ["boss search <关键词>", "boss recommend"]
 
 
 # ── mark 错误分支和 _resolve_label ───────────────────────

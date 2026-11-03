@@ -142,7 +142,9 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 	"JOB_NOT_FOUND": {
 		"message": "职位不存在或已下架",
 		"recoverable": False,
-		"recovery_action": None,
+		# 平台职位不存在是确定性结果，但 Agent 仍需一条换线索的路径；
+		# 留 null 会让错误信封变成「下架」的死胡同。
+		"recovery_action": "该职位已不可用：用 boss search <关键词> 重新搜索，或 boss recommend 查看推荐职位",
 	},
 	"CONTACT_NOT_FOUND": {
 		"message": "沟通列表中未找到该联系人",
