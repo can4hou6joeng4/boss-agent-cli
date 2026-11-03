@@ -239,7 +239,13 @@ class BossCliGroup(click.Group):
 			if not standalone_mode:
 				raise
 			ctx = getattr(exc, "ctx", None)
-			command = _top_level_command_name(ctx, self.name or "boss")
+			if ctx is not None:
+				command = _top_level_command_name(ctx, self.name or "boss")
+			else:
+				# 选项缺取值时 Click 在 parser 层直接抛 UsageError，异常上不挂
+				# ctx（缺位置参数 / 未知选项都会挂）：一律退回 argv，否则
+				# `boss search --city` 会被报成 command: "boss"。
+				command = _invoked_command_name(args, self.name or "boss")
 			message = _click_error_message(exc)
 			recovery_action = "修正参数"
 			hints = None

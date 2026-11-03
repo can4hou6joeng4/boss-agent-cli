@@ -41,6 +41,11 @@ def _assert_single_stdout_json_error(result: Result, *, command: str, code: str 
 		# 子命令的用法错误归到最外层命令上，与同一命令成功信封的 command 一致
 		(("config", "get"), "config", "KEY"),
 		(("shortlist", "add"), "shortlist", "SECURITY_ID"),
+		# 选项缺取值时 Click 在 parser 层报错、不挂 ctx：仍要落在对应子命令上
+		(("search", "--city"), "search", "--city"),
+		(("wizard", "--resume"), "wizard", "--resume"),
+		(("crawl", "start", "--city"), "crawl", "--city"),
+		(("--data-dir",), "boss", "--data-dir"),
 	],
 )
 def test_agent_facing_usage_errors_emit_stdout_json_envelope(tmp_path, args, command, message_fragment):
