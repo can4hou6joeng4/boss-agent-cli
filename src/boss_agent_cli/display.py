@@ -22,6 +22,18 @@ from boss_agent_cli.schema.error_codes import ERROR_CODES
 console = Console(stderr=True)
 
 
+def shell_argument(value: str) -> str:
+	"""Quote *value* so it survives being copied into a runnable hint verbatim.
+
+	只按空白判断：shlex.quote 用 ASCII 安全字符集，会把中文名也包上引号。
+	带空格 / 制表符 / 换行的名字（简历名、watch 名、预设名都是自由文本）不转义
+	就会在 ``next_actions`` 里被拆成多个参数，Agent 照抄只会换回参数错误。
+	"""
+	if not any(ch.isspace() for ch in value):
+		return value
+	return "'" + value.replace("'", "'\\''") + "'"
+
+
 def boss_command_for_ctx(ctx: Any, command: str) -> str:
 	"""Return a platform-aware boss subcommand."""
 	platform_name = "zhipin"

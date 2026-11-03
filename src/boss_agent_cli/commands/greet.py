@@ -28,6 +28,7 @@ from boss_agent_cli.display import (
 	render_message_panel,
 	risk_error_contract,
 	risk_error_message,
+	shell_argument,
 )
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
@@ -155,13 +156,6 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 			)
 
 
-def _shell_argument(value: str) -> str:
-	# 不用 shlex.join：它按 ASCII 安全字符集判断，会把中文城市名也包成引号。
-	if not any(ch.isspace() for ch in value):
-		return value
-	return "'" + value.replace("'", "'\\''") + "'"
-
-
 def _batch_greet_dry_run_rerun(ctx: click.Context, query: str) -> str:
 	"""dry-run 之后真正要执行的那条命令：与本次调用同参数，只去掉 --dry-run。"""
 	params = ctx.params or {}
@@ -182,7 +176,7 @@ def _batch_greet_dry_run_rerun(ctx: click.Context, query: str) -> str:
 	count = params.get("count")
 	if count is not None:
 		argv.extend(["--count", str(count)])
-	return " ".join(_shell_argument(part) for part in argv)
+	return " ".join(shell_argument(part) for part in argv)
 
 
 @click.command("batch-greet")

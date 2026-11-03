@@ -1,4 +1,5 @@
 import json
+import shlex
 import sqlite3
 from unittest.mock import patch
 
@@ -286,3 +287,17 @@ def test_preset_list_json_hints_follow_the_actual_list(tmp_path):
 	filled = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "list"]).output)
 	assert [item["name"] for item in filled["data"]] == ["golang"]
 	assert filled["hints"]["next_actions"] == ["boss search --preset <name>", "boss preset remove <name>"]
+
+
+def test_preset_hint_quotes_name_with_spaces(tmp_path):
+	"""预设名是自由文本：带空格时 hint 必须整体加引号，Agent 照抄才不会拆成两个参数。"""
+	runner = CliRunner()
+	added = runner.invoke(
+		cli, ["--data-dir", str(tmp_path), "--json", "preset", "add", "我的 列表", "golang"]
+	)
+	assert added.exit_code == 0, added.output
+	parsed = json.loads(added.output)
+	assert "boss search --preset '我的 列表'" in parsed["hints"]["next_actions"]
+
+	hint = next(a for a in parsed["hints"]["next_actions"] if a.startswith("boss search"))
+	assert shlex.split(hint)[1:] == ["search", "--preset", "我的 列表"]

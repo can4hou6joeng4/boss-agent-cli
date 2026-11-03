@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `hints.next_actions` 里的用户输入没有 shell 转义：简历名 / 预设名 / watch 名都是自由文本，`boss resume init --name "我的 简历"` 之后的提示是 `boss resume show 我的 简历`，Agent 照抄会把一个名字拆成两个参数换回 `INVALID_PARAM`；`boss ai` 系命令的 `resume_name`、`digest` / `stats` / `resume export` 的 `open <文件路径>` 同样受影响（路径里有空格时打不开）。现在新增 `display.shell_argument()`（只按空白判断，中文名不加引号），所有插入用户输入的 hint 与 TTY `next_steps` 统一走它；`greet` 原有的私有实现改为复用同一函数。
 - `boss search " "` 与 `boss export " "` 把纯空白的关键词当成合法输入：只有空字符串会被「未提供 query」拦下，`strip()` 后为空的一串空格照样进入一次没有关键词的搜索 / 导出——既消耗请求预算（`export` 还会翻页抓取），也把账号放在更宽的风控面里，`boss crawl start ""` 早已拒绝同类输入。现在两个命令在解析 preset / `--url` 之前把纯空白 query 归一成空值，按 `INVALID_PARAM` 返回。
 - `boss shortlist remove "" ""` 把空标识当成「候选池里没有」静默成功：返回 `ok: true` 与 `removed: false`，Agent 只看 `ok` 会以为已经删除；同一组里的 `shortlist add "" ""` 早已按 `INVALID_PARAM` 拒绝空值；`shortlist annotate "" ""` 更把空标识说成 `SHORTLIST_ENTRY_NOT_FOUND`「候选池中没有该职位:  / 」，让 argv 少传参数看起来像条目不存在。现在两者在打开缓存之前按 `strip()` 判空，返回 `INVALID_PARAM`「security_id 与 job_id 不能为空」。
 - `boss apply "" <job_id>` 不校验空参数：投递是写操作，空 `security_id` / `job_id` 既不可能命中职位，又会带着空参数真的发起一次投递请求，失败后看起来像登录过期或职位失效，真正的原因（argv 拼错）被掩盖。`greet` / `detail` / `mark` 等命令都已拒绝空标识，`apply` 补齐同一类校验——在查本地已投递记录和调用平台之前返回 `INVALID_PARAM`，`hints.next_actions` 指向 `boss search <关键词>`。

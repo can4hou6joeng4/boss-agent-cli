@@ -19,6 +19,7 @@ from boss_agent_cli.display import (
 	handle_platform_error_output,
 	login_action_for_ctx,
 	risk_error_message,
+	shell_argument,
 )
 
 
@@ -1110,3 +1111,11 @@ def test_search_pipeline_progress_markers_contract():
 	assert "✅ {company} - {title}（详情匹配）" in content
 	assert "❌ {company} - {title}" in content
 	assert "预筛排除:" in content
+
+
+def test_shell_argument_quotes_only_when_needed():
+	"""提示里的用户输入带空白时才加引号，中文名不加。"""
+	assert shell_argument("我的简历") == "我的简历"
+	assert shell_argument("我的 简历") == "'我的 简历'"
+	assert shell_argument("its'fine") == "its'fine"
+	assert shell_argument("it's mind") == "'it'\\''s mind'"
