@@ -134,7 +134,7 @@ def test_find_friend_by_security_id_prefers_result_over_friend_list_when_both_ex
 def test_find_friend_matches_by_uid_when_security_id_rotates():
 	"""回归：securityId 每次请求都不同，按 uid 匹配必须仍然命中。
 
-	这是 chatmsg 报 JOB_NOT_FOUND 的根因场景——调用方拿到的 security_id
+	这是 chatmsg 报 CONTACT_NOT_FOUND 的根因场景——调用方拿到的 security_id
 	与本次 friend_list 返回的值必然不同，只有 uid 能稳定关联。
 	"""
 	platform, calls = _platform_from_pages([

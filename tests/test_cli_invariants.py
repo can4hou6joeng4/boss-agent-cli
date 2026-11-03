@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -242,3 +243,28 @@ def test_next_actions_hold_executable_commands_only() -> None:
 		if " — " in text or text.startswith("使用 ") or (text.startswith("boss ") and " 或 " in text)
 	]
 	assert offenders == []
+
+
+def test_local_record_lookups_do_not_report_job_not_found() -> None:
+	"""本地 / 会话侧记录缺失有自己的错误码，``JOB_NOT_FOUND`` 只表示平台职位不存在。
+
+	crawl run、preset / watch、联系人、workflow run 都不是职位：报成
+	``JOB_NOT_FOUND``（登记表文案「职位不存在或已下架」、recovery_action 为 null）
+	会让 Agent 以为职位下架而跳过，而且拿不到任何下一步。
+	"""
+	root = Path(__file__).resolve().parents[1] / "src" / "boss_agent_cli"
+	local_lookup_files = (
+		"commands/search.py",
+		"commands/watch.py",
+		"commands/crawl.py",
+		"commands/agent.py",
+		"commands/_contact_lookup.py",
+		"commands/wizard.py",
+		"wizard/actions.py",
+	)
+	offenders = [
+		name
+		for name in local_lookup_files
+		if '"JOB_NOT_FOUND"' in (root / name).read_text(encoding="utf-8")
+	]
+	assert offenders == [], f"本地记录查找仍复用 JOB_NOT_FOUND：{offenders}"

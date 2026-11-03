@@ -324,7 +324,10 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 			return
 
 		if summary is None:
-			handle_error_output(ctx, "watch", code="JOB_NOT_FOUND", message=f"未找到 watch: {name}")
+			handle_error_output(
+				ctx, "watch", code="SAVED_SEARCH_NOT_FOUND", message=f"未找到 watch: {name}",
+				hints={"next_actions": ["boss watch list", f"boss watch add {name} <关键词>"]},
+			)
 			return
 
 		handle_output(

@@ -301,12 +301,12 @@ def _all_run_ids(tmp_path: Path) -> list[str]:
 # ── resume ────────────────────────────────────────────────────────────
 
 
-def test_resume_background_reports_job_not_found(tmp_path):
+def test_resume_background_reports_run_not_found(tmp_path):
 	runner = CliRunner()
 	_enable_research(runner, tmp_path)
 	result = _invoke(runner, tmp_path, "crawl", "resume", "missing", "--background")
 	assert result.exit_code == 1
-	assert _envelope(result)["error"]["code"] == "JOB_NOT_FOUND"
+	assert _envelope(result)["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
 
 
 def test_resume_background_relaunches_stopped_run(tmp_path, monkeypatch):
@@ -401,10 +401,10 @@ def test_status_returns_checkpoint_and_detail_progress(tmp_path):
 	assert data["status"] == "completed"
 
 
-def test_status_reports_job_not_found(tmp_path):
+def test_status_reports_run_not_found(tmp_path):
 	result = _invoke(CliRunner(), tmp_path, "crawl", "status", "missing")
 	assert result.exit_code == 1
-	assert _envelope(result)["error"]["code"] == "JOB_NOT_FOUND"
+	assert _envelope(result)["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
 
 
 def test_status_risk_stopped_reports_operator_unlock(tmp_path):
@@ -429,10 +429,10 @@ def test_status_completed_has_no_unlock_flag(tmp_path):
 	assert "hints" not in payload or "operator_actions" not in (payload.get("hints") or {})
 
 
-def test_stop_reports_job_not_found(tmp_path):
+def test_stop_reports_run_not_found(tmp_path):
 	result = _invoke(CliRunner(), tmp_path, "crawl", "stop", "missing")
 	assert result.exit_code == 1
-	assert _envelope(result)["error"]["code"] == "JOB_NOT_FOUND"
+	assert _envelope(result)["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
 
 
 def test_stop_records_the_kill_switch(tmp_path):
@@ -471,10 +471,10 @@ def test_results_never_leaks_platform_identifiers(tmp_path):
 	assert "job-0" not in raw, "平台职位 ID 不得出现在 crawl results 输出里"
 
 
-def test_results_reports_job_not_found(tmp_path):
+def test_results_reports_run_not_found(tmp_path):
 	result = _invoke(CliRunner(), tmp_path, "crawl", "results", "missing")
 	assert result.exit_code == 1
-	assert _envelope(result)["error"]["code"] == "JOB_NOT_FOUND"
+	assert _envelope(result)["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
 
 
 # ── shortlist ─────────────────────────────────────────────────────────
@@ -512,10 +512,10 @@ def test_shortlist_rejects_unknown_selector(tmp_path):
 	assert _envelope(result)["error"]["code"] == "INVALID_PARAM"
 
 
-def test_shortlist_reports_job_not_found(tmp_path):
+def test_shortlist_reports_run_not_found(tmp_path):
 	result = _invoke(CliRunner(), tmp_path, "crawl", "shortlist", "missing", "--all")
 	assert result.exit_code == 1
-	assert _envelope(result)["error"]["code"] == "JOB_NOT_FOUND"
+	assert _envelope(result)["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
 
 
 # ── 后台拉起的命令拼装 ────────────────────────────────────────────────
@@ -562,7 +562,7 @@ def test_background_resume_omits_optional_flags_when_not_requested(tmp_path, mon
 # ── _run_service 的错误映射 ───────────────────────────────────────────
 
 
-def test_resume_maps_missing_run_to_job_not_found(tmp_path, monkeypatch):
+def test_resume_maps_missing_run_to_run_not_found(tmp_path, monkeypatch):
 	from boss_agent_cli.commands import crawl as crawl_module
 
 	def _missing(self, run_id, **kwargs):
@@ -574,7 +574,7 @@ def test_resume_maps_missing_run_to_job_not_found(tmp_path, monkeypatch):
 	result = _invoke(runner, tmp_path, "crawl", "resume", "run-missing")
 	assert result.exit_code == 1
 	error = _envelope(result)["error"]
-	assert error["code"] == "JOB_NOT_FOUND"
+	assert error["code"] == "CRAWL_RUN_NOT_FOUND"
 	assert "run-missing" in error["message"]
 
 
@@ -722,3 +722,14 @@ def test_structurally_drifted_hook_results_reports_envelope(tmp_path):
 	result = _invoke(CliRunner(), tmp_path, "crawl", "status", "run-1")
 	assert result.exit_code == 1, result.output
 	assert "JSON array" in _envelope(result)["error"]["message"]
+
+
+def test_run_not_found_carries_recovery_and_hints(tmp_path):
+	"""run_id 写错时给出新建与核对两条可执行下一步，而不是「职位不存在」。"""
+	result = _invoke(CliRunner(), tmp_path, "crawl", "status", "missing")
+
+	assert result.exit_code == 1
+	payload = _envelope(result)
+	assert payload["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
+	assert payload["error"]["recovery_action"]
+	assert payload["hints"]["next_actions"] == ["boss crawl start <query>", "boss crawl status <run_id>"]

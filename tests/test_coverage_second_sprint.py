@@ -116,7 +116,7 @@ def test_mark_security_id_not_found_in_friend_list(mock_auth_cls, mock_client_cl
 	runner = CliRunner()
 	result = runner.invoke(cli, ["--json", "mark", "ghost", "--label", "收藏"])
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "JOB_NOT_FOUND"
+	assert parsed["error"]["code"] == "CONTACT_NOT_FOUND"
 
 
 # ── me 异常分支 ──────────────────────────────────────────

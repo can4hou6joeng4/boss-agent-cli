@@ -41,7 +41,7 @@ def resolve_friend_or_emit(
 
 	封装 mark/exchange/chatmsg/chat-summary 共用的「解析 + 错误处理」样板：
 	NotImplementedError→NOT_SUPPORTED、FriendLookupLimitExceeded→NETWORK_ERROR、
-	平台失败→按错误码、未找到→JOB_NOT_FOUND。成功返回 friend_item；否则输出错误信封
+	平台失败→按错误码、未找到→CONTACT_NOT_FOUND。成功返回 friend_item；否则输出错误信封
 	并返回 None（调用方应立即 return）。
 
 	注意：调用方**不要**把 identifier 直接当作 securityId 传给平台 API——
@@ -72,8 +72,9 @@ def resolve_friend_or_emit(
 		handle_error_output(
 			ctx,
 			command,
-			code="JOB_NOT_FOUND",
+			code="CONTACT_NOT_FOUND",
 			message=not_found_message or f"未在沟通列表中找到联系人 {identifier}",
+			hints={"next_actions": ["boss chat"]},
 		)
 		return None
 	return friend_item

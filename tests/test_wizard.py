@@ -2745,7 +2745,11 @@ def test_wizard_status_and_stop_use_explicit_run_id(tmp_path):
 		],
 	)
 	assert stop.exit_code == 1
-	assert json.loads(stop.stdout)["error"]["code"] == "JOB_NOT_FOUND"
+	envelope = json.loads(stop.stdout)
+	assert envelope["error"]["code"] == "WORKFLOW_NOT_FOUND"
+	# 任务记录缺失是本地状态问题：Agent 需要一条能直接执行的重建入口。
+	assert envelope["error"]["recovery_action"]
+	assert envelope["hints"]["next_actions"] == ["boss wizard"]
 
 
 # ── 未登录 = waiting_input（不是 failed，也不阻塞）─────────────

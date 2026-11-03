@@ -282,6 +282,10 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `WIZARD_INPUT_REQUIRED` | A headless workflow lacks role/platform/goal/inputs | Complete `--input-json` from the `boss schema` catalog |
 | `WORKFLOW_TIMEOUT` | The workflow exceeded its explicit timeout | Retain `run_id`, adjust timeout, and run `boss wizard --resume <run_id>` |
 | `WORKFLOW_PLAN_MISMATCH` | An existing `run_id` is bound to a different plan | Resume with the original plan or omit `run_id` to create a new run |
+| `WORKFLOW_NOT_FOUND` | The local workflow run does not exist or the `run_id` is wrong (`boss wizard --status` / `--stop` / `--resume`) | Run `boss wizard` to create a new run, or check the ID with `boss wizard --status <run_id>` |
+| `CRAWL_RUN_NOT_FOUND` | The local crawl run does not exist or the `run_id` is wrong (`boss crawl status` / `resume` / `results`, etc.) | Run `boss crawl start <query>` to create a new run, or check with `boss crawl status <run_id>` using the real ID |
+| `CONTACT_NOT_FOUND` | The contact is not in the chat list: the `security_id` may have rotated, or they are no longer listed | Run `boss chat` to inspect conversations; retry with the uid if you have it |
+| `SAVED_SEARCH_NOT_FOUND` | A local preset / watch does not exist: `boss search --preset` / `boss watch run` referenced a name that was never saved | List existing entries with `boss preset list` / `boss watch list`, then recreate with `boss preset add` / `boss watch add` if needed |
 | `JOB_NOT_FOUND` | Job removed or invalid | Skip |
 | `ALREADY_GREETED` | Already messaged recruiter | Skip |
 | `CONFIRMATION_REQUIRED` | Operation target and content not approved | Preview with `hr greet --dry-run` or `hr accept-resume <friend_id> --message-id <mid> --dry-run`; set `--yes` only after explicit operator approval. Agents must not infer approval. |

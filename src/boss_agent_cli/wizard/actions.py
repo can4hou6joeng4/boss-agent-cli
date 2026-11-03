@@ -558,7 +558,7 @@ def _candidate_friend(platform: Any, identifier: str) -> dict[str, Any]:
 		_unwrap(platform, error_response, "沟通列表获取失败")
 	if friend is not None:
 		return friend
-	raise WorkflowActionError("JOB_NOT_FOUND", f"沟通列表中未找到联系人: {identifier}")
+	raise WorkflowActionError("CONTACT_NOT_FOUND", f"沟通列表中未找到联系人: {identifier}")
 
 
 def _candidate_current_security_id(friend: Mapping[str, Any]) -> str:
@@ -810,7 +810,7 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 				recovery_action=f"boss watch remove {name} 后重新 watch add {name} <关键词>",
 			) from exc
 		if record is None:
-			raise WorkflowActionError("JOB_NOT_FOUND", f"未找到 watch: {name}")
+			raise WorkflowActionError("SAVED_SEARCH_NOT_FOUND", f"未找到 watch: {name}")
 		account = account_scope(context.auth())
 		with context.candidate_platform() as platform:
 			result = execute_candidate_search(platform, cache, context.logger, {**record["params"], "account": account})
@@ -1031,7 +1031,7 @@ def _crawl_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 			data = crawl_status(cache, run_id)
 			data = _attach_wizard_jobs(data, cache, run_id)
 		except KeyError as exc:
-			raise WorkflowActionError("JOB_NOT_FOUND", str(exc)) from exc
+			raise WorkflowActionError("CRAWL_RUN_NOT_FOUND", str(exc)) from exc
 	return StepResult(data)
 
 
@@ -1048,7 +1048,7 @@ def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 				clear_stop=True,
 			)
 		except KeyError as exc:
-			raise WorkflowActionError("JOB_NOT_FOUND", f"未找到 crawl run: {run_id}") from exc
+			raise WorkflowActionError("CRAWL_RUN_NOT_FOUND", f"未找到 crawl run: {run_id}") from exc
 		return _crawl_outcome_result(outcome, cache)
 
 
@@ -1056,7 +1056,7 @@ def _crawl_stop(context: ActionContext, inputs: Mapping[str, Any], prior: Mappin
 	run_id = str(_required(inputs, "run_id"))
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		if not cache.request_crawl_stop(run_id):
-			raise WorkflowActionError("JOB_NOT_FOUND", f"未找到 crawl run: {run_id}")
+			raise WorkflowActionError("CRAWL_RUN_NOT_FOUND", f"未找到 crawl run: {run_id}")
 	return StepResult({"run_id": run_id, "status": "stop_requested"})
 
 
