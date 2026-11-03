@@ -219,6 +219,29 @@ def test_invalid_path_value_is_reported_in_chinese(tmp_path):
 		assert parsed["hints"]["next_actions"] == ["boss ai local import --help"]
 
 
+def test_unopenable_file_error_is_reported_in_chinese(tmp_path):
+	"""``click.File`` 打不开文件时透出的是 OSError 的英文 strerror。
+
+	``boss login --curl-file ""`` 原来回 ``Invalid value for '--curl-file': '':
+	No such file or directory``，``--curl-file <目录>`` 回 ``'/tmp': Is a
+	directory``：错误码正确，但正文英文、``hints`` 为 null，Agent 读不出该改什么。
+	"""
+	runner = CliRunner()
+	missing = tmp_path / "missing.txt"
+	for value, expected in (
+		("", "boss login 的 --curl-file 的值不能为空"),
+		(str(missing), f"boss login 的 --curl-file 无效：路径 '{missing}' 不存在"),
+		(str(tmp_path), f"boss login 的 --curl-file 无效：路径 '{tmp_path}' 是目录，但这里需要文件"),
+	):
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "login", "--curl-file", value])
+		parsed = _assert_single_stdout_json_error(result, command="login")
+		message = parsed["error"]["message"]
+		assert "Invalid value for" not in message
+		assert message == expected
+		assert parsed["error"]["recovery_action"] == "用 boss login --help 查看参数说明"
+		assert parsed["hints"]["next_actions"] == ["boss login --help"]
+
+
 def test_agent_run_requires_login_returns_envelope_not_traceback(tmp_path):
 	"""未登录的 `agent run` 必须返回 AUTH_REQUIRED 信封，而不是 traceback。
 

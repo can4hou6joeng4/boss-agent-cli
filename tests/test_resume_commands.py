@@ -456,6 +456,21 @@ def test_import_rejects_directory_path(tmp_path):
 	assert "是目录" in parsed["error"]["message"]
 
 
+def test_import_missing_file_points_at_import_flow(tmp_path):
+	"""不存在的文件要和空路径、目录两条分支一样给出可执行的下一步。
+
+	原来这条分支只回「文件 '…' 不存在」，``recovery_action`` 是笼统的「修正参数」、
+	``hints`` 为 null，Agent 不知道是该重新导出还是换个路径。
+	"""
+	result = _invoke(CliRunner(), tmp_path, ["import", str(tmp_path / "missing.json")])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "INVALID_PARAM")
+	assert "不存在" in parsed["error"]["message"]
+	assert parsed["error"]["recovery_action"] == "boss resume import <简历JSON路径>"
+	assert parsed["hints"]["next_actions"] == ["boss resume import <file>", "boss resume list"]
+
+
 def test_import_non_utf8_file_returns_invalid_param(tmp_path):
 	"""GBK 保存的 JSON、误选的 PDF/图片都会读成非 UTF-8：要给信封和转码指引，而不是 traceback。"""
 	bad_file = tmp_path / "gbk.json"

@@ -404,6 +404,8 @@ def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 			ctx, "resume",
 			code="INVALID_PARAM",
 			message=f"文件 '{file_path}' 不存在",
+			recovery_action="boss resume import <简历JSON路径>",
+			hints={"next_actions": ["boss resume import <file>", "boss resume list"]},
 		)
 		ctx.exit(1)
 		return
