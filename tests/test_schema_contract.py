@@ -102,6 +102,37 @@ def test_schema_commands_have_descriptions():
 	)
 
 
+def test_schema_options_and_args_have_descriptions():
+	"""schema 声明的每个选项与位置参数都必须有非空 description。
+
+	`crawl results --detail-status` 曾只声明 enum 不写说明：Agent 能从 schema
+	枚举出 completed / pending 两个取值，却不知道它们分别指详情已抓取与待抓取。
+	"""
+	missing: list[str] = []
+
+	def walk(path: str, spec: Any) -> None:
+		if not isinstance(spec, dict):
+			return
+		for key, value in spec.items():
+			if str(key).startswith("-") and isinstance(value, dict):
+				if not str(value.get("description") or "").strip():
+					missing.append(f"{path} {key}")
+				continue
+			if key == "args" and isinstance(value, list):
+				for entry in value:
+					if isinstance(entry, dict) and not str(entry.get("description") or "").strip():
+						missing.append(f"{path} <{entry.get('name')}>")
+				continue
+			if key in ("description", "subcommands"):
+				continue
+			walk(f"{path}.{key}", value)
+
+	for name, spec in SCHEMA_DATA["commands"].items():
+		walk(name, spec)
+
+	assert not missing, "以下选项/参数缺少 description: " + ", ".join(missing)
+
+
 def _iter_schema_subcommands(entries: dict[str, Any], prefix: str):
 	"""遍历 schema options 里的子命令条目，返回 ``(路径, 条目)``。
 
