@@ -114,10 +114,14 @@ def collect_favorites_items(
 		if not page_items:
 			break
 
-		signature = tuple(str(item.get("encryptJobId", "")) for item in page_items if isinstance(item, dict))
-		if signature in seen_signatures:
-			break
-		seen_signatures.add(signature)
+		identities = [str(item.get("encryptJobId") or "") for item in page_items if isinstance(item, dict)]
+		# 卡片缺少 encryptJobId 时签名恒为空，无法判断是否重复页；此时继续聚合，
+		# 避免把缺字段的新页面当成重复页丢掉（终止交给 hasMore / max_pages）。
+		if any(identities):
+			signature = tuple(identities)
+			if signature in seen_signatures:
+				break
+			seen_signatures.add(signature)
 		items.extend(page_items)
 
 		if platform_data.get("hasMore") is False:

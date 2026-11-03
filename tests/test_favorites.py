@@ -384,6 +384,27 @@ def test_favorites_sync_null_identifiers_are_skipped(mock_auth_cls, mock_platfor
 	assert _shortlist_items(tmp_path) == []
 
 
+def test_collect_favorites_keeps_second_page_when_cards_lack_encrypt_job_id():
+	"""卡片刻意缺少 encryptJobId 时签名恒为空，不能把第二页当成重复页丢掉。"""
+	from unittest.mock import MagicMock
+
+	from boss_agent_cli.commands.favorites import collect_favorites_items
+
+	platform = MagicMock()
+	platform.is_success.return_value = True
+	platform.unwrap_data.side_effect = lambda response: response["zpData"]
+	platform.job_favorites.side_effect = [
+		{"code": 0, "zpData": {"cardList": [_make_card(jid="job_1", drop=("encryptJobId",))], "hasMore": True}},
+		{"code": 0, "zpData": {"cardList": [_make_card(jid="job_2", drop=("encryptJobId",))], "hasMore": False}},
+	]
+
+	items, error = collect_favorites_items(platform)
+
+	assert error is None
+	assert len(items) == 2
+	assert platform.job_favorites.call_count == 2
+
+
 def test_collect_favorites_rejects_incomplete_page_budget():
 	from unittest.mock import MagicMock
 
