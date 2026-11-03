@@ -883,6 +883,7 @@ SCHEMA_DATA = {
 				"--format": {
 					"type": "string",
 					"default": "json",
+					"enum": ["json", "md"],
 					"description": "输出格式（json 信封 / md 可直发邮件飞书）",
 				},
 				"-o, --output": {
@@ -947,6 +948,7 @@ SCHEMA_DATA = {
 				"--format": {
 					"type": "string",
 					"default": "json",
+					"enum": ["json", "html"],
 					"description": "输出格式：json（JSON 信封）或 html（自包含报表）",
 				},
 				"-o, --output": {
@@ -1426,8 +1428,8 @@ SCHEMA_DATA = {
 		},
 		"--delay": {
 			"type": "string",
-			"default": "1.5-3.0",
-			"description": "请求间隔范围（秒），如 1.5-3.0",
+			"default": "30-60",
+			"description": "请求间隔范围（秒），如 30-60",
 		},
 		"--log-level": {
 			"type": "string",

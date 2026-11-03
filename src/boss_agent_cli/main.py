@@ -261,7 +261,7 @@ class BossCliGroup(click.Group):
 )
 @click.version_option(version=__version__, prog_name="boss")
 @click.option("--data-dir", default="~/.boss-agent", help="数据存储目录")
-@click.option("--delay", default=None, help="请求间隔范围（秒），如 1.5-3.0")
+@click.option("--delay", default=None, help="请求间隔范围（秒），如 30-60")
 @click.option(
 	"--cdp-url", default=None, help="Chrome CDP 调试地址（如 http://localhost:9222），启用则优先用用户 Chrome"
 )
@@ -330,7 +330,7 @@ def cli(
 			validate_delay(ctx.obj["delay"])
 		except ValueError as exc:
 			raise click.BadParameter(
-				"必须是形如 1.5-3.0 的数值区间，且满足 0 <= 下限 <= 上限",
+				"必须是形如 30-60 的数值区间，且满足 0 <= 下限 <= 上限",
 				param_hint="--delay",
 			) from exc
 	else:
