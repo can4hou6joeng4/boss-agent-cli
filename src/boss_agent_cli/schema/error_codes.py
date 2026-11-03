@@ -159,6 +159,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": "boss preset list（预设）或 boss watch list（watch）",
 	},
+	"SHORTLIST_ENTRY_NOT_FOUND": {
+		"message": "候选池中没有该职位，无法标注",
+		"recoverable": False,
+		"recovery_action": "boss shortlist add <security_id> <job_id>（先加入候选池），或 boss shortlist list 核对已有条目",
+	},
 	"WORKFLOW_NOT_FOUND": {
 		"message": "本地 workflow 任务不存在或 run_id 有误",
 		"recoverable": False,
