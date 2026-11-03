@@ -225,3 +225,22 @@ def test_cli_export_not_found(tmp_path):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
+
+
+def test_cli_export_json_corrupt_resume_reports_not_found(tmp_path):
+	"""文件在但读不出来时不能报成 LOCAL_IO_ERROR：磁盘/权限指引会把人带偏。
+
+	`store.export_json` 内部的 `get()` 返回 None 后抛 `FileNotFoundError`，
+	顶层 OSError 网兜会把它说成「本地文件读写失败」；而其它子命令对同一份坏文件
+	一律返回 RESUME_NOT_FOUND。json 导出应与其一致。
+	"""
+	resumes = tmp_path / "resumes"
+	resumes.mkdir(parents=True)
+	(resumes / "broken.json").write_text("{", encoding="utf-8")
+
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["export", "broken", "--format", "json"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"

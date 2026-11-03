@@ -217,16 +217,16 @@ def resume_delete_cmd(ctx: click.Context, name: str) -> None:
 def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str | None) -> None:
 	"""导出简历"""
 	store = _get_store(ctx)
-	if not store.exists(name):
+	# 文件存在但读不出来（手写坏、字段类型写错）与「不存在」走同一个契约：
+	# 其它子命令都是这样。json 导出若交给 export_json 内部的 FileNotFoundError，
+	# 会被顶层 OSError 网兜报成 LOCAL_IO_ERROR「本地文件读写失败」，指引用户去查
+	# 磁盘与权限，而真正该做的是重建这份简历。
+	resume = store.get(name)
+	if resume is None:
 		handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
 		ctx.exit(1)
 		return
 	if fmt in ("pdf", "html"):
-		resume = store.get(name)
-		if resume is None:
-			handle_error_output(ctx, "resume", code="RESUME_NOT_FOUND", message=f"简历 '{name}' 不存在")
-			ctx.exit(1)
-			return
 		if output_path is None:
 			output_path = f"{name}.{fmt}"
 		out = prepare_output_path(output_path)
