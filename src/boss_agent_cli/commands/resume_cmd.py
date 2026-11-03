@@ -147,7 +147,10 @@ def resume_list_cmd(ctx: click.Context) -> None:
 			if not d
 			else ["boss resume show <name>", "boss resume init --template default"],
 		),
-		hints={"next_actions": ["boss resume show <name>", "boss resume init --template default"]},
+		# 空列表里没有简历名可 show：照抄只会换回 RESUME_NOT_FOUND。
+		hints={"next_actions": ["boss resume init --template default"]
+		if not items
+		else ["boss resume show <name>", "boss resume init --template default"]},
 	)
 
 
@@ -487,5 +490,8 @@ def resume_applications_cmd(ctx: click.Context, name: str) -> None:
 			[("职位", "job_title", "bold cyan"), ("公司", "company", "green"), ("状态", "status", "yellow"), ("更新", "updated_at", "dim")],
 			next_steps=[f"boss resume link {name} <security_id> <job_id>"] if not d else [f"boss resume show {name}"],
 		),
-		hints={"next_actions": [f"boss resume show {name}"]},
+		# 与 TTY 同一口径：没有关联职位时 show 只能看到简历本身，下一步是关联一个职位。
+		hints={"next_actions": [f"boss resume link {name} <security_id> <job_id>"]
+		if not items
+		else [f"boss resume show {name}"]},
 	)

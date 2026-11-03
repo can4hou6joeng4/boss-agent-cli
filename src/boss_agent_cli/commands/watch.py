@@ -162,6 +162,7 @@ def watch_remove_cmd(ctx: click.Context, name: str) -> None:
 		"watch",
 		{"action": "remove", "name": name, "removed": removed},
 		render=lambda d: render_action_result(d, title="watch", next_steps=["boss watch list"]),
+		hints={"next_actions": ["boss watch list"]},
 	)
 
 

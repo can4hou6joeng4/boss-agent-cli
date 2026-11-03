@@ -316,6 +316,7 @@ def configure_cmd(
 		"crawl.configure",
 		{"crawl": configured},
 		render=lambda d: render_record_result(d, title="crawl configure", next_steps=["boss crawl run <关键词> --city <城市>"]),
+		hints={"next_actions": ["boss crawl run <关键词> --city <城市>"]},
 	)
 
 
@@ -605,6 +606,7 @@ def stop_cmd(ctx: click.Context, run_id: str) -> None:
 		"crawl.stop",
 		{"run_id": run_id, "status": "stop_requested"},
 		render=lambda d: render_action_result(d, title="crawl stop", next_steps=[f"boss crawl status {run_id}"]),
+		hints={"next_actions": [f"boss crawl status {run_id}"]},
 	)
 
 
@@ -629,6 +631,7 @@ def results_cmd(ctx: click.Context, run_id: str, page: int | None, detail_status
 		"crawl.results",
 		payload,
 		render=lambda d: render_record_result(d, title="crawl results", next_steps=[f"boss crawl shortlist {run_id}"]),
+		hints={"next_actions": [f"boss crawl shortlist {run_id}"]},
 	)
 
 

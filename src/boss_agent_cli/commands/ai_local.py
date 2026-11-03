@@ -164,6 +164,7 @@ def local_pull_cmd(ctx: click.Context, model: str, confirm_download: bool) -> No
 		"ai.local.pull",
 		{"status": "installed", "model": model},
 		render=lambda d: render_action_result(d, title="ai local pull", next_steps=["boss ai local smoke"]),
+		hints={"next_actions": ["boss ai local smoke"]},
 	)
 
 
@@ -262,4 +263,5 @@ def local_smoke_cmd(ctx: click.Context) -> None:
 		"ai.local.smoke",
 		{"status": "ok", "model": str(model), "reply": reply[:200]},
 		render=lambda d: render_action_result(d, title="ai local smoke", next_steps=["boss ai analyze-jd <security_id>"]),
+		hints={"next_actions": ["boss ai analyze-jd <security_id>"]},
 	)
