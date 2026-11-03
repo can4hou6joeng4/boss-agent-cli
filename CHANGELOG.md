@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 招聘者侧三条沟通类路径成功时没有下一步：`boss hr greet` 发出招呼后 `hints` 为 `null`（Agent 不知道要回会话列表跟进），`boss hr last-messages` 在没有会话时只回一个空列表（分不清「没有会话」还是筛选太窄，也没有任何后继命令），`boss hr download-resume` 落盘后既不提示文件位置也没有下一步。现在 `greet` 给出 `boss hr chat` / `boss hr last-messages`，`last-messages` 空结果给出 `boss hr chat` 与真人指引，`download-resume` 给出 `boss hr chatmsg <friend_id>` 并在 `operator_actions` 里写明附件保存路径。
 - 招聘者侧 `boss hr jobs list` / `offline` / `online` / `detail` 成功时没有下一步：信封 `hints` 为 `null`，终端也不渲染任何内容（无 `render` 时退回打印 JSON）。Agent 把职位下线之后看不出可以核对列表或重新上线，看完详情也没有上下线与返回列表的入口。现在四条成功路径都带上可执行的后继命令（上下线互指、列表指向详情、详情指向上下线与列表），`offline` / `online` 在终端渲染结果面板并与信封同口径。
 - `display.shell_argument()` 只在有空白时加引号，漏掉其它会被 shell 解释的字符：简历 / 预设 / watch 名里出现落单单引号时（`boss resume init --name "it's"`），提示是 `boss resume show it's`——引号没闭合，照抄到终端直接语法错误；名字里带 `*`、`$HOME` 或以 `~` 开头时则会被 glob / 变量 / 家目录展开成完全不同的参数。现在空白与 shell 元字符（引号、`$`、`*?[]{}`、`|&;#<>` 等）以及开头的 `~` 统一按 POSIX 单引号转义，普通中文名与 `qwen3:14b` 这类名字的提示保持不变。
 - `shell_argument()` 仍有两条自由文本路径直接拼名字：`boss search --preset <名>` 的筛选项校验错误消息里写着 `boss preset remove 我的 列表`（预设名带空格时删不到正确的条目），wizard 的 `candidate_watch` 在本地 watch 参数损坏时 `recovery_action` 为 `boss watch remove 我的 监控 后重新 watch add 我的 监控 <关键词>`（Agent 照抄两个命令都会拆错名字）。现在两处统一走 `display.shell_argument()`，并把恢复指引写成两条完整命令。

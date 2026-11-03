@@ -522,7 +522,20 @@ def recruiter_last_messages_cmd(
 				handle_platform_error_output(ctx, "recruiter-last-messages", platform, error, fallback_message="沟通列表获取失败")
 				return
 		if not ids:
-			handle_output(ctx, "recruiter-last-messages", {"friend_ids": [], "messages": []})
+			# 空结果不能只回一个空列表：Agent 拿不到任何后继动作，也不知道
+			# 是「没有会话」还是「筛选条件太窄」。
+			handle_output(
+				ctx,
+				"recruiter-last-messages",
+				{"friend_ids": [], "messages": []},
+				hints={
+					"next_actions": [boss_command_for_ctx(ctx, "hr chat")],
+					"operator_actions": [
+						"没有可读取的候选人会话：先用 boss hr chat 查看沟通列表，"
+						"或用 boss hr candidates <关键词> 主动搜索候选人"
+					],
+				},
+			)
 			return
 
 		skipped = max(0, len(ids) - limit)

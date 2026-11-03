@@ -224,6 +224,22 @@ def test_recruiter_chatmsg_returns_history_envelope(mock_auth_cls, mock_platform
 
 @patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
+def test_recruiter_last_messages_empty_result_points_to_chat(mock_auth_cls, mock_platform_cls):
+	"""没有会话时不能只回空列表：Agent 需要一条可执行的后继命令。"""
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.friend_list.return_value = {"code": 200, "data": {"friendList": []}}
+
+	result = _invoke("hr", "last-messages")
+
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	assert parsed["data"] == {"friend_ids": [], "messages": []}
+	assert parsed["hints"]["next_actions"] == ["boss hr chat"]
+	assert parsed["hints"]["operator_actions"]
+
+
+@patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.chat.AuthManager")
 def test_recruiter_last_messages_returns_batch_summary(mock_auth_cls, mock_platform_cls):
 	mock_platform = _ctx_mock(mock_platform_cls)
 	mock_platform.friend_list.return_value = {

@@ -196,4 +196,12 @@ def greet_cmd(
 		except Exception:
 			_send_error(ctx, code="GREET_RESULT_UNKNOWN", job_id=job_id, details=data)
 			return
-		handle_output(ctx, "recruiter-greet", data)
+		# 招呼发出后 Agent 需要回到沟通列表跟进候选人：成功信封原先没有 hints，
+		# 终端也不渲染任何内容，整条链在「已发送」处断掉。
+		handle_output(
+			ctx, "recruiter-greet", data,
+			hints={"next_actions": [
+				boss_command_for_ctx(ctx, "hr chat"),
+				boss_command_for_ctx(ctx, "hr last-messages"),
+			]},
+		)

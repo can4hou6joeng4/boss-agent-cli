@@ -13,6 +13,7 @@ from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_i
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.display import (
+	boss_command_for_ctx,
 	error_contract_for_code,
 	handle_auth_errors,
 	handle_error_output,
@@ -134,4 +135,9 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 			ctx,
 			command,
 			{"friend_id": friend_id, "message_id": message_id, "downloaded": True, **platform.unwrap_data(result)},
+			# 附件落盘后没有下一步：Agent 只能自己猜文件在哪、也不会回到会话继续沟通。
+			hints={
+				"next_actions": [boss_command_for_ctx(ctx, f"hr chatmsg {friend_id}")],
+				"operator_actions": [f"附件已保存到 {output.resolve()}"],
+			},
 		)

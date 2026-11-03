@@ -355,7 +355,11 @@ def test_download_cli_returns_only_file_metadata(tmp_path):
 		platform.is_success.return_value = True
 		platform.unwrap_data.side_effect = lambda response: response["zpData"]
 		result = _invoke("download-resume", "123", "--message-id", "456", "--output", str(tmp_path / "resume.pdf"))
-		assert json.loads(result.output)["data"]["downloaded"] is True
+		payload = json.loads(result.output)
+		assert payload["data"]["downloaded"] is True
+		# 落盘之后要给可执行的后继命令，操作者也要看得出文件在哪。
+		assert payload["hints"]["next_actions"] == ["boss hr chatmsg 123"]
+		assert str((tmp_path / "resume.pdf").resolve()) in payload["hints"]["operator_actions"][0]
 		platform.download_resume_by_friend.assert_called_once_with(123, 456, tmp_path / "resume.pdf")
 
 

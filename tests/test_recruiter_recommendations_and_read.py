@@ -350,6 +350,16 @@ def greeting_platform():
 		yield platform
 
 
+def test_greet_success_points_back_to_the_conversation(greeting_args, greeting_platform):
+	"""招呼发出后要能回到会话跟进：成功信封原先 hints 为 null。"""
+	result = CliRunner().invoke(cli, greeting_args + ["--yes"])
+
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	assert parsed["data"]["sent"] is True
+	assert parsed["hints"]["next_actions"] == ["boss hr chat", "boss hr last-messages"]
+
+
 def test_rejected_greeting_preserves_safe_platform_diagnostics(greeting_args, greeting_platform):
 	greeting_platform.start_chat.return_value = {"code": 9, "message": "额度不足 cookie=private", "zpData": {"token": "secret"}}
 	result = CliRunner().invoke(cli, greeting_args + ["--yes"])
