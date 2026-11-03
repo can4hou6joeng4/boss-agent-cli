@@ -124,6 +124,26 @@ def test_shortlist_compare_filters_by_tag_locally(tmp_path):
 	]
 
 
+def test_shortlist_repeat_add_keeps_annotation_and_reports_stored_row(tmp_path):
+	"""重复 add 同一职位时保留本地标签/备注，响应回显真实存储值。
+
+	响应原先直接回显入参：再次 add 只给城市时，标签/备注字段是空字符串，Agent
+	会以为本地标注已被清空（旧实现确实会在库里清掉）。
+	"""
+	runner = CliRunner()
+	base = ["--data-dir", str(tmp_path), "--json"]
+	runner.invoke(cli, base + ["shortlist", "add", "sec_001", "job_001", "--title", "Go 开发"])
+	runner.invoke(cli, base + ["shortlist", "annotate", "sec_001", "job_001", "--add-tag", "重点", "--note", "等回复"])
+
+	result = runner.invoke(cli, base + ["shortlist", "add", "sec_001", "job_001", "--city", "广州"])
+	assert result.exit_code == 0, result.output
+	data = json.loads(result.output)["data"]
+	assert data["tags"] == ["重点"]
+	assert data["note"] == "等回复"
+	assert data["title"] == "Go 开发"
+	assert data["city"] == "广州"
+
+
 def test_shortlist_local_flows_do_not_construct_platform_clients(tmp_path):
 	runner = CliRunner()
 	with (

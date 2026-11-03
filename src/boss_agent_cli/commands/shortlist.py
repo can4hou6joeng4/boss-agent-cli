@@ -76,7 +76,7 @@ def shortlist_add_cmd(
 ) -> None:
 	parsed_tags = _parse_tags(tags)
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
-		cache.add_shortlist(
+		stored = cache.add_shortlist(
 			{
 				"security_id": security_id,
 				"job_id": job_id,
@@ -90,22 +90,12 @@ def shortlist_add_cmd(
 				"note": note,
 			}
 		)
+	# 回显存储后的行，而不是入参：重复加入同一职位时本地标签/备注会保留下来，
+	# 入参里没给这些字段（空字符串），直接回显会让 Agent 以为资料被清空了。
 	handle_output(
 		ctx,
 		"shortlist",
-		{
-			"action": "add",
-			"security_id": security_id,
-			"job_id": job_id,
-			"title": title,
-			"company": company,
-			"city": city,
-			"salary": salary,
-			"source": source,
-			"lid": lid,
-			"tags": parsed_tags,
-			"note": note,
-		},
+		{"action": "add", **stored},
 		hints={
 			"next_actions": [
 				boss_command_for_ctx(ctx, "shortlist list"),

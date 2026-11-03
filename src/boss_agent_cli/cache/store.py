@@ -1073,7 +1073,14 @@ class CacheStore:
 		).fetchone()
 		return row is not None
 
-	def add_shortlist(self, item: dict[str, Any]) -> None:
+	def add_shortlist(self, item: dict[str, Any]) -> dict[str, Any]:
+		"""加入候选池；同一主键重复加入只刷新本次给出的字段。
+
+		`INSERT OR REPLACE` 会把整行替换掉，连同用户后来在本地打的标签、备注和
+		首次加入时间一起清空。重新 `shortlist add` 同一职位（脚本重跑、换设备后
+		再导一次）就会静默丢掉这些本地数据。这里改成冲突时按字段更新：本次没给
+		空值的列保留原值，`created_at` 始终保留首次加入时间。
+		"""
 		security_id = str(item.get("security_id") or "")
 		job_id = str(item.get("job_id") or "")
 		source = str(item.get("source") or "")
@@ -1082,10 +1089,19 @@ class CacheStore:
 		if not lid:
 			lid = self._crawl_shortlist_lid(security_id, job_id, source)
 		self._conn.execute(
-			"INSERT OR REPLACE INTO shortlist_records "
+			"INSERT INTO shortlist_records "
 			"(security_id, job_id, title, company, city, salary, source, tags, note, lid, created_at) "
 			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "
-			"COALESCE(NULLIF(?, ''), (SELECT lid FROM shortlist_records WHERE security_id = ? AND job_id = ?), ''), ?)",
+			"COALESCE(NULLIF(?, ''), (SELECT lid FROM shortlist_records WHERE security_id = ? AND job_id = ?), ''), ?) "
+			"ON CONFLICT(security_id, job_id) DO UPDATE SET "
+			"title = COALESCE(NULLIF(excluded.title, ''), shortlist_records.title), "
+			"company = COALESCE(NULLIF(excluded.company, ''), shortlist_records.company), "
+			"city = COALESCE(NULLIF(excluded.city, ''), shortlist_records.city), "
+			"salary = COALESCE(NULLIF(excluded.salary, ''), shortlist_records.salary), "
+			"source = COALESCE(NULLIF(excluded.source, ''), shortlist_records.source), "
+			"tags = COALESCE(NULLIF(excluded.tags, ''), shortlist_records.tags), "
+			"note = COALESCE(NULLIF(excluded.note, ''), shortlist_records.note), "
+			"lid = excluded.lid",
 			(
 				security_id,
 				job_id,
@@ -1103,6 +1119,19 @@ class CacheStore:
 			),
 		)
 		self._conn.commit()
+		stored = self.get_shortlist_item(security_id, job_id)
+		return stored if stored is not None else {}
+
+	def get_shortlist_item(self, security_id: str, job_id: str) -> dict[str, Any] | None:
+		"""按主键读取一条候选池记录，字段形状与 `list_shortlist` 一致。"""
+		row = self._conn.execute(
+			"SELECT security_id, job_id, title, company, city, salary, source, tags, note, created_at, lid "
+			"FROM shortlist_records WHERE security_id = ? AND job_id = ?",
+			(security_id, job_id),
+		).fetchone()
+		if row is None:
+			return None
+		return self._shortlist_row_to_dict(row)
 
 	def add_shortlist_batch(self, items: list[dict[str, Any]], source: str = "favorites") -> dict[str, int]:
 		"""批量导入候选池：按 job_id 去重，刷新 favorites 访问 ID，缺主键则跳过。
@@ -1184,22 +1213,22 @@ class CacheStore:
 			"SELECT security_id, job_id, title, company, city, salary, source, tags, note, created_at, lid "
 			"FROM shortlist_records ORDER BY created_at DESC"
 		).fetchall()
-		return [
-			{
-				"security_id": row[0],
-				"job_id": row[1],
-				"title": row[2],
-				"company": row[3],
-				"city": row[4],
-				"salary": row[5],
-				"source": row[6],
-				"tags": self._deserialize_shortlist_tags(row[7]),
-				"note": row[8] or "",
-				"created_at": row[9],
-				"lid": row[10] or self._crawl_shortlist_lid(str(row[0] or ""), str(row[1] or ""), str(row[6] or "")),
-			}
-			for row in rows
-		]
+		return [self._shortlist_row_to_dict(row) for row in rows]
+
+	def _shortlist_row_to_dict(self, row: Any) -> dict[str, Any]:
+		return {
+			"security_id": row[0],
+			"job_id": row[1],
+			"title": row[2],
+			"company": row[3],
+			"city": row[4],
+			"salary": row[5],
+			"source": row[6],
+			"tags": self._deserialize_shortlist_tags(row[7]),
+			"note": row[8] or "",
+			"created_at": row[9],
+			"lid": row[10] or self._crawl_shortlist_lid(str(row[0] or ""), str(row[1] or ""), str(row[6] or "")),
+		}
 
 	def _crawl_shortlist_lid(self, security_id: str, job_id: str, source: str) -> str:
 		"""复用同一 crawl 记录的上下文；不推断其他来源的 lid。"""

@@ -197,6 +197,37 @@ def test_shortlist_add_and_list(store):
 	assert result[0]["note"] == "复盘薪资结构"
 
 
+def test_shortlist_repeat_add_preserves_local_annotations(store):
+	"""重复加入同一职位不能抹掉本地标签、备注和首次加入时间。
+
+	`INSERT OR REPLACE` 会整行替换：脚本重跑一次 `shortlist add`、或换设备后再导
+	一次，用户在本地打的标签和备注就没了，界面也不报任何错。
+	"""
+	store.add_shortlist({"security_id": "s1", "job_id": "j1", "title": "后端", "source": "manual"})
+	assert store.set_shortlist_tags("s1", "j1", ["重点"]) is True
+	assert store.set_shortlist_note("s1", "j1", "等待回复") is True
+	created_at = store.list_shortlist()[0]["created_at"]
+
+	store.add_shortlist({"security_id": "s1", "job_id": "j1", "city": "北京"})
+
+	item = store.list_shortlist()[0]
+	assert item["tags"] == ["重点"]
+	assert item["note"] == "等待回复"
+	assert item["created_at"] == created_at
+	assert item["title"] == "后端"
+	assert item["city"] == "北京"
+
+
+def test_shortlist_repeat_add_applies_explicit_values(store):
+	"""本次显式给出的新值仍然覆盖旧值。"""
+	store.add_shortlist({"security_id": "s1", "job_id": "j1", "tags": ["旧"], "note": "旧备注"})
+	store.add_shortlist({"security_id": "s1", "job_id": "j1", "tags": ["新"], "note": "新备注"})
+
+	item = store.list_shortlist()[0]
+	assert item["tags"] == ["新"]
+	assert item["note"] == "新备注"
+
+
 def test_shortlist_set_tags_and_note(store):
 	"""候选池标签和备注应能独立更新。"""
 	store.add_shortlist({"security_id": "s1", "job_id": "j1", "title": "", "company": "", "city": "", "salary": "", "source": ""})
