@@ -41,6 +41,26 @@ _HOOK_CHOICES = ("screenshot-full", "none")
 _RUN_NOT_FOUND_HINTS = {"next_actions": ["boss crawl start <query>", "boss crawl status <run_id>"]}
 
 
+def _require_run_id(ctx: click.Context, command: str, run_id: str) -> bool:
+	"""空 run_id 是 argv 少传了值，不是「任务不存在」。
+
+	``--data-dir`` 拼错、复制命令时漏掉最后一个词都会落到这里。原样查缓存会报
+	``CRAWL_RUN_NOT_FOUND``「未找到 crawl run: 」（冒号后面什么都没有），Agent 会
+	以为任务丢了而重建；``crawl resume ""`` 更先撞上登录校验，报 ``AUTH_REQUIRED``，
+	把参数写错的人送去重新登录。
+	"""
+	if run_id.strip():
+		return True
+	handle_error_output(
+		ctx,
+		command,
+		code="INVALID_PARAM",
+		message="run_id 不能为空；先用 boss crawl status <run_id> 核对已有任务",
+		hints=_RUN_NOT_FOUND_HINTS,
+	)
+	return False
+
+
 @click.group("crawl")
 def crawl_group() -> None:
 	"""使用 DrissionPage 执行可恢复的批量职位采集。"""
@@ -485,6 +505,9 @@ def resume_cmd(
 	from_queue: bool,
 ) -> None:
 	"""从已保存的页游标和详情队列恢复采集。"""
+	if not _require_run_id(ctx, "crawl.resume", run_id):
+		ctx.exit(1)
+		return
 	if not _require_crawl_capabilities(ctx):
 		ctx.exit(1)
 		return
@@ -565,6 +588,8 @@ def resume_cmd(
 @click.pass_context
 def status_cmd(ctx: click.Context, run_id: str) -> None:
 	"""读取 crawl 任务状态，不打开浏览器。"""
+	if not _require_run_id(ctx, "crawl.status", run_id):
+		return
 	try:
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			payload = crawl_status(cache, run_id)
@@ -609,6 +634,8 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 @click.pass_context
 def stop_cmd(ctx: click.Context, run_id: str) -> None:
 	"""请求运行中的 crawl 在下一安全点停止并保留 checkpoint。"""
+	if not _require_run_id(ctx, "crawl.stop", run_id):
+		return
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		if not cache.request_crawl_stop(run_id):
 			handle_error_output(ctx, "crawl.stop", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_RUN_NOT_FOUND_HINTS)
@@ -629,6 +656,8 @@ def stop_cmd(ctx: click.Context, run_id: str) -> None:
 @click.pass_context
 def results_cmd(ctx: click.Context, run_id: str, page: int | None, detail_status: str | None) -> None:
 	"""读取 crawl 已采集结果，不打开浏览器。"""
+	if not _require_run_id(ctx, "crawl.results", run_id):
+		return
 	try:
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			payload = crawl_results(cache, run_id, page=page, detail_status=detail_status)

@@ -351,6 +351,23 @@ def test_resume_background_reports_run_not_found(tmp_path):
 	assert _envelope(result)["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
 
 
+def test_empty_run_id_is_invalid_param_not_run_not_found(tmp_path):
+	"""空 run_id 是 argv 少传了值，不是「任务不存在」。
+
+	原样查缓存会报 ``CRAWL_RUN_NOT_FOUND``「未找到 crawl run: 」（冒号后面空着），
+	Agent 会以为 run 丢了而重建；``crawl resume ""`` 更会因为先做登录校验而报
+	``AUTH_REQUIRED``，把参数写错的人送去重新登录。
+	"""
+	runner = CliRunner()
+	for command in ("status", "stop", "results", "resume"):
+		result = _invoke(runner, tmp_path, "crawl", command, "")
+		assert result.exit_code == 1, command
+		payload = _envelope(result)
+		assert payload["error"]["code"] == "INVALID_PARAM", command
+		assert "run_id 不能为空" in payload["error"]["message"], command
+		assert payload["hints"]["next_actions"] == ["boss crawl start <query>", "boss crawl status <run_id>"]
+
+
 def test_resume_background_relaunches_stopped_run(tmp_path, monkeypatch):
 	launched: list[tuple[str, int | None, bool]] = []
 	monkeypatch.setattr(
