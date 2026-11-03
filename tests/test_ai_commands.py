@@ -348,6 +348,7 @@ def test_analyze_jd_at_file_not_found(tmp_path, monkeypatch):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["recovery_action"] == "检查 @ 后面的文件路径是否存在后重试"
 
 
 _AT_FILE_COMMANDS = [
@@ -380,6 +381,7 @@ def test_at_file_non_utf8_returns_envelope(tmp_path, monkeypatch, args):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert "UTF-8" in parsed["error"]["message"]
+	assert "转存为 UTF-8" in parsed["error"]["recovery_action"]
 
 
 def test_at_file_directory_returns_envelope(tmp_path, monkeypatch):
@@ -394,6 +396,7 @@ def test_at_file_directory_returns_envelope(tmp_path, monkeypatch):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert "是目录" in parsed["error"]["message"]
+	assert "具体的 UTF-8 文本文件路径" in parsed["error"]["recovery_action"]
 
 
 def test_at_file_permission_error_returns_envelope(tmp_path, monkeypatch):

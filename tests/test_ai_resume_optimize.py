@@ -202,6 +202,8 @@ def test_ai_resume_optimize_requires_jd_or_job_id(tmp_path):
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert "需要指定 --jd 或 --job-id" in parsed["error"]["message"]
+	assert parsed["hints"]["next_actions"] == ["boss search <关键词>"]
+	assert "boss search <关键词>" in parsed["error"]["recovery_action"]
 
 
 def test_ai_resume_optimize_reports_cache_miss_for_job_id(tmp_path):

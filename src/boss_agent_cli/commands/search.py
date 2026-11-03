@@ -243,7 +243,15 @@ def search_cmd(
 		try:
 			parsed_url = parse_boss_search_url(search_url)
 		except SearchUrlParseError as exc:
-			handle_error_output(ctx, "search", code="INVALID_PARAM", message=str(exc))
+			search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
+			handle_error_output(
+				ctx,
+				"search",
+				code="INVALID_PARAM",
+				message=str(exc),
+				recovery_action=f"换成完整的 BOSS 直聘搜索页链接，或改用关键词重试，例如 {search_cmd}",
+				hints={"next_actions": [search_cmd]},
+			)
 			return
 		query = query or parsed_url.query
 		raw_params.update(parsed_url.params)
@@ -251,7 +259,15 @@ def search_cmd(
 			page = parsed_url.page
 
 	if not query and not search_url:
-		handle_error_output(ctx, "search", code="INVALID_PARAM", message="未提供 query，请传入搜索关键词、--preset 或 --url")
+		search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
+		handle_error_output(
+			ctx,
+			"search",
+			code="INVALID_PARAM",
+			message="未提供 query，请传入搜索关键词、--preset 或 --url",
+			recovery_action=f"补上搜索关键词、--preset 或 --url 后重试，例如 {search_cmd}",
+			hints={"next_actions": [search_cmd, boss_command_for_ctx(ctx, "preset list")]},
+		)
 		return
 	query = query or ""
 

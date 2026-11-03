@@ -121,7 +121,11 @@ def test_save_crawl_config_survives_corrupted_config_file(tmp_path):
 def test_configure_without_any_option_is_invalid_param(tmp_path):
 	result = _invoke(CliRunner(), tmp_path, "crawl", "configure")
 	assert result.exit_code == 1
-	assert _envelope(result)["error"]["code"] == "INVALID_PARAM"
+	parsed = _envelope(result)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	# 没给配置项时也要有可执行的下一步：列出可配置项。
+	assert parsed["hints"]["next_actions"] == ["boss crawl configure --help"]
+	assert "boss crawl configure --help" in parsed["error"]["recovery_action"]
 
 
 def test_configure_persists_budget_overrides(tmp_path):
