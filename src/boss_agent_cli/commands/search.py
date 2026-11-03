@@ -82,6 +82,16 @@ def _refresh_greeted(items: list[dict[str, Any]], cache: CacheStore, account: st
 	return items
 
 
+def _more_hint(query: str, page: int) -> str:
+	"""TTY 表尾的翻页提示。
+
+	query 是用户输入，原来手写双引号：``a"b`` 会把提示截成
+	``boss search "a"b" --page 2``，``$HOME`` 在双引号里照样展开。统一走
+	``shell_argument`` 后，带元字符的关键词才能被原样复制执行。
+	"""
+	return f"more: boss search {shell_argument(query)} --page {page + 1}"
+
+
 def _progress_title(criteria: SearchFilterCriteria, welfare_conditions: Any, active: str | None = None) -> str:
 	"""进度头部：把本次搜索条件浓缩成一行，让真人知道正在跑什么。"""
 	parts = [f"搜索 {criteria.query}"]
@@ -428,7 +438,7 @@ def search_cmd(
 				render=lambda data: render_job_table(
 					data, f"search: {query}{title_suffix}",
 					page=page,
-					hint_next=f"more: boss search \"{query}\" --page {page + 1}" if pipeline_result.has_more and not detail_filter else "",
+					hint_next=_more_hint(query, page) if pipeline_result.has_more and not detail_filter else "",
 				),
 				pagination=pagination, hints=hints,
 			)
