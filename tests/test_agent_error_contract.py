@@ -51,6 +51,30 @@ def test_agent_facing_usage_errors_emit_stdout_json_envelope(tmp_path, args, com
 	assert message_fragment in parsed["error"]["message"]
 
 
+def test_agent_run_requires_login_returns_envelope_not_traceback(tmp_path):
+	"""未登录的 `agent run` 必须返回 AUTH_REQUIRED 信封，而不是 traceback。
+
+	`run_cmd` / `train_cmd` 没挂 `handle_auth_errors`（同组的 `agent crawl` 挂了）：
+	自动化适配器在扫描会话时抛出的 `AuthRequired` 一路冒到顶层，stdout 没有任何
+	信封、stderr 是完整 traceback，MCP 子进程只能解析失败回成 `CLI_ERROR`。
+	"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "agent", "run"])
+
+	parsed = _assert_single_stdout_json_error(result, command="agent.run", code="AUTH_REQUIRED")
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"]
+
+
+def test_agent_train_live_requires_login_returns_envelope(tmp_path):
+	"""`agent train --live` 的登录态检查同样走信封。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "agent", "train", "--live"])
+
+	parsed = _assert_single_stdout_json_error(result, command="agent.train", code="AUTH_REQUIRED")
+	assert parsed["error"]["recoverable"] is True
+
+
 def test_invalid_delay_reports_chinese_message(tmp_path):
 	"""--delay 的范围错误要给出中文说明和示例，而不是 Click 的英文原文。"""
 	runner = CliRunner()

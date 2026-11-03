@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss agent run`（以及 `agent train --live`）在未登录时抛出 `AuthRequired` traceback，stdout 没有任何信封：`run_cmd` / `train_cmd` 没有挂 `handle_auth_errors`（同组的 `agent crawl` 挂了），自动化适配器扫描会话时抛出的登录异常一路冒到顶层，`exit 1` 却只有 stderr 的堆栈，MCP 子进程解析失败后统一回成 `CLI_ERROR`，Agent 完全看不到「先登录」这个真正原因。现在两者与其它命令走同一个装饰器，返回 `AUTH_REQUIRED` 信封（可恢复，`recovery_action` 为 `boss login`），`agent train` 默认的 dry-run 行为不变。
 - `boss shortlist add` 重复加入同一职位会静默清空本地标签、备注和首次加入时间：`add_shortlist` 用 `INSERT OR REPLACE` 整行替换，主键 `(security_id, job_id)` 命中时先删后插，用户在 `shortlist annotate` 里打的标签、写的备注和 `created_at` 一起没了，命令仍返回 `action: "add"` 和一份看起来正常的记录——脚本重跑一次 `shortlist add`、或换设备后再导一次就会遇到。现在冲突时改为按字段更新：本次显式给出非空值的列才覆盖（`title` / `company` / `city` / `salary` / `source` / `tags` / `note` / `lid`），`created_at` 保留首次加入时间；响应改为回显存储后的整行，重复 add 时能看到保留下来的标注。
 - `boss resume export <name> --format json` 在简历文件损坏（手写坏、字段类型写错）时报成 `LOCAL_IO_ERROR`「本地文件读写失败」：这条路径先用 `exists()` 判断、再让 `export_json` 里的 `get()` 返回 `None` 后抛 `FileNotFoundError`，被顶层 `OSError` 网兜接走，恢复指引让人去查磁盘与权限；同一份文件在 `resume show` / `resume export --format html|pdf` / `resume clone` 里都是 `RESUME_NOT_FOUND`。现在 json 导出同样先 `get()` 再分支，四种格式与其它子命令口径一致。
 - 未登录时的调用会占用共享请求预算，把下一条命令卡住 30 秒并报错成限流：`_request` 在预算窗口内才读取凭据，所以一次根本不会发出请求、只会得到 `AUTH_REQUIRED` 的调用，也记了一个名额并把 `next_at` 推后一个 interval（`request_delay` 下限 30 秒）。例如 `boss pipeline`（未登录，`AUTH_REQUIRED`）之后 30 秒内再跑 `boss digest`，会先阻塞到 `request_wait_timeout` 超时，再以「请求节流等待超时，请求未发出」的 `REQUEST_BUDGET_EXHAUSTED` 失败——原因不对，还白等半分钟。现在在申请预算之前先取一次凭据（成功时命中缓存），未登录直接返回 `AUTH_REQUIRED`，不登记名额、不影响后续命令。

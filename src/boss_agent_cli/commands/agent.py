@@ -61,6 +61,7 @@ def agent_group() -> None:
 	help="已完成官方验证并核实未确认动作后，显式清除停止标志并从本地 checkpoint 恢复",
 )
 @click.pass_context
+@handle_auth_errors("agent.run")
 def run_cmd(ctx: click.Context, dry_run: bool, limit: int | None, resume: bool) -> None:
 	"""运行一轮招聘自动化。"""
 	report = _run_agent(ctx, dry_run=dry_run, limit=limit, force_mode=None, command="agent.run", resume=resume)
@@ -255,6 +256,7 @@ def crawl_cmd(
 )
 @click.option("--limit", default=None, type=click.IntRange(min=1), help="本轮最多处理多少个会话")
 @click.pass_context
+@handle_auth_errors("agent.train")
 def train_cmd(ctx: click.Context, dry_run: bool, limit: int | None) -> None:
 	"""运行训练校准模式：默认演练，--live 直接执行满足阈值的动作。"""
 	report = _run_agent(
