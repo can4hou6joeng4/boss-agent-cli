@@ -125,6 +125,24 @@ def _invoked_command_name(args: Sequence[str] | None, fallback: str) -> str:
 	return fallback
 
 
+def _top_level_command_name(ctx: click.Context | None, fallback: str) -> str:
+	"""用法错误落到最外层子命令上，与成功信封的 command 口径一致。
+
+	Click 把解析失败记在出错的那一层 context 上：`boss resume show`（缺参数）
+	的 ``info_name`` 是 ``show``，而同一命令成功时的信封是 ``resume``；
+	``boss hr whoami --bogus`` 同理报成 ``whoami``。这些叶子名不在能力清单里，
+	Agent 按 command 归档 / 路由时会看到一个不存在的命令。这里沿 context 链
+	上溯到根 context 的直接子级（真正的顶层命令）；根 context 自身的错误
+	（如 ``boss --bogus``）仍报 ``boss``。
+	"""
+	if ctx is None:
+		return fallback
+	top = ctx
+	while top.parent is not None and top.parent.parent is not None:
+		top = top.parent
+	return top.info_name or fallback
+
+
 def _declare_dash_prefixed_positionals(
 	group: click.Group, ctx: click.Context | None, args: list[str]
 ) -> list[str]:
@@ -195,7 +213,7 @@ class BossCliGroup(click.Group):
 			if not standalone_mode:
 				raise
 			ctx = getattr(exc, "ctx", None)
-			command = getattr(ctx, "info_name", None) or self.name or "boss"
+			command = _top_level_command_name(ctx, self.name or "boss")
 			message = _click_error_message(exc)
 			recovery_action = "修正参数"
 			hints = None
