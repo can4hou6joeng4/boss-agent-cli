@@ -640,3 +640,50 @@ def test_hr_group_rejects_removed_zhilian_platform():
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert "不支持的平台" in parsed["error"]["message"]
+
+
+@patch("boss_agent_cli.commands.recruiter.reply.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.reply.AuthManager")
+def test_recruiter_reply_rejects_blank_message(mock_auth_cls, mock_platform_cls):
+	"""空白回复会真的作为一条空消息发到候选人会话，必须在本地拦下。"""
+	mock_platform = _ctx_mock(mock_platform_cls)
+	result = _invoke("hr", "reply", "123", "   ")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	mock_platform.send_message_by_friend.assert_not_called()
+
+
+@patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.jobs.AuthManager")
+def test_recruiter_jobs_offline_rejects_blank_job_id(mock_auth_cls, mock_platform_cls):
+	"""空 job_id 的「下线」请求不该真的发给平台。"""
+	mock_platform = _ctx_mock(mock_platform_cls)
+	result = _invoke("hr", "jobs", "offline", " ")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["hints"]["next_actions"] == ["boss hr jobs list"]
+	mock_platform.job_offline.assert_not_called()
+
+
+@patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.jobs.AuthManager")
+def test_recruiter_jobs_online_rejects_blank_job_id(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	result = _invoke("hr", "jobs", "online", " ")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	mock_platform.job_online.assert_not_called()
+
+
+@patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.jobs.AuthManager")
+def test_recruiter_jobs_detail_rejects_blank_enc_job_id(mock_auth_cls, mock_platform_cls):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	result = _invoke("hr", "jobs", "detail", " ")
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	mock_platform.job_detail.assert_not_called()

@@ -3,7 +3,13 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_output, handle_platform_error_output
+from boss_agent_cli.display import (
+	boss_command_for_ctx,
+	handle_auth_errors,
+	handle_error_output,
+	handle_output,
+	handle_platform_error_output,
+)
 
 
 @click.group("jobs")
@@ -38,6 +44,16 @@ def jobs_list_cmd(ctx: click.Context, page: int) -> None:
 @handle_auth_errors("recruiter-jobs-offline")
 def jobs_offline_cmd(ctx: click.Context, job_id: str) -> None:
 	"""下线职位"""
+	# 空 job_id 无法命中任何职位，却会带着空参数发出一次上线状态变更请求。
+	if not job_id.strip():
+		handle_error_output(
+			ctx,
+			"recruiter-jobs-offline",
+			code="INVALID_PARAM",
+			message="job_id 不能为空；先用 boss hr jobs list 取到职位 ID",
+			hints={"next_actions": [boss_command_for_ctx(ctx, "hr jobs list")]},
+		)
+		return
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
@@ -57,6 +73,16 @@ def jobs_offline_cmd(ctx: click.Context, job_id: str) -> None:
 @handle_auth_errors("recruiter-jobs-online")
 def jobs_online_cmd(ctx: click.Context, job_id: str) -> None:
 	"""上线职位"""
+	# 与 offline 同理：空 job_id 的「上线」请求只会换来一次无意义的平台往返。
+	if not job_id.strip():
+		handle_error_output(
+			ctx,
+			"recruiter-jobs-online",
+			code="INVALID_PARAM",
+			message="job_id 不能为空；先用 boss hr jobs list 取到职位 ID",
+			hints={"next_actions": [boss_command_for_ctx(ctx, "hr jobs list")]},
+		)
+		return
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
@@ -76,6 +102,15 @@ def jobs_online_cmd(ctx: click.Context, job_id: str) -> None:
 @handle_auth_errors("recruiter-jobs-detail")
 def jobs_detail_cmd(ctx: click.Context, enc_job_id: str) -> None:
 	"""查看职位详情（含完整 JD）"""
+	if not enc_job_id.strip():
+		handle_error_output(
+			ctx,
+			"recruiter-jobs-detail",
+			code="INVALID_PARAM",
+			message="enc_job_id 不能为空；先用 boss hr jobs list 取到职位 ID",
+			hints={"next_actions": [boss_command_for_ctx(ctx, "hr jobs list")]},
+		)
+		return
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
