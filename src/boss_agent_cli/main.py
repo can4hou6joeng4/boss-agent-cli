@@ -27,6 +27,31 @@ def _command_path(ctx: click.Context | None) -> str:
 	return " ".join(reversed(names))
 
 
+def _missing_subcommand_error(ctx: click.Context | None) -> tuple[str, str, dict[str, Any]] | None:
+	"""把「只写了命令组、没给子命令」的 Click 帮助全文换成子命令清单。
+
+	``boss resume`` / ``boss hr`` / ``boss agent pending`` 这类调用在 Click 8
+	抛 ``NoArgsIsHelpError``，异常消息就是整份英文帮助（「Usage: …」「Options: …」
+	几百字符）。信封的 ``error.message`` 因此被撑成一坨帮助文本，Agent 既读不到
+	「缺子命令」这个原因，也拿不到可执行的下一步。这里改成一句中文说明，并把
+	子命令清单放进 ``hints.next_actions``。
+	"""
+	# NoArgsIsHelpError 在 Click 8.2 才出现，而依赖声明是 click>=8.0：
+	# 按类名判断，避免为它把最低版本抬上去。
+	if ctx is None or not isinstance(ctx.command, click.Group):
+		return None
+	names = sorted(ctx.command.list_commands(ctx))
+	if not names:
+		return None
+	root = ctx.find_root().info_name or "boss"
+	path = f"{root} {_command_path(ctx)}".strip()
+	return (
+		f"{path} 缺少子命令（可选：{', '.join(names)}）",
+		f"从子命令中选一个后重试，例如 {path} {names[0]} --help",
+		{"next_actions": [f"{path} {name}" for name in names]},
+	)
+
+
 def _misplaced_global_option(group: click.Group, exc: click.ClickException) -> tuple[str, str] | None:
 	"""Return a clearer message when a root option was parsed by a subcommand.
 
@@ -217,6 +242,9 @@ class BossCliGroup(click.Group):
 			message = _click_error_message(exc)
 			recovery_action = "修正参数"
 			hints = None
+			missing = _missing_subcommand_error(ctx) if type(exc).__name__ == "NoArgsIsHelpError" else None
+			if missing is not None:
+				message, recovery_action, hints = missing
 			misplaced = _misplaced_global_option(self, exc)
 			if misplaced is not None:
 				message, recovery_action = misplaced
