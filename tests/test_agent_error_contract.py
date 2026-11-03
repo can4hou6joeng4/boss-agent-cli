@@ -84,6 +84,26 @@ def test_group_without_subcommand_reports_subcommand_hints(tmp_path):
 	)["hints"]["next_actions"]
 
 
+def test_unknown_option_points_at_command_help(tmp_path):
+	"""Click 的英文 ``No such option`` 与拼写建议对 Agent 是误导。
+
+	``boss search golang --limit 10`` 拿到的 ``Did you mean '--city'?`` 与「限制结果
+	数」的意图无关；信封应点名命令与选项，并给出可执行的 ``--help``。
+	"""
+	runner = CliRunner()
+	for args, command, path in (
+		(("search", "golang", "--limit", "10"), "search", "boss search"),
+		(("resume", "show", "--format", "x"), "resume", "boss resume show"),
+	):
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *args])
+		parsed = _assert_single_stdout_json_error(result, command=command)
+		message = parsed["error"]["message"]
+		assert "No such option" not in message
+		assert "Did you mean" not in message
+		assert f"{path} 没有选项" in message
+		assert parsed["hints"]["next_actions"] == [f"{path} --help"]
+
+
 def test_unknown_subcommand_reports_available_commands(tmp_path):
 	"""写错子命令时不能只回 Click 的英文原文。
 
