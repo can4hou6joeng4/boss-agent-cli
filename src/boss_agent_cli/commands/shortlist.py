@@ -74,6 +74,7 @@ def shortlist_add_cmd(
 	tags: str,
 	note: str,
 ) -> None:
+	"""把一个职位加入本地候选池，可同时写标签与备注。"""
 	# 空字符串仍是合法的 argv，但不构成一条候选记录：存进去之后 `shortlist list`
 	# 会多出一行全空数据，提示里的 `boss shortlist remove ` 也没有可执行的参数。
 	# Agent 从搜索结果里取字段失败时最容易走到这里，必须在写盘前拒绝。
@@ -116,6 +117,7 @@ def shortlist_add_cmd(
 @shortlist_group.command("list")
 @click.pass_context
 def shortlist_list_cmd(ctx: click.Context) -> None:
+	"""列出本地候选池中的全部职位。"""
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		items = cache.list_shortlist()
 	handle_output(
@@ -156,6 +158,7 @@ def shortlist_annotate_cmd(
 	remove_tag: tuple[str, ...],
 	note: str | None,
 ) -> None:
+	"""给候选池条目增删标签或替换备注；条目不存在时报错而不是静默成功。"""
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		current = _find_shortlist_item(cache.list_shortlist(), security_id, job_id)
 		if current is None:
@@ -197,6 +200,7 @@ def shortlist_annotate_cmd(
 @click.option("--tag", default=None, help="只比较包含该本地标签的候选职位")
 @click.pass_context
 def shortlist_compare_cmd(ctx: click.Context, tag: str | None) -> None:
+	"""并排比较候选池条目（可按标签过滤）。"""
 	normalized_tag = tag.strip() if tag else None
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		items = cache.list_shortlist()
@@ -233,6 +237,7 @@ def shortlist_compare_cmd(ctx: click.Context, tag: str | None) -> None:
 @click.argument("job_id")
 @click.pass_context
 def shortlist_remove_cmd(ctx: click.Context, security_id: str, job_id: str) -> None:
+	"""从本地候选池中移除一个职位。"""
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		removed = cache.remove_shortlist(security_id, job_id)
 	handle_output(

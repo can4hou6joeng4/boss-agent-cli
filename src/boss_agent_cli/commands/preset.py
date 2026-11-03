@@ -67,6 +67,7 @@ def preset_add_cmd(
 	welfare: str | None,
 	active: str | None,
 ) -> None:
+	"""保存一组可复用的搜索参数，之后用 `boss search --preset <名称>` 调用。"""
 	# 空字符串是合法 argv，但存下来的预设既没法点名（`boss search --preset ""`），
 	# 也没法搜到目标（空关键词等于不筛选）。必须在写盘前拒绝。
 	if not name.strip() or not query.strip():
@@ -110,6 +111,7 @@ def preset_add_cmd(
 @preset_group.command("list")
 @click.pass_context
 def preset_list_cmd(ctx: click.Context) -> None:
+	"""列出本地已保存的搜索预设。"""
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		items, corrupt = cache.list_saved_searches_with_corrupt()
 	hints: dict[str, Any] = {
@@ -145,6 +147,7 @@ def preset_list_cmd(ctx: click.Context) -> None:
 @click.argument("name")
 @click.pass_context
 def preset_remove_cmd(ctx: click.Context, name: str) -> None:
+	"""删除一条本地搜索预设；名字不存在时保持幂等（不报错）。"""
 	# 与 add 同口径：空名字不可能命中任何本地记录，却会以
 	# `{"removed": false}` 的 `ok: true` 报成功，Agent 会以为已经删掉了。
 	if not name.strip():

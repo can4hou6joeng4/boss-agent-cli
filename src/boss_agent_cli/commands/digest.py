@@ -32,6 +32,7 @@ from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up
 @click.pass_context
 @handle_auth_errors("digest")
 def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, output_format: str, output_path: Path | None) -> None:
+	"""汇总新增职位、待跟进会话与面试项的日报（JSON 或 Markdown）。"""
 	if not require_compliance_allowed(ctx, "digest"):
 		ctx.exit(1)
 
