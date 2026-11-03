@@ -407,6 +407,19 @@ def test_config_set_numeric_parse_error_returns_chinese_envelope(tmp_path, key, 
 	assert value in message
 	assert "could not convert" not in message
 	assert "invalid literal" not in message
+	assert parsed["hints"]["next_actions"] == [f"boss config get {key}", "boss config list"]
+	assert "boss config list" in parsed["error"]["recovery_action"]
+
+
+def test_config_set_invalid_choice_points_at_config_commands(tmp_path):
+	"""枚举值写错时同样要给出查看当前配置的下一步，而不只是「修正参数」。"""
+	code, parsed = _invoke("config", "set", "log_level", "bogus", tmp_path=tmp_path)
+
+	assert code == 1
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["message"] == "log_level 必须是以下值之一: error, warning, info, debug"
+	assert parsed["hints"]["next_actions"] == ["boss config get log_level", "boss config list"]
+	assert "boss config list" in parsed["error"]["recovery_action"]
 
 
 def test_config_set_list_value(tmp_path):
