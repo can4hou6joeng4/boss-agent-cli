@@ -225,3 +225,48 @@ def test_clean_privacy_deletes_sensitive_files_and_hints_relogin(tmp_path):
 	assert all(not file.exists() for file in files)
 	actions = parsed.get("hints", {}).get("next_actions", [])
 	assert any("login" in a for a in actions)
+
+
+def test_clean_privacy_tolerates_database_without_crawl_tables(tmp_path):
+	"""旧版本数据目录缺少后加的 crawl 表时，隐私清理不能整条命令 traceback。"""
+	_setup_db(tmp_path, expired_search=1)
+
+	code, parsed = _invoke("clean", "--privacy", tmp_path=tmp_path)
+
+	assert code == 0
+	assert parsed["ok"] is True
+	targets = {r["target"]: r for r in parsed["data"]["results"]}
+	assert targets["crawl 任务与导出"]["cleaned"] == 0
+
+
+def test_clean_all_tolerates_tables_missing_from_old_database(tmp_path):
+	"""没有任何业务表的旧库（或空库）按「没有可清理项」处理。"""
+	db_dir = tmp_path / "cache"
+	db_dir.mkdir(parents=True, exist_ok=True)
+	sqlite3.connect(str(db_dir / "boss_agent.db")).close()
+
+	code, parsed = _invoke("clean", "--all", tmp_path=tmp_path)
+
+	assert code == 0
+	assert parsed["ok"] is True
+	targets = {r["target"]: r for r in parsed["data"]["results"]}
+	assert targets["搜索缓存"]["cleaned"] == 0
+	assert targets["打招呼记录"]["cleaned"] == 0
+	assert targets["投递记录"]["cleaned"] == 0
+
+
+def test_clean_corrupt_database_returns_envelope_before_deleting(tmp_path):
+	"""库文件损坏时先给 CACHE_DATABASE_INVALID 信封，且不先删掉登录态。"""
+	db_dir = tmp_path / "cache"
+	db_dir.mkdir(parents=True, exist_ok=True)
+	(db_dir / "boss_agent.db").write_bytes(b"not a database")
+	session = tmp_path / "auth" / "session.enc"
+	session.parent.mkdir(parents=True, exist_ok=True)
+	session.write_text("secret", encoding="utf-8")
+
+	code, parsed = _invoke("clean", "--privacy", tmp_path=tmp_path)
+
+	assert code == 1
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "CACHE_DATABASE_INVALID"
+	assert session.exists()

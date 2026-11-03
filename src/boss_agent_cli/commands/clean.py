@@ -15,6 +15,7 @@ from rich.table import Table
 from boss_agent_cli import display
 from boss_agent_cli.api.cdp_risk_lock import lock_path
 from boss_agent_cli.api.request_budget import budget_directory
+from boss_agent_cli.cache.store import CacheDatabaseInvalid
 from boss_agent_cli.display import handle_output, render_next_steps
 
 
@@ -40,6 +41,13 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 	data_dir = ctx.obj["data_dir"]
 	results = []
 	total_freed = 0
+
+	# 库文件存在但读不动时，先在这里失败：main.py 会把 CacheDatabaseInvalid 转成
+	# CACHE_DATABASE_INVALID 信封。否则 --privacy 会先删掉登录态和简历，再在
+	# sqlite 里抛 traceback，用户既看不到信封，也不知道哪些文件已经删了。
+	db_path = data_dir / "cache" / "boss_agent.db"
+	if db_path.exists():
+		_open_cache_db(db_path).close()
 
 	# 0) 本地风险锁：显式 opt-in，文件名及 target 标签沿用历史协议，不连浏览器。
 	if risk_lock:
@@ -161,14 +169,36 @@ def _human_bytes(value: int) -> str:
 	return f"{size:.1f} GB"
 
 
+def _open_cache_db(db_path: Path) -> sqlite3.Connection:
+	"""打开缓存库，并把 sqlite3.DatabaseError 归一成 CacheDatabaseInvalid。
+
+	clean 直接操作 SQLite，不经过 CacheStore 的启动校验；库文件损坏时若把
+	DatabaseError 抛给顶层，只会得到 traceback 而不是信封。
+	"""
+	try:
+		conn = sqlite3.connect(str(db_path))
+		conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchall()
+	except sqlite3.DatabaseError as exc:
+		raise CacheDatabaseInvalid(db_path, str(exc)) from exc
+	return conn
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+	"""旧版本数据目录可能缺少后加的表，按「没有可清理项」处理而不是报错。"""
+	row = conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone()
+	return row is not None
+
+
 def _clean_search_cache(data_dir: Path, *, dry_run: bool, clean_all: bool) -> tuple[int, int]:
 	"""清理搜索缓存，返回 (释放字节数, 清理条数)。"""
 	db_path = data_dir / "cache" / "boss_agent.db"
 	if not db_path.exists():
 		return 0, 0
 
-	conn = sqlite3.connect(str(db_path))
+	conn = _open_cache_db(db_path)
 	try:
+		if not _table_exists(conn, "search_cache"):
+			return 0, 0
 		if clean_all:
 			row = conn.execute("SELECT COUNT(*), COALESCE(SUM(LENGTH(response)), 0) FROM search_cache").fetchone()
 		else:
@@ -264,14 +294,16 @@ def _clean_crawl_data(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 	db_path = data_dir / "cache" / "boss_agent.db"
 	if not db_path.exists():
 		return files_size, files_count
-	conn = sqlite3.connect(str(db_path))
+	conn = _open_cache_db(db_path)
 	try:
+		if not _table_exists(conn, "crawl_runs"):
+			return files_size, files_count
 		row = conn.execute("SELECT COUNT(*) FROM crawl_runs").fetchone()
 		count = int(row[0])
 		if not dry_run:
-			conn.execute("DELETE FROM crawl_jobs")
-			conn.execute("DELETE FROM crawl_runs")
-			conn.execute("DELETE FROM crawl_budget")
+			for table in ("crawl_jobs", "crawl_runs", "crawl_budget"):
+				if _table_exists(conn, table):
+					conn.execute(f"DELETE FROM {table}")  # noqa: S608 - 表名来自固定白名单
 			conn.commit()
 		return files_size + count * 200, files_count + count
 	finally:
@@ -284,8 +316,10 @@ def _clean_table(data_dir: Path, table: str, *, dry_run: bool) -> tuple[int, int
 	if not db_path.exists():
 		return 0, 0
 
-	conn = sqlite3.connect(str(db_path))
+	conn = _open_cache_db(db_path)
 	try:
+		if not _table_exists(conn, table):
+			return 0, 0
 		row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()  # noqa: S608
 		count = row[0]
 		estimated_size = count * 100
