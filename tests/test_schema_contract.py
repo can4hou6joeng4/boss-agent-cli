@@ -652,3 +652,72 @@ def test_schema_option_minimums_match_click_ranges():
 			walk(name, node, spec.get("options") or {})
 
 	assert not problems, "schema minimum 与 Click 取值域不一致:\n" + "\n".join(problems)
+
+def test_schema_choice_options_match_click_choices():
+	"""Click 用 `Choice` 限制的选项，schema 必须声明同一组取值。
+
+	digest / stats 的 `--format` 在 Click 层只接受固定取值，schema 却没写
+	`enum`：Agent 照 schema 可能构造 `--format markdown`，换回一个
+	`INVALID_PARAM`。schema 声明的取值可以比 Click 更宽（如 `search --city`
+	由 `search_filters` 在运行时校验），这类只做单向检查。
+	"""
+	problems: list[str] = []
+
+	def walk(path: str, node: Any, group: dict[str, Any]) -> None:
+		params: dict[str, click.Parameter] = {}
+		for param in getattr(node, "params", ()):
+			if isinstance(param, click.Argument):
+				continue
+			for opt in getattr(param, "opts", ()):
+				params[opt] = param
+				if "/" in opt:
+					params["--" + opt.rsplit("/", 1)[-1].lstrip("-")] = param
+			for opt in getattr(param, "secondary_opts", ()):
+				params[opt] = param
+
+		subgroups: dict[str, dict[str, Any]] = {}
+		for key, value in group.items():
+			if not isinstance(value, dict):
+				continue
+			if not str(key).startswith("-"):
+				subgroups[str(key)] = value
+				continue
+			for spelling in _schema_option_spellings(str(key)):
+				param = params.get(spelling)
+				if param is None:
+					continue
+				click_choices = list(param.type.choices) if isinstance(param.type, click.Choice) else None
+				schema_choices = value.get("choices") or value.get("enum")
+				if click_choices is None:
+					continue
+				if schema_choices is None:
+					problems.append(f"{path} {spelling}: Click 限制为 {click_choices}，schema 未声明")
+				elif list(schema_choices) != click_choices:
+					problems.append(f"{path} {spelling}: schema {list(schema_choices)} 与 Click {click_choices} 不一致")
+
+		subcommands = getattr(node, "commands", {}) or {}
+		for key, value in subgroups.items():
+			if key in subcommands:
+				walk(f"{path}.{key}", subcommands[key], value)
+		for name, sub in subcommands.items():
+			if name not in subgroups:
+				walk(f"{path}.{name}", sub, {})
+
+	for name, spec in SCHEMA_DATA["commands"].items():
+		node = cli.commands.get(name)
+		if node is not None:
+			walk(name, node, spec.get("options") or {})
+
+	assert not problems, "schema 枚举与 Click Choice 不一致:\n" + "\n".join(problems)
+
+
+def test_schema_global_delay_default_matches_runtime():
+	"""`boss schema` 的 --delay 默认值必须反映实际生效的配置默认值。
+
+	schema 长期写着 1.5-3.0，而 config.DEFAULT_REQUEST_DELAY 早已改为 30-60；
+	Agent 会把 1.5-3.0 当成默认节奏，低估真实请求间隔。
+	"""
+	from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
+
+	low, high = DEFAULT_REQUEST_DELAY
+	assert SCHEMA_DATA["global_options"]["--delay"]["default"] == f"{low:g}-{high:g}"

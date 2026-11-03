@@ -60,5 +60,5 @@ def test_invalid_delay_reports_chinese_message(tmp_path):
 	message = parsed["error"]["message"]
 	assert "Invalid value" not in message
 	assert message.startswith("参数 --delay 的值无效: ")
-	assert "1.5-3.0" in message
+	assert "30-60" in message
 	assert "0 <= 下限 <= 上限" in message
