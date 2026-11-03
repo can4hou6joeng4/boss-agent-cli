@@ -9,6 +9,7 @@ from boss_agent_cli.display import (
 	handle_error_output,
 	handle_output,
 	handle_platform_error_output,
+	render_action_result,
 )
 
 
@@ -35,7 +36,14 @@ def jobs_list_cmd(ctx: click.Context, page: int) -> None:
 			handle_platform_error_output(ctx, "recruiter-jobs-list", platform, result, fallback_message="职位列表获取失败")
 			return
 		data = platform.unwrap_data(result) or {}
-		handle_output(ctx, "recruiter-jobs-list", data)
+		# 成功信封原先没有下一步：Agent 拿到职位清单后不知道可以点进详情
+		# （列表为空时更没有任何可执行动作），只能自己翻 `boss hr --help`。
+		handle_output(
+			ctx,
+			"recruiter-jobs-list",
+			data,
+			hints={"next_actions": [boss_command_for_ctx(ctx, "hr jobs detail <enc_job_id>")]},
+		)
 
 
 @jobs_group.command("offline")
@@ -64,7 +72,19 @@ def jobs_offline_cmd(ctx: click.Context, job_id: str) -> None:
 			handle_platform_error_output(ctx, "recruiter-jobs-offline", platform, result, fallback_message="职位下线失败")
 			return
 		data = {"job_id": job_id, "message": "职位已下线"}
-		handle_output(ctx, "recruiter-jobs-offline", data)
+		# 上下线是成对动作：下线后 Agent 要能核对状态、或把职位重新上架；
+		# 只回一句 message 时两条路径都没有可执行的后继命令。
+		next_actions = [
+			boss_command_for_ctx(ctx, "hr jobs list"),
+			boss_command_for_ctx(ctx, f"hr jobs online {job_id}"),
+		]
+		handle_output(
+			ctx,
+			"recruiter-jobs-offline",
+			data,
+			render=lambda d: render_action_result(d, title="hr jobs offline", next_steps=next_actions),
+			hints={"next_actions": next_actions},
+		)
 
 
 @jobs_group.command("online")
@@ -93,7 +113,17 @@ def jobs_online_cmd(ctx: click.Context, job_id: str) -> None:
 			handle_platform_error_output(ctx, "recruiter-jobs-online", platform, result, fallback_message="职位上线失败")
 			return
 		data = {"job_id": job_id, "message": "职位已上线"}
-		handle_output(ctx, "recruiter-jobs-online", data)
+		next_actions = [
+			boss_command_for_ctx(ctx, "hr jobs list"),
+			boss_command_for_ctx(ctx, f"hr jobs offline {job_id}"),
+		]
+		handle_output(
+			ctx,
+			"recruiter-jobs-online",
+			data,
+			render=lambda d: render_action_result(d, title="hr jobs online", next_steps=next_actions),
+			hints={"next_actions": next_actions},
+		)
 
 
 @jobs_group.command("detail")
@@ -121,4 +151,15 @@ def jobs_detail_cmd(ctx: click.Context, enc_job_id: str) -> None:
 			handle_platform_error_output(ctx, "recruiter-jobs-detail", platform, result, fallback_message="职位详情获取失败")
 			return
 		data = platform.unwrap_data(result) or {}
-		handle_output(ctx, "recruiter-jobs-detail", data)
+		handle_output(
+			ctx,
+			"recruiter-jobs-detail",
+			data,
+			hints={
+				"next_actions": [
+					boss_command_for_ctx(ctx, f"hr jobs offline {enc_job_id}"),
+					boss_command_for_ctx(ctx, f"hr jobs online {enc_job_id}"),
+					boss_command_for_ctx(ctx, "hr jobs list"),
+				]
+			},
+		)

@@ -378,6 +378,35 @@ def test_recruiter_jobs_online_reports_error_when_platform_rejects(mock_auth_cls
 
 @patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.jobs.AuthManager")
+def test_recruiter_jobs_success_paths_point_to_the_next_step(mock_auth_cls, mock_platform_cls):
+	"""hr jobs 的成功信封原先没有 hints：Agent 改完职位状态后看不出下一步。
+
+	上线 / 下线是成对动作，列表之后要点进详情，详情之后才是上下线。
+	"""
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.list_jobs.return_value = {"code": 0, "zpData": {"data": []}}
+	mock_platform.job_offline.return_value = {"code": 0}
+	mock_platform.job_online.return_value = {"code": 0}
+	mock_platform.job_detail.return_value = {"code": 0, "zpData": {"jobName": "后端工程师"}}
+
+	cases = [
+		(("hr", "jobs", "list"), ["boss hr jobs detail <enc_job_id>"]),
+		(("hr", "jobs", "offline", "enc-job-1"), ["boss hr jobs list", "boss hr jobs online enc-job-1"]),
+		(("hr", "jobs", "online", "enc-job-1"), ["boss hr jobs list", "boss hr jobs offline enc-job-1"]),
+		(
+			("hr", "jobs", "detail", "enc-job-1"),
+			["boss hr jobs offline enc-job-1", "boss hr jobs online enc-job-1", "boss hr jobs list"],
+		),
+	]
+	for args, expected in cases:
+		result = _invoke(*args)
+		assert result.exit_code == 0, result.output
+		parsed = json.loads(result.output)
+		assert parsed["hints"]["next_actions"] == expected, args
+
+
+@patch("boss_agent_cli.commands.recruiter.jobs.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.jobs.AuthManager")
 def test_recruiter_jobs_detail_reports_error_when_platform_rejects(mock_auth_cls, mock_platform_cls):
 	mock_platform = _ctx_mock(mock_platform_cls)
 	mock_platform.job_detail.return_value = {"code": 37, "message": "stoken expired"}
