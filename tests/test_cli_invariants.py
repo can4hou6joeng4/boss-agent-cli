@@ -245,6 +245,35 @@ def test_next_actions_hold_executable_commands_only() -> None:
 	assert offenders == []
 
 
+def test_next_actions_are_accepted_by_the_cli(tmp_path: Any) -> None:
+	"""字面量 ``next_actions`` 不只要能解析，还要真的被 CLI 接受。
+
+	占位符放进**受约束的选项值**里时，条目看起来仍是命令，照抄却只会换回
+	INVALID_PARAM：``boss --platform <name> status`` 里的 ``<name>`` 会被平台
+	校验直接拒绝（可选值只有 ``zhipin``），Agent 拿到的一条可执行路径都没有。
+	占位符只能出现在位置参数上，选项值必须给真实取值。
+
+	给每条命令追加 ``--help``：Click 解析完选项就打印帮助退出，既不访问平台
+	API，也不要求登录。
+	"""
+	import shlex
+
+	runner = CliRunner()
+	failures: list[str] = []
+	for path, line, text in _next_action_literals():
+		try:
+			argv = shlex.split(text)
+		except ValueError:
+			failures.append(f"{path}:{line} 无法按 shell 解析：{text}")
+			continue
+		if not argv or argv[0] != "boss":
+			continue
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), *argv[1:], "--help"])
+		if result.exit_code != 0:
+			failures.append(f"{path}:{line} 退出码 {result.exit_code}：{text}")
+	assert failures == []
+
+
 def test_local_record_lookups_do_not_report_job_not_found() -> None:
 	"""本地 / 会话侧记录缺失有自己的错误码，``JOB_NOT_FOUND`` 只表示平台职位不存在。
 

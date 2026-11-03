@@ -161,15 +161,19 @@ def _render_platforms(data: dict[str, Any]) -> None:
 @click.pass_context
 def platforms_cmd(ctx: click.Context, platform_name: str | None, capability: str | None) -> None:
 	"""列出本地已注册平台与能力状态。"""
+	data = platform_capability_data(platform_name, capability)
+	# next_actions 会被 Agent 原样执行，而 --platform 是受约束的取值：
+	# 原来那条 `boss --platform <name> status` 照抄只会换回 INVALID_PARAM，
+	# 等于没有下一步。按本次列出的平台逐个生成可直接运行的命令。
+	next_actions = [f"boss --platform {item['name']} status" for item in data["platforms"]]
+	if not next_actions:
+		# 能力筛选可能把所有平台都过滤掉，此时退回当前平台的状态查询。
+		next_actions.append(boss_command_for_ctx(ctx, "status"))
+	next_actions.append(boss_command_for_ctx(ctx, "schema"))
 	handle_output(
 		ctx,
 		"platforms",
-		platform_capability_data(platform_name, capability),
+		data,
 		render=_render_platforms,
-		hints={
-			"next_actions": [
-				"boss --platform <name> status",
-				boss_command_for_ctx(ctx, "schema"),
-			],
-		},
+		hints={"next_actions": next_actions},
 	)
