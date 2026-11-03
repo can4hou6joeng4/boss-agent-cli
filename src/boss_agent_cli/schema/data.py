@@ -22,6 +22,7 @@ SCHEMA_DATA = {
 				"--timeout": {
 					"type": "int",
 					"default": 120,
+					"minimum": 1,
 					"description": "登录超时时间（秒）",
 				},
 				"--cdp": {
