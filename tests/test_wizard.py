@@ -2657,6 +2657,21 @@ def test_mixed_tty_headless_forces_json_envelope(tmp_path, monkeypatch):
 	assert result.stderr == ""
 
 
+def test_empty_selector_value_is_invalid_param(tmp_path):
+	"""传了 ``--resume ""`` 不能回「非交互模式需要 --json」。
+
+	旧逻辑只看值是否为 None，空串被当成「没有选择器」，于是一边拒绝一边让
+	Agent 重复刚做过的动作；真实原因是 flag 后面少了值。
+	"""
+	for flag in ("--input-json", "--resume", "--status", "--stop"):
+		result = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), "wizard", flag, ""])
+		payload = json.loads(result.stdout)
+		assert result.exit_code == 1, flag
+		assert payload["error"]["code"] == "INVALID_PARAM", flag
+		assert flag in payload["error"]["message"], flag
+		assert "不能为空" in payload["error"]["message"], flag
+
+
 def _once_then_cancel(value):
 	"""Return value once then exit the interactive main loop."""
 	state = {"used": False}

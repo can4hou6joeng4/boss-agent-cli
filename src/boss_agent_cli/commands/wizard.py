@@ -608,7 +608,16 @@ def _run_wizard_command(
 	if not interactive:
 		# stdin 非 TTY 时必须使用 Agent JSON 路由，即使 stdout 仍连接终端。
 		ctx.obj["json_output"] = True
-	selectors = [value for value in (input_json, resume_run_id, status_run_id, stop_run_id) if value is not None]
+	selectors = [
+		(name, value)
+		for name, value in (
+			("--input-json", input_json),
+			("--resume", resume_run_id),
+			("--status", status_run_id),
+			("--stop", stop_run_id),
+		)
+		if value is not None
+	]
 	if len(selectors) > 1:
 		_wizard_error(
 			ctx,
@@ -616,6 +625,19 @@ def _run_wizard_command(
 			code="INVALID_PARAM",
 			message="--input-json/--resume/--status/--stop 只能指定一个",
 			recovery_action="选择一个 workflow 操作后重试",
+		)
+		return
+	if len(selectors) == 1 and not selectors[0][1].strip():
+		# 传了 flag 但值为空时，旧逻辑把它当成「没有选择器」，回一句
+		# 「非交互模式需要 --input-json、--resume、--status 或 --stop」——
+		# 用户明明传了，看到的却是「你没传」，只能再猜一次。
+		_wizard_error(
+			ctx,
+			interactive,
+			code="INVALID_PARAM",
+			message=f"{selectors[0][0]} 的值不能为空",
+			recovery_action="补上 run_id 后重试；用 boss wizard --status <run_id> 核对已有任务",
+			hints={"next_actions": ["boss wizard"]},
 		)
 		return
 
