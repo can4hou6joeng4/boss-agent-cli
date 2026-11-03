@@ -201,6 +201,23 @@ def test_dry_run_has_no_auth_network_or_cache(greeting_args: list[str], tmp_path
 
 
 
+def test_greet_rejects_blank_message_with_executable_next_step(greeting_args: list[str]) -> None:
+	"""空招呼内容不会发出去；恢复指引要指回可执行的推荐列表。"""
+	args = [*greeting_args]
+	args[args.index("--message") + 1] = "   "
+	with patch("boss_agent_cli.commands.recruiter.recommendations.AuthManager") as auth, patch(
+		"boss_agent_cli.commands.recruiter.recommendations.get_recruiter_platform_instance"
+	) as factory:
+		result = CliRunner().invoke(cli, args)
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert payload["hints"]["next_actions"] == ["boss hr recommendations --job-id job"]
+	assert "boss hr recommendations --job-id job" in payload["error"]["recovery_action"]
+	auth.assert_not_called()
+	factory.assert_not_called()
+
+
 def test_greet_deduplicates_when_security_id_rotates(greeting_args: list[str], greeting_platform: MagicMock) -> None:
 	first = CliRunner().invoke(cli, greeting_args + ["--yes"])
 	assert first.exit_code == 0, first.output

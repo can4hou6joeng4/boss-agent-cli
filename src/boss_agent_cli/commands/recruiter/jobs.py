@@ -54,12 +54,14 @@ def jobs_offline_cmd(ctx: click.Context, job_id: str) -> None:
 	"""下线职位"""
 	# 空 job_id 无法命中任何职位，却会带着空参数发出一次上线状态变更请求。
 	if not job_id.strip():
+		list_cmd = boss_command_for_ctx(ctx, "hr jobs list")
 		handle_error_output(
 			ctx,
 			"recruiter-jobs-offline",
 			code="INVALID_PARAM",
 			message="job_id 不能为空；先用 boss hr jobs list 取到职位 ID",
-			hints={"next_actions": [boss_command_for_ctx(ctx, "hr jobs list")]},
+			recovery_action=f"补上 job_id 后重试；职位 ID 可从 {list_cmd} 的结果中取到",
+			hints={"next_actions": [list_cmd]},
 		)
 		return
 	data_dir = ctx.obj["data_dir"]
@@ -95,12 +97,14 @@ def jobs_online_cmd(ctx: click.Context, job_id: str) -> None:
 	"""上线职位"""
 	# 与 offline 同理：空 job_id 的「上线」请求只会换来一次无意义的平台往返。
 	if not job_id.strip():
+		list_cmd = boss_command_for_ctx(ctx, "hr jobs list")
 		handle_error_output(
 			ctx,
 			"recruiter-jobs-online",
 			code="INVALID_PARAM",
 			message="job_id 不能为空；先用 boss hr jobs list 取到职位 ID",
-			hints={"next_actions": [boss_command_for_ctx(ctx, "hr jobs list")]},
+			recovery_action=f"补上 job_id 后重试；职位 ID 可从 {list_cmd} 的结果中取到",
+			hints={"next_actions": [list_cmd]},
 		)
 		return
 	data_dir = ctx.obj["data_dir"]
@@ -133,12 +137,14 @@ def jobs_online_cmd(ctx: click.Context, job_id: str) -> None:
 def jobs_detail_cmd(ctx: click.Context, enc_job_id: str) -> None:
 	"""查看职位详情（含完整 JD）"""
 	if not enc_job_id.strip():
+		list_cmd = boss_command_for_ctx(ctx, "hr jobs list")
 		handle_error_output(
 			ctx,
 			"recruiter-jobs-detail",
 			code="INVALID_PARAM",
 			message="enc_job_id 不能为空；先用 boss hr jobs list 取到职位 ID",
-			hints={"next_actions": [boss_command_for_ctx(ctx, "hr jobs list")]},
+			recovery_action=f"补上 enc_job_id 后重试；编号可从 {list_cmd} 的结果中取到",
+			hints={"next_actions": [list_cmd]},
 		)
 		return
 	data_dir = ctx.obj["data_dir"]

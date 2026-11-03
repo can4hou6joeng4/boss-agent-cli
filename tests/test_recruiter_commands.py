@@ -696,6 +696,8 @@ def test_recruiter_reply_rejects_blank_message(mock_auth_cls, mock_platform_cls)
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["hints"]["next_actions"] == ["boss hr chat"]
+	assert "boss hr chat" in parsed["error"]["recovery_action"]
 	mock_platform.send_message_by_friend.assert_not_called()
 
 
@@ -709,6 +711,7 @@ def test_recruiter_jobs_offline_rejects_blank_job_id(mock_auth_cls, mock_platfor
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert parsed["hints"]["next_actions"] == ["boss hr jobs list"]
+	assert "boss hr jobs list" in parsed["error"]["recovery_action"]
 	mock_platform.job_offline.assert_not_called()
 
 
@@ -720,6 +723,8 @@ def test_recruiter_jobs_online_rejects_blank_job_id(mock_auth_cls, mock_platform
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["hints"]["next_actions"] == ["boss hr jobs list"]
+	assert "boss hr jobs list" in parsed["error"]["recovery_action"]
 	mock_platform.job_online.assert_not_called()
 
 
@@ -731,4 +736,6 @@ def test_recruiter_jobs_detail_rejects_blank_enc_job_id(mock_auth_cls, mock_plat
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["hints"]["next_actions"] == ["boss hr jobs list"]
+	assert "boss hr jobs list" in parsed["error"]["recovery_action"]
 	mock_platform.job_detail.assert_not_called()
