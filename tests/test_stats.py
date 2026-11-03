@@ -178,7 +178,9 @@ def test_stats_html_format_with_json_flag_returns_envelope(tmp_path):
 	assert parsed["ok"] is True
 	assert parsed["data"]["format"] == "html"
 	assert parsed["data"]["content"].startswith("<!doctype html>")
-	assert parsed["data"]["bytes"] == len(parsed["data"]["content"])
+	# bytes 是落盘后的字节数，中文报表按 UTF-8 计算，不能是字符数。
+	assert parsed["data"]["bytes"] == len(parsed["data"]["content"].encode("utf-8"))
+	assert parsed["data"]["bytes"] > len(parsed["data"]["content"])
 
 
 def test_stats_html_format_to_file(tmp_path):
@@ -194,6 +196,7 @@ def test_stats_html_format_to_file(tmp_path):
 	assert parsed["data"]["bytes"] > 1000
 	# 文件真的写了
 	assert out_path.exists()
+	assert parsed["data"]["bytes"] == out_path.stat().st_size
 	html_content = out_path.read_text(encoding="utf-8")
 	assert "<!doctype html>" in html_content
 	assert "10" in html_content  # greeted
