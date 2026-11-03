@@ -77,6 +77,18 @@ def export_cmd(
 	include_private: bool,
 ) -> None:
 	"""导出搜索结果为 HTML / CSV / JSON 文件"""
+	# 与 search 同一口径：传了 --url 但值是空串时，「未提供 query」会读成
+	# 「你没传 --url」，真正的原因（flag 后面少了值）被掩盖。
+	if search_url is not None and not search_url.strip():
+		handle_error_output(
+			ctx,
+			"export",
+			code="INVALID_PARAM",
+			message="--url 的值不能为空",
+			recovery_action="boss export <关键词> 或 boss export --url <搜索页URL>",
+			hints={"next_actions": ["boss export <关键词>"]},
+		)
+		return
 	# 与 search 同一口径：纯空白的 query 仍是「没给关键词」，不能当成一次
 	# 合法的全量导出——那会翻页抓取大量无关职位，并写出一份内容可疑的文件。
 	if query is not None and not query.strip():

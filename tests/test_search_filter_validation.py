@@ -77,3 +77,27 @@ def test_watch_add_rejects_unknown_filter_values(tmp_path):
 
 	assert payload["error"]["code"] == "INVALID_PARAM"
 	assert "未知薪资范围" in payload["error"]["message"]
+
+
+@pytest.mark.parametrize(
+	("argv", "message"),
+	[
+		(["search", "--preset", ""], "--preset 的值不能为空"),
+		(["search", "--preset", "   "], "--preset 的值不能为空"),
+		(["search", "--url", ""], "--url 的值不能为空"),
+		(["search", "--url", "   "], "--url 的值不能为空"),
+		(["export", "--url", ""], "--url 的值不能为空"),
+	],
+)
+def test_blank_selector_values_are_param_errors(tmp_path, argv, message):
+	"""传了 flag 但值是空的时候不能回「未提供 query」。
+
+	``boss search --preset ""`` 原来回「未提供 query，请传入搜索关键词、--preset
+	或 --url」——用户明明传了 ``--preset``，读到的却是「你没传」；纯空白的
+	``--url`` 更被当成域名不匹配。真正的原因是 flag 后面少了值。
+	"""
+	payload = _invoke(tmp_path, argv)
+
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert payload["error"]["message"] == message
+	assert payload["hints"]["next_actions"]
