@@ -102,7 +102,7 @@ boss ai polish my-resume
 
 配置错误会返回错误码：
 
-- `AI_NOT_CONFIGURED`：未配置 provider / model / api_key
+- `AI_NOT_CONFIGURED`：未配置 provider / model / api_key，或 provider 没有可用端点（未登记且没有 `--base-url`；`recovery_action` 会点名）
 - `AI_API_ERROR`：API 调用失败（鉴权、网络、限速、模型不支持的参数、输出上限不够写完正文等）。`error.message` 带上服务端返回的原因（疑似密钥会被遮掉），`recovery_action` 按失败类型给出下一步
 - `AI_PARSE_ERROR`：模型返回不符合预期 JSON 格式（重试即可）
 

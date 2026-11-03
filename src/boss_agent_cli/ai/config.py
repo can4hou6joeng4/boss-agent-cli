@@ -31,6 +31,19 @@ PROVIDER_BASE_URLS: dict[str, str | None] = {
 	"custom": None,
 }
 
+def provider_endpoint(provider: str | None, base_url: str | None = None) -> str | None:
+	"""解析实际生效的端点：显式 base_url 优先，否则查 provider 登记表。
+
+	登记表里没有的名字（`--provider openai-cn` 这类笔误）与 provider=custom
+	都会返回 None——配置里明明填了 provider，却没有任何可用端点。
+	"""
+	if base_url:
+		return base_url
+	if provider and provider in PROVIDER_BASE_URLS:
+		return PROVIDER_BASE_URLS[provider]
+	return None
+
+
 _DEFAULT_CONFIG: dict[str, Any] = {
 	"ai_provider": None,
 	"ai_model": None,
@@ -123,18 +136,29 @@ class AIConfigStore:
 	def get_base_url(self) -> str | None:
 		"""Get the API base URL: user config takes priority, then provider lookup."""
 		config = self.load_config()
-		base_url = config.get("ai_base_url")
-		if base_url:
-			return str(base_url)
 		provider = config.get("ai_provider")
-		if provider and provider in PROVIDER_BASE_URLS:
-			return PROVIDER_BASE_URLS[provider]
-		return None
+		base_url = config.get("ai_base_url")
+		return provider_endpoint(
+			str(provider) if provider else None,
+			str(base_url) if base_url else None,
+		)
+
+	def unresolved_provider(self) -> str | None:
+		"""provider 已填写却解析不出端点时返回 provider 名，否则返回 None。
+
+		`--provider openai-cn` 这类笔误、或 provider=custom 没配 base_url，
+		``get_base_url()`` 都是 None；服务层只会笼统地说「AI 服务未配置」，
+		用户看不出真正缺的是端点而不是 key。
+		"""
+		if self.get_base_url():
+			return None
+		provider = self.load_config().get("ai_provider")
+		return str(provider) if provider else None
 
 	def is_configured(self) -> bool:
-		"""Check if all required settings are present (provider + model + api_key)."""
+		"""Check if the service can actually be used (provider + model + api_key + endpoint)."""
 		config = self.load_config()
 		provider = config.get("ai_provider")
 		model = config.get("ai_model")
 		api_key = self.get_api_key()
-		return all([provider, model, api_key])
+		return bool(all([provider, model, api_key]) and self.get_base_url())
