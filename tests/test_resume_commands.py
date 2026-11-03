@@ -206,6 +206,7 @@ def test_edit_container_field_is_rejected(tmp_path):
 			"boss resume export container --format json",
 			"boss resume show container",
 		]
+		assert "export" in parsed["error"]["recovery_action"]
 
 	# 简历本身没有被写坏：仍然可以正常展示与导出。
 	shown = _invoke(runner, tmp_path, ["show", "container"])
@@ -222,6 +223,7 @@ def test_edit_unknown_field_lists_next_steps(tmp_path):
 	_assert_error_envelope(parsed, "INVALID_PARAM")
 	assert "不存在" in parsed["error"]["message"]
 	assert parsed["hints"]["next_actions"][0] == "boss resume export typo --format json"
+	assert "文本子字段" in parsed["error"]["recovery_action"]
 
 
 def test_edit_error_message_quotes_resume_name_with_spaces(tmp_path):
@@ -256,6 +258,7 @@ def test_edit_name_field_points_to_clone(tmp_path):
 	parsed = json.loads(result.output)
 	_assert_error_envelope(parsed, "INVALID_PARAM")
 	assert parsed["hints"]["next_actions"] == ["boss resume clone oldname <新名>"]
+	assert "clone" in parsed["error"]["recovery_action"]
 
 	shown = json.loads(_invoke(runner, tmp_path, ["show", "oldname"]).output)
 	assert shown["data"]["name"] == "oldname"
@@ -449,6 +452,22 @@ def test_import_invalid_file(tmp_path):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
+
+
+def test_import_malformed_structure_points_at_export_template(tmp_path):
+	"""结构对不上模型的 JSON 要给出对照模板，而不是只报一句「解析失败」。"""
+	bad_file = tmp_path / "bad_structure.json"
+	bad_file.write_text(json.dumps({"name": "broken", "personal_info": "not-an-object"}), encoding="utf-8")
+	result = _invoke(CliRunner(), tmp_path, ["import", str(bad_file)])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "INVALID_PARAM")
+	assert "解析失败" in parsed["error"]["message"]
+	assert parsed["hints"]["next_actions"] == [
+		"boss resume export <简历> --format json",
+		"boss resume list",
+	]
+	assert "export" in parsed["error"]["recovery_action"]
 
 
 def test_import_file_not_found(tmp_path):

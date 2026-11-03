@@ -448,6 +448,34 @@ def test_resume_auth_and_risk_failures_stop_without_leaking(action, error_type, 
 		method.assert_called_once()
 
 
+@pytest.mark.parametrize(
+	("side_effect", "message_fragment", "recovery_fragment", "expected_hints"),
+	[
+		(FileExistsError(), "输出文件已存在", "换一个 --output 文件名", None),
+		(OSError("disk"), "无法保存文件", "父目录存在且可写", None),
+		(ResumeValidationError("该消息不是附件简历请求，不会执行联系方式交换"), "附件简历请求", "boss hr chat", ["boss hr chat"]),
+	],
+)
+def test_download_resume_local_errors_give_actionable_recovery(
+	side_effect, message_fragment, recovery_fragment, expected_hints
+):
+	"""本地文件与请求校验失败不能只回「修正参数」：要说明下一步怎么做。"""
+	module = "boss_agent_cli.commands.recruiter.download_resume"
+	with patch(module + ".AuthManager"), patch(module + ".get_recruiter_platform_instance") as factory:
+		platform = factory.return_value.__enter__.return_value
+		platform.download_resume_by_friend.side_effect = side_effect
+		result = _invoke("download-resume", "123", "--message-id", "456", "--output", "resume.pdf")
+
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert message_fragment in payload["error"]["message"]
+	assert recovery_fragment in payload["error"]["recovery_action"]
+	if expected_hints is None:
+		assert payload["hints"] is None
+	else:
+		assert payload["hints"]["next_actions"] == expected_hints
+
+
 def test_download_budget_stop_is_not_network_error():
 	"""下载遇到预算/时限停止时不能提示「检查网络后重试」。"""
 	from boss_agent_cli.api.request_budget import RequestBudgetExceeded

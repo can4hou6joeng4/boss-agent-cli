@@ -48,18 +48,20 @@ def resolve_friend_or_emit(
 	securityId 是每请求轮换的令牌，必须使用本次 friend_list 返回的
 	``friend_item["securityId"]``。
 	"""
-	from boss_agent_cli.display import handle_error_output, handle_not_supported, handle_platform_error_output
+	from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_not_supported, handle_platform_error_output
 
 	# 空标识不可能命中任何联系人：继续下去会先把整个沟通列表翻一遍再报
 	# CONTACT_NOT_FOUND，既浪费一次受限流的请求，也让真正的原因（argv 少了
 	# 参数）看起来像「联系人不在这份列表里」。
 	if not str(identifier or "").strip():
+		chat_cmd = boss_command_for_ctx(ctx, "chat")
 		handle_error_output(
 			ctx,
 			command,
 			code="INVALID_PARAM",
 			message="联系人标识不能为空；先用 boss chat 取到 uid 或 security_id",
-			hints={"next_actions": ["boss chat"]},
+			recovery_action=f"用 {chat_cmd} 取到联系人的 uid 或 security_id 后重试",
+			hints={"next_actions": [chat_cmd]},
 		)
 		return None
 	try:
