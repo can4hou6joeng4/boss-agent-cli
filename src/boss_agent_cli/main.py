@@ -178,6 +178,15 @@ def _unexpected_extra_argument_error(exc: click.ClickException) -> tuple[str, st
 _RANGE_INVALID_RE = re.compile(r"^(.+) is not in the range (.+)\.$")
 _CHOICE_INVALID_RE = re.compile(r"^(.+) is not one of (.+)\.$")
 _TYPE_INVALID_RE = re.compile(r"^(.+) is not a valid (.+)\.$")
+_PATH_MISSING_RE = re.compile(r"^Path '(.*)' does not exist\.$")
+_PATH_INVALID_RE = re.compile(r"^Path '(.*)' is (a file|a directory|not readable|not writable|not executable)\.$")
+_PATH_PROBLEMS = {
+	"a file": "是文件，但这里需要目录",
+	"a directory": "是目录，但这里需要文件",
+	"not readable": "不可读",
+	"not writable": "不可写",
+	"not executable": "不可执行",
+}
 
 
 def _invalid_value_error(exc: click.ClickException) -> tuple[str, str, dict[str, Any]] | None:
@@ -216,6 +225,36 @@ def _invalid_value_error(exc: click.ClickException) -> tuple[str, str, dict[str,
 	)
 
 
+def _invalid_path_error(exc: click.ClickException) -> tuple[str, str, dict[str, Any]] | None:
+	"""把 ``Path '' does not exist.`` 这类 Click 路径校验换成中文。
+
+	``boss ai local import --path ""`` 原来回 ``Invalid value for '--path':
+	Path '' does not exist.``：正文英文、``hints`` 为 null，Agent 读不出是路径
+	不存在还是类型不对。
+	"""
+	if not isinstance(exc, click.BadParameter) or _has_cjk(exc.message):
+		return None
+	raw = str(exc.message)
+	matched = _PATH_MISSING_RE.match(raw)
+	if matched is not None:
+		problem = "不存在"
+	else:
+		matched = _PATH_INVALID_RE.match(raw)
+		if matched is None:
+			return None
+		problem = _PATH_PROBLEMS[matched.group(2)]
+	path = _usage_path(exc)
+	if path is None:
+		return None
+	hint = _parameter_display_name(exc)
+	label = hint or "参数"
+	return (
+		f"{path} 的 {label} 无效：路径 '{matched.group(1)}' {problem}",
+		f"用 {path} --help 查看参数说明",
+		{"next_actions": [f"{path} --help"]},
+	)
+
+
 def _usage_error_detail(exc: click.ClickException, ctx: click.Context | None) -> tuple[str, str, dict[str, Any]] | None:
 	"""按异常类型给用法错误配中文说明；不认识时返回 ``None``，保留 Click 原文。"""
 	if type(exc).__name__ == "NoArgsIsHelpError":
@@ -229,6 +268,7 @@ def _usage_error_detail(exc: click.ClickException, ctx: click.Context | None) ->
 		_missing_parameter_error,
 		_unexpected_extra_argument_error,
 		_invalid_value_error,
+		_invalid_path_error,
 	):
 		detail = converter(exc)
 		if detail is not None:

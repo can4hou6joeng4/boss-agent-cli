@@ -96,6 +96,49 @@ def test_import_local_model_keeps_dots_inside_the_name(tmp_path):
 	assert imported.path == str(tmp_path / "models" / "qwen3.5" / "model.bin")
 
 
+def test_import_local_model_rejects_source_containing_target(tmp_path):
+	"""`--path` 指到数据目录本身时，copytree 会把刚写出的副本当成源一路复制下去。
+
+	旧实现里这条命令会递归到 ``[Errno 63] File name too long``，再被顶层兜成
+	可重试的 ``NETWORK_ERROR``——拿去重试只会得到同一个错误。
+	"""
+	data_dir = tmp_path / "data"
+	data_dir.mkdir()
+
+	with pytest.raises(LocalModelManifestError) as excinfo:
+		import_local_model(data_dir, data_dir, "qwen3")
+
+	assert excinfo.value.code == "INVALID_PARAM"
+	assert "互相包含" in excinfo.value.message
+	assert not model_registry_path(data_dir).exists()
+
+
+def test_import_local_model_registers_source_already_at_target(tmp_path):
+	"""源目录恰好就是目标目录时，旧实现先 rmtree 再复制，源目录会被删掉。"""
+	data_dir = tmp_path / "data"
+	source = data_dir / "models" / "qwen3" / "artifact"
+	source.mkdir(parents=True)
+	(source / "w.bin").write_bytes(b"weights")
+
+	imported = import_local_model(data_dir, source, "qwen3")
+
+	assert imported.path == str(source)
+	assert (source / "w.bin").read_bytes() == b"weights"
+
+
+def test_local_import_cli_reports_recursive_copy_as_param_error(tmp_path):
+	"""端到端：同一路径同时作为 --data-dir 与 --path 时不能回 NETWORK_ERROR。"""
+	result = CliRunner().invoke(
+		cli,
+		["--json", "--data-dir", str(tmp_path), "ai", "local", "import", "--model", "qwen3", "--path", str(tmp_path)],
+	)
+	payload = json.loads(result.stdout)
+
+	assert result.exit_code == 1
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "互相包含" in payload["error"]["message"]
+
+
 def test_import_local_model_writes_registry_without_leftover_temp(tmp_path):
 	source = _make_model_source(tmp_path)
 	import_local_model(tmp_path, source, "qwen-local")
