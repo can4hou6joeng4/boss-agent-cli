@@ -126,6 +126,50 @@ def test_unknown_subcommand_reports_available_commands(tmp_path):
 		assert all(action.startswith(f"{path} ") for action in next_actions)
 
 
+def test_missing_required_parameter_points_at_command_help(tmp_path):
+	"""缺必填参数 / 选项时不能只回 Click 的英文原文。
+
+	``boss mark <uid>`` 少写 ``--label``、``boss resume diff <旧名>`` 少写第二个
+	名字，信封原来只有 ``Missing option '--label'.`` / ``Missing argument
+	'NAME2'.`` 与笼统的「修正参数」：Agent 看不出缺的是选项还是位置参数，也没有
+	可执行的下一步。现在按类型给出中文说明，并指向该命令的 ``--help``。
+	"""
+	runner = CliRunner()
+	for args, command, fragment, path in (
+		(("mark", "abc"), "mark", "缺少必填选项 '--label'", "boss mark"),
+		(("resume", "diff", "a"), "resume", "缺少必填参数 'NAME2'", "boss resume diff"),
+	):
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *args])
+		parsed = _assert_single_stdout_json_error(result, command=command)
+		message = parsed["error"]["message"]
+		assert "Missing option" not in message
+		assert "Missing argument" not in message
+		assert message == f"{path} {fragment}"
+		assert parsed["error"]["recovery_action"] == f"用 {path} --help 查看用法"
+		assert parsed["hints"]["next_actions"] == [f"{path} --help"]
+
+
+def test_unexpected_extra_argument_is_reported_in_chinese(tmp_path):
+	"""多给参数时同样只有英文原文与一句「修正参数」。
+
+	``boss search golang extra`` / ``boss resume init a b`` 的信封原来是
+	``Got unexpected extra argument (extra)``——读起来像内部错误而不是「你多写了
+	一个参数」，Agent 不知道下一步该删掉它。
+	"""
+	runner = CliRunner()
+	for args, command, shown, path in (
+		(("search", "golang", "extra"), "search", "'extra'", "boss search"),
+		(("resume", "init", "a", "b"), "resume", "'a b'", "boss resume init"),
+	):
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *args])
+		parsed = _assert_single_stdout_json_error(result, command=command)
+		message = parsed["error"]["message"]
+		assert "Got unexpected" not in message
+		assert message == f"{path} 收到了多余的参数 {shown}"
+		assert f"用 {path} --help 查看用法" in parsed["error"]["recovery_action"]
+		assert parsed["hints"]["next_actions"] == [f"{path} --help"]
+
+
 def test_agent_run_requires_login_returns_envelope_not_traceback(tmp_path):
 	"""未登录的 `agent run` 必须返回 AUTH_REQUIRED 信封，而不是 traceback。
 
