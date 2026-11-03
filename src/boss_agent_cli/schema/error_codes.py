@@ -196,7 +196,8 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 	"GREET_LIMIT": {
 		"message": "今日打招呼次数已用完",
 		"recoverable": False,
-		"recovery_action": None,
+		# 平台按职位/账号限制主动沟通人数：等待权益恢复，不能自动重发。
+		"recovery_action": "今日主动沟通额度已用完：停止自动打招呼，等平台权益恢复后再试；不要自动重发本次招呼",
 	},
 	"INTERNAL_ERROR": {
 		"message": "CLI 内部错误，或平台返回了未预期的数据结构",
