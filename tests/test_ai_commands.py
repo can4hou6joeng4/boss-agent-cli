@@ -723,6 +723,77 @@ def test_config_set_max_tokens(tmp_path, monkeypatch):
 	assert "ai_max_tokens" in parsed["data"]["updated_fields"]
 
 
+def test_config_rejects_unknown_provider_without_endpoint(tmp_path, monkeypatch):
+	"""`--provider openai-cn` 这类笔误不能再写进配置。
+
+	以前直接返回 ok=true，之后每条 AI 命令都报「AI 服务未配置」，而 key 其实
+	已经存下了——用户会去重填 key，而不是改 provider 名。
+	"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	from boss_agent_cli.ai.config import AIConfigStore
+	runner = CliRunner()
+	result = _invoke(
+		runner, tmp_path, ["config", "--provider", "openai-cn", "--model", "gpt-4o", "--api-key", "sk-test"]
+	)
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "openai-cn" in parsed["error"]["message"]
+	assert "openai" in parsed["error"]["message"]
+	store = AIConfigStore(tmp_path)
+	assert store.load_config()["ai_provider"] is None
+	assert store.get_api_key() is None
+
+
+def test_config_rejects_custom_provider_without_base_url(tmp_path, monkeypatch):
+	"""provider=custom 必须同时给 --base-url，否则写下的是永远不能用的配置。"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["config", "--provider", "custom", "--model", "m"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "--base-url" in parsed["error"]["message"]
+
+
+def test_config_accepts_unknown_provider_with_explicit_base_url(tmp_path, monkeypatch):
+	"""自建 OpenAI 兼容端点：名字不在登记表里，但给了 --base-url 就应当可用。"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	runner = CliRunner()
+	result = _invoke(
+		runner,
+		tmp_path,
+		[
+			"config", "--provider", "myproxy", "--base-url", "https://proxy.example/v1",
+			"--model", "m", "--api-key", "sk-test",
+		],
+	)
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["data"]["resolved_base_url"] == "https://proxy.example/v1"
+
+
+def test_ai_command_names_provider_when_endpoint_missing(tmp_path, monkeypatch):
+	"""遗留坏配置（provider 已填、没有端点）再跑 AI 命令时要点名 provider。"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	from boss_agent_cli.ai.config import AIConfigStore
+	store = AIConfigStore(tmp_path)
+	store.save_config(ai_provider="custom", ai_model="m", ai_base_url=None)
+	store.save_api_key("sk-test")
+	_setup_resume(tmp_path)
+
+	result = _invoke(CliRunner(), tmp_path, ["polish", "test-resume"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "AI_NOT_CONFIGURED"
+	assert "'custom'" in parsed["error"]["message"]
+	assert "--base-url" in parsed["error"]["recovery_action"]
+
+
 # ── polish 错误分支 ──────────────────────────────────────
 
 

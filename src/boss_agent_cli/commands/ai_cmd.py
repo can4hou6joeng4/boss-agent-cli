@@ -9,7 +9,7 @@ from typing import Any, cast
 
 import click
 
-from boss_agent_cli.ai.config import AIConfigStore
+from boss_agent_cli.ai.config import AIConfigStore, PROVIDER_BASE_URLS, provider_endpoint
 from boss_agent_cli.ai.prompts import (
 	CHAT_COACH_PROMPT,
 	CHAT_REPLY_PROMPT,
@@ -66,13 +66,25 @@ def _require_ai_service(ctx: click.Context) -> AIService | None:
 	"""获取 AIService，未配置时输出错误信封并返回 None。"""
 	svc = _create_ai_service(ctx)
 	if svc is None:
-		handle_error_output(
-			ctx, "ai",
-			code="AI_NOT_CONFIGURED",
-			message="AI 服务未配置",
-			recoverable=True,
-			recovery_action="boss ai config --provider <provider> --model <model> --api-key <key>",
-		)
+		# provider / model / api_key 都在、只缺端点时，笼统的「AI 服务未配置」会把人
+		# 引去重填 key；真正要改的是 provider 名或补 base_url。
+		provider = _get_ai_config_store(ctx).unresolved_provider()
+		if provider is not None:
+			handle_error_output(
+				ctx, "ai",
+				code="AI_NOT_CONFIGURED",
+				message=f"AI provider {provider!r} 没有可用端点（provider 未登记或未设置 --base-url）",
+				recoverable=True,
+				recovery_action="boss ai config --provider <已登记的 provider>，或使用 --base-url 指向自建 OpenAI 兼容端点",
+			)
+		else:
+			handle_error_output(
+				ctx, "ai",
+				code="AI_NOT_CONFIGURED",
+				message="AI 服务未配置",
+				recoverable=True,
+				recovery_action="boss ai config --provider <provider> --model <model> --api-key <key>",
+			)
 		ctx.exit(1)
 		return None
 	return svc
@@ -263,6 +275,29 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 			]},
 		)
 		return
+
+	# provider 写错（如 `openai-cn`）或 provider=custom 没给 base_url 时，端点解析为
+	# None：写进配置后每条 AI 命令都只会回「AI 服务未配置」，用户看不出是 provider
+	# 名的问题，而配置和 api_key 已经落盘。写入前先拒绝，并列出登记表里的取值。
+	if provider is not None:
+		stored_base_url = store.load_config().get("ai_base_url")
+		effective_base_url = base_url if base_url is not None else stored_base_url
+		if provider_endpoint(provider, effective_base_url) is None:
+			if provider == "custom":
+				message = "provider 'custom' 需要同时传 --base-url（自建 OpenAI 兼容端点）"
+			else:
+				message = f"未知 AI provider: {provider!r}，可选: {', '.join(sorted(PROVIDER_BASE_URLS))}"
+			handle_error_output(
+				ctx, "ai-config",
+				code="INVALID_PARAM",
+				message=message,
+				hints={"next_actions": [
+					"boss ai config --provider custom --base-url <url> --model <model> --api-key <key>",
+					"boss ai config",
+				]},
+			)
+			ctx.exit(1)
+			return
 
 	# 有参数时更新配置
 	updates: dict[str, Any] = {}

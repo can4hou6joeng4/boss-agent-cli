@@ -102,7 +102,7 @@ boss ai polish my-resume
 
 Error codes you may see:
 
-- `AI_NOT_CONFIGURED`: provider, model, or API key is missing
+- `AI_NOT_CONFIGURED`: provider, model, or API key is missing, or the provider has no usable endpoint (unregistered and no `--base-url`; `recovery_action` names it)
 - `AI_API_ERROR`: the model API call failed, such as auth, network, rate-limit, unsupported-parameter, or output-limit issues. `error.message` includes the reason returned by the service (key-like strings are masked), and `recovery_action` suggests a next step for that kind of failure
 - `AI_PARSE_ERROR`: the model returned JSON that does not match the expected schema, so retrying is usually enough
 

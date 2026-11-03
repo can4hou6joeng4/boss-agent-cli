@@ -185,14 +185,26 @@ def local_import_cmd(ctx: click.Context, source_path: Path, model: str) -> None:
 			recoverable=recoverable,
 			recovery_action=recovery_action,
 		)
-	store = AIConfigStore(ctx.obj["data_dir"])
-	store.save_config(ai_provider="custom", ai_model=model, ai_base_url=None)
-	store.save_api_key("local")
+	# 只登记模型文件，不改 AI 配置：这里原先会写 ai_provider=custom / ai_base_url=None /
+	# ai_model=<导入名> 并覆盖 api_key，把已经配好的 ollama / vLLM 端点清空，下一条
+	# AI 命令就直接报「AI 服务未配置」。导入也不该切换当前模型——把一个正在服务的
+	# 模型名换成只有权重文件、没有服务在跑的导入名，请求同样必然失败。
 	handle_output(
 		ctx,
 		"ai.local.import",
 		asdict(imported),
-		render=lambda d: render_action_result(d, title="ai local import", next_steps=["boss ai local status"]),
+		render=lambda d: render_action_result(
+			d, title="ai local import", next_steps=[f"boss ai local configure --runtime vllm --model {model}"]
+		),
+		hints={
+			"next_actions": [
+				f"boss ai local configure --runtime vllm --model {model}",
+				"boss ai local status",
+			],
+			"operator_actions": [
+				"用 vLLM / llama.cpp 等 OpenAI 兼容服务加载该模型后，执行上面的 configure 命令把端点写入配置",
+			],
+		},
 	)
 
 
@@ -206,13 +218,19 @@ def local_smoke_cmd(ctx: click.Context) -> None:
 	base_url = store.get_base_url()
 	model = config.get("ai_model")
 	if not api_key or not base_url or not model:
+		provider = store.unresolved_provider()
+		message = (
+			"本地 AI 服务未配置"
+			if provider is None
+			else f"本地 AI 服务没有可用端点：provider {provider!r} 未登记或未设置 --base-url"
+		)
 		handle_error_output(
 			ctx,
 			"ai.local.smoke",
 			code="AI_NOT_CONFIGURED",
-			message="本地 AI 服务未配置",
+			message=message,
 			recoverable=True,
-			recovery_action="boss ai local configure --runtime ollama --model qwen3:14b",
+			recovery_action="boss ai local configure --runtime ollama --model qwen3:14b，或 boss ai config --provider <provider> --base-url <url>",
 		)
 		return
 	# 输出上限用配置值而不是写死的小数：思考模型在几十个 token 内写不完思考，

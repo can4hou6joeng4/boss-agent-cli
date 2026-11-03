@@ -1,6 +1,6 @@
 """Tests for AI configuration store."""
 
-from boss_agent_cli.ai.config import AIConfigStore, PROVIDER_BASE_URLS
+from boss_agent_cli.ai.config import AIConfigStore, PROVIDER_BASE_URLS, provider_endpoint
 from boss_agent_cli.ai.local_models import RUNTIME_BASE_URLS
 
 #: registry 的期望全集。新增 / 移除 provider 时必须同步这里——这正是让
@@ -214,6 +214,32 @@ def test_is_configured_missing_model(tmp_path, monkeypatch):
 	store.save_config(ai_provider="openai")
 	store.save_api_key("sk-test-key")
 	assert store.is_configured() is False
+
+
+def test_is_configured_requires_resolvable_endpoint(tmp_path, monkeypatch):
+	"""provider=custom 没配 base_url 时不可用。
+
+	以前 is_configured 只看 provider/model/api_key，`ai local status` 会报
+	「已配置」，而 smoke 与所有 AI 命令仍说「未配置」——同一个配置两种结论。
+	"""
+	store = _make_store(tmp_path, monkeypatch)
+	store.save_config(ai_provider="custom", ai_model="m")
+	store.save_api_key("sk-test-key")
+
+	assert store.is_configured() is False
+	assert store.unresolved_provider() == "custom"
+
+	store.save_config(ai_base_url="https://proxy.example/v1")
+	assert store.is_configured() is True
+	assert store.unresolved_provider() is None
+
+
+def test_provider_endpoint_prefers_explicit_base_url(tmp_path, monkeypatch):
+	"""显式 base_url 优先于 provider 查表；未登记的名字没有端点。"""
+	assert provider_endpoint("openai") == PROVIDER_BASE_URLS["openai"]
+	assert provider_endpoint("openai", "https://proxy.example/v1") == "https://proxy.example/v1"
+	assert provider_endpoint("openai-cn") is None
+	assert provider_endpoint("custom") is None
 
 
 # ── provider base URLs ───────────────────────────────────────

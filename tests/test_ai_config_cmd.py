@@ -3,7 +3,8 @@
 这条命令此前零测试覆盖。核心断言是**解析后的实际端点必须回显**：
 只设 `--provider` 时 `ai_base_url` 为空，真正生效的地址来自 `PROVIDER_BASE_URLS`
 查表；不回显的话，provider 名相近（`openrouter` / `orcarouter`）记混会把 API key
-与简历全文发到另一家，而用户在任何界面上都看不出差别。
+与简历全文发到另一家，而用户在任何界面上都看不出差别。写入路径另外在落盘前
+解析端点：解析不出来（未登记且没有 `--base-url`）直接拒绝，不留坏配置。
 """
 
 import json
@@ -82,8 +83,8 @@ def test_update_echoes_resolved_base_url_immediately(tmp_path):
 def test_brand_adjacent_providers_resolve_to_different_endpoints(tmp_path):
 	"""名字相近的 provider 必须解析到不同端点，且该差别在输出里可见。
 
-	`--provider` 没有 click.Choice 校验（自由字符串），所以拼错不会报错；
-	能救用户的只有这条回显。
+	`--provider` 是自由字符串（帮助文案是取值域的唯一文档），合法名字之间
+	仍可能记混；写入时的校验挡不住这类混淆，能救用户的只有这条回显。
 	"""
 	adjacent = [name for name in PROVIDER_BASE_URLS if name.endswith("router")]
 	if len(adjacent) < 2:
@@ -96,8 +97,24 @@ def test_brand_adjacent_providers_resolve_to_different_endpoints(tmp_path):
 	assert len(seen) == len(adjacent), f"{adjacent} 解析到了相同端点，用户无法区分"
 
 
-def test_unknown_provider_resolves_to_null_rather_than_a_wrong_endpoint(tmp_path):
-	"""拼错的 provider 解析为 null，不会静默落到别家端点。"""
-	data = _run(tmp_path, "--provider", "openrouterr", "--model", "m")["data"]
+def test_typo_provider_is_rejected_before_writing(tmp_path):
+	"""拼错的 provider 在写入前就拒绝：既不静默落到别家端点，也不留下用不了的配置。"""
+	result = CliRunner().invoke(
+		cli, ["--json", "--data-dir", str(tmp_path), "ai", "config", "--provider", "openrouterr", "--model", "m"]
+	)
+
+	assert result.exit_code == 1
+	payload = json.loads(result.stdout)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "openrouterr" in payload["error"]["message"]
+	assert AIConfigStore(tmp_path).load_config()["ai_provider"] is None
+
+
+def test_view_reports_null_endpoint_for_legacy_unknown_provider(tmp_path):
+	"""旧版本写下的未登记 provider（如已移除的 atlas）查看时仍回显 null，不缺键。"""
+	store = AIConfigStore(tmp_path)
+	store.save_config(ai_provider="atlas", ai_model="m")
+
+	data = _run(tmp_path)["data"]
 
 	assert data["resolved_base_url"] is None
