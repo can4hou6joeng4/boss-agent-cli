@@ -349,30 +349,15 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "切换招聘者账号或使用 --role candidate",
 	},
-	"APPLICATION_NOT_FOUND": {
-		"message": "投递申请不存在",
-		"recoverable": False,
-		"recovery_action": None,
-	},
 	"RESUME_NOT_SHARED": {
 		"message": "候选人未分享简历",
 		"recoverable": True,
 		"recovery_action": "使用 boss hr request-resume <friend_id> 请求附件简历",
 	},
-	"JOB_POST_LIMIT": {
-		"message": "职位发布数量已达上限",
-		"recoverable": False,
-		"recovery_action": None,
-	},
 	"PLATFORM_NOT_SUPPORTED": {
 		"message": "当前平台不支持该角色或子命令",
 		"recoverable": True,
 		"recovery_action": "切换到支持的平台（如 boss --platform zhipin hr ...）",
-	},
-	"AUTO_EXECUTED": {
-		"message": "招聘自动化动作已执行",
-		"recoverable": False,
-		"recovery_action": None,
 	},
 	"QUEUED_FOR_REVIEW": {
 		"message": "旧版本招聘自动化动作进入人工复核（当前决策路径不主动产生）",

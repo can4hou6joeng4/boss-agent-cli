@@ -469,7 +469,7 @@ _NON_ERROR_CODE_LITERALS = {
 	"BOSS_AGENT_MACHINE_ID", "BOSS_BROWSER_VERBOSE", "BOSS_DATA_DIR", "BOSS_EGRESS_PROBE_URL",  # 环境变量名
 	"CLI_ERROR",  # MCP 层「CLI 输出不可解析」分类，不进入 CLI 信封
 	"CREATE_NO_WINDOW",  # Windows 子进程常量
-	"DRY_RUN",  # 招聘自动化事件状态，不是错误码
+	"AUTO_EXECUTED", "DRY_RUN",  # 招聘自动化事件的成功状态，不是错误码
 	"HOOK_SCRIPT_NAMES",  # crawler 常量名
 	"PYTEST_CURRENT_TEST",  # pytest 环境变量
 	"SERVER_INSTRUCTIONS",  # MCP server 常量名
@@ -556,6 +556,34 @@ def test_schema_error_codes_have_recovery_action_field():
 	assert not missing, (
 		f"以下错误码缺少 recovery_action 字段: {missing}"
 	)
+
+
+def test_schema_error_codes_have_recovery_action_text():
+	"""每个错误码都要给出可理解的 recovery_action，null 会让 Agent 停在原地。
+
+	`APPLICATION_NOT_FOUND` / `JOB_POST_LIMIT` 曾以 `recovery_action: null` 登记，
+	但它们从未被任何代码路径产生，schema 里却像是真实可恢复分支。
+	"""
+	missing = [
+		code
+		for code, spec in SCHEMA_DATA["error_codes"].items()
+		if not isinstance(spec.get("recovery_action"), str) or not spec["recovery_action"].strip()
+	]
+
+	assert not missing, f"以下错误码缺少 recovery_action 文案: {missing}"
+
+
+def test_schema_error_codes_exclude_success_event_statuses():
+	"""AUTO_EXECUTED / DRY_RUN 是招聘自动化事件的成功状态，不能登记成错误码。
+
+	`AUTO_EXECUTED` 曾以 `recoverable: false`、`recovery_action: null` 混进
+	error_codes：Agent 枚举「可能收到的错误」时会看到一个表示「动作已执行」的条目。
+	真正的失败状态（如 `CIRCUIT_BREAKER_OPEN`）仍保留在登记表里。
+	"""
+	from boss_agent_cli.automation.models import EventStatus
+
+	for status in (EventStatus.AUTO_EXECUTED, EventStatus.DRY_RUN):
+		assert status.value not in SCHEMA_DATA["error_codes"]
 
 
 def test_search_schema_keeps_welfare_option():
