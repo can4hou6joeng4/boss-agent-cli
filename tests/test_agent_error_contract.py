@@ -393,6 +393,30 @@ def test_custom_parameter_errors_point_at_help(tmp_path, args, command, recovery
 	assert parsed["hints"]["next_actions"] == next_actions
 
 
+@pytest.mark.parametrize("value", [":::", "http://", "localhost:9222", "http://127.0.0.1:99999"])
+def test_invalid_cdp_url_is_rejected_at_startup(tmp_path, value):
+	"""非 http(s) / 无主机 / 端口非法的 CDP 地址要当成参数错误，
+	不能让 doctor 把同一个坏地址写进 next_actions 反复执行。"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "--cdp-url", value, "status"])
+
+	parsed = _assert_single_stdout_json_error(result, command="boss", code="INVALID_PARAM")
+	assert "http(s) 调试地址" in parsed["error"]["message"]
+	assert parsed["error"]["recovery_action"] == "用 boss --help 查看参数说明"
+	assert parsed["hints"]["next_actions"] == ["boss --help"]
+
+
+def test_invalid_config_cdp_url_does_not_block_config_repair(tmp_path):
+	"""config.json 里的坏 cdp_url 不能把 `boss config reset cdp_url` 也挡在启动期。"""
+	(tmp_path / "config.json").write_text(json.dumps({"cdp_url": ":::"}), encoding="utf-8")
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "config", "reset", "cdp_url"])
+
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	assert parsed["data"] == {"key": "cdp_url", "value": None, "restored": True}
+
+
 @pytest.mark.parametrize(
 	("args", "command", "recovery_fragment"),
 	[

@@ -1,8 +1,9 @@
 import re
 import sys
-from pathlib import Path
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import click
 
@@ -26,6 +27,21 @@ def _command_path(ctx: click.Context | None) -> str:
 			names.append(current.info_name)
 		current = current.parent
 	return " ".join(reversed(names))
+
+
+def _is_valid_cdp_url(value: str) -> bool:
+	"""``--cdp-url`` 必须是带主机名的 http(s) 地址。
+
+	``probe_cdp`` 只是把值拼成 ``{base}/json/version`` 交给 httpx：``:::``、
+	``http://``、``localhost:9222`` 这类值会让探测稳定失败，doctor 却仍把它原样
+	写进 next_actions，Agent 照着再执行一次还是同一个错误。启动期统一挡住。
+	"""
+	try:
+		parsed = urlsplit(value)
+		_ = parsed.port  # 端口非数字 / 超出 1-65535 时抛 ValueError
+	except ValueError:
+		return False
+	return parsed.scheme in {"http", "https"} and bool(parsed.hostname)
 
 
 def _missing_subcommand_error(ctx: click.Context | None) -> tuple[str, str, dict[str, Any]] | None:
@@ -798,6 +814,14 @@ def cli(
 			f"必须是调试地址字符串或 null，收到 {resolved_cdp_url!r}",
 			param_hint="--cdp-url",
 		)
+	if resolved_cdp_url is not None and (cdp_url is not None or ctx.invoked_subcommand != "config"):
+		# 显式 --cdp-url 任何时候都要校验；config.json 里的坏值则放行 config
+		# 子命令，否则 `boss config reset cdp_url` 会在启动期被同一个坏值挡住。
+		if not _is_valid_cdp_url(resolved_cdp_url):
+			raise click.BadParameter(
+				f"必须是形如 http://127.0.0.1:9222 的 http(s) 调试地址，收到 {resolved_cdp_url!r}",
+				param_hint="--cdp-url",
+			)
 	ctx.obj["cdp_url"] = resolved_cdp_url
 
 	# 归一化（大小写/首尾空白）后再校验，与下游 resolve_policy 的 .strip().lower() 一致，
