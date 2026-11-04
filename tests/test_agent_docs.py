@@ -217,6 +217,43 @@ def test_llms_txt_doc_links_resolve():
 	assert not missing, f"以下 llms.txt 链接指向不存在的文件: {missing}"
 
 
+def test_site_copy_matches_current_version_and_counts():
+	"""GitHub Pages 站点是公开门面：首页与站点 llms.txt 的事实必须跟代码一致。
+
+	首页曾停在 v3.0.0、MCP 工具数写成 77（实际 78）；它和仓库内 `llms.txt` 一样
+	没有守卫，发版时不会有人记得同步。
+	"""
+	from boss_agent_cli import __version__
+	from boss_agent_cli.main import cli
+	from boss_agent_cli.schema.data import SCHEMA_DATA
+
+	index = _read("demo/index.html")
+	site_llms = _read("demo/llms.txt")
+	command_count = len(SCHEMA_DATA["commands"])
+	recruiter_count = len(cli.commands["hr"].commands)
+	tool_count = len(_load_mcp_tools())
+
+	version_match = re.search(r'class="version-link"[^>]*>v([0-9.]+)</a>', index)
+	assert version_match, "demo/index.html 缺少版本链接"
+	assert version_match.group(1) == __version__
+
+	def _metric(label: str) -> int:
+		match = re.search(
+			rf'<span class="metric-value">(\d+)</span><span class="metric-label" data-zh="{label}"',
+			index,
+		)
+		assert match, f"demo/index.html 缺少「{label}」指标"
+		return int(match.group(1))
+
+	assert _metric("顶层命令") == command_count
+	assert _metric("MCP 工具") == tool_count
+
+	assert f"Current version: {__version__}" in site_llms
+	assert f"{command_count} top-level commands" in site_llms
+	assert f"{recruiter_count} recruiter subcommands" in site_llms
+	assert f"{tool_count} implemented MCP tools" in site_llms
+
+
 def test_contributing_documents_offline_mcp_evals():
 	"""离线评测必须能被贡献者发现：双语 CONTRIBUTING 说明场景、命令与独立终端要求。"""
 	zh = _read("CONTRIBUTING.md")

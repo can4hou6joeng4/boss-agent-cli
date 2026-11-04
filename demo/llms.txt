@@ -1,6 +1,6 @@
 # boss-agent-cli
 
-> A BOSS Zhipin CLI for people and AI agents. Welfare filtering, dual-role workflows, local shortlists, resumes and communication share one capability set. Current version: 3.0.0.
+> A BOSS Zhipin CLI for people and AI agents. Welfare filtering, dual-role workflows, local shortlists, resumes and communication share one capability set. Current version: 3.2.0.
 
 ## What it is
 Humans run `boss` to enter a terminal wizard. Agents call the same workflows through JSON, MCP or the Python API. `boss schema` is the capability source of truth: 39 top-level commands, 14 recruiter subcommands, and 78 implemented MCP tools. The sole registered platform is zhipin (BOSS Zhipin).
