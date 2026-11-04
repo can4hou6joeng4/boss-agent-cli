@@ -351,9 +351,46 @@ def test_invalid_delay_reports_chinese_message(tmp_path):
 	parsed = _assert_single_stdout_json_error(result, command="boss")
 	message = parsed["error"]["message"]
 	assert "Invalid value" not in message
-	assert message.startswith("参数 --delay 的值无效: ")
+	assert message.startswith("boss 的 --delay 取值无效：")
 	assert "30-60" in message
 	assert "0 <= 下限 <= 上限" in message
+	assert parsed["error"]["recovery_action"] == "用 boss --help 查看参数说明"
+	assert parsed["hints"]["next_actions"] == ["boss --help"]
+
+
+@pytest.mark.parametrize(
+	("args", "command", "recovery", "next_actions"),
+	[
+		(("--platform", "bogus", "status"), "boss", "用 boss --help 查看参数说明", ["boss --help"]),
+		(("--role", "admin", "status"), "boss", "用 boss --help 查看参数说明", ["boss --help"]),
+		(
+			("platforms", "--capability", "bogus"),
+			"platforms",
+			"用 boss platforms --help 查看参数说明",
+			["boss platforms --help"],
+		),
+		(
+			("mark", "uid1", "--label", "不存在的标签"),
+			"mark",
+			"用 boss mark --help 查看参数说明",
+			["boss mark --help"],
+		),
+	],
+)
+def test_custom_parameter_errors_point_at_help(tmp_path, args, command, recovery, next_actions):
+	"""回调自定义的中文参数校验不能只回「修正参数」+ null hints。
+
+	``--platform`` / ``--role`` / ``--capability`` 由回调自己 raise，``mark --label``
+	在命令体里 raise：原来都没有可执行的下一步；``mark`` 甚至会被
+	``handle_auth_errors`` 兜成可重试的 ``NETWORK_ERROR``。
+	"""
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *args])
+
+	parsed = _assert_single_stdout_json_error(result, command=command, code="INVALID_PARAM")
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["error"]["recovery_action"] == recovery
+	assert parsed["hints"]["next_actions"] == next_actions
 
 
 @pytest.mark.parametrize(
