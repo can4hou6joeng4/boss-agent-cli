@@ -967,6 +967,26 @@ def test_runner_normalizes_auth_and_network_failures(tmp_path):
 	assert last["next_action"] == "boss wizard --resume auth-required-run"
 	assert any("boss --platform zhipin login" in action for action in last["operator_actions"])
 
+
+def test_runner_auth_wait_quotes_run_id_in_resume_next_action(tmp_path):
+	"""等待登录时给出的 --resume next_action 同样要转义 run_id。"""
+	auth_plan = WorkflowPlan(
+		role="candidate",
+		platform="zhipin",
+		goal="recommendations",
+		inputs={},
+		requested_steps=("auth_status",),
+		mode="headless",
+	)
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, DEFAULT_ACTIONS).run(
+			auth_plan,
+			_action_context(tmp_path),
+			run_id="auth; echo pwn",
+		)
+	assert run["status"] == "waiting_input"
+	assert run["last_result"]["next_action"] == "boss wizard --resume 'auth; echo pwn'"
+
 	def broken(context, inputs, prior):
 		raise OSError("offline")
 
@@ -1288,6 +1308,21 @@ def test_runner_records_timeout_at_action_boundary(tmp_path):
 	assert run["status"] == "failed"
 	assert run["error"]["code"] == "WORKFLOW_TIMEOUT"
 	assert run["error"]["recoverable"] is True
+
+
+def test_runner_timeout_quotes_run_id_in_recovery_action(tmp_path):
+	"""run_id 是本地自由文本，拼进可执行的 --resume 提示前必须按 shell 参数转义。"""
+	def slow(context, inputs, prior):
+		time.sleep(0.01)
+		return StepResult({"done": True})
+
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, {"slow": slow}).run(
+			_plan("slow"), object(), run_id="run; echo pwn", timeout_seconds=0.001
+		)
+
+	assert run["error"]["code"] == "WORKFLOW_TIMEOUT"
+	assert run["error"]["recovery_action"] == "boss wizard --resume 'run; echo pwn'"
 
 
 def _shortlist_input() -> str:
@@ -2832,6 +2867,28 @@ def test_wizard_status_and_stop_after_stop_report_resume(tmp_path):
 	assert envelope["hints"]["next_actions"] == [
 		"boss wizard --resume wrn_stopped",
 		"boss wizard --status wrn_stopped",
+	]
+
+
+def test_wizard_stop_hints_quote_run_id_with_shell_metacharacters(tmp_path):
+	"""run_id 是本地自由文本，拼进可执行提示前必须按 shell 参数转义。"""
+	plan = WorkflowPlan(
+		role="candidate",
+		platform="zhipin",
+		goal="shortlist",
+		inputs={},
+		requested_steps=(),
+		mode="headless",
+	)
+	run_id = "wrn; echo pwn"
+	with WorkflowStore(tmp_path) as store:
+		store.create(run_id, plan)
+
+	stop = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), "wizard", "--stop", run_id])
+	assert stop.exit_code == 0, stop.stdout
+	assert json.loads(stop.stdout)["hints"]["next_actions"] == [
+		"boss wizard --resume 'wrn; echo pwn'",
+		"boss wizard --status 'wrn; echo pwn'",
 	]
 
 

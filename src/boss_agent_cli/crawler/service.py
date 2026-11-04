@@ -37,7 +37,7 @@ from boss_agent_cli.crawler.hooks import (
 	HookRegistrationError,
 )
 from boss_agent_cli.crawler.transport import CrawlRiskError, CrawlTransport
-from boss_agent_cli.display import risk_error_message
+from boss_agent_cli.display import risk_error_message, shell_argument
 
 
 @dataclass(frozen=True)
@@ -191,7 +191,7 @@ class CrawlOutcome:
 			"pages_completed": self.pages_completed,
 			"jobs_seen": self.jobs_seen,
 			"detail_checks": self.detail_checks,
-			"checkpoint": {"next_page": self.next_page, "resume_command": f"boss crawl resume {self.run_id}"},
+			"checkpoint": {"next_page": self.next_page, "resume_command": f"boss crawl resume {shell_argument(self.run_id)}"},
 			"output_paths": self.output_paths,
 			"requests_attempted": self.requests_attempted,
 			"detail_requests_attempted": self.detail_requests_attempted,

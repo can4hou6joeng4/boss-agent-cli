@@ -172,3 +172,17 @@ def test_ai_cover_letter_reports_cache_miss_for_job_id(tmp_path):
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "CACHE_MISS"
 	assert "job-999" in parsed["error"]["message"]
+
+
+def test_ai_cover_letter_quotes_job_id_in_recovery_action(tmp_path):
+	"""job_id 是自由文本，拼进 ``boss detail --job-id`` 提示前必须按 shell 参数转义。"""
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+	service = FakeAIService({})
+	with patch("boss_agent_cli.commands.ai_cmd._create_ai_service", return_value=service):
+		result = _invoke(runner, tmp_path, ["cover-letter", "test-resume", "--job-id", "job; echo pwn"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "CACHE_MISS"
+	assert parsed["error"]["recovery_action"] == "boss detail <security_id> --job-id 'job; echo pwn'"

@@ -482,6 +482,14 @@ def test_status_running_points_to_results_and_stop(tmp_path):
 	]
 
 
+def test_status_quotes_run_id_in_checkpoint_resume_command(tmp_path):
+	"""checkpoint.resume_command 也是可执行提示，run_id 必须按 shell 参数转义。"""
+	_seed_run(tmp_path, "run; echo pwn", status="running")
+	payload = _envelope(_invoke(CliRunner(), tmp_path, "crawl", "status", "run; echo pwn"))
+	assert payload["ok"] is True
+	assert payload["data"]["checkpoint"]["resume_command"] == "boss crawl resume 'run; echo pwn'"
+
+
 def test_status_reports_run_not_found(tmp_path):
 	result = _invoke(CliRunner(), tmp_path, "crawl", "status", "missing")
 	assert result.exit_code == 1
@@ -576,6 +584,20 @@ def test_shortlist_requires_exactly_one_selection_mode(tmp_path):
 	both = _invoke(runner, tmp_path, "crawl", "shortlist", "run-1", "--all", "--selector", selectors[0])
 	assert both.exit_code == 1
 	assert _envelope(both)["error"]["code"] == "INVALID_PARAM"
+
+
+def test_shortlist_hint_quotes_run_id_with_shell_metacharacters(tmp_path):
+	"""run_id 是自由文本，拼进 next_actions 前必须按 shell 参数转义。
+
+	``boss crawl shortlist 'run; echo pwn'`` 原先把这段原样拼成
+	``boss crawl results run; echo pwn``，Agent 照抄会把后半段当成独立命令执行。
+	"""
+	result = _invoke(CliRunner(), tmp_path, "crawl", "shortlist", "run; echo pwn")
+	assert result.exit_code == 1
+	payload = _envelope(result)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert payload["hints"]["next_actions"] == ["boss crawl results 'run; echo pwn'"]
+	assert "boss crawl results 'run; echo pwn'" in payload["error"]["recovery_action"]
 
 
 def test_shortlist_imports_selected_rows_with_tags_and_note(tmp_path):

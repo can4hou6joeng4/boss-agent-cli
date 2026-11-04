@@ -661,6 +661,19 @@ def test_link_resume_to_job(tmp_path):
 	assert parsed["hints"]["next_actions"] == ["boss resume applications linktest", "boss apply sid-001 jid-001"]
 
 
+def test_link_hints_quote_identifiers_with_shell_metacharacters(tmp_path):
+	"""security_id / job_id 是自由文本，拼进 ``boss apply`` 提示前必须转义。"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "quotetest", "--template", "default"])
+	result = _invoke(runner, tmp_path, ["link", "quotetest", "sid; echo pwn", "jid $(id)"])
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	assert parsed["hints"]["next_actions"] == [
+		"boss resume applications quotetest",
+		"boss apply 'sid; echo pwn' 'jid $(id)'",
+	]
+
+
 def test_link_resume_not_found(tmp_path):
 	runner = CliRunner()
 	result = _invoke(runner, tmp_path, ["link", "ghost", "sid", "jid"])

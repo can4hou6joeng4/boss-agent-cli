@@ -432,7 +432,7 @@ def _auth_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 		# 刻意不阻塞轮询等待扫码——Agent 与真人都不该被卡在这里。
 		login_command = f"boss --platform {context.platform} login"
 		control = context.workflow_control
-		resume_command = f"boss wizard --resume {control.run_id}" if control else "boss wizard"
+		resume_command = f"boss wizard --resume {shell_argument(control.run_id)}" if control else "boss wizard"
 		return StepResult(
 			{"authenticated": False, "platform": context.platform, "role": context.role},
 			status=WorkflowStatus.WAITING_INPUT,
@@ -899,14 +899,14 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 			"WORKFLOW_TIMEOUT",
 			outcome.error or "workflow 超过设定时限",
 			recoverable=True,
-			recovery_action=f"boss crawl resume {outcome.run_id}",
+			recovery_action=f"boss crawl resume {shell_argument(outcome.run_id)}",
 		)
 	if outcome.status in {"workflow_stopped", "stopped"} and "stop requested" in str(outcome.error or ""):
 		raise WorkflowActionError(
 			"WORKFLOW_STOPPED",
 			outcome.error or "crawl 已停止",
 			recoverable=True,
-			recovery_action=f"boss crawl resume {outcome.run_id}",
+			recovery_action=f"boss crawl resume {shell_argument(outcome.run_id)}",
 		)
 	if outcome.status in {"risk_stopped", "budget_stopped"}:
 		# 风控停止时 service 会 keep Chrome；把标记写入结果供向导文案使用。
@@ -919,7 +919,7 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 				"browser_kept_open": browser_kept_open,
 				"cdp_port": browser.get("cdp_port") or data.get("cdp_port"),
 			}
-		resume_command = f"boss crawl resume {outcome.run_id}"
+		resume_command = f"boss crawl resume {shell_argument(outcome.run_id)}"
 		operator_actions: tuple[str, ...]
 		if browser_kept_open:
 			operator_actions = (
@@ -945,7 +945,7 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 			"NETWORK_ERROR",
 			outcome.error or f"crawl 以状态 {outcome.status} 停止",
 			recoverable=True,
-			recovery_action=f"boss crawl resume {outcome.run_id}",
+			recovery_action=f"boss crawl resume {shell_argument(outcome.run_id)}",
 		)
 	return StepResult(data, artifacts=tuple(outcome.output_paths.values()))
 

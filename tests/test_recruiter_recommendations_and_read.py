@@ -218,6 +218,24 @@ def test_greet_rejects_blank_message_with_executable_next_step(greeting_args: li
 	factory.assert_not_called()
 
 
+def test_greet_blank_message_quotes_job_id_with_shell_metacharacters(greeting_args: list[str]) -> None:
+	"""job_id 是自由文本，拼进可执行的推荐命令前必须按 shell 参数转义。"""
+	args = [*greeting_args]
+	args[args.index("--job-id") + 1] = "job; echo pwn"
+	args[args.index("--message") + 1] = "   "
+	with patch("boss_agent_cli.commands.recruiter.recommendations.AuthManager") as auth, patch(
+		"boss_agent_cli.commands.recruiter.recommendations.get_recruiter_platform_instance"
+	) as factory:
+		result = CliRunner().invoke(cli, args)
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert payload["hints"]["next_actions"] == ["boss hr recommendations --job-id 'job; echo pwn'"]
+	assert "boss hr recommendations --job-id 'job; echo pwn'" in payload["error"]["recovery_action"]
+	auth.assert_not_called()
+	factory.assert_not_called()
+
+
 def test_greet_deduplicates_when_security_id_rotates(greeting_args: list[str], greeting_platform: MagicMock) -> None:
 	first = CliRunner().invoke(cli, greeting_args + ["--yes"])
 	assert first.exit_code == 0, first.output
@@ -444,6 +462,16 @@ def test_cache_write_failure_preserves_sent_and_blocks_resend(greeting_args, gre
 	second = CliRunner().invoke(cli, greeting_args + ["--yes"])
 	assert json.loads(second.output)["error"]["code"] == "GREET_RESULT_UNKNOWN"
 	greeting_platform.start_chat.assert_called_once()
+
+
+def test_greet_unknown_send_failure_quotes_job_id_in_check_command(greeting_args, greeting_platform):
+	"""发送结果未知时给出的核对命令同样要转义 job_id。"""
+	greeting_args[greeting_args.index("--job-id") + 1] = "job; echo pwn"
+	greeting_platform.start_chat.side_effect = RuntimeError("boom")
+	result = CliRunner().invoke(cli, greeting_args + ["--yes"])
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "GREET_RESULT_UNKNOWN"
+	assert payload["hints"]["next_actions"] == ["boss hr chat --job-id 'job; echo pwn'"]
 
 
 @pytest.mark.parametrize("failure,code", [

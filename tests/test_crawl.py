@@ -15,7 +15,13 @@ from boss_agent_cli.config import DEFAULTS
 from boss_agent_cli.crawler.exporter import write_run_outputs
 from boss_agent_cli.crawler.hooks import HOOK_SCRIPT_NAMES, HookInjection, HookRegistrationError, inject_hook_profile
 from boss_agent_cli.crawler.operations import crawl_results, import_crawl_shortlist
-from boss_agent_cli.crawler.service import CrawlBudget, CrawlService, CrawlSettings, CrawlStopRequested
+from boss_agent_cli.crawler.service import (
+	CrawlBudget,
+	CrawlOutcome,
+	CrawlService,
+	CrawlSettings,
+	CrawlStopRequested,
+)
 from boss_agent_cli.crawler.transport import JOBLIST_TARGET, CrawlRiskError, DrissionCrawlerSession
 from boss_agent_cli.main import cli
 
@@ -815,3 +821,18 @@ def test_exporter_formats_workbook(tmp_path):
 	assert sheet.column_dimensions["P"].width == 54
 	assert sheet["P2"].alignment.wrap_text is not True
 	assert sheet.row_dimensions[2].height == 20
+
+
+def test_crawl_outcome_quotes_run_id_in_resume_command():
+	"""outcome.checkpoint.resume_command 会被直接执行，run_id 必须按 shell 参数转义。"""
+	outcome = CrawlOutcome(
+		run_id="run; echo pwn",
+		status="stopped",
+		next_page=1,
+		pages_completed=0,
+		jobs_seen=0,
+		detail_checks=0,
+		output_paths={},
+		hooks=(),
+	)
+	assert outcome.as_dict()["checkpoint"]["resume_command"] == "boss crawl resume 'run; echo pwn'"

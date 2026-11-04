@@ -36,6 +36,7 @@ from boss_agent_cli.display import (
 	render_action_result,
 	render_list_result,
 	render_record_result,
+	shell_argument,
 )
 from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
@@ -220,7 +221,7 @@ def crawl_cmd(
 				"summary": {"analyzed": 0, "missing_details": len(missing)},
 			},
 			render=lambda d: render_record_result(d, title="agent crawl", next_steps=["boss shortlist list"]),
-			hints={"next_actions": [f"boss crawl resume {run_id} --with-detail"]},
+			hints={"next_actions": [f"boss crawl resume {shell_argument(run_id or '')} --with-detail"]},
 		)
 		return
 
@@ -265,7 +266,7 @@ def crawl_cmd(
 		render=lambda d: render_record_result(d, title="agent crawl", next_steps=["boss shortlist list"]),
 		hints={
 			"next_actions": [
-				f"boss crawl results {run_id}",
+				f"boss crawl results {shell_argument(run_id or '')}",
 				"boss shortlist list",
 			],
 		},
