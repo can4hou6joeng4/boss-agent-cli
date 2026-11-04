@@ -445,6 +445,30 @@ def test_data_dir_with_surrounding_whitespace_is_rejected(tmp_path):
 	assert not target.exists()
 
 
+def test_data_dir_pointing_at_a_file_is_param_error(tmp_path):
+	"""目录位置被文件占住时，错误要指向 --data-dir 而不是报成命令的本地 IO 失败。"""
+	target = tmp_path / "occupied"
+	target.write_text("not a directory", encoding="utf-8")
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(target), "--json", "status"])
+
+	parsed = _assert_single_stdout_json_error(result, command="boss", code="INVALID_PARAM")
+	assert "--data-dir" in parsed["error"]["message"]
+	assert "不是目录" in parsed["error"]["message"]
+	assert parsed["hints"]["next_actions"] == ["boss --help"]
+
+
+def test_data_dir_under_a_file_is_param_error(tmp_path):
+	"""上级路径是文件时同理：不能把 NotADirectoryError 说成本地读写失败。"""
+	target = tmp_path / "occupied"
+	target.write_text("not a directory", encoding="utf-8")
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(target / "child"), "--json", "status"])
+
+	parsed = _assert_single_stdout_json_error(result, command="boss", code="INVALID_PARAM")
+	assert "上级路径不是目录" in parsed["error"]["message"]
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows 的 Path.expanduser 不解析 ~user")
 def test_unknown_tilde_user_is_param_error_not_traceback():
 	"""`~某用户` 查不到家目录时 expanduser 抛 RuntimeError：原来只有 traceback、没有信封。"""

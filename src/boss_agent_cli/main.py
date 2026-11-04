@@ -36,12 +36,15 @@ def _command_path(ctx: click.Context | None) -> str:
 
 
 def _resolve_data_dir(data_dir: str) -> Path:
-	"""把 ``--data-dir`` 解析成绝对路径，拒绝启动期无法正确处理的值。
+	"""解析并创建 ``--data-dir``，拒绝启动期无法正确处理的值。
 
 	``Path("")`` 等于当前目录：`--data-dir ""`（例如脚本里变量为空）会把登录态、
 	缓存和配置静默写进 cwd，看起来像「未登录」而不是参数写错；``~某用户`` 在
 	系统里查不到用户时 ``expanduser`` 直接抛 ``RuntimeError``，traceback 冲出
-	stdout，连信封都没有。两者都在建目录之前按参数错误拒绝。
+	stdout，连信封都没有。两者都在建目录之前按参数错误拒绝。目录位置被一个
+	已存在的文件占住时，``mkdir`` 的 ``FileExistsError`` 原来会报成
+	``LOCAL_IO_ERROR``「status 本地文件读写失败: [Errno 17] File exists」——把
+	``--data-dir`` 的参数错误说成命令的本地 IO 失败，也没有可执行的下一步。
 	"""
 	raw = data_dir.strip()
 	if not raw:
@@ -55,12 +58,25 @@ def _resolve_data_dir(data_dir: str) -> Path:
 			param_hint="--data-dir",
 		)
 	try:
-		return Path(raw).expanduser()
+		resolved = Path(raw).expanduser()
 	except RuntimeError as exc:
 		raise click.BadParameter(
 			f"无法展开家目录写法，收到 {data_dir!r}（{exc}）；请改用绝对路径或 ~/ 开头的当前用户路径",
 			param_hint="--data-dir",
 		) from exc
+	try:
+		resolved.mkdir(parents=True, exist_ok=True)
+	except FileExistsError as exc:
+		raise click.BadParameter(
+			f"必须是目录路径，{str(resolved)!r} 已存在且不是目录",
+			param_hint="--data-dir",
+		) from exc
+	except NotADirectoryError as exc:
+		raise click.BadParameter(
+			f"必须是目录路径，{str(resolved)!r} 的上级路径不是目录",
+			param_hint="--data-dir",
+		) from exc
+	return resolved
 
 
 def _missing_subcommand_error(ctx: click.Context | None) -> tuple[str, str, dict[str, Any]] | None:
@@ -784,7 +800,6 @@ def cli(
 ) -> None:
 	ctx.ensure_object(dict)
 	resolved_dir = _resolve_data_dir(data_dir)
-	resolved_dir.mkdir(parents=True, exist_ok=True)
 	ctx.obj["data_dir"] = resolved_dir
 	ctx.obj["json_output"] = json_output
 	ctx.obj["exit_codes"] = exit_codes
