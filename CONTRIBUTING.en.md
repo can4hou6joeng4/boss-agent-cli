@@ -121,6 +121,18 @@ On error, the envelope must contain `error.code`, `error.recoverable`, and `erro
 - **Mock external I/O**: `AuthManager`, `BossClient`, `CacheStore`, and `AIService` are mock boundaries — tests should not hit the real BOSS Zhipin API.
 - **Error-path parity**: for every success path, add at least one error path test (auth expired, rate-limited, invalid param, etc.).
 
+## Offline MCP evals
+
+`evals/` contains a fixture-first, reproducible evaluation that compares an MCP agent using this CLI with a baseline agent across four scenarios (welfare filtering, detail + shortlist, compliance boundary, error recovery). Pass criteria and failure signals per scenario are listed in the scenario table in [`evals/README.md`](evals/README.md).
+
+The default `fixture` mode is fully offline: no platform calls and no login state. **Run it from an independent terminal — do not nest it inside Claude Code / Codex or other agent sessions**, where it can hang or produce false "0 trigger" results.
+
+```bash
+uv run python evals/run_eval.py --mode fixture
+```
+
+Expected output is `4/4 passed`; results are written to `evals/results/<timestamp>-fixture.json`. The suite is local evidence, not a CI job.
+
 ## Adding an AI Provider
 
 `boss ai` keeps a table of OpenAI-compatible providers in `PROVIDER_BASE_URLS` (`src/boss_agent_cli/ai/config.py`). New providers are welcome, **including PRs authored by the provider's own engineers**.

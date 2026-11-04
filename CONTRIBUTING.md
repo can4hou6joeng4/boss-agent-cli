@@ -103,6 +103,18 @@ git diff --check
 - **Mock 外部 I/O**：`AuthManager`、`BossClient`、`CacheStore`、`AIService` 是 mock 边界，测试不应真正调用 BOSS 直聘 API。
 - **错误路径对等**：每条成功路径至少对应一条错误路径测试（认证过期、限流、参数非法等）。
 
+## 离线 MCP 评测
+
+`evals/` 提供 fixture-first 的可复现评测，用来比较接入本 CLI 的 MCP Agent 与基线 Agent 在四个场景上的表现（福利筛选 / 详情+候选池 / 合规边界 / 错误恢复），各场景的通过判据与失败信号见 [`evals/README.md`](evals/README.md) 的场景表。
+
+默认 `fixture` 模式完全离线：不调用平台、不需要登录态。**必须在该独立终端运行，不要嵌套在 Claude Code / Codex 等 Agent 会话里**——嵌套会挂起或产生假的「0 触发」结果。
+
+```bash
+uv run python evals/run_eval.py --mode fixture
+```
+
+预期输出 `4/4 passed`，结果写入 `evals/results/<时间戳>-fixture.json`。评测是本地证据，不进入 CI。
+
 ## 维护者文档
 
 - [Release Checklist](docs/maintainer/release-checklist.md)
