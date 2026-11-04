@@ -213,6 +213,35 @@ def test_config_set_browser_source_validates_choice(tmp_path):
 	assert parsed["data"]["value"] == "auto"
 
 
+@pytest.mark.parametrize("value", [":::", "http://", "localhost:9222", "http://127.0.0.1:99999", "ftp://127.0.0.1:1"])
+def test_config_set_rejects_invalid_cdp_url(tmp_path, value):
+	"""坏 cdp_url 会让之后每条命令在启动期失败，写入时就必须拒绝。
+
+	`--cdp-url` 已在启动期按同一规则校验；`config set cdp_url` 若照常落盘，
+	用户会得到 ok=true，然后所有命令都换回 INVALID_PARAM。
+	"""
+	code, parsed = _invoke("config", "set", "cdp_url", value, tmp_path=tmp_path)
+
+	assert code == 1
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "http(s) 调试地址" in parsed["error"]["message"]
+	assert parsed["hints"]["next_actions"] == ["boss config get cdp_url", "boss config list"]
+	written = tmp_path / "config.json"
+	assert not written.exists() or "cdp_url" not in json.loads(written.read_text(encoding="utf-8"))
+
+
+def test_config_set_accepts_valid_cdp_url(tmp_path):
+	"""合法 CDP 地址写入后，普通命令能通过启动期校验。"""
+	code, parsed = _invoke("config", "set", "cdp_url", "http://127.0.0.1:9222", tmp_path=tmp_path)
+	assert code == 0
+	assert parsed["data"]["value"] == "http://127.0.0.1:9222"
+
+	code, parsed = _invoke("config", "list", tmp_path=tmp_path)
+	assert code == 0
+	item = next(i for i in parsed["data"]["items"] if i["key"] == "cdp_url")
+	assert item["value"] == "http://127.0.0.1:9222"
+
+
 def test_config_set_role_validates_choice(tmp_path):
 	"""role 进 _CONFIG_CHOICES：写进非法值时命令本身就该失败。
 

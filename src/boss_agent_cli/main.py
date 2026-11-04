@@ -3,7 +3,6 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
 
 import click
 
@@ -11,7 +10,14 @@ from boss_agent_cli import __version__
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.cache.store import CacheDatabaseInvalid
 from boss_agent_cli.commands.register import register_candidate_commands, register_recruiter_commands
-from boss_agent_cli.config import DEFAULT_REQUEST_DELAY, ROLES, load_config, validate_request_config
+from boss_agent_cli.config import (
+	CDP_URL_REQUIREMENT,
+	DEFAULT_REQUEST_DELAY,
+	ROLES,
+	is_valid_cdp_url,
+	load_config,
+	validate_request_config,
+)
 from boss_agent_cli.api.request_budget import validate_delay
 from boss_agent_cli.display import INTERNAL_ERROR_TYPES, error_contract_for_code
 from boss_agent_cli.hooks import create_hook_bus
@@ -55,21 +61,6 @@ def _resolve_data_dir(data_dir: str) -> Path:
 			f"无法展开家目录写法，收到 {data_dir!r}（{exc}）；请改用绝对路径或 ~/ 开头的当前用户路径",
 			param_hint="--data-dir",
 		) from exc
-
-
-def _is_valid_cdp_url(value: str) -> bool:
-	"""``--cdp-url`` 必须是带主机名的 http(s) 地址。
-
-	``probe_cdp`` 只是把值拼成 ``{base}/json/version`` 交给 httpx：``:::``、
-	``http://``、``localhost:9222`` 这类值会让探测稳定失败，doctor 却仍把它原样
-	写进 next_actions，Agent 照着再执行一次还是同一个错误。启动期统一挡住。
-	"""
-	try:
-		parsed = urlsplit(value)
-		_ = parsed.port  # 端口非数字 / 超出 1-65535 时抛 ValueError
-	except ValueError:
-		return False
-	return parsed.scheme in {"http", "https"} and bool(parsed.hostname)
 
 
 def _missing_subcommand_error(ctx: click.Context | None) -> tuple[str, str, dict[str, Any]] | None:
@@ -845,9 +836,9 @@ def cli(
 	if resolved_cdp_url is not None and (cdp_url is not None or ctx.invoked_subcommand != "config"):
 		# 显式 --cdp-url 任何时候都要校验；config.json 里的坏值则放行 config
 		# 子命令，否则 `boss config reset cdp_url` 会在启动期被同一个坏值挡住。
-		if not _is_valid_cdp_url(resolved_cdp_url):
+		if not is_valid_cdp_url(resolved_cdp_url):
 			raise click.BadParameter(
-				f"必须是形如 http://127.0.0.1:9222 的 http(s) 调试地址，收到 {resolved_cdp_url!r}",
+				f"{CDP_URL_REQUIREMENT}，收到 {resolved_cdp_url!r}",
 				param_hint="--cdp-url",
 			)
 	ctx.obj["cdp_url"] = resolved_cdp_url

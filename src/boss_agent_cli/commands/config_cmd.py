@@ -10,7 +10,7 @@ import click
 
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.automation.config import automation_config_from_dict
-from boss_agent_cli.config import DEFAULTS, ROLES, validate_request_config
+from boss_agent_cli.config import CDP_URL_REQUIREMENT, DEFAULTS, ROLES, is_valid_cdp_url, validate_request_config
 from boss_agent_cli.crawler.service import crawl_cdp_port, crawl_chrome_path, crawl_int_setting
 from boss_agent_cli.display import boss_command_for_ctx, handle_output, render_action_result, render_simple_list
 from boss_agent_cli.output import LOG_LEVELS
@@ -189,6 +189,10 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 		if key.startswith("request_") or key == "batch_greet_delay":
 			# Validate the edited field without preventing repairs of other bad fields.
 			validate_request_config({**DEFAULTS, key: parsed_value})
+		if key == "cdp_url" and parsed_value is not None and not is_valid_cdp_url(parsed_value):
+			# 启动期按同一规则拒绝坏地址：写进去会让之后每条命令都启动失败，
+			# 连 `config get` 也只能靠 config 子命令的豁免勉强可用。
+			raise ValueError(f"{CDP_URL_REQUIREMENT}，收到 {parsed_value!r}")
 	except (TypeError, ValueError) as exc:
 		_emit_invalid_value(ctx, key, str(exc))
 		ctx.exit(1)

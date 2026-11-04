@@ -2,6 +2,7 @@ import json
 import math
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 #: 请求间隔默认值。来源：实测评测显示 15 秒间隔连续 3 次 search 会在第 3 次命中
 #: code 37（「您的环境存在异常」），90 秒间隔 3/3 通过
@@ -52,6 +53,25 @@ DEFAULTS: dict[str, Any] = {
 		"max_retries": 1,
 	},
 }
+
+
+#: ``--cdp-url`` / ``config set cdp_url`` 的取值要求，启动期校验与写配置共用同一句文案。
+CDP_URL_REQUIREMENT = "必须是形如 http://127.0.0.1:9222 的 http(s) 调试地址"
+
+
+def is_valid_cdp_url(value: str) -> bool:
+	"""``cdp_url`` 必须是带主机名的 http(s) 地址。
+
+	``probe_cdp`` 只是把值拼成 ``{base}/json/version`` 交给 httpx：``:::``、
+	``http://``、``localhost:9222`` 这类值会让探测稳定失败，doctor 却仍把它原样
+	写进 next_actions，Agent 照着再执行一次还是同一个错误。
+	"""
+	try:
+		parsed = urlsplit(value)
+		_ = parsed.port  # 端口非数字 / 超出 1-65535 时抛 ValueError
+	except ValueError:
+		return False
+	return parsed.scheme in {"http", "https"} and bool(parsed.hostname)
 
 
 def expand_budget_directory(value: str) -> Path:
