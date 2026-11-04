@@ -54,6 +54,23 @@ DEFAULTS: dict[str, Any] = {
 }
 
 
+def expand_budget_directory(value: str) -> Path:
+	"""把 ``request_budget_dir`` 展开成绝对路径，未知用户的 ``~user`` 按配置错误处理。
+
+	``Path.expanduser`` 在系统里查不到该用户时抛 ``RuntimeError``：启动期它会让整条
+	命令冲出 traceback（连信封都没有），运行期则会把配置问题报成可重试的网络错误。
+	"""
+	try:
+		path = Path(value).expanduser()
+	except RuntimeError as exc:
+		raise ValueError(
+			f"request_budget_dir 的家目录写法无法展开（{exc}）：{value!r}；请改用绝对路径或 ~/ 开头的当前用户路径"
+		) from exc
+	if not path.is_absolute():
+		raise ValueError("request_budget_dir 必须是非空绝对路径或 null")
+	return path
+
+
 def validate_request_config(cfg: dict[str, Any]) -> None:
 	"""Validate local pacing limits before they reach a transport or persistence."""
 	for key in ("request_delay", "batch_greet_delay"):
@@ -74,10 +91,10 @@ def validate_request_config(cfg: dict[str, Any]) -> None:
 	if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or seconds <= 0:
 		raise ValueError("request_wait_timeout 必须是有限正数")
 	directory = cfg.get("request_budget_dir")
-	if directory is not None and (
-		not isinstance(directory, str) or not directory.strip() or not Path(directory).expanduser().is_absolute()
-	):
-		raise ValueError("request_budget_dir 必须是非空绝对路径或 null")
+	if directory is not None:
+		if not isinstance(directory, str) or not directory.strip():
+			raise ValueError("request_budget_dir 必须是非空绝对路径或 null")
+		expand_budget_directory(directory)
 
 
 def load_config(config_path: Path | None) -> dict[str, Any]:

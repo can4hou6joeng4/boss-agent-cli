@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 from typing import Any
 
 import pytest
@@ -253,6 +254,41 @@ def test_config_choices_cover_enum_valued_defaults():
 	from boss_agent_cli.commands.config_cmd import _CONFIG_CHOICES
 
 	assert {"operating_mode", "browser_source", "role", "log_level"} <= set(_CONFIG_CHOICES)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows 的 Path.expanduser 不解析 ~user")
+def test_unknown_home_in_request_budget_dir_returns_envelope(tmp_path):
+	"""config.json 里 `~未知用户` 的预算目录不能让整条命令冲出 traceback。"""
+	(tmp_path / "config.json").write_text(json.dumps({"request_budget_dir": "~boss_cli_no_such_user_zzz/x"}), encoding="utf-8")
+
+	code, parsed = _invoke("status", tmp_path=tmp_path)
+
+	assert code == 1
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "家目录写法无法展开" in parsed["error"]["message"]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows 的 Path.expanduser 不解析 ~user")
+def test_config_set_unknown_home_budget_dir_is_rejected(tmp_path):
+	"""`config set request_budget_dir "~未知用户/x"` 要按参数错误拒绝且不写盘。"""
+	code, parsed = _invoke("config", "set", "request_budget_dir", "~boss_cli_no_such_user_zzz/x", tmp_path=tmp_path)
+
+	assert code == 1
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "家目录写法无法展开" in parsed["error"]["message"]
+	written = tmp_path / "config.json"
+	assert not written.exists() or "request_budget_dir" not in json.loads(written.read_text(encoding="utf-8"))
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows 的 Path.expanduser 不解析 ~user")
+def test_budget_directory_unknown_home_is_value_error(tmp_path):
+	"""运行期解析预算目录同样把 ~未知用户 归一成 ValueError，而不是 RuntimeError。"""
+	from boss_agent_cli.api.request_budget import budget_directory
+
+	(tmp_path / "config.json").write_text(json.dumps({"request_budget_dir": "~boss_cli_no_such_user_zzz/x"}), encoding="utf-8")
+
+	with pytest.raises(ValueError, match="家目录写法无法展开"):
+		budget_directory(tmp_path)
 
 
 @pytest.mark.parametrize("value", [5, True, ["auto"], {"name": "auto"}])

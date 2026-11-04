@@ -152,17 +152,14 @@ def retry_after_seconds(value: object, *, now: float | None = None) -> float | N
 
 
 def budget_directory(data_dir: Path) -> Path:
-	from boss_agent_cli.config import load_config
+	from boss_agent_cli.config import expand_budget_directory, load_config
 
 	value = load_config(data_dir / "config.json").get("request_budget_dir")
 	if value is None:
 		return data_dir.resolve()
 	if not isinstance(value, str) or not value.strip():
 		raise ValueError("request_budget_dir must be a nonempty absolute path or null")
-	path = Path(value).expanduser()
-	if not path.is_absolute():
-		raise ValueError("request_budget_dir must be an absolute path")
-	return path.resolve()
+	return expand_budget_directory(value).resolve()
 
 
 def risk_lock_status(data_dir: Path) -> dict[str, Any]:

@@ -144,6 +144,16 @@ def _settings_from_context(
 	if resolved_port is None:
 		raw_port = cfg.get("cdp_port")
 		resolved_port = unused_local_port() if raw_port is None else crawl_cdp_port(raw_port)
+	# Path.expanduser 在 ~某用户 查不到家目录时抛 RuntimeError，原来一路兜成
+	# 可重试的 NETWORK_ERROR「重试」：参数问题被说成网络问题，重试只会重复失败。
+	resolved_hook_dir: Path | None = None
+	if hook_dir:
+		try:
+			resolved_hook_dir = Path(hook_dir).expanduser()
+		except RuntimeError as exc:
+			raise ValueError(
+				f"无法展开 --hook-dir 的家目录写法：{hook_dir!r}（{exc}）；请改用绝对路径或 ~/ 开头的当前用户路径"
+			) from exc
 	return CrawlSettings(
 		query=query,
 		city_code=_city_code(city),
@@ -153,7 +163,7 @@ def _settings_from_context(
 		chrome_path=resolved_chrome,
 		cdp_port=resolved_port,
 		hook_profile=resolved_hook,
-		hook_dir=Path(hook_dir).expanduser() if hook_dir else None,
+		hook_dir=resolved_hook_dir,
 		max_requests=crawl_int_setting(cfg, "max_requests", 20),
 		max_details=crawl_int_setting(cfg, "max_details", 50),
 		max_seconds=crawl_int_setting(cfg, "max_seconds", 600),
