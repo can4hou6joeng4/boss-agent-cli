@@ -29,6 +29,34 @@ def _command_path(ctx: click.Context | None) -> str:
 	return " ".join(reversed(names))
 
 
+def _resolve_data_dir(data_dir: str) -> Path:
+	"""把 ``--data-dir`` 解析成绝对路径，拒绝启动期无法正确处理的值。
+
+	``Path("")`` 等于当前目录：`--data-dir ""`（例如脚本里变量为空）会把登录态、
+	缓存和配置静默写进 cwd，看起来像「未登录」而不是参数写错；``~某用户`` 在
+	系统里查不到用户时 ``expanduser`` 直接抛 ``RuntimeError``，traceback 冲出
+	stdout，连信封都没有。两者都在建目录之前按参数错误拒绝。
+	"""
+	raw = data_dir.strip()
+	if not raw:
+		raise click.BadParameter(
+			"必须是目录路径，不能为空（省略该选项时使用 ~/.boss-agent）",
+			param_hint="--data-dir",
+		)
+	if raw != data_dir:
+		raise click.BadParameter(
+			f"路径首尾不能有空白，收到 {data_dir!r}",
+			param_hint="--data-dir",
+		)
+	try:
+		return Path(raw).expanduser()
+	except RuntimeError as exc:
+		raise click.BadParameter(
+			f"无法展开家目录写法，收到 {data_dir!r}（{exc}）；请改用绝对路径或 ~/ 开头的当前用户路径",
+			param_hint="--data-dir",
+		) from exc
+
+
 def _is_valid_cdp_url(value: str) -> bool:
 	"""``--cdp-url`` 必须是带主机名的 http(s) 地址。
 
@@ -764,7 +792,7 @@ def cli(
 	exit_codes: str,
 ) -> None:
 	ctx.ensure_object(dict)
-	resolved_dir = Path(data_dir).expanduser()
+	resolved_dir = _resolve_data_dir(data_dir)
 	resolved_dir.mkdir(parents=True, exist_ok=True)
 	ctx.obj["data_dir"] = resolved_dir
 	ctx.obj["json_output"] = json_output

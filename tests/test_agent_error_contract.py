@@ -1,6 +1,7 @@
 """Agent-facing CLI error envelope contract tests."""
 
 import json
+import sys
 from typing import Any
 
 import pytest
@@ -415,6 +416,43 @@ def test_invalid_config_cdp_url_does_not_block_config_repair(tmp_path):
 	assert result.exit_code == 0, result.output
 	parsed = json.loads(result.output)
 	assert parsed["data"] == {"key": "cdp_url", "value": None, "restored": True}
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_blank_data_dir_is_param_error_not_current_directory(tmp_path, monkeypatch, value):
+	"""`--data-dir ""` 只能报参数错误：`Path("")` 是当前目录，登录态与缓存会静默写进 cwd，
+	下一个命令还会因为找不到 ~/.boss-agent 的登录态而回「未登录」。"""
+	workdir = tmp_path / "work"
+	workdir.mkdir()
+	monkeypatch.chdir(workdir)
+
+	result = CliRunner().invoke(cli, ["--data-dir", value, "--json", "status"])
+
+	parsed = _assert_single_stdout_json_error(result, command="boss", code="INVALID_PARAM")
+	assert "不能为空" in parsed["error"]["message"]
+	assert parsed["hints"]["next_actions"] == ["boss --help"]
+	assert list(workdir.iterdir()) == []
+
+
+def test_data_dir_with_surrounding_whitespace_is_rejected(tmp_path):
+	"""首尾空白会被当成目录名的一部分，静默建出一个几乎看不见的目录。"""
+	target = tmp_path / "padded"
+
+	result = CliRunner().invoke(cli, ["--data-dir", f" {target} ", "--json", "status"])
+
+	parsed = _assert_single_stdout_json_error(result, command="boss", code="INVALID_PARAM")
+	assert "首尾不能有空白" in parsed["error"]["message"]
+	assert not target.exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows 的 Path.expanduser 不解析 ~user")
+def test_unknown_tilde_user_is_param_error_not_traceback():
+	"""`~某用户` 查不到家目录时 expanduser 抛 RuntimeError：原来只有 traceback、没有信封。"""
+	result = CliRunner().invoke(cli, ["--data-dir", "~boss_cli_no_such_user_zzz/data", "--json", "status"])
+
+	parsed = _assert_single_stdout_json_error(result, command="boss", code="INVALID_PARAM")
+	assert "无法展开家目录写法" in parsed["error"]["message"]
+	assert parsed["hints"]["next_actions"] == ["boss --help"]
 
 
 @pytest.mark.parametrize(
