@@ -55,6 +55,11 @@ Git tags and does not replace the local quality baseline or fixture eval. Run
 `uv run python evals/run_eval.py --mode fixture` in an independent terminal, not
 inside an active agent session.
 
+The tag-triggered `release.yml` runs the same artifact check
+(`--artifacts dist --tag "$GITHUB_REF_NAME" --require-clean`) between `uv build`
+and `uv publish`, so a tag that does not match `pyproject.toml` fails before
+anything reaches PyPI.
+
 ## 5. Publish
 
 Create an annotated release tag only after the local verification above is green:
