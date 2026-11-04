@@ -7,8 +7,8 @@
 
 | Version | Supported          |
 |---------|--------------------|
-| 1.17.x  | :white_check_mark: |
-| < 1.17  | :x:                |
+| 3.2.x   | :white_check_mark: |
+| < 3.2   | :x:                |
 
 升级：`uv tool install --upgrade boss-agent-cli`（或 `pip install -U boss-agent-cli`）。
 
