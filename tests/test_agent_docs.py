@@ -188,6 +188,35 @@ def test_readme_en_mentions_current_mcp_tool_count():
 	assert "[Roadmap](ROADMAP.en.md)" in content
 
 
+def test_llms_txt_reports_current_version_and_counts():
+	"""`llms.txt` 是 Agent 的入口索引：版本与计数必须与代码一致。
+
+	它曾把版本停在 3.0.0，连着两个 minor 版本没人发现——README 与
+	capability-matrix 的计数都有守卫，而这份机器入口没有任何测试。
+	"""
+	from boss_agent_cli import __version__
+	from boss_agent_cli.main import cli
+	from boss_agent_cli.schema.data import SCHEMA_DATA
+
+	content = _read("llms.txt")
+	recruiter_subcommands = len(cli.commands["hr"].commands)
+
+	assert f"Current version: {__version__}" in content
+	assert f"{len(SCHEMA_DATA['commands'])} top-level commands" in content
+	assert f"{recruiter_subcommands} first-level recruiter subcommands" in content
+	assert f"{len(_load_mcp_tools())} implemented MCP tools" in content
+
+
+def test_llms_txt_doc_links_resolve():
+	"""`llms.txt` 里的文档链接必须都指向仓库内真实存在的文件。"""
+	content = _read("llms.txt")
+	links = re.findall(r"\]\((docs/[^)#]+)\)", content)
+
+	assert links, "llms.txt 应至少链接 Agent quickstart / commands / capability matrix"
+	missing = [path for path in links if not (ROOT / path).exists()]
+	assert not missing, f"以下 llms.txt 链接指向不存在的文件: {missing}"
+
+
 def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
 	quickstart = _read("docs/agent-quickstart.en.md")
 	assert "# Agent Quickstart" in quickstart
