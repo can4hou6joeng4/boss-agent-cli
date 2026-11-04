@@ -217,6 +217,37 @@ def test_llms_txt_doc_links_resolve():
 	assert not missing, f"以下 llms.txt 链接指向不存在的文件: {missing}"
 
 
+def test_contributing_documents_offline_mcp_evals():
+	"""离线评测必须能被贡献者发现：双语 CONTRIBUTING 说明场景、命令与独立终端要求。"""
+	zh = _read("CONTRIBUTING.md")
+	en = _read("CONTRIBUTING.en.md")
+
+	for content in (zh, en):
+		assert "uv run python evals/run_eval.py --mode fixture" in content
+		assert "evals/README.md" in content
+		assert "4/4 passed" in content
+
+	assert "## 离线 MCP 评测" in zh
+	assert "不要嵌套" in zh
+	assert "## Offline MCP evals" in en
+	assert "do not nest" in en.lower()
+
+
+def test_readme_links_offline_evals():
+	"""README 的贡献入口要指向评测说明，而不是只藏在 evals/ 目录里。"""
+	for path in ("README.md", "README.en.md"):
+		assert "evals/README.md" in _read(path), path
+
+
+def test_evals_readme_documents_scenario_criteria():
+	"""评测说明要有「场景 → 通过信号 → 失败信号」表，失败时能直接定位原因。"""
+	content = _read("evals/README.md")
+	assert "## Scenario Criteria" in content
+	for scenario in ("福利筛选", "详情+候选池", "合规边界", "错误恢复"):
+		assert scenario in content
+	assert "| Scenario | Pass signal (with-MCP) | Failure signals |" in content
+
+
 def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
 	quickstart = _read("docs/agent-quickstart.en.md")
 	assert "# Agent Quickstart" in quickstart

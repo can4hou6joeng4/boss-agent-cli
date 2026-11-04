@@ -199,7 +199,7 @@ CLI (Click)
 
 ## 🤝 贡献者
 
-欢迎 Issue / PR：`git clone` → `feat/xxx` 分支 → 写测试 → `python scripts/quality_baseline.py`（Windows 中文系统可先 `$env:PYTHONUTF8='1'`）→ PR。详见 [CONTRIBUTING.md](CONTRIBUTING.md)，上手路径见 [快速上手](docs/getting-started.md)。
+欢迎 Issue / PR：`git clone` → `feat/xxx` 分支 → 写测试 → `python scripts/quality_baseline.py`（Windows 中文系统可先 `$env:PYTHONUTF8='1'`）→ PR。详见 [CONTRIBUTING.md](CONTRIBUTING.md)，上手路径见 [快速上手](docs/getting-started.md)。可复现的离线 MCP 评测见 [`evals/README.md`](evals/README.md)。
 
 感谢每一位让 boss-agent-cli 变得更好的贡献者，去关注他们！❤️
 
