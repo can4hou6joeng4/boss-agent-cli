@@ -167,6 +167,36 @@ def test_run_rejects_unknown_city_before_touching_the_browser(tmp_path, monkeypa
 	assert _envelope(result)["hints"]["next_actions"] == ["boss crawl configure --help"]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows 的 Path.expanduser 不解析 ~user")
+def test_run_rejects_unknown_home_hook_dir_before_touching_the_browser(tmp_path, monkeypatch):
+	"""`--hook-dir "~未知用户/…"` 是参数问题，不能兜成可重试的网络错误。"""
+
+	def _explode(settings):  # pragma: no cover - 不应被调用
+		raise AssertionError("非法 --hook-dir 不应进入 transport 构造")
+
+	monkeypatch.setattr("boss_agent_cli.commands.crawl._transport_factory", _explode)
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(
+		runner,
+		tmp_path,
+		"crawl",
+		"run",
+		"AI",
+		"--city",
+		"杭州",
+		"--hook-profile",
+		"screenshot-full",
+		"--hook-dir",
+		"~boss_cli_no_such_user_zzz/hooks",
+	)
+	assert result.exit_code == 1
+	error = _envelope(result)["error"]
+	assert error["code"] == "INVALID_PARAM"
+	assert "无法展开 --hook-dir 的家目录写法" in error["message"]
+	assert error["recoverable"] is False
+
+
 def test_run_honors_configured_zero_max_retries(tmp_path, monkeypatch):
 	"""configure 接受 --max-retries 0；运行时不能被 `or` 悄悄改回 1。"""
 	from boss_agent_cli.commands import crawl as crawl_module
