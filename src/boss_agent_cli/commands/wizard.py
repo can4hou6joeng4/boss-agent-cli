@@ -10,7 +10,7 @@ import click
 
 from boss_agent_cli.cache.store import CacheRecordInvalid
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
-from boss_agent_cli.display import boss_command_for_ctx, console, handle_error_output, handle_output
+from boss_agent_cli.display import boss_command_for_ctx, console, handle_error_output, handle_output, shell_argument
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS
 from boss_agent_cli.wizard.catalog import build_plan, require_supported_platform
 from boss_agent_cli.wizard.models import WorkflowInputError, WorkflowPlan, WizardInput
@@ -93,13 +93,13 @@ def _workflow_next_actions(ctx: click.Context, run: Mapping[str, Any]) -> list[s
 	run_id = str(run.get("run_id") or "").strip()
 	if not run_id:
 		return [prefix]
-	status_cmd = f"{prefix} --status {run_id}"
+	status_cmd = f"{prefix} --status {shell_argument(run_id)}"
 	status = str(run.get("status") or "")
 	if status in {"stopped", "failed", "waiting_input"}:
 		# 断点仍在本地：恢复是唯一能接着往下跑的动作，status 方便先核对。
-		return [f"{prefix} --resume {run_id}", status_cmd]
+		return [f"{prefix} --resume {shell_argument(run_id)}", status_cmd]
 	if status in {"running", "pending"}:
-		return [status_cmd, f"{prefix} --stop {run_id}"]
+		return [status_cmd, f"{prefix} --stop {shell_argument(run_id)}"]
 	return [prefix, status_cmd]
 
 
@@ -316,7 +316,7 @@ def _emit_run(ctx: click.Context, run: Mapping[str, Any], *, interactive: bool) 
 		"wizard",
 		run,
 		render=render_run,
-		hints={"next_actions": [f"boss wizard --status {run['run_id']}"]},
+		hints={"next_actions": [f"boss wizard --status {shell_argument(str(run['run_id']))}"]},
 	)
 
 
@@ -762,7 +762,7 @@ def _run_wizard_command(
 		"wizard",
 		run,
 		render=render_run,
-		hints={"next_actions": [f"boss wizard --status {run['run_id']}"]},
+		hints={"next_actions": [f"boss wizard --status {shell_argument(str(run['run_id']))}"]},
 	)
 
 

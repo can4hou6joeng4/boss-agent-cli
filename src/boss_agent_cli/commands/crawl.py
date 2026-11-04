@@ -35,6 +35,7 @@ from boss_agent_cli.display import (
 	handle_output,
 	login_action_for_ctx,
 	render_action_result,
+	shell_argument,
 	render_record_result,
 )
 
@@ -205,7 +206,7 @@ def _report_corrupt_run(ctx: click.Context, command: str, run_id: str, exc: Cach
 		command,
 		code="CACHE_RECORD_INVALID",
 		message=str(exc),
-		hints={"next_actions": ["boss crawl start <关键词>", f"boss crawl status {run_id}"]},
+		hints={"next_actions": ["boss crawl start <关键词>", f"boss crawl status {shell_argument(run_id)}"]},
 	)
 
 
@@ -266,15 +267,15 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 	if outcome.status == "risk_stopped":
 		hints = {"operator_actions": [
 			*UNLOCK_OPERATOR_ACTIONS,
-			f"完成人工恢复后，显式执行 boss crawl resume {outcome.run_id} 从原断点继续",
+			f"完成人工恢复后，显式执行 boss crawl resume {shell_argument(outcome.run_id)} 从原断点继续",
 		]}
 	elif outcome.status != "completed":
-		hints = {"next_actions": [f"boss crawl resume {outcome.run_id}"]}
+		hints = {"next_actions": [f"boss crawl resume {shell_argument(outcome.run_id)}"]}
 	else:
 		hints = {
 			# 采集跑完后 output_paths 只是落盘文件；Agent 要继续筛选得先按 run_id 读结果，
 			# 空 next_actions 会让它只能自己猜命令（crawl status 的 completed 分支同此口径）。
-			"next_actions": [f"boss crawl results {outcome.run_id}"],
+			"next_actions": [f"boss crawl results {shell_argument(outcome.run_id)}"],
 			"operator_actions": ["查看 output_paths 中的 JSON、CSV 或 XLSX 结果文件"],
 		}
 	handle_output(
@@ -494,7 +495,7 @@ def start_cmd(
 					)
 		# operating_mode 在新版本不再限制能力，指引应指向真正的启动失败原因。
 		recovery_action = (
-			f"检查磁盘空间与数据目录权限后执行 boss crawl resume {run_id} 重试"
+			f"检查磁盘空间与数据目录权限后执行 boss crawl resume {shell_argument(run_id)} 重试"
 			if run_id is not None
 			else "检查磁盘空间与数据目录权限后重新执行 boss crawl start"
 		)
@@ -509,7 +510,7 @@ def start_cmd(
 		return
 	# 终端里看到的下一步必须与信封 hints 同口径：此前终端只提示 stop、
 	# 信封只提示 results，真人不知道去哪里看结果，Agent 不知道可以中止。
-	next_steps = [f"boss crawl status {run_id}", f"boss crawl results {run_id}", f"boss crawl stop {run_id}"]
+	next_steps = [f"boss crawl status {shell_argument(run_id)}", f"boss crawl results {shell_argument(run_id)}", f"boss crawl stop {shell_argument(run_id)}"]
 	handle_output(
 		ctx,
 		"crawl.start",
@@ -517,7 +518,7 @@ def start_cmd(
 			"run_id": run_id,
 			"status": "queued",
 			"background": True,
-			"checkpoint": {"resume_command": f"boss crawl resume {run_id}"},
+			"checkpoint": {"resume_command": f"boss crawl resume {shell_argument(run_id)}"},
 		},
 		render=lambda d: render_record_result(d, title="crawl start", next_steps=next_steps),
 		hints={"next_actions": next_steps},
@@ -586,7 +587,7 @@ def resume_cmd(
 				code="CRAWL_UNAVAILABLE",
 				message=f"无法启动 crawl 后台任务: {exc}",
 				recoverable=True,
-				recovery_action=f"检查磁盘空间与数据目录权限后执行 boss crawl resume {run_id} 重试",
+				recovery_action=f"检查磁盘空间与数据目录权限后执行 boss crawl resume {shell_argument(run_id)} 重试",
 			)
 			return
 		if already_complete:
@@ -595,16 +596,16 @@ def resume_cmd(
 				ctx,
 				"crawl.resume",
 				{"run_id": run_id, "status": "completed", "background": True},
-				render=lambda d: render_action_result(d, title="crawl resume", next_steps=[f"boss crawl results {run_id}"]),
-				hints={"next_actions": [f"boss crawl results {run_id}"]},
+				render=lambda d: render_action_result(d, title="crawl resume", next_steps=[f"boss crawl results {shell_argument(run_id)}"]),
+				hints={"next_actions": [f"boss crawl results {shell_argument(run_id)}"]},
 			)
 			return
 		handle_output(
 			ctx,
 			"crawl.resume",
 			{"run_id": run_id, "status": status if status in {"queued", "running"} else "queued", "background": True},
-			render=lambda d: render_action_result(d, title="crawl resume", next_steps=[f"boss crawl status {run_id}"]),
-			hints={"next_actions": [f"boss crawl status {run_id}"]},
+			render=lambda d: render_action_result(d, title="crawl resume", next_steps=[f"boss crawl status {shell_argument(run_id)}"]),
+			hints={"next_actions": [f"boss crawl status {shell_argument(run_id)}"]},
 		)
 		return
 	_run_service(
@@ -638,9 +639,9 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 	hints: dict[str, list[str]] | None = None
 	# TTY 的下一步与信封 hints 必须同一口径：只有还在跑的 run 才值得提示 stop，
 	# 已结束的 run 上 `crawl stop` 仍会返回 stop_requested，但什么都不会停。
-	next_steps = [f"boss crawl results {run_id}"]
+	next_steps = [f"boss crawl results {shell_argument(run_id)}"]
 	if payload["status"] in ("queued", "running"):
-		next_steps.append(f"boss crawl stop {run_id}")
+		next_steps.append(f"boss crawl stop {shell_argument(run_id)}")
 	if payload["status"] == "risk_stopped":
 		# 风险锁会先于浏览器构造阻断 resume：直接照 checkpoint.resume_command
 		# 重试只会再次撞锁。解锁必须由用户确认官方页面恢复后显式执行。
@@ -680,8 +681,8 @@ def stop_cmd(ctx: click.Context, run_id: str) -> None:
 		ctx,
 		"crawl.stop",
 		{"run_id": run_id, "status": "stop_requested"},
-		render=lambda d: render_action_result(d, title="crawl stop", next_steps=[f"boss crawl status {run_id}"]),
-		hints={"next_actions": [f"boss crawl status {run_id}"]},
+		render=lambda d: render_action_result(d, title="crawl stop", next_steps=[f"boss crawl status {shell_argument(run_id)}"]),
+		hints={"next_actions": [f"boss crawl status {shell_argument(run_id)}"]},
 	)
 
 
@@ -707,8 +708,8 @@ def results_cmd(ctx: click.Context, run_id: str, page: int | None, detail_status
 		ctx,
 		"crawl.results",
 		payload,
-		render=lambda d: render_record_result(d, title="crawl results", next_steps=[f"boss crawl shortlist {run_id}"]),
-		hints={"next_actions": [f"boss crawl shortlist {run_id}"]},
+		render=lambda d: render_record_result(d, title="crawl results", next_steps=[f"boss crawl shortlist {shell_argument(run_id)}"]),
+		hints={"next_actions": [f"boss crawl shortlist {shell_argument(run_id)}"]},
 	)
 
 
@@ -729,7 +730,7 @@ def shortlist_cmd(
 ) -> None:
 	"""将 crawl 结果导入原项目的本地职位候选池。"""
 	if include_all == bool(selectors):
-		results_cmd = boss_command_for_ctx(ctx, f"crawl results {run_id}")
+		results_cmd = boss_command_for_ctx(ctx, f"crawl results {shell_argument(run_id)}")
 		handle_error_output(
 			ctx,
 			"crawl.shortlist",
@@ -757,7 +758,7 @@ def shortlist_cmd(
 		_report_corrupt_run(ctx, "crawl.shortlist", run_id, exc)
 		return
 	except ValueError as exc:
-		results_cmd = boss_command_for_ctx(ctx, f"crawl results {run_id}")
+		results_cmd = boss_command_for_ctx(ctx, f"crawl results {shell_argument(run_id)}")
 		handle_error_output(
 			ctx,
 			"crawl.shortlist",

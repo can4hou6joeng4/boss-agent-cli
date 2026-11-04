@@ -581,9 +581,9 @@ def resume_link_cmd(ctx: click.Context, name: str, security_id: str, job_id: str
 		ctx, "resume",
 		{"action": "link", "name": name, "security_id": security_id, "job_id": job_id},
 		render=lambda d: render_action_result(
-			d, title="resume link", next_steps=[f"boss resume applications {shell_argument(name)}", f"boss apply {security_id} {job_id}"]
+			d, title="resume link", next_steps=[f"boss resume applications {shell_argument(name)}", f"boss apply {shell_argument(security_id)} {shell_argument(job_id)}"]
 		),
-		hints={"next_actions": [f"boss resume applications {shell_argument(name)}", f"boss apply {security_id} {job_id}"]},
+		hints={"next_actions": [f"boss resume applications {shell_argument(name)}", f"boss apply {shell_argument(security_id)} {shell_argument(job_id)}"]},
 	)
 
 

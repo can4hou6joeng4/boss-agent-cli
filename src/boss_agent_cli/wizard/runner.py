@@ -18,6 +18,7 @@ from boss_agent_cli.display import (
 	error_contract_for_code,
 	risk_error_contract,
 	risk_error_message,
+	shell_argument,
 )
 from boss_agent_cli.output import is_local_io_error
 from boss_agent_cli.wizard.models import StepResult, WorkflowInputError, WorkflowPlan, WorkflowStatus
@@ -99,7 +100,7 @@ class WorkflowControl:
 				"WORKFLOW_TIMEOUT",
 				"workflow 超过设定时限",
 				recoverable=True,
-				recovery_action=f"boss wizard --resume {self.run_id}",
+				recovery_action=f"boss wizard --resume {shell_argument(self.run_id)}",
 			)
 
 
@@ -182,7 +183,7 @@ class WorkflowRunner:
 					step_name,
 					code="WORKFLOW_TIMEOUT",
 					message=f"workflow 超过 {timeout_seconds:g} 秒未完成",
-					recovery_action=f"boss wizard --resume {run_id}",
+					recovery_action=f"boss wizard --resume {shell_argument(run_id)}",
 				)
 			if on_event:
 				on_event("step_started", step_name, None)
@@ -330,7 +331,7 @@ class WorkflowRunner:
 						step_name,
 						code="WORKFLOW_TIMEOUT",
 						message=f"workflow 超过 {timeout_seconds:g} 秒未完成",
-						recovery_action=f"boss wizard --resume {run_id}",
+						recovery_action=f"boss wizard --resume {shell_argument(run_id)}",
 						preserve_result=True,
 					)
 				self._store.update_run(

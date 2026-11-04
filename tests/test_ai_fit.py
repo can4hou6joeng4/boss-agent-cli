@@ -7,6 +7,7 @@ from unittest.mock import patch
 from click.testing import CliRunner
 
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.commands.ai_cmd import _fit_missing_detail_item
 from boss_agent_cli.main import cli
 
 
@@ -145,3 +146,9 @@ def test_ai_fit_empty_shortlist_returns_empty_report(tmp_path):
 	assert parsed["ok"] is True
 	assert parsed["data"] == {"results": [], "missing": [], "summary": {"analyzed": 0, "missing_details": 0}}
 	assert service.messages == []
+
+
+def test_fit_missing_detail_hint_quotes_security_id():
+	"""security_id 来自模型输出，拼进 ``boss detail`` 提示前必须按 shell 参数转义。"""
+	item = _fit_missing_detail_item({"security_id": "sec; echo pwn", "job_id": "job-1"})
+	assert item["hint"] == "先 boss detail 'sec; echo pwn'"

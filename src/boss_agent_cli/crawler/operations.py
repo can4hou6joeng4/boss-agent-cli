@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.display import shell_argument
 
 _PUBLIC_JOB_FIELDS = {
 	"query", "page", "rank", "title", "salary", "city", "district", "business_district",
@@ -26,7 +27,7 @@ def crawl_status(cache: CacheStore, run_id: str) -> dict[str, Any]:
 	details_completed = sum(1 for item in jobs if item["detail_done"])
 	checkpoint: dict[str, Any] = {
 		"next_page": run["next_page"],
-		"resume_command": f"boss crawl resume {run_id}",
+		"resume_command": f"boss crawl resume {shell_argument(run_id)}",
 	}
 	if run["status"] == "risk_stopped":
 		# 风险锁会先于浏览器构造阻断 resume（raise_if_locked）。这里只标记前置条件，

@@ -212,7 +212,7 @@ def _call_ai(ctx: click.Context, svc: AIService, prompt: str) -> dict[str, Any] 
 
 def _fit_missing_detail_item(item: dict[str, Any]) -> dict[str, Any]:
 	security_id = str(item.get("security_id") or "")
-	hint = f"先 boss detail {security_id}" if security_id else "先 boss detail <security_id>"
+	hint = f"先 boss detail {shell_argument(security_id)}" if security_id else "先 boss detail <security_id>"
 	return {
 		"job_id": item.get("job_id", ""),
 		"security_id": security_id,
@@ -778,7 +778,7 @@ def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | 
 				code="CACHE_MISS",
 				message=f"job_id '{job_id}' 的职位描述未缓存",
 				recoverable=True,
-				recovery_action=f"boss detail <security_id> --job-id {job_id}",
+				recovery_action=f"boss detail <security_id> --job-id {shell_argument(job_id)}",
 			)
 			ctx.exit(1)
 			return
@@ -849,7 +849,7 @@ def ai_cover_letter_cmd(
 				code="CACHE_MISS",
 				message=f"job_id '{job_id}' 的职位描述未缓存",
 				recoverable=True,
-				recovery_action=f"boss detail <security_id> --job-id {job_id}",
+				recovery_action=f"boss detail <security_id> --job-id {shell_argument(job_id)}",
 			)
 			ctx.exit(1)
 			return

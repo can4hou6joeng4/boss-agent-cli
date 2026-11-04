@@ -161,3 +161,42 @@ def test_agent_crawl_does_not_process_risk_stopped_runs(tmp_path: Path, monkeypa
 	assert "boss clean --risk-lock" in payload["error"]["recovery_action"]
 	assert not payload["hints"].get("next_actions")
 	assert any("boss crawl resume run-1" in item for item in payload["hints"]["operator_actions"])
+
+
+def test_agent_crawl_missing_details_hint_quotes_run_id(tmp_path: Path, monkeypatch) -> None:
+	"""run_id 是自由文本，拼进 ``boss crawl resume`` 提示前必须按 shell 参数转义。"""
+	runner = CliRunner()
+	_init_resume(runner, tmp_path)
+	run_id = "run; echo pwn"
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.create_crawl_run(run_id, _settings(tmp_path).as_dict(), str(tmp_path / "crawl" / "runs" / run_id))
+		cache.update_crawl_run(run_id, status="completed", next_page=2, list_finished=True)
+	monkeypatch.setattr("boss_agent_cli.commands.agent._create_ai_service", lambda ctx: (_ for _ in ()).throw(AssertionError("AI must not run")))
+
+	result = runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "agent", "crawl", "--run-id", run_id, "--resume", "test-resume"],
+	)
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.output)
+	assert payload["hints"]["next_actions"] == ["boss crawl resume 'run; echo pwn' --with-detail"]
+
+
+def test_agent_crawl_results_hint_quotes_run_id(tmp_path: Path, monkeypatch) -> None:
+	"""成功后的 ``boss crawl results <run_id>`` 同样要转义 run_id。"""
+	runner = CliRunner()
+	_init_resume(runner, tmp_path)
+	run_id = "run; echo pwn"
+	_complete_run(tmp_path, run_id)
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.agent._create_ai_service",
+		lambda ctx: _FakeAIService({"results": [{"selector": "csel_placeholder", "match_score": 80}]}),
+	)
+
+	result = runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "agent", "crawl", "--run-id", run_id, "--resume", "test-resume"],
+	)
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.output)
+	assert payload["hints"]["next_actions"] == ["boss crawl results 'run; echo pwn'", "boss shortlist list"]
