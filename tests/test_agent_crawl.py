@@ -125,6 +125,24 @@ def test_agent_crawl_new_query_runs_without_permission_gate(tmp_path: Path, monk
 	assert payload["results"][0]["match_score"] == 80
 
 
+def test_agent_crawl_invalid_city_points_at_crawl_config(tmp_path: Path) -> None:
+	"""采集参数校验失败要给配置入口，不能落到默认「修正参数」。"""
+	runner = CliRunner()
+	_init_resume(runner, tmp_path)
+	result = runner.invoke(
+		cli,
+		[
+			"--data-dir", str(tmp_path), "--json", "agent", "crawl",
+			"--query", "AI", "--city", "火星", "--resume", "test-resume",
+		],
+	)
+	assert result.exit_code == 1
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "boss crawl configure --help" in payload["error"]["recovery_action"]
+	assert payload["hints"]["next_actions"] == ["boss crawl configure --help"]
+
+
 def test_agent_crawl_does_not_process_risk_stopped_runs(tmp_path: Path, monkeypatch) -> None:
 	runner = CliRunner()
 	_init_resume(runner, tmp_path)

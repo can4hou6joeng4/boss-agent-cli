@@ -182,7 +182,15 @@ def crawl_cmd(
 		)
 		return
 	except ValueError as exc:
-		handle_error_output(ctx, "agent.crawl", code="INVALID_PARAM", message=str(exc))
+		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help")
+		handle_error_output(
+			ctx,
+			"agent.crawl",
+			code="INVALID_PARAM",
+			message=str(exc),
+			recovery_action=f"按提示修正关键词、城市或 crawl 配置后重试；可用 {configure_cmd} 查看可配置项",
+			hints={"next_actions": [configure_cmd]},
+		)
 		return
 	except RuntimeError as exc:
 		handle_error_output(

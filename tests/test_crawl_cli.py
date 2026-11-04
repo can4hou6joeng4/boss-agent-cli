@@ -163,6 +163,8 @@ def test_run_rejects_unknown_city_before_touching_the_browser(tmp_path, monkeypa
 	error = _envelope(result)["error"]
 	assert error["code"] == "INVALID_PARAM"
 	assert "城市" in error["message"]
+	assert "boss crawl configure --help" in error["recovery_action"]
+	assert _envelope(result)["hints"]["next_actions"] == ["boss crawl configure --help"]
 
 
 def test_run_honors_configured_zero_max_retries(tmp_path, monkeypatch):
@@ -330,6 +332,7 @@ def test_start_rejects_blank_query_without_creating_a_run(tmp_path, query):
 	error = _envelope(result)["error"]
 	assert error["code"] == "INVALID_PARAM"
 	assert "关键词" in error["message"]
+	assert "boss crawl configure --help" in error["recovery_action"]
 	db = tmp_path / "cache" / "boss_agent.db"
 	if db.exists():
 		assert _all_run_ids(tmp_path) == [], "空关键词不该留下 run 或拉起后台进程"
@@ -342,6 +345,7 @@ def test_run_rejects_blank_query(tmp_path):
 	assert result.exit_code == 1
 	assert _envelope(result)["error"]["code"] == "INVALID_PARAM"
 	assert "关键词" in _envelope(result)["error"]["message"]
+	assert _envelope(result)["hints"]["next_actions"] == ["boss crawl configure --help"]
 
 
 # ── resume ────────────────────────────────────────────────────────────
@@ -590,7 +594,10 @@ def test_shortlist_rejects_unknown_selector(tmp_path):
 	_seed_run(tmp_path, "run-1", jobs=1)
 	result = _invoke(CliRunner(), tmp_path, "crawl", "shortlist", "run-1", "--selector", "csel_不存在")
 	assert result.exit_code == 1
-	assert _envelope(result)["error"]["code"] == "INVALID_PARAM"
+	error = _envelope(result)["error"]
+	assert error["code"] == "INVALID_PARAM"
+	assert "boss crawl results run-1" in error["recovery_action"]
+	assert _envelope(result)["hints"]["next_actions"] == ["boss crawl results run-1"]
 
 
 def test_shortlist_reports_run_not_found(tmp_path):

@@ -60,7 +60,16 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 		try:
 			result = platform.accept_resume_by_friend(friend_id, message_id)
 		except ResumeValidationError as exc:
-			handle_error_output(ctx, command, code="INVALID_PARAM", message=str(exc), details=data)
+			chat_cmd = boss_command_for_ctx(ctx, "hr chat")
+			handle_error_output(
+				ctx,
+				command,
+				code="INVALID_PARAM",
+				message=str(exc),
+				details=data,
+				recovery_action=f"用 {chat_cmd} 核对候选人与附件消息 ID 后重试；不确定时不要发送同意请求",
+				hints={"next_actions": [chat_cmd]},
+			)
 			return
 		except NotImplementedError:
 			handle_error_output(
