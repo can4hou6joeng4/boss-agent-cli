@@ -262,6 +262,19 @@ def test_accept_confirmation_and_preview_do_not_access_auth():
 		auth.assert_not_called()
 
 
+def test_accept_validation_error_points_at_chat_lookup():
+	"""平台数据无法确定附件目标时，要指向 hr chat 核对，而不是只报一句校验失败。"""
+	module = "boss_agent_cli.commands.recruiter.accept_resume"
+	with patch(module + ".AuthManager"), patch(module + ".get_recruiter_platform_instance") as factory:
+		platform = factory.return_value.__enter__.return_value
+		platform.accept_resume_by_friend.side_effect = ResumeValidationError("附件请求不匹配")
+		result = _invoke("accept-resume", "123", "--message-id", "456", "--yes")
+	error = json.loads(result.output)["error"]
+	assert error["code"] == "INVALID_PARAM"
+	assert "boss hr chat" in error["recovery_action"]
+	assert json.loads(result.output)["hints"]["next_actions"] == ["boss hr chat"]
+
+
 @pytest.mark.parametrize("status,success", [(0, True), (1, False), (2, False), (4, False), (None, False), (False, False)])
 def test_accept_requires_both_success_codes(status, success):
 	with patch("boss_agent_cli.commands.recruiter.accept_resume.AuthManager"), patch("boss_agent_cli.commands.recruiter.accept_resume.get_recruiter_platform_instance") as factory:

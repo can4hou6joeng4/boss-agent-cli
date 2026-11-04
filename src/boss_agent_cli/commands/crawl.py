@@ -231,7 +231,15 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 		_report_corrupt_run(ctx, "crawl", exc.record_id, exc)
 		return
 	except ValueError as exc:
-		handle_error_output(ctx, "crawl", code="INVALID_PARAM", message=str(exc))
+		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help")
+		handle_error_output(
+			ctx,
+			"crawl",
+			code="INVALID_PARAM",
+			message=str(exc),
+			recovery_action=f"按提示修正 crawl 配置后重试；可用 {configure_cmd} 查看可配置项",
+			hints={"next_actions": [configure_cmd]},
+		)
 		return
 	except RuntimeError as exc:
 		message = str(exc)
@@ -401,7 +409,15 @@ def run_cmd(
 			cdp_port=cdp_port,
 		)
 	except ValueError as exc:
-		handle_error_output(ctx, "crawl", code="INVALID_PARAM", message=str(exc))
+		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help")
+		handle_error_output(
+			ctx,
+			"crawl",
+			code="INVALID_PARAM",
+			message=str(exc),
+			recovery_action=f"按提示修正关键词、城市或 Hook 配置后重试；可用 {configure_cmd} 查看可配置项",
+			hints={"next_actions": [configure_cmd]},
+		)
 		return
 	_run_service(ctx, lambda service: service.create_and_run(settings))
 
@@ -450,7 +466,15 @@ def start_cmd(
 			run_id = service.create(settings)
 		_launch_background_resume(Path(ctx.obj["data_dir"]), run_id)
 	except ValueError as exc:
-		handle_error_output(ctx, "crawl.start", code="INVALID_PARAM", message=str(exc))
+		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help")
+		handle_error_output(
+			ctx,
+			"crawl.start",
+			code="INVALID_PARAM",
+			message=str(exc),
+			recovery_action=f"按提示修正关键词、城市或 Hook 配置后重试；可用 {configure_cmd} 查看可配置项",
+			hints={"next_actions": [configure_cmd]},
+		)
 		return
 	except OSError as exc:
 		if run_id is not None:
@@ -733,7 +757,15 @@ def shortlist_cmd(
 		_report_corrupt_run(ctx, "crawl.shortlist", run_id, exc)
 		return
 	except ValueError as exc:
-		handle_error_output(ctx, "crawl.shortlist", code="INVALID_PARAM", message=str(exc))
+		results_cmd = boss_command_for_ctx(ctx, f"crawl results {run_id}")
+		handle_error_output(
+			ctx,
+			"crawl.shortlist",
+			code="INVALID_PARAM",
+			message=str(exc),
+			recovery_action=f"用 {results_cmd} 核对可用 selector 后重试，或改用 --all 导入该 run 的全部结果",
+			hints={"next_actions": [results_cmd]},
+		)
 		return
 
 	handle_output(
