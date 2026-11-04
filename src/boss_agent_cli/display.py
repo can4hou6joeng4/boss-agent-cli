@@ -10,6 +10,7 @@ import threading
 from collections.abc import Sequence
 from typing import Any, Callable
 
+import click
 from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
@@ -891,6 +892,11 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 						recovery_action="重试",
 						hints=_with_httpx_only_hint(ctx, None),
 					)
+			except click.ClickException:
+				# 命令体里抛出的参数校验（如 mark 的 --label）仍是用法错误：交给
+				# BossCliGroup 出 INVALID_PARAM 信封，不能兜成「可重试的 NETWORK_ERROR」，
+				# 否则 Agent 会拿同一个非法值反复重试。
+				raise
 			except Exception as e:
 				handle_error_output(
 					ctx,

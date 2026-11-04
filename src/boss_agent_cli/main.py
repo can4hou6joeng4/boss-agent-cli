@@ -363,11 +363,34 @@ def _usage_error_detail(exc: click.ClickException, ctx: click.Context | None) ->
 		_invalid_value_error,
 		_invalid_path_error,
 		_invalid_file_error,
+		_localized_bad_parameter_error,
 	):
 		detail = converter(exc)
 		if detail is not None:
 			return detail
 	return None
+
+
+def _localized_bad_parameter_error(exc: click.ClickException) -> tuple[str, str, dict[str, Any]] | None:
+	"""自定义回调已经写好中文正文的 ``BadParameter``：至少补齐可执行的下一步。
+
+	``--platform`` / ``--delay`` / ``--role`` / ``mark --label`` 这类校验由回调自己
+	raise，正文是中文，四类 Click 自带格式（范围 / 枚举 / 类型 / 路径）都匹配不上，
+	原来的兜底只有 ``recovery_action="修正参数"``、``hints=null``——Agent 拿不到
+	任何能执行的命令。正文保留，恢复指引与 ``next_actions`` 指向出错命令的 ``--help``。
+	"""
+	if not isinstance(exc, click.BadParameter) or not _has_cjk(str(exc.message)):
+		return None
+	path = _usage_path(exc)
+	if path is None:
+		return None
+	hint = _parameter_display_name(exc)
+	subject = f"的 {hint} 取值无效" if hint else "的参数取值无效"
+	return (
+		f"{path} {subject}：{exc.message}",
+		f"用 {path} --help 查看参数说明",
+		{"next_actions": [f"{path} --help"]},
+	)
 
 
 def _misplaced_global_option(group: click.Group, exc: click.ClickException) -> tuple[str, str] | None:

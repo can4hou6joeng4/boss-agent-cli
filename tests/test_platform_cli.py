@@ -66,7 +66,8 @@ class TestPlatformGlobalOption:
 		assert payload["command"] == "boss"
 		assert payload["error"]["code"] == "INVALID_PARAM"
 		assert payload["error"]["recoverable"] is False
-		assert payload["error"]["recovery_action"] == "修正参数"
+		assert payload["error"]["recovery_action"] == "用 boss --help 查看参数说明"
+		assert payload["hints"]["next_actions"] == ["boss --help"]
 		assert result.stderr == ""
 
 	@pytest.mark.parametrize("platform_name", ["qiancheng", "51job", "zhilian"])
@@ -81,7 +82,8 @@ class TestPlatformGlobalOption:
 		assert payload["command"] == "boss"
 		assert payload["error"]["code"] == "INVALID_PARAM"
 		assert payload["error"]["recoverable"] is False
-		assert payload["error"]["recovery_action"] == "修正参数"
+		assert payload["error"]["recovery_action"] == "用 boss --help 查看参数说明"
+		assert payload["hints"]["next_actions"] == ["boss --help"]
 		assert "不支持的平台" in payload["error"]["message"]
 		assert "可选: zhipin" in payload["error"]["message"]
 
