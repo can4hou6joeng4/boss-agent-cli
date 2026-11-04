@@ -107,6 +107,21 @@ def test_removed_bridge_is_not_shipped_or_advertised_as_an_extra():
 	assert "bridge" not in metadata("boss-agent-cli").get_all("Provides-Extra", [])
 
 
+def test_release_workflow_verifies_artifacts_before_publishing():
+	"""发版工作流必须先跑 `scripts/verify_release.py`，再发布到 PyPI。
+
+	`uv build` 不校验 tag 与 pyproject 版本是否一致，也不检查产物里是否混入本地
+	文件；tag 打错时 `uv publish` 会照常把错误产物推上 PyPI。校验脚本早已实现这
+	些检查，但工作流此前没有调用它。
+	"""
+	content = read(".github/workflows/release.yml")
+
+	assert "scripts/verify_release.py" in content
+	assert '--tag "${{ github.ref_name }}"' in content
+	assert "--require-clean" in content
+	assert content.index("scripts/verify_release.py") < content.index("uv publish")
+
+
 def test_codeowners_paths_exist():
 	"""CODEOWNERS 里的路径必须真实存在。
 

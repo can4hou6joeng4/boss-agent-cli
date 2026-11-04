@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- 发版工作流在 `uv build` 之后、发布到 PyPI 之前新增 `scripts/verify_release.py --artifacts dist --tag "$GITHUB_REF_NAME" --require-clean --json`：`uv build` 本身不校验 tag 与 `pyproject.toml` 版本是否一致，也不检查产物里是否混入本地文件，tag 打错时 `uv publish` 会照常把错误版本推上 PyPI。校验脚本早已实现这些检查（含 `--tag` / `--require-clean`），此前只有维护者本地手动运行。新增 `tests/test_open_source_docs.py::test_release_workflow_verifies_artifacts_before_publishing` 守卫（校验步骤必须在 `uv publish` 之前），发版清单同步说明。
 - 把已有的离线 MCP 评测提升为可发现的公开能力面（Issue #717）：`CONTRIBUTING.md` / `CONTRIBUTING.en.md` 新增「离线 MCP 评测」一节，说明四个场景、`uv run python evals/run_eval.py --mode fixture` 的预期输出（`4/4 passed`）与「必须在该独立终端运行、不要嵌套在 Agent 会话里」；`README.md` / `README.en.md` 的贡献入口加上指向 `evals/README.md` 的链接；`evals/README.md` 新增「场景 → 通过信号 → 失败信号」判据表。新增 `tests/test_agent_docs.py::test_contributing_documents_offline_mcp_evals` / `test_readme_links_offline_evals` / `test_evals_readme_documents_scenario_criteria` 守卫，文档再次漂移会直接失败。
 
 ### Fixed

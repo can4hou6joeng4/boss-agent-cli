@@ -23,13 +23,20 @@ jobs:
         run: uv python install 3.11
 
       - name: Install dependencies
-        run: uv sync --all-extras
+        # --locked：下面的产物校验带 --require-clean，uv 改写 uv.lock 会让发布
+        # 因为「工作树不干净」失败；锁定安装则保证环境与提交的 lock 完全一致。
+        run: uv sync --all-extras --locked
 
       - name: Run tests
         run: uv run pytest tests/ -v --tb=short
 
       - name: Build package
         run: uv build
+
+      - name: Verify release artifacts
+        # `uv build` 不校验 tag 与 pyproject 版本是否一致，也不检查产物里是否混入
+        # 本地文件；这些校验在 scripts/verify_release.py 里，发布前必须先跑。
+        run: uv run python scripts/verify_release.py --artifacts dist --tag "${{ github.ref_name }}" --require-clean --json
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
