@@ -389,6 +389,36 @@ def test_resume_background_reports_run_not_found(tmp_path):
 	assert _envelope(result)["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
 
 
+def test_resume_missing_run_reports_not_found_before_requiring_login(tmp_path):
+	"""run 记录在本地：ID 不存在时不该先把人送去登录。
+
+	`_run_service` 会先注入登录 Cookie；登录态缺失时，一个写错的 run_id 会报
+	``AUTH_REQUIRED``，登录回来才发现任务不存在。
+	"""
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "resume", "missing"])
+
+	assert result.exit_code == 1
+	payload = _envelope(result)
+	assert payload["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
+	assert "missing" in payload["error"]["message"]
+	assert payload["hints"]["next_actions"] == ["boss crawl start <query>", "boss crawl status <run_id>"]
+
+
+def test_resume_existing_run_without_login_still_requires_auth(tmp_path):
+	"""存在性检查不能把「已登录才可恢复」这条前置条件吞掉。"""
+	_seed_run(tmp_path)
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "resume", "run-1"])
+
+	assert result.exit_code == 1
+	assert _envelope(result)["error"]["code"] == "AUTH_REQUIRED"
+
+
 def test_empty_run_id_is_invalid_param_not_run_not_found(tmp_path):
 	"""空 run_id 是 argv 少传了值，不是「任务不存在」。
 
@@ -725,6 +755,7 @@ def test_resume_maps_value_error_to_invalid_param(tmp_path, monkeypatch):
 		raise ValueError("run 已完成，无需恢复")
 
 	monkeypatch.setattr(crawl_module.CrawlService, "resume", _invalid)
+	_seed_run(tmp_path)
 	runner = CliRunner()
 	_enable_research(runner, tmp_path)
 	result = _invoke(runner, tmp_path, "crawl", "resume", "run-1")
@@ -752,6 +783,7 @@ def test_resume_foreground_clears_the_stop_request_but_queue_resume_does_not(tmp
 		return _Outcome()
 
 	monkeypatch.setattr(crawl_module.CrawlService, "resume", _resume)
+	_seed_run(tmp_path)
 	runner = CliRunner()
 	_enable_research(runner, tmp_path)
 

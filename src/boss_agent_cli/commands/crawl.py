@@ -559,6 +559,19 @@ def resume_cmd(
 		ctx.exit(1)
 		return
 	raise_if_locked(Path(ctx.obj["data_dir"]))
+	# run 记录只存在本地缓存：ID 写错时要在要求登录之前报出来，否则调用方
+	# 会先被送去 `boss login`，登录回来才发现任务根本不存在（与空 run_id 同类）。
+	try:
+		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
+			run_exists = cache.get_crawl_run(run_id) is not None
+	except CacheRecordInvalid as exc:
+		_report_corrupt_run(ctx, "crawl.resume", run_id, exc)
+		return
+	if not run_exists:
+		handle_error_output(
+			ctx, "crawl.resume", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_RUN_NOT_FOUND_HINTS
+		)
+		return
 	if background:
 		already_complete = False
 		try:
