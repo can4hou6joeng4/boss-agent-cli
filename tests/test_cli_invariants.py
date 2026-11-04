@@ -153,6 +153,23 @@ def test_valued_global_option_hint_includes_placeholder(tmp_path: Any) -> None:
 	assert result.exit_code == 1
 	payload = _parse_single_envelope(result)
 	assert "boss --delay <value> schema" in payload["error"]["message"]
+	# 带取值的全局选项给不出可执行命令：next_actions 退回 boss --help，
+	# 不能拼一个含 <value> 占位符、Agent 原样执行必然失败的假命令。
+	assert payload["hints"]["next_actions"] == ["boss --help"]
+	assert "<value>" not in payload["error"]["recovery_action"]
+	assert "boss --help" in payload["error"]["recovery_action"]
+
+
+def test_flag_global_option_hint_is_a_runnable_command(tmp_path: Any) -> None:
+	"""不带取值的全局选项可以给出完整修正命令，且该命令必须真能执行。"""
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "schema", "--json"])
+	assert result.exit_code == 1
+	payload = _parse_single_envelope(result)
+	assert payload["error"]["recovery_action"] == "boss --json schema"
+	assert payload["hints"]["next_actions"] == ["boss --json schema"]
+
+	runnable = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), *payload["hints"]["next_actions"][0].split()[1:]])
+	assert runnable.exit_code == 0
 
 
 def test_no_json_after_subcommand_is_also_global(tmp_path: Any) -> None:

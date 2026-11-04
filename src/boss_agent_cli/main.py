@@ -444,12 +444,16 @@ def _localized_bad_parameter_error(exc: click.ClickException) -> tuple[str, str,
 	)
 
 
-def _misplaced_global_option(group: click.Group, exc: click.ClickException) -> tuple[str, str] | None:
+def _misplaced_global_option(group: click.Group, exc: click.ClickException) -> tuple[str, str | None] | None:
 	"""Return a clearer message when a root option was parsed by a subcommand.
 
 	``allow_interspersed_args`` stays false so Click's option ownership does not
 	change. Users who write ``boss search --json`` otherwise only see
 	``No such option '--json'``.
+
+	第二个返回值是**可直接执行**的修正命令：带取值的全局选项需要用户先确定值
+	（如 ``--delay 30-60``），给不出可执行命令，返回 ``None``，由调用方把
+	next_actions 退回 ``boss --help``，而不是拼一个含 ``<value>`` 的假命令。
 	"""
 	if not isinstance(exc, click.NoSuchOption):
 		return None
@@ -466,10 +470,11 @@ def _misplaced_global_option(group: click.Group, exc: click.ClickException) -> t
 	if matched is None:
 		return None
 	command = _command_path(ctx) or "<command>"
-	option_usage = token if matched.is_flag else f"{token} <value>"
-	example = f"boss {option_usage} {command} ..."
-	message = f"选项 {token} 是全局选项，必须写在子命令之前，例如：{example}"
-	return message, example
+	if matched.is_flag:
+		corrected = f"boss {token} {command}"
+		return f"选项 {token} 是全局选项，必须写在子命令之前，例如：{corrected}", corrected
+	example = f"boss {token} <value> {command} ..."
+	return f"选项 {token} 是全局选项，必须写在子命令之前，例如：{example}", None
 
 
 def _has_cjk(text: str) -> bool:
@@ -675,9 +680,17 @@ class BossCliGroup(click.Group):
 				message, recovery_action, hints = detail
 			misplaced = _misplaced_global_option(self, exc)
 			if misplaced is not None:
-				message, recovery_action = misplaced
+				message, corrected = misplaced
+				if corrected is not None:
+					recovery_action = corrected
+					next_actions = [corrected]
+				else:
+					# 带取值的全局选项给不出可执行命令：next_actions 必须是真能跑的
+					# 命令，退回 `boss --help`，修正示例只留在 message 里。
+					recovery_action = "把全局选项移到子命令之前；用 boss --help 查看全部全局选项"
+					next_actions = ["boss --help"]
 				hints = {
-					"next_actions": [recovery_action.replace(" ...", " --help")],
+					"next_actions": next_actions,
 					"operator_actions": [
 						"全局选项（--json、--data-dir、--platform、--cdp-url 等）写在子命令前面",
 					],
