@@ -9,6 +9,7 @@ Use this checklist before publishing a release tag.
 - CLI JSON envelope changes are documented.
 - `boss schema --format native` still describes the released capability surface.
 - `llms.txt` 的 `Current version` 与能力计数（顶层命令 / 一级招聘者子命令 / MCP 工具）已随本次发版更新；`tests/test_agent_docs.py` 会对照代码校验，漏改会直接失败。
+- `SECURITY.md` 的支持版本表已更新到当前 minor（< 当前 minor 标为不再支持）；`tests/test_open_source_docs.py` 会校验。
 
 ## 2. Local verification
 

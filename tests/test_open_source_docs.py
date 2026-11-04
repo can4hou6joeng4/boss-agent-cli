@@ -107,6 +107,21 @@ def test_removed_bridge_is_not_shipped_or_advertised_as_an_extra():
 	assert "bridge" not in metadata("boss-agent-cli").get_all("Provides-Extra", [])
 
 
+def test_security_policy_supported_versions_match_current_minor():
+	"""SECURITY.md 的支持版本表必须指向当前 minor。
+
+	它曾停在 1.17.x，而项目已到 3.2.0：用户会以为当前版本不再接收安全修复，
+	报告漏洞前也可能先降级到旧版本。
+	"""
+	from boss_agent_cli import __version__
+
+	minor = ".".join(__version__.split(".")[:2])
+	content = read("SECURITY.md")
+
+	assert f"| {minor}.x" in content, f"SECURITY.md 支持版本表未更新到 {minor}.x"
+	assert f"< {minor}" in content, f"SECURITY.md 的「不再支持」区间未更新到 < {minor}"
+
+
 def test_platform_research_template_covers_adapter_admission_gate():
 	index = read("docs/research/platforms/README.md")
 	abstraction_zh = read("docs/platform-abstraction.md")
