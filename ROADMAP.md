@@ -13,7 +13,7 @@
 - ✅ v1.16.0（2026-07-17）：显式 `operating_mode` 双模式契约（`assisted` / `research`）+ 合规护栏升级为不可变能力策略注册表，CLI / schema / MCP 过滤从同一真源派生
 - ✅ v1.15.0（2026-07-14）：`boss ai cover-letter` 求职信草稿 + 死配置键与死码清理 + 智联页面域名校验加固（精确 hostname 匹配）
 - ✅ v1.14.0（2026-06-25）：shortlist 本地标签 / 备注 / 离线对比 + `ai fit` / `ai suggest-keywords` / `ai resume-optimize` + 转向 MCP-first + 搜索 `match_score`
-- ✅ v1.13.x（2026-06-11 ~ 06-16）：platforms 能力状态语义 + login 链路错误码补齐 + welfare 详情本地缓存 + 双语 README 重构为导航型；Agent Skill 迁出至独立仓库 [boss-skill](https://github.com/can4hou6joeng4/boss-skill)（Breaking Change）
+- ✅ v1.13.x（2026-06-11 ~ 06-16）：platforms 能力状态语义 + login 链路错误码补齐 + welfare 详情本地缓存 + 双语 README 重构为导航型；Agent Skill 迁出至独立仓库 boss-skill（Breaking Change）
 - ✅ v1.12.0（2026-06-09）：MCP 三种传输（stdio / SSE / HTTP streaming）+ `boss_export` + 51job / `qiancheng` 占位适配器
 - ✅ v1.11.0（2026-04-23）：招聘者模式（`--role recruiter`）全套 CLI 命令组 + `BossRecruiterClient` 双通道客户端 + `RecruiterPlatform` 抽象
 - ✅ v1.10.x（2026-04-21）：Platform 抽象落地 —— ABC + 注册表 + `--platform` 全局选项 + 20 个命令全量迁移，`commands/` 下不再直接引用 `BossClient`

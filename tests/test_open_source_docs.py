@@ -107,6 +107,30 @@ def test_removed_bridge_is_not_shipped_or_advertised_as_an_extra():
 	assert "bridge" not in metadata("boss-agent-cli").get_all("Provides-Extra", [])
 
 
+def test_codeowners_paths_exist():
+	"""CODEOWNERS 里的路径必须真实存在。
+
+	`/SKILL.md` 在 Agent Skill 迁出后仍留在规则里，指向一个已不存在的文件；
+	评审者按 CODEOWNERS 找负责人时会被引到空处。
+	"""
+	content = read(".github/CODEOWNERS")
+	missing: list[str] = []
+	checked: list[str] = []
+	for line in content.splitlines():
+		stripped = line.strip()
+		if not stripped or stripped.startswith("#"):
+			continue
+		path = stripped.split()[0]
+		if any(char in path for char in "*?[]"):
+			continue
+		checked.append(path)
+		if not (ROOT / path.lstrip("/")).exists():
+			missing.append(path)
+
+	assert checked, "CODEOWNERS 应至少声明一个具体路径"
+	assert not missing, f"以下 CODEOWNERS 路径不存在: {missing}"
+
+
 def test_security_policy_supported_versions_match_current_minor():
 	"""SECURITY.md 的支持版本表必须指向当前 minor。
 
