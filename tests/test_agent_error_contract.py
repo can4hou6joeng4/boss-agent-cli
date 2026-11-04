@@ -199,6 +199,49 @@ def test_invalid_option_value_is_reported_in_chinese(tmp_path):
 		assert parsed["hints"]["next_actions"] == [f"{path} --help"]
 
 
+def test_chinese_choice_values_are_still_translated(tmp_path):
+	"""候选值本身是中文时，Click 的英文骨架也不能漏出来。
+
+	``boss ai reply --tone 不存在`` 原来回 ``参数 '--tone' 的值无效: '不存在' is
+	not one of '简洁专业', …``：正文里混着英文、``recovery_action`` 只有「修正参数」、
+	``hints`` 为 null。不能按「消息含中文」判断是不是自家文案——``--industry`` /
+	``--stage`` 这类选项的候选值本来就是中文。
+	"""
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "ai", "reply", "--tone", "不存在"])
+	parsed = _assert_single_stdout_json_error(result, command="ai")
+	message = parsed["error"]["message"]
+	assert "is not one of" not in message
+	assert message == "boss ai reply 的 --tone 取值无效：'不存在' 不在可选值 '简洁专业', '热情积极', '谨慎确认' 中"
+	assert parsed["error"]["recovery_action"] == "用 boss ai reply --help 查看参数说明"
+	assert parsed["hints"]["next_actions"] == ["boss ai reply --help"]
+
+
+def test_chinese_paths_are_still_reported_in_chinese(tmp_path):
+	"""路径名带中文时，Click 的路径错误同样要翻译。
+
+	``Path '/tmp/不存在的模型目录' does not exist.`` 与 ``'/tmp/不存在.txt': No
+	such file or directory`` 都含中文；按「消息含中文」跳过翻译会让英文正文、
+	默认「修正参数」和 null ``hints`` 直接透给用户。
+	"""
+	runner = CliRunner()
+	missing_dir = tmp_path / "不存在的模型目录"
+	result = runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "ai", "local", "import", "--path", str(missing_dir), "--model", "qwen3"],
+	)
+	parsed = _assert_single_stdout_json_error(result, command="ai")
+	assert parsed["error"]["message"] == f"boss ai local import 的 --path 无效：路径 '{missing_dir}' 不存在"
+	assert parsed["error"]["recovery_action"] == "用 boss ai local import --help 查看参数说明"
+	assert parsed["hints"]["next_actions"] == ["boss ai local import --help"]
+
+	curl_file = tmp_path / "不存在的cookies.txt"
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "login", "--curl-file", str(curl_file)])
+	parsed = _assert_single_stdout_json_error(result, command="login")
+	assert parsed["error"]["message"] == f"boss login 的 --curl-file 无效：路径 '{curl_file}' 不存在"
+	assert parsed["error"]["recovery_action"] == "用 boss login --help 查看参数说明"
+	assert parsed["hints"]["next_actions"] == ["boss login --help"]
+
+
 def test_invalid_path_value_is_reported_in_chinese(tmp_path):
 	"""Click 的路径校验（``Path '' does not exist.``）同样是英文正文 + 无 hints。
 

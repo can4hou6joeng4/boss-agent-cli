@@ -245,8 +245,13 @@ def _invalid_value_error(exc: click.ClickException) -> tuple[str, str, dict[str,
 	integer.``：错误码是对的，但正文是英文、``recovery_action`` 只有「修正参数」、
 	``hints`` 为 null。这里按消息里的取值与范围 / 可选值重排成中文，正文格式不
 	认识（例如已本地化）时保持原样。
+
+	不能按「消息里有没有中文」判断是不是 Click 自己的英文骨架：``--industry`` /
+	``--stage`` 这类选项的候选值本身就是中文，``__nope__ is not one of '不限',
+	'电子商务', …`` 含中文却仍是 Click 生成的英文正文。只按格式匹配，匹配不上
+	才原样透出。
 	"""
-	if not isinstance(exc, click.BadParameter) or _has_cjk(exc.message):
+	if not isinstance(exc, click.BadParameter):
 		return None
 	path = _usage_path(exc)
 	if path is None:
@@ -282,8 +287,11 @@ def _invalid_path_error(exc: click.ClickException) -> tuple[str, str, dict[str, 
 	Click 按 ``dir_okay`` / ``file_okay`` 决定前缀：只收文件时是 ``File '/tmp' is
 	a directory.``（``boss stats --output <目录>``），只收目录时是 ``Directory …``，
 	两种都收才是 ``Path …``——三种前缀都要认。
+
+	同样不能因为消息含中文就跳过：路径本身可以是中文，``Path '/tmp/不存在的模型
+	目录' does not exist.`` 的英文骨架仍要说清楚。
 	"""
-	if not isinstance(exc, click.BadParameter) or _has_cjk(exc.message):
+	if not isinstance(exc, click.BadParameter):
 		return None
 	raw = str(exc.message)
 	matched = _PATH_MISSING_RE.match(raw)
@@ -313,8 +321,9 @@ def _invalid_file_error(exc: click.ClickException) -> tuple[str, str, dict[str, 
 	No such file or directory``，``--curl-file /tmp`` 回 ``'/tmp': Is a directory``：
 	错误码对，但正文是 OSError 的英文 strerror，``recovery_action`` 只有「修正参数」、
 	``hints`` 为 null。只翻译认识的 strerror，其余（含已本地化的消息）保持原样。
+	路径名带中文时消息同样含中文，不能据此跳过。
 	"""
-	if not isinstance(exc, click.BadParameter) or _has_cjk(exc.message):
+	if not isinstance(exc, click.BadParameter):
 		return None
 	raw = str(exc.message)
 	matched = _FILE_ERROR_RE.match(raw)
