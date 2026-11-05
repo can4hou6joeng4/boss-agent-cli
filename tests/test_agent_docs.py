@@ -217,6 +217,27 @@ def test_llms_txt_doc_links_resolve():
 	assert not missing, f"以下 llms.txt 链接指向不存在的文件: {missing}"
 
 
+def test_readme_command_groups_cover_every_top_level_command():
+	"""README 声称按工作流列出全部顶层命令，每个命令名都必须能在正文中找到。
+
+	`mark` / `interviews` / `chat-summary` / `follow-up` 曾完全不在分组里，
+	读者只能去 `docs/commands.md` 或 schema 才发现它们存在。`chat*` 这类通配
+	写法也改成逐个列出，否则守卫无法确认范围。
+	"""
+	import re
+
+	from boss_agent_cli.main import cli
+
+	for path in ("README.md", "README.en.md"):
+		content = _read(path)
+		missing = [
+			name
+			for name in cli.commands
+			if not re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", content)
+		]
+		assert not missing, f"{path} 缺少顶层命令: {sorted(missing)}"
+
+
 def test_readme_documents_full_envelope_keys():
 	"""README 的能力条目必须描述完整的七键信封。
 
