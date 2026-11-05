@@ -217,6 +217,21 @@ def test_llms_txt_doc_links_resolve():
 	assert not missing, f"以下 llms.txt 链接指向不存在的文件: {missing}"
 
 
+def test_readme_documents_full_envelope_keys():
+	"""README 的能力条目必须描述完整的七键信封。
+
+	中英 README 曾写成 `{ok, data, pagination, error, hints}`——漏掉
+	`schema_version` 与 `command`，Agent 照此构造解析器会对不上真实 stdout。
+	"""
+	keys = "{ok, schema_version, command, data, pagination, error, hints}"
+	old_subset = "{ok, data, pagination, error, hints}"
+
+	for path in ("README.md", "README.en.md"):
+		content = _read(path)
+		assert keys in content, f"{path} 未描述完整七键信封"
+		assert old_subset not in content, f"{path} 仍在描述五键子集"
+
+
 def test_site_copy_matches_current_version_and_counts():
 	"""GitHub Pages 站点是公开门面：首页与站点 llms.txt 的事实必须跟代码一致。
 
