@@ -41,7 +41,8 @@ const squashText = (text) => String(text || '').replace(/\\s+/g, ' ').trim();
 const escapeHtml = (text) => String(text)
 	.replace(/&/g, '&amp;')
 	.replace(/</g, '&lt;')
-	.replace(/>/g, '&gt;');
+	.replace(/>/g, '&gt;')
+	.replace(/\\n/g, '<br>');
 const getGeekList = () => {
 	const chatUser = document.querySelector('.chat-user');
 	if (!chatUser) return [null, '.chat-user not found (chat tab not open?)'];
@@ -399,11 +400,16 @@ def _readable_geek_detail(info: Any) -> bool:
 
 _SEND_MESSAGE_ACTION_JS = """
 const escaped = escapeHtml(args.content);
-if (editor.disabled || editor.conversationLoading$) {
+if (editor.conversationLoading$) {
 	return {ok: false, error: 'editor is disabled or conversation is loading', log};
 }
 editor.draft[editor.uniqueId] = args.content;
 input.innerHTML = escaped;
+try { editor.handleKeyup({ key: '', keyCode: 0, preventDefault: () => {}, stopPropagation: () => {} }); } catch (e) { log.push('handleKeyup threw: ' + e.message); }
+await sleep(150);
+if (editor.disabled) {
+	return {ok: false, error: 'editor is disabled or conversation is loading', log};
+}
 log.push('editbox html set, calling sendText');
 try {
 	const ret = editor.sendText();
@@ -673,7 +679,7 @@ class BossRecruiterClient(_BaseHttpClient):
 				"ok": False,
 				"error": "browser action interrupted; outcome unknown",
 				"action_interrupted": True,
-				"log": [],
+				"log": [f"EXCEPTION {type(exc).__name__}: {exc}"],
 			}, []
 		result = capture.get("value") if isinstance(capture, dict) else capture
 		events = cast("list[dict[str, Any]]", capture.get("events", []) if isinstance(capture, dict) else [])
