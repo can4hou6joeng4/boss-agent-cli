@@ -808,6 +808,22 @@ def test_schema_option_ranges_match_click_ranges():
 
 	assert not problems, "schema 取值域与 Click 不一致:\n" + "\n".join(problems)
 
+def test_crawl_run_and_start_share_hook_profile_default():
+	"""`crawl run` 与 `crawl start` 的 `--hook-profile` 默认值必须一致且为 none。
+
+	两个命令省略该选项时都按 `hook_profile or "none"` 执行；schema 里 run 写
+	"none"、start 写 null，Agent 会以为 start 的「未指定」另有含义，而 null 也
+	不在 enum 的可选值里。
+	"""
+	options = SCHEMA_DATA["commands"]["crawl"]["options"]
+	run = options["run"]["--hook-profile"]
+	start = options["start"]["--hook-profile"]
+
+	assert run["default"] == start["default"] == "none"
+	assert "none" in run["enum"]
+	assert "none" in start["enum"]
+
+
 def test_schema_choice_options_match_click_choices():
 	"""Click 用 `Choice` 限制的选项，schema 必须声明同一组取值。
 

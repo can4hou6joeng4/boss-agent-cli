@@ -684,7 +684,10 @@ SCHEMA_DATA = {
 					"--with-detail": {"type": "bool", "default": False, "description": "串行补全所有职位的 job_card"},
 					"--hook-profile": {
 						"type": "string",
-						"default": None,
+						# run / start 省略时都按 "none" 执行（`hook_profile or "none"`），
+						# 两个子命令的 schema 默认值必须一致，否则 Agent 会以为 start
+						# 的「未指定」等于某种额外行为。
+						"default": "none",
 						"enum": ["screenshot-full", "none"],
 						"description": "页面 Hook 配置；none 不注入脚本，screenshot-full 需同时给 --hook-dir",
 					},
