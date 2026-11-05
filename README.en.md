@@ -125,12 +125,12 @@ with BossClient(AuthManager(...)) as client:
 `boss schema` exposes 39 top-level commands + 14 first-level recruiter subcommands, grouped by workflow:
 
 - **Auth**: `login` · `logout` · `status` · `doctor`
-- **Discover**: `search` · `detail` · `show` · `cities` · `history`
+- **Discover**: `search` · `recommend` · `detail` · `show` · `cities` · `history`
 - **Organize**: `watch` · `preset` · `shortlist` · `stats` · `favorites`
 - **Resumable crawl**: `crawl configure/run/start/status/results/resume/stop/shortlist`
 - **Resume / AI**: `resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai cover-letter` · `ai interview-prep` · `ai chat-coach` · `ai local`
 - **Utility / workflow**: `wizard` · `schema` · `platforms` · `export` · `config` · `clean`
-- **Candidate actions**: `greet` · `batch-greet` · `apply` · `exchange` · `chat*` · `pipeline` · `digest`
+- **Candidate actions**: `greet` · `batch-greet` · `apply` · `exchange` · `chat` · `chatmsg` · `chat-summary` · `mark` · `interviews` · `pipeline` · `digest` · `follow-up`
 - **Recruiter**: `hr whoami/applications/candidates/recommendations/greet/resume/chat/chatmsg/last-messages/reply/request-resume/accept-resume/download-resume/jobs`
 
 Full command tables, parameters, and welfare-matching internals: **[Command Reference](docs/commands.en.md)**. The capability source of truth is `boss schema` (with `--format openai-tools` / `anthropic-tools` exports).

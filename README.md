@@ -123,12 +123,12 @@ with BossClient(AuthManager(...)) as client:
 `boss schema` 暴露 39 个顶层命令 + 14 个一级招聘者子命令，按工作流分组：
 
 - **认证**：`login` · `logout` · `status` · `doctor`
-- **职位发现**：`search` · `detail` · `show` · `cities` · `history`
+- **职位发现**：`search` · `recommend` · `detail` · `show` · `cities` · `history`
 - **本地整理**：`watch` · `preset` · `shortlist` · `stats` · `favorites`
 - **可恢复采集**：`crawl configure/run/start/status/results/resume/stop/shortlist`
 - **简历 / AI**：`resume` · `me` · `ai analyze-jd` · `ai polish` · `ai optimize` · `ai fit` · `ai suggest-keywords` · `ai resume-optimize` · `ai cover-letter` · `ai interview-prep` · `ai chat-coach` · `ai local`
 - **系统 / workflow**：`wizard` · `schema` · `platforms` · `export` · `config` · `clean`
-- **候选者动作**：`greet` · `batch-greet` · `apply` · `exchange` · `chat*` · `pipeline` · `digest`
+- **候选者动作**：`greet` · `batch-greet` · `apply` · `exchange` · `chat` · `chatmsg` · `chat-summary` · `mark` · `interviews` · `pipeline` · `digest` · `follow-up`
 - **招聘者**：`hr whoami/applications/candidates/recommendations/greet/resume/chat/chatmsg/last-messages/reply/request-resume/accept-resume/download-resume/jobs`
 
 完整命令表、参数与福利筛选原理见 **[命令参考](docs/commands.md)**；能力真源是 `boss schema`（支持 `--format openai-tools` / `anthropic-tools` 导出工具定义）。
