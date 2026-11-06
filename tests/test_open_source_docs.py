@@ -1,3 +1,4 @@
+import re
 from importlib.metadata import metadata
 from pathlib import Path
 
@@ -120,6 +121,34 @@ def test_release_workflow_verifies_artifacts_before_publishing():
 	assert '--tag "${{ github.ref_name }}"' in content
 	assert "--require-clean" in content
 	assert content.index("scripts/verify_release.py") < content.index("uv publish")
+
+
+def test_architecture_docs_exist_and_are_linked():
+	"""公开架构文档必须存在、中英同步，并从 README / CONTRIBUTING 可达。
+
+	架构知识此前只存在于本地 CLAUDE.md（gitignore）与代码注释里，外部贡献者和
+	Agent 宿主看不到四条入口、信封契约与风控边界之间的关系。
+	"""
+	zh = read("docs/architecture.md")
+	en = read("docs/architecture.en.md")
+
+	assert zh.startswith("# 架构")
+	assert en.startswith("# Architecture")
+	for content in (zh, en):
+		assert "boss schema" in content
+		assert "stdout" in content
+		assert "MCP" in content
+
+	assert "[架构](docs/architecture.md)" in read("README.md")
+	assert "[Architecture](docs/architecture.en.md)" in read("README.en.md")
+	assert "docs/architecture.md" in read("CONTRIBUTING.md")
+	assert "docs/architecture.en.md" in read("CONTRIBUTING.en.md")
+
+	for path, content in (("docs/architecture.md", zh), ("docs/architecture.en.md", en)):
+		links = re.findall(r"\]\((\.\.?/[^)#]+|[A-Za-z0-9_./-]+\.md)\)", content)
+		assert links, f"{path} 应至少链接命令参考与贡献指南"
+		for target in links:
+			assert (Path(path).parent / target).exists(), f"{path} 链接不存在: {target}"
 
 
 def test_codeowners_paths_exist():
