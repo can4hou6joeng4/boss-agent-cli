@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.2.1] - 2026-11-06
 
 ### Added
 - `boss hr reply` 返回 `ACTION_UNCONFIRMED` 时，`error.details` 现在同时带上 `history_checked` / `history_matched_count` / `history_attempts` / `history_error`：此前只有 `ws_evidence`，无法区分「历史回读没跑」与「回读了但没命中」，社区反馈的 `matched_ws_count: 0` 只能靠猜。现在失败信封能直接看出历史回读执行了几次、是否命中；排障表与命令参考（中英）同步说明这四个字段。`tests/test_recruiter_client.py` 的未命中用例补上对应断言，`tests/test_agent_docs.py` 守卫排障文档包含这些字段。
