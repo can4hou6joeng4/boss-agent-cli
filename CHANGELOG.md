@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- ROADMAP 的「已发布」列表停在 v2.0.0，补上 2.0.1 / 3.0.0 / 3.0.1 / 3.1.0 / 3.2.0 / 3.2.1 的摘要（中英同步）。
+
 ## [3.2.1] - 2026-11-06
 
 ### Added
