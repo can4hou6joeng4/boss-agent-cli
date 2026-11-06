@@ -91,7 +91,12 @@ def test_page_ok_without_evidence_is_action_unconfirmed_not_unexpected_page_resu
 	assert details["log"] == ["handleExChange returned", "confirm clicked=True"]
 	assert details["confirmed"] is True
 	assert details["componentName"] == "ExchangeResume"
-	assert details["ws_evidence"] == {"event_count": 1, "ws_send_count": 1, "matched_ws_count": 0}
+	assert details["ws_evidence"] == {
+		"event_count": 1,
+		"ws_send_count": 1,
+		"ws_send_without_text": 0,
+		"matched_ws_count": 0,
+	}
 	assert details["history_checked"] is True
 	assert details["history_matched_count"] == 0
 	client.close()
