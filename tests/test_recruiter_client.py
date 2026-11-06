@@ -588,6 +588,11 @@ def test_send_message_by_friend_without_real_ws_send_returns_error():
 		assert "页面动作未在目标聊天记录中得到确认" in result["message"]
 		assert result["zpData"]["ws_evidence"]["matched_ws_count"] == 0
 		assert "sample_bits" not in result["zpData"]["ws_evidence"]
+		# 失败 details 要说明历史回读确实跑过、命中了多少：只给 ws_evidence
+		# 时无法区分「没回读」和「回读了但没命中」。
+		assert result["zpData"]["history_checked"] is True
+		assert result["zpData"]["history_matched_count"] == 0
+		assert result["zpData"]["history_attempts"] == 4
 		assert private_message not in json.dumps(result, ensure_ascii=False)
 	client.close()
 

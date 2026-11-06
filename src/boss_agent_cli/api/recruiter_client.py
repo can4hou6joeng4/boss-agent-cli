@@ -1200,6 +1200,8 @@ class BossRecruiterClient(_BaseHttpClient):
 				events=events,
 				expected_bits=[content],
 			)
+		history: dict[str, Any] | None = None
+		history_attempts = 0
 		if isinstance(result, dict) and result.get("ok"):
 			matched_ws = self._matching_chat_send_events(events, [content])
 			history = self._exchange_history_evidence(
@@ -1241,6 +1243,16 @@ class BossRecruiterClient(_BaseHttpClient):
 				result["confirmation_stop"] = history["control_stop"]
 		# Surface the page-side error in CLI envelope shape
 		err_msg = self._page_error_message(result)
+		# 把「回读核对是否执行、命中多少」也放进失败 details：只有 ws_evidence 时
+		# 看不出历史回读到底跑没跑，社区反馈的 matched_ws_count=0 无法进一步定位。
+		history_extra: dict[str, Any] | None = None
+		if history is not None:
+			history_extra = {
+				"history_checked": history.get("checked"),
+				"history_matched_count": history.get("matched_count"),
+				"history_attempts": history_attempts,
+				"history_error": history.get("error"),
+			}
 		return self._chat_action_failure_response(
 			message=f"发送消息未确认: {err_msg}；{_ACTION_UNCONFIRMED_HINT.format(friend_id=friend_id)}",
 			payload=self._chat_action_failure_data(
@@ -1250,6 +1262,7 @@ class BossRecruiterClient(_BaseHttpClient):
 				expected_bits=[content],
 				result=result,
 				events=events,
+				extra=history_extra,
 			),
 			error_code="ACTION_UNCONFIRMED",
 		)
