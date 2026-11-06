@@ -11,6 +11,7 @@
 - `boss hr reply` 的 `ws_evidence` 新增 `ws_send_without_text`：统计有发送帧但提取不到文本（二进制 / 压缩 / 新编码）的条数，把「没有发送帧」与「有帧但读不出文本」区分开，供 Issue #735 定位。排障表与守卫同步。
 
 ### Changed
+- ROADMAP 结构整理：全部完成的「近期（当前主线）」改为「近期（已完成）」，「中期（v2.0）」改为「中期（v2.x–v3.x）」，Web UI 明确标注「未排期」（中英同步）。
 - 维护者文档归位：`docs/smoke-testing.md` 与 `docs/readme-badge-policy.md` 实际是单语的维护者文档（未被 README 链接，也没有 `.en.md` 对照），已移到 `docs/maintainer/` 并在中英 CONTRIBUTING 的「维护者文档」清单登记；两处测试引用同步，链接守卫扩展为覆盖全部五份维护者文档。
 
 ### Fixed

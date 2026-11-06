@@ -29,7 +29,7 @@
 
 完整历史见 [CHANGELOG.md](CHANGELOG.md)。
 
-## 🎯 近期（当前主线）
+## ✅ 近期（已完成）
 
 ### 数据可视化
 - [x] `boss stats --format html` 输出交互式漏斗报表（v1.7.1）
@@ -46,7 +46,7 @@
 - [x] `boss ai interview-prep` — 基于 JD 生成模拟面试题（v1.8.0）
 - [x] 支持 Claude 4.7 / GPT-5 最新模型（v1.8.2，provider 扩至 openrouter/qwen/zhipu/siliconflow）
 
-## 🔮 中期（v2.0）
+## 🔮 中期（v2.x–v3.x）
 
 ### 治理与合规
 - [x] 默认低风险辅助模式：敏感命令默认阻断并交接回平台官网（ADR 0001）
@@ -60,7 +60,7 @@
 - [x] 移除 Browser Bridge daemon、Chrome 扩展及可选依赖（v3.0.0）；保留 CDP / headless 浏览器通道，不再推进 Bridge 协议升级
 
 ### 生态扩展
-- [ ] Web UI（React + Tailwind），适合非 Agent 用户
+- [ ] Web UI（React + Tailwind），适合非 Agent 用户（未排期）
 - [ ] 多平台支持：Platform 抽象已落地（Week 1a–1c）；拉勾 / 猎聘 API 调研已完成（Issue #90 已闭环 · [docs/research/platforms/](docs/research/platforms/)），经评估不建议接入；智联适配器曾接入（候选者侧 + 招聘者 agent 自动化），已在 v3.0.0 移除，BOSS 直聘为当前唯一注册平台。
   - [x] Week 1a：Platform ABC 骨架 + BossPlatform adapter（#129，零行为变化）
   - [x] Week 1b：`--platform` 全局 CLI 选项 + `get_platform_instance` helper + schema 暴露 current_platform

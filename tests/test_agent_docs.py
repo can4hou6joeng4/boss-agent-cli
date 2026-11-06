@@ -395,8 +395,8 @@ def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
 def test_english_roadmap_exists_and_readme_en_links_to_it():
 	roadmap_en = _read("ROADMAP.en.md")
 	assert "# Roadmap" in roadmap_en
-	assert "## Near term (current mainline)" in roadmap_en
-	assert "## Mid term (v2.0)" in roadmap_en
+	assert "## ✅ Near term (completed)" in roadmap_en
+	assert "## 🔮 Mid term (v2.x–v3.x)" in roadmap_en
 	assert "## Long-term vision" in roadmap_en
 	assert "[awesome-agents](https://github.com/kyrolabs/awesome-agents)" in roadmap_en
 
