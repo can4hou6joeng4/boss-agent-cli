@@ -13,6 +13,20 @@ boss <命令> --help                      # 查看单个命令选项
 
 兼容配置：`boss config set operating_mode assisted|research`。两种模式均可调用全部已实现能力；schema 仍提供风险和数据分类，平台缺失能力返回 `NOT_SUPPORTED`。
 
+## 目录
+
+- [命令还是 wizard](#命令还是-wizard)
+- [基础操作](#基础操作)
+- [职位搜索](#职位搜索)
+- [可恢复批量采集](#可恢复批量采集)
+- [求职动作](#求职动作)
+- [沟通跟进](#沟通跟进)
+- [流水线监控](#流水线监控)
+- [招聘者模式](#招聘者模式)
+- [简历与 AI](#简历与-ai)
+- [系统管理](#系统管理)
+- [搜索筛选参数详解](#搜索筛选参数详解)
+
 ## 命令还是 wizard
 
 顶层命令和 `boss wizard` 是两套并行的能力面，分工写在 `boss schema` 的 `conventions.command_vs_wizard`：
