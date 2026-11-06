@@ -79,6 +79,8 @@ Maintainers will `squash merge`, so the squash title must follow the commit conv
 - [Release Checklist](docs/maintainer/release-checklist.md)
 - [Labels And Triage](docs/maintainer/labels.md)
 - [Branch Protection](docs/maintainer/branch-protection.md)
+- [Smoke Testing](docs/maintainer/smoke-testing.md)
+- [README Badge Policy](docs/maintainer/readme-badge-policy.md)
 
 ## Adding a New Command
 

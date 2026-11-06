@@ -153,7 +153,7 @@ def test_mcp_readme_links_to_quickstart_and_matrix():
 
 
 def test_readme_badge_policy_exists_and_has_core_rules():
-	content = _read("docs/readme-badge-policy.md")
+	content = _read("docs/maintainer/readme-badge-policy.md")
 	assert "# README 第三方 Badge 准入标准" in content
 	assert "`README.md` / `README.en.md`" in content
 	assert "### 一类：默认允许" in content
