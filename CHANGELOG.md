@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增 ADR 索引 `docs/adr/README.md` 与三份架构决策记录：0003（浏览器来源冻结策略表）、0004（七键信封与错误码登记契约）、0005（MCP server 通过子进程适配 CLI）；0001/0002 标注为历史上下文。架构文档与中英 CONTRIBUTING 加入 ADR 入口，新增 `tests/test_open_source_docs.py::test_adr_index_covers_every_record` 守卫（索引覆盖每份记录、必需章节、入口可达）。
 - 新增公开架构文档 `docs/architecture.md` / `docs/architecture.en.md`：四条入口、七键信封、`boss schema` 真源、模块分层与调用链、登录链路、平台抽象、预算与风控边界、本地数据目录；README 顶部导航与 CONTRIBUTING 加入架构入口，新增 `tests/test_open_source_docs.py::test_architecture_docs_exist_and_are_linked` 守卫（中英存在、链接可达、相对链接有效）。
 - `boss hr reply` 的 `ws_evidence` 新增 `ws_send_without_text`：统计有发送帧但提取不到文本（二进制 / 压缩 / 新编码）的条数，把「没有发送帧」与「有帧但读不出文本」区分开，供 Issue #735 定位。排障表与守卫同步。
 
