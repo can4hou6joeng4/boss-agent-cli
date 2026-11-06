@@ -151,6 +151,29 @@ def test_architecture_docs_exist_and_are_linked():
 			assert (Path(path).parent / target).exists(), f"{path} 链接不存在: {target}"
 
 
+def test_adr_index_covers_every_record():
+	"""ADR 目录必须有索引，索引覆盖每份记录，且从架构文档与贡献指南可达。
+
+	此前只有 0001/0002 两份 ADR，之后的浏览器来源策略、信封/错误码契约与 MCP
+	子进程架构都没有决策记录，贡献者只能从代码反推。
+	"""
+	adr_dir = ROOT / "docs" / "adr"
+	records = sorted(path.name for path in adr_dir.glob("[0-9][0-9][0-9][0-9]-*.md"))
+	assert records, "docs/adr 应至少有一份 ADR"
+
+	index = read("docs/adr/README.md")
+	linked = set(re.findall(r"\]\((\d{4}-[^)]+\.md)\)", index))
+	assert linked == set(records), f"索引与记录不一致：缺少 {set(records) - linked}，多余 {linked - set(records)}"
+	for name in records:
+		content = read(f"docs/adr/{name}")
+		assert content.startswith("# "), f"{name} 缺少标题"
+		assert "Status" in content, f"{name} 缺少 Status"
+
+	for path in ("docs/architecture.md", "docs/architecture.en.md", "CONTRIBUTING.md", "CONTRIBUTING.en.md"):
+		content = read(path)
+		assert "docs/adr/README.md" in content or "adr/README.md" in content, path
+
+
 def test_codeowners_paths_exist():
 	"""CODEOWNERS 里的路径必须真实存在。
 

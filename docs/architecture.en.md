@@ -110,4 +110,4 @@ These files are used on this machine only; back them up as needed before uninsta
 
 ## Extending the Capability Surface
 
-When adding a command / option / MCP tool, follow the checklists in [CONTRIBUTING](../CONTRIBUTING.en.md) ("Adding a New Command" and "Output Contract") plus the schema, document-count and version-sync items in the [Release Checklist](maintainer/release-checklist.md).
+When adding a command / option / MCP tool, follow the checklists in [CONTRIBUTING](../CONTRIBUTING.en.md) ("Adding a New Command" and "Output Contract") plus the schema, document-count and version-sync items in the [Release Checklist](maintainer/release-checklist.md). Key architectural decisions are recorded in the [ADR index](adr/README.md).

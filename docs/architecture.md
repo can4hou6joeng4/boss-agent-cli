@@ -110,4 +110,4 @@ automation/          招聘自动化状态与去重记录
 
 ## 扩展新能力
 
-新增命令 / 选项 / MCP 工具时，需要同步的清单见 [CONTRIBUTING](../CONTRIBUTING.md) 的「添加新命令」与「输出契约」两节，以及 [发版清单](maintainer/release-checklist.md) 中与 schema、文档计数、版本同步相关的条目。
+新增命令 / 选项 / MCP 工具时，需要同步的清单见 [CONTRIBUTING](../CONTRIBUTING.md) 的「添加新命令」与「输出契约」两节，以及 [发版清单](maintainer/release-checklist.md) 中与 schema、文档计数、版本同步相关的条目。关键架构决策记录在 [ADR 索引](adr/README.md)。

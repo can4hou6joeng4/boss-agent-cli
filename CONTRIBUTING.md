@@ -122,6 +122,7 @@ uv run python evals/run_eval.py --mode fixture
 - [Branch Protection](docs/maintainer/branch-protection.md)
 - [Smoke Testing](docs/maintainer/smoke-testing.md)
 - [README Badge Policy](docs/maintainer/readme-badge-policy.md)
+- [Architecture Decisions](docs/adr/README.md)
 
 ## 添加新命令
 

@@ -81,6 +81,7 @@ Maintainers will `squash merge`, so the squash title must follow the commit conv
 - [Branch Protection](docs/maintainer/branch-protection.md)
 - [Smoke Testing](docs/maintainer/smoke-testing.md)
 - [README Badge Policy](docs/maintainer/readme-badge-policy.md)
+- [Architecture Decisions](docs/adr/README.md)
 
 ## Adding a New Command
 
