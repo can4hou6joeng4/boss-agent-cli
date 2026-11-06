@@ -13,6 +13,7 @@
 - 维护者文档归位：`docs/smoke-testing.md` 与 `docs/readme-badge-policy.md` 实际是单语的维护者文档（未被 README 链接，也没有 `.en.md` 对照），已移到 `docs/maintainer/` 并在中英 CONTRIBUTING 的「维护者文档」清单登记；两处测试引用同步，链接守卫扩展为覆盖全部五份维护者文档。
 
 ### Fixed
+- 营销文档 `docs/marketing/awesome-submissions.md` 顶部声明只覆盖「计数与低风险定位」，但正文的投稿模板与 Checklist 仍写着 `38/9/50`、`latest release v2.0.0`；未来投稿者可能直接照抄。现在声明明确覆盖发布版本与投稿文案，Checklist 标题标注为 2026-08-27 快照并要求提交前按 README / PyPI / `boss schema` 复核；历史投稿记录保持原样。
 - ROADMAP 的「已发布」列表停在 v2.0.0，补上 2.0.1 / 3.0.0 / 3.0.1 / 3.1.0 / 3.2.0 / 3.2.1 的摘要（中英同步）。
 
 ## [3.2.1] - 2026-11-06

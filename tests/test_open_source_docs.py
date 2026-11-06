@@ -174,6 +174,16 @@ def test_adr_index_covers_every_record():
 		assert "docs/adr/README.md" in content or "adr/README.md" in content, path
 
 
+def test_marketing_submission_doc_marks_itself_as_historical_snapshot():
+	"""投稿模板里的计数与版本必须明确是历史快照，避免被当成当前事实照抄。"""
+	content = read("docs/marketing/awesome-submissions.md")
+
+	assert "Historical snapshot" in content
+	assert "PyPI" in content
+	assert "`boss schema`" in content
+	assert "2026-08-27 快照" in content
+
+
 def test_codeowners_paths_exist():
 	"""CODEOWNERS 里的路径必须真实存在。
 
