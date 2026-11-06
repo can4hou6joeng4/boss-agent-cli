@@ -29,7 +29,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 Full release history lives in [CHANGELOG.md](CHANGELOG.md).
 
-## Near term (current mainline)
+## ✅ Near term (completed)
 
 ### Data visualization
 
@@ -49,7 +49,7 @@ Full release history lives in [CHANGELOG.md](CHANGELOG.md).
 - [x] `boss ai interview-prep` - mock interview generation based on the JD (v1.8.0)
 - [x] support for current Claude 4.7 / GPT-5 generation models (v1.8.2, providers extended to openrouter, qwen, zhipu, and siliconflow)
 
-## Mid term (v2.0)
+## 🔮 Mid term (v2.x–v3.x)
 
 ### Governance and compliance
 
@@ -66,7 +66,7 @@ Full release history lives in [CHANGELOG.md](CHANGELOG.md).
 
 ### Ecosystem expansion
 
-- [ ] Web UI (React + Tailwind) for non-agent users
+- [ ] Web UI (React + Tailwind) for non-agent users (not scheduled)
 - [ ] Multi-platform support: the Platform abstraction shipped (Week 1a-1c); Lagou / Liepin API research is complete (Issue #90 closed, [docs/research/platforms/](docs/research/platforms/)) and neither is pursued; the Zhilian adapter (candidate side + recruiter agent automation) was removed in v3.0.0, so BOSS Zhipin is the only registered platform.
   - [x] Week 1a: Platform ABC skeleton + `BossPlatform` adapter (#129, zero behavior change)
   - [x] Week 1b: global `--platform` CLI option + `get_platform_instance` helper + schema exposure of `current_platform`
