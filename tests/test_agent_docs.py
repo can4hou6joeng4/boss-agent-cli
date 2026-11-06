@@ -238,6 +238,15 @@ def test_readme_command_groups_cover_every_top_level_command():
 		assert not missing, f"{path} 缺少顶层命令: {sorted(missing)}"
 
 
+def test_troubleshooting_documents_action_unconfirmed_evidence():
+	"""ACTION_UNCONFIRMED 的 details 字段要写进排障表，用户才看得懂失败信封。"""
+	for path in ("docs/troubleshooting.md", "docs/troubleshooting.en.md"):
+		content = _read(path)
+		assert "ACTION_UNCONFIRMED" in content, path
+		for field in ("history_checked", "history_matched_count", "history_attempts"):
+			assert field in content, f"{path} 缺少 {field}"
+
+
 def test_readme_documents_full_envelope_keys():
 	"""README 的能力条目必须描述完整的七键信封。
 
