@@ -174,7 +174,7 @@ boss crawl stop <run_id>
 
 `greet` 只发送首次招呼，不建立 MQTT 连接、不清理红点。成功返回 `sent=true`；若发送后本地记录失败，错误信封仍在 `error.details.sent=true` 保留已发送事实，不能因此重发。BOSS 外层 `code=0` 也可能返回权益拦截页；CLI 会识别这类业务拒绝，返回 `GREET_LIMIT`、`error.details.sent=false` 和脱敏平台提示，保留拒绝状态以阻止重发。平台可能按职位限制免费沟通人数，不能把调用方配置的日额度当作平台保证。`chat` / `last-messages` 中未知未读数保留为 `null`，不当作零。
 
-`request-resume` 与 `resume --exchange` 在聊天页里调用官方组件完成动作，只点击本次动作新弹出的确认框。成功需要动作后回读聊天记录看到自己新发出的已知请求文案或已识别类型的动作卡片。只有 outgoing WS 帧、页面调用返回成功或未知手机号动作编号时不能确认发送；这些情况返回 `ACTION_UNCONFIRMED`（`recoverable=false`），`error.details` 附带页面日志、确认按钮状态和 WS 统计。此时动作可能已经生效，先用 `boss hr chatmsg <friend_id>` 核实，不要直接重试。聊天记录证据也不证明接收方已收到或已读。换手机或微信时如果同时看到了求简历消息，成功结果会带 `side_effects: ["resume_request_detected"]`。动作前或回读时首次命中风险立即停止，不继续轮询；禁用或仍在加载的编辑器不会被强制开启，目标好友必须唯一匹配。
+`request-resume` 与 `resume --exchange` 在聊天页里调用官方组件完成动作，只点击本次动作新弹出的确认框。成功需要动作后回读聊天记录看到自己新发出的已知请求文案或已识别类型的动作卡片。只有 outgoing WS 帧、页面调用返回成功或未知手机号动作编号时不能确认发送；这些情况返回 `ACTION_UNCONFIRMED`（`recoverable=false`），`error.details` 附带页面日志、确认按钮状态、WS 统计与历史回读核对结果（`history_checked` / `history_matched_count` / `history_attempts`）。此时动作可能已经生效，先用 `boss hr chatmsg <friend_id>` 核实，不要直接重试。聊天记录证据也不证明接收方已收到或已读。换手机或微信时如果同时看到了求简历消息，成功结果会带 `side_effects: ["resume_request_detected"]`。动作前或回读时首次命中风险立即停止，不继续轮询；禁用或仍在加载的编辑器不会被强制开启，目标好友必须唯一匹配。
 
 ### 自动化停止与显式恢复
 
