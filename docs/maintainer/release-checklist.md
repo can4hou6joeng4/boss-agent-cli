@@ -11,6 +11,7 @@ Use this checklist before publishing a release tag.
 - `llms.txt` 的 `Current version` 与能力计数（顶层命令 / 一级招聘者子命令 / MCP 工具）已随本次发版更新；`tests/test_agent_docs.py` 会对照代码校验，漏改会直接失败。
 - `SECURITY.md` 的支持版本表已更新到当前 minor（< 当前 minor 标为不再支持）；`tests/test_open_source_docs.py` 会校验。
 - GitHub Pages 站点（`demo/index.html` 的版本链接与指标、`demo/llms.txt` 的版本与计数）已同步；`tests/test_agent_docs.py` 会校验（`demo/keynote-animation` 等发布素材是历史版本，不随发版修改）。
+- `ROADMAP.md` / `ROADMAP.en.md` 的「已发布」列表已加入当前版本的摘要（`tests/test_agent_docs.py` 会校验当前版本出现在列表里）。
 
 ## 2. Local verification
 

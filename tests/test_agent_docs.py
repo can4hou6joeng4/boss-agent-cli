@@ -238,6 +238,20 @@ def test_readme_command_groups_cover_every_top_level_command():
 		assert not missing, f"{path} 缺少顶层命令: {sorted(missing)}"
 
 
+def test_roadmap_lists_the_current_release():
+	"""路线图的「已发布」列表必须包含当前版本。
+
+	它曾停在 v2.0.0，跨过 2.0.1 与整个 3.x 都没人发现；导航文档落后两个大版本
+	比没有路线图更误导。
+	"""
+	from boss_agent_cli import __version__
+
+	for path, heading in (("ROADMAP.md", "## 已发布"), ("ROADMAP.en.md", "## Released")):
+		content = _read(path)
+		section = content.split(heading, 1)[1].split("\n## ", 1)[0]
+		assert f"v{__version__}" in section, f"{path} 的已发布列表缺少 v{__version__}"
+
+
 def test_troubleshooting_documents_action_unconfirmed_evidence():
 	"""ACTION_UNCONFIRMED 的 details 字段要写进排障表，用户才看得懂失败信封。"""
 	for path in ("docs/troubleshooting.md", "docs/troubleshooting.en.md"):
