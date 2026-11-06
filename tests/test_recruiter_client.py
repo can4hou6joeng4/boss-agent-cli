@@ -597,6 +597,24 @@ def test_send_message_by_friend_without_real_ws_send_returns_error():
 	client.close()
 
 
+def test_chat_ws_evidence_counts_frames_without_readable_text():
+	"""有发送帧但提取不到文本时，诊断要能和「没有发送帧」区分开（#735）。"""
+	client = BossRecruiterClient(_make_auth())
+	events = [
+		{"kind": "ws_send", "bytes": 120, "utf8_bits": ["hello"]},
+		{"kind": "ws_send", "bytes": 300},
+		{"kind": "ws_recv", "bytes": 40, "utf8_bits": ["hello"]},
+	]
+	evidence = client._chat_ws_evidence(events, ["hello"])
+	assert evidence == {
+		"event_count": 3,
+		"ws_send_count": 2,
+		"ws_send_without_text": 1,
+		"matched_ws_count": 1,
+	}
+	client.close()
+
+
 def test_exchange_request_by_friend_without_real_ws_send_returns_error():
 	"""exchange 也必须命中真实 chat WS 帧，DOM 文案不足以判成功。"""
 	auth = _make_auth()

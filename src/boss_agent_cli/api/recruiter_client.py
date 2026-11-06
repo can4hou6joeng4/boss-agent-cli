@@ -812,9 +812,13 @@ class BossRecruiterClient(_BaseHttpClient):
 
 	def _chat_ws_evidence(self, events: list[dict[str, Any]], expected_bits: list[str]) -> dict[str, Any]:
 		ws_send = [event for event in events if event.get("kind") == "ws_send"]
+		# 帧里提取不到任何文本（二进制 / 压缩 / 新编码）时 matched 必然为 0：
+		# 单独计数，才能把「没有发送帧」和「有帧但读不出文本」区分开（#735）。
+		ws_send_without_text = sum(1 for event in ws_send if not event.get("utf8_bits"))
 		return {
 			"event_count": len(events),
 			"ws_send_count": len(ws_send),
+			"ws_send_without_text": ws_send_without_text,
 			"matched_ws_count": len(self._matching_chat_send_events(events, expected_bits)),
 		}
 
