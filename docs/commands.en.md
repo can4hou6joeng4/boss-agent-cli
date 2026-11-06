@@ -17,6 +17,20 @@ subcommands under `hr`, grouped below by workflow stage.
 
 Compatibility setting: `boss config set operating_mode assisted|research`. Both modes can call every implemented capability; schema still reports risk/data classifications, and missing platform implementations return `NOT_SUPPORTED`.
 
+## Contents
+
+- [Command or wizard](#command-or-wizard)
+- [Basics](#basics)
+- [Discovery](#discovery)
+- [Resumable bulk crawl](#resumable-bulk-crawl)
+- [Candidate actions](#candidate-actions)
+- [Conversation track](#conversation-track)
+- [Pipeline & organization](#pipeline--organization)
+- [Recruiter mode](#recruiter-mode)
+- [Resume & AI](#resume--ai)
+- [Utilities](#utilities)
+- [Search filter parameters](#search-filter-parameters)
+
 ## Command or wizard
 
 Top-level commands and `boss wizard` are two parallel capability surfaces. The split is declared in `conventions.command_vs_wizard` from `boss schema`:

@@ -18,6 +18,29 @@ def read(path: str) -> str:
 	return (ROOT / path).read_text(encoding="utf-8")
 
 
+def _github_slug(text: str) -> str:
+	text = text.strip().lower()
+	text = re.sub(r"[^\w一-鿿\- ]", "", text)
+	return text.replace(" ", "-")
+
+
+def test_commands_doc_toc_matches_headings():
+	"""命令参考的目录锚点必须都有对应标题。
+
+	`docs/commands.md` 有 300+ 行，没有目录时只能整页滚动；目录本身也会随章节
+	改名而漂移，所以这里校验每个锚点都能落到真实标题上。
+	"""
+	for path, marker in (("docs/commands.md", "## 目录"), ("docs/commands.en.md", "## Contents")):
+		content = read(path)
+		assert marker in content, f"{path} 缺少目录"
+		section = content.split(marker, 1)[1].split("\n## ", 1)[0]
+		links = re.findall(r"\]\(#([^)]+)\)", section)
+		assert len(links) >= 5, f"{path} 目录条目过少"
+		slugs = {_github_slug(heading) for heading in re.findall(r"^## (.+)$", content, re.M)}
+		missing = [anchor for anchor in links if anchor not in slugs]
+		assert not missing, f"{path} 目录锚点无对应标题: {missing}"
+
+
 def load_yaml(path: str) -> dict:
 	content = yaml.safe_load(read(path))
 	assert isinstance(content, dict)
