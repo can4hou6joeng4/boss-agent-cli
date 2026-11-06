@@ -293,10 +293,16 @@ def test_branch_protection_required_checks_match_ci_job_names():
 
 
 def test_contributing_links_maintainer_governance_docs():
-	assert "docs/maintainer/release-checklist.md" in read("CONTRIBUTING.md")
-	assert "docs/maintainer/labels.md" in read("CONTRIBUTING.md")
-	assert "docs/maintainer/release-checklist.md" in read("CONTRIBUTING.en.md")
-	assert "docs/maintainer/labels.md" in read("CONTRIBUTING.en.md")
+	for path in ("CONTRIBUTING.md", "CONTRIBUTING.en.md"):
+		content = read(path)
+		for target in (
+			"docs/maintainer/release-checklist.md",
+			"docs/maintainer/labels.md",
+			"docs/maintainer/branch-protection.md",
+			"docs/maintainer/smoke-testing.md",
+			"docs/maintainer/readme-badge-policy.md",
+		):
+			assert target in content, f"{path} 缺少维护者文档链接: {target}"
 
 
 def test_pull_request_template_requires_quality_and_risk_checks():

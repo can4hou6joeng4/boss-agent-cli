@@ -8,6 +8,9 @@
 - 新增公开架构文档 `docs/architecture.md` / `docs/architecture.en.md`：四条入口、七键信封、`boss schema` 真源、模块分层与调用链、登录链路、平台抽象、预算与风控边界、本地数据目录；README 顶部导航与 CONTRIBUTING 加入架构入口，新增 `tests/test_open_source_docs.py::test_architecture_docs_exist_and_are_linked` 守卫（中英存在、链接可达、相对链接有效）。
 - `boss hr reply` 的 `ws_evidence` 新增 `ws_send_without_text`：统计有发送帧但提取不到文本（二进制 / 压缩 / 新编码）的条数，把「没有发送帧」与「有帧但读不出文本」区分开，供 Issue #735 定位。排障表与守卫同步。
 
+### Changed
+- 维护者文档归位：`docs/smoke-testing.md` 与 `docs/readme-badge-policy.md` 实际是单语的维护者文档（未被 README 链接，也没有 `.en.md` 对照），已移到 `docs/maintainer/` 并在中英 CONTRIBUTING 的「维护者文档」清单登记；两处测试引用同步，链接守卫扩展为覆盖全部五份维护者文档。
+
 ### Fixed
 - ROADMAP 的「已发布」列表停在 v2.0.0，补上 2.0.1 / 3.0.0 / 3.0.1 / 3.1.0 / 3.2.0 / 3.2.1 的摘要（中英同步）。
 

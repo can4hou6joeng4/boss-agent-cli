@@ -415,7 +415,7 @@ def test_smoke_runner_dry_run_bypasses_live_env_preconditions(monkeypatch):
 
 
 def test_smoke_docs_describe_env_controls_and_failure_classes():
-	content = (ROOT / "docs" / "smoke-testing.md").read_text(encoding="utf-8")
+	content = (ROOT / "docs" / "maintainer" / "smoke-testing.md").read_text(encoding="utf-8")
 
 	assert "BOSS_SMOKE_PLATFORM" in content
 	assert "BOSS_SMOKE_QUERY" in content
