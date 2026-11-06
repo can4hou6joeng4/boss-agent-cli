@@ -1,8 +1,8 @@
 # Awesome List Submissions
 
-> **Historical snapshot:** counts and default low-risk positioning below are superseded by the current open-capability wizard design. Use README and `boss schema` before submitting.
+> **Historical snapshot (2026-08-27):** the submission copy, command/tool counts, release version and low-risk positioning below record what was submitted at that time. They are **not** current facts — before submitting anywhere, regenerate counts from README / `boss schema` and take the current version from PyPI or the README release badge.
 
-本文件记录 boss-agent-cli 向各大 awesome 列表投稿的模板，供维护者提交用。最后更新：master 当前状态 (2026-08-27)。
+本文件记录 boss-agent-cli 向各大 awesome 列表投稿的模板与投稿记录，供维护者参考。最后更新：2026-08-27（历史快照，数字与版本不代表当前状态）。
 
 ## 项目一句话介绍
 
@@ -50,7 +50,7 @@
 - [boss-agent-cli](https://github.com/can4hou6joeng4/boss-agent-cli) - Let your AI agent organize the low-risk parts of a job search. 38 top-level CLI commands + 9 recruiter subcommands + 50 default low-risk MCP tools covering search, detail, local shortlist, interview prep, and AI resume coaching on BOSS Zhipin.
 ```
 
-## 投稿前 Checklist（master 当前状态）
+## 投稿前 Checklist（2026-08-27 快照；提交前按当前 README / PyPI / `boss schema` 复核）
 
 - [x] README 双语（中文 + 英文）
 - [x] MIT License
