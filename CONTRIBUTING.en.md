@@ -2,7 +2,7 @@
 
 Thanks for your interest in `boss-agent-cli`! This guide is the English companion of [CONTRIBUTING.md](CONTRIBUTING.md) — both describe the same workflow, so pick whichever fits you.
 
-Before your first contribution, complete the local preflight and developer verification in [Getting Started](docs/getting-started.en.md).
+Before your first contribution, complete the local preflight and developer verification in [Getting Started](docs/getting-started.en.md). Before changing code, read [Architecture](docs/architecture.en.md) to understand the envelope contract, platform abstraction and risk boundary.
 
 ## Development Environment
 
