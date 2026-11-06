@@ -406,9 +406,19 @@ if (editor.conversationLoading$) {
 editor.draft[editor.uniqueId] = args.content;
 input.innerHTML = escaped;
 try { editor.handleKeyup({ key: '', keyCode: 0, preventDefault: () => {}, stopPropagation: () => {} }); } catch (e) { log.push('handleKeyup threw: ' + e.message); }
-await sleep(150);
+// 页面在自己的 input 回调里异步清 disabled：固定等 150ms 在慢页面/慢机器上会
+// 误判为「编辑器不可用」并放弃发送。改为有上限的轮询，仍不强制清除 disabled。
+const readyStartedAt = Date.now();
+const readyDeadline = readyStartedAt + 3000;
+while (editor.disabled && Date.now() < readyDeadline) {
+	await sleep(50);
+}
+log.push('editor ready after ' + (Date.now() - readyStartedAt) + 'ms');
 if (editor.disabled) {
 	return {ok: false, error: 'editor is disabled or conversation is loading', log};
+}
+if (editor.conversationLoading$ || (editor.conversation$ && editor.conversation$.friendId !== args.targetFriendId)) {
+	return {ok: false, error: 'conversation switched away from target before send', log};
 }
 log.push('editbox html set, calling sendText');
 try {
