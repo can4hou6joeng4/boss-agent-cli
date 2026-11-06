@@ -1,6 +1,6 @@
 # boss-agent-cli
 
-> A BOSS Zhipin (BOSS 直聘) CLI for people and AI agents. Job discovery with real welfare filtering, applications, recruiter workflows, resumes, AI assistance and recoverable crawling share one capability set behind a single JSON envelope. Current version: 3.2.0.
+> A BOSS Zhipin (BOSS 直聘) CLI for people and AI agents. Job discovery with real welfare filtering, applications, recruiter workflows, resumes, AI assistance and recoverable crawling share one capability set behind a single JSON envelope. Current version: 3.2.1.
 
 ## Capability source of truth
 
