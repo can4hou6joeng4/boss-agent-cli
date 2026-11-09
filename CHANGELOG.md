@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.2.2] - 2026-11-09
 
 ### Added
 - `ACTION_UNCONFIRMED` 的历史回读诊断再补漏斗计数 `history_new_count` / `history_self_count` / `history_recipient_count`：能直接看出失败卡在「没有新消息（mid/时间判定）」「新消息不是自己发的（from 缺失）」「收件人不匹配」还是「文案不匹配」，并新增 `new_messages()` 供匹配与诊断共用（Issue #735）。排障表与命令参考（中英）同步。

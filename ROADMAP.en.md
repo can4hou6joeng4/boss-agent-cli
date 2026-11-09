@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.2.2 (2026-11-09): `ACTION_UNCONFIRMED` diagnostics now include WebSocket frames without readable text (`ws_send_without_text`) and history read-back funnel counts (`history_new_count` / `history_self_count` / `history_recipient_count`), making delivered-but-unconfirmed sends diagnosable; also added the public architecture doc, an ADR index and a command-reference table of contents, and reorganized maintainer docs and the roadmap.
 - ✅ v3.2.1 (2026-11-06): recruiter replies now fill the editor before checking its state and preserve newlines in multi-line messages (community PR #728); send readiness polls with a bound and re-checks the target conversation; `ACTION_UNCONFIRMED` details now carry history read-back evidence; the release workflow verifies artifacts and the tag before publishing
 - ✅ v3.2.0 (2026-11-01): `--industry` switched to platform industry codes and the `--experience` / `--salary` codes were aligned with the web filters; added the nationwide plus three city codes; fallback errors now report the non-recoverable `INTERNAL_ERROR`; `login --cookie-source` failures explain what to do next (breaking change: industry codes)
 - ✅ v3.1.0 (2026-10-30): added `--browser-source httpx-only` (opens no browser by construction), a shared httpx / Chromium egress proxy, page token identity capture and egress-region probing, the `boss doctor` request-delay check, search `job_url`, and recruiter `hr whoami`

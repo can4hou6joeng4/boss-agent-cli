@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.2.2（2026-11-09）：`ACTION_UNCONFIRMED` 诊断补齐 WS 无文本帧计数（`ws_send_without_text`）与历史回读漏斗计数（`history_new_count` / `history_self_count` / `history_recipient_count`），便于定位「已送达却未确认」的发送；同时新增公开架构文档、ADR 索引与命令参考目录，整理维护者文档与路线图。
 - ✅ v3.2.1（2026-11-06）：招聘者回复在新会话上先填内容再检查编辑器、多行消息保留换行（社区 PR #728），发送前改为有上限轮询并复查目标会话；`ACTION_UNCONFIRMED` 失败详情补上历史回读证据；发版工作流在发布前校验产物与 tag
 - ✅ v3.2.0（2026-11-01）：`--industry` 改用平台行业码、`--experience` / `--salary` 码位按网页筛选器校正；新增「全国」等 4 个城市码；命令兜底改报不可恢复的 `INTERNAL_ERROR`；`login --cookie-source` 提取失败给出可执行诊断（Breaking Change：行业码迁移）
 - ✅ v3.1.0（2026-10-30）：新增 `--browser-source httpx-only`（结构上不打开浏览器）、统一 httpx / Chromium 出口代理、页面 token 身份采集与出口地区探测、`boss doctor` 请求间隔检查、搜索结果 `job_url`、招聘者 `hr whoami`
