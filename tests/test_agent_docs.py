@@ -257,7 +257,15 @@ def test_troubleshooting_documents_action_unconfirmed_evidence():
 	for path in ("docs/troubleshooting.md", "docs/troubleshooting.en.md"):
 		content = _read(path)
 		assert "ACTION_UNCONFIRMED" in content, path
-		for field in ("ws_send_without_text", "history_checked", "history_matched_count", "history_attempts"):
+		for field in (
+			"ws_send_without_text",
+			"history_checked",
+			"history_matched_count",
+			"history_attempts",
+			"history_new_count",
+			"history_self_count",
+			"history_recipient_count",
+		):
 			assert field in content, f"{path} 缺少 {field}"
 
 

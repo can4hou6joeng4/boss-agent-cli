@@ -593,6 +593,9 @@ def test_send_message_by_friend_without_real_ws_send_returns_error():
 		assert result["zpData"]["history_checked"] is True
 		assert result["zpData"]["history_matched_count"] == 0
 		assert result["zpData"]["history_attempts"] == 4
+		assert result["zpData"]["history_new_count"] == 0
+		assert result["zpData"]["history_self_count"] == 0
+		assert result["zpData"]["history_recipient_count"] == 0
 		assert private_message not in json.dumps(result, ensure_ascii=False)
 	client.close()
 
@@ -612,6 +615,32 @@ def test_chat_ws_evidence_counts_frames_without_readable_text():
 		"ws_send_without_text": 1,
 		"matched_ws_count": 1,
 	}
+	client.close()
+
+
+def test_exchange_history_evidence_reports_funnel_counts():
+	"""回读诊断要能指出卡在「新消息 / 自己发出 / 收件人」哪一步（#735）。"""
+	client = BossRecruiterClient(_make_auth())
+	client.chat_history = MagicMock(
+		return_value={
+			"code": 0,
+			"zpData": {
+				"messages": [
+					{"mid": 1, "time": 1000, "from": {"uid": 999}, "body": {"text": "hello"}},
+					{"mid": 2, "time": 2000, "body": {"text": "hello"}},
+				]
+			},
+		}
+	)
+
+	evidence = client._exchange_history_evidence(
+		7, ("hello",), exchange_type=0, baseline_mids=None, since_ms=0
+	)
+
+	assert evidence["new_count"] == 2
+	assert evidence["self_count"] == 1
+	assert evidence["recipient_count"] == 1
+	assert evidence["matched_count"] == 1
 	client.close()
 
 

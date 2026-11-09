@@ -95,6 +95,20 @@ def _is_new_message(message: dict[str, Any], *, baseline_mids: set[int] | None, 
 	return sent_at is not None and sent_at >= since_ms
 
 
+def new_messages(
+	data: Any,
+	*,
+	baseline_mids: set[int] | None,
+	since_ms: int,
+) -> list[dict[str, Any]]:
+	"""找出动作之后新出现的消息（尚未做发送方 / 收件人 / 文案过滤）。"""
+	return [
+		message
+		for message in history_messages(data)
+		if _is_new_message(message, baseline_mids=baseline_mids, since_ms=since_ms)
+	]
+
+
 def new_messages_matching(
 	data: Any,
 	texts: tuple[str, ...],
@@ -109,9 +123,8 @@ def new_messages_matching(
 	"""
 	return [
 		message
-		for message in history_messages(data)
-		if _is_new_message(message, baseline_mids=baseline_mids, since_ms=since_ms)
-		and any(text in candidate for candidate in message_texts(message) for text in texts)
+		for message in new_messages(data, baseline_mids=baseline_mids, since_ms=since_ms)
+		if any(text in candidate for candidate in message_texts(message) for text in texts)
 	]
 
 
