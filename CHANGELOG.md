@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- `ACTION_UNCONFIRMED` 的历史回读诊断再补漏斗计数 `history_new_count` / `history_self_count` / `history_recipient_count`：能直接看出失败卡在「没有新消息（mid/时间判定）」「新消息不是自己发的（from 缺失）」「收件人不匹配」还是「文案不匹配」，并新增 `new_messages()` 供匹配与诊断共用（Issue #735）。排障表与命令参考（中英）同步。
 - 命令参考 `docs/commands.md` / `docs/commands.en.md` 新增章节目录（11 个锚点），300+ 行的速查表可以直接跳转；新增 `tests/test_open_source_docs.py::test_commands_doc_toc_matches_headings` 守卫，目录锚点与真实标题不一致时失败。
 - 新增 ADR 索引 `docs/adr/README.md` 与三份架构决策记录：0003（浏览器来源冻结策略表）、0004（七键信封与错误码登记契约）、0005（MCP server 通过子进程适配 CLI）；0001/0002 标注为历史上下文。架构文档与中英 CONTRIBUTING 加入 ADR 入口，新增 `tests/test_open_source_docs.py::test_adr_index_covers_every_record` 守卫（索引覆盖每份记录、必需章节、入口可达）。
 - 新增公开架构文档 `docs/architecture.md` / `docs/architecture.en.md`：四条入口、七键信封、`boss schema` 真源、模块分层与调用链、登录链路、平台抽象、预算与风控边界、本地数据目录；README 顶部导航与 CONTRIBUTING 加入架构入口，新增 `tests/test_open_source_docs.py::test_architecture_docs_exist_and_are_linked` 守卫（中英存在、链接可达、相对链接有效）。

@@ -26,6 +26,7 @@ from boss_agent_cli.api.recruiter_resume import (
 	message_mid,
 	message_texts,
 	new_action_cards_matching,
+	new_messages,
 	new_messages_matching,
 	resume_friend,
 	save_resume,
@@ -1255,6 +1256,9 @@ class BossRecruiterClient(_BaseHttpClient):
 				"history_checked": history.get("checked"),
 				"history_matched_count": history.get("matched_count"),
 				"history_attempts": history_attempts,
+				"history_new_count": history.get("new_count"),
+				"history_self_count": history.get("self_count"),
+				"history_recipient_count": history.get("recipient_count"),
 				"history_error": history.get("error"),
 			}
 		return self._chat_action_failure_response(
@@ -1499,6 +1503,9 @@ class BossRecruiterClient(_BaseHttpClient):
 			"history_checked": history["checked"],
 			"history_matched_count": 0,
 			"history_attempts": history_attempts,
+			"history_new_count": history.get("new_count"),
+			"history_self_count": history.get("self_count"),
+			"history_recipient_count": history.get("recipient_count"),
 		}
 		if check_availability:
 			extra["history_self_message"] = self_message
@@ -1555,18 +1562,30 @@ class BossRecruiterClient(_BaseHttpClient):
 		except Exception as exc:  # noqa: BLE001 — 写操作已发生，回读失败只能记为未确认
 			if is_request_stop(exc):
 				return {"checked": False, "matched_count": 0, "resume_matched_count": 0,
+					"new_count": 0, "self_count": 0, "recipient_count": 0,
 					"control_stop": getattr(exc, "code", "WORKFLOW_STOPPED"), "error": type(exc).__name__}
-			return {"checked": False, "matched_count": 0, "resume_matched_count": 0, "error": type(exc).__name__}
+			return {"checked": False, "matched_count": 0, "resume_matched_count": 0,
+				"new_count": 0, "self_count": 0, "recipient_count": 0, "error": type(exc).__name__}
 		if not isinstance(response, dict) or response.get("code") != 0:
 			code = response.get("code") if isinstance(response, dict) else None
 			return {
 				"checked": False,
 				"matched_count": 0,
 				"resume_matched_count": 0,
+				"new_count": 0,
+				"self_count": 0,
+				"recipient_count": 0,
 				"error": f"chat_history code={code}",
 			}
 		data = response.get("zpData")
 		aids, exclude = self._exchange_aid_filter(exchange_type)
+		# 漏斗计数：新消息 → 自己发出 → 收件人匹配。文案 / 卡片命中之外，
+		# 失败详情能指出到底卡在哪一步（mid 缺失、from 缺失、或文案不匹配）。
+		fresh = new_messages(data, baseline_mids=baseline_mids, since_ms=since_ms)
+		self_authored = [message for message in fresh if sent_by_self(message, friend_id)]
+		recipient_matched = [
+			message for message in self_authored if self._history_recipient_matches(message, friend_id)
+		]
 
 		def _new_matches(
 			match_texts: tuple[str, ...], card_aids: frozenset[int] | None, card_exclude: frozenset[int]
@@ -1592,7 +1611,14 @@ class BossRecruiterClient(_BaseHttpClient):
 
 		matched_count = _new_matches(texts, aids, exclude)
 		resume_count = _new_matches(_RESUME_REQUEST_TEXTS, frozenset({_RESUME_REQUEST_AID}), frozenset())
-		return {"checked": True, "matched_count": matched_count, "resume_matched_count": resume_count}
+		return {
+			"checked": True,
+			"matched_count": matched_count,
+			"resume_matched_count": resume_count,
+			"new_count": len(fresh),
+			"self_count": len(self_authored),
+			"recipient_count": len(recipient_matched),
+		}
 
 	@staticmethod
 	def _history_recipient_matches(message: dict[str, Any], friend_id: int) -> bool:
