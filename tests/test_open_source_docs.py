@@ -867,8 +867,12 @@ def test_readme_badges_come_from_approved_sources():
 
 
 _SHELL_FENCE_LANGS = {"", "bash", "sh", "shell", "console", "powershell", "pwsh", "cmd", "bat"}
-#: 示例里代表「用户自己替换」的占位符；整行跳过，不当作可执行示例。
-_COMMAND_PLACEHOLDERS = ("<", ">", "{", "}", "$", "`", "...", "|", "/path/to/")
+#: 角度占位符代表「用户自己替换」的取值；只掩码取值本身，选项仍参与解析，
+#: 这样 `<security_id>` 所在行的选项拼写错误也能被发现。
+_ANGLE_PLACEHOLDER = re.compile(r"<[^<>\s]+>")
+#: 其余无法可靠还原成命令行的写法（JSON 片段、变量、续行、管道、示例路径）；
+#: 整行跳过，不当作可执行示例。
+_COMMAND_PLACEHOLDERS = ("{", "}", "$", "`", "...", "|", "/path/to/")
 
 
 def _documented_boss_commands() -> list[tuple[str, int, str]]:
@@ -909,17 +913,23 @@ def test_documented_boss_commands_parse_with_click():
 
 	README 曾把 ``boss config reset`` 写成不带 ``KEY`` 的「恢复默认」，而该命令
 	要求单个配置键——用户照抄只会拿到 ``Missing parameter: key``。这里从 shell
-	代码块提取示例，按 CLI 的 Group 树下钻到目标命令跑一次参数解析（不执行
-	回调），占位符与 PowerShell 续行整行跳过。
+	代码块提取示例，把 ``<占位符>`` 掩码成合法取值后，按 CLI 的 Group 树下钻到
+	目标命令跑一次参数解析（不执行回调）；无法还原的写法整行跳过。
 	"""
 	checked = 0
 	failures: list[str] = []
 	for path, lineno, line in _documented_boss_commands():
 		try:
-			argv = shlex.split(line)
+			tokens = shlex.split(line)
 		except ValueError:
 			continue
-		argv = argv[1:]
+		if len(tokens) < 2 or tokens[1].startswith("<"):
+			# `boss <cmd> --help` 之类：命令名本身是占位符，无从解析。
+			continue
+		try:
+			argv = shlex.split(_ANGLE_PLACEHOLDER.sub("1", line))[1:]
+		except ValueError:
+			continue
 		for terminator in ("#", "&&", "||"):
 			if terminator in argv:
 				argv = argv[: argv.index(terminator)]
@@ -936,4 +946,4 @@ def test_documented_boss_commands_parse_with_click():
 			failures.append(f"{path}:{lineno}: {line}\n    {exc.format_message()}")
 		checked += 1
 	assert not failures, "文档示例无法被 CLI 解析：\n" + "\n".join(failures)
-	assert checked >= 30, f"只解析到 {checked} 条文档命令，提取逻辑可能失效"
+	assert checked >= 150, f"只解析到 {checked} 条文档命令，提取逻辑可能失效"
