@@ -141,6 +141,19 @@ def test_automation_config_accepts_zero_limits() -> None:
 	assert config.max_consecutive_errors == 0
 
 
+def test_automation_config_ignores_removed_keys() -> None:
+	"""已移除的死配置键不能让旧 config.json 加载失败。
+
+	`platforms` 与 `stop_on_page_text` 从未有消费点：平台由全局 --platform 决定，
+	页面风控由 api/zhipin_errors 的 URL / 页面内容检测负责。字段删除后，用户的
+	旧 config.json 里可能仍存有它们，解析必须继续接受。
+	"""
+	config = automation_config_from_dict({"platforms": ["zhipin"], "stop_on_page_text": ["验证码"]})
+	assert config == AutomationConfig()
+	# 死字段不得被重新加回：配置项存在却不生效，与「已实现」的承诺相悖。
+	assert not {"platforms", "stop_on_page_text"} & set(AutomationConfig.__dataclass_fields__)
+
+
 def test_automation_config_rejects_unknown_allowed_actions() -> None:
 	"""拼错的动作名必须报错，不能被静默丢弃。
 
