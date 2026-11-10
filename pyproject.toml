@@ -298,6 +298,21 @@ module = [
 	"boss_agent_cli.commands._contact_lookup",
 	"boss_agent_cli.commands._filter_errors",
 	"boss_agent_cli.api.browser_urls",
+	"boss_agent_cli.api.cdp_risk_lock",
+	"boss_agent_cli.api.egress",
+	"boss_agent_cli.api.proxy",
+	"boss_agent_cli.auth.page_identity",
+	"boss_agent_cli.commands.wizard",
+	"boss_agent_cli.services.json_files",
+	"boss_agent_cli.wizard.actions",
+	"boss_agent_cli.wizard.catalog",
+	"boss_agent_cli.wizard.live_crawl",
+	"boss_agent_cli.wizard.models",
+	"boss_agent_cli.wizard.preflight",
+	"boss_agent_cli.wizard.prompts",
+	"boss_agent_cli.wizard.renderer",
+	"boss_agent_cli.wizard.runner",
+	"boss_agent_cli.wizard.store",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true

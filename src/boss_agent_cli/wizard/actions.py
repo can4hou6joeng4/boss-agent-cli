@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Callable, Mapping, NoReturn
+from typing import Any, Callable, Mapping, NoReturn, cast
 
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.auth.identity import account_scope
@@ -152,7 +152,9 @@ def execute_candidate_search(
 
 def execute_recruiter_candidate_search(platform: Any, inputs: Mapping[str, Any]) -> dict[str, Any]:
 	"""Shared recruiter search call used by the command and workflow action."""
-	return platform.search_geeks(
+	# platform 按鸭子类型接收真实适配器与测试替身，返回的平台响应字典由调用方
+	# 按 API 响应契约读取；这里显式收敛 Any，避免整条调用链丢失类型。
+	return cast("dict[str, Any]", platform.search_geeks(
 		str(inputs.get("query") or ""),
 		city=_optional_str(inputs.get("city")),
 		page=_int_input(inputs, "page", 1, minimum=1),
@@ -165,7 +167,7 @@ def execute_recruiter_candidate_search(platform: Any, inputs: Mapping[str, Any])
 		source=_optional_str(inputs.get("source")),
 		select=bool(inputs.get("select", False)),
 		salary=_optional_str(inputs.get("salary")),
-	)
+	))
 
 
 def _extract_list_items(payload: Any, keys: tuple[str, ...] = ()) -> list[dict[str, Any]]:
