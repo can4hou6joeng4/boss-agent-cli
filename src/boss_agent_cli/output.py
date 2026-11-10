@@ -36,12 +36,16 @@ _NON_CREDENTIAL_TYPES = (bool, int, float, type(None))
 SchemaPath = tuple[str | int, ...]
 SchemaParameterPaths = dict[SchemaPath, str]
 _SCHEMA_VALUE_FIELDS = {"default", "example", "examples", "const", "enum"}
+# 凭据值在这些字符处结束：ASCII 空白 / 逗号 / 分号，以及全角标点。只排除
+# ASCII 分隔符时，`stoken=abc）` 会把右括号算进值里，`Bearer x，然后`
+# 连后续中文说明一起被替换成 [REDACTED]，诊断文案就此残缺。
+_TEXT_VALUE_TERMINATORS = r"\s,;，。、；：（）「」『』【】《》！？…—"
 _SENSITIVE_TEXT_PATTERNS = tuple(
 	re.compile(pattern, re.IGNORECASE)
 	for pattern in (
-		r"\b(authorization)\b(\s*[:=]\s*)(bearer\s+)?([^\s,;]+)",
-		r"\b(api[_-]?key|authorization|cookie|credential|password|secret|session(?:[_-]?id)?|stoken|token)\b(\s*[:=]\s*)([^\s,;]+)",
-		r"\b(bearer)\s+([^\s,;]+)",
+		rf"\b(authorization)\b(\s*[:=]\s*)(bearer\s+)?([^{_TEXT_VALUE_TERMINATORS}]+)",
+		rf"\b(api[_-]?key|authorization|cookie|credential|password|secret|session(?:[_-]?id)?|stoken|token)\b(\s*[:=]\s*)([^{_TEXT_VALUE_TERMINATORS}]+)",
+		rf"\b(bearer)\s+([^{_TEXT_VALUE_TERMINATORS}]+)",
 	)
 )
 
