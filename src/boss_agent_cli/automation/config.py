@@ -100,11 +100,19 @@ def automation_config_from_dict(raw: dict[str, Any] | None) -> AutomationConfig:
 		raise ValueError("automation 配置必须是 JSON object")
 	default_actions = [action.value for action in DEFAULT_ALLOWED_ACTIONS]
 	allowed_action_values = {action.value for action in PlatformAction}
-	actions = tuple(
-		PlatformAction(item)
-		for item in data.get("allowed_actions", default_actions)
-		if item in allowed_action_values
-	)
+	# 安全相关配置必须 fail-closed：旧实现把未知值静默过滤后 `actions or DEFAULT_ALLOWED_ACTIONS`
+	# 回退到默认全集，用户写错一个枚举值（或写空列表想禁用自动动作）反而放开全部写动作。
+	# 未知值一律报错；空列表保留为空集合——执行层会把每个动作判为 SKIPPED。
+	raw_actions = data.get("allowed_actions", default_actions)
+	if not isinstance(raw_actions, (list, tuple)):
+		raise ValueError(f"allowed_actions 必须是字符串数组，收到 {raw_actions!r}")
+	unknown_actions = [item for item in raw_actions if item not in allowed_action_values]
+	if unknown_actions:
+		raise ValueError(
+			f"allowed_actions 包含未知动作：{unknown_actions}；"
+			f"有效值：{sorted(allowed_action_values)}"
+		)
+	actions = tuple(PlatformAction(item) for item in raw_actions)
 	human_review_threshold = _config_confidence(
 		data, "human_review_threshold", _DEFAULT.human_review_threshold
 	)
@@ -119,7 +127,7 @@ def automation_config_from_dict(raw: dict[str, Any] | None) -> AutomationConfig:
 	return AutomationConfig(
 		mode=AutomationMode(data.get("mode", _DEFAULT.mode.value)),
 		platforms=tuple(str(item) for item in data.get("platforms", _DEFAULT.platforms)),
-		allowed_actions=actions or DEFAULT_ALLOWED_ACTIONS,
+		allowed_actions=actions,
 		human_review_threshold=human_review_threshold,
 		auto_execute_threshold=auto_execute_threshold,
 		max_actions_per_run=_config_int(data, "max_actions_per_run", _DEFAULT.max_actions_per_run, minimum=0),
