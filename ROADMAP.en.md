@@ -54,8 +54,8 @@ Full release history lives in [CHANGELOG.md](CHANGELOG.md).
 
 ### Governance and compliance
 
-- [x] default low-risk assistance mode: sensitive commands are blocked by default and handed back to the official platform (ADR 0001)
-- [x] explicit `operating_mode` two-mode contract: `assisted` / `research` drives the CLI, schema, and MCP filtering from a single source of truth (v1.16.0, ADR 0002)
+- [x] default low-risk assistance mode (historical; superseded by the 2026-08 open-capability design): ADR 0001 once blocked sensitive commands by default and handed them back to the official platform; today `assisted` / `research` have identical access to implemented capabilities, and the real boundaries are platform risk control and bounded long-running workflows
+- [x] explicit `operating_mode` two-mode contract (historical; v1.16.0 / ADR 0002, superseded by the 2026-08 open-capability design): the two mode names are kept only for configuration compatibility, with identical access and no mode-level `COMPLIANCE_BLOCKED` or schema / MCP mode filtering
 - [x] restricted Research Mode collection: fixed request / detail / wall-clock / retry budgets, SQLite checkpointing, and a stop switch (v1.17.0)
 
 ### Architecture evolution

@@ -132,6 +132,23 @@ def test_security_policy_describes_current_mode_semantics():
 	assert "默认启用低风险辅助模式" not in content
 
 
+def test_roadmap_describes_current_mode_semantics():
+	"""ROADMAP 不得把已被取代的模式阻断 / 过滤写成现状。
+
+	ADR 0001 / 0002 都已标注 Superseded by the 2026-08 open-capability design，
+	两种 `operating_mode` 权限一致；ROADMAP 曾把「默认阻断」和「schema / MCP
+	模式过滤」列为已完成能力，与 ADR 状态和 `compliance.py` 矛盾。
+	"""
+	zh = read("ROADMAP.md")
+	en = read("ROADMAP.en.md")
+	assert "已被 2026-08 开放能力设计取代" in zh
+	assert "权限一致" in zh
+	assert "敏感命令默认阻断并交接回平台官网（ADR 0001）" not in zh
+	assert "superseded by the 2026-08 open-capability design" in en
+	assert "identical access" in en
+	assert "sensitive commands are blocked by default and handed back to the official platform (ADR 0001)" not in en
+
+
 def test_readme_documents_browser_bridge_removal_and_manual_cleanup():
 	zh = read("README.md")
 	en = read("README.en.md")
