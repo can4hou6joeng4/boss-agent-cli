@@ -22,6 +22,7 @@
 - 加固 GitHub 工作流（Issue #747）：全部 18 处 `uses:` 从 `@v7` 这类可移动标签改为完整提交 SHA 并在行尾注明精确版本；`release.yml` 的标签名改用 `$GITHUB_REF_NAME`，不再在 `run:` 脚本里展开 `${{ github.ref_name }}`；发布构建关闭 `setup-uv` 缓存，避免 `master` 上 CI 写入的缓存被带进持有 PyPI 令牌的环境；不需要推送的任务（CI、Pages、发布）的 `actions/checkout` 设 `persist-credentials: false`。各工作流的触发条件与行为不变。`tests/test_open_source_docs.py` 新增 6 条离线守卫（SHA 钉版与版本注释、`run:` 不展开表达式、`pull_request_target` 不检出 PR head、发布不吃缓存、checkout 凭据逐任务登记），`docs/maintainer/branch-protection.md` 新增「Workflow rules」一节。
 
 ### Fixed
+- `boss watch run <名称>` 的终端输出不再把新增职位塞进面板：`new_items` 是完整搜索结果项的列表，一次几十条新职位时整段 dict repr 会撑爆面板，也没法扫读。现在面板只保留 `new_count` / `seen_count` / `total_count` 三个计数，新增职位改用与 `search` 一致的表格展示（标题 / 公司 / 薪资 / 城市）。JSON 信封输出不变。
 - `boss config get/set/reset` 的终端输出在遇到结构化配置时改用格式化 JSON：`automation` / `crawl` 的 Python repr 把两段十一字段字典挤进一个面板，单引号与折行让当前值、「默认值」和「上一次的值」都难读。现在面板内显示占位，完整 JSON 打印在下方；相同内容只展开一次，不同时并列便于对比。JSON 信封输出不变。
 - `boss config list` 的结构化配置不再被截断：`automation` 的字典 repr 有二十多行，塞进 25 宽的值列后挤满表格，两条话术还被截成省略号，用户恰恰看不到自己配了什么。现在表格内显示「（JSON，见下方）」，完整 JSON 以格式化形式打印在表格下方；JSON 信封输出与 `config get` 不受影响。
 - 自动化配置的 `allowed_actions` 不再 fail-open：旧实现把未知动作名静默过滤后 `actions or DEFAULT_ALLOWED_ACTIONS` 回退到默认全集，用户拼错一个枚举值（或写空列表想禁用自动动作）反而放开全部默认写动作。现在未知值与非数组（如字符串）一律报 `ValueError` 并列出有效值；空列表保持为空集合——执行层 `status_for_decision` 会把每个动作判为 `SKIPPED`，与消费点「不在白名单即跳过」的既有语义一致。新增三条测试，变异回旧实现时全部失败。
