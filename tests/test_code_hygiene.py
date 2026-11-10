@@ -36,3 +36,35 @@ def test_no_unreachable_statements() -> None:
 	（E4/E7/E9/F）与 mypy 都不报这类问题。
 	"""
 	assert _unreachable_statements() == []
+
+
+def _stdout_echo_calls() -> list[str]:
+	"""列出未声明 ``err`` 的 ``click.echo`` 调用（``output.py`` 的信封出口除外）。"""
+	found: list[str] = []
+	envelope_path = ROOT / "src" / "boss_agent_cli" / "output.py"
+	for path in sorted((ROOT / "src").rglob("*.py")):
+		if path == envelope_path:
+			continue
+		tree = ast.parse(path.read_text(encoding="utf-8"))
+		for node in ast.walk(tree):
+			if not (
+				isinstance(node, ast.Call)
+				and isinstance(node.func, ast.Attribute)
+				and node.func.attr == "echo"
+				and isinstance(node.func.value, ast.Name)
+				and node.func.value.id == "click"
+			):
+				continue
+			if not any(keyword.arg == "err" for keyword in node.keywords):
+				found.append(f"{path.relative_to(ROOT)}:{node.lineno}")
+	return found
+
+
+def test_no_stdout_click_echo_outside_envelope_output() -> None:
+	"""stdout 只能由 ``output.py`` 的七键信封写入。
+
+	``commands/platforms.py`` 的 TTY render 曾用裸 ``click.echo`` 把表格写进
+	stdout，管道场景因 ``is_json_mode`` 走 JSON 分支而侥幸正常；这里静态拦住
+	所有未声明 ``err`` 的 ``click.echo``，日志 / 表格只允许走 stderr。
+	"""
+	assert _stdout_echo_calls() == []
