@@ -694,7 +694,7 @@ def _heading_levels(path: str) -> list[int]:
 def test_bilingual_docs_share_the_same_heading_structure():
 	"""中英对照文档的标题层级必须一致，防止一侧新增章节、另一侧没跟上。"""
 	pairs = _bilingual_pairs()
-	assert len(pairs) >= 13
+	assert len(pairs) >= 14
 	for zh_path, en_path in pairs:
 		assert _heading_levels(zh_path) == _heading_levels(en_path), f"{zh_path} 与 {en_path} 的标题结构不一致"
 
@@ -743,9 +743,13 @@ def test_support_docs_route_every_request_channel():
 
 
 def _tracked_markdown_files() -> list[Path]:
-	"""只扫 git 跟踪的文档，本地忽略的研究笔记不参与。"""
+	"""扫描已跟踪文档，外加尚未 `git add` 但没被忽略的新文件。
+
+	`--others --exclude-standard` 让本地新建的文档也参与检查，同时排除
+	`.git/info/exclude` 里的本地研究笔记。
+	"""
 	result = subprocess.run(
-		["git", "ls-files", "-z", "*.md"],
+		["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "*.md"],
 		cwd=ROOT,
 		capture_output=True,
 		check=True,
