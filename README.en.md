@@ -172,7 +172,7 @@ Full checks, CDP launch examples, and error codes: **[Troubleshooting](docs/trou
 ```bash
 boss config list                      # view all settings
 boss config set log_level debug       # set the log level
-boss config reset                     # restore defaults
+boss config reset log_level           # restore one setting to its default
 ```
 
 Settings live in `~/.boss-agent/config.json`: request delays, batch-greet delay, log level, CDP URL, export dir, platform / role.

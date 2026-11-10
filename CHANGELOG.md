@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增文档命令可解析守卫 `tests/test_open_source_docs.py::test_documented_boss_commands_parse_with_click`：README 与 `docs/` 下 shell 代码块里以 `boss ` 开头的示例命令，会被提取并按 CLI 的 Group 树下钻到目标命令跑一次参数解析（不执行回调）；占位符、PowerShell 续行与管道行整行跳过，并设 30 条检查下限防止提取失效。审查当期即发现两处真实缺陷：中英文 README 的 `boss config reset` 缺少必需的 `KEY` 参数（照抄会收到 `Missing parameter: key`），已改为 `boss config reset log_level`。变异验证：还原旧示例即触发失败。
 - 新增 MCP 参数映射契约守卫 `tests/test_mcp_args_contract.py`：`_build_args` 是 MCP 与 CLI 之间唯一的手写映射层，参数名与选项名不一致（`tag` → `--label`、`limit` → `--count`）、枚举拼错或漏写 `--` 前缀时，工具目录与 schema 都看不出问题，只会在真实 MCP 会话里变成 Click 用法错误。现在按 78 个工具的 `inputSchema` 自动生成样例参数，解析到目标命令后跑一次完整的 Click 参数解析（不执行命令回调），映射写错会在本地门禁直接失败。变异验证：把 `mark` 的 `--label` 改成 `--tag` 即触发失败。
 - 新增 mypy 严格清单完整性守卫（Issue #785）：`CLAUDE.md` 要求新模块加入 `[[tool.mypy.overrides]]` 严格列表，但此前没有守卫，只能靠人肉发现；#783 收尾后仍有 8 个包的 `__init__.py` 漏登记。现在这 8 个包补入清单，`tests/test_quality_gates.py::test_mypy_strict_overrides_cover_every_source_module` 按 mypy 语义（`foo.bar` 不覆盖子模块，须写 `foo.bar.*`）双向断言：源码里每个模块都被严格条目覆盖，且清单里没有已不存在的模块。变异验证删条目 / 加假模块均能触发失败。
 - 新增 `docs/README.md` 与英文版作为文档索引（Issue #769）：`docs/` 下 20+ 篇文档此前没有导航页，GitHub 浏览时只能看到平铺文件列表；索引按入门 / 核心参考 / Agent 接入 / 边界与安全 / 集成 / ADR / 维护者 / 研究分类，只链接 git 跟踪的文件，双语文档守卫与相对链接守卫自动覆盖。同时把相对链接守卫扩展到尚未 `git add` 的新文件（`--others --exclude-standard`），本地新建文档里的死链也能在提交前发现。
