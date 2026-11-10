@@ -1,4 +1,5 @@
 import re
+import subprocess
 from importlib.metadata import metadata
 from pathlib import Path
 
@@ -705,6 +706,55 @@ def test_support_docs_route_every_request_channel():
 	assert "[Getting Support](SUPPORT.en.md)" in read("README.en.md")
 	assert "](SECURITY.md)" in read("README.md")
 	assert "](SECURITY.md)" in read("README.en.md")
+
+
+def _tracked_markdown_files() -> list[Path]:
+	"""只扫 git 跟踪的文档，本地忽略的研究笔记不参与。"""
+	result = subprocess.run(
+		["git", "ls-files", "-z", "*.md"],
+		cwd=ROOT,
+		capture_output=True,
+		check=True,
+	)
+	return [ROOT / name for name in result.stdout.decode("utf-8").split("\0") if name and (ROOT / name).exists()]
+
+
+def _relative_link_targets(content: str) -> list[str]:
+	targets: list[str] = []
+	in_fence = False
+	for line in content.splitlines():
+		stripped = line.strip()
+		if stripped.startswith("```") or stripped.startswith("~~~"):
+			in_fence = not in_fence
+			continue
+		if in_fence:
+			continue
+		for match in re.finditer(r"\]\(([^)\s]+)\)", line):
+			target = match.group(1)
+			if target.startswith(("http://", "https://", "#", "mailto:", "data:", "/", "<")):
+				continue
+			target = target.split("#", 1)[0].split("?", 1)[0]
+			if not target or "{" in target:
+				continue
+			targets.append(target)
+	return targets
+
+
+def test_markdown_relative_links_resolve():
+	"""被跟踪文档里的相对链接必须指向真实存在的文件。
+
+	`CHANGELOG.md` 曾长期链到从未提交的 `docs/research/platforms/zhaopin.md`，
+	读者点开是 404。守卫只扫 git 跟踪的文档，本地研究笔记不参与。
+	"""
+	checked = 0
+	broken: list[str] = []
+	for path in _tracked_markdown_files():
+		for target in _relative_link_targets(path.read_text(encoding="utf-8")):
+			checked += 1
+			if not (path.parent / target).resolve().exists():
+				broken.append(f"{path.relative_to(ROOT).as_posix()} -> {target}")
+	assert checked >= 200, f"只检查到 {checked} 个相对链接，正则可能失效"
+	assert not broken, "相对链接目标不存在:\n" + "\n".join(broken)
 
 
 def test_code_of_conduct_is_reachable_from_entry_docs():

@@ -6,6 +6,7 @@
 
 ### Added
 - 新增两条双语文档守卫（Issue #751）：`tests/test_open_source_docs.py::test_bilingual_docs_share_the_same_heading_structure` 要求 12 对中英对照文档的标题层级序列一致，一侧新增章节而另一侧没跟上就失败；`::test_troubleshooting_error_tables_list_the_same_registered_codes` 要求两个排障文档的错误码表列出同一组码，且每个码都在 `ERROR_CODES` 里登记。
+- 修复 Markdown 相对链接死链并加守卫（Issue #761）：`CHANGELOG.md` 曾链到从未提交的 `docs/research/platforms/zhaopin.md`，读者点开是 404；该历史条目改为纯文本路径。新增 `test_markdown_relative_links_resolve`，扫描 git 跟踪的全部 `.md`，去掉代码围栏后检查每个相对链接目标存在，并设 200 个链接的检查下限防止正则失效后空转。
 - README 中英「支持」节补上安全报告入口（Issue #759）：此前 `SECURITY.md` 只被 SUPPORT 与 issue 模板引用，README 正文没有链接；现在明确「安全漏洞请私密报告，不要公开提 Issue」，并把 README 的 `SECURITY.md` 可达性并入 `test_support_docs_route_every_request_channel` 守卫。
 - 行为准则接入入口文档（Issue #757）：`CODE_OF_CONDUCT.md` 此前在仓库根目录但全仓库没有任何链接，GitHub 社区健康页之外不可达；README 中英「贡献者」段落、CONTRIBUTING 中英开头均已加入口，并新增 `test_code_of_conduct_is_reachable_from_entry_docs` 守卫。
 - 新增 [SUPPORT.md](SUPPORT.md) 与英文版 [SUPPORT.en.md](SUPPORT.en.md)（Issue #755）：集中说明先看哪些文档、使用问题 / 可复现 Bug / 安全漏洞各自该走哪个渠道、提问要附的信息与脱敏要求、响应预期与 stale 策略；README 中英「支持」一节与 CONTRIBUTING 的「有问题？」段落加入口。双语文档标题结构守卫扩展到 SUPPORT（13 对），新增 `test_support_docs_route_every_request_channel` 守卫四类入口齐全且 README 可到达。
@@ -830,7 +831,7 @@
 
 #### ZhilianPlatform 自证（PR #134）
 - `src/boss_agent_cli/platforms/zhilian.py` — 智联招聘 stub 实现
-- 包络适配按 [zhaopin.md](docs/research/platforms/zhaopin.md) §4 完整实现（`code==200` / `data` key / 401+403+429 映射）
+- 包络适配按 `docs/research/platforms/zhaopin.md` §4 完整实现（`code==200` / `data` key / 401+403+429 映射；该研究文档未随仓库发布，故不加链接）
 - P0/P1/P2 方法抛 `NotImplementedError("Week 2 待实现")`
 - 27 条契约测试覆盖元信息 / 包络适配 / stub 行为 / CLI 集成
 
