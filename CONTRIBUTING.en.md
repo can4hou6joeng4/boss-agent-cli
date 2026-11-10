@@ -4,6 +4,8 @@ Thanks for your interest in `boss-agent-cli`! This guide is the English companio
 
 Before your first contribution, complete the local preflight and developer verification in [Getting Started](docs/getting-started.en.md). Before changing code, read [Architecture](docs/architecture.en.md) to understand the envelope contract, platform abstraction and risk boundary.
 
+By participating (issues, pull requests, discussions) you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Development Environment
 
 ```bash

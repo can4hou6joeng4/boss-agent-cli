@@ -703,3 +703,14 @@ def test_support_docs_route_every_request_channel():
 
 	assert "[获取支持](SUPPORT.md)" in read("README.md")
 	assert "[Getting Support](SUPPORT.en.md)" in read("README.en.md")
+
+
+def test_code_of_conduct_is_reachable_from_entry_docs():
+	"""行为准则必须存在，且入口文档中英都能到达。
+
+	`CODE_OF_CONDUCT.md` 2026-11 之前一直躺在仓库根目录，没有任何文档链接它；
+	GitHub 社区健康页之外基本不可达。
+	"""
+	assert (ROOT / "CODE_OF_CONDUCT.md").exists()
+	for path in ("README.md", "README.en.md", "CONTRIBUTING.md", "CONTRIBUTING.en.md"):
+		assert "CODE_OF_CONDUCT.md" in read(path), f"{path} 没有指向 CODE_OF_CONDUCT.md"

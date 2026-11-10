@@ -4,6 +4,8 @@
 
 首次贡献前请先完成 [快速上手](docs/getting-started.md) 中的本地自检与开发者验证；改代码前建议先读 [架构](docs/architecture.md)，了解信封契约、平台抽象与风控边界。
 
+参与本项目（Issue、PR、Discussions）即表示同意遵守 [行为准则](CODE_OF_CONDUCT.md)。
+
 ## 开发环境
 
 ```bash
