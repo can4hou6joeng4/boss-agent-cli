@@ -838,3 +838,34 @@ def test_config_json_envelope_structure(tmp_path):
 	assert "command" in parsed
 	assert "data" in parsed
 	assert parsed["command"] == "config"
+
+
+@pytest.mark.parametrize("raw", ['"debug "', "3", "[]", "null", '"verbose"'])
+def test_startup_rejects_invalid_config_log_level(tmp_path, raw):
+	"""config.json 里的 log_level 坏值不能让每条命令静默按 error 阈值跑。
+
+	``Logger`` 对未知级别用 ``_LEVEL_ORDER.get(level, 3)``：用户以为打开了
+	debug 却什么都看不到；非字符串值还会在字典查找处抛 TypeError。
+	"""
+	(tmp_path / "config.json").write_text(f'{{"log_level": {raw}}}', encoding="utf-8")
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "status"])
+	parsed = _assert_single_stdout_json_error(result, command="boss", code="INVALID_PARAM")
+	assert "log_level" in parsed["error"]["message"]
+
+
+@pytest.mark.parametrize("raw", ['"30-60"', "30", "[]", "null"])
+def test_startup_rejects_invalid_request_delay_shape(tmp_path, raw):
+	"""坏形状不能被静默换成默认区间：用户以为节流生效，实际跑的是 30-60。"""
+	(tmp_path / "config.json").write_text(f'{{"request_delay": {raw}}}', encoding="utf-8")
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "status"])
+	parsed = _assert_single_stdout_json_error(result, command="boss", code="INVALID_PARAM")
+	assert "request_delay" in parsed["error"]["message"]
+
+
+@pytest.mark.parametrize("key, raw", [("log_level", '"verbose"'), ("request_delay", '"30-60"')])
+def test_config_reset_repairs_invalid_startup_config(tmp_path, key, raw):
+	"""坏值必须放行 config 子命令，否则用户没有命令行手段把它改回来。"""
+	(tmp_path / "config.json").write_text(f'{{"{key}": {raw}}}', encoding="utf-8")
+	code, parsed = _invoke("config", "reset", key, tmp_path=tmp_path)
+	assert code == 0
+	assert parsed["ok"] is True
