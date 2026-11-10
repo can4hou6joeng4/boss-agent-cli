@@ -1172,6 +1172,15 @@ def test_build_args_favorites_list_is_fixed_to_job_favorites():
 	assert _build_args("boss_favorites_list", {"page": 2, "tag": 99}) == ["favorites", "list", "--page", "2"]
 
 
+def test_build_args_favorites_list_forwards_explicit_zero_page():
+	"""page=0 要原样下发交给 Click 拒绝，不能被真值判断换成默认第 1 页。"""
+	assert _build_args("boss_favorites_list", {"page": 0}) == ["favorites", "list", "--page", "0"]
+
+
+def test_build_args_favorites_list_omits_page_when_absent():
+	assert _build_args("boss_favorites_list", {}) == ["favorites", "list"]
+
+
 def test_tool_count_after_pr41():
 	"""协议服务工具总数应与当前 MCP 暴露能力完全一致。"""
 	assert len(TOOLS) == 78
