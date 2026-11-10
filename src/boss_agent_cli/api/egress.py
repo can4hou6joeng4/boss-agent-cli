@@ -18,18 +18,20 @@ from typing import Any, Mapping
 
 PROBE_ENV_KEY = "BOSS_EGRESS_PROBE_URL"
 
-# Region -> (language region subtag, timezone prefix). Deliberately small: an
-# unlisted region yields "unknown", never a guessed expectation.
-_REGION_EXPECTATIONS: dict[str, tuple[str, str]] = {
-	"CN": ("CN", "Asia/Shanghai"),
-	"HK": ("HK", "Asia/Hong_Kong"),
-	"TW": ("TW", "Asia/Taipei"),
-	"SG": ("SG", "Asia/Singapore"),
-	"JP": ("JP", "Asia/Tokyo"),
-	"KR": ("KR", "Asia/Seoul"),
-	"US": ("US", "America/"),
-	"GB": ("GB", "Europe/London"),
-	"DE": ("DE", "Europe/Berlin"),
+# Region -> expected language region subtag. The timezone side is derived from
+# ``_TZ_REGION_HINTS`` at check time so the two mappings cannot drift.
+# Deliberately small: an unlisted region yields "unknown", never a guessed
+# expectation.
+_REGION_EXPECTATIONS: dict[str, str] = {
+	"CN": "CN",
+	"HK": "HK",
+	"TW": "TW",
+	"SG": "SG",
+	"JP": "JP",
+	"KR": "KR",
+	"US": "US",
+	"GB": "GB",
+	"DE": "DE",
 }
 
 # Timezone prefixes that are unambiguous enough to infer a region from.
@@ -116,7 +118,7 @@ def evaluate_egress(
 	if country not in _REGION_EXPECTATIONS:
 		return EgressVerdict(status="unknown", exit_country=country, detail=f"出口地区 {country} 不在已知表中，无法判断")
 
-	expected_lang, expected_tz = _REGION_EXPECTATIONS[country]
+	expected_lang = _REGION_EXPECTATIONS[country]
 	contradictions: list[str] = []
 
 	if lang := language_region(accept_language):

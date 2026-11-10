@@ -343,7 +343,6 @@ class PromptToolkitMenu:
 			clear_wizard_screen()
 		items = _augment_menu_options(options, allow_back=allow_back, allow_exit=allow_exit)
 		selected = _default_select_index(items, default)
-		content_label_w, nav_label_w = _menu_label_widths(items)
 
 		def content() -> list[tuple[str, str]]:
 			return _menu_content_lines(items, selected=selected, title=title)
