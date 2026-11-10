@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from boss_agent_cli.automation.config import AutomationConfig
+
 #: 请求间隔默认值。来源：实测评测显示 15 秒间隔连续 3 次 search 会在第 3 次命中
 #: code 37（「您的环境存在异常」），90 秒间隔 3/3 通过
 #: （docs/research/zhipin-cdp-free-read-path-2026-10-29.md 第七节）。
@@ -13,6 +15,30 @@ DEFAULT_REQUEST_DELAY: tuple[float, float] = (30.0, 60.0)
 #: 角色取值域：``--role`` 的 ``Choice``、启动期校验与 ``config set role`` 共用。
 #: 三处必须一致，否则 ``config set`` 能写进一个让之后每条命令都启动失败的值。
 ROLES: tuple[str, str] = ("candidate", "recruiter")
+
+
+def _automation_defaults() -> dict[str, Any]:
+	"""把 ``AutomationConfig`` 的运行时默认值转成 config.json 形态。
+
+	``boss config list`` 展示的 ``automation.default`` 与解析器的真实默认值必须一致。
+	原先这里手写了一份五字段副本，字段删除后副本不会跟着变——``platforms`` 就这样
+	留了下来，用户看到却无法生效；新增的七个字段反而看不到。
+	"""
+	config = AutomationConfig()
+	return {
+		"mode": config.mode.value,
+		"allowed_actions": [action.value for action in config.allowed_actions],
+		"human_review_threshold": config.human_review_threshold,
+		"auto_execute_threshold": config.auto_execute_threshold,
+		"max_actions_per_run": config.max_actions_per_run,
+		"max_consecutive_errors": config.max_consecutive_errors,
+		"tabs": list(config.tabs),
+		"max_per_tab": config.max_per_tab,
+		"questionnaire_message": config.questionnaire_message,
+		"follow_up_message": config.follow_up_message,
+		"reply_strategy": config.reply_strategy.value,
+	}
+
 
 DEFAULTS: dict[str, Any] = {
 	"request_delay": list(DEFAULT_REQUEST_DELAY),
@@ -28,25 +54,10 @@ DEFAULTS: dict[str, Any] = {
 	"role": "candidate",
 	"operating_mode": "assisted",
 	"low_risk_mode": True,
-	"automation": {
-		"mode": "autonomous",
-		"platforms": ["zhipin"],
-		"allowed_actions": [
-			"scan_conversations",
-			"read_candidate_profile",
-			"send_questionnaire",
-			"send_follow_up",
-			"exchange_contact",
-			"create_interview_lead",
-		],
-		"human_review_threshold": 0.65,
-		"auto_execute_threshold": 0.82,
-	},
+	"automation": _automation_defaults(),
 	"crawl": {
 		"chrome_path": None,
 		"cdp_port": None,
-		"hook_profile": "none",
-		"hook_dir": None,
 		"max_requests": 20,
 		"max_details": 50,
 		"max_seconds": 600,
