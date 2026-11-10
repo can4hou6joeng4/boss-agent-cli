@@ -2,6 +2,16 @@
 
 仓库辅助脚本目录。
 
+## quality_baseline.py
+
+本地 P0 门禁：一次跑完 `ruff check`、全量离线测试与 `mypy`，给 Agent、真人和 CI 同一份确定性结果。提交前先跑这个，再按需单步定位。
+
+```bash
+uv run python scripts/quality_baseline.py
+uv run python scripts/quality_baseline.py --json        # 结构化结果
+uv run python scripts/quality_baseline.py --skip-mypy   # 只做快速本地迭代，不用于合并前
+```
+
 ## verify_release.py
 
 维护者发布验证：默认只读检查项目版本、已构建 wheel/sdist 的元数据与文件清单、SHA-256 和 Git 状态，不访问包索引、不执行发布或招聘平台请求。产物目录必须恰好包含目标版本的一份 wheel 和一份源码包；混入旧包会失败，不按修改时间猜测。
@@ -59,3 +69,32 @@ Windows PowerShell 等价入口：
 ```
 
 `--dry-run` 仅打印将执行的 JS payload 用于审阅，不连 CDP。
+
+## capture_request_identity.py
+
+记录 BOSS 直聘页面实际发出的请求身份（完整请求头、请求体、状态码），用来核对 httpx 通道与浏览器通道是否一致——是证据采集，不是平台风控绕过。需要在本地可信环境启动带远程调试端口的 Chrome，并手动完成登录。
+
+```bash
+uv run python scripts/capture_request_identity.py --cdp-url http://localhost:9222 --output identity.json
+# 或直接指定页面
+uv run python scripts/capture_request_identity.py --cdp-url http://localhost:9222 --url "https://www.zhipin.com/web/geek/job?query=Python"
+```
+
+`--settle-seconds` 控制页面停留时长，`--max-body-bytes` 限制记录的响应体大小。
+
+## package_portable.py
+
+打包便携发行包（默认 macOS arm64，可用 `--platform` 指定后缀）：CLI、示例与 MCP 配置打进一个目录，不包含浏览器内核。发布脚本与文档演示共用。
+
+```bash
+uv run scripts/package_portable.py --platform macos-arm64 --output dist/portable
+uv run scripts/package_portable.py --wheel dist/boss_agent_cli-*.whl   # 复用已构建的 wheel
+```
+
+## update_contributors.py
+
+生成 `CONTRIBUTORS.svg`（圆形头像 + 姓名，base64 内嵌，无外部依赖）。布局参数与仓库的 `update-contributors` workflow 一致；`GITHUB_TOKEN` 可选，仅用于提高 GitHub API 限额。
+
+```bash
+uv run python scripts/update_contributors.py
+```

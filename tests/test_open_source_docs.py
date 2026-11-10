@@ -97,6 +97,18 @@ def test_security_and_readme_link_platform_risk_docs():
 	assert "docs/platform-risk.md" in read("SECURITY.md")
 
 
+def test_scripts_readme_indexes_every_script():
+	"""scripts/README.md 必须索引每个可执行脚本。
+
+	`quality_baseline.py` 这类最常用入口曾长期不在索引里，只能靠读源码发现。
+	"""
+	indexed = read("scripts/README.md")
+	scripts = sorted(path.name for path in (ROOT / "scripts").glob("*.py") if not path.name.startswith("_"))
+	assert scripts
+	missing = [name for name in scripts if f"## {name}" not in indexed]
+	assert not missing, f"scripts/README.md 缺少脚本条目: {missing}"
+
+
 def test_contributing_documents_project_quality_gates():
 	"""贡献者文档必须给出仓库实际使用的一键门禁与 eval 入口。"""
 	for path in ("CONTRIBUTING.md", "CONTRIBUTING.en.md"):
