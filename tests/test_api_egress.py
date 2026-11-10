@@ -24,6 +24,17 @@ def test_timezone_region_maps_known_prefixes() -> None:
 	assert timezone_region("Pacific/Auckland") == ""
 
 
+def test_region_and_timezone_tables_cover_the_same_countries() -> None:
+	"""两张表共同描述同一组国家。
+
+	语言检查查 `_REGION_EXPECTATIONS`，时区检查查 `_TZ_REGION_HINTS`；任一侧
+	新增国家而另一侧漏配，时区检查会静默跳过，出口矛盾就漏判了。
+	"""
+	from boss_agent_cli.api.egress import _REGION_EXPECTATIONS, _TZ_REGION_HINTS
+
+	assert set(_REGION_EXPECTATIONS) == {region for _, region in _TZ_REGION_HINTS}
+
+
 def test_matching_egress_and_locale_is_ok() -> None:
 	verdict = evaluate_egress(exit_country="CN", accept_language="zh-CN,zh;q=0.9", timezone="Asia/Shanghai")
 
