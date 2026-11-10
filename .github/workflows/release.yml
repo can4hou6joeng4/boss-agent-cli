@@ -12,12 +12,17 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # 发布任务不推送提交，令牌不必留在 .git/config 里。
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
-          enable-cache: true
+          # 发布构建不恢复缓存：master 上的 CI 会写入 uv 缓存，被改写的缓存会被带进
+          # 持有 PyPI 令牌的构建环境。发版频率低，多花的安装时间可以接受。
+          enable-cache: false
 
       - name: Set up Python
         run: uv python install 3.11
@@ -36,10 +41,12 @@ jobs:
       - name: Verify release artifacts
         # `uv build` 不校验 tag 与 pyproject 版本是否一致，也不检查产物里是否混入
         # 本地文件；这些校验在 scripts/verify_release.py 里，发布前必须先跑。
-        run: uv run python scripts/verify_release.py --artifacts dist --tag "${{ github.ref_name }}" --require-clean --json
+        # 标签名取 runner 提供的环境变量 GITHUB_REF_NAME，不在脚本里展开 ${{ }}：
+        # 表达式在 shell 解析之前就被替换成原文，标签名里的引号会变成命令。
+        run: uv run python scripts/verify_release.py --artifacts dist --tag "$GITHUB_REF_NAME" --require-clean --json
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           generate_release_notes: true
           # 只上传真正的分发产物。此前用 dist/* 会把构建后端生成的 dist/.gitignore

@@ -60,6 +60,8 @@ The tag-triggered `release.yml` runs the same artifact check
 (`--artifacts dist --tag "$GITHUB_REF_NAME" --require-clean`) between `uv build`
 and `uv publish`, so a tag that does not match `pyproject.toml` fails before
 anything reaches PyPI.
+The release build installs dependencies without restoring any cache; the
+reasons are in `docs/maintainer/branch-protection.md` under "Workflow rules".
 
 ## 5. Publish
 
