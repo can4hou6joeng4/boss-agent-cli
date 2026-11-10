@@ -97,6 +97,15 @@ def test_security_and_readme_link_platform_risk_docs():
 	assert "docs/platform-risk.md" in read("SECURITY.md")
 
 
+def test_contributing_documents_project_quality_gates():
+	"""贡献者文档必须给出仓库实际使用的一键门禁与 eval 入口。"""
+	for path in ("CONTRIBUTING.md", "CONTRIBUTING.en.md"):
+		content = read(path)
+		assert "scripts/quality_baseline.py" in content, f"{path} 没提一键门禁"
+		assert "scripts/smoke_p0.py" in content, f"{path} 没提离线冒烟"
+		assert "evals/run_eval.py" in content, f"{path} 没提 MCP eval"
+
+
 def test_security_policy_describes_current_mode_semantics():
 	"""SECURITY.md 不得再描述已不存在的模式级权限差异。
 

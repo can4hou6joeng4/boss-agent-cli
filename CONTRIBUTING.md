@@ -35,14 +35,27 @@ Python **≥ 3.11** 是最低要求。项目使用 [`uv`](https://github.com/ast
 
 ## 本地验证
 
-代码改动提交前尽量运行完整矩阵：
+代码改动提交前先跑一键门禁（ruff + 全量离线测试 + mypy）：
+
+```bash
+uv run python scripts/quality_baseline.py
+```
+
+需要定位单步时再单独运行：
 
 ```bash
 uv run pytest tests/ -q
-uv run ruff check src/ tests/
+uv run ruff check src/ tests/ scripts/ mcp-server/
 uv run mypy src/boss_agent_cli
 uv run boss --help
 uv run boss schema --format native
+```
+
+打开 PR 前再跑离线冒烟契约与 MCP eval（eval 只能在独立终端运行，不要嵌套在 Agent 会话里）：
+
+```bash
+BOSS_SMOKE_DRY_RUN=1 uv run python scripts/smoke_p0.py
+uv run python evals/run_eval.py --mode fixture
 ```
 
 文档改动至少运行：

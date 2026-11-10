@@ -35,14 +35,27 @@ Python **≥ 3.11** is required. We use [`uv`](https://github.com/astral-sh/uv) 
 
 ## Local Verification
 
-Run the full matrix before submitting code changes:
+Before submitting code changes, run the one-shot gate (ruff + full offline test suite + mypy):
+
+```bash
+uv run python scripts/quality_baseline.py
+```
+
+Run individual steps only to narrow down a failure:
 
 ```bash
 uv run pytest tests/ -q
-uv run ruff check src/ tests/
+uv run ruff check src/ tests/ scripts/ mcp-server/
 uv run mypy src/boss_agent_cli
 uv run boss --help
 uv run boss schema --format native
+```
+
+Before opening a PR, also run the offline smoke contract and the MCP eval (the eval must run in a standalone terminal, not nested inside an Agent session):
+
+```bash
+BOSS_SMOKE_DRY_RUN=1 uv run python scripts/smoke_p0.py
+uv run python evals/run_eval.py --mode fixture
 ```
 
 For documentation-only changes, run at least:
