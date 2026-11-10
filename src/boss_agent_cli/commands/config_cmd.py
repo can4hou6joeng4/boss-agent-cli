@@ -72,6 +72,37 @@ def config_group(ctx: click.Context) -> None:
 		ctx.invoke(config_list_cmd)
 
 
+def _render_config_list(data: dict[str, Any]) -> None:
+	"""TTY 下的配置列表：结构化配置在表格里占位，完整 JSON 放到表格下方。
+
+	``automation`` 的字典 repr 有二十多行，塞进 ``max_width=25`` 的单元格后既挤满
+	表格，又会把两条话术截成省略号——用户反而看不到自己配的内容。
+	"""
+	items: list[dict[str, Any]] = data["items"]
+	structured = {item["key"]: item["value"] for item in items if isinstance(item["value"], dict)}
+	rows = [
+		{**item, "value": "（JSON，见下方）" if item["key"] in structured else item["value"]}
+		for item in items
+	]
+	render_simple_list(
+		rows,
+		f"配置 ({data['config_path']})",
+		[
+			("key", "key", "cyan"),
+			("value", "value", "green"),
+			("source", "source", "dim"),
+		],
+	)
+	if not structured:
+		return
+	from boss_agent_cli import display
+
+	for key, value in structured.items():
+		display.console.print()
+		display.console.print(f"[bold]{key}[/bold]")
+		display.console.print_json(json.dumps({key: value}, ensure_ascii=False, sort_keys=True))
+
+
 @config_group.command("list")
 @click.pass_context
 def config_list_cmd(ctx: click.Context) -> None:
@@ -105,15 +136,7 @@ def config_list_cmd(ctx: click.Context) -> None:
 		ctx,
 		"config",
 		data,
-		render=lambda d: render_simple_list(
-			d["items"],
-			f"配置 ({d['config_path']})",
-			[
-				("key", "key", "cyan"),
-				("value", "value", "green"),
-				("source", "source", "dim"),
-			],
-		),
+		render=_render_config_list,
 		hints=hints,
 	)
 

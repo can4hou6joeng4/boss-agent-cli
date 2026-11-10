@@ -98,6 +98,21 @@ def test_config_without_subcommand_shows_list(tmp_path):
 	assert "items" in parsed["data"]
 
 
+def test_config_list_renders_structured_values_in_full(tmp_path, monkeypatch):
+	"""结构化配置不能在 25 宽单元格里挤成多行截断文本。
+
+	``automation`` 的字典 repr 有二十多行，两条话术会被截成省略号——用户看不到
+	自己配的内容。现在表格里给出占位，完整 JSON 放在表格下方。
+	"""
+	code, text = _invoke_tty(tmp_path, monkeypatch, "config", "list")
+	assert code == 0
+	assert "（JSON，见下方）" in text
+	assert "您好，想确认下近期是否看机会？" in text
+	assert "谢谢回复，我这边同步岗位信息，方便的话可以继续沟通面试时间。" in text
+	# 表格里不再出现被 rich 折行的 dict repr。
+	assert "'allowed_actions':" not in text
+
+
 # ── config get ──────────────────────────────────────────────────────
 
 
