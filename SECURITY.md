@@ -31,8 +31,10 @@
 
 ## Security Considerations
 
-本项目默认启用低风险辅助模式：本地辅助、只读优先、用户主动触发、不批量触达、不抓取平台数据。开发时请特别注意：
+历史配置 `operating_mode=assisted|research` 仅为兼容保留，两种模式对所有已实现能力权限一致；真正的边界由以下机制保证：
 
+- **平台风控是硬边界**：命中账号风险 / 环境风险 / 安全页时停止当前 workflow 并保存 checkpoint，不无界重试，也不经 CDP / patchright / Cookie 提取绕过风控。
+- **长流程有界**：受 timeout、retry、预算、checkpoint 与 stop 约束；批量打招呼、批量采集等能力需要用户显式触发并设置上限。
 - **Cookie/Token 存储**：使用 Fernet 对称加密 + PBKDF2 机器绑定密钥
 - **浏览器兼容通道**：仅用于用户主动登录和低风险兼容路径，所有浏览器操作限定在 `zhipin.com` 域名
 - **本地数据**：缓存数据存储在 `~/.boss-agent/`，不上传任何数据到第三方服务

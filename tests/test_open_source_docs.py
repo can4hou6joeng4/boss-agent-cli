@@ -97,6 +97,19 @@ def test_security_and_readme_link_platform_risk_docs():
 	assert "docs/platform-risk.md" in read("SECURITY.md")
 
 
+def test_security_policy_describes_current_mode_semantics():
+	"""SECURITY.md 不得再描述已不存在的模式级权限差异。
+
+	`compliance.py` 里两种 `operating_mode` 权限一致，`COMPLIANCE_BLOCKED` 仅为
+	历史协议兼容保留；安全文档写「不批量触达、不抓取平台数据」会低估真实能力面。
+	"""
+	content = read("SECURITY.md")
+	assert "operating_mode" in content
+	assert "两种模式" in content
+	assert "平台风控" in content
+	assert "默认启用低风险辅助模式" not in content
+
+
 def test_readme_documents_browser_bridge_removal_and_manual_cleanup():
 	zh = read("README.md")
 	en = read("README.en.md")
