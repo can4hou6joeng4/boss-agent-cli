@@ -633,7 +633,7 @@ def _bilingual_pairs() -> list[tuple[str, str]]:
 		en_path = zh_path.with_name(f"{zh_path.stem}.en.md")
 		if en_path.exists():
 			pairs.append((zh_path.relative_to(ROOT).as_posix(), en_path.relative_to(ROOT).as_posix()))
-	for path in ("README.md", "CONTRIBUTING.md", "ROADMAP.md"):
+	for path in ("README.md", "CONTRIBUTING.md", "ROADMAP.md", "SUPPORT.md"):
 		en_path = f"{path[:-3]}.en.md"
 		if (ROOT / en_path).exists():
 			pairs.append((path, en_path))
@@ -659,7 +659,7 @@ def _heading_levels(path: str) -> list[int]:
 def test_bilingual_docs_share_the_same_heading_structure():
 	"""中英对照文档的标题层级必须一致，防止一侧新增章节、另一侧没跟上。"""
 	pairs = _bilingual_pairs()
-	assert len(pairs) >= 12
+	assert len(pairs) >= 13
 	for zh_path, en_path in pairs:
 		assert _heading_levels(zh_path) == _heading_levels(en_path), f"{zh_path} 与 {en_path} 的标题结构不一致"
 
@@ -690,3 +690,16 @@ def test_troubleshooting_error_tables_list_the_same_registered_codes():
 	assert zh_codes, "错误码表解析不到任何条目"
 	assert zh_codes == en_codes, f"中文版缺 {sorted(en_codes - zh_codes)}，英文版缺 {sorted(zh_codes - en_codes)}"
 	assert zh_codes <= set(ERROR_CODES), f"未在 ERROR_CODES 登记：{sorted(zh_codes - set(ERROR_CODES))}"
+
+
+def test_support_docs_route_every_request_channel():
+	"""求助入口必须齐全，且 README 中英都要能到达。"""
+	for path in ("SUPPORT.md", "SUPPORT.en.md"):
+		content = read(path)
+		assert "discussions" in content.lower()
+		assert "issues/new/choose" in content
+		assert "SECURITY.md" in content
+		assert "docs/troubleshooting" in content
+
+	assert "[获取支持](SUPPORT.md)" in read("README.md")
+	assert "[Getting Support](SUPPORT.en.md)" in read("README.en.md")
