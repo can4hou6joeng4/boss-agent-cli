@@ -227,6 +227,21 @@ def test_envelope_error_redacts_sensitive_values_inside_message():
 	assert message.count("[REDACTED]") == 5
 
 
+def test_redaction_stops_at_cjk_punctuation() -> None:
+	"""凭据值在全角标点处结束，标点及其后的中文说明必须保留。
+
+	旧实现用 ``[^\\s,;]+`` 匹配值，全角标点不是终止符：``stoken=abc）`` 会把
+	右括号吞进 ``[REDACTED]``，``Bearer x，然后`` 连后续中文一起消失，
+	``boss status`` 的就绪详情里因此出现过缺右括号的文案。
+	"""
+	from boss_agent_cli.output import redact_sensitive_text
+
+	assert redact_sensitive_text("（cookies=14, stoken=abc123）") == "（cookies=14, stoken=[REDACTED]）"
+	assert redact_sensitive_text("token=abc.def。") == "token=[REDACTED]。"
+	assert redact_sensitive_text("Authorization: Bearer eyJ.payload.sig，然后") == "Authorization: [REDACTED]，然后"
+	assert redact_sensitive_text("cookie: sessionid=xyz；继续") == "cookie: [REDACTED]；继续"
+
+
 def test_logger_filters_by_level(capsys):
 	logger = Logger("warning")
 	logger.debug("debug msg")
