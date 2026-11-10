@@ -103,6 +103,8 @@ If `uv tool update-shell` times out, temporarily expose global tools in PowerShe
 $env:PATH = "$env:USERPROFILE\.local\bin;$env:PATH"
 ```
 
+Permanently fixing it still means re-running `uv tool update-shell` on a stable network, or adding `C:\Users\<you>\.local\bin` to the user PATH by hand.
+
 For Chinese Windows test runs, force UTF-8:
 
 ```powershell
@@ -125,6 +127,8 @@ curl http://localhost:9222/json/version
 # macOS users: make sure Chrome is fully quit first (⌘Q, not just close window)
 ```
 
+With CDP configured, `boss --cdp-url http://localhost:9222 doctor` checks the channel against that endpoint.
+
 ### CDP launch examples
 
 macOS:
@@ -141,6 +145,24 @@ Linux:
 google-chrome \
   --remote-debugging-port=9222 \
   --user-data-dir=/tmp/boss-chrome
+```
+
+Windows PowerShell:
+
+```powershell
+$chromeCandidates = @(
+  "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+  "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+  "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
+)
+
+$chrome = $chromeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $chrome) { throw "Google Chrome executable was not found" }
+
+& $chrome `
+  --remote-debugging-port=9222 `
+  --remote-allow-origins=* `
+  --user-data-dir="$env:LOCALAPPDATA\boss-agent-cdp-profile"
 ```
 
 Then log in via CDP from another terminal:
@@ -288,7 +310,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `SAVED_SEARCH_NOT_FOUND` | A local preset / watch does not exist: `boss search --preset` / `boss watch run` referenced a name that was never saved | List existing entries with `boss preset list` / `boss watch list`, then recreate with `boss preset add` / `boss watch add` if needed |
 | `SHORTLIST_ENTRY_NOT_FOUND` | The job is not in the shortlist (that `security_id` / `job_id` combination), so `boss shortlist annotate` has nothing to annotate | Add it first with `boss shortlist add <security_id> <job_id>`, or check existing entries with `boss shortlist list` |
 | `RESUME_FILE_INVALID` | A local resume file is corrupt or has wrong field types, so `boss resume show` / `edit` / `export` / `clone` / `diff` cannot read it (`boss resume list` reports these files in `hints.corrupt`) | Fix the matching `.json` under `resumes/` and retry, or run `boss resume delete <name>` and recreate it; the file exists only on this machine |
-| `JOB_NOT_FOUND` | Job removed or invalid | Skip |
+| `JOB_NOT_FOUND` | Job removed or invalid | Re-search with `boss search <keywords>`, or check `boss recommend` |
 | `ALREADY_GREETED` | Already messaged recruiter | Skip |
 | `CONFIRMATION_REQUIRED` | Operation target and content not approved | Preview with `hr greet --dry-run` or `hr accept-resume <friend_id> --message-id <mid> --dry-run`; set `--yes` only after explicit operator approval. Agents must not infer approval. |
 | `RESUME_ACCEPT_RESULT_UNKNOWN` | Resume acceptance result is unconfirmed | Keep `accepted=null` and check the request on the official page; never automatically retry acceptance. |
@@ -302,7 +324,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `SAVED_SEARCH_INVALID` | A local preset / watch has unreadable params (`saved_searches.params` is not a JSON object), so `boss search --preset` / `boss watch run` cannot continue | Run `boss preset remove <name>` (or `boss watch remove`) and add it again; the params live only in the local cache, so deleting them does not touch platform data |
 | `CACHE_RECORD_INVALID` | A local crawl / workflow record is unreadable (`crawl_runs`, `crawl_jobs`, `workflow_runs` or `workflow_steps` JSON columns cannot be parsed), so the checkpoint cannot be resumed | Re-create the task (`boss crawl start` for crawl, `boss wizard --input-json` for workflows); the record lives only in the local cache, already-exported files are left untouched, and the `boss wizard` task list skips broken records and names them |
 | `CACHE_DATABASE_INVALID` | The local cache database `cache/boss_agent.db` is corrupted or occupied by another file (`file is not a database`), so nearly every command that reads or writes local state fails | Back up the file, delete it and retry; a fresh empty database is created automatically. The shortlist, presets, watch history and task checkpoints in it are lost, while platform data is untouched. Retryable failures such as a concurrent lock never report this code |
-| `ALREADY_APPLIED` | Already applied | Skip |
+| `ALREADY_APPLIED` | Already applied | Skip; review applications with `boss me --section deliver`, or follow up with `boss chat` |
 | `GREET_LIMIT` | Daily greet quota hit | Pause until tomorrow |
 | `NETWORK_ERROR` | Connection failed | Retry with backoff |
 | `UNKNOWN` | The platform returned an unrecognized error (it does not match expired session, rate limit or risk control) | Do not retry automatically: check the official page for the actual result, run `boss doctor` to verify session and network, then run the command once more; if it still fails, open an issue with the command and `error.message` |
@@ -311,6 +333,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `AI_NOT_CONFIGURED` | AI service not set up | `boss ai config` |
 | `AI_API_ERROR` | AI provider call failed | Retry / check key |
 | `AI_PARSE_ERROR` | AI response not JSON | Retry |
+| `PLATFORM_NOT_SUPPORTED` | The current platform does not support this role or subcommand | Switch to a supported platform (e.g. `boss --platform zhipin hr ...`) |
 | `BROWSER_KERNEL_MISSING` | patchright browser kernel missing or mismatched | `patchright install chromium`; if the headless shell is missing, run `patchright install chromium-headless-shell` |
 
 ## Windows smoke checklist

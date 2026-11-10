@@ -41,27 +41,69 @@ boss doctor --live-probe
 | `recruiter_read_health` | 招聘者只读能力前置条件 |
 | `network` | zhipin.com 可访问 |
 
-## 常见问题修复
+## 登录问题
+
+### Cookie 提取失败
 
 ```bash
-# 安装浏览器内核
-patchright install chromium
+# 强制重新扫码登录
+boss logout && boss login
+```
+
+**auth_session 显示"损坏"**：登录态来自旧机器指纹或文件损坏 → `boss logout && boss login`
+
+**auth_token_quality 各状态含义**：
+
+- `wt2/stoken 均存在`：完整，可正常使用
+- `wt2 存在，stoken 缺失`：部分可用，通常是二维码或 Cookie 提取只拿到部分登录态；建议以 Chrome CDP 远程调试端口启动浏览器后运行 `boss login --cdp`，或重新执行 `boss login`
+- `wt2 缺失`：无效 → `boss logout && boss login`
+
+### 平台识别到自动化（code 36 / `ACCOUNT_RISK`）
+
+停止当前 workflow，保留 run ID 或 checkpoint。处理登录或安全页状态后，再显式恢复；不要切换多种通道反复重试。
+
+### v3.0.0：从 Browser Bridge 迁移
+
+Browser Bridge daemon、Chrome 扩展及 `[bridge]` 安装 extra 已移除。`boss doctor` 不再探测旧 daemon，也不再输出扩展检查项。
+
+**升级 CLI 不会停止旧 daemon，也不会卸载浏览器扩展。** 请手动停止旧 daemon（包括其他 Python 环境中仍运行的副本），并在 `chrome://extensions` 中禁用或移除旧扩展；从安装命令中去掉 `[bridge]`，不要重新启动已移除的服务。迁移不要求删除凭据或日常浏览器 profile。
+
+如果需要不读取本地凭据的只读访问，请先在已运行的本机 CDP 浏览器中手动打开并登录 BOSS 直聘，保留该页签，然后显式选择：
+
+```bash
+boss --browser-source existing-browser --cdp-url http://localhost:9222 chat
+```
+
+该来源只复用已有目标页，不读本地凭据、不新建 context/页面、不导航或启动浏览器；不可用时返回 `BROWSER_SESSION_NOT_FOUND`，不降级。`chat` / `chatmsg` 在 `auto` 下仍走 httpx，其他显式浏览器来源遵循各自策略。CDP 调试端口仅用于本机可信环境，不应暴露到公网。命中平台风控时停止 workflow 并保存 checkpoint，不要切换通道重试。
+
+### 会话中途 Token 过期
+
+```bash
+# stoken（核心会话 token）约 24 小时后过期
+# 重新登录，或用 Chrome CDP 复用会话；auth_token_quality 会报告该问题
+boss logout && boss login
+```
+
+## 浏览器 / patchright 问题
+
+### `patchright install chromium` 失败
+
+```bash
+# macOS / Linux：确认对 ~/Library/Caches（macOS）或 ~/.cache（Linux）有写权限
+# Windows：以管理员身份运行一次
+pip install --upgrade patchright
+patchright install chromium --with-deps
 # 全局 tool 环境提示缺 headless shell 时再执行
 patchright install chromium-headless-shell
-
-# 重建登录态
-boss logout && boss login
-
-# CDP 诊断
-boss --cdp-url http://localhost:9222 doctor
-
-# 默认 status 只检查本地凭据；需要真实只读验证时显式加 --live
-boss status --live
 ```
+
+### 真实平台验证前就报 `AUTH_REQUIRED`
 
 **`AUTH_REQUIRED` 不代表 CLI 故障**：它表示当前数据目录没有可用登录态。真实平台
 `search`、`detail`、`status --live` 验证必须先执行 `boss login`；登录前只验证 CLI
 本地命令、schema、MCP 和 doctor。
+
+### Windows PATH 与 UTF-8
 
 **Windows 全局 `boss` 命令找不到**：如果 `uv tool update-shell` 超时，可先临时修复：
 
@@ -79,29 +121,25 @@ $env:PYTHONUTF8='1'
 uv run python scripts/quality_baseline.py
 ```
 
-**auth_session 显示"损坏"**：登录态来自旧机器指纹或文件损坏 → `boss logout && boss login`
+### Chromium 启动后白屏
 
-**auth_token_quality 各状态含义**：
+- 用 `boss doctor` 看 `auth_session`：显示「损坏」说明登录态来自旧机器指纹或文件已损坏 → `boss logout && boss login`，或删除 `~/.boss-agent/auth/` 后重新登录
+- 检查 `network`——部分地区需要代理：`HTTPS_PROXY=http://...:port boss login`
 
-- `wt2/stoken 均存在`：完整，可正常使用
-- `wt2 存在，stoken 缺失`：部分可用，通常是二维码或 Cookie 提取只拿到部分登录态；建议以 Chrome CDP 远程调试端口启动浏览器后运行 `boss login --cdp`，或重新执行 `boss login`
-- `wt2 缺失`：无效 → `boss logout && boss login`
-
-## v3.0.0：从 Browser Bridge 迁移
-
-Browser Bridge daemon、Chrome 扩展及 `[bridge]` 安装 extra 已移除。`boss doctor` 不再探测旧 daemon，也不再输出扩展检查项。
-
-**升级 CLI 不会停止旧 daemon，也不会卸载浏览器扩展。** 请手动停止旧 daemon（包括其他 Python 环境中仍运行的副本），并在 `chrome://extensions` 中禁用或移除旧扩展；从安装命令中去掉 `[bridge]`，不要重新启动已移除的服务。迁移不要求删除凭据或日常浏览器 profile。
-
-如果需要不读取本地凭据的只读访问，请先在已运行的本机 CDP 浏览器中手动打开并登录 BOSS 直聘，保留该页签，然后显式选择：
+### CDP 连接被拒绝
 
 ```bash
-boss --browser-source existing-browser --cdp-url http://localhost:9222 chat
+# 确认 CDP 确实在监听
+curl http://localhost:9222/json/version
+
+# 输出为空说明 Chrome 启动时没带 --remote-debugging-port
+# macOS 用户先完全退出 Chrome（⌘Q，而不是只关窗口）
+
+# 配好 CDP 后，doctor 会按该端点检查通道
+boss --cdp-url http://localhost:9222 doctor
 ```
 
-该来源只复用已有目标页，不读本地凭据、不新建 context/页面、不导航或启动浏览器；不可用时返回 `BROWSER_SESSION_NOT_FOUND`，不降级。`chat` / `chatmsg` 在 `auto` 下仍走 httpx，其他显式浏览器来源遵循各自策略。CDP 调试端口仅用于本机可信环境，不应暴露到公网。命中平台风控时停止 workflow 并保存 checkpoint，不要切换通道重试。
-
-## CDP 启动示例
+### CDP 启动示例
 
 macOS：
 
@@ -177,7 +215,33 @@ context」；若指纹对应的账号不是你要的，请关闭多余窗口或�
 | `existing-browser` | 仅已有 CDP | 否 | 是 | 禁止 | BROWSER_SESSION_NOT_FOUND |
 | `stored-cookie` | 仅指定 CDP | 是 | 否 | 禁止 | CDP_UNAVAILABLE |
 
-## CDP 模式下一直报 code 37（`ENVIRONMENT_RISK` / `ENVIRONMENT_RISK_LOCKED`）
+## 搜索 / 接口错误
+
+### `code 36` / `ACCOUNT_RISK`
+
+风控终止了当前 workflow。保留 run ID / checkpoint，处理账号或安全页状态后再显式恢复，不要循环重试。
+
+### `RATE_LIMITED`
+
+同一时间窗口内请求过多。增大请求间隔：
+
+```bash
+boss --delay 3-7 search "python"
+# 或全局配置
+boss config set request_delay "[3.0, 7.0]"
+```
+
+### `JOB_NOT_FOUND`
+
+- 先到 BOSS 官网确认职位是否已下架
+- 有 `encrypt_job_id` 时直接传 `--job-id`，跳过损坏的详情缓存
+
+### 查询有效但搜索结果为空
+
+- 先跑 `boss doctor`——认证问题常常表现为零结果
+- 加 `--log-level debug`，在 stderr 看实际发出的请求
+
+### CDP 模式下一直报 code 37（`ENVIRONMENT_RISK` / `ENVIRONMENT_RISK_LOCKED`）
 
 现象：配了 `--cdp-url`（或 `--browser-source existing-browser` / `stored-cookie`）后，CLI 的每个浏览器请求都返回
 code 37「访问环境存在异常」，但在同一个 Chrome 里手动浏览 BOSS 直聘一切正常。
@@ -241,6 +305,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `SAVED_SEARCH_NOT_FOUND` | 本地预设或 watch 不存在：`boss search --preset` / `boss watch run` 引用了没保存过的名字 | `boss preset list` / `boss watch list` 查看已有条目，需要时用 `boss preset add` / `boss watch add` 重建 |
 | `SHORTLIST_ENTRY_NOT_FOUND` | 候选池里没有这个职位（`security_id` / `job_id` 组合），`boss shortlist annotate` 没有可标注的记录 | 先 `boss shortlist add <security_id> <job_id>` 加入候选池，或 `boss shortlist list` 核对已有条目 |
 | `RESUME_FILE_INVALID` | 本地简历文件损坏或字段类型不正确，`boss resume show` / `edit` / `export` / `clone` / `diff` 读不出来（`boss resume list` 会把这些文件列在 `hints.corrupt`） | 修正 `resumes/` 下对应的 `.json` 后重试，或 `boss resume delete <name>` 后重新创建；文件只在本机 |
+| `JOB_NOT_FOUND` | 职位不存在或已下架 | 用 `boss search <关键词>` 重新搜索，或 `boss recommend` 查看推荐职位 |
 | `INVALID_PARAM` | 参数错误 | 修正参数 |
 | `ALREADY_GREETED` | 已打过招呼 | 跳过 |
 | `CONFIRMATION_REQUIRED` | 未确认操作目标与内容 | 先用 `hr greet --dry-run` 或 `hr accept-resume <friend_id> --message-id <mid> --dry-run` 预览；操作者明确批准后才加 `--yes`，Agent 不可自行补确认 |
@@ -255,11 +320,14 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `SAVED_SEARCH_INVALID` | 本地预设 / watch 的参数损坏（`saved_searches.params` 不是 JSON 对象），`boss search --preset`、`boss watch run` 无法执行 | 执行 `boss preset remove <名称>`（watch 用 `boss watch remove`）后重新添加；参数只存在本地缓存，删除不影响平台数据 |
 | `CACHE_RECORD_INVALID` | 本地 crawl / workflow 任务记录损坏（`crawl_runs`、`crawl_jobs`、`workflow_runs`、`workflow_steps` 的 JSON 列读不出来），断点无法恢复 | 重新创建任务（crawl 用 `boss crawl start`，workflow 用 `boss wizard --input-json`）；记录只存在本地缓存，已导出的文件不会自动删除，`boss wizard` 的任务列表会跳过坏记录并点名 |
 | `CACHE_DATABASE_INVALID` | 本地缓存库 `cache/boss_agent.db` 损坏或被别的文件占位（`file is not a database`），几乎所有读写本地状态的命令都受影响 | 先备份该文件，再删除后重试，命令会自动重建空库；库里的候选池、预设、watch 历史与任务断点会一起作废，平台数据不受影响。并发锁等可重试错误不会报这个码 |
+| `ALREADY_APPLIED` | 已发起过投递 / 立即沟通 | 跳过；用 `boss me --section deliver` 查看投递记录，或用 `boss chat` 跟进 |
 | `GREET_LIMIT` | 今日次数用完 | 告知用户 |
 | `NETWORK_ERROR` | 网络错误 | 重试 |
 | `UNKNOWN` | 平台返回了未识别的错误（无法按登录过期 / 限流 / 风控归类） | 不自动重试：先在官方页面核对本次操作是否生效，用 `boss doctor` 检查登录态与网络，确认后再执行一次；仍失败请附上命令与 `error.message` 提交 issue |
 | `INTERNAL_ERROR` | CLI 内部错误或平台返回了未预期的数据结构 | 不要重试；升级到最新版本，仍出现时附上命令与 error.message 提交 issue |
 | `AI_NOT_CONFIGURED` | AI 未配置 | `boss ai config` |
+| `AI_API_ERROR` | AI 服务调用失败 | 检查网络连接和密钥配置，重试 |
+| `AI_PARSE_ERROR` | AI 返回结果解析失败 | 重试（模型输出不稳定时可能发生） |
 | `PLATFORM_NOT_SUPPORTED` | 当前平台不支持该角色或子命令 | 切换到支持的平台 |
 | `BROWSER_KERNEL_MISSING` | patchright 浏览器内核缺失或版本不匹配 | `patchright install chromium`；缺 headless shell 时运行 `patchright install chromium-headless-shell` |
 
@@ -276,3 +344,17 @@ boss detail <security_id>
 ```
 
 未登录时 `boss status` 返回 `AUTH_REQUIRED` 属于预期；不要把未登录状态计为真实平台功能失败。
+
+## 术语表
+
+| 术语 | 含义 |
+|------|------|
+| `stoken` | 会话 token——BOSS 接口的核心认证凭据 |
+| `wt2` | 长期有效的 bearer token，与 stoken 配对使用 |
+| `wbg` / `zp_at` | wapi 接口使用的辅助 cookie |
+| `security_id` | 搜索返回的职位级不透明 ID；`detail` 与本地组织类命令使用 |
+| `encrypt_job_id` | httpx 快速通道（跳过浏览器）使用的另一种职位 ID |
+| `CDP` | Chrome DevTools Protocol——登录兼容机制，不是风控绕过手段 |
+| `wapi` | BOSS 直聘内部 JSON 接口（`www.zhipin.com/wapi/...`） |
+
+这些术语会原样出现在 JSON 响应和错误信息里——刻意不翻译，以与 BOSS 自身的命名保持一致。
