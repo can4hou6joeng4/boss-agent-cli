@@ -141,6 +141,35 @@ def test_automation_config_accepts_zero_limits() -> None:
 	assert config.max_consecutive_errors == 0
 
 
+def test_automation_config_rejects_unknown_allowed_actions() -> None:
+	"""拼错的动作名必须报错，不能被静默丢弃。
+
+	旧实现对非法值 `if item in allowed_action_values` 过滤后 `or DEFAULT_ALLOWED_ACTIONS`，
+	写错一个枚举值反而回退到完整的默认写动作集——用户以为收紧了权限，实际全部放开。
+	"""
+	with pytest.raises(ValueError, match="allowed_actions"):
+		automation_config_from_dict({"allowed_actions": ["send_follow_up", "send_folow_up"]})
+
+
+def test_automation_config_rejects_non_list_allowed_actions() -> None:
+	"""字符串会被逐字符迭代，必须按形状错误拒绝并给出字段名。"""
+	with pytest.raises(ValueError, match="allowed_actions"):
+		automation_config_from_dict({"allowed_actions": "send_follow_up"})
+
+
+def test_automation_config_empty_allowed_actions_skips_every_action() -> None:
+	"""空列表的语义是「什么都不允许」，执行层全部 SKIPPED。
+
+	配置解析不得把它替换成默认动作集；需要禁用写操作时也应保持这一 fail-closed 行为。
+	"""
+	config = automation_config_from_dict({"allowed_actions": []})
+	assert config.allowed_actions == ()
+
+	conversation = _conversation("你好，我在上海做过3年销售，擅长客户沟通，大专，想看机会")
+	decision = decide_action(conversation, config, {})
+	assert status_for_decision(config, decision, dry_run=False) is EventStatus.SKIPPED
+
+
 def test_decision_sends_questionnaire_for_high_confidence_new_candidate() -> None:
 	config = AutomationConfig()
 	conversation = _conversation(
