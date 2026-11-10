@@ -518,6 +518,44 @@ def test_schema_error_codes_cover_all_used_codes():
 	assert {"INVALID_PARAM", "HOOK_BLOCKED", "MODEL_SOURCE_NOT_FOUND"} <= used_codes
 
 
+def _referenced_string_literals() -> set[str]:
+	"""收集源码中的全部字符串字面量（错误码定义文件自身除外）。
+
+	反向守卫不能用 `_literal_error_codes`：它的正则要求带下划线，像 `UNKNOWN`
+	这样的单字码会被判成「从未引用」。这里只关心字符串是否出现，不判断形态；
+	docstring 命中会漏报（当作已引用），不会误报。
+	"""
+	literals: set[str] = set()
+	for path in sorted(_SOURCE_ROOT.rglob("*.py")):
+		if path == _SOURCE_ROOT / "schema" / "error_codes.py":
+			continue
+		tree = ast.parse(path.read_text(encoding="utf-8"))
+		for node in ast.walk(tree):
+			if isinstance(node, ast.Constant) and isinstance(node.value, str):
+				literals.add(node.value)
+	return literals
+
+
+def test_schema_error_codes_mark_never_emitted_codes():
+	"""登记表里从不被源码引用的码必须标注「当前版本不主动产生」。
+
+	`boss schema` 把 error_codes 整体暴露给 Agent；一个登记了却永远不会出现在信封里的
+	码，会让 Agent 为不存在的失败分支准备恢复逻辑。RESUME_NOT_SHARED 与
+	RECRUITER_NOT_AUTHORIZED 曾以普通可恢复码的措辞留在登记表里，却从未有生产路径
+	产生它们。历史兼容码保留是明确的惯例（见 COMPLIANCE_BLOCKED 等），但必须显式标注。
+	"""
+	referenced = _referenced_string_literals()
+	unmarked = sorted(
+		code
+		for code, spec in SCHEMA_DATA["error_codes"].items()
+		if code not in referenced and "不主动产生" not in spec["message"]
+	)
+
+	assert not unmarked, (
+		f"以下错误码从未在源码中出现，但 message 未标注「当前版本不主动产生」：{unmarked}"
+	)
+
+
 def test_schema_error_codes_all_have_message():
 	"""schema 中每个错误码都应有非空的 message 字段。"""
 	error_codes = SCHEMA_DATA["error_codes"]
