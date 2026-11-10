@@ -48,7 +48,9 @@ def test_platforms_terminal_render_includes_status_legend(capsys) -> None:
 	_render_platforms(platform_capability_data())
 	captured = capsys.readouterr()
 
-	rendered = captured.out + captured.err
+	# TTY 渲染必须走 stderr：stdout 只留给七键 JSON 信封。
+	assert captured.out == ""
+	rendered = captured.err
 	assert "capability_status_legend" in rendered
 	assert "available" in rendered
 	assert "可用" in rendered
@@ -169,7 +171,8 @@ def test_platforms_terminal_render_includes_capability_columns(capsys) -> None:
 	_render_platforms(platform_capability_data(capability="apply"))
 	captured = capsys.readouterr()
 
-	rendered = captured.out + captured.err
+	assert captured.out == ""
+	rendered = captured.err
 	assert "capability\tcapability_status" in rendered
 	assert rendered.count("apply\tavailable") == 1
 	assert "apply\tnot_supported" not in rendered

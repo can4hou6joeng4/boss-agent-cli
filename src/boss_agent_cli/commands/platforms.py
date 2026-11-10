@@ -152,7 +152,8 @@ def _render_platforms(data: dict[str, Any]) -> None:
 	lines.append("capability_status_legend")
 	for status, meta in data["capability_status_legend"].items():
 		lines.append(f"{status}\t{meta['label']}\t{meta['description']}")
-	click.echo("\n".join(lines))
+	# TTY 渲染必须走 stderr：stdout 只留给七键 JSON 信封。
+	click.echo("\n".join(lines), err=True)
 
 
 @click.command("platforms")
