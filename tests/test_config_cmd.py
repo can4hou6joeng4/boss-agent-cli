@@ -135,6 +135,30 @@ def test_config_get_renders_value_in_tty(tmp_path, monkeypatch):
 	assert "boss config set role <值>" in text
 
 
+def test_config_get_renders_structured_value_as_json(tmp_path, monkeypatch):
+	"""结构化值在终端里用格式化 JSON，不再输出会被折行的 Python repr。
+
+	当前值与默认值相同时只展开一次，避免重复四十行相同内容。
+	"""
+	code, text = _invoke_tty(tmp_path, monkeypatch, "config", "get", "automation")
+	assert code == 0
+	assert "（JSON，见下方）" in text
+	assert "您好，想确认下近期是否看机会？" in text
+	assert '"reply_strategy": "hybrid"' in text
+	assert "'allowed_actions':" not in text
+	assert text.count('"allowed_actions"') == 1
+
+
+def test_config_get_renders_override_and_default_when_different(tmp_path, monkeypatch):
+	"""用户覆盖与默认值不同时，两组 JSON 都要出现，便于对比。"""
+	(tmp_path / "config.json").write_text('{"automation": {"mode": "training"}}', encoding="utf-8")
+	code, text = _invoke_tty(tmp_path, monkeypatch, "config", "get", "automation")
+	assert code == 0
+	assert '"mode": "training"' in text
+	assert '"default"' in text
+	assert '"reply_strategy": "hybrid"' in text
+
+
 def test_config_get_unknown_key(tmp_path):
 	"""获取未知配置项应返回 Agent 可消费的 stdout JSON 错误包络。"""
 	runner = CliRunner()
@@ -169,6 +193,16 @@ def test_config_set_renders_confirmation_in_tty(tmp_path, monkeypatch):
 	assert "debug" in text
 	saved = json.loads((tmp_path / "config.json").read_text())
 	assert saved["log_level"] == "debug"
+
+
+def test_config_set_renders_structured_values_as_json(tmp_path, monkeypatch):
+	"""设置结构化配置时，新值与上一次的值都以格式化 JSON 呈现。"""
+	code, text = _invoke_tty(tmp_path, monkeypatch, "config", "set", "automation", '{"mode": "training"}')
+	assert code == 0
+	assert "（JSON，见下方）" in text
+	assert '"mode": "training"' in text
+	assert '"previous"' in text
+	assert '"reply_strategy": "hybrid"' in text
 
 
 def test_config_set_operating_mode_validates_choice(tmp_path):
@@ -698,6 +732,16 @@ def test_config_reset_renders_confirmation_in_tty(tmp_path, monkeypatch):
 	assert code == 0
 	assert "log_level" in text
 	assert "restored" in text
+
+
+def test_config_reset_renders_structured_default_as_json(tmp_path, monkeypatch):
+	"""恢复结构化配置时，默认值以完整 JSON 呈现而不是被折行的 repr。"""
+	_invoke("config", "set", "automation", '{"mode": "training"}', tmp_path=tmp_path)
+	code, text = _invoke_tty(tmp_path, monkeypatch, "config", "reset", "automation")
+	assert code == 0
+	assert "（JSON，见下方）" in text
+	assert '"mode": "autonomous"' in text
+	assert "'allowed_actions':" not in text
 
 
 def test_config_reset_unknown_key(tmp_path):
