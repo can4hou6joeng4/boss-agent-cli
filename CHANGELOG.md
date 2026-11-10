@@ -16,6 +16,7 @@
 - 加固 GitHub 工作流（Issue #747）：全部 18 处 `uses:` 从 `@v7` 这类可移动标签改为完整提交 SHA 并在行尾注明精确版本；`release.yml` 的标签名改用 `$GITHUB_REF_NAME`，不再在 `run:` 脚本里展开 `${{ github.ref_name }}`；发布构建关闭 `setup-uv` 缓存，避免 `master` 上 CI 写入的缓存被带进持有 PyPI 令牌的环境；不需要推送的任务（CI、Pages、发布）的 `actions/checkout` 设 `persist-credentials: false`。各工作流的触发条件与行为不变。`tests/test_open_source_docs.py` 新增 6 条离线守卫（SHA 钉版与版本注释、`run:` 不展开表达式、`pull_request_target` 不检出 PR head、发布不吃缓存、checkout 凭据逐任务登记），`docs/maintainer/branch-protection.md` 新增「Workflow rules」一节。
 
 ### Fixed
+- 对齐 `SECURITY.md` 的运行边界描述（Issue #763）：原文称「默认启用低风险辅助模式……不批量触达、不抓取平台数据」，与 `compliance.py` 的「两种模式权限一致」及实际 `batch-greet` / `crawl` 能力不符；现改为说明模式仅为兼容保留、真正边界是平台风控硬边界与有界长流程，保留原有 Cookie/Token、本地数据与导出防护条目。新增守卫禁止该过时表述回归。
 - 修复中英排障文档的结构漂移（Issue #751）：中文版此前只有 8 个 H2，缺英文版已有的「登录问题」「浏览器 / patchright 问题」「搜索 / 接口错误」「术语表」分节，以及 `JOB_NOT_FOUND`、`ALREADY_APPLIED`、`AI_API_ERROR`、`AI_PARSE_ERROR` 四个错误码；英文版缺 `PLATFORM_NOT_SUPPORTED` 与 Windows CDP 启动脚本。两版现按同一标题结构组织，`JOB_NOT_FOUND` / `ALREADY_APPLIED` 的恢复建议对齐 `ERROR_CODES` 登记表。
 
 ## [3.2.2] - 2026-11-09
