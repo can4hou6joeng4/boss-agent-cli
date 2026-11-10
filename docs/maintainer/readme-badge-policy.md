@@ -66,6 +66,19 @@
 
 ---
 
+## 当前首页 badge 清单（2026-11 核对）
+
+| Badge | 来源 | 类型 | 状态 |
+|-------|------|------|------|
+| Python ≥3.11 | img.shields.io | 兼容性 | 允许 |
+| License MIT | img.shields.io | 许可证 | 允许 |
+| GitHub Release | img.shields.io | 分发 / 版本 | 允许 |
+| PyPI Downloads | img.shields.io | 分发 | 允许 |
+| PRs Welcome | img.shields.io | 贡献入口 | 允许 |
+| MCP Toplist | mcptoplist.com | 第三方目录站 | **已移除**：外部提交于 2026-07-28（`366c71d`）加入，与本文「二类：默认不允许」冲突，2026-11 移除 |
+
+`tests/test_open_source_docs.py::test_readme_badges_come_from_approved_sources` 会检查 README 中英的 badge 图片主机是否在白名单内。新增第三方 badge 前，先更新本章与测试白名单。
+
 ## 准入原则
 
 README 首页 badge 的默认原则是：

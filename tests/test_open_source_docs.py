@@ -1,5 +1,6 @@
 import re
 import subprocess
+import urllib.parse
 from importlib.metadata import metadata
 from pathlib import Path
 
@@ -804,3 +805,39 @@ def test_code_of_conduct_is_reachable_from_entry_docs():
 	assert (ROOT / "CODE_OF_CONDUCT.md").exists()
 	for path in ("README.md", "README.en.md", "CONTRIBUTING.md", "CONTRIBUTING.en.md"):
 		assert "CODE_OF_CONDUCT.md" in read(path), f"{path} 没有指向 CODE_OF_CONDUCT.md"
+
+
+APPROVED_BADGE_HOSTS = {"img.shields.io", "github.com", "codecov.io"}
+
+
+def _readme_badge_hosts(path: str) -> list[tuple[str, str]]:
+	"""返回 README 里所有外链图片的 (host, 原始 URL)，涵盖 markdown badge 与 HTML <img>。"""
+	content = read(path)
+	urls = re.findall(r"!\[[^\]]*\]\((https?://[^)\s]+)\)", content)
+	urls += re.findall(r"<img[^>]+src=[\"'](https?://[^\"']+)[\"']", content)
+	urls += re.findall(r"srcset=[\"'](https?://[^\"']+)[\"']", content)
+	return [(urllib.parse.urlsplit(url).hostname or "", url) for url in urls]
+
+
+def test_readme_badges_come_from_approved_sources():
+	"""README 首页 badge 只能来自真源白名单，且政策文档列出当前清单。
+
+	2026-07-28 外部提交（`366c71d`）给两个 README 加了 MCP Toplist
+	（mcptoplist.com）目录站 badge，与 2026-05-03 的
+	`docs/maintainer/readme-badge-policy.md`「第三方目录站导流 badge 默认
+	不允许」冲突，直到 2026-11 才被发现移除。白名单与政策文档里的
+	「当前首页 badge 清单」保持同步。
+	"""
+	checked = 0
+	for path in ("README.md", "README.en.md"):
+		hosts = _readme_badge_hosts(path)
+		assert len(hosts) >= 5, f"{path} 只解析到 {len(hosts)} 个外链图片，正则可能失效"
+		checked += len(hosts)
+		unapproved = [f"{host} ({url})" for host, url in hosts if host not in APPROVED_BADGE_HOSTS]
+		assert not unapproved, f"{path} 含未批准的 badge 主机: " + ", ".join(unapproved)
+		assert "mcptoplist.com" not in read(path), f"{path} 仍残留 MCP Toplist badge"
+
+	policy = read("docs/maintainer/readme-badge-policy.md")
+	assert "## 当前首页 badge 清单" in policy
+	assert "MCP Toplist" in policy and "已移除" in policy
+	assert checked >= 10, f"只检查到 {checked} 个 badge，正则可能失效"
