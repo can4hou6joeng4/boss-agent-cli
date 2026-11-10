@@ -20,6 +20,7 @@ from boss_agent_cli.display import (
 	platform_error_contract,
 	platform_error_message,
 	render_action_result,
+	render_job_table,
 	render_list_result,
 	render_message_panel,
 	shell_argument,
@@ -260,6 +261,19 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 	}
 
 
+def _render_watch_run(data: dict[str, Any]) -> None:
+	"""单个 watch 的终端结果：面板只放计数，新增职位用表格展示。
+
+	``new_items`` 是完整搜索结果项的列表，直接插进面板会被渲染成一大段 dict
+	repr——一次几十条新职位时既撑爆面板，也没法扫读标题和薪资。
+	"""
+	items = data.get("new_items")
+	summary = {key: value for key, value in data.items() if key != "new_items"}
+	render_message_panel(summary, title="watch run")
+	if isinstance(items, list) and items:
+		render_job_table(items, "新增职位")
+
+
 @watch_group.command("run")
 @click.argument("name", required=False)
 @click.option("--all", "run_all", is_flag=True, help="跑所有已保存 watch")
@@ -375,6 +389,6 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 
 		handle_output(
 			ctx, "watch", summary,
-			render=lambda d: render_message_panel(d, title="watch run"),
+			render=_render_watch_run,
 			hints={"next_actions": ["boss detail <security_id>", "boss watch list"]},
 		)

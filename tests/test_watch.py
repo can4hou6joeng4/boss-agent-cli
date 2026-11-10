@@ -150,6 +150,43 @@ def test_watch_run_marks_only_new_items(mock_auth_cls, mock_client_cls, tmp_path
 	assert second_parsed["data"]["new_count"] == 0
 
 
+def test_watch_run_renders_new_items_as_table(tmp_path, monkeypatch):
+	"""TTY 下新增职位走表格，不再把整段 dict 列表塞进面板。
+
+	``new_items`` 是完整搜索结果项；直接插值进面板会渲染成一大段 repr，几十条
+	新职位时既撑爆面板，也没法扫读标题与薪资。
+	"""
+
+	def _run(*args):
+		return CliRunner().invoke(cli, ["--data-dir", str(tmp_path), *args])
+
+	with patch("boss_agent_cli.commands.watch.get_platform_instance") as mock_platform_cls, patch(
+		"boss_agent_cli.commands.watch.AuthManager"
+	):
+		mock_client = _ctx_mock(mock_platform_cls)
+		mock_client.is_success.return_value = True
+		mock_client.search_jobs.return_value = {"zpData": {"hasMore": False, "jobList": [_job("sec-1", "job-1")]}}
+		_run("--json", "watch", "add", "golang-gz", "golang", "--city", "广州")
+
+		import io
+
+		from rich.console import Console
+
+		stream = io.StringIO()
+		monkeypatch.setattr(display, "console", Console(file=stream, force_terminal=False, width=100))
+		monkeypatch.setattr(display, "is_json_mode", lambda ctx: False)
+		result = _run("watch", "run", "golang-gz")
+
+	text = stream.getvalue()
+	assert result.exit_code == 0
+	assert result.output.strip() == ""
+	assert "new_count: 1" in text
+	assert "新增职位" in text
+	assert "Go 开发" in text
+	# 表格里不再出现被折行的 dict repr。
+	assert "'jobName':" not in text
+
+
 @patch("boss_agent_cli.commands.watch.get_platform_instance")
 @patch("boss_agent_cli.commands.watch.AuthManager")
 def test_watch_run_dedupes_across_security_id_rotation(mock_auth_cls, mock_client_cls, tmp_path, legacy_args):
