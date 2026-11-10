@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增 mypy 严格清单完整性守卫（Issue #785）：`CLAUDE.md` 要求新模块加入 `[[tool.mypy.overrides]]` 严格列表，但此前没有守卫，只能靠人肉发现；#783 收尾后仍有 8 个包的 `__init__.py` 漏登记。现在这 8 个包补入清单，`tests/test_quality_gates.py::test_mypy_strict_overrides_cover_every_source_module` 按 mypy 语义（`foo.bar` 不覆盖子模块，须写 `foo.bar.*`）双向断言：源码里每个模块都被严格条目覆盖，且清单里没有已不存在的模块。变异验证删条目 / 加假模块均能触发失败。
 - 新增 `docs/README.md` 与英文版作为文档索引（Issue #769）：`docs/` 下 20+ 篇文档此前没有导航页，GitHub 浏览时只能看到平铺文件列表；索引按入门 / 核心参考 / Agent 接入 / 边界与安全 / 集成 / ADR / 维护者 / 研究分类，只链接 git 跟踪的文件，双语文档守卫与相对链接守卫自动覆盖。同时把相对链接守卫扩展到尚未 `git add` 的新文件（`--others --exclude-standard`），本地新建文档里的死链也能在提交前发现。
 - 新增两条双语文档守卫（Issue #751）：`tests/test_open_source_docs.py::test_bilingual_docs_share_the_same_heading_structure` 要求 12 对中英对照文档的标题层级序列一致，一侧新增章节而另一侧没跟上就失败；`::test_troubleshooting_error_tables_list_the_same_registered_codes` 要求两个排障文档的错误码表列出同一组码，且每个码都在 `ERROR_CODES` 里登记。
 - 修复 Markdown 相对链接死链并加守卫（Issue #761）：`CHANGELOG.md` 曾链到从未提交的 `docs/research/platforms/zhaopin.md`，读者点开是 404；该历史条目改为纯文本路径。新增 `test_markdown_relative_links_resolve`，扫描 git 跟踪的全部 `.md`，去掉代码围栏后检查每个相对链接目标存在，并设 200 个链接的检查下限防止正则失效后空转。
