@@ -1,10 +1,16 @@
+import contextlib
+import io
 import re
+import shlex
 import subprocess
 import urllib.parse
 from importlib.metadata import metadata
 from pathlib import Path
 
+import click
 import yaml
+
+from boss_agent_cli.main import cli
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -858,3 +864,76 @@ def test_readme_badges_come_from_approved_sources():
 	assert "## 当前首页 badge 清单" in policy
 	assert "MCP Toplist" in policy and "已移除" in policy
 	assert checked >= 10, f"只检查到 {checked} 个 badge，正则可能失效"
+
+
+_SHELL_FENCE_LANGS = {"", "bash", "sh", "shell", "console", "powershell", "pwsh", "cmd", "bat"}
+#: 示例里代表「用户自己替换」的占位符；整行跳过，不当作可执行示例。
+_COMMAND_PLACEHOLDERS = ("<", ">", "{", "}", "$", "`", "...", "|", "/path/to/")
+
+
+def _documented_boss_commands() -> list[tuple[str, int, str]]:
+	"""收集 README 与 docs 下 shell 代码块里以 ``boss `` 开头的示例命令。"""
+	paths = [Path("README.md"), Path("README.en.md"), *sorted(Path("docs").rglob("*.md"))]
+	commands: list[tuple[str, int, str]] = []
+	for path in paths:
+		if not (ROOT / path).exists():
+			continue
+		fence_lang: str | None = None
+		for lineno, line in enumerate(read(str(path)).splitlines(), 1):
+			stripped = line.strip()
+			if stripped.startswith("```"):
+				fence_lang = None if fence_lang is not None else stripped[3:].strip()
+				continue
+			if fence_lang not in _SHELL_FENCE_LANGS:
+				continue
+			if not stripped.startswith("boss ") or stripped.startswith("boss-agent"):
+				continue
+			if any(marker in stripped for marker in _COMMAND_PLACEHOLDERS):
+				continue
+			commands.append((str(path), lineno, stripped))
+	return commands
+
+
+def _resolve_documented_command(argv: list[str]) -> tuple[click.Command, list[str]]:
+	"""沿 Click 的 Group 子命令树把 argv 拆成目标命令与它自己的参数。"""
+	command: click.Command = cli
+	rest = list(argv)
+	while isinstance(command, click.Group) and rest and rest[0] in command.commands:
+		command = command.commands[rest[0]]
+		rest = rest[1:]
+	return command, rest
+
+
+def test_documented_boss_commands_parse_with_click():
+	"""文档里的 ``boss`` 示例必须能被真实 CLI 解析，防止照抄即报用法错误。
+
+	README 曾把 ``boss config reset`` 写成不带 ``KEY`` 的「恢复默认」，而该命令
+	要求单个配置键——用户照抄只会拿到 ``Missing parameter: key``。这里从 shell
+	代码块提取示例，按 CLI 的 Group 树下钻到目标命令跑一次参数解析（不执行
+	回调），占位符与 PowerShell 续行整行跳过。
+	"""
+	checked = 0
+	failures: list[str] = []
+	for path, lineno, line in _documented_boss_commands():
+		try:
+			argv = shlex.split(line)
+		except ValueError:
+			continue
+		argv = argv[1:]
+		for terminator in ("#", "&&", "||"):
+			if terminator in argv:
+				argv = argv[: argv.index(terminator)]
+		command, rest = _resolve_documented_command(argv)
+		try:
+			# `--version` / `--help` 的 eager 回调会直接写 stdout，这里吞掉以免刷屏。
+			with contextlib.redirect_stdout(io.StringIO()):
+				ctx = command.make_context(command.name, rest)
+				ctx.close()
+		except click.exceptions.Exit:
+			# eager 选项以 Exit(0) 结束解析，示例本身合法。
+			pass
+		except click.ClickException as exc:
+			failures.append(f"{path}:{lineno}: {line}\n    {exc.format_message()}")
+		checked += 1
+	assert not failures, "文档示例无法被 CLI 解析：\n" + "\n".join(failures)
+	assert checked >= 30, f"只解析到 {checked} 条文档命令，提取逻辑可能失效"

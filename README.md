@@ -170,7 +170,7 @@ boss --browser-source existing-browser --cdp-url http://localhost:9222 chat
 ```bash
 boss config list                    # 查看所有配置
 boss config set log_level debug     # 设置日志级别
-boss config reset                   # 恢复默认
+boss config reset log_level         # 恢复单个配置项的默认值
 ```
 
 配置位于 `~/.boss-agent/config.json`：运行模式（`operating_mode=assisted|research`）、请求间隔、批量打招呼间隔、日志级别、CDP 地址、导出目录、平台 / 角色。
