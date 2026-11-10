@@ -85,7 +85,7 @@ git diff --check
    ```
 5. **原子提交**：每个 commit 只做一件事。
 6. **Push** 并向 `master` 发起 Pull Request。
-7. **CI 全绿**才能合并：`CI` 工作流在 PR 上跑 ruff / mypy / pre-commit 和 Python 3.11、3.12、3.14 的测试（fork 的 PR 同样会跑，不需要任何 secret），另有 CodeQL 和 GitGuardian 安全扫描。测试全部离线，不要写需要网络、真实浏览器或真实账号的测试。
+7. **CI 全绿**才能合并：`CI` 工作流在 PR 上跑 ruff / mypy / pre-commit 和 Python 3.11、3.12、3.13、3.14 的测试（fork 的 PR 同样会跑，不需要任何 secret），另有 CodeQL 和 GitGuardian 安全扫描。测试全部离线，不要写需要网络、真实浏览器或真实账号的测试。
 
 维护者会使用 squash merge，所以最终 squash 标题也要遵守上面的 commit 格式。
 
