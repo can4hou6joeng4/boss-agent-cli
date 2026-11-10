@@ -623,3 +623,70 @@ def test_contributing_clarifies_verification_and_tab_indentation():
 		assert "uv run boss schema --format native" in content
 
 	assert "# Python files intentionally use tabs" in pyproject
+
+
+def _bilingual_pairs() -> list[tuple[str, str]]:
+	pairs: list[tuple[str, str]] = []
+	for zh_path in sorted((ROOT / "docs").glob("*.md")):
+		if zh_path.name.endswith(".en.md"):
+			continue
+		en_path = zh_path.with_name(f"{zh_path.stem}.en.md")
+		if en_path.exists():
+			pairs.append((zh_path.relative_to(ROOT).as_posix(), en_path.relative_to(ROOT).as_posix()))
+	for path in ("README.md", "CONTRIBUTING.md", "ROADMAP.md"):
+		en_path = f"{path[:-3]}.en.md"
+		if (ROOT / en_path).exists():
+			pairs.append((path, en_path))
+	return pairs
+
+
+def _heading_levels(path: str) -> list[int]:
+	levels: list[int] = []
+	in_fence = False
+	for line in read(path).splitlines():
+		stripped = line.strip()
+		if stripped.startswith("```") or stripped.startswith("~~~"):
+			in_fence = not in_fence
+			continue
+		if in_fence:
+			continue
+		match = re.match(r"^(#{1,6})\s", line)
+		if match:
+			levels.append(len(match.group(1)))
+	return levels
+
+
+def test_bilingual_docs_share_the_same_heading_structure():
+	"""中英对照文档的标题层级必须一致，防止一侧新增章节、另一侧没跟上。"""
+	pairs = _bilingual_pairs()
+	assert len(pairs) >= 12
+	for zh_path, en_path in pairs:
+		assert _heading_levels(zh_path) == _heading_levels(en_path), f"{zh_path} 与 {en_path} 的标题结构不一致"
+
+
+ERROR_TABLE_HEADINGS = {
+	"docs/troubleshooting.md": "## 错误码与自动修复",
+	"docs/troubleshooting.en.md": "## Error codes & agent-friendly recovery",
+}
+
+
+def _troubleshooting_error_codes(path: str) -> set[str]:
+	content = read(path)
+	heading = ERROR_TABLE_HEADINGS[path]
+	section = content[content.index(heading) + len(heading) :]
+	end = section.find("\n## ")
+	if end != -1:
+		section = section[:end]
+	return set(re.findall(r"^\|\s*`([A-Z][A-Z0-9_]+)`\s*\|", section, re.MULTILINE))
+
+
+def test_troubleshooting_error_tables_list_the_same_registered_codes():
+	"""两个排障文档的错误码表必须列出同一组码，且每个码都在登记表里。"""
+	from boss_agent_cli.schema.error_codes import ERROR_CODES
+
+	zh_codes = _troubleshooting_error_codes("docs/troubleshooting.md")
+	en_codes = _troubleshooting_error_codes("docs/troubleshooting.en.md")
+
+	assert zh_codes, "错误码表解析不到任何条目"
+	assert zh_codes == en_codes, f"中文版缺 {sorted(en_codes - zh_codes)}，英文版缺 {sorted(zh_codes - en_codes)}"
+	assert zh_codes <= set(ERROR_CODES), f"未在 ERROR_CODES 登记：{sorted(zh_codes - set(ERROR_CODES))}"
