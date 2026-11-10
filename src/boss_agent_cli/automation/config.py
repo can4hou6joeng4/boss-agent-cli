@@ -83,6 +83,31 @@ def _config_confidence(data: dict[str, Any], key: str, default: float) -> float:
 	return parsed
 
 
+def _config_tabs(data: dict[str, Any]) -> tuple[str, ...]:
+	"""读取要扫描的 tab 列表，必须是字符串数组。
+
+	直接 `tuple(str(item) for item in value)` 会在用户把 ``tabs`` 写成字符串时
+	按字符拆开：``"新招呼"`` 变成 ``("新", "招", "呼")``——执行层匹配不到任何
+	tab，自动化空转却报成功；写成 ``null`` 或数字则抛未包装的 TypeError。
+	"""
+	value = data.get("tabs", _DEFAULT.tabs)
+	if not isinstance(value, (list, tuple)) or not all(isinstance(item, str) for item in value):
+		raise ValueError(f"tabs 必须是字符串数组，收到 {value!r}")
+	return tuple(value)
+
+
+def _config_text(data: dict[str, Any], key: str, default: str) -> str:
+	"""读取发给候选人的话术，必须是非空字符串。
+
+	`str(value)` 会把 ``null`` / 数字静默变成 ``"None"`` / ``"123"``，自动化随后
+	把它们原样发给候选人；话术还用于匹配历史消息推断阶段，空值会破坏判定。
+	"""
+	value = data.get(key, default)
+	if not isinstance(value, str) or not value.strip():
+		raise ValueError(f"{key} 必须是非空字符串，收到 {value!r}")
+	return value
+
+
 def automation_config_from_dict(raw: dict[str, Any] | None) -> AutomationConfig:
 	"""Parse automation config from config.json-compatible data."""
 	data = raw or {}
@@ -125,9 +150,13 @@ def automation_config_from_dict(raw: dict[str, Any] | None) -> AutomationConfig:
 		max_consecutive_errors=_config_int(
 			data, "max_consecutive_errors", _DEFAULT.max_consecutive_errors, minimum=0
 		),
-		tabs=tuple(str(item) for item in data.get("tabs", _DEFAULT.tabs)),
+		tabs=_config_tabs(data),
 		max_per_tab=_config_int(data, "max_per_tab", _DEFAULT.max_per_tab, minimum=0),
-		questionnaire_message=str(data.get("questionnaire_message", _DEFAULT.questionnaire_message)),
-		follow_up_message=str(data.get("follow_up_message", _DEFAULT.follow_up_message)),
+		questionnaire_message=_config_text(
+			data, "questionnaire_message", _DEFAULT.questionnaire_message
+		),
+		follow_up_message=_config_text(
+			data, "follow_up_message", _DEFAULT.follow_up_message
+		),
 		reply_strategy=ReplyStrategy(data.get("reply_strategy", _DEFAULT.reply_strategy.value)),
 	)

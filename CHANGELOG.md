@@ -22,6 +22,7 @@
 - 加固 GitHub 工作流（Issue #747）：全部 18 处 `uses:` 从 `@v7` 这类可移动标签改为完整提交 SHA 并在行尾注明精确版本；`release.yml` 的标签名改用 `$GITHUB_REF_NAME`，不再在 `run:` 脚本里展开 `${{ github.ref_name }}`；发布构建关闭 `setup-uv` 缓存，避免 `master` 上 CI 写入的缓存被带进持有 PyPI 令牌的环境；不需要推送的任务（CI、Pages、发布）的 `actions/checkout` 设 `persist-credentials: false`。各工作流的触发条件与行为不变。`tests/test_open_source_docs.py` 新增 6 条离线守卫（SHA 钉版与版本注释、`run:` 不展开表达式、`pull_request_target` 不检出 PR head、发布不吃缓存、checkout 凭据逐任务登记），`docs/maintainer/branch-protection.md` 新增「Workflow rules」一节。
 
 ### Fixed
+- 自动化配置的 `tabs` 与话术字段不再静默变形：`tabs` 旧实现直接迭代给定值，用户把 `tabs` 写成字符串时会被逐字符拆成 `("新", "招", "呼")`——执行层匹配不到任何 tab，自动化空转却报成功；写成 `null` / 数字则抛未包装的 `TypeError`。`questionnaire_message` / `follow_up_message` 旧实现用 `str(...)` 强转，`null` 会变成 `"None"`、空串会发送空消息，而这两个值会原样发给候选人。现在三者都按形状校验：`tabs` 必须是字符串数组，话术必须是非空字符串，错误信息带字段名与收到的值。
 - `boss digest` 的终端输出不再把三段列表塞进面板：`new_matches` / `follow_ups` / `interviews` 都是完整结果项，直接插值进面板会渲染成一大段 dict repr，日报一天几十条时既撑爆面板，也没法扫读。现在面板只保留计数与摘要，三节分别用与 `pipeline` 一致的表格展示（公司 / 职位 / 关系 / 未读 / 最近时间 / 最近消息；面试节为面试时间与状态），空小节不打印占位。JSON 信封输出不变。
 - `boss watch run <名称>` 的终端输出不再把新增职位塞进面板：`new_items` 是完整搜索结果项的列表，一次几十条新职位时整段 dict repr 会撑爆面板，也没法扫读。现在面板只保留 `new_count` / `seen_count` / `total_count` 三个计数，新增职位改用与 `search` 一致的表格展示（标题 / 公司 / 薪资 / 城市）。JSON 信封输出不变。
 - `boss config get/set/reset` 的终端输出在遇到结构化配置时改用格式化 JSON：`automation` / `crawl` 的 Python repr 把两段十一字段字典挤进一个面板，单引号与折行让当前值、「默认值」和「上一次的值」都难读。现在面板内显示占位，完整 JSON 打印在下方；相同内容只展开一次，不同时并列便于对比。JSON 信封输出不变。
