@@ -1,6 +1,7 @@
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -10,8 +11,49 @@ from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_items
 from boss_agent_cli.digest import build_digest, render_digest_markdown
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output, json_forced, render_message_panel, shell_argument
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output, json_forced, render_message_panel, render_simple_list, shell_argument
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
+
+
+# 会话类条目（新匹配 / 待跟进）与面试条目的展示列。两者字段形状相同，
+# 但面试的 ``last_msg`` 是状态描述、``last_time`` 是面试时间，列名不同。
+_CHAT_SECTION_COLUMNS = [
+	("公司", "company", "green"),
+	("职位", "title", "yellow"),
+	("关系", "relation", ""),
+	("未读", "unread", "red"),
+	("最近时间", "last_time", "dim"),
+	("最近消息", "last_msg", ""),
+]
+_INTERVIEW_SECTION_COLUMNS = [
+	("公司", "company", "green"),
+	("职位", "title", "yellow"),
+	("面试时间", "last_time", "dim"),
+	("状态", "last_msg", ""),
+]
+
+
+def _render_digest_section(items: object, title: str, columns: list[tuple[str, str, str]]) -> None:
+	if isinstance(items, list) and items:
+		render_simple_list(items, title, columns)
+
+
+def _render_digest(data: dict[str, Any]) -> None:
+	"""digest 的终端渲染：面板只放计数与摘要，三个列表分别用表格展示。
+
+	``new_matches`` / ``follow_ups`` / ``interviews`` 都是完整结果项，直接插进
+	面板会渲染成一大段 dict repr——日报一天几十条时既撑爆面板，也没法扫读
+	公司、职位与未读状态。空小节不打印，避免「no xxx」占位。
+	"""
+	summary = {
+		key: value
+		for key, value in data.items()
+		if key not in ("new_matches", "follow_ups", "interviews")
+	}
+	render_message_panel(summary, title="digest")
+	_render_digest_section(data.get("new_matches"), "新匹配", _CHAT_SECTION_COLUMNS)
+	_render_digest_section(data.get("follow_ups"), "待跟进", _CHAT_SECTION_COLUMNS)
+	_render_digest_section(data.get("interviews"), "面试", _INTERVIEW_SECTION_COLUMNS)
 
 
 @click.command("digest")
@@ -98,6 +140,6 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 		ctx,
 		"digest",
 		data,
-		render=lambda d: render_message_panel(d, title="digest"),
+		render=_render_digest,
 		hints={"next_actions": ["boss pipeline", "boss follow-up", "boss watch list"]},
 	)
