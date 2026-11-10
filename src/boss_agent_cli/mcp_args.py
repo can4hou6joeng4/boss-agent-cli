@@ -324,7 +324,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "favorites_list":
 		args = ["favorites", "list"]
-		if arguments.get("page"):
+		# page=0 是显式传入的非法值，要原样下发交给 CLI 的 IntRange(1) 拒绝；
+		# 用真值判断会把它静默换成默认第 1 页，与其他工具的页码行为不一致。
+		if arguments.get("page") is not None:
 			args.extend(["--page", str(arguments["page"])])
 		return args
 
