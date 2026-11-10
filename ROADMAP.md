@@ -50,8 +50,8 @@
 ## 🔮 中期（v2.x–v3.x）
 
 ### 治理与合规
-- [x] 默认低风险辅助模式：敏感命令默认阻断并交接回平台官网（ADR 0001）
-- [x] 显式 `operating_mode` 双模式契约：`assisted` / `research` 单一真源驱动 CLI、schema 与 MCP 过滤（v1.16.0，ADR 0002）
+- [x] 默认低风险辅助模式（历史项，已被 2026-08 开放能力设计取代）：ADR 0001 曾把敏感命令默认阻断并交接回平台官网；当前 `assisted` / `research` 对已实现能力权限一致，真正的边界是平台风控硬边界与有界长流程
+- [x] 显式 `operating_mode` 双模式契约（历史项，v1.16.0 / ADR 0002，已被 2026-08 开放能力设计取代）：两个模式名仅作配置兼容保留，权限一致，不再产生模式级 `COMPLIANCE_BLOCKED` 或 schema / MCP 模式过滤
 - [x] 受限 Research Mode 采集：固定请求 / 详情 / 墙钟 / 重试预算 + SQLite checkpoint + 停止开关（v1.17.0）
 
 ### 架构演进
