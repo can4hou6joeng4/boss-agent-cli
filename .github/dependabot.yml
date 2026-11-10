@@ -29,3 +29,19 @@ updates:
       github-actions:
         patterns:
           - "*"
+  # pre-commit 钩子仓库的 rev 也要跟版本：此前该生态未配置，ruff-pre-commit
+  # 一直停在 v0.8.6，而 uv.lock 里的 ruff 已到 0.17.4。
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci"
+    groups:
+      pre-commit:
+        patterns:
+          - "*"

@@ -592,7 +592,8 @@ def test_checkout_keeps_credentials_only_where_a_push_follows():
 def test_dependabot_stays_low_noise():
 	config = load_yaml(".github/dependabot.yml")
 	ecosystems = {update["package-ecosystem"]: update for update in config["updates"]}
-	assert set(ecosystems) == {"uv", "github-actions"}
+	# pre-commit 生态负责钩子仓库的 rev（ruff 本身走 uv 生态，钩子用项目环境）。
+	assert set(ecosystems) == {"uv", "github-actions", "pre-commit"}
 	for update in ecosystems.values():
 		assert update["schedule"]["interval"] == "weekly"
 		assert update["open-pull-requests-limit"] <= 3

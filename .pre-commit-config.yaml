@@ -1,13 +1,18 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+  # ruff 直接用项目环境里的那一份（uv.lock），不让 pre-commit 另装副本：
+  # 钩子版本要手工跟 uv.lock 同步，漏一次就和 CI 的 `uv run ruff check`
+  # 变成两个不同的 linter（v0.8.6 与 0.17.4 曾长期并存）。
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix]
+        name: ruff
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
         files: ^(src|tests|scripts)/
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
