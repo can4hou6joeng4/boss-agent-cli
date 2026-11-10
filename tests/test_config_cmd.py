@@ -8,6 +8,8 @@ from typing import Any
 import pytest
 from click.testing import CliRunner, Result
 
+from boss_agent_cli.automation.config import AutomationConfig, automation_config_from_dict
+from boss_agent_cli.config import DEFAULTS
 from boss_agent_cli.main import cli
 
 
@@ -546,6 +548,36 @@ def test_config_set_automation_accepts_partial_object(tmp_path):
 	code, parsed = _invoke("config", "set", "automation", '{"max_per_tab": 5}', tmp_path=tmp_path)
 	assert code == 0
 	assert parsed["data"]["value"] == {"max_per_tab": 5}
+
+
+def test_defaults_automation_matches_runtime_parser():
+	"""``config list`` 展示的 automation 默认值必须与解析器完全一致。
+
+	手写副本会漂移：``platforms`` 字段删除后它仍留在 DEFAULTS 里被展示（配了不生效），
+	而 ``tabs`` / ``reply_strategy`` 等七个字段反而看不到。新增或删除字段却忘了同步
+	这份默认值时，这条断言会失败。
+	"""
+	listed = DEFAULTS["automation"]
+	assert set(listed) == set(AutomationConfig.__dataclass_fields__)
+	# 同一份数据交给正式解析器必须得到全新构造的默认配置，不再有任何兜底差异。
+	assert automation_config_from_dict(listed) == AutomationConfig()
+
+
+def test_defaults_crawl_lists_only_consumed_keys():
+	"""crawl 默认值只保留 run/start/configure 真正读取的键。
+
+	``hook_profile`` / ``hook_dir`` 曾出现在默认值里，但采集只能通过
+	``boss crawl run --hook-profile ... --hook-dir ...`` 显式指定，config.json 里的
+	同名键从未被读取。多一个「能配不生效」的键比少一个更糟。
+	"""
+	assert set(DEFAULTS["crawl"]) == {
+		"chrome_path",
+		"cdp_port",
+		"max_requests",
+		"max_details",
+		"max_seconds",
+		"max_retries",
+	}
 
 
 @pytest.mark.parametrize(
