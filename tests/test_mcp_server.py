@@ -425,6 +425,128 @@ def test_call_tool_rejects_unknown_arguments(monkeypatch):
 	assert "dry_run" in payload["error"]["message"]
 
 
+def test_call_tool_rejects_non_boolean_flags(monkeypatch):
+	"""布尔参数传成字符串时必须拒绝，不能被 truthiness 静默改写。
+
+	`_build_args` 对 `dry_run` 用 truthiness、对 `yes` 用 `is True`：传 `"true"`
+	会同时丢掉预览与确认标志，写操作可能直接执行。
+	"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+
+	async def fake_run(*args):
+		raise AssertionError("类型错误不应触达 CLI")
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+
+	base = {
+		"geek_id": "g",
+		"job_id": "j",
+		"expect_id": "e",
+		"lid": "l",
+		"security_id": "s",
+		"message": "m",
+	}
+	for field in ("dry_run", "yes"):
+		result = asyncio.run(
+			mcp_server.call_tool(
+				None,
+				CallToolRequestParams(name="boss_hr_greet", arguments={**base, field: "true"}),
+			)
+		)
+		payload = json.loads(result.content[0].text)
+		assert result.is_error is True
+		assert payload["error"]["code"] == "INVALID_PARAM"
+		assert field in payload["error"]["message"]
+		assert "boolean" in payload["error"]["message"]
+
+
+def test_call_tool_accepts_boolean_flags(monkeypatch):
+	"""布尔标志仍按原样翻译成 CLI 选项。"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+
+	seen: list[tuple[str, ...]] = []
+
+	async def fake_run(*args):
+		seen.append(args)
+		return {"ok": True, "error": None}
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+
+	arguments = {
+		"geek_id": "g",
+		"job_id": "j",
+		"expect_id": "e",
+		"lid": "l",
+		"security_id": "s",
+		"message": "m",
+		"dry_run": True,
+		"yes": True,
+	}
+	result = asyncio.run(
+		mcp_server.call_tool(None, CallToolRequestParams(name="boss_hr_greet", arguments=arguments))
+	)
+
+	assert result.is_error is False
+	assert seen == [
+		(
+			"hr",
+			"greet",
+			"--geek-id",
+			"g",
+			"--job-id",
+			"j",
+			"--expect-id",
+			"e",
+			"--lid",
+			"l",
+			"--security-id",
+			"s",
+			"--message",
+			"m",
+			"--yes",
+			"--dry-run",
+		)
+	]
+
+
+def test_call_tool_rejects_unknown_tool_name(monkeypatch):
+	"""未知工具名直接返回 INVALID_PARAM，而不是执行 `boss <name>`。"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+
+	async def fake_run(*args):
+		raise AssertionError("未知工具不应触达 CLI")
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+
+	result = asyncio.run(
+		mcp_server.call_tool(None, CallToolRequestParams(name="boss_no_such_tool", arguments={}))
+	)
+
+	payload = json.loads(result.content[0].text)
+	assert result.is_error is True
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "未知工具" in payload["error"]["message"]
+	assert "tools/list" in payload["error"]["message"]
+
+
 def test_search_tool_requires_query():
 	"""搜索工具应要求 query 参数。"""
 	search = next(t for t in TOOLS if t.name == "boss_search")

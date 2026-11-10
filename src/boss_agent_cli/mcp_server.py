@@ -301,18 +301,69 @@ def _declared_arguments(tool_name: str) -> set[str] | None:
 	return set(tool.input_schema.get("properties", {}))
 
 
+_JSON_TYPE_CHECKS: dict[str, tuple[type, ...]] = {
+	"boolean": (bool,),
+	"integer": (int,),
+	"number": (int, float),
+	"string": (str,),
+	"array": (list,),
+	"object": (dict,),
+}
+
+
+def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str]:
+	"""按 inputSchema 校验参数类型，返回人类可读的错误列表。
+
+	`_build_args` 用 `is True` / truthiness 判断布尔参数：客户端把 `dry_run` /
+	`yes` 传成字符串时，标志位会被静默丢弃或反向生效（`"false"` 是 truthy），
+	写命令的预览 / 确认语义随之改变。类型错误必须在进入 CLI 之前拒绝。
+	"""
+	tool = next((item for item in TOOLS if item.name == tool_name), None)
+	if tool is None:
+		return []
+	properties = tool.input_schema.get("properties", {})
+	errors: list[str] = []
+	for key, value in arguments.items():
+		prop = properties.get(key)
+		if not isinstance(prop, dict):
+			continue
+		expected = prop.get("type")
+		if not isinstance(expected, str) or expected not in _JSON_TYPE_CHECKS:
+			continue
+		allowed = _JSON_TYPE_CHECKS[expected]
+		# Python 里 bool 是 int 子类；JSON 里 true/false 不是数字，反向也一样。
+		valid = isinstance(value, allowed) and (expected in {"boolean"} or not isinstance(value, bool))
+		if not valid:
+			errors.append(f"{key} 应为 {expected}，收到 {type(value).__name__}")
+	return errors
+
+
 async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
 	arguments = dict(params.arguments or {})
 	declared = _declared_arguments(params.name)
-	if declared is not None:
-		unknown = sorted(set(arguments) - declared)
-		if unknown:
-			# 未知参数不能静默丢弃：给写工具多传一个 dry_run 也会被忽略，然后真实执行
-			# 投递/打招呼。与 CLI 对未知选项的处理一致，直接拒绝并指出参数名。
-			return _tool_argument_error(
-				params.name,
-				f"未知参数：{', '.join(unknown)}；请按 tools/list 的 inputSchema 传参",
-			)
+	if declared is None:
+		# 未知工具名不能落到 `boss <name>`：那只会得到 Click 的 "No such command"，
+		# Agent 看不到「工具不存在」与可用工具列表的指引。
+		return _tool_argument_error(
+			params.name,
+			f"未知工具：{params.name}；请调用 tools/list 获取可用工具",
+		)
+	unknown = sorted(set(arguments) - declared)
+	if unknown:
+		# 未知参数不能静默丢弃：给写工具多传一个 dry_run 也会被忽略，然后真实执行
+		# 投递/打招呼。与 CLI 对未知选项的处理一致，直接拒绝并指出参数名。
+		return _tool_argument_error(
+			params.name,
+			f"未知参数：{', '.join(unknown)}；请按 tools/list 的 inputSchema 传参",
+		)
+	type_errors = _argument_type_errors(params.name, arguments)
+	if type_errors:
+		# 类型错误同样不能交给 `_build_args` 的 truthiness 判断：`"false"` 是 truthy，
+		# `is True` 对 `"true"` 为假，`dry_run` / `yes` 会因此静默丢失或反向生效。
+		return _tool_argument_error(
+			params.name,
+			"参数类型错误：" + "；".join(type_errors) + "；请按 tools/list 的 inputSchema 传参",
+		)
 	try:
 		args = _build_args(params.name, arguments)
 	except KeyError as exc:

@@ -126,7 +126,7 @@ boss status
 - `REQUEST_BUDGET_EXHAUSTED`：共享执行锁、60 秒预算或冷却超出本次等待时限，本次操作未发出；保留 checkpoint，检查并发与 `retry_after_seconds` 后显式恢复，不自动重试或清锁。同 `data_dir` 默认共享，可用 `request_budget_dir` 显式分组；见 [共享预算配置](commands.md#共享请求预算与冷却)。写后确认中断仍为 `ACTION_UNCONFIRMED`，先核对结果
 - `NOT_SUPPORTED`：切换 schema catalog 中支持该 goal 的平台或 workflow
 - `WORKFLOW_TIMEOUT`：正常 wizard 超时保留 `run_id`，调整超时后显式 `boss wizard --resume <run_id>`；若 MCP 返回 `outcome_unknown=true`，先核对未确认的动作，禁止直接重试
-- `INVALID_PARAM`：校正参数（城市、福利、页码等）
+- `INVALID_PARAM`：校正参数（城市、福利、页码等）；MCP 侧还包括未知工具名，以及不符合 `inputSchema` 声明类型的参数（例如把 `dry_run` 传成字符串 `"true"`）
 
 ## 4) 工具协议直出
 
