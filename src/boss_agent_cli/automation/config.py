@@ -29,7 +29,6 @@ class ReplyStrategy(str, Enum):
 @dataclass(frozen=True, slots=True)
 class AutomationConfig:
 	mode: AutomationMode = AutomationMode.AUTONOMOUS
-	platforms: tuple[str, ...] = ("zhipin",)
 	allowed_actions: tuple[PlatformAction, ...] = DEFAULT_ALLOWED_ACTIONS
 	human_review_threshold: float = 0.65
 	auto_execute_threshold: float = 0.82
@@ -42,13 +41,6 @@ class AutomationConfig:
 		"谢谢回复，我这边同步岗位信息，方便的话可以继续沟通面试时间。"
 	)
 	reply_strategy: ReplyStrategy = ReplyStrategy.HYBRID
-	stop_on_page_text: tuple[str, ...] = (
-		"验证码",
-		"安全验证",
-		"操作频繁",
-		"账号异常",
-		"访问受限",
-	)
 
 
 _DEFAULT = AutomationConfig()
@@ -126,7 +118,6 @@ def automation_config_from_dict(raw: dict[str, Any] | None) -> AutomationConfig:
 		)
 	return AutomationConfig(
 		mode=AutomationMode(data.get("mode", _DEFAULT.mode.value)),
-		platforms=tuple(str(item) for item in data.get("platforms", _DEFAULT.platforms)),
 		allowed_actions=actions,
 		human_review_threshold=human_review_threshold,
 		auto_execute_threshold=auto_execute_threshold,
@@ -139,5 +130,4 @@ def automation_config_from_dict(raw: dict[str, Any] | None) -> AutomationConfig:
 		questionnaire_message=str(data.get("questionnaire_message", _DEFAULT.questionnaire_message)),
 		follow_up_message=str(data.get("follow_up_message", _DEFAULT.follow_up_message)),
 		reply_strategy=ReplyStrategy(data.get("reply_strategy", _DEFAULT.reply_strategy.value)),
-		stop_on_page_text=tuple(str(item) for item in data.get("stop_on_page_text", _DEFAULT.stop_on_page_text)),
 	)
