@@ -202,7 +202,7 @@ All state lives under `~/.boss-agent/` — encrypted tokens, cached searches, sh
 
 ## 🤝 Contributing
 
-See [CONTRIBUTING.en.md](CONTRIBUTING.en.md) and [Getting Started](docs/getting-started.en.md). TL;DR: fork → `feat/xxx` branch → write tests → `python scripts/quality_baseline.py` (on Chinese Windows, set `$env:PYTHONUTF8='1'` first) → PR. Reproducible offline MCP evals live in [`evals/README.md`](evals/README.md).
+See [CONTRIBUTING.en.md](CONTRIBUTING.en.md) and [Getting Started](docs/getting-started.en.md). TL;DR: fork → `feat/xxx` branch → write tests → `python scripts/quality_baseline.py` (on Chinese Windows, set `$env:PYTHONUTF8='1'` first) → PR. Reproducible offline MCP evals live in [`evals/README.md`](evals/README.md). By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 Thanks to everyone who has made boss-agent-cli better — go follow them! ❤️
 
