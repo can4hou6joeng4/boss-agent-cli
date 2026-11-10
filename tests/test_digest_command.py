@@ -312,3 +312,38 @@ def test_digest_reports_second_page_friend_list_error(mock_auth_cls, mock_client
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
+
+
+def test_digest_renders_sections_as_tables(monkeypatch, legacy_args):
+	"""TTY 下三个列表分别走表格，不再把整段 dict 列表塞进面板。
+
+	``new_matches`` / ``follow_ups`` / ``interviews`` 是完整结果项；直接插值进
+	面板会渲染成一大段 repr，几十条时既撑爆面板，也没法扫读公司、职位与未读。
+	"""
+	import io
+
+	from rich.console import Console
+
+	from boss_agent_cli import display
+
+	with patch("boss_agent_cli.commands.digest.get_platform_instance") as mock_platform_cls, patch(
+		"boss_agent_cli.commands.digest.AuthManager"
+	):
+		_setup_digest_mocks(mock_platform_cls)
+		stream = io.StringIO()
+		monkeypatch.setattr(display, "console", Console(file=stream, force_terminal=False, width=100))
+		monkeypatch.setattr(display, "is_json_mode", lambda ctx: False)
+		result = CliRunner().invoke(cli, [*legacy_args, "digest"])
+
+	text = stream.getvalue()
+	assert result.exit_code == 0
+	assert result.output.strip() == ""
+	# 面板只放计数与摘要，列表内容走表格。
+	assert "new_match_count: 1" in text
+	assert "新匹配" in text
+	assert "待跟进" in text
+	assert "面试" in text
+	assert "TestCo" in text
+	assert "请尽快回复" in text
+	# 表格里不再出现被折行的 dict repr。
+	assert "'company':" not in text
