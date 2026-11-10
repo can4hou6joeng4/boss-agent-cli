@@ -28,10 +28,12 @@ jobs:
           fi
 
       - name: 检出仓库
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: master
           token: ${{ secrets.STAR_HISTORY_TOKEN }}
+          # 末尾的 git push 依赖这里留下的凭据。
+          persist-credentials: true
 
       # mystarhistory 没有 pip 包，且脚本需读取同目录的 handlee-subset.woff2（字体内嵌进 SVG），
       # 所以整体克隆并 pin 到 v1；升级时改这里的 SHA 即可。

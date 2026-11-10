@@ -19,7 +19,11 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # 不设 ref：pull_request_target 下默认检出基线分支，绝不检出 PR 的 head。
+          # create-pull-request 推分支依赖这里留下的凭据。
+          persist-credentials: true
 
       - name: Generate contributors SVG
         env:
@@ -29,7 +33,7 @@ jobs:
       # master 为保护分支,且 GITHUB_TOKEN 发起的 PR 不会触发必需检查,
       # 因此有变更时开 PR,由维护者手动合并。
       - name: Create PR if changed
-        uses: peter-evans/create-pull-request@v8
+        uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
         with:
           commit-message: "chore: 更新贡献者名单"
           title: "chore: update contributors"

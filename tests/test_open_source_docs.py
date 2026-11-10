@@ -141,7 +141,7 @@ def test_release_workflow_verifies_artifacts_before_publishing():
 	content = read(".github/workflows/release.yml")
 
 	assert "scripts/verify_release.py" in content
-	assert '--tag "${{ github.ref_name }}"' in content
+	assert '--tag "$GITHUB_REF_NAME"' in content
 	assert "--require-clean" in content
 	assert content.index("scripts/verify_release.py") < content.index("uv publish")
 
@@ -320,6 +320,9 @@ def test_maintainer_docs_cover_open_source_governance():
 	assert "git diff --check master...HEAD" in branch
 	assert "allow_force_pushes" in branch
 	assert "allow_deletions" in branch
+	assert "## Workflow rules" in branch
+	assert "CHECKOUTS_THAT_PUSH" in branch
+	assert "enable-cache: false" in branch
 
 	assert "uv run pytest tests/ -q" in release
 	assert "uv run ruff check src/ tests/" in release
@@ -463,6 +466,127 @@ def test_labeler_workflow_never_runs_pull_request_code():
 	assert workflow["permissions"] == {}
 	job = workflow["jobs"]["label"]
 	assert job["permissions"] == {"contents": "read", "pull-requests": "write"}
+
+
+WORKFLOW_PATHS = sorted(
+	f".github/workflows/{path.name}"
+	for pattern in ("*.yml", "*.yaml")
+	for path in (ROOT / ".github/workflows").glob(pattern)
+)
+USES_LINE = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)[ \t]*(#.*)?$", re.MULTILINE)
+PINNED_ACTION = re.compile(r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}$")
+VERSION_COMMENT = re.compile(r"^# v\d+\.\d+\.\d+$")
+# 这些任务在 checkout 之后要推送提交或分支，必须把令牌留在工作区；其余任务一律不留。
+CHECKOUTS_THAT_PUSH = {
+	(".github/workflows/star-history.yml", "star-history"),
+	(".github/workflows/update-contributors.yml", "update-contributors"),
+}
+
+
+def _workflow_triggers(path: str) -> set[str]:
+	workflow = load_yaml(path)
+	# PyYAML 按 YAML 1.1 把裸键 `on` 解析成布尔值 True
+	triggers = workflow.get("on", workflow.get(True))
+	if isinstance(triggers, str):
+		return {triggers}
+	assert isinstance(triggers, (dict, list)), path
+	return set(triggers)
+
+
+def _workflow_steps(path: str) -> list[tuple[str, dict]]:
+	steps = []
+	for job_name, job in load_yaml(path)["jobs"].items():
+		for step in job.get("steps", []):
+			steps.append((job_name, step))
+	return steps
+
+
+def test_workflow_guards_see_every_workflow():
+	assert len(WORKFLOW_PATHS) >= 9
+	assert ".github/workflows/release.yml" in WORKFLOW_PATHS
+
+
+def test_workflow_actions_are_pinned_to_commit_sha():
+	"""第三方 action 必须钉到完整提交 SHA，并在行尾注明精确版本。
+
+	`@v7` 这类标签可以被上游改指向任意提交；发布工作流持有 PyPI 令牌，任何一个
+	被改写的标签都能读到它。提交 SHA 不可变，Dependabot 按行尾的版本注释照常升级。
+	"""
+	seen = 0
+	for path in WORKFLOW_PATHS:
+		for reference, comment in USES_LINE.findall(read(path)):
+			seen += 1
+			if reference.startswith("./"):
+				continue
+			assert PINNED_ACTION.match(reference), (
+				f"{path}: `{reference}` 没有钉到 40 位提交 SHA；"
+				"写成 `owner/repo@<sha> # vX.Y.Z`（见 docs/maintainer/branch-protection.md）"
+			)
+			assert VERSION_COMMENT.match(comment), (
+				f"{path}: `{reference}` 行尾缺少 `# vX.Y.Z` 版本注释，Dependabot 与评审都靠它识别版本"
+			)
+	assert seen >= 18
+
+
+def test_workflow_run_scripts_do_not_expand_expressions():
+	"""`run:` 脚本里不直接展开 `${{ }}`，取值一律经 `env:` 传入。
+
+	表达式在 shell 解析之前就被替换成原文：标签名、分支名、PR 标题里的引号和分号
+	会变成命令。经环境变量传入后，shell 只把它当作数据。
+	"""
+	checked = 0
+	for path in WORKFLOW_PATHS:
+		for job_name, step in _workflow_steps(path):
+			script = step.get("run")
+			if script is None:
+				continue
+			checked += 1
+			assert "${{" not in script, f"{path} / {job_name}: run 脚本里展开了表达式，改为经 env: 传入"
+	assert checked >= 10
+
+
+def test_pull_request_target_workflows_never_check_out_pull_request_code():
+	"""`pull_request_target` 拿得到写权限和 secret，绝不能检出或引用 PR 的 head。"""
+	targeted = [path for path in WORKFLOW_PATHS if "pull_request_target" in _workflow_triggers(path)]
+	assert ".github/workflows/update-contributors.yml" in targeted
+	for path in targeted:
+		text = read(path)
+		for marker in ("pull_request.head", "github.head_ref", "refs/pull/"):
+			assert marker not in text, f"{path}: pull_request_target 工作流引用了 PR head（{marker}）"
+		for job_name, step in _workflow_steps(path):
+			if str(step.get("uses", "")).startswith("actions/checkout@"):
+				assert "ref" not in (step.get("with") or {}), (
+					f"{path} / {job_name}: pull_request_target 下 checkout 不得指定 ref，默认检出的是基线分支"
+				)
+
+
+def test_release_workflow_does_not_restore_caches():
+	"""发布构建不吃缓存：master 上的 CI 写入的缓存会被带进持有 PyPI 令牌的环境。"""
+	steps = _workflow_steps(".github/workflows/release.yml")
+	setup_uv = [step for _, step in steps if str(step.get("uses", "")).startswith("astral-sh/setup-uv@")]
+	assert len(setup_uv) == 1
+	# setup-uv 的 enable-cache 默认值是 auto，在托管 runner 上等于开启，必须显式关闭
+	assert setup_uv[0]["with"]["enable-cache"] is False
+	for _, step in steps:
+		assert not str(step.get("uses", "")).startswith("actions/cache"), "发布工作流不得使用 actions/cache"
+
+
+def test_checkout_keeps_credentials_only_where_a_push_follows():
+	"""`actions/checkout` 默认把令牌写进 .git/config；不推送的任务必须显式关闭。"""
+	keeps = set()
+	checkouts = 0
+	for path in WORKFLOW_PATHS:
+		for job_name, step in _workflow_steps(path):
+			if not str(step.get("uses", "")).startswith("actions/checkout@"):
+				continue
+			checkouts += 1
+			options = step.get("with") or {}
+			assert "persist-credentials" in options, f"{path} / {job_name}: checkout 必须显式声明 persist-credentials"
+			assert isinstance(options["persist-credentials"], bool), f"{path} / {job_name}"
+			if options["persist-credentials"]:
+				keeps.add((path, job_name))
+	assert checkouts >= 6
+	assert keeps == CHECKOUTS_THAT_PUSH
 
 
 def test_dependabot_stays_low_noise():

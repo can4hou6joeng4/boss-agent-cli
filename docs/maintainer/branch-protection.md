@@ -59,6 +59,48 @@ gh api -X PUT repos/can4hou6joeng4/boss-agent-cli/pulls/<number>/update-branch \
 A manual `workflow_dispatch` run of `ci.yml` on the branch does not attach its
 checks to the pull request.
 
+## Workflow rules
+
+Workflows under `.github/workflows/` hold write tokens and, for `release.yml`,
+the PyPI token. `tests/test_open_source_docs.py` enforces these rules offline,
+so a pull request that breaks one fails the required checks:
+
+- Every `uses:` is pinned to a full commit SHA with the exact version in a
+  trailing comment: `actions/checkout@<40-hex-sha> # v7.0.1`. A tag such as
+  `@v7` can be moved upstream to any commit; a SHA cannot. Dependabot reads the
+  comment and keeps updating both.
+- `run:` scripts never expand `${{ ... }}`. The expression is substituted
+  before the shell parses the script, so quotes in a tag or branch name become
+  code. Pass the value through `env:` or use the runner's own variable
+  (`$GITHUB_REF_NAME`).
+- A `pull_request_target` workflow never checks out or references the pull
+  request head. `update-contributors.yml` checks out the base branch;
+  `labeler.yml` and `dependabot-auto-merge.yml` check out nothing.
+- `release.yml` restores no caches (`enable-cache: false`, no `actions/cache`).
+  CI on `master` writes the uv cache, and a release build that restored it
+  would run whatever that cache contains next to the PyPI token.
+- `actions/checkout` sets `persist-credentials` explicitly. It is `true` only
+  in the jobs listed in `CHECKOUTS_THAT_PUSH` in that test file, which push a
+  commit or a branch afterwards.
+
+To pin a new action, resolve the tag and copy the SHA:
+
+```bash
+gh api repos/<owner>/<repo>/commits/<tag> --jq .sha
+```
+
+An optional local audit covers more than the tests do:
+
+```bash
+uvx zizmor==1.25.2 --persona regular --offline .github/workflows
+```
+
+Four findings are expected and accepted: `dangerous-triggers` on the two
+`pull_request_target` workflows above, and `use-trusted-publishing` and
+`superfluous-actions` on `release.yml`. Moving to PyPI Trusted Publishing needs
+the publisher registered on pypi.org before the token is removed from the
+workflow.
+
 ## Local quality gate
 
 Run the canonical local baseline from a clean worktree rebased onto the current
