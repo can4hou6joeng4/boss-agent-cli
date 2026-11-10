@@ -46,6 +46,31 @@ def test_schema_mcp_tools_exposes_chatmsg_raw_option(tmp_path: Path) -> None:
 	assert "保真" in properties["raw"]["description"]
 
 
+def test_all_tool_formats_declare_no_additional_properties(tmp_path: Path) -> None:
+	"""三种导出格式都要带上与 call_tool 一致的顶层封闭声明。"""
+	runner = CliRunner()
+	for output_format in ("openai-tools", "anthropic-tools", "mcp-tools"):
+		result = runner.invoke(
+			cli,
+			["--data-dir", str(tmp_path), "schema", "--format", output_format],
+		)
+		assert result.exit_code == 0, result.output
+		tools = json.loads(result.output)["data"]["tools"]
+		assert len(tools) == len(build_tool_catalog())
+		schemas: list[tuple[str, dict]] = []
+		for tool in tools:
+			if "inputSchema" in tool:
+				schemas.append((tool["name"], tool["inputSchema"]))
+			elif "input_schema" in tool:
+				schemas.append((tool["name"], tool["input_schema"]))
+			else:
+				schemas.append((tool["function"]["name"], tool["function"]["parameters"]))
+		missing = [
+			name for name, schema in schemas if schema.get("additionalProperties") is not False
+		]
+		assert not missing, f"{output_format} 未声明 additionalProperties: false：{missing}"
+
+
 def test_native_schema_describes_explicit_agent_resume(tmp_path: Path) -> None:
 	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "schema"])
 	assert result.exit_code == 0, result.output

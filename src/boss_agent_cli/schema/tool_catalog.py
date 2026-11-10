@@ -1014,6 +1014,14 @@ def build_tool_catalog(data: dict[str, Any] | None = None) -> list[ToolDefinitio
 	schema = build_schema_with_availability(data)
 	tools = []
 	for tool in _tool_definitions(schema):
+		# call_tool 在进入 CLI 前会拒绝 inputSchema.properties 之外的顶层参数；
+		# 声明 additionalProperties: false 让客户端按同一份契约在发送前校验，
+		# 而不是先发一次才从 INVALID_PARAM 得知。嵌套对象（如 wizard 的 inputs）
+		# 由各 goal 自行解释，因此只约束顶层，新 dict 也避免改写原生 schema。
+		tool = replace(
+			tool,
+			input_schema={**tool.input_schema, "additionalProperties": False},
+		)
 		availability = tool_availability(tool.name, schema)
 		if availability:
 			# availability_note 自带「可用性: 」前缀，这里不能再拼一次，

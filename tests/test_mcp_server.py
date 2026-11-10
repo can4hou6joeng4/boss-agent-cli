@@ -150,6 +150,27 @@ def test_all_tool_schemas_are_well_formed_objects():
 	assert not problems, "工具 schema 结构问题：\n" + "\n".join(problems)
 
 
+def test_every_tool_schema_rejects_unknown_top_level_arguments():
+	"""inputSchema 必须与 call_tool 的未知参数拒绝保持一致。
+
+	服务端在 #776 之后会拒绝 inputSchema 之外的顶层参数；schema 不声明
+	additionalProperties: false 时，客户端按 schema 校验不会拦下拼错的参数，
+	Agent 只能通过一次失败的调用才知道契约。
+	"""
+	missing = [
+		tool.name
+		for tool in TOOLS
+		if (tool.input_schema or {}).get("additionalProperties") is not False
+	]
+	assert not missing, "工具 schema 未声明 additionalProperties: false：\n" + "\n".join(missing)
+
+
+def test_nested_tool_objects_are_not_marked_strict():
+	"""只约束顶层：wizard 的 inputs 由各 goal 自行解释，不能误标为封闭对象。"""
+	wizard = next(t for t in TOOLS if t.name == "boss_wizard")
+	assert "additionalProperties" not in wizard.input_schema["properties"]["inputs"]
+
+
 def test_candidate_tool_description_includes_availability():
 	search = next(t for t in TOOLS if t.name == "boss_search")
 	assert "可用性:" in search.description
