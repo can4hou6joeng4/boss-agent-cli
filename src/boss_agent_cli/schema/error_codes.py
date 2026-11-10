@@ -345,12 +345,12 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recovery_action": "缓存库只存本地数据：先备份 cache/boss_agent.db（--data-dir 指定时在对应目录下），再删除该文件后重试，命令会自动重建一个空库",
 	},
 	"RECRUITER_NOT_AUTHORIZED": {
-		"message": "当前账号非招聘者账号",
+		"message": "当前账号非招聘者账号（当前版本不主动产生）",
 		"recoverable": True,
 		"recovery_action": "切换招聘者账号或使用 --role candidate",
 	},
 	"RESUME_NOT_SHARED": {
-		"message": "候选人未分享简历",
+		"message": "候选人未分享简历（当前版本不主动产生）",
 		"recoverable": True,
 		"recovery_action": "使用 boss hr request-resume <friend_id> 请求附件简历",
 	},
