@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PRE_COMMIT_CONFIG = ROOT / ".pre-commit-config.yaml"
 PYPROJECT = ROOT / "pyproject.toml"
 SOURCE_ROOT = ROOT / "src" / "boss_agent_cli"
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 
 def _ruff_hooks() -> list[tuple[dict[str, Any], dict[str, Any]]]:
@@ -79,3 +80,21 @@ def test_mypy_strict_overrides_cover_every_source_module() -> None:
 
 	stale = sorted(entry for entry in strict if not entry.endswith(".*") and entry not in modules)
 	assert not stale, f"mypy 严格 overrides 登记了不存在的模块：{stale}"
+
+
+def test_ci_test_matrix_covers_declared_python_classifiers() -> None:
+	"""CI 必须实测 pyproject 声明的每个 Python 3.x 版本。
+
+	3.13 曾在 CI 重写时被无声丢掉，而 classifiers 仍声明支持；声明了却不测，
+	3.13 用户会先于 CI 撞上兼容性问题。
+	"""
+	config = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+	matrix = set(config["jobs"]["test"]["strategy"]["matrix"]["python-version"])
+	classifiers = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]["classifiers"]
+	declared = {
+		classifier.rsplit("::", 1)[1].strip()
+		for classifier in classifiers
+		if classifier.startswith("Programming Language :: Python :: 3.")
+	}
+
+	assert declared <= matrix, f"CI 矩阵缺少已声明支持的 Python 版本：{sorted(declared - matrix)}"

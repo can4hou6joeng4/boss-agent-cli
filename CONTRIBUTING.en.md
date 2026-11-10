@@ -85,7 +85,7 @@ Before investing in promotion, examples, or integrations, check those passive si
    ```
 5. **Commit** atomically — one logical change per commit.
 6. **Push** and open a PR against `master`.
-7. **CI green** is a hard prerequisite before merge: the `CI` workflow runs ruff / mypy / pre-commit and tests on Python 3.11, 3.12 and 3.14 for every PR (fork PRs included, no secrets needed), plus CodeQL and GitGuardian scans. Tests are fully offline; don't add tests that need the network, a real browser or a real account.
+7. **CI green** is a hard prerequisite before merge: the `CI` workflow runs ruff / mypy / pre-commit and tests on Python 3.11, 3.12, 3.13 and 3.14 for every PR (fork PRs included, no secrets needed), plus CodeQL and GitGuardian scans. Tests are fully offline; don't add tests that need the network, a real browser or a real account.
 
 Maintainers will `squash merge`, so the squash title must follow the commit convention above.
 
