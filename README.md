@@ -210,7 +210,7 @@ CLI (Click)
 ## ❤️ 支持
 
 - 如果它帮到了你，最直接的支持是点一个 [Star ⭐](https://github.com/can4hou6joeng4/boss-agent-cli)，或分享给正在找工作的人。
-- 用出问题、有新想法，欢迎提 [Issue](https://github.com/can4hou6joeng4/boss-agent-cli/issues)；想动手就直接上 PR。
+- 用出问题、有新想法，欢迎提 [Issue](https://github.com/can4hou6joeng4/boss-agent-cli/issues)；想动手就直接上 PR。安全漏洞请按 [SECURITY.md](SECURITY.md) 私密报告，不要公开提 Issue。
 - 需要帮助？先看 [获取支持](SUPPORT.md)：文档入口、Discussions、Issue 与私密安全报告的正确去处。
 - 想看看船队的其他船，欢迎靠泊母港 [bobochang.cn](https://bobochang.cn) 🧭，航海记录在[掘金专栏](https://juejin.cn/user/1187904004821262)。
 
