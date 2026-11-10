@@ -291,7 +291,79 @@ def test_next_actions_are_accepted_by_the_cli(tmp_path: Any) -> None:
 	assert failures == []
 
 
-def test_local_record_lookups_do_not_report_job_not_found() -> None:
+def _boss_command_argument_literals() -> list[tuple[str, int, str]]:
+	"""收集 ``boss_command_for_ctx(ctx, "...")`` 里能静态求值的子命令实参。"""
+	import ast
+
+	def render(node: ast.AST) -> str | None:
+		if isinstance(node, ast.Constant) and isinstance(node.value, str):
+			return node.value
+		if isinstance(node, ast.JoinedStr):
+			parts: list[str] = []
+			for value in node.values:
+				parts.append(str(value.value) if isinstance(value, ast.Constant) else "1")
+			return "".join(parts)
+		return None
+
+	found: list[tuple[str, int, str]] = []
+	root = Path(__file__).resolve().parent.parent / "src" / "boss_agent_cli"
+	for path in sorted(root.rglob("*.py")):
+		tree = ast.parse(path.read_text(encoding="utf-8"))
+		parents: dict[ast.AST, ast.AST] = {}
+		for parent in ast.walk(tree):
+			for child in ast.iter_child_nodes(parent):
+				parents[child] = parent
+		for node in ast.walk(tree):
+			if not (
+				isinstance(node, ast.Call)
+				and isinstance(node.func, ast.Name)
+				and node.func.id == "boss_command_for_ctx"
+				and len(node.args) >= 2
+			):
+				continue
+			parent = parents.get(node)
+			# `boss_command_for_ctx(ctx, "batch-greet").split(" ")` 只取命令前缀，
+			# 调用者随后还会拼接参数，不能单拿字面量校验。
+			if isinstance(parent, ast.Attribute) and parent.attr == "split":
+				continue
+			text = render(node.args[1])
+			if text is not None:
+				found.append((str(path.relative_to(root)), node.lineno, text))
+	return found
+
+
+def test_boss_command_for_ctx_literals_are_accepted_by_the_cli(tmp_path: Any) -> None:
+	"""``boss_command_for_ctx`` 的静态子命令实参也要能被 CLI 接受。
+
+	``hints`` / ``recovery_action`` 里的命令大多由 ``boss_command_for_ctx(ctx, "...")``
+	拼出：实参不含 ``boss`` 前缀，也不经过 ``next_actions`` 字面量扫描，写错选项
+	时只有 Agent 在执行 hint 的那一刻才会失败。这里按 AST 收集第二参数能静态
+	求值的调用点，把 ``<占位符>`` 掩码成合法取值后逐条追加 ``--help`` 交给 CLI，
+	只校验解析、不执行命令。
+	"""
+	import re
+	import shlex
+
+	command_literals = _boss_command_argument_literals()
+	assert len(command_literals) >= 150, f"只收集到 {len(command_literals)} 条，AST 扫描可能失效"
+	runner = CliRunner()
+	failures: list[str] = []
+	for path, line, text in command_literals:
+		text = re.sub(r"<[^<>\s]+>", "1", text)
+		try:
+			argv = shlex.split(text)
+		except ValueError:
+			failures.append(f"{path}:{line} 无法按 shell 解析：{text}")
+			continue
+		if argv and argv[0] == "boss":
+			argv = argv[1:]
+		result = runner.invoke(cli, ["--data-dir", str(tmp_path), *argv, "--help"])
+		if result.exit_code != 0:
+			failures.append(f"{path}:{line} 退出码 {result.exit_code}：{text}")
+	assert failures == []
+
+
+
 	"""本地 / 会话侧记录缺失有自己的错误码，``JOB_NOT_FOUND`` 只表示平台职位不存在。
 
 	crawl run、preset / watch、联系人、workflow run 都不是职位：报成
