@@ -13,6 +13,7 @@ from boss_agent_cli.commands.register import register_candidate_commands, regist
 from boss_agent_cli.config import (
 	CDP_URL_REQUIREMENT,
 	DEFAULT_REQUEST_DELAY,
+	DEFAULTS,
 	ROLES,
 	is_valid_cdp_url,
 	load_config,
@@ -841,16 +842,36 @@ def cli(
 			) from exc
 	else:
 		# Config inspection/reset must remain available to repair an invalid limit.
-		ctx.obj["delay"] = (
-			tuple(cfg["request_delay"]) if isinstance(cfg["request_delay"], (list, tuple)) else DEFAULT_REQUEST_DELAY
-		)
+		raw_delay = cfg["request_delay"]
+		if not isinstance(raw_delay, (list, tuple)):
+			# 坏形状不能静默换成默认值：用户以为节流配置已生效，实际每条命令
+			# 都按默认区间跑，风控节奏与感知不符。config 子命令放行以便 reset。
+			if ctx.invoked_subcommand != "config":
+				raise click.BadParameter(
+					f"request_delay 必须是两个数值的数组，收到 {raw_delay!r}",
+					param_hint="config.json",
+				)
+			raw_delay = DEFAULT_REQUEST_DELAY
+		ctx.obj["delay"] = tuple(raw_delay)
 	if ctx.invoked_subcommand != "config":
 		try:
 			validate_request_config({**cfg, "request_delay": ctx.obj["delay"]})
 		except ValueError as exc:
 			raise click.BadParameter(str(exc), param_hint="config.json") from exc
 
-	level = log_level or cfg["log_level"]
+	raw_level = log_level or cfg["log_level"]
+	# Logger 对未知级别会静默回退到 error 阈值：config.json 手改出的坏值会让
+	# 用户以为 debug 已打开却什么都看不到。与 cdp_url 同规则放行 config 子命令，
+	# 但归一成合法默认值再交给 Logger，避免非字符串在字典查找处抛 TypeError。
+	if isinstance(raw_level, str) and raw_level in LOG_LEVELS:
+		level = raw_level
+	elif ctx.invoked_subcommand == "config":
+		level = DEFAULTS["log_level"]
+	else:
+		raise click.BadParameter(
+			f"必须是 {' / '.join(LOG_LEVELS)} 之一，收到 {raw_level!r}",
+			param_hint="config.json 的 log_level",
+		)
 	ctx.obj["log_level"] = level
 	ctx.obj["logger"] = Logger(level)
 	resolved_cdp_url = cdp_url or cfg.get("cdp_url")
