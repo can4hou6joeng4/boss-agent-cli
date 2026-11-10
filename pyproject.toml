@@ -313,6 +313,14 @@ module = [
 	"boss_agent_cli.wizard.renderer",
 	"boss_agent_cli.wizard.runner",
 	"boss_agent_cli.wizard.store",
+	"boss_agent_cli.ai",
+	"boss_agent_cli.api",
+	"boss_agent_cli.auth",
+	"boss_agent_cli.cache",
+	"boss_agent_cli.commands",
+	"boss_agent_cli.crawler",
+	"boss_agent_cli.resume",
+	"boss_agent_cli.wizard",
 ]
 disallow_untyped_defs = true
 disallow_any_generics = true
