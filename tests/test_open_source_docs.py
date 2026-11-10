@@ -703,6 +703,8 @@ def test_support_docs_route_every_request_channel():
 
 	assert "[获取支持](SUPPORT.md)" in read("README.md")
 	assert "[Getting Support](SUPPORT.en.md)" in read("README.en.md")
+	assert "](SECURITY.md)" in read("README.md")
+	assert "](SECURITY.md)" in read("README.en.md")
 
 
 def test_code_of_conduct_is_reachable_from_entry_docs():

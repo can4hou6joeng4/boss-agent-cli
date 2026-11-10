@@ -213,7 +213,7 @@ Thanks to everyone who has made boss-agent-cli better — go follow them! ❤️
 ## ❤️ Support
 
 - If this project helps you, the most direct support is a [Star ⭐](https://github.com/can4hou6joeng4/boss-agent-cli), or sharing it with someone who is job hunting.
-- Hit a problem or have an idea? Open an [Issue](https://github.com/can4hou6joeng4/boss-agent-cli/issues) — or go straight to a PR.
+- Hit a problem or have an idea? Open an [Issue](https://github.com/can4hou6joeng4/boss-agent-cli/issues) — or go straight to a PR. For security vulnerabilities, report privately via [SECURITY.md](SECURITY.md) — do not open a public issue.
 - Need help? Start with [Getting Support](SUPPORT.en.md): docs entry points, Discussions, Issues, and private security reporting.
 - Curious about the rest of the fleet? Drop anchor at the home port [bobochang.cn](https://bobochang.cn) 🧭.
 
