@@ -183,6 +183,34 @@ def test_automation_config_empty_allowed_actions_skips_every_action() -> None:
 	assert status_for_decision(config, decision, dry_run=False) is EventStatus.SKIPPED
 
 
+@pytest.mark.parametrize(
+	"raw",
+	[
+		{"tabs": "新招呼"},
+		{"tabs": None},
+		{"tabs": 3},
+		{"tabs": ["新招呼", 1]},
+	],
+)
+def test_automation_config_rejects_malformed_tabs(raw) -> None:
+	"""tabs 必须是字符串数组。
+
+	旧实现对值直接迭代：字符串 ``"新招呼"`` 被拆成 ``("新", "招", "呼")``，
+	执行层匹配不到任何 tab，自动化空转却报成功；``null`` / 数字则抛未包装的
+	TypeError，命令以内部错误退出。
+	"""
+	with pytest.raises(ValueError, match="tabs"):
+		automation_config_from_dict(raw)
+
+
+@pytest.mark.parametrize("key", ["questionnaire_message", "follow_up_message"])
+@pytest.mark.parametrize("value", [None, 123, "", "   "])
+def test_automation_config_rejects_malformed_messages(key, value) -> None:
+	"""话术会原样发给候选人：null 经 str() 变成 "None"，空串等于发送空消息。"""
+	with pytest.raises(ValueError, match=key):
+		automation_config_from_dict({key: value})
+
+
 def test_decision_sends_questionnaire_for_high_confidence_new_candidate() -> None:
 	config = AutomationConfig()
 	conversation = _conversation(
