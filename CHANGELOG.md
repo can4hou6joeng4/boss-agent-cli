@@ -6,6 +6,7 @@
 
 ### Added
 - 新增两条双语文档守卫（Issue #751）：`tests/test_open_source_docs.py::test_bilingual_docs_share_the_same_heading_structure` 要求 12 对中英对照文档的标题层级序列一致，一侧新增章节而另一侧没跟上就失败；`::test_troubleshooting_error_tables_list_the_same_registered_codes` 要求两个排障文档的错误码表列出同一组码，且每个码都在 `ERROR_CODES` 里登记。
+- 新增 [SUPPORT.md](SUPPORT.md) 与英文版 [SUPPORT.en.md](SUPPORT.en.md)（Issue #755）：集中说明先看哪些文档、使用问题 / 可复现 Bug / 安全漏洞各自该走哪个渠道、提问要附的信息与脱敏要求、响应预期与 stale 策略；README 中英「支持」一节与 CONTRIBUTING 的「有问题？」段落加入口。双语文档标题结构守卫扩展到 SUPPORT（13 对），新增 `test_support_docs_route_every_request_channel` 守卫四类入口齐全且 README 可到达。
 
 ### Changed
 - 本地提交门禁与 CI 统一到同一份 ruff（Issue #749）：pre-commit 的 ruff 钩子从 `ruff-pre-commit` v0.8.6 改为 `repo: local` + `uv run ruff check --fix`，直接用 `uv.lock` 里的版本；此前钩子自己装一份，与 CI 的 `uv run ruff check`（0.17.4）长期是两个 linter。`.github/dependabot.yml` 增加 `pre-commit` 生态，`pre-commit-hooks` 升到 v6.0.0；新增 `tests/test_quality_gates.py` 锁住「ruff 只在项目环境里跑」这一约束。

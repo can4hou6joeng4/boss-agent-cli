@@ -198,4 +198,4 @@ uv run python evals/run_eval.py --mode fixture
 
 ## 有问题？
 
-欢迎在 [Discussions](https://github.com/can4hou6joeng4/boss-agent-cli/discussions) 发帖，或在相关 [Issue](https://github.com/can4hou6joeng4/boss-agent-cli/issues) 下留言。
+欢迎在 [Discussions](https://github.com/can4hou6joeng4/boss-agent-cli/discussions) 发帖，或在相关 [Issue](https://github.com/can4hou6joeng4/boss-agent-cli/issues) 下留言；完整的求助渠道与提问清单见 [获取支持](SUPPORT.md)。

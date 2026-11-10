@@ -198,4 +198,4 @@ You don't need to write code to help:
 
 ## Questions?
 
-Open a [Discussion](https://github.com/can4hou6joeng4/boss-agent-cli/discussions) or comment on a related [Issue](https://github.com/can4hou6joeng4/boss-agent-cli/issues).
+Open a [Discussion](https://github.com/can4hou6joeng4/boss-agent-cli/discussions) or comment on a related [Issue](https://github.com/can4hou6joeng4/boss-agent-cli/issues). For every channel and what to include, see [Getting Support](SUPPORT.en.md).
