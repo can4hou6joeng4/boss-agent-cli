@@ -330,6 +330,13 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--page", str(arguments["page"])])
 		return args
 
+	if name == "history":
+		args = ["history"]
+		# 与 favorites_list 同一取舍：显式传入的 0 交给 CLI 拒绝，不静默改写。
+		if arguments.get("page") is not None:
+			args.extend(["--page", str(arguments["page"])])
+		return args
+
 	if name == "shortlist_add":
 		args = ["shortlist", "add", arguments["security_id"], arguments["job_id"]]
 		if arguments.get("lid"):
@@ -500,5 +507,5 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "hr_jobs_detail":
 		return ["hr", "jobs", "detail", str(arguments["enc_job_id"])]
 
-	# 无参数命令：status, doctor, cities, interviews, history, pipeline
+	# 无参数命令：status, doctor, cities, interviews, pipeline
 	return [name]

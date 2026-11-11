@@ -668,6 +668,15 @@ def test_build_args_history():
 	assert _build_args("boss_history", {}) == ["history"]
 
 
+def test_build_args_history_forwards_page():
+	assert _build_args("boss_history", {"page": 3}) == ["history", "--page", "3"]
+
+
+def test_build_args_history_forwards_explicit_zero_page():
+	"""page=0 原样下发，由 CLI 的 IntRange(1) 拒绝，不静默换成第 1 页。"""
+	assert _build_args("boss_history", {"page": 0}) == ["history", "--page", "0"]
+
+
 def test_build_args_search_basic():
 	"""搜索只传 query 时应返回最小参数。"""
 	args = _build_args("boss_search", {"query": "python"})

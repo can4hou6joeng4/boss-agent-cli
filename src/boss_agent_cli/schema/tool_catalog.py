@@ -228,8 +228,14 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_history",
-			description="查看浏览历史",
-			input_schema={"type": "object", "properties": {}, "required": []},
+			description="查看浏览历史，支持 --page 翻页",
+			input_schema={
+				"type": "object",
+				"properties": {
+					"page": {"type": "integer", "description": "页码", "default": 1},
+				},
+				"required": [],
+			},
 		),
 		ToolDefinition(
 			name="boss_chatmsg",
