@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增信封 `command` 词汇表守卫（Issue #809）：成功 / 错误路径（含 `@handle_auth_errors` 装饰器）逐个 AST 收集 command 字面量，要求每个取值都是 `boss schema` 的 39 个一级命令之一或显式登记的 53 个遗留值；新增第四种命名风格会在本地门禁失败。遗留清单同时做双向校验——不得与一级命令重名，也不得留下没有调用点再产出的死条目。词汇表本身仍留给 Issue #809 拍板，迁移落地时逐项删除。
 - 索引快照增加页码：`search --page N` / `recommend --page N` 写入索引时记录 `page`，`boss show <#>` 的 `data.index_snapshot` 与 `search` / `recommend` 的 `pagination.index_snapshot` 都返回该字段，TTY 详情行显示「第 N 页」。此前的快照只能靠 `saved_at` 区分，Agent 从第 1 页记下的编号在翻到第 2 页后无法仅凭 `source` 判断已失效；旧版本写入的缓存没有该字段，返回 `null`。
 - `search` / `recommend` 的成功信封在 `pagination.index_snapshot` 返回本次写入的索引快照身份（`source` / `count` / `saved_at`），与 `boss show <#>` 的 `data.index_snapshot` 使用同一结构：Agent 拿到「结果 #3」时可以当场记下它属于哪份快照，而不必先 `show` 一次才知道编号是否已被后续搜索覆盖。索引写入失败时不带该字段，避免把陈旧编号归到本次结果。缓存命中路径同样重新读取快照；快照身份不写入搜索缓存，避免缓存命中后返回过期时间。新增单元测试与 search 两条路径、recommend 的集成断言。
 - `boss show <#>` 的输出新增 `data.index_snapshot`：编号只对最近一次 `search` / `recommend` 写入的索引快照有效，而缓存每次整份覆盖——重跑搜索后，Agent 手里的「结果 #3」会静默指向另一个职位，原输出只有 `index`，无法察觉引用已过期。现在成功信封返回 `source`（`search:<关键词>` 或 `recommend`）、`count` 与 `saved_at`（Unix 秒），TTY 详情面板下方同步显示编号来源与保存时间；命令参考与 agent-quickstart 中英说明「编号随快照失效、需重新定位」。新增 JSON 与 TTY 两条测试。
