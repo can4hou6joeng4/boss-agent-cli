@@ -727,12 +727,22 @@ def results_cmd(ctx: click.Context, run_id: str, page: int | None, detail_status
 	except CacheRecordInvalid as exc:
 		_report_corrupt_run(ctx, "crawl.results", run_id, exc)
 		return
+	# 后继导入必须明确选择范围：缺少 --selector / --all 会被 shortlist 拒绝。
+	# 使用本次实际返回的 selector，保留页码和详情状态筛选的结果范围。
+	argv = ["--data-dir", str(ctx.obj["data_dir"].resolve()), "crawl"]
+	if payload["jobs"]:
+		argv.extend(["shortlist", run_id])
+		for job in payload["jobs"]:
+			argv.extend(["--selector", str(job["selector"])])
+	else:
+		argv.extend(["status", run_id])
+	next_steps = [boss_command_for_ctx(ctx, " ".join(shell_argument(part) for part in argv))]
 	handle_output(
 		ctx,
 		"crawl.results",
 		payload,
-		render=lambda d: render_record_result(d, title="crawl results", next_steps=[f"boss crawl shortlist {shell_argument(run_id)}"]),
-		hints={"next_actions": [f"boss crawl shortlist {shell_argument(run_id)}"]},
+		render=lambda d: render_record_result(d, title="crawl results", next_steps=next_steps),
+		hints={"next_actions": next_steps},
 	)
 
 
