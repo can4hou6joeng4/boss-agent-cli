@@ -8,6 +8,7 @@
 boss schema                            # 完整能力 JSON（Agent 首先调用）
 boss schema --format openai-tools      # 导出 OpenAI Functions / Tools 定义
 boss schema --format anthropic-tools   # 导出 Claude Tool Use 定义
+boss schema --format mcp-tools         # 导出 Model Context Protocol Tools 定义
 boss <命令> --help                      # 查看单个命令选项
 ```
 

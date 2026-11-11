@@ -9,6 +9,7 @@
 boss schema                            # full capability JSON (agents call this first)
 boss schema --format openai-tools      # export OpenAI Functions / Tools definitions
 boss schema --format anthropic-tools   # export Claude Tool Use definitions
+boss schema --format mcp-tools         # export Model Context Protocol Tools definitions
 boss <cmd> --help                      # options for a single command
 ```
 

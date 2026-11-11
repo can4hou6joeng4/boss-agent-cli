@@ -877,7 +877,13 @@ _COMMAND_PLACEHOLDERS = ("{", "}", "$", "`", "...", "|", "/path/to/")
 
 def _documented_boss_commands() -> list[tuple[str, int, str]]:
 	"""收集 README 与 docs 下 shell 代码块里以 ``boss `` 开头的示例命令。"""
-	paths = [Path("README.md"), Path("README.en.md"), *sorted(Path("docs").rglob("*.md"))]
+	paths = [
+		Path("README.md"),
+		Path("README.en.md"),
+		Path("mcp-server/README.md"),
+		Path("mcp-server/README.en.md"),
+		*sorted(Path("docs").rglob("*.md")),
+	]
 	commands: list[tuple[str, int, str]] = []
 	for path in paths:
 		if not (ROOT / path).exists():
