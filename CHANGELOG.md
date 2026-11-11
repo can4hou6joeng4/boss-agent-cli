@@ -46,6 +46,7 @@
 - 加固 GitHub 工作流（Issue #747）：全部 18 处 `uses:` 从 `@v7` 这类可移动标签改为完整提交 SHA 并在行尾注明精确版本；`release.yml` 的标签名改用 `$GITHUB_REF_NAME`，不再在 `run:` 脚本里展开 `${{ github.ref_name }}`；发布构建关闭 `setup-uv` 缓存，避免 `master` 上 CI 写入的缓存被带进持有 PyPI 令牌的环境；不需要推送的任务（CI、Pages、发布）的 `actions/checkout` 设 `persist-credentials: false`。各工作流的触发条件与行为不变。`tests/test_open_source_docs.py` 新增 6 条离线守卫（SHA 钉版与版本注释、`run:` 不展开表达式、`pull_request_target` 不检出 PR head、发布不吃缓存、checkout 凭据逐任务登记），`docs/maintainer/branch-protection.md` 新增「Workflow rules」一节。
 
 ### Fixed
+- `chatmsg --raw` 的翻页提示保留 `--raw`：此前下一页命令只带 `--page` / `--count`，翻页后 `type_code` / `timestamp` / `body` / `links` / `security_id` 等保真字段全部消失，Agent 会以为这些字段只在第一页存在。回归测试断言提示含 `--raw` 且可被 CLI 解析，未请求 `--raw` 时提示保持原样。
 - `search` 的下一页提示保留本次调用条件：此前只重建关键词与页码，城市 / 薪资 / 经验 / 学历 / 行业 / 规模 / 融资阶段 / 职位类型、`--url` 网页筛选、`--with-score`、`--sort score`、`--no-cache` 全部丢失，Agent 照提示翻页会拿到另一组结果却以为在继续上一页。现在下一页命令与本次调用同条件、只换页码，`--preset` 展开为等价显式筛选，值按 POSIX shell 规则转义；终端 `more:` 提示与信封 `next_actions` 使用同一条命令。带 `--welfare` / `--active` 的搜索分页语义不同，仍不提供下一页提示。搜索缓存 schema 相应升级，旧缓存条目不再复用。回归测试解析提示并交给 CLI 校验，覆盖中文关键词、多筛选、URL、引号与无下一页路径。
 - `recommend` 的下一页提示保留 `--with-score`：此前只写 `--page N+1`，带匹配分翻页后 `match_score` / `match_reasons` 静默消失。
 - `batch-greet --dry-run` 的执行提示保留全局上下文：此前只重建职位筛选与数量上限，丢失自定义数据目录和显式的 `--browser-source` / `--cdp-url` / `--delay`，照提示执行会改用默认目录的登录态与去重缓存，并静默回退到默认浏览器通道和节流区间。现在提示始终携带当前数据目录，命令行显式给出的通道、CDP 地址与节流区间原样保留，路径与关键字继续按 shell 规则转义；配置文件中同名的值随数据目录重新读取，不重复下发。新增断言锁定显式全局选项与选项顺序。

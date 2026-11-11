@@ -91,9 +91,13 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int, sho
 			boss_command_for_ctx(ctx, f"detail {fresh_security_id}"),
 		]}
 		if pagination["has_more"] is True:
-			hints["next_actions"].append(boss_command_for_ctx(
-				ctx, f"chatmsg {gid} --page {pagination['page'] + 1} --count {count}",
-			))
+			# 翻页命令必须保留 --raw：只写 --page / --count 时下一页的
+			# type_code / timestamp / body / links / security_id 全部消失，
+			# Agent 会以为保真字段只在第一页存在。
+			next_page = f"chatmsg {gid} --page {pagination['page'] + 1} --count {count}"
+			if show_raw:
+				next_page += " --raw"
+			hints["next_actions"].append(boss_command_for_ctx(ctx, next_page))
 		elif pagination["has_more"] is None:
 			hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]
 
