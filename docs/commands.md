@@ -200,6 +200,8 @@ boss crawl stop <run_id>
 
 `hr applications` / `hr chat` / `hr candidates` / `hr recommendations` / `hr last-messages` 的列表响应在信封 `pagination` 给出分页证据：`has_more` 只在平台返回布尔 `hasMore` 时为 `true` / `false`，缺失或类型不明确时为 `null`（`has_more_source=unknown`）；`total` 是本页返回条数（`total_kind=returned_page_count`），不代表平台全集。只有 `has_more=true` 才在 `hints.next_actions` 附加保留筛选条件的下一页命令；`null` 时 `hints.operator_actions` 说明不能仅凭本页条数判断是否还有记录。`hr last-messages` 用 `--friend-id` 直查时没有列表页，`pagination` 为 `null`。
 
+`hr chatmsg` 用 `--max-msg-id` 游标向更早消息翻页，信封 `pagination` 相应给出游标证据：`has_more` 只在平台返回布尔 `hasMore` 时取 `true` / `false`，缺失或类型不明确时为 `null`（`has_more_source=unknown`）；`total` 是本页消息条数（`total_kind=returned_page_count`）；`next_max_msg_id` 是本页最旧的可用 `mid`，没有可解析的消息 ID 时为 `null`。只有 `has_more=true` 且存在游标时，`hints.next_actions` 才附加保留本次 `--count` 的下一页命令；`null` 时 `hints.operator_actions` 说明不能凭本页条数判断。游标分页没有页码，因此该命令的 `pagination` 不含 `page`。
+
 `greet` 只发送首次招呼，不建立 MQTT 连接、不清理红点。成功返回 `sent=true`；若发送后本地记录失败，错误信封仍在 `error.details.sent=true` 保留已发送事实，不能因此重发。BOSS 外层 `code=0` 也可能返回权益拦截页；CLI 会识别这类业务拒绝，返回 `GREET_LIMIT`、`error.details.sent=false` 和脱敏平台提示，保留拒绝状态以阻止重发。平台可能按职位限制免费沟通人数，不能把调用方配置的日额度当作平台保证。`chat` / `last-messages` 中未知未读数保留为 `null`，不当作零。
 
 `hr location` 向**已经存在**的候选人会话发送该职位的工作地点卡片。它不接受推荐卡片上的 `securityId`：真正发送前先读本次 `friend_detail`，用其中的会话级 `securityId` 和内部 `jobId` 调用 `POST /wapi/zpchat/message/sendJobLocation`（表单字段 `jobId`、`toUserId`、`securityId`），并且只发一次。不加参数时返回 `CONFIRMATION_REQUIRED`；`--dry-run` 只预览、不登录、不请求平台。`boss agent stop` 打开的 `automation/stop.json` 会在任何请求之前拒绝。同一 `friend_id` 已发送过记为 `LOCATION_ALREADY_SENT`；发送结果未确认时保留本地预约并返回 `LOCATION_RESULT_UNKNOWN`，禁止自动重发。成功信封的 `data.sent` 为 `true`，并给出 `job_id` / `job_name`，不回显 `securityId`。

@@ -9,7 +9,7 @@ from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.services.chat_utils import MSG_STATUS_LABELS
+from boss_agent_cli.services.chat_utils import MSG_STATUS_LABELS, message_list
 from boss_agent_cli.services.pagination import (
 	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
 	list_pagination,
@@ -75,6 +75,36 @@ def _list_dict_items(value: Any) -> list[dict[str, Any]]:
 	if isinstance(value, list):
 		return [item for item in value if isinstance(item, dict)]
 	return []
+
+
+def _message_cursor_id(value: Any) -> int | None:
+	"""消息 ``mid`` 是正整数或数字字符串；其他形状不能当游标。"""
+	if isinstance(value, bool):
+		return None
+	if isinstance(value, int):
+		return value if value > 0 else None
+	if isinstance(value, str) and value.strip().isdigit():
+		cursor = int(value.strip())
+		return cursor if cursor > 0 else None
+	return None
+
+
+def _chat_history_pagination(data: Any) -> dict[str, Any]:
+	"""聊天历史用游标分页：复用三态 ``hasMore``，下一页游标取本页最旧的 ``mid``。
+
+	平台把 ``hasMore`` 放在响应顶层；页码字段对 ``--max-msg-id`` 不适用，因此
+	这里不返回 ``page``。
+	"""
+	messages = message_list(data)
+	pagination = list_pagination(data, page=1, rows=messages)
+	pagination.pop("page", None)
+	mids = [
+		mid
+		for msg in messages
+		if isinstance(msg, dict) and (mid := _message_cursor_id(msg.get("mid"))) is not None
+	]
+	pagination["next_max_msg_id"] = min(mids) if mids else None
+	return pagination
 
 
 def _friend_data(data: Any) -> dict[str, Any]:
@@ -515,12 +545,22 @@ def recruiter_chatmsg_cmd(ctx: click.Context, friend_id: int, count: int, max_ms
 			handle_platform_error_output(ctx, "recruiter-chatmsg", platform, result, fallback_message="聊天记录获取失败")
 			return
 		data = platform.unwrap_data(result) or {}
+		pagination = _chat_history_pagination(data)
+		hints: dict[str, list[str]] = {"next_actions": [
+			boss_command_for_ctx(ctx, f"hr reply {friend_id} <message>"),
+			boss_command_for_ctx(ctx, "hr chat"),
+		]}
+		if pagination["has_more"] is True and pagination["next_max_msg_id"] is not None:
+			hints["next_actions"].append(boss_command_for_ctx(
+				ctx,
+				f"hr chatmsg {friend_id} --max-msg-id {pagination['next_max_msg_id']} --count {count}",
+			))
+		elif pagination["has_more"] is None:
+			hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]
 		handle_output(
 			ctx, "recruiter-chatmsg", data,
-			hints={"next_actions": [
-				boss_command_for_ctx(ctx, f"hr reply {friend_id} <message>"),
-				boss_command_for_ctx(ctx, "hr chat"),
-			]},
+			pagination=pagination,
+			hints=hints,
 		)
 
 
