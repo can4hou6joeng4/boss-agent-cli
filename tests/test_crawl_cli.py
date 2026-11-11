@@ -11,6 +11,7 @@ an agent's parser.
 """
 
 import json
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -610,6 +611,93 @@ def test_results_filters_by_page_and_detail_status(tmp_path):
 
 	completed = _envelope(_invoke(runner, tmp_path, "crawl", "results", "run-1", "--detail-status", "completed"))["data"]
 	assert [job["detail_done"] for job in completed["jobs"]] == [True]
+
+
+@pytest.mark.parametrize("run_id", ["run-1", "run 'quoted'; $HOME"])
+@pytest.mark.parametrize(
+	"filters, selected_indexes",
+	[
+		((), [0, 1, 2]),
+		(("--page", "2"), [1]),
+		(("--detail-status", "completed"), [0]),
+		(("--page", "2", "--detail-status", "pending"), [1]),
+	],
+)
+def test_results_import_hint_runs_with_visible_selection(tmp_path, monkeypatch, run_id, filters, selected_indexes):
+	"""直接执行后继命令：使用原目录，只导入当前结果中的职位。"""
+	data_dir = tmp_path / "saved 'crawl'; $STATE"
+	_seed_run(data_dir, run_id, jobs=0)
+	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+		for index in range(3):
+			cache.put_crawl_job(
+				run_id,
+				f"job-{index}",
+				page_no=index + 1,
+				payload={"security_id": f"sec-{index}", "job_id": f"job-{index}", "title": f"测试职位 {index}"},
+				detail_done=index == 0,
+			)
+	default_home = tmp_path / "default-home"
+	monkeypatch.setenv("HOME", str(default_home))
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(data_dir), "--json", "crawl", "results", run_id, *filters])
+	assert result.exit_code == 0, result.output
+	payload = _envelope(result)
+	assert len(payload["hints"]["next_actions"]) == 1
+	argv = shlex.split(payload["hints"]["next_actions"][0])
+
+	follow = runner.invoke(cli, argv[1:])
+	assert follow.exit_code == 0, follow.output
+	imported = _envelope(follow)["data"]
+	assert imported["selected_count"] == imported["imported_count"] == len(selected_indexes)
+	assert argv[:6] == ["boss", "--data-dir", str(data_dir), "crawl", "shortlist", run_id]
+	assert argv[6:] == [part for job in payload["data"]["jobs"] for part in ("--selector", job["selector"])]
+	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+		assert {job["job_id"] for job in cache.list_shortlist()} == {f"job-{index}" for index in selected_indexes}
+	assert not (default_home / ".boss-agent" / "cache" / "boss_agent.db").exists()
+
+
+@pytest.mark.parametrize("jobs, filters", [(0, ()), (2, ("--page", "99"))])
+def test_results_empty_hint_runs_status_in_same_directory(tmp_path, monkeypatch, jobs, filters):
+	"""没有返回职位时查看同一任务状态，不能建议空选择的导入。"""
+	data_dir = tmp_path / "saved 'crawl'"
+	run_id = "empty 'run';"
+	_seed_run(data_dir, run_id, jobs=jobs)
+	monkeypatch.setenv("HOME", str(tmp_path / "default-home"))
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(data_dir), "--json", "crawl", "results", run_id, *filters])
+	assert result.exit_code == 0, result.output
+	payload = _envelope(result)
+	assert payload["data"]["jobs"] == []
+	assert len(payload["hints"]["next_actions"]) == 1
+	argv = shlex.split(payload["hints"]["next_actions"][0])
+	assert argv == ["boss", "--data-dir", str(data_dir), "crawl", "status", run_id]
+	follow = runner.invoke(cli, argv[1:])
+	assert follow.exit_code == 0, follow.output
+	status = _envelope(follow)
+	assert status["command"] == "crawl.status"
+	assert status["data"]["run_id"] == run_id
+	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+		assert cache.list_shortlist() == []
+
+
+@pytest.mark.parametrize("jobs", [0, 2])
+def test_results_tty_next_steps_match_envelope(tmp_path, monkeypatch, jobs):
+	"""终端 renderer 与信封接收同一条完整后继命令。"""
+	_seed_run(tmp_path, jobs=jobs)
+	runner = CliRunner()
+	args = ["--data-dir", str(tmp_path), "crawl", "results", "run-1"]
+	result = runner.invoke(cli, args)
+	assert result.exit_code == 0, result.output
+	expected = _envelope(result)["hints"]["next_actions"]
+	shown = []
+	monkeypatch.setattr("boss_agent_cli.display.is_json_mode", lambda ctx: False)
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl.render_record_result",
+		lambda data, *, title, next_steps: shown.extend(next_steps),
+	)
+	tty_result = runner.invoke(cli, args)
+	assert tty_result.exit_code == 0, tty_result.output
+	assert shown == expected
 
 
 def test_results_never_leaks_platform_identifiers(tmp_path):
