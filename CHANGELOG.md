@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- `hr jobs list` 把平台分页事实映射到信封 `pagination`：`page` 优先取平台返回值（否则回显请求页），`has_more` 仅在平台给出布尔 `hasMore` 时为 `true` / `false`（否则 `null`，`has_more_source=unknown`），`total` / `total_kind` 是本页条数，`total_available` 对应平台 `totalSize`。此前这些字段只藏在 `data` 嵌套载荷里，按七键信封契约只看 `pagination` 的 Agent 拿到的是 `null`。`data` 原样保留；仅 `has_more=true` 时附加下一页命令。
 - `chat --page N` 现在返回 `pagination`：`page` 是本次请求页，`has_more` 只在平台响应给出布尔 `hasMore` 时取 `true` / `false`（否则 `null`，`has_more_source=unknown`），`total` 是本页经 `--from` / `--days` 筛选后的条数（`total_kind=returned_page_count`），并记录 `has_more_source`。此前 `--page` 能翻页但信封不带任何页码或翻页证据，Agent 只能靠「本页是否满额」猜测，短页也可能是筛选后的结果而非最后一页。只有 `has_more=true` 时 `hints.next_actions` 才附加下一页命令并保留筛选参数；`has_more=null` 时 `hints.operator_actions` 说明不能仅凭本页条数判断是否还有记录。与 `recommend` 的分页语义一致，新增覆盖 `true` / `false` / 缺失三态的测试。
 - 新增信封 `command` 词汇表守卫（Issue #809）：成功 / 错误路径（含 `@handle_auth_errors` 装饰器）逐个 AST 收集 command 字面量，要求每个取值都是 `boss schema` 的 39 个一级命令之一或显式登记的 53 个遗留值；新增第四种命名风格会在本地门禁失败。遗留清单同时做双向校验——不得与一级命令重名，也不得留下没有调用点再产出的死条目。词汇表本身仍留给 Issue #809 拍板，迁移落地时逐项删除。
 - 索引快照增加页码：`search --page N` / `recommend --page N` 写入索引时记录 `page`，`boss show <#>` 的 `data.index_snapshot` 与 `search` / `recommend` 的 `pagination.index_snapshot` 都返回该字段，TTY 详情行显示「第 N 页」。此前的快照只能靠 `saved_at` 区分，Agent 从第 1 页记下的编号在翻到第 2 页后无法仅凭 `source` 判断已失效；旧版本写入的缓存没有该字段，返回 `null`。

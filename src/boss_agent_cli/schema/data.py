@@ -1492,7 +1492,7 @@ SCHEMA_DATA = {
 				"jobs": {
 				"description": "管理职位发布。",
 					"list": {
-					"description": "查看已发布的职位列表。",
+					"description": "查看已发布的职位列表；信封 pagination 返回平台 page / hasMore / totalSize（hasMore 缺失时为 null）。",
 						"--page": {
 							"type": "int",
 							"default": 1,
