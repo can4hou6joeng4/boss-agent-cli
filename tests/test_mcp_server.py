@@ -945,6 +945,12 @@ def test_build_args_clean():
 	assert "--all" in args
 
 
+def test_build_args_clean_forwards_days():
+	"""保留天数要能下发；显式 0 也必须原样交给 CLI，不能被真值判断丢掉。"""
+	assert _build_args("boss_clean", {"days": 7}) == ["clean", "--days", "7"]
+	assert _build_args("boss_clean", {"days": 0}) == ["clean", "--days", "0"]
+
+
 # ── CLI 调用逻辑 ───────────────────────────────────────────────────
 
 
