@@ -46,6 +46,7 @@
 - 加固 GitHub 工作流（Issue #747）：全部 18 处 `uses:` 从 `@v7` 这类可移动标签改为完整提交 SHA 并在行尾注明精确版本；`release.yml` 的标签名改用 `$GITHUB_REF_NAME`，不再在 `run:` 脚本里展开 `${{ github.ref_name }}`；发布构建关闭 `setup-uv` 缓存，避免 `master` 上 CI 写入的缓存被带进持有 PyPI 令牌的环境；不需要推送的任务（CI、Pages、发布）的 `actions/checkout` 设 `persist-credentials: false`。各工作流的触发条件与行为不变。`tests/test_open_source_docs.py` 新增 6 条离线守卫（SHA 钉版与版本注释、`run:` 不展开表达式、`pull_request_target` 不检出 PR head、发布不吃缓存、checkout 凭据逐任务登记），`docs/maintainer/branch-protection.md` 新增「Workflow rules」一节。
 
 ### Fixed
+- 职位描述缓存 `job_desc_cache` 新增 1,000 条容量上限：此前只在再次读取某个过期职位时懒删除，长期不再访问的缓存会持续累积。现在 `put_job_desc()` 写入后按保存时间淘汰最旧条目，同一时间按写入顺序处理；更新已有职位会刷新其保存时间，不额外占用容量。已有超限缓存会在下一次有效写入时收敛到上限，TTL 与显式 `clean --all` 保持原有语义。新增离线回归测试覆盖超限淘汰、最近条目保留与更新后的淘汰顺序。
 - `clean --all` 补齐两张从未被清理路径触及的表：`recruiter_greet_records`（招聘者侧首次招呼去重记录，与求职者侧 `greet_records` 对称，此前执行全量清理后同一候选人仍在同一职位上永久不可再次招呼）和 `job_desc_cache`（职位描述缓存，只在读取到过期条目时懒删除，冷门职位写入后没有出口、也没有容量上限）。信封 `results` 各自新增「招聘者打招呼记录」「职位描述缓存」两行；默认 `clean`（不带 `--all`）行为不变，旧库缺表按没有可清理项处理。同步 `--all` 的 help、`boss schema` 描述与双语命令参考。
 - 文档补齐 `hr location` 的排障与 MCP 工具说明：双语排障表新增 `LOCATION_ALREADY_SENT` / `LOCATION_RESULT_UNKNOWN`，`CONFIRMATION_REQUIRED` 的预览示例补上 `hr location --dry-run`；`mcp-server/README` 中英工具表补上 `boss_hr_location`，使新写路径在错误码与 MCP 文档中同样可达。
 - `clean --all` 现在会清理 `recruiter_location_records`：`hr location` 引入的工作地点发送记录此前不在全量清理范围，执行 `boss clean --all` 后仍残留会话与职位标识。同时不再把候选人姓名写进该表（输出使用本次 `friend_detail` 的姓名，去重只需要 `friend_id` / `job_id` / `status`），避免本地留下无用途的个人信息；旧库中的历史姓名随 `--all` 一并删除。新增清理项测试与存储字段断言。
