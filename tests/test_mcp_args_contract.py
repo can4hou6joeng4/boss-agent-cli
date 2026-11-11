@@ -14,11 +14,17 @@ from typing import Any
 import click
 import pytest
 
+from boss_agent_cli.commands import chat as chat_cmd_module
+from boss_agent_cli.commands import chat_summary as chat_summary_cmd_module
+from boss_agent_cli.commands import detail as detail_cmd_module
 from boss_agent_cli.commands import greet as greet_cmd_module
+from boss_agent_cli.commands import me as me_cmd_module
+from boss_agent_cli.commands import pipeline as pipeline_cmd_module
 from boss_agent_cli.commands import preset as preset_cmd_module
 from boss_agent_cli.commands import recommend as recommend_cmd_module
 from boss_agent_cli.commands import search as search_cmd_module
 from boss_agent_cli.commands import shortlist as shortlist_cmd_module
+from boss_agent_cli.commands import status as status_cmd_module
 from boss_agent_cli.commands import watch as watch_cmd_module
 from boss_agent_cli.commands.recruiter import (
 	accept_resume as recruiter_accept_resume,
@@ -155,12 +161,7 @@ _CORE_SINGLE_COMMAND_TOOLS = {
 }
 
 
-@pytest.mark.parametrize(
-	("tool_name", "command", "aliases", "hidden"),
-	[(tool_name, *spec) for tool_name, spec in _CORE_SINGLE_COMMAND_TOOLS.items()],
-	ids=list(_CORE_SINGLE_COMMAND_TOOLS),
-)
-def test_core_tool_schema_lists_every_cli_parameter(
+def _assert_schema_matches_command(
 	tool_name: str, command: click.Command, aliases: dict[str, str], hidden: set[str],
 ) -> None:
 	schema = next(tool for tool in TOOLS if tool.name == tool_name).input_schema
@@ -176,6 +177,17 @@ def test_core_tool_schema_lists_every_cli_parameter(
 		f"{tool_name} 的 inputSchema 与 CLI 参数不一致："
 		f"CLI 有但 schema 未声明 {missing_in_schema}；schema 声明但 CLI 没有 {extra_in_schema}"
 	)
+
+
+@pytest.mark.parametrize(
+	("tool_name", "command", "aliases", "hidden"),
+	[(tool_name, *spec) for tool_name, spec in _CORE_SINGLE_COMMAND_TOOLS.items()],
+	ids=list(_CORE_SINGLE_COMMAND_TOOLS),
+)
+def test_core_tool_schema_lists_every_cli_parameter(
+	tool_name: str, command: click.Command, aliases: dict[str, str], hidden: set[str],
+) -> None:
+	_assert_schema_matches_command(tool_name, command, aliases, hidden)
 
 
 # 本地搜索工具（preset / watch / shortlist）之前只暴露了最小参数集：筛选条件
@@ -203,16 +215,35 @@ _LOCAL_SINGLE_COMMAND_TOOLS = {
 def test_local_tool_schema_lists_every_cli_parameter(
 	tool_name: str, command: click.Command, aliases: dict[str, str], hidden: set[str],
 ) -> None:
-	schema = next(tool for tool in TOOLS if tool.name == tool_name).input_schema
-	properties = set((schema.get("properties") or {}).keys())
-	parameters = {
-		aliases.get(param.name, param.name)
-		for param in command.params
-		if param.name and param.name not in hidden
-	}
-	missing_in_schema = sorted(parameters - properties)
-	extra_in_schema = sorted(properties - parameters)
-	assert not missing_in_schema and not extra_in_schema, (
-		f"{tool_name} 的 inputSchema 与 CLI 参数不一致："
-		f"CLI 有但 schema 未声明 {missing_in_schema}；schema 声明但 CLI 没有 {extra_in_schema}"
-	)
+	_assert_schema_matches_command(tool_name, command, aliases, hidden)
+
+
+# 只读查询工具的参数面同样要钉住：`status --live`、`me --deliver-page`、
+# `chat-summary --page/--count`、`chat --export/-o` 都是 CLI 早已支持却长期
+# 没进 MCP schema 的旋钮。`chat` / `chatmsg` 与 CLI 参数名不同，登记别名；
+# `pipeline` / `follow-up` 的 `--now-ts-ms` 是测试钩子，`doctor` 的在线探测
+# 与浏览器 Cookie 提取属于真人确认的敏感操作，均显式不暴露。
+_READ_SINGLE_COMMAND_TOOLS = {
+	"boss_status": (status_cmd_module.status_cmd, {}, set()),
+	"boss_detail": (detail_cmd_module.detail_cmd, {}, set()),
+	"boss_chat": (
+		chat_cmd_module.chat_cmd,
+		{"export_fmt": "format", "output_path": "output_file"},
+		set(),
+	),
+	"boss_me": (me_cmd_module.me_cmd, {}, set()),
+	"boss_chat_summary": (chat_summary_cmd_module.chat_summary_cmd, {}, set()),
+	"boss_pipeline": (pipeline_cmd_module.pipeline_cmd, {}, {"now_ts_ms"}),
+	"boss_follow_up": (pipeline_cmd_module.follow_up_cmd, {}, {"now_ts_ms"}),
+}
+
+
+@pytest.mark.parametrize(
+	("tool_name", "command", "aliases", "hidden"),
+	[(tool_name, *spec) for tool_name, spec in _READ_SINGLE_COMMAND_TOOLS.items()],
+	ids=list(_READ_SINGLE_COMMAND_TOOLS),
+)
+def test_read_tool_schema_lists_every_cli_parameter(
+	tool_name: str, command: click.Command, aliases: dict[str, str], hidden: set[str],
+) -> None:
+	_assert_schema_matches_command(tool_name, command, aliases, hidden)

@@ -625,6 +625,12 @@ def test_build_args_status():
 	assert _build_args("boss_status", {}) == ["status"]
 
 
+def test_build_args_status_forwards_live():
+	"""--live 会发一次只读在线验证请求，显式传 true 才下发。"""
+	assert _build_args("boss_status", {"live": True}) == ["status", "--live"]
+	assert _build_args("boss_status", {"live": False}) == ["status"]
+
+
 def test_build_args_wizard_run_and_controls():
 	args = _build_args("boss_wizard", {
 		"role": "candidate",
@@ -766,6 +772,11 @@ def test_build_args_detail_with_job_id():
 	assert "j456" in args
 
 
+def test_build_args_detail_with_lid():
+	args = _build_args("boss_detail", {"security_id": "abc", "lid": "lid-1"})
+	assert args == ["detail", "abc", "--lid", "lid-1"]
+
+
 def test_build_args_greet():
 	args = _build_args("boss_greet", {"security_id": "s1", "job_id": "j1"})
 	assert args == ["greet", "s1", "j1"]
@@ -785,6 +796,12 @@ def test_build_args_chat_with_all_options():
 	assert "--page" in args
 
 
+def test_build_args_chat_forwards_export_options():
+	"""导出走 CLI 的 --export / --output，MCP 侧用 format / output_file 命名。"""
+	args = _build_args("boss_chat", {"format": "md", "output_file": "/tmp/chat.md"})
+	assert args == ["chat", "--export", "md", "--output", "/tmp/chat.md"]
+
+
 def test_build_args_me_no_section():
 	args = _build_args("boss_me", {})
 	assert args == ["me"]
@@ -793,6 +810,12 @@ def test_build_args_me_no_section():
 def test_build_args_me_with_section():
 	args = _build_args("boss_me", {"section": "resume"})
 	assert args == ["me", "--section", "resume"]
+
+
+def test_build_args_me_forwards_deliver_page():
+	assert _build_args("boss_me", {"section": "deliver", "deliver_page": 2}) == [
+		"me", "--section", "deliver", "--deliver-page", "2",
+	]
 
 
 # ── 新增工具参数构建 ────────────────────────────────────────────────
@@ -811,6 +834,12 @@ def test_build_args_chatmsg_raw():
 def test_build_args_chat_summary():
 	args = _build_args("boss_chat_summary", {"security_id": "s1"})
 	assert args == ["chat-summary", "s1"]
+
+
+def test_build_args_chat_summary_forwards_paging():
+	"""摘要也读聊天记录，页码与条数决定请求预算与上下文长度。"""
+	args = _build_args("boss_chat_summary", {"security_id": "s1", "page": 2, "count": 50})
+	assert args == ["chat-summary", "s1", "--page", "2", "--count", "50"]
 
 
 def test_build_args_mark():
@@ -874,6 +903,10 @@ def test_build_args_show():
 
 def test_build_args_pipeline():
 	assert _build_args("boss_pipeline", {}) == ["pipeline"]
+
+
+def test_build_args_pipeline_forwards_days_stale():
+	assert _build_args("boss_pipeline", {"days_stale": 7}) == ["pipeline", "--days-stale", "7"]
 
 
 def test_build_args_follow_up():
