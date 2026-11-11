@@ -375,7 +375,7 @@ SCHEMA_DATA = {
 			"options": {},
 		},
 		"me": {
-			"description": "获取当前登录用户的个人信息（基本信息、简历、求职期望、投递记录）",
+			"description": "获取当前登录用户的个人信息（基本信息、简历、求职期望、投递记录）；仅 --section deliver 的信封 pagination 给出投递列表分页证据，has_more 仅平台返回布尔 hasMore 时有效，缺失或类型不明确时为 null",
 			"args": [],
 			"options": {
 				"--section": {
