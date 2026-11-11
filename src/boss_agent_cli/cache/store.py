@@ -186,6 +186,13 @@ class CacheStore:
 				updated_at REAL NOT NULL,
 				PRIMARY KEY (geek_id, job_id)
 			);
+			CREATE TABLE IF NOT EXISTS recruiter_location_records (
+				friend_id TEXT NOT NULL PRIMARY KEY,
+				job_id TEXT NOT NULL,
+				name TEXT NOT NULL,
+				status TEXT NOT NULL,
+				updated_at REAL NOT NULL
+			);
 			CREATE TABLE IF NOT EXISTS search_cache (
 				cache_key TEXT PRIMARY KEY,
 				response TEXT NOT NULL,
@@ -853,6 +860,54 @@ class CacheStore:
 				"UPDATE recruiter_greet_records SET status = ?, updated_at = ? WHERE geek_id = ? AND job_id = ?",
 				(status, time.time(), geek_id, job_id),
 			)
+
+	def location_send_status(self, friend_id: int) -> str | None:
+		"""读取工作地点发送记录。没有记录时返回 None，不创建新行。"""
+		row = self._conn.execute(
+			"SELECT status FROM recruiter_location_records WHERE friend_id = ?",
+			(str(friend_id),),
+		).fetchone()
+		return str(row[0]) if row else None
+
+	def claim_location_send(self, friend_id: int) -> str | None:
+		"""原子预约工作地点发送。已有记录时返回状态，禁止对同一会话再发一次。
+
+		进程退出或响应丢失时保留 pending，后续调用不得自动重发。
+		"""
+		key = str(friend_id)
+		with self._conn:
+			cursor = self._conn.execute(
+				"INSERT OR IGNORE INTO recruiter_location_records (friend_id, job_id, name, status, updated_at) "
+				"VALUES (?, '', '', 'pending', ?)",
+				(key, time.time()),
+			)
+			if cursor.rowcount:
+				return None
+			row = self._conn.execute(
+				"SELECT status FROM recruiter_location_records WHERE friend_id = ?",
+				(key,),
+			).fetchone()
+			return str(row[0]) if row else None
+
+	def record_location_send(self, friend_id: int, *, job_id: str, name: str = "") -> None:
+		"""把已确认发出的工作地点记为 sent。没有对应预约时抛错，避免假装记上了。"""
+		with self._conn:
+			cursor = self._conn.execute(
+				"UPDATE recruiter_location_records SET status = 'sent', job_id = ?, name = ?, updated_at = ? "
+				"WHERE friend_id = ?",
+				(job_id, name, time.time(), str(friend_id)),
+			)
+			if cursor.rowcount != 1:
+				raise sqlite3.OperationalError("工作地点发送记录不存在，无法标记为已发送")
+
+	def release_location_send(self, friend_id: int) -> bool:
+		"""撤销确定未发出的预约。只删除 pending，已发送或结果未知的记录保持原样。"""
+		with self._conn:
+			cursor = self._conn.execute(
+				"DELETE FROM recruiter_location_records WHERE friend_id = ? AND status = 'pending'",
+				(str(friend_id),),
+			)
+			return bool(cursor.rowcount)
 
 	def release_recruiter_greet(self, geek_id: str, job_id: str) -> bool:
 		"""撤销确定未发出的预约；只删 pending，已发送或结果未知的记录保持原样。

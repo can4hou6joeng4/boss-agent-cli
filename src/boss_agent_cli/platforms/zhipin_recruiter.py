@@ -120,8 +120,11 @@ class BossRecruiterPlatform(RecruiterPlatform):
 	def friend_list(self, page: int = 1, label_id: int = 0, job_id: str | None = None) -> dict[str, Any]:
 		return self._client.friend_list(page=page, label_id=label_id, job_id=job_id)
 
-	def friend_detail(self, friend_ids: list[int]) -> dict[str, Any]:
-		return self._client.friend_detail(friend_ids)
+	def friend_detail(self, friend_ids: list[int], *, retry: bool = True) -> dict[str, Any]:
+		return self._client.friend_detail(friend_ids, retry=retry)
+
+	def send_job_location(self, *, job_id: str | int, to_user_id: int, security_id: str) -> dict[str, Any]:
+		return self._client.send_job_location(job_id=job_id, to_user_id=to_user_id, security_id=security_id)
 
 	def friend_labels(self) -> dict[str, Any]:
 		return self._client.friend_labels()

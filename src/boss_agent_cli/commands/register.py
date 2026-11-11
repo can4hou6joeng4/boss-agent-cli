@@ -47,6 +47,7 @@ from boss_agent_cli.commands.recruiter import download_resume as recruiter_downl
 from boss_agent_cli.commands.recruiter import candidates as recruiter_candidates
 from boss_agent_cli.commands.recruiter import chat as recruiter_chat
 from boss_agent_cli.commands.recruiter import jobs as recruiter_jobs
+from boss_agent_cli.commands.recruiter import location as recruiter_location
 from boss_agent_cli.commands.recruiter import reply as recruiter_reply
 from boss_agent_cli.commands.recruiter import request_resume as recruiter_request_resume
 from boss_agent_cli.commands.recruiter import recommendations as recruiter_recommendations
@@ -138,3 +139,4 @@ def register_recruiter_commands(cli: click.Group) -> None:
 	hr_group.add_command(recruiter_download_resume.download_resume_cmd, "download-resume")
 	hr_group.add_command(recruiter_recommendations.recommendations_cmd, "recommendations")
 	hr_group.add_command(recruiter_recommendations.greet_cmd, "greet")
+	hr_group.add_command(recruiter_location.location_cmd, "location")

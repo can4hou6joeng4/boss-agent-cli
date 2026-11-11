@@ -532,6 +532,14 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.append("--dry-run")
 		return args
 
+	if name == "hr_location":
+		args = ["hr", "location", str(arguments["friend_id"])]
+		if arguments.get("yes") is True:
+			args.append("--yes")
+		if arguments.get("dry_run") is True:
+			args.append("--dry-run")
+		return args
+
 	if name == "hr_jobs":
 		action = arguments.get("action", "list")
 		args = ["hr", "jobs", action]

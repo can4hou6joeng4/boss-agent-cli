@@ -278,6 +278,23 @@ def test_start_chat_never_refreshes_or_retries(code, message):
 	assert auth.refresh_calls == []
 
 
+def test_send_job_location_uses_chat_referer_and_bst_zp_token():
+	client = BossRecruiterClient(FakeAuthManager())
+	http_client = FakeHttpxClient([FakeResponse()])
+	http_client.cookies.set("bst", "bst-token")
+	client._client = http_client
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+	client.send_job_location(job_id=5566, to_user_id=10001, security_id="conversation-security")
+	call = http_client.calls[0]
+	assert call["method"] == "POST"
+	assert call["url"] == ep.BOSS_SEND_JOB_LOCATION_URL
+	assert call["headers"]["Referer"] == "https://www.zhipin.com/web/chat/index"
+	assert call["headers"]["zp_token"] == "bst-token"
+	assert call["kwargs"]["data"] == {"jobId": 5566, "toUserId": 10001, "securityId": "conversation-security"}
+	assert len(http_client.calls) == 1
+
+
 def test_zp_token_is_scoped_and_uses_rotated_cookie():
 	client = BossRecruiterClient(FakeAuthManager())
 	http_client = FakeHttpxClient(

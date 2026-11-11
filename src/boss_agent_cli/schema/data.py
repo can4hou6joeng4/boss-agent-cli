@@ -1467,6 +1467,18 @@ SCHEMA_DATA = {
 					},
 					"--dry-run": {"type": "bool", "default": False, "description": "只预览，不发送"},
 				},
+				"location": {
+				"description": "向已有会话发送该职位的工作地点卡片。securityId 与内部 jobId 取自本次 friend_detail，不使用推荐卡片上的 securityId。",
+					"args": [
+						{"name": "friend_id", "required": True, "description": "候选人会话 friend_id"},
+					],
+					"--yes": {
+						"type": "bool",
+						"default": False,
+						"description": "操作者明确批准向该会话发送工作地点后才可发送",
+					},
+					"--dry-run": {"type": "bool", "default": False, "description": "只预览，不请求平台、不写发送记录"},
+				},
 				"accept-resume": {
 				"description": "同意接收指定附件简历请求，不主动索要、不下载附件。",
 					"args": [
@@ -1536,6 +1548,7 @@ SCHEMA_DATA = {
 				"download-resume": "检查权限并下载已收到的附件简历，不自动同意请求",
 				"recommendations": "读取推荐牛人完整卡片和首次开聊参数",
 				"greet": "单次建立候选人会话并发送首次招呼（需 --yes），不修改已读状态",
+				"location": "向已有会话发送工作地点卡片（需 --yes）；同一会话不重复发送，停止开关打开时拒绝",
 			},
 		},
 	},

@@ -111,9 +111,13 @@ class RecruiterPlatform(ABC):
 
 	# ── 可选操作（默认抛 NotImplementedError）──────
 
-	def friend_detail(self, friend_ids: list[int]) -> dict[str, Any]:
-		"""批量获取好友详情。"""
+	def friend_detail(self, friend_ids: list[int], *, retry: bool = True) -> dict[str, Any]:
+		"""批量获取好友详情。写操作前的读取应传 retry=False，避免自动重放。"""
 		raise NotImplementedError(f"{self.name} does not implement friend_detail")
+
+	def send_job_location(self, *, job_id: str | int, to_user_id: int, security_id: str) -> dict[str, Any]:
+		"""向已有会话发送工作地点卡片。security_id 必须是本次会话的 friend_detail 值。"""
+		raise NotImplementedError(f"{self.name} does not implement send_job_location")
 
 	def friend_labels(self) -> dict[str, Any]:
 		"""获取好友标签。"""

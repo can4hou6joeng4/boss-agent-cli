@@ -74,7 +74,9 @@ SERVER_INSTRUCTIONS = (
 	" For hr_greet, preview with dry_run and obtain explicit operator approval for that candidate and message "
 	"before setting yes=true. Never infer approval or retry a confirmation failure with yes=true on your own. "
 	"An uncertain send result requires conversation verification, not another send. "
-	"After a post-send error, inspect error.details.sent and stop; a sent greeting must not be repeated."
+	"After a post-send error, inspect error.details.sent and stop; a sent greeting must not be repeated. "
+	"For hr_location, preview with dry_run and obtain explicit operator approval before setting yes=true. "
+	"Do not resend a location card to the same friend, and do not call it while the automation stop switch is open."
 )
 
 server = Server(

@@ -930,6 +930,23 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			},
 		),
 		ToolDefinition(
+			name="boss_hr_location",
+			description="招聘者模式：向已有会话发送工作地点卡片；需操作者明确批准，同一会话不重复发送",
+			input_schema={
+				"type": "object",
+				"properties": {
+					"friend_id": {"type": "integer", "minimum": 1, "description": "候选人会话 friend_id"},
+					"yes": {
+						"type": "boolean",
+						"default": False,
+						"description": "人工确认位；只有操作者明确批准向该会话发送工作地点后才置 true，不得自行推断",
+					},
+					"dry_run": {"type": "boolean", "default": False, "description": "只预览，不请求平台、不写发送记录"},
+				},
+				"required": ["friend_id"],
+			},
+		),
+		ToolDefinition(
 			name="boss_hr_chat",
 			description="招聘者模式：查看与候选人的沟通列表（含未读数和最近消息摘要）；结果信封 pagination 给出平台 hasMore 证据（缺失为 null）",
 			input_schema={

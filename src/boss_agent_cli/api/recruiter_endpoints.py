@@ -30,6 +30,7 @@ BOSS_LAST_MESSAGES_URL = _url("boss_last_messages")
 BOSS_CHAT_HISTORY_URL = _url("boss_chat_history")
 BOSS_SEND_MESSAGE_URL = _url("boss_send_message")
 BOSS_SESSION_ENTER_URL = _url("boss_session_enter")
+BOSS_SEND_JOB_LOCATION_URL = _url("boss_send_job_location")
 
 # ── 打招呼 / 新招呼 ────────────────────────────────
 BOSS_GREET_LIST_URL = _url("boss_greet_list")

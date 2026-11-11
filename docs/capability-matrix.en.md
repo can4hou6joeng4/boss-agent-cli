@@ -111,6 +111,7 @@ Compatibility modes `assisted` and `research` can both call every implemented ca
 | Job listing and online/offline operations | `boss hr jobs list [--page N]` | Yes | httpx; job-management `data/list` |
 | Recommended candidates | `boss hr recommendations --job-id <id>` | Yes | httpx |
 | First contact | `boss hr greet ... --yes` | Yes | One-shot httpx POST; does not change read status |
+| Work-location card | `boss hr location <friend_id> --yes` | Yes | One-shot httpx POST; conversation securityId comes from friend_detail; explicit approval, no duplicate send |
 
 Notes:
 - **Transport**: `httpx` means a direct API call. Risk-control blocks stop the workflow. Browser/hook adapters may not retry without bounds and must preserve checkpoints and redaction. `AI service` means a third-party model API; do not send chat records, resumes, or contact details without authorization.
@@ -118,4 +119,4 @@ Notes:
 - For CLI-first integrations, prefer `boss schema` for capability discovery and parameter validation; the schema exposes both `supported_platforms` and `supported_recruiter_platforms`.
 - Current platform coverage: `boss platforms` reports the registered local adapters, and `boss platforms --platform zhipin` shows a single platform; `zhipin` is the only registered platform and has both candidate and recruiter (`zhipin-recruiter`) implementations.
 - `crawl` uses an isolated Chrome profile, cross-process rate budgets, SQLite checkpoints, and the `crawl stop` kill switch. Fine-grained MCP crawl tools provide local `crawl_status/results/shortlist` operations for existing runs, while `boss_wizard` can start, resume, and stop the shared workflow. The default Hook is `none`; local Hook directories must provide `SHA256SUMS`. Risk codes, a security page, or an exhausted budget stop it and return a resume command.
-- Use `boss schema` as the source of truth: it currently exposes 39 top-level commands, with 14 first-level recruiter subcommands under `hr`, while `ai` and `resume` remain command-group entries.
+- Use `boss schema` as the source of truth: it currently exposes 39 top-level commands, with 15 first-level recruiter subcommands under `hr`, while `ai` and `resume` remain command-group entries.

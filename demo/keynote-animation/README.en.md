@@ -2,7 +2,7 @@
 
 **One command. A connection to opportunity.** A 48-second, 1920 × 1080, 30 fps release film in the selected A “Aurora Keynote” direction. It uses the project's existing PNG logo and an original 120 BPM electronic score.
 
-Content is grounded in the local code and schema: BOSS Zhipin is the sole registered platform; 39 top-level commands, 14 recruiter subcommands, and 78 MCP tools. The rendered film still uses an earlier on-screen count. Jobs, salaries, and workflow states are explicitly illustrative. Rendering makes no platform calls and accesses no login state.
+Content is grounded in the local code and schema: BOSS Zhipin is the sole registered platform; 39 top-level commands, 15 recruiter subcommands, and 79 MCP tools. The rendered film still uses an earlier on-screen count. Jobs, salaries, and workflow states are explicitly illustrative. Rendering makes no platform calls and accesses no login state.
 
 [中文](README.md)
 

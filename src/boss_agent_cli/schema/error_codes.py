@@ -49,6 +49,16 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": "先用 boss hr chat --job-id <id> 核对会话；保留本地预约，必要时在官方页面处理",
 	},
+	"LOCATION_ALREADY_SENT": {
+		"message": "该会话已发送过工作地点，禁止重复发送",
+		"recoverable": False,
+		"recovery_action": "用 boss hr chatmsg <friend_id> 核对地点卡，不要删除本地记录后重发",
+	},
+	"LOCATION_RESULT_UNKNOWN": {
+		"message": "工作地点发送结果未确认，禁止自动重发",
+		"recoverable": False,
+		"recovery_action": "先用 boss hr chatmsg <friend_id> 核对地点卡是否已发出；保留本地预约，不要自动重发",
+	},
 	"AUTH_EXPIRED": {
 		"message": "登录态过期",
 		"recoverable": True,
