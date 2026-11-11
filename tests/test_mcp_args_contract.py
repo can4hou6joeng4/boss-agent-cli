@@ -14,8 +14,10 @@ from typing import Any
 import click
 import pytest
 
+from boss_agent_cli.commands import agent as agent_cmd_module
 from boss_agent_cli.commands import chat as chat_cmd_module
 from boss_agent_cli.commands import chat_summary as chat_summary_cmd_module
+from boss_agent_cli.commands import clean as clean_cmd_module
 from boss_agent_cli.commands import detail as detail_cmd_module
 from boss_agent_cli.commands import greet as greet_cmd_module
 from boss_agent_cli.commands import me as me_cmd_module
@@ -244,6 +246,28 @@ _READ_SINGLE_COMMAND_TOOLS = {
 	ids=list(_READ_SINGLE_COMMAND_TOOLS),
 )
 def test_read_tool_schema_lists_every_cli_parameter(
+	tool_name: str, command: click.Command, aliases: dict[str, str], hidden: set[str],
+) -> None:
+	_assert_schema_matches_command(tool_name, command, aliases, hidden)
+
+
+# 本地维护与自动化工具：`clean` 只暴露保留天数，`--privacy`（清登录会话/简历）
+# 与 `--risk-lock`（清风控锁）必须由真人判断，不进 MCP；`agent train` 的
+# `--live` 会绕过默认演练直接执行动作，同样不暴露。把这些「有意不暴露」
+# 写进守卫，未来新增参数时不会靠删字段悄悄绕过。
+_MAINTENANCE_SINGLE_COMMAND_TOOLS = {
+	"boss_clean": (clean_cmd_module.clean_cmd, {"clean_all": "all"}, {"privacy", "risk_lock"}),
+	"boss_agent_run": (agent_cmd_module.run_cmd, {}, set()),
+	"boss_agent_train": (agent_cmd_module.train_cmd, {}, {"dry_run"}),
+}
+
+
+@pytest.mark.parametrize(
+	("tool_name", "command", "aliases", "hidden"),
+	[(tool_name, *spec) for tool_name, spec in _MAINTENANCE_SINGLE_COMMAND_TOOLS.items()],
+	ids=list(_MAINTENANCE_SINGLE_COMMAND_TOOLS),
+)
+def test_maintenance_tool_schema_lists_every_cli_parameter(
 	tool_name: str, command: click.Command, aliases: dict[str, str], hidden: set[str],
 ) -> None:
 	_assert_schema_matches_command(tool_name, command, aliases, hidden)

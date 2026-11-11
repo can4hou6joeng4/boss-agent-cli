@@ -433,6 +433,13 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"dry_run": {"type": "boolean", "description": "仅预览不删除", "default": False},
 					"all": {"type": "boolean", "description": "全量清理", "default": False},
+					"days": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 36500,
+						"description": "清理超过指定天数的快照和导出文件",
+						"default": 30,
+					},
 				},
 				"required": [],
 			},

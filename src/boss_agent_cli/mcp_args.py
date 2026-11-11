@@ -243,6 +243,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.append("--dry-run")
 		if arguments.get("all"):
 			args.append("--all")
+		if arguments.get("days") is not None:
+			args.extend(["--days", str(arguments["days"])])
 		return args
 
 	if name == "digest":
