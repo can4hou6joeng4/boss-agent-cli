@@ -350,6 +350,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "shortlist_add":
 		args = ["shortlist", "add", arguments["security_id"], arguments["job_id"]]
+		for opt in ("title", "company", "city", "salary", "source"):
+			if arguments.get(opt):
+				args.extend([f"--{opt}", str(arguments[opt])])
 		if arguments.get("lid"):
 			args.extend(["--lid", str(arguments["lid"])])
 		if arguments.get("tags"):
@@ -379,9 +382,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "preset_add":
 		args = ["preset", "add", arguments["name"], arguments["query"]]
-		for opt in ("city", "salary", "experience", "education", "welfare", "active"):
+		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type", "welfare", "active"):
 			if arguments.get(opt):
-				args.extend([f"--{opt}", str(arguments[opt])])
+				args.extend([f"--{opt.replace('_', '-')}", str(arguments[opt])])
 		return args
 
 	if name == "preset_remove":
@@ -389,9 +392,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "watch_add":
 		args = ["watch", "add", arguments["name"], arguments["query"]]
-		for opt in ("city", "salary"):
+		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type", "welfare"):
 			if arguments.get(opt):
-				args.extend([f"--{opt}", str(arguments[opt])])
+				args.extend([f"--{opt.replace('_', '-')}", str(arguments[opt])])
 		return args
 
 	if name == "watch_remove":
