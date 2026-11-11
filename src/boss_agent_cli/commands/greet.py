@@ -159,10 +159,28 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 			)
 
 
+def _explicit_global_options(ctx: click.Context) -> list[str]:
+	"""重建本次调用显式给出的全局选项，供预演后继命令复用。
+
+	数据目录总是保留：省略时会读默认目录的登录态和去重缓存，预览结论不再成立。
+	浏览器通道、CDP 地址和节流区间只在命令行显式给出时保留；来自 config.json
+	的值会随同一数据目录被重新读取，不需要重复下发。
+	"""
+	options = ["--data-dir", str(ctx.obj["data_dir"])]
+	root = ctx.find_root()
+	raw = root.params if root is not None else {}
+	for flag, key in (("--browser-source", "browser_source"), ("--cdp-url", "cdp_url"), ("--delay", "delay")):
+		value = raw.get(key)
+		if value:
+			options.extend([flag, str(value)])
+	return options
+
+
 def _batch_greet_dry_run_rerun(ctx: click.Context, query: str) -> str:
 	"""dry-run 之后真正要执行的那条命令：与本次调用同参数，只去掉 --dry-run。"""
 	params = ctx.params or {}
-	argv = boss_command_for_ctx(ctx, "batch-greet").split(" ") + [query]
+	argv = boss_command_for_ctx(ctx, "batch-greet").split(" ")
+	argv = [*argv[:-1], *_explicit_global_options(ctx), argv[-1], query]
 	for flag, key in (
 		("--city", "city"),
 		("--salary", "salary"),

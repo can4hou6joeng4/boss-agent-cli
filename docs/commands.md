@@ -135,6 +135,8 @@ boss crawl stop <run_id>
 |------|------|
 | `boss greet <sid> <jid>` | 向指定招聘者打招呼；重复记录返回 `ALREADY_GREETED` |
 | `boss batch-greet <query>` | 搜索后按显式 `--count` 批量打招呼，支持 `--dry-run`；命中 `ACCOUNT_RISK` / `ENVIRONMENT_RISK` 立即停批并返回 `ok:false`，已成功项随 `error.details.greeted` 带回 |
+
+`batch-greet --dry-run` 的执行提示保留本次数据目录以及显式给出的 `--browser-source` / `--cdp-url` / `--delay`，只去掉 `--dry-run`；照提示执行时使用的登录态、去重缓存、浏览器通道与节流区间与预览一致。
 | `boss apply <sid> <jid>` | 发起投递或立即沟通；重复记录返回 `ALREADY_APPLIED` |
 | `boss exchange <uid-or-sid>` | 请求交换手机号或微信；优先使用 `boss chat` 输出的稳定 `uid` |
 

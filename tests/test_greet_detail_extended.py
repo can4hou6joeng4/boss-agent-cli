@@ -195,7 +195,7 @@ def test_batch_greet_dry_run(tmp_path):
 	assert parsed["data"]["dry_run"] is True
 	assert parsed["data"]["count"] == 2
 	# 预览完不是终点：要给出同参数、只去掉 --dry-run 的真实执行命令。
-	assert parsed["hints"]["next_actions"] == ["boss batch-greet python --count 10"]
+	assert parsed["hints"]["next_actions"] == [f"boss --data-dir {tmp_path} batch-greet python --count 10"]
 	assert parsed["hints"]["operator_actions"]
 
 
@@ -207,8 +207,22 @@ def test_batch_greet_dry_run_rerun_keeps_filters(tmp_path):
 	)
 	assert code == 0
 	assert parsed["hints"]["next_actions"] == [
-		"boss batch-greet '后端 开发' --city 北京 --job-type 实习 --count 3"
+		f"boss --data-dir {tmp_path} batch-greet '后端 开发' --city 北京 --job-type 实习 --count 3"
 	]
+
+
+def test_batch_greet_dry_run_rerun_keeps_explicit_global_options(tmp_path):
+	"""显式浏览器通道、CDP 地址与节流区间不能在执行提示里丢失。"""
+	code, parsed = _invoke_batch_greet(
+		"--browser-source", "stored-cookie", "--cdp-url", "http://127.0.0.1:9222", "--delay", "45-90",
+		"batch-greet", "python", "--count", "3", "--dry-run", tmp_path=tmp_path,
+	)
+	assert code == 0
+	assert parsed["hints"]["next_actions"] == [
+		f"boss --data-dir {tmp_path} --browser-source stored-cookie "
+		"--cdp-url http://127.0.0.1:9222 --delay 45-90 batch-greet python --count 3"
+	]
+	assert "--dry-run" not in parsed["hints"]["next_actions"][0]
 
 
 def test_batch_greet_internship_dry_run_rejects_unverified_types(tmp_path):
