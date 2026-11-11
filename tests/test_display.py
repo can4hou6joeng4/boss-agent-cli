@@ -570,11 +570,12 @@ class TestRenderers:
 
 		render_job_detail({
 			"title": "Go", "salary": "20K", "index": 3,
-			"index_snapshot": {"source": "search:Golang", "count": 30, "saved_at": 1700000000.0},
+			"index_snapshot": {"source": "search:Golang", "page": 2, "count": 30, "saved_at": 1700000000.0},
 		})
 
 		output = stream.getvalue()
 		assert "#3" in output
+		assert "第 2 页" in output
 		assert "search:Golang" in output
 		assert "共 30 条" in output
 

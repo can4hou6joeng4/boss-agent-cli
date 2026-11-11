@@ -103,9 +103,11 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 	result = build_job_from_card(card, security_id=security_id, greeted=greeted, lid=lid)
 	result["index"] = index
 	# 与 index 一起返回快照身份：source 形如 search:<关键词> 或 recommend，
-	# saved_at 是 Unix 秒。编号离开这份快照就没有意义，重跑搜索后必须重新定位。
+	# page 是建立快照的页码（旧缓存或未知时为 None），saved_at 是 Unix 秒。
+	# 编号离开这份快照就没有意义，重跑搜索后必须重新定位。
 	result["index_snapshot"] = {
 		"source": info["source"],
+		"page": info.get("page"),
 		"count": info["count"],
 		"saved_at": info["saved_at"],
 	}

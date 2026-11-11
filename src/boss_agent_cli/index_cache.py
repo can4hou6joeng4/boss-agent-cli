@@ -16,7 +16,7 @@ def _cache_path(data_dir: Path) -> Path:
 	return data_dir / "cache" / _CACHE_FILE
 
 
-def save_index(data_dir: Path, jobs: list[dict[str, Any]], source: str = "search") -> None:
+def save_index(data_dir: Path, jobs: list[dict[str, Any]], source: str = "search", page: int | None = None) -> None:
 	"""保存搜索/推荐结果到索引缓存。"""
 	entries = []
 	for job in jobs:
@@ -39,6 +39,7 @@ def save_index(data_dir: Path, jobs: list[dict[str, Any]], source: str = "search
 
 	cache_data = {
 		"source": source,
+		"page": page,
 		"count": len(entries),
 		"saved_at": time.time(),
 		"jobs": entries,
@@ -48,10 +49,13 @@ def save_index(data_dir: Path, jobs: list[dict[str, Any]], source: str = "search
 	write_json_atomic(path, cache_data)
 
 
-def try_save_index(data_dir: Path, jobs: list[dict[str, Any]], *, source: str = "search", logger: Logger | None = None) -> bool:
+def try_save_index(
+	data_dir: Path, jobs: list[dict[str, Any]], *, source: str = "search",
+	page: int | None = None, logger: Logger | None = None,
+) -> bool:
 	"""Best-effort 保存索引缓存，失败时记录 warning，不影响主命令成功返回。"""
 	try:
-		save_index(data_dir, jobs, source=source)
+		save_index(data_dir, jobs, source=source, page=page)
 		return True
 	except OSError as e:
 		if logger:
@@ -96,14 +100,15 @@ def get_job_by_index(data_dir: Path, index: int) -> dict[str, Any] | None:
 
 
 def get_index_info(data_dir: Path) -> dict[str, Any]:
-	"""获取缓存元信息（来源、数量、保存时间）。"""
+	"""获取缓存元信息（来源、页码、数量、保存时间）。"""
 	cache_data = _load_cache(data_dir)
 	if cache_data is None:
-		return {"exists": False, "source": "", "count": 0, "saved_at": 0}
+		return {"exists": False, "source": "", "page": None, "count": 0, "saved_at": 0}
 
 	return {
 		"exists": True,
 		"source": cache_data.get("source", ""),
+		"page": cache_data.get("page"),
 		"count": cache_data.get("count", 0),
 		"saved_at": cache_data.get("saved_at", 0),
 	}
@@ -114,9 +119,15 @@ def get_index_snapshot(data_dir: Path) -> dict[str, Any] | None:
 
 	`boss show <编号>` 的编号只在这份快照内有效，`search` / `recommend` 成功
 	写入后把它附在分页信息里，调用方才能对照 `show` 返回的 `index_snapshot`
-	判断手里的编号是否已被新的搜索覆盖。
+	判断手里的编号是否已被新的搜索覆盖。`page` 让多页搜索的编号也能区分页码，
+	旧版本写入的缓存没有该字段，这里按 None 返回。
 	"""
 	info = get_index_info(data_dir)
 	if not info["exists"]:
 		return None
-	return {"source": info["source"], "count": info["count"], "saved_at": info["saved_at"]}
+	return {
+		"source": info["source"],
+		"page": info["page"],
+		"count": info["count"],
+		"saved_at": info["saved_at"],
+	}

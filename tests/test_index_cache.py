@@ -53,9 +53,16 @@ class TestSaveIndex:
 		cache_file = tmp_path / "cache" / "index_cache.json"
 		data = json.loads(cache_file.read_text(encoding="utf-8"))
 		assert data["source"] == "search"
+		assert data["page"] is None
 		assert data["count"] == 2
 		assert "saved_at" in data
 		assert len(data["jobs"]) == 2
+
+	def test_stores_page_when_given(self, tmp_path):
+		save_index(tmp_path, _SAMPLE_JOBS, source="search:Go", page=3)
+		cache_file = tmp_path / "cache" / "index_cache.json"
+		data = json.loads(cache_file.read_text(encoding="utf-8"))
+		assert data["page"] == 3
 
 	def test_preserves_fields(self, tmp_path):
 		save_index(tmp_path, _SAMPLE_JOBS)
@@ -125,28 +132,42 @@ class TestGetJobByIndex:
 
 class TestGetIndexInfo:
 	def test_with_cache(self, tmp_path):
-		save_index(tmp_path, _SAMPLE_JOBS, source="recommend")
+		save_index(tmp_path, _SAMPLE_JOBS, source="recommend", page=2)
 		info = get_index_info(tmp_path)
 		assert info["exists"] is True
 		assert info["source"] == "recommend"
+		assert info["page"] == 2
 		assert info["count"] == 2
 		assert info["saved_at"] > 0
 
 	def test_without_cache(self, tmp_path):
 		info = get_index_info(tmp_path)
 		assert info["exists"] is False
+		assert info["page"] is None
 		assert info["count"] == 0
 
 
 class TestGetIndexSnapshot:
 	def test_returns_identity_without_exists_flag(self, tmp_path):
-		save_index(tmp_path, _SAMPLE_JOBS, source="search:Go")
+		save_index(tmp_path, _SAMPLE_JOBS, source="search:Go", page=2)
 		snapshot = get_index_snapshot(tmp_path)
 		assert snapshot is not None
 		assert snapshot["source"] == "search:Go"
+		assert snapshot["page"] == 2
 		assert snapshot["count"] == 2
 		assert snapshot["saved_at"] > 0
 		assert "exists" not in snapshot
+
+	def test_legacy_cache_without_page_returns_none_page(self, tmp_path):
+		cache_dir = tmp_path / "cache"
+		cache_dir.mkdir()
+		(cache_dir / "index_cache.json").write_text(
+			json.dumps({"source": "search:Go", "count": 1, "saved_at": 1.0, "jobs": [{"title": "Go"}]}),
+			encoding="utf-8",
+		)
+		snapshot = get_index_snapshot(tmp_path)
+		assert snapshot is not None
+		assert snapshot["page"] is None
 
 	def test_without_cache_returns_none(self, tmp_path):
 		assert get_index_snapshot(tmp_path) is None

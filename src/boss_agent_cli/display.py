@@ -359,9 +359,11 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 		source = escape(str(snapshot.get("source") or "-"))
 		count = snapshot.get("count")
 		count_label = str(count) if isinstance(count, int) and not isinstance(count, bool) else "-"
+		page = snapshot.get("page")
+		page_label = f"第 {page} 页 · " if isinstance(page, int) and not isinstance(page, bool) else ""
 		index = data.get("index", "-")
 		console.print(
-			f"  [dim]#{index} · {source} · 共 {count_label} 条 · 保存于 {_snapshot_time_label(snapshot.get('saved_at'))}[/dim]"
+			f"  [dim]#{index} · {page_label}{source} · 共 {count_label} 条 · 保存于 {_snapshot_time_label(snapshot.get('saved_at'))}[/dim]"
 		)
 
 	sid = data.get("security_id", "")

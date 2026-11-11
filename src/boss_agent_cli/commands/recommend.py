@@ -59,7 +59,7 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 					item_dict = score_job_dict(item_dict, criteria=None, expect_data=expect_data)
 				items.append(item_dict)
 
-		saved = try_save_index(data_dir, items, source="recommend", logger=logger)
+		saved = try_save_index(data_dir, items, source="recommend", page=page, logger=logger)
 
 		raw_has_more = platform_data.get("hasMore")
 		has_more = raw_has_more if isinstance(raw_has_more, bool) else None
