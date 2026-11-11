@@ -260,7 +260,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_chatmsg",
-			description="查看与指定好友的聊天消息历史",
+			description="查看与指定好友的聊天消息历史；信封 pagination 给出所读消息页证据（page / has_more / has_more_source / total）",
 			input_schema={
 				"type": "object",
 				"properties": {
@@ -274,7 +274,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_chat_summary",
-			description="基于聊天历史生成结构化摘要与下一步建议",
+			description="基于聊天历史生成结构化摘要与下一步建议；信封 pagination 给出所读消息页证据（page / has_more / has_more_source / total）",
 			input_schema={
 				"type": "object",
 				"properties": {

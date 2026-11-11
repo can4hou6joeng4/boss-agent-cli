@@ -9,6 +9,8 @@ from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._contact_lookup import current_friend_security_id_or_emit, resolve_friend_or_emit
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_simple_list
+from boss_agent_cli.services.chat_utils import message_list
+from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION, list_pagination
 
 _MSG_TYPE_MAP = {
 	1: "文本", 2: "图片", 3: "招呼", 4: "简历", 5: "系统",
@@ -65,7 +67,8 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int, sho
 			handle_platform_error_output(ctx, "chatmsg", platform, resp, fallback_message="聊天记录获取失败")
 			return
 		msg_data = platform.unwrap_data(resp) or {}
-		messages = msg_data.get("messages") or msg_data.get("historyMsgList") or []
+		messages = message_list(msg_data)
+		pagination = list_pagination(msg_data, page=page, rows=messages)
 
 		result = []
 		for msg in messages:
@@ -83,13 +86,22 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int, sho
 				],
 			)
 
+		hints: dict[str, Any] = {"next_actions": [
+			boss_command_for_ctx(ctx, "chat"),
+			boss_command_for_ctx(ctx, f"detail {fresh_security_id}"),
+		]}
+		if pagination["has_more"] is True:
+			hints["next_actions"].append(boss_command_for_ctx(
+				ctx, f"chatmsg {gid} --page {pagination['page'] + 1} --count {count}",
+			))
+		elif pagination["has_more"] is None:
+			hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]
+
 		handle_output(
 			ctx, "chatmsg", result,
+			pagination=pagination,
 			render=_render,
-			hints={"next_actions": [
-				boss_command_for_ctx(ctx, "chat"),
-				boss_command_for_ctx(ctx, f"detail {fresh_security_id}"),
-			]},
+			hints=hints,
 		)
 
 
