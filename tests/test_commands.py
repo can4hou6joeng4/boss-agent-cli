@@ -1198,6 +1198,40 @@ def test_chat_from_boss_filter(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_pagination_reports_platform_page_evidence(mock_auth_cls, mock_client_cls):
+	"""--page 必须有分页证据：只有平台 hasMore=true 才提示下一页。"""
+	import time
+	now_ms = int(time.time() * 1000)
+	_ctx_mock(mock_client_cls)
+	runner = CliRunner()
+	for raw_has_more, expected in ((True, True), (False, False), ("missing", None)):
+		platform_data = {"result": [_make_friend_item("张HR", "阿里", 1, now_ms)]}
+		if raw_has_more != "missing":
+			platform_data["hasMore"] = raw_has_more
+		mock_client_cls.return_value.friend_list.reset_mock()
+		mock_client_cls.return_value.friend_list.return_value = {"zpData": platform_data}
+
+		result = runner.invoke(cli, ["chat", "--page", "2", "--from", "boss", "--days", "7"])
+
+		assert result.exit_code == 0, result.output
+		payload = json.loads(result.output)
+		pagination = payload["pagination"]
+		assert pagination["page"] == 2
+		assert pagination["has_more"] is expected
+		assert pagination["has_more_source"] == ("unknown" if expected is None else "platform_hasMore")
+		assert pagination["total"] == 1
+		assert pagination["total_kind"] == "returned_page_count"
+		next_pages = [action for action in payload["hints"]["next_actions"] if "chat --page" in action]
+		assert len(next_pages) == (1 if expected is True else 0)
+		if expected is True:
+			assert next_pages[0] == "boss chat --page 3 --from boss --days 7"
+		if expected is None:
+			assert payload["hints"]["operator_actions"]
+		mock_client_cls.return_value.friend_list.assert_called_once_with(page=2)
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_days_filter(mock_auth_cls, mock_client_cls):
 	"""--days 3 只返回最近 3 天的记录"""
 	import time
