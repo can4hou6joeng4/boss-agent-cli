@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- `chatmsg` / `chat-summary` 返回所读消息页的分页证据：复用共享分页逻辑，`page` 优先取平台有效页码，`has_more` 仅在平台给出布尔 `hasMore` 时非 `null`，`total` 是本页消息条数（`total_kind=returned_page_count`）。仅确认还有下一页时附加保留本次 `--count` 的翻页命令，未知时用 `operator_actions` 说明不能凭本页数量判断。消息数组的读取统一走 `services/chat_utils.message_list`：`messages` 为空或类型不符时回退 `historyMsgList`，畸形载荷按空页处理而非崩溃。同步 CLI / MCP 能力说明、双语命令参考与 CHANGELOG，补测三态、畸形字段、平台页码、下一页执行和错误路径。
 - `me --section deliver` 返回投递记录分页证据：复用共享分页逻辑，仅将平台布尔 `hasMore` 映射为 `pagination.has_more`，缺失或类型不明确时为 `null`；`total` 只计本页 `list` 数组，无法识别时为 `null`。仅确认还有下一页时附加翻页命令；默认汇总查询与其他 section 的顶层 `pagination` 仍为 `null`。同步 CLI / MCP 能力说明与双语命令参考，补测三态、畸形字段、平台页码、下一页执行和错误路径。
 - MCP `boss_stats` 新增 `format` / `output_file`：此前只能拿到 JSON 统计，无法让 CLI 生成自包含 HTML 报表并写到指定路径。参数守卫继续覆盖其余单命令工具，把 MCP 侧与 Click 参数名不同的别名（`show_raw` ↔ `raw`、`fmt` ↔ `format`、`output` ↔ `output_file`、`search_url` ↔ `url`、`output_format` / `output_path`、`resume_name` ↔ `resume`、`label` ↔ `tag`）显式登记，`digest` 的测试钩子 `--now-ts-ms` 同样登记为不暴露。变异验证：删掉 `boss_stats` 的 `format` 后守卫立即失败。
 - MCP `boss_clean` 新增 `days`（保留天数，0–36500，显式 0 原样下发），此前 Agent 只能按默认 30 天清理，无法收紧或放宽快照 / 导出文件的保留窗口。同时把本地维护与自动化工具纳入参数完整性守卫：`boss_agent_run` 的 `dry_run` / `limit` / `resume` 与 CLI 对齐；`boss_clean` 的 `--privacy`（清登录会话与简历）与 `--risk-lock`（清除本地风控锁）、`boss_agent_train` 的 `--live` 会绕过默认演练或删除敏感本地数据，显式登记为不暴露，未来改动必须经过这层判断。变异验证：删掉 `boss_clean` 的 `days` 后守卫立即失败。

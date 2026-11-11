@@ -443,7 +443,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"chatmsg": {
-			"description": "查看与指定好友的聊天消息历史；--raw 输出保真结构化消息字段。",
+			"description": "查看与指定好友的聊天消息历史；--raw 输出保真结构化消息字段。信封 pagination 给出所读消息页证据：has_more 仅在平台返回布尔 hasMore 时为 true / false。",
 			"args": [
 				{
 					"name": "security_id",
@@ -462,7 +462,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"chat-summary": {
-			"description": "基于聊天历史生成结构化摘要与下一步建议。",
+			"description": "基于聊天历史生成结构化摘要与下一步建议。信封 pagination 给出所读消息页证据：has_more 仅在平台返回布尔 hasMore 时为 true / false。",
 			"args": [
 				{
 					"name": "security_id",
