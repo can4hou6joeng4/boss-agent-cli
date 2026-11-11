@@ -190,7 +190,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_chat",
-			description="查看沟通列表，支持按发起方和时间筛选。返回项含稳定标识 uid，可用于 boss_chatmsg / boss_mark / boss_exchange。",
+			description="查看沟通列表，支持按发起方和时间筛选。返回项含稳定标识 uid，可用于 boss_chatmsg / boss_mark / boss_exchange。分页证据见 pagination.page / has_more（仅平台给出布尔 hasMore 时非 null）。",
 			input_schema={
 				"type": "object",
 				"properties": {

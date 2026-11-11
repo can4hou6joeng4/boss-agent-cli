@@ -193,13 +193,38 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				],
 			)
 
+		# --page 一直存在，但此前不从平台响应推导分页事实：Agent 翻页时既不知道
+		# 当前是哪一页，也没有「是否还有下一页」的证据。与 recommend 保持同一套
+		# 保守语义：只有平台返回布尔 hasMore 才据此给出下一页命令。
+		raw_has_more = platform_data.get("hasMore")
+		has_more = raw_has_more if isinstance(raw_has_more, bool) else None
+		pagination: dict[str, Any] = {
+			"page": page,
+			"has_more": has_more,
+			"has_more_source": "platform_hasMore" if has_more is not None else "unknown",
+			"total": len(friends),
+			"total_kind": "returned_page_count",
+		}
+		next_actions = [
+			boss_command_for_ctx(ctx, "detail <security_id>"),
+			boss_command_for_ctx(ctx, "chatmsg <uid>"),
+		]
+		if has_more is True:
+			next_cmd = f"chat --page {page + 1}"
+			if from_who:
+				next_cmd += f" --from {from_who}"
+			if days is not None:
+				next_cmd += f" --days {days}"
+			next_actions.append(boss_command_for_ctx(ctx, next_cmd))
+		hints: dict[str, Any] = {"next_actions": next_actions}
+		if has_more is None:
+			hints["operator_actions"] = ["平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有记录"]
+
 		handle_output(
 			ctx, "chat", friends,
 			render=_render,
-				hints={"next_actions": [
-					boss_command_for_ctx(ctx, "detail <security_id>"),
-					boss_command_for_ctx(ctx, "chatmsg <uid>"),
-			]},
+			pagination=pagination,
+			hints=hints,
 		)
 
 

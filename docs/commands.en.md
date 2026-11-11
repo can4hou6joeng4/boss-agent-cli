@@ -151,6 +151,8 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 | `boss interviews` | Interview invitations |
 | `boss history` | Browsing history |
 
+`boss chat --page N` returns `pagination`: `page` is the requested page; `has_more` is `true` or `false` only when the platform returns a boolean `hasMore`, otherwise `null`, with `has_more_source` set to `platform_hasMore` or `unknown` accordingly; `total` is the number of rows on this page after `--from` / `--days` filtering, with `total_kind=returned_page_count`, not the number of conversations on the platform. `hints.next_actions` adds a next-page command, preserving the filters, only when `has_more=true`; when `has_more=null`, `hints.operator_actions` states that the page size alone cannot establish whether more records exist.
+
 ## Pipeline & organization
 
 | Command | Description |

@@ -147,6 +147,8 @@ boss crawl stop <run_id>
 | `boss interviews` | 面试邀请 |
 | `boss history` | 浏览历史 |
 
+`boss chat --page N` 返回 `pagination`：`page` 是本次请求页；`has_more` 只在平台返回布尔 `hasMore` 时取 `true` 或 `false`，缺失或类型不明确时为 `null`，`has_more_source` 相应为 `platform_hasMore` 或 `unknown`；`total` 是本页经 `--from` / `--days` 筛选后的条数，`total_kind=returned_page_count`，不代表平台上的会话总数。只有 `has_more=true` 时 `hints.next_actions` 才附加下一页命令并保留筛选参数；`has_more=null` 时 `hints.operator_actions` 说明不能仅凭本页条数判断是否还有记录。
+
 ## 流水线监控
 
 | 命令 | 说明 |
