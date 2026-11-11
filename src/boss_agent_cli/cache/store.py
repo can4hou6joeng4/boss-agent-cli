@@ -11,6 +11,7 @@ from boss_agent_cli.services.job_identity import deduplicate_job_result
 
 _SEARCH_TTL = 86400  # 24 hours
 _MAX_SEARCH_CACHE = 100
+_MAX_JOB_DESC_CACHE = 1000
 
 
 class SavedSearchParamsError(ValueError):
@@ -985,7 +986,7 @@ class CacheStore:
 		return cast("str", row[0])
 
 	def put_job_desc(self, job_id: str, description: str) -> None:
-		"""缓存职位描述（仅当 job_id 与描述非空时写入）。"""
+		"""缓存非空职位描述，超过容量时淘汰保存时间最早的条目。"""
 		if not job_id or not description:
 			return
 		self._conn.execute(
@@ -993,6 +994,18 @@ class CacheStore:
 			(job_id, description, time.time()),
 		)
 		self._conn.commit()
+		self._evict_old_job_desc_cache()
+
+	def _evict_old_job_desc_cache(self) -> None:
+		count = self._conn.execute("SELECT COUNT(*) FROM job_desc_cache").fetchone()[0]
+		if count > _MAX_JOB_DESC_CACHE:
+			excess = count - _MAX_JOB_DESC_CACHE
+			self._conn.execute(
+				"DELETE FROM job_desc_cache WHERE job_id IN "
+				"(SELECT job_id FROM job_desc_cache ORDER BY created_at ASC, rowid ASC LIMIT ?)",
+				(excess,),
+			)
+			self._conn.commit()
 
 	def _evict_old_search_cache(self) -> None:
 		count = self._conn.execute("SELECT COUNT(*) FROM search_cache").fetchone()[0]

@@ -261,6 +261,66 @@ def test_job_desc_cache_ignores_empty(tmp_path):
 	assert store.get_job_desc("") is None
 
 
+@pytest.mark.parametrize("step", [0.0, 1.0])
+def test_job_desc_cache_evicts_oldest_on_overflow(tmp_path, monkeypatch, step):
+	"""超过容量后只保留最近写入的描述，不按职位 ID 排序。"""
+	monkeypatch.setattr("boss_agent_cli.cache.store._MAX_JOB_DESC_CACHE", 3)
+	now = 1000.0
+	monkeypatch.setattr("boss_agent_cli.cache.store.time.time", lambda: now)
+	with CacheStore(tmp_path / "test.db") as store:
+		for i in range(5):
+			now += step
+			store.put_job_desc(f"job-{4 - i}", f"描述 {i}")
+		assert store._conn.execute("SELECT COUNT(*) FROM job_desc_cache").fetchone()[0] == 3
+		assert store.get_job_desc("job-4") is None
+		assert store.get_job_desc("job-3") is None
+		assert store.get_job_desc("job-2") == "描述 2"
+		assert store.get_job_desc("job-1") == "描述 3"
+		assert store.get_job_desc("job-0") == "描述 4"
+
+
+def test_job_desc_cache_refresh_at_capacity_keeps_recent_value(tmp_path, monkeypatch):
+	"""更新已有条目不挤掉其他条目，随后扩容时按刷新后的保存时间淘汰。"""
+	monkeypatch.setattr("boss_agent_cli.cache.store._MAX_JOB_DESC_CACHE", 3)
+	now = 1000.0
+	monkeypatch.setattr("boss_agent_cli.cache.store.time.time", lambda: now)
+	with CacheStore(tmp_path / "test.db") as store:
+		for i in range(3):
+			now += 1
+			store.put_job_desc(f"job-{i}", f"描述 {i}")
+		now += 1
+		store.put_job_desc("job-0", "更新后的描述")
+		assert store.get_job_desc("job-0") == "更新后的描述"
+		assert store.get_job_desc("job-1") == "描述 1"
+		assert store.get_job_desc("job-2") == "描述 2"
+		now += 1
+		store.put_job_desc("job-3", "新职位描述")
+		assert store._conn.execute("SELECT COUNT(*) FROM job_desc_cache").fetchone()[0] == 3
+		assert store.get_job_desc("job-0") == "更新后的描述"
+		assert store.get_job_desc("job-1") is None
+		assert store.get_job_desc("job-2") == "描述 2"
+		assert store.get_job_desc("job-3") == "新职位描述"
+
+
+def test_job_desc_cache_trims_existing_overflow_on_next_write(tmp_path, monkeypatch):
+	"""升级前已经超限的缓存，在下一次写入时一次收敛到上限。"""
+	monkeypatch.setattr("boss_agent_cli.cache.store._MAX_JOB_DESC_CACHE", 3)
+	monkeypatch.setattr("boss_agent_cli.cache.store.time.time", lambda: 1000.0)
+	with CacheStore(tmp_path / "test.db") as store:
+		store._conn.executemany(
+			"INSERT INTO job_desc_cache VALUES (?, ?, ?)",
+			[(f"job-{i}", f"描述 {i}", 990.0 + i) for i in range(5)],
+		)
+		store._conn.commit()
+		store.put_job_desc("job-5", "新职位描述")
+		assert store._conn.execute("SELECT COUNT(*) FROM job_desc_cache").fetchone()[0] == 3
+		for i in range(3):
+			assert store.get_job_desc(f"job-{i}") is None
+		assert store.get_job_desc("job-3") == "描述 3"
+		assert store.get_job_desc("job-4") == "描述 4"
+		assert store.get_job_desc("job-5") == "新职位描述"
+
+
 # ── 缓存库文件本身损坏 ────────────────────────────────────────────────
 
 
