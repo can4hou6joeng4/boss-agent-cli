@@ -363,7 +363,7 @@ def test_boss_command_for_ctx_literals_are_accepted_by_the_cli(tmp_path: Any) ->
 	assert failures == []
 
 
-
+def test_local_record_lookups_do_not_report_job_not_found() -> None:
 	"""本地 / 会话侧记录缺失有自己的错误码，``JOB_NOT_FOUND`` 只表示平台职位不存在。
 
 	crawl run、preset / watch、联系人、workflow run 都不是职位：报成
