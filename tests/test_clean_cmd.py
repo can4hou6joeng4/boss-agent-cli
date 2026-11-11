@@ -1,9 +1,12 @@
 """clean 命令测试 — 覆盖缓存清理的各种场景。"""
 
 import json
+import os
+import shlex
 import sqlite3
 import time
 
+import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
@@ -234,18 +237,81 @@ def test_clean_json_envelope(tmp_path):
 	assert "total_bytes_freed_display" in parsed["data"]
 
 
-def test_clean_hints_after_dry_run(tmp_path):
-	"""预览模式后应提示执行实际清理。"""
-	code, parsed = _invoke("clean", "--dry-run", tmp_path=tmp_path)
-	actions = parsed.get("hints", {}).get("next_actions", [])
-	assert any("clean" in a for a in actions)
+@pytest.mark.parametrize(
+	"flags, days",
+	[
+		([], 0),
+		([], 7),
+		(["--all"], 7),
+		(["--privacy"], 7),
+		(["--all", "--privacy"], 7),
+	],
+	ids=["zero-days", "seven-days", "all", "privacy", "all-and-privacy"],
+)
+def test_clean_dry_run_hint_executes_previewed_scope(tmp_path, monkeypatch, flags, days):
+	"""实际执行预演返回的命令，只清理原目录，并保留原清理范围与天数。"""
+	data_dir = tmp_path / "preview data ' $scope"
+	other_dir = tmp_path / "default-data"
+	data_option = next(param for param in cli.params if param.name == "data_dir")
+	monkeypatch.setattr(data_option, "default", str(other_dir))
+	_setup_db(data_dir, fresh_search=1, greets=1, recruiter_greets=1, job_descs=1)
+	files = [
+		data_dir / "chat-history" / "old.json",
+		data_dir / "chat-history" / "recent.json",
+		data_dir / "resumes" / "draft.json",
+		other_dir / "chat-history" / "old.json",
+	]
+	for path in files:
+		path.parent.mkdir(parents=True, exist_ok=True)
+		path.write_text("{}", encoding="utf-8")
+	old, recent, resume, other = files
+	old_time = time.time() - 10 * 86400
+	recent_time = time.time() - 2 * 86400
+	os.utime(old, (old_time, old_time))
+	os.utime(other, (old_time, old_time))
+	os.utime(recent, (recent_time, recent_time))
+
+	code, preview = _invoke("clean", *flags, "--days", str(days), "--dry-run", tmp_path=data_dir)
+
+	assert code == 0
+	assert all(path.exists() for path in files)
+	actions = preview["hints"]["next_actions"]
+	assert len(actions) == 1
+	argv = shlex.split(actions[0])
+	assert argv[0] == "boss"
+	assert "--dry-run" not in argv
+	assert "--data-dir" in argv
+	assert argv[argv.index("--data-dir") + 1] == str(data_dir)
+	result = CliRunner().invoke(cli, argv[1:])
+	assert result.exit_code == 0, result.output
+	assert json.loads(result.stdout)["ok"] is True
+	assert not old.exists()
+	assert recent.exists() is (days != 0 and "--privacy" not in flags)
+	assert resume.exists() is ("--privacy" not in flags)
+	assert other.exists()
+	with sqlite3.connect(str(data_dir / "cache" / "boss_agent.db")) as conn:
+		for table in ("search_cache", "greet_records", "recruiter_greet_records", "job_desc_cache"):
+			assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == (0 if "--all" in flags else 1)
+
+
+def test_clean_risk_preview_keeps_scoped_command_only_in_operator_actions(tmp_path):
+	"""清锁命令只交给真人，并携带同一目录、范围与保留天数。"""
+	data_dir = tmp_path / "preview data ' $scope"
+	code, preview = _invoke(
+		"clean", "--all", "--privacy", "--days", "7", "--risk-lock", "--dry-run", tmp_path=data_dir,
+	)
+	assert code == 0
+	assert preview["hints"]["next_actions"] == []
+	manual = next(item for item in preview["hints"]["operator_actions"] if "预演未解除锁" in item)
+	argv = shlex.split(manual.split("执行 ", 1)[1])
+	assert argv == ["boss", "--data-dir", str(data_dir), "clean", "--all", "--privacy", "--days", "7", "--risk-lock"]
 
 
 def test_clean_hints_after_actual(tmp_path):
-	"""实际清理后应提示检查环境。"""
+	"""实际清理后应提示在同一目录检查环境。"""
 	code, parsed = _invoke("clean", tmp_path=tmp_path)
-	actions = parsed.get("hints", {}).get("next_actions", [])
-	assert any("doctor" in a for a in actions)
+	assert code == 0
+	assert shlex.split(parsed["hints"]["next_actions"][0]) == ["boss", "--data-dir", str(tmp_path), "doctor"]
 
 
 def test_clean_privacy_dry_run_does_not_delete_sensitive_files(tmp_path):
@@ -285,8 +351,10 @@ def test_clean_privacy_deletes_sensitive_files_and_hints_relogin(tmp_path):
 
 	assert code == 0
 	assert all(not file.exists() for file in files)
-	actions = parsed.get("hints", {}).get("next_actions", [])
-	assert any("login" in a for a in actions)
+	assert [shlex.split(action) for action in parsed["hints"]["next_actions"]] == [
+		["boss", "--data-dir", str(tmp_path), "login"],
+		["boss", "--data-dir", str(tmp_path), "doctor"],
+	]
 
 
 def test_clean_privacy_tolerates_database_without_crawl_tables(tmp_path):

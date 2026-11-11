@@ -274,6 +274,8 @@ boss hr download-resume <friend_id> --message-id <attachment_mid> --output ./res
 | `boss stats` | 投递转化漏斗统计（greeted/applied/shortlist） |
 | `boss export <query>` | 导出结果（CSV/JSON/HTML，支持 `--url` 网页筛选） |
 
+`clean --dry-run` 返回的执行提示会去掉 `--dry-run`，保留本次 `--data-dir`、`--all` / `--privacy` 与 `--days`；路径会正确转义，照提示执行时仍操作预演的数据目录与清理范围。清理后的登录、自检提示也沿用该目录。带 `--risk-lock` 的预演只在 `hints.operator_actions` 提供保留范围的人工执行命令。
+
 ### 平台配置校验
 
 `boss config set platform <名称>` 按当前平台注册表校验，内置可用值为 `zhipin`。已移除的平台、未知值和空值返回 `INVALID_PARAM`，不会创建或修改配置文件。

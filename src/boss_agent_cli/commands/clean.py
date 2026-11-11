@@ -16,7 +16,7 @@ from boss_agent_cli import display
 from boss_agent_cli.api.cdp_risk_lock import lock_path
 from boss_agent_cli.api.request_budget import budget_directory
 from boss_agent_cli.cache.store import CacheDatabaseInvalid
-from boss_agent_cli.display import handle_output, render_next_steps
+from boss_agent_cli.display import boss_command_for_ctx, handle_output, render_next_steps, shell_argument
 
 
 @click.command("clean")
@@ -131,22 +131,33 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 			"platform_risk_status": "unverified",
 		}
 
+	hint_prefix = boss_command_for_ctx(ctx, f"--data-dir {shell_argument(str(data_dir))}")
 	hints: dict[str, list[str]] = {"next_actions": []}
 	operator_actions: list[str] = []
 	if risk_lock:
 		operator_actions.append(
 			"本地清锁不解除服务器风险；请确认官方目标业务页已恢复，再由用户显式恢复原任务，若再次命中风险立即停止"
 		)
-	if dry_run and risk_lock:
-		operator_actions.append("预演未解除锁；确认恢复后由用户执行 boss clean --risk-lock")
-	elif dry_run:
-		hints["next_actions"].append("boss clean")
+	if dry_run:
+		clean_args = ["clean"]
+		if clean_all:
+			clean_args.append("--all")
+		if privacy:
+			clean_args.append("--privacy")
+		clean_args.extend(("--days", str(days)))
+		if risk_lock:
+			clean_args.append("--risk-lock")
+		clean_action = f"{hint_prefix} {' '.join(clean_args)}"
+		if risk_lock:
+			operator_actions.append(f"预演未解除锁；确认恢复后由用户执行 {clean_action}")
+		else:
+			hints["next_actions"].append(clean_action)
 	elif privacy:
-		hints["next_actions"].append("boss login")
-		hints["next_actions"].append("boss doctor")
+		hints["next_actions"].append(f"{hint_prefix} login")
+		hints["next_actions"].append(f"{hint_prefix} doctor")
 		operator_actions.append("隐私清理会清除本地登录态，需要重新登录后再继续")
 	else:
-		hints["next_actions"].append("boss doctor")
+		hints["next_actions"].append(f"{hint_prefix} doctor")
 	if operator_actions:
 		hints["operator_actions"] = operator_actions
 
