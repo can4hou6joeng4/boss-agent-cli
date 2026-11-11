@@ -563,6 +563,30 @@ class TestRenderers:
 		assert "next:" in output
 		assert "boss greet <security_id> <job_id>" in output
 
+	def test_render_job_detail_shows_index_snapshot_provenance(self, monkeypatch):
+		"""编号属于索引快照：详情下方要能看出它来自哪次搜索、保存时间。"""
+		from boss_agent_cli.display import render_job_detail
+		stream = _capture_display_console(monkeypatch)
+
+		render_job_detail({
+			"title": "Go", "salary": "20K", "index": 3,
+			"index_snapshot": {"source": "search:Golang", "count": 30, "saved_at": 1700000000.0},
+		})
+
+		output = stream.getvalue()
+		assert "#3" in output
+		assert "search:Golang" in output
+		assert "共 30 条" in output
+
+	def test_render_job_detail_omits_snapshot_line_without_metadata(self, monkeypatch):
+		"""detail 命令不带快照元信息时不应渲染空的溯源行。"""
+		from boss_agent_cli.display import render_job_detail
+		stream = _capture_display_console(monkeypatch)
+
+		render_job_detail({"title": "Go", "salary": "20K"})
+
+		assert "保存于" not in stream.getvalue()
+
 	def test_render_job_detail_truncates_long_description_at_500_chars(self, monkeypatch):
 		from boss_agent_cli.display import render_job_detail
 		stream = _capture_display_console(monkeypatch)

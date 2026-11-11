@@ -5,6 +5,7 @@ Pipe mode (Agent): JSON envelope to stdout.
 --json flag: Force JSON to stdout even in TTY.
 """
 
+import datetime
 import sys
 import threading
 from collections.abc import Sequence
@@ -308,6 +309,16 @@ def render_job_table(
 		console.print(f"  [dim]{hint_next}[/dim]")
 
 
+def _snapshot_time_label(value: Any) -> str:
+	"""把索引快照的 Unix 秒渲染成本地时间；损坏缓存里的非数值按 "-" 处理。"""
+	if isinstance(value, bool) or not isinstance(value, (int, float)):
+		return "-"
+	try:
+		return datetime.datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M")
+	except (OverflowError, OSError, ValueError):
+		return "-"
+
+
 def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None) -> None:
 	"""Render job detail as a rich panel."""
 	title = data.get("title", "-")
@@ -340,6 +351,18 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 
 	panel = Panel(text, title="job detail", border_style="cyan")
 	console.print(panel)
+
+	# 编号绑定的是索引快照，不是职位本身：把来源和保存时间放在详情下方，
+	# 重搜之后一眼就能看出这条编号是不是已经指向另一次搜索。
+	snapshot = data.get("index_snapshot")
+	if isinstance(snapshot, dict):
+		source = escape(str(snapshot.get("source") or "-"))
+		count = snapshot.get("count")
+		count_label = str(count) if isinstance(count, int) and not isinstance(count, bool) else "-"
+		index = data.get("index", "-")
+		console.print(
+			f"  [dim]#{index} · {source} · 共 {count_label} 条 · 保存于 {_snapshot_time_label(snapshot.get('saved_at'))}[/dim]"
+		)
 
 	sid = data.get("security_id", "")
 	jid = data.get("job_id", "")

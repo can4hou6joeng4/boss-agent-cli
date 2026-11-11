@@ -55,6 +55,7 @@ Parsing contract:
 - Read JSON envelopes from `stdout` only
 - `ok=true` means success; when `ok=false`, inspect `error.code` and `error.recovery_action`
 - `boss schema` also returns `supported_platforms`, `supported_recruiter_platforms`, and per-command `availability`, so agents can route tools by `role/platform`
+- A `boss show <#>` number is bound to the latest `search` / `recommend` snapshot; `data.index_snapshot` reports `source`, `count`, and `saved_at`. After a rerun the old number points at new results, so locate it again
 
 ### Agent authorization boundary
 

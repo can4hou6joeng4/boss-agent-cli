@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- `boss show <#>` 的输出新增 `data.index_snapshot`：编号只对最近一次 `search` / `recommend` 写入的索引快照有效，而缓存每次整份覆盖——重跑搜索后，Agent 手里的「结果 #3」会静默指向另一个职位，原输出只有 `index`，无法察觉引用已过期。现在成功信封返回 `source`（`search:<关键词>` 或 `recommend`）、`count` 与 `saved_at`（Unix 秒），TTY 详情面板下方同步显示编号来源与保存时间；命令参考与 agent-quickstart 中英说明「编号随快照失效、需重新定位」。新增 JSON 与 TTY 两条测试。
 - 新增「结果未知必须声明重试安全性」守卫 `tests/test_output.py::test_unknown_outcome_details_always_declare_replay_safety`：扫描源码里 `outcome="unknown"` 的 details 字面量，缺少 `replay_safe` 时失败——只写 outcome 时 `envelope_error` 补不出 `outcome_unknown`，Agent 会误以为可以重试。变异验证：删掉 `_base_client._unconfirmed_http_response` 的 `replay_safe` 即触发失败。
 - 新增向导渲染标签守卫 `tests/test_wizard_renderer.py`：`STEP_LABELS` / `ERROR_LABELS` / `RECOVERY_LABELS` 三张表此前没有任何测试覆盖，新增 wizard 动作或错误码却漏配标签时，TTY 会静默退化成「处理任务步骤」或「请返回主菜单后重试」，JSON 与 Agent 路径完全看不出问题。现在按 AST 收集 wizard 包内出现的全部已登记错误码（33 个），要求每个都有错误文案与恢复文案；步骤标签必须与 `DEFAULT_ACTIONS` 双向相等；错误与恢复文案必须成对且都在 `ERROR_CODES` 里。变异验证：删掉 `AI_API_ERROR` 标签或把 `candidate_apply` 改名，3 条守卫立即失败。
 - 文档补齐 `boss schema --format mcp-tools`：能力真源支持四种导出格式，但命令参考（中英）与两份 README 只列了 `native` / `openai-tools` / `anthropic-tools`，照文档读会以为没有 MCP Tools 导出（实际输出 78 个工具，与 `mcp_tools.TOOLS` 逐名一致）。现在命令参考示例与 README 的 schema 说明都补上 `mcp-tools`；文档命令可解析守卫的扫描范围同时扩展到 `mcp-server/README.md` / `.en.md`，受检示例由 245 条增至 253 条（共收集 269 行）。
