@@ -868,6 +868,24 @@ def test_show_corrupt_resume_reports_file_invalid(tmp_path):
 	assert parsed["hints"]["next_actions"] == ["boss resume delete broken", "boss resume list"]
 
 
+@pytest.mark.parametrize("name", ["我的 简历", "it's fine", "$HOME*"])
+def test_show_corrupt_resume_quotes_delete_hint(tmp_path, name):
+	"""简历名是自由文本：``resume delete`` 提示不转义时会被拆成多个参数。
+
+	``boss resume delete 我的 简历`` 按 shell 解析是两个参数；``it's fine``
+	会截断成非法引号；``$HOME*`` 会被展开。统一走 ``shell_argument`` 后，
+	按 shell 解析要还原成同一个名字。
+	"""
+	_write_corrupt_resume(tmp_path, name=name)
+	result = _invoke(CliRunner(), tmp_path, ["show", name])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "RESUME_FILE_INVALID")
+	hint = parsed["hints"]["next_actions"][0]
+	assert shlex.split(hint) == ["boss", "resume", "delete", name]
+
+
 def test_clone_corrupt_resume_not_local_io_error(tmp_path):
 	"""clone 以前把 FileNotFoundError 漏到顶层，报成「本地文件读写失败」+ 查磁盘。"""
 	_write_corrupt_resume(tmp_path)

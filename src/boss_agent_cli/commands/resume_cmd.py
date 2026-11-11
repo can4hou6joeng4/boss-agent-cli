@@ -75,7 +75,8 @@ def _load_resume(ctx: click.Context, store: ResumeStore, name: str) -> ResumeDat
 			message=f"简历文件 '{name}.json' 损坏，无法读取",
 			hints={
 				"next_actions": [
-					boss_command_for_ctx(ctx, f"resume delete {name}"),
+					# 简历名是自由文本（可含空格 / 引号）：不转义时提示会被拆成多个参数。
+					boss_command_for_ctx(ctx, f"resume delete {shell_argument(name)}"),
 					boss_command_for_ctx(ctx, "resume list"),
 				]
 			},
