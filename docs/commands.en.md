@@ -139,6 +139,8 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 |---------|-------------|
 | `boss greet <sid> <jid>` | Greet a recruiter; duplicates return `ALREADY_GREETED` |
 | `boss batch-greet <query>` | Search and greet up to an explicit `--count`; supports `--dry-run`; on `ACCOUNT_RISK` / `ENVIRONMENT_RISK` the batch stops immediately with `ok:false`, and already-greeted items are returned in `error.details.greeted` |
+
+The execution hint returned by `batch-greet --dry-run` preserves the current data directory and any explicitly given `--browser-source` / `--cdp-url` / `--delay`, removing only `--dry-run`, so following it uses the same login state, dedupe cache, browser channel, and throttle range as the preview.
 | `boss apply <sid> <jid>` | Apply or start a conversation; duplicates return `ALREADY_APPLIED` |
 | `boss exchange <uid-or-sid>` | Request a phone-number or WeChat exchange; prefer the stable `uid` returned by `boss chat` |
 
