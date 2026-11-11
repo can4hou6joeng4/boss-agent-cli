@@ -131,7 +131,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_search",
-			description="按关键词和筛选条件搜索 BOSS 直聘职位列表。支持城市、薪资、经验、学历、福利等多维度筛选；成功时 pagination.index_snapshot 给出本次写入的索引快照（source/page/count/saved_at），与 boss_show 的编号配套使用。",
+			description="按关键词和筛选条件搜索 BOSS 直聘职位列表。支持城市、薪资、经验、学历、行业、公司规模、融资阶段、职位类型、福利等多维度筛选；成功时 pagination.index_snapshot 给出本次写入的索引快照（source/page/count/saved_at），与 boss_show 的编号配套使用。",
 			input_schema={
 				"type": "object",
 				"properties": {
@@ -140,6 +140,10 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"salary": {"type": "string", "description": "薪资范围（如 20-50K）"},
 					"experience": {"type": "string", "description": "经验要求（如 3-5年）"},
 					"education": {"type": "string", "description": "学历要求（如 本科）"},
+					"industry": {"type": "string", "description": "行业类型，支持逗号分隔多选"},
+					"scale": {"type": "string", "description": "公司规模（如 100-499人），支持逗号分隔多选"},
+					"stage": {"type": "string", "description": "融资阶段（如 已上市、A轮），支持逗号分隔多选"},
+					"job_type": {"type": "string", "description": "职位类型（全职/兼职/实习），支持逗号分隔多选"},
 					"welfare": {"type": "string", "description": "福利筛选，逗号分隔 AND 逻辑（如 双休,五险一金）"},
 					"active": {
 						"type": "string",
@@ -147,6 +151,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 						"description": "只保留 HR 活跃度不低于该档的职位；online 只看列表、请求量与普通搜索相同，其余档位列表看不出时会逐个查详情（更慢、风控风险更高），活跃度未知的职位会被排除并写进 hints.active_filter",
 					},
 					"page": {"type": "integer", "description": "页码", "default": 1},
+					"no_cache": {"type": "boolean", "description": "跳过缓存，强制重新请求", "default": False},
+					"with_score": {"type": "boolean", "description": "附加匹配分和原因（使用本地简历）", "default": False},
 					"sort": {"type": "string", "enum": ["relevance", "score"], "description": "排序方式", "default": "relevance"},
 				},
 				"required": ["query"],
@@ -160,6 +166,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"page": {"type": "integer", "description": "页码", "default": 1},
+					"with_score": {"type": "boolean", "description": "附加匹配分和原因（使用本地简历）", "default": False},
 				},
 				"required": [],
 			},

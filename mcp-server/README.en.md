@@ -70,7 +70,7 @@ The current MCP server exposes **78 implemented tools**.
 
 | Tool | Description |
 |------|-------------|
-| `boss_search` | Search jobs with city, salary, and welfare filters |
+| `boss_search` | Search jobs with city, salary, experience, education, industry, company scale, funding stage, job type, welfare, and activity filters |
 | `boss_detail` | Fetch job details |
 | `boss_show` | Open a job from the previous search result by index |
 | `boss_export` | Export search results to CSV / JSON / HTML (supports `url` for replaying web filters; redacts job_id/security_id/boss_name by default) |

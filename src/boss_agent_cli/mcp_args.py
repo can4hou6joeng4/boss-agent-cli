@@ -34,11 +34,17 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "search":
 		args = [name, arguments["query"]]
-		for opt in ("city", "salary", "experience", "education", "welfare", "active"):
+		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "welfare", "active"):
 			if opt in arguments and arguments[opt]:
 				args.extend([f"--{opt}", str(arguments[opt])])
+		if arguments.get("job_type"):
+			args.extend(["--job-type", str(arguments["job_type"])])
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
+		if arguments.get("no_cache"):
+			args.append("--no-cache")
+		if arguments.get("with_score"):
+			args.append("--with-score")
 		if arguments.get("sort"):
 			args.extend(["--sort", str(arguments["sort"])])
 		return args
@@ -70,6 +76,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = [name]
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
+		if arguments.get("with_score"):
+			args.append("--with-score")
 		return args
 
 	if name == "detail":

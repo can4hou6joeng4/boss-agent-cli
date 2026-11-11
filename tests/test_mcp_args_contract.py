@@ -14,6 +14,8 @@ from typing import Any
 import click
 import pytest
 
+from boss_agent_cli.commands import recommend as recommend_cmd_module
+from boss_agent_cli.commands import search as search_cmd_module
 from boss_agent_cli.commands.recruiter import (
 	accept_resume as recruiter_accept_resume,
 	applications as recruiter_applications,
@@ -114,6 +116,43 @@ def test_hr_tool_schema_lists_every_cli_parameter(tool_name: str, command: click
 	schema = next(tool for tool in TOOLS if tool.name == tool_name).input_schema
 	properties = set((schema.get("properties") or {}).keys())
 	parameters = {param.name for param in command.params if param.name}
+	missing_in_schema = sorted(parameters - properties)
+	extra_in_schema = sorted(properties - parameters)
+	assert not missing_in_schema and not extra_in_schema, (
+		f"{tool_name} 的 inputSchema 与 CLI 参数不一致："
+		f"CLI 有但 schema 未声明 {missing_in_schema}；schema 声明但 CLI 没有 {extra_in_schema}"
+	)
+
+
+# 核心读取工具同样要求 schema 与 CLI 参数对齐；CLI 参数名与 schema 不同名时
+# 显式登记别名，确实不暴露的参数写明原因，避免新增筛选条件只加在 CLI 里。
+_CORE_SINGLE_COMMAND_TOOLS = {
+	"boss_search": (
+		search_cmd_module.search_cmd,
+		{"sort_mode": "sort"},
+		# 二者与 query 是互斥输入源，而工具 schema 把 query 标为必填；
+		# 要暴露需先设计 oneOf，本次不改契约。
+		{"search_url", "preset"},
+	),
+	"boss_recommend": (recommend_cmd_module.recommend_cmd, {}, set()),
+}
+
+
+@pytest.mark.parametrize(
+	("tool_name", "command", "aliases", "hidden"),
+	[(tool_name, *spec) for tool_name, spec in _CORE_SINGLE_COMMAND_TOOLS.items()],
+	ids=list(_CORE_SINGLE_COMMAND_TOOLS),
+)
+def test_core_tool_schema_lists_every_cli_parameter(
+	tool_name: str, command: click.Command, aliases: dict[str, str], hidden: set[str],
+) -> None:
+	schema = next(tool for tool in TOOLS if tool.name == tool_name).input_schema
+	properties = set((schema.get("properties") or {}).keys())
+	parameters = {
+		aliases.get(param.name, param.name)
+		for param in command.params
+		if param.name and param.name not in hidden
+	}
 	missing_in_schema = sorted(parameters - properties)
 	extra_in_schema = sorted(properties - parameters)
 	assert not missing_in_schema and not extra_in_schema, (

@@ -94,7 +94,7 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 
 | 工具 | 说明 |
 |------|------|
-| `boss_search` | 搜索职位（支持城市、薪资、福利筛选） |
+| `boss_search` | 搜索职位（支持城市、薪资、经验、学历、行业、规模、融资阶段、职位类型、福利与活跃度筛选） |
 | `boss_detail` | 职位详情 |
 | `boss_show` | 按编号查看上次搜索结果中的职位 |
 | `boss_export` | 导出搜索结果为 CSV / JSON / HTML（支持 `--url` 复用网页筛选；默认脱敏 job_id/security_id/boss_name） |
