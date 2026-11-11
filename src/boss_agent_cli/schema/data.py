@@ -1363,7 +1363,7 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"applications": {
-				"description": "查看候选人投递申请列表。",
+				"description": "查看候选人投递申请列表。信封 pagination 给出分页证据：has_more 仅平台返回布尔 hasMore 时有效，缺失为 null。",
 					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
 					"--label-id": {"type": "int", "default": 0, "minimum": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
 					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
@@ -1388,7 +1388,7 @@ SCHEMA_DATA = {
 					"--raw": {"type": "bool", "default": False, "description": "输出原始 API 数据（不解析）"},
 				},
 				"chat": {
-				"description": "查看与候选人的沟通列表。",
+				"description": "查看与候选人的沟通列表。信封 pagination 给出分页证据：has_more 仅平台返回布尔 hasMore 时有效，缺失为 null。",
 					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
 					"--label-id": {"type": "int", "default": 0, "minimum": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
@@ -1409,7 +1409,7 @@ SCHEMA_DATA = {
 					"--max-msg-id": {"type": "int", "default": None, "minimum": 1, "description": "向前翻页的最大消息 ID"},
 				},
 				"last-messages": {
-				"description": "批量查看候选人最近消息摘要。",
+				"description": "批量查看候选人最近消息摘要。从平台取沟通列表时信封 pagination 给出分页证据；--friend-id 直查时为 null。",
 					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "沟通列表页码"},
 					"--job-id": {"type": "string", "default": None, "description": "按职位筛选"},
 					"--label-id": {"type": "int", "default": 0, "minimum": 0, "description": "按标签筛选（0=全部, 1=新招呼, 2=沟通中）"},
@@ -1430,7 +1430,7 @@ SCHEMA_DATA = {
 					],
 				},
 				"candidates": {
-				"description": "搜索候选人。",
+				"description": "搜索候选人。信封 pagination 给出分页证据：has_more 仅平台返回布尔 hasMore 时有效，缺失为 null。",
 					"args": [
 						{"name": "query", "required": False, "description": "按关键词过滤候选人摘要；省略时列出全部"},
 					],
@@ -1447,7 +1447,7 @@ SCHEMA_DATA = {
 					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 				},
 				"recommendations": {
-				"description": "读取推荐牛人完整卡片和首次开聊参数。",
+				"description": "读取推荐牛人完整卡片和首次开聊参数。信封 pagination 给出分页证据：has_more 仅平台返回布尔 hasMore 时有效，缺失为 null。",
 					"--job-id": {"type": "string", "required": True, "description": "招聘职位的加密 ID"},
 					"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 				},

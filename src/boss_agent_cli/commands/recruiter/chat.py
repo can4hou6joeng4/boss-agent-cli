@@ -10,7 +10,18 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.services.chat_utils import MSG_STATUS_LABELS
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output
+from boss_agent_cli.services.pagination import (
+	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
+	list_pagination,
+	rows_from,
+)
+from boss_agent_cli.display import (
+	boss_command_for_ctx,
+	handle_auth_errors,
+	handle_output,
+	handle_platform_error_output,
+	shell_argument,
+)
 
 
 _RECRUITER_MSG_STATUS_LABELS = {0: "发送中", **MSG_STATUS_LABELS}
@@ -257,12 +268,29 @@ def _friend_ids_from_items(items: list[dict[str, Any]]) -> list[int]:
 
 def _fetch_friend_ids(
 	platform: Any, *, page: int, label_id: int, job_id: str | None,
-) -> tuple[list[int], dict[int, int], dict[str, Any] | None]:
+) -> tuple[list[int], dict[int, int], dict[str, Any] | None, dict[str, Any]]:
+	"""取一页沟通列表；同时把平台原始载荷带回，供调用方推导分页证据。"""
 	result = platform.friend_list(page=page, label_id=label_id, job_id=job_id)
 	if not platform.is_success(result):
-		return [], {}, result
-	items = _friend_items(_friend_data(platform.unwrap_data(result)))
-	return _friend_ids_from_items(items), _friend_sources(items), None
+		return [], {}, result, {}
+	data = _friend_data(platform.unwrap_data(result))
+	items = _friend_items(data)
+	ids = _friend_ids_from_items(items)
+	return ids, _friend_sources(items), None, data
+
+
+def _last_messages_page(
+	ctx: Any, pagination: dict[str, Any], job_id: str | None, label_id: int, limit: int,
+) -> str:
+	"""下一页沟通列表命令：保留筛选条件，非默认 limit 才透传。"""
+	next_page = f"hr last-messages --page {pagination['page'] + 1}"
+	if job_id:
+		next_page += f" --job-id {shell_argument(job_id)}"
+	if label_id:
+		next_page += f" --label-id {label_id}"
+	if limit != DEFAULT_SUMMARY_LIMIT:
+		next_page += f" --limit {limit}"
+	return boss_command_for_ctx(ctx, next_page)
 
 
 UNREAD_TOTAL_TAB = "1"
@@ -444,15 +472,26 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 		data = _friend_data(platform.unwrap_data(result))
 		friend_items = _friend_items(data)
 		summary_hint = _enrich_chat_summaries(platform, friend_items, summary_limit=summary_limit)
+		pagination = list_pagination(data, page=page, rows=rows_from(data, "friendList"))
 		hints: dict[str, Any] = {"next_actions": [
 			boss_command_for_ctx(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
 			boss_command_for_ctx(ctx, "hr chatmsg <friend_id>"),
 		]}
+		if pagination["has_more"] is True:
+			next_page = f"hr chat --page {pagination['page'] + 1}"
+			if job_id:
+				next_page += f" --job-id {shell_argument(job_id)}"
+			if label_id:
+				next_page += f" --label-id {label_id}"
+			next_page += f" --summary-limit {summary_limit}"
+			hints["next_actions"].append(boss_command_for_ctx(ctx, next_page))
+		if pagination["has_more"] is None:
+			hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]
 		# 未读总数只读页面内存（uncountTab$），不额外发请求；放在 hints 顶层，拿不到为 null。
 		hints.update(_unread_totals(summary_hint.get("page_snapshot")))
 		if summary_hint:
 			hints["summary_sources"] = summary_hint
-		handle_output(ctx, "recruiter-chat", data, hints=hints)
+		handle_output(ctx, "recruiter-chat", data, pagination=pagination, hints=hints)
 
 
 @click.command("chatmsg")
@@ -516,25 +555,33 @@ def recruiter_last_messages_cmd(
 	with get_recruiter_platform_instance(ctx, auth) as platform:
 		ids = list(dict.fromkeys(friend_ids))
 		sources: dict[int, int] = {}
+		# 只有从平台取了一页沟通列表才有分页证据；--friend-id 直查没有列表页，pagination 为 null。
+		pagination: dict[str, Any] | None = None
 		if not ids:
-			ids, sources, error = _fetch_friend_ids(platform, page=page, label_id=label_id, job_id=job_id)
+			ids, sources, error, page_data = _fetch_friend_ids(platform, page=page, label_id=label_id, job_id=job_id)
 			if error is not None:
 				handle_platform_error_output(ctx, "recruiter-last-messages", platform, error, fallback_message="沟通列表获取失败")
 				return
+			pagination = list_pagination(page_data, page=page, rows=rows_from(page_data, "friendList"))
 		if not ids:
 			# 空结果不能只回一个空列表：Agent 拿不到任何后继动作，也不知道
 			# 是「没有会话」还是「筛选条件太窄」。
+			next_actions = [boss_command_for_ctx(ctx, "hr chat")]
+			operator_actions = [
+				"没有可读取的候选人会话：先用 boss hr chat 查看沟通列表，"
+				"或用 boss hr candidates <关键词> 主动搜索候选人"
+			]
+			if pagination is not None:
+				if pagination["has_more"] is True:
+					next_actions.append(_last_messages_page(ctx, pagination, job_id, label_id, limit))
+				if pagination["has_more"] is None:
+					operator_actions.append(UNKNOWN_HAS_MORE_OPERATOR_ACTION)
 			handle_output(
 				ctx,
 				"recruiter-last-messages",
 				{"friend_ids": [], "messages": []},
-				hints={
-					"next_actions": [boss_command_for_ctx(ctx, "hr chat")],
-					"operator_actions": [
-						"没有可读取的候选人会话：先用 boss hr chat 查看沟通列表，"
-						"或用 boss hr candidates <关键词> 主动搜索候选人"
-					],
-				},
+				pagination=pagination,
+				hints={"next_actions": next_actions, "operator_actions": operator_actions},
 			)
 			return
 
@@ -555,11 +602,19 @@ def recruiter_last_messages_cmd(
 			output["skipped"] = skipped
 		if "error" in stats:
 			output["partial_error"] = stats["error"]
+		next_actions = [
+			boss_command_for_ctx(ctx, "hr chatmsg <friend_id>"),
+			boss_command_for_ctx(ctx, "hr reply <friend_id> <message>"),
+		]
+		hints: dict[str, Any] = {"next_actions": next_actions}
+		if pagination is not None:
+			if pagination["has_more"] is True:
+				next_actions.append(_last_messages_page(ctx, pagination, job_id, label_id, limit))
+			if pagination["has_more"] is None:
+				hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]
 		handle_output(
 			ctx, "recruiter-last-messages",
 			output,
-			hints={"next_actions": [
-				boss_command_for_ctx(ctx, "hr chatmsg <friend_id>"),
-				boss_command_for_ctx(ctx, "hr reply <friend_id> <message>"),
-			]},
+			pagination=pagination,
+			hints=hints,
 		)

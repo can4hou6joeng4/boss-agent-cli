@@ -804,7 +804,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_hr_applications",
-			description="招聘者模式：查看候选人投递申请列表",
+			description="招聘者模式：查看候选人投递申请列表；结果信封 pagination 给出平台 hasMore 证据（缺失为 null）",
 			input_schema={
 				"type": "object",
 				"properties": {
@@ -817,7 +817,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_hr_candidates",
-			description="招聘者模式：搜索候选人",
+			description="招聘者模式：搜索候选人；结果信封 pagination 给出平台 hasMore 证据（缺失为 null）",
 			input_schema={
 				"type": "object",
 				"properties": {
@@ -839,7 +839,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_hr_recommendations",
-			description="招聘者模式：读取推荐牛人完整卡片和首次开聊所需参数",
+			description="招聘者模式：读取推荐牛人完整卡片和首次开聊所需参数；结果信封 pagination 给出平台 hasMore 证据（缺失为 null）",
 			input_schema={
 				"type": "object",
 				"properties": {
@@ -870,7 +870,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_hr_chat",
-			description="招聘者模式：查看与候选人的沟通列表（含未读数和最近消息摘要）",
+			description="招聘者模式：查看与候选人的沟通列表（含未读数和最近消息摘要）；结果信封 pagination 给出平台 hasMore 证据（缺失为 null）",
 			input_schema={
 				"type": "object",
 				"properties": {
@@ -896,7 +896,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_hr_last_messages",
-			description="招聘者模式：批量查看候选人最近消息摘要",
+			description="招聘者模式：批量查看候选人最近消息摘要；按页取沟通列表时信封 pagination 给出平台 hasMore 证据（--friend-id 直查为 null）",
 			input_schema={
 				"type": "object",
 				"properties": {
