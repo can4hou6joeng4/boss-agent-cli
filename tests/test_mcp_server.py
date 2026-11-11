@@ -706,6 +706,33 @@ def test_build_args_search_with_score_sort():
 	assert args == ["search", "python", "--sort", "score"]
 
 
+def test_build_args_search_forwards_industry_scale_stage_job_type():
+	"""CLI 已支持的筛选参数必须都能从 MCP 透传，否则 Agent 只能加大结果集再自行过滤。"""
+	args = _build_args("boss_search", {
+		"query": "golang",
+		"industry": "互联网",
+		"scale": "100-499人",
+		"stage": "A轮",
+		"job_type": "全职",
+		"welfare": "双休",
+		"active": "online",
+	})
+	assert args == [
+		"search", "golang",
+		"--industry", "互联网",
+		"--scale", "100-499人",
+		"--stage", "A轮",
+		"--welfare", "双休",
+		"--active", "online",
+		"--job-type", "全职",
+	]
+
+
+def test_build_args_search_forwards_cache_and_score_flags():
+	args = _build_args("boss_search", {"query": "python", "no_cache": True, "with_score": True})
+	assert args == ["search", "python", "--no-cache", "--with-score"]
+
+
 def test_build_args_search_ignores_empty_options():
 	"""空选项不应出现在参数中。"""
 	args = _build_args("boss_search", {"query": "java", "city": "", "salary": None})
@@ -721,6 +748,11 @@ def test_build_args_recommend_no_page():
 def test_build_args_recommend_with_page():
 	args = _build_args("boss_recommend", {"page": 3})
 	assert args == ["recommend", "--page", "3"]
+
+
+def test_build_args_recommend_forwards_with_score():
+	args = _build_args("boss_recommend", {"page": 3, "with_score": True})
+	assert args == ["recommend", "--page", "3", "--with-score"]
 
 
 def test_build_args_detail_basic():
