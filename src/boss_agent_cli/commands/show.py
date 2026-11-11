@@ -34,26 +34,30 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 		)
 		return
 
+	# 编号只对当前索引快照有效：后一次 search / recommend 会整份覆盖缓存，
+	# 同一个「结果 #3」可能已经指向别的职位。先取快照元信息，成功输出也要带上
+	# 来源与保存时间，Agent 才能发现自己手里的编号已经过期。
+	info = get_index_info(data_dir)
+	if not info["exists"]:
+		handle_error_output(
+			ctx, "show",
+			code="INVALID_PARAM",
+			message="没有缓存的搜索结果，请先执行 boss search 或 boss recommend",
+			recovery_action=f"先执行 {search_cmd} 或 {recommend_cmd} 建立结果缓存",
+			hints=rerun_hints,
+		)
+		return
+
 	# 从索引缓存获取职位信息
 	job = get_job_by_index(data_dir, index)
 	if job is None:
-		info = get_index_info(data_dir)
-		if not info["exists"]:
-			handle_error_output(
-				ctx, "show",
-				code="INVALID_PARAM",
-				message="没有缓存的搜索结果，请先执行 boss search 或 boss recommend",
-				recovery_action=f"先执行 {search_cmd} 或 {recommend_cmd} 建立结果缓存",
-				hints=rerun_hints,
-			)
-		else:
-			handle_error_output(
-				ctx, "show",
-				code="INVALID_PARAM",
-				message=f"编号 {index} 超出范围，当前缓存共 {info['count']} 条结果（来源: {info['source']}）",
-				recovery_action=f"改用当前结果数以内的编号，或用 {search_cmd} 重新搜索",
-				hints=rerun_hints,
-			)
+		handle_error_output(
+			ctx, "show",
+			code="INVALID_PARAM",
+			message=f"编号 {index} 超出范围，当前缓存共 {info['count']} 条结果（来源: {info['source']}）",
+			recovery_action=f"改用当前结果数以内的编号，或用 {search_cmd} 重新搜索",
+			hints=rerun_hints,
+		)
 		return
 
 	security_id = job.get("security_id", "")
@@ -98,6 +102,13 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 
 	result = build_job_from_card(card, security_id=security_id, greeted=greeted, lid=lid)
 	result["index"] = index
+	# 与 index 一起返回快照身份：source 形如 search:<关键词> 或 recommend，
+	# saved_at 是 Unix 秒。编号离开这份快照就没有意义，重跑搜索后必须重新定位。
+	result["index_snapshot"] = {
+		"source": info["source"],
+		"count": info["count"],
+		"saved_at": info["saved_at"],
+	}
 
 	# TTY 的 next 行可以写「A 或 B」，但 hints.next_actions 的每条都必须能直接执行。
 	next_action = (

@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 
 from click.testing import CliRunner
 from boss_agent_cli.display import risk_error_message
+from boss_agent_cli.index_cache import save_index
 from boss_agent_cli.main import cli
 from boss_agent_cli.search_filters import SearchPipelinePlatformError
 
@@ -2094,9 +2095,13 @@ def test_detail_json_hints_expose_available_candidate_actions(mock_client_cls, m
 @patch("boss_agent_cli.commands.show.CacheStore")
 @patch("boss_agent_cli.commands.show.AuthManager")
 @patch("boss_agent_cli.commands.show.get_platform_instance")
+@patch("boss_agent_cli.commands.show.get_index_info")
 @patch("boss_agent_cli.commands.show.get_job_by_index")
-def test_show_json_hints_expose_available_candidate_actions(mock_get_job, mock_client_cls, mock_auth_cls, mock_cache_cls):
+def test_show_json_hints_expose_available_candidate_actions(
+	mock_get_job, mock_get_info, mock_client_cls, mock_auth_cls, mock_cache_cls,
+):
 	mock_get_job.return_value = {"security_id": "sec_001"}
+	mock_get_info.return_value = {"exists": True, "source": "search:Go", "count": 1, "saved_at": 1700000000.0}
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	mock_client = _ctx_mock(mock_client_cls)
@@ -2126,6 +2131,37 @@ def test_show_json_hints_expose_available_candidate_actions(mock_get_job, mock_c
 	actions = parsed["hints"]["next_actions"]
 	assert "boss apply <security_id> <job_id>" in actions
 	assert "boss greet <security_id> <job_id>" in actions
+
+
+@patch("boss_agent_cli.commands.show.CacheStore")
+@patch("boss_agent_cli.commands.show.AuthManager")
+@patch("boss_agent_cli.commands.show.get_platform_instance")
+def test_show_json_data_binds_number_to_its_search_snapshot(mock_client_cls, mock_auth_cls, mock_cache_cls, tmp_path):
+	"""编号只对某一次 search / recommend 的快照有效，show 必须同时返回快照身份。"""
+	save_index(
+		tmp_path,
+		[
+			{"security_id": "sec_001", "job_id": "j1", "title": "Go 开发"},
+			{"security_id": "sec_002", "job_id": "j2", "title": "Python 后端"},
+		],
+		source="search:Golang",
+	)
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.job_card.return_value = {
+		"zpData": {"jobCard": {"encryptJobId": "j2", "jobName": "Python 后端", "brandName": "TestCo"}},
+	}
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "show", "2"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["data"]["index"] == 2
+	snapshot = parsed["data"]["index_snapshot"]
+	assert snapshot["source"] == "search:Golang"
+	assert snapshot["count"] == 2
+	assert snapshot["saved_at"] > 0
 
 
 @patch("boss_agent_cli.commands.stats._collect_stats")

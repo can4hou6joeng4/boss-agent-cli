@@ -308,7 +308,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_show",
-			description="按编号快速查看上次搜索或推荐结果中的职位详情",
+			description="按编号快速查看上次搜索或推荐结果中的职位详情；返回的 index_snapshot 给出编号所属快照的来源、条数与保存时间",
 			input_schema={
 				"type": "object",
 				"properties": {

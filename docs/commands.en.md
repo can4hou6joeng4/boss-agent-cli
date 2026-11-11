@@ -99,6 +99,8 @@ This is an alternative credential input, not a login/risk-control bypass or a co
 
 `recommend` sets `pagination.has_more` to `true` or `false` only when the platform returns a boolean `hasMore`. A missing or ambiguous value produces `null` with `has_more_source=unknown` and no next-page action. Only `true` suggests another page; neither `false` nor `null` triggers an additional probe. The compatible `total` field remains the number of returned items, with `total_kind=returned_page_count`, rather than an overall job count.
 
+A `boss show <#>` number is valid only for the index snapshot created by the most recent `search` / `recommend`: each search or recommendation overwrites the cache wholesale, so an old number silently points at a new result after any rerun. The success envelope returns `data.index_snapshot` with `source` (`search:<query>` or `recommend`), `count`, and `saved_at` (Unix seconds). Agents should store the number together with this snapshot identity and re-run the search when the source or time no longer matches instead of reusing the old number.
+
 ## Resumable bulk crawl
 
 `crawl` is an explicitly triggered, bounded Chrome task. Install `uv sync --extra crawl` first; it starts only the isolated `<data-dir>/crawl/chrome-profile`, never attaches to a daily Chrome profile, checkpoints every stage, and applies fixed request/detail/time/retry budgets plus a stop control.
