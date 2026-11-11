@@ -73,6 +73,20 @@ ERROR_LABELS = {
 	"WORKFLOW_STOPPED": "任务已停止",
 	"WORKFLOW_PLAN_MISMATCH": "任务信息与已有记录不一致",
 	"INVALID_PARAM": "请求参数无效",
+	"AUTH_EXPIRED": "登录状态已过期",
+	"AI_API_ERROR": "AI 服务调用失败",
+	"AI_NOT_CONFIGURED": "AI 服务尚未配置",
+	"ACTION_UNCONFIRMED": "操作可能已生效，但未能确认",
+	"ALREADY_APPLIED": "已投递过该职位",
+	"ALREADY_GREETED": "已向该招聘者打过招呼",
+	"ENDPOINT_DEPRECATED": "平台接口已迁移，当前版本无法发送",
+	"EXCHANGE_NOT_AVAILABLE": "交换联系方式按钮尚未解锁",
+	"LOCAL_IO_ERROR": "本地文件读写失败",
+	"LOCAL_STATE_WRITE_FAILED": "平台操作已完成，但本地状态保存失败",
+	"RESUME_NOT_FOUND": "本地简历不存在",
+	"SAVED_SEARCH_INVALID": "本地预设或监控的参数已损坏",
+	"UNKNOWN": "平台返回了未识别的错误",
+	"WIZARD_INPUT_REQUIRED": "workflow 缺少必要输入",
 }
 
 RECOVERY_LABELS = {
@@ -94,6 +108,21 @@ RECOVERY_LABELS = {
 	"WORKFLOW_TIMEOUT": "请选择“恢复已有任务”继续。",
 	"WORKFLOW_PLAN_MISMATCH": "请使用原任务恢复，或新建任务。",
 	"INVALID_PARAM": "请换一条结果重试，或返回结果列表重新选择。",
+	"AUTH_EXPIRED": "请重新登录当前平台，然后选择“恢复已有任务”。",
+	"AI_API_ERROR": "检查网络连接与 AI 密钥配置后重试。",
+	"AI_NOT_CONFIGURED": "先执行 boss ai config --provider <provider> --model <model> --api-key <key> 完成配置。",
+	"ACTION_UNCONFIRMED": "动作可能已生效：先用 boss hr chatmsg <friend_id> 核实，不要直接重试。",
+	"ALREADY_APPLIED": "该职位已投递过：用 boss me --section deliver 查看投递记录，或用 boss chat 跟进。",
+	"ALREADY_GREETED": "已打过招呼：用 boss chat 查看会话，或返回重新搜索换一批职位。",
+	"ENDPOINT_DEPRECATED": "停止重试：该平台端点已下线，请升级到最新版本并查看 error.details.tracking_issue。",
+	"EXCHANGE_NOT_AVAILABLE": "先回复候选人（boss hr reply）或请求附件简历，再重新执行交换。",
+	"LOCAL_IO_ERROR": "确认目标路径是可写目录、权限与磁盘空间正常后，再执行。",
+	"LOCAL_STATE_WRITE_FAILED": "先在官方页面核对操作是否已生效；不要自动重发，确认磁盘空间与缓存目录权限后再继续。",
+	"RESUME_NOT_FOUND": "先用 boss resume list 查看可用简历，再重新选择。",
+	"SAVED_SEARCH_INVALID": "执行 boss preset remove <名称>（watch 用 boss watch remove）后重新添加。",
+	"UNKNOWN": "不要自动重试：先在平台官方页面核对操作是否生效，并用 boss doctor 检查登录态与网络。",
+	"WIZARD_INPUT_REQUIRED": "headless 模式请通过 --input-json 提供完整输入，或用 run_id 恢复。",
+	"WORKFLOW_STOPPED": "任务已停止；如需继续，请选择“恢复已有任务”。",
 }
 
 # 这些步骤对真人噪声大，TTY 进度里默认静默。
