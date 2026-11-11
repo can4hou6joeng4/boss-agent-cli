@@ -671,7 +671,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_favorites_list",
-			description="预览 BOSS 职位收藏单页及有效状态（不落库）",
+			description="预览 BOSS 职位收藏单页及有效状态（不落库）。分页证据见 pagination.has_more / has_more_source（缺失 hasMore 时为 null）。",
 			input_schema={
 				"type": "object",
 				"properties": {

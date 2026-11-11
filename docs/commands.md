@@ -163,6 +163,8 @@ boss crawl stop <run_id>
 
 `boss shortlist add <sid> <jid> --lid <lid>` 可保存与 `sid` 同一列表项的访问上下文，`list` / `compare` 会返回该值；crawl 和 favorites 导入也保留对应上下文，favorites 预览继续脱敏。`lid` 可省略，保存不代表其仍有效，不推断有效期或跨账号身份。
 
+`history` / `favorites list` 的 `pagination.has_more` 与 `recommend` / `chat` 同一口径：只有平台返回布尔 `hasMore` 时才是 `true` / `false`；缺失或类型不明确时为 `null`、`has_more_source=unknown`，不会默认成 `false`，也不提示下一页。`total` 始终是本页返回条数（`total_kind=returned_page_count`）。
+
 ## 招聘者模式
 
 `boss hr whoami` 只读 `getUserInfo`。`identity` 为 1 表示当前登录态在招聘者侧，`ready` 为 true。`profile_recruit` 对应账号资料里的 `recruit`，只回显，不参与判断。双身份账号停在求职者侧时 `ready` 为 false，需要在官方页面切换到「我要招聘」后再查；命令本身不切换身份。

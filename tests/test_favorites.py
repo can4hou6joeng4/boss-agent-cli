@@ -164,6 +164,44 @@ def test_favorites_list_hints_include_next_page_when_has_more(mock_auth_cls, moc
 	assert any("favorites list --page 3" in action for action in next_actions)
 
 
+@pytest.mark.parametrize(
+	("platform_has_more", "expected"),
+	[(True, True), (False, False), ("missing", None)],
+)
+@patch("boss_agent_cli.commands.favorites.get_platform_instance")
+@patch("boss_agent_cli.commands.favorites.AuthManager")
+def test_favorites_list_pagination_reports_platform_evidence(
+	mock_auth_cls, mock_platform_cls, platform_has_more, expected,
+):
+	"""缺失 hasMore 时返回 null，不能伪造成 false；三态都必须记录来源。"""
+	platform = _ctx_mock(mock_platform_cls)
+	zp_data = {"cardList": [_make_card()]}
+	if platform_has_more != "missing":
+		zp_data["hasMore"] = platform_has_more
+	platform.job_favorites.return_value = {"code": 0, "zpData": zp_data}
+	result = CliRunner().invoke(cli, ["--json", "favorites", "list", "--page", "2"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	pagination = parsed["pagination"]
+	assert pagination["page"] == 2
+	assert pagination["has_more"] is expected
+	assert pagination["has_more_source"] == ("platform_hasMore" if expected is not None else "unknown")
+	assert pagination["total"] == 1
+	assert pagination["total_kind"] == "returned_page_count"
+	next_pages = [action for action in parsed["hints"]["next_actions"] if "favorites list --page" in action]
+	operator_actions = parsed["hints"]["operator_actions"]
+	if expected is True:
+		assert next_pages == ["boss favorites list --page 3"]
+		assert len(operator_actions) == 3
+	elif expected is False:
+		assert next_pages == []
+		assert len(operator_actions) == 3
+	else:
+		assert next_pages == []
+		assert operator_actions[-1] == "平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有记录"
+		assert len(operator_actions) == 4
+
+
 # ── sync ──────────────────────────────────────────────────────────
 
 

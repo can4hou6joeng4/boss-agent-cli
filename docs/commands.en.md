@@ -165,6 +165,8 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 
 `boss shortlist add <sid> <jid> --lid <lid>` saves access context from the same list item as `sid`; `list` / `compare` return it, and crawl and favorites imports retain the matching context while favorites previews remain redacted. `lid` is optional. Storage does not establish current validity, a lifetime, or identity across accounts.
 
+`history` / `favorites list` follow the same `pagination.has_more` contract as `recommend` / `chat`: `true` / `false` only when the platform returns a boolean `hasMore`; a missing or ambiguous value is `null` with `has_more_source=unknown`, never defaulted to `false`, and no next-page action is suggested. `total` is always the number of rows on this page (`total_kind=returned_page_count`).
+
 ## Recruiter mode
 
 `boss hr whoami` reads `getUserInfo`. `identity` 1 means the current login is on the recruiter side and `ready` is true. `profile_recruit` echoes the account `recruit` flag and is not the decision. A dual-identity account sitting on the candidate side returns `ready: false`; switch to recruiting on the official site and check again. This command does not switch identity.
