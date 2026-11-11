@@ -261,6 +261,10 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = [name]
 		if "days" in arguments:
 			args.extend(["--days", str(arguments["days"])])
+		if arguments.get("format"):
+			args.extend(["--format", str(arguments["format"])])
+		if arguments.get("output_file"):
+			args.extend(["--output", str(arguments["output_file"])])
 		return args
 
 	if name == "ai_reply":
