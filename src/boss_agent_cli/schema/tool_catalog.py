@@ -131,7 +131,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_search",
-			description="按关键词和筛选条件搜索 BOSS 直聘职位列表。支持城市、薪资、经验、学历、福利等多维度筛选。",
+			description="按关键词和筛选条件搜索 BOSS 直聘职位列表。支持城市、薪资、经验、学历、福利等多维度筛选；成功时 pagination.index_snapshot 给出本次写入的索引快照（source/count/saved_at），与 boss_show 的编号配套使用。",
 			input_schema={
 				"type": "object",
 				"properties": {
@@ -155,7 +155,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		*crawl_tool_definitions(data),
 		ToolDefinition(
 			name="boss_recommend",
-			description="获取基于简历的个性化职位推荐",
+			description="获取基于简历的个性化职位推荐；成功时 pagination.index_snapshot 给出本次写入的索引快照（source/count/saved_at），与 boss_show 的编号配套使用。",
 			input_schema={
 				"type": "object",
 				"properties": {

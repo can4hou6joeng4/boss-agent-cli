@@ -417,6 +417,31 @@ def test_recommend_success(mock_auth_cls, mock_client_cls, mock_cache_cls):
 @patch("boss_agent_cli.commands.recommend.CacheStore")
 @patch("boss_agent_cli.commands.recommend.get_platform_instance")
 @patch("boss_agent_cli.commands.recommend.AuthManager")
+def test_recommend_pagination_reports_index_snapshot_for_show(mock_auth_cls, mock_client_cls, mock_cache_cls, tmp_path):
+	from boss_agent_cli.index_cache import get_index_info
+
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.recommend_jobs.return_value = {
+		"zpData": {
+			"hasMore": False,
+			"jobList": [{"encryptJobId": "j1", "securityId": "sec_r1", "jobName": "Go 开发"}],
+		},
+	}
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "recommend"])
+	assert result.exit_code == 0, result.output
+	snapshot = json.loads(result.output)["pagination"]["index_snapshot"]
+	info = get_index_info(tmp_path)
+	assert snapshot == {"source": info["source"], "count": info["count"], "saved_at": info["saved_at"]}
+	assert snapshot["source"] == "recommend"
+	assert snapshot["count"] == 1
+
+
+@patch("boss_agent_cli.commands.recommend.CacheStore")
+@patch("boss_agent_cli.commands.recommend.get_platform_instance")
+@patch("boss_agent_cli.commands.recommend.AuthManager")
 def test_recommend_with_score(mock_auth_cls, mock_client_cls, mock_cache_cls):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
@@ -789,6 +814,30 @@ def test_search_cache_hit_recomputes_greeted_for_current_account(
 	mock_pipeline.assert_not_called()
 
 
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_cache_hit_reports_fresh_index_snapshot(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline, tmp_path):
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = json.dumps({
+		"data": [{"security_id": "sec_1", "job_id": "job_1", "greeted": False}],
+		"pagination": {"page": 1, "has_more": False, "total": 1},
+		"hints": None,
+	})
+	mock_auth_cls.return_value.account_fingerprint.return_value = "acct_a"
+	mock_cache.is_greeted.return_value = False
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "search", "产品"])
+
+	assert result.exit_code == 0, result.output
+	snapshot = json.loads(result.output)["pagination"]["index_snapshot"]
+	assert snapshot["source"] == "search:产品"
+	assert snapshot["count"] == 1
+	assert snapshot["saved_at"] > 0
+	mock_pipeline.assert_not_called()
+
+
 def test_search_rejects_non_boss_url():
 	runner = CliRunner()
 	result = runner.invoke(cli, ["search", "--url", "https://example.com/jobs?query=Python"])
@@ -934,6 +983,47 @@ def test_search_json_hints_expose_available_candidate_actions(mock_client_cls, m
 	]
 	assert all("使用 " not in action and " — " not in action for action in actions)
 	mock_save_index.assert_called_once()
+
+
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_pagination_reports_index_snapshot_for_show(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline, tmp_path):
+	from boss_agent_cli.index_cache import get_index_info
+
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = None
+	_ctx_mock(mock_client_cls)
+	mock_pipeline.return_value = SimpleNamespace(
+		items=[{
+			"job_id": "j1",
+			"title": "Go 开发",
+			"company": "TestCo",
+			"salary": "20K",
+			"city": "广州",
+			"security_id": "sec_001",
+			"greeted": False,
+		}],
+		has_more=False,
+		total=1,
+		stats=SimpleNamespace(
+			pages_scanned=1,
+			jobs_seen=1,
+			jobs_prefiltered=0,
+			detail_checks=0,
+		),
+	)
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "search", "golang"])
+
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	snapshot = parsed["pagination"]["index_snapshot"]
+	info = get_index_info(tmp_path)
+	assert snapshot == {"source": info["source"], "count": info["count"], "saved_at": info["saved_at"]}
+	assert snapshot["source"] == "search:golang"
+	assert snapshot["count"] == 1
 
 
 @patch("boss_agent_cli.commands.export.get_platform_instance")

@@ -19,7 +19,7 @@ from boss_agent_cli.display import (
 	render_job_table,
 	shell_argument,
 )
-from boss_agent_cli.index_cache import try_save_index
+from boss_agent_cli.index_cache import get_index_snapshot, try_save_index
 from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.search_filters import (
 	SearchFilterCriteria,
@@ -336,11 +336,16 @@ def search_cmd(
 					logger.debug("搜索命中缓存")
 					items = _refresh_greeted(result["data"], cache, account)
 					items = _sort_search_items(items, sort_mode)
-					try_save_index(data_dir, items, source=f"search:{query}", logger=logger)
+					saved = try_save_index(data_dir, items, source=f"search:{query}", logger=logger)
+					cached_pagination = result.get("pagination")
+					if saved and isinstance(cached_pagination, dict):
+						snapshot = get_index_snapshot(data_dir)
+						if snapshot is not None:
+							cached_pagination["index_snapshot"] = snapshot
 					handle_output(
 						ctx, "search", items,
 						render=lambda data: render_job_table(data, f"search: {query}"),
-						pagination=result.get("pagination"), hints=result.get("hints"),
+						pagination=cached_pagination, hints=result.get("hints"),
 					)
 					return
 				logger.debug("搜索缓存内容不可用，按未命中处理")
@@ -419,7 +424,7 @@ def search_cmd(
 				items = [score_job_dict(item, criteria=criteria, expect_data=None) for item in items]
 			cache_items = items
 			output_items = _sort_search_items(items, sort_mode)
-			try_save_index(data_dir, output_items, source=f"search:{query}", logger=logger)
+			saved = try_save_index(data_dir, output_items, source=f"search:{query}", logger=logger)
 
 			# Emit search_completed hook
 			hooks = ctx.obj.get("hooks")
@@ -438,7 +443,7 @@ def search_cmd(
 					"source": "search",
 				})
 
-			pagination = {
+			pagination: dict[str, Any] = {
 				"page": page,
 				"has_more": pipeline_result.has_more,
 				"total": pipeline_result.total or len(items),
@@ -469,6 +474,12 @@ def search_cmd(
 				}
 				cache_data = {"data": cache_items, "pagination": pagination, "hints": hints}
 				cache.put_search(search_params, json.dumps(cache_data, ensure_ascii=False))
+
+			# 快照身份只对本次返回有效，不写进搜索缓存；缓存命中时重新读取。
+			if saved:
+				snapshot = get_index_snapshot(data_dir)
+				if snapshot is not None:
+					pagination["index_snapshot"] = snapshot
 
 			title_suffix = " (welfare filter)" if welfare_conditions else ""
 			if active_level:

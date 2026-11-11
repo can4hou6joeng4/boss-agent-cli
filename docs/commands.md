@@ -95,7 +95,7 @@ pbpaste | boss login --curl-file -
 
 `recommend` 的 `pagination.has_more` 只在平台返回布尔 `hasMore` 时取 `true` 或 `false`；缺失或类型不明确时为 `null`，`has_more_source=unknown`，不会给出下一页执行提示。仅 `true` 提示翻页；`false` 与 `null` 不触发额外探测。兼容字段 `total` 仍是本次返回条数，`total_kind=returned_page_count`，不代表全量职位数。
 
-`boss show <#>` 的编号只对最近一次 `search` / `recommend` 建立的索引快照有效：每次搜索或推荐都会整份覆盖缓存，重跑任一命令后旧编号会静默指向新结果。成功信封的 `data.index_snapshot` 返回 `source`（`search:<关键词>` 或 `recommend`）、`count` 与 `saved_at`（Unix 秒）；Agent 应把编号和这份快照身份一起保存，发现来源或时间不匹配时重新搜索定位，而不是继续使用旧编号。
+`boss show <#>` 的编号只对最近一次 `search` / `recommend` 建立的索引快照有效：每次搜索或推荐都会整份覆盖缓存，重跑任一命令后旧编号会静默指向新结果。成功信封的 `data.index_snapshot` 返回 `source`（`search:<关键词>` 或 `recommend`）、`count` 与 `saved_at`（Unix 秒）；`search` / `recommend` 成功写入索引后也会在 `pagination.index_snapshot` 返回同一份快照身份，写入失败或没有缓存时该字段缺失——此时不要把本次结果与旧编号配对。Agent 应把编号和这份快照身份一起保存，发现来源或时间不匹配时重新搜索定位，而不是继续使用旧编号。
 
 ## 可恢复批量采集
 

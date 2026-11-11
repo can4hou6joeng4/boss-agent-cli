@@ -1,3 +1,5 @@
+from typing import Any
+
 import click
 
 from boss_agent_cli.api.models import JobItem, field_list
@@ -6,7 +8,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_job_table
-from boss_agent_cli.index_cache import try_save_index
+from boss_agent_cli.index_cache import get_index_snapshot, try_save_index
 from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.services.job_identity import deduplicate_job_result
 
@@ -57,17 +59,21 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 					item_dict = score_job_dict(item_dict, criteria=None, expect_data=expect_data)
 				items.append(item_dict)
 
-		try_save_index(data_dir, items, source="recommend", logger=logger)
+		saved = try_save_index(data_dir, items, source="recommend", logger=logger)
 
 		raw_has_more = platform_data.get("hasMore")
 		has_more = raw_has_more if isinstance(raw_has_more, bool) else None
-		pagination = {
+		pagination: dict[str, Any] = {
 			"page": page,
 			"has_more": has_more,
 			"has_more_source": "platform_hasMore" if has_more is not None else "unknown",
 			"total": len(items),
 			"total_kind": "returned_page_count",
 		}
+		if saved:
+			snapshot = get_index_snapshot(data_dir)
+			if snapshot is not None:
+				pagination["index_snapshot"] = snapshot
 		hints = {
 			"next_actions": [
 				boss_command_for_ctx(ctx, "detail <security_id>"),
