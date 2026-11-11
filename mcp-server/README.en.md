@@ -130,6 +130,7 @@ Fine-grained crawl tools read or import existing tasks; `boss_wizard` goals `cra
 | `boss_hr_applications` / `boss_hr_candidates` | Applications and candidate search |
 | `boss_hr_accept_resume` / `boss_hr_download_resume` | Accept a specific resume request and download a received attachment after checking access |
 | `boss_hr_recommendations` / `boss_hr_greet` | Recommended candidates, greeting preview, and operator-approved first contact without changing read status |
+| `boss_hr_location` | Send a work-location card into an existing conversation; requires explicit operator approval and never repeats for the same friend |
 | `boss_hr_resume` / `boss_hr_exchange` / `boss_hr_request_resume` | Online resumes, contact exchange, and attached-resume requests |
 | `boss_hr_chat` / `boss_hr_chatmsg` / `boss_hr_last_messages` / `boss_hr_reply` | Recruiter conversation reads and replies |
 

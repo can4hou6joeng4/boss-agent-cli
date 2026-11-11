@@ -156,6 +156,7 @@ MCP Server 内部调用 `boss` CLI 时会关闭子进程 stdin，避免子进程
 | `boss_hr_chat` / `boss_hr_chatmsg` / `boss_hr_last_messages` / `boss_hr_reply` | 招聘者沟通读取与回复 |
 | `boss_hr_accept_resume` / `boss_hr_download_resume` | 同意指定附件简历请求，以及权限检查后下载已收到的附件 |
 | `boss_hr_recommendations` / `boss_hr_greet` | 推荐牛人及需明确批准的单次首次招呼，不修改已读状态 |
+| `boss_hr_location` | 向已有会话发送工作地点卡片；需操作者明确批准，同一会话不重复发送 |
 
 所有已实现工具都会暴露。`ACCOUNT_RISK`、`ENVIRONMENT_RISK`、`AUTH_REQUIRED`、`RATE_LIMITED` 和 `NOT_SUPPORTED` 仍通过标准 JSON 错误信封返回，Agent 应读取 `error.recovery_action`。
 
