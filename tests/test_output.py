@@ -1,4 +1,7 @@
+import ast
 import json
+from pathlib import Path
+
 import pytest
 
 from boss_agent_cli.output import envelope_success, envelope_error, emit_error, emit_success, Logger
@@ -452,3 +455,73 @@ def test_status_envelope_exposes_token_expiry():
 	payload = json.loads(envelope_success("status", {"logged_in": True, "token_expires_in": 7200}))
 
 	assert payload["data"]["token_expires_in"] == 7200
+
+
+def test_error_details_normalize_retry_safety_across_cli_and_mcp_shapes():
+	cli_shape = json.loads(
+		envelope_error(
+			"greet",
+			code="ACTION_UNCONFIRMED",
+			message="请求结果未确认",
+			details={"outcome": "unknown", "replay_safe": False, "reason": "transport_error"},
+		)
+	)
+	details = cli_shape["error"]["details"]
+	assert details["outcome"] == "unknown"
+	assert details["replay_safe"] is False
+	assert details["outcome_unknown"] is True
+
+	mcp_shape = json.loads(
+		envelope_error(
+			"wizard",
+			code="WORKFLOW_TIMEOUT",
+			message="底层 CLI 超时",
+			details={"outcome_unknown": True},
+		)
+	)
+	details = mcp_shape["error"]["details"]
+	assert details["outcome_unknown"] is True
+	assert details["replay_safe"] is False
+
+
+def test_error_details_leave_replay_safe_reads_without_unknown_flag():
+	# 读取被中断时重试没有副作用：outcome 未知但 replay_safe=true，不应被标成禁止重试。
+	payload = json.loads(
+		envelope_error(
+			"detail",
+			code="NETWORK_ERROR",
+			message="浏览器读取请求中断",
+			details={"outcome": "unknown", "replay_safe": True},
+		)
+	)
+	details = payload["error"]["details"]
+	assert details["replay_safe"] is True
+	assert "outcome_unknown" not in details
+
+
+def test_unknown_outcome_details_always_declare_replay_safety():
+	"""``outcome="unknown"`` 必须与显式的 ``replay_safe`` 一起出现。
+
+	Agent 只能依据 ``replay_safe`` 判断写操作能否重试；只写 ``outcome`` 时
+	``envelope_error`` 无法补出 ``outcome_unknown``，调用方会误以为可以重试。
+	"""
+	source_root = Path(__file__).resolve().parents[1] / "src" / "boss_agent_cli"
+	checked = 0
+	failures: list[str] = []
+	for path in sorted(source_root.rglob("*.py")):
+		tree = ast.parse(path.read_text(encoding="utf-8"))
+		for node in ast.walk(tree):
+			if not isinstance(node, ast.Dict):
+				continue
+			entries = {
+				key.value: value.value
+				for key, value in zip(node.keys, node.values)
+				if isinstance(key, ast.Constant) and isinstance(key.value, str) and isinstance(value, ast.Constant)
+			}
+			if entries.get("outcome") != "unknown":
+				continue
+			checked += 1
+			if "replay_safe" not in entries:
+				failures.append(f"{path.relative_to(source_root.parents[1])}:{node.lineno}")
+	assert checked >= 1, "没有找到 outcome=unknown 的 details 字面量，AST 扫描可能失效"
+	assert failures == [], f"这些位置缺少 replay_safe：{failures}"

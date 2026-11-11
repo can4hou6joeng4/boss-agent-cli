@@ -174,7 +174,16 @@ def envelope_error(
 		"recovery_action": recovery_action,
 	}
 	if details is not None:
-		error["details"] = redact_sensitive(details)
+		# 结果未知的写操作有两个来源：CLI 传输层写 ``outcome="unknown"`` +
+		# ``replay_safe=false``，MCP 强制终止写 ``outcome_unknown=true``。
+		# 两者含义相同（动作可能已生效，禁止自动重试），Agent 不该按入口猜键名：
+		# 这里补成同一组字段，CLI 与 MCP 的错误详情都能用 ``replay_safe`` 判定。
+		normalized_details = dict(details)
+		if normalized_details.get("outcome") == "unknown" and normalized_details.get("replay_safe") is False:
+			normalized_details.setdefault("outcome_unknown", True)
+		if "outcome_unknown" in normalized_details:
+			normalized_details.setdefault("replay_safe", not normalized_details["outcome_unknown"])
+		error["details"] = redact_sensitive(normalized_details)
 	return json.dumps(
 		{
 			"ok": False,
