@@ -23,7 +23,7 @@ from boss_agent_cli.display import handle_output, render_next_steps
 @click.option("--dry-run", is_flag=True, default=False, help="仅预览将清理的内容，不实际删除")
 @click.option(
 	"--all", "clean_all", is_flag=True, default=False,
-	help="清理全部缓存（包括未过期的搜索缓存、打招呼/投递记录和工作地点发送记录）",
+	help="清理全部缓存（包括未过期的搜索缓存、打招呼/投递记录、招聘者打招呼记录、职位描述缓存和工作地点发送记录）",
 )
 @click.option("--privacy", is_flag=True, default=False, help="清理本地敏感数据（登录会话、简历、聊天快照和导出文件）")
 # 负数会让 cutoff 落到未来（time.time() - days * 86400），目录里所有文件都算「过期」，
@@ -103,12 +103,20 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 		results.append({"target": "打招呼记录", "cleaned": count, "bytes_freed": freed})
 		total_freed += freed
 
+		freed, count = _clean_recruiter_greet_records(data_dir, dry_run=dry_run)
+		results.append({"target": "招聘者打招呼记录", "cleaned": count, "bytes_freed": freed})
+		total_freed += freed
+
 		freed, count = _clean_apply_records(data_dir, dry_run=dry_run)
 		results.append({"target": "投递记录", "cleaned": count, "bytes_freed": freed})
 		total_freed += freed
 
 		freed, count = _clean_location_records(data_dir, dry_run=dry_run)
 		results.append({"target": "工作地点发送记录", "cleaned": count, "bytes_freed": freed})
+		total_freed += freed
+
+		freed, count = _clean_job_desc_cache(data_dir, dry_run=dry_run)
+		results.append({"target": "职位描述缓存", "cleaned": count, "bytes_freed": freed})
 		total_freed += freed
 
 	data = {
@@ -294,6 +302,11 @@ def _clean_greet_records(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 	return _clean_table(data_dir, "greet_records", dry_run=dry_run)
 
 
+def _clean_recruiter_greet_records(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
+	"""清理招聘者打招呼记录；与求职者侧 greet_records 对称。"""
+	return _clean_table(data_dir, "recruiter_greet_records", dry_run=dry_run)
+
+
 def _clean_apply_records(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 	"""清理投递记录。"""
 	return _clean_table(data_dir, "apply_records", dry_run=dry_run)
@@ -302,6 +315,15 @@ def _clean_apply_records(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 def _clean_location_records(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 	"""清理招聘者工作地点发送记录。"""
 	return _clean_table(data_dir, "recruiter_location_records", dry_run=dry_run)
+
+
+def _clean_job_desc_cache(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
+	"""清理职位描述缓存。
+
+	``get_job_desc()`` 只在命中过期条目时懒删除，冷门职位写入后没有任何
+	出口；``--all`` 是唯一能整体回收这部分空间的路径。
+	"""
+	return _clean_table(data_dir, "job_desc_cache", dry_run=dry_run)
 
 
 def _clean_crawl_data(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
