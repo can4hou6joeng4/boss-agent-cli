@@ -420,6 +420,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--job-id", str(arguments["job_id"])])
 		if "label_id" in arguments:
 			args.extend(["--label-id", str(arguments["label_id"])])
+		if "summary_limit" in arguments:
+			args.extend(["--summary-limit", str(arguments["summary_limit"])])
 		return args
 
 	if name == "hr_chatmsg":
@@ -440,6 +442,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--job-id", str(arguments["job_id"])])
 		if "label_id" in arguments:
 			args.extend(["--label-id", str(arguments["label_id"])])
+		if "limit" in arguments:
+			args.extend(["--limit", str(arguments["limit"])])
 		return args
 
 	if name == "hr_resume":
