@@ -336,7 +336,7 @@ def search_cmd(
 					logger.debug("搜索命中缓存")
 					items = _refresh_greeted(result["data"], cache, account)
 					items = _sort_search_items(items, sort_mode)
-					saved = try_save_index(data_dir, items, source=f"search:{query}", logger=logger)
+					saved = try_save_index(data_dir, items, source=f"search:{query}", page=page, logger=logger)
 					cached_pagination = result.get("pagination")
 					if saved and isinstance(cached_pagination, dict):
 						snapshot = get_index_snapshot(data_dir)
@@ -424,7 +424,7 @@ def search_cmd(
 				items = [score_job_dict(item, criteria=criteria, expect_data=None) for item in items]
 			cache_items = items
 			output_items = _sort_search_items(items, sort_mode)
-			saved = try_save_index(data_dir, output_items, source=f"search:{query}", logger=logger)
+			saved = try_save_index(data_dir, output_items, source=f"search:{query}", page=page, logger=logger)
 
 			# Emit search_completed hook
 			hooks = ctx.obj.get("hooks")

@@ -434,8 +434,11 @@ def test_recommend_pagination_reports_index_snapshot_for_show(mock_auth_cls, moc
 	assert result.exit_code == 0, result.output
 	snapshot = json.loads(result.output)["pagination"]["index_snapshot"]
 	info = get_index_info(tmp_path)
-	assert snapshot == {"source": info["source"], "count": info["count"], "saved_at": info["saved_at"]}
+	assert snapshot == {
+		"source": info["source"], "page": info["page"], "count": info["count"], "saved_at": info["saved_at"],
+	}
 	assert snapshot["source"] == "recommend"
+	assert snapshot["page"] == 1
 	assert snapshot["count"] == 1
 
 
@@ -833,6 +836,7 @@ def test_search_cache_hit_reports_fresh_index_snapshot(mock_client_cls, mock_aut
 	assert result.exit_code == 0, result.output
 	snapshot = json.loads(result.output)["pagination"]["index_snapshot"]
 	assert snapshot["source"] == "search:产品"
+	assert snapshot["page"] == 1
 	assert snapshot["count"] == 1
 	assert snapshot["saved_at"] > 0
 	mock_pipeline.assert_not_called()
@@ -1021,8 +1025,11 @@ def test_search_pagination_reports_index_snapshot_for_show(mock_client_cls, mock
 	parsed = json.loads(result.output)
 	snapshot = parsed["pagination"]["index_snapshot"]
 	info = get_index_info(tmp_path)
-	assert snapshot == {"source": info["source"], "count": info["count"], "saved_at": info["saved_at"]}
+	assert snapshot == {
+		"source": info["source"], "page": info["page"], "count": info["count"], "saved_at": info["saved_at"],
+	}
 	assert snapshot["source"] == "search:golang"
+	assert snapshot["page"] == 1
 	assert snapshot["count"] == 1
 
 
@@ -2235,6 +2242,7 @@ def test_show_json_data_binds_number_to_its_search_snapshot(mock_client_cls, moc
 			{"security_id": "sec_002", "job_id": "j2", "title": "Python 后端"},
 		],
 		source="search:Golang",
+		page=2,
 	)
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
@@ -2250,6 +2258,7 @@ def test_show_json_data_binds_number_to_its_search_snapshot(mock_client_cls, moc
 	assert parsed["data"]["index"] == 2
 	snapshot = parsed["data"]["index_snapshot"]
 	assert snapshot["source"] == "search:Golang"
+	assert snapshot["page"] == 2
 	assert snapshot["count"] == 2
 	assert snapshot["saved_at"] > 0
 

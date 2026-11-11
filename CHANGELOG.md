@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- 索引快照增加页码：`search --page N` / `recommend --page N` 写入索引时记录 `page`，`boss show <#>` 的 `data.index_snapshot` 与 `search` / `recommend` 的 `pagination.index_snapshot` 都返回该字段，TTY 详情行显示「第 N 页」。此前的快照只能靠 `saved_at` 区分，Agent 从第 1 页记下的编号在翻到第 2 页后无法仅凭 `source` 判断已失效；旧版本写入的缓存没有该字段，返回 `null`。
 - `search` / `recommend` 的成功信封在 `pagination.index_snapshot` 返回本次写入的索引快照身份（`source` / `count` / `saved_at`），与 `boss show <#>` 的 `data.index_snapshot` 使用同一结构：Agent 拿到「结果 #3」时可以当场记下它属于哪份快照，而不必先 `show` 一次才知道编号是否已被后续搜索覆盖。索引写入失败时不带该字段，避免把陈旧编号归到本次结果。缓存命中路径同样重新读取快照；快照身份不写入搜索缓存，避免缓存命中后返回过期时间。新增单元测试与 search 两条路径、recommend 的集成断言。
 - `boss show <#>` 的输出新增 `data.index_snapshot`：编号只对最近一次 `search` / `recommend` 写入的索引快照有效，而缓存每次整份覆盖——重跑搜索后，Agent 手里的「结果 #3」会静默指向另一个职位，原输出只有 `index`，无法察觉引用已过期。现在成功信封返回 `source`（`search:<关键词>` 或 `recommend`）、`count` 与 `saved_at`（Unix 秒），TTY 详情面板下方同步显示编号来源与保存时间；命令参考与 agent-quickstart 中英说明「编号随快照失效、需重新定位」。新增 JSON 与 TTY 两条测试。
 - 新增「结果未知必须声明重试安全性」守卫 `tests/test_output.py::test_unknown_outcome_details_always_declare_replay_safety`：扫描源码里 `outcome="unknown"` 的 details 字面量，缺少 `replay_safe` 时失败——只写 outcome 时 `envelope_error` 补不出 `outcome_unknown`，Agent 会误以为可以重试。变异验证：删掉 `_base_client._unconfirmed_http_response` 的 `replay_safe` 即触发失败。
