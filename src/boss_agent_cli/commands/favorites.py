@@ -186,10 +186,15 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 	status_counts = _count_job_statuses(valid_cards)
 	items = [_redact_for_display(_card_to_shortlist_item(card)) for card in valid_cards]
 
+	# 与 history / recommend 同一口径：缺失 hasMore 时为 null，不伪造成 false。
+	raw_has_more = platform_data.get("hasMore")
+	has_more = raw_has_more if isinstance(raw_has_more, bool) else None
 	pagination = {
 		"page": page,
-		"has_more": platform_data.get("hasMore", False),
+		"has_more": has_more,
+		"has_more_source": "platform_hasMore" if has_more is not None else "unknown",
 		"total": len(items),
+		"total_kind": "returned_page_count",
 		"status_counts": status_counts,
 	}
 	next_actions = [
@@ -202,9 +207,11 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 		"终端表格不显示 security_id / job_id，需要 ID 时加 --json 读取。",
 		"httpx 快速通道只用 job_id，security_id 过期不影响取 JD。",
 	]
-	# 与 history 同一口径：hasMore 为假时再给 --page N+1 只会把 Agent 送进空页。
-	if pagination["has_more"]:
+	# 与 history 同一口径：hasMore 为真时才给 --page N+1，否则只会把 Agent 送进空页。
+	if has_more is True:
 		next_actions.append(boss_command_for_ctx(ctx, f"favorites list --page {page + 1}"))
+	if has_more is None:
+		operator_actions.append("平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有记录")
 	hints = {"next_actions": next_actions, "operator_actions": operator_actions}
 	handle_output(
 		ctx, "favorites-list", items,

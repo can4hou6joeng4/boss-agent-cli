@@ -859,6 +859,41 @@ def test_history_hints_include_next_page_when_has_more(mock_auth_cls, mock_clien
 	assert any("history --page 3" in action for action in parsed["hints"]["next_actions"])
 
 
+@pytest.mark.parametrize(
+	("platform_has_more", "expected"),
+	[(True, True), (False, False), ("missing", None)],
+)
+@patch("boss_agent_cli.commands.history.get_platform_instance")
+@patch("boss_agent_cli.commands.history.AuthManager")
+def test_history_pagination_reports_platform_evidence(mock_auth_cls, mock_client_cls, platform_has_more, expected):
+	"""缺失 hasMore 时返回 null，不能伪造成 false；三态都必须记录来源。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	zp_data = {"jobList": []}
+	if platform_has_more != "missing":
+		zp_data["hasMore"] = platform_has_more
+	mock_client.job_history.return_value = {"code": 0, "zpData": zp_data}
+	result = CliRunner().invoke(cli, ["--json", "history", "--page", "2"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	pagination = parsed["pagination"]
+	assert pagination["page"] == 2
+	assert pagination["has_more"] is expected
+	assert pagination["has_more_source"] == ("platform_hasMore" if expected is not None else "unknown")
+	assert pagination["total"] == 0
+	assert pagination["total_kind"] == "returned_page_count"
+	next_pages = [action for action in parsed["hints"]["next_actions"] if "history --page" in action]
+	if expected is True:
+		assert next_pages == ["boss history --page 3"]
+	else:
+		assert next_pages == []
+	if expected is None:
+		assert parsed["hints"]["operator_actions"] == [
+			"平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有记录"
+		]
+	else:
+		assert "operator_actions" not in parsed["hints"]
+
+
 @patch("boss_agent_cli.commands.history.get_platform_instance")
 @patch("boss_agent_cli.commands.history.AuthManager")
 def test_history_uses_client_context_manager(mock_auth_cls, mock_client_cls):
