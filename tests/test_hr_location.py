@@ -1,6 +1,7 @@
 """招聘者发送工作地点：离线契约。平台与登录态全部使用替身。"""
 
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -189,7 +190,7 @@ def test_missing_session_fields_stop_before_send(tmp_path: Path, overrides: dict
 def test_duplicate_ledger_blocks_before_auth(tmp_path: Path) -> None:
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
 		assert cache.claim_location_send(FRIEND_ID) is None
-		cache.record_location_send(FRIEND_ID, job_id="5566", name="测试候选人")
+		cache.record_location_send(FRIEND_ID, job_id="5566")
 	result, auth, factory = _invoke(tmp_path, "--yes")
 	assert result.exit_code == 1, result.output
 	assert _payload(result)["error"]["code"] == "LOCATION_ALREADY_SENT"
@@ -272,7 +273,15 @@ def test_claim_record_and_release_location_ledger(tmp_path: Path) -> None:
 		assert cache.release_location_send(FRIEND_ID) is True
 		assert cache.location_send_status(FRIEND_ID) is None
 		assert cache.claim_location_send(FRIEND_ID) is None
-		cache.record_location_send(FRIEND_ID, job_id="5566", name="测试候选人")
+		cache.record_location_send(FRIEND_ID, job_id="5566")
 		assert cache.location_send_status(FRIEND_ID) == "sent"
 		assert cache.release_location_send(FRIEND_ID) is False
 		assert cache.claim_location_send(FRIEND_ID) == "sent"
+
+	conn = sqlite3.connect(tmp_path / "cache" / "boss_agent.db")
+	row = conn.execute(
+		"SELECT job_id, name FROM recruiter_location_records WHERE friend_id = ?",
+		(str(FRIEND_ID),),
+	).fetchone()
+	conn.close()
+	assert row == ("5566", "")

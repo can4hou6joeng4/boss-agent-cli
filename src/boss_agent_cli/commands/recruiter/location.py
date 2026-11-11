@@ -288,7 +288,7 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 		job_name = raw_job_name if isinstance(raw_job_name, str) else ""
 		sent = {**base, "sent": True, "job_id": job_id, "job_name": job_name, "name": name}
 		try:
-			cache.record_location_send(friend_id, job_id=str(job_id), name=name)
+			cache.record_location_send(friend_id, job_id=str(job_id))
 		except Exception:
 			_fail(
 				ctx,
