@@ -252,7 +252,7 @@ Both commands reuse native CLI authentication. This implementation follows stati
 | Command | Description |
 |---------|-------------|
 | `boss config list/set/reset` | Configuration management |
-| `boss clean` | Clean caches; `--risk-lock` explicitly clears the local risk lock after the user confirms the intended official business page has recovered; `--dry-run` keeps the lock, and cleanup does not establish server recovery |
+| `boss clean` | Clean caches; `--all` clears all caches (search cache, greeting/application records, and work-location send records); `--risk-lock` explicitly clears the local risk lock after the user confirms the intended official business page has recovered; `--dry-run` keeps the lock, and cleanup does not establish server recovery |
 | `boss stats` | Funnel stats from local state (greeted/applied/shortlist) |
 | `boss export <query>` | Export results (CSV/JSON/HTML, supports `--url` web filters) |
 

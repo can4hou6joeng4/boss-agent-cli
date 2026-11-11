@@ -889,13 +889,16 @@ class CacheStore:
 			).fetchone()
 			return str(row[0]) if row else None
 
-	def record_location_send(self, friend_id: int, *, job_id: str, name: str = "") -> None:
-		"""把已确认发出的工作地点记为 sent。没有对应预约时抛错，避免假装记上了。"""
+	def record_location_send(self, friend_id: int, *, job_id: str) -> None:
+		"""把已确认发出的工作地点记为 sent。没有对应预约时抛错，避免假装记上了。
+
+		只保留去重所需的会话与职位标识，不保存候选人姓名。
+		"""
 		with self._conn:
 			cursor = self._conn.execute(
-				"UPDATE recruiter_location_records SET status = 'sent', job_id = ?, name = ?, updated_at = ? "
+				"UPDATE recruiter_location_records SET status = 'sent', job_id = ?, name = '', updated_at = ? "
 				"WHERE friend_id = ?",
-				(job_id, name, time.time(), str(friend_id)),
+				(job_id, time.time(), str(friend_id)),
 			)
 			if cursor.rowcount != 1:
 				raise sqlite3.OperationalError("工作地点发送记录不存在，无法标记为已发送")

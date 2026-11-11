@@ -982,7 +982,7 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"--dry-run": {"type": "bool", "default": False, "description": "仅预览将清理的内容"},
-				"--all": {"type": "bool", "default": False, "description": "清理全部缓存"},
+				"--all": {"type": "bool", "default": False, "description": "清理全部缓存（包括未过期的搜索缓存、打招呼/投递记录和工作地点发送记录）"},
 				"--days": {"type": "int", "default": 30, "minimum": 0, "maximum": 36500, "description": "清理超过指定天数的快照和导出"},
 				"--privacy": {
 					"type": "bool",

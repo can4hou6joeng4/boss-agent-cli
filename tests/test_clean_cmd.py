@@ -19,7 +19,7 @@ def _invoke(*args, tmp_path=None):
 	return result.exit_code, json.loads(result.output) if result.output.strip() else None
 
 
-def _setup_db(tmp_path, *, expired_search=0, fresh_search=0, greets=0, applies=0):
+def _setup_db(tmp_path, *, expired_search=0, fresh_search=0, greets=0, applies=0, locations=0):
 	"""在临时目录中创建测试数据库。"""
 	db_dir = tmp_path / "cache"
 	db_dir.mkdir(parents=True, exist_ok=True)
@@ -29,6 +29,7 @@ def _setup_db(tmp_path, *, expired_search=0, fresh_search=0, greets=0, applies=0
 		CREATE TABLE IF NOT EXISTS search_cache (cache_key TEXT PRIMARY KEY, response TEXT NOT NULL, created_at REAL NOT NULL);
 		CREATE TABLE IF NOT EXISTS greet_records (security_id TEXT PRIMARY KEY, job_id TEXT NOT NULL, greeted_at REAL NOT NULL);
 		CREATE TABLE IF NOT EXISTS apply_records (security_id TEXT NOT NULL, job_id TEXT NOT NULL, applied_at REAL NOT NULL, PRIMARY KEY (security_id, job_id));
+		CREATE TABLE IF NOT EXISTS recruiter_location_records (friend_id TEXT PRIMARY KEY, job_id TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL, updated_at REAL NOT NULL);
 	""")
 	now = time.time()
 	for i in range(expired_search):
@@ -39,6 +40,11 @@ def _setup_db(tmp_path, *, expired_search=0, fresh_search=0, greets=0, applies=0
 		conn.execute("INSERT INTO greet_records VALUES (?, ?, ?)", (f"s{i}", f"j{i}", now))
 	for i in range(applies):
 		conn.execute("INSERT INTO apply_records VALUES (?, ?, ?)", (f"s{i}", f"j{i}", now))
+	for i in range(locations):
+		conn.execute(
+			"INSERT INTO recruiter_location_records VALUES (?, ?, ?, ?, ?)",
+			(str(i), f"j{i}", "", "sent", now),
+		)
 	conn.commit()
 	conn.close()
 	return db_path
@@ -87,7 +93,7 @@ def test_clean_deletes_expired_search_cache(tmp_path):
 
 def test_clean_all_deletes_everything(tmp_path):
 	"""全量清理应删除所有缓存和记录。"""
-	_setup_db(tmp_path, expired_search=2, fresh_search=3, greets=5, applies=2)
+	_setup_db(tmp_path, expired_search=2, fresh_search=3, greets=5, applies=2, locations=3)
 	code, parsed = _invoke("clean", "--all", tmp_path=tmp_path)
 	assert code == 0
 	search_result = next(r for r in parsed["data"]["results"] if r["target"] == "搜索缓存")
@@ -96,6 +102,11 @@ def test_clean_all_deletes_everything(tmp_path):
 	assert greet_result["cleaned"] == 5
 	apply_result = next(r for r in parsed["data"]["results"] if r["target"] == "投递记录")
 	assert apply_result["cleaned"] == 2
+	location_result = next(r for r in parsed["data"]["results"] if r["target"] == "工作地点发送记录")
+	assert location_result["cleaned"] == 3
+	conn = sqlite3.connect(str(tmp_path / "cache" / "boss_agent.db"))
+	assert conn.execute("SELECT COUNT(*) FROM recruiter_location_records").fetchone()[0] == 0
+	conn.close()
 
 
 # ── 索引缓存 ────────────────────────────────────────────────────────
@@ -267,6 +278,7 @@ def test_clean_all_tolerates_tables_missing_from_old_database(tmp_path):
 	assert targets["搜索缓存"]["cleaned"] == 0
 	assert targets["打招呼记录"]["cleaned"] == 0
 	assert targets["投递记录"]["cleaned"] == 0
+	assert targets["工作地点发送记录"]["cleaned"] == 0
 
 
 def test_clean_corrupt_database_returns_envelope_before_deleting(tmp_path):
