@@ -132,7 +132,7 @@ with BossClient(AuthManager(...)) as client:
 - **Candidate actions**: `greet` · `batch-greet` · `apply` · `exchange` · `chat` · `chatmsg` · `chat-summary` · `mark` · `interviews` · `pipeline` · `digest` · `follow-up`
 - **Recruiter**: `hr whoami/applications/candidates/recommendations/greet/resume/chat/chatmsg/last-messages/reply/request-resume/accept-resume/download-resume/jobs`
 
-Full command tables, parameters, and welfare-matching internals: **[Command Reference](docs/commands.en.md)**. The capability source of truth is `boss schema` (with `--format openai-tools` / `anthropic-tools` exports).
+Full command tables, parameters, and welfare-matching internals: **[Command Reference](docs/commands.en.md)**. The capability source of truth is `boss schema` (with `--format openai-tools` / `anthropic-tools` / `mcp-tools` exports).
 
 Bulk crawl requires `uv sync --extra crawl`. It uses its own `<data-dir>/crawl/chrome-profile` and never attaches to a daily Chrome profile. Hooks are disabled by default; local scripts require both an explicit profile and a directory containing `SHA256SUMS`:
 
