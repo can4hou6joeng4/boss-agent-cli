@@ -1337,6 +1337,20 @@ def test_build_args_shortlist_add():
 	assert args == ["shortlist", "add", "s1", "j1", "--tags", "远程,双休", "--note", "优先"]
 
 
+def test_build_args_shortlist_add_forwards_metadata():
+	"""候选池元数据要能随添加写入，否则 MCP 侧列表只能看到空标题/空公司。"""
+	args = _build_args("boss_shortlist_add", {
+		"security_id": "s1", "job_id": "j1",
+		"title": "后端工程师", "company": "某公司", "city": "北京",
+		"salary": "30-50K", "source": "search",
+	})
+	assert args == [
+		"shortlist", "add", "s1", "j1",
+		"--title", "后端工程师", "--company", "某公司", "--city", "北京",
+		"--salary", "30-50K", "--source", "search",
+	]
+
+
 def test_build_args_shortlist_annotate():
 	args = _build_args(
 		"boss_shortlist_annotate",
@@ -1375,6 +1389,19 @@ def test_build_args_preset_add_full():
 	assert "--welfare" in args and "双休" in args
 
 
+def test_build_args_preset_add_forwards_structured_filters():
+	"""预设要能保存行业/规模/阶段/职位类型，否则 search --preset 拿不到完整条件。"""
+	args = _build_args("boss_preset_add", {
+		"name": "p1", "query": "golang",
+		"industry": "电子商务", "scale": "100-499人", "stage": "A轮", "job_type": "全职",
+	})
+	assert args == [
+		"preset", "add", "p1", "golang",
+		"--industry", "电子商务", "--scale", "100-499人",
+		"--stage", "A轮", "--job-type", "全职",
+	]
+
+
 def test_build_args_preset_remove():
 	assert _build_args("boss_preset_remove", {"name": "p1"}) == ["preset", "remove", "p1"]
 
@@ -1383,6 +1410,20 @@ def test_build_args_watch_add():
 	args = _build_args("boss_watch_add", {"name": "w1", "query": "rust", "city": "北京"})
 	assert args[:4] == ["watch", "add", "w1", "rust"]
 	assert "--city" in args and "北京" in args
+
+
+def test_build_args_watch_add_forwards_filters():
+	"""监控保存的筛选条件必须完整，否则增量结果会在每次运行时被放大。"""
+	args = _build_args("boss_watch_add", {
+		"name": "w1", "query": "rust",
+		"experience": "3-5年", "education": "本科", "industry": "电子商务",
+		"scale": "100-499人", "stage": "A轮", "job_type": "全职", "welfare": "双休",
+	})
+	assert args == [
+		"watch", "add", "w1", "rust",
+		"--experience", "3-5年", "--education", "本科", "--industry", "电子商务",
+		"--scale", "100-499人", "--stage", "A轮", "--job-type", "全职", "--welfare", "双休",
+	]
 
 
 def test_build_args_watch_remove():

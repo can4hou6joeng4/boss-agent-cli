@@ -15,8 +15,11 @@ import click
 import pytest
 
 from boss_agent_cli.commands import greet as greet_cmd_module
+from boss_agent_cli.commands import preset as preset_cmd_module
 from boss_agent_cli.commands import recommend as recommend_cmd_module
 from boss_agent_cli.commands import search as search_cmd_module
+from boss_agent_cli.commands import shortlist as shortlist_cmd_module
+from boss_agent_cli.commands import watch as watch_cmd_module
 from boss_agent_cli.commands.recruiter import (
 	accept_resume as recruiter_accept_resume,
 	applications as recruiter_applications,
@@ -158,6 +161,46 @@ _CORE_SINGLE_COMMAND_TOOLS = {
 	ids=list(_CORE_SINGLE_COMMAND_TOOLS),
 )
 def test_core_tool_schema_lists_every_cli_parameter(
+	tool_name: str, command: click.Command, aliases: dict[str, str], hidden: set[str],
+) -> None:
+	schema = next(tool for tool in TOOLS if tool.name == tool_name).input_schema
+	properties = set((schema.get("properties") or {}).keys())
+	parameters = {
+		aliases.get(param.name, param.name)
+		for param in command.params
+		if param.name and param.name not in hidden
+	}
+	missing_in_schema = sorted(parameters - properties)
+	extra_in_schema = sorted(properties - parameters)
+	assert not missing_in_schema and not extra_in_schema, (
+		f"{tool_name} 的 inputSchema 与 CLI 参数不一致："
+		f"CLI 有但 schema 未声明 {missing_in_schema}；schema 声明但 CLI 没有 {extra_in_schema}"
+	)
+
+
+# 本地搜索工具（preset / watch / shortlist）之前只暴露了最小参数集：筛选条件
+# 只能写进 CLI 预设/监控，MCP 调用方看不到；候选池元数据也只能留空。这里用
+# 同一套集合相等断言把三个工具的参数面钉住。`shortlist annotate` 的 CLI 选项
+# 可重复（`--add-tag`），MCP 侧用数组，登记别名。
+_LOCAL_SINGLE_COMMAND_TOOLS = {
+	"boss_preset_add": (preset_cmd_module.preset_add_cmd, {}, set()),
+	"boss_watch_add": (watch_cmd_module.watch_add_cmd, {}, set()),
+	"boss_shortlist_add": (shortlist_cmd_module.shortlist_add_cmd, {}, set()),
+	"boss_shortlist_annotate": (
+		shortlist_cmd_module.shortlist_annotate_cmd,
+		{"add_tag": "add_tags", "remove_tag": "remove_tags"},
+		set(),
+	),
+	"boss_shortlist_compare": (shortlist_cmd_module.shortlist_compare_cmd, {}, set()),
+}
+
+
+@pytest.mark.parametrize(
+	("tool_name", "command", "aliases", "hidden"),
+	[(tool_name, *spec) for tool_name, spec in _LOCAL_SINGLE_COMMAND_TOOLS.items()],
+	ids=list(_LOCAL_SINGLE_COMMAND_TOOLS),
+)
+def test_local_tool_schema_lists_every_cli_parameter(
 	tool_name: str, command: click.Command, aliases: dict[str, str], hidden: set[str],
 ) -> None:
 	schema = next(tool for tool in TOOLS if tool.name == tool_name).input_schema
