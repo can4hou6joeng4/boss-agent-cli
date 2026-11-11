@@ -251,6 +251,8 @@ Both commands reuse native CLI authentication. This implementation follows stati
 
 > Latest models such as Claude 4.7 / GPT-5 / DeepSeek-V3 / Qwen3 are supported — see [recommended models](integrations/ai-models.en.md).
 
+Resume names are free text and may contain spaces, quotes and shell metacharacters. Every follow-up hint that takes a resume name (`resume show` / `edit` / `export` / `delete`, including error-message bodies) is POSIX-shell quoted, and `shlex.split` recovers the same name. `resume list`, `resume show` and `resume clone` return `RESUME_FILE_INVALID` for an unreadable file, and the `resume delete` hint they provide is likewise paste-ready.
+
 ## Utilities
 
 | Command | Description |
