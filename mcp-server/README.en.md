@@ -49,7 +49,7 @@ Add the server in Cursor Settings -> MCP Servers:
 
 ## Available tools
 
-The current MCP server exposes **78 implemented tools**.
+The current MCP server exposes **79 implemented tools**.
 
 ### Shared workflow
 

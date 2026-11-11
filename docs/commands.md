@@ -190,6 +190,7 @@ boss crawl stop <run_id>
 | `boss hr download-resume <friend_id> --message-id <mid> --output <文件路径>` | 检查权限后下载已收到的指定附件，不覆盖旧文件 |
 | `boss hr recommendations --job-id <encJobId>` | 读取推荐牛人完整卡片和首次开聊参数 |
 | `boss hr greet ... --message <话术> --yes` | 建立候选人会话并单次发送首次招呼，不修改已读状态 |
+| `boss hr location <friend_id> --yes` | 向已有会话发送该职位的工作地点卡片；同一会话不重复发送 |
 
 先在同一组候选人参数和话术后加 `--dry-run` 预览；操作者明确批准该候选人和话术后，才改为 `--yes` 发送。MCP 的 `yes` 默认不传，Agent 不得自行确认；预览本身不构成人工批准。
 
@@ -200,6 +201,13 @@ boss crawl stop <run_id>
 `hr applications` / `hr chat` / `hr candidates` / `hr recommendations` / `hr last-messages` 的列表响应在信封 `pagination` 给出分页证据：`has_more` 只在平台返回布尔 `hasMore` 时为 `true` / `false`，缺失或类型不明确时为 `null`（`has_more_source=unknown`）；`total` 是本页返回条数（`total_kind=returned_page_count`），不代表平台全集。只有 `has_more=true` 才在 `hints.next_actions` 附加保留筛选条件的下一页命令；`null` 时 `hints.operator_actions` 说明不能仅凭本页条数判断是否还有记录。`hr last-messages` 用 `--friend-id` 直查时没有列表页，`pagination` 为 `null`。
 
 `greet` 只发送首次招呼，不建立 MQTT 连接、不清理红点。成功返回 `sent=true`；若发送后本地记录失败，错误信封仍在 `error.details.sent=true` 保留已发送事实，不能因此重发。BOSS 外层 `code=0` 也可能返回权益拦截页；CLI 会识别这类业务拒绝，返回 `GREET_LIMIT`、`error.details.sent=false` 和脱敏平台提示，保留拒绝状态以阻止重发。平台可能按职位限制免费沟通人数，不能把调用方配置的日额度当作平台保证。`chat` / `last-messages` 中未知未读数保留为 `null`，不当作零。
+
+`hr location` 向**已经存在**的候选人会话发送该职位的工作地点卡片。它不接受推荐卡片上的 `securityId`：真正发送前先读本次 `friend_detail`，用其中的会话级 `securityId` 和内部 `jobId` 调用 `POST /wapi/zpchat/message/sendJobLocation`（表单字段 `jobId`、`toUserId`、`securityId`），并且只发一次。不加参数时返回 `CONFIRMATION_REQUIRED`；`--dry-run` 只预览、不登录、不请求平台。`boss agent stop` 打开的 `automation/stop.json` 会在任何请求之前拒绝。同一 `friend_id` 已发送过记为 `LOCATION_ALREADY_SENT`；发送结果未确认时保留本地预约并返回 `LOCATION_RESULT_UNKNOWN`，禁止自动重发。成功信封的 `data.sent` 为 `true`，并给出 `job_id` / `job_name`，不回显 `securityId`。
+
+```bash
+boss hr location 10001 --dry-run
+boss hr location 10001 --yes
+```
 
 `request-resume` 与 `resume --exchange` 在聊天页里调用官方组件完成动作，只点击本次动作新弹出的确认框。成功需要动作后回读聊天记录看到自己新发出的已知请求文案或已识别类型的动作卡片。只有 outgoing WS 帧、页面调用返回成功或未知手机号动作编号时不能确认发送；这些情况返回 `ACTION_UNCONFIRMED`（`recoverable=false`），`error.details` 附带页面日志、确认按钮状态、WS 统计与历史回读核对结果（`history_checked` / `history_matched_count` / `history_attempts` / `history_new_count` / `history_self_count` / `history_recipient_count`）。此时动作可能已经生效，先用 `boss hr chatmsg <friend_id>` 核实，不要直接重试。聊天记录证据也不证明接收方已收到或已读。换手机或微信时如果同时看到了求简历消息，成功结果会带 `side_effects: ["resume_request_detected"]`。动作前或回读时首次命中风险立即停止，不继续轮询；禁用或仍在加载的编辑器不会被强制开启，目标好友必须唯一匹配。
 

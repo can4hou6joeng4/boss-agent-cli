@@ -254,6 +254,7 @@ module = [
 	"boss_agent_cli.commands.recruiter.jobs",
 	"boss_agent_cli.commands.recruiter.reply",
 	"boss_agent_cli.commands.recruiter.recommendations",
+	"boss_agent_cli.commands.recruiter.location",
 	"boss_agent_cli.commands.recruiter.accept_resume",
 	"boss_agent_cli.commands.recruiter.download_resume",
 	"boss_agent_cli.commands.recruiter.request_resume",

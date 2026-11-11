@@ -272,7 +272,7 @@ def test_crawl_tools_only_read_or_locally_shortlist_existing_runs():
 
 def test_tool_count():
 	"""工具总数应与当前注册一致。"""
-	assert len(TOOLS) == 78
+	assert len(TOOLS) == 79
 
 
 def test_mcp_tool_count_matches_readme():
@@ -1081,7 +1081,7 @@ def test_read_only_tool_classification_covers_real_tools_only():
 		"boss_agent_review_approve", "boss_agent_review_reject",
 		"boss_shortlist_add", "boss_shortlist_annotate", "boss_shortlist_remove",
 		"boss_preset_add", "boss_preset_remove", "boss_watch_add", "boss_watch_remove",
-		"boss_hr_greet", "boss_hr_reply", "boss_hr_request_resume",
+		"boss_hr_greet", "boss_hr_location", "boss_hr_reply", "boss_hr_request_resume",
 		"boss_hr_accept_resume", "boss_hr_exchange",
 	}
 	assert not (mcp_server._READ_ONLY_TOOL_NAMES & write_tools)
@@ -1373,7 +1373,7 @@ def test_build_args_favorites_list_omits_page_when_absent():
 
 def test_tool_count_after_pr41():
 	"""协议服务工具总数应与当前 MCP 暴露能力完全一致。"""
-	assert len(TOOLS) == 78
+	assert len(TOOLS) == 79
 
 
 def test_build_args_shortlist_add():

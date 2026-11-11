@@ -67,6 +67,7 @@ _MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES = {
 	"boss_hr_download_resume": "recruiter-download-resume",
 	"boss_hr_recommendations": "recruiter-recommendations",
 	"boss_hr_greet": "recruiter-greet",
+	"boss_hr_location": "recruiter-location",
 }
 
 

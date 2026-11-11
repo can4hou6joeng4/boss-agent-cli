@@ -539,8 +539,9 @@ class BossRecruiterClient(_BaseHttpClient):
 
 	def _headers_for(self, url: str) -> dict[str, str]:
 		headers = super()._headers_for(url)
-		if url in (ep.BOSS_RECOMMEND_GEEK_LIST_URL, ep.BOSS_CHAT_START_URL):
+		if url in (ep.BOSS_RECOMMEND_GEEK_LIST_URL, ep.BOSS_CHAT_START_URL, ep.BOSS_SEND_JOB_LOCATION_URL):
 			# 从当前 jar 取值，包含上次响应轮换的 bst；不改变既有端点的请求头。
+			# sendJobLocation 与推荐开聊一样要带页面 zp_token（bst），空值不发。
 			if bst := self._get_client().cookies.get("bst"):
 				headers["zp_token"] = str(bst)
 		return headers
@@ -977,6 +978,11 @@ class BossRecruiterClient(_BaseHttpClient):
 			"customGreetingGuide": "-1",
 		}
 		return self._request("POST", ep.BOSS_CHAT_START_URL, data=data, retry=False)
+
+	def send_job_location(self, *, job_id: str | int, to_user_id: int, security_id: str) -> dict[str, Any]:
+		"""向已有会话发送工作地点卡片。调用方必须传入本次 friend_detail 的会话级 securityId。"""
+		data = {"jobId": job_id, "toUserId": to_user_id, "securityId": security_id}
+		return self._request("POST", ep.BOSS_SEND_JOB_LOCATION_URL, data=data, retry=False)
 
 	# ── 候选人搜索与简历 ──────────────────────────────────
 

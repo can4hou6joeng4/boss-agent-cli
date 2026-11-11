@@ -83,6 +83,14 @@ endpoints:
     replay_safe: false
     path: "/wapi/zpchat/session/bossEnter"
     referer: "/web/chat/index"
+  # 工作地点卡片。2026-11-10 CDP：表单 jobId + toUserId + 会话级 securityId
+  # （friend_detail 返回，不是推荐卡片上那个）。只发一次，不重放。
+  boss_send_job_location:
+    method: POST
+    effect: write
+    replay_safe: false
+    path: "/wapi/zpchat/message/sendJobLocation"
+    referer: "/web/chat/index"
 
   # ── 打招呼 / 新招呼 ────────────────────────────────
   boss_greet_list:

@@ -560,6 +560,7 @@ _LEGACY_ENVELOPE_COMMANDS = frozenset({
 	"recruiter-jobs-offline",
 	"recruiter-jobs-online",
 	"recruiter-last-messages",
+	"recruiter-location",
 	"recruiter-recommendations",
 	"recruiter-reply",
 	"recruiter-request-resume",

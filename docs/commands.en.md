@@ -13,7 +13,7 @@ boss schema --format mcp-tools         # export Model Context Protocol Tools def
 boss <cmd> --help                      # options for a single command
 ```
 
-`boss schema` currently exposes 39 top-level commands, plus 14 first-level recruiter
+`boss schema` currently exposes 39 top-level commands, plus 15 first-level recruiter
 subcommands under `hr`, grouped below by workflow stage.
 
 Compatibility setting: `boss config set operating_mode assisted|research`. Both modes can call every implemented capability; schema still reports risk/data classifications, and missing platform implementations return `NOT_SUPPORTED`.
@@ -184,6 +184,7 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 | `boss hr accept-resume <friend_id> --message-id <mid> --yes` | Accept a specific incoming attached-resume request |
 | `boss hr download-resume <friend_id> --message-id <mid> --output <path>` | Check access and download an already received attachment without overwriting files |
 | `boss hr greet ... --message <text> --yes` | Create a conversation and send first contact once, without changing read status |
+| `boss hr location <friend_id> --yes` | Send the job's work-location card into an existing chat; the same conversation is not sent twice |
 
 Preview the candidate parameters and message with `--dry-run`. Replace it with `--yes` only after the operator explicitly approves that candidate and message. MCP omits `yes` by default; agents must not infer approval, and a preview is not human authorization.
 
@@ -194,6 +195,13 @@ The `hr chat` list endpoint only returns basic conversation info (friendId, name
 `hr applications` / `hr chat` / `hr candidates` / `hr recommendations` / `hr last-messages` report pagination evidence in envelope `pagination`: `has_more` is `true` / `false` only when the platform returns a boolean `hasMore`, otherwise `null` with `has_more_source=unknown`; `total` is the number of rows on this page (`total_kind=returned_page_count`), not the full platform set. A next-page command preserving the filters is added to `hints.next_actions` only when `has_more=true`; when `null`, `hints.operator_actions` states that the page size alone cannot establish whether more records exist. With explicit `--friend-id` there is no list page, so `pagination` is `null` for `hr last-messages`.
 
 `greet` only sends first contact. It does not open an MQTT connection or clear unread state. Success returns `sent=true`; if saving local state fails after sending, the error envelope preserves `error.details.sent=true`. Never resend because local bookkeeping failed. BOSS can return a quota-block page inside a `code=0` response; the CLI recognizes this business rejection and returns `GREET_LIMIT` with `error.details.sent=false` and a redacted platform message. The rejected candidate/job pair remains reserved to prevent retries. Platform limits may be per job and lower than a caller's configured daily budget. Unknown unread counts in `chat` / `last-messages` remain `null`, not zero.
+
+`hr location` sends the job's work-location card into a conversation that **already exists**. It does not accept the `securityId` from a recommendation card. Before the single `POST /wapi/zpchat/message/sendJobLocation` (form fields `jobId`, `toUserId`, `securityId`), it reads the current `friend_detail` and uses that conversation-level `securityId` and internal `jobId`. With no flag the command returns `CONFIRMATION_REQUIRED`; `--dry-run` previews only and does not log in or call the platform. The `automation/stop.json` latch opened by `boss agent stop` refuses the command before any request. A friend already sent is `LOCATION_ALREADY_SENT`. An unconfirmed send keeps the local reservation and returns `LOCATION_RESULT_UNKNOWN`; do not send again automatically. Success sets `data.sent` to `true` and includes `job_id` / `job_name` without echoing `securityId`.
+
+```bash
+boss hr location 10001 --dry-run
+boss hr location 10001 --yes
+```
 
 `request-resume` and `resume --exchange` drive the official chat-page components and only click a confirmation that appeared for this action. Success requires a new message from you in the history read after the action, with a known request text or recognized action-card type. An outgoing WebSocket frame, a successful page call, or an unknown phone action ID alone cannot confirm sending; these cases return `ACTION_UNCONFIRMED` (`recoverable=false`) with the page log, confirmation state, WebSocket counts and history read-back evidence (`history_checked` / `history_matched_count` / `history_attempts` / `history_new_count` / `history_self_count` / `history_recipient_count`) in `error.details`. The action may already have taken effect, so check `boss hr chatmsg <friend_id>` first and do not retry blindly. History evidence does not prove recipient delivery or read status. When a phone or WeChat exchange also produces a resume request, the success result includes `side_effects: ["resume_request_detected"]`. Risk before the action or during the first history read stops the flow without further polling. Disabled or loading editors are never forced open, and the target friend must match uniquely.
 
