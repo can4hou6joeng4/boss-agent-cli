@@ -1,3 +1,5 @@
+from typing import Any
+
 import click
 
 from boss_agent_cli.api.client import AuthError, PlatformRiskError
@@ -18,6 +20,7 @@ from boss_agent_cli.display import (
 	render_sectioned_record,
 	risk_error_message,
 )
+from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION, list_pagination, rows_from
 
 
 @click.command("me")
@@ -34,6 +37,7 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 		auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 		with get_platform_instance(ctx, auth) as platform:
 			result = {}
+			pagination: dict[str, Any] | None = None
 
 			sections = [section] if section else ["user", "resume", "expect", "deliver"]
 
@@ -106,16 +110,29 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 					return
 				zp_data = platform.unwrap_data(resp) or {}
 				result["deliver"] = zp_data
+				# 汇总四段信息时，投递列表的页码不能代表整份载荷。
+				if section == "deliver":
+					pagination = list_pagination(zp_data, page=deliver_page, rows=rows_from(zp_data, "list"))
+
+			success_hints: dict[str, Any] = {
+				"next_actions": [
+					boss_command_for_ctx(ctx, "search <关键词> --city <城市>"),
+					boss_command_for_ctx(ctx, "recommend"),
+				],
+			}
+			if pagination is not None:
+				if pagination["has_more"] is True:
+					success_hints["next_actions"].append(boss_command_for_ctx(
+						ctx, f"me --section deliver --deliver-page {pagination['page'] + 1}",
+					))
+				elif pagination["has_more"] is None:
+					success_hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]
 
 			handle_output(
 				ctx, "me", result,
+				pagination=pagination,
 				render=lambda d: render_sectioned_record(d, title="me"),
-				hints={
-					"next_actions": [
-						boss_command_for_ctx(ctx, "search <关键词> --city <城市>"),
-						boss_command_for_ctx(ctx, "recommend"),
-					],
-				},
+				hints=success_hints,
 			)
 
 	except (AuthRequired, TokenRefreshFailed):
