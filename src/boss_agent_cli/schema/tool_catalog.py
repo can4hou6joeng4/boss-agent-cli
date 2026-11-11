@@ -968,7 +968,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_hr_chatmsg",
-			description="招聘者模式：查看与指定候选人的聊天消息历史",
+			description="招聘者模式：查看与指定候选人的聊天消息历史；信封 pagination 给出游标分页证据（has_more / next_max_msg_id）",
 			input_schema={
 				"type": "object",
 				"properties": {

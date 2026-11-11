@@ -1401,7 +1401,7 @@ SCHEMA_DATA = {
 					},
 				},
 				"chatmsg": {
-				"description": "与指定候选人的聊天消息历史。",
+				"description": "与指定候选人的聊天消息历史。信封 pagination 给出游标分页证据：has_more 仅平台返回布尔 hasMore 时非 null，next_max_msg_id 是本页最旧消息 ID。",
 					"args": [
 						{"name": "friend_id", "required": True, "description": "候选人会话 friend_id"},
 					],
@@ -1538,7 +1538,7 @@ SCHEMA_DATA = {
 				"applications": "查看候选人投递申请列表",
 				"resume": "查看候选人在线简历或发起联系方式交换",
 				"chat": "查看与候选人的沟通列表（含未读数和最近消息摘要）",
-				"chatmsg": "查看与指定候选人的聊天消息历史",
+				"chatmsg": "查看与指定候选人的聊天消息历史；信封 pagination 给出游标分页证据（next_max_msg_id）",
 				"last-messages": "批量查看候选人最近消息摘要",
 				"jobs": "管理职位发布（list 读取职位管理 data/list，可用 --page；offline/online/detail）",
 				"candidates": "搜索候选人",
