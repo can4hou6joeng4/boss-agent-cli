@@ -1,10 +1,23 @@
 """招聘者 — 候选人搜索。"""
+from typing import Any
+
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output
+from boss_agent_cli.display import (
+	boss_command_for_ctx,
+	handle_auth_errors,
+	handle_output,
+	handle_platform_error_output,
+	shell_argument,
+)
+from boss_agent_cli.services.pagination import (
+	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
+	list_pagination,
+	rows_from,
+)
 from boss_agent_cli.wizard.actions import execute_recruiter_candidate_search
 
 
@@ -51,10 +64,38 @@ def candidates_cmd(ctx: click.Context, query: str, city: str | None, job_id: str
 			handle_platform_error_output(ctx, "recruiter-candidates", platform, result, fallback_message="候选人搜索失败")
 			return
 		data = platform.unwrap_data(result) or {}
+		pagination = list_pagination(data, page=page, rows=rows_from(data, "geekList"))
+		next_actions = [
+			boss_command_for_ctx(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
+			boss_command_for_ctx(ctx, "hr chat"),
+		]
+		if pagination["has_more"] is True:
+			# 翻页必须保留本次筛选条件，否则第 2 页与第 1 页不是同一组结果。
+			parts = ["hr", "candidates"]
+			if query:
+				parts.append(shell_argument(query))
+			parts.extend(["--page", str(pagination["page"] + 1)])
+			for flag, value in (
+				("--city", city),
+				("--job-id", job_id),
+				("--experience", experience),
+				("--degree", degree),
+				("--age", age),
+				("--school-level", school_level),
+				("--activeness", activeness),
+				("--source", source),
+				("--salary", salary),
+			):
+				if value:
+					parts.extend([flag, shell_argument(value)])
+			if select:
+				parts.append("--select")
+			next_actions.append(boss_command_for_ctx(ctx, " ".join(parts)))
+		hints: dict[str, Any] = {"next_actions": next_actions}
+		if pagination["has_more"] is None:
+			hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]
 		handle_output(
 			ctx, "recruiter-candidates", data,
-			hints={"next_actions": [
-				boss_command_for_ctx(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
-				boss_command_for_ctx(ctx, "hr chat"),
-			]},
+			pagination=pagination,
+			hints=hints,
 		)

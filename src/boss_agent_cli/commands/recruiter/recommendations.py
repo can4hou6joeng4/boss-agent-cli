@@ -24,6 +24,11 @@ from boss_agent_cli.display import (
 	risk_error_contract,
 	shell_argument,
 )
+from boss_agent_cli.services.pagination import (
+	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
+	list_pagination,
+	rows_from,
+)
 
 
 @click.command("recommendations")
@@ -41,15 +46,29 @@ def recommendations_cmd(ctx: click.Context, job_id: str, page: int) -> None:
 		if not platform.is_success(result):
 			handle_platform_error_output(ctx, "recruiter-recommendations", platform, result, fallback_message="推荐牛人获取失败")
 			return
-		handle_output(
-			ctx, "recruiter-recommendations", platform.unwrap_data(result) or {},
-			hints={"next_actions": [
+		data = platform.unwrap_data(result) or {}
+		pagination = list_pagination(data, page=page, rows=rows_from(data, "geekList"))
+		next_actions = [
+			boss_command_for_ctx(
+				ctx,
+				"hr greet --geek-id <geek_id> --job-id <id> --expect-id <id> --lid <id> "
+				"--security-id <id> --message <话术> --dry-run",
+			),
+		]
+		if pagination["has_more"] is True:
+			next_actions.append(
 				boss_command_for_ctx(
 					ctx,
-					"hr greet --geek-id <geek_id> --job-id <id> --expect-id <id> --lid <id> "
-					"--security-id <id> --message <话术> --dry-run",
-				),
-			], "operator_actions": ["先 dry-run 预览候选人和话术，由操作者确认后去掉 --dry-run 并加 --yes 再发送"]},
+					f"hr recommendations --job-id {shell_argument(job_id)} --page {pagination['page'] + 1}",
+				)
+			)
+		operator_actions = ["先 dry-run 预览候选人和话术，由操作者确认后去掉 --dry-run 并加 --yes 再发送"]
+		if pagination["has_more"] is None:
+			operator_actions.append(UNKNOWN_HAS_MORE_OPERATOR_ACTION)
+		handle_output(
+			ctx, "recruiter-recommendations", data,
+			pagination=pagination,
+			hints={"next_actions": next_actions, "operator_actions": operator_actions},
 		)
 
 
