@@ -46,6 +46,8 @@
 - 加固 GitHub 工作流（Issue #747）：全部 18 处 `uses:` 从 `@v7` 这类可移动标签改为完整提交 SHA 并在行尾注明精确版本；`release.yml` 的标签名改用 `$GITHUB_REF_NAME`，不再在 `run:` 脚本里展开 `${{ github.ref_name }}`；发布构建关闭 `setup-uv` 缓存，避免 `master` 上 CI 写入的缓存被带进持有 PyPI 令牌的环境；不需要推送的任务（CI、Pages、发布）的 `actions/checkout` 设 `persist-credentials: false`。各工作流的触发条件与行为不变。`tests/test_open_source_docs.py` 新增 6 条离线守卫（SHA 钉版与版本注释、`run:` 不展开表达式、`pull_request_target` 不检出 PR head、发布不吃缓存、checkout 凭据逐任务登记），`docs/maintainer/branch-protection.md` 新增「Workflow rules」一节。
 
 ### Fixed
+- `search` 的下一页提示保留本次调用条件：此前只重建关键词与页码，城市 / 薪资 / 经验 / 学历 / 行业 / 规模 / 融资阶段 / 职位类型、`--url` 网页筛选、`--with-score`、`--sort score`、`--no-cache` 全部丢失，Agent 照提示翻页会拿到另一组结果却以为在继续上一页。现在下一页命令与本次调用同条件、只换页码，`--preset` 展开为等价显式筛选，值按 POSIX shell 规则转义；终端 `more:` 提示与信封 `next_actions` 使用同一条命令。带 `--welfare` / `--active` 的搜索分页语义不同，仍不提供下一页提示。搜索缓存 schema 相应升级，旧缓存条目不再复用。回归测试解析提示并交给 CLI 校验，覆盖中文关键词、多筛选、URL、引号与无下一页路径。
+- `recommend` 的下一页提示保留 `--with-score`：此前只写 `--page N+1`，带匹配分翻页后 `match_score` / `match_reasons` 静默消失。
 - `batch-greet --dry-run` 的执行提示保留全局上下文：此前只重建职位筛选与数量上限，丢失自定义数据目录和显式的 `--browser-source` / `--cdp-url` / `--delay`，照提示执行会改用默认目录的登录态与去重缓存，并静默回退到默认浏览器通道和节流区间。现在提示始终携带当前数据目录，命令行显式给出的通道、CDP 地址与节流区间原样保留，路径与关键字继续按 shell 规则转义；配置文件中同名的值随数据目录重新读取，不重复下发。新增断言锁定显式全局选项与选项顺序。
 - `clean --dry-run` 的后继命令保留预演范围：此前固定返回 `boss clean`，丢失自定义数据目录、`--all` / `--privacy` 与 `--days`，照提示执行会转向默认目录和默认清理范围。现在只去掉 `--dry-run`，保留数据目录与有效选项，并转义含空格、单引号等字符的路径；清理后的 `login` / `doctor` 提示同样保留目录。`--risk-lock` 的预演命令继续只交给真人，并携带完整范围。回归测试实际执行返回命令，验证预演目录按原范围清理、另一个默认目录保持完整；同步双语命令参考。
 - 职位描述缓存 `job_desc_cache` 新增 1,000 条容量上限：此前只在再次读取某个过期职位时懒删除，长期不再访问的缓存会持续累积。现在 `put_job_desc()` 写入后按保存时间淘汰最旧条目，同一时间按写入顺序处理；更新已有职位会刷新其保存时间，不额外占用容量。已有超限缓存会在下一次有效写入时收敛到上限，TTL 与显式 `clean --all` 保持原有语义。新增离线回归测试覆盖超限淘汰、最近条目保留与更新后的淘汰顺序。

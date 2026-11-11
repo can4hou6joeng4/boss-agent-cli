@@ -490,6 +490,29 @@ def test_recommend_with_score(mock_auth_cls, mock_client_cls, mock_cache_cls):
 @patch("boss_agent_cli.commands.recommend.CacheStore")
 @patch("boss_agent_cli.commands.recommend.get_platform_instance")
 @patch("boss_agent_cli.commands.recommend.AuthManager")
+def test_recommend_next_page_hint_keeps_with_score(mock_auth_cls, mock_client_cls, mock_cache_cls):
+	"""翻页提示必须保留 --with-score：否则下一页的 match_score 静默消失。"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.resume_expect.return_value = {"zpData": {"city": "广州"}}
+	mock_client.recommend_jobs.return_value = {
+		"zpData": {
+			"hasMore": True,
+			"jobList": [{"encryptJobId": "j1", "securityId": "sec_r1", "jobName": "Go 开发"}],
+		},
+	}
+
+	result = CliRunner().invoke(cli, ["--json", "recommend", "--with-score", "--page", "2"])
+
+	assert result.exit_code == 0, result.output
+	next_pages = [a for a in json.loads(result.stdout)["hints"]["next_actions"] if "recommend --page" in a]
+	assert next_pages == ["boss recommend --page 3 --with-score"]
+
+
+@patch("boss_agent_cli.commands.recommend.CacheStore")
+@patch("boss_agent_cli.commands.recommend.get_platform_instance")
+@patch("boss_agent_cli.commands.recommend.AuthManager")
 def test_recommend_supports_data_envelope(mock_auth_cls, mock_client_cls, mock_cache_cls):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
@@ -722,7 +745,7 @@ def test_search_cache_key_includes_current_result_schema(mock_client_cls, mock_a
 
 	assert result.exit_code == 0
 	cache_params = mock_cache.get_search.call_args.args[0]
-	assert cache_params["cache_schema"] == 4
+	assert cache_params["cache_schema"] == 5
 	assert "account" in cache_params
 	mock_pipeline.assert_not_called()
 
