@@ -894,6 +894,10 @@ def _attach_wizard_jobs(data: dict[str, Any], cache: CacheStore, run_id: str) ->
 
 def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> StepResult:
 	data = outcome.as_dict()
+	checkpoint = data.get("checkpoint") if isinstance(data, dict) else None
+	resume_command = checkpoint.get("resume_command") if isinstance(checkpoint, dict) else None
+	if not isinstance(resume_command, str) or not resume_command:
+		resume_command = f"boss crawl resume {shell_argument(outcome.run_id)}"
 	if cache is not None:
 		data = _attach_wizard_jobs(data if isinstance(data, dict) else {}, cache, str(outcome.run_id))
 	if outcome.status == "timeout_stopped":
@@ -901,14 +905,14 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 			"WORKFLOW_TIMEOUT",
 			outcome.error or "workflow 超过设定时限",
 			recoverable=True,
-			recovery_action=f"boss crawl resume {shell_argument(outcome.run_id)}",
+			recovery_action=resume_command,
 		)
 	if outcome.status in {"workflow_stopped", "stopped"} and "stop requested" in str(outcome.error or ""):
 		raise WorkflowActionError(
 			"WORKFLOW_STOPPED",
 			outcome.error or "crawl 已停止",
 			recoverable=True,
-			recovery_action=f"boss crawl resume {shell_argument(outcome.run_id)}",
+			recovery_action=resume_command,
 		)
 	if outcome.status in {"risk_stopped", "budget_stopped"}:
 		# 风控停止时 service 会 keep Chrome；把标记写入结果供向导文案使用。
@@ -921,7 +925,6 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 				"browser_kept_open": browser_kept_open,
 				"cdp_port": browser.get("cdp_port") or data.get("cdp_port"),
 			}
-		resume_command = f"boss crawl resume {shell_argument(outcome.run_id)}"
 		operator_actions: tuple[str, ...]
 		if browser_kept_open:
 			operator_actions = (
@@ -947,7 +950,7 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 			"NETWORK_ERROR",
 			outcome.error or f"crawl 以状态 {outcome.status} 停止",
 			recoverable=True,
-			recovery_action=f"boss crawl resume {shell_argument(outcome.run_id)}",
+			recovery_action=resume_command,
 		)
 	return StepResult(data, artifacts=tuple(outcome.output_paths.values()))
 
@@ -1032,7 +1035,7 @@ def _crawl_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		try:
 			run_id = str(_required(inputs, "run_id"))
-			data = crawl_status(cache, run_id)
+			data = crawl_status(cache, run_id, data_dir=context.data_dir)
 			data = _attach_wizard_jobs(data, cache, run_id)
 		except KeyError as exc:
 			raise WorkflowActionError("CRAWL_RUN_NOT_FOUND", str(exc)) from exc

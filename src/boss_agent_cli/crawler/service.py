@@ -37,7 +37,7 @@ from boss_agent_cli.crawler.hooks import (
 	HookRegistrationError,
 )
 from boss_agent_cli.crawler.transport import CrawlRiskError, CrawlTransport
-from boss_agent_cli.display import risk_error_message, shell_argument
+from boss_agent_cli.display import boss_command, risk_error_message, shell_argument
 
 
 @dataclass(frozen=True)
@@ -182,6 +182,7 @@ class CrawlOutcome:
 	elapsed_seconds: int = 0
 	error: str = ""
 	risk_lock: dict[str, Any] | None = None
+	data_dir: Path | None = None
 
 	def as_dict(self) -> dict[str, Any]:
 		result = {
@@ -191,7 +192,10 @@ class CrawlOutcome:
 			"pages_completed": self.pages_completed,
 			"jobs_seen": self.jobs_seen,
 			"detail_checks": self.detail_checks,
-			"checkpoint": {"next_page": self.next_page, "resume_command": f"boss crawl resume {shell_argument(self.run_id)}"},
+			"checkpoint": {
+				"next_page": self.next_page,
+				"resume_command": boss_command(f"crawl resume {shell_argument(self.run_id)}", data_dir=self.data_dir),
+			},
 			"output_paths": self.output_paths,
 			"requests_attempted": self.requests_attempted,
 			"detail_requests_attempted": self.detail_requests_attempted,
@@ -404,6 +408,7 @@ class CrawlService:
 			detail_requests_attempted=int(run["detail_requests_attempted"]),
 			elapsed_seconds=int(run["elapsed_seconds"]),
 			error=str(run.get("error", "")),
+			data_dir=self._data_dir,
 		)
 
 	def _run(
@@ -586,6 +591,7 @@ class CrawlService:
 			detail_requests_attempted=run_budget.detail_requests_attempted,
 			elapsed_seconds=run_budget.elapsed_seconds,
 			risk_lock=risk_lock,
+			data_dir=self._data_dir,
 		)
 
 	def _check_risk_lock(self) -> None:
