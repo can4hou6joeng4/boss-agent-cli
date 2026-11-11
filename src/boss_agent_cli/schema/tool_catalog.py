@@ -121,8 +121,14 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_status",
-			description="检查 BOSS 直聘登录态",
-			input_schema={"type": "object", "properties": {}, "required": []},
+			description="检查 BOSS 直聘登录态；默认只查本地登录态，live 会发一次只读在线验证请求",
+			input_schema={
+				"type": "object",
+				"properties": {
+					"live": {"type": "boolean", "description": "执行一次只读在线验证（默认仅检查本地登录态）", "default": False},
+				},
+				"required": [],
+			},
 		),
 		ToolDefinition(
 			name="boss_doctor",
@@ -179,6 +185,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"security_id": {"type": "string", "description": "职位的 security_id"},
 					"job_id": {"type": "string", "description": "encrypt_job_id，传入可走快速通道"},
+					"lid": {"type": "string", "description": "与 security_id 同一列表项的访问上下文（取自 search 结果，可选）"},
 				},
 				"required": ["security_id"],
 			},
@@ -204,6 +211,12 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"from_who": {"type": "string", "enum": ["boss", "me"], "description": "筛选发起方"},
 					"days": {"type": "integer", "description": "只显示最近 N 天的记录"},
 					"page": {"type": "integer", "description": "页码", "default": 1},
+					"format": {
+						"type": "string",
+						"enum": ["html", "md", "csv", "json"],
+						"description": "导出格式；指定后把沟通列表写入文件而不是返回列表",
+					},
+					"output_file": {"type": "string", "description": "导出文件路径（不指定则保存到配置的 export_dir）"},
 				},
 				"required": [],
 			},
@@ -219,6 +232,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 						"enum": ["user", "resume", "expect", "deliver"],
 						"description": "指定查看的部分",
 					},
+					"deliver_page": {"type": "integer", "minimum": 1, "description": "投递记录页码", "default": 1},
 				},
 				"required": [],
 			},
@@ -265,6 +279,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"security_id": {"type": "string", "description": "好友的 uid（推荐，取自 boss_chat，跨请求稳定）或 security_id"},
+					"page": {"type": "integer", "description": "消息页码", "default": 1},
+					"count": {"type": "integer", "description": "每页消息数量", "default": 20},
 				},
 				"required": ["security_id"],
 			},
@@ -364,7 +380,13 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		ToolDefinition(
 			name="boss_pipeline",
 			description="聚合聊天和面试数据，生成统一候选进度视图",
-			input_schema={"type": "object", "properties": {}, "required": []},
+			input_schema={
+				"type": "object",
+				"properties": {
+					"days_stale": {"type": "integer", "minimum": 0, "description": "超过 N 天未推进则标记为 follow_up", "default": 3},
+				},
+				"required": [],
+			},
 		),
 		ToolDefinition(
 			name="boss_follow_up",

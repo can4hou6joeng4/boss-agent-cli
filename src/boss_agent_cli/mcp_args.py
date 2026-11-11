@@ -84,6 +84,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = [name, arguments["security_id"]]
 		if "job_id" in arguments and arguments["job_id"]:
 			args.extend(["--job-id", arguments["job_id"]])
+		if arguments.get("lid"):
+			args.extend(["--lid", str(arguments["lid"])])
 		return args
 
 	if name == "greet":
@@ -97,12 +99,18 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--days", str(arguments["days"])])
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
+		if arguments.get("format"):
+			args.extend(["--export", str(arguments["format"])])
+		if arguments.get("output_file"):
+			args.extend(["--output", str(arguments["output_file"])])
 		return args
 
 	if name == "me":
 		args = [name]
 		if "section" in arguments and arguments["section"]:
 			args.extend(["--section", arguments["section"]])
+		if arguments.get("deliver_page") is not None:
+			args.extend(["--deliver-page", str(arguments["deliver_page"])])
 		return args
 
 	if name == "chatmsg":
@@ -116,7 +124,12 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return args
 
 	if name == "chat_summary":
-		return ["chat-summary", arguments["security_id"]]
+		args = ["chat-summary", arguments["security_id"]]
+		if arguments.get("page") is not None:
+			args.extend(["--page", str(arguments["page"])])
+		if arguments.get("count") is not None:
+			args.extend(["--count", str(arguments["count"])])
+		return args
 
 	if name == "mark":
 		# MCP 侧参数名是 tag，CLI 的选项名是 --label；两者不是同一个词，写错会让
@@ -525,5 +538,17 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "hr_jobs_detail":
 		return ["hr", "jobs", "detail", str(arguments["enc_job_id"])]
 
-	# 无参数命令：status, doctor, cities, interviews, pipeline
+	if name == "status":
+		args = [name]
+		if arguments.get("live"):
+			args.append("--live")
+		return args
+
+	if name == "pipeline":
+		args = [name]
+		if arguments.get("days_stale") is not None:
+			args.extend(["--days-stale", str(arguments["days_stale"])])
+		return args
+
+	# 无参数命令：doctor, cities, interviews
 	return [name]
