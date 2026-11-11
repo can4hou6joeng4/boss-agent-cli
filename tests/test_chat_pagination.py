@@ -172,6 +172,45 @@ def test_chat_next_page_action_is_executable(module, name, tmp_path):
 		]
 
 
+def test_chatmsg_next_page_action_keeps_raw(tmp_path):
+	"""``chatmsg --raw`` 的翻页提示必须保留 --raw。
+
+	只写 --page / --count 时，下一页的 type_code / timestamp / body / links /
+	security_id 全部消失，Agent 会以为保真字段只在第一页存在。
+	"""
+	with patch("boss_agent_cli.commands.chatmsg.get_platform_instance") as platform_cls, \
+			patch("boss_agent_cli.commands.chatmsg.AuthManager"):
+		client = _ctx_mock(platform_cls)
+		client.friend_list.return_value = _friend_list_response([_friend_item()])
+		client.chat_history.return_value = {"code": 0, "zpData": {
+			"messages": [_message()], "hasMore": True, "page": 2,
+		}}
+		result = CliRunner().invoke(
+			cli, ["--data-dir", str(tmp_path), "--json", "chatmsg", "10001", "--count", "9", "--raw"],
+		)
+	assert result.exit_code == 0, result.output
+	actions = [a for a in json.loads(result.output)["hints"]["next_actions"] if "--page" in a]
+	assert actions == ["boss chatmsg 10001 --page 3 --count 9 --raw"]
+
+	# 提示要真能被 CLI 解析，且 --raw 确实生效（下一页输出仍是保真字段）。
+	replay = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), *shlex.split(actions[0])[1:], "--help"])
+	assert replay.exit_code == 0, replay.output
+
+
+def test_chatmsg_next_page_action_omits_raw_when_not_requested(tmp_path):
+	with patch("boss_agent_cli.commands.chatmsg.get_platform_instance") as platform_cls, \
+			patch("boss_agent_cli.commands.chatmsg.AuthManager"):
+		client = _ctx_mock(platform_cls)
+		client.friend_list.return_value = _friend_list_response([_friend_item()])
+		client.chat_history.return_value = {"code": 0, "zpData": {
+			"messages": [_message()], "hasMore": True, "page": 1,
+		}}
+		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "chatmsg", "10001"])
+	assert result.exit_code == 0, result.output
+	actions = [a for a in json.loads(result.output)["hints"]["next_actions"] if "--page" in a]
+	assert actions == ["boss chatmsg 10001 --page 2 --count 20"]
+
+
 @pytest.mark.parametrize(("code", "recoverable"), [("RATE_LIMITED", True), ("ACCOUNT_RISK", False)])
 @pytest.mark.parametrize(("module", "name"), CHAT_COMMANDS)
 def test_chat_failure_has_no_pagination(module, name, code, recoverable):
