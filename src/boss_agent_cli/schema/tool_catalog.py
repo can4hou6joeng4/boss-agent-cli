@@ -451,6 +451,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"days": {"type": "integer", "description": "统计窗口天数", "default": 30},
+					"format": {"type": "string", "enum": ["json", "html"], "description": "输出格式；html 生成自包含报表", "default": "json"},
+					"output_file": {"type": "string", "description": "HTML 输出路径（仅 format=html 时生效）"},
 				},
 				"required": [],
 			},

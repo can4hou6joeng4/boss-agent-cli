@@ -15,13 +15,19 @@ import click
 import pytest
 
 from boss_agent_cli.commands import agent as agent_cmd_module
+from boss_agent_cli.commands import ai_cmd as ai_cmd_module
 from boss_agent_cli.commands import chat as chat_cmd_module
 from boss_agent_cli.commands import chat_summary as chat_summary_cmd_module
+from boss_agent_cli.commands import chatmsg as chatmsg_cmd_module
 from boss_agent_cli.commands import clean as clean_cmd_module
 from boss_agent_cli.commands import detail as detail_cmd_module
+from boss_agent_cli.commands import digest as digest_cmd_module
+from boss_agent_cli.commands import export as export_cmd_module
 from boss_agent_cli.commands import greet as greet_cmd_module
+from boss_agent_cli.commands import mark as mark_cmd_module
 from boss_agent_cli.commands import me as me_cmd_module
 from boss_agent_cli.commands import pipeline as pipeline_cmd_module
+from boss_agent_cli.commands import stats as stats_cmd_module
 from boss_agent_cli.commands import preset as preset_cmd_module
 from boss_agent_cli.commands import recommend as recommend_cmd_module
 from boss_agent_cli.commands import search as search_cmd_module
@@ -268,6 +274,42 @@ _MAINTENANCE_SINGLE_COMMAND_TOOLS = {
 	ids=list(_MAINTENANCE_SINGLE_COMMAND_TOOLS),
 )
 def test_maintenance_tool_schema_lists_every_cli_parameter(
+	tool_name: str, command: click.Command, aliases: dict[str, str], hidden: set[str],
+) -> None:
+	_assert_schema_matches_command(tool_name, command, aliases, hidden)
+
+
+# MCP 侧为了可读性使用与 Click 参数不同的名字（`format` / `output_file` /
+# `raw` / `tag` / `resume`），这些别名过去只写在 `_build_args` 里，schema
+# 与 CLI 任何一侧增删参数都不会被发现。这里逐项登记，锁定映射后的集合相等。
+_ALIASED_SINGLE_COMMAND_TOOLS = {
+	"boss_chatmsg": (chatmsg_cmd_module.chatmsg_cmd, {"show_raw": "raw"}, set()),
+	"boss_export": (
+		export_cmd_module.export_cmd,
+		{"fmt": "format", "output": "output_file", "search_url": "url"},
+		set(),
+	),
+	"boss_digest": (
+		digest_cmd_module.digest_cmd,
+		{"output_format": "format", "output_path": "output"},
+		{"now_ts_ms"},
+	),
+	"boss_stats": (
+		stats_cmd_module.stats_cmd,
+		{"output_format": "format", "output_path": "output_file"},
+		set(),
+	),
+	"boss_ai_fit": (ai_cmd_module.ai_fit_cmd, {"resume_name": "resume"}, set()),
+	"boss_mark": (mark_cmd_module.mark_cmd, {"label": "tag"}, set()),
+}
+
+
+@pytest.mark.parametrize(
+	("tool_name", "command", "aliases", "hidden"),
+	[(tool_name, *spec) for tool_name, spec in _ALIASED_SINGLE_COMMAND_TOOLS.items()],
+	ids=list(_ALIASED_SINGLE_COMMAND_TOOLS),
+)
+def test_aliased_tool_schema_lists_every_cli_parameter(
 	tool_name: str, command: click.Command, aliases: dict[str, str], hidden: set[str],
 ) -> None:
 	_assert_schema_matches_command(tool_name, command, aliases, hidden)

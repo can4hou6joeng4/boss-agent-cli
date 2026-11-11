@@ -1243,6 +1243,11 @@ def test_build_args_stats_with_days():
 	assert args == ["stats", "--days", "7"]
 
 
+def test_build_args_stats_forwards_html_export():
+	args = _build_args("boss_stats", {"format": "html", "output_file": "/tmp/report.html"})
+	assert args == ["stats", "--format", "html", "--output", "/tmp/report.html"]
+
+
 def test_build_args_agent_run_and_stop():
 	assert _build_args("boss_agent_run", {"dry_run": True, "limit": 2}) == [
 		"agent", "run", "--dry-run", "--limit", "2",
