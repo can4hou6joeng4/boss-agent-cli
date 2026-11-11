@@ -1381,6 +1381,17 @@ def test_build_args_hr_chat():
 	assert args == ["hr", "chat", "--page", "2", "--job-id", "55", "--label-id", "1"]
 
 
+def test_build_args_hr_chat_forwards_summary_limit():
+	# 0 = 只读沟通列表、不额外请求最近消息，MCP 调用方能显式关闭补充请求。
+	args = _build_args("boss_hr_chat", {"page": 2, "summary_limit": 0})
+	assert args == ["hr", "chat", "--page", "2", "--summary-limit", "0"]
+
+
+def test_build_args_hr_chat_omits_unset_summary_limit():
+	args = _build_args("boss_hr_chat", {"page": 2})
+	assert "--summary-limit" not in args
+
+
 def test_build_args_hr_chatmsg():
 	args = _build_args("boss_hr_chatmsg", {"friend_id": 12345, "count": 10, "max_msg_id": 9001})
 	assert args == ["hr", "chatmsg", "12345", "--count", "10", "--max-msg-id", "9001"]
@@ -1389,6 +1400,13 @@ def test_build_args_hr_chatmsg():
 def test_build_args_hr_last_messages():
 	args = _build_args("boss_hr_last_messages", {"friend_ids": [12345, 67790], "page": 2})
 	assert args == ["hr", "last-messages", "--friend-id", "12345", "--friend-id", "67790", "--page", "2"]
+
+
+def test_build_args_hr_last_messages_forwards_limit():
+	# limit 控制串行请求批次数量，默认 100 时不下发，显式值原样透传。
+	args = _build_args("boss_hr_last_messages", {"page": 2, "limit": 40})
+	assert args == ["hr", "last-messages", "--page", "2", "--limit", "40"]
+	assert "--limit" not in _build_args("boss_hr_last_messages", {"page": 2})
 
 
 def test_build_args_hr_resume():

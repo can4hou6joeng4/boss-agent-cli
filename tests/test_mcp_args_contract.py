@@ -14,6 +14,17 @@ from typing import Any
 import click
 import pytest
 
+from boss_agent_cli.commands.recruiter import (
+	accept_resume as recruiter_accept_resume,
+	applications as recruiter_applications,
+	candidates as recruiter_candidates,
+	chat as recruiter_chat,
+	download_resume as recruiter_download_resume,
+	recommendations as recruiter_recommendations,
+	reply as recruiter_reply,
+	request_resume as recruiter_request_resume,
+	whoami as recruiter_whoami,
+)
 from boss_agent_cli.main import cli
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.mcp_tools import TOOLS
@@ -58,3 +69,54 @@ def test_tool_arguments_parse_with_cli(tool) -> None:
 	# make_context 只做参数解析与类型校验，不执行命令回调。
 	ctx = command.make_context(command.name, rest)
 	ctx.close()
+
+
+# 单工具 ↔ 单命令的 hr 工具：inputSchema 的属性集合必须与 Click 参数逐一相等。
+# 新增 CLI 选项却忘了同步 schema（或反之）时，MCP 调用方要么看不到可用参数，
+# 要么声明了 CLI 不认识的参数。`hr chat --summary-limit` / `hr last-messages --limit`
+# 就是因此长期不可达。
+_HR_SINGLE_COMMAND_TOOLS = {
+	"boss_hr_whoami": recruiter_whoami.whoami_cmd,
+	"boss_hr_applications": recruiter_applications.applications_cmd,
+	"boss_hr_candidates": recruiter_candidates.candidates_cmd,
+	"boss_hr_recommendations": recruiter_recommendations.recommendations_cmd,
+	"boss_hr_greet": recruiter_recommendations.greet_cmd,
+	"boss_hr_chat": recruiter_chat.recruiter_chat_cmd,
+	"boss_hr_chatmsg": recruiter_chat.recruiter_chatmsg_cmd,
+	"boss_hr_last_messages": recruiter_chat.recruiter_last_messages_cmd,
+	"boss_hr_reply": recruiter_reply.reply_cmd,
+	"boss_hr_request_resume": recruiter_request_resume.request_resume_cmd,
+	"boss_hr_accept_resume": recruiter_accept_resume.accept_resume_cmd,
+	"boss_hr_download_resume": recruiter_download_resume.download_resume_cmd,
+}
+
+# resume / exchange 共用一条 CLI 命令却被拆成两个工具；jobs 用 action 合并
+# list / online / offline，detail 用位置参数。结构不同，不做集合相等比较。
+_HR_STRUCTURED_TOOLS = {
+	"boss_hr_resume",
+	"boss_hr_exchange",
+	"boss_hr_jobs",
+	"boss_hr_jobs_detail",
+}
+
+
+def test_hr_completeness_table_covers_every_hr_tool() -> None:
+	hr_tools = {tool.name for tool in TOOLS if tool.name.startswith("boss_hr_")}
+	assert set(_HR_SINGLE_COMMAND_TOOLS) | _HR_STRUCTURED_TOOLS == hr_tools
+
+
+@pytest.mark.parametrize(
+	("tool_name", "command"),
+	list(_HR_SINGLE_COMMAND_TOOLS.items()),
+	ids=list(_HR_SINGLE_COMMAND_TOOLS),
+)
+def test_hr_tool_schema_lists_every_cli_parameter(tool_name: str, command: click.Command) -> None:
+	schema = next(tool for tool in TOOLS if tool.name == tool_name).input_schema
+	properties = set((schema.get("properties") or {}).keys())
+	parameters = {param.name for param in command.params if param.name}
+	missing_in_schema = sorted(parameters - properties)
+	extra_in_schema = sorted(properties - parameters)
+	assert not missing_in_schema and not extra_in_schema, (
+		f"{tool_name} 的 inputSchema 与 CLI 参数不一致："
+		f"CLI 有但 schema 未声明 {missing_in_schema}；schema 声明但 CLI 没有 {extra_in_schema}"
+	)
