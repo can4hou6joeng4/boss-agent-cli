@@ -3,6 +3,7 @@ import asyncio
 import inspect
 import json
 import re
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -401,7 +402,7 @@ def test_call_tool_is_error_mirrors_envelope_ok(monkeypatch, ok, expected):
 	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
 	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
 
-	async def fake_run(*args):
+	async def fake_run(*args, **kwargs):
 		return {"ok": ok, "error": None if ok else {"code": "AUTH_REQUIRED"}}
 
 	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
@@ -425,7 +426,7 @@ def test_call_tool_rejects_unknown_arguments(monkeypatch):
 	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
 	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
 
-	async def fake_run(*args):
+	async def fake_run(*args, **kwargs):
 		raise AssertionError("未知参数不应触达 CLI")
 
 	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
@@ -460,7 +461,7 @@ def test_call_tool_rejects_non_boolean_flags(monkeypatch):
 	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
 	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
 
-	async def fake_run(*args):
+	async def fake_run(*args, **kwargs):
 		raise AssertionError("类型错误不应触达 CLI")
 
 	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
@@ -499,7 +500,7 @@ def test_call_tool_accepts_boolean_flags(monkeypatch):
 
 	seen: list[tuple[str, ...]] = []
 
-	async def fake_run(*args):
+	async def fake_run(*args, **kwargs):
 		seen.append(args)
 		return {"ok": True, "error": None}
 
@@ -552,7 +553,7 @@ def test_call_tool_rejects_unknown_tool_name(monkeypatch):
 	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
 	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
 
-	async def fake_run(*args):
+	async def fake_run(*args, **kwargs):
 		raise AssertionError("未知工具不应触达 CLI")
 
 	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
@@ -931,6 +932,83 @@ def test_run_boss_timeout(mock_run):
 	mock_run.return_value = MagicMock(stdout='{"ok": true}', stderr="")
 	_run_boss("doctor")
 	assert mock_run.call_args[1]["timeout"] == 120
+
+
+@patch("server.subprocess.run")
+def test_run_boss_read_only_timeout_is_replay_safe(mock_run):
+	"""只读命令超时不能继承写操作的「结果未知」：读取没有副作用，可以直接重试。"""
+	mock_run.side_effect = subprocess.TimeoutExpired("boss", 120)
+
+	result = _run_boss("show", "3", may_write=False)
+
+	assert result["ok"] is False
+	assert result["error"]["code"] == "WORKFLOW_TIMEOUT"
+	assert result["error"]["recoverable"] is True
+	assert result["error"]["details"]["outcome_unknown"] is False
+	assert result["error"]["details"]["replay_safe"] is True
+	assert "可直接重新调用" in result["error"]["recovery_action"]
+
+
+@patch("server.subprocess.run")
+def test_run_boss_write_timeout_still_requires_outcome_check(mock_run):
+	"""未声明只读的工具默认按写操作处理：超时后必须先核对平台结果。"""
+	mock_run.side_effect = subprocess.TimeoutExpired("boss", 120)
+
+	result = _run_boss("apply", "s", "j")
+
+	assert result["error"]["recoverable"] is False
+	assert result["error"]["details"]["outcome_unknown"] is True
+	assert result["error"]["details"]["replay_safe"] is False
+	assert "未确认的写操作不要直接重试" in result["error"]["recovery_action"]
+
+
+def test_read_only_tool_classification_covers_real_tools_only():
+	"""只读白名单不能引用不存在的工具，也不能把已知写工具放进去。"""
+	from boss_agent_cli import mcp_server
+
+	catalog = {tool.name for tool in TOOLS}
+	assert mcp_server._READ_ONLY_TOOL_NAMES <= catalog
+	write_tools = {
+		"boss_apply", "boss_greet", "boss_batch_greet", "boss_mark", "boss_exchange",
+		"boss_wizard", "boss_clean", "boss_crawl_shortlist", "boss_agent_run",
+		"boss_agent_review_approve", "boss_agent_review_reject",
+		"boss_shortlist_add", "boss_shortlist_annotate", "boss_shortlist_remove",
+		"boss_preset_add", "boss_preset_remove", "boss_watch_add", "boss_watch_remove",
+		"boss_hr_greet", "boss_hr_reply", "boss_hr_request_resume",
+		"boss_hr_accept_resume", "boss_hr_exchange",
+	}
+	assert not (mcp_server._READ_ONLY_TOOL_NAMES & write_tools)
+
+
+def test_call_tool_passes_per_tool_write_classification(monkeypatch):
+	"""超时 / 取消的保守程度必须按工具区分，而不是所有工具一律「结果未知」。"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+	captured: dict[str, bool] = {}
+
+	async def fake_run(*args, **kwargs):
+		captured["may_write"] = kwargs["may_write"]
+		return {"ok": True}
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+
+	asyncio.run(
+		mcp_server.call_tool(None, CallToolRequestParams(name="boss_show", arguments={"number": 1}))
+	)
+	assert captured == {"may_write": False}
+
+	asyncio.run(
+		mcp_server.call_tool(
+			None,
+			CallToolRequestParams(name="boss_apply", arguments={"security_id": "s", "job_id": "j"}),
+		)
+	)
+	assert captured == {"may_write": True}
 
 
 @patch("server.subprocess.run")

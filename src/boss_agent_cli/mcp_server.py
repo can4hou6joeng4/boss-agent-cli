@@ -118,6 +118,56 @@ def _configure_boss_invocation(
 	_BOSS_GLOBAL_ARGS = args
 
 
+# 子进程超时 / 取消时，只有明确只读的工具才能声明「可重放」。未列出的工具
+# （包括未来新增的）一律按「可能已产生平台副作用」处理：漏判只读只是保守，
+# 漏判写操作会让 Agent 直接重试一个可能已经生效的动作。
+_READ_ONLY_TOOL_NAMES = frozenset({
+	"boss_status",
+	"boss_doctor",
+	"boss_search",
+	"boss_recommend",
+	"boss_detail",
+	"boss_show",
+	"boss_history",
+	"boss_chat",
+	"boss_chatmsg",
+	"boss_me",
+	"boss_interviews",
+	"boss_cities",
+	"boss_pipeline",
+	"boss_follow_up",
+	"boss_digest",
+	"boss_stats",
+	"boss_export",
+	"boss_resume_list",
+	"boss_resume_show",
+	"boss_watch_list",
+	"boss_preset_list",
+	"boss_shortlist_list",
+	"boss_shortlist_compare",
+	"boss_favorites_list",
+	"boss_crawl_status",
+	"boss_crawl_results",
+	"boss_hr_whoami",
+	"boss_hr_applications",
+	"boss_hr_candidates",
+	"boss_hr_recommendations",
+	"boss_hr_chat",
+	"boss_hr_chatmsg",
+	"boss_hr_last_messages",
+	"boss_hr_resume",
+	"boss_hr_jobs",
+	"boss_hr_jobs_detail",
+})
+
+_WRITE_INTERRUPT_RECOVERY = "检查本地 checkpoint 与平台实际结果，再显式恢复；未确认的写操作不要直接重试"
+_READ_INTERRUPT_RECOVERY = "只读命令已中断，不产生平台写入；确认子进程已退出后可直接重新调用"
+
+
+def _tool_may_write(tool_name: str) -> bool:
+	return tool_name not in _READ_ONLY_TOOL_NAMES
+
+
 def _cli_timeout(args: tuple[str, ...]) -> float:
 	# A wizard deadline belongs to the child. The host allows bounded extra
 	# time for that child to commit its result/checkpoint and emit the envelope.
@@ -131,7 +181,14 @@ def _cli_timeout(args: tuple[str, ...]) -> float:
 	return _CLI_TIMEOUT_SECONDS
 
 
-def _cli_failure(args: tuple[str, ...], code: str, message: str, **details: Any) -> dict[str, Any]:
+def _cli_failure(
+	args: tuple[str, ...],
+	code: str,
+	message: str,
+	*,
+	recovery_action: str | None = None,
+	**details: Any,
+) -> dict[str, Any]:
 	command = args[0] if args else "mcp"
 	if command in {"agent", "hr", "ai", "resume", "watch", "crawl"} and len(args) > 1:
 		command = f"{command}.{args[1]}"
@@ -143,7 +200,7 @@ def _cli_failure(args: tuple[str, ...], code: str, message: str, **details: Any)
 				code=code,
 				message=message,
 				recoverable=code != "CLI_ERROR" and not details.get("outcome_unknown", False),
-				recovery_action="检查本地 checkpoint 与平台实际结果，再显式恢复；未确认的写操作不要直接重试",
+				recovery_action=recovery_action or _WRITE_INTERRUPT_RECOVERY,
 				details=details or None,
 			)
 		),
@@ -162,7 +219,7 @@ def _parse_cli_output(args: tuple[str, ...], stdout: str, stderr: str) -> dict[s
 	return _cli_failure(args, "CLI_ERROR", stderr or "命令执行失败")
 
 
-def _run_boss(*args: str) -> dict[str, Any]:
+def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
 	"""Synchronous compatibility entrypoint; MCP handlers use the async path."""
 	cmd = [_BOSS_BIN, "--json", *_BOSS_GLOBAL_ARGS, *args]
 	try:
@@ -174,7 +231,13 @@ def _run_boss(*args: str) -> dict[str, Any]:
 			stdin=subprocess.DEVNULL,
 		)
 	except subprocess.TimeoutExpired:
-		return _cli_failure(args, "WORKFLOW_TIMEOUT", "底层 CLI 超时", outcome_unknown=True)
+		return _cli_failure(
+			args,
+			"WORKFLOW_TIMEOUT",
+			"底层 CLI 超时",
+			outcome_unknown=may_write,
+			recovery_action=_WRITE_INTERRUPT_RECOVERY if may_write else _READ_INTERRUPT_RECOVERY,
+		)
 	except OSError as exc:
 		return _cli_failure(args, "CLI_ERROR", str(exc))
 	return _parse_cli_output(args, result.stdout, result.stderr)
@@ -222,7 +285,7 @@ async def _stop_cli_process(
 			return b"", b""
 
 
-async def _run_boss_async(*args: str) -> dict[str, Any]:
+async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 	if args and args[0] == "wizard" and not any(flag in args for flag in ("--timeout", "--status", "--stop")):
 		args = (*args, "--timeout", str(_CLI_TIMEOUT_SECONDS))
 	cmd = [_BOSS_BIN, "--json", *_BOSS_GLOBAL_ARGS, *args]
@@ -245,7 +308,13 @@ async def _run_boss_async(*args: str) -> dict[str, Any]:
 			return _cli_failure(args, "WORKFLOW_STOPPED", "MCP 调用已取消", outcome_unknown=False)
 		output = asyncio.create_task(process.communicate())
 		await asyncio.shield(_stop_cli_process(process, output))
-		return _cli_failure(args, "WORKFLOW_STOPPED", "MCP 调用已取消", outcome_unknown=True)
+		return _cli_failure(
+			args,
+			"WORKFLOW_STOPPED",
+			"MCP 调用已取消",
+			outcome_unknown=may_write,
+			recovery_action=_WRITE_INTERRUPT_RECOVERY if may_write else _READ_INTERRUPT_RECOVERY,
+		)
 	output = asyncio.create_task(process.communicate())
 	try:
 		stdout, stderr = await asyncio.wait_for(asyncio.shield(output), _cli_timeout(args))
@@ -262,7 +331,8 @@ async def _run_boss_async(*args: str) -> dict[str, Any]:
 			args,
 			code,
 			"MCP 调用已取消" if code == "WORKFLOW_STOPPED" else "底层 CLI 超时",
-			outcome_unknown=True,
+			outcome_unknown=may_write,
+			recovery_action=_WRITE_INTERRUPT_RECOVERY if may_write else _READ_INTERRUPT_RECOVERY,
 			checkpoint_result=checkpoint_result if isinstance(checkpoint_result, dict) else None,
 		)
 	return _parse_cli_output(args, stdout.decode("utf-8", errors="replace"), stderr.decode("utf-8", errors="replace"))
@@ -373,7 +443,7 @@ async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
 		# CLI 的错误信封返回，至少带上 INVALID_PARAM、缺失参数名与恢复指引。
 		missing = str(exc.args[0]) if exc.args else "参数"
 		return _tool_argument_error(params.name, f"缺少必填参数：{missing}")
-	result = await _run_boss_async(*args)
+	result = await _run_boss_async(*args, may_write=_tool_may_write(params.name))
 	# 信封的 ok 是唯一真源，但 MCP 客户端还需要 is_error 才能把失败标成工具错误；
 	# 两者不一致时，ok:false 会被当成一次成功的工具调用。
 	return CallToolResult(
