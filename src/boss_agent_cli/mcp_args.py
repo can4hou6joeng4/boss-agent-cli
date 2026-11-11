@@ -134,8 +134,11 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "batch_greet":
 		args = ["batch-greet", arguments["query"]]
-		if "city" in arguments and arguments["city"]:
-			args.extend(["--city", arguments["city"]])
+		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage"):
+			if arguments.get(opt):
+				args.extend([f"--{opt}", str(arguments[opt])])
+		if arguments.get("job_type"):
+			args.extend(["--job-type", str(arguments["job_type"])])
 		# MCP 侧参数名是 limit，CLI 选项名是 --count。默认值要显式下发：不传就落到
 		# CLI 的默认 10，比工具声明的 5 多打一倍招呼。
 		args.extend(["--count", str(arguments.get("limit", 5))])

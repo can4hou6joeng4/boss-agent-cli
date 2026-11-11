@@ -14,6 +14,7 @@ from typing import Any
 import click
 import pytest
 
+from boss_agent_cli.commands import greet as greet_cmd_module
 from boss_agent_cli.commands import recommend as recommend_cmd_module
 from boss_agent_cli.commands import search as search_cmd_module
 from boss_agent_cli.commands.recruiter import (
@@ -32,12 +33,24 @@ from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.mcp_tools import TOOLS
 
 
-def _sample_value(prop: dict[str, Any]) -> Any:
+# 这些筛选在部分命令里是 Click Choice（如 batch-greet），schema 只声明 string；
+# 样例值必须落在可选值集合内，解析测试才能验证映射而不是被 Choice 拦下。
+_FILTER_SAMPLE_VALUES = {
+	"industry": "电子商务",
+	"scale": "100-499人",
+	"stage": "A轮",
+	"job_type": "全职",
+}
+
+
+def _sample_value(prop: dict[str, Any], name: str = "") -> Any:
 	"""按 JSON Schema 生成一个合法的样例值；枚举取第一个，与 CLI Choice 对齐。"""
 	if "enum" in prop:
 		return prop["enum"][0]
 	if prop.get("type") == "array":
 		return [_sample_value(prop.get("items") or {})]
+	if name in _FILTER_SAMPLE_VALUES:
+		return _FILTER_SAMPLE_VALUES[name]
 	return {
 		"string": "sample",
 		"integer": 1,
@@ -63,7 +76,7 @@ def _resolve_command(argv: list[str]) -> tuple[click.Command, list[str]]:
 @pytest.mark.parametrize("tool", TOOLS, ids=[tool.name for tool in TOOLS])
 def test_tool_arguments_parse_with_cli(tool) -> None:
 	properties = tool.input_schema.get("properties") or {}
-	arguments = {key: _sample_value(prop) for key, prop in properties.items()}
+	arguments = {key: _sample_value(prop, key) for key, prop in properties.items()}
 
 	argv = _build_args(tool.name, arguments)
 
@@ -135,6 +148,7 @@ _CORE_SINGLE_COMMAND_TOOLS = {
 		{"search_url", "preset"},
 	),
 	"boss_recommend": (recommend_cmd_module.recommend_cmd, {}, set()),
+	"boss_batch_greet": (greet_cmd_module.batch_greet_cmd, {"count": "limit"}, set()),
 }
 
 
