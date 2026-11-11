@@ -1,4 +1,6 @@
 """招聘者 — 职位管理。"""
+from typing import Any
+
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
@@ -36,13 +38,57 @@ def jobs_list_cmd(ctx: click.Context, page: int) -> None:
 			handle_platform_error_output(ctx, "recruiter-jobs-list", platform, result, fallback_message="职位列表获取失败")
 			return
 		data = platform.unwrap_data(result) or {}
+		# 平台把分页事实放在 data.page / hasMore / totalSize 里，信封 pagination
+		# 却一直是 null：Agent 按契约只看 pagination 时既不知道当前页，也没有
+		# 「是否还有下一页」的证据。data 原样保留，避免破坏已有消费方。
+		if isinstance(data, dict):
+			raw_page = data.get("page")
+			current_page = (
+				raw_page
+				if isinstance(raw_page, int) and not isinstance(raw_page, bool) and raw_page >= 1
+				else page
+			)
+			raw_has_more = data.get("hasMore")
+			has_more = raw_has_more if isinstance(raw_has_more, bool) else None
+			raw_total = data.get("totalSize")
+			total_available = (
+				raw_total
+				if isinstance(raw_total, int) and not isinstance(raw_total, bool) and raw_total >= 0
+				else None
+			)
+			rows = data.get("data")
+			row_count = len(rows) if isinstance(rows, list) else 0
+			pagination: dict[str, Any] = {
+				"page": current_page,
+				"has_more": has_more,
+				"has_more_source": "platform_hasMore" if has_more is not None else "unknown",
+				"total": row_count,
+				"total_kind": "returned_page_count",
+				"total_available": total_available,
+			}
+		else:
+			pagination = {
+				"page": page,
+				"has_more": None,
+				"has_more_source": "unknown",
+				"total": None,
+				"total_kind": "returned_page_count",
+				"total_available": None,
+			}
 		# 成功信封原先没有下一步：Agent 拿到职位清单后不知道可以点进详情
 		# （列表为空时更没有任何可执行动作），只能自己翻 `boss hr --help`。
+		next_actions = [boss_command_for_ctx(ctx, "hr jobs detail <enc_job_id>")]
+		if pagination["has_more"] is True:
+			next_actions.append(boss_command_for_ctx(ctx, f"hr jobs list --page {pagination['page'] + 1}"))
+		hints: dict[str, Any] = {"next_actions": next_actions}
+		if pagination["has_more"] is None:
+			hints["operator_actions"] = ["平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有职位"]
 		handle_output(
 			ctx,
 			"recruiter-jobs-list",
 			data,
-			hints={"next_actions": [boss_command_for_ctx(ctx, "hr jobs detail <enc_job_id>")]},
+			pagination=pagination,
+			hints=hints,
 		)
 
 
