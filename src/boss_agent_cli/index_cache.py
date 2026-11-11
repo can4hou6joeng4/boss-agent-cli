@@ -107,3 +107,16 @@ def get_index_info(data_dir: Path) -> dict[str, Any]:
 		"count": cache_data.get("count", 0),
 		"saved_at": cache_data.get("saved_at", 0),
 	}
+
+
+def get_index_snapshot(data_dir: Path) -> dict[str, Any] | None:
+	"""返回当前索引快照的身份信息；没有可用缓存时返回 None。
+
+	`boss show <编号>` 的编号只在这份快照内有效，`search` / `recommend` 成功
+	写入后把它附在分页信息里，调用方才能对照 `show` 返回的 `index_snapshot`
+	判断手里的编号是否已被新的搜索覆盖。
+	"""
+	info = get_index_info(data_dir)
+	if not info["exists"]:
+		return None
+	return {"source": info["source"], "count": info["count"], "saved_at": info["saved_at"]}

@@ -7,7 +7,7 @@ import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.index_cache import (
-	save_index, try_save_index, get_job_by_index, get_index_info,
+	save_index, try_save_index, get_job_by_index, get_index_info, get_index_snapshot,
 )
 from boss_agent_cli.main import cli
 
@@ -136,6 +136,26 @@ class TestGetIndexInfo:
 		info = get_index_info(tmp_path)
 		assert info["exists"] is False
 		assert info["count"] == 0
+
+
+class TestGetIndexSnapshot:
+	def test_returns_identity_without_exists_flag(self, tmp_path):
+		save_index(tmp_path, _SAMPLE_JOBS, source="search:Go")
+		snapshot = get_index_snapshot(tmp_path)
+		assert snapshot is not None
+		assert snapshot["source"] == "search:Go"
+		assert snapshot["count"] == 2
+		assert snapshot["saved_at"] > 0
+		assert "exists" not in snapshot
+
+	def test_without_cache_returns_none(self, tmp_path):
+		assert get_index_snapshot(tmp_path) is None
+
+	def test_corrupted_cache_returns_none(self, tmp_path):
+		cache_dir = tmp_path / "cache"
+		cache_dir.mkdir()
+		(cache_dir / "index_cache.json").write_text("NOT JSON")
+		assert get_index_snapshot(tmp_path) is None
 
 
 class TestMalformedCache:
