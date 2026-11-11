@@ -95,7 +95,9 @@ pbpaste | boss login --curl-file -
 | `boss show <#>` | 按编号查看上次搜索结果 |
 | `boss cities` | 44 个支持城市（含不限城市的「全国」） |
 
-`recommend` 的 `pagination.has_more` 只在平台返回布尔 `hasMore` 时取 `true` 或 `false`；缺失或类型不明确时为 `null`，`has_more_source=unknown`，不会给出下一页执行提示。仅 `true` 提示翻页；`false` 与 `null` 不触发额外探测。兼容字段 `total` 仍是本次返回条数，`total_kind=returned_page_count`，不代表全量职位数。
+`recommend` 的 `pagination.has_more` 只在平台返回布尔 `hasMore` 时取 `true` 或 `false`；缺失或类型不明确时为 `null`，`has_more_source=unknown`，不会给出下一页执行提示。仅 `true` 提示翻页；`false` 与 `null` 不触发额外探测。兼容字段 `total` 仍是本次返回条数，`total_kind=returned_page_count`，不代表全量职位数。下一页命令保留本次的 `--with-score`，翻页后仍返回 `match_score`。
+
+`search` 的下一页命令（信封 `hints.next_actions` 与终端 `more:` 提示是同一条）保留本次调用生效的全部条件：位置参数关键词、`--url`、城市 / 薪资 / 经验 / 学历 / 行业 / 规模 / 融资阶段 / 职位类型、`--with-score`、`--sort score`、`--no-cache`，只把 `--page` 换成 N+1；`--preset` 展开成等价的显式筛选。所有值按 POSIX shell 规则转义，可直接复制执行。带 `--welfare` / `--active` 的搜索需要逐个查详情，分页语义不同，不提供下一页提示。
 
 `boss show <#>` 的编号只对最近一次 `search` / `recommend` 建立的索引快照有效：每次搜索或推荐都会整份覆盖缓存，重跑任一命令后旧编号会静默指向新结果。成功信封的 `data.index_snapshot` 返回 `source`（`search:<关键词>` 或 `recommend`）、`page`（建立快照的页码，旧版本缓存为 `null`）、`count` 与 `saved_at`（Unix 秒）；`search` / `recommend` 成功写入索引后也会在 `pagination.index_snapshot` 返回同一份快照身份，写入失败或没有缓存时该字段缺失——此时不要把本次结果与旧编号配对。Agent 应把编号和这份快照身份一起保存，发现来源、页码或时间不匹配时重新搜索定位，而不是继续使用旧编号。
 

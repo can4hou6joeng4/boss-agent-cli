@@ -82,7 +82,12 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 			],
 		}
 		if has_more is True:
-			hints["next_actions"].append(boss_command_for_ctx(ctx, f"recommend --page {page + 1}"))
+			# 翻页命令必须保留本次的 --with-score：只写 --page 时下一页的
+			# match_score 全部消失，Agent 会以为排序依据变了。
+			next_page = f"recommend --page {page + 1}"
+			if with_score:
+				next_page += " --with-score"
+			hints["next_actions"].append(boss_command_for_ctx(ctx, next_page))
 		elif has_more is None:
 			hints["operator_actions"] = ["平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有结果"]
 		handle_output(

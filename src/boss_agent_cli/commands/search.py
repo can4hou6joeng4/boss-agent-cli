@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Any, NamedTuple
 
 import click
 
@@ -41,7 +41,8 @@ from boss_agent_cli.wizard.actions import execute_candidate_search
 
 # 3：职位条目新增 boss_active_desc 字段，旧缓存不再复用。
 # 4：缓存键带上账号作用域，且命中后按当前账号重算 greeted；旧缓存不再复用。
-_SEARCH_CACHE_SCHEMA = 4
+# 5：缓存里的下一页提示开始保留本次筛选条件；旧条目会把翻页带到另一组结果。
+_SEARCH_CACHE_SCHEMA = 5
 
 
 def _parse_cached_result(raw: str) -> dict[str, Any] | None:
@@ -83,14 +84,71 @@ def _refresh_greeted(items: list[dict[str, Any]], cache: CacheStore, account: st
 	return items
 
 
-def _more_hint(query: str, page: int) -> str:
+def _more_hint(next_command: str) -> str:
 	"""TTY 表尾的翻页提示。
 
-	query 是用户输入，原来手写双引号：``a"b`` 会把提示截成
-	``boss search "a"b" --page 2``，``$HOME`` 在双引号里照样展开。统一走
-	``shell_argument`` 后，带元字符的关键词才能被原样复制执行。
+	next_command 已由 ``_build_next_page_command`` 完成筛选条件与 shell 转义，
+	这里只贴前缀：TTY 与信封必须是同一条命令，否则真人和 Agent 翻页后拿到
+	不同条件的结果集。
 	"""
-	return f"more: boss search {shell_argument(query)} --page {page + 1}"
+	return f"more: {next_command}"
+
+
+class _NextPageParams(NamedTuple):
+	"""重建下一页命令所需的本次调用参数（筛选与开关）。"""
+
+	query: str
+	search_url: str | None
+	city: str | None
+	salary: str | None
+	experience: str | None
+	education: str | None
+	industry: str | None
+	scale: str | None
+	stage: str | None
+	job_type: str | None
+	no_cache: bool
+	with_score: bool
+	sort_mode: str
+
+
+def _build_next_page_command(ctx: click.Context, *, page: int, params: _NextPageParams) -> str:
+	"""下一页命令：与本次调用同条件，只把 ``--page`` 换成 N+1。
+
+	只写 ``search <query> --page N+1`` 会让 Agent 丢掉本次生效的全部筛选条件
+	（城市 / 薪资 / 经验 / 学历 / 行业 / 规模 / 融资阶段 / 职位类型）、``--url``
+	里的网页筛选、``--with-score`` / ``--sort score`` 与 ``--no-cache``，翻页后
+	拿到的是另一组结果却以为在继续上一页。``--preset`` 展开成显式筛选：预设
+	之后被修改不影响本次翻页的语义。
+
+	带 ``--welfare`` / ``--active`` 的搜索不受影响：它们要逐个查详情，分页
+	语义不同，调用方本来就不给下一页提示。
+	"""
+	argv = boss_command_for_ctx(ctx, "search").split(" ")
+	if params.query:
+		argv.append(params.query)
+	if params.search_url:
+		argv.extend(["--url", params.search_url])
+	for flag, value in (
+		("--city", params.city),
+		("--salary", params.salary),
+		("--experience", params.experience),
+		("--education", params.education),
+		("--industry", params.industry),
+		("--scale", params.scale),
+		("--stage", params.stage),
+		("--job-type", params.job_type),
+	):
+		if value:
+			argv.extend([flag, str(value)])
+	if params.no_cache:
+		argv.append("--no-cache")
+	if params.with_score:
+		argv.append("--with-score")
+	if params.sort_mode != "relevance":
+		argv.extend(["--sort", params.sort_mode])
+	argv.extend(["--page", str(page + 1)])
+	return " ".join(shell_argument(part) for part in argv)
 
 
 def _progress_title(criteria: SearchFilterCriteria, welfare_conditions: Any, active: str | None = None) -> str:
@@ -457,10 +515,28 @@ def search_cmd(
 			}
 			if active_level:
 				hints["active_filter"] = _active_filter_hint(active_level, pipeline_result)
+			next_page_command = ""
 			if pipeline_result.has_more and not detail_filter:
-				hints["next_actions"].append(
-					boss_command_for_ctx(ctx, f"search <query> --page {page + 1}")
+				next_page_command = _build_next_page_command(
+					ctx,
+					page=page,
+					params=_NextPageParams(
+						query=query,
+						search_url=search_url,
+						city=city,
+						salary=salary,
+						experience=experience,
+						education=education,
+						industry=industry,
+						scale=scale,
+						stage=stage,
+						job_type=job_type,
+						no_cache=no_cache,
+						with_score=with_score,
+						sort_mode=sort_mode,
+					),
 				)
+				hints["next_actions"].append(next_page_command)
 
 			# 缓存普通搜索结果
 			if not detail_filter and not with_score:
@@ -489,7 +565,7 @@ def search_cmd(
 				render=lambda data: render_job_table(
 					data, f"search: {query}{title_suffix}",
 					page=page,
-					hint_next=_more_hint(query, page) if pipeline_result.has_more and not detail_filter else "",
+					hint_next=_more_hint(next_page_command) if next_page_command else "",
 				),
 				pagination=pagination, hints=hints,
 			)
