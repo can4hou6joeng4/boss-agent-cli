@@ -506,3 +506,138 @@ def test_every_public_option_has_help_text() -> None:
 	同样没有说明。用户和 Agent 都只能靠猜，猜错就落到 INVALID_PARAM 上。
 	"""
 	assert _public_options_without_help() == []
+
+
+# Issue #809 尚未拍板的信封 command 词汇表：这些取值既不是 ``boss schema`` 的
+# 一级命令名，也没有统一成点号层级或连字符扁平中的任何一种。本表只用于冻结
+# 现状、阻止新增第四种风格；迁移落地时逐项删除，不要往这里加新条目。
+_LEGACY_ENVELOPE_COMMANDS = frozenset({
+	"agent.control",
+	"agent.crawl",
+	"agent.pending.list",
+	"agent.review.approve",
+	"agent.review.list",
+	"agent.review.reject",
+	"agent.run",
+	"agent.stats",
+	"agent.stop",
+	"agent.train",
+	"ai-analyze-jd",
+	"ai-chat-coach",
+	"ai-config",
+	"ai-cover-letter",
+	"ai-fit",
+	"ai-interview-prep",
+	"ai-optimize",
+	"ai-polish",
+	"ai-reply",
+	"ai-resume-optimize",
+	"ai-suggest",
+	"ai-suggest-keywords",
+	"ai.local.configure",
+	"ai.local.import",
+	"ai.local.pull",
+	"ai.local.smoke",
+	"ai.local.status",
+	"crawl.configure",
+	"crawl.results",
+	"crawl.resume",
+	"crawl.shortlist",
+	"crawl.start",
+	"crawl.status",
+	"crawl.stop",
+	"favorites-list",
+	"favorites-sync",
+	"recruiter-accept-resume",
+	"recruiter-applications",
+	"recruiter-candidates",
+	"recruiter-chat",
+	"recruiter-chatmsg",
+	"recruiter-download-resume",
+	"recruiter-greet",
+	"recruiter-jobs-detail",
+	"recruiter-jobs-list",
+	"recruiter-jobs-offline",
+	"recruiter-jobs-online",
+	"recruiter-last-messages",
+	"recruiter-recommendations",
+	"recruiter-reply",
+	"recruiter-request-resume",
+	"recruiter-resume",
+	"recruiter-whoami",
+})
+
+
+def _envelope_command_literals() -> list[tuple[str, int, str]]:
+	"""收集成功 / 错误信封 command 实参里能直接读出的字符串字面量。
+
+	除了六个直接 emit 调用，还要扫 ``@handle_auth_errors("...")``：这个装饰器
+	在认证失败时同样产出信封，漏扫会让错误路径悄悄引入新取值。
+	"""
+	import ast
+
+	call_positions = {
+		"emit_success": 0,
+		"emit_error": 0,
+		"handle_output": 1,
+		"handle_error_output": 1,
+		"handle_not_supported": 1,
+		"handle_platform_error_output": 1,
+	}
+	found: list[tuple[str, int, str]] = []
+	root = Path(__file__).resolve().parent.parent / "src" / "boss_agent_cli"
+	for path in sorted(root.rglob("*.py")):
+		tree = ast.parse(path.read_text(encoding="utf-8"))
+		for node in ast.walk(tree):
+			if isinstance(node, ast.Call):
+				name = node.func.id if isinstance(node.func, ast.Name) else (
+					node.func.attr if isinstance(node.func, ast.Attribute) else ""
+				)
+				position = call_positions.get(name)
+				if position is not None and len(node.args) > position:
+					arg = node.args[position]
+					if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+						found.append((str(path.relative_to(root)), node.lineno, arg.value))
+			if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+				for decorator in node.decorator_list:
+					if not isinstance(decorator, ast.Call) or not decorator.args:
+						continue
+					name = decorator.func.id if isinstance(decorator.func, ast.Name) else (
+						decorator.func.attr if isinstance(decorator.func, ast.Attribute) else ""
+					)
+					if name != "handle_auth_errors":
+						continue
+					arg = decorator.args[0]
+					if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+						found.append((str(path.relative_to(root)), decorator.lineno, arg.value))
+	return found
+
+
+def test_envelope_command_values_are_registered() -> None:
+	"""信封 command 取值必须收敛到一级命令名或 #809 的显式遗留清单。
+
+	Agent 按 ``boss schema`` 的 39 个一级命令做路由；新增命令若随手写
+	``favorites-star`` / ``crawl.foo``，路由会在发布后才踩空。这个守卫让第四种
+	风格在本地门禁失败，保留 Issue #809 的词汇表决定权。
+	"""
+	from boss_agent_cli.schema.data import SCHEMA_DATA
+
+	registered = set(SCHEMA_DATA["commands"]) | _LEGACY_ENVELOPE_COMMANDS
+	offenders = [
+		f"{path}:{line} -> {value!r}"
+		for path, line, value in _envelope_command_literals()
+		if value not in registered
+	]
+	assert offenders == [], (
+		"信封 command 出现未登记取值；请复用一级命令名，或先在 Issue #809 决定词汇表并更新本表：\n"
+		+ "\n".join(offenders)
+	)
+
+
+def test_legacy_envelope_command_allowlist_has_no_overlap_or_stale_entries() -> None:
+	"""遗留清单不能与一级命令重名，也不能留下没人再产出的死条目。"""
+	from boss_agent_cli.schema.data import SCHEMA_DATA
+
+	values = {value for _, _, value in _envelope_command_literals()}
+	assert _LEGACY_ENVELOPE_COMMANDS.isdisjoint(SCHEMA_DATA["commands"])
+	assert _LEGACY_ENVELOPE_COMMANDS <= values, sorted(_LEGACY_ENVELOPE_COMMANDS - values)
