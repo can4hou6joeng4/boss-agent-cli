@@ -307,13 +307,20 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_batch_greet",
-			description="搜索后批量打招呼（上限 10）",
+			description="搜索后批量打招呼（上限 10）；筛选条件与搜索一致，未传时默认最多 5 个",
 			input_schema={
 				"type": "object",
 				"properties": {
 					"query": {"type": "string", "description": "搜索关键词"},
 					"city": {"type": "string", "description": "城市名称"},
-					"limit": {"type": "integer", "description": "最大打招呼数量", "default": 5},
+					"salary": {"type": "string", "description": "薪资范围（如 20-50K）"},
+					"experience": {"type": "string", "description": "经验要求（如 3-5年）"},
+					"education": {"type": "string", "description": "学历要求（如 本科）"},
+					"industry": {"type": "string", "description": "行业类型（可选值见 boss schema）"},
+					"scale": {"type": "string", "description": "公司规模（如 100-499人）"},
+					"stage": {"type": "string", "description": "融资阶段（如 已上市、A轮）"},
+					"job_type": {"type": "string", "description": "职位类型（全职/兼职/实习）"},
+					"limit": {"type": "integer", "description": "最大打招呼数量", "default": 5, "minimum": 0, "maximum": 10},
 					"dry_run": {"type": "boolean", "description": "预览模式", "default": False},
 				},
 				"required": ["query"],

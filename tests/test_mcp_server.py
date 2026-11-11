@@ -841,6 +841,33 @@ def test_build_args_batch_greet():
 	assert default_args == ["batch-greet", "python", "--count", "5"]
 
 
+def test_build_args_batch_greet_forwards_filters():
+	"""批量招呼必须能带全筛选条件：漏传会把范围放大到整页搜索结果。"""
+	args = _build_args("boss_batch_greet", {
+		"query": "golang",
+		"city": "北京",
+		"salary": "20-40K",
+		"experience": "3-5年",
+		"education": "本科",
+		"industry": "电子商务",
+		"scale": "100-499人",
+		"stage": "A轮",
+		"job_type": "全职",
+	})
+	assert args == [
+		"batch-greet", "golang",
+		"--city", "北京",
+		"--salary", "20-40K",
+		"--experience", "3-5年",
+		"--education", "本科",
+		"--industry", "电子商务",
+		"--scale", "100-499人",
+		"--stage", "A轮",
+		"--job-type", "全职",
+		"--count", "5",
+	]
+
+
 def test_build_args_show():
 	assert _build_args("boss_show", {"number": 5}) == ["show", "5"]
 
