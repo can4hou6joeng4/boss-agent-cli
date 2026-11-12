@@ -211,7 +211,9 @@ def _render_markdown(
 		lines.append("| 编号 | 公司/联系人 | 联系人标识（uid 优先） |")
 		lines.append("|------|------------|--------------------------|")
 		for ref, key, label in rd["id_map"]:
-			lines.append(f"| {ref} | {label} | {key} |")
+			# label 含平台外部可控的联系人 / 公司名称：不转义时一个 `|` 就能让
+			# uid 落错列，换行还能凭空插入伪造的映射行（Issue #895）。
+			lines.append(f"| {ref} | {escape_md_cell(label)} | {escape_md_cell(key)} |")
 		lines.append("")
 		lines.append("</details>")
 		lines.append("")
