@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.3.0] - 2026-11-12
 
 ### Added
 - `hr chatmsg` 返回游标分页证据：聊天历史用 `--max-msg-id` 向更早消息翻页，响应顶层已有 `hasMore`，但此前信封 `pagination` 为 `null`。现在 `pagination` 给出 `has_more`（仅平台布尔值非 `null`）、`has_more_source`、本页消息条数 `total`，以及本页最旧的可用 `mid` 作为 `next_max_msg_id`；仅 `has_more=true` 且存在游标时附加保留本次 `--count` 的下一页命令，未知时用 `operator_actions` 说明不能凭本页条数判断。游标分页没有页码，因此不返回 `page`。消息数组与 `mid` 解析容错，畸形载荷不会被当成可翻页数据。同步 CLI / MCP 能力说明与双语命令参考，补测三态、数字字符串 `mid`、畸形字段、下一页执行和错误路径。
