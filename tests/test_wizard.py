@@ -409,10 +409,12 @@ def test_candidate_pipeline_action_aggregates_every_friend_list_page(tmp_path):
 
 	platform = PagedPlatform()
 	context = _action_context(tmp_path, candidate=platform)
-	items = _candidate_pipeline_data(context, {})
+	items, pages_scanned, truncated = _candidate_pipeline_data(context, {})
 
 	assert [page for _, page in platform.calls if _ == "friend_list"] == [1, 2]
 	assert {item["security_id"] for item in items} == {"sid_1", "sid_2"}
+	assert pages_scanned == 2
+	assert truncated is False
 
 
 def test_candidate_write_actions_persist_idempotence_records(tmp_path):

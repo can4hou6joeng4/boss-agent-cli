@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from boss_agent_cli.services.friend_list_pages import collect_friend_list_items
+from boss_agent_cli.services.friend_list_pages import collect_friend_list_items, collect_friend_list_page
 
 
 class _PagePlatform:
@@ -94,3 +94,65 @@ def test_failed_page_returns_raw_error_response() -> None:
 
 	assert items == []
 	assert error == {"code": 500, "message": "server busy"}
+
+
+class _EndlessPagesPlatform:
+	"""每页都有新联系人、hasMore 恒为 True：模拟超过页数上限的账号。"""
+
+	def __init__(self) -> None:
+		self.calls: list[int] = []
+
+	def friend_list(self, *, page: int) -> dict[str, Any]:
+		self.calls.append(page)
+		item = {"uid": 10000 + page, "securityId": f"sid_{page}", "name": f"联系人{page}"}
+		return {"zpData": {"result": [item], "hasMore": True}}
+
+	@staticmethod
+	def is_success(resp: dict[str, Any]) -> bool:
+		return True
+
+	@staticmethod
+	def unwrap_data(resp: dict[str, Any]) -> dict[str, Any]:
+		return resp.get("zpData") or {}
+
+
+def test_page_collector_flags_truncation_at_page_limit() -> None:
+	"""翻满上限而平台仍称有下一页时，必须显式报告截断，不能静默返回前缀（Issue #885）。"""
+	platform = _EndlessPagesPlatform()
+
+	items, error, pages_scanned, truncated = collect_friend_list_page(platform, max_pages=3)
+
+	assert error is None
+	assert pages_scanned == 3
+	assert truncated is True
+	assert len(items) == 3
+	assert platform.calls == [1, 2, 3]
+
+
+def test_page_collector_reports_complete_when_has_more_false() -> None:
+	platform = _PagePlatform([
+		{"result": [{"uid": 1, "securityId": "sid_1"}], "hasMore": True},
+		{"result": [{"uid": 2, "securityId": "sid_2"}], "hasMore": False},
+	])
+
+	items, error, pages_scanned, truncated = collect_friend_list_page(platform)
+
+	assert error is None
+	assert pages_scanned == 2
+	assert truncated is False
+	assert len(items) == 2
+
+
+def test_page_collector_not_truncated_when_empty_page_ends_scan() -> None:
+	"""上限恰好用完但最后一页为空：结果已完整，不能误报截断。"""
+	platform = _PagePlatform([
+		{"result": [{"uid": 1, "securityId": "sid_1"}], "hasMore": True},
+		{"result": [], "hasMore": True},
+	])
+
+	items, error, pages_scanned, truncated = collect_friend_list_page(platform, max_pages=2)
+
+	assert error is None
+	assert pages_scanned == 2
+	assert truncated is False
+	assert len(items) == 1

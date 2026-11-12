@@ -108,6 +108,12 @@ def render_digest_markdown(data: dict[str, Any], *, generated_at: str | None = N
 	lines.append(f"| 待跟进 | {len(follow_ups)} |")
 	lines.append(f"| 面试 | {len(interviews)} |")
 	lines.append("")
+	if data.get("truncated"):
+		# 达到沟通列表分页上限时计数只是前缀；这份 Markdown 常被直接转发，
+		# 不带说明会被当成全量日报（Issue #885）。
+		pages = data.get("chat_pages_scanned")
+		lines.append(f"> ⚠️ 沟通列表超过 {pages} 页上限，以上计数仅覆盖已扫描的前 {pages} 页。")
+		lines.append("")
 
 	lines.append("## 新匹配")
 	lines.append("")

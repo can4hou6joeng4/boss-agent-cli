@@ -65,6 +65,41 @@ def test_digest_command_returns_structured_sections(mock_auth_cls, mock_client_c
 
 @patch("boss_agent_cli.commands.digest.get_platform_instance")
 @patch("boss_agent_cli.commands.digest.AuthManager")
+def test_digest_reports_chat_page_truncation(mock_auth_cls, mock_client_cls, legacy_args):
+	"""沟通列表翻满上限时 digest 必须显式标注截断，否则计数被当前缀（Issue #885）。"""
+	mock_client = _ctx_mock(mock_client_cls)
+
+	def endless_friend_list(*, page=1):
+		item = {
+			"name": f"张HR{page}",
+			"securityId": f"sec_{page}",
+			"uid": 10000 + page,
+			"title": "HR",
+			"brandName": "TestCo",
+			"friendSource": 0,
+			"encryptJobId": f"job_{page}",
+			"lastMsg": "请尽快回复",
+			"lastTS": 1700000001000,
+			"unreadMsgCount": 1,
+			"relationType": 1,
+			"lastMessageInfo": {"status": 1},
+		}
+		return {"zpData": {"result": [item], "hasMore": True}}
+
+	mock_client.friend_list.side_effect = endless_friend_list
+	mock_client.interview_data.return_value = {"zpData": {"interviewList": []}}
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", *legacy_args, "digest"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["truncated"] is True
+	assert parsed["data"]["chat_pages_scanned"] == 50
+
+
+@patch("boss_agent_cli.commands.digest.get_platform_instance")
+@patch("boss_agent_cli.commands.digest.AuthManager")
 def test_digest_aggregates_second_page_matches(mock_auth_cls, mock_client_cls, legacy_args):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.side_effect = [
