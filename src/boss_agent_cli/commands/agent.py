@@ -10,7 +10,7 @@ from typing import Any, NoReturn
 import click
 
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
-from boss_agent_cli.api.cdp_risk_lock import UNLOCK_OPERATOR_ACTIONS, raise_if_locked
+from boss_agent_cli.api.cdp_risk_lock import unlock_operator_actions, raise_if_locked
 from boss_agent_cli.automation.adapters import build_automation_adapter
 from boss_agent_cli.automation.config import automation_config_from_dict
 from boss_agent_cli.automation.events import make_event, now_iso
@@ -151,14 +151,17 @@ def crawl_cmd(
 			status = crawl_status(cache, run_id or "", data_dir=data_dir)
 			if status["status"] != "completed":
 				is_risk_stopped = status["status"] == "risk_stopped"
+				unlock_actions = unlock_operator_actions(
+					boss_command_for_ctx(ctx, "clean --risk-lock", include_data_dir=True)
+				)
 				handle_error_output(
 					ctx,
 					"agent.crawl",
 					code="CRAWL_NOT_COMPLETED",
 					message=f"crawl run {run_id} 当前状态为 {status['status']}，不会导入不完整结果",
 					recoverable=True,
-					recovery_action="；".join(UNLOCK_OPERATOR_ACTIONS) if is_risk_stopped else status["checkpoint"]["resume_command"],
-					hints={"operator_actions": [*UNLOCK_OPERATOR_ACTIONS,
+					recovery_action="；".join(unlock_actions) if is_risk_stopped else status["checkpoint"]["resume_command"],
+					hints={"operator_actions": [*unlock_actions,
 						f"完成人工恢复后，显式执行 {status['checkpoint']['resume_command']} 从原断点继续",
 					]} if is_risk_stopped else None,
 				)
@@ -179,7 +182,10 @@ def crawl_cmd(
 			"agent.crawl",
 			code="CRAWL_RUN_NOT_FOUND",
 			message=f"未找到 crawl run: {run_id}",
-			hints={"next_actions": ["boss crawl start <query>", "boss crawl status <run_id>"]},
+			hints={"next_actions": [
+				boss_command_for_ctx(ctx, "crawl start <query>", include_data_dir=True),
+				boss_command_for_ctx(ctx, "crawl status <run_id>", include_data_dir=True),
+			]},
 		)
 		return
 	except ValueError as exc:

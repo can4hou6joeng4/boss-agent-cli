@@ -10,7 +10,7 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.cdp_risk_lock import UNLOCK_OPERATOR_ACTIONS, raise_if_locked
+from boss_agent_cli.api.cdp_risk_lock import unlock_operator_actions, raise_if_locked
 from boss_agent_cli.api.endpoints import CITY_CODES
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired
 from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
@@ -42,7 +42,12 @@ from boss_agent_cli.display import (
 _HOOK_CHOICES = ("screenshot-full", "none")
 
 # 本地采集任务不存在时，Agent 能直接执行的下一步：新建任务、或用真实 run_id 核对。
-_RUN_NOT_FOUND_HINTS = {"next_actions": ["boss crawl start <query>", "boss crawl status <run_id>"]}
+# 这两步都读本地状态，必须带上当前数据目录，否则会在默认目录里找同名任务。
+def _run_not_found_hints(ctx: click.Context) -> dict[str, list[str]]:
+	return {"next_actions": [
+		boss_command_for_ctx(ctx, "crawl start <query>", include_data_dir=True),
+		boss_command_for_ctx(ctx, "crawl status <run_id>", include_data_dir=True),
+	]}
 
 
 def _require_run_id(ctx: click.Context, command: str, run_id: str) -> bool:
@@ -60,8 +65,8 @@ def _require_run_id(ctx: click.Context, command: str, run_id: str) -> bool:
 		command,
 		code="INVALID_PARAM",
 		message="run_id 不能为空；先用 boss crawl status <run_id> 核对已有任务",
-		recovery_action="补上已有的 run_id 后重试；没有任务时先用 boss crawl start <query> 新建",
-		hints=_RUN_NOT_FOUND_HINTS,
+		recovery_action=f"补上已有的 run_id 后重试；没有任务时先用 {boss_command_for_ctx(ctx, 'crawl start <query>', include_data_dir=True)} 新建",
+		hints=_run_not_found_hints(ctx),
 	)
 	return False
 
@@ -216,7 +221,10 @@ def _report_corrupt_run(ctx: click.Context, command: str, run_id: str, exc: Cach
 		command,
 		code="CACHE_RECORD_INVALID",
 		message=str(exc),
-		hints={"next_actions": ["boss crawl start <关键词>", f"boss crawl status {shell_argument(run_id)}"]},
+		hints={"next_actions": [
+			boss_command_for_ctx(ctx, "crawl start <关键词>", include_data_dir=True),
+			boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True),
+		]},
 	)
 
 
@@ -236,7 +244,7 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 			)
 			outcome = service_call(service)
 	except KeyError as exc:
-		handle_error_output(ctx, "crawl", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {exc.args[0]}", hints=_RUN_NOT_FOUND_HINTS)
+		handle_error_output(ctx, "crawl", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {exc.args[0]}", hints=_run_not_found_hints(ctx))
 		return
 	except CacheRecordInvalid as exc:
 		_report_corrupt_run(ctx, "crawl", exc.record_id, exc)
@@ -277,7 +285,7 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 	resume_command = boss_command_for_ctx(ctx, f"crawl resume {shell_argument(outcome.run_id)}", include_data_dir=True)
 	if outcome.status == "risk_stopped":
 		hints = {"operator_actions": [
-			*UNLOCK_OPERATOR_ACTIONS,
+			*unlock_operator_actions(boss_command_for_ctx(ctx, "clean --risk-lock", include_data_dir=True)),
 			f"完成人工恢复后，显式执行 {resume_command} 从原断点继续",
 		]}
 	elif outcome.status != "completed":
@@ -576,7 +584,7 @@ def resume_cmd(
 		return
 	if not run_exists:
 		handle_error_output(
-			ctx, "crawl.resume", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_RUN_NOT_FOUND_HINTS
+			ctx, "crawl.resume", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx)
 		)
 		return
 	if background:
@@ -604,7 +612,7 @@ def resume_cmd(
 					with_detail=with_detail,
 				)
 		except KeyError:
-			handle_error_output(ctx, "crawl.resume", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_RUN_NOT_FOUND_HINTS)
+			handle_error_output(ctx, "crawl.resume", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))
 			return
 		except CacheRecordInvalid as exc:
 			_report_corrupt_run(ctx, "crawl.resume", run_id, exc)
@@ -664,7 +672,7 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			payload = crawl_status(cache, run_id, data_dir=ctx.obj["data_dir"])
 	except KeyError:
-		handle_error_output(ctx, "crawl.status", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_RUN_NOT_FOUND_HINTS)
+		handle_error_output(ctx, "crawl.status", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))
 		return
 	except CacheRecordInvalid as exc:
 		_report_corrupt_run(ctx, "crawl.status", run_id, exc)
@@ -680,7 +688,7 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 		# 重试只会再次撞锁。解锁必须由用户确认官方页面恢复后显式执行。
 		hints = {
 			"operator_actions": [
-				*UNLOCK_OPERATOR_ACTIONS,
+				*unlock_operator_actions(boss_command_for_ctx(ctx, "clean --risk-lock", include_data_dir=True)),
 				f"完成人工恢复后，显式执行 {payload['checkpoint']['resume_command']} 从原断点继续",
 			],
 		}
@@ -708,7 +716,7 @@ def stop_cmd(ctx: click.Context, run_id: str) -> None:
 		return
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		if not cache.request_crawl_stop(run_id):
-			handle_error_output(ctx, "crawl.stop", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_RUN_NOT_FOUND_HINTS)
+			handle_error_output(ctx, "crawl.stop", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))
 			return
 	status_command = boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True)
 	handle_output(
@@ -733,7 +741,7 @@ def results_cmd(ctx: click.Context, run_id: str, page: int | None, detail_status
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			payload = crawl_results(cache, run_id, page=page, detail_status=detail_status)
 	except KeyError:
-		handle_error_output(ctx, "crawl.results", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_RUN_NOT_FOUND_HINTS)
+		handle_error_output(ctx, "crawl.results", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))
 		return
 	except CacheRecordInvalid as exc:
 		_report_corrupt_run(ctx, "crawl.results", run_id, exc)
@@ -796,7 +804,7 @@ def shortlist_cmd(
 				note=note,
 			)
 	except KeyError:
-		handle_error_output(ctx, "crawl.shortlist", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_RUN_NOT_FOUND_HINTS)
+		handle_error_output(ctx, "crawl.shortlist", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))
 		return
 	except CacheRecordInvalid as exc:
 		_report_corrupt_run(ctx, "crawl.shortlist", run_id, exc)

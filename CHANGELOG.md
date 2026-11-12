@@ -46,7 +46,7 @@
 - 加固 GitHub 工作流（Issue #747）：全部 18 处 `uses:` 从 `@v7` 这类可移动标签改为完整提交 SHA 并在行尾注明精确版本；`release.yml` 的标签名改用 `$GITHUB_REF_NAME`，不再在 `run:` 脚本里展开 `${{ github.ref_name }}`；发布构建关闭 `setup-uv` 缓存，避免 `master` 上 CI 写入的缓存被带进持有 PyPI 令牌的环境；不需要推送的任务（CI、Pages、发布）的 `actions/checkout` 设 `persist-credentials: false`。各工作流的触发条件与行为不变。`tests/test_open_source_docs.py` 新增 6 条离线守卫（SHA 钉版与版本注释、`run:` 不展开表达式、`pull_request_target` 不检出 PR head、发布不吃缓存、checkout 凭据逐任务登记），`docs/maintainer/branch-protection.md` 新增「Workflow rules」一节。
 
 ### Fixed
-- 采集任务的后继命令和 `checkpoint.resume_command` 保留原数据目录（Issue #859）：此前使用自定义 `--data-dir` 时，状态、结果、停止和恢复提示会退回默认目录，可能读取或停止同名的其他任务。现在任务指引显式携带经过 shell 参数转义的绝对目录，候选池后继操作、采集服务、向导和 `agent crawl` 同步保留上下文；风险停止仍只提供人工恢复说明。离线回归实际执行结果、停止、状态和断点恢复命令，并验证切换工作目录后仍定位原任务。
+- 采集任务的后继命令和 `checkpoint.resume_command` 保留原数据目录（Issue #859）：此前使用自定义 `--data-dir` 时，状态、结果、停止和恢复提示会退回默认目录，可能读取或停止同名的其他任务。现在任务指引显式携带经过 shell 参数转义的绝对目录，任务不存在或记录损坏时的核对提示同样保留目录；风险停止的人工解锁步骤与候选池后继操作、采集服务、向导和 `agent crawl` 一并同步。风险停止仍只提供人工恢复说明，解锁后显式恢复。离线回归实际执行结果、停止、状态、断点恢复和 `clean --risk-lock`，确认默认目录的同名任务与风险锁未被修改。
 - `crawl results` 的后继导入命令补齐本次返回职位的 `--selector` 并保留当前数据目录（Issue #857）：此前只提示 `crawl shortlist <run_id>`，缺少必需的选择范围，照抄必然返回 `INVALID_PARAM`。现在仅导入本次结果中的职位，保持页码与详情状态筛选的范围；空结果改为查看同一任务状态。路径、run_id 与 selector 按 shell 参数转义，终端与信封复用同一条命令；回归测试实际执行提示并核对落库范围。双语命令参考同步说明本地 selector 与导出文件的区别。
 - 恢复本地记录错误码守卫的独立测试声明（Issue #855）：此前插入相邻测试时误删函数头，原断言附在提示命令守卫末尾，无法独立收集与运行，相邻测试提前失败也会跳过这项检查。恢复 `test_local_record_lookups_do_not_report_job_not_found`，保持原断言不变。
 - 简历文件损坏时的 `resume delete` 提示按 `shell_argument` 转义简历名：简历名是自由文本（`resume init --name '我的 简历'` 合法），此前只有这一条提示直接拼名字，带空格时按 shell 解析会拆成两个参数，Agent 照抄只会换回「No such command」。回归测试用空格、单引号与 `$HOME*` 三种名字触发 `RESUME_FILE_INVALID`，断言 `shlex.split` 还原同一个名字。双语命令参考补充简历名转义说明。

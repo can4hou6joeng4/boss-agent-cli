@@ -169,8 +169,13 @@ def lock_status(data_dir: Path, *, now: float | None = None) -> dict[str, Any]:
 	return info
 
 
-UNLOCK_OPERATOR_ACTIONS: tuple[str, ...] = (
-	"在原会话的 BOSS 直聘官方页面完成验证，并确认目标业务页（如职位列表页）能正常加载，主页可访问不能替代该确认",
-	"确认风险已解除后，由用户执行 boss clean --risk-lock 解除本地阻断，再显式恢复原任务；令牌变化不会自动解锁",
-	"该清理命令不解除服务器风险；若再次命中风险立即停止并重新锁存，Agent 不应自行清除锁",
-)
+def unlock_operator_actions(clean_command: str = "boss clean --risk-lock") -> tuple[str, ...]:
+	"""风险锁的人工解锁步骤；调用方传入带本地上下文的清理命令。"""
+	return (
+		"在原会话的 BOSS 直聘官方页面完成验证，并确认目标业务页（如职位列表页）能正常加载，主页可访问不能替代该确认",
+		f"确认风险已解除后，由用户执行 {clean_command} 解除本地阻断，再显式恢复原任务；令牌变化不会自动解锁",
+		"该清理命令不解除服务器风险；若再次命中风险立即停止并重新锁存，Agent 不应自行清除锁",
+	)
+
+
+UNLOCK_OPERATOR_ACTIONS: tuple[str, ...] = unlock_operator_actions()

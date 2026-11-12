@@ -413,7 +413,7 @@ def test_resume_missing_run_reports_not_found_before_requiring_login(tmp_path):
 	payload = _envelope(result)
 	assert payload["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
 	assert "missing" in payload["error"]["message"]
-	assert payload["hints"]["next_actions"] == ["boss crawl start <query>", "boss crawl status <run_id>"]
+	_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl start <query>", "crawl status <run_id>")
 
 
 def test_resume_existing_run_without_login_still_requires_auth(tmp_path):
@@ -442,7 +442,7 @@ def test_empty_run_id_is_invalid_param_not_run_not_found(tmp_path):
 		payload = _envelope(result)
 		assert payload["error"]["code"] == "INVALID_PARAM", command
 		assert "run_id 不能为空" in payload["error"]["message"], command
-		assert payload["hints"]["next_actions"] == ["boss crawl start <query>", "boss crawl status <run_id>"]
+		_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl start <query>", "crawl status <run_id>")
 		# 恢复动作要说明「补上已存在的 run_id」或新建任务，而不是「修正参数」。
 		assert "run_id" in payload["error"]["recovery_action"], command
 
@@ -627,19 +627,56 @@ def test_status_reports_run_not_found(tmp_path):
 	assert _envelope(result)["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
 
 
-def test_status_risk_stopped_reports_operator_unlock(tmp_path):
+def test_run_not_found_hint_checks_the_original_directory(tmp_path, monkeypatch):
+	"""run_id 打错时，核对提示不能在默认目录里找到同名任务。"""
+	data_dir = tmp_path / "custom-state"
+	default_dir = tmp_path / "default-home" / ".boss-agent"
+	_seed_run(data_dir, "run-1", jobs=2)
+	_seed_run(default_dir, "run-1", jobs=1)
+	monkeypatch.setenv("HOME", str(tmp_path / "default-home"))
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--data-dir", str(data_dir), "--json", "crawl", "status", "missing"])
+	assert result.exit_code == 1, result.output
+	actions = _envelope(result)["hints"]["next_actions"]
+	_assert_state_commands(actions, data_dir, "crawl start <query>", "crawl status <run_id>")
+	status_hint = actions[1].replace("<run_id>", "run-1")
+	status = runner.invoke(cli, shlex.split(status_hint)[1:])
+	assert status.exit_code == 0, status.output
+	assert _envelope(status)["data"]["jobs_seen"] == 2, "核对提示应读到原目录的任务，而不是默认目录的同名任务"
+
+
+def test_status_risk_stopped_reports_operator_unlock(tmp_path, monkeypatch):
 	"""risk_stopped 的 checkpoint 不能只给 resume 命令：风险锁会先阻断它。"""
+	from boss_agent_cli.api import cdp_risk_lock
+
+	default_dir = tmp_path.parent / "default-home" / ".boss-agent"
 	_seed_run(tmp_path, "run-1", status="risk_stopped")
-	payload = _envelope(_invoke(CliRunner(), tmp_path, "crawl", "status", "run-1"))
+	_seed_run(default_dir, "run-1", status="risk_stopped")
+	monkeypatch.setenv("HOME", str(tmp_path.parent / "default-home"))
+	cdp_risk_lock.write_lock(tmp_path, None, now=1, reason="ENVIRONMENT_RISK", platform_code=37)
+	cdp_risk_lock.write_lock(default_dir, None, now=1, reason="ENVIRONMENT_RISK", platform_code=37)
+	runner = CliRunner()
+	payload = _envelope(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "status", "run-1"]))
 	data = payload["data"]
 	assert data["status"] == "risk_stopped"
 	assert data["checkpoint"]["resume_requires_operator_unlock"] is True
 	_assert_state_commands([data["checkpoint"]["resume_command"]], tmp_path, "crawl resume run-1")
 
 	actions = payload["hints"]["operator_actions"]
-	assert any("boss clean --risk-lock" in action for action in actions)
+	clean_action = next(action for action in actions if "clean --risk-lock" in action)
+	assert "boss clean --risk-lock" not in clean_action
+	clean_command = clean_action.split("执行 ", 1)[1].split(" 解除本地阻断", 1)[0]
+	_assert_state_commands([clean_command], tmp_path, "clean --risk-lock")
 	assert any(data["checkpoint"]["resume_command"] in action for action in actions)
 	assert "next_actions" not in payload["hints"]
+	# 照人工指引先解锁再恢复：两步都必须作用于原目录，否则会清掉/续跑默认目录的同名任务。
+	unlocked = runner.invoke(cli, shlex.split(clean_command)[1:])
+	assert unlocked.exit_code == 0, unlocked.output
+	assert cdp_risk_lock.read_lock(tmp_path) is None
+	assert cdp_risk_lock.read_lock(default_dir) is not None
+	resumed = runner.invoke(cli, shlex.split(data["checkpoint"]["resume_command"])[1:])
+	assert resumed.exit_code == 1, resumed.output
+	assert _envelope(resumed)["error"]["code"] == "AUTH_REQUIRED", "解锁后应继续走到登录前置条件，而不是再次撞本地锁"
 
 
 def test_status_completed_has_no_unlock_flag(tmp_path):
@@ -1002,7 +1039,7 @@ def test_corrupt_run_params_reports_envelope_instead_of_traceback(tmp_path, comm
 	assert error["code"] == "CACHE_RECORD_INVALID"
 	assert error["recoverable"] is True
 	assert "params" in error["message"]
-	assert _envelope(result)["hints"]["next_actions"][0] == "boss crawl start <关键词>"
+	_assert_state_commands(_envelope(result)["hints"]["next_actions"][:1], tmp_path, "crawl start <关键词>")
 
 
 def test_corrupt_hook_results_reports_envelope(tmp_path):
@@ -1064,4 +1101,4 @@ def test_run_not_found_carries_recovery_and_hints(tmp_path):
 	payload = _envelope(result)
 	assert payload["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
 	assert payload["error"]["recovery_action"]
-	assert payload["hints"]["next_actions"] == ["boss crawl start <query>", "boss crawl status <run_id>"]
+	_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl start <query>", "crawl status <run_id>")
