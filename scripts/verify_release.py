@@ -136,7 +136,45 @@ def check_metadata(raw: bytes, version: str) -> None:
 		raise VerificationError("产物仍声明已移除的 bridge extra")
 
 
-def check_artifacts(directory: Path, version: str) -> dict[str, Any]:
+def tracked_files(root: Path, *, timeout: float) -> set[str]:
+	"""返回仓库根下被 git 跟踪的文件路径。
+
+	构建后端只读取项目根的 ``.gitignore``，不读 ``.git/info/exclude``：本地被
+	排除的草稿、素材或测试会被静默打进 sdist（v3.3.0 准备时源码包因此从
+	6.5 MB 涨到 78 MB），而 ``--require-clean`` 用的 ``git status`` 看不到被
+	忽略的文件。产物成员必须能对应到跟踪文件，才能发现这类混入。
+	"""
+	output = run_command(["git", "ls-files", "-z"], cwd=root, timeout=timeout)
+	return {name for name in output.split("\0") if name}
+
+
+#: 构建后端自己生成、不对应任何跟踪文件的成员（源码包元数据）。
+_GENERATED_MEMBERS = {"PKG-INFO"}
+
+
+def check_tracked_members(names: list[str], tracked: set[str], *, version: str) -> None:
+	"""产物中每个非生成成员都必须来自被 git 跟踪的文件。"""
+	for name in names:
+		path = PurePosixPath(name)
+		parts = path.parts
+		if not parts or name.endswith("/"):
+			continue
+		if parts[0] == f"boss_agent_cli-{version}":
+			parts = parts[1:]
+		elif parts[0] == "boss_agent_cli" and len(parts) > 1:
+			# wheel 成员是包内相对路径，对应仓库里的 src/ 目录。
+			parts = ("src", *parts)
+		elif parts[0].startswith(f"boss_agent_cli-{version}.dist-info"):
+			continue
+		if not parts:
+			continue
+		relative = "/".join(parts)
+		if relative in _GENERATED_MEMBERS or relative in tracked:
+			continue
+		raise VerificationError(f"产物含未被 git 跟踪的文件：{name}")
+
+
+def check_artifacts(directory: Path, version: str, *, root: Path | None = None, timeout: float = 180) -> dict[str, Any]:
 	wheels = sorted(directory.glob("*.whl"))
 	sdists = sorted(directory.glob("*.tar.gz"))
 	if len(wheels) != 1 or len(sdists) != 1:
@@ -144,9 +182,11 @@ def check_artifacts(directory: Path, version: str) -> dict[str, Any]:
 	wheel, sdist = wheels[0], sdists[0]
 	if not wheel.name.startswith(f"boss_agent_cli-{version}-") or sdist.name != f"boss_agent_cli-{version}.tar.gz":
 		raise VerificationError("产物文件名与目标版本不一致")
+	member_names: list[str] = []
 	with zipfile.ZipFile(wheel) as archive:
 		for member in archive.infolist():
 			check_member(member.filename, version, sdist=False, link=stat.S_ISLNK(member.external_attr >> 16))
+		member_names.extend(item.filename for item in archive.infolist())
 		metadata_name = f"boss_agent_cli-{version}.dist-info/METADATA"
 		if archive.namelist().count(metadata_name) != 1:
 			raise VerificationError("wheel 缺少唯一的版本元数据")
@@ -157,6 +197,7 @@ def check_artifacts(directory: Path, version: str) -> dict[str, Any]:
 		members = archive.getmembers()
 		for member in members:
 			check_member(member.name, version, sdist=True, link=not (member.isfile() or member.isdir()))
+		member_names.extend(item.name for item in members)
 		metadata_members = [m for m in members if m.name == f"boss_agent_cli-{version}/PKG-INFO"]
 		if len(metadata_members) != 1 or metadata_members[0].size > 1024 * 1024:
 			raise VerificationError("源码包缺少唯一或合理大小的元数据")
@@ -165,6 +206,8 @@ def check_artifacts(directory: Path, version: str) -> dict[str, Any]:
 			raise VerificationError("源码包元数据不是普通文件")
 		with stream:
 			check_metadata(stream.read(), version)
+	if root is not None:
+		check_tracked_members(member_names, tracked_files(root, timeout=timeout), version=version)
 	files = []
 	for path in (wheel, sdist):
 		digest = hashlib.sha256()
@@ -209,7 +252,11 @@ def verify(args: argparse.Namespace, root: Path = ROOT) -> dict[str, Any]:
 			"git",
 			lambda: check_git(root, version, timeout=args.timeout, require_clean=args.require_clean, tag=args.tag),
 		)
-		artifacts = step("artifacts", lambda: check_artifacts(args.artifacts, version)) if args.artifacts else None
+		artifacts = (
+			step("artifacts", lambda: check_artifacts(args.artifacts, version, root=root, timeout=args.timeout))
+			if args.artifacts
+			else None
+		)
 		if args.fresh_install or args.pypi_version:
 			uv = shutil.which("uv")
 			with tempfile.TemporaryDirectory(prefix="boss-release-verify-") as temporary:
