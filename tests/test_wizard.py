@@ -574,6 +574,22 @@ def test_candidate_contact_actions_refresh_rotating_security_id(tmp_path):
 	]
 
 
+@pytest.mark.parametrize("value", ["wecaht", "PHONE", "phone ", "wx", 2])
+def test_candidate_exchange_rejects_unknown_type(tmp_path, value):
+	"""非法交换类型不能静默按手机号发出请求（Issue #905）。"""
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	with pytest.raises(WorkflowActionError) as exc_info:
+		DEFAULT_ACTIONS["candidate_exchange"](
+			context, {"security_id": "10001", "type": value}, {}
+		)
+
+	assert exc_info.value.code == "INVALID_PARAM"
+	assert "wechat" in str(exc_info.value)
+	assert platform.calls == []
+
+
 def test_local_and_ai_actions_return_structured_recovery(tmp_path):
 	context = _action_context(tmp_path)
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
@@ -993,6 +1009,21 @@ def test_recruiter_read_write_and_job_actions_preserve_arguments(tmp_path):
 		("job_online", "job-1"),
 		("job_offline", "job-1"),
 	]
+
+
+def test_recruiter_exchange_rejects_unknown_type(tmp_path):
+	"""招聘者侧非法交换类型同样不能静默按手机号发出请求（Issue #905）。"""
+	platform = _FakeRecruiterPlatform()
+	context = _action_context(tmp_path, role="recruiter", recruiter=platform)
+
+	with pytest.raises(WorkflowActionError) as exc_info:
+		DEFAULT_ACTIONS["recruiter_exchange_contact"](
+			context, {"friend_id": 42, "type": "wecaht"}, {}
+		)
+
+	assert exc_info.value.code == "INVALID_PARAM"
+	assert "wechat" in str(exc_info.value)
+	assert platform.calls == []
 
 
 def test_platform_error_and_not_supported_are_not_reported_as_success(tmp_path):

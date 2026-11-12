@@ -8,6 +8,7 @@
 - 扫码登录风险错误补充本地脱敏诊断（Issue #863）：`error.details.login_diagnostic` 记录失败阶段、页面检查或响应监听来源、白名单顶层路径和可用的页签数量；响应事件另附状态码、资源类型、导航标识与主/子框架归属。仅读取已有事件属性，未知信息省略或标记未知，不输出完整网址、查询参数、凭据或页面正文；风险判定、锁存、停止与窗口清理行为保持不变。
 
 ### Fixed
+- wizard 交换联系方式拒绝非法 `type`，不再静默改发手机号请求（Issue #905）：`candidate_exchange` 与 `recruiter_exchange_contact` 用 `2 if str(inputs.get("type") or "phone") == "wechat" else 1` 映射类型，`"wecaht"`、`"PHONE"`、`"phone "` 等拼错值都会按手机号真实发出交换请求；wizard `inputs` 来自 `--input-json` / MCP，不经过 Click `Choice`，catalog 也只检查必填项。现在只有精确的 `phone` / `wechat` 合法（未提供时默认 `phone`），其余值返回 `INVALID_PARAM`，与 CLI 及 schema enum 对齐。
 - `export` 在平台省略 `hasMore` 时继续翻页而不是静默截断（Issue #903）：分页循环用 `.get("hasMore", False)` 把「平台没说」当成「没有下一页」，`--count 50` 只导出第一页（最多 15 条）就 `exit 0`，信封里也没有任何截断证据。现在只有平台明确返回布尔 `false` 才停止，缺失或类型不明确时继续，仍受 `--count`、`max_pages` 与空 `jobList` 三重约束。
 - `resume link` 跨轮换 `securityId` 不再重复关联同一职位（Issue #901）：`resume_job_links` 主键与冲突更新都用 `(resume_name, security_id, job_id)`，而 `securityId` 每次搜索请求都会轮换。同一简历重新关联同一职位时新 `security_id` 对不上旧键，会多出一行 `prepared` 记录，旧行仍是 `applied`，`boss resume applications` 把同一职位显示两次并给出矛盾状态。现在关联前先按稳定的 `job_id` 找到既有行，把该行迁到本次的新标识，保留 `status` / `notes` / `linked_at`，再刷新标题与公司。
 - crawl 导入候选池按稳定 `job_id` 去重（Issue #899）：`import_crawl_shortlist` 用 `(security_id, job_id)` 复合键判断职位是否已导入，而 `securityId` 每次搜索请求都会轮换——同一职位重新采集后再 `--all` 导入，永远对不上旧键，候选池里就多出一条重复记录，`shortlist list/compare`、`stats` 和 `ai fit` 都会把它算两次。导入现在只按稳定的 `job_id` 判重，命中计入 `existing_count`，已有标签 / 备注 / 首次加入时间保持不变。
