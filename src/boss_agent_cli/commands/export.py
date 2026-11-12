@@ -218,7 +218,11 @@ def export_cmd(
 					item = JobItem.from_api(raw_item)
 					all_items.append(item.to_dict())
 
-			if not platform_data.get("hasMore", False):
+			# 只有平台明确返回布尔 false 才算「没有下一页」。缺失或类型不明确的
+			# hasMore 被当成 false 会让 export 静默只导出第一页（Issue #903）；
+			# 与 crawler 的保守默认一致，继续翻页，仍受 count / max_pages /
+			# 空 jobList 三重终止约束。
+			if platform_data.get("hasMore") is False:
 				break
 			page += 1
 
