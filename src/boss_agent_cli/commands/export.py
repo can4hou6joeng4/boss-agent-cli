@@ -36,11 +36,15 @@ from boss_agent_cli.search_filters import (
 )
 from boss_agent_cli.commands._filter_errors import emit_filter_error
 
-
 _EXPORT_FILTER_PAGE_ALLOWANCE = 5
 _TRUNCATED_OPERATOR_ACTION = (
 	"本次导出扫描到内部页数上限，结果可能不完整；请缩小筛选条件后重试，或用 --url 精确筛选"
 )
+
+
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""导出失败后的重试与后继命令沿用当前登录态与数据目录。"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
 
 
 @click.command("export")
@@ -85,13 +89,14 @@ def export_cmd(
 	# 与 search 同一口径：传了 --url 但值是空串时，「未提供 query」会读成
 	# 「你没传 --url」，真正的原因（flag 后面少了值）被掩盖。
 	if search_url is not None and not search_url.strip():
+		export_example = _hint_command(ctx, "export <关键词>")
 		handle_error_output(
 			ctx,
 			"export",
 			code="INVALID_PARAM",
 			message="--url 的值不能为空",
-			recovery_action="boss export <关键词> 或 boss export --url <搜索页URL>",
-			hints={"next_actions": ["boss export <关键词>"]},
+			recovery_action=f"{export_example} 或 {_hint_command(ctx, 'export --url <搜索页URL>')}",
+			hints={"next_actions": [export_example]},
 		)
 		return
 	# 与 search 同一口径：纯空白的 query 仍是「没给关键词」，不能当成一次
@@ -106,7 +111,7 @@ def export_cmd(
 		try:
 			parsed_url = parse_boss_search_url(search_url)
 		except SearchUrlParseError as exc:
-			export_cmd = boss_command_for_ctx(ctx, "export <关键词>")
+			export_cmd = _hint_command(ctx, "export <关键词>")
 			handle_error_output(
 				ctx,
 				"export",
@@ -126,7 +131,9 @@ def export_cmd(
 			code="INVALID_PARAM",
 			message="未提供 query，请传入搜索关键词或 --url",
 			recoverable=False,
-			recovery_action="boss export <query> 或 boss export --url <搜索页URL>",
+			recovery_action=(
+				f"{_hint_command(ctx, 'export <query>')} 或 {_hint_command(ctx, 'export --url <搜索页URL>')}"
+			),
 		)
 		return
 	query = query or ""
@@ -265,8 +272,8 @@ def export_cmd(
 				hints=_truncation_hints(
 					truncated,
 					next_actions=[
-						boss_command_for_ctx(ctx, "search <query>"),
-						boss_command_for_ctx(ctx, "recommend"),
+						_hint_command(ctx, "search <query>"),
+						_hint_command(ctx, "recommend"),
 					],
 				),
 			)
@@ -289,7 +296,7 @@ def export_cmd(
 					},
 					hints=_truncation_hints(
 						truncated,
-						next_actions=[boss_command_for_ctx(ctx, "export <query> --format html -o <path>")],
+						next_actions=[_hint_command(ctx, "export <query> --format html -o <path>")],
 						operator_actions=["把 data.content 写成 .html 文件后打开"],
 					),
 				)
@@ -316,7 +323,7 @@ def export_cmd(
 				render=lambda d: render_job_table(d.get("jobs", []), "export"),
 				hints=_truncation_hints(
 					truncated,
-					next_actions=[boss_command_for_ctx(ctx, "export <query> -o file.csv")],
+					next_actions=[_hint_command(ctx, "export <query> -o file.csv")],
 				),
 			)
 
