@@ -221,6 +221,24 @@ def _optional_str(value: Any) -> str | None:
 	return str(value) if value is not None and value != "" else None
 
 
+def _exchange_type(inputs: Mapping[str, Any]) -> int:
+	"""解析交换联系方式类型：只有精确的 ``phone`` / ``wechat`` 才合法。
+
+	wizard inputs 来自 ``--input-json`` / MCP，不经过 Click 的 ``Choice``，catalog
+	也只检查必填项。原先除 ``wechat`` 外的任何值都会静默按手机号处理（`"wecaht"`、
+	`"PHONE"`、`"phone "`），发出与用户意图不同的隐私授权请求（Issue #905）。
+	未提供类型时按 schema 默认 ``phone``。
+	"""
+	raw = inputs.get("type")
+	if raw is None or raw == "":
+		return 1
+	if raw == "wechat":
+		return 2
+	if raw == "phone":
+		return 1
+	raise WorkflowActionError("INVALID_PARAM", f"未知的交换类型: {raw!r}（可选: phone、wechat）")
+
+
 def _coerce_int(raw: Any, name: str) -> int:
 	"""把 wizard 输入转成整数；类型错误必须点名字段。
 
@@ -586,7 +604,7 @@ def _candidate_current_security_id(friend: Mapping[str, Any]) -> str:
 
 def _candidate_exchange(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	identifier = str(_required(inputs, "security_id"))
-	exchange_type = 2 if str(inputs.get("type") or "phone") == "wechat" else 1
+	exchange_type = _exchange_type(inputs)
 	with context.candidate_platform() as platform:
 		friend = _candidate_friend(platform, identifier)
 		uid = str(friend.get("uid") or "")
@@ -1233,7 +1251,7 @@ def _recruiter_exchange_contact(
 	context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]
 ) -> StepResult:
 	friend_id = _required_int(inputs, "friend_id", minimum=1)
-	exchange_type = 2 if str(inputs.get("type") or "phone") == "wechat" else 1
+	exchange_type = _exchange_type(inputs)
 	return _recruiter_call(
 		context,
 		lambda platform: platform.exchange_request_by_friend(friend_id, exchange_type=exchange_type),
