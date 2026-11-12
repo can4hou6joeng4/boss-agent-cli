@@ -8,6 +8,7 @@
 - 扫码登录风险错误补充本地脱敏诊断（Issue #863）：`error.details.login_diagnostic` 记录失败阶段、页面检查或响应监听来源、白名单顶层路径和可用的页签数量；响应事件另附状态码、资源类型、导航标识与主/子框架归属。仅读取已有事件属性，未知信息省略或标记未知，不输出完整网址、查询参数、凭据或页面正文；风险判定、锁存、停止与窗口清理行为保持不变。
 
 ### Fixed
+- 沟通列表聚合到页数上限时显式报告截断（Issue #885）：`collect_friend_list_items` 在翻满 50 页而平台仍声称有下一页时静默返回已收集部分，`pipeline` / `follow-up` / `digest` 及其向导版本都把它当完整统计，计数只会偏小且无法察觉。新增 `collect_friend_list_page` 返回 `(items, error, pages_scanned, truncated)`；`pipeline` / `follow-up` 在信封 `pagination` 里给出 `pages_scanned` / `truncated`，`digest` 与向导在 `data` 里给出 `chat_pages_scanned` / `truncated`。原 `collect_friend_list_items` 保留为兼容包装。
 - 向导超时或中断后恢复不再新建第二份采集（Issue #882）：runner 收集恢复用的既有结果时只认 `completed` / `waiting_input` 步骤，`failed` / `running` 步骤里的 `inner_run_id` 绑定被忽略；重跑该步骤前又以不传 `result` 的方式把状态写回 `running`，顺带把绑定清成 NULL。于是 `crawl_start` 超时后 `wizard --resume` 会再 `create_and_run` 一份新采集，旧 run 的页游标与已抓详情全部弃用。现在 runner 保留失败/运行中步骤的结果并传给 action，`_fail_controlled` 落失败状态时不再清空已有结果，`_crawl_start` 认出 `inner_run_id` 后走 `crawl resume` 续跑原任务。
 - 向导 pipeline / digest 聚合全部沟通列表页（Issue #881）：`_candidate_pipeline_data` 只请求 `friend_list(page=1)` 并忽略 `hasMore`，而顶层 `boss pipeline` / `boss digest` 早已用 `collect_friend_list_items` 翻完全部页。同一账号下向导会静默漏掉后续页里待跟进的沟通。现在复用同一聚合函数，任一页失败按平台错误传播。
 - TTY 错误输出与 JSON 路径一样脱敏（Issue #880）：`handle_error_output` 的终端分支直接打印 message 与 recovery_action，异常文本里夹带的 `token=` / `cookie=` 会明文出现在终端，而 `--json` 路径经 `output.redact_sensitive_text` 遮盖。现在两个分支使用同一脱敏。

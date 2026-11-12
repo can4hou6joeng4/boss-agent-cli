@@ -73,6 +73,45 @@ def test_pipeline_command_returns_aggregated_items(mock_auth_cls, mock_client_cl
 
 @patch("boss_agent_cli.commands.pipeline.get_platform_instance")
 @patch("boss_agent_cli.commands.pipeline.AuthManager")
+def test_pipeline_command_reports_chat_page_truncation(mock_auth_cls, mock_client_cls, legacy_args):
+	"""沟通列表翻满上限时信封必须带 truncated，否则 Agent 把前缀当全量（Issue #885）。"""
+	mock_client = _ctx_mock(mock_client_cls)
+
+	def endless_friend_list(*, page=1):
+		# 每页 uid 都不同，避免重复页守卫提前结束。
+		item = _chat_item(security_id=f"sec_{page}", job_id=f"job_{page}", uid=10000 + page)
+		return {"zpData": {"result": [item], "hasMore": True}}
+
+	mock_client.friend_list.side_effect = endless_friend_list
+	mock_client.interview_data.return_value = {"zpData": {"interviewList": []}}
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", *legacy_args, "pipeline"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["pagination"]["pages_scanned"] == 50
+	assert parsed["pagination"]["truncated"] is True
+	assert len(parsed["data"]) == 50
+
+
+@patch("boss_agent_cli.commands.pipeline.get_platform_instance")
+@patch("boss_agent_cli.commands.pipeline.AuthManager")
+def test_pipeline_command_reports_complete_scan_as_not_truncated(mock_auth_cls, mock_client_cls, legacy_args):
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = {"zpData": {"result": [_chat_item(unread=1)], "hasMore": False}}
+	mock_client.interview_data.return_value = {"zpData": {"interviewList": []}}
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", *legacy_args, "pipeline"])
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["pagination"]["truncated"] is False
+	assert parsed["pagination"]["pages_scanned"] == 1
+
+
+@patch("boss_agent_cli.commands.pipeline.get_platform_instance")
+@patch("boss_agent_cli.commands.pipeline.AuthManager")
 def test_follow_up_command_filters_actionable_items(mock_auth_cls, mock_client_cls, legacy_args):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response(

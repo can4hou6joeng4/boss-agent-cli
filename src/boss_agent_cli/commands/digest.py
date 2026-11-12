@@ -9,7 +9,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.services.output_path import prepare_output_path
-from boss_agent_cli.services.friend_list_pages import collect_friend_list_items
+from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.digest import build_digest, render_digest_markdown
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output, json_forced, render_message_panel, render_simple_list, shell_argument
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
@@ -83,7 +83,7 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 
 	with get_platform_instance(ctx, auth) as platform:
-		chat_items, friend_error = collect_friend_list_items(platform)
+		chat_items, friend_error, pages_scanned, truncated = collect_friend_list_page(platform)
 		if friend_error is not None:
 			handle_platform_error_output(ctx, "digest", platform, friend_error, fallback_message="沟通列表获取失败")
 			return
@@ -108,6 +108,10 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 		follow_ups=follow_ups,
 		interviews=[item for item in items if item.get("source") == "interview"],
 	)
+	# 沟通列表达到分页上限时，上面所有计数都只是前 N 页的前缀；在 data 里显式
+	# 标注，Agent 才不会把它当成全量日报（Issue #885）。
+	data["chat_pages_scanned"] = pages_scanned
+	data["truncated"] = truncated
 
 	if output_format == "md":
 		md_text = render_digest_markdown(data)
