@@ -1,12 +1,18 @@
 import json
 import shlex
 import sqlite3
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from click.testing import CliRunner
 
 from boss_agent_cli import display
 from boss_agent_cli.main import cli
+
+
+def _hinted(tmp_path, *parts):
+	"""提示命令的期望文本：按当前数据目录重建（Issue #919）。"""
+	return " ".join(["boss --data-dir", str(tmp_path.resolve()), *parts])
 
 
 def _break_params(tmp_path, name, payload="{not json"):
@@ -71,13 +77,13 @@ def test_preset_add_list_remove(tmp_path):
 	remove_parsed = json.loads(remove_result.output)
 	assert remove_parsed["data"]["removed"] is True
 	# TTY 渲染给了「boss preset list」的下一步，信封必须同样给出。
-	assert remove_parsed["hints"]["next_actions"] == ["boss preset list"]
+	assert remove_parsed["hints"]["next_actions"] == [_hinted(tmp_path, "preset list")]
 
 	missing_result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "remove", "nope"])
 	assert missing_result.exit_code == 0
 	missing_parsed = json.loads(missing_result.output)
 	assert missing_parsed["data"]["removed"] is False
-	assert missing_parsed["hints"]["next_actions"] == ["boss preset list"]
+	assert missing_parsed["hints"]["next_actions"] == [_hinted(tmp_path, "preset list")]
 
 
 def test_preset_remove_rejects_blank_name(tmp_path):
@@ -90,8 +96,8 @@ def test_preset_remove_rejects_blank_name(tmp_path):
 		assert parsed["error"]["code"] == "INVALID_PARAM"
 		assert "名称不能为空" in parsed["error"]["message"]
 		# 空名字的恢复指引要能直接执行：空串既没有名字也查不到记录。
-		assert parsed["hints"]["next_actions"] == ["boss preset list"]
-		assert "boss preset list" in parsed["error"]["recovery_action"]
+		assert parsed["hints"]["next_actions"] == [_hinted(tmp_path, "preset list")]
+		assert _hinted(tmp_path, "preset list") in parsed["error"]["recovery_action"]
 
 
 def test_preset_list_empty_next_step_is_executable(tmp_path, monkeypatch):
@@ -107,10 +113,12 @@ def test_preset_list_empty_next_step_is_executable(tmp_path, monkeypatch):
 	list_result = runner.invoke(cli, ["--data-dir", str(tmp_path), "preset", "list"])
 	assert list_result.exit_code == 0, list_result.output
 	steps = captured["steps"]
-	assert steps == ["boss preset add <name> <关键词>"]
+	assert steps == [_hinted(tmp_path, "preset add <name> <关键词>")]
 
-	hint_args = steps[0].replace("<name>", "hint-preset").replace("<关键词>", "golang").split(" ")[1:]
-	added = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *hint_args])
+	# 提示自带数据目录，去掉开头的 boss 即可执行。
+	hint_args = [part.replace("<name>", "hint-preset").replace("<关键词>", "golang")
+		for part in shlex.split(steps[0])[1:]]
+	added = runner.invoke(cli, ["--json", *hint_args])
 	assert added.exit_code == 0, added.output
 
 
@@ -158,7 +166,7 @@ def test_search_with_invalid_preset_names_the_preset(tmp_path):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert "来自 preset 'legacy'" in parsed["error"]["message"]
-	assert "boss preset remove legacy" in parsed["error"]["message"]
+	assert _hinted(tmp_path, "preset remove legacy") in parsed["error"]["message"]
 
 
 def test_search_with_invalid_preset_quotes_name_in_message(tmp_path):
@@ -179,8 +187,8 @@ def test_search_with_invalid_preset_quotes_name_in_message(tmp_path):
 
 	assert result.exit_code == 1, result.output
 	message = json.loads(result.output)["error"]["message"]
-	assert "boss preset remove '我的 列表'" in message
-	assert "boss preset remove 我的 列表" not in message
+	assert _hinted(tmp_path, "preset remove '我的 列表'") in message
+	assert _hinted(tmp_path, "preset remove 我的 列表") not in message
 
 
 @patch("boss_agent_cli.commands.search.get_platform_instance")
@@ -243,7 +251,7 @@ def test_preset_list_reports_corrupt_params(tmp_path):
 	names = [item["name"] for item in parsed["data"]]
 	assert "good" in names and "broken" not in names
 	assert parsed["hints"]["corrupt"] == ["broken"]
-	assert "boss preset remove" in parsed["hints"]["operator_actions"][0]
+	assert _hinted(tmp_path, "preset remove") in parsed["hints"]["operator_actions"][0]
 
 
 def test_search_with_type_drifted_preset_reports_envelope(tmp_path):
@@ -275,7 +283,7 @@ def test_search_with_corrupt_preset_reports_envelope(tmp_path):
 	assert parsed["error"]["recoverable"] is True
 	assert parsed["error"]["recovery_action"]
 	assert "broken" in parsed["error"]["message"]
-	assert parsed["hints"]["next_actions"][0] == "boss preset remove broken"
+	assert parsed["hints"]["next_actions"][0] == _hinted(tmp_path, "preset remove broken")
 
 
 def test_search_with_missing_preset_reports_saved_search_not_found(tmp_path):
@@ -291,8 +299,11 @@ def test_search_with_missing_preset_reports_saved_search_not_found(tmp_path):
 	assert result.exit_code == 1, result.output
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "SAVED_SEARCH_NOT_FOUND"
-	assert parsed["error"]["recovery_action"] == "boss preset list（预设）或 boss watch list（watch）"
-	assert parsed["hints"]["next_actions"] == ["boss preset list", "boss preset add ghost <关键词>"]
+	assert parsed["error"]["recovery_action"] == f"用 {_hinted(tmp_path, 'preset list')} 查看已保存的预设后重试"
+	assert parsed["hints"]["next_actions"] == [
+		_hinted(tmp_path, "preset list"),
+		_hinted(tmp_path, "preset add ghost <关键词>"),
+	]
 
 
 def test_search_with_missing_preset_quotes_name_with_spaces(tmp_path):
@@ -306,8 +317,10 @@ def test_search_with_missing_preset_quotes_name_with_spaces(tmp_path):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "SAVED_SEARCH_NOT_FOUND"
 	add_hint = parsed["hints"]["next_actions"][1]
-	assert add_hint == "boss preset add '我的 列表' <关键词>"
-	assert shlex.split(add_hint)[3] == "我的 列表"
+	assert add_hint == _hinted(tmp_path, "preset add '我的 列表' <关键词>")
+	assert shlex.split(add_hint) == [
+		"boss", "--data-dir", str(tmp_path.resolve()), "preset", "add", "我的 列表", "<关键词>",
+	]
 
 
 def test_search_with_corrupt_preset_quotes_name_with_spaces(tmp_path):
@@ -326,8 +339,8 @@ def test_search_with_corrupt_preset_quotes_name_with_spaces(tmp_path):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "SAVED_SEARCH_INVALID"
 	assert parsed["hints"]["next_actions"] == [
-		"boss preset remove '我的 列表'",
-		"boss preset add '我的 列表' <关键词>",
+		_hinted(tmp_path, "preset remove '我的 列表'"),
+		_hinted(tmp_path, "preset add '我的 列表' <关键词>"),
 	]
 
 
@@ -342,12 +355,15 @@ def test_preset_list_json_hints_follow_the_actual_list(tmp_path):
 
 	empty = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "list"]).output)
 	assert empty["data"] == []
-	assert empty["hints"]["next_actions"] == ["boss preset add <name> <关键词>"]
+	assert empty["hints"]["next_actions"] == [_hinted(tmp_path, "preset add <name> <关键词>")]
 
 	runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "add", "golang", "golang"])
 	filled = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "preset", "list"]).output)
 	assert [item["name"] for item in filled["data"]] == ["golang"]
-	assert filled["hints"]["next_actions"] == ["boss search --preset <name>", "boss preset remove <name>"]
+	assert filled["hints"]["next_actions"] == [
+		_hinted(tmp_path, "search --preset <name>"),
+		_hinted(tmp_path, "preset remove <name>"),
+	]
 
 
 def test_preset_hint_quotes_name_with_spaces(tmp_path):
@@ -358,7 +374,48 @@ def test_preset_hint_quotes_name_with_spaces(tmp_path):
 	)
 	assert added.exit_code == 0, added.output
 	parsed = json.loads(added.output)
-	assert "boss search --preset '我的 列表'" in parsed["hints"]["next_actions"]
+	assert _hinted(tmp_path, "search --preset '我的 列表'") in parsed["hints"]["next_actions"]
 
-	hint = next(a for a in parsed["hints"]["next_actions"] if a.startswith("boss search"))
-	assert shlex.split(hint)[1:] == ["search", "--preset", "我的 列表"]
+	hint = next(a for a in parsed["hints"]["next_actions"] if " search " in a)
+	assert shlex.split(hint) == [
+		"boss", "--data-dir", str(tmp_path.resolve()), "search", "--preset", "我的 列表",
+	]
+
+
+@patch("boss_agent_cli.index_cache.save_index")
+@patch("boss_agent_cli.commands.search.account_scope", return_value="acct")
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+@patch("boss_agent_cli.commands.search.AuthManager")
+def test_preset_add_hint_finds_preset_in_same_data_dir(
+	mock_auth_cls, mock_client_cls, mock_pipeline, mock_scope, mock_save_index, tmp_path,
+):
+	"""``preset add`` 的下一步提示要在同一数据目录里找得到刚保存的预设（Issue #919）。
+
+	提示写成裸的 ``boss search --preset <名称>`` 时，照抄会落到默认目录，
+	刚保存的预设立刻 ``SAVED_SEARCH_NOT_FOUND``。
+	"""
+	_ctx_mock(mock_client_cls)
+	mock_pipeline.return_value = SimpleNamespace(
+		items=[],
+		has_more=False,
+		has_more_reported=False,
+		total=0,
+		stats=SimpleNamespace(pages_scanned=1, jobs_seen=0, jobs_prefiltered=0, detail_checks=0),
+	)
+
+	runner = CliRunner()
+	added = runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "preset", "add", "golang-gz", "golang", "--city", "广州"],
+	)
+	assert added.exit_code == 0, added.output
+	hint = json.loads(added.output)["hints"]["next_actions"][0]
+	assert hint == _hinted(tmp_path, "search --preset golang-gz")
+
+	# 提示自带数据目录，去掉开头的 boss 即可直接执行。
+	result = runner.invoke(cli, ["--json", *shlex.split(hint)[1:]])
+	assert result.exit_code == 0, result.output
+	criteria = mock_pipeline.call_args.kwargs["criteria"]
+	assert criteria.query == "golang"
+	assert criteria.city == "广州"

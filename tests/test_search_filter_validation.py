@@ -132,8 +132,12 @@ def test_search_without_any_selector_points_at_keyword_and_presets(tmp_path):
 	payload = _invoke(tmp_path, ["search"])
 
 	assert payload["error"]["code"] == "INVALID_PARAM"
-	assert payload["hints"]["next_actions"] == ["boss search <关键词>", "boss preset list"]
-	assert "boss search <关键词>" in payload["error"]["recovery_action"]
+	prefix = f"boss --data-dir {tmp_path.resolve()}"
+	assert payload["hints"]["next_actions"] == [
+		f"{prefix} search <关键词>",
+		f"{prefix} preset list",
+	]
+	assert f"{prefix} search <关键词>" in payload["error"]["recovery_action"]
 
 
 def test_search_url_parse_error_points_at_keyword_search(tmp_path):
@@ -141,5 +145,5 @@ def test_search_url_parse_error_points_at_keyword_search(tmp_path):
 	payload = _invoke(tmp_path, ["search", "--url", "https://example.com/web/geek/jobs?query=Python"])
 
 	assert payload["error"]["code"] == "INVALID_PARAM"
-	assert payload["hints"]["next_actions"] == ["boss search <关键词>"]
+	assert payload["hints"]["next_actions"] == [f"boss --data-dir {tmp_path.resolve()} search <关键词>"]
 	assert "search <关键词>" in payload["error"]["recovery_action"]

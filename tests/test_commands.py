@@ -857,6 +857,8 @@ def test_search_cache_scope_uses_current_account(mock_client_cls, mock_auth_cls,
 	assert result.exit_code == 0
 	assert mock_cache.get_search.call_args.args[0]["account"] == "acct_a"
 	assert mock_cache.put_search.call_args.args[0]["account"] == "acct_a"
+	# 只缓存结果与分页证据：hints 取决于调用上下文，写入后会在别的调用下失效。
+	assert "hints" not in json.loads(mock_cache.put_search.call_args.args[1])
 
 
 @patch("boss_agent_cli.commands.search.run_search_pipeline")
@@ -883,6 +885,37 @@ def test_search_cache_hit_recomputes_greeted_for_current_account(
 	assert result.exit_code == 0
 	assert [item["greeted"] for item in json.loads(result.output)["data"]] == [True, False]
 	assert mock_cache.is_greeted.call_args_list[0].kwargs == {"job_id": "job_1", "account": "acct_a"}
+	mock_pipeline.assert_not_called()
+
+
+@patch("boss_agent_cli.index_cache.save_index")
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_cache_hit_rebuilds_hints_for_current_call(
+	mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline, mock_save_index, tmp_path,
+):
+	"""缓存命中不能复用别次调用的提示（Issue #919）。
+
+	缓存键不含 ``--sort``：旧实现把 hints 一起缓存，按相关度排序的调用会拿到
+	上次 ``--sort score`` 的翻页命令，提示里的数据目录也会丢失。命中时按本次
+	调用重建，翻页条件与数据目录都跟本次一致。
+	"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = json.dumps({
+		"data": [],
+		"pagination": {"page": 1, "has_more": True, "total": 0},
+		"hints": {"next_actions": ["boss search 产品 --sort score --page 2"]},
+	})
+	mock_auth_cls.return_value.account_fingerprint.return_value = "acct_a"
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "search", "产品"])
+
+	assert result.exit_code == 0, result.output
+	actions = json.loads(result.output)["hints"]["next_actions"]
+	assert "boss search 产品 --sort score --page 2" not in actions
+	assert actions[-1] == f"boss --data-dir {tmp_path.resolve()} search 产品 --page 2"
 	mock_pipeline.assert_not_called()
 
 
@@ -1016,7 +1049,7 @@ def test_search_ignores_index_cache_write_failure(mock_client_cls, mock_auth_cls
 @patch("boss_agent_cli.commands.search.CacheStore")
 @patch("boss_agent_cli.commands.search.AuthManager")
 @patch("boss_agent_cli.commands.search.get_platform_instance")
-def test_search_json_hints_expose_available_candidate_actions(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline, mock_save_index):
+def test_search_json_hints_expose_available_candidate_actions(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline, mock_save_index, tmp_path):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.get_search.return_value = None
 	_ctx_mock(mock_client_cls)
@@ -1044,17 +1077,19 @@ def test_search_json_hints_expose_available_candidate_actions(mock_client_cls, m
 	)
 
 	runner = CliRunner()
-	result = runner.invoke(cli, ["search", "golang"])
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "search", "golang"])
 
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	actions = parsed["hints"]["next_actions"]
-	# next_actions 的每条都必须能直接执行：说明性文字放 operator_actions。
+	# next_actions 的每条都必须能直接执行：说明性文字放 operator_actions；
+	# 且必须在同一数据目录里执行（Issue #919）。
+	prefix = f"boss --data-dir {tmp_path.resolve()}"
 	assert actions == [
-		"boss detail <security_id>",
-		"boss apply <security_id> <job_id>",
-		"boss greet <security_id> <job_id>",
+		f"{prefix} detail <security_id>",
+		f"{prefix} apply <security_id> <job_id>",
+		f"{prefix} greet <security_id> <job_id>",
 	]
 	assert all("使用 " not in action and " — " not in action for action in actions)
 	mock_save_index.assert_called_once()
