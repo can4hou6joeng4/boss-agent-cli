@@ -104,7 +104,7 @@ def test_send_uses_conversation_security_id_and_records_ledger(tmp_path: Path) -
 		"job_name": "后端工程师",
 		"name": "测试候选人",
 	}
-	assert payload["hints"]["next_actions"] == [f"boss hr chatmsg {FRIEND_ID}"]
+	assert payload["hints"]["next_actions"] == [f"boss --data-dir {tmp_path.resolve()} hr chatmsg {FRIEND_ID}"]
 	assert "conversation-security" not in result.output
 	platform.friend_detail.assert_called_once_with([FRIEND_ID], retry=False)
 	platform.send_job_location.assert_called_once_with(
@@ -166,8 +166,8 @@ def test_friend_not_found_does_not_send(tmp_path: Path) -> None:
 	payload = _payload(result)
 	assert payload["error"]["code"] == "CONTACT_NOT_FOUND"
 	assert payload["error"]["recoverable"] is False
-	assert "boss hr chat" in payload["error"]["recovery_action"]
-	assert payload["hints"]["next_actions"] == ["boss hr chat"]
+	assert f"boss --data-dir {tmp_path.resolve()} hr chat" in payload["error"]["recovery_action"]
+	assert payload["hints"]["next_actions"] == [f"boss --data-dir {tmp_path.resolve()} hr chat"]
 	platform.send_job_location.assert_not_called()
 
 

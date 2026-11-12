@@ -5,7 +5,8 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.services.resume_parser import parse_resume
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output
+from boss_agent_cli.commands.recruiter._hints import hint_command
+from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output
 
 
 @click.command("resume")
@@ -38,7 +39,7 @@ def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id
 			# issue #217 修复路径：只要 friend_id 即可，不再要求占位 geek_id。
 			# 旧的 uid/gid/jobId 路径已 121 弃用，保留参数仅作过渡兼容。
 			if friend_id is None:
-				chat_cmd = boss_command_for_ctx(ctx, "hr chat")
+				chat_cmd = hint_command(ctx, "hr chat")
 				handle_error_output(
 					ctx, "recruiter-resume",
 					code="INVALID_PARAM",
@@ -62,7 +63,7 @@ def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id
 				return
 			data = result if show_raw else parse_resume(result)
 		else:
-			apps_cmd = boss_command_for_ctx(ctx, "hr applications")
+			apps_cmd = hint_command(ctx, "hr applications")
 			handle_error_output(
 				ctx, "recruiter-resume",
 				code="INVALID_PARAM",
@@ -76,6 +77,6 @@ def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id
 		handle_output(
 			ctx, "recruiter-resume", data,
 			hints={"next_actions": [
-				boss_command_for_ctx(ctx, "hr applications"),
+				hint_command(ctx, "hr applications"),
 			]},
 		)

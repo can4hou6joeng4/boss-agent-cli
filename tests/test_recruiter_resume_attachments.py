@@ -22,6 +22,11 @@ from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
 
 
+def _hint(command: str) -> str:
+	"""默认数据目录下的招聘者后继命令。"""
+	return f"boss --data-dir {(Path.home() / '.boss-agent').resolve()} {command}"
+
+
 def _assert_download_error_contract(payload: dict, code: str) -> None:
 	error = payload["error"]
 	assert error["recoverable"] is error_contract_for_code(code)[0]
@@ -283,8 +288,8 @@ def test_accept_validation_error_points_at_chat_lookup():
 		result = _invoke("accept-resume", "123", "--message-id", "456", "--yes")
 	error = json.loads(result.output)["error"]
 	assert error["code"] == "INVALID_PARAM"
-	assert "boss hr chat" in error["recovery_action"]
-	assert json.loads(result.output)["hints"]["next_actions"] == ["boss hr chat"]
+	assert _hint("hr chat") in error["recovery_action"]
+	assert json.loads(result.output)["hints"]["next_actions"] == [_hint("hr chat")]
 
 
 @pytest.mark.parametrize("status,success", [(0, True), (1, False), (2, False), (4, False), (None, False), (False, False)])
@@ -383,7 +388,7 @@ def test_download_cli_returns_only_file_metadata(tmp_path):
 		payload = json.loads(result.output)
 		assert payload["data"]["downloaded"] is True
 		# 落盘之后要给可执行的后继命令，操作者也要看得出文件在哪。
-		assert payload["hints"]["next_actions"] == ["boss hr chatmsg 123"]
+		assert payload["hints"]["next_actions"] == [_hint("hr chatmsg 123")]
 		assert str((tmp_path / "resume.pdf").resolve()) in payload["hints"]["operator_actions"][0]
 		platform.download_resume_by_friend.assert_called_once_with(123, 456, tmp_path / "resume.pdf")
 
@@ -478,7 +483,7 @@ def test_resume_auth_and_risk_failures_stop_without_leaking(action, error_type, 
 	[
 		(FileExistsError(), "输出文件已存在", "换一个 --output 文件名", None),
 		(OSError("disk"), "无法保存文件", "父目录存在且可写", None),
-		(ResumeValidationError("该消息不是附件简历请求，不会执行联系方式交换"), "附件简历请求", "boss hr chat", ["boss hr chat"]),
+		(ResumeValidationError("该消息不是附件简历请求，不会执行联系方式交换"), "附件简历请求", _hint("hr chat"), [_hint("hr chat")]),
 	],
 )
 def test_download_resume_local_errors_give_actionable_recovery(

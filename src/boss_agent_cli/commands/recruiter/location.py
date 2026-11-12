@@ -15,8 +15,8 @@ from boss_agent_cli.automation.storage import AutomationStore
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.compliance import require_compliance_allowed
+from boss_agent_cli.commands.recruiter._hints import hint_command
 from boss_agent_cli.display import (
-	boss_command_for_ctx,
 	error_contract_for_code,
 	handle_auth_errors,
 	handle_error_output,
@@ -86,7 +86,7 @@ def _fail(
 
 
 def _duplicate_failure(ctx: click.Context, friend_id: int, status: str) -> None:
-	chatmsg = boss_command_for_ctx(ctx, "hr chatmsg <friend_id>")
+	chatmsg = hint_command(ctx, "hr chatmsg <friend_id>")
 	details: dict[str, Any] = {"friend_id": friend_id, "sent": True if status == "sent" else None}
 	hints = {"next_actions": [chatmsg]}
 	if status == "sent":
@@ -134,7 +134,7 @@ def _target_from_detail(detail: dict[str, Any], friend_id: int) -> tuple[str | i
 
 
 def _reject_target(ctx: click.Context, friend_id: int, reason: str) -> None:
-	chat_cmd = boss_command_for_ctx(ctx, "hr chat")
+	chat_cmd = hint_command(ctx, "hr chat")
 	details = {"friend_id": friend_id, "sent": False}
 	if reason == "friend_not_found":
 		_fail(
@@ -176,7 +176,7 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 	base: dict[str, Any] = {"friend_id": friend_id, "sent": False}
 	stop = _stop_reason(data_dir)
 	if stop is not None:
-		resume_cmd = boss_command_for_ctx(ctx, "agent run --dry-run --resume")
+		resume_cmd = hint_command(ctx, "agent run --dry-run --resume")
 		_fail(
 			ctx,
 			code="CIRCUIT_BREAKER_OPEN",
@@ -267,7 +267,7 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 				code="LOCATION_RESULT_UNKNOWN",
 				message="工作地点是否已发出无法确认，禁止自动重发",
 				details={**base, "sent": None, "job_id": job_id},
-				hints={"next_actions": [boss_command_for_ctx(ctx, "hr chatmsg <friend_id>")]},
+				hints={"next_actions": [hint_command(ctx, "hr chatmsg <friend_id>")]},
 			)
 			return
 		if not platform.is_success(result):
@@ -301,5 +301,5 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 			ctx,
 			"recruiter-location",
 			sent,
-			hints={"next_actions": [boss_command_for_ctx(ctx, f"hr chatmsg {friend_id}")]},
+			hints={"next_actions": [hint_command(ctx, f"hr chatmsg {friend_id}")]},
 		)

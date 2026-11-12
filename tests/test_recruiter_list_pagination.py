@@ -1,5 +1,6 @@
 """招聘者列表命令的信封分页证据（applications / candidates / recommendations / chat）。"""
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -7,6 +8,11 @@ from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
 from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION, list_pagination, rows_from
+
+
+def _hint(command: str) -> str:
+	"""默认数据目录下的招聘者后继命令。"""
+	return f"boss --data-dir {(Path.home() / '.boss-agent').resolve()} {command}"
 
 
 def _platform(mock_cls):
@@ -52,7 +58,7 @@ def test_applications_pagination_evidence(mock_auth_cls, mock_platform_cls, plat
 	_assert_pagination(payload, expected=expected, total=1)
 	next_pages = _next_pages(payload, "hr applications --page")
 	if expected is True:
-		assert next_pages == ["boss hr applications --page 3 --job-id jobx --label-id 2"]
+		assert next_pages == [_hint("hr applications --page 3 --job-id jobx --label-id 2")]
 		assert "operator_actions" not in payload["hints"]
 	else:
 		assert next_pages == []
@@ -84,7 +90,7 @@ def test_candidates_pagination_evidence_and_filters(mock_auth_cls, mock_platform
 	next_pages = _next_pages(payload, "hr candidates python --page")
 	if expected is True:
 		assert next_pages == [
-			"boss hr candidates python --page 3 --city 101020100 --degree 201,201 --select"
+			_hint("hr candidates python --page 3 --city 101020100 --degree 201,201 --select")
 		]
 	else:
 		assert next_pages == []
@@ -109,7 +115,7 @@ def test_recommendations_pagination_evidence(mock_auth_cls, mock_platform_cls, p
 	_assert_pagination(payload, expected=expected, total=1)
 	next_pages = _next_pages(payload, "hr recommendations --job-id job-enc --page")
 	if expected is True:
-		assert next_pages == ["boss hr recommendations --job-id job-enc --page 3"]
+		assert next_pages == [_hint("hr recommendations --job-id job-enc --page 3")]
 	else:
 		assert next_pages == []
 	if expected is None:
@@ -138,7 +144,7 @@ def test_recruiter_chat_pagination_evidence(mock_auth_cls, mock_platform_cls, pl
 	next_pages = _next_pages(payload, "hr chat --page 3")
 	if expected is True:
 		assert next_pages == [
-			"boss hr chat --page 3 --job-id job-enc --label-id 2 --summary-limit 0"
+			_hint("hr chat --page 3 --job-id job-enc --label-id 2 --summary-limit 0")
 		]
 	else:
 		assert next_pages == []
@@ -165,7 +171,7 @@ def test_recruiter_last_messages_pagination_evidence(mock_auth_cls, mock_platfor
 	next_pages = _next_pages(payload, "hr last-messages --page")
 	if expected is True:
 		assert next_pages == [
-			"boss hr last-messages --page 3 --job-id job-enc --label-id 2 --limit 5"
+			_hint("hr last-messages --page 3 --job-id job-enc --label-id 2 --limit 5")
 		]
 	else:
 		assert next_pages == []

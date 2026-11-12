@@ -226,6 +226,8 @@ boss crawl stop <run_id>
 | `boss hr greet ... --message <话术> --yes` | 建立候选人会话并单次发送首次招呼，不修改已读状态 |
 | `boss hr location <friend_id> --yes` | 向已有会话发送该职位的工作地点卡片；同一会话不重复发送 |
 
+招聘者命令的后继与恢复提示显式携带原 `--data-dir`：`hr whoami` / `applications` / `resume` / `chat` / `chatmsg` / `last-messages` / `jobs` / `candidates` / `recommendations` / `greet` / `reply` / `request-resume` / `accept-resume` / `download-resume` / `location` 的 `hints.next_actions`、终端 `next_steps`、失败与空结果的 `recovery_action`，以及嵌入 `operator_actions` 的核对命令都指回同一份登录态与本地缓存。`hr` 组自身会设置 recruiter 角色，照抄提示无需再补 `--role`，也不会读取默认目录中另一套账号状态；当前平台不支持招聘者模式时，恢复命令固定 `--platform zhipin` 并保留原目录。
+
 `boss hr resume` 默认返回结构化简历；`data.basic.gender` 仅转换已识别的整数编码，字段缺失、`null` 或未知值保留为空字符串，不推断候选人的性别。加 `--raw` 可读取原始响应。
 
 先在同一组候选人参数和话术后加 `--dry-run` 预览；操作者明确批准该候选人和话术后，才改为 `--yes` 发送。MCP 的 `yes` 默认不传，Agent 不得自行确认；预览本身不构成人工批准。

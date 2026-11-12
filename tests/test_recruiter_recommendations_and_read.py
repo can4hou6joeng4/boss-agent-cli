@@ -20,6 +20,16 @@ from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
 
 
+def _hint_at(data_dir: str | Path, command: str) -> str:
+	"""指定数据目录下的招聘者后继命令。"""
+	return f"boss --data-dir {Path(data_dir).resolve()} {command}"
+
+
+def _hint(command: str) -> str:
+	"""默认数据目录下的招聘者后继命令。"""
+	return _hint_at(Path.home() / ".boss-agent", command)
+
+
 def test_recommendations_cli_returns_full_cards() -> None:
 	client = MagicMock()
 	cards = {"geekList": [{"geekName": "测试候选人", "encryptGeekId": "geek", "securityId": "security"}], "hasMore": True}
@@ -218,8 +228,9 @@ def test_greet_rejects_blank_message_with_executable_next_step(greeting_args: li
 	assert result.exit_code == 1, result.output
 	payload = json.loads(result.output)
 	assert payload["error"]["code"] == "INVALID_PARAM"
-	assert payload["hints"]["next_actions"] == ["boss hr recommendations --job-id job"]
-	assert "boss hr recommendations --job-id job" in payload["error"]["recovery_action"]
+	expected = _hint_at(greeting_args[1], "hr recommendations --job-id job")
+	assert payload["hints"]["next_actions"] == [expected]
+	assert expected in payload["error"]["recovery_action"]
 	auth.assert_not_called()
 	factory.assert_not_called()
 
@@ -236,8 +247,9 @@ def test_greet_blank_message_quotes_job_id_with_shell_metacharacters(greeting_ar
 	assert result.exit_code == 1, result.output
 	payload = json.loads(result.output)
 	assert payload["error"]["code"] == "INVALID_PARAM"
-	assert payload["hints"]["next_actions"] == ["boss hr recommendations --job-id 'job; echo pwn'"]
-	assert "boss hr recommendations --job-id 'job; echo pwn'" in payload["error"]["recovery_action"]
+	expected = _hint_at(greeting_args[1], "hr recommendations --job-id 'job; echo pwn'")
+	assert payload["hints"]["next_actions"] == [expected]
+	assert expected in payload["error"]["recovery_action"]
 	auth.assert_not_called()
 	factory.assert_not_called()
 
@@ -398,16 +410,19 @@ def test_greet_success_points_back_to_the_conversation(greeting_args, greeting_p
 	assert result.exit_code == 0, result.output
 	parsed = json.loads(result.output)
 	assert parsed["data"]["sent"] is True
-	assert parsed["hints"]["next_actions"] == ["boss hr chat", "boss hr last-messages"]
+	assert parsed["hints"]["next_actions"] == [
+		_hint_at(greeting_args[1], "hr chat"),
+		_hint_at(greeting_args[1], "hr last-messages"),
+	]
 
 
 def test_rejected_greeting_preserves_safe_platform_diagnostics(greeting_args, greeting_platform):
-	greeting_platform.start_chat.return_value = {"code": 9, "message": "额度不足 cookie=private", "zpData": {"token": "secret"}}
+	greeting_platform.start_chat.return_value = {"code": 9, "message": "额度不足 cookie=fixture-leak", "zpData": {"token": "secret"}}
 	result = CliRunner().invoke(cli, greeting_args + ["--yes"])
 	details = json.loads(result.output)["error"]["details"]
 	assert details["platform_code"] == 9
 	assert "额度不足" in details["platform_message"]
-	assert "private" not in result.output
+	assert "fixture-leak" not in result.output
 	assert "secret" not in result.output
 	assert details["sent"] is None
 	greeting_platform.start_chat.assert_called_once()
@@ -477,16 +492,18 @@ def test_greet_unknown_send_failure_quotes_job_id_in_check_command(greeting_args
 	result = CliRunner().invoke(cli, greeting_args + ["--yes"])
 	payload = json.loads(result.output)
 	assert payload["error"]["code"] == "GREET_RESULT_UNKNOWN"
-	assert payload["hints"]["next_actions"] == ["boss hr chat --job-id 'job; echo pwn'"]
+	assert payload["hints"]["next_actions"] == [
+		_hint_at(greeting_args[1], "hr chat --job-id 'job; echo pwn'"),
+	]
 
 
 @pytest.mark.parametrize("failure,code", [
-	(RecruiterAuthError("private"), "AUTH_REQUIRED"),
-	(AuthRequired("private"), "AUTH_REQUIRED"),
-	(TokenRefreshFailed("private"), "TOKEN_REFRESH_FAILED"),
-	(AccountRiskError("private"), "ACCOUNT_RISK"),
-	(EnvironmentRiskError("private"), "ENVIRONMENT_RISK"),
-	(EnvironmentRiskLockedError("private"), "ENVIRONMENT_RISK_LOCKED"),
+	(RecruiterAuthError("fixture-leak"), "AUTH_REQUIRED"),
+	(AuthRequired("fixture-leak"), "AUTH_REQUIRED"),
+	(TokenRefreshFailed("fixture-leak"), "TOKEN_REFRESH_FAILED"),
+	(AccountRiskError("fixture-leak"), "ACCOUNT_RISK"),
+	(EnvironmentRiskError("fixture-leak"), "ENVIRONMENT_RISK"),
+	(EnvironmentRiskLockedError("fixture-leak"), "ENVIRONMENT_RISK_LOCKED"),
 ])
 def test_greeting_auth_and_risk_are_not_network_errors(greeting_args, greeting_platform, failure, code):
 	greeting_platform.start_chat.side_effect = failure
@@ -500,7 +517,7 @@ def test_greeting_auth_and_risk_are_not_network_errors(greeting_args, greeting_p
 		assert body["hints"]["next_actions"]
 	assert body["error"]["details"]["sent"] is None
 	assert body["error"]["recoverable"] is False
-	assert "private" not in result.output
+	assert "fixture-leak" not in result.output
 	greeting_platform.start_chat.assert_called_once()
 
 

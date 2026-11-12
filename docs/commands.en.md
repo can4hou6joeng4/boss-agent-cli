@@ -220,6 +220,8 @@ The `hints.next_actions` from `favorites` and `shortlist` preserve the original 
 | `boss hr greet ... --message <text> --yes` | Create a conversation and send first contact once, without changing read status |
 | `boss hr location <friend_id> --yes` | Send the job's work-location card into an existing chat; the same conversation is not sent twice |
 
+Recruiter follow-up and recovery hints carry the original `--data-dir`: `hints.next_actions`, TTY `next_steps`, failure and empty-result `recovery_action`, and the lookup commands embedded in `operator_actions` for `hr whoami` / `applications` / `resume` / `chat` / `chatmsg` / `last-messages` / `jobs` / `candidates` / `recommendations` / `greet` / `reply` / `request-resume` / `accept-resume` / `download-resume` / `location` all point back to the same login state and local caches. The `hr` group already sets the recruiter role, so replaying a hint needs no extra `--role` and will not read another account's state from the default directory. When the current platform does not support recruiter mode, the recovery command pins `--platform zhipin` while keeping the original directory.
+
 `boss hr resume` returns a structured resume by default. `data.basic.gender` converts recognized integer codes only; missing, `null`, or unknown values remain an empty string without inferring the candidate's gender. Use `--raw` to read the original response.
 
 Preview the candidate parameters and message with `--dry-run`. Replace it with `--yes` only after the operator explicitly approves that candidate and message. MCP omits `yes` by default; agents must not infer approval, and a preview is not human authorization.

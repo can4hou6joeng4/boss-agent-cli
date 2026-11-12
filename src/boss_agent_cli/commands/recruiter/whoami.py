@@ -5,8 +5,8 @@ import click
 
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.commands.recruiter._hints import hint_command
 from boss_agent_cli.display import (
-	boss_command_for_ctx,
 	handle_auth_errors,
 	handle_output,
 	handle_platform_error_output,
@@ -42,11 +42,11 @@ def _hints(ctx: click.Context, record: dict[str, Any]) -> dict[str, list[str]]:
 	if record["ready"] is True:
 		return {
 			"next_actions": [
-				boss_command_for_ctx(ctx, "hr chat"),
-				boss_command_for_ctx(ctx, "hr jobs list"),
+				hint_command(ctx, "hr chat"),
+				hint_command(ctx, "hr jobs list"),
 			],
 		}
-	retry = boss_command_for_ctx(ctx, "hr whoami")
+	retry = hint_command(ctx, "hr whoami")
 	if record["side"] == "candidate" and record["double_identity"] is True:
 		return {
 			"next_actions": [retry],

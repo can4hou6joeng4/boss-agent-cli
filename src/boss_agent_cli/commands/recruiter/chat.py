@@ -15,8 +15,8 @@ from boss_agent_cli.services.pagination import (
 	list_pagination,
 	rows_from,
 )
+from boss_agent_cli.commands.recruiter._hints import hint_command
 from boss_agent_cli.display import (
-	boss_command_for_ctx,
 	handle_auth_errors,
 	handle_output,
 	handle_platform_error_output,
@@ -320,7 +320,7 @@ def _last_messages_page(
 		next_page += f" --label-id {label_id}"
 	if limit != DEFAULT_SUMMARY_LIMIT:
 		next_page += f" --limit {limit}"
-	return boss_command_for_ctx(ctx, next_page)
+	return hint_command(ctx, next_page)
 
 
 UNREAD_TOTAL_TAB = "1"
@@ -504,8 +504,8 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 		summary_hint = _enrich_chat_summaries(platform, friend_items, summary_limit=summary_limit)
 		pagination = list_pagination(data, page=page, rows=rows_from(data, "friendList"))
 		hints: dict[str, Any] = {"next_actions": [
-			boss_command_for_ctx(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
-			boss_command_for_ctx(ctx, "hr chatmsg <friend_id>"),
+			hint_command(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
+			hint_command(ctx, "hr chatmsg <friend_id>"),
 		]}
 		if pagination["has_more"] is True:
 			next_page = f"hr chat --page {pagination['page'] + 1}"
@@ -514,7 +514,7 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 			if label_id:
 				next_page += f" --label-id {label_id}"
 			next_page += f" --summary-limit {summary_limit}"
-			hints["next_actions"].append(boss_command_for_ctx(ctx, next_page))
+			hints["next_actions"].append(hint_command(ctx, next_page))
 		if pagination["has_more"] is None:
 			hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]
 		# 未读总数只读页面内存（uncountTab$），不额外发请求；放在 hints 顶层，拿不到为 null。
@@ -547,11 +547,11 @@ def recruiter_chatmsg_cmd(ctx: click.Context, friend_id: int, count: int, max_ms
 		data = platform.unwrap_data(result) or {}
 		pagination = _chat_history_pagination(data)
 		hints: dict[str, list[str]] = {"next_actions": [
-			boss_command_for_ctx(ctx, f"hr reply {friend_id} <message>"),
-			boss_command_for_ctx(ctx, "hr chat"),
+			hint_command(ctx, f"hr reply {friend_id} <message>"),
+			hint_command(ctx, "hr chat"),
 		]}
 		if pagination["has_more"] is True and pagination["next_max_msg_id"] is not None:
-			hints["next_actions"].append(boss_command_for_ctx(
+			hints["next_actions"].append(hint_command(
 				ctx,
 				f"hr chatmsg {friend_id} --max-msg-id {pagination['next_max_msg_id']} --count {count}",
 			))
@@ -606,10 +606,10 @@ def recruiter_last_messages_cmd(
 		if not ids:
 			# 空结果不能只回一个空列表：Agent 拿不到任何后继动作，也不知道
 			# 是「没有会话」还是「筛选条件太窄」。
-			next_actions = [boss_command_for_ctx(ctx, "hr chat")]
+			next_actions = [hint_command(ctx, "hr chat")]
 			operator_actions = [
-				"没有可读取的候选人会话：先用 boss hr chat 查看沟通列表，"
-				"或用 boss hr candidates <关键词> 主动搜索候选人"
+				f"没有可读取的候选人会话：先用 {hint_command(ctx, 'hr chat')} 查看沟通列表，"
+				f"或用 {hint_command(ctx, 'hr candidates <关键词>')} 主动搜索候选人"
 			]
 			if pagination is not None:
 				if pagination["has_more"] is True:
@@ -643,8 +643,8 @@ def recruiter_last_messages_cmd(
 		if "error" in stats:
 			output["partial_error"] = stats["error"]
 		next_actions = [
-			boss_command_for_ctx(ctx, "hr chatmsg <friend_id>"),
-			boss_command_for_ctx(ctx, "hr reply <friend_id> <message>"),
+			hint_command(ctx, "hr chatmsg <friend_id>"),
+			hint_command(ctx, "hr reply <friend_id> <message>"),
 		]
 		hints: dict[str, Any] = {"next_actions": next_actions}
 		if pagination is not None:

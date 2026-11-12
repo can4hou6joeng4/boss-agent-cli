@@ -1,5 +1,6 @@
 """招聘者身份判断：identity=1 才就绪，recruit 不参与。"""
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 from click.testing import CliRunner
@@ -8,6 +9,11 @@ from boss_agent_cli.main import cli
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.mcp_tools import TOOLS, _compliance_command_for_tool
 from boss_agent_cli.services.recruiter_identity import interpret_recruiter_identity
+
+
+def _hint(command: str) -> str:
+	"""默认数据目录下的招聘者后继命令。"""
+	return f"boss --data-dir {(Path.home() / '.boss-agent').resolve()} {command}"
 
 
 def test_recruiter_workbench_identity_is_ready_when_recruit_flag_is_false():
@@ -71,7 +77,7 @@ def test_hr_whoami_reports_recruiter_side(factory, _auth):
 	assert parsed["data"]["ready"] is True
 	assert parsed["data"]["profile_recruit"] is False
 	assert "hidden" not in result.output
-	assert parsed["hints"]["next_actions"] == ["boss hr chat", "boss hr jobs list"]
+	assert parsed["hints"]["next_actions"] == [_hint("hr chat"), _hint("hr jobs list")]
 
 
 @patch("boss_agent_cli.commands.recruiter.whoami.AuthManager")
@@ -84,7 +90,7 @@ def test_hr_whoami_asks_double_identity_account_to_switch_on_the_official_site(f
 	assert parsed["ok"] is True
 	assert parsed["data"]["ready"] is False
 	assert "我要招聘" in parsed["hints"]["operator_actions"][0]
-	assert parsed["hints"]["next_actions"] == ["boss hr whoami"]
+	assert parsed["hints"]["next_actions"] == [_hint("hr whoami")]
 
 
 @patch("boss_agent_cli.commands.recruiter.whoami.AuthManager")
