@@ -27,8 +27,10 @@ from boss_agent_cli.automation.models import (
 	PendingAction,
 	ReviewItem,
 	PlatformAction,
+	RunReport,
 )
 from boss_agent_cli.automation.runner import run_automation_cycle
+from boss_agent_cli.automation.reply_ai import parse_reply_draft
 from boss_agent_cli.automation.safety import SafetyGuard
 from boss_agent_cli.automation.storage import AutomationStore
 from boss_agent_cli.main import cli
@@ -303,6 +305,90 @@ def test_local_ai_parse_error_is_skipped_without_sending_or_review(tmp_path: Pat
 	assert report.events[0].status == EventStatus.SKIPPED.value
 	assert adapter.messages == []
 	assert store.read_reviews() == []
+
+
+@pytest.mark.parametrize(
+	("payload", "error"),
+	[
+		({"action": "send_questionnaire", "confidence": 0.9, "reply": None, "reason": "r", "risk_flags": []}, TypeError),
+		({"action": "send_questionnaire", "confidence": 0.9, "reply": 123, "reason": "r", "risk_flags": []}, TypeError),
+		({"action": 123, "confidence": 0.9, "reply": "您好", "reason": "r", "risk_flags": []}, TypeError),
+		({"action": "send_questionnaire", "confidence": "high", "reply": "您好", "reason": "r", "risk_flags": []}, ValueError),
+		({"action": "send_questionnaire", "confidence": 2.0, "reply": "您好", "reason": "r", "risk_flags": []}, ValueError),
+		({"action": "send_questionnaire", "confidence": float("nan"), "reply": "您好", "reason": "r", "risk_flags": []}, ValueError),
+		({"action": "send_questionnaire", "confidence": True, "reply": "您好", "reason": "r", "risk_flags": []}, TypeError),
+	],
+)
+def test_reply_draft_rejects_malformed_model_fields(payload, error) -> None:
+	"""模型输出是不可信外部输入：null 回复不能变成 "None" 发给候选人（Issue #893）。"""
+	with pytest.raises(error):
+		parse_reply_draft(json.dumps(payload, ensure_ascii=False))
+
+
+def test_reply_draft_accepts_numeric_string_confidence_and_strips_reply() -> None:
+	draft = parse_reply_draft(
+		json.dumps(
+			{
+				"action": "send_questionnaire",
+				"confidence": "0.88",
+				"reply": "  您好，方便沟通吗？  \n",
+				"reason": "r",
+				"risk_flags": [],
+			},
+			ensure_ascii=False,
+		)
+	)
+	assert draft.confidence == 0.88
+	assert draft.reply == "您好，方便沟通吗？"
+
+
+def _run_cycle_with_local_ai_draft(
+	tmp_path: Path, monkeypatch, payload: dict
+) -> tuple[RunReport, RecordingMockRecruiterAutomationPlatform]:
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	store = AutomationStore(tmp_path)
+	ai_store = AIConfigStore(tmp_path)
+	ai_store.save_config(ai_provider="ollama", ai_model="qwen3:14b")
+	ai_store.save_api_key("local")
+	adapter = RecordingMockRecruiterAutomationPlatform(
+		"zhipin",
+		[_conversation("你好，我在上海做过3年销售，擅长客户沟通，大专，想看机会", "高分")],
+	)
+	response = MagicMock()
+	response.raise_for_status = MagicMock()
+	response.json.return_value = {
+		"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]
+	}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=response):
+		report = run_automation_cycle(
+			adapter,
+			store,
+			AutomationConfig(reply_strategy=ReplyStrategy.LOCAL_AI),
+			platform="zhipin",
+			dry_run=False,
+			limit=1,
+		)
+	return report, adapter
+
+
+@pytest.mark.parametrize(
+	"payload",
+	[
+		# null / 数字回复曾被 str() 变成 "None" / "123" 原样发给候选人。
+		{"action": "send_questionnaire", "confidence": 0.9, "reply": None, "reason": "r", "risk_flags": []},
+		{"action": "send_questionnaire", "confidence": 0.9, "reply": 123, "reason": "r", "risk_flags": []},
+		# 非数值 / 越界置信度曾让 cycle 崩溃或被静默接受。
+		{"action": "send_questionnaire", "confidence": "high", "reply": "您好", "reason": "r", "risk_flags": []},
+		{"action": "send_questionnaire", "confidence": 2.0, "reply": "您好", "reason": "r", "risk_flags": []},
+	],
+)
+def test_local_ai_malformed_draft_skips_without_sending(tmp_path: Path, monkeypatch, payload: dict) -> None:
+	"""畸形草稿统一降级为复核跳过：不发消息，也不把整轮自动化打成可重试网络错误。"""
+	report, adapter = _run_cycle_with_local_ai_draft(tmp_path, monkeypatch, payload)
+
+	assert adapter.messages == []
+	assert report.events[0].status == EventStatus.SKIPPED.value
+	assert "local ai parse failed" in report.events[0].reason
 
 
 def test_runner_dry_run_writes_events_without_review_queue(tmp_path: Path) -> None:
