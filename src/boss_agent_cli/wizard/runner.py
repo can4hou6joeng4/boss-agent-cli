@@ -15,6 +15,7 @@ from boss_agent_cli.api.request_budget import RequestBudgetExceeded, request_con
 from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 from boss_agent_cli.display import (
 	INTERNAL_ERROR_TYPES,
+	boss_command,
 	error_contract_for_code,
 	risk_error_contract,
 	risk_error_message,
@@ -122,6 +123,7 @@ class WorkflowRunner:
 		if max_retries < 0:
 			raise ValueError("max_retries must be >= 0")
 		started_at = time.monotonic()
+		login_action = boss_command("login", platform_name=plan.platform, data_dir=getattr(context, "data_dir", None))
 		deadline = started_at + timeout_seconds if timeout_seconds is not None else None
 		run_id = run_id or f"wrn_{secrets.token_urlsafe(12)}"
 		existing = self._store.get(run_id)
@@ -221,10 +223,10 @@ class WorkflowRunner:
 						if on_event:
 							on_event("step_retrying", step_name, {"attempt": attempt, "code": exc.code})
 			except AuthRequired as exc:
-				error = WorkflowActionError("AUTH_REQUIRED", str(exc), recoverable=True, recovery_action="boss login")
+				error = WorkflowActionError("AUTH_REQUIRED", str(exc), recoverable=True, recovery_action=login_action)
 			except TokenRefreshFailed as exc:
 				error = WorkflowActionError(
-					"TOKEN_REFRESH_FAILED", str(exc), recoverable=True, recovery_action="boss login"
+					"TOKEN_REFRESH_FAILED", str(exc), recoverable=True, recovery_action=login_action
 				)
 			except NotImplementedError as exc:
 				error = WorkflowActionError(
@@ -234,6 +236,14 @@ class WorkflowRunner:
 					recovery_action="切换平台或 workflow goal 后重试",
 				)
 			except WorkflowActionError as exc:
+				if (
+					exc.code in {"AUTH_REQUIRED", "AUTH_EXPIRED", "TOKEN_REFRESH_FAILED"}
+					and exc.recoverable
+					and exc.replay_safe
+					and exc.recovery_action == error_contract_for_code(exc.code)[1]
+				):
+					# action 的通用认证指引在写入 checkpoint 前补齐本次运行目录。
+					exc.recovery_action = login_action
 				error = exc
 			except WorkflowInputError as exc:
 				# inputs 写错（类型不对）不是网络问题：落到下面的通用兜底会变成

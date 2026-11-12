@@ -967,8 +967,9 @@ def test_runner_normalizes_auth_and_network_failures(tmp_path):
 	last = auth_run["last_result"]
 	assert last["status"] == "waiting_input"
 	assert last["data"]["authenticated"] is False
-	assert last["next_action"] == "boss wizard --resume auth-required-run"
-	assert any("boss --platform zhipin login" in action for action in last["operator_actions"])
+	assert shlex.split(last["next_action"]) == ["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--resume", "auth-required-run"]
+	login_action = f"boss --data-dir {shlex.quote(str(tmp_path.resolve()))} login"
+	assert any(login_action in action for action in last["operator_actions"])
 
 
 def test_runner_auth_wait_quotes_run_id_in_resume_next_action(tmp_path):
@@ -988,7 +989,9 @@ def test_runner_auth_wait_quotes_run_id_in_resume_next_action(tmp_path):
 			run_id="auth; echo pwn",
 		)
 	assert run["status"] == "waiting_input"
-	assert run["last_result"]["next_action"] == "boss wizard --resume 'auth; echo pwn'"
+	assert shlex.split(run["last_result"]["next_action"]) == [
+		"boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--resume", "auth; echo pwn",
+	]
 
 	def broken(context, inputs, prior):
 		raise OSError("offline")
@@ -2840,7 +2843,10 @@ def test_wizard_status_reports_resume_next_action(tmp_path):
 	envelope = json.loads(status.stdout)
 	assert envelope["data"]["run_id"] == run_id
 	assert envelope["data"]["status"] == "completed"
-	assert envelope["hints"]["next_actions"] == ["boss wizard", f"boss wizard --status {run_id}"]
+	assert [shlex.split(action) for action in envelope["hints"]["next_actions"]] == [
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard"],
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--status", run_id],
+	]
 
 
 def test_wizard_status_and_stop_after_stop_report_resume(tmp_path):
@@ -2860,16 +2866,16 @@ def test_wizard_status_and_stop_after_stop_report_resume(tmp_path):
 	assert stop.exit_code == 0
 	stopped = json.loads(stop.stdout)
 	assert stopped["data"]["status"] == "stopped"
-	assert stopped["hints"]["next_actions"] == [
-		"boss wizard --resume wrn_stopped",
-		"boss wizard --status wrn_stopped",
+	assert [shlex.split(action) for action in stopped["hints"]["next_actions"]] == [
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--resume", "wrn_stopped"],
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--status", "wrn_stopped"],
 	]
 
 	status = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), "wizard", "--status", "wrn_stopped"])
 	envelope = json.loads(status.stdout)
-	assert envelope["hints"]["next_actions"] == [
-		"boss wizard --resume wrn_stopped",
-		"boss wizard --status wrn_stopped",
+	assert [shlex.split(action) for action in envelope["hints"]["next_actions"]] == [
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--resume", "wrn_stopped"],
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--status", "wrn_stopped"],
 	]
 
 
@@ -2889,9 +2895,9 @@ def test_wizard_stop_hints_quote_run_id_with_shell_metacharacters(tmp_path):
 
 	stop = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), "wizard", "--stop", run_id])
 	assert stop.exit_code == 0, stop.stdout
-	assert json.loads(stop.stdout)["hints"]["next_actions"] == [
-		"boss wizard --resume 'wrn; echo pwn'",
-		"boss wizard --status 'wrn; echo pwn'",
+	assert [shlex.split(action) for action in json.loads(stop.stdout)["hints"]["next_actions"]] == [
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--resume", run_id],
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--status", run_id],
 	]
 
 
@@ -2952,7 +2958,7 @@ def test_auth_status_operator_actions_are_natural_language(tmp_path):
 			_auth_plan(), _action_context(tmp_path), run_id="operator-actions-run"
 		)
 	last = run["last_result"]
-	assert last["next_action"] == "boss wizard --resume operator-actions-run"
+	assert shlex.split(last["next_action"]) == ["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--resume", "operator-actions-run"]
 	actions = last["operator_actions"]
 	assert len(actions) == 2
 	assert any("扫码" in action for action in actions)
@@ -2962,7 +2968,7 @@ def test_auth_status_without_workflow_control_falls_back(tmp_path):
 	"""直接调 action（无 WorkflowControl）时 resume 命令要有兜底，不能抛 AttributeError。"""
 	result = DEFAULT_ACTIONS["auth_status"](_action_context(tmp_path), {}, {})
 	assert result.status is WorkflowStatus.WAITING_INPUT
-	assert result.next_action == "boss wizard"
+	assert shlex.split(result.next_action) == ["boss", "--data-dir", str(tmp_path.resolve()), "wizard"]
 	assert result.operator_actions
 
 

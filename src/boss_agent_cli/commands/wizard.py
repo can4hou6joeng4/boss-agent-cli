@@ -89,7 +89,7 @@ def _workflow_next_actions(ctx: click.Context, run: Mapping[str, Any]) -> list[s
 	就断了，看不出该恢复、继续等待还是新建（主执行路径跑完反而给了
 	``--status <run_id>``）。这里按状态补齐，取值来自 ``WorkflowStatus``。
 	"""
-	prefix = boss_command_for_ctx(ctx, "wizard")
+	prefix = boss_command_for_ctx(ctx, "wizard", include_data_dir=True)
 	run_id = str(run.get("run_id") or "").strip()
 	if not run_id:
 		return [prefix]
@@ -316,7 +316,7 @@ def _emit_run(ctx: click.Context, run: Mapping[str, Any], *, interactive: bool) 
 		"wizard",
 		run,
 		render=render_run,
-		hints={"next_actions": [f"boss wizard --status {shell_argument(str(run['run_id']))}"]},
+		hints={"next_actions": [boss_command_for_ctx(ctx, f"wizard --status {shell_argument(str(run['run_id']))}", include_data_dir=True)]},
 	)
 
 
@@ -762,7 +762,7 @@ def _run_wizard_command(
 		"wizard",
 		run,
 		render=render_run,
-		hints={"next_actions": [f"boss wizard --status {shell_argument(str(run['run_id']))}"]},
+		hints={"next_actions": [boss_command_for_ctx(ctx, f"wizard --status {shell_argument(str(run['run_id']))}", include_data_dir=True)]},
 	)
 
 

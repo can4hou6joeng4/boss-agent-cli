@@ -1,6 +1,7 @@
 """推荐牛人及首次招呼安全契约；所有平台调用使用替身。"""
 import importlib.util
 import json
+import shlex
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -46,7 +47,12 @@ def test_recommendations_cli_reports_platform_failure(response: dict[str, Any], 
 	payload = json.loads(result.output)
 	assert payload["ok"] is False
 	assert payload["error"]["code"] == code
-	assert (payload["error"]["recoverable"], payload["error"]["recovery_action"]) == error_contract_for_code(code)
+	assert payload["error"]["recoverable"] is error_contract_for_code(code)[0]
+	if code == "AUTH_REQUIRED":
+		assert shlex.split(payload["error"]["recovery_action"]) == ["boss", "--data-dir", str((Path.home() / ".boss-agent").resolve()), "login"]
+		assert payload["hints"]["next_actions"] == [payload["error"]["recovery_action"]]
+	else:
+		assert payload["error"]["recovery_action"] == error_contract_for_code(code)[1]
 	client.recommend_geeks.assert_called_once_with("job", page=1)
 	client.start_chat.assert_not_called()
 

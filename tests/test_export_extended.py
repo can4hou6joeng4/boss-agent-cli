@@ -5,12 +5,15 @@
 
 import csv
 import json
+import shlex
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 from boss_agent_cli.main import cli
+
+_DEFAULT_DATA_DIR = str((Path.home() / ".boss-agent").resolve())
 
 
 def _ctx_mock(mock_cls):
@@ -628,7 +631,7 @@ def test_export_search_auth_expired_is_recoverable(mock_auth_cls, mock_client_cl
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "AUTH_EXPIRED"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == ["boss", "--data-dir", _DEFAULT_DATA_DIR, "login"]
 
 
 @patch("boss_agent_cli.commands.export.get_platform_instance")

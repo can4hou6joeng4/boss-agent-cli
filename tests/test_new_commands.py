@@ -1,6 +1,7 @@
 """补齐缺失的命令测试：chatmsg / mark / exchange / detail / me / show / history / interviews / login / logout"""
 import json
 import shlex
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from click.testing import CliRunner
@@ -8,6 +9,8 @@ import pytest
 
 from boss_agent_cli.display import error_contract_for_code, risk_error_message
 from boss_agent_cli.main import cli
+
+_DEFAULT_DATA_DIR = str((Path.home() / ".boss-agent").resolve())
 
 
 def _ctx_mock(mock_cls):
@@ -151,7 +154,7 @@ def test_chatmsg_reports_friend_list_error(mock_auth_cls, mock_client_cls):
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == ["boss", "--data-dir", _DEFAULT_DATA_DIR, "login"]
 
 
 @patch("boss_agent_cli.commands.chatmsg.get_platform_instance")
@@ -286,7 +289,7 @@ def test_mark_reports_friend_list_error(mock_auth_cls, mock_client_cls):
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == ["boss", "--data-dir", _DEFAULT_DATA_DIR, "login"]
 
 
 @patch("boss_agent_cli.commands.mark.get_platform_instance")
@@ -542,7 +545,7 @@ def test_detail_reports_platform_error(mock_auth_cls, mock_client_cls, mock_cach
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == ["boss", "--data-dir", _DEFAULT_DATA_DIR, "login"]
 
 
 @patch("boss_agent_cli.commands.detail.CacheStore")
@@ -752,7 +755,13 @@ def test_me_deliver_failure_has_no_pagination(mock_auth_cls, mock_client_cls, tm
 	assert parsed["pagination"] is None
 	assert parsed["error"]["code"] == code
 	assert parsed["error"]["recoverable"] is recoverable
-	assert parsed["error"]["recovery_action"] == error_contract_for_code(code)[1]
+	if code in {"AUTH_REQUIRED", "AUTH_EXPIRED", "TOKEN_REFRESH_FAILED"}:
+		# 认证错误在运行目录内重新登录，不再回显登记表的通用示例。
+		assert shlex.split(parsed["error"]["recovery_action"]) == [
+			"boss", "--data-dir", str(tmp_path.resolve()), "login",
+		]
+	else:
+		assert parsed["error"]["recovery_action"] == error_contract_for_code(code)[1]
 	mock_client.deliver_list.assert_called_once_with(page=1)
 	mock_client.unwrap_data.assert_not_called()
 
@@ -785,7 +794,7 @@ def test_me_reports_user_info_error(mock_auth_cls, mock_client_cls):
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == ["boss", "--data-dir", _DEFAULT_DATA_DIR, "login"]
 
 
 @patch("boss_agent_cli.commands.me.get_platform_instance")
