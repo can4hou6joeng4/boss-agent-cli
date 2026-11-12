@@ -140,8 +140,9 @@ def test_agent_crawl_invalid_city_points_at_crawl_config(tmp_path: Path) -> None
 	assert result.exit_code == 1
 	payload = json.loads(result.output)
 	assert payload["error"]["code"] == "INVALID_PARAM"
-	assert "boss crawl configure --help" in payload["error"]["recovery_action"]
-	assert payload["hints"]["next_actions"] == ["boss crawl configure --help"]
+	expected_help = f"boss --data-dir {tmp_path.resolve()} crawl configure --help"
+	assert expected_help in payload["error"]["recovery_action"]
+	assert payload["hints"]["next_actions"] == [expected_help]
 
 
 def test_agent_crawl_does_not_process_risk_stopped_runs(tmp_path: Path, monkeypatch) -> None:

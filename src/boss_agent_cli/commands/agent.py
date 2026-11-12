@@ -203,7 +203,7 @@ def crawl_cmd(
 		)
 		return
 	except ValueError as exc:
-		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help")
+		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help", include_data_dir=True)
 		handle_error_output(
 			ctx,
 			"agent.crawl",
@@ -214,13 +214,14 @@ def crawl_cmd(
 		)
 		return
 	except RuntimeError as exc:
+		configure_cmd = boss_command_for_ctx(ctx, "crawl configure", include_data_dir=True)
 		handle_error_output(
 			ctx,
 			"agent.crawl",
 			code="CRAWL_UNAVAILABLE",
 			message=str(exc),
 			recoverable=True,
-			recovery_action="安装 boss-agent-cli[crawl] 并执行 boss crawl configure",
+			recovery_action=f"安装 boss-agent-cli[crawl] 并执行 {configure_cmd}",
 		)
 		return
 

@@ -250,7 +250,7 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 		_report_corrupt_run(ctx, "crawl", exc.record_id, exc)
 		return
 	except ValueError as exc:
-		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help")
+		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help", include_data_dir=True)
 		handle_error_output(
 			ctx,
 			"crawl",
@@ -273,13 +273,14 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 				hints=auth_required_hints(ctx),
 			)
 			return
+		configure_cmd = boss_command_for_ctx(ctx, "crawl configure", include_data_dir=True)
 		handle_error_output(
 			ctx,
 			"crawl",
 			code="CRAWL_UNAVAILABLE",
 			message=message,
 			recoverable=True,
-			recovery_action="安装 boss-agent-cli[crawl] 并执行 boss crawl configure",
+			recovery_action=f"安装 boss-agent-cli[crawl] 并执行 {configure_cmd}",
 		)
 		return
 	resume_command = boss_command_for_ctx(ctx, f"crawl resume {shell_argument(outcome.run_id)}", include_data_dir=True)
@@ -359,13 +360,14 @@ def configure_cmd(
 ) -> None:
 	"""设置 crawl 专用 Chrome 和 Hook 配置。"""
 	if all(value is None for value in (chrome_path, cdp_port, max_requests, max_details, max_seconds, max_retries)):
+		configure_help = boss_command_for_ctx(ctx, "crawl configure --help", include_data_dir=True)
 		handle_error_output(
 			ctx,
 			"crawl.configure",
 			code="INVALID_PARAM",
 			message="至少提供一个 crawl 配置项",
-			recovery_action="补上要调整的配置项后重试；可用 boss crawl configure --help 查看可配置项",
-			hints={"next_actions": ["boss crawl configure --help"]},
+			recovery_action=f"补上要调整的配置项后重试；可用 {configure_help} 查看可配置项",
+			hints={"next_actions": [configure_help]},
 		)
 		return
 	updates = {
@@ -377,12 +379,15 @@ def configure_cmd(
 		"max_retries": max_retries,
 	}
 	configured = _save_crawl_config(Path(ctx.obj["data_dir"]), updates)
+	# 配置写在当前数据目录；后继的 crawl run 必须用同一目录，否则新预算与
+	# Chrome 设置不会生效，断点与产物也落进默认目录。
+	run_command = boss_command_for_ctx(ctx, "crawl run <关键词> --city <城市>", include_data_dir=True)
 	handle_output(
 		ctx,
 		"crawl.configure",
 		{"crawl": configured},
-		render=lambda d: render_record_result(d, title="crawl configure", next_steps=["boss crawl run <关键词> --city <城市>"]),
-		hints={"next_actions": ["boss crawl run <关键词> --city <城市>"]},
+		render=lambda d: render_record_result(d, title="crawl configure", next_steps=[run_command]),
+		hints={"next_actions": [run_command]},
 	)
 
 
@@ -429,7 +434,7 @@ def run_cmd(
 			cdp_port=cdp_port,
 		)
 	except ValueError as exc:
-		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help")
+		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help", include_data_dir=True)
 		handle_error_output(
 			ctx,
 			"crawl",
@@ -486,7 +491,7 @@ def start_cmd(
 			run_id = service.create(settings)
 		_launch_background_resume(Path(ctx.obj["data_dir"]), run_id)
 	except ValueError as exc:
-		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help")
+		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help", include_data_dir=True)
 		handle_error_output(
 			ctx,
 			"crawl.start",
