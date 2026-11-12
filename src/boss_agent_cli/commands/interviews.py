@@ -64,7 +64,7 @@ def interviews_cmd(ctx: click.Context) -> None:
 			],
 		)
 
-	hints: dict[str, Any] = {"next_actions": [boss_command_for_ctx(ctx, "search <query>")]}
+	hints: dict[str, Any] = {"next_actions": [boss_command_for_ctx(ctx, "search <query>", include_data_dir=True)]}
 
 	handle_output(
 		ctx, "interviews", items,

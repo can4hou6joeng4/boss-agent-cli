@@ -17,7 +17,7 @@ def cities_cmd(ctx: click.Context) -> None:
 		render=lambda d: render_string_grid(d["cities"], "cities"),
 		hints={
 			"next_actions": [
-				boss_command_for_ctx(ctx, "search <query> --city <城市名>"),
+				boss_command_for_ctx(ctx, "search <query> --city <城市名>", include_data_dir=True),
 			],
 		},
 	)

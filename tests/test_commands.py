@@ -2569,7 +2569,7 @@ def test_stats_json_hints_expose_available_application_action(mock_collect_stats
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	actions = parsed["hints"]["next_actions"]
-	assert "boss apply <security_id> <job_id>" in actions
+	assert f"boss --data-dir {_DEFAULT_DATA_DIR} apply <security_id> <job_id>" in actions
 
 
 def test_corrupt_cache_database_returns_envelope_not_traceback(tmp_path):

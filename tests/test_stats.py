@@ -15,6 +15,11 @@ def _invoke(tmp_path: Path, *args):
 	return runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "stats", *args])
 
 
+def _hint(tmp_path: Path, command: str) -> str:
+	"""后继提示必须保留本次调用的数据目录。"""
+	return f"boss --data-dir {tmp_path.resolve()} {command}"
+
+
 def _seed_cache(
 	tmp_path: Path,
 	greet: int = 0,
@@ -70,9 +75,9 @@ def test_stats_empty_cache(tmp_path):
 	assert parsed["data"]["window_days"] == 30
 	assert "缓存尚未建立" in parsed["data"]["note"]
 	assert parsed["hints"]["next_actions"] == [
-		"boss search <query>",
-		"boss pipeline",
-		"boss follow-up",
+		_hint(tmp_path, "search <query>"),
+		_hint(tmp_path, "pipeline"),
+		_hint(tmp_path, "follow-up"),
 	]
 
 
@@ -97,8 +102,8 @@ def test_stats_funnel_counts(tmp_path):
 	assert conv["shortlist_rate"] == 0.2
 	assert conv["apply_rate_window"] == 0.3
 	assert parsed["hints"]["next_actions"] == [
-		"boss pipeline",
-		"boss follow-up",
+		_hint(tmp_path, "pipeline"),
+		_hint(tmp_path, "follow-up"),
 	]
 
 
@@ -300,12 +305,19 @@ def _capture_console(monkeypatch):
 	return stream
 
 
+def _render_ctx():
+	"""_render_stats 需要 ctx 才能把数据目录带进提示。"""
+	from types import SimpleNamespace
+
+	return SimpleNamespace(obj={"data_dir": Path("/tmp/stats-data"), "platform": "zhipin"})
+
+
 def test_render_stats_shows_funnel_counts(monkeypatch):
 	"""渲染应展示漏斗各阶段计数，而不是 JSON。"""
 	from boss_agent_cli.commands.stats import _render_stats
 
 	stream = _capture_console(monkeypatch)
-	_render_stats({
+	_render_stats(_render_ctx(), {
 		"window_days": 30,
 		"funnel": {"greeted": 12, "applied": 3, "shortlist": 8},
 		"window": {"greeted": 5, "applied": 1, "shortlist": 2, "watch_hits": 4},
@@ -323,7 +335,7 @@ def test_render_stats_shows_conversion_rate_as_percent(monkeypatch):
 	from boss_agent_cli.commands.stats import _render_stats
 
 	stream = _capture_console(monkeypatch)
-	_render_stats({
+	_render_stats(_render_ctx(), {
 		"window_days": 30,
 		"funnel": {"greeted": 12, "applied": 3, "shortlist": 8},
 		"window": {"greeted": 5, "applied": 1, "shortlist": 2, "watch_hits": 4},
@@ -340,7 +352,7 @@ def test_render_stats_empty_state_gives_next_step(monkeypatch):
 	from boss_agent_cli.commands.stats import _render_stats
 
 	stream = _capture_console(monkeypatch)
-	_render_stats({
+	_render_stats(_render_ctx(), {
 		"funnel": {"greeted": 0, "applied": 0, "shortlist": 0, "watch_hits": 0},
 		"conversion": {"apply_rate": 0.0, "shortlist_rate": 0.0},
 		"window_days": 30,
@@ -348,7 +360,7 @@ def test_render_stats_empty_state_gives_next_step(monkeypatch):
 	})
 	out = stream.getvalue()
 
-	assert "boss search" in out, "空态应提示下一步命令"
+	assert f"boss --data-dir {Path('/tmp/stats-data').resolve()} search" in out, "空态应提示下一步命令"
 	assert "{" not in out
 
 

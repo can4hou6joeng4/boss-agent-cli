@@ -1067,7 +1067,7 @@ def test_interviews_success(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
-	assert parsed["hints"]["next_actions"][0] == "boss search <query>"
+	assert parsed["hints"]["next_actions"][0] == f"boss --data-dir {_DEFAULT_DATA_DIR} search <query>"
 
 
 @patch("boss_agent_cli.commands.interviews.get_platform_instance")
@@ -1085,7 +1085,7 @@ def test_interviews_supports_data_envelope(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"][0]["jobName"] == "测试岗位"
-	assert parsed["hints"]["next_actions"][0] == "boss search <query>"
+	assert parsed["hints"]["next_actions"][0] == f"boss --data-dir {_DEFAULT_DATA_DIR} search <query>"
 
 
 @patch("boss_agent_cli.commands.interviews.get_platform_instance")

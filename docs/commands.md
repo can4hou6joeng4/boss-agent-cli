@@ -326,6 +326,8 @@ AI 命令同样读取 `--data-dir` 中的 AI 配置、`resumes/`、候选池与�
 
 `config list` / `get` / `set` / `reset` 的后继命令与 `INVALID_PARAM` 恢复提示保留本次 `--data-dir` 与平台：未知配置项、非法取值与写入成功后的 `config get` / `config list` / `config set` 示例都携带经过 shell 参数转义的绝对目录，照抄即读写同一份 `config.json`，不会在默认目录另建配置。TTY 的「下一步」列表按字面渲染命令文本，目录含 `[bold]` 等 Rich 标签时不会被改写或中断输出。
 
+`stats` / `interviews` / `cities` / `platforms` 的后继提示同样保留本次 `--data-dir`：漏斗统计的 `search` / `apply` / `pipeline` / `follow-up` 与 HTML 报表内的建议、面试列表后的 `search`、城市列表后的 `search --city`、平台清单逐个生成的 `--platform <名称> status`（以及兜底 `status` / `schema`）都携带经过 shell 参数转义的绝对目录，照提示执行时读写同一份缓存、登录态与索引。
+
 ### 平台配置校验
 
 `boss config set platform <名称>` 按当前平台注册表校验，内置可用值为 `zhipin`。已移除的平台、未知值和空值返回 `INVALID_PARAM`，不会创建或修改配置文件。

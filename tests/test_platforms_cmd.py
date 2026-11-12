@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from click.testing import CliRunner
 
 from boss_agent_cli.commands.platforms import _render_platforms, platform_capability_data
 from boss_agent_cli.main import cli
+
+_DEFAULT_DATA_DIR = str((Path.home() / ".boss-agent").resolve())
 
 
 def test_platforms_outputs_local_capability_matrix() -> None:
@@ -70,8 +73,8 @@ def test_platforms_next_actions_name_every_listed_platform() -> None:
 	payload = json.loads(result.output)
 	platform_names = [item["name"] for item in payload["data"]["platforms"]]
 	assert payload["hints"]["next_actions"] == [
-		*(f"boss --platform {name} status" for name in platform_names),
-		"boss schema",
+		*(f"boss --platform {name} --data-dir {_DEFAULT_DATA_DIR} status" for name in platform_names),
+		f"boss --data-dir {_DEFAULT_DATA_DIR} schema",
 	]
 	assert "<name>" not in " ".join(payload["hints"]["next_actions"])
 
