@@ -102,7 +102,11 @@ def import_crawl_shortlist(
 	tags: tuple[str, ...] = (),
 	note: str = "",
 ) -> dict[str, Any]:
-	"""Import selected crawl rows into the existing shortlist without overwrites."""
+	"""Import selected crawl rows into the existing shortlist without overwrites.
+
+	Dedupe by the stable ``job_id``: ``security_id`` rotates on every search
+	response, so a composite key lets a re-crawled job in as a second row.
+	"""
 	if include_all == bool(selectors):
 		raise ValueError("必须且只能使用 --all 或至少一个 --selector 选择要导入的职位")
 	if len(selectors) != len(set(selectors)):
@@ -121,10 +125,10 @@ def import_crawl_shortlist(
 	if missing_selectors:
 		raise ValueError(f"run {run_id} 中不存在 selector: {', '.join(missing_selectors)}")
 
-	existing_keys = {
-		(str(item.get("security_id", "")), str(item.get("job_id", "")))
-		for item in cache.list_shortlist()
-	}
+	# security_id 每次搜索请求都会轮换，不能参与跨 run 去重：同一职位重新采集后
+	# 再次导入会带着新值，复合键永远对不上，候选池里就多出一条重复记录。只按稳定
+	# 的 job_id 判断是否已存在；命中时保留已有标签、备注和首次加入时间（Issue #899）。
+	known_job_ids = {str(item.get("job_id", "")) for item in cache.list_shortlist()}
 	imported: list[dict[str, str]] = []
 	existing_count = 0
 	skipped_count = 0
@@ -135,7 +139,7 @@ def import_crawl_shortlist(
 		if not security_id or not job_id:
 			skipped_count += 1
 			continue
-		if (security_id, job_id) in existing_keys:
+		if job_id in known_job_ids:
 			existing_count += 1
 			continue
 		cache.add_shortlist({
@@ -150,6 +154,7 @@ def import_crawl_shortlist(
 			"note": note,
 		})
 		imported.append({"selector": str(selected_item["selector"]), "title": str(item.get("title", ""))})
+		known_job_ids.add(job_id)
 	return {
 		"run_id": run_id,
 		"selected_count": len(selected),
