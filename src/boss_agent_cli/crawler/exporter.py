@@ -7,11 +7,34 @@ import json
 from pathlib import Path
 from typing import Any
 
+from boss_agent_cli.services.chat_utils import sanitize_csv_cell
+
 FIELDS = (
 	"query", "page", "rank", "title", "salary", "city", "district", "business_district",
 	"company", "company_scale", "industry", "education", "experience", "labels", "benefits", "post_description",
 	"address", "detail_status",
 )
+
+#: 会被 Excel / openpyxl 当成公式或特殊指令开头的字符。平台原文（JD 分隔线
+#: `=====岗位职责=====`、以 `-` 开头的列表项等）经常以这里面的一个开头。
+_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def _csv_cell(value: Any) -> str:
+	"""CSV 没有类型：一律按共享规则清洗后落盘，防止公式注入。"""
+	return sanitize_csv_cell(str(value if value is not None else ""))
+
+
+def _force_text_cell(cell: Any) -> None:
+	"""把以公式字符开头的字符串单元格固定为文本。
+
+	openpyxl 对以 `=` 开头的字符串默认按公式保存（写 `<f>` 节点），Excel 打开
+	时会计算或报错。CSV 用前置单引号解决，XLSX 则应保留原值并显式声明文本——
+	单引号在 xlsx 里会作为可见字符留在单元格里。
+	"""
+	value = cell.value
+	if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
+		cell.data_type = "s"
 
 
 def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str, str]:
@@ -25,7 +48,7 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 	with csv_path.open("w", encoding="utf-8-sig", newline="") as file:
 		writer = csv.DictWriter(file, fieldnames=FIELDS, extrasaction="ignore")
 		writer.writeheader()
-		writer.writerows(export_rows)
+		writer.writerows({field: _csv_cell(row.get(field)) for field in FIELDS} for row in export_rows)
 	_write_xlsx(xlsx_path, export_rows)
 	return {"json": str(json_path), "csv": str(csv_path), "xlsx": str(xlsx_path)}
 
@@ -46,7 +69,10 @@ def _write_xlsx(path: Path, rows: list[dict[str, Any]]) -> None:
 		cell = sheet.cell(row=1, column=index, value=field)
 		cell.alignment = Alignment(horizontal="center", vertical="center")
 	for row in rows:
+		start = sheet.max_row + 1
 		sheet.append([row.get(field, "") for field in FIELDS])
+		for cell in sheet[start]:
+			_force_text_cell(cell)
 
 	sheet.freeze_panes = "A2"
 	sheet.auto_filter.ref = f"A1:{get_column_letter(len(FIELDS))}{max(1, len(rows) + 1)}"
