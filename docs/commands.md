@@ -107,6 +107,8 @@ pbpaste | boss login --curl-file -
 
 `recommend`、`show`、`detail` 的后继操作与错误恢复指引也保留原 `--data-dir` 与平台。`search`（包括缓存命中）和 `recommend` 的终端表尾使用同一目录的 `show` 命令；详情页的投递、打招呼提示同样沿用该目录。路径中的空格、引号或 Rich 标签按字面保留，复制执行时仍指向同一登录态与索引。
 
+终端职位表的编号查看提示只在本次列表已写入编号索引时出现，即 `search`（含缓存命中）与 `recommend` 索引写入成功时；索引写入失败时不出现。`history`、`watch run`、`batch-greet --dry-run` 与未指定 `-o` 的 `export` 只展示结果、不写编号索引，因此不再打印 `boss show <#>` 提示——这些命令的表格编号与 `show` 读取的索引没有对应关系，照提示执行会打开另一条职位，随后的 `apply` / `greet` 也会落到错误职位上。
+
 `boss show <#>` 的编号只对最近一次 `search` / `recommend` 建立的索引快照有效：每次搜索或推荐都会整份覆盖缓存，重跑任一命令后旧编号会静默指向新结果。成功信封的 `data.index_snapshot` 返回 `source`（`search:<关键词>` 或 `recommend`）、`page`（建立快照的页码，旧版本缓存为 `null`）、`count` 与 `saved_at`（Unix 秒）；`search` / `recommend` 成功写入索引后也会在 `pagination.index_snapshot` 返回同一份快照身份，写入失败或没有缓存时该字段缺失——此时不要把本次结果与旧编号配对。Agent 应把编号和这份快照身份一起保存，发现来源、页码或时间不匹配时重新搜索定位，而不是继续使用旧编号。
 
 ## 可恢复批量采集
