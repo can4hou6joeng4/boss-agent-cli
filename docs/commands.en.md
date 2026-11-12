@@ -296,6 +296,8 @@ Resume names are free text and may contain spaces, quotes and shell metacharacte
 
 The execution hint returned by `clean --dry-run` removes `--dry-run` and preserves the current `--data-dir`, `--all` / `--privacy`, and `--days`. Paths are quoted so following the hint uses the same data directory and cleanup scope as the preview. Login and diagnostic hints after cleanup also keep that directory. A preview with `--risk-lock` provides its scoped execution command only in `hints.operator_actions` for the operator.
 
+Follow-up and `INVALID_PARAM` recovery hints from `config list` / `get` / `set` / `reset` keep the current `--data-dir` and platform. Unknown keys, invalid values, and the `config get` / `config list` / `config set` examples after a successful write all carry the shell-quoted absolute directory, so following them reads and writes the same `config.json` instead of creating one in the default directory. The TTY "next steps" list renders command text literally: directories containing Rich tags such as `[bold]` are shown as-is and never break the output.
+
 ### Platform configuration validation
 
 `boss config set platform <name>` validates against the current platform registry; the built-in value is `zhipin`. Removed platforms, unknown names, and empty values return `INVALID_PARAM` without creating or modifying the configuration file.
