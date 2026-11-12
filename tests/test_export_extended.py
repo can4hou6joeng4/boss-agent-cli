@@ -660,3 +660,27 @@ def test_export_search_risk_uses_stop_contract(mock_auth_cls, mock_client_cls, t
 	assert parsed["error"]["recoverable"] is False
 	assert "停止自动化访问" in parsed["error"]["recovery_action"]
 	assert parsed["hints"]["next_actions"]
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_continues_when_has_more_is_missing(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	"""平台省略 hasMore 不等于没有下一页，不能静默只导出第一页（Issue #903）。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	page1_jobs = [_make_raw_job(f"Job {i}", security_id=f"p1_{i}") for i in range(15)]
+	page2_jobs = [_make_raw_job(f"Job {i}", security_id=f"p2_{i}") for i in range(10)]
+
+	def search_side_effect(query, city=None, salary=None, page=1):
+		if page == 1:
+			return {"zpData": {"jobList": page1_jobs}}
+		if page == 2:
+			return _api_response(page2_jobs, has_more=False)
+		return _api_response([])
+
+	mock_client.search_jobs.side_effect = search_side_effect
+
+	out_path = tmp_path / "unknown-more.json"
+	result = CliRunner().invoke(cli, ["export", "bulk", "--count", "20", "--format", "json", "-o", str(out_path)])
+	assert result.exit_code == 0, result.output
+	assert len(json.loads(out_path.read_text(encoding="utf-8"))) == 20
+	assert mock_client.search_jobs.call_count == 2
