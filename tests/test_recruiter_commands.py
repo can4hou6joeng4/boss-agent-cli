@@ -3,6 +3,7 @@ import shlex
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.display import risk_error_message
@@ -680,6 +681,54 @@ def test_parse_resume_reads_wasm_education_field_names():
 	assert education["degree"] == "本科"
 	assert education["start"] == "2016.09"
 	assert education["end"] == "2020.06"
+
+
+@pytest.mark.parametrize(
+	("base", "expected"),
+	[
+		pytest.param({}, "", id="missing"),
+		pytest.param({"gender": None}, "", id="null"),
+		pytest.param({"gender": ""}, "", id="empty"),
+		pytest.param({"gender": "unknown"}, "", id="unknown-string"),
+		pytest.param({"gender": 99}, "", id="unknown-code"),
+		pytest.param({"gender": -1}, "", id="negative-code"),
+		pytest.param({"gender": "1"}, "", id="numeric-string"),
+		pytest.param({"gender": True}, "", id="true"),
+		pytest.param({"gender": False}, "", id="false"),
+		pytest.param({"gender": []}, "", id="list"),
+		pytest.param({"gender": {}}, "", id="object"),
+		pytest.param({"gender": 0}, "女", id="female"),
+		pytest.param({"gender": 1}, "男", id="male"),
+	],
+)
+def test_parse_resume_gender_preserves_unknown(base, expected):
+	"""缺失或未知的性别不能在结构化简历里凭空变成女（Issue #909）。"""
+	result = parse_resume({"geekDetailInfo": {"geekBaseInfo": base}})
+
+	assert result["basic"]["gender"] == expected
+
+
+@pytest.mark.parametrize("envelope", ["zpData", "data"])
+@pytest.mark.parametrize("base", [{}, {"gender": None}, {"gender": 99}], ids=["missing", "null", "unknown"])
+@patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
+def test_recruiter_resume_keeps_unknown_gender_empty(mock_auth_cls, mock_platform_cls, tmp_path, envelope, base):
+	"""缺少性别仍是有效简历，七键成功信封必须保留未知而非补全个人属性。"""
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.view_geek.return_value = {
+		"code": 0,
+		envelope: {"geekDetailInfo": {"geekBaseInfo": {"name": "示例候选人", **base}}},
+	}
+
+	result = _invoke("--data-dir", str(tmp_path), "hr", "resume", "geek-example", "--job-id", "job-example", "--security-id", "sid-example")
+
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.output)
+	assert set(payload) == {"ok", "schema_version", "command", "data", "pagination", "error", "hints"}
+	assert payload["ok"] is True
+	assert payload["data"]["basic"]["name"] == "示例候选人"
+	assert payload["data"]["basic"]["gender"] == ""
+	mock_platform.view_geek.assert_called_once_with("geek-example", "job-example", security_id="sid-example")
 
 
 def test_hr_group_rejects_removed_zhilian_platform():

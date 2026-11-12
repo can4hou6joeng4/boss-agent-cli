@@ -200,6 +200,8 @@ The execution hint returned by `batch-greet --dry-run` preserves the current dat
 | `boss hr greet ... --message <text> --yes` | Create a conversation and send first contact once, without changing read status |
 | `boss hr location <friend_id> --yes` | Send the job's work-location card into an existing chat; the same conversation is not sent twice |
 
+`boss hr resume` returns a structured resume by default. `data.basic.gender` converts recognized integer codes only; missing, `null`, or unknown values remain an empty string without inferring the candidate's gender. Use `--raw` to read the original response.
+
 Preview the candidate parameters and message with `--dry-run`. Replace it with `--yes` only after the operator explicitly approves that candidate and message. MCP omits `yes` by default; agents must not infer approval, and a preview is not human authorization.
 
 `greet` atomically reserves the encrypted candidate/job pair locally and records a confirmed send. A lost response, process exit, or rate limit leaves the reservation in place and blocks automatic resending. Check `boss hr chat --job-id <id>` and use the official page if needed; do not delete the reservation to resend.
