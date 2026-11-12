@@ -29,6 +29,11 @@ _PUBLIC_CONFIG_KEYS = tuple(key for key in DEFAULTS if key != "low_risk_mode")
 _AVAILABLE_CONFIG_MESSAGE = f"可用项: {', '.join(sorted(_PUBLIC_CONFIG_KEYS))}"
 
 
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""配置读写与修复命令沿用当前数据目录中的 config.json。"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
 def _emit_unknown_key(ctx: click.Context) -> None:
 	"""未知配置项：消息里列出可用项，hints 给出能看到当前值的 config list。"""
 	from boss_agent_cli.output import emit_error
@@ -37,7 +42,7 @@ def _emit_unknown_key(ctx: click.Context) -> None:
 		"config",
 		code="INVALID_PARAM",
 		message=f"未知配置项。{_AVAILABLE_CONFIG_MESSAGE}",
-		hints={"next_actions": [boss_command_for_ctx(ctx, "config list")]},
+		hints={"next_actions": [_hint_command(ctx, "config list")]},
 	)
 
 
@@ -54,11 +59,11 @@ def _emit_invalid_value(ctx: click.Context, key: str, message: str) -> None:
 		"config",
 		code="INVALID_PARAM",
 		message=message,
-		recovery_action=f"按提示修正 {key} 的取值；用 {boss_command_for_ctx(ctx, 'config list')} 查看当前值与可用项",
+		recovery_action=f"按提示修正 {key} 的取值；用 {_hint_command(ctx, 'config list')} 查看当前值与可用项",
 		hints={
 			"next_actions": [
-				boss_command_for_ctx(ctx, f"config get {key}"),
-				boss_command_for_ctx(ctx, "config list"),
+				_hint_command(ctx, f"config get {key}"),
+				_hint_command(ctx, "config list"),
 			]
 		},
 	)
@@ -127,9 +132,9 @@ def config_list_cmd(ctx: click.Context) -> None:
 	data = {"config_path": str(config_path), "items": items}
 	hints = {
 		"next_actions": [
-			boss_command_for_ctx(ctx, "config set <键> <值>"),
-			boss_command_for_ctx(ctx, "config get <键>"),
-			boss_command_for_ctx(ctx, "config reset <键>"),
+			_hint_command(ctx, "config set <键> <值>"),
+			_hint_command(ctx, "config get <键>"),
+			_hint_command(ctx, "config reset <键>"),
 		],
 	}
 	handle_output(
@@ -184,8 +189,8 @@ def config_get_cmd(ctx: click.Context, key: str) -> None:
 	# `render=lambda d: None` 让 TTY 下的 get / set / reset 什么都不打印：真人在终端
 	# 改完配置看不到任何确认，只能再跑一次 config list 才能确认是否生效。
 	next_actions = [
-		boss_command_for_ctx(ctx, f"config set {key} <值>"),
-		boss_command_for_ctx(ctx, "config list"),
+		_hint_command(ctx, f"config set {key} <值>"),
+		_hint_command(ctx, "config list"),
 	]
 	handle_output(
 		ctx,
@@ -260,8 +265,8 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 
 	data = {"key": key, "value": parsed_value, "previous": ctx.obj["config"].get(key)}
 	next_actions = [
-		boss_command_for_ctx(ctx, f"config get {key}"),
-		boss_command_for_ctx(ctx, "config list"),
+		_hint_command(ctx, f"config get {key}"),
+		_hint_command(ctx, "config list"),
 	]
 	handle_output(
 		ctx,
@@ -293,8 +298,8 @@ def config_reset_cmd(ctx: click.Context, key: str) -> None:
 
 	data = {"key": key, "value": DEFAULTS[key], "restored": True}
 	next_actions = [
-		boss_command_for_ctx(ctx, f"config get {key}"),
-		boss_command_for_ctx(ctx, "config list"),
+		_hint_command(ctx, f"config get {key}"),
+		_hint_command(ctx, "config list"),
 	]
 	handle_output(
 		ctx,

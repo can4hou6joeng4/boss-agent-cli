@@ -314,6 +314,8 @@ boss hr download-resume <friend_id> --message-id <attachment_mid> --output ./res
 
 `clean --dry-run` 返回的执行提示会去掉 `--dry-run`，保留本次 `--data-dir`、`--all` / `--privacy` 与 `--days`；路径会正确转义，照提示执行时仍操作预演的数据目录与清理范围。清理后的登录、自检提示也沿用该目录。带 `--risk-lock` 的预演只在 `hints.operator_actions` 提供保留范围的人工执行命令。
 
+`config list` / `get` / `set` / `reset` 的后继命令与 `INVALID_PARAM` 恢复提示保留本次 `--data-dir` 与平台：未知配置项、非法取值与写入成功后的 `config get` / `config list` / `config set` 示例都携带经过 shell 参数转义的绝对目录，照抄即读写同一份 `config.json`，不会在默认目录另建配置。TTY 的「下一步」列表按字面渲染命令文本，目录含 `[bold]` 等 Rich 标签时不会被改写或中断输出。
+
 ### 平台配置校验
 
 `boss config set platform <名称>` 按当前平台注册表校验，内置可用值为 `zhipin`。已移除的平台、未知值和空值返回 `INVALID_PARAM`，不会创建或修改配置文件。

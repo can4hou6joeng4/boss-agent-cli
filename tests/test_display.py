@@ -990,6 +990,16 @@ class TestRenderNextSteps:
 
 		assert stream.getvalue() == ""
 
+	@pytest.mark.parametrize("path", ["/tmp/jobs [bold] team", "/tmp/jobs [/bold] team"])
+	def test_renders_commands_with_rich_tags_literally(self, monkeypatch, path):
+		"""命令里的数据目录是原样文本：Rich 标签不能吞掉它或抛 MarkupError。"""
+		from boss_agent_cli.display import render_next_steps
+
+		stream = _capture_display_console(monkeypatch)
+		render_next_steps([f"boss --data-dir {path} config list"])
+
+		assert f"--data-dir {path} config list" in stream.getvalue()
+
 
 class TestRenderActionResult:
 	def test_shows_fields_and_next_steps(self, monkeypatch):

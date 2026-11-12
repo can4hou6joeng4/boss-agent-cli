@@ -556,7 +556,9 @@ def render_next_steps(actions: "Sequence[str] | None") -> None:
 		return
 	console.print("\n  [bold]下一步：[/bold]")
 	for action in actions:
-		console.print(f"    [dim]{action}[/dim]")
+		# 命令里带数据目录等用户可控文本：不转义时 `[bold]` 会被 Rich 吞掉，
+		# 未配对的 `[/bold]` 直接抛 MarkupError，整个人工提示都打不出来。
+		console.print(f"    [dim]{escape(action)}[/dim]")
 
 
 def render_action_result(

@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -14,6 +15,11 @@ from boss_agent_cli.main import cli
 
 
 _ERROR_KEYS = {"code", "message", "recoverable", "recovery_action"}
+
+
+def _hint(command: str, data_dir: Path) -> str:
+	"""后继提示保留本次调用的数据目录（绝对解析路径）。"""
+	return f"boss --data-dir {Path(data_dir).resolve()} {command}"
 
 
 def _assert_single_stdout_json_error(result: Result, *, command: str, code: str) -> dict[str, Any]:
@@ -123,7 +129,7 @@ def test_config_get_valid_key(tmp_path):
 	assert parsed["data"]["key"] == "log_level"
 	assert parsed["data"]["value"] == "error"
 	assert parsed["data"]["default"] == "error"
-	assert parsed["hints"]["next_actions"] == ["boss config set log_level <值>", "boss config list"]
+	assert parsed["hints"]["next_actions"] == [_hint("config set log_level <值>", tmp_path), _hint("config list", tmp_path)]
 
 
 def test_config_get_renders_value_in_tty(tmp_path, monkeypatch):
@@ -132,7 +138,9 @@ def test_config_get_renders_value_in_tty(tmp_path, monkeypatch):
 	assert code == 0
 	assert "role" in text
 	assert "candidate" in text
-	assert "boss config set role <值>" in text
+	# pytest 的临时目录很长，Rich 会在 120 列处折行：分别断言前缀与命令尾部。
+	assert "--data-dir" in text
+	assert "config set role <值>" in text
 
 
 def test_config_get_renders_structured_value_as_json(tmp_path, monkeypatch):
@@ -166,7 +174,7 @@ def test_config_get_unknown_key(tmp_path):
 	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
 	assert "可用项" in parsed["error"]["message"]
 	# 消息里已经列了可用项，hints 再给出能看到当前值的 config list。
-	assert parsed["hints"]["next_actions"] == ["boss config list"]
+	assert parsed["hints"]["next_actions"] == [_hint("config list", tmp_path)]
 
 
 # ── config set ──────────────────────────────────────────────────────
@@ -182,7 +190,7 @@ def test_config_set_string_value(tmp_path):
 	config_file = tmp_path / "config.json"
 	saved = json.loads(config_file.read_text())
 	assert saved["log_level"] == "debug"
-	assert parsed["hints"]["next_actions"] == ["boss config get log_level", "boss config list"]
+	assert parsed["hints"]["next_actions"] == [_hint("config get log_level", tmp_path), _hint("config list", tmp_path)]
 
 
 def test_config_set_renders_confirmation_in_tty(tmp_path, monkeypatch):
@@ -276,7 +284,7 @@ def test_config_set_rejects_invalid_cdp_url(tmp_path, value):
 	assert code == 1
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert "http(s) 调试地址" in parsed["error"]["message"]
-	assert parsed["hints"]["next_actions"] == ["boss config get cdp_url", "boss config list"]
+	assert parsed["hints"]["next_actions"] == [_hint("config get cdp_url", tmp_path), _hint("config list", tmp_path)]
 	written = tmp_path / "config.json"
 	assert not written.exists() or "cdp_url" not in json.loads(written.read_text(encoding="utf-8"))
 
@@ -523,8 +531,8 @@ def test_config_set_numeric_parse_error_returns_chinese_envelope(tmp_path, key, 
 	assert value in message
 	assert "could not convert" not in message
 	assert "invalid literal" not in message
-	assert parsed["hints"]["next_actions"] == [f"boss config get {key}", "boss config list"]
-	assert "boss config list" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [_hint(f"config get {key}", tmp_path), _hint("config list", tmp_path)]
+	assert _hint("config list", tmp_path) in parsed["error"]["recovery_action"]
 
 
 def test_config_set_invalid_choice_points_at_config_commands(tmp_path):
@@ -534,8 +542,8 @@ def test_config_set_invalid_choice_points_at_config_commands(tmp_path):
 	assert code == 1
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert parsed["error"]["message"] == "log_level 必须是以下值之一: error, warning, info, debug"
-	assert parsed["hints"]["next_actions"] == ["boss config get log_level", "boss config list"]
-	assert "boss config list" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [_hint("config get log_level", tmp_path), _hint("config list", tmp_path)]
+	assert _hint("config list", tmp_path) in parsed["error"]["recovery_action"]
 
 
 def test_config_set_list_value(tmp_path):
@@ -690,7 +698,7 @@ def test_config_set_unknown_key(tmp_path):
 	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "config", "set", "bad_key", "val"])
 	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
 	assert "可用项" in parsed["error"]["message"]
-	assert parsed["hints"]["next_actions"] == ["boss config list"]
+	assert parsed["hints"]["next_actions"] == [_hint("config list", tmp_path)]
 
 
 def test_config_commands_do_not_expose_internal_low_risk_policy(tmp_path):
@@ -718,7 +726,7 @@ def test_config_reset_restores_default(tmp_path):
 	assert code == 0
 	assert parsed["data"]["value"] == "error"
 	assert parsed["data"]["restored"] is True
-	assert parsed["hints"]["next_actions"] == ["boss config get log_level", "boss config list"]
+	assert parsed["hints"]["next_actions"] == [_hint("config get log_level", tmp_path), _hint("config list", tmp_path)]
 	# 验证文件中已移除
 	config_file = tmp_path / "config.json"
 	saved = json.loads(config_file.read_text())
@@ -750,7 +758,7 @@ def test_config_reset_unknown_key(tmp_path):
 	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "config", "reset", "bad_key"])
 	parsed = _assert_single_stdout_json_error(result, command="config", code="INVALID_PARAM")
 	assert "可用项" in parsed["error"]["message"]
-	assert parsed["hints"]["next_actions"] == ["boss config list"]
+	assert parsed["hints"]["next_actions"] == [_hint("config list", tmp_path)]
 
 
 def test_unreadable_config_file_returns_envelope_instead_of_traceback(tmp_path):
