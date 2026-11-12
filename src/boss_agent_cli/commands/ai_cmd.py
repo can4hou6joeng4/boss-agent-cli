@@ -44,6 +44,11 @@ def _get_resume_store(ctx: click.Context) -> ResumeStore:
 	return ResumeStore(ctx.obj["data_dir"] / "resumes")
 
 
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""AI 命令的后继与恢复提示沿用本地简历、缓存与 AI 配置所在的数据目录。"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
 def _create_ai_service(ctx: click.Context) -> AIService | None:
 	"""从配置创建 AIService 实例，未配置时返回 None。"""
 	store = _get_ai_config_store(ctx)
@@ -76,7 +81,8 @@ def _require_ai_service(ctx: click.Context) -> AIService | None:
 				code="AI_NOT_CONFIGURED",
 				message=f"AI provider {provider!r} 没有可用端点（provider 未登记或未设置 --base-url）",
 				recoverable=True,
-				recovery_action="boss ai config --provider <已登记的 provider>，或使用 --base-url 指向自建 OpenAI 兼容端点",
+				recovery_action=_hint_command(ctx, "ai config --provider <已登记的 provider>")
+				+ "，或使用 --base-url 指向自建 OpenAI 兼容端点",
 			)
 		else:
 			handle_error_output(
@@ -84,7 +90,7 @@ def _require_ai_service(ctx: click.Context) -> AIService | None:
 				code="AI_NOT_CONFIGURED",
 				message="AI 服务未配置",
 				recoverable=True,
-				recovery_action="boss ai config --provider <provider> --model <model> --api-key <key>",
+				recovery_action=_hint_command(ctx, "ai config --provider <provider> --model <model> --api-key <key>"),
 			)
 		ctx.exit(1)
 		return None
@@ -171,7 +177,11 @@ def _call_ai(ctx: click.Context, svc: AIService, prompt: str) -> dict[str, Any] 
 			code="AI_API_ERROR",
 			message=f"AI 服务调用失败: {exc}",
 			recoverable=True,
-			recovery_action=recovery_action_for(exc, "检查网络连接和密钥配置，重试"),
+			recovery_action=recovery_action_for(
+				exc,
+				"检查网络连接和密钥配置，重试",
+				config_command=_hint_command(ctx, "ai config"),
+			),
 		)
 		ctx.exit(1)
 		return None
@@ -210,9 +220,13 @@ def _call_ai(ctx: click.Context, svc: AIService, prompt: str) -> dict[str, Any] 
 	return cast("dict[str, Any]", parsed)
 
 
-def _fit_missing_detail_item(item: dict[str, Any]) -> dict[str, Any]:
+def _fit_missing_detail_item(ctx: click.Context, item: dict[str, Any]) -> dict[str, Any]:
 	security_id = str(item.get("security_id") or "")
-	hint = f"先 boss detail {shell_argument(security_id)}" if security_id else "先 boss detail <security_id>"
+	hint = (
+		f"先 {_hint_command(ctx, f'detail {shell_argument(security_id)}')}"
+		if security_id
+		else f"先 {_hint_command(ctx, 'detail <security_id>')}"
+	)
 	return {
 		"job_id": item.get("job_id", ""),
 		"security_id": security_id,
@@ -278,11 +292,14 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 		handle_output(
 			ctx, "ai-config", config,
 			render=lambda d: render_action_result(
-				d, title="ai config", next_steps=["boss ai local status", "boss ai analyze-jd <security_id>"]
+				d, title="ai config", next_steps=[
+					_hint_command(ctx, "ai local status"),
+					_hint_command(ctx, "ai analyze-jd <security_id>"),
+				]
 			),
 			hints={"next_actions": [
-				"boss ai config --provider openai --model gpt-4o --api-key <key>",
-				"boss ai local configure --runtime ollama --model qwen3:14b",
+				_hint_command(ctx, "ai config --provider openai --model gpt-4o --api-key <key>"),
+				_hint_command(ctx, "ai local configure --runtime ollama --model qwen3:14b"),
 			]},
 		)
 		return
@@ -304,8 +321,8 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 				message=message,
 				recovery_action="按 next_actions 选择可用的 provider 参数后重试",
 				hints={"next_actions": [
-					"boss ai config --provider custom --base-url <url> --model <model> --api-key <key>",
-					"boss ai config",
+					_hint_command(ctx, "ai config --provider custom --base-url <url> --model <model> --api-key <key>"),
+					_hint_command(ctx, "ai config"),
 				]},
 			)
 			ctx.exit(1)
@@ -337,8 +354,12 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 			# 在同一屏内可确认，而不是要再跑一次 boss ai config 才看得到。
 			"resolved_base_url": store.get_base_url(),
 		},
-		render=lambda d: render_action_result(d, title="ai config", next_steps=["boss ai config"]),
-		hints={"next_actions": ["boss ai config", "boss ai local status", "boss ai analyze-jd <security_id> --resume <name>"]},
+		render=lambda d: render_action_result(d, title="ai config", next_steps=[_hint_command(ctx, "ai config")]),
+		hints={"next_actions": [
+			_hint_command(ctx, "ai config"),
+			_hint_command(ctx, "ai local status"),
+			_hint_command(ctx, "ai analyze-jd <security_id> --resume <name>"),
+		]},
 	)
 
 
@@ -374,8 +395,8 @@ def ai_analyze_jd_cmd(ctx: click.Context, jd_text: str, resume_name: str) -> Non
 		ctx, "ai-analyze-jd", result,
 		render=lambda d: render_ai_result(d, title="ai-analyze-jd"),
 		hints={"next_actions": [
-			f"boss ai optimize {shell_argument(resume_name)} --jd <jd_text>",
-			f"boss ai suggest {shell_argument(resume_name)} --jd <jd_text>",
+			_hint_command(ctx, f"ai optimize {shell_argument(resume_name)} --jd <jd_text>"),
+			_hint_command(ctx, f"ai suggest {shell_argument(resume_name)} --jd <jd_text>"),
 		]},
 	)
 
@@ -401,7 +422,7 @@ def ai_polish_cmd(ctx: click.Context, resume_name: str) -> None:
 	handle_output(
 		ctx, "ai-polish", result,
 		render=lambda d: render_ai_result(d, title="ai-polish"),
-		hints={"next_actions": [f"boss resume show {shell_argument(resume_name)}"]},
+		hints={"next_actions": [_hint_command(ctx, f"resume show {shell_argument(resume_name)}")]},
 	)
 
 
@@ -433,8 +454,8 @@ def ai_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str) -> None:
 		ctx, "ai-optimize", result,
 		render=lambda d: render_ai_result(d, title="ai-optimize"),
 		hints={"next_actions": [
-			f"boss resume show {shell_argument(resume_name)}",
-			f"boss resume export {shell_argument(resume_name)} --format pdf",
+			_hint_command(ctx, f"resume show {shell_argument(resume_name)}"),
+			_hint_command(ctx, f"resume export {shell_argument(resume_name)} --format pdf"),
 		]},
 	)
 
@@ -467,8 +488,8 @@ def ai_suggest_cmd(ctx: click.Context, resume_name: str, jd_text: str) -> None:
 		ctx, "ai-suggest", result,
 		render=lambda d: render_ai_result(d, title="ai-suggest"),
 		hints={"next_actions": [
-			f"boss ai optimize {shell_argument(resume_name)} --jd <jd_text>",
-			f"boss resume show {shell_argument(resume_name)}",
+			_hint_command(ctx, f"ai optimize {shell_argument(resume_name)} --jd <jd_text>"),
+			_hint_command(ctx, f"resume show {shell_argument(resume_name)}"),
 		]},
 	)
 
@@ -505,7 +526,7 @@ def ai_fit_cmd(ctx: click.Context, resume_name: str, limit: int) -> None:
 					"description": description,
 				})
 			else:
-				missing.append(_fit_missing_detail_item(item))
+				missing.append(_fit_missing_detail_item(ctx, item))
 
 	if not shortlist:
 		handle_output(
@@ -513,7 +534,7 @@ def ai_fit_cmd(ctx: click.Context, resume_name: str, limit: int) -> None:
 			"ai-fit",
 			{"results": [], "missing": [], "summary": {"analyzed": 0, "missing_details": 0}},
 			render=lambda d: render_ai_result(d, title="ai-fit"),
-			hints={"next_actions": ["boss shortlist add <security_id> <job_id>"]},
+			hints={"next_actions": [_hint_command(ctx, "shortlist add <security_id> <job_id>")]},
 		)
 		return
 
@@ -523,8 +544,11 @@ def ai_fit_cmd(ctx: click.Context, resume_name: str, limit: int) -> None:
 			"ai-fit",
 			{"results": [], "missing": missing, "summary": {"analyzed": 0, "missing_details": len(missing)}},
 			render=lambda d: render_ai_result(d, title="ai-fit"),
-			hints={"next_actions": [boss_command_for_ctx(ctx, "detail <security_id>")],
-				"operator_actions": ["候选池职位缺少详情缓存，先逐个 detail 后再重试 ai fit"]},
+			hints={"next_actions": [_hint_command(ctx, "detail <security_id>")],
+				"operator_actions": [
+					f"候选池职位缺少详情缓存，先逐个 {_hint_command(ctx, 'detail <security_id>')} 后再重试 "
+					f"{_hint_command(ctx, f'ai fit --resume {shell_argument(resume_name)}')}"
+				]},
 		)
 		return
 
@@ -543,7 +567,7 @@ def ai_fit_cmd(ctx: click.Context, resume_name: str, limit: int) -> None:
 		"ai-fit",
 		result,
 		render=lambda d: render_ai_result(d, title="ai-fit"),
-		hints={"next_actions": [f"boss ai optimize {shell_argument(resume_name)} --jd <jd_text>"]},
+		hints={"next_actions": [_hint_command(ctx, f"ai optimize {shell_argument(resume_name)} --jd <jd_text>")]},
 	)
 
 
@@ -592,10 +616,10 @@ def ai_reply_cmd(ctx: click.Context, recruiter_message: str, context: str, resum
 		ctx, "ai-reply", result,
 		render=lambda d: render_ai_result(d, title="ai-reply"),
 		hints={"next_actions": [
-			boss_command_for_ctx(ctx, "chatmsg <uid>"),
+			_hint_command(ctx, "chatmsg <uid>"),
 		], "operator_actions": [
 			"复制草稿到 BOSS 聊天框手动发送",
-			"uid 见 boss chat 输出",
+			f"uid 见 {_hint_command(ctx, 'chat')} 输出",
 		]},
 	)
 
@@ -639,7 +663,7 @@ def ai_interview_prep_cmd(ctx: click.Context, jd_text: str, resume_name: str | N
 		ctx, "ai-interview-prep", result,
 		render=lambda d: render_ai_result(d, title="ai-interview-prep"),
 		hints={"next_actions": [
-			boss_command_for_ctx(ctx, "ai chat-coach <chat_text>"),
+			_hint_command(ctx, "ai chat-coach <chat_text>"),
 		], "operator_actions": [
 			"对照 questions 逐题准备答案",
 		]},
@@ -709,7 +733,7 @@ def ai_suggest_keywords_cmd(ctx: click.Context, limit: int) -> None:
 			"ai-suggest-keywords",
 			{"keyword_groups": [], "patterns": [], "search_suggestions": []},
 			render=lambda d: render_ai_result(d, title="ai-suggest-keywords"),
-			hints={"next_actions": ["boss shortlist add <security_id> <job_id>"]},
+			hints={"next_actions": [_hint_command(ctx, "shortlist add <security_id> <job_id>")]},
 		)
 		return
 
@@ -738,8 +762,8 @@ def ai_suggest_keywords_cmd(ctx: click.Context, limit: int) -> None:
 		result,
 		render=lambda d: render_ai_result(d, title="ai-suggest-keywords"),
 		hints={"next_actions": [
-			"boss search <推荐关键词>",
-			"boss preset add <name> <关键词>",
+			_hint_command(ctx, "search <推荐关键词>"),
+			_hint_command(ctx, "preset add <name> <关键词>"),
 		]},
 	)
 
@@ -756,7 +780,7 @@ def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | 
 		return
 
 	if not jd_text and not job_id:
-		search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
+		search_cmd = _hint_command(ctx, "search <关键词>")
 		handle_error_output(
 			ctx,
 			"ai",
@@ -778,7 +802,7 @@ def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | 
 				code="CACHE_MISS",
 				message=f"job_id '{job_id}' 的职位描述未缓存",
 				recoverable=True,
-				recovery_action=f"boss detail <security_id> --job-id {shell_argument(job_id)}",
+				recovery_action=_hint_command(ctx, f"detail <security_id> --job-id {shell_argument(job_id)}"),
 			)
 			ctx.exit(1)
 			return
@@ -803,8 +827,8 @@ def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | 
 		ctx, "ai-resume-optimize", result,
 		render=lambda d: render_ai_result(d, title="ai-resume-optimize"),
 		hints={"next_actions": [
-			f"boss resume edit {shell_argument(resume_name)}",
-			f"boss ai optimize {shell_argument(resume_name)} --jd <jd_text>",
+			_hint_command(ctx, f"resume edit {shell_argument(resume_name)}"),
+			_hint_command(ctx, f"ai optimize {shell_argument(resume_name)} --jd <jd_text>"),
 		]},
 	)
 
@@ -827,7 +851,7 @@ def ai_cover_letter_cmd(
 		return
 
 	if not jd_text and not job_id:
-		search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
+		search_cmd = _hint_command(ctx, "search <关键词>")
 		handle_error_output(
 			ctx,
 			"ai",
@@ -849,7 +873,7 @@ def ai_cover_letter_cmd(
 				code="CACHE_MISS",
 				message=f"job_id '{job_id}' 的职位描述未缓存",
 				recoverable=True,
-				recovery_action=f"boss detail <security_id> --job-id {shell_argument(job_id)}",
+				recovery_action=_hint_command(ctx, f"detail <security_id> --job-id {shell_argument(job_id)}"),
 			)
 			ctx.exit(1)
 			return
@@ -880,7 +904,7 @@ def ai_cover_letter_cmd(
 		hints={
 			"note": "仅为 AI 生成的草稿，请自行核对真实性后再使用；本命令不发送任何消息",
 			"next_actions": [
-				f"boss ai interview-prep <jd_text> --resume {shell_argument(resume_name)}",
+				_hint_command(ctx, f"ai interview-prep <jd_text> --resume {shell_argument(resume_name)}"),
 			],
 		},
 	)

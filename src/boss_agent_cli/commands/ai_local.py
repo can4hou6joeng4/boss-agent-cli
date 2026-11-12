@@ -21,10 +21,23 @@ from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action
 from rich.table import Table
 
 from boss_agent_cli import display
-from boss_agent_cli.display import error_contract_for_code, handle_error_output, handle_output, render_action_result, render_next_steps, shell_argument
+from boss_agent_cli.display import (
+	boss_command_for_ctx,
+	error_contract_for_code,
+	handle_error_output,
+	handle_output,
+	render_action_result,
+	render_next_steps,
+	shell_argument,
+)
 
 
-def _render_local_status(data: dict[str, Any]) -> None:
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""本地模型命令的后继与恢复提示沿用 AI 配置和模型文件所在的数据目录。"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
+def _render_local_status(ctx: click.Context, data: dict[str, Any]) -> None:
 	"""本地模型配置 + 推荐清单（TTY 路径）。"""
 	state = "[green]已配置[/green]" if data.get("configured") else "[yellow]未配置[/yellow]"
 	display.console.print(f"本地模型：{state}")
@@ -54,9 +67,9 @@ def _render_local_status(data: dict[str, Any]) -> None:
 		display.console.print(f"  已导入 {len(imported)} 个本地模型")
 
 	render_next_steps(
-		["boss ai local smoke"]
+		[_hint_command(ctx, "ai local smoke")]
 		if data.get("configured")
-		else ["boss ai local configure --runtime ollama --model qwen3:14b"]
+		else [_hint_command(ctx, "ai local configure --runtime ollama --model qwen3:14b")]
 	)
 
 
@@ -83,8 +96,8 @@ def local_status_cmd(ctx: click.Context) -> None:
 			"recommended_models": recommended_model_rows(),
 			"imported_models": [asdict(item) for item in read_imported_models(ctx.obj["data_dir"])],
 		},
-		render=_render_local_status,
-		hints={"next_actions": ["boss ai local configure --runtime ollama --model qwen3:14b"]},
+		render=lambda d: _render_local_status(ctx, d),
+		hints={"next_actions": [_hint_command(ctx, "ai local configure --runtime ollama --model qwen3:14b")]},
 	)
 
 
@@ -109,9 +122,15 @@ def local_configure_cmd(ctx: click.Context, runtime: str, model: str, base_url: 
 		"ai.local.configure",
 		{"runtime": runtime, "model": model, "base_url": store.get_base_url()},
 		render=lambda d: render_action_result(
-			d, title="ai local configure", next_steps=["boss ai local status", "boss ai local smoke"]
+			d, title="ai local configure", next_steps=[
+				_hint_command(ctx, "ai local status"),
+				_hint_command(ctx, "ai local smoke"),
+			]
 		),
-		hints={"next_actions": ["boss ai local smoke", "boss ai local status"]},
+		hints={"next_actions": [
+			_hint_command(ctx, "ai local smoke"),
+			_hint_command(ctx, "ai local status"),
+		]},
 	)
 
 
@@ -128,7 +147,7 @@ def local_pull_cmd(ctx: click.Context, model: str, confirm_download: bool) -> No
 			code="CONFIRM_DOWNLOAD_REQUIRED",
 			message="下载模型权重需要显式传 --confirm-download",
 			recoverable=True,
-			recovery_action=f"boss ai local pull --model {shell_argument(model)} --confirm-download",
+			recovery_action=_hint_command(ctx, f"ai local pull --model {shell_argument(model)} --confirm-download"),
 		)
 	try:
 		result = subprocess.run(
@@ -163,8 +182,10 @@ def local_pull_cmd(ctx: click.Context, model: str, confirm_download: bool) -> No
 		ctx,
 		"ai.local.pull",
 		{"status": "installed", "model": model},
-		render=lambda d: render_action_result(d, title="ai local pull", next_steps=["boss ai local smoke"]),
-		hints={"next_actions": ["boss ai local smoke"]},
+		render=lambda d: render_action_result(
+			d, title="ai local pull", next_steps=[_hint_command(ctx, "ai local smoke")]
+		),
+		hints={"next_actions": [_hint_command(ctx, "ai local smoke")]},
 	)
 
 
@@ -195,12 +216,13 @@ def local_import_cmd(ctx: click.Context, source_path: Path, model: str) -> None:
 		"ai.local.import",
 		asdict(imported),
 		render=lambda d: render_action_result(
-			d, title="ai local import", next_steps=[f"boss ai local configure --runtime vllm --model {shell_argument(model)}"]
+			d, title="ai local import",
+			next_steps=[_hint_command(ctx, f"ai local configure --runtime vllm --model {shell_argument(model)}")],
 		),
 		hints={
 			"next_actions": [
-				f"boss ai local configure --runtime vllm --model {shell_argument(model)}",
-				"boss ai local status",
+				_hint_command(ctx, f"ai local configure --runtime vllm --model {shell_argument(model)}"),
+				_hint_command(ctx, "ai local status"),
 			],
 			"operator_actions": [
 				"用 vLLM / llama.cpp 等 OpenAI 兼容服务加载该模型后，执行上面的 configure 命令把端点写入配置",
@@ -231,7 +253,11 @@ def local_smoke_cmd(ctx: click.Context) -> None:
 			code="AI_NOT_CONFIGURED",
 			message=message,
 			recoverable=True,
-			recovery_action="boss ai local configure --runtime ollama --model qwen3:14b，或 boss ai config --provider <provider> --base-url <url>",
+			recovery_action=(
+				_hint_command(ctx, "ai local configure --runtime ollama --model qwen3:14b")
+				+ "，或 "
+				+ _hint_command(ctx, "ai config --provider <provider> --base-url <url>")
+			),
 		)
 		return
 	# 输出上限用配置值而不是写死的小数：思考模型在几十个 token 内写不完思考，
@@ -255,13 +281,19 @@ def local_smoke_cmd(ctx: click.Context) -> None:
 			code="AI_API_ERROR",
 			message=f"本地 AI 服务调用失败: {exc}",
 			recoverable=True,
-			recovery_action=recovery_action_for(exc, "确认本地模型服务已启动后重试"),
+			recovery_action=recovery_action_for(
+				exc,
+				"确认本地模型服务已启动后重试",
+				config_command=_hint_command(ctx, "ai config"),
+			),
 		)
 		return
 	handle_output(
 		ctx,
 		"ai.local.smoke",
 		{"status": "ok", "model": str(model), "reply": reply[:200]},
-		render=lambda d: render_action_result(d, title="ai local smoke", next_steps=["boss ai analyze-jd <security_id>"]),
-		hints={"next_actions": ["boss ai analyze-jd <security_id>"]},
+		render=lambda d: render_action_result(
+			d, title="ai local smoke", next_steps=[_hint_command(ctx, "ai analyze-jd <security_id>")]
+		),
+		hints={"next_actions": [_hint_command(ctx, "ai analyze-jd <security_id>")]},
 	)

@@ -202,8 +202,9 @@ def test_ai_resume_optimize_requires_jd_or_job_id(tmp_path):
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert "需要指定 --jd 或 --job-id" in parsed["error"]["message"]
-	assert parsed["hints"]["next_actions"] == ["boss search <关键词>"]
-	assert "boss search <关键词>" in parsed["error"]["recovery_action"]
+	search_hint = f"boss --data-dir {tmp_path.resolve()} search <关键词>"
+	assert parsed["hints"]["next_actions"] == [search_hint]
+	assert search_hint in parsed["error"]["recovery_action"]
 
 
 def test_ai_resume_optimize_reports_cache_miss_for_job_id(tmp_path):
@@ -218,7 +219,7 @@ def test_ai_resume_optimize_reports_cache_miss_for_job_id(tmp_path):
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "CACHE_MISS"
 	assert "job-999" in parsed["error"]["message"]
-	assert "boss detail" in parsed["error"]["recovery_action"]
+	assert f"boss --data-dir {tmp_path.resolve()} detail" in parsed["error"]["recovery_action"]
 
 
 def test_ai_resume_optimize_quotes_job_id_in_recovery_action(tmp_path):
@@ -232,7 +233,9 @@ def test_ai_resume_optimize_quotes_job_id_in_recovery_action(tmp_path):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "CACHE_MISS"
-	assert parsed["error"]["recovery_action"] == "boss detail <security_id> --job-id 'job; echo pwn'"
+	assert parsed["error"]["recovery_action"] == (
+		f"boss --data-dir {tmp_path.resolve()} detail <security_id> --job-id 'job; echo pwn'"
+	)
 
 
 def test_ai_resume_optimize_reports_nonexistent_file(tmp_path):
