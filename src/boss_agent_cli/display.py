@@ -224,9 +224,11 @@ def handle_error_output(
 		# 明文打到终端（Issue #880）。
 		safe_message = redact_sensitive_text(message)
 		safe_recovery = redact_sensitive_text(recovery_action) if recovery_action else recovery_action
-		console.print(f"[red]error[/red] [{code}] {safe_message}")
+		# 命令文本里可能带数据目录：方括号内容会被 Rich 当作样式标签吞掉，
+		# 未配对的闭合标签还会直接抛 MarkupError，恢复指引必须按字面显示。
+		console.print(f"[red]error[/red] [{code}] {escape(safe_message)}")
 		if safe_recovery:
-			console.print(f"  [dim]recovery: {safe_recovery}[/dim]")
+			console.print(f"  [dim]recovery: {escape(safe_recovery)}[/dim]")
 		render_operator_actions(hints)
 		raise SystemExit(1)
 
@@ -297,8 +299,9 @@ def render_job_table(
 	*,
 	page: int = 1,
 	hint_next: str = "",
+	show_command: str = "boss show <#>",
 ) -> None:
-	"""Render a list of jobs as a rich table."""
+	"""渲染职位表，编号查看命令由调用方提供。"""
 	if not items:
 		console.print("[yellow]no results[/yellow]")
 		return
@@ -326,9 +329,9 @@ def render_job_table(
 		)
 
 	console.print(table)
-	console.print("  [dim]use: boss show <#> to view details[/dim]")
+	console.print(f"  [dim]use: {escape(show_command)} to view details[/dim]")
 	if hint_next:
-		console.print(f"  [dim]{hint_next}[/dim]")
+		console.print(f"  [dim]{escape(hint_next)}[/dim]")
 
 
 def _snapshot_time_label(value: Any) -> str:
@@ -392,7 +395,7 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 	jid = data.get("job_id", "")
 	if sid and jid:
 		greet_command = greet_command or "boss greet <security_id> <job_id>"
-		console.print(f"  [dim]next: {greet_command}[/dim]")
+		console.print(f"  [dim]next: {escape(greet_command)}[/dim]")
 
 
 def render_status(data: dict[str, Any], *, login_action: str = "boss login") -> None:

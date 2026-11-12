@@ -13,6 +13,11 @@ from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.services.job_identity import deduplicate_job_result
 
 
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""推荐翻页与后继操作沿用当前登录态和索引目录。"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
 @click.command("recommend")
 @click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
 @click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
@@ -76,9 +81,9 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 				pagination["index_snapshot"] = snapshot
 		hints = {
 			"next_actions": [
-				boss_command_for_ctx(ctx, "detail <security_id>"),
-				boss_command_for_ctx(ctx, "apply <security_id> <job_id>"),
-				boss_command_for_ctx(ctx, "greet <security_id> <job_id>"),
+				_hint_command(ctx, "detail <security_id>"),
+				_hint_command(ctx, "apply <security_id> <job_id>"),
+				_hint_command(ctx, "greet <security_id> <job_id>"),
 			],
 		}
 		if has_more is True:
@@ -87,11 +92,13 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 			next_page = f"recommend --page {page + 1}"
 			if with_score:
 				next_page += " --with-score"
-			hints["next_actions"].append(boss_command_for_ctx(ctx, next_page))
+			hints["next_actions"].append(_hint_command(ctx, next_page))
 		elif has_more is None:
 			hints["operator_actions"] = ["平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有结果"]
 		handle_output(
 			ctx, "recommend", items,
-			render=lambda data: render_job_table(data, "recommend", page=page),
+			render=lambda data: render_job_table(
+				data, "recommend", page=page, show_command=_hint_command(ctx, "show <#>"),
+			),
 			pagination=pagination, hints=hints,
 		)

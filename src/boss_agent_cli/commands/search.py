@@ -487,7 +487,9 @@ def search_cmd(
 					)
 					handle_output(
 						ctx, "search", items,
-						render=lambda data: render_job_table(data, f"search: {query}"),
+						render=lambda data: render_job_table(
+							data, f"search: {query}", show_command=_hint_command(ctx, "show <#>"),
+						),
 						pagination=cached_pagination, hints=cached_hints,
 					)
 					return
@@ -634,6 +636,7 @@ def search_cmd(
 					data, f"search: {query}{title_suffix}",
 					page=page,
 					hint_next=_more_hint(next_page_command) if next_page_command else "",
+					show_command=_hint_command(ctx, "show <#>"),
 				),
 				pagination=pagination, hints=hints,
 			)

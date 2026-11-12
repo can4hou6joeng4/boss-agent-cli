@@ -24,6 +24,11 @@ from boss_agent_cli.services.job_card import build_job_from_card
 DetailError = tuple[str, str, dict[str, Any] | None]
 
 
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""详情的后继操作沿用当前登录态与缓存目录。"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
 def _platform_error_details(response: Any) -> dict[str, Any] | None:
 	if isinstance(response, dict):
 		error = response.get("error")
@@ -49,9 +54,9 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 			ctx,
 			"detail",
 			code="INVALID_PARAM",
-			message="security_id 不能为空；先用 boss search 或 boss show 取到编号再查询",
-			recovery_action=f"先执行 {boss_command_for_ctx(ctx, 'search <关键词>')} 或 {boss_command_for_ctx(ctx, 'show <编号>')} 取到编号后重试",
-			hints={"next_actions": [boss_command_for_ctx(ctx, "search <关键词>"), boss_command_for_ctx(ctx, "show <编号>")]},
+			message="security_id 不能为空；请先搜索职位或查看已有编号",
+			recovery_action=f"先执行 {_hint_command(ctx, 'search <关键词>')} 或 {_hint_command(ctx, 'show <编号>')} 取到编号后重试",
+			hints={"next_actions": [_hint_command(ctx, "search <关键词>"), _hint_command(ctx, "show <编号>")]},
 		)
 		return
 	data_dir = ctx.obj["data_dir"]
@@ -103,20 +108,20 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 			message="职位不存在或已下架",
 			# 职位没了不等于线索断了：Agent 要能直接换关键词重搜，而不是停在
 			# 「下架」上（与 show 的同类提示保持一致）。
-			hints={"next_actions": [boss_command_for_ctx(ctx, "search <关键词>"), boss_command_for_ctx(ctx, "recommend")]},
+			hints={"next_actions": [_hint_command(ctx, "search <关键词>"), _hint_command(ctx, "recommend")]},
 		)
 		return
 
 	# TTY 的 next 行可以写「A 或 B」，但 hints.next_actions 的每条都必须能直接执行。
 	next_action = (
-		f"{boss_command_for_ctx(ctx, 'apply <security_id> <job_id>')} 或 "
-		f"{boss_command_for_ctx(ctx, 'greet <security_id> <job_id>')}"
+		f"{_hint_command(ctx, 'apply <security_id> <job_id>')} 或 "
+		f"{_hint_command(ctx, 'greet <security_id> <job_id>')}"
 	)
 	hints = {
 		"next_actions": [
-			boss_command_for_ctx(ctx, "apply <security_id> <job_id>"),
-			boss_command_for_ctx(ctx, "greet <security_id> <job_id>"),
-			boss_command_for_ctx(ctx, "search <query>"),
+			_hint_command(ctx, "apply <security_id> <job_id>"),
+			_hint_command(ctx, "greet <security_id> <job_id>"),
+			_hint_command(ctx, "search <query>"),
 		],
 	}
 	handle_output(
