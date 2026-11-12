@@ -1390,19 +1390,39 @@ class CacheStore:
 		职位批量关联一遍再补标题）会把投递状态打回 `prepared`、清空备注，并把首次
 		关联时间改成当前时间；本次没传 `--title` / `--company` 时还会用空串覆盖原值。
 		冲突时按字段更新，`status` / `notes` / `linked_at` 始终保留。
+
+		`security_id` 每次搜索请求都会轮换，不能当作跨请求的职位身份：同一简历对同一
+		`job_id` 已有记录时，把该行迁到本次的新标识，而不是再插入一行 `prepared` 记录
+		（Issue #901）。
 		"""
 		now = time.time()
-		self._conn.execute(
-			"INSERT INTO resume_job_links "
-			"(resume_name, security_id, job_id, job_title, company, status, notes, linked_at, updated_at) "
-			"VALUES (?, ?, ?, ?, ?, 'prepared', '', ?, ?) "
-			"ON CONFLICT(resume_name, security_id, job_id) DO UPDATE SET "
-			"job_title = COALESCE(NULLIF(excluded.job_title, ''), resume_job_links.job_title), "
-			"company = COALESCE(NULLIF(excluded.company, ''), resume_job_links.company), "
-			"updated_at = excluded.updated_at",
-			(resume_name, security_id, job_id, job_title, company, now, now),
-		)
-		self._conn.commit()
+		with self._conn:
+			exact = self._conn.execute(
+				"SELECT 1 FROM resume_job_links WHERE resume_name = ? AND security_id = ? AND job_id = ?",
+				(resume_name, security_id, job_id),
+			).fetchone()
+			if exact is None:
+				existing = self._conn.execute(
+					"SELECT security_id FROM resume_job_links "
+					"WHERE resume_name = ? AND job_id = ? ORDER BY updated_at DESC LIMIT 1",
+					(resume_name, job_id),
+				).fetchone()
+				if existing is not None:
+					self._conn.execute(
+						"UPDATE resume_job_links SET security_id = ?, updated_at = ? "
+						"WHERE resume_name = ? AND security_id = ? AND job_id = ?",
+						(security_id, now, resume_name, str(existing[0]), job_id),
+					)
+			self._conn.execute(
+				"INSERT INTO resume_job_links "
+				"(resume_name, security_id, job_id, job_title, company, status, notes, linked_at, updated_at) "
+				"VALUES (?, ?, ?, ?, ?, 'prepared', '', ?, ?) "
+				"ON CONFLICT(resume_name, security_id, job_id) DO UPDATE SET "
+				"job_title = COALESCE(NULLIF(excluded.job_title, ''), resume_job_links.job_title), "
+				"company = COALESCE(NULLIF(excluded.company, ''), resume_job_links.company), "
+				"updated_at = excluded.updated_at",
+				(resume_name, security_id, job_id, job_title, company, now, now),
+			)
 
 	def update_job_link_status(
 		self,
