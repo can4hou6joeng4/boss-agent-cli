@@ -292,6 +292,38 @@ def test_wizard_unknown_goal_envelope_lists_goals_and_schema_hint(tmp_path):
 	assert payload["hints"]["next_actions"] == ["boss schema"]
 
 
+def test_wizard_duplicate_requested_steps_returns_invalid_param_envelope(tmp_path):
+	"""重复步骤会撞 workflow_steps 主键；必须在建 plan 时拒绝并给出信封（Issue #879）。"""
+	result = CliRunner().invoke(
+		cli,
+		[
+			"--json",
+			"--data-dir",
+			str(tmp_path),
+			"wizard",
+			"--input-json",
+			json.dumps(
+				{
+					"role": "candidate",
+					"platform": "zhipin",
+					"goal": "shortlist",
+					"inputs": {},
+					"requested_steps": ["local_shortlist", "local_shortlist"],
+					"mode": "headless",
+				}
+			),
+		],
+	)
+	assert result.exit_code == 1
+	payload = json.loads(result.stdout)
+	assert set(payload) == {"ok", "schema_version", "command", "data", "pagination", "error", "hints"}
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "不能重复" in payload["error"]["message"]
+	# 与「未知 goal」同一路径：输入本身不成立，需要改成新输入而不是原样重试。
+	assert payload["error"]["recoverable"] is False
+	assert payload["hints"]["next_actions"] == ["boss schema"]
+
+
 class _FakeCandidatePlatform:
 	def __init__(self):
 		self.calls = []
@@ -356,6 +388,31 @@ def _action_context(tmp_path, *, role="candidate", candidate=None, recruiter=Non
 		candidate_factory=(lambda name, auth, delay, cdp_url, browser_source=None: candidate if candidate is not None else None),
 		recruiter_factory=(lambda name, auth, delay, cdp_url, browser_source=None: recruiter if recruiter is not None else None),
 	)
+
+
+def test_candidate_pipeline_action_aggregates_every_friend_list_page(tmp_path):
+	"""向导 pipeline 只看第 1 页会静默漏掉后续页的沟通（Issue #881）。"""
+	from boss_agent_cli.wizard.actions import _candidate_pipeline_data
+
+	class PagedPlatform(_FakeCandidatePlatform):
+		def friend_list(self, *, page=1):
+			self.calls.append(("friend_list", page))
+			page_one = [{"uid": 10001, "securityId": "sid_1", "name": "联系人甲", "friendSource": 0}]
+			page_two = [{"uid": 10002, "securityId": "sid_2", "name": "联系人乙", "friendSource": 0}]
+			return {
+				"code": 0,
+				"data": {"result": page_one if page == 1 else page_two, "hasMore": page == 1},
+			}
+
+		def interview_data(self):
+			return {"code": 0, "data": {"interviewList": []}}
+
+	platform = PagedPlatform()
+	context = _action_context(tmp_path, candidate=platform)
+	items = _candidate_pipeline_data(context, {})
+
+	assert [page for _, page in platform.calls if _ == "friend_list"] == [1, 2]
+	assert {item["security_id"] for item in items} == {"sid_1", "sid_2"}
 
 
 def test_candidate_write_actions_persist_idempotence_records(tmp_path):

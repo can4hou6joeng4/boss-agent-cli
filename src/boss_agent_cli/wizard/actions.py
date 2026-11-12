@@ -16,6 +16,7 @@ from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action
 from boss_agent_cli.cache.store import CacheStore, SavedSearchParamsError
 from boss_agent_cli.platforms.factory import build_platform_instance, build_recruiter_platform_instance
 from boss_agent_cli.services.contact_lookup import FriendLookupLimitExceeded, find_friend
+from boss_agent_cli.services.friend_list_pages import collect_friend_list_items
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.crawler.operations import crawl_status
 from boss_agent_cli.crawler.service import (
@@ -665,9 +666,12 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 
 def _candidate_pipeline_data(context: ActionContext, inputs: Mapping[str, Any]) -> list[dict[str, Any]]:
 	with context.candidate_platform() as platform:
-		chat_data = _unwrap(platform, platform.friend_list(page=1), "沟通列表获取失败")
+		# 沟通列表是分页的：只看第 1 页会静默漏掉后续页里待跟进的沟通，
+		# 与顶层 `boss pipeline` / `boss digest` 的聚合结果不一致（Issue #881）。
+		chat_items, friend_error = collect_friend_list_items(platform)
+		if friend_error is not None:
+			_unwrap(platform, friend_error, "沟通列表获取失败")
 		interview_data = _unwrap(platform, platform.interview_data(), "面试列表获取失败")
-	chat_items = chat_data.get("result") or chat_data.get("friendList") or []
 	interview_items = interview_data.get("interviewList") or []
 	return build_pipeline_items(
 		chat_items=chat_items,

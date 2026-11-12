@@ -7,6 +7,7 @@ import sys
 from unittest.mock import patch, MagicMock
 from urllib.parse import urlparse
 
+import pytest
 from rich.console import Console
 
 from boss_agent_cli.api.browser_urls import is_zhipin_url
@@ -119,6 +120,29 @@ class TestHandleErrorOutput:
 		with patch("boss_agent_cli.output.emit_error") as mock_emit:
 			handle_error_output(ctx, "test", code="ERR", message="bad")
 			mock_emit.assert_called_once()
+
+	def test_tty_mode_redacts_credentials_like_json_mode(self):
+		"""TTY 分支原先直接打印 message，异常文本里的凭据会明文出现在终端（Issue #880）。"""
+		import boss_agent_cli.display as display_module
+
+		ctx = MagicMock()
+		ctx.obj = {"json_output": False}
+		buffer = io.StringIO()
+		safe_console = Console(file=buffer, width=200, color_system=None)
+		with patch.object(sys.stdout, "isatty", return_value=True), patch.object(
+			display_module, "console", safe_console
+		):
+			with pytest.raises(SystemExit):
+				handle_error_output(
+					ctx,
+					"test",
+					code="NETWORK_ERROR",
+					message="token=DEMO leaked",
+					recovery_action="检查 cookie=DEMO 后重试",
+				)
+		output = buffer.getvalue()
+		assert "DEMO" not in output
+		assert "[REDACTED]" in output
 
 
 class TestHandleAuthErrors:
