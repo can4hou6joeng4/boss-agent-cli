@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import click
 
-from boss_agent_cli.display import boss_command_for_ctx, handle_output
+from boss_agent_cli.display import boss_command_for_ctx, handle_output, shell_argument
 from boss_agent_cli.platforms import get_platform, list_platforms, list_recruiter_platforms
 
 _READONLY_CAPABILITIES = ["search", "detail", "show", "history", "interviews", "recommend", "me", "status"]
@@ -166,11 +166,14 @@ def platforms_cmd(ctx: click.Context, platform_name: str | None, capability: str
 	# next_actions 会被 Agent 原样执行，而 --platform 是受约束的取值：
 	# 原来那条 `boss --platform <name> status` 照抄只会换回 INVALID_PARAM，
 	# 等于没有下一步。按本次列出的平台逐个生成可直接运行的命令。
-	next_actions = [f"boss --platform {item['name']} status" for item in data["platforms"]]
+	# status 读的是该数据目录下的登录态，提示必须保留 --data-dir。
+	data_dir = ctx.obj.get("data_dir")
+	data_dir_option = "" if data_dir is None else f" --data-dir {shell_argument(str(data_dir.resolve()))}"
+	next_actions = [f"boss --platform {item['name']}{data_dir_option} status" for item in data["platforms"]]
 	if not next_actions:
 		# 能力筛选可能把所有平台都过滤掉，此时退回当前平台的状态查询。
-		next_actions.append(boss_command_for_ctx(ctx, "status"))
-	next_actions.append(boss_command_for_ctx(ctx, "schema"))
+		next_actions.append(boss_command_for_ctx(ctx, "status", include_data_dir=True))
+	next_actions.append(boss_command_for_ctx(ctx, "schema", include_data_dir=True))
 	handle_output(
 		ctx,
 		"platforms",
