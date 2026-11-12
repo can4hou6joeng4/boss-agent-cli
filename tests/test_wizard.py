@@ -218,7 +218,7 @@ def test_candidate_search_helper_preserves_filters_welfare_and_pagination():
 
 	def pipeline(platform, cache, logger, **kwargs):
 		captured.update(kwargs)
-		return SimpleNamespace(items=[{"job_id": "job-1"}], has_more=True, total=27)
+		return SimpleNamespace(items=[{"job_id": "job-1"}], has_more=True, has_more_reported=True, total=27)
 
 	result = execute_candidate_search(
 		object(),
@@ -248,7 +248,7 @@ def test_candidate_search_normalizes_welfare_input_and_uses_detail_page_budget()
 
 	def pipeline(platform, cache, logger, **kwargs):
 		captured.update(kwargs)
-		return SimpleNamespace(items=[], has_more=False, total=0)
+		return SimpleNamespace(items=[], has_more=False, has_more_reported=False, total=0)
 
 	execute_candidate_search(
 		object(),
@@ -478,6 +478,26 @@ def test_candidate_write_actions_mark_local_state_failure_as_not_retryable(tmp_p
 		("apply", "sec-1", "job-1", ""),
 		("greet", "sec-2", "job-2", "你好"),
 	]
+
+
+def test_candidate_search_action_reports_unknown_has_more_as_null(tmp_path):
+	"""向导 search 与顶层 `boss search` 同口径：平台没说下一页时 has_more 为 null（Issue #887）。"""
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	class _Result:
+		items = [{"job_id": "job-1"}]
+		has_more = False
+		has_more_reported = None
+		total = 1
+
+	with patch("boss_agent_cli.wizard.actions.execute_candidate_search", return_value=_Result()):
+		result = DEFAULT_ACTIONS["candidate_search"](context, {"query": "golang"}, {})
+
+	pagination = result.data["pagination"]
+	assert pagination["has_more"] is None
+	assert pagination["has_more_source"] == "unknown"
+	assert pagination["total_kind"] == "returned_page_count"
 
 
 def test_candidate_export_scopes_search_to_current_account(tmp_path):

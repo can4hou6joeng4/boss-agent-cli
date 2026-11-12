@@ -501,10 +501,14 @@ def search_cmd(
 					"source": "search",
 				})
 
+			# 与 recommend / chat / history / favorites / hr jobs 同一口径：平台
+			# 未返回布尔 hasMore 时为 null，不伪造成 false（Issue #887）。
 			pagination: dict[str, Any] = {
 				"page": page,
-				"has_more": pipeline_result.has_more,
+				"has_more": pipeline_result.has_more_reported,
+				"has_more_source": "platform_hasMore" if pipeline_result.has_more_reported is not None else "unknown",
 				"total": pipeline_result.total or len(items),
+				"total_kind": "returned_page_count",
 			}
 			hints: dict[str, Any] = {
 				"next_actions": [
@@ -537,6 +541,9 @@ def search_cmd(
 					),
 				)
 				hints["next_actions"].append(next_page_command)
+			elif pipeline_result.has_more_reported is None and not detail_filter:
+				# 与 recommend 同口径：平台没说下一页，不能凭本页数量判断。
+				hints["operator_actions"] = ["平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有结果"]
 
 			# 缓存普通搜索结果
 			if not detail_filter and not with_score:

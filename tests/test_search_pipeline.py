@@ -98,6 +98,64 @@ def _make_job_raw(
 	return raw
 
 
+def test_pipeline_reports_platform_has_more_verbatim():
+	"""has_more_reported 如实反映平台原值：缺失/非布尔为 None，不被聚合成 False（Issue #887）。"""
+	pages = [
+		{"zpData": {"jobList": [_make_job_raw(security_id="sec-a", job_id="job-a")]}},
+		{"zpData": {"hasMore": "yes", "jobList": [_make_job_raw(security_id="sec-b", job_id="job-b")]}},
+		{"zpData": {"hasMore": False, "jobList": [_make_job_raw(security_id="sec-c", job_id="job-c")]}},
+		{"zpData": {"hasMore": True, "jobList": [_make_job_raw(security_id="sec-d", job_id="job-d")]}},
+	]
+	client = FakeClient(pages=pages, descriptions={})
+
+	result = run_search_pipeline(
+		client, FakeCache(), FakeLogger(), criteria=SearchFilterCriteria(query="Go"),
+	)
+
+	# 第 1 页缺失、第 2 页非布尔：控制流停止翻页，但对外标记必须是 None。
+	assert result.has_more is False
+	assert result.has_more_reported is None
+	assert [item["job_id"] for item in result.items] == ["job-a"]
+
+	false_result = run_search_pipeline(
+		FakeClient(
+			pages=[{"zpData": {"hasMore": False, "jobList": [_make_job_raw(security_id="sec-x", job_id="job-x")]}}],
+			descriptions={},
+		),
+		FakeCache(),
+		FakeLogger(),
+		criteria=SearchFilterCriteria(query="Go"),
+	)
+	assert false_result.has_more_reported is False
+
+	true_result = run_search_pipeline(
+		FakeClient(
+			pages=[
+				{"zpData": {"hasMore": True, "jobList": [_make_job_raw(security_id="sec-y", job_id="job-y")]}},
+				{"zpData": {"hasMore": False, "jobList": [_make_job_raw(security_id="sec-z", job_id="job-z")]}},
+			],
+			descriptions={},
+		),
+		FakeCache(),
+		FakeLogger(),
+		criteria=SearchFilterCriteria(query="Go"),
+	)
+	assert true_result.has_more_reported is True
+
+
+def test_pipeline_reports_complete_when_empty_page_ends_scan():
+	"""空页在读取 hasMore 之前就结束扫描：没有下一页可标记，has_more_reported 保持 None。"""
+	result = run_search_pipeline(
+		FakeClient(pages=[{"zpData": {"hasMore": True, "jobList": []}}], descriptions={}),
+		FakeCache(),
+		FakeLogger(),
+		criteria=SearchFilterCriteria(query="Go"),
+	)
+	assert result.items == []
+	assert result.has_more is False
+	assert result.has_more_reported is None
+
+
 def test_pipeline_strict_internship_keeps_only_verified_response_type():
 	client = FakeClient(
 		pages=[{

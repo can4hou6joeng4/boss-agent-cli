@@ -652,6 +652,7 @@ def test_search_with_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_
 			"greeted": False,
 		}],
 		has_more=False,
+		has_more_reported=False,
 		total=1,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -686,6 +687,7 @@ def test_search_sort_score_orders_by_local_match_score(mock_client_cls, mock_aut
 			{"job_id": "high", "title": "高分", "security_id": "s2", "match_score": 90},
 		],
 		has_more=False,
+		has_more_reported=False,
 		total=2,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -716,6 +718,7 @@ def test_search_supports_url_and_multiselect_filters(mock_client_cls, mock_auth_
 	mock_pipeline.return_value = SimpleNamespace(
 		items=[],
 		has_more=False,
+		has_more_reported=False,
 		total=0,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -775,6 +778,7 @@ def test_search_corrupt_cache_entry_falls_back_to_live_search(
 	mock_pipeline.return_value = SimpleNamespace(
 		items=[],
 		has_more=False,
+		has_more_reported=False,
 		total=0,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -808,6 +812,7 @@ def test_search_cache_scope_uses_current_account(mock_client_cls, mock_auth_cls,
 	mock_pipeline.return_value = SimpleNamespace(
 		items=[],
 		has_more=False,
+		has_more_reported=False,
 		total=0,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -959,6 +964,7 @@ def test_search_ignores_index_cache_write_failure(mock_client_cls, mock_auth_cls
 			"greeted": False,
 		}],
 		has_more=False,
+		has_more_reported=False,
 		total=1,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -997,6 +1003,7 @@ def test_search_json_hints_expose_available_candidate_actions(mock_client_cls, m
 			"greeted": False,
 		}],
 		has_more=False,
+		has_more_reported=False,
 		total=1,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -1044,6 +1051,7 @@ def test_search_pagination_reports_index_snapshot_for_show(mock_client_cls, mock
 			"greeted": False,
 		}],
 		has_more=False,
+		has_more_reported=False,
 		total=1,
 		stats=SimpleNamespace(
 			pages_scanned=1,

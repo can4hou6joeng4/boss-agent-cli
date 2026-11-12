@@ -495,6 +495,10 @@ class SearchPipelineStats:
 class SearchPipelineResult:
 	items: list[dict[str, Any]] = field(default_factory=list)
 	has_more: bool = False
+	# 平台原样报告的 hasMore：True/False 是平台明确给出的，None 表示缺失或非布尔值。
+	# 控制流用 has_more（缺失按停止处理），信封必须用 has_more_reported，
+	# 否则「平台没说」会被读成「确实没有下一页」（Issue #887）。
+	has_more_reported: bool | None = None
 	total: int | None = None
 	last_page: int = 0
 	stats: SearchPipelineStats = field(default_factory=SearchPipelineStats)
@@ -1027,6 +1031,7 @@ def run_search_pipeline(
 	current_page = start_page
 	last_page_scanned = 0
 	has_more = False
+	has_more_reported: bool | None = None
 	active_only = bool(active_level) and not welfare_conditions
 	if active_only:
 		max_pages = min(max_pages, detail_filter_max_pages(None, active_level))
@@ -1188,7 +1193,10 @@ def run_search_pipeline(
 		))
 		matched.extend(page_matched)
 
-		has_more = platform_data.get("hasMore", False)
+		raw_has_more = platform_data.get("hasMore")
+		# 控制流：缺失/非布尔一律视为「本页之后不再翻」，避免无界请求。
+		has_more = raw_has_more is True
+		has_more_reported = raw_has_more if isinstance(raw_has_more, bool) else None
 		if not has_more:
 			break
 		if limit and len(matched) >= limit:
@@ -1204,6 +1212,7 @@ def run_search_pipeline(
 	return SearchPipelineResult(
 		items=matched,
 		has_more=has_more,
+		has_more_reported=has_more_reported,
 		total=len(matched),
 		last_page=last_page_scanned,
 		stats=stats,

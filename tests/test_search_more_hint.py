@@ -16,7 +16,7 @@ def test_more_hint_only_prefixes_the_given_command() -> None:
 	assert _more_hint("boss search golang --page 2") == "more: boss search golang --page 2"
 
 
-def _invoke_search(*args, tmp_path, has_more=True):
+def _invoke_search(*args, tmp_path, has_more=True, has_more_reported="same"):
 	with (
 		patch("boss_agent_cli.commands.search.AuthManager"),
 		patch("boss_agent_cli.commands.search.get_platform_instance"),
@@ -39,6 +39,7 @@ def _invoke_search(*args, tmp_path, has_more=True):
 				"greeted": False,
 			}],
 			has_more=has_more,
+			has_more_reported=has_more if has_more_reported == "same" else has_more_reported,
 			total=1,
 			stats=SimpleNamespace(
 				pages_scanned=1,
@@ -136,3 +137,18 @@ def test_next_page_hint_is_accepted_by_the_cli(tmp_path) -> None:
 def test_no_next_page_hint_when_platform_has_no_more(tmp_path) -> None:
 	payload = _invoke_search("golang", has_more=False, tmp_path=tmp_path)
 	assert not any("--page" in action for action in payload["hints"]["next_actions"])
+	assert payload["pagination"]["has_more"] is False
+	assert payload["pagination"]["has_more_source"] == "platform_hasMore"
+	assert payload["pagination"]["total_kind"] == "returned_page_count"
+
+
+def test_unknown_has_more_is_reported_as_null_not_false(tmp_path) -> None:
+	"""平台没给 hasMore 时信封必须是 null + unknown，不能谎报 false（Issue #887）。"""
+	payload = _invoke_search("golang", has_more=False, has_more_reported=None, tmp_path=tmp_path)
+
+	pagination = payload["pagination"]
+	assert pagination["has_more"] is None
+	assert pagination["has_more_source"] == "unknown"
+	assert pagination["total_kind"] == "returned_page_count"
+	assert not any("--page" in action for action in payload["hints"]["next_actions"])
+	assert any("下一页" in action for action in payload["hints"].get("operator_actions") or [])
