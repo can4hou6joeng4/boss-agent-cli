@@ -64,6 +64,17 @@ def boss_command_for_ctx(ctx: Any, command: str, *, include_data_dir: bool = Fal
 	return boss_command(command, platform_name=platform_name, data_dir=data_dir)
 
 
+def show_command_for_ctx(ctx: Any, *, index_saved: bool) -> str | None:
+	"""编号查看命令：只有本次列表写入了编号索引时才可用。
+
+	``boss show <#>`` 读的是索引里最近一次写入的列表，不是屏幕上这张表；
+	没写索引时给出编号会让用户打开另一条职位（Issue #925）。
+	"""
+	if not index_saved:
+		return None
+	return boss_command_for_ctx(ctx, "show <#>", include_data_dir=True)
+
+
 def login_action_for_ctx(ctx: Any) -> str:
 	"""登录恢复使用原平台与数据目录，避免登录后原命令仍无会话。"""
 	return boss_command_for_ctx(ctx, "login", include_data_dir=True)
@@ -299,9 +310,13 @@ def render_job_table(
 	*,
 	page: int = 1,
 	hint_next: str = "",
-	show_command: str = "boss show <#>",
+	show_command: str | None = None,
 ) -> None:
-	"""渲染职位表，编号查看命令由调用方提供。"""
+	"""渲染职位表。
+
+	``show_command`` 只在调用方已把这批职位写进编号索引时传入：`boss show <#>`
+	读的是索引而不是屏幕上的表格，没写索引的列表给出编号提示会打开另一条职位。
+	"""
 	if not items:
 		console.print("[yellow]no results[/yellow]")
 		return
@@ -329,7 +344,8 @@ def render_job_table(
 		)
 
 	console.print(table)
-	console.print(f"  [dim]use: {escape(show_command)} to view details[/dim]")
+	if show_command:
+		console.print(f"  [dim]use: {escape(show_command)} to view details[/dim]")
 	if hint_next:
 		console.print(f"  [dim]{escape(hint_next)}[/dim]")
 

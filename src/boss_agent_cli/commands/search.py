@@ -18,6 +18,7 @@ from boss_agent_cli.display import (
 	platform_error_message,
 	render_job_table,
 	shell_argument,
+	show_command_for_ctx,
 )
 from boss_agent_cli.index_cache import get_index_snapshot, try_save_index
 from boss_agent_cli.match_score import score_job_dict
@@ -488,7 +489,7 @@ def search_cmd(
 					handle_output(
 						ctx, "search", items,
 						render=lambda data: render_job_table(
-							data, f"search: {query}", show_command=_hint_command(ctx, "show <#>"),
+							data, f"search: {query}", show_command=show_command_for_ctx(ctx, index_saved=saved),
 						),
 						pagination=cached_pagination, hints=cached_hints,
 					)
@@ -636,7 +637,7 @@ def search_cmd(
 					data, f"search: {query}{title_suffix}",
 					page=page,
 					hint_next=_more_hint(next_page_command) if next_page_command else "",
-					show_command=_hint_command(ctx, "show <#>"),
+					show_command=show_command_for_ctx(ctx, index_saved=saved),
 				),
 				pagination=pagination, hints=hints,
 			)

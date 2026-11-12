@@ -545,6 +545,7 @@ class TestRenderers:
 			title="jobs",
 			page=1,
 			hint_next="next hint",
+			show_command="boss show <#>",
 		)
 
 		output = stream.getvalue()

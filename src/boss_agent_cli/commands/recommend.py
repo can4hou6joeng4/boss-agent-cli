@@ -7,7 +7,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_job_table
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_job_table, show_command_for_ctx
 from boss_agent_cli.index_cache import get_index_snapshot, try_save_index
 from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.services.job_identity import deduplicate_job_result
@@ -98,7 +98,7 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 		handle_output(
 			ctx, "recommend", items,
 			render=lambda data: render_job_table(
-				data, "recommend", page=page, show_command=_hint_command(ctx, "show <#>"),
+				data, "recommend", page=page, show_command=show_command_for_ctx(ctx, index_saved=saved),
 			),
 			pagination=pagination, hints=hints,
 		)
