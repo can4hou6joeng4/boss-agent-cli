@@ -4,6 +4,7 @@ import json
 from unittest.mock import patch, MagicMock
 
 from click.testing import CliRunner
+from boss_agent_cli.commands.chatmsg import _message_type_label
 from boss_agent_cli.main import cli
 
 
@@ -486,6 +487,13 @@ def test_chatmsg_uses_client_context_manager(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 0
 	instance.__enter__.assert_called_once()
 	instance.__exit__.assert_called_once()
+
+
+def test_message_type_boolean_is_not_a_text_code():
+	"""JSON 布尔不是消息类型编码：True 不能显示成「文本」（Issue #915）。"""
+	assert _message_type_label(True) == "其他(True)"
+	assert _message_type_label(1) == "文本"
+	assert _message_type_label(99) == "其他(99)"
 
 
 @patch("boss_agent_cli.commands.chatmsg.get_platform_instance")

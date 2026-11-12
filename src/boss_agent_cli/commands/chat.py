@@ -12,7 +12,7 @@ from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.chat_snapshot import save_snapshot_and_diff, load_snapshot
 from boss_agent_cli.services.chat_utils import (
 	RELATION_LABELS, FROM_FILTER, MSG_STATUS_LABELS,
-	contact_identity, sanitize_csv_cell, escape_md_cell,
+	contact_identity, int_code, sanitize_csv_cell, escape_md_cell,
 )
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_simple_list
 
@@ -69,23 +69,22 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 		relation_label = _RELATION_LABELS.get(relation_filter) if relation_filter is not None else None
 
 		def _friend_record(item: dict[str, Any]) -> dict[str, Any]:
-			last_ts = item.get("lastTS", 0)
+			# lastTS / relationType / status / unreadMsgCount 都是平台数值编码：
+			# JSON 布尔不能当整数用，否则 True 会被翻译成「未读」「对方主动」
+			# 或参与未读计数（Issue #915）。
+			last_ts = int_code(item.get("lastTS")) or 0
 			if last_ts:
 				last_time_str = _format_ts(last_ts)
 			else:
 				last_time_str = item.get("lastTime", "-")
 			last_message_info = item.get("lastMessageInfo") or {}
 			message_status = last_message_info.get("status")
-			msg_status_label = (
-				_MSG_STATUS_LABELS.get(message_status, "未知")
-				if isinstance(message_status, int)
-				else "未知"
-			)
+			msg_status_label = _MSG_STATUS_LABELS.get(int_code(message_status), "未知")
 			return {
 				"name": item.get("name") or "-",
 				"title": item.get("title") or "-",
 				"brand_name": item.get("brandName") or "-",
-				"initiated_by": _RELATION_LABELS.get(item.get("relationType"), "未知"),
+				"initiated_by": _RELATION_LABELS.get(int_code(item.get("relationType")), "未知"),
 				"last_msg": item.get("lastMsg") or "-",
 				"last_time": last_time_str,
 				"last_ts": last_ts,
@@ -95,7 +94,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				"uid": item.get("uid") or "",
 				"security_id": item.get("securityId") or "",
 				"encrypt_job_id": item.get("encryptJobId") or "",
-				"unread": item.get("unreadMsgCount") or 0,
+				"unread": int_code(item.get("unreadMsgCount")) or 0,
 			}
 
 		# 快照保存本次平台页面的完整观察结果；--from / --days 只影响导出内容。

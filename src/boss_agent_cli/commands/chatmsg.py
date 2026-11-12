@@ -9,7 +9,7 @@ from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._contact_lookup import current_friend_security_id_or_emit, resolve_friend_or_emit
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_simple_list
-from boss_agent_cli.services.chat_utils import message_list
+from boss_agent_cli.services.chat_utils import int_code, message_list
 from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION, list_pagination
 
 _MSG_TYPE_MAP = {
@@ -161,8 +161,10 @@ def _message_body(msg: dict[str, Any]) -> dict[str, Any]:
 
 
 def _message_type_label(msg_type: Any) -> str:
-	if isinstance(msg_type, int):
-		return _MSG_TYPE_MAP.get(msg_type, f"其他({msg_type})")
+	# JSON 布尔不是平台消息类型编码：True 不能显示成「文本」（Issue #915）。
+	code = int_code(msg_type)
+	if code is not None:
+		return _MSG_TYPE_MAP.get(code, f"其他({code})")
 	return f"其他({msg_type})"
 
 
