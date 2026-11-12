@@ -4,7 +4,6 @@ import os
 import platform
 import shutil
 import subprocess
-import tempfile
 import time
 from base64 import urlsafe_b64encode
 from contextlib import contextmanager
@@ -15,36 +14,9 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 
+from boss_agent_cli.services.private_files import chmod_best_effort, write_private_bytes
+
 _LOCK_TIMEOUT = 30
-
-
-def _chmod_best_effort(path: Path, mode: int) -> None:
-	"""尽力收紧权限；Windows 等平台语义有限，失败不影响读写。"""
-	try:
-		os.chmod(path, mode)
-	except OSError:
-		pass
-
-
-def _write_private_bytes(path: Path, data: bytes) -> None:
-	"""原子写入仅当前用户可读的字节文件。
-
-	登录态虽是 Fernet 密文，但密钥只由机器 ID 与同目录 salt 派生，不涉及用户
-	口令：同机其他用户只要能读这两个文件就能解密。``mkstemp`` 默认 0600 且
-	同目录 ``os.replace`` 原子替换，避免半截文件与默认 umask 的 0644 权限。
-	"""
-	path.parent.mkdir(parents=True, exist_ok=True)
-	fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-	temporary = Path(temporary_name)
-	try:
-		with os.fdopen(fd, "wb") as handle:
-			handle.write(data)
-			handle.flush()
-			os.fsync(handle.fileno())
-		os.replace(temporary, path)
-	finally:
-		temporary.unlink(missing_ok=True)
-	_chmod_best_effort(path, 0o600)
 
 
 class TokenStore:
@@ -52,13 +24,13 @@ class TokenStore:
 		self._auth_dir = auth_dir
 		self._auth_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 		# 历史安装的目录 / 文件可能是 0755 / 0644：打开时一并收紧。
-		_chmod_best_effort(self._auth_dir, 0o700)
+		chmod_best_effort(self._auth_dir, 0o700)
 		self._session_path = auth_dir / "session.enc"
 		self._salt_path = auth_dir / "salt"
 		self._lock_path = auth_dir / "refresh.lock"
 		for path in (self._salt_path, self._session_path):
 			if path.exists():
-				_chmod_best_effort(path, 0o600)
+				chmod_best_effort(path, 0o600)
 
 	def _get_machine_id(self) -> str:
 		# 允许显式覆盖，便于测试 / CI / 沙箱环境稳定运行
@@ -108,7 +80,7 @@ class TokenStore:
 		if self._salt_path.exists():
 			return self._salt_path.read_bytes()
 		salt = os.urandom(16)
-		_write_private_bytes(self._salt_path, salt)
+		write_private_bytes(self._salt_path, salt)
 		return salt
 
 	def _derive_key(self) -> bytes:
@@ -127,7 +99,7 @@ class TokenStore:
 		fernet = Fernet(self._derive_key())
 		plaintext = json.dumps(token_data, ensure_ascii=False).encode()
 		encrypted = fernet.encrypt(plaintext)
-		_write_private_bytes(self._session_path, encrypted)
+		write_private_bytes(self._session_path, encrypted)
 
 	def load(self) -> dict[str, Any] | None:
 		if not self._session_path.exists():

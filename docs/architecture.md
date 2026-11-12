@@ -79,7 +79,7 @@ main.py                 Click group、全局选项、用法错误的信封化翻
 
 ## 登录与认证
 
-`auth/AuthManager` 维护加密登录态（Fernet + 机器绑定密钥）。登录链路按平台声明依次尝试：浏览器 Cookie 提取 → CDP（复用已登录 context 前做一次只读探测，失效自动改走强制登录）→ patchright 扫码。登录态只保存在本地；CLI 不读取或上传任何与登录无关的浏览器数据。密钥由机器 ID 与随机 salt 派生，因此同机其他用户若能读到文件即可解密：`auth/` 目录按 0700 创建，`salt` 与 `session.enc` 以 0600 原子写入，历史安装的宽松权限在打开时也会被收紧。
+`auth/AuthManager` 维护加密登录态（Fernet + 机器绑定密钥）。登录链路按平台声明依次尝试：浏览器 Cookie 提取 → CDP（复用已登录 context 前做一次只读探测，失效自动改走强制登录）→ patchright 扫码。登录态只保存在本地；CLI 不读取或上传任何与登录无关的浏览器数据。密钥由机器 ID 与随机 salt 派生，因此同机其他用户若能读到文件即可解密：`auth/` 目录按 0700 创建，`salt` 与 `session.enc` 以 0600 原子写入，历史安装的宽松权限在打开时也会被收紧。同一考虑覆盖整个数据目录：`--data-dir`（默认 `~/.boss-agent`）按 0700 创建并在启动时尽力收紧已存在的目录，AI 服务商的 `ai/`、`auth/` 与 `api_key.enc` 同样按 0700 / 0600 落盘。
 
 ## 平台抽象
 
@@ -93,7 +93,7 @@ main.py                 Click group、全局选项、用法错误的信封化翻
 
 ## 本地数据目录
 
-默认 `~/.boss-agent/`（`--data-dir` 可改）：
+默认 `~/.boss-agent/`（`--data-dir` 可改；目录按 0700 创建，仅当前用户可访问）：
 
 ```text
 config.json          用户配置

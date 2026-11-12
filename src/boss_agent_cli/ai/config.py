@@ -17,6 +17,12 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from boss_agent_cli.services.json_files import write_json_atomic
+from boss_agent_cli.services.private_files import (
+	DIRECTORY_MODE,
+	FILE_MODE,
+	chmod_best_effort,
+	write_private_bytes,
+)
 
 PROVIDER_BASE_URLS: dict[str, str | None] = {
 	"openai": "https://api.openai.com/v1",
@@ -59,10 +65,19 @@ class AIConfigStore:
 	def __init__(self, data_dir: Path):
 		self._data_dir = data_dir
 		self._ai_dir = data_dir / "ai"
-		self._ai_dir.mkdir(parents=True, exist_ok=True)
+		# 密钥是 Fernet 密文，但加密密钥只由机器 ID 与 auth/salt 派生，不涉及用户
+		# 口令：同机其他用户能读密文与 salt 就能解密。ai/ 与 auth/ 按 0700 创建，
+		# 历史安装的宽松权限在打开时一并收紧（与 AuthManager 的 TokenStore 同口径）。
+		self._ai_dir.mkdir(parents=True, exist_ok=True, mode=DIRECTORY_MODE)
+		chmod_best_effort(self._ai_dir, DIRECTORY_MODE)
 		self._key_path = self._ai_dir / "api_key.enc"
 		self._config_path = self._ai_dir / "config.json"
 		self._auth_dir = data_dir / "auth"
+		if self._key_path.exists():
+			chmod_best_effort(self._key_path, FILE_MODE)
+		salt_path = self._auth_dir / "salt"
+		if salt_path.exists():
+			chmod_best_effort(salt_path, FILE_MODE)
 
 	def _get_machine_id(self) -> str:
 		"""Get a stable machine identifier for key derivation."""
@@ -77,12 +92,14 @@ class AIConfigStore:
 
 	def _get_salt(self) -> bytes:
 		"""Reuse auth salt file, or create one if it doesn't exist."""
-		self._auth_dir.mkdir(parents=True, exist_ok=True)
+		self._auth_dir.mkdir(parents=True, exist_ok=True, mode=DIRECTORY_MODE)
+		chmod_best_effort(self._auth_dir, DIRECTORY_MODE)
 		salt_path = self._auth_dir / "salt"
 		if salt_path.exists():
+			chmod_best_effort(salt_path, FILE_MODE)
 			return salt_path.read_bytes()
 		salt = os.urandom(16)
-		salt_path.write_bytes(salt)
+		write_private_bytes(salt_path, salt)
 		return salt
 
 	def _derive_key(self) -> bytes:
@@ -102,7 +119,7 @@ class AIConfigStore:
 		"""Encrypt and persist the API key."""
 		fernet = Fernet(self._derive_key())
 		encrypted = fernet.encrypt(key.encode("utf-8"))
-		self._key_path.write_bytes(encrypted)
+		write_private_bytes(self._key_path, encrypted)
 
 	def get_api_key(self) -> str | None:
 		"""Load and decrypt the API key. Returns None if not set or decryption fails."""

@@ -24,6 +24,7 @@ from boss_agent_cli.display import INTERNAL_ERROR_TYPES, error_contract_for_code
 from boss_agent_cli.hooks import create_hook_bus
 from boss_agent_cli.output import LOG_LEVELS, emit_error, is_local_io_error, Logger, set_exit_codes_mode
 from boss_agent_cli.platforms import list_platforms
+from boss_agent_cli.services.private_files import DIRECTORY_MODE, tighten_private_directory
 
 
 def _command_path(ctx: click.Context | None) -> str:
@@ -46,6 +47,10 @@ def _resolve_data_dir(data_dir: str) -> Path:
 	已存在的文件占住时，``mkdir`` 的 ``FileExistsError`` 原来会报成
 	``LOCAL_IO_ERROR``「status 本地文件读写失败: [Errno 17] File exists」——把
 	``--data-dir`` 的参数错误说成命令的本地 IO 失败，也没有可执行的下一步。
+
+	目录下是聊天记录、候选池、简历与登录态，因此新建目录按 0700 创建；已存在
+	的目录在启动时尽力收紧（共享目录与只读目录保持原样，见
+	``services.private_files.tighten_private_directory``）。
 	"""
 	raw = data_dir.strip()
 	if not raw:
@@ -66,7 +71,7 @@ def _resolve_data_dir(data_dir: str) -> Path:
 			param_hint="--data-dir",
 		) from exc
 	try:
-		resolved.mkdir(parents=True, exist_ok=True)
+		resolved.mkdir(parents=True, exist_ok=True, mode=DIRECTORY_MODE)
 	except FileExistsError as exc:
 		raise click.BadParameter(
 			f"必须是目录路径，{str(resolved)!r} 已存在且不是目录",
@@ -77,6 +82,9 @@ def _resolve_data_dir(data_dir: str) -> Path:
 			f"必须是目录路径，{str(resolved)!r} 的上级路径不是目录",
 			param_hint="--data-dir",
 		) from exc
+	# 目录下是聊天记录、候选池、简历与登录态：默认 umask 会建出 0755，同机其他
+	# 用户可读。历史安装的宽松权限在启动时尽力收紧；共享目录（如 /tmp）不动。
+	tighten_private_directory(resolved)
 	return resolved
 
 
