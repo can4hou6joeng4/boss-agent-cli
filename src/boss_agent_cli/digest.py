@@ -1,6 +1,8 @@
 import time
 from typing import Any
 
+from boss_agent_cli.services.chat_utils import escape_md_cell as _escape_md_cell
+
 
 def build_digest(*, new_matches: list[dict[str, Any]], follow_ups: list[dict[str, Any]], interviews: list[dict[str, Any]]) -> dict[str, Any]:
 	return {
@@ -12,12 +14,6 @@ def build_digest(*, new_matches: list[dict[str, Any]], follow_ups: list[dict[str
 		"interviews": interviews,
 		"summary": f"{len(new_matches)} new matches, {len(follow_ups)} follow-ups, {len(interviews)} interviews",
 	}
-
-
-def _escape_md_cell(text: object) -> str:
-	"""Markdown 表格单元格内的 | 和换行转义，防止破坏表格结构。"""
-	s = "" if text is None else str(text)
-	return s.replace("|", "\\|").replace("\n", " ").replace("\r", " ")
 
 
 def _fmt_follow_up(item: dict[str, Any]) -> str:
