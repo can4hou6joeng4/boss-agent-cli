@@ -1358,6 +1358,71 @@ def test_workflow_stop_forwards_to_bound_crawl_run(tmp_path):
 	assert inner["stop_requested"] is True
 
 
+def test_resume_after_timeout_forwards_bound_inner_checkpoint_to_action(tmp_path):
+	"""超时后恢复：failed 步骤的 inner_run_id 必须传给 action，且不能被重跑清空（Issue #882）。"""
+	priors = []
+	store_seen = []
+
+	with WorkflowStore(tmp_path) as store:
+
+		def flaky(context, inputs, prior):
+			store.update_step(
+				"run-resume-bound", "crawl_start", status="running", result={"inner_run_id": "crw_inner"}
+			)
+			raise WorkflowActionError(
+				"WORKFLOW_TIMEOUT",
+				"workflow 超过设定时限",
+				recoverable=True,
+				recovery_action="boss crawl resume crw_inner",
+			)
+
+		runner = WorkflowRunner(store, {"crawl_start": flaky})
+		plan = WorkflowPlan(
+			role="candidate",
+			platform="zhipin",
+			goal="crawl_start",
+			inputs={"query": "Python", "city": "北京"},
+			requested_steps=("crawl_start",),
+			mode="headless",
+		)
+		first = runner.run(plan, object(), run_id="run-resume-bound")
+		assert first["error"]["code"] == "WORKFLOW_TIMEOUT"
+		assert first["steps"][0]["result"] == {"inner_run_id": "crw_inner"}
+
+		def recovered(context, inputs, prior):
+			priors.append(prior)
+			step = next(s for s in store.get("run-resume-bound")["steps"] if s["step_name"] == "crawl_start")
+			store_seen.append(step["result"])
+			return StepResult({"ok": True})
+
+		runner._actions["crawl_start"] = recovered
+		second = runner.run(plan, object(), run_id="run-resume-bound")
+	assert second["status"] == "completed"
+	assert priors[0]["crawl_start"] == {"inner_run_id": "crw_inner"}
+	# 重跑开始时不得清空已写入的绑定，否则再次中断就永久丢失内部任务。
+	assert store_seen[0] == {"inner_run_id": "crw_inner"}
+
+
+def test_deadline_before_step_keeps_bound_inner_checkpoint(tmp_path):
+	"""恢复时 deadline 已过：_fail_controlled 也不能清掉上次绑定（Issue #882）。"""
+	plan = WorkflowPlan(
+		role="candidate",
+		platform="zhipin",
+		goal="crawl_start",
+		inputs={"query": "Python", "city": "北京"},
+		requested_steps=("crawl_start",),
+		mode="headless",
+	)
+	with WorkflowStore(tmp_path) as store:
+		store.create("run-deadline-bind", plan)
+		store.update_run("run-deadline-bind", status="running", current_step="crawl_start")
+		store.update_step("run-deadline-bind", "crawl_start", status="running", result={"inner_run_id": "crw_inner"})
+		runner = WorkflowRunner(store, {"crawl_start": lambda c, i, p: StepResult({"ok": True})})
+		run = runner.run(plan, object(), run_id="run-deadline-bind", timeout_seconds=0)
+	assert run["error"]["code"] == "WORKFLOW_TIMEOUT"
+	assert run["steps"][0]["result"] == {"inner_run_id": "crw_inner"}
+
+
 def test_runner_records_timeout_at_action_boundary(tmp_path):
 	def slow(context, inputs, prior):
 		time.sleep(0.01)
@@ -2242,6 +2307,58 @@ def test_crawl_start_resumes_existing_run_from_prior_waiting_result():
 	finally:
 		actions_mod._crawl_service = orig
 	assert resumed == ["crawl-inner"]
+	assert result.status.value == "completed"
+
+
+def test_crawl_start_resumes_bound_inner_run_from_interrupted_step():
+	"""中断步骤只留下 {inner_run_id}：恢复时续跑该 crawl，不新建第二份采集（Issue #882）。"""
+	from boss_agent_cli.wizard.actions import DEFAULT_ACTIONS
+
+	resumed = []
+	created = []
+
+	class _Svc:
+		def resume(self, run_id, **kwargs):
+			resumed.append(run_id)
+			return CrawlOutcome(
+				run_id=run_id,
+				status="completed",
+				jobs_seen=1,
+				pages_completed=1,
+				next_page=2,
+				requests_attempted=1,
+				detail_requests_attempted=0,
+				detail_checks=0,
+				elapsed_seconds=1,
+				output_paths={"json": f"/tmp/{run_id}.json"},
+				error="",
+				hooks=[],
+			)
+
+		def create_and_run(self, settings):
+			created.append(settings)
+			raise AssertionError("中断后恢复不应新建采集任务")
+
+	ctx = ActionContext(
+		data_dir=Path("/tmp"),
+		platform="zhipin",
+		role="candidate",
+		logger=Logger("error"),
+	)
+	import boss_agent_cli.wizard.actions as actions_mod
+
+	orig = actions_mod._crawl_service
+	actions_mod._crawl_service = lambda context, cache: _Svc()
+	try:
+		result = DEFAULT_ACTIONS["crawl_start"](
+			ctx,
+			{"query": "Golang", "city": "广州"},
+			{"crawl_start": {"inner_run_id": "crw_bound"}},
+		)
+	finally:
+		actions_mod._crawl_service = orig
+	assert resumed == ["crw_bound"]
+	assert created == []
 	assert result.status.value == "completed"
 
 
