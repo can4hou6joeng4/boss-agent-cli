@@ -8,6 +8,7 @@
 - 扫码登录风险错误补充本地脱敏诊断（Issue #863）：`error.details.login_diagnostic` 记录失败阶段、页面检查或响应监听来源、白名单顶层路径和可用的页签数量；响应事件另附状态码、资源类型、导航标识与主/子框架归属。仅读取已有事件属性，未知信息省略或标记未知，不输出完整网址、查询参数、凭据或页面正文；风险判定、锁存、停止与窗口清理行为保持不变。
 
 ### Fixed
+- crawl 导入候选池按稳定 `job_id` 去重（Issue #899）：`import_crawl_shortlist` 用 `(security_id, job_id)` 复合键判断职位是否已导入，而 `securityId` 每次搜索请求都会轮换——同一职位重新采集后再 `--all` 导入，永远对不上旧键，候选池里就多出一条重复记录，`shortlist list/compare`、`stats` 和 `ai fit` 都会把它算两次。导入现在只按稳定的 `job_id` 判重，命中计入 `existing_count`，已有标签 / 备注 / 首次加入时间保持不变。
 - crawl 断点恢复不再从页签第 1 页重抓列表（Issue #897）：`DrissionCrawlerSession` 只记录「是否导航过」，不记录页签当前显示第几页；恢复任务从 `next_page>1` 开始时，新页签仍停在第 1 页，第一页响应被当成断点页记入 SQLite 与 `jobs.json` / `jobs.csv` / `jobs.xlsx` 的 `page` 列，已见页被重复请求消耗预算，游标还会跳过从未采集的页。现在会话维护 `_page_no`，等待监听响应前先把可见列表导航并滚动到请求页；同一页重试重新导航，滚动中途中断则把位置标记为未知，下次重新对齐。
 - 沟通列表 Markdown 导出的联系人映射表转义外部名称（Issue #895）：正文主表格、已消失列表与 HTML 版本都用 `escape_md_cell` / `html.escape` 处理联系人、公司等平台外部输入，唯独「联系人标识映射表」直接拼接 `label` 与 uid——名称含 `|` 时 uid 落到错误列，含换行时可凭空插入一行伪造映射（`| S2 | 伪造公司 | 99999 |`），而这张表正是告诉 Agent 用哪个 uid 调用 `boss chatmsg` 的依据。现在映射表两列同样转义，一行只对应一个联系人。
 - 招聘自动化本地 AI 回复草稿不再把畸形字段当话术发给候选人（Issue #893）：`parse_reply_draft` 直接 `str()` / `float()` 模型 JSON，`reply: null` 变成 `"None"`、`reply: 123` 变成 `"123"`，且置信度沿用规则分数、动作判为 `AUTO_EXECUTED`，畸形文本被真实发出；`confidence: "high"` 的 `float()` 抛出的 `ValueError` 不在调用方捕获列表里，一个确定性的格式问题会终止整轮自动化并被 CLI 报成可重试的 `NETWORK_ERROR`；`2.0` / `NaN` 置信度也被静默接受。现在 `action` / `reply` 只接受字符串，`confidence` 必须是 `[0, 1]` 内的有限数值（兼容 `"0.9"` 这类可无损转换的字符串），结构错误统一走既有「local ai parse failed」降级：退回模板话术、要求人工复核、不发送任何消息，且不中断同轮其余候选人。

@@ -892,6 +892,28 @@ def test_crawl_selector_import_is_stable_private_and_validated(tmp_path):
 			raise AssertionError("expected selector validation error")
 
 
+def test_crawl_shortlist_import_dedupes_rotating_security_id(tmp_path):
+	"""同一职位重新采集后 security_id 已轮换，再次导入不能重复进候选池（Issue #899）。"""
+	cache = CacheStore(tmp_path / "cache.db")
+	for run_id, security_id in (("run-1", "sec-request-1"), ("run-2", "sec-request-2")):
+		cache.create_crawl_run(run_id, _settings(tmp_path).as_dict(), str(tmp_path / "crawl" / "runs" / run_id))
+		cache.put_crawl_job(run_id, "job-1", 1, {
+			"job_id": "job-1", "security_id": security_id, "title": "职位", "company": "公司",
+		}, detail_done=False)
+
+	first = import_crawl_shortlist(cache, "run-1", include_all=True)
+	assert first["imported_count"] == 1
+	assert cache.set_shortlist_tags("sec-request-1", "job-1", ["重点"]) is True
+
+	second = import_crawl_shortlist(cache, "run-2", include_all=True)
+	assert second["imported_count"] == 0
+	assert second["existing_count"] == 1
+	assert second["imported"] == []
+	items = cache.list_shortlist()
+	assert [item["job_id"] for item in items] == ["job-1"]
+	assert items[0]["tags"] == ["重点"]
+
+
 def test_crawl_selector_migration_backfills_legacy_rows(tmp_path):
 	db_path = tmp_path / "legacy.db"
 	with sqlite3.connect(db_path) as connection:
