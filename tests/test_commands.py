@@ -1291,6 +1291,30 @@ def test_chat_boolean_codes_are_not_labels_or_counts(mock_auth_cls, mock_client_
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_hints_preserve_data_dir(mock_auth_cls, mock_client_cls, tmp_path):
+	"""沟通列表的后继命令必须在同一数据目录执行（Issue #917）。"""
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
+	mock_client_cls.return_value.friend_list.return_value = {
+		"zpData": {
+			"result": [_make_friend_item("联系人甲", "示例公司甲", 1, 1700000000000)],
+			"hasMore": True,
+		},
+	}
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "chat"])
+
+	assert result.exit_code == 0, result.output
+	prefix = f"boss --data-dir {tmp_path.resolve()}"
+	assert json.loads(result.output)["hints"]["next_actions"] == [
+		f"{prefix} detail <security_id>",
+		f"{prefix} chatmsg <uid>",
+		f"{prefix} chat --page 2",
+	]
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_pagination_reports_platform_page_evidence(mock_auth_cls, mock_client_cls):
 	"""--page 必须有分页证据：只有平台 hasMore=true 才提示下一页。"""
 	import time
@@ -1317,7 +1341,7 @@ def test_chat_pagination_reports_platform_page_evidence(mock_auth_cls, mock_clie
 		next_pages = [action for action in payload["hints"]["next_actions"] if "chat --page" in action]
 		assert len(next_pages) == (1 if expected is True else 0)
 		if expected is True:
-			assert next_pages[0] == "boss chat --page 3 --from boss --days 7"
+			assert next_pages[0] == f"boss --data-dir {_DEFAULT_DATA_DIR} chat --page 3 --from boss --days 7"
 		if expected is None:
 			assert payload["hints"]["operator_actions"]
 		mock_client_cls.return_value.friend_list.assert_called_once_with(page=2)
@@ -2537,6 +2561,6 @@ def test_mark_rejects_blank_identifier(mock_auth_cls, mock_client_cls):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
-	assert parsed["hints"]["next_actions"] == ["boss chat"]
-	assert "boss chat" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [f"boss --data-dir {_DEFAULT_DATA_DIR} chat"]
+	assert f"boss --data-dir {_DEFAULT_DATA_DIR} chat" in parsed["error"]["recovery_action"]
 	mock_client.friend_list.assert_not_called()

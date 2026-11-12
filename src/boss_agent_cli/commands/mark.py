@@ -76,6 +76,6 @@ def mark_cmd(ctx: click.Context, security_id: str, label: str, remove: bool) -> 
 			ctx, "mark", data,
 			render=lambda d: render_message_panel(d, title="mark"),
 			hints={"next_actions": [
-				boss_command_for_ctx(ctx, "chat"),
+				boss_command_for_ctx(ctx, "chat", include_data_dir=True),
 			]},
 		)

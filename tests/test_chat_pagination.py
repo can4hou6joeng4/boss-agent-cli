@@ -62,6 +62,11 @@ def _message(uid=10001, text="您好"):
 	return {"from": {"uid": uid, "name": "联系人甲"}, "type": 1, "text": text, "time": 1700000000000}
 
 
+def _hinted_args(data_dir, *parts):
+	"""提示命令的期望 argv：保留当前数据目录后跟子命令。"""
+	return ["boss", "--data-dir", str(data_dir.resolve()), *parts]
+
+
 def _invoke(module, name, argv, payload=None, *, parse_error=None, tmp_path=None):
 	with patch(f"{module}.get_platform_instance") as platform_cls, patch(f"{module}.AuthManager") as auth_cls:
 		client = _ctx_mock(platform_cls)
@@ -122,7 +127,9 @@ def test_chat_pagination_evidence(module, name, payload, expected, next_page, tm
 	}
 	next_pages = [action for action in parsed["hints"]["next_actions"] if "--page" in action]
 	if has_more is True:
-		assert next_pages == [f"boss {name} 10001 --page {next_page} --count 20"]
+		assert shlex.split(next_pages[0]) == _hinted_args(
+			tmp_path, name, "10001", "--page", str(next_page), "--count", "20",
+		)
 	else:
 		assert next_pages == []
 	if has_more is None:
@@ -155,9 +162,12 @@ def test_chat_next_page_action_is_executable(module, name, tmp_path):
 		)
 		assert first.exit_code == 0, first.output
 		actions = [a for a in json.loads(first.output)["hints"]["next_actions"] if "--page" in a]
-		assert actions == [f"boss {name} 10001 --page 4 --count 7"]
+		assert shlex.split(actions[0]) == _hinted_args(
+			tmp_path, name, "10001", "--page", "4", "--count", "7",
+		)
 
-		second = runner.invoke(cli, ["--data-dir", str(tmp_path), *shlex.split(actions[0])[1:]])
+		# 提示自带数据目录，直接去掉开头的 boss 即可执行。
+		second = runner.invoke(cli, shlex.split(actions[0])[1:])
 		assert second.exit_code == 0, second.output
 		parsed = json.loads(second.output)
 		assert parsed["pagination"]["page"] == 4
@@ -190,10 +200,12 @@ def test_chatmsg_next_page_action_keeps_raw(tmp_path):
 		)
 	assert result.exit_code == 0, result.output
 	actions = [a for a in json.loads(result.output)["hints"]["next_actions"] if "--page" in a]
-	assert actions == ["boss chatmsg 10001 --page 3 --count 9 --raw"]
+	assert shlex.split(actions[0]) == _hinted_args(
+		tmp_path, "chatmsg", "10001", "--page", "3", "--count", "9", "--raw",
+	)
 
-	# 提示要真能被 CLI 解析，且 --raw 确实生效（下一页输出仍是保真字段）。
-	replay = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), *shlex.split(actions[0])[1:], "--help"])
+	# 提示自带数据目录与 --raw，直接去掉开头的 boss 即可执行并保留保真字段。
+	replay = CliRunner().invoke(cli, [*shlex.split(actions[0])[1:], "--help"])
 	assert replay.exit_code == 0, replay.output
 
 
@@ -208,7 +220,9 @@ def test_chatmsg_next_page_action_omits_raw_when_not_requested(tmp_path):
 		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "chatmsg", "10001"])
 	assert result.exit_code == 0, result.output
 	actions = [a for a in json.loads(result.output)["hints"]["next_actions"] if "--page" in a]
-	assert actions == ["boss chatmsg 10001 --page 2 --count 20"]
+	assert shlex.split(actions[0]) == _hinted_args(
+		tmp_path, "chatmsg", "10001", "--page", "2", "--count", "20",
+	)
 
 
 @pytest.mark.parametrize(("code", "recoverable"), [("RATE_LIMITED", True), ("ACCOUNT_RISK", False)])

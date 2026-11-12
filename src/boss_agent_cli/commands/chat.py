@@ -154,7 +154,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 						code="INVALID_PARAM",
 						message=f"export_dir 必须是目录路径字符串或 null，收到 {export_dir!r}",
 						recoverable=True,
-						recovery_action=boss_command_for_ctx(ctx, "config reset export_dir"),
+						recovery_action=boss_command_for_ctx(ctx, "config reset export_dir", include_data_dir=True),
 					)
 					ctx.exit(1)
 					return
@@ -184,8 +184,8 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 					f"已导出 {d['count']} 条到 {d['path']}", err=True
 				),
 					hints={"next_actions": [
-						boss_command_for_ctx(ctx, "detail <security_id>"),
-						boss_command_for_ctx(ctx, "chatmsg <uid>"),
+						boss_command_for_ctx(ctx, "detail <security_id>", include_data_dir=True),
+						boss_command_for_ctx(ctx, "chatmsg <uid>", include_data_dir=True),
 				]},
 			)
 			return
@@ -228,8 +228,8 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			"total_kind": "returned_page_count",
 		}
 		next_actions = [
-			boss_command_for_ctx(ctx, "detail <security_id>"),
-			boss_command_for_ctx(ctx, "chatmsg <uid>"),
+			boss_command_for_ctx(ctx, "detail <security_id>", include_data_dir=True),
+			boss_command_for_ctx(ctx, "chatmsg <uid>", include_data_dir=True),
 		]
 		if has_more is True:
 			next_cmd = f"chat --page {page + 1}"
@@ -237,7 +237,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				next_cmd += f" --from {from_who}"
 			if days is not None:
 				next_cmd += f" --days {days}"
-			next_actions.append(boss_command_for_ctx(ctx, next_cmd))
+			next_actions.append(boss_command_for_ctx(ctx, next_cmd, include_data_dir=True))
 		hints: dict[str, Any] = {"next_actions": next_actions}
 		if has_more is None:
 			hints["operator_actions"] = ["平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有记录"]

@@ -51,13 +51,14 @@ def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int
 
 		hints: dict[str, list[str]] = {
 			"next_actions": [
-				boss_command_for_ctx(ctx, "chat"),
-				boss_command_for_ctx(ctx, f"chatmsg {gid}"),
+				boss_command_for_ctx(ctx, "chat", include_data_dir=True),
+				boss_command_for_ctx(ctx, f"chatmsg {gid}", include_data_dir=True),
 			]
 		}
 		if pagination["has_more"] is True:
 			hints["next_actions"].append(boss_command_for_ctx(
 				ctx, f"chat-summary {gid} --page {pagination['page'] + 1} --count {count}",
+				include_data_dir=True,
 			))
 		elif pagination["has_more"] is None:
 			hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]

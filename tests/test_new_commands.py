@@ -1353,4 +1353,4 @@ def test_chatmsg_missing_contact_recovery_points_to_chat(mock_auth_cls, mock_cli
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "CONTACT_NOT_FOUND"
 	assert parsed["error"]["recovery_action"] == "boss chat"
-	assert parsed["hints"]["next_actions"] == ["boss chat"]
+	assert parsed["hints"]["next_actions"] == [f"boss --data-dir {_DEFAULT_DATA_DIR} chat"]

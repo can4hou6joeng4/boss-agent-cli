@@ -171,6 +171,8 @@ The execution hint returned by `batch-greet --dry-run` preserves the current dat
 
 `boss chatmsg <uid> --page N` and `boss chat-summary <uid> --page N` likewise return pagination evidence for the message page they read: `page` uses a valid platform-returned page number when available and otherwise echoes the requested page; `has_more` is `true` / `false` only for a boolean platform `hasMore`, otherwise `null` with `has_more_source=unknown`; `total` is the number of messages on this page (`total_kind=returned_page_count`), not the conversation's total message count. A next-page command is added only when `has_more=true`, preserving the current `--count`; for `chatmsg --raw` it also preserves `--raw`, so the following page keeps the verbatim fields. For `null`, `operator_actions` states that the page size alone cannot establish whether more messages exist. A missing or non-array `messages` field falls back to `historyMsgList`; when neither is usable the command treats the page as empty with `total=0`.
 
+Follow-up hints from chat commands keep the current `--data-dir`. The `hints.next_actions` of `chat` / `chatmsg` / `chat-summary` / `mark` / `exchange` (`detail`, `chatmsg`, next-page commands), the `boss chat` hint for `CONTACT_NOT_FOUND`, and the `config reset export_dir` recovery command from `chat --export` all carry the shell-quoted absolute directory and platform, so executing them from another working directory still uses the same login state, caches, and snapshots.
+
 ## Pipeline & organization
 
 | Command | Description |
