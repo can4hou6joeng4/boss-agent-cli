@@ -131,9 +131,10 @@ def test_configure_without_any_option_is_invalid_param(tmp_path):
 	assert result.exit_code == 1
 	parsed = _envelope(result)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
-	# 没给配置项时也要有可执行的下一步：列出可配置项。
-	assert parsed["hints"]["next_actions"] == ["boss crawl configure --help"]
-	assert "boss crawl configure --help" in parsed["error"]["recovery_action"]
+	# 没给配置项时也要有可执行的下一步：列出可配置项，并保留当前数据目录。
+	expected_help = f"boss --data-dir {tmp_path.resolve()} crawl configure --help"
+	assert parsed["hints"]["next_actions"] == [expected_help]
+	assert expected_help in parsed["error"]["recovery_action"]
 
 
 def test_configure_persists_budget_overrides(tmp_path):
@@ -153,6 +154,10 @@ def test_configure_persists_budget_overrides(tmp_path):
 	}
 	saved = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
 	assert saved["crawl"]["max_retries"] == 0
+	# 后继命令必须留在同一数据目录：配置只对当前目录生效。
+	assert payload["hints"]["next_actions"] == [
+		f"boss --data-dir {tmp_path.resolve()} crawl run <关键词> --city <城市>"
+	]
 
 
 # ── 运行与参数校验 ────────────────────────────────────────────────────
@@ -171,8 +176,9 @@ def test_run_rejects_unknown_city_before_touching_the_browser(tmp_path, monkeypa
 	error = _envelope(result)["error"]
 	assert error["code"] == "INVALID_PARAM"
 	assert "城市" in error["message"]
-	assert "boss crawl configure --help" in error["recovery_action"]
-	assert _envelope(result)["hints"]["next_actions"] == ["boss crawl configure --help"]
+	expected_help = f"boss --data-dir {tmp_path.resolve()} crawl configure --help"
+	assert expected_help in error["recovery_action"]
+	assert _envelope(result)["hints"]["next_actions"] == [expected_help]
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows 的 Path.expanduser 不解析 ~user")
@@ -269,7 +275,7 @@ def test_run_maps_service_runtime_error_to_crawl_unavailable(tmp_path, monkeypat
 	error = _envelope(result)["error"]
 	assert error["code"] == "CRAWL_UNAVAILABLE"
 	assert error["recoverable"] is True
-	assert "crawl configure" in error["recovery_action"]
+	assert f"boss --data-dir {tmp_path.resolve()} crawl configure" in error["recovery_action"]
 
 
 def test_run_emits_resume_hint_when_run_stops_early(tmp_path, monkeypatch):
@@ -371,7 +377,7 @@ def test_start_rejects_blank_query_without_creating_a_run(tmp_path, query):
 	error = _envelope(result)["error"]
 	assert error["code"] == "INVALID_PARAM"
 	assert "关键词" in error["message"]
-	assert "boss crawl configure --help" in error["recovery_action"]
+	assert f"boss --data-dir {tmp_path.resolve()} crawl configure --help" in error["recovery_action"]
 	db = tmp_path / "cache" / "boss_agent.db"
 	if db.exists():
 		assert _all_run_ids(tmp_path) == [], "空关键词不该留下 run 或拉起后台进程"
@@ -384,7 +390,9 @@ def test_run_rejects_blank_query(tmp_path):
 	assert result.exit_code == 1
 	assert _envelope(result)["error"]["code"] == "INVALID_PARAM"
 	assert "关键词" in _envelope(result)["error"]["message"]
-	assert _envelope(result)["hints"]["next_actions"] == ["boss crawl configure --help"]
+	assert _envelope(result)["hints"]["next_actions"] == [
+		f"boss --data-dir {tmp_path.resolve()} crawl configure --help"
+	]
 
 
 # ── resume ────────────────────────────────────────────────────────────
