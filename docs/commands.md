@@ -360,6 +360,8 @@ boss search --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280
 boss export --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280100' --count 50 -o jobs.csv
 ```
 
+`boss export` 的 JSON 信封带 `truncated` 与 `stop_reason`，用于区分「取满请求量」与「本地扫描到上限」：`count_reached`、`platform_has_more_false`、`empty_page` 都表示结果完整；`page_budget_exhausted` 时 `truncated=true`，表示内部页数预算已耗尽、结果可能不完整，同时 `hints.operator_actions` 给出缩小筛选条件的指引。`--format html` 直出没有信封，截断提示写到 stderr。
+
 **福利筛选工作原理**：
 
 1. 先检查职位福利标签（`welfareList`）

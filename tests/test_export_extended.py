@@ -684,3 +684,88 @@ def test_export_continues_when_has_more_is_missing(mock_auth_cls, mock_client_cl
 	assert result.exit_code == 0, result.output
 	assert len(json.loads(out_path.read_text(encoding="utf-8"))) == 20
 	assert mock_client.search_jobs.call_count == 2
+
+
+# ── 截断证据（Issue #907）─────────────────────────────────────────────
+
+
+def _endless_single_job_pages(mock_client) -> None:
+	"""每页只返回 1 条、平台始终 hasMore=true：内部页数预算必然耗尽。"""
+
+	def search_side_effect(query, **kwargs):
+		page = kwargs.get("page", 1)
+		job = _make_raw_job(f"Job {page}", security_id=f"sec-{page}")
+		return _api_response([job], has_more=True)
+
+	mock_client.search_jobs.side_effect = search_side_effect
+
+
+@pytest.mark.parametrize("mode", ["stdout", "file", "html-json"])
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_marks_page_budget_exhaustion_in_every_envelope(
+	mock_auth_cls, mock_client_cls, tmp_path: Path, mode: str
+):
+	"""预算耗尽仍未取满 count 时，三种信封都要带 truncated / stop_reason（Issue #907）。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	_endless_single_job_pages(mock_client)
+
+	argv = ["export", "golang", "--count", "10"]
+	if mode == "file":
+		argv += ["-o", str(tmp_path / "jobs.csv")]
+	elif mode == "html-json":
+		argv = ["--json", *argv, "--format", "html"]
+
+	result = CliRunner().invoke(cli, argv)
+
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.output)
+	assert payload["data"]["count"] == 6
+	assert payload["data"]["truncated"] is True
+	assert payload["data"]["stop_reason"] == "page_budget_exhausted"
+	# estimated_pages=1 + allowance=5，恰好 6 次列表请求
+	assert mock_client.search_jobs.call_count == 6
+	assert payload["hints"]["operator_actions"]
+
+
+@pytest.mark.parametrize(
+	("has_more", "job_count", "count", "expected", "requests"),
+	[
+		(False, 1, 50, "platform_has_more_false", 1),
+		(True, 0, 10, "empty_page", 1),
+		(True, 1, 1, "count_reached", 1),
+	],
+	ids=["platform-false", "empty-page", "count-reached"],
+)
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_reports_normal_stop_reasons(
+	mock_auth_cls, mock_client_cls, has_more, job_count, count, expected, requests
+):
+	"""取满请求量、平台明确没有下一页、空页都不算截断，但要说明终止原因。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	jobs = [_make_raw_job(f"Job {i}", security_id=f"n-{i}") for i in range(job_count)]
+	mock_client.search_jobs.return_value = _api_response(jobs, has_more=has_more)
+
+	result = CliRunner().invoke(cli, ["export", "golang", "--count", str(count)])
+
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.output)
+	assert payload["data"]["truncated"] is False
+	assert payload["data"]["stop_reason"] == expected
+	assert "operator_actions" not in payload["hints"]
+	assert mock_client.search_jobs.call_count == requests
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_html_stdout_warns_on_stderr_without_polluting_html(mock_auth_cls, mock_client_cls):
+	"""HTML 直出没有信封：截断提示只能走 stderr，stdout 必须仍是完整 HTML。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	_endless_single_job_pages(mock_client)
+
+	result = CliRunner().invoke(cli, ["export", "golang", "--count", "10", "--format", "html"])
+
+	assert result.exit_code == 0, result.output
+	assert result.stdout.lstrip().startswith("<")
+	assert "页数上限" in result.stderr
