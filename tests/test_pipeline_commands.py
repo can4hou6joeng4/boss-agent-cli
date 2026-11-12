@@ -1,4 +1,5 @@
 import json
+import shlex
 from unittest.mock import patch
 
 from click.testing import CliRunner
@@ -108,6 +109,41 @@ def test_pipeline_command_reports_complete_scan_as_not_truncated(mock_auth_cls, 
 	parsed = json.loads(result.output)
 	assert parsed["pagination"]["truncated"] is False
 	assert parsed["pagination"]["pages_scanned"] == 1
+
+
+@patch("boss_agent_cli.commands.pipeline.get_platform_instance")
+@patch("boss_agent_cli.commands.pipeline.AuthManager")
+def test_pipeline_hints_preserve_data_dir(mock_auth_cls, mock_client_cls, tmp_path):
+	"""后继命令必须保留自定义数据目录，否则 Agent 会读取另一份本地库（Issue #913）。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_chat_item(unread=1)])
+	mock_client.interview_data.return_value = {"zpData": {"interviewList": []}}
+
+	result = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), "pipeline"])
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	expected = ["boss", "--data-dir", str(tmp_path.resolve())]
+	commands = parsed["hints"]["next_actions"]
+	assert commands
+	for command in commands:
+		assert shlex.split(command)[:3] == [*expected]
+
+
+@patch("boss_agent_cli.commands.pipeline.get_platform_instance")
+@patch("boss_agent_cli.commands.pipeline.AuthManager")
+def test_follow_up_hints_preserve_data_dir(mock_auth_cls, mock_client_cls, tmp_path):
+	"""follow-up 的 chat / mark 提示同样落在原数据目录（Issue #913）。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_chat_item(unread=1)])
+	mock_client.interview_data.return_value = {"zpData": {"interviewList": []}}
+
+	result = CliRunner().invoke(
+		cli, ["--json", "--data-dir", str(tmp_path), "follow-up", "--now-ts-ms", "1800000000000"]
+	)
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	for command in parsed["hints"]["next_actions"]:
+		assert shlex.split(command)[:3] == ["boss", "--data-dir", str(tmp_path.resolve())]
 
 
 @patch("boss_agent_cli.commands.pipeline.get_platform_instance")

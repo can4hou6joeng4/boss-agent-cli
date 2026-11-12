@@ -7,7 +7,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.display import handle_auth_errors, handle_output, handle_platform_error_output, render_simple_list
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output, render_simple_list
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
 
 
@@ -75,7 +75,11 @@ def pipeline_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None) -> 
 		items,
 		render=lambda data: _render_pipeline(data, "pipeline"),
 		pagination={**pagination, "total": len(items), "total_kind": "returned_page_count"} if pagination else None,
-		hints={"next_actions": ["boss follow-up", "boss chat", "boss interviews"]},
+		hints={"next_actions": [
+			boss_command_for_ctx(ctx, "follow-up", include_data_dir=True),
+			boss_command_for_ctx(ctx, "chat", include_data_dir=True),
+			boss_command_for_ctx(ctx, "interviews", include_data_dir=True),
+		]},
 	)
 
 
@@ -99,5 +103,8 @@ def follow_up_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None) ->
 		candidates,
 		render=lambda data: _render_pipeline(data, "follow-up"),
 		pagination={**pagination, "total": len(candidates), "total_kind": "returned_page_count"} if pagination else None,
-		hints={"next_actions": ["boss chat", "boss mark <uid> --label 沟通中"]},
+		hints={"next_actions": [
+			boss_command_for_ctx(ctx, "chat", include_data_dir=True),
+			boss_command_for_ctx(ctx, "mark <uid> --label 沟通中", include_data_dir=True),
+		]},
 	)
