@@ -386,7 +386,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--add-tag", str(tag)])
 		for tag in arguments.get("remove_tags") or []:
 			args.extend(["--remove-tag", str(tag)])
-		if arguments.get("note"):
+		# `--note ""` 在 CLI 是「替换为空」，即清空备注；用 truthiness 会把空串
+		# 丢掉，旧备注保留而信封仍回 updated=true（Issue #872）。
+		if "note" in arguments and arguments["note"] is not None:
 			args.extend(["--note", str(arguments["note"])])
 		return args
 

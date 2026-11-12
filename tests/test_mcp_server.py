@@ -1085,6 +1085,59 @@ def test_read_only_tool_classification_covers_real_tools_only():
 		"boss_hr_accept_resume", "boss_hr_exchange",
 	}
 	assert not (mcp_server._READ_ONLY_TOOL_NAMES & write_tools)
+	# 按参数判写的工具同样必须在只读白名单里，否则规则本身就没机会生效。
+	assert mcp_server._TOOL_WRITE_MODES.keys() <= mcp_server._READ_ONLY_TOOL_NAMES
+
+
+def test_write_modes_only_reference_declared_enum_actions():
+	"""写模式必须是 schema 里真实存在的 action 枚举值，不能凭工具名猜。"""
+	from boss_agent_cli import mcp_server
+
+	by_name = {tool.name: tool for tool in TOOLS}
+	for tool_name, modes in mcp_server._TOOL_WRITE_MODES.items():
+		tool = by_name[tool_name]
+		allowance = tool.input_schema["properties"]["action"]
+		assert set(allowance["enum"]) >= modes
+		assert allowance.get("default", "list") not in modes
+
+
+@pytest.mark.parametrize(
+	"arguments,may_write",
+	[
+		({"action": "online", "job_id": "j"}, True),
+		({"action": "offline", "job_id": "j"}, True),
+		({"action": "list"}, False),
+		({}, False),
+	],
+)
+def test_hr_jobs_write_classification_depends_on_action(arguments, may_write):
+	"""`boss_hr_jobs` 的 online/offline 会 POST 平台状态变更，不能整体算只读（Issue #869）。"""
+	from boss_agent_cli import mcp_server
+
+	assert mcp_server._tool_may_write("boss_hr_jobs", arguments) is may_write
+
+
+def test_hr_jobs_offline_timeout_requires_outcome_check(monkeypatch):
+	"""超时信封必须与参数级写判定一致：offline 不能说自己「不产生平台写入」。"""
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", MagicMock())
+	monkeypatch.setattr(mcp_server, "CallToolResult", MagicMock())
+	captured: dict[str, bool] = {}
+
+	async def fake_run(*args, **kwargs):
+		captured["may_write"] = kwargs["may_write"]
+		return {"ok": True}
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+	asyncio.run(
+		mcp_server.call_tool(
+			None,
+			CallToolRequestParams(name="boss_hr_jobs", arguments={"action": "offline", "job_id": "j"}),
+		)
+	)
+	assert captured == {"may_write": True}
 
 
 def test_call_tool_passes_per_tool_write_classification(monkeypatch):
@@ -1406,6 +1459,16 @@ def test_build_args_shortlist_annotate():
 		"--remove-tag", "外包",
 		"--note", "优先",
 	]
+
+
+def test_build_args_shortlist_annotate_forwards_empty_note_to_clear_it():
+	"""空串是「清空备注」的显式意图，不能在映射层被当成未传（Issue #872）。"""
+	assert _build_args(
+		"boss_shortlist_annotate", {"security_id": "s1", "job_id": "j1", "note": ""}
+	) == ["shortlist", "annotate", "s1", "j1", "--note", ""]
+	assert _build_args(
+		"boss_shortlist_annotate", {"security_id": "s1", "job_id": "j1"}
+	) == ["shortlist", "annotate", "s1", "j1"]
 
 
 def test_build_args_shortlist_compare():

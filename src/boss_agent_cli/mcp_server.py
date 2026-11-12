@@ -162,12 +162,26 @@ _READ_ONLY_TOOL_NAMES = frozenset({
 	"boss_hr_jobs_detail",
 })
 
+#: 工具名整体只读、但个别参数会把调用变成平台写操作。判定必须看参数：
+#: `boss_hr_jobs` 的 `action=online|offline` 会 POST 上线/下线，超时后若按只读
+#: 告诉 Agent「可直接重试」，就会在状态未知时重发一次状态变更（Issue #869）。
+_TOOL_WRITE_MODES: dict[str, frozenset[str]] = {
+	"boss_hr_jobs": frozenset({"online", "offline"}),
+}
+
 _WRITE_INTERRUPT_RECOVERY = "检查本地 checkpoint 与平台实际结果，再显式恢复；未确认的写操作不要直接重试"
 _READ_INTERRUPT_RECOVERY = "只读命令已中断，不产生平台写入；确认子进程已退出后可直接重新调用"
 
 
-def _tool_may_write(tool_name: str) -> bool:
-	return tool_name not in _READ_ONLY_TOOL_NAMES
+def _tool_may_write(tool_name: str, arguments: dict[str, Any] | None = None) -> bool:
+	if tool_name not in _READ_ONLY_TOOL_NAMES:
+		return True
+	write_modes = _TOOL_WRITE_MODES.get(tool_name)
+	if write_modes is None:
+		return False
+	# 缺省 action 与 schema 默认值一致（list）：只有显式声明写模式才算写。
+	action = (arguments or {}).get("action", "list")
+	return isinstance(action, str) and action in write_modes
 
 
 def _cli_timeout(args: tuple[str, ...]) -> float:
@@ -445,7 +459,7 @@ async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
 		# CLI 的错误信封返回，至少带上 INVALID_PARAM、缺失参数名与恢复指引。
 		missing = str(exc.args[0]) if exc.args else "参数"
 		return _tool_argument_error(params.name, f"缺少必填参数：{missing}")
-	result = await _run_boss_async(*args, may_write=_tool_may_write(params.name))
+	result = await _run_boss_async(*args, may_write=_tool_may_write(params.name, arguments))
 	# 信封的 ok 是唯一真源，但 MCP 客户端还需要 is_error 才能把失败标成工具错误；
 	# 两者不一致时，ok:false 会被当成一次成功的工具调用。
 	return CallToolResult(
