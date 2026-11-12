@@ -1,9 +1,11 @@
+import csv
 import json
 import shlex
 import socket
 import sqlite3
 import sys
 import types
+import zipfile
 from hashlib import sha256
 from pathlib import Path
 
@@ -841,6 +843,46 @@ def test_exporter_formats_workbook(tmp_path):
 	assert sheet.column_dimensions["P"].width == 54
 	assert sheet["P2"].alignment.wrap_text is not True
 	assert sheet.row_dimensions[2].height == 20
+
+
+def test_exporter_neutralizes_formula_prefixed_values(tmp_path):
+	"""平台原文以 =+-@ 开头时不能落成公式：CSV 与 XLSX 都要按文本处理（Issue #871）。
+
+	JD 常见的 `=====岗位职责=====` 分隔线和 `- 负责…` 列表项都会命中；openpyxl
+	对以 `=` 开头的字符串默认写 `<f>` 公式节点，Excel 打开时报错或直接求值。
+	"""
+	paths = write_run_outputs(
+		tmp_path,
+		[
+			{
+				"title": "=SUM(A1:A9)",
+				"company": "-1+1",
+				"city": "@cmd",
+				"post_description": "=====岗位职责=====\n- 负责后端开发",
+			},
+			{"title": "Python 开发", "company": "正常公司"},
+		],
+	)
+	with open(paths["csv"], encoding="utf-8-sig", newline="") as file:
+		rows = list(csv.DictReader(file))
+	assert rows[0]["title"] == "'=SUM(A1:A9)"
+	assert rows[0]["company"] == "'-1+1"
+	assert rows[0]["city"] == "'@cmd"
+	assert rows[0]["post_description"].startswith("'=====岗位职责=====")
+	# 正常值不能被顺手改写。
+	assert rows[1]["title"] == "Python 开发"
+
+	with zipfile.ZipFile(paths["xlsx"]) as archive:
+		sheet_xml = archive.read("xl/worksheets/sheet1.xml").decode()
+	assert "<f>" not in sheet_xml
+
+	sheet = load_workbook(paths["xlsx"]).active
+	# XLSX 保留原值，只把它声明为文本；不能像 CSV 那样插入可见单引号。
+	assert sheet["D2"].value == "=SUM(A1:A9)"
+	assert sheet["D2"].data_type == "s"
+	assert sheet["I2"].value == "-1+1"
+	assert sheet["I2"].data_type == "s"
+	assert sheet["D3"].value == "Python 开发"
 
 
 def test_crawl_outcome_quotes_run_id_in_resume_command():
