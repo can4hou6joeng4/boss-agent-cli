@@ -55,7 +55,7 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 			ctx, "exchange", data,
 			render=lambda d: render_message_panel(d, title="exchange"),
 			hints={"next_actions": [
-				boss_command_for_ctx(ctx, "chat"),
-				boss_command_for_ctx(ctx, f"chatmsg {uid}"),
+				boss_command_for_ctx(ctx, "chat", include_data_dir=True),
+				boss_command_for_ctx(ctx, f"chatmsg {uid}", include_data_dir=True),
 			]},
 		)

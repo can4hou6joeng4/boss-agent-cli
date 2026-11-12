@@ -54,7 +54,7 @@ def resolve_friend_or_emit(
 	# CONTACT_NOT_FOUND，既浪费一次受限流的请求，也让真正的原因（argv 少了
 	# 参数）看起来像「联系人不在这份列表里」。
 	if not str(identifier or "").strip():
-		chat_cmd = boss_command_for_ctx(ctx, "chat")
+		chat_cmd = boss_command_for_ctx(ctx, "chat", include_data_dir=True)
 		handle_error_output(
 			ctx,
 			command,
@@ -83,12 +83,13 @@ def resolve_friend_or_emit(
 		handle_platform_error_output(ctx, command, platform, friends_error, fallback_message="沟通列表获取失败")
 		return None
 	if friend_item is None:
+		chat_cmd = boss_command_for_ctx(ctx, "chat", include_data_dir=True)
 		handle_error_output(
 			ctx,
 			command,
 			code="CONTACT_NOT_FOUND",
 			message=not_found_message or f"未在沟通列表中找到联系人 {identifier}",
-			hints={"next_actions": ["boss chat"]},
+			hints={"next_actions": [chat_cmd]},
 		)
 		return None
 	return friend_item

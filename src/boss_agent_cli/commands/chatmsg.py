@@ -87,8 +87,8 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int, sho
 			)
 
 		hints: dict[str, Any] = {"next_actions": [
-			boss_command_for_ctx(ctx, "chat"),
-			boss_command_for_ctx(ctx, f"detail {fresh_security_id}"),
+			boss_command_for_ctx(ctx, "chat", include_data_dir=True),
+			boss_command_for_ctx(ctx, f"detail {fresh_security_id}", include_data_dir=True),
 		]}
 		if pagination["has_more"] is True:
 			# 翻页命令必须保留 --raw：只写 --page / --count 时下一页的
@@ -97,7 +97,7 @@ def chatmsg_cmd(ctx: click.Context, security_id: str, page: int, count: int, sho
 			next_page = f"chatmsg {gid} --page {pagination['page'] + 1} --count {count}"
 			if show_raw:
 				next_page += " --raw"
-			hints["next_actions"].append(boss_command_for_ctx(ctx, next_page))
+			hints["next_actions"].append(boss_command_for_ctx(ctx, next_page, include_data_dir=True))
 		elif pagination["has_more"] is None:
 			hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]
 

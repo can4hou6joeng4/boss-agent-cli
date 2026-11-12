@@ -198,6 +198,26 @@ def test_chat_summary_by_uid_uses_fresh_security_id(mock_auth_cls, mock_client_c
 
 @patch("boss_agent_cli.commands.exchange.get_platform_instance")
 @patch("boss_agent_cli.commands.exchange.AuthManager")
+def test_exchange_hints_preserve_data_dir(mock_auth_cls, mock_client_cls, tmp_path):
+	"""交换请求后的沟通类后继命令必须在同一数据目录执行（Issue #917）。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response(
+		[_friend_item(uid=10001, sid="sid_current_request")]
+	)
+	mock_client.exchange_contact.return_value = {"zpData": {}}
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "exchange", "10001"])
+
+	assert result.exit_code == 0, result.output
+	prefix = f"boss --data-dir {tmp_path.resolve()}"
+	assert json.loads(result.output)["hints"]["next_actions"] == [
+		f"{prefix} chat",
+		f"{prefix} chatmsg 10001",
+	]
+
+
+@patch("boss_agent_cli.commands.exchange.get_platform_instance")
+@patch("boss_agent_cli.commands.exchange.AuthManager")
 def test_exchange_by_uid_uses_fresh_security_id(mock_auth_cls, mock_client_cls):
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.friend_list.return_value = _friend_list_response(
