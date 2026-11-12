@@ -14,7 +14,7 @@ uv run python scripts/quality_baseline.py --skip-mypy   # 只做快速本地迭�
 
 ## verify_release.py
 
-维护者发布验证：默认只读检查项目版本、已构建 wheel/sdist 的元数据与文件清单、SHA-256 和 Git 状态，不访问包索引、不执行发布或招聘平台请求。产物目录必须恰好包含目标版本的一份 wheel 和一份源码包；混入旧包会失败，不按修改时间猜测。
+维护者发布验证：默认只读检查项目版本、已构建 wheel/sdist 的元数据与文件清单、SHA-256 和 Git 状态，不访问包索引、不执行发布或招聘平台请求。产物目录必须恰好包含目标版本的一份 wheel 和一份源码包；混入旧包会失败，不按修改时间猜测。产物里每个文件还必须对应一个被 git 跟踪的路径——构建后端只读取项目根的 `.gitignore`，不读 `.git/info/exclude`，本地草稿、素材或测试会被静默打进源码包；`PKG-INFO` 是构建生成项，不受此限制。因此本地构建请用干净 worktree，或在构建后先跑本脚本确认。
 
 ```bash
 uv build --out-dir dist/release-check

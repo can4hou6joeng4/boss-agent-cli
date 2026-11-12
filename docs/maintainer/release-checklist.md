@@ -48,6 +48,14 @@ packages or contact a package index. `--fresh-install` explicitly enables depend
 resolution in a temporary environment without `uv.lock`, then checks installed CLI
 and MCP behavior without calling the recruitment platform.
 
+Every archive member must also correspond to a git-tracked path (`PKG-INFO` is the
+build-generated exception). The build backend reads only the project-root
+`.gitignore`, not `.git/info/exclude`, so locally excluded drafts, assets or tests
+silently land in the sdist — a local v3.3.0 build grew the source archive from
+6.5 MB to 78 MB this way while `--require-clean` still passed. Build release
+artifacts from a clean worktree (or verify before publishing) so the local result
+matches CI.
+
 The report distinguishes `passed`, `failed`, and `not_run`. A successful default
 check with `git.clean=false` is development evidence, not release readiness. Before
 publishing, use `--require-clean`; when the local tag already exists, also pass
