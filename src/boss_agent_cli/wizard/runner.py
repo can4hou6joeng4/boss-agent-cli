@@ -159,7 +159,14 @@ class WorkflowRunner:
 				continue
 			if step["status"] == WorkflowStatus.COMPLETED.value:
 				prior_results[step["step_name"]] = step["result"]
-			elif step["status"] == WorkflowStatus.WAITING_INPUT.value:
+			elif step["status"] in {
+				WorkflowStatus.WAITING_INPUT.value,
+				WorkflowStatus.FAILED.value,
+				WorkflowStatus.RUNNING.value,
+			}:
+				# 失败/中断的步骤仍会重跑，但它可能已通过 bind_inner_run 绑定了内部可恢复
+				# 任务（如 crawl run_id）：把 result 交给 action，让 crawl_start 续跑而不是
+				# 新建一份采集（Issue #882）。
 				waiting_priors[step["step_name"]] = step["result"]
 		pending_steps = [name for name in plan.requested_steps if name not in prior_results]
 		if pending_steps and pending_steps[0] in blocked_steps:
@@ -203,7 +210,13 @@ class WorkflowRunner:
 				status=WorkflowStatus.RUNNING.value,
 				current_step=step_name,
 			)
-			self._store.update_step(run_id, step_name, status=WorkflowStatus.RUNNING.value)
+			self._store.update_step(
+				run_id,
+				step_name,
+				status=WorkflowStatus.RUNNING.value,
+				# 重跑前保留此前的 result（可能含内部 crawl 绑定），否则中断后再恢复就找不到原任务。
+				result=waiting_priors.get(step_name),
+			)
 			control = WorkflowControl(run_id, step_name, self._store, deadline, resume_action=resume_action_for(run_id))
 			with_control = getattr(context, "with_workflow_control", None)
 			action_context = with_control(control) if callable(with_control) else context
@@ -442,18 +455,21 @@ class WorkflowRunner:
 			"recoverable": True,
 			"recovery_action": recovery_action,
 		}
-		if not preserve_result:
-			self._store.update_step(run_id, step_name, status=WorkflowStatus.FAILED.value, error=error)
 		stored_run = self._store.get(run_id) or {}
-		last_result = next(
+		step_result = next(
 			(step.get("result") for step in stored_run.get("steps", []) if step["step_name"] == step_name),
 			None,
 		)
+		if not preserve_result:
+			# 超时/失败同样保留此前写入的结果（如 inner_run_id），恢复时才能续跑内部任务（Issue #882）。
+			self._store.update_step(
+				run_id, step_name, status=WorkflowStatus.FAILED.value, result=step_result, error=error
+			)
 		self._store.update_run(
 			run_id,
 			status=WorkflowStatus.FAILED.value,
 			current_step=step_name,
-			last_result=last_result,
+			last_result=step_result,
 			error=error,
 		)
 		return self._store.get(run_id) or {}

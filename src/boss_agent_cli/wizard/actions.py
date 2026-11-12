@@ -971,9 +971,13 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 	if existing_run_id is None:
 		prior_step = prior.get("crawl_start")
 		if isinstance(prior_step, Mapping):
-			data = prior_step.get("data") if isinstance(prior_step.get("data"), Mapping) else prior_step
-			if isinstance(data, Mapping):
-				existing_run_id = _optional_str(data.get("run_id"))
+			# 已完成的结果是 {data: {run_id}}；中断/超时留下的绑定是 {inner_run_id}（bind_inner_run）。
+			# 两者都指向同一个内部 crawl，恢复时必须续跑而不是新建（Issue #882）。
+			existing_run_id = _optional_str(prior_step.get("inner_run_id"))
+			if existing_run_id is None:
+				data = prior_step.get("data") if isinstance(prior_step.get("data"), Mapping) else prior_step
+				if isinstance(data, Mapping):
+					existing_run_id = _optional_str(data.get("run_id"))
 	if existing_run_id:
 		return _crawl_resume(context, {"run_id": existing_run_id, **dict(inputs)}, prior)
 
