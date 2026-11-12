@@ -342,6 +342,8 @@ boss search --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280
 boss export --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280100' --count 50 -o jobs.csv
 ```
 
+The `boss export` JSON envelope carries `truncated` and `stop_reason`, distinguishing "reached the requested count" from "hit the local page budget": `count_reached`, `platform_has_more_false`, and `empty_page` all mean the result is complete; with `page_budget_exhausted`, `truncated=true` means the internal page budget ran out and the result may be incomplete, and `hints.operator_actions` suggests narrowing the filters. `--format html` writes directly without an envelope, so the truncation notice goes to stderr.
+
 **How welfare filtering works**:
 
 1. Check job welfare tags (`welfareList`) first

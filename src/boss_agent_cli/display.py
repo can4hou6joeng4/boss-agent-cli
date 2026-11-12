@@ -519,6 +519,8 @@ def render_export_summary(data: dict[str, Any]) -> None:
 		console.print(f"[green]exported[/green] {count} jobs to [bold]{path}[/bold] ({fmt})")
 	else:
 		console.print(f"[green]exported[/green] {count} jobs ({fmt})")
+	if data.get("truncated"):
+		console.print("[yellow]注意：扫描到内部页数上限，结果可能不完整[/yellow]")
 
 
 def render_next_steps(actions: "Sequence[str] | None") -> None:
