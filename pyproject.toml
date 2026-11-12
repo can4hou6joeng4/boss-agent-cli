@@ -223,6 +223,7 @@ module = [
 	"boss_agent_cli.api.browser_client",
 	"boss_agent_cli.api.browser_source",
 	"boss_agent_cli.auth.browser",
+	"boss_agent_cli.auth.login_diagnostics",
 	"boss_agent_cli.platforms",
 	"boss_agent_cli.platforms.base",
 	"boss_agent_cli.platforms.zhipin",

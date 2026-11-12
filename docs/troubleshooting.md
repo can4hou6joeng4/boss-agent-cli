@@ -62,6 +62,14 @@ boss logout && boss login
 
 停止当前 workflow，保留 run ID 或 checkpoint。处理登录或安全页状态后，再显式恢复；不要切换多种通道反复重试。
 
+扫码登录路径遇到风险时，`error.details.login_diagnostic` 可提供本地诊断上下文：
+
+- `origin` / `stage`：页面检查、会话探测或响应监听，以及当时的登录阶段。
+- `top_path` / `open_pages`：白名单顶层路径和可读取的当前 context 页数；未知路径只返回占位符，不包含查询参数或片段。
+- 响应事件还可能包含 `status`、`resource_type`、`is_navigation_request`、`frame_scope`（`main_frame` / `child_frame` / `other_page` / `unknown`）。
+
+字段只读取已有页面/响应对象的属性，不发额外请求，也不采集正文、Cookie 或 Token。不可用的信息省略或标记未知；这些字段不能证明响应无害、登录成功或风险已解除，原停止与锁存规则不变。此改动不新增保留失败窗口或自动恢复能力。
+
 ### v3.0.0：从 Browser Bridge 迁移
 
 Browser Bridge daemon、Chrome 扩展及 `[bridge]` 安装 extra 已移除。`boss doctor` 不再探测旧 daemon，也不再输出扩展检查项。
