@@ -67,6 +67,8 @@ Login recovery keeps the original data directory. With `--data-dir`, authenticat
 
 When `boss me --section deliver --deliver-page 2` selects application records alone, envelope `pagination` reports the available evidence: `page` uses a valid platform page number, falling back to the requested page; `has_more` is `true` / `false` only for a boolean platform `hasMore`, otherwise `null` with `has_more_source=unknown`. `total` counts the current `list` array (`total_kind=returned_page_count`), or is `null` when that field is missing or malformed; it is not the total number of applications. Only `has_more=true` adds a next-page command. An unknown value adds `operator_actions` explaining that page size cannot establish whether more records exist. The default `boss me` aggregate and other sections keep top-level `pagination=null`. The corresponding MCP call is `boss_me(section="deliver", deliver_page=2)`.
 
+Search and recommendation follow-ups for every `me` section, and the next-page command for application records, include the current platform and shell-quoted absolute `--data-dir`. Following the hint therefore reuses the original login state without manually restoring the directory.
+
 BOSS codes `31` (IP/environment restriction) / `32` (account restriction) / `35` / `36`, environmental or ambiguous code `37`, HTTP 403 and official `403.html` access-restriction and `verify.html` / `security.html` pages stop requests and latch local state. Bounded refresh requires explicit credential expiry; a token name alone, or a security-verification requirement alongside expiry, cannot trigger refresh. The historical `cdp_risk_lock.json` file covers candidate and recruiter httpx, CDP, headless, chat actions, login, credential import, refresh and independent crawls using the same `data_dir`. Token or channel changes never clear it. `error.details.risk_lock` retains the original risk reason, available platform code and `explicit_resume_required`; account risks keep `ACCOUNT_RISK`, while historical environment locks keep `ENVIRONMENT_RISK_LOCKED`.
 
 After confirming recovery on the intended official business page in the original session, the user runs `boss clean --risk-lock` to remove the local block, then explicitly resumes the task. A working homepage does not prove the job or chat page has recovered. Local cleanup neither removes server restrictions nor verifies online recovery. `--dry-run` only previews cleanup; another risk immediately relatches the lock. Agents must not clear it on their own.
@@ -155,10 +157,12 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 |---------|-------------|
 | `boss greet <sid> <jid>` | Greet a recruiter; duplicates return `ALREADY_GREETED` |
 | `boss batch-greet <query>` | Search and greet up to an explicit `--count`; supports `--dry-run`; on `ACCOUNT_RISK` / `ENVIRONMENT_RISK` the batch stops immediately with `ok:false`, and already-greeted items are returned in `error.details.greeted` |
-
-The execution hint returned by `batch-greet --dry-run` preserves the current data directory and any explicitly given `--browser-source` / `--cdp-url` / `--delay`, removing only `--dry-run`, so following it uses the same login state, dedupe cache, browser channel, and throttle range as the preview.
 | `boss apply <sid> <jid>` | Apply or start a conversation; duplicates return `ALREADY_APPLIED` |
 | `boss exchange <uid-or-sid>` | Request a phone-number or WeChat exchange; prefer the stable `uid` returned by `boss chat` |
+
+The execution hint returned by `batch-greet --dry-run` preserves the current data directory and any explicitly given `--browser-source` / `--cdp-url` / `--delay`, removing only `--dry-run`, so following it uses the same login state, dedupe cache, browser channel, and throttle range as the preview.
+
+Follow-up commands from `apply`, `greet`, and `batch-greet` preserve the original `--data-dir` and platform: application-record and conversation checks after a successful or duplicate application, and search, recommendation, or conversation hints after greeting, all use the same directory. Search recovery for blank identifiers and `error.recovery_action` for duplicate operations retain it as well. If greetings were sent but local bookkeeping failed, the instructions only suggest checking conversations in that directory and never automatically resend. Spaces, quotes, and Rich markup in directory paths are shell-quoted and displayed literally.
 
 ## Conversation track
 

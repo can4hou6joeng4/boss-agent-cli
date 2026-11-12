@@ -23,6 +23,11 @@ from boss_agent_cli.display import (
 from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION, list_pagination, rows_from
 
 
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""个人记录的翻页与后继操作沿用当前账号的数据目录。"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
 @click.command("me")
 @click.option("--section", default=None, type=click.Choice(["user", "resume", "expect", "deliver"]),
 	help="只获取指定部分（不指定则获取全部）")
@@ -116,13 +121,13 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 
 			success_hints: dict[str, Any] = {
 				"next_actions": [
-					boss_command_for_ctx(ctx, "search <关键词> --city <城市>"),
-					boss_command_for_ctx(ctx, "recommend"),
+					_hint_command(ctx, "search <关键词> --city <城市>"),
+					_hint_command(ctx, "recommend"),
 				],
 			}
 			if pagination is not None:
 				if pagination["has_more"] is True:
-					success_hints["next_actions"].append(boss_command_for_ctx(
+					success_hints["next_actions"].append(_hint_command(
 						ctx, f"me --section deliver --deliver-page {pagination['page'] + 1}",
 					))
 				elif pagination["has_more"] is None:

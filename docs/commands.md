@@ -63,6 +63,8 @@ TTY 下只把 `operator_actions` 渲染到 stderr；`next_actions` 是纯 Agent 
 
 `boss me --section deliver --deliver-page 2` 单独查看投递记录时，信封 `pagination` 给出分页证据：`page` 优先使用平台返回的有效页码，否则回显请求页；`has_more` 仅在平台返回布尔 `hasMore` 时为 `true` / `false`，缺失或类型不明确时为 `null`，`has_more_source=unknown`。`total` 是本页 `list` 数组的条数（`total_kind=returned_page_count`）；列表字段缺失或类型不符时为 `null`，不代表全量投递数。仅 `has_more=true` 时附加下一页命令；未知时 `operator_actions` 说明不能凭本页数量判断。默认 `boss me` 汇总四段信息、或只查其他 section 时，顶层 `pagination` 保持 `null`。MCP 对应调用是 `boss_me(section="deliver", deliver_page=2)`。
 
+`me` 各 section 的搜索与推荐后继命令，以及投递记录的下一页命令，均携带当前平台和经过 shell 转义的绝对 `--data-dir`；照抄提示即可沿用原登录态，无须手动补回目录。
+
 BOSS 的 code `31`（IP/环境限制）/ `32`（账号限制）/ `35` / `36`、环境类或含糊的 code `37`、HTTP 403 和官方 `403.html` 访问受限页及 `verify.html` / `security.html` 安全页会停止请求并锁存本地状态。明确的凭据过期才能进入有限刷新；仅出现 `token` / `stoken` 或同时要求安全验证时不能刷新。风险锁沿用 `cdp_risk_lock.json` 文件名，覆盖候选人与招聘者的 httpx、CDP、headless、聊天页动作、登录、导入、刷新和同 `data_dir` 的独立 crawl；更换令牌或通道不会自动清除锁。`error.details.risk_lock` 保留原始风险原因、可用业务码与 `explicit_resume_required`；账号风险仍返回 `ACCOUNT_RISK`，历史环境锁继续返回 `ENVIRONMENT_RISK_LOCKED`。
 
 由用户在原会话的官方目标业务页确认恢复后，执行 `boss clean --risk-lock` 解除本地阻断，再显式恢复原任务。主页可访问不代表职位页或聊天页已恢复；该清理命令不解除服务器风险，也不验证线上恢复。`--dry-run` 仅预览；再次命中风险会立即重锁。Agent 不应自行执行清锁。
@@ -151,10 +153,12 @@ boss crawl stop <run_id>
 |------|------|
 | `boss greet <sid> <jid>` | 向指定招聘者打招呼；重复记录返回 `ALREADY_GREETED` |
 | `boss batch-greet <query>` | 搜索后按显式 `--count` 批量打招呼，支持 `--dry-run`；命中 `ACCOUNT_RISK` / `ENVIRONMENT_RISK` 立即停批并返回 `ok:false`，已成功项随 `error.details.greeted` 带回 |
-
-`batch-greet --dry-run` 的执行提示保留本次数据目录以及显式给出的 `--browser-source` / `--cdp-url` / `--delay`，只去掉 `--dry-run`；照提示执行时使用的登录态、去重缓存、浏览器通道与节流区间与预览一致。
 | `boss apply <sid> <jid>` | 发起投递或立即沟通；重复记录返回 `ALREADY_APPLIED` |
 | `boss exchange <uid-or-sid>` | 请求交换手机号或微信；优先使用 `boss chat` 输出的稳定 `uid` |
+
+`batch-greet --dry-run` 的执行提示保留本次数据目录以及显式给出的 `--browser-source` / `--cdp-url` / `--delay`，只去掉 `--dry-run`；照提示执行时使用的登录态、去重缓存、浏览器通道与节流区间与预览一致。
+
+`apply` / `greet` / `batch-greet` 的后继命令保留原 `--data-dir` 与平台：投递成功或被重复记录拦截后查看投递记录、跟进会话，以及招呼后的搜索、推荐、会话提示，均使用同一目录。空编号的搜索恢复指引和重复操作的 `error.recovery_action` 同样携带目录。批量招呼已发送但记账失败时，只提示在原目录核对会话，不自动重发；目录里的空格、引号与 Rich 标签按 shell 参数转义并按字面显示。
 
 ## 沟通跟进
 

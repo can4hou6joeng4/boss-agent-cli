@@ -40,6 +40,11 @@ from boss_agent_cli.commands._filter_errors import emit_filter_error
 from boss_agent_cli.services.job_identity import deduplicate_job_result
 
 
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""招呼完成或被本地去重拦截后，继续在原目录中操作。"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
 @click.command("greet")
 @click.argument("security_id")
 @click.argument("job_id")
@@ -54,12 +59,12 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 	# 空 ID 无法定位任何职位或招聘者：继续下去只会先查一次本地缓存、再带着空参数
 	# 发平台请求，错误看起来像网络或登录问题，真正的原因（argv 拼错）被掩盖。
 	if not security_id.strip() or not job_id.strip():
-		search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
+		search_cmd = _hint_command(ctx, "search <关键词>")
 		handle_error_output(
 			ctx,
 			"greet",
 			code="INVALID_PARAM",
-			message="security_id 与 job_id 不能为空；先用 boss search 取到完整职位参数再打招呼",
+			message=f"security_id 与 job_id 不能为空；先用 {search_cmd} 取到完整职位参数再打招呼",
 			recovery_action=f"补上两个编号后重试；完整职位参数可从 {search_cmd} 的结果中取到",
 			hints={"next_actions": [search_cmd]},
 		)
@@ -73,11 +78,14 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		if cache.is_greeted(security_id, job_id=job_id, account=account):
+			chat_cmd = _hint_command(ctx, "chat")
+			search_cmd = _hint_command(ctx, "search <query>")
 			handle_error_output(
 				ctx, "greet",
 				code="ALREADY_GREETED",
 				message="已向该招聘者打过招呼",
-				hints={"next_actions": [boss_command_for_ctx(ctx, "search <query>")]},
+				recovery_action=f"该招聘者已打过招呼：用 {chat_cmd} 查看会话，或用 {search_cmd} 换一批职位",
+				hints={"next_actions": [search_cmd]},
 			)
 			return
 
@@ -148,8 +156,8 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 			}
 			hints = {
 				"next_actions": [
-					boss_command_for_ctx(ctx, "search <query>"),
-					boss_command_for_ctx(ctx, "recommend"),
+					_hint_command(ctx, "search <query>"),
+					_hint_command(ctx, "recommend"),
 				],
 			}
 			handle_output(
@@ -413,7 +421,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 					hints={
 						"operator_actions": [
 							"先在 BOSS 直聘官方页面核对已发送的招呼；不要自动重发本次批次",
-							"确认磁盘空间与缓存目录权限后，再用 boss chat 核对会话",
+							f"确认磁盘空间与缓存目录权限后，再用 {_hint_command(ctx, 'chat')} 核对会话",
 						]
 					},
 				)
@@ -454,7 +462,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 				render=lambda d: render_batch_operation_summary(d, title="batch-greet"),
 				# 招呼已经发出，下一步是跟进会话；`me` 没有 greet 分区，不能提示去那里看。
 				hints={
-					"next_actions": [boss_command_for_ctx(ctx, "chat")],
+					"next_actions": [_hint_command(ctx, "chat")],
 					"operator_actions": ["到 BOSS 直聘会话列表跟进已打招呼的招聘者"],
 				},
 			)

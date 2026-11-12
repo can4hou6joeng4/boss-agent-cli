@@ -4,6 +4,7 @@
 """
 
 import json
+import shlex
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
@@ -123,7 +124,7 @@ def test_batch_greet_success_all(mock_cache_cls, mock_auth_cls, mock_client_cls,
 	assert mock_client.greet.call_count == 2
 	assert mock_cache.record_greet.call_count == 2
 	# 招呼发完的下一步是跟进会话（`me` 没有 greet 分区）。
-	assert parsed["hints"]["next_actions"] == ["boss chat"]
+	assert [shlex.split(action) for action in parsed["hints"]["next_actions"]] == [["boss", *legacy_args, "chat"]]
 
 
 @patch("boss_agent_cli.commands.greet.time")

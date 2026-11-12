@@ -712,7 +712,9 @@ def test_me_deliver_pagination_evidence(mock_auth_cls, mock_client_cls, tmp_path
 	}
 	next_pages = [action for action in parsed["hints"]["next_actions"] if "--deliver-page" in action]
 	if expected is True:
-		assert next_pages == [f"boss me --section deliver --deliver-page {page + 1}"]
+		assert [shlex.split(action) for action in next_pages] == [
+			["boss", "--data-dir", str(tmp_path.resolve()), "me", "--section", "deliver", "--deliver-page", str(page + 1)],
+		]
 	else:
 		assert next_pages == []
 	if expected is None:
@@ -738,7 +740,7 @@ def test_me_deliver_next_action_is_executable(mock_auth_cls, mock_client_cls, tm
 	first = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "me", "--section", "deliver", "--deliver-page", "4"])
 	assert first.exit_code == 0
 	action = next(action for action in json.loads(first.output)["hints"]["next_actions"] if "--deliver-page" in action)
-	second = runner.invoke(cli, ["--data-dir", str(tmp_path), *shlex.split(action)[1:]])
+	second = runner.invoke(cli, ["--json", *shlex.split(action)[1:]])
 	assert second.exit_code == 0
 	assert json.loads(second.output)["pagination"]["page"] == 5
 	assert [call.kwargs for call in mock_client.deliver_list.call_args_list] == [{"page": 4}, {"page": 5}]

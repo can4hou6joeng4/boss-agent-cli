@@ -203,7 +203,7 @@ def test_greet_already_greeted(mock_cache_cls, mock_auth_cls, mock_client_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ALREADY_GREETED"
 	# 已打招呼不是死胡同：恢复指引要给出跟进会话的路径。
-	assert "boss chat" in parsed["error"]["recovery_action"]
+	assert f"boss --data-dir {_DEFAULT_DATA_DIR} chat" in parsed["error"]["recovery_action"]
 
 
 @patch("boss_agent_cli.commands.greet.get_platform_instance")
@@ -232,8 +232,8 @@ def test_greet_rejects_blank_identifiers():
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
-	assert parsed["hints"]["next_actions"] == ["boss search <关键词>"]
-	assert "boss search <关键词>" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [f"boss --data-dir {_DEFAULT_DATA_DIR} search <关键词>"]
+	assert f"boss --data-dir {_DEFAULT_DATA_DIR} search <关键词>" in parsed["error"]["recovery_action"]
 
 
 def test_detail_rejects_blank_security_id():
@@ -257,7 +257,7 @@ def test_apply_rejects_blank_identifiers():
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
-	assert parsed["hints"]["next_actions"] == ["boss search <关键词>"]
+	assert parsed["hints"]["next_actions"] == [f"boss --data-dir {_DEFAULT_DATA_DIR} search <关键词>"]
 
 
 @patch("boss_agent_cli.commands.greet.time")
