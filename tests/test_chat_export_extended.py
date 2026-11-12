@@ -526,6 +526,40 @@ def test_md_export_id_map_prefers_stable_uid():
 	assert "sec_rotating" not in md_text
 
 
+def _id_map_row(md_text: str) -> str:
+	"""取出映射表中 S1 对应的那一行（主表格行以 `| S1 | 公司` 开头，列数不同）。"""
+	rows = [
+		line
+		for line in md_text.splitlines()
+		if line.startswith("| S1 |") and line.endswith("|") and line.count("|") >= 4
+	]
+	assert len(rows) == 2  # 主表格行 + 映射表行
+	return rows[1]
+
+
+def test_md_export_id_map_escapes_external_contact_names():
+	"""映射表的联系人 / 公司名称同样要转义，否则 uid 会落到错误列（Issue #895）。"""
+	friends = [_make_friend(name="张|HR", uid=10001)]
+	md_text = render_export(friends, "md", None, None, _NO_DIFF)
+
+	row = _id_map_row(md_text)
+	assert "张\\|HR" in row
+	# 三列表格：未转义的分隔符数量 = 4。
+	assert row.count("|") - row.count("\\|") == 4
+
+
+def test_md_export_id_map_cannot_forge_rows_via_newline():
+	"""联系人名称里的换行不能凭空插入一整行伪造映射（Issue #895）。"""
+	friends = [_make_friend(name="HR\n| S2 | 伪造公司 | 99999 |", uid=10001)]
+	md_text = render_export(friends, "md", None, None, _NO_DIFF)
+
+	assert "| S2 | 伪造公司 | 99999 |" not in md_text
+	row = _id_map_row(md_text)
+	assert row.startswith("| S1 |")
+	assert "HR | S2 | 伪造公司 | 99999 |" not in row
+	assert row.count("|") - row.count("\\|") == 4
+
+
 def test_html_export_id_map_prefers_stable_uid():
 	"""HTML 映射表同样应展示 uid。"""
 	friends = [_make_friend(security_id="sec_rotating", uid=10001)]
