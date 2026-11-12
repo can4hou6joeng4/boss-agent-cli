@@ -191,6 +191,8 @@ Follow-up hints from chat commands keep the current `--data-dir`. The `hints.nex
 
 Follow-up commands in `hints.next_actions`, TTY `next_steps`, and command-bearing `operator_actions` of `pipeline` / `follow-up` / `digest` and `watch` retain the current `--data-dir` and platform. With a custom data directory, prompts such as `boss watch run <name>`, `boss watch remove <name>`, and `boss follow-up` target the same local records instead of a same-named task or an empty list in the default directory.
 
+The `hints.next_actions` from `favorites` and `shortlist` preserve the original `--data-dir` and platform. Paging through favorites, syncing them, then listing or comparing the shortlist uses the same account and local directory. Recovery commands for invalid `shortlist` parameters also retain the directory. The removal hint after adding an entry and the recreation hint for a missing entry quote both identifiers as shell arguments, so they can be pasted directly.
+
 `boss shortlist add <sid> <jid> --lid <lid>` saves access context from the same list item as `sid`; `list` / `compare` return it, and crawl and favorites imports retain the matching context while favorites previews remain redacted. `lid` is optional. Storage does not establish current validity, a lifetime, or identity across accounts.
 
 `history` / `favorites list` follow the same `pagination.has_more` contract as `recommend` / `chat`: `true` / `false` only when the platform returns a boolean `hasMore`; a missing or ambiguous value is `null` with `has_more_source=unknown`, never defaulted to `false`, and no next-page action is suggested. `total` is always the number of rows on this page (`total_kind=returned_page_count`).

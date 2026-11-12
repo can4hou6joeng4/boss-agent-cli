@@ -22,6 +22,11 @@ JOB_STATUS_INACTIVE = "inactive"
 JOB_STATUS_UNKNOWN = "unknown"
 
 
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""收藏翻页、同步与候选池查询沿用当前登录态及数据目录。"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
 class FavoritesPageLimitExceeded(RuntimeError):
 	"""The remote list still has more data after the bounded page budget."""
 
@@ -198,9 +203,9 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 		"status_counts": status_counts,
 	}
 	next_actions = [
-		boss_command_for_ctx(ctx, "favorites sync"),
-		boss_command_for_ctx(ctx, "--json shortlist list"),
-		boss_command_for_ctx(ctx, "detail <security_id> --job-id <job_id>"),
+		_hint_command(ctx, "favorites sync"),
+		_hint_command(ctx, "--json shortlist list"),
+		_hint_command(ctx, "detail <security_id> --job-id <job_id>"),
 	]
 	operator_actions = [
 		"favorites sync 把明确有效的收藏同步到本地候选池（完整字段落库）。",
@@ -209,7 +214,7 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 	]
 	# 与 history 同一口径：hasMore 为真时才给 --page N+1，否则只会把 Agent 送进空页。
 	if has_more is True:
-		next_actions.append(boss_command_for_ctx(ctx, f"favorites list --page {page + 1}"))
+		next_actions.append(_hint_command(ctx, f"favorites list --page {page + 1}"))
 	if has_more is None:
 		operator_actions.append("平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有记录")
 	hints = {"next_actions": next_actions, "operator_actions": operator_actions}
@@ -282,10 +287,10 @@ def favorites_sync_cmd(ctx: click.Context) -> None:
 		},
 		hints={
 			"next_actions": [
-				boss_command_for_ctx(ctx, "shortlist list"),
-				boss_command_for_ctx(ctx, "shortlist compare"),
-				boss_command_for_ctx(ctx, "apply <security_id> <job_id>"),
-				boss_command_for_ctx(ctx, "greet <security_id> <job_id>"),
+				_hint_command(ctx, "shortlist list"),
+				_hint_command(ctx, "shortlist compare"),
+				_hint_command(ctx, "apply <security_id> <job_id>"),
+				_hint_command(ctx, "greet <security_id> <job_id>"),
 			],
 		},
 	)

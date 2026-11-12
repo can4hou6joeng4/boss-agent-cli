@@ -1,9 +1,15 @@
 import json
+import shlex
 from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
+
+
+def _hinted_args(data_dir, *parts):
+	return ["boss", "--data-dir", str(data_dir.resolve()), *parts]
 
 
 def test_shortlist_add_list_remove(tmp_path):
@@ -185,8 +191,10 @@ def test_shortlist_add_rejects_blank_identifiers(tmp_path):
 		parsed = json.loads(result.output)
 		assert parsed["error"]["code"] == "INVALID_PARAM"
 		# 空编号的恢复指引要能直接执行：编号从搜索结果里取，而不是让 Agent 猜。
-		assert parsed["hints"]["next_actions"] == ["boss search <关键词>"]
-		assert "boss search <关键词>" in parsed["error"]["recovery_action"]
+		assert [shlex.split(action) for action in parsed["hints"]["next_actions"]] == [
+			_hinted_args(tmp_path, "search", "<关键词>"),
+		]
+		assert parsed["hints"]["next_actions"][0] in parsed["error"]["recovery_action"]
 
 	listed = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "shortlist", "list"]).output)
 	assert listed["data"] == []
@@ -204,8 +212,10 @@ def test_shortlist_remove_and_annotate_reject_blank_identifiers(tmp_path):
 		parsed = json.loads(result.output)
 		assert parsed["error"]["code"] == "INVALID_PARAM", action
 		# 候选池条目的编号来自本地列表：空编号时要指回 shortlist list。
-		assert parsed["hints"]["next_actions"] == ["boss shortlist list"]
-		assert "boss shortlist list" in parsed["error"]["recovery_action"]
+		assert [shlex.split(action) for action in parsed["hints"]["next_actions"]] == [
+			_hinted_args(tmp_path, "shortlist", "list"),
+		]
+		assert parsed["hints"]["next_actions"][0] in parsed["error"]["recovery_action"]
 
 
 def test_shortlist_schema_is_exposed():
@@ -244,9 +254,9 @@ def test_shortlist_annotate_missing_entry_reports_not_found(tmp_path):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "SHORTLIST_ENTRY_NOT_FOUND"
 	assert parsed["error"]["recovery_action"]
-	assert parsed["hints"]["next_actions"] == [
-		"boss shortlist add sec_missing job_missing",
-		"boss shortlist list",
+	assert [shlex.split(action) for action in parsed["hints"]["next_actions"]] == [
+		_hinted_args(tmp_path, "shortlist", "add", "sec_missing", "job_missing"),
+		_hinted_args(tmp_path, "shortlist", "list"),
 	]
 
 	listed = json.loads(
@@ -261,18 +271,24 @@ def test_shortlist_list_and_compare_empty_hints_point_to_add(tmp_path):
 
 	listed = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "shortlist", "list"]).output)
 	assert listed["data"] == []
-	assert listed["hints"]["next_actions"] == ["boss shortlist add <security_id> <job_id>"]
+	assert [shlex.split(action) for action in listed["hints"]["next_actions"]] == [
+		_hinted_args(tmp_path, "shortlist", "add", "<security_id>", "<job_id>"),
+	]
 
 	compared = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "shortlist", "compare"]).output)
 	assert compared["data"]["items"] == []
-	assert compared["hints"]["next_actions"] == ["boss shortlist add <security_id> <job_id>"]
+	assert [shlex.split(action) for action in compared["hints"]["next_actions"]] == [
+		_hinted_args(tmp_path, "shortlist", "add", "<security_id>", "<job_id>"),
+	]
 
 	runner.invoke(
 		cli,
 		["--data-dir", str(tmp_path), "--json", "shortlist", "add", "sec_001", "job_001", "--title", "Go 开发"],
 	)
 	filled = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "shortlist", "list"]).output)
-	assert filled["hints"]["next_actions"] == ["boss detail <security_id> --job-id <job_id>"]
+	assert [shlex.split(action) for action in filled["hints"]["next_actions"]] == [
+		_hinted_args(tmp_path, "detail", "<security_id>", "--job-id", "<job_id>"),
+	]
 
 
 def test_shortlist_compare_tag_without_match_does_not_point_to_add(tmp_path):
@@ -287,4 +303,67 @@ def test_shortlist_compare_tag_without_match_does_not_point_to_add(tmp_path):
 		runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "shortlist", "compare", "--tag", "前端"]).output
 	)
 	assert compared["data"]["items"] == []
-	assert compared["hints"]["next_actions"] == ["boss shortlist compare", "boss shortlist list"]
+	assert [shlex.split(action) for action in compared["hints"]["next_actions"]] == [
+		_hinted_args(tmp_path, "shortlist", "compare"),
+		_hinted_args(tmp_path, "shortlist", "list"),
+	]
+
+
+@pytest.mark.parametrize(
+	("security_id", "job_id"),
+	[("sid_fixture", "job_fixture"), ("sid fixture' [x]", 'job fixture" $value;*')],
+)
+def test_shortlist_add_hints_replay_list_and_remove(tmp_path, security_id, job_id):
+	"""照抄后继命令要读取、删除刚加入的条目，且不拆开标识。"""
+	data_dir = tmp_path / "jobs [x] team's"
+	runner = CliRunner()
+	added = runner.invoke(cli, ["--data-dir", str(data_dir), "--json", "shortlist", "add", security_id, job_id])
+	assert added.exit_code == 0, added.output
+	list_hint, remove_hint = json.loads(added.stdout)["hints"]["next_actions"]
+	assert shlex.split(list_hint) == ["boss", "--data-dir", str(data_dir.resolve()), "shortlist", "list"]
+	assert shlex.split(remove_hint) == [
+		"boss", "--data-dir", str(data_dir.resolve()), "shortlist", "remove", security_id, job_id,
+	]
+
+	listed = runner.invoke(cli, ["--json", *shlex.split(list_hint)[1:]])
+	assert listed.exit_code == 0, listed.output
+	assert json.loads(listed.stdout)["data"][0]["job_id"] == job_id
+	removed = runner.invoke(cli, ["--json", *shlex.split(remove_hint)[1:]])
+	assert removed.exit_code == 0, removed.output
+	payload = json.loads(removed.stdout)
+	assert payload["data"]["removed"] is True
+	assert payload["hints"]["next_actions"] == [list_hint]
+	listed = runner.invoke(cli, ["--json", *shlex.split(list_hint)[1:]])
+	assert listed.exit_code == 0, listed.output
+	assert json.loads(listed.stdout)["data"] == []
+
+
+@pytest.mark.parametrize(
+	("security_id", "job_id"),
+	[("sid_fixture", "job_fixture"), ("sid fixture' [x]", 'job fixture" $value;*')],
+)
+def test_shortlist_missing_entry_hint_creates_same_entry(tmp_path, security_id, job_id):
+	"""标注失败时的 add 指引要在原目录创建同一条目，再标注才能成功。"""
+	data_dir = tmp_path / "jobs [x] team's"
+	runner = CliRunner()
+	args = ["--data-dir", str(data_dir), "--json", "shortlist", "annotate", security_id, job_id, "--note", "优先沟通"]
+	missing = runner.invoke(cli, args)
+	assert missing.exit_code == 1, missing.output
+	payload = json.loads(missing.stdout)
+	assert payload["error"]["code"] == "SHORTLIST_ENTRY_NOT_FOUND"
+	add_hint, list_hint = payload["hints"]["next_actions"]
+	assert shlex.split(add_hint) == [
+		"boss", "--data-dir", str(data_dir.resolve()), "shortlist", "add", security_id, job_id,
+	]
+	added = runner.invoke(cli, ["--json", *shlex.split(add_hint)[1:]])
+	assert added.exit_code == 0, added.output
+	annotated = runner.invoke(cli, args)
+	assert annotated.exit_code == 0, annotated.output
+	payload = json.loads(annotated.stdout)
+	assert payload["data"]["item"]["note"] == "优先沟通"
+	compare_hint = payload["hints"]["next_actions"][0]
+	assert shlex.split(compare_hint)[:3] == ["boss", "--data-dir", str(data_dir.resolve())]
+	compared = runner.invoke(cli, ["--json", *shlex.split(compare_hint)[1:]])
+	assert compared.exit_code == 0, compared.output
+	assert json.loads(compared.stdout)["data"]["items"][0]["job_id"] == job_id
+	assert shlex.split(list_hint) == ["boss", "--data-dir", str(data_dir.resolve()), "shortlist", "list"]
