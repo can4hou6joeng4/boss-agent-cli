@@ -393,6 +393,27 @@ class TestHandleErrorOutputTTY:
 
 		assert ERROR_CODES["NETWORK_ERROR"]["recovery_action"] in stream.getvalue()
 
+	@pytest.mark.parametrize("path", ["/tmp/jobs [x] team", "/tmp/jobs [/bold] team"])
+	def test_tty_mode_recovery_renders_bracket_paths_literally(self, monkeypatch, path):
+		"""恢复命令里的目录按字面显示：Rich 标签不能吞路径，未配对闭合标签也不能抛错。"""
+		ctx = MagicMock()
+		ctx.obj = {"json_output": False}
+		stream = _capture_display_console(monkeypatch)
+		with patch.object(sys, "stdout") as mock_out:
+			mock_out.isatty.return_value = True
+			with pytest.raises(SystemExit):
+				handle_error_output(
+					ctx,
+					"show",
+					code="INVALID_PARAM",
+					message="当前数据目录没有缓存的搜索结果",
+					recovery_action=f"先执行 boss --data-dir '{path}' search <关键词> 建立结果缓存",
+				)
+
+		output = stream.getvalue()
+		assert path in output
+		assert "recovery:" in output
+
 
 # ── handle_auth_errors AccountRiskError 分支 ─────────────────
 

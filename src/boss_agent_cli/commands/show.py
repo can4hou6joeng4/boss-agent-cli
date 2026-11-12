@@ -8,6 +8,11 @@ from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, han
 from boss_agent_cli.index_cache import get_index_info, get_job_by_index
 
 
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""编号及恢复操作必须定位生成该编号的数据目录。"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
 @click.command("show")
 @click.argument("index", type=int)
 @click.pass_context
@@ -16,9 +21,9 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 	"""按编号查看搜索/推荐结果中的职位详情（如 boss show 3）"""
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-	search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
-	recommend_cmd = boss_command_for_ctx(ctx, "recommend")
-	show_cmd = boss_command_for_ctx(ctx, "show <编号>")
+	search_cmd = _hint_command(ctx, "search <关键词>")
+	recommend_cmd = _hint_command(ctx, "recommend")
+	show_cmd = _hint_command(ctx, "show <编号>")
 	rerun_hints = {"next_actions": [search_cmd, recommend_cmd]}
 
 	# 索引是 1-based 的编号：0 或负数永远不可能命中，先按参数错误拒绝，
@@ -42,7 +47,7 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 		handle_error_output(
 			ctx, "show",
 			code="INVALID_PARAM",
-			message="没有缓存的搜索结果，请先执行 boss search 或 boss recommend",
+			message="当前数据目录没有缓存的搜索结果",
 			recovery_action=f"先执行 {search_cmd} 或 {recommend_cmd} 建立结果缓存",
 			hints=rerun_hints,
 		)
@@ -93,7 +98,7 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 			message="职位不存在或已下架",
 			# 职位没了不等于线索断了：Agent 要能直接换关键词重搜，而不是停在
 			# 「下架」上（与索引越界那条提示同一组下一步）。
-			hints={"next_actions": [boss_command_for_ctx(ctx, "search <关键词>"), boss_command_for_ctx(ctx, "recommend")]},
+			hints=rerun_hints,
 		)
 		return
 
@@ -114,14 +119,14 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 
 	# TTY 的 next 行可以写「A 或 B」，但 hints.next_actions 的每条都必须能直接执行。
 	next_action = (
-		f"{boss_command_for_ctx(ctx, 'apply <security_id> <job_id>')} 或 "
-		f"{boss_command_for_ctx(ctx, 'greet <security_id> <job_id>')}"
+		f"{_hint_command(ctx, 'apply <security_id> <job_id>')} 或 "
+		f"{_hint_command(ctx, 'greet <security_id> <job_id>')}"
 	)
 	hints = {
 		"next_actions": [
-			boss_command_for_ctx(ctx, "apply <security_id> <job_id>"),
-			boss_command_for_ctx(ctx, "greet <security_id> <job_id>"),
-			boss_command_for_ctx(ctx, "search <query>"),
+			_hint_command(ctx, "apply <security_id> <job_id>"),
+			_hint_command(ctx, "greet <security_id> <job_id>"),
+			_hint_command(ctx, "search <query>"),
 		],
 	}
 	handle_output(

@@ -584,7 +584,10 @@ def test_detail_empty_job_card_reports_not_found_with_next_steps(mock_auth_cls, 
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "JOB_NOT_FOUND"
 	assert parsed["error"]["recovery_action"]
-	assert parsed["hints"]["next_actions"] == ["boss search <关键词>", "boss recommend"]
+	assert parsed["hints"]["next_actions"] == [
+		f"boss --data-dir {_DEFAULT_DATA_DIR} search <关键词>",
+		f"boss --data-dir {_DEFAULT_DATA_DIR} recommend",
+	]
 
 
 @patch("boss_agent_cli.commands.detail.CacheStore")

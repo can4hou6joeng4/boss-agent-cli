@@ -243,8 +243,11 @@ def test_detail_rejects_blank_security_id():
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
-	assert parsed["hints"]["next_actions"] == ["boss search <关键词>", "boss show <编号>"]
-	assert "boss search <关键词>" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [
+		f"boss --data-dir {_DEFAULT_DATA_DIR} search <关键词>",
+		f"boss --data-dir {_DEFAULT_DATA_DIR} show <编号>",
+	]
+	assert f"boss --data-dir {_DEFAULT_DATA_DIR} search <关键词>" in parsed["error"]["recovery_action"]
 
 
 def test_apply_rejects_blank_identifiers():
@@ -519,7 +522,7 @@ def test_recommend_next_page_hint_keeps_with_score(mock_auth_cls, mock_client_cl
 
 	assert result.exit_code == 0, result.output
 	next_pages = [a for a in json.loads(result.stdout)["hints"]["next_actions"] if "recommend --page" in a]
-	assert next_pages == ["boss recommend --page 3 --with-score"]
+	assert next_pages == [f"boss --data-dir {_DEFAULT_DATA_DIR} recommend --page 3 --with-score"]
 
 
 @patch("boss_agent_cli.commands.recommend.CacheStore")
@@ -2472,8 +2475,8 @@ def test_detail_json_hints_expose_available_candidate_actions(mock_client_cls, m
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	actions = parsed["hints"]["next_actions"]
-	assert "boss apply <security_id> <job_id>" in actions
-	assert "boss greet <security_id> <job_id>" in actions
+	assert f"boss --data-dir {_DEFAULT_DATA_DIR} apply <security_id> <job_id>" in actions
+	assert f"boss --data-dir {_DEFAULT_DATA_DIR} greet <security_id> <job_id>" in actions
 
 
 @patch("boss_agent_cli.commands.show.CacheStore")
@@ -2513,8 +2516,8 @@ def test_show_json_hints_expose_available_candidate_actions(
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	actions = parsed["hints"]["next_actions"]
-	assert "boss apply <security_id> <job_id>" in actions
-	assert "boss greet <security_id> <job_id>" in actions
+	assert f"boss --data-dir {_DEFAULT_DATA_DIR} apply <security_id> <job_id>" in actions
+	assert f"boss --data-dir {_DEFAULT_DATA_DIR} greet <security_id> <job_id>" in actions
 
 
 @patch("boss_agent_cli.commands.show.CacheStore")

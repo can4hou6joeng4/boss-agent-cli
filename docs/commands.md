@@ -105,6 +105,8 @@ pbpaste | boss login --curl-file -
 
 `search` 与 `preset` 的全部后继命令（`detail` / `apply` / `greet`、翻页、`preset list` / `preset add` / `preset remove`）都保留本次调用的 `--data-dir` 与平台，并按 shell 参数转义，照抄即可在同一数据目录里执行。搜索缓存只保存结果与分页证据，不保存 `hints`：命中时按本次调用参数重建提示，缓存键不含 `--sort`，未排序的调用也不会拿到上一次 `--sort score` 的翻页命令。
 
+`recommend`、`show`、`detail` 的后继操作与错误恢复指引也保留原 `--data-dir` 与平台。`search`（包括缓存命中）和 `recommend` 的终端表尾使用同一目录的 `show` 命令；详情页的投递、打招呼提示同样沿用该目录。路径中的空格、引号或 Rich 标签按字面保留，复制执行时仍指向同一登录态与索引。
+
 `boss show <#>` 的编号只对最近一次 `search` / `recommend` 建立的索引快照有效：每次搜索或推荐都会整份覆盖缓存，重跑任一命令后旧编号会静默指向新结果。成功信封的 `data.index_snapshot` 返回 `source`（`search:<关键词>` 或 `recommend`）、`page`（建立快照的页码，旧版本缓存为 `null`）、`count` 与 `saved_at`（Unix 秒）；`search` / `recommend` 成功写入索引后也会在 `pagination.index_snapshot` 返回同一份快照身份，写入失败或没有缓存时该字段缺失——此时不要把本次结果与旧编号配对。Agent 应把编号和这份快照身份一起保存，发现来源、页码或时间不匹配时重新搜索定位，而不是继续使用旧编号。
 
 ## 可恢复批量采集
