@@ -79,7 +79,7 @@ main.py                 Click group、全局选项、用法错误的信封化翻
 
 ## 登录与认证
 
-`auth/AuthManager` 维护加密登录态（Fernet + 机器绑定密钥）。登录链路按平台声明依次尝试：浏览器 Cookie 提取 → CDP（复用已登录 context 前做一次只读探测，失效自动改走强制登录）→ patchright 扫码。登录态只保存在本地；CLI 不读取或上传任何与登录无关的浏览器数据。
+`auth/AuthManager` 维护加密登录态（Fernet + 机器绑定密钥）。登录链路按平台声明依次尝试：浏览器 Cookie 提取 → CDP（复用已登录 context 前做一次只读探测，失效自动改走强制登录）→ patchright 扫码。登录态只保存在本地；CLI 不读取或上传任何与登录无关的浏览器数据。密钥由机器 ID 与随机 salt 派生，因此同机其他用户若能读到文件即可解密：`auth/` 目录按 0700 创建，`salt` 与 `session.enc` 以 0600 原子写入，历史安装的宽松权限在打开时也会被收紧。
 
 ## 平台抽象
 
@@ -97,7 +97,7 @@ main.py                 Click group、全局选项、用法错误的信封化翻
 
 ```text
 config.json          用户配置
-auth/session.enc     加密登录态（Fernet，机器绑定）
+auth/session.enc     加密登录态（Fernet，机器绑定，0600）
 cache/boss_agent.db  SQLite 缓存：搜索历史、候选池、预设、watch、crawl 断点
 chat-export/         聊天快照与导出
 resumes/             本地简历

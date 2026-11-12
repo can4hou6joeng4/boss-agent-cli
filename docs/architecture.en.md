@@ -79,7 +79,7 @@ Design constraints:
 
 ## Login and Authentication
 
-`auth/AuthManager` keeps encrypted login state (Fernet with a machine-bound key). Login tries, in the order declared by the platform: browser cookie extraction → CDP (a read-only probe before reusing an existing logged-in context; on failure it falls back to a forced login) → patchright QR. Login state stays local; the CLI does not read or upload unrelated browser data.
+`auth/AuthManager` keeps encrypted login state (Fernet with a machine-bound key). Login tries, in the order declared by the platform: browser cookie extraction → CDP (a read-only probe before reusing an existing logged-in context; on failure it falls back to a forced login) → patchright QR. Login state stays local; the CLI does not read or upload unrelated browser data. The key is derived from the machine ID and a random salt, so another local user who can read the files could decrypt them: the `auth/` directory is created with mode 0700, `salt` and `session.enc` are written atomically with mode 0600, and looser permissions from older installs are tightened when the store is opened.
 
 ## Platform Abstraction
 
@@ -97,7 +97,7 @@ Default `~/.boss-agent/` (override with `--data-dir`):
 
 ```text
 config.json          user configuration
-auth/session.enc     encrypted login state (Fernet, machine-bound)
+auth/session.enc     encrypted login state (Fernet, machine-bound, 0600)
 cache/boss_agent.db  SQLite cache: search history, shortlist, presets, watch, crawl checkpoints
 chat-export/         chat snapshots and exports
 resumes/             local resumes
