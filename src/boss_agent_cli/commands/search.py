@@ -86,6 +86,16 @@ def _refresh_greeted(items: list[dict[str, Any]], cache: CacheStore, account: st
 	return items
 
 
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""search 的后继命令必须保留原数据目录与平台。
+
+	预设、搜索缓存、登录态都在当前数据目录里。提示写成裸的 ``boss ...`` 时，
+	使用自定义 ``--data-dir`` 的调用方照抄会落到默认目录：预设「不存在」、
+	翻页读另一份缓存、``detail`` / ``greet`` 用另一个账号（Issue #919）。
+	"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
 def _more_hint(next_command: str) -> str:
 	"""TTY 表尾的翻页提示。
 
@@ -126,7 +136,7 @@ def _build_next_page_command(ctx: click.Context, *, page: int, params: _NextPage
 	带 ``--welfare`` / ``--active`` 的搜索不受影响：它们要逐个查详情，分页
 	语义不同，调用方本来就不给下一页提示。
 	"""
-	argv = boss_command_for_ctx(ctx, "search").split(" ")
+	argv = ["search"]
 	if params.query:
 		argv.append(params.query)
 	if params.search_url:
@@ -150,7 +160,42 @@ def _build_next_page_command(ctx: click.Context, *, page: int, params: _NextPage
 	if params.sort_mode != "relevance":
 		argv.extend(["--sort", params.sort_mode])
 	argv.extend(["--page", str(page + 1)])
-	return " ".join(shell_argument(part) for part in argv)
+	# 前缀（平台 / 数据目录）由 _hint_command 负责转义，这里只转义本次调用参数。
+	return _hint_command(ctx, " ".join(shell_argument(part) for part in argv))
+
+
+_UNKNOWN_HAS_MORE_ACTION = "平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有结果"
+
+
+def _result_hints(
+	ctx: click.Context,
+	*,
+	page: int,
+	params: _NextPageParams,
+	has_next_page: bool,
+	has_more_unknown: bool,
+) -> tuple[dict[str, Any], str]:
+	"""成功信封的 hints 与下一页命令（没有下一页时为空串）。
+
+	hints 取决于本次调用的上下文（数据目录、平台、``--sort``），所以每次调用
+	都重新构造，不从搜索缓存里取：缓存键不含 ``--sort``，把提示和结果一起
+	缓存会让命中的调用拿到别次调用的翻页命令（Issue #919）。
+	"""
+	hints: dict[str, Any] = {
+		"next_actions": [
+			_hint_command(ctx, "detail <security_id>"),
+			_hint_command(ctx, "apply <security_id> <job_id>"),
+			_hint_command(ctx, "greet <security_id> <job_id>"),
+		],
+	}
+	next_page_command = ""
+	if has_next_page:
+		next_page_command = _build_next_page_command(ctx, page=page, params=params)
+		hints["next_actions"].append(next_page_command)
+	elif has_more_unknown:
+		# 与 recommend 同口径：平台没说下一页，不能凭本页数量判断。
+		hints["operator_actions"] = [_UNKNOWN_HAS_MORE_ACTION]
+	return hints, next_page_command
 
 
 def _progress_title(criteria: SearchFilterCriteria, welfare_conditions: Any, active: str | None = None) -> str:
@@ -241,8 +286,8 @@ def search_cmd(
 			"search",
 			code="INVALID_PARAM",
 			message="--preset 的值不能为空",
-			recovery_action="用 boss preset list 查看已保存的预设，或改用搜索关键词",
-			hints={"next_actions": ["boss preset list"]},
+			recovery_action=f"用 {_hint_command(ctx, 'preset list')} 查看已保存的预设，或改用搜索关键词",
+			hints={"next_actions": [_hint_command(ctx, "preset list")]},
 		)
 		return
 	if search_url is not None and not search_url.strip():
@@ -251,8 +296,11 @@ def search_cmd(
 			"search",
 			code="INVALID_PARAM",
 			message="--url 的值不能为空",
-			recovery_action="boss search <关键词> 或 boss search --url <搜索页URL>",
-			hints={"next_actions": ["boss search <关键词>"]},
+			recovery_action=(
+				f"{_hint_command(ctx, 'search <关键词>')} 或 "
+				f"{_hint_command(ctx, 'search --url <搜索页URL>')}"
+			),
+			hints={"next_actions": [_hint_command(ctx, "search <关键词>")]},
 		)
 		return
 	# 纯空白的 query 与空串等价：`boss search " "` 能绕过下面的「未提供 query」
@@ -266,7 +314,8 @@ def search_cmd(
 	# 用户这次没传任何筛选参数，只说「未知薪资范围」看不出该改哪里。
 	preset_origin = ""
 	if preset and not any((city, salary, experience, education, industry, scale, stage, job_type)):
-		preset_origin = f"（来自 preset '{preset}'，可用 boss preset remove {shell_argument(preset)} 删除后重建）"
+		remove_cmd = _hint_command(ctx, f"preset remove {shell_argument(preset)}")
+		preset_origin = f"（来自 preset '{preset}'，可用 {remove_cmd} 删除后重建）"
 
 	if preset:
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
@@ -277,13 +326,21 @@ def search_cmd(
 				# 兜成 NETWORK_ERROR 让 Agent 无限重试。
 				handle_error_output(
 					ctx, "search", code="SAVED_SEARCH_INVALID", message=str(exc),
-					hints={"next_actions": [f"boss preset remove {shell_argument(preset)}", f"boss preset add {shell_argument(preset)} <关键词>"]},
+					hints={"next_actions": [
+						_hint_command(ctx, f"preset remove {shell_argument(preset)}"),
+						_hint_command(ctx, f"preset add {shell_argument(preset)} <关键词>"),
+					]},
 				)
 				return
 		if record is None:
+			list_cmd = _hint_command(ctx, "preset list")
 			handle_error_output(
 				ctx, "search", code="SAVED_SEARCH_NOT_FOUND", message=f"未找到 preset: {preset}",
-				hints={"next_actions": ["boss preset list", f"boss preset add {shell_argument(preset)} <关键词>"]},
+				recovery_action=f"用 {list_cmd} 查看已保存的预设后重试",
+				hints={"next_actions": [
+					list_cmd,
+					_hint_command(ctx, f"preset add {shell_argument(preset)} <关键词>"),
+				]},
 			)
 			return
 		params = record["params"]
@@ -303,7 +360,7 @@ def search_cmd(
 		try:
 			parsed_url = parse_boss_search_url(search_url)
 		except SearchUrlParseError as exc:
-			search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
+			search_cmd = _hint_command(ctx, "search <关键词>")
 			handle_error_output(
 				ctx,
 				"search",
@@ -319,14 +376,14 @@ def search_cmd(
 			page = parsed_url.page
 
 	if not query and not search_url:
-		search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
+		search_cmd = _hint_command(ctx, "search <关键词>")
 		handle_error_output(
 			ctx,
 			"search",
 			code="INVALID_PARAM",
 			message="未提供 query，请传入搜索关键词、--preset 或 --url",
 			recovery_action=f"补上搜索关键词、--preset 或 --url 后重试，例如 {search_cmd}",
-			hints={"next_actions": [search_cmd, boss_command_for_ctx(ctx, "preset list")]},
+			hints={"next_actions": [search_cmd, _hint_command(ctx, "preset list")]},
 		)
 		return
 	query = query or ""
@@ -374,6 +431,22 @@ def search_cmd(
 		raw_params=raw_params,
 	)
 
+	next_page_params = _NextPageParams(
+		query=query,
+		search_url=search_url,
+		city=city,
+		salary=salary,
+		experience=experience,
+		education=education,
+		industry=industry,
+		scale=scale,
+		stage=stage,
+		job_type=job_type,
+		no_cache=no_cache,
+		with_score=with_score,
+		sort_mode=sort_mode,
+	)
+
 	# 账号作用域要在读缓存之前确定：缓存按账号隔离，命中后也要按当前账号重算 greeted。
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	account = account_scope(auth)
@@ -402,10 +475,20 @@ def search_cmd(
 						snapshot = get_index_snapshot(data_dir)
 						if snapshot is not None:
 							cached_pagination["index_snapshot"] = snapshot
+					# 提示按本次调用重建，不取缓存里的旧值：分页证据来自缓存的
+					# pagination，数据目录 / --sort 来自本次调用。
+					cached_has_more = cached_pagination.get("has_more") if isinstance(cached_pagination, dict) else None
+					cached_hints, _ = _result_hints(
+						ctx,
+						page=page,
+						params=next_page_params,
+						has_next_page=cached_has_more is True,
+						has_more_unknown=not isinstance(cached_has_more, bool),
+					)
 					handle_output(
 						ctx, "search", items,
 						render=lambda data: render_job_table(data, f"search: {query}"),
-						pagination=cached_pagination, hints=result.get("hints"),
+						pagination=cached_pagination, hints=cached_hints,
 					)
 					return
 				logger.debug("搜索缓存内容不可用，按未命中处理")
@@ -512,40 +595,15 @@ def search_cmd(
 				"total": pipeline_result.total or len(items),
 				"total_kind": "returned_page_count",
 			}
-			hints: dict[str, Any] = {
-				"next_actions": [
-					boss_command_for_ctx(ctx, "detail <security_id>"),
-					boss_command_for_ctx(ctx, "apply <security_id> <job_id>"),
-					boss_command_for_ctx(ctx, "greet <security_id> <job_id>"),
-				],
-			}
+			hints, next_page_command = _result_hints(
+				ctx,
+				page=page,
+				params=next_page_params,
+				has_next_page=bool(pipeline_result.has_more) and not detail_filter,
+				has_more_unknown=pipeline_result.has_more_reported is None and not detail_filter,
+			)
 			if active_level:
 				hints["active_filter"] = _active_filter_hint(active_level, pipeline_result)
-			next_page_command = ""
-			if pipeline_result.has_more and not detail_filter:
-				next_page_command = _build_next_page_command(
-					ctx,
-					page=page,
-					params=_NextPageParams(
-						query=query,
-						search_url=search_url,
-						city=city,
-						salary=salary,
-						experience=experience,
-						education=education,
-						industry=industry,
-						scale=scale,
-						stage=stage,
-						job_type=job_type,
-						no_cache=no_cache,
-						with_score=with_score,
-						sort_mode=sort_mode,
-					),
-				)
-				hints["next_actions"].append(next_page_command)
-			elif pipeline_result.has_more_reported is None and not detail_filter:
-				# 与 recommend 同口径：平台没说下一页，不能凭本页数量判断。
-				hints["operator_actions"] = ["平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有结果"]
 
 			# 缓存普通搜索结果
 			if not detail_filter and not with_score:
@@ -557,7 +615,8 @@ def search_cmd(
 					"job_type": job_type, "url": search_url, "raw_params": raw_params, "page": page,
 					"account": account,
 				}
-				cache_data = {"data": cache_items, "pagination": pagination, "hints": hints}
+				# 只缓存结果与分页证据；hints 取决于调用上下文，命中时重建。
+				cache_data = {"data": cache_items, "pagination": pagination}
 				cache.put_search(search_params, json.dumps(cache_data, ensure_ascii=False))
 
 			# 快照身份只对本次返回有效，不写进搜索缓存；缓存命中时重新读取。

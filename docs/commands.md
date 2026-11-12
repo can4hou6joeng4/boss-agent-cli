@@ -103,6 +103,8 @@ pbpaste | boss login --curl-file -
 
 `search` 的下一页命令（信封 `hints.next_actions` 与终端 `more:` 提示是同一条）保留本次调用生效的全部条件：位置参数关键词、`--url`、城市 / 薪资 / 经验 / 学历 / 行业 / 规模 / 融资阶段 / 职位类型、`--with-score`、`--sort score`、`--no-cache`，只把 `--page` 换成 N+1；`--preset` 展开成等价的显式筛选。所有值按 POSIX shell 规则转义，可直接复制执行。带 `--welfare` / `--active` 的搜索需要逐个查详情，分页语义不同，不提供下一页提示。
 
+`search` 与 `preset` 的全部后继命令（`detail` / `apply` / `greet`、翻页、`preset list` / `preset add` / `preset remove`）都保留本次调用的 `--data-dir` 与平台，并按 shell 参数转义，照抄即可在同一数据目录里执行。搜索缓存只保存结果与分页证据，不保存 `hints`：命中时按本次调用参数重建提示，缓存键不含 `--sort`，未排序的调用也不会拿到上一次 `--sort score` 的翻页命令。
+
 `boss show <#>` 的编号只对最近一次 `search` / `recommend` 建立的索引快照有效：每次搜索或推荐都会整份覆盖缓存，重跑任一命令后旧编号会静默指向新结果。成功信封的 `data.index_snapshot` 返回 `source`（`search:<关键词>` 或 `recommend`）、`page`（建立快照的页码，旧版本缓存为 `null`）、`count` 与 `saved_at`（Unix 秒）；`search` / `recommend` 成功写入索引后也会在 `pagination.index_snapshot` 返回同一份快照身份，写入失败或没有缓存时该字段缺失——此时不要把本次结果与旧编号配对。Agent 应把编号和这份快照身份一起保存，发现来源、页码或时间不匹配时重新搜索定位，而不是继续使用旧编号。
 
 ## 可恢复批量采集
