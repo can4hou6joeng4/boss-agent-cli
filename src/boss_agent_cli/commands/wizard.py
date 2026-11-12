@@ -82,6 +82,26 @@ def _wizard_error(
 	)
 
 
+def _workflow_inner_run_id(run: Mapping[str, Any]) -> str:
+	"""取被 stop 的 run 里绑定的 crawl 子任务 run_id（如有）。
+
+	与 ``WorkflowStore.request_stop`` 的取值口径一致：步骤结果里的
+	``inner_run_id``，或 crawl 动作返回数据里的 ``run_id``。
+	"""
+	for step in run.get("steps") or []:
+		if not isinstance(step, Mapping):
+			continue
+		result = step.get("result") or {}
+		if not isinstance(result, Mapping):
+			continue
+		inner = result.get("inner_run_id")
+		if inner is None and isinstance(result.get("data"), Mapping):
+			inner = result["data"].get("run_id")
+		if inner:
+			return str(inner)
+	return ""
+
+
 def _workflow_next_actions(ctx: click.Context, run: Mapping[str, Any]) -> list[str]:
 	"""按 run 状态给出可直接执行的后继命令。
 
@@ -95,7 +115,21 @@ def _workflow_next_actions(ctx: click.Context, run: Mapping[str, Any]) -> list[s
 		return [prefix]
 	status_cmd = f"{prefix} --status {shell_argument(run_id)}"
 	status = str(run.get("status") or "")
-	if status in {"stopped", "failed", "waiting_input"}:
+	if status == "stopped":
+		# stopped 是终态：runner 对 stopped 直接返回原 run，preserve_stopped 也保证
+		# 状态无法离开 stopped——给 `--resume` 会让 Agent 得到一个永远 ok 的空转
+		# 循环（Issue #870）。只能新建 workflow，或恢复它当时启动的内部 crawl。
+		actions = [prefix]
+		inner_run_id = _workflow_inner_run_id(run)
+		if inner_run_id:
+			# crawl run 也只存在于同一个数据目录，指引必须带上它（同 #861 的迁移）。
+			actions.insert(
+				0,
+				boss_command_for_ctx(ctx, f"crawl resume {shell_argument(inner_run_id)}", include_data_dir=True),
+			)
+		actions.append(status_cmd)
+		return actions
+	if status in {"failed", "waiting_input"}:
 		# 断点仍在本地：恢复是唯一能接着往下跑的动作，status 方便先核对。
 		return [f"{prefix} --resume {shell_argument(run_id)}", status_cmd]
 	if status in {"running", "pending"}:
