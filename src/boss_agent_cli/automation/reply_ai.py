@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, replace
 from json import JSONDecodeError
 from pathlib import Path
@@ -82,7 +83,11 @@ def _draft_with_local_ai(
 		return replace(decision, reason=f"{decision.reason}; local ai unavailable ({exc}), template fallback")
 	try:
 		draft = parse_reply_draft(raw)
-	except (JSONDecodeError, KeyError, TypeError):
+	except (JSONDecodeError, KeyError, TypeError, ValueError):
+		# 本地模型输出是不可信外部输入：`confidence: "high"` 的 float() 会抛
+		# ValueError，旧实现没接住，一个确定性的格式问题会终止整轮自动化并被
+		# CLI 报成可重试的 NETWORK_ERROR（Issue #893）。所有结构错误统一降级到
+		# 模板话术并要求人工复核，不发送任何消息。
 		return replace(
 			decision,
 			confidence=min(decision.confidence, 0.5),
@@ -117,23 +122,55 @@ def _draft_with_local_ai(
 
 
 def parse_reply_draft(raw: str) -> ReplyDraft:
-	"""Parse the strict JSON object produced by a local model."""
+	"""Parse the strict JSON object produced by a local model.
+
+	模型输出是外部输入，字段类型必须显式校验：``reply: null`` 经 ``str()`` 会变成
+	``"None"`` 并作为话术原样发给候选人（``123`` 同理）；``confidence: "high"``
+	会让 ``float()`` 抛出调用方没接住的 ValueError；``2.0`` / ``NaN`` 则绕开草稿
+	自身的复核分支。这里把结构问题抛给调用方，由调用方统一降级到模板话术
+	（Issue #893）。
+	"""
 	text = raw.strip()
 	if text.startswith("```"):
 		text = "\n".join(line for line in text.splitlines() if not line.startswith("```")).strip()
 	data = json.loads(text)
 	if not isinstance(data, dict):
 		raise TypeError("reply draft must be a JSON object")
+	action = data["action"]
+	reply = data["reply"]
+	if not isinstance(action, str):
+		raise TypeError("reply draft action must be a string")
+	if not isinstance(reply, str):
+		raise TypeError("reply draft reply must be a string")
+	confidence = _draft_confidence(data["confidence"])
 	risk_flags = data.get("risk_flags", [])
 	if not isinstance(risk_flags, list):
 		raise TypeError("risk_flags must be a list")
 	return ReplyDraft(
-		action=str(data["action"]),
-		confidence=float(data["confidence"]),
-		reply=str(data["reply"]),
+		action=action,
+		confidence=confidence,
+		# 首尾空白对聊天话术没有意义；全空白回复按空串处理，调用方退回模板。
+		reply=reply.strip(),
 		reason=str(data["reason"]),
 		risk_flags=tuple(str(item) for item in risk_flags),
 	)
+
+
+def _draft_confidence(value: Any) -> float:
+	"""Validate model-reported confidence as a finite number in [0, 1].
+
+	接受可无损转成数值的字符串（部分本地模型会把 ``0.9`` 写成 ``"0.9"``），
+	但拒绝布尔值、非数值文本与越界值——这些都不是可解释的置信度。
+	"""
+	if isinstance(value, bool):
+		raise TypeError("reply draft confidence must be a number")
+	try:
+		confidence = float(value)
+	except (TypeError, ValueError) as exc:
+		raise ValueError("reply draft confidence must be a finite number between 0 and 1") from exc
+	if not math.isfinite(confidence) or not 0 <= confidence <= 1:
+		raise ValueError("reply draft confidence must be between 0 and 1")
+	return confidence
 
 
 def _reply_messages(decision: Decision, conversation: Conversation) -> list[dict[str, Any]]:
