@@ -31,7 +31,14 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 	auth = AuthManager(data_dir, logger=logger, platform=platform_name)
 
 	token = auth.check_status()
-	auth_health = assess_auth_health(data_dir, platform=platform_name, token=token)
+	auth_health = assess_auth_health(
+		data_dir,
+		platform=platform_name,
+		token=token,
+		login_action=login_action_for_ctx(ctx),
+		logout_action=boss_command_for_ctx(ctx, "logout", include_data_dir=True),
+		status_action=boss_command_for_ctx(ctx, "status", include_data_dir=True),
+	)
 	if token is None:
 		login_action = login_action_for_ctx(ctx)
 		handle_error_output(

@@ -897,7 +897,10 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recovery_action=nav_recovery,
 					details=e.details(),
 					hints={
-						"next_actions": ["boss doctor", "boss login"],
+						"next_actions": [
+							boss_command_for_ctx(ctx, "doctor", include_data_dir=True),
+							login_action_for_ctx(ctx),
+						],
 						"operator_actions": [
 							"浏览器通道会先打开 https://www.zhipin.com/ 再请求接口；--url 只解析筛选条件，不会改走搜索页",
 							"首页在自动化下偶发加载卡住，CLI 已跳到空白页并重试。仍失败时，用带调试端口的 Chrome 打开官网并确认首页能加载，再执行 boss --cdp-url http://127.0.0.1:9222 <命令>",

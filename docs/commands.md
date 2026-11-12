@@ -59,7 +59,7 @@ TTY 下只把 `operator_actions` 渲染到 stderr；`next_actions` 是纯 Agent 
 | `boss doctor` | 诊断环境、依赖、凭据完整性和网络；默认仅本地诊断，不读取浏览器 Cookie。`--probe-cookies` 才提取浏览器 Cookie，`--live-probe` 才执行低频只读探测。探测到求职者侧登录态时先标出身份，不继续请求招聘者接口 |
 | `boss me` | 我的信息（用户/简历/期望/投递记录） |
 
-登录恢复命令保留原数据目录：使用 `--data-dir` 时，认证错误的 `error.recovery_action`、`hints.next_actions` 和真人扫码指引会携带经过 shell 参数转义的绝对目录，换工作目录后仍可照提示登录。登录成功后的状态检查、搜索与推荐提示，以及 `status` 的后继操作，使用同一目录。向导等待登录时的登录与续跑指引、认证失败 checkpoint 的恢复动作和任务状态提示也保留目录，避免登录或恢复到默认目录下的其他会话。静态 `boss schema` 仍展示通用命令示例。
+登录恢复命令保留原数据目录：使用 `--data-dir` 时，认证错误的 `error.recovery_action`、`hints.next_actions` 和真人扫码指引会携带经过 shell 参数转义的绝对目录，换工作目录后仍可照提示登录。登录成功后的状态检查、搜索与推荐提示，以及 `status` 的后继操作，使用同一目录。向导等待登录时的登录与续跑指引、认证失败与超时 checkpoint、任务不存在或记录损坏时的恢复提示，以及 `status` / `doctor` 信封里的 `auth_health` 诊断字段（含检查项的恢复动作），也保留目录，避免被引导到默认目录下的其他会话。静态 `boss schema` 仍展示通用命令示例。
 
 `boss me --section deliver --deliver-page 2` 单独查看投递记录时，信封 `pagination` 给出分页证据：`page` 优先使用平台返回的有效页码，否则回显请求页；`has_more` 仅在平台返回布尔 `hasMore` 时为 `true` / `false`，缺失或类型不明确时为 `null`，`has_more_source=unknown`。`total` 是本页 `list` 数组的条数（`total_kind=returned_page_count`）；列表字段缺失或类型不符时为 `null`，不代表全量投递数。仅 `has_more=true` 时附加下一页命令；未知时 `operator_actions` 说明不能凭本页数量判断。默认 `boss me` 汇总四段信息、或只查其他 section 时，顶层 `pagination` 保持 `null`。MCP 对应调用是 `boss_me(section="deliver", deliver_page=2)`。
 

@@ -116,7 +116,10 @@ class AuthManager:
 		check_request_control()
 
 	def _login_action(self) -> str:
-		return "boss login" if self._platform == "zhipin" else f"boss --platform {self._platform} login"
+		# 异常文本会作为 error.message 出现在信封里，同样要指回本次登录态所在目录。
+		from boss_agent_cli.display import boss_command
+
+		return boss_command("login", platform_name=self._platform, data_dir=self._data_dir)
 
 	def get_token(self) -> dict[str, Any]:
 		if self._token is not None:

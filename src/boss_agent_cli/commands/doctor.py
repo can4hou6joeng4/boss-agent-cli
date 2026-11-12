@@ -17,7 +17,13 @@ from boss_agent_cli.auth.cookie_extract import extract_cookies
 from boss_agent_cli.auth.health import assess_auth_health, auth_config_for_platform
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._doctor_checks import _add_live_probe_checks, _add_quality_baseline_checks, _doctor_command
-from boss_agent_cli.display import handle_output, platform_error_contract, render_simple_list
+from boss_agent_cli.display import (
+	boss_command_for_ctx,
+	handle_output,
+	login_action_for_ctx,
+	platform_error_contract,
+	render_simple_list,
+)
 from boss_agent_cli.services.browser_runtime import (
 	evaluate_patchright_chromium,
 	patchright_browser_cache_dirs,
@@ -155,7 +161,14 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 
 	# 2) Auth storage
 	token = auth.check_status()
-	auth_health = assess_auth_health(data_dir, platform=platform_name, token=token)
+	auth_health = assess_auth_health(
+		data_dir,
+		platform=platform_name,
+		token=token,
+		login_action=login_action_for_ctx(ctx),
+		logout_action=boss_command_for_ctx(ctx, "logout", include_data_dir=True),
+		status_action=boss_command_for_ctx(ctx, "status", include_data_dir=True),
+	)
 	has_token = auth_health.token_present
 	checks.extend(auth_health.checks_as_dicts())
 
@@ -245,7 +258,7 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 			"browser_channel",
 			"warn",
 			"CDP 不可用；普通 httpx 读取不依赖浏览器通道",
-			"如需登录，请使用 boss login；命中风控时停止自动化访问",
+			f"如需登录，请使用 {login_action_for_ctx(ctx)}；命中风控时停止自动化访问",
 		)
 
 	# 5.6) Optional low-frequency live read probes

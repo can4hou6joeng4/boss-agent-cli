@@ -590,7 +590,7 @@ def run_wizard_command(
 			code="CACHE_RECORD_INVALID",
 			message=str(exc),
 			recoverable=True,
-			recovery_action="boss wizard --input-json '<object>' 重新创建任务；原记录无法恢复，已导出的文件不会自动删除",
+			recovery_action=f"{boss_command_for_ctx(ctx, 'wizard --input-json <object>', include_data_dir=True)} 重新创建任务；原记录无法恢复，已导出的文件不会自动删除",
 		)
 
 
@@ -636,8 +636,8 @@ def _run_wizard_command(
 			interactive,
 			code="INVALID_PARAM",
 			message=f"{selectors[0][0]} 的值不能为空",
-			recovery_action="补上 run_id 后重试；用 boss wizard --status <run_id> 核对已有任务",
-			hints={"next_actions": ["boss wizard"]},
+			recovery_action=f"补上 run_id 后重试；用 {boss_command_for_ctx(ctx, 'wizard --status <run_id>', include_data_dir=True)} 核对已有任务",
+			hints={"next_actions": [boss_command_for_ctx(ctx, "wizard", include_data_dir=True)]},
 		)
 		return
 
@@ -651,7 +651,11 @@ def _run_wizard_command(
 					interactive,
 					code="WORKFLOW_NOT_FOUND",
 					message=f"未找到任务: {status_run_id}",
-					hints={"next_actions": ["boss wizard"]},
+					recovery_action=(
+						f"{boss_command_for_ctx(ctx, 'wizard', include_data_dir=True)}（新建 workflow），或 "
+						f"{boss_command_for_ctx(ctx, 'wizard --status <run_id>', include_data_dir=True)} 核对 ID"
+					),
+					hints={"next_actions": [boss_command_for_ctx(ctx, "wizard", include_data_dir=True)]},
 				)
 				return
 			handle_output(ctx, "wizard", run, render=render_run, hints={"next_actions": _workflow_next_actions(ctx, run)})
@@ -663,7 +667,11 @@ def _run_wizard_command(
 					interactive,
 					code="WORKFLOW_NOT_FOUND",
 					message=f"未找到可停止的任务: {stop_run_id}",
-					hints={"next_actions": ["boss wizard"]},
+					recovery_action=(
+						f"{boss_command_for_ctx(ctx, 'wizard', include_data_dir=True)}（新建 workflow），或 "
+						f"{boss_command_for_ctx(ctx, 'wizard --status <run_id>', include_data_dir=True)} 核对 ID"
+					),
+					hints={"next_actions": [boss_command_for_ctx(ctx, "wizard", include_data_dir=True)]},
 				)
 				return
 			run = store.get(stop_run_id) or {}
@@ -693,7 +701,11 @@ def _run_wizard_command(
 						interactive,
 						code="WORKFLOW_NOT_FOUND",
 						message=f"未找到任务: {resume_run_id}",
-						hints={"next_actions": ["boss wizard"]},
+						recovery_action=(
+							f"{boss_command_for_ctx(ctx, 'wizard', include_data_dir=True)}（新建 workflow），或 "
+							f"{boss_command_for_ctx(ctx, 'wizard --status <run_id>', include_data_dir=True)} 核对 ID"
+						),
+						hints={"next_actions": [boss_command_for_ctx(ctx, "wizard", include_data_dir=True)]},
 					)
 					return
 				plan = _plan_from_run(existing)
@@ -706,7 +718,7 @@ def _run_wizard_command(
 					code="WIZARD_INPUT_REQUIRED",
 					message="非交互模式需要 --input-json、--resume、--status 或 --stop",
 					recoverable=True,
-					recovery_action="boss wizard --json --input-json '<object>'",
+					recovery_action=f"在原来的数据目录执行 {boss_command_for_ctx(ctx, 'wizard --json --input-json <object>', include_data_dir=True)} 创建新任务",
 				)
 				return
 		except WorkflowInputError as exc:

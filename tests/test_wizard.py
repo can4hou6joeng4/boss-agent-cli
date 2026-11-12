@@ -2823,7 +2823,7 @@ def test_wizard_status_and_stop_use_explicit_run_id(tmp_path):
 	assert envelope["error"]["code"] == "WORKFLOW_NOT_FOUND"
 	# 任务记录缺失是本地状态问题：Agent 需要一条能直接执行的重建入口。
 	assert envelope["error"]["recovery_action"]
-	assert envelope["hints"]["next_actions"] == ["boss wizard"]
+	assert envelope["hints"]["next_actions"] == [f"boss --data-dir {tmp_path.resolve()} wizard"]
 
 
 def test_wizard_status_reports_resume_next_action(tmp_path):

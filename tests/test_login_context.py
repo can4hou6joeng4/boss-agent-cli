@@ -13,11 +13,11 @@ from click.testing import CliRunner
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.auth.token_store import TokenStore
 from boss_agent_cli.commands._login_errors import classify_login_error
-from boss_agent_cli.display import handle_error_output, login_action_for_ctx
+from boss_agent_cli.display import handle_error_output, login_action_for_ctx, shell_argument
 from boss_agent_cli.main import cli
 from boss_agent_cli.output import Logger
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS
-from boss_agent_cli.wizard.models import WorkflowPlan
+from boss_agent_cli.wizard.models import StepResult, WorkflowPlan
 from boss_agent_cli.wizard.runner import WorkflowActionError, WorkflowRunner
 from boss_agent_cli.wizard.store import WorkflowStore
 
@@ -110,6 +110,15 @@ def test_platform_auth_error_keeps_directory_and_diagnostic_fields(tmp_path, mon
 	assert action in payload["hints"]["operator_actions"][0]
 	assert payload["hints"]["auth_health"]["primary_name"] == "wt2"
 	assert payload["hints"]["checks"]
+	# 嵌套诊断字段同样会被 Agent 当作可执行命令：不能把人引回默认目录。
+	nested = [payload["hints"]["auth_health"]["recovery_action"]]
+	nested += [check.get("recovery_action") for check in payload["hints"]["checks"]]
+	for command in filter(None, nested):
+		# 多个可执行片段可能用 && 串联；每段都必须指回原目录。
+		for part in command.split("&&"):
+			if part.strip().startswith("boss "):
+				assert shlex.split(part)[:3] == ["boss", "--data-dir", str(data_dir.resolve())], command
+	assert not any("boss login" in command for command in filter(None, nested))
 
 
 @pytest.mark.parametrize("exc", [
@@ -219,6 +228,54 @@ def test_waiting_login_can_resume_and_check_original_workflow(tmp_path, monkeypa
 	with WorkflowStore(default_dir) as store:
 		assert store.get(run_id)["status"] == "pending"
 	assert not (default_dir / "auth" / "session.enc").exists()
+
+
+@pytest.mark.parametrize("flag", ["--status", "--resume", "--stop"])
+def test_wizard_missing_run_keeps_original_directory(tmp_path, monkeypatch, flag):
+	"""任务不存在时，提示不能把用户带到默认目录里核对另一个同名任务。"""
+	data_dir = tmp_path / "向导 ' $目录"
+	default_dir = tmp_path / "default-home" / ".boss-agent"
+	monkeypatch.setattr(Path, "home", classmethod(lambda cls: default_dir.parent))
+	run_id = "wrn_missing"
+	plan = WorkflowPlan(role="candidate", platform="zhipin", goal="shortlist", inputs={}, requested_steps=(), mode="headless")
+	with WorkflowStore(default_dir) as store:
+		store.create(run_id, plan)
+	result = CliRunner().invoke(cli, ["--data-dir", str(data_dir), "--json", "wizard", flag, run_id])
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "WORKFLOW_NOT_FOUND"
+	assert [shlex.split(action) for action in payload["hints"]["next_actions"]] == [
+		["boss", "--data-dir", str(data_dir.resolve()), "wizard"]
+	]
+	assert payload["error"]["recovery_action"].count(shell_argument(str(data_dir.resolve()))) == 2
+	# 照提示打开的是原目录的向导，而不是默认目录里那个同名任务。
+	with WorkflowStore(data_dir) as store:
+		assert list(store.list_recent()) == []
+
+
+def test_wizard_timeout_checkpoint_keeps_original_directory(tmp_path):
+	"""超时 checkpoint 的恢复命令要能回到本次运行目录。"""
+	import time
+
+	def slow(context, inputs, prior):
+		time.sleep(0.01)
+		return StepResult({"done": True})
+
+	data_dir = tmp_path / "超时 ' $目录"
+	context = ActionContext(data_dir=data_dir, platform="otherplat", role="candidate", logger=Logger())
+	plan = WorkflowPlan(role="candidate", platform="otherplat", goal="job_search", inputs={}, requested_steps=("slow",), mode="headless")
+	with WorkflowStore(data_dir) as store:
+		run = WorkflowRunner(store, {"slow": slow}).run(
+			plan, context, run_id="timeout; fixture", timeout_seconds=0.001
+		)
+		stored = store.get("timeout; fixture")
+	assert run["status"] == "failed"
+	assert run["error"]["code"] == "WORKFLOW_TIMEOUT"
+	action = run["error"]["recovery_action"]
+	assert shlex.split(action) == [
+		"boss", "--platform", "otherplat", "--data-dir", str(data_dir.resolve()), "wizard", "--resume", "timeout; fixture",
+	]
+	assert stored["error"]["recovery_action"] == action
 
 
 def test_login_action_keeps_platform_and_directory(tmp_path):

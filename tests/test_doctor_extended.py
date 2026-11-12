@@ -855,7 +855,7 @@ def test_doctor_login_preflight_blocks_missing_auth_before_platform_requests(tmp
 	assert preflight is not None
 	assert preflight["status"] == "error"
 	assert "禁止发起需要认证的平台请求" in preflight["detail"]
-	assert "boss login" in preflight["recovery_action"]
+	assert preflight["recovery_action"] == f"boss --data-dir {tmp_path.resolve()} login"
 
 
 def test_doctor_login_preflight_warns_on_partial_auth(tmp_path):
