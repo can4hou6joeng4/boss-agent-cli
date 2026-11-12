@@ -41,3 +41,19 @@ def test_render_digest_markdown_has_no_warning_when_complete():
 	text = render_digest_markdown(data, generated_at="2026-11-12 10:00:00")
 
 	assert "页上限" not in text
+
+
+def test_render_digest_markdown_breaks_link_and_html_injection():
+	"""日报常被转发到邮件 / 飞书，公司名与职位名里的链接语法必须被转义。"""
+	payload = "[点我领奖](https://example.invalid/phish)"
+	data = build_digest(
+		new_matches=[{"company": payload, "title": "<https://example.invalid/auto>", "last_msg": "hi"}],
+		follow_ups=[],
+		interviews=[],
+	)
+
+	text = render_digest_markdown(data, generated_at="2026-11-13 10:00:00")
+
+	assert "\\[点我领奖\\](https://example.invalid/phish)" in text
+	assert "\\<https://example.invalid/auto>" in text
+	assert "[点我领奖](https://example.invalid/phish)" not in text

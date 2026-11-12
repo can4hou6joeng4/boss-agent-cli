@@ -126,6 +126,19 @@ def test_escape_md_cell_non_string():
 	assert escape_md_cell(42) == "42"
 
 
+def test_escape_md_cell_breaks_links_and_raw_html():
+	"""公司名 / 职位名是平台外部输入：导出 Markdown 里不能变成可点击链接或原始 HTML。"""
+	assert escape_md_cell("[点我领奖](https://example.invalid)") == "\\[点我领奖\\](https://example.invalid)"
+	assert escape_md_cell("![图](https://example.invalid/x.png)") == "!\\[图\\](https://example.invalid/x.png)"
+	assert escape_md_cell("<https://example.invalid/auto>") == "\\<https://example.invalid/auto>"
+	assert escape_md_cell("<img src=x onerror=alert(1)>") == "\\<img src=x onerror=alert(1)>"
+
+
+def test_escape_md_cell_escapes_backslash_first():
+	"""反斜杠先转义：已有 ``\\|`` 不能与管道转义叠加成双重转义。"""
+	assert escape_md_cell("C:\\Users\\x|y") == "C:\\\\Users\\\\x\\|y"
+
+
 def test_md_export_pipe_injection_in_render():
 	"""MD 渲染结果中管道符和换行应被正确转义"""
 	friends = [_make_friend(
@@ -143,6 +156,15 @@ def test_md_export_pipe_injection_in_render():
 		if line.startswith("|") and "测试公司" in line and "张" in line:
 			assert "张\\|HR" in line
 			break
+
+
+def test_md_export_breaks_link_injection():
+	"""招聘者可写的公司名 / 职位名不能把导出的 Markdown 变成可点击链接。"""
+	payload = "[点我领奖](https://example.invalid/phish)"
+	friends = [_make_friend(name=payload, brand_name=payload, title=payload)]
+	md_text = render_export(friends, "md", None, None, _NO_DIFF)
+	assert "\\[点我领奖\\](https://example.invalid/phish)" in md_text
+	assert "[点我领奖](https://example.invalid/phish)" not in md_text
 
 
 # ── HTML 导出格式正确性 ─────────────────────────────────────────────

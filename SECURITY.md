@@ -38,6 +38,6 @@
 - **Cookie/Token 存储**：使用 Fernet 对称加密 + PBKDF2 机器绑定密钥；数据目录按 0700 创建，登录态、salt 与 AI 服务商密钥按 0600 原子写入，仅当前用户可读
 - **浏览器兼容通道**：仅用于用户主动登录和低风险兼容路径，所有浏览器操作限定在 `zhipin.com` 域名
 - **本地数据**：缓存数据存储在 `~/.boss-agent/`，不上传任何数据到第三方服务
-- **CSV/HTML 导出**：已实施公式注入防护和 XSS 防护
+- **导出格式防护**：CSV 已实施公式注入防护，HTML 已实施 XSS 防护，Markdown 导出对链接 / 图片 / 自动链接 / 原始 HTML 语法做转义，平台外部名称在转发后不会变成可点击链接
 
 更多平台边界、Cookie/CDP、真实账号和 smoke test 风险边界见 [docs/platform-risk.md](docs/platform-risk.md)。
