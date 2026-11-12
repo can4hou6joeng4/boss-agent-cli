@@ -8,6 +8,7 @@
 - 扫码登录风险错误补充本地脱敏诊断（Issue #863）：`error.details.login_diagnostic` 记录失败阶段、页面检查或响应监听来源、白名单顶层路径和可用的页签数量；响应事件另附状态码、资源类型、导航标识与主/子框架归属。仅读取已有事件属性，未知信息省略或标记未知，不输出完整网址、查询参数、凭据或页面正文；风险判定、锁存、停止与窗口清理行为保持不变。
 
 ### Fixed
+- `export` 的 CSV 清洗改用与 chat 导出同一实现（Issue #876）：`services/job_export.py` 自带一份弱化副本，不剥 Tab 与回车，同一段文本走两种导出会得到不同结果，未剥的 `\r` 还可能让解析器把一列拆成两行。现在直接复用 `services/chat_utils.sanitize_csv_cell`，保留模块内私有别名以兼容既有引用。
 - `wizard --stop` / `--status` 对 stopped run 不再给 `--resume`（Issue #870）：stopped 是终态，runner 直接返回原 run 且 `preserve_stopped` 保证状态无法离开 stopped，旧 hints 会让 Agent 得到一个永远 `ok:true` 却什么都不做的空转循环。现在给「新建 workflow」，并在 run 绑定了内部 crawl 时优先给出保留原数据目录的 `crawl resume <inner_run_id>`；`failed` / `waiting_input` 仍给 `--resume`。
 - 采集导出的 CSV / XLSX 对平台原文做公式注入防护（Issue #871）：`crawler/exporter.py` 直接把职位名、公司、地址和 JD 正文写入文件，JD 常见的 `=====岗位职责=====` 分隔线以 `=` 开头时，openpyxl 会写成 `<f>` 公式节点、CSV 被 Excel 当公式求值。现在 CSV 复用共享的 `sanitize_csv_cell`（前置单引号），XLSX 保留原值并显式声明文本类型，避免单元格里出现可见单引号。
 - MCP `boss_shortlist_annotate` 传空备注时真正清空备注（Issue #872）：参数映射用真值判断，`note:""` 被丢弃、旧备注保留，信封却仍返回 `updated:true`。CLI 的「替换备注」语义是显式传值即可替换，映射层现在只区分「未传 / 传了值」，空串原样下发。

@@ -538,6 +538,16 @@ def test_sanitize_csv_cell_escapes_formula_prefixes():
 	assert _sanitize_csv_cell("@cmd") == "'@cmd"
 
 
+def test_job_export_sanitizer_is_shared_with_chat_export():
+	"""两份实现曾经分叉：job_export 的副本不剥 Tab/CR，同类数据两种导出结果不同（Issue #876）。"""
+	from boss_agent_cli.services.chat_utils import sanitize_csv_cell
+	from boss_agent_cli.services import job_export
+
+	assert job_export._sanitize_csv_cell is sanitize_csv_cell
+	for value in ("a\tb", "a\rb", "=\tcmd"):
+		assert job_export._sanitize_csv_cell(value) == sanitize_csv_cell(value)
+
+
 def test_sanitize_csv_cell_passes_other_specials():
 	from boss_agent_cli.services.job_export import _sanitize_csv_cell
 
