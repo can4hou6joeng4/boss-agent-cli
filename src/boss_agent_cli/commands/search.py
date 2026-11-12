@@ -42,7 +42,9 @@ from boss_agent_cli.wizard.actions import execute_candidate_search
 # 3：职位条目新增 boss_active_desc 字段，旧缓存不再复用。
 # 4：缓存键带上账号作用域，且命中后按当前账号重算 greeted；旧缓存不再复用。
 # 5：缓存里的下一页提示开始保留本次筛选条件；旧条目会把翻页带到另一组结果。
-_SEARCH_CACHE_SCHEMA = 5
+# 6：pagination 改为如实区分「平台说 false」与「平台没说」（Issue #887），
+#    旧缓存的 has_more 一律是布尔值，复用会让 Agent 继续读到底气十足的 false。
+_SEARCH_CACHE_SCHEMA = 6
 
 
 def _parse_cached_result(raw: str) -> dict[str, Any] | None:
@@ -501,10 +503,14 @@ def search_cmd(
 					"source": "search",
 				})
 
+			# 与 recommend / chat / history / favorites / hr jobs 同一口径：平台
+			# 未返回布尔 hasMore 时为 null，不伪造成 false（Issue #887）。
 			pagination: dict[str, Any] = {
 				"page": page,
-				"has_more": pipeline_result.has_more,
+				"has_more": pipeline_result.has_more_reported,
+				"has_more_source": "platform_hasMore" if pipeline_result.has_more_reported is not None else "unknown",
 				"total": pipeline_result.total or len(items),
+				"total_kind": "returned_page_count",
 			}
 			hints: dict[str, Any] = {
 				"next_actions": [
@@ -537,6 +543,9 @@ def search_cmd(
 					),
 				)
 				hints["next_actions"].append(next_page_command)
+			elif pipeline_result.has_more_reported is None and not detail_filter:
+				# 与 recommend 同口径：平台没说下一页，不能凭本页数量判断。
+				hints["operator_actions"] = ["平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有结果"]
 
 			# 缓存普通搜索结果
 			if not detail_filter and not with_score:

@@ -652,6 +652,7 @@ def test_search_with_score(mock_client_cls, mock_auth_cls, mock_cache_cls, mock_
 			"greeted": False,
 		}],
 		has_more=False,
+		has_more_reported=False,
 		total=1,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -686,6 +687,7 @@ def test_search_sort_score_orders_by_local_match_score(mock_client_cls, mock_aut
 			{"job_id": "high", "title": "高分", "security_id": "s2", "match_score": 90},
 		],
 		has_more=False,
+		has_more_reported=False,
 		total=2,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -716,6 +718,7 @@ def test_search_supports_url_and_multiselect_filters(mock_client_cls, mock_auth_
 	mock_pipeline.return_value = SimpleNamespace(
 		items=[],
 		has_more=False,
+		has_more_reported=False,
 		total=0,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -756,9 +759,38 @@ def test_search_cache_key_includes_current_result_schema(mock_client_cls, mock_a
 
 	assert result.exit_code == 0
 	cache_params = mock_cache.get_search.call_args.args[0]
-	assert cache_params["cache_schema"] == 5
+	assert cache_params["cache_schema"] == 6
 	assert "account" in cache_params
 	mock_pipeline.assert_not_called()
+
+
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.AuthManager")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+def test_search_cache_schema_bump_invalidates_pre_887_entries(
+	mock_client_cls, mock_auth_cls, mock_cache_cls, mock_pipeline
+):
+	"""修复前写入的缓存 has_more 恒为布尔值，复用会让 Agent 继续读到谎报的 false（Issue #887）。"""
+	from boss_agent_cli.commands.search import _SEARCH_CACHE_SCHEMA
+
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.get_search.return_value = None
+	mock_pipeline.return_value = SimpleNamespace(
+		items=[],
+		has_more=False,
+		has_more_reported=None,
+		total=0,
+		stats=SimpleNamespace(pages_scanned=1, jobs_seen=0, jobs_prefiltered=0, detail_checks=0),
+	)
+	with patch("boss_agent_cli.index_cache.save_index"):
+		result = CliRunner().invoke(cli, ["--json", "search", "产品"])
+
+	assert result.exit_code == 0, result.output
+	# 缓存键必须带新版本：旧条目（schema 5）不会再被 get_search 命中。
+	assert _SEARCH_CACHE_SCHEMA >= 6
+	assert mock_cache.get_search.call_args.args[0]["cache_schema"] == _SEARCH_CACHE_SCHEMA
+	assert json.loads(result.stdout)["pagination"]["has_more"] is None
 
 
 @patch("boss_agent_cli.commands.search.run_search_pipeline")
@@ -775,6 +807,7 @@ def test_search_corrupt_cache_entry_falls_back_to_live_search(
 	mock_pipeline.return_value = SimpleNamespace(
 		items=[],
 		has_more=False,
+		has_more_reported=False,
 		total=0,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -808,6 +841,7 @@ def test_search_cache_scope_uses_current_account(mock_client_cls, mock_auth_cls,
 	mock_pipeline.return_value = SimpleNamespace(
 		items=[],
 		has_more=False,
+		has_more_reported=False,
 		total=0,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -959,6 +993,7 @@ def test_search_ignores_index_cache_write_failure(mock_client_cls, mock_auth_cls
 			"greeted": False,
 		}],
 		has_more=False,
+		has_more_reported=False,
 		total=1,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -997,6 +1032,7 @@ def test_search_json_hints_expose_available_candidate_actions(mock_client_cls, m
 			"greeted": False,
 		}],
 		has_more=False,
+		has_more_reported=False,
 		total=1,
 		stats=SimpleNamespace(
 			pages_scanned=1,
@@ -1044,6 +1080,7 @@ def test_search_pagination_reports_index_snapshot_for_show(mock_client_cls, mock
 			"greeted": False,
 		}],
 		has_more=False,
+		has_more_reported=False,
 		total=1,
 		stats=SimpleNamespace(
 			pages_scanned=1,

@@ -464,8 +464,11 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 			"items": result.items,
 			"pagination": {
 				"page": _int_input(inputs, "page", 1, minimum=1),
-				"has_more": result.has_more,
+				# 与顶层 `boss search` 同一口径（Issue #887）：平台没说 hasMore 时为 null。
+				"has_more": result.has_more_reported,
+				"has_more_source": "platform_hasMore" if result.has_more_reported is not None else "unknown",
 				"total": result.total or len(result.items),
+				"total_kind": "returned_page_count",
 			},
 		}
 	)
