@@ -1,6 +1,7 @@
 """Tests for boss ai suggest-keywords."""
 
 import json
+import shlex
 from typing import Any
 from unittest.mock import patch
 
@@ -102,10 +103,15 @@ def test_ai_suggest_keywords_analyzes_shortlist_and_returns_keyword_groups(tmp_p
 	assert "广州" in prompt
 
 	# 预设提示必须能直接执行：query 是位置参数，写成 --query 会被 Click 拒绝
-	preset_hint = next(action for action in parsed["hints"]["next_actions"] if action.startswith("boss preset add"))
-	assert preset_hint == "boss preset add <name> <关键词>"
-	hint_args = preset_hint.replace("<name>", "ai-preset").replace("<关键词>", "golang").split(" ")[1:]
-	preset_result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *hint_args])
+	prefix = ["boss", "--data-dir", str(tmp_path.resolve())]
+	preset_hint = next(
+		action for action in parsed["hints"]["next_actions"]
+		if action.endswith(" preset add <name> <关键词>")
+	)
+	assert preset_hint == f"boss --data-dir {tmp_path.resolve()} preset add <name> <关键词>"
+	hint_args = shlex.split(preset_hint.replace("<name>", "ai-preset").replace("<关键词>", "golang"))
+	assert hint_args[:3] == prefix
+	preset_result = runner.invoke(cli, ["--json", *hint_args[1:]])
 	assert preset_result.exit_code == 0, preset_result.output
 
 	# Zero platform requests
@@ -136,7 +142,7 @@ def test_ai_suggest_keywords_handles_empty_shortlist(tmp_path):
 	assert parsed["data"]["keyword_groups"] == []
 	assert parsed["data"]["patterns"] == []
 	assert parsed["data"]["search_suggestions"] == []
-	assert "boss shortlist add" in parsed["hints"]["next_actions"][0]
+	assert parsed["hints"]["next_actions"][0].startswith(f"boss --data-dir {tmp_path.resolve()} shortlist add")
 	assert service.messages == []  # AI not called when shortlist is empty
 
 

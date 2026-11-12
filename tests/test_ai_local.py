@@ -74,9 +74,12 @@ def test_ai_local_pull_hint_quotes_model_with_spaces(tmp_path: Path) -> None:
 
 	assert result.exit_code == 1
 	recovery = json.loads(result.output)["error"]["recovery_action"]
-	assert recovery == "boss ai local pull --model 'my model' --confirm-download"
+	assert recovery == (
+		f"boss --data-dir {tmp_path.resolve()} ai local pull --model 'my model' --confirm-download"
+	)
 	assert shlex.split(recovery) == [
-		"boss", "ai", "local", "pull", "--model", "my model", "--confirm-download",
+		"boss", "--data-dir", str(tmp_path.resolve()),
+		"ai", "local", "pull", "--model", "my model", "--confirm-download",
 	]
 
 
@@ -135,7 +138,7 @@ def test_ai_local_import_hint_quotes_model_with_spaces(tmp_path: Path, monkeypat
 
 	assert result.exit_code == 0, result.output
 	hint = json.loads(result.output)["hints"]["next_actions"][0]
-	assert hint == "boss ai local configure --runtime vllm --model 'my model'"
+	assert hint == f"boss --data-dir {tmp_path.resolve()} ai local configure --runtime vllm --model 'my model'"
 	assert shlex.split(hint)[-1] == "my model"
 
 
@@ -160,7 +163,9 @@ def test_ai_local_import_does_not_reset_configured_endpoint(tmp_path: Path, monk
 	assert store.get_base_url() == "http://localhost:11434/v1"
 	assert store.get_api_key() == "local"
 	payload = json.loads(result.output)
-	assert payload["hints"]["next_actions"][0] == "boss ai local configure --runtime vllm --model local-test"
+	assert payload["hints"]["next_actions"][0] == (
+		f"boss --data-dir {tmp_path.resolve()} ai local configure --runtime vllm --model local-test"
+	)
 
 
 def test_ai_local_smoke_names_provider_without_endpoint(tmp_path: Path, monkeypatch) -> None:

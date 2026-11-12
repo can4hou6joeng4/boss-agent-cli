@@ -29,15 +29,19 @@ class AIServiceError(Exception):
 		self.truncated = truncated
 
 
-def recovery_action_for(exc: AIServiceError, default: str) -> str:
-	"""按失败类型给出可执行的恢复建议；判断不了时沿用调用方的默认建议。"""
+def recovery_action_for(exc: AIServiceError, default: str, *, config_command: str = "boss ai config") -> str:
+	"""按失败类型给出可执行的恢复建议；判断不了时沿用调用方的默认建议。
+
+	``config_command`` 允许调用方传入带 ``--data-dir`` 的等价命令，避免照抄恢复
+	提示后把新的 key / model 写进默认目录。
+	"""
 	if exc.truncated:
-		return "调大输出上限后重试：boss ai config --max-tokens <更大的值>；思考模型也可以关闭思考模式"
+		return f"调大输出上限后重试：{config_command} --max-tokens <更大的值>；思考模型也可以关闭思考模式"
 	status = exc.status_code
 	if status in (401, 403):
-		return "检查 API Key 是否有效、是否有该模型的权限：boss ai config --api-key <key>"
+		return f"检查 API Key 是否有效、是否有该模型的权限：{config_command} --api-key <key>"
 	if status in (400, 404, 422):
-		return "按错误信息核对模型名与请求参数：boss ai config --model <model>"
+		return f"按错误信息核对模型名与请求参数：{config_command} --model <model>"
 	if status == 429:
 		return "已被限流或额度不足，稍后重试或检查账户额度"
 	if status is not None and status >= 500:

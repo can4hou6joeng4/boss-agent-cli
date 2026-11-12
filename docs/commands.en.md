@@ -291,6 +291,8 @@ Resume names are free text and may contain spaces, quotes and shell metacharacte
 
 Local resumes live under `resumes/` inside `--data-dir`, so resume follow-up and recovery hints carry that directory explicitly: `hints.next_actions`, TTY `next_steps`, error `recovery_action`, and corrupt-file `operator_actions` for `resume init` / `list` / `show` / `edit` / `delete` / `export` / `import` / `clone` / `diff` / `link` / `applications` all point back to the directory that holds the resume. The `apply` hint from `resume link`, the lookup `search`, and the `me` hint after `init` use the same directory, so executing a hint from another working directory still operates on the same resume and job links instead of creating another copy or reading another account's cache.
 
+AI commands likewise read the AI config, `resumes/`, shortlist and job-description cache under `--data-dir`, so the whole `ai` command family carries that directory in follow-up and recovery hints: `hints.next_actions` and TTY `next_steps` for `ai config` / `ai local status|configure|pull|import|smoke`, the follow-up commands for `ai analyze-jd` / `polish` / `optimize` / `suggest` / `fit` / `reply` / `interview-prep` / `chat-coach` / `suggest-keywords` / `resume-optimize` / `cover-letter`, and the `recovery_action` for unconfigured AI, API failures, a missing JD, `CACHE_MISS`, an empty shortlist and an unconfirmed download all point back to the same config and resumes. Executing a hint will not write a new key into the default directory or read/write another account's shortlist cache.
+
 ## Utilities
 
 | Command | Description |

@@ -309,6 +309,8 @@ boss hr download-resume <friend_id> --message-id <attachment_mid> --output ./res
 
 本地简历全部存放在 `--data-dir` 的 `resumes/` 下，因此简历族的后继与恢复提示都显式携带该目录：`resume init` / `list` / `show` / `edit` / `delete` / `export` / `import` / `clone` / `diff` / `link` / `applications` 的 `hints.next_actions`、终端 `next_steps`、错误的 `recovery_action`，以及损坏文件的 `operator_actions` 都指回产生这份简历的目录；`resume link` 后继的 `apply`、取参用的 `search` 与 `init` 后的 `me` 也在同一目录。换一个工作目录照抄提示时，仍操作同一份简历与职位关联，而不会在默认目录另建一份或读取另一个账号的缓存。
 
+AI 命令同样读取 `--data-dir` 中的 AI 配置、`resumes/`、候选池与详情缓存，因此整个 `ai` 命令族的后继与恢复提示都显式携带该目录：`ai config` / `ai local status|configure|pull|import|smoke` 的 `hints.next_actions` 与终端 `next_steps`，`ai analyze-jd` / `polish` / `optimize` / `suggest` / `fit` / `reply` / `interview-prep` / `chat-coach` / `suggest-keywords` / `resume-optimize` / `cover-letter` 的后继命令，以及 AI 未配置、API 报错、缺 JD、`CACHE_MISS`、候选池为空、下载未确认时的 `recovery_action` 都指回同一份配置与简历。照抄提示时不会把新密钥写进默认目录，也不会读取或写入另一个账号的候选池缓存。
+
 ## 系统管理
 
 | 命令 | 说明 |
