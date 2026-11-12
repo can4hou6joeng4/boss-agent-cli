@@ -255,6 +255,8 @@ boss hr location 10001 --yes
 
 `--dry-run` 只预览决策，不改写任何业务状态：`automation/state.json` 里的对话阶段字段（`questionnaire_sent_at` / `follow_up_sent_at` / `exchange_contact_at`）不会因演练而更新，`pending-actions.jsonl` 里已批准项保持 `pending`，`interview-leads.csv` 也不会追加演练产生的线索。因此先 `--dry-run` 预览、再真实运行，得到的动作序列与从未预览过时一致。
 
+招聘自动化命令的后继与恢复提示显式携带原 `--data-dir` 与 `--role recruiter`：`agent run` / `train` / `stats` / `control` / `stop` 与 `agent review list|approve|reject`、`agent pending list` 的 `hints.next_actions`、终端 `next_steps`、`agent control` 返回的 `data.commands`，以及复核项缺失、`automation` 配置损坏时的 `recovery_action` 都指回同一份 `automation/` 状态。`agent` 组不在 `hr` 组下，重放招聘者命令必须显式带角色，否则会按候选人角色读取另一套本地状态。候选人侧的 `agent crawl` 后继命令只保留目录、不强制角色；AI 未配置时给出的 `ai config` 与 AI 匹配失败后的重试命令同样保留目录。
+
 在同一浏览器、同一账号完成官方验证并确认原先受阻页面正常后，由操作者明确恢复：`boss --role recruiter agent run --resume`。该选项解除本地停止状态并复用已确认动作与队列，不代表平台风险已经解除；普通 `agent run` 不解锁。MCP `boss_agent_run` 的 `resume` 默认 `false`，Agent 只有收到操作者明确恢复指令后才可设置为 `true`。wizard 和 crawl 的可恢复 run 继续使用各自的 `--resume <run_id>` / `crawl resume <run_id>`；已被 `wizard --stop` 置为 `stopped` 的 run 保持终止，应新建 workflow 或恢复其内部任务。结果未知的写动作（`ACTION_UNCONFIRMED`，或平台已成功但本地记账失败）会把 `replay_safe: false` 写入步骤错误；`--resume` 不会重跑该步骤，只返回原失败与核对指引，确认平台实际状态后应新建 workflow。
 
 MCP 的长运行使用异步子进程，运行期间仍能调用停止/状态工具。取消或超时会尝试中断并回收子进程；写操作被强制终止后可能有未知副作用，`error.details.outcome_unknown=true` 时不可自动重试；只读工具（如 search / show / status）返回 `outcome_unknown=false` 与 `replay_safe=true`，确认子进程已退出后可直接重试。正常返回的 wizard 超时保留可恢复结果，MCP 等待覆盖其显式超时及保存进度的宽限期。

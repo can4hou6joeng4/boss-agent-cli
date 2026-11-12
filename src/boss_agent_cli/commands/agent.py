@@ -47,6 +47,20 @@ def agent_group() -> None:
 	"""招聘自动化入口。"""
 
 
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""招聘自动化的后继与恢复命令保留数据目录与招聘者角色。
+
+	`agent` 组不在 `hr` 组下，重放招聘者命令必须显式带 ``--role recruiter``；
+	否则会按候选人角色读取另一套本地状态。
+	"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True, role="recruiter")
+
+
+def _crawl_hint_command(ctx: click.Context, command: str) -> str:
+	"""候选人侧 `agent crawl` 的后继命令沿用数据目录，但不强制招聘者角色。"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
 @agent_group.command("run")
 @click.option(
 	"--dry-run",
@@ -70,7 +84,7 @@ def run_cmd(ctx: click.Context, dry_run: bool, limit: int | None, resume: bool) 
 		ctx,
 		"agent.run",
 		_report_payload(report),
-		render=lambda d: render_record_result(d, title="agent run", next_steps=["boss agent stats"]),
+		render=lambda d: render_record_result(d, title="agent run", next_steps=[_hint_command(ctx, "agent stats")]),
 		hints=_agent_hints(ctx),
 	)
 
@@ -98,8 +112,8 @@ def crawl_cmd(
 	limit: int,
 ) -> None:
 	"""新建或读取 crawl 结果，导入候选池并执行 ai fit。"""
-	crawl_by_run = boss_command_for_ctx(ctx, "agent crawl --run-id <run_id> --resume <简历>")
-	crawl_by_query = boss_command_for_ctx(ctx, "agent crawl --query <关键词> --city <城市> --resume <简历>")
+	crawl_by_run = _crawl_hint_command(ctx, "agent crawl --run-id <run_id> --resume <简历>")
+	crawl_by_query = _crawl_hint_command(ctx, "agent crawl --query <关键词> --city <城市> --resume <简历>")
 	if bool(run_id) == bool(query):
 		handle_error_output(
 			ctx,
@@ -240,19 +254,23 @@ def crawl_cmd(
 			code="AI_NOT_CONFIGURED",
 			message="AI 服务未配置；crawl 结果已导入 shortlist",
 			recoverable=True,
-			recovery_action="boss ai config --provider <provider> --model <model> --api-key <key>",
+			recovery_action=_crawl_hint_command(ctx, "ai config --provider <provider> --model <model> --api-key <key>"),
 		)
 		return
 	try:
 		fit = _fit_crawl_jobs(svc, resume_text, jobs)
 	except (AIServiceError, ValueError, RuntimeError) as exc:
+		retry_cmd = _crawl_hint_command(
+			ctx,
+			f"agent crawl --run-id {shell_argument(run_id or '')} --resume {shell_argument(resume_name)}",
+		)
 		handle_error_output(
 			ctx,
 			"agent.crawl",
 			code="AI_API_ERROR",
 			message=f"AI 匹配失败: {exc}",
 			recoverable=True,
-			recovery_action="检查 AI 配置后重试 boss agent crawl --run-id <run_id> --resume <简历名>",
+			recovery_action=f"检查 AI 配置后重试 {retry_cmd}",
 		)
 		return
 	results = fit.get("results", [])
@@ -302,7 +320,7 @@ def train_cmd(ctx: click.Context, dry_run: bool, limit: int | None) -> None:
 		ctx,
 		"agent.train",
 		_report_payload(report),
-		render=lambda d: render_record_result(d, title="agent train", next_steps=["boss agent review list"]),
+		render=lambda d: render_record_result(d, title="agent train", next_steps=[_hint_command(ctx, "agent review list")]),
 		hints=_agent_hints(ctx),
 	)
 
@@ -325,7 +343,7 @@ def review_list_cmd(ctx: click.Context) -> None:
 			d.get("items", []),
 			"reviews",
 			[("ID", "review_id", "bold cyan"), ("动作", "action", "green"), ("分数", "score", "yellow")],
-			next_steps=["boss agent review approve <id>", "boss agent review reject <id>"],
+			next_steps=[_hint_command(ctx, "agent review approve <id>"), _hint_command(ctx, "agent review reject <id>")],
 		),
 		hints=_agent_hints(ctx),
 	)
@@ -345,7 +363,7 @@ def review_approve_cmd(ctx: click.Context, review_id: str) -> None:
 		ctx,
 		"agent.review.approve",
 		{"pending": asdict(pending)},
-		render=lambda d: render_record_result(d, title="agent review approve", next_steps=["boss agent pending list"]),
+		render=lambda d: render_record_result(d, title="agent review approve", next_steps=[_hint_command(ctx, "agent pending list")]),
 		hints=_agent_hints(ctx),
 	)
 
@@ -374,7 +392,7 @@ def review_reject_cmd(ctx: click.Context, review_id: str, reason: str) -> None:
 		ctx,
 		"agent.review.reject",
 		{"review": asdict(rejected), "event": asdict(event)},
-		render=lambda d: render_record_result(d, title="agent review reject", next_steps=["boss agent review list"]),
+		render=lambda d: render_record_result(d, title="agent review reject", next_steps=[_hint_command(ctx, "agent review list")]),
 		hints=_agent_hints(ctx),
 	)
 
@@ -397,7 +415,7 @@ def pending_list_cmd(ctx: click.Context) -> None:
 			d.get("items", []),
 			"pending",
 			[("ID", "review_id", "bold cyan"), ("动作", "action", "green"), ("状态", "status", "yellow")],
-			next_steps=["boss agent stats"],
+			next_steps=[_hint_command(ctx, "agent stats")],
 		),
 		hints=_agent_hints(ctx),
 	)
@@ -417,7 +435,7 @@ def agent_stats_cmd(ctx: click.Context) -> None:
 		ctx,
 		"agent.stats",
 		stats,
-		render=lambda d: render_record_result(d, title="agent stats", next_steps=["boss agent pending list"]),
+		render=lambda d: render_record_result(d, title="agent stats", next_steps=[_hint_command(ctx, "agent pending list")]),
 		hints=_agent_hints(ctx),
 	)
 
@@ -436,13 +454,13 @@ def control_cmd(ctx: click.Context) -> None:
 				"Web 控制台将在后续接入同一状态目录"
 			),
 			"commands": [
-				"boss agent run",
-				"boss agent stats",
-				"boss agent review list",
-				"boss agent pending list",
+				_hint_command(ctx, "agent run"),
+				_hint_command(ctx, "agent stats"),
+				_hint_command(ctx, "agent review list"),
+				_hint_command(ctx, "agent pending list"),
 			],
 		},
-		render=lambda d: render_record_result(d, title="agent control", next_steps=["boss agent stats"]),
+		render=lambda d: render_record_result(d, title="agent control", next_steps=[_hint_command(ctx, "agent stats")]),
 		hints=_agent_hints(ctx),
 	)
 
@@ -458,7 +476,7 @@ def stop_cmd(ctx: click.Context, reason: str) -> None:
 		ctx,
 		"agent.stop",
 		{"status": "CIRCUIT_BREAKER_OPEN", "reason": reason},
-		render=lambda d: render_action_result(d, title="agent stop", next_steps=["boss agent stats"]),
+		render=lambda d: render_action_result(d, title="agent stop", next_steps=[_hint_command(ctx, "agent stats")]),
 		hints=_agent_hints(ctx),
 	)
 
@@ -511,7 +529,7 @@ def _run_agent(
 			code="INVALID_PARAM",
 			message="automation 配置必须是 JSON object",
 			recoverable=True,
-			recovery_action=boss_command_for_ctx(ctx, "config reset automation"),
+			recovery_action=boss_command_for_ctx(ctx, "config reset automation", include_data_dir=True),
 		)
 		ctx.exit(1)
 	try:
@@ -525,7 +543,7 @@ def _run_agent(
 			code="INVALID_PARAM",
 			message=f"automation 配置无效: {exc}",
 			recoverable=True,
-			recovery_action=boss_command_for_ctx(ctx, "config reset automation"),
+			recovery_action=boss_command_for_ctx(ctx, "config reset automation", include_data_dir=True),
 		)
 		ctx.exit(1)
 	if force_mode is not None:
@@ -645,18 +663,14 @@ def _report_payload(report: RunReport) -> dict[str, Any]:
 
 
 def _agent_review_list_command(ctx: click.Context) -> str:
-	platform = ctx.obj.get("platform") or "zhipin"
-	prefix = "boss" if platform == "zhipin" else f"boss --platform {platform}"
-	return f"{prefix} --role recruiter agent review list"
+	return _hint_command(ctx, "agent review list")
 
 
 def _agent_hints(ctx: click.Context) -> dict[str, Any]:
-	platform = ctx.obj.get("platform") or "zhipin"
-	prefix = "boss" if platform == "zhipin" else f"boss --platform {platform}"
 	return {
 		"next_actions": [
-			f"{prefix} --role recruiter agent stats",
-			f"{prefix} --role recruiter agent review list",
-			f"{prefix} --role recruiter agent pending list",
+			_hint_command(ctx, "agent stats"),
+			_hint_command(ctx, "agent review list"),
+			_hint_command(ctx, "agent pending list"),
 		],
 	}

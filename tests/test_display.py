@@ -343,6 +343,14 @@ class TestLoginActionForCtx:
 		ctx.obj = {"platform": "otherplat"}
 		assert boss_command_for_ctx(ctx, "status") == "boss --platform otherplat status"
 
+	def test_role_and_data_dir_are_kept_before_subcommand(self, tmp_path):
+		"""agent 等不在 hr 组下的招聘者命令必须在全局选项区保留角色。"""
+		ctx = MagicMock()
+		ctx.obj = {"data_dir": tmp_path, "platform": "zhipin"}
+		assert boss_command_for_ctx(ctx, "agent stats", include_data_dir=True, role="recruiter") == (
+			f"boss --data-dir {tmp_path.resolve()} --role recruiter agent stats"
+		)
+
 	def test_default_platform_uses_plain_login(self):
 		ctx = MagicMock()
 		ctx.obj = {}
