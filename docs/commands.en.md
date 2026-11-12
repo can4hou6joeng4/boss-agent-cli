@@ -287,6 +287,8 @@ Both commands reuse native CLI authentication. This implementation follows stati
 
 Resume names are free text and may contain spaces, quotes and shell metacharacters. Every follow-up hint that takes a resume name (`resume show` / `edit` / `export` / `delete`, including error-message bodies) is POSIX-shell quoted, and `shlex.split` recovers the same name. `resume list`, `resume show` and `resume clone` return `RESUME_FILE_INVALID` for an unreadable file, and the `resume delete` hint they provide is likewise paste-ready.
 
+Local resumes live under `resumes/` inside `--data-dir`, so resume follow-up and recovery hints carry that directory explicitly: `hints.next_actions`, TTY `next_steps`, error `recovery_action`, and corrupt-file `operator_actions` for `resume init` / `list` / `show` / `edit` / `delete` / `export` / `import` / `clone` / `diff` / `link` / `applications` all point back to the directory that holds the resume. The `apply` hint from `resume link`, the lookup `search`, and the `me` hint after `init` use the same directory, so executing a hint from another working directory still operates on the same resume and job links instead of creating another copy or reading another account's cache.
+
 ## Utilities
 
 | Command | Description |
