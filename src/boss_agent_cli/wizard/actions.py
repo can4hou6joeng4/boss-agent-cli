@@ -166,7 +166,7 @@ def execute_recruiter_candidate_search(platform: Any, inputs: Mapping[str, Any])
 		school_level=_optional_str(inputs.get("school_level")),
 		activeness=_optional_str(inputs.get("activeness")),
 		source=_optional_str(inputs.get("source")),
-		select=bool(inputs.get("select", False)),
+		select=_bool_input(inputs, "select"),
 		salary=_optional_str(inputs.get("salary")),
 	))
 
@@ -219,6 +219,25 @@ def _with_items(data: Mapping[str, Any], items: list[dict[str, Any]]) -> dict[st
 
 def _optional_str(value: Any) -> str | None:
 	return str(value) if value is not None and value != "" else None
+
+
+def _bool_input(inputs: Mapping[str, Any], name: str, default: bool = False) -> bool:
+	"""读取布尔输入：只有 JSON 的 true/false 才合法。
+
+	wizard inputs 来自 ``--input-json`` / MCP，不经过 Click 的 ``is_flag``；
+	``bool("false")`` 在 Python 里是 ``True``，字符串或数字会被静默当成真：
+	``remove`` 会删除标签而不是添加，``include_private`` 会导出未脱敏个人信息，
+	``select`` 会改变平台搜索模式，``with_detail`` 会扩大采集范围。
+	``null`` 与缺省一样使用默认值；其余类型点名报错，避免在平台请求之后才失败。
+	"""
+	if name not in inputs:
+		return default
+	raw = inputs[name]
+	if raw is None:
+		return default
+	if isinstance(raw, bool):
+		return raw
+	raise WorkflowInputError(f"wizard 输入 {name} 必须是布尔值，收到 {raw!r}")
 
 
 def _exchange_type(inputs: Mapping[str, Any]) -> int:
@@ -628,6 +647,8 @@ _LABEL_IDS = {"新招呼": 1, "沟通中": 2, "已约面": 3, "已获取简历":
 def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	identifier = str(_required(inputs, "security_id"))
 	label = str(_required(inputs, "label"))
+	# 先校验布尔值，再查联系人：非法输入不应产生任何平台请求。
+	remove = _bool_input(inputs, "remove")
 	label_id = int(label) if label.isdigit() else _LABEL_IDS.get(label)
 	if label_id is None:
 		raise WorkflowActionError("INVALID_PARAM", f"未知标签: {label}（可选: 新招呼、沟通中、已约面、已获取简历、不合适、收藏）")
@@ -640,7 +661,7 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 				uid,
 				label_id,
 				int(friend.get("friendSource") or 0),
-				remove=bool(inputs.get("remove", False)),
+				remove=remove,
 			),
 			"联系人标签更新失败",
 		)
@@ -782,6 +803,8 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	from boss_agent_cli.services.job_export import prepare_export_items, write_export_file
 
+	# 先校验布尔值：非法输入不能在导出后才失败，更不能静默保留未脱敏个人信息。
+	include_private = _bool_input(inputs, "include_private")
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		with context.candidate_platform() as platform:
 			# 与 candidate_search / candidate_watch 一致：导出时的 greeted 标记
@@ -793,7 +816,7 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 	if fmt not in {"json", "csv"}:
 		raise WorkflowActionError("INVALID_PARAM", "wizard export format 仅支持 json/csv")
 	output = prepare_output_path(inputs.get("output") or context.data_dir / "exports" / f"wizard-jobs.{fmt}")
-	items = prepare_export_items(result.items, include_private=bool(inputs.get("include_private", False)))
+	items = prepare_export_items(result.items, include_private=include_private)
 	write_export_file(items, fmt, str(output))
 	return StepResult({"path": str(output), "format": fmt, "count": len(items)}, artifacts=(str(output),))
 
@@ -1030,13 +1053,14 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 		)
 	raw_pages = inputs.get("pages")
 	pages = 5 if raw_pages is None else _positive_int(raw_pages, name="pages")
+	with_detail = _bool_input(inputs, "with_detail")
 	raw_port = crawl_config.get("cdp_port")
 	try:
 		settings = CrawlSettings(
 			query=str(_required(inputs, "query")),
 			city_code=city_code,
 			pages=pages,
-			with_detail=bool(inputs.get("with_detail", False)),
+			with_detail=with_detail,
 			profile_path=context.data_dir / "crawl" / "chrome-profile",
 			chrome_path=crawl_chrome_path(crawl_config.get("chrome_path")),
 			cdp_port=unused_local_port() if raw_port is None else crawl_cdp_port(raw_port),
@@ -1093,12 +1117,13 @@ def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 	run_id = str(_required(inputs, "run_id"))
 	raw_pages = inputs.get("pages")
 	pages = None if raw_pages is None else _positive_int(raw_pages, name="pages")
+	with_detail = _bool_input(inputs, "with_detail")
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		try:
 			outcome = _crawl_service(context, cache).resume(
 				run_id,
 				pages=pages,
-				with_detail=bool(inputs.get("with_detail", False)),
+				with_detail=with_detail,
 				clear_stop=True,
 			)
 		except KeyError as exc:
