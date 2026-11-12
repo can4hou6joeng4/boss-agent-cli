@@ -16,9 +16,12 @@ def _safe_str(val: Any) -> str:
 
 def _parse_base(info: dict[str, Any]) -> dict[str, Any]:
 	base = info.get("geekBaseInfo", {})
+	gender = base.get("gender")
+	# 未提供或未识别的性别保持未知；bool 与数值编码相等，不能据此补全个人属性。
+	gender_label = {0: "女", 1: "男"}.get(gender, "") if type(gender) is int else ""
 	return {
 		"name": base.get("name", ""),
-		"gender": "男" if base.get("gender") == 1 else "女",
+		"gender": gender_label,
 		"age": base.get("ageDesc", ""),
 		"degree": base.get("degreeCategory", ""),
 		"work_years": base.get("workYearDesc", ""),
