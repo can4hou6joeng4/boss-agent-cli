@@ -2849,8 +2849,8 @@ def test_wizard_status_reports_resume_next_action(tmp_path):
 	]
 
 
-def test_wizard_status_and_stop_after_stop_report_resume(tmp_path):
-	"""被停掉的 run 断点还在本地：`--stop` 与随后的 `--status` 都要给出 `--resume`。"""
+def test_wizard_status_and_stop_after_stop_report_only_terminals(tmp_path):
+	"""stopped 是终态：不能给 `--resume`，否则 Agent 会陷入永远 ok 的空转（Issue #870）。"""
 	plan = WorkflowPlan(
 		role="candidate",
 		platform="zhipin",
@@ -2866,16 +2866,47 @@ def test_wizard_status_and_stop_after_stop_report_resume(tmp_path):
 	assert stop.exit_code == 0
 	stopped = json.loads(stop.stdout)
 	assert stopped["data"]["status"] == "stopped"
-	assert [shlex.split(action) for action in stopped["hints"]["next_actions"]] == [
-		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--resume", "wrn_stopped"],
+	expected = [
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard"],
 		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--status", "wrn_stopped"],
 	]
+	assert [shlex.split(action) for action in stopped["hints"]["next_actions"]] == expected
 
 	status = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), "wizard", "--status", "wrn_stopped"])
 	envelope = json.loads(status.stdout)
+	assert [shlex.split(action) for action in envelope["hints"]["next_actions"]] == expected
+
+
+def test_wizard_stopped_run_offers_bound_crawl_resume(tmp_path):
+	"""绑定了内部 crawl 的 stopped run：先给恢复了数据目录的 crawl resume（Issue #870）。"""
+	plan = WorkflowPlan(
+		role="candidate",
+		platform="zhipin",
+		goal="crawl_start",
+		inputs={"query": "Python", "city": "北京"},
+		requested_steps=("crawl_start",),
+		mode="headless",
+	)
+	with WorkflowStore(tmp_path) as store:
+		store.create("wrn_crawl", plan)
+		store.update_run("wrn_crawl", status="running", current_step="crawl_start")
+		store.update_step(
+			"wrn_crawl", "crawl_start", status="running", result={"inner_run_id": "crw_inner"}
+		)
+		store._cache.create_crawl_run(
+			"crw_inner",
+			{"query": "Python"},
+			str(tmp_path / "crawl" / "runs" / "crw_inner"),
+		)
+		store.request_stop("wrn_crawl")
+
+	status = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), "wizard", "--status", "wrn_crawl"])
+	envelope = json.loads(status.stdout)
+	assert envelope["data"]["status"] == "stopped"
 	assert [shlex.split(action) for action in envelope["hints"]["next_actions"]] == [
-		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--resume", "wrn_stopped"],
-		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--status", "wrn_stopped"],
+		["boss", "--data-dir", str(tmp_path.resolve()), "crawl", "resume", "crw_inner"],
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard"],
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--status", "wrn_crawl"],
 	]
 
 
@@ -2896,7 +2927,7 @@ def test_wizard_stop_hints_quote_run_id_with_shell_metacharacters(tmp_path):
 	stop = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), "wizard", "--stop", run_id])
 	assert stop.exit_code == 0, stop.stdout
 	assert [shlex.split(action) for action in json.loads(stop.stdout)["hints"]["next_actions"]] == [
-		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--resume", run_id],
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard"],
 		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--status", run_id],
 	]
 
