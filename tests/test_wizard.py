@@ -4249,3 +4249,71 @@ def test_structurally_drifted_workflow_params_nested_fields_report_envelope(tmp_
 	assert payload["error"]["code"] == "CACHE_RECORD_INVALID"
 	assert payload["error"]["recoverable"] is True
 	assert field in payload["error"]["message"]
+
+
+# ── 布尔输入类型校验（Issue #945）────────────────────────────────────
+
+
+def test_bool_input_only_accepts_json_booleans():
+	"""字符串与数字不能被当成 true；null 与缺省使用默认值。"""
+	from boss_agent_cli.wizard.actions import _bool_input
+
+	assert _bool_input({}, "flag") is False
+	assert _bool_input({"flag": None}, "flag") is False
+	assert _bool_input({"flag": True}, "flag") is True
+	assert _bool_input({"flag": False}, "flag", default=True) is False
+	for raw in ("false", "0", 1, 0, [], {}):
+		with pytest.raises(WorkflowInputError) as exc_info:
+			_bool_input({"flag": raw}, "flag")
+		assert "flag" in str(exc_info.value)
+		assert "布尔" in str(exc_info.value)
+
+
+def test_candidate_mark_rejects_string_remove_before_platform_calls(tmp_path):
+	""""false" 不能被当成 true 删除标签；非法输入不能先查联系人。"""
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	with pytest.raises(WorkflowInputError):
+		DEFAULT_ACTIONS["candidate_mark"](
+			context, {"security_id": "sid_current", "label": "沟通中", "remove": "false"}, {}
+		)
+
+	assert platform.calls == []
+
+	# 真正的布尔 false 仍然表示「添加标签」。
+	DEFAULT_ACTIONS["candidate_mark"](
+		context, {"security_id": "sid_current", "label": "沟通中", "remove": False}, {}
+	)
+	assert ("friend_label", "10001", 2, 0, False) in platform.calls
+
+
+def test_candidate_export_rejects_string_include_private_before_io(tmp_path):
+	"""未脱敏导出是隐私开关：字符串 "false" 必须在任何搜索 / 写文件之前被拒绝。"""
+	context = _action_context(tmp_path)
+
+	with pytest.raises(WorkflowInputError):
+		DEFAULT_ACTIONS["candidate_export"](context, {"query": "Python", "include_private": "false"}, {})
+
+	assert not (tmp_path / "exports").exists()
+
+
+def test_recruiter_candidates_rejects_string_select_before_request(tmp_path):
+	"""字符串 "false" 不能把 select=true 发给平台。"""
+	platform = _FakeRecruiterPlatform()
+	context = _action_context(tmp_path, role="recruiter", recruiter=platform)
+
+	with pytest.raises(WorkflowInputError):
+		DEFAULT_ACTIONS["recruiter_candidates"](context, {"query": "Python", "select": "false"}, {})
+
+	assert platform.calls == []
+
+
+def test_crawl_actions_reject_string_with_detail(tmp_path):
+	"""字符串 "false" 不能扩大采集范围。"""
+	context = _action_context(tmp_path)
+
+	with pytest.raises(WorkflowInputError):
+		DEFAULT_ACTIONS["crawl_start"](context, {"query": "Python", "city": "北京", "with_detail": "false"}, {})
+	with pytest.raises(WorkflowInputError):
+		DEFAULT_ACTIONS["crawl_resume"](context, {"run_id": "run-1", "with_detail": "false"}, {})
