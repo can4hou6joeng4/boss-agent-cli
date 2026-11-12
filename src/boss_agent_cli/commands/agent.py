@@ -52,7 +52,7 @@ def agent_group() -> None:
 	"--dry-run",
 	is_flag=True,
 	default=False,
-	help="只演练自动化决策，不执行真实平台动作",
+	help="只演练自动化决策，不执行真实平台动作，也不改写对话阶段、待执行队列或面试线索",
 )
 @click.option("--limit", default=None, type=click.IntRange(min=1), help="本轮最多处理多少个会话")
 @click.option(

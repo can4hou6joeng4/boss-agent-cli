@@ -56,7 +56,9 @@ def process_pending(
 		# Commit each confirmed queue effect before attempting another item. A
 		# later risk/error must not leave a successful action pending for replay.
 		store.write_pending(actions)
-		if state is not None and status in {EventStatus.AUTO_EXECUTED, EventStatus.DRY_RUN}:
+		# 预览不是执行：dry-run 期间写 prior 会让下一次真实运行误以为动作已发生
+		# （Issue #889），因此只有真正执行成功才更新业务状态。
+		if state is not None and status is EventStatus.AUTO_EXECUTED:
 			prior = state.setdefault("conversations", {}).setdefault(item.candidate_key, {})
 			update_prior(prior, decision)
 		guard.checkpoint()
@@ -96,13 +98,18 @@ def process_ref(
 	}:
 		safety = guard.before_action(decision)
 		if safety.allowed:
-			store.append_interview_lead(candidate_key, decision.interview_time, decision.reason)
+			# 预览不落盘线索记录（Issue #889）：dry-run 后重复运行不能看见
+			# 一份从未真实产生过的面试线索清单。
+			if status is EventStatus.AUTO_EXECUTED:
+				store.append_interview_lead(candidate_key, decision.interview_time, decision.reason)
 		else:
 			status = EventStatus.CIRCUIT_BREAKER_OPEN if safety.circuit_breaker else EventStatus.STOPPED_BY_SAFETY
 			event_reason = safety.reason
 	elif status is EventStatus.AUTO_EXECUTED or status is EventStatus.DRY_RUN:
 		status, event_reason = execute_or_dry_run(adapter, guard, decision, ref, dry_run)
-		if status in {EventStatus.AUTO_EXECUTED, EventStatus.DRY_RUN}:
+		# 只有真正执行成功才把动作记进对话阶段；dry-run 写 prior 会让下一次
+		# 真实运行误判「问卷已发」并跳过它（Issue #889）。
+		if status is EventStatus.AUTO_EXECUTED:
 			update_prior(prior, decision)
 	guard.checkpoint()
 	event = make_event(
@@ -223,7 +230,10 @@ def _next_pending_status(status: EventStatus) -> str:
 		case EventStatus.AUTO_EXECUTED:
 			return "executed"
 		case EventStatus.DRY_RUN:
-			return "dry-run"
+			# 预览没有发出任何东西：队列项必须留在 pending，下一次真实运行才会执行
+			# （Issue #889）。旧实现把它改成 "dry-run"，演练一次就永久消耗掉
+			# 操作者批准过的待执行动作。
+			return "pending"
 		case EventStatus.PLATFORM_VERIFICATION_REQUIRED:
 			# 动作可能已经生效：退出 pending 队列，避免下一轮自动重发。
 			return "verification-required"

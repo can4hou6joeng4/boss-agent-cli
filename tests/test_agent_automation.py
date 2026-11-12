@@ -24,6 +24,7 @@ from boss_agent_cli.automation.models import (
 	ConversationFingerprint,
 	ConversationRef,
 	EventStatus,
+	PendingAction,
 	ReviewItem,
 	PlatformAction,
 )
@@ -359,6 +360,18 @@ def test_runner_creates_interview_lead_after_contact_exchange(tmp_path: Path) ->
 	)
 
 	assert report.events[0].action == PlatformAction.CREATE_INTERVIEW_LEAD.value
+	# 演练不落盘线索（Issue #889）：预览过一次就跑出一份真实面试清单，
+	# 会让后续 live 运行看起来像「已经安排过面试」。
+	assert not (tmp_path / "automation" / "interview-leads.csv").exists()
+
+	live = run_automation_cycle(
+		adapter,
+		store,
+		AutomationConfig(),
+		platform="zhipin",
+		dry_run=False,
+	)
+	assert live.events[0].action == PlatformAction.CREATE_INTERVIEW_LEAD.value
 	assert (tmp_path / "automation" / "interview-leads.csv").exists()
 
 
@@ -902,3 +915,108 @@ def test_local_ai_null_content_falls_back_to_template_and_cycle_continues(tmp_pa
 		assert "local ai unavailable" in event.reason
 		assert "max_tokens=2048" in event.reason
 		assert "template fallback" in event.reason
+
+
+def test_dry_run_does_not_advance_conversation_phase(tmp_path: Path) -> None:
+	"""预览不能改写对话阶段：演练后 live 必须仍从问卷开始（Issue #889）。
+
+	旧实现把 DRY_RUN 也当成「已发送」写进 state.json，下一次真实运行据此
+	认为问卷已发、候选人已回复，直接跳过问卷发出跟进话术——而候选人从未
+	收到任何消息。
+	"""
+	store = AutomationStore(tmp_path)
+	text = "你好，我在上海做过3年销售，擅长客户沟通，大专，想看机会，可面试"
+	adapter = RecordingMockRecruiterAutomationPlatform(
+		"zhipin", [_conversation(text, "候选人A")],
+	)
+	config = AutomationConfig()
+
+	preview = run_automation_cycle(adapter, store, config, platform="zhipin", dry_run=True)
+	assert [event.status for event in preview.events] == [EventStatus.DRY_RUN.value]
+	assert store.read_state()["conversations"].get("候选人A", {}) == {}
+	assert adapter.messages == []
+
+	live = run_automation_cycle(adapter, store, config, platform="zhipin", dry_run=False)
+	assert [event.action for event in live.events] == [PlatformAction.SEND_QUESTIONNAIRE.value]
+	assert [event.status for event in live.events] == [EventStatus.AUTO_EXECUTED.value]
+	assert "近期是否看机会" in adapter.messages[0]
+
+
+def test_dry_run_keeps_pending_actions_for_the_next_live_run(tmp_path: Path) -> None:
+	"""演练不得消耗待执行队列（Issue #889）。
+
+	`_next_pending_status(DRY_RUN)` 曾返回 "dry-run"，该状态不在 `status ==
+	"pending"` 的重放过滤里：操作者 preview 一次，批准过的真实动作就永久丢失。
+	"""
+	store = AutomationStore(tmp_path)
+	store.append_pending(PendingAction(
+		id="approved-1",
+		ts="2026-11-12T00:00:00+00:00",
+		platform="zhipin",
+		candidate_key="候选人A",
+		action=PlatformAction.SEND_QUESTIONNAIRE.value,
+		status="pending",
+		confidence=0.9,
+		reason="approved review",
+		message="您好，想确认下近期是否看机会？",
+	))
+	# 会话扫描用一个必被跳过的候选人，确保 live 断言只覆盖队列动作本身。
+	adapter = RecordingMockRecruiterAutomationPlatform(
+		"zhipin", [_conversation("不要再联系", "风险候选人")],
+	)
+	config = AutomationConfig()
+
+	preview = run_automation_cycle(adapter, store, config, platform="zhipin", dry_run=True)
+	assert preview.events[0].status == EventStatus.DRY_RUN.value
+	assert [item.status for item in store.read_pending()] == ["pending"]
+	assert adapter.messages == []
+
+	live = run_automation_cycle(adapter, store, config, platform="zhipin", dry_run=False)
+	assert live.events[0].status == EventStatus.AUTO_EXECUTED.value
+	assert [item.status for item in store.read_pending()] == ["executed"]
+	assert adapter.messages == ["您好，想确认下近期是否看机会？"]
+
+
+def test_interview_lead_is_deduplicated_across_cycles(tmp_path: Path) -> None:
+	"""同一候选人的同一面试时间只记一次（Issue #889）。
+
+	候选人停留在同一段回复上时，每轮自动化都会重新命中 CREATE_INTERVIEW_LEAD；
+	旧实现每轮追加一行，运维清单里同一条面试被重复 N 次。
+	"""
+	store = AutomationStore(tmp_path)
+	store.write_state({"conversations": {"面试候选人": {"exchange_contact_at": "2026-06-23T00:00:00"}}})
+	adapter = MockRecruiterAutomationPlatform(
+		"zhipin",
+		[_conversation("我在上海做过3年销售，大专，想看机会，周二 14:00 面试", "面试候选人")],
+	)
+	config = AutomationConfig()
+
+	for _ in range(3):
+		report = run_automation_cycle(adapter, store, config, platform="zhipin", dry_run=False)
+		assert report.events[0].action == PlatformAction.CREATE_INTERVIEW_LEAD.value
+
+	lines = (tmp_path / "automation" / "interview-leads.csv").read_text(encoding="utf-8").splitlines()
+	assert len(lines) == 2
+	assert lines[0] == "candidate_key,interview_time,reason"
+
+
+def test_interview_lead_csv_escapes_external_candidate_names(tmp_path: Path) -> None:
+	"""候选人昵称是外部可控输入，不能破坏行结构或注入公式（Issue #889）。"""
+	import csv as csv_module
+	import io
+
+	store = AutomationStore(tmp_path)
+	store.append_interview_lead('=HYPERLINK("http://evil","click")', "周二 14:00", "ok")
+	store.append_interview_lead("张三\n伪造行,周二 23:00,hacked", "周二 14:00", "ok")
+	store.append_interview_lead("正常,候选人", "周二 14:00", "ok")
+
+	path = tmp_path / "automation" / "interview-leads.csv"
+	# 必须用 csv 解析带引号单元格里的换行；splitlines() 会把它当成两个数据行。
+	rows = list(csv_module.reader(io.StringIO(path.read_text(encoding="utf-8"), newline="")))
+	assert rows[0] == ["candidate_key", "interview_time", "reason"]
+	# 三行数据 + 表头：每个候选人恰好一行，换行与逗号都被正确引用。
+	assert len(rows) == 4
+	assert rows[1][0] == '\'=HYPERLINK("http://evil","click")'
+	assert rows[2][0] == "张三\n伪造行,周二 23:00,hacked"
+	assert rows[3][0] == "正常,候选人"
+	assert all(len(row) == 3 for row in rows)
