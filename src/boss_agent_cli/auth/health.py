@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +20,9 @@ class PlatformAuthConfig:
 	site_host: str
 	login_action: str
 	recruiter_read_supported: bool
+	# 实际命令由调用方按当前平台 / 数据目录传入；默认值只是无上下文时的通用示例。
+	logout_action: str = "boss logout"
+	status_action: str = "boss status"
 
 
 @dataclass(frozen=True)
@@ -105,8 +108,22 @@ def assess_auth_health(
 	platform: str = "zhipin",
 	token: dict[str, Any] | None,
 	now: float | None = None,
+	login_action: str | None = None,
+	logout_action: str | None = None,
+	status_action: str | None = None,
 ) -> AuthHealthReport:
-	config = auth_config_for_platform(platform)
+	"""评估本地登录健康度。
+
+	检查项里的 recovery_action 会被 Agent 直接复制执行：使用自定义数据目录时，
+	调用方传入带目录的命令，避免诊断字段把用户引到默认目录。
+	"""
+	base = auth_config_for_platform(platform)
+	config = replace(
+		base,
+		login_action=login_action or base.login_action,
+		logout_action=logout_action or base.logout_action,
+		status_action=status_action or base.status_action,
+	)
 	auth_dir = auth_dir_for_platform(data_dir, platform)
 	session_path = auth_dir / "session.enc"
 	salt_path = auth_dir / "salt"
@@ -138,7 +155,7 @@ def assess_auth_health(
 	else:
 		status = "error" if session_path.exists() else "warn"
 		detail = f"检测到 session 文件但无法解密/已损坏: {session_path}" if session_path.exists() else "未检测到本地登录态"
-		recovery = f"{login_action}；如为旧密钥残留，可先 boss logout" if session_path.exists() else login_action
+		recovery = f"{login_action}；如为旧密钥残留，可先 {config.logout_action}" if session_path.exists() else login_action
 		checks.append(AuthHealthCheck("credential_file", status, detail, recovery))
 		checks.append(AuthHealthCheck("auth_session", status, detail, recovery))
 
@@ -156,7 +173,7 @@ def assess_auth_health(
 			if has_primary
 			else f"关键 Cookie {config.primary_cookie} 缺失"
 		),
-		None if has_primary else f"boss logout && {login_action}" if has_token else login_action,
+		None if has_primary else f"{config.logout_action} && {login_action}" if has_token else login_action,
 	))
 	checks.append(_stoken_presence_check(config, has_token=has_token, has_secondary=has_secondary))
 	checks.append(_stoken_freshness_check(config, session_path, has_token=has_token, has_secondary=has_secondary, now=current_time))
@@ -208,7 +225,7 @@ def _stoken_presence_check(config: PlatformAuthConfig, *, has_token: bool, has_s
 		"stoken_presence",
 		"warn" if has_token else "error",
 		"__zp_stoken__ 缺失，二维码或 Cookie 提取可能只得到部分登录态",
-		"以 Chrome CDP 远程调试端口启动浏览器后运行 boss login --cdp，或重新执行 boss login",
+		f"以 Chrome CDP 远程调试端口启动浏览器后运行 {config.login_action} --cdp，或重新执行 {config.login_action}",
 	)
 
 
@@ -251,7 +268,7 @@ def _stoken_freshness_check(
 		"stoken_freshness",
 		"warn",
 		f"session 文件约 {age_hours:.1f} 小时前更新；stoken 可能已过期",
-		"运行 boss status --live 验证；失败时通过 CDP 或 boss login 刷新",
+		f"运行 {config.status_action} --live 验证；失败时通过 CDP 或 {config.login_action} 刷新",
 	)
 
 
@@ -274,21 +291,21 @@ def _auth_token_quality_check(
 			"auth_token_quality",
 			"ok",
 			f"登录态完整：{config.primary_cookie}/{config.secondary_token_label} 均存在",
-			hint="可运行 boss status --live 做一次只读在线验证",
+			hint=f"可运行 {config.status_action} --live 做一次只读在线验证",
 		)
 	if has_primary and not has_secondary:
 		return AuthHealthCheck(
 			"auth_token_quality",
 			"warn",
 			f"登录态部分可用：{config.primary_cookie} 存在，但 {config.secondary_token_label} 缺失",
-			"以 Chrome CDP 远程调试端口启动浏览器后运行 boss login --cdp，或重新执行 boss login",
+			f"以 Chrome CDP 远程调试端口启动浏览器后运行 {config.login_action} --cdp，或重新执行 {config.login_action}",
 		)
 	if not has_primary and has_secondary:
 		return AuthHealthCheck(
 			"auth_token_quality",
 			"error",
 			f"登录态异常：{config.secondary_token_label} 存在，但关键 Cookie {config.primary_cookie} 缺失",
-			f"boss logout && {config.login_action}",
+			f"{config.logout_action} && {config.login_action}",
 		)
 	return AuthHealthCheck(
 		"auth_token_quality",
@@ -311,14 +328,14 @@ def _login_preflight_check(
 			"login_preflight",
 			"ok",
 			f"登录前置通过：{config.primary_cookie}/{config.secondary_token_label} 均存在，可执行只读请求",
-			hint="仍建议用 boss status --live 做低频只读验证；遇到风控立即停止自动化访问",
+			hint=f"仍建议用 {config.status_action} --live 做低频只读验证；遇到风控立即停止自动化访问",
 		)
 	if has_token and has_primary:
 		return AuthHealthCheck(
 			"login_preflight",
 			"warn",
 			f"登录前置部分通过：{config.primary_cookie} 存在，但 {config.secondary_token_label} 缺失；只读请求可能失败",
-			"通过 CDP 或 boss login 刷新登录态后再执行需要平台请求的命令",
+			f"通过 CDP 或 {config.login_action} 刷新登录态后再执行需要平台请求的命令",
 			hint="不要在缺少二级令牌时重试高频请求；优先刷新登录态",
 		)
 	if has_token:
@@ -326,7 +343,7 @@ def _login_preflight_check(
 			"login_preflight",
 			"error",
 			f"登录前置失败：缺少关键 Cookie {config.primary_cookie}，当前登录态不可用于平台请求",
-			f"boss logout && {config.login_action}",
+			f"{config.logout_action} && {config.login_action}",
 		)
 	return AuthHealthCheck(
 		"login_preflight",
@@ -348,7 +365,7 @@ def _cookie_completeness_check(config: PlatformAuthConfig, cookies: dict[str, An
 		"cookie_completeness",
 		"warn",
 		f"辅助 Cookie 缺失：{'/'.join(missing_aux)}",
-		f"部分接口可能受影响；重新登录通常可补全：boss logout && {login_action}",
+		f"部分接口可能受影响；重新登录通常可补全：{config.logout_action} && {login_action}",
 	)
 
 
@@ -392,9 +409,9 @@ def _candidate_readiness(
 	if not has_token:
 		return "error", "缺少本地登录态", config.login_action
 	if not has_primary:
-		return "error", f"缺少关键 Cookie {config.primary_cookie}", f"boss logout && {config.login_action}"
+		return "error", f"缺少关键 Cookie {config.primary_cookie}", f"{config.logout_action} && {config.login_action}"
 	if config.secondary_token_key == "stoken" and not has_secondary:
-		return "warn", "仅具备部分登录态，缺少 __zp_stoken__", "通过 CDP 或 boss login 刷新登录态"
+		return "warn", "仅具备部分登录态，缺少 __zp_stoken__", f"通过 CDP 或 {config.login_action} 刷新登录态"
 	return "ok", "本地凭据满足前置条件；未执行真实平台请求", None
 
 

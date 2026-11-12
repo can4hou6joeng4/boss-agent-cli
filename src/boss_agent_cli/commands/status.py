@@ -31,7 +31,14 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 	auth = AuthManager(data_dir, logger=logger, platform=platform_name)
 
 	token = auth.check_status()
-	auth_health = assess_auth_health(data_dir, platform=platform_name, token=token)
+	auth_health = assess_auth_health(
+		data_dir,
+		platform=platform_name,
+		token=token,
+		login_action=login_action_for_ctx(ctx),
+		logout_action=boss_command_for_ctx(ctx, "logout", include_data_dir=True),
+		status_action=boss_command_for_ctx(ctx, "status", include_data_dir=True),
+	)
 	if token is None:
 		login_action = login_action_for_ctx(ctx)
 		handle_error_output(
@@ -58,10 +65,10 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 
 	if not live:
 		status_hints: dict[str, Any] = {
-			"next_actions": _status_next_actions(auth_health.auth_state, login_action=login_action_for_ctx(ctx)),
-			"live_probe": "运行 boss status --live 执行一次只读在线验证",
+			"next_actions": _status_next_actions(ctx, auth_health.auth_state),
+			"live_probe": f"运行 {boss_command_for_ctx(ctx, 'status --live', include_data_dir=True)} 执行一次只读在线验证",
 		}
-		status_operator_actions = _status_operator_actions(auth_health.auth_state)
+		status_operator_actions = _status_operator_actions(auth_health.auth_state, login_action=login_action_for_ctx(ctx))
 		if status_operator_actions:
 			status_hints["operator_actions"] = status_operator_actions
 		handle_output(
@@ -100,27 +107,29 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 			render=lambda payload: render_status(payload, login_action=login_action_for_ctx(ctx)),
 			hints={
 				"next_actions": [
-					boss_command_for_ctx(ctx, "recommend"),
-					boss_command_for_ctx(ctx, "search <关键词>"),
+					boss_command_for_ctx(ctx, "recommend", include_data_dir=True),
+					boss_command_for_ctx(ctx, "search <关键词>", include_data_dir=True),
 				],
 				"operator_actions": ["登录态在线验证通过，可以直接开始浏览推荐职位或搜索职位"],
 			},
 		)
 
 
-def _status_next_actions(auth_state: str, *, login_action: str) -> list[str]:
+def _status_next_actions(ctx: click.Context, auth_state: str) -> list[str]:
 	# hints.next_actions 只放能直接执行的命令；`&&` 组合与「先启动带调试端口的
 	# 浏览器」这类前置条件属于操作者指引，见 _status_operator_actions。
+	login_action = login_action_for_ctx(ctx)
+	live_action = boss_command_for_ctx(ctx, "status --live", include_data_dir=True)
 	if auth_state == "complete":
-		return ["boss status --live"]
+		return [live_action]
 	if auth_state == "partial":
-		return ["boss login --cdp", "boss status --live"]
+		return [f"{login_action} --cdp", live_action]
 	if auth_state == "broken":
-		return ["boss logout", login_action]
+		return [boss_command_for_ctx(ctx, "logout", include_data_dir=True), login_action]
 	return [login_action]
 
 
-def _status_operator_actions(auth_state: str) -> list[str]:
+def _status_operator_actions(auth_state: str, *, login_action: str) -> list[str]:
 	if auth_state == "partial":
-		return ["想走 CDP 复用浏览器时，先用远程调试端口启动 Chrome，再执行 boss login --cdp"]
+		return [f"想走 CDP 复用浏览器时，先用远程调试端口启动 Chrome，再执行 {login_action} --cdp"]
 	return []

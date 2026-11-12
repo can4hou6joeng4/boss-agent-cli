@@ -1,4 +1,5 @@
 import json
+import shlex
 import sqlite3
 from unittest.mock import patch
 
@@ -389,7 +390,9 @@ def test_watch_run_auth_expired_is_recoverable(mock_auth_cls, mock_client_cls, t
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "AUTH_EXPIRED"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == [
+		"boss", "--data-dir", str(tmp_path.resolve()), "login",
+	]
 
 
 @patch("boss_agent_cli.commands.watch.run_search_pipeline")

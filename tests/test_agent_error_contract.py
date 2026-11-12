@@ -1,6 +1,7 @@
 """Agent-facing CLI error envelope contract tests."""
 
 import json
+import shlex
 import sys
 from typing import Any
 
@@ -327,11 +328,12 @@ def test_auth_required_points_at_login_with_operator_hint(tmp_path, args):
 	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *args])
 
 	parsed = _assert_single_stdout_json_error(result, command=args[0], code="AUTH_REQUIRED")
-	assert parsed["error"]["recovery_action"] == "boss login"
-	assert parsed["hints"]["next_actions"] == ["boss login"]
+	login_action = parsed["error"]["recovery_action"]
+	assert shlex.split(login_action) == ["boss", "--data-dir", str(tmp_path.resolve()), "login"]
+	assert parsed["hints"]["next_actions"] == [login_action]
 	operator_actions = parsed["hints"]["operator_actions"]
 	assert len(operator_actions) == 1
-	assert "boss login" in operator_actions[0]
+	assert login_action in operator_actions[0]
 	assert "扫码" in operator_actions[0]
 
 

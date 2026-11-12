@@ -1,6 +1,8 @@
 from io import BytesIO
 import json
 import os
+import shlex
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from zipfile import ZipFile
 
@@ -18,6 +20,16 @@ from boss_agent_cli.display import error_contract_for_code
 from boss_agent_cli.main import cli
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
+
+
+def _assert_download_error_contract(payload: dict, code: str) -> None:
+	error = payload["error"]
+	assert error["recoverable"] is error_contract_for_code(code)[0]
+	if code in {"AUTH_REQUIRED", "TOKEN_REFRESH_FAILED"}:
+		assert shlex.split(error["recovery_action"]) == ["boss", "--data-dir", str((Path.home() / ".boss-agent").resolve()), "login"]
+		assert payload["hints"]["next_actions"] == [error["recovery_action"]]
+	else:
+		assert error["recovery_action"] == error_contract_for_code(code)[1]
 
 
 def test_removed_experiments_do_not_remove_native_or_attachment_commands():
@@ -447,7 +459,7 @@ def test_resume_auth_and_risk_failures_stop_without_leaking(action, error_type, 
 		error = payload["error"]
 		assert error["code"] == code
 		if action == "download_resume":
-			assert (error["recoverable"], error["recovery_action"]) == error_contract_for_code(code)
+			_assert_download_error_contract(payload, code)
 		else:
 			assert error["recoverable"] is False
 			assert error["recovery_action"]
@@ -540,7 +552,7 @@ def test_resume_platform_errors_use_declared_codes_and_safe_recovery(action, res
 			else:
 				assert "不要自动重试" in error["recovery_action"]
 		else:
-			assert (error["recoverable"], error["recovery_action"]) == error_contract_for_code(code)
+			_assert_download_error_contract(payload, code)
 			if code in {"ACCOUNT_RISK", "ENVIRONMENT_RISK"}:
 				assert payload["hints"]["next_actions"]
 		method.assert_called_once()

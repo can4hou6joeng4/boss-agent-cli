@@ -1,4 +1,6 @@
 import json
+import shlex
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
@@ -24,11 +26,14 @@ def _invoke(*args):
 	return runner.invoke(cli, ["--role", "recruiter", *args])
 
 
-def _assert_error_contract(parsed: dict, *, code: str, message: str, recoverable: bool, recovery_action: str | None) -> None:
+def _assert_error_contract(parsed: dict, *, code: str, message: str, recoverable: bool, recovery_action: str | list[str] | None) -> None:
 	assert parsed["error"]["code"] == code
 	assert parsed["error"]["message"] == message
 	assert parsed["error"]["recoverable"] is recoverable
-	assert parsed["error"]["recovery_action"] == recovery_action
+	if isinstance(recovery_action, list):
+		assert shlex.split(parsed["error"]["recovery_action"]) == recovery_action
+	else:
+		assert parsed["error"]["recovery_action"] == recovery_action
 
 
 @patch("boss_agent_cli.commands.recruiter.candidates.get_recruiter_platform_instance")
@@ -282,7 +287,7 @@ def test_recruiter_chat_reports_error_when_platform_rejects(mock_auth_cls, mock_
 		code="TOKEN_REFRESH_FAILED",
 		message="stoken expired",
 		recoverable=True,
-		recovery_action="boss login",
+		recovery_action=["boss", "--data-dir", str((Path.home() / ".boss-agent").resolve()), "login"],
 	)
 
 
@@ -368,7 +373,7 @@ def test_recruiter_jobs_offline_reports_error_when_platform_rejects(mock_auth_cl
 		code="TOKEN_REFRESH_FAILED",
 		message="stoken expired",
 		recoverable=True,
-		recovery_action="boss login",
+		recovery_action=["boss", "--data-dir", str((Path.home() / ".boss-agent").resolve()), "login"],
 	)
 
 
@@ -437,7 +442,7 @@ def test_recruiter_jobs_detail_reports_error_when_platform_rejects(mock_auth_cls
 		code="TOKEN_REFRESH_FAILED",
 		message="stoken expired",
 		recoverable=True,
-		recovery_action="boss login",
+		recovery_action=["boss", "--data-dir", str((Path.home() / ".boss-agent").resolve()), "login"],
 	)
 
 
@@ -486,7 +491,7 @@ def test_recruiter_resume_exchange_reports_error_when_platform_rejects(mock_auth
 		code="TOKEN_REFRESH_FAILED",
 		message="stoken expired",
 		recoverable=True,
-		recovery_action="boss login",
+		recovery_action=["boss", "--data-dir", str((Path.home() / ".boss-agent").resolve()), "login"],
 	)
 
 
@@ -560,7 +565,7 @@ def test_recruiter_resume_parse_reports_error_when_platform_rejects(mock_auth_cl
 		code="TOKEN_REFRESH_FAILED",
 		message="stoken expired",
 		recoverable=True,
-		recovery_action="boss login",
+		recovery_action=["boss", "--data-dir", str((Path.home() / ".boss-agent").resolve()), "login"],
 	)
 
 

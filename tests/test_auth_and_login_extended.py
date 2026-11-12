@@ -2,6 +2,7 @@
 
 import json
 import os
+import shlex
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -10,6 +11,8 @@ from click.testing import CliRunner
 
 from boss_agent_cli.auth.token_store import TokenStore
 from boss_agent_cli.main import cli
+
+_DEFAULT_DATA_DIR = str((Path.home() / ".boss-agent").resolve())
 
 
 # ══════════════ TokenStore ══════════════
@@ -244,7 +247,7 @@ def test_login_connection_error_recovery_is_boss_chrome(mock_auth_cls):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "CDP_UNAVAILABLE"
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == ["boss", "--data-dir", _DEFAULT_DATA_DIR, "login"]
 
 
 @patch("boss_agent_cli.commands.login.AuthManager")
@@ -284,7 +287,7 @@ def test_login_timeout_error_recovery_is_retry(mock_auth_cls):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "LOGIN_TIMEOUT"
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == ["boss", "--data-dir", _DEFAULT_DATA_DIR, "login"]
 
 
 @patch("boss_agent_cli.commands.login.AuthManager")
@@ -343,7 +346,7 @@ def test_login_timeout_error_has_actionable_diagnostics(mock_auth_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "LOGIN_TIMEOUT"
 	assert "登录等待超时" in parsed["error"]["message"]
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == ["boss", "--data-dir", _DEFAULT_DATA_DIR, "login"]
 	assert any("--timeout 180" in action for action in parsed["hints"]["next_actions"])
 
 
@@ -406,7 +409,9 @@ def test_login_generic_error_keeps_network_fallback_with_doctor_hint(mock_auth_c
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NETWORK_ERROR"
 	assert "登录失败" in parsed["error"]["message"]
-	assert any("boss doctor" in action for action in parsed["hints"]["next_actions"])
+	assert ["boss", "--data-dir", _DEFAULT_DATA_DIR, "doctor"] in [
+		shlex.split(action) for action in parsed["hints"]["next_actions"]
+	]
 
 
 # ── login 错误 hints 的双受众通道拆分（R5 / A11）─────────────

@@ -29,7 +29,7 @@ from boss_agent_cli.crawler.service import (
 )
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
 from boss_agent_cli.digest import build_digest
-from boss_agent_cli.display import RISK_ERROR_CONTRACTS, risk_error_contract, risk_error_message, shell_argument
+from boss_agent_cli.display import RISK_ERROR_CONTRACTS, boss_command, risk_error_contract, risk_error_message, shell_argument
 from boss_agent_cli.output import Logger
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
 from boss_agent_cli.resume.models import resume_to_text
@@ -295,6 +295,7 @@ def _classify_action_error(code: str, message: str) -> tuple[str, bool, str]:
 		recovery, _ = risk_error_contract(code)
 		return code, False, recovery
 	recoverable = code in {
+		"AUTH_REQUIRED",
 		"AUTH_EXPIRED",
 		"RATE_LIMITED",
 		"NETWORK_ERROR",
@@ -302,8 +303,8 @@ def _classify_action_error(code: str, message: str) -> tuple[str, bool, str]:
 		"NOT_SUPPORTED",
 		"INVALID_PARAM",
 	}
-	if code in {"AUTH_EXPIRED", "TOKEN_REFRESH_FAILED"}:
-		recovery = "boss login"
+	if code in {"AUTH_REQUIRED", "AUTH_EXPIRED", "TOKEN_REFRESH_FAILED"}:
+		recovery = str(ERROR_CODES[code]["recovery_action"])
 	elif code == "NOT_SUPPORTED":
 		recovery = "切换平台或 workflow goal 后重试"
 	elif code == "INVALID_PARAM":
@@ -432,9 +433,13 @@ def _auth_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 		# 未登录不是失败，是「在等人」。返回 WAITING_INPUT 让 run 挂起可恢复，
 		# 而不是把整个 workflow 打成 failed 逼用户从头重走向导。
 		# 刻意不阻塞轮询等待扫码——Agent 与真人都不该被卡在这里。
-		login_command = f"boss --platform {context.platform} login"
+		login_command = boss_command("login", platform_name=context.platform, data_dir=context.data_dir)
 		control = context.workflow_control
-		resume_command = f"boss wizard --resume {shell_argument(control.run_id)}" if control else "boss wizard"
+		resume_command = boss_command(
+			f"wizard --resume {shell_argument(control.run_id)}" if control else "wizard",
+			platform_name=context.platform,
+			data_dir=context.data_dir,
+		)
 		return StepResult(
 			{"authenticated": False, "platform": context.platform, "role": context.role},
 			status=WorkflowStatus.WAITING_INPUT,
@@ -826,6 +831,7 @@ def _crawl_seed_session(context: ActionContext) -> tuple[dict[str, str], str]:
 	"""Load boss-login cookies for the isolated crawl browser profile."""
 	from boss_agent_cli.auth.manager import AuthRequired
 
+	login_action = boss_command("login", platform_name=context.platform, data_dir=context.data_dir)
 	try:
 		token = context.auth().get_token()
 	except AuthRequired as exc:
@@ -833,7 +839,7 @@ def _crawl_seed_session(context: ActionContext) -> tuple[dict[str, str], str]:
 			"AUTH_REQUIRED",
 			str(exc),
 			recoverable=True,
-			recovery_action=f"boss --platform {context.platform} login",
+			recovery_action=login_action,
 		) from exc
 	raw_cookies = token.get("cookies") if isinstance(token, dict) else None
 	if not isinstance(raw_cookies, dict) or not raw_cookies:
@@ -841,7 +847,7 @@ def _crawl_seed_session(context: ActionContext) -> tuple[dict[str, str], str]:
 			"AUTH_REQUIRED",
 			"本地登录态缺少 Cookie，采集浏览器无法自动登录",
 			recoverable=True,
-			recovery_action=f"boss --platform {context.platform} login",
+			recovery_action=login_action,
 		)
 	cookies = {str(name): str(value) for name, value in raw_cookies.items() if name and value is not None}
 	if context.platform in {"zhipin", ""} and "wt2" not in cookies:
@@ -849,7 +855,7 @@ def _crawl_seed_session(context: ActionContext) -> tuple[dict[str, str], str]:
 			"AUTH_REQUIRED",
 			"登录态缺少 wt2，采集浏览器会被当成未登录并立即退出",
 			recoverable=True,
-			recovery_action="boss login",
+			recovery_action=login_action,
 		)
 	user_agent = str(token.get("user_agent") or "")
 	return cookies, user_agent

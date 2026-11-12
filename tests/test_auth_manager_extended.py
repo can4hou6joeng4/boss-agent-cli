@@ -39,7 +39,7 @@ def test_get_token_raises_platform_specific_auth_required_for_non_default_platfo
 	mock_store_cls.return_value = store
 	manager = AuthManager(tmp_path, platform="otherplat")
 
-	with pytest.raises(AuthRequired, match="boss --platform otherplat login"):
+	with pytest.raises(AuthRequired, match="boss --platform otherplat .*login"):
 		manager.get_token()
 
 

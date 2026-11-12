@@ -80,9 +80,9 @@ def login_cmd(
 				ignore_risk_lock=ignore_risk_lock,
 			)
 		method = token.pop("_method", "未知")
-		status_cmd = boss_command_for_ctx(ctx, "status")
-		search_cmd = boss_command_for_ctx(ctx, "search <query>")
-		recommend_cmd = boss_command_for_ctx(ctx, "recommend")
+		status_cmd = boss_command_for_ctx(ctx, "status", include_data_dir=True)
+		search_cmd = boss_command_for_ctx(ctx, "search <query>", include_data_dir=True)
+		recommend_cmd = boss_command_for_ctx(ctx, "recommend", include_data_dir=True)
 		emit_success(
 			"login",
 			{"message": f"登录成功（{method}）"},

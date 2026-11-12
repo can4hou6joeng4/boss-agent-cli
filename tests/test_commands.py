@@ -1,4 +1,6 @@
 import json
+import shlex
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
@@ -7,6 +9,8 @@ from boss_agent_cli.display import risk_error_message
 from boss_agent_cli.index_cache import save_index
 from boss_agent_cli.main import cli
 from boss_agent_cli.search_filters import SearchPipelinePlatformError
+
+_DEFAULT_DATA_DIR = str((Path.home() / ".boss-agent").resolve())
 
 
 def _ctx_mock(mock_cls):
@@ -46,7 +50,9 @@ def test_login_cdp_connection_error_returns_json_envelope(mock_auth_cls):
 	assert parsed["error"]["code"] == "CDP_UNAVAILABLE"
 	assert "Chrome 调试连接不可用" in parsed["error"]["message"]
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == [
+		"boss", "--data-dir", _DEFAULT_DATA_DIR, "login",
+	]
 
 
 @patch("boss_agent_cli.commands.status.AuthManager")
@@ -118,7 +124,10 @@ def test_status_live_success_points_at_business_commands(mock_auth_cls, mock_cli
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"]["user_name"] == "tester"
-	assert parsed["hints"]["next_actions"] == ["boss recommend", "boss search <关键词>"]
+	assert [shlex.split(action) for action in parsed["hints"]["next_actions"]] == [
+		["boss", "--data-dir", _DEFAULT_DATA_DIR, "recommend"],
+		["boss", "--data-dir", _DEFAULT_DATA_DIR, "search", "<关键词>"],
+	]
 	assert parsed["hints"]["operator_actions"]
 
 
@@ -139,7 +148,9 @@ def test_status_reports_user_info_error(mock_auth_cls, mock_client_cls):
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == [
+		"boss", "--data-dir", _DEFAULT_DATA_DIR, "login",
+	]
 	assert parsed["hints"]["auth_health"]["primary_name"] == "wt2"
 
 
@@ -588,7 +599,7 @@ def test_recommend_with_score_reports_expect_error(mock_auth_cls, mock_client_cl
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == ["boss", "--data-dir", _DEFAULT_DATA_DIR, "login"]
 
 
 @patch("boss_agent_cli.commands.recommend.CacheStore")
@@ -1356,7 +1367,7 @@ def test_chat_reports_friend_list_error(mock_auth_cls, mock_client_cls):
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == ["boss", "--data-dir", _DEFAULT_DATA_DIR, "login"]
 
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
@@ -1990,7 +2001,7 @@ def test_pipeline_reports_friend_list_error_contract(mock_auth_cls, mock_client_
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == ["boss", "--data-dir", _DEFAULT_DATA_DIR, "login"]
 
 
 @patch("boss_agent_cli.commands.pipeline.get_platform_instance")
@@ -2059,7 +2070,7 @@ def test_digest_reports_friend_list_error_contract(mock_auth_cls, mock_client_cl
 	assert parsed["error"]["code"] == "TOKEN_REFRESH_FAILED"
 	assert parsed["error"]["message"] == "stoken expired"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == ["boss", "--data-dir", _DEFAULT_DATA_DIR, "login"]
 
 
 @patch("boss_agent_cli.commands.digest.get_platform_instance")
@@ -2166,7 +2177,7 @@ def test_search_pipeline_auth_expired_is_recoverable(mock_client_cls, mock_auth_
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "AUTH_EXPIRED"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "boss login"
+	assert shlex.split(parsed["error"]["recovery_action"]) == ["boss", "--data-dir", _DEFAULT_DATA_DIR, "login"]
 
 
 @patch("boss_agent_cli.commands.search.CacheStore")

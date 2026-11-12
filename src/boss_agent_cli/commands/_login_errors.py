@@ -25,8 +25,8 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 	message = raw_message.lower()
 	recovery_action = login_action_for_ctx(ctx)
 	login_cmd = login_action_for_ctx(ctx)
-	status_cmd = boss_command_for_ctx(ctx, "status")
-	doctor_cmd = boss_command_for_ctx(ctx, "doctor")
+	status_cmd = boss_command_for_ctx(ctx, "status", include_data_dir=True)
+	doctor_cmd = boss_command_for_ctx(ctx, "doctor", include_data_dir=True)
 
 	def payload(
 		code: str,

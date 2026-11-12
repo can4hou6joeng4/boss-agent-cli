@@ -65,8 +65,8 @@ def boss_command_for_ctx(ctx: Any, command: str, *, include_data_dir: bool = Fal
 
 
 def login_action_for_ctx(ctx: Any) -> str:
-	"""Return the platform-aware login recovery command."""
-	return boss_command_for_ctx(ctx, "login")
+	"""登录恢复使用原平台与数据目录，避免登录后原命令仍无会话。"""
+	return boss_command_for_ctx(ctx, "login", include_data_dir=True)
 
 
 def auth_required_hints(ctx: Any) -> dict[str, list[str]]:
@@ -195,12 +195,19 @@ def handle_error_output(
 	from boss_agent_cli.output import emit_error
 
 	# 调用方未显式声明时按登记表补齐，TTY 与 JSON 两条路径看到同一份恢复契约。
-	if recoverable is None or recovery_action is None:
-		registered_recoverable, registered_recovery_action = error_contract_for_code(code)
-		if recoverable is None:
-			recoverable = registered_recoverable
-		if recovery_action is None:
-			recovery_action = registered_recovery_action
+	registered_recoverable, registered_recovery_action = error_contract_for_code(code)
+	if recoverable is None:
+		recoverable = registered_recoverable
+	if recovery_action is None:
+		recovery_action = registered_recovery_action
+	if (
+		code in {"AUTH_REQUIRED", "AUTH_EXPIRED", "TOKEN_REFRESH_FAILED"}
+		and recoverable
+		and recovery_action == registered_recovery_action
+	):
+		# 登记表是无运行上下文的示例；只补齐通用登录动作，不覆盖写操作的人工核对要求。
+		recovery_action = login_action_for_ctx(ctx)
+		hints = {**auth_required_hints(ctx), **(hints or {})}
 
 	if is_json_mode(ctx):
 		emit_error(
@@ -890,7 +897,10 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recovery_action=nav_recovery,
 					details=e.details(),
 					hints={
-						"next_actions": ["boss doctor", "boss login"],
+						"next_actions": [
+							boss_command_for_ctx(ctx, "doctor", include_data_dir=True),
+							login_action_for_ctx(ctx),
+						],
 						"operator_actions": [
 							"浏览器通道会先打开 https://www.zhipin.com/ 再请求接口；--url 只解析筛选条件，不会改走搜索页",
 							"首页在自动化下偶发加载卡住，CLI 已跳到空白页并重试。仍失败时，用带调试端口的 Chrome 打开官网并确认首页能加载，再执行 boss --cdp-url http://127.0.0.1:9222 <命令>",
