@@ -1,4 +1,5 @@
 import json
+import shlex
 import socket
 import sqlite3
 import sys
@@ -585,6 +586,25 @@ def test_crawl_writes_outputs_and_reuses_cached_detail(tmp_path):
 	assert sheet.auto_filter.ref == "A1:R2"
 	assert sheet["P2"].alignment.wrap_text is not True
 	assert sheet.row_dimensions[2].height == 20
+
+
+@pytest.mark.parametrize("fail_first_page", [False, True])
+def test_service_outcome_keeps_data_directory_in_checkpoint(tmp_path, fail_first_page):
+	"""真实运行及已完成任务的快捷返回都必须绑定原数据目录。"""
+	data_dir = tmp_path / "state 'one'; $STATE"
+	transport = _FakeTransport({1: _page()}, fail_pages={1} if fail_first_page else set())
+	cache, service = _service(data_dir, lambda settings: transport)
+	with cache:
+		outcome = service.create_and_run(_settings(data_dir, max_retries=0))
+		assert outcome.status == ("stopped" if fail_first_page else "completed")
+		outcomes = [outcome]
+		if not fail_first_page:
+			outcomes.append(service.resume(outcome.run_id))
+		for item in outcomes:
+			assert shlex.split(item.as_dict()["checkpoint"]["resume_command"]) == [
+				"boss", "--data-dir", str(data_dir.resolve()), "crawl", "resume", outcome.run_id,
+			]
+		assert transport.page_calls == [1]
 
 
 def test_crawl_honors_page_limit_and_resume_deduplicates(tmp_path):

@@ -2,6 +2,7 @@ import json
 import os
 import pty
 import select
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -626,7 +627,9 @@ def test_crawl_actions_use_fixture_service_and_persist_stop(tmp_path, monkeypatc
 		)
 	status = DEFAULT_ACTIONS["crawl_status"](context, {"run_id": "crawl-existing"}, {})
 	assert status.data["run_id"] == "crawl-existing"
-	assert status.data["checkpoint"]["resume_command"] == "boss crawl resume crawl-existing"
+	assert shlex.split(status.data["checkpoint"]["resume_command"]) == [
+		"boss", "--data-dir", str(tmp_path.resolve()), "crawl", "resume", "crawl-existing",
+	]
 	resumed = DEFAULT_ACTIONS["crawl_resume"](
 		context,
 		{"run_id": "crawl-existing", "pages": 4, "with_detail": True},
@@ -3017,6 +3020,42 @@ def test_waiting_panel_falls_back_for_legacy_runs(monkeypatch):
 		},
 	)
 	assert "采集用 Chrome 已保持打开" in body
+
+
+@pytest.mark.parametrize(
+	"status, error_code",
+	[
+		("risk_stopped", None),
+		("budget_stopped", None),
+		("timeout_stopped", "WORKFLOW_TIMEOUT"),
+		("workflow_stopped", "WORKFLOW_STOPPED"),
+		("stopped", "WORKFLOW_STOPPED"),
+		("failed", "NETWORK_ERROR"),
+	],
+)
+def test_crawl_outcome_recovery_keeps_checkpoint_directory(tmp_path, status, error_code):
+	"""向导等待和错误路径都复用采集服务提供的恢复命令。"""
+	from boss_agent_cli.wizard.actions import _crawl_outcome_result
+
+	run_id = "run 'one'; $RUN"
+	data_dir = tmp_path / "state 'one'; $STATE"
+	outcome = replace(
+		_crawl_outcome(run_id, status),
+		data_dir=data_dir,
+		error="stop requested" if status in {"workflow_stopped", "stopped"} else "fixture stop",
+	)
+	expected = ["boss", "--data-dir", str(data_dir.resolve()), "crawl", "resume", run_id]
+	if error_code is not None:
+		with pytest.raises(WorkflowActionError) as exc_info:
+			_crawl_outcome_result(outcome)
+		assert exc_info.value.code == error_code
+		assert shlex.split(exc_info.value.recovery_action) == expected
+	else:
+		result = _crawl_outcome_result(outcome)
+		assert result.status is WorkflowStatus.WAITING_INPUT
+		assert shlex.split(result.next_action) == expected
+		assert result.next_action == result.data["checkpoint"]["resume_command"]
+		assert any(result.next_action in action for action in result.operator_actions)
 
 
 def test_crawl_risk_stop_emits_browser_operator_actions():

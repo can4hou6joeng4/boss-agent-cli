@@ -1,4 +1,5 @@
 import json
+import shlex
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -158,9 +159,11 @@ def test_agent_crawl_does_not_process_risk_stopped_runs(tmp_path: Path, monkeypa
 	assert result.exit_code == 1
 	payload = json.loads(result.output)
 	assert payload["error"]["code"] == "CRAWL_NOT_COMPLETED"
-	assert "boss clean --risk-lock" in payload["error"]["recovery_action"]
+	assert "clean --risk-lock" in payload["error"]["recovery_action"]
+	assert str(tmp_path.resolve()) in payload["error"]["recovery_action"]
 	assert not payload["hints"].get("next_actions")
-	assert any("boss crawl resume run-1" in item for item in payload["hints"]["operator_actions"])
+	resume_action = next(item for item in payload["hints"]["operator_actions"] if "crawl resume run-1" in item)
+	assert str(tmp_path.resolve()) in resume_action
 
 
 def test_agent_crawl_missing_details_hint_quotes_run_id(tmp_path: Path, monkeypatch) -> None:
@@ -179,7 +182,9 @@ def test_agent_crawl_missing_details_hint_quotes_run_id(tmp_path: Path, monkeypa
 	)
 	assert result.exit_code == 0, result.output
 	payload = json.loads(result.output)
-	assert payload["hints"]["next_actions"] == ["boss crawl resume 'run; echo pwn' --with-detail"]
+	assert [shlex.split(action) for action in payload["hints"]["next_actions"]] == [
+		["boss", "--data-dir", str(tmp_path.resolve()), "crawl", "resume", run_id, "--with-detail"],
+	]
 
 
 def test_agent_crawl_results_hint_quotes_run_id(tmp_path: Path, monkeypatch) -> None:
@@ -199,4 +204,10 @@ def test_agent_crawl_results_hint_quotes_run_id(tmp_path: Path, monkeypatch) -> 
 	)
 	assert result.exit_code == 0, result.output
 	payload = json.loads(result.output)
-	assert payload["hints"]["next_actions"] == ["boss crawl results 'run; echo pwn'", "boss shortlist list"]
+	assert [shlex.split(action) for action in payload["hints"]["next_actions"]] == [
+		["boss", "--data-dir", str(tmp_path.resolve()), "crawl", "results", run_id],
+		["boss", "--data-dir", str(tmp_path.resolve()), "shortlist", "list"],
+	]
+	followed = runner.invoke(cli, shlex.split(payload["hints"]["next_actions"][0])[1:])
+	assert followed.exit_code == 0, followed.output
+	assert json.loads(followed.output)["data"]["run_id"] == run_id
