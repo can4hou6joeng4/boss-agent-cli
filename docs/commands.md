@@ -386,6 +386,8 @@ boss export --url 'https://www.zhipin.com/web/geek/jobs?query=Golang&city=101280
 
 `boss export` 的 JSON 信封带 `truncated` 与 `stop_reason`，用于区分「取满请求量」与「本地扫描到上限」：`count_reached`、`platform_has_more_false`、`empty_page` 都表示结果完整；`page_budget_exhausted` 时 `truncated=true`，表示内部页数预算已耗尽、结果可能不完整，同时 `hints.operator_actions` 给出缩小筛选条件的指引。`--format html` 直出没有信封，截断提示写到 stderr。
 
+`export` 的成功后继与参数错误恢复提示保留本次 `--data-dir` 与平台：写完文件后的 `search` / `recommend`、`--format html --json` 与 CSV/stdout 的重导出示例，以及空 query / 空 `--url` / URL 解析失败的恢复命令都携带按 shell 参数转义的绝对目录，照抄提示仍使用同一登录态与缓存。
+
 **福利筛选工作原理**：
 
 1. 先检查职位福利标签（`welfareList`）
