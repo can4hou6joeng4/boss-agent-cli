@@ -19,7 +19,7 @@ def test_resume_init_hints_include_boss_me(tmp_path: Path) -> None:
 	envelope = json.loads(result.output)
 	assert envelope["ok"] is True
 	next_actions = envelope.get("hints", {}).get("next_actions", [])
-	assert any("boss me" in action for action in next_actions), (
+	assert any(action.endswith(" me") for action in next_actions), (
 		f"期望 hint 提示用户走 boss me 拉真实简历，实际 next_actions={next_actions}"
 	)
 
@@ -36,13 +36,14 @@ def test_resume_hints_quote_name_with_apostrophe(tmp_path: Path) -> None:
 	)
 	assert result.exit_code == 0, result.output
 	hint = next(
-		a for a in json.loads(result.output)["hints"]["next_actions"] if a.startswith("boss resume show")
+		action for action in json.loads(result.output)["hints"]["next_actions"] if "resume show" in action
 	)
-	assert hint == "boss resume show 'it'\\''s'"
+	assert shlex.split(hint) == ["boss", "--data-dir", str(tmp_path.resolve()), "resume", "show", "it's"]
+	assert "'it'\\''s'" in hint
 
 	parts = shlex.split(hint)
-	assert parts[3] == "it's"
-	shown = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *parts[1:]])
+	# 提示已经携带目录：不额外补 --data-dir 直接重放。
+	shown = runner.invoke(cli, ["--json", *parts[1:]])
 	assert shown.exit_code == 0, shown.output
 	assert json.loads(shown.output)["data"]["name"] == "it's"
 
@@ -55,9 +56,12 @@ def test_resume_hints_quote_name_with_spaces(tmp_path: Path) -> None:
 	)
 	assert result.exit_code == 0, result.output
 	next_actions = json.loads(result.output)["hints"]["next_actions"]
-	assert "boss resume show '我的 简历'" in next_actions
+	hint = next(action for action in next_actions if "resume show" in action)
+	parts = shlex.split(hint)
+	assert parts[:3] == ["boss", "--data-dir", str(tmp_path.resolve())]
+	assert parts[3:] == ["resume", "show", "我的 简历"]
 
-	hint = next(a for a in next_actions if a.startswith("boss resume show"))
-	shown = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *shlex.split(hint)[1:]])
+	# 提示已经携带目录：不额外补 --data-dir 直接重放。
+	shown = runner.invoke(cli, ["--json", *parts[1:]])
 	assert shown.exit_code == 0, shown.output
 	assert json.loads(shown.output)["data"]["name"] == "我的 简历"

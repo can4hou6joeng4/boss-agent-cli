@@ -305,6 +305,8 @@ boss hr download-resume <friend_id> --message-id <attachment_mid> --output ./res
 
 简历名是自由文本，可含空格、引号与 shell 元字符。所有以简历名为参数的后继提示（`resume show` / `edit` / `export` / `delete`，含错误消息正文）都按 POSIX shell 规则转义，`shlex.split` 后还原为同一个名字；`resume list` 与 `resume show` / `clone` 遇到损坏文件返回 `RESUME_FILE_INVALID`，给出的 `resume delete` 提示同样可直接复制执行。
 
+本地简历全部存放在 `--data-dir` 的 `resumes/` 下，因此简历族的后继与恢复提示都显式携带该目录：`resume init` / `list` / `show` / `edit` / `delete` / `export` / `import` / `clone` / `diff` / `link` / `applications` 的 `hints.next_actions`、终端 `next_steps`、错误的 `recovery_action`，以及损坏文件的 `operator_actions` 都指回产生这份简历的目录；`resume link` 后继的 `apply`、取参用的 `search` 与 `init` 后的 `me` 也在同一目录。换一个工作目录照抄提示时，仍操作同一份简历与职位关联，而不会在默认目录另建一份或读取另一个账号的缓存。
+
 ## 系统管理
 
 | 命令 | 说明 |

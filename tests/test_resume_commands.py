@@ -1,11 +1,17 @@
 import json
 import shlex
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
+
+
+def _hint(command: str, data_dir: Path) -> str:
+	"""后继提示保留本次调用的数据目录（绝对解析路径）。"""
+	return f"boss --data-dir {Path(data_dir).resolve()} {command}"
 
 
 def _invoke(runner, tmp_path, args):
@@ -44,10 +50,10 @@ def test_init_with_template(tmp_path):
 	_assert_success_envelope(parsed)
 	assert parsed["data"] == {"action": "init", "name": "myresume", "template": "default"}
 	assert parsed["hints"]["next_actions"] == [
-		"boss resume show myresume",
-		"boss resume edit myresume --field title --value <新标题>",
-		"boss me",
-		"boss resume import <path>",
+		_hint("resume show myresume", tmp_path),
+		_hint("resume edit myresume --field title --value <新标题>", tmp_path),
+		_hint("me", tmp_path),
+		_hint("resume import <path>", tmp_path),
 	]
 
 
@@ -96,7 +102,7 @@ def test_list_empty(tmp_path):
 	_assert_success_envelope(parsed)
 	assert parsed["data"] == []
 	# 空列表里没有简历名可 show：照抄只会换回 RESUME_NOT_FOUND。
-	assert parsed["hints"]["next_actions"] == ["boss resume init --template default"]
+	assert parsed["hints"]["next_actions"] == [_hint("resume init --template default", tmp_path)]
 
 
 def test_list_with_items(tmp_path):
@@ -126,8 +132,8 @@ def test_show_existing(tmp_path):
 	assert parsed["data"]["personal_info"] == {"items": [], "layout": "inline"}
 	assert parsed["data"]["modules"] == []
 	assert parsed["hints"]["next_actions"] == [
-		"boss resume edit showme --field title --value <新标题>",
-		"boss resume export showme --format json",
+		_hint("resume edit showme --field title --value <新标题>", tmp_path),
+		_hint("resume export showme --format json", tmp_path),
 	]
 
 
@@ -161,7 +167,7 @@ def test_not_found_points_at_resume_list(tmp_path, args):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	_assert_error_envelope(parsed, "RESUME_NOT_FOUND")
-	assert parsed["hints"]["next_actions"] == ["boss resume list"]
+	assert parsed["hints"]["next_actions"] == [_hint("resume list", tmp_path)]
 
 
 # ── edit ──────────────────────────────────────────────────────
@@ -175,7 +181,7 @@ def test_edit_existing_field(tmp_path):
 	parsed = json.loads(result.output)
 	_assert_success_envelope(parsed)
 	assert parsed["data"] == {"action": "edit", "name": "editable", "field": "title", "value": "Senior Dev"}
-	assert parsed["hints"]["next_actions"] == ["boss resume show editable"]
+	assert parsed["hints"]["next_actions"] == [_hint("resume show editable", tmp_path)]
 
 	# 验证确实修改了
 	show_result = _invoke(runner, tmp_path, ["show", "editable"])
@@ -203,8 +209,8 @@ def test_edit_container_field_is_rejected(tmp_path):
 		_assert_error_envelope(parsed, "INVALID_PARAM")
 		assert "不是文本字段" in parsed["error"]["message"]
 		assert parsed["hints"]["next_actions"] == [
-			"boss resume export container --format json",
-			"boss resume show container",
+			_hint("resume export container --format json", tmp_path),
+			_hint("resume show container", tmp_path),
 		]
 		assert "export" in parsed["error"]["recovery_action"]
 
@@ -222,7 +228,7 @@ def test_edit_unknown_field_lists_next_steps(tmp_path):
 	parsed = json.loads(result.output)
 	_assert_error_envelope(parsed, "INVALID_PARAM")
 	assert "不存在" in parsed["error"]["message"]
-	assert parsed["hints"]["next_actions"][0] == "boss resume export typo --format json"
+	assert parsed["hints"]["next_actions"][0] == _hint("resume export typo --format json", tmp_path)
 	assert "文本子字段" in parsed["error"]["recovery_action"]
 
 
@@ -238,9 +244,11 @@ def test_edit_error_message_quotes_resume_name_with_spaces(tmp_path):
 
 	assert result.exit_code == 1
 	message = json.loads(result.output)["error"]["message"]
-	assert "boss resume export '我的 简历' --format json" in message
+	assert "resume export '我的 简历' --format json" in message
 	assert shlex.split(message.split("完整结构见 ", 1)[1]) == [
 		"boss",
+		"--data-dir",
+		str(tmp_path.resolve()),
 		"resume",
 		"export",
 		"我的 简历",
@@ -257,7 +265,7 @@ def test_edit_name_field_points_to_clone(tmp_path):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	_assert_error_envelope(parsed, "INVALID_PARAM")
-	assert parsed["hints"]["next_actions"] == ["boss resume clone oldname <新名>"]
+	assert parsed["hints"]["next_actions"] == [_hint("resume clone oldname <新名>", tmp_path)]
 	assert "clone" in parsed["error"]["recovery_action"]
 
 	shown = json.loads(_invoke(runner, tmp_path, ["show", "oldname"]).output)
@@ -373,7 +381,7 @@ def test_export_pdf_success(tmp_path):
 	_assert_success_envelope(parsed)
 	assert parsed["data"]["format"] == "pdf"
 	assert parsed["data"]["path"] == str(out_file)
-	assert parsed["hints"]["next_actions"] == ["boss resume show pdftest"]
+	assert parsed["hints"]["next_actions"] == [_hint("resume show pdftest", tmp_path)]
 
 
 def test_export_not_found(tmp_path):
@@ -405,7 +413,7 @@ def test_import_valid(tmp_path):
 	parsed = json.loads(result.output)
 	_assert_success_envelope(parsed)
 	assert parsed["data"] == {"action": "import", "name": "imported", "title": "Imported Resume"}
-	assert parsed["hints"]["next_actions"] == ["boss resume show imported"]
+	assert parsed["hints"]["next_actions"] == [_hint("resume show imported", tmp_path)]
 
 
 def test_import_refuses_to_overwrite_existing_resume(tmp_path):
@@ -464,8 +472,8 @@ def test_import_parse_failure_points_at_export_template(tmp_path):
 	_assert_error_envelope(parsed, "INVALID_PARAM")
 	assert "UTF-8" in parsed["error"]["recovery_action"]
 	assert parsed["hints"]["next_actions"] == [
-		"boss resume export <简历> --format json",
-		"boss resume list",
+		_hint("resume export <简历> --format json", tmp_path),
+		_hint("resume list", tmp_path),
 	]
 
 
@@ -479,8 +487,8 @@ def test_import_malformed_structure_points_at_export_template(tmp_path):
 	_assert_error_envelope(parsed, "INVALID_PARAM")
 	assert "解析失败" in parsed["error"]["message"]
 	assert parsed["hints"]["next_actions"] == [
-		"boss resume export <简历> --format json",
-		"boss resume list",
+		_hint("resume export <简历> --format json", tmp_path),
+		_hint("resume list", tmp_path),
 	]
 	assert "export" in parsed["error"]["recovery_action"]
 
@@ -526,8 +534,8 @@ def test_import_missing_file_points_at_import_flow(tmp_path):
 	parsed = json.loads(result.output)
 	_assert_error_envelope(parsed, "INVALID_PARAM")
 	assert "不存在" in parsed["error"]["message"]
-	assert parsed["error"]["recovery_action"] == "boss resume import <简历JSON路径>"
-	assert parsed["hints"]["next_actions"] == ["boss resume import <file>", "boss resume list"]
+	assert parsed["error"]["recovery_action"] == _hint("resume import <简历JSON路径>", tmp_path)
+	assert parsed["hints"]["next_actions"] == [_hint("resume import <file>", tmp_path), _hint("resume list", tmp_path)]
 
 
 def test_import_non_utf8_file_returns_invalid_param(tmp_path):
@@ -597,7 +605,7 @@ def test_clone_rejects_blank_new_name(tmp_path):
 		parsed = json.loads(result.output)
 		assert parsed["error"]["code"] == "INVALID_PARAM"
 		assert "名称" in parsed["error"]["message"]
-		assert parsed["hints"]["next_actions"] == ["boss resume list"]
+		assert parsed["hints"]["next_actions"] == [_hint("resume list", tmp_path)]
 
 	listed = json.loads(_invoke(runner, tmp_path, ["list"]).output)
 	assert [item["name"] for item in listed["data"]] == ["original"]
@@ -658,7 +666,10 @@ def test_link_resume_to_job(tmp_path):
 		"security_id": "sid-001",
 		"job_id": "jid-001",
 	}
-	assert parsed["hints"]["next_actions"] == ["boss resume applications linktest", "boss apply sid-001 jid-001"]
+	assert parsed["hints"]["next_actions"] == [
+		_hint("resume applications linktest", tmp_path),
+		_hint("apply sid-001 jid-001", tmp_path),
+	]
 
 
 def test_link_hints_quote_identifiers_with_shell_metacharacters(tmp_path):
@@ -669,8 +680,8 @@ def test_link_hints_quote_identifiers_with_shell_metacharacters(tmp_path):
 	assert result.exit_code == 0, result.output
 	parsed = json.loads(result.output)
 	assert parsed["hints"]["next_actions"] == [
-		"boss resume applications quotetest",
-		"boss apply 'sid; echo pwn' 'jid $(id)'",
+		_hint("resume applications quotetest", tmp_path),
+		_hint("apply 'sid; echo pwn' 'jid $(id)'", tmp_path),
 	]
 
 
@@ -711,7 +722,7 @@ def test_applications_list(tmp_path):
 	]
 	assert all(item["resume_name"] == "apptest" for item in parsed["data"])
 	assert all(item["status"] == "prepared" for item in parsed["data"])
-	assert parsed["hints"]["next_actions"] == ["boss resume show apptest"]
+	assert parsed["hints"]["next_actions"] == [_hint("resume show apptest", tmp_path)]
 
 
 def test_applications_empty_hints_point_to_link(tmp_path):
@@ -722,7 +733,7 @@ def test_applications_empty_hints_point_to_link(tmp_path):
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"] == []
-	assert parsed["hints"]["next_actions"] == ["boss resume link apptest <security_id> <job_id>"]
+	assert parsed["hints"]["next_actions"] == [_hint("resume link apptest <security_id> <job_id>", tmp_path)]
 
 
 def test_relink_resume_keeps_title_company_and_tracking(tmp_path):
@@ -816,7 +827,7 @@ def test_name_commands_reject_blank_resume_name(tmp_path, args):
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert "名称不能为空" in parsed["error"]["message"]
 	# 空名字的下一步是列出已有简历，而不是笼统的「修正参数」。
-	assert parsed["hints"]["next_actions"] == ["boss resume list"]
+	assert parsed["hints"]["next_actions"] == [_hint("resume list", tmp_path)]
 
 
 def test_blank_name_rejected_for_whitespace_only(tmp_path):
@@ -833,7 +844,7 @@ def test_resume_not_found_gives_executable_recovery(tmp_path):
 
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "RESUME_NOT_FOUND"
-	assert parsed["error"]["recovery_action"] == "boss resume list"
+	assert parsed["error"]["recovery_action"] == _hint("resume list", tmp_path)
 
 
 # ── 损坏的简历文件 ────────────────────────────────────────────
@@ -853,7 +864,7 @@ def test_list_reports_corrupt_resume_files(tmp_path):
 	parsed = json.loads(result.output)
 	assert parsed["data"] == []
 	assert parsed["hints"]["corrupt"] == ["broken"]
-	assert any("boss resume delete" in text for text in parsed["hints"]["operator_actions"])
+	assert any("resume delete" in text and "--data-dir" in text for text in parsed["hints"]["operator_actions"])
 
 
 def test_show_corrupt_resume_reports_file_invalid(tmp_path):
@@ -864,8 +875,9 @@ def test_show_corrupt_resume_reports_file_invalid(tmp_path):
 	parsed = json.loads(result.output)
 	_assert_error_envelope(parsed, "RESUME_FILE_INVALID")
 	assert parsed["error"]["recoverable"] is True
-	assert "boss resume delete" in parsed["error"]["recovery_action"]
-	assert parsed["hints"]["next_actions"] == ["boss resume delete broken", "boss resume list"]
+	assert "resume delete" in parsed["error"]["recovery_action"]
+	assert "--data-dir" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [_hint("resume delete broken", tmp_path), _hint("resume list", tmp_path)]
 
 
 @pytest.mark.parametrize("name", ["我的 简历", "it's fine", "$HOME*"])
@@ -883,7 +895,7 @@ def test_show_corrupt_resume_quotes_delete_hint(tmp_path, name):
 	parsed = json.loads(result.output)
 	_assert_error_envelope(parsed, "RESUME_FILE_INVALID")
 	hint = parsed["hints"]["next_actions"][0]
-	assert shlex.split(hint) == ["boss", "resume", "delete", name]
+	assert shlex.split(hint) == ["boss", "--data-dir", str(tmp_path.resolve()), "resume", "delete", name]
 
 
 def test_clone_corrupt_resume_not_local_io_error(tmp_path):
