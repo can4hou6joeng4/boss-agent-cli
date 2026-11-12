@@ -241,10 +241,11 @@ def busy_status(message: str) -> Iterator[None]:
 
 
 def render_error(*, code: str, message: str | None = None, recovery_action: str | None = None) -> None:
-	display.console.print(Panel(error_message(code, message), title="操作未完成", border_style="red"))
+	message_text = display.escape_markup(error_message(code, message))
+	display.console.print(Panel(message_text, title="操作未完成", border_style="red"))
 	recovery = recovery_message(code, recovery_action)
 	if recovery:
-		display.console.print(f"[bold]下一步：[/bold]{recovery}")
+		display.console.print(f"[bold]下一步：[/bold]{display.escape_markup(recovery)}")
 
 
 def render_cancelled() -> None:
@@ -359,19 +360,21 @@ def _count_list_items(last_result: Any) -> int | None:
 
 def render_job_card_zh(job: Mapping[str, Any]) -> None:
 	"""Human-facing Chinese job detail panel for TTY wizard."""
-	title = str(job.get("title") or "未命名职位")
-	salary = str(job.get("salary") or "-")
-	company = str(job.get("company") or "-")
-	city = str(job.get("city") or "-")
-	experience = str(job.get("experience") or "-")
-	education = str(job.get("education") or "-")
-	boss = str(job.get("boss_name") or "-")
-	boss_title = str(job.get("boss_title") or "")
+	esc = display.escape_markup
+	title = esc(job.get("title") or "未命名职位")
+	salary = esc(job.get("salary") or "-")
+	company = esc(job.get("company") or "-")
+	city = esc(job.get("city") or "-")
+	experience = esc(job.get("experience") or "-")
+	education = esc(job.get("education") or "-")
+	boss = esc(job.get("boss_name") or "-")
+	boss_title = esc(job.get("boss_title") or "")
 	skills = job.get("skills") or job.get("labels") or []
-	skill_str = "、".join(str(item) for item in skills[:12]) if skills else "-"
+	skill_str = "、".join(esc(item) for item in skills[:12]) if skills else "-"
 	desc = str(job.get("description") or "")
 	if len(desc) > 420:
 		desc = desc[:420] + "…"
+	desc = esc(desc)
 
 	lines = [
 		f"[bold cyan]{title}[/bold cyan]  [yellow]{salary}[/yellow]",
@@ -381,7 +384,7 @@ def render_job_card_zh(job: Mapping[str, Any]) -> None:
 		f"招聘者 {boss}" + (f"（{boss_title}）" if boss_title else ""),
 	]
 	if job.get("address"):
-		lines.append(f"地址 {job.get('address')}")
+		lines.append(f"地址 {esc(job.get('address'))}")
 	if desc:
 		lines.append("")
 		lines.append(f"[bold]职位描述[/bold]\n{desc}")
@@ -390,28 +393,29 @@ def render_job_card_zh(job: Mapping[str, Any]) -> None:
 
 def render_crawl_job_brief(job: Mapping[str, Any], *, with_description: bool = False) -> None:
 	"""On-demand local crawl row: compact by default, optional short description."""
-	title = str(job.get("title") or "未命名职位")
-	salary = str(job.get("salary") or "-")
-	company = str(job.get("company") or "-")
-	city = str(job.get("city") or "-")
-	experience = str(job.get("experience") or "-")
-	education = str(job.get("education") or "-")
-	boss = str(job.get("boss_name") or "")
+	esc = display.escape_markup
+	title = esc(job.get("title") or "未命名职位")
+	salary = esc(job.get("salary") or "-")
+	company = esc(job.get("company") or "-")
+	city = esc(job.get("city") or "-")
+	experience = esc(job.get("experience") or "-")
+	education = esc(job.get("education") or "-")
+	boss = esc(job.get("boss_name") or "")
 	lines = [
 		f"[bold cyan]{title}[/bold cyan]  [yellow]{salary}[/yellow]",
 		f"公司 {company}  ·  城市 {city}",
 		f"经验 {experience}  ·  学历 {education}",
 	]
 	if boss:
-		boss_title = str(job.get("boss_title") or "")
+		boss_title = esc(job.get("boss_title") or "")
 		lines.append(f"招聘者 {boss}" + (f"（{boss_title}）" if boss_title else ""))
 	labels = job.get("labels") or []
 	if isinstance(labels, list) and labels:
-		lines.append("标签 " + "、".join(str(item) for item in labels[:8]))
+		lines.append("标签 " + "、".join(esc(item) for item in labels[:8]))
 	if job.get("crawl_page") is not None:
 		lines.append(f"采集页 第 {job.get('crawl_page')} 页")
 	if with_description:
-		desc = str(job.get("description") or "").strip()
+		desc = esc(job.get("description") or "").strip()
 		if desc:
 			lines.append("")
 			lines.append(f"[bold]本地描述[/bold]\n{desc}")
@@ -451,8 +455,10 @@ def render_run(run: Mapping[str, Any], *, with_preview: bool = True) -> None:
 		if live == "completed" and int(jobs_seen or 0) > 0:
 			if _render_crawl_summary(run, with_preview=with_preview):
 				return
-		reason = str(data.get("error") or last.get("next_action") or "需要补充信息或人工处理后才能继续")
-		inner = data.get("run_id")
+		reason = display.escape_markup(
+			data.get("error") or last.get("next_action") or "需要补充信息或人工处理后才能继续"
+		)
+		inner = display.escape_markup(data.get("run_id")) if data.get("run_id") else None
 		lines = [
 			f"[bold]{goal_label(run.get('role'), run.get('goal'))}[/bold] 需要你处理后再继续。",
 			"",
@@ -466,7 +472,7 @@ def render_run(run: Mapping[str, Any], *, with_preview: bool = True) -> None:
 		if operator_actions:
 			# 数据驱动：step 自己声明「人该做什么」，renderer 不再猜。
 			lines.append("")
-			lines.extend(str(item) for item in operator_actions)
+			lines.extend(display.escape_markup(item) for item in operator_actions)
 		elif data.get("status") == "risk_stopped" or "非 JSON" in reason or "未登录" in reason or "环境" in reason:
 			# 兜底：SQLite 里的历史 run 没有 operator_actions 字段，仍走旧的子串启发式。
 			lines.append("")
@@ -488,7 +494,7 @@ def render_run(run: Mapping[str, Any], *, with_preview: bool = True) -> None:
 				)
 		next_action = last.get("next_action")
 		if next_action:
-			lines.append(f"命令行恢复：{next_action}")
+			lines.append(f"命令行恢复：{display.escape_markup(next_action)}")
 		display.console.print(Panel("\n".join(lines), title="等待继续", border_style="yellow"))
 		return
 
@@ -523,7 +529,7 @@ def render_run(run: Mapping[str, Any], *, with_preview: bool = True) -> None:
 	table.add_row("事项", f"[bold]{goal}[/bold]")
 	table.add_row("状态", f"[bold]{status_label(status)}[/bold]")
 	if run.get("run_id"):
-		table.add_row("任务编号", f"[dim]{run.get('run_id')}[/dim]")
+		table.add_row("任务编号", f"[dim]{display.escape_markup(run.get('run_id'))}[/dim]")
 	params = run.get("params") if isinstance(run.get("params"), Mapping) else {}
 	inputs = params.get("inputs") if isinstance(params, Mapping) else {}
 	if isinstance(inputs, Mapping) and inputs:
@@ -533,18 +539,18 @@ def render_run(run: Mapping[str, Any], *, with_preview: bool = True) -> None:
 			if value not in (None, "") and key in {"query", "city", "run_id", "resume", "prompt", "name"}
 		)
 		if hint:
-			table.add_row("参数", f"[bold]{hint}[/bold]")
+			table.add_row("参数", f"[bold]{display.escape_markup(hint)}[/bold]")
 	last = _as_mapping(run.get("last_result")) or {}
 	data = _as_mapping(last.get("data")) or {}
 	if data.get("result"):
 		text = str(data.get("result"))
 		if len(text) > 600:
 			text = text[:600] + "…"
-		table.add_row("结果", text)
+		table.add_row("结果", display.escape_markup(text))
 	if data.get("summary"):
-		table.add_row("摘要", f"[bold]{data.get('summary')}[/bold]")
+		table.add_row("摘要", f"[bold]{display.escape_markup(data.get('summary'))}[/bold]")
 	if data.get("path"):
-		table.add_row("文件", f"[bold]{data.get('path')}[/bold]")
+		table.add_row("文件", f"[bold]{display.escape_markup(data.get('path'))}[/bold]")
 	artifacts = last.get("artifacts") or []
 	if artifacts:
 		names, directory = _short_artifact_lines(artifacts)
@@ -775,7 +781,7 @@ def _render_management_result(run: Mapping[str, Any]) -> bool:
 		meta.add_row("待跟进", str(data.get("follow_up_count") or 0))
 		meta.add_row("面试", str(data.get("interview_count") or 0))
 		if summary:
-			meta.add_row("摘要", summary)
+			meta.add_row("摘要", display.escape_markup(summary))
 		# Sample rows from each bucket.
 		preview = Table(show_header=True, header_style="bold", box=None, pad_edge=False)
 		preview.add_column("类型", style="cyan", no_wrap=True)
@@ -788,7 +794,8 @@ def _render_management_result(run: Mapping[str, Any]) -> bool:
 					continue
 				label = item.get("title") or item.get("jobName") or item.get("name") or "—"
 				company = item.get("company") or item.get("brandName") or ""
-				preview.add_row(kind, f"{label}" + (f" · {company}" if company else ""))
+				text = f"{label}" + (f" · {company}" if company else "")
+				preview.add_row(kind, display.escape_markup(text))
 		parts: list[Any] = [headline, Text(""), meta]
 		if preview.row_count:
 			parts.extend([Text(""), Text("明细预览", style="bold"), preview])
@@ -830,9 +837,9 @@ def _render_management_result(run: Mapping[str, Any]) -> bool:
 			table.add_column("v", style="bold")
 			table.add_row("事项", goal_label(run.get("role"), goal))
 			if action:
-				table.add_row("操作", action)
+				table.add_row("操作", display.escape_markup(action))
 			if name:
-				table.add_row("名称", name)
+				table.add_row("名称", display.escape_markup(name))
 			if data.get("removed") is not None:
 				table.add_row("已删除", "是" if data.get("removed") else "否")
 			if data.get("new_count") is not None:
@@ -864,9 +871,9 @@ def _render_management_result(run: Mapping[str, Any]) -> bool:
 			table.add_column("k", style="dim", width=10)
 			table.add_column("v", style="bold")
 			table.add_row("事项", goal_label(run.get("role"), goal))
-			table.add_row("格式", str(data.get("format") or "—"))
+			table.add_row("格式", display.escape_markup(data.get("format") or "—"))
 			table.add_row("条数", str(data.get("count") if data.get("count") is not None else len(items)))
-			table.add_row("文件", str(data.get("path")))
+			table.add_row("文件", display.escape_markup(data.get("path")))
 			display.console.print(Panel(table, title="导出完成", border_style="green"))
 			return True
 		count = len(items)
@@ -909,9 +916,9 @@ def _render_management_result(run: Mapping[str, Any]) -> bool:
 				value = str(data.get(key))
 				if key in {"security_id"} and len(value) > 18:
 					value = value[:12] + "…"
-				table.add_row(label, f"[bold]{value}[/bold]")
+				table.add_row(label, f"[bold]{display.escape_markup(value)}[/bold]")
 		if data.get("status"):
-			table.add_row("详情", f"[dim]{data.get('status')}[/dim]")
+			table.add_row("详情", f"[dim]{display.escape_markup(data.get('status'))}[/dim]")
 		display.console.print(Panel(table, title="操作成功", border_style="green"))
 		return True
 
@@ -978,22 +985,25 @@ def _short_artifact_lines(paths: Mapping[str, Any] | Sequence[Any]) -> tuple[str
 			entries.append((path.suffix.lstrip(".") or "file", path))
 	if not entries:
 		return "", ""
-	names = "  ".join(f"[bold]{kind}[/bold] {path.name}" for kind, path in entries)
+	names = "  ".join(
+		f"[bold]{display.escape_markup(kind)}[/bold] {display.escape_markup(path.name)}" for kind, path in entries
+	)
 	parent = str(entries[0][1].parent)
 	# Prefer compact home-relative path.
 	home = str(Path.home())
 	if parent.startswith(home):
 		parent = "~" + parent[len(home) :]
-	return names, f"[dim]{parent}[/dim]"
+	return names, f"[dim]{display.escape_markup(parent)}[/dim]"
 
 
 def _clip_text(value: Any, limit: int) -> str:
+	"""裁剪成表格单元格用的单行文本，并按 Rich 字面量转义（见 ``display.escape_markup``）。"""
 	text = " ".join(str(value or "").split())
 	if len(text) <= limit:
-		return text
+		return display.escape_markup(text)
 	if limit <= 1:
-		return text[:limit]
-	return text[: limit - 1] + "…"
+		return display.escape_markup(text[:limit])
+	return display.escape_markup(text[: limit - 1] + "…")
 
 
 def _preview_jobs_from_data(data: Mapping[str, Any], *, limit: int = 5) -> list[dict[str, str]]:
@@ -1173,15 +1183,15 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 		row("目录", artifact_dir)
 
 	if data.get("error") and str(crawl_status) != "completed":
-		row("说明", f"[yellow]{data.get('error')}[/yellow]")
+		row("说明", f"[yellow]{display.escape_markup(data.get('error'))}[/yellow]")
 
 	# Secondary ids, dim — debugging aids.
 	id_bits = []
 	if run.get("run_id"):
-		id_bits.append(f"向导 {run.get('run_id')}")
+		id_bits.append(f"向导 {display.escape_markup(run.get('run_id'))}")
 	inner = data.get("run_id") or last.get("run_id")
 	if inner:
-		id_bits.append(f"采集 {inner}")
+		id_bits.append(f"采集 {display.escape_markup(inner)}")
 	if id_bits:
 		row("编号", f"[dim]{'  ·  '.join(str(bit) for bit in id_bits)}[/dim]")
 
@@ -1195,7 +1205,7 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 			else None
 		)
 		if next_action:
-			row("下一步", f"[bold]{next_action}[/bold]")
+			row("下一步", f"[bold]{display.escape_markup(next_action)}[/bold]")
 
 	# ── Preview under meta: Markdown-style pipe table ───────────────
 	preview_rows = _preview_jobs_from_data(data, limit=5) if with_preview else []
