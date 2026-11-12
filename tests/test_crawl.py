@@ -562,6 +562,131 @@ def test_listener_parses_string_json_response(monkeypatch, tmp_path):
 	assert session.fetch_page("AI", "101210100", 1)["zpData"]["jobList"][0]["encryptJobId"] == "job-1"
 
 
+class _PagingPage:
+	"""Fake tab whose visible job list starts at page 1 and only advances by scrolling."""
+
+	url = "https://www.zhipin.com/web/geek/jobs"
+	html = "<div class='job-list-box'></div>"
+
+	def __init__(self, last_page: int = 5) -> None:
+		self.last_page = last_page
+		self.current_page = 1
+		self.navigations = 0
+		self.scrolls = 0
+		self.listen = types.SimpleNamespace(
+			start=lambda *args, **kwargs: None,
+			stop=lambda: None,
+			wait=self._packet,
+		)
+		self.scroll = types.SimpleNamespace(down=lambda *args: None, to_bottom=self._next_page)
+
+	def get(self, url: str) -> None:
+		self.navigations += 1
+		self.current_page = 1
+
+	def _next_page(self) -> None:
+		self.scrolls += 1
+		self.current_page = min(self.last_page, self.current_page + 1)
+
+	def _packet(self, **kwargs):
+		page = self.current_page
+		body = {
+			"code": 0,
+			"zpData": {
+				"jobList": [{"encryptJobId": f"job-{page}"}],
+				"hasMore": page < self.last_page,
+			},
+		}
+		return types.SimpleNamespace(response=types.SimpleNamespace(body=body))
+
+
+def _paging_session(tmp_path: Path, monkeypatch, last_page: int = 5):
+	page = _PagingPage(last_page)
+	session = DrissionCrawlerSession(
+		profile_path=tmp_path / "profile",
+		chrome_path=None,
+		cdp_port=_free_port(),
+		hook_profile="none",
+		hook_dir=None,
+	)
+	session._page = page
+	monkeypatch.setattr("boss_agent_cli.crawler.transport.cancellable_sleep", lambda *args, **kwargs: None)
+	return session, page
+
+
+def test_fetch_page_aligns_visible_list_with_requested_page_after_resume(tmp_path, monkeypatch):
+	"""断点恢复从第 3 页开始时，不能把第 1 页响应当成第 3 页（Issue #897）。"""
+	session, page = _paging_session(tmp_path, monkeypatch)
+
+	payload = session.fetch_page("AI", "101210100", 3)
+
+	assert payload["zpData"]["jobList"][0]["encryptJobId"] == "job-3"
+	assert page.navigations == 1
+	assert page.scrolls == 2
+	assert session._page_no == 3
+
+	payload = session.fetch_page("AI", "101210100", 4)
+
+	assert payload["zpData"]["jobList"][0]["encryptJobId"] == "job-4"
+	assert page.navigations == 1
+	assert page.scrolls == 3
+
+
+def test_fetch_page_retry_renavigates_instead_of_reusing_stale_position(tmp_path, monkeypatch):
+	"""同一页重试要重新导航：上一次停在该页不代表这一次请求已经发出。"""
+	session, page = _paging_session(tmp_path, monkeypatch)
+
+	assert session.fetch_page("AI", "101210100", 2)["zpData"]["jobList"][0]["encryptJobId"] == "job-2"
+	assert page.navigations == 1
+	assert page.scrolls == 1
+
+	assert session.fetch_page("AI", "101210100", 2)["zpData"]["jobList"][0]["encryptJobId"] == "job-2"
+	assert page.navigations == 2
+	assert page.scrolls == 2
+
+
+def test_resume_fetches_checkpoint_page_and_keeps_exported_page_numbers_aligned(tmp_path, monkeypatch):
+	"""从 next_page=3 恢复时，浏览器页与落库 page_no 必须一致，且不重复抓已见页。"""
+	page = _PagingPage(last_page=5)
+	session = DrissionCrawlerSession(
+		profile_path=tmp_path / "profile",
+		chrome_path=None,
+		cdp_port=_free_port(),
+		hook_profile="none",
+		hook_dir=None,
+	)
+	session._page = page
+	session.open = lambda: []
+	monkeypatch.setattr("boss_agent_cli.crawler.transport.cancellable_sleep", lambda *args, **kwargs: None)
+	cache = CacheStore(tmp_path / "cache.db")
+	service = CrawlService(
+		cache,
+		data_dir=tmp_path,
+		transport_factory=lambda settings: session,
+		budget_factory=lambda store: _NoDelayBudget(store),
+	)
+	run_id = service.create(_settings(tmp_path, pages=5))
+	for page_no in (1, 2):
+		cache.put_crawl_job(
+			run_id, f"job-{page_no}", page_no, {"job_id": f"job-{page_no}"}, detail_done=False
+		)
+	cache.update_crawl_run(run_id, status="stopped", next_page=3)
+
+	outcome = service.resume(run_id, operating_mode="research")
+
+	assert outcome.status == "completed"
+	assert outcome.requests_attempted == 3, "只应请求第 3、4、5 页，不能重复抓第 1、2 页"
+	assert page.current_page == 5
+	assert {item["job_key"]: item["page_no"] for item in cache.list_crawl_jobs(run_id)} == {
+		"job-1": 1,
+		"job-2": 2,
+		"job-3": 3,
+		"job-4": 4,
+		"job-5": 5,
+	}
+	cache.close()
+
+
 def test_non_json_login_html_is_not_mislabelled_as_captcha_only():
 	session = DrissionCrawlerSession(
 		profile_path=Path("/tmp/profile"),
