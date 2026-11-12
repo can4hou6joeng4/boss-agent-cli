@@ -127,7 +127,7 @@ SCHEMA_DATA = {
 			},
 		},
 		"search": {
-			"description": "按关键词和筛选条件搜索职位列表，可传入 BOSS 直聘搜索页 URL 复用网页筛选参数；成功时 pagination.index_snapshot 给出本次写入的索引快照（source/page/count/saved_at），与 show 的编号配套使用",
+			"description": "按关键词和筛选条件搜索职位列表，可传入 BOSS 直聘搜索页 URL 复用网页筛选参数；成功时 pagination.index_snapshot 给出本次写入的索引快照（source/page/count/saved_at），与 show 的编号配套使用；信封 pagination 的 has_more 仅平台返回布尔 hasMore 时有效，缺失或类型不明确时为 null（has_more_source=unknown），不能凭本页条数判断是否还有结果",
 			"args": [
 				{"name": "query", "required": False, "description": "搜索关键词；提供 --url 时可省略"},
 			],
