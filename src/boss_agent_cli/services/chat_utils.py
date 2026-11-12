@@ -5,10 +5,20 @@ from typing import Any
 # relationType 映射：API 返回值 → 可读标签（key 类型放宽为 object，兼容 API 返回 None/未知值走 default）
 RELATION_LABELS: dict[object, str] = {1: "对方主动", 2: "我主动", 3: "投递"}
 FROM_FILTER = {"boss": 1, "me": 2}
-MSG_STATUS_LABELS = {1: "未读", 2: "已读"}
+MSG_STATUS_LABELS: dict[object, str] = {1: "未读", 2: "已读"}
 
 # 已知分组渲染顺序
 GROUP_ORDER = ["对方主动", "我主动", "投递"]
+
+
+def int_code(value: Any) -> int | None:
+	"""平台数值编码：只接受真正的整数。
+
+	Python 的 ``bool`` 是 ``int`` 子类，``{1: "未读"}.get(True)`` 会命中编码 1。
+	JSON 布尔不携带平台编码语义，不能据此补出「未读」「对方主动」等具体状态，
+	也不能当成 `unreadMsgCount` 参与计数（与 Issue #909 的性别编码同因）。
+	"""
+	return value if type(value) is int else None
 
 
 def message_list(platform_data: Any) -> list[Any]:

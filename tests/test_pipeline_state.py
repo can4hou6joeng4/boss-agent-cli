@@ -75,6 +75,22 @@ def test_build_pipeline_items_adds_interview_candidates():
 	assert items[0]["source"] == "interview"
 
 
+def test_build_pipeline_items_ignores_boolean_codes():
+	"""JSON 布尔不参与平台编码判断：不触发 reply_needed，unread 保持整数（Issue #915）。"""
+	items = build_pipeline_items(
+		chat_items=[_chat_item(relation_type=True, unread=True, last_ts=True)],
+		interview_items=[],
+		now_ts_ms=1700000000000,
+		stale_days=3,
+	)
+	entry = items[0]
+	assert entry["stage"] == "chatting"
+	assert entry["unread"] == 0
+	assert entry["relation"] == "未知"
+	assert entry["last_time"] == "-"
+	assert entry["reason"] == "会话进行中"
+
+
 def test_select_follow_up_candidates_filters_only_actionable_states():
 	items = [
 		{"stage": "reply_needed", "source": "chat"},

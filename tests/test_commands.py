@@ -1270,6 +1270,27 @@ def test_chat_from_boss_filter(mock_auth_cls, mock_client_cls):
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_boolean_codes_are_not_labels_or_counts(mock_auth_cls, mock_client_cls, tmp_path):
+	"""JSON 布尔不是平台数值编码：不能变成「对方主动」「未读」或未读数（Issue #915）。"""
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
+	item = _make_friend_item("联系人甲", "示例公司甲", True, 1700000000000)
+	item["lastMessageInfo"] = {"status": True}
+	item["unreadMsgCount"] = True
+	mock_client_cls.return_value.friend_list.return_value = {"zpData": {"result": [item]}}
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "chat"])
+
+	assert result.exit_code == 0, result.output
+	row = json.loads(result.output)["data"][0]
+	assert row["initiated_by"] == "未知"
+	assert row["msg_status"] == "未知"
+	assert row["unread"] == 0
+	assert row["last_ts"] == 1700000000000
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_pagination_reports_platform_page_evidence(mock_auth_cls, mock_client_cls):
 	"""--page 必须有分页证据：只有平台 hasMore=true 才提示下一页。"""
 	import time
