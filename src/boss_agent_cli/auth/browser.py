@@ -10,6 +10,7 @@ from patchright.sync_api import sync_playwright
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
 from boss_agent_cli.api.proxy import WEBRTC_LEAK_GUARD_ARGS, resolve_proxy
 from boss_agent_cli.auth.identity import account_fingerprint
+from boss_agent_cli.auth.login_diagnostics import login_diagnostic
 from boss_agent_cli.auth.page_identity import PageIdentityCapture
 
 LOGIN_PAGE_URL = "https://www.zhipin.com/web/user/"
@@ -314,6 +315,8 @@ def login_via_cdp(
 			用户没有任何重登入口（Issue #424）。只清目标平台域、只清当前 context，
 			其他站点与其他 context 不动。
 	"""
+	from boss_agent_cli.api.client import PlatformRiskError
+
 	config = _get_platform_config(platform)
 	login_page_url = config["login_page_url"]
 	home_url = config["home_url"]
@@ -330,7 +333,11 @@ def login_via_cdp(
 	try:
 		for existing_context in all_contexts:
 			for existing_page in existing_context.pages:
-				_raise_if_security_page(existing_page, is_cdp=True)
+				try:
+					_raise_if_security_page(existing_page, is_cdp=True)
+				except PlatformRiskError as error:
+					error.details["login_diagnostic"] = login_diagnostic(existing_page, stage="open_login")
+					raise
 	except Exception:
 		with suppress(Exception):
 			pw.stop()
@@ -355,6 +362,7 @@ def login_via_cdp(
 	if page is None:
 		page = ctx.new_page()
 
+	stage = "open_login"
 	try:
 		_raise_if_security_page(page, is_cdp=True)
 		if already_logged_in:
@@ -386,6 +394,7 @@ def login_via_cdp(
 
 			print(f"[boss] 请在 Chrome 中扫码登录，等待中...（超时 {timeout}s）", file=sys.stderr)
 
+			stage = "wait_for_scan"
 			for i in range(timeout):
 				time.sleep(1)
 				_raise_if_security_page(page, is_cdp=True)
@@ -406,6 +415,7 @@ def login_via_cdp(
 		# page_ready 是「可对 page evaluate」的统一就绪门禁，覆盖所有复用既有页签
 		# （not created_page）的情况——无论预先登录还是扫码后登录。新建页签的就绪由
 		# _warm_home_for_runtime 的返回值 home_loaded 表达。
+		stage = "read_user_agent"
 		ua = ""
 		page_ready = False
 		# 页面自己给每条业务 XHR 加的 token/zp_token 只能在导航前挂监听才抓得到：
@@ -419,11 +429,14 @@ def login_via_cdp(
 			ua = _safe_user_agent(page) if page_ready else ""
 			# evaluate 之后页面可能已跳到安全页：命中即停止，不再自动预热首页（Issue #863）。
 			_raise_if_security_page(page, is_cdp=True)
+			stage = "warm_home"
 			home_loaded = _warm_home_for_runtime(page, home_url, stage="登录后回到首页", is_cdp=True)
 		elif created_page:
 			# 复用登录态但无既有平台页签：新建页签回平台 home
+			stage = "warm_home"
 			home_loaded = _warm_home_for_runtime(page, home_url, stage="复用登录态回首页", is_cdp=True)
 			page_ready = home_loaded
+			stage = "read_user_agent"
 			ua = _safe_user_agent(page) if home_loaded else ""
 		else:
 			# 复用既有平台页签（已预先登录）：不导航，避免打断用户页面；有界确认就绪后采 UA。
@@ -435,6 +448,7 @@ def login_via_cdp(
 		if already_logged_in:
 			# 复用只证明 cookie 存在，不证明服务端仍认：wt2 已失效但仍在 jar 里时，
 			# 不探测就会把死凭证当「登录成功」落盘，之后每条命令都 AUTH_REQUIRED（Issue #424）。
+			stage = "probe_session"
 			probe_ready = home_loaded if created_page else page_ready
 			status = _probe_reused_session(page, platform=platform) if probe_ready else "unverified"
 			if status == "stale":
@@ -452,6 +466,7 @@ def login_via_cdp(
 		# 不能用吞异常的 _matching_cookies：ctx.cookies() 抛错（如 CDP target closed）若返回
 		# []，会被当作 cookies={} 的「成功」结果落盘（AuthManager.login 不校验主 cookie）。
 		# 故直接 ctx.cookies() 让异常传播，并读完后校验主 cookie 存在，否则 raise。
+		stage = "read_credentials"
 		all_cookies = {
 			c["name"]: c["value"] for c in ctx.cookies() if _is_cookie_domain(c.get("domain", ""), cookie_domain)
 		}
@@ -476,6 +491,10 @@ def login_via_cdp(
 			# 复用已有页签时页面早已启动完且不再发请求，才需要临时页签补采一次。
 			page_identity = _capture_identity_from_probe_page(ctx, home_url, existing=page)
 		return {"cookies": all_cookies, "stoken": stoken, "user_agent": ua, **page_identity}
+	except PlatformRiskError as error:
+		if "login_diagnostic" not in error.details:
+			error.details["login_diagnostic"] = login_diagnostic(page, stage=stage)
+		raise
 	finally:
 		with suppress(Exception):
 			identity_capture.close()
@@ -534,6 +553,8 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 				proxy=resolve_proxy(),
 				args=list(WEBRTC_LEAK_GUARD_ARGS),
 			)
+		stage = "open_login"
+		page: Any = None
 		try:
 			context = browser.new_context(
 				viewport={"width": 1280, "height": 800},
@@ -584,6 +605,7 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 					if response.status == 403:
 						raise AccountRiskError("浏览器登录遇到平台访问限制，已停止", details={"platform_code": None})
 				except PlatformRiskError as exc:
+					exc.details["login_diagnostic"] = login_diagnostic(page, stage=stage, response=response)
 					response_risk = exc
 					return
 				if (
@@ -595,6 +617,7 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 
 			page.on("response", _on_response)
 
+			stage = "wait_for_scan"
 			deadline = time.time() + timeout
 			while time.time() < deadline and not login_detected:
 				if response_risk is not None:
@@ -620,12 +643,14 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 
 			_raise_if_security_page(page)
 			print("[boss] 已识别到扫码确认，正在校验并保存凭证…", file=sys.stderr)
+			stage = "post_scan_wait"
 			time.sleep(_POST_LOGIN_WAIT)
 			if response_risk is not None:
 				raise response_risk
 			_raise_if_security_page(page)
 
 			# UA 在已加载的登录页上记录（此时 evaluate 安全）；之后再预热首页
+			stage = "read_user_agent"
 			user_agent = _safe_user_agent(page)
 
 			# UA 采集会让页面继续处理排队中的响应，监听器可能刚刚锁存安全页风险；
@@ -635,10 +660,12 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 			_raise_if_security_page(page)
 
 			# 跳转主站提取完整 cookies 和 stoken
+			stage = "warm_home"
 			home_loaded = _warm_home_for_runtime(page, home_url, stage="登录后回到首页")
 			if response_risk is not None:
 				raise response_risk
 
+			stage = "read_credentials"
 			cookies_list = context.cookies()
 			cookies = {
 				c["name"]: c["value"] for c in cookies_list if _is_cookie_domain(c.get("domain", ""), cookie_domain)
@@ -650,6 +677,10 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 			else:
 				stoken = ""
 
+		except PlatformRiskError as error:
+			if "login_diagnostic" not in error.details:
+				error.details["login_diagnostic"] = login_diagnostic(page, stage=stage)
+			raise
 		finally:
 			with suppress(Exception):
 				browser.close()

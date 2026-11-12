@@ -54,6 +54,14 @@ boss logout && boss login
 
 Stop the current workflow and retain its run ID or checkpoint. Resolve the login or security-page state before an explicit resume; do not retry through multiple transports.
 
+Risk errors in the QR login paths may include local context in `error.details.login_diagnostic`:
+
+- `origin` / `stage`: a page check, session probe or response event, and the login stage at observation time.
+- `top_path` / `open_pages`: an allowlisted top-level path and the current context's page count when available. Unknown paths use a placeholder; queries and fragments are never included.
+- Response events may also include `status`, `resource_type`, `is_navigation_request`, and `frame_scope` (`main_frame` / `child_frame` / `other_page` / `unknown`).
+
+Only existing page/response object properties are read: no extra requests, bodies, cookies, or tokens. Unavailable metadata is omitted or marked unknown. These fields do not establish that a response is harmless, login succeeded, or risk was resolved; stopping and lock persistence remain unchanged. This does not add a failure-window hold or automatic recovery mode.
+
 ### Migrating from Browser Bridge in v3.0.0
 
 The Browser Bridge daemon, Chrome extension, and `[bridge]` installation extra have been removed. `boss doctor` no longer probes the old daemon or reports extension checks.
