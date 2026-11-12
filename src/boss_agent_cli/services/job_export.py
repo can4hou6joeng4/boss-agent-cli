@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from boss_agent_cli.api.models import field_list
+from boss_agent_cli.services.chat_utils import sanitize_csv_cell
 
 
 def prepare_export_items(items: list[dict[str, Any]], *, include_private: bool) -> list[dict[str, Any]]:
@@ -73,16 +74,13 @@ def write_export_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 					row["skills"] = ", ".join(row["skills"])
 				if isinstance(row.get("welfare"), list):
 					row["welfare"] = ", ".join(row["welfare"])
-				# CSV 公式注入防护
-				row = {k: _sanitize_csv_cell(str(v)) for k, v in row.items()}
+				# CSV 公式注入防护；与 chat 导出一致（剥 Tab/CR，Issue #876）。
+				row = {k: sanitize_csv_cell(str(v)) for k, v in row.items()}
 				writer.writerow(row)
 
 
-def _sanitize_csv_cell(value: str) -> str:
-	"""防止 CSV 公式注入：以 =+@- 开头的值前置单引号。"""
-	if isinstance(value, str) and value and value[0] in ("=", "+", "-", "@"):
-		return f"'{value}"
-	return value
+# 向后兼容别名：旧测试与调用方按模块内私有名取用。
+_sanitize_csv_cell = sanitize_csv_cell
 
 
 def render_html_export(items: list[dict[str, Any]]) -> str:
