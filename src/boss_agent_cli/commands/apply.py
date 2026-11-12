@@ -7,6 +7,11 @@ from boss_agent_cli.commands._platform import account_scope, get_platform_instan
 from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output, render_message_panel
 
 
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""投递后的记录查询与错误恢复沿用原登录态及数据目录。"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
 @click.command("apply")
 @click.argument("security_id")
 @click.argument("job_id")
@@ -21,12 +26,12 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 	# apply 是写操作：空标识既不可能命中职位，又会带着空参数真的发出一次投递
 	# 请求，失败后看起来像登录或职位失效，真正的原因（argv 少了参数）被掩盖。
 	if not security_id.strip() or not job_id.strip():
-		search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
+		search_cmd = _hint_command(ctx, "search <关键词>")
 		handle_error_output(
 			ctx,
 			"apply",
 			code="INVALID_PARAM",
-			message="security_id 与 job_id 不能为空；先用 boss search 取到完整职位参数再投递",
+			message=f"security_id 与 job_id 不能为空；先用 {search_cmd} 取到完整职位参数再投递",
 			recovery_action=f"补上两个编号后重试；完整职位参数可从 {search_cmd} 的结果中取到",
 			hints={"next_actions": [search_cmd]},
 		)
@@ -40,17 +45,15 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		if cache.is_applied(security_id, job_id, account=account):
+			deliver_cmd = _hint_command(ctx, "me --section deliver")
+			chat_cmd = _hint_command(ctx, "chat")
 			handle_error_output(
 				ctx,
 				"apply",
 				code="ALREADY_APPLIED",
 				message="已对该职位发起过投递/立即沟通",
-				hints={
-					"next_actions": [
-						boss_command_for_ctx(ctx, "me --section deliver"),
-						boss_command_for_ctx(ctx, "chat"),
-					]
-				},
+				recovery_action=f"该职位已投递过：用 {deliver_cmd} 查看投递记录，或用 {chat_cmd} 跟进",
+				hints={"next_actions": [deliver_cmd, chat_cmd]},
 			)
 			return
 
@@ -104,8 +107,8 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 		render=lambda d: render_message_panel(d, title="apply"),
 		hints={
 			"next_actions": [
-				boss_command_for_ctx(ctx, "me --section deliver"),
-				boss_command_for_ctx(ctx, "chat"),
+				_hint_command(ctx, "me --section deliver"),
+				_hint_command(ctx, "chat"),
 			]
 		},
 	)

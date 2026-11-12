@@ -1,4 +1,5 @@
 import json
+import shlex
 from unittest.mock import patch
 
 from click.testing import CliRunner
@@ -34,31 +35,40 @@ def test_apply_success(mock_cache_cls, mock_auth_cls, mock_get_platform):
 	mock_cache.record_apply.assert_called_once_with("sec_001", "job_001", account="")
 
 
-def test_apply_rejects_blank_identifiers_with_search_hint():
+def test_apply_rejects_blank_identifiers_with_search_hint(tmp_path):
 	"""空编号不会发出投递请求；恢复指引指回搜索结果取得完整参数。"""
-	result = CliRunner().invoke(cli, ["--json", "apply", "", "job_001"])
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "apply", "", "job_001"])
 
 	assert result.exit_code == 1, result.output
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
-	assert parsed["hints"]["next_actions"] == ["boss search <关键词>"]
-	assert "boss search <关键词>" in parsed["error"]["recovery_action"]
+	actions = parsed["hints"]["next_actions"]
+	assert [shlex.split(action) for action in actions] == [
+		["boss", "--data-dir", str(tmp_path.resolve()), "search", "<关键词>"],
+	]
+	assert actions[0] in parsed["error"]["recovery_action"]
 
 
 @patch("boss_agent_cli.commands.apply.get_platform_instance")
 @patch("boss_agent_cli.commands.apply.AuthManager")
 @patch("boss_agent_cli.commands.apply.CacheStore")
-def test_apply_duplicate_is_blocked(mock_cache_cls, mock_auth_cls, mock_get_platform):
+def test_apply_duplicate_is_blocked(mock_cache_cls, mock_auth_cls, mock_get_platform, tmp_path):
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_applied.return_value = True
 
 	runner = CliRunner()
-	result = runner.invoke(cli, ["apply", "sec_001", "job_001"])
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "apply", "sec_001", "job_001"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "ALREADY_APPLIED"
-	# 已投递不是死胡同：恢复指引要给出查看投递记录 / 跟进会话的路径。
-	assert "boss me --section deliver" in parsed["error"]["recovery_action"]
+	# 已投递不是死胡同：恢复指引要给出同一目录的查看投递记录 / 跟进会话路径。
+	actions = parsed["hints"]["next_actions"]
+	assert [shlex.split(action) for action in actions] == [
+		["boss", "--data-dir", str(tmp_path.resolve()), "me", "--section", "deliver"],
+		["boss", "--data-dir", str(tmp_path.resolve()), "chat"],
+	]
+	assert all(action in parsed["error"]["recovery_action"] for action in actions)
+	mock_get_platform.assert_not_called()
 
 
 @patch("boss_agent_cli.commands.apply.get_platform_instance")
