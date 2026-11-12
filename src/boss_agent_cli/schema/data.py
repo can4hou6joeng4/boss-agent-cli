@@ -1292,7 +1292,7 @@ SCHEMA_DATA = {
 					"--dry-run": {
 						"type": "bool",
 						"default": False,
-						"description": "只演练自动化决策，不执行真实平台动作",
+						"description": "只演练自动化决策，不执行真实平台动作，也不改写对话阶段、待执行队列或面试线索",
 					},
 					"--limit": {
 						"type": "int",

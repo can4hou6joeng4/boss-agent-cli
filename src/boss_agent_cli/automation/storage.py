@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import itertools
 import json
 import os
 import sqlite3
@@ -14,6 +16,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from boss_agent_cli.automation.models import AutomationEvent, PendingAction, ReviewItem
+from boss_agent_cli.services.chat_utils import sanitize_csv_cell
 
 
 class AutomationStateError(ValueError):
@@ -271,12 +274,31 @@ class AutomationStore:
 		candidate_key: str,
 		interview_time: str,
 		reason: str,
-	) -> None:
+	) -> bool:
+		"""Record one interview lead; returns False when it was already present.
+
+		`candidate_key` 是候选人在平台上的昵称，属于外部可控输入：直接拼字符串
+		会让含逗号 / 引号 / 换行的昵称破坏 CSV 行结构，以 `=` / `+` / `-` / `@`
+		开头还会变成 Excel 公式。这里统一走 `csv` 模块与共享清洗规则，
+		并按 `(candidate_key, interview_time)` 去重——同一候选人每轮自动化都会
+		重新命中同一时间，重复行只会污染运维清单（Issue #889）。
+		"""
 		path = self.root / "interview-leads.csv"
-		if not path.exists():
+		row = [sanitize_csv_cell(candidate_key), sanitize_csv_cell(interview_time), sanitize_csv_cell(reason)]
+		if path.exists():
+			try:
+				with path.open("r", encoding="utf-8", newline="") as handle:
+					if any(existing[:2] == row[:2] for existing in itertools.islice(csv.reader(handle), 1, None)):
+						return False
+			except (UnicodeDecodeError, csv.Error):
+				# 手工编辑或外部写入造成的坏文件不该让整轮自动化失败；无法判重时
+				# 继续追加，最坏只是多一行可见的重复记录。
+				pass
+		else:
 			path.write_text("candidate_key,interview_time,reason\n", encoding="utf-8")
-		with path.open("a", encoding="utf-8") as handle:
-			handle.write(f"{candidate_key},{interview_time},{reason.replace(',', '，')}\n")
+		with path.open("a", encoding="utf-8", newline="") as handle:
+			csv.writer(handle).writerow(row)
+		return True
 
 	def stats(self) -> dict[str, Any]:
 		events = self.read_jsonl("action-log.jsonl")

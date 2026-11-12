@@ -64,7 +64,9 @@ def test_pending_actions_are_isolated_by_platform(tmp_path: Path) -> None:
 	assert "legacy-pending" not in {event.candidate_key for event in report.events}
 	statuses = {item.candidate_key: item.status for item in store.read_pending()}
 	assert statuses["legacy-pending"] == "pending"
-	assert statuses["zhipin-pending"] == "dry-run"
+	# 演练没有执行任何动作：本平台已批准项也必须留在 pending，
+	# 否则一次预览就永久消耗掉操作者批准的待执行动作（Issue #889）。
+	assert statuses["zhipin-pending"] == "pending"
 
 
 def test_pending_action_stays_pending_when_execution_is_blocked(tmp_path: Path) -> None:
