@@ -45,23 +45,32 @@ def shell_argument(value: str) -> str:
 	return "'" + value.replace("'", "'\\''") + "'"
 
 
-def boss_command(command: str, *, platform_name: str = "zhipin", data_dir: Path | None = None) -> str:
+def boss_command(command: str, *, platform_name: str = "zhipin", data_dir: Path | None = None, role: str | None = None) -> str:
 	"""构造后继命令；依赖本地状态时显式保留数据目录。"""
 	prefix = "boss" if platform_name == "zhipin" else f"boss --platform {platform_name}"
 	if data_dir is not None:
 		prefix += f" --data-dir {shell_argument(str(data_dir.resolve()))}"
+	if role:
+		# 部分命令组（如 agent）不在 hr 组下，重放时必须显式带角色。
+		prefix += f" --role {role}"
 	return f"{prefix} {command}".strip()
 
 
-def boss_command_for_ctx(ctx: Any, command: str, *, include_data_dir: bool = False) -> str:
-	"""构造平台感知命令，可选择保留当前数据目录。"""
+def boss_command_for_ctx(
+	ctx: Any,
+	command: str,
+	*,
+	include_data_dir: bool = False,
+	role: str | None = None,
+) -> str:
+	"""构造平台感知命令，可选择保留当前数据目录与角色。"""
 	platform_name = "zhipin"
 	data_dir = None
 	if ctx and getattr(ctx, "obj", None):
 		platform_name = ctx.obj.get("platform") or "zhipin"
 		if include_data_dir:
 			data_dir = ctx.obj.get("data_dir")
-	return boss_command(command, platform_name=platform_name, data_dir=data_dir)
+	return boss_command(command, platform_name=platform_name, data_dir=data_dir, role=role)
 
 
 def show_command_for_ctx(ctx: Any, *, index_saved: bool) -> str | None:
