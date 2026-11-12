@@ -15,9 +15,18 @@ _SNAPSHOT_NAME_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def save_snapshot_and_diff(
-	snapshot_dir: str, friends: list[dict[str, Any]], logger: Logger
+	snapshot_dir: str,
+	friends: list[dict[str, Any]],
+	logger: Logger,
+	*,
+	complete: bool = True,
 ) -> dict[str, Any]:
-	"""保存当日 JSON 快照（uid 优先，旧数据回退 security_id）并与上次对比。"""
+	"""保存当日 JSON 快照（uid 优先，旧数据回退 security_id）并与上次对比。
+
+	``complete`` 表示本次观察是否覆盖完整沟通列表（第 1 页且平台明确
+	``hasMore=false``）。不完整时只记录观察结果，不推断联系人已消失：
+	筛选结果或部分页面缺少“该联系人不在列表中”的证据（Issue #911）。
+	"""
 	os.makedirs(snapshot_dir, exist_ok=True)
 	today = datetime.date.today().isoformat()
 	snapshot_path = os.path.join(snapshot_dir, f"{today}.json")
@@ -49,11 +58,11 @@ def save_snapshot_and_diff(
 	# 查找上一次快照
 	prev_path = _find_previous_snapshot(snapshot_dir, today)
 	if prev_path is None:
-		return {"is_first": True, "added": [], "removed": [], "new_unread": []}
+		return {"is_first": True, "complete": complete, "added": [], "removed": [], "new_unread": []}
 
 	prev_friends = load_snapshot(prev_path, logger)
 	if prev_friends is None:
-		return {"is_first": True, "added": [], "removed": [], "new_unread": []}
+		return {"is_first": True, "complete": complete, "added": [], "removed": [], "new_unread": []}
 
 	# 用稳定标识（uid 优先）做 key 对比
 	curr_map = {contact_identity(item): item for item in merged if contact_identity(item)}
@@ -62,7 +71,8 @@ def save_snapshot_and_diff(
 	prev_ids = set(prev_map)
 
 	added = [curr_map[key] for key in (curr_ids - prev_ids)]
-	removed = [prev_map[key] for key in (prev_ids - curr_ids)]
+	# 不完整的采集只能证明“看到了谁”，不能证明“谁消失了”。
+	removed = [prev_map[key] for key in (prev_ids - curr_ids)] if complete else []
 
 	# 新增未读：检测任何未读增量
 	new_unread = []
@@ -74,6 +84,7 @@ def save_snapshot_and_diff(
 
 	return {
 		"is_first": False,
+		"complete": complete,
 		"prev_date": os.path.basename(prev_path).replace(".json", ""),
 		"added": added,
 		"removed": removed,

@@ -8,6 +8,7 @@
 - 扫码登录风险错误补充本地脱敏诊断（Issue #863）：`error.details.login_diagnostic` 记录失败阶段、页面检查或响应监听来源、白名单顶层路径和可用的页签数量；响应事件另附状态码、资源类型、导航标识与主/子框架归属。仅读取已有事件属性，未知信息省略或标记未知，不输出完整网址、查询参数、凭据或页面正文；风险判定、锁存、停止与窗口清理行为保持不变。
 
 ### Fixed
+- 聊天筛选导出不再把未选中的联系人标成已消失（Issue #911）：`chat --from boss --export md` 把筛选后的列表交给当日快照，与上次快照做 UID 差集；未被 `--from` / `--days` 选中的联系人、以及只采集了第 1 页的结果，都会在 Markdown 和 `data.diff.removed` 里被报成“已消失”，即使同一次平台响应仍在返回它们。现在快照记录本次平台页面返回的全部联系人，筛选只影响导出正文与变化摘要；只有第 1 页且平台明确 `hasMore=false` 才判断消失，否则 `removed` 为空、`complete=false`，摘要注明“本次采集不完整，未判断消失”。
 - 招聘者结构化简历保留未知性别（Issue #909）：`hr resume` 原先把所有非数值 `1` 的性别字段都输出为“女”，接口省略字段或返回 `null` 时会补出来源中不存在的个人属性。现在只转换已识别的整数编码，缺失或未知值输出空字符串，布尔值与字符串不冒充数值编码。
 - `export` 达到内部页数上限时显式报告截断（Issue #907）：`--count 10` 在平台每页只返回少量职位（或本地筛选剔除大部分结果）时会静默返回 6 条，信封只有 `count` / `format` / `jobs`，调用方无法区分「平台只有这些」与「本地扫描到上限」。现在 `data` 新增 `truncated` 与 `stop_reason`（`count_reached` / `platform_has_more_false` / `empty_page` / `page_budget_exhausted`），只有最后一种 `truncated=true` 并在 `hints.operator_actions` 提示缩小筛选条件；`--output` 文件、`--format html --json`、stdout 数组三种信封一致，HTML 直出的提示写 stderr。
 - wizard 交换联系方式拒绝非法 `type`，不再静默改发手机号请求（Issue #905）：`candidate_exchange` 与 `recruiter_exchange_contact` 用 `2 if str(inputs.get("type") or "phone") == "wechat" else 1` 映射类型，`"wecaht"`、`"PHONE"`、`"phone "` 等拼错值都会按手机号真实发出交换请求；wizard `inputs` 来自 `--input-json` / MCP，不经过 Click `Choice`，catalog 也只检查必填项。现在只有精确的 `phone` / `wechat` 合法（未提供时默认 `phone`），其余值返回 `INVALID_PARAM`，与 CLI 及 schema enum 对齐。

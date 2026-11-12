@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
+import pytest
 from click.testing import CliRunner
 from boss_agent_cli.display import risk_error_message
 from boss_agent_cli.index_cache import save_index
@@ -1459,6 +1460,107 @@ def test_chat_export_md(mock_auth_cls, mock_client_cls, tmp_path):
 	assert snapshot_dir.exists()
 	json_files = list(snapshot_dir.glob("*.json"))
 	assert len(json_files) == 1
+
+
+@pytest.mark.parametrize("filters", [["--from", "boss"], ["--days", "7"]], ids=["from", "days"])
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_export_filtering_does_not_mark_unselected_contacts_removed(mock_auth_cls, mock_client_cls, tmp_path, filters):
+	"""快照记录全部观察，导出正文与变化摘要使用相同筛选范围（Issue #911）。"""
+	import datetime
+	import time
+	now_ms = int(time.time() * 1000)
+	old_ms = now_ms - 14 * 24 * 3600 * 1000
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
+	selected = {**_make_friend_item("联系人甲", "示例公司甲", 1, now_ms), "uid": 101, "unreadMsgCount": 2}
+	unselected = {**_make_friend_item("联系人乙", "示例公司乙", 2, old_ms), "uid": 202, "unreadMsgCount": 3}
+	new_unselected = {**_make_friend_item("联系人丙", "示例公司丙", 2, old_ms), "uid": 303}
+	mock_client_cls.return_value.friend_list.return_value = {
+		"zpData": {"hasMore": False, "result": [selected, unselected, new_unselected]},
+	}
+	history = tmp_path / "chat-history"
+	history.mkdir()
+	yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+	(history / f"{yesterday}.json").write_text(
+		json.dumps([{"uid": 101, "name": "联系人甲"}, {"uid": 202, "name": "联系人乙"}]),
+		encoding="utf-8",
+	)
+
+	out_file = tmp_path / "chat.md"
+	result = CliRunner().invoke(cli, [
+		"--json", "--data-dir", str(tmp_path),
+		"chat", *filters, "--export", "md", "-o", str(out_file),
+	])
+
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.output)
+	assert payload["data"]["count"] == 1
+	assert payload["data"]["diff"]["removed"] == []
+	assert payload["data"]["diff"]["added"] == []
+	assert [row["uid"] for row in payload["data"]["diff"]["new_unread"]] == [101]
+	assert payload["data"]["diff"]["complete"] is True
+	content = out_file.read_text(encoding="utf-8")
+	assert "已消失" not in content
+	assert "联系人乙" not in content
+	assert "联系人丙" not in content
+	today = datetime.date.today().isoformat()
+	saved = json.loads((history / f"{today}.json").read_text(encoding="utf-8"))
+	assert {str(item["uid"]) for item in saved} == {"101", "202", "303"}
+
+
+@pytest.mark.parametrize(
+	("page", "paging", "fmt", "complete"),
+	[
+		pytest.param(1, {"hasMore": False}, "md", True, id="complete"),
+		pytest.param(1, {"hasMore": True}, "md", False, id="more-pages"),
+		pytest.param(2, {"hasMore": False}, "md", False, id="last-page-only"),
+		pytest.param(1, {}, "md", False, id="missing-marker"),
+		pytest.param(1, {"hasMore": None}, "md", False, id="null-marker"),
+		pytest.param(1, {"hasMore": "false"}, "md", False, id="ambiguous-marker"),
+		pytest.param(1, {"hasMore": True}, "html", False, id="html-partial"),
+	],
+)
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_export_removal_requires_complete_list(mock_auth_cls, mock_client_cls, tmp_path, page, paging, fmt, complete):
+	"""只有完整列表能证明联系人消失；部分观察在信封和正文说明局限（Issue #911）。"""
+	import datetime
+	import time
+	now_ms = int(time.time() * 1000)
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
+	_ctx_mock(mock_client_cls)
+	first = {**_make_friend_item("联系人甲", "示例公司甲", 1, now_ms), "uid": 101}
+	mock_client_cls.return_value.friend_list.return_value = {
+		"zpData": {**paging, "result": [first]},
+	}
+	history = tmp_path / "chat-history"
+	history.mkdir()
+	yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+	(history / f"{yesterday}.json").write_text(
+		json.dumps([{"uid": 101, "name": "联系人甲"}, {"uid": 202, "name": "联系人乙"}]),
+		encoding="utf-8",
+	)
+
+	out_file = tmp_path / f"chat.{fmt}"
+	result = CliRunner().invoke(cli, [
+		"--json", "--data-dir", str(tmp_path),
+		"chat", "--page", str(page), "--export", fmt, "-o", str(out_file),
+	])
+
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.output)
+	assert payload["data"]["diff"]["complete"] is complete
+	content = out_file.read_text(encoding="utf-8")
+	if complete:
+		assert [row["uid"] for row in payload["data"]["diff"]["removed"]] == [202]
+		assert "已消失" in content
+		assert "本次采集不完整" not in content
+	else:
+		assert payload["data"]["diff"]["removed"] == []
+		assert "已消失" not in content
+		assert "本次采集不完整" in content
+	mock_client_cls.return_value.friend_list.assert_called_once_with(page=page)
 
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
