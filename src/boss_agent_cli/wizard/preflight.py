@@ -87,11 +87,11 @@ def _render_login_failure(ctx: Any, exc: Exception) -> None:
 	payload = classify_login_error(exc, ctx)
 	raw_hints = payload.get("hints")
 	hints: dict[str, Any] = raw_hints if isinstance(raw_hints, dict) else {}
-	lines = [f"[red]{payload.get('message')}[/red]"]
+	lines = [f"[red]{display.escape_markup(payload.get('message'))}[/red]"]
 	operator_actions = hints.get("operator_actions") or []
 	if operator_actions:
 		lines.append("")
-		lines.extend(f"· {action}" for action in operator_actions)
+		lines.extend(f"· {display.escape_markup(action)}" for action in operator_actions)
 	display.console.print(Panel("\n".join(lines), title="登录失败", border_style="red"))
 
 

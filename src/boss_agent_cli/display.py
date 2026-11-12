@@ -25,6 +25,17 @@ from boss_agent_cli.schema.error_codes import ERROR_CODES
 console = Console(stderr=True)
 
 
+def escape_markup(value: Any) -> str:
+	"""把平台 / 用户外部字符串转成 Rich 按字面渲染的文本。
+
+	Rich 默认把字符串当 markup 解析：未配对的闭合标签（``[/bold]``）直接抛
+	MarkupError 让整条 TTY 输出崩掉，``[link=...]`` 则会把终端渲染成可点击
+	超链接（OSC 8）。公司名、职位名、职位描述、聊天内容、昵称都是平台外部
+	输入，进入 Rich 前一律经过这里；代码自身的样式标签保持不变。
+	"""
+	return escape(str(value))
+
+
 _SHELL_METACHARACTERS = frozenset("'\"`$\\!*?[]{}()<>|&;#")
 
 
@@ -177,7 +188,7 @@ def render_operator_actions(hints: dict[str, Any] | None) -> None:
 	console.print()
 	for index, action in enumerate(actions):
 		prefix = "↓ 你需要：" if index == 0 else "　　　　　"
-		console.print(f"[yellow]{prefix}[/yellow]{action}")
+		console.print(f"[yellow]{prefix}[/yellow]{escape_markup(action)}")
 
 
 def handle_output(
@@ -343,13 +354,13 @@ def render_job_table(
 	for i, job in enumerate(items, 1):
 		table.add_row(
 			str(i),
-			job.get("title", job.get("jobName", "-")),
-			job.get("company", job.get("brandName", "-")),
-			job.get("salary", job.get("salaryDesc", "-")),
-			job.get("employment_type") or "-",
-			job.get("experience", job.get("jobExperience", "-")),
-			job.get("education", job.get("jobDegree", "-")),
-			job.get("city", job.get("cityName", "-")),
+			escape_markup(job.get("title", job.get("jobName", "-"))),
+			escape_markup(job.get("company", job.get("brandName", "-"))),
+			escape_markup(job.get("salary", job.get("salaryDesc", "-"))),
+			escape_markup(job.get("employment_type") or "-"),
+			escape_markup(job.get("experience", job.get("jobExperience", "-"))),
+			escape_markup(job.get("education", job.get("jobDegree", "-"))),
+			escape_markup(job.get("city", job.get("cityName", "-"))),
 		)
 
 	console.print(table)
@@ -371,18 +382,18 @@ def _snapshot_time_label(value: Any) -> str:
 
 def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None) -> None:
 	"""Render job detail as a rich panel."""
-	title = data.get("title", "-")
-	salary = data.get("salary", "-")
-	exp = data.get("experience", "-")
-	edu = data.get("education", "-")
-	city = data.get("city", "-")
-	company = data.get("company", "-")
-	boss = data.get("boss_name", "-")
-	boss_title = data.get("boss_title", "-")
-	desc = data.get("description", "")
+	title = escape_markup(data.get("title", "-"))
+	salary = escape_markup(data.get("salary", "-"))
+	exp = escape_markup(data.get("experience", "-"))
+	edu = escape_markup(data.get("education", "-"))
+	city = escape_markup(data.get("city", "-"))
+	company = escape_markup(data.get("company", "-"))
+	boss = escape_markup(data.get("boss_name", "-"))
+	boss_title = escape_markup(data.get("boss_title", "-"))
+	desc = str(data.get("description", ""))
 
 	skills = data.get("skills", [])
-	skill_str = ", ".join(skills) if skills else "-"
+	skill_str = ", ".join(escape_markup(skill) for skill in skills) if skills else "-"
 
 	text = (
 		f"[bold cyan]{title}[/bold cyan]  [yellow]{salary}[/yellow]\n"
@@ -397,7 +408,8 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 	if desc:
 		if len(desc) > 500:
 			desc = desc[:500] + "..."
-		text += f"\n[bold]description:[/bold]\n{desc}"
+		# 先截断再转义：截断可能落在转义序列中间。
+		text += f"\n[bold]description:[/bold]\n{escape_markup(desc)}"
 
 	panel = Panel(text, title="job detail", border_style="cyan")
 	console.print(panel)
@@ -426,14 +438,14 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 def render_status(data: dict[str, Any], *, login_action: str = "boss login") -> None:
 	"""Render login status."""
 	if data.get("logged_in"):
-		name = data.get("user_name", "unknown")
+		name = escape_markup(data.get("user_name", "unknown"))
 		console.print(f"[green]logged in[/green] as [bold]{name}[/bold]")
 	else:
 		console.print(f"[yellow]not logged in[/yellow] - run: {login_action}")
 	lock = data.get("cdp_risk_lock")
 	if isinstance(lock, dict) and lock.get("locked"):
-		since = lock.get("locked_at") or "unknown"
-		reason = lock.get("reason") or "ENVIRONMENT_RISK"
+		since = escape_markup(lock.get("locked_at") or "unknown")
+		reason = escape_markup(lock.get("reason") or "ENVIRONMENT_RISK")
 		console.print(
 			f"[yellow]BOSS 本地风控锁定中[/yellow]（{since} 起，{reason}）：确认官方目标业务页已恢复后，"
 			"由用户执行 boss clean --risk-lock 再显式恢复任务；令牌变化不会自动解锁"
@@ -461,7 +473,7 @@ def render_simple_list(
 	for i, item in enumerate(items, 1):
 		row = [str(i)]
 		for _, key, _ in columns:
-			row.append(str(item.get(key, "-")))
+			row.append(escape_markup(item.get(key, "-")))
 		table.add_row(*row)
 
 	console.print(table)
@@ -474,7 +486,7 @@ def render_message_panel(data: dict[str, Any], *, title: str = "result") -> None
 	"""Render a simple key-value result as a panel."""
 	lines = []
 	for k, v in data.items():
-		lines.append(f"[bold]{k}:[/bold] {v}")
+		lines.append(f"[bold]{escape_markup(k)}:[/bold] {escape_markup(v)}")
 	panel = Panel("\n".join(lines), title=title, border_style="green")
 	console.print(panel)
 
@@ -498,10 +510,10 @@ def render_batch_operation_summary(data: dict[str, Any], *, title: str = "batch 
 		table.add_column("title", style="cyan", max_width=25)
 		table.add_column("company", style="green", max_width=20)
 		for item in greeted:
-			table.add_row(item.get("title", "-"), item.get("company", "-"))
+			table.add_row(escape_markup(item.get("title", "-")), escape_markup(item.get("company", "-")))
 		console.print(table)
 	if data.get("stopped_reason"):
-		console.print(f"  [yellow]stopped: {data['stopped_reason']}[/yellow]")
+		console.print(f"  [yellow]stopped: {escape_markup(data['stopped_reason'])}[/yellow]")
 
 
 def render_sectioned_record(data: dict[str, Any], *, title: str = "info") -> None:
@@ -512,11 +524,11 @@ def render_sectioned_record(data: dict[str, Any], *, title: str = "info") -> Non
 			for k, v in content.items():
 				if isinstance(v, (list, dict)):
 					v = str(v)[:200]
-				lines.append(f"[bold]{k}:[/bold] {v or '-'}")
+				lines.append(f"[bold]{escape_markup(k)}:[/bold] {escape_markup(v or '-')}")
 			panel = Panel("\n".join(lines) if lines else "[dim]empty[/dim]", title=section, border_style="cyan")
 			console.print(panel)
 		else:
-			console.print(f"[bold]{section}:[/bold] {content}")
+			console.print(f"[bold]{escape_markup(section)}:[/bold] {escape_markup(content)}")
 
 
 def render_string_grid(items: list[str], title: str, *, columns: int = 4) -> None:
@@ -533,7 +545,7 @@ def render_string_grid(items: list[str], title: str, *, columns: int = 4) -> Non
 		row = items[i : i + columns]
 		while len(row) < columns:
 			row.append("")
-		table.add_row(*row)
+		table.add_row(*[escape_markup(item) for item in row])
 
 	console.print(table)
 
@@ -544,7 +556,7 @@ def render_export_summary(data: dict[str, Any]) -> None:
 	count = data.get("count", 0)
 	fmt = data.get("format", "")
 	if path:
-		console.print(f"[green]exported[/green] {count} jobs to [bold]{path}[/bold] ({fmt})")
+		console.print(f"[green]exported[/green] {count} jobs to [bold]{escape_markup(path)}[/bold] ({escape_markup(fmt)})")
 	else:
 		console.print(f"[green]exported[/green] {count} jobs ({fmt})")
 	if data.get("truncated"):
