@@ -218,6 +218,24 @@ def test_resume_job_link_repeat_applies_explicit_values(tmp_path):
 	assert app["status"] == "prepared"
 
 
+def test_resume_job_link_rotating_security_id_keeps_tracking(tmp_path):
+	"""重新关联同一职位时 security_id 已轮换，不能新增一行并退回 prepared（Issue #901）。"""
+	store = CacheStore(tmp_path / "test.db")
+	store.link_resume_to_job("default", "sid-request-1", "job_001", "后端工程师", "测试公司")
+	assert store.update_job_link_status("default", "sid-request-1", "job_001", "applied", "已投递") is True
+	linked_at = store.get_resume_applications("default")[0]["linked_at"]
+
+	time.sleep(0.01)
+	store.link_resume_to_job("default", "sid-request-2", "job_001", "后端工程师", "测试公司")
+
+	apps = store.get_resume_applications("default")
+	assert len(apps) == 1
+	assert apps[0]["security_id"] == "sid-request-2"
+	assert apps[0]["status"] == "applied"
+	assert apps[0]["notes"] == "已投递"
+	assert apps[0]["linked_at"] == linked_at
+
+
 def test_remove_resume_links_clears_only_that_resume(tmp_path):
 	"""删除简历的全部分关联只影响同名简历，其它简历的关联保留。"""
 	store = CacheStore(tmp_path / "test.db")
