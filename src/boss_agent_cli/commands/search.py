@@ -42,7 +42,9 @@ from boss_agent_cli.wizard.actions import execute_candidate_search
 # 3：职位条目新增 boss_active_desc 字段，旧缓存不再复用。
 # 4：缓存键带上账号作用域，且命中后按当前账号重算 greeted；旧缓存不再复用。
 # 5：缓存里的下一页提示开始保留本次筛选条件；旧条目会把翻页带到另一组结果。
-_SEARCH_CACHE_SCHEMA = 5
+# 6：pagination 改为如实区分「平台说 false」与「平台没说」（Issue #887），
+#    旧缓存的 has_more 一律是布尔值，复用会让 Agent 继续读到底气十足的 false。
+_SEARCH_CACHE_SCHEMA = 6
 
 
 def _parse_cached_result(raw: str) -> dict[str, Any] | None:
