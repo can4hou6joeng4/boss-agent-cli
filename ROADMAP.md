@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.3.0（2026-11-12）：新增招聘者 `hr location` 工作地点卡片（默认预览、`--yes` 确认、本地去重）；`hr chatmsg` / `chatmsg` / `chat-summary` / `me --section deliver` / 招聘者四个列表命令 / `hr jobs list` / `chat --page` / `history` / `favorites list` 统一返回分页证据；MCP 工具补齐 CLI 已有参数并以 `inputSchema` 校验类型、拒绝未声明参数；登录恢复、采集后继与清理预演提示保留数据目录；职位描述缓存加容量上限，`clean --all` 覆盖负隅表；截断 / 脱敏 / fail-open 等一批静默变形问题修正。
 - ✅ v3.2.2（2026-11-09）：`ACTION_UNCONFIRMED` 诊断补齐 WS 无文本帧计数（`ws_send_without_text`）与历史回读漏斗计数（`history_new_count` / `history_self_count` / `history_recipient_count`），便于定位「已送达却未确认」的发送；同时新增公开架构文档、ADR 索引与命令参考目录，整理维护者文档与路线图。
 - ✅ v3.2.1（2026-11-06）：招聘者回复在新会话上先填内容再检查编辑器、多行消息保留换行（社区 PR #728），发送前改为有上限轮询并复查目标会话；`ACTION_UNCONFIRMED` 失败详情补上历史回读证据；发版工作流在发布前校验产物与 tag
 - ✅ v3.2.0（2026-11-01）：`--industry` 改用平台行业码、`--experience` / `--salary` 码位按网页筛选器校正；新增「全国」等 4 个城市码；命令兜底改报不可恢复的 `INTERNAL_ERROR`；`login --cookie-source` 提取失败给出可执行诊断（Breaking Change：行业码迁移）
