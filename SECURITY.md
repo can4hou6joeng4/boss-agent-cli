@@ -35,7 +35,7 @@
 
 - **平台风控是硬边界**：命中账号风险 / 环境风险 / 安全页时停止当前 workflow 并保存 checkpoint，不无界重试，也不经 CDP / patchright / Cookie 提取绕过风控。
 - **长流程有界**：受 timeout、retry、预算、checkpoint 与 stop 约束；批量打招呼、批量采集等能力需要用户显式触发并设置上限。
-- **Cookie/Token 存储**：使用 Fernet 对称加密 + PBKDF2 机器绑定密钥
+- **Cookie/Token 存储**：使用 Fernet 对称加密 + PBKDF2 机器绑定密钥；数据目录按 0700 创建，登录态、salt 与 AI 服务商密钥按 0600 原子写入，仅当前用户可读
 - **浏览器兼容通道**：仅用于用户主动登录和低风险兼容路径，所有浏览器操作限定在 `zhipin.com` 域名
 - **本地数据**：缓存数据存储在 `~/.boss-agent/`，不上传任何数据到第三方服务
 - **CSV/HTML 导出**：已实施公式注入防护和 XSS 防护

@@ -79,7 +79,7 @@ Design constraints:
 
 ## Login and Authentication
 
-`auth/AuthManager` keeps encrypted login state (Fernet with a machine-bound key). Login tries, in the order declared by the platform: browser cookie extraction → CDP (a read-only probe before reusing an existing logged-in context; on failure it falls back to a forced login) → patchright QR. Login state stays local; the CLI does not read or upload unrelated browser data. The key is derived from the machine ID and a random salt, so another local user who can read the files could decrypt them: the `auth/` directory is created with mode 0700, `salt` and `session.enc` are written atomically with mode 0600, and looser permissions from older installs are tightened when the store is opened.
+`auth/AuthManager` keeps encrypted login state (Fernet with a machine-bound key). Login tries, in the order declared by the platform: browser cookie extraction → CDP (a read-only probe before reusing an existing logged-in context; on failure it falls back to a forced login) → patchright QR. Login state stays local; the CLI does not read or upload unrelated browser data. The key is derived from the machine ID and a random salt, so another local user who can read the files could decrypt them: the `auth/` directory is created with mode 0700, `salt` and `session.enc` are written atomically with mode 0600, and looser permissions from older installs are tightened when the store is opened. The same reasoning covers the whole data directory: `--data-dir` (default `~/.boss-agent`) is created with mode 0700 and an existing directory is tightened on startup, and the AI provider `ai/`, `auth/` directories and `api_key.enc` are written with modes 0700 / 0600.
 
 ## Platform Abstraction
 
@@ -93,7 +93,7 @@ Design constraints:
 
 ## Local Data Directory
 
-Default `~/.boss-agent/` (override with `--data-dir`):
+Default `~/.boss-agent/` (override with `--data-dir`; the directory is created with mode 0700 and is only accessible to the current user):
 
 ```text
 config.json          user configuration
