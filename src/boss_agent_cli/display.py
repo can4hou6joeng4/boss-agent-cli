@@ -18,7 +18,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
-from boss_agent_cli.output import emit_success, is_local_io_error
+from boss_agent_cli.output import emit_success, is_local_io_error, redact_sensitive_text
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 
 # Rich output goes to stderr so stdout stays clean for Agent JSON
@@ -220,9 +220,13 @@ def handle_error_output(
 			hints=hints,
 		)
 	else:
-		console.print(f"[red]error[/red] [{code}] {message}")
-		if recovery_action:
-			console.print(f"  [dim]recovery: {recovery_action}[/dim]")
+		# JSON 路径由 output.py 脱敏；TTY 分支同样不能把异常文本里的凭据
+		# 明文打到终端（Issue #880）。
+		safe_message = redact_sensitive_text(message)
+		safe_recovery = redact_sensitive_text(recovery_action) if recovery_action else recovery_action
+		console.print(f"[red]error[/red] [{code}] {safe_message}")
+		if safe_recovery:
+			console.print(f"  [dim]recovery: {safe_recovery}[/dim]")
 		render_operator_actions(hints)
 		raise SystemExit(1)
 

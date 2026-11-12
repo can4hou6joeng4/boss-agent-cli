@@ -175,6 +175,13 @@ def build_plan(wizard_input: WizardInput) -> WorkflowPlan:
 			f"requested_steps 不属于 goal {goal.name!r}: {', '.join(unknown_steps)}"
 			f"；可选: {', '.join(goal.steps)}"
 		)
+	duplicates = sorted({step for step in steps if steps.count(step) > 1})
+	if duplicates:
+		# 步骤表主键是 (run_id, step_name)：带重复项写库会抛 sqlite3.IntegrityError，
+		# 这里必须在建 plan 时拒绝，否则命令没有错误信封（Issue #879）。
+		raise WorkflowInputError(
+			f"requested_steps 不能重复: {', '.join(duplicates)}；每个步骤只写一次，执行顺序由 goal 决定"
+		)
 	return WorkflowPlan(
 		role=wizard_input.role,
 		platform=wizard_input.platform,
