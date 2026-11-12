@@ -53,7 +53,7 @@ from boss_agent_cli.commands.recruiter import request_resume as recruiter_reques
 from boss_agent_cli.commands.recruiter import recommendations as recruiter_recommendations
 from boss_agent_cli.commands.recruiter import resume as recruiter_resume
 from boss_agent_cli.commands.recruiter import whoami as recruiter_whoami
-from boss_agent_cli.display import handle_error_output
+from boss_agent_cli.display import handle_error_output, shell_argument
 from boss_agent_cli.platforms import list_recruiter_platforms
 
 
@@ -108,6 +108,12 @@ def hr_group(ctx: click.Context) -> None:
 	recruiter_name = f"{platform_name}-recruiter"
 	supported = list_recruiter_platforms()
 	if recruiter_name not in supported:
+		# 当前平台不支持招聘者模式：恢复命令强制切回 zhipin，同时保留原数据目录。
+		data_dir = ctx.obj.get("data_dir")
+		recovery_action = "boss --platform zhipin"
+		if data_dir is not None:
+			recovery_action += f" --data-dir {shell_argument(str(data_dir.resolve()))}"
+		recovery_action += " hr ..."
 		handle_error_output(
 			ctx,
 			"hr",
@@ -117,7 +123,7 @@ def hr_group(ctx: click.Context) -> None:
 				f"当前仅支持: {', '.join(supported)}"
 			),
 			recoverable=True,
-			recovery_action="boss --platform zhipin hr ...",
+			recovery_action=recovery_action,
 		)
 		raise SystemExit(1)
 

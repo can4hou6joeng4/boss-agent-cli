@@ -13,6 +13,14 @@ from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.services.resume_parser import parse_resume
 
 
+_DEFAULT_DATA_DIR = (Path.home() / ".boss-agent").resolve()
+
+
+def _hint(command: str) -> str:
+	"""默认数据目录下的招聘者后继命令。"""
+	return f"boss --data-dir {_DEFAULT_DATA_DIR} {command}"
+
+
 def _ctx_mock(mock_cls):
 	instance = mock_cls.return_value
 	instance.__enter__ = lambda self: self
@@ -50,8 +58,8 @@ def test_recruiter_candidates_supports_data_envelope(mock_auth_cls, mock_platfor
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	assert parsed["data"]["geekList"][0]["name"] == "候选人A"
-	assert parsed["hints"]["next_actions"][0] == "boss hr resume <geek_id> --job-id <id> --security-id <id>"
-	assert parsed["hints"]["next_actions"][1] == "boss hr chat"
+	assert parsed["hints"]["next_actions"][0] == _hint("hr resume <geek_id> --job-id <id> --security-id <id>")
+	assert parsed["hints"]["next_actions"][1] == _hint("hr chat")
 
 
 @patch("boss_agent_cli.commands.recruiter.candidates.get_recruiter_platform_instance")
@@ -142,7 +150,7 @@ def test_recruiter_chat_supports_data_envelope(mock_auth_cls, mock_platform_cls)
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"]["friendList"][0]["name"] == "候选人B"
-	assert parsed["hints"]["next_actions"][0] == "boss hr resume <geek_id> --job-id <id> --security-id <id>"
+	assert parsed["hints"]["next_actions"][0] == _hint("hr resume <geek_id> --job-id <id> --security-id <id>")
 
 
 @patch("boss_agent_cli.commands.recruiter.chat.get_recruiter_platform_instance")
@@ -240,7 +248,7 @@ def test_recruiter_last_messages_empty_result_points_to_chat(mock_auth_cls, mock
 	assert result.exit_code == 0, result.output
 	parsed = json.loads(result.output)
 	assert parsed["data"] == {"friend_ids": [], "messages": []}
-	assert parsed["hints"]["next_actions"] == ["boss hr chat"]
+	assert parsed["hints"]["next_actions"] == [_hint("hr chat")]
 	assert parsed["hints"]["operator_actions"]
 
 
@@ -304,8 +312,8 @@ def test_recruiter_applications_supports_data_envelope(mock_auth_cls, mock_platf
 	assert result.exit_code == 0
 	parsed = json.loads(result.output)
 	assert parsed["data"]["friendList"][0]["name"] == "候选人C"
-	assert parsed["hints"]["next_actions"][0] == "boss hr resume <geek_id> --job-id <id> --security-id <id>"
-	assert parsed["hints"]["next_actions"][1] == "boss hr chat"
+	assert parsed["hints"]["next_actions"][0] == _hint("hr resume <geek_id> --job-id <id> --security-id <id>")
+	assert parsed["hints"]["next_actions"][1] == _hint("hr chat")
 
 
 @patch("boss_agent_cli.commands.recruiter.applications.get_recruiter_platform_instance")
@@ -412,12 +420,12 @@ def test_recruiter_jobs_success_paths_point_to_the_next_step(mock_auth_cls, mock
 	mock_platform.job_detail.return_value = {"code": 0, "zpData": {"jobName": "后端工程师"}}
 
 	cases = [
-		(("hr", "jobs", "list"), ["boss hr jobs detail <enc_job_id>"]),
-		(("hr", "jobs", "offline", "enc-job-1"), ["boss hr jobs list", "boss hr jobs online enc-job-1"]),
-		(("hr", "jobs", "online", "enc-job-1"), ["boss hr jobs list", "boss hr jobs offline enc-job-1"]),
+		(("hr", "jobs", "list"), [_hint("hr jobs detail <enc_job_id>")]),
+		(("hr", "jobs", "offline", "enc-job-1"), [_hint("hr jobs list"), _hint("hr jobs online enc-job-1")]),
+		(("hr", "jobs", "online", "enc-job-1"), [_hint("hr jobs list"), _hint("hr jobs offline enc-job-1")]),
 		(
 			("hr", "jobs", "detail", "enc-job-1"),
-			["boss hr jobs offline enc-job-1", "boss hr jobs online enc-job-1", "boss hr jobs list"],
+			[_hint("hr jobs offline enc-job-1"), _hint("hr jobs online enc-job-1"), _hint("hr jobs list")],
 		),
 	]
 	for args, expected in cases:
@@ -460,7 +468,7 @@ def test_recruiter_resume_exchange_supports_data_envelope(mock_auth_cls, mock_pl
 	parsed = json.loads(result.output)
 	assert parsed["data"]["exchangeStatus"] == "sent"
 	assert "联系方式交换请求已发送" == parsed["data"]["message"]
-	assert parsed["hints"]["next_actions"][0] == "boss hr applications"
+	assert parsed["hints"]["next_actions"][0] == _hint("hr applications")
 	mock_platform.exchange_request_by_friend.assert_called_once_with(1, exchange_type=1)
 
 
@@ -549,7 +557,7 @@ def test_recruiter_resume_parse_supports_data_envelope(mock_auth_cls, mock_platf
 	parsed = json.loads(result.output)
 	assert parsed["data"]["basic"]["name"] == "张三"
 	assert parsed["data"]["expectation"]["position"] == "后端工程师"
-	assert parsed["hints"]["next_actions"][0] == "boss hr applications"
+	assert parsed["hints"]["next_actions"][0] == _hint("hr applications")
 
 
 @patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
@@ -750,8 +758,8 @@ def test_recruiter_reply_rejects_blank_message(mock_auth_cls, mock_platform_cls)
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
-	assert parsed["hints"]["next_actions"] == ["boss hr chat"]
-	assert "boss hr chat" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [_hint("hr chat")]
+	assert _hint("hr chat") in parsed["error"]["recovery_action"]
 	mock_platform.send_message_by_friend.assert_not_called()
 
 
@@ -764,8 +772,8 @@ def test_recruiter_jobs_offline_rejects_blank_job_id(mock_auth_cls, mock_platfor
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
-	assert parsed["hints"]["next_actions"] == ["boss hr jobs list"]
-	assert "boss hr jobs list" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [_hint("hr jobs list")]
+	assert _hint("hr jobs list") in parsed["error"]["recovery_action"]
 	mock_platform.job_offline.assert_not_called()
 
 
@@ -777,8 +785,8 @@ def test_recruiter_jobs_online_rejects_blank_job_id(mock_auth_cls, mock_platform
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
-	assert parsed["hints"]["next_actions"] == ["boss hr jobs list"]
-	assert "boss hr jobs list" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [_hint("hr jobs list")]
+	assert _hint("hr jobs list") in parsed["error"]["recovery_action"]
 	mock_platform.job_online.assert_not_called()
 
 
@@ -790,8 +798,8 @@ def test_recruiter_jobs_detail_rejects_blank_enc_job_id(mock_auth_cls, mock_plat
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
-	assert parsed["hints"]["next_actions"] == ["boss hr jobs list"]
-	assert "boss hr jobs list" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [_hint("hr jobs list")]
+	assert _hint("hr jobs list") in parsed["error"]["recovery_action"]
 	mock_platform.job_detail.assert_not_called()
 
 
@@ -805,8 +813,8 @@ def test_recruiter_resume_exchange_without_friend_id_points_at_chat(mock_auth_cl
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert parsed["error"]["recoverable"] is False
-	assert parsed["hints"]["next_actions"] == ["boss hr chat"]
-	assert "boss hr chat" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [_hint("hr chat")]
+	assert _hint("hr chat") in parsed["error"]["recovery_action"]
 	mock_platform.exchange_request_by_friend.assert_not_called()
 
 
@@ -820,6 +828,6 @@ def test_recruiter_resume_without_ids_points_at_applications(mock_auth_cls, mock
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
 	assert parsed["error"]["recoverable"] is False
-	assert parsed["hints"]["next_actions"] == ["boss hr applications"]
-	assert "boss hr applications" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["next_actions"] == [_hint("hr applications")]
+	assert _hint("hr applications") in parsed["error"]["recovery_action"]
 	mock_platform.view_geek.assert_not_called()

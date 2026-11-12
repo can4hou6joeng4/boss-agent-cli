@@ -14,9 +14,9 @@ from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshF
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
+from boss_agent_cli.commands.recruiter._hints import hint_command
 from boss_agent_cli.display import (
 	RISK_ERROR_CONTRACTS,
-	boss_command_for_ctx,
 	handle_auth_errors,
 	handle_error_output,
 	handle_output,
@@ -49,7 +49,7 @@ def recommendations_cmd(ctx: click.Context, job_id: str, page: int) -> None:
 		data = platform.unwrap_data(result) or {}
 		pagination = list_pagination(data, page=page, rows=rows_from(data, "geekList"))
 		next_actions = [
-			boss_command_for_ctx(
+			hint_command(
 				ctx,
 				"hr greet --geek-id <geek_id> --job-id <id> --expect-id <id> --lid <id> "
 				"--security-id <id> --message <话术> --dry-run",
@@ -57,7 +57,7 @@ def recommendations_cmd(ctx: click.Context, job_id: str, page: int) -> None:
 		]
 		if pagination["has_more"] is True:
 			next_actions.append(
-				boss_command_for_ctx(
+				hint_command(
 					ctx,
 					f"hr recommendations --job-id {shell_argument(job_id)} --page {pagination['page'] + 1}",
 				)
@@ -74,7 +74,7 @@ def recommendations_cmd(ctx: click.Context, job_id: str, page: int) -> None:
 
 def _send_error(ctx: click.Context, *, code: str, job_id: str, details: dict[str, Any]) -> None:
 	"""保留发送状态并停止工作流，禁止把写失败解释为自动重发。"""
-	check = f"boss hr chat --job-id {shell_argument(job_id)}"
+	check = hint_command(ctx, f"hr chat --job-id {shell_argument(job_id)}")
 	message = "招呼已发送，但本地状态保存失败；停止后续建联" if details.get("sent") else "首次招呼未确认成功；停止发送并核对会话"
 	if code == "ALREADY_GREETED":
 		message = "该候选人在此职位下已发送过招呼，禁止重复发送"
@@ -137,7 +137,7 @@ def greet_cmd(
 		return
 	data: dict[str, Any] = {"geek_id": geek_id, "job_id": job_id, "sent": False}
 	if not message.strip():
-		rec_cmd = boss_command_for_ctx(ctx, f"hr recommendations --job-id {shell_argument(job_id)}")
+		rec_cmd = hint_command(ctx, f"hr recommendations --job-id {shell_argument(job_id)}")
 		handle_error_output(
 			ctx,
 			"recruiter-greet",
@@ -229,7 +229,7 @@ def greet_cmd(
 		handle_output(
 			ctx, "recruiter-greet", data,
 			hints={"next_actions": [
-				boss_command_for_ctx(ctx, "hr chat"),
-				boss_command_for_ctx(ctx, "hr last-messages"),
+				hint_command(ctx, "hr chat"),
+				hint_command(ctx, "hr last-messages"),
 			]},
 		)

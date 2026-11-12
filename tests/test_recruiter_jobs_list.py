@@ -1,6 +1,7 @@
 """hr jobs list reads the job-management page. All calls stay offline."""
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,6 +13,11 @@ from boss_agent_cli.main import cli
 from boss_agent_cli.schema.data import SCHEMA_DATA
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
+
+
+def _hint(command: str) -> str:
+	"""默认数据目录下的招聘者后继命令。"""
+	return f"boss --data-dir {(Path.home() / '.boss-agent').resolve()} {command}"
 
 
 def _management_page() -> dict:
@@ -123,7 +129,7 @@ def test_hr_jobs_list_reports_pagination_evidence(platform_has_more: object, exp
 	assert pagination["total_available"] == 1
 	next_pages = [action for action in payload["hints"]["next_actions"] if "hr jobs list --page" in action]
 	if expected is True:
-		assert next_pages == ["boss hr jobs list --page 3"]
+		assert next_pages == [_hint("hr jobs list --page 3")]
 		assert "operator_actions" not in payload["hints"]
 	else:
 		assert next_pages == []

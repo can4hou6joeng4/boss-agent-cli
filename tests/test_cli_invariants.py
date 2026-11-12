@@ -292,8 +292,11 @@ def test_next_actions_are_accepted_by_the_cli(tmp_path: Any) -> None:
 
 
 def _boss_command_argument_literals() -> list[tuple[str, int, str]]:
-	"""收集 ``boss_command_for_ctx(ctx, "...")`` 里能静态求值的子命令实参。"""
+	"""收集 ``boss_command_for_ctx`` / ``hint_command`` 包装里能静态求值的子命令实参。"""
 	import ast
+
+	# 迁移后各族改用文件内/共享包装，包装签名与 boss_command_for_ctx 一致（ctx, command）。
+	command_builders = {"boss_command_for_ctx", "hint_command", "_hint_command"}
 
 	def render(node: ast.AST) -> str | None:
 		if isinstance(node, ast.Constant) and isinstance(node.value, str):
@@ -317,7 +320,7 @@ def _boss_command_argument_literals() -> list[tuple[str, int, str]]:
 			if not (
 				isinstance(node, ast.Call)
 				and isinstance(node.func, ast.Name)
-				and node.func.id == "boss_command_for_ctx"
+				and node.func.id in command_builders
 				and len(node.args) >= 2
 			):
 				continue

@@ -11,8 +11,8 @@ from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.compliance import require_compliance_allowed
+from boss_agent_cli.commands.recruiter._hints import hint_command
 from boss_agent_cli.display import (
-	boss_command_for_ctx,
 	error_contract_for_code,
 	handle_auth_errors,
 	handle_error_output,
@@ -60,7 +60,7 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 		try:
 			result = platform.accept_resume_by_friend(friend_id, message_id)
 		except ResumeValidationError as exc:
-			chat_cmd = boss_command_for_ctx(ctx, "hr chat")
+			chat_cmd = hint_command(ctx, "hr chat")
 			handle_error_output(
 				ctx,
 				command,
@@ -172,6 +172,6 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 			ctx,
 			command,
 			{**data, "accepted": True},
-			hints={"next_actions": [boss_command_for_ctx(ctx, f"hr chatmsg {friend_id}")],
+			hints={"next_actions": [hint_command(ctx, f"hr chatmsg {friend_id}")],
 				"operator_actions": ["同意不代表附件已下载，可在该会话里查看后续附件消息"]},
 		)

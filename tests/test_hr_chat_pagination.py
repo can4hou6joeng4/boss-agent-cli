@@ -11,6 +11,7 @@
 
 import json
 import shlex
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -19,6 +20,11 @@ from click.testing import CliRunner
 from boss_agent_cli.display import error_contract_for_code
 from boss_agent_cli.main import cli
 from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION
+
+
+def _hint(command: str) -> str:
+	"""默认数据目录下的招聘者后继命令。"""
+	return f"boss --data-dir {(Path.home() / '.boss-agent').resolve()} {command}"
 
 
 def _ctx_mock(mock_cls):
@@ -93,7 +99,7 @@ def test_hr_chatmsg_pagination_evidence(payload, expected):
 	assert "page" not in parsed["pagination"]
 	next_cursors = [action for action in parsed["hints"]["next_actions"] if "--max-msg-id" in action]
 	if has_more is True and next_max_msg_id is not None:
-		assert next_cursors == [f"boss hr chatmsg 12345 --max-msg-id {next_max_msg_id} --count 20"]
+		assert next_cursors == [_hint(f"hr chatmsg 12345 --max-msg-id {next_max_msg_id} --count 20")]
 	else:
 		assert next_cursors == []
 	if has_more is None:
@@ -118,9 +124,9 @@ def test_hr_chatmsg_next_cursor_is_executable(tmp_path):
 		first = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "hr", "chatmsg", "12345", "--count", "7"])
 		assert first.exit_code == 0, first.output
 		actions = [action for action in json.loads(first.output)["hints"]["next_actions"] if "--max-msg-id" in action]
-		assert actions == ["boss hr chatmsg 12345 --max-msg-id 99 --count 7"]
+		assert actions == [f"boss --data-dir {tmp_path.resolve()} hr chatmsg 12345 --max-msg-id 99 --count 7"]
 
-		second = runner.invoke(cli, ["--data-dir", str(tmp_path), *shlex.split(actions[0])[1:]])
+		second = runner.invoke(cli, ["--json", *shlex.split(actions[0])[1:]])
 		assert second.exit_code == 0, second.output
 		parsed = json.loads(second.output)
 		assert parsed["pagination"]["has_more"] is False
