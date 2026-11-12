@@ -48,6 +48,10 @@ def prepare_render_data(
 			parts.append(f"消失 {removed_count} 条")
 		if new_unread_count:
 			parts.append(f"新消息 {new_unread_count} 条")
+		if diff_result.get("complete") is False:
+			# 部分页或筛选结果缺少“谁不在列表里”的证据，不能显示“无变化”
+			# 让读者以为已确认联系人仍在（Issue #911）。
+			parts.append("本次采集不完整，未判断消失")
 		diff_summary = {
 			"prev_date": prev_date,
 			"change": "，".join(parts) if parts else "无变化",

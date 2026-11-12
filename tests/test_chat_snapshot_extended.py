@@ -112,6 +112,27 @@ def test_diff_detects_removed_contacts(tmp_path):
 	assert len(result["added"]) == 0
 
 
+def test_incomplete_snapshot_does_not_claim_removed(tmp_path):
+	"""不完整采集缺少“不在列表里”的证据，不能把上次见过的联系人标成消失（Issue #911）。"""
+	snapshot_dir = str(tmp_path / "snapshots")
+	os.makedirs(snapshot_dir)
+
+	yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+	prev_data = _make_items(("张三", "sid_a", 0), ("李四", "sid_b", 0))
+	with open(os.path.join(snapshot_dir, f"{yesterday}.json"), "w", encoding="utf-8") as f:
+		json.dump(prev_data, f)
+
+	# 本次只看到张三，但采集不完整（例如第 1 页仍有下一页）
+	result = save_snapshot_and_diff(
+		snapshot_dir, _make_items(("张三", "sid_a", 0)), _make_logger(), complete=False
+	)
+
+	assert result["is_first"] is False
+	assert result["complete"] is False
+	assert result["removed"] == []
+	assert result["added"] == []
+
+
 # ── 4. 增量对比 — 检测新消息（未读增量） ──────────────────────────────
 
 def test_diff_detects_new_unread(tmp_path):

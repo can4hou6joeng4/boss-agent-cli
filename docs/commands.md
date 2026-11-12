@@ -163,6 +163,8 @@ boss crawl stop <run_id>
 
 `boss chat --page N` 返回 `pagination`：`page` 是本次请求页；`has_more` 只在平台返回布尔 `hasMore` 时取 `true` 或 `false`，缺失或类型不明确时为 `null`，`has_more_source` 相应为 `platform_hasMore` 或 `unknown`；`total` 是本页经 `--from` / `--days` 筛选后的条数，`total_kind=returned_page_count`，不代表平台上的会话总数。只有 `has_more=true` 时 `hints.next_actions` 才附加下一页命令并保留筛选参数；`has_more=null` 时 `hints.operator_actions` 说明不能仅凭本页条数判断是否还有记录。
 
+`boss chat --export <格式>` 同时保存当日 `chat-history/YYYY-MM-DD.json` 快照并与上次快照对比。快照记录本次平台页面返回的全部联系人，`--from` / `--days` 只筛选导出正文与变化摘要；`data.diff.removed` 仅在本次覆盖完整列表（第 1 页且平台明确 `hasMore=false`）时才可能非空，否则为空且 `complete=false`，Markdown / HTML 摘要注明“本次采集不完整，未判断消失”。同日多次导出按稳定 `uid`（旧数据回退 `security_id`）合并为并集。
+
 `boss chatmsg <uid> --page N` 与 `boss chat-summary <uid> --page N` 同样返回所读消息页的分页证据：`page` 优先使用平台返回的有效页码，否则回显请求页；`has_more` 仅在平台返回布尔 `hasMore` 时为 `true` / `false`，缺失或类型不明确时为 `null`（`has_more_source=unknown`）；`total` 是本页消息条数（`total_kind=returned_page_count`），不代表会话消息总数。仅 `has_more=true` 时附加下一页命令并保留本次 `--count`；`chatmsg --raw` 的翻页命令同时保留 `--raw`，下一页继续输出保真字段。`null` 时 `operator_actions` 说明不能凭本页数量判断。`messages` 缺失或类型不符时按 `historyMsgList` 回退，两者都不可用时按空列表处理、`total=0`。
 
 ## 流水线监控
