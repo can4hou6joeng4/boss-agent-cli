@@ -1020,3 +1020,49 @@ def test_interview_lead_csv_escapes_external_candidate_names(tmp_path: Path) -> 
 	assert rows[2][0] == "张三\n伪造行,周二 23:00,hacked"
 	assert rows[3][0] == "正常,候选人"
 	assert all(len(row) == 3 for row in rows)
+
+
+@pytest.mark.parametrize(
+	("text", "expected"),
+	[
+		("明天下午3点30面试", "明天下午3:30"),
+		("明天下午3点半有空", "明天下午3:30"),
+		("明天下午3点30分", "明天下午3:30"),
+		("明天下午3点05", "明天下午3:05"),
+		("周三上午9点半到公司", "周三上午9:30"),
+		("今天下午3点一刻", "今天下午3:15"),
+		("后天晚上7点三刻", "后天晚上7:45"),
+		("明天下午3:30", "明天下午3:30"),
+		("周二 14:00 面试", "周二 14:00"),
+		("明天10点", "明天10:00"),
+		("时间待定", ""),
+	],
+)
+def test_interview_time_parses_colloquial_minutes(text: str, expected: str) -> None:
+	"""口语分钟必须还原成合法 HH:MM（Issue #891）。
+
+	旧实现把「点」一律替换成 `:00`，于是「3点30」产出 `3:0030`、「3点半」
+	静默截成 `3:00`——操作者按 15:00 赴约而候选人说的是 15:30。
+	"""
+	from boss_agent_cli.automation.decision import _extract_interview_time
+
+	assert _extract_interview_time(text) == expected
+
+
+def test_interview_lead_records_colloquial_time_verbatim(tmp_path: Path) -> None:
+	"""会谈时间的口语形态要一路还原到 interview-leads.csv（Issue #891）。"""
+	from boss_agent_cli.automation.decision import _extract_interview_time
+
+	store = AutomationStore(tmp_path)
+	store.write_state({"conversations": {"面试候选人": {"exchange_contact_at": "2026-06-23T00:00:00"}}})
+	adapter = MockRecruiterAutomationPlatform(
+		"zhipin",
+		[_conversation("我在上海做过3年销售，大专，想看机会，明天下午3点30面试", "面试候选人")],
+	)
+	report = run_automation_cycle(adapter, store, AutomationConfig(), platform="zhipin", dry_run=False)
+
+	assert report.events[0].action == PlatformAction.CREATE_INTERVIEW_LEAD.value
+	csv_text = (tmp_path / "automation" / "interview-leads.csv").read_text(encoding="utf-8")
+	assert "明天下午3:30" in csv_text
+	assert "3:0030" not in csv_text
+	assert _extract_interview_time("明天下午3点半") == "明天下午3:30"

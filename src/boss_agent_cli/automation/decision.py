@@ -227,10 +227,39 @@ def _extract_years(text: str) -> float | None:
 	return float(match.group(1)) if match else None
 
 
+_INTERVIEW_DAY = r"(?:今天|明天|后天|周[一二三四五六日]|星期[一二三四五六日天])"
+_INTERVIEW_PERIOD = r"(?:上午|下午|晚上|中午)?"
+# H:MM / H：MM / H点MM / H点M / H点半 / H点一刻 / H点三刻
+_INTERVIEW_MINUTES = (
+	r"(?:(?P<colon>[：:])(?P<colon_minutes>\d{2})(?!\d)"
+	r"|点(?:(?P<ban>半)|(?P<quarter>[一三])刻|(?P<point_minutes>\d{1,2})分?)?)"
+)
+_INTERVIEW_TIME = re.compile(
+	r"(?P<prefix>" + _INTERVIEW_DAY + r"\s*" + _INTERVIEW_PERIOD + r"\s*\d{1,2})" + _INTERVIEW_MINUTES
+)
+
+
 def _extract_interview_time(text: str) -> str:
-	pattern = (
-		r"((今天|明天|后天|周[一二三四五六日]|星期[一二三四五六日天])"
-		r"\s*(上午|下午|晚上)?\s*\d{1,2}[:：点]\d{0,2})"
-	)
-	match = re.search(pattern, text)
-	return match.group(1).replace("：", ":").replace("点", ":00").strip() if match else ""
+	"""Extract one spoken-time expression as ``<day><period> H:MM``.
+
+	候选人说的是口语时间，可能是「3点30」「3点半」「3:30」「3点一刻」。旧实现
+	把「点」一律替换成 `:00`，于是「3点30」变成 `3:0030`、「3点半」静默截成
+	`3:00`——操作者会按 15:00 赴约而候选人说的是 15:30（Issue #891）。这里显式
+	解析每种分钟形态；识别不出时返回空串，调用方据此不生成面试线索。
+	"""
+	match = _INTERVIEW_TIME.search(text)
+	if match is None:
+		return ""
+	hour = match.group("prefix")
+	if match.group("colon"):
+		minutes = match.group("colon_minutes")
+	elif match.group("ban"):
+		minutes = "30"
+	elif match.group("quarter"):
+		minutes = "15" if match.group("quarter") == "一" else "45"
+	elif match.group("point_minutes"):
+		minutes = match.group("point_minutes").zfill(2)
+	else:
+		minutes = "00"
+	# 保留日期/时段原样（旧格式如「周二 14:00」继续带内部空格），仅去首尾空白。
+	return f"{hour.strip()}:{minutes}"
