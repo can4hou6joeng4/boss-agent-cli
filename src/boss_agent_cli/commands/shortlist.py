@@ -2,7 +2,12 @@ import click
 from typing import Any
 
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, render_simple_list
+from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, render_simple_list, shell_argument
+
+
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""候选池后继操作沿用存放该条目的数据目录。"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
 
 
 def _parse_tags(value: str) -> list[str]:
@@ -79,7 +84,7 @@ def shortlist_add_cmd(
 	# 会多出一行全空数据，提示里的 `boss shortlist remove ` 也没有可执行的参数。
 	# Agent 从搜索结果里取字段失败时最容易走到这里，必须在写盘前拒绝。
 	if not security_id.strip() or not job_id.strip():
-		search_cmd = boss_command_for_ctx(ctx, "search <关键词>")
+		search_cmd = _hint_command(ctx, "search <关键词>")
 		handle_error_output(
 			ctx,
 			"shortlist",
@@ -113,8 +118,8 @@ def shortlist_add_cmd(
 		{"action": "add", **stored},
 		hints={
 			"next_actions": [
-				boss_command_for_ctx(ctx, "shortlist list"),
-				boss_command_for_ctx(ctx, f"shortlist remove {security_id} {job_id}"),
+				_hint_command(ctx, "shortlist list"),
+				_hint_command(ctx, f"shortlist remove {shell_argument(security_id)} {shell_argument(job_id)}"),
 			]
 		},
 	)
@@ -143,9 +148,9 @@ def shortlist_list_cmd(ctx: click.Context) -> None:
 				("source", "source", "magenta"),
 			],
 		),
-		hints={"next_actions": [boss_command_for_ctx(ctx, "shortlist add <security_id> <job_id>")]
+		hints={"next_actions": [_hint_command(ctx, "shortlist add <security_id> <job_id>")]
 		if not items
-		else [boss_command_for_ctx(ctx, "detail <security_id> --job-id <job_id>")]},
+		else [_hint_command(ctx, "detail <security_id> --job-id <job_id>")]},
 	)
 
 
@@ -168,7 +173,7 @@ def shortlist_annotate_cmd(
 	# 空标识不可能命中候选池里的任何条目：继续查下去会报 SHORTLIST_ENTRY_NOT_FOUND
 	# 「候选池中没有该职位:  / 」，把 argv 少传参数说成「这条职位不在池子里」。
 	if not security_id.strip() or not job_id.strip():
-		list_cmd = boss_command_for_ctx(ctx, "shortlist list")
+		list_cmd = _hint_command(ctx, "shortlist list")
 		handle_error_output(
 			ctx,
 			"shortlist",
@@ -190,8 +195,8 @@ def shortlist_annotate_cmd(
 				message=f"候选池中没有该职位: {security_id} / {job_id}",
 				hints={
 					"next_actions": [
-						boss_command_for_ctx(ctx, f"shortlist add {security_id} {job_id}"),
-						boss_command_for_ctx(ctx, "shortlist list"),
+						_hint_command(ctx, f"shortlist add {shell_argument(security_id)} {shell_argument(job_id)}"),
+						_hint_command(ctx, "shortlist list"),
 					]
 				},
 			)
@@ -211,7 +216,7 @@ def shortlist_annotate_cmd(
 			"updated": True,
 			"item": current,
 		},
-		hints={"next_actions": [boss_command_for_ctx(ctx, "shortlist compare")]},
+		hints={"next_actions": [_hint_command(ctx, "shortlist compare")]},
 	)
 
 
@@ -232,13 +237,13 @@ def shortlist_compare_cmd(ctx: click.Context, tag: str | None) -> None:
 	# 过滤的比较。按池子是否为空分别给下一步。
 	if not compare_items and normalized_tag and pool:
 		next_actions = [
-			boss_command_for_ctx(ctx, "shortlist compare"),
-			boss_command_for_ctx(ctx, "shortlist list"),
+			_hint_command(ctx, "shortlist compare"),
+			_hint_command(ctx, "shortlist list"),
 		]
 	elif not compare_items:
-		next_actions = [boss_command_for_ctx(ctx, "shortlist add <security_id> <job_id>")]
+		next_actions = [_hint_command(ctx, "shortlist add <security_id> <job_id>")]
 	else:
-		next_actions = [boss_command_for_ctx(ctx, "shortlist annotate <security_id> <job_id>")]
+		next_actions = [_hint_command(ctx, "shortlist annotate <security_id> <job_id>")]
 	handle_output(
 		ctx,
 		"shortlist",
@@ -271,7 +276,7 @@ def shortlist_remove_cmd(ctx: click.Context, security_id: str, job_id: str) -> N
 	# watch remove / preset remove 早已拒绝空名字：同样的空标识在候选池里既不
 	# 会命中条目，又会返回 ok:true + removed:false，Agent 只看 ok 会以为删掉了。
 	if not security_id.strip() or not job_id.strip():
-		list_cmd = boss_command_for_ctx(ctx, "shortlist list")
+		list_cmd = _hint_command(ctx, "shortlist list")
 		handle_error_output(
 			ctx,
 			"shortlist",
@@ -287,5 +292,5 @@ def shortlist_remove_cmd(ctx: click.Context, security_id: str, job_id: str) -> N
 		ctx,
 		"shortlist",
 		{"action": "remove", "security_id": security_id, "job_id": job_id, "removed": removed},
-		hints={"next_actions": [boss_command_for_ctx(ctx, "shortlist list")]},
+		hints={"next_actions": [_hint_command(ctx, "shortlist list")]},
 	)
