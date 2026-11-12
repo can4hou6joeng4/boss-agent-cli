@@ -65,6 +65,17 @@ def watch_group() -> None:
 	"""保存搜索条件并执行增量监控。"""
 
 
+def _hint_command(ctx: click.Context, command: str) -> str:
+	"""watch 的后继命令必须保留原数据目录与平台。
+
+	watch 记录存放在 ``<data_dir>/cache/boss_agent.db``。用自定义 ``--data-dir``
+	时，硬编码的 ``boss watch ...`` 会让 Agent 在默认目录里查找、删除或重建
+	另一份记录：刚创建的 watch 立刻 ``SAVED_SEARCH_NOT_FOUND``，坏记录也永远
+	删不到（Issue #913）。
+	"""
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
 @watch_group.command("add")
 @click.argument("name")
 @click.argument("query")
@@ -96,7 +107,7 @@ def watch_add_cmd(
 	# 空字符串是合法 argv，但存下来的记录既没法点名（`boss watch run ` 缺参数），
 	# 也没法搜到目标（空关键词等于不筛选）。必须在写盘前拒绝。
 	if not name.strip() or not query.strip():
-		list_cmd = boss_command_for_ctx(ctx, "watch list")
+		list_cmd = _hint_command(ctx, "watch list")
 		handle_error_output(
 			ctx,
 			"watch",
@@ -122,13 +133,15 @@ def watch_add_cmd(
 	params, _ = _parse_watch_filters(query, city, salary, experience, education, industry, scale, stage, job_type, welfare)
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		cache.save_saved_search(name, params)
+	run_cmd = _hint_command(ctx, f"watch run {shell_argument(name)}")
+	list_cmd = _hint_command(ctx, "watch list")
 	handle_output(
 		ctx, "watch",
 		{"action": "add", "name": name, "params": params},
 		render=lambda d: render_action_result(
-			d, title="watch", next_steps=[f"boss watch run {shell_argument(name)}", "boss watch list"]
+			d, title="watch", next_steps=[run_cmd, list_cmd]
 		),
-		hints={"next_actions": [f"boss watch run {shell_argument(name)}", "boss watch list"]},
+		hints={"next_actions": [run_cmd, list_cmd]},
 	)
 
 
@@ -138,16 +151,17 @@ def watch_list_cmd(ctx: click.Context) -> None:
 	"""列出本地已保存的 watch，并提示下一步可执行命令。"""
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		items, corrupt = cache.list_saved_searches_with_corrupt()
+	add_cmd = _hint_command(ctx, "watch add <name> <关键词>")
+	run_cmd = _hint_command(ctx, "watch run <name>")
+	remove_cmd = _hint_command(ctx, "watch remove <name>")
 	hints: dict[str, Any] = {
 		# 空列表没有任何 name 可 run / remove：照抄只会换回一个不存在的 watch。
-		"next_actions": ["boss watch add <name> <关键词>"]
-		if not items
-		else ["boss watch run <name>", "boss watch remove <name>"]
+		"next_actions": [add_cmd] if not items else [run_cmd, remove_cmd]
 	}
 	if corrupt:
 		hints["corrupt"] = corrupt
 		hints["operator_actions"] = [
-			f"以下条目的参数已损坏，先执行 boss watch remove <名称> 再重新 watch add：{', '.join(corrupt)}"
+			f"以下条目的参数已损坏，先执行 {_hint_command(ctx, 'watch remove <名称>')} 再重新 watch add：{', '.join(corrupt)}"
 		]
 	handle_output(
 		ctx,
@@ -157,9 +171,7 @@ def watch_list_cmd(ctx: click.Context) -> None:
 			d,
 			"watches",
 			[("名称", "name", "bold cyan"), ("条件", "params", "green"), ("创建时间", "created_at", "dim")],
-			next_steps=["boss watch add <name> <关键词>"]
-			if not d
-			else ["boss watch run <name>", "boss watch remove <name>"],
+			next_steps=[add_cmd] if not d else [run_cmd, remove_cmd],
 		),
 		hints=hints,
 	)
@@ -173,7 +185,7 @@ def watch_remove_cmd(ctx: click.Context, name: str) -> None:
 	# 与 add / run 同口径：空名字不可能命中任何本地记录，却会以
 	# `{"removed": false}` 的 `ok: true` 报成功，Agent 会以为已经删掉了。
 	if not name.strip():
-		list_cmd = boss_command_for_ctx(ctx, "watch list")
+		list_cmd = _hint_command(ctx, "watch list")
 		handle_error_output(
 			ctx,
 			"watch",
@@ -189,8 +201,10 @@ def watch_remove_cmd(ctx: click.Context, name: str) -> None:
 		ctx,
 		"watch",
 		{"action": "remove", "name": name, "removed": removed},
-		render=lambda d: render_action_result(d, title="watch", next_steps=["boss watch list"]),
-		hints={"next_actions": ["boss watch list"]},
+		render=lambda d: render_action_result(
+			d, title="watch", next_steps=[_hint_command(ctx, "watch list")]
+		),
+		hints={"next_actions": [_hint_command(ctx, "watch list")]},
 	)
 
 
@@ -322,14 +336,17 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 			all_hints: dict[str, Any] = {
 				# 一个 watch 都没跑成时没有任何 security_id 可 detail：照抄只会换回一个
 				# 必然失败的编号，下一步应该是先建一个 watch。
-				"next_actions": ["boss watch add <name> <关键词>"]
+				"next_actions": [_hint_command(ctx, "watch add <name> <关键词>")]
 				if not watches
-				else ["boss watch list", "boss detail <security_id>"]
+				else [
+					_hint_command(ctx, "watch list"),
+					_hint_command(ctx, "detail <security_id>"),
+				]
 			}
 			if corrupt:
 				all_hints["corrupt"] = corrupt
 				all_hints["operator_actions"] = [
-					f"以下 watch 的参数已损坏、本次未执行，先执行 boss watch remove <名称> 再重新 watch add：{', '.join(corrupt)}"
+					f"以下 watch 的参数已损坏、本次未执行，先执行 {_hint_command(ctx, 'watch remove <名称>')} 再重新 watch add：{', '.join(corrupt)}"
 				]
 			handle_output(
 				ctx, "watch",
@@ -342,14 +359,14 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 			return
 
 		if not name:
-			list_cmd = boss_command_for_ctx(ctx, "watch list")
+			list_cmd = _hint_command(ctx, "watch list")
 			handle_error_output(
 				ctx, "watch",
 				code="INVALID_PARAM",
 				message="必须传入 watch 名或使用 --all",
 				recoverable=False,
 				recovery_action=f"用 {list_cmd} 查看已保存的 watch 后点名运行，或加 --all 运行全部",
-				hints={"next_actions": [list_cmd, boss_command_for_ctx(ctx, "watch run --all")]},
+				hints={"next_actions": [list_cmd, _hint_command(ctx, "watch run --all")]},
 			)
 			return
 
@@ -362,7 +379,10 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 				"watch",
 				code="SAVED_SEARCH_INVALID",
 				message=str(exc),
-				hints={"next_actions": [f"boss watch remove {shell_argument(name)}", f"boss watch add {shell_argument(name)} <关键词>"]},
+				hints={"next_actions": [
+					_hint_command(ctx, f"watch remove {shell_argument(name)}"),
+					_hint_command(ctx, f"watch add {shell_argument(name)} <关键词>"),
+				]},
 			)
 			return
 		except SearchPipelinePlatformError as exc:
@@ -383,12 +403,19 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 		if summary is None:
 			handle_error_output(
 				ctx, "watch", code="SAVED_SEARCH_NOT_FOUND", message=f"未找到 watch: {name}",
-				hints={"next_actions": ["boss watch list", f"boss watch add {shell_argument(name)} <关键词>"]},
+				recovery_action=f"用 {_hint_command(ctx, 'watch list')} 查看已保存的 watch 后重试",
+				hints={"next_actions": [
+					_hint_command(ctx, "watch list"),
+					_hint_command(ctx, f"watch add {shell_argument(name)} <关键词>"),
+				]},
 			)
 			return
 
 		handle_output(
 			ctx, "watch", summary,
 			render=_render_watch_run,
-			hints={"next_actions": ["boss detail <security_id>", "boss watch list"]},
+			hints={"next_actions": [
+				_hint_command(ctx, "detail <security_id>"),
+				_hint_command(ctx, "watch list"),
+			]},
 		)

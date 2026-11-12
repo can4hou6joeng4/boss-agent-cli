@@ -40,6 +40,11 @@ def _job(security_id: str, job_id: str, title: str = "Go 开发"):
 	}
 
 
+def _hinted_args(tmp_path, *parts: str) -> list[str]:
+	"""提示命令的期望 argv：保留当前数据目录后跟子命令。"""
+	return ["boss", "--data-dir", str(tmp_path.resolve()), *parts]
+
+
 def test_watch_add_list_remove(tmp_path):
 	runner = CliRunner()
 	result = runner.invoke(
@@ -56,6 +61,11 @@ def test_watch_add_list_remove(tmp_path):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is True
 	assert parsed["data"]["name"] == "golang-gz"
+	# 新增 watch 的下一步是「运行 / 列表」，必须仍定位到当前数据目录（Issue #913）。
+	assert [shlex.split(cmd) for cmd in parsed["hints"]["next_actions"]] == [
+		_hinted_args(tmp_path, "watch", "run", "golang-gz"),
+		_hinted_args(tmp_path, "watch", "list"),
+	]
 
 	list_result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "list"])
 	assert list_result.exit_code == 0
@@ -66,14 +76,14 @@ def test_watch_add_list_remove(tmp_path):
 	assert remove_result.exit_code == 0
 	remove_parsed = json.loads(remove_result.output)
 	assert remove_parsed["data"]["removed"] is True
-	# TTY 渲染给了「boss watch list」的下一步，信封必须同样给出。
-	assert remove_parsed["hints"]["next_actions"] == ["boss watch list"]
+	# TTY 渲染给了「watch list」的下一步，信封必须同样给出，并保留当前数据目录。
+	assert shlex.split(remove_parsed["hints"]["next_actions"][0]) == _hinted_args(tmp_path, "watch", "list")
 
 	missing_result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "remove", "nope"])
 	assert missing_result.exit_code == 0
 	missing_parsed = json.loads(missing_result.output)
 	assert missing_parsed["data"]["removed"] is False
-	assert missing_parsed["hints"]["next_actions"] == ["boss watch list"]
+	assert shlex.split(missing_parsed["hints"]["next_actions"][0]) == _hinted_args(tmp_path, "watch", "list")
 
 
 def test_watch_remove_rejects_blank_name(tmp_path):
@@ -86,8 +96,9 @@ def test_watch_remove_rejects_blank_name(tmp_path):
 		assert parsed["error"]["code"] == "INVALID_PARAM"
 		assert "名称不能为空" in parsed["error"]["message"]
 		# 空名字的恢复指引要能直接执行：空串既没有名字也查不到记录。
-		assert parsed["hints"]["next_actions"] == ["boss watch list"]
-		assert "boss watch list" in parsed["error"]["recovery_action"]
+		assert shlex.split(parsed["hints"]["next_actions"][0]) == _hinted_args(tmp_path, "watch", "list")
+		assert "watch list" in parsed["error"]["recovery_action"]
+		assert str(tmp_path.resolve()) in parsed["error"]["recovery_action"]
 
 
 def test_watch_run_blank_name_points_at_list_and_all(tmp_path):
@@ -97,7 +108,10 @@ def test_watch_run_blank_name_points_at_list_and_all(tmp_path):
 	assert result.exit_code == 1, result.output
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
-	assert parsed["hints"]["next_actions"] == ["boss watch list", "boss watch run --all"]
+	assert [shlex.split(cmd) for cmd in parsed["hints"]["next_actions"]] == [
+		_hinted_args(tmp_path, "watch", "list"),
+		_hinted_args(tmp_path, "watch", "run", "--all"),
+	]
 
 
 def test_watch_list_empty_next_step_is_executable(tmp_path, monkeypatch):
@@ -110,10 +124,14 @@ def test_watch_list_empty_next_step_is_executable(tmp_path, monkeypatch):
 	list_result = runner.invoke(cli, ["--data-dir", str(tmp_path), "watch", "list"])
 	assert list_result.exit_code == 0, list_result.output
 	steps = captured["steps"]
-	assert steps == ["boss watch add <name> <关键词>"]
+	assert shlex.split(steps[0]) == _hinted_args(tmp_path, "watch", "add", "<name>", "<关键词>")
 
-	hint_args = steps[0].replace("<name>", "hint-watch").replace("<关键词>", "golang").split(" ")[1:]
-	added = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", *hint_args])
+	# 提示命令自带 --data-dir：去掉可执行名直接交回 CLI，应命中同一个本地库。
+	hint_args = [
+		part.replace("<name>", "hint-watch").replace("<关键词>", "golang")
+		for part in shlex.split(steps[0])[1:]
+	]
+	added = runner.invoke(cli, ["--json", *hint_args])
 	assert added.exit_code == 0, added.output
 
 
@@ -444,7 +462,8 @@ def test_watch_list_reports_corrupt_params(tmp_path):
 	names = [item["name"] for item in parsed["data"]]
 	assert "good" in names and "broken" not in names
 	assert parsed["hints"]["corrupt"] == ["broken"]
-	assert "boss watch remove" in parsed["hints"]["operator_actions"][0]
+	assert "watch remove" in parsed["hints"]["operator_actions"][0]
+	assert str(tmp_path.resolve()) in parsed["hints"]["operator_actions"][0]
 
 
 def test_watch_run_corrupt_params_reports_envelope(tmp_path):
@@ -459,7 +478,9 @@ def test_watch_run_corrupt_params_reports_envelope(tmp_path):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "SAVED_SEARCH_INVALID"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["hints"]["next_actions"][0] == "boss watch remove broken"
+	assert shlex.split(parsed["hints"]["next_actions"][0]) == _hinted_args(
+		tmp_path, "watch", "remove", "broken"
+	)
 
 
 @patch("boss_agent_cli.commands.watch._execute_single_watch")
@@ -502,7 +523,9 @@ def test_watch_run_params_type_drift_reports_saved_search_invalid(tmp_path):
 	assert parsed["error"]["recoverable"] is True
 	assert "query" in parsed["error"]["message"]
 	assert "list" in parsed["error"]["message"]
-	assert parsed["hints"]["next_actions"][0] == "boss watch remove drifted"
+	assert shlex.split(parsed["hints"]["next_actions"][0]) == _hinted_args(
+		tmp_path, "watch", "remove", "drifted"
+	)
 
 
 def test_watch_run_missing_reports_saved_search_not_found(tmp_path):
@@ -512,8 +535,12 @@ def test_watch_run_missing_reports_saved_search_not_found(tmp_path):
 	assert result.exit_code == 1, result.output
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "SAVED_SEARCH_NOT_FOUND"
-	assert parsed["error"]["recovery_action"] == "boss preset list（预设）或 boss watch list（watch）"
-	assert parsed["hints"]["next_actions"] == ["boss watch list", "boss watch add ghost <关键词>"]
+	assert "watch list" in parsed["error"]["recovery_action"]
+	assert str(tmp_path.resolve()) in parsed["error"]["recovery_action"]
+	assert [shlex.split(cmd) for cmd in parsed["hints"]["next_actions"]] == [
+		_hinted_args(tmp_path, "watch", "list"),
+		_hinted_args(tmp_path, "watch", "add", "ghost", "<关键词>"),
+	]
 
 
 def test_watch_list_json_hints_follow_the_actual_list(tmp_path):
@@ -522,9 +549,14 @@ def test_watch_list_json_hints_follow_the_actual_list(tmp_path):
 
 	empty = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "list"]).output)
 	assert empty["data"] == []
-	assert empty["hints"]["next_actions"] == ["boss watch add <name> <关键词>"]
+	assert [shlex.split(cmd) for cmd in empty["hints"]["next_actions"]] == [
+		_hinted_args(tmp_path, "watch", "add", "<name>", "<关键词>"),
+	]
 
 	runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "add", "golang", "golang"])
 	filled = json.loads(runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "list"]).output)
 	assert [item["name"] for item in filled["data"]] == ["golang"]
-	assert filled["hints"]["next_actions"] == ["boss watch run <name>", "boss watch remove <name>"]
+	assert [shlex.split(cmd) for cmd in filled["hints"]["next_actions"]] == [
+		_hinted_args(tmp_path, "watch", "run", "<name>"),
+		_hinted_args(tmp_path, "watch", "remove", "<name>"),
+	]

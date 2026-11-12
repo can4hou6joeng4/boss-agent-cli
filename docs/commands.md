@@ -181,6 +181,8 @@ boss crawl stop <run_id>
 
 `boss pipeline` / `boss follow-up` / `boss digest` 都会翻完沟通列表，最多 50 页。达到该上限而平台仍声称有下一页时，结果只是前缀：`pipeline` / `follow-up` 在信封 `pagination` 给出 `pages_scanned` 与 `truncated`（`total` 仍按本次返回条数计，`total_kind=returned_page_count`）；`digest` 与 `wizard` 的 `pipeline` / `digest` 在 `data` 里给出 `chat_pages_scanned` 与 `truncated`。`truncated=true` 时计数只覆盖前 50 页，不能当作全量。
 
+`pipeline` / `follow-up` / `digest` 与 `watch` 的 `hints.next_actions`、TTY `next_steps` 以及嵌入命令的 `operator_actions` 都保留本次调用的 `--data-dir` 与平台。使用自定义数据目录时，`boss watch run <名称>`、`boss watch remove <名称>`、`boss follow-up` 等提示会命中同一份本地记录，而不是默认目录中的同名任务或空列表。
+
 `boss shortlist add <sid> <jid> --lid <lid>` 可保存与 `sid` 同一列表项的访问上下文，`list` / `compare` 会返回该值；crawl 和 favorites 导入也保留对应上下文，favorites 预览继续脱敏。`lid` 可省略，保存不代表其仍有效，不推断有效期或跨账号身份。
 
 `history` / `favorites list` 的 `pagination.has_more` 与 `recommend` / `chat` 同一口径：只有平台返回布尔 `hasMore` 时才是 `true` / `false`；缺失或类型不明确时为 `null`、`has_more_source=unknown`，不会默认成 `false`，也不提示下一页。`total` 始终是本页返回条数（`total_kind=returned_page_count`）。

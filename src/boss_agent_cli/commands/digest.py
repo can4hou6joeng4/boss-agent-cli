@@ -132,7 +132,7 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 				ctx,
 				"digest",
 				{"format": "md", "content": md_text, "bytes": len(md_text.encode("utf-8"))},
-				hints={"next_actions": [boss_command_for_ctx(ctx, "digest --format md -o <path>")],
+				hints={"next_actions": [boss_command_for_ctx(ctx, "digest --format md -o <path>", include_data_dir=True)],
 					"operator_actions": ["把 data.content 写成 .md 文件或直接发送"]},
 			)
 		else:
@@ -145,5 +145,9 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 		"digest",
 		data,
 		render=_render_digest,
-		hints={"next_actions": ["boss pipeline", "boss follow-up", "boss watch list"]},
+		hints={"next_actions": [
+			boss_command_for_ctx(ctx, "pipeline", include_data_dir=True),
+			boss_command_for_ctx(ctx, "follow-up", include_data_dir=True),
+			boss_command_for_ctx(ctx, "watch list", include_data_dir=True),
+		]},
 	)
