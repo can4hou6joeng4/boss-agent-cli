@@ -8,6 +8,7 @@
 - 扫码登录风险错误补充本地脱敏诊断（Issue #863）：`error.details.login_diagnostic` 记录失败阶段、页面检查或响应监听来源、白名单顶层路径和可用的页签数量；响应事件另附状态码、资源类型、导航标识与主/子框架归属。仅读取已有事件属性，未知信息省略或标记未知，不输出完整网址、查询参数、凭据或页面正文；风险判定、锁存、停止与窗口清理行为保持不变。
 
 ### Fixed
+- 浏览历史的后继提示保留数据目录（Issue #931）：`history` 的 `detail` / `apply` / `greet` 与下一页命令、终端表尾的 `more:` 提示此前都是裸 `boss ...`，使用自定义 `--data-dir` 时照抄会落到默认目录，轻则 `AUTH_REQUIRED`，重则读取另一个账号的浏览记录与缓存。现在这些提示统一携带按 shell 参数转义的绝对目录与平台。
 - 配置命令的后继与恢复提示保留数据目录，终端「下一步」按字面显示（Issue #929）：`config list` / `get` / `set` / `reset` 的 `hints.next_actions`、未知配置项与非法取值的 `INVALID_PARAM` 恢复提示此前都是裸 `boss config ...`，照抄会在默认目录读写另一份 `config.json`——原目录的坏值仍在，之后的命令继续在启动阶段失败。现在这些提示统一携带经过 shell 参数转义的绝对 `--data-dir` 与平台。补上目录后暴露了 `display.render_next_steps` 未做 Rich 转义：目录名含 `[bold]` 时标签被吞掉，含未配对的 `[/bold]` 时 `console.print` 抛 `MarkupError`，整段「下一步」提示都打不出来；现在命令文本按字面渲染。
 - 投递、招呼与个人记录的后继提示保留数据目录（Issue #927）：`apply` / `greet` 的成功、空编号恢复与重复操作指引，`batch-greet` 完成后的会话提示及记账失败后的核对命令，以及 `me` 的搜索、推荐与投递记录翻页命令，均保留原 `--data-dir` 与平台。重复操作的恢复正文同步带目录，避免照抄后读取默认目录的其他登录态；回归直接重放提示，不再在测试调用方手动补回目录。
 - 职位表的编号查看提示只在写入编号索引后出现（Issue #925）：终端职位表统一打印 `use: boss show <#> to view details`，但只有 `search` / `recommend` 会把本次结果写进编号索引。`history`、`watch run`、`batch-greet --dry-run` 与未指定 `-o` 的 `export` 照提示执行 `show 1` 时打开的是上一次搜索留下的职位（此前没有搜索过则报「没有缓存的搜索结果」），随后的 `apply` / `greet` 也会落到错误职位上。`render_job_table` 的编号提示改为可选，仅由已写入索引的调用方传入；`search`（含缓存命中）与 `recommend` 在索引写入失败时同样不再提示。

@@ -992,7 +992,8 @@ def test_history_pagination_reports_platform_evidence(mock_auth_cls, mock_client
 	assert pagination["total_kind"] == "returned_page_count"
 	next_pages = [action for action in parsed["hints"]["next_actions"] if "history --page" in action]
 	if expected is True:
-		assert next_pages == ["boss history --page 3"]
+		assert len(next_pages) == 1
+		assert next_pages[0].endswith("history --page 3")
 	else:
 		assert next_pages == []
 	if expected is None:
