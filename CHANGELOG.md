@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 扫码登录采到 User-Agent 后先复查安全页再导航首页（Issue #863）：headless 与 CDP 两条扫码路径在 `_safe_user_agent()` 之后直接调用首页预热，而 evaluate 会让页面继续处理排队中的响应，监听器可能刚好在此之前锁存了 `security.html` 风险——命中风控后仍自动发出一次首页导航请求，与「风控即停止、不继续自动化」的边界不符。现在两条路径都在采集后、预热前复查风险与安全页，命中即抛原风险。新增离线回归把页面 URL 造在 evaluate 之后才变成安全页，去掉复查即失败，断言登录页之后不再有第二次 `goto`。
+
 ## [3.3.0] - 2026-11-12
 
 ### Added

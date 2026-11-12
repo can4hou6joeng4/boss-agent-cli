@@ -417,6 +417,8 @@ def login_via_cdp(
 			# 容忍 UA 为空、不挂起。
 			page_ready = _ensure_page_evaluable(page)
 			ua = _safe_user_agent(page) if page_ready else ""
+			# evaluate 之后页面可能已跳到安全页：命中即停止，不再自动预热首页（Issue #863）。
+			_raise_if_security_page(page, is_cdp=True)
 			home_loaded = _warm_home_for_runtime(page, home_url, stage="登录后回到首页", is_cdp=True)
 		elif created_page:
 			# 复用登录态但无既有平台页签：新建页签回平台 home
@@ -625,6 +627,12 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 
 			# UA 在已加载的登录页上记录（此时 evaluate 安全）；之后再预热首页
 			user_agent = _safe_user_agent(page)
+
+			# UA 采集会让页面继续处理排队中的响应，监听器可能刚刚锁存安全页风险；
+			# 命中风控后不能再自动发出首页导航（Issue #863）。
+			if response_risk is not None:
+				raise response_risk
+			_raise_if_security_page(page)
 
 			# 跳转主站提取完整 cookies 和 stoken
 			home_loaded = _warm_home_for_runtime(page, home_url, stage="登录后回到首页")

@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -791,3 +791,67 @@ def test_login_via_cdp_reuse_probe_risk_propagates(mock_sleep, mock_probe_cdp):
 	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
 		with pytest.raises(EnvironmentRiskError):
 			login_via_cdp(timeout=1)
+
+
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_login_via_browser_stops_before_home_nav_when_page_turns_into_security_page(mock_sleep):
+	"""采 UA 时页面可能已经跳到安全页：命中即停止，不能再自动导航首页（Issue #863）。
+
+	URL 只在 evaluate 之后才变成安全页，前面的 _raise_if_security_page 都看到登录页，
+	只有 UA 采集后的复查能拦住——去掉这层复查就会多发出一次首页导航。
+	"""
+	security_url = "https://www.zhipin.com/web/passport/zp/security.html"
+	mock_page = MagicMock()
+	mock_page.goto.return_value = None
+	mock_page.wait_for_load_state.side_effect = Exception("Timeout 3000ms exceeded")
+	evaluated = {"done": False}
+	mock_page.evaluate.side_effect = lambda _script: (evaluated.update(done=True), "UA")[1]
+	type(mock_page).url = PropertyMock(side_effect=lambda: security_url if evaluated["done"] else LOGIN_PAGE_URL)
+
+	mock_context = MagicMock()
+	mock_context.new_page.return_value = mock_page
+	mock_context.cookies.return_value = [{"name": "wt2", "value": "token", "domain": ".zhipin.com"}]
+
+	mock_browser = MagicMock()
+	mock_browser.new_context.return_value = mock_context
+
+	from boss_agent_cli.api.client import AccountRiskError
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=_mock_playwright_context(mock_browser)):
+		with pytest.raises(AccountRiskError) as caught:
+			login_via_browser(timeout=2, platform="zhipin")
+
+	assert caught.value.details.get("risk_source") == "security_page"
+	assert caught.value.details.get("path") == "/web/passport/zp/security.html"
+	# 命中风控后不得再向首页发导航请求
+	assert mock_page.goto.call_count == 1
+	mock_page.goto.assert_called_once_with(LOGIN_PAGE_URL, wait_until="domcontentloaded", timeout=_NAV_TIMEOUT_MS)
+	mock_browser.close.assert_called_once()
+
+
+@patch("boss_agent_cli.auth.browser.probe_cdp", return_value="ws://localhost/devtools/browser")
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_login_via_cdp_stops_before_home_nav_when_page_turns_into_security_page(mock_sleep, mock_probe_cdp):
+	"""CDP 扫码路径同样在采 UA 后复查安全页：命中就不再预热首页（Issue #863）。"""
+	security_url = "https://www.zhipin.com/web/passport/zp/security.html"
+	mock_context = MagicMock()
+	mock_launcher, _mock_playwright, mock_page = _mock_cdp_playwright(mock_context)
+	mock_page.goto.return_value = None
+	evaluated = {"done": False}
+	mock_page.evaluate.side_effect = lambda _script: (evaluated.update(done=True), "UA")[1]
+	type(mock_page).url = PropertyMock(side_effect=lambda: security_url if evaluated["done"] else LOGIN_PAGE_URL)
+	# 首次读取（复用登录态探测）为空：走未登录扫码路径；轮询第一秒出现 wt2
+	mock_context.cookies.side_effect = [
+		[],
+		[{"name": "wt2", "value": "token", "domain": ".zhipin.com"}],
+	]
+
+	from boss_agent_cli.api.client import AccountRiskError
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=mock_launcher):
+		with pytest.raises(AccountRiskError) as caught:
+			login_via_cdp(timeout=2)
+
+	assert caught.value.details.get("risk_source") == "security_page"
+	# 登录页 commit 之后命中风控，不得再向首页发导航请求
+	mock_page.goto.assert_called_once_with(LOGIN_PAGE_URL, wait_until="commit", timeout=_NAV_TIMEOUT_MS)
