@@ -4215,10 +4215,15 @@ def test_runner_reports_browser_kernel_missing_without_retry(tmp_path):
 		)
 
 	with WorkflowStore(tmp_path) as store:
-		run = WorkflowRunner(store, {"broken": broken}).run(_plan("broken"), object(), run_id="kernel-run")
+		run = WorkflowRunner(store, {"broken": broken}).run(
+			_plan("broken"), SimpleNamespace(data_dir=tmp_path), run_id="kernel-run"
+		)
 	assert run["error"]["code"] == "BROWSER_KERNEL_MISSING"
 	assert run["error"]["recoverable"] is True
 	assert run["error"]["recovery_action"] == "patchright install chromium"
+	# doctor 指引必须指向本次运行的数据目录（同 Issue #978 的迁移）。
+	assert str((tmp_path / "doctor-marker")) not in run["error"]["details"]["doctor_command"]
+	assert run["error"]["details"]["doctor_command"] == f"boss --data-dir {tmp_path.resolve()} doctor"
 
 
 def test_runner_does_not_auto_retry_browser_kernel_missing(tmp_path):

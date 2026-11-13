@@ -6,6 +6,7 @@ import secrets
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.api.browser_client import BrowserNavigationError
@@ -64,7 +65,9 @@ class WorkflowActionError(Exception):
 		return result
 
 
-def _browser_kernel_missing_error(exc: Exception, plan: WorkflowPlan) -> WorkflowActionError:
+def _browser_kernel_missing_error(
+	exc: Exception, plan: WorkflowPlan, data_dir: Path | None
+) -> WorkflowActionError:
 	"""内核缺失的统一 workflow 错误：安装指引 + 本次运行的数据目录。
 
 	Playwright 报 ``Executable doesn't exist`` / ``Playwright was just installed``
@@ -72,9 +75,12 @@ def _browser_kernel_missing_error(exc: Exception, plan: WorkflowPlan) -> Workflo
 	重试与 Agent 的 ``--resume`` 都会复现同一结果，而且每次重试还会再起一个
 	浏览器进程。登录链路与命令层（``display.handle_browser_kernel_missing``）
 	已识别这条错误，runner 沿用同一份登记表契约与文案。
+
+	``doctor`` 诊断的是 ``<data_dir>`` 里的登录态与内核缓存，必须带上本次运行
+	的数据目录，否则自定义 --data-dir 下照抄提示会诊断另一份目录（同 Issue #978）。
 	"""
 	recoverable, recovery_action = error_contract_for_code("BROWSER_KERNEL_MISSING")
-	doctor = boss_command("doctor", platform_name=plan.platform, data_dir=None)
+	doctor = boss_command("doctor", platform_name=plan.platform, data_dir=data_dir)
 	cause = (str(exc) or type(exc).__name__).splitlines()[0][:300]
 	return WorkflowActionError(
 		"BROWSER_KERNEL_MISSING",
@@ -385,7 +391,7 @@ class WorkflowRunner:
 				# 套接字层的 ConnectionError / TimeoutError 仍是网络问题，保持可重试语义。
 				if is_browser_kernel_missing(str(exc)):
 					# Playwright 的「内核缺失」也是 OSError 子类：重试只会再起一个浏览器。
-					error = _browser_kernel_missing_error(exc, plan)
+					error = _browser_kernel_missing_error(exc, plan, data_dir)
 				elif is_local_io_error(exc):
 					io_recoverable, io_recovery = error_contract_for_code("LOCAL_IO_ERROR")
 					error = WorkflowActionError(
@@ -402,7 +408,7 @@ class WorkflowRunner:
 				# 内核缺失是确定性失败：同一条输入（含 --resume）永远复现，不能兜成
 				# NETWORK_ERROR +「重试当前 run_id」（Issue #1007）。
 				if is_browser_kernel_missing(str(exc)):
-					error = _browser_kernel_missing_error(exc, plan)
+					error = _browser_kernel_missing_error(exc, plan, data_dir)
 				else:
 					error = WorkflowActionError(
 						"NETWORK_ERROR", str(exc), recoverable=True, recovery_action="重试当前 run_id"
