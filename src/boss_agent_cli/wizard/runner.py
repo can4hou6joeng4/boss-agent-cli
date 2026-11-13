@@ -242,6 +242,17 @@ class WorkflowRunner:
 							raise
 						attempt += 1
 						control.raise_if_requested()
+						# 动作可能在失败前已保存内部任务绑定；自动重试也要读取最新断点，
+						# 否则 crawl_start 会另建任务并丢开原任务的进度与预算（Issue #972）。
+						persisted = self._store.get(run_id) or {}
+						checkpoint = next(
+							(step.get("result") for step in persisted.get("steps", []) if step["step_name"] == step_name),
+							None,
+						)
+						if checkpoint is None:
+							action_prior.pop(step_name, None)
+						else:
+							action_prior[step_name] = checkpoint
 						if on_event:
 							on_event("step_retrying", step_name, {"attempt": attempt, "code": exc.code})
 			except AuthRequired as exc:
