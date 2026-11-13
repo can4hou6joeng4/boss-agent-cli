@@ -247,3 +247,43 @@ def test_chat_failure_has_no_pagination(module, name, code, recoverable):
 	else:
 		assert parsed["error"]["recovery_action"] == error_contract_for_code(code)[1]
 	client.chat_history.assert_called_once_with("10001", "sid_current", page=1, count=20)
+
+
+# ── -o 参数错误在平台请求之前暴露 ─────────────────────────────────────
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_export_invalid_output_path_makes_no_platform_request(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	"""chat --export 的 `-o` 指向目录时应先报参数错误，不请求沟通列表。
+
+	此前要等拿到整份列表、写好 JSON 快照之后才由 ``prepare_output_path`` 抛出，
+	既白打一次平台、又留下一份与本次导出无关的快照。
+	"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_friend_item()])
+
+	result = CliRunner().invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "chat", "--export", "md", "-o", str(tmp_path)],
+	)
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert payload["error"]["recoverable"] is False
+	assert mock_client.friend_list.call_count == 0
+
+
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_without_export_ignores_output_path_check(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	"""没传 --export 时 `-o` 不生效，不能因此拒绝一次普通查看。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_friend_item()])
+
+	result = CliRunner().invoke(
+		cli, ["--data-dir", str(tmp_path), "--json", "chat", "-o", str(tmp_path)]
+	)
+
+	assert result.exit_code == 0, result.output

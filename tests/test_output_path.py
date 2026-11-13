@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from boss_agent_cli.services.output_path import prepare_output_path
+from boss_agent_cli.services.output_path import OutputPathProblem, inspect_output_path, prepare_output_path
 
 
 def test_expands_tilde(monkeypatch, tmp_path):
@@ -52,3 +52,52 @@ def test_parent_that_is_a_file_raises_oserror(tmp_path):
 
 	with pytest.raises(OSError):
 		prepare_output_path(blocker / "report.md")
+
+
+# ── inspect_output_path：无副作用的前置检查 ────────────────────────────
+
+
+@pytest.mark.parametrize(
+	"make, expected",
+	[
+		(lambda p: p, OutputPathProblem.IS_DIRECTORY),
+		# 已有文件本身不是目录：目标是那个文件时无问题，是它的子路径才是父路径问题。
+		(lambda p: p / "blocker" / "x.md", OutputPathProblem.PARENT_NOT_DIR),
+	],
+)
+def test_inspect_output_path_reports_problems(make, expected, tmp_path):
+	"""只回答问题、不建目录：`-o` 的问题必须在平台请求之前暴露。"""
+	blocker = tmp_path / "blocker"
+	blocker.write_text("not a directory", encoding="utf-8")
+
+	_, problem = inspect_output_path(make(tmp_path))
+
+	assert problem == expected
+
+
+def test_inspect_output_path_accepts_existing_file_target(tmp_path):
+	"""覆盖已有普通文件是允许的（调用方自行决定是否覆盖）。"""
+	existing = tmp_path / "report.md"
+	existing.write_text("old", encoding="utf-8")
+
+	_, problem = inspect_output_path(existing)
+
+	assert problem is None
+
+
+def test_inspect_output_path_does_not_create_directories(tmp_path):
+	"""(tmp_path)/deep/nested/x.md 的父目录在检查后仍不存在。"""
+	target_path = tmp_path / "deep" / "nested" / "x.md"
+
+	target, problem = inspect_output_path(target_path)
+
+	assert problem is None
+	assert target == target_path
+	assert not (tmp_path / "deep").exists()
+
+
+def test_inspect_output_path_accepts_writable_target(tmp_path):
+	target, problem = inspect_output_path(tmp_path / "report.md")
+
+	assert problem is None
+	assert target == tmp_path / "report.md"

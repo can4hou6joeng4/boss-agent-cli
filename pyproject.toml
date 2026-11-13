@@ -302,6 +302,7 @@ module = [
 	"boss_agent_cli.commands._login_errors",
 	"boss_agent_cli.commands._contact_lookup",
 	"boss_agent_cli.commands._filter_errors",
+	"boss_agent_cli.commands._output_path",
 	"boss_agent_cli.api.browser_urls",
 	"boss_agent_cli.api.cdp_risk_lock",
 	"boss_agent_cli.api.egress",

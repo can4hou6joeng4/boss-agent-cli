@@ -35,6 +35,7 @@ from boss_agent_cli.search_filters import (
 	resolve_search_code_params,
 )
 from boss_agent_cli.commands._filter_errors import emit_filter_error
+from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 
 _EXPORT_FILTER_PAGE_ALLOWANCE = 5
 _TRUNCATED_OPERATOR_ACTION = (
@@ -171,6 +172,14 @@ def export_cmd(
 		job_type=job_type,
 		raw_params=raw_params,
 	)
+
+	# 参数错误必须在第一次平台请求之前暴露：`-o` 指向目录时，抓完 5 页再报路径
+	# 错误既消耗请求预算、也可能触发风控，而真正该做的只是换个文件名。
+	if output:
+		validated = validate_output_path_or_emit(ctx, "export", output)
+		if validated is None:
+			return
+		output = validated
 
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 	with get_platform_instance(ctx, auth) as platform:
