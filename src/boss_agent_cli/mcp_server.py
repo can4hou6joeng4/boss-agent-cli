@@ -171,6 +171,16 @@ _TOOL_WRITE_MODES: dict[str, frozenset[str]] = {
 
 _WRITE_INTERRUPT_RECOVERY = "检查本地 checkpoint 与平台实际结果，再显式恢复；未确认的写操作不要直接重试"
 _READ_INTERRUPT_RECOVERY = "只读命令已中断，不产生平台写入；确认子进程已退出后可直接重新调用"
+#: 子进程没能启动：从未运行过，不可能有平台副作用。真正要处理的是安装 / 路径，
+#: 让 Agent 去核对 checkpoint 与平台结果只会把人引向不存在的现场（Issue #962）。
+_SPAWN_FAILURE_RECOVERY = (
+	"底层 boss CLI 未能启动，未产生任何平台操作；确认 boss-agent-cli 已安装且 boss 在 "
+	"MCP server 进程的 PATH 中，或用 boss-mcp --boss-bin 指定可执行文件路径后重新调用"
+)
+_READ_UNPARSEABLE_RECOVERY = (
+	"只读命令未返回 JSON 信封，不产生平台写入；按 error.message 排查，"
+	"升级 boss-agent-cli 后重新调用，仍出现时附上 error.message 提交 issue"
+)
 
 
 def _tool_may_write(tool_name: str, arguments: dict[str, Any] | None = None) -> bool:
@@ -223,7 +233,19 @@ def _cli_failure(
 	)
 
 
-def _parse_cli_output(args: tuple[str, ...], stdout: str, stderr: str) -> dict[str, Any]:
+def _spawn_failure(args: tuple[str, ...], exc: OSError) -> dict[str, Any]:
+	return _cli_failure(
+		args,
+		"CLI_ERROR",
+		f"无法启动底层 boss CLI：{exc}",
+		recovery_action=_SPAWN_FAILURE_RECOVERY,
+		outcome_unknown=False,
+	)
+
+
+def _parse_cli_output(
+	args: tuple[str, ...], stdout: str, stderr: str, *, may_write: bool = True,
+) -> dict[str, Any]:
 	try:
 		parsed = json.loads(stdout)
 	except json.JSONDecodeError:
@@ -231,8 +253,16 @@ def _parse_cli_output(args: tuple[str, ...], stdout: str, stderr: str) -> dict[s
 	if isinstance(parsed, dict):
 		return parsed
 	# CLI 契约保证 stdout 是 JSON 信封对象；拿到别的形状（解析失败或非对象）
-	# 一律按命令失败处理，而不是把非 dict 结果透传给调用方。
-	return _cli_failure(args, "CLI_ERROR", stderr or "命令执行失败")
+	# 一律按命令失败处理，而不是把非 dict 结果透传给调用方。进程已经运行过：
+	# 写工具的结果此时未知，与超时 / 取消同样标 outcome_unknown；只读工具没有
+	# 平台写入，不能套用「未确认的写操作不要直接重试」（Issue #962）。
+	return _cli_failure(
+		args,
+		"CLI_ERROR",
+		stderr or "命令执行失败",
+		recovery_action=_WRITE_INTERRUPT_RECOVERY if may_write else _READ_UNPARSEABLE_RECOVERY,
+		outcome_unknown=may_write,
+	)
 
 
 def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
@@ -255,8 +285,8 @@ def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
 			recovery_action=_WRITE_INTERRUPT_RECOVERY if may_write else _READ_INTERRUPT_RECOVERY,
 		)
 	except OSError as exc:
-		return _cli_failure(args, "CLI_ERROR", str(exc))
-	return _parse_cli_output(args, result.stdout, result.stderr)
+		return _spawn_failure(args, exc)
+	return _parse_cli_output(args, result.stdout, result.stderr, may_write=may_write)
 
 
 async def _stop_cli_process(
@@ -316,7 +346,7 @@ async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 	try:
 		process = await asyncio.shield(spawn)
 	except OSError as exc:
-		return _cli_failure(args, "CLI_ERROR", str(exc))
+		return _spawn_failure(args, exc)
 	except asyncio.CancelledError:
 		try:
 			process = await asyncio.shield(spawn)
@@ -351,7 +381,12 @@ async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 			recovery_action=_WRITE_INTERRUPT_RECOVERY if may_write else _READ_INTERRUPT_RECOVERY,
 			checkpoint_result=checkpoint_result if isinstance(checkpoint_result, dict) else None,
 		)
-	return _parse_cli_output(args, stdout.decode("utf-8", errors="replace"), stderr.decode("utf-8", errors="replace"))
+	return _parse_cli_output(
+		args,
+		stdout.decode("utf-8", errors="replace"),
+		stderr.decode("utf-8", errors="replace"),
+		may_write=may_write,
+	)
 
 
 # ── Handler 注册（mcp 2.x） ────────────────────────────────────────
