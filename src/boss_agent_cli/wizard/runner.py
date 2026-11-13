@@ -301,8 +301,15 @@ class WorkflowRunner:
 			except PlatformRiskError as exc:
 				# 风控：终止语义不能被下面的 NETWORK_ERROR 兜底反转成「重试当前 run_id」。
 				# checkpoint 照常落盘（下方 update_step/update_run），恢复只能由用户在
-				# 处理完账号/安全页后显式发起（Issue #419）。
-				recovery_action, _ = risk_error_contract(exc.code)
+				# 处理完账号/安全页后显式发起（Issue #419）。解锁命令必须指向本次
+				# workflow 的数据目录，否则 clean --risk-lock 会去默认目录空转（Issue #978）。
+				recovery_action, _ = risk_error_contract(
+					exc.code,
+					clean_command=boss_command(
+						"clean --risk-lock", platform_name=plan.platform, data_dir=data_dir
+					),
+					doctor_command=boss_command("doctor", platform_name=plan.platform, data_dir=data_dir),
+				)
 				error = WorkflowActionError(
 					exc.code,
 					risk_error_message(exc.code),

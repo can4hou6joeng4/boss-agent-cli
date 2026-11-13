@@ -48,7 +48,7 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 
 	if isinstance(exc, PlatformRiskError):
 		# 复用登录态的只读探测命中风控：与其他命令共用同一份终止契约，不建议重试登录。
-		recovery, hints = risk_error_contract(exc.code)
+		recovery, hints = risk_error_contract(exc.code, ctx=ctx)
 		return {
 			"code": exc.code,
 			# 风控信封不透传平台响应文本（可能带临时凭据），只给登记表文案。

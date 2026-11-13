@@ -104,7 +104,7 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 			# 风控异常是多子类结构：EnvironmentRiskError / EnvironmentRiskLockedError
 			# 与 AccountRiskError 平级。只捕账号风控会把环境风控漏进下面的兜底，
 			# 误报成「结果未知」，也不会给出停止自动化的指引。
-			_, recovery_action, risk_hints = platform_error_contract(exc.code)
+			_, recovery_action, risk_hints = platform_error_contract(exc.code, ctx=ctx)
 			hints: dict[str, Any] = dict(risk_hints or {})
 			hints["operator_actions"] = ["本次同意请求的结果未知或未发出；先在官方页面核对，不要自动重试"]
 			handle_error_output(
@@ -140,7 +140,7 @@ def accept_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, yes: 
 			code = code if code != "UNKNOWN" else "RESUME_ACCEPT_RESULT_UNKNOWN"
 			# 响应字典形态的风控码同样走停止契约；普通失败保留写操作的
 			# 「先核对、勿重试」指引，不能按可恢复错误处理。
-			_, recovery_action, risk_hints = platform_error_contract(code)
+			_, recovery_action, risk_hints = platform_error_contract(code, ctx=ctx)
 			if risk_hints is None:
 				recovery_action = "在官方页面核对请求状态，不要自动重试"
 			handle_error_output(

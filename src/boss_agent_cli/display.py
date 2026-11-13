@@ -123,15 +123,23 @@ def error_contract_for_code(
 	)
 
 
-def platform_error_contract(code: str) -> tuple[bool, str | None, dict[str, Any] | None]:
+def platform_error_contract(
+	code: str,
+	*,
+	ctx: Any = None,
+	clean_command: str | None = None,
+	doctor_command: str | None = None,
+) -> tuple[bool, str | None, dict[str, Any] | None]:
 	"""Return ``(recoverable, recovery_action, hints)`` for a platform error code.
 
 	风控码的恢复指引与 ``next_actions`` 一律以 ``RISK_ERROR_CONTRACTS`` 为准，
-	避免各命令手工拼装出互相矛盾的停止指令。
+	避免各命令手工拼装出互相矛盾的停止指令。有运行上下文的调用方传入 ``ctx``：
+	风险锁写在 ``<data_dir>/.cdp_risk_lock``，裸 ``boss clean --risk-lock`` 会去
+	默认目录解锁，自定义目录的锁原样保留且命令不报错（Issue #978）。
 	"""
 	recoverable, recovery_action = error_contract_for_code(code)
 	if code in RISK_ERROR_CONTRACTS:
-		recovery_action, hints = risk_error_contract(code)
+		recovery_action, hints = risk_error_contract(code, ctx=ctx, clean_command=clean_command, doctor_command=doctor_command)
 		return recoverable, recovery_action, hints
 	return recoverable, recovery_action, None
 
@@ -295,7 +303,7 @@ def handle_platform_error_output(
 	code, message = platform.parse_error(response)
 	if code == "UNKNOWN" and unknown_error_code is not None:
 		code = unknown_error_code
-	recoverable, recovery_action, risk_hints = platform_error_contract(code)
+	recoverable, recovery_action, risk_hints = platform_error_contract(code, ctx=ctx)
 	hints = {**(extra_hints or {}), **(risk_hints or {})} or None
 	details = None
 	if isinstance(response, dict):
@@ -763,13 +771,55 @@ RISK_ERROR_CONTRACTS: dict[str, dict[str, Any]] = {
 }
 
 
-def risk_error_contract(code: str) -> tuple[str, dict[str, list[str]]]:
-	"""Return ``(recovery_action, hints)`` for a platform risk error code."""
+#: 契约文案里的注释性命令（默认示例）。有运行上下文时由调用方替换成带
+#: ``--data-dir`` 的真实命令：风险锁写在 ``<data_dir>/.cdp_risk_lock``。
+_RISK_CONTRACT_CLEAN = "boss clean --risk-lock"
+_RISK_CONTRACT_DOCTOR = "boss doctor"
+
+
+def _risk_contract_commands(
+	text: str,
+	clean_command: str | None,
+	doctor_command: str | None,
+) -> str:
+	"""把契约文本里的默认示例替换成调用方上下文中的命令（Issue #978）。"""
+	if clean_command:
+		text = text.replace(_RISK_CONTRACT_CLEAN, clean_command)
+	if doctor_command:
+		text = text.replace(_RISK_CONTRACT_DOCTOR, doctor_command)
+	return text
+
+
+def risk_error_contract(
+	code: str,
+	*,
+	ctx: Any = None,
+	clean_command: str | None = None,
+	doctor_command: str | None = None,
+) -> tuple[str, dict[str, list[str]]]:
+	"""Return ``(recovery_action, hints)`` for a platform risk error code.
+
+	有 ``ctx`` 的调用方得到带 ``--data-dir`` 与平台的 ``clean --risk-lock`` /
+	``doctor``；无上下文的纯函数调用与静态文档保持登记表的通用示例。
+	"""
 	spec = RISK_ERROR_CONTRACTS.get(code)
 	if spec is None:
 		_, recovery = error_contract_for_code(code, fallback_recovery_action="停止自动化访问")
 		return recovery or "停止自动化访问", {}
-	return str(spec["recovery_action"]), {"next_actions": list(spec["next_actions"])}
+	if ctx is not None:
+		if clean_command is None:
+			clean_command = boss_command_for_ctx(ctx, "clean --risk-lock", include_data_dir=True)
+		if doctor_command is None:
+			doctor_command = boss_command_for_ctx(ctx, "doctor", include_data_dir=True)
+	return (
+		_risk_contract_commands(str(spec["recovery_action"]), clean_command, doctor_command),
+		{
+			"next_actions": [
+				_risk_contract_commands(str(item), clean_command, doctor_command)
+				for item in spec["next_actions"]
+			]
+		},
+	)
 
 
 def httpx_only_fallback_hint(ctx: Any) -> list[str]:
@@ -908,7 +958,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					hints=auth_required_hints(ctx),
 				)
 			except PlatformRiskError as e:
-				recovery_action, hints = risk_error_contract(e.code)
+				recovery_action, hints = risk_error_contract(e.code, ctx=ctx)
 				handle_error_output(
 					ctx,
 					command_name,

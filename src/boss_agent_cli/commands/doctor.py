@@ -10,7 +10,7 @@ import httpx
 
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL
-from boss_agent_cli.api.cdp_risk_lock import UNLOCK_OPERATOR_ACTIONS
+from boss_agent_cli.api.cdp_risk_lock import unlock_operator_actions
 from boss_agent_cli.api.request_budget import risk_lock_status as lock_status
 from boss_agent_cli.auth.browser import probe_cdp
 from boss_agent_cli.auth.cookie_extract import extract_cookies
@@ -36,8 +36,12 @@ from boss_agent_cli.services.browser_runtime import (
 _RISK_FREE_DELAY_FLOOR = 30.0
 
 
-def _risk_lock_check_payload(risk_lock: dict[str, Any]) -> dict[str, Any]:
-	"""本地风险锁的检查项；初次读取和探测命中后的复读共用同一份文案。"""
+def _risk_lock_check_payload(risk_lock: dict[str, Any], *, clean_command: str = "boss clean --risk-lock") -> dict[str, Any]:
+	"""本地风险锁的检查项；初次读取和探测命中后的复读共用同一份文案。
+
+	``clean_command`` 由调用方按当前数据目录构造：锁文件在 ``<data_dir>`` 下，
+	裸命令只会去默认目录解锁（Issue #978）。
+	"""
 	since = risk_lock.get("locked_at", "未知时间")
 	if risk_lock.get("corrupt"):
 		detail = "BOSS 本地风控锁文件无法解析，所有平台请求会在本地被拒绝"
@@ -47,7 +51,7 @@ def _risk_lock_check_payload(risk_lock: dict[str, Any]) -> dict[str, Any]:
 		"name": "cdp_risk_lock",
 		"status": "warn",
 		"detail": detail,
-		"hint": "在原会话的 BOSS 官方目标业务页确认风险解除后，由用户运行 boss clean --risk-lock 再显式恢复任务；"
+		"hint": f"在原会话的 BOSS 官方目标业务页确认风险解除后，由用户运行 {clean_command} 再显式恢复任务；"
 		"令牌变化不会自动解锁，本地清理不解除服务器风险",
 	}
 
@@ -229,8 +233,10 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 
 	# 4.5) BOSS 本地风险锁（沿用历史字段，只读本地文件）
 	risk_lock = lock_status(Path(data_dir)) if platform_name == "zhipin" else {"locked": False}
+	# 锁文件在本次 --data-dir 下：检查项的解锁命令必须同目录。
+	clean_lock_command = boss_command_for_ctx(ctx, "clean --risk-lock", include_data_dir=True)
 	if risk_lock["locked"]:
-		checks.append(_risk_lock_check_payload(risk_lock))
+		checks.append(_risk_lock_check_payload(risk_lock, clean_command=clean_lock_command))
 	else:
 		add_check("cdp_risk_lock", "ok", "未记录 BOSS 本地风控锁")
 
@@ -272,7 +278,7 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 			fresh_lock = lock_status(Path(data_dir)) if platform_name == "zhipin" else {"locked": False}
 			if fresh_lock.get("locked"):
 				risk_lock = fresh_lock
-				updated = _risk_lock_check_payload(fresh_lock)
+				updated = _risk_lock_check_payload(fresh_lock, clean_command=clean_lock_command)
 				for index, item in enumerate(checks):
 					if item["name"] == "cdp_risk_lock":
 						checks[index] = updated
@@ -316,11 +322,11 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 		operator_actions.append("如需 CDP，请先确认目标浏览器及调试端口已就绪，再重新诊断；不要反复重试")
 	if live_probe_risk is not None:
 		# 风控命中后不再建议任何会触发平台请求的后续动作，停止指引以统一契约为准。
-		_, recovery_action, risk_hints = platform_error_contract(live_probe_risk)
+		_, recovery_action, risk_hints = platform_error_contract(live_probe_risk, ctx=ctx)
 		next_actions.extend((risk_hints or {}).get("next_actions") or [])
 		operator_actions.append(f"在线只读探测命中平台风控（{live_probe_risk}）：{recovery_action}")
 	if risk_lock["locked"]:
-		operator_actions.extend(UNLOCK_OPERATOR_ACTIONS)
+		operator_actions.extend(unlock_operator_actions(clean_lock_command))
 	if not any(item["name"] == "cookie_extract" and item["status"] == "ok" for item in checks):
 		operator_actions.append(f"需要提取本地登录态时，先在本机浏览器的 {config.site_host} 官方页面完成登录")
 	if source_root is not None:

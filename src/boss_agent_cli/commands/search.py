@@ -551,7 +551,7 @@ def search_cmd(
 			except SearchPipelinePlatformError as exc:
 				# 风控码必须走风险契约：不可恢复、不提示重试；登录过期等
 				# 可恢复错误按登记表给出 recovery_action，而不是一律 false。
-				recoverable, recovery_action, error_hints = platform_error_contract(exc.code)
+				recoverable, recovery_action, error_hints = platform_error_contract(exc.code, ctx=ctx)
 				handle_error_output(
 					ctx, "search",
 					code=exc.code,

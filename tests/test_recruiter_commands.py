@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from boss_agent_cli.display import risk_error_message
+from boss_agent_cli.display import risk_error_contract, risk_error_message
 from boss_agent_cli.main import cli
 from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
 from boss_agent_cli.schema.error_codes import ERROR_CODES
@@ -33,6 +33,15 @@ def _ctx_mock(mock_cls):
 def _invoke(*args):
 	runner = CliRunner()
 	return runner.invoke(cli, ["--role", "recruiter", *args])
+
+
+def _risk_recovery_for_default_dir(code: str) -> str:
+	"""风控停止契约的 recovery_action，解锁命令指向默认数据目录（Issue #978）。"""
+	return risk_error_contract(
+		code,
+		clean_command=f"boss --data-dir {_DEFAULT_DATA_DIR} clean --risk-lock",
+		doctor_command=f"boss --data-dir {_DEFAULT_DATA_DIR} doctor",
+	)[0]
 
 
 def _assert_error_contract(parsed: dict, *, code: str, message: str, recoverable: bool, recovery_action: str | list[str] | None) -> None:
@@ -330,7 +339,7 @@ def test_recruiter_applications_reports_error_when_platform_rejects(mock_auth_cl
 		code="ACCOUNT_RISK",
 		message=risk_error_message("ACCOUNT_RISK"),
 		recoverable=False,
-		recovery_action="停止自动化访问，回到平台官网手动处理；确认目标业务页风险解除后，由用户执行 boss clean --risk-lock 并显式恢复任务，必要时联系客服",
+		recovery_action=_risk_recovery_for_default_dir("ACCOUNT_RISK"),
 	)
 
 
@@ -632,7 +641,7 @@ def test_recruiter_request_resume_reports_error_when_platform_rejects(mock_auth_
 		code="ACCOUNT_RISK",
 		message=risk_error_message("ACCOUNT_RISK"),
 		recoverable=False,
-		recovery_action="停止自动化访问，回到平台官网手动处理；确认目标业务页风险解除后，由用户执行 boss clean --risk-lock 并显式恢复任务，必要时联系客服",
+		recovery_action=_risk_recovery_for_default_dir("ACCOUNT_RISK"),
 	)
 
 

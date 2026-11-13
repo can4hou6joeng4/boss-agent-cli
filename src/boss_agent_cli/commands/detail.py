@@ -91,7 +91,7 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 
 	if result is None:
 		if last_error:
-			recoverable, recovery_action, hints = platform_error_contract(last_error[0])
+			recoverable, recovery_action, hints = platform_error_contract(last_error[0], ctx=ctx)
 			handle_error_output(
 				ctx, "detail",
 				code=last_error[0],

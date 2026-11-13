@@ -458,7 +458,9 @@ def test_doctor_reports_lock_without_network(tmp_path):
 	parsed = _doctor(tmp_path)
 	check = next(c for c in parsed["data"]["checks"] if c["name"] == "cdp_risk_lock")
 	assert check["status"] == "warn"
-	assert "boss clean --risk-lock" in check["hint"]
+	# 解锁命令必须指向本次诊断的数据目录（Issue #978）。
+	assert f"boss --data-dir {tmp_path.resolve()} clean --risk-lock" in check["hint"]
+	assert "boss clean --risk-lock；" not in check["hint"]
 	assert parsed["data"]["cdp_risk_lock"]["locked"] is True
 	assert RAW_STOKEN not in json.dumps(parsed, ensure_ascii=False)
 	assert any("职位列表页" in step for step in parsed["hints"]["operator_actions"])

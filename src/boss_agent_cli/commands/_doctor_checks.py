@@ -103,9 +103,12 @@ def _add_quality_baseline_checks(checks: list[dict[str, Any]]) -> Path | None:
 	return root if baseline.is_file() else None
 
 
-def _live_probe_risk_check(name: str, code: str) -> dict[str, Any]:
-	"""在线探测命中风控时的检查项：文案取自登记表，不透传异常或平台响应文本。"""
-	_, recovery_action, _ = platform_error_contract(code)
+def _live_probe_risk_check(name: str, code: str, *, ctx: Any = None) -> dict[str, Any]:
+	"""在线探测命中风控时的检查项：文案取自登记表，不透传异常或平台响应文本。
+
+	``ctx`` 让解锁命令定位到本次诊断的数据目录（Issue #978）。
+	"""
+	_, recovery_action, _ = platform_error_contract(code, ctx=ctx)
 	return {
 		"name": name,
 		"status": "warn",
@@ -146,7 +149,7 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 			else:
 				code, message = platform.parse_error(info)
 				if code in RISK_ERROR_CONTRACTS:
-					checks.append(_live_probe_risk_check("candidate_live_user_info", code))
+					checks.append(_live_probe_risk_check("candidate_live_user_info", code, ctx=ctx))
 					checks.append(_live_probe_skipped_check("recruiter_live_read", code))
 					return code
 				checks.append(
@@ -160,7 +163,7 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 	except PlatformRiskError as exc:
 		# 漏掉这个分支时，风控异常会被通用兜底吞成“探测异常”并带出平台文案，
 		# 而且探测会继续请求招聘者接口——等于命中风控后再发一次请求。
-		checks.append(_live_probe_risk_check("candidate_live_user_info", exc.code))
+		checks.append(_live_probe_risk_check("candidate_live_user_info", exc.code, ctx=ctx))
 		checks.append(_live_probe_skipped_check("recruiter_live_read", exc.code))
 		return exc.code
 	except Exception as exc:
@@ -198,7 +201,7 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 			else:
 				code, message = recruiter.parse_error(result)
 				if code in RISK_ERROR_CONTRACTS:
-					checks.append(_live_probe_risk_check("recruiter_live_read", code))
+					checks.append(_live_probe_risk_check("recruiter_live_read", code, ctx=ctx))
 					return code
 				checks.append(
 					{
@@ -209,7 +212,7 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 					}
 				)
 	except PlatformRiskError as exc:
-		checks.append(_live_probe_risk_check("recruiter_live_read", exc.code))
+		checks.append(_live_probe_risk_check("recruiter_live_read", exc.code, ctx=ctx))
 		return exc.code
 	except Exception as exc:
 		checks.append(

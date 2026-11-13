@@ -12,7 +12,7 @@ from click.testing import CliRunner
 from rich.console import Console
 from boss_agent_cli.api import cdp_risk_lock
 from boss_agent_cli.api.client import AccountRiskError, EnvironmentRiskError
-from boss_agent_cli.display import error_contract_for_code
+from boss_agent_cli.display import risk_error_contract
 from boss_agent_cli.main import cli
 
 
@@ -762,7 +762,11 @@ def test_doctor_live_probe_stops_after_candidate_risk(tmp_path):
 	check = _find_check(parsed["data"]["checks"], "candidate_live_user_info")
 	assert check["status"] == "warn"
 	assert "ENVIRONMENT_RISK" in check["detail"]
-	assert check["recovery_action"] == error_contract_for_code("ENVIRONMENT_RISK")[1]
+	assert check["recovery_action"] == risk_error_contract(
+		"ENVIRONMENT_RISK",
+		clean_command=f"boss --data-dir {tmp_path.resolve()} clean --risk-lock",
+		doctor_command=f"boss --data-dir {tmp_path.resolve()} doctor",
+	)[0]
 	assert "secret-risk-text" not in output
 
 	skipped = _find_check(parsed["data"]["checks"], "recruiter_live_read")
@@ -773,6 +777,13 @@ def test_doctor_live_probe_stops_after_candidate_risk(tmp_path):
 	next_actions = parsed["hints"]["next_actions"]
 	assert not any("--live" in action for action in next_actions)
 	assert any("不要刷新 Token" in action for action in next_actions)
+	# ENVIRONMENT_RISK 的解锁命令在 recovery_action 里：必须指向本次诊断的数据目录（Issue #978）。
+	assert f"boss --data-dir {tmp_path.resolve()} clean --risk-lock" in parsed["data"]["checks"][0].get(
+		"recovery_action", ""
+	) or any(
+		f"boss --data-dir {tmp_path.resolve()} clean --risk-lock" in str(item.get("recovery_action") or "")
+		for item in parsed["data"]["checks"]
+	)
 	assert any("在线只读探测命中平台风控" in action for action in parsed["hints"]["operator_actions"])
 
 
@@ -786,7 +797,11 @@ def test_doctor_live_probe_stops_after_recruiter_risk(tmp_path):
 	check = _find_check(parsed["data"]["checks"], "recruiter_live_read")
 	assert check["status"] == "warn"
 	assert "ACCOUNT_RISK" in check["detail"]
-	assert check["recovery_action"] == error_contract_for_code("ACCOUNT_RISK")[1]
+	assert check["recovery_action"] == risk_error_contract(
+		"ACCOUNT_RISK",
+		clean_command=f"boss --data-dir {tmp_path.resolve()} clean --risk-lock",
+		doctor_command=f"boss --data-dir {tmp_path.resolve()} doctor",
+	)[0]
 	assert "secret-account-text" not in output
 	assert parsed["data"]["live_probe_risk"] == "ACCOUNT_RISK"
 	assert any("不要通过 CDP" in action for action in parsed["hints"]["next_actions"])
@@ -825,7 +840,8 @@ def test_doctor_live_probe_refreshes_risk_lock_after_risk(tmp_path):
 	lock_check = _find_check(parsed["data"]["checks"], "cdp_risk_lock")
 	assert lock_check["status"] == "warn"
 	assert "ENVIRONMENT_RISK" in lock_check["detail"]
-	assert any("boss clean --risk-lock" in action for action in parsed["hints"]["operator_actions"])
+	clean_action = next(action for action in parsed["hints"]["operator_actions"] if "clean --risk-lock" in action)
+	assert f"boss --data-dir {tmp_path.resolve()} clean --risk-lock" in clean_action
 
 
 def test_cookie_completeness_missing_zp_at(tmp_path):

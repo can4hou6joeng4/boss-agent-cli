@@ -445,7 +445,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 				# 停批原因是风控时信封必须是 ok:false + 对应错误码 + recoverable=false，
 				# 而不是 ok:true + stopped_reason——后者会让 Agent 当成「等一会儿重试」。
 				# 已成功的部分随 details 带回，避免 Agent 对同一批候选人重复打招呼。
-				recovery_action, hints = risk_error_contract(risk_error.code)
+				recovery_action, hints = risk_error_contract(risk_error.code, ctx=ctx)
 				handle_error_output(
 					ctx, "batch-greet",
 					code=risk_error.code,
