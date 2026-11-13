@@ -7,10 +7,20 @@ from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
 import pytest
 
-from boss_agent_cli.display import error_contract_for_code, risk_error_message
+from boss_agent_cli.display import error_contract_for_code, risk_error_contract, risk_error_message
 from boss_agent_cli.main import cli
 
 _DEFAULT_DATA_DIR = str((Path.home() / ".boss-agent").resolve())
+
+
+def _risk_recovery_for_default_dir(code: str) -> str:
+	"""风控停止契约的 recovery_action，解锁命令指向默认数据目录（Issue #978）。"""
+	return risk_error_contract(
+		code,
+		clean_command=f"boss --data-dir {_DEFAULT_DATA_DIR} clean --risk-lock",
+		doctor_command=f"boss --data-dir {_DEFAULT_DATA_DIR} doctor",
+	)[0]
+
 
 
 def _ctx_mock(mock_cls):
@@ -271,7 +281,7 @@ def test_mark_reports_error_when_platform_rejects(mock_auth_cls, mock_client_cls
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
 	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
 	assert parsed["error"]["recoverable"] is False
-	assert parsed["error"]["recovery_action"] == "停止自动化访问，回到平台官网手动处理；确认目标业务页风险解除后，由用户执行 boss clean --risk-lock 并显式恢复任务，必要时联系客服"
+	assert parsed["error"]["recovery_action"] == _risk_recovery_for_default_dir("ACCOUNT_RISK")
 
 
 @patch("boss_agent_cli.commands.mark.get_platform_instance")
@@ -448,7 +458,7 @@ def test_exchange_reports_friend_list_error(mock_auth_cls, mock_client_cls):
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
 	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
 	assert parsed["error"]["recoverable"] is False
-	assert parsed["error"]["recovery_action"] == "停止自动化访问，回到平台官网手动处理；确认目标业务页风险解除后，由用户执行 boss clean --risk-lock 并显式恢复任务，必要时联系客服"
+	assert parsed["error"]["recovery_action"] == _risk_recovery_for_default_dir("ACCOUNT_RISK")
 
 
 @patch("boss_agent_cli.commands.exchange.get_platform_instance")
@@ -765,6 +775,9 @@ def test_me_deliver_failure_has_no_pagination(mock_auth_cls, mock_client_cls, tm
 		assert shlex.split(parsed["error"]["recovery_action"]) == [
 			"boss", "--data-dir", str(tmp_path.resolve()), "login",
 		]
+	elif code in {"ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_LOCKED"}:
+		# 风控解锁命令定位运行目录（Issue #978）。
+		assert f"boss --data-dir {tmp_path.resolve()} clean --risk-lock" in parsed["error"]["recovery_action"]
 	else:
 		assert parsed["error"]["recovery_action"] == error_contract_for_code(code)[1]
 	mock_client.deliver_list.assert_called_once_with(page=1)
@@ -826,7 +839,12 @@ def test_me_risk_uses_stop_contract(mock_auth_cls, mock_client_cls, error_cls, c
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == code
 	assert parsed["error"]["recoverable"] is False
-	assert parsed["error"]["recovery_action"] == error_contract_for_code(code)[1]
+	# 风控解锁命令定位本次运行的数据目录（这里是默认目录，Issue #978）。
+	assert parsed["error"]["recovery_action"] == risk_error_contract(
+		code,
+		clean_command=f"boss --data-dir {_DEFAULT_DATA_DIR} clean --risk-lock",
+		doctor_command=f"boss --data-dir {_DEFAULT_DATA_DIR} doctor",
+	)[0]
 	assert parsed["hints"]["next_actions"]
 	assert "private-token" not in result.output
 
@@ -1102,7 +1120,7 @@ def test_interviews_reports_platform_error(mock_auth_cls, mock_client_cls):
 	assert parsed["error"]["code"] == "ACCOUNT_RISK"
 	assert parsed["error"]["message"] == risk_error_message("ACCOUNT_RISK")
 	assert parsed["error"]["recoverable"] is False
-	assert parsed["error"]["recovery_action"] == "停止自动化访问，回到平台官网手动处理；确认目标业务页风险解除后，由用户执行 boss clean --risk-lock 并显式恢复任务，必要时联系客服"
+	assert parsed["error"]["recovery_action"] == _risk_recovery_for_default_dir("ACCOUNT_RISK")
 
 
 @patch("boss_agent_cli.commands.interviews.get_platform_instance")

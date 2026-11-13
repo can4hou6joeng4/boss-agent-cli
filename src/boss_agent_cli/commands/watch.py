@@ -322,7 +322,7 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 				if summary is not None:
 					watches.append(summary)
 			if risk_error is not None:
-				recoverable, recovery_action, risk_hints = platform_error_contract(risk_error.code)
+				recoverable, recovery_action, risk_hints = platform_error_contract(risk_error.code, ctx=ctx)
 				handle_error_output(
 					ctx, "watch",
 					code=risk_error.code,
@@ -387,7 +387,7 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 			return
 		except SearchPipelinePlatformError as exc:
 			# 与 search 一致：风控码给停止指引，登录过期等可恢复错误给恢复动作。
-			recoverable, recovery_action, hints = platform_error_contract(exc.code)
+			recoverable, recovery_action, hints = platform_error_contract(exc.code, ctx=ctx)
 			handle_error_output(
 				ctx,
 				"watch",

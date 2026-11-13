@@ -96,6 +96,20 @@ class ActionContext:
 		)
 
 
+def _risk_commands(context: "ActionContext | None") -> dict[str, str]:
+	"""风控契约里的解锁 / 诊断命令：指向触发本次 workflow 的目录与平台。
+
+	风险锁写在 ``<data_dir>/.cdp_risk_lock``；裸 ``boss clean --risk-lock``
+	会让 Agent 去默认目录解锁，命令不报错但原锁仍在（Issue #978）。
+	"""
+	if context is None:
+		return {}
+	return {
+		"clean_command": _hint_command(context, "clean --risk-lock"),
+		"doctor_command": _hint_command(context, "doctor"),
+	}
+
+
 def execute_candidate_search(
 	platform: Any,
 	cache: CacheStore,
@@ -322,8 +336,14 @@ def _required_int(inputs: Mapping[str, Any], name: str, *, minimum: int = 0) -> 
 	return _check_minimum(_coerce_int(raw, name), raw, name, minimum)
 
 
-def _classify_action_error(code: str, message: str) -> tuple[str, bool, str]:
-	"""Map platform error codes into wizard-facing code/recoverable/recovery."""
+def _classify_action_error(
+	code: str, message: str, *, clean_command: str | None = None, doctor_command: str | None = None
+) -> tuple[str, bool, str]:
+	"""Map platform error codes into wizard-facing code/recoverable/recovery.
+
+	``clean_command`` / ``doctor_command`` 指向本次 workflow 的数据目录：
+	风险锁写在 ``<data_dir>`` 下，裸命令会让 Agent 去默认目录空转（Issue #978）。
+	"""
 	text = message or ""
 	if code == "UNKNOWN":
 		if any(token in text for token in ("缺少必要参数", "参数错误", "非法参数", "invalid param")):
@@ -340,7 +360,7 @@ def _classify_action_error(code: str, message: str) -> tuple[str, bool, str]:
 		return code, True, str(ERROR_CODES[code]["recovery_action"])
 	if code in RISK_ERROR_CONTRACTS:
 		# 风控码：与单次命令路径共用同一份 recovery_action，绝不落到「稍后重试」兜底。
-		recovery, _ = risk_error_contract(code)
+		recovery, _ = risk_error_contract(code, clean_command=clean_command, doctor_command=doctor_command)
 		return code, False, recovery
 	recoverable = code in {
 		"AUTH_REQUIRED",
@@ -362,12 +382,18 @@ def _classify_action_error(code: str, message: str) -> tuple[str, bool, str]:
 	return code, recoverable, recovery
 
 
-def _unwrap(platform: Any, response: dict[str, Any], fallback: str) -> Any:
+def _unwrap(
+	platform: Any,
+	response: dict[str, Any],
+	fallback: str,
+	*,
+	context: ActionContext | None = None,
+) -> Any:
 	if platform.is_success(response):
 		return platform.unwrap_data(response) or {}
 	code, message = platform.parse_error(response)
 	text = message or fallback
-	code, recoverable, recovery = _classify_action_error(code, text)
+	code, recoverable, recovery = _classify_action_error(code, text, **_risk_commands(context))
 	if code in RISK_ERROR_CONTRACTS:
 		# 风控响应原文可能带临时凭据，不进 workflow 结果；停止指引由 recovery_action 承载。
 		text = risk_error_message(code)
@@ -390,6 +416,7 @@ def execute_candidate_detail(
 	lid: str = "",
 	data_dir: Path | None = None,
 	account: str = "",
+	context: ActionContext | None = None,
 ) -> dict[str, Any]:
 	"""Fetch job detail with the same httpx → job_card fallback as `boss detail`.
 
@@ -441,7 +468,7 @@ def execute_candidate_detail(
 		else:
 			code, message = platform.parse_error(raw)
 			text = message or "职位详情获取失败"
-			code, recoverable, recovery = _classify_action_error(code, text)
+			code, recoverable, recovery = _classify_action_error(code, text, **_risk_commands(context))
 			last_error = WorkflowActionError(code, text, recoverable=recoverable, recovery_action=recovery)
 
 	try:
@@ -471,7 +498,7 @@ def execute_candidate_detail(
 		raise last_error
 	code, message = platform.parse_error(raw_card)
 	text = message or "职位详情获取失败"
-	code, recoverable, recovery = _classify_action_error(code, text)
+	code, recoverable, recovery = _classify_action_error(code, text, **_risk_commands(context))
 	raise WorkflowActionError(code, text, recoverable=recoverable, recovery_action=recovery)
 
 
@@ -523,7 +550,12 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 
 def _candidate_recommend(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	with context.candidate_platform() as platform:
-		data = _unwrap(platform, platform.recommend_jobs(page=_int_input(inputs, "page", 1, minimum=1)), "推荐职位获取失败")
+		data = _unwrap(
+			platform,
+			platform.recommend_jobs(page=_int_input(inputs, "page", 1, minimum=1)),
+			"推荐职位获取失败",
+			context=context,
+		)
 	items = _extract_list_items(data, ("recommendList", "jobList", "list", "items", "result"))
 	return StepResult(_with_items({"result": data}, items))
 
@@ -543,6 +575,7 @@ def _candidate_detail(context: ActionContext, inputs: Mapping[str, Any], prior: 
 				lid=lid,
 				data_dir=context.data_dir,
 				account=account_scope(context.auth()),
+				context=context,
 			)
 	return StepResult({"job": data, "result": data})
 
@@ -568,7 +601,12 @@ def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 		if cache.is_applied(security_id, job_id, account=account):
 			raise WorkflowActionError("ALREADY_APPLIED", "已对该职位发起过投递/立即沟通")
 		with context.candidate_platform() as platform:
-			data = _unwrap(platform, platform.apply(security_id, job_id, lid=str(inputs.get("lid") or "")), "投递失败")
+			data = _unwrap(
+				platform,
+				platform.apply(security_id, job_id, lid=str(inputs.get("lid") or "")),
+				"投递失败",
+				context=context,
+			)
 		try:
 			cache.record_apply(security_id, job_id, account=account)
 		except Exception:
@@ -602,7 +640,7 @@ def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: M
 	return StepResult({"security_id": security_id, "job_id": job_id, "result": data})
 
 
-def _candidate_friend(platform: Any, identifier: str) -> dict[str, Any]:
+def _candidate_friend(platform: Any, identifier: str, *, context: ActionContext | None = None) -> dict[str, Any]:
 	try:
 		friend, error_response = find_friend(platform, identifier)
 	except FriendLookupLimitExceeded as exc:
@@ -613,7 +651,7 @@ def _candidate_friend(platform: Any, identifier: str) -> dict[str, Any]:
 			recovery_action="缩小沟通列表范围后重试",
 		) from exc
 	if error_response is not None:
-		_unwrap(platform, error_response, "沟通列表获取失败")
+		_unwrap(platform, error_response, "沟通列表获取失败", context=context)
 	if friend is not None:
 		return friend
 	raise WorkflowActionError("CONTACT_NOT_FOUND", f"沟通列表中未找到联系人: {identifier}")
@@ -635,7 +673,7 @@ def _candidate_exchange(context: ActionContext, inputs: Mapping[str, Any], prior
 	identifier = str(_required(inputs, "security_id"))
 	exchange_type = _exchange_type(inputs)
 	with context.candidate_platform() as platform:
-		friend = _candidate_friend(platform, identifier)
+		friend = _candidate_friend(platform, identifier, context=context)
 		uid = str(friend.get("uid") or "")
 		security_id = _candidate_current_security_id(friend)
 		data = _unwrap(
@@ -663,7 +701,7 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 	if label_id is None:
 		raise WorkflowActionError("INVALID_PARAM", f"未知标签: {label}（可选: 新招呼、沟通中、已约面、已获取简历、不合适、收藏）")
 	with context.candidate_platform() as platform:
-		friend = _candidate_friend(platform, identifier)
+		friend = _candidate_friend(platform, identifier, context=context)
 		uid = str(friend.get("uid") or "")
 		data = _unwrap(
 			platform,
@@ -685,14 +723,19 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 
 def _candidate_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	with context.candidate_platform() as platform:
-		data = _unwrap(platform, platform.friend_list(page=_int_input(inputs, "page", 1, minimum=1)), "沟通列表获取失败")
+		data = _unwrap(
+			platform,
+			platform.friend_list(page=_int_input(inputs, "page", 1, minimum=1)),
+			"沟通列表获取失败",
+			context=context,
+		)
 	items = _extract_list_items(data, ("result", "friendList", "list", "items"))
 	return StepResult(_with_items({"result": data}, items))
 
 
 def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	with context.candidate_platform() as platform:
-		friend = _candidate_friend(platform, str(_required(inputs, "gid")))
+		friend = _candidate_friend(platform, str(_required(inputs, "gid")), context=context)
 		gid = str(friend.get("uid") or "")
 		security_id = _candidate_current_security_id(friend)
 		response = platform.chat_history(
@@ -701,7 +744,7 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 			page=_int_input(inputs, "page", 1, minimum=1),
 			count=_int_input(inputs, "count", 20, minimum=1),
 		)
-		data = _unwrap(platform, response, "聊天记录获取失败")
+		data = _unwrap(platform, response, "聊天记录获取失败", context=context)
 	items = _extract_list_items(data, ("messageList", "messages", "list", "items", "result"))
 	return StepResult(
 		_with_items(
@@ -724,8 +767,8 @@ def _candidate_pipeline_data(
 		# 与顶层 `boss pipeline` / `boss digest` 的聚合结果不一致（Issue #881）。
 		chat_items, friend_error, pages_scanned, truncated = collect_friend_list_page(platform)
 		if friend_error is not None:
-			_unwrap(platform, friend_error, "沟通列表获取失败")
-		interview_data = _unwrap(platform, platform.interview_data(), "面试列表获取失败")
+			_unwrap(platform, friend_error, "沟通列表获取失败", context=context)
+		interview_data = _unwrap(platform, platform.interview_data(), "面试列表获取失败", context=context)
 	interview_items = interview_data.get("interviewList") or []
 	items = build_pipeline_items(
 		chat_items=chat_items,
@@ -1178,7 +1221,7 @@ def _recruiter_call(
 	list_keys: tuple[str, ...] = (),
 ) -> StepResult:
 	with context.recruiter_platform() as platform:
-		data = _unwrap(platform, call(platform), fallback)
+		data = _unwrap(platform, call(platform), fallback, context=context)
 	payload: dict[str, Any] = {"result": data}
 	if list_keys:
 		items = _extract_list_items(data, list_keys)
@@ -1234,6 +1277,7 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 				job_id=_optional_str(inputs.get("job_id")),
 			),
 			"沟通列表获取失败",
+			context=context,
 		)
 		friend_items = next(
 			(value for key in ("friendList", "result", "list") if isinstance((value := friend_data.get(key)), list)),
@@ -1256,7 +1300,7 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 				break
 		if not friend_ids:
 			return StepResult({"friend_ids": [], "messages": [], "items": [], "total": 0})
-		data = _unwrap(platform, platform.last_messages(friend_ids), "最近消息获取失败")
+		data = _unwrap(platform, platform.last_messages(friend_ids), "最近消息获取失败", context=context)
 	items = _extract_list_items(data, ("messages", "messageList", "list", "items", "result"))
 	if not items and isinstance(data, Mapping):
 		# Some APIs return {friendId: lastMsg} maps — flatten for TUI.

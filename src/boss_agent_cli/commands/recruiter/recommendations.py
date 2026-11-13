@@ -85,7 +85,7 @@ def _send_error(ctx: click.Context, *, code: str, job_id: str, details: dict[str
 	elif code in RISK_ERROR_CONTRACTS:
 		# 风控码（含环境风险与本地风险锁）统一取登记表的停止指引；
 		# 命令自身的「不要重发本次招呼」作为操作者补充，不覆盖机器可读的 next_actions。
-		recovery, risk_hints = risk_error_contract(code)
+		recovery, risk_hints = risk_error_contract(code, ctx=ctx)
 		action = f"{recovery}；不要自动重发本次招呼"
 		hints = {
 			**(risk_hints or {}),

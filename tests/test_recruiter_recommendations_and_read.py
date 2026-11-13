@@ -14,10 +14,13 @@ from boss_agent_cli.api import recruiter_endpoints as ep
 from boss_agent_cli.api.client import AccountRiskError, EnvironmentRiskError, EnvironmentRiskLockedError
 from boss_agent_cli.api.recruiter_client import BossRecruiterClient, RecruiterAuthError
 from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
-from boss_agent_cli.display import error_contract_for_code
+from boss_agent_cli.display import error_contract_for_code, risk_error_contract
 from boss_agent_cli.main import cli
+
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
+
+_DEFAULT_DATA_DIR = str((Path.home() / ".boss-agent").resolve())
 
 
 def _hint_at(data_dir: str | Path, command: str) -> str:
@@ -61,6 +64,13 @@ def test_recommendations_cli_reports_platform_failure(response: dict[str, Any], 
 	if code == "AUTH_REQUIRED":
 		assert shlex.split(payload["error"]["recovery_action"]) == ["boss", "--data-dir", str((Path.home() / ".boss-agent").resolve()), "login"]
 		assert payload["hints"]["next_actions"] == [payload["error"]["recovery_action"]]
+	elif code in {"ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_LOCKED"}:
+		# 风控解锁命令定位本次运行的数据目录（默认目录，Issue #978）。
+		assert payload["error"]["recovery_action"] == risk_error_contract(
+			code,
+			clean_command=f"boss --data-dir {_DEFAULT_DATA_DIR} clean --risk-lock",
+			doctor_command=f"boss --data-dir {_DEFAULT_DATA_DIR} doctor",
+		)[0]
 	else:
 		assert payload["error"]["recovery_action"] == error_contract_for_code(code)[1]
 	client.recommend_geeks.assert_called_once_with("job", page=1)
@@ -360,12 +370,14 @@ def test_greet_environment_risk_does_not_suggest_more_requests(
 	assert body["error"]["code"] == "ENVIRONMENT_RISK"
 	assert body["error"]["recoverable"] is False
 	assert body["error"]["details"]["sent"] is None
-	assert error_contract_for_code("ENVIRONMENT_RISK")[1] in body["error"]["recovery_action"]
+	# recovery_action 现在带本次运行的数据目录（Issue #978），文本仍以登记表的停止指引为准。
+	assert "停止自动化访问" in body["error"]["recovery_action"]
+	assert "clean --risk-lock" in body["error"]["recovery_action"]
 	assert "不要自动重发" in body["error"]["recovery_action"]
-	# 机器可读提示只能是「停止 / 不要重试」，不能出现任何继续请求平台的命令。
+	# 机器可读提示:只有解锁命令定位本次运行目录，其余条目不得包含任何继续请求平台的命令。
 	next_actions = body["hints"]["next_actions"]
 	assert next_actions
-	assert all("boss " not in action for action in next_actions)
+	assert all("boss " not in action or "clean --risk-lock" in action for action in next_actions)
 	assert "boss hr chat" not in json.dumps(body["hints"])
 	greeting_platform.start_chat.assert_called_once()
 	greeting_platform.friend_list.assert_not_called()
@@ -505,15 +517,24 @@ def test_greet_unknown_send_failure_quotes_job_id_in_check_command(greeting_args
 	(EnvironmentRiskError("fixture-leak"), "ENVIRONMENT_RISK"),
 	(EnvironmentRiskLockedError("fixture-leak"), "ENVIRONMENT_RISK_LOCKED"),
 ])
-def test_greeting_auth_and_risk_are_not_network_errors(greeting_args, greeting_platform, failure, code):
+def test_greeting_auth_and_risk_are_not_network_errors(greeting_args, greeting_platform, tmp_path, failure, code):
 	greeting_platform.start_chat.side_effect = failure
 	result = CliRunner().invoke(cli, greeting_args + ["--yes"])
 	body = json.loads(result.output)
 	assert body["error"]["code"] == code
 	if code in {"ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_LOCKED"}:
-		# 风控异常走统一停止契约，且保留「不要重发本次招呼」的写操作约束。
-		assert error_contract_for_code(code)[1] in body["error"]["recovery_action"]
+		# 风控异常走统一停止契约，且保留「不要重发本次招呼」的写操作约束；
+		# 解锁命令定位本次运行的数据目录（Issue #978）。
+		assert risk_error_contract(
+			code,
+			clean_command=f"boss --data-dir {tmp_path.resolve()} clean --risk-lock",
+			doctor_command=f"boss --data-dir {tmp_path.resolve()} doctor",
+		)[0] in body["error"]["recovery_action"]
 		assert "不要自动重发" in body["error"]["recovery_action"]
+		# 整份信封里不得再有裸解锁命令；出现时必须带本次运行的数据目录（Issue #978）。
+		dumped = json.dumps(body, ensure_ascii=False)
+		assert "boss clean --risk-lock" not in dumped
+		assert f"boss --data-dir {tmp_path.resolve()} clean --risk-lock" in dumped
 		assert body["hints"]["next_actions"]
 	assert body["error"]["details"]["sent"] is None
 	assert body["error"]["recoverable"] is False

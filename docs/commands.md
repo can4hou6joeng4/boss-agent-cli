@@ -67,7 +67,7 @@ TTY 下只把 `operator_actions` 渲染到 stderr；`next_actions` 是纯 Agent 
 
 BOSS 的 code `31`（IP/环境限制）/ `32`（账号限制）/ `35` / `36`、环境类或含糊的 code `37`、HTTP 403 和官方 `403.html` 访问受限页及 `verify.html` / `security.html` 安全页会停止请求并锁存本地状态。明确的凭据过期才能进入有限刷新；仅出现 `token` / `stoken` 或同时要求安全验证时不能刷新。风险锁沿用 `cdp_risk_lock.json` 文件名，覆盖候选人与招聘者的 httpx、CDP、headless、聊天页动作、登录、导入、刷新和同 `data_dir` 的独立 crawl；更换令牌或通道不会自动清除锁。`error.details.risk_lock` 保留原始风险原因、可用业务码与 `explicit_resume_required`；账号风险仍返回 `ACCOUNT_RISK`，历史环境锁继续返回 `ENVIRONMENT_RISK_LOCKED`。
 
-由用户在原会话的官方目标业务页确认恢复后，执行 `boss clean --risk-lock` 解除本地阻断，再显式恢复原任务。主页可访问不代表职位页或聊天页已恢复；该清理命令不解除服务器风险，也不验证线上恢复。`--dry-run` 仅预览；再次命中风险会立即重锁。Agent 不应自行执行清锁。
+由用户在原会话的官方目标业务页确认恢复后，执行 `boss clean --risk-lock` 解除本地阻断，再显式恢复原任务。主页可访问不代表职位页或聊天页已恢复；该清理命令不解除服务器风险，也不验证线上恢复。`--dry-run` 仅预览；再次命中风险会立即重锁。Agent 不应自行执行清锁。风控信封的 `error.recovery_action` 与 `hints.next_actions` 中出现的 `clean --risk-lock` 与 `doctor` 会携带触发该错误的数据目录与平台（`boss --data-dir <绝对路径> clean --risk-lock`）：锁文件位于 `<data_dir>/.cdp_risk_lock`，照抄裸命令只会在默认目录空转、返回 `local_lock_removed: false` 而不报错。`doctor` 的 `cdp_risk_lock` 检查项与风险锁解锁指引同样定位本次诊断目录；静态 `boss schema` 的 `error_codes` 仍展示通用示例。
 
 访问受限页展示的恢复时间只作平台提示，不触发定时刷新或自动清锁；移动端可用也不能证明网页端限制已解除。已有受限页时，`login --force` 在清除 Cookie 前同样停止。
 

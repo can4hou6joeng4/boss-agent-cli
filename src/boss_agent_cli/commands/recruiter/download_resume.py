@@ -114,7 +114,7 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 			# 风控异常是多子类结构：EnvironmentRiskError / EnvironmentRiskLockedError
 			# 与 AccountRiskError 平级。只捕账号风控会把环境风控漏进下面的
 			# NETWORK_ERROR 兜底，反而提示“检查网络后重试”，违反风控硬边界。
-			_, recovery_action, risk_hints = platform_error_contract(exc.code)
+			_, recovery_action, risk_hints = platform_error_contract(exc.code, ctx=ctx)
 			handle_error_output(
 				ctx,
 				command,
@@ -144,7 +144,7 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 		if not platform.is_success(result):
 			code, _ = platform.parse_error(result)
 			code = code if code != "UNKNOWN" else "NETWORK_ERROR"
-			recoverable, recovery_action, risk_hints = platform_error_contract(code)
+			recoverable, recovery_action, risk_hints = platform_error_contract(code, ctx=ctx)
 			handle_error_output(
 				ctx,
 				command,

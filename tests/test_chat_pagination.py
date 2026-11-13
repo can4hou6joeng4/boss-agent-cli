@@ -12,6 +12,7 @@
 
 import json
 import shlex
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -20,6 +21,8 @@ from click.testing import CliRunner
 from boss_agent_cli.display import error_contract_for_code
 from boss_agent_cli.main import cli
 from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION
+
+_DEFAULT_DATA_DIR = str((Path.home() / ".boss-agent").resolve())
 
 CHAT_COMMANDS = [
 	pytest.param("boss_agent_cli.commands.chatmsg", "chatmsg", id="chatmsg"),
@@ -234,5 +237,13 @@ def test_chat_failure_has_no_pagination(module, name, code, recoverable):
 	assert parsed["pagination"] is None
 	assert parsed["error"]["code"] == code
 	assert parsed["error"]["recoverable"] is recoverable
-	assert parsed["error"]["recovery_action"] == error_contract_for_code(code)[1]
+	if code in {"ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_LOCKED"}:
+		# 风控解锁命令定位本次运行的数据目录，而不是默认目录（Issue #978）。
+		assert error_contract_for_code(code)[1].replace(
+			"boss clean --risk-lock", f"boss --data-dir {_DEFAULT_DATA_DIR} clean --risk-lock"
+		).replace(
+			"boss doctor", f"boss --data-dir {_DEFAULT_DATA_DIR} doctor"
+		) == parsed["error"]["recovery_action"]
+	else:
+		assert parsed["error"]["recovery_action"] == error_contract_for_code(code)[1]
 	client.chat_history.assert_called_once_with("10001", "sid_current", page=1, count=20)

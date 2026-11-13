@@ -16,15 +16,27 @@ from boss_agent_cli.api.recruiter_client import BossRecruiterClient, RecruiterAu
 from boss_agent_cli.api.recruiter_resume import ResumeValidationError, attachment_params, save_resume
 from boss_agent_cli.auth.manager import AuthRequired
 from boss_agent_cli.schema.data import SCHEMA_DATA
-from boss_agent_cli.display import error_contract_for_code
+from boss_agent_cli.display import error_contract_for_code, risk_error_contract
 from boss_agent_cli.main import cli
+
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
+
+_DEFAULT_DATA_DIR = str((Path.home() / ".boss-agent").resolve())
 
 
 def _hint(command: str) -> str:
 	"""默认数据目录下的招聘者后继命令。"""
 	return f"boss --data-dir {(Path.home() / '.boss-agent').resolve()} {command}"
+
+
+def _risk_recovery_for_default_dir(code: str) -> str:
+	"""风控停止契约的 recovery_action，解锁命令指向默认数据目录（Issue #978）。"""
+	return risk_error_contract(
+		code,
+		clean_command=f"boss --data-dir {_DEFAULT_DATA_DIR} clean --risk-lock",
+		doctor_command=f"boss --data-dir {_DEFAULT_DATA_DIR} doctor",
+	)[0]
 
 
 def _assert_download_error_contract(payload: dict, code: str) -> None:
@@ -33,6 +45,9 @@ def _assert_download_error_contract(payload: dict, code: str) -> None:
 	if code in {"AUTH_REQUIRED", "TOKEN_REFRESH_FAILED"}:
 		assert shlex.split(error["recovery_action"]) == ["boss", "--data-dir", str((Path.home() / ".boss-agent").resolve()), "login"]
 		assert payload["hints"]["next_actions"] == [error["recovery_action"]]
+	elif code in {"ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_LOCKED"}:
+		# 风控解锁命令指向运行目录（这里是默认目录），不再是裸命令（Issue #978）。
+		assert error["recovery_action"] == _risk_recovery_for_default_dir(code)
 	else:
 		assert error["recovery_action"] == error_contract_for_code(code)[1]
 
@@ -469,8 +484,9 @@ def test_resume_auth_and_risk_failures_stop_without_leaking(action, error_type, 
 			assert error["recoverable"] is False
 			assert error["recovery_action"]
 		if code in {"ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_LOCKED"}:
-			# 风控异常必须走统一停止契约，不能漏进 NETWORK_ERROR / 结果未知兜底。
-			assert error["recovery_action"] == error_contract_for_code(code)[1]
+			# 风控异常必须走统一停止契约，不能漏进 NETWORK_ERROR / 结果未知兜底；
+			# 解锁命令定位运行目录（Issue #978）。
+			assert error["recovery_action"] == _risk_recovery_for_default_dir(code)
 			assert payload["hints"]["next_actions"]
 		assert "private-token" not in result.output
 		if action == "accept_resume":
@@ -551,8 +567,9 @@ def test_resume_platform_errors_use_declared_codes_and_safe_recovery(action, res
 			assert error["details"]["accepted"] is None
 			assert error["recoverable"] is False
 			if code in {"ACCOUNT_RISK", "ENVIRONMENT_RISK"}:
-				# 响应字典形态的风控码同样给统一停止指引，不只让用户核对本次请求。
-				assert error["recovery_action"] == error_contract_for_code(code)[1]
+				# 响应字典形态的风控码同样给统一停止指引，不只让用户核对本次请求；
+				# 解锁命令定位运行目录（Issue #978）。
+				assert error["recovery_action"] == _risk_recovery_for_default_dir(code)
 				assert payload["hints"]["next_actions"]
 			else:
 				assert "不要自动重试" in error["recovery_action"]

@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Fixed
+- 风控停止契约的恢复命令保留数据目录与平台（Issue #978）：`display.RISK_ERROR_CONTRACTS` 是所有风控信封（`ACCOUNT_RISK` / `ENVIRONMENT_RISK` / `ENVIRONMENT_RISK_LOCKED`）的唯一真源，其中 `recovery_action` 与 `hints.next_actions` 嵌的 `boss clean --risk-lock` / `boss doctor` 是裸命令。风险锁写在 `<data_dir>/.cdp_risk_lock`：使用自定义 `--data-dir` 时，照抄提示的 Agent / 用户会在默认目录执行 `clean --risk-lock`，命令回 `ok` 且 `local_lock_removed: false` 不报错，原目录的锁原样保留，随后每次重试都撞同一个锁；`doctor` 诊断的也是另一份目录。现在 `risk_error_contract` / `platform_error_contract` 接受触发错误的数据目录（命令层传 `ctx`，wizard 传 `ActionContext`，无上下文的纯函数调用保持登记表通用示例），`doctor` 的 `cdp_risk_lock` 检查项与解锁指引同样定位本次诊断目录；风险判定、锁存语义与「必须由用户确认后显式解锁」的硬边界不变，静态 `boss schema` 仍展示通用示例。
+
 - 向导动作层的恢复命令保留数据目录与平台（Issue #976）：`wizard/actions.py` 里 AI 未配置时的 `boss ai config ...`、AI API 报错时 `recovery_action_for` 生成的 `ai config` 建议、watch 参数损坏时的 `boss watch remove` / `boss watch add` 重建命令、不支持的 `hook_profile` 指引与 `boss config reset crawl` 都是裸命令。wizard 的 headless / MCP 调用可带 `--data-dir`：照抄提示会把新 AI 密钥、配置重置、watch 删除重建或 crawl 重建落到默认目录，原目录的问题原样保留（与 #913 / #919 等命令层迁移同一接缝，动作层此前漏迁）。现在这些命令统一经本地 `_hint_command` 包装携带按 shell 参数转义的绝对目录与平台；`_crawl_outcome_result` 的兜底恢复命令同样保留 `CrawlOutcome.data_dir`。
 
 ## [3.4.1] - 2026-11-13

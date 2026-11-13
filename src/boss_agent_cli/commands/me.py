@@ -147,7 +147,7 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 	except PlatformRiskError as e:
 		# me 没有 @handle_auth_errors 包裹：风控异常原本会掉进下面的
 		# NETWORK_ERROR 兜底，变成 recoverable=true +「重试」，违反风控硬边界。
-		recoverable, recovery_action, hints = platform_error_contract(e.code)
+		recoverable, recovery_action, hints = platform_error_contract(e.code, ctx=ctx)
 		handle_error_output(
 			ctx,
 			"me",

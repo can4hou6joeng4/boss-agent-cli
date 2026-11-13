@@ -54,6 +54,8 @@ def _invoke(payload, *args, parse_error=None):
 	return result, platform
 
 
+_DEFAULT_DATA_DIR = str((Path.home() / ".boss-agent").resolve())
+
 PAGINATION_CASES = [
 	pytest.param(
 		{"messages": [_message(100), _message(99)], "hasMore": True},
@@ -149,5 +151,9 @@ def test_hr_chatmsg_failure_has_no_pagination(code, recoverable):
 	assert parsed["pagination"] is None
 	assert parsed["error"]["code"] == code
 	assert parsed["error"]["recoverable"] is recoverable
-	assert parsed["error"]["recovery_action"] == error_contract_for_code(code)[1]
+	if code in {"ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_LOCKED"}:
+		# 风控解锁命令定位本次运行的数据目录，而不是默认目录（Issue #978）。
+		assert f"boss --data-dir {_DEFAULT_DATA_DIR} clean --risk-lock" in parsed["error"]["recovery_action"]
+	else:
+		assert parsed["error"]["recovery_action"] == error_contract_for_code(code)[1]
 	platform.unwrap_data.assert_not_called()
