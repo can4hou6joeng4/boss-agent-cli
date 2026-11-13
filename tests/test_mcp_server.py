@@ -3,6 +3,7 @@ import asyncio
 import inspect
 import json
 import re
+import signal
 import subprocess
 import sys
 import types
@@ -59,6 +60,7 @@ from boss_agent_cli.main import cli  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
+_ENVELOPE_KEYS = {"ok", "schema_version", "command", "data", "pagination", "error", "hints"}
 
 
 def _read(path: str) -> str:
@@ -1186,6 +1188,121 @@ def test_run_boss_async_spawn_failure_points_at_install_not_platform_state(monke
 	assert "--boss-bin" in result["error"]["recovery_action"]
 	assert "checkpoint" not in result["error"]["recovery_action"]
 	assert result["error"]["details"]["outcome_unknown"] is False
+
+
+class _InterruptibleProcess:
+	"""创建阶段取消用的进程替身：收到 SIGINT 后返回带 checkpoint 的信封。"""
+
+	def __init__(self):
+		self.returncode = None
+		self.started = asyncio.Event()
+		self.finished = asyncio.Event()
+		self.signals = []
+
+	async def communicate(self):
+		self.started.set()
+		await self.finished.wait()
+		self.returncode = 0
+		return (
+			json.dumps(
+				{
+					"ok": False,
+					"schema_version": "1.0",
+					"command": "wizard",
+					"data": None,
+					"pagination": None,
+					"error": {
+						"code": "WORKFLOW_STOPPED",
+						"message": "fixture 中断",
+						"recoverable": True,
+						"recovery_action": "boss wizard --resume fixture-run",
+						"details": {"run_id": "fixture-checkpoint"},
+					},
+					"hints": None,
+				}
+			).encode(),
+			b"",
+		)
+
+	def send_signal(self, sig):
+		self.signals.append(sig)
+		self.finished.set()
+
+	def terminate(self):
+		self.signals.append("terminate")
+		self.finished.set()
+
+	def kill(self):
+		self.signals.append("kill")
+		self.finished.set()
+
+
+@pytest.mark.parametrize("may_write", [True, False])
+def test_run_boss_async_spawn_cancel_preserves_child_checkpoint(monkeypatch, may_write):
+	"""创建子进程期间取消与运行期间取消必须给出同一份恢复信息（Issue #998）。
+
+	子进程已保存 checkpoint 并输出 run_id 时，两种取消时机都要把它放进
+	``error.details.checkpoint_result``；写工具仍标结果未知，只读工具可直接重调。
+	"""
+	from boss_agent_cli import mcp_server
+
+	async def scenario():
+		process = _InterruptibleProcess()
+		spawn_started = asyncio.Event()
+		allow_spawn = asyncio.Event()
+
+		async def spawn(*args, **kwargs):
+			spawn_started.set()
+			await allow_spawn.wait()
+			return process
+
+		monkeypatch.setattr(mcp_server.asyncio, "create_subprocess_exec", spawn)
+		task = asyncio.create_task(mcp_server._run_boss_async("wizard", "--resume", "fixture-run", may_write=may_write))
+		await asyncio.wait_for(spawn_started.wait(), 1)
+		task.cancel()
+		await asyncio.sleep(0)
+		allow_spawn.set()
+		return await asyncio.wait_for(task, 1), process
+
+	result, process = asyncio.run(scenario())
+
+	assert set(result) == _ENVELOPE_KEYS
+	assert result["error"]["code"] == "WORKFLOW_STOPPED"
+	assert result["error"]["recoverable"] is (not may_write)
+	assert result["error"]["details"]["outcome_unknown"] is may_write
+	assert result["error"]["details"]["replay_safe"] is (not may_write)
+	assert result["error"]["details"]["checkpoint_result"]["error"]["details"]["run_id"] == "fixture-checkpoint"
+	assert process.signals == [signal.SIGINT]
+	assert process.returncode == 0
+
+
+def test_run_boss_async_spawn_cancel_without_child_start_is_not_unknown(monkeypatch):
+	"""创建本身失败时子进程从未运行，取消不能把结果标成未知。"""
+	from boss_agent_cli import mcp_server
+
+	spawn_started = asyncio.Event()
+	allow_spawn = asyncio.Event()
+
+	async def spawn(*args, **kwargs):
+		spawn_started.set()
+		await allow_spawn.wait()
+		raise FileNotFoundError(2, "No such file or directory", "boss")
+
+	monkeypatch.setattr(mcp_server.asyncio, "create_subprocess_exec", spawn)
+
+	async def scenario():
+		task = asyncio.create_task(mcp_server._run_boss_async("apply", "s", "j"))
+		await asyncio.wait_for(spawn_started.wait(), 1)
+		task.cancel()
+		await asyncio.sleep(0)
+		allow_spawn.set()
+		return await asyncio.wait_for(task, 1)
+
+	result = asyncio.run(scenario())
+
+	assert result["error"]["code"] == "WORKFLOW_STOPPED"
+	assert result["error"]["details"]["outcome_unknown"] is False
+	assert "checkpoint_result" not in result["error"]["details"]
 
 
 @patch("server.subprocess.run")

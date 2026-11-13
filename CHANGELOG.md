@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- MCP 在创建子进程期间被取消时不再丢失恢复标识（Issue #998）：该分支会回收底层 CLI，却丢弃其 stdout，`error.details` 缺少 `checkpoint_result`，与运行期间取消和超时路径不一致。现在两条中断路径共用同一信封构造逻辑，子进程输出的 checkpoint / `run_id` 在 `error.details.checkpoint_result` 保留；写工具仍标结果未知，只读工具可直接重调。
 - 离线评估改为验证当前的平台风控停止契约（Issue #996）：过时场景曾将已取消的模式级 `COMPLIANCE_BLOCKED` 当作通过条件。现在用当前 `ACCOUNT_RISK` 信封验证不可自动恢复、单次模拟搜索后停止及恢复指引；评分器拒绝额外工具调用和未在信封中确认的风险码，回归覆盖账号与环境风险，双语评估说明同步。
 - 发布后 PyPI 安装验收定向刷新目标包索引（Issue #994）：新虚拟环境仍会复用 uv 的旧索引缓存，刚发布的版本此前可能被误报为不存在，导致验收假失败。`verify_release.py --pypi-version` 现在为目标包指定 `--refresh-package boss-agent-cli`，依赖包继续复用缓存；本地 wheel 验收保持原语义。
 
