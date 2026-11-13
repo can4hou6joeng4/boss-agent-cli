@@ -8,6 +8,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	error_contract_for_code,
+	handle_browser_kernel_missing,
 	handle_error_output,
 	handle_output,
 	render_action_result,
@@ -15,8 +16,10 @@ from boss_agent_cli.display import (
 	render_record_result,
 	shell_argument,
 )
+from boss_agent_cli.output import is_local_io_error
 from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, resume_to_dict
 from boss_agent_cli.resume.store import ResumeAlreadyExistsError, ResumeImportError, ResumeStore
+from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing
 from boss_agent_cli.services.output_path import prepare_output_path
 
 
@@ -95,6 +98,47 @@ def _load_resume(ctx: click.Context, store: ResumeStore, name: str) -> ResumeDat
 		return None
 	_emit_resume_not_found(ctx, name)
 	return None
+
+
+def _emit_export_failure(ctx: click.Context, fmt: str, exc: Exception, *, target: str) -> None:
+	"""导出失败的统一出口，按失败原因区分错误码。
+
+	``resume export`` 此前把所有异常都归成 ``EXPORT_FAILED`` +「检查 patchright
+	安装」，但 HTML / JSON 导出根本不需要 patchright：目标路径是目录、父目录
+	不可写时给的是让用户去装浏览器内核的指引，与真正该做的事（换个路径）无关。
+	反过来，PDF 导出命中内核缺失时又把整段 patchright 安装横幅和本机绝对路径
+	塞进 ``error.message``。
+
+	三类失败分别处理（与 ``display.handle_auth_errors`` 同一口径）：
+
+	- 内核缺失 → ``BROWSER_KERNEL_MISSING``（确定性失败，重试不会成功）
+	- 本地文件读写失败 → ``LOCAL_IO_ERROR``（换个可写路径即可，不是重试平台）
+	- 其它（渲染 / 模板错误）→ ``EXPORT_FAILED``，message 里不带本机路径
+	"""
+	if is_browser_kernel_missing(str(exc)):
+		handle_browser_kernel_missing(ctx, "resume", exc)
+		return
+	if is_local_io_error(exc):
+		# 目标路径不可写与「导出器坏了」是两回事：前者换路径就能解决，
+		# 给个安装浏览器的指引只会让用户白折腾一圈。
+		handle_error_output(
+			ctx,
+			"resume",
+			code="LOCAL_IO_ERROR",
+			message=f"{fmt.upper()} 导出失败：无法写入 {target}（目标可能是已存在的目录或没有写权限）",
+			hints={"operator_actions": ["换一个 --output 路径，或确认目标目录存在且可写后重试"]},
+		)
+		return
+	recoverable, recovery_action = error_contract_for_code("EXPORT_FAILED")
+	handle_error_output(
+		ctx,
+		"resume",
+		code="EXPORT_FAILED",
+		# 异常文本可能带本机路径或渲染栈：只保留首行，完整信息要 debug 日志。
+		message=f"{fmt.upper()} 导出失败: {(str(exc) or type(exc).__name__).splitlines()[0][:300]}",
+		recoverable=recoverable,
+		recovery_action=recovery_action,
+	)
 
 
 def _build_default_template(name: str) -> ResumeData:
@@ -367,7 +411,14 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 	if fmt in ("pdf", "html"):
 		if output_path is None:
 			output_path = f"{name}.{fmt}"
-		out = prepare_output_path(output_path)
+		try:
+			out = prepare_output_path(output_path)
+		except OSError as exc:
+			# 建父目录就失败（目标本身是目录、无权限）：与写文件失败同一契约。
+			# 这里必须自己出信封：resume_cmd 没有统一异常装饰器，漏出去会落进
+			# 顶层 OSError 网兜，被报成「resume 本地文件读写失败」。
+			_emit_export_failure(ctx, fmt, exc, target=output_path)
+			return
 		try:
 			from boss_agent_cli.resume.export import export_html, export_pdf
 			if fmt == "html":
@@ -375,15 +426,7 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 			else:
 				export_pdf(resume, out)
 		except Exception as exc:
-			recoverable, recovery_action = error_contract_for_code("EXPORT_FAILED")
-			handle_error_output(
-				ctx, "resume",
-				code="EXPORT_FAILED",
-				message=f"{fmt.upper()} 导出失败: {exc}",
-				recoverable=recoverable,
-				recovery_action=recovery_action,
-			)
-			ctx.exit(1)
+			_emit_export_failure(ctx, fmt, exc, target=str(out))
 			return
 		handle_output(
 			ctx, "resume",
@@ -395,7 +438,11 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 	json_str = store.export_json(name)
 	export_data = json.loads(json_str)
 	if output_path:
-		prepare_output_path(output_path).write_text(json_str, encoding="utf-8")
+		try:
+			prepare_output_path(output_path).write_text(json_str, encoding="utf-8")
+		except OSError as exc:
+			_emit_export_failure(ctx, fmt, exc, target=output_path)
+			return
 	handle_output(
 		ctx, "resume", export_data,
 		render=lambda d: render_record_result(
