@@ -5,6 +5,7 @@ import shlex
 import sys
 from typing import Any
 
+import click
 import pytest
 from click.testing import CliRunner, Result
 
@@ -81,7 +82,7 @@ def test_group_without_subcommand_reports_subcommand_hints(tmp_path):
 		assert next_actions
 		assert all(action.startswith(f"{path} ") for action in next_actions)
 
-	assert "boss agent pending list" in json.loads(
+	assert "boss agent pending list --help" in json.loads(
 		runner.invoke(cli, ["--data-dir", str(tmp_path), "agent", "pending"]).output
 	)["hints"]["next_actions"]
 
@@ -126,6 +127,54 @@ def test_unknown_subcommand_reports_available_commands(tmp_path):
 		assert "可选：" in message
 		next_actions = parsed["hints"]["next_actions"]
 		assert all(action.startswith(f"{path} ") for action in next_actions)
+
+
+def _subcommand_error_cases(
+	group: click.Group, prefix: tuple[str, ...] = ()
+) -> list[tuple[tuple[str, ...], bool]]:
+	cases: list[tuple[tuple[str, ...], bool]] = []
+	for name, command in sorted(group.commands.items()):
+		if not isinstance(command, click.Group):
+			continue
+		path = (*prefix, name)
+		if command.no_args_is_help:
+			cases.append((path, False))
+		cases.append((path, True))
+		cases.extend(_subcommand_error_cases(command, path))
+	return cases
+
+
+@pytest.mark.parametrize(("group_path", "unknown"), _subcommand_error_cases(cli))
+def test_subcommand_error_hints_display_help_without_invoking_actions(tmp_path, monkeypatch, group_path, unknown):
+	"""逐组重放错误信封里的提示，不能再次缺参，也不能执行创建、删除等业务动作。"""
+	# 提示原样重放；只改测试进程的 Click 默认目录，避免启动流程使用真实用户目录。
+	data_dir_option = next(parameter for parameter in cli.params if parameter.name == "data_dir")
+	monkeypatch.setattr(data_dir_option, "default", str(tmp_path))
+	group = cli
+	for name in group_path:
+		group = group.commands[name]
+	assert isinstance(group, click.Group)
+	calls: list[bool] = []
+
+	def forbidden_action(*args, **kwargs):
+		calls.append(True)
+		raise AssertionError("恢复提示不得调用业务动作")
+
+	for command in group.commands.values():
+		monkeypatch.setattr(command, "callback", forbidden_action)
+
+	runner = CliRunner()
+	args = [*group_path, *(["bogus"] if unknown else [])]
+	parsed = _assert_single_stdout_json_error(runner.invoke(cli, args), command=group_path[0])
+	actions = parsed["hints"]["next_actions"]
+	assert actions
+	for action in actions:
+		argv = shlex.split(action)
+		assert argv[0] == "boss"
+		result = runner.invoke(cli, argv[1:])
+		assert result.exit_code == 0, (action, result.output, result.exception)
+		assert "Usage:" in result.stdout
+	assert calls == []
 
 
 def test_missing_required_parameter_points_at_command_help(tmp_path):

@@ -130,6 +130,8 @@ boss status
 - `WORKFLOW_TIMEOUT`：正常 wizard 超时保留 `run_id`，调整超时后显式 `boss wizard --resume <run_id>`；若 MCP 返回 `outcome_unknown=true`，先核对未确认的动作，禁止直接重试
 - `INVALID_PARAM`：校正参数（城市、福利、页码等）；MCP 侧还包括未知工具名、不符合 `inputSchema` 声明类型的参数（例如把 `dry_run` 传成字符串 `"true"`），以及 `inputSchema.properties` 之外的未知参数（工具的 schema 已声明顶层 `additionalProperties: false`）。枚举参数（`format` / `sort` / `from_who` / `section` / `detail_status` / `tone` / `lang` / `type`）传显式空串会原样到达 CLI，得到带可选值列表的取值诊断，不会静默落回默认值；传 `null` 或不传仍等价于省略
 
+缺少或写错子命令时，`hints.next_actions` 会列出各子命令的帮助命令（例如 `boss resume init --help`）。先读取帮助，再按目标与必填参数执行具体动作。
+
 ## 4) 工具协议直出
 
 招聘者自动化的停止状态不会被普通 `agent run` 清除。操作者在原浏览器完成官方验证、核对受阻页面及未确认动作后，可明确调用 `boss --role recruiter agent run --resume`；MCP `boss_agent_run.resume=true` 同样需要该明确恢复指令。恢复复用已确认动作的防重记录。
