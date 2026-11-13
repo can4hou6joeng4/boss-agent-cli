@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Fixed
+- 批量招呼对结果未知的发送自动重发，并以 `ok:true` 回报（Issue #984）：`batch-greet` 把所有非风控异常统一「sleep 后重试一次」，包括 `ACTION_UNCONFIRMED`——该码表示请求已发出但响应中断（平台层 `__cli_error_details__` 明确 `replay_safe: false`、`outcome: unknown`）。第一次结果未知时再发一次招呼，就是在不知道是否已送达的情况下重复写操作；两次都未知后还输出 `ok:true` + `failed[0].error` 字符串，Agent 无从知道「这条可能已经发出」。现在 `ACTION_UNCONFIRMED`（响应字典与异常两种形态）与风控、预算停止同级：立即停批、不 sleep、不重试，返回 `ok:false`，`error.details` 带 `outcome_unknown: true` / `replay_safe: false` 与该未知项的完整详情，已成功项仍随 `details.greeted` 带回。普通网络错误（请求未发出）的一次重试语义不变。
+
 - MCP 工具对枚举参数保留显式空串，CLI 的取值诊断不再被静默吞掉（Issue #982）：`mcp_args._build_args` 对 `sort` / `detail_status` / `from_who` / `format` / `section` / `tone` / `lang` / `type` 用真值判断，调用方传 `{"format": ""}`（模板渲染失败、拼写留空、编排器把缺失值序列化成空串）时被当成「没传」：`boss_stats(format="")` 静默按默认 `json` 执行、`boss_search(sort="")` 静默按默认相关性排序，信封仍是 `ok:true`，Agent 没有信号。现在这些枚举参数的空串原样下发，CLI 返回 `INVALID_PARAM` + 可选值列表；`null` 与缺键仍等价于未传（与 #958 的 `query` / `url` 一致），自由文本参数（`city` / `note` / `tone` 之外的 `context` 等）语义不变。新增结构门禁：schema 里声明 enum 的字符串参数必须登记在 `_ENUM_KEYS`，新增枚举参数漏登记时测试失败。
 
 - 浏览器来源耗尽信封的恢复命令保留数据目录与平台（Issue #980）：`api/browser_source.py` 的 `POLICIES` 是 `BrowserSourceUnavailable` 信封的文案真源，其中内嵌的 `boss doctor`、`boss status --live` 与 `httpx-only` 指引里的 `boss clean --risk-lock` / `boss login --cdp` 都是裸命令。自定义 `--data-dir` 下 `doctor` 诊断的是默认目录的登录态、缓存与风险锁，`clean --risk-lock` 走错目录还会静默返回 `local_lock_removed: false`（同 #978）。现在 `display.handle_auth_errors` 与 `wizard/runner.py` 在拿到运行上下文时把策略文案里的命令改写成带平台与按 shell 参数转义的绝对目录的形式（`browser_policy_text` / `browser_policy_text_for_ctx`）；策略表本身保持无上下文的通用文案。新增结构门禁：策略文案里出现的 `boss <cmd>` 字面量必须登记在 `display._BROWSER_POLICY_COMMANDS`，新增来源漏登记会在测试现形。

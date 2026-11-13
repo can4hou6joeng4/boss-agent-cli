@@ -184,6 +184,20 @@ def _explicit_global_options(ctx: click.Context) -> list[str]:
 	return options
 
 
+def _cli_error_details(response: Any) -> dict[str, Any]:
+	"""提取平台层挂在响应上的 ``__cli_error_details__``（如 ``replay_safe=false``）。
+
+	未知结果的信封必须保留「操作可能已生效」的语义字段，否则 Agent 只看到一个
+	字符串错误码，会当成普通失败重试（Issue #984）。
+	"""
+	if not isinstance(response, dict):
+		return {}
+	details = response.get("__cli_error_details__")
+	if not isinstance(details, dict):
+		return {}
+	return {str(key): value for key, value in details.items() if not str(key).startswith("__")}
+
+
 def _batch_greet_dry_run_rerun(ctx: click.Context, query: str) -> str:
 	"""dry-run 之后真正要执行的那条命令：与本次调用同参数，只去掉 --dry-run。"""
 	params = ctx.params or {}
@@ -317,6 +331,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 			stopped_reason = None
 			risk_error: PlatformRiskError | None = None
 			stop_error: Exception | None = None
+			unconfirmed: dict[str, Any] | None = None
 			cache_write_failed = False
 
 			for idx, item in enumerate(candidates):
@@ -333,6 +348,22 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 								# 响应字典形态的风控与异常形态走同一条终止分支，
 								# 不再靠 message 里的「频率」字样误判成 RATE_LIMITED（Issue #419）。
 								raise risk_cls(error_message or error_code)
+							if error_code == "ACTION_UNCONFIRMED":
+								# 请求已发出、结果未知（`__cli_error_details__.replay_safe=false`）：
+								# 重试等于在不知道是否已送达时再发一次招呼。立即停批，
+								# 把阻止重放的详情原样带回（Issue #984）。
+								unconfirmed = {
+									**item.to_dict(),
+									"status": "unconfirmed",
+									"error": error_code,
+									"details": _cli_error_details(resp),
+								}
+								results.append(unconfirmed)
+								stopped_reason = error_code
+								logger.warning(
+									f"招呼结果未确认，停止批量打招呼: {item.title} @ {item.company}"
+								)
+								break
 							raise RuntimeError(error_code if error_code != "UNKNOWN" else (resp.get("message") or "greet failed"))
 						entry: dict[str, Any] = {
 							"security_id": item.security_id,
@@ -367,6 +398,18 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 							logger.warning(f"请求预算耗尽，停止批量打招呼: {item.title} @ {item.company}")
 							break
 						error_msg = str(e)
+						if "ACTION_UNCONFIRMED" in error_msg:
+							# 异常形态的未知结果（平台层直接 raise 时）同样不能重试（Issue #984）。
+							unconfirmed = {
+								**item.to_dict(),
+								"status": "unconfirmed",
+								"error": "ACTION_UNCONFIRMED",
+								"details": {"outcome": "unknown", "replay_safe": False},
+							}
+							results.append(unconfirmed)
+							stopped_reason = "ACTION_UNCONFIRMED"
+							logger.warning(f"招呼结果未确认，停止批量打招呼: {item.title} @ {item.company}")
+							break
 						if "RATE_LIMITED" in error_msg or "频率" in error_msg:
 							stopped_reason = "RATE_LIMITED"
 							break
@@ -454,6 +497,31 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 					recovery_action=recovery_action,
 					details=data,
 					hints=hints or None,
+				)
+				return
+
+			if unconfirmed is not None:
+				# 结果未知的招呼不能以 ok:true 回报：Agent 会当成普通失败重发（Issue #984）。
+				recoverable, recovery_action = error_contract_for_code("ACTION_UNCONFIRMED")
+				handle_error_output(
+					ctx, "batch-greet",
+					code="ACTION_UNCONFIRMED",
+					message="部分招呼的发送结果未确认；已停止剩余候选人，不要自动重发",
+					recoverable=recoverable,
+					recovery_action=recovery_action,
+					details={
+						**data,
+						"outcome_unknown": True,
+						"replay_safe": False,
+						# 未知项的完整详情（含平台层给出的 replay_safe / outcome）随批次带回。
+						"unconfirmed": unconfirmed,
+					},
+					hints={
+						"next_actions": [_hint_command(ctx, "chat")],
+						"operator_actions": [
+							"先在 BOSS 直聘官方会话列表核对这条招呼是否已送达；不要自动重发",
+						],
+					},
 				)
 				return
 
