@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 发布后 PyPI 安装验收定向刷新目标包索引（Issue #994）：新虚拟环境仍会复用 uv 的旧索引缓存，刚发布的版本此前可能被误报为不存在，导致验收假失败。`verify_release.py --pypi-version` 现在为目标包指定 `--refresh-package boss-agent-cli`，依赖包继续复用缓存；本地 wheel 验收保持原语义。
+
 ## [3.4.2] - 2026-11-13
 
 ### Fixed

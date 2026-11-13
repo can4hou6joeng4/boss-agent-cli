@@ -299,20 +299,32 @@ def test_fresh_install_reports_failures_and_cleans(verifier, monkeypatch, tmp_pa
 		assert "PYTHONPATH" not in kwargs["env"]
 	if failure is None:
 		assert calls[1][0][-1].endswith(".whl[mcp]")
+		assert "--refresh-package" not in calls[1][0]
 
 
-def test_pypi_uses_exact_version(verifier, monkeypatch, tmp_path):
+@pytest.mark.parametrize("install_fails", [False, True])
+def test_pypi_uses_exact_version_and_refreshes_only_target(verifier, monkeypatch, tmp_path, install_fails):
 	monkeypatch.setattr(verifier, "check_git", lambda *a, **kw: {"clean": True})
 	monkeypatch.setattr(verifier.shutil, "which", lambda _: "/fake/uv")
 	calls = []
 
 	def run(argv, **kw):
 		calls.append(argv)
+		if "pip" in argv and install_fails:
+			raise verifier.VerificationError("安装失败")
 		return json.dumps(probe_report()) if argv[0].endswith(("python", "python.exe")) else ""
 
 	monkeypatch.setattr(verifier, "run_command", run)
-	assert verifier.verify(options(pypi_version=VERSION), tmp_path)["ok"]
-	assert calls[1][-1] == f"boss-agent-cli[mcp]=={VERSION}"
+	report = verifier.verify(options(pypi_version=VERSION), tmp_path)
+	assert report["ok"] is (not install_fails)
+	install = calls[1]
+	assert install[-1] == f"boss-agent-cli[mcp]=={VERSION}"
+	assert "--refresh-package" in install
+	assert install[install.index("--refresh-package") + 1] == "boss-agent-cli"
+	assert install.count("--refresh-package") == 1
+	assert "--refresh" not in install
+	assert "--no-cache" not in install
+	assert report["steps"][-1]["status"] == ("not_run" if install_fails else "passed")
 
 
 def test_cli_failure_is_single_json(verifier, monkeypatch, tmp_path, capsys):
