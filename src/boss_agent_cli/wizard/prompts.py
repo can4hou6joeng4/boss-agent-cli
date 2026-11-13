@@ -12,6 +12,7 @@ import click
 
 from boss_agent_cli.wizard.catalog import GOALS, catalog_data
 from boss_agent_cli.wizard.models import WizardInput, WorkflowInputError
+from boss_agent_cli.wizard.runner import has_blocked_step
 
 
 @dataclass(frozen=True)
@@ -556,7 +557,7 @@ def _collect_control(
 	runs = [run for run in available_runs if str(run.get("status")) in allowed_statuses]
 	if action in {"resume", "retry"}:
 		# 结果未确认的失败任务不能靠恢复重跑，只在状态视图里展示。
-		runs = [run for run in runs if not _has_blocked_step(run)]
+		runs = [run for run in runs if not has_blocked_step(run)]
 	# Status view: also include waiting shells that already have a completed live crawl.
 	if action == "status":
 		seen = {str(run.get("run_id")) for run in runs}
@@ -604,7 +605,7 @@ def _collect_control(
 				inner = data.get("run_id")
 		if inner:
 			description = f"{description} · 采集 {inner}"
-		if action == "status" and _has_blocked_step(run):
+		if action == "status" and has_blocked_step(run):
 			description = f"{description} · 结果未确认，需人工核对"
 		options.append(MenuOption(str(run["run_id"]), label, description))
 	run_id = menu.select("请选择任务", options, default=options[0].value, allow_back=True)
@@ -764,26 +765,12 @@ def _runs_with_status(available_runs: Sequence[Mapping[str, Any]], statuses: set
 	return [run for run in available_runs if str(run.get("status")) in statuses]
 
 
-def _has_blocked_step(run: Mapping[str, Any]) -> bool:
-	"""失败步骤带 replay_safe=false：动作可能已生效，恢复只会返回原失败。"""
-	steps = run.get("steps")
-	if not isinstance(steps, Sequence):
-		return False
-	for step in steps:
-		if not isinstance(step, Mapping) or str(step.get("status")) != "failed":
-			continue
-		error = step.get("error")
-		if isinstance(error, Mapping) and error.get("replay_safe") is False:
-			return True
-	return False
-
-
 def _resumable_runs(available_runs: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
 	statuses = {"pending", "running", "waiting_input", "failed"}
 	return [
 		run
 		for run in available_runs
-		if str(run.get("status")) in statuses and not _has_blocked_step(run)
+		if str(run.get("status")) in statuses and not has_blocked_step(run)
 	]
 
 

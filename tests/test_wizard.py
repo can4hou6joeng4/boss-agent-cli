@@ -3157,6 +3157,86 @@ def test_wizard_status_and_stop_after_stop_report_only_terminals(tmp_path):
 	assert [shlex.split(action) for action in envelope["hints"]["next_actions"]] == expected
 
 
+_BLOCKED_STEP_ERRORS = {
+	"unconfirmed-write": {
+		"code": "ACTION_UNCONFIRMED",
+		"message": "发送结果未确认",
+		"recoverable": False,
+		"recovery_action": "操作可能已生效：先用 boss hr chatmsg 42 核对平台记录，不要自动重试",
+		"replay_safe": False,
+	},
+	"local-state-write-failed": {
+		"code": "LOCAL_STATE_WRITE_FAILED",
+		"message": "平台操作已完成，但本地状态保存失败",
+		"recoverable": False,
+		"recovery_action": "先在官方页面核对本次操作是否已生效；不要自动重发",
+		"replay_safe": False,
+	},
+}
+
+
+@pytest.mark.parametrize("error", _BLOCKED_STEP_ERRORS.values(), ids=_BLOCKED_STEP_ERRORS.keys())
+def test_wizard_status_on_blocked_failed_run_stops_suggesting_resume(tmp_path, error):
+	"""结果无法重放的失败给 `--resume` 只会原样失败：指引改为先核对（Issue #1021）。"""
+	plan = WorkflowPlan(
+		role="recruiter",
+		platform="zhipin",
+		goal="reply",
+		inputs={"friend_id": 42, "message": "offline fixture"},
+		requested_steps=("recruiter_reply",),
+		mode="headless",
+	)
+	with WorkflowStore(tmp_path) as store:
+		store.create("wrn_blocked", plan)
+		store.update_step("wrn_blocked", "recruiter_reply", status="failed", error=error)
+		store.update_run("wrn_blocked", status="failed", current_step="recruiter_reply", error=error)
+
+	status = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), "wizard", "--status", "wrn_blocked"])
+	assert status.exit_code == 0
+	envelope = json.loads(status.stdout)
+	assert envelope["data"]["status"] == "failed"
+	assert [shlex.split(action) for action in envelope["hints"]["next_actions"]] == [
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--status", "wrn_blocked"],
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard"],
+	]
+	# 步骤级的核对命令随状态返回，Agent 照它核对平台记录。
+	assert envelope["data"]["steps"][0]["error"]["recovery_action"] == error["recovery_action"]
+
+	# 照做 `--resume` 得到的确实是原失败：改变指引的前提成立。
+	resumed = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), "wizard", "--resume", "wrn_blocked"])
+	assert resumed.exit_code == 1
+	assert json.loads(resumed.stdout)["error"]["code"] == error["code"]
+
+
+def test_wizard_status_on_replayable_failed_run_still_suggests_resume(tmp_path):
+	"""普通失败没有这条限制：恢复仍是唯一能接着往下跑的动作。"""
+	plan = WorkflowPlan(
+		role="recruiter",
+		platform="zhipin",
+		goal="reply",
+		inputs={"friend_id": 42, "message": "offline fixture"},
+		requested_steps=("recruiter_reply",),
+		mode="headless",
+	)
+	error = {
+		"code": "RATE_LIMITED",
+		"message": "请求过于频繁",
+		"recoverable": True,
+		"recovery_action": "稍后重试，或返回主菜单选择其他事项",
+	}
+	with WorkflowStore(tmp_path) as store:
+		store.create("wrn_retryable", plan)
+		store.update_step("wrn_retryable", "recruiter_reply", status="failed", error=error)
+		store.update_run("wrn_retryable", status="failed", current_step="recruiter_reply", error=error)
+
+	status = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), "wizard", "--status", "wrn_retryable"])
+	assert status.exit_code == 0
+	assert [shlex.split(action) for action in json.loads(status.stdout)["hints"]["next_actions"]] == [
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--resume", "wrn_retryable"],
+		["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--status", "wrn_retryable"],
+	]
+
+
 def test_wizard_stopped_run_offers_bound_crawl_resume(tmp_path):
 	"""绑定了内部 crawl 的 stopped run：先给恢复了数据目录的 crawl resume（Issue #870）。"""
 	plan = WorkflowPlan(
