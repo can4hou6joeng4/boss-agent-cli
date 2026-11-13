@@ -204,10 +204,13 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "export":
 		args = [name]
-		if arguments.get("query"):
-			args.append(arguments["query"])
-		if arguments.get("url"):
-			args.extend(["--url", arguments["url"]])
+		# 显式空串要原样下发（Issue #958）：CLI 对 `export --url ""` 有专门诊断
+		# （「--url 的值不能为空」），真值判断会把空值化装成没传，Agent 收到的
+		# 就是误导性的「未提供 query」。query 同理，空关键词应显式到达 CLI。
+		if "query" in arguments and arguments["query"] is not None:
+			args.append(str(arguments["query"]))
+		if "url" in arguments and arguments["url"] is not None:
+			args.extend(["--url", str(arguments["url"])])
 		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type"):
 			if arguments.get(opt):
 				cli_flag = f"--{opt.replace('_', '-')}"
