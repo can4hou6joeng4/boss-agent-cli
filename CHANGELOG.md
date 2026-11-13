@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Fixed
+- 子命令选择错误的下一步提示改为帮助命令（Issue #986）：`boss resume`、`boss resume bogus` 等缺少或写错子命令的调用，此前直接返回裸子命令，`resume clone` 会再次缺参，`resume init` 则会直接创建默认简历。现在两类错误都返回各子命令的 `--help`，供 Agent 读取用法后选择动作；回归逐组重放提示并拦截业务回调，覆盖嵌套组及两类错误。
+
 - 批量招呼对结果未知的发送自动重发，并以 `ok:true` 回报（Issue #984）：`batch-greet` 把所有非风控异常统一「sleep 后重试一次」，包括 `ACTION_UNCONFIRMED`——该码表示请求已发出但响应中断（平台层 `__cli_error_details__` 明确 `replay_safe: false`、`outcome: unknown`）。第一次结果未知时再发一次招呼，就是在不知道是否已送达的情况下重复写操作；两次都未知后还输出 `ok:true` + `failed[0].error` 字符串，Agent 无从知道「这条可能已经发出」。现在 `ACTION_UNCONFIRMED`（响应字典与异常两种形态）与风控、预算停止同级：立即停批、不 sleep、不重试，返回 `ok:false`，`error.details` 带 `outcome_unknown: true` / `replay_safe: false` 与该未知项的完整详情，已成功项仍随 `details.greeted` 带回。普通网络错误（请求未发出）的一次重试语义不变。
 
 - MCP 工具对枚举参数保留显式空串，CLI 的取值诊断不再被静默吞掉（Issue #982）：`mcp_args._build_args` 对 `sort` / `detail_status` / `from_who` / `format` / `section` / `tone` / `lang` / `type` 用真值判断，调用方传 `{"format": ""}`（模板渲染失败、拼写留空、编排器把缺失值序列化成空串）时被当成「没传」：`boss_stats(format="")` 静默按默认 `json` 执行、`boss_search(sort="")` 静默按默认相关性排序，信封仍是 `ok:true`，Agent 没有信号。现在这些枚举参数的空串原样下发，CLI 返回 `INVALID_PARAM` + 可选值列表；`null` 与缺键仍等价于未传（与 #958 的 `query` / `url` 一致），自由文本参数（`city` / `note` / `tone` 之外的 `context` 等）语义不变。新增结构门禁：schema 里声明 enum 的字符串参数必须登记在 `_ENUM_KEYS`，新增枚举参数漏登记时测试失败。

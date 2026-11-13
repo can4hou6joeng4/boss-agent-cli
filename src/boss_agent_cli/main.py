@@ -95,7 +95,7 @@ def _missing_subcommand_error(ctx: click.Context | None) -> tuple[str, str, dict
 	抛 ``NoArgsIsHelpError``，异常消息就是整份英文帮助（「Usage: …」「Options: …」
 	几百字符）。信封的 ``error.message`` 因此被撑成一坨帮助文本，Agent 既读不到
 	「缺子命令」这个原因，也拿不到可执行的下一步。这里改成一句中文说明，并把
-	子命令清单放进 ``hints.next_actions``。
+	各子命令的帮助命令放进 ``hints.next_actions``；直接列裸子命令会缺参或执行写入。
 	"""
 	# NoArgsIsHelpError 在 Click 8.2 才出现，而依赖声明是 click>=8.0：
 	# 按类名判断，避免为它把最低版本抬上去。
@@ -109,7 +109,7 @@ def _missing_subcommand_error(ctx: click.Context | None) -> tuple[str, str, dict
 	return (
 		f"{path} 缺少子命令（可选：{', '.join(names)}）",
 		f"从子命令中选一个后重试，例如 {path} {names[0]} --help",
-		{"next_actions": [f"{path} {name}" for name in names]},
+		{"next_actions": [f"{path} {name} --help" for name in names]},
 	)
 
 
@@ -139,7 +139,7 @@ def _unknown_subcommand_error(exc: click.ClickException) -> tuple[str, str, dict
 	return (
 		f"{path} 没有子命令 '{name}'（可选：{', '.join(names)}）",
 		f"从子命令中选一个后重试，例如 {path} {names[0]} --help",
-		{"next_actions": [f"{path} {name}" for name in names]},
+		{"next_actions": [f"{path} {name} --help" for name in names]},
 	)
 
 

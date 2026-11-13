@@ -130,6 +130,8 @@ Common recovery actions:
 - `WORKFLOW_TIMEOUT`: a normal wizard timeout retains its `run_id`; adjust the deadline and explicitly run `boss wizard --resume <run_id>`. If MCP reports `outcome_unknown=true`, verify unconfirmed actions before retrying
 - `INVALID_PARAM`: correct the input parameters, such as city, welfare filters, or page number; on the MCP side this also covers unknown tool names, argument types that do not match the declared `inputSchema` (for example passing `dry_run` as the string `"true"`), and argument names outside `inputSchema.properties` (every tool schema declares top-level `additionalProperties: false`). Enum arguments (`format` / `sort` / `from_who` / `section` / `detail_status` / `tone` / `lang` / `type`) passed as an explicit empty string reach the CLI verbatim and return its value diagnostic with the allowed choices instead of silently falling back to a default; `null` or an omitted key still means omitted
 
+When a subcommand is missing or unknown, `hints.next_actions` lists help commands for the available subcommands, such as `boss resume init --help`. Read the help first, then choose an action and supply its required parameters.
+
 ## 4) Export tool protocols
 
 Ordinary `agent run` never clears recruiter automation stop state. After official verification in the original browser and checks of the blocked page and any unconfirmed actions, the operator can explicitly run `boss --role recruiter agent run --resume`. The MCP parameter `boss_agent_run.resume=true` requires the same explicit recovery instruction. Confirmed action deduplication records are retained.
