@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import secrets
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -93,6 +93,24 @@ def _browser_kernel_missing_error(
 
 #: 恢复时发现上一个执行器在写请求结果确认前消失，步骤与 run 落成失败时使用的说明。
 _INTERRUPTED_WRITE_MESSAGE = "上一次执行在写请求结果确认前中断，无法确认操作是否已生效，禁止自动重试"
+
+
+def has_blocked_step(run: Mapping[str, Any]) -> bool:
+	"""是否有失败步骤声明 ``replay_safe: false``：动作可能已生效，恢复只会返回原失败。
+
+	``--resume`` 与 TTY 的「恢复已有任务」列表都以此为准，避免同一份状态在两处
+	得出不同结论（Issue #1021）。
+	"""
+	steps = run.get("steps")
+	if not isinstance(steps, Sequence):
+		return False
+	for step in steps:
+		if not isinstance(step, Mapping) or str(step.get("status")) != WorkflowStatus.FAILED.value:
+			continue
+		error = step.get("error")
+		if isinstance(error, Mapping) and error.get("replay_safe") is False:
+			return True
+	return False
 
 
 @dataclass(frozen=True)

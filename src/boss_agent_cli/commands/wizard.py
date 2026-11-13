@@ -34,7 +34,7 @@ from boss_agent_cli.wizard.renderer import (
 	render_run,
 	wizard_screen,
 )
-from boss_agent_cli.wizard.runner import WorkflowActionError, WorkflowRunner
+from boss_agent_cli.wizard.runner import WorkflowActionError, WorkflowRunner, has_blocked_step
 from boss_agent_cli.wizard.store import WorkflowStore
 
 
@@ -129,6 +129,11 @@ def _workflow_next_actions(ctx: click.Context, run: Mapping[str, Any]) -> list[s
 			)
 		actions.append(status_cmd)
 		return actions
+	if status == "failed" and has_blocked_step(run):
+		# 失败步骤的结果无法重放（replay_safe=false）：--resume 只会原样返回同一个失败，
+		# 照做的 Agent 会把它读成「再试一次」而空转。先看 --status 里该步骤的核对命令，
+		# 确认平台实际状态后再决定；与 TTY「恢复已有任务」列表的筛选口径一致（Issue #1021）。
+		return [status_cmd, prefix]
 	if status in {"failed", "waiting_input"}:
 		# 断点仍在本地：恢复是唯一能接着往下跑的动作，status 方便先核对。
 		return [f"{prefix} --resume {shell_argument(run_id)}", status_cmd]
