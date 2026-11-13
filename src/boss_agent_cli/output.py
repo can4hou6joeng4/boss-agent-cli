@@ -167,6 +167,15 @@ def envelope_error(
 		recoverable = bool(spec.get("recoverable", False))
 	if recovery_action is None:
 		recovery_action = spec.get("recovery_action")
+	# 登记表声明 ``replay_safe: false`` 的码表示「禁止自动重发」，Agent 必须能从
+	# ``error.details`` 读到与文案一致的判定，而不是只看到 ``sent: null``（Issue #988）。
+	# ``outcome_unknown`` 只在本码确实「结果未知」时补齐：``LOCAL_STATE_WRITE_FAILED``
+	# 的平台结果已确认，只是本地记账失败。调用方给出的更精确值优先。
+	if spec.get("replay_safe") is False:
+		implied: dict[str, Any] = {"replay_safe": False}
+		if spec.get("outcome_unknown") is True:
+			implied["outcome_unknown"] = True
+		details = {**implied, **(details or {})}
 	error = {
 		"code": code,
 		"message": redact_sensitive_text(message),

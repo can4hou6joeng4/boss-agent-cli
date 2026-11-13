@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from boss_agent_cli.output import envelope_success, envelope_error, emit_error, emit_success, Logger
+from boss_agent_cli.schema.error_codes import ERROR_CODES
 
 
 def test_envelope_success_minimal():
@@ -525,3 +526,59 @@ def test_unknown_outcome_details_always_declare_replay_safety():
 				failures.append(f"{path.relative_to(source_root.parents[1])}:{node.lineno}")
 	assert checked >= 1, "没有找到 outcome=unknown 的 details 字面量，AST 扫描可能失效"
 	assert failures == [], f"这些位置缺少 replay_safe：{failures}"
+
+
+def test_unregistered_unknown_result_codes_still_declare_replay_safety():
+	"""登记表里「结果未确认」的码，信封必须自带 ``replay_safe: false``。
+
+	招聘者侧 ``GREET_RESULT_UNKNOWN`` / ``LOCATION_RESULT_UNKNOWN`` /
+	``RESUME_ACCEPT_RESULT_UNKNOWN`` 的 details 原先只有 ``sent: null`` /
+	``accepted: null``，与文档承诺的「未知结果都带 replay_safe」不一致（Issue #988）。
+	``LOCAL_STATE_WRITE_FAILED`` 的平台结果已确认，只缺 ``replay_safe``，不能
+	被顺手标成 ``outcome_unknown``。
+	"""
+	unknown_codes = [
+		"ACTION_UNCONFIRMED",
+		"RESUME_ACCEPT_RESULT_UNKNOWN",
+		"GREET_RESULT_UNKNOWN",
+		"LOCATION_RESULT_UNKNOWN",
+	]
+	for code in unknown_codes:
+		assert ERROR_CODES[code].get("replay_safe") is False, code
+		assert ERROR_CODES[code].get("outcome_unknown") is True, code
+		payload = json.loads(
+			envelope_error("hr", code=code, message="未确认", details={"friend_id": 1})
+		)
+		details = payload["error"]["details"]
+		assert details["replay_safe"] is False, code
+		assert details["outcome_unknown"] is True, code
+		assert details["friend_id"] == 1, code
+
+	assert ERROR_CODES["LOCAL_STATE_WRITE_FAILED"].get("replay_safe") is False
+	payload = json.loads(
+		envelope_error(
+			"recruiter-location",
+			code="LOCAL_STATE_WRITE_FAILED",
+			message="已发送，但本地记录保存失败",
+			details={"friend_id": 1, "sent": True},
+		)
+	)
+	details = payload["error"]["details"]
+	assert details["replay_safe"] is False
+	assert details["sent"] is True
+	assert "outcome_unknown" not in details
+
+
+def test_caller_supplied_replay_safe_wins_over_registry():
+	"""调用方掌握更精确的判定时，登记表的 ``replay_safe: false`` 不能覆盖它。"""
+	payload = json.loads(
+		envelope_error(
+			"hr",
+			code="ACTION_UNCONFIRMED",
+			message="读取被中断",
+			details={"replay_safe": True, "outcome_unknown": False},
+		)
+	)
+	details = payload["error"]["details"]
+	assert details["replay_safe"] is True
+	assert details["outcome_unknown"] is False

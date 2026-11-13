@@ -611,6 +611,23 @@ def test_schema_error_codes_have_recovery_action_text():
 	assert not missing, f"以下错误码缺少 recovery_action 文案: {missing}"
 
 
+def test_schema_error_codes_promising_no_retry_declare_replay_safety():
+	"""文案承诺「禁止自动重发 / 重试」的码必须显式声明 ``replay_safe: false``。
+
+	``GREET_RESULT_UNKNOWN`` 等招聘者未知结果码的 details 曾只有 ``sent: null``，
+	Agent 按文档读 ``replay_safe`` 拿不到值，只能凭文案猜（Issue #988）。由
+	``output.envelope_error`` 按登记表补齐，新增同类码漏声明时在此现形。
+	"""
+	offenders = sorted(
+		code
+		for code, spec in SCHEMA_DATA["error_codes"].items()
+		if any(token in spec["message"] for token in ("禁止自动重发", "禁止自动重试", "禁止自动重新"))
+		and spec.get("replay_safe") is not False
+	)
+
+	assert offenders == [], f"以下错误码承诺禁止重发但未声明 replay_safe: false: {offenders}"
+
+
 def test_schema_error_codes_exclude_success_event_statuses():
 	"""AUTO_EXECUTED / DRY_RUN 是招聘自动化事件的成功状态，不能登记成错误码。
 
