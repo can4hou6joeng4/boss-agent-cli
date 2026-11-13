@@ -1358,6 +1358,39 @@ def test_runner_retries_only_recoverable_errors(tmp_path):
 	assert attempts == 2
 
 
+def test_automatic_retry_reuses_newly_bound_inner_checkpoint(tmp_path):
+	"""同一次运行中的自动重试必须读取刚保存的内部绑定，不能另建采集任务。"""
+	seen_inner_ids = []
+	created_inner_ids = []
+
+	def crawl(context, inputs, prior):
+		# 刷新当前步骤 checkpoint 时，已完成前置步骤的结果也必须保留。
+		assert prior["auth_status"]["data"] == {"ok": True}
+		inner_run_id = prior.get("crawl_start", {}).get("inner_run_id")
+		seen_inner_ids.append(inner_run_id)
+		if inner_run_id is None:
+			inner_run_id = f"fixture-inner-{len(created_inner_ids) + 1}"
+			created_inner_ids.append(inner_run_id)
+			context.workflow_control.bind_inner_run(inner_run_id)
+		if len(seen_inner_ids) == 1:
+			raise WorkflowActionError("NETWORK_ERROR", "离线模拟采集中断", recoverable=True)
+		return StepResult({"run_id": inner_run_id})
+
+	plan = replace(
+		_plan("auth_status", "crawl_start"), goal="crawl_start", inputs={"query": "Python", "city": "北京"},
+	)
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(
+			store,
+			{"auth_status": lambda c, i, p: StepResult({"ok": True}), "crawl_start": crawl},
+		).run(plan, _action_context(tmp_path), run_id="run-retry-bound", max_retries=1)
+
+	assert run["status"] == "completed"
+	assert seen_inner_ids == [None, "fixture-inner-1"]
+	assert created_inner_ids == ["fixture-inner-1"]
+	assert run["steps"][1]["result"]["data"]["run_id"] == "fixture-inner-1"
+
+
 def test_runner_honors_persisted_stop_between_steps(tmp_path):
 	with WorkflowStore(tmp_path) as store:
 		runner = WorkflowRunner(
