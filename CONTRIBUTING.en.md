@@ -141,7 +141,7 @@ On error, the envelope must contain `error.code`, `error.recoverable`, and `erro
 
 ## Offline MCP evals
 
-`evals/` contains a fixture-first, reproducible evaluation that compares an MCP agent using this CLI with a baseline agent across four scenarios (welfare filtering, detail + shortlist, compliance boundary, error recovery). Pass criteria and failure signals per scenario are listed in the scenario table in [`evals/README.md`](evals/README.md).
+`evals/` contains a fixture-first, reproducible evaluation that compares an MCP agent using this CLI with a baseline agent using recorded evidence across four scenarios (welfare filtering, detail + shortlist, platform risk stop, error recovery). Pass criteria and failure signals per scenario are listed in the scenario table in [`evals/README.md`](evals/README.md).
 
 The default `fixture` mode is fully offline: no platform calls and no login state. **Run it from an independent terminal — do not nest it inside Claude Code / Codex or other agent sessions**, where it can hang or produce false "0 trigger" results.
 

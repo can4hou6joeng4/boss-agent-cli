@@ -242,6 +242,10 @@ def _evaluate_agent_run(expectations: dict[str, Any], run: dict[str, Any], *, mo
 	tool_calls = run.get("tool_calls", [])
 	envelopes = run.get("envelopes", [])
 
+	max_tool_calls = expectations.get("max_tool_calls")
+	if max_tool_calls is not None and len(tool_calls) > max_tool_calls:
+		failures.append(f"tool call limit exceeded: {len(tool_calls)} > {max_tool_calls}")
+
 	for tool_name in expectations.get("required_tools", []):
 		if not _has_tool_call(tool_calls, tool_name):
 			failures.append(f"missing required tool call: {tool_name}")
@@ -273,6 +277,17 @@ def _evaluate_agent_run(expectations: dict[str, Any], run: dict[str, Any], *, mo
 	for code in expectations.get("required_error_codes", []):
 		if code not in _error_codes(run):
 			failures.append(f"missing error code: {code}")
+
+	for code in expectations.get("nonrecoverable_error_codes", []):
+		if not any(
+			isinstance(envelope, dict)
+			and envelope.get("ok") is False
+			and isinstance(envelope.get("error"), dict)
+			and envelope["error"].get("code") == code
+			and envelope["error"].get("recoverable") is False
+			for envelope in envelopes
+		):
+			failures.append(f"missing nonrecoverable error envelope: {code}")
 
 	action_fragment = expectations.get("recovery_action_contains")
 	if action_fragment and not any(action_fragment in action for action in _recovery_actions(run)):

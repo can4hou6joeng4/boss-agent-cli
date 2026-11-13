@@ -120,7 +120,7 @@ git diff --check
 
 ## 离线 MCP 评测
 
-`evals/` 提供 fixture-first 的可复现评测，用来比较接入本 CLI 的 MCP Agent 与基线 Agent 在四个场景上的表现（福利筛选 / 详情+候选池 / 合规边界 / 错误恢复），各场景的通过判据与失败信号见 [`evals/README.md`](evals/README.md) 的场景表。
+`evals/` 提供 fixture-first 的可复现评测，用来比较接入本 CLI 的 MCP Agent 与基线 Agent 在四个场景上的记录证据（福利筛选 / 详情+候选池 / 平台风控停止 / 错误恢复），各场景的通过判据与失败信号见 [`evals/README.md`](evals/README.md) 的场景表。
 
 默认 `fixture` 模式完全离线：不调用平台、不需要登录态。**必须在该独立终端运行，不要嵌套在 Claude Code / Codex 等 Agent 会话里**——嵌套会挂起或产生假的「0 触发」结果。
 
