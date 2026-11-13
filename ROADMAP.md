@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.1（2026-11-13）：MCP 导出保留显式空串、配置工具遵守必填参数；`CLI_ERROR` 恢复提示区分未启动与读写操作；只读工具带 action 维度却漏登记写模式时按写处理；`ai local status` 按字面渲染配置；采集响应结构异常保留原断点，向导自动重试复用内部任务及计数预算。
 - ✅ v3.4.0（2026-11-13）：扫码登录风险错误补本地脱敏诊断（失败阶段 / 事件来源 / 白名单路径，不输出网址与正文）；TTY 终端渲染与 Markdown 导出对平台外部字符串按字面转义（markup 注入与链接 / 图片 / 原始 HTML 语法）；采集配置与后继提示保留数据目录；数据目录与登录态 / AI 密钥文件收紧为仅当前用户可读；`stats` / `interviews` / `cities` / `platforms` / 招聘者 / AI / 招聘自动化 / 简历 / 导出 / 历史 / 配置 / 投递 / 收藏 / 推荐 / 搜索 / 沟通 / 流水线等全部命令族的后继与恢复提示保留数据目录（自定义 `--data-dir` 下照抄提示不再写错目录）；MCP 空备注清空、`boss_hr_jobs` 按参数判定写操作；采集断点恢复 / 翻页截断 / 简历性别 / 面试时间 / `--dry-run` 污染 / 缓存提示复用等约 45 项缺陷修正。
 - ✅ v3.3.0（2026-11-12）：新增招聘者 `hr location` 工作地点卡片（默认预览、`--yes` 确认、本地去重）；`hr chatmsg` / `chatmsg` / `chat-summary` / `me --section deliver` / 招聘者四个列表命令 / `hr jobs list` / `chat --page` / `history` / `favorites list` 统一返回分页证据；MCP 工具补齐 CLI 已有参数并以 `inputSchema` 校验类型、拒绝未声明参数；登录恢复、采集后继与清理预演提示保留数据目录；职位描述缓存加容量上限，`clean --all` 覆盖负隅表；截断 / 脱敏 / fail-open 等一批静默变形问题修正。
 - ✅ v3.2.2（2026-11-09）：`ACTION_UNCONFIRMED` 诊断补齐 WS 无文本帧计数（`ws_send_without_text`）与历史回读漏斗计数（`history_new_count` / `history_self_count` / `history_recipient_count`），便于定位「已送达却未确认」的发送；同时新增公开架构文档、ADR 索引与命令参考目录，整理维护者文档与路线图。
