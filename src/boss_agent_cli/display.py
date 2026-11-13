@@ -20,6 +20,7 @@ from rich.table import Table
 
 from boss_agent_cli.output import emit_success, is_local_io_error, redact_sensitive_text
 from boss_agent_cli.schema.error_codes import ERROR_CODES
+from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing
 
 # Rich output goes to stderr so stdout stays clean for Agent JSON
 console = Console(stderr=True)
@@ -152,6 +153,38 @@ def risk_error_message(code: str) -> str:
 	"""
 	label = str(ERROR_CODES.get(code, {}).get("message") or "命中平台风控")
 	return f"{label}；停止自动化访问并在官方页面处理"
+
+
+def handle_browser_kernel_missing(ctx: Any, command: str, exc: Exception) -> None:
+	"""内核缺失的统一出口：BROWSER_KERNEL_MISSING + 可执行的安装指引。
+
+	Playwright 报 ``Executable doesn't exist`` / ``Playwright was just installed``
+	是确定性失败：patchright 已升级但对应修订版的 Chromium 还没装，重试同一条
+	命令（含 wizard 的自动重试）永远不会成功。此前命令层把它兜成
+	``NETWORK_ERROR`` +「重试」，Agent 会拿同一条命令反复打平台。登录链路
+	（``commands/_login_errors.py``）早已识别这条错误，命令层与 wizard 现在共用
+	同一份契约与文案。异常文本可能带本机路径，只作为 ``details.cause`` 保留
+	首行，不进 message。
+	"""
+	recoverable, recovery_action = error_contract_for_code("BROWSER_KERNEL_MISSING")
+	doctor = boss_command_for_ctx(ctx, "doctor", include_data_dir=True)
+	cause = (str(exc) or type(exc).__name__).splitlines()[0][:300]
+	handle_error_output(
+		ctx,
+		command,
+		code="BROWSER_KERNEL_MISSING",
+		message="patchright 浏览器内核缺失或与所需修订版不匹配",
+		recoverable=recoverable,
+		recovery_action=recovery_action,
+		details={"cause": cause},
+		hints={
+			"next_actions": ["patchright install chromium", doctor],
+			"operator_actions": [
+				"浏览器内核安装完成后重新执行原命令；缺的是 headless shell 时运行 patchright install chromium-headless-shell",
+				f"仍失败时先跑 {doctor} 核对所需修订版与本机已安装版本",
+			],
+		},
+	)
 
 
 def platform_error_message(code: str, message: str | None, fallback_message: str) -> str:
@@ -1056,7 +1089,10 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recovery_action=internal_recovery,
 				)
 			except OSError as e:
-				if is_local_io_error(e):
+				if is_browser_kernel_missing(str(e)):
+					# Playwright 以 OSError 子类抛「内核缺失」时同样不能被兜成可重试。
+					handle_browser_kernel_missing(ctx, command_name, e)
+				elif is_local_io_error(e):
 					# 路径不可写、目标被同名文件占用、磁盘满：重试同一条命令永远修不好，
 					# 落成可重试的 NETWORK_ERROR 只会让 Agent 无限重试。
 					handle_error_output(
@@ -1081,6 +1117,11 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 				# 否则 Agent 会拿同一个非法值反复重试。
 				raise
 			except Exception as e:
+				# 内核缺失是确定性失败：符号名 / 路径未变时重试永远同一结果，不能
+				# 兜成 NETWORK_ERROR +「重试」让 Agent 反复打平台。
+				if is_browser_kernel_missing(str(e)):
+					handle_browser_kernel_missing(ctx, command_name, e)
+					return
 				handle_error_output(
 					ctx,
 					command_name,

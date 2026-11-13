@@ -4200,6 +4200,48 @@ def test_runner_reports_deterministic_action_bug_as_internal_error(tmp_path):
 	assert run["error"]["message"] == "KeyError: 'jobList'"
 
 
+def test_runner_reports_browser_kernel_missing_without_retry(tmp_path):
+	"""浏览器内核缺失是确定性失败：wizard 不能报成可重试的 NETWORK_ERROR。
+
+	patchright 升级后所需 Chromium 未安装，同一条命令（含 runner 的自动重试与
+	Agent 的 --resume）永远复现同一结果；恢复动作只能是安装内核。
+	"""
+
+	def broken(context, inputs, prior):
+		raise RuntimeError(
+			"BrowserType.launch: Executable doesn't exist at "
+			"/Users/u/Library/Caches/ms-playwright/chromium_headless_shell-1248/"
+			"chrome-headless-shell-mac-arm64/chrome-headless-shell"
+		)
+
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, {"broken": broken}).run(
+			_plan("broken"), SimpleNamespace(data_dir=tmp_path), run_id="kernel-run"
+		)
+	assert run["error"]["code"] == "BROWSER_KERNEL_MISSING"
+	assert run["error"]["recoverable"] is True
+	assert run["error"]["recovery_action"] == "patchright install chromium"
+	# doctor 指引必须指向本次运行的数据目录（同 Issue #978 的迁移）。
+	assert str((tmp_path / "doctor-marker")) not in run["error"]["details"]["doctor_command"]
+	assert run["error"]["details"]["doctor_command"] == f"boss --data-dir {tmp_path.resolve()} doctor"
+
+
+def test_runner_does_not_auto_retry_browser_kernel_missing(tmp_path):
+	"""内核缺失不能进入 runner 的自动重试循环：每次重试都会再起一个浏览器。"""
+	attempts = []
+
+	def broken(context, inputs, prior):
+		attempts.append(1)
+		raise RuntimeError("Executable doesn't exist at /nonexistent/chromium")
+
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, {"broken": broken}).run(
+			_plan("broken"), object(), run_id="kernel-retry-run", max_retries=3
+		)
+	assert len(attempts) == 1, attempts
+	assert run["error"]["code"] == "BROWSER_KERNEL_MISSING"
+
+
 def test_runner_reports_local_file_error_as_local_io_error(tmp_path):
 	"""导出路径不可写时重试同一 run_id 也不会成功，不能报成可重试的 NETWORK_ERROR。"""
 

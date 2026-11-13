@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 非登录命令不再把浏览器内核缺失报成可重试的 `NETWORK_ERROR`（Issue #1007）：patchright 升级后所需修订版 Chromium 未安装时，`sync_playwright().start()` / `chromium.launch()` 抛 `Executable doesn't exist` 或 `Playwright was just installed`，命令装饰器、`me` 的兜底与 wizard runner 此前都把它归成 `NETWORK_ERROR` +「重试 / 重试当前 run_id」。这是确定性失败，重试（含 `--resume` 与 runner 自动重试）永远复现，且每次都白起一个浏览器进程。登录链路早已识别该错误，现在识别逻辑收敛到 `services/browser_runtime.is_browser_kernel_missing` 供四处共用；`search` / `detail` / `greet` / `chat` 等装饰器命令、`me` 与 wizard 统一返回 `BROWSER_KERNEL_MISSING`，恢复动作为 `patchright install chromium`，`next_actions` 附带本次数据目录的 `doctor`，异常文本只保留首行进 `error.details.cause`。
+
 ## [3.4.3] - 2026-11-14
 
 ### Fixed

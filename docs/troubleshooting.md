@@ -348,7 +348,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `AI_API_ERROR` | AI 服务调用失败 | 检查网络连接和密钥配置，重试 |
 | `AI_PARSE_ERROR` | AI 返回结果解析失败 | 重试（模型输出不稳定时可能发生） |
 | `PLATFORM_NOT_SUPPORTED` | 当前平台不支持该角色或子命令 | 切换到支持的平台 |
-| `BROWSER_KERNEL_MISSING` | patchright 浏览器内核缺失或版本不匹配 | `patchright install chromium`；缺 headless shell 时运行 `patchright install chromium-headless-shell` |
+| `BROWSER_KERNEL_MISSING` | patchright 浏览器内核缺失或版本不匹配（含非登录命令：`search` / `detail` / `greet` / `chat` / `me` / `wizard` 等启动浏览器时） | `patchright install chromium`；缺 headless shell 时运行 `patchright install chromium-headless-shell`。这是确定性失败，重试不会成功 |
 
 ## Windows smoke checklist
 

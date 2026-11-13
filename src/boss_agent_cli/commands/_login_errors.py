@@ -9,6 +9,7 @@ from boss_agent_cli.display import (
 	risk_error_contract,
 	risk_error_message,
 )
+from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing
 
 
 def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object]:
@@ -80,7 +81,7 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 			],
 		)
 
-	if "executable doesn't exist" in message or "playwright was just installed" in message:
+	if is_browser_kernel_missing(message):
 		return payload(
 			"BROWSER_KERNEL_MISSING",
 			f"patchright 浏览器内核缺失或与所需修订版不匹配: {raw_message}",

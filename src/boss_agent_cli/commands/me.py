@@ -11,6 +11,7 @@ from boss_agent_cli.display import (
 	auth_required_hints,
 	boss_command_for_ctx,
 	error_contract_for_code,
+	handle_browser_kernel_missing,
 	handle_error_output,
 	handle_not_supported,
 	handle_output,
@@ -20,6 +21,7 @@ from boss_agent_cli.display import (
 	render_sectioned_record,
 	risk_error_message,
 )
+from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing
 from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION, list_pagination, rows_from
 
 
@@ -168,4 +170,9 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 		recoverable, recovery_action = error_contract_for_code("INTERNAL_ERROR")
 		handle_error_output(ctx, "me", code="INTERNAL_ERROR", message=f"{type(e).__name__}: {e}", recoverable=recoverable, recovery_action=recovery_action)
 	except Exception as e:
+		# 内核缺失是确定性失败：路径没变时重试永远同一结果，不能兜成
+		# NETWORK_ERROR +「重试」让 Agent 反复打平台（同 search 等装饰器路径）。
+		if is_browser_kernel_missing(str(e)):
+			handle_browser_kernel_missing(ctx, "me", e)
+			return
 		handle_error_output(ctx, "me", code="NETWORK_ERROR", message=str(e), recoverable=True, recovery_action="重试")
