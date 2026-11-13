@@ -427,3 +427,22 @@ def test_action_card_json_in_ws_frame_is_attempt_only():
 	client, _ = _client(page=_page("ExchangeWx", "not_required"), events=[_ws(frame.replace("32", "37"))])
 	assert client.exchange_request_by_friend(FRIEND_ID, exchange_type=2)["__cli_error_code__"] == "ACTION_UNCONFIRMED"
 	client.close()
+
+
+def test_exchange_thrown_action_is_interrupted_and_unconfirmed():
+	"""handleExChange 抛错时请求可能已发出（Issue #990）。
+
+	此前该分支不带 ``action_interrupted``，响应被判 ``UNKNOWN``，招聘自动化把它
+	当普通失败标 ``blocked``，下一轮 ``agent run`` 会重发同一次交换请求。
+	"""
+	client, _ = _client(page={"ok": False, "action_interrupted": True, "error": "handleExChange threw: boom", "log": []})
+	result = client.exchange_request_by_friend(FRIEND_ID, exchange_type=2)
+	assert result["code"] == -1
+	assert result["__cli_error_code__"] == "ACTION_UNCONFIRMED"
+	assert "boss hr chatmsg" in result["message"]
+	client.close()
+
+
+def test_exchange_script_marks_throw_as_action_interrupted():
+	"""页面脚本的 handleExChange 抛错分支必须显式标记动作可能已发出。"""
+	assert "action_interrupted: true" in rc._EXCHANGE_ACTION_JS

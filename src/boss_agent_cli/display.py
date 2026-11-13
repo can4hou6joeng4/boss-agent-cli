@@ -292,17 +292,17 @@ def handle_platform_error_output(
 	response: Any,
 	*,
 	fallback_message: str,
-	unknown_error_code: str | None = None,
 	extra_hints: dict[str, Any] | None = None,
 ) -> None:
 	"""Emit a schema-backed error envelope for an unsuccessful platform response.
 
 	``extra_hints`` 承载命令自身的诊断字段（如 status 的 ``auth_health``）；
 	风控码的 ``next_actions`` 由 ``RISK_ERROR_CONTRACTS`` 覆盖，调用方不能改写。
+	``UNKNOWN`` 沿用登记表的「先核对、勿自动重试」契约：写命令曾把它改写成
+	可重试的 ``NETWORK_ERROR``，批量与 wizard 因此重放可能已生效的写操作
+	（Issue #990）。
 	"""
 	code, message = platform.parse_error(response)
-	if code == "UNKNOWN" and unknown_error_code is not None:
-		code = unknown_error_code
 	recoverable, recovery_action, risk_hints = platform_error_contract(code, ctx=ctx)
 	hints = {**(extra_hints or {}), **(risk_hints or {})} or None
 	details = None

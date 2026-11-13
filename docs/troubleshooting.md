@@ -327,7 +327,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `ALREADY_GREETED` | 已打过招呼 | 跳过 |
 | `CONFIRMATION_REQUIRED` | 未确认操作目标与内容 | 先用 `hr greet --dry-run`、`hr accept-resume <friend_id> --message-id <mid> --dry-run` 或 `hr location <friend_id> --dry-run` 预览；操作者明确批准后才加 `--yes`，Agent 不可自行补确认 |
 | `RESUME_ACCEPT_RESULT_UNKNOWN` | 同意附件简历请求的结果未确认 | 保留 `accepted=null`，在官方页面核对请求状态；禁止自动重试同意操作 |
-| `ACTION_UNCONFIRMED` | 招聘者交换联系方式或求简历的页面动作已执行，但未确认是否发出 | 动作可能已生效，先用 `boss hr chatmsg <friend_id>` 核实，勿直接重试；`error.details` 里有页面日志、WS 统计（`ws_evidence`，含 `ws_send_without_text`：有发送帧但读不出文本的条数）与历史回读核对结果（`history_checked` / `history_matched_count` / `history_attempts` / `history_new_count` / `history_self_count` / `history_recipient_count`） |
+| `ACTION_UNCONFIRMED` | 写请求已发出，但响应中断、不是 JSON 或页面动作未确认，结果可能已生效 | 禁止自动重发：求职者用 `boss chat` 核对招呼、`boss me --section deliver` 核对投递；招聘者用 `boss hr chatmsg <friend_id>` 核对。信封带 `replay_safe: false` 与 `outcome_unknown: true`，后继命令保留本次数据目录；招聘者页面动作还可能带页面日志、WS 统计（`ws_evidence`，含 `ws_send_without_text`：有发送帧但读不出文本的条数）与历史回读证据（`history_checked` / `history_matched_count` / `history_attempts` / `history_new_count` / `history_self_count` / `history_recipient_count`） |
 | `EXCHANGE_NOT_AVAILABLE` | 换电话/换微信按钮还没解锁（你还没在这个会话里发过消息），本次未发出任何请求 | 先回复候选人（`boss hr reply <friend_id> <消息>` 或 `boss hr request-resume <friend_id>`），再重新交换；`error.details` 里有命中的禁用信号 |
 | `GREET_RESULT_UNKNOWN` | 已预约发送，但结果未确认 | 用 `boss hr chat --job-id <id>` 核对会话，禁止自动重发；本地保留预约，必要时在官方页面处理 |
 | `LOCATION_ALREADY_SENT` | 同一候选人会话已发送过工作地点卡片，本地记录阻止重复发送 | 用 `boss hr chatmsg <friend_id>` 核对地点卡；不要删除本地记录来重发 |
@@ -342,7 +342,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `ALREADY_APPLIED` | 已发起过投递 / 立即沟通 | 跳过；用 `boss me --section deliver` 查看投递记录，或用 `boss chat` 跟进 |
 | `GREET_LIMIT` | 今日次数用完 | 告知用户 |
 | `NETWORK_ERROR` | 网络错误 | 重试 |
-| `UNKNOWN` | 平台返回了未识别的错误（无法按登录过期 / 限流 / 风控归类） | 不自动重试：先在官方页面核对本次操作是否生效，用 `boss doctor` 检查登录态与网络，确认后再执行一次；仍失败请附上命令与 `error.message` 提交 issue |
+| `UNKNOWN` | 平台返回了未识别的错误（无法按登录过期 / 限流 / 风控归类），写操作的响应无法证明动作没有发生 | 不自动重试：先在官方页面核对本次操作是否生效，用 `boss doctor` 检查登录态与网络，确认后再执行一次；仍失败请附上命令与 `error.message` 提交 issue。信封始终带 `replay_safe: false`；浏览器通道对写请求拿到非 JSON 响应时会直接归为 `ACTION_UNCONFIRMED` |
 | `INTERNAL_ERROR` | CLI 内部错误或平台返回了未预期的数据结构 | 不要重试；升级到最新版本，仍出现时附上命令与 error.message 提交 issue |
 | `AI_NOT_CONFIGURED` | AI 未配置 | `boss ai config` |
 | `AI_API_ERROR` | AI 服务调用失败 | 检查网络连接和密钥配置，重试 |

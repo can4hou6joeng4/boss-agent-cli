@@ -233,6 +233,10 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"message": "平台返回了未识别的错误",
 		"recoverable": False,
 		"recovery_action": "不要自动重试：先在 BOSS 官方页面核对本次操作是否生效，并用 boss doctor 检查登录态、浏览器通道与网络；确认后重新执行一次，仍失败请附上命令与 error.message 提交 issue",
+		# 未识别的响应无法证明写操作没有发生：写命令不得把它升级成可重试的
+		# NETWORK_ERROR，批量与 wizard 也不得重放（Issue #990）。声明后，单次
+		# 命令的 UNKNOWN 信封同样能从 error.details 读出该判定。
+		"replay_safe": False,
 	},
 	"CRAWL_UNAVAILABLE": {
 		"message": "DrissionPage crawl 运行环境或 Hook 注入不可用",

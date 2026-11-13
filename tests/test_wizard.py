@@ -4397,3 +4397,80 @@ def test_crawl_actions_reject_string_with_detail(tmp_path):
 		DEFAULT_ACTIONS["crawl_start"](context, {"query": "Python", "city": "北京", "with_detail": "false"}, {})
 	with pytest.raises(WorkflowInputError):
 		DEFAULT_ACTIONS["crawl_resume"](context, {"run_id": "run-1", "with_detail": "false"}, {})
+
+
+class _UnknownResponsePlatform(_FakeCandidatePlatform):
+	"""所有平台调用都返回无法解析的响应（Issue #990 的浏览器通道形态）。"""
+
+	def apply(self, security_id, job_id, lid=""):
+		self.calls.append(("apply", security_id, job_id, lid))
+		return {"code": -1, "message": "browser response is not JSON", "zpData": {}}
+
+	def greet(self, security_id, job_id, message=""):
+		self.calls.append(("greet", security_id, job_id, message))
+		return {"code": -1, "message": "browser response is not JSON", "zpData": {}}
+
+	def parse_error(self, response):
+		return "UNKNOWN", str(response.get("message") or "")
+
+
+def test_wizard_write_unknown_response_is_not_replayed(tmp_path):
+	"""写步骤遇到未识别的响应时禁止自动重试与 --resume 重跑（Issue #990）。
+
+	``_classify_action_error`` 原先把所有 ``UNKNOWN`` 映射成可重试的
+	``NETWORK_ERROR``，``_unwrap`` 又让 ``replay_safe`` 保持 True，runner 的
+	自动重试与 ``--resume`` 都会重放一次可能已生效的写操作。
+	"""
+	platform = _UnknownResponsePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	with pytest.raises(WorkflowActionError) as applied:
+		DEFAULT_ACTIONS["candidate_apply"](context, {"security_id": "sec-1", "job_id": "job-1"}, {})
+	assert applied.value.code == "UNKNOWN"
+	assert applied.value.recoverable is False
+	assert applied.value.replay_safe is False
+	assert "不要自动重试" in (applied.value.recovery_action or "")
+
+	with pytest.raises(WorkflowActionError) as greeted:
+		DEFAULT_ACTIONS["candidate_greet"](context, {"security_id": "sec-2", "job_id": "job-2", "message": "你好"}, {})
+	assert greeted.value.replay_safe is False
+
+
+def test_wizard_runner_does_not_resume_unknown_write_step(tmp_path):
+	calls = []
+
+	def unknown_write(context, inputs, prior):
+		calls.append("write")
+		raise WorkflowActionError(
+			"UNKNOWN",
+			"browser response is not JSON",
+			recoverable=False,
+			recovery_action=str(ERROR_CODES["UNKNOWN"]["recovery_action"]),
+			replay_safe=False,
+		)
+
+	with WorkflowStore(tmp_path) as store:
+		first = WorkflowRunner(store, {"write": unknown_write}).run(
+			_plan("write"), object(), run_id="run-unknown-write", max_retries=1
+		)
+		assert first["status"] == "failed"
+		assert first["steps"][0]["error"]["replay_safe"] is False
+		# 自动重试不得发生：一次未识别响应就是一次可能已发出的写。
+		assert calls == ["write"]
+		second = WorkflowRunner(store, {"write": unknown_write}).run(
+			_plan("write"), object(), run_id="run-unknown-write"
+		)
+
+	assert second["status"] == "failed"
+	assert second["error"]["code"] == "UNKNOWN"
+	assert calls == ["write"]
+
+
+def test_wizard_read_unknown_response_stays_retryable():
+	"""读取的未识别响应没有副作用，仍按 NETWORK_ERROR 兜底（Issue #990）。"""
+	from boss_agent_cli.wizard.actions import _classify_action_error
+
+	code, recoverable, recovery = _classify_action_error("UNKNOWN", "browser response is not JSON")
+	assert code == "NETWORK_ERROR"
+	assert recoverable is True
+	assert "稍后重试" in recovery

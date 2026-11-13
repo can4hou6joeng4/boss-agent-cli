@@ -111,15 +111,37 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 
 			resp = platform.greet(security_id, job_id, message)
 			if not platform.is_success(resp):
+				error_code, _ = platform.parse_error(resp)
+				if error_code == "ACTION_UNCONFIRMED":
+					# 求职者侧结果未知：登记表的恢复文案是给招聘者的
+					# `boss hr chatmsg`，这里换成核对自己的会话（Issue #990）。
+					chat_cmd = _hint_command(ctx, "chat")
+					handle_error_output(
+						ctx, "greet",
+						code="ACTION_UNCONFIRMED",
+						message="请求结果未确认；消息可能已发出，请先核对，勿直接重试",
+						recoverable=False,
+						recovery_action=f"动作可能已生效：先用 {chat_cmd} 核对会话，不要直接重试",
+						details={
+							"outcome_unknown": True,
+							**_cli_error_details(resp),
+						},
+						hints={
+							"next_actions": [chat_cmd],
+							"operator_actions": ["先到 BOSS 直聘会话列表核对这条招呼是否已送达；不要自动重发"],
+						},
+					)
+					return
 				# 风控码必须走 RISK_ERROR_CONTRACTS：不可恢复、不提示重试，
-				# 与 apply / batch-greet 的风险终止语义保持一致。
+				# 与 apply / batch-greet 的风险终止语义保持一致。UNKNOWN 也按登记表
+				# 的「先核对、勿重试」输出，不能再升级成可重试的 NETWORK_ERROR
+				# （Issue #990）。
 				handle_platform_error_output(
 					ctx,
 					"greet",
 					platform,
 					resp,
 					fallback_message="打招呼失败",
-					unknown_error_code="NETWORK_ERROR",
 				)
 				return
 
@@ -364,7 +386,22 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 									f"招呼结果未确认，停止批量打招呼: {item.title} @ {item.company}"
 								)
 								break
-							raise RuntimeError(error_code if error_code != "UNKNOWN" else (resp.get("message") or "greet failed"))
+							if error_code == "UNKNOWN":
+								# 未识别的响应同样无法证明招呼没发出去：sleep 后重发就是
+								# 在不确定的情况下重复写操作（Issue #990）。
+								unconfirmed = {
+									**item.to_dict(),
+									"status": "unconfirmed",
+									"error": error_code,
+									"details": {"outcome_unknown": True, "replay_safe": False, **_cli_error_details(resp)},
+								}
+								results.append(unconfirmed)
+								stopped_reason = "UNKNOWN"
+								logger.warning(
+									f"招呼结果未确认（平台响应未识别），停止批量打招呼: {item.title} @ {item.company}"
+								)
+								break
+							raise RuntimeError(error_code)
 						entry: dict[str, Any] = {
 							"security_id": item.security_id,
 							"job_id": item.job_id,
@@ -502,10 +539,12 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 
 			if unconfirmed is not None:
 				# 结果未知的招呼不能以 ok:true 回报：Agent 会当成普通失败重发（Issue #984）。
-				recoverable, recovery_action = error_contract_for_code("ACTION_UNCONFIRMED")
+				# UNKNOWN 与 ACTION_UNCONFIRMED 同义——响应无法证明招呼没发出去（Issue #990）。
+				unconfirmed_code = str(unconfirmed.get("error") or "ACTION_UNCONFIRMED")
+				recoverable, recovery_action = error_contract_for_code(unconfirmed_code)
 				handle_error_output(
 					ctx, "batch-greet",
-					code="ACTION_UNCONFIRMED",
+					code=unconfirmed_code,
 					message="部分招呼的发送结果未确认；已停止剩余候选人，不要自动重发",
 					recoverable=recoverable,
 					recovery_action=recovery_action,

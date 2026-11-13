@@ -460,7 +460,9 @@ try {
 	if (ret && typeof ret.then === 'function') await ret;
 	log.push('handleExChange returned');
 } catch (e) {
-	return {ok: false, error: 'handleExChange threw: ' + e.message, log, componentName: args.componentName};
+	// handleExChange 抛错时请求可能已经发出：不能当成「确定未发送」的普通失败，
+	// 自动化会把它放回 pending 并在下一轮重发（Issue #990）。
+	return {ok: false, action_interrupted: true, error: 'handleExChange threw: ' + e.message, log, componentName: args.componentName};
 }
 
 await sleep(args.preConfirmUiWaitMs);
@@ -1431,8 +1433,15 @@ class BossRecruiterClient(_BaseHttpClient):
 
 		if not (isinstance(result, dict) and result.get("ok")):
 			err = self._page_error_message(result)
+			# handleExChange 抛错时动作可能已经发出：文案必须与 ACTION_UNCONFIRMED
+			# 的「先核实」契约一致，不能让 Agent 读成「确定没发出去」（Issue #990）。
+			interrupted = isinstance(result, dict) and result.get("action_interrupted")
 			return self._chat_action_failure_response(
-				message=f"交换联系方式请求失败: {err}",
+				message=(
+					f"交换联系方式请求未确认: {err}；{_ACTION_UNCONFIRMED_HINT.format(friend_id=friend_id)}"
+					if interrupted
+					else f"交换联系方式请求失败: {err}"
+				),
 				payload=self._chat_action_failure_data(
 					action="exchange",
 					friend_id=friend_id,
@@ -1442,9 +1451,7 @@ class BossRecruiterClient(_BaseHttpClient):
 					events=events,
 					extra={"exchange_type": exchange_type, "componentName": component_name},
 				),
-				error_code="ACTION_UNCONFIRMED"
-				if isinstance(result, dict) and result.get("action_interrupted")
-				else None,
+				error_code="ACTION_UNCONFIRMED" if interrupted else None,
 			)
 
 		matched_ws = self._exchange_ws_matches(events, expected_bits, exchange_type)

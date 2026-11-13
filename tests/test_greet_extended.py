@@ -551,3 +551,45 @@ def test_batch_greet_unconfirmed_result_is_never_retried(tmp_path):
 	# 已成功的部分仍随批次带回（这里是 0 条），Agent 不会对整批重来。
 	assert details["total_greeted"] == 0
 	assert "不要自动重发" in " ".join(body["hints"]["operator_actions"])
+
+
+def test_batch_greet_unparsed_write_response_is_never_retried(tmp_path):
+	"""浏览器通道的非 JSON 写响应同样不得自动重发（Issue #990）。
+
+	传输层此前只返回裸 ``code: -1``，平台层判 ``UNKNOWN``，批量循环把它当普通
+	失败 sleep 后重发同一个招呼，两次都失败还回 ``ok:true``；下一次运行会第三
+	次发送。现在传输层把它标成 ``ACTION_UNCONFIRMED``，批量路径就地停批。
+	"""
+	unparsed = {
+		"code": -1,
+		"message": "browser response is not JSON",
+		"zpData": {},
+		"__cli_error_code__": "ACTION_UNCONFIRMED",
+		"__cli_error_details__": {"outcome": "unknown", "replay_safe": False, "reason": "unparsed_response"},
+	}
+	result, client = _invoke_batch_with_real_platform(tmp_path, unparsed)
+
+	assert result.exit_code == 1
+	body = json.loads(result.stdout)
+	assert body["ok"] is False
+	assert body["error"]["code"] == "ACTION_UNCONFIRMED"
+	assert body["error"]["recoverable"] is False
+	assert client.greet_calls == 1
+	assert body["error"]["details"]["replay_safe"] is False
+	assert body["error"]["details"]["outcome_unknown"] is True
+
+
+def test_batch_greet_unknown_response_stops_without_resending(tmp_path):
+	"""平台层仍判 ``UNKNOWN``（没有 CLI 内部码）时也不能 sleep 后重发。"""
+	unknown = {"code": -1, "message": "browser response is not JSON", "zpData": {}}
+	result, client = _invoke_batch_with_real_platform(tmp_path, unknown)
+
+	assert result.exit_code == 1
+	body = json.loads(result.stdout)
+	assert body["ok"] is False
+	assert body["error"]["code"] == "UNKNOWN"
+	assert body["error"]["recoverable"] is False
+	assert body["error"]["details"]["replay_safe"] is False
+	assert body["error"]["details"]["outcome_unknown"] is True
+	# 一次未知就地停批：sleep 后重发就是重复写操作。
+	assert client.greet_calls == 1

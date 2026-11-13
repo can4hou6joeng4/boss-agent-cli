@@ -2,6 +2,8 @@ import json
 import shlex
 from unittest.mock import patch
 
+import pytest
+
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
@@ -112,6 +114,50 @@ def test_apply_cache_write_failure_is_not_retryable(mock_cache_cls, mock_auth_cl
 	assert parsed["error"]["recovery_action"] == ERROR_CODES["LOCAL_STATE_WRITE_FAILED"]["recovery_action"]
 	assert parsed["error"]["details"]["applied"] is True
 	assert parsed["error"]["details"]["recorded"] is False
+
+
+@pytest.mark.parametrize("error_code", ["ACTION_UNCONFIRMED", "UNKNOWN"])
+@patch("boss_agent_cli.commands.apply.get_platform_instance")
+@patch("boss_agent_cli.commands.apply.AuthManager")
+@patch("boss_agent_cli.commands.apply.CacheStore")
+def test_apply_unknown_outcome_never_suggests_resending(
+	mock_cache_cls, mock_auth_cls, mock_get_platform, tmp_path, error_code,
+):
+	"""未确认投递不记成功、不重复发送，核对命令保留原数据目录。"""
+	data_dir = tmp_path / "candidate profile"
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_applied.return_value = False
+	mock_platform = _ctx_mock(mock_get_platform)
+	mock_platform.apply.return_value = {
+		"code": -1,
+		"message": "response is not JSON",
+		"__cli_error_details__": {"outcome": "unknown", "replay_safe": False, "reason": "unparsed_response"},
+	}
+	mock_platform.is_success.return_value = False
+	mock_platform.parse_error.return_value = (error_code, "response is not JSON")
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(data_dir), "--json", "apply", "synthetic-sid", "synthetic-job"])
+
+	assert result.exit_code == 1, result.output
+	body = json.loads(result.output)
+	assert body["ok"] is False
+	error = body["error"]
+	assert error["code"] == error_code
+	assert error["recoverable"] is False
+	assert error["details"]["replay_safe"] is False
+	assert error["details"]["reason"] == "unparsed_response"
+	assert "不要自动重试" in error["recovery_action"] or "不要直接重试" in error["recovery_action"]
+	if error_code == "ACTION_UNCONFIRMED":
+		assert error["details"]["outcome_unknown"] is True
+		actions = body["hints"]["next_actions"]
+		assert [shlex.split(action) for action in actions] == [
+			["boss", "--data-dir", str(data_dir.resolve()), "me", "--section", "deliver"],
+			["boss", "--data-dir", str(data_dir.resolve()), "chat"],
+		]
+		assert actions[0] in error["recovery_action"]
+		assert "hr chatmsg" not in error["recovery_action"]
+	mock_platform.apply.assert_called_once_with("synthetic-sid", "synthetic-job", lid="")
+	mock_cache.record_apply.assert_not_called()
 
 
 def test_apply_is_exposed_in_schema():

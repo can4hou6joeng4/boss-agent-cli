@@ -1,6 +1,7 @@
 """greet 和 detail 命令扩展测试 — 覆盖核心求职动作的正常和异常路径。"""
 
 import json
+import shlex
 from unittest.mock import patch, MagicMock
 
 from click.testing import CliRunner
@@ -92,8 +93,12 @@ def test_greet_account_risk_uses_stop_contract(tmp_path):
 	mock_cache.record_greet.assert_not_called()
 
 
-def test_greet_unknown_error_stays_retryable(tmp_path):
-	"""无法识别的业务失败仍按 NETWORK_ERROR 提示重试，不被风险契约吞掉。"""
+def test_greet_unknown_error_is_not_retryable(tmp_path):
+	"""未识别的写响应沿用登记表的「先核对、勿重试」契约（Issue #990）。
+
+	`UNKNOWN` 表示响应无法证明招呼没有发出；旧实现把它升级成可重试的
+	`NETWORK_ERROR`，Agent 照提示重跑就会重复打招呼。
+	"""
 	code, parsed, mock_cache, mock_client = _invoke_greet(
 		"greet", "sid1", "jid1", tmp_path=tmp_path,
 		greet_result={"code": -1, "message": "boom"},
@@ -101,8 +106,42 @@ def test_greet_unknown_error_stays_retryable(tmp_path):
 		parse_error=("UNKNOWN", "boom"),
 	)
 	assert code == 1
-	assert parsed["error"]["code"] == "NETWORK_ERROR"
-	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["code"] == "UNKNOWN"
+	assert parsed["error"]["recoverable"] is False
+	assert "不要自动重试" in parsed["error"]["recovery_action"]
+	assert parsed["error"]["details"]["replay_safe"] is False
+	mock_cache.record_greet.assert_not_called()
+
+
+def test_greet_unconfirmed_result_uses_candidate_chat_hint(tmp_path):
+	"""结果未知时只核对一次请求，不记成功；核对指引沿用含空格的数据目录。"""
+	data_dir = tmp_path / "candidate profile"
+	code, parsed, mock_cache, mock_platform = _invoke_greet(
+		"--json", "greet", "synthetic-sid", "synthetic-job", tmp_path=data_dir,
+		greet_result={
+			"code": -1,
+			"__cli_error_code__": "ACTION_UNCONFIRMED",
+			"__cli_error_details__": {"outcome": "unknown", "replay_safe": False, "reason": "unparsed_response"},
+		},
+		is_success=False,
+		parse_error=("ACTION_UNCONFIRMED", "response is not JSON"),
+	)
+	assert code == 1
+	assert parsed["ok"] is False
+	error = parsed["error"]
+	assert error["code"] == "ACTION_UNCONFIRMED"
+	assert error["recoverable"] is False
+	assert error["details"]["replay_safe"] is False
+	assert error["details"]["outcome_unknown"] is True
+	assert error["details"]["reason"] == "unparsed_response"
+	actions = parsed["hints"]["next_actions"]
+	assert [shlex.split(action) for action in actions] == [
+		["boss", "--data-dir", str(data_dir.resolve()), "chat"],
+	]
+	assert actions[0] in error["recovery_action"]
+	assert "hr chatmsg" not in error["recovery_action"]
+	assert "不要自动重发" in parsed["hints"]["operator_actions"][0]
+	mock_platform.greet.assert_called_once_with("synthetic-sid", "synthetic-job", "")
 	mock_cache.record_greet.assert_not_called()
 
 
