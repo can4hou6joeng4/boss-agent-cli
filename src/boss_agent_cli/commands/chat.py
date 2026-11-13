@@ -7,6 +7,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 from boss_agent_cli.services.chat_export import render_export
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.chat_snapshot import save_snapshot_and_diff, load_snapshot
@@ -41,6 +42,14 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 	"""查看沟通列表（支持按发起方、时间筛选，支持导出）"""
 	if not require_compliance_allowed(ctx, "chat"):
 		ctx.exit(1)
+
+	# 只在真要导出时校验：`-o` 指向目录这类参数错误必须在第一次平台请求之前暴露，
+	# 而不是抓完沟通列表、写完快照之后再报一个与真正原因无关的信封。
+	if export_fmt and output_path:
+		validated = validate_output_path_or_emit(ctx, "chat", output_path)
+		if validated is None:
+			return
+		output_path = validated
 
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

@@ -771,3 +771,58 @@ def test_export_html_stdout_warns_on_stderr_without_polluting_html(mock_auth_cls
 	assert result.exit_code == 0, result.output
 	assert result.stdout.lstrip().startswith("<")
 	assert "页数上限" in result.stderr
+
+
+# ── -o 参数错误在平台请求之前暴露 ─────────────────────────────────────
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_invalid_output_path_makes_no_platform_request(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	"""`-o` 指向目录时应在第一次平台请求之前失败。
+
+	此前路径问题要等抓完分页、写文件时才由 ``prepare_output_path`` 抛出：
+	``count=40`` 会先翻 5 页平台数据，既消耗请求预算、也可能触发风控，而真正
+	该做的只是换个文件名。
+	"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = _api_response([_make_raw_job("Go")], has_more=True)
+
+	result = CliRunner().invoke(cli, ["export", "golang", "--count", "40", "-o", str(tmp_path)])
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert payload["error"]["recoverable"] is False
+	assert mock_client.search_jobs.call_count == 0
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_output_parent_that_is_a_file_fails_before_platform(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	"""`-o` 的父路径是普通文件时同样是参数/IO 错误，不该先打平台。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = _api_response([_make_raw_job("Go")])
+	blocker = tmp_path / "blocker"
+	blocker.write_text("not a directory", encoding="utf-8")
+
+	result = CliRunner().invoke(cli, ["export", "golang", "-o", str(blocker / "jobs.csv")])
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "LOCAL_IO_ERROR"
+	assert payload["error"]["recoverable"] is False
+	assert mock_client.search_jobs.call_count == 0
+
+
+@patch("boss_agent_cli.commands.export.get_platform_instance")
+@patch("boss_agent_cli.commands.export.AuthManager")
+def test_export_valid_output_path_still_exports(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	"""前置校验不能误伤正常路径。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = _api_response([_make_raw_job("Go")])
+
+	result = CliRunner().invoke(cli, ["export", "golang", "--count", "1", "-o", str(tmp_path / "jobs.csv")])
+
+	assert result.exit_code == 0, result.output
+	assert (tmp_path / "jobs.csv").exists()
