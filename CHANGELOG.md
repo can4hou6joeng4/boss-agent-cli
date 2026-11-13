@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 向导动作层的恢复命令保留数据目录与平台（Issue #976）：`wizard/actions.py` 里 AI 未配置时的 `boss ai config ...`、AI API 报错时 `recovery_action_for` 生成的 `ai config` 建议、watch 参数损坏时的 `boss watch remove` / `boss watch add` 重建命令、不支持的 `hook_profile` 指引与 `boss config reset crawl` 都是裸命令。wizard 的 headless / MCP 调用可带 `--data-dir`：照抄提示会把新 AI 密钥、配置重置、watch 删除重建或 crawl 重建落到默认目录，原目录的问题原样保留（与 #913 / #919 等命令层迁移同一接缝，动作层此前漏迁）。现在这些命令统一经本地 `_hint_command` 包装携带按 shell 参数转义的绝对目录与平台；`_crawl_outcome_result` 的兜底恢复命令同样保留 `CrawlOutcome.data_dir`。
+
 ## [3.4.1] - 2026-11-13
 
 ### Fixed

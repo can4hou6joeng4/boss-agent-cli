@@ -43,6 +43,16 @@ from boss_agent_cli.wizard.runner import Action, WorkflowActionError, WorkflowCo
 PlatformFactory = Callable[[str, AuthManager, tuple[float, float], str | None, str | None], Any]
 
 
+def _hint_command(context: ActionContext, command: str) -> str:
+	"""动作层恢复命令必须定位触发它的数据目录与平台。
+
+	wizard 的 headless / MCP 调用可以带 ``--data-dir``：恢复指引写成裸 ``boss ...``
+	时，Agent 照抄会把新 AI 密钥、``config reset``、watch 删除重建或 crawl 重建
+	落到默认目录，原目录的问题原样保留（与 #913 / #919 的命令层迁移同一接缝）。
+	"""
+	return boss_command(command, platform_name=context.platform, data_dir=context.data_dir)
+
+
 @dataclass(frozen=True)
 class ActionContext:
 	data_dir: Path
@@ -777,7 +787,9 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 			"AI_NOT_CONFIGURED",
 			"AI 服务未配置",
 			recoverable=True,
-			recovery_action="boss ai config --provider <provider> --model <model> --api-key <key>",
+			recovery_action=_hint_command(
+				context, "ai config --provider <provider> --model <model> --api-key <key>"
+			),
 		)
 	service = AIService(
 		str(base_url),
@@ -795,7 +807,15 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 		)
 	except AIServiceError as exc:
 		raise WorkflowActionError(
-			"AI_API_ERROR", str(exc), recoverable=True, recovery_action=recovery_action_for(exc, "检查 AI 配置后重试")
+			"AI_API_ERROR",
+			str(exc),
+			recoverable=True,
+			recovery_action=recovery_action_for(
+				exc,
+				"检查 AI 配置后重试",
+				# 恢复建议里的 ai config 必须写回触发本次 workflow 的目录。
+				config_command=_hint_command(context, "ai config"),
+			),
 		) from exc
 	return StepResult({"resume": resume_name, "result": result})
 
@@ -876,7 +896,10 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 				recoverable=True,
 				# watch 名来自 wizard 的 name 输入、是自由文本：带空格时不加引号，
 				# 照抄 `watch remove 我的 监控` 会把一个名字拆成两个参数。
-				recovery_action=f"boss watch remove {shell_argument(name)}；再用 boss watch add {shell_argument(name)} <关键词> 重建",
+				recovery_action=(
+					f"{_hint_command(context, f'watch remove {shell_argument(name)}')}；"
+					f"再用 {_hint_command(context, f'watch add {shell_argument(name)} <关键词>')} 重建"
+				),
 			) from exc
 		if record is None:
 			raise WorkflowActionError("SAVED_SEARCH_NOT_FOUND", f"未找到 watch: {name}")
@@ -963,7 +986,12 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 	checkpoint = data.get("checkpoint") if isinstance(data, dict) else None
 	resume_command = checkpoint.get("resume_command") if isinstance(checkpoint, dict) else None
 	if not isinstance(resume_command, str) or not resume_command:
-		resume_command = f"boss crawl resume {shell_argument(outcome.run_id)}"
+		# 兜底只服务拿不到 checkpoint 的 outcome（如测试替身）：有 data_dir 时同样
+		# 保留目录，避免恢复命令落到默认目录的另一份采集记录。
+		resume_command = boss_command(
+			f"crawl resume {shell_argument(outcome.run_id)}",
+			data_dir=getattr(outcome, "data_dir", None),
+		)
 	if cache is not None:
 		data = _attach_wizard_jobs(data if isinstance(data, dict) else {}, cache, str(outcome.run_id))
 	if outcome.status == "timeout_stopped":
@@ -1049,7 +1077,10 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 		raise WorkflowActionError(
 			"INVALID_PARAM",
 			f"向导采集不支持 hook_profile={hook_profile!r}：workflow 没有 hook-dir 输入，请显式运行 boss crawl run/start",
-			recovery_action="boss crawl run <query> --city <城市> --hook-profile screenshot-full --hook-dir <脚本目录>",
+			recovery_action=_hint_command(
+				context,
+				"crawl run <query> --city <城市> --hook-profile screenshot-full --hook-dir <脚本目录>",
+			),
 		)
 	raw_pages = inputs.get("pages")
 	pages = 5 if raw_pages is None else _positive_int(raw_pages, name="pages")
@@ -1076,7 +1107,7 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 		raise WorkflowActionError(
 			"INVALID_PARAM",
 			f"crawl 配置无效: {exc}",
-			recovery_action="boss config reset crawl",
+			recovery_action=_hint_command(context, "config reset crawl"),
 		) from exc
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		outcome = _crawl_service(context, cache).create_and_run(settings)

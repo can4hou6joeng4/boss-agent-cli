@@ -614,6 +614,10 @@ def test_local_and_ai_actions_return_structured_recovery(tmp_path):
 		DEFAULT_ACTIONS["ai_assist"](context, {"resume": "default", "prompt": "优化"}, {})
 	assert exc_info.value.code == "AI_NOT_CONFIGURED"
 	assert exc_info.value.recoverable is True
+	# 照抄恢复提示必须把新密钥写回本次运行的数据目录（Issue #976）。
+	assert shlex.split(exc_info.value.recovery_action)[:4] == [
+		"boss", "--data-dir", str(tmp_path.resolve()), "ai",
+	]
 
 
 def test_candidate_watch_stores_string_params(tmp_path):
@@ -652,7 +656,10 @@ def test_candidate_watch_corrupt_params_reports_recovery(tmp_path):
 	with pytest.raises(WorkflowActionError) as exc_info:
 		DEFAULT_ACTIONS["candidate_watch"](context, {"action": "run", "name": "daily"}, {})
 	assert exc_info.value.code == "SAVED_SEARCH_INVALID"
-	assert "boss watch remove daily" in exc_info.value.recovery_action
+	# 动作层恢复命令保留触发本次 workflow 的数据目录（Issue #976）。
+	assert shlex.split(exc_info.value.recovery_action.split("；")[0]) == [
+		"boss", "--data-dir", str(tmp_path.resolve()), "watch", "remove", "daily",
+	]
 
 
 def test_candidate_watch_corrupt_params_quotes_name_with_spaces(tmp_path):
@@ -669,8 +676,13 @@ def test_candidate_watch_corrupt_params_quotes_name_with_spaces(tmp_path):
 	with pytest.raises(WorkflowActionError) as exc_info:
 		DEFAULT_ACTIONS["candidate_watch"](context, {"action": "run", "name": "我的 监控"}, {})
 	assert exc_info.value.code == "SAVED_SEARCH_INVALID"
-	assert "boss watch remove '我的 监控'" in exc_info.value.recovery_action
-	assert "boss watch add '我的 监控' <关键词>" in exc_info.value.recovery_action
+	remove_cmd, _, rebuild = exc_info.value.recovery_action.partition("；再用 ")
+	assert shlex.split(remove_cmd) == [
+		"boss", "--data-dir", str(tmp_path.resolve()), "watch", "remove", "我的 监控",
+	]
+	assert shlex.split(rebuild.removesuffix(" 重建")) == [
+		"boss", "--data-dir", str(tmp_path.resolve()), "watch", "add", "我的 监控", "<关键词>",
+	]
 
 
 def _crawl_outcome(run_id, status="completed"):
@@ -774,7 +786,9 @@ def test_crawl_action_rejects_invalid_config(tmp_path, monkeypatch, crawl_config
 		DEFAULT_ACTIONS["crawl_start"](context, {"query": "Python", "city": "北京"}, {})
 	assert excinfo.value.code == "INVALID_PARAM"
 	assert field in str(excinfo.value)
-	assert excinfo.value.recovery_action == "boss config reset crawl"
+	assert shlex.split(excinfo.value.recovery_action) == [
+		"boss", "--data-dir", str(tmp_path.resolve()), "config", "reset", "crawl",
+	]
 	assert service.created_settings is None
 
 
@@ -800,7 +814,13 @@ def test_crawl_action_rejects_unsupported_hook_profile(tmp_path, monkeypatch, ho
 		)
 	assert excinfo.value.code == "INVALID_PARAM"
 	assert "hook_profile" in str(excinfo.value)
-	assert "boss crawl run" in str(excinfo.value.recovery_action)
+	# 文本参数只用作说明；机器可执行的是 recovery_action 里的 crawl run 命令。
+	assert shlex.split(str(excinfo.value.recovery_action))[:4] == [
+		"boss", "--data-dir", str(tmp_path.resolve()), "crawl",
+	]
+	assert excinfo.value.recovery_action.endswith(
+		"crawl run <query> --city <城市> --hook-profile screenshot-full --hook-dir <脚本目录>"
+	)
 	assert service.created_settings is None
 
 
@@ -4138,6 +4158,8 @@ def test_ai_assist_truncation_recovery_points_to_max_tokens(tmp_path, monkeypatc
 	assert exc_info.value.code == "AI_API_ERROR"
 	assert "max_completion_tokens=4096" in str(exc_info.value)
 	assert "--max-tokens" in exc_info.value.recovery_action
+	# AI 报错的恢复建议同样指回本次运行的数据目录（Issue #976）。
+	assert str(tmp_path.resolve()) in exc_info.value.recovery_action
 
 
 def test_runner_reports_deterministic_action_bug_as_internal_error(tmp_path):
