@@ -822,6 +822,38 @@ def risk_error_contract(
 	)
 
 
+#: 浏览器来源策略表里的命令默认示例。有运行上下文时由调用方替换成带
+#: ``--data-dir`` 与平台的真实命令：``doctor`` 诊断的是本地登录态、缓存与风险锁。
+_BROWSER_POLICY_COMMANDS: dict[str, tuple[str, ...]] = {
+	"boss status --live": ("status --live",),
+	"boss doctor": ("doctor",),
+	"boss login --cdp": ("login --cdp",),
+	"boss clean --risk-lock": ("clean --risk-lock",),
+}
+
+
+def browser_policy_text(text: str, command_for: Callable[[str], str]) -> str:
+	"""把来源策略文案里的默认示例换成 ``command_for`` 构造的命令（Issue #980）。
+
+	``doctor`` / ``status --live`` / ``login --cdp`` / ``clean --risk-lock`` 读的是
+	``<data_dir>`` 里的登录态与风险锁；自定义 ``--data-dir`` 下照抄裸命令只会
+	诊断或清理默认目录。
+	"""
+	for literal, (command,) in _BROWSER_POLICY_COMMANDS.items():
+		if literal in text:
+			text = text.replace(literal, command_for(command))
+	return text
+
+
+def browser_policy_text_for_ctx(ctx: Any, text: str) -> str:
+	"""带数据目录与平台的来源策略文案；无上下文的纯函数调用保持原文。"""
+	if not text:
+		return text
+	return browser_policy_text(
+		text, lambda command: boss_command_for_ctx(ctx, command, include_data_dir=True)
+	)
+
+
 def httpx_only_fallback_hint(ctx: Any) -> list[str]:
 	"""``--browser-source httpx-only`` 失败时给真人的回退指引。
 
@@ -891,18 +923,25 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					},
 				)
 			except BrowserSourceUnavailable as e:
+				# 策略表是来源耗尽时的唯一文案真源，但表本身没有运行上下文：
+				# 其中内嵌的 doctor / status --live / login --cdp / clean --risk-lock
+				# 读的是 <data_dir> 里的登录态与风险锁，这里补上本次目录与平台（Issue #980）。
 				hints: dict[str, list[str]] = {}
 				if e.policy.operator_actions:
-					hints["operator_actions"] = list(e.policy.operator_actions)
+					hints["operator_actions"] = [
+						browser_policy_text_for_ctx(ctx, action) for action in e.policy.operator_actions
+					]
 				if e.policy.next_actions:
-					hints["next_actions"] = list(e.policy.next_actions)
+					hints["next_actions"] = [
+						browser_policy_text_for_ctx(ctx, action) for action in e.policy.next_actions
+					]
 				handle_error_output(
 					ctx,
 					command_name,
 					code=e.code,
 					message=str(e),
 					recoverable=True,
-					recovery_action=e.policy.recovery_action,
+					recovery_action=browser_policy_text_for_ctx(ctx, e.policy.recovery_action),
 					hints=hints or None,
 				)
 			except BrowserChannelRequired as e:

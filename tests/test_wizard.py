@@ -3988,6 +3988,31 @@ def test_runner_browser_source_unavailable_keeps_policy_error_code(tmp_path):
 	assert run["error"]["recovery_action"] == policy.recovery_action
 
 
+def test_runner_browser_source_recovery_targets_the_run_data_dir(tmp_path):
+	"""wizard 的来源耗尽恢复命令必须指向本次运行的数据目录（Issue #980）。
+
+	策略表的 ``boss doctor`` 读的是 ``<data_dir>`` 里的登录态与风险锁；runner
+	手上有 ``context.data_dir``，不补就退回默认目录。
+	"""
+	import shlex
+
+	from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, resolve_policy
+
+	policy = resolve_policy("existing-browser")
+	data_dir = tmp_path / "state dir"
+
+	def no_channel(context, inputs, prior):
+		raise BrowserSourceUnavailable(policy, attempted=("cdp",))
+
+	with WorkflowStore(tmp_path) as store:
+		run = WorkflowRunner(store, {"no_channel": no_channel}).run(
+			_plan("no_channel"), SimpleNamespace(data_dir=data_dir), run_id="bs-dir-run"
+		)
+
+	recovery = run["error"]["recovery_action"]
+	assert shlex.split(recovery) == ["boss", "--data-dir", str(data_dir.resolve()), "doctor"]
+
+
 def test_runner_browser_navigation_timeout_is_not_generic_network_error(tmp_path):
 	from boss_agent_cli.api.browser_client import BrowserNavigationError
 

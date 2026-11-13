@@ -458,3 +458,42 @@ def test_auto_probes_default_endpoint_and_devtools_port(monkeypatch):
 
 	assert session._try_cdp() is False
 	assert tried == [browser_client.DEFAULT_CDP_URL, "ws://127.0.0.1:9222/devtools/browser/x"]
+
+
+# ── 来源耗尽信封：可执行命令必须能定位到运行目录（Issue #980） ────────────
+
+
+def test_policy_command_literals_are_all_covered_by_the_rewrite_table():
+	"""策略表里出现的 ``boss <cmd>`` 字面量必须都在 display 的改写表里有条目。
+
+	策略表本身没有运行上下文，``display`` / wizard runner 按改写表把命令换成
+	``boss --data-dir <绝对路径> ...``。新增来源时若写了新命令却忘了登记，
+	自定义数据目录的用户会照抄一条诊断默认目录的裸命令——静默走错目录。
+	"""
+	import re
+
+	from boss_agent_cli.display import _BROWSER_POLICY_COMMANDS
+
+	literal = re.compile(r"boss [a-z][a-z -]*")
+	known_commands = {command for (command,) in _BROWSER_POLICY_COMMANDS.values()}
+	uncovered: dict[str, list[str]] = {}
+	for name, policy in POLICIES.items():
+		texts = (policy.recovery_action, *policy.operator_actions, *policy.next_actions)
+		missing = {
+			match.group(0).rstrip()
+			for text in texts
+			for match in literal.finditer(text)
+			if match.group(0).rstrip()[len("boss ") :] not in known_commands
+		}
+		if missing:
+			uncovered[name] = sorted(missing)
+	assert not uncovered, f"策略文案里的命令未登记到 _BROWSER_POLICY_COMMANDS：{uncovered}"
+
+
+def test_only_auto_is_fail_open_after_policy_rewrite():
+	"""改写表不得改变来源的 fail-closed 结构（同 ``test_only_auto_is_fail_open``）。"""
+	from boss_agent_cli.api.browser_source import DEFAULT_BROWSER_SOURCE
+
+	assert DEFAULT_BROWSER_SOURCE == "auto"
+	for name, policy in POLICIES.items():
+		assert policy.fail_closed is (name != "auto")
