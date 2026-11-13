@@ -167,6 +167,51 @@ class TestHandleAuthErrors:
 			POLICIES["existing-browser"].operator_actions
 		)
 
+	def test_browser_source_unavailable_carries_data_dir_and_platform(self, tmp_path):
+		"""自定义 --data-dir 下策略里的 doctor / status --live 必须指向同一目录（Issue #980）。
+
+		裸 ``boss doctor`` 诊断的是默认目录的登录态与风险锁，照抄的 Agent 拿到的是
+		另一份本地状态。
+		"""
+		from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, POLICIES
+
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True, "data_dir": tmp_path, "platform": "zhipin"}
+
+		@handle_auth_errors("chat")
+		def impl(ctx):
+			raise BrowserSourceUnavailable(POLICIES["existing-browser"], ("cdp",))
+
+		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
+			impl(ctx)
+
+		kwargs = mock_err.call_args.kwargs
+		doctor = f"boss --data-dir {shell_argument(str(tmp_path.resolve()))} doctor"
+		assert kwargs["recovery_action"] == doctor
+		assert kwargs["hints"]["next_actions"] == [doctor]
+
+	def test_httpx_only_policy_commands_are_rewritten_per_data_dir(self, tmp_path):
+		"""策略表文案里的 clean --risk-lock / login --cdp 也属于本地状态命令（Issue #980）。"""
+		from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, POLICIES
+
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True, "data_dir": tmp_path, "platform": "zhipin"}
+
+		@handle_auth_errors("chat")
+		def impl(ctx):
+			raise BrowserSourceUnavailable(POLICIES["httpx-only"], ("httpx",))
+
+		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
+			impl(ctx)
+
+		kwargs = mock_err.call_args.kwargs
+		prefix = f"boss --data-dir {shell_argument(str(tmp_path.resolve()))}"
+		assert kwargs["hints"]["next_actions"] == [f"{prefix} status --live"]
+		recovery = kwargs["hints"]["operator_actions"][-1]
+		assert f"{prefix} clean --risk-lock" in recovery
+		assert f"{prefix} login --cdp" in recovery
+		assert " boss clean --risk-lock" not in recovery
+
 	def test_browser_source_unsupported_uses_not_supported_contract(self):
 		"""BrowserSourceUnsupported → NOT_SUPPORTED：recoverable / recovery_action 来自真源契约，
 		不被硬编码覆盖；针对来源的建议放进 hints.operator_actions。"""

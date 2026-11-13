@@ -16,6 +16,7 @@ from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 from boss_agent_cli.display import (
 	INTERNAL_ERROR_TYPES,
 	boss_command,
+	browser_policy_text,
 	error_contract_for_code,
 	risk_error_contract,
 	risk_error_message,
@@ -327,8 +328,16 @@ class WorkflowRunner:
 					details=exc.details(),
 				)
 			except BrowserSourceUnavailable as exc:
+				# 策略表的 doctor / status --live 读的是 <data_dir> 里的登录态与风险锁，
+				# 这里补上本次运行的数据目录与平台（Issue #980）。
 				error = WorkflowActionError(
-					exc.code, str(exc), recoverable=True, recovery_action=exc.policy.recovery_action
+					exc.code,
+					str(exc),
+					recoverable=True,
+					recovery_action=browser_policy_text(
+						exc.policy.recovery_action,
+						lambda command: boss_command(command, platform_name=plan.platform, data_dir=data_dir),
+					),
 				)
 			except BrowserSourceUnsupported as exc:
 				fallback_recovery = "切换平台或 workflow goal 后重试"

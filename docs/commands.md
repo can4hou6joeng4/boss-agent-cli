@@ -71,6 +71,8 @@ BOSS 的 code `31`（IP/环境限制）/ `32`（账号限制）/ `35` / `36`、�
 
 访问受限页展示的恢复时间只作平台提示，不触发定时刷新或自动清锁；移动端可用也不能证明网页端限制已解除。已有受限页时，`login --force` 在清除 Cookie 前同样停止。
 
+浏览器来源耗尽（`BROWSER_SESSION_NOT_FOUND` / `CDP_UNAVAILABLE` / `BROWSER_DISABLED`）的信封同样保留本次数据目录与平台：`error.recovery_action`、`hints.next_actions` 与 `hints.operator_actions` 里出现的 `doctor`、`status --live`、`login --cdp`、`clean --risk-lock` 都改写成 `boss --data-dir <绝对路径> ...`。`doctor` 检查的是该目录的登录态、缓存与风险锁；静态 `boss schema` 与来源策略表本身仍展示通用示例。
+
 ### 浏览器 Cookie 提取与 macOS 钥匙串
 
 `boss login` 默认先从本机浏览器提取 BOSS Cookie，按 chrome、firefox、edge、brave、opera、chromium、vivaldi、arc、librewolf、safari 的顺序尝试，`--cookie-source` 可只指定一个。macOS 上 Chromium 系浏览器的 Cookie 由钥匙串里的「<浏览器> Safe Storage」加密，读取时系统会弹出授权框。CLI 会先以只读方式查看 Cookie 库中明文的域名和名称两列：确认某个浏览器没有 `zhipin.com` 的 `wt2` 登录记录，就直接跳过它，不读取钥匙串；找不到 Cookie 库或无法读取时，仍按原方式交给 browser-cookie3。这一步不读取任何 Cookie 值。同一浏览器有多个配置（Default、Profile 1……）时，macOS 上直接读取含登录记录的那个配置（按 Default、Profile N、测试版的顺序取第一个），钥匙串仍只读一次；其他系统仍由 browser-cookie3 读取默认配置。`boss doctor` 默认不读取浏览器 Cookie，`--probe-cookies` 走同一套逻辑。显式用 `--cookie-source` 指定浏览器却没提取到时，stderr 会说明是读取失败还是该浏览器没有登录 Cookie；拿不到解密密钥（macOS 钥匙串未授权、Windows 上新版 Chrome / Edge 的 App-Bound 加密、Linux 密钥环未解锁）时，提示改用 `--cdp` 或 `--curl-file`。自动探测全部落空时，只汇总无法解密的浏览器。
