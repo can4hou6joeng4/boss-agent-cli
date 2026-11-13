@@ -167,6 +167,11 @@ def envelope_error(
 		recoverable = bool(spec.get("recoverable", False))
 	if recovery_action is None:
 		recovery_action = spec.get("recovery_action")
+	# 登记表声明 ``replay_safe: false`` 的码表示「写操作结果未知」，Agent 必须能
+	# 从 ``error.details`` 读到与文案一致的判定，而不是只看到 ``sent: null``（Issue #988）。
+	# 调用方给出的更精确值优先：details 里显式写了 replay_safe 时不覆盖。
+	if spec.get("replay_safe") is False:
+		details = {"replay_safe": False, "outcome_unknown": True, **(details or {})}
 	error = {
 		"code": code,
 		"message": redact_sensitive_text(message),

@@ -126,7 +126,7 @@ boss status
 - `RATE_LIMITED`：已声明可重放的读取可有限冷却；写操作先核对是否生效
 - `REQUEST_BUDGET_EXHAUSTED`：共享执行锁、60 秒预算或冷却超出本次等待时限，本次操作未发出；保留 checkpoint，检查并发与 `retry_after_seconds` 后显式恢复，不自动重试或清锁。同 `data_dir` 默认共享，可用 `request_budget_dir` 显式分组；见 [共享预算配置](commands.md#共享请求预算与冷却)。写后确认中断仍为 `ACTION_UNCONFIRMED`，先核对结果
 - `NOT_SUPPORTED`：切换 schema catalog 中支持该 goal 的平台或 workflow
-- 结果未知的写操作：CLI 与 MCP 信封的 `error.details` 都带 `replay_safe`；为 `false`（或 `outcome_unknown=true`）时动作可能已生效，先核对平台实际状态，禁止自动重试。读取被中断时 `replay_safe=true`，可按通道规则重试
+- 结果未知的写操作：CLI 与 MCP 信封的 `error.details` 都带 `replay_safe`；为 `false`（或 `outcome_unknown=true`）时动作可能已生效，先核对平台实际状态，禁止自动重试。读取被中断时 `replay_safe=true`，可按通道规则重试。`ACTION_UNCONFIRMED`、`GREET_RESULT_UNKNOWN`、`LOCATION_RESULT_UNKNOWN`、`RESUME_ACCEPT_RESULT_UNKNOWN` 与 `LOCAL_STATE_WRITE_FAILED` 由错误码登记表统一补 `replay_safe: false`，即使命令只带回 `sent: null` / `accepted: null`
 - `WORKFLOW_TIMEOUT`：正常 wizard 超时保留 `run_id`，调整超时后显式 `boss wizard --resume <run_id>`；若 MCP 返回 `outcome_unknown=true`，先核对未确认的动作，禁止直接重试
 - `INVALID_PARAM`：校正参数（城市、福利、页码等）；MCP 侧还包括未知工具名、不符合 `inputSchema` 声明类型的参数（例如把 `dry_run` 传成字符串 `"true"`），以及 `inputSchema.properties` 之外的未知参数（工具的 schema 已声明顶层 `additionalProperties: false`）。枚举参数（`format` / `sort` / `from_who` / `section` / `detail_status` / `tone` / `lang` / `type`）传显式空串会原样到达 CLI，得到带可选值列表的取值诊断，不会静默落回默认值；传 `null` 或不传仍等价于省略
 
