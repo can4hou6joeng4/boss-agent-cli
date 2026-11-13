@@ -158,7 +158,7 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 | Command | Description |
 |---------|-------------|
 | `boss greet <sid> <jid>` | Greet a recruiter; duplicates return `ALREADY_GREETED` |
-| `boss batch-greet <query>` | Search and greet up to an explicit `--count`; supports `--dry-run`; on `ACCOUNT_RISK` / `ENVIRONMENT_RISK` the batch stops immediately with `ok:false`, and already-greeted items are returned in `error.details.greeted` |
+| `boss batch-greet <query>` | Search and greet up to an explicit `--count`; supports `--dry-run`; on `ACCOUNT_RISK` / `ENVIRONMENT_RISK` the batch stops immediately with `ok:false`, and already-greeted items are returned in `error.details.greeted`; an unconfirmed greeting (a sent request whose response was interrupted, `ACTION_UNCONFIRMED`) also stops the batch immediately with `ok:false` and `error.details` carrying `outcome_unknown: true` / `replay_safe: false`, never auto-resending |
 | `boss apply <sid> <jid>` | Apply or start a conversation; duplicates return `ALREADY_APPLIED` |
 | `boss exchange <uid-or-sid>` | Request a phone-number or WeChat exchange; prefer the stable `uid` returned by `boss chat` |
 

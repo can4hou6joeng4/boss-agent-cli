@@ -479,3 +479,75 @@ def test_batch_greet_cache_write_failure_stops_without_resending(
 	# 只发出第一个招呼：不重发、不继续；记账失败后也不再节流等待。
 	assert [call.args[0] for call in mock_client.greet.call_args_list] == ["s1"]
 	mock_time.sleep.assert_not_called()
+
+
+def _invoke_batch_with_real_platform(tmp_path, greet_response):
+	"""走真实 ``BossPlatform`` 的批量招呼：只有最深层的 client 是假的。
+
+	mock 平台层（``is_success`` / ``parse_error`` 一并 mock）测不出错误码
+	在平台层与命令层之间的真实映射，结果未知的重放语义正是丢在这个接缝上。
+	"""
+	from boss_agent_cli.platforms.zhipin import BossPlatform
+
+	raw_job = _make_raw_job("A", "s1")
+
+	class _FakeClient:
+		def __init__(self) -> None:
+			self.greet_calls = 0
+
+		def search_jobs(self, *a, **k):
+			return {"code": 0, "zpData": {"jobList": [raw_job]}}
+
+		def greet(self, sid, jid, msg=""):
+			self.greet_calls += 1
+			return greet_response
+
+	client = _FakeClient()
+	platform = BossPlatform(client)
+	with (
+		patch("boss_agent_cli.commands.greet.get_platform_instance", return_value=platform),
+		patch("boss_agent_cli.commands.greet.AuthManager"),
+		patch("boss_agent_cli.commands.greet.CacheStore") as mock_cache_cls,
+		patch("boss_agent_cli.commands.greet.time") as mock_time,
+	):
+		mock_cache = _ctx_mock(mock_cache_cls)
+		mock_cache.is_greeted.return_value = False
+		mock_time.sleep = MagicMock()
+		result = CliRunner().invoke(
+			cli, ["--data-dir", str(tmp_path), "--json", "batch-greet", "x", "--count", "1"]
+		)
+	return result, client
+
+
+def test_batch_greet_unconfirmed_result_is_never_retried(tmp_path):
+	"""结果未知的招呼不得自动重发，且信封必须带 replay_safe=false（Issue #984）。
+
+	``ACTION_UNCONFIRMED`` 的语义是请求已发出、结果未知（平台层在
+	``__cli_error_details__`` 里明确 ``replay_safe: false``）。批量路径原先把它
+	当普通失败 sleep 后重发一次，最终还回 ``ok:true``：既可能重复打招呼，也让
+	Agent 以为只是一次普通失败。
+	"""
+	unknown = {
+		"code": -1,
+		"message": "请求期间页面或响应中断；操作可能已生效，请先核对结果，勿直接重试",
+		"zpData": {},
+		"__cli_error_code__": "ACTION_UNCONFIRMED",
+		"__cli_error_details__": {"outcome": "unknown", "replay_safe": False},
+	}
+	result, client = _invoke_batch_with_real_platform(tmp_path, unknown)
+
+	assert result.exit_code == 1
+	body = json.loads(result.stdout)
+	assert body["ok"] is False
+	assert body["error"]["code"] == "ACTION_UNCONFIRMED"
+	assert body["error"]["recoverable"] is False
+	# 一次未知就地停批：重试等于在不知道是否送达时再发一次。
+	assert client.greet_calls == 1
+	details = body["error"]["details"]
+	assert details["outcome_unknown"] is True
+	assert details["replay_safe"] is False
+	assert details["unconfirmed"]["details"]["replay_safe"] is False
+	assert details["unconfirmed"]["security_id"] == "s1"
+	# 已成功的部分仍随批次带回（这里是 0 条），Agent 不会对整批重来。
+	assert details["total_greeted"] == 0
+	assert "不要自动重发" in " ".join(body["hints"]["operator_actions"])

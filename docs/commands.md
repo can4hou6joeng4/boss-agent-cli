@@ -154,7 +154,7 @@ boss crawl stop <run_id>
 | 命令 | 说明 |
 |------|------|
 | `boss greet <sid> <jid>` | 向指定招聘者打招呼；重复记录返回 `ALREADY_GREETED` |
-| `boss batch-greet <query>` | 搜索后按显式 `--count` 批量打招呼，支持 `--dry-run`；命中 `ACCOUNT_RISK` / `ENVIRONMENT_RISK` 立即停批并返回 `ok:false`，已成功项随 `error.details.greeted` 带回 |
+| `boss batch-greet <query>` | 搜索后按显式 `--count` 批量打招呼，支持 `--dry-run`；命中 `ACCOUNT_RISK` / `ENVIRONMENT_RISK` 立即停批并返回 `ok:false`，已成功项随 `error.details.greeted` 带回；单条招呼结果未确认（`ACTION_UNCONFIRMED`，请求已发出但响应中断）同样立即停批，返回 `ok:false` 且 `error.details` 带 `outcome_unknown: true` / `replay_safe: false`，不自动重发 |
 | `boss apply <sid> <jid>` | 发起投递或立即沟通；重复记录返回 `ALREADY_APPLIED` |
 | `boss exchange <uid-or-sid>` | 请求交换手机号或微信；优先使用 `boss chat` 输出的稳定 `uid` |
 
