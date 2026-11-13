@@ -378,6 +378,41 @@ def test_non_enum_empty_and_none_values_stay_omitted(
 		assert flag not in argv, f"{flag} 不该出现：{argv}"
 
 
+@pytest.mark.parametrize("tool", TOOLS, ids=[tool.name for tool in TOOLS])
+def test_enum_values_are_never_silently_replaced_by_a_default(tool) -> None:
+	"""非法的枚举值必须被拒绝，不能静默落回默认分支（Issue #1002）。
+
+	映射层允许两种处理：自己抛 ``ValueError`` / ``KeyError``；或把原值原样写进
+	argv，让 Click 的 Choice 或命令层校验返回 ``INVALID_PARAM``。禁止的是第三种：
+	值被丢掉或替换成别的分支（``boss_wizard`` 曾把 ``resum`` 当成新建运行）。
+	"""
+	properties = tool.input_schema.get("properties") or {}
+	for key, prop in properties.items():
+		if not isinstance(prop, dict) or "enum" not in prop:
+			continue
+		arguments = {name: _sample_value(value, name) for name, value in properties.items()}
+		arguments[key] = "bogus-enum-value"
+		try:
+			argv = _build_args(tool.name, arguments)
+		except (KeyError, ValueError):
+			continue
+		assert any("bogus-enum-value" in str(item) for item in argv), (
+			f"{tool.name}.{key} 的非法取值被静默丢弃或被替换：{argv}"
+		)
+		try:
+			command, rest = _resolve_command(argv)
+			ctx = command.make_context(command.name, rest)
+			ctx.close()
+		except (click.ClickException, SystemExit):
+			continue
+		except AssertionError:
+			# action 是位置参数里的一层子命令（config / hr jobs）：非法值解析不到
+			# 已注册子命令，真实 CLI 会回 "No such command"，同样属于拒绝。
+			continue
+		# Click 未拒绝时，值必须仍在 argv 里，命令层的校验才有机会拒绝它。
+		assert any("bogus-enum-value" in str(item) for item in argv), f"{tool.name}.{key}: {argv}"
+
+
 def test_every_enum_schema_property_is_covered_by_the_empty_value_rule() -> None:
 	"""schema 里声明了 enum 的字符串参数必须登记在 ``_ENUM_KEYS``。
 

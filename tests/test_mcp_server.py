@@ -430,6 +430,54 @@ def test_call_tool_reports_missing_conditional_argument(monkeypatch, tool_name, 
 	assert payload["error"]["recovery_action"] == "修正参数"
 
 
+@pytest.mark.parametrize(
+	("arguments", "shown"),
+	[
+		({"action": "resum", "run_id": "run-1"}, "resum"),
+		({"action": "STOP", "run_id": "run-1"}, "STOP"),
+		({"action": ""}, "''"),
+	],
+)
+def test_call_tool_rejects_unknown_wizard_action(monkeypatch, arguments, shown):
+	"""未识别的 action 不能静默新建 workflow run（Issue #1002）。
+
+	旧实现把 `resum` / `STOP` / 空串全落进 run 分支：调用方以为恢复或停止
+	已生效，实际却新建了一次执行，`run_id` 也被丢弃。
+	"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+
+	async def fake_run(*args, **kwargs):
+		raise AssertionError("非法 action 不应触达 CLI")
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+
+	result = asyncio.run(
+		mcp_server.call_tool(None, CallToolRequestParams(name="boss_wizard", arguments=arguments))
+	)
+
+	assert result.is_error is True
+	payload = json.loads(result.content[0].text)
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "参数取值非法" in payload["error"]["message"]
+	assert shown in payload["error"]["message"]
+	assert "run / resume / status / stop" in payload["error"]["message"]
+
+
+@patch("server.subprocess.run")
+def test_wizard_unknown_action_never_builds_run_payload(mock_run):
+	"""映射层直接拒绝，不能退化成 `wizard --input-json`（Issue #1002）。"""
+	with pytest.raises(ValueError, match="action 应为"):
+		_build_args("boss_wizard", {"action": "resum", "run_id": "run-1", "goal": "daily_apply"})
+	mock_run.assert_not_called()
+
+
 @pytest.mark.parametrize(("ok", "expected"), [(True, False), (False, True)])
 def test_call_tool_is_error_mirrors_envelope_ok(monkeypatch, ok, expected):
 	"""CLI 返回 ok:false 时，工具结果必须标成 is_error，否则客户端会当成成功调用。"""

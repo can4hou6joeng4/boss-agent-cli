@@ -517,6 +517,9 @@ async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
 		# CLI 的错误信封返回，至少带上 INVALID_PARAM、缺失参数名与恢复指引。
 		missing = str(exc.args[0]) if exc.args else "参数"
 		return _tool_argument_error(params.name, f"缺少必填参数：{missing}")
+	except ValueError as exc:
+		# 映射层自己拒绝的非法枚举值（Issue #1002）：不能落进默认分支。
+		return _tool_argument_error(params.name, f"参数取值非法：{exc}")
 	result = await _run_boss_async(*args, may_write=_tool_may_write(params.name, arguments))
 	# 信封的 ok 是唯一真源，但 MCP 客户端还需要 is_error 才能把失败标成工具错误；
 	# 两者不一致时，ok:false 会被当成一次成功的工具调用。
