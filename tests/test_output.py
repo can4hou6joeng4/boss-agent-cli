@@ -532,19 +532,20 @@ def test_unregistered_unknown_result_codes_still_declare_replay_safety():
 	"""登记表里「结果未确认」的码，信封必须自带 ``replay_safe: false``。
 
 	招聘者侧 ``GREET_RESULT_UNKNOWN`` / ``LOCATION_RESULT_UNKNOWN`` /
-	``RESUME_ACCEPT_RESULT_UNKNOWN`` 与 ``LOCAL_STATE_WRITE_FAILED`` 的 details
-	原先只有 ``sent: null`` / ``accepted: null``，与文档承诺的「未知结果都带
-	replay_safe」不一致（Issue #988）。这里逐码断言登记表声明与信封输出一致。
+	``RESUME_ACCEPT_RESULT_UNKNOWN`` 的 details 原先只有 ``sent: null`` /
+	``accepted: null``，与文档承诺的「未知结果都带 replay_safe」不一致（Issue #988）。
+	``LOCAL_STATE_WRITE_FAILED`` 的平台结果已确认，只缺 ``replay_safe``，不能
+	被顺手标成 ``outcome_unknown``。
 	"""
-	codes = [
+	unknown_codes = [
 		"ACTION_UNCONFIRMED",
 		"RESUME_ACCEPT_RESULT_UNKNOWN",
 		"GREET_RESULT_UNKNOWN",
 		"LOCATION_RESULT_UNKNOWN",
-		"LOCAL_STATE_WRITE_FAILED",
 	]
-	for code in codes:
+	for code in unknown_codes:
 		assert ERROR_CODES[code].get("replay_safe") is False, code
+		assert ERROR_CODES[code].get("outcome_unknown") is True, code
 		payload = json.loads(
 			envelope_error("hr", code=code, message="未确认", details={"friend_id": 1})
 		)
@@ -552,6 +553,20 @@ def test_unregistered_unknown_result_codes_still_declare_replay_safety():
 		assert details["replay_safe"] is False, code
 		assert details["outcome_unknown"] is True, code
 		assert details["friend_id"] == 1, code
+
+	assert ERROR_CODES["LOCAL_STATE_WRITE_FAILED"].get("replay_safe") is False
+	payload = json.loads(
+		envelope_error(
+			"recruiter-location",
+			code="LOCAL_STATE_WRITE_FAILED",
+			message="已发送，但本地记录保存失败",
+			details={"friend_id": 1, "sent": True},
+		)
+	)
+	details = payload["error"]["details"]
+	assert details["replay_safe"] is False
+	assert details["sent"] is True
+	assert "outcome_unknown" not in details
 
 
 def test_caller_supplied_replay_safe_wins_over_registry():

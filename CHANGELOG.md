@@ -5,7 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
-- 结果未知的写操作信封统一声明 `replay_safe`（Issue #988）：`hr greet` 的 `GREET_RESULT_UNKNOWN`、`hr location` 的 `LOCATION_RESULT_UNKNOWN`、`hr accept-resume` 的 `RESUME_ACCEPT_RESULT_UNKNOWN` 以及 `apply` / `greet` / `hr location` 的 `LOCAL_STATE_WRITE_FAILED` 表示写操作可能已生效，但 `error.details` 原先只有 `sent: null` / `accepted: null`，没有快速入门文档承诺的 `replay_safe`；Agent 读不到判定，只能凭错误码文案猜，与本仓库「未知结果禁止自动重试」的契约脱节（wizard 路径一直正确携带）。现在错误码登记表为这些码声明 `replay_safe: false`，`output.envelope_error` 按登记表补齐 `replay_safe: false` 与 `outcome_unknown: true`（调用方给出的更精确值优先）。新增守卫：文案承诺「禁止自动重发 / 重试」的码必须声明该字段。
+- 结果未知的写操作信封统一声明 `replay_safe`（Issue #988）：`hr greet` 的 `GREET_RESULT_UNKNOWN`、`hr location` 的 `LOCATION_RESULT_UNKNOWN`、`hr accept-resume` 的 `RESUME_ACCEPT_RESULT_UNKNOWN` 以及 `apply` / `greet` / `hr location` 的 `LOCAL_STATE_WRITE_FAILED` 表示写操作可能已生效，但 `error.details` 原先只有 `sent: null` / `accepted: null`，没有快速入门文档承诺的 `replay_safe`；Agent 读不到判定，只能凭错误码文案猜，与本仓库「未知结果禁止自动重试」的契约脱节（wizard 路径一直正确携带）。现在错误码登记表为这些码声明 `replay_safe: false`，`output.envelope_error` 按登记表补齐；前三个「结果未确认」码同时声明并补 `outcome_unknown: true`，`LOCAL_STATE_WRITE_FAILED` 的平台结果已确认、只补 `replay_safe`。调用方给出的更精确值优先。新增守卫：文案承诺「禁止自动重发 / 重试」的码必须声明该字段。
 
 - 子命令选择错误的下一步提示改为帮助命令（Issue #986）：`boss resume`、`boss resume bogus` 等缺少或写错子命令的调用，此前直接返回裸子命令，`resume clone` 会再次缺参，`resume init` 则会直接创建默认简历。现在两类错误都返回各子命令的 `--help`，供 Agent 读取用法后选择动作；回归逐组重放提示并拦截业务回调，覆盖嵌套组及两类错误。
 
