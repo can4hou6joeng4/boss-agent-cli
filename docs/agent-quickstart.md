@@ -128,7 +128,7 @@ boss status
 - `NOT_SUPPORTED`：切换 schema catalog 中支持该 goal 的平台或 workflow
 - 结果未知的写操作：CLI 与 MCP 信封的 `error.details` 都带 `replay_safe`；为 `false`（或 `outcome_unknown=true`）时动作可能已生效，先核对平台实际状态，禁止自动重试。读取被中断时 `replay_safe=true`，可按通道规则重试
 - `WORKFLOW_TIMEOUT`：正常 wizard 超时保留 `run_id`，调整超时后显式 `boss wizard --resume <run_id>`；若 MCP 返回 `outcome_unknown=true`，先核对未确认的动作，禁止直接重试
-- `INVALID_PARAM`：校正参数（城市、福利、页码等）；MCP 侧还包括未知工具名、不符合 `inputSchema` 声明类型的参数（例如把 `dry_run` 传成字符串 `"true"`），以及 `inputSchema.properties` 之外的未知参数（工具的 schema 已声明顶层 `additionalProperties: false`）
+- `INVALID_PARAM`：校正参数（城市、福利、页码等）；MCP 侧还包括未知工具名、不符合 `inputSchema` 声明类型的参数（例如把 `dry_run` 传成字符串 `"true"`），以及 `inputSchema.properties` 之外的未知参数（工具的 schema 已声明顶层 `additionalProperties: false`）。枚举参数（`format` / `sort` / `from_who` / `section` / `detail_status` / `tone` / `lang` / `type`）传显式空串会原样到达 CLI，得到带可选值列表的取值诊断，不会静默落回默认值；传 `null` 或不传仍等价于省略
 
 ## 4) 工具协议直出
 

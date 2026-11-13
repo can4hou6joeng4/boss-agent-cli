@@ -315,3 +315,87 @@ def test_aliased_tool_schema_lists_every_cli_parameter(
 	tool_name: str, command: click.Command, aliases: dict[str, str], hidden: set[str],
 ) -> None:
 	_assert_schema_matches_command(tool_name, command, aliases, hidden)
+
+
+# ── 枚举参数的显式空串必须到达 CLI（Issue #982） ──────────────────────────
+# CLI 对每个 enum 选项都有取值校验，空串会得到 INVALID_PARAM + 可选值列表。
+# 映射层用真值判断时，空串被化装成「没传」，工具静默落回默认值：`stats(format="")`
+# 返回 json 而不是报错、`search(sort="")` 按默认相关性排序。
+_ENUM_EMPTY_CASES: list[tuple[str, dict[str, Any], list[str]]] = [
+	("boss_search", {"query": "python", "sort": ""}, ["--sort", ""]),
+	("boss_crawl_results", {"run_id": "r1", "detail_status": ""}, ["--detail-status", ""]),
+	("boss_chat", {"from_who": ""}, ["--from", ""]),
+	("boss_chat", {"format": ""}, ["--export", ""]),
+	("boss_me", {"section": ""}, ["--section", ""]),
+	("boss_export", {"query": "python", "format": ""}, ["--format", ""]),
+	("boss_digest", {"format": ""}, ["--format", ""]),
+	("boss_stats", {"format": ""}, ["--format", ""]),
+	("boss_ai_reply", {"recruiter_message": "hi", "tone": ""}, ["--tone", ""]),
+	("boss_ai_cover_letter", {"resume": "r", "tone": "", "lang": ""}, ["--tone", "", "--lang", ""]),
+	("boss_hr_exchange", {"friend_id": "f", "type": ""}, ["--type", ""]),
+]
+
+
+@pytest.mark.parametrize(
+	("tool_name", "arguments", "expected_tail"),
+	_ENUM_EMPTY_CASES,
+	ids=[f"{name}-{list(args)}" for name, args, _ in _ENUM_EMPTY_CASES],
+)
+def test_enum_empty_string_reaches_cli_verbatim(
+	tool_name: str, arguments: dict[str, Any], expected_tail: list[str],
+) -> None:
+	"""显式空串的枚举参数原样下发，让 CLI 的取值诊断回到 Agent（Issue #982）。"""
+	argv = _build_args(tool_name, arguments)
+	assert argv[-len(expected_tail) :] == expected_tail, argv
+
+	# 目标命令必须真的把空串判成非法取值，而不是静默接受。
+	# Click 的 BadParameter 消息是英文的；CLI 的中文诊断在命令层再包一层，
+	# 这里只验证「空串确实到达了 Choice 校验」。
+	command, rest = _resolve_command(argv)
+	with pytest.raises(click.BadParameter):
+		command.make_context(command.name, rest)
+
+
+@pytest.mark.parametrize(
+	("tool_name", "arguments", "absent_flags"),
+	[
+		("boss_search", {"query": "python", "sort": None}, ["--sort"]),
+		("boss_search", {"query": "python", "city": ""}, ["--city"]),
+		("boss_chat", {"format": None, "output_file": None}, ["--export", "--output"]),
+		("boss_me", {"section": None}, ["--section"]),
+		("boss_stats", {"format": None}, ["--format"]),
+		("boss_ai_cover_letter", {"resume": "r", "tone": "", "lang": None}, ["--lang"]),
+		("boss_hr_exchange", {"friend_id": "f", "type": None}, ["--type"]),
+	],
+	ids=["search-null-sort", "search-empty-city", "chat-null", "me-null", "stats-null", "ai-empty-tone-null-lang", "hr-exchange-null"],
+)
+def test_non_enum_empty_and_none_values_stay_omitted(
+	tool_name: str, arguments: dict[str, Any], absent_flags: list[str],
+) -> None:
+	"""``null`` 与自由文本的空串仍等价于未传（与 Issue #958 一致），行为不变。"""
+	argv = _build_args(tool_name, arguments)
+	for flag in absent_flags:
+		assert flag not in argv, f"{flag} 不该出现：{argv}"
+
+
+def test_every_enum_schema_property_is_covered_by_the_empty_value_rule() -> None:
+	"""schema 里声明了 enum 的字符串参数必须登记在 ``_ENUM_KEYS``。
+
+	新增带取值校验的枚举参数时，映射层若还用真值判断，显式空串会被静默吞掉；
+	这条守卫让漏登记在本地门禁现形，而不是等 Agent 拿到 ``ok:true`` 的默认结果。
+	"""
+	from boss_agent_cli import mcp_args
+
+	enum_keys: set[str] = set()
+	for tool in TOOLS:
+		properties = tool.input_schema.get("properties") or {}
+		enum_keys.update(
+			key for key, prop in properties.items() if "enum" in prop and prop.get("type") == "string"
+		)
+	# 以下枚举键不走 `_optional`：
+	# - `active`：`resolve_active_level("")` 返回 None，空值本来就等于未传；
+	# - `action` / `role`：位置参数语义（wizard / config / hr jobs 的命令路由），
+	#   不是 `--flag value`；空串由各自的 KeyError / 路由分支处理。
+	assert enum_keys - {"active", "action", "role"} <= set(mcp_args._ENUM_KEYS), (
+		f"schema 声明了枚举但映射层未登记：{sorted(enum_keys - set(mcp_args._ENUM_KEYS))}"
+	)
