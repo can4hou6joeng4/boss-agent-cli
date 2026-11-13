@@ -218,6 +218,77 @@ def test_cli_export_pdf_chromium_unavailable(tmp_path):
 	assert "playwright install" not in action
 
 
+def test_cli_export_pdf_kernel_missing_is_not_export_failed(tmp_path):
+	"""PDF 导出命中 patchright 内核缺失时按 BROWSER_KERNEL_MISSING 上报。
+
+	``EXPORT_FAILED`` 是「导出器出错、可以再试一次」的语义；内核缺失是确定性
+	失败，重试同一条命令永远同一结果。而且 patchright 的异常文本里带整段安装
+	横幅和本机绝对路径，不能塞进 error.message。
+	"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "pdfkernel", "--template", "default"])
+
+	with patch(
+		"patchright.sync_api.sync_playwright",
+		side_effect=Exception(
+			"BrowserType.launch: Executable doesn't exist at /x/chromium-1/chrome-headless-shell"
+		),
+	):
+		result = _invoke(runner, tmp_path, ["export", "pdfkernel", "--format", "pdf"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "BROWSER_KERNEL_MISSING"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "patchright install chromium"
+	assert parsed["hints"]["next_actions"][0] == "patchright install chromium"
+	# doctor 必须指向本次 --data-dir，否则自定义目录下诊断的是另一份数据。
+	assert str(tmp_path.resolve()) in parsed["hints"]["next_actions"][1]
+	assert "chrome-headless-shell" not in parsed["error"]["message"]
+
+
+def test_cli_export_html_to_directory_is_local_io_not_export_failed(tmp_path):
+	"""HTML 导出写到目录时是路径问题，不能给「装浏览器内核」的指引。
+
+	HTML 导出只用本地模板渲染，完全不碰 patchright；此前所有异常都归成
+	``EXPORT_FAILED`` +「检查 patchright 安装」，把用户引向一个无关的方向。
+	"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "htmldir", "--template", "default"])
+
+	result = _invoke(runner, tmp_path, ["export", "htmldir", "--format", "html", "-o", str(tmp_path)])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "LOCAL_IO_ERROR"
+	assert parsed["error"]["recoverable"] is False
+	assert "patchright" not in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["operator_actions"]
+
+
+def test_cli_export_json_output_path_prepare_failure_is_enveloped(tmp_path):
+	"""建父目录就失败（目标父路径是普通文件）时也要给 LOCAL_IO_ERROR 信封。
+
+	``resume_cmd`` 没有统一异常装饰器：``prepare_output_path`` 在 try 之外抛
+	OSError 时会落进顶层网兜，被报成「resume 本地文件读写失败」而不是导出失败。
+	"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "jsondir", "--template", "default"])
+	blocker = tmp_path / "blocker"
+	blocker.write_text("not a directory", encoding="utf-8")
+
+	result = _invoke(
+		runner,
+		tmp_path,
+		["export", "jsondir", "--format", "json", "-o", str(blocker / "x.json")],
+	)
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "LOCAL_IO_ERROR"
+	assert parsed["error"]["recoverable"] is False
+
+
 def test_cli_export_not_found(tmp_path):
 	"""Exporting a non-existent resume returns RESUME_NOT_FOUND."""
 	runner = CliRunner()
