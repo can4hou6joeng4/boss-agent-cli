@@ -103,6 +103,26 @@ patchright install chromium-headless-shell
 not a CLI failure. Validate local commands, schema, MCP, and doctor first; run
 `boss login` before live `search`, `detail`, or `status --live` checks.
 
+### MCP tools return `CLI_ERROR`
+
+`CLI_ERROR` is a process-level failure between the MCP server and the underlying
+`boss` CLI, not a platform response:
+
+- **The CLI could not start** (`error.message` begins with `无法启动底层 boss CLI`):
+  `boss` is not on the MCP server process's `PATH`, the `--boss-bin` path is wrong,
+  or the file is not executable. No platform operation happened
+  (`error.details.outcome_unknown=false`). Install `boss` into the MCP server's
+  environment or pass `boss-mcp --boss-bin /path/to/boss`; the README's
+  `uvx --from boss-agent-cli[mcp] boss-mcp` puts that environment's `boss` on `PATH`.
+- **The child ran but printed no JSON envelope**: read-only tools made no platform
+  write (`outcome_unknown=false`) — inspect `error.message`, upgrade to the latest
+  release, and retry; write tools have an unknown outcome (`outcome_unknown=true`) —
+  verify the actual platform state before retrying.
+
+Common `boss-mcp` startup flags: `--data-dir`, `--platform`, `--role`,
+`--browser-source`, `--boss-bin`, `--transport stdio|sse|http`; see
+`boss-mcp --help` for every default.
+
 ### Windows PATH and UTF-8
 
 If `uv tool update-shell` times out, temporarily expose global tools in PowerShell:
