@@ -91,6 +91,10 @@ def _browser_kernel_missing_error(
 	)
 
 
+#: 恢复时发现上一个执行器在写请求结果确认前消失，步骤与 run 落成失败时使用的说明。
+_INTERRUPTED_WRITE_MESSAGE = "上一次执行在写请求结果确认前中断，无法确认操作是否已生效，禁止自动重试"
+
+
 @dataclass(frozen=True)
 class WorkflowControl:
 	"""Cooperative stop/deadline control exposed to long-running actions."""
@@ -117,6 +121,26 @@ class WorkflowControl:
 			status=WorkflowStatus.RUNNING.value,
 			result={"inner_run_id": inner_run_id},
 		)
+
+	def begin_write(self, recovery_action: str) -> None:
+		"""在写请求发出之前调用：先把「结果未知」落到本步骤上。
+
+		执行器若在结果确认前消失（被 kill、终端关闭、断电），步骤会停在 running，
+		它没有机会再记录任何东西；``--resume`` 凭这条预先落盘的记录拒绝重放
+		（Issue #1019）。结果一旦确认——成功，或动作明确报告的失败——runner 落盘
+		步骤时会用实际结果覆盖它。
+
+		记录落不了盘就抛出：调用方不得在没有记录的情况下发出写请求。
+		"""
+		error = WorkflowActionError(
+			"ACTION_UNCONFIRMED",
+			"写请求在途，结果尚未确认",
+			recoverable=False,
+			recovery_action=recovery_action,
+			replay_safe=False,
+		)
+		if not self.store.set_step_error(self.run_id, self.step_name, error.to_dict()):
+			raise RuntimeError(f"workflow step {self.step_name!r} of run {self.run_id!r} was not persisted")
 
 	def raise_if_requested(self) -> None:
 		signal = self.poll()
@@ -213,6 +237,7 @@ class WorkflowRunner:
 		stored_run = self._store.get(run_id)
 		if stored_run is None:
 			raise RuntimeError(f"workflow run {run_id!r} was not persisted")
+		stored_run = self._settle_interrupted_writes(run_id, stored_run)
 		blocked_steps: dict[str, dict[str, Any]] = {}
 		for step in stored_run["steps"]:
 			error = step.get("error") or {}
@@ -307,6 +332,9 @@ class WorkflowRunner:
 							raise
 						attempt += 1
 						control.raise_if_requested()
+						# 动作明确报告了可以重放的失败：这次尝试在写请求前预先落盘的「结果未知」
+						# 随之作废。留着它，下一次尝试还没发出请求就被终止也会被当成结果未知。
+						self._store.set_step_error(run_id, step_name, None)
 						# 动作可能在失败前已保存内部任务绑定；自动重试也要读取最新断点，
 						# 否则 crawl_start 会另建任务并丢开原任务的进度与预算（Issue #972）。
 						persisted = self._store.get(run_id) or {}
@@ -510,6 +538,39 @@ class WorkflowRunner:
 			last_result=prior_results.get(plan.requested_steps[-1]) if plan.requested_steps else {},
 		)
 		return self._store.get(run_id) or {}
+
+	def _settle_interrupted_writes(self, run_id: str, stored_run: dict[str, Any]) -> dict[str, Any]:
+		"""把上一个执行器留下的在途写请求落成「结果未知」的失败。
+
+		调用方持有执行权，所以仍是 running 的步骤不可能还在执行：上一个执行器没有
+		记录结果就消失了。步骤若带着写请求发出前预先落盘的记录（``begin_write``），
+		这次写操作可能已经生效，也可能没有——不重放，交给操作者核对（Issue #1019）。
+		没有这条记录的 running 步骤（只读、内部任务续跑、尚未走到写请求）照常重跑。
+		"""
+		interrupted = [
+			step
+			for step in stored_run["steps"]
+			if step["status"] == WorkflowStatus.RUNNING.value and (step.get("error") or {}).get("replay_safe") is False
+		]
+		if not interrupted:
+			return stored_run
+		for step in interrupted:
+			self._store.update_step(
+				run_id,
+				step["step_name"],
+				status=WorkflowStatus.FAILED.value,
+				result=step["result"],
+				error={**step["error"], "message": _INTERRUPTED_WRITE_MESSAGE},
+			)
+		# 步骤按顺序执行，正常情况下只有一个；run 指向最先该执行的那一步。
+		first = interrupted[0]
+		self._store.update_run(
+			run_id,
+			status=WorkflowStatus.FAILED.value,
+			current_step=first["step_name"],
+			error={**first["error"], "message": _INTERRUPTED_WRITE_MESSAGE},
+		)
+		return self._store.get(run_id) or stored_run
 
 	@staticmethod
 	def _assert_plan_matches(existing: Mapping[str, Any], plan: WorkflowPlan) -> None:
