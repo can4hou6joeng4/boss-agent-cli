@@ -37,7 +37,14 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	name = tool_name.replace("boss_", "")
 
 	if name == "wizard":
-		action = str(arguments.get("action") or "run")
+		# 未识别的 action 不能落进 run 分支（Issue #1002）：把 `resume` 拼错成
+		# `resum` 会静默新建一次 workflow run，调用方以为控制请求已生效。
+		# 显式空串同样是非法取值（与 Issue #982 的枚举契约一致），只有缺省 /
+		# ``null`` 才落回 schema 默认的 run。
+		raw_action = arguments.get("action")
+		action = "run" if raw_action is None else str(raw_action)
+		if action not in {"run", "resume", "status", "stop"}:
+			raise ValueError(f"action 应为 run / resume / status / stop，收到 {action!r}")
 		if action in {"resume", "status", "stop"}:
 			run_id = str(arguments["run_id"])
 			args = ["wizard", f"--{action}", run_id]

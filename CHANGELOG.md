@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `boss_wizard.action` 的非法取值不再静默新建运行（Issue #1002）：映射层原先把 `resume` / `status` / `stop` 之外的一切（`resum`、`STOP`、空串）都送进 `run` 分支，调用方以为恢复或停止已生效，实际却新建了一次 workflow 并丢弃 `run_id`。现在进入 CLI 前返回 `INVALID_PARAM` 并列出合法取值；缺省或 `null` 仍落回默认 `run`。新增覆盖全部工具枚举参数的守卫，禁止非法值被静默替换。
 - 创建失败且同时被取消时，MCP 恢复指引改为指向安装 / `--boss-bin`（Issue #1000）：此前该分支沿用写操作中断文案，让 Agent 去核对并不存在的平台 checkpoint。子进程从未运行，现在与同步启动失败路径一致，保留 `WORKFLOW_STOPPED` 错误码与 `outcome_unknown=false`。
 - MCP 在创建子进程期间被取消时不再丢失恢复标识（Issue #998）：该分支会回收底层 CLI，却丢弃其 stdout，`error.details` 缺少 `checkpoint_result`，与运行期间取消和超时路径不一致。现在两条中断路径共用同一信封构造逻辑，子进程输出的 checkpoint / `run_id` 在 `error.details.checkpoint_result` 保留；写工具仍标结果未知，只读工具可直接重调。
 - 离线评估改为验证当前的平台风控停止契约（Issue #996）：过时场景曾将已取消的模式级 `COMPLIANCE_BLOCKED` 当作通过条件。现在用当前 `ACCOUNT_RISK` 信封验证不可自动恢复、单次模拟搜索后停止及恢复指引；评分器拒绝额外工具调用和未在信封中确认的风险码，回归覆盖账号与环境风险，双语评估说明同步。
