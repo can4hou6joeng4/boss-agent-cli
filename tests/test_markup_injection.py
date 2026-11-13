@@ -8,6 +8,7 @@
 
 import io
 import re
+from pathlib import Path
 
 import pytest
 from rich.console import Console
@@ -160,6 +161,34 @@ class TestWizardRenderers:
 				"role": "candidate",
 				"last_result": {"data": {"error": payload}},
 			}
+		)
+
+		_assert_literal(stream, payload)
+
+
+class TestAiLocalRenderers:
+	"""本地 AI 配置值（provider / model / base_url）也是自由文本（Issue #964）。"""
+
+	@pytest.mark.parametrize("payload", _PAYLOADS)
+	def test_local_status(self, monkeypatch, payload):
+		import click
+
+		from boss_agent_cli.commands import ai_local
+
+		ctx = click.Context(click.Command("ai"))
+		ctx.obj = {"data_dir": Path("/tmp/data"), "platform": "zhipin"}
+		stream = _capture_terminal_console(monkeypatch)
+		ai_local._render_local_status(
+			ctx,
+			{
+				"configured": True,
+				"provider": payload,
+				"model": payload,
+				"base_url": payload,
+				"recommended_models": [
+					{"name": payload, "runtime": payload, "min_memory_gb": 8, "description": payload},
+				],
+			},
 		)
 
 		_assert_literal(stream, payload)
