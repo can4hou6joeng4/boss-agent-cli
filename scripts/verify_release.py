@@ -289,6 +289,9 @@ def verify(args: argparse.Namespace, root: Path = ROOT) -> dict[str, Any]:
 							str(python),
 							"--index-url",
 							"https://pypi.org/simple",
+							# 新 venv 仍共享索引缓存：刚发布的版本可能尚未出现在旧元数据中。
+							# 定向刷新目标包，依赖包继续复用缓存；本地 wheel 无需刷新。
+							*(["--refresh-package", "boss-agent-cli"] if args.pypi_version else []),
 							requirement,
 						],
 						cwd=work,
