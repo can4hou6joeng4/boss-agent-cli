@@ -344,12 +344,26 @@ def test_readme_links_offline_evals():
 
 
 def test_evals_readme_documents_scenario_criteria():
-	"""评测说明要有「场景 → 通过信号 → 失败信号」表，失败时能直接定位原因。"""
-	content = _read("evals/README.md")
-	assert "## Scenario Criteria" in content
-	for scenario in ("福利筛选", "详情+候选池", "合规边界", "错误恢复"):
-		assert scenario in content
-	assert "| Scenario | Pass signal (with-MCP) | Failure signals |" in content
+	"""双语说明都要有「场景 → 通过信号 → 失败信号」表，且场景反映当前运行契约。"""
+	for path, heading, scenarios, table in (
+		(
+			"evals/README.md",
+			"## 场景判据",
+			("福利筛选", "详情与候选池", "平台风控停止", "认证恢复"),
+			"| 场景 | 通过信号 | 失败信号 |",
+		),
+		(
+			"evals/README.en.md",
+			"## Scenario Criteria",
+			("Welfare filtering", "Detail + shortlist", "Platform risk stop", "Auth recovery"),
+			"| Scenario | Pass signal | Failure signals |",
+		),
+	):
+		content = _read(path)
+		assert heading in content
+		for scenario in scenarios:
+			assert scenario in content
+		assert table in content
 
 
 def test_english_agent_docs_exist_and_are_linked_from_english_entrypoints():
