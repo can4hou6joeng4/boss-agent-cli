@@ -41,9 +41,13 @@ def _render_local_status(ctx: click.Context, data: dict[str, Any]) -> None:
 	"""本地模型配置 + 推荐清单（TTY 路径）。"""
 	state = "[green]已配置[/green]" if data.get("configured") else "[yellow]未配置[/yellow]"
 	display.console.print(f"本地模型：{state}")
+	# provider / model / base_url 是自由文本配置（`ai local configure --model` 不限
+	# 格式，配置文件也可手改）：不经 escape 直接拼进 Rich，含 `[/bold]` 的值会抛
+	# MarkupError 让整条 TTY 输出崩掉，含可解析标签的值会被吞成样式（Issue #964）。
+	esc = display.escape_markup
 	if data.get("configured"):
-		display.console.print(f"  runtime: {data.get('provider') or '-'}    model: {data.get('model') or '-'}")
-		display.console.print(f"  base_url: {data.get('base_url') or '-'}")
+		display.console.print(f"  runtime: {esc(data.get('provider') or '-')}    model: {esc(data.get('model') or '-')}")
+		display.console.print(f"  base_url: {esc(data.get('base_url') or '-')}")
 
 	rows = data.get("recommended_models") or []
 	if rows:
@@ -55,10 +59,10 @@ def _render_local_status(ctx: click.Context, data: dict[str, Any]) -> None:
 		for row in rows:
 			mark = " ★" if row.get("recommended") else ""
 			table.add_row(
-				f"{row.get('name', '-')}{mark}",
-				str(row.get("runtime", "-")),
-				f"{row.get('min_memory_gb', '-')} GB",
-				str(row.get("description", "")),
+				f"{esc(row.get('name', '-'))}{mark}",
+				esc(row.get("runtime", "-")),
+				f"{esc(row.get('min_memory_gb', '-'))} GB",
+				esc(row.get("description", "")),
 			)
 		display.console.print(table)
 
