@@ -50,7 +50,10 @@ def inspect_output_path(path: str | os.PathLike[str]) -> tuple[Path, OutputPathP
 		return target, OutputPathProblem.IS_DIRECTORY
 	if target.exists() and not target.is_file():
 		return target, OutputPathProblem.NOT_REGULAR
-	parent = target.parent
-	if parent.exists() and not parent.is_dir():
-		return target, OutputPathProblem.PARENT_NOT_DIR
+	# 缺失的父目录可以创建，但创建链上任意一级被文件或悬空符号链接占用都不行。
+	for parent in target.parents:
+		if parent.is_dir():
+			break
+		if parent.exists() or parent.is_symlink():
+			return target, OutputPathProblem.PARENT_NOT_DIR
 	return target, None

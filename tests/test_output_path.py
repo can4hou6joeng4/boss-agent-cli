@@ -63,6 +63,7 @@ def test_parent_that_is_a_file_raises_oserror(tmp_path):
 		(lambda p: p, OutputPathProblem.IS_DIRECTORY),
 		# 已有文件本身不是目录：目标是那个文件时无问题，是它的子路径才是父路径问题。
 		(lambda p: p / "blocker" / "x.md", OutputPathProblem.PARENT_NOT_DIR),
+		(lambda p: p / "blocker" / "nested" / "x.md", OutputPathProblem.PARENT_NOT_DIR),
 	],
 )
 def test_inspect_output_path_reports_problems(make, expected, tmp_path):
@@ -73,6 +74,28 @@ def test_inspect_output_path_reports_problems(make, expected, tmp_path):
 	_, problem = inspect_output_path(make(tmp_path))
 
 	assert problem == expected
+
+
+@pytest.mark.parametrize("suffix", ["report.md", "nested/report.md"])
+@pytest.mark.parametrize("destination_kind", ["file", "directory", "missing"])
+def test_inspect_output_path_checks_symlink_ancestors(tmp_path, suffix, destination_kind):
+	"""目录链接可复用，文件链接或悬空链接不能充当任意一级父目录。"""
+	destination = tmp_path / "destination"
+	if destination_kind == "file":
+		destination.write_text("not a directory", encoding="utf-8")
+	elif destination_kind == "directory":
+		destination.mkdir()
+	link = tmp_path / "link"
+	try:
+		link.symlink_to(destination, target_is_directory=destination_kind == "directory")
+	except (OSError, NotImplementedError):
+		pytest.skip("当前环境不支持创建符号链接")
+
+	target, problem = inspect_output_path(link / suffix)
+
+	assert target == link / suffix
+	assert problem == (None if destination_kind == "directory" else OutputPathProblem.PARENT_NOT_DIR)
+	assert not (destination / "nested").exists()
 
 
 def test_inspect_output_path_accepts_existing_file_target(tmp_path):

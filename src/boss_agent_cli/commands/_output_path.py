@@ -45,7 +45,7 @@ def validate_output_path_or_emit(ctx: Any, command: str, raw: str | os.PathLike[
 	elif problem is OutputPathProblem.NOT_REGULAR:
 		message = f"{command} 的 -o / --output 需要普通文件路径，{str(target)!r} 不是普通文件"
 	else:
-		message = f"{command} 的 -o / --output 父路径不是目录: {str(target.parent)!r}"
+		message = f"{command} 的 -o / --output 无法创建父目录，某级父路径不是目录: {str(target)!r}"
 
 	handle_error_output(
 		ctx,
