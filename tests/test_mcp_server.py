@@ -746,6 +746,16 @@ def test_build_args_search_ignores_empty_options():
 	assert "--salary" not in args
 
 
+def test_build_args_search_forwards_empty_query_verbatim():
+	"""schema 里 query 是 required，空串原样下发（Issue #958）。
+
+	CLI 把纯空白关键词归为 None 后报「未提供 query，请传入搜索关键词、--preset
+	或 --url」；这里钉住映射层不下场改写——至少 argv 必须如实反映 Agent 传了
+	空 query，而不是把它化装成没传。
+	"""
+	assert _build_args("boss_search", {"query": ""}) == ["search", ""]
+
+
 def test_build_args_recommend_no_page():
 	args = _build_args("boss_recommend", {})
 	assert args == ["recommend"]
@@ -994,6 +1004,39 @@ def test_run_boss_passes_args(mock_run):
 	_run_boss("search", "python", "--city", "北京")
 	cmd = mock_run.call_args[0][0]
 	assert cmd == ["boss", "--json", "search", "python", "--city", "北京"]
+
+
+@patch("server.subprocess.run")
+def test_run_boss_export_empty_url_reaches_cli_dedicated_error(mock_run):
+	"""`boss_export {"url": ""}` 要把 CLI 的专门诊断原样带回（Issue #958）。
+
+	CLI 对 `export --url ""` 报「--url 的值不能为空」；映射层若用真值判断把
+	空串吞掉，Agent 收到的是误导性的「未提供 query，请传入搜索关键词或 --url」。
+	"""
+	empty_url_envelope = json.dumps(
+		{
+			"ok": False,
+			"schema_version": "1.0",
+			"command": "export",
+			"data": None,
+			"pagination": None,
+			"error": {
+				"code": "INVALID_PARAM",
+				"message": "--url 的值不能为空",
+				"recoverable": True,
+				"recovery_action": "boss export <query> 或 boss export --url <搜索页URL>",
+			},
+			"hints": {"next_actions": []},
+		},
+		ensure_ascii=False,
+	)
+	mock_run.return_value = MagicMock(stdout=empty_url_envelope, stderr="")
+	result = _run_boss("export", "--url", "")
+	assert result["ok"] is False
+	assert result["error"]["message"] == "--url 的值不能为空"
+	# 子进程 argv 里空 url 必须原样存在，不能在映射层被丢弃
+	cmd = mock_run.call_args[0][0]
+	assert cmd == ["boss", "--json", "export", "--url", ""]
 
 
 @patch("server.subprocess.run")
@@ -1696,6 +1739,18 @@ def test_build_args_export_url_only():
 	url_idx = args.index("--url")
 	positional = [a for i, a in enumerate(args) if not a.startswith("--") and a != "export" and i != url_idx + 1]
 	assert len(positional) == 0
+
+
+def test_build_args_export_forwards_empty_query_and_url_to_cli_diagnostics():
+	"""显式空串要原样下发（Issue #958）：CLI 对 `export --url ""` 有专门诊断
+	（「--url 的值不能为空」），真值判断会把空值化装成没传，Agent 收到的就是
+	误导性的「未提供 query」。与 #872 空备注清空同一取舍。"""
+	assert _build_args("boss_export", {"query": ""}) == ["export", ""]
+	assert _build_args("boss_export", {"url": ""}) == ["export", "--url", ""]
+	assert _build_args("boss_export", {"query": "python", "url": ""}) == ["export", "python", "--url", ""]
+	# 未传与传 None 仍等价：不出现裸位置参数 / --url
+	assert _build_args("boss_export", {}) == ["export"]
+	assert _build_args("boss_export", {"query": None, "url": None}) == ["export"]
 
 
 def test_build_args_export_format_default_omitted():

@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- MCP `boss_export` 不再丢弃显式空串的 `query` / `url`（Issue #958）：参数映射用真值判断，`query:""` / `url:""` 被静默丢弃，Agent 收到的是误导性的「未提供 query，请传入搜索关键词或 --url」——明明传了值，读到的却是「你没传」。CLI 对 `export --url ""` 本有专门诊断「--url 的值不能为空」（为「flag 后面少了值」的真实场景设计），映射层吞掉空值后这条正确错误永远到不了 Agent。现在空串原样下发，未传与 `null` 仍等价省略；`boss_search` 的空 `query` 下发行为同步钉住。
+
 ## [3.4.0] - 2026-11-13
 
 ### Added
