@@ -797,22 +797,26 @@ def test_export_invalid_output_path_makes_no_platform_request(mock_auth_cls, moc
 	assert mock_client.search_jobs.call_count == 0
 
 
+@pytest.mark.parametrize("suffix", ["jobs.csv", "nested/jobs.csv", "nested/deeper/jobs.csv"])
 @patch("boss_agent_cli.commands.export.get_platform_instance")
 @patch("boss_agent_cli.commands.export.AuthManager")
-def test_export_output_parent_that_is_a_file_fails_before_platform(mock_auth_cls, mock_client_cls, tmp_path: Path):
-	"""`-o` 的父路径是普通文件时同样是参数/IO 错误，不该先打平台。"""
+def test_export_output_parent_that_is_a_file_fails_before_platform(mock_auth_cls, mock_client_cls, tmp_path: Path, suffix: str):
+	"""任意层祖先被文件占用时，都必须在请求平台之前失败。"""
 	mock_client = _ctx_mock(mock_client_cls)
 	mock_client.search_jobs.return_value = _api_response([_make_raw_job("Go")])
 	blocker = tmp_path / "blocker"
 	blocker.write_text("not a directory", encoding="utf-8")
 
-	result = CliRunner().invoke(cli, ["export", "golang", "-o", str(blocker / "jobs.csv")])
+	result = CliRunner().invoke(cli, [
+		"--data-dir", str(tmp_path), "--json", "export", "golang", "-o", str(blocker / suffix),
+	])
 
 	assert result.exit_code == 1, result.output
-	payload = json.loads(result.output)
+	payload = json.loads(result.stdout)
 	assert payload["error"]["code"] == "LOCAL_IO_ERROR"
 	assert payload["error"]["recoverable"] is False
-	assert mock_client.search_jobs.call_count == 0
+	mock_client_cls.assert_not_called()
+	mock_client.search_jobs.assert_not_called()
 
 
 @patch("boss_agent_cli.commands.export.get_platform_instance")

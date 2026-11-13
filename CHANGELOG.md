@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 输出路径前置检查覆盖全部祖先目录（Issue #1015）：`export` / `chat --export` 的 `-o` 若形如 `blocker/nested/report.csv`，且 `blocker` 是普通文件，此前仅检查紧邻父目录，会漏检并先请求平台，沟通导出还会写入会话快照。现在向上检查至已有目录，遇到被文件或悬空符号链接占用的任意一级父路径即返回 `LOCAL_IO_ERROR`；有效目录链接与可创建的缺失目录继续允许，检查本身不创建目录或文件。
 - 命令组兜底的本地 IO 错误补上可执行指引（Issue #1013）：没有 `@handle_auth_errors` 的本地命令（`stats` / `cities` / `config set` 等）写文件失败时由 `BossCliGroup` 的 `except OSError` 统一出 `LOCAL_IO_ERROR`，但信封的 `hints` 一直是 `null`——`recovery_action` 里的「确认目标路径是可写目录、磁盘空间正常」只是自然语言，Agent 读到的是空动作列表。现在 `LOCAL_IO_ERROR` 补 `hints.operator_actions`，`NETWORK_ERROR` 保持不补（「检查磁盘」对网络异常是误导）。
 - `export` / `chat --export` 的 `-o` 参数错误在第一次平台请求之前暴露（Issue #1011）：此前 `-o` 指向目录时，`export --count 40` 会先翻 5 页平台数据、`chat --export` 会先取完整沟通列表并写 JSON 快照，之后才由 `prepare_output_path` 报一个与真正原因无关的信封——既消耗请求预算，也可能触发风控，而该做的只是换个文件名。现在新增 `services.output_path.inspect_output_path`（无副作用，不建目录）与 `commands/_output_path.validate_output_path_or_emit`，两条命令在调用平台之前完成校验：目标是目录或非普通文件 → `INVALID_PARAM`，父路径不是目录 → `LOCAL_IO_ERROR`。
 - `resume export` 的失败信封按原因分流，不再一律指向浏览器内核（Issue #1009）：该命令没有统一异常装饰器，导出的三层失败此前都归成 `EXPORT_FAILED` +「检查 patchright 安装」。但 `--format html` / `json` 只用本地模板与文件写入、完全不碰 patchright：`-o` 指向目录或父目录不可写时，用户被告知去装浏览器内核，与真正该做的「换个路径」无关；PDF 导出命中内核缺失时又把整段 patchright 安装横幅和本机绝对路径塞进 `error.message`。现在内核缺失返回 `BROWSER_KERNEL_MISSING`（确定性失败，`next_actions` 附带本次数据目录的 `doctor`，异常文本只留首行进 `details.cause`），本地文件读写失败返回 `LOCAL_IO_ERROR`（不可自动重试，附可执行路径建议），其余渲染错误保持 `EXPORT_FAILED`；`prepare_output_path` 建父目录的失败也纳入同一出口，不再落进顶层网兜被报成「resume 本地文件读写失败」。

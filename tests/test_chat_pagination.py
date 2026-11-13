@@ -275,6 +275,30 @@ def test_chat_export_invalid_output_path_makes_no_platform_request(mock_auth_cls
 	assert mock_client.friend_list.call_count == 0
 
 
+@pytest.mark.parametrize("suffix", ["chat.md", "nested/chat.md", "nested/deeper/chat.md"])
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_export_blocked_ancestor_stops_before_request_and_snapshot(mock_auth_cls, mock_client_cls, tmp_path: Path, suffix: str):
+	"""输出路径的祖先是文件时，不请求平台也不保存会话快照。"""
+	blocker = tmp_path / "blocker"
+	blocker.write_text("not a directory", encoding="utf-8")
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_friend_item()])
+
+	result = CliRunner().invoke(cli, [
+		"--data-dir", str(tmp_path), "--json", "chat", "--export", "md",
+		"-o", str(blocker / suffix),
+	])
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.stdout)
+	assert payload["error"]["code"] == "LOCAL_IO_ERROR"
+	assert payload["error"]["recoverable"] is False
+	mock_client_cls.assert_not_called()
+	mock_client.friend_list.assert_not_called()
+	assert not (tmp_path / "chat-history").exists()
+
+
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_without_export_ignores_output_path_check(mock_auth_cls, mock_client_cls, tmp_path: Path):
