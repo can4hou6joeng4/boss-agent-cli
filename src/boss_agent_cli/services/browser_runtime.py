@@ -6,6 +6,22 @@ import json
 import os
 from pathlib import Path
 
+#: Playwright / patchright 报告「浏览器内核缺失」的文案。两条来自不同位置：
+#: ``chromium.launch()`` 抛 ``Executable doesn't exist at <路径>``；
+#: ``sync_playwright().start()`` 在驱动刚升级、内核未装时抛 ``Looks like
+#: Playwright was just installed or updated`` 并要求 ``playwright install``。
+#: 都是确定性失败：重试同一条命令永远不会成功。
+BROWSER_KERNEL_MISSING_SIGNATURES: tuple[str, ...] = (
+	"executable doesn't exist",
+	"playwright was just installed",
+)
+
+
+def is_browser_kernel_missing(message: str) -> bool:
+	"""判断异常文本是否为浏览器内核缺失（大小写不敏感）。"""
+	text = (message or "").lower()
+	return any(signature in text for signature in BROWSER_KERNEL_MISSING_SIGNATURES)
+
 
 def patchright_chromium_revision() -> str | None:
 	"""读取 patchright 自带 browsers.json 声明的 chromium 修订版。"""

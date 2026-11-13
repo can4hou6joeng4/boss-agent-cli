@@ -298,3 +298,29 @@ def test_pipeline_chat_stage_chatting_when_recent():
 		"lastTS": now_ts - 1000,  # 1 秒前
 	}
 	assert _chat_stage(item, now_ts_ms=now_ts, stale_days=3) == "chatting"
+
+
+@patch("boss_agent_cli.commands.me.get_platform_instance")
+@patch("boss_agent_cli.commands.me.AuthManager")
+def test_me_browser_kernel_missing_is_not_retryable_network_error(mock_auth_cls, mock_client_cls, tmp_path):
+	"""`me` 自己的异常兜底也要识别内核缺失（同类缺陷的第三处）。
+
+	me 没有 @handle_auth_errors 包裹，异常在命令体里逐个 except；只修装饰器
+	会漏掉这条路径，Agent 从 me 拿到的仍会是「重试」。恢复指引必须指向
+	patchright 安装，且指向本次数据目录的 doctor。
+	"""
+	mock_client_cls.side_effect = RuntimeError(
+		"BrowserType.launch: Executable doesn't exist at "
+		"/Users/u/Library/Caches/ms-playwright/chromium_headless_shell-1248/"
+		"chrome-headless-shell-mac-arm64/chrome-headless-shell"
+	)
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "me"])
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "BROWSER_KERNEL_MISSING"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "patchright install chromium"
+	assert "patchright install chromium" in parsed["hints"]["next_actions"]
+	assert str(tmp_path.resolve()) in parsed["hints"]["next_actions"][1]
+	assert "chrome-headless-shell-mac-arm64" not in parsed["error"]["message"]

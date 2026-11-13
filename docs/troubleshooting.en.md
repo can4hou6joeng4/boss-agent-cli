@@ -364,7 +364,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `AI_API_ERROR` | AI provider call failed | Retry / check key |
 | `AI_PARSE_ERROR` | AI response not JSON | Retry |
 | `PLATFORM_NOT_SUPPORTED` | The current platform does not support this role or subcommand | Switch to a supported platform (e.g. `boss --platform zhipin hr ...`) |
-| `BROWSER_KERNEL_MISSING` | patchright browser kernel missing or mismatched | `patchright install chromium`; if the headless shell is missing, run `patchright install chromium-headless-shell` |
+| `BROWSER_KERNEL_MISSING` | patchright browser kernel missing or mismatched (including non-login commands that launch a browser: `search` / `detail` / `greet` / `chat` / `me` / `wizard`) | `patchright install chromium`; if the headless shell is missing, run `patchright install chromium-headless-shell`. This is a deterministic failure; retrying will not help |
 
 ## Windows smoke checklist
 
