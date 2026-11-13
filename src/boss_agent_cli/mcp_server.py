@@ -169,6 +169,13 @@ _TOOL_WRITE_MODES: dict[str, frozenset[str]] = {
 	"boss_hr_jobs": frozenset({"online", "offline"}),
 }
 
+#: schema 里带 action 维度的工具。只读白名单中的这类工具读写取决于参数，必须在
+#: `_TOOL_WRITE_MODES` 显式登记（写模式可以是空集）；漏登记时按写处理，不让新增
+#: 的写 action 静默回到「超时也告诉 Agent 可直接重试」的旧缺陷（Issue #968）。
+_ACTION_DIMENSION_TOOL_NAMES = frozenset(
+	tool.name for tool in TOOLS if "action" in tool.input_schema.get("properties", {})
+)
+
 _WRITE_INTERRUPT_RECOVERY = "检查本地 checkpoint 与平台实际结果，再显式恢复；未确认的写操作不要直接重试"
 _READ_INTERRUPT_RECOVERY = "只读命令已中断，不产生平台写入；确认子进程已退出后可直接重新调用"
 #: 子进程没能启动：从未运行过，不可能有平台副作用。真正要处理的是安装 / 路径，
@@ -188,7 +195,9 @@ def _tool_may_write(tool_name: str, arguments: dict[str, Any] | None = None) -> 
 		return True
 	write_modes = _TOOL_WRITE_MODES.get(tool_name)
 	if write_modes is None:
-		return False
+		# 带 action 维度却没有登记写模式：无法判断哪个动作会产生平台写入，按写处理
+		# （与「未列出的工具按写」同一保守原则）。守卫测试保证现有工具不会走到这里。
+		return tool_name in _ACTION_DIMENSION_TOOL_NAMES
 	# 缺省 action 与 schema 默认值一致（list）：只有显式声明写模式才算写。
 	action = (arguments or {}).get("action", "list")
 	return isinstance(action, str) and action in write_modes
