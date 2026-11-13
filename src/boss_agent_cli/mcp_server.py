@@ -383,8 +383,17 @@ async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 	except asyncio.CancelledError:
 		try:
 			process = await asyncio.shield(spawn)
-		except OSError:
-			return _cli_failure(args, "WORKFLOW_STOPPED", "MCP 调用已取消", outcome_unknown=False)
+		except OSError as exc:
+			# The child never ran, so the interrupted call left no platform effect.
+			# Point at installation/path, not at a checkpoint that cannot exist
+			# (Issue #1000).
+			return _cli_failure(
+				args,
+				"WORKFLOW_STOPPED",
+				f"无法启动底层 boss CLI：{exc}",
+				outcome_unknown=False,
+				recovery_action=_SPAWN_FAILURE_RECOVERY,
+			)
 		output = asyncio.create_task(process.communicate())
 		stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
 		return _interrupted_failure(args, "WORKFLOW_STOPPED", stdout, may_write=may_write)
