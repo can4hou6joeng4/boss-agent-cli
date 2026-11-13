@@ -247,6 +247,40 @@ def test_required_tools_present():
 	assert not missing, f"缺少核心工具: {missing}"
 
 
+def test_call_tool_rejects_missing_required_arguments_for_every_tool(monkeypatch):
+	"""schema 声明的 required 参数，漏传一律 INVALID_PARAM（Issue #960）。
+
+	boss_config 的 action 曾在映射层私自默认成 list：schema 说 required、实现却
+	补默认值，绕过客户端校验的调用拿到 ok:true 的全量配置。这条守卫逐工具漏传
+	全部 required 参数，任何一处 schema/实现漂移都会在这里现形。
+	"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+
+	async def fake_run(*args, **kwargs):
+		raise AssertionError("required 漏传不应触达 CLI")
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+
+	for tool in TOOLS:
+		if not tool.input_schema.get("required"):
+			continue
+		result = asyncio.run(
+			mcp_server.call_tool(None, CallToolRequestParams(name=tool.name, arguments={}))
+		)
+		payload = json.loads(result.content[0].text)
+		assert result.is_error is True, f"{tool.name} 漏传 required 应返回工具错误"
+		err = payload.get("error") or {}
+		assert payload["ok"] is False, f"{tool.name} 漏传 required 不应成功"
+		assert err.get("code") == "INVALID_PARAM", f"{tool.name}: {err.get('code')}"
+		assert "缺少必填参数" in err.get("message", ""), f"{tool.name}: {err.get('message')}"
+
+
 def test_crawl_tools_only_read_or_locally_shortlist_existing_runs():
 	names = {tool.name for tool in TOOLS}
 	assert {"boss_crawl_status", "boss_crawl_results", "boss_crawl_shortlist"} <= names
@@ -366,6 +400,9 @@ def test_every_tool_enum_value_parses_on_click_tree():
 	[
 		("boss_wizard", {"action": "status"}, "run_id"),
 		("boss_hr_jobs", {"action": "offline"}, "job_id"),
+		# action 在 boss_config 的 schema 里是 required（Issue #960）：映射层曾
+		# 私自默认成 list，漏传拿到 ok:true 的全量配置，schema 契约形同虚设。
+		("boss_config", {}, "action"),
 	],
 )
 def test_call_tool_reports_missing_conditional_argument(monkeypatch, tool_name, arguments, missing):

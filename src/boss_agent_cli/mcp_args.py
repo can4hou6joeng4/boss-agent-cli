@@ -232,7 +232,12 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return args
 
 	if name == "config":
-		action = arguments.get("action", "list")
+		# action 在 schema 里是 required（Issue #960）：漏传要落到 call_tool 的
+		# KeyError 分支返回 INVALID_PARAM，不能在这里私自默认成 list——那会让
+		# 绕过客户端校验的调用拿到 ok:true 的全量配置，schema 契约形同虚设。
+		# 需要默认行为的工具（boss_hr_jobs / boss_wizard）在 schema 里声明
+		# 非 required + default，映射层才允许补默认值。
+		action = arguments["action"]
 		args = [name, action]
 		if action in ("get", "set", "reset") and "key" in arguments:
 			args.append(arguments["key"])
