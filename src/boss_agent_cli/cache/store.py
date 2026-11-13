@@ -770,6 +770,19 @@ class CacheStore:
 		self._conn.commit()
 		return cursor.rowcount > 0
 
+	def set_workflow_step_error(self, run_id: str, step_name: str, error: dict[str, Any] | None) -> bool:
+		"""只改步骤的 error，不动状态、结果与时间戳；``None`` 清空。"""
+		cursor = self._conn.execute(
+			"UPDATE workflow_steps SET error = ? WHERE run_id = ? AND step_name = ?",
+			(
+				json.dumps(error, ensure_ascii=False, sort_keys=True) if error is not None else None,
+				run_id,
+				step_name,
+			),
+		)
+		self._conn.commit()
+		return cursor.rowcount > 0
+
 	def request_workflow_stop(self, run_id: str) -> bool:
 		cursor = self._conn.execute(
 			"UPDATE workflow_runs SET status = ?, updated_at = ? WHERE run_id = ? "

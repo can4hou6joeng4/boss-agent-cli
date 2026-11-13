@@ -429,9 +429,7 @@ def _unwrap(
 	# 无法证明动作没有发生（读取的 UNKNOWN 会先被映射成可重试的 NETWORK_ERROR）。
 	replay_safe = not (code == "ACTION_UNCONFIRMED" or (code == "UNKNOWN" and write))
 	if not replay_safe and context is not None:
-		# 核对指引沿用当前角色和数据目录；求职者不能被引到招聘者会话。
-		command = check_command or ("hr chat" if context.role == "recruiter" else "chat")
-		recovery = f"操作可能已生效：先用 {_hint_command(context, command)} 核对平台记录，不要自动重试"
+		recovery = _unconfirmed_write_recovery(context, check_command)
 	raise WorkflowActionError(
 		code,
 		text,
@@ -440,6 +438,35 @@ def _unwrap(
 		details=details if isinstance(details, dict) and details else None,
 		replay_safe=replay_safe,
 	)
+
+
+def _unconfirmed_write_recovery(context: ActionContext, check_command: str | None) -> str:
+	"""写操作结果未知时的核对指引：沿用当前角色和数据目录；求职者不能被引到招聘者会话。"""
+	command = check_command or ("hr chat" if context.role == "recruiter" else "chat")
+	return f"操作可能已生效：先用 {_hint_command(context, command)} 核对平台记录，不要自动重试"
+
+
+def _write_call(
+	context: ActionContext,
+	platform: Any,
+	call: Callable[[], dict[str, Any]],
+	fallback: str,
+	*,
+	check_command: str | None = None,
+) -> Any:
+	"""发出一次写请求并按写语义解包响应；所有写动作都经由这里。
+
+	请求发出之前先把「结果未知」连同本动作的核对命令落到当前步骤上。执行进程若在
+	结果确认前消失（被 kill、终端关闭、断电），步骤停在 running、什么都来不及记，
+	``--resume`` 凭这条记录拒绝重放（Issue #1019）。``call`` 只负责发请求：参数的
+	校验与前置读取放在调用之前，那时被终止的步骤没有记录，恢复后照常重跑。
+
+	不经 runner 直接调用动作时没有步骤可记，直接执行。
+	"""
+	control = context.workflow_control
+	if control is not None:
+		control.begin_write(_unconfirmed_write_recovery(context, check_command))
+	return _unwrap(platform, call(), fallback, context=context, write=True, check_command=check_command)
 
 
 def execute_candidate_detail(
@@ -642,17 +669,17 @@ def _raise_local_state_write_failed(message: str, details: dict[str, Any]) -> No
 def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	security_id = str(_required(inputs, "security_id"))
 	job_id = str(_required(inputs, "job_id"))
+	lid = str(inputs.get("lid") or "")
 	account = account_scope(context.auth())
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		if cache.is_applied(security_id, job_id, account=account):
 			raise WorkflowActionError("ALREADY_APPLIED", "已对该职位发起过投递/立即沟通")
 		with context.candidate_platform() as platform:
-			data = _unwrap(
+			data = _write_call(
+				context,
 				platform,
-				platform.apply(security_id, job_id, lid=str(inputs.get("lid") or "")),
+				lambda: platform.apply(security_id, job_id, lid=lid),
 				"投递失败",
-				context=context,
-				write=True,
 				check_command="me --section deliver",
 			)
 		try:
@@ -669,17 +696,17 @@ def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	security_id = str(_required(inputs, "security_id"))
 	job_id = str(_required(inputs, "job_id"))
+	message = str(inputs.get("message") or "")
 	account = account_scope(context.auth())
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		if cache.is_greeted(security_id, job_id=job_id, account=account):
 			raise WorkflowActionError("ALREADY_GREETED", "已向该招聘者打过招呼")
 		with context.candidate_platform() as platform:
-			data = _unwrap(
+			data = _write_call(
+				context,
 				platform,
-				platform.greet(security_id, job_id, str(inputs.get("message") or "")),
+				lambda: platform.greet(security_id, job_id, message),
 				"打招呼失败",
-				context=context,
-				write=True,
 			)
 		try:
 			cache.record_greet(security_id, job_id, account=account)
@@ -728,17 +755,12 @@ def _candidate_exchange(context: ActionContext, inputs: Mapping[str, Any], prior
 		friend = _candidate_friend(platform, identifier, context=context)
 		uid = str(friend.get("uid") or "")
 		security_id = _candidate_current_security_id(friend)
-		data = _unwrap(
+		name = str(friend.get("name") or "-")
+		data = _write_call(
+			context,
 			platform,
-			platform.exchange_contact(
-				security_id,
-				uid,
-				str(friend.get("name") or "-"),
-				exchange_type=exchange_type,
-			),
+			lambda: platform.exchange_contact(security_id, uid, name, exchange_type=exchange_type),
 			"联系方式交换失败",
-			context=context,
-			write=True,
 		)
 	return StepResult({"uid": uid, "security_id": security_id, "result": data})
 
@@ -757,17 +779,12 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 	with context.candidate_platform() as platform:
 		friend = _candidate_friend(platform, identifier, context=context)
 		uid = str(friend.get("uid") or "")
-		data = _unwrap(
+		friend_source = int(friend.get("friendSource") or 0)
+		data = _write_call(
+			context,
 			platform,
-			platform.friend_label(
-				uid,
-				label_id,
-				int(friend.get("friendSource") or 0),
-				remove=remove,
-			),
+			lambda: platform.friend_label(uid, label_id, friend_source, remove=remove),
 			"联系人标签更新失败",
-			context=context,
-			write=True,
 		)
 	return StepResult({
 		"uid": uid,
@@ -1279,7 +1296,10 @@ def _recruiter_call(
 	check_command: str | None = None,
 ) -> StepResult:
 	with context.recruiter_platform() as platform:
-		data = _unwrap(platform, call(platform), fallback, context=context, write=write, check_command=check_command)
+		if write:
+			data = _write_call(context, platform, lambda: call(platform), fallback, check_command=check_command)
+		else:
+			data = _unwrap(platform, call(platform), fallback, context=context, check_command=check_command)
 	payload: dict[str, Any] = {"result": data}
 	if list_keys:
 		items = _extract_list_items(data, list_keys)
@@ -1310,13 +1330,12 @@ def _recruiter_applications(context: ActionContext, inputs: Mapping[str, Any], p
 
 
 def _recruiter_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
+	geek_id = str(_required(inputs, "geek_id"))
+	job_id = str(_required(inputs, "job_id"))
+	security_id = _optional_str(inputs.get("security_id"))
 	return _recruiter_call(
 		context,
-		lambda platform: platform.view_geek(
-			str(_required(inputs, "geek_id")),
-			str(_required(inputs, "job_id")),
-			_optional_str(inputs.get("security_id")),
-		),
+		lambda platform: platform.view_geek(geek_id, job_id, security_id),
 		"候选人简历获取失败",
 		# view_geek 声明 effect: unknown，无法证明没有副作用；未知结果不能自动重放。
 		write=True,

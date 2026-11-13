@@ -88,6 +88,10 @@ class WorkflowStore:
 	def update_step(self, run_id: str, step_name: str, **kwargs: Any) -> bool:
 		return self._cache.update_workflow_step(run_id, step_name, **kwargs)
 
+	def set_step_error(self, run_id: str, step_name: str, error: dict[str, Any] | None) -> bool:
+		"""只改步骤的 error：状态、结果（含内部任务绑定）与时间戳保持原样。"""
+		return self._cache.set_workflow_step_error(run_id, step_name, error)
+
 	def request_stop(self, run_id: str) -> bool:
 		run = self.get(run_id)
 		if run is None or not self._cache.request_workflow_stop(run_id):
