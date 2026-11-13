@@ -1250,6 +1250,30 @@ def test_write_modes_only_reference_declared_enum_actions():
 		assert allowance.get("default", "list") not in modes
 
 
+def test_read_only_tools_with_action_dimension_are_explicitly_classified():
+	"""只读白名单里带 action 的工具必须登记写模式，读写不能靠猜（Issue #968）。"""
+	from boss_agent_cli import mcp_server
+
+	unclassified = (
+		mcp_server._READ_ONLY_TOOL_NAMES
+		& mcp_server._ACTION_DIMENSION_TOOL_NAMES
+	) - mcp_server._TOOL_WRITE_MODES.keys()
+	assert unclassified == set()
+	# 当前唯一带 action 维度的只读工具；新增这类工具时必须同步核实写模式。
+	assert "boss_hr_jobs" in mcp_server._ACTION_DIMENSION_TOOL_NAMES
+
+
+def test_unregistered_action_dimension_defaults_to_write(monkeypatch):
+	"""写模式漏登记时保守按写处理，不能回落到 #869 的只读判定。"""
+	from boss_agent_cli import mcp_server
+
+	monkeypatch.setattr(mcp_server, "_TOOL_WRITE_MODES", {})
+	assert mcp_server._tool_may_write("boss_hr_jobs", {"action": "list"}) is True
+	assert mcp_server._tool_may_write("boss_hr_jobs", {}) is True
+	# 无 action 维度的只读工具不受影响。
+	assert mcp_server._tool_may_write("boss_search", {"query": "x"}) is False
+
+
 @pytest.mark.parametrize(
 	"arguments,may_write",
 	[

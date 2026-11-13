@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- MCP 只读白名单里带 action 维度的工具未登记写模式时按写处理（Issue #968）：`_tool_may_write` 对未出现在 `_TOOL_WRITE_MODES` 的只读工具直接返回只读，与模块「未列出的工具一律按可能已产生平台副作用处理」的保守原则相悖。未来给 `boss_hr_jobs` 这类工具新增 action 枚举值而忘记登记时，新动作会被静默当成只读，超时 / 取消信封又回到「只读命令已中断，可直接重新调用」——正是 #869 的复发路径。现在 schema 带 `action` 维度的只读工具若未登记写模式一律按写处理；新增守卫测试要求这类工具必须显式登记（写模式可为空集），并钉住漏登记时的保守判定。
 - `ai local status` 的 TTY 渲染按字面显示配置值（Issue #964）：provider / model / base_url 是自由文本（`ai local configure --model` 不限格式，配置文件也可手改），直接拼进 Rich 时含 `[/bold]` 的值会抛 `MarkupError` 让整条 TTY 输出甩 traceback，含可解析标签的值会被吞成样式。现在这些值与推荐模型表格经 `display.escape_markup()` 转义后再进入 Rich；JSON 信封不变。同步补渲染级回归（含 `[link=...]` 不得渲染成 OSC 8 超链接）。
 - MCP `CLI_ERROR` 的恢复指引按失败阶段与读写区分（Issue #962）：子进程没能启动（`boss` 不在 MCP server 的 `PATH` 中、`--boss-bin` 路径有误、文件不可执行）或 stdout 不是 JSON 信封时，信封一律回「检查本地 checkpoint 与平台实际结果，再显式恢复；未确认的写操作不要直接重试」——进程从未运行时不存在可核对的平台结果，只读工具也被描述成可能有写入，真正要处理的安装 / 路径问题只字未提。现在启动失败给出专用指引（未产生平台操作，确认安装或用 `boss-mcp --boss-bin` 指定路径）并带 `outcome_unknown=false`；输出不可解析时只读工具给只读指引且 `outcome_unknown=false`，写工具保留原指引并补 `outcome_unknown=true`，与超时 / 取消路径的详情字段一致。`CLI_ERROR` 仍为 `recoverable=false`。
 - MCP `boss_config` 漏传 required 的 `action` 不再静默默认成 `list`（Issue #960）：schema 声明 `required: ["action"]`，映射层却用 `arguments.get("action", "list")` 私自补默认值，绕过客户端校验的调用（手写 JSON-RPC、宽松 SDK）拿到 `ok:true` 的全量配置，Agent 无从得知自己漏了参数；与其余 required 工具（漏传一律 `INVALID_PARAM` + `缺少必填参数`）行为漂移。现在 `action` 漏传走既有 KeyError 分支；需要默认行为的工具（`boss_hr_jobs` / `boss_wizard`）在 schema 声明非 required + default，映射层才允许补默认。新增逐工具守卫：任何工具漏传全部 required 参数必须返回 `INVALID_PARAM`，schema / 实现再漂移会在守卫现形。
