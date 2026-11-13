@@ -9,6 +9,28 @@
 import json
 from typing import Any
 
+#: 枚举参数（按 MCP 侧 JSON 键登记，Issue #982）。
+#: 这些参数在 CLI 层有取值校验，显式空串会得到 ``INVALID_PARAM`` + 可选值列表；
+#: 映射层若用真值判断，空串被化装成「没传」，调用方误以为参数生效（``format=""``
+#: 静默落回默认格式、``sort=""`` 静默按默认排序）。键存在且值不为 ``None`` 时
+#: 原样下发；``None`` 与缺键仍等价于未传（与 Issue #958 的 ``query`` / ``url`` 一致）。
+#: ``active`` 不在此列：``resolve_active_level("")`` 本来就返回 ``None``（空值等于未传）。
+_ENUM_KEYS: frozenset[str] = frozenset(
+	{"sort", "detail_status", "from_who", "format", "section", "lang", "tone", "type"}
+)
+
+
+def _optional(args: list[str], flag: str, key: str, arguments: dict[str, Any]) -> None:
+	"""下发可选字符串参数：枚举参数的空串也要原样下发（Issue #982）。"""
+	if key not in arguments:
+		return
+	value = arguments[key]
+	if value is None:
+		return
+	if not value and key not in _ENUM_KEYS:
+		return
+	args.extend([flag, str(value)])
+
 
 def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	"""根据 tool name 和参数构建 CLI 参数列表。"""
@@ -35,18 +57,15 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "search":
 		args = [name, arguments["query"]]
 		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "welfare", "active"):
-			if opt in arguments and arguments[opt]:
-				args.extend([f"--{opt}", str(arguments[opt])])
-		if arguments.get("job_type"):
-			args.extend(["--job-type", str(arguments["job_type"])])
+			_optional(args, f"--{opt}", opt, arguments)
+		_optional(args, "--job-type", "job_type", arguments)
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
 		if arguments.get("no_cache"):
 			args.append("--no-cache")
 		if arguments.get("with_score"):
 			args.append("--with-score")
-		if arguments.get("sort"):
-			args.extend(["--sort", str(arguments["sort"])])
+		_optional(args, "--sort", "sort", arguments)
 		return args
 
 	if name == "crawl_status":
@@ -56,8 +75,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = ["crawl", "results", str(arguments["run_id"])]
 		if arguments.get("page") is not None:
 			args.extend(["--page", str(arguments["page"])])
-		if arguments.get("detail_status"):
-			args.extend(["--detail-status", str(arguments["detail_status"])])
+		_optional(args, "--detail-status", "detail_status", arguments)
 		return args
 
 	if name == "crawl_shortlist":
@@ -93,22 +111,18 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "chat":
 		args = [name]
-		if "from_who" in arguments and arguments["from_who"]:
-			args.extend(["--from", arguments["from_who"]])
+		_optional(args, "--from", "from_who", arguments)
 		if "days" in arguments:
 			args.extend(["--days", str(arguments["days"])])
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
-		if arguments.get("format"):
-			args.extend(["--export", str(arguments["format"])])
-		if arguments.get("output_file"):
-			args.extend(["--output", str(arguments["output_file"])])
+		_optional(args, "--export", "format", arguments)
+		_optional(args, "--output", "output_file", arguments)
 		return args
 
 	if name == "me":
 		args = [name]
-		if "section" in arguments and arguments["section"]:
-			args.extend(["--section", arguments["section"]])
+		_optional(args, "--section", "section", arguments)
 		if arguments.get("deliver_page") is not None:
 			args.extend(["--deliver-page", str(arguments["deliver_page"])])
 		return args
@@ -212,15 +226,11 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		if "url" in arguments and arguments["url"] is not None:
 			args.extend(["--url", str(arguments["url"])])
 		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type"):
-			if arguments.get(opt):
-				cli_flag = f"--{opt.replace('_', '-')}"
-				args.extend([cli_flag, arguments[opt]])
+			_optional(args, f"--{opt.replace('_', '-')}", opt, arguments)
 		if "count" in arguments:
 			args.extend(["--count", str(arguments["count"])])
-		if arguments.get("format"):
-			args.extend(["--format", arguments["format"]])
-		if arguments.get("output_file"):
-			args.extend(["-o", arguments["output_file"]])
+		_optional(args, "--format", "format", arguments)
+		_optional(args, "-o", "output_file", arguments)
 		if arguments.get("include_private"):
 			args.append("--include-private")
 		return args
@@ -259,30 +269,23 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = [name]
 		if "days_stale" in arguments:
 			args.extend(["--days-stale", str(arguments["days_stale"])])
-		if arguments.get("format"):
-			args.extend(["--format", arguments["format"]])
-		if arguments.get("output"):
-			args.extend(["-o", arguments["output"]])
+		_optional(args, "--format", "format", arguments)
+		_optional(args, "-o", "output", arguments)
 		return args
 
 	if name == "stats":
 		args = [name]
 		if "days" in arguments:
 			args.extend(["--days", str(arguments["days"])])
-		if arguments.get("format"):
-			args.extend(["--format", str(arguments["format"])])
-		if arguments.get("output_file"):
-			args.extend(["--output", str(arguments["output_file"])])
+		_optional(args, "--format", "format", arguments)
+		_optional(args, "--output", "output_file", arguments)
 		return args
 
 	if name == "ai_reply":
 		args = ["ai", "reply", arguments["recruiter_message"]]
-		if arguments.get("context"):
-			args.extend(["--context", arguments["context"]])
-		if arguments.get("resume"):
-			args.extend(["--resume", arguments["resume"]])
-		if arguments.get("tone"):
-			args.extend(["--tone", arguments["tone"]])
+		_optional(args, "--context", "context", arguments)
+		_optional(args, "--resume", "resume", arguments)
+		_optional(args, "--tone", "tone", arguments)
 		return args
 
 	if name == "ai_interview_prep":
@@ -338,14 +341,10 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "ai_cover_letter":
 		args = ["ai", "cover-letter", arguments["resume"]]
-		if arguments.get("jd_text"):
-			args.extend(["--jd", arguments["jd_text"]])
-		if arguments.get("job_id"):
-			args.extend(["--job-id", arguments["job_id"]])
-		if arguments.get("tone"):
-			args.extend(["--tone", arguments["tone"]])
-		if arguments.get("lang"):
-			args.extend(["--lang", arguments["lang"]])
+		_optional(args, "--jd", "jd_text", arguments)
+		_optional(args, "--job-id", "job_id", arguments)
+		_optional(args, "--tone", "tone", arguments)
+		_optional(args, "--lang", "lang", arguments)
 		return args
 
 	if name == "watch_list":
@@ -497,7 +496,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "hr_exchange":
 		args = ["hr", "resume", "--exchange", "--friend-id", str(arguments["friend_id"])]
-		if arguments.get("type") and arguments["type"] != "phone":
+		# 省略 type 等于 phone；空串是调用方写错了取值，交给 CLI 的枚举诊断（Issue #982）。
+		if "type" in arguments and arguments["type"] is not None and arguments["type"] != "phone":
 			args.extend(["--type", str(arguments["type"])])
 		return args
 
