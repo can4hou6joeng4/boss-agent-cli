@@ -332,6 +332,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `WIZARD_INPUT_REQUIRED` | A headless workflow lacks role/platform/goal/inputs | Complete `--input-json` from the `boss schema` catalog |
 | `WORKFLOW_TIMEOUT` | The workflow exceeded its explicit timeout | Retain `run_id`, adjust timeout, and run `boss wizard --resume <run_id>` |
 | `WORKFLOW_PLAN_MISMATCH` | An existing `run_id` is bound to a different plan | Resume with the original plan or omit `run_id` to create a new run |
+| `WORKFLOW_BUSY` | The same `run_id` is already being executed by another invocation (another terminal, agent, or MCP call); this call ran no steps and left the checkpoint untouched | Check progress with `boss wizard --status <run_id>` and `--resume` once the current execution has ended; never resume the same `run_id` concurrently |
 | `WORKFLOW_NOT_FOUND` | The local workflow run does not exist or the `run_id` is wrong (`boss wizard --status` / `--stop` / `--resume`) | Run `boss wizard` to create a new run, or check the ID with `boss wizard --status <run_id>` |
 | `CRAWL_RUN_NOT_FOUND` | The local crawl run does not exist or the `run_id` is wrong (`boss crawl status` / `resume` / `results`, etc.) | Run `boss crawl start <query>` to create a new run, or check with `boss crawl status <run_id>` using the real ID |
 | `CONTACT_NOT_FOUND` | The contact is not in the chat list: the `security_id` may have rotated, or they are no longer listed | Run `boss chat` to inspect conversations; retry with the uid if you have it |

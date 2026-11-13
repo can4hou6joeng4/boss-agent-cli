@@ -268,6 +268,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "创建新 workflow，或恢复其内部可恢复任务",
 	},
+	"WORKFLOW_BUSY": {
+		"message": "同一 workflow 正在由另一次调用执行，本次调用未执行任何步骤",
+		"recoverable": True,
+		"recovery_action": "boss wizard --status <run_id> 查看进度，等当前执行结束后再恢复；不要并发恢复同一个 run_id",
+	},
 	"CRAWL_NOT_COMPLETED": {
 		"message": "crawl 尚未完成，Agent 不会导入不完整结果",
 		"recoverable": True,

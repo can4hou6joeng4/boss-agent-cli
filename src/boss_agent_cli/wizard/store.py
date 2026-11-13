@@ -2,18 +2,32 @@
 
 from __future__ import annotations
 
+import hashlib
+from contextlib import AbstractContextManager
 from pathlib import Path
 from types import TracebackType
 from typing import Any
 
 from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
+from boss_agent_cli.services.file_lock import exclusive_file_lock
 from boss_agent_cli.wizard.models import WorkflowPlan
 
 
 class WorkflowStore:
 	def __init__(self, data_dir: Path) -> None:
 		self._cache = CacheStore(data_dir / "cache" / "boss_agent.db")
+		self._lock_dir = data_dir / "cache" / "workflow-locks"
 		self._corrupt_run_ids: list[str] = []
+
+	def execution_lock(self, run_id: str) -> AbstractContextManager[bool]:
+		"""同一 run 的执行权：跨进程独占、不等待，进程退出时由操作系统释放。
+
+		只约束「执行步骤」。状态查询与 stop 请求不取这把锁，执行期间照常可用；
+		不同 run 各用各的锁文件，互不阻塞。文件名取 run_id 的摘要，调用方传入
+		的任意字符串都不会变成路径的一部分。
+		"""
+		digest = hashlib.sha256(run_id.encode("utf-8", "surrogatepass")).hexdigest()
+		return exclusive_file_lock(self._lock_dir / f"{digest}.lock")
 
 	def create(self, run_id: str, plan: WorkflowPlan) -> None:
 		self._cache.create_workflow_run(

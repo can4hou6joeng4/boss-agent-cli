@@ -19,7 +19,9 @@ from dataclasses import dataclass
 from datetime import timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO, cast
+from typing import TYPE_CHECKING, Any, BinaryIO
+
+from boss_agent_cli.services.file_lock import try_lock_exclusive
 
 if TYPE_CHECKING:
 	from boss_agent_cli.api.cdp_risk_lock import RiskLock
@@ -274,24 +276,7 @@ class RequestBudget:
 
 	@staticmethod
 	def _try_lease(handle: BinaryIO) -> bool:
-		try:
-			if os.name == "nt":
-				import msvcrt
-
-				handle.seek(0)
-				windows_lock = cast(Any, msvcrt)
-				windows_lock.locking(handle.fileno(), windows_lock.LK_NBLCK, 1)
-			else:
-				import fcntl
-
-				fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-		except (BlockingIOError, PermissionError):
-			return False
-		except OSError as error:
-			if error.errno in (11, 13, 35, 36):
-				return False
-			raise
-		return True
+		return try_lock_exclusive(handle)
 
 	@contextmanager
 	def _lease(self, started: float, check: Callable[[], None] | None) -> Iterator[None]:
