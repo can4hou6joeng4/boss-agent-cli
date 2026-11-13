@@ -758,12 +758,21 @@ class BossCliGroup(click.Group):
 				raise
 			command = _invoked_command_name(args, self.name or "boss")
 			code = "LOCAL_IO_ERROR" if is_local_io_error(exc) else "NETWORK_ERROR"
+			# 本地 IO 失败要给出可执行的下一步：recovery_action 里说的「确认目标路径
+			# 可写 / 磁盘空间正常」对 Agent 只是自然语言，没有一条能直接跑的命令。
+			# 全量路径带本机绝对路径，只在 details 里保留，message 不进敏感位置信息
+			# （与其他错误码一致：message 说原因，details 说位置）。
 			emit_error(
 				command,
 				code=code,
 				message=f"{command} 本地文件读写失败: {exc}"
 				if code == "LOCAL_IO_ERROR"
 				else f"{command} 失败: {exc}",
+				hints={
+					"operator_actions": ["确认目标路径在可写目录下、磁盘空间充足后重新执行原命令"]
+				}
+				if code == "LOCAL_IO_ERROR"
+				else None,
 			)
 			return None
 

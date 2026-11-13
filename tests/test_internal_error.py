@@ -104,6 +104,22 @@ def test_uncaught_oserror_reports_actual_command_name(tmp_path):
 	assert payload["error"]["code"] == "LOCAL_IO_ERROR"
 	assert payload["error"]["message"].startswith("stats 本地文件读写失败: ")
 	assert payload["error"]["recoverable"] is False
+	# recovery_action 说的「确认目标路径可写 / 磁盘空间正常」是给真人的自然语言；
+	# hints.operator_actions 才是信封里可读的下一步，此前这里是 null。
+	assert payload["hints"]["operator_actions"]
+
+
+def test_group_network_fallback_does_not_add_local_io_hint(tmp_path):
+	"""网络类异常不该带「确认目标路径可写」这条与原因无关的指引。"""
+	with patch(
+		"boss_agent_cli.main._resolve_data_dir",
+		side_effect=ConnectionResetError("connection reset by peer"),
+	):
+		result = CliRunner().invoke(cli, ["--json", "stats"])
+
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "NETWORK_ERROR"
+	assert payload["hints"] is None
 
 
 def test_local_io_error_is_registered_as_not_recoverable():
