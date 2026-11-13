@@ -1149,6 +1149,75 @@ def test_run_boss_write_timeout_still_requires_outcome_check(mock_run):
 	assert "未确认的写操作不要直接重试" in result["error"]["recovery_action"]
 
 
+@pytest.mark.parametrize("may_write", [True, False])
+@patch("server.subprocess.run")
+def test_run_boss_spawn_failure_points_at_install_not_platform_state(mock_run, may_write):
+	"""子进程没能启动时不能让 Agent 去核对 checkpoint 与平台结果（Issue #962）。
+
+	进程从未运行，写工具也不可能产生平台操作；要处理的是安装 / --boss-bin。
+	"""
+	mock_run.side_effect = FileNotFoundError(2, "No such file or directory", "boss")
+
+	result = _run_boss("apply", "s", "j", may_write=may_write)
+
+	assert result["ok"] is False
+	assert result["error"]["code"] == "CLI_ERROR"
+	assert result["error"]["recoverable"] is False
+	assert "无法启动底层 boss CLI" in result["error"]["message"]
+	assert "--boss-bin" in result["error"]["recovery_action"]
+	assert "未产生任何平台操作" in result["error"]["recovery_action"]
+	assert "checkpoint" not in result["error"]["recovery_action"]
+	assert result["error"]["details"]["outcome_unknown"] is False
+	assert result["error"]["details"]["replay_safe"] is True
+
+
+def test_run_boss_async_spawn_failure_points_at_install_not_platform_state(monkeypatch):
+	"""MCP handler 实际走异步路径，启动失败的指引要与同步路径一致（Issue #962）。"""
+	from boss_agent_cli import mcp_server
+
+	async def fail_spawn(*args, **kwargs):
+		raise PermissionError(13, "Permission denied", "boss")
+
+	monkeypatch.setattr(mcp_server.asyncio, "create_subprocess_exec", fail_spawn)
+
+	result = asyncio.run(mcp_server._run_boss_async("status", may_write=False))
+
+	assert result["error"]["code"] == "CLI_ERROR"
+	assert "--boss-bin" in result["error"]["recovery_action"]
+	assert "checkpoint" not in result["error"]["recovery_action"]
+	assert result["error"]["details"]["outcome_unknown"] is False
+
+
+@patch("server.subprocess.run")
+def test_run_boss_read_only_unparseable_output_is_not_described_as_write(mock_run):
+	"""只读工具输出不可解析时没有平台写入，不能套用写操作的中断文案（Issue #962）。"""
+	mock_run.return_value = MagicMock(stdout="Traceback ...", stderr="boom")
+
+	result = _run_boss("status", may_write=False)
+
+	assert result["error"]["code"] == "CLI_ERROR"
+	assert result["error"]["message"] == "boom"
+	assert result["error"]["recoverable"] is False
+	assert "不产生平台写入" in result["error"]["recovery_action"]
+	assert "未确认的写操作" not in result["error"]["recovery_action"]
+	assert result["error"]["details"]["outcome_unknown"] is False
+	assert result["error"]["details"]["replay_safe"] is True
+
+
+@patch("server.subprocess.run")
+def test_run_boss_write_unparseable_output_marks_outcome_unknown(mock_run):
+	"""写工具跑过却没给信封：结果未知，要与超时 / 取消一样带 outcome_unknown。"""
+	mock_run.return_value = MagicMock(stdout="", stderr="boom")
+
+	result = _run_boss("apply", "s", "j")
+
+	assert result["error"]["code"] == "CLI_ERROR"
+	assert result["error"]["recoverable"] is False
+	assert "未确认的写操作不要直接重试" in result["error"]["recovery_action"]
+	assert result["error"]["details"]["outcome_unknown"] is True
+	assert result["error"]["details"]["replay_safe"] is False
+
+
 def test_read_only_tool_classification_covers_real_tools_only():
 	"""只读白名单不能引用不存在的工具，也不能把已知写工具放进去。"""
 	from boss_agent_cli import mcp_server

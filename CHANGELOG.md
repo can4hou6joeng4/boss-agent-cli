@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- MCP `CLI_ERROR` 的恢复指引按失败阶段与读写区分（Issue #962）：子进程没能启动（`boss` 不在 MCP server 的 `PATH` 中、`--boss-bin` 路径有误、文件不可执行）或 stdout 不是 JSON 信封时，信封一律回「检查本地 checkpoint 与平台实际结果，再显式恢复；未确认的写操作不要直接重试」——进程从未运行时不存在可核对的平台结果，只读工具也被描述成可能有写入，真正要处理的安装 / 路径问题只字未提。现在启动失败给出专用指引（未产生平台操作，确认安装或用 `boss-mcp --boss-bin` 指定路径）并带 `outcome_unknown=false`；输出不可解析时只读工具给只读指引且 `outcome_unknown=false`，写工具保留原指引并补 `outcome_unknown=true`，与超时 / 取消路径的详情字段一致。`CLI_ERROR` 仍为 `recoverable=false`。
 - MCP `boss_config` 漏传 required 的 `action` 不再静默默认成 `list`（Issue #960）：schema 声明 `required: ["action"]`，映射层却用 `arguments.get("action", "list")` 私自补默认值，绕过客户端校验的调用（手写 JSON-RPC、宽松 SDK）拿到 `ok:true` 的全量配置，Agent 无从得知自己漏了参数；与其余 required 工具（漏传一律 `INVALID_PARAM` + `缺少必填参数`）行为漂移。现在 `action` 漏传走既有 KeyError 分支；需要默认行为的工具（`boss_hr_jobs` / `boss_wizard`）在 schema 声明非 required + default，映射层才允许补默认。新增逐工具守卫：任何工具漏传全部 required 参数必须返回 `INVALID_PARAM`，schema / 实现再漂移会在守卫现形。
 - MCP `boss_export` 不再丢弃显式空串的 `query` / `url`（Issue #958）：参数映射用真值判断，`query:""` / `url:""` 被静默丢弃，Agent 收到的是误导性的「未提供 query，请传入搜索关键词或 --url」——明明传了值，读到的却是「你没传」。CLI 对 `export --url ""` 本有专门诊断「--url 的值不能为空」（为「flag 后面少了值」的真实场景设计），映射层吞掉空值后这条正确错误永远到不了 Agent。现在空串原样下发，未传与 `null` 仍等价省略；`boss_search` 的空 `query` 下发行为同步钉住。
 
