@@ -475,10 +475,9 @@ class CrawlService:
 					lambda: self._fetch_list(run_id, transport, budget, run_budget, settings, current_page),
 					max_retries=settings.max_retries,
 				)
-				jobs_data = body.get("zpData", {}) if isinstance(body.get("zpData"), dict) else {}
-				jobs = jobs_data.get("jobList", [])
-				if not isinstance(jobs, list):
-					raise RuntimeError(f"第 {current_page} 页 jobList 不是列表")
+				# _fetch_list 已在有限重试范围内校验结构；未取得列表不能推进断点。
+				jobs_data = body["zpData"]
+				jobs = jobs_data["jobList"]
 				for rank, raw in enumerate(jobs, 1):
 					if not isinstance(raw, dict):
 						continue
@@ -664,10 +663,10 @@ class CrawlService:
 				security_id = str(row.get("security_id", ""))
 
 				def fetch_detail() -> dict[str, Any]:
-					return self._fetch_detail(run_id, transport, budget, run_budget, security_id)
+					# 结构校验与请求共用有限重试；失败时条目仍保留在待补队列。
+					return _unwrap_card(self._fetch_detail(run_id, transport, budget, run_budget, security_id))
 
-				detail = self._with_retry(fetch_detail, max_retries=settings.max_retries)
-				card = _unwrap_card(detail)
+				card = self._with_retry(fetch_detail, max_retries=settings.max_retries)
 				row.update(
 					{
 						"post_description": card.get("postDescription", ""),
@@ -719,6 +718,9 @@ class CrawlService:
 		self._raise_if_stop_requested(run_id)
 		if payload.get("code") not in (None, 0):
 			raise RuntimeError(f"第 {page_no} 页接口错误 code={payload.get('code')}: {payload.get('message', '')}")
+		data = payload.get("zpData")
+		if not isinstance(data, dict) or not isinstance(data.get("jobList"), list):
+			raise RuntimeError(f"第 {page_no} 页响应缺少有效的 zpData.jobList 列表")
 		return payload
 
 	def _fetch_detail(
@@ -805,11 +807,11 @@ def _normalize_job(raw: dict[str, Any], query: str, page_no: int, rank: int) -> 
 
 
 def _unwrap_card(payload: dict[str, Any]) -> dict[str, Any]:
-	data = payload.get("zpData", {})
-	if not isinstance(data, dict):
-		return {}
-	card = data.get("jobCard", {})
-	return card if isinstance(card, dict) else {}
+	data = payload.get("zpData")
+	card = data.get("jobCard") if isinstance(data, dict) else None
+	if not isinstance(card, dict):
+		raise RuntimeError("职位详情响应缺少有效的 zpData.jobCard 对象")
+	return card
 
 
 def _hook_metadata(hooks: tuple[HookInjection, ...]) -> list[dict[str, Any]]:
