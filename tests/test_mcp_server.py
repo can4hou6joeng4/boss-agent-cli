@@ -1276,8 +1276,12 @@ def test_run_boss_async_spawn_cancel_preserves_child_checkpoint(monkeypatch, may
 	assert process.returncode == 0
 
 
-def test_run_boss_async_spawn_cancel_without_child_start_is_not_unknown(monkeypatch):
-	"""创建本身失败时子进程从未运行，取消不能把结果标成未知。"""
+def test_run_boss_async_spawn_cancel_without_child_start_points_at_install(monkeypatch):
+	"""创建失败且同时被取消时，子进程从未运行（Issue #1000）。
+
+	错误码仍是取消，但恢复指引必须指向安装 / ``--boss-bin``：去核对平台
+	checkpoint 只会把 Agent 引向不存在的现场。
+	"""
 	from boss_agent_cli import mcp_server
 
 	spawn_started = asyncio.Event()
@@ -1303,6 +1307,9 @@ def test_run_boss_async_spawn_cancel_without_child_start_is_not_unknown(monkeypa
 	assert result["error"]["code"] == "WORKFLOW_STOPPED"
 	assert result["error"]["details"]["outcome_unknown"] is False
 	assert "checkpoint_result" not in result["error"]["details"]
+	assert "--boss-bin" in result["error"]["recovery_action"]
+	assert "未产生任何平台操作" in result["error"]["recovery_action"]
+	assert "checkpoint" not in result["error"]["recovery_action"]
 
 
 @patch("server.subprocess.run")
