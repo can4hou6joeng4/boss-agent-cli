@@ -541,7 +541,9 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 				# 结果未知的招呼不能以 ok:true 回报：Agent 会当成普通失败重发（Issue #984）。
 				# UNKNOWN 与 ACTION_UNCONFIRMED 同义——响应无法证明招呼没发出去（Issue #990）。
 				unconfirmed_code = str(unconfirmed.get("error") or "ACTION_UNCONFIRMED")
-				recoverable, recovery_action = error_contract_for_code(unconfirmed_code)
+				recoverable, _ = error_contract_for_code(unconfirmed_code)
+				chat_cmd = _hint_command(ctx, "chat")
+				recovery_action = f"动作可能已生效：先用 {chat_cmd} 核对会话，不要自动重试"
 				handle_error_output(
 					ctx, "batch-greet",
 					code=unconfirmed_code,

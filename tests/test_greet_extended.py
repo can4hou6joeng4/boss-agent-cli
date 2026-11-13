@@ -577,6 +577,9 @@ def test_batch_greet_unparsed_write_response_is_never_retried(tmp_path):
 	assert client.greet_calls == 1
 	assert body["error"]["details"]["replay_safe"] is False
 	assert body["error"]["details"]["outcome_unknown"] is True
+	chat_cmd = body["hints"]["next_actions"][0]
+	assert chat_cmd in body["error"]["recovery_action"]
+	assert "hr chatmsg" not in body["error"]["recovery_action"]
 
 
 def test_batch_greet_unknown_response_stops_without_resending(tmp_path):
@@ -591,5 +594,8 @@ def test_batch_greet_unknown_response_stops_without_resending(tmp_path):
 	assert body["error"]["recoverable"] is False
 	assert body["error"]["details"]["replay_safe"] is False
 	assert body["error"]["details"]["outcome_unknown"] is True
+	chat_cmd = body["hints"]["next_actions"][0]
+	assert chat_cmd in body["error"]["recovery_action"]
+	assert "hr chatmsg" not in body["error"]["recovery_action"]
 	# 一次未知就地停批：sleep 后重发就是重复写操作。
 	assert client.greet_calls == 1

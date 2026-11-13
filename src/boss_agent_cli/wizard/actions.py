@@ -401,6 +401,7 @@ def _unwrap(
 	*,
 	context: ActionContext | None = None,
 	write: bool = False,
+	check_command: str | None = None,
 ) -> Any:
 	"""解包平台响应；失败时转成 ``WorkflowActionError``。
 
@@ -427,6 +428,10 @@ def _unwrap(
 	# 写操作的结果未知一律禁止重放：ACTION_UNCONFIRMED 明确结果未知，UNKNOWN 则
 	# 无法证明动作没有发生（读取的 UNKNOWN 会先被映射成可重试的 NETWORK_ERROR）。
 	replay_safe = not (code == "ACTION_UNCONFIRMED" or (code == "UNKNOWN" and write))
+	if not replay_safe and context is not None:
+		# 核对指引沿用当前角色和数据目录；求职者不能被引到招聘者会话。
+		command = check_command or ("hr chat" if context.role == "recruiter" else "chat")
+		recovery = f"操作可能已生效：先用 {_hint_command(context, command)} 核对平台记录，不要自动重试"
 	raise WorkflowActionError(
 		code,
 		text,
@@ -648,6 +653,7 @@ def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 				"投递失败",
 				context=context,
 				write=True,
+				check_command="me --section deliver",
 			)
 		try:
 			cache.record_apply(security_id, job_id, account=account)
@@ -1270,9 +1276,10 @@ def _recruiter_call(
 	*,
 	list_keys: tuple[str, ...] = (),
 	write: bool = False,
+	check_command: str | None = None,
 ) -> StepResult:
 	with context.recruiter_platform() as platform:
-		data = _unwrap(platform, call(platform), fallback, context=context, write=write)
+		data = _unwrap(platform, call(platform), fallback, context=context, write=write, check_command=check_command)
 	payload: dict[str, Any] = {"result": data}
 	if list_keys:
 		items = _extract_list_items(data, list_keys)
@@ -1311,6 +1318,8 @@ def _recruiter_resume(context: ActionContext, inputs: Mapping[str, Any], prior: 
 			_optional_str(inputs.get("security_id")),
 		),
 		"候选人简历获取失败",
+		# view_geek 声明 effect: unknown，无法证明没有副作用；未知结果不能自动重放。
+		write=True,
 	)
 
 
@@ -1373,6 +1382,7 @@ def _recruiter_reply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 		lambda platform: platform.send_message_by_friend(friend_id, message),
 		"消息发送失败",
 		write=True,
+		check_command=f"hr chatmsg {friend_id}",
 	)
 
 
@@ -1399,6 +1409,7 @@ def _recruiter_request_resume(
 		lambda platform: platform.exchange_request_by_friend(friend_id, exchange_type=4),
 		"附件简历请求失败",
 		write=True,
+		check_command=f"hr chatmsg {friend_id}",
 	)
 
 
@@ -1412,6 +1423,7 @@ def _recruiter_exchange_contact(
 		lambda platform: platform.exchange_request_by_friend(friend_id, exchange_type=exchange_type),
 		"联系方式交换请求失败",
 		write=True,
+		check_command=f"hr chatmsg {friend_id}",
 	)
 
 
@@ -1431,12 +1443,16 @@ def _recruiter_jobs_detail(context: ActionContext, inputs: Mapping[str, Any], pr
 
 def _recruiter_jobs_online(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	job_id = str(_required(inputs, "job_id"))
-	return _recruiter_call(context, lambda platform: platform.job_online(job_id), "职位上线失败", write=True)
+	return _recruiter_call(
+		context, lambda platform: platform.job_online(job_id), "职位上线失败", write=True, check_command="hr jobs list"
+	)
 
 
 def _recruiter_jobs_offline(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	job_id = str(_required(inputs, "job_id"))
-	return _recruiter_call(context, lambda platform: platform.job_offline(job_id), "职位下线失败", write=True)
+	return _recruiter_call(
+		context, lambda platform: platform.job_offline(job_id), "职位下线失败", write=True, check_command="hr jobs list"
+	)
 
 
 DEFAULT_ACTIONS: dict[str, Action] = {

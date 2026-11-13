@@ -4466,6 +4466,62 @@ def test_wizard_runner_does_not_resume_unknown_write_step(tmp_path):
 	assert calls == ["write"]
 
 
+@pytest.mark.parametrize("error_code", ["UNKNOWN", "ACTION_UNCONFIRMED"])
+@pytest.mark.parametrize(
+	"role,action,method,inputs,check_args",
+	[
+		("candidate", "candidate_apply", "apply", {"security_id": "synthetic-sid", "job_id": "synthetic-job"}, ["me", "--section", "deliver"]),
+		("candidate", "candidate_greet", "greet", {"security_id": "synthetic-sid", "job_id": "synthetic-job"}, ["chat"]),
+		("candidate", "candidate_exchange", "exchange_contact", {"security_id": "sid_current"}, ["chat"]),
+		("candidate", "candidate_mark", "friend_label", {"security_id": "sid_current", "label": "沟通中"}, ["chat"]),
+		("recruiter", "recruiter_reply", "send_message_by_friend", {"friend_id": 42, "message": "你好"}, ["hr", "chatmsg", "42"]),
+		("recruiter", "recruiter_request_resume", "exchange_request_by_friend", {"friend_id": 42}, ["hr", "chatmsg", "42"]),
+		("recruiter", "recruiter_exchange_contact", "exchange_request_by_friend", {"friend_id": 42}, ["hr", "chatmsg", "42"]),
+		("recruiter", "recruiter_jobs_online", "job_online", {"job_id": "synthetic-job"}, ["hr", "jobs", "list"]),
+		("recruiter", "recruiter_jobs_offline", "job_offline", {"job_id": "synthetic-job"}, ["hr", "jobs", "list"]),
+		("recruiter", "recruiter_resume", "view_geek", {"geek_id": "synthetic-geek", "job_id": "synthetic-job"}, ["hr", "chat"]),
+	],
+)
+def test_default_wizard_actions_never_replay_unknown_results(
+	tmp_path, error_code, role, action, method, inputs, check_args,
+):
+	"""真实适配器连接默认动作与 runner：有限重试、恢复都只能调用一次。"""
+	from boss_agent_cli.platforms.zhipin import BossPlatform
+	from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
+
+	data_dir = tmp_path / "wizard profile"
+	client = MagicMock()
+	response = {"code": -1, "message": "unrecognized backend response", "zpData": {}}
+	if error_code == "ACTION_UNCONFIRMED":
+		response["__cli_error_code__"] = error_code
+		response["__cli_error_details__"] = {"outcome": "unknown", "replay_safe": False}
+	getattr(client, method).return_value = response
+	client.friend_list.return_value = {
+		"code": 0,
+		"zpData": {"result": [{"uid": 10001, "securityId": "sid_current", "name": "测试联系人", "friendSource": 0}], "hasMore": False},
+	}
+	platform = BossPlatform(client) if role == "candidate" else BossRecruiterPlatform(client)
+	context = _action_context(data_dir, role=role, candidate=platform, recruiter=platform)
+	plan = replace(_plan(action), role=role, inputs=inputs)
+	with WorkflowStore(data_dir) as store:
+		runner = WorkflowRunner(store, DEFAULT_ACTIONS)
+		first = runner.run(plan, context, run_id="unknown-action", max_retries=2)
+		assert first["status"] == "failed"
+		error = first["steps"][0]["error"]
+		assert error["code"] == error_code
+		assert error["recoverable"] is False
+		assert error["replay_safe"] is False
+		check_command = shlex.join(["boss", "--data-dir", str(data_dir.resolve()), *check_args])
+		assert check_command in error["recovery_action"]
+		assert "不要自动重试" in error["recovery_action"]
+		if role == "candidate":
+			assert "hr chatmsg" not in error["recovery_action"]
+		getattr(client, method).assert_called_once()
+		resumed = runner.run(plan, context, run_id="unknown-action", max_retries=2)
+		assert resumed["status"] == "failed"
+		getattr(client, method).assert_called_once()
+
+
 def test_wizard_read_unknown_response_stays_retryable():
 	"""读取的未识别响应没有副作用，仍按 NETWORK_ERROR 兜底（Issue #990）。"""
 	from boss_agent_cli.wizard.actions import _classify_action_error
