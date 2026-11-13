@@ -38,6 +38,7 @@ def test_mapping_only_uses_registered_codes_and_sysexits_values():
 		("LOGIN_TIMEOUT", 75),
 		("BROWSER_NAV_TIMEOUT", 75),
 		("WORKFLOW_TIMEOUT", 75),
+		("WORKFLOW_BUSY", 75),
 		("ACCOUNT_RISK", 69),
 		("ENVIRONMENT_RISK", 69),
 		("ENVIRONMENT_RISK_LOCKED", 69),

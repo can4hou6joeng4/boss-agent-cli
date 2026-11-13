@@ -154,6 +154,43 @@ class WorkflowRunner:
 	) -> dict[str, Any]:
 		if max_retries < 0:
 			raise ValueError("max_retries must be >= 0")
+		run_id = run_id or f"wrn_{secrets.token_urlsafe(12)}"
+		# 执行权必须先于执行快照取得：两次调用都读到旧快照时，后到者会把先到者已保存
+		# 的结果覆盖回 running，再把同一个写操作发一遍（Issue #1017）。
+		with self._store.execution_lock(run_id) as acquired:
+			if not acquired:
+				status_action = boss_command(
+					f"wizard --status {shell_argument(run_id)}",
+					platform_name=plan.platform,
+					data_dir=getattr(context, "data_dir", None),
+				)
+				raise WorkflowActionError(
+					"WORKFLOW_BUSY",
+					"该 workflow 正在由另一次调用执行，本次调用未执行任何步骤",
+					recoverable=True,
+					recovery_action=f"用 {status_action} 查看进度，等当前执行结束后再恢复；不要并发恢复同一个 run_id",
+					details={"run_id": run_id},
+				)
+			return self._run_exclusive(
+				plan,
+				context,
+				run_id=run_id,
+				on_event=on_event,
+				timeout_seconds=timeout_seconds,
+				max_retries=max_retries,
+			)
+
+	def _run_exclusive(
+		self,
+		plan: WorkflowPlan,
+		context: Any,
+		*,
+		run_id: str,
+		on_event: WorkflowEvent | None,
+		timeout_seconds: float | None,
+		max_retries: int,
+	) -> dict[str, Any]:
+		"""读取执行快照并逐步执行；调用方必须已持有该 run 的执行权。"""
 		started_at = time.monotonic()
 		data_dir = getattr(context, "data_dir", None)
 		login_action = boss_command("login", platform_name=plan.platform, data_dir=data_dir)
@@ -163,7 +200,6 @@ class WorkflowRunner:
 				f"wizard --resume {shell_argument(target)}", platform_name=plan.platform, data_dir=data_dir
 			)
 		deadline = started_at + timeout_seconds if timeout_seconds is not None else None
-		run_id = run_id or f"wrn_{secrets.token_urlsafe(12)}"
 		existing = self._store.get(run_id)
 		if existing is None:
 			self._store.create(run_id, plan)

@@ -310,6 +310,7 @@ module = [
 	"boss_agent_cli.auth.page_identity",
 	"boss_agent_cli.commands.wizard",
 	"boss_agent_cli.services.json_files",
+	"boss_agent_cli.services.file_lock",
 	"boss_agent_cli.wizard.actions",
 	"boss_agent_cli.wizard.catalog",
 	"boss_agent_cli.wizard.live_crawl",

@@ -119,7 +119,11 @@ SCHEMA_DATA = {
 					"default": None,
 					"description": "包含 role/platform/goal/inputs/requested_steps 的 JSON object",
 				},
-				"--resume": {"type": "string", "default": None, "description": "恢复指定 workflow run_id"},
+				"--resume": {
+					"type": "string",
+					"default": None,
+					"description": "恢复指定 workflow run_id；同一 run_id 同时只允许一次执行，重叠调用返回 WORKFLOW_BUSY 且不执行任何步骤",
+				},
 				"--status": {"type": "string", "default": None, "description": "查询指定 workflow run_id"},
 				"--stop": {"type": "string", "default": None, "description": "停止指定 workflow run_id"},
 				"--timeout": {"type": "float", "default": None, "minimum": 0.001, "description": "workflow 超时秒数"},

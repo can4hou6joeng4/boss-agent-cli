@@ -137,6 +137,19 @@ def _workflow_next_actions(ctx: click.Context, run: Mapping[str, Any]) -> list[s
 	return [prefix, status_cmd]
 
 
+def _busy_hints(ctx: click.Context, exc: WorkflowActionError) -> dict[str, Any] | None:
+	"""run 正由另一次调用执行时，给 Agent 的后继动作只有查看状态。
+
+	不给 ``--resume``（照做只会再撞一次）也不给 ``--stop``（照做会打断一次正常
+	的执行）；要不要停由查到状态之后的调用方决定。
+	"""
+	run_id = (exc.details or {}).get("run_id") if exc.code == "WORKFLOW_BUSY" else None
+	if not run_id:
+		return None
+	status_cmd = boss_command_for_ctx(ctx, f"wizard --status {shell_argument(str(run_id))}", include_data_dir=True)
+	return {"next_actions": [status_cmd]}
+
+
 def _plan_from_run(run: Mapping[str, Any]) -> WorkflowPlan:
 	# 历史 run 可能保存着已移除的平台（如 zhilian）；恢复前与新建 plan 走同一套校验，
 	# 否则会绕过 --platform 校验去读遗留登录态，并被兜底成可重试的 NETWORK_ERROR。
@@ -785,6 +798,8 @@ def _run_wizard_command(
 				message=str(exc),
 				recoverable=exc.recoverable,
 				recovery_action=exc.recovery_action,
+				details=exc.details,
+				hints=_busy_hints(ctx, exc),
 			)
 			return
 
