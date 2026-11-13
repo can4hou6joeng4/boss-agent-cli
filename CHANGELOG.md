@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.3] - 2026-11-14
+
 ### Fixed
 - `boss_wizard.action` 的非法取值不再静默新建运行（Issue #1002）：映射层原先把 `resume` / `status` / `stop` 之外的一切（`resum`、`STOP`、空串）都送进 `run` 分支，调用方以为恢复或停止已生效，实际却新建了一次 workflow 并丢弃 `run_id`。现在进入 CLI 前返回 `INVALID_PARAM` 并列出合法取值；缺省或 `null` 仍落回默认 `run`。新增覆盖全部工具枚举参数的守卫，禁止非法值被静默替换。
 - 创建失败且同时被取消时，MCP 恢复指引改为指向安装 / `--boss-bin`（Issue #1000）：此前该分支沿用写操作中断文案，让 Agent 去核对并不存在的平台 checkpoint。子进程从未运行，现在与同步启动失败路径一致，保留 `WORKFLOW_STOPPED` 错误码与 `outcome_unknown=false`。
