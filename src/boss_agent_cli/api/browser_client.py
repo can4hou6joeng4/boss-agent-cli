@@ -207,6 +207,7 @@ _FETCH_SCRIPT = r"""
 						const contentType = resp.headers.get('Content-Type') || '';
 						const isHtml = /html/i.test(contentType) || /^\s*(?:<!doctype html|<html)/i.test(body);
 						return {code: -1, message: 'browser response is not JSON', zpData: {},
+							__cli_unparsed_response__: true,
 							__cli_security_response__: {url: resp.url, content_type: isHtml ? 'text/html' : contentType, title, restricted}};
 					}
 					})()]);
@@ -332,6 +333,8 @@ class BrowserSession:
 					raise_platform_risk_response(result, is_cdp=self._is_cdp)
 				if result.pop("__cli_request_interrupted__", False):
 					return self._interrupted_request_response(endpoint)
+				if result.pop("__cli_unparsed_response__", False):
+					return self._unparsed_response(endpoint)
 			return result
 
 	def _navigate_home(self, *, channel: str | None = None) -> None:
@@ -853,6 +856,13 @@ class BrowserSession:
 	def _interrupted_request_response(endpoint: EndpointSpec | None) -> dict[str, Any]:
 		write_possible = endpoint is None or endpoint.effect != "read"
 		code = "ACTION_UNCONFIRMED" if write_possible else "NETWORK_ERROR"
+		# 读取被中断时重试没有副作用，与文档的 replay_safe=true 契约一致；
+		# 写请求不知道是否已生效，保持 false。两处写成字面量，供结构门禁扫描。
+		details: dict[str, Any] = (
+			{"outcome": "unknown", "replay_safe": False}
+			if write_possible
+			else {"outcome": "unknown", "replay_safe": True}
+		)
 		return {
 			"code": -1,
 			"message": "请求期间页面或响应中断；操作可能已生效，请先核对结果，勿直接重试"
@@ -860,7 +870,33 @@ class BrowserSession:
 			else "浏览器读取请求中断或超时，请检查页面后恢复",
 			"zpData": {},
 			"__cli_error_code__": code,
-			"__cli_error_details__": {"outcome": "unknown", "replay_safe": False},
+			"__cli_error_details__": details,
+		}
+
+	@staticmethod
+	def _unparsed_response(endpoint: EndpointSpec | None) -> dict[str, Any]:
+		"""响应正文不是 JSON：写请求无法证明动作没有发生。
+
+		httpx 通道在同样情形返回 ``ACTION_UNCONFIRMED``（``_unconfirmed_http_response``），
+		浏览器通道此前留下裸 ``code: -1``，平台层只能判 ``UNKNOWN``，写命令又把它
+		升级成可重试的 ``NETWORK_ERROR``——同一个「可能已生效」的写操作因此在
+		单次命令、批量循环和 wizard 里被重放（Issue #990）。
+		"""
+		write_possible = endpoint is None or endpoint.effect != "read"
+		if not write_possible:
+			return {
+				"code": -1,
+				"message": "浏览器读取响应不是 JSON，请检查页面后重试",
+				"zpData": {},
+				"__cli_error_code__": "NETWORK_ERROR",
+				"__cli_error_details__": {"outcome": "unknown", "replay_safe": True},
+			}
+		return {
+			"code": -1,
+			"message": "请求结果未确认：响应不是 JSON，操作可能已生效，请先核对平台记录，勿直接重试",
+			"zpData": {},
+			"__cli_error_code__": "ACTION_UNCONFIRMED",
+			"__cli_error_details__": {"outcome": "unknown", "replay_safe": False, "reason": "unparsed_response"},
 		}
 
 	# ── Arbitrary JS evaluation (CDP-only, raw websocket) ────────────

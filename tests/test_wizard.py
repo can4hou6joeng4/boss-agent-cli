@@ -4397,3 +4397,136 @@ def test_crawl_actions_reject_string_with_detail(tmp_path):
 		DEFAULT_ACTIONS["crawl_start"](context, {"query": "Python", "city": "北京", "with_detail": "false"}, {})
 	with pytest.raises(WorkflowInputError):
 		DEFAULT_ACTIONS["crawl_resume"](context, {"run_id": "run-1", "with_detail": "false"}, {})
+
+
+class _UnknownResponsePlatform(_FakeCandidatePlatform):
+	"""所有平台调用都返回无法解析的响应（Issue #990 的浏览器通道形态）。"""
+
+	def apply(self, security_id, job_id, lid=""):
+		self.calls.append(("apply", security_id, job_id, lid))
+		return {"code": -1, "message": "browser response is not JSON", "zpData": {}}
+
+	def greet(self, security_id, job_id, message=""):
+		self.calls.append(("greet", security_id, job_id, message))
+		return {"code": -1, "message": "browser response is not JSON", "zpData": {}}
+
+	def parse_error(self, response):
+		return "UNKNOWN", str(response.get("message") or "")
+
+
+def test_wizard_write_unknown_response_is_not_replayed(tmp_path):
+	"""写步骤遇到未识别的响应时禁止自动重试与 --resume 重跑（Issue #990）。
+
+	``_classify_action_error`` 原先把所有 ``UNKNOWN`` 映射成可重试的
+	``NETWORK_ERROR``，``_unwrap`` 又让 ``replay_safe`` 保持 True，runner 的
+	自动重试与 ``--resume`` 都会重放一次可能已生效的写操作。
+	"""
+	platform = _UnknownResponsePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	with pytest.raises(WorkflowActionError) as applied:
+		DEFAULT_ACTIONS["candidate_apply"](context, {"security_id": "sec-1", "job_id": "job-1"}, {})
+	assert applied.value.code == "UNKNOWN"
+	assert applied.value.recoverable is False
+	assert applied.value.replay_safe is False
+	assert "不要自动重试" in (applied.value.recovery_action or "")
+
+	with pytest.raises(WorkflowActionError) as greeted:
+		DEFAULT_ACTIONS["candidate_greet"](context, {"security_id": "sec-2", "job_id": "job-2", "message": "你好"}, {})
+	assert greeted.value.replay_safe is False
+
+
+def test_wizard_runner_does_not_resume_unknown_write_step(tmp_path):
+	calls = []
+
+	def unknown_write(context, inputs, prior):
+		calls.append("write")
+		raise WorkflowActionError(
+			"UNKNOWN",
+			"browser response is not JSON",
+			recoverable=False,
+			recovery_action=str(ERROR_CODES["UNKNOWN"]["recovery_action"]),
+			replay_safe=False,
+		)
+
+	with WorkflowStore(tmp_path) as store:
+		first = WorkflowRunner(store, {"write": unknown_write}).run(
+			_plan("write"), object(), run_id="run-unknown-write", max_retries=1
+		)
+		assert first["status"] == "failed"
+		assert first["steps"][0]["error"]["replay_safe"] is False
+		# 自动重试不得发生：一次未识别响应就是一次可能已发出的写。
+		assert calls == ["write"]
+		second = WorkflowRunner(store, {"write": unknown_write}).run(
+			_plan("write"), object(), run_id="run-unknown-write"
+		)
+
+	assert second["status"] == "failed"
+	assert second["error"]["code"] == "UNKNOWN"
+	assert calls == ["write"]
+
+
+@pytest.mark.parametrize("error_code", ["UNKNOWN", "ACTION_UNCONFIRMED"])
+@pytest.mark.parametrize(
+	"role,action,method,inputs,check_args",
+	[
+		("candidate", "candidate_apply", "apply", {"security_id": "synthetic-sid", "job_id": "synthetic-job"}, ["me", "--section", "deliver"]),
+		("candidate", "candidate_greet", "greet", {"security_id": "synthetic-sid", "job_id": "synthetic-job"}, ["chat"]),
+		("candidate", "candidate_exchange", "exchange_contact", {"security_id": "sid_current"}, ["chat"]),
+		("candidate", "candidate_mark", "friend_label", {"security_id": "sid_current", "label": "沟通中"}, ["chat"]),
+		("recruiter", "recruiter_reply", "send_message_by_friend", {"friend_id": 42, "message": "你好"}, ["hr", "chatmsg", "42"]),
+		("recruiter", "recruiter_request_resume", "exchange_request_by_friend", {"friend_id": 42}, ["hr", "chatmsg", "42"]),
+		("recruiter", "recruiter_exchange_contact", "exchange_request_by_friend", {"friend_id": 42}, ["hr", "chatmsg", "42"]),
+		("recruiter", "recruiter_jobs_online", "job_online", {"job_id": "synthetic-job"}, ["hr", "jobs", "list"]),
+		("recruiter", "recruiter_jobs_offline", "job_offline", {"job_id": "synthetic-job"}, ["hr", "jobs", "list"]),
+		("recruiter", "recruiter_resume", "view_geek", {"geek_id": "synthetic-geek", "job_id": "synthetic-job"}, ["hr", "chat"]),
+	],
+)
+def test_default_wizard_actions_never_replay_unknown_results(
+	tmp_path, error_code, role, action, method, inputs, check_args,
+):
+	"""真实适配器连接默认动作与 runner：有限重试、恢复都只能调用一次。"""
+	from boss_agent_cli.platforms.zhipin import BossPlatform
+	from boss_agent_cli.platforms.zhipin_recruiter import BossRecruiterPlatform
+
+	data_dir = tmp_path / "wizard profile"
+	client = MagicMock()
+	response = {"code": -1, "message": "unrecognized backend response", "zpData": {}}
+	if error_code == "ACTION_UNCONFIRMED":
+		response["__cli_error_code__"] = error_code
+		response["__cli_error_details__"] = {"outcome": "unknown", "replay_safe": False}
+	getattr(client, method).return_value = response
+	client.friend_list.return_value = {
+		"code": 0,
+		"zpData": {"result": [{"uid": 10001, "securityId": "sid_current", "name": "测试联系人", "friendSource": 0}], "hasMore": False},
+	}
+	platform = BossPlatform(client) if role == "candidate" else BossRecruiterPlatform(client)
+	context = _action_context(data_dir, role=role, candidate=platform, recruiter=platform)
+	plan = replace(_plan(action), role=role, inputs=inputs)
+	with WorkflowStore(data_dir) as store:
+		runner = WorkflowRunner(store, DEFAULT_ACTIONS)
+		first = runner.run(plan, context, run_id="unknown-action", max_retries=2)
+		assert first["status"] == "failed"
+		error = first["steps"][0]["error"]
+		assert error["code"] == error_code
+		assert error["recoverable"] is False
+		assert error["replay_safe"] is False
+		check_command = shlex.join(["boss", "--data-dir", str(data_dir.resolve()), *check_args])
+		assert check_command in error["recovery_action"]
+		assert "不要自动重试" in error["recovery_action"]
+		if role == "candidate":
+			assert "hr chatmsg" not in error["recovery_action"]
+		getattr(client, method).assert_called_once()
+		resumed = runner.run(plan, context, run_id="unknown-action", max_retries=2)
+		assert resumed["status"] == "failed"
+		getattr(client, method).assert_called_once()
+
+
+def test_wizard_read_unknown_response_stays_retryable():
+	"""读取的未识别响应没有副作用，仍按 NETWORK_ERROR 兜底（Issue #990）。"""
+	from boss_agent_cli.wizard.actions import _classify_action_error
+
+	code, recoverable, recovery = _classify_action_error("UNKNOWN", "browser response is not JSON")
+	assert code == "NETWORK_ERROR"
+	assert recoverable is True
+	assert "稍后重试" in recovery

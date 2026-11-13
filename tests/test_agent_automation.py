@@ -1152,3 +1152,26 @@ def test_interview_lead_records_colloquial_time_verbatim(tmp_path: Path) -> None
 	assert "明天下午3:30" in csv_text
 	assert "3:0030" not in csv_text
 	assert _extract_interview_time("明天下午3点半") == "明天下午3:30"
+
+
+def test_action_result_separates_unsent_page_errors_from_interrupted_actions() -> None:
+	"""页面错误必须区分「确定没发出」与「可能已发出」（Issue #990）。
+
+	``handleExChange`` 抛错现在标记 ``action_interrupted``，信封带
+	``ACTION_UNCONFIRMED``，自动化据此停轮而不是重发；组件找不到之类在任何
+	请求之前就失败的确定性错误仍按 ``blocked`` 处理，不会被误判成结果未知。
+	"""
+	from boss_agent_cli.automation.boss_adapter import _action_result
+
+	interrupted = _action_result({
+		"code": -1,
+		"message": "交换联系方式请求未确认: handleExChange threw: boom",
+		"__cli_error_code__": "ACTION_UNCONFIRMED",
+	})
+	assert interrupted.status == "unconfirmed"
+
+	deterministic = _action_result({
+		"code": -1,
+		"message": "交换联系方式请求失败: ExchangeWx Vue component not found",
+	})
+	assert deterministic.status == "blocked"

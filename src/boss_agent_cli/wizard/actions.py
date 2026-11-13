@@ -337,19 +337,31 @@ def _required_int(inputs: Mapping[str, Any], name: str, *, minimum: int = 0) -> 
 
 
 def _classify_action_error(
-	code: str, message: str, *, clean_command: str | None = None, doctor_command: str | None = None
+	code: str,
+	message: str,
+	*,
+	clean_command: str | None = None,
+	doctor_command: str | None = None,
+	write: bool = False,
 ) -> tuple[str, bool, str]:
 	"""Map platform error codes into wizard-facing code/recoverable/recovery.
 
 	``clean_command`` / ``doctor_command`` 指向本次 workflow 的数据目录：
 	风险锁写在 ``<data_dir>`` 下，裸命令会让 Agent 去默认目录空转（Issue #978）。
+
+	``write`` 标记产生该响应的平台调用是写操作。写请求拿到未识别的响应时不能
+	沿用「当作网络抖动、稍后重试」的兜底：响应无法证明动作没有生效，重试就是
+	重放写操作（Issue #990）。
 	"""
 	text = message or ""
 	if code == "UNKNOWN":
 		if any(token in text for token in ("缺少必要参数", "参数错误", "非法参数", "invalid param")):
 			code = "INVALID_PARAM"
-		else:
+		elif not write:
 			code = "NETWORK_ERROR"
+	if code == "UNKNOWN":
+		# 写操作的未识别响应：沿用登记表的「先核对、勿自动重试」契约。
+		return code, False, str(ERROR_CODES[code]["recovery_action"])
 	if code == "ACTION_UNCONFIRMED":
 		# 写操作可能已生效：沿用登记表的「先核实、勿重试」契约，不落到「稍后重试」兜底。
 		return code, False, str(ERROR_CODES[code]["recovery_action"])
@@ -388,23 +400,45 @@ def _unwrap(
 	fallback: str,
 	*,
 	context: ActionContext | None = None,
+	write: bool = False,
+	check_command: str | None = None,
 ) -> Any:
+	"""解包平台响应；失败时转成 ``WorkflowActionError``。
+
+	``write`` 标记本次调用是写操作：未识别的响应（``UNKNOWN``）无法证明动作
+	没有生效，必须按「先核对、勿自动重试」处理，且 ``replay_safe=False`` 让
+	runner 的自动重试与 ``--resume`` 都不再重跑该步骤（Issue #990）。
+	"""
 	if platform.is_success(response):
 		return platform.unwrap_data(response) or {}
 	code, message = platform.parse_error(response)
 	text = message or fallback
-	code, recoverable, recovery = _classify_action_error(code, text, **_risk_commands(context))
+	risk_commands = _risk_commands(context)
+	code, recoverable, recovery = _classify_action_error(
+		code,
+		text,
+		clean_command=risk_commands.get("clean_command"),
+		doctor_command=risk_commands.get("doctor_command"),
+		write=write,
+	)
 	if code in RISK_ERROR_CONTRACTS:
 		# 风控响应原文可能带临时凭据，不进 workflow 结果；停止指引由 recovery_action 承载。
 		text = risk_error_message(code)
 	details = response.get("__cli_error_details__") if isinstance(response, dict) else None
+	# 写操作的结果未知一律禁止重放：ACTION_UNCONFIRMED 明确结果未知，UNKNOWN 则
+	# 无法证明动作没有发生（读取的 UNKNOWN 会先被映射成可重试的 NETWORK_ERROR）。
+	replay_safe = not (code == "ACTION_UNCONFIRMED" or (code == "UNKNOWN" and write))
+	if not replay_safe and context is not None:
+		# 核对指引沿用当前角色和数据目录；求职者不能被引到招聘者会话。
+		command = check_command or ("hr chat" if context.role == "recruiter" else "chat")
+		recovery = f"操作可能已生效：先用 {_hint_command(context, command)} 核对平台记录，不要自动重试"
 	raise WorkflowActionError(
 		code,
 		text,
 		recoverable=recoverable,
 		recovery_action=recovery,
 		details=details if isinstance(details, dict) and details else None,
-		replay_safe=code != "ACTION_UNCONFIRMED",
+		replay_safe=replay_safe,
 	)
 
 
@@ -468,7 +502,13 @@ def execute_candidate_detail(
 		else:
 			code, message = platform.parse_error(raw)
 			text = message or "职位详情获取失败"
-			code, recoverable, recovery = _classify_action_error(code, text, **_risk_commands(context))
+			risk_commands = _risk_commands(context)
+			code, recoverable, recovery = _classify_action_error(
+				code,
+				text,
+				clean_command=risk_commands.get("clean_command"),
+				doctor_command=risk_commands.get("doctor_command"),
+			)
 			last_error = WorkflowActionError(code, text, recoverable=recoverable, recovery_action=recovery)
 
 	try:
@@ -498,7 +538,13 @@ def execute_candidate_detail(
 		raise last_error
 	code, message = platform.parse_error(raw_card)
 	text = message or "职位详情获取失败"
-	code, recoverable, recovery = _classify_action_error(code, text, **_risk_commands(context))
+	risk_commands = _risk_commands(context)
+	code, recoverable, recovery = _classify_action_error(
+		code,
+		text,
+		clean_command=risk_commands.get("clean_command"),
+		doctor_command=risk_commands.get("doctor_command"),
+	)
 	raise WorkflowActionError(code, text, recoverable=recoverable, recovery_action=recovery)
 
 
@@ -606,6 +652,8 @@ def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 				platform.apply(security_id, job_id, lid=str(inputs.get("lid") or "")),
 				"投递失败",
 				context=context,
+				write=True,
+				check_command="me --section deliver",
 			)
 		try:
 			cache.record_apply(security_id, job_id, account=account)
@@ -627,7 +675,11 @@ def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: M
 			raise WorkflowActionError("ALREADY_GREETED", "已向该招聘者打过招呼")
 		with context.candidate_platform() as platform:
 			data = _unwrap(
-				platform, platform.greet(security_id, job_id, str(inputs.get("message") or "")), "打招呼失败"
+				platform,
+				platform.greet(security_id, job_id, str(inputs.get("message") or "")),
+				"打招呼失败",
+				context=context,
+				write=True,
 			)
 		try:
 			cache.record_greet(security_id, job_id, account=account)
@@ -685,6 +737,8 @@ def _candidate_exchange(context: ActionContext, inputs: Mapping[str, Any], prior
 				exchange_type=exchange_type,
 			),
 			"联系方式交换失败",
+			context=context,
+			write=True,
 		)
 	return StepResult({"uid": uid, "security_id": security_id, "result": data})
 
@@ -712,6 +766,8 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 				remove=remove,
 			),
 			"联系人标签更新失败",
+			context=context,
+			write=True,
 		)
 	return StepResult({
 		"uid": uid,
@@ -1219,9 +1275,11 @@ def _recruiter_call(
 	fallback: str,
 	*,
 	list_keys: tuple[str, ...] = (),
+	write: bool = False,
+	check_command: str | None = None,
 ) -> StepResult:
 	with context.recruiter_platform() as platform:
-		data = _unwrap(platform, call(platform), fallback, context=context)
+		data = _unwrap(platform, call(platform), fallback, context=context, write=write, check_command=check_command)
 	payload: dict[str, Any] = {"result": data}
 	if list_keys:
 		items = _extract_list_items(data, list_keys)
@@ -1260,6 +1318,8 @@ def _recruiter_resume(context: ActionContext, inputs: Mapping[str, Any], prior: 
 			_optional_str(inputs.get("security_id")),
 		),
 		"候选人简历获取失败",
+		# view_geek 声明 effect: unknown，无法证明没有副作用；未知结果不能自动重放。
+		write=True,
 	)
 
 
@@ -1318,7 +1378,11 @@ def _recruiter_reply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 	friend_id = _required_int(inputs, "friend_id", minimum=1)
 	message = str(_required(inputs, "message"))
 	return _recruiter_call(
-		context, lambda platform: platform.send_message_by_friend(friend_id, message), "消息发送失败"
+		context,
+		lambda platform: platform.send_message_by_friend(friend_id, message),
+		"消息发送失败",
+		write=True,
+		check_command=f"hr chatmsg {friend_id}",
 	)
 
 
@@ -1344,6 +1408,8 @@ def _recruiter_request_resume(
 		context,
 		lambda platform: platform.exchange_request_by_friend(friend_id, exchange_type=4),
 		"附件简历请求失败",
+		write=True,
+		check_command=f"hr chatmsg {friend_id}",
 	)
 
 
@@ -1356,6 +1422,8 @@ def _recruiter_exchange_contact(
 		context,
 		lambda platform: platform.exchange_request_by_friend(friend_id, exchange_type=exchange_type),
 		"联系方式交换请求失败",
+		write=True,
+		check_command=f"hr chatmsg {friend_id}",
 	)
 
 
@@ -1375,12 +1443,16 @@ def _recruiter_jobs_detail(context: ActionContext, inputs: Mapping[str, Any], pr
 
 def _recruiter_jobs_online(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	job_id = str(_required(inputs, "job_id"))
-	return _recruiter_call(context, lambda platform: platform.job_online(job_id), "职位上线失败")
+	return _recruiter_call(
+		context, lambda platform: platform.job_online(job_id), "职位上线失败", write=True, check_command="hr jobs list"
+	)
 
 
 def _recruiter_jobs_offline(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	job_id = str(_required(inputs, "job_id"))
-	return _recruiter_call(context, lambda platform: platform.job_offline(job_id), "职位下线失败")
+	return _recruiter_call(
+		context, lambda platform: platform.job_offline(job_id), "职位下线失败", write=True, check_command="hr jobs list"
+	)
 
 
 DEFAULT_ACTIONS: dict[str, Action] = {

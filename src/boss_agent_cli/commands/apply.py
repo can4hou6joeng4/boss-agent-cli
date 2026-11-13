@@ -60,13 +60,37 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 		with get_platform_instance(ctx, auth) as platform:
 			resp = platform.apply(security_id, job_id, lid=lid)
 			if not platform.is_success(resp):
+				error_code, _ = platform.parse_error(resp)
+				if error_code == "ACTION_UNCONFIRMED":
+					# 求职者侧结果未知：核对投递记录与本机会话，而不是招聘者的
+					# `boss hr chatmsg`（Issue #990）。
+					deliver_cmd = _hint_command(ctx, "me --section deliver")
+					chat_cmd = _hint_command(ctx, "chat")
+					details = resp.get("__cli_error_details__") if isinstance(resp, dict) else None
+					handle_error_output(
+						ctx, "apply",
+						code="ACTION_UNCONFIRMED",
+						message="投递结果未确认；请求可能已生效，请先核对，勿直接重试",
+						recoverable=False,
+						recovery_action=f"动作可能已生效：先用 {deliver_cmd} 核对投递记录，不要直接重试",
+						details={
+							"outcome_unknown": True,
+							**(details if isinstance(details, dict) else {}),
+						},
+						hints={
+							"next_actions": [deliver_cmd, chat_cmd],
+							"operator_actions": ["先到 BOSS 直聘投递记录页核对本次投递是否已提交；不要自动重发"],
+						},
+					)
+					return
+				# UNKNOWN 走登记表的「先核对、勿重试」契约，不能升级成可重试的
+				# NETWORK_ERROR：重跑会重复提交同一次投递（Issue #990）。
 				handle_platform_error_output(
 					ctx,
 					"apply",
 					platform,
 					resp,
 					fallback_message="投递/立即沟通提交失败",
-					unknown_error_code="NETWORK_ERROR",
 				)
 				return
 			try:

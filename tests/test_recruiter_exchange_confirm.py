@@ -427,3 +427,57 @@ def test_action_card_json_in_ws_frame_is_attempt_only():
 	client, _ = _client(page=_page("ExchangeWx", "not_required"), events=[_ws(frame.replace("32", "37"))])
 	assert client.exchange_request_by_friend(FRIEND_ID, exchange_type=2)["__cli_error_code__"] == "ACTION_UNCONFIRMED"
 	client.close()
+
+
+def test_exchange_thrown_action_is_interrupted_and_unconfirmed():
+	"""handleExChange 抛错时请求可能已发出（Issue #990）。
+
+	此前该分支不带 ``action_interrupted``，响应被判 ``UNKNOWN``，招聘自动化把它
+	当普通失败标 ``blocked``，下一轮 ``agent run`` 会重发同一次交换请求。
+	"""
+	client, _ = _client(page={"ok": False, "action_interrupted": True, "error": "handleExChange threw: boom", "log": []})
+	result = client.exchange_request_by_friend(FRIEND_ID, exchange_type=2)
+	assert result["code"] == -1
+	assert result["__cli_error_code__"] == "ACTION_UNCONFIRMED"
+	assert "boss hr chatmsg" in result["message"]
+	client.close()
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行页面脚本")
+@pytest.mark.parametrize("mode", ["sync_throw", "async_reject", "missing", "disabled"])
+def test_exchange_script_distinguishes_interrupted_and_unsent_actions(tmp_path, mode):
+	"""实际脚本区分调用后抛错与发送前拦截，抛错后不再点击确认。"""
+	probe = f"""
+	const mode = {json.dumps(mode)};
+	const AsyncFunction = Object.getPrototypeOf(async function() {{}}).constructor;
+	const invoke = new AsyncFunction(
+		'args', 'findVueComponent', 'exchangeAvailability', 'snapshotConfirmState',
+		'sleep', 'clickPrimaryConfirm', 'log', {json.dumps(rc._EXCHANGE_ACTION_JS)}
+	);
+	let handles = 0, confirms = 0;
+	const vm = {{type: 2, handleExChange() {{
+		handles++;
+		if (mode === 'async_reject') return Promise.reject(new Error('boom'));
+		throw new Error('boom');
+	}}}};
+	const result = await invoke(
+		{{componentName: 'ExchangeWx', checkAvailability: true}},
+		() => mode === 'missing' ? null : vm,
+		() => ({{state: mode === 'disabled' ? 'disabled' : 'enabled', signals: []}}),
+		() => ({{}}), async () => {{}}, () => {{ confirms++; return true; }}, []
+	);
+	process.stdout.write(JSON.stringify({{result, handles, confirms}}));
+	"""
+	path = tmp_path / "exchange-interruption.mjs"
+	path.write_text(probe, encoding="utf-8")
+	output = subprocess.run(["node", str(path)], capture_output=True, text=True, timeout=5, check=True).stdout
+	data = json.loads(output)
+	assert data["result"]["ok"] is False
+	assert data["confirms"] == 0
+	if mode in {"sync_throw", "async_reject"}:
+		assert data["handles"] == 1
+		assert data["result"]["action_interrupted"] is True
+		assert data["result"]["componentName"] == "ExchangeWx"
+	else:
+		assert data["handles"] == 0
+		assert "action_interrupted" not in data["result"]

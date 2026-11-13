@@ -1,6 +1,8 @@
 from unittest.mock import patch, MagicMock
 
 import json
+import shutil
+import subprocess
 
 import pytest
 
@@ -11,6 +13,7 @@ from boss_agent_cli.api.browser_client import (
 	_HEADLESS_NETWORKIDLE_GRACE_MS,
 	_HOME_NAV_RETRIES,
 	_NAV_TIMEOUT_MS,
+	_FETCH_SCRIPT,
 	BrowserNavigationError,
 	BrowserSession,
 	_find_reusable_zhipin_page,
@@ -608,6 +611,94 @@ def _started_cdp_session_with_page(page):
 	session._pw = MagicMock()
 	session._throttle = MagicMock()
 	return session
+
+
+@pytest.mark.parametrize("is_cdp", [True, False], ids=["cdp", "headless"])
+@pytest.mark.parametrize(
+	"method,path,expected_code,replay_safe",
+	[
+		("POST", "/wapi/zpgeek/friend/add.json", "ACTION_UNCONFIRMED", False),
+		("GET", "/wapi/zprelation/friend/label/addMark", "ACTION_UNCONFIRMED", False),
+		("POST", "/wapi/zpchat/exchange/request", "ACTION_UNCONFIRMED", False),
+		("GET", "/wapi/unknown-operation", "ACTION_UNCONFIRMED", False),
+		("GET", "/wapi/zpgeek/job/detail.json", "NETWORK_ERROR", True),
+	],
+)
+def test_request_classifies_non_json_response_without_replaying(is_cdp, method, path, expected_code, replay_safe):
+	"""非 JSON 响应无法证明写入没有发生；读取仍可恢复，GET 写端点也不能重放。"""
+	page = MagicMock()
+	page.url = HOME_URL
+	page.evaluate.return_value = {
+		"code": -1,
+		"message": "browser response is not JSON",
+		"__cli_unparsed_response__": True,
+		"__cli_security_response__": {
+			"url": f"https://www.zhipin.com{path}",
+			"content_type": "text/plain",
+			"title": "",
+			"restricted": False,
+		},
+	}
+	session = _started_cdp_session_with_page(page)
+	session._is_cdp = is_cdp
+
+	response = session.request(method, f"https://www.zhipin.com{path}")
+
+	assert response["__cli_error_code__"] == expected_code
+	assert response["__cli_error_details__"]["replay_safe"] is replay_safe
+	assert "__cli_unparsed_response__" not in response
+	assert "__cli_security_response__" not in response
+	page.evaluate.assert_called_once()
+	page.wait_for_load_state.assert_not_called()
+
+
+def test_non_json_security_response_still_stops_as_platform_risk():
+	"""安全页优先于非 JSON 分类，不能降级成普通网络错误或未确认写入。"""
+	from boss_agent_cli.api.client import AccountRiskError
+
+	page = MagicMock()
+	page.url = HOME_URL
+	page.evaluate.return_value = {
+		"code": -1,
+		"__cli_unparsed_response__": True,
+		"__cli_security_response__": {
+			"url": "https://www.zhipin.com/web/passport/zp/verify.html",
+			"content_type": "text/html",
+			"title": "安全验证",
+		},
+	}
+	session = _started_cdp_session_with_page(page)
+
+	with pytest.raises(AccountRiskError):
+		session.request("POST", "https://www.zhipin.com/wapi/zpgeek/friend/add.json")
+
+	page.evaluate.assert_called_once()
+
+
+@pytest.mark.parametrize(
+	"body,content_type",
+	[("upstream unavailable", "text/plain"), ("<html><title>暂时不可用</title></html>", "text/html")],
+)
+def test_fetch_script_marks_non_json_body(tmp_path, body, content_type):
+	"""离线执行实际 fetch 脚本，确保纯文本与普通 HTML 都带上不可解析标记。"""
+	node = shutil.which("node")
+	if node is None:
+		pytest.skip("此离线 JavaScript 回归需要 Node")
+	probe = f"""
+	globalThis.fetch = async () => ({{
+		status: 200, url: 'https://www.zhipin.com/wapi/test',
+		headers: {{get: () => {json.dumps(content_type)}}},
+		text: async () => {json.dumps(body)}
+	}});
+	const response = await ({_FETCH_SCRIPT})({{method:'POST', url:'/test', timeoutMs:100}});
+	process.stdout.write(JSON.stringify(response));
+	"""
+	path = tmp_path / "non-json-response.mjs"
+	path.write_text(probe, encoding="utf-8")
+	result = subprocess.run([node, str(path)], capture_output=True, text=True, timeout=5, check=True)
+	response = json.loads(result.stdout)
+	assert response["__cli_unparsed_response__"] is True
+	assert response["code"] == -1
 
 
 def test_is_context_destroyed_error_matches_navigation_races():
