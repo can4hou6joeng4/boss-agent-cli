@@ -145,7 +145,7 @@ boss crawl stop <run_id>
 
 采集在浏览器打开、抓页或补详情时收到 `SystemExit` / `KeyboardInterrupt` 等退出信号，会先保存 `stopped`、页游标、待补详情和已消耗预算，再向外传播原退出信号；不会把未完成任务标为 `completed`。显式执行 `crawl resume <run_id>` 后续跑未完成页面和详情，已提交页面不重抓。
 
-采集任务的状态、结果、停止、恢复及候选池后继命令，以及 `checkpoint.resume_command`，都显式携带原 `--data-dir` 的绝对路径；换一个工作目录执行提示时仍定位同一份本地任务。任务不存在或记录损坏时的核对提示同样保留目录。采集服务、向导采集动作与 `agent crawl` 返回的任务恢复指引也保留目录，避免误读或停止默认目录中的同名任务。风险停止仍须先完成人工恢复；人工解锁提示中的 `boss clean --risk-lock` 也携带原数据目录，解锁后显式执行恢复命令。
+采集任务的状态、结果、停止、恢复及候选池后继命令，以及 `checkpoint.resume_command`，都显式携带原 `--data-dir` 的绝对路径；换一个工作目录执行提示时仍定位同一份本地任务。任务不存在或记录损坏时的核对提示同样保留目录。采集服务、向导采集动作与 `agent crawl` 返回的任务恢复指引也保留目录，避免误读或停止默认目录中的同名任务。风险停止仍须先完成人工恢复；人工解锁提示中的 `boss clean --risk-lock` 也携带原数据目录，解锁后显式执行恢复命令。运行结果 `data.error` 与错误信封 `error.message` 里的同类命令（如「由用户执行 `boss clean --risk-lock`」）同样改写为原数据目录的完整命令。
 
 `crawl results` 的后继导入命令还携带本次返回职位的全部 `--selector`，只导入所见结果；`--page` / `--detail-status` 的筛选范围因此保持不变。空结果改为提示查看同一 run 的 `crawl status`。路径、run_id 和 selector 按 shell 参数转义，终端与信封使用同一条命令。
 

@@ -1483,3 +1483,33 @@ class TestRegistryRecoveryCommands:
 		)
 
 		assert captured["recovery_action"] == "在官方页面核对后再决定下一步"
+
+	def test_error_message_rewrites_embedded_bare_commands(self, monkeypatch, tmp_path):
+		"""``error.message`` 里的裸命令同样要指向本次运行的数据目录（Issue #1097）。
+
+		采集层与招聘者层在 ``api/`` / ``crawler/`` 构造文案时没有 ctx，只能在
+		信封出口改写。
+		"""
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True, "platform": "zhipin", "data_dir": tmp_path}
+		captured = {}
+		monkeypatch.setattr("boss_agent_cli.output.emit_error", lambda *args, **kwargs: captured.update(kwargs))
+		handle_error_output(
+			ctx,
+			"crawl",
+			code="ACCOUNT_RISK",
+			message="采集浏览器当前未登录，已停止；由用户执行 boss clean --risk-lock 再显式恢复。",
+		)
+
+		message = captured["message"]
+		assert f"boss --data-dir {tmp_path.resolve()} clean --risk-lock" in message
+		assert "boss clean --risk-lock" not in message
+
+	def test_error_message_without_commands_is_unchanged(self, monkeypatch):
+		ctx = MagicMock()
+		ctx.obj = {"json_output": True, "platform": "zhipin", "data_dir": Path("/tmp/plain")}
+		captured = {}
+		monkeypatch.setattr("boss_agent_cli.output.emit_error", lambda *args, **kwargs: captured.update(kwargs))
+		handle_error_output(ctx, "fixture", code="INVALID_PARAM", message="缺少必填参数 query")
+
+		assert captured["message"] == "缺少必填参数 query"
