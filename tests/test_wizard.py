@@ -3517,7 +3517,7 @@ def test_gate_is_silent_and_free_when_logged_in(tmp_path, monkeypatch, capsys):
 
 
 def test_gate_offers_login_before_any_goal_selection(tmp_path, monkeypatch):
-	"""A14/A15：未登录时先给三选菜单；选「现在登录」直接开浏览器。"""
+	"""A14/A15：未登录时先给三选菜单；选「现在登录」执行认证链。"""
 	from boss_agent_cli.wizard import preflight
 
 	monkeypatch.setattr("boss_agent_cli.auth.manager.AuthManager.check_status", lambda self: None)
@@ -3536,8 +3536,8 @@ def test_gate_offers_login_before_any_goal_selection(tmp_path, monkeypatch):
 	assert [option.value for option in options] == ["login", "local", "exit"]
 
 
-def test_gate_blocks_on_missing_browser_kernel_without_opening_browser(tmp_path, monkeypatch):
-	"""A16：内核缺失时给安装指引，绝不尝试开浏览器。"""
+def test_gate_reports_missing_browser_kernel_when_qr_login_is_needed(tmp_path, monkeypatch, capsys):
+	"""A16：认证链确实需要扫码且内核缺失时，给安装指引并回到菜单。"""
 	from boss_agent_cli.wizard import preflight
 
 	monkeypatch.setattr("boss_agent_cli.auth.manager.AuthManager.check_status", lambda self: None)
@@ -3547,23 +3547,28 @@ def test_gate_blocks_on_missing_browser_kernel_without_opening_browser(tmp_path,
 		lambda: ("error", "patchright 需要 chromium-1234，请运行 python -m patchright install chromium"),
 	)
 	login_calls = []
-	monkeypatch.setattr(
-		"boss_agent_cli.auth.manager.AuthManager.login",
-		lambda self, **kw: login_calls.append(kw),
-	)
 
-	# 第一次选登录 → 被内核拦住回到菜单；第二次选退出。
+	def missing_kernel(self, **kw):
+		login_calls.append(kw)
+		raise RuntimeError("Executable doesn't exist at /missing/chromium")
+
+	monkeypatch.setattr("boss_agent_cli.auth.manager.AuthManager.login", missing_kernel)
+
+	# 第一次选登录 → 扫码路径报告缺内核；第二次选退出。
 	menu = _ScriptedMenu(["login", "exit"])
 	assert preflight.ensure_login(_gate_ctx(tmp_path), menu=menu) == preflight.GATE_EXIT
-	assert login_calls == [], "内核缺失时不得尝试打开浏览器"
+	assert len(login_calls) == 1, "先尝试认证链，不能提前阻断不需要扫码的登录方式"
+	captured = capsys.readouterr()
+	assert captured.out == ""
+	assert "环境不支持自动扫码" in captured.err
+	assert "python -m patchright install chromium" in captured.err
 
 
 def test_gate_kernel_status_compares_real_cache_entries(tmp_path, monkeypatch):
 	"""回归（Issue #1060）：预检必须展开缓存条目再按修订版比对。
 
 	此前直接把缓存根目录传给 ``evaluate_patchright_chromium``，按条目名精确匹配
-	永远失败，于是返回 warn、登录门的 ``status == "error"`` 分支不可达：内核
-	真缺失时仍会去开浏览器，再在 launch 时报错。
+	永远失败，于是返回 warn，无法识别真正缺失的内核并展示安装指引。
 	"""
 	from boss_agent_cli.services import browser_runtime
 	from boss_agent_cli.wizard import preflight
@@ -3580,13 +3585,14 @@ def test_gate_kernel_status_compares_real_cache_entries(tmp_path, monkeypatch):
 	assert preflight._browser_kernel_status()[0] == "ok"
 
 
-def test_gate_login_risk_stops_without_offering_retry(tmp_path, monkeypatch):
-	"""风控是硬边界：登录门展示停止指引后退出，不再回到「重试登录」菜单。"""
+@pytest.mark.parametrize("kernel_status", ["ok", "error"])
+def test_gate_login_risk_stops_without_offering_retry(tmp_path, monkeypatch, kernel_status):
+	"""风控是硬边界：登录门展示停止指引后退出，缺扫码内核也不能遮蔽风险。"""
 	from boss_agent_cli.api.client import AccountRiskError
 	from boss_agent_cli.wizard import preflight
 
 	monkeypatch.setattr("boss_agent_cli.auth.manager.AuthManager.check_status", lambda self: None)
-	monkeypatch.setattr(preflight, "_browser_kernel_status", lambda: ("ok", ""))
+	monkeypatch.setattr(preflight, "_browser_kernel_status", lambda: (kernel_status, "fixture kernel detail"))
 
 	def _boom(self, **kw):
 		raise AccountRiskError("fixture risk", is_cdp=True)
