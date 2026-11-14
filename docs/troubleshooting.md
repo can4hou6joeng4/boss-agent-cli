@@ -117,6 +117,8 @@ boss doctor                     # 输出可执行的安装命令与所需修订�
 
 Windows 下的安装指引面向 PowerShell。解释器路径含空格或特殊字符时，完整命令形如 `& 'C:\Program Files\Python\python.exe' -m patchright install chromium`；开头的 `&` 是执行该路径所需的调用运算符，照抄时请保留。正在使用 cmd.exe 时，先打开 PowerShell 再执行这类命令。
 
+设置 `PLAYWRIGHT_BROWSERS_PATH` 后，内核安装、运行 CLI、`boss doctor` 与向导预检需要使用同一环境设置；预检只检查这个指定目录。相对路径以 `INIT_CWD`（未设置时为当前目录）为基准，值为 `0` 时使用 patchright 驱动包内的 `.local-browsers`。
+
 ### 真实平台验证前就报 `AUTH_REQUIRED`
 
 **`AUTH_REQUIRED` 不代表 CLI 故障**：它表示当前数据目录没有可用登录态。真实平台
