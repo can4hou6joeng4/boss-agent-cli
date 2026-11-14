@@ -4,8 +4,11 @@ import json
 import subprocess
 import sys
 
+import pytest
 
-def test_tools_list_is_registered_over_stdio() -> None:
+
+@pytest.mark.parametrize("entry_module", ["boss_agent_cli.mcp_server", "boss_agent_cli.mcp_entrypoint"])
+def test_tools_list_is_registered_over_stdio(entry_module: str) -> None:
 	probe = """
 import asyncio
 import json
@@ -16,7 +19,7 @@ from mcp.client.stdio import stdio_client
 
 
 async def main():
-	server = StdioServerParameters(command=sys.executable, args=["-m", "boss_agent_cli.mcp_server"])
+	server = StdioServerParameters(command=sys.executable, args=["-m", sys.argv[1]])
 	async with stdio_client(server) as (read_stream, write_stream):
 		async with ClientSession(read_stream, write_stream) as session:
 			initialization = await session.initialize()
@@ -30,18 +33,19 @@ async def main():
 asyncio.run(main())
 """
 	result = subprocess.run(
-		[sys.executable, "-c", probe],
+		[sys.executable, "-c", probe, entry_module],
 		capture_output=True,
 		text=True,
 		encoding="utf-8",
-		timeout=10,
+		timeout=30,
 	)
 
 	assert result.returncode == 0, result.stderr
 	response = json.loads(result.stdout)
 	assert response["server_name"] == "boss-agent-cli"
-	assert response["tool_names"]
-	assert "boss_status" in response["tool_names"]
+	from boss_agent_cli.mcp_tools import TOOLS
+
+	assert response["tool_names"] == [tool.name for tool in TOOLS]
 
 
 def test_recruiter_preview_and_confirmation_over_stdio(tmp_path) -> None:

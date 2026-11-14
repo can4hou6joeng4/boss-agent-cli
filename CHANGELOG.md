@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 默认安装未包含 MCP SDK 时，`boss-mcp` 不再只输出 `ModuleNotFoundError` 堆栈（Issue #1053）：安装后的命令改走轻量启动入口，只有顶层 `mcp` 包缺失时向 stderr 输出 `[mcp]` 的 pip / uv tool / 源码安装说明并以 1 退出，stdout 保持为空；SDK 可用时原样转发全部参数，SDK 内部其他依赖错误保留原始诊断。双语排障文档同步，stdio 回归逐名核对新旧入口的工具列表。
+
 ## [3.4.7] - 2026-11-14
 
 ### Fixed

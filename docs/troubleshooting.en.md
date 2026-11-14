@@ -103,6 +103,20 @@ patchright install chromium-headless-shell
 not a CLI failure. Validate local commands, schema, MCP, and doctor first; run
 `boss login` before live `search`, `detail`, or `status --live` checks.
 
+### `boss-mcp` reports a missing MCP SDK
+
+The default `boss-agent-cli` install does not include the optional MCP SDK. When the SDK is missing, `boss-mcp` writes installation guidance to stderr and exits with code 1, leaving stdout empty; a host may only report that the connection closed. Add the dependency using your original installation method, then restart MCP:
+
+```bash
+pip install "boss-agent-cli[mcp]"
+# For a uv tool installation
+uv tool install "boss-agent-cli[mcp]"
+# Inside a source checkout
+uv sync --extra mcp
+```
+
+You can also use the README's `uvx --from "boss-agent-cli[mcp]" boss-mcp` configuration directly. Missing dependencies inside the SDK and other server failures keep their original errors so you can diagnose the actual cause.
+
 ### MCP tools return `CLI_ERROR`
 
 `CLI_ERROR` is a process-level failure between the MCP server and the underlying
