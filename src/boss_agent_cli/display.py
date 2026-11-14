@@ -6,9 +6,10 @@ Pipe mode (Agent): JSON envelope to stdout.
 """
 
 import datetime
+import re
 import sys
 import threading
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Callable
 
@@ -157,8 +158,27 @@ _REGISTRY_COMMANDS: dict[str, str] = {
 	"boss --json wizard": "--json wizard",
 }
 
-#: 按字面量长度倒序的匹配顺序，构造一次。
-_REGISTRY_COMMAND_ORDER: tuple[str, ...] = tuple(sorted(_REGISTRY_COMMANDS, key=len, reverse=True))
+def rewrite_command_examples(
+	text: str,
+	commands: Mapping[str, str],
+	command_for: Callable[[str], str],
+) -> str:
+	"""一次扫描替换原文命令，保留引号内的路径和名称（Issue #1100）。
+
+	不能逐项 ``str.replace``：插入的目录可能含另一条命令的字面量，下一轮
+	替换会切坏路径。已构造的命令里的带引号参数也必须原样保留；Markdown
+	反引号包裹的命令示例仍需改写。词内的撇号不作为引号边界，否则前文
+	的 ``it's`` 或 ``'sample'unit'`` 会打乱后续路径的引号配对。
+	"""
+	if not commands:
+		return text
+	literals = "|".join(re.escape(literal) for literal in sorted(commands, key=len, reverse=True))
+	single_quoted = r"(?<![A-Za-z0-9])'(?:[^']|(?<=[A-Za-z0-9])'(?=[A-Za-z0-9]))*'"
+	pattern = re.compile(r"""\\.|""" + single_quoted + r"""|"(?:\\.|[^"\\])*"|(?P<command>""" + literals + ")")
+	return pattern.sub(
+		lambda match: command_for(commands[match["command"]]) if match["command"] else match[0],
+		text,
+	)
 
 
 def registry_recovery_for_ctx(ctx: Any, text: str) -> str:
@@ -175,10 +195,7 @@ def registry_recovery_for_ctx(ctx: Any, text: str) -> str:
 	def command_for(command: str) -> str:
 		return boss_command_for_ctx(ctx, command, include_data_dir=True)
 
-	for literal in _REGISTRY_COMMAND_ORDER:
-		if literal in text:
-			text = text.replace(literal, command_for(_REGISTRY_COMMANDS[literal]))
-	return text
+	return rewrite_command_examples(text, _REGISTRY_COMMANDS, command_for)
 
 
 def error_contract_for_code(
@@ -921,11 +938,15 @@ def _risk_contract_commands(
 	doctor_command: str | None,
 ) -> str:
 	"""把契约文本里的默认示例替换成调用方上下文中的命令（Issue #978）。"""
-	if clean_command:
-		text = text.replace(_RISK_CONTRACT_CLEAN, clean_command)
-	if doctor_command:
-		text = text.replace(_RISK_CONTRACT_DOCTOR, doctor_command)
-	return text
+	replacements = {
+		literal: command
+		for literal, command in (
+			(_RISK_CONTRACT_CLEAN, clean_command),
+			(_RISK_CONTRACT_DOCTOR, doctor_command),
+		)
+		if command
+	}
+	return rewrite_command_examples(text, replacements, lambda command: command)
 
 
 def risk_error_contract(
@@ -977,10 +998,9 @@ def browser_policy_text(text: str, command_for: Callable[[str], str]) -> str:
 	``<data_dir>`` 里的登录态与风险锁；自定义 ``--data-dir`` 下照抄裸命令只会
 	诊断或清理默认目录。
 	"""
-	for literal, (command,) in _BROWSER_POLICY_COMMANDS.items():
-		if literal in text:
-			text = text.replace(literal, command_for(command))
-	return text
+	return rewrite_command_examples(
+		text, {literal: command for literal, (command,) in _BROWSER_POLICY_COMMANDS.items()}, command_for
+	)
 
 
 def browser_policy_text_for_ctx(ctx: Any, text: str) -> str:

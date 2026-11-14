@@ -251,6 +251,7 @@ def _recruiter_identity_check(identity: dict[str, Any], *, ctx: Any = None) -> d
 			"status": "ok",
 			"detail": "当前登录态在招聘者侧（identity=1）",
 		}
+	whoami_command = _doctor_command(ctx, "hr", "whoami") if ctx is not None else "boss hr whoami"
 	if identity.get("side") == "candidate":
 		detail = "当前登录态在求职者侧（identity=0）"
 		if identity.get("double_identity") is True:
@@ -259,11 +260,11 @@ def _recruiter_identity_check(identity: dict[str, Any], *, ctx: Any = None) -> d
 			"name": "recruiter_identity",
 			"status": "warn",
 			"detail": detail,
-			"recovery_action": f"在官方页面切换到「我要招聘」后执行 {_doctor_command(ctx, 'hr', 'whoami')}",
+			"recovery_action": f"在官方页面切换到「我要招聘」后执行 {whoami_command}",
 		}
 	return {
 		"name": "recruiter_identity",
 		"status": "warn",
 		"detail": "getUserInfo 的 identity 不是 0 或 1，继续做招聘者只读探测",
-		"recovery_action": f"执行 {_doctor_command(ctx, 'hr', 'whoami')} 核对身份",
+		"recovery_action": f"执行 {whoami_command} 核对身份",
 	}
