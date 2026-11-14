@@ -114,6 +114,10 @@ def _emit_export_failure(ctx: click.Context, fmt: str, exc: Exception, *, target
 	- 内核缺失 → ``BROWSER_KERNEL_MISSING``（确定性失败，重试不会成功）
 	- 本地文件读写失败 → ``LOCAL_IO_ERROR``（换个可写路径即可，不是重试平台）
 	- 其它（渲染 / 模板错误）→ ``EXPORT_FAILED``，message 里不带本机路径
+
+	``EXPORT_FAILED`` 的登记文案仍指向 patchright 内核（PDF 确实经由浏览器渲染），
+	但 HTML / JSON 导出只用本地模板与文件写入，从不启动浏览器：这两类格式的通用
+	失败必须换成与浏览器无关的恢复指引（Issue #1031）。
 	"""
 	if is_browser_kernel_missing(str(exc)):
 		handle_browser_kernel_missing(ctx, "resume", exc)
@@ -130,6 +134,11 @@ def _emit_export_failure(ctx: click.Context, fmt: str, exc: Exception, *, target
 		)
 		return
 	recoverable, recovery_action = error_contract_for_code("EXPORT_FAILED")
+	if fmt != "pdf":
+		recovery_action = (
+			"检查简历文件内容与导出选项后重试；HTML/JSON 导出只做本地模板渲染，不使用浏览器内核；"
+			"仍失败时附上 error.message 与命令提交 issue"
+		)
 	handle_error_output(
 		ctx,
 		"resume",

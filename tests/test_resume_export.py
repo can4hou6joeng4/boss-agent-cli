@@ -266,6 +266,26 @@ def test_cli_export_html_to_directory_is_local_io_not_export_failed(tmp_path):
 	assert parsed["hints"]["operator_actions"]
 
 
+def test_cli_export_html_render_failure_guidance_is_not_about_browsers(tmp_path):
+	"""HTML 渲染失败不能用 patchright 文案：该格式从不启动浏览器（Issue #1031）。
+
+	Issue #1009 把内核缺失与本地 IO 分流后，通用渲染失败仍直接复用错误码
+	登记表里拆分前的恢复文案，用户会被告知去装一个与 HTML 导出无关的内核。
+	"""
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "htmlrender", "--template", "default"])
+
+	with patch("boss_agent_cli.resume.export.export_html", side_effect=RuntimeError("template render exploded")):
+		result = _invoke(runner, tmp_path, ["export", "htmlrender", "--format", "html"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "EXPORT_FAILED"
+	assert "patchright" not in parsed["error"]["recovery_action"]
+	assert "不使用浏览器内核" in parsed["error"]["recovery_action"]
+	assert "template render exploded" in parsed["error"]["message"]
+
+
 def test_cli_export_json_output_path_prepare_failure_is_enveloped(tmp_path):
 	"""建父目录就失败（目标父路径是普通文件）时也要给 LOCAL_IO_ERROR 信封。
 
