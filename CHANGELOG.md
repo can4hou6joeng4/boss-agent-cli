@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- MCP 数组参数按 `items.type` 逐元素校验（Issue #1105）：入口此前只检查参数的顶层 JSON 类型，`add_tags: [false, {"k": "v"}]` 会被映射层用 `str()` 拼成 `--add-tag False --add-tag "{'k': 'v'}"` 并写进本地标签，信封仍是 `ok:true`；`friend_ids` 里的错误元素要到 CLI 才得到一条不指明位置的参数错误，数字字符串则被隐式接受。现在 `boss_shortlist_annotate.add_tags` / `remove_tags`、`boss_crawl_shortlist.selectors`、`boss_wizard.requested_steps` 与 `boss_hr_last_messages.friend_ids` 的元素类型不符时，在进入参数映射和 CLI 之前返回 `INVALID_PARAM`，错误带下标（如 `add_tags[1] 应为 string，收到 bool`）；单个数组最多逐条列出 3 处，其余只报数量。合法数组与空数组的行为不变。
+
 ## [3.4.17] - 2026-11-15
 
 ### Fixed
