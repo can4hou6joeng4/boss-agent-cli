@@ -1376,5 +1376,6 @@ def test_chatmsg_missing_contact_recovery_points_to_chat(mock_auth_cls, mock_cli
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "CONTACT_NOT_FOUND"
-	assert parsed["error"]["recovery_action"] == "boss chat"
+	# 登记表给了裸 `boss chat`，信封出口会补上本次运行的数据目录（Issue #1092）。
+	assert parsed["error"]["recovery_action"] == f"boss --data-dir {_DEFAULT_DATA_DIR} chat"
 	assert parsed["hints"]["next_actions"] == [f"boss --data-dir {_DEFAULT_DATA_DIR} chat"]

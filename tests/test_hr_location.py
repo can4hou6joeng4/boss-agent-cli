@@ -116,8 +116,11 @@ def test_send_uses_conversation_security_id_and_records_ledger(tmp_path: Path) -
 	duplicate = _payload(again)
 	assert duplicate["error"]["code"] == "LOCATION_ALREADY_SENT"
 	assert duplicate["error"]["details"]["sent"] is True
-	assert (duplicate["error"]["recoverable"], duplicate["error"]["recovery_action"]) == error_contract_for_code(
-		"LOCATION_ALREADY_SENT"
+	# 登记表原文里的 `boss hr chatmsg` 在信封出口带上本次运行的数据目录（Issue #1092）。
+	recoverable, registered = error_contract_for_code("LOCATION_ALREADY_SENT")
+	assert duplicate["error"]["recoverable"] is recoverable
+	assert duplicate["error"]["recovery_action"] == registered.replace(
+		"boss hr chatmsg", f"boss --data-dir {tmp_path.resolve()} hr chatmsg"
 	)
 	factory.assert_not_called()
 
@@ -219,7 +222,12 @@ def test_nonzero_api_code_is_not_recorded_as_sent(tmp_path: Path) -> None:
 	assert result.exit_code == 1, result.output
 	payload = _payload(result)
 	assert payload["error"]["code"] == "UNKNOWN"
-	assert (payload["error"]["recoverable"], payload["error"]["recovery_action"]) == error_contract_for_code("UNKNOWN")
+	# 登记表原文里的 `boss doctor` 在信封出口带上本次运行的数据目录（Issue #1092）。
+	recoverable, registered = error_contract_for_code("UNKNOWN")
+	assert payload["error"]["recoverable"] is recoverable
+	assert payload["error"]["recovery_action"] == registered.replace(
+		"boss doctor", f"boss --data-dir {tmp_path.resolve()} doctor"
+	)
 	platform.send_job_location.assert_called_once()
 
 	follow, _auth, _factory = _invoke(tmp_path, "--dry-run")
