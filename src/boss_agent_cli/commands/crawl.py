@@ -624,7 +624,12 @@ def resume_cmd(
 					not item["detail_done"] for item in cache.list_crawl_jobs(run_id)
 				)
 				already_complete = status == "completed" and not (needs_more_pages or pending_details)
-			if not already_complete and status not in {"queued", "running"}:
+				should_launch = not already_complete and status not in {"queued", "running"}
+				if should_launch and not from_queue:
+					# 显式后台恢复在父进程清除旧 stop（Issue #1036）。worker 保留
+					# --from-queue，不会清掉启动期间新收到的停止请求。
+					cache.clear_crawl_stop_request(run_id)
+			if should_launch:
 				_launch_background_resume(
 					Path(ctx.obj["data_dir"]),
 					run_id,
