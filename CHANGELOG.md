@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.5] - 2026-11-14
+
 ### Fixed
 - 采集进程突然退出后可从遗留的 `running` 状态后台恢复（Issue #1038）：此前 `crawl resume <run_id> --background` 只看持久化状态，worker 已退出、执行锁已释放时仍回报 `running` 而不启动恢复，任务持续空转。现在父进程用现有执行锁判断是否仍有执行器，空闲时重读断点并允许恢复遗留的 `running`；持锁任务不启动第二个 worker、不修改 checkpoint 或清除 stop。探测锁在启动前释放，worker 再自行取锁；锁不可用时返回 `LOCAL_IO_ERROR`。真实子进程突然退出的离线回归验证只续抓未提交页面、保留累计请求预算，中英文命令参考同步。
 - 已停止采集任务的显式后台恢复会解除旧停止请求（Issue #1036）：此前 `crawl resume <run_id> --background` 返回 `queued`，但子进程因 `--from-queue` 保留旧 `stop_requested`，刚开始执行便再次停止，无法续跑。现在父进程在启动 worker 前清除旧标记，worker 仍保留启动期间新收到的 stop；对已有 `queued` 任务及仍在执行的 `running` 任务，重复恢复不清除停止请求、不拉起新进程。离线回归执行真实队列入口，覆盖正常续跑与启动途中再次停止。
