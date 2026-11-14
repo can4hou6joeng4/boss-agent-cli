@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.16 (2026-11-15): recovery commands in the error-code registry, `boss doctor` checks, error envelopes and crawl results retain a custom `--data-dir`; rewriting scans the original text once, so command words in directories and apostrophes within earlier words do not corrupt quoted paths; identity diagnostics without a context return generic commands, and static `boss schema` keeps generic examples.
 - ✅ v3.4.15 (2026-11-15): every command in the wizard TTY recovery copy keeps a custom `--data-dir`, including `RESUME_NOT_FOUND`, the empty-resume panel and the AI-assist import hint; dynamic recovery sentences win over static labels, and a guard test catches newly added bare commands.
 - ✅ v3.4.14 (2026-11-15): risk-recovery hints in `boss status` and the wizard failure panel keep a custom `--data-dir`, so the unlock command no longer targets the default directory.
 - ✅ v3.4.13 (2026-11-15): the login command in the `boss status` not-logged-in hint is rendered literally, so a custom `--data-dir` containing bracketed directory names is no longer truncated.
