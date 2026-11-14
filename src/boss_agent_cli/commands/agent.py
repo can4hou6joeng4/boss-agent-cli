@@ -25,7 +25,13 @@ from boss_agent_cli.automation.storage import AutomationStateError, AutomationSt
 from boss_agent_cli.ai.service import AIServiceError
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands.ai_cmd import _build_fit_prompt, _create_ai_service
-from boss_agent_cli.commands.crawl import _require_crawl_capabilities, _settings_from_context, _transport_factory
+from boss_agent_cli.commands.crawl import (
+	_LoginSeedUnavailable,
+	_report_login_required,
+	_require_crawl_capabilities,
+	_seeded_transport_factory,
+	_settings_from_context,
+)
 from boss_agent_cli.crawler.operations import crawl_status, import_crawl_shortlist
 from boss_agent_cli.crawler.service import CrawlBusyError, CrawlService
 from boss_agent_cli.display import (
@@ -156,10 +162,12 @@ def crawl_cmd(
 					chrome_path=None,
 					cdp_port=None,
 				)
+				# 与 crawl run / start 同一份登录种子：采集浏览器的配置目录是隔离的，
+				# 不注入就是登录页，会落成 risk_stopped 并写下风险锁（Issue #1044）。
 				outcome = CrawlService(
 					cache,
 					data_dir=data_dir,
-					transport_factory=_transport_factory,
+					transport_factory=_seeded_transport_factory(ctx),
 				).create_and_run(settings)
 				run_id = outcome.run_id
 			status = crawl_status(cache, run_id or "", data_dir=data_dir)
@@ -226,6 +234,9 @@ def crawl_cmd(
 			recovery_action=f"用 {status_command} 查看进度，等当前执行结束后再恢复；不要并发恢复同一个 run_id",
 			hints={"next_actions": [status_command]},
 		)
+		return
+	except _LoginSeedUnavailable as exc:
+		_report_login_required(ctx, "agent.crawl", str(exc))
 		return
 	except RuntimeError as exc:
 		configure_cmd = boss_command_for_ctx(ctx, "crawl configure", include_data_dir=True)

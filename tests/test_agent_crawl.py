@@ -1,8 +1,10 @@
 import json
 import shlex
+import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.cache.store import CacheStore
@@ -58,6 +60,18 @@ def _enable_research(runner: CliRunner, tmp_path: Path) -> None:
 	assert result.exit_code == 0, result.output
 
 
+def _seed_login(tmp_path: Path, cookies: dict[str, str] | None = None) -> None:
+	from boss_agent_cli.auth.token_store import TokenStore
+
+	TokenStore(tmp_path / "auth").save(
+		{
+			"cookies": {"wt2": "test-wt2", "wbg": "1"} if cookies is None else cookies,
+			"user_agent": "test-agent",
+			"stoken": "",
+		}
+	)
+
+
 def _complete_run(tmp_path: Path, run_id: str = "run-1") -> None:
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
 		cache.create_crawl_run(run_id, _settings(tmp_path).as_dict(), str(tmp_path / "crawl" / "runs" / run_id))
@@ -98,6 +112,7 @@ def test_agent_crawl_completed_run_imports_then_ranks_only_that_run(tmp_path: Pa
 def test_agent_crawl_new_query_runs_without_permission_gate(tmp_path: Path, monkeypatch) -> None:
 	runner = CliRunner()
 	_init_resume(runner, tmp_path)
+	_seed_login(tmp_path)
 
 	def fake_create_and_run(service, settings):
 		service._cache.create_crawl_run("new-run", settings.as_dict(), str(tmp_path / "crawl" / "runs" / "new-run"))
@@ -124,6 +139,90 @@ def test_agent_crawl_new_query_runs_without_permission_gate(tmp_path: Path, monk
 	assert payload["run_id"] == "new-run"
 	assert payload["shortlist"]["imported_count"] == 1
 	assert payload["results"][0]["match_score"] == 80
+
+
+def test_agent_crawl_new_query_seeds_the_crawl_browser_with_the_login_session(tmp_path: Path, monkeypatch) -> None:
+	"""采集浏览器的配置目录是隔离的：不注入登录 Cookie 就是登录页，会落成风险停止（Issue #1044）。"""
+	sessions: list[dict] = []
+
+	class _Session:
+		def __init__(self, **kwargs) -> None:
+			sessions.append(kwargs)
+
+		def open(self) -> list:
+			return []
+
+		def fetch_page(self, query, city_code, page_no):
+			return {"code": 0, "zpData": {"jobList": [], "hasMore": False}}
+
+		def close(self, **kwargs) -> None:
+			pass
+
+	monkeypatch.setattr("boss_agent_cli.commands.crawl.DrissionCrawlerSession", _Session)
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.agent._create_ai_service",
+		lambda ctx: (_ for _ in ()).throw(AssertionError("没有职位时不该调用 AI")),
+	)
+	runner = CliRunner()
+	_init_resume(runner, tmp_path)
+	_seed_login(tmp_path)
+
+	result = runner.invoke(
+		cli,
+		[
+			"--data-dir", str(tmp_path), "--json", "agent", "crawl",
+			"--query", "AI", "--city", "杭州", "--pages", "1", "--resume", "test-resume",
+		],
+	)
+	assert result.exit_code == 0, result.output
+	assert json.loads(result.output)["data"]["crawl"]["status"] == "completed"
+	assert len(sessions) == 1
+	assert sessions[0]["seed_cookies"] == {"wt2": "test-wt2", "wbg": "1"}
+	assert sessions[0]["user_agent"] == "test-agent"
+
+
+@pytest.mark.parametrize("cookies", [None, {}, {"wbg": "1"}], ids=["logged-out", "no-cookies", "no-wt2"])
+def test_agent_crawl_new_query_requires_login_before_opening_the_browser(tmp_path: Path, monkeypatch, cookies) -> None:
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl.DrissionCrawlerSession",
+		lambda **kwargs: (_ for _ in ()).throw(AssertionError("登录态不足时不该构造采集浏览器")),
+	)
+	runner = CliRunner()
+	_init_resume(runner, tmp_path)
+	if cookies is not None:
+		_seed_login(tmp_path, cookies)
+
+	result = runner.invoke(
+		cli,
+		[
+			"--data-dir", str(tmp_path), "--json", "agent", "crawl",
+			"--query", "AI", "--city", "杭州", "--resume", "test-resume",
+		],
+	)
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["command"] == "agent.crawl"
+	assert payload["error"]["code"] == "AUTH_REQUIRED"
+	assert payload["error"]["recoverable"] is True
+	assert shlex.split(payload["error"]["recovery_action"])[:3] == ["boss", "--data-dir", str(tmp_path.resolve())]
+	with sqlite3.connect(tmp_path / "cache" / "boss_agent.db") as conn:
+		assert conn.execute("SELECT COUNT(*) FROM crawl_runs").fetchone()[0] == 0, "登录态不足不该留下任务"
+
+
+def test_agent_crawl_reading_a_completed_run_does_not_need_login(tmp_path: Path, monkeypatch) -> None:
+	"""--run-id 只读本地结果，不打开浏览器，登录态与它无关。"""
+	runner = CliRunner()
+	_init_resume(runner, tmp_path)
+	_complete_run(tmp_path)
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.agent._create_ai_service",
+		lambda ctx: _FakeAIService({"results": [{"selector": "csel_placeholder", "match_score": 80}]}),
+	)
+	result = runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "agent", "crawl", "--run-id", "run-1", "--resume", "test-resume"],
+	)
+	assert result.exit_code == 0, result.output
 
 
 def test_agent_crawl_invalid_city_points_at_crawl_config(tmp_path: Path) -> None:

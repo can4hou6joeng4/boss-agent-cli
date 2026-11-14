@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `agent crawl --query` 向采集浏览器注入登录态（Issue #1044）：`crawl run` / `start` / `resume` 与向导采集步骤都会把 `boss login` 的 Cookie 与 User-Agent 注入独立采集浏览器，只有 `agent crawl --query` 直接用了不带登录种子的传输。采集浏览器的配置目录与日常 Chrome 隔离，没有可用会话时页面是登录页，采集按未登录落为 `risk_stopped` 并写下本地风险锁——已登录的用户也会被要求手动执行 `clean --risk-lock`。现在该入口与其他采集入口共用同一份登录种子；本地登录态缺失、没有 Cookie 或缺少 `wt2` 时在打开浏览器之前返回 `AUTH_REQUIRED` 与登录指引，不创建任务，参数错误仍先报出；`agent crawl --run-id` 只读本地结果，不受登录态影响。中英文命令参考同步。
 - 未登录时启动后台采集不再留下永久排队的任务（Issue #1042）：`crawl start` 只创建任务并拉起后台进程，登录态由 worker 检查；worker 的信封写进空设备，未登录时它以 `AUTH_REQUIRED` 退出却不改写任务，调用方拿到 `ok` 与 `queued`，之后 `crawl status` 一直是没有错误的 `queued`，`crawl resume --background` 又把 `queued` 视为原 worker 即将接手而不再启动。现在 `crawl start` 与需要启动 worker 的 `crawl resume --background` 先按采集实际使用的口径检查本地登录态，缺失、没有 Cookie 或缺少 `wt2` 时返回 `AUTH_REQUIRED` 与登录指引，不创建任务、不解除停止请求、不启动进程；参数错误仍先报出，已完成或排队中的任务不受影响。worker 在接手前退出而任务仍显示 `queued` 或 `running` 时，把它落为 `stopped` 并写明原因与错误码（风险锁只记错误码）；任务已处于终态、另一个执行器持有执行权或本次是被 `CRAWL_BUSY` 拒绝时不改写；前台恢复失败不改动任务。中英文命令参考同步。
 
 ## [3.4.5] - 2026-11-14
