@@ -1065,3 +1065,31 @@ def test_doctor_recruiter_side_hint_keeps_the_data_dir(tmp_path):
 	assert f"--data-dir {tmp_path.resolve()}" in recovery
 	assert "hr whoami" in recovery
 	assert "执行 boss hr whoami" not in recovery
+
+
+# ── 11. 检查项恢复文案保留 --data-dir ─────────────────────────────────
+
+
+def test_doctor_cookie_hint_keeps_the_data_dir(tmp_path):
+	"""默认诊断的 cookie_extract 提示要指向本次诊断的数据目录（Issue #1095）。"""
+	_code, parsed = _invoke_doctor(tmp_path)
+	ce = _find_check(parsed["data"]["checks"], "cookie_extract")
+	expected_dir = tmp_path.resolve()
+	assert f"boss --data-dir {expected_dir}" in ce["hint"]
+	assert "--probe-cookies" in ce["hint"]
+	assert "boss --data-dir " in ce["hint"].split("，或 ")[-1]
+
+
+def test_doctor_recruiter_identity_hint_keeps_the_data_dir(tmp_path):
+	"""双身份停在求职者侧时，核对命令必须指回本次诊断的数据目录（Issue #1095）。"""
+	parsed, _platform, recruiter, _output = _run_live_probe(
+		tmp_path, platform_user_info={"zpData": {"identity": 0, "doubleIdentity": True, "recruit": False}}
+	)
+	identity = _find_check(parsed["data"]["checks"], "recruiter_identity")
+	read = _find_check(parsed["data"]["checks"], "recruiter_live_read")
+	expected_prefix = f"boss --data-dir {tmp_path.resolve()} "
+	for check in (identity, read):
+		action = check["recovery_action"]
+		assert expected_prefix in action
+		assert " hr whoami" in action
+	recruiter.list_jobs.assert_not_called()

@@ -190,7 +190,7 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 			"cookie_extract",
 			"ok",
 			"未读取浏览器 Cookie",
-			f"需要核对浏览器登录态时执行 boss doctor --probe-cookies，或 {config.login_action}",
+			f"需要核对浏览器登录态时执行 {_doctor_command(ctx, 'doctor', '--probe-cookies')}，或 {login_action_for_ctx(ctx)}",
 		)
 	else:
 		cookie_probe = extract_cookies(None, platform=platform_name)
@@ -206,7 +206,7 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 				"cookie_extract",
 				"warn",
 				f"未从本地浏览器提取到 {config.cookie_domain_label} Cookie",
-				f"请先在本机浏览器登录 {config.site_host}，或使用 {config.login_action}",
+				f"请先在本机浏览器登录 {config.site_host}，或使用 {login_action_for_ctx(ctx)}",
 			)
 
 	# 4) CDP availability
