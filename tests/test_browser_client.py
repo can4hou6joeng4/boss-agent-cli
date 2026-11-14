@@ -695,7 +695,9 @@ def test_fetch_script_marks_non_json_body(tmp_path, body, content_type):
 	"""
 	path = tmp_path / "non-json-response.mjs"
 	path.write_text(probe, encoding="utf-8")
-	result = subprocess.run([node, str(path)], capture_output=True, text=True, timeout=5, check=True)
+	# 30s 只覆盖 CI 跑步机上的 Node 冷启动卡顿（脚本本地实测约 40ms）；脚本真的挂起
+	# 仍会在 30s 内失败。5s 曾在 Python 3.14 任务把必需检查打成假红（Issue #1029）。
+	result = subprocess.run([node, str(path)], capture_output=True, text=True, timeout=30, check=True)
 	response = json.loads(result.stdout)
 	assert response["__cli_unparsed_response__"] is True
 	assert response["code"] == -1

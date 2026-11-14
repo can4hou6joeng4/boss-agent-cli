@@ -283,7 +283,8 @@ def test_online_resume_script_reads_official_dialog_fields(tmp_path):
 
 	script = tmp_path / "resume-page.js"
 	script.write_text(_PAGE_RESUME_HARNESS.replace("__SCRIPT__", _ONLINE_RESUME_JS), encoding="utf-8")
-	completed = subprocess.run(["node", str(script)], capture_output=True, text=True, check=True, timeout=10)
+	# 与其它 Node 回归同一预算：CI 冷启动卡顿可超过 10s（Issue #1029）。
+	completed = subprocess.run(["node", str(script)], capture_output=True, text=True, check=True, timeout=30)
 	result = json.loads(completed.stdout)
 	assert result["ok"] is True
 	info = result["geekDetailInfo"]

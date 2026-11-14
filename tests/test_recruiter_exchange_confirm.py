@@ -470,7 +470,8 @@ def test_exchange_script_distinguishes_interrupted_and_unsent_actions(tmp_path, 
 	"""
 	path = tmp_path / "exchange-interruption.mjs"
 	path.write_text(probe, encoding="utf-8")
-	output = subprocess.run(["node", str(path)], capture_output=True, text=True, timeout=5, check=True).stdout
+	# 与其它 Node 回归同一预算：CI 冷启动卡顿可超过 5s（Issue #1029）。
+	output = subprocess.run(["node", str(path)], capture_output=True, text=True, timeout=30, check=True).stdout
 	data = json.loads(output)
 	assert data["result"]["ok"] is False
 	assert data["confirms"] == 0
