@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.15] - 2026-11-15
+
 ### Fixed
 - 向导 TTY 恢复文案的其余命令保留自定义 `--data-dir`（Issue #1090）：`AI_NOT_CONFIGURED`、`CONTACT_NOT_FOUND`、`ALREADY_APPLIED`、`EXCHANGE_NOT_AVAILABLE`、`SAVED_SEARCH_INVALID`、`CRAWL_BUSY`、`UNKNOWN`、`RESUME_NOT_FOUND` 等静态恢复文案仍写死裸 `boss ai config` / `boss chat` / `boss doctor` / `boss resume list` 等；actions 已算好带数据目录的恢复句子（如 watch 失败给 `watch remove`）时还会被静态标签覆盖。空简历面板与 AI 辅助的输入提示同样只给裸 `boss resume import`。现在向导失败面板与空态提示把命令改写为本次运行的 `boss [--platform ...] --data-dir <dir> ...`，动态指引优先采用，无上下文时保持通用示例；另有守卫测试要求静态文案里出现的每条 `boss …` 命令都有改写条目。
 

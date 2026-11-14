@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.15 (2026-11-15): every command in the wizard TTY recovery copy keeps a custom `--data-dir`, including `RESUME_NOT_FOUND`, the empty-resume panel and the AI-assist import hint; dynamic recovery sentences win over static labels, and a guard test catches newly added bare commands.
 - ✅ v3.4.14 (2026-11-15): risk-recovery hints in `boss status` and the wizard failure panel keep a custom `--data-dir`, so the unlock command no longer targets the default directory.
 - ✅ v3.4.13 (2026-11-15): the login command in the `boss status` not-logged-in hint is rendered literally, so a custom `--data-dir` containing bracketed directory names is no longer truncated.
 - ✅ v3.4.12 (2026-11-15): wizard login tries Cookie / CDP first and shows kernel installation guidance only when the QR fallback reports a missing kernel; existing browser sessions are no longer blocked by the absence of the QR kernel, platform risk errors still stop immediately, and installation hints preserve bracketed interpreter paths literally.
