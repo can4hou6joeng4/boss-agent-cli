@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.19 (2026-11-15): MCP explicit `null` arguments behave like omitted keys and required arguments report a missing parameter; release-verification failures keep a redacted stderr tail (redaction happens before truncation), so index propagation is distinguishable from a real dependency conflict.
 - ✅ v3.4.18 (2026-11-15): MCP array arguments are checked element by element against `items.type`; wrong elements in tags, selectors, steps and `friend_ids` return an indexed `INVALID_PARAM` before the CLI instead of being stringified into local tags, while valid and empty arrays behave as before.
 - ✅ v3.4.17 (2026-11-15): MCP positional arguments preserve queries, names, messages and identifiers that start with a hyphen; `--help` remains literal text, real options still apply, and regression coverage traverses every tool and action branch.
 - ✅ v3.4.16 (2026-11-15): recovery commands in the error-code registry, `boss doctor` checks, error envelopes and crawl results retain a custom `--data-dir`; rewriting scans the original text once, so command words in directories and apostrophes within earlier words do not corrupt quoted paths; identity diagnostics without a context return generic commands, and static `boss schema` keeps generic examples.
