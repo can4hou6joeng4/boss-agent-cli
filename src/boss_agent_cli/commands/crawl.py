@@ -220,6 +220,16 @@ def _transport_factory(
 	)
 
 
+def _seeded_transport_factory(ctx: click.Context) -> Callable[[CrawlSettings], DrissionCrawlerSession]:
+	"""读取本地登录态并返回注入它的传输工厂；登录态不足时抛 ``_LoginSeedUnavailable``。
+
+	采集浏览器的配置目录与日常 Chrome 隔离：不注入就是登录页，采集会按未登录
+	落成 ``risk_stopped`` 并写下风险锁。所有会打开浏览器的入口都从这里取工厂。
+	"""
+	seed_cookies, user_agent = _session_seed(ctx)
+	return lambda settings: _transport_factory(settings, seed_cookies=seed_cookies, user_agent=user_agent)
+
+
 def _report_corrupt_run(ctx: click.Context, command: str, run_id: str, exc: CacheRecordInvalid) -> None:
 	"""本地 run 记录写坏：断点读不出来，给「重新创建任务」指引而不是 traceback。"""
 	handle_error_output(
@@ -254,16 +264,12 @@ def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[s
 
 	try:
 		raise_if_locked(Path(ctx.obj["data_dir"]))
-		seed_cookies, user_agent = _session_seed(ctx)
+		transport_factory = _seeded_transport_factory(ctx)
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			service = CrawlService(
 				cache,
 				data_dir=Path(ctx.obj["data_dir"]),
-				transport_factory=lambda settings: _transport_factory(
-					settings,
-					seed_cookies=seed_cookies,
-					user_agent=user_agent,
-				),
+				transport_factory=transport_factory,
 			)
 			outcome = service_call(service)
 	except KeyError as exc:
