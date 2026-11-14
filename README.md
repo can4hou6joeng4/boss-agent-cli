@@ -47,7 +47,7 @@ boss-agent-cli 把职位发现、福利筛选、本地简历与 AI、投递沟�
 ```bash
 # 安装（uv 推荐；浏览器内核仅用于用户主动登录 / 本地导出）
 uv tool install boss-agent-cli
-patchright install chromium
+boss doctor   # 缺浏览器内核时会给出可直接执行的安装命令
 
 # 真人入口：直接进入角色、平台和目标向导
 boss

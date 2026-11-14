@@ -137,7 +137,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 	"BROWSER_KERNEL_MISSING": {
 		"message": "patchright 浏览器内核缺失或与所需修订版不匹配",
 		"recoverable": True,
-		"recovery_action": "patchright install chromium",
+		# 安装命令由运行本 CLI 的解释器拼出（python -m patchright ...）：`uv tool
+		# install` / `pipx install` 不把 patchright 暴露到 PATH，裸命令会
+		# command not found（Issue #1060）。登记表给的是不带解释器路径的通用说法，
+		# 各出口用 browser_runtime.patchright_install_command() 生成可执行命令。
+		"recovery_action": "python -m patchright install chromium（使用运行 boss 的同一个解释器）",
 	},
 	"BROWSER_NAV_TIMEOUT": {
 		"message": "浏览器首页导航超时",
@@ -321,7 +325,7 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 	"EXPORT_FAILED": {
 		"message": "导出失败",
 		"recoverable": True,
-		"recovery_action": "检查 patchright 安装：patchright install chromium",
+		"recovery_action": "检查 patchright 安装：python -m patchright install chromium（使用运行 boss 的同一个解释器）",
 	},
 	"AI_NOT_CONFIGURED": {
 		"message": "AI 服务未配置",

@@ -38,17 +38,21 @@ def _browser_kernel_status() -> tuple[str, str]:
 	"""复用 doctor 的浏览器内核判定，返回 (status, detail)。
 
 	只在真要开浏览器之前调用——已登录用户不该为此付出任何启动开销。
+
+	必须传展开后的 ``chromium-<修订版>`` 条目：``evaluate_patchright_chromium``
+	按条目名精确匹配，传缓存根目录永远匹配不上，登录门的 error 分支也就永远
+	不可达（Issue #1060）。
 	"""
 	from boss_agent_cli.services.browser_runtime import (
 		evaluate_patchright_chromium,
-		patchright_browser_cache_dirs,
+		installed_browser_dirs,
 		patchright_chromium_revision,
 	)
 
 	try:
 		return evaluate_patchright_chromium(
 			patchright_chromium_revision(),
-			patchright_browser_cache_dirs(),
+			installed_browser_dirs(),
 		)
 	except Exception as exc:  # 预检本身不该阻断登录，退化成 warn
 		return "warn", f"无法确认浏览器内核状态：{exc}"

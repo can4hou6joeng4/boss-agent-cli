@@ -94,15 +94,25 @@ boss logout && boss login
 
 ## 浏览器 / patchright 问题
 
-### `patchright install chromium` 失败
+### 浏览器内核安装失败（`BROWSER_KERNEL_MISSING`）
+
+内核安装命令必须使用**运行 boss 的同一个解释器**。`uv tool install` / `pipx install`
+只把 `boss`、`boss-mcp` 放进 PATH，patchright 留在工具环境里，裸
+`patchright install chromium` 会报 `command not found`（Issue #1060）。信封的
+`error.recovery_action` 与 `boss doctor` 给出的都是带解释器路径的可执行命令，
+直接照抄即可：
 
 ```bash
+boss doctor                     # 输出可执行的安装命令与所需修订版
+# 形如：/path/to/python -m patchright install chromium
+
+# 安装失败时的补充排查
 # macOS / Linux：确认对 ~/Library/Caches（macOS）或 ~/.cache（Linux）有写权限
 # Windows：以管理员身份运行一次
-pip install --upgrade patchright
-patchright install chromium --with-deps
-# 全局 tool 环境提示缺 headless shell 时再执行
-patchright install chromium-headless-shell
+<同上的解释器> -m pip install --upgrade patchright
+<同上的解释器> -m patchright install chromium --with-deps
+# 提示缺 headless shell 时再执行
+<同上的解释器> -m patchright install chromium-headless-shell
 ```
 
 ### 真实平台验证前就报 `AUTH_REQUIRED`
@@ -364,7 +374,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `AI_API_ERROR` | AI 服务调用失败 | 检查网络连接和密钥配置，重试 |
 | `AI_PARSE_ERROR` | AI 返回结果解析失败 | 重试（模型输出不稳定时可能发生） |
 | `PLATFORM_NOT_SUPPORTED` | 当前平台不支持该角色或子命令 | 切换到支持的平台 |
-| `BROWSER_KERNEL_MISSING` | patchright 浏览器内核缺失或版本不匹配（含非登录命令：`search` / `detail` / `greet` / `chat` / `me` / `wizard` 等启动浏览器时，以及 `resume export --format pdf`） | `patchright install chromium`；缺 headless shell 时运行 `patchright install chromium-headless-shell`。这是确定性失败，重试不会成功 |
+| `BROWSER_KERNEL_MISSING` | patchright 浏览器内核缺失或版本不匹配（含非登录命令：`search` / `detail` / `greet` / `chat` / `me` / `wizard` 等启动浏览器时，以及 `resume export --format pdf`） | `<运行 boss 的解释器> -m patchright install chromium`（信封 `recovery_action` 给出完整命令）；缺 headless shell 时运行同一解释器的 `-m patchright install chromium-headless-shell`。这是确定性失败，重试不会成功 |
 
 ## Windows smoke checklist
 

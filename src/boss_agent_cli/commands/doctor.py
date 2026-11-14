@@ -26,8 +26,10 @@ from boss_agent_cli.display import (
 )
 from boss_agent_cli.services.browser_runtime import (
 	evaluate_patchright_chromium,
-	patchright_browser_cache_dirs,
+	installed_browser_dirs,
 	patchright_chromium_revision,
+	patchright_importable,
+	patchright_install_command,
 )
 
 
@@ -108,22 +110,20 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 	else:
 		add_check("request_delay", "ok", f"请求间隔下限 {low_delay:g}s")
 
-	patchright_bin = shutil.which("patchright")
+	# patchright 是运行本 CLI 的解释器里的依赖：`uv tool install` / `pipx install`
+	# 只把 boss / boss-mcp 放到 PATH，按 `which patchright` 判断会误报缺失
+	# （Issue #1060）。内核安装与 launch 都走同一个解释器，这里也按导入判断。
+	importable = patchright_importable()
 	add_check(
 		"patchright",
-		"ok" if patchright_bin else "warn",
-		f"{patchright_bin}" if patchright_bin else "未找到 patchright 可执行文件",
-		"运行 uv run patchright install chromium 或确认已正确安装 patchright",
+		"ok" if importable else "warn",
+		"patchright 可在当前解释器导入（内核安装直接使用同一解释器）"
+		if importable
+		else "当前解释器无法导入 patchright；浏览器扫码与 PDF 导出不可用",
+		None if importable else "用原安装方式重装 boss-agent-cli（含 patchright 依赖）后重新自检",
 	)
 
-	patchright_browser_dirs = [
-		*patchright_browser_cache_dirs(),
-	]
-	chromium_candidates: list[Path] = []
-	for base in patchright_browser_dirs:
-		if base.exists():
-			chromium_candidates.extend(base.glob("chromium-*"))
-			chromium_candidates.extend(base.glob("chromium_headless_shell-*"))
+	chromium_candidates = installed_browser_dirs()
 	chromium_status, chromium_detail = evaluate_patchright_chromium(
 		patchright_chromium_revision(), chromium_candidates
 	)
@@ -131,7 +131,7 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 		"patchright_chromium",
 		chromium_status,
 		chromium_detail,
-		"运行 patchright install chromium 安装浏览器内核",
+		f"运行 {patchright_install_command()} 安装浏览器内核",
 	)
 
 	chrome_bins = [

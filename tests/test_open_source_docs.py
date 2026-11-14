@@ -61,12 +61,18 @@ def test_getting_started_docs_exist_and_cover_happy_path():
 
 	for content in (zh, en):
 		assert "uv tool install boss-agent-cli" in content
-		assert "patchright install chromium" in content
 		assert "boss doctor" in content
 		assert "boss status" in content
 		assert "boss schema --format native" in content
 		assert "JSON" in content
 		assert "security_id" in content
+
+	# 内核安装指引不能是裸 `patchright install chromium`：`uv tool install` 只把
+	# boss / boss-mcp 放进 PATH，照抄会 command not found（Issue #1060）。内核
+	# 安装改为由 doctor / 信封给出带解释器的可执行命令。
+	for content in (zh, en):
+		assert "patchright install chromium" not in content.replace("uv run patchright install chromium", "")
+		assert "boss doctor" in content
 
 
 def test_readme_and_contributing_link_getting_started_docs():

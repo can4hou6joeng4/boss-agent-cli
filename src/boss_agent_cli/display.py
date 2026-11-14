@@ -20,7 +20,11 @@ from rich.table import Table
 
 from boss_agent_cli.output import emit_success, is_local_io_error, redact_sensitive_text
 from boss_agent_cli.schema.error_codes import ERROR_CODES
-from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing
+from boss_agent_cli.services.browser_runtime import (
+	is_browser_kernel_missing,
+	patchright_headless_shell_command,
+	patchright_install_command,
+)
 
 # Rich output goes to stderr so stdout stays clean for Agent JSON
 console = Console(stderr=True)
@@ -166,7 +170,9 @@ def handle_browser_kernel_missing(ctx: Any, command: str, exc: Exception) -> Non
 	同一份契约与文案。异常文本可能带本机路径，只作为 ``details.cause`` 保留
 	首行，不进 message。
 	"""
-	recoverable, recovery_action = error_contract_for_code("BROWSER_KERNEL_MISSING")
+	recoverable, _ = error_contract_for_code("BROWSER_KERNEL_MISSING")
+	install_command = patchright_install_command()
+	headless_command = patchright_headless_shell_command()
 	doctor = boss_command_for_ctx(ctx, "doctor", include_data_dir=True)
 	cause = (str(exc) or type(exc).__name__).splitlines()[0][:300]
 	handle_error_output(
@@ -175,12 +181,16 @@ def handle_browser_kernel_missing(ctx: Any, command: str, exc: Exception) -> Non
 		code="BROWSER_KERNEL_MISSING",
 		message="patchright 浏览器内核缺失或与所需修订版不匹配",
 		recoverable=recoverable,
-		recovery_action=recovery_action,
+		# 恢复动作必须是**当前安装形态下可执行**的命令：`uv tool install` 只把
+		# boss / boss-mcp 放进 PATH，裸 `patchright install chromium` 会 command
+		# not found（Issue #1060）。用运行本 CLI 的解释器调模块入口，版本也必然
+		# 与启动浏览器时一致。
+		recovery_action=install_command,
 		details={"cause": cause},
 		hints={
-			"next_actions": ["patchright install chromium", doctor],
+			"next_actions": [install_command, doctor],
 			"operator_actions": [
-				"浏览器内核安装完成后重新执行原命令；缺的是 headless shell 时运行 patchright install chromium-headless-shell",
+				f"浏览器内核安装完成后重新执行原命令；缺的是 headless shell 时运行 {headless_command}",
 				f"仍失败时先跑 {doctor} 核对所需修订版与本机已安装版本",
 			],
 		},

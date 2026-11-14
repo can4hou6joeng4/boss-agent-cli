@@ -81,3 +81,25 @@ def test_missing_crawl_dependencies_do_not_fall_back_to_generic_retry():
 	assert "boss-agent-cli[crawl]" in recovery
 	assert "重试不会有帮助" in recovery
 	assert recovery != "请返回主菜单后重试。"
+
+
+def test_browser_kernel_recovery_uses_the_running_interpreter():
+	"""内核安装指引必须能照抄执行（Issue #1060）。
+
+	`uv tool install` 只把 boss / boss-mcp 放进 PATH，裸 `patchright install
+	chromium` 会 command not found；向导展示的命令必须走运行本 CLI 的解释器，
+	并且优先使用错误里携带的动态命令（含本次运行的解释器路径）。
+	"""
+	import sys
+
+	from boss_agent_cli.services.browser_runtime import patchright_install_command
+
+	localized = recovery_message("BROWSER_KERNEL_MISSING") or ""
+	assert sys.executable in localized
+	assert "-m patchright install chromium" in localized
+
+	custom = "/custom/venv/bin/python -m patchright install chromium"
+	assert custom in (recovery_message("BROWSER_KERNEL_MISSING", custom) or "")
+	# 没有动态命令时回落到当前解释器。
+	fallback = recovery_message("BROWSER_KERNEL_MISSING", "检查网络后重试") or ""
+	assert patchright_install_command() in fallback

@@ -210,11 +210,12 @@ def test_cli_export_pdf_chromium_unavailable(tmp_path):
 	parsed = json.loads(result.output)
 	assert parsed["ok"] is False
 	assert parsed["error"]["code"] == "EXPORT_FAILED"
-	# 导出用 patchright 渲染，恢复指引必须指向 patchright 而不是 playwright
-	from boss_agent_cli.schema.error_codes import ERROR_CODES
+	# 导出用 patchright 渲染，恢复指引必须指向 patchright 而不是 playwright，
+	# 且命令要能在 `uv tool install` 环境里执行（走运行本 CLI 的解释器）。
+	from boss_agent_cli.services.browser_runtime import patchright_install_command
 
 	action = parsed["error"]["recovery_action"]
-	assert action == ERROR_CODES["EXPORT_FAILED"]["recovery_action"]
+	assert patchright_install_command() in action
 	assert "playwright install" not in action
 
 
@@ -240,8 +241,11 @@ def test_cli_export_pdf_kernel_missing_is_not_export_failed(tmp_path):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "BROWSER_KERNEL_MISSING"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "patchright install chromium"
-	assert parsed["hints"]["next_actions"][0] == "patchright install chromium"
+	from boss_agent_cli.services.browser_runtime import patchright_install_command
+
+	install = patchright_install_command()
+	assert parsed["error"]["recovery_action"] == install
+	assert parsed["hints"]["next_actions"][0] == install
 	# doctor 必须指向本次 --data-dir，否则自定义目录下诊断的是另一份数据。
 	assert str(tmp_path.resolve()) in parsed["hints"]["next_actions"][1]
 	assert "chrome-headless-shell" not in parsed["error"]["message"]

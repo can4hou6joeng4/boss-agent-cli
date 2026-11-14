@@ -19,7 +19,7 @@ from boss_agent_cli.display import (
 from boss_agent_cli.output import is_local_io_error
 from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, resume_to_dict
 from boss_agent_cli.resume.store import ResumeAlreadyExistsError, ResumeImportError, ResumeStore
-from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing
+from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
 from boss_agent_cli.services.output_path import prepare_output_path
 
 
@@ -134,7 +134,11 @@ def _emit_export_failure(ctx: click.Context, fmt: str, exc: Exception, *, target
 		)
 		return
 	recoverable, recovery_action = error_contract_for_code("EXPORT_FAILED")
-	if fmt != "pdf":
+	if fmt == "pdf":
+		# 登记表只写通用说法；这里补上运行本 CLI 的解释器，`uv tool install`
+		# 环境下裸 patchright 不在 PATH（Issue #1060）。
+		recovery_action = f"检查 patchright 安装：{patchright_install_command()}"
+	else:
 		recovery_action = (
 			"检查简历文件内容与导出选项后重试；HTML/JSON 导出只做本地模板渲染，不使用浏览器内核；"
 			"仍失败时附上 error.message 与命令提交 issue"
