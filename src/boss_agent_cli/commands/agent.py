@@ -27,7 +27,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands.ai_cmd import _build_fit_prompt, _create_ai_service
 from boss_agent_cli.commands.crawl import _require_crawl_capabilities, _settings_from_context, _transport_factory
 from boss_agent_cli.crawler.operations import crawl_status, import_crawl_shortlist
-from boss_agent_cli.crawler.service import CrawlService
+from boss_agent_cli.crawler.service import CrawlBusyError, CrawlService
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	handle_auth_errors,
@@ -211,6 +211,20 @@ def crawl_cmd(
 			message=str(exc),
 			recovery_action=f"按提示修正关键词、城市或 crawl 配置后重试；可用 {configure_cmd} 查看可配置项",
 			hints={"next_actions": [configure_cmd]},
+		)
+		return
+	except CrawlBusyError as exc:
+		# 新建的 run_id 几乎不可能被别人持有；真撞上时仍要按「另一个执行器在跑」回报，
+		# 不能被下面的 RuntimeError 兜成「安装 crawl 依赖」。
+		status_command = boss_command_for_ctx(ctx, f"crawl status {shell_argument(exc.run_id)}", include_data_dir=True)
+		handle_error_output(
+			ctx,
+			"agent.crawl",
+			code="CRAWL_BUSY",
+			message=str(exc),
+			details={"run_id": exc.run_id},
+			recovery_action=f"用 {status_command} 查看进度，等当前执行结束后再恢复；不要并发恢复同一个 run_id",
+			hints={"next_actions": [status_command]},
 		)
 		return
 	except RuntimeError as exc:

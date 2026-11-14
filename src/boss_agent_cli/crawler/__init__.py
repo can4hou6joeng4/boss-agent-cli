@@ -1,10 +1,11 @@
 """Explicit Research Mode crawl support."""
 
 from boss_agent_cli.crawler.hooks import HOOK_SCRIPT_NAMES, inject_hook_profile
-from boss_agent_cli.crawler.service import CrawlOutcome, CrawlService
+from boss_agent_cli.crawler.service import CrawlBusyError, CrawlOutcome, CrawlService
 from boss_agent_cli.crawler.transport import CrawlRiskError, DrissionCrawlerSession
 
 __all__ = [
+	"CrawlBusyError",
 	"CrawlOutcome",
 	"CrawlRiskError",
 	"CrawlService",

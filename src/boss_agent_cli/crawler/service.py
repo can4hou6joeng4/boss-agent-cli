@@ -8,7 +8,7 @@ import time
 import uuid
 from dataclasses import dataclass, replace
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager, nullcontext
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, Callable
 
@@ -38,6 +38,15 @@ from boss_agent_cli.crawler.hooks import (
 )
 from boss_agent_cli.crawler.transport import CrawlRiskError, CrawlTransport
 from boss_agent_cli.display import boss_command, risk_error_message, shell_argument
+from boss_agent_cli.services.file_lock import exclusive_file_lock, run_lock_path
+
+
+class CrawlBusyError(RuntimeError):
+	"""同一个 crawl run 正在由另一次调用执行：本次调用没有发出任何请求。"""
+
+	def __init__(self, run_id: str) -> None:
+		super().__init__(f"crawl run {run_id} 正在由另一次调用执行")
+		self.run_id = run_id
 
 
 @dataclass(frozen=True)
@@ -307,16 +316,33 @@ class CrawlService:
 		self._on_run_created = on_run_created
 		self._unpersisted_risk_lock: cdp_risk_lock.RiskLock | None = None
 		self._request_budget = RequestBudget.for_data_dir(data_dir)
+		self._lock_dir = data_dir / "cache" / "crawl-locks"
+
+	def execution_lock(self, run_id: str) -> AbstractContextManager[bool]:
+		"""同一 crawl run 的执行权：跨进程独占、不等待，进程退出时由操作系统释放。
+
+		只约束「执行」。`crawl status` / `crawl results` 等只读命令不取这把锁，执行
+		期间照常可用；不同 run 各用各的锁文件，互不阻塞。
+		"""
+		return exclusive_file_lock(run_lock_path(self._lock_dir, run_id))
+
+	@contextmanager
+	def _execution_right(self, run_id: str) -> Iterator[None]:
+		"""取得执行权，取不到就按「正在执行」拒绝，而不是排队等前一个执行器。
+
+		必须在读取断点之前取得：两次调用都读到旧游标时，后到者会从同一个页
+		重抓，把重复请求打给平台（Issue #1023）。
+		"""
+		with self.execution_lock(run_id) as acquired:
+			if not acquired:
+				raise CrawlBusyError(run_id)
+			yield
 
 	def create_and_run(self, settings: CrawlSettings) -> CrawlOutcome:
-		self._validate_settings(settings)
-		require_capability_mode(settings.operating_mode, "crawl")
-		require_capability_mode(settings.operating_mode, "crawl-cdp")
-		if settings.hook_profile != "none":
-			require_capability_mode(settings.operating_mode, "crawl-hook")
 		run_id = self.create(settings)
-		output_dir = self._data_dir / "crawl" / "runs" / run_id
-		return self._run(run_id, settings, next_page=1, output_dir=output_dir)
+		# on_run_created 发布 run_id 后，别的调用方可能已经推进了断点。新建与恢复
+		# 共用持锁后的断点读取，不能再假定 next_page=1（Issue #1023）。
+		return self.resume(run_id)
 
 	def create(self, settings: CrawlSettings) -> str:
 		"""Persist a new task so another process may run or resume it."""
@@ -360,6 +386,26 @@ class CrawlService:
 		with_detail: bool = False,
 		operating_mode: str | None = None,
 		clear_stop: bool = False,
+	) -> CrawlOutcome:
+		# 执行权先于断点读取：重叠恢复会在两个执行器各读一份旧游标后重复抓页，
+		# 再把同一页的请求打给平台（Issue #1023）。取不到就拒绝，不排队。
+		with self._execution_right(run_id):
+			return self._resume_locked(
+				run_id,
+				pages=pages,
+				with_detail=with_detail,
+				operating_mode=operating_mode,
+				clear_stop=clear_stop,
+			)
+
+	def _resume_locked(
+		self,
+		run_id: str,
+		*,
+		pages: int | None,
+		with_detail: bool,
+		operating_mode: str | None,
+		clear_stop: bool,
 	) -> CrawlOutcome:
 		run = self._cache.get_crawl_run(run_id)
 		if run is None:

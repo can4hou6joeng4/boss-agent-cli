@@ -21,6 +21,7 @@ from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.crawler.operations import crawl_status
 from boss_agent_cli.crawler.service import (
 	CrawlBudget,
+	CrawlBusyError,
 	CrawlService,
 	CrawlSettings,
 	crawl_cdp_port,
@@ -1165,6 +1166,18 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 	return StepResult(data, artifacts=tuple(outcome.output_paths.values()))
 
 
+def _crawl_busy_error(context: ActionContext, exc: CrawlBusyError) -> WorkflowActionError:
+	"""同一个 crawl run 正由别的进程执行：本次没有发出任何请求，稍后恢复是安全的。"""
+	status_command = _hint_command(context, f"crawl status {shell_argument(exc.run_id)}")
+	return WorkflowActionError(
+		"CRAWL_BUSY",
+		str(exc),
+		recoverable=True,
+		recovery_action=f"用 {status_command} 查看进度，等当前执行结束后再恢复；不要并发恢复同一个任务",
+		details={"run_id": exc.run_id},
+	)
+
+
 def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	# 恢复 waiting_input 时若已有内部 crawl run_id，必须续跑而不是新建采集。
 	existing_run_id = _optional_str(inputs.get("run_id") or inputs.get("crawl_run_id"))
@@ -1226,7 +1239,10 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 			recovery_action=_hint_command(context, "config reset crawl"),
 		) from exc
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
-		outcome = _crawl_service(context, cache).create_and_run(settings)
+		try:
+			outcome = _crawl_service(context, cache).create_and_run(settings)
+		except CrawlBusyError as exc:
+			raise _crawl_busy_error(context, exc) from exc
 		return _crawl_outcome_result(outcome, cache)
 
 
@@ -1275,6 +1291,8 @@ def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 			)
 		except KeyError as exc:
 			raise WorkflowActionError("CRAWL_RUN_NOT_FOUND", f"未找到 crawl run: {run_id}") from exc
+		except CrawlBusyError as exc:
+			raise _crawl_busy_error(context, exc) from exc
 		return _crawl_outcome_result(outcome, cache)
 
 
