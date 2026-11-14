@@ -100,15 +100,18 @@ Maintainers will `squash merge`, so the squash title must follow the commit conv
 
 ## Adding a New Command
 
-1. Create a file under `src/boss_agent_cli/commands/`
+1. Create a command module under `src/boss_agent_cli/commands/`; put reusable business logic that does not depend on Click or display in `services/`
 2. Register it in `commands/register.py` (`register_candidate_commands` / `register_recruiter_commands`; `main.py` only holds global options and does not attach commands directly)
 3. Describe it in `src/boss_agent_cli/schema/data.py` (under `SCHEMA_DATA["commands"]`); when the top-level command count changes, also update the "共 N 个顶层命令" count inside `SCHEMA_DATA["description"]` (a test asserts the count matches the command table length)
-4. Add tests in `tests/test_commands.py` or a new file matching the command name
+4. Add success and error tests in `tests/test_commands.py` or a new file matching the command name, and check the envelope contract in `tests/test_cli_invariants.py`
 5. Update `docs/commands.md` and `docs/commands.en.md` (command cheat-sheet)
-6. Update `AGENTS.md` (command-count invariant) and the command counts in `docs/capability-matrix.md` / `docs/capability-matrix.en.md`; `tests/test_agent_docs.py` hard-codes these count strings, so update it in the same change
-7. Update `README.md` and `README.en.md` (command reference table)
-8. Update the relevant module's `CLAUDE.md`
-9. If the command is useful for Agents via MCP, also register it in `src/boss_agent_cli/mcp_server.py` (add a Tool to the `TOOLS` list and a branch in `_build_args`); when the tool name does not map onto its compliance command identifier (e.g. `boss_hr_*` tools map to `recruiter-*`), register it in `_MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES` or the low-risk filtering will not apply; `mcp-server/server.py` is a hand-maintained re-export list — add a line for each new public symbol; when the tool count changes, update "MCP server with N tools" in `README.en.md` (a test asserts it against `len(TOOLS)`)
+6. Update the command counts in `docs/capability-matrix.md` / `docs/capability-matrix.en.md`; `tests/test_agent_docs.py` hard-codes these count strings, so update it in the same change
+7. Update `README.md` and `README.en.md` (command reference table and counts), together with the capability counts in `llms.txt` / `demo/llms.txt` and `demo/index.html`
+8. Add each new Python module to the strict module list under `[[tool.mypy.overrides]]` in `pyproject.toml`, then run `uv run mypy src/boss_agent_cli`
+9. To expose the command through MCP, add its Tool definition to `TOOLS` in `src/boss_agent_cli/mcp_tools.py` and its argument mapping to `_build_args` in `src/boss_agent_cli/mcp_args.py`. When the tool name does not map onto its compliance command identifier (e.g. `boss_hr_*` maps to `recruiter-*`), register it in `_MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES` in `mcp_tools.py`. `mcp_server.py` holds the server and compatibility re-exports, and `mcp-server/server.py` maintains an explicit re-export list; update both when adding a compatibility public symbol. When the tool count changes, update "MCP server with N tools" in `README.en.md` and the other capability counts. Check that the actual `tools/list` names exactly match `mcp_tools.TOOLS`: `uv run pytest tests/test_mcp_server_protocol.py tests/test_mcp_handler_registration.py -q`
+10. Record the change under `[Unreleased]` in `CHANGELOG.md`
+
+`AGENTS.md` / `CLAUDE.md` are local guidance files excluded by `.gitignore` and are not required in contribution PRs; public engineering and architecture conventions are documented here and in the [architecture guide](docs/architecture.en.md).
 
 ## Output Contract (Do Not Break)
 
