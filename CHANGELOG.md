@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.6] - 2026-11-14
+
 ### Fixed
 - 排队任务的后台进程消失后可用后台恢复重新启动（Issue #1045）：`crawl resume <run_id> --background` 把 `queued` 一律视为原 worker 即将接手，不探测执行锁也不启动进程。worker 若不经过清理路径就消失（被强制终止、机器重启），任务永远停在没有错误的 `queued`，后台恢复每次都返回 `queued`，`crawl status` 的后继动作只有 `results` 与 `stop`。现在这个保护只在 30 秒启动窗口内生效；排队更久的任务与遗留的 `running` 一样先探测执行锁：仍被占用返回 `running`、不改动任务，空闲则做登录预检、解除旧停止请求并启动 worker。`crawl status` 对排队过久的任务额外给出 `crawl resume <run_id> --background`。执行锁仍保证同一任务只有一个执行器，后到者以 `CRAWL_BUSY` 退出且不改写任务。中英文命令参考同步。
 - `agent crawl --query` 向采集浏览器注入登录态（Issue #1044）：`crawl run` / `start` / `resume` 与向导采集步骤都会把 `boss login` 的 Cookie 与 User-Agent 注入独立采集浏览器，只有 `agent crawl --query` 直接用了不带登录种子的传输。采集浏览器的配置目录与日常 Chrome 隔离，没有可用会话时页面是登录页，采集按未登录落为 `risk_stopped` 并写下本地风险锁——已登录的用户也会被要求手动执行 `clean --risk-lock`。现在该入口与其他采集入口共用同一份登录种子；本地登录态缺失、没有 Cookie 或缺少 `wt2` 时在打开浏览器之前返回 `AUTH_REQUIRED` 与登录指引，不创建任务，参数错误仍先报出；`agent crawl --run-id` 只读本地结果，不受登录态影响。中英文命令参考同步。
