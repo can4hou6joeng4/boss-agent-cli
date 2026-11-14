@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 from contextlib import AbstractContextManager
 from pathlib import Path
 from types import TracebackType
 from typing import Any
 
 from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
-from boss_agent_cli.services.file_lock import exclusive_file_lock
+from boss_agent_cli.services.file_lock import exclusive_file_lock, run_lock_path
 from boss_agent_cli.wizard.models import WorkflowPlan
 
 
@@ -26,8 +25,7 @@ class WorkflowStore:
 		不同 run 各用各的锁文件，互不阻塞。文件名取 run_id 的摘要，调用方传入
 		的任意字符串都不会变成路径的一部分。
 		"""
-		digest = hashlib.sha256(run_id.encode("utf-8", "surrogatepass")).hexdigest()
-		return exclusive_file_lock(self._lock_dir / f"{digest}.lock")
+		return exclusive_file_lock(run_lock_path(self._lock_dir, run_id))
 
 	def create(self, run_id: str, plan: WorkflowPlan) -> None:
 		self._cache.create_workflow_run(

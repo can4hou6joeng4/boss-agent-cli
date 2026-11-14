@@ -18,6 +18,7 @@ from boss_agent_cli.compliance import operating_mode, require_compliance_allowed
 from boss_agent_cli.config import DEFAULTS
 from boss_agent_cli.crawler.operations import crawl_results, crawl_status, import_crawl_shortlist
 from boss_agent_cli.crawler.service import (
+	CrawlBusyError,
 	CrawlService,
 	CrawlSettings,
 	crawl_cdp_port,
@@ -248,6 +249,20 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 		return
 	except CacheRecordInvalid as exc:
 		_report_corrupt_run(ctx, "crawl", exc.record_id, exc)
+		return
+	except CrawlBusyError as exc:
+		# 同一个 run 只能有一个执行器：另一个进程正在抓页时，本次调用没有发出任何请求。
+		# 照做 --resume 只会再撞一次，后继动作只有查看状态。
+		status_command = boss_command_for_ctx(ctx, f"crawl status {shell_argument(exc.run_id)}", include_data_dir=True)
+		handle_error_output(
+			ctx,
+			"crawl",
+			code="CRAWL_BUSY",
+			message=str(exc),
+			details={"run_id": exc.run_id},
+			recovery_action=f"用 {status_command} 查看进度，等当前执行结束后再恢复；不要并发恢复同一个 run_id",
+			hints={"next_actions": [status_command]},
+		)
 		return
 	except ValueError as exc:
 		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help", include_data_dir=True)

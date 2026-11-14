@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -19,6 +20,16 @@ _WINDOWS = os.name == "nt"
 
 #: 获取期间锁文件被上一个持有者删除时的重试上限；用尽按「已被占用」处理。
 _ACQUIRE_ATTEMPTS = 8
+
+
+def run_lock_path(directory: Path, run_id: str) -> Path:
+	"""按 run_id 生成锁文件路径。
+
+	run_id 是调用方给的任意字符串（本地自由文本），不能变成路径的一部分：
+	文件名取它的摘要，互斥按文件描述符算，不依赖目录层级。
+	"""
+	digest = hashlib.sha256(run_id.encode("utf-8", "surrogatepass")).hexdigest()
+	return directory / f"{digest}.lock"
 
 
 def try_lock_exclusive(handle: BinaryIO) -> bool:

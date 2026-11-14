@@ -73,6 +73,7 @@ ERROR_LABELS = {
 	"WORKFLOW_TIMEOUT": "任务运行超时",
 	"WORKFLOW_STOPPED": "任务已停止",
 	"WORKFLOW_BUSY": "该任务正在另一个窗口或进程中执行",
+	"CRAWL_BUSY": "该采集任务正在另一个窗口或进程中执行",
 	"WORKFLOW_PLAN_MISMATCH": "任务信息与已有记录不一致",
 	"INVALID_PARAM": "请求参数无效",
 	"AUTH_EXPIRED": "登录状态已过期",
@@ -127,6 +128,7 @@ RECOVERY_LABELS = {
 	"WIZARD_INPUT_REQUIRED": "headless 模式请通过 --input-json 提供完整输入，或用 run_id 恢复。",
 	"WORKFLOW_STOPPED": "任务已停止；如需继续，请选择“恢复已有任务”。",
 	"WORKFLOW_BUSY": "请等它结束，或选择“查看任务状态”确认进度后再恢复。",
+	"CRAWL_BUSY": "请等它结束；需要确认进度时执行 boss crawl status <run_id>，不要并发恢复同一个任务。",
 }
 
 # 这些步骤对真人噪声大，TTY 进度里默认静默。

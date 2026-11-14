@@ -129,6 +129,10 @@ def _workflow_next_actions(ctx: click.Context, run: Mapping[str, Any]) -> list[s
 			)
 		actions.append(status_cmd)
 		return actions
+	if status == "failed":
+		busy_hints = _busy_hints(ctx, run.get("error") or {})
+		if busy_hints is not None:
+			return busy_hints["next_actions"]
 	if status == "failed" and has_blocked_step(run):
 		# 失败步骤的结果无法重放（replay_safe=false）：--resume 只会原样返回同一个失败，
 		# 照做的 Agent 会把它读成「再试一次」而空转。先看 --status 里该步骤的核对命令，
@@ -142,16 +146,20 @@ def _workflow_next_actions(ctx: click.Context, run: Mapping[str, Any]) -> list[s
 	return [prefix, status_cmd]
 
 
-def _busy_hints(ctx: click.Context, exc: WorkflowActionError) -> dict[str, Any] | None:
-	"""run 正由另一次调用执行时，给 Agent 的后继动作只有查看状态。
+def _busy_hints(ctx: click.Context, error: Mapping[str, Any]) -> dict[str, list[str]] | None:
+	"""workflow 或其内部采集正由另一次调用执行时，只建议查看对应任务的状态。
 
 	不给 ``--resume``（照做只会再撞一次）也不给 ``--stop``（照做会打断一次正常
 	的执行）；要不要停由查到状态之后的调用方决定。
 	"""
-	run_id = (exc.details or {}).get("run_id") if exc.code == "WORKFLOW_BUSY" else None
+	command = {"WORKFLOW_BUSY": "wizard --status", "CRAWL_BUSY": "crawl status"}.get(str(error.get("code")))
+	details = error.get("details")
+	if command is None or not isinstance(details, Mapping):
+		return None
+	run_id = details.get("run_id")
 	if not run_id:
 		return None
-	status_cmd = boss_command_for_ctx(ctx, f"wizard --status {shell_argument(str(run_id))}", include_data_dir=True)
+	status_cmd = boss_command_for_ctx(ctx, f"{command} {shell_argument(str(run_id))}", include_data_dir=True)
 	return {"next_actions": [status_cmd]}
 
 
@@ -804,7 +812,7 @@ def _run_wizard_command(
 				recoverable=exc.recoverable,
 				recovery_action=exc.recovery_action,
 				details=exc.details,
-				hints=_busy_hints(ctx, exc),
+				hints=_busy_hints(ctx, exc.to_dict()),
 			)
 			return
 
@@ -821,6 +829,7 @@ def _run_wizard_command(
 			recoverable=bool(error.get("recoverable")),
 			recovery_action=error.get("recovery_action"),
 			details={"run": run},
+			hints=_busy_hints(ctx, error),
 		)
 		return
 	handle_output(

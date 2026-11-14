@@ -139,6 +139,8 @@ boss crawl stop <run_id>
 | `boss crawl stop <run_id>` | 请求运行中任务在下一个安全点停止并保留 checkpoint |
 | `boss crawl shortlist <run_id> (--all \| --selector <csel_...>)` | 将 crawl 结果导入原项目的本地候选池；不请求平台，保留内部职位关联和详情缓存供 `boss ai fit` 使用 |
 
+同一采集 `run_id` 同时只允许一个执行器。重叠的前台恢复返回 `CRAWL_BUSY`（`recoverable: true`，`--exit-codes sysexits` 下为 75），不发出请求、不修改断点或清除停止请求；`hints.next_actions` 只给原数据目录的 `crawl status <run_id>`，等当前执行结束后再恢复。新建采集、后台 worker 与向导采集步骤共用这项互斥；向导的失败信封与该失败任务的状态查询同样只建议查看内部采集状态。`--background` 仍立即返回供轮询，worker 取得执行权后才读取断点。`status` / `results` / `stop` 在执行期间照常可用；锁按 `run_id` 隔离，进程退出后由操作系统释放，不需手工删除锁文件。无法准备执行锁时返回 `LOCAL_IO_ERROR`，不发出请求。Python API 的 `CrawlService.resume()` 在任务被占用时抛出 `CrawlBusyError`，可在当前执行结束后再次恢复。
+
 采集任务的状态、结果、停止、恢复及候选池后继命令，以及 `checkpoint.resume_command`，都显式携带原 `--data-dir` 的绝对路径；换一个工作目录执行提示时仍定位同一份本地任务。任务不存在或记录损坏时的核对提示同样保留目录。采集服务、向导采集动作与 `agent crawl` 返回的任务恢复指引也保留目录，避免误读或停止默认目录中的同名任务。风险停止仍须先完成人工恢复；人工解锁提示中的 `boss clean --risk-lock` 也携带原数据目录，解锁后显式执行恢复命令。
 
 `crawl results` 的后继导入命令还携带本次返回职位的全部 `--selector`，只导入所见结果；`--page` / `--detail-status` 的筛选范围因此保持不变。空结果改为提示查看同一 run 的 `crawl status`。路径、run_id 和 selector 按 shell 参数转义，终端与信封使用同一条命令。

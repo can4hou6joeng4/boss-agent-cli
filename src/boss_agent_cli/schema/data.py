@@ -634,7 +634,7 @@ SCHEMA_DATA = {
 					},
 				},
 				"resume": {
-				"description": "从已保存的页游标和详情队列恢复采集。",
+				"description": "从已保存的页游标和详情队列恢复采集；同一 run_id 同时只允许一个执行器，前台重叠调用返回 CRAWL_BUSY，不发出请求或修改断点。",
 					"args": [
 						{"name": "run_id", "required": True, "description": "要恢复的 crawl run 标识"},
 					],
