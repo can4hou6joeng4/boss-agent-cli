@@ -74,7 +74,7 @@ def _render_kernel_blocked(detail: str) -> None:
 				[
 					"[red]无法自动打开浏览器[/red]：缺少 patchright 所需的 Chromium 内核。",
 					"",
-					detail,
+					display.escape_markup(detail),
 					"",
 					"[bold]安装完成后回到这里重新选择「现在登录」即可。[/bold]",
 				]
