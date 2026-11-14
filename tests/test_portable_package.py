@@ -67,6 +67,10 @@ def test_create_portable_bundle_includes_installer_docs_and_wheel(tmp_path: Path
 	assert "uv tool install --force" in install
 	assert "BOSS_AGENT_INSTALL_BROWSER" in install
 	assert "patchright install chromium" in install
+	# 内核安装必须走运行 boss 的解释器：`uv tool run patchright` 会独立解析版本，
+	# 与 wheel 内修订版可能不一致，且在 PATH 上找不到时同样失败（Issue #1060）。
+	assert '"$BOSS_PYTHON" -m patchright install chromium' in install
+	assert "uv tool run patchright install" not in install
 	opencode = (result.bundle_dir / "examples" / "opencode.json").read_text(encoding="utf-8")
 	assert '"boss-mcp"' in opencode
 	assert '"--data-dir"' in opencode
