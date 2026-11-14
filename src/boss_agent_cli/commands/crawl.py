@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -346,6 +347,19 @@ def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[s
 	)
 
 
+# worker 从被拉起到取得执行锁只需要解释器启动与一次本地读取；超过这段时间
+# 仍是 queued 且锁空闲，说明它没有活下来（Issue #1045）。
+_QUEUE_HANDOFF_GRACE_SECONDS = 30.0
+
+
+def _awaiting_queued_worker(run: dict[str, Any]) -> bool:
+	"""任务刚排队：原 worker 可能正要取锁，父进程不探测、不抢占。"""
+	if run["status"] != "queued":
+		return False
+	# 时钟回拨得到负值时按仍在窗口内处理，宁可多等也不抢。
+	return time.time() - float(run["updated_at"]) < _QUEUE_HANDOFF_GRACE_SECONDS
+
+
 def _prepare_background_resume(
 	data_dir: Path,
 	run_id: str,
@@ -363,8 +377,9 @@ def _prepare_background_resume(
 			raise KeyError(run_id)
 		if not service.has_resume_work(run, pages=pages, with_detail=with_detail):
 			return "completed", False
-		# 排队中的任务不抢锁，以免让正准备启动的 worker 被拒绝。
-		if run["status"] == "queued":
+		# 刚排队的任务不抢锁，以免让正准备启动的 worker 被拒绝；排队过久的
+		# 与遗留的 running 一样靠执行锁判断是否还有执行器。
+		if _awaiting_queued_worker(run):
 			return "queued", False
 		with service.execution_lock(run_id) as acquired:
 			if not acquired:
@@ -376,7 +391,7 @@ def _prepare_background_resume(
 				raise KeyError(run_id)
 			if not service.has_resume_work(run, pages=pages, with_detail=with_detail):
 				return "completed", False
-			if run["status"] == "queued":
+			if _awaiting_queued_worker(run):
 				return "queued", False
 			# worker 的错误信封写进空设备：登录态不足要在这里由父进程报出来，
 			# 并且先于解除 stop，失败的调用不改动任务（Issue #1042）。
@@ -829,6 +844,8 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 	try:
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			payload = crawl_status(cache, run_id, data_dir=ctx.obj["data_dir"])
+			run = cache.get_crawl_run(run_id)
+			queue_overdue = run is not None and run["status"] == "queued" and not _awaiting_queued_worker(run)
 	except KeyError:
 		handle_error_output(ctx, "crawl.status", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))
 		return
@@ -841,6 +858,12 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 	next_steps = [boss_command_for_ctx(ctx, f"crawl results {shell_argument(run_id)}", include_data_dir=True)]
 	if payload["status"] in ("queued", "running"):
 		next_steps.append(boss_command_for_ctx(ctx, f"crawl stop {shell_argument(run_id)}", include_data_dir=True))
+	if queue_overdue:
+		# 排队过久多半是后台进程没活下来：只轮询 status 永远等不到结果。后台恢复
+		# 会先探测执行锁，仍有执行器时只回报 running，不会重复启动（Issue #1045）。
+		next_steps.append(
+			boss_command_for_ctx(ctx, f"crawl resume {shell_argument(run_id)} --background", include_data_dir=True)
+		)
 	if payload["status"] == "risk_stopped":
 		# 风险锁会先于浏览器构造阻断 resume：直接照 checkpoint.resume_command
 		# 重试只会再次撞锁。解锁必须由用户确认官方页面恢复后显式执行。

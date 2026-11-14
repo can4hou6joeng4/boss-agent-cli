@@ -776,6 +776,90 @@ def test_resume_background_keeps_a_pending_queue_and_its_stop_request(tmp_path, 
 	assert launched == []
 
 
+def _age_run(tmp_path: Path, run_id: str, seconds: float) -> None:
+	"""把任务的最近更新时间往前拨，模拟排队已久。"""
+	with sqlite3.connect(tmp_path / "cache" / "boss_agent.db") as conn:
+		conn.execute("UPDATE crawl_runs SET updated_at = updated_at - ? WHERE run_id = ?", (seconds, run_id))
+
+
+def test_resume_background_relaunches_a_queue_whose_worker_never_took_over(tmp_path, monkeypatch):
+	"""worker 被强制终止后任务停在 queued：过了启动窗口，后台恢复要能重新启动（Issue #1045）。"""
+	launched: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._launch_background_resume",
+		lambda data_dir, run_id, **kwargs: launched.append(run_id),
+	)
+	_seed_run(tmp_path, "run-queued", status="queued")
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.request_crawl_stop("run-queued")
+	_age_run(tmp_path, "run-queued", 3600)
+	result = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-queued", "--background")
+	assert result.exit_code == 0, result.output
+	assert _envelope(result)["data"] == {"run_id": "run-queued", "status": "queued", "background": True}
+	assert launched == ["run-queued"]
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.get_crawl_run("run-queued")["stop_requested"] is False, "显式恢复解除旧停止请求"
+	# 重新启动后任务回到启动窗口内：紧接着再恢复一次不会再起一个进程。
+	again = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-queued", "--background")
+	assert again.exit_code == 0, again.output
+	assert _envelope(again)["data"]["status"] == "queued"
+	assert launched == ["run-queued"]
+
+
+def test_resume_background_leaves_an_overdue_queue_alone_while_an_executor_holds_it(tmp_path, monkeypatch):
+	"""排队再久，只要执行锁被占用就有执行器（例如仍在打开浏览器），不能再起一个。"""
+	launched: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._launch_background_resume",
+		lambda data_dir, run_id, **kwargs: launched.append(run_id),
+	)
+	_seed_run(tmp_path, "run-queued", status="queued")
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.request_crawl_stop("run-queued")
+		_age_run(tmp_path, "run-queued", 3600)
+		service = CrawlService(cache, data_dir=tmp_path, transport_factory=lambda settings: None)
+		with service.execution_lock("run-queued") as acquired:
+			assert acquired
+			before = cache.get_crawl_run("run-queued")
+			result = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-queued", "--background")
+			assert cache.get_crawl_run("run-queued") == before
+	assert result.exit_code == 0, result.output
+	assert _envelope(result)["data"]["status"] == "running"
+	assert launched == []
+
+
+def test_resume_background_on_an_overdue_queue_still_requires_login(tmp_path, monkeypatch):
+	launched: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._launch_background_resume",
+		lambda data_dir, run_id, **kwargs: launched.append(run_id),
+	)
+	_seed_run(tmp_path, "run-queued", status="queued")
+	_age_run(tmp_path, "run-queued", 3600)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		before = cache.get_crawl_run("run-queued")
+		result = CliRunner().invoke(
+			cli, ["--data-dir", str(tmp_path), "--json", "crawl", "resume", "run-queued", "--background"]
+		)
+		assert cache.get_crawl_run("run-queued") == before
+	assert result.exit_code == 1, result.output
+	assert _envelope(result)["error"]["code"] == "AUTH_REQUIRED"
+	assert launched == []
+
+
+@pytest.mark.parametrize("age, overdue", [(0, False), (3600, True)], ids=["just-queued", "overdue"])
+def test_status_offers_background_resume_only_for_an_overdue_queue(tmp_path, age, overdue):
+	"""只轮询 status 等不到已经消失的 worker；刚排队时不提示，避免催着抢占正在启动的进程。"""
+	_seed_run(tmp_path, "run-queued", status="queued")
+	_age_run(tmp_path, "run-queued", age)
+	payload = _envelope(_invoke(CliRunner(), tmp_path, "crawl", "status", "run-queued"))
+	assert payload["data"]["status"] == "queued"
+	expected = ["crawl results run-queued", "crawl stop run-queued"]
+	if overdue:
+		expected.append("crawl resume run-queued --background")
+	_assert_state_commands(payload["hints"]["next_actions"], tmp_path, *expected)
+
+
 def test_resume_background_returns_completed_without_relaunch(tmp_path, monkeypatch):
 	launched: list[str] = []
 	monkeypatch.setattr(
