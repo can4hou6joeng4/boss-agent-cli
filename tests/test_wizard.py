@@ -45,6 +45,7 @@ from boss_agent_cli.wizard.prompts import (
 	collect_result_follow_up,
 	collect_wizard_input,
 )
+from boss_agent_cli.services.install_extras import extras_requirement
 
 # PTY 用例要真起一个 CLI 进程并等 prompt_toolkit 渲染完首屏，耗时随机器负载浮动：
 # 本机约 1s，而 CI 的 P0 baseline job 在同一个 job 里串跑 ruff / pytest / mypy，
@@ -4687,7 +4688,7 @@ def test_crawl_start_without_crawl_dependencies_reports_unavailable_and_creates_
 	error = caught.value
 	assert error.code == "CRAWL_UNAVAILABLE"
 	assert error.recoverable is ERROR_CODES["CRAWL_UNAVAILABLE"]["recoverable"]
-	assert "boss-agent-cli[crawl]" in error.recovery_action
+	assert extras_requirement("crawl") in error.recovery_action
 	assert f"boss --data-dir {tmp_path.resolve()} crawl configure" in error.recovery_action
 	with sqlite3.connect(tmp_path / "cache" / "boss_agent.db") as conn:
 		assert conn.execute("SELECT COUNT(*) FROM crawl_runs").fetchone()[0] == 0

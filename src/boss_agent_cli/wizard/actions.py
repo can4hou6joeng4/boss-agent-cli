@@ -31,6 +31,7 @@ from boss_agent_cli.crawler.service import (
 )
 from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
+from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.digest import build_digest
 from boss_agent_cli.display import RISK_ERROR_CONTRACTS, boss_command, risk_error_contract, risk_error_message, shell_argument
 from boss_agent_cli.output import Logger
@@ -1188,7 +1189,7 @@ def _crawl_unavailable_error(context: ActionContext, exc: CrawlRuntimeUnavailabl
 		"CRAWL_UNAVAILABLE",
 		str(exc),
 		recoverable=bool(ERROR_CODES["CRAWL_UNAVAILABLE"]["recoverable"]),
-		recovery_action=f"安装 boss-agent-cli[crawl] 并执行 {configure_command}",
+		recovery_action=f"安装 {extras_requirement('crawl')} 并执行 {configure_command}",
 	)
 
 

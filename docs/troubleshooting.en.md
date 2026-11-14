@@ -126,6 +126,8 @@ uv tool install "boss-agent-cli[mcp]"
 uv sync --extra mcp
 ```
 
+`uv tool install` rebuilds the tool environment from the extras you name and does not keep earlier ones: when `crawl` is already installed, list both (`uv tool install "boss-agent-cli[crawl,mcp]"`), otherwise adding MCP removes the crawl dependencies. The `boss-mcp` startup message and the `CRAWL_UNAVAILABLE` recovery guidance spell out the full requirement for the current environment; `pip install` is incremental and unaffected.
+
 You can also use the README's `uvx --from "boss-agent-cli[mcp]" boss-mcp` configuration directly. Missing dependencies inside the SDK and other server failures keep their original errors so you can diagnose the actual cause.
 
 ### MCP tools return `CLI_ERROR`

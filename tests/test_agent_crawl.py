@@ -11,6 +11,7 @@ from click.testing import CliRunner
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.crawler.service import CrawlSettings
 from boss_agent_cli.main import cli
+from boss_agent_cli.services.install_extras import extras_requirement
 
 
 class _FakeAIService:
@@ -333,7 +334,7 @@ def test_agent_crawl_new_query_without_crawl_dependencies_creates_no_run(tmp_pat
 	assert payload["command"] == "agent.crawl"
 	assert payload["error"]["code"] == "CRAWL_UNAVAILABLE"
 	assert payload["error"]["recoverable"] is True
-	assert "boss-agent-cli[crawl]" in payload["error"]["recovery_action"]
+	assert extras_requirement("crawl") in payload["error"]["recovery_action"]
 	assert "next_actions" not in payload["hints"]
 	with sqlite3.connect(tmp_path / "cache" / "boss_agent.db") as conn:
 		assert conn.execute("SELECT COUNT(*) FROM crawl_runs").fetchone()[0] == 0, "依赖缺失不该留下任务"

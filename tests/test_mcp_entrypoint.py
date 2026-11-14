@@ -10,6 +10,7 @@ from types import ModuleType
 import pytest
 
 from boss_agent_cli.mcp_entrypoint import run
+from boss_agent_cli.services.install_extras import extras_requirement
 
 
 @pytest.mark.parametrize("arguments", [[], ["--help"]])
@@ -39,8 +40,10 @@ def test_installed_entrypoint_explains_missing_mcp_without_writing_stdout(argume
 	)
 	assert result.returncode == 1
 	assert result.stdout == "", "启动诊断不能污染 MCP stdio 的 stdout"
-	assert 'pip install "boss-agent-cli[mcp]"' in result.stderr
-	assert 'uv tool install "boss-agent-cli[mcp]"' in result.stderr
+	# 已可用的依赖组必须一并列出：uv tool install 会重建环境（Issue #1068）。
+	requirement = extras_requirement("mcp")
+	assert f'pip install "{requirement}"' in result.stderr
+	assert f'uv tool install "{requirement}"' in result.stderr
 	assert "uv sync --extra mcp" in result.stderr
 	assert "Traceback" not in result.stderr
 

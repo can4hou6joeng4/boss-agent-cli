@@ -133,6 +133,8 @@ uv tool install "boss-agent-cli[mcp]"
 uv sync --extra mcp
 ```
 
+`uv tool install` 每次按给定的依赖组重建工具环境，不保留之前选过的组：已经装过 `crawl` 时要一次列全（`uv tool install "boss-agent-cli[crawl,mcp]"`），否则补上 MCP 的同时采集依赖会被移除。`boss-mcp` 的启动提示和 `CRAWL_UNAVAILABLE` 的恢复指引会按当前环境给出完整写法；`pip install` 是增量安装，不受影响。
+
 也可直接使用 README 的 `uvx --from "boss-agent-cli[mcp]" boss-mcp` 配置。SDK 内部其他依赖缺失或服务器自身异常仍显示其原始错误，请按具体报错排查。
 
 ### MCP 工具返回 `CLI_ERROR`

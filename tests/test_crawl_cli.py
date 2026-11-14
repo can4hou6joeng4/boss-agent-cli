@@ -24,6 +24,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands.crawl import _city_code, _launch_background_resume, _save_crawl_config
 from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
 from boss_agent_cli.main import cli
+from boss_agent_cli.services.install_extras import extras_requirement
 
 
 def _enable_research(runner: CliRunner, tmp_path: Path) -> None:
@@ -1502,11 +1503,14 @@ def _assert_runtime_missing(payload: dict, tmp_path: Path, command: str) -> None
 	error = payload["error"]
 	assert error["code"] == "CRAWL_UNAVAILABLE"
 	assert error["recoverable"] is True
-	assert "boss-agent-cli[crawl]" in error["recovery_action"]
+	assert extras_requirement("crawl") in error["recovery_action"]
 	assert f"boss --data-dir {tmp_path.resolve()} crawl configure" in error["recovery_action"]
 	# 恢复同一个任务只会复现：不能给出 Agent 可以照抄的后继命令。
 	assert "next_actions" not in payload["hints"]
-	assert any("boss-agent-cli[crawl]" in action for action in payload["hints"]["operator_actions"])
+	assert any(
+		f'uv tool install "{extras_requirement("crawl")}"' in action
+		for action in payload["hints"]["operator_actions"]
+	)
 
 
 @pytest.mark.parametrize("missing", ["DrissionPage", "openpyxl"])
@@ -1604,7 +1608,7 @@ def test_queued_worker_without_crawl_dependencies_records_the_cause(tmp_path, mo
 		run = cache.get_crawl_run("run-queued")
 	assert run["status"] == "stopped"
 	assert "CRAWL_UNAVAILABLE" in run["error"]
-	assert "boss-agent-cli[crawl]" in run["error"]
+	assert extras_requirement("crawl") in run["error"]
 
 
 @pytest.mark.parametrize("args", [("status", "run-1"), ("results", "run-1"), ("stop", "run-1")])
