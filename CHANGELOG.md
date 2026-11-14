@@ -6,6 +6,7 @@
 
 ### Fixed
 - 发布验收的子进程失败保留 stderr 原因（Issue #1107）：`scripts/verify_release.py` 只报「uv 失败，退出码 1」，把 stderr 整个丢掉——刚发布后 PyPI 索引尚未传播与真实依赖冲突在报告里完全一样，维护者只能重跑碰运气（3.4.17 发布时 `--pypi-version` 首跑失败、数分钟后通过，原因没有留下任何证据）。现在失败时的 `steps[].error` 带上 stderr 的有界尾部（末尾 12 行、单行 300 字符）；凭据先抹成 `[REDACTED]` 再截断（URL userinfo、无 scheme 的 `user:pass@host`、`token=` / `password=` 等键值与 Bearer 令牌），避免 `@` 落在截断点之外时漏出前缀；超时与 `allow_failure` 探针路径不变，无输出时保持原来的一句话。
+- MCP 显式 `null` 参数与缺键等价（Issue #1108）：文档与 CHANGELOG 自 3.3.x 起承诺「传 `null` 与不传等价于省略」，映射层也为 `None` 留了判断，但入口的类型检查会先把 `null` 判成 `INVALID_PARAM`（如 `boss_wizard.action: null` 得不到文档承诺的默认 `run`，`sort` / `section` 等可选参数同样被拒）。现在 `call_tool` 在类型检查与参数映射之前剔除值为 `null` 的键；必填参数传 `null` 按缺参返回「缺少必填参数」，不会把 `str(None)` 拼成 `"None"` 发给 CLI。数组内部的 `null` 元素、未知参数与原有类型校验不变。
 
 ## [3.4.18] - 2026-11-15
 
