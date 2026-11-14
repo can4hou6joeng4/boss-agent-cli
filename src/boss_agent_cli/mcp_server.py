@@ -9,9 +9,12 @@ import argparse
 import asyncio
 import json
 import math
+import os
 import signal
 import subprocess
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from mcp.server import Server
@@ -95,6 +98,28 @@ _BOSS_GLOBAL_ARGS: list[str] = []
 _CLI_TIMEOUT_SECONDS = 120.0
 _CHECKPOINT_GRACE_SECONDS = 5.0
 _TERMINATE_GRACE_SECONDS = 1.0
+
+
+def _default_boss_bin(*, executable: str | None = None, windows: bool | None = None) -> str:
+	"""未显式传 ``--boss-bin`` 时使用的底层 CLI。
+
+	``boss`` 与 ``boss-mcp`` 是同一次安装的两个入口，都在运行本 server 的解释器
+	旁边。MCP 主机常用绝对路径启动 ``boss-mcp`` 且不继承登录 shell 的 PATH
+	（``uv tool install`` / ``pipx install`` 的入口目录不在其中），只按 PATH 找
+	``boss`` 会让全部工具调用失败；PATH 上若另有一份旧版 ``boss``，还会被静默
+	驱动（Issue #1066）。同目录入口不存在时才回退到按 PATH 查找。
+	"""
+	interpreter = sys.executable if executable is None else executable
+	if not interpreter:
+		# 嵌入式运行时 sys.executable 可能为空；不能据此落到当前目录下的同名文件。
+		return DEFAULT_BOSS_BIN
+	bin_dir = Path(interpreter).parent
+	on_windows = os.name == "nt" if windows is None else windows
+	for name in (("boss.exe", "boss") if on_windows else ("boss",)):
+		candidate = bin_dir / name
+		if candidate.is_file():
+			return str(candidate)
+	return DEFAULT_BOSS_BIN
 
 
 def _configure_boss_invocation(
@@ -637,7 +662,11 @@ def _parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
 	parser.add_argument("--path", default=DEFAULT_HTTP_PATH, help="HTTP streaming 路径")
 	parser.add_argument("--sse-path", default=DEFAULT_SSE_PATH, help="SSE 建链路径")
 	parser.add_argument("--message-path", default=DEFAULT_MESSAGE_PATH, help="SSE 消息回传路径")
-	parser.add_argument("--boss-bin", default=DEFAULT_BOSS_BIN, help="底层 boss CLI 可执行文件路径")
+	parser.add_argument(
+		"--boss-bin",
+		default=None,
+		help="底层 boss CLI 可执行文件路径（默认使用与 boss-mcp 同一安装的 boss 入口，找不到时按 PATH 查找）",
+	)
 	parser.add_argument("--data-dir", default=None, help="传给 boss CLI 的数据目录，用于项目级状态隔离")
 	parser.add_argument("--platform", default=None, help="传给 boss CLI 的默认平台，如 zhipin")
 	parser.add_argument("--role", choices=("candidate", "recruiter"), default=None, help="传给 boss CLI 的默认角色")
@@ -654,7 +683,7 @@ def _parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
 def run(argv: list[str] | None = None) -> None:
 	args = _parse_cli_args(argv)
 	_configure_boss_invocation(
-		boss_bin=args.boss_bin,
+		boss_bin=args.boss_bin or _default_boss_bin(),
 		data_dir=args.data_dir,
 		platform=args.platform,
 		role=args.role,
