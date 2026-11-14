@@ -111,6 +111,20 @@ patchright install chromium-headless-shell
 `search`、`detail`、`status --live` 验证必须先执行 `boss login`；登录前只验证 CLI
 本地命令、schema、MCP 和 doctor。
 
+### `boss-mcp` 提示缺少 MCP SDK
+
+默认安装 `boss-agent-cli` 不包含可选的 MCP SDK。`boss-mcp` 在 SDK 缺失时会把安装说明写到 stderr 并以 1 退出；stdout 保持为空，宿主可能只显示连接已关闭。用原安装方式补上依赖后重启 MCP：
+
+```bash
+pip install "boss-agent-cli[mcp]"
+# 使用 uv tool 安装时
+uv tool install "boss-agent-cli[mcp]"
+# 源码仓库内
+uv sync --extra mcp
+```
+
+也可直接使用 README 的 `uvx --from "boss-agent-cli[mcp]" boss-mcp` 配置。SDK 内部其他依赖缺失或服务器自身异常仍显示其原始错误，请按具体报错排查。
+
 ### MCP 工具返回 `CLI_ERROR`
 
 `CLI_ERROR` 是 MCP server 与底层 `boss` CLI 之间的进程层失败，不是平台响应：

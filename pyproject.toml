@@ -97,7 +97,7 @@ crawl = [
 
 [project.scripts]
 boss = "boss_agent_cli.main:cli"
-boss-mcp = "boss_agent_cli.mcp_server:run"
+boss-mcp = "boss_agent_cli.mcp_entrypoint:run"
 
 [tool.hatch.build]
 exclude = [
@@ -284,6 +284,7 @@ module = [
 	"boss_agent_cli.crawler.service",
 	"boss_agent_cli.crawler.transport",
 	"boss_agent_cli.mcp_args",
+	"boss_agent_cli.mcp_entrypoint",
 	"boss_agent_cli.mcp_server",
 	"boss_agent_cli.mcp_tools",
 	"boss_agent_cli.schema",
