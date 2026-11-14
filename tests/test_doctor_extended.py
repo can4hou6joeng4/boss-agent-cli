@@ -952,6 +952,7 @@ def test_windows_playwright_cache_dir_uses_localappdata(tmp_path, monkeypatch):
 	"""Windows 默认 ms-playwright 缓存应纳入 doctor 检测。"""
 	from boss_agent_cli.services.browser_runtime import patchright_browser_cache_dirs
 
+	monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
 	local_app_data = tmp_path / "AppData" / "Local"
 	monkeypatch.setenv("LOCALAPPDATA", str(local_app_data))
 

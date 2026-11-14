@@ -110,6 +110,8 @@ boss doctor                     # prints the runnable install command and the re
 
 On Windows, install guidance targets PowerShell. If the interpreter path contains spaces or special characters, the full command looks like `& 'C:\Program Files\Python\python.exe' -m patchright install chromium`; keep the leading `&`, which invokes the quoted path. If you are using cmd.exe, open PowerShell before running this form of command.
 
+When `PLAYWRIGHT_BROWSERS_PATH` is set, use the same environment setting for the kernel install, the CLI, `boss doctor`, and the wizard preflight; the preflight checks only that directory. Relative paths resolve against `INIT_CWD` (or the current directory when unset), and `0` selects `.local-browsers` inside the patchright driver package.
+
 ### `AUTH_REQUIRED` before live tests
 
 `AUTH_REQUIRED` means the selected data directory has no usable login session. It is

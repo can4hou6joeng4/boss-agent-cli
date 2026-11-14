@@ -6,6 +6,7 @@
 
 ### Fixed
 - Windows 上的浏览器内核安装恢复命令可以直接执行（Issue #1072）：3.4.9 起该命令用运行 boss 的解释器路径拼出，但引用规则按 POSIX 处理，反斜杠不在安全字符集内，Windows 上任何路径都会被包上单引号——PowerShell 报 `Unexpected token '-m'`，cmd.exe 把整段当成文件名。现在 Windows 上路径不含需转义字符时原样输出（PowerShell 与 cmd 均可执行），含空格等字符时按 PowerShell 写成 `& '<路径>' -m patchright install chromium`；`BROWSER_KERNEL_MISSING` 信封、`boss doctor` 提示、向导文案与 PDF 导出失败的恢复文案同步生效，POSIX 行为不变。
+- 浏览器内核预检遵循 `PLAYWRIGHT_BROWSERS_PATH`（Issue #1073）：patchright 会按该环境变量安装和启动浏览器，`boss doctor` 与向导登录门此前却只扫描默认缓存，自定义目录已安装时误报缺失、默认缓存有旧安装时又可能误报正常。现在显式配置时只检测驱动实际使用的目录，支持相对路径的 `INIT_CWD` 解析与 `0` 指定的包内 `.local-browsers`；未配置时保持原有默认探测。双语排障文档同步。
 
 ## [3.4.10] - 2026-11-14
 

@@ -43,7 +43,24 @@ def patchright_chromium_revision() -> str | None:
 
 
 def patchright_browser_cache_dirs() -> list[Path]:
-	"""Return Playwright/Patchright browser cache directories for the current OS."""
+	"""按驱动的缓存位置检测浏览器，显式配置时不混入默认缓存。"""
+	if configured := os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+		if configured == "0":
+			try:
+				import patchright
+
+				package_root = Path(patchright.__file__).resolve().parent / "driver" / "package"
+			except Exception:
+				# 无法定位驱动包时不借用默认缓存冒充包内安装。
+				return []
+			return [package_root / ".local-browsers"]
+		cache = Path(configured)
+		if not cache.is_absolute():
+			# 与驱动一致：相对路径以 INIT_CWD（未设置时为当前目录）为基准。
+			base = Path(os.environ.get("INIT_CWD") or Path.cwd())
+			cache = Path(os.path.abspath(base / cache))
+		return [cache]
+	# 未显式配置时保留已有的默认缓存探测。
 	dirs = [
 		Path.home() / ".cache" / "ms-playwright",
 		Path.home() / "Library" / "Caches" / "ms-playwright",
