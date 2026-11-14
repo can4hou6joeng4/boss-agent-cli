@@ -35,7 +35,8 @@ process.stdout.write(JSON.stringify({{ result, sends: runs.sends, html: input.in
 """
 	path = tmp_path / "send.mjs"
 	path.write_text(probe)
-	completed = subprocess.run([_node(), str(path)], capture_output=True, text=True, timeout=15, check=True)
+	# 与其它 Node 回归同一预算：CI 冷启动卡顿可超过 15s（Issue #1029）。
+	completed = subprocess.run([_node(), str(path)], capture_output=True, text=True, timeout=30, check=True)
 	return json.loads(completed.stdout)
 
 
