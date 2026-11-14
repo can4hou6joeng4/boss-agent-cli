@@ -464,6 +464,79 @@ def test_queued_worker_records_why_it_could_not_start(tmp_path):
 	_assert_state_commands([payload["data"]["checkpoint"]["resume_command"]], tmp_path, "crawl resume run-queued")
 
 
+def test_worker_resuming_a_leftover_running_run_records_why_it_could_not_start(tmp_path):
+	"""恢复遗留 running 的 worker 没能接手时，任务不能继续显示无错误的 running（Issue #1042）。"""
+	_seed_run(tmp_path, "run-left", status="running", jobs=0)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.update_crawl_run("run-left", status="running", next_page=3, list_finished=False)
+	worker = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "resume", "run-left", "--from-queue"])
+	assert worker.exit_code == 1, worker.output
+	assert _envelope(worker)["error"]["code"] == "AUTH_REQUIRED"
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		run = cache.get_crawl_run("run-left")
+	assert run["status"] == "stopped"
+	assert run["next_page"] == 3, "未接手的 worker 不能改动页面断点"
+	assert "AUTH_REQUIRED" in run["error"]
+
+
+@pytest.mark.parametrize("status", ["stopped", "budget_stopped", "risk_stopped", "completed"])
+def test_worker_that_could_not_start_keeps_an_earlier_terminal_state(tmp_path, status):
+	"""终态是上一次真实执行的结果：没接手的 worker 不改写它，也不覆盖原错误。"""
+	_seed_run(tmp_path, "run-ended", status=status, jobs=0)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.update_crawl_run("run-ended", status=status, next_page=2, error="上一次执行的原因", list_finished=False)
+		before = cache.get_crawl_run("run-ended")
+		worker = CliRunner().invoke(
+			cli, ["--data-dir", str(tmp_path), "--json", "crawl", "resume", "run-ended", "--from-queue"]
+		)
+		assert cache.get_crawl_run("run-ended") == before
+	assert worker.exit_code == 1, worker.output
+	assert _envelope(worker)["error"]["code"] == "AUTH_REQUIRED"
+
+
+def test_queued_worker_that_runs_to_completion_is_not_settled_as_unstarted(tmp_path, monkeypatch):
+	class _Transport:
+		def open(self):
+			return []
+
+		def fetch_page(self, query, city_code, page_no):
+			return {"code": 0, "zpData": {"jobList": [], "hasMore": False}}
+
+		def close(self):
+			pass
+
+	monkeypatch.setattr("boss_agent_cli.commands.crawl._transport_factory", lambda *args, **kwargs: _Transport())
+	_seed_run(tmp_path, "run-queued", status="queued", jobs=0)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.update_crawl_run_params("run-queued", CrawlSettings(
+			query="AI", city_code="101210100", pages=1, with_detail=False,
+			profile_path=tmp_path / "crawl" / "chrome-profile", chrome_path=None,
+			cdp_port=9222, hook_profile="none",
+		).as_dict())
+	worker = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-queued", "--from-queue")
+	assert worker.exit_code == 0, worker.output
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		run = cache.get_crawl_run("run-queued")
+	assert (run["status"], run["error"]) == ("completed", "")
+
+
+def test_queued_worker_refused_as_busy_does_not_settle_the_run_after_the_lock_frees(tmp_path, monkeypatch):
+	"""被拒绝后对方随即放锁也不改写：任务归对方负责，不能记成「本次未接手：CRAWL_BUSY」。"""
+	from boss_agent_cli.crawler.service import CrawlBusyError
+
+	def _busy(self, run_id, **kwargs):
+		raise CrawlBusyError(run_id)
+
+	monkeypatch.setattr(CrawlService, "resume", _busy)
+	_seed_run(tmp_path, "run-queued", status="queued", jobs=0)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		before = cache.get_crawl_run("run-queued")
+		worker = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-queued", "--from-queue")
+		assert cache.get_crawl_run("run-queued") == before
+	assert worker.exit_code == 1, worker.output
+	assert _envelope(worker)["error"]["code"] == "CRAWL_BUSY"
+
+
 def test_queued_worker_blocked_by_the_risk_lock_records_only_the_error_code(tmp_path):
 	from boss_agent_cli.api import cdp_risk_lock
 

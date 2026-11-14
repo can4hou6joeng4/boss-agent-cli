@@ -246,11 +246,11 @@ def _report_login_required(ctx: click.Context, command: str, message: str) -> No
 	)
 
 
-def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[str], None] | None = None) -> None:
+def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[str, str], None] | None = None) -> None:
 	def note(code: str, message: str) -> None:
 		# 错误出口会直接结束进程：后台 worker 要在那之前留下原因（Issue #1042）。
 		if on_error is not None:
-			on_error(f"{code}: {message}")
+			on_error(code, message)
 
 	try:
 		raise_if_locked(Path(ctx.obj["data_dir"]))
@@ -416,11 +416,16 @@ def _launch_background_resume(
 	)
 
 
+_UNSETTLED_STATUSES = ("queued", "running")
+
+
 def _settle_unstarted_worker(data_dir: Path, run_id: str, detail: str) -> None:
-	"""后台 worker 没能接手就退出时，把原因写回仍在排队的任务（Issue #1042）。
+	"""后台 worker 退出时任务仍显示排队或运行中：没有执行器了，把原因写回（Issue #1042）。
 
 	worker 的信封写进空设备；不写回的话任务永远停在 ``queued``、没有错误，
-	而后台恢复又把 ``queued`` 当作「原 worker 即将接手」，不会再启动。
+	而后台恢复又把 ``queued`` 当作「原 worker 即将接手」，不会再启动。恢复遗留
+	``running`` 的 worker 没能接手时同理。执行器写下的终态（含 ``stopped``）不改：
+	那是上一次真实执行的结果。
 	"""
 	reason = (
 		f"后台任务未能开始执行（{detail}）"
@@ -430,15 +435,16 @@ def _settle_unstarted_worker(data_dir: Path, run_id: str, detail: str) -> None:
 	try:
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 			run = cache.get_crawl_run(run_id)
-			if run is None or run["status"] != "queued":
+			if run is None or run["status"] not in _UNSETTLED_STATUSES:
 				return
 			service = CrawlService(cache, data_dir=data_dir, transport_factory=_transport_factory)
 			with service.execution_lock(run_id) as acquired:
 				if not acquired:
 					# 另一个执行器已取得执行权，任务由它负责。
 					return
+				# 执行器全程持锁并在放锁前写终态：锁空闲而状态仍未结束，说明无人执行。
 				run = cache.get_crawl_run(run_id)
-				if run is None or run["status"] != "queued":
+				if run is None or run["status"] not in _UNSETTLED_STATUSES:
 					return
 				cache.update_crawl_run(
 					run_id,
@@ -689,16 +695,23 @@ def resume_cmd(
 	from_queue: bool,
 ) -> None:
 	"""从已保存的页游标和详情队列恢复采集。"""
-	failures: list[str] = []
+	failures: list[tuple[str, str]] = []
 	try:
-		_resume(ctx, run_id, pages, with_detail, background, from_queue, on_error=failures.append)
+		_resume(
+			ctx, run_id, pages, with_detail, background, from_queue,
+			on_error=lambda code, message: failures.append((code, message)),
+		)
 	except Exception as exc:
 		# 由外层装饰器出信封的异常（风险锁等）只留稳定错误码，不留平台原文。
-		failures.append(str(getattr(exc, "code", "") or type(exc).__name__))
+		failures.append((str(getattr(exc, "code", "") or type(exc).__name__), ""))
 		raise
 	finally:
-		if from_queue and not background:
-			_settle_unstarted_worker(Path(ctx.obj["data_dir"]), run_id, failures[-1] if failures else "")
+		code, message = failures[-1] if failures else ("", "")
+		# 被另一个执行器拒绝时任务归它负责：即使它随后放锁，也不把它的任务记成本次未接手。
+		if from_queue and not background and code != "CRAWL_BUSY":
+			_settle_unstarted_worker(
+				Path(ctx.obj["data_dir"]), run_id, f"{code}: {message}" if message else code
+			)
 
 
 def _resume(
@@ -709,7 +722,7 @@ def _resume(
 	background: bool,
 	from_queue: bool,
 	*,
-	on_error: Callable[[str], None],
+	on_error: Callable[[str, str], None],
 ) -> None:
 	if not _require_run_id(ctx, "crawl.resume", run_id):
 		ctx.exit(1)
