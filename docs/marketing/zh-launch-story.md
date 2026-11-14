@@ -32,8 +32,7 @@
 
 ```bash
 uv tool install boss-agent-cli
-patchright install chromium
-boss doctor
+boss doctor                     # 缺浏览器内核时给出可直接执行的安装命令
 boss login
 boss search "golang" --city 上海 --welfare "双休,五险一金"
 boss detail <security_id> --job-id <job_id>

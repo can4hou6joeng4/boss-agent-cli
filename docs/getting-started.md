@@ -6,7 +6,8 @@
 
 ```bash
 uv tool install boss-agent-cli
-patchright install chromium
+# 浏览器内核按需安装：缺少时 boss doctor 会给出可直接执行的安装命令
+boss doctor
 ```
 
 源码开发环境：

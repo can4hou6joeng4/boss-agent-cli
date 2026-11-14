@@ -99,7 +99,7 @@ RECOVERY_LABELS = {
 	"NETWORK_ERROR": "请检查网络后重试，或返回主菜单选择其他事项。",
 	"INTERNAL_ERROR": "这不是网络问题，重试不会有帮助。请升级到最新版本，仍出现时把这次的命令和报错反馈给维护者。",
 	"BROWSER_NAV_TIMEOUT": "请用已登录的 Chrome 调试端口重试，或先重新登录后再恢复任务。",
-	"BROWSER_KERNEL_MISSING": "这不是网络问题，重试不会有帮助。请退出向导，运行 patchright install chromium 安装浏览器内核后重新执行命令。",
+	"BROWSER_KERNEL_MISSING": "这不是网络问题，重试不会有帮助。请退出向导，运行 python -m patchright install chromium（使用运行 boss 的同一个解释器）安装浏览器内核后重新执行命令。",
 	"RATE_LIMITED": "请稍后再试。",
 	"ACCOUNT_RISK": "请停止自动操作并在平台内检查账号状态；确认风险解除后，由你本人执行 boss clean --risk-lock，再重新启动向导恢复任务。",
 	"ENVIRONMENT_RISK": "请停止自动操作，保留当前浏览器 profile，在平台官方页面确认风险解除后，由你本人执行 boss clean --risk-lock，再重新启动向导恢复任务。",
@@ -167,6 +167,16 @@ def error_message(code: str, message: str | None = None) -> str:
 
 def recovery_message(code: str, recovery_action: str | None = None) -> str | None:
 	localized = RECOVERY_LABELS.get(code)
+	if code == "BROWSER_KERNEL_MISSING":
+		# 安装命令依赖运行本 CLI 的解释器（`uv tool install` 不把 patchright
+		# 放进 PATH，Issue #1060）：有动态命令时用它替换静态说法。
+		from boss_agent_cli.services.browser_runtime import patchright_install_command
+
+		command = str(recovery_action) if recovery_action and "patchright" in str(recovery_action) else None
+		return (
+			"这不是网络问题，重试不会有帮助。请退出向导，运行 "
+			f"{command or patchright_install_command()} 安装浏览器内核后重新执行命令。"
+		)
 	if localized:
 		return localized
 	if recovery_action and any("\u4e00" <= char <= "\u9fff" for char in str(recovery_action)):

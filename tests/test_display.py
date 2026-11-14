@@ -23,6 +23,7 @@ from boss_agent_cli.display import (
 	risk_error_message,
 	shell_argument,
 )
+from boss_agent_cli.services.browser_runtime import patchright_install_command
 
 
 _HTTP_URL = re.compile(r"https?://[^\s<>\"']+")
@@ -1301,10 +1302,15 @@ def test_browser_kernel_missing_uses_install_contract(message):
 		impl(ctx)
 
 	kwargs = mock_err.call_args.kwargs
+	install = patchright_install_command()
 	assert kwargs["code"] == "BROWSER_KERNEL_MISSING"
 	assert kwargs["recoverable"] is True
-	assert kwargs["recovery_action"] == "patchright install chromium"
-	assert "patchright install chromium" in kwargs["hints"]["next_actions"]
+	# 安装命令必须带运行本 CLI 的解释器：`uv tool install` 后裸 patchright 不在 PATH
+	# 上，照抄会 command not found（Issue #1060）。
+	assert kwargs["recovery_action"] == install
+	assert sys.executable in install
+	assert "-m patchright install chromium" in install
+	assert install in kwargs["hints"]["next_actions"]
 	assert not any("重试" == action for action in kwargs["hints"]["next_actions"])
 
 
@@ -1321,7 +1327,7 @@ def test_browser_kernel_missing_hint_points_at_doctor_and_does_not_suggest_retry
 
 	kwargs = mock_err.call_args.kwargs
 	actions = kwargs["hints"]["next_actions"]
-	assert actions[0] == "patchright install chromium"
+	assert actions[0] == patchright_install_command()
 	assert any("doctor" in action for action in actions)
 	assert kwargs["hints"]["operator_actions"]
 

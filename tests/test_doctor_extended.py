@@ -138,13 +138,55 @@ def test_python_version_satisfies(tmp_path):
 # ── 3. 依赖缺失 ─────────────────────────────────────────────────────
 
 
-@patch("boss_agent_cli.commands.doctor.shutil.which", return_value=None)
-def test_patchright_missing(mock_which, tmp_path):
-	"""patchright 可执行文件不在 PATH 中时应为 warn。"""
+@patch("boss_agent_cli.commands.doctor.patchright_importable", return_value=False)
+def test_patchright_missing(mock_importable, tmp_path):
+	"""patchright 无法导入时应为 warn；判定以解释器导入为准，不看 PATH。"""
 	code, parsed = _invoke_doctor(tmp_path)
 	pr_check = _find_check(parsed["data"]["checks"], "patchright")
 	assert pr_check["status"] == "warn"
-	assert "未找到" in pr_check["detail"]
+	assert "无法导入" in pr_check["detail"]
+
+
+def test_patchright_check_does_not_depend_on_path(tmp_path, monkeypatch):
+	"""回归（Issue #1060）：`uv tool install` 只暴露 boss / boss-mcp，patchright
+	不在 PATH 上，但它就在运行 CLI 的解释器里，doctor 不能误报缺失。"""
+	import boss_agent_cli.commands.doctor as doctor_module
+
+	monkeypatch.setattr(doctor_module.shutil, "which", lambda name: None)
+	_code, parsed = _invoke_doctor(tmp_path)
+	pr_check = _find_check(parsed["data"]["checks"], "patchright")
+	assert pr_check["status"] == "ok"
+
+
+def test_doctor_kernel_install_hint_is_executable_in_this_installation(tmp_path):
+	"""内核安装提示必须用运行 CLI 的解释器，而不是 PATH 上的裸 patchright。
+
+	`uv tool install boss-agent-cli` 之后 `patchright` 不在 PATH，裸命令 rc=127；
+	提示里的解释器必须存在，且 `-m patchright` 可以导入。
+	"""
+	import re as re_module
+	import shlex
+	import subprocess
+	import sys
+	from pathlib import Path
+
+	_code, parsed = _invoke_doctor(tmp_path)
+	pr_check = _find_check(parsed["data"]["checks"], "patchright_chromium")
+	command = next(
+		token
+		for token in re_module.findall(r"(\S+ -m patchright install [^\s；]+)", pr_check["detail"])
+	)
+	argv = shlex.split(command)
+	assert argv[0] == sys.executable
+	assert Path(argv[0]).exists()
+	probe = subprocess.run(
+		[argv[0], "-m", "patchright", "--version"],
+		capture_output=True,
+		text=True,
+		timeout=120,
+		check=False,
+	)
+	assert probe.returncode == 0, probe.stderr
 
 
 # ── 4. 网络不通 ──────────────────────────────────────────────────────
@@ -944,7 +986,9 @@ def test_evaluate_patchright_chromium_requires_exact_revision(tmp_path):
 		tmp_path / "chromium_headless_shell-1217",
 	]
 	status, detail = evaluate_patchright_chromium("1208", installed)
-	assert status == "warn"
+	# 内核缺失是确定性失败：doctor 用 error 让 summary 变成 broken，而不是
+	# 让用户以为只是「有点小问题」（Issue #1060）。
+	assert status == "error"
 	assert "chromium-1208" in detail
 	assert "boss login" in detail
 
@@ -959,9 +1003,9 @@ def test_evaluate_patchright_chromium_reports_missing_headless_shell(tmp_path):
 
 	status, detail = evaluate_patchright_chromium("1223", [tmp_path / "chromium-1223"])
 
-	assert status == "warn"
+	assert status == "error"
 	assert "chromium_headless_shell-1223" in detail
-	assert "patchright install chromium-headless-shell" in detail
+	assert "-m patchright install chromium-headless-shell" in detail
 
 
 def test_evaluate_patchright_chromium_falls_back_without_manifest(tmp_path):

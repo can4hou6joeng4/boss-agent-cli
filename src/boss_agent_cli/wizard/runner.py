@@ -24,7 +24,7 @@ from boss_agent_cli.display import (
 	shell_argument,
 )
 from boss_agent_cli.output import is_local_io_error
-from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing
+from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
 from boss_agent_cli.wizard.models import StepResult, WorkflowInputError, WorkflowPlan, WorkflowStatus
 from boss_agent_cli.wizard.store import WorkflowStore
 
@@ -79,14 +79,16 @@ def _browser_kernel_missing_error(
 	``doctor`` 诊断的是 ``<data_dir>`` 里的登录态与内核缓存，必须带上本次运行
 	的数据目录，否则自定义 --data-dir 下照抄提示会诊断另一份目录（同 Issue #978）。
 	"""
-	recoverable, recovery_action = error_contract_for_code("BROWSER_KERNEL_MISSING")
+	recoverable, _ = error_contract_for_code("BROWSER_KERNEL_MISSING")
 	doctor = boss_command("doctor", platform_name=plan.platform, data_dir=data_dir)
 	cause = (str(exc) or type(exc).__name__).splitlines()[0][:300]
 	return WorkflowActionError(
 		"BROWSER_KERNEL_MISSING",
 		"patchright 浏览器内核缺失或与所需修订版不匹配",
 		recoverable=recoverable,
-		recovery_action=recovery_action,
+		# 与命令层同一份可执行指引：裸 `patchright install chromium` 在
+		# `uv tool install` 环境下不在 PATH 上（Issue #1060）。
+		recovery_action=patchright_install_command(),
 		details={"cause": cause, "doctor_command": doctor},
 	)
 

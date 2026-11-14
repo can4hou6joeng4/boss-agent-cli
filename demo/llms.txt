@@ -23,7 +23,7 @@ Long workflows are bounded by timeout, retry, budget, checkpoint and stop contro
 ## Install
 - MCP: `uvx --from boss-agent-cli[mcp] boss-mcp`
 - CLI: `uv tool install boss-agent-cli`
-- Browser core when needed: `patchright install chromium`
+- Browser core when needed: `boss doctor` prints a runnable install command when the kernel is missing
 
 ## License & environment
 MIT. Python >= 3.11. Login state, cache, resumes and shortlists are stored locally. No runtime telemetry is included.

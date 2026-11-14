@@ -86,15 +86,26 @@ boss logout && boss login
 
 ## Browser / patchright issues
 
-### `patchright install chromium` fails
+### Browser kernel install fails (`BROWSER_KERNEL_MISSING`)
+
+The kernel install command must use **the same interpreter that runs boss**.
+`uv tool install` / `pipx install` only put `boss` and `boss-mcp` on PATH and keep
+patchright inside the tool environment, so a bare `patchright install chromium`
+fails with `command not found` (Issue #1060). Both the envelope's
+`error.recovery_action` and `boss doctor` print a runnable command that includes the
+interpreter path — copy it as is:
 
 ```bash
+boss doctor                     # prints the runnable install command and the required revision
+# e.g. /path/to/python -m patchright install chromium
+
+# Extra troubleshooting when the install itself fails
 # macOS / Linux: ensure write access to ~/Library/Caches (macOS) or ~/.cache (Linux)
 # Windows: run as admin once
-pip install --upgrade patchright
-patchright install chromium --with-deps
-# If the global tool environment reports a missing headless shell:
-patchright install chromium-headless-shell
+<same interpreter> -m pip install --upgrade patchright
+<same interpreter> -m patchright install chromium --with-deps
+# If it reports a missing headless shell:
+<same interpreter> -m patchright install chromium-headless-shell
 ```
 
 ### `AUTH_REQUIRED` before live tests
@@ -380,7 +391,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `AI_API_ERROR` | AI provider call failed | Retry / check key |
 | `AI_PARSE_ERROR` | AI response not JSON | Retry |
 | `PLATFORM_NOT_SUPPORTED` | The current platform does not support this role or subcommand | Switch to a supported platform (e.g. `boss --platform zhipin hr ...`) |
-| `BROWSER_KERNEL_MISSING` | patchright browser kernel missing or mismatched (including non-login commands that launch a browser: `search` / `detail` / `greet` / `chat` / `me` / `wizard`, and `resume export --format pdf`) | `patchright install chromium`; if the headless shell is missing, run `patchright install chromium-headless-shell`. This is a deterministic failure; retrying will not help |
+| `BROWSER_KERNEL_MISSING` | patchright browser kernel missing or mismatched (including non-login commands that launch a browser: `search` / `detail` / `greet` / `chat` / `me` / `wizard`, and `resume export --format pdf`) | `<interpreter running boss> -m patchright install chromium` (the envelope's `recovery_action` gives the full command); if the headless shell is missing, run `-m patchright install chromium-headless-shell` with the same interpreter. This is a deterministic failure; retrying will not help |
 
 ## Windows smoke checklist
 

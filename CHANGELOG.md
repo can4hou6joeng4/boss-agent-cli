@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Fixed
+- 工具式安装下浏览器内核安装指引不可执行（Issue #1060）：按推荐方式 `uv tool install` / `pipx install` 安装后，只有 `boss`、`boss-mcp` 进入 PATH，patchright 留在工具环境里，而信封的 `error.recovery_action`、`hints.next_actions`、向导文案与文档都让用户执行裸 `patchright install chromium`——实测直接 `command not found`（rc=127），Agent 照抄必然失败。现在所有内核安装指引改用运行本 CLI 的同一解释器（`<python> -m patchright install chromium`，缺 headless shell 时为对应变体），版本与启动浏览器时一致；`uv run` / 源码环境同样成立。
+- 向导登录门的内核预检从不拦截（Issue #1060）：`_browser_kernel_status()` 把缓存根目录传给按条目名精确匹配的判定函数，永远匹配不上，`status == "error"` 分支不可达，内核真缺失时仍会去开浏览器再失败；同时该函数此前只会返回 `ok` / `warn`，`boss doctor` 把内核缺失报成 `warn`、摘要停在 `degraded`。现在预检展开 `chromium-<修订版>` 条目再比对，缺内核判定为 `error`，`doctor` 的 `patchright` 检查也改为按解释器导入判断，不再因 `uv tool install` 未把 patchright 暴露到 PATH 而误报缺失。
 - 新命令贡献指南与当前工程结构对齐（Issue #1057）：中英文清单改为在 `mcp_tools.py` 定义工具、在 `mcp_args.py` 映射参数，说明兼容导出和协议工具目录核对；移除对本地忽略文件的必改要求，补齐新增模块 mypy 严格登记、能力计数与变更记录同步步骤。
 
 ## [3.4.8] - 2026-11-14

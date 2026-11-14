@@ -3,6 +3,7 @@
 import json
 import os
 import shlex
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -270,9 +271,12 @@ def test_login_missing_browser_kernel_recovery_is_patchright_install(mock_auth_c
 	result = runner.invoke(cli, ["login"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
+	from boss_agent_cli.services.browser_runtime import patchright_install_command
+
+	install = patchright_install_command()
 	assert parsed["error"]["code"] == "BROWSER_KERNEL_MISSING"
-	assert parsed["error"]["recovery_action"] == "patchright install chromium"
-	assert any("patchright install chromium" in action for action in parsed["hints"]["next_actions"])
+	assert parsed["error"]["recovery_action"] == install
+	assert install in parsed["hints"]["next_actions"]
 
 
 @patch("boss_agent_cli.commands.login.AuthManager")
@@ -447,9 +451,10 @@ def test_login_error_hints_split_by_audience(mock_auth_cls, side_effect, expecte
 	# 每个分类都必须给真人留下可读指引。
 	assert hints["operator_actions"], f"{expected_code} 缺少 operator_actions"
 
-	# next_actions 必须是可执行命令，不是叙述句。
+	# next_actions 必须是可执行命令，不是叙述句。内核安装提示用运行本 CLI 的
+	# 解释器（可能是绝对路径，见 Issue #1060），其余一律以 boss 开头。
 	for action in hints["next_actions"]:
-		assert action.startswith(("boss", "patchright")), (
+		assert action.startswith(("boss", "patchright", sys.executable)), (
 			f"{expected_code} 的 next_actions 混入了非命令条目: {action!r}"
 		)
 		assert "，" not in action and "。" not in action

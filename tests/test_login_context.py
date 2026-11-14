@@ -137,7 +137,9 @@ def test_login_failure_commands_keep_directory(tmp_path, exc):
 	assert boss_commands
 	for argv in boss_commands:
 		assert argv[:5] == ["boss", "--platform", "otherplat", "--data-dir", str(ctx.obj["data_dir"].resolve())]
-	assert shlex.split(payload["recovery_action"])[-1] == "login" or payload["recovery_action"] == "patchright install chromium"
+	from boss_agent_cli.services.browser_runtime import patchright_install_command
+
+	assert shlex.split(payload["recovery_action"])[-1] == "login" or payload["recovery_action"] == patchright_install_command()
 
 
 @pytest.mark.parametrize("code", ["AUTH_REQUIRED", "AUTH_EXPIRED", "TOKEN_REFRESH_FAILED"])

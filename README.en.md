@@ -47,7 +47,7 @@ Historical `operating_mode=assisted|research` configuration remains compatible, 
 ```bash
 # Install (uv recommended; the browser core is only for user-triggered login / local export)
 uv tool install boss-agent-cli
-patchright install chromium
+boss doctor   # prints a runnable browser-kernel install command when missing
 
 # Human entrypoint: choose role, platform, and goal in the wizard
 boss

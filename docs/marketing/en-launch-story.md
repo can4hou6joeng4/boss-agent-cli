@@ -24,8 +24,7 @@ Recommended: **A**. It frames the project as an agent integration without implyi
 
 ```bash
 uv tool install boss-agent-cli
-patchright install chromium
-boss doctor
+boss doctor                     # prints a runnable browser-kernel install command when missing
 boss login
 boss search "golang" --city Shanghai --welfare "two-day weekends,5 insurances 1 fund"
 boss detail <security_id> --job-id <job_id>

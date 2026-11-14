@@ -3543,7 +3543,7 @@ def test_gate_blocks_on_missing_browser_kernel_without_opening_browser(tmp_path,
 	monkeypatch.setattr(
 		preflight,
 		"_browser_kernel_status",
-		lambda: ("error", "patchright 需要 chromium-1234，请运行 patchright install chromium"),
+		lambda: ("error", "patchright 需要 chromium-1234，请运行 python -m patchright install chromium"),
 	)
 	login_calls = []
 	monkeypatch.setattr(
@@ -3555,6 +3555,28 @@ def test_gate_blocks_on_missing_browser_kernel_without_opening_browser(tmp_path,
 	menu = _ScriptedMenu(["login", "exit"])
 	assert preflight.ensure_login(_gate_ctx(tmp_path), menu=menu) == preflight.GATE_EXIT
 	assert login_calls == [], "内核缺失时不得尝试打开浏览器"
+
+
+def test_gate_kernel_status_compares_real_cache_entries(tmp_path, monkeypatch):
+	"""回归（Issue #1060）：预检必须展开缓存条目再按修订版比对。
+
+	此前直接把缓存根目录传给 ``evaluate_patchright_chromium``，按条目名精确匹配
+	永远失败，于是返回 warn、登录门的 ``status == "error"`` 分支不可达：内核
+	真缺失时仍会去开浏览器，再在 launch 时报错。
+	"""
+	from boss_agent_cli.services import browser_runtime
+	from boss_agent_cli.wizard import preflight
+
+	monkeypatch.setattr(browser_runtime, "patchright_chromium_revision", lambda: "1234")
+	monkeypatch.setattr(browser_runtime, "patchright_browser_cache_dirs", lambda: [tmp_path])
+
+	# 缓存根目录存在但没有所需修订版：必须判定为 error。
+	assert preflight._browser_kernel_status()[0] == "error"
+
+	# 装上所需修订版后必须判定为 ok。
+	(tmp_path / "chromium-1234").mkdir()
+	(tmp_path / "chromium_headless_shell-1234").mkdir()
+	assert preflight._browser_kernel_status()[0] == "ok"
 
 
 def test_gate_login_risk_stops_without_offering_retry(tmp_path, monkeypatch):
@@ -4298,9 +4320,12 @@ def test_runner_reports_browser_kernel_missing_without_retry(tmp_path):
 		run = WorkflowRunner(store, {"broken": broken}).run(
 			_plan("broken"), SimpleNamespace(data_dir=tmp_path), run_id="kernel-run"
 		)
+	from boss_agent_cli.services.browser_runtime import patchright_install_command
+
 	assert run["error"]["code"] == "BROWSER_KERNEL_MISSING"
 	assert run["error"]["recoverable"] is True
-	assert run["error"]["recovery_action"] == "patchright install chromium"
+	# 与命令层同一份可执行指引：解释器 + 模块入口，不依赖 PATH（Issue #1060）。
+	assert run["error"]["recovery_action"] == patchright_install_command()
 	# doctor 指引必须指向本次运行的数据目录（同 Issue #978 的迁移）。
 	assert str((tmp_path / "doctor-marker")) not in run["error"]["details"]["doctor_command"]
 	assert run["error"]["details"]["doctor_command"] == f"boss --data-dir {tmp_path.resolve()} doctor"

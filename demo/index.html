@@ -285,7 +285,7 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 		</div>
 		<pre class="code"><span class="c"># <span data-zh="安装（浏览器内核按需安装）" data-en="install (browser core when needed)">安装（浏览器内核按需安装）</span></span>
 <span class="k">$</span> uv tool install boss-agent-cli
-<span class="k">$</span> patchright install chromium
+<span class="k">$</span> boss doctor   # <span data-zh="缺内核时给出可执行的安装命令" data-en="prints a runnable kernel install command when missing">缺内核时给出可执行的安装命令</span>
 
 <span class="c"># <span data-zh="跑通闭环" data-en="run the loop">跑通闭环</span></span>
 <span class="k">$</span> boss doctor
@@ -325,7 +325,7 @@ footer.foot{margin-top:56px;padding-top:40px;border-top:1px solid var(--border-s
 			</div>
 			<div class="faq-pair">
 				<dt data-zh="需要什么环境？" data-en="What do I need?">需要什么环境？</dt>
-				<dd data-zh="Python ≥ 3.11；登录、导出及已声明的浏览器工作流按需使用 Patchright 内核（patchright install chromium）。" data-en="Python ≥ 3.11; login, export and declared browser workflows use the Patchright browser core when needed (patchright install chromium).">Python ≥ 3.11；登录、导出及已声明的浏览器工作流按需使用 Patchright 内核（patchright install chromium）。</dd>
+				<dd data-zh="Python ≥ 3.11；登录、导出及已声明的浏览器工作流按需使用 Patchright 内核，缺内核时 boss doctor 会给出可直接执行的安装命令。" data-en="Python ≥ 3.11; login, export and declared browser workflows use the Patchright browser core when needed; boss doctor prints a runnable install command when it is missing.">Python ≥ 3.11；登录、导出及已声明的浏览器工作流按需使用 Patchright 内核（patchright install chromium）。</dd>
 			</div>
 			<div class="faq-pair">
 				<dt data-zh="开源吗？" data-en="Is it open source?">开源吗？</dt>

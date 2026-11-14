@@ -18,7 +18,7 @@ Run `boss schema` (also supports `--format native | openai-tools | anthropic-too
 
 - MCP server: `uvx --from boss-agent-cli[mcp] boss-mcp`
 - CLI: `uv tool install boss-agent-cli`
-- Browser core (login / export only): `patchright install chromium`
+- Browser core (login / export only): run `boss doctor`; when the kernel is missing it prints a runnable install command (`<python running boss> -m patchright install chromium`) that works under `uv tool install` / `pipx`
 
 ## Contract
 

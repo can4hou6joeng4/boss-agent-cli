@@ -320,7 +320,10 @@ def test_me_browser_kernel_missing_is_not_retryable_network_error(mock_auth_cls,
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "BROWSER_KERNEL_MISSING"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "patchright install chromium"
-	assert "patchright install chromium" in parsed["hints"]["next_actions"]
+	from boss_agent_cli.services.browser_runtime import patchright_install_command
+
+	install = patchright_install_command()
+	assert parsed["error"]["recovery_action"] == install
+	assert install in parsed["hints"]["next_actions"]
 	assert str(tmp_path.resolve()) in parsed["hints"]["next_actions"][1]
 	assert "chrome-headless-shell-mac-arm64" not in parsed["error"]["message"]
