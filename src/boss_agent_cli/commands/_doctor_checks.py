@@ -145,7 +145,7 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 					}
 				)
 				identity = interpret_recruiter_identity(_user_info_payload(platform, info))
-				checks.append(_recruiter_identity_check(identity))
+				checks.append(_recruiter_identity_check(identity, ctx=ctx))
 			else:
 				code, message = platform.parse_error(info)
 				if code in RISK_ERROR_CONTRACTS:
@@ -243,7 +243,8 @@ def _user_info_payload(platform: Any, info: Any) -> dict[str, Any]:
 	return {}
 
 
-def _recruiter_identity_check(identity: dict[str, Any]) -> dict[str, Any]:
+def _recruiter_identity_check(identity: dict[str, Any], *, ctx: Any = None) -> dict[str, Any]:
+	"""``hr whoami`` 恢复命令定位到本次诊断的数据目录（Issue #1095）。"""
 	if identity.get("ready") is True:
 		return {
 			"name": "recruiter_identity",
@@ -258,11 +259,11 @@ def _recruiter_identity_check(identity: dict[str, Any]) -> dict[str, Any]:
 			"name": "recruiter_identity",
 			"status": "warn",
 			"detail": detail,
-			"recovery_action": "在官方页面切换到「我要招聘」后执行 boss hr whoami",
+			"recovery_action": f"在官方页面切换到「我要招聘」后执行 {_doctor_command(ctx, 'hr', 'whoami')}",
 		}
 	return {
 		"name": "recruiter_identity",
 		"status": "warn",
 		"detail": "getUserInfo 的 identity 不是 0 或 1，继续做招聘者只读探测",
-		"recovery_action": "执行 boss hr whoami 核对身份",
+		"recovery_action": f"执行 {_doctor_command(ctx, 'hr', 'whoami')} 核对身份",
 	}
