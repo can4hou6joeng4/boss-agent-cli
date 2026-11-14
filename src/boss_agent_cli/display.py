@@ -486,8 +486,18 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 		console.print(f"  [dim]next: {escape(greet_command)}[/dim]")
 
 
-def render_status(data: dict[str, Any], *, login_action: str = "boss login") -> None:
-	"""Render login status."""
+def render_status(
+	data: dict[str, Any],
+	*,
+	login_action: str = "boss login",
+	clean_action: str = "boss clean --risk-lock",
+) -> None:
+	"""Render login status.
+
+	``clean_action`` 由命令层传入带 ``--data-dir`` / ``--platform`` 的真实解锁
+	命令：风险锁写在 ``<data_dir>/.cdp_risk_lock``，裸命令会去默认目录空转
+	（Issue #1087）。
+	"""
 	if data.get("logged_in"):
 		name = escape_markup(data.get("user_name", "unknown"))
 		console.print(f"[green]logged in[/green] as [bold]{name}[/bold]")
@@ -500,7 +510,7 @@ def render_status(data: dict[str, Any], *, login_action: str = "boss login") -> 
 		reason = escape_markup(lock.get("reason") or "ENVIRONMENT_RISK")
 		console.print(
 			f"[yellow]BOSS 本地风控锁定中[/yellow]（{since} 起，{reason}）：确认官方目标业务页已恢复后，"
-			"由用户执行 boss clean --risk-lock 再显式恢复任务；令牌变化不会自动解锁"
+			f"由用户执行 {escape_markup(clean_action)} 再显式恢复任务；令牌变化不会自动解锁"
 		)
 
 

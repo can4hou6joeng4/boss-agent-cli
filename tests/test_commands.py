@@ -86,6 +86,31 @@ def test_status_logged_in_happy_path(mock_auth_cls):
 	assert "checks" in parsed["data"]
 
 
+@patch("boss_agent_cli.commands.status.AuthManager")
+def test_status_tty_risk_lock_hint_keeps_custom_data_dir(mock_auth_cls, tmp_path, monkeypatch):
+	"""风控锁提示必须指向本次 --data-dir（Issue #1087）。"""
+	import io
+
+	from rich.console import Console
+
+	from boss_agent_cli.api import cdp_risk_lock
+	from boss_agent_cli.display import shell_argument
+
+	mock_auth_cls.return_value.check_status.return_value = {"cookies": {"wt2": "x"}, "stoken": "s"}
+	cdp_risk_lock.write_lock(tmp_path, cdp_risk_lock.hash_stoken("synthetic-stoken"), reason="ENVIRONMENT_RISK")
+	stream = io.StringIO()
+	monkeypatch.setattr("boss_agent_cli.display.console", Console(file=stream, force_terminal=False, width=400))
+	monkeypatch.setattr("boss_agent_cli.display.is_json_mode", lambda ctx: False)
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "status"])
+
+	assert result.exit_code == 0
+	expected = f"boss --data-dir {shell_argument(str(tmp_path.resolve()))} clean --risk-lock"
+	output = stream.getvalue()
+	assert expected in output
+	assert "执行 boss clean --risk-lock" not in output
+
+
 @patch("boss_agent_cli.commands.status.get_platform_instance")
 @patch("boss_agent_cli.commands.status.AuthManager")
 def test_status_live_logged_in_unknown_user(mock_auth_cls, mock_client_cls):

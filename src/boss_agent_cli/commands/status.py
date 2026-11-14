@@ -75,7 +75,11 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 			ctx,
 			"status",
 			data,
-			render=lambda payload: render_status(payload, login_action=login_action_for_ctx(ctx)),
+			render=lambda payload: render_status(
+				payload,
+				login_action=login_action_for_ctx(ctx),
+				clean_action=boss_command_for_ctx(ctx, "clean --risk-lock", include_data_dir=True),
+			),
 			hints=status_hints,
 		)
 		return
@@ -104,7 +108,11 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 			ctx,
 			"status",
 			data,
-			render=lambda payload: render_status(payload, login_action=login_action_for_ctx(ctx)),
+			render=lambda payload: render_status(
+				payload,
+				login_action=login_action_for_ctx(ctx),
+				clean_action=boss_command_for_ctx(ctx, "clean --risk-lock", include_data_dir=True),
+			),
 			hints={
 				"next_actions": [
 					boss_command_for_ctx(ctx, "recommend", include_data_dir=True),
