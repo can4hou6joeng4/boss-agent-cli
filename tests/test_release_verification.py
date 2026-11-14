@@ -379,6 +379,113 @@ def test_nonzero_process_cannot_claim_success(verifier, monkeypatch, tmp_path, o
 		verifier.run_command(["python"], cwd=tmp_path, timeout=1, allow_failure=True)
 
 
+def test_failed_command_reports_the_stderr_reason(verifier, monkeypatch, tmp_path):
+	"""失败报告要带上 stderr 尾部：只报退出码无法区分索引延迟与真实冲突（Issue #1107）。"""
+	process = MagicMock()
+	process.__enter__.return_value = process
+	process.returncode = 1
+	process.communicate.return_value = (
+		"",
+		"  × No solution found when resolving dependencies:\n"
+		"  ╰─▶ Because there is no version of boss-agent-cli[mcp]==999.0.0\n"
+		"Using credentials from https://maintainer:hunter2@nested@pypi.example/simple\n",
+	)
+	monkeypatch.setattr(verifier.subprocess, "Popen", lambda *a, **kw: process)
+
+	with pytest.raises(verifier.VerificationError) as error:
+		verifier.run_command(["uv", "pip", "install"], cwd=tmp_path, timeout=1)
+
+	message = str(error.value)
+	assert message.startswith("uv 失败，退出码 1：")
+	assert "no version of boss-agent-cli[mcp]==999.0.0" in message
+	assert "https://[REDACTED]@pypi.example/simple" in message
+	assert "hunter2" not in message
+	assert "nested@" not in message
+
+
+def test_failed_command_tail_is_bounded_and_keeps_the_last_lines(verifier, monkeypatch, tmp_path):
+	process = MagicMock()
+	process.__enter__.return_value = process
+	process.returncode = 2
+	lines = [f"line-{index:02d}" for index in range(40)] + ["x" * 5000]
+	process.communicate.return_value = ("", "\n".join(lines))
+	monkeypatch.setattr(verifier.subprocess, "Popen", lambda *a, **kw: process)
+
+	with pytest.raises(verifier.VerificationError) as error:
+		verifier.run_command(["git", "ls-files"], cwd=tmp_path, timeout=1)
+
+	message = str(error.value)
+	assert message.startswith("git 失败，退出码 2：")
+	assert "line-39" in message
+	assert "line-00" not in message
+	tail_lines = message.split("：", 1)[1].splitlines()
+	assert len(tail_lines) == verifier._STDERR_TAIL_LINES
+	assert all(len(line) <= verifier._STDERR_LINE_LIMIT for line in tail_lines)
+	assert "x" * verifier._STDERR_LINE_LIMIT in message
+	assert "x" * (verifier._STDERR_LINE_LIMIT + 1) not in message
+
+
+def test_credentials_are_redacted_before_truncation(verifier, monkeypatch, tmp_path):
+	"""凭据的 `@` 落在 300 字符之外时也必须整体抹掉（Issue #1107 复核）。
+
+	先截断再脱敏会切掉 `user:pass@host` 的 `@`，正则认不出 userinfo，凭据
+	前缀原样进入报告；因此顺序必须是先脱敏、后截断。
+	"""
+	process = MagicMock()
+	process.__enter__.return_value = process
+	process.returncode = 1
+	process.communicate.return_value = ("", "x" * 270 + " https://maintainer:" + "A" * 100 + "@pypi.example/simple")
+	monkeypatch.setattr(verifier.subprocess, "Popen", lambda *a, **kw: process)
+
+	with pytest.raises(verifier.VerificationError) as error:
+		verifier.run_command(["uv"], cwd=tmp_path, timeout=1)
+
+	message = str(error.value)
+	assert "https://[REDACTED]@" in message
+	assert "A" * 10 not in message
+	tail_lines = message.split("：", 1)[1].splitlines()
+	assert all(len(line) <= verifier._STDERR_LINE_LIMIT for line in tail_lines)
+
+
+def test_bare_userinfo_query_credentials_and_bearer_are_redacted(verifier, monkeypatch, tmp_path):
+	"""无 scheme 的 userinfo、查询串凭据与 Bearer 令牌同样先抹掉。"""
+	process = MagicMock()
+	process.__enter__.return_value = process
+	process.returncode = 1
+	process.communicate.return_value = (
+		"",
+		"index user:hunter2@pypi.example/simple?token=abc123&page=2\n"
+		"Authorization: Bearer ghp_abcdefghijklmnop\n"
+		"note: expected Bearer token\n",
+	)
+	monkeypatch.setattr(verifier.subprocess, "Popen", lambda *a, **kw: process)
+
+	with pytest.raises(verifier.VerificationError) as error:
+		verifier.run_command(["uv"], cwd=tmp_path, timeout=1)
+
+	message = str(error.value)
+	assert "[REDACTED]@pypi.example/simple" in message
+	assert "token=[REDACTED]" in message
+	assert "hunter2" not in message
+	assert "abc123" not in message
+	assert "ghp_abcdefghijklmnop" not in message
+	assert "page=2" in message
+	assert "expected Bearer token" in message
+
+
+def test_failed_command_without_output_keeps_the_plain_message(verifier, monkeypatch, tmp_path):
+	process = MagicMock()
+	process.__enter__.return_value = process
+	process.returncode = 3
+	process.communicate.return_value = ("", " \n\t\n")
+	monkeypatch.setattr(verifier.subprocess, "Popen", lambda *a, **kw: process)
+
+	with pytest.raises(verifier.VerificationError) as error:
+		verifier.run_command(["uv"], cwd=tmp_path, timeout=1)
+
+	assert str(error.value) == "uv 失败，退出码 3"
+
+
 def test_probe_timeout_is_a_failed_json_report(probe_module, monkeypatch, capsys):
 	import asyncio
 

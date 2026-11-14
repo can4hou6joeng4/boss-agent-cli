@@ -29,7 +29,53 @@ _VERSION = re.compile(r"[0-9][A-Za-z0-9.!+\-]*\Z")
 
 
 class VerificationError(Exception):
-	"""发布检查失败，不携带子进程环境或凭据。"""
+	"""发布检查失败，不携带子进程环境或凭据。
+
+	子进程失败时报告会带上 stderr 的有界尾部（见 `_stderr_tail`）：凭据在进入
+	错误信息前已抹掉（URL userinfo、`token=` / `password=` 等键值），环境变量
+	不会被回显。
+	"""
+
+
+#: 失败报告保留的 stderr 末尾行数：uv / git 的诊断总在最后几行。
+_STDERR_TAIL_LINES = 12
+#: 单行上限，防止异常长的输出把报告撑大。
+_STDERR_LINE_LIMIT = 300
+
+
+def _redact_credentials(line: str) -> str:
+	"""抹掉一行 stderr 里常见的凭据形态（Issue #1107）。
+
+	必须在截断之前调用：先截断会把 `user:pass@host` 的 `@` 切掉，正则再也
+	认不出 userinfo，凭据前缀便原样留在报告里。
+	"""
+	# URL / 协议相对地址的 userinfo：https://user:pass@host、//user:pass@host。
+	line = re.sub(r"(?<=//)[^/\s]+@", "[REDACTED]@", line)
+	# 无 scheme 的 userinfo（索引配置、scp 风格地址）：user:pass@host/path。
+	line = re.sub(r"(?<![\w./-])[^\s/:@]+:[^\s/@]+@", "[REDACTED]@", line)
+	# 查询串与键值对里的常见凭据字段。
+	line = re.sub(
+		r"(?i)\b(token|password|passwd|secret|api[_-]?key|access[_-]?token|auth)=[^\s&]+",
+		r"\1=[REDACTED]",
+		line,
+	)
+	# Authorization: Bearer xxx；只抹看起来像令牌的长串，避免误伤普通单词。
+	return re.sub(r"(?i)\b(bearer)\s+[A-Za-z0-9._~+/=-]{8,}", r"\1 [REDACTED]", line)
+
+
+def _stderr_tail(stderr: str) -> str:
+	"""取 stderr 末尾若干行作为失败原因；凭据先抹掉、再截断（Issue #1107）。"""
+	lines = [_redact_credentials(line.rstrip()) for line in stderr.splitlines() if line.strip()]
+	if not lines:
+		return ""
+	return "\n".join(line[:_STDERR_LINE_LIMIT] for line in lines[-_STDERR_TAIL_LINES:])
+
+
+def _failure_message(tool: str, returncode: int, stderr: str) -> str:
+	"""失败信息 = 退出码 + stderr 尾部；没有输出时保持原来的一句话。"""
+	message = f"{tool} 失败，退出码 {returncode}"
+	tail = _stderr_tail(stderr)
+	return f"{message}：{tail}" if tail else message
 
 
 def run_command(
@@ -51,7 +97,7 @@ def run_command(
 		start_new_session=os.name != "nt",
 	) as process:
 		try:
-			stdout, _ = process.communicate(timeout=timeout)
+			stdout, stderr = process.communicate(timeout=timeout)
 		except subprocess.TimeoutExpired as exc:
 			if os.name == "nt":
 				try:
@@ -79,7 +125,7 @@ def run_command(
 					report = None
 				if isinstance(report, dict) and report.get("ok") is False:
 					return stdout
-			raise VerificationError(f"{Path(argv[0]).name} 失败，退出码 {process.returncode}")
+			raise VerificationError(_failure_message(Path(argv[0]).name, process.returncode, stderr))
 		return stdout
 
 
