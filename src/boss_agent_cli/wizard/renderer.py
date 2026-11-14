@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -134,6 +135,12 @@ RECOVERY_LABELS = {
 	"CRAWL_BUSY": "请等它结束；需要确认进度时执行 boss crawl status <run_id>，不要并发恢复同一个任务。",
 }
 
+#: 风控恢复动作里由 runner / actions 注入的真实解锁命令（Issue #978 / #976）。
+_RISK_CLEAN_COMMAND = re.compile(
+	r"""boss(?: --platform \S+)? --data-dir (?:'[^']*'|"[^"]*"|\S+) clean --risk-lock"""
+)
+_RISK_CODES = frozenset({"ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_LOCKED"})
+
 # 这些步骤对真人噪声大，TTY 进度里默认静默。
 _SILENT_STEPS = {"auth_status"}
 
@@ -168,6 +175,13 @@ def error_message(code: str, message: str | None = None) -> str:
 
 def recovery_message(code: str, recovery_action: str | None = None) -> str | None:
 	localized = RECOVERY_LABELS.get(code)
+	if localized and code in _RISK_CODES and recovery_action:
+		# runner / actions 已把解锁命令换成带 --data-dir 的真实命令；静态文案
+		# 保留面向真人的措辞，命令部分必须用动态版本，否则自定义数据目录下
+		# 照抄提示会去默认目录空转（Issue #1087）。
+		match = _RISK_CLEAN_COMMAND.search(str(recovery_action))
+		if match:
+			return localized.replace("boss clean --risk-lock", match.group(0))
 	if code == "BROWSER_KERNEL_MISSING":
 		# 安装命令依赖运行本 CLI 的解释器（`uv tool install` 不把 patchright
 		# 放进 PATH，Issue #1060）：有动态命令时用它替换静态说法。

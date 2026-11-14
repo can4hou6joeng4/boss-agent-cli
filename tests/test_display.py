@@ -43,9 +43,9 @@ def _has_official_zhipin_url(text: str) -> bool:
 	return False
 
 
-def _capture_display_console(monkeypatch):
+def _capture_display_console(monkeypatch, *, width: int = 100):
 	stream = io.StringIO()
-	console = Console(file=stream, force_terminal=False, width=100)
+	console = Console(file=stream, force_terminal=False, width=width)
 	monkeypatch.setattr("boss_agent_cli.display.console", console)
 	return stream
 
@@ -737,6 +737,28 @@ class TestRenderers:
 		output = stream.getvalue()
 		assert "not logged in" in output
 		assert "boss --platform otherplat login" in output
+
+	def test_render_status_risk_lock_uses_custom_clean_action(self, monkeypatch):
+		from boss_agent_cli.display import render_status
+		stream = _capture_display_console(monkeypatch, width=400)
+
+		render_status(
+			{
+				"logged_in": True,
+				"user_name": "张三",
+				"cdp_risk_lock": {
+					"locked": True,
+					"locked_at": "2026-11-15 10:00:00",
+					"reason": "ENVIRONMENT_RISK",
+				},
+			},
+			clean_action="boss --data-dir '/tmp/custom state' clean --risk-lock",
+		)
+
+		output = stream.getvalue()
+		assert "风控锁定中" in output
+		assert "boss --data-dir '/tmp/custom state' clean --risk-lock" in output
+		assert "执行 boss clean --risk-lock" not in output
 
 	def test_render_simple_list_empty(self, monkeypatch):
 		from boss_agent_cli.display import render_simple_list

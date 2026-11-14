@@ -104,3 +104,46 @@ def test_browser_kernel_recovery_uses_the_running_interpreter():
 	# 没有动态命令时回落到当前解释器。
 	fallback = recovery_message("BROWSER_KERNEL_MISSING", "检查网络后重试") or ""
 	assert patchright_install_command() in fallback
+
+
+def test_risk_recovery_uses_context_aware_clean_command():
+	"""runner 已算出带数据目录的解锁命令时，TTY 文案不能退回裸命令（Issue #1087）。"""
+	command = "boss --data-dir '/tmp/custom state' clean --risk-lock"
+	for code in ("ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_LOCKED"):
+		recovery = recovery_message(code, f"由用户执行 {command} 并显式恢复任务") or ""
+		assert command in recovery, code
+		assert "由你本人执行" in recovery, code
+		assert "执行 boss clean --risk-lock" not in recovery, code
+
+
+def test_risk_recovery_without_context_keeps_the_generic_example():
+	recovery = recovery_message("ENVIRONMENT_RISK_LOCKED") or ""
+	assert "boss clean --risk-lock" in recovery
+
+
+def test_failed_run_panel_prefers_context_aware_unlock_command(monkeypatch):
+	"""失败面板的「下一步」必须使用 run 里保存的上下文解锁命令（Issue #1087）。"""
+	import io
+
+	from rich.console import Console
+
+	from boss_agent_cli import display
+	from boss_agent_cli.wizard.renderer import render_run
+
+	command = "boss --data-dir '/tmp/custom state' clean --risk-lock"
+	stream = io.StringIO()
+	monkeypatch.setattr(display, "console", Console(file=stream, force_terminal=False, width=200))
+	render_run(
+		{
+			"status": "failed",
+			"error": {
+				"code": "ENVIRONMENT_RISK_LOCKED",
+				"message": "风控锁定",
+				"recovery_action": f"由用户执行 {command} 并显式恢复任务",
+			},
+		}
+	)
+
+	output = stream.getvalue()
+	assert command in output
+	assert "执行 boss clean --risk-lock" not in output
