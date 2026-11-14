@@ -19,6 +19,7 @@ from rich.panel import Panel
 from boss_agent_cli import display
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing
 from boss_agent_cli.wizard.catalog import GOALS
 
 # 登录门的三种出口。
@@ -37,7 +38,7 @@ def local_goal_names(role: str) -> tuple[str, ...]:
 def _browser_kernel_status() -> tuple[str, str]:
 	"""复用 doctor 的浏览器内核判定，返回 (status, detail)。
 
-	只在真要开浏览器之前调用——已登录用户不该为此付出任何启动开销。
+	只在认证链报告扫码内核缺失后读取；已有登录态或 Cookie / CDP 成功时无需检查。
 
 	必须传展开后的 ``chromium-<修订版>`` 条目：``evaluate_patchright_chromium``
 	按条目名精确匹配，传缓存根目录永远匹配不上，登录门的 error 分支也就永远
@@ -73,7 +74,7 @@ def _render_kernel_blocked(detail: str) -> None:
 				[
 					"[red]无法自动打开浏览器[/red]：缺少 patchright 所需的 Chromium 内核。",
 					"",
-					detail,
+					display.escape_markup(detail),
 					"",
 					"[bold]安装完成后回到这里重新选择「现在登录」即可。[/bold]",
 				]
@@ -102,7 +103,7 @@ def _render_login_failure(ctx: Any, exc: Exception) -> None:
 def _gate_options(role: str) -> list[Any]:
 	from boss_agent_cli.wizard.prompts import MenuOption
 
-	options = [MenuOption("login", "现在登录", "打开浏览器扫码，登录后继续")]
+	options = [MenuOption("login", "现在登录", "尝试复用登录态，必要时打开浏览器扫码")]
 	if local_goal_names(role):
 		options.append(MenuOption("local", "仅看本地功能", "简历、候选池、采集任务等无需登录的能力"))
 	options.append(MenuOption("exit", "退出", ""))
@@ -152,16 +153,12 @@ def ensure_login(ctx: Any, *, menu: Any = None, role: str | None = None) -> str:
 				continue
 			return GATE_LOCAL_ONLY
 
-		# choice == "login"：先确认环境能开浏览器，再真开。
-		status, detail = _browser_kernel_status()
-		if status == "error":
-			_render_kernel_blocked(detail)
-			continue
-
+		# choice == "login"：先走完整认证链。Cookie / CDP 不依赖扫码内核，
+		# 不能因最后一级降级路径的前置条件而阻断它们（Issue #1075）。
 		try:
 			from boss_agent_cli.wizard.renderer import busy_status
 
-			with busy_status("正在打开浏览器，请在弹出的窗口中扫码登录…"):
+			with busy_status("正在登录，必要时会打开浏览器供扫码…"):
 				auth.login(timeout=_LOGIN_TIMEOUT_SECONDS, cdp_url=ctx.obj.get("cdp_url"))
 		except PlatformRiskError as exc:
 			# 风控是硬边界：展示停止指引后退出登录门，不再回到「重试登录」菜单。
@@ -169,6 +166,11 @@ def ensure_login(ctx: Any, *, menu: Any = None, role: str | None = None) -> str:
 			_render_login_failure(ctx, exc)
 			return GATE_EXIT
 		except Exception as exc:
+			if is_browser_kernel_missing(str(exc)):
+				status, detail = _browser_kernel_status()
+				if status == "error":
+					_render_kernel_blocked(detail)
+					continue
 			_render_login_failure(ctx, exc)
 			continue
 

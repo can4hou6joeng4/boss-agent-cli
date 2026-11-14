@@ -112,6 +112,8 @@ On Windows, install guidance targets PowerShell. If the interpreter path contain
 
 When `PLAYWRIGHT_BROWSERS_PATH` is set, use the same environment setting for the kernel install, the CLI, `boss doctor`, and the wizard preflight; the preflight checks only that directory. Relative paths resolve against `INIT_CWD` (or the current directory when unset), and `0` selects `.local-browsers` inside the patchright driver package.
 
+The wizard's “Log in now” option uses the same authentication chain as `boss login`: it first tries to reuse an existing browser login and opens a QR browser only when needed. A missing patchright kernel does not block valid Cookie or existing CDP login; the wizard shows kernel installation guidance only after the QR fallback reports that the kernel is missing.
+
 ### `AUTH_REQUIRED` before live tests
 
 `AUTH_REQUIRED` means the selected data directory has no usable login session. It is

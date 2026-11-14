@@ -119,6 +119,8 @@ Windows 下的安装指引面向 PowerShell。解释器路径含空格或特殊�
 
 设置 `PLAYWRIGHT_BROWSERS_PATH` 后，内核安装、运行 CLI、`boss doctor` 与向导预检需要使用同一环境设置；预检只检查这个指定目录。相对路径以 `INIT_CWD`（未设置时为当前目录）为基准，值为 `0` 时使用 patchright 驱动包内的 `.local-browsers`。
 
+向导的「现在登录」与 `boss login` 使用同一认证链：先尝试复用浏览器登录态，必要时再打开扫码浏览器。缺少 patchright 内核时，仍可通过有效的 Cookie 或已有 CDP 登录；只有实际进入扫码降级并报告内核缺失后，向导才展示内核安装指引。
+
 ### 真实平台验证前就报 `AUTH_REQUIRED`
 
 **`AUTH_REQUIRED` 不代表 CLI 故障**：它表示当前数据目录没有可用登录态。真实平台

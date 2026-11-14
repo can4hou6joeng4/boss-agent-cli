@@ -110,6 +110,19 @@ class TestDisplayRenderers:
 
 
 class TestWizardRenderers:
+	@pytest.mark.parametrize("command", [
+		"'/opt/[green]/bin/python' -m patchright install chromium",
+		r"& 'C:\Tools\[green]\python.exe' -m patchright install chromium",
+	])
+	def test_kernel_install_hint_preserves_bracketed_paths(self, monkeypatch, command):
+		"""内核安装命令中的目录名必须原样显示（Issue #1079）。"""
+		from boss_agent_cli.wizard.preflight import _render_kernel_blocked
+
+		stream = _capture_terminal_console(monkeypatch)
+		_render_kernel_blocked(f"缺少内核，请运行 {command}")
+
+		_assert_literal(stream, command)
+
 	@pytest.mark.parametrize("payload", _PAYLOADS)
 	def test_job_card(self, monkeypatch, payload):
 		from boss_agent_cli.wizard.renderer import render_job_card_zh
