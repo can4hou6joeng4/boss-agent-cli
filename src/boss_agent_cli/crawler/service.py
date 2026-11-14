@@ -583,13 +583,15 @@ class CrawlService:
 		except CrawlStopRequested as exc:
 			status = "stopped"
 			error = str(exc)
-		except KeyboardInterrupt:
-			status = "stopped"
-			error = "execution interrupted; verify any unfinished operation before explicitly resuming"
-			raise
 		except Exception as exc:
 			status = "stopped"
 			error = str(exc)
+		except BaseException:
+			# SystemExit 等退出信号也会进入 finally：先保存中断断点，不能把未完成
+			# 的任务按默认状态记为 completed。原信号继续向外传播（Issue #1024）。
+			status = "stopped"
+			error = "execution interrupted; verify any unfinished operation before explicitly resuming"
+			raise
 		finally:
 			# Save progress before cleanup: a detached browser can fail to close.
 			self._cache.update_crawl_run_budget(

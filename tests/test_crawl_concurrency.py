@@ -246,9 +246,8 @@ def test_execution_right_is_released_on_failure_or_interruption(tmp_path, raised
 		# 对所有异常直接验证同一任务的锁已交还，不能用另建任务证明。
 		with worker.execution_lock(run_id) as acquired:
 			assert acquired
-		if not isinstance(raised, SystemExit):
-			assert worker.resume(run_id).status == "completed"
-			assert transport.fetches == [1, 2, 3]
+		assert worker.resume(run_id).status == "completed"
+		assert transport.fetches == [1, 2, 3]
 	assert _lock_files(tmp_path) == []
 
 
