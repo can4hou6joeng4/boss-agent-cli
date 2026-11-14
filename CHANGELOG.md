@@ -4,9 +4,12 @@
 
 ## [Unreleased]
 
+## [3.4.10] - 2026-11-14
+
 ### Fixed
 - 补装一个可选依赖不再顶掉另一个（Issue #1068）：`uv tool install` 每次按给定的依赖组重建工具环境，而 `CRAWL_UNAVAILABLE` 的恢复指引只写 `boss-agent-cli[crawl]`、`boss-mcp` 缺 SDK 的启动提示只写 `boss-agent-cli[mcp]`——已装 `[mcp]` 的用户照前者执行后 MCP SDK 被移除，再照后者执行又把采集依赖移除，两条指引互相循环，通过 MCP 使用采集的用户正好落在其中。现在两处指引（含 `crawl` 各入口、`agent crawl --query`、向导采集步骤与向导终端文案）给出的安装要求都会带上当前解释器里已经可用的依赖组，例如 `boss-agent-cli[crawl,mcp]`；只装了某个组的一部分时不算已安装。双语命令参考与排障文档补充说明。
 - MCP 主机用绝对路径启动 `boss-mcp` 时工具调用不再全部 `CLI_ERROR`（Issue #1066）：底层 CLI 此前只按 MCP server 进程的 `PATH` 查找 `boss`，而桌面端主机通常不继承登录 shell 的 `PATH`，`uv tool install` / `pipx install` 的入口目录不在其中——`initialize` 与 `tools/list` 正常，每一次 `tools/call` 都返回「无法启动底层 boss CLI」；`PATH` 上若另有一份旧版 `boss`，还会被静默驱动。现在未传 `--boss-bin` 时优先使用与 `boss-mcp` 同一安装的 `boss` 入口（运行 server 的解释器旁边），该入口不存在时才回退到按 `PATH` 查找；显式 `--boss-bin` 行为不变。双语排障文档同步。
+- 便携包的内核安装改用运行 boss 的解释器（Issue #1064）：`install.sh` 此前用 `uv tool run patchright install chromium`，它会独立解析一个 patchright 版本，可能与 wheel 内的浏览器修订版不一致，装完仍报内核缺失。现在从 `boss` 入口脚本取工具环境解释器并调用 `-m patchright install`，手动重试命令同样打印完整可执行写法；便携包说明的 Windows 段改为指向 `boss doctor` 给出的命令。
 
 ## [3.4.9] - 2026-11-14
 
