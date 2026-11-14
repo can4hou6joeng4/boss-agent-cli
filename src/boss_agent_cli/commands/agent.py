@@ -27,11 +27,13 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands.ai_cmd import _build_fit_prompt, _create_ai_service
 from boss_agent_cli.commands.crawl import (
 	_LoginSeedUnavailable,
+	_report_crawl_runtime_missing,
 	_report_login_required,
 	_require_crawl_capabilities,
 	_seeded_transport_factory,
 	_settings_from_context,
 )
+from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
 from boss_agent_cli.crawler.operations import crawl_status, import_crawl_shortlist
 from boss_agent_cli.crawler.service import CrawlBusyError, CrawlService
 from boss_agent_cli.display import (
@@ -237,6 +239,9 @@ def crawl_cmd(
 		return
 	except _LoginSeedUnavailable as exc:
 		_report_login_required(ctx, "agent.crawl", str(exc))
+		return
+	except CrawlRuntimeUnavailable as exc:
+		_report_crawl_runtime_missing(ctx, "agent.crawl", str(exc))
 		return
 	except RuntimeError as exc:
 		configure_cmd = boss_command_for_ctx(ctx, "crawl configure", include_data_dir=True)

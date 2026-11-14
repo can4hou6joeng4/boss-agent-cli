@@ -121,7 +121,7 @@ A `boss show <#>` number is valid only for the index snapshot created by the mos
 
 ## Resumable bulk crawl
 
-`crawl` is an explicitly triggered, bounded Chrome task. Install `uv sync --extra crawl` first; it starts only the isolated `<data-dir>/crawl/chrome-profile`, never attaches to a daily Chrome profile, checkpoints every stage, and applies fixed request/detail/time/retry budgets plus a stop control.
+`crawl` is an explicitly triggered, bounded Chrome task. The default install does not include the crawl dependencies; install `pip install "boss-agent-cli[crawl]"` (or `uv tool install "boss-agent-cli[crawl]"`; `uv sync --extra crawl` inside a source checkout) first. Without them `crawl run` / `start` / `resume`, `agent crawl --query` and the wizard crawl steps return `CRAWL_UNAVAILABLE` without creating a run or starting a background process, while `status` / `results` / `stop` / `shortlist` keep working. The crawler starts only the isolated `<data-dir>/crawl/chrome-profile`, never attaches to a daily Chrome profile, checkpoints every stage, and applies fixed request/detail/time/retry budgets plus a stop control.
 
 ```powershell
 boss crawl configure --max-requests 20 --max-details 50 --max-seconds 600 --max-retries 1

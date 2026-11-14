@@ -117,7 +117,7 @@ pbpaste | boss login --curl-file -
 
 ## 可恢复批量采集
 
-`crawl` 是用户显式触发的有界 Chrome 任务。首次使用需安装 `uv sync --extra crawl`；采集器只启动 `<data-dir>/crawl/chrome-profile` 这个独立 profile，不接管日常 Chrome。请求数、详情数、墙钟时间和重试由固定预算控制，每一步持久化 checkpoint，并可用 `stop` 停止。
+`crawl` 是用户显式触发的有界 Chrome 任务。默认安装不带采集依赖，首次使用需安装 `pip install "boss-agent-cli[crawl]"`（或 `uv tool install "boss-agent-cli[crawl]"`；源码仓库内为 `uv sync --extra crawl`）；未安装时 `crawl run` / `start` / `resume`、`agent crawl --query` 与向导采集步骤返回 `CRAWL_UNAVAILABLE`，不创建任务也不启动后台进程，`status` / `results` / `stop` / `shortlist` 不受影响。采集器只启动 `<data-dir>/crawl/chrome-profile` 这个独立 profile，不接管日常 Chrome。请求数、详情数、墙钟时间和重试由固定预算控制，每一步持久化 checkpoint，并可用 `stop` 停止。
 
 ```powershell
 boss crawl configure --max-requests 20 --max-details 50 --max-seconds 600 --max-retries 1

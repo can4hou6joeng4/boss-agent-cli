@@ -1484,3 +1484,161 @@ def test_run_not_found_carries_recovery_and_hints(tmp_path):
 	assert payload["error"]["code"] == "CRAWL_RUN_NOT_FOUND"
 	assert payload["error"]["recovery_action"]
 	_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl start <query>", "crawl status <run_id>")
+
+
+def _block_crawl_runtime(monkeypatch, *names: str) -> None:
+	"""让 crawl 可选依赖表现为未安装：默认安装不带 `[crawl]`。"""
+	for name in names or ("DrissionPage", "openpyxl"):
+		monkeypatch.setitem(sys.modules, name, None)
+
+
+def _run_count(tmp_path: Path) -> int:
+	return len(_all_run_ids(tmp_path)) if (tmp_path / "cache" / "boss_agent.db").exists() else 0
+
+
+def _assert_runtime_missing(payload: dict, tmp_path: Path, command: str) -> None:
+	assert payload["ok"] is False
+	assert payload["command"] == command
+	error = payload["error"]
+	assert error["code"] == "CRAWL_UNAVAILABLE"
+	assert error["recoverable"] is True
+	assert "boss-agent-cli[crawl]" in error["recovery_action"]
+	assert f"boss --data-dir {tmp_path.resolve()} crawl configure" in error["recovery_action"]
+	# 恢复同一个任务只会复现：不能给出 Agent 可以照抄的后继命令。
+	assert "next_actions" not in payload["hints"]
+	assert any("boss-agent-cli[crawl]" in action for action in payload["hints"]["operator_actions"])
+
+
+@pytest.mark.parametrize("missing", ["DrissionPage", "openpyxl"])
+def test_run_without_crawl_dependencies_fails_before_creating_a_run(tmp_path, monkeypatch, missing):
+	"""默认安装下不能回成功信封加恢复指引，也不能留下执行不了的任务（Issue #1050）。"""
+	_block_crawl_runtime(monkeypatch, missing)
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, "crawl", "run", "AI", "--city", "杭州")
+	assert result.exit_code == 1, result.output
+	payload = _envelope(result)
+	_assert_runtime_missing(payload, tmp_path, "crawl")
+	assert missing in payload["error"]["message"]
+	assert _run_count(tmp_path) == 0
+
+
+def test_run_reports_missing_crawl_dependencies_before_asking_for_login(tmp_path, monkeypatch):
+	"""没装依赖时登录也无法采集：不应先把调用方送去登录。"""
+	_block_crawl_runtime(monkeypatch)
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "run", "AI", "--city", "杭州"])
+	assert result.exit_code == 1, result.output
+	_assert_runtime_missing(_envelope(result), tmp_path, "crawl")
+
+
+def test_run_reports_a_blank_query_before_the_dependency_check(tmp_path, monkeypatch):
+	"""参数写错的人不该先被要求安装依赖。"""
+	_block_crawl_runtime(monkeypatch)
+	result = _invoke(CliRunner(), tmp_path, "crawl", "run", " ", "--city", "杭州")
+	assert result.exit_code == 1, result.output
+	assert _envelope(result)["error"]["code"] == "INVALID_PARAM"
+
+
+def test_start_without_crawl_dependencies_creates_no_run_and_starts_no_worker(tmp_path, monkeypatch):
+	launched: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._launch_background_resume",
+		lambda data_dir, run_id, **kwargs: launched.append(run_id),
+	)
+	_block_crawl_runtime(monkeypatch)
+	result = _invoke(CliRunner(), tmp_path, "crawl", "start", "AI", "--city", "杭州")
+	assert result.exit_code == 1, result.output
+	_assert_runtime_missing(_envelope(result), tmp_path, "crawl.start")
+	assert launched == []
+	assert _run_count(tmp_path) == 0
+
+
+def test_resume_background_without_crawl_dependencies_leaves_the_run_untouched(tmp_path, monkeypatch):
+	launched: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._launch_background_resume",
+		lambda data_dir, run_id, **kwargs: launched.append(run_id),
+	)
+	_seed_run(tmp_path, "run-1", status="stopped", jobs=0)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.request_crawl_stop("run-1")
+	_block_crawl_runtime(monkeypatch)
+	result = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-1", "--background")
+	assert result.exit_code == 1, result.output
+	_assert_runtime_missing(_envelope(result), tmp_path, "crawl.resume")
+	assert launched == []
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		run = cache.get_crawl_run("run-1")
+	assert run["status"] == "stopped"
+	assert run["stop_requested"] is True, "失败的调用不解除停止请求"
+
+
+def test_resume_background_without_crawl_dependencies_still_reports_a_completed_run(tmp_path, monkeypatch):
+	"""没有待恢复工作的任务不需要采集依赖。"""
+	_seed_run(tmp_path, "run-1", status="completed")
+	_block_crawl_runtime(monkeypatch)
+	result = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-1", "--background")
+	assert result.exit_code == 0, result.output
+	assert _envelope(result)["data"]["status"] == "completed"
+
+
+def test_foreground_resume_without_crawl_dependencies_reports_unavailable(tmp_path, monkeypatch):
+	_seed_run(tmp_path, "run-1", status="stopped", jobs=0)
+	_block_crawl_runtime(monkeypatch)
+	result = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-1")
+	assert result.exit_code == 1, result.output
+	_assert_runtime_missing(_envelope(result), tmp_path, "crawl")
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		run = cache.get_crawl_run("run-1")
+	assert (run["status"], run["error"]) == ("stopped", "")
+
+
+def test_queued_worker_without_crawl_dependencies_records_the_cause(tmp_path, monkeypatch):
+	"""worker 的信封没人看得到：依赖缺失也要把原因写回任务。"""
+	_seed_run(tmp_path, "run-queued", status="queued", jobs=0)
+	_block_crawl_runtime(monkeypatch)
+	worker = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-queued", "--from-queue")
+	assert worker.exit_code == 1, worker.output
+	assert _envelope(worker)["error"]["code"] == "CRAWL_UNAVAILABLE"
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		run = cache.get_crawl_run("run-queued")
+	assert run["status"] == "stopped"
+	assert "CRAWL_UNAVAILABLE" in run["error"]
+	assert "boss-agent-cli[crawl]" in run["error"]
+
+
+@pytest.mark.parametrize("args", [("status", "run-1"), ("results", "run-1"), ("stop", "run-1")])
+def test_local_crawl_commands_do_not_need_crawl_dependencies(tmp_path, monkeypatch, args):
+	_seed_run(tmp_path, "run-1", status="stopped")
+	_block_crawl_runtime(monkeypatch)
+	result = _invoke(CliRunner(), tmp_path, "crawl", *args)
+	assert result.exit_code == 0, result.output
+
+
+def test_run_whose_browser_reports_missing_dependencies_is_not_offered_a_resume(tmp_path, monkeypatch):
+	"""模块可定位但导入失败（安装损坏）：预检放行后也不能落成成功信封加恢复指引。"""
+	from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
+
+	class _BrokenSession:
+		def __init__(self, **kwargs):
+			pass
+
+		def open(self):
+			raise CrawlRuntimeUnavailable("crawl 需要 DrissionPage；请安装 boss-agent-cli[crawl]")
+
+		def close(self, **kwargs):
+			pass
+
+	monkeypatch.setattr("boss_agent_cli.commands.crawl.DrissionCrawlerSession", _BrokenSession)
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, "crawl", "run", "AI", "--city", "杭州")
+	assert result.exit_code == 1, result.output
+	_assert_runtime_missing(_envelope(result), tmp_path, "crawl")
+	# 任务此时已经创建：断点保留为 stopped 并带原因，装好依赖后按原 run_id 恢复。
+	[run_id] = _all_run_ids(tmp_path)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		run = cache.get_crawl_run(run_id)
+	assert run["status"] == "stopped"
+	assert "DrissionPage" in run["error"]
+	assert run["next_page"] == 1

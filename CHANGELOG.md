@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 未安装 `crawl` 可选依赖时采集不再返回成功信封（Issue #1050）：默认安装不带 DrissionPage 与 openpyxl，依赖缺失此前要到打开浏览器才被发现，执行器把它当普通异常落成 `stopped`——`crawl run` 返回 `ok: true` 与 `crawl resume` 指引，照做得到同样的结果，可以无限重复，每次还新建一条执行不了的任务；`crawl start` 返回 `queued` 后由后台进程落成 `stopped`，`agent crawl --query` 先建任务再失败，向导采集步骤落成 `NETWORK_ERROR` 加「恢复当前任务」。登记表里为此准备的 `CRAWL_UNAVAILABLE` 在真实路径上到不了。现在 `crawl run` / `start` / `resume`、`agent crawl --query` 与向导采集步骤在创建任务、启动后台进程、读取登录态之前确认依赖可导入，缺失时返回 `CRAWL_UNAVAILABLE`（`exit 1`），恢复动作指向安装 `boss-agent-cli[crawl]`，不给出恢复命令；模块可定位但导入失败时，执行器保存断点后同样按 `CRAWL_UNAVAILABLE` 回报。`crawl status` / `results` / `stop` / `shortlist` 不受影响。文档补上 pip / uv tool 的安装方式。
+
 ## [3.4.6] - 2026-11-14
 
 ### Fixed

@@ -28,7 +28,8 @@ from boss_agent_cli.crawler.service import (
 	crawl_int_setting,
 	unused_local_port,
 )
-from boss_agent_cli.crawler.transport import DrissionCrawlerSession
+from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
+from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.json_files import write_json_atomic
 from boss_agent_cli.display import (
 	auth_required_hints,
@@ -221,13 +222,22 @@ def _transport_factory(
 	)
 
 
+def _crawl_preflight(ctx: click.Context) -> tuple[dict[str, str], str]:
+	"""创建任务或启动进程之前必须成立的本地前提：可选依赖已安装、登录态可注入。
+
+	依赖先于登录态：没装 `crawl` 依赖时登录也无法采集，不应先把调用方送去登录。
+	"""
+	ensure_crawl_runtime()
+	return _session_seed(ctx)
+
+
 def _seeded_transport_factory(ctx: click.Context) -> Callable[[CrawlSettings], DrissionCrawlerSession]:
 	"""读取本地登录态并返回注入它的传输工厂；登录态不足时抛 ``_LoginSeedUnavailable``。
 
 	采集浏览器的配置目录与日常 Chrome 隔离：不注入就是登录页，采集会按未登录
 	落成 ``risk_stopped`` 并写下风险锁。所有会打开浏览器的入口都从这里取工厂。
 	"""
-	seed_cookies, user_agent = _session_seed(ctx)
+	seed_cookies, user_agent = _crawl_preflight(ctx)
 	return lambda settings: _transport_factory(settings, seed_cookies=seed_cookies, user_agent=user_agent)
 
 
@@ -254,6 +264,25 @@ def _report_login_required(ctx: click.Context, command: str, message: str) -> No
 		recoverable=True,
 		recovery_action=login_action_for_ctx(ctx),
 		hints=auth_required_hints(ctx),
+	)
+
+
+def _report_crawl_runtime_missing(ctx: click.Context, command: str, message: str) -> None:
+	"""`crawl` 可选依赖缺失：恢复同一个任务只会复现，后继动作只有安装。"""
+	configure_cmd = boss_command_for_ctx(ctx, "crawl configure", include_data_dir=True)
+	handle_error_output(
+		ctx,
+		command,
+		code="CRAWL_UNAVAILABLE",
+		message=message,
+		recoverable=True,
+		recovery_action=f"安装 boss-agent-cli[crawl] 并执行 {configure_cmd}",
+		hints={"operator_actions": [
+			"用安装本工具的同一方式补上 crawl 可选依赖："
+			"pip install \"boss-agent-cli[crawl]\" 或 uv tool install \"boss-agent-cli[crawl]\"；"
+			"源码仓库内为 uv sync --extra crawl",
+			"安装完成后重新执行原命令；已创建的任务可按原 run_id 恢复",
+		]},
 	)
 
 
@@ -313,6 +342,9 @@ def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[s
 			_report_login_required(ctx, "crawl", message)
 			return
 		note("CRAWL_UNAVAILABLE", message)
+		if isinstance(exc, CrawlRuntimeUnavailable):
+			_report_crawl_runtime_missing(ctx, "crawl", message)
+			return
 		configure_cmd = boss_command_for_ctx(ctx, "crawl configure", include_data_dir=True)
 		handle_error_output(
 			ctx,
@@ -393,7 +425,7 @@ def _prepare_background_resume(
 				return "completed", False
 			if _awaiting_queued_worker(run):
 				return "queued", False
-			# worker 的错误信封写进空设备：登录态不足要在这里由父进程报出来，
+			# worker 的错误信封写进空设备：依赖缺失与登录态不足要在这里由父进程报出来，
 			# 并且先于解除 stop，失败的调用不改动任务（Issue #1042）。
 			preflight()
 			if clear_stop:
@@ -624,15 +656,18 @@ def start_cmd(
 			chrome_path=None,
 			cdp_port=None,
 		)
-		# worker 的错误信封写进空设备：登录态不足必须在创建任务之前由父进程报出来，
-		# 否则留下一个永远 queued、没有错误的任务（Issue #1042）。
-		_session_seed(ctx)
+		# worker 的错误信封写进空设备：依赖缺失与登录态不足必须在创建任务之前由
+		# 父进程报出来，否则留下一个没人能执行的任务（Issue #1042、#1050）。
+		_crawl_preflight(ctx)
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			service = CrawlService(cache, data_dir=Path(ctx.obj["data_dir"]), transport_factory=_transport_factory)
 			run_id = service.create(settings)
 		_launch_background_resume(Path(ctx.obj["data_dir"]), run_id)
 	except _LoginSeedUnavailable as exc:
 		_report_login_required(ctx, "crawl.start", str(exc))
+		return
+	except CrawlRuntimeUnavailable as exc:
+		_report_crawl_runtime_missing(ctx, "crawl.start", str(exc))
 		return
 	except ValueError as exc:
 		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help", include_data_dir=True)
@@ -770,10 +805,13 @@ def _resume(
 			status, should_launch = _prepare_background_resume(
 				Path(ctx.obj["data_dir"]), run_id,
 				pages=pages, with_detail=with_detail, clear_stop=not from_queue,
-				preflight=lambda: _session_seed(ctx),
+				preflight=lambda: _crawl_preflight(ctx),
 			)
 		except _LoginSeedUnavailable as exc:
 			_report_login_required(ctx, "crawl.resume", str(exc))
+			return
+		except CrawlRuntimeUnavailable as exc:
+			_report_crawl_runtime_missing(ctx, "crawl.resume", str(exc))
 			return
 		except KeyError:
 			handle_error_output(ctx, "crawl.resume", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))

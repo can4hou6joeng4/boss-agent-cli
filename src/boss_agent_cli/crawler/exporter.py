@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell
 
 FIELDS = (
@@ -60,7 +61,7 @@ def _write_xlsx(path: Path, rows: list[dict[str, Any]]) -> None:
 		from openpyxl.worksheet.table import Table, TableStyleInfo
 		from openpyxl.utils import get_column_letter
 	except ImportError as exc:  # pragma: no cover - exercised through CLI dependency error
-		raise RuntimeError("crawl XLSX 导出需要安装 boss-agent-cli[crawl]") from exc
+		raise CrawlRuntimeUnavailable("crawl XLSX 导出需要 openpyxl；请安装 boss-agent-cli[crawl]") from exc
 
 	workbook = Workbook()
 	sheet = workbook.active

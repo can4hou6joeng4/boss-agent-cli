@@ -1,6 +1,7 @@
 import json
 import shlex
 import sqlite3
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -311,3 +312,28 @@ def test_agent_crawl_results_hint_quotes_run_id(tmp_path: Path, monkeypatch) -> 
 	followed = runner.invoke(cli, shlex.split(payload["hints"]["next_actions"][0])[1:])
 	assert followed.exit_code == 0, followed.output
 	assert json.loads(followed.output)["data"]["run_id"] == run_id
+
+
+def test_agent_crawl_new_query_without_crawl_dependencies_creates_no_run(tmp_path: Path, monkeypatch) -> None:
+	"""默认安装不带 `[crawl]`：不能先建任务再失败（Issue #1050）。"""
+	monkeypatch.setitem(sys.modules, "DrissionPage", None)
+	runner = CliRunner()
+	_init_resume(runner, tmp_path)
+	_seed_login(tmp_path)
+
+	result = runner.invoke(
+		cli,
+		[
+			"--data-dir", str(tmp_path), "--json", "agent", "crawl",
+			"--query", "AI", "--city", "杭州", "--resume", "test-resume",
+		],
+	)
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["command"] == "agent.crawl"
+	assert payload["error"]["code"] == "CRAWL_UNAVAILABLE"
+	assert payload["error"]["recoverable"] is True
+	assert "boss-agent-cli[crawl]" in payload["error"]["recovery_action"]
+	assert "next_actions" not in payload["hints"]
+	with sqlite3.connect(tmp_path / "cache" / "boss_agent.db") as conn:
+		assert conn.execute("SELECT COUNT(*) FROM crawl_runs").fetchone()[0] == 0, "依赖缺失不该留下任务"
