@@ -108,6 +108,19 @@ class TestDisplayRenderers:
 
 		_assert_literal(stream, payload)
 
+	@pytest.mark.parametrize("command", [
+		"boss --data-dir '/tmp/[green]/data' login",
+		"boss --data-dir '/tmp/[link=https://example.invalid]x[/link]' login",
+	])
+	def test_status_login_hint_preserves_bracketed_data_dir(self, monkeypatch, command):
+		"""未登录提示里的数据目录必须按字面显示（Issue #1083）。"""
+		from boss_agent_cli.display import render_status
+
+		stream = _capture_terminal_console(monkeypatch)
+		render_status({"logged_in": False}, login_action=command)
+
+		_assert_literal(stream, command)
+
 
 class TestWizardRenderers:
 	@pytest.mark.parametrize("command", [

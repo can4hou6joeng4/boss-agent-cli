@@ -492,7 +492,8 @@ def render_status(data: dict[str, Any], *, login_action: str = "boss login") -> 
 		name = escape_markup(data.get("user_name", "unknown"))
 		console.print(f"[green]logged in[/green] as [bold]{name}[/bold]")
 	else:
-		console.print(f"[yellow]not logged in[/yellow] - run: {login_action}")
+		# 登录命令可能带自定义 --data-dir：方括号目录名不能被当作样式吞掉。
+		console.print(f"[yellow]not logged in[/yellow] - run: {escape_markup(login_action)}")
 	lock = data.get("cdp_risk_lock")
 	if isinstance(lock, dict) and lock.get("locked"):
 		since = escape_markup(lock.get("locked_at") or "unknown")
