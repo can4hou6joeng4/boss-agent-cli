@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- MCP 主机用绝对路径启动 `boss-mcp` 时工具调用不再全部 `CLI_ERROR`（Issue #1066）：底层 CLI 此前只按 MCP server 进程的 `PATH` 查找 `boss`，而桌面端主机通常不继承登录 shell 的 `PATH`，`uv tool install` / `pipx install` 的入口目录不在其中——`initialize` 与 `tools/list` 正常，每一次 `tools/call` 都返回「无法启动底层 boss CLI」；`PATH` 上若另有一份旧版 `boss`，还会被静默驱动。现在未传 `--boss-bin` 时优先使用与 `boss-mcp` 同一安装的 `boss` 入口（运行 server 的解释器旁边），该入口不存在时才回退到按 `PATH` 查找；显式 `--boss-bin` 行为不变。双语排障文档同步。
+
 ## [3.4.9] - 2026-11-14
 
 ### Fixed

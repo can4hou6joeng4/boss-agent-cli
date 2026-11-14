@@ -139,7 +139,7 @@ uv sync --extra mcp
 
 `CLI_ERROR` 是 MCP server 与底层 `boss` CLI 之间的进程层失败，不是平台响应：
 
-- **底层 CLI 没能启动**（`error.message` 以「无法启动底层 boss CLI」开头）：`boss` 不在 MCP server 进程的 `PATH` 中、`--boss-bin` 路径有误或文件不可执行。此时没有产生任何平台操作（`error.details.outcome_unknown=false`）。把 `boss` 装进 MCP server 所在环境，或用 `boss-mcp --boss-bin /path/to/boss` 指定路径；README 推荐的 `uvx --from boss-agent-cli[mcp] boss-mcp` 会把同一环境的 `boss` 放进 `PATH`。
+- **底层 CLI 没能启动**（`error.message` 以「无法启动底层 boss CLI」开头）：`boss-mcp` 默认使用与自己同一安装的 `boss` 入口（运行 server 的解释器旁边），不依赖 MCP 主机的 `PATH`；只有该入口不存在时才按 `PATH` 查找。出现这条错误说明同安装入口缺失且 `boss` 不在 MCP server 进程的 `PATH` 中，或 `--boss-bin` 路径有误、文件不可执行。此时没有产生任何平台操作（`error.details.outcome_unknown=false`）。把 `boss` 装进 MCP server 所在环境，或用 `boss-mcp --boss-bin /path/to/boss` 指定路径；README 推荐的 `uvx --from boss-agent-cli[mcp] boss-mcp` 会把同一环境的 `boss` 放进 `PATH`。
 - **子进程运行后没有输出 JSON 信封**：只读工具没有平台写入（`outcome_unknown=false`），按 `error.message` 排查，升级到最新版本后重新调用；写工具结果未知（`outcome_unknown=true`），先核对平台实际状态，不要直接重试。
 
 `boss-mcp` 常用启动参数：`--data-dir`、`--platform`、`--role`、`--browser-source`、`--boss-bin`、`--transport stdio|sse|http`；完整默认值见 `boss-mcp --help`。

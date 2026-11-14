@@ -1534,11 +1534,65 @@ def test_parse_cli_args_defaults():
 	assert args.path == "/mcp"
 	assert args.sse_path == "/sse"
 	assert args.message_path == "/messages/"
-	assert args.boss_bin == "boss"
+	assert args.boss_bin is None
 	assert args.data_dir is None
 	assert args.platform is None
 	assert args.role is None
 	assert args.browser_source is None
+
+
+def test_default_boss_bin_prefers_entry_point_next_to_interpreter(tmp_path):
+	"""boss 与 boss-mcp 同属一次安装：默认用解释器旁的入口，不依赖主机 PATH（Issue #1066）。"""
+	from boss_agent_cli.mcp_server import _default_boss_bin
+
+	bin_dir = tmp_path / "bin"
+	bin_dir.mkdir()
+	(bin_dir / "boss").write_text("#!/bin/sh\n", encoding="utf-8")
+
+	assert _default_boss_bin(executable=str(bin_dir / "python"), windows=False) == str(bin_dir / "boss")
+
+
+def test_default_boss_bin_prefers_exe_on_windows(tmp_path):
+	from boss_agent_cli.mcp_server import _default_boss_bin
+
+	bin_dir = tmp_path / "Scripts"
+	bin_dir.mkdir()
+	(bin_dir / "boss.exe").write_bytes(b"")
+
+	assert _default_boss_bin(executable=str(bin_dir / "python.exe"), windows=True) == str(bin_dir / "boss.exe")
+
+
+def test_default_boss_bin_falls_back_to_path_lookup(tmp_path):
+	"""解释器旁没有入口（嵌入式运行、自定义打包）时保持原行为：按 PATH 查找。"""
+	from boss_agent_cli.mcp_server import _default_boss_bin
+
+	assert _default_boss_bin(executable=str(tmp_path / "python"), windows=False) == "boss"
+
+
+def test_default_boss_bin_ignores_cwd_when_interpreter_is_unknown(tmp_path, monkeypatch):
+	"""sys.executable 为空时不得把当前目录下的同名文件当成 CLI。"""
+	from boss_agent_cli.mcp_server import _default_boss_bin
+
+	(tmp_path / "boss").write_text("#!/bin/sh\n", encoding="utf-8")
+	monkeypatch.chdir(tmp_path)
+
+	assert _default_boss_bin(executable="", windows=False) == "boss"
+
+
+def test_run_uses_sibling_boss_unless_boss_bin_is_given(monkeypatch):
+	"""显式 --boss-bin 原样生效；未传时落到同安装入口。"""
+	import boss_agent_cli.mcp_server as impl
+
+	seen: list[str] = []
+	monkeypatch.setattr(impl, "_default_boss_bin", lambda: "/tool/bin/boss")
+	monkeypatch.setattr(impl.asyncio, "run", lambda coro: (seen.append(impl._BOSS_BIN), coro.close()))
+	try:
+		impl.run([])
+		impl.run(["--boss-bin", "/opt/boss"])
+	finally:
+		_configure_boss_invocation()
+
+	assert seen == ["/tool/bin/boss", "/opt/boss"]
 
 
 def test_parse_cli_args_browser_source_choices_come_from_policy_table():

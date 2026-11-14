@@ -134,8 +134,11 @@ You can also use the README's `uvx --from "boss-agent-cli[mcp]" boss-mcp` config
 `boss` CLI, not a platform response:
 
 - **The CLI could not start** (`error.message` begins with `无法启动底层 boss CLI`):
-  `boss` is not on the MCP server process's `PATH`, the `--boss-bin` path is wrong,
-  or the file is not executable. No platform operation happened
+  `boss-mcp` defaults to the `boss` entry point from its own installation (next to
+  the interpreter running the server) and does not depend on the MCP host's `PATH`;
+  it falls back to a `PATH` lookup only when that entry point is missing. This error
+  means the sibling entry point is absent and `boss` is not on the MCP server
+  process's `PATH`, or the `--boss-bin` path is wrong or not executable. No platform operation happened
   (`error.details.outcome_unknown=false`). Install `boss` into the MCP server's
   environment or pass `boss-mcp --boss-bin /path/to/boss`; the README's
   `uvx --from boss-agent-cli[mcp] boss-mcp` puts that environment's `boss` on `PATH`.
