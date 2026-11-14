@@ -139,7 +139,7 @@ boss crawl stop <run_id>
 | `boss crawl stop <run_id>` | 请求运行中任务在下一个安全点停止并保留 checkpoint |
 | `boss crawl shortlist <run_id> (--all \| --selector <csel_...>)` | 将 crawl 结果导入原项目的本地候选池；不请求平台，保留内部职位关联和详情缓存供 `boss ai fit` 使用 |
 
-同一采集 `run_id` 同时只允许一个执行器。重叠的前台恢复返回 `CRAWL_BUSY`（`recoverable: true`，`--exit-codes sysexits` 下为 75），不发出请求、不修改断点或清除停止请求；`hints.next_actions` 只给原数据目录的 `crawl status <run_id>`，等当前执行结束后再恢复。新建采集、后台 worker 与向导采集步骤共用这项互斥；向导的失败信封与该失败任务的状态查询同样只建议查看内部采集状态。`--background` 仍立即返回供轮询，worker 取得执行权后才读取断点。`status` / `results` / `stop` 在执行期间照常可用；锁按 `run_id` 隔离，进程退出后由操作系统释放，不需手工删除锁文件。无法准备执行锁时返回 `LOCAL_IO_ERROR`，不发出请求。Python API 的 `CrawlService.resume()` 在任务被占用时抛出 `CrawlBusyError`，可在当前执行结束后再次恢复。
+同一采集 `run_id` 同时只允许一个执行器。重叠的前台恢复返回 `CRAWL_BUSY`（`recoverable: true`，`--exit-codes sysexits` 下为 75），不发出请求、不修改断点或清除停止请求；`hints.next_actions` 只给原数据目录的 `crawl status <run_id>`，等当前执行结束后再恢复。新建采集、后台 worker 与向导采集步骤共用这项互斥；向导的失败信封与该失败任务的状态查询同样只建议查看内部采集状态。`--background` 对有待恢复工作的非排队任务先探测执行锁，再立即返回供轮询：仍被占用时返回 `running`，不另起 worker，也不清除停止请求；原 worker 已退出、锁已释放但记录仍为 `running` 时，会启动恢复并返回 `queued`。父进程在启动前释放探测锁，worker 重新取得执行权后才读取最新断点，保留已提交页面和累计预算。尚为 `queued` 的任务继续等待原 worker。`status` / `results` / `stop` 在执行期间照常可用；锁按 `run_id` 隔离，进程退出后由操作系统释放，不需手工删除锁文件。无法准备执行锁时返回 `LOCAL_IO_ERROR`，不发出请求。Python API 的 `CrawlService.resume()` 在任务被占用时抛出 `CrawlBusyError`，可在当前执行结束后再次恢复。
 
 采集在浏览器打开、抓页或补详情时收到 `SystemExit` / `KeyboardInterrupt` 等退出信号，会先保存 `stopped`、页游标、待补详情和已消耗预算，再向外传播原退出信号；不会把未完成任务标为 `completed`。显式执行 `crawl resume <run_id>` 后续跑未完成页面和详情，已提交页面不重抓。
 

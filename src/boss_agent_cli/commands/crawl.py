@@ -322,6 +322,44 @@ def _run_service(ctx: click.Context, service_call: Any) -> None:
 	)
 
 
+def _prepare_background_resume(
+	data_dir: Path,
+	run_id: str,
+	*,
+	pages: int | None,
+	with_detail: bool,
+	clear_stop: bool,
+) -> tuple[str, bool]:
+	"""返回调度状态与是否需要启动 worker；启动前交还探测用的执行锁。"""
+	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+		service = CrawlService(cache, data_dir=data_dir, transport_factory=_transport_factory)
+		run = cache.get_crawl_run(run_id)
+		if run is None:
+			raise KeyError(run_id)
+		if not service.has_resume_work(run, pages=pages, with_detail=with_detail):
+			return "completed", False
+		# 排队中的任务不抢锁，以免让正准备启动的 worker 被拒绝。
+		if run["status"] == "queued":
+			return "queued", False
+		with service.execution_lock(run_id) as acquired:
+			if not acquired:
+				return "running", False
+			# running 可能来自已退出的 worker（Issue #1038）：锁空闲才
+			# 重读最新断点，不能把旧状态当作进程仍在执行的证据。
+			run = cache.get_crawl_run(run_id)
+			if run is None:
+				raise KeyError(run_id)
+			if not service.has_resume_work(run, pages=pages, with_detail=with_detail):
+				return "completed", False
+			if run["status"] == "queued":
+				return "queued", False
+			if clear_stop:
+				# 父进程解除旧 stop；worker 保留 --from-queue，不能清除
+				# 启动期间新收到的停止请求（Issue #1036）。
+				cache.clear_crawl_stop_request(run_id)
+		return "queued", True
+
+
 def _launch_background_resume(
 	data_dir: Path,
 	run_id: str,
@@ -608,53 +646,38 @@ def resume_cmd(
 		)
 		return
 	if background:
-		already_complete = False
 		try:
-			with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
-				run = cache.get_crawl_run(run_id)
-				if run is None:
-					raise KeyError(run_id)
-				status = str(run["status"])
-				# 与 CrawlService.resume 的前置条件保持一致：完成的 run 只有在
-				# 请求了更多页或还有待补详情时才有可恢复的工作。
-				needs_more_pages = (
-					not bool(run["list_finished"]) and pages is not None and pages >= int(run["next_page"])
-				)
-				pending_details = with_detail and any(
-					not item["detail_done"] for item in cache.list_crawl_jobs(run_id)
-				)
-				already_complete = status == "completed" and not (needs_more_pages or pending_details)
-				should_launch = not already_complete and status not in {"queued", "running"}
-				if should_launch and not from_queue:
-					# 显式后台恢复在父进程清除旧 stop（Issue #1036）。worker 保留
-					# --from-queue，不会清掉启动期间新收到的停止请求。
-					cache.clear_crawl_stop_request(run_id)
-			if should_launch:
-				_launch_background_resume(
-					Path(ctx.obj["data_dir"]),
-					run_id,
-					pages=pages,
-					with_detail=with_detail,
-				)
+			status, should_launch = _prepare_background_resume(
+				Path(ctx.obj["data_dir"]), run_id,
+				pages=pages, with_detail=with_detail, clear_stop=not from_queue,
+			)
 		except KeyError:
 			handle_error_output(ctx, "crawl.resume", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))
 			return
 		except CacheRecordInvalid as exc:
 			_report_corrupt_run(ctx, "crawl.resume", run_id, exc)
 			return
-		except OSError as exc:
-			# 与 crawl start 同一类失败：OSError 多来自磁盘满或目录权限，直接重试不会好转。
-			resume_command = boss_command_for_ctx(ctx, f"crawl resume {shell_argument(run_id)}", include_data_dir=True)
-			handle_error_output(
-				ctx,
-				"crawl.resume",
-				code="CRAWL_UNAVAILABLE",
-				message=f"无法启动 crawl 后台任务: {exc}",
-				recoverable=True,
-				recovery_action=f"检查磁盘空间与数据目录权限后执行 {resume_command} 重试",
-			)
-			return
-		if already_complete:
+		if should_launch:
+			# 先释放探测锁再启动，worker 会自行取得执行权并重读断点。
+			try:
+				_launch_background_resume(
+					Path(ctx.obj["data_dir"]),
+					run_id,
+					pages=pages,
+					with_detail=with_detail,
+				)
+			except OSError as exc:
+				resume_command = boss_command_for_ctx(ctx, f"crawl resume {shell_argument(run_id)}", include_data_dir=True)
+				handle_error_output(
+					ctx,
+					"crawl.resume",
+					code="CRAWL_UNAVAILABLE",
+					message=f"无法启动 crawl 后台任务: {exc}",
+					recoverable=True,
+					recovery_action=f"检查磁盘空间与数据目录权限后执行 {resume_command} 重试",
+				)
+				return
+		if status == "completed":
 			# 拉起一个没有工作的后台进程只会让它立即退出，却让调用方以为任务重新排队。
 			results_command = boss_command_for_ctx(ctx, f"crawl results {shell_argument(run_id)}", include_data_dir=True)
 			handle_output(
@@ -669,7 +692,7 @@ def resume_cmd(
 		handle_output(
 			ctx,
 			"crawl.resume",
-			{"run_id": run_id, "status": status if status in {"queued", "running"} else "queued", "background": True},
+			{"run_id": run_id, "status": status, "background": True},
 			render=lambda d: render_action_result(d, title="crawl resume", next_steps=[status_command]),
 			hints={"next_actions": [status_command]},
 		)

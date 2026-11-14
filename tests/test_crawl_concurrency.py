@@ -260,16 +260,22 @@ def test_different_runs_execute_independently(tmp_path):
 	assert _lock_files(tmp_path) == []
 
 
+@pytest.mark.parametrize("background", [False, True], ids=["foreground", "background"])
 @pytest.mark.parametrize("failure", ["unsupported", "blocked-directory"])
-def test_unavailable_lock_fails_closed_as_a_local_file_error(tmp_path, offline_cli, monkeypatch, failure):
+def test_unavailable_lock_fails_closed_as_a_local_file_error(tmp_path, offline_cli, monkeypatch, failure, background):
 	run_id = _persisted_run(tmp_path)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.update_crawl_run(run_id, status="stopped", next_page=1)
 	if failure == "unsupported":
 		def unsupported(handle):
 			raise OSError(errno.ENOLCK, "No locks available")
 		monkeypatch.setattr("boss_agent_cli.services.file_lock.try_lock_exclusive", unsupported)
 	else:
 		(tmp_path / "cache" / "crawl-locks").write_text("not a directory", encoding="utf-8")
-	result = offline_cli.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "resume", run_id])
+	args = ["--data-dir", str(tmp_path), "--json", "crawl", "resume", run_id]
+	if background:
+		args.append("--background")
+	result = offline_cli.invoke(cli, args)
 	assert result.exit_code == 1, result.output
 	payload = json.loads(result.stdout)
 	assert set(payload) == ENVELOPE_KEYS
@@ -277,7 +283,7 @@ def test_unavailable_lock_fails_closed_as_a_local_file_error(tmp_path, offline_c
 	assert payload["error"]["recoverable"] is False
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
 		run = cache.get_crawl_run(run_id)
-		assert run["status"] == "queued"
+		assert run["status"] == "stopped"
 		assert run["next_page"] == 1
 	status = offline_cli.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "status", run_id])
 	assert status.exit_code == 0, status.output
@@ -334,6 +340,63 @@ with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 	cache, service = _service(tmp_path, lambda settings: _Pages())
 	with cache:
 		assert service.resume(run_id).status == "completed"
+	assert _lock_files(tmp_path) == []
+
+
+def test_background_resume_recovers_running_checkpoint_after_worker_exit(tmp_path, offline_cli, monkeypatch):
+	run_id = _persisted_run(tmp_path)
+	child = subprocess.run([
+		sys.executable, "-c", textwrap.dedent("""\
+import os
+import sys
+from pathlib import Path
+from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.crawler.service import CrawlBudget, CrawlService
+class NoDelay(CrawlBudget):
+    def wait(self, kind):
+        pass
+class Exiting:
+    def open(self):
+        return []
+    def fetch_page(self, query, city, page):
+        if page == 2:
+            os._exit(17)
+        return {"code": 0, "zpData": {"jobList": [{"encryptJobId": "job-1", "securityId": "fixture-sec-1"}], "hasMore": True}}
+data_dir = Path(sys.argv[1])
+with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+    CrawlService(cache, data_dir=data_dir, transport_factory=lambda settings: Exiting(), budget_factory=NoDelay).resume(sys.argv[2])
+"""), str(tmp_path), run_id,
+	], capture_output=True, text=True, timeout=30)
+	assert child.returncode == 17, child.stderr
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		abandoned = cache.get_crawl_run(run_id)
+		assert abandoned["status"] == "running"
+		assert abandoned["next_page"] == 2
+		assert abandoned["requests_attempted"] == 2
+
+	transport = _Pages()
+	outcomes = []
+
+	def launch(data_dir, launched_run_id, **kwargs):
+		# 立即接手还会验证父进程已释放探测锁；后台 worker 仍走真实执行互斥。
+		assert data_dir == tmp_path
+		assert launched_run_id == run_id
+		cache, service = _service(data_dir, lambda settings: transport)
+		with cache:
+			outcomes.append(service.resume(launched_run_id))
+
+	monkeypatch.setattr("boss_agent_cli.commands.crawl._launch_background_resume", launch)
+	result = offline_cli.invoke(cli, [
+		"--data-dir", str(tmp_path), "--json", "crawl", "resume", run_id, "--background",
+	])
+	assert result.exit_code == 0, result.output
+	assert len(outcomes) == 1, "running 只是旧状态，原 worker 已退出时必须真正拉起恢复"
+	assert json.loads(result.stdout)["data"] == {"run_id": run_id, "status": "queued", "background": True}
+	assert outcomes[0].status == "completed"
+	assert outcomes[0].requests_attempted == 4
+	assert transport.fetches == [2, 3]
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert [item["job_key"] for item in cache.list_crawl_jobs(run_id)] == ["job-1", "job-2", "job-3"]
 	assert _lock_files(tmp_path) == []
 
 
