@@ -141,15 +141,18 @@ uv run python evals/run_eval.py --mode fixture
 
 ## 添加新命令
 
-1. 在 `src/boss_agent_cli/commands/` 下新建文件
+1. 在 `src/boss_agent_cli/commands/` 下新建命令模块；可复用且不依赖 Click / display 的业务逻辑放到 `services/`
 2. 在 `commands/register.py` 中注册命令（`register_candidate_commands` / `register_recruiter_commands`；`main.py` 只保留全局选项，不直接挂命令）
 3. 在 `src/boss_agent_cli/schema/data.py`（`SCHEMA_DATA["commands"]`）中添加命令描述；顶层命令数变化时同步 `SCHEMA_DATA["description"]` 中的「共 N 个顶层命令」计数（有测试断言计数与命令表长度一致）
-4. 在 `tests/test_commands.py` 或按命令名新建测试文件
+4. 在 `tests/test_commands.py` 或按命令名新建测试文件，覆盖成功与错误路径，并确认命令满足 `tests/test_cli_invariants.py` 的信封契约
 5. 更新 `docs/commands.md` 和 `docs/commands.en.md`（命令速查表）
-6. 更新 `AGENTS.md`（CLI 不变量契约中的命令数）与 `docs/capability-matrix.md` / `docs/capability-matrix.en.md` 中的命令计数；`tests/test_agent_docs.py` 对这些计数字符串有硬编码断言，需一并更新
-7. 更新 `README.md` 和 `README.en.md`（命令参考表）
-8. 更新对应模块的 `CLAUDE.md`
-9. 如果命令对 Agent 通过 MCP 调用有用，还需在 `src/boss_agent_cli/mcp_server.py` 的 `TOOLS` 列表加 Tool 定义、在 `_build_args` 函数加分支；工具名与合规命令标识对不上时（如 `boss_hr_*` 系对应 `recruiter-*`）要登记 `_MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES`，否则低风险过滤不生效；`mcp-server/server.py` 是手工维护的 re-export 清单，新增公开符号需补一行；工具总数变化时同步 `README.en.md` 中的 "MCP server with N tools"（有测试按 `len(TOOLS)` 动态断言）
+6. 更新 `docs/capability-matrix.md` / `docs/capability-matrix.en.md` 中的命令计数；`tests/test_agent_docs.py` 对这些计数字符串有硬编码断言，需一并更新
+7. 更新 `README.md` 和 `README.en.md`（命令参考表与计数），同步 `llms.txt` / `demo/llms.txt` 及 `demo/index.html` 的能力计数
+8. 将新增 Python 模块加入 `pyproject.toml` 的 `[[tool.mypy.overrides]]` 严格模块列表，运行 `uv run mypy src/boss_agent_cli`
+9. 如果命令需要通过 MCP 暴露，在 `src/boss_agent_cli/mcp_tools.py` 的 `TOOLS` 中添加 Tool 定义，在 `src/boss_agent_cli/mcp_args.py` 的 `_build_args` 中添加参数映射。工具名与合规命令标识对不上时（如 `boss_hr_*` 对应 `recruiter-*`），在 `mcp_tools.py` 的 `_MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES` 登记。`mcp_server.py` 保留服务器与兼容再导出，`mcp-server/server.py` 是手工维护的 re-export 清单；新增兼容公开符号时同步两处。工具总数变化时同步 `README.en.md` 中的 "MCP server with N tools" 及其他能力计数，并确认实际 `tools/list` 与 `mcp_tools.TOOLS` 逐名相等：`uv run pytest tests/test_mcp_server_protocol.py tests/test_mcp_handler_registration.py -q`
+10. 在 `CHANGELOG.md` 的 `[Unreleased]` 下记录本次改动
+
+`AGENTS.md` / `CLAUDE.md` 是被 `.gitignore` 排除的本地说明文件，不是贡献 PR 的必需文件；公开工程与架构约定见本指南和 [架构文档](docs/architecture.md)。
 
 ## 新增 AI provider
 
