@@ -74,6 +74,7 @@ ERROR_LABELS = {
 	"WORKFLOW_STOPPED": "任务已停止",
 	"WORKFLOW_BUSY": "该任务正在另一个窗口或进程中执行",
 	"CRAWL_BUSY": "该采集任务正在另一个窗口或进程中执行",
+	"CRAWL_UNAVAILABLE": "采集所需的可选依赖没有安装",
 	"WORKFLOW_PLAN_MISMATCH": "任务信息与已有记录不一致",
 	"INVALID_PARAM": "请求参数无效",
 	"AUTH_EXPIRED": "登录状态已过期",
@@ -129,6 +130,7 @@ RECOVERY_LABELS = {
 	"WORKFLOW_STOPPED": "任务已停止；如需继续，请选择“恢复已有任务”。",
 	"WORKFLOW_BUSY": "请等它结束，或选择“查看任务状态”确认进度后再恢复。",
 	"CRAWL_BUSY": "请等它结束；需要确认进度时执行 boss crawl status <run_id>，不要并发恢复同一个任务。",
+	"CRAWL_UNAVAILABLE": "这不是网络问题，重试不会有帮助。请退出向导，用 pip install \"boss-agent-cli[crawl]\" 或 uv tool install \"boss-agent-cli[crawl]\" 补上采集依赖后重新执行。",
 }
 
 # 这些步骤对真人噪声大，TTY 进度里默认静默。
