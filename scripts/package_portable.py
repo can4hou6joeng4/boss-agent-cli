@@ -141,16 +141,30 @@ if command -v boss >/dev/null 2>&1; then
   boss --help >/dev/null
 fi
 
+# 内核安装必须用运行 boss 的同一个解释器：`uv tool install` 只把 boss /
+# boss-mcp 放进 PATH，而 `uv tool run patchright` 会独立解析一个 patchright
+# 版本，可能与 wheel 内的修订版不一致。boss 入口脚本的 shebang 就是工具环境
+# 解释器，直接用它调模块入口（Issue #1060）。
+BOSS_PYTHON=""
+if command -v boss >/dev/null 2>&1; then
+  BOSS_PYTHON="$(sed -n '1s/^#!//p' "$(command -v boss)")"
+fi
+if [[ -z "$BOSS_PYTHON" || ! -x "$BOSS_PYTHON" ]]; then
+  BOSS_PYTHON="$(command -v python3 || true)"
+fi
+KERNEL_INSTALL=("$BOSS_PYTHON" -m patchright install chromium)
+KERNEL_INSTALL_SHELL=("$BOSS_PYTHON" -m patchright install chromium-headless-shell)
+
 if [[ "${{BOSS_AGENT_INSTALL_BROWSER:-0}}" == "1" ]]; then
-  if uv tool run patchright install chromium; then
+  if "${{KERNEL_INSTALL[@]}}"; then
     echo "patchright chromium installed"
   else
-    echo "patchright chromium install failed. You can retry: uv tool run patchright install chromium" >&2
+    echo "patchright chromium install failed. You can retry: ${{KERNEL_INSTALL[*]}}" >&2
   fi
 else
   echo "browser kernel skipped. To install it now: BOSS_AGENT_INSTALL_BROWSER=1 ./install.sh"
-  echo "manual retry command: uv tool run patchright install chromium"
-  echo "if headless shell is missing: uv tool run patchright install chromium-headless-shell"
+  echo "manual retry command: ${{KERNEL_INSTALL[*]}}"
+  echo "if headless shell is missing: ${{KERNEL_INSTALL_SHELL[*]}}"
 fi
 
 cat <<'MSG'
@@ -216,10 +230,12 @@ If `uv tool update-shell` times out, temporarily expose global tools in PowerShe
 $env:PATH = "$env:USERPROFILE\\.local\\bin;$env:PATH"
 ```
 
-If patchright reports a missing headless shell in the global tool environment:
+If patchright reports a missing headless shell in the global tool environment,
+run the kernel install with the same interpreter that runs boss. `boss doctor`
+prints the full runnable command for this installation:
 
 ```powershell
-uv tool run patchright install chromium-headless-shell
+boss doctor   # e.g. <python> -m patchright install chromium-headless-shell
 ```
 
 Before live platform checks, run `boss login`; `AUTH_REQUIRED` means no login
