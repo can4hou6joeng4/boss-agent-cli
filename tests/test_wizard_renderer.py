@@ -73,3 +73,11 @@ def test_expired_auth_and_stopped_workflow_do_not_fall_back_to_generic_retry():
 	stopped_recovery = recovery_message("WORKFLOW_STOPPED") or ""
 	assert "恢复已有任务" in stopped_recovery
 	assert stopped_recovery != "请返回主菜单后重试。"
+
+
+def test_missing_crawl_dependencies_do_not_fall_back_to_generic_retry():
+	"""依赖缺失时「请返回主菜单后重试」只会让真人反复撞同一个失败（Issue #1050）。"""
+	recovery = recovery_message("CRAWL_UNAVAILABLE") or ""
+	assert "boss-agent-cli[crawl]" in recovery
+	assert "重试不会有帮助" in recovery
+	assert recovery != "请返回主菜单后重试。"

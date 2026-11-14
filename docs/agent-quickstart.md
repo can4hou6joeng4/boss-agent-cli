@@ -65,7 +65,7 @@ boss --json wizard --resume <run_id>
 
 ### 候选人 crawl 编排
 
-安装 `uv sync --extra crawl` 后，crawl 只使用 `<data-dir>/crawl/chrome-profile` 独立 profile。可用细粒度 CLI 创建任务，再使用 MCP 读取或本地导入已有任务；也可通过 `boss_wizard` 直接推进共享 crawl workflow：
+安装 `pip install "boss-agent-cli[crawl]"`（或 `uv tool install "boss-agent-cli[crawl]"`；源码仓库内为 `uv sync --extra crawl`） 后，crawl 只使用 `<data-dir>/crawl/chrome-profile` 独立 profile。可用细粒度 CLI 创建任务，再使用 MCP 读取或本地导入已有任务；也可通过 `boss_wizard` 直接推进共享 crawl workflow：
 
 ```text
 boss crawl start <query> --city <city> --pages <n>
@@ -135,6 +135,7 @@ boss status
 - `WORKFLOW_TIMEOUT`：正常 wizard 超时保留 `run_id`，调整超时后显式 `boss wizard --resume <run_id>`；若 MCP 返回 `outcome_unknown=true`，先核对未确认的动作，禁止直接重试
 - `WORKFLOW_BUSY`：同一 `run_id` 同时只允许一次执行；另一次调用（另一个终端、Agent 或 MCP 调用）还在执行时，本次调用不执行任何步骤、不改动 checkpoint。按 `hints.next_actions` 用 `boss wizard --status <run_id>` 查看进度，等它结束后再恢复；不要并发恢复同一个 `run_id`，也不要为了让位去 `--stop` 一次正常的执行。`--status` 与 `--stop` 不受影响，不同 `run_id` 互不阻塞；执行进程异常退出后执行权自动归还，无须清理
 - `CRAWL_BUSY`：同一 crawl `run_id` 同时只允许一次执行；另一次 `crawl start` / `crawl resume` / wizard 采集步骤还在执行时，本次调用不发出请求、不推进断点、也不清除停止请求。按 `hints.next_actions` 用 `boss crawl status <run_id>` 查看进度，等它结束后再恢复；不要并发恢复同一个 `run_id`，也不要为了让位去 `--stop` 一次正常的执行。`status` / `results` / `stop` 不受影响，不同 `run_id` 互不阻塞；执行进程异常退出后执行权由操作系统自动释放，无须清理锁文件
+- `CRAWL_UNAVAILABLE`：采集运行环境不可用，最常见的是默认安装没有带 `crawl` 可选依赖。入口在创建任务、启动后台进程之前就返回它，重试或恢复不会改变结果；按 `error.recovery_action` 安装 `boss-agent-cli[crawl]` 后重新执行原命令。
 - `INVALID_PARAM`：校正参数（城市、福利、页码等）；MCP 侧还包括未知工具名、不符合 `inputSchema` 声明类型的参数（例如把 `dry_run` 传成字符串 `"true"`），以及 `inputSchema.properties` 之外的未知参数（工具的 schema 已声明顶层 `additionalProperties: false`）。枚举参数（`format` / `sort` / `from_who` / `section` / `detail_status` / `tone` / `lang` / `type`）传显式空串会原样到达 CLI，得到带可选值列表的取值诊断，不会静默落回默认值；传 `null` 或不传仍等价于省略。`boss_wizard.action` 的非法值（如 `resum`、`STOP`、空串）同样在进入 CLI 前被拒绝并列出 `run / resume / status / stop`，不会静默新建一次 workflow run；只有缺省或 `null` 才落回默认的 `run`
 
 缺少或写错子命令时，`hints.next_actions` 会列出各子命令的帮助命令（例如 `boss resume init --help`）。先读取帮助，再按目标与必填参数执行具体动作。

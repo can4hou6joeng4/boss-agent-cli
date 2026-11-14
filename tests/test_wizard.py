@@ -4652,3 +4652,36 @@ def test_wizard_read_unknown_response_stays_retryable():
 	assert code == "NETWORK_ERROR"
 	assert recoverable is True
 	assert "稍后重试" in recovery
+
+
+def test_crawl_start_without_crawl_dependencies_reports_unavailable_and_creates_no_run(tmp_path, monkeypatch):
+	"""依赖缺失不是网络抖动：不能落成 NETWORK_ERROR 加「恢复当前任务」（Issue #1050）。"""
+	monkeypatch.setitem(sys.modules, "DrissionPage", None)
+	with pytest.raises(WorkflowActionError) as caught:
+		DEFAULT_ACTIONS["crawl_start"](_action_context(tmp_path), {"query": "Python", "city": "北京"}, {})
+	error = caught.value
+	assert error.code == "CRAWL_UNAVAILABLE"
+	assert error.recoverable is ERROR_CODES["CRAWL_UNAVAILABLE"]["recoverable"]
+	assert "boss-agent-cli[crawl]" in error.recovery_action
+	assert f"boss --data-dir {tmp_path.resolve()} crawl configure" in error.recovery_action
+	with sqlite3.connect(tmp_path / "cache" / "boss_agent.db") as conn:
+		assert conn.execute("SELECT COUNT(*) FROM crawl_runs").fetchone()[0] == 0
+
+
+def test_crawl_resume_without_crawl_dependencies_leaves_the_run_untouched(tmp_path, monkeypatch):
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.create_crawl_run(
+			"crawl-existing",
+			{"query": "Python", "city_code": "101010100"},
+			str(tmp_path / "crawl" / "runs" / "crawl-existing"),
+			status="stopped",
+		)
+		cache.request_crawl_stop("crawl-existing")
+	monkeypatch.setitem(sys.modules, "openpyxl", None)
+	with pytest.raises(WorkflowActionError) as caught:
+		DEFAULT_ACTIONS["crawl_resume"](_action_context(tmp_path), {"run_id": "crawl-existing"}, {})
+	assert caught.value.code == "CRAWL_UNAVAILABLE"
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		run = cache.get_crawl_run("crawl-existing")
+	assert run["status"] == "stopped"
+	assert run["stop_requested"] is True

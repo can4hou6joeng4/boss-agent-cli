@@ -29,7 +29,8 @@ from boss_agent_cli.crawler.service import (
 	crawl_int_setting,
 	unused_local_port,
 )
-from boss_agent_cli.crawler.transport import DrissionCrawlerSession
+from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
+from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.digest import build_digest
 from boss_agent_cli.display import RISK_ERROR_CONTRACTS, boss_command, risk_error_contract, risk_error_message, shell_argument
 from boss_agent_cli.output import Logger
@@ -1063,6 +1064,8 @@ def _crawl_seed_session(context: ActionContext) -> tuple[dict[str, str], str]:
 
 def _crawl_service(context: ActionContext, cache: CacheStore) -> CrawlService:
 	control = context.workflow_control
+	# 依赖先于登录态：没装 crawl 依赖时登录也无法采集，也不应创建内部任务。
+	ensure_crawl_runtime()
 	seed_cookies, user_agent = _crawl_seed_session(context)
 	return CrawlService(
 		cache,
@@ -1178,6 +1181,17 @@ def _crawl_busy_error(context: ActionContext, exc: CrawlBusyError) -> WorkflowAc
 	)
 
 
+def _crawl_unavailable_error(context: ActionContext, exc: CrawlRuntimeUnavailable) -> WorkflowActionError:
+	"""crawl 可选依赖缺失：不是网络抖动，重试或恢复只会复现，指向安装（Issue #1050）。"""
+	configure_command = _hint_command(context, "crawl configure")
+	return WorkflowActionError(
+		"CRAWL_UNAVAILABLE",
+		str(exc),
+		recoverable=bool(ERROR_CODES["CRAWL_UNAVAILABLE"]["recoverable"]),
+		recovery_action=f"安装 boss-agent-cli[crawl] 并执行 {configure_command}",
+	)
+
+
 def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	# 恢复 waiting_input 时若已有内部 crawl run_id，必须续跑而不是新建采集。
 	existing_run_id = _optional_str(inputs.get("run_id") or inputs.get("crawl_run_id"))
@@ -1243,6 +1257,8 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 			outcome = _crawl_service(context, cache).create_and_run(settings)
 		except CrawlBusyError as exc:
 			raise _crawl_busy_error(context, exc) from exc
+		except CrawlRuntimeUnavailable as exc:
+			raise _crawl_unavailable_error(context, exc) from exc
 		return _crawl_outcome_result(outcome, cache)
 
 
@@ -1293,6 +1309,8 @@ def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 			raise WorkflowActionError("CRAWL_RUN_NOT_FOUND", f"未找到 crawl run: {run_id}") from exc
 		except CrawlBusyError as exc:
 			raise _crawl_busy_error(context, exc) from exc
+		except CrawlRuntimeUnavailable as exc:
+			raise _crawl_unavailable_error(context, exc) from exc
 		return _crawl_outcome_result(outcome, cache)
 
 

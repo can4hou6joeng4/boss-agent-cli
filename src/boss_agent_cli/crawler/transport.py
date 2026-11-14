@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import random
 import socket
+import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
@@ -18,6 +20,7 @@ from boss_agent_cli.api.request_budget import (
 	is_request_stop,
 	retry_after_seconds,
 )
+from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
 from boss_agent_cli.crawler.hooks import HookInjection, HookRegistrationError, inject_hook_profile
 from boss_agent_cli.display import risk_error_message
 
@@ -89,6 +92,31 @@ class CrawlTransport(Protocol):
 	def close(self) -> None: ...
 
 
+# 采集浏览器与 XLSX 导出各自依赖的可选包，都在 `crawl` 依赖组里。
+_CRAWL_RUNTIME_MODULES = ("DrissionPage", "openpyxl")
+
+
+def _module_available(name: str) -> bool:
+	if name in sys.modules:
+		return sys.modules[name] is not None
+	try:
+		return importlib.util.find_spec(name) is not None
+	except (ImportError, ValueError):
+		return False
+
+
+def ensure_crawl_runtime() -> None:
+	"""入口在创建任务、启动后台进程、打开浏览器之前确认 `crawl` 可选依赖已安装。
+
+	默认安装不带这组依赖。等到打开浏览器才发现时任务已经建好，执行器只能把它
+	记成 `stopped`，调用方拿到的是成功信封和恢复指引，照做只会重复同一个失败
+	（Issue #1050）。这里只探测模块是否可导入，不导入它们。
+	"""
+	missing = [name for name in _CRAWL_RUNTIME_MODULES if not _module_available(name)]
+	if missing:
+		raise CrawlRuntimeUnavailable(f"crawl 需要 {'、'.join(missing)}；请安装 boss-agent-cli[crawl]")
+
+
 class DrissionCrawlerSession:
 	"""A single-tab, sequential browser listener and page-cookie detail client."""
 
@@ -145,7 +173,7 @@ class DrissionCrawlerSession:
 		try:
 			from DrissionPage import ChromiumOptions, ChromiumPage
 		except ImportError as exc:
-			raise RuntimeError("crawl 需要 DrissionPage；请安装 boss-agent-cli[crawl]") from exc
+			raise CrawlRuntimeUnavailable("crawl 需要 DrissionPage；请安装 boss-agent-cli[crawl]") from exc
 		options = ChromiumOptions()
 		self._profile_path = self._profile_path.resolve()
 		self._profile_path.mkdir(parents=True, exist_ok=True)

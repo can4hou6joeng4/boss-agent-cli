@@ -19,3 +19,7 @@ class CrawlWorkflowStopRequested(CrawlStopRequested):
 
 class CrawlTimeoutRequested(CrawlStopRequested):
 	"""The owning workflow deadline expired."""
+
+
+class CrawlRuntimeUnavailable(RuntimeError):
+	"""The optional crawl dependencies cannot be imported; retrying or resuming cannot change that."""

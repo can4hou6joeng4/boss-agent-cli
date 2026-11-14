@@ -27,6 +27,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_capability_mode
 from boss_agent_cli.crawler.controls import (
 	CrawlLimitExceeded as CrawlLimitExceeded,
+	CrawlRuntimeUnavailable as CrawlRuntimeUnavailable,
 	CrawlStopRequested as CrawlStopRequested,
 	CrawlWorkflowStopRequested as CrawlWorkflowStopRequested,
 	CrawlTimeoutRequested as CrawlTimeoutRequested,
@@ -591,6 +592,12 @@ class CrawlService:
 		except CrawlStopRequested as exc:
 			status = "stopped"
 			error = str(exc)
+		except CrawlRuntimeUnavailable as exc:
+			# 可选依赖缺失是确定性失败：保存断点后原样抛出，由入口按 CRAWL_UNAVAILABLE
+			# 回报。落成普通的 stopped 会让调用方拿到成功信封与恢复指引（Issue #1050）。
+			status = "stopped"
+			error = str(exc)
+			raise
 		except Exception as exc:
 			status = "stopped"
 			error = str(exc)
