@@ -471,19 +471,75 @@ def test_resume_background_relaunches_stopped_run(tmp_path, monkeypatch):
 	assert launched == [("run-stopped", 3, True)]
 
 
-def test_resume_background_does_not_relaunch_an_already_running_job(tmp_path, monkeypatch):
+@pytest.mark.parametrize("stop_during_launch", [False, True], ids=["resume-stopped", "stop-during-launch"])
+def test_resume_background_resets_old_stop_and_honors_stop_during_launch(tmp_path, monkeypatch, stop_during_launch):
+	"""显式后台恢复要解除旧停止；启动途中新的 stop 仍须阻止 worker 打开浏览器。"""
+	class _Transport:
+		def __init__(self):
+			self.opened = False
+			self.page_calls: list[int] = []
+
+		def open(self):
+			self.opened = True
+			return []
+
+		def fetch_page(self, query, city_code, page_no):
+			self.page_calls.append(page_no)
+			return {"code": 0, "zpData": {"jobList": [], "hasMore": False}}
+
+		def close(self):
+			pass
+
+	def _launch(data_dir, run_id, **kwargs):
+		if stop_during_launch:
+			with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
+				cache.request_crawl_stop(run_id)
+
+	transport = _Transport()
+	monkeypatch.setattr("boss_agent_cli.commands.crawl._launch_background_resume", _launch)
+	monkeypatch.setattr("boss_agent_cli.commands.crawl._transport_factory", lambda *args, **kwargs: transport)
+	_seed_run(tmp_path, "run-stopped", status="stopped", jobs=0)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.update_crawl_run_params("run-stopped", CrawlSettings(
+			query="AI", city_code="101210100", pages=5, with_detail=False,
+			profile_path=tmp_path / "crawl" / "chrome-profile", chrome_path=None,
+			cdp_port=9222, hook_profile="none",
+		).as_dict())
+	runner = CliRunner()
+	stopped = _invoke(runner, tmp_path, "crawl", "stop", "run-stopped")
+	assert stopped.exit_code == 0, stopped.output
+	resumed = _invoke(runner, tmp_path, "crawl", "resume", "run-stopped", "--background")
+	assert resumed.exit_code == 0, resumed.output
+	assert _envelope(resumed)["data"]["status"] == "queued"
+
+	# 执行真实的队列入口与 CrawlService，仅替换浏览器传输；不访问平台。
+	worker = _invoke(runner, tmp_path, "crawl", "resume", "run-stopped", "--from-queue")
+	assert worker.exit_code == 0, worker.output
+	assert _envelope(worker)["data"]["status"] == ("stopped" if stop_during_launch else "completed")
+	assert transport.opened is not stop_during_launch
+	assert transport.page_calls == ([] if stop_during_launch else [1])
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.get_crawl_run("run-stopped")["stop_requested"] is stop_during_launch
+
+
+@pytest.mark.parametrize("status", ["queued", "running"])
+def test_resume_background_does_not_relaunch_an_already_running_job(tmp_path, monkeypatch, status):
 	launched: list[str] = []
 	monkeypatch.setattr(
 		"boss_agent_cli.commands.crawl._launch_background_resume",
 		lambda data_dir, run_id, **kwargs: launched.append(run_id),
 	)
-	_seed_run(tmp_path, "run-active", status="running")
+	_seed_run(tmp_path, "run-active", status=status)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.request_crawl_stop("run-active")
 	runner = CliRunner()
 	_enable_research(runner, tmp_path)
 	result = _invoke(runner, tmp_path, "crawl", "resume", "run-active", "--background")
 	assert result.exit_code == 0, result.output
-	assert _envelope(result)["data"]["status"] == "running"
+	assert _envelope(result)["data"]["status"] == status
 	assert launched == [], "已在运行的任务重复拉起会产生并发采集，属风控风险"
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.get_crawl_run("run-active")["stop_requested"] is True
 
 
 def test_resume_background_returns_completed_without_relaunch(tmp_path, monkeypatch):
