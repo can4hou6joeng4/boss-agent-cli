@@ -9,9 +9,12 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
+from unittest.mock import MagicMock
 
 import click
+from click.testing import CliRunner
 import pytest
 
 from boss_agent_cli.commands import agent as agent_cmd_module
@@ -102,6 +105,72 @@ def test_tool_arguments_parse_with_cli(tool) -> None:
 	# make_context 只做参数解析与类型校验，不执行命令回调。
 	ctx = command.make_context(command.name, rest)
 	ctx.close()
+
+
+@pytest.mark.parametrize("tool", TOOLS, ids=[tool.name for tool in TOOLS])
+@pytest.mark.parametrize("literal", ["-synthetic", "--help", "--"])
+def test_tool_positionals_keep_option_like_text_literal(tool, literal: str) -> None:
+	"""工具字符串到达 Click 位置参数时必须保持字面值（Issue #1102）。"""
+	properties = tool.input_schema.get("properties") or {}
+	arguments = {key: _sample_value(prop, key) for key, prop in properties.items()}
+	text_values = {
+		key: f"sample_{key}"
+		for key, prop in properties.items()
+		if prop.get("type") == "string" and "enum" not in prop and key not in _FILTER_SAMPLE_VALUES
+	}
+	arguments.update(text_values)
+	# config 的 get / set 与 hr jobs 的 online / offline 才有位置参数，不能只测 list。
+	actions = properties.get("action", {}).get("enum", [None])
+	for action in actions:
+		case = {**arguments, **({"action": action} if action is not None else {})}
+		command, rest = _resolve_command(_build_args(tool.name, case))
+		with command.make_context(command.name, rest) as baseline:
+			expected_params = dict(baseline.params)
+		for parameter in command.params:
+			if not isinstance(parameter, click.Argument):
+				continue
+			key = next((key for key, value in text_values.items() if expected_params[parameter.name] == value), None)
+			if key is None:
+				continue
+			argv = _build_args(tool.name, {**case, key: literal})
+			parsed_command, rest = _resolve_command(argv)
+			try:
+				with parsed_command.make_context(parsed_command.name, rest) as parsed:
+					assert parsed.params == {**expected_params, parameter.name: literal}, argv
+			except (click.ClickException, click.exceptions.Exit) as exc:
+				pytest.fail(f"{tool.name}.{key} 未按字面传入：{argv}；{exc}")
+
+
+@pytest.mark.parametrize("name", ["-synthetic", "--help", "--"])
+def test_mcp_preset_option_like_names_reach_cli_callbacks(name, tmp_path, monkeypatch) -> None:
+	"""通过真实 CLI 信封验证预设名、关键词和筛选项，缓存保持 mock。"""
+	cache = MagicMock()
+	cache.__enter__.return_value = cache
+	cache.delete_saved_search.return_value = True
+	monkeypatch.setattr(preset_cmd_module, "CacheStore", lambda *_: cache)
+	runner = CliRunner()
+	prefix = ["--json", "--data-dir", str(tmp_path)]
+	arguments = {"name": name, "query": "-synthetic", "city": "北京"}
+	added = runner.invoke(cli, [*prefix, *_build_args("boss_preset_add", arguments)])
+	assert added.exit_code == 0, added.output
+	payload = json.loads(added.output)
+	assert payload["ok"] is True
+	assert payload["data"]["name"] == name
+	cache.save_saved_search.assert_called_once()
+	saved_name, saved_params = cache.save_saved_search.call_args.args
+	assert saved_name == name
+	assert saved_params["query"] == "-synthetic"
+	assert saved_params["city"] == "北京"
+
+	invalid = runner.invoke(cli, [*prefix, *_build_args("boss_preset_add", {**arguments, "query": ""})])
+	assert invalid.exit_code == 1, invalid.output
+	assert json.loads(invalid.output)["error"]["code"] == "INVALID_PARAM"
+	cache.save_saved_search.assert_called_once()
+
+	removed = runner.invoke(cli, [*prefix, *_build_args("boss_preset_remove", {"name": name})])
+	assert removed.exit_code == 0, removed.output
+	assert json.loads(removed.output)["data"]["removed"] is True
+	cache.delete_saved_search.assert_called_once_with(name)
 
 
 # 单工具 ↔ 单命令的 hr 工具：inputSchema 的属性集合必须与 Click 参数逐一相等。
