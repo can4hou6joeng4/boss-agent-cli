@@ -370,6 +370,10 @@ def handle_error_output(
 		# 仍是登记表原文：doctor / resume list / crawl status 读的是本次运行的数据
 		# 目录，透传出参会让真人与 Agent 去默认目录找（Issue #1092）。
 		recovery_action = registry_recovery_for_ctx(ctx, recovery_action)
+	# error.message 里也可能嵌着采集层 / 招聘者层构造的裸命令（「由用户执行
+	# boss clean --risk-lock」「请先 boss hr chatmsg <id> 核实」）。这些文案在
+	# api/ 与 crawler/ 层没有 ctx，只能在出口按本次运行改写（Issue #1097）。
+	message = registry_recovery_for_ctx(ctx, message)
 
 	if is_json_mode(ctx):
 		emit_error(

@@ -1646,3 +1646,24 @@ def test_run_whose_browser_reports_missing_dependencies_is_not_offered_a_resume(
 	assert run["status"] == "stopped"
 	assert "DrissionPage" in run["error"]
 	assert run["next_page"] == 1
+
+
+def test_crawl_status_rewrites_bare_commands_in_stored_error(tmp_path):
+	"""``data.error`` 里嵌的裸命令要指向本次运行的数据目录（Issue #1097）。
+
+	``CrawlRiskError`` 在 ``crawler/`` 层构造时没有 CLI 上下文，文案里是裸
+	``boss clean --risk-lock``；出口要按与 ``hints`` 相同的口径改写。
+	"""
+	_seed_run(tmp_path, "run-risk", status="risk_stopped")
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.update_crawl_run(
+			"run-risk",
+			status="risk_stopped",
+			next_page=1,
+			error="当前采集已停止并保存断点；由用户执行 boss clean --risk-lock 再显式继续。",
+		)
+	result = _invoke(CliRunner(), tmp_path, "crawl", "status", "run-risk")
+	assert result.exit_code == 0, result.output
+	error = _envelope(result)["data"]["error"]
+	assert f"boss --data-dir {tmp_path.resolve()} clean --risk-lock" in error
+	assert "由用户执行 boss clean --risk-lock" not in error

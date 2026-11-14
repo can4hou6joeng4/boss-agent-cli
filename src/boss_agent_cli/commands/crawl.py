@@ -39,12 +39,25 @@ from boss_agent_cli.display import (
 	handle_error_output,
 	handle_output,
 	login_action_for_ctx,
+	registry_recovery_for_ctx,
 	render_action_result,
 	shell_argument,
 	render_record_result,
 )
 
 _HOOK_CHOICES = ("screenshot-full", "none")
+
+def _crawl_payload_for_ctx(ctx: click.Context, payload: dict[str, Any]) -> dict[str, Any]:
+	"""采集结果里的 ``error`` 文案定位到本次运行的数据目录（Issue #1097）。
+
+	``CrawlRiskError`` 在 ``crawler/`` 层构造，拿不到 CLI 上下文，文案里嵌的是
+	裸 ``boss clean --risk-lock``；在出口按 ``hints`` 的同一口径改写。
+	"""
+	error = payload.get("error")
+	if not isinstance(error, str) or not error:
+		return payload
+	return {**payload, "error": registry_recovery_for_ctx(ctx, error)}
+
 
 # 本地采集任务不存在时，Agent 能直接执行的下一步：新建任务、或用真实 run_id 核对。
 # 这两步都读本地状态，必须带上当前数据目录，否则会在默认目录里找同名任务。
@@ -376,7 +389,7 @@ def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[s
 	handle_output(
 		ctx,
 		"crawl",
-		outcome.as_dict(),
+		_crawl_payload_for_ctx(ctx, outcome.as_dict()),
 		render=lambda d: render_record_result(d, title="crawl", next_steps=hints.get("next_actions", [])),
 		hints=hints,
 	)
@@ -919,7 +932,7 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 	handle_output(
 		ctx,
 		"crawl.status",
-		payload,
+		_crawl_payload_for_ctx(ctx, payload),
 		render=lambda d: render_record_result(
 			d,
 			title="crawl status",
