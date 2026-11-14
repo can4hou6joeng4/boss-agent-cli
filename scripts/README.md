@@ -31,6 +31,7 @@ uv run python scripts/verify_release.py --pypi-version 3.0.0 --python 3.11 --jso
 - `--require-clean` 把脏工作树视为失败；默认允许验证未提交改动，但报告中的 `git.clean=false` **不能作为发布就绪证据**。`--tag vX.Y.Z` 额外检查已有本地标签的版本及目标提交，不创建或移动标签；正式门禁需同时加 `--require-clean`。
 - `--timeout` 指定每个外部步骤的超时秒数，默认 180；`--python` 默认 3.11。Windows 使用临时环境的 `Scripts`，POSIX 使用 `bin`。
 - stdout 始终输出一个 JSON 报告（`--json` 可显式传入），stderr 输出步骤进度。`steps` 区分 `passed`、`failed`、`not_run`；没有请求的联网步骤不算通过。检查失败返回非零退出码。
+- 子进程失败时 `steps[].error` 带上 stderr 的有界尾部（末尾 12 行、单行 300 字符）；凭据先抹成 `[REDACTED]` 再截断（URL userinfo、无 scheme 的 `user:pass@host`、`token=` / `password=` 等键值与 Bearer 令牌）：刚发布后 PyPI 索引尚未传播与真实依赖冲突都表现为安装失败，只有 uv 自己的诊断能区分两者（Issue #1107）。
 - `_release_probe.py` 是安装验证使用的子进程探针，不是 `boss` 顶层命令。工具不代替 `quality_baseline.py`、smoke dry-run 或独立终端的 fixture eval，也不会修改 GitHub/PyPI。
 
 ## smoke_p0.py

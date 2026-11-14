@@ -98,5 +98,9 @@ uv publish
   ```
 
   This explicitly downloads packages from PyPI, checks CLI/MCP contracts, and
-  leaves the user's installed tools and credentials unchanged.
+  leaves the user's installed tools and credentials unchanged. A failure right
+  after publishing can come from index propagation rather than a real conflict;
+  the report keeps the tail of the failing command's stderr (credentials are
+  redacted before the per-line truncation), so uv's own diagnostic distinguishes
+  the two before you decide whether to retry.
 - Create follow-up issues for known limitations instead of hiding them in release notes.
