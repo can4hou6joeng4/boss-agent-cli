@@ -32,6 +32,15 @@ def _optional(args: list[str], flag: str, key: str, arguments: dict[str, Any]) -
 	args.extend([flag, str(value)])
 
 
+def _literal_positionals(args: list[str], *, start: int = 1, count: int = 1) -> list[str]:
+	"""以连字符开头的位置参数放到 ``--`` 后，选项保持生效（Issue #1102）。"""
+	end = start + count
+	values = args[start:end]
+	if any(value.startswith("-") for value in values):
+		return [*args[:start], *args[end:], "--", *values]
+	return args
+
+
 def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	"""根据 tool name 和参数构建 CLI 参数列表。"""
 	name = tool_name.replace("boss_", "")
@@ -73,17 +82,17 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		if arguments.get("with_score"):
 			args.append("--with-score")
 		_optional(args, "--sort", "sort", arguments)
-		return args
+		return _literal_positionals(args)
 
 	if name == "crawl_status":
-		return ["crawl", "status", str(arguments["run_id"])]
+		return _literal_positionals(["crawl", "status", str(arguments["run_id"])], start=2)
 
 	if name == "crawl_results":
 		args = ["crawl", "results", str(arguments["run_id"])]
 		if arguments.get("page") is not None:
 			args.extend(["--page", str(arguments["page"])])
 		_optional(args, "--detail-status", "detail_status", arguments)
-		return args
+		return _literal_positionals(args, start=2)
 
 	if name == "crawl_shortlist":
 		args = ["crawl", "shortlist", str(arguments["run_id"])]
@@ -95,7 +104,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--tags", str(arguments["tags"])])
 		if arguments.get("note"):
 			args.extend(["--note", str(arguments["note"])])
-		return args
+		return _literal_positionals(args, start=2)
 
 	if name == "recommend":
 		args = [name]
@@ -111,10 +120,10 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--job-id", arguments["job_id"]])
 		if arguments.get("lid"):
 			args.extend(["--lid", str(arguments["lid"])])
-		return args
+		return _literal_positionals(args)
 
 	if name == "greet":
-		return [name, arguments["security_id"], arguments["job_id"]]
+		return _literal_positionals([name, arguments["security_id"], arguments["job_id"]], count=2)
 
 	if name == "chat":
 		args = [name]
@@ -142,7 +151,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--count", str(arguments["count"])])
 		if arguments.get("raw"):
 			args.append("--raw")
-		return args
+		return _literal_positionals(args)
 
 	if name == "chat_summary":
 		args = ["chat-summary", arguments["security_id"]]
@@ -150,7 +159,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--page", str(arguments["page"])])
 		if arguments.get("count") is not None:
 			args.extend(["--count", str(arguments["count"])])
-		return args
+		return _literal_positionals(args)
 
 	if name == "mark":
 		# MCP 侧参数名是 tag，CLI 的选项名是 --label；两者不是同一个词，写错会让
@@ -158,13 +167,13 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = [name, arguments["security_id"], "--label", arguments["tag"]]
 		if arguments.get("remove"):
 			args.append("--remove")
-		return args
+		return _literal_positionals(args)
 
 	if name == "exchange":
-		return [name, arguments["security_id"]]
+		return _literal_positionals([name, arguments["security_id"]])
 
 	if name == "apply":
-		return [name, arguments["security_id"], arguments["job_id"]]
+		return _literal_positionals([name, arguments["security_id"], arguments["job_id"]], count=2)
 
 	if name == "batch_greet":
 		args = ["batch-greet", arguments["query"]]
@@ -178,10 +187,10 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args.extend(["--count", str(arguments.get("limit", 5))])
 		if arguments.get("dry_run"):
 			args.append("--dry-run")
-		return args
+		return _literal_positionals(args)
 
 	if name == "show":
-		return [name, str(arguments["number"])]
+		return _literal_positionals([name, str(arguments["number"])])
 
 	if name == "agent_run":
 		args = ["agent", "run"]
@@ -203,13 +212,13 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return ["agent", "review", "list"]
 
 	if name == "agent_review_approve":
-		return ["agent", "review", "approve", str(arguments["id"])]
+		return _literal_positionals(["agent", "review", "approve", str(arguments["id"])], start=3)
 
 	if name == "agent_review_reject":
 		args = ["agent", "review", "reject", str(arguments["id"])]
 		if arguments.get("reason"):
 			args.extend(["--reason", str(arguments["reason"])])
-		return args
+		return _literal_positionals(args, start=3)
 
 	if name == "agent_pending":
 		return ["agent", "pending", "list"]
@@ -240,7 +249,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		_optional(args, "-o", "output_file", arguments)
 		if arguments.get("include_private"):
 			args.append("--include-private")
-		return args
+		return _literal_positionals(args, count=int("query" in arguments and arguments["query"] is not None))
 
 	if name == "follow_up":
 		args = ["follow-up"]
@@ -260,7 +269,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.append(arguments["key"])
 		if action == "set" and "value" in arguments:
 			args.append(arguments["value"])
-		return args
+		return _literal_positionals(args, start=2, count=len(args) - 2)
 
 	if name == "clean":
 		args = [name]
@@ -293,7 +302,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		_optional(args, "--context", "context", arguments)
 		_optional(args, "--resume", "resume", arguments)
 		_optional(args, "--tone", "tone", arguments)
-		return args
+		return _literal_positionals(args, start=2)
 
 	if name == "ai_interview_prep":
 		args = ["ai", "interview-prep", arguments["jd_text"]]
@@ -301,7 +310,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--resume", arguments["resume"]])
 		if "count" in arguments:
 			args.extend(["--count", str(arguments["count"])])
-		return args
+		return _literal_positionals(args, start=2)
 
 	if name == "ai_chat_coach":
 		args = ["ai", "chat-coach", arguments["chat_text"]]
@@ -309,22 +318,22 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--resume", arguments["resume"]])
 		if arguments.get("style"):
 			args.extend(["--style", arguments["style"]])
-		return args
+		return _literal_positionals(args, start=2)
 
 	if name == "resume_list":
 		return ["resume", "list"]
 
 	if name == "resume_show":
-		return ["resume", "show", arguments["name"]]
+		return _literal_positionals(["resume", "show", arguments["name"]], start=2)
 
 	if name == "ai_analyze_jd":
-		return ["ai", "analyze-jd", arguments["jd_text"], "--resume", arguments["resume"]]
+		return _literal_positionals(["ai", "analyze-jd", arguments["jd_text"], "--resume", arguments["resume"]], start=2)
 
 	if name == "ai_optimize":
-		return ["ai", "optimize", arguments["resume"], "--jd", arguments["jd_text"]]
+		return _literal_positionals(["ai", "optimize", arguments["resume"], "--jd", arguments["jd_text"]], start=2)
 
 	if name == "ai_suggest":
-		return ["ai", "suggest", arguments["resume"], "--jd", arguments["jd_text"]]
+		return _literal_positionals(["ai", "suggest", arguments["resume"], "--jd", arguments["jd_text"]], start=2)
 
 	if name == "ai_fit":
 		args = ["ai", "fit", "--resume", arguments["resume"]]
@@ -344,7 +353,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--jd", arguments["jd_text"]])
 		if arguments.get("job_id"):
 			args.extend(["--job-id", arguments["job_id"]])
-		return args
+		return _literal_positionals(args, start=2)
 
 	if name == "ai_cover_letter":
 		args = ["ai", "cover-letter", arguments["resume"]]
@@ -352,13 +361,13 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		_optional(args, "--job-id", "job_id", arguments)
 		_optional(args, "--tone", "tone", arguments)
 		_optional(args, "--lang", "lang", arguments)
-		return args
+		return _literal_positionals(args, start=2)
 
 	if name == "watch_list":
 		return ["watch", "list"]
 
 	if name == "watch_run":
-		return ["watch", "run", arguments["name"]]
+		return _literal_positionals(["watch", "run", arguments["name"]], start=2)
 
 	if name == "preset_list":
 		return ["preset", "list"]
@@ -392,7 +401,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--tags", str(arguments["tags"])])
 		if arguments.get("note"):
 			args.extend(["--note", str(arguments["note"])])
-		return args
+		return _literal_positionals(args, start=2, count=2)
 
 	if name == "shortlist_annotate":
 		args = ["shortlist", "annotate", arguments["security_id"], arguments["job_id"]]
@@ -404,7 +413,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		# 丢掉，旧备注保留而信封仍回 updated=true（Issue #872）。
 		if "note" in arguments and arguments["note"] is not None:
 			args.extend(["--note", str(arguments["note"])])
-		return args
+		return _literal_positionals(args, start=2, count=2)
 
 	if name == "shortlist_compare":
 		args = ["shortlist", "compare"]
@@ -413,27 +422,27 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return args
 
 	if name == "shortlist_remove":
-		return ["shortlist", "remove", arguments["security_id"], arguments["job_id"]]
+		return _literal_positionals(["shortlist", "remove", arguments["security_id"], arguments["job_id"]], start=2, count=2)
 
 	if name == "preset_add":
 		args = ["preset", "add", arguments["name"], arguments["query"]]
 		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type", "welfare", "active"):
 			if arguments.get(opt):
 				args.extend([f"--{opt.replace('_', '-')}", str(arguments[opt])])
-		return args
+		return _literal_positionals(args, start=2, count=2)
 
 	if name == "preset_remove":
-		return ["preset", "remove", arguments["name"]]
+		return _literal_positionals(["preset", "remove", arguments["name"]], start=2)
 
 	if name == "watch_add":
 		args = ["watch", "add", arguments["name"], arguments["query"]]
 		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type", "welfare"):
 			if arguments.get(opt):
 				args.extend([f"--{opt.replace('_', '-')}", str(arguments[opt])])
-		return args
+		return _literal_positionals(args, start=2, count=2)
 
 	if name == "watch_remove":
-		return ["watch", "remove", arguments["name"]]
+		return _literal_positionals(["watch", "remove", arguments["name"]], start=2)
 
 	if name == "hr_whoami":
 		return ["hr", "whoami"]
@@ -459,7 +468,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.append("--select")
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
-		return args
+		return _literal_positionals(args, start=2, count=int(bool(arguments.get("query"))))
 
 	if name == "hr_chat":
 		args = ["hr", "chat"]
@@ -479,7 +488,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--count", str(arguments["count"])])
 		if arguments.get("max_msg_id"):
 			args.extend(["--max-msg-id", str(arguments["max_msg_id"])])
-		return args
+		return _literal_positionals(args, start=2)
 
 	if name == "hr_last_messages":
 		args = ["hr", "last-messages"]
@@ -499,7 +508,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = ["hr", "resume", arguments["geek_id"], "--job-id", str(arguments["job_id"]), "--security-id", str(arguments["security_id"])]
 		if arguments.get("raw"):
 			args.append("--raw")
-		return args
+		return _literal_positionals(args, start=2)
 
 	if name == "hr_exchange":
 		args = ["hr", "resume", "--exchange", "--friend-id", str(arguments["friend_id"])]
@@ -509,10 +518,10 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return args
 
 	if name == "hr_reply":
-		return ["hr", "reply", str(arguments["friend_id"]), arguments["message"]]
+		return _literal_positionals(["hr", "reply", str(arguments["friend_id"]), arguments["message"]], start=2, count=2)
 
 	if name == "hr_request_resume":
-		return ["hr", "request-resume", str(arguments["friend_id"])]
+		return _literal_positionals(["hr", "request-resume", str(arguments["friend_id"])], start=2)
 
 	if name == "hr_accept_resume":
 		args = ["hr", "accept-resume", str(arguments["friend_id"]), "--message-id", str(arguments["message_id"])]
@@ -520,10 +529,13 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.append("--yes")
 		if arguments.get("dry_run") is True:
 			args.append("--dry-run")
-		return args
+		return _literal_positionals(args, start=2)
 
 	if name == "hr_download_resume":
-		return ["hr", "download-resume", str(arguments["friend_id"]), "--message-id", str(arguments["message_id"]), "--output", str(arguments["output"])]
+		return _literal_positionals(
+			["hr", "download-resume", str(arguments["friend_id"]), "--message-id", str(arguments["message_id"]), "--output", str(arguments["output"])],
+			start=2,
+		)
 
 	if name == "hr_recommendations":
 		args = ["hr", "recommendations", "--job-id", str(arguments["job_id"])]
@@ -555,7 +567,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.append("--yes")
 		if arguments.get("dry_run") is True:
 			args.append("--dry-run")
-		return args
+		return _literal_positionals(args, start=2)
 
 	if name == "hr_jobs":
 		action = arguments.get("action", "list")
@@ -564,10 +576,10 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.append(str(arguments["job_id"]))
 		elif arguments.get("page") is not None:
 			args.extend(["--page", str(arguments["page"])])
-		return args
+		return _literal_positionals(args, start=3, count=int(action in {"online", "offline"}))
 
 	if name == "hr_jobs_detail":
-		return ["hr", "jobs", "detail", str(arguments["enc_job_id"])]
+		return _literal_positionals(["hr", "jobs", "detail", str(arguments["enc_job_id"])], start=3)
 
 	if name == "status":
 		args = [name]

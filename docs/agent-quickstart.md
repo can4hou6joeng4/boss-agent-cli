@@ -141,6 +141,8 @@ boss status
 
 缺少或写错子命令时，`hints.next_actions` 会列出各子命令的帮助命令（例如 `boss resume init --help`）。先读取帮助，再按目标与必填参数执行具体动作。
 
+MCP 工具的查询、预设名与消息按字面传入，`-draft`、`--help`、`--` 都可作为文本值。直接使用 CLI 时，把选项放在 `--` 前、位置参数放在其后，例如 `boss preset add --city 北京 -- -draft -synthetic`。
+
 ## 4) 工具协议直出
 
 招聘者自动化的停止状态不会被普通 `agent run` 清除。操作者在原浏览器完成官方验证、核对受阻页面及未确认动作后，可明确调用 `boss --role recruiter agent run --resume`；MCP `boss_agent_run.resume=true` 同样需要该明确恢复指令。恢复复用已确认动作的防重记录。

@@ -141,6 +141,8 @@ Common recovery actions:
 
 When a subcommand is missing or unknown, `hints.next_actions` lists help commands for the available subcommands, such as `boss resume init --help`. Read the help first, then choose an action and supply its required parameters.
 
+MCP queries, preset names and messages are passed literally, so `-draft`, `--help` and `--` can all be text values. When using the CLI directly, put options before `--` and positional arguments after it, for example `boss preset add --city 北京 -- -draft -synthetic`.
+
 ## 4) Export tool protocols
 
 Ordinary `agent run` never clears recruiter automation stop state. After official verification in the original browser and checks of the blocked page and any unconfirmed actions, the operator can explicitly run `boss --role recruiter agent run --resume`. The MCP parameter `boss_agent_run.resume=true` requires the same explicit recovery instruction. Confirmed action deduplication records are retained.
