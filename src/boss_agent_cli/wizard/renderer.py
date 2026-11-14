@@ -170,10 +170,9 @@ def _rewrite_recovery_commands(text: str, command_for: Callable[[str], str] | No
 	"""把静态恢复文案里的裸命令换成调用方上下文的命令（Issue #1090）。"""
 	if command_for is None:
 		return text
-	for literal, (command,) in _RECOVERY_COMMANDS.items():
-		if literal in text:
-			text = text.replace(literal, command_for(command))
-	return text
+	return display.rewrite_command_examples(
+		text, {literal: command for literal, (command,) in _RECOVERY_COMMANDS.items()}, command_for
+	)
 
 # 这些步骤对真人噪声大，TTY 进度里默认静默。
 _SILENT_STEPS = {"auth_status"}

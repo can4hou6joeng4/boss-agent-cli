@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 恢复命令不再重复改写路径或引号内的名称（Issue #1100）：数据目录含 `boss chat` / `boss doctor` 等文字时，逐项替换会再次改写刚插入的路径并破坏命令。错误信封、风控契约、浏览器来源提示与向导恢复文案统一只扫描原文一次，保留已有命令中的路径参数，前文名称或路径中的词内撇号也不会打乱引用边界；身份诊断省略可选上下文时继续返回通用 `boss hr whoami` 示例。
 - 采集结果与错误信封的 `message` / `data.error` 保留自定义 `--data-dir`（Issue #1097）：`CrawlRiskError` 在 `crawler/` 层构造，文案里嵌的 `boss clean --risk-lock` 是裸命令；`error.message` 之前只做脱敏不做改写。现在 `handle_error_output` 在出口统一按运行上下文改写 `message`，`crawl start` / `crawl resume` / `crawl status` 的 `data.error` 同样指向本次运行的命令；不含命令的文案与无上下文的纯函数调用保持原文。
 - `boss doctor` 检查项的恢复文案保留自定义 `--data-dir`（Issue #1095）：`checks[].hint` 与 `checks[].recovery_action` 仍写死裸 `boss doctor --probe-cookies` / `boss login` / `boss hr whoami`，而同一信封的 `hints.next_actions` 已按运行上下文改写。自定义 `--data-dir` 的用户照抄检查项里的命令，诊断或核对的仍是默认目录。现在这些检查项同样指向本次运行的 `boss [--platform ...] --data-dir <dir> ...`；无上下文时保持通用示例。
 - 命令层与信封的恢复文案保留自定义 `--data-dir`（Issue #1092）：错误码登记表里 42 个错误码的 `recovery_action` 写死裸 `boss resume list` / `boss crawl status` / `boss doctor` / `boss shortlist add` 等，而 `handle_error_output` 只对认证类与风控码按运行上下文改写，其余错误码直接透传登记表原文——自定义 `--data-dir` 的用户按提示操作时，命令会落到默认目录，看不到自己的简历、采集记录或 workflow，容易以为任务丢了而重建。现在登记表恢复文案在信封出口统一改写为本次运行的 `boss [--platform ...] --data-dir <dir> ...`（TTY 与 JSON 两条路径一致），认证类错误仍优先给登录命令；调用方显式传入的恢复文案、无上下文的 `boss schema` 文档与纯函数调用保持原文。新增守卫测试：登记表里出现的每条 `boss …` 命令都必须有改写条目。
