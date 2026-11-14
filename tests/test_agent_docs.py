@@ -92,6 +92,18 @@ def test_agent_quickstart_exists_and_has_core_sections():
 	assert "[Capability Matrix](capability-matrix.md)" in content
 
 
+def test_agent_quickstart_documents_both_busy_contracts():
+	"""两个并发互斥错误码要在两份快速上手里同时出现（Issue #1033）。
+
+	3.4.4 新增 `CRAWL_BUSY` 后，Agent 的错误码清单只写了同类的 `WORKFLOW_BUSY`；
+	只补一侧或只补一个码，都会让 Agent 在并发恢复被拒时找不到处理说明。
+	"""
+	for name in ("docs/agent-quickstart.md", "docs/agent-quickstart.en.md"):
+		content = _read(name)
+		assert "`WORKFLOW_BUSY`" in content, name
+		assert "`CRAWL_BUSY`" in content, name
+
+
 def test_capability_matrix_exists_and_covers_core_capabilities():
 	path = ROOT / "docs/capability-matrix.md"
 	assert path.exists(), "docs/capability-matrix.md should exist"
