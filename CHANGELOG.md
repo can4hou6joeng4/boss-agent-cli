@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 命令层与信封的恢复文案保留自定义 `--data-dir`（Issue #1092）：错误码登记表里 42 个错误码的 `recovery_action` 写死裸 `boss resume list` / `boss crawl status` / `boss doctor` / `boss shortlist add` 等，而 `handle_error_output` 只对认证类与风控码按运行上下文改写，其余错误码直接透传登记表原文——自定义 `--data-dir` 的用户按提示操作时，命令会落到默认目录，看不到自己的简历、采集记录或 workflow，容易以为任务丢了而重建。现在登记表恢复文案在信封出口统一改写为本次运行的 `boss [--platform ...] --data-dir <dir> ...`（TTY 与 JSON 两条路径一致），认证类错误仍优先给登录命令；调用方显式传入的恢复文案、无上下文的 `boss schema` 文档与纯函数调用保持原文。新增守卫测试：登记表里出现的每条 `boss …` 命令都必须有改写条目。
+
 ## [3.4.15] - 2026-11-15
 
 ### Fixed

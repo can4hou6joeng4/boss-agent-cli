@@ -172,7 +172,9 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 				"name": "candidate_live_user_info",
 				"status": "warn",
 				"detail": f"求职者只读 user_info 探测异常: {exc}",
-				"recovery_action": "先运行 boss status 检查本地登录态；命中风控时停止自动化访问",
+				"recovery_action": (
+					f"先运行 {_doctor_command(ctx, 'status')} 检查本地登录态；命中风控时停止自动化访问"
+				),
 			}
 		)
 
@@ -182,7 +184,9 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 				"name": "recruiter_live_read",
 				"status": "warn",
 				"detail": "当前登录态在求职者侧，未请求招聘者接口",
-				"recovery_action": "在官方页面切换到「我要招聘」后执行 boss hr whoami；命中风控时停止自动化访问",
+				"recovery_action": (
+					f"在官方页面切换到「我要招聘」后执行 {_doctor_command(ctx, 'hr', 'whoami')}；命中风控时停止自动化访问"
+				),
 			}
 		)
 		return None

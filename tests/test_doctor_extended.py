@@ -1036,3 +1036,32 @@ def test_doctor_no_longer_probes_zhaopin(tmp_path):
 	checks = parsed["data"]["checks"]
 	assert _find_check(checks, "network_zhilian") is None
 	assert not any("zhaopin" in json.dumps(check, ensure_ascii=False) for check in checks)
+
+
+def test_doctor_live_probe_recovery_keeps_the_data_dir(tmp_path):
+	"""探测异常的恢复命令要指向本次诊断的数据目录（Issue #1092）。
+
+	裸 `boss status` / `boss hr whoami` 读默认目录的登录态，`--data-dir` 用户
+	照抄后会被引到另一份缓存，看起来仍然「未登录」。
+	"""
+	parsed, _, _, _ = _run_live_probe(
+		tmp_path,
+		platform_side_effect=RuntimeError("fixture probe failure"),
+	)
+	checks = {check["name"]: check for check in parsed["data"]["checks"]}
+	recovery = checks["candidate_live_user_info"]["recovery_action"]
+	assert f"--data-dir {tmp_path.resolve()}" in recovery
+	assert "boss --data-dir" in recovery
+	assert "运行 boss status" not in recovery
+
+
+def test_doctor_recruiter_side_hint_keeps_the_data_dir(tmp_path):
+	parsed, _, _, _ = _run_live_probe(
+		tmp_path,
+		platform_user_info={"zpData": {"identity": 0, "doubleIdentity": True, "recruit": False}},
+	)
+	checks = {check["name"]: check for check in parsed["data"]["checks"]}
+	recovery = checks["recruiter_live_read"]["recovery_action"]
+	assert f"--data-dir {tmp_path.resolve()}" in recovery
+	assert "hr whoami" in recovery
+	assert "执行 boss hr whoami" not in recovery

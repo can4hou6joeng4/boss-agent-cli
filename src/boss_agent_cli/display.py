@@ -114,6 +114,73 @@ def auth_required_hints(ctx: Any) -> dict[str, list[str]]:
 	}
 
 
+#: 错误码登记表恢复文案里的示例命令；有运行上下文时改写成带 ``--data-dir``
+#: 的真实命令（Issue #1092）。登记表是纯数据、被 `boss schema` 与文档引用，
+#: 不能写死某个用户的数据目录；改写只发生在错误信封出口。
+#:
+#: 键必须按长度倒序匹配：``boss hr chat`` 是 ``boss hr chatmsg`` 的前缀，
+#: ``boss wizard`` 是 ``boss wizard --status`` 的前缀，先短后长会切坏命令。
+_REGISTRY_COMMANDS: dict[str, str] = {
+	"boss agent pending list": "agent pending list",
+	"boss agent review list": "agent review list",
+	"boss agent run": "agent run",
+	"boss agent stats": "agent stats",
+	"boss ai config": "ai config",
+	"boss chat": "chat",
+	"boss clean --risk-lock": "clean --risk-lock",
+	"boss crawl configure": "crawl configure",
+	"boss crawl resume": "crawl resume",
+	"boss crawl start": "crawl start",
+	"boss crawl status": "crawl status",
+	"boss doctor": "doctor",
+	"boss hr chat": "hr chat",
+	"boss hr chatmsg": "hr chatmsg",
+	"boss hr reply": "hr reply",
+	"boss hr request-resume": "hr request-resume",
+	"boss login": "login",
+	"boss logout": "logout",
+	"boss me --section deliver": "me --section deliver",
+	"boss preset list": "preset list",
+	"boss preset remove": "preset remove",
+	"boss recommend": "recommend",
+	"boss resume delete": "resume delete",
+	"boss resume list": "resume list",
+	"boss search": "search",
+	"boss shortlist add": "shortlist add",
+	"boss shortlist list": "shortlist list",
+	"boss watch list": "watch list",
+	"boss watch remove": "watch remove",
+	"boss wizard --input-json": "wizard --input-json",
+	"boss wizard --resume": "wizard --resume",
+	"boss wizard --status": "wizard --status",
+	"boss wizard": "wizard",
+	"boss --json wizard": "--json wizard",
+}
+
+#: 按字面量长度倒序的匹配顺序，构造一次。
+_REGISTRY_COMMAND_ORDER: tuple[str, ...] = tuple(sorted(_REGISTRY_COMMANDS, key=len, reverse=True))
+
+
+def registry_recovery_for_ctx(ctx: Any, text: str) -> str:
+	"""把登记表恢复文案里的示例命令换成本次运行的命令（Issue #1092）。
+
+	``boss doctor`` / ``boss resume list`` / ``boss crawl status`` 等读的都是
+	``<data_dir>`` 里的登录态与本地记录；自定义 ``--data-dir`` 下照抄裸命令会
+	诊断或查询默认目录，让真人与 Agent 以为任务丢了。无运行上下文（纯函数
+	调用、``boss schema`` 文档）时原样返回。
+	"""
+	if ctx is None:
+		return text
+
+	def command_for(command: str) -> str:
+		return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+	for literal in _REGISTRY_COMMAND_ORDER:
+		if literal in text:
+			text = text.replace(literal, command_for(_REGISTRY_COMMANDS[literal]))
+	return text
+
+
 def error_contract_for_code(
 	code: str,
 	*,
@@ -146,6 +213,10 @@ def platform_error_contract(
 	if code in RISK_ERROR_CONTRACTS:
 		recovery_action, hints = risk_error_contract(code, ctx=ctx, clean_command=clean_command, doctor_command=doctor_command)
 		return recoverable, recovery_action, hints
+	if recovery_action:
+		# 登记表是通用示例；诊断类命令（doctor / crawl status / resume list）读的
+		# 是本次运行的数据目录（Issue #1092）。
+		recovery_action = registry_recovery_for_ctx(ctx, recovery_action)
 	return recoverable, recovery_action, None
 
 
@@ -282,14 +353,23 @@ def handle_error_output(
 		recoverable = registered_recoverable
 	if recovery_action is None:
 		recovery_action = registered_recovery_action
+	# 调用方可能已经通过 platform_error_contract 之类把登记表原文改写成本次目录；
+	# 两种形态都算「仍是登记表契约」，认证分支不能因此丢掉扫码提示。
+	registered_variants = {registered_recovery_action}
+	if registered_recovery_action:
+		registered_variants.add(registry_recovery_for_ctx(ctx, registered_recovery_action))
 	if (
 		code in {"AUTH_REQUIRED", "AUTH_EXPIRED", "TOKEN_REFRESH_FAILED"}
 		and recoverable
-		and recovery_action == registered_recovery_action
+		and recovery_action in registered_variants
 	):
 		# 登记表是无运行上下文的示例；只补齐通用登录动作，不覆盖写操作的人工核对要求。
 		recovery_action = login_action_for_ctx(ctx)
 		hints = {**auth_required_hints(ctx), **(hints or {})}
+	elif recovery_action and recovery_action == registered_recovery_action:
+		# 仍是登记表原文：doctor / resume list / crawl status 读的是本次运行的数据
+		# 目录，透传出参会让真人与 Agent 去默认目录找（Issue #1092）。
+		recovery_action = registry_recovery_for_ctx(ctx, recovery_action)
 
 	if is_json_mode(ctx):
 		emit_error(
