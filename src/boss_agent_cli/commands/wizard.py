@@ -152,14 +152,18 @@ def _busy_hints(ctx: click.Context, error: Mapping[str, Any]) -> dict[str, list[
 	不给 ``--resume``（照做只会再撞一次）也不给 ``--stop``（照做会打断一次正常
 	的执行）；要不要停由查到状态之后的调用方决定。
 	"""
-	command = {"WORKFLOW_BUSY": "wizard --status", "CRAWL_BUSY": "crawl status"}.get(str(error.get("code")))
 	details = error.get("details")
-	if command is None or not isinstance(details, Mapping):
+	if not isinstance(details, Mapping):
 		return None
 	run_id = details.get("run_id")
 	if not run_id:
 		return None
-	status_cmd = boss_command_for_ctx(ctx, f"{command} {shell_argument(str(run_id))}", include_data_dir=True)
+	if error.get("code") == "WORKFLOW_BUSY":
+		status_cmd = boss_command_for_ctx(ctx, f"wizard --status {shell_argument(str(run_id))}", include_data_dir=True)
+	elif error.get("code") == "CRAWL_BUSY":
+		status_cmd = boss_command_for_ctx(ctx, f"crawl status {shell_argument(str(run_id))}", include_data_dir=True)
+	else:
+		return None
 	return {"next_actions": [status_cmd]}
 
 
