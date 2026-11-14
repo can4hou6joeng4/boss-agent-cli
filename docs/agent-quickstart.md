@@ -84,6 +84,8 @@ boss agent crawl --query "AI 工程师" --city 杭州 --pages 3 --with-detail --
 
 默认不注入 Hook。只有拥有相应授权时，才可在 CLI 显式传 `--hook-profile screenshot-full --hook-dir <含 SHA256SUMS 的目录>`；项目不随包发布第三方脚本。需要立即终止时执行 `boss crawl stop <run_id>`。当 `crawl_status` 返回 `risk_stopped` 时，同 `data_dir` 的风险锁会在浏览器构造前阻断所有新采集和恢复；保留 `run_id`，由用户确认官方目标业务页恢复后执行 `boss clean --risk-lock`，再显式 `boss crawl resume <run_id>`。恢复步骤属于 `operator_actions`，Agent 不自行清锁。`budget_stopped` 需处理预算后恢复；两者均不应重新建任务或循环重试。本地状态、结果和导入仍可用。
 
+同一 `run_id` 同时只允许一个执行器：另一次 `crawl start` / `crawl resume` / wizard 采集步骤还在执行时，后到者返回 `CRAWL_BUSY`，不发出请求、不推进断点，也不清除停止请求。按 `hints.next_actions` 查 `boss crawl status <run_id>`，等当前执行结束后再恢复；不要并发恢复同一个 `run_id`，也不要为了让位去 `--stop` 一次正常的执行。`status` / `results` / `stop` 不受影响，不同 `run_id` 互不阻塞；执行进程异常退出后执行权由操作系统自动释放，无须清理锁文件。
+
 ### 招聘者 workflow
 
 招聘者命令覆盖候选人搜索、投递申请、简历、聊天、联系方式交换、消息回复和职位管理：
@@ -132,6 +134,7 @@ boss status
 - `UNKNOWN`：平台返回了未识别的错误。写操作的响应无法证明动作没有发生，按上面「结果未知的写操作」处理；不要因为它不是 `ACTION_UNCONFIRMED` 就当成网络抖动重试。`batch-greet` 与 `boss wizard` 也会就地停批，不会自动重发
 - `WORKFLOW_TIMEOUT`：正常 wizard 超时保留 `run_id`，调整超时后显式 `boss wizard --resume <run_id>`；若 MCP 返回 `outcome_unknown=true`，先核对未确认的动作，禁止直接重试
 - `WORKFLOW_BUSY`：同一 `run_id` 同时只允许一次执行；另一次调用（另一个终端、Agent 或 MCP 调用）还在执行时，本次调用不执行任何步骤、不改动 checkpoint。按 `hints.next_actions` 用 `boss wizard --status <run_id>` 查看进度，等它结束后再恢复；不要并发恢复同一个 `run_id`，也不要为了让位去 `--stop` 一次正常的执行。`--status` 与 `--stop` 不受影响，不同 `run_id` 互不阻塞；执行进程异常退出后执行权自动归还，无须清理
+- `CRAWL_BUSY`：同一 crawl `run_id` 同时只允许一次执行；另一次 `crawl start` / `crawl resume` / wizard 采集步骤还在执行时，本次调用不发出请求、不推进断点、也不清除停止请求。按 `hints.next_actions` 用 `boss crawl status <run_id>` 查看进度，等它结束后再恢复；不要并发恢复同一个 `run_id`，也不要为了让位去 `--stop` 一次正常的执行。`status` / `results` / `stop` 不受影响，不同 `run_id` 互不阻塞；执行进程异常退出后执行权由操作系统自动释放，无须清理锁文件
 - `INVALID_PARAM`：校正参数（城市、福利、页码等）；MCP 侧还包括未知工具名、不符合 `inputSchema` 声明类型的参数（例如把 `dry_run` 传成字符串 `"true"`），以及 `inputSchema.properties` 之外的未知参数（工具的 schema 已声明顶层 `additionalProperties: false`）。枚举参数（`format` / `sort` / `from_who` / `section` / `detail_status` / `tone` / `lang` / `type`）传显式空串会原样到达 CLI，得到带可选值列表的取值诊断，不会静默落回默认值；传 `null` 或不传仍等价于省略。`boss_wizard.action` 的非法值（如 `resum`、`STOP`、空串）同样在进入 CLI 前被拒绝并列出 `run / resume / status / stop`，不会静默新建一次 workflow run；只有缺省或 `null` 才落回默认的 `run`
 
 缺少或写错子命令时，`hints.next_actions` 会列出各子命令的帮助命令（例如 `boss resume init --help`）。先读取帮助，再按目标与必填参数执行具体动作。
