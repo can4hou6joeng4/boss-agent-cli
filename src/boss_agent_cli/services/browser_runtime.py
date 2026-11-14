@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -81,6 +82,27 @@ def patchright_importable() -> bool:
 	return True
 
 
+_WINDOWS_BARE_PATH = re.compile(r"[A-Za-z0-9_.:\\/+=-]+")
+
+
+def interpreter_invocation(executable: str | None = None, *, windows: bool | None = None) -> str:
+	"""把解释器路径写成可照抄执行的命令前缀。
+
+	POSIX 用 ``shlex.quote``。Windows 不能套用：它的安全字符集不含反斜杠，任何
+	路径都会被包上单引号——PowerShell 把引号开头的行当表达式（缺调用运算符
+	``&``），cmd.exe 根本不把单引号当引号，两边都执行不了（Issue #1072）。
+	Windows 上路径不含需转义字符时原样输出（PowerShell 与 cmd 均可执行），否则
+	按 PowerShell 写成 ``& '<路径>'``，与 doctor 命令提示的引用约定一致。
+	"""
+	path = sys.executable if executable is None else executable
+	on_windows = os.name == "nt" if windows is None else windows
+	if not on_windows:
+		return shlex.quote(path)
+	if _WINDOWS_BARE_PATH.fullmatch(path):
+		return path
+	return "& '" + path.replace("'", "''") + "'"
+
+
 def patchright_install_command() -> str:
 	"""返回当前安装形态下可直接执行的内核安装命令。
 
@@ -90,12 +112,12 @@ def patchright_install_command() -> str:
 	（Issue #1060）。改用运行本 CLI 的同一个解释器调模块入口：它必然能导入
 	patchright，且版本与启动浏览器时一致，不会装成另一个修订版。
 	"""
-	return f"{shlex.quote(sys.executable)} -m patchright install chromium"
+	return f"{interpreter_invocation()} -m patchright install chromium"
 
 
 def patchright_headless_shell_command() -> str:
 	""":func:`patchright_install_command` 的 headless shell 变体。"""
-	return f"{shlex.quote(sys.executable)} -m patchright install chromium-headless-shell"
+	return f"{interpreter_invocation()} -m patchright install chromium-headless-shell"
 
 
 def evaluate_patchright_chromium(required_revision: str | None, installed: list[Path]) -> tuple[str, str]:

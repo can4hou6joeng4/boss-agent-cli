@@ -108,6 +108,8 @@ boss doctor                     # prints the runnable install command and the re
 <same interpreter> -m patchright install chromium-headless-shell
 ```
 
+On Windows, install guidance targets PowerShell. If the interpreter path contains spaces or special characters, the full command looks like `& 'C:\Program Files\Python\python.exe' -m patchright install chromium`; keep the leading `&`, which invokes the quoted path. If you are using cmd.exe, open PowerShell before running this form of command.
+
 ### `AUTH_REQUIRED` before live tests
 
 `AUTH_REQUIRED` means the selected data directory has no usable login session. It is
