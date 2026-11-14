@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.14 (2026-11-15): risk-recovery hints in `boss status` and the wizard failure panel keep a custom `--data-dir`, so the unlock command no longer targets the default directory.
 - ✅ v3.4.13 (2026-11-15): the login command in the `boss status` not-logged-in hint is rendered literally, so a custom `--data-dir` containing bracketed directory names is no longer truncated.
 - ✅ v3.4.12 (2026-11-15): wizard login tries Cookie / CDP first and shows kernel installation guidance only when the QR fallback reports a missing kernel; existing browser sessions are no longer blocked by the absence of the QR kernel, platform risk errors still stop immediately, and installation hints preserve bracketed interpreter paths literally.
 - ✅ v3.4.11 (2026-11-15): Windows kernel-install guidance quotes interpreter paths for the target shell and uses the PowerShell call operator when needed; browser-kernel diagnostics honor `PLAYWRIGHT_BROWSERS_PATH`, including relative paths and the package-local cache, without mixing in default caches when configured explicitly.
