@@ -129,8 +129,9 @@ RECOVERY_LABELS = {
 	"WIZARD_INPUT_REQUIRED": "headless 模式请通过 --input-json 提供完整输入，或用 run_id 恢复。",
 	"WORKFLOW_STOPPED": "任务已停止；如需继续，请选择“恢复已有任务”。",
 	"WORKFLOW_BUSY": "请等它结束，或选择“查看任务状态”确认进度后再恢复。",
+	# 具体安装命令由 recovery_message 按当前已有的依赖组动态拼出（Issue #1068）。
+	"CRAWL_UNAVAILABLE": "这不是网络问题，重试不会有帮助。请退出向导，补上 crawl 可选依赖后重新执行。",
 	"CRAWL_BUSY": "请等它结束；需要确认进度时执行 boss crawl status <run_id>，不要并发恢复同一个任务。",
-	"CRAWL_UNAVAILABLE": "这不是网络问题，重试不会有帮助。请退出向导，用 pip install \"boss-agent-cli[crawl]\" 或 uv tool install \"boss-agent-cli[crawl]\" 补上采集依赖后重新执行。",
 }
 
 # 这些步骤对真人噪声大，TTY 进度里默认静默。
@@ -176,6 +177,14 @@ def recovery_message(code: str, recovery_action: str | None = None) -> str | Non
 		return (
 			"这不是网络问题，重试不会有帮助。请退出向导，运行 "
 			f"{command or patchright_install_command()} 安装浏览器内核后重新执行命令。"
+		)
+	if code == "CRAWL_UNAVAILABLE":
+		# 安装命令要带上已经可用的依赖组：uv tool install 会重建环境（Issue #1068）。
+		from boss_agent_cli.services.install_extras import extras_install_hint
+
+		return (
+			"这不是网络问题，重试不会有帮助。请退出向导，用 "
+			f"{extras_install_hint('crawl')} 补上采集依赖后重新执行。"
 		)
 	if localized:
 		return localized

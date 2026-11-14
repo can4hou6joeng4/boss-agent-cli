@@ -48,6 +48,7 @@ from boss_agent_cli.display import (
 )
 from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
+from boss_agent_cli.services.install_extras import extras_requirement
 
 
 @click.group("agent")
@@ -251,7 +252,7 @@ def crawl_cmd(
 			code="CRAWL_UNAVAILABLE",
 			message=str(exc),
 			recoverable=True,
-			recovery_action=f"安装 boss-agent-cli[crawl] 并执行 {configure_cmd}",
+			recovery_action=f"安装 {extras_requirement('crawl')} 并执行 {configure_cmd}",
 		)
 		return
 

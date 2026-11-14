@@ -30,6 +30,7 @@ from boss_agent_cli.crawler.service import (
 )
 from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
+from boss_agent_cli.services.install_extras import extras_install_hint, extras_requirement
 from boss_agent_cli.services.json_files import write_json_atomic
 from boss_agent_cli.display import (
 	auth_required_hints,
@@ -276,10 +277,12 @@ def _report_crawl_runtime_missing(ctx: click.Context, command: str, message: str
 		code="CRAWL_UNAVAILABLE",
 		message=message,
 		recoverable=True,
-		recovery_action=f"安装 boss-agent-cli[crawl] 并执行 {configure_cmd}",
+		recovery_action=f"安装 {extras_requirement('crawl')} 并执行 {configure_cmd}",
 		hints={"operator_actions": [
+			# uv tool install 会按给定 requirement 重建环境：已有的依赖组必须一并列出，
+			# 否则补上 crawl 的同时会丢掉 mcp（Issue #1068）。
 			"用安装本工具的同一方式补上 crawl 可选依赖："
-			"pip install \"boss-agent-cli[crawl]\" 或 uv tool install \"boss-agent-cli[crawl]\"；"
+			f"{extras_install_hint('crawl')}；"
 			"源码仓库内为 uv sync --extra crawl",
 			"安装完成后重新执行原命令；已创建的任务可按原 run_id 恢复",
 		]},
@@ -352,7 +355,7 @@ def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[s
 			code="CRAWL_UNAVAILABLE",
 			message=message,
 			recoverable=True,
-			recovery_action=f"安装 boss-agent-cli[crawl] 并执行 {configure_cmd}",
+			recovery_action=f"安装 {extras_requirement('crawl')} 并执行 {configure_cmd}",
 		)
 		return
 	resume_command = boss_command_for_ctx(ctx, f"crawl resume {shell_argument(outcome.run_id)}", include_data_dir=True)

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import random
 import socket
-import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
@@ -23,6 +21,7 @@ from boss_agent_cli.api.request_budget import (
 from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
 from boss_agent_cli.crawler.hooks import HookInjection, HookRegistrationError, inject_hook_profile
 from boss_agent_cli.display import risk_error_message
+from boss_agent_cli.services.install_extras import EXTRA_MODULES, extras_requirement, module_available
 
 # 兼容 search / pc 等变体；监听只作主路径，失败时退到页面内同源请求（不走 httpx）。
 JOBLIST_TARGET = r"wapi/zpgeek/[^?\s]*joblist\.json"
@@ -93,16 +92,7 @@ class CrawlTransport(Protocol):
 
 
 # 采集浏览器与 XLSX 导出各自依赖的可选包，都在 `crawl` 依赖组里。
-_CRAWL_RUNTIME_MODULES = ("DrissionPage", "openpyxl")
-
-
-def _module_available(name: str) -> bool:
-	if name in sys.modules:
-		return sys.modules[name] is not None
-	try:
-		return importlib.util.find_spec(name) is not None
-	except (ImportError, ValueError):
-		return False
+_CRAWL_RUNTIME_MODULES = EXTRA_MODULES["crawl"]
 
 
 def ensure_crawl_runtime() -> None:
@@ -112,9 +102,9 @@ def ensure_crawl_runtime() -> None:
 	记成 `stopped`，调用方拿到的是成功信封和恢复指引，照做只会重复同一个失败
 	（Issue #1050）。这里只探测模块是否可导入，不导入它们。
 	"""
-	missing = [name for name in _CRAWL_RUNTIME_MODULES if not _module_available(name)]
+	missing = [name for name in _CRAWL_RUNTIME_MODULES if not module_available(name)]
 	if missing:
-		raise CrawlRuntimeUnavailable(f"crawl 需要 {'、'.join(missing)}；请安装 boss-agent-cli[crawl]")
+		raise CrawlRuntimeUnavailable(f"crawl 需要 {'、'.join(missing)}；请安装 {extras_requirement('crawl')}")
 
 
 class DrissionCrawlerSession:
