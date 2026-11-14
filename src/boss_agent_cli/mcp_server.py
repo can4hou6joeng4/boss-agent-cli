@@ -546,6 +546,12 @@ async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
 			params.name,
 			f"未知参数：{', '.join(unknown)}；请按 tools/list 的 inputSchema 传参",
 		)
+	# 显式 ``null`` 与缺键等价于省略（Issue #958 / #982 / #1002 的契约）：映射层所有
+	# 可选参数判断都为 ``None`` 留了位置，文档也承诺 ``null`` 落回默认值，但类型检查
+	# 会先把 ``null`` 判成类型错误，导致 `boss_wizard.action: null` 到不了默认的 run。
+	# 在类型检查与映射之前剔除；必填参数传 null 因此走缺参分支，而不是把
+	# ``str(None)`` 拼成 "None" 发给 CLI（Issue #1108）。
+	arguments = {key: value for key, value in arguments.items() if value is not None}
 	type_errors = _argument_type_errors(params.name, arguments)
 	if type_errors:
 		# 类型错误同样不能交给 `_build_args` 的 truthiness 判断：`"false"` 是 truthy，
