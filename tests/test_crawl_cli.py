@@ -367,6 +367,143 @@ def _all_run_ids(tmp_path: Path) -> list[str]:
 		return [str(row[0]) for row in conn.execute("SELECT run_id FROM crawl_runs")]
 
 
+def _seed_incomplete_login(tmp_path: Path, state: str) -> None:
+	from boss_agent_cli.auth.token_store import TokenStore
+
+	if state == "no-cookies":
+		TokenStore(tmp_path / "auth").save({"cookies": {}, "user_agent": "test-agent", "stoken": ""})
+	elif state == "no-wt2":
+		TokenStore(tmp_path / "auth").save({"cookies": {"wbg": "1"}, "user_agent": "test-agent", "stoken": ""})
+
+
+@pytest.mark.parametrize("state", ["logged-out", "no-cookies", "no-wt2"])
+def test_start_requires_login_before_creating_a_run(tmp_path, monkeypatch, state):
+	"""worker 的信封写进空设备：登录态不足要由父进程报出，不能留下永久 queued 的任务（Issue #1042）。"""
+	launched: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._launch_background_resume",
+		lambda data_dir, run_id, **kwargs: launched.append(run_id),
+	)
+	_seed_incomplete_login(tmp_path, state)
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "start", "AI", "--city", "杭州"])
+	assert result.exit_code == 1, result.output
+	payload = _envelope(result)
+	assert payload["command"] == "crawl.start"
+	assert payload["error"]["code"] == "AUTH_REQUIRED"
+	assert payload["error"]["recoverable"] is True
+	assert shlex.split(payload["error"]["recovery_action"])[:3] == ["boss", "--data-dir", str(tmp_path.resolve())]
+	assert launched == []
+	db = tmp_path / "cache" / "boss_agent.db"
+	if db.exists():
+		assert _all_run_ids(tmp_path) == []
+
+
+def test_start_reports_a_blank_query_before_the_login_check(tmp_path):
+	"""参数写错的人不该先被送去登录。"""
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "start", " ", "--city", "杭州"])
+	assert result.exit_code == 1
+	assert _envelope(result)["error"]["code"] == "INVALID_PARAM"
+
+
+def test_resume_background_requires_login_before_touching_the_run(tmp_path, monkeypatch):
+	"""登录态失效时后台恢复不解除停止请求、不拉起注定失败的 worker（Issue #1042）。"""
+	launched: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._launch_background_resume",
+		lambda data_dir, run_id, **kwargs: launched.append(run_id),
+	)
+	_seed_run(tmp_path, "run-stopped", status="stopped")
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.request_crawl_stop("run-stopped")
+		before = cache.get_crawl_run("run-stopped")
+		result = CliRunner().invoke(
+			cli, ["--data-dir", str(tmp_path), "--json", "crawl", "resume", "run-stopped", "--background"]
+		)
+		assert cache.get_crawl_run("run-stopped") == before
+	assert result.exit_code == 1, result.output
+	payload = _envelope(result)
+	assert payload["command"] == "crawl.resume"
+	assert payload["error"]["code"] == "AUTH_REQUIRED"
+	assert launched == []
+	# 探测锁随失败一起交还：登录后可以立即恢复。
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		service = CrawlService(cache, data_dir=tmp_path, transport_factory=lambda settings: None)
+		with service.execution_lock("run-stopped") as acquired:
+			assert acquired
+
+
+@pytest.mark.parametrize("status", ["completed", "queued"])
+def test_resume_background_without_login_still_reports_state_that_needs_no_worker(tmp_path, monkeypatch, status):
+	"""不需要启动 worker 的分支只读本地状态，登录态与它无关。"""
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._launch_background_resume",
+		lambda data_dir, run_id, **kwargs: pytest.fail("不该启动 worker"),
+	)
+	_seed_run(tmp_path, "run-1", status=status)
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "resume", "run-1", "--background"])
+	assert result.exit_code == 0, result.output
+	assert _envelope(result)["data"]["status"] == status
+
+
+def test_queued_worker_records_why_it_could_not_start(tmp_path):
+	"""登录态在启动瞬间失效：worker 的信封没人看得到，原因必须写回任务（Issue #1042）。"""
+	_seed_run(tmp_path, "run-queued", status="queued", jobs=0)
+	runner = CliRunner()
+	worker = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "resume", "run-queued", "--from-queue"])
+	assert worker.exit_code == 1, worker.output
+	assert _envelope(worker)["error"]["code"] == "AUTH_REQUIRED"
+
+	status = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "status", "run-queued"])
+	payload = _envelope(status)
+	assert payload["data"]["status"] == "stopped"
+	assert "后台任务未能开始执行" in payload["data"]["error"]
+	assert "AUTH_REQUIRED" in payload["data"]["error"]
+	assert payload["data"]["next_page"] == 1
+	# stopped 不再提示 stop；恢复命令仍指向同一数据目录的同一任务。
+	_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl results run-queued")
+	_assert_state_commands([payload["data"]["checkpoint"]["resume_command"]], tmp_path, "crawl resume run-queued")
+
+
+def test_queued_worker_blocked_by_the_risk_lock_records_only_the_error_code(tmp_path):
+	from boss_agent_cli.api import cdp_risk_lock
+
+	_seed_run(tmp_path, "run-queued", status="queued", jobs=0)
+	cdp_risk_lock.write_lock(tmp_path, None, reason="ACCOUNT_RISK", platform_code=32)
+	worker = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-queued", "--from-queue")
+	assert worker.exit_code == 1, worker.output
+	error = _envelope(worker)["error"]
+	assert error["code"] == "ACCOUNT_RISK"
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		run = cache.get_crawl_run("run-queued")
+	assert run["status"] == "stopped"
+	assert run["error"] == "后台任务未能开始执行（ACCOUNT_RISK）"
+
+
+def test_queued_worker_refused_by_a_live_executor_leaves_the_run_alone(tmp_path):
+	"""另一个执行器持有执行权时，后到的 worker 不能把它的任务改成 stopped。"""
+	_seed_run(tmp_path, "run-queued", status="queued", jobs=0)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		service = CrawlService(cache, data_dir=tmp_path, transport_factory=lambda settings: None)
+		with service.execution_lock("run-queued") as acquired:
+			assert acquired
+			before = cache.get_crawl_run("run-queued")
+			worker = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-queued", "--from-queue")
+			assert cache.get_crawl_run("run-queued") == before
+	assert worker.exit_code == 1, worker.output
+	assert _envelope(worker)["error"]["code"] == "CRAWL_BUSY"
+
+
+def test_foreground_resume_failure_does_not_rewrite_a_queued_run(tmp_path):
+	"""只有队列 worker 负责把没接手的任务落成 stopped；前台调用方已经看到信封。"""
+	_seed_run(tmp_path, "run-queued", status="queued", jobs=0)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		before = cache.get_crawl_run("run-queued")
+		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "resume", "run-queued"])
+		assert cache.get_crawl_run("run-queued") == before
+	assert result.exit_code == 1
+	assert _envelope(result)["error"]["code"] == "AUTH_REQUIRED"
+
+
 @pytest.mark.parametrize("query", ["", "   "])
 def test_start_rejects_blank_query_without_creating_a_run(tmp_path, query):
 	"""空关键词等于不筛选：会抓城市默认列表，消耗预算并放大风控面。"""
