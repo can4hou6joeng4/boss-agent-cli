@@ -5,7 +5,8 @@
 ## [Unreleased]
 
 ### Fixed
-- 已停止采集任务的显式后台恢复会解除旧停止请求（Issue #1036）：此前 `crawl resume <run_id> --background` 返回 `queued`，但子进程因 `--from-queue` 保留旧 `stop_requested`，刚开始执行便再次停止，无法续跑。现在父进程在启动 worker 前清除旧标记，worker 仍保留启动期间新收到的 stop；对已有 `queued` / `running` 任务的重复恢复不清除停止请求、不拉起新进程。离线回归执行真实队列入口，覆盖正常续跑与启动途中再次停止。
+- 采集进程突然退出后可从遗留的 `running` 状态后台恢复（Issue #1038）：此前 `crawl resume <run_id> --background` 只看持久化状态，worker 已退出、执行锁已释放时仍回报 `running` 而不启动恢复，任务持续空转。现在父进程用现有执行锁判断是否仍有执行器，空闲时重读断点并允许恢复遗留的 `running`；持锁任务不启动第二个 worker、不修改 checkpoint 或清除 stop。探测锁在启动前释放，worker 再自行取锁；锁不可用时返回 `LOCAL_IO_ERROR`。真实子进程突然退出的离线回归验证只续抓未提交页面、保留累计请求预算，中英文命令参考同步。
+- 已停止采集任务的显式后台恢复会解除旧停止请求（Issue #1036）：此前 `crawl resume <run_id> --background` 返回 `queued`，但子进程因 `--from-queue` 保留旧 `stop_requested`，刚开始执行便再次停止，无法续跑。现在父进程在启动 worker 前清除旧标记，worker 仍保留启动期间新收到的 stop；对已有 `queued` 任务及仍在执行的 `running` 任务，重复恢复不清除停止请求、不拉起新进程。离线回归执行真实队列入口，覆盖正常续跑与启动途中再次停止。
 - Agent 快速上手补上 `CRAWL_BUSY`（Issue #1033）：3.4.4 的采集执行互斥已写进命令参考与排障文档，但 Agent 快速上手的错误码清单只有同类的 `WORKFLOW_BUSY`，中英文都缺这一条——Agent 遇到并发恢复被拒时找不到处理说明，容易重试或 `--stop` 让位，正是该错误码要阻止的行为。现在两份快速上手的错误码清单与采集编排一节都写明「查 `crawl status <run_id>`、等当前执行结束再恢复，`status` / `results` / `stop` 不受影响」，并新增文档守卫要求两个并发码在中英两侧同时出现。
 - HTML / JSON 导出的通用失败不再提示安装浏览器内核（Issue #1031）：`resume export` 的失败分流在内核缺失与本地 IO 之外，第三条「渲染 / 模板错误」仍直接复用错误码登记表里拆分前的 `EXPORT_FAILED` 恢复文案「检查 patchright 安装」——HTML / JSON 导出只用本地模板与文件写入，从不启动浏览器，照做只会装一个没用到的内核。现在 PDF 保留内核提示（浏览器确实参与渲染），HTML / JSON 改为提示检查简历文件内容与导出选项，并说明该格式不使用浏览器内核；新增回归要求 HTML 渲染失败的信封里不出现 `patchright`，PDF 的通用失败仍保留原指引。
 - Node 回归脚本的子进程超时统一为 30 秒（Issue #1029）：`test_fetch_script_marks_non_json_body` 等四条用例的预算原为 5–15 秒，相对脚本实测的约 40 毫秒本有余量，但 CI 跑步机在四个矩阵任务与 lint 并发时会出现秒级冷启动卡顿，`Test (Python 3.14)` 因此把必需检查打成假红一次，重跑才恢复。现在四条用例与其余 Node 回归一样使用 30 秒预算；脚本真的挂起仍会在 30 秒内失败，断言与重试策略不变。

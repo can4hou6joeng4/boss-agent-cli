@@ -22,7 +22,7 @@ from click.testing import CliRunner
 
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands.crawl import _city_code, _launch_background_resume, _save_crawl_config
-from boss_agent_cli.crawler.service import CrawlSettings
+from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
 from boss_agent_cli.main import cli
 
 
@@ -522,7 +522,7 @@ def test_resume_background_resets_old_stop_and_honors_stop_during_launch(tmp_pat
 		assert cache.get_crawl_run("run-stopped")["stop_requested"] is stop_during_launch
 
 
-@pytest.mark.parametrize("status", ["queued", "running"])
+@pytest.mark.parametrize("status", ["running", "stopped"])
 def test_resume_background_does_not_relaunch_an_already_running_job(tmp_path, monkeypatch, status):
 	launched: list[str] = []
 	monkeypatch.setattr(
@@ -530,16 +530,40 @@ def test_resume_background_does_not_relaunch_an_already_running_job(tmp_path, mo
 		lambda data_dir, run_id, **kwargs: launched.append(run_id),
 	)
 	_seed_run(tmp_path, "run-active", status=status)
-	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
-		cache.request_crawl_stop("run-active")
 	runner = CliRunner()
 	_enable_research(runner, tmp_path)
-	result = _invoke(runner, tmp_path, "crawl", "resume", "run-active", "--background")
-	assert result.exit_code == 0, result.output
-	assert _envelope(result)["data"]["status"] == status
-	assert launched == [], "已在运行的任务重复拉起会产生并发采集，属风控风险"
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
-		assert cache.get_crawl_run("run-active")["stop_requested"] is True
+		cache.request_crawl_stop("run-active")
+		service = CrawlService(cache, data_dir=tmp_path, transport_factory=lambda settings: None)
+		with service.execution_lock("run-active") as acquired:
+			assert acquired
+			before = cache.get_crawl_run("run-active")
+			result = _invoke(runner, tmp_path, "crawl", "resume", "run-active", "--background")
+			assert cache.get_crawl_run("run-active") == before
+	assert result.exit_code == 0, result.output
+	assert _envelope(result)["data"]["status"] == "running"
+	assert launched == [], "已在运行的任务重复拉起会产生并发采集，属风控风险"
+
+
+def test_resume_background_keeps_a_pending_queue_and_its_stop_request(tmp_path, monkeypatch):
+	launched: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._launch_background_resume",
+		lambda data_dir, run_id, **kwargs: launched.append(run_id),
+	)
+	def forbidden_probe(*args, **kwargs):
+		raise AssertionError("排队中的 worker 可能即将取锁，父进程不能抢占其执行权")
+
+	monkeypatch.setattr(CrawlService, "execution_lock", forbidden_probe)
+	_seed_run(tmp_path, "run-queued", status="queued")
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.request_crawl_stop("run-queued")
+		before = cache.get_crawl_run("run-queued")
+		result = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-queued", "--background")
+		assert cache.get_crawl_run("run-queued") == before
+	assert result.exit_code == 0, result.output
+	assert _envelope(result)["data"]["status"] == "queued"
+	assert launched == []
 
 
 def test_resume_background_returns_completed_without_relaunch(tmp_path, monkeypatch):

@@ -398,6 +398,16 @@ class CrawlService:
 				clear_stop=clear_stop,
 			)
 
+	def has_resume_work(self, run: dict[str, Any], *, pages: int | None = None, with_detail: bool = False) -> bool:
+		"""只读判断快照是否还有恢复工作；真正执行前仍须取锁并重读断点。"""
+		if run["status"] != "completed":
+			return True
+		needs_more_pages = not bool(run["list_finished"]) and pages is not None and pages >= int(run["next_page"])
+		pending_details = with_detail and any(
+			not item["detail_done"] for item in self._cache.list_crawl_jobs(str(run["run_id"]))
+		)
+		return needs_more_pages or pending_details
+
 	def _resume_locked(
 		self,
 		run_id: str,
@@ -422,9 +432,7 @@ class CrawlService:
 		if with_detail:
 			settings = replace(settings, with_detail=True)
 		self._validate_settings(settings)
-		pending_details = any(not item["detail_done"] for item in self._cache.list_crawl_jobs(run_id))
-		needs_more_pages = not bool(run["list_finished"]) and pages is not None and pages >= int(run["next_page"])
-		if run["status"] == "completed" and not (needs_more_pages or (with_detail and pending_details)):
+		if not self.has_resume_work(run, pages=pages, with_detail=with_detail):
 			return self._completed_outcome(run)
 		self._check_risk_lock()
 		self._cache.update_crawl_run_params(run_id, settings.as_dict())
