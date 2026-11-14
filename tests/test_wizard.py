@@ -39,6 +39,7 @@ from boss_agent_cli.wizard.prompts import (
 	WizardControl,
 	WizardReturnHome,
 	_collect_control,
+	_collect_inputs,
 	_main_menu_options,
 	ask_continue_session,
 	collect_entity_follow_up,
@@ -60,6 +61,7 @@ class _ScriptedMenu:
 		self.selections = iter(selections)
 		self.texts = iter(texts)
 		self.menus = []
+		self.text_labels: list[str] = []
 		self.last_kwargs = {}
 		self.kwargs_log = []
 
@@ -78,6 +80,7 @@ class _ScriptedMenu:
 		return value
 
 	def text(self, label, *, default="", required=True):
+		self.text_labels.append(label)
 		return next(self.texts, default)
 
 
@@ -2543,6 +2546,35 @@ def test_error_message_prefers_platform_chinese_text():
 	assert "换一条" in (recovery_message("INVALID_PARAM") or "")
 
 
+def test_interactive_error_panel_uses_the_run_data_dir(tmp_path, monkeypatch):
+	"""TTY 失败面板的恢复命令必须指向本次 --data-dir（Issue #1090）。
+
+	`_interactive_error` 拿到的是 click ctx；改写后照抄面板里的命令就能修好
+	同一份目录，而不是默认目录。
+	"""
+	import io
+
+	from rich.console import Console
+
+	from boss_agent_cli import display
+	from boss_agent_cli.commands import wizard as wizard_mod
+	from boss_agent_cli.wizard.renderer import _RECOVERY_COMMANDS  # noqa: F401  (确保改写表已加载)
+
+	stream = io.StringIO()
+	monkeypatch.setattr(display, "console", Console(file=stream, force_terminal=False, width=400))
+	state_dir = tmp_path / "state dir"
+	ctx = SimpleNamespace()
+	ctx.obj = {"data_dir": state_dir, "platform": "zhipin"}
+
+	with pytest.raises(SystemExit):
+		wizard_mod._interactive_error(ctx, code="AI_NOT_CONFIGURED")
+
+	output = stream.getvalue()
+	assert "boss --data-dir" in output
+	assert str(state_dir) in output
+	assert "执行 boss ai config" not in output
+
+
 def test_wizard_risk_recovery_requires_explicit_unlock_command():
 	"""风控锁不会自动解除：向导恢复文案必须给出本人执行的显式解锁命令。
 
@@ -4717,3 +4749,23 @@ def test_crawl_resume_without_crawl_dependencies_leaves_the_run_untouched(tmp_pa
 		run = cache.get_crawl_run("crawl-existing")
 	assert run["status"] == "stopped"
 	assert run["stop_requested"] is True
+
+
+def test_empty_resume_prompt_points_at_the_run_data_dir(tmp_path):
+	"""AI 辅助缺简历时，提示里的导入命令要落在本次数据目录（Issue #1090）。"""
+	menu = _ScriptedMenu([], ["项目经历优化", "优化"])
+	inputs = _collect_inputs(menu, "candidate", "ai_assist", data_dir=tmp_path)
+
+	labels = menu.text_labels
+	assert inputs["prompt"] == "优化"
+	assert f"boss --data-dir {tmp_path.resolve()} resume import <文件>" in labels[0]
+	assert "可先用 boss resume 导入" not in labels[0]
+
+
+def test_empty_resume_prompt_keeps_the_bare_command_without_a_data_dir():
+	"""没有数据目录上下文时保持通用示例。"""
+	menu = _ScriptedMenu([], ["写一段自我介绍", "优化"])
+	_collect_inputs(menu, "candidate", "ai_assist")
+	labels = menu.text_labels
+	assert "可先用 boss resume import <文件> 导入" in labels[0]
+	assert "--data-dir" not in labels[0]

@@ -715,8 +715,13 @@ def _collect_inputs(
 				default=names[0],
 			)
 		else:
+			# 提示里的命令要指向本次运行的数据目录，裸命令会让真人导入到默认目录
+			# （Issue #1090）。
+			from boss_agent_cli import display
+
+			resume_command = display.boss_command("resume import <文件>", data_dir=data_dir)
 			inputs["resume"] = menu.text(
-				"本地简历名称（当前无简历，可先用 boss resume 导入）",
+				f"本地简历名称（当前无简历，可先用 {resume_command} 导入）",
 				required=True,
 			)
 		inputs["prompt"] = menu.text("希望 AI 完成的任务", required=True)

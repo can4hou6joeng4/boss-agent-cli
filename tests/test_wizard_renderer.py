@@ -16,6 +16,7 @@ from boss_agent_cli.wizard.renderer import (
 	ERROR_LABELS,
 	RECOVERY_LABELS,
 	STEP_LABELS,
+	_RECOVERY_COMMANDS,
 	recovery_message,
 )
 from boss_agent_cli.services.install_extras import extras_requirement
@@ -119,6 +120,84 @@ def test_risk_recovery_uses_context_aware_clean_command():
 def test_risk_recovery_without_context_keeps_the_generic_example():
 	recovery = recovery_message("ENVIRONMENT_RISK_LOCKED") or ""
 	assert "boss clean --risk-lock" in recovery
+
+
+def test_every_bare_boss_command_in_recovery_labels_can_be_rebound():
+	"""静态恢复文案里的每个 ``boss …`` 示例都必须有改写条目（Issue #1090）。
+
+	漏登记的家族会让真人在 TTY 里照抄一条指向默认数据目录的命令。
+	"""
+	import re
+
+	# 先剔除已登记的完整字面量，剩下的 ``boss …`` 就是漏网之鱼。正则直接匹配
+	# 会截断多词命令（``boss me --section deliver`` → ``boss me``）。
+	pattern = re.compile(r"boss [a-z][a-z0-9-]*")
+	missing: dict[str, list[str]] = {}
+	for code, text in RECOVERY_LABELS.items():
+		for literal in sorted(_RECOVERY_COMMANDS, key=len, reverse=True):
+			text = text.replace(literal, "")
+		uncovered = sorted(set(pattern.findall(text)))
+		if uncovered:
+			missing[code] = uncovered
+	assert missing == {}, f"这些命令没有改写条目，会指向默认数据目录：{missing}"
+
+
+def test_empty_state_panel_rebinds_its_import_hint(monkeypatch):
+	"""空简历面板的导入命令也要带上本次运行的数据目录（Issue #1090）。"""
+	import io
+
+	from rich.console import Console
+
+	from boss_agent_cli import display
+	from boss_agent_cli.wizard.renderer import render_run
+
+	def command_for(command: str) -> str:
+		return f"boss --data-dir '/tmp/custom state' {command}"
+
+	stream = io.StringIO()
+	monkeypatch.setattr(display, "console", Console(file=stream, force_terminal=False, width=200))
+	render_run(
+		{"status": "completed", "goal": "resumes", "last_result": {"data": {"items": []}}},
+		command_for=command_for,
+	)
+
+	output = stream.getvalue()
+	assert "boss --data-dir '/tmp/custom state' resume import <文件>" in output
+	assert "命令导入：boss resume import" not in output
+
+	"""静态恢复文案里的裸命令要能换成本次运行的数据目录（Issue #1090）。"""
+	def command_for(command: str) -> str:
+		return f"boss --data-dir '/tmp/custom state' {command}"
+	expected = {
+		"AI_NOT_CONFIGURED": "boss --data-dir '/tmp/custom state' ai config",
+		"SAVED_SEARCH_INVALID": "boss --data-dir '/tmp/custom state' watch remove",
+		"CONTACT_NOT_FOUND": "boss --data-dir '/tmp/custom state' chat",
+		"ALREADY_APPLIED": "boss --data-dir '/tmp/custom state' me --section deliver",
+		"EXCHANGE_NOT_AVAILABLE": "boss --data-dir '/tmp/custom state' hr reply",
+		"CRAWL_BUSY": "boss --data-dir '/tmp/custom state' crawl status",
+		"UNKNOWN": "boss --data-dir '/tmp/custom state' doctor",
+	}
+	for code, marker in expected.items():
+		recovery = recovery_message(code, command_for=command_for) or ""
+		assert marker in recovery, code
+		# 改写后不能残留裸命令。
+		assert " boss ai config" not in recovery.replace(marker, ""), code
+
+	# 无上下文保持通用示例。
+	assert "boss doctor" in (recovery_message("UNKNOWN") or "")
+
+
+def test_dynamic_recovery_sentence_wins_over_a_stale_static_label():
+	"""actions 已按本次数据目录改正命令家族时，静态标签不能覆盖它（Issue #1090）。"""
+	dynamic = "用 boss --data-dir '/tmp/custom state' watch remove demo 重建"
+	recovery = recovery_message("SAVED_SEARCH_INVALID", dynamic) or ""
+	assert recovery == dynamic
+
+	busy = "用 boss --data-dir '/tmp/custom state' crawl status run-1 查看进度"
+	assert recovery_message("CRAWL_BUSY", busy) == busy
+
+	# 没有上下文的动态句子不改变原有静态文案。
+	assert "boss preset remove" in (recovery_message("SAVED_SEARCH_INVALID", "请重新添加") or "")
 
 
 def test_failed_run_panel_prefers_context_aware_unlock_command(monkeypatch):
