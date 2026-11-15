@@ -38,10 +38,20 @@ class WorkflowStore:
 			steps=plan.requested_steps,
 		)
 
-	def get(self, run_id: str) -> dict[str, Any] | None:
+	def get_checkpoint(self, run_id: str) -> dict[str, Any] | None:
+		"""只读 workflow 自己的断点（run + steps），不叠加内部 crawl 的实时结果。
+
+		停止这类控制操作只依赖断点本身：绑定的 crawl 结果读不出来时，
+		也必须能落下停止标记（Issue #1128）。
+		"""
 		run = self._cache.get_workflow_run(run_id)
 		if run is not None:
 			run["steps"] = self._cache.list_workflow_steps(run_id)
+		return run
+
+	def get(self, run_id: str) -> dict[str, Any] | None:
+		run = self.get_checkpoint(run_id)
+		if run is not None:
 			from boss_agent_cli.wizard.live_crawl import BROWSE_JOB_LIMIT, enrich_run_with_live_crawl
 
 			# Full browseable job page for status / follow-up (still paginated in TUI).
@@ -91,10 +101,17 @@ class WorkflowStore:
 		return self._cache.set_workflow_step_error(run_id, step_name, error)
 
 	def request_stop(self, run_id: str) -> bool:
-		run = self.get(run_id)
-		if run is None or not self._cache.request_workflow_stop(run_id):
+		# 先落盘停止标记，再读断点传给内部 crawl：断点或采集结果读不出来
+		# 都不能挡住停止本身（Issue #1128）。
+		if not self._cache.request_workflow_stop(run_id):
 			return False
-		for step in run["steps"]:
+		try:
+			steps = self._cache.list_workflow_steps(run_id)
+		except CacheRecordInvalid:
+			# 步骤记录损坏时无法确定绑定的内部任务；workflow 已停止，
+			# 内部 crawl 需由操作者用 crawl stop 单独处理。
+			return True
+		for step in steps:
 			result = step.get("result") or {}
 			inner_run_id = result.get("inner_run_id")
 			if inner_run_id is None and isinstance(result.get("data"), dict):
