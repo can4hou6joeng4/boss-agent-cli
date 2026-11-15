@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.29] - 2026-11-15
 
 ### Fixed
 - 历史列表与向导职位详情在非对象平台载荷上不再崩溃（Issue #1162）：`history` 的 `zpData` 漂移成字符串 / 数组 / 数字时，此前在 `hasMore` 读取处抛 `AttributeError` 并报成 `INTERNAL_ERROR`，现在按空页返回且分页证据保持「未知」；wizard 候选人详情在 `zpData` 或 `jobInfo` 不是对象时，此前抛未捕获的 `AttributeError`，现在与 `detail` / `show` 同口径改走职位卡片，两个通道都读不出职位时返回 `JOB_NOT_FOUND` 而不是 `NETWORK_ERROR`。合法响应行为不变。
