@@ -72,7 +72,7 @@ def _seed_run(tmp_path: Path, run_id: str = "run-1", *, status: str = "completed
 	with CacheStore(db_path) as cache:
 		cache.create_crawl_run(
 			run_id,
-			{"query": "AI", "city_code": "101210100", "pages": 5},
+			{"query": "AI", "city_code": "101210100", "pages": 5, "with_detail": False},
 			str(tmp_path / "crawl" / run_id),
 			status=status,
 		)
@@ -1498,6 +1498,47 @@ def test_structurally_drifted_params_reports_envelope(tmp_path):
 	error = _envelope(result)["error"]
 	assert error["code"] == "CACHE_RECORD_INVALID"
 	assert "JSON object" in error["message"]
+
+
+_BASE_PARAMS = {"query": "AI", "city_code": "101210100", "pages": 5, "with_detail": False}
+
+
+@pytest.mark.parametrize(
+	("overrides", "field"),
+	[
+		({"query": "<missing>"}, "query"),
+		({"city_code": "<missing>"}, "city_code"),
+		({"pages": "<missing>"}, "pages"),
+		({"with_detail": "<missing>"}, "with_detail"),
+		({"query": 5}, "query"),
+		({"city_code": ["101210100"]}, "city_code"),
+		({"pages": "abc"}, "pages"),
+		({"pages": None}, "pages"),
+		({"pages": True}, "pages"),
+		({"with_detail": "yes"}, "with_detail"),
+	],
+)
+def test_drifted_run_params_report_cache_record_invalid(tmp_path, overrides, field):
+	"""缺键与类型漂移属于记录损坏，不能报成「未找到 crawl run: <字段名>」（Issue #1117）。"""
+	_seed_run(tmp_path, "run-1", status="stopped")
+	params = dict(_BASE_PARAMS)
+	for key, value in overrides.items():
+		if value == "<missing>":
+			params.pop(key)
+		else:
+			params[key] = value
+	_break_column(tmp_path, "crawl_runs", "params", value=json.dumps(params))
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, "crawl", "resume", "run-1")
+	assert result.exit_code == 1, result.output
+	error = _envelope(result)["error"]
+	assert error["code"] == "CACHE_RECORD_INVALID"
+	assert field in error["message"]
+	assert error["recoverable"] is True
+	# 记录损坏不是「任务不存在」：恢复指引必须是重建任务，而不是换一个 run_id。
+	assert "未找到 crawl run" not in error["message"]
+	_assert_state_commands(_envelope(result)["hints"]["next_actions"][:1], tmp_path, "crawl start <关键词>")
 
 
 def test_structurally_drifted_hook_results_reports_envelope(tmp_path):
