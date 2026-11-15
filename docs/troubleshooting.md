@@ -373,6 +373,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `SAVED_SEARCH_INVALID` | 本地预设 / watch 的参数损坏（`saved_searches.params` 不是 JSON 对象），`boss search --preset`、`boss watch run` 无法执行 | 执行 `boss preset remove <名称>`（watch 用 `boss watch remove`）后重新添加；参数只存在本地缓存，删除不影响平台数据 |
 | `CACHE_RECORD_INVALID` | 本地 crawl / workflow 任务记录损坏（`crawl_runs`、`crawl_jobs`、`workflow_runs`、`workflow_steps` 的 JSON 列读不出来），断点无法恢复 | 重新创建任务（crawl 用 `boss crawl start`，workflow 用 `boss wizard --input-json`）；记录只存在本地缓存，已导出的文件不会自动删除，`boss wizard` 的任务列表会跳过坏记录并点名 |
 | `CACHE_DATABASE_INVALID` | 本地缓存库 `cache/boss_agent.db` 损坏或被别的文件占位（`file is not a database`），几乎所有读写本地状态的命令都受影响 | 先备份该文件，再删除后重试，命令会自动重建空库；库里的候选池、预设、watch 历史与任务断点会一起作废，平台数据不受影响。并发锁等可重试错误不会报这个码 |
+| `CACHE_BUSY` | 本地缓存库 `cache/boss_agent.db` 正被其他连接写入（`database is locked`），SQLite busy timeout 内拿不到写锁 | 等待占用缓存的 boss 命令或程序结束写入后重试；库文件本身完好，不需要删除，平台数据不受影响。持续出现时检查是否有残留的 boss 后台任务 |
 | `ALREADY_APPLIED` | 已发起过投递 / 立即沟通 | 跳过；用 `boss me --section deliver` 查看投递记录，或用 `boss chat` 跟进 |
 | `GREET_LIMIT` | 今日次数用完 | 告知用户 |
 | `NETWORK_ERROR` | 网络错误 | 重试 |

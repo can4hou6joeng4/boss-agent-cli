@@ -12,6 +12,8 @@ from boss_agent_cli.services.job_identity import deduplicate_job_result
 _SEARCH_TTL = 86400  # 24 hours
 _MAX_SEARCH_CACHE = 100
 _MAX_JOB_DESC_CACHE = 1000
+# sqlite3.connect 的默认 busy timeout（秒）。单独成常量是为了让测试把等待压到毫秒级。
+_BUSY_TIMEOUT_SECONDS = 5.0
 
 
 class SavedSearchParamsError(ValueError):
@@ -145,6 +147,30 @@ class CacheDatabaseInvalid(Exception):
 		self.detail = detail
 
 
+class CacheBusyError(Exception):
+	"""缓存库正被其他连接写入，SQLite 在 busy timeout 内拿不到写锁。
+
+	与 CacheDatabaseInvalid 区分：库文件完好，等写锁释放后重试即可。此前该错误
+	按原样上抛——没有统一装饰器的命令（`crawl stop` 等）stdout 为空并带
+	traceback，`crawl resume` 则被兜成可重试的 NETWORK_ERROR，让 Agent 把本地
+	锁冲突当成平台网络问题反复重试（Issue #1118）。
+	"""
+
+	def __init__(self, path: Path | None, detail: str) -> None:
+		location = f"本地缓存库 {path}" if path is not None else "本地缓存库"
+		super().__init__(f"{location} 正被其他进程写入（{detail}）")
+		self.path = path
+		self.detail = detail
+
+
+def is_cache_busy_error(exc: BaseException) -> bool:
+	"""SQLite 写锁冲突的判定：busy timeout 内拿不到锁，等锁释放后可重试。"""
+	if not isinstance(exc, sqlite3.OperationalError):
+		return False
+	message = str(exc).lower()
+	return "locked" in message or "busy" in message
+
+
 def _has_sqlite_header(path: Path) -> bool:
 	try:
 		with path.open("rb") as handle:
@@ -159,13 +185,15 @@ class CacheStore:
 		self._search_ttl = search_ttl_seconds
 		db_path.parent.mkdir(parents=True, exist_ok=True)
 		try:
-			self._conn = sqlite3.connect(str(db_path))
+			self._conn = sqlite3.connect(str(db_path), timeout=_BUSY_TIMEOUT_SECONDS)
 			self._conn.execute("PRAGMA journal_mode=WAL")
 			self._init_tables()
 		except sqlite3.OperationalError as exc:
-			# 库文件头正常时多为并发锁或磁盘压力，按原错误上抛（重试可能有效）；
-			# 头不对才说明这个文件根本不是 SQLite 库，只能备份后重建。
+			# 库文件头正常时多为并发锁或磁盘压力：锁冲突等锁释放后重试即可，单独
+			# 报 CACHE_BUSY；其余仍按原错误上抛（重试可能有效）。
 			if _has_sqlite_header(db_path):
+				if is_cache_busy_error(exc):
+					raise CacheBusyError(db_path, str(exc)) from exc
 				raise
 			raise CacheDatabaseInvalid(db_path, str(exc)) from exc
 		except sqlite3.DatabaseError as exc:

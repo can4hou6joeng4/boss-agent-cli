@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from boss_agent_cli.cache.store import CacheDatabaseInvalid, CacheStore
+from boss_agent_cli.cache.store import CacheBusyError, CacheDatabaseInvalid, CacheStore
 
 
 def test_greet_record(tmp_path):
@@ -353,8 +353,8 @@ def test_cache_store_reports_invalid_database_file(tmp_path):
 	assert "file is not a database" in str(excinfo.value)
 
 
-def test_locked_database_is_not_reported_as_corrupt(tmp_path, monkeypatch):
-	"""并发锁（OperationalError）在上层可重试，不能被说成库文件损坏。"""
+def test_locked_database_is_reported_as_busy_not_corrupt(tmp_path, monkeypatch):
+	"""并发锁归一为可重试的 CacheBusyError，不能被说成库文件损坏（Issue #1118）。"""
 	db = tmp_path / "cache.db"
 	CacheStore(db).close()
 
@@ -363,5 +363,5 @@ def test_locked_database_is_not_reported_as_corrupt(tmp_path, monkeypatch):
 			raise sqlite3.OperationalError("database is locked")
 
 	monkeypatch.setattr("boss_agent_cli.cache.store.sqlite3.connect", lambda *a, **k: _LockedConnection())
-	with pytest.raises(sqlite3.OperationalError):
+	with pytest.raises(CacheBusyError):
 		CacheStore(db)

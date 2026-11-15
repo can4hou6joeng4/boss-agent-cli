@@ -6,6 +6,10 @@
 
 ### Fixed
 - `crawl run` / `crawl start --hook-profile screenshot-full` 缺少 `--hook-dir` 时在创建任务之前返回 `INVALID_PARAM`（Issue #1116）：此前任务会先落盘，打开浏览器并导航到平台之后才在注入阶段失败，被记成 `status=stopped` 的成功信封；`crawl resume` 没有 `--hook-dir` 参数，重试只会重复同一错误并白开一次有头 Chrome。schema 与文档早已写明两者必须成对，现在入口按同一规则拒绝，不创建 run、不启动浏览器。
+- 缓存库写锁冲突不再以 traceback 退出或被报成 `NETWORK_ERROR`（Issue #1118）：SQLite 头正常时，`CacheStore` 初始化与写操作里的 `database is locked` 现在归一成新登记的 `CACHE_BUSY`。此前 `crawl stop` 没有异常处理，stdout 为 0 字节并带 traceback；`crawl resume` 被统一装饰器兜成可重试的 `NETWORK_ERROR`，`boss wizard` 的通用兜底同样如此。现在 `crawl stop` / `status` / `results` / `shortlist`、`crawl resume` 与 wizard 动作都返回单个可重试信封，恢复动作是「等待写入结束后重试」，不再提示删除缓存库或重试平台请求。
+
+### Added
+- 错误码 `CACHE_BUSY`（缓存库被其他连接写入，可重试）：登记在 `ERROR_CODES`，`docs/troubleshooting` 中英文补充说明。
 
 ## [3.4.19] - 2026-11-15
 
