@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 工作流停止改为幂等操作（Issue #1156）：外层停止已经落盘、向内部采集传播停止时中断或遇到临时写锁后，再次 `wizard --stop` 会补齐内部停止标记，不再误报 `WORKFLOW_NOT_FOUND`；断点损坏时仍先保存外层停止，不存在和已完成任务的拒绝契约保持不变。
+
 ## [3.4.26] - 2026-11-15
 
 ### Fixed

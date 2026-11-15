@@ -831,10 +831,11 @@ class CacheStore:
 		return cursor.rowcount > 0
 
 	def request_workflow_stop(self, run_id: str) -> bool:
+		"""幂等记录停止请求，让重试能补齐尚未完成的内部停止传播。"""
 		cursor = self._conn.execute(
 			"UPDATE workflow_runs SET status = ?, updated_at = ? WHERE run_id = ? "
-			"AND status NOT IN (?, ?)",
-			("stopped", time.time(), run_id, "completed", "stopped"),
+			"AND status != ?",
+			("stopped", time.time(), run_id, "completed"),
 		)
 		self._conn.commit()
 		return cursor.rowcount > 0
