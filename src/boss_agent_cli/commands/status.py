@@ -98,7 +98,11 @@ def status_cmd(ctx: click.Context, live: bool) -> None:
 				extra_hints={"auth_health": auth_health.public_summary(), "checks": auth_health.checks_as_dicts()},
 			)
 			return
-		user_info = platform.unwrap_data(info) or {}
+		# 在线验证的 zpData 漂移成非对象时仍按未知用户返回，不让 `.get`
+		# 抛 AttributeError 把整次登录态检查报成 INTERNAL_ERROR（Issue #1148）。
+		user_info = platform.unwrap_data(info)
+		if not isinstance(user_info, dict):
+			user_info = {}
 		user_name = user_info.get("name", "未知用户")
 		data["user_name"] = user_name
 		# 非 live 的下一步正是 `--live`；在线验证本身成功后不能到此为止，
