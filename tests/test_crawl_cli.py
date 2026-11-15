@@ -77,7 +77,11 @@ def _seed_run(tmp_path: Path, run_id: str = "run-1", *, status: str = "completed
 	with CacheStore(db_path) as cache:
 		cache.create_crawl_run(
 			run_id,
-			{"query": "AI", "city_code": "101210100", "pages": 5, "with_detail": False},
+			CrawlSettings(
+				query="AI", city_code="101210100", pages=5, with_detail=False,
+				profile_path=tmp_path / "crawl" / "chrome-profile", chrome_path=None,
+				cdp_port=9222, hook_profile="none",
+			).as_dict(),
 			str(tmp_path / "crawl" / run_id),
 			status=status,
 		)
@@ -1587,7 +1591,8 @@ _BASE_PARAMS = {"query": "AI", "city_code": "101210100", "pages": 5, "with_detai
 		({"with_detail": "yes"}, "with_detail"),
 	],
 )
-def test_drifted_run_params_report_cache_record_invalid(tmp_path, overrides, field):
+@pytest.mark.parametrize("background", [False, True])
+def test_drifted_run_params_report_cache_record_invalid(tmp_path, monkeypatch, overrides, field, background):
 	"""缺键与类型漂移属于记录损坏，不能报成「未找到 crawl run: <字段名>」（Issue #1117）。"""
 	_seed_run(tmp_path, "run-1", status="stopped")
 	params = dict(_BASE_PARAMS)
@@ -1597,9 +1602,22 @@ def test_drifted_run_params_report_cache_record_invalid(tmp_path, overrides, fie
 		else:
 			params[key] = value
 	_break_column(tmp_path, "crawl_runs", "params", value=json.dumps(params))
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.request_crawl_stop("run-1")
+		before = cache.get_crawl_run("run-1")
+	probes = []
+	launches = []
+	if background:
+		monkeypatch.setattr(
+			"boss_agent_cli.commands.crawl._crawl_preflight", lambda ctx: probes.append("preflight") or ({}, "")
+		)
+		monkeypatch.setattr(
+			"boss_agent_cli.commands.crawl._launch_background_resume", lambda *args, **kwargs: launches.append("launch")
+		)
 	runner = CliRunner()
 	_enable_research(runner, tmp_path)
-	result = _invoke(runner, tmp_path, "crawl", "resume", "run-1")
+	args = ["crawl", "resume", "run-1", *(["--background"] if background else [])]
+	result = _invoke(runner, tmp_path, *args)
 	assert result.exit_code == 1, result.output
 	error = _envelope(result)["error"]
 	assert error["code"] == "CACHE_RECORD_INVALID"
@@ -1608,6 +1626,9 @@ def test_drifted_run_params_report_cache_record_invalid(tmp_path, overrides, fie
 	# 记录损坏不是「任务不存在」：恢复指引必须是重建任务，而不是换一个 run_id。
 	assert "未找到 crawl run" not in error["message"]
 	_assert_state_commands(_envelope(result)["hints"]["next_actions"][:1], tmp_path, "crawl start <关键词>")
+	assert probes == [] and launches == [], "损坏断点必须在预检和启动 worker 之前拒绝（Issue #1125）"
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.get_crawl_run("run-1") == before, "失败恢复不能清 stop 或刷新时间戳"
 
 
 def test_structurally_drifted_hook_results_reports_envelope(tmp_path):
