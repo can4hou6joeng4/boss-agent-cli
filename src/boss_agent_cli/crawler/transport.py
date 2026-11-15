@@ -235,6 +235,23 @@ class DrissionCrawlerSession:
 				pass
 		listen.start(JOBLIST_TARGET, is_regex=True, method=("GET", "POST"))
 
+	def _joblist_packet_body(self, packet: Any) -> Any:
+		"""解析监听包，并在按页码筛选之前执行统一的风险检查。"""
+		response = getattr(packet, "response", None)
+		body = self._normalize_response_body(getattr(response, "body", None))
+		if isinstance(body, dict):
+			self._raise_if_risk_response(body)
+		response_url = getattr(response, "url", None) or getattr(packet, "url", "")
+		page_risk = platform_risk_page_response(
+			url=response_url if isinstance(response_url, str) else "",
+			body=body if isinstance(body, str) else "",
+		)
+		if page_risk is not None:
+			raise CrawlRiskError.from_response(page_risk)
+		if getattr(response, "status", None) == 403:
+			raise CrawlRiskError("职位监听请求 HTTP 403，已停止；请在官方目标业务页确认恢复")
+		return body
+
 	def _wait_for_joblist_packet(self, target_page: int) -> Any | None:
 		"""取与目标页匹配的 joblist 响应包，跳过导航/滚动带出的早期页（Issue #1114）。
 
@@ -253,6 +270,11 @@ class DrissionCrawlerSession:
 			packet = self._page.listen.wait(timeout=remaining, raise_err=False)
 			if not packet:
 				return None
+			# 早期页的风险响应也必须停止，限流响应也必须交给调用方处理。
+			body = self._joblist_packet_body(packet)
+			response = getattr(packet, "response", None)
+			if getattr(response, "status", None) == 429 or isinstance(body, dict) and body.get("code") in (9, "9"):
+				return packet
 			page_no = packet_page_no(packet)
 			if page_no == target_page or (page_no is None and target_page == 1):
 				return packet
@@ -308,18 +330,7 @@ class DrissionCrawlerSession:
 				packet = self._wait_for_joblist_packet(target_page)
 				if packet is not None:
 					response = getattr(packet, "response", None)
-					body = self._normalize_response_body(getattr(response, "body", None))
-					if isinstance(body, dict):
-						self._raise_if_risk_response(body)
-					response_url = getattr(response, "url", None) or getattr(packet, "url", "")
-					page_risk = platform_risk_page_response(
-						url=response_url if isinstance(response_url, str) else "",
-						body=body if isinstance(body, str) else "",
-					)
-					if page_risk is not None:
-						raise CrawlRiskError.from_response(page_risk)
-					if getattr(response, "status", None) == 403:
-						raise CrawlRiskError("职位监听请求 HTTP 403，已停止；请在官方目标业务页确认恢复")
+					body = self._joblist_packet_body(packet)
 					if (
 						getattr(response, "status", None) == 429
 						or isinstance(body, dict)

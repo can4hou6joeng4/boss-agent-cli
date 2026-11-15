@@ -731,6 +731,53 @@ def test_wait_for_joblist_packet_skips_unrecognizable_and_earlier_pages(tmp_path
 	assert page.packets == [], "第 1 页与无法识别页码的包都应被丢弃，而不是当成第 2 页"
 
 
+@pytest.mark.parametrize(
+	"response",
+	[
+		{"body": {"code": 37}},
+		{"body": json.dumps({"code": 32})},
+		{"body": "<html><title>安全验证</title></html>"},
+		{"body": "", "url": "https://www.zhipin.com/web/passport/zp/security.html"},
+		{"body": {}, "status": 403},
+	],
+)
+def test_fetch_page_stops_on_risk_in_an_earlier_page(tmp_path, monkeypatch, response):
+	"""丢弃非目标页之前也必须检查风险，不能因此改走页面内请求。"""
+	session, page = _paging_session(tmp_path, monkeypatch)
+	enqueue = page._enqueue
+
+	def enqueue_with_risk(page_no):
+		enqueue(page_no)
+		if page_no == 1:
+			page.packets[-1].response = types.SimpleNamespace(**response)
+
+	monkeypatch.setattr(page, "_enqueue", enqueue_with_risk)
+	fallback_calls = []
+	monkeypatch.setattr(session, "_fetch_joblist_in_page", lambda **kwargs: fallback_calls.append(kwargs))
+	with pytest.raises(CrawlRiskError):
+		session.fetch_page("AI", "101210100", 3)
+	assert fallback_calls == []
+	assert len(page.packets) == 2, "检测到第 1 页风险后不能继续取后续页的包"
+
+
+@pytest.mark.parametrize("response", [{"body": {}, "status": 429}, {"body": {"code": 9}}])
+def test_fetch_page_keeps_rate_limits_from_an_earlier_page(tmp_path, monkeypatch, response):
+	session, page = _paging_session(tmp_path, monkeypatch)
+	enqueue = page._enqueue
+
+	def enqueue_with_limit(page_no):
+		enqueue(page_no)
+		if page_no == 1:
+			page.packets[-1].response = types.SimpleNamespace(**response)
+
+	monkeypatch.setattr(page, "_enqueue", enqueue_with_limit)
+	cooldowns = []
+	session._cooldown_callback = cooldowns.append
+	assert session.fetch_page("AI", "101210100", 3)["code"] == 9
+	assert cooldowns == [10.0]
+	assert len(page.packets) == 2
+
+
 def test_wait_for_joblist_packet_accepts_unrecognizable_packet_for_first_page(tmp_path, monkeypatch):
 	"""请求第 1 页时监听到的包没有可解析页码，仍按原有行为接受。"""
 	session, page = _paging_session(tmp_path, monkeypatch)
