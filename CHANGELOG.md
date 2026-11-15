@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 后台采集恢复在启动 worker 前校验断点参数（Issue #1125）：`CrawlSettings.from_dict` 已能识别缺键与类型漂移，但后台父进程此前跳过它，以 `ok=true / queued` 回报、清除旧 stop 并启动随后立即失败的 worker。现在持有执行锁重读记录后，在修改 stop、刷新时间戳和探测依赖/登录态之前返回 `CACHE_RECORD_INVALID`；原记录保留，已有执行器与交接中的队列维持幂等处理。
+
 ## [3.4.20] - 2026-11-15
 
 ### Fixed

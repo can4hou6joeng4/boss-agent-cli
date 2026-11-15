@@ -446,6 +446,9 @@ def _prepare_background_resume(
 				return "completed", False
 			if _awaiting_queued_worker(run):
 				return "queued", False
+			# 将要启动 worker 才校验持锁重读的设置；损坏断点在修改 stop 或
+			# 探测依赖/登录态之前由父进程返回错误（Issue #1125）。
+			CrawlSettings.from_dict(run["params"], run_id=run_id)
 			# 旧 stop 必须在预检之前清掉：预检要探测可选依赖、读取登录态，可能
 			# 耗时；这期间到达的新 stop 不能被后面的清理当成启动前残留一起清掉
 			# （Issue #1115）。预检失败时还原旧 stop 与时间戳，保持「失败的调用
