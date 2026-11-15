@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 断点里的重放标记类型漂移时不再重放结果未知的写步骤（Issue #1159）：`error.replay_safe` 被写成 `0`、`"false"`、`null` 等非布尔值时，`wizard --resume` 此前按可重放处理并再次执行该步骤。现在 `--resume` / `--status` 与任务列表在读取边界返回 `CACHE_RECORD_INVALID`，不执行动作、不改写断点，并提示先核对平台实际状态；布尔值与缺省标记的行为不变，`--stop` 仍照常落盘并传播停止。
+
 ## [3.4.27] - 2026-11-15
 
 ### Fixed

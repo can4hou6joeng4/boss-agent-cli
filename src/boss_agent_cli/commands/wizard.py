@@ -101,7 +101,7 @@ def _run_after_stop(store: WorkflowStore, run_id: str) -> dict[str, Any]:
 	try:
 		return store.get(run_id) or {}
 	except CacheRecordInvalid:
-		return store.get_checkpoint(run_id) or {}
+		return store.get_checkpoint(run_id, validate_replay_markers=False) or {}
 
 
 def _workflow_inner_run_id(run: Mapping[str, Any]) -> str:
