@@ -212,6 +212,38 @@ def test_run_rejects_unknown_home_hook_dir_before_touching_the_browser(tmp_path,
 	assert error["recoverable"] is False
 
 
+def test_run_rejects_screenshot_profile_without_hook_dir(tmp_path, monkeypatch):
+	"""`screenshot-full` 缺 `--hook-dir` 要在创建任务前拒绝（Issue #1116）。
+
+	落到运行期时任务已经落盘：浏览器启动、首页导航之后才在注入阶段报错，
+	被记成 status=stopped 的成功信封，而 resume 没有 --hook-dir 参数可补。
+	"""
+
+	def _explode(settings):  # pragma: no cover - 不应被调用
+		raise AssertionError("缺少 --hook-dir 不应进入 transport 构造")
+
+	monkeypatch.setattr("boss_agent_cli.commands.crawl._transport_factory", _explode)
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(
+		runner,
+		tmp_path,
+		"crawl",
+		"run",
+		"AI",
+		"--city",
+		"杭州",
+		"--hook-profile",
+		"screenshot-full",
+	)
+	assert result.exit_code == 1
+	error = _envelope(result)["error"]
+	assert error["code"] == "INVALID_PARAM"
+	assert "--hook-dir" in error["message"]
+	assert error["recoverable"] is False
+	assert not (tmp_path / "cache" / "boss_agent.db").exists()
+
+
 def test_run_honors_configured_zero_max_retries(tmp_path, monkeypatch):
 	"""configure 接受 --max-retries 0；运行时不能被 `or` 悄悄改回 1。"""
 	from boss_agent_cli.commands import crawl as crawl_module
