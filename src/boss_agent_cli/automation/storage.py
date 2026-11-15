@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import itertools
 import json
+import math
 import os
 import sqlite3
 import tempfile
@@ -15,12 +16,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 
-from boss_agent_cli.automation.models import AutomationEvent, PendingAction, ReviewItem
+from boss_agent_cli.automation.models import AutomationEvent, PendingAction, PlatformAction, ReviewItem
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell
 
 
 class AutomationStateError(ValueError):
-	"""`automation/state.json` 读不出来；调用方应输出信封并停止自动化。"""
+	"""自动化状态文件（`state.json` 或队列 JSONL）读不出来；调用方应输出信封并停止自动化。"""
 
 	def __init__(self, path: Path, detail: str) -> None:
 		super().__init__(f"{path} 无法解析（{detail}）")
@@ -111,6 +112,20 @@ class AutomationStore:
 			if not isinstance(loaded, dict):
 				raise AutomationStateError(self.state_path, "顶层必须是 JSON object")
 			state = cast("dict[str, Any]", loaded)
+			# 后续读取按 object 逐层取值：嵌套容器类型漂移在这里报成状态损坏，
+			# 而不是让 AttributeError 被兜成 INTERNAL_ERROR（Issue #1130）。
+			for key in ("conversations", "autonomy", "safety"):
+				if key in state and not isinstance(state[key], dict):
+					raise AutomationStateError(self.state_path, f"{key} 必须是 JSON object")
+			breaker = state.get("autonomy", {}).get("circuit_breaker", {})
+			if not isinstance(breaker, dict):
+				raise AutomationStateError(self.state_path, "autonomy.circuit_breaker 必须是 JSON object")
+			for candidate_key, prior in state.get("conversations", {}).items():
+				if not isinstance(prior, dict):
+					raise AutomationStateError(self.state_path, f"conversations[{candidate_key!r}] 必须是 JSON object")
+			errors = state.get("safety", {}).get("consecutive_errors", 0)
+			if isinstance(errors, bool) or not isinstance(errors, int):
+				raise AutomationStateError(self.state_path, "safety.consecutive_errors 必须是整数")
 		stop = self.read_stop()
 		if "open" in stop:
 			state.setdefault("autonomy", {})["circuit_breaker"] = stop
@@ -149,11 +164,21 @@ class AutomationStore:
 	def append_pending(self, action: PendingAction) -> None:
 		self._append_jsonl("pending-actions.jsonl", asdict(action))
 
+	@property
+	def reviews_path(self) -> Path:
+		return self.root / "human-review-queue.jsonl"
+
+	@property
+	def pending_path(self) -> Path:
+		return self.root / "pending-actions.jsonl"
+
 	def read_reviews(self) -> list[ReviewItem]:
-		return [_review_from_row(row) for row in self.read_jsonl("human-review-queue.jsonl")]
+		path = self.reviews_path
+		return [_review_from_row(row, path) for row in self.read_jsonl(path.name)]
 
 	def read_pending(self) -> list[PendingAction]:
-		return [_pending_from_row(row) for row in self.read_jsonl("pending-actions.jsonl")]
+		path = self.pending_path
+		return [_pending_from_row(row, path) for row in self.read_jsonl(path.name)]
 
 	def write_reviews(self, items: list[ReviewItem]) -> None:
 		self.write_jsonl("human-review-queue.jsonl", [asdict(item) for item in items])
@@ -167,6 +192,8 @@ class AutomationStore:
 		pending: PendingAction | None = None
 		for item in reviews:
 			if item.id == review_id and item.status == "review":
+				# 未知动作进不了待执行队列：在改写任何文件之前报出。
+				queued_action(item, self.reviews_path)
 				approved = ReviewItem(
 					id=item.id,
 					ts=item.ts,
@@ -211,6 +238,8 @@ class AutomationStore:
 		rejected: ReviewItem | None = None
 		for item in reviews:
 			if item.id == review_id and item.status == "review":
+				# 拒绝会记录一条带动作的跳过事件：先确认动作可解析，再改写队列。
+				queued_action(item, self.reviews_path)
 				rejected = ReviewItem(
 					id=item.id,
 					ts=item.ts,
@@ -339,7 +368,27 @@ class AutomationStore:
 			handle.write("\n")
 
 
-def _review_from_row(row: dict[str, Any]) -> ReviewItem:
+def _row_confidence(row: dict[str, Any], path: Path) -> float:
+	"""读取队列记录的 confidence；类型漂移按状态损坏上报，不带着未知分数执行动作。"""
+	value = row.get("confidence", 0.0)
+	try:
+		confidence = float(value)
+	except (TypeError, ValueError, OverflowError):
+		confidence = math.nan
+	if isinstance(value, bool) or not math.isfinite(confidence):
+		raise AutomationStateError(path, f"记录 {str(row.get('id', ''))!r} 的 confidence 不是有限数字")
+	return confidence
+
+
+def queued_action(item: ReviewItem | PendingAction, path: Path) -> PlatformAction:
+	"""把队列记录的 action 解析成平台动作；未知取值按状态损坏上报，不猜测要执行什么。"""
+	try:
+		return PlatformAction(item.action)
+	except ValueError:
+		raise AutomationStateError(path, f"记录 {item.id!r} 的 action {item.action!r} 不是已知动作") from None
+
+
+def _review_from_row(row: dict[str, Any], path: Path) -> ReviewItem:
 	return ReviewItem(
 		id=str(row.get("id", "")),
 		ts=str(row.get("ts", "")),
@@ -347,7 +396,7 @@ def _review_from_row(row: dict[str, Any]) -> ReviewItem:
 		candidate_key=str(row.get("candidate_key", "")),
 		action=str(row.get("action", "")),
 		status=str(row.get("status", "review")),
-		confidence=float(row.get("confidence", 0.0)),
+		confidence=_row_confidence(row, path),
 		reason=str(row.get("reason", "")),
 		message=str(row.get("message", "")),
 		reviewed_at=str(row.get("reviewed_at", "")),
@@ -355,7 +404,7 @@ def _review_from_row(row: dict[str, Any]) -> ReviewItem:
 	)
 
 
-def _pending_from_row(row: dict[str, Any]) -> PendingAction:
+def _pending_from_row(row: dict[str, Any], path: Path) -> PendingAction:
 	return PendingAction(
 		id=str(row.get("id", "")),
 		ts=str(row.get("ts", "")),
@@ -363,7 +412,7 @@ def _pending_from_row(row: dict[str, Any]) -> PendingAction:
 		candidate_key=str(row.get("candidate_key", "")),
 		action=str(row.get("action", "")),
 		status=str(row.get("status", "pending")),
-		confidence=float(row.get("confidence", 0.0)),
+		confidence=_row_confidence(row, path),
 		reason=str(row.get("reason", "")),
 		message=str(row.get("message", "")),
 		approved_review_id=str(row.get("approved_review_id", "")),

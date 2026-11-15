@@ -20,7 +20,7 @@ from boss_agent_cli.automation.models import (
 )
 from boss_agent_cli.automation.reply_ai import apply_reply_strategy
 from boss_agent_cli.automation.safety import SafetyGuard
-from boss_agent_cli.automation.storage import AutomationStore
+from boss_agent_cli.automation.storage import AutomationStore, queued_action
 
 
 def process_pending(
@@ -39,7 +39,7 @@ def process_pending(
 			break
 		if item.status != "pending":
 			continue
-		action = PlatformAction(item.action)
+		action = queued_action(item, store.pending_path)
 		ref = ConversationRef(id=item.candidate_key, tab="pending")
 		decision = Decision(
 			action=action,
