@@ -46,13 +46,17 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 					if not platform.is_success(expect_resp):
 						handle_platform_error_output(ctx, "recommend", platform, expect_resp, fallback_message="求职期望获取失败")
 						return
-					expect_data = platform.unwrap_data(expect_resp) or {}
+					expect_data = platform.unwrap_data(expect_resp)
+					if not isinstance(expect_data, dict):
+						expect_data = {}
 
 			raw = platform.recommend_jobs(page=page)
 			if not platform.is_success(raw):
 				handle_platform_error_output(ctx, "recommend", platform, raw, fallback_message="推荐职位获取失败")
 				return
-			platform_data = platform.unwrap_data(raw) or {}
+			platform_data = platform.unwrap_data(raw)
+			if not isinstance(platform_data, dict):
+				platform_data = {}
 			job_list = dict_items(field_list(platform_data, "jobList"))
 
 			items = []
