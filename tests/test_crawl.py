@@ -25,7 +25,7 @@ from boss_agent_cli.crawler.service import (
 	CrawlSettings,
 	CrawlStopRequested,
 )
-from boss_agent_cli.crawler.transport import JOBLIST_TARGET, CrawlRiskError, DrissionCrawlerSession
+from boss_agent_cli.crawler.transport import JOBLIST_TARGET, CrawlRiskError, DrissionCrawlerSession, packet_page_no
 from boss_agent_cli.main import cli
 
 
@@ -563,7 +563,13 @@ def test_listener_parses_string_json_response(monkeypatch, tmp_path):
 
 
 class _PagingPage:
-	"""Fake tab whose visible job list starts at page 1 and only advances by scrolling."""
+	"""Fake tab whose listener queue behaves like DrissionPage: FIFO, oldest first.
+
+	`Listener.start()` clears the queue; navigation enqueues the page-1 joblist
+	response and each scroll enqueues the next page. `wait()` returns the oldest
+	packet — the real behaviour behind Issue #1114, where a resumed fetch took
+	the page-1 packet and recorded it as the checkpoint page.
+	"""
 
 	url = "https://www.zhipin.com/web/geek/jobs"
 	html = "<div class='job-list-box'></div>"
@@ -573,23 +579,29 @@ class _PagingPage:
 		self.current_page = 1
 		self.navigations = 0
 		self.scrolls = 0
+		self.packets: list[types.SimpleNamespace] = []
 		self.listen = types.SimpleNamespace(
-			start=lambda *args, **kwargs: None,
+			start=self._start_listen,
 			stop=lambda: None,
-			wait=self._packet,
+			wait=self._wait,
 		)
 		self.scroll = types.SimpleNamespace(down=lambda *args: None, to_bottom=self._next_page)
+
+	def _start_listen(self, *args, **kwargs) -> None:
+		# DrissionPage 的 Listener.start() 先 clear()：队列里只留本次导航的包。
+		self.packets.clear()
 
 	def get(self, url: str) -> None:
 		self.navigations += 1
 		self.current_page = 1
+		self._enqueue(1)
 
 	def _next_page(self) -> None:
 		self.scrolls += 1
 		self.current_page = min(self.last_page, self.current_page + 1)
+		self._enqueue(self.current_page)
 
-	def _packet(self, **kwargs):
-		page = self.current_page
+	def _enqueue(self, page: int) -> None:
 		body = {
 			"code": 0,
 			"zpData": {
@@ -597,7 +609,13 @@ class _PagingPage:
 				"hasMore": page < self.last_page,
 			},
 		}
-		return types.SimpleNamespace(response=types.SimpleNamespace(body=body))
+		url = f"https://www.zhipin.com/wapi/zpgeek/search/joblist.json?query=AI&city=101210100&page={page}"
+		self.packets.append(types.SimpleNamespace(url=url, response=types.SimpleNamespace(body=body, url=url)))
+
+	def _wait(self, timeout: float | None = None, **kwargs):
+		if not self.packets:
+			return False
+		return self.packets.pop(0)
 
 
 def _paging_session(tmp_path: Path, monkeypatch, last_page: int = 5):
@@ -685,6 +703,96 @@ def test_resume_fetches_checkpoint_page_and_keeps_exported_page_numbers_aligned(
 		"job-5": 5,
 	}
 	cache.close()
+
+
+def test_packet_page_no_reads_page_query_from_request_url():
+	url = "https://www.zhipin.com/wapi/zpgeek/search/joblist.json?query=AI&city=101210100&page=3"
+	assert packet_page_no(types.SimpleNamespace(url=url)) == 3
+	assert packet_page_no(types.SimpleNamespace(request=types.SimpleNamespace(url=url.replace("page=3", "page=12")))) == 12
+	assert packet_page_no(types.SimpleNamespace(url="https://www.zhipin.com/wapi/zpgeek/pc/search/joblist.json?page=2")) == 2
+	assert packet_page_no(types.SimpleNamespace(url=url.replace("page=3", "page=abc"))) is None
+	assert packet_page_no(types.SimpleNamespace(url=url.replace("page=3", "page=0"))) is None
+	assert packet_page_no(types.SimpleNamespace(url="https://www.zhipin.com/wapi/zpgeek/search/joblist.json?query=AI")) is None
+	assert packet_page_no(types.SimpleNamespace()) is None
+
+
+def test_wait_for_joblist_packet_skips_unrecognizable_and_earlier_pages(tmp_path, monkeypatch):
+	"""页码读不出的包不能当目标页；早期页的包丢弃后继续等（Issue #1114）。"""
+	session, page = _paging_session(tmp_path, monkeypatch)
+	session._start_joblist_listener()
+	assert page.packets == []
+	unknown = types.SimpleNamespace(url="https://www.zhipin.com/wapi/zpgeek/search/joblist.json?query=AI")
+	page.packets.append(unknown)
+	page._enqueue(1)
+	page._enqueue(2)
+	target = session._wait_for_joblist_packet(2)
+	assert target is not None
+	assert packet_page_no(target) == 2
+	assert page.packets == [], "第 1 页与无法识别页码的包都应被丢弃，而不是当成第 2 页"
+
+
+@pytest.mark.parametrize(
+	"response",
+	[
+		{"body": {"code": 37}},
+		{"body": json.dumps({"code": 32})},
+		{"body": "<html><title>安全验证</title></html>"},
+		{"body": "", "url": "https://www.zhipin.com/web/passport/zp/security.html"},
+		{"body": {}, "status": 403},
+	],
+)
+def test_fetch_page_stops_on_risk_in_an_earlier_page(tmp_path, monkeypatch, response):
+	"""丢弃非目标页之前也必须检查风险，不能因此改走页面内请求。"""
+	session, page = _paging_session(tmp_path, monkeypatch)
+	enqueue = page._enqueue
+
+	def enqueue_with_risk(page_no):
+		enqueue(page_no)
+		if page_no == 1:
+			page.packets[-1].response = types.SimpleNamespace(**response)
+
+	monkeypatch.setattr(page, "_enqueue", enqueue_with_risk)
+	fallback_calls = []
+	monkeypatch.setattr(session, "_fetch_joblist_in_page", lambda **kwargs: fallback_calls.append(kwargs))
+	with pytest.raises(CrawlRiskError):
+		session.fetch_page("AI", "101210100", 3)
+	assert fallback_calls == []
+	assert len(page.packets) == 2, "检测到第 1 页风险后不能继续取后续页的包"
+
+
+@pytest.mark.parametrize("response", [{"body": {}, "status": 429}, {"body": {"code": 9}}])
+def test_fetch_page_keeps_rate_limits_from_an_earlier_page(tmp_path, monkeypatch, response):
+	session, page = _paging_session(tmp_path, monkeypatch)
+	enqueue = page._enqueue
+
+	def enqueue_with_limit(page_no):
+		enqueue(page_no)
+		if page_no == 1:
+			page.packets[-1].response = types.SimpleNamespace(**response)
+
+	monkeypatch.setattr(page, "_enqueue", enqueue_with_limit)
+	cooldowns = []
+	session._cooldown_callback = cooldowns.append
+	assert session.fetch_page("AI", "101210100", 3)["code"] == 9
+	assert cooldowns == [10.0]
+	assert len(page.packets) == 2
+
+
+def test_wait_for_joblist_packet_accepts_unrecognizable_packet_for_first_page(tmp_path, monkeypatch):
+	"""请求第 1 页时监听到的包没有可解析页码，仍按原有行为接受。"""
+	session, page = _paging_session(tmp_path, monkeypatch)
+	session._start_joblist_listener()
+	unknown = types.SimpleNamespace(response=types.SimpleNamespace(body={"code": 0}))
+	page.packets.append(unknown)
+	assert session._wait_for_joblist_packet(1) is unknown
+
+
+def test_wait_for_joblist_packet_returns_none_when_only_earlier_pages_arrive(tmp_path, monkeypatch):
+	"""队列里只有早期页的包时返回 None，由 fetch_page 走页面内兜底。"""
+	session, page = _paging_session(tmp_path, monkeypatch)
+	session._start_joblist_listener()
+	page._enqueue(1)
+	assert session._wait_for_joblist_packet(3) is None
 
 
 def test_non_json_login_html_is_not_mislabelled_as_captcha_only():
