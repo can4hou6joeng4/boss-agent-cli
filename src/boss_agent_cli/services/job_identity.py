@@ -15,6 +15,8 @@ def deduplicate_job_result(
 	seen = seen_job_ids if seen_job_ids is not None else set()
 	unique = []
 	for item in items:
+		if not isinstance(item, dict):
+			continue
 		job_id = item.get("job_id") or item.get("encryptJobId")
 		if isinstance(job_id, str) and job_id:
 			if job_id in seen:

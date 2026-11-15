@@ -22,6 +22,17 @@ def field_list(data: Any, key: str) -> list[Any]:
 	return value if isinstance(value, list) else []
 
 
+def dict_items(value: Any) -> list[dict[str, Any]]:
+	"""取列表里的对象元素：跳过 null / 数字 / 字符串等漂移元素（Issue #1141）。
+
+	平台把列表容器返回成 null 时早已按空列表处理；元素级漂移沿用同一口径，
+	不能把单个坏元素变成整个命令的 INTERNAL_ERROR。
+	"""
+	if not isinstance(value, list):
+		return []
+	return [item for item in value if isinstance(item, dict)]
+
+
 def field_dict(data: Any, key: str) -> dict[str, Any]:
 	"""取对象字段：缺失、为 null 或不是对象时返回空字典。"""
 	value = data.get(key) if isinstance(data, dict) else None
@@ -93,6 +104,9 @@ class JobItem:
 
 	@classmethod
 	def from_api(cls, raw: dict[str, Any]) -> "JobItem":
+		if not isinstance(raw, dict):
+			# 兜底：调用点应先用 dict_items 过滤，这里保证单独调用也不 traceback。
+			raw = {}
 		raw_job_type = raw.get("jobType")
 		return cls(
 			job_id=field_text(raw, "encryptJobId"),

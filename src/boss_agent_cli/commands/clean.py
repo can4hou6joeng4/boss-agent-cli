@@ -226,26 +226,32 @@ def _clean_search_cache(data_dir: Path, *, dry_run: bool, clean_all: bool) -> tu
 
 	conn = _open_cache_db(db_path)
 	try:
-		if not _table_exists(conn, "search_cache"):
-			return 0, 0
-		if clean_all:
-			row = conn.execute("SELECT COUNT(*), COALESCE(SUM(LENGTH(response)), 0) FROM search_cache").fetchone()
-		else:
-			cutoff = time.time() - 86400
-			row = conn.execute(
-				"SELECT COUNT(*), COALESCE(SUM(LENGTH(response)), 0) FROM search_cache WHERE created_at < ?",
-				(cutoff,),
-			).fetchone()
-
-		count, size = row[0], row[1]
-		if not dry_run and count > 0:
+		try:
+			if not _table_exists(conn, "search_cache"):
+				return 0, 0
 			if clean_all:
-				conn.execute("DELETE FROM search_cache")
+				row = conn.execute("SELECT COUNT(*), COALESCE(SUM(LENGTH(response)), 0) FROM search_cache").fetchone()
 			else:
-				conn.execute("DELETE FROM search_cache WHERE created_at < ?", (cutoff,))
-			conn.commit()
-			conn.execute("VACUUM")
-		return size, count
+				cutoff = time.time() - 86400
+				row = conn.execute(
+					"SELECT COUNT(*), COALESCE(SUM(LENGTH(response)), 0) FROM search_cache WHERE created_at < ?",
+					(cutoff,),
+				).fetchone()
+
+			count, size = row[0], row[1]
+			if not dry_run and count > 0:
+				if clean_all:
+					conn.execute("DELETE FROM search_cache")
+				else:
+					conn.execute("DELETE FROM search_cache WHERE created_at < ?", (cutoff,))
+				conn.commit()
+				conn.execute("VACUUM")
+			return size, count
+		except sqlite3.DatabaseError as exc:
+			# 打开时正常、清理时才发现列漂移（旧库、迁移中断、同名表）：
+			# 与打开失败同口径报 CACHE_DATABASE_INVALID，不能让 clean 自己
+			# 变成 traceback——它正是缓存异常时的恢复入口（Issue #1139）。
+			raise CacheDatabaseInvalid(db_path, str(exc)) from exc
 	finally:
 		conn.close()
 

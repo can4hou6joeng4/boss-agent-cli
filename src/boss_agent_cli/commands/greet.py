@@ -11,7 +11,7 @@ from boss_agent_cli.api.endpoints import (
 	SCALE_CODES,
 	STAGE_CODES,
 )
-from boss_agent_cli.api.models import JobItem, field_list
+from boss_agent_cli.api.models import dict_items, JobItem, field_list
 from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
@@ -305,7 +305,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 				)
 				return
 			platform_data = platform.unwrap_data(raw) or {}
-			job_list = field_list(platform_data, "jobList")
+			job_list = dict_items(field_list(platform_data, "jobList"))
 			criteria = SearchFilterCriteria(
 				query=query,
 				city=city,
