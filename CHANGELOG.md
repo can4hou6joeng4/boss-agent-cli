@@ -7,6 +7,7 @@
 ### Fixed
 - `show` / `me` / `status` 的平台数据形状漂移不再报 `INTERNAL_ERROR`（Issue #1148）：`jobCard` 或 `zpData` 不是对象时，`show` 按 `JOB_NOT_FOUND` 返回（与 `jobCard: null` 一致），`me --section user` 输出空字段，`status --live` 的 `user_name` 回退为「未知用户」；合法响应的字段值与类型保持原样。
 - 招聘者简历的求职期望与联系方式交换响应形状漂移不再报 `INTERNAL_ERROR`（Issue #1150）：`showExpectPosition` 不是对象时按空期望处理，其余简历信息继续返回；交换动作已获平台成功响应时，可选 `zpData` 容器漂移不再把已成功动作误报为失败，合法对象字段继续保留。
+- 推荐列表与评分期望的非对象成功响应不再让 `recommend` 报 `INTERNAL_ERROR`（Issue #1152）：推荐载荷漂移时按空列表返回并保留未知分页标记；`--with-score` 的期望载荷漂移时按空偏好评分，合法职位继续返回。
 
 ## [3.4.25] - 2026-11-15
 
