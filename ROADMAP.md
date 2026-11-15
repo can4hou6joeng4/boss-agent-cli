@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.23（2026-11-15）：`export -o` 先写临时文件再原子替换，失败不再截断已有导出；采集导出的 json / csv / xlsx 一起更新或都不更新，XLSX 清洗控制字符、标签容错，导出失败以 `LOCAL_IO_ERROR` 回报；搜索缓存 `pagination` 形状漂移按未命中处理。
 - ✅ v3.4.22（2026-11-15）：`boss wizard --stop` 先落盘停止标记再传给内部采集任务，workflow 自身断点或采集结果损坏都不再挡住停止；`--resume` 把只落盘一半的写失败归并为 `failed` 并 exit 1；招聘自动化队列的 `confidence` / `action` 与 `state.json` 嵌套字段类型漂移统一返回 `AUTOMATION_STATE_INVALID`。
 - ✅ v3.4.21（2026-11-15）：后台采集恢复在父进程持锁重读后校验断点参数，缺键和类型漂移在修改 stop、刷新交接时间或探测登录态前返回 `CACHE_RECORD_INVALID`；校验失败保留原任务且不启动 worker。
 - ✅ v3.4.20（2026-11-15）：采集断点恢复按请求页码匹配监听响应，保留旧页风险和限流信号；后台预检不再丢失停止请求，并维持排队交接窗口；损坏的断点参数返回 `CACHE_RECORD_INVALID`，缓存写锁冲突返回 `CACHE_BUSY`；Hook 目录缺失在创建任务前拒绝。

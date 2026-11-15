@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.23] - 2026-11-15
 
 ### Fixed
 - `export -o` 不再在失败时破坏已有文件（Issue #1134）：序列化 / 写入此前直接以 `"w"` 打开目标文件，平台字段里的列表混入非字符串元素时 `join` 抛错，用户上一次的导出已被截断。现在整份内容先在内存组装并写同目录临时文件，成功后才原子替换；`skills` / `welfare` 列表元素按文本拼接；写入失败返回 `LOCAL_IO_ERROR`，不再报 `INTERNAL_ERROR`。
