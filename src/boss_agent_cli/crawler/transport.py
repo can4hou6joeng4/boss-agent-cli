@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import random
 import socket
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, ContextManager, Protocol
-from urllib.parse import quote, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 from boss_agent_cli.api.zhipin_errors import normalize_risk_code, platform_risk_page_response
 from boss_agent_cli.api.request_budget import (
@@ -29,6 +30,32 @@ JOBLIST_URL = "https://www.zhipin.com/wapi/zpgeek/search/joblist.json"
 JOB_CARD_URL = "https://www.zhipin.com/wapi/zpgeek/job/card.json"
 JOBLIST_PATH = "/wapi/zpgeek/search/joblist.json"
 JOB_CARD_PATH = "/wapi/zpgeek/job/card.json"
+
+
+def packet_page_no(packet: Any) -> int | None:
+	"""从监听到的 joblist 请求 URL 读 `page` 参数；读不出页码返回 None。
+
+	DrissionPage 的 `DataPacket.url` 即请求 URL（POST 也一样带原查询串），
+	`Listener.start()` 会先清空队列。断点恢复先导航到第 1 页再滚动翻页，
+	队列里会依次出现 1..target 页的响应；只有按 URL 页码匹配才能拿到
+	本次请求的目标页（Issue #1114）。
+	"""
+	url = getattr(packet, "url", None)
+	if not isinstance(url, str) or not url:
+		url = getattr(getattr(packet, "request", None), "url", None)
+	if not isinstance(url, str) or not url:
+		return None
+	try:
+		values = parse_qs(urlsplit(url).query).get("page")
+	except ValueError:
+		return None
+	if not values:
+		return None
+	try:
+		page_no = int(values[0])
+	except (TypeError, ValueError):
+		return None
+	return page_no if page_no >= 1 else None
 
 _CRAWL_FETCH_SCRIPT = """
 async function (path, params, timeoutMs) {
@@ -208,6 +235,28 @@ class DrissionCrawlerSession:
 				pass
 		listen.start(JOBLIST_TARGET, is_regex=True, method=("GET", "POST"))
 
+	def _wait_for_joblist_packet(self, target_page: int) -> Any | None:
+		"""取与目标页匹配的 joblist 响应包，跳过导航/滚动带出的早期页（Issue #1114）。
+
+		`Listener.wait()` 返回队列头（最旧的包）。断点恢复从第 N 页开始时，
+		队列里依次是导航产生的第 1 页、滚动产生的 2..N 页响应；直接取队头
+		会把第 1 页的数据记成第 N 页并且断点照常前进。页码读不出的包只在
+		请求第 1 页时接受，其余情况继续等目标页或超时后走页面内兜底。
+		"""
+		if self._page is None:
+			return None
+		deadline = time.monotonic() + self._timeout
+		while True:
+			remaining = deadline - time.monotonic()
+			if remaining <= 0:
+				return None
+			packet = self._page.listen.wait(timeout=remaining, raise_err=False)
+			if not packet:
+				return None
+			page_no = packet_page_no(packet)
+			if page_no == target_page or (page_no is None and target_page == 1):
+				return packet
+
 	@staticmethod
 	def _normalize_response_body(body: Any) -> Any:
 		if isinstance(body, (dict, list)):
@@ -256,7 +305,7 @@ class DrissionCrawlerSession:
 					raise
 				self._page_no = position
 				self._raise_if_security_page()
-				packet = self._page.listen.wait(timeout=self._timeout, raise_err=False)
+				packet = self._wait_for_joblist_packet(target_page)
 				if packet is not None:
 					response = getattr(packet, "response", None)
 					body = self._normalize_response_body(getattr(response, "body", None))
