@@ -551,6 +551,25 @@ class CacheStore:
 		)
 		self._conn.commit()
 
+	def restore_crawl_stop_request(self, run_id: str, *, updated_at: float) -> None:
+		"""预检失败时放回先前清除的 stop 标记，并还原清除前的时间戳。
+
+		`clear_crawl_stop_request` 会更新 `updated_at`；失败路径要还原到清除前
+		的记录，所以由调用方传入清除前的时间戳。清除之后若又有新的 stop 到达，
+		标记保持 1、时间取两者较大的值，不能被旧快照覆盖（Issue #1042 / #1115）。
+		"""
+		row = self._conn.execute(
+			"SELECT stop_requested, updated_at FROM crawl_runs WHERE run_id = ?", (run_id,)
+		).fetchone()
+		if row is None:
+			return
+		restored_at = max(float(updated_at), float(row[1] or 0.0)) if row[0] else float(updated_at)
+		self._conn.execute(
+			"UPDATE crawl_runs SET stop_requested = 1, updated_at = ? WHERE run_id = ?",
+			(restored_at, run_id),
+		)
+		self._conn.commit()
+
 	def update_crawl_run_budget(
 		self,
 		run_id: str,

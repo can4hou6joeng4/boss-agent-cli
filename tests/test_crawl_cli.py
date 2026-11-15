@@ -21,7 +21,12 @@ import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.commands.crawl import _city_code, _launch_background_resume, _save_crawl_config
+from boss_agent_cli.commands.crawl import (
+	_city_code,
+	_launch_background_resume,
+	_prepare_background_resume,
+	_save_crawl_config,
+)
 from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
 from boss_agent_cli.main import cli
 from boss_agent_cli.services.install_extras import extras_requirement
@@ -807,6 +812,46 @@ def test_resume_background_keeps_a_pending_queue_and_its_stop_request(tmp_path, 
 	assert result.exit_code == 0, result.output
 	assert _envelope(result)["data"]["status"] == "queued"
 	assert launched == []
+
+
+def test_prepare_background_resume_keeps_a_stop_that_arrives_during_preflight(tmp_path):
+	"""预检窗口内到达的 stop 不能被当成启动前残留清掉（Issue #1115）。
+
+	父进程持有执行锁、先清旧 stop 再预检；这个窗口里的新 stop 由 worker 的
+	`--from-queue` 路径保留，最终在下一个安全点停止。
+	"""
+	_seed_run(tmp_path, "run-1", status="stopped", jobs=0)
+	db_path = tmp_path / "cache" / "boss_agent.db"
+	with CacheStore(db_path) as cache:
+		assert cache.request_crawl_stop("run-1")
+
+		def preflight() -> None:
+			# 另一个进程在预检期间请求停止。
+			with CacheStore(db_path) as other:
+				assert other.request_crawl_stop("run-1")
+
+		status, should_launch = _prepare_background_resume(
+			tmp_path, "run-1", pages=None, with_detail=False, clear_stop=True, preflight=preflight
+		)
+		assert (status, should_launch) == ("queued", True)
+		assert cache.get_crawl_run("run-1")["stop_requested"] is True, "预检期间到达的停止请求必须保留"
+
+
+def test_prepare_background_resume_restores_the_old_stop_when_preflight_fails(tmp_path):
+	"""失败的调用不改动任务：先清后预检也必须把旧 stop 放回去（Issue #1042 / #1115）。"""
+	_seed_run(tmp_path, "run-1", status="stopped", jobs=0)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.request_crawl_stop("run-1")
+		before = cache.get_crawl_run("run-1")
+
+		def failing_preflight() -> None:
+			raise RuntimeError("crawl 依赖缺失")
+
+		with pytest.raises(RuntimeError, match="依赖缺失"):
+			_prepare_background_resume(
+				tmp_path, "run-1", pages=None, with_detail=False, clear_stop=True, preflight=failing_preflight
+			)
+		assert cache.get_crawl_run("run-1") == before
 
 
 def _age_run(tmp_path: Path, run_id: str, seconds: float) -> None:
