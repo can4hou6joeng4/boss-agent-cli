@@ -446,13 +446,24 @@ def _prepare_background_resume(
 				return "completed", False
 			if _awaiting_queued_worker(run):
 				return "queued", False
-			# worker 的错误信封写进空设备：依赖缺失与登录态不足要在这里由父进程报出来，
-			# 并且先于解除 stop，失败的调用不改动任务（Issue #1042）。
-			preflight()
-			if clear_stop:
-				# 父进程解除旧 stop；worker 保留 --from-queue，不能清除
-				# 启动期间新收到的停止请求（Issue #1036）。
+			# 旧 stop 必须在预检之前清掉：预检要探测可选依赖、读取登录态，可能
+			# 耗时；这期间到达的新 stop 不能被后面的清理当成启动前残留一起清掉
+			# （Issue #1115）。预检失败时还原旧 stop 与时间戳，保持「失败的调用
+			# 不改动任务」的既有约定（Issue #1042）；失败且无旧 stop 时不写库。
+			previous_stop = bool(run.get("stop_requested"))
+			previous_updated_at = float(run.get("updated_at") or 0.0)
+			if clear_stop and previous_stop:
 				cache.clear_crawl_stop_request(run_id)
+			try:
+				# worker 的错误信封写进空设备：依赖缺失与登录态不足要在这里由父进程报出来。
+				preflight()
+			except BaseException:
+				if clear_stop and previous_stop:
+					cache.restore_crawl_stop_request(run_id, updated_at=previous_updated_at)
+				raise
+			if clear_stop:
+				# 重新给 worker 留足交接窗口（Issue #1045），只刷新时间而不清新 stop。
+				cache.touch_crawl_run(run_id)
 		return "queued", True
 
 
