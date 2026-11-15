@@ -3,6 +3,7 @@ from typing import Any
 
 import click
 
+from boss_agent_cli.api.models import dict_items, field_list
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
@@ -27,8 +28,8 @@ def _collect_pipeline_items(
 		if not platform.is_success(interview_resp):
 			handle_platform_error_output(ctx, command_name, platform, interview_resp, fallback_message="面试列表获取失败")
 			return [], {}
-		interview_data = platform.unwrap_data(interview_resp) or {}
-		interview_items = interview_data.get("interviewList") or []
+		interview_data = platform.unwrap_data(interview_resp)
+		interview_items = dict_items(field_list(interview_data, "interviewList"))
 
 	items = build_pipeline_items(
 		chat_items=chat_items,

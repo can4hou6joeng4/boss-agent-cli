@@ -1,6 +1,7 @@
 import datetime
 from typing import Any
 
+from boss_agent_cli.api.models import dict_items
 from boss_agent_cli.services.chat_utils import RELATION_LABELS, int_code
 
 
@@ -31,7 +32,9 @@ def _chat_stage(item: dict[str, Any], *, now_ts_ms: int, stale_days: int) -> str
 def build_pipeline_items(*, chat_items: list[dict[str, Any]], interview_items: list[dict[str, Any]], now_ts_ms: int, stale_days: int = 3) -> list[dict[str, Any]]:
 	items: list[dict[str, Any]] = []
 
-	for raw in chat_items:
+	# 沟通 / 面试列表里的元素级漂移在这里统一跳过：本函数是 pipeline / digest /
+	# wizard 共用的聚合点，坏元素只丢自己，不拖垮整份日报（Issue #1141 同一口径）。
+	for raw in dict_items(chat_items):
 		unread = int_code(raw.get("unreadMsgCount")) or 0
 		stage = _chat_stage(raw, now_ts_ms=now_ts_ms, stale_days=stale_days)
 		items.append(
@@ -50,7 +53,7 @@ def build_pipeline_items(*, chat_items: list[dict[str, Any]], interview_items: l
 			}
 		)
 
-	for raw in interview_items:
+	for raw in dict_items(interview_items):
 		items.append(
 			{
 				"source": "interview",
