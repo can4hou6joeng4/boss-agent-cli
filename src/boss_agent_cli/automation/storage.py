@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 
-from boss_agent_cli.automation.models import AutomationEvent, PendingAction, ReviewItem
+from boss_agent_cli.automation.models import AutomationEvent, PendingAction, PlatformAction, ReviewItem
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell
 
 
@@ -120,6 +120,12 @@ class AutomationStore:
 			breaker = state.get("autonomy", {}).get("circuit_breaker", {})
 			if not isinstance(breaker, dict):
 				raise AutomationStateError(self.state_path, "autonomy.circuit_breaker 必须是 JSON object")
+			for candidate_key, prior in state.get("conversations", {}).items():
+				if not isinstance(prior, dict):
+					raise AutomationStateError(self.state_path, f"conversations[{candidate_key!r}] 必须是 JSON object")
+			errors = state.get("safety", {}).get("consecutive_errors", 0)
+			if isinstance(errors, bool) or not isinstance(errors, int):
+				raise AutomationStateError(self.state_path, "safety.consecutive_errors 必须是整数")
 		stop = self.read_stop()
 		if "open" in stop:
 			state.setdefault("autonomy", {})["circuit_breaker"] = stop
@@ -158,12 +164,20 @@ class AutomationStore:
 	def append_pending(self, action: PendingAction) -> None:
 		self._append_jsonl("pending-actions.jsonl", asdict(action))
 
+	@property
+	def reviews_path(self) -> Path:
+		return self.root / "human-review-queue.jsonl"
+
+	@property
+	def pending_path(self) -> Path:
+		return self.root / "pending-actions.jsonl"
+
 	def read_reviews(self) -> list[ReviewItem]:
-		path = self.root / "human-review-queue.jsonl"
+		path = self.reviews_path
 		return [_review_from_row(row, path) for row in self.read_jsonl(path.name)]
 
 	def read_pending(self) -> list[PendingAction]:
-		path = self.root / "pending-actions.jsonl"
+		path = self.pending_path
 		return [_pending_from_row(row, path) for row in self.read_jsonl(path.name)]
 
 	def write_reviews(self, items: list[ReviewItem]) -> None:
@@ -178,6 +192,8 @@ class AutomationStore:
 		pending: PendingAction | None = None
 		for item in reviews:
 			if item.id == review_id and item.status == "review":
+				# 未知动作进不了待执行队列：在改写任何文件之前报出。
+				queued_action(item, self.reviews_path)
 				approved = ReviewItem(
 					id=item.id,
 					ts=item.ts,
@@ -222,6 +238,8 @@ class AutomationStore:
 		rejected: ReviewItem | None = None
 		for item in reviews:
 			if item.id == review_id and item.status == "review":
+				# 拒绝会记录一条带动作的跳过事件：先确认动作可解析，再改写队列。
+				queued_action(item, self.reviews_path)
 				rejected = ReviewItem(
 					id=item.id,
 					ts=item.ts,
@@ -355,11 +373,19 @@ def _row_confidence(row: dict[str, Any], path: Path) -> float:
 	value = row.get("confidence", 0.0)
 	try:
 		confidence = float(value)
-	except (TypeError, ValueError):
+	except (TypeError, ValueError, OverflowError):
 		confidence = math.nan
 	if isinstance(value, bool) or not math.isfinite(confidence):
 		raise AutomationStateError(path, f"记录 {str(row.get('id', ''))!r} 的 confidence 不是有限数字")
 	return confidence
+
+
+def queued_action(item: ReviewItem | PendingAction, path: Path) -> PlatformAction:
+	"""把队列记录的 action 解析成平台动作；未知取值按状态损坏上报，不猜测要执行什么。"""
+	try:
+		return PlatformAction(item.action)
+	except ValueError:
+		raise AutomationStateError(path, f"记录 {item.id!r} 的 action {item.action!r} 不是已知动作") from None
 
 
 def _review_from_row(row: dict[str, Any], path: Path) -> ReviewItem:

@@ -787,6 +787,9 @@ def test_agent_run_reports_corrupt_state(tmp_path: Path) -> None:
 		{"conversations": [], "autonomy": {}, "safety": {}},
 		{"conversations": {}, "autonomy": {}, "safety": "off"},
 		{"conversations": {}, "autonomy": {"circuit_breaker": []}, "safety": {}},
+		{"conversations": {"synthetic-candidate": "done"}, "autonomy": {}, "safety": {}},
+		{"conversations": {}, "autonomy": {}, "safety": {"consecutive_errors": "x"}},
+		{"conversations": {}, "autonomy": {}, "safety": {"consecutive_errors": True}},
 	],
 )
 @pytest.mark.parametrize(
@@ -807,11 +810,11 @@ def test_agent_reports_nested_state_drift(tmp_path: Path, state: dict, argv: lis
 	assert result.exit_code == 1
 	payload = json.loads(result.output)
 	assert payload["error"]["code"] == "AUTOMATION_STATE_INVALID"
-	assert "必须是 JSON object" in payload["error"]["message"]
+	assert "必须是" in payload["error"]["message"]
 	assert "state.json" in payload["error"]["recovery_action"]
 
 
-@pytest.mark.parametrize("confidence", ["high", None, [0.9], True, float("nan")])
+@pytest.mark.parametrize("confidence", ["high", None, [0.9], True, float("nan"), 10**400])
 @pytest.mark.parametrize(
 	("filename", "argv"),
 	[
@@ -830,7 +833,7 @@ def test_agent_queue_confidence_drift_reports_state_invalid(
 	queue_dir.mkdir()
 	row = {
 		"id": "queue-1", "platform": "zhipin", "candidate_key": "synthetic-candidate",
-		"action": "reply", "status": "review" if filename.startswith("human") else "pending",
+		"action": "send_follow_up", "status": "review" if filename.startswith("human") else "pending",
 		"confidence": confidence, "message": "offline fixture",
 	}
 	body = json.dumps(row, ensure_ascii=False) + "\n"
@@ -847,6 +850,38 @@ def test_agent_queue_confidence_drift_reports_state_invalid(
 	assert filename in payload["error"]["recovery_action"]
 	assert (queue_dir / filename).read_text(encoding="utf-8") == body
 	assert not (queue_dir / "action-log.jsonl").exists()
+
+
+@pytest.mark.parametrize(
+	("filename", "argv"),
+	[
+		("human-review-queue.jsonl", ["agent", "review", "approve", "queue-1"]),
+		("human-review-queue.jsonl", ["agent", "review", "reject", "queue-1"]),
+		("pending-actions.jsonl", ["--role", "recruiter", "agent", "run", "--dry-run", "--limit", "1"]),
+	],
+)
+def test_agent_queue_unknown_action_reports_state_invalid(tmp_path: Path, filename: str, argv: list[str]) -> None:
+	"""队列里的未知动作不执行、不改写队列，也不报成可重试的网络错误（Issue #1130）。"""
+	queue_dir = tmp_path / "automation"
+	queue_dir.mkdir()
+	row = {
+		"id": "queue-1", "platform": "zhipin", "candidate_key": "synthetic-candidate",
+		"action": "nonsense", "status": "review" if filename.startswith("human") else "pending",
+		"confidence": 0.9, "message": "offline fixture",
+	}
+	body = json.dumps(row, ensure_ascii=False) + "\n"
+	(queue_dir / filename).write_text(body, encoding="utf-8")
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", *argv])
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "AUTOMATION_STATE_INVALID"
+	assert "nonsense" in payload["error"]["message"]
+	assert filename in payload["error"]["recovery_action"]
+	assert (queue_dir / filename).read_text(encoding="utf-8") == body
+	assert not (queue_dir / "action-log.jsonl").exists()
+	assert not (queue_dir / "pending-actions.jsonl").exists() or filename == "pending-actions.jsonl"
 
 
 def test_agent_queue_accepts_numeric_confidence(tmp_path: Path) -> None:
