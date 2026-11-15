@@ -54,7 +54,9 @@ def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id
 			if not platform.is_success(result):
 				handle_platform_error_output(ctx, "recruiter-resume", platform, result, fallback_message="联系方式交换请求失败")
 				return
-			data = platform.unwrap_data(result) or {}
+			data = platform.unwrap_data(result)
+			if not isinstance(data, dict):
+				data = {}
 			data["message"] = "联系方式交换请求已发送"
 		elif geek_id and security_id and job_id:
 			result = platform.view_geek(geek_id, job_id, security_id=security_id)
