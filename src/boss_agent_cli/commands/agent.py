@@ -367,10 +367,15 @@ def review_group() -> None:
 def review_list_cmd(ctx: click.Context) -> None:
 	"""列出旧版本遗留的待人工复核动作。"""
 	store = AutomationStore(ctx.obj["data_dir"])
+	try:
+		reviews = store.read_reviews()
+	except AutomationStateError as exc:
+		_emit_state_error(ctx, "agent.review.list", exc)
+		return
 	handle_output(
 		ctx,
 		"agent.review.list",
-		{"items": [asdict(item) for item in store.read_reviews()]},
+		{"items": [asdict(item) for item in reviews]},
 		render=lambda d: render_list_result(
 			d.get("items", []),
 			"reviews",
@@ -387,7 +392,11 @@ def review_list_cmd(ctx: click.Context) -> None:
 def review_approve_cmd(ctx: click.Context, review_id: str) -> None:
 	"""处理旧版本复核项并写入兼容 pending 队列。"""
 	store = AutomationStore(ctx.obj["data_dir"])
-	pending = store.approve_review(review_id, now_iso())
+	try:
+		pending = store.approve_review(review_id, now_iso())
+	except AutomationStateError as exc:
+		_emit_state_error(ctx, "agent.review.approve", exc)
+		return
 	if pending is None:
 		_emit_review_missing(ctx, "agent.review.approve", review_id)
 		return
@@ -407,7 +416,11 @@ def review_approve_cmd(ctx: click.Context, review_id: str) -> None:
 def review_reject_cmd(ctx: click.Context, review_id: str, reason: str) -> None:
 	"""拒绝一条旧版本人工复核动作，并记录跳过事件。"""
 	store = AutomationStore(ctx.obj["data_dir"])
-	rejected = store.reject_review(review_id, reason, now_iso())
+	try:
+		rejected = store.reject_review(review_id, reason, now_iso())
+	except AutomationStateError as exc:
+		_emit_state_error(ctx, "agent.review.reject", exc)
+		return
 	if rejected is None:
 		_emit_review_missing(ctx, "agent.review.reject", review_id)
 		return
@@ -439,10 +452,15 @@ def pending_group() -> None:
 def pending_list_cmd(ctx: click.Context) -> None:
 	"""列出旧版本遗留的待执行动作队列。"""
 	store = AutomationStore(ctx.obj["data_dir"])
+	try:
+		pending = store.read_pending()
+	except AutomationStateError as exc:
+		_emit_state_error(ctx, "agent.pending.list", exc)
+		return
 	handle_output(
 		ctx,
 		"agent.pending.list",
-		{"items": [asdict(item) for item in store.read_pending()]},
+		{"items": [asdict(item) for item in pending]},
 		render=lambda d: render_list_result(
 			d.get("items", []),
 			"pending",
@@ -538,6 +556,12 @@ def _emit_state_error(ctx: click.Context, command: str, exc: AutomationStateErro
 		command,
 		code="AUTOMATION_STATE_INVALID",
 		message=f"{exc.path} 无法解析：{exc.detail}",
+		# 登记表的指引只针对 state.json；队列文件损坏时指向实际出问题的文件。
+		recovery_action=(
+			None
+			if exc.path.name == "state.json"
+			else f"修正或移除 {exc.path} 中的问题记录后重试；建议先备份该文件"
+		),
 	)
 	ctx.exit(1)
 

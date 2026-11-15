@@ -7,6 +7,8 @@
 ### Fixed
 - `boss wizard --stop` 不再被损坏的内部采集结果挡住（Issue #1128）：`WorkflowStore.request_stop` 此前先读取叠加了实时采集结果的 run，绑定的 crawl 任务里只要有一条 `crawl_jobs.payload` 解码失败，就在写入停止标记之前以 `CACHE_RECORD_INVALID` 退出，workflow 仍是 `running`、内部 crawl 也收不到停止请求。现在先落盘停止标记，再只读取 workflow 自己的步骤记录把停止传给内部 crawl；展示用的实时结果读不出来时退回断点本身，仍返回已停止的状态。workflow 自己的断点列损坏时停止标记同样会落盘，长动作轮询停止信号也不再读取实时采集结果。`--status` 对损坏记录的报告不变。
 - `boss wizard --resume` 不再把只落盘一半的写失败报成执行中（Issue #1129）：写步骤以 `ACTION_UNCONFIRMED` 失败时，步骤与 run 的失败状态分两次提交；执行器在两次提交之间消失后，断点停在 run=`running`、step=`failed`，恢复原样返回它，命令 exit 0、`ok=true`、`error=null`。现在恢复会把 run 归并为 `failed` 并带上该步骤的错误与核对指引，命令 exit 1；这次写操作仍然不会重放。
+- 招聘自动化的队列与状态文件类型漂移统一返回 `AUTOMATION_STATE_INVALID`（Issue #1130）：`pending-actions.jsonl` / `human-review-queue.jsonl` 里某条记录的 `confidence` 不是数字时，`boss agent pending list`、`agent review list / approve / reject` 此前 stdout 为空并以 `ValueError` traceback 退出；`state.json` 的 `conversations` / `autonomy` / `safety` 或 `autonomy.circuit_breaker` 不是 object 时，`agent stats` 与 `agent run` 被报成 `INTERNAL_ERROR` 并让用户升级或提 issue。现在两类情况都给出指明文件与字段的信封，队列损坏时 `recovery_action` 指向实际出问题的文件；校验失败不改写队列，也不执行其中的动作。数字、数字字符串和缺省的 `confidence` 照常读取。
+
 
 ## [3.4.21] - 2026-11-15
 

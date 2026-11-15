@@ -780,6 +780,89 @@ def test_agent_run_reports_corrupt_state(tmp_path: Path) -> None:
 	assert "顶层必须是 JSON object" in payload["error"]["message"]
 
 
+@pytest.mark.parametrize(
+	"state",
+	[
+		{"conversations": {}, "autonomy": [], "safety": {}},
+		{"conversations": [], "autonomy": {}, "safety": {}},
+		{"conversations": {}, "autonomy": {}, "safety": "off"},
+		{"conversations": {}, "autonomy": {"circuit_breaker": []}, "safety": {}},
+	],
+)
+@pytest.mark.parametrize(
+	"argv",
+	[
+		["agent", "stats"],
+		["--role", "recruiter", "agent", "run", "--dry-run", "--limit", "1"],
+	],
+)
+def test_agent_reports_nested_state_drift(tmp_path: Path, state: dict, argv: list[str]) -> None:
+	"""嵌套容器类型漂移是状态文件损坏，不是内部错误（Issue #1130）。"""
+	state_dir = tmp_path / "automation"
+	state_dir.mkdir()
+	(state_dir / "state.json").write_text(json.dumps(state), encoding="utf-8")
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", *argv])
+
+	assert result.exit_code == 1
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "AUTOMATION_STATE_INVALID"
+	assert "必须是 JSON object" in payload["error"]["message"]
+	assert "state.json" in payload["error"]["recovery_action"]
+
+
+@pytest.mark.parametrize("confidence", ["high", None, [0.9], True, float("nan")])
+@pytest.mark.parametrize(
+	("filename", "argv"),
+	[
+		("pending-actions.jsonl", ["agent", "pending", "list"]),
+		("human-review-queue.jsonl", ["agent", "review", "list"]),
+		("human-review-queue.jsonl", ["agent", "review", "approve", "queue-1"]),
+		("human-review-queue.jsonl", ["agent", "review", "reject", "queue-1"]),
+		("pending-actions.jsonl", ["--role", "recruiter", "agent", "run", "--dry-run", "--limit", "1"]),
+	],
+)
+def test_agent_queue_confidence_drift_reports_state_invalid(
+	tmp_path: Path, filename: str, argv: list[str], confidence: object,
+) -> None:
+	"""队列记录的 confidence 不是数字时给信封并指向该文件，原文件不被改写（Issue #1130）。"""
+	queue_dir = tmp_path / "automation"
+	queue_dir.mkdir()
+	row = {
+		"id": "queue-1", "platform": "zhipin", "candidate_key": "synthetic-candidate",
+		"action": "reply", "status": "review" if filename.startswith("human") else "pending",
+		"confidence": confidence, "message": "offline fixture",
+	}
+	body = json.dumps(row, ensure_ascii=False) + "\n"
+	(queue_dir / filename).write_text(body, encoding="utf-8")
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", *argv])
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert set(payload) == {"ok", "schema_version", "command", "data", "pagination", "error", "hints"}
+	assert payload["error"]["code"] == "AUTOMATION_STATE_INVALID"
+	assert filename in payload["error"]["message"]
+	assert "confidence" in payload["error"]["message"]
+	assert filename in payload["error"]["recovery_action"]
+	assert (queue_dir / filename).read_text(encoding="utf-8") == body
+	assert not (queue_dir / "action-log.jsonl").exists()
+
+
+def test_agent_queue_accepts_numeric_confidence(tmp_path: Path) -> None:
+	queue_dir = tmp_path / "automation"
+	queue_dir.mkdir()
+	rows = [{"id": "p-1", "confidence": 1}, {"id": "p-2", "confidence": "0.5"}, {"id": "p-3"}]
+	(queue_dir / "pending-actions.jsonl").write_text(
+		"".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8",
+	)
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "agent", "pending", "list"])
+
+	assert result.exit_code == 0, result.output
+	assert [item["confidence"] for item in json.loads(result.output)["data"]["items"]] == [1.0, 0.5, 0.0]
+
+
 def test_corrupt_stop_latch_fails_closed(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
 	(store.root / "stop.json").write_text("not json", encoding="utf-8")
