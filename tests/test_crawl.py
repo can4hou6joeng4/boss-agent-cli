@@ -15,6 +15,7 @@ from openpyxl import load_workbook
 
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.config import DEFAULTS
+from boss_agent_cli.crawler.controls import CrawlExportError
 from boss_agent_cli.crawler.exporter import write_run_outputs
 from boss_agent_cli.crawler.hooks import HOOK_SCRIPT_NAMES, HookInjection, HookRegistrationError, inject_hook_profile
 from boss_agent_cli.crawler.operations import crawl_results, import_crawl_shortlist
@@ -1189,6 +1190,55 @@ def test_exporter_formats_workbook(tmp_path):
 	assert sheet.column_dimensions["P"].width == 54
 	assert sheet["P2"].alignment.wrap_text is not True
 	assert sheet.row_dimensions[2].height == 20
+
+
+def test_exporter_cleans_openpyxl_illegal_characters(tmp_path):
+	"""平台原文夹带控制字符时三份输出都要写成功，XLSX 只去掉非法字符（Issue #1135）。"""
+	paths = write_run_outputs(
+		tmp_path,
+		[{"title": "后端\x0b工程师", "company": "正常公司", "benefits": "双休\x01"}],
+	)
+
+	assert set(paths) == {"json", "csv", "xlsx"}
+	sheet = load_workbook(paths["xlsx"]).active
+	assert sheet["D2"].value == "后端工程师"
+	assert sheet["O2"].value == "双休"
+	# JSON 保留平台原文，不因 XLSX 的限制丢信息。
+	assert json.loads(Path(paths["json"]).read_text(encoding="utf-8"))[0]["title"] == "后端\x0b工程师"
+
+
+def test_exporter_keeps_every_output_when_one_format_fails(tmp_path, monkeypatch):
+	"""任一格式失败时三份文件都不更新，也不留下临时文件（Issue #1135）。"""
+	for name, body in (("jobs.json", "old-json"), ("jobs.csv", "old-csv"), ("jobs.xlsx", "old-xlsx")):
+		(tmp_path / name).write_text(body, encoding="utf-8")
+
+	def fail_xlsx(path, rows):
+		raise RuntimeError("synthetic serializer failure")
+
+	monkeypatch.setattr("boss_agent_cli.crawler.exporter._write_xlsx", fail_xlsx)
+	with pytest.raises(CrawlExportError):
+		write_run_outputs(tmp_path, [{"title": "AI"}])
+
+	assert (tmp_path / "jobs.json").read_text(encoding="utf-8") == "old-json"
+	assert (tmp_path / "jobs.csv").read_text(encoding="utf-8") == "old-csv"
+	assert (tmp_path / "jobs.xlsx").read_text(encoding="utf-8") == "old-xlsx"
+	assert sorted(path.name for path in tmp_path.iterdir()) == ["jobs.csv", "jobs.json", "jobs.xlsx"]
+
+
+def test_normalize_job_coerces_non_string_labels():
+	"""平台标签混入非字符串元素时按文本拼接，不让单条漂移卡住整批导出（Issue #1135）。"""
+	from boss_agent_cli.crawler.service import _normalize_job
+
+	job_key, payload = _normalize_job(
+		{"jobName": "Python", "jobLabels": [101, "Python"], "welfareList": [True, "双休"]},
+		"Python",
+		1,
+		1,
+	)
+
+	assert payload["labels"] == "101、Python"
+	assert payload["benefits"] == "True、双休"
+	assert job_key
 
 
 def test_exporter_neutralizes_formula_prefixed_values(tmp_path):

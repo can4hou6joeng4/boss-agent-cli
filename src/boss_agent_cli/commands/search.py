@@ -61,6 +61,10 @@ def _parse_cached_result(raw: str) -> dict[str, Any] | None:
 		return None
 	if not isinstance(parsed, dict) or not isinstance(parsed.get("data"), list):
 		return None
+	# pagination 只能是对象或 null：形状漂移的缓存按未命中处理，不让非法类型
+	# 原样进入成功信封（Issue #1136）。
+	if parsed.get("pagination") is not None and not isinstance(parsed["pagination"], dict):
+		return None
 	return parsed
 
 

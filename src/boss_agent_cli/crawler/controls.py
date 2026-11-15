@@ -23,3 +23,7 @@ class CrawlTimeoutRequested(CrawlStopRequested):
 
 class CrawlRuntimeUnavailable(RuntimeError):
 	"""The optional crawl dependencies cannot be imported; retrying or resuming cannot change that."""
+
+
+class CrawlExportError(RuntimeError):
+	"""采集结果无法写出到本地：确定性失败，重试或恢复同一断点无法改变结果。"""

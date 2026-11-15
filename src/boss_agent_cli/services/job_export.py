@@ -2,7 +2,11 @@
 
 import csv
 import html as _html
+import io
 import json
+import os
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.api.models import field_list
@@ -35,14 +39,32 @@ def public_html_export_item_from_api(raw: dict[str, Any]) -> dict[str, Any]:
 	}
 
 
+def _write_text_atomic(path: str, body: str, *, encoding: str = "utf-8", newline: str | None = None) -> None:
+	"""先写同目录临时文件再原子替换：序列化或写入失败都不会破坏已有文件。"""
+	target = Path(path)
+	fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent or Path("."))
+	try:
+		with os.fdopen(fd, "w", encoding=encoding, newline=newline) as handle:
+			handle.write(body)
+			handle.flush()
+			os.fsync(handle.fileno())
+		os.replace(temporary, target)
+	finally:
+		Path(temporary).unlink(missing_ok=True)
+
+
+def _join_cells(value: list[Any]) -> str:
+	"""列表单元格按文本拼接：平台字段里混入非字符串元素不该让整次导出失败。"""
+	return ", ".join(str(item) for item in value)
+
+
 def write_export_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 	if fmt == "json":
-		with open(path, "w", encoding="utf-8") as f:
-			json.dump(items, f, ensure_ascii=False, indent=2)
+		body = json.dumps(items, ensure_ascii=False, indent=2)
+		_write_text_atomic(path, body)
 	elif fmt == "csv":
 		if not items:
-			with open(path, "w") as f:
-				f.write("")
+			_write_text_atomic(path, "")
 			return
 		fields = [
 			"title",
@@ -65,18 +87,19 @@ def write_export_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 			"job_id",
 			"security_id",
 		]
-		with open(path, "w", encoding="utf-8", newline="") as f:
-			writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
-			writer.writeheader()
-			for item in items:
-				row = dict(item)
-				if isinstance(row.get("skills"), list):
-					row["skills"] = ", ".join(row["skills"])
-				if isinstance(row.get("welfare"), list):
-					row["welfare"] = ", ".join(row["welfare"])
-				# CSV 公式注入防护；与 chat 导出一致（剥 Tab/CR，Issue #876）。
-				row = {k: sanitize_csv_cell(str(v)) for k, v in row.items()}
-				writer.writerow(row)
+		buffer = io.StringIO()
+		writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
+		writer.writeheader()
+		for item in items:
+			row = dict(item)
+			if isinstance(row.get("skills"), list):
+				row["skills"] = _join_cells(row["skills"])
+			if isinstance(row.get("welfare"), list):
+				row["welfare"] = _join_cells(row["welfare"])
+			# CSV 公式注入防护；与 chat 导出一致（剥 Tab/CR，Issue #876）。
+			row = {k: sanitize_csv_cell(str(v)) for k, v in row.items()}
+			writer.writerow(row)
+		_write_text_atomic(path, buffer.getvalue())
 
 
 # 向后兼容别名：旧测试与调用方按模块内私有名取用。
@@ -151,5 +174,4 @@ def render_html_export(items: list[dict[str, Any]]) -> str:
 
 def write_html_export(items: list[dict[str, Any]], path: str) -> None:
 	"""将搜索结果导出为 HTML 表格文件。"""
-	with open(path, "w", encoding="utf-8") as f:
-		f.write(render_html_export(items))
+	_write_text_atomic(path, render_html_export(items))

@@ -56,6 +56,40 @@ def _invoke_search(*args, tmp_path, has_more=True, has_more_reported="same"):
 	return json.loads(result.stdout)
 
 
+def test_cached_pagination_shape_drift_is_a_cache_miss(tmp_path):
+	"""缓存里 pagination 不是对象时按未命中处理，不让非法类型进入成功信封（Issue #1136）。"""
+	with (
+		patch("boss_agent_cli.commands.search.AuthManager"),
+		patch("boss_agent_cli.commands.search.get_platform_instance"),
+		patch("boss_agent_cli.commands.search.CacheStore") as mock_cache_cls,
+		patch("boss_agent_cli.commands.search.run_search_pipeline") as mock_pipeline,
+	):
+		mock_cache = mock_cache_cls.return_value
+		mock_cache.__enter__ = lambda s: mock_cache
+		mock_cache.__exit__ = lambda s, *a: None
+		mock_cache.get_search.return_value = json.dumps({
+			"data": [{"job_id": "cached", "title": "缓存职位"}],
+			"pagination": "corrupted-not-an-object",
+		})
+		mock_cache.is_greeted.return_value = False
+		mock_pipeline.return_value = SimpleNamespace(
+			items=[{"job_id": "fresh", "title": "新职位", "greeted": False}],
+			has_more=False,
+			has_more_reported=False,
+			total=1,
+			stats=SimpleNamespace(pages_scanned=1, jobs_seen=1, jobs_prefiltered=0, detail_checks=0),
+		)
+		with patch("boss_agent_cli.index_cache.save_index"):
+			result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "search", "Go"])
+
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.stdout)
+	# 未命中缓存：重新请求平台，且信封的 pagination 仍是对象。
+	assert [item["job_id"] for item in payload["data"]] == ["fresh"]
+	assert isinstance(payload["pagination"], dict)
+	mock_pipeline.assert_called_once()
+
+
 def _prefix(tmp_path) -> list[str]:
 	"""提示命令的前缀：保留当前数据目录（Issue #919）。"""
 	return ["boss", "--data-dir", str(tmp_path.resolve())]

@@ -1256,6 +1256,21 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 				# 否则 Agent 会拿同一个非法值反复重试。
 				raise
 			except Exception as e:
+				from boss_agent_cli.crawler.controls import CrawlExportError
+
+				# 采集结果写不出去是确定性本地失败：重试或恢复同一断点只会得到同一
+				# 结果，也不能兜成 NETWORK_ERROR +「重试」让 Agent 反复打平台（#1135）。
+				if isinstance(e, CrawlExportError):
+					export_recoverable, export_recovery = error_contract_for_code("LOCAL_IO_ERROR")
+					handle_error_output(
+						ctx,
+						command_name,
+						code="LOCAL_IO_ERROR",
+						message=str(e),
+						recoverable=export_recoverable,
+						recovery_action=export_recovery,
+					)
+					return
 				# 本地缓存锁冲突必须在 NETWORK_ERROR「重试」之前收口（Issue #1118）：
 				# 等锁释放即可，不是平台网络问题，也不需要重建缓存库。
 				if isinstance(e, CacheBusyError) or is_cache_busy_error(e):
