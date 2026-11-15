@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.24] - 2026-11-15
 
 ### Fixed
 - `boss clean` 在搜索缓存表结构漂移时返回 `CACHE_DATABASE_INVALID` 信封（Issue #1139）：本地 SQLite 的 `search_cache` 表缺列（例如旧版本建库）时，清理逻辑直接执行 `SELECT ... response`，sqlite 抛出的 `no such column` 此前穿透到通用兜底，stdout 为空并以 traceback 退出，`--dry-run` 同样如此。现在这类 `sqlite3.DatabaseError` 归一成指明缓存库路径的信封，恢复指引为重建缓存库。
