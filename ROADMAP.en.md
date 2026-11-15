@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.28 (2026-11-15): when the checkpoint replay marker `error.replay_safe` drifts to a non-boolean type, `wizard --resume` no longer replays a write step whose outcome is unknown; `--resume` / `--status` and the run list reject it with `CACHE_RECORD_INVALID` without rewriting the checkpoint, boolean and absent markers behave as before, and `--stop` is unaffected.
 - ✅ v3.4.27 (2026-11-15): `wizard --stop` supports idempotent retries, completing internal crawl stop propagation when the outer stop was already committed; repeated stops succeed without resuming or replaying business steps, while missing and completed runs remain rejected.
 - ✅ v3.4.26 (2026-11-15): non-object containers in job cards, user info, recommendations and scoring preferences are handled consistently while valid field types are preserved; drifted recruiter resume expectations are treated as empty, and a confirmed contact-exchange success is no longer reported as failure because of response shape drift.
 - ✅ v3.4.25 (2026-11-15): element and container drift in friend, interview and chat message lists is skipped or treated as empty, so `chat`, `pipeline`, `digest`, `chatmsg`, `chat-summary` and the matching wizard steps no longer fail with `INTERNAL_ERROR`; a drifted `zpData` in `friend_detail` refuses chat actions as a missing candidate.
