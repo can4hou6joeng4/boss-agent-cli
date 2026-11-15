@@ -1,4 +1,5 @@
 import re
+import sqlite3
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -8,7 +9,7 @@ import click
 
 from boss_agent_cli import __version__
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
-from boss_agent_cli.cache.store import CacheDatabaseInvalid
+from boss_agent_cli.cache.store import CacheBusyError, CacheDatabaseInvalid, is_cache_busy_error
 from boss_agent_cli.commands.register import register_candidate_commands, register_recruiter_commands
 from boss_agent_cli.config import (
 	CDP_URL_REQUIREMENT,
@@ -715,6 +716,39 @@ class BossCliGroup(click.Group):
 				recoverable=False,
 				recovery_action=recovery_action,
 				hints=hints,
+			)
+			return None
+		except CacheBusyError as exc:
+			# 缓存库被其他连接写了超过 busy timeout：库文件完好，等锁释放后重试即可。
+			# 没有单独兜底的命令（crawl stop 等）原来 stdout 为空并带 traceback
+			# （Issue #1118），resume 则被兜成 NETWORK_ERROR「重试」。
+			if not standalone_mode:
+				raise
+			command = _invoked_command_name(args, self.name or "boss")
+			busy_recoverable, busy_recovery_action = error_contract_for_code("CACHE_BUSY")
+			emit_error(
+				command,
+				code="CACHE_BUSY",
+				message=str(exc),
+				recoverable=busy_recoverable,
+				recovery_action=busy_recovery_action,
+			)
+			return None
+		except sqlite3.OperationalError as exc:
+			# 只在兜底层收口锁冲突；其他 OperationalError 保持原样，避免把代码缺陷
+			# 说成「等锁释放后重试」。
+			if not is_cache_busy_error(exc):
+				raise
+			if not standalone_mode:
+				raise
+			command = _invoked_command_name(args, self.name or "boss")
+			busy_recoverable, busy_recovery_action = error_contract_for_code("CACHE_BUSY")
+			emit_error(
+				command,
+				code="CACHE_BUSY",
+				message=f"本地缓存库正被其他进程写入（{exc}）",
+				recoverable=busy_recoverable,
+				recovery_action=busy_recovery_action,
 			)
 			return None
 		except CacheDatabaseInvalid as exc:

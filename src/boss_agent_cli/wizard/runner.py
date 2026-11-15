@@ -14,6 +14,7 @@ from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserS
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded, request_control
 from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
+from boss_agent_cli.cache.store import CacheBusyError, is_cache_busy_error
 from boss_agent_cli.display import (
 	INTERNAL_ERROR_TYPES,
 	boss_command,
@@ -489,9 +490,19 @@ class WorkflowRunner:
 						"NETWORK_ERROR", str(exc), recoverable=True, recovery_action="重试当前 run_id"
 					)
 			except Exception as exc:
+				# 本地缓存锁冲突不是网络问题（Issue #1118）：等锁释放后重试同一
+				# run_id 即可，不能兜成 NETWORK_ERROR。
+				if isinstance(exc, CacheBusyError) or is_cache_busy_error(exc):
+					busy_recoverable, busy_recovery = error_contract_for_code("CACHE_BUSY")
+					error = WorkflowActionError(
+						"CACHE_BUSY",
+						str(exc) if isinstance(exc, CacheBusyError) else f"本地缓存库正被其他进程写入（{exc}）",
+						recoverable=busy_recoverable,
+						recovery_action=busy_recovery,
+					)
 				# 内核缺失是确定性失败：同一条输入（含 --resume）永远复现，不能兜成
 				# NETWORK_ERROR +「重试当前 run_id」（Issue #1007）。
-				if is_browser_kernel_missing(str(exc)):
+				elif is_browser_kernel_missing(str(exc)):
 					error = _browser_kernel_missing_error(exc, plan, data_dir)
 				else:
 					error = WorkflowActionError(

@@ -382,6 +382,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "缓存库只存本地数据：先备份 cache/boss_agent.db（--data-dir 指定时在对应目录下），再删除该文件后重试，命令会自动重建一个空库",
 	},
+	"CACHE_BUSY": {
+		"message": "本地缓存库正被其他进程写入",
+		"recoverable": True,
+		"recovery_action": "等待占用 cache/boss_agent.db 的其他 boss 命令或程序结束写入后重试；持续出现时检查是否有残留的 boss 后台任务。库文件本身完好，不需要删除",
+	},
 	"RECRUITER_NOT_AUTHORIZED": {
 		"message": "当前账号非招聘者账号（当前版本不主动产生）",
 		"recoverable": True,

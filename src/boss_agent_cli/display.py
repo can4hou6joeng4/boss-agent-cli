@@ -19,6 +19,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
+from boss_agent_cli.cache.store import CacheBusyError, is_cache_busy_error
 from boss_agent_cli.output import emit_success, is_local_io_error, redact_sensitive_text
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.services.browser_runtime import (
@@ -1041,6 +1042,19 @@ def _with_httpx_only_hint(ctx: Any, hints: dict[str, list[str]] | None) -> dict[
 INTERNAL_ERROR_TYPES: tuple[type[Exception], ...] = (TypeError, AttributeError, KeyError, IndexError, OverflowError)
 
 
+def _handle_cache_busy_error(ctx: Any, command_name: str, message: str) -> None:
+	"""锁冲突的统一出口：等待写锁释放后重试，而不是删除缓存或重试平台请求。"""
+	recoverable, recovery_action = error_contract_for_code("CACHE_BUSY")
+	handle_error_output(
+		ctx,
+		command_name,
+		code="CACHE_BUSY",
+		message=message,
+		recoverable=recoverable,
+		recovery_action=recovery_action,
+	)
+
+
 def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
 	"""装饰器：统一处理 AuthRequired / TokenRefreshFailed / Exception 三层捕获。
 
@@ -1242,6 +1256,12 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 				# 否则 Agent 会拿同一个非法值反复重试。
 				raise
 			except Exception as e:
+				# 本地缓存锁冲突必须在 NETWORK_ERROR「重试」之前收口（Issue #1118）：
+				# 等锁释放即可，不是平台网络问题，也不需要重建缓存库。
+				if isinstance(e, CacheBusyError) or is_cache_busy_error(e):
+					message = str(e) if isinstance(e, CacheBusyError) else f"本地缓存库正被其他进程写入（{e}）"
+					_handle_cache_busy_error(ctx, command_name, message)
+					return
 				# 内核缺失是确定性失败：符号名 / 路径未变时重试永远同一结果，不能
 				# 兜成 NETWORK_ERROR +「重试」让 Agent 反复打平台。
 				if is_browser_kernel_missing(str(e)):
