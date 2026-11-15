@@ -34,6 +34,10 @@ def history_cmd(ctx: click.Context, page: int) -> None:
 			)
 			return
 		platform_data = platform.unwrap_data(raw) or {}
+		# 非对象载荷（字符串 / 数组 / 数字）与 null 同口径按空页处理：后续
+		# `hasMore` 读取和分页证据都按「平台没给」输出，而不是 INTERNAL_ERROR。
+		if not isinstance(platform_data, dict):
+			platform_data = {}
 		job_list = dict_items(field_list(platform_data, "jobList"))
 
 		items = [JobItem.from_api(raw_item).to_dict() for raw_item in job_list]
