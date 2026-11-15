@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, NoReturn, cast
 
+from boss_agent_cli.api.models import dict_items, field_list
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.auth.identity import account_scope
 from boss_agent_cli.auth.manager import AuthManager
@@ -845,7 +846,7 @@ def _candidate_pipeline_data(
 		if friend_error is not None:
 			_unwrap(platform, friend_error, "沟通列表获取失败", context=context)
 		interview_data = _unwrap(platform, platform.interview_data(), "面试列表获取失败", context=context)
-	interview_items = interview_data.get("interviewList") or []
+	interview_items = dict_items(field_list(interview_data, "interviewList"))
 	items = build_pipeline_items(
 		chat_items=chat_items,
 		interview_items=interview_items,

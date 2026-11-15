@@ -1,5 +1,7 @@
 from typing import Any
 
+from boss_agent_cli.api.models import dict_items
+
 
 class FriendLookupLimitExceeded(RuntimeError):
 	"""Raised when paginated friend lookup cannot prove completion safely."""
@@ -31,22 +33,26 @@ def find_friend(
 		if not platform.is_success(resp):
 			return None, resp
 
-		platform_data = platform.unwrap_data(resp) or {}
-		items = platform_data.get("result") or platform_data.get("friendList") or []
-		dict_items = [item for item in items if isinstance(item, dict)]
+		platform_data = platform.unwrap_data(resp)
+		if not isinstance(platform_data, dict):
+			# 页面数据形状漂移（如返回字符串）按空页处理，不把 AttributeError
+			# 兜成 INTERNAL_ERROR（Issue #1141 同一口径）。
+			platform_data = {}
+		raw_items = platform_data.get("result") or platform_data.get("friendList")
+		page_items = dict_items(raw_items)
 		# 同一页先完整检查稳定 uid，再回退到轮换的 securityId。这样即使某个
 		# securityId 恰好与另一条记录的 uid 文本相同，也不会命中错误联系人。
-		for item in dict_items:
+		for item in page_items:
 			if str(item.get("uid") or "").strip() == needle:
 				return item, None
-		for item in dict_items:
+		for item in page_items:
 			if str(item.get("securityId") or "") == needle:
 				return item, None
 
 		# securityId 会在请求间轮换，不能用于重复页判定；有 uid 时必须优先用 uid。
 		# 签名全为空时无法判断是否重复页，继续翻页，避免把缺字段的新页面
 		# 当成重复页提前结束（与 services/friend_list_pages 的聚合守卫一致）。
-		identities = [str(item.get("uid") or item.get("securityId") or "") for item in dict_items]
+		identities = [str(item.get("uid") or item.get("securityId") or "") for item in page_items]
 		if any(identities):
 			signature = tuple(identities)
 			if signature in seen_signatures:
@@ -55,7 +61,7 @@ def find_friend(
 			seen_signatures.add(signature)
 
 		has_more = platform_data.get("hasMore")
-		if not items or has_more is False:
+		if not page_items or has_more is False:
 			terminated = True
 			break
 		page += 1

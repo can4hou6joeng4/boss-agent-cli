@@ -127,7 +127,9 @@ def _normalize_message(
 		from_name = "我"
 
 	msg_time = ""
-	if ts := msg.get("time"):
+	ts = msg.get("time")
+	# 平台偶尔把时间戳写成字符串 / 对象：只接受真正的数字，坏值按「无时间」输出。
+	if isinstance(ts, (int, float)) and not isinstance(ts, bool) and ts:
 		msg_time = datetime.datetime.fromtimestamp(ts / 1000).strftime("%m-%d %H:%M")
 
 	body = _message_body(msg)

@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from boss_agent_cli.api.models import dict_items
+
 # relationType 映射：API 返回值 → 可读标签（key 类型放宽为 object，兼容 API 返回 None/未知值走 default）
 RELATION_LABELS: dict[object, str] = {1: "对方主动", 2: "我主动", 3: "投递"}
 FROM_FILTER = {"boss": 1, "me": 2}
@@ -26,13 +28,14 @@ def message_list(platform_data: Any) -> list[Any]:
 
 	沿用原有「空数组视为缺失」的语义：``messages`` 为空时回退到
 	``historyMsgList``。字段缺失、响应非 mapping 或字段类型不是数组时返回
-	空列表，避免把畸形载荷当成可迭代的消息集合。
+	空列表，避免把畸形载荷当成可迭代的消息集合。数组里的 ``null`` / 数字 /
+	字符串元素同样跳过（Issue #1145；与 #1141 同一口径）。
 	"""
 	if not isinstance(platform_data, dict):
 		return []
 	for key in ("messages", "historyMsgList"):
-		value = platform_data.get(key)
-		if isinstance(value, list) and value:
+		value = dict_items(platform_data.get(key))
+		if value:
 			return value
 	return []
 

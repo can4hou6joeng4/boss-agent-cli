@@ -1,5 +1,7 @@
 from typing import Any
 
+from boss_agent_cli.api.models import field_dict, field_text
+
 
 def summarize_messages(messages: list[dict[str, Any]], *, friend_uid: str) -> dict[str, Any]:
 	stage = "new"
@@ -17,8 +19,12 @@ def summarize_messages(messages: list[dict[str, Any]], *, friend_uid: str) -> di
 		}
 
 	latest = messages[-1]
-	latest_from = str(latest.get("from", {}).get("uid", ""))
-	texts = " ".join((item.get("text") or item.get("body", {}).get("text", "")) for item in messages)
+	# from / body 形状漂移按空对象处理，text 统一转文本：摘要聚合不能因为
+	# 单个字段类型异常让整条命令报 INTERNAL_ERROR（Issue #1145）。
+	latest_from = field_text(field_dict(latest, "from"), "uid")
+	texts = " ".join(
+		field_text(item, "text") or field_text(field_dict(item, "body"), "text") for item in messages
+	)
 
 	if "面试" in texts or "约个面" in texts:
 		stage = "interview"

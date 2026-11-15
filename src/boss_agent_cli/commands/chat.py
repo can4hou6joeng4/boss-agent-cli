@@ -4,6 +4,7 @@ from typing import Any
 
 import click
 
+from boss_agent_cli.api.models import dict_items
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
@@ -64,8 +65,11 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 		if not platform.is_success(resp):
 			handle_platform_error_output(ctx, "chat", platform, resp, fallback_message="沟通列表获取失败")
 			return
-		platform_data = platform.unwrap_data(resp) or {}
-		items = platform_data.get("result") or platform_data.get("friendList") or []
+		platform_data = platform.unwrap_data(resp)
+		if not isinstance(platform_data, dict):
+			platform_data = {}
+		# 与 services/friend_list_pages 同一口径：元素级漂移只跳过坏元素（Issue #1141）。
+		items = dict_items(platform_data.get("result") or platform_data.get("friendList"))
 
 		# 时间筛选阈值
 		cutoff_ts = None

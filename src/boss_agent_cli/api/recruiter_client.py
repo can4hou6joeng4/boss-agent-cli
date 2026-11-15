@@ -17,6 +17,7 @@ from boss_agent_cli.api._base_client import _BaseHttpClient
 from boss_agent_cli.api.request_budget import cancellable_sleep, check_request_control, is_request_stop, retry_after_seconds
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.httpx_helpers import make_client_registry
+from boss_agent_cli.api.models import field_dict, field_list
 from boss_agent_cli.api.recruiter_resume import (
 	ResumeValidationError,
 	attachment_params,
@@ -574,10 +575,15 @@ class BossRecruiterClient(_BaseHttpClient):
 		"""
 		self._check_cdp_risk_lock()
 		fd_resp = self.friend_detail([friend_id])
+		if not isinstance(fd_resp, dict):
+			raise LookupError("friend_detail 读取失败，未执行聊天动作")
 		self._raise_platform_risk_response(fd_resp)
 		if fd_resp.get("code") != 0:
 			raise LookupError("friend_detail 读取失败，未执行聊天动作")
-		friends = (fd_resp.get("zpData") or {}).get("friendList") or []
+		# zpData / friendList 形状漂移（字符串、对象、混入非对象元素）按空处理：
+		# 这里只做「未找到唯一候选人就拒绝发消息」的判断，不能把坏格式变成
+		# AttributeError 后继续执行聊天动作（Issue #1141 同一口径）。
+		friends = field_list(field_dict(fd_resp, "zpData"), "friendList")
 		matches = [
 			item
 			for item in friends

@@ -1,5 +1,7 @@
 from typing import Any
 
+from boss_agent_cli.api.models import dict_items
+
 
 MAX_FRIEND_LIST_PAGES = 50
 
@@ -51,19 +53,19 @@ def collect_friend_list_page(
 		if not platform.is_success(resp):
 			return [], resp, pages_scanned, False
 
-		platform_data = platform.unwrap_data(resp) or {}
-		page_items = platform_data.get("result") or platform_data.get("friendList") or []
+		platform_data = platform.unwrap_data(resp)
+		if not isinstance(platform_data, dict):
+			platform_data = {}
+		# 列表元素混入 null / 数字 / 字符串时只跳过坏元素（Issue #1141 同一口径），
+		# 否则下游 build_pipeline_items / _friend_record 读键会整条命令崩溃。
+		page_items = dict_items(platform_data.get("result") or platform_data.get("friendList"))
 		if not page_items:
 			break
 
 		# securityId 在每次请求间都会轮换（见 services/contact_lookup.py），
 		# 只能作为 uid 缺失时的回退标识；签名全为空时无法判断是否重复，
 		# 继续聚合，避免把缺字段的新页面当成重复页丢掉。
-		identities = [
-			str(item.get("uid") or item.get("securityId") or "")
-			for item in page_items
-			if isinstance(item, dict)
-		]
+		identities = [str(item.get("uid") or item.get("securityId") or "") for item in page_items]
 		if any(identities):
 			signature = tuple(identities)
 			if signature in seen_signatures:

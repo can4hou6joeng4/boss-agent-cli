@@ -2,6 +2,13 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 沟通 / 面试列表的元素与容器漂移不再让 `chat` / `pipeline` / `digest` 报 `INTERNAL_ERROR`（Issue #1143）：`result` / `friendList` / `interviewList` 混入 `null`、数字、字符串时跳过坏元素，容器漂移成字符串或对象时按空处理，其余条目照常返回；wizard 的 pipeline / digest 步骤与联系人查找共用同一口径。
+- `friend_detail` 的 `zpData` 形状漂移按「未找到唯一匹配候选人」拒绝执行聊天动作（Issue #1144）：此前非对象真值会让 `.get` 抛 `AttributeError` 并以 `INTERNAL_ERROR` 中断，回复 / 交换联系方式等动作都不会执行；合法响应行为不变。
+- 聊天消息数组的元素与字段漂移不再让 `chatmsg` / `chat-summary` 报 `INTERNAL_ERROR`（Issue #1145）：`messages` / `historyMsgList` 里的非对象元素被跳过，`from` / `body` 漂移按空处理，`text` 统一转文本；招聘者聊天历史的游标分页共用同一入口。
+
 ## [3.4.24] - 2026-11-15
 
 ### Fixed
