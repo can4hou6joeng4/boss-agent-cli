@@ -23,7 +23,7 @@ from boss_agent_cli.wizard import actions as wizard_actions
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS
 from boss_agent_cli.wizard.catalog import build_plan
 from boss_agent_cli.wizard.models import StepResult, WizardInput, WorkflowPlan
-from boss_agent_cli.wizard.runner import WorkflowRunner
+from boss_agent_cli.wizard.runner import WorkflowActionError, WorkflowRunner
 from boss_agent_cli.wizard.store import WorkflowStore
 
 ENVELOPE_KEYS = {"ok", "schema_version", "command", "data", "pagination", "error", "hints"}
@@ -133,7 +133,7 @@ from boss_agent_cli.output import Logger
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS
 from boss_agent_cli.wizard.catalog import build_plan
 from boss_agent_cli.wizard.models import WizardInput
-from boss_agent_cli.wizard.runner import WorkflowRunner
+from boss_agent_cli.wizard.runner import WorkflowActionError, WorkflowRunner
 from boss_agent_cli.wizard.store import WorkflowStore
 
 data_dir = Path(sys.argv[1])
@@ -406,6 +406,67 @@ def test_stopping_an_orphaned_run_keeps_the_unconfirmed_record(tmp_path):
 	assert resumed["steps"][0]["error"]["code"] == "ACTION_UNCONFIRMED"
 	assert resumed["steps"][0]["error"]["replay_safe"] is False
 	assert len(recruiter.sends) == 1
+
+
+@pytest.mark.parametrize("via_cli", [False, True])
+def test_resume_settles_a_run_left_running_after_the_step_failure_was_saved(tmp_path, via_cli):
+	"""步骤失败已落盘、run 状态没写完执行器就消失：恢复要报失败，不能报执行中（Issue #1129）。"""
+	sends = []
+
+	def unconfirmed_write(context, inputs, prior):
+		sends.append(inputs["friend_id"])
+		raise WorkflowActionError(
+			"ACTION_UNCONFIRMED",
+			"写请求在途，结果尚未确认",
+			recoverable=False,
+			recovery_action="操作可能已生效：先核对平台记录，不要自动重试",
+			replay_safe=False,
+		)
+
+	actions = {"recruiter_reply": unconfirmed_write}
+	context = _context(tmp_path, "recruiter", None)
+	plan = build_plan(WizardInput.from_mapping(_REPLY_INPUT))
+
+	with WorkflowStore(tmp_path) as store:
+		original_update_run = store.update_run
+
+		def vanish_before_run_status(run_id, **kwargs):
+			if kwargs.get("status") == "failed":
+				raise _ExecutorGone()
+			return original_update_run(run_id, **kwargs)
+
+		store.update_run = vanish_before_run_status
+		with pytest.raises(_ExecutorGone):
+			WorkflowRunner(store, actions).run(plan, context, run_id="run-half-saved")
+		store.update_run = original_update_run
+		orphan = store.get("run-half-saved")
+		assert orphan["status"] == "running"
+		assert orphan["steps"][0]["status"] == "failed"
+		assert orphan["steps"][0]["error"]["replay_safe"] is False
+
+		if not via_cli:
+			resumed = WorkflowRunner(store, actions).run(plan, context, run_id="run-half-saved")
+
+	if via_cli:
+		result = CliRunner().invoke(
+			cli,
+			["--json", "--data-dir", str(tmp_path), "wizard", "--resume", "run-half-saved"],
+		)
+		assert result.exit_code == 1, result.output
+		envelope = json.loads(result.stdout)
+		assert set(envelope) == ENVELOPE_KEYS
+		assert envelope["ok"] is False
+		assert envelope["error"]["code"] == "ACTION_UNCONFIRMED"
+		assert envelope["error"]["recovery_action"]
+		with WorkflowStore(tmp_path) as store:
+			resumed = store.get("run-half-saved")
+
+	assert resumed["status"] == "failed"
+	assert resumed["current_step"] == "recruiter_reply"
+	assert resumed["error"]["code"] == "ACTION_UNCONFIRMED"
+	assert resumed["error"]["replay_safe"] is False
+	assert resumed["steps"][0]["status"] == "failed"
+	assert sends == [42]
 
 
 def test_steps_completed_before_the_interrupted_write_are_kept(tmp_path):

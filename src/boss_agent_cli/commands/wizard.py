@@ -93,6 +93,17 @@ def _wizard_error(
 	)
 
 
+def _run_after_stop(store: WorkflowStore, run_id: str) -> dict[str, Any]:
+	"""停止已落盘后取展示用的 run；内部 crawl 结果损坏时退回断点本身。
+
+	停止标记已经写入，不能因为叠加实时采集结果失败就把这次停止报成错误。
+	"""
+	try:
+		return store.get(run_id) or {}
+	except CacheRecordInvalid:
+		return store.get_checkpoint(run_id) or {}
+
+
 def _workflow_inner_run_id(run: Mapping[str, Any]) -> str:
 	"""取被 stop 的 run 里绑定的 crawl 子任务 run_id（如有）。
 
@@ -492,7 +503,7 @@ def _run_interactive_session(
 						render_error(code="WORKFLOW_NOT_FOUND", command_for=_command_for_ctx(ctx))
 					else:
 						clear_wizard_screen()
-						render_run(store.get(str(selection.run_id)) or {})
+						render_run(_run_after_stop(store, str(selection.run_id)))
 					if not ask_continue_session(clear_before=False):
 						return
 					continue
@@ -783,7 +794,7 @@ def _run_wizard_command(
 					hints={"next_actions": [boss_command_for_ctx(ctx, "wizard", include_data_dir=True)]},
 				)
 				return
-			run = store.get(stop_run_id) or {}
+			run = _run_after_stop(store, stop_run_id)
 			handle_output(ctx, "wizard", run, render=render_run, hints={"next_actions": _workflow_next_actions(ctx, run)})
 			return
 

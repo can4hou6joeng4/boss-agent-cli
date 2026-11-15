@@ -1468,6 +1468,59 @@ def test_workflow_stop_forwards_to_bound_crawl_run(tmp_path):
 	assert inner["stop_requested"] is True
 
 
+def test_wizard_stop_persists_when_bound_crawl_results_are_corrupt(tmp_path):
+	"""停止只依赖 workflow 断点：内部 crawl 结果读不出来也要落下停止标记（Issue #1128）。"""
+	plan = WorkflowPlan(
+		role="candidate",
+		platform="zhipin",
+		goal="crawl_resume",
+		inputs={"run_id": "inner-corrupt"},
+		requested_steps=("crawl_resume",),
+		mode="headless",
+	)
+	with WorkflowStore(tmp_path) as store:
+		store.create("run-corrupt-crawl", plan)
+		store.update_run("run-corrupt-crawl", status="running", current_step="crawl_resume")
+		store.update_step(
+			"run-corrupt-crawl",
+			"crawl_resume",
+			status="running",
+			result={"inner_run_id": "inner-corrupt"},
+		)
+		store._cache.create_crawl_run(
+			"inner-corrupt",
+			{"run_id": "inner-corrupt"},
+			str(tmp_path / "crawl" / "runs" / "inner-corrupt"),
+		)
+		store._cache._conn.execute(
+			"INSERT INTO crawl_jobs (run_id, job_key, selector, page_no, payload, detail_done, updated_at) "
+			"VALUES (?, ?, ?, ?, ?, ?, ?)",
+			("inner-corrupt", "job-1", "selector-1", 1, "{not json", 0, 0.0),
+		)
+		store._cache._conn.commit()
+
+	stop = CliRunner().invoke(
+		cli,
+		["--json", "--data-dir", str(tmp_path), "wizard", "--stop", "run-corrupt-crawl"],
+	)
+
+	assert stop.exit_code == 0, stop.output
+	envelope = json.loads(stop.stdout)
+	assert envelope["ok"] is True
+	assert envelope["data"]["run_id"] == "run-corrupt-crawl"
+	assert envelope["data"]["status"] == "stopped"
+	with WorkflowStore(tmp_path) as store:
+		assert store.get_checkpoint("run-corrupt-crawl")["status"] == "stopped"
+		assert store._cache.get_crawl_run("inner-corrupt")["stop_requested"] is True
+	# 状态查询仍按记录损坏报告，停止不改变这条契约。
+	status = CliRunner().invoke(
+		cli,
+		["--json", "--data-dir", str(tmp_path), "wizard", "--status", "run-corrupt-crawl"],
+	)
+	assert status.exit_code == 1
+	assert json.loads(status.stdout)["error"]["code"] == "CACHE_RECORD_INVALID"
+
+
 def test_resume_after_timeout_forwards_bound_inner_checkpoint_to_action(tmp_path):
 	"""超时后恢复：failed 步骤的 inner_run_id 必须传给 action，且不能被重跑清空（Issue #882）。"""
 	priors = []

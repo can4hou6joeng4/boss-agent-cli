@@ -282,6 +282,18 @@ class WorkflowRunner:
 		pending_steps = [name for name in plan.requested_steps if name not in prior_results]
 		if pending_steps and pending_steps[0] in blocked_steps:
 			# 保持原失败状态与 recovery_action，让操作者先核对官方页面。
+			if stored_run["status"] != WorkflowStatus.FAILED.value:
+				# 步骤失败已落盘、run 状态还没写完执行器就消失了：run 仍是 running，
+				# 原样返回会把结果未知的写操作报成执行中（Issue #1129）。
+				blocked_step = pending_steps[0]
+				self._store.update_run(
+					run_id,
+					status=WorkflowStatus.FAILED.value,
+					current_step=blocked_step,
+					last_result=stored_run.get("last_result"),
+					error=blocked_steps[blocked_step],
+				)
+				return self._store.get(run_id) or stored_run
 			return stored_run
 
 		self._store.update_run(

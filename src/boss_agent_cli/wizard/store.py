@@ -38,10 +38,20 @@ class WorkflowStore:
 			steps=plan.requested_steps,
 		)
 
-	def get(self, run_id: str) -> dict[str, Any] | None:
+	def get_checkpoint(self, run_id: str) -> dict[str, Any] | None:
+		"""只读 workflow 自己的断点（run + steps），不叠加内部 crawl 的实时结果。
+
+		停止这类控制操作只依赖断点本身：绑定的 crawl 结果读不出来时，
+		也必须能落下停止标记（Issue #1128）。
+		"""
 		run = self._cache.get_workflow_run(run_id)
 		if run is not None:
 			run["steps"] = self._cache.list_workflow_steps(run_id)
+		return run
+
+	def get(self, run_id: str) -> dict[str, Any] | None:
+		run = self.get_checkpoint(run_id)
+		if run is not None:
 			from boss_agent_cli.wizard.live_crawl import BROWSE_JOB_LIMIT, enrich_run_with_live_crawl
 
 			# Full browseable job page for status / follow-up (still paginated in TUI).
@@ -91,7 +101,7 @@ class WorkflowStore:
 		return self._cache.set_workflow_step_error(run_id, step_name, error)
 
 	def request_stop(self, run_id: str) -> bool:
-		run = self.get(run_id)
+		run = self.get_checkpoint(run_id)
 		if run is None or not self._cache.request_workflow_stop(run_id):
 			return False
 		for step in run["steps"]:
