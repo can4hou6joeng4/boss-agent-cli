@@ -481,6 +481,23 @@ def test_recruiter_resume_exchange_supports_data_envelope(mock_auth_cls, mock_pl
 	mock_platform.exchange_request_by_friend.assert_called_once_with(1, exchange_type=1)
 
 
+@pytest.mark.parametrize("envelope", ["zpData", "data"])
+@pytest.mark.parametrize("payload", [None, "oops", ["oops"], 7])
+@patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
+def test_recruiter_resume_exchange_preserves_confirmed_success(mock_auth_cls, mock_platform_cls, envelope, payload):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.exchange_request_by_friend.return_value = {"code": 0, envelope: payload}
+
+	result = _invoke("hr", "resume", "--exchange", "--friend-id", "1")
+
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"] == {"message": "联系方式交换请求已发送"}
+	mock_platform.exchange_request_by_friend.assert_called_once_with(1, exchange_type=1)
+
+
 @patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
 @patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
 def test_recruiter_resume_exchange_wechat_maps_to_type_2(mock_auth_cls, mock_platform_cls):
@@ -567,6 +584,30 @@ def test_recruiter_resume_parse_supports_data_envelope(mock_auth_cls, mock_platf
 	assert parsed["data"]["basic"]["name"] == "张三"
 	assert parsed["data"]["expectation"]["position"] == "后端工程师"
 	assert parsed["hints"]["next_actions"][0] == _hint("hr applications")
+
+
+@pytest.mark.parametrize("envelope", ["zpData", "data"])
+@pytest.mark.parametrize("expectation", [None, "oops", ["oops"], 7])
+@patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")
+@patch("boss_agent_cli.commands.recruiter.resume.AuthManager")
+def test_recruiter_resume_keeps_other_sections_with_drifted_expectation(mock_auth_cls, mock_platform_cls, envelope, expectation):
+	mock_platform = _ctx_mock(mock_platform_cls)
+	mock_platform.view_geek.return_value = {
+		"code": 0,
+		envelope: {"geekDetailInfo": {
+			"showExpectPosition": expectation,
+			"geekWorkExpList": [{"positionName": "测试工程师"}],
+		}},
+	}
+
+	result = _invoke("hr", "resume", "geek-1", "--job-id", "job-1", "--security-id", "sec-1")
+
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["expectation"] == {"position": "", "salary": "", "city": ""}
+	assert parsed["data"]["work_experience"][0]["position"] == "测试工程师"
+	mock_platform.view_geek.assert_called_once_with("geek-1", "job-1", security_id="sec-1")
 
 
 @patch("boss_agent_cli.commands.recruiter.resume.get_recruiter_platform_instance")

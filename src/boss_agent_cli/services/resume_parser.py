@@ -33,7 +33,7 @@ def _parse_base(info: dict[str, Any]) -> dict[str, Any]:
 
 
 def _parse_expect(info: dict[str, Any]) -> dict[str, Any]:
-	ex = info.get("showExpectPosition") or {}
+	ex = field_dict(info, "showExpectPosition")
 	return {
 		"position": ex.get("positionName", ""),
 		"salary": ex.get("salaryDesc", ""),
