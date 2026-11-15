@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.22 (2026-11-15): `boss wizard --stop` persists the stop marker before forwarding it to the inner crawl run, so a corrupt workflow checkpoint or crawl result no longer blocks stopping; `--resume` settles a half-persisted write failure as `failed` with exit 1; recruiter automation queue `confidence` / `action` and nested `state.json` type drift return `AUTOMATION_STATE_INVALID`.
 - ✅ v3.4.21 (2026-11-15): the background-resume parent validates checkpoint parameters after rereading under the execution lock; missing fields and type drift return `CACHE_RECORD_INVALID` before changing stop state, refreshing the handoff time or checking login state, preserving the original run and avoiding a worker launch.
 - ✅ v3.4.20 (2026-11-15): crawl resume matches listener responses by request page while preserving risk and rate-limit signals from earlier pages; background preflight keeps stop requests and the queue handoff window; malformed checkpoint parameters return `CACHE_RECORD_INVALID`, cache write-lock conflicts return `CACHE_BUSY`, and a missing Hook directory is rejected before creating a run.
 - ✅ v3.4.19 (2026-11-15): MCP explicit `null` arguments behave like omitted keys and required arguments report a missing parameter; release-verification failures keep a redacted stderr tail (redaction happens before truncation), so index propagation is distinguishable from a real dependency conflict.
