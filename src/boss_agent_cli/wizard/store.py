@@ -101,10 +101,17 @@ class WorkflowStore:
 		return self._cache.set_workflow_step_error(run_id, step_name, error)
 
 	def request_stop(self, run_id: str) -> bool:
-		run = self.get_checkpoint(run_id)
-		if run is None or not self._cache.request_workflow_stop(run_id):
+		# 先落盘停止标记，再读断点传给内部 crawl：断点或采集结果读不出来
+		# 都不能挡住停止本身（Issue #1128）。
+		if not self._cache.request_workflow_stop(run_id):
 			return False
-		for step in run["steps"]:
+		try:
+			steps = self._cache.list_workflow_steps(run_id)
+		except CacheRecordInvalid:
+			# 步骤记录损坏时无法确定绑定的内部任务；workflow 已停止，
+			# 内部 crawl 需由操作者用 crawl stop 单独处理。
+			return True
+		for step in steps:
 			result = step.get("result") or {}
 			inner_run_id = result.get("inner_run_id")
 			if inner_run_id is None and isinstance(result.get("data"), dict):

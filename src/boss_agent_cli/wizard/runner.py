@@ -128,7 +128,8 @@ class WorkflowControl:
 	resume_action: str | None = None
 
 	def poll(self) -> str | None:
-		run = self.store.get(self.run_id)
+		# 只看断点里的状态：叠加实时采集结果会让损坏的 crawl 记录挡住停止信号。
+		run = self.store.get_checkpoint(self.run_id)
 		if run is not None and run.get("status") == WorkflowStatus.STOPPED.value:
 			return "stop"
 		if self.deadline is not None and time.monotonic() >= self.deadline:
@@ -282,7 +283,7 @@ class WorkflowRunner:
 		pending_steps = [name for name in plan.requested_steps if name not in prior_results]
 		if pending_steps and pending_steps[0] in blocked_steps:
 			# 保持原失败状态与 recovery_action，让操作者先核对官方页面。
-			if stored_run["status"] != WorkflowStatus.FAILED.value:
+			if stored_run["status"] not in {WorkflowStatus.FAILED.value, WorkflowStatus.STOPPED.value}:
 				# 步骤失败已落盘、run 状态还没写完执行器就消失了：run 仍是 running，
 				# 原样返回会把结果未知的写操作报成执行中（Issue #1129）。
 				blocked_step = pending_steps[0]

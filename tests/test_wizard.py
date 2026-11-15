@@ -28,7 +28,7 @@ from boss_agent_cli.wizard.catalog import GOALS, build_plan, catalog_data
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS, execute_candidate_search
 from boss_agent_cli.output import Logger
 from boss_agent_cli.main import cli
-from boss_agent_cli.wizard.runner import WorkflowActionError, WorkflowRunner
+from boss_agent_cli.wizard.runner import WorkflowActionError, WorkflowControl, WorkflowRunner
 from boss_agent_cli.wizard.store import WorkflowStore
 from boss_agent_cli.wizard.prompts import (
 	ClickMenu,
@@ -1512,6 +1512,9 @@ def test_wizard_stop_persists_when_bound_crawl_results_are_corrupt(tmp_path):
 	with WorkflowStore(tmp_path) as store:
 		assert store.get_checkpoint("run-corrupt-crawl")["status"] == "stopped"
 		assert store._cache.get_crawl_run("inner-corrupt")["stop_requested"] is True
+		control = WorkflowControl("run-corrupt-crawl", "crawl_resume", store)
+		# 长动作轮询停止信号时同样不能被损坏的采集结果挡住。
+		assert control.poll() == "stop"
 	# 状态查询仍按记录损坏报告，停止不改变这条契约。
 	status = CliRunner().invoke(
 		cli,
@@ -1519,6 +1522,40 @@ def test_wizard_stop_persists_when_bound_crawl_results_are_corrupt(tmp_path):
 	)
 	assert status.exit_code == 1
 	assert json.loads(status.stdout)["error"]["code"] == "CACHE_RECORD_INVALID"
+
+
+@pytest.mark.parametrize(
+	("table", "column", "where"),
+	[
+		("workflow_steps", "result", "run_id = 'run-corrupt-self'"),
+		("workflow_steps", "error", "run_id = 'run-corrupt-self'"),
+		("workflow_runs", "last_result", "run_id = 'run-corrupt-self'"),
+	],
+)
+def test_wizard_stop_persists_when_its_own_checkpoint_is_corrupt(tmp_path, table, column, where):
+	"""workflow 自己的断点列损坏时，停止标记仍要先落盘（Issue #1128）。"""
+	plan = WorkflowPlan(
+		role="candidate",
+		platform="zhipin",
+		goal="crawl_start",
+		inputs={"query": "Python", "city": "北京"},
+		requested_steps=("crawl_start",),
+		mode="headless",
+	)
+	with WorkflowStore(tmp_path) as store:
+		store.create("run-corrupt-self", plan)
+		store.update_run("run-corrupt-self", status="running", current_step="crawl_start")
+		store._cache._conn.execute(f"UPDATE {table} SET {column} = '{{bad' WHERE {where}")
+		store._cache._conn.commit()
+
+		assert store.request_stop("run-corrupt-self") is True
+		status = store._cache._conn.execute(
+			"SELECT status FROM workflow_runs WHERE run_id = 'run-corrupt-self'"
+		).fetchone()[0]
+		# 已停止的任务再次停止与此前一致：没有可停止的任务。
+		assert store.request_stop("run-corrupt-self") is False
+
+	assert status == "stopped"
 
 
 def test_resume_after_timeout_forwards_bound_inner_checkpoint_to_action(tmp_path):
