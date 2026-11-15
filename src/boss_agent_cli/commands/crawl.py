@@ -177,6 +177,11 @@ def _settings_from_context(
 			raise ValueError(
 				f"无法展开 --hook-dir 的家目录写法：{hook_dir!r}（{exc}）；请改用绝对路径或 ~/ 开头的当前用户路径"
 			) from exc
+	# 目录与 profile 必须成对（Issue #1116）：缺 --hook-dir 时任务会先落盘，打开浏览器、
+	# 导航到平台之后才在注入阶段抛错并被记成 status=stopped 的成功信封；resume 没有
+	# --hook-dir 参数，重试只会重复同一错误。参数问题必须在创建任务之前拒绝。
+	if resolved_hook == "screenshot-full" and resolved_hook_dir is None:
+		raise ValueError("--hook-profile screenshot-full 需要同时提供 --hook-dir（用户授权的原始 Hook 脚本目录）")
 	return CrawlSettings(
 		query=query,
 		city_code=_city_code(city),
