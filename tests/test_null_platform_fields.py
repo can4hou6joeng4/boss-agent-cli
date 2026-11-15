@@ -161,6 +161,28 @@ def test_null_result_list_is_an_empty_result(module, args, method, payload):
 	assert _envelope(result)["data"] == []
 
 
+@pytest.mark.parametrize(
+	("module", "args", "method", "payload"),
+	[
+		("history", ["history"], "job_history", {"jobList": [None, 123, "x", {"encryptJobId": "j1", "jobName": "后端"}], "hasMore": False}),
+		("interviews", ["interviews"], "interview_data", {"interviewList": [None, 7]}),
+	],
+)
+def test_non_object_list_elements_are_skipped(module, args, method, payload):
+	"""元素级漂移与容器为 null 同口径：跳过坏元素，命令仍然成功（Issue #1141）。"""
+
+	def setup(platform):
+		getattr(platform, method).return_value = {"code": 0, "zpData": payload}
+
+	result, _ = _invoke(module, args, setup)
+	envelope = _envelope(result)
+	assert result.exit_code == 0
+	if module == "history":
+		assert [item["job_id"] for item in envelope["data"]] == ["j1"]
+	else:
+		assert envelope["data"] == []
+
+
 @pytest.mark.parametrize("section", ["bossInfo", "brandComInfo"])
 def test_detail_null_section_returns_detail_without_browser_fallback(section):
 	"""以前这里抛 AttributeError，被吞掉后改走浏览器通道多请求一次，最后误报 JOB_NOT_FOUND。"""

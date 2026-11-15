@@ -2,6 +2,13 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- `boss clean` 在搜索缓存表结构漂移时返回 `CACHE_DATABASE_INVALID` 信封（Issue #1139）：本地 SQLite 的 `search_cache` 表缺列（例如旧版本建库）时，清理逻辑直接执行 `SELECT ... response`，sqlite 抛出的 `no such column` 此前穿透到通用兜底，stdout 为空并以 traceback 退出，`--dry-run` 同样如此。现在这类 `sqlite3.DatabaseError` 归一成指明缓存库路径的信封，恢复指引为重建缓存库。
+- 简历解析对平台返回的 `null` 与漂移 section 按空处理（Issue #1140）：`hr resume` 在 `geekDetailInfo`、`geekBaseInfo`、`geekWorkExpList`、`geekCertificationList` 等字段为 `null` 或元素混入非对象时，此前抛 `TypeError` / `AttributeError` 并报成 `INTERNAL_ERROR`。现在按空 section 解析并照常输出其余字段；`workEmphasis` 等标量字段也走宽松读取。
+- 平台列表接口里的非对象元素被跳过而不是让整个命令失败（Issue #1141）：`history`、`interviews`、`recommend`、`greet`、`export` 与联系人去重此前对 `jobList` / `interviewList` 里的 `null`、数字、字符串元素直接读键，抛出异常并让整次调用失败。现在这些元素被跳过，其余条目照常返回；新增 `api.models.dict_items` 作为统一入口。
+
 ## [3.4.23] - 2026-11-15
 
 ### Fixed

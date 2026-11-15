@@ -661,6 +661,29 @@ def test_parse_resume_accepts_data_envelope():
 	assert result["expectation"]["position"] == "Python 工程师"
 
 
+@pytest.mark.parametrize(
+	"detail",
+	[
+		None,
+		{"geekBaseInfo": None},
+		{"geekWorkExpList": None},
+		{"geekProjExpList": None},
+		{"geekEduExpList": None},
+		{"geekCertificationList": None},
+		{"jobCompetitive": None},
+		{"geekWorkExpList": [None, 123], "geekEduExpList": [None], "geekCertificationList": [None, {"certName": "PMP"}]},
+	],
+)
+def test_parse_resume_tolerates_null_and_drifted_sections(detail):
+	"""平台把简历字段返回成 null 或列表元素漂移时按空 section 处理（Issue #1140）。"""
+	result = parse_resume({"zpData": {"geekDetailInfo": detail}})
+
+	assert result["work_experience"] == [] or all(isinstance(item, dict) for item in result["work_experience"])
+	assert result["project_experience"] == []
+	assert result["education"] == []
+	assert isinstance(result["certifications"], list)
+
+
 def test_parse_resume_accepts_unwrapped_payload():
 	result = parse_resume(
 		{

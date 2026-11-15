@@ -2,7 +2,7 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.models import JobItem, field_list
+from boss_agent_cli.api.models import dict_items, JobItem, field_list
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
@@ -53,7 +53,7 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 				handle_platform_error_output(ctx, "recommend", platform, raw, fallback_message="推荐职位获取失败")
 				return
 			platform_data = platform.unwrap_data(raw) or {}
-			job_list = field_list(platform_data, "jobList")
+			job_list = dict_items(field_list(platform_data, "jobList"))
 
 			items = []
 			for raw_item in deduplicate_job_result(job_list):

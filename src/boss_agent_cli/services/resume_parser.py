@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from boss_agent_cli.api.models import dict_items, field_dict, field_list
+
 
 def _safe_str(val: Any) -> str:
 	if val is None:
@@ -15,7 +17,7 @@ def _safe_str(val: Any) -> str:
 
 
 def _parse_base(info: dict[str, Any]) -> dict[str, Any]:
-	base = info.get("geekBaseInfo", {})
+	base = field_dict(info, "geekBaseInfo")
 	gender = base.get("gender")
 	# 未提供或未识别的性别保持未知；bool 与数值编码相等，不能据此补全个人属性。
 	gender_label = {0: "女", 1: "男"}.get(gender, "") if type(gender) is int else ""
@@ -41,7 +43,7 @@ def _parse_expect(info: dict[str, Any]) -> dict[str, Any]:
 
 def _parse_works(info: dict[str, Any]) -> list[dict[str, Any]]:
 	result = []
-	for w in info.get("geekWorkExpList", []):
+	for w in dict_items(field_list(info, "geekWorkExpList")):
 		result.append({
 			"company": w.get("company", ""),
 			"position": w.get("positionName", ""),
@@ -51,14 +53,14 @@ def _parse_works(info: dict[str, Any]) -> list[dict[str, Any]]:
 			"duration": w.get("workYearDesc", ""),
 			"responsibility": w.get("responsibility", ""),
 			"performance": w.get("workPerformance", ""),
-			"keywords": w.get("workEmphasis", "").split("#&#") if w.get("workEmphasis") else [],
+			"keywords": _safe_str(w.get("workEmphasis")).split("#&#") if w.get("workEmphasis") else [],
 		})
 	return result
 
 
 def _parse_projects(info: dict[str, Any]) -> list[dict[str, Any]]:
 	result = []
-	for p in info.get("geekProjExpList", []):
+	for p in dict_items(field_list(info, "geekProjExpList")):
 		result.append({
 			"name": p.get("name", ""),
 			"role": p.get("roleName", ""),
@@ -73,7 +75,7 @@ def _parse_projects(info: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _parse_education(info: dict[str, Any]) -> list[dict[str, Any]]:
 	result = []
-	for e in info.get("geekEduExpList", []):
+	for e in dict_items(field_list(info, "geekEduExpList")):
 		result.append({
 			"school": e.get("school", ""),
 			"major": e.get("major", ""),
@@ -85,9 +87,8 @@ def _parse_education(info: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _parse_competitive(info: dict[str, Any]) -> list[str]:
-	jc = info.get("jobCompetitive") or {}
-	tips = jc.get("tips") or []
-	return [t.get("content", "") for t in tips]
+	jc = field_dict(info, "jobCompetitive")
+	return [_safe_str(t.get("content")) for t in dict_items(jc.get("tips"))]
 
 
 def parse_resume(raw: dict[str, Any]) -> dict[str, Any]:
@@ -108,9 +109,13 @@ def parse_resume(raw: dict[str, Any]) -> dict[str, Any]:
 	payload = raw.get("zpData") if "zpData" in raw else raw.get("data", raw)
 	if not isinstance(payload, dict):
 		payload = {}
-	info = payload.get("geekDetailInfo", {})
+	info = field_dict(payload, "geekDetailInfo")
 
-	certs = [_safe_str(c.get("certName")) for c in info.get("geekCertificationList", []) if c.get("certName")]
+	certs = [
+		_safe_str(c.get("certName"))
+		for c in dict_items(field_list(info, "geekCertificationList"))
+		if c.get("certName")
+	]
 
 	return {
 		"basic": _parse_base(info),

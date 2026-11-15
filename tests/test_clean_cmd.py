@@ -86,6 +86,24 @@ def test_clean_dry_run_does_not_delete(tmp_path):
 	assert count == 5
 
 
+@pytest.mark.parametrize("dry_run", [(), ("--dry-run",)])
+def test_clean_reports_search_cache_schema_drift_as_envelope(tmp_path, dry_run):
+	"""search_cache 表缺列时 clean 也要给信封：它正是缓存异常时的恢复入口（Issue #1139）。"""
+	db_dir = tmp_path / "cache"
+	db_dir.mkdir()
+	conn = sqlite3.connect(str(db_dir / "boss_agent.db"))
+	conn.execute("CREATE TABLE search_cache (cache_key TEXT PRIMARY KEY)")
+	conn.commit()
+	conn.close()
+
+	code, parsed = _invoke("clean", *dry_run, tmp_path=tmp_path)
+
+	assert code == 1
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "CACHE_DATABASE_INVALID"
+	assert "no such column" in parsed["error"]["message"]
+
+
 def test_clean_deletes_expired_search_cache(tmp_path):
 	"""正常模式应删除过期搜索缓存。"""
 	_setup_db(tmp_path, expired_search=3, fresh_search=2)
