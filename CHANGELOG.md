@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.26] - 2026-11-15
 
 ### Fixed
 - `show` / `me` / `status` 的平台数据形状漂移不再报 `INTERNAL_ERROR`（Issue #1148）：`jobCard` 或 `zpData` 不是对象时，`show` 按 `JOB_NOT_FOUND` 返回（与 `jobCard: null` 一致），`me --section user` 输出空字段，`status --live` 的 `user_name` 回退为「未知用户」；合法响应的字段值与类型保持原样。
