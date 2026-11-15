@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.20 (2026-11-15): crawl resume matches listener responses by request page while preserving risk and rate-limit signals from earlier pages; background preflight keeps stop requests and the queue handoff window; malformed checkpoint parameters return `CACHE_RECORD_INVALID`, cache write-lock conflicts return `CACHE_BUSY`, and a missing Hook directory is rejected before creating a run.
 - ✅ v3.4.19 (2026-11-15): MCP explicit `null` arguments behave like omitted keys and required arguments report a missing parameter; release-verification failures keep a redacted stderr tail (redaction happens before truncation), so index propagation is distinguishable from a real dependency conflict.
 - ✅ v3.4.18 (2026-11-15): MCP array arguments are checked element by element against `items.type`; wrong elements in tags, selectors, steps and `friend_ids` return an indexed `INVALID_PARAM` before the CLI instead of being stringified into local tags, while valid and empty arrays behave as before.
 - ✅ v3.4.17 (2026-11-15): MCP positional arguments preserve queries, names, messages and identifiers that start with a hyphen; `--help` remains literal text, real options still apply, and regression coverage traverses every tool and action branch.
