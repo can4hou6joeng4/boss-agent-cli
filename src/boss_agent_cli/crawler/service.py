@@ -26,6 +26,7 @@ from boss_agent_cli.api.zhipin_errors import normalize_risk_code
 from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
 from boss_agent_cli.compliance import require_capability_mode
 from boss_agent_cli.crawler.controls import (
+	CrawlExportError as CrawlExportError,
 	CrawlLimitExceeded as CrawlLimitExceeded,
 	CrawlRuntimeUnavailable as CrawlRuntimeUnavailable,
 	CrawlStopRequested as CrawlStopRequested,
@@ -631,9 +632,10 @@ class CrawlService:
 		except CrawlStopRequested as exc:
 			status = "stopped"
 			error = str(exc)
-		except CrawlRuntimeUnavailable as exc:
-			# 可选依赖缺失是确定性失败：保存断点后原样抛出，由入口按 CRAWL_UNAVAILABLE
-			# 回报。落成普通的 stopped 会让调用方拿到成功信封与恢复指引（Issue #1050）。
+		except (CrawlRuntimeUnavailable, CrawlExportError) as exc:
+			# 可选依赖缺失与导出失败都是确定性失败：保存断点后原样抛出，由入口按
+			# CRAWL_UNAVAILABLE / LOCAL_IO_ERROR 回报。落成普通的 stopped 会让调用方
+			# 拿到成功信封与恢复指引（Issue #1050、#1135）。
 			status = "stopped"
 			error = str(exc)
 			raise
@@ -898,8 +900,8 @@ def _normalize_job(raw: dict[str, Any], query: str, page_no: int, rank: int) -> 
 		"industry": raw.get("brandIndustry", ""),
 		"education": raw.get("jobDegree", ""),
 		"experience": raw.get("jobExperience", ""),
-		"labels": "、".join(labels) if isinstance(labels, list) else str(labels or ""),
-		"benefits": "、".join(benefits) if isinstance(benefits, list) else str(benefits or ""),
+		"labels": "、".join(str(item) for item in labels) if isinstance(labels, list) else str(labels or ""),
+		"benefits": "、".join(str(item) for item in benefits) if isinstance(benefits, list) else str(benefits or ""),
 		"post_description": "",
 		"address": "",
 		"boss_name": raw.get("bossName", ""),

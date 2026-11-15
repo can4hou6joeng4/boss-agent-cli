@@ -2,6 +2,13 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- `export -o` 不再在失败时破坏已有文件（Issue #1134）：序列化 / 写入此前直接以 `"w"` 打开目标文件，平台字段里的列表混入非字符串元素时 `join` 抛错，用户上一次的导出已被截断。现在整份内容先在内存组装并写同目录临时文件，成功后才原子替换；`skills` / `welfare` 列表元素按文本拼接；写入失败返回 `LOCAL_IO_ERROR`，不再报 `INTERNAL_ERROR`。
+- 采集导出的三份输出要么一起更新要么都不更新（Issue #1135）：`jobs.json` / `jobs.csv` / `jobs.xlsx` 此前顺序非原子写入，XLSX 因控制字符序列化失败时其余文件已被覆盖；同一失败还被兜成可重试的 `NETWORK_ERROR`，或让运行以 `ok=true` 停在必然失败的断点上。现在各写临时文件、全部成功后替换；XLSX 写入前去掉 openpyxl 不接受的控制字符（JSON 保留原文）；标签 / 福利的非字符串元素按文本拼接；导出失败以 `LOCAL_IO_ERROR`（不可重试）回报并保存断点。
+- 搜索缓存的 `pagination` 形状漂移按未命中处理（Issue #1136）：缓存条目的 `pagination` 不是对象或 `null` 时，`boss search` 此前原样把它放进成功信封，下游按对象读取会出错。现在这类缓存视为未命中并重新请求平台。
+
 ## [3.4.22] - 2026-11-15
 
 ### Fixed

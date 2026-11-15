@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 from boss_agent_cli.main import cli
+from boss_agent_cli.services.job_export import write_export_file
 
 _DEFAULT_DATA_DIR = str((Path.home() / ".boss-agent").resolve())
 
@@ -57,6 +58,28 @@ def _api_response(jobs: list[dict], has_more: bool = False) -> dict:
 
 
 # ── 文件输出 · CSV ────────────────────────────────────────────────────
+
+
+def test_write_export_file_stringifies_list_items(tmp_path):
+	"""列表单元格里的非字符串元素按文本写出，不因单个字段漂移让整次导出失败（Issue #1134）。"""
+	path = tmp_path / "jobs.csv"
+	write_export_file([{"title": "Go", "skills": [101, "Golang"], "welfare": [True]}], "csv", str(path))
+
+	rows = list(csv.DictReader(path.read_text(encoding="utf-8").splitlines()))
+	assert rows[0]["skills"] == "101, Golang"
+	assert rows[0]["welfare"] == "True"
+
+
+def test_write_export_file_keeps_existing_file_on_serialization_failure(tmp_path):
+	"""序列化失败不能截断已有文件：写临时文件后原子替换（Issue #1134）。"""
+	path = tmp_path / "jobs.json"
+	path.write_text("previous export", encoding="utf-8")
+
+	with pytest.raises(TypeError):
+		write_export_file([{"value": object()}], "json", str(path))
+
+	assert path.read_text(encoding="utf-8") == "previous export"
+	assert sorted(item.name for item in tmp_path.iterdir()) == ["jobs.json"]
 
 
 @patch("boss_agent_cli.commands.export.get_platform_instance")

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
-from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
+from boss_agent_cli.crawler.controls import CrawlExportError, CrawlRuntimeUnavailable
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell
 
 FIELDS = (
@@ -26,6 +29,17 @@ def _csv_cell(value: Any) -> str:
 	return sanitize_csv_cell(str(value if value is not None else ""))
 
 
+#: openpyxl 拒绝写入的控制字符（XML 1.0 不允许）。平台原文偶尔夹带，例如
+#: 垂直制表符 `\x0b`；保留其余文字，只去掉这些字符。
+_ILLEGAL_XLSX_CHARACTERS = re.compile(r"[\000-\010]|[\013-\014]|[\016-\037]")
+
+
+def _xlsx_cell(value: Any) -> Any:
+	if isinstance(value, str):
+		return _ILLEGAL_XLSX_CHARACTERS.sub("", value)
+	return value
+
+
 def _force_text_cell(cell: Any) -> None:
 	"""把以公式字符开头的字符串单元格固定为文本。
 
@@ -39,19 +53,48 @@ def _force_text_cell(cell: Any) -> None:
 
 
 def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str, str]:
-	"""Overwrite the three deterministic artifacts after each completed page."""
+	"""Overwrite the three deterministic artifacts after each completed page.
+
+	Three files must move together: each is written to a sibling temporary file
+	first and only replaced once every format succeeded, so a failure in one
+	serializer cannot leave the others half-updated (Issue #1135).
+	"""
 	export_rows = [{field: row.get(field, "") for field in FIELDS} for row in rows]
 	output_dir.mkdir(parents=True, exist_ok=True)
 	json_path = output_dir / "jobs.json"
 	csv_path = output_dir / "jobs.csv"
 	xlsx_path = output_dir / "jobs.xlsx"
-	json_path.write_text(json.dumps(export_rows, ensure_ascii=False, indent=2), encoding="utf-8")
-	with csv_path.open("w", encoding="utf-8-sig", newline="") as file:
-		writer = csv.DictWriter(file, fieldnames=FIELDS, extrasaction="ignore")
-		writer.writeheader()
-		writer.writerows({field: _csv_cell(row.get(field)) for field in FIELDS} for row in export_rows)
-	_write_xlsx(xlsx_path, export_rows)
+	temporaries: list[Path] = []
+	try:
+		json_tmp = _temporary_for(json_path)
+		temporaries.append(json_tmp)
+		json_tmp.write_text(json.dumps(export_rows, ensure_ascii=False, indent=2), encoding="utf-8")
+		csv_tmp = _temporary_for(csv_path)
+		temporaries.append(csv_tmp)
+		with csv_tmp.open("w", encoding="utf-8-sig", newline="") as file:
+			writer = csv.DictWriter(file, fieldnames=FIELDS, extrasaction="ignore")
+			writer.writeheader()
+			writer.writerows({field: _csv_cell(row.get(field)) for field in FIELDS} for row in export_rows)
+		xlsx_tmp = _temporary_for(xlsx_path)
+		temporaries.append(xlsx_tmp)
+		_write_xlsx(xlsx_tmp, export_rows)
+	except CrawlRuntimeUnavailable:
+		for temporary in temporaries:
+			temporary.unlink(missing_ok=True)
+		raise
+	except Exception as exc:
+		for temporary in temporaries:
+			temporary.unlink(missing_ok=True)
+		raise CrawlExportError(f"采集结果无法写出：{type(exc).__name__}: {exc}") from exc
+	for temporary, target in ((json_tmp, json_path), (csv_tmp, csv_path), (xlsx_tmp, xlsx_path)):
+		os.replace(temporary, target)
 	return {"json": str(json_path), "csv": str(csv_path), "xlsx": str(xlsx_path)}
+
+
+def _temporary_for(target: Path) -> Path:
+	fd, name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+	os.close(fd)
+	return Path(name)
 
 
 def _write_xlsx(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -71,7 +114,7 @@ def _write_xlsx(path: Path, rows: list[dict[str, Any]]) -> None:
 		cell.alignment = Alignment(horizontal="center", vertical="center")
 	for row in rows:
 		start = sheet.max_row + 1
-		sheet.append([row.get(field, "") for field in FIELDS])
+		sheet.append([_xlsx_cell(row.get(field, "")) for field in FIELDS])
 		for cell in sheet[start]:
 			_force_text_cell(cell)
 
