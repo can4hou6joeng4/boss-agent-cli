@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.20] - 2026-11-15
 
 ### Fixed
 - `crawl run` / `crawl start --hook-profile screenshot-full` 缺少 `--hook-dir` 时在创建任务之前返回 `INVALID_PARAM`（Issue #1116）：此前任务会先落盘，打开浏览器并导航到平台之后才在注入阶段失败，被记成 `status=stopped` 的成功信封；`crawl resume` 没有 `--hook-dir` 参数，重试只会重复同一错误并白开一次有头 Chrome。schema 与文档早已写明两者必须成对，现在入口按同一规则拒绝，不创建 run、不启动浏览器。
