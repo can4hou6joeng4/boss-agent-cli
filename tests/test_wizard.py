@@ -1552,8 +1552,8 @@ def test_wizard_stop_persists_when_its_own_checkpoint_is_corrupt(tmp_path, table
 		status = store._cache._conn.execute(
 			"SELECT status FROM workflow_runs WHERE run_id = 'run-corrupt-self'"
 		).fetchone()[0]
-		# 已停止的任务再次停止与此前一致：没有可停止的任务。
-		assert store.request_stop("run-corrupt-self") is False
+		# 重复停止同样成功；断点损坏不应阻挡停止，也不应让补偿重试误报任务不存在。
+		assert store.request_stop("run-corrupt-self") is True
 
 	assert status == "stopped"
 
