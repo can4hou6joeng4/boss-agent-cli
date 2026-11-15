@@ -23,7 +23,7 @@ from boss_agent_cli.api.request_budget import (
 	request_control,
 )
 from boss_agent_cli.api.zhipin_errors import normalize_risk_code
-from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
 from boss_agent_cli.compliance import require_capability_mode
 from boss_agent_cli.crawler.controls import (
 	CrawlLimitExceeded as CrawlLimitExceeded,
@@ -97,7 +97,14 @@ class CrawlSettings:
 		}
 
 	@classmethod
-	def from_dict(cls, raw: dict[str, Any]) -> "CrawlSettings":
+	def from_dict(cls, raw: dict[str, Any], *, run_id: str = "") -> "CrawlSettings":
+		"""从断点记录还原设置；缺键与类型漂移按记录损坏处理（Issue #1117）。
+
+		`as_dict()` 总是写全顶层字段，缺键只可能来自记录损坏或手工篡改。原来
+		直接下标访问，`KeyError` 被命令层当成「未找到 crawl run: <字段名>」，
+		把「本地记录写坏」误导成「任务不存在」，恢复指引指向新建任务；类型
+		漂移（如 `pages="abc"`）则落成 INVALID_PARAM 或 INTERNAL_ERROR。
+		"""
 		browser = raw.get("browser", {})
 		hook = raw.get("hook", {})
 		limits = raw.get("limits", {})
@@ -107,30 +114,62 @@ class CrawlSettings:
 			hook = {}
 		if not isinstance(limits, dict):
 			limits = {}
+		missing = [key for key in ("query", "city_code", "pages", "with_detail") if key not in raw]
+		if missing:
+			raise CacheRecordInvalid("crawl_run", run_id, "params", f"缺少字段 {', '.join(missing)}")
+		query = raw["query"]
+		city_code = raw["city_code"]
+		pages = raw["pages"]
+		with_detail = raw["with_detail"]
+		if not isinstance(query, str):
+			raise CacheRecordInvalid("crawl_run", run_id, "params.query", f"期望字符串，实际是 {type(query).__name__}")
+		if not isinstance(city_code, str):
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "params.city_code", f"期望字符串，实际是 {type(city_code).__name__}"
+			)
+		# bool 是 int 的子类：`pages=true` 是类型漂移，不是第 1 页。
+		if not isinstance(pages, int) or isinstance(pages, bool):
+			raise CacheRecordInvalid("crawl_run", run_id, "params.pages", f"期望整数，实际是 {type(pages).__name__}")
+		if not isinstance(with_detail, bool):
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "params.with_detail", f"期望布尔值，实际是 {type(with_detail).__name__}"
+			)
 		profile_path = raw.get("profile_path") or browser.get("profile_path")
 		cdp_port = raw.get("cdp_port") or browser.get("cdp_port")
 		hook_profile = raw.get("hook_profile") or hook.get("profile")
 		if profile_path is None or cdp_port is None or hook_profile is None:
-			raise ValueError("crawl run 缺少浏览器或 Hook 配置")
-		return cls(
-			query=str(raw["query"]),
-			city_code=str(raw["city_code"]),
-			pages=int(raw["pages"]),
-			with_detail=bool(raw["with_detail"]),
-			profile_path=Path(str(profile_path)),
-			chrome_path=raw.get("chrome_path"),
-			cdp_port=int(cdp_port),
-			hook_profile=str(hook_profile),
-			hook_dir=Path(str(raw.get("hook_dir") or hook.get("directory")))
-			if raw.get("hook_dir") or hook.get("directory")
-			else None,
-			hook_source=str(raw.get("hook_source") or hook.get("source", "user-supplied")),
-			max_requests=int(raw.get("max_requests") or limits.get("max_requests", 20)),
-			max_details=int(raw.get("max_details") or limits.get("max_details", 50)),
-			max_seconds=int(raw.get("max_seconds") or limits.get("max_seconds", 600)),
-			max_retries=int(raw.get("max_retries") or limits.get("max_retries", 1)),
-			operating_mode=str(raw.get("operating_mode", "assisted")),
-		)
+			missing_browser = [
+				name
+				for name, value in (
+					("browser.profile_path", profile_path),
+					("browser.cdp_port", cdp_port),
+					("hook.profile", hook_profile),
+				)
+				if value is None
+			]
+			raise CacheRecordInvalid("crawl_run", run_id, "params", f"缺少字段 {', '.join(missing_browser)}")
+		try:
+			return cls(
+				query=query,
+				city_code=city_code,
+				pages=pages,
+				with_detail=with_detail,
+				profile_path=Path(str(profile_path)),
+				chrome_path=raw.get("chrome_path"),
+				cdp_port=int(cdp_port),
+				hook_profile=str(hook_profile),
+				hook_dir=Path(str(raw.get("hook_dir") or hook.get("directory")))
+				if raw.get("hook_dir") or hook.get("directory")
+				else None,
+				hook_source=str(raw.get("hook_source") or hook.get("source", "user-supplied")),
+				max_requests=int(raw.get("max_requests") or limits.get("max_requests", 20)),
+				max_details=int(raw.get("max_details") or limits.get("max_details", 50)),
+				max_seconds=int(raw.get("max_seconds") or limits.get("max_seconds", 600)),
+				max_retries=int(raw.get("max_retries") or limits.get("max_retries", 1)),
+				operating_mode=str(raw.get("operating_mode", "assisted")),
+			)
+		except (TypeError, ValueError) as exc:
+			raise CacheRecordInvalid("crawl_run", run_id, "params", f"字段类型无法解析（{exc}）") from exc
 
 
 def crawl_int_setting(cfg: Mapping[str, Any], key: str, default: int, *, minimum: int = 1) -> int:
@@ -421,7 +460,7 @@ class CrawlService:
 		run = self._cache.get_crawl_run(run_id)
 		if run is None:
 			raise KeyError(run_id)
-		settings = CrawlSettings.from_dict(run["params"])
+		settings = CrawlSettings.from_dict(run["params"], run_id=run_id)
 		active_mode = operating_mode or settings.operating_mode
 		require_capability_mode(active_mode, "crawl")
 		require_capability_mode(active_mode, "crawl-cdp")
