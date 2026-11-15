@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 from typing import Any
@@ -366,12 +367,38 @@ def test_boss_command_for_ctx_literals_are_accepted_by_the_cli(tmp_path: Any) ->
 	assert failures == []
 
 
+def _job_not_found_outside_job_readers(path: Path) -> list[str]:
+	"""返回 `path` 里「平台职位读取」函数之外出现 ``JOB_NOT_FOUND`` 的位置。
+
+	该文件同时承载职位读取（候选人详情）：那里的 ``JOB_NOT_FOUND`` 指的是平台
+	职位本身读不出来，与 `detail` / `show` 同口径，属正确用法。豁免用**显式
+	函数名白名单**而不是前缀，新增的本地记录查找即便命名相似也会让这条断言
+	失败，必须显式决定。
+	"""
+	job_reader_functions = {"execute_candidate_detail"}
+	tree = ast.parse(path.read_text(encoding="utf-8"))
+	offenders: list[str] = []
+	for func in ast.walk(tree):
+		if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+			continue
+		if func.name in job_reader_functions:
+			continue
+		for node in ast.walk(func):
+			if isinstance(node, ast.Constant) and node.value == "JOB_NOT_FOUND":
+				offenders.append(f"{path.name}:{node.lineno} ({func.name})")
+	return offenders
+
+
 def test_local_record_lookups_do_not_report_job_not_found() -> None:
 	"""本地 / 会话侧记录缺失有自己的错误码，``JOB_NOT_FOUND`` 只表示平台职位不存在。
 
 	crawl run、preset / watch、联系人、workflow run 都不是职位：报成
-	``JOB_NOT_FOUND``（登记表文案「职位不存在或已下架」、recovery_action 为 null）
-	会让 Agent 以为职位下架而跳过，而且拿不到任何下一步。
+	``JOB_NOT_FOUND``（登记表文案「职位不存在或已下架」）会让 Agent 以为职位下架
+	而跳过，而且拿不到任何下一步。
+
+	`wizard/actions.py` 同时承载职位读取（候选人详情）：那里的
+	``JOB_NOT_FOUND`` 指的是平台职位本身读不出来，与 `detail` / `show` 同口径。
+	对它的校验只覆盖职位读取函数之外的本地记录查找。
 	"""
 	root = Path(__file__).resolve().parents[1] / "src" / "boss_agent_cli"
 	local_lookup_files = (
@@ -381,7 +408,6 @@ def test_local_record_lookups_do_not_report_job_not_found() -> None:
 		"commands/agent.py",
 		"commands/_contact_lookup.py",
 		"commands/wizard.py",
-		"wizard/actions.py",
 	)
 	offenders = [
 		name
@@ -389,6 +415,7 @@ def test_local_record_lookups_do_not_report_job_not_found() -> None:
 		if '"JOB_NOT_FOUND"' in (root / name).read_text(encoding="utf-8")
 	]
 	assert offenders == [], f"本地记录查找仍复用 JOB_NOT_FOUND：{offenders}"
+	assert _job_not_found_outside_job_readers(root / "wizard/actions.py") == []
 
 
 def _commands_root() -> Path:
