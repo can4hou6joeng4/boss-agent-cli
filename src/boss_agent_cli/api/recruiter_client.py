@@ -575,8 +575,10 @@ class BossRecruiterClient(_BaseHttpClient):
 		"""
 		self._check_cdp_risk_lock()
 		fd_resp = self.friend_detail([friend_id])
+		if not isinstance(fd_resp, dict):
+			raise LookupError("friend_detail 读取失败，未执行聊天动作")
 		self._raise_platform_risk_response(fd_resp)
-		if not isinstance(fd_resp, dict) or fd_resp.get("code") != 0:
+		if fd_resp.get("code") != 0:
 			raise LookupError("friend_detail 读取失败，未执行聊天动作")
 		# zpData / friendList 形状漂移（字符串、对象、混入非对象元素）按空处理：
 		# 这里只做「未找到唯一候选人就拒绝发消息」的判断，不能把坏格式变成

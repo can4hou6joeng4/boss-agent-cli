@@ -16,6 +16,8 @@ from click.testing import CliRunner
 
 from boss_agent_cli.api.models import dict_items
 from boss_agent_cli.api.recruiter_client import BossRecruiterClient
+from boss_agent_cli.chat_summary import summarize_messages
+from boss_agent_cli.services.chat_utils import message_list
 from boss_agent_cli.main import cli
 from boss_agent_cli.pipeline_state import build_pipeline_items
 from boss_agent_cli.services.contact_lookup import find_friend
@@ -38,9 +40,11 @@ class _FakePlatform:
 		self,
 		*friend_pages: object,
 		interview: object = None,
+		messages: object = None,
 	):
 		self._friend_pages = list(friend_pages)
 		self._interview = interview if interview is not None else {"interviewList": []}
+		self._messages = messages if messages is not None else []
 		self.friend_calls = 0
 
 	def __enter__(self):
@@ -58,6 +62,9 @@ class _FakePlatform:
 	def interview_data(self):
 		return {"code": 0, "zpData": self._interview}
 
+	def chat_history(self, gid, security_id, page: int = 1, count: int = 20):
+		return {"code": 0, "zpData": {"messages": self._messages, "hasMore": False}}
+
 	def is_success(self, response):
 		return isinstance(response, dict) and response.get("code") == 0
 
@@ -71,12 +78,12 @@ DRIFTED_FRIENDS = {
 }
 
 
-def _invoke_command(module: str, platform: _FakePlatform):
-	command_module = importlib.import_module(f"boss_agent_cli.commands.{module}")
+def _invoke_command(module: str, platform: _FakePlatform, *args: str):
+	command_module = importlib.import_module(f"boss_agent_cli.commands.{module.replace('-', '_')}")
 	with pytest.MonkeyPatch.context() as patch:
 		patch.setattr(command_module, "get_platform_instance", lambda *a, **kw: platform)
 		patch.setattr(command_module, "AuthManager", lambda *a, **kw: None)
-		return CliRunner().invoke(cli, ["--json", module])
+		return CliRunner().invoke(cli, ["--json", module, *args])
 
 
 # ── 命令级：chat / pipeline / digest ─────────────────────────────
@@ -157,6 +164,37 @@ def test_build_pipeline_items_skips_non_object_elements():
 		now_ts_ms=1700000000000,
 	)
 	assert [item["source"] for item in items] == ["chat", "interview"]
+
+
+MESSAGE = {"text": "你好", "from": {"uid": "u1"}, "time": 1700000000000}
+
+
+@pytest.mark.parametrize("module", ["chatmsg", "chat-summary"])
+def test_message_commands_skip_non_object_messages(module):
+	platform = _FakePlatform(
+		{"result": [FRIEND], "hasMore": False},
+		messages=[None, 5, "x", MESSAGE],
+	)
+	result = _invoke_command(module, platform, "u1")
+
+	assert result.exit_code == 0, result.output
+	envelope = json.loads(result.stdout)
+	assert envelope["ok"] is True
+	assert envelope["error"] is None
+	if module == "chatmsg":
+		assert len(envelope["data"]) == 1
+	else:
+		assert envelope["data"]["message_count"] == 1
+
+
+def test_message_list_and_summary_tolerate_drifted_message_fields():
+	assert message_list({"messages": [None, 1, {"a": 1}]}) == [{"a": 1}]
+	summary = summarize_messages(
+		[{"text": 7, "from": "oops", "body": "oops"}],  # type: ignore[list-item]
+		friend_uid="u1",
+	)
+	assert summary["message_count"] == 1
+	assert summary["stage"] in {"new", "waiting", "reply_needed", "interview"}
 
 
 def test_require_chat_friend_data_rejects_non_object_zpdata():
