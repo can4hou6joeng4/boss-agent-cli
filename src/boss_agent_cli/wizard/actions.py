@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, NoReturn, cast
 
-from boss_agent_cli.api.models import dict_items, field_list
+from boss_agent_cli.api.models import dict_items, field_dict, field_list
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.auth.identity import account_scope
 from boss_agent_cli.auth.manager import AuthManager
@@ -34,7 +34,7 @@ from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.digest import build_digest
-from boss_agent_cli.display import RISK_ERROR_CONTRACTS, boss_command, risk_error_contract, risk_error_message, shell_argument
+from boss_agent_cli.display import RISK_ERROR_CONTRACTS, boss_command, error_contract_for_code, risk_error_contract, risk_error_message, shell_argument
 from boss_agent_cli.output import Logger
 from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
 from boss_agent_cli.resume.models import resume_to_text
@@ -500,11 +500,14 @@ def execute_candidate_detail(
 	if job_id:
 		raw = platform.job_detail(job_id)
 		if platform.is_success(raw):
-			platform_data = platform.unwrap_data(raw) or {}
-			job_info = platform_data.get("jobInfo") or {}
+			# 包装详情漂移（zpData / jobInfo 不是对象）与 `detail` 命令同一口径：
+			# 按空 section 处理并改走职位卡片，不能抛 AttributeError（Issue #1162）。
+			platform_data = platform.unwrap_data(raw)
+			platform_data = platform_data if isinstance(platform_data, dict) else {}
+			job_info = field_dict(platform_data, "jobInfo")
 			if job_info:
-				boss_info = platform_data.get("bossInfo") or {}
-				brand_info = platform_data.get("brandComInfo") or {}
+				boss_info = field_dict(platform_data, "bossInfo")
+				brand_info = field_dict(platform_data, "brandComInfo")
 				raw_job_type = job_info.get("jobType")
 				return {
 					"job_id": job_id,
@@ -516,7 +519,7 @@ def execute_candidate_detail(
 					"education": job_info.get("degreeName", ""),
 					"description": platform_data.get("jobDetail", "") or job_info.get("postDescription", ""),
 					"address": job_info.get("address", ""),
-					"skills": job_info.get("jobLabels", []) or job_info.get("skills", []),
+					"skills": field_list(job_info, "jobLabels") or field_list(job_info, "skills"),
 					"boss_name": boss_info.get("name", ""),
 					"boss_title": boss_info.get("title", ""),
 					"boss_active": boss_info.get("activeTimeDesc", "离线"),
@@ -555,8 +558,7 @@ def execute_candidate_detail(
 		) from exc
 
 	if platform.is_success(raw_card):
-		platform_data = platform.unwrap_data(raw_card) or {}
-		card = platform_data.get("jobCard") or {}
+		card = field_dict(platform.unwrap_data(raw_card), "jobCard")
 		if card:
 			job = build_job_from_card(card, security_id=security_id, greeted=greeted)
 			job["lid"] = lid
@@ -567,16 +569,15 @@ def execute_candidate_detail(
 
 	if last_error is not None:
 		raise last_error
-	code, message = platform.parse_error(raw_card)
-	text = message or "职位详情获取失败"
-	risk_commands = _risk_commands(context)
-	code, recoverable, recovery = _classify_action_error(
-		code,
-		text,
-		clean_command=risk_commands.get("clean_command"),
-		doctor_command=risk_commands.get("doctor_command"),
+	# 两个通道都成功但载荷漂移、读不出职位：与 `detail` / `show` 一致按「职位不存在
+	# 或已下架」返回，而不是拿成功响应当错误包络解出 UNKNOWN → NETWORK_ERROR。
+	not_found_recoverable, not_found_recovery = error_contract_for_code("JOB_NOT_FOUND")
+	raise WorkflowActionError(
+		"JOB_NOT_FOUND",
+		str(ERROR_CODES["JOB_NOT_FOUND"]["message"]),
+		recoverable=not_found_recoverable,
+		recovery_action=not_found_recovery or str(ERROR_CODES["JOB_NOT_FOUND"]["recovery_action"]),
 	)
-	raise WorkflowActionError(code, text, recoverable=recoverable, recovery_action=recovery)
 
 
 def _auth_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
