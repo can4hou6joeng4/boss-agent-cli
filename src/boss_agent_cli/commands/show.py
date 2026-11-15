@@ -1,5 +1,6 @@
 import click
 
+from boss_agent_cli.api.models import field_dict
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
@@ -89,8 +90,10 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 			handle_platform_error_output(ctx, "show", platform, raw, fallback_message="职位详情获取失败")
 			return
 
-	platform_data = platform.unwrap_data(raw) or {}
-	card = platform_data.get("jobCard", {})
+	# zpData / jobCard 形状漂移按「职位不存在或已下架」处理，不能把
+	# AttributeError 兜成 INTERNAL_ERROR（Issue #1148）。
+	platform_data = platform.unwrap_data(raw)
+	card = field_dict(platform_data, "jobCard")
 	if not card:
 		handle_error_output(
 			ctx, "show",

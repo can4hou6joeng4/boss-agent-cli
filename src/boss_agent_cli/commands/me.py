@@ -58,7 +58,11 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 						fallback_message="用户基本信息获取失败",
 					)
 					return
-				zp_data = platform.unwrap_data(resp) or {}
+				zp_data = platform.unwrap_data(resp)
+				# user_info 的 zpData 漂移时按空对象输出；合法对象里的 identity
+				# 等字段保持平台类型，不额外转成文本（Issue #1148）。
+				if not isinstance(zp_data, dict):
+					zp_data = {}
 				result["user"] = {
 					"name": zp_data.get("name", ""),
 					"email": zp_data.get("email", ""),
