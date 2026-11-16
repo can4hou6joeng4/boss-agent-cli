@@ -538,6 +538,9 @@ class CrawlService:
 		detail_checks = 0
 		status = "completed"
 		error = ""
+		# 成功路径在 completed 落库前导出并覆盖这里；异常路径保持空，错误信封
+		# 不会指向不存在的产物（Issue #1238）。
+		paths: dict[str, str] = {}
 		risk_lock: dict[str, Any] | None = None
 		current_page = next_page
 		# 风控/待人工处理时保留采集 Chrome，便于用户在窗口内登录或过验证。
@@ -597,6 +600,11 @@ class CrawlService:
 				write_run_outputs(output_dir, [item["payload"] for item in self._cache.list_crawl_jobs(run_id)])
 				if list_finished:
 					break
+			# 最后一页的导出必须在 completed 落库之前（Issue #1238）：第二次 resume
+			# 时页循环不执行，若导出留在 finally 之后，completed 会先写进数据库，
+			# 导出失败后再也无法重试，后续 resume 会报成功但产物不存在。
+			rows = [item["payload"] for item in self._cache.list_crawl_jobs(run_id)]
+			paths = write_run_outputs(output_dir, rows)
 		except HookRegistrationError as exc:
 			hooks = exc.injections
 			status = "stopped"
@@ -642,7 +650,17 @@ class CrawlService:
 			error = str(exc)
 			raise
 		except Exception as exc:
-			status = "stopped"
+			# transport 的控制检查会透传 wizard 的 ambient 信号
+			# （WorkflowActionError 的 WORKFLOW_STOPPED / WORKFLOW_TIMEOUT）；按错误码
+			# 归入 crawl 自己的停止语义。落成普通 stopped 会让调用方看到可重试的
+			# NETWORK_ERROR，甚至给出会清掉 stop 标记的恢复命令（Issue #1238）。
+			code = getattr(exc, "code", None)
+			if code == "WORKFLOW_TIMEOUT":
+				status = "timeout_stopped"
+			elif code == "WORKFLOW_STOPPED":
+				status = "workflow_stopped"
+			else:
+				status = "stopped"
 			error = str(exc)
 		except BaseException:
 			# SystemExit 等退出信号也会进入 finally：先保存中断断点，不能把未完成
@@ -681,7 +699,6 @@ class CrawlService:
 					self._cache.update_crawl_run(run_id, status=status, next_page=current_page, error=error)
 
 		rows = [item["payload"] for item in self._cache.list_crawl_jobs(run_id)]
-		paths = write_run_outputs(output_dir, rows)
 		return CrawlOutcome(
 			run_id=run_id,
 			status=status,

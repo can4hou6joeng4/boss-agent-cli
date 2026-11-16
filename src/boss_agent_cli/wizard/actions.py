@@ -1116,6 +1116,12 @@ def _attach_wizard_jobs(data: dict[str, Any], cache: CacheStore, run_id: str) ->
 	return merged
 
 
+def _is_stop_error(error: Any) -> bool:
+	"""普通 stopped 记录里识别「用户/工作流 stop」的中英文文案（Issue #1238）。"""
+	message = str(error or "")
+	return "stop requested" in message or "stop 请求" in message or "workflow stop" in message
+
+
 def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> StepResult:
 	data = outcome.as_dict()
 	checkpoint = data.get("checkpoint") if isinstance(data, dict) else None
@@ -1129,6 +1135,12 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 		)
 	if cache is not None:
 		data = _attach_wizard_jobs(data if isinstance(data, dict) else {}, cache, str(outcome.run_id))
+	# stop 的恢复命令不能是 `crawl resume`：它默认清除 stop 标记，用户刚发出的
+	# 停止会被工具自己的指引撤销（Issue #1238）。只读的 status 足够让人核对断点。
+	status_command = boss_command(
+		f"crawl status {shell_argument(outcome.run_id)}",
+		data_dir=getattr(outcome, "data_dir", None),
+	)
 	if outcome.status == "timeout_stopped":
 		raise WorkflowActionError(
 			"WORKFLOW_TIMEOUT",
@@ -1136,12 +1148,14 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 			recoverable=True,
 			recovery_action=resume_command,
 		)
-	if outcome.status in {"workflow_stopped", "stopped"} and "stop requested" in str(outcome.error or ""):
+	if outcome.status == "workflow_stopped" or (
+		outcome.status == "stopped" and _is_stop_error(outcome.error)
+	):
 		raise WorkflowActionError(
 			"WORKFLOW_STOPPED",
 			outcome.error or "crawl 已停止",
-			recoverable=True,
-			recovery_action=resume_command,
+			recoverable=False,
+			recovery_action=status_command,
 		)
 	if outcome.status in {"risk_stopped", "budget_stopped"}:
 		# 风控停止时 service 会 keep Chrome；把标记写入结果供向导文案使用。
@@ -1165,12 +1179,12 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 		else:
 			operator_actions = (
 				"本轮采集因预算上限停止，不是账号异常",
-				f"确认要继续时选「继续采集」，或在终端执行 {resume_command}",
+				f"该任务的预算已用完，继续采集需要新建任务（或调高 max_requests 后重新 crawl start）；断点可用 {status_command} 查看",
 			)
 		return StepResult(
 			data,
 			status=WorkflowStatus.WAITING_INPUT,
-			next_action=resume_command,
+			next_action=resume_command if browser_kept_open else status_command,
 			artifacts=tuple(outcome.output_paths.values()),
 			operator_actions=operator_actions,
 		)
