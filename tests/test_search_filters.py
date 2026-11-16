@@ -186,6 +186,10 @@ class TestPrefilterJob:
 		ok, reasons = prefilter_job(raw, criteria)
 		assert ok is False
 		assert any("薪资" in r for r in reasons)
+		# 日志原因里不记录薪资原值与用户期望值（CodeQL private data，Issue #1394）。
+		joined = " ".join(reasons)
+		assert "3-5K" not in joined
+		assert "20-50K" not in joined
 
 	def test_salary_mianyi_pass(self):
 		"""面议的薪资应该通过（无法判断）"""
