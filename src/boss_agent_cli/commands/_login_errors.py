@@ -8,6 +8,7 @@ from boss_agent_cli.display import (
 	login_action_for_ctx,
 	risk_error_contract,
 	risk_error_message,
+	risk_lock_persistence_actions,
 )
 from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
 
@@ -50,6 +51,16 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 	if isinstance(exc, PlatformRiskError):
 		# 复用登录态的只读探测命中风控：与其他命令共用同一份终止契约，不建议重试登录。
 		recovery, hints = risk_error_contract(exc.code, ctx=ctx)
+		persistence_actions = risk_lock_persistence_actions(exc.details)
+		if persistence_actions:
+			# 锁只留在进程内时，新进程不会再被它阻止：必须让操作者知道（Issue #1270）。
+			hints = {
+				**(hints or {}),
+				"operator_actions": [
+					*((hints or {}).get("operator_actions") or []),
+					*persistence_actions,
+				],
+			}
 		return {
 			"code": exc.code,
 			# 风控信封不透传平台响应文本（可能带临时凭据），只给登记表文案。

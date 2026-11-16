@@ -982,6 +982,24 @@ def risk_error_contract(
 	)
 
 
+def risk_lock_persistence_actions(details: dict[str, Any] | None) -> list[str]:
+	"""风险锁未能写盘时，补充「只在当前进程生效」的操作者提示（Issue #1270）。
+
+	主锁与 group 目录的锁都写失败时，同进程后续请求仍被内存里的锁拦住，但进程
+	退出后新进程读不到任何锁，会以为没有风控阻断。信封必须在 `persisted: false`
+	时把这件事讲清楚，而不是只给普通的风控恢复指引。
+	"""
+	if not isinstance(details, dict):
+		return []
+	lock = details.get("risk_lock")
+	if not isinstance(lock, dict) or lock.get("persisted") is not False:
+		return []
+	return [
+		"本地风险锁未能写入磁盘：当前进程退出后，新的 boss 进程不会再被这把锁阻止；"
+		"先修复数据目录的写权限与磁盘空间，在确认平台已恢复前不要启动新的 boss 进程",
+	]
+
+
 #: 浏览器来源策略表里的命令默认示例。有运行上下文时由调用方替换成带
 #: ``--data-dir`` 与平台的真实命令：``doctor`` 诊断的是本地登录态、缓存与风险锁。
 _BROWSER_POLICY_COMMANDS: dict[str, tuple[str, ...]] = {
@@ -1169,7 +1187,18 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					hints=auth_required_hints(ctx),
 				)
 			except PlatformRiskError as e:
-				recovery_action, hints = risk_error_contract(e.code, ctx=ctx)
+				recovery_action, contract_hints = risk_error_contract(e.code, ctx=ctx)
+				# _with_httpx_only_hint 可能返回 None：显式声明可空，避免覆盖既有变量类型。
+				risk_hints: dict[str, list[str]] | None = _with_httpx_only_hint(ctx, contract_hints)
+				persistence_actions = risk_lock_persistence_actions(e.details)
+				if persistence_actions:
+					risk_hints = {
+						**(risk_hints or {}),
+						"operator_actions": [
+							*((risk_hints or {}).get("operator_actions") or []),
+							*persistence_actions,
+						],
+					}
 				handle_error_output(
 					ctx,
 					command_name,
@@ -1179,7 +1208,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recoverable=False,
 					recovery_action=recovery_action,
 					details=e.details or None,
-					hints=_with_httpx_only_hint(ctx, hints),
+					hints=risk_hints,
 				)
 			except RequestBudgetExceeded as e:
 				budget_recoverable, budget_recovery = error_contract_for_code(e.code)
