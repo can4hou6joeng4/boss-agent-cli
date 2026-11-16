@@ -23,6 +23,7 @@ from boss_agent_cli.automation.models import (
 from boss_agent_cli.automation.runner import run_automation_cycle
 from boss_agent_cli.automation.storage import (
 	AutomationControlBusy,
+	AutomationControlBusyDispatched,
 	AutomationRunBusy,
 	AutomationStateError,
 	AutomationStore,
@@ -593,6 +594,25 @@ def _emit_control_busy(ctx: click.Context, command: str, exc: AutomationControlB
 	ctx.exit(1)
 
 
+def _emit_control_busy_after_dispatch(
+	ctx: click.Context, command: str, exc: AutomationControlBusyDispatched
+) -> NoReturn:
+	"""周期内控制锁冲突：平台动作可能已发出，禁止按「没有生效」重试（Issue #1267）。
+
+	动作派发后队列已写回 executed，但 checkpoint 撞锁没落盘。重新运行不会重发
+	已确认的行；但熔断状态可能落后，所以按 `LOCAL_STATE_WRITE_FAILED` 上报：
+	先核对官方页面，不自动重发。
+	"""
+	handle_error_output(
+		ctx,
+		command,
+		code="LOCAL_STATE_WRITE_FAILED",
+		message=f"招聘自动化执行中断：平台动作可能已发出，但自动化状态保存失败（{exc}）",
+		hints={"next_actions": [_hint_command(ctx, "agent stats")]},
+	)
+	ctx.exit(1)
+
+
 def _emit_run_busy(ctx: click.Context, command: str, exc: AutomationRunBusy) -> NoReturn:
 	"""执行锁冲突：另一个 agent run 正在执行，本次调用没有发出任何请求（Issue #1253）。"""
 	handle_error_output(
@@ -681,6 +701,8 @@ def _run_agent(
 		)
 	except AutomationRunBusy as exc:
 		_emit_run_busy(ctx, command, exc)
+	except AutomationControlBusyDispatched as exc:
+		_emit_control_busy_after_dispatch(ctx, command, exc)
 	except AutomationControlBusy as exc:
 		_emit_control_busy(ctx, command, exc)
 	except AutomationStateError as exc:
