@@ -233,7 +233,13 @@ def _render_html(
 	diff_result: dict[str, Any],
 ) -> str:
 	"""渲染为 HTML 格式，含分组、diff 标记和联系人标识映射。"""
-	esc = _html.escape
+
+	def esc(value: Any) -> str:
+		# 平台字段类型漂移（数字 / 对象）时 html.escape 直接抛 AttributeError，
+		# 整次 HTML 导出落成 INTERNAL_ERROR；md / csv 已用 str() 兜底，这里
+		# 统一同口径（Issue #1296）。
+		return _html.escape(str(value))
+
 	rd = prepare_render_data(friends, from_who, diff_result)
 
 	# diff 摘要

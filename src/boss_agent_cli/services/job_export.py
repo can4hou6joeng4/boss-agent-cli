@@ -92,7 +92,13 @@ _sanitize_csv_cell = sanitize_csv_cell
 
 def render_html_export(items: list[dict[str, Any]]) -> str:
 	"""将搜索结果渲染为自包含 HTML 表格字符串（export 的 -o 与 stdout 共用）。"""
-	esc = _html.escape
+
+	def esc(value: Any) -> str:
+		# 平台字段类型漂移（数字 / 对象）时 html.escape 直接抛 AttributeError，
+		# 整次 HTML 导出落成 INTERNAL_ERROR；csv 已用 str() 兜底，这里统一
+		# 同口径（Issue #1296）。
+		return _html.escape(str(value))
+
 	if not items:
 		return "<html><body><p>无数据</p></body></html>"
 
