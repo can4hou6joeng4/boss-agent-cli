@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 from boss_agent_cli.main import cli
+from boss_agent_cli.search_filters import match_all_welfare, resolve_welfare_keywords
 
 
 def _make_job_raw(job_id="j1", welfare=None, security_id="sec_1"):
@@ -147,3 +148,70 @@ def test_search_click_keeps_welfare_option():
 	assert result.exit_code == 0
 	assert "--welfare" in result.output
 	assert "福利筛选" in result.output
+
+
+def test_match_all_welfare_skips_non_string_list_elements():
+	"""welfareList 元素漂移不能把整次筛选变成 TypeError（Issue #1329）。"""
+	assert match_all_welfare(
+		[("双休", resolve_welfare_keywords("双休"))],
+		[123, {"x": 1}, None, "双休"],
+		"",
+	) == ["双休(标签)"]
+
+
+def test_match_all_welfare_ignores_non_string_description():
+	assert match_all_welfare([("双休", ["双休"])], ["五险一金"], None) == []
+
+
+@patch("boss_agent_cli.commands.search.try_save_index")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+@patch("boss_agent_cli.commands.search.AuthManager")
+def test_welfare_filter_tolerates_non_string_list_element(mock_auth, mock_client_cls, mock_cache_cls, mock_save):
+	"""混合数组里的坏元素不影响其余标签命中（Issue #1329）。"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_cache.reserve_crawl_budget.return_value = 0.0
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = {
+		"zpData": {
+			"hasMore": False,
+			"jobList": [_make_job_raw("j1", welfare=["双休", 123], security_id="sec_1")],
+		},
+	}
+
+	result = CliRunner().invoke(cli, ["--json", "search", "golang", "--welfare", "双休"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"][0]["job_id"] == "j1"
+	assert "双休(标签)" in parsed["data"][0]["welfare_match"]
+
+
+@patch("boss_agent_cli.commands.search.try_save_index")
+@patch("boss_agent_cli.commands.search.CacheStore")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+@patch("boss_agent_cli.commands.search.AuthManager")
+def test_welfare_detail_fallback_tolerates_non_string_list_element(
+	mock_auth, mock_client_cls, mock_cache_cls, mock_save
+):
+	"""列表全为坏元素时仍按详情描述判断，不落 INTERNAL_ERROR（Issue #1329）。"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_cache.reserve_crawl_budget.return_value = 0.0
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = {
+		"zpData": {
+			"hasMore": False,
+			"jobList": [_make_job_raw("j1", welfare=[123, None], security_id="sec_1")],
+		},
+	}
+	mock_client.job_card.return_value = {"zpData": {"jobCard": {"postDescription": "本岗位周末双休"}}}
+
+	result = CliRunner().invoke(cli, ["--json", "search", "golang", "--welfare", "双休"])
+
+	assert result.exit_code == 0
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is True
+	assert "双休(描述)" in parsed["data"][0]["welfare_match"]

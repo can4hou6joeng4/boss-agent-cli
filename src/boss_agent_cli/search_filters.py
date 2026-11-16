@@ -606,7 +606,11 @@ def match_all_welfare(
 	description: str,
 ) -> list[str]:
 	"""Check all welfare conditions (AND). Returns match descriptions or empty list."""
-	text = " ".join(welfare_list)
+	# field_list() 只保证容器是 list：平台可能混入数字 / null / 对象等漂移元素，
+	# 直接 join 会让整次搜索落成 INTERNAL_ERROR。与 dict_items() 同口径跳过
+	# 非字符串元素；description 非字符串按空文本处理（Issue #1329）。
+	text = " ".join(item for item in welfare_list if isinstance(item, str))
+	description = description if isinstance(description, str) else ""
 	full_text = text + " " + description
 	results = []
 	for label, keywords in conditions:
