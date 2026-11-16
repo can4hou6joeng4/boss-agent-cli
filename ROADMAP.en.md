@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.68 (2026-11-17): MCP forwards explicit empty strings verbatim (Issue #1324); crawl checkpoints gain range, enum and text validation (Issue #1325); auxiliary workflows no longer rely on `pull_request_target` (Issue #1322).
 - ✅ v3.4.67 (2026-11-17): three chat-family field drifts fall back to missing (Issue #1317); search-cache element and browsers.json shape drifts fall back to unavailable (Issue #1318).
 - ✅ v3.4.66 (2026-11-17): wizard `friendSource` type drift falls back to the default (Issue #1314); ROADMAP release entries are separate list items again (Issue #1312).
 - ✅ v3.4.65 (2026-11-17): automation lock corruption reported as state errors and zero-dispatch conflict semantics (Issues #1304, #1307); empty stoken refresh failures (Issue #1305); strict ASCII digit parsing (Issue #1306).
