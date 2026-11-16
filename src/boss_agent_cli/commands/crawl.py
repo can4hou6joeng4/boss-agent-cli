@@ -380,7 +380,9 @@ def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[s
 		# 同一数据目录的采集共用一个 Chrome 配置目录：另一个 run 的 Chrome 正在
 		# 使用时，本次调用既没有发出请求，也不该删锁或起第二个实例（Issue #1266）。
 		note("CRAWL_PROFILE_BUSY", str(exc))
-		status_command = boss_command_for_ctx(ctx, "crawl status", include_data_dir=True)
+		# `crawl status` 的 run_id 是必填参数：不带值的命令照抄后必然 INVALID_PARAM
+		# （Issue #1289）。占位符与项目其他 hint 一致。
+		status_command = boss_command_for_ctx(ctx, "crawl status <run_id>", include_data_dir=True)
 		handle_error_output(
 			ctx,
 			"crawl",

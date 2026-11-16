@@ -1212,7 +1212,9 @@ def _crawl_busy_error(context: ActionContext, exc: CrawlBusyError) -> WorkflowAc
 
 def _crawl_profile_busy_error(context: ActionContext, exc: CrawlProfileBusy) -> WorkflowActionError:
 	"""采集配置目录被另一个运行中的采集 Chrome 占用：本次没有发出请求。"""
-	status_command = _hint_command(context, "crawl status")
+	# `crawl status` 的 run_id 是必填参数：写不带值的命令会让 Agent 照抄后拿到
+	# INVALID_PARAM（Issue #1289）。用占位符形式，与项目其他 hint 一致。
+	status_command = _hint_command(context, "crawl status <run_id>")
 	return WorkflowActionError(
 		"CRAWL_PROFILE_BUSY",
 		str(exc),
@@ -1331,7 +1333,9 @@ def _positive_int(value: Any, *, name: str) -> int:
 	"""解析 workflow 输入的正整数；非法值按参数错误返回，不落成可重试的网络错误。"""
 	try:
 		parsed = int(value)
-	except (TypeError, ValueError) as exc:
+	# OverflowError：`1e400` 解析成 inf，`int(inf)` 抛错；调用方改输入即可修复，
+	# 不能落成 INTERNAL_ERROR（Issue #1288）。
+	except (TypeError, ValueError, OverflowError) as exc:
 		raise WorkflowActionError(
 			"INVALID_PARAM",
 			f"{name} 必须是整数: {value!r}",

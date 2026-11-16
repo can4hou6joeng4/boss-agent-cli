@@ -179,7 +179,9 @@ class CrawlSettings:
 				max_retries=int(raw.get("max_retries") or limits.get("max_retries", 1)),
 				operating_mode=str(raw.get("operating_mode", "assisted")),
 			)
-		except (TypeError, ValueError) as exc:
+		except (TypeError, ValueError, OverflowError) as exc:
+			# OverflowError：`1e400` 解析成 inf，`int(inf)` 抛错；与
+			# crawl_int_setting / crawl_cdp_port 同口径按记录损坏处理（Issue #1288）。
 			raise CacheRecordInvalid("crawl_run", run_id, "params", f"字段类型无法解析（{exc}）") from exc
 
 
