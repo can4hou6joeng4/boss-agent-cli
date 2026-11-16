@@ -2,6 +2,22 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.73] - 2026-11-17
+
+### Fixed
+- wizard 的 run/step `status` 只认 `WorkflowStatus` 枚举：NULL / 非字符串 / 未知值此前能绕过 resume 去重（写操作会被重放），现在 `get_checkpoint` 与 `list_recent` 统一报 `CACHE_RECORD_INVALID`；`SearchPipelinePlatformError` 不再被兜成 `NETWORK_ERROR`，保留 AUTH_EXPIRED / RATE_LIMITED / 风控码的原语义与恢复指引（Issue #1382、#1384）。
+- wizard 的 `welfare_conditions` 文档形状（`list[str]`）被逐字符拆包导致静默错误筛选；入口统一归一为 `(label, keywords)`，非法形状报 `INVALID_PARAM`（Issue #1383）。
+- wizard 的 `--timeout` 接受 `nan` / `inf`，超时保护被静默关闭；现在要求有限正数并报 `INVALID_PARAM`。`--status` 的 TTY 恢复命令按 `--data-dir` 改写（Issue #1385、#1386）。
+- 登录风控信封把 `LOGIN_RISK_CONTROL` 报成 `recoverable=true` + 「重试登录」，`display.py` 又只在字段为 `None` 时按登记表补齐；现在按 `ERROR_CODES` 取 `recoverable=false` 与登记表 recovery，`next_actions` 保持为空（Issue #1390）。
+- `boss doctor` 的登录态结论 `stoken=存在/缺失` 被自由文本脱敏替换成 `[REDACTED]`；改为 `stoken_present=...`，真实 token 仍被脱敏（Issue #1393）。
+- stdout 与 MCP 输出遇到非有限浮点会写出 `NaN` / `Infinity`，严格 JSON 解析器拒绝整份信封；现在递归归一为 `null`（超长整数同样归一），并以 `allow_nan=False` 兜底，正常输出逐字节不变（Issue #1391）。
+- MCP 工具 schema 的 `minimum` / `maximum` 与 Click 参数漂移（`timeout=0`、`count=0`、`days=-1` 先被放行再由 CLI 拒绝）；现在以 Click 为真源补齐边界，并新增双向守卫测试防止再次漂移（Issue #1392）。
+- Rich 表格标题直接拼接用户查询词 / 联系人名 / `--data-dir` 路径，`[/bold]` 这类标记会让 TTY 输出崩溃并被兜成可重试 `NETWORK_ERROR`；三个渲染器与空列表路径现在转义标题，`MarkupError` 按不可恢复的 `INTERNAL_ERROR` 分类（Issue #1399）。
+- 磁盘满等 fd 级写失败抛出的 `OSError` 没有 `filename`，被 `is_local_io_error` 判成网络错误并提示重试；原子写现在补上目标路径，按 `LOCAL_IO_ERROR` 报告（Issue #1400）。
+- Windows 上职位 CSV 导出被文本层二次翻译，每行变成 `\r\r\n`；CSV 分支改用 `newline=""` 落盘（Issue #1401）。
+- 联系人接口 `result` 为非空坏元素数组时不再回退合法的 `friendList`，整页被静默当作 0 条，导出还会把空页写成完整快照；现在只要取不出 dict 元素就回退（Issue #1402）。
+- 预筛日志把职位薪资与用户期望薪资拼进 stderr，CodeQL 按明文记录私有数据告警；日志原因改为定性描述，数值仍保留在输出 data 里（Issue #1394）。
+
 ## [3.4.72] - 2026-11-17
 
 ### Fixed
