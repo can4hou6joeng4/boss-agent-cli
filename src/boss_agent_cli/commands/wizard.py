@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 from typing import Any, Callable, Mapping, NoReturn
 
@@ -36,6 +37,20 @@ from boss_agent_cli.wizard.renderer import (
 )
 from boss_agent_cli.wizard.runner import WorkflowActionError, WorkflowRunner, has_blocked_step
 from boss_agent_cli.wizard.store import WorkflowStore
+
+
+def _validate_timeout(ctx: click.Context, param: click.Parameter, value: float | None) -> float | None:
+	"""`click.FloatRange` 只比较大小，nan / inf 会穿过并让 deadline 计算失效（Issue #1385）。
+
+	`--timeout inf` / `1e400` 时 `started_at + timeout` 是 inf，超时保护被静默
+	关闭；`nan` 让任何比较都为 False，同样永远不触发。两者都必须按参数错误
+	在解析阶段拒绝，而不是带着 ok:true 跑完整个 workflow。
+	"""
+	if value is None:
+		return None
+	if not math.isfinite(value) or value <= 0:
+		raise click.BadParameter("必须是有限的正数秒数，例如 30", ctx=ctx, param=param)
+	return value
 
 
 def _is_interactive(ctx: click.Context) -> bool:
@@ -787,7 +802,13 @@ def _run_wizard_command(
 					hints={"next_actions": [boss_command_for_ctx(ctx, "wizard", include_data_dir=True)]},
 				)
 				return
-			handle_output(ctx, "wizard", run, render=render_run, hints={"next_actions": _workflow_next_actions(ctx, run)})
+			handle_output(
+				ctx,
+				"wizard",
+				run,
+				render=lambda payload: render_run(payload, command_for=_command_for_ctx(ctx)),
+				hints={"next_actions": _workflow_next_actions(ctx, run)},
+			)
 			return
 		if stop_run_id:
 			if not store.request_stop(stop_run_id):
@@ -917,7 +938,14 @@ def _run_wizard_command(
 @click.option("--resume", "resume_run_id", default=None, help="恢复指定 workflow run_id")
 @click.option("--status", "status_run_id", default=None, help="查看指定 workflow run_id")
 @click.option("--stop", "stop_run_id", default=None, help="停止指定 workflow run_id")
-@click.option("--timeout", "timeout_seconds", type=click.FloatRange(min=0.001), default=None, help="workflow 超时秒数")
+@click.option(
+	"--timeout",
+	"timeout_seconds",
+	type=click.FloatRange(min=0.001),
+	default=None,
+	callback=_validate_timeout,
+	help="workflow 超时秒数",
+)
 @click.option("--max-retries", type=click.IntRange(min=0, max=10), default=0, help="可恢复步骤的最大重试次数")
 @click.pass_context
 def wizard_cmd(
