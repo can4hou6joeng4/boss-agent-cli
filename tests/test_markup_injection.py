@@ -17,6 +17,9 @@ _CLOSING_TAG = "看到 [/bold] 崩溃"
 _LINK = "[link=https://example.invalid/x]点我领奖[/link]"
 _PAYLOADS = (_CLOSING_TAG, _LINK)
 
+# 标题直接来自外部输入：搜索词、联系人名、--data-dir 路径（Issue #1399）。
+_TITLE_PAYLOADS = ("[/bold]", "[x]", "[HR] 王女士", "/tmp/a[/b]")
+
 
 def _capture_terminal_console(monkeypatch, *, width: int = 120):
 	"""force_terminal 才会走到 OSC 8 超链接编码；force_terminal=False 掩盖注入。"""
@@ -38,6 +41,12 @@ def _assert_literal(stream, payload: str) -> None:
 	plain = _ANSI_ESCAPE.sub("", output)
 	marker = "[link=" if payload == _LINK else payload
 	assert marker in plain
+
+
+def _assert_title_literal(stream, payload: str) -> None:
+	"""标题会被表格按宽度折行，断言前把空白折叠成单个空格再比对。"""
+	plain = _ANSI_ESCAPE.sub("", stream.getvalue())
+	assert " ".join(payload.split()) in " ".join(plain.split())
 
 
 class TestDisplayRenderers:
@@ -144,6 +153,72 @@ class TestDisplayRenderers:
 		)
 
 		_assert_literal(stream, command)
+
+
+class TestRendererTitles:
+	"""表格 / 空列表提示的 title 也是外部输入，同样必须按字面渲染（Issue #1399）。"""
+
+	@pytest.mark.parametrize("payload", _TITLE_PAYLOADS)
+	def test_job_table_title(self, monkeypatch, payload):
+		from boss_agent_cli.display import render_job_table
+
+		stream = _capture_terminal_console(monkeypatch)
+		render_job_table([{"title": "Go", "company": "X"}], title=f"search: {payload}")
+
+		flat = " ".join(_ANSI_ESCAPE.sub("", stream.getvalue()).split())
+		assert "search:" in flat, "代码自己的标题前缀不能被转义改变"
+		assert "(1 results)" in flat
+		_assert_title_literal(stream, payload)
+
+	@pytest.mark.parametrize("payload", _TITLE_PAYLOADS)
+	def test_simple_list_title(self, monkeypatch, payload):
+		from boss_agent_cli.display import render_simple_list
+
+		stream = _capture_terminal_console(monkeypatch)
+		render_simple_list(
+			[{"name": "A"}],
+			f"配置 ({payload})",
+			[("name", "name", "bold")],
+		)
+
+		flat = " ".join(_ANSI_ESCAPE.sub("", stream.getvalue()).split())
+		assert "配置 (" in flat
+		assert "(1)" in flat
+		_assert_title_literal(stream, payload)
+
+	@pytest.mark.parametrize("payload", _TITLE_PAYLOADS)
+	def test_simple_list_empty_title(self, monkeypatch, payload):
+		from boss_agent_cli.display import render_simple_list
+
+		stream = _capture_terminal_console(monkeypatch)
+		render_simple_list([], f"聊天记录 — {payload}", [("name", "name", "bold")])
+
+		flat = " ".join(_ANSI_ESCAPE.sub("", stream.getvalue()).split())
+		assert "no 聊天记录" in flat
+		_assert_title_literal(stream, payload)
+
+	@pytest.mark.parametrize("payload", _TITLE_PAYLOADS)
+	def test_string_grid_title(self, monkeypatch, payload):
+		from boss_agent_cli.display import render_string_grid
+
+		stream = _capture_terminal_console(monkeypatch)
+		render_string_grid(["北京"], f"cities {payload}")
+
+		flat = " ".join(_ANSI_ESCAPE.sub("", stream.getvalue()).split())
+		assert "cities" in flat
+		assert "(1)" in flat
+		_assert_title_literal(stream, payload)
+
+	@pytest.mark.parametrize("payload", _TITLE_PAYLOADS)
+	def test_string_grid_empty_title(self, monkeypatch, payload):
+		from boss_agent_cli.display import render_string_grid
+
+		stream = _capture_terminal_console(monkeypatch)
+		render_string_grid([], f"cities {payload}")
+
+		flat = " ".join(_ANSI_ESCAPE.sub("", stream.getvalue()).split())
+		assert "no cities" in flat
+		_assert_title_literal(stream, payload)
 
 
 class TestWizardRenderers:
