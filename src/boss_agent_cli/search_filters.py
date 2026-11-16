@@ -549,7 +549,10 @@ def prefilter_job(
 		item_range = parse_salary_range(raw_item.get("salaryDesc", ""))
 		if req_range and item_range:
 			if item_range[1] < req_range[0]:
-				reasons.append(f"薪资不足: {raw_item.get('salaryDesc', '')} < {criteria.salary}")
+				# 日志原因里不写薪资原值与期望值：职位薪资与用户的期望薪资都属于
+				# 私有数据，CodeQL 会按明文记录敏感数据告警（Issue #1394）；具体
+				# 数值仍保留在搜索结果的 data 里，TTY 表格也照常展示。
+				reasons.append("薪资不足: 低于期望下限")
 
 	# Experience filter
 	if criteria.experience:
