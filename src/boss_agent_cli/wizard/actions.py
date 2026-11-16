@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -18,7 +19,7 @@ from boss_agent_cli.cache.store import CacheStore, SavedSearchParamsError
 from boss_agent_cli.platforms.factory import build_platform_instance, build_recruiter_platform_instance
 from boss_agent_cli.services.contact_lookup import FriendLookupLimitExceeded, find_friend
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
-from boss_agent_cli.services.output_path import prepare_output_path
+from boss_agent_cli.services.output_path import OutputPathProblem, inspect_output_path, prepare_output_path
 from boss_agent_cli.crawler.operations import crawl_status
 from boss_agent_cli.crawler.service import (
 	CrawlBudget,
@@ -146,7 +147,7 @@ def execute_candidate_search(
 		scale=_optional_str(inputs.get("scale")),
 		stage=_optional_str(inputs.get("stage")),
 		job_type=_optional_str(inputs.get("job_type")),
-		raw_params=dict(inputs.get("raw_params") or {}),
+		raw_params=_mapping_input(inputs, "raw_params"),
 	)
 	extra: dict[str, Any] = {"active": active} if active else {}
 	account = str(inputs.get("account") or "")
@@ -266,6 +267,21 @@ def _bool_input(inputs: Mapping[str, Any], name: str, default: bool = False) -> 
 	if isinstance(raw, bool):
 		return raw
 	raise WorkflowInputError(f"wizard 输入 {name} 必须是布尔值，收到 {raw!r}")
+
+
+def _mapping_input(inputs: Mapping[str, Any], name: str) -> dict[str, Any]:
+	"""读取 JSON 对象输入：缺省 / ``null`` 为空对象，其余非对象类型点名报错。
+
+	wizard inputs 来自 ``--input-json`` / MCP：字符串会被 ``dict()`` 当成键值对
+	序列解析成随机结果或 ValueError，数组 / 数字直接抛 TypeError，最终都被
+	runner 兜成可重试的 ``NETWORK_ERROR``，而同一条输入重试永远复现（Issue #1330）。
+	"""
+	raw = inputs.get(name)
+	if raw is None:
+		return {}
+	if not isinstance(raw, Mapping):
+		raise WorkflowInputError(f"wizard 输入 {name} 必须是 JSON 对象，收到 {raw!r}")
+	return dict(raw)
 
 
 def _exchange_type(inputs: Mapping[str, Any]) -> int:
@@ -962,11 +978,54 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 	return StepResult({"resume": resume_name, "result": result})
 
 
+_EXPORT_OUTPUT_CONTRACTS: dict[OutputPathProblem, tuple[str, str]] = {
+	OutputPathProblem.IS_DIRECTORY: ("INVALID_PARAM", "在 output 里给出完整文件名"),
+	OutputPathProblem.NOT_REGULAR: ("INVALID_PARAM", "换一个普通文件路径后重试"),
+	OutputPathProblem.PARENT_NOT_DIR: ("LOCAL_IO_ERROR", "换一个父目录存在且可写的路径后重试"),
+}
+
+
+def _export_output_path(context: ActionContext, inputs: Mapping[str, Any], fmt: str) -> Path:
+	"""在发出平台请求前校验导出目标，返回展开后的路径。
+
+	命令层 `export` / `chat --export` 已把 `-o` 校验前置（`inspect_output_path`）；
+	wizard 之前要等取完数才在 `prepare_output_path` 上暴露路径问题，非法 format
+	也会先翻页消耗请求预算（Issue #1330）。这里只读检查，不建目录：父目录仍由
+	写文件前的 `prepare_output_path` 创建。
+	"""
+	raw = inputs.get("output")
+	if raw is None or raw == "":
+		raw = context.data_dir / "exports" / f"wizard-jobs.{fmt}"
+	elif not isinstance(raw, (str, os.PathLike)):
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"wizard export output 必须是文件路径字符串，收到 {type(raw).__name__}",
+			recovery_action="把 output 改成完整文件路径后重试",
+		)
+	target, problem = inspect_output_path(raw)
+	if problem is None:
+		return target
+	code, recovery_action = _EXPORT_OUTPUT_CONTRACTS[problem]
+	if problem is OutputPathProblem.IS_DIRECTORY:
+		message = f"wizard export 的 output 需要文件路径，{str(target)!r} 是目录"
+		recovery_action = f"{recovery_action}，例如 {target / 'result.txt'}"
+	elif problem is OutputPathProblem.NOT_REGULAR:
+		message = f"wizard export 的 output 需要普通文件路径，{str(target)!r} 不是普通文件"
+	else:
+		message = f"wizard export 的 output 无法创建父目录，某级父路径不是目录: {str(target)!r}"
+	raise WorkflowActionError(code, message, recovery_action=recovery_action)
+
+
 def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	from boss_agent_cli.services.job_export import prepare_export_items, write_export_file
 
-	# 先校验布尔值：非法输入不能在导出后才失败，更不能静默保留未脱敏个人信息。
+	# 参数与路径必须在平台请求之前校验：非法 format 不能先翻完页才发现，
+	# `output` 指向目录也不能消耗一次受限请求（与命令层 `-o` 预检同口径）。
 	include_private = _bool_input(inputs, "include_private")
+	fmt = str(inputs.get("format") or "json")
+	if fmt not in {"json", "csv"}:
+		raise WorkflowActionError("INVALID_PARAM", "wizard export format 仅支持 json/csv")
+	output_path = _export_output_path(context, inputs, fmt)
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		with context.candidate_platform() as platform:
 			# 与 candidate_search / candidate_watch 一致：导出时的 greeted 标记
@@ -974,10 +1033,7 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 			result = execute_candidate_search(
 				platform, cache, context.logger, {**inputs, "account": account_scope(context.auth())}
 			)
-	fmt = str(inputs.get("format") or "json")
-	if fmt not in {"json", "csv"}:
-		raise WorkflowActionError("INVALID_PARAM", "wizard export format 仅支持 json/csv")
-	output = prepare_output_path(inputs.get("output") or context.data_dir / "exports" / f"wizard-jobs.{fmt}")
+	output = prepare_output_path(output_path)
 	items = prepare_export_items(result.items, include_private=include_private)
 	write_export_file(items, fmt, str(output))
 	return StepResult({"path": str(output), "format": fmt, "count": len(items)}, artifacts=(str(output),))
@@ -1280,7 +1336,26 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 	if existing_run_id:
 		return _crawl_resume(context, {"run_id": existing_run_id, **dict(inputs)}, prior)
 
-	crawl_config = dict((context.config or {}).get("crawl") or {})
+	if context.config is not None and not isinstance(context.config, Mapping):
+		# config.json 由用户手工编辑：顶层或 crawl 段写成数组 / 字符串时，
+		# dict() / .get() 抛出的 TypeError / AttributeError 会被 runner 兜成可重试的
+		# NETWORK_ERROR，而重试同一条 run_id 永远复现（Issue #1330）。
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"本地配置必须是 JSON 对象，收到 {type(context.config).__name__}",
+			recovery_action=f"修正或删除 {context.data_dir / 'config.json'} 后重试",
+		)
+	crawl_value = context.config.get("crawl") if context.config is not None else None
+	if crawl_value is not None and not isinstance(crawl_value, Mapping):
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"配置项 crawl 必须是 JSON 对象，收到 {type(crawl_value).__name__}",
+			recovery_action=(
+				f"{_hint_command(context, 'config reset crawl')}；"
+				f"或直接修正 {context.data_dir / 'config.json'} 的 crawl 段"
+			),
+		)
+	crawl_config = dict(crawl_value or {})
 	city = str(_required(inputs, "city"))
 	city_code = CITY_CODES.get(city, city if city.isascii() and city.isdigit() else None)
 	if city_code is None:
