@@ -240,7 +240,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "agent_review_reject":
 		args = ["agent", "review", "reject", str(arguments["id"])]
-		if arguments.get("reason"):
+		# 显式空串要原样下发（Issue #1324）：CLI 的 default 只在选项缺席时生效。
+		if arguments.get("reason") is not None:
 			args.extend(["--reason", str(arguments["reason"])])
 		return _literal_positionals(args, start=3)
 
@@ -252,7 +253,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "agent_stop":
 		args = ["agent", "stop"]
-		if arguments.get("reason"):
+		# 显式空串要原样下发（Issue #1324）：CLI 的 default 只在选项缺席时生效。
+		if arguments.get("reason") is not None:
 			args.extend(["--reason", str(arguments["reason"])])
 		return args
 
@@ -416,8 +418,10 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "shortlist_add":
 		args = ["shortlist", "add", arguments["security_id"], arguments["job_id"]]
+		# 显式空串要原样下发（Issue #1324）：CLI 的 default 只在选项缺席时生效，
+		# 真值判断会把 "" 化装成没传，落库的 source 与调用方参数不一致。
 		for opt in ("title", "company", "city", "salary", "source"):
-			if arguments.get(opt):
+			if arguments.get(opt) is not None:
 				args.extend([f"--{opt}", str(arguments[opt])])
 		if arguments.get("lid"):
 			args.extend(["--lid", str(arguments["lid"])])
