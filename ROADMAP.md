@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.42（2026-11-16）：`boss ai` 各命令、`boss agent crawl` 与向导 AI 步骤在构造 `AIService` 前校验 `ai_temperature` / `ai_max_tokens`。坏值（字符串、数组、`bool`、负数、`inf`/`nan`）此前会原样进入请求 payload，由服务商返回 400、只看到泛化的 `AI_API_ERROR`；现在返回 `INVALID_PARAM` 并给出 `boss ai config` 修复命令，向导步骤抛同码错误，`null` 与缺键继续按默认值（Issue #1209）。
 - ✅ v3.4.41（2026-11-16）：`crawl resume --background` 在断点 `updated_at` 列被写成非数字文本时不再返回可重试的 `NETWORK_ERROR`。时间戳与状态排序、排队探测共用同一容错读数，漂移按 0 降级，后台恢复照常排队/启动，预检失败还原时写回归一后的 0.0（Issue #1206）。
 - ✅ v3.4.40（2026-11-16）：MCP 补齐两个 CLI 已有参数。`boss_greet` 新增可选 `message`（自定义打招呼语，缺省使用平台默认招呼），`boss_apply` 新增可选 `lid`（与 `security_id` 同一列表项的访问上下文，取自 search 结果）；两者缺省 / `null` 不下发，自由文本空串按未传处理（与 `boss_detail` 的 `lid` 同口径）。
 - ✅ v3.4.39（2026-11-16）：MCP 参数面两处修正。`boss_hr_chatmsg` 的显式 `max_msg_id=0` 不再被真值判断吞掉（键存在即下发，由 CLI 拒绝并返回 `INVALID_PARAM`）；`boss_exchange` 的 schema 暴露 `type`（phone|wechat），微信交换可达，缺省 / `phone` 不带选项、空串交给 CLI 枚举诊断。
