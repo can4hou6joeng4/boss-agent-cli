@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, NoReturn, cast
 
-from boss_agent_cli.api.models import dict_items, field_dict, field_list
+from boss_agent_cli.api.models import dict_items, field_dict, field_list, platform_data_dict
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.auth.identity import account_scope
 from boss_agent_cli.auth.manager import AuthManager
@@ -1399,7 +1399,7 @@ def _recruiter_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 
 def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	with context.recruiter_platform() as platform:
-		friend_data = _unwrap(
+		friend_data = platform_data_dict(_unwrap(
 			platform,
 			platform.friend_list(
 				page=_int_input(inputs, "page", 1, minimum=1),
@@ -1408,7 +1408,7 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 			),
 			"沟通列表获取失败",
 			context=context,
-		)
+		))
 		friend_items = next(
 			(value for key in ("friendList", "result", "list") if isinstance((value := friend_data.get(key)), list)),
 			[],

@@ -110,7 +110,7 @@ def collect_favorites_items(
 		if not platform.is_success(resp):
 			return [], resp
 
-		platform_data = platform.unwrap_data(resp) or {}
+		platform_data = platform.unwrap_data(resp)
 		if not isinstance(platform_data, dict):
 			return [], resp
 		page_items = platform_data.get("cardList") or []
@@ -172,18 +172,29 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 				fallback_message="职位收藏获取失败",
 			)
 			return
-		platform_data = platform.unwrap_data(raw) or {}
+		platform_data = platform.unwrap_data(raw)
 		if not isinstance(platform_data, dict):
-			handle_platform_error_output(
-				ctx, "favorites-list", platform, raw,
-				fallback_message="职位收藏响应格式无效",
+			# 平台数据形状问题对只读命令是可重试的；handle_platform_error_output
+			# 在成功包络上会落到 UNKNOWN（写操作口径「核对是否生效」），对 list
+			# 是误导（Issue #1233）。
+			handle_error_output(
+				ctx,
+				"favorites-list",
+				code="NETWORK_ERROR",
+				message="职位收藏响应格式无效",
+				recoverable=True,
+				recovery_action="重试；若持续出现，用 boss doctor 检查登录态与网络",
 			)
 			return
 		cards = platform_data.get("cardList") or []
 		if not isinstance(cards, list):
-			handle_platform_error_output(
-				ctx, "favorites-list", platform, raw,
-				fallback_message="职位收藏响应格式无效",
+			handle_error_output(
+				ctx,
+				"favorites-list",
+				code="NETWORK_ERROR",
+				message="职位收藏响应格式无效",
+				recoverable=True,
+				recovery_action="重试；若持续出现，用 boss doctor 检查登录态与网络",
 			)
 			return
 

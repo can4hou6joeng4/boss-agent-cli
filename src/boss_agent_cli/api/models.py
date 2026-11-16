@@ -39,6 +39,17 @@ def field_dict(data: Any, key: str) -> dict[str, Any]:
 	return value if isinstance(value, dict) else {}
 
 
+def platform_data_dict(value: Any) -> dict[str, Any]:
+	"""把 `unwrap_data` 的结果归一为对象：缺失、null 或非对象真值都按空对象。
+
+	平台把 ``zpData`` 返回成字符串 / 数组 / 数字时，``unwrap_data(...) or {}``
+	只挡假值，后续 ``.get`` 会抛 ``AttributeError``、``**`` 会抛 ``TypeError``，
+	被兜成不可重试的 ``INTERNAL_ERROR``（Issue #1233）。注意只用于期望对象的
+	消费点：有的 wizard 动作显式支持顶层数组（``_extract_list_items``）。
+	"""
+	return value if isinstance(value, dict) else {}
+
+
 def job_public_url(job_id: str) -> str:
 	"""职位详情页地址。只由 encryptJobId 拼出，不额外请求平台。"""
 	if not job_id:

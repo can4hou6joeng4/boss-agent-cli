@@ -3,6 +3,7 @@ from typing import Any
 
 import click
 
+from boss_agent_cli.api.models import platform_data_dict
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.commands.recruiter._hints import hint_command
@@ -202,7 +203,7 @@ def jobs_detail_cmd(ctx: click.Context, enc_job_id: str) -> None:
 		if not platform.is_success(result):
 			handle_platform_error_output(ctx, "recruiter-jobs-detail", platform, result, fallback_message="职位详情获取失败")
 			return
-		data = platform.unwrap_data(result) or {}
+		data = platform_data_dict(platform.unwrap_data(result))
 		handle_output(
 			ctx,
 			"recruiter-jobs-detail",
