@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.40] - 2026-11-16
 
 ### Added
 - MCP 补齐两个 CLI 已有参数的映射（Issue #1202）：`boss_greet` 新增可选 `message`（自定义打招呼语，缺省使用平台默认招呼），`boss_apply` 新增可选 `lid`（与 `security_id` 同一列表项的访问上下文，取自 search 结果）。两者缺省 / `null` 不下发，自由文本空串按未传处理（与 `boss_detail` 的 `lid` 同口径）。
