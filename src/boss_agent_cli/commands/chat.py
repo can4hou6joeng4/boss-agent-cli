@@ -11,6 +11,7 @@ from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 from boss_agent_cli.services.chat_export import render_export
 from boss_agent_cli.services.output_path import prepare_output_path
+from boss_agent_cli.services.text_files import write_text_atomic
 from boss_agent_cli.services.chat_snapshot import save_snapshot_and_diff, load_snapshot
 from boss_agent_cli.services.chat_utils import (
 	RELATION_LABELS, FROM_FILTER, MSG_STATUS_LABELS,
@@ -181,8 +182,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			# 显式指定的写入位置由用户负责，这里只展开 ~ 并建好父目录，
 			# 与 digest / stats / resume export 共用同一套 -o 语义。
 			target = prepare_output_path(output_path)
-			with open(target, "w", encoding="utf-8", newline="") as f:
-				f.write(content)
+			write_text_atomic(target, content, newline="")
 			output_path = str(target)
 			handle_output(
 				ctx, "chat",

@@ -20,6 +20,7 @@ from boss_agent_cli import display
 from boss_agent_cli.cache.store import CacheDatabaseInvalid
 from boss_agent_cli.display import boss_command_for_ctx, handle_output, json_forced, render_action_result, shell_argument
 from boss_agent_cli.services.output_path import prepare_output_path
+from boss_agent_cli.services.text_files import write_text_atomic
 
 
 def _safe_count(conn: sqlite3.Connection, table: str) -> int:
@@ -382,7 +383,7 @@ def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Pa
 		html_text = _render_html(ctx, data)
 		if output_path:
 			target = prepare_output_path(output_path)
-			target.write_text(html_text, encoding="utf-8")
+			write_text_atomic(target, html_text)
 			handle_output(
 				ctx, "stats",
 				{"format": "html", "path": str(target), "bytes": len(html_text.encode("utf-8"))},

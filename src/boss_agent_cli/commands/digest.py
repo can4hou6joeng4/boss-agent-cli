@@ -10,6 +10,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.services.output_path import prepare_output_path
+from boss_agent_cli.services.text_files import write_text_atomic
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.digest import build_digest, render_digest_markdown
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output, json_forced, render_message_panel, render_simple_list, shell_argument
@@ -118,7 +119,7 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 		md_text = render_digest_markdown(data)
 		if output_path:
 			target = prepare_output_path(output_path)
-			target.write_text(md_text, encoding="utf-8")
+			write_text_atomic(target, md_text)
 			handle_output(
 				ctx,
 				"digest",
