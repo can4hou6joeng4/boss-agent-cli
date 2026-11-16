@@ -214,8 +214,9 @@ def _plan_from_run(run: Mapping[str, Any]) -> WorkflowPlan:
 def _parse_input_json(raw: str) -> WizardInput:
 	try:
 		value = json.loads(raw)
-	except json.JSONDecodeError as exc:
-		raise WorkflowInputError(f"input-json 不是有效 JSON: {exc.msg}") from exc
+	# 超长整数（3.11+）与深嵌套和语法错误一样：都是 input-json 不合法。
+	except (ValueError, RecursionError) as exc:
+		raise WorkflowInputError(f"input-json 不是有效 JSON: {exc}") from exc
 	if not isinstance(value, dict):
 		raise WorkflowInputError("input-json 顶层必须是 JSON object")
 	return WizardInput.from_mapping(value, mode="headless")

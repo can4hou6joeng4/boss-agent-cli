@@ -110,7 +110,8 @@ def _save_crawl_config(data_dir: Path, updates: dict[str, Any]) -> dict[str, Any
 			loaded = json.loads(config_path.read_text(encoding="utf-8"))
 			if isinstance(loaded, dict):
 				user_cfg = loaded
-		except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+		# 超长整数（3.11+）与深嵌套同样按配置损坏降级，不能挡住 crawl 配置写入。
+		except (ValueError, OSError, RecursionError):
 			pass
 	crawl_cfg = user_cfg.get("crawl", {})
 	if not isinstance(crawl_cfg, dict):

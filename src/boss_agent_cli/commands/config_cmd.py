@@ -317,7 +317,8 @@ def _load_user_overrides(config_path: Path) -> dict[str, Any]:
 			with open(config_path, encoding="utf-8") as f:
 				result: dict[str, Any] = json.load(f)
 				return result
-		except (json.JSONDecodeError, OSError):
+		# 超长整数（3.11+）与深嵌套同样按配置损坏降级，不影响 config 子命令。
+		except (ValueError, OSError, RecursionError):
 			return {}
 	return {}
 
@@ -366,7 +367,8 @@ def _parse_value(key: str, raw: str, default: Any) -> Any:
 		# （如 automation_config_from_dict）在 .get() 上崩溃。这里只接受 JSON object。
 		try:
 			parsed = json.loads(raw)
-		except json.JSONDecodeError as exc:
+		# 超长整数与深嵌套和语法错误一样：都是用户传入的值无法解析。
+		except (ValueError, RecursionError) as exc:
 			raise ValueError(
 				"结构化配置项必须以 JSON object 传值，例如 '{\"mode\": \"training\"}'"
 			) from exc

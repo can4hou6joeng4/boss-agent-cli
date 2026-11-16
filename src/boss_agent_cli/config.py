@@ -135,11 +135,21 @@ def load_config(config_path: Path | None) -> dict[str, Any]:
 		with open(config_path, encoding="utf-8") as f:
 			try:
 				user_cfg = json.load(f)
-			except json.JSONDecodeError as exc:
+			except ValueError as exc:
+				# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError，以及 Python
+				# 3.11+ 对超长整数字面量的位数上限；只有 JSONDecodeError 带行列。
 				# 这份文件坏掉时所有命令都在启动阶段退出，连 config reset 也跑不了：
 				# 消息必须给出文件路径和行列，让用户知道要改哪份文件、怎么恢复。
+				position = (
+					f"第 {exc.lineno} 行第 {exc.colno} 列：" if isinstance(exc, json.JSONDecodeError) else ""
+				)
 				raise ValueError(
-					f"{config_path} 不是合法 JSON（第 {exc.lineno} 行第 {exc.colno} 列：{exc.msg}）："
+					f"{config_path} 不是合法 JSON（{position}{exc}）："
+					"修正该文件或删除它后重试；删除后所有配置回到默认值"
+				) from exc
+			except RecursionError as exc:
+				raise ValueError(
+					f"{config_path} 不是合法 JSON（嵌套层级过深）："
 					"修正该文件或删除它后重试；删除后所有配置回到默认值"
 				) from exc
 		if not isinstance(user_cfg, dict):

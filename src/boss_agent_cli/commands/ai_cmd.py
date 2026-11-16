@@ -222,7 +222,8 @@ def _call_ai(ctx: click.Context, svc: AIService, prompt: str) -> dict[str, Any] 
 
 	try:
 		parsed = json.loads(text)
-	except json.JSONDecodeError:
+	# 超长整数（3.11+）与深嵌套同样是模型输出不可解析，走 AI_PARSE_ERROR 信封。
+	except (ValueError, RecursionError):
 		handle_error_output(
 			ctx, "ai",
 			code="AI_PARSE_ERROR",

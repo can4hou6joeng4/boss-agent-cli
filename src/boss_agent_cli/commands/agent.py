@@ -708,7 +708,8 @@ def _fit_crawl_jobs(svc: Any, resume_text: str, jobs: list[dict[str, Any]]) -> d
 		text = "\n".join(line for line in text.splitlines() if not line.startswith("```")).strip()
 	try:
 		payload = json.loads(text)
-	except json.JSONDecodeError as exc:
+	# 超长整数（3.11+）与深嵌套同样是模型输出不可用，按解析失败报错。
+	except (ValueError, RecursionError) as exc:
 		raise ValueError("AI 返回结果不是 JSON") from exc
 	if not isinstance(payload, dict):
 		raise ValueError("AI 返回结果不是对象")
