@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.51（2026-11-16）：收口 wizard `requested_steps` 空数组语义与 MCP argv 文本边界。空数组不再折叠为全量步骤，NUL / 孤立代理项在派生 CLI 前以 `INVALID_PARAM` 拒绝（Issue #1236）。
 - ✅ v3.4.50（2026-11-16）：收口平台载荷的容器漂移。`zpData` 为非对象真值时，wizard `last_messages` 按空页继续、`hr download-resume` 不再在附件落盘后崩溃、`hr jobs detail` 归一为空对象、`favorites list` 返回可重试的 `NETWORK_ERROR`（Issue #1233）。
 - ✅ v3.4.49（2026-11-16）：本地数值转换的溢出边界一次收口。合法大整数 / `1e400` 不再让搜索缓存、启动期配置校验、automation / crawl / AI 配置与本地模型输出落成 `INTERNAL_ERROR` 或可重试的 `NETWORK_ERROR`（Issue #1230）。
 - ✅ v3.4.48（2026-11-16）：本地 JSON 读取补齐超长整数与深嵌套两类确定性解析异常；熔断 latch 读不出来时 fail-closed，`agent stats` / `resume show` 返回契约错误码而不是 traceback（Issue #1227）。

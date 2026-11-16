@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.51] - 2026-11-16
+
+### Fixed
+- `boss wizard --input-json` / MCP `boss_wizard` 的 `requested_steps` 传空数组时，原先会被折叠成「执行 goal 全部步骤」——对 `candidate_greet` 这类含真实平台写入的 goal，调用方本意是不执行任何步骤，却会执行全部写操作（Issue #1236）。现在空数组以 `INVALID_PARAM` 拒绝，只有省略该字段才表示全量执行；工具 schema 同步声明 `minItems: 1`。
+- MCP 工具参数含 NUL 或孤立代理项字符时，原先在派生 `boss` CLI 的子进程编码阶段抛 `UnicodeEncodeError`，被兜成不可读的 `INTERNAL_ERROR`（Issue #1236）。现在在调用 `boss` CLI 前统一校验 argv，返回可读的 `INVALID_PARAM` 信封，且不会生成子进程。
+
 ## [3.4.50] - 2026-11-16
 
 ### Fixed
