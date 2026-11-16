@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 索引缓存的读路径补齐解析、自洽与展示边界（Issue #1224）：写入合法 JSON 的超长整数（Python 3.11+ 的 4300 位转换上限）或深嵌套数组时，`json.loads` 抛裸 `ValueError` / `RecursionError`，`boss show` 被兜成可重试的 `NETWORK_ERROR`；现在损坏缓存按「没有缓存」返回 `INVALID_PARAM` 并提示重新搜索。缓存里的 `count` 与 `jobs` 不一致时越界提示会自相矛盾（「共 5 条」却拒绝编号 5），现在 `count` 始终等于已校验的 `len(jobs)`。`source` 含孤立代理字符（`"\ud800"` 转义）会让错误信封在 stdout 编码时抛 `UnicodeEncodeError`、同样落成可重试的网络错误，现在按空串归一。`count` / `page` 不再绕过溢出防护（超大整数按实际条数 / `None`），`saved_at` 限定在合理的 Unix 秒区间（负值与 2100 年以后按 0 处理）。
+
 ## [3.4.46] - 2026-11-16
 
 ### Fixed
