@@ -925,15 +925,22 @@ def cli(
 		)
 	ctx.obj["log_level"] = level
 	ctx.obj["logger"] = Logger(level)
+	# config 子命令是唯一的修复入口：坏值归一成默认值放行，否则连
+	# `boss config reset <键>` 也会被同一个坏值挡住，用户只能手改文件。
+	repair_mode = ctx.invoked_subcommand == "config"
+
 	resolved_cdp_url = cdp_url or cfg.get("cdp_url")
 	# 与 browser_source 同理：config.json 被手改成数字后，doctor 等命令会在 shlex.quote
 	# 上抛 TypeError traceback，启动期就要按参数错误挡住。
 	if resolved_cdp_url is not None and not isinstance(resolved_cdp_url, str):
-		raise click.BadParameter(
-			f"必须是调试地址字符串或 null，收到 {resolved_cdp_url!r}",
-			param_hint="--cdp-url",
-		)
-	if resolved_cdp_url is not None and (cdp_url is not None or ctx.invoked_subcommand != "config"):
+		if repair_mode:
+			resolved_cdp_url = None
+		else:
+			raise click.BadParameter(
+				f"必须是调试地址字符串或 null，收到 {resolved_cdp_url!r}",
+				param_hint="--cdp-url",
+			)
+	if resolved_cdp_url is not None and (cdp_url is not None or not repair_mode):
 		# 显式 --cdp-url 任何时候都要校验；config.json 里的坏值则放行 config
 		# 子命令，否则 `boss config reset cdp_url` 会在启动期被同一个坏值挡住。
 		if not is_valid_cdp_url(resolved_cdp_url):
@@ -952,29 +959,35 @@ def cli(
 		raw_browser_source.strip().lower() if isinstance(raw_browser_source, str) else raw_browser_source
 	)
 	if not isinstance(resolved_browser_source, str) or resolved_browser_source not in BROWSER_SOURCES:
-		raise click.BadParameter(
-			f"不支持的浏览器通道 {resolved_browser_source!r}，可选: {', '.join(BROWSER_SOURCES)}",
-			param_hint="--browser-source",
-		)
+		if not repair_mode or browser_source is not None:
+			raise click.BadParameter(
+				f"不支持的浏览器通道 {resolved_browser_source!r}，可选: {', '.join(BROWSER_SOURCES)}",
+				param_hint="--browser-source",
+			)
+		resolved_browser_source = DEFAULTS["browser_source"]
 	ctx.obj["browser_source"] = resolved_browser_source
 
 	resolved_platform = platform_name or cfg.get("platform") or "zhipin"
 	available = list_platforms()
 	if resolved_platform not in available:
-		raise click.BadParameter(
-			f"不支持的平台 {resolved_platform!r}，可选: {', '.join(available)}",
-			param_hint="--platform",
-		)
+		if not repair_mode or platform_name is not None:
+			raise click.BadParameter(
+				f"不支持的平台 {resolved_platform!r}，可选: {', '.join(available)}",
+				param_hint="--platform",
+			)
+		resolved_platform = DEFAULTS["platform"]
 	ctx.obj["platform"] = resolved_platform
 
 	resolved_role = role or cfg.get("role") or "candidate"
 	# config.json 的 role 写成数字或拼错时，下游会把非字符串塞进诊断命令的
 	# shlex.quote（doctor）或静默按求职者处理；启动期就按参数错误挡住。
 	if resolved_role not in ROLES:
-		raise click.BadParameter(
-			f"不支持的角色 {resolved_role!r}，可选: {', '.join(ROLES)}",
-			param_hint="--role",
-		)
+		if not repair_mode or role is not None:
+			raise click.BadParameter(
+				f"不支持的角色 {resolved_role!r}，可选: {', '.join(ROLES)}",
+				param_hint="--role",
+			)
+		resolved_role = DEFAULTS["role"]
 	ctx.obj["role"] = resolved_role
 
 	ctx.obj["config"] = cfg
