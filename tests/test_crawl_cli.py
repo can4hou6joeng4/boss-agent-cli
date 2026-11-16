@@ -340,6 +340,51 @@ def test_run_emits_resume_hint_when_run_stops_early(tmp_path, monkeypatch):
 	_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl resume run-stopped")
 
 
+def test_run_risk_stopped_warns_when_risk_lock_not_persisted(tmp_path, monkeypatch):
+	"""风险锁没写盘时，成功信封必须说明新进程不再受保护（Issue #1281）。"""
+	from boss_agent_cli.commands import crawl as crawl_module
+
+	class _Outcome:
+		run_id = "run-risk"
+		status = "risk_stopped"
+		risk_lock = {"locked_at": 1.0, "reason": "security page", "persisted": False}
+
+		def as_dict(self):
+			return {"run_id": self.run_id, "status": self.status, "risk_lock": self.risk_lock, "output_paths": {}}
+
+	monkeypatch.setattr(crawl_module.CrawlService, "create_and_run", lambda self, settings: _Outcome())
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, "crawl", "run", "AI", "--city", "杭州")
+	assert result.exit_code == 0, result.output
+	payload = _envelope(result)
+	assert payload["data"]["risk_lock"]["persisted"] is False
+	actions = payload["hints"]["operator_actions"]
+	assert any("新的 boss 进程" in action for action in actions)
+
+
+def test_run_risk_stopped_keeps_hints_when_risk_lock_persisted(tmp_path, monkeypatch):
+	"""锁已写盘时只给解锁与 resume，不追加持久化警告。"""
+	from boss_agent_cli.commands import crawl as crawl_module
+
+	class _Outcome:
+		run_id = "run-risk"
+		status = "risk_stopped"
+		risk_lock = {"locked_at": 1.0, "reason": "security page", "persisted": True}
+
+		def as_dict(self):
+			return {"run_id": self.run_id, "status": self.status, "risk_lock": self.risk_lock, "output_paths": {}}
+
+	monkeypatch.setattr(crawl_module.CrawlService, "create_and_run", lambda self, settings: _Outcome())
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+	result = _invoke(runner, tmp_path, "crawl", "run", "AI", "--city", "杭州")
+	assert result.exit_code == 0, result.output
+	actions = _envelope(result)["hints"]["operator_actions"]
+	assert all("新的 boss 进程" not in action for action in actions)
+	assert any("clean --risk-lock" in action for action in actions)
+
+
 def test_run_hints_point_at_output_files_when_completed(tmp_path, monkeypatch):
 	from boss_agent_cli.commands import crawl as crawl_module
 
