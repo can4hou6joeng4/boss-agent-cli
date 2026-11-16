@@ -198,6 +198,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"security_id": {"type": "string", "description": "职位的 security_id"},
 					"job_id": {"type": "string", "description": "职位的 encrypt_job_id"},
+					"message": {"type": "string", "description": "自定义打招呼消息；缺省使用平台默认招呼语"},
 				},
 				"required": ["security_id", "job_id"],
 			},
@@ -318,6 +319,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"security_id": {"type": "string", "description": "职位的 security_id"},
 					"job_id": {"type": "string", "description": "职位的 encrypt_job_id"},
+					"lid": {"type": "string", "description": "与 security_id 同一列表项的访问上下文（取自 search 结果，可选）"},
 				},
 				"required": ["security_id", "job_id"],
 			},
