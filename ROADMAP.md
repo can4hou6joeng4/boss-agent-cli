@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.41（2026-11-16）：`crawl resume --background` 在断点 `updated_at` 列被写成非数字文本时不再返回可重试的 `NETWORK_ERROR`。时间戳与状态排序、排队探测共用同一容错读数，漂移按 0 降级，后台恢复照常排队/启动，预检失败还原时写回归一后的 0.0（Issue #1206）。
 - ✅ v3.4.40（2026-11-16）：MCP 补齐两个 CLI 已有参数。`boss_greet` 新增可选 `message`（自定义打招呼语，缺省使用平台默认招呼），`boss_apply` 新增可选 `lid`（与 `security_id` 同一列表项的访问上下文，取自 search 结果）；两者缺省 / `null` 不下发，自由文本空串按未传处理（与 `boss_detail` 的 `lid` 同口径）。
 - ✅ v3.4.39（2026-11-16）：MCP 参数面两处修正。`boss_hr_chatmsg` 的显式 `max_msg_id=0` 不再被真值判断吞掉（键存在即下发，由 CLI 拒绝并返回 `INVALID_PARAM`）；`boss_exchange` 的 schema 暴露 `type`（phone|wechat），微信交换可达，缺省 / `phone` 不带选项、空串交给 CLI 枚举诊断。
 - ✅ v3.4.38（2026-11-16）：本地记录与配置的数值/类型漂移继续收敛。`crawl_runs` 数值列被写成文本时 `crawl status` 不再 stdout 为空 + traceback，改为带列名的 `CACHE_RECORD_INVALID`，并与 `crawl resume` 共用 `params` 判定、回显有效预算；上一份聊天快照的 `unread` 类型漂移不再打断 `chat --export`（按 0 比较）；`ai_max_tokens` 被手改成数组/字符串时 `ai local smoke` 返回 `INVALID_PARAM`、招聘者自动回复退回模板话术，不再中止整轮自动化。
