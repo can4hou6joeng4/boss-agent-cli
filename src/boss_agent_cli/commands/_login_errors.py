@@ -5,6 +5,7 @@ import click
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
+	error_contract_for_code,
 	login_action_for_ctx,
 	risk_error_contract,
 	risk_error_message,
@@ -37,10 +38,14 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 		operator_actions: list[str],
 		recovery: str | None = None,
 	) -> dict[str, object]:
+		# recoverable 以错误码登记表为准：风控码必须报不可恢复，否则 Agent 会把
+		# 「重试登录」当成合法动作反复触发风控（Issue #1390）。未登记的码保留
+		# 登录链路既有的可重试语义。
+		recoverable, _ = error_contract_for_code(code, fallback_recoverable=True)
 		return {
 			"code": code,
 			"message": user_message,
-			"recoverable": True,
+			"recoverable": recoverable,
 			"recovery_action": recovery or recovery_action,
 			"hints": {
 				"next_actions": next_actions,
@@ -114,6 +119,9 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 		)
 
 	if any(term in message for term in ("403", "forbidden", "风控", "risk", "rate limit", "too many")):
+		# 风控是硬边界：恢复动作取登记表原文，不能沿用 login_action_for_ctx 的
+		# 默认「重新登录」，否则信封会诱导 Agent 反复重试（Issue #1390）。
+		_, risk_recovery = error_contract_for_code("LOGIN_RISK_CONTROL")
 		return payload(
 			"LOGIN_RISK_CONTROL",
 			f"登录请求可能触发平台风控: {raw_message}",
@@ -123,6 +131,7 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 				"降低请求频率，避免短时间重复登录或刷新",
 				"必要时联系平台客服确认账号是否受限",
 			],
+			recovery=risk_recovery,
 		)
 
 	if any(term in message for term in ("401", "unauthorized", "expired", "过期", "未登录")):
