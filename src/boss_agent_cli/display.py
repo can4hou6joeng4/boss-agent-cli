@@ -20,7 +20,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
-from boss_agent_cli.cache.store import CacheBusyError, is_cache_busy_error
+from boss_agent_cli.cache.store import CacheBusyError, CacheDatabaseInvalid, is_cache_busy_error
 from boss_agent_cli.output import emit_success, is_local_io_error, redact_sensitive_text
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.services.browser_runtime import (
@@ -1245,6 +1245,21 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 							"首页在自动化下偶发加载卡住，CLI 已跳到空白页并重试。仍失败时，用带调试端口的 Chrome 打开官网并确认首页能加载，再执行 boss --cdp-url http://127.0.0.1:9222 <命令>",
 							"若 boss status 显示登录态 degraded 或 stoken 很久未更新，先执行 boss login",
 						],
+					},
+				)
+			except CacheDatabaseInvalid as e:
+				# 缓存库损坏（含取数阶段才暴露的坏页）是确定性本地失败：给登记表的
+				# 「备份后删库」指引，不能兜成 NETWORK_ERROR +「重试」让 Agent 在
+				# 坏库上无限 resume（Issue #1350）。
+				handle_error_output(
+					ctx,
+					command_name,
+					code="CACHE_DATABASE_INVALID",
+					message=str(e),
+					hints={
+						"operator_actions": [
+							f"备份后删除 {e.path}；候选池、预设、watch 历史与任务断点都随旧库一起作废",
+						]
 					},
 				)
 			except INTERNAL_ERROR_TYPES as e:
