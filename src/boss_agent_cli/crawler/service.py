@@ -28,6 +28,7 @@ from boss_agent_cli.compliance import require_capability_mode
 from boss_agent_cli.crawler.controls import (
 	CrawlExportError as CrawlExportError,
 	CrawlLimitExceeded as CrawlLimitExceeded,
+	CrawlProfileBusy as CrawlProfileBusy,
 	CrawlRuntimeUnavailable as CrawlRuntimeUnavailable,
 	CrawlStopRequested as CrawlStopRequested,
 	CrawlWorkflowStopRequested as CrawlWorkflowStopRequested,
@@ -641,11 +642,12 @@ class CrawlService:
 		except CrawlStopRequested as exc:
 			status = "stopped"
 			error = str(exc)
-		except (CrawlRuntimeUnavailable, CrawlExportError, CacheRecordInvalid) as exc:
-			# 可选依赖缺失、导出失败与本地记录损坏都是确定性失败：保存断点后原样
-			# 抛出，由入口按 CRAWL_UNAVAILABLE / LOCAL_IO_ERROR / CACHE_RECORD_INVALID
-			# 回报。落成普通的 stopped 会让调用方拿到成功信封与恢复指引，而重跑
-			# 仍会读同一坏记录（Issue #1050、#1135、#1212）。
+		except (CrawlRuntimeUnavailable, CrawlExportError, CrawlProfileBusy, CacheRecordInvalid) as exc:
+			# 可选依赖缺失、导出失败、配置目录被另一个采集 Chrome 占用与本地记录
+			# 损坏都是确定性失败：保存断点后原样抛出，由入口按 CRAWL_UNAVAILABLE /
+			# LOCAL_IO_ERROR / CRAWL_PROFILE_BUSY / CACHE_RECORD_INVALID 回报。
+			# 落成普通的 stopped 会让调用方拿到成功信封与恢复指引，而重跑仍会撞上
+			# 同一个占用者或读同一坏记录（Issue #1050、#1135、#1212、#1266）。
 			status = "stopped"
 			error = str(exc)
 			raise

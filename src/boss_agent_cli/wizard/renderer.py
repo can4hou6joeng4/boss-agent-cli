@@ -76,6 +76,7 @@ ERROR_LABELS = {
 	"WORKFLOW_STOPPED": "任务已停止",
 	"WORKFLOW_BUSY": "该任务正在另一个窗口或进程中执行",
 	"CRAWL_BUSY": "该采集任务正在另一个窗口或进程中执行",
+	"CRAWL_PROFILE_BUSY": "采集配置目录正被运行中的采集浏览器占用",
 	"CACHE_BUSY": "本地缓存正被另一个进程写入",
 	"CRAWL_UNAVAILABLE": "采集所需的可选依赖没有安装",
 	"WORKFLOW_PLAN_MISMATCH": "任务信息与已有记录不一致",
@@ -135,6 +136,7 @@ RECOVERY_LABELS = {
 	# 具体安装命令由 recovery_message 按当前已有的依赖组动态拼出（Issue #1068）。
 	"CRAWL_UNAVAILABLE": "这不是网络问题，重试不会有帮助。请退出向导，补上 crawl 可选依赖后重新执行。",
 	"CRAWL_BUSY": "请等它结束；需要确认进度时执行 boss crawl status <run_id>，不要并发恢复同一个任务。",
+	"CRAWL_PROFILE_BUSY": "请等正在运行的采集结束；需要确认进度时执行 boss crawl status <run_id>，不要删除 profile 目录里的 SingletonLock，也不要并发使用同一数据目录的采集浏览器。",
 	"CACHE_BUSY": "请等正在运行的 boss 命令结束后选择“恢复已有任务”继续；库文件本身完好，不需要删除。",
 }
 
