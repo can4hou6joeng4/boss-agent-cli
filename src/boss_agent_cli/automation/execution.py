@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
+from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.automation.adapters import RecruiterAutomationPlatform
 from boss_agent_cli.automation.config import AutomationConfig
 from boss_agent_cli.automation.decision import decide_action
@@ -37,6 +38,27 @@ def process_pending(
 	for index, item in enumerate(actions):
 		if guard.stop_reason() is not None:
 			break
+		if item.status == "executing":
+			# 上一次执行在写请求已发出后中断：结果未知，不能自动重发（Issue #1245）。
+			# 转成 verification-required 并打开熔断，先让操作者核对官方页面。
+			if item.platform != platform:
+				continue
+			reason = f"pending action {item.id!r} was interrupted while executing"
+			guard.open_circuit_breaker(f"platform verification required: {reason}")
+			actions[index] = _pending_with_status(item, "verification-required")
+			# 队列标记先落盘，再写事件：事件写失败也不会让该行回到可重放状态。
+			store.write_pending(actions)
+			event = make_event(
+				platform,
+				item.candidate_key,
+				queued_action(item, store.pending_path),
+				EventStatus.PLATFORM_VERIFICATION_REQUIRED,
+				item.confidence,
+				reason,
+			)
+			events.append(event)
+			store.append_event(event)
+			break
 		if item.status != "pending":
 			continue
 		action = queued_action(item, store.pending_path)
@@ -50,7 +72,23 @@ def process_pending(
 		)
 		if item.platform != platform:
 			continue
-		status, event_reason = execute_or_dry_run(adapter, guard, decision, ref, dry_run)
+		if not dry_run:
+			# 先落盘「执行中」再派发：进程在写请求发出后中断时，下一轮看到
+			# executing 行就知道结果未知，不会把可能已生效的动作重发一遍
+			# （Issue #1245）。写盘失败时动作尚未发出，行仍是 pending，可安全重试。
+			actions[index] = _pending_with_status(item, "executing")
+			store.write_pending(actions)
+			actions[index] = item
+		try:
+			status, event_reason = execute_or_dry_run(adapter, guard, decision, ref, dry_run)
+		except RequestBudgetExceeded as exc:
+			# 预算 / 时限在动作发出前抛出的停止（details.request_sent=False）可以安全
+			# 恢复 pending；其它异常（含中断与响应风控）请求可能已发出，保守保留
+			# executing，下一轮按结果未知处理（Issue #1245）。
+			if exc.details.get("request_sent") is False:
+				actions[index] = _pending_with_status(item, "pending")
+				store.write_pending(actions)
+			raise
 		next_status = _next_pending_status(status)
 		actions[index] = _pending_with_status(item, next_status)
 		# Commit each confirmed queue effect before attempting another item. A

@@ -261,7 +261,7 @@ boss hr location 10001 --yes
 
 ### 自动化停止与显式恢复
 
-`boss agent stop --reason <原因>` 保存独立的停止标志，运行中的旧状态快照不能覆盖它。招聘者自动化在动作边界重新读取停止状态，每个已确认动作及时保存防重结果；风险、正常超时或中断时保存已取得的 checkpoint。平台请求已提交但没有确认结果时，先在官方页面核对，禁止自动重发。自动化的页面写动作返回 `ACTION_UNCONFIRMED` 时，本轮事件记为 `PLATFORM_VERIFICATION_REQUIRED` 并打开熔断，对应待执行项标记为 `verification-required` 退出 `pending` 队列；`--resume` 不会把它变回待执行，避免重发可能已生效的动作。
+`boss agent stop --reason <原因>` 保存独立的停止标志，运行中的旧状态快照不能覆盖它。招聘者自动化在动作边界重新读取停止状态，每个已确认动作及时保存防重结果；风险、正常超时或中断时保存已取得的 checkpoint。平台请求已提交但没有确认结果时，先在官方页面核对，禁止自动重发。写动作派发前先落盘 `executing` 标记：请求发出后中断（Ctrl+C、进程被杀、页面风控）时该行保持 `executing`，下一轮按结果未知转成 `verification-required` 并打开熔断。自动化的页面写动作返回 `ACTION_UNCONFIRMED` 时，本轮事件记为 `PLATFORM_VERIFICATION_REQUIRED` 并打开熔断，对应待执行项标记为 `verification-required` 退出 `pending` 队列；`--resume` 不会把它变回待执行，避免重发可能已生效的动作。
 
 `--dry-run` 只预览决策，不改写任何业务状态：`automation/state.json` 里的对话阶段字段（`questionnaire_sent_at` / `follow_up_sent_at` / `exchange_contact_at`）不会因演练而更新，`pending-actions.jsonl` 里已批准项保持 `pending`，`interview-leads.csv` 也不会追加演练产生的线索。因此先 `--dry-run` 预览、再真实运行，得到的动作序列与从未预览过时一致。
 
