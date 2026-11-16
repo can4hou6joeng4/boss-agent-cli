@@ -56,6 +56,15 @@ class BrowserChannelRequired(RuntimeError):
 	"""CDP / 显式浏览器来源下，该操作只有 httpx 实现，拒绝用 httpx 携带浏览器凭据发送。"""
 
 
+class PlatformResponseInvalid(ValueError):
+	"""平台响应无法解析成 JSON 对象（非对象响应，或深嵌套让 ``resp.json()`` 抛错）。
+
+	同一响应重试必然复现，命令出口按 ``INTERNAL_ERROR``（recoverable=false）上报，
+	不能兜成可重试的 ``NETWORK_ERROR``（Issue #1368）。子类化 ``ValueError`` 保留
+	旧调用方按 ``ValueError`` 捕获的兼容性。
+	"""
+
+
 _SelfT = TypeVar("_SelfT", bound="_BaseHttpClient")
 
 
@@ -401,7 +410,9 @@ class _BaseHttpClient:
 				# HTTP 状态和“安全验证”文案不能先覆盖风险业务码，更不能触发自动换登录通道。
 				try:
 					payload = resp.json()
-				except ValueError:
+				# ValueError 覆盖 JSONDecodeError / 超长整数；RecursionError 覆盖深嵌套。
+				# 两者都是「平台响应无法解析」，同一响应重试必然复现（Issue #1368）。
+				except (ValueError, RecursionError):
 					payload = None
 				data = payload if isinstance(payload, dict) else None
 				from boss_agent_cli.api.client import AccountRiskError, PlatformRiskError
@@ -448,7 +459,7 @@ class _BaseHttpClient:
 				if data is None:
 					if write_possible:
 						return self._unconfirmed_http_response(url, "invalid_response")
-					raise ValueError("平台响应不是 JSON 对象")
+					raise PlatformResponseInvalid("平台响应不是 JSON 对象或嵌套过深，无法解析")
 				code = data.get("code")
 				limited = code in (self._CODE_RATE_LIMITED, str(self._CODE_RATE_LIMITED)) or resp.status_code == 429
 				cooldown = None
