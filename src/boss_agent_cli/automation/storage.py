@@ -62,6 +62,16 @@ class AutomationStore:
 			return {"open": True, "reason": f"stop.json 无法解析，已按熔断处理：{exc}", "corrupt": True}
 		if not isinstance(loaded, dict):
 			return {"open": True, "reason": "stop.json 顶层不是 JSON object，已按熔断处理", "corrupt": True}
+		if "open" in loaded and not isinstance(loaded["open"], bool):
+			# 熔断开关只认布尔：0 / null / "false" 这类真值漂移若被当成「已关闭」，
+			# 一次写坏就能放行自动化写操作；而 "true" 又会让两个读取器（SafetyGuard
+			# 的真值与 location 的 `is not True`）得到相反结论（Issue #1242）。
+			# 与顶层非 object 一致，按损坏处理并停下等人工核对。
+			return {
+				"open": True,
+				"reason": "stop.json 的 open 字段不是布尔值，已按熔断处理",
+				"corrupt": True,
+			}
 		return cast("dict[str, Any]", loaded)
 
 	def request_stop(self, reason: str) -> None:
@@ -123,6 +133,10 @@ class AutomationStore:
 			breaker = state.get("autonomy", {}).get("circuit_breaker", {})
 			if not isinstance(breaker, dict):
 				raise AutomationStateError(self.state_path, "autonomy.circuit_breaker 必须是 JSON object")
+			if "open" in breaker and not isinstance(breaker["open"], bool):
+				# 真值语义会让 0 / null 关闭熔断、"false" 打开熔断（Issue #1242）；
+				# 与 consecutive_errors 一样按状态损坏处理。
+				raise AutomationStateError(self.state_path, "autonomy.circuit_breaker.open 必须是布尔值")
 			for candidate_key, prior in state.get("conversations", {}).items():
 				if not isinstance(prior, dict):
 					raise AutomationStateError(self.state_path, f"conversations[{candidate_key!r}] 必须是 JSON object")
@@ -138,7 +152,14 @@ class AutomationStore:
 		# Preserve legacy callers that set the breaker through write_state. A stale
 		# snapshot lacking it can never remove the separate stop latch.
 		with self._control_lock():
-			breaker = state.get("autonomy", {}).get("circuit_breaker", {})
+			autonomy = state.get("autonomy", {})
+			if not isinstance(autonomy, dict):
+				raise AutomationStateError(self.state_path, "autonomy 必须是 JSON object")
+			breaker = autonomy.get("circuit_breaker", {})
+			if not isinstance(breaker, dict):
+				raise AutomationStateError(self.state_path, "autonomy.circuit_breaker 必须是 JSON object")
+			if "open" in breaker and not isinstance(breaker["open"], bool):
+				raise AutomationStateError(self.state_path, "autonomy.circuit_breaker.open 必须是布尔值")
 			stop = self.read_stop()
 			if breaker.get("open") and not stop:
 				self._set_stop(str(breaker.get("reason", "熔断已打开")))
