@@ -679,6 +679,16 @@ def _run_agent(
 		_emit_control_busy(ctx, command, exc)
 	except AutomationStateError as exc:
 		_emit_state_error(ctx, command, exc)
+	except KeyboardInterrupt:
+		# runner 已打开熔断并保留 checkpoint；stdout 仍必须有一个信封：Click 的
+		# Abort 会让 MCP 拿到空输出，把这次写调用只当成结果未知（Issue #1262）。
+		handle_error_output(
+			ctx,
+			command,
+			code="CIRCUIT_BREAKER_OPEN",
+			message="招聘自动化执行被中断，已打开熔断并保留 checkpoint",
+		)
+		ctx.exit(1)
 
 
 def _resume_text(data_dir: Path, resume_name: str) -> str | None:
