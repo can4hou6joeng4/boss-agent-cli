@@ -125,6 +125,53 @@ def _risk_commands(context: "ActionContext | None") -> dict[str, str]:
 	}
 
 
+def _invalid_welfare_conditions(raw: Any) -> WorkflowActionError:
+	recoverable, recovery = error_contract_for_code("INVALID_PARAM")
+	return WorkflowActionError(
+		"INVALID_PARAM",
+		'wizard 输入 welfare_conditions 必须是福利标签字符串数组（如 ["双休", "五险一金"]），'
+		f"或 [[标签, [关键词...]], ...] 形状；收到 {raw!r}",
+		recoverable=recoverable,
+		recovery_action=recovery,
+	)
+
+
+def _normalize_welfare_conditions(raw: Any) -> list[tuple[str, list[str]]] | None:
+	"""把 wizard 的 ``welfare_conditions`` 归一到 pipeline 的 ``(label, keywords)`` 形状。
+
+	wizard inputs 来自 ``--input-json`` / MCP，文档示例是 ``["双休"]``；原样透传时
+	``match_all_welfare`` 会按 ``for label, keywords in conditions`` 把它拆成单字
+	标签（"双" / "休"）静默错筛，多条件列表则抛 ``ValueError`` 被 runner 兜成可
+	重试的 ``NETWORK_ERROR``（Issue #1383）。字符串数组与既有的
+	``[[label, [keywords...]], ...]`` 形状都在平台请求前归一，其余类型点名报错。
+	"""
+	if raw is None:
+		return None
+	if not isinstance(raw, (list, tuple)):
+		raise _invalid_welfare_conditions(raw)
+	conditions: list[tuple[str, list[str]]] = []
+	for item in raw:
+		if isinstance(item, str):
+			label = item.strip()
+			if label:
+				conditions.append((label, resolve_welfare_keywords(label)))
+			continue
+		if (
+			isinstance(item, (list, tuple))
+			and len(item) == 2
+			and isinstance(item[0], str)
+			and isinstance(item[1], (list, tuple))
+			and all(isinstance(keyword, str) for keyword in item[1])
+		):
+			label = item[0].strip()
+			if not label:
+				raise _invalid_welfare_conditions(raw)
+			conditions.append((label, list(item[1])))
+			continue
+		raise _invalid_welfare_conditions(raw)
+	return conditions
+
+
 def execute_candidate_search(
 	platform: Any,
 	cache: CacheStore,
@@ -143,6 +190,8 @@ def execute_candidate_search(
 			else [item.strip() for item in str(raw_welfare).split(",")]
 		)
 		welfare_conditions = [(label, resolve_welfare_keywords(label)) for label in labels if label]
+	else:
+		welfare_conditions = _normalize_welfare_conditions(welfare_conditions)
 	try:
 		active = resolve_active_level(_optional_str(inputs.get("active")))
 	except ValueError as exc:

@@ -21,6 +21,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.crawler.service import CrawlOutcome
 from boss_agent_cli.resume.models import ResumeData
 from boss_agent_cli.resume.store import ResumeStore
+from boss_agent_cli.search_filters import resolve_welfare_keywords
 from boss_agent_cli.display import risk_error_message
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.wizard.models import StepResult, WorkflowInputError, WorkflowPlan, WorkflowStatus, WizardInput
@@ -244,7 +245,10 @@ def test_candidate_search_helper_preserves_filters_welfare_and_pagination():
 	assert captured["criteria"].raw_params == {"degree": "本科"}
 	assert captured["start_page"] == 2
 	assert captured["max_pages"] == 3
-	assert captured["welfare_conditions"] == ["双休", "五险一金"]
+	assert captured["welfare_conditions"] == [
+		("双休", resolve_welfare_keywords("双休")),
+		("五险一金", resolve_welfare_keywords("五险一金")),
+	]
 
 
 def test_candidate_search_normalizes_welfare_input_and_uses_detail_page_budget():
