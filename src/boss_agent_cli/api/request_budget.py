@@ -329,17 +329,32 @@ class RequestBudget:
 				# Close releases the POSIX/Windows lease even after an exception.
 
 	def _connect(self) -> sqlite3.Connection:
-		connection = sqlite3.connect(self.root / "request-budget.sqlite3", timeout=0.1)
-		connection.executescript("""
-			CREATE TABLE IF NOT EXISTS request_state (
-				id INTEGER PRIMARY KEY CHECK(id=1), last_at REAL NOT NULL DEFAULT 0,
-				next_at REAL NOT NULL DEFAULT 0, cooldown_until REAL NOT NULL DEFAULT 0
-			);
-			INSERT OR IGNORE INTO request_state(id) VALUES(1);
-			CREATE TABLE IF NOT EXISTS request_attempts (
-				id INTEGER PRIMARY KEY, requested_at REAL NOT NULL, kind TEXT NOT NULL
-			);
-		""")
+		path = self.root / "request-budget.sqlite3"
+		try:
+			connection = sqlite3.connect(path, timeout=0.1)
+			connection.executescript("""
+				CREATE TABLE IF NOT EXISTS request_state (
+					id INTEGER PRIMARY KEY CHECK(id=1), last_at REAL NOT NULL DEFAULT 0,
+					next_at REAL NOT NULL DEFAULT 0, cooldown_until REAL NOT NULL DEFAULT 0
+				);
+				INSERT OR IGNORE INTO request_state(id) VALUES(1);
+				CREATE TABLE IF NOT EXISTS request_attempts (
+					id INTEGER PRIMARY KEY, requested_at REAL NOT NULL, kind TEXT NOT NULL
+				);
+			""")
+		except sqlite3.DatabaseError as exc:
+			# 锁冲突保持原有语义（等锁释放即可）；其余是文件损坏 / 被同名目录
+			# 占位，属于确定性本地失败。带上路径与自愈方式，命令层统一报
+			# LOCAL_IO_ERROR，而不是 NETWORK_ERROR +「重试」让 Agent 反复打平台
+			# （Issue #1336）。
+			if isinstance(exc, sqlite3.OperationalError) and any(
+				word in str(exc).lower() for word in ("locked", "busy")
+			):
+				raise
+			raise sqlite3.DatabaseError(
+				f"{path} 不是可用的 SQLite 数据库（{exc}）；"
+				"该文件只保存请求节流元数据，备份后删除即可自动重建"
+			) from exc
 		return connection
 
 	@contextmanager
