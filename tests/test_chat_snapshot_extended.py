@@ -5,6 +5,8 @@ import json
 import os
 from unittest.mock import MagicMock
 
+import pytest
+
 from boss_agent_cli.services.chat_snapshot import (
 	save_snapshot_and_diff,
 	load_snapshot,
@@ -270,6 +272,39 @@ def test_unread_none_treated_as_zero(tmp_path):
 
 	# unread: None -> 3 应检测为新消息
 	assert len(result["new_unread"]) == 1
+
+
+@pytest.mark.parametrize("drifted", ["3", True, 3.5, ["3"]])
+def test_diff_tolerates_unread_type_drift_in_previous_snapshot(tmp_path, drifted):
+	"""上一份快照 unread 类型漂移时按 0 比较，不能抛 TypeError 打断导出（Issue #1194）。"""
+	snapshot_dir = str(tmp_path / "snapshots")
+	os.makedirs(snapshot_dir)
+
+	yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+	prev_data = [{"name": "张三", "security_id": "sid_a", "unread": drifted}]
+	with open(os.path.join(snapshot_dir, f"{yesterday}.json"), "w", encoding="utf-8") as f:
+		json.dump(prev_data, f)
+
+	friends = [{"name": "张三", "security_id": "sid_a", "unread": 5}]
+	result = save_snapshot_and_diff(snapshot_dir, friends, _make_logger())
+
+	assert len(result["new_unread"]) == 1
+
+
+def test_diff_does_not_report_new_unread_for_non_int_current_value(tmp_path):
+	"""本次 unread 类型漂移按 0 比较：不能把「读不懂」报成新增未读。"""
+	snapshot_dir = str(tmp_path / "snapshots")
+	os.makedirs(snapshot_dir)
+
+	yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+	prev_data = [{"name": "张三", "security_id": "sid_a", "unread": 3}]
+	with open(os.path.join(snapshot_dir, f"{yesterday}.json"), "w", encoding="utf-8") as f:
+		json.dump(prev_data, f)
+
+	friends = [{"name": "张三", "security_id": "sid_a", "unread": "5"}]
+	result = save_snapshot_and_diff(snapshot_dir, friends, _make_logger())
+
+	assert result["new_unread"] == []
 
 
 # ── 7. 分页合并（同天多次调用不覆盖） ────────────────────────────────
