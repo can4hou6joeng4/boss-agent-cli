@@ -28,7 +28,7 @@ from boss_agent_cli.crawler.service import (
 	crawl_int_setting,
 	unused_local_port,
 )
-from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
+from boss_agent_cli.crawler.controls import CrawlExportError, CrawlRuntimeUnavailable
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_install_hint, extras_requirement
 from boss_agent_cli.services.json_files import write_json_atomic
@@ -357,6 +357,19 @@ def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[s
 			hints={"next_actions": [configure_cmd]},
 		)
 		return
+	except CrawlExportError as exc:
+		# 导出失败是本地目录 / 权限问题：CrawlExportError 是 RuntimeError 子类，
+		# 不单独捕获会被兜成 CRAWL_UNAVAILABLE 并让人去安装 crawl 依赖（Issue #1238）。
+		note("LOCAL_IO_ERROR", str(exc))
+		handle_error_output(
+			ctx,
+			"crawl",
+			code="LOCAL_IO_ERROR",
+			message=str(exc),
+			recoverable=False,
+			recovery_action="确认输出目录可写（不是同名的已有文件）、目录权限与磁盘空间正常，修正后重新执行 crawl resume",
+		)
+		return
 	except RuntimeError as exc:
 		message = str(exc)
 		if isinstance(exc, _LoginSeedUnavailable) or "未登录" in message or "Cookie" in message or "wt2" in message:
@@ -378,11 +391,27 @@ def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[s
 		)
 		return
 	resume_command = boss_command_for_ctx(ctx, f"crawl resume {shell_argument(outcome.run_id)}", include_data_dir=True)
+	status_command = boss_command_for_ctx(ctx, f"crawl status {shell_argument(outcome.run_id)}", include_data_dir=True)
 	if outcome.status == "risk_stopped":
 		hints = {"operator_actions": [
 			*unlock_operator_actions(boss_command_for_ctx(ctx, "clean --risk-lock", include_data_dir=True)),
 			f"完成人工恢复后，显式执行 {resume_command} 从原断点继续",
 		]}
+	elif outcome.status == "budget_stopped":
+		# 预算计数与 settings 都持久化，resume 不会推进（Issue #1238）：只给只读状态。
+		hints = {
+			"next_actions": [status_command],
+			"operator_actions": [
+				"该任务的预算已用完，继续采集需要新建任务（或调高 max_requests 后重新 crawl start）",
+			],
+		}
+	elif outcome.status == "workflow_stopped":
+		hints = {
+			"next_actions": [status_command],
+			"operator_actions": [
+				"任务已按停止请求结束，未继续采集；如需继续，显式执行 crawl resume（它会清除停止标记）",
+			],
+		}
 	elif outcome.status != "completed":
 		hints = {"next_actions": [resume_command]}
 	else:

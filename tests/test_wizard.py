@@ -3553,18 +3553,22 @@ def test_waiting_panel_falls_back_for_legacy_runs(monkeypatch):
 
 
 @pytest.mark.parametrize(
-	"status, error_code",
+	"status, error_code, command",
 	[
-		("risk_stopped", None),
-		("budget_stopped", None),
-		("timeout_stopped", "WORKFLOW_TIMEOUT"),
-		("workflow_stopped", "WORKFLOW_STOPPED"),
-		("stopped", "WORKFLOW_STOPPED"),
-		("failed", "NETWORK_ERROR"),
+		("risk_stopped", None, "resume"),
+		("budget_stopped", None, "status"),
+		("timeout_stopped", "WORKFLOW_TIMEOUT", "resume"),
+		("workflow_stopped", "WORKFLOW_STOPPED", "status"),
+		("stopped", "WORKFLOW_STOPPED", "status"),
+		("failed", "NETWORK_ERROR", "resume"),
 	],
 )
-def test_crawl_outcome_recovery_keeps_checkpoint_directory(tmp_path, status, error_code):
-	"""向导等待和错误路径都复用采集服务提供的恢复命令。"""
+def test_crawl_outcome_recovery_keeps_checkpoint_directory(tmp_path, status, error_code, command):
+	"""向导等待和错误路径都复用采集服务提供的恢复命令。
+
+	stop 与预算用尽不再指向 `crawl resume`：前者会清除用户刚写入的 stop 标记，
+	后者在原预算下必然原地返回（Issue #1238）。
+	"""
 	from boss_agent_cli.wizard.actions import _crawl_outcome_result
 
 	run_id = "run 'one'; $RUN"
@@ -3574,7 +3578,7 @@ def test_crawl_outcome_recovery_keeps_checkpoint_directory(tmp_path, status, err
 		data_dir=data_dir,
 		error="stop requested" if status in {"workflow_stopped", "stopped"} else "fixture stop",
 	)
-	expected = ["boss", "--data-dir", str(data_dir.resolve()), "crawl", "resume", run_id]
+	expected = ["boss", "--data-dir", str(data_dir.resolve()), "crawl", command, run_id]
 	if error_code is not None:
 		with pytest.raises(WorkflowActionError) as exc_info:
 			_crawl_outcome_result(outcome)
@@ -3584,8 +3588,12 @@ def test_crawl_outcome_recovery_keeps_checkpoint_directory(tmp_path, status, err
 		result = _crawl_outcome_result(outcome)
 		assert result.status is WorkflowStatus.WAITING_INPUT
 		assert shlex.split(result.next_action) == expected
-		assert result.next_action == result.data["checkpoint"]["resume_command"]
-		assert any(result.next_action in action for action in result.operator_actions)
+		if command == "resume":
+			assert result.next_action == result.data["checkpoint"]["resume_command"]
+			assert any(result.next_action in action for action in result.operator_actions)
+		else:
+			assert result.next_action not in result.data["checkpoint"]["resume_command"]
+			assert any(result.next_action in action for action in result.operator_actions)
 
 
 def test_crawl_risk_stop_emits_browser_operator_actions():
