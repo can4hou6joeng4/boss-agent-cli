@@ -2,6 +2,15 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.71] - 2026-11-17
+
+### Fixed
+- crawl 列表 `hasMore` 为显式 `null` 时被读成「没有更多」，run 报 `completed` 却只抓第一页；导出 `os.replace` 失败（目标已是目录 / 被占用）逃到 `except Exception`，run 落成 `ok=true` 的 stopped、临时文件残留；断点 `profile_path` 为空串时 `Path("")` 解析到 cwd，resume 会删除当前目录的 Singleton 锁并把 Chrome 配置写进去。现在只有显式布尔 `False` 才结束翻页，替换失败转 `CrawlExportError` 并清理临时文件，`profile_path` 必须是非空绝对路径（写入断点前统一 `resolve()`，相对 `--data-dir` 不受影响）（Issue #1345、#1346、#1347）。
+- `crawl run --hook-dir` 的内容校验发生在建任务、开浏览器之后：目录拼错 / 清单缺失时任务已落库，命令返回 `ok=true` 并提示 `crawl resume`，但 resume 没有 `--hook-dir` 参数可以修复。现在建任务前校验目录存在、清单可读、脚本齐全且摘要匹配；同时 `_tolerated_timestamp` 补齐 `OverflowError` 与 `math.isfinite`，`updated_at` 为 `inf` 时不再让 queued 任务永久排队（Issue #1348、#1349）。
+- 缓存库数据页损坏但首行可读时，游标 `fetchone` / `fetchall` / 迭代抛裸 `sqlite3.DatabaseError`：`crawl status` 只给通用 IO 指引，crawl 执行中被吞成 `ok=true` stopped + resume，坏库下无限重复。现在所有读取路径统一为 `CacheDatabaseInvalid`，命令层输出 `CACHE_DATABASE_INVALID`（Issue #1350）。
+- `friend_list` 的 `result` 为真值非列表时遮蔽合法 `friendList`：`chat` 返回空、`digest` / `pipeline` 全零、`chatmsg` / `mark` / `exchange` 误报 `CONTACT_NOT_FOUND`，`chat --export` 还会把空列表写进当日快照。联系人 `uid` 为 null 时被字符串化成 `"None"` 并发进读写请求，候选人消息被误标「我」；查找超过分页上限被报成可重试的 `NETWORK_ERROR`。现在 `result` 只在非空列表时优先、uid 缺失安全停止并给出带 `--data-dir` 的 `boss chat` 路径、分页上限与 wizard 同口径说明重试不改变结果（Issue #1351、#1352、#1353）。
+- HTML 导出把平台 null 字段渲染成字面量 `None`；`-o` 指向符号链接时原子写入替换链接本身，真实目标保持旧内容；当日聊天快照的读-合并-写没有互斥，并发导出互相覆盖、次日 diff 误报 `added`。现在 `esc` 对 `None` 输出空串、符号链接（含悬空链接）按 `INVALID_PARAM` 拒绝、快照读-合并-写在跨进程锁内完成（Issue #1354、#1355、#1356）。
+
 ## [3.4.70] - 2026-11-17
 
 ### Fixed
