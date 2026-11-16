@@ -249,12 +249,14 @@ def test_agent_crawl_invalid_city_points_at_crawl_config(tmp_path: Path) -> None
 
 def test_agent_crawl_corrupt_run_record_points_at_recreating_task(tmp_path: Path) -> None:
 	"""本地 run 记录损坏不是参数错误：指引重新创建任务（Issue #1259）。"""
+	runner = CliRunner()
+	_init_resume(runner, tmp_path)
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
 		cache.create_crawl_run("run-broken", _settings(tmp_path).as_dict(), str(tmp_path / "crawl" / "runs" / "run-broken"))
 		cache._conn.execute("UPDATE crawl_runs SET params = '[]' WHERE run_id = 'run-broken'")
 		cache._conn.commit()
 
-	result = CliRunner().invoke(
+	result = runner.invoke(
 		cli,
 		["--data-dir", str(tmp_path), "--json", "agent", "crawl", "--run-id", "run-broken", "--resume", "test-resume"],
 	)

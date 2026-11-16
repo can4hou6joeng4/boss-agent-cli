@@ -255,6 +255,79 @@ def test_agent_crawl_empty_resume_name_is_invalid_param_before_crawling(
 	]
 
 
+# ── Issue #1407：简历校验必须先于采集 / 短名单导入 ──────────────────────
+
+
+def test_agent_crawl_missing_resume_is_rejected_before_new_crawl(tmp_path: Path, monkeypatch) -> None:
+	"""--query 路径：非空但不存在的简历名不能先采集再报错（Issue #1407）。"""
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.agent.CrawlService.create_and_run",
+		lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("简历缺失不该开始采集")),
+	)
+
+	result = _invoke(
+		CliRunner(), tmp_path, "agent", "crawl", "--query", "AI", "--city", "杭州", "--resume", "ghost"
+	)
+
+	assert result.exit_code == 1, result.output
+	assert json.loads(result.output)["error"]["code"] == "RESUME_NOT_FOUND"
+	assert not (tmp_path / "cache" / "boss_agent.db").exists(), "简历缺失不该创建 crawl run"
+
+
+def test_agent_crawl_corrupt_resume_is_rejected_before_new_crawl(tmp_path: Path, monkeypatch) -> None:
+	"""损坏简历同样要在采集前报 RESUME_FILE_INVALID（Issue #1407）。"""
+	_write_corrupt_resume(tmp_path)
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.agent.CrawlService.create_and_run",
+		lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("简历损坏不该开始采集")),
+	)
+
+	result = _invoke(
+		CliRunner(), tmp_path, "agent", "crawl", "--query", "AI", "--city", "杭州", "--resume", "broken"
+	)
+
+	assert result.exit_code == 1, result.output
+	assert json.loads(result.output)["error"]["code"] == "RESUME_FILE_INVALID"
+	assert not (tmp_path / "cache" / "boss_agent.db").exists(), "简历损坏不该创建 crawl run"
+
+
+def test_agent_crawl_missing_resume_is_rejected_before_shortlist_import(tmp_path: Path, monkeypatch) -> None:
+	"""--run-id 路径：简历缺失不能先导入短名单再报错（Issue #1407）。"""
+	_complete_run(tmp_path)
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.agent.import_crawl_shortlist",
+		lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("简历缺失不该导入短名单")),
+	)
+
+	result = _invoke(
+		CliRunner(), tmp_path, "agent", "crawl", "--run-id", "run-1", "--resume", "ghost"
+	)
+
+	assert result.exit_code == 1, result.output
+	assert json.loads(result.output)["error"]["code"] == "RESUME_NOT_FOUND"
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.list_shortlist() == []
+
+
+def test_agent_crawl_corrupt_resume_is_rejected_before_shortlist_import(tmp_path: Path, monkeypatch) -> None:
+	"""--run-id 路径的损坏简历同样要先于短名单导入（Issue #1407）。"""
+	_complete_run(tmp_path)
+	_write_corrupt_resume(tmp_path)
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.agent.import_crawl_shortlist",
+		lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("简历损坏不该导入短名单")),
+	)
+
+	result = _invoke(
+		CliRunner(), tmp_path, "agent", "crawl", "--run-id", "run-1", "--resume", "broken"
+	)
+
+	assert result.exit_code == 1, result.output
+	assert json.loads(result.output)["error"]["code"] == "RESUME_FILE_INVALID"
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.list_shortlist() == []
+
+
 # ── Issue #1366：agent crawl 的本地确定性失败 ───────────────────────────
 
 
@@ -266,6 +339,15 @@ def _seed_login(tmp_path: Path) -> None:
 		"user_agent": "test-agent",
 		"stoken": "",
 	})
+
+
+def _init_resume(runner: CliRunner, tmp_path: Path) -> None:
+	"""建立一份可读简历：简历校验已前移到采集之前（Issue #1407）。"""
+	result = runner.invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "resume", "init", "--name", "test-resume", "--template", "default"],
+	)
+	assert result.exit_code == 0, result.output
 
 
 @pytest.mark.parametrize(
@@ -280,6 +362,8 @@ def test_agent_crawl_local_failures_are_local_io_error(
 	tmp_path: Path, monkeypatch, failure: RuntimeError, expected_recovery: str
 ) -> None:
 	_seed_login(tmp_path)
+	runner = CliRunner()
+	_init_resume(runner, tmp_path)
 
 	def _raise(self, settings):
 		raise failure
@@ -287,7 +371,7 @@ def test_agent_crawl_local_failures_are_local_io_error(
 	monkeypatch.setattr("boss_agent_cli.commands.agent.CrawlService.create_and_run", _raise)
 
 	result = _invoke(
-		CliRunner(), tmp_path, "agent", "crawl", "--query", "AI", "--city", "杭州", "--resume", "test-resume"
+		runner, tmp_path, "agent", "crawl", "--query", "AI", "--city", "杭州", "--resume", "test-resume"
 	)
 
 	assert result.exit_code == 1, result.output

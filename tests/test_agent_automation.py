@@ -898,6 +898,21 @@ def test_agent_queue_accepts_numeric_confidence(tmp_path: Path) -> None:
 	assert [item["confidence"] for item in json.loads(result.output)["data"]["items"]] == [1.0, 0.5, 0.0]
 
 
+def test_agent_queue_tty_columns_match_model_fields() -> None:
+	"""TTY 列键必须存在于数据模型字段，否则复核 / 待执行表格的列恒显示 “-”（Issue #1411）。"""
+	from boss_agent_cli.commands.agent import _PENDING_LIST_COLUMNS, _REVIEW_LIST_COLUMNS
+
+	review_keys = {key for _, key, _ in _REVIEW_LIST_COLUMNS}
+	pending_keys = {key for _, key, _ in _PENDING_LIST_COLUMNS}
+
+	assert review_keys <= set(ReviewItem.__dataclass_fields__)
+	assert pending_keys <= set(PendingAction.__dataclass_fields__)
+	assert {"id", "confidence"} <= review_keys
+	assert {"id", "status"} <= pending_keys
+	assert "review_id" not in review_keys | pending_keys
+	assert "score" not in review_keys
+
+
 def test_corrupt_stop_latch_fails_closed(tmp_path: Path) -> None:
 	store = AutomationStore(tmp_path)
 	(store.root / "stop.json").write_text("not json", encoding="utf-8")

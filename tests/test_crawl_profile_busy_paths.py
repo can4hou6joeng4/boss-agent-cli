@@ -90,10 +90,13 @@ def test_agent_crawl_reports_profile_busy_envelope(tmp_path, monkeypatch):
 		"boss_agent_cli.commands.agent._seeded_transport_factory",
 		lambda ctx: (lambda settings: _BusyTransport()),
 	)
+	# 简历校验已前移到采集之前（Issue #1407）：先建一份可读简历才能走到 transport。
+	init = _invoke(tmp_path, "resume", "init", "--name", "test-resume", "--template", "default")
+	assert init.exit_code == 0, init.output
 	result = _invoke(
 		tmp_path,
 		"--role", "recruiter",
-		"agent", "crawl", "--query", "AI", "--city", "杭州", "--resume", "简历",
+		"agent", "crawl", "--query", "AI", "--city", "杭州", "--resume", "test-resume",
 	)
 
 	assert result.exit_code == 1, result.output
