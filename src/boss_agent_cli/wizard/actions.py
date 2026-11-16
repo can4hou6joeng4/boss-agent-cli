@@ -744,11 +744,17 @@ def _candidate_friend(platform: Any, identifier: str, *, context: ActionContext 
 	try:
 		friend, error_response = find_friend(platform, identifier)
 	except FriendLookupLimitExceeded as exc:
+		# 候选人无法「缩小沟通列表范围」：照抄旧指引只会把同一段超过分页上限的
+		# 遍历再跑一遍。find_friend 优先匹配稳定 uid，给出可执行的 uid 路径。
+		chat_hint = _hint_command(context, "chat") if context is not None else "boss chat"
 		raise WorkflowActionError(
 			"NETWORK_ERROR",
 			str(exc),
 			recoverable=True,
-			recovery_action="缩小沟通列表范围后重试",
+			recovery_action=(
+				f"先用 {chat_hint} 确认联系人仍在沟通列表并取到 uid，再用 uid 重试；"
+				"按会轮换的 securityId 查询超过分页上限时，重试同样的查询不会改变结果"
+			),
 		) from exc
 	if error_response is not None:
 		_unwrap(platform, error_response, "沟通列表获取失败", context=context)
@@ -914,13 +920,31 @@ def _local_shortlist(context: ActionContext, inputs: Mapping[str, Any], prior: M
 
 
 def _local_resumes(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	items = ResumeStore(context.data_dir / "resumes").list_all()
-	return StepResult({"items": items, "total": len(items)})
+	items, corrupt = ResumeStore(context.data_dir / "resumes").list_all_with_corrupt()
+	data: dict[str, Any] = {"items": items, "total": len(items)}
+	# 坏文件不能假装不存在：列表里没有名字，用户不会知道 resumes/ 下还有一份
+	# 需要修正或删除的文件（与 `boss resume list` 的 hints.corrupt 同口径）。
+	if corrupt:
+		data["corrupt"] = corrupt
+	return StepResult(data)
 
 
 def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	resume_name = str(_required(inputs, "resume"))
-	resume = ResumeStore(context.data_dir / "resumes").get(resume_name)
+	resume, load_error = ResumeStore(context.data_dir / "resumes").get_with_error(resume_name)
+	if resume is None and load_error is not None:
+		# 文件存在但读不出来：报「不存在」会让 Agent 去 resume init，又被同名
+		# 文件挡住（RESUME_ALREADY_EXISTS），恢复链断在这里（Issue #1189 同口径）。
+		raise WorkflowActionError(
+			"RESUME_FILE_INVALID",
+			f"简历文件 {resume_name!r} 损坏：{load_error}",
+			recoverable=True,
+			recovery_action=(
+				f"修正 resumes/{resume_name}.json 的 JSON 内容后重试，"
+				f"或执行 {_hint_command(context, f'resume delete {shell_argument(resume_name)}')} 后重新创建；"
+				"该文件只存在本机"
+			),
+		)
 	if resume is None:
 		raise WorkflowActionError("RESUME_NOT_FOUND", f"简历 {resume_name!r} 不存在")
 	config_store = AIConfigStore(context.data_dir)
