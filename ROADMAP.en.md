@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.49 (2026-11-16): numeric-overflow edges of local conversion. Legal large integers / `1e400` no longer turn search caches, startup config validation, automation / crawl / AI settings and local-model outputs into `INTERNAL_ERROR` or retryable `NETWORK_ERROR` (Issue #1230).
 - ✅ v3.4.48 (2026-11-16): local JSON reads now handle overlong integers and deep nesting; an unreadable stop latch fails closed, and `agent stats` / `resume show` return contract error codes instead of tracebacks (Issue #1227).
 - ✅ v3.4.47 (2026-11-16): parse, consistency and rendering edges of the index-cache read path. Overlong integers / deep nesting now report `INVALID_PARAM` as a missing cache, `count` always equals `len(jobs)`, a surrogate-bearing `source` becomes an empty string, and `page` / `saved_at` get sane bounds (Issue #1224).
 - ✅ v3.4.46 (2026-11-16): drifted index-cache metadata no longer reaches the `index_snapshot` envelope as-is. A non-string `source` becomes an empty string, an invalid `page` becomes `None`, an invalid `count` falls back to `len(jobs)`, and a non-finite `saved_at` becomes 0; the cache is kept whenever `jobs` is usable (Issue #1221).

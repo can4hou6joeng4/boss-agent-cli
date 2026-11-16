@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.49] - 2026-11-16
 
 ### Fixed
 - 本地数值转换的溢出边界一次收口（Issue #1230）：`json.loads` 能正常解析 4300 位以内的大整数与 `1e400`（→ `inf`），但 `float()` / `int()` / `math.isfinite()` 在溢出时抛 `OverflowError`——`BossCliGroup` 把它归入不可重试的 `INTERNAL_ERROR`（指引「升级版本」），搜索缓存路径则被兜成可重试的 `NETWORK_ERROR`。现在：搜索缓存里的坏行按未命中处理、继续正常搜索；`config.json` 的 `request_delay` / `request_wait_timeout` 大整数与 `config set automation|crawl` 的 `1e400` 返回 `INVALID_PARAM` 并给修复入口；`ai_temperature` 大整数返回 `INVALID_PARAM`；本地模型输出的 `confidence` 大整数或深嵌套走模板话术降级并要求人工复核，不再中止整轮自动化；AI fit 输出的 `match_score: 1e400` 按 0 分处理并继续返回结果。
