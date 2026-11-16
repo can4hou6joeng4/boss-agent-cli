@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.55] - 2026-11-16
+
+### Fixed
+- `boss agent review approve` 先写复核队列再追加待执行队列（Issue #1248）：第二步失败（磁盘满、权限、中断）时复核项已是 `approved`、pending 里却没有对应行，重试因为找不到 `review` 记录直接报「不存在或已处理」，已批准的动作永久丢失。现在改为先入队、再标记复核项；入队失败可直接重试，两步之间失败时按 `approved_review_id` 去重，只补写复核队列。
+
 ## [3.4.54] - 2026-11-16
 
 ### Fixed
