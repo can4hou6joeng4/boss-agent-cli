@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.56] - 2026-11-16
+
+### Fixed
+- automation 控制锁冲突不再被误报成 `CACHE_BUSY`（Issue #1251）：`automation/.control-lock.sqlite3` 被其他 boss 命令占用时，`BEGIN IMMEDIATE` 抛出的 `database is locked` 穿透到兜底层后被归为缓存库错误，恢复指引让人去等 `cache/boss_agent.db` 的写入者，而 `agent stop` 实际上没有生效。现在控制锁冲突返回新登记的 `AUTOMATION_BUSY`（可重试），指引指向真正的锁文件并说明锁文件完好、不需要删除；`agent stop` 与 `agent run` 的恢复/写状态路径都按此上报。非锁类 `OperationalError` 原样上抛，不伪装成可重试的占用。
+
 ## [3.4.55] - 2026-11-16
 
 ### Fixed
