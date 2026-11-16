@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.35] - 2026-11-16
 
 ### Fixed
 - wizard 任务列表不再把可恢复任务标成断点损坏（Issue #1181）：`wizard --status` 与交互式恢复选择此前把「读步骤 + 校验重放标记」和「叠加实时采集」放在同一个 `try`，绑定的 crawl 记录写坏时整条任务被丢进 `corrupt_run_ids`，明明能恢复却被提示重建。现在两层读取分开：断点或重放标记损坏仍按损坏跳过，只是叠加数据坏掉时保留任务（少显示 jobs / live_status，不影响恢复）。

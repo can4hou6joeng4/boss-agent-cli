@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.35（2026-11-16）：`wizard --status` 与交互式恢复选择不再把可恢复任务标成断点损坏。此前「读步骤 + 校验重放标记」和「叠加实时采集」共用一个 `try`，绑定的 crawl 记录写坏时整条任务被丢进损坏名单并提示重建；现在叠加数据损坏只影响 jobs / live_status 展示，断点或重放标记损坏仍按损坏跳过。
 - ✅ v3.4.34（2026-11-16）：MCP 的 `boss_preset_add` / `boss_watch_add` / `boss_batch_greet` 收到显式空串筛选（`industry` / `scale` / `stage` / `job_type`）时不再当成「没传」并返回 `ok=true`，而是原样下发给 CLI 返回取值诊断；`None` 与缺键仍等价于未传。
 - ✅ v3.4.33（2026-11-16）：`wizard --resume` 在任务断点完好、但绑定的内部 crawl 记录损坏时不再被判成 `CACHE_RECORD_INVALID`；恢复与执行器的控制读取只读断点本身，执行结果优先带实时采集叠加、叠加损坏时退回断点，`--status` 仍按展示契约报告损坏。
 - ✅ v3.4.32（2026-11-16）：缓存表结构漂移（旧版本建的库缺列、迁移中断）时，`shortlist list` / `shortlist add` 等走 `CacheStore` 的命令不再直接 traceback，改为返回 `CACHE_DATABASE_INVALID` 信封与备份重建指引；锁冲突仍是可重试的 `CACHE_BUSY`，代码写错的 `ProgrammingError` 保持原样上抛。
