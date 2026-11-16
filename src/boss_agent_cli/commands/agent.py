@@ -567,6 +567,10 @@ def stop_cmd(ctx: click.Context, reason: str) -> None:
 		store.request_stop(reason)
 	except AutomationControlBusy as exc:
 		_emit_control_busy(ctx, "agent.stop", exc)
+	except AutomationStateError as exc:
+		# 锁文件损坏 / 不可打开：确定性本地状态问题，不能把 traceback 甩给 Agent
+		# （Issue #1304）。
+		_emit_state_error(ctx, "agent.stop", exc)
 	handle_output(
 		ctx,
 		"agent.stop",

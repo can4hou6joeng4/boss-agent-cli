@@ -734,11 +734,23 @@ class BossCliGroup(click.Group):
 				recovery_action=busy_recovery_action,
 			)
 			return None
-		except sqlite3.OperationalError as exc:
-			# 只在兜底层收口锁冲突；其他 OperationalError 保持原样，避免把代码缺陷
-			# 说成「等锁释放后重试」。
-			if not is_cache_busy_error(exc):
-				raise
+		except sqlite3.DatabaseError as exc:
+			# 锁冲突统一收口；其余的数据库错误（文件损坏、路径被同名目录占用）
+			# 是确定性本地失败：原样上抛会让命令丢掉整个信封，或在带装饰器的
+			# 命令里被兜成可重试的 NETWORK_ERROR（Issue #1304）。
+			if not (isinstance(exc, sqlite3.OperationalError) and is_cache_busy_error(exc)):
+				if not standalone_mode:
+					raise
+				command = _invoked_command_name(args, self.name or "boss")
+				db_recoverable, db_recovery_action = error_contract_for_code("LOCAL_IO_ERROR")
+				emit_error(
+					command,
+					code="LOCAL_IO_ERROR",
+					message=f"{command} 本地数据库文件无法打开: {exc}",
+					recoverable=db_recoverable,
+					recovery_action=db_recovery_action,
+				)
+				return None
 			if not standalone_mode:
 				raise
 			command = _invoked_command_name(args, self.name or "boss")

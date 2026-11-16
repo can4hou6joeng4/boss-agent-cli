@@ -44,6 +44,9 @@ def run_automation_cycle(
 	with store.execution_lock():
 		if resume:
 			store.resume()
+		# 本周期是否真的把动作派发到平台：控制锁冲突的语义取决于它——
+		# 零派发周期里只有本地状态写回撞锁，「没有生效」才是准确的（Issue #1307）。
+		dispatched = [False]
 		try:
 			return _run_cycle_locked(
 				adapter,
@@ -52,10 +55,11 @@ def run_automation_cycle(
 				platform=platform,
 				dry_run=dry_run,
 				limit=limit,
+				dispatched=dispatched,
 			)
 		except AutomationControlBusy as exc:
-			if dry_run:
-				# 预览没有发出任何请求，控制锁冲突仍是「本次操作没有生效」。
+			if dry_run or not dispatched[0]:
+				# 预览没有发出任何请求；零派发周期也没有平台动作可能生效。
 				raise
 			# 周期内的冲突发生在动作派发与 checkpoint 之间：队列写回成功时平台
 			# 动作可能已经发出，不能按「没有生效」让操作者直接重试（Issue #1267）。
@@ -71,6 +75,7 @@ def _run_cycle_locked(
 	platform: str,
 	dry_run: bool,
 	limit: int | None = None,
+	dispatched: list[bool] | None = None,
 ) -> RunReport:
 	"""Run one recruiter automation cycle while holding the execution lock."""
 	state = store.read_state()
@@ -93,7 +98,7 @@ def _run_cycle_locked(
 		with request_control(check=guard.raise_if_stopped):
 			adapter.ensure_session()
 			if guard.stop_reason() is None:
-				events.extend(process_pending(adapter, store, guard, platform, dry_run, state=state))
+				events.extend(process_pending(adapter, store, guard, platform, dry_run, state=state, dispatched=dispatched))
 			if guard.stop_reason() is None:
 				# 用 is None 而不是 or：limit=0 表示「本轮不处理任何会话」，
 				# 而 `0 or max_per_tab` 会静默放大成默认的 20 个；负数在这里归一为 0，
@@ -115,7 +120,7 @@ def _run_cycle_locked(
 						events.append(event)
 						store.append_event(event)
 						continue
-					events.append(process_ref(adapter, store, config, guard, state, platform, dry_run, ref))
+					events.append(process_ref(adapter, store, config, guard, state, platform, dry_run, ref, dispatched=dispatched))
 	except PlatformRiskError as exc:
 		guard.open_circuit_breaker(exc.code)
 		store.append_event(
