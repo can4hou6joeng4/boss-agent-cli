@@ -1,6 +1,8 @@
 """Tests for resume export (HTML + PDF)."""
 
+import errno
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
@@ -71,12 +73,14 @@ def test_export_html_overwrites_existing(tmp_path):
 # ── export_pdf ───────────────────────────────────────────────
 
 
-def test_export_pdf_mock_patchright(tmp_path):
-	"""export_pdf calls patchright correctly (mocked)."""
-	resume = _make_resume()
-	out = tmp_path / "resume.pdf"
-
+def _mock_patchright():
+	"""patchright mock：`page.pdf` 按 path 参数落占位文件（真实 Chromium 会写盘）。"""
 	mock_page = MagicMock()
+
+	def _write_pdf(*args, **kwargs):
+		Path(kwargs["path"]).write_bytes(b"%PDF-1.4 mock")
+
+	mock_page.pdf.side_effect = _write_pdf
 	mock_browser = MagicMock()
 	mock_browser.new_page.return_value = mock_page
 	mock_chromium = MagicMock()
@@ -87,11 +91,21 @@ def test_export_pdf_mock_patchright(tmp_path):
 	mock_context_manager = MagicMock()
 	mock_context_manager.__enter__ = MagicMock(return_value=mock_playwright)
 	mock_context_manager.__exit__ = MagicMock(return_value=False)
+	return mock_page, mock_chromium, mock_browser, mock_context_manager
 
+
+def test_export_pdf_mock_patchright(tmp_path):
+	"""export_pdf calls patchright correctly (mocked)."""
+	resume = _make_resume()
+	out = tmp_path / "resume.pdf"
+
+	mock_page, mock_chromium, mock_browser, mock_context_manager = _mock_patchright()
 	with patch("patchright.sync_api.sync_playwright", return_value=mock_context_manager):
 		result = export_pdf(resume, out)
 
 	assert result == out
+	assert out.read_bytes() == b"%PDF-1.4 mock"
+	assert [p.name for p in tmp_path.iterdir()] == ["resume.pdf"]
 	mock_chromium.launch.assert_called_once_with(headless=True)
 	mock_browser.new_page.assert_called_once()
 	mock_page.set_content.assert_called_once()
@@ -104,18 +118,7 @@ def test_export_pdf_call_params(tmp_path):
 	resume = _make_resume()
 	out = tmp_path / "output.pdf"
 
-	mock_page = MagicMock()
-	mock_browser = MagicMock()
-	mock_browser.new_page.return_value = mock_page
-	mock_chromium = MagicMock()
-	mock_chromium.launch.return_value = mock_browser
-	mock_playwright = MagicMock()
-	mock_playwright.chromium = mock_chromium
-
-	mock_context_manager = MagicMock()
-	mock_context_manager.__enter__ = MagicMock(return_value=mock_playwright)
-	mock_context_manager.__exit__ = MagicMock(return_value=False)
-
+	mock_page, _, _, mock_context_manager = _mock_patchright()
 	with patch("patchright.sync_api.sync_playwright", return_value=mock_context_manager):
 		export_pdf(resume, out)
 
@@ -126,7 +129,58 @@ def test_export_pdf_call_params(tmp_path):
 	assert pdf_call.kwargs["margin"]["bottom"] == "10mm"
 	assert pdf_call.kwargs["margin"]["left"] == "10mm"
 	assert pdf_call.kwargs["margin"]["right"] == "10mm"
-	assert pdf_call.kwargs["path"] == str(out)
+	# 先写同目录临时文件再原子替换：Chromium 不直接写目标路径。
+	pdf_path = Path(pdf_call.kwargs["path"])
+	assert pdf_path.parent == out.parent
+	assert pdf_path.name.startswith(".output.pdf.")
+	assert out.read_bytes() == b"%PDF-1.4 mock"
+
+
+def test_export_pdf_preserves_existing_on_write_failure(tmp_path):
+	"""Chromium 写 PDF 失败时旧文件保留、临时文件不残留。"""
+	resume = _make_resume()
+	out = tmp_path / "resume.pdf"
+	out.write_bytes(b"old complete pdf")
+
+	mock_page = MagicMock()
+	mock_page.pdf.side_effect = OSError(errno.ENOSPC, "No space left on device")
+	mock_browser = MagicMock()
+	mock_browser.new_page.return_value = mock_page
+	mock_chromium = MagicMock()
+	mock_chromium.launch.return_value = mock_browser
+	mock_playwright = MagicMock()
+	mock_playwright.chromium = mock_chromium
+	mock_context_manager = MagicMock()
+	mock_context_manager.__enter__ = MagicMock(return_value=mock_playwright)
+	mock_context_manager.__exit__ = MagicMock(return_value=False)
+
+	with patch("patchright.sync_api.sync_playwright", return_value=mock_context_manager):
+		try:
+			export_pdf(resume, out)
+		except OSError:
+			pass
+		else:  # pragma: no cover - 明确失败才算通过
+			raise AssertionError("写入失败应向上抛出")
+
+	assert out.read_bytes() == b"old complete pdf"
+	assert [p.name for p in tmp_path.iterdir()] == ["resume.pdf"]
+
+
+def test_export_html_preserves_existing_on_write_failure(tmp_path):
+	"""HTML 写入中途失败时旧简历导出保留。"""
+	resume = _make_resume(title="Version 2")
+	out = tmp_path / "resume.html"
+	out.write_text("上一次的完整简历", encoding="utf-8")
+
+	with patch("os.fsync", side_effect=OSError(errno.ENOSPC, "No space left on device", str(out))):
+		try:
+			export_html(resume, out)
+		except OSError:
+			pass
+		else:  # pragma: no cover - 明确失败才算通过
+			raise AssertionError("写入失败应向上抛出")
+
+	assert out.read_text(encoding="utf-8") == "上一次的完整简历"
 
 
 def test_export_pdf_creates_parent_dirs(tmp_path):
@@ -134,22 +188,12 @@ def test_export_pdf_creates_parent_dirs(tmp_path):
 	resume = _make_resume()
 	out = tmp_path / "sub" / "dir" / "resume.pdf"
 
-	mock_page = MagicMock()
-	mock_browser = MagicMock()
-	mock_browser.new_page.return_value = mock_page
-	mock_chromium = MagicMock()
-	mock_chromium.launch.return_value = mock_browser
-	mock_playwright = MagicMock()
-	mock_playwright.chromium = mock_chromium
-
-	mock_context_manager = MagicMock()
-	mock_context_manager.__enter__ = MagicMock(return_value=mock_playwright)
-	mock_context_manager.__exit__ = MagicMock(return_value=False)
-
+	_, _, _, mock_context_manager = _mock_patchright()
 	with patch("patchright.sync_api.sync_playwright", return_value=mock_context_manager):
 		export_pdf(resume, out)
 
 	assert out.parent.exists()
+	assert out.exists()
 
 
 # ── CLI integration: --format html ───────────────────────────

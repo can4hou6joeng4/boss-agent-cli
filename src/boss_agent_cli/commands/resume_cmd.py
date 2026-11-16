@@ -21,6 +21,7 @@ from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, resume
 from boss_agent_cli.resume.store import ResumeAlreadyExistsError, ResumeImportError, ResumeStore
 from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
 from boss_agent_cli.services.output_path import prepare_output_path
+from boss_agent_cli.services.text_files import write_text_atomic
 
 
 def _get_store(ctx: click.Context) -> ResumeStore:
@@ -452,7 +453,7 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 	export_data = json.loads(json_str)
 	if output_path:
 		try:
-			prepare_output_path(output_path).write_text(json_str, encoding="utf-8")
+			write_text_atomic(prepare_output_path(output_path), json_str)
 		except OSError as exc:
 			_emit_export_failure(ctx, fmt, exc, target=output_path)
 			return
