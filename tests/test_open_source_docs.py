@@ -519,11 +519,12 @@ def test_ci_workflow_is_safe_for_fork_pull_requests():
 	assert not (ROOT / ".github/workflows/docs.yml").exists()
 
 
-def test_labeler_workflow_never_runs_pull_request_code():
+def test_labeler_workflow_is_safe_for_pull_requests():
 	workflow = load_yaml(".github/workflows/labeler.yml")
 	triggers = workflow.get("on", workflow.get(True))
-	assert "pull_request_target" in triggers
-	# pull_request_target 拿得到写权限，所以绝不能 checkout 或执行 PR 里的代码
+	assert "pull_request" in triggers
+	assert "pull_request_target" not in triggers
+	# 同仓库分支的 PR 才能申请到写权限；任务本身不 checkout、不执行 PR 代码。
 	text = read(".github/workflows/labeler.yml")
 	assert "actions/checkout" not in text
 	assert "run:" not in text
@@ -531,6 +532,31 @@ def test_labeler_workflow_never_runs_pull_request_code():
 	assert workflow["permissions"] == {}
 	job = workflow["jobs"]["label"]
 	assert job["permissions"] == {"contents": "read", "pull-requests": "write"}
+	# fork / Dependabot 的 pull_request token 只读，打标签会 403：直接跳过。
+	assert "head.repo.full_name == github.repository" in job["if"]
+	assert "dependabot[bot]" in job["if"]
+
+
+def test_no_workflow_uses_pull_request_target():
+	"""公共仓库从 2026-12-02 起默认阻止 ``pull_request_target``（Issue #1322）。
+
+	GitHub 在 2026-11-09 / 11-16 的 brownout 里已经把这些运行拦成
+	``startup_failure``。迁移口径：PR 合并后的动作改为 ``push`` 到 ``master``，
+	同仓库 PR 的辅助动作改为 ``pull_request``；不再依赖仓库级 event policy 放行。
+	"""
+	targeted = [
+		path for path in WORKFLOW_PATHS
+		if "pull_request_target" in _workflow_triggers(path)
+	]
+	assert targeted == [], f"这些工作流仍在用 pull_request_target: {targeted}"
+
+
+def test_update_contributors_runs_on_master_push():
+	workflow = load_yaml(".github/workflows/update-contributors.yml")
+	triggers = workflow.get("on", workflow.get(True))
+	assert "pull_request_target" not in triggers
+	assert triggers["push"] == {"branches": ["master"]}
+	assert "workflow_dispatch" in triggers
 
 
 WORKFLOW_PATHS = sorted(
@@ -567,7 +593,7 @@ def _workflow_steps(path: str) -> list[tuple[str, dict]]:
 
 
 def test_workflow_guards_see_every_workflow():
-	assert len(WORKFLOW_PATHS) >= 9
+	assert len(WORKFLOW_PATHS) >= 8
 	assert ".github/workflows/release.yml" in WORKFLOW_PATHS
 
 
@@ -590,7 +616,7 @@ def test_workflow_actions_are_pinned_to_commit_sha():
 			assert VERSION_COMMENT.match(comment), (
 				f"{path}: `{reference}` 行尾缺少 `# vX.Y.Z` 版本注释，Dependabot 与评审都靠它识别版本"
 			)
-	assert seen >= 18
+	assert seen >= 17
 
 
 def test_workflow_run_scripts_do_not_expand_expressions():
@@ -608,21 +634,6 @@ def test_workflow_run_scripts_do_not_expand_expressions():
 			checked += 1
 			assert "${{" not in script, f"{path} / {job_name}: run 脚本里展开了表达式，改为经 env: 传入"
 	assert checked >= 10
-
-
-def test_pull_request_target_workflows_never_check_out_pull_request_code():
-	"""`pull_request_target` 拿得到写权限和 secret，绝不能检出或引用 PR 的 head。"""
-	targeted = [path for path in WORKFLOW_PATHS if "pull_request_target" in _workflow_triggers(path)]
-	assert ".github/workflows/update-contributors.yml" in targeted
-	for path in targeted:
-		text = read(path)
-		for marker in ("pull_request.head", "github.head_ref", "refs/pull/"):
-			assert marker not in text, f"{path}: pull_request_target 工作流引用了 PR head（{marker}）"
-		for job_name, step in _workflow_steps(path):
-			if str(step.get("uses", "")).startswith("actions/checkout@"):
-				assert "ref" not in (step.get("with") or {}), (
-					f"{path} / {job_name}: pull_request_target 下 checkout 不得指定 ref，默认检出的是基线分支"
-				)
 
 
 def test_release_workflow_does_not_restore_caches():

@@ -74,9 +74,13 @@ so a pull request that breaks one fails the required checks:
   before the shell parses the script, so quotes in a tag or branch name become
   code. Pass the value through `env:` or use the runner's own variable
   (`$GITHUB_REF_NAME`).
-- A `pull_request_target` workflow never checks out or references the pull
-  request head. `update-contributors.yml` checks out the base branch;
-  `labeler.yml` and `dependabot-auto-merge.yml` check out nothing.
+- No workflow uses `pull_request_target`. GitHub blocks it by default in public
+  repositories from 2026-12-02 (the 2026-11-09 and 2026-11-16 brownouts already
+  turned every such run into a `startup_failure`, see Issue #1322).
+  `update-contributors.yml` runs on `push` to `master`; `labeler.yml` runs on
+  `pull_request` and skips fork / Dependabot PRs, whose token is read-only.
+  `tests/test_open_source_docs.py` fails a pull request that reintroduces the
+  trigger.
 - `release.yml` restores no caches (`enable-cache: false`, no `actions/cache`).
   CI on `master` writes the uv cache, and a release build that restored it
   would run whatever that cache contains next to the PyPI token.
@@ -96,8 +100,7 @@ An optional local audit covers more than the tests do:
 uvx zizmor==1.25.2 --persona regular --offline .github/workflows
 ```
 
-Four findings are expected and accepted: `dangerous-triggers` on the two
-`pull_request_target` workflows above, and `use-trusted-publishing` and
+Two findings are expected and accepted: `use-trusted-publishing` and
 `superfluous-actions` on `release.yml`. Moving to PyPI Trusted Publishing needs
 the publisher registered on pypi.org before the token is removed from the
 workflow.
