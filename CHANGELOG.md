@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.44] - 2026-11-16
 
 ### Fixed
 - 缓存 TTL、风险锁时间戳与令牌刷新前的登录态读取收口（Issue #1214）：`search_cache` / `job_desc_cache` 的 `created_at` 被写成文本或 `inf` 时，TTL 比较抛 `TypeError`——`boss search` 兜成不可重试的 `INTERNAL_ERROR`，crawl 详情阶段吞成没有错误码的 `stopped` 且重跑仍读同一坏行。现在坏时间戳按已过期处理并删除坏行，后续请求正常重取。风险锁的 `locked_at` 写成超长整数时 `float()` 抛 `OverflowError`，绕过 fail-closed 分支并把 `ACCOUNT_RISK` / `ENVIRONMENT_RISK` 替换成 `INTERNAL_ERROR`；写成 `inf` 时 `lock_status` 的 `time.localtime` 崩溃。现在只接受有限且落在合理区间的时间戳，两种坏值都按「时间未知」展示，锁的阻断语义不变。刷新 stoken 前先校验 `cookies` 是对象，结构漂移时直接提示重新登录，不再先发起刷新再误报成泛化的 `TOKEN_REFRESH_FAILED`。
