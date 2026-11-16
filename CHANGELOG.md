@@ -2,6 +2,15 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.68] - 2026-11-17
+
+### Fixed
+- MCP 三个工具把显式空串当成未传：`boss_shortlist_add` 的 `source`、`boss_agent_stop` / `boss_agent_review_reject` 的 `reason` 传 `""` 时，CLI 落到自己的默认值（`manual` / `manual-stop` / `human-rejected`），落库值与调用方参数不一致。现在键存在且非 null 就原样下发，与 `export --url ""` 的口径一致（Issue #1324）。
+- crawl 断点读取补齐范围、枚举与文本校验：`browser.cdp_port` 越界会在 `socket.connect_ex` 抛 `OverflowError` 并被吞成 `ok: true` 的 stopped；`pages` / `limits` 的 0 或负数、负的 `next_page` 与计数器、非枚举的 `hook.profile`、BLOB 的 `status` / `output_dir` / `error` 均缺少读取边界校验。现在统一抛 `CACHE_RECORD_INVALID`，`crawl status` 与 `crawl resume` 对同一行口径一致（Issue #1325）。
+
+### Changed
+- GitHub 公共仓库默认阻止 `pull_request_target`（2026-11-16 brownout，2026-12-02 起永久生效），三个辅助工作流每个 PR 都 `startup_failure`。`Update Contributors` 改为在 `push` 到 `master` 时运行，`Labeler` 改为 `pull_request`（fork / Dependabot 只读 token 直接跳过），删除从未生效的 `Dependabot auto-merge`；新增离线守卫禁止重新引入 `pull_request_target`（Issue #1322）。
+
 ## [3.4.67] - 2026-11-17
 
 ### Fixed
