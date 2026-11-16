@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.43] - 2026-11-16
 
 ### Fixed
 - 本地记录数值与容器漂移在四处读取边界收口（Issue #1212）：`crawl_budget.last_request_at` 与 `request_state` / `request_attempts` 的时间列被写成非数值文本时，`reserve_crawl_budget` 抛 `ValueError`（被 `handle_auth_errors` 兜成可重试的 `NETWORK_ERROR`），`RequestBudget.attempt` 抛 `TypeError`（全部平台请求落成不可重试的 `INTERNAL_ERROR`）；坏行还会永久占满每分钟额度并让等待超时。现在调度元数据按无历史 / 0 容错，`typeof` 漂移的行在下一轮清理，坏 `cooldown_until` 在写入与读取两侧归一（此前 SQLite 的 `MAX(text, real)` 会选中文本，新冷却被静默吞掉）。`crawl_jobs.page_no` / `detail_done` 与 `crawl_runs` 一样在读取边界校验，`crawl start` / `resume` 把 `CacheRecordInvalid` 作为确定性失败重抛，入口返回 `CACHE_RECORD_INVALID` 而不是 `ok:true` 的 stopped。向导状态面板与结果菜单对历史 `last_result.data.jobs_seen` / `jobs` 的漂移值降级展示，不再 traceback。`_record_cdp_risk_lock` 在登录态 `cookies` 不是对象时按缺失处理，保证风险锁照常写入、原始 `ACCOUNT_RISK` / `ENVIRONMENT_RISK` 异常不被 `AttributeError` 替换。
