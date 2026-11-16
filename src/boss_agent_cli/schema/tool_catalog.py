@@ -116,8 +116,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 						"description": "可选的 goal 内步骤子集；省略表示执行全部步骤，空数组非法",
 					},
 					"run_id": {"type": "string", "description": "resume/status/stop 的显式 workflow run_id"},
-					"timeout": {"type": "number", "description": "workflow 超时秒数"},
-					"max_retries": {"type": "integer", "minimum": 0, "description": "可恢复步骤的最大重试次数"},
+					"timeout": {"type": "number", "minimum": 0.001, "description": "workflow 超时秒数"},
+					"max_retries": {"type": "integer", "minimum": 0, "maximum": 10, "description": "可恢复步骤的最大重试次数"},
 				},
 				"required": [],
 			},
@@ -159,7 +159,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 						"enum": ["online", "today", "3d", "week", "2w", "month", "half-year"],
 						"description": "只保留 HR 活跃度不低于该档的职位；online 只看列表、请求量与普通搜索相同，其余档位列表看不出时会逐个查详情（更慢、风控风险更高），活跃度未知的职位会被排除并写进 hints.active_filter",
 					},
-					"page": {"type": "integer", "description": "页码", "default": 1},
+					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
 					"no_cache": {"type": "boolean", "description": "跳过缓存，强制重新请求", "default": False},
 					"with_score": {"type": "boolean", "description": "附加匹配分和原因（使用本地简历）", "default": False},
 					"sort": {"type": "string", "enum": ["relevance", "score"], "description": "排序方式", "default": "relevance"},
@@ -174,7 +174,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"page": {"type": "integer", "description": "页码", "default": 1},
+					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
 					"with_score": {"type": "boolean", "description": "附加匹配分和原因（使用本地简历）", "default": False},
 				},
 				"required": [],
@@ -213,8 +213,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"from_who": {"type": "string", "enum": ["boss", "me"], "description": "筛选发起方"},
-					"days": {"type": "integer", "description": "只显示最近 N 天的记录"},
-					"page": {"type": "integer", "description": "页码", "default": 1},
+					"days": {"type": "integer", "minimum": 0, "maximum": 36500, "description": "只显示最近 N 天的记录"},
+					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
 					"format": {
 						"type": "string",
 						"enum": ["html", "md", "csv", "json"],
@@ -257,7 +257,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"page": {"type": "integer", "description": "页码", "default": 1},
+					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
 				},
 				"required": [],
 			},
@@ -269,8 +269,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"security_id": {"type": "string", "description": "好友的 uid（推荐，取自 boss_chat，跨请求稳定）或 security_id"},
-					"page": {"type": "integer", "description": "页码", "default": 1},
-					"count": {"type": "integer", "description": "每页消息数量", "default": 20},
+					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
+					"count": {"type": "integer", "minimum": 1, "description": "每页消息数量", "default": 20},
 					"raw": {"type": "boolean", "description": "输出保真结构化消息字段（仍受合规门控）", "default": False},
 				},
 				"required": ["security_id"],
@@ -283,8 +283,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"security_id": {"type": "string", "description": "好友的 uid（推荐，取自 boss_chat，跨请求稳定）或 security_id"},
-					"page": {"type": "integer", "description": "消息页码", "default": 1},
-					"count": {"type": "integer", "description": "每页消息数量", "default": 20},
+					"page": {"type": "integer", "minimum": 1, "description": "消息页码", "default": 1},
+					"count": {"type": "integer", "minimum": 1, "description": "每页消息数量", "default": 20},
 				},
 				"required": ["security_id"],
 			},
@@ -375,7 +375,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"scale": {"type": "string", "description": "公司规模，支持逗号分隔多选"},
 					"stage": {"type": "string", "description": "融资阶段，支持逗号分隔多选"},
 					"job_type": {"type": "string", "description": "职位类型，支持逗号分隔多选"},
-					"count": {"type": "integer", "description": "导出数量", "default": 50},
+					"count": {"type": "integer", "minimum": 1, "description": "导出数量", "default": 50},
 					"format": {"type": "string", "enum": ["csv", "json", "html"], "description": "输出格式", "default": "csv"},
 					"output_file": {"type": "string", "description": "输出文件路径；不传时 csv/json 在信封内返回 jobs 列表，html 在 data.content 返回 HTML 正文"},
 					"include_private": {"type": "boolean", "description": "CSV/JSON/stdout 保留 job_id/security_id/boss_name 明文；HTML 始终省略平台标识、招聘者姓名和薪资", "default": False},
@@ -400,7 +400,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"days_stale": {"type": "integer", "description": "超过 N 天未推进视为待跟进", "default": 3},
+					"days_stale": {"type": "integer", "minimum": 0, "description": "超过 N 天未推进视为待跟进", "default": 3},
 				},
 				"required": [],
 			},
@@ -411,7 +411,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"days_stale": {"type": "integer", "description": "超过 N 天未推进视为待跟进", "default": 3},
+					"days_stale": {"type": "integer", "minimum": 0, "maximum": 36500, "description": "超过 N 天未推进视为待跟进", "default": 3},
 					"format": {"type": "string", "description": "输出格式", "enum": ["json", "md"], "default": "json"},
 					"output": {"type": "string", "description": "Markdown 输出路径（仅 format=md 时生效）"},
 				},
@@ -456,7 +456,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"days": {"type": "integer", "description": "统计窗口天数", "default": 30},
+					"days": {"type": "integer", "minimum": 0, "maximum": 36500, "description": "统计窗口天数", "default": 30},
 					"format": {"type": "string", "enum": ["json", "html"], "description": "输出格式；html 生成自包含报表", "default": "json"},
 					"output_file": {"type": "string", "description": "HTML 输出路径（仅 format=html 时生效）"},
 				},
@@ -571,7 +571,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"jd_text": {"type": "string", "description": "目标职位描述文本"},
 					"resume": {"type": "string", "description": "参考简历名称（可选）"},
-					"count": {"type": "integer", "description": "题量，默认 10", "default": 10},
+					"count": {"type": "integer", "minimum": 1, "description": "题量，默认 10", "default": 10},
 				},
 				"required": ["jd_text"],
 			},
@@ -652,7 +652,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"resume": {"type": "string", "description": "简历名称"},
-					"limit": {"type": "integer", "description": "最多分析的候选池职位数", "default": 20},
+					"limit": {"type": "integer", "minimum": 1, "description": "最多分析的候选池职位数", "default": 20},
 				},
 				"required": ["resume"],
 			},
@@ -663,7 +663,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"limit": {"type": "integer", "description": "候选池职位数上限", "default": 20},
+					"limit": {"type": "integer", "minimum": 1, "description": "候选池职位数上限", "default": 20},
 				},
 				"required": [],
 			},
@@ -732,7 +732,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"page": {"type": "integer", "description": "页码"},
+					"page": {"type": "integer", "minimum": 1, "description": "页码"},
 				},
 				"required": [],
 			},
@@ -876,8 +876,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"job_id": {"type": "string", "description": "按职位筛选（可选）"},
-					"label_id": {"type": "integer", "description": "标签筛选（0=全部, 1=新招呼, 2=沟通中）", "default": 0},
-					"page": {"type": "integer", "description": "页码", "default": 1},
+					"label_id": {"type": "integer", "minimum": 0, "description": "标签筛选（0=全部, 1=新招呼, 2=沟通中）", "default": 0},
+					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
 				},
 				"required": [],
 			},
@@ -899,7 +899,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"source": {"type": "string", "description": "来源编码（默认 4）"},
 					"salary": {"type": "string", "description": "薪资范围，如 -1,3"},
 					"select": {"type": "boolean", "description": "是否带 select=true", "default": False},
-					"page": {"type": "integer", "description": "页码", "default": 1},
+					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
 				},
 				"required": [],
 			},
@@ -911,7 +911,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"job_id": {"type": "string", "description": "招聘职位的加密 ID"},
-					"page": {"type": "integer", "description": "页码", "default": 1},
+					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
 				},
 				"required": ["job_id"],
 			},
@@ -958,9 +958,9 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"page": {"type": "integer", "description": "页码", "default": 1},
+					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
 					"job_id": {"type": "string", "description": "按职位筛选"},
-					"label_id": {"type": "integer", "description": "标签筛选（0=全部, 1=新招呼, 2=沟通中）", "default": 0},
+					"label_id": {"type": "integer", "minimum": 0, "description": "标签筛选（0=全部, 1=新招呼, 2=沟通中）", "default": 0},
 					"summary_limit": {
 						"type": "integer",
 						"description": "最多给前多少个会话补最近消息（每 50 个一次串行请求；0=不请求，上限 300）",
@@ -978,8 +978,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
-					"count": {"type": "integer", "description": "消息数量", "default": 20},
+					"friend_id": {"type": "integer", "minimum": 1, "description": "候选人会话 friend_id"},
+					"count": {"type": "integer", "minimum": 1, "description": "消息数量", "default": 20},
 					"max_msg_id": {"type": "integer", "minimum": 1, "description": "向前翻页的最大消息 ID"},
 				},
 				"required": ["friend_id"],
@@ -997,9 +997,9 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 						"minItems": 1,
 						"description": "候选人会话 friend_id 列表；不传时从 hr chat 页获取当前页候选人",
 					},
-					"page": {"type": "integer", "description": "沟通列表页码", "default": 1},
+					"page": {"type": "integer", "minimum": 1, "description": "沟通列表页码", "default": 1},
 					"job_id": {"type": "string", "description": "按职位筛选"},
-					"label_id": {"type": "integer", "description": "标签筛选（0=全部, 1=新招呼, 2=沟通中）", "default": 0},
+					"label_id": {"type": "integer", "minimum": 0, "description": "标签筛选（0=全部, 1=新招呼, 2=沟通中）", "default": 0},
 					"limit": {
 						"type": "integer",
 						"description": "最多查询多少个会话（每 50 个一次串行请求，上限 300）",
@@ -1031,7 +1031,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
+					"friend_id": {"type": "integer", "minimum": 1, "description": "候选人会话 friend_id"},
 					"type": {"type": "string", "description": "交换类型", "enum": ["phone", "wechat"], "default": "phone"},
 				},
 				"required": ["friend_id"],
@@ -1043,7 +1043,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
+					"friend_id": {"type": "integer", "minimum": 1, "description": "候选人会话 friend_id"},
 					"message": {"type": "string", "description": "回复消息内容"},
 				},
 				"required": ["friend_id", "message"],
@@ -1055,7 +1055,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
+					"friend_id": {"type": "integer", "minimum": 1, "description": "候选人会话 friend_id"},
 				},
 				"required": ["friend_id"],
 			},
@@ -1068,7 +1068,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"action": {"type": "string", "description": "操作类型", "enum": ["list", "online", "offline"], "default": "list"},
 					"job_id": {"type": "string", "description": "职位 ID（online/offline 时必填）"},
-					"page": {"type": "integer", "description": "职位管理列表页码，仅 list 使用", "default": 1},
+					"page": {"type": "integer", "minimum": 1, "description": "职位管理列表页码，仅 list 使用", "default": 1},
 				},
 				"required": [],
 			},
