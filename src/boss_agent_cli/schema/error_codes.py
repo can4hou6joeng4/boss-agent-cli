@@ -292,6 +292,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "boss crawl status <run_id> 查看进度，等当前执行结束后再恢复；不要并发恢复同一个 run_id",
 	},
+	"CRAWL_PROFILE_BUSY": {
+		"message": "采集配置目录正被另一个运行中的采集 Chrome 使用，本次调用未发出任何请求",
+		"recoverable": True,
+		"recovery_action": "boss crawl status 查看正在运行的采集，等它结束后再启动或恢复；不要并发使用同一数据目录的采集浏览器，也不要删除 SingletonLock",
+	},
 	"CRAWL_NOT_COMPLETED": {
 		"message": "crawl 尚未完成，Agent 不会导入不完整结果",
 		"recoverable": True,
