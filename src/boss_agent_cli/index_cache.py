@@ -2,6 +2,7 @@
 缓存文件: ~/.boss-agent/cache/index_cache.json
 """
 import json
+import math
 import time
 from pathlib import Path
 from typing import Any
@@ -99,19 +100,44 @@ def get_job_by_index(data_dir: Path, index: int) -> dict[str, Any] | None:
 	return job if isinstance(job, dict) else None
 
 
+def _finite_number(raw: Any) -> int | float | None:
+	"""缓存元信息的数值容错读取：bool、非数值与非有限值一律视为缺失。
+
+	`math.isfinite(10**400)` 与 `float("inf")` 都会让下游的 JSON 序列化 / 时间
+	格式化出问题，`saved_at` 这类字段只接受能安全进入信封的有限数值。
+	"""
+	if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+		return None
+	try:
+		return raw if math.isfinite(float(raw)) else None
+	except OverflowError:
+		return None
+
+
+def _cache_metadata(cache_data: dict[str, Any]) -> dict[str, Any]:
+	"""把缓存元信息归一成信封声明的类型；`jobs` 可用时不因元信息漂移整体丢弃。"""
+	jobs = cache_data.get("jobs")
+	job_count = len(jobs) if isinstance(jobs, list) else 0
+	source = cache_data.get("source")
+	page = cache_data.get("page")
+	count = cache_data.get("count")
+	saved_at = _finite_number(cache_data.get("saved_at"))
+	return {
+		"source": source if isinstance(source, str) else "",
+		# 旧版本写入的缓存没有 page 字段，未知页码本来就按 None 返回。
+		"page": page if isinstance(page, int) and not isinstance(page, bool) and page >= 1 else None,
+		"count": count if isinstance(count, int) and not isinstance(count, bool) and count >= 0 else job_count,
+		"saved_at": saved_at if saved_at is not None else 0,
+	}
+
+
 def get_index_info(data_dir: Path) -> dict[str, Any]:
 	"""获取缓存元信息（来源、页码、数量、保存时间）。"""
 	cache_data = _load_cache(data_dir)
 	if cache_data is None:
 		return {"exists": False, "source": "", "page": None, "count": 0, "saved_at": 0}
 
-	return {
-		"exists": True,
-		"source": cache_data.get("source", ""),
-		"page": cache_data.get("page"),
-		"count": cache_data.get("count", 0),
-		"saved_at": cache_data.get("saved_at", 0),
-	}
+	return {"exists": True, **_cache_metadata(cache_data)}
 
 
 def get_index_snapshot(data_dir: Path) -> dict[str, Any] | None:
