@@ -2,6 +2,16 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.62] - 2026-11-16
+
+### Fixed
+- 采集配置目录被另一个运行中的采集 Chrome 占用时，`CrawlService.create_and_run` 抛出的 `CRAWL_PROFILE_BUSY` 在 `agent crawl`、`crawl run` 与向导路径上被兜底成 `stopped`，调用方拿到 `ok=true` 与永远复现的恢复指引（Issue #1274）。现在三条路径都按 `CRAWL_PROFILE_BUSY` 上报：本次调用未发出请求，指引先用 `crawl status` 确认占用结束。
+- 安全页检查把 DrissionPage 未命中时返回的 `NoneElement` 当成命中（`is None` 永远为假），未登录或安全页会被当成空结果继续（Issue #1276）。现在用真值判断，缺职位列表容器时按风险页停止并写风险锁。
+- 断点 `params.chrome_path` 的类型漂移（非字符串）原样进 `set_browser_path` 抛 `TypeError`，被记成 `stopped` 并给出永远复现的恢复指引（Issue #1278）。现在 `CrawlSettings.from_dict` 按 `CacheRecordInvalid` 报 `CACHE_RECORD_INVALID`，与其它参数漂移一致。
+- 采集因风控停止且风险锁写盘失败时，成功信封没有提示「新进程不再受保护」（Issue #1281）。现在 `risk_stopped` 分支追加与认证错误路径相同的操作者提示。
+- 采集 `_run` 的 `finally` 顺序执行 budget 落库、终态落库与关闭浏览器：前一步失败会跳过后续步骤，run 永远停在 `running`、采集 Chrome 继续占用共享 profile，且清理异常会覆盖传播中的原始异常（Issue #1277）。现在三步各自兜底，正常路径上的清理失败仍然抛出（命令层报缓存或 IO 错误），但不覆盖风控 / 中断 / 停止。
+- 风险锁主文件写盘失败（主文件被占成目录、权限损坏）时，锁只保留在当前进程内存里，进程退出后新进程读不到阻断（Issue #1270）。现在 `write_lock` 会尝试后备位置 `<data_dir>/cache/cdp_risk_lock.json`：`read_lock` / `raise_if_locked` 任一份存在即 fail-closed 锁定，`clean --risk-lock` 同时清理两处；只有两处都失败才保留进程内锁并在信封提示「新进程不再受保护」。
+
 ## [3.4.61] - 2026-11-16
 
 ### Fixed
