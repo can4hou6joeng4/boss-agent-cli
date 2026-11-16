@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.34] - 2026-11-16
 
 ### Fixed
 - MCP 枚举筛选的显式空串不再被静默吞掉（Issue #1180）：`boss_preset_add` / `boss_watch_add` / `boss_batch_greet` 的 `industry` / `scale` / `stage` / `job_type` 在 CLI 层是 Choice 校验的枚举，映射层此前用真值判断，`industry=""` 被化装成「没传」并返回 `ok=true`。现在这些键登记进 `_ENUM_KEYS` 并原样下发，由 CLI 返回 `INVALID_PARAM` 与可选值；`None` / 缺键仍等价于未传。

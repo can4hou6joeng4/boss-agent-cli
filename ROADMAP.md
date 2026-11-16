@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.34（2026-11-16）：MCP 的 `boss_preset_add` / `boss_watch_add` / `boss_batch_greet` 收到显式空串筛选（`industry` / `scale` / `stage` / `job_type`）时不再当成「没传」并返回 `ok=true`，而是原样下发给 CLI 返回取值诊断；`None` 与缺键仍等价于未传。
 - ✅ v3.4.33（2026-11-16）：`wizard --resume` 在任务断点完好、但绑定的内部 crawl 记录损坏时不再被判成 `CACHE_RECORD_INVALID`；恢复与执行器的控制读取只读断点本身，执行结果优先带实时采集叠加、叠加损坏时退回断点，`--status` 仍按展示契约报告损坏。
 - ✅ v3.4.32（2026-11-16）：缓存表结构漂移（旧版本建的库缺列、迁移中断）时，`shortlist list` / `shortlist add` 等走 `CacheStore` 的命令不再直接 traceback，改为返回 `CACHE_DATABASE_INVALID` 信封与备份重建指引；锁冲突仍是可重试的 `CACHE_BUSY`，代码写错的 `ProgrammingError` 保持原样上抛。
 - ✅ v3.4.31（2026-11-16）：`digest`、`stats`、`chat` 与 `resume export` 的 `-o` 导出统一改为原子写入，写入中途失败时保留上一次的完整导出，不再留下半截文件；失败仍返回 `LOCAL_IO_ERROR` 信封。
