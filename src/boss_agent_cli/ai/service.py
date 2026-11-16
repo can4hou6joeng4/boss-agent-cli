@@ -62,7 +62,9 @@ def _error_detail(response: httpx.Response) -> str:
 	"""取 OpenAI 风格错误体里的说明，压成一行、遮掉疑似密钥并截断；取不到时返回空串。"""
 	try:
 		body = response.json()
-	except ValueError:
+	# RecursionError：3.11–3.13 解析极深嵌套的错误体时抛出；取不到说明就按空串处理，
+	# 不能让它在 HTTP 错误分支里冒泡成 traceback。
+	except (ValueError, RecursionError):
 		return ""
 	detail: Any = None
 	if isinstance(body, dict):
@@ -147,7 +149,9 @@ class AIService:
 			data = response.json()
 			choice = data["choices"][0]
 			content = choice["message"]["content"]
-		except (KeyError, IndexError, TypeError, ValueError) as exc:
+		# RecursionError：3.11–3.13 的 json.loads 对极深嵌套响应抛它，按响应格式异常上报，
+		# 与裸 ValueError（非法 JSON / 超长整数）走同一个 AIServiceError 信封分支。
+		except (KeyError, IndexError, TypeError, ValueError, RecursionError) as exc:
 			raise AIServiceError(f"响应格式异常: {exc}") from exc
 		finish_reason = choice.get("finish_reason") if isinstance(choice, dict) else None
 		if finish_reason == "length" and not content:
