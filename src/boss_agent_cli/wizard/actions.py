@@ -786,7 +786,14 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 	with context.candidate_platform() as platform:
 		friend = _candidate_friend(platform, identifier, context=context)
 		uid = str(friend.get("uid") or "")
-		friend_source = int(friend.get("friendSource") or 0)
+		# friendSource 只是回传给标签接口的定位参数：平台字段漂移成非数字串 /
+		# 对象 / 1e400 时按缺失的默认 0 处理，不能让 int() 的 ValueError 把整个
+		# 步骤兜成可重试的 NETWORK_ERROR（Issue #1314）。
+		raw_friend_source = friend.get("friendSource")
+		try:
+			friend_source = int(raw_friend_source or 0)
+		except (TypeError, ValueError, OverflowError):
+			friend_source = 0
 		data = _write_call(
 			context,
 			platform,
