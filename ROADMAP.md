@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.39（2026-11-16）：MCP 参数面两处修正。`boss_hr_chatmsg` 的显式 `max_msg_id=0` 不再被真值判断吞掉（键存在即下发，由 CLI 拒绝并返回 `INVALID_PARAM`）；`boss_exchange` 的 schema 暴露 `type`（phone|wechat），微信交换可达，缺省 / `phone` 不带选项、空串交给 CLI 枚举诊断。
 - ✅ v3.4.38（2026-11-16）：本地记录与配置的数值/类型漂移继续收敛。`crawl_runs` 数值列被写成文本时 `crawl status` 不再 stdout 为空 + traceback，改为带列名的 `CACHE_RECORD_INVALID`，并与 `crawl resume` 共用 `params` 判定、回显有效预算；上一份聊天快照的 `unread` 类型漂移不再打断 `chat --export`（按 0 比较）；`ai_max_tokens` 被手改成数组/字符串时 `ai local smoke` 返回 `INVALID_PARAM`、招聘者自动回复退回模板话术，不再中止整轮自动化。
 - ✅ v3.4.37（2026-11-16）：简历 JSON 字段类型漂移的读取判定统一。`name` 写成对象、`personal_info` 写成字符串、`rows` 元素写成字符串等坏文件不再出现「list 当正常条目、show 返回错误类型、export 把 `'str' object has no attribute 'get'` 兜成 `EXPORT_FAILED`」；模型读取边界按字段校验类型，list 与按名读取共用判定，show/export 返回 `RESUME_FILE_INVALID` 并指出字段，import 仍是字段级 `INVALID_PARAM`。
 - ✅ v3.4.36（2026-11-16）：`wizard --stop` 在断点写坏（如 `params` 不是合法 JSON）时不再把已生效的停止报成 `CACHE_RECORD_INVALID`。停止标记先落盘，展示读取两级回退都失败时返回最小可用记录（`run_id` + `status: stopped`）；`--status` 仍按展示契约报告损坏。
