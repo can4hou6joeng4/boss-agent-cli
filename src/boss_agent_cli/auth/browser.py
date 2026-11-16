@@ -753,6 +753,10 @@ def refresh_stoken(cookies: dict[str, Any], user_agent: str) -> str:
 			with suppress(Exception):
 				browser.close()
 
+	if not stoken:
+		# 与 CDP 路径同口径：首页迟迟不产出 stoken 是刷新失败，不能把空串当
+		# 成功返回、让调用方覆盖掉本地旧 stoken（Issue #1305）。
+		raise RuntimeError("headless 刷新 stoken 失败：页面未生成 stoken")
 	return stoken
 
 
