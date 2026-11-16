@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.54] - 2026-11-16
+
+### Fixed
+- 招聘自动化的待执行动作在写请求发出后中断时仍保持 `pending`，`agent run --resume` 或下一次普通运行会把可能已生效的动作再发一遍（Issue #1245）。现在派发前先落盘 `executing` 标记：中断、进程被杀、响应风控与本地回写失败都停在 `executing`，下一轮转成 `verification-required` 并打开熔断，提示先核对官方页面；只有预算 / 时限在请求发出前抛出（`request_sent=false`）时才恢复 `pending` 可安全重试。`docs/commands.md` 同步补充该语义。
+
 ## [3.4.53] - 2026-11-16
 
 ### Fixed
