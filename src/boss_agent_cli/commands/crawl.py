@@ -165,7 +165,10 @@ def _settings_from_context(
 		raise ValueError("搜索关键词不能为空")
 	cfg = _crawl_config(ctx)
 	data_dir = Path(ctx.obj["data_dir"])
-	resolved_profile = str(data_dir / "crawl" / "chrome-profile")
+	# 断点里存的是绝对路径：`--data-dir` 允许相对路径（如 `state`），若把
+	# `state/crawl/chrome-profile` 原样落盘，之后在不同 cwd 下 resume 会指向
+	# 另一个目录，而 from_dict 的绝对路径校验也会把刚建的任务判成记录损坏。
+	resolved_profile = str((data_dir / "crawl" / "chrome-profile").resolve())
 	resolved_hook = hook_profile or "none"
 	if resolved_hook not in _HOOK_CHOICES:
 		raise ValueError(f"unknown hook profile: {resolved_hook}")

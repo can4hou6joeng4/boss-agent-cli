@@ -163,6 +163,25 @@ class CrawlSettings:
 				if value is None
 			]
 			raise CacheRecordInvalid("crawl_run", run_id, "params", f"缺少字段 {', '.join(missing_browser)}")
+		# profile_path 为空串时 `Path("")` 就是 `Path(".")`：resume 会删除 cwd 下
+		# 采集 Chrome 的 Singleton 锁并把浏览器配置写进当前目录；数字 / 对象漂移
+		# 同样会落成相对 cwd 的目录名。断点里的配置目录必须是绝对路径
+		# （Issue #1347）。
+		if not isinstance(profile_path, str):
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "params.browser.profile_path",
+				f"期望绝对路径字符串，实际是 {type(profile_path).__name__}",
+			)
+		if not profile_path.strip():
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "params.browser.profile_path",
+				f"期望非空绝对路径字符串，实际是空字符串（{type(profile_path).__name__}）",
+			)
+		if not Path(profile_path).is_absolute():
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "params.browser.profile_path",
+				f"期望绝对路径，实际是相对路径 {profile_path!r}（{type(profile_path).__name__}）",
+			)
 		# 断点里的端口必须落在 1–65535：越界值会在 transport 的
 		# socket.connect_ex 抛 OverflowError，被吞成 ok:true 的 stopped 并给出
 		# 可复现的 resume 指引（Issue #1325）。
@@ -646,7 +665,11 @@ class CrawlService:
 					self._cache.put_crawl_job(run_id, job_key, current_page, row, detail_done=False)
 
 				current_page += 1
-				list_finished = not bool(jobs_data.get("hasMore", True))
+				# 只有平台显式返回布尔 false 才算列表结束。`not bool(None)` 为真，
+				# 原写法会把显式 null 当成「没有更多」，第一页就停止且 run 报
+				# completed；缺失 / null / 类型漂移一律继续翻页到页数上限
+				# （Issue #1345）。
+				list_finished = jobs_data.get("hasMore") is False
 				self._cache.update_crawl_run(
 					run_id,
 					status="running",
