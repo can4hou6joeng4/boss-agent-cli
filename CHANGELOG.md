@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- `wizard --resume` 不再被损坏的内部采集记录挡住（Issue #1177）：断点与步骤完好、但绑定的 crawl 记录写坏时，`--resume` 此前经 `WorkflowStore.get()` 的展示用实时采集叠加读取，直接返回 `CACHE_RECORD_INVALID` 并提示重新创建任务。现在恢复与执行器内的控制读取只读断点本身；执行结果优先带实时采集叠加，叠加数据损坏时退回断点。`--status` 仍按展示契约报告损坏。
+
 ## [3.4.32] - 2026-11-16
 
 ### Fixed

@@ -511,7 +511,8 @@ def _run_interactive_session(
 					resume_run_id = selection.run_id
 					if selection.action == "retry":
 						turn_retries = max(1, max_retries)
-					existing = store.get(str(resume_run_id))
+					# 恢复只认断点：展示用的实时采集叠加损坏不能挡住 resume（Issue #1176）。
+					existing = store.get_checkpoint(str(resume_run_id))
 					if existing is None:
 						render_error(code="WORKFLOW_NOT_FOUND", command_for=_command_for_ctx(ctx))
 						if not ask_continue_session():
@@ -606,7 +607,7 @@ def _run_interactive_session(
 			# 执行后仍 waiting：就地给出继续采集 / 浏览已有结果。
 			clear_wizard_screen()
 			# Re-load so live crawl completion + jobs surface after concurrent resume.
-			fresh = store.get(str(run.get("run_id") or "")) or run
+			fresh = store.get_for_result(str(run.get("run_id") or "")) or run
 			render_run(fresh)
 			try:
 				recovery = collect_waiting_recovery(fresh, clear_before=False)
@@ -814,7 +815,8 @@ def _run_wizard_command(
 
 		try:
 			if resume_run_id:
-				existing = store.get(resume_run_id)
+				# 恢复只认断点：展示用的实时采集叠加损坏不能挡住 resume（Issue #1176）。
+				existing = store.get_checkpoint(resume_run_id)
 				if existing is None:
 					_wizard_error(
 						ctx,
