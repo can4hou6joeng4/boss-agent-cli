@@ -125,18 +125,50 @@ def _require_ai_service(ctx: click.Context) -> AIService | None:
 
 
 def _load_resume_text(ctx: click.Context, resume_name: str) -> str | None:
-	"""加载简历纯文本，不存在时输出错误。"""
-	store = _get_resume_store(ctx)
-	resume = store.get(resume_name)
-	if resume is None:
+	"""加载简历纯文本；不存在、文件损坏或名称为空时输出对应错误。
+
+	损坏与缺失必须分开报：坏文件不报 ``RESUME_NOT_FOUND``，否则 Agent 照
+	``resume list`` 只看得到空列表、``resume init`` 又被同名文件挡住
+	（``RESUME_ALREADY_EXISTS``），恢复链断在这里（Issue #1369）。
+	"""
+	if not resume_name.strip():
+		list_cmd = _hint_command(ctx, "resume list")
 		handle_error_output(
-			ctx, "ai",
-			code="RESUME_NOT_FOUND",
-			message=f"简历 '{resume_name}' 不存在",
+			ctx,
+			"ai",
+			code="INVALID_PARAM",
+			message="简历名称不能为空",
+			recovery_action=f"补上简历名称后重试；用 {list_cmd} 查看已有简历",
+			hints={"next_actions": [list_cmd]},
 		)
 		ctx.exit(1)
 		return None
-	return resume_to_text(resume)
+	store = _get_resume_store(ctx)
+	resume, load_error = store.get_with_error(resume_name)
+	if resume is not None:
+		return resume_to_text(resume)
+	if load_error is not None:
+		delete_cmd = _hint_command(ctx, f"resume delete {shell_argument(resume_name)}")
+		handle_error_output(
+			ctx,
+			"ai",
+			code="RESUME_FILE_INVALID",
+			message=f"简历文件 '{resume_name}.json' 损坏：{load_error}",
+			recovery_action=(
+				f"修正 resumes/{resume_name}.json 的 JSON 内容后重试，"
+				f"或执行 {delete_cmd} 后重新创建；该文件只存在本机"
+			),
+			hints={"next_actions": [delete_cmd, _hint_command(ctx, "resume list")]},
+		)
+		ctx.exit(1)
+		return None
+	handle_error_output(
+		ctx, "ai",
+		code="RESUME_NOT_FOUND",
+		message=f"简历 '{resume_name}' 不存在",
+	)
+	ctx.exit(1)
+	return None
 
 
 def _read_text_argument(ctx: click.Context, value: str) -> str | None:

@@ -40,7 +40,12 @@ from boss_agent_cli.commands.crawl import (
 	_seeded_transport_factory,
 	_settings_from_context,
 )
-from boss_agent_cli.crawler.controls import CrawlProfileBusy, CrawlRuntimeUnavailable
+from boss_agent_cli.crawler.controls import (
+	CrawlExportError,
+	CrawlProfileBusy,
+	CrawlProfilePathInvalid,
+	CrawlRuntimeUnavailable,
+)
 from boss_agent_cli.crawler.operations import crawl_status, import_crawl_shortlist
 from boss_agent_cli.crawler.service import CrawlBusyError, CrawlService
 from boss_agent_cli.display import (
@@ -128,6 +133,19 @@ def crawl_cmd(
 	limit: int,
 ) -> None:
 	"""新建或读取 crawl 结果，导入候选池并执行 ai fit。"""
+	# 空简历名是合法 argv，但先跑完采集再报「简历 '' 不存在」既浪费请求也看不出
+	# 是漏填了名字；与 resume 命令组同口径，在入口按 INVALID_PARAM 拒绝（Issue #1369）。
+	if not resume_name.strip():
+		list_cmd = _crawl_hint_command(ctx, "resume list")
+		handle_error_output(
+			ctx,
+			"agent.crawl",
+			code="INVALID_PARAM",
+			message="简历名称不能为空",
+			recovery_action=f"补上简历名称后重试；用 {list_cmd} 查看已有简历",
+			hints={"next_actions": [list_cmd]},
+		)
+		return
 	crawl_by_run = _crawl_hint_command(ctx, "agent crawl --run-id <run_id> --resume <简历>")
 	crawl_by_query = _crawl_hint_command(ctx, "agent crawl --query <关键词> --city <城市> --resume <简历>")
 	if bool(run_id) == bool(query):
@@ -265,6 +283,33 @@ def crawl_cmd(
 			hints={"next_actions": [status_command]},
 		)
 		return
+	except CrawlExportError as exc:
+		# 导出失败是本地目录 / 权限问题：CrawlExportError 是 RuntimeError 子类，
+		# 不单独捕获会被兜成 CRAWL_UNAVAILABLE 并让人去安装 crawl 依赖（与 crawl run 同口径）。
+		handle_error_output(
+			ctx,
+			"agent.crawl",
+			code="LOCAL_IO_ERROR",
+			message=str(exc),
+			recoverable=False,
+			recovery_action="确认输出目录可写（不是同名的已有文件）、目录权限与磁盘空间正常，修正后重新执行 agent crawl",
+		)
+		return
+	except CrawlProfilePathInvalid as exc:
+		# 配置目录被同名文件占用或不可写：确定性本地路径失败，重试或 resume 只会
+		# 复现同一个错误，不能兜成「安装 crawl 依赖」（Issue #1290 同口径）。
+		handle_error_output(
+			ctx,
+			"agent.crawl",
+			code="LOCAL_IO_ERROR",
+			message=str(exc),
+			recoverable=False,
+			recovery_action=(
+				"检查数据目录下的 crawl/chrome-profile 是否被同名文件占用、"
+				"目录权限与磁盘空间是否正常，修正后重新执行"
+			),
+		)
+		return
 	except CrawlRuntimeUnavailable as exc:
 		_report_crawl_runtime_missing(ctx, "agent.crawl", str(exc))
 		return
@@ -280,8 +325,23 @@ def crawl_cmd(
 		)
 		return
 
-	resume_text = _resume_text(data_dir, resume_name)
+	resume_text, load_error = _resume_text(data_dir, resume_name)
 	if resume_text is None:
+		if load_error is not None:
+			# 文件存在但读不出来：不能报成「简历不存在」，提示修正或删除坏文件（Issue #1369）。
+			delete_cmd = _crawl_hint_command(ctx, f"resume delete {shell_argument(resume_name)}")
+			handle_error_output(
+				ctx,
+				"agent.crawl",
+				code="RESUME_FILE_INVALID",
+				message=f"简历文件 '{resume_name}.json' 损坏：{load_error}",
+				recovery_action=(
+					f"修正 resumes/{resume_name}.json 的 JSON 内容后重试，"
+					f"或执行 {delete_cmd} 后重新创建；该文件只存在本机"
+				),
+				hints={"next_actions": [delete_cmd, _crawl_hint_command(ctx, "resume list")]},
+			)
+			return
 		handle_error_output(ctx, "agent.crawl", code="RESUME_NOT_FOUND", message=f"简历 '{resume_name}' 不存在")
 		return
 	if not jobs:
@@ -735,9 +795,16 @@ def _run_agent(
 		ctx.exit(1)
 
 
-def _resume_text(data_dir: Path, resume_name: str) -> str | None:
-	resume = ResumeStore(data_dir / "resumes").get(resume_name)
-	return resume_to_text(resume) if resume is not None else None
+def _resume_text(data_dir: Path, resume_name: str) -> tuple[str | None, str | None]:
+	"""读取简历纯文本；同时返回读不出来的原因，交给调用方区分损坏与缺失。
+
+	``(None, None)`` 表示文件不存在；``(None, 原因)`` 表示文件存在但损坏，
+	命令层据此报 ``RESUME_FILE_INVALID``（Issue #1369）。
+	"""
+	resume, load_error = ResumeStore(data_dir / "resumes").get_with_error(resume_name)
+	if resume is None:
+		return None, load_error
+	return resume_to_text(resume), None
 
 
 def _crawl_fit_jobs(cache: CacheStore, crawl_jobs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
