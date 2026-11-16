@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import shlex
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -65,3 +68,47 @@ def test_windows_kernel_hints_and_wizard_keep_runnable_command(
 	assert install in detail
 	assert install in (recovery_message("BROWSER_KERNEL_MISSING") or "")
 	assert headless in (recovery_message("BROWSER_KERNEL_MISSING", headless) or "")
+
+
+# ── browsers.json 形状漂移 ─────────────────────────────────────────
+
+
+def _fake_patchright(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, payload) -> None:
+	"""注入一个自带 browsers.json 的假 patchright 包。"""
+	package = tmp_path / "patchright" / "driver" / "package"
+	package.mkdir(parents=True)
+	(package / "browsers.json").write_text(json.dumps(payload), encoding="utf-8")
+	init = tmp_path / "patchright" / "__init__.py"
+	init.write_text("", encoding="utf-8")
+	monkeypatch.setitem(sys.modules, "patchright", SimpleNamespace(__file__=str(init)))
+
+
+def test_chromium_revision_reads_normal_browsers_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+	_fake_patchright(monkeypatch, tmp_path, {"browsers": [{"name": "chromium", "revision": 1200}]})
+
+	assert browser_runtime.patchright_chromium_revision() == "1200"
+
+
+def test_chromium_revision_skips_null_entries(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+	_fake_patchright(
+		monkeypatch, tmp_path,
+		{"browsers": [None, {"name": "firefox", "revision": 1}, {"name": "chromium", "revision": 7}]},
+	)
+
+	assert browser_runtime.patchright_chromium_revision() == "7"
+
+
+@pytest.mark.parametrize("payload", [
+	[],
+	"drifted",
+	{"browsers": "drifted"},
+	{"browsers": [None]},
+	{"browsers": [{"name": "chromium", "revision": None}]},
+], ids=["top-level-list", "top-level-string", "browsers-not-list", "null-entry-only", "revision-null"])
+def test_chromium_revision_tolerates_shape_drift(
+	monkeypatch: pytest.MonkeyPatch, tmp_path: Path, payload,
+) -> None:
+	"""形状异常按「读不到」处理，doctor 不会被 AttributeError 打断。"""
+	_fake_patchright(monkeypatch, tmp_path, payload)
+
+	assert browser_runtime.patchright_chromium_revision() is None

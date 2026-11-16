@@ -35,7 +35,14 @@ def patchright_chromium_revision() -> str | None:
 		data = json.loads(browsers_json.read_text(encoding="utf-8"))
 	except Exception:
 		return None
-	for browser in data.get("browsers", []):
+	# 文件形状漂移（顶层是数组、browsers 不是数组、混入 null）时按「读不到」
+	# 处理，不能让 doctor 因本地 JSON 结构异常丢掉信封（Issue #1318）。
+	browsers = data.get("browsers") if isinstance(data, dict) else None
+	if not isinstance(browsers, list):
+		return None
+	for browser in browsers:
+		if not isinstance(browser, dict):
+			continue
 		if browser.get("name") == "chromium":
 			revision = browser.get("revision")
 			return str(revision) if revision else None
