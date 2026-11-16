@@ -299,6 +299,21 @@ def _parse_cli_output(
 	)
 
 
+def _dumps_tool_result(payload: dict[str, Any]) -> str:
+	"""把工具结果序列化成可直接放进 ``TextContent`` 的文本。
+
+	平台字段或本地坏文件里可能出现 JSON 合法的孤立代理转义（``\\udcff`` /
+	``\\ud800``）：``json.loads`` 会把它还原成孤立代理，``json.dumps(...,
+	ensure_ascii=False)`` 又原样写回。MCP SDK 用 UTF-8 序列化 ``TextContent`` 时
+	抛 ``PydanticSerializationError``，异常穿出 ``stdio_server()`` 让进程退出，
+	写工具的成功响应就此丢失，客户端还可能重试（Issue #1375）。
+	与 CLI 信封同口径用 ``backslashreplace`` 转成字面 ``\\udcff`` 转义，解析出的
+	值不变，响应始终可编码。
+	"""
+	text = json.dumps(payload, ensure_ascii=False, indent=2)
+	return text.encode("utf-8", "backslashreplace").decode("utf-8")
+
+
 def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
 	"""Synchronous compatibility entrypoint; MCP handlers use the async path."""
 	cmd = [_BOSS_BIN, "--json", *_BOSS_GLOBAL_ARGS, *args]
@@ -604,7 +619,7 @@ async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
 	# 信封的 ok 是唯一真源，但 MCP 客户端还需要 is_error 才能把失败标成工具错误；
 	# 两者不一致时，ok:false 会被当成一次成功的工具调用。
 	return CallToolResult(
-		content=[TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))],
+		content=[TextContent(type="text", text=_dumps_tool_result(result))],
 		is_error=result.get("ok") is False,
 	)
 

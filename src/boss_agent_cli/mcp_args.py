@@ -34,15 +34,33 @@ _ENUM_KEYS: frozenset[str] = frozenset(
 	}
 )
 
+#: 显式空串必须原样下发的输出路径参数（按 (子命令, MCP 键) 登记，Issue #1377）。
+#: ``click.Path`` 把空串转成当前目录，真正写盘时得到 ``LOCAL_IO_ERROR``；映射层
+#: 若按真值判断丢弃，调用方以为已指定输出文件，CLI 却返回 ``ok:true`` 且不写文件。
+#: 只登记 digest / stats：chat 与 jobs export 的 ``-o ""`` 仍按未传处理。
+_EXPLICIT_EMPTY_KEYS: frozenset[tuple[str, str]] = frozenset(
+	{
+		("digest", "output"),
+		("stats", "output_file"),
+	}
+)
 
-def _optional(args: list[str], flag: str, key: str, arguments: dict[str, Any]) -> None:
-	"""下发可选字符串参数：枚举参数的空串也要原样下发（Issue #982）。"""
+
+def _optional(
+	args: list[str],
+	flag: str,
+	key: str,
+	arguments: dict[str, Any],
+	*,
+	command: str | None = None,
+) -> None:
+	"""下发可选字符串参数：枚举参数与登记的输出路径空串也要原样下发（Issue #982）。"""
 	if key not in arguments:
 		return
 	value = arguments[key]
 	if value is None:
 		return
-	if not value and key not in _ENUM_KEYS:
+	if not value and key not in _ENUM_KEYS and (command, key) not in _EXPLICIT_EMPTY_KEYS:
 		return
 	args.extend([flag, str(value)])
 
@@ -312,7 +330,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		if "days_stale" in arguments:
 			args.extend(["--days-stale", str(arguments["days_stale"])])
 		_optional(args, "--format", "format", arguments)
-		_optional(args, "-o", "output", arguments)
+		_optional(args, "-o", "output", arguments, command=name)
 		return args
 
 	if name == "stats":
@@ -320,7 +338,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		if "days" in arguments:
 			args.extend(["--days", str(arguments["days"])])
 		_optional(args, "--format", "format", arguments)
-		_optional(args, "--output", "output_file", arguments)
+		_optional(args, "--output", "output_file", arguments, command=name)
 		return args
 
 	if name == "ai_reply":
