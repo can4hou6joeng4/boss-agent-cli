@@ -785,6 +785,21 @@ class BossCliGroup(click.Group):
 				recovery_action=internal_recovery_action,
 			)
 			return None
+		except UnicodeError as exc:
+			# 孤立代理字符等不可编码内容属于确定性本地数据问题：既不是平台网络
+			# 故障（重试无意义），也不是「升级版本可解」的内部缺陷（Issue #1294）。
+			if not standalone_mode:
+				raise
+			command = _invoked_command_name(args, self.name or "boss")
+			encode_recoverable, encode_recovery_action = error_contract_for_code("LOCAL_IO_ERROR")
+			emit_error(
+				command,
+				code="LOCAL_IO_ERROR",
+				message=f"{command} 处理本地文本失败: {exc}",
+				recoverable=encode_recoverable,
+				recovery_action=encode_recovery_action,
+			)
+			return None
 		except OSError as exc:
 			# 网兜：导出、保存配置这类直接写文件的路径没有统一装饰器，
 			# 写失败时必须给信封，而不是把 traceback 甩给 Agent。

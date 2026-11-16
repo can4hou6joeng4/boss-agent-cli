@@ -26,7 +26,11 @@ def write_json_atomic(
 	fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
 	temporary = Path(temporary_name)
 	try:
-		with os.fdopen(fd, "w", encoding="utf-8") as handle:
+		# 孤立代理字符（如 argv 里的非法 UTF-8 字节解码出的 U+DCFF）无法按 UTF-8
+		# 编码，严格模式会让整条命令在写盘时抛 UnicodeEncodeError、stdout 无信封
+		# （Issue #1294）。backslashreplace 把它写成 JSON 合法的 ``\udcff`` 转义，
+		# 读回值不变，写入不再失败。
+		with os.fdopen(fd, "w", encoding="utf-8", errors="backslashreplace") as handle:
 			json.dump(value, handle, ensure_ascii=False, indent=indent)
 			if trailing_newline:
 				handle.write("\n")

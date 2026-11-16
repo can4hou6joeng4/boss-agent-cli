@@ -125,6 +125,18 @@ def redact_sensitive_text(message: str) -> str:
 	return redacted
 
 
+def _dumps_envelope(payload: dict[str, Any]) -> str:
+	"""序列化信封并保证结果一定能按 UTF-8 写出（Issue #1294）。
+
+孤立代理字符（平台字段或本地坏文件里的 ``\\udcff`` / ``\\ud800``）会让
+``json.dumps(..., ensure_ascii=False)`` 产出无法编码的 str，``click.echo``
+写 stdout 时抛 UnicodeEncodeError，命令丢掉整个信封。``backslashreplace``
+把它转成 JSON 合法的 ``\\udcff`` 转义，解析出的值不变，stdout 始终可读。
+	"""
+	text = json.dumps(payload, ensure_ascii=False)
+	return text.encode("utf-8", "backslashreplace").decode("utf-8")
+
+
 def envelope_success(
 	command: str,
 	data: Any,
@@ -136,7 +148,7 @@ def envelope_success(
 	# 只有 schema 命令从内置目录显式声明的参数路径可保留元数据。
 	# 任意业务字典自称 type=object 不能获得豁免，参数默认值/示例仍按敏感名称脱敏。
 	public_parameters = (schema_parameter_paths or {}) if command == "schema" else {}
-	return json.dumps(
+	return _dumps_envelope(
 		{
 			"ok": True,
 			"schema_version": "1.0",
@@ -145,8 +157,7 @@ def envelope_success(
 			"pagination": redact_sensitive(pagination),
 			"error": None,
 			"hints": redact_sensitive(hints),
-		},
-		ensure_ascii=False,
+		}
 	)
 
 
@@ -193,7 +204,7 @@ def envelope_error(
 		if "outcome_unknown" in normalized_details:
 			normalized_details.setdefault("replay_safe", not normalized_details["outcome_unknown"])
 		error["details"] = redact_sensitive(normalized_details)
-	return json.dumps(
+	return _dumps_envelope(
 		{
 			"ok": False,
 			"schema_version": "1.0",
@@ -202,8 +213,7 @@ def envelope_error(
 			"pagination": None,
 			"error": error,
 			"hints": redact_sensitive(hints),
-		},
-		ensure_ascii=False,
+		}
 	)
 
 
