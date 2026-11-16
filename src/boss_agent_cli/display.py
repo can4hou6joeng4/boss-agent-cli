@@ -7,6 +7,7 @@ Pipe mode (Agent): JSON envelope to stdout.
 
 import datetime
 import re
+import sqlite3
 import sys
 import threading
 from collections.abc import Mapping, Sequence
@@ -1305,6 +1306,26 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 				if isinstance(e, CacheBusyError) or is_cache_busy_error(e):
 					message = str(e) if isinstance(e, CacheBusyError) else f"本地缓存库正被其他进程写入（{e}）"
 					_handle_cache_busy_error(ctx, command_name, message)
+					return
+				# 本地 SQLite 文件损坏 / 被同名目录占位是确定性失败：非装饰器命令
+				# 已由 BossCliGroup 报 LOCAL_IO_ERROR（Issue #1304），装饰器命令不能
+				# 兜成 NETWORK_ERROR +「重试」（Issue #1336）。请求预算库只保存节流
+				# 元数据，可删除重建；缓存库给出登记表里的通用本地 IO 指引。
+				if isinstance(e, sqlite3.DatabaseError):
+					io_recoverable, io_recovery = error_contract_for_code("LOCAL_IO_ERROR")
+					db_recovery_action = (
+						"备份后删除 request-budget.sqlite3 再重试；该文件只保存请求节流元数据，会自动重建"
+						if "request-budget.sqlite3" in str(e)
+						else io_recovery
+					)
+					handle_error_output(
+						ctx,
+						command_name,
+						code="LOCAL_IO_ERROR",
+						message=f"{command_name} 本地数据库文件无法打开: {e}",
+						recoverable=io_recoverable,
+						recovery_action=db_recovery_action,
+					)
 					return
 				# 内核缺失是确定性失败：符号名 / 路径未变时重试永远同一结果，不能
 				# 兜成 NETWORK_ERROR +「重试」让 Agent 反复打平台。
