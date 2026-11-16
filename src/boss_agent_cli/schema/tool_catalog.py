@@ -305,6 +305,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"security_id": {"type": "string", "description": "联系人的 uid（推荐）或 security_id"},
+					"type": {"type": "string", "description": "交换类型", "enum": ["phone", "wechat"], "default": "phone"},
 				},
 				"required": ["security_id"],
 			},
@@ -974,7 +975,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"friend_id": {"type": "integer", "description": "候选人会话 friend_id"},
 					"count": {"type": "integer", "description": "消息数量", "default": 20},
-					"max_msg_id": {"type": "integer", "description": "向前翻页的最大消息 ID"},
+					"max_msg_id": {"type": "integer", "minimum": 1, "description": "向前翻页的最大消息 ID"},
 				},
 				"required": ["friend_id"],
 			},

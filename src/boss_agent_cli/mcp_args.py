@@ -185,7 +185,12 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return _literal_positionals(args)
 
 	if name == "exchange":
-		return _literal_positionals([name, arguments["security_id"]])
+		args = [name, arguments["security_id"]]
+		# 描述承诺「手机号或微信」，但 CLI 默认 phone：省略/显式 phone 不下发，
+		# 空串等非法值交给 CLI 的枚举诊断（Issue #982、#1200）。
+		if "type" in arguments and arguments["type"] is not None and arguments["type"] != "phone":
+			args.extend(["--type", str(arguments["type"])])
+		return _literal_positionals(args)
 
 	if name == "apply":
 		return _literal_positionals([name, arguments["security_id"], arguments["job_id"]], count=2)
@@ -497,7 +502,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = ["hr", "chatmsg", str(arguments["friend_id"])]
 		if "count" in arguments:
 			args.extend(["--count", str(arguments["count"])])
-		if arguments.get("max_msg_id"):
+		# 存在即下发（显式 null 已在入口剥离）：游标 0 是非法取值，但不能被
+		# 真值判断化装成「没传」，否则调用方拿到默认最新一页还以为翻页生效（Issue #1199）。
+		if "max_msg_id" in arguments:
 			args.extend(["--max-msg-id", str(arguments["max_msg_id"])])
 		return _literal_positionals(args, start=2)
 
