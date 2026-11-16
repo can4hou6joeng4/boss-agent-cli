@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.38] - 2026-11-16
 
 ### Fixed
 - crawl 记录的数值列与 `params` 类型漂移不再让 `crawl status` 破坏信封契约（Issue #1192）：`crawl_runs` 的 `next_page` / `requests_attempted` / `elapsed_seconds` / `stop_requested` 等列被写成文本时，此前 stdout 为空、stderr 只剩 `ValueError` traceback（`BossCliGroup` 兜底不含 `ValueError`）。现在缓存读取边界逐列校验并抛 `CacheRecordInvalid`（消息带列名），命令层返回 `CACHE_RECORD_INVALID` 信封；`crawl status` 复用 `CrawlSettings.from_dict` 校验 `params`，同一份损坏记录与 `crawl resume` 判定一致，`limits` 回显归一后的有效预算而不是原始坏值；任务列表排序与后台排队探测对坏时间戳按降级值处理，不再 traceback。
