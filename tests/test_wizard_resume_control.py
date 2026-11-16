@@ -103,3 +103,23 @@ def test_get_for_result_keeps_live_overlay_when_healthy(tmp_path):
 	assert run is not None
 	assert run["live_crawl_status"] == "completed"
 	assert run["live_jobs_seen"] == 0
+
+
+def test_list_recent_keeps_run_when_inner_crawl_is_corrupt(tmp_path):
+	"""列表只看断点与重放标记：叠加的实时采集坏了仍要列出可恢复任务（Issue #1181）。"""
+	_seed_completed_crawl_run(tmp_path)
+	with WorkflowStore(tmp_path) as store:
+		runs = store.list_recent()
+		assert [run["run_id"] for run in runs] == ["run-corrupt-crawl"]
+		assert store.corrupt_run_ids == []
+
+
+def test_list_recent_still_skips_corrupt_checkpoint(tmp_path):
+	"""断点本身写坏的任务仍被跳过并点名，不能被上面这条放宽。"""
+	_seed_completed_crawl_run(tmp_path, corrupt_inner=False)
+	with WorkflowStore(tmp_path) as store:
+		store._cache._conn.execute("UPDATE workflow_runs SET params = '[]' WHERE run_id = 'run-corrupt-crawl'")
+		store._cache._conn.commit()
+		runs = store.list_recent()
+		assert runs == []
+		assert store.corrupt_run_ids == ["run-corrupt-crawl"]

@@ -110,16 +110,21 @@ class WorkflowStore:
 			try:
 				run["steps"] = self._cache.list_workflow_steps(run_id)
 				_validate_replay_markers(run)
-				# 绑定的 crawl 记录写坏时同样读不出状态，与 run 本体损坏同等对待。
-				enriched.append(enrich_run_with_live_crawl(run, self._cache, job_limit=LIST_ENRICH_JOB_LIMIT))
 			except CacheRecordInvalid:
 				corrupt.append(run_id)
+				continue
+			try:
+				enriched.append(enrich_run_with_live_crawl(run, self._cache, job_limit=LIST_ENRICH_JOB_LIMIT))
+			except CacheRecordInvalid:
+				# 叠加的实时采集读不出来只影响展示字段（jobs / live_status），
+				# 断点与步骤完好就仍可恢复；不能把任务丢进 corrupt 名单（Issue #1181）。
+				enriched.append(run)
 		self._corrupt_run_ids = corrupt
 		return sort_runs_for_status_picker(enriched)
 
 	@property
 	def corrupt_run_ids(self) -> list[str]:
-		"""上一次 list_recent 跳过的损坏 run_id（读不出断点，只能重建）。"""
+		"""上一次 list_recent 跳过的损坏 run_id（断点读不出，只能重建）。"""
 		return list(self._corrupt_run_ids)
 
 	@property
