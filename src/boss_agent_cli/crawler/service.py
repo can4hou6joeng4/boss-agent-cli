@@ -132,6 +132,13 @@ class CrawlSettings:
 		# bool 是 int 的子类：`pages=true` 是类型漂移，不是第 1 页。
 		if not isinstance(pages, int) or isinstance(pages, bool):
 			raise CacheRecordInvalid("crawl_run", run_id, "params.pages", f"期望整数，实际是 {type(pages).__name__}")
+		# chrome_path 原样传给 transport，非字符串会在 set_browser_path 抛 TypeError，
+		# 被 `_run` 记成 stopped 并给出「恢复」指引，重跑永远复现（Issue #1278）。
+		chrome_path = raw.get("chrome_path")
+		if chrome_path is not None and not isinstance(chrome_path, str):
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "params.chrome_path", f"期望字符串或 null，实际是 {type(chrome_path).__name__}"
+			)
 		if not isinstance(with_detail, bool):
 			raise CacheRecordInvalid(
 				"crawl_run", run_id, "params.with_detail", f"期望布尔值，实际是 {type(with_detail).__name__}"
@@ -157,7 +164,7 @@ class CrawlSettings:
 				pages=pages,
 				with_detail=with_detail,
 				profile_path=Path(str(profile_path)),
-				chrome_path=raw.get("chrome_path"),
+				chrome_path=chrome_path,
 				cdp_port=int(cdp_port),
 				hook_profile=str(hook_profile),
 				hook_dir=Path(str(raw.get("hook_dir") or hook.get("directory")))
