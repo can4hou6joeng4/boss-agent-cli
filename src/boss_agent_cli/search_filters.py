@@ -421,7 +421,9 @@ _SALARY_BELOW_RE = re.compile(r"(\d+)\s*K以下", re.IGNORECASE)
 
 def parse_salary_range(value: str) -> tuple[int, int] | None:
 	"""Parse salary string like '20-50K' into (low, high) in K. Returns None if unparseable."""
-	if not value or value == "面议":
+	# 平台把 salaryDesc 返回成数字 / null / 对象时按「无法解析」处理：单个坏字段
+	# 不能让整次搜索落 INTERNAL_ERROR（Issue #1335）。
+	if not isinstance(value, str) or not value or value == "面议":
 		return None
 	m = _SALARY_BELOW_RE.search(value)
 	if m:
@@ -441,6 +443,8 @@ def meets_experience_threshold(candidate: str, required: str | None) -> bool:
 	"""Check if candidate experience meets or exceeds required threshold."""
 	if required is None:
 		return True
+	if not isinstance(candidate, str):
+		return True  # unknown experience passes（平台字段漂移，Issue #1335）
 	c = _EXPERIENCE_ORDER.get(candidate)
 	r = _EXPERIENCE_ORDER.get(required)
 	if c is None:
@@ -454,6 +458,8 @@ def meets_education_threshold(candidate: str, required: str | None) -> bool:
 	"""Check if candidate education meets or exceeds required threshold."""
 	if required is None:
 		return True
+	if not isinstance(candidate, str):
+		return True  # unknown education passes（平台字段漂移，Issue #1335）
 	c = _EDUCATION_ORDER.get(candidate)
 	r = _EDUCATION_ORDER.get(required)
 	if c is None:
@@ -532,7 +538,9 @@ def prefilter_job(
 	city = city_constraint(criteria.city)
 	if city:
 		item_city = raw_item.get("cityName", "")
-		if item_city and city not in item_city:
+		# 非字符串城市字段按未知放行：`int in str` 会抛 TypeError，让整次搜索
+		# 落 INTERNAL_ERROR（Issue #1335）。
+		if isinstance(item_city, str) and item_city and city not in item_city:
 			reasons.append(f"城市不匹配: {item_city} != {city}")
 
 	# Salary filter — reject only if candidate max is below required min
@@ -736,7 +744,12 @@ def _fetch_and_check(
 				raise SearchPipelinePlatformError(code, message or "职位详情获取失败")
 			card_data = _unwrap_platform_data(client, card_raw)
 			card = card_data.get("jobCard", {}) or {}
-			desc = card.get("postDescription", "") or ""
+			# postDescription 可能是数组 / 对象 / 数字：非字符串进 put_job_desc
+			# 会抛 sqlite3.ProgrammingError（--active 串行路径落 NETWORK_ERROR，
+			# 无线程池路径命中项被静默丢弃）。按平台文本字段缺失处理（Issue #1335）；
+			# 不能 str() 成 "['双休']"，否则福利关键词会从坏结构里误命中。
+			raw_desc = card.get("postDescription") if isinstance(card, dict) else None
+			desc = raw_desc if isinstance(raw_desc, str) else ""
 			raw_active = card.get("activeTimeDesc")
 			card_active = raw_active.strip() if isinstance(raw_active, str) else ""
 			outcome.fresh_desc = desc  # 仅新取到的描述需写回缓存（主线程处理）
