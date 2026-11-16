@@ -1,9 +1,10 @@
 name: Update Contributors
 
 on:
-  # PR 合并后刷新（pull_request_target 保证 fork PR 合并时也拿得到写权限）
-  pull_request_target:
-    types: [closed]
+  # 合并即 push 到 master；push 事件本就能申请写权限，不需要 pull_request_target。
+  # GitHub 公共仓库从 2026-12-02 起默认阻止 pull_request_target（Issue #1322）。
+  push:
+    branches: [master]
   workflow_dispatch:
 
 concurrency:
@@ -12,7 +13,6 @@ concurrency:
 
 jobs:
   update-contributors:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -21,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # 不设 ref：pull_request_target 下默认检出基线分支，绝不检出 PR 的 head。
+          # 默认检出触发本次运行的 master 提交。
           # create-pull-request 推分支依赖这里留下的凭据。
           persist-credentials: true
 
