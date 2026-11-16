@@ -83,7 +83,11 @@ def ai_float_setting(config: dict[str, Any], key: str, default: float, *, minimu
 		return default
 	if isinstance(value, bool) or not isinstance(value, (int, float)):
 		raise ValueError(f"AI 配置项 {key} 必须是数值，实际是 {type(value).__name__}")
-	parsed = float(value)
+	try:
+		parsed = float(value)
+	# 合法 JSON 的大整数转 float 会溢出：与 inf 同等按无效配置处理（Issue #1230）。
+	except OverflowError as exc:
+		raise ValueError(f"AI 配置项 {key} 必须是有限数值") from exc
 	if not math.isfinite(parsed):
 		raise ValueError(f"AI 配置项 {key} 必须是有限数值")
 	if parsed < minimum:

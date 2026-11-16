@@ -721,7 +721,8 @@ def _fit_score(item: Any) -> int:
 		return 0
 	try:
 		return int(item.get("match_score", 0))
-	except (TypeError, ValueError):
+	# OverflowError：模型输出 1e400 解析成 inf，按 0 分处理并继续返回结果。
+	except (TypeError, ValueError, OverflowError):
 		return 0
 
 

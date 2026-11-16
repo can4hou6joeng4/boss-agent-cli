@@ -91,7 +91,10 @@ def _draft_with_local_ai(
 		return replace(decision, reason=f"{decision.reason}; local ai unavailable ({exc}), template fallback")
 	try:
 		draft = parse_reply_draft(raw)
-	except (JSONDecodeError, KeyError, TypeError, ValueError):
+	# ValueError 覆盖 JSONDecodeError / 超长整数；RecursionError 覆盖深嵌套；
+	# OverflowError 覆盖 confidence 大整数。都是模型输出的确定性格式问题，
+	# 必须降级到模板话术，不能中止整轮自动化（Issue #1230）。
+	except (JSONDecodeError, KeyError, TypeError, ValueError, OverflowError, RecursionError):
 		# 本地模型输出是不可信外部输入：`confidence: "high"` 的 float() 会抛
 		# ValueError，旧实现没接住，一个确定性的格式问题会终止整轮自动化并被
 		# CLI 报成可重试的 NETWORK_ERROR（Issue #893）。所有结构错误统一降级到
@@ -174,7 +177,7 @@ def _draft_confidence(value: Any) -> float:
 		raise TypeError("reply draft confidence must be a number")
 	try:
 		confidence = float(value)
-	except (TypeError, ValueError) as exc:
+	except (TypeError, ValueError, OverflowError) as exc:
 		raise ValueError("reply draft confidence must be a finite number between 0 and 1") from exc
 	if not math.isfinite(confidence) or not 0 <= confidence <= 1:
 		raise ValueError("reply draft confidence must be between 0 and 1")

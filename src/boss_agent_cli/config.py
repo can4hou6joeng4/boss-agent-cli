@@ -102,6 +102,21 @@ def expand_budget_directory(value: str) -> Path:
 	return path
 
 
+def _finite_number(value: Any) -> bool:
+	"""数值且可安全转成 float。
+
+	合法 JSON 的大整数（4300 位以内，``json.loads`` 正常解析）在 ``math.isfinite``
+	里转 float 会抛 ``OverflowError``；与 ``inf`` 同等按「无效」处理，不能落成
+	``INTERNAL_ERROR``（Issue #1230）。
+	"""
+	if isinstance(value, bool) or not isinstance(value, (int, float)):
+		return False
+	try:
+		return math.isfinite(value)
+	except OverflowError:
+		return False
+
+
 def validate_request_config(cfg: dict[str, Any]) -> None:
 	"""Validate local pacing limits before they reach a transport or persistence."""
 	for key in ("request_delay", "batch_greet_delay"):
@@ -109,9 +124,7 @@ def validate_request_config(cfg: dict[str, Any]) -> None:
 		if (
 			not isinstance(value, (list, tuple))
 			or len(value) != 2
-			or not all(
-				isinstance(item, (int, float)) and not isinstance(item, bool) and math.isfinite(item) for item in value
-			)
+			or not all(_finite_number(item) for item in value)
 			or not 0 <= value[0] <= value[1]
 		):
 			raise ValueError(f"{key} 必须包含两个有限数值，且满足 0 <= 下限 <= 上限")
@@ -119,7 +132,7 @@ def validate_request_config(cfg: dict[str, Any]) -> None:
 	if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
 		raise ValueError("request_max_per_minute 必须是正整数")
 	seconds = cfg.get("request_wait_timeout", DEFAULTS["request_wait_timeout"])
-	if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or seconds <= 0:
+	if not _finite_number(seconds) or seconds <= 0:
 		raise ValueError("request_wait_timeout 必须是有限正数")
 	directory = cfg.get("request_budget_dir")
 	if directory is not None:
