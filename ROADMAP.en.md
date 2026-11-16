@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.72 (2026-11-17): wizard reports corrupt caches as `CACHE_DATABASE_INVALID` (Issue #1362); resume row drift and agent/ai error semantics (Issues #1366, #1369, #1370); recursion errors on deeply nested AI, platform and auth responses (Issues #1365, #1368, #1378); group budget config validation (Issue #1367); MCP response surrogates and empty tag/path boundaries (Issues #1375–#1377).
 - ✅ v3.4.71 (2026-11-17): crawl pagination, export, profile-path and hook pre-check boundaries (Issues #1345–#1349); corrupted cache pages during cursor reads report `CACHE_DATABASE_INVALID` (Issue #1350); contact identity and lookup-limit semantics (Issues #1351–#1353); HTML export nulls, symlinked output paths and concurrent snapshots (Issues #1354–#1356).
 - ✅ v3.4.70 (2026-11-17): search prefilter tolerates field type drift (Issue #1335); corrupt request-budget database reports a local IO error (Issue #1336); the automation queue no longer silently empties on bad statuses or non-UTF-8 bytes (Issue #1337); watch and wizard re-validate stored search parameters at run time (Issue #1338).
 - ✅ v3.4.69 (2026-11-17): welfare filtering skips malformed `welfareList` elements (Issue #1329); wizard input, config and export-path boundaries are validated up front (Issue #1330); clearer wizard errors for corrupt resumes and friend-lookup limits (Issue #1331).
