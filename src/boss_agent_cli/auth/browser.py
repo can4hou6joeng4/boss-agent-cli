@@ -292,7 +292,13 @@ def probe_cdp(cdp_url: str | None = None) -> str | None:
 	base = cdp_url or DEFAULT_CDP_URL
 	try:
 		resp = httpx.get(f"{base}/json/version", timeout=_CDP_PROBE_TIMEOUT)
-		return cast("str | None", resp.json().get("webSocketDebuggerUrl"))
+		payload = resp.json()
+		# 非对象 JSON（[] / null / 标量）没有 webSocketDebuggerUrl 可读。直接 .get 会抛
+		# AttributeError 并中断登录降级链，故与 _fetch_ws_url 同口径：视为探测不可用。
+		# 与解析失败一样按「拿不到调试端口」处理（Issue #1421）。
+		if not isinstance(payload, dict):
+			return None
+		return cast("str | None", payload.get("webSocketDebuggerUrl"))
 	# ValueError 覆盖 JSON 语法错误；深嵌套响应在 3.11–3.13 抛 RecursionError。
 	# 与解析失败一样按「响应无法解析」处理：拿不到调试端口即视为探测不可用（Issue #1378）。
 	except (httpx.HTTPError, ValueError, KeyError, RecursionError):
@@ -329,10 +335,13 @@ def login_via_cdp(
 		raise ConnectionError("CDP 不可用，请先运行 boss-chrome 启动带调试端口的 Chrome")
 
 	pw = sync_playwright().start()
-	browser = pw.chromium.connect_over_cdp(ws_url)
-	# 跨所有 browser context 搜索已有登录态：命中则复用该 context，不导航登录页
-	all_contexts = list(browser.contexts)
 	try:
+		# 连接与 contexts 读取也在 try 内：握手失败时若泄漏 Playwright driver，
+		# 自动登录还会继续启动 patchright 扫码（Issue #1425）。成功路径不在这里
+		# stop，只由末尾的 finally 统一收尾，避免重复 stop。
+		browser = pw.chromium.connect_over_cdp(ws_url)
+		# 跨所有 browser context 搜索已有登录态：命中则复用该 context，不导航登录页
+		all_contexts = list(browser.contexts)
 		for existing_context in all_contexts:
 			for existing_page in existing_context.pages:
 				try:
