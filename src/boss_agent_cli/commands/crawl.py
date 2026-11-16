@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 import sys
 import time
@@ -34,6 +35,7 @@ from boss_agent_cli.crawler.controls import (
 	CrawlProfilePathInvalid,
 	CrawlRuntimeUnavailable,
 )
+from boss_agent_cli.crawler.hooks import verify_hook_profile
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_install_hint, extras_requirement
 from boss_agent_cli.services.json_files import write_json_atomic
@@ -192,6 +194,10 @@ def _settings_from_context(
 	# --hook-dir 参数，重试只会重复同一错误。参数问题必须在创建任务之前拒绝。
 	if resolved_hook == "screenshot-full" and resolved_hook_dir is None:
 		raise ValueError("--hook-profile screenshot-full 需要同时提供 --hook-dir（用户授权的原始 Hook 脚本目录）")
+	# 目录内容同样必须在创建任务与打开浏览器之前校验（Issue #1348）：缺清单、
+	# 空目录或脚本被改时，运行期注入失败只会把任务记成 stopped 并提示 resume，
+	# 而 resume 没有 --hook-dir 参数可以修复。这里只读本地文件，不触碰浏览器。
+	verify_hook_profile(resolved_hook, resolved_hook_dir)
 	return CrawlSettings(
 		query=query,
 		city_code=_city_code(city),
@@ -484,11 +490,15 @@ def _tolerated_timestamp(value: Any) -> float:
 
 	`get_crawl_run` 故意不校验 `created_at` / `updated_at`，消费方必须自行降级；
 	纯本地元数据问题不能拦停恢复，更不能被兜成可重试的 NETWORK_ERROR（Issue #1206）。
+	`inf` / `nan` 同样按 0：`time.time() - inf` 是 `-inf`，小于交接窗口，会让
+	queued 任务被永远当成「刚排队」，后台恢复返回成功却不启动 worker（Issue #1349）；
+	超大整数在 `float()` 抛 `OverflowError`，也不能逃成 INTERNAL_ERROR。
 	"""
 	try:
-		return float(value or 0.0)
-	except (TypeError, ValueError):
+		parsed = float(value or 0.0)
+	except (TypeError, ValueError, OverflowError):
 		return 0.0
+	return parsed if math.isfinite(parsed) else 0.0
 
 
 def _awaiting_queued_worker(run: dict[str, Any]) -> bool:

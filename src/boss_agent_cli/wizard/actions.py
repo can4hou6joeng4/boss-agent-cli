@@ -32,6 +32,7 @@ from boss_agent_cli.crawler.service import (
 	unused_local_port,
 )
 from boss_agent_cli.crawler.controls import CrawlExportError, CrawlProfileBusy, CrawlRuntimeUnavailable
+from boss_agent_cli.crawler.hooks import verify_hook_profile
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.digest import build_digest
@@ -1478,6 +1479,19 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 			"INVALID_PARAM",
 			f"crawl 配置无效: {exc}",
 			recovery_action=_hint_command(context, "config reset crawl"),
+		) from exc
+	try:
+		# 当前向导只允许 hook_profile=none，这里与 CLI 创建入口共用同一道只读
+		# 预检（Issue #1348）：将来补上 hook-dir 输入时不会绕过目录内容校验。
+		verify_hook_profile(settings.hook_profile, settings.hook_dir)
+	except ValueError as exc:
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			str(exc),
+			recovery_action=_hint_command(
+				context,
+				"crawl run <query> --city <城市> --hook-profile screenshot-full --hook-dir <脚本目录>",
+			),
 		) from exc
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		try:
