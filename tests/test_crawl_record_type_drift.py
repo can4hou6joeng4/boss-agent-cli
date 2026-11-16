@@ -13,7 +13,7 @@ import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.commands.crawl import _awaiting_queued_worker
+from boss_agent_cli.commands.crawl import _awaiting_queued_worker, _prepare_background_resume
 from boss_agent_cli.main import cli
 from boss_agent_cli.wizard.live_crawl import sort_runs_for_status_picker
 
@@ -34,10 +34,10 @@ def _params(tmp_path, **overrides):
 	return params
 
 
-def _seed_run(tmp_path, params=None) -> None:
+def _seed_run(tmp_path, params=None, *, status: str = "running") -> None:
 	cache = CacheStore(tmp_path / "cache" / "boss_agent.db")
 	try:
-		cache.create_crawl_run("run-1", params or _params(tmp_path), str(tmp_path / "crawl" / "run-1"))
+		cache.create_crawl_run("run-1", params or _params(tmp_path), str(tmp_path / "crawl" / "run-1"), status=status)
 	finally:
 		cache.close()
 
@@ -142,3 +142,72 @@ def test_queued_handoff_tolerates_corrupt_updated_at():
 	# 时间戳坏掉时按「排队已久」处理：宁可去探测锁，也不让父进程 traceback。
 	run = {"status": "queued", "updated_at": "abc"}
 	assert _awaiting_queued_worker(run) is False
+
+
+@pytest.mark.parametrize("drifted", ["yesterday", "12abc"])
+def test_prepare_background_resume_tolerates_corrupt_updated_at(tmp_path, drifted):
+	# updated_at 不参与契约校验（Issue #1192）：后台恢复只拿它做预检失败时的
+	# 还原，漂移必须按 0 降级，不能被兜成可重试的 NETWORK_ERROR（Issue #1206）。
+	_seed_run(tmp_path, status="stopped")
+	_exec(tmp_path, "UPDATE crawl_runs SET updated_at = ? WHERE run_id = 'run-1'", (drifted,))
+
+	status, should_launch = _prepare_background_resume(
+		tmp_path, "run-1", pages=None, with_detail=False, clear_stop=True, preflight=lambda: None
+	)
+
+	assert (status, should_launch) == ("queued", True)
+
+
+def test_prepare_background_resume_restores_stop_with_normalized_timestamp(tmp_path):
+	# 预检失败仍要还原旧 stop；还原时间戳用归一后的 0.0，不能把漂移值写回去。
+	_seed_run(tmp_path, status="stopped")
+	cache = CacheStore(tmp_path / "cache" / "boss_agent.db")
+	try:
+		assert cache.request_crawl_stop("run-1")
+	finally:
+		cache.close()
+	_exec(tmp_path, "UPDATE crawl_runs SET updated_at = 'yesterday' WHERE run_id = 'run-1'", ())
+
+	def failing_preflight() -> None:
+		raise RuntimeError("crawl 依赖缺失")
+
+	with pytest.raises(RuntimeError, match="依赖缺失"):
+		_prepare_background_resume(
+			tmp_path, "run-1", pages=None, with_detail=False, clear_stop=True, preflight=failing_preflight
+		)
+
+	cache = CacheStore(tmp_path / "cache" / "boss_agent.db")
+	try:
+		run = cache.get_crawl_run("run-1")
+	finally:
+		cache.close()
+	assert run["stop_requested"] is True
+	assert run["updated_at"] == 0.0
+
+
+def test_resume_background_does_not_report_corrupt_timestamp_as_network_error(tmp_path, monkeypatch):
+	# CLI 层回归：此前 ValueError 被 handle_auth_errors 兜成可重试的 NETWORK_ERROR，
+	# Agent 会拿同一条命令无限重试（Issue #1206）。
+	launched: list[str] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._launch_background_resume",
+		lambda data_dir, run_id, **kwargs: launched.append(run_id),
+	)
+	_seed_run(tmp_path, status="stopped")
+	_exec(tmp_path, "UPDATE crawl_runs SET updated_at = 'yesterday' WHERE run_id = 'run-1'", ())
+
+	from boss_agent_cli.auth.token_store import TokenStore
+
+	TokenStore(tmp_path / "auth").save(
+		{
+			"cookies": {"wt2": "test-wt2", "wbg": "1", "zp_at": "1"},
+			"user_agent": "test-agent",
+		}
+	)
+	result = _invoke(tmp_path, "resume", "run-1", "--background")
+
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.stdout)
+	assert payload["ok"] is True
+	assert payload["data"] == {"run_id": "run-1", "status": "queued", "background": True}
+	assert launched == ["run-1"]

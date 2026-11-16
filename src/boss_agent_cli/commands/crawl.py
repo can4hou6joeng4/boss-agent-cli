@@ -405,16 +405,25 @@ def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[s
 _QUEUE_HANDOFF_GRACE_SECONDS = 30.0
 
 
+def _tolerated_timestamp(value: Any) -> float:
+	"""本地记录时间戳的容错读取：漂移值按 0 参与调度（与 Issue #1192 同口径）。
+
+	`get_crawl_run` 故意不校验 `created_at` / `updated_at`，消费方必须自行降级；
+	纯本地元数据问题不能拦停恢复，更不能被兜成可重试的 NETWORK_ERROR（Issue #1206）。
+	"""
+	try:
+		return float(value or 0.0)
+	except (TypeError, ValueError):
+		return 0.0
+
+
 def _awaiting_queued_worker(run: dict[str, Any]) -> bool:
 	"""任务刚排队：原 worker 可能正要取锁，父进程不探测、不抢占。"""
 	if run["status"] != "queued":
 		return False
 	# 时钟回拨得到负值时按仍在窗口内处理，宁可多等也不抢；时间戳类型漂移
 	# 无法判断新鲜度，按「排队已久」去探测锁，不能让父进程 traceback（Issue #1192）。
-	try:
-		updated = float(run["updated_at"])
-	except (TypeError, ValueError):
-		return False
+	updated = _tolerated_timestamp(run["updated_at"])
 	return time.time() - updated < _QUEUE_HANDOFF_GRACE_SECONDS
 
 
@@ -459,7 +468,8 @@ def _prepare_background_resume(
 			# （Issue #1115）。预检失败时还原旧 stop 与时间戳，保持「失败的调用
 			# 不改动任务」的既有约定（Issue #1042）；失败且无旧 stop 时不写库。
 			previous_stop = bool(run.get("stop_requested"))
-			previous_updated_at = float(run.get("updated_at") or 0.0)
+			# 仅用于预检失败时还原；类型漂移按 0 降级，不能让恢复本身中断（Issue #1206）。
+			previous_updated_at = _tolerated_timestamp(run.get("updated_at"))
 			if clear_stop and previous_stop:
 				cache.clear_crawl_stop_request(run_id)
 			try:
