@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.36] - 2026-11-16
 
 ### Fixed
 - `wizard --stop` 不再把已生效的停止报成失败（Issue #1186）：停止标记先落盘、展示读取随后解析断点 JSON 列，断点写坏（如 `params` 不是合法 JSON）时整次停止返回 `ok=false` + `CACHE_RECORD_INVALID`，并引导「重新创建任务」。现在两级回退都失败时返回最小可用记录（`run_id` + `status: "stopped"`），确认停止生效；`--status` 仍按展示契约报告损坏。
