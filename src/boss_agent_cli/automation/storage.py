@@ -34,6 +34,15 @@ class AutomationControlBusy(RuntimeError):
 	"""automation 控制锁被其他进程占用：本次控制更新没有生效，可稍后重试。"""
 
 
+class AutomationControlBusyDispatched(AutomationControlBusy):
+	"""周期内控制锁冲突：平台动作可能已经发出，不能沿用「本次操作没有生效」（Issue #1267）。
+
+	执行周期里队列写回与 checkpoint 是两次独立的本地写入：动作派发成功、队列
+	已记为 executed 之后 checkpoint 才撞上控制锁时，平台侧可能已经生效。调用方
+	必须按「结果可能已提交」的语义上报（禁止自动重发），而不是让操作者直接重试。
+	"""
+
+
 class AutomationRunBusy(RuntimeError):
 	"""另一个 agent run 正在同一数据目录执行：本次调用没有发出任何请求。"""
 

@@ -18,7 +18,11 @@ from boss_agent_cli.automation.models import (
 	RunReport,
 )
 from boss_agent_cli.automation.safety import SafetyGuard
-from boss_agent_cli.automation.storage import AutomationStore
+from boss_agent_cli.automation.storage import (
+	AutomationControlBusy,
+	AutomationControlBusyDispatched,
+	AutomationStore,
+)
 
 
 def run_automation_cycle(
@@ -40,14 +44,23 @@ def run_automation_cycle(
 	with store.execution_lock():
 		if resume:
 			store.resume()
-		return _run_cycle_locked(
-			adapter,
-			store,
-			config,
-			platform=platform,
-			dry_run=dry_run,
-			limit=limit,
-		)
+		try:
+			return _run_cycle_locked(
+				adapter,
+				store,
+				config,
+				platform=platform,
+				dry_run=dry_run,
+				limit=limit,
+			)
+		except AutomationControlBusy as exc:
+			if dry_run:
+				# 预览没有发出任何请求，控制锁冲突仍是「本次操作没有生效」。
+				raise
+			# 周期内的冲突发生在动作派发与 checkpoint 之间：队列写回成功时平台
+			# 动作可能已经发出，不能按「没有生效」让操作者直接重试（Issue #1267）。
+			# `--resume` 在锁内、try 之外：它撞锁时确实什么都没做，保持原语义。
+			raise AutomationControlBusyDispatched(str(exc)) from exc
 
 
 def _run_cycle_locked(
