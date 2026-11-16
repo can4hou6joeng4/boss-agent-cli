@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.47 (2026-11-16): parse, consistency and rendering edges of the index-cache read path. Overlong integers / deep nesting now report `INVALID_PARAM` as a missing cache, `count` always equals `len(jobs)`, a surrogate-bearing `source` becomes an empty string, and `page` / `saved_at` get sane bounds (Issue #1224).
 - ✅ v3.4.46 (2026-11-16): drifted index-cache metadata no longer reaches the `index_snapshot` envelope as-is. A non-string `source` becomes an empty string, an invalid `page` becomes `None`, an invalid `count` falls back to `len(jobs)`, and a non-finite `saved_at` becomes 0; the cache is kept whenever `jobs` is usable (Issue #1221).
 - ✅ v3.4.45 (2026-11-16): an explicit empty `friend_ids` array on `boss_hr_last_messages` no longer degrades into fetching the current page of candidates. The schema declares `minItems: 1`, the MCP entry point validates it and returns `INVALID_PARAM`; omitting the field still uses page mode and valid non-empty arrays are unchanged (Issue #1218).
 - ✅ v3.4.44 (2026-11-16): tolerant reads for cache TTL, risk-lock timestamps and the login state before a token refresh. Bad `created_at` values in `search_cache` / `job_desc_cache` are treated as expired and deleted; oversized integers / `inf` in the risk lock's `locked_at` render as an unknown time while the lock stays effective and `raise_if_locked` keeps the risk contract; `cookies` structure is validated before refreshing the stoken (Issue #1214).
