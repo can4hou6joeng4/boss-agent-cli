@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.30] - 2026-11-16
 
 ### Fixed
 - `config.json` 的 `role` / `platform` / `browser_source` / `cdp_url`（类型）坏值不再把 `boss config reset` 也挡在启动期（Issue #1168）：此前这些键被手改成非法取值后，所有命令（含修复入口 `config reset <键>`）都在启动阶段返回 `INVALID_PARAM`，只能手工编辑文件。现在 `config` 子命令把坏值归一成默认值后放行，其余命令仍按参数错误拒绝；显式 `--role` / `--platform` / `--browser-source` / `--cdp-url` 覆盖保持严格校验。

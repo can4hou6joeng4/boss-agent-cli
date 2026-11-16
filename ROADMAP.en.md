@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.30 (2026-11-16): bad `config.json` values for `role` / `platform` / `browser_source` / `cdp_url` (type) no longer block the repair entry point `boss config reset`; other commands still reject them as parameter errors, and explicit command-line overrides stay strictly validated.
 - ✅ v3.4.29 (2026-11-15): `history` and the wizard candidate-detail step no longer crash on a non-object platform payload; `history` returns an empty page with unknown pagination, and the wizard detail step falls back to the job card, returning `JOB_NOT_FOUND` when neither channel yields a job.
 - ✅ v3.4.28 (2026-11-15): when the checkpoint replay marker `error.replay_safe` drifts to a non-boolean type, `wizard --resume` no longer replays a write step whose outcome is unknown; `--resume` / `--status` and the run list reject it with `CACHE_RECORD_INVALID` without rewriting the checkpoint, boolean and absent markers behave as before, and `--stop` is unaffected.
 - ✅ v3.4.27 (2026-11-15): `wizard --stop` supports idempotent retries, completing internal crawl stop propagation when the outer stop was already committed; repeated stops succeed without resuming or replaying business steps, while missing and completed runs remain rejected.
