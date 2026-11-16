@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 from enum import Enum
 from pathlib import Path
@@ -46,6 +47,12 @@ def inspect_output_path(path: str | os.PathLike[str]) -> tuple[Path, OutputPathP
 	保持纯函数（不依赖 click / display），出信封由命令层负责。
 	"""
 	target = Path(os.path.expanduser(os.fspath(path)))
+	# 符号链接不是普通文件：``is_file()`` 会跟随链接把「链接指向普通文件」判成
+	# 可写，而原子写入的 ``os.replace`` 替换的是链接本身，真实目标保持旧内容
+	# （Issue #1355）。悬空链接的 ``exists()`` 为 False，同样必须按非普通文件
+	# 拒绝，否则会被当成「尚不存在的新文件」。
+	if target.is_symlink():
+		return target, OutputPathProblem.NOT_REGULAR
 	if target.is_dir():
 		return target, OutputPathProblem.IS_DIRECTORY
 	if target.exists() and not target.is_file():
@@ -57,3 +64,17 @@ def inspect_output_path(path: str | os.PathLike[str]) -> tuple[Path, OutputPathP
 		if parent.exists() or parent.is_symlink():
 			return target, OutputPathProblem.PARENT_NOT_DIR
 	return target, None
+
+
+def refuse_symlink_target(target: Path) -> None:
+	"""原子写入入口的兜底：目标本身是符号链接时拒绝写入。
+
+	``write_text_atomic`` / ``write_json_atomic`` / ``write_private_bytes`` 都靠
+	同目录临时文件 + ``os.replace`` 落盘，替换的是链接本身，不会写穿到真实目标。
+	命令层的 ``-o`` 预检已覆盖一部分调用方，其余内部状态写入也必须走这里，避免
+	静默破坏用户的链接布局（Issue #1355）。
+
+	抛出的 ``OSError`` 带 ``filename``，顶层网兜会把它归成 ``LOCAL_IO_ERROR``。
+	"""
+	if target.is_symlink():
+		raise OSError(errno.EINVAL, "拒绝写入符号链接目标", str(target))

@@ -13,6 +13,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from boss_agent_cli.services.output_path import refuse_symlink_target
+
 
 def write_json_atomic(
 	path: Path,
@@ -22,6 +24,8 @@ def write_json_atomic(
 	trailing_newline: bool = False,
 ) -> None:
 	"""原子替换写入 JSON 文件；失败时保留原文件，不留下临时文件。"""
+	# os.replace 替换符号链接本身而不是写穿目标；入口直接拒绝，避免静默破坏链接。
+	refuse_symlink_target(path)
 	path.parent.mkdir(parents=True, exist_ok=True)
 	fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
 	temporary = Path(temporary_name)

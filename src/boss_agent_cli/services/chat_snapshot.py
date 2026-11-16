@@ -1,17 +1,24 @@
 """Chat snapshot — JSON 快照保存与 diff 对比。"""
 
 import datetime
+import errno
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.services.chat_utils import contact_identity
+from boss_agent_cli.services.file_lock import exclusive_file_lock, run_lock_path
 from boss_agent_cli.services.json_files import write_json_atomic
 from boss_agent_cli.output import Logger
 
 _SNAPSHOT_NAME_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+#: 当日快照锁被占用时的有限重试；锁只包住一次读-合并-写，正常持有时长是毫秒级。
+_LOCK_ATTEMPTS = 100
+_LOCK_RETRY_INTERVAL_SECONDS = 0.05
 
 
 def _unread_count(item: dict[str, Any]) -> int:
@@ -43,31 +50,9 @@ def save_snapshot_and_diff(
 	today = datetime.date.today().isoformat()
 	snapshot_path = os.path.join(snapshot_dir, f"{today}.json")
 
-	# 合并已有的当日快照（解决分页覆盖问题）
-	existing = {}
-	if os.path.exists(snapshot_path):
-		try:
-			with open(snapshot_path, encoding="utf-8") as f:
-				prev_today = json.load(f)
-			if isinstance(prev_today, list):
-				for item in prev_today:
-					if isinstance(item, dict) and contact_identity(item):
-						existing[contact_identity(item)] = item
-		except (ValueError, OSError, RecursionError):
-			# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长
-			# 整数上限；RecursionError 覆盖深嵌套。坏快照按没有历史处理。
-			pass
-
-	# 用当前数据更新（新数据优先）
-	for item in friends:
-		key = contact_identity(item)
-		if key:
-			existing[key] = item
-
-	merged = list(existing.values())
-
-	# 保存合并后的快照；原子写避免中断后当日快照变成半截 JSON（下次读取会整个丢弃）。
-	write_json_atomic(Path(snapshot_path), merged)
+	# 读-合并-写必须在同一个临界区内：两个并发导出各自读到旧快照再各自覆盖，
+	# 后写者会丢掉另一页的联系人，次日 diff 误报 added（Issue #1356）。
+	merged = _merge_and_write_locked(snapshot_dir, snapshot_path, friends)
 
 	# 查找上一次快照
 	prev_path = _find_previous_snapshot(snapshot_dir, today)
@@ -104,6 +89,56 @@ def save_snapshot_and_diff(
 		"removed": removed,
 		"new_unread": new_unread,
 	}
+
+
+def _merge_and_write_locked(
+	snapshot_dir: str,
+	snapshot_path: str,
+	friends: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+	"""在跨进程独占锁内完成读-合并-写，返回合并后的快照内容。
+
+	锁拿不到时有限重试；重试耗尽按本地 IO 错误上报（``OSError`` 带 ``filename``），
+	绝不在未持锁时读取基准或写入，避免并发导出互相覆盖（Issue #1356）。
+	"""
+	lock_path = run_lock_path(Path(snapshot_dir), f"chat-snapshot-{os.path.basename(snapshot_path)}")
+	for attempt in range(_LOCK_ATTEMPTS):
+		with exclusive_file_lock(lock_path) as acquired:
+			if acquired:
+				return _merge_and_write(snapshot_path, friends)
+		if attempt + 1 < _LOCK_ATTEMPTS:
+			time.sleep(_LOCK_RETRY_INTERVAL_SECONDS)
+	raise OSError(errno.EAGAIN, "当日聊天快照正被其他进程写入，等待互斥锁超时", snapshot_path)
+
+
+def _merge_and_write(snapshot_path: str, friends: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	"""调用方必须持有当日快照锁。"""
+	# 合并已有的当日快照（解决分页覆盖问题）
+	existing: dict[str, dict[str, Any]] = {}
+	if os.path.exists(snapshot_path):
+		try:
+			with open(snapshot_path, encoding="utf-8") as f:
+				prev_today = json.load(f)
+			if isinstance(prev_today, list):
+				for item in prev_today:
+					if isinstance(item, dict) and contact_identity(item):
+						existing[contact_identity(item)] = item
+		except (ValueError, OSError, RecursionError):
+			# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长
+			# 整数上限；RecursionError 覆盖深嵌套。坏快照按没有历史处理。
+			pass
+
+	# 用当前数据更新（新数据优先）
+	for item in friends:
+		key = contact_identity(item)
+		if key:
+			existing[key] = item
+
+	merged = list(existing.values())
+
+	# 保存合并后的快照；原子写避免中断后当日快照变成半截 JSON（下次读取会整个丢弃）。
+	write_json_atomic(Path(snapshot_path), merged)
+	return merged
 
 
 def load_snapshot(path: str, logger: Logger) -> list[dict[str, Any]] | None:

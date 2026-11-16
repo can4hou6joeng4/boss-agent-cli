@@ -14,6 +14,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from boss_agent_cli.services.output_path import refuse_symlink_target
+
 
 def write_text_atomic(
 	path: str | os.PathLike[str],
@@ -24,6 +26,8 @@ def write_text_atomic(
 ) -> Path:
 	"""原子替换写入文本文件；失败时保留原文件，不留下临时文件。"""
 	target = Path(path)
+	# os.replace 替换符号链接本身而不是写穿目标；入口直接拒绝，避免静默破坏链接。
+	refuse_symlink_target(target)
 	target.parent.mkdir(parents=True, exist_ok=True)
 	fd, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
 	temporary = Path(temporary_name)
