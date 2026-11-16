@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.61] - 2026-11-16
+
+### Fixed
+- 不同 crawl run 并发执行时共用同一个采集 Chrome 配置目录（`crawl/chrome-profile`），而端口按 run 随机分配：`CrawlTransport.open()` 只探测自己的端口，空闲就无条件删除 `SingletonLock` 等文件，会破坏另一个 run 正在使用的采集 Chrome（Issue #1266）。现在先读锁里的 `<hostname>-<pid>`，进程仍存活时不删锁、不启动第二个实例，返回 `CRAWL_PROFILE_BUSY`（`recoverable: true`，本次调用未发出请求）；只有进程已不存在、跨主机或格式不可解析的锁才按陈旧锁清理。
+- 命中平台风控且主锁与 group 目录的锁都写失败时，本地锁只在当前进程生效：进程退出后新进程读不到锁会继续访问平台（Issue #1270）。现在风控信封在 `details.risk_lock.persisted` 为 `false` 时追加 `operator_actions`：「本地风险锁未能写入磁盘：当前进程退出后，新的 boss 进程不会再被这把锁阻止；先修复数据目录的写权限与磁盘空间，在确认平台已恢复前不要启动新的 boss 进程」。两条风控出口（`handle_auth_errors` 与登录链路的 `classify_login_error`）共用同一份提示。
+
 ## [3.4.60] - 2026-11-16
 
 ### Fixed
