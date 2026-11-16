@@ -2,6 +2,13 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.69] - 2026-11-17
+
+### Fixed
+- welfare 筛选对 `welfareList` 元素级漂移直接 `" ".join` 抛 `TypeError`：平台把标签数组混入数字 / null / 对象时，`boss search --welfare` 与 wizard 的 job_search / export / watch 全部落 `INTERNAL_ERROR`（wizard 里可能被兜成可重试的 `NETWORK_ERROR`）。`match_all_welfare()` 现在只拼接字符串元素，非字符串 `description` 按空文本处理（Issue #1329）。
+- wizard 自由输入与本地配置边界：`raw_params` 非 JSON 对象时被 `dict()` 抛 `ValueError` / `TypeError`；`candidate_export` 的 `format` / `output` 校验放在平台搜索之后，非法 format 也会先翻页消耗请求预算，非路径类型的 `output` 落 `INTERNAL_ERROR`；`config.json` 的 `crawl` 段非对象时同样被兜成可重试错误。现在三处都在平台请求前校验：参数 / 目录路径报 `INVALID_PARAM`，父路径不可用报 `LOCAL_IO_ERROR`，crawl 配置的恢复指引指向带 `--data-dir` 的 `config reset crawl`（Issue #1330）。
+- wizard 本地简历损坏与联系人查找上限的错误语义：`ai_assist` 把损坏简历误报成 `RESUME_NOT_FOUND`（照提示 `resume init` 又撞 `RESUME_ALREADY_EXISTS`），`local_resumes` 静默隐藏坏文件，`FriendLookupLimitExceeded` 让候选人「缩小沟通列表范围」。现在分别返回 `RESUME_FILE_INVALID`（带字段级原因与 `resume delete` 指引）、`corrupt` 名单，以及指向 `boss chat` 取 uid 的恢复路径；TTY 补齐 `RESUME_FILE_INVALID` 文案与 `boss resume delete` 的目录改写（Issue #1331）。
+
 ## [3.4.68] - 2026-11-17
 
 ### Fixed
