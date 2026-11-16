@@ -215,6 +215,42 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 		return None
 
 	params = record["params"]
+	# 存量记录可能由旧版本或 wizard 写入：运行前按 watch add 同口径重新校验。
+	# 未知城市留到 search_jobs 才抛 ValueError，会被兜成可重试的 NETWORK_ERROR；
+	# 未知薪资 / 经验标签会被静默丢弃，run 看起来成功但筛选已失效（Issue #1338）。
+	for key in (
+		"query",
+		"city",
+		"salary",
+		"experience",
+		"education",
+		"industry",
+		"scale",
+		"stage",
+		"job_type",
+		"welfare",
+	):
+		value = params.get(key)
+		if value is not None and not isinstance(value, str):
+			# 存量参数可能被手工改成数组 / 数字：先在类型上失败，避免
+			# `ensure_supported_city` / `.split()` 抛 TypeError / AttributeError
+			# 被兜成 NETWORK_ERROR（Issue #1338）。
+			raise SavedSearchParamsError(
+				name, f"参数 {key} 必须是字符串（收到 {type(value).__name__}）"
+			)
+	try:
+		ensure_supported_city(params.get("city"))
+		resolve_search_code_params(
+			salary=params.get("salary"),
+			experience=params.get("experience"),
+			education=params.get("education"),
+			industry=params.get("industry"),
+			scale=params.get("scale"),
+			stage=params.get("stage"),
+			job_type=params.get("job_type"),
+		)
+	except ValueError as exc:
+		raise SavedSearchParamsError(name, str(exc)) from exc
 	welfare = params.get("welfare")
 	_, welfare_conditions = _parse_watch_filters(
 		params.get("query"),
@@ -311,6 +347,14 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 			for record in records:
 				try:
 					summary = _execute_single_watch(ctx, cache, record["name"])
+				except SavedSearchParamsError as exc:
+					# 单条存量参数失效不能中止整批，也不能静默跳过：记录进
+					# watches 并给出删除重建指引，其余 watch 继续执行（Issue #1338）。
+					summary = {
+						"name": record["name"],
+						"error": "SAVED_SEARCH_INVALID",
+						"message": str(exc),
+					}
 				except SearchPipelinePlatformError as exc:
 					if exc.code in RISK_ERROR_CONTRACTS:
 						# 风控是整条 workflow 的硬边界：停止后续 watch，
@@ -348,9 +392,19 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 				all_hints["operator_actions"] = [
 					f"以下 watch 的参数已损坏、本次未执行，先执行 {_hint_command(ctx, 'watch remove <名称>')} 再重新 watch add：{', '.join(corrupt)}"
 				]
+			invalid = [
+				item["name"]
+				for item in watches
+				if item.get("error") == "SAVED_SEARCH_INVALID" and item.get("name")
+			]
+			if invalid:
+				all_hints.setdefault("operator_actions", []).append(
+					"以下 watch 的筛选条件已失效、本次未执行，"
+					f"先执行 {_hint_command(ctx, 'watch remove <名称>')} 再重新 watch add：{', '.join(invalid)}"
+				)
 			handle_output(
 				ctx, "watch",
-				{"mode": "all", "watches": watches, "total": len(watches), "skipped": corrupt},
+				{"mode": "all", "watches": watches, "total": len(watches), "skipped": corrupt, "invalid": invalid},
 				render=lambda d: render_message_panel(
 					{"模式": "全部", "监控数": d.get("total", 0)}, title="watch run"
 				),
