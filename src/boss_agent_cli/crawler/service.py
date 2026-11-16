@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import socket
+import sys
 import time
 import uuid
 from dataclasses import dataclass, replace
@@ -678,21 +679,31 @@ class CrawlService:
 			error = "execution interrupted; verify any unfinished operation before explicitly resuming"
 			raise
 		finally:
-			# Save progress before cleanup: a detached browser can fail to close.
-			self._cache.update_crawl_run_budget(
-				run_id,
-				requests_attempted=run_budget.requests_attempted,
-				detail_requests_attempted=run_budget.detail_requests_attempted,
-				elapsed_seconds=run_budget.elapsed_seconds,
-			)
-			self._cache.update_crawl_run(
-				run_id,
-				status=status,
-				next_page=current_page,
-				error=error,
-				list_finished=list_finished,
-				hook_results=_hook_metadata(hooks),
-			)
+			# 三步各自独立兜底：budget 写失败不能让终态落库与浏览器关闭被跳过，
+			# 否则 run 永远停在 running、本次错误丢失，采集 Chrome 继续占用共享
+			# profile（Issue #1277）。
+			cleanup_errors: list[BaseException] = []
+			try:
+				# Save progress before cleanup: a detached browser can fail to close.
+				self._cache.update_crawl_run_budget(
+					run_id,
+					requests_attempted=run_budget.requests_attempted,
+					detail_requests_attempted=run_budget.detail_requests_attempted,
+					elapsed_seconds=run_budget.elapsed_seconds,
+				)
+			except Exception as exc:
+				cleanup_errors.append(exc)
+			try:
+				self._cache.update_crawl_run(
+					run_id,
+					status=status,
+					next_page=current_page,
+					error=error,
+					list_finished=list_finished,
+					hook_results=_hook_metadata(hooks),
+				)
+			except Exception as exc:
+				cleanup_errors.append(exc)
 			close = getattr(transport, "close", None)
 			if callable(close):
 				try:
@@ -705,7 +716,14 @@ class CrawlService:
 					if status == "completed":
 						status = "stopped"
 					error = f"{error}; browser cleanup failed ({type(close_error).__name__})".lstrip("; ")
-					self._cache.update_crawl_run(run_id, status=status, next_page=current_page, error=error)
+					try:
+						self._cache.update_crawl_run(run_id, status=status, next_page=current_page, error=error)
+					except Exception as exc:
+						cleanup_errors.append(exc)
+			if cleanup_errors and sys.exc_info()[0] is None:
+				# 正常路径上本地清理失败必须暴露（命令层报 CACHE_BUSY / LOCAL_IO_ERROR），
+				# 但不能覆盖正在传播的原始异常（风控 / 中断 / 停止）。
+				raise cleanup_errors[0]
 
 		rows = [item["payload"] for item in self._cache.list_crawl_jobs(run_id)]
 		return CrawlOutcome(
