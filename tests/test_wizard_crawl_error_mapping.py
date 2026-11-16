@@ -34,7 +34,7 @@ def _seed_corrupt_run(tmp_path) -> None:
 		"city_code": "101210100",
 		"pages": 1,
 		"with_detail": False,
-		"browser": {"profile_path": str(tmp_path / "profile"), "cdp_port": 0},
+		"browser": {"profile_path": str(tmp_path / "profile"), "cdp_port": 9333},
 		"chrome_path": None,
 		"hook": {"profile": "none", "source": "user-supplied", "directory": None},
 		"limits": {"max_requests": 20, "max_details": 50, "max_seconds": 600, "max_retries": 1},

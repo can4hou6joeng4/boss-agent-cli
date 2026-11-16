@@ -740,7 +740,7 @@ def test_crawl_actions_use_fixture_service_and_persist_stop(tmp_path, monkeypatc
 				"city_code": "101010100",
 				"pages": 1,
 				"with_detail": False,
-				"browser": {"profile_path": str(tmp_path / "profile"), "cdp_port": 0},
+				"browser": {"profile_path": str(tmp_path / "profile"), "cdp_port": 9333},
 				"hook": {"profile": "none", "source": "user-supplied", "directory": None},
 				"limits": {"max_requests": 20, "max_details": 50, "max_seconds": 600, "max_retries": 1},
 			},
