@@ -24,7 +24,7 @@ from boss_agent_cli.api.request_budget import (
 	request_control,
 )
 from boss_agent_cli.api.zhipin_errors import normalize_risk_code
-from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
+from boss_agent_cli.cache.store import CacheDatabaseInvalid, CacheRecordInvalid, CacheStore
 from boss_agent_cli.compliance import require_capability_mode
 from boss_agent_cli.crawler.controls import (
 	CrawlExportError as CrawlExportError,
@@ -723,14 +723,20 @@ class CrawlService:
 			status = "stopped"
 			error = str(exc)
 		except (
-			CrawlRuntimeUnavailable, CrawlExportError, CrawlProfileBusy, CrawlProfilePathInvalid, CacheRecordInvalid,
+			CrawlRuntimeUnavailable,
+			CrawlExportError,
+			CrawlProfileBusy,
+			CrawlProfilePathInvalid,
+			CacheRecordInvalid,
+			CacheDatabaseInvalid,
 		) as exc:
 			# 可选依赖缺失、导出失败、配置目录被另一个采集 Chrome 占用、配置目录
-			# 路径不可用与本地记录损坏都是确定性失败：保存断点后原样抛出，由入口按
-			# CRAWL_UNAVAILABLE / LOCAL_IO_ERROR / CRAWL_PROFILE_BUSY /
-			# CACHE_RECORD_INVALID 回报。落成普通的 stopped 会让调用方拿到成功信封与
-			# 恢复指引，而重跑仍会撞上同一个占用者、坏路径或坏记录
-			# （Issue #1050、#1135、#1212、#1266、#1290）。
+			# 路径不可用、本地记录损坏与缓存库损坏（含取数阶段才暴露的坏页）都是
+			# 确定性失败：保存断点后原样抛出，由入口按 CRAWL_UNAVAILABLE /
+			# LOCAL_IO_ERROR / CRAWL_PROFILE_BUSY / CACHE_RECORD_INVALID /
+			# CACHE_DATABASE_INVALID 回报。落成普通的 stopped 会让调用方拿到成功
+			# 信封与恢复指引，而重跑仍会撞上同一个占用者、坏路径或坏库
+			# （Issue #1050、#1135、#1212、#1266、#1290、#1350）。
 			status = "stopped"
 			error = str(exc)
 			raise

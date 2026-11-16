@@ -4,9 +4,10 @@ import math
 import secrets
 import sqlite3
 import time
+from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Literal, NoReturn, cast
+from typing import Any, Literal, NoReturn, TypeVar, cast, overload
 
 from boss_agent_cli.services.job_identity import deduplicate_job_result
 
@@ -229,6 +230,74 @@ def _has_sqlite_header(path: Path) -> bool:
 		return False
 
 
+_CursorT = TypeVar("_CursorT", bound=sqlite3.Cursor)
+
+
+class _GuardedCursor(sqlite3.Cursor):
+	"""把取数阶段的 SQLite 数据库错误转成缓存层异常（Issue #1350）。
+
+	多页表的 B 树数据页损坏时，`execute()` 可能已经成功返回首行，直到
+	`fetchone` / `fetchall` / 迭代下一行才抛 `sqlite3.DatabaseError`。这些读取
+	路径不经过 `_GuardedConnection` 的执行期转换：`crawl status` / `results`
+	会拿到裸 `sqlite3.DatabaseError` 只给通用 IO 指引，crawl 执行也把坏库当成
+	可恢复的普通停止并无限 resume。这里按 `_translate` 同一口径转换——锁冲突
+	仍走 `CacheBusyError`，SQL 写错的 `ProgrammingError` 保持原样上抛。
+
+	只转换由 `_GuardedConnection` 创建的游标；直接拿普通连接构造的游标保持
+	原生行为，不去包装 `sqlite3.Connection` 之外的路径。
+	"""
+
+	def __init__(self, connection: sqlite3.Connection, /) -> None:
+		super().__init__(connection)
+		self._guarded: _GuardedConnection | None = connection if isinstance(connection, _GuardedConnection) else None
+
+	def _raise_translated(self, exc: sqlite3.DatabaseError) -> NoReturn:
+		if self._guarded is None:
+			raise exc
+		self._guarded._raise_translated(exc)
+
+	def _cursor_call(self, method: str, *args: Any, **kwargs: Any) -> Any:
+		"""调用底层 C 游标方法。
+
+		`sqlite3.Cursor` 的方法不能直接 patch（C 扩展类型），取数阶段坏页的
+		测试通过替换这里注入 `database disk image is malformed`。
+		"""
+		return getattr(super(), method)(*args, **kwargs)
+
+	def _translated_call(self, method: str, *args: Any, **kwargs: Any) -> Any:
+		try:
+			return self._cursor_call(method, *args, **kwargs)
+		except sqlite3.DatabaseError as exc:
+			self._raise_translated(exc)
+
+	def execute(self, *args: Any, **kwargs: Any) -> "_GuardedCursor":
+		self._translated_call("execute", *args, **kwargs)
+		return self
+
+	def executemany(self, *args: Any, **kwargs: Any) -> "_GuardedCursor":
+		self._translated_call("executemany", *args, **kwargs)
+		return self
+
+	def executescript(self, *args: Any, **kwargs: Any) -> "_GuardedCursor":
+		self._translated_call("executescript", *args, **kwargs)
+		return self
+
+	def fetchone(self) -> tuple[Any, ...] | None:
+		return cast("tuple[Any, ...] | None", self._translated_call("fetchone"))
+
+	def fetchmany(self, *args: Any, **kwargs: Any) -> list[tuple[Any, ...]]:
+		return cast("list[tuple[Any, ...]]", self._translated_call("fetchmany", *args, **kwargs))
+
+	def fetchall(self) -> list[tuple[Any, ...]]:
+		return cast("list[tuple[Any, ...]]", self._translated_call("fetchall"))
+
+	def __iter__(self) -> "_GuardedCursor":
+		return self
+
+	def __next__(self) -> tuple[Any, ...]:
+		return cast("tuple[Any, ...]", self._translated_call("__next__"))
+
+
 class _GuardedConnection(sqlite3.Connection):
 	"""把执行期的 SQLite 数据库错误转成缓存层异常。
 
@@ -237,7 +306,8 @@ class _GuardedConnection(sqlite3.Connection):
 	抛到命令层，没有统一装饰器的命令（`shortlist list` / `shortlist add`）
 	stdout 为空并带 traceback（Issue #1174）。`clean` / `stats` 自己开的连接
 	早已按 `CacheDatabaseInvalid` 归一（Issue #1139），这里把 CacheStore 的
-	连接也收进同一口径。
+	连接也收进同一口径。`execute` / `cursor` 返回的游标由 `_GuardedCursor`
+	包装，取数阶段才暴露的坏页同样转换（Issue #1350）。
 
 	两种错误保持原样上抛：busy 锁冲突由 `CacheBusyError` 单独表示（等锁重试，
 	不是数据损坏）；`ProgrammingError` 是代码把 SQL 或绑定参数写错了，不能被
@@ -264,21 +334,36 @@ class _GuardedConnection(sqlite3.Connection):
 			raise exc
 		raise translated from exc
 
+	@overload
+	def cursor(self, factory: None = None) -> sqlite3.Cursor: ...
+
+	@overload
+	def cursor(self, factory: Callable[[sqlite3.Connection], _CursorT]) -> _CursorT: ...
+
+	def cursor(self, factory: Callable[[sqlite3.Connection], Any] | None = None) -> Any:
+		"""返回受保护游标；显式传入的自定义 factory 保持调用方语义。"""
+		return super().cursor(_GuardedCursor if factory is None else factory)
+
+	def _guarded_cursor(self) -> sqlite3.Cursor:
+		return super().cursor(_GuardedCursor)
+
 	def execute(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+		# Connection.execute 的默认返回值是普通 sqlite3.Cursor，后续 fetchone /
+		# fetchall 不受 _translate 保护；改为在受保护游标上执行（Issue #1350）。
 		try:
-			return super().execute(*args, **kwargs)
+			return self._guarded_cursor().execute(*args, **kwargs)
 		except sqlite3.DatabaseError as exc:
 			self._raise_translated(exc)
 
 	def executemany(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
 		try:
-			return super().executemany(*args, **kwargs)
+			return self._guarded_cursor().executemany(*args, **kwargs)
 		except sqlite3.DatabaseError as exc:
 			self._raise_translated(exc)
 
 	def executescript(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
 		try:
-			return super().executescript(*args, **kwargs)
+			return self._guarded_cursor().executescript(*args, **kwargs)
 		except sqlite3.DatabaseError as exc:
 			self._raise_translated(exc)
 
