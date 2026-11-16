@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.58] - 2026-11-16
+
+### Fixed
+- `boss agent run --dry-run` 遇到上一轮真实运行中断后遗留的 `executing` 待执行行时会打开熔断并改写队列（Issue #1257）：预览的 `process_pending` 把该行转成 `verification-required` 并写入 `stop.json`，之后普通 `agent run` 直接返回 `CIRCUIT_BREAKER_OPEN`，操作者需要额外 `--resume` 才能继续，违反「预览不改写待执行队列」的契约。现在 dry-run 只追加一条 `DRY_RUN` 事件，说明真实运行会把它转为 `verification-required` 并要求人工核对、不会自动重发，不改写队列也不打开熔断；真实运行保持既有行为。
+- `boss agent crawl --run-id` 读取到损坏的本地 crawl run 记录时误报 `INVALID_PARAM`（Issue #1259）：`CacheRecordInvalid` 是 `ValueError` 子类，被参数错误的 `except ValueError` 接住，恢复指引让人去修关键词、城市或 crawl 配置——调整任何参数都不可能修好一条写坏的本地记录。现在单独捕获并返回 `CACHE_RECORD_INVALID`，`next_actions` 指向 `crawl start`（重新创建任务）与 `crawl status`（核对 ID），与 `crawl status` / `crawl resume` 的恢复契约一致。
+
 ## [3.4.57] - 2026-11-16
 
 ### Fixed
