@@ -59,6 +59,20 @@ def test_other_errors_keep_network_error(exc):
 	assert payload["error"]["recoverable"] is True
 
 
+def test_markup_error_becomes_internal_error():
+	"""漏转义的外部字符串让 Rich 抛 MarkupError：同一输入必然复现，不可重试（Issue #1399）。"""
+	from rich.errors import MarkupError
+
+	from boss_agent_cli.display import INTERNAL_ERROR_TYPES
+
+	assert MarkupError in INTERNAL_ERROR_TYPES
+	exc = MarkupError("closing tag '[/bold]' at position 8 doesn't match any open tag")
+	payload = json.loads(_recommend_raising(exc).output)
+	assert payload["error"]["code"] == "INTERNAL_ERROR"
+	assert payload["error"]["recoverable"] is False
+	assert payload["error"]["message"].startswith("recommend 失败: MarkupError: ")
+
+
 @pytest.mark.parametrize(
 	"exc",
 	[

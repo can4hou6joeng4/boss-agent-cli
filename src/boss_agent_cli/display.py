@@ -16,6 +16,7 @@ from typing import Any, Callable
 
 import click
 from rich.console import Console
+from rich.errors import MarkupError
 from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
@@ -496,7 +497,8 @@ def render_job_table(
 		console.print("[yellow]no results[/yellow]")
 		return
 
-	table = Table(title=f"{title} ({len(items)} results)", show_lines=True)
+	# title 可能含外部输入（搜索词等）：整个标题按字面渲染，后缀是代码自己的文本。
+	table = Table(title=f"{escape_markup(title)} ({len(items)} results)", show_lines=True)
 	table.add_column("#", style="dim", width=3)
 	table.add_column("title", style="bold cyan", max_width=30)
 	table.add_column("company", style="green", max_width=20)
@@ -628,10 +630,11 @@ def render_simple_list(
 	columns: list of (header, dict_key, style)
 	"""
 	if not items:
-		console.print(f"[yellow]no {title}[/yellow]")
+		console.print(f"[yellow]no {escape_markup(title)}[/yellow]")
 		return
 
-	table = Table(title=f"{title} ({len(items)})", show_lines=True)
+	# title 可能含外部输入（联系人名、配置路径等）：整个标题按字面渲染。
+	table = Table(title=f"{escape_markup(title)} ({len(items)})", show_lines=True)
 	table.add_column("#", style="dim", width=3)
 	for header, _, style in columns:
 		table.add_column(header, style=style, max_width=25)
@@ -700,10 +703,11 @@ def render_sectioned_record(data: dict[str, Any], *, title: str = "info") -> Non
 def render_string_grid(items: list[str], title: str, *, columns: int = 4) -> None:
 	"""Render a list of strings as a multi-column grid."""
 	if not items:
-		console.print(f"[yellow]no {title}[/yellow]")
+		console.print(f"[yellow]no {escape_markup(title)}[/yellow]")
 		return
 
-	table = Table(title=f"{title} ({len(items)})", show_header=False)
+	# title 可能含外部输入：整个标题按字面渲染。
+	table = Table(title=f"{escape_markup(title)} ({len(items)})", show_header=False)
 	for _ in range(columns):
 		table.add_column(max_width=20)
 
@@ -1061,6 +1065,8 @@ def _with_httpx_only_hint(ctx: Any, hints: dict[str, list[str]] | None) -> dict[
 # 并建议「重试」会让 Agent 反复重试，重试的若是平台请求，还会白白消耗请求预算。
 # PlatformResponseInvalid：平台响应不是 JSON 对象，或深嵌套让 resp.json() 抛
 # RecursionError；同一响应重试必然复现，按 INTERNAL_ERROR（不可恢复）上报（Issue #1368）。
+# MarkupError：Rich 标记解析失败（漏转义的外部字符串进了渲染器）。同一输入必然
+# 复现，且这是 CLI 自身的转义缺陷，不能兜成可重试的网络错误（Issue #1399）。
 INTERNAL_ERROR_TYPES: tuple[type[Exception], ...] = (
 	TypeError,
 	AttributeError,
@@ -1068,6 +1074,7 @@ INTERNAL_ERROR_TYPES: tuple[type[Exception], ...] = (
 	IndexError,
 	OverflowError,
 	PlatformResponseInvalid,
+	MarkupError,
 )
 
 
