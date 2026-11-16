@@ -778,7 +778,9 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 	label = str(_required(inputs, "label"))
 	# 先校验布尔值，再查联系人：非法输入不应产生任何平台请求。
 	remove = _bool_input(inputs, "remove")
-	label_id = int(label) if label.isdigit() else _LABEL_IDS.get(label)
+	# `str.isdigit()` 对 '①' / '²' 这类非 ASCII 数字也为真，但 `int()` 会抛
+	# ValueError，落成可重试的网络错误；只有纯 ASCII 数字串才当 ID（Issue #1306）。
+	label_id = int(label) if label.isascii() and label.isdigit() else _LABEL_IDS.get(label)
 	if label_id is None:
 		raise WorkflowActionError("INVALID_PARAM", f"未知标签: {label}（可选: 新招呼、沟通中、已约面、已获取简历、不合适、收藏）")
 	with context.candidate_platform() as platform:
@@ -1273,7 +1275,7 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 
 	crawl_config = dict((context.config or {}).get("crawl") or {})
 	city = str(_required(inputs, "city"))
-	city_code = CITY_CODES.get(city, city if city.isdigit() else None)
+	city_code = CITY_CODES.get(city, city if city.isascii() and city.isdigit() else None)
 	if city_code is None:
 		raise WorkflowActionError("INVALID_PARAM", f"未知城市: {city}")
 	hook_profile = str(inputs.get("hook_profile") or "none")

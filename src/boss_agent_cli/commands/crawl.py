@@ -132,7 +132,7 @@ def _save_crawl_config(data_dir: Path, updates: dict[str, Any]) -> dict[str, Any
 def _city_code(city: str) -> str:
 	if city in CITY_CODES:
 		return CITY_CODES[city]
-	if city.isdigit():
+	if city.isascii() and city.isdigit():
 		return city
 	raise ValueError("city 必须是支持的城市名称或数字城市代码")
 
