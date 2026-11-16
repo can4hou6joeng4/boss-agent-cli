@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.52] - 2026-11-16
+
+### Fixed
+- `boss crawl` 的停止状态机与导出顺序（Issue #1238）：transport 透传的 wizard 控制信号（`WORKFLOW_STOPPED` / `WORKFLOW_TIMEOUT`）原先落成普通 `stopped`，命令层会给出可重试的 `NETWORK_ERROR` 与会清除 stop 标记的 `crawl resume`；现在按错误码落成 `workflow_stopped` / `timeout_stopped`。最后一页导出移到 `completed` 落库之前，导出失败后再次 `resume` 仍能补齐产物，而不是带着 `completed` 报成功却无文件。
+- `boss crawl` 导出失败原先被兜成 `CRAWL_UNAVAILABLE`（指引用户安装 crawl 依赖），现在映射为不可重试的 `LOCAL_IO_ERROR`；`budget_stopped` / `workflow_stopped` 的 `next_actions` 改为只读的 `crawl status`，`operator_actions` 说明预算已用尽需新建任务、stop 后需要显式 resume。
+
 ## [3.4.51] - 2026-11-16
 
 ### Fixed
