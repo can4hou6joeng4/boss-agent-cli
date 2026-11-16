@@ -18,7 +18,7 @@ from click.testing import CliRunner
 from boss_agent_cli.automation.config import AutomationConfig
 from boss_agent_cli.automation.models import ActionResult, PendingAction, PlatformAction, ReviewItem
 from boss_agent_cli.automation.runner import run_automation_cycle
-from boss_agent_cli.automation.storage import AutomationRunBusy, AutomationStore
+from boss_agent_cli.automation.storage import AutomationControlBusy, AutomationRunBusy, AutomationStateError, AutomationStore
 from boss_agent_cli.main import cli
 
 
@@ -159,13 +159,17 @@ def test_review_approve_reports_run_busy_without_queueing(tmp_path):
 	assert store.read_pending() == []
 
 
-def test_non_lock_operational_error_is_not_translated(tmp_path, monkeypatch):
+def test_non_lock_operational_error_is_reported_as_state_error(tmp_path, monkeypatch):
 	store = AutomationStore(tmp_path)
 
 	def unavailable(*args, **kwargs):
 		raise sqlite3.OperationalError("unable to open database file")
 
 	monkeypatch.setattr("boss_agent_cli.automation.storage.sqlite3.connect", unavailable)
-	with pytest.raises(sqlite3.OperationalError):
+	# 打不开数据库不是锁冲突（不能误报成 busy），也不该让命令丢掉信封：
+	# 按确定性的状态损坏报错（Issue #1304）。
+	with pytest.raises(AutomationStateError) as excinfo:
 		with store.execution_lock():
 			pass
+	assert not isinstance(excinfo.value, AutomationRunBusy)
+	assert not isinstance(excinfo.value, AutomationControlBusy)

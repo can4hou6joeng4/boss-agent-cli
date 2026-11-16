@@ -132,15 +132,21 @@ class AutomationStore:
 		"""
 		connection: sqlite3.Connection | None = None
 		try:
-			connection = sqlite3.connect(self.root / ".run-lock.sqlite3", timeout=0.5)
 			try:
+				connection = sqlite3.connect(self.root / ".run-lock.sqlite3", timeout=0.5)
 				connection.execute("BEGIN IMMEDIATE")
-			except sqlite3.OperationalError as exc:
-				if is_cache_busy_error(exc):
+			except sqlite3.DatabaseError as exc:
+				if isinstance(exc, sqlite3.OperationalError) and is_cache_busy_error(exc):
 					raise AutomationRunBusy(
 						"另一个 boss agent run 正在执行，本次没有发出任何请求"
 					) from exc
-				raise
+				# 锁文件损坏或路径被同名目录占用是确定性本地状态问题：原样上抛
+				# 会让命令丢掉整个信封，或在 agent run 里被兜成可重试的
+				# NETWORK_ERROR（Issue #1304）。
+				raise AutomationStateError(
+					self.root / ".run-lock.sqlite3",
+					f"自动化执行锁无法打开（{exc}）",
+				) from exc
 			yield
 			connection.commit()
 		finally:
@@ -150,23 +156,29 @@ class AutomationStore:
 	@contextmanager
 	def _control_lock(self) -> Iterator[None]:
 		"""Serialize tiny control updates across processes with a bounded wait."""
-		connection = sqlite3.connect(self.root / ".control-lock.sqlite3", timeout=1.0)
+		connection: sqlite3.Connection | None = None
 		try:
 			try:
+				connection = sqlite3.connect(self.root / ".control-lock.sqlite3", timeout=1.0)
 				connection.execute("BEGIN IMMEDIATE")
-			except sqlite3.OperationalError as exc:
+			except sqlite3.DatabaseError as exc:
 				# 锁冲突是 automation 自己的并发边界，不是缓存库问题：直接上抛会被
 				# main 的兜底层报成 CACHE_BUSY 并指向 cache/boss_agent.db，而实际的
 				# 锁文件是 automation/.control-lock.sqlite3（Issue #1251）。
-				if is_cache_busy_error(exc):
+				if isinstance(exc, sqlite3.OperationalError) and is_cache_busy_error(exc):
 					raise AutomationControlBusy(
 						"automation 控制锁正被其他进程占用，本次操作没有生效"
 					) from exc
-				raise
+				# 锁文件损坏 / 路径被同名目录占用：确定性本地状态问题（Issue #1304）。
+				raise AutomationStateError(
+					self.root / ".control-lock.sqlite3",
+					f"自动化控制锁无法打开（{exc}）",
+				) from exc
 			yield
 			connection.commit()
 		finally:
-			connection.close()
+			if connection is not None:
+				connection.close()
 
 	def read_state(self) -> dict[str, Any]:
 		if not self.state_path.exists():

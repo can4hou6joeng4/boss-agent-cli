@@ -14,7 +14,7 @@ from typing import Iterator
 import pytest
 from click.testing import CliRunner
 
-from boss_agent_cli.automation.storage import AutomationControlBusy, AutomationStore
+from boss_agent_cli.automation.storage import AutomationControlBusy, AutomationStateError, AutomationStore
 from boss_agent_cli.main import cli
 
 
@@ -86,13 +86,15 @@ def test_store_control_operations_raise_control_busy(tmp_path, operation):
 	assert not store.state_path.exists()
 
 
-def test_non_lock_operational_error_is_not_translated(tmp_path, monkeypatch):
+def test_non_lock_operational_error_is_reported_as_state_error(tmp_path, monkeypatch):
 	store = _store(tmp_path)
 
 	def unavailable(*args, **kwargs):
 		raise sqlite3.OperationalError("unable to open database file")
 
 	monkeypatch.setattr("boss_agent_cli.automation.storage.sqlite3.connect", unavailable)
-	# 只翻译锁冲突；打不开库之类的错误不能被伪装成「稍后重试即可」的占用。
-	with pytest.raises(sqlite3.OperationalError):
+	# 打不开库不是锁冲突（不能伪装成「稍后重试即可」的占用），也不能裸抛
+	# sqlite 异常让命令丢掉信封：按确定性的状态损坏报错（Issue #1304）。
+	with pytest.raises(AutomationStateError) as excinfo:
 		store.request_stop("manual")
+	assert not isinstance(excinfo.value, AutomationControlBusy)

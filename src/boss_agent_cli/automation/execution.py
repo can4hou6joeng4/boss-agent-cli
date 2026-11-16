@@ -32,6 +32,7 @@ def process_pending(
 	dry_run: bool,
 	*,
 	state: dict[str, Any] | None = None,
+	dispatched: list[bool] | None = None,
 ) -> list[AutomationEvent]:
 	actions = store.read_pending()
 	events: list[AutomationEvent] = []
@@ -94,6 +95,10 @@ def process_pending(
 			actions[index] = _pending_with_status(item, "executing")
 			store.write_pending(actions)
 			actions[index] = item
+			# 队列已把这一行标成 executing：接下来动作可能真的发出，控制锁
+			# 冲突的语义要按「可能已生效」处理（Issue #1307）。
+			if dispatched is not None:
+				dispatched[0] = True
 		try:
 			status, event_reason = execute_or_dry_run(adapter, guard, decision, ref, dry_run)
 		except RequestBudgetExceeded as exc:
@@ -137,6 +142,8 @@ def process_ref(
 	platform: str,
 	dry_run: bool,
 	ref: ConversationRef,
+	*,
+	dispatched: list[bool] | None = None,
 ) -> AutomationEvent:
 	conversation = adapter.read_conversation(ref)
 	candidate_key = conversation.title or str(conversation.fingerprint) or ref.id
@@ -159,6 +166,10 @@ def process_ref(
 			status = EventStatus.CIRCUIT_BREAKER_OPEN if safety.circuit_breaker else EventStatus.STOPPED_BY_SAFETY
 			event_reason = safety.reason
 	elif status is EventStatus.AUTO_EXECUTED or status is EventStatus.DRY_RUN:
+		# 真实执行会向平台发请求：先标记，之后控制锁冲突按「可能已生效」处理
+		# （Issue #1307）。
+		if dispatched is not None and not dry_run:
+			dispatched[0] = True
 		status, event_reason = execute_or_dry_run(adapter, guard, decision, ref, dry_run)
 		# 只有真正执行成功才把动作记进对话阶段；dry-run 写 prior 会让下一次
 		# 真实运行误判「问卷已发」并跳过它（Issue #889）。
