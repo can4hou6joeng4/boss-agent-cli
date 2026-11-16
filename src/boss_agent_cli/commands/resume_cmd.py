@@ -74,15 +74,17 @@ def _load_resume(ctx: click.Context, store: ResumeStore, name: str) -> ResumeDat
 	Agent 照提示只能看到一份空列表，再 `resume init` 又被同名文件挡住
 	（RESUME_ALREADY_EXISTS），恢复链在这里断掉。
 	"""
-	resume = store.get(name)
+	resume, load_error = store.get_with_error(name)
 	if resume is not None:
 		return resume
-	if store.is_corrupt(name):
+	if load_error is not None:
+		# 消息带字段级原因：手写 JSON 的修复者要知道是哪个字段、期望什么类型，
+		# 而不是只看到「无法读取」（Issue #1189）。
 		handle_error_output(
 			ctx,
 			"resume",
 			code="RESUME_FILE_INVALID",
-			message=f"简历文件 '{name}.json' 损坏，无法读取",
+			message=f"简历文件 '{name}.json' 损坏：{load_error}",
 			recovery_action=(
 				f"修正 resumes/{name}.json 的 JSON 内容后重试，"
 				f"或执行 {_hint_command(ctx, f'resume delete {shell_argument(name)}')} 后重新创建；该文件只存在本机"

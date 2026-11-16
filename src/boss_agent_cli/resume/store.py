@@ -44,39 +44,64 @@ class ResumeStore:
 		列表命令不能因为一份手写坏的文件整体失败，也不能让坏文件假装不存在：
 		调用方据此提示修复或删除重建（`resume init` 遇到同名文件会报
 		``RESUME_ALREADY_EXISTS``，用户否则无从得知该删哪一份）。
+
+		可读性判定与 ``get()`` 共用同一套模型校验：字段类型漂移（``name`` 写成
+		对象、``rows`` 元素写成字符串）的文件在这里同样进损坏名单，不能出现
+		「列表里正常、show/export 报损坏」的矛盾（Issue #1189）。
 		"""
 		results: list[dict[str, Any]] = []
 		corrupt: list[str] = []
 		for path in sorted(self._dir.glob("*.json")):
-			try:
-				raw = json.loads(path.read_text(encoding="utf-8"))
-				if not isinstance(raw, dict):
-					# 手写坏的简历文件不该让整份列表都打不开。
-					corrupt.append(path.stem)
-					continue
-				results.append({
-					"name": raw.get("name", ""),
-					"title": raw.get("title", ""),
-					"updated_at": raw.get("updated_at", ""),
-				})
-			except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+			raw, _ = self._read_payload(path)
+			if raw is None:
 				corrupt.append(path.stem)
+				continue
+			try:
+				dict_to_resume(raw)
+			except (AttributeError, TypeError, ValueError):
+				corrupt.append(path.stem)
+				continue
+			results.append({
+				"name": raw.get("name", ""),
+				"title": raw.get("title", ""),
+				"updated_at": raw.get("updated_at", ""),
+			})
 		return results, corrupt
+
+	@staticmethod
+	def _read_payload(path: Path) -> tuple[dict[str, Any] | None, str | None]:
+		"""读取一份简历的原始 JSON；返回（payload, 读取错误说明）。
+
+		文件不存在返回 ``(None, None)``；语法/编码/权限问题与顶层不是对象都
+		返回错误说明，交给调用方报 ``RESUME_FILE_INVALID``。
+		"""
+		if not path.exists():
+			return None, None
+		try:
+			raw = json.loads(path.read_text(encoding="utf-8"))
+		except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+			return None, f"JSON 读取失败：{exc}"
+		if not isinstance(raw, dict):
+			return None, "顶层必须是 JSON 对象"
+		return raw, None
+
+	def get_with_error(self, name: str) -> tuple[ResumeData | None, str | None]:
+		"""按名称读取简历，并带上读不出来的原因（Issue #1189）。
+
+		``(None, None)`` 表示文件不存在；``(None, 原因)`` 表示文件存在但损坏，
+		命令层据此区分 ``RESUME_NOT_FOUND`` 与 ``RESUME_FILE_INVALID``。
+		"""
+		raw, error = self._read_payload(self._path_for(name))
+		if raw is None:
+			return None, error
+		try:
+			return dict_to_resume(raw), None
+		except (AttributeError, TypeError, ValueError) as exc:
+			return None, str(exc) or type(exc).__name__
 
 	def get(self, name: str) -> ResumeData | None:
 		"""按名称读取简历"""
-		path = self._path_for(name)
-		if not path.exists():
-			return None
-		try:
-			raw = json.loads(path.read_text(encoding="utf-8"))
-			if not isinstance(raw, dict):
-				return None
-			return dict_to_resume(raw)
-		except (json.JSONDecodeError, UnicodeDecodeError, OSError, AttributeError, TypeError):
-			# 字段类型写错（如 personal_info 写成数组）时模型解析会抛 AttributeError：
-			# 与语法损坏同样按「读不出来」处理，避免 resume show 甩 traceback。
-			return None
+		return self.get_with_error(name)[0]
 
 	def save(self, resume: ResumeData) -> None:
 		"""保存/更新简历，自动更新 updated_at"""
