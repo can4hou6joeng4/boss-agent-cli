@@ -28,10 +28,11 @@ from boss_agent_cli.automation.storage import (
 	AutomationStore,
 )
 from boss_agent_cli.ai.service import AIServiceError
-from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
 from boss_agent_cli.commands.ai_cmd import _build_fit_prompt, _create_ai_service
 from boss_agent_cli.commands.crawl import (
 	_LoginSeedUnavailable,
+	_report_corrupt_run,
 	_report_crawl_runtime_missing,
 	_report_login_required,
 	_require_crawl_capabilities,
@@ -217,6 +218,11 @@ def crawl_cmd(
 				boss_command_for_ctx(ctx, "crawl status <run_id>", include_data_dir=True),
 			]},
 		)
+		return
+	except CacheRecordInvalid as exc:
+		# 本地 run 记录损坏不是参数错误：调整关键词或配置永远修不好（Issue #1259）。
+		# 与 crawl status / crawl resume 共用「断点读不出来，重新创建任务」的指引。
+		_report_corrupt_run(ctx, "agent.crawl", run_id or "", exc)
 		return
 	except ValueError as exc:
 		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help", include_data_dir=True)

@@ -246,6 +246,29 @@ def test_agent_crawl_invalid_city_points_at_crawl_config(tmp_path: Path) -> None
 	assert payload["hints"]["next_actions"] == [expected_help]
 
 
+def test_agent_crawl_corrupt_run_record_points_at_recreating_task(tmp_path: Path) -> None:
+	"""本地 run 记录损坏不是参数错误：指引重新创建任务（Issue #1259）。"""
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.create_crawl_run("run-broken", _settings(tmp_path).as_dict(), str(tmp_path / "crawl" / "runs" / "run-broken"))
+		cache._conn.execute("UPDATE crawl_runs SET params = '[]' WHERE run_id = 'run-broken'")
+		cache._conn.commit()
+
+	result = CliRunner().invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "agent", "crawl", "--run-id", "run-broken", "--resume", "test-resume"],
+	)
+
+	assert result.exit_code == 1
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "CACHE_RECORD_INVALID"
+	assert payload["command"] == "agent.crawl"
+	# 参数 / 配置指引修不好一条写坏的本地记录。
+	recovery = payload["error"]["recovery_action"]
+	assert "crawl start" in recovery
+	assert "crawl configure --help" not in recovery
+	assert any("crawl start" in action for action in payload["hints"]["next_actions"])
+
+
 def test_agent_crawl_does_not_process_risk_stopped_runs(tmp_path: Path, monkeypatch) -> None:
 	runner = CliRunner()
 	_init_resume(runner, tmp_path)
