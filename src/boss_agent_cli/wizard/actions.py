@@ -41,7 +41,16 @@ from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up
 from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
 from boss_agent_cli.schema.error_codes import ERROR_CODES
-from boss_agent_cli.search_filters import SearchFilterCriteria, client_is_browser_only, detail_filter_max_pages, resolve_active_level, resolve_welfare_keywords, run_search_pipeline
+from boss_agent_cli.search_filters import (
+	SearchFilterCriteria,
+	client_is_browser_only,
+	detail_filter_max_pages,
+	ensure_supported_city,
+	resolve_active_level,
+	resolve_search_code_params,
+	resolve_welfare_keywords,
+	run_search_pipeline,
+)
 from boss_agent_cli.wizard.models import StepResult, WorkflowInputError, WorkflowStatus
 from boss_agent_cli.wizard.runner import Action, WorkflowActionError, WorkflowControl
 
@@ -137,6 +146,17 @@ def execute_candidate_search(
 		active = resolve_active_level(_optional_str(inputs.get("active")))
 	except ValueError as exc:
 		raise WorkflowActionError("INVALID_PARAM", str(exc), recoverable=True, recovery_action="修正 active 取值后重试") from exc
+	try:
+		_validate_search_filters(inputs)
+	except ValueError as exc:
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			str(exc),
+			recovery_action=(
+				"修正搜索筛选后重试；支持的城市用 boss cities 查看，"
+				"薪资 / 经验 / 学历等可选值在错误信息里已列出"
+			),
+		) from exc
 	criteria = SearchFilterCriteria(
 		query=str(inputs.get("query") or ""),
 		city=_optional_str(inputs.get("city")),
@@ -248,6 +268,26 @@ def _with_items(data: Mapping[str, Any], items: list[dict[str, Any]]) -> dict[st
 
 def _optional_str(value: Any) -> str | None:
 	return str(value) if value is not None and value != "" else None
+
+
+def _validate_search_filters(params: Mapping[str, Any]) -> None:
+	"""按保存入口同口径校验搜索筛选（城市名 + 标签取值域）。
+
+	wizard 的搜索 / 导出 / watch 会直接消费自由输入与存量 watch 参数；未知城市
+	留到 ``search_jobs`` 才抛 ``ValueError``，会被 runner 兜成可重试的
+	``NETWORK_ERROR``；未知薪资 / 经验标签则被 ``*_CODES.get(...)`` 静默丢弃，
+	命令仍报成功（Issue #1338）。
+	"""
+	ensure_supported_city(_optional_str(params.get("city")))
+	resolve_search_code_params(
+		salary=_optional_str(params.get("salary")),
+		experience=_optional_str(params.get("experience")),
+		education=_optional_str(params.get("education")),
+		industry=_optional_str(params.get("industry")),
+		scale=_optional_str(params.get("scale")),
+		stage=_optional_str(params.get("stage")),
+		job_type=_optional_str(params.get("job_type")),
+	)
 
 
 def _bool_input(inputs: Mapping[str, Any], name: str, default: bool = False) -> bool:
@@ -1063,6 +1103,20 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 	return StepResult({"path": str(output), "format": fmt, "count": len(items)}, artifacts=(str(output),))
 
 
+def _saved_search_invalid_error(context: ActionContext, name: str, detail: str) -> WorkflowActionError:
+	# watch 名来自 wizard 的 name 输入、是自由文本：带空格时不加引号，
+	# 照抄 `watch remove 我的 监控` 会把一个名字拆成两个参数。
+	return WorkflowActionError(
+		"SAVED_SEARCH_INVALID",
+		detail,
+		recoverable=True,
+		recovery_action=(
+			f"{_hint_command(context, f'watch remove {shell_argument(name)}')}；"
+			f"再用 {_hint_command(context, f'watch add {shell_argument(name)} <关键词>')} 重建"
+		),
+	)
+
+
 def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	action = str(inputs.get("action") or "list")
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
@@ -1103,6 +1157,12 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 				except ValueError as exc:
 					raise WorkflowActionError("INVALID_PARAM", str(exc)) from exc
 			_required(inputs, "query")
+			try:
+				_validate_search_filters(params)
+			except ValueError as exc:
+				raise WorkflowActionError(
+					"INVALID_PARAM", str(exc), recovery_action="修正 watch 筛选参数后重试"
+				) from exc
 			cache.save_saved_search(name, params)
 			return StepResult({"action": "add", "name": name, "params": params})
 		if action == "remove":
@@ -1112,19 +1172,15 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 		try:
 			record = cache.get_saved_search(name)
 		except SavedSearchParamsError as exc:
-			raise WorkflowActionError(
-				"SAVED_SEARCH_INVALID",
-				str(exc),
-				recoverable=True,
-				# watch 名来自 wizard 的 name 输入、是自由文本：带空格时不加引号，
-				# 照抄 `watch remove 我的 监控` 会把一个名字拆成两个参数。
-				recovery_action=(
-					f"{_hint_command(context, f'watch remove {shell_argument(name)}')}；"
-					f"再用 {_hint_command(context, f'watch add {shell_argument(name)} <关键词>')} 重建"
-				),
-			) from exc
+			raise _saved_search_invalid_error(context, name, str(exc)) from exc
 		if record is None:
 			raise WorkflowActionError("SAVED_SEARCH_NOT_FOUND", f"未找到 watch: {name}")
+		try:
+			_validate_search_filters(record["params"])
+		except ValueError as exc:
+			raise _saved_search_invalid_error(
+				context, name, f"watch {name!r} 的参数已失效：{exc}"
+			) from exc
 		account = account_scope(context.auth())
 		with context.candidate_platform() as platform:
 			result = execute_candidate_search(platform, cache, context.logger, {**record["params"], "account": account})
