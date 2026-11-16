@@ -2,6 +2,15 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.64] - 2026-11-17
+
+### Fixed
+- argv 里的非法字节会解码成 U+DCFF 之类的孤立代理：本地 JSON 写入、`-o` 文本导出、信封序列化与 `config set` 输入边界原先都会抛 `UnicodeEncodeError`，命令 exit 1 但 stdout 没有信封（MCP 拿不到结果）（Issue #1294）。现在写入用 `backslashreplace` 落成 JSON 合法转义，信封序列化后保证可编码，`config set` 直接报 `INVALID_PARAM`，顶层网兜把 `UnicodeError` 归为 `LOCAL_IO_ERROR`。
+- 平台把纳秒时间戳当毫秒传来（`10**17`）或 JSON 的 `1e400` 变成 `inf` 时，`chat` / `chatmsg` / `hr chat` / `pipeline` / `digest` 的时间格式化抛 `ValueError` / `OverflowError`，被兜成可重试的 `NETWORK_ERROR` 或 `INTERNAL_ERROR`（Issue #1295）。现在统一按「无时间」输出。
+- HTML 导出遇到非字符串平台字段（`brandName` 是数字、`skills` 混入非字符串）时 `html.escape` 抛 `AttributeError`，落成 `INTERNAL_ERROR`，而 md / csv 正常（Issue #1296）。现在统一按文本转义。
+- pipeline 聚合排序遇到混合类型的 `brandName` / `title` 时跨类型比较抛 `TypeError`，一条漂移记录拖垮整份日报（Issue #1297）。排序键统一转字符串。
+- `pipeline` / `digest` 的 `--now-ts-ms 0` 被真值回退吞掉，测试钩子静默失效（Issue #1298）。现在按显式值处理。
+
 ## [3.4.63] - 2026-11-16
 
 ### Fixed
