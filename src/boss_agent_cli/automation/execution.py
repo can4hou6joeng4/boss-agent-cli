@@ -44,6 +44,21 @@ def process_pending(
 			if item.platform != platform:
 				continue
 			reason = f"pending action {item.id!r} was interrupted while executing"
+			if dry_run:
+				# 预览不是执行：dry-run 不改写队列、不打开熔断（Issue #1257）。
+				# 只报告真实运行会怎么处理这条在途记录，操作者预览后不需要额外
+				# `--resume` 才能继续。
+				event = make_event(
+					platform,
+					item.candidate_key,
+					queued_action(item, store.pending_path),
+					EventStatus.DRY_RUN,
+					item.confidence,
+					f"dry-run: {reason}；真实运行会把它转为 verification-required 并要求人工核对，不会自动重发",
+				)
+				events.append(event)
+				store.append_event(event)
+				break
 			guard.open_circuit_breaker(f"platform verification required: {reason}")
 			actions[index] = _pending_with_status(item, "verification-required")
 			# 队列标记先落盘，再写事件：事件写失败也不会让该行回到可重放状态。
