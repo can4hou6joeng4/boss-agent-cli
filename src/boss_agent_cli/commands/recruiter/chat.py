@@ -94,7 +94,12 @@ def _message_cursor_id(value: Any) -> int | None:
 		# ValueError，让整个聊天历史命令丢掉信封；只认 ASCII 数字串（Issue #1306）。
 		text = value.strip()
 		if text.isascii() and text.isdigit():
-			cursor = int(text)
+			try:
+				cursor = int(text)
+			except (ValueError, OverflowError):
+				# 超过 4300 位的 ASCII 数字串仍会触发 int_max_str_digits 上限；
+				# 漂移字段不能让整条命令落成可重试的网络错误（Issue #1317）。
+				return None
 			return cursor if cursor > 0 else None
 	return None
 

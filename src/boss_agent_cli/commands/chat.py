@@ -91,7 +91,12 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				last_time_str = _format_ts(last_ts)
 			else:
 				last_time_str = item.get("lastTime", "-")
-			last_message_info = item.get("lastMessageInfo") or {}
+			# lastMessageInfo 是对象；平台字段漂移成非空字符串 / 数组 / 数字时
+			# `.get` 会抛 AttributeError，状态的缺失语义本就是「未知」，按缺失处理
+			# （Issue #1317）。
+			last_message_info = item.get("lastMessageInfo")
+			if not isinstance(last_message_info, dict):
+				last_message_info = {}
 			message_status = last_message_info.get("status")
 			msg_status_label = _MSG_STATUS_LABELS.get(int_code(message_status), "未知")
 			return {
@@ -116,8 +121,14 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 		all_friends = [_friend_record(item) for item in items]
 
 		def _matches_filter(friend: dict[str, Any]) -> bool:
+			# 快照里的 last_ts 只认真正的整数：旧格式 / 手工改过的快照可能是
+			# 字符串，与 float 比较会抛 TypeError 打断整次导出（Issue #1317）。
+			# 与 chat_snapshot._unread_count 的 unread 同口径，漂移值按 0（未知）处理。
+			last_ts = friend.get("last_ts")
+			if type(last_ts) is not int:
+				last_ts = 0
 			return (
-				(not cutoff_ts or not friend.get("last_ts") or friend["last_ts"] >= cutoff_ts)
+				(not cutoff_ts or not last_ts or last_ts >= cutoff_ts)
 				and (relation_label is None or friend.get("initiated_by", "未知") == relation_label)
 			)
 
