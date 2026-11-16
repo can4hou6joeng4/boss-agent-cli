@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.api.client import PlatformRiskError
+from boss_agent_cli.api.proxy import ProxyConfigurationError
 from boss_agent_cli.api.zhipin_errors import normalize_risk_code
 from boss_agent_cli.auth.browser import (
 	ReusedSessionStaleError,
@@ -358,6 +359,11 @@ class AuthManager:
 				raise
 			except TokenRefreshFailed:
 				# 刷新链里已经明确失败（例如返回空 stoken），不要二次包装。
+				raise
+			except ProxyConfigurationError:
+				# 代理环境变量非法是确定性配置错误：包装成可重试的
+				# TOKEN_REFRESH_FAILED 只会诱导重试，保留 typed error 交给
+				# 命令层统一映射 INVALID_PARAM（Issue #1423）。
 				raise
 			except Exception as e:
 				raise TokenRefreshFailed(f"Token 刷新失败: {e}") from e

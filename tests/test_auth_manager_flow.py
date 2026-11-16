@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from boss_agent_cli.api.proxy import ProxyConfigurationError
 from boss_agent_cli.auth.manager import AuthManager, TokenRefreshFailed
 
 
@@ -159,6 +160,21 @@ def test_force_refresh_raises_when_no_token(mock_store_cls, tmp_path):
 	manager = AuthManager(tmp_path)
 
 	with pytest.raises(TokenRefreshFailed, match="无法刷新 Token，请重新登录"):
+		manager.force_refresh()
+
+
+@patch("boss_agent_cli.auth.manager.TokenStore")
+@patch("boss_agent_cli.auth.manager.refresh_stoken", side_effect=ProxyConfigurationError("HTTPS_PROXY"))
+@patch("boss_agent_cli.auth.manager.probe_cdp", return_value=False)
+def test_force_refresh_preserves_proxy_configuration_error(
+	mock_probe_cdp, mock_refresh_stoken, mock_store_cls, tmp_path
+):
+	"""代理配置错误不能被包装成可重试的 TOKEN_REFRESH_FAILED（Issue #1423）。"""
+	current = {"cookies": {"wt2": "cookie"}, "stoken": "old-token", "user_agent": "ua"}
+	mock_store_cls.return_value = _make_store(token=current.copy())
+	manager = AuthManager(tmp_path)
+
+	with pytest.raises(ProxyConfigurationError):
 		manager.force_refresh()
 
 

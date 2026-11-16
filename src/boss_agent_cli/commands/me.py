@@ -3,6 +3,7 @@ from typing import Any
 import click
 
 from boss_agent_cli.api.client import AuthError, PlatformRiskError
+from boss_agent_cli.api.proxy import ProxyConfigurationError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.commands._platform import get_platform_instance
@@ -169,6 +170,14 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 		handle_error_output(
 			ctx, "me", code=e.code, message=str(e), recoverable=recoverable,
 			recovery_action=recovery_action, details=e.details,
+		)
+	except ProxyConfigurationError as e:
+		# 代理环境变量非法是确定性配置错误：重试只会复现，不能兜成可重试的
+		# NETWORK_ERROR（Issue #1423）。
+		recoverable, recovery_action = error_contract_for_code("INVALID_PARAM")
+		handle_error_output(
+			ctx, "me", code="INVALID_PARAM", message=str(e), recoverable=recoverable,
+			recovery_action=recovery_action,
 		)
 	except INTERNAL_ERROR_TYPES as e:
 		recoverable, recovery_action = error_contract_for_code("INTERNAL_ERROR")

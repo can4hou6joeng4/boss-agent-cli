@@ -20,7 +20,7 @@ from rich.console import Console
 from boss_agent_cli import display
 from boss_agent_cli.api import cdp_risk_lock
 from boss_agent_cli.api.client import AccountRiskError
-from boss_agent_cli.api.request_budget import RequestBudget
+from boss_agent_cli.api.request_budget import RequestBudget, RequestBudgetExceeded
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
 from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
@@ -90,6 +90,32 @@ def test_get_crawl_budget_returns_none_for_drifted_timestamp(tmp_path):
 		assert cache.get_crawl_budget("zhipin:all") is None
 
 
+@pytest.mark.parametrize("drifted", [1000.0 + 86400.0, 1000.0 + 1e9])
+def test_reserve_crawl_budget_resets_far_future_reservation(tmp_path, drifted):
+	"""有限远未来值同样是漂移：不能返回巨大等待并继续推向未来（Issue #1422）。"""
+	with _open_cache(tmp_path) as cache:
+		cache._conn.execute(
+			"INSERT OR REPLACE INTO crawl_budget (budget_key, last_request_at) VALUES (?, ?)",
+			("zhipin:all", drifted),
+		)
+		cache._conn.commit()
+		assert cache.reserve_crawl_budget("zhipin:all", now=1000.0, interval=8.0) == 0.0
+		# 坏值被本次预留覆盖，调度自愈。
+		assert cache.get_crawl_budget("zhipin:all") == 1000.0
+
+
+def test_reserve_crawl_budget_keeps_slightly_ahead_reservation(tmp_path):
+	"""略超前的正数是上一次预留的合法槽位，不能被当成漂移清零。"""
+	with _open_cache(tmp_path) as cache:
+		cache._conn.execute(
+			"INSERT OR REPLACE INTO crawl_budget (budget_key, last_request_at) VALUES (?, ?)",
+			("zhipin:all", 1002.0),
+		)
+		cache._conn.commit()
+		assert cache.reserve_crawl_budget("zhipin:all", now=1000.0, interval=8.0) == 10.0
+		assert cache.get_crawl_budget("zhipin:all") == 1010.0
+
+
 @pytest.mark.parametrize("column", ["last_at", "next_at", "cooldown_until"])
 def test_request_budget_attempt_tolerates_drifted_state(tmp_path, column):
 	budget = RequestBudget(tmp_path, interval=0.0, wait_timeout=1.0)
@@ -116,6 +142,90 @@ def test_request_budget_cleans_drifted_attempt_rows(tmp_path):
 	with budget._database() as db:
 		remaining = db.execute("SELECT COUNT(*) FROM request_attempts").fetchone()[0]
 	assert remaining == 1  # 只有本次合法登记的一条
+
+
+@pytest.mark.parametrize("column", ["last_at", "next_at"])
+def test_request_budget_attempt_resets_far_future_state(tmp_path, column):
+	"""有限远未来值不能把每条命令都拒成预算耗尽且永不写回（Issue #1422）。"""
+	budget = RequestBudget(tmp_path, interval=1.5, wait_timeout=1.0)
+	with budget._database() as db:
+		db.execute(f"UPDATE request_state SET {column}=? WHERE id=1", (time.time() + 86400.0,))
+	with budget.attempt("test"):
+		pass
+	with budget._database() as db:
+		last_at, next_at, cooldown = db.execute(
+			"SELECT last_at,next_at,cooldown_until FROM request_state WHERE id=1"
+		).fetchone()
+	assert time.time() - last_at < 5
+	assert 0 <= next_at - time.time() < 5
+	assert cooldown == 0.0
+
+
+def test_request_budget_attempt_keeps_short_future_reservation(tmp_path, monkeypatch):
+	"""正数但略超前的 next_at 是合法预留：等到该时间点后执行，不能清零。"""
+	clock = [1000.0]
+	monkeypatch.setattr("boss_agent_cli.api.request_budget.time.time", lambda: clock[0])
+	slept: list[float] = []
+
+	def fake_sleep(seconds, **_kwargs):
+		slept.append(seconds)
+		clock[0] += seconds
+
+	monkeypatch.setattr("boss_agent_cli.api.request_budget.cancellable_sleep", fake_sleep)
+	budget = RequestBudget(tmp_path, interval=1.5, wait_timeout=5.0)
+	with budget._database() as db:
+		db.execute("UPDATE request_state SET next_at=? WHERE id=1", (1001.0,))
+	with budget.attempt("test"):
+		pass
+	assert slept == [pytest.approx(1.0)]
+	with budget._database() as db:
+		next_at = db.execute("SELECT next_at FROM request_state WHERE id=1").fetchone()[0]
+	assert next_at == pytest.approx(1002.5)
+
+
+def test_request_budget_attempt_keeps_legitimate_cooldown(tmp_path, monkeypatch):
+	"""服务器冷却可以长于请求间隔：合法的短冷却不能被当成漂移（Issue #1422）。"""
+	clock = [1000.0]
+	monkeypatch.setattr("boss_agent_cli.api.request_budget.time.time", lambda: clock[0])
+	budget = RequestBudget(tmp_path, interval=1.5, wait_timeout=1.0)
+	with budget._database() as db:
+		db.execute("UPDATE request_state SET cooldown_until=? WHERE id=1", (1005.0,))
+	with pytest.raises(RequestBudgetExceeded) as exc_info:
+		with budget.attempt("test"):
+			pass
+	assert exc_info.value.details["retry_after_seconds"] == pytest.approx(5.0)
+	with budget._database() as db:
+		cooldown = db.execute("SELECT cooldown_until FROM request_state WHERE id=1").fetchone()[0]
+	assert cooldown == pytest.approx(1005.0)
+
+
+def test_request_budget_attempt_bounds_far_future_cooldown(tmp_path, monkeypatch):
+	"""超过本地冷却上限的值按漂移截断并写回，而不是永久阻塞（Issue #1422）。"""
+	clock = [1000.0]
+	monkeypatch.setattr("boss_agent_cli.api.request_budget.time.time", lambda: clock[0])
+	budget = RequestBudget(tmp_path, interval=1.5, wait_timeout=1.0)
+	with budget._database() as db:
+		db.execute("UPDATE request_state SET cooldown_until=? WHERE id=1", (1000.0 + 86400.0,))
+	with pytest.raises(RequestBudgetExceeded) as exc_info:
+		with budget.attempt("test"):
+			pass
+	assert exc_info.value.details["retry_after_seconds"] == pytest.approx(3600.0)
+	with budget._database() as db:
+		cooldown = db.execute("SELECT cooldown_until FROM request_state WHERE id=1").fetchone()[0]
+	assert cooldown == pytest.approx(1000.0 + 3600.0)
+
+
+def test_request_budget_cooldown_overwrites_far_future_drift(tmp_path, monkeypatch):
+	"""有限远未来值不能让 MAX() 永远选中坏值、吞掉服务器冷却（Issue #1422）。"""
+	clock = [1000.0]
+	monkeypatch.setattr("boss_agent_cli.api.request_budget.time.time", lambda: clock[0])
+	budget = RequestBudget(tmp_path, interval=0.0, wait_timeout=0.5)
+	with budget._database() as db:
+		db.execute("UPDATE request_state SET cooldown_until=? WHERE id=1", (1000.0 + 86400.0,))
+	budget.cooldown(10.0)
+	with budget._database() as db:
+		cooldown = db.execute("SELECT cooldown_until FROM request_state WHERE id=1").fetchone()[0]
+	assert cooldown == pytest.approx(1010.0)
 
 
 @pytest.mark.parametrize("drifted", ["later", float("inf")])

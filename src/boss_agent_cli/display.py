@@ -1108,6 +1108,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 			from boss_agent_cli.api._base_client import BrowserChannelRequired
 			from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserSourceUnsupported
 			from boss_agent_cli.api.client import PlatformRiskError
+			from boss_agent_cli.api.proxy import ProxyConfigurationError
 			from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 			from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 
@@ -1227,6 +1228,28 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recovery_action=recovery_action,
 					details=e.details or None,
 					hints=risk_hints,
+				)
+			except ProxyConfigurationError as e:
+				# 代理环境变量非法是确定性配置错误：重试只会复现，且不能静默回退
+				# 直连（出口泄露）。按 INVALID_PARAM 收口，不动网络重试语义
+				# （Issue #1423）。文案由 typed error 提供，不含代理凭据。
+				invalid_recoverable, invalid_recovery = error_contract_for_code(
+					"INVALID_PARAM",
+					fallback_recovery_action="修正或清除 HTTPS_PROXY/ALL_PROXY 等代理环境变量后重试",
+				)
+				handle_error_output(
+					ctx,
+					command_name,
+					code="INVALID_PARAM",
+					message=str(e),
+					recoverable=invalid_recoverable,
+					recovery_action=invalid_recovery,
+					hints={
+						"operator_actions": [
+							"确认 HTTPS_PROXY / ALL_PROXY 形如 scheme://host:port，端口为 1-65535 的整数",
+							"不使用代理时请清除对应环境变量；CLI 不会回退为直连",
+						]
+					},
 				)
 			except RequestBudgetExceeded as e:
 				budget_recoverable, budget_recovery = error_contract_for_code(e.code)

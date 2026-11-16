@@ -16,7 +16,9 @@ from boss_agent_cli.api.browser_client import (
 	_FETCH_SCRIPT,
 	BrowserNavigationError,
 	BrowserSession,
+	RecruiterChatTabRequired,
 	_find_reusable_zhipin_page,
+	_pick_chat_target_ws,
 )
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
 
@@ -870,3 +872,50 @@ def test_request_injects_page_identity_headers() -> None:
 	assert method == "Runtime.evaluate"
 	payload = json.loads(args["expression"].rsplit(")(", 1)[1][:-1])
 	assert payload["identity"] == {"token": "abc", "zp_token": "a~|b~"}
+
+
+# ─── 招聘者聊天页 /json 容器漂移（Issue #1424） ─────────────────────────
+
+
+class _FakeJsonResponse:
+	def __init__(self, payload):
+		self._payload = json.dumps(payload)
+
+	def __enter__(self):
+		return self
+
+	def __exit__(self, *args):
+		return False
+
+	def read(self, *args):
+		return self._payload
+
+
+def _pick_chat_target(payload):
+	with patch("urllib.request.urlopen", return_value=_FakeJsonResponse(payload)):
+		return _pick_chat_target_ws("http://127.0.0.1:9222")
+
+
+@pytest.mark.parametrize(
+	"payload",
+	[
+		{"tabs": []},  # /json 返回对象而不是数组
+		[],
+		[1, "page", None, [], {}],  # 数组混入非对象元素
+		[{"type": "page", "url": "https://www.zhipin.com/web/chat/index", "webSocketDebuggerUrl": 123}],
+		[{"type": "page", "url": "https://www.zhipin.com/web/geek/jobs", "webSocketDebuggerUrl": "ws://x"}],
+	],
+)
+def test_pick_chat_target_ws_malformed_json_is_deterministic(payload):
+	"""不可用页签必须抛确定性错误，而不是让上层报「结果未知」（Issue #1424）。"""
+	with pytest.raises(RecruiterChatTabRequired):
+		_pick_chat_target(payload)
+
+
+def test_pick_chat_target_ws_skips_non_dict_entries():
+	payload = [
+		42,
+		{"type": "page", "url": "https://www.zhipin.com/web/chat/index", "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/abc"},
+	]
+
+	assert _pick_chat_target(payload) == "ws://127.0.0.1:9222/devtools/page/abc"

@@ -16,6 +16,24 @@ import os
 from typing import Mapping, TypedDict
 from urllib.parse import unquote, urlsplit
 
+
+class ProxyConfigurationError(ValueError):
+	"""代理环境变量存在但无法解析成可用代理（Issue #1423）。
+
+	把非法配置静默当成「没有代理」会让 Chromium 直连并泄露真实出口，所以这里
+	抛 typed error，由命令层统一映射为 ``INVALID_PARAM``（确定性配置错误，
+	不是可重试的网络故障）。文案只点名环境变量，绝不回显 URL 或其中的凭据。
+	"""
+
+	def __init__(self, env_key: str | None = None) -> None:
+		self.env_key = env_key
+		label = env_key or "HTTPS_PROXY/ALL_PROXY"
+		super().__init__(
+			f"代理配置无效：{label} 的代理地址或端口无法解析（端口必须是 1-65535 的整数）；"
+			"修正或清除 HTTPS_PROXY/ALL_PROXY 等代理环境变量后重试，不会回退为直连"
+		)
+
+
 class PlaywrightProxy(TypedDict, total=False):
 	"""Subset of Playwright's ``ProxySettings`` this project sets."""
 
@@ -57,11 +75,16 @@ def resolve_proxy(environ: Mapping[str, str] | None = None) -> PlaywrightProxy |
 			break
 	if not raw:
 		return None
-	return parse_proxy_url(raw)
+	return parse_proxy_url(raw, env_key=key)
 
 
-def parse_proxy_url(raw: str) -> PlaywrightProxy | None:
-	"""Convert ``scheme://[user:pass@]host:port`` into a Playwright proxy dict."""
+def parse_proxy_url(raw: str, *, env_key: str | None = None) -> PlaywrightProxy | None:
+	"""Convert ``scheme://[user:pass@]host:port`` into a Playwright proxy dict.
+
+	非法端口（非整数 / 超出 1-65535）与非法 URL 结构抛
+	:class:`ProxyConfigurationError`，而不是静默返回 ``None``：后者会让
+	Chromium 直连，导致 httpx 与浏览器两个通道出口不一致（Issue #1423）。
+	"""
 	raw = raw.strip()
 	if not raw:
 		return None
@@ -69,14 +92,20 @@ def parse_proxy_url(raw: str) -> PlaywrightProxy | None:
 		raw = f"http://{raw}"
 	try:
 		parts = urlsplit(raw)
+		# ``parts.port`` 的求值必须在 try 内：``http://host:abc`` 与
+		# ``http://host:99999`` 都在这里抛 ValueError，此前落在 try 之外，
+		# 变成裸 ValueError 并被命令层兜成可重试的 NETWORK_ERROR。
+		port = parts.port
 	except ValueError:
-		return None
+		raise ProxyConfigurationError(env_key) from None
 	if not parts.hostname:
 		return None
 	scheme = parts.scheme or "http"
-	port = parts.port
 	server = f"{scheme}://{parts.hostname}"
-	if port:
+	if port is not None:
+		if port <= 0:
+			# 显式 :0 不是可用端口；静默省略会变成 scheme 的默认端口。
+			raise ProxyConfigurationError(env_key)
 		server = f"{server}:{port}"
 	proxy: PlaywrightProxy = {"server": server}
 	if parts.username:

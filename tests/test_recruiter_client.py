@@ -718,3 +718,25 @@ def test_context_manager():
 	auth = _make_auth()
 	with BossRecruiterClient(auth) as client:
 		assert client is not None
+
+
+def test_chat_action_missing_tab_is_not_reported_as_unconfirmed():
+	"""聊天页不存在是执行前的确定性失败，不能报「动作可能已生效」（Issue #1424）。"""
+	from boss_agent_cli.api.browser_client import RecruiterChatTabRequired
+
+	client = BossRecruiterClient(_make_auth())
+	browser = MagicMock()
+	browser.evaluate_js.side_effect = RecruiterChatTabRequired()
+
+	with (
+		patch.object(client, "_check_cdp_risk_lock_raw"),
+		patch.object(client, "_get_browser", return_value=browser),
+	):
+		with pytest.raises(RecruiterChatTabRequired):
+			client._run_chat_frontend_action_unpaced(
+				friend_data={"friendId": 1},
+				action_js="",
+				require_security_id=False,
+				settle_ms=0,
+			)
+	client.close()
