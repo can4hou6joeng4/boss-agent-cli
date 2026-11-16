@@ -18,14 +18,19 @@ from boss_agent_cli.cache.store import CacheBusyError, CacheDatabaseInvalid, Cac
 from boss_agent_cli.crawler.controls import CrawlProfilePathInvalid
 from boss_agent_cli.display import (
 	INTERNAL_ERROR_TYPES,
+	RISK_ERROR_CONTRACTS,
 	boss_command,
 	browser_policy_text,
 	error_contract_for_code,
+	platform_error_contract,
+	platform_error_message,
 	risk_error_contract,
 	risk_error_message,
 	shell_argument,
 )
 from boss_agent_cli.output import is_local_io_error
+from boss_agent_cli.schema.error_codes import ERROR_CODES
+from boss_agent_cli.search_filters import SearchPipelinePlatformError
 from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
 from boss_agent_cli.wizard.models import StepResult, WorkflowInputError, WorkflowPlan, WorkflowStatus
 from boss_agent_cli.wizard.store import WorkflowStore
@@ -97,6 +102,56 @@ def _browser_kernel_missing_error(
 
 #: 恢复时发现上一个执行器在写请求结果确认前消失，步骤与 run 落成失败时使用的说明。
 _INTERRUPTED_WRITE_MESSAGE = "上一次执行在写请求结果确认前中断，无法确认操作是否已生效，禁止自动重试"
+
+
+def _search_pipeline_error(
+	exc: SearchPipelinePlatformError,
+	plan: WorkflowPlan,
+	data_dir: Path | None,
+	login_action: str,
+) -> WorkflowActionError:
+	"""搜索管线异常：保留平台错误码与登记表契约。
+
+	搜索动作只读，但错误码决定 Agent 的下一步：登录过期要重新登录、限流要
+	等待、风控要终止。此前这些异常都被 ``except Exception`` 兜成
+	``NETWORK_ERROR`` +「重试当前 run_id」，Agent 会拿同一个过期登录态反复
+	重试（Issue #1384）。风控码仍按 ``RISK_ERROR_CONTRACTS`` 保持终止语义，
+	不透传平台响应原文。
+	"""
+	code = exc.code
+	if code not in ERROR_CODES or code in {"NETWORK_ERROR", "UNKNOWN"}:
+		# 未登记的传输类错误维持原兜底：可重试的网络问题。
+		return WorkflowActionError("NETWORK_ERROR", str(exc), recoverable=True, recovery_action="重试当前 run_id")
+	if code in RISK_ERROR_CONTRACTS:
+		recoverable, recovery_action, _ = platform_error_contract(
+			code,
+			clean_command=boss_command("clean --risk-lock", platform_name=plan.platform, data_dir=data_dir),
+			doctor_command=boss_command("doctor", platform_name=plan.platform, data_dir=data_dir),
+		)
+		return WorkflowActionError(
+			code,
+			risk_error_message(code),
+			recoverable=recoverable,
+			recovery_action=recovery_action,
+		)
+	message = platform_error_message(code, exc.message, "搜索结果获取失败")
+	if code in {"AUTH_EXPIRED", "AUTH_REQUIRED", "TOKEN_REFRESH_FAILED"}:
+		recoverable, _ = error_contract_for_code(code)
+		return WorkflowActionError(
+			code,
+			message,
+			recoverable=recoverable,
+			recovery_action=login_action,
+			details=exc.details,
+		)
+	recoverable, recovery_action, _ = platform_error_contract(code)
+	return WorkflowActionError(
+		code,
+		message,
+		recoverable=recoverable,
+		recovery_action=recovery_action,
+		details=exc.details,
+	)
 
 
 def has_blocked_step(run: Mapping[str, Any]) -> bool:
@@ -445,6 +500,10 @@ class WorkflowRunner:
 					recoverable=False,
 					recovery_action=recovery_action,
 				)
+			except SearchPipelinePlatformError as exc:
+				# 搜索管线把平台错误包成自己的异常：保留原始错误码与契约，
+				# 不能兜成 NETWORK_ERROR（Issue #1384）。
+				error = _search_pipeline_error(exc, plan, data_dir, login_action)
 			except BrowserNavigationError as exc:
 				# 首页导航已经在会话内重试过。这里不再把同一步骤立刻重跑一遍。
 				recoverable, recovery = error_contract_for_code(exc.code)

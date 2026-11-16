@@ -9,7 +9,9 @@ from typing import Any
 
 from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
 from boss_agent_cli.services.file_lock import exclusive_file_lock, run_lock_path
-from boss_agent_cli.wizard.models import WorkflowPlan
+from boss_agent_cli.wizard.models import WorkflowPlan, WorkflowStatus
+
+_VALID_WORKFLOW_STATUSES = frozenset(status.value for status in WorkflowStatus)
 
 
 def _validate_replay_markers(run: dict[str, Any]) -> dict[str, Any]:
@@ -32,6 +34,33 @@ def _validate_replay_markers(run: dict[str, Any]) -> dict[str, Any]:
 				"error.replay_safe",
 				"必须是布尔值；该步骤的写操作可能已经生效，重建任务前先核对平台实际状态",
 			)
+	return run
+
+
+def _validate_statuses(run: dict[str, Any]) -> dict[str, Any]:
+	"""run 与每个 step 的 ``status`` 必须是 ``WorkflowStatus`` 的枚举值。
+
+	恢复去重按 ``status == "completed"`` 判断，结算中断写请求按
+	``status == "running"`` 判断。属性漂移成 ``"Completed"`` / ``NULL`` / 数字
+	后两条判断都不成立：已完成的写步骤会被重跑，``replay_safe: false`` 的在途
+	步骤也不会结算成 blocked。状态没有可猜测的原值，读取边界按记录损坏拒绝，
+	不改写断点。
+	"""
+	run_id = str(run.get("run_id") or "")
+	records = [("workflow_run", run_id, run.get("status"))]
+	records.extend(
+		("workflow_step", f"{run_id}/{step.get('step_name')}", step.get("status")) for step in run.get("steps") or []
+	)
+	for kind, record_id, status in records:
+		if isinstance(status, str) and status in _VALID_WORKFLOW_STATUSES:
+			continue
+		raise CacheRecordInvalid(
+			kind,
+			record_id,
+			"status",
+			f"必须是 {' / '.join(sorted(_VALID_WORKFLOW_STATUSES))} 之一，实际是 {status!r}；"
+			"状态无法识别时不能判断写步骤是否已完成或在途，禁止恢复或重放",
+		)
 	return run
 
 
@@ -66,13 +95,14 @@ class WorkflowStore:
 
 		停止这类控制操作只依赖断点本身：绑定的 crawl 结果读不出来时，
 		也必须能落下停止标记（Issue #1128）。``validate_replay_markers=False``
-		只供停止后的展示使用：停止已经落盘，不因重放标记漂移把它报成失败。
+		只供停止后的展示使用：停止已经落盘，不因重放标记或状态漂移把它报成失败。
 		"""
 		run = self._cache.get_workflow_run(run_id)
 		if run is not None:
 			run["steps"] = self._cache.list_workflow_steps(run_id)
 			if validate_replay_markers:
 				_validate_replay_markers(run)
+				_validate_statuses(run)
 		return run
 
 	def get(self, run_id: str) -> dict[str, Any] | None:
@@ -110,6 +140,7 @@ class WorkflowStore:
 			try:
 				run["steps"] = self._cache.list_workflow_steps(run_id)
 				_validate_replay_markers(run)
+				_validate_statuses(run)
 			except CacheRecordInvalid:
 				corrupt.append(run_id)
 				continue
