@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.31（2026-11-16）：`digest`、`stats`、`chat` 与 `resume export` 的 `-o` 导出统一改为原子写入，写入中途失败时保留上一次的完整导出，不再留下半截文件；失败仍返回 `LOCAL_IO_ERROR` 信封。
 - ✅ v3.4.30（2026-11-16）：`config.json` 的 `role` / `platform` / `browser_source` / `cdp_url`（类型）坏值不再挡住修复入口 `boss config reset`，其余命令仍按参数错误拒绝，显式命令行覆盖保持严格校验。
 - ✅ v3.4.29（2026-11-15）：`history` 与 wizard 候选人详情在非对象平台载荷上不再崩溃；`history` 按空页返回并保持分页未知，向导详情改走职位卡片，两个通道都读不出职位时返回 `JOB_NOT_FOUND`。
 - ✅ v3.4.28（2026-11-15）：断点里的重放标记 `error.replay_safe` 类型漂移时，`wizard --resume` 不再重放结果未知的写步骤；`--resume` / `--status` 与任务列表按 `CACHE_RECORD_INVALID` 拒绝且不改写断点，布尔值与缺省标记行为不变，`--stop` 不受影响。
