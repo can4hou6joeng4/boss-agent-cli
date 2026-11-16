@@ -40,6 +40,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": "不要自动重试：确认目标路径是可写目录（而不是同名的已有文件）、目录权限与磁盘空间正常，修正后再执行",
 	},
+	"AUTOMATION_BUSY": {
+		"message": "招聘自动化控制锁正被其他进程占用",
+		"recoverable": True,
+		"recovery_action": "本次操作没有生效：等待占用 automation/.control-lock.sqlite3 的其他 boss 命令结束后重试；可先用 boss agent stats 查看当前状态。锁文件本身完好，不需要删除",
+	},
 	"AUTOMATION_STATE_INVALID": {
 		"message": "招聘自动化状态文件损坏",
 		"recoverable": True,
