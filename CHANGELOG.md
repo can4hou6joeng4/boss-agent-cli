@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.32] - 2026-11-16
 
 ### Fixed
 - 缓存表结构漂移时不再直接 traceback（Issue #1174）：`shortlist_records` 缺列（旧版本建的库、迁移中断）时，`shortlist list` / `shortlist add` 等走 `CacheStore` 的命令此前把 `sqlite3.OperationalError` 抛到顶层，stdout 为空并带 traceback。现在 `CacheStore` 的连接把执行期数据/结构错误归一为 `CACHE_DATABASE_INVALID` 信封（备份后删除重建的恢复动作），锁冲突仍是可重试的 `CACHE_BUSY`，代码写错的 `ProgrammingError` 保持原样上抛。

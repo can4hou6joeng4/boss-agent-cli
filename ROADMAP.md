@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.32（2026-11-16）：缓存表结构漂移（旧版本建的库缺列、迁移中断）时，`shortlist list` / `shortlist add` 等走 `CacheStore` 的命令不再直接 traceback，改为返回 `CACHE_DATABASE_INVALID` 信封与备份重建指引；锁冲突仍是可重试的 `CACHE_BUSY`，代码写错的 `ProgrammingError` 保持原样上抛。
 - ✅ v3.4.31（2026-11-16）：`digest`、`stats`、`chat` 与 `resume export` 的 `-o` 导出统一改为原子写入，写入中途失败时保留上一次的完整导出，不再留下半截文件；失败仍返回 `LOCAL_IO_ERROR` 信封。
 - ✅ v3.4.30（2026-11-16）：`config.json` 的 `role` / `platform` / `browser_source` / `cdp_url`（类型）坏值不再挡住修复入口 `boss config reset`，其余命令仍按参数错误拒绝，显式命令行覆盖保持严格校验。
 - ✅ v3.4.29（2026-11-15）：`history` 与 wizard 候选人详情在非对象平台载荷上不再崩溃；`history` 按空页返回并保持分页未知，向导详情改走职位卡片，两个通道都读不出职位时返回 `JOB_NOT_FOUND`。
