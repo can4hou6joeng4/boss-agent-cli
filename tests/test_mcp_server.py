@@ -2191,3 +2191,140 @@ def test_call_tool_rejects_empty_friend_ids_array(monkeypatch):
 	assert payload["error"]["code"] == "INVALID_PARAM"
 	assert "friend_ids" in payload["error"]["message"]
 	assert "至少" in payload["error"]["message"]
+
+
+# ── Issue #1236：wizard 空步骤与 argv 文本边界 ────────────────────────
+
+
+def test_wizard_schema_declares_non_empty_requested_steps():
+	tool = next(item for item in TOOLS if item.name == "boss_wizard")
+	requested = tool.input_schema["properties"]["requested_steps"]
+
+	assert requested["minItems"] == 1
+	assert "空数组非法" in requested["description"]
+
+
+def test_call_tool_rejects_empty_wizard_steps_before_spawn(monkeypatch):
+	from boss_agent_cli import mcp_server
+	from types import SimpleNamespace
+
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+
+	called = []
+
+	async def fake_run(*args, **kwargs):
+		called.append(args)
+		raise AssertionError("空 requested_steps 不应触达 CLI")
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+	result = asyncio.run(
+		mcp_server.call_tool(
+			None,
+			CallToolRequestParams(
+				name="boss_wizard",
+				arguments={
+					"action": "run",
+					"role": "candidate",
+					"platform": "zhipin",
+					"goal": "greet",
+					"inputs": {"security_id": "sec-1", "job_id": "job-1", "message": "您好"},
+					"requested_steps": [],
+				},
+			),
+		)
+	)
+
+	payload = json.loads(result.content[0].text)
+	assert result.is_error is True
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "至少需要 1 个元素" in payload["error"]["message"]
+	assert called == []
+
+
+@pytest.mark.parametrize(
+	("value", "expected"),
+	[("a\x00b", "NUL"), ("\ud800", "代理项")],
+	ids=["nul", "surrogate"],
+)
+def test_call_tool_rejects_unsafe_argv_text(monkeypatch, value, expected):
+	from boss_agent_cli import mcp_server
+	from types import SimpleNamespace
+
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+
+	called = []
+
+	async def fake_run(*args, **kwargs):
+		called.append(args)
+		raise AssertionError("非法文本不应触达 CLI")
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+	result = asyncio.run(
+		mcp_server.call_tool(
+			None, CallToolRequestParams(name="boss_search", arguments={"query": value})
+		)
+	)
+
+	payload = json.loads(result.content[0].text)
+	assert result.is_error is True
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert expected in payload["error"]["message"]
+	assert called == []
+
+
+def test_call_tool_rejects_surrogate_nested_in_wizard_inputs(monkeypatch):
+	from boss_agent_cli import mcp_server
+	from types import SimpleNamespace
+
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+
+	called = []
+
+	async def fake_run(*args, **kwargs):
+		called.append(args)
+		raise AssertionError("非法文本不应触达 CLI")
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+	result = asyncio.run(
+		mcp_server.call_tool(
+			None,
+			CallToolRequestParams(
+				name="boss_wizard",
+				arguments={
+					"action": "run",
+					"role": "candidate",
+					"platform": "zhipin",
+					"goal": "ai_assist",
+					"inputs": {"resume": "default", "prompt": "\ud800"},
+				},
+			),
+		)
+	)
+
+	payload = json.loads(result.content[0].text)
+	assert result.is_error is True
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "代理项" in payload["error"]["message"]
+	assert called == []
+
+
+def test_sync_run_boss_rejects_unsafe_text_before_spawn(monkeypatch):
+	def fail(*args, **kwargs):
+		raise AssertionError("非法文本不应启动子进程")
+
+	monkeypatch.setattr(subprocess, "run", fail)
+	result = _run_boss("search", "a\x00b")
+
+	assert result["ok"] is False
+	assert result["error"]["code"] == "INVALID_PARAM"
+	assert "NUL" in result["error"]["message"]

@@ -302,6 +302,9 @@ def _parse_cli_output(
 def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
 	"""Synchronous compatibility entrypoint; MCP handlers use the async path."""
 	cmd = [_BOSS_BIN, "--json", *_BOSS_GLOBAL_ARGS, *args]
+	unsafe_reason = _unsafe_argv_reason(cmd)
+	if unsafe_reason is not None:
+		return _cli_failure(args, "INVALID_PARAM", unsafe_reason)
 	try:
 		result = subprocess.run(
 			cmd,
@@ -463,6 +466,22 @@ def _tool_argument_error(tool_name: str, message: str) -> CallToolResult:
 	)
 
 
+def _unsafe_argv_reason(args: "list[str] | tuple[str, ...]") -> str | None:
+	"""argv 里的 NUL / 孤立代理项返回原因（Issue #1236）。
+
+	两者都能编码在 JSON-RPC 字符串里，但传给子进程时
+	``create_subprocess_exec`` 会抛 ``ValueError``、UTF-8 编码会抛
+	``UnicodeEncodeError``；异常逃出 handler 会被 MCP SDK 变成
+	"Internal server error"，调用方拿不到错误信封与修复指引。
+	"""
+	for arg in args:
+		if "\x00" in arg:
+			return "参数中含 NUL 字符，无法传给底层 boss CLI；请去掉该字符后重试"
+		if any(0xD800 <= ord(char) <= 0xDFFF for char in arg):
+			return "参数中含孤立代理项字符，无法编码为 UTF-8；请修正文本后重试"
+	return None
+
+
 def _declared_arguments(tool_name: str) -> set[str] | None:
 	tool = next((item for item in TOOLS if item.name == tool_name), None)
 	if tool is None:
@@ -578,6 +597,9 @@ async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
 	except ValueError as exc:
 		# 映射层自己拒绝的非法枚举值（Issue #1002）：不能落进默认分支。
 		return _tool_argument_error(params.name, f"参数取值非法：{exc}")
+	unsafe_reason = _unsafe_argv_reason(args)
+	if unsafe_reason is not None:
+		return _tool_argument_error(params.name, unsafe_reason)
 	result = await _run_boss_async(*args, may_write=_tool_may_write(params.name, arguments))
 	# 信封的 ok 是唯一真源，但 MCP 客户端还需要 is_error 才能把失败标成工具错误；
 	# 两者不一致时，ok:false 会被当成一次成功的工具调用。
