@@ -14,7 +14,7 @@ from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserS
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded, request_control
 from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
-from boss_agent_cli.cache.store import CacheBusyError, CacheRecordInvalid, is_cache_busy_error
+from boss_agent_cli.cache.store import CacheBusyError, CacheDatabaseInvalid, CacheRecordInvalid, is_cache_busy_error
 from boss_agent_cli.crawler.controls import CrawlProfilePathInvalid
 from boss_agent_cli.display import (
 	INTERNAL_ERROR_TYPES,
@@ -519,6 +519,18 @@ class WorkflowRunner:
 				# NETWORK_ERROR +「重试当前 run_id」（Issue #1007）。
 				elif is_browser_kernel_missing(str(exc)):
 					error = _browser_kernel_missing_error(exc, plan, data_dir)
+				# 缓存库损坏（含取数阶段才暴露的坏页）是确定性本地失败：重试或恢复
+				# 只会撞上同一个坏库，不能兜成 NETWORK_ERROR +「重试当前 run_id」
+				# （Issue #1362）。与 CLI 路径的 CACHE_DATABASE_INVALID 同口径。
+				elif isinstance(exc, CacheDatabaseInvalid):
+					db_recoverable, db_recovery = error_contract_for_code("CACHE_DATABASE_INVALID")
+					error = WorkflowActionError(
+						"CACHE_DATABASE_INVALID",
+						str(exc),
+						recoverable=db_recoverable,
+						recovery_action=db_recovery,
+						replay_safe=False,
+					)
 				# 本地任务记录写坏同属确定性失败：重试同一条记录永远复现，不能兜成
 				# NETWORK_ERROR +「重试当前 run_id」（Issue #1286）。
 				elif isinstance(exc, CacheRecordInvalid):
