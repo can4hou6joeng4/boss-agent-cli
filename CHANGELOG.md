@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.39] - 2026-11-16
 
 ### Fixed
 - `boss_hr_chatmsg` 的显式游标 0 不再被 MCP 映射层静默吞掉（Issue #1199）：`max_msg_id` 此前用真值判断，传 `0` 时 argv 不含 `--max-msg-id`，工具却返回 `ok=true`，调用方以为翻页生效、实际拿到默认最新一页。现在键存在即下发（显式 `null` 仍在入口剥离），由 CLI 的 `IntRange(min=1)` 返回 `INVALID_PARAM`；schema 标注 `minimum: 1`。
