@@ -1462,7 +1462,7 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 			city_code=city_code,
 			pages=pages,
 			with_detail=with_detail,
-			profile_path=context.data_dir / "crawl" / "chrome-profile",
+			profile_path=(context.data_dir / "crawl" / "chrome-profile").resolve(),
 			chrome_path=crawl_chrome_path(crawl_config.get("chrome_path")),
 			cdp_port=unused_local_port() if raw_port is None else crawl_cdp_port(raw_port),
 			hook_profile=hook_profile,

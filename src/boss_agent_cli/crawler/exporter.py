@@ -65,6 +65,9 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 	csv_path = output_dir / "jobs.csv"
 	xlsx_path = output_dir / "jobs.xlsx"
 	temporaries: list[Path] = []
+	# 替换只能发生在三种序列化都成功之后；记录当前目标，替换失败时错误信息
+	# 才能指向具体产物。
+	current_target: Path | None = None
 	try:
 		json_tmp = _temporary_for(json_path)
 		temporaries.append(json_tmp)
@@ -78,16 +81,25 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 		xlsx_tmp = _temporary_for(xlsx_path)
 		temporaries.append(xlsx_tmp)
 		_write_xlsx(xlsx_tmp, export_rows)
+		# 替换也必须留在 try 内：目标已是目录（或权限 / 磁盘问题）时 os.replace
+		# 抛 OSError，原样上抛会被 _run 兜成 status=stopped 的 ok:true 信封，
+		# 且 `.jobs.*` 临时文件残留（Issue #1346）。
+		for temporary, current_target in ((json_tmp, json_path), (csv_tmp, csv_path), (xlsx_tmp, xlsx_path)):
+			os.replace(temporary, current_target)
 	except CrawlRuntimeUnavailable:
 		for temporary in temporaries:
 			temporary.unlink(missing_ok=True)
 		raise
+	except OSError as exc:
+		for temporary in temporaries:
+			temporary.unlink(missing_ok=True)
+		raise CrawlExportError(
+			f"采集结果无法写出到 {current_target or output_dir}：{type(exc).__name__}: {exc}"
+		) from exc
 	except Exception as exc:
 		for temporary in temporaries:
 			temporary.unlink(missing_ok=True)
-		raise CrawlExportError(f"采集结果无法写出：{type(exc).__name__}: {exc}") from exc
-	for temporary, target in ((json_tmp, json_path), (csv_tmp, csv_path), (xlsx_tmp, xlsx_path)):
-		os.replace(temporary, target)
+		raise CrawlExportError(f"采集结果无法写出到 {output_dir}：{type(exc).__name__}: {exc}") from exc
 	return {"json": str(json_path), "csv": str(csv_path), "xlsx": str(xlsx_path)}
 
 
