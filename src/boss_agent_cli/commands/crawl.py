@@ -41,6 +41,7 @@ from boss_agent_cli.display import (
 	login_action_for_ctx,
 	registry_recovery_for_ctx,
 	render_action_result,
+	risk_lock_persistence_actions,
 	shell_argument,
 	render_record_result,
 )
@@ -409,6 +410,10 @@ def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[s
 		hints = {"operator_actions": [
 			*unlock_operator_actions(boss_command_for_ctx(ctx, "clean --risk-lock", include_data_dir=True)),
 			f"完成人工恢复后，显式执行 {resume_command} 从原断点继续",
+			# 风险锁没写盘时保护只在本进程内存里：不提示会让操作者以为新进程
+			# 也被拦住（Issue #1281，文案与认证错误路径同一真源）。helper 接收
+			# 异常 details 结构，锁本身包成 {"risk_lock": ...}。
+			*risk_lock_persistence_actions({"risk_lock": outcome.risk_lock}),
 		]}
 	elif outcome.status == "budget_stopped":
 		# 预算计数与 settings 都持久化，resume 不会推进（Issue #1238）：只给只读状态。
