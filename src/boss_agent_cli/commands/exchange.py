@@ -3,7 +3,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.commands._contact_lookup import current_friend_security_id_or_emit, resolve_friend_or_emit
+from boss_agent_cli.commands._contact_lookup import current_friend_security_id_or_emit, current_friend_uid_or_emit, resolve_friend_or_emit
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_message_panel
 
 
@@ -28,7 +28,9 @@ def exchange_cmd(ctx: click.Context, security_id: str, exchange_type: str) -> No
 		friend_item = resolve_friend_or_emit(ctx, "exchange", platform, security_id)
 		if friend_item is None:
 			return
-		uid = str(friend_item.get("uid", ""))
+		uid = current_friend_uid_or_emit(ctx, "exchange", friend_item)
+		if uid is None:
+			return
 		friend_name: str = friend_item.get("name") or "-"
 		# securityId 是每请求轮换的令牌，必须用本次 friend_list 返回的新值。
 		fresh_security_id = current_friend_security_id_or_emit(ctx, "exchange", friend_item)

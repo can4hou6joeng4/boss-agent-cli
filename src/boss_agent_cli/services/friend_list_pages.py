@@ -6,6 +6,20 @@ from boss_agent_cli.api.models import dict_items
 MAX_FRIEND_LIST_PAGES = 50
 
 
+def friend_list_page_items(platform_data: dict[str, Any]) -> list[dict[str, Any]]:
+	"""取沟通列表页里的联系人条目。
+
+	``result`` 只有是**非空列表**时才优先使用；平台把 ``result`` 漂移成对象 /
+	数字 / 非空字符串时，``result or friendList`` 会选中这个真值容器，
+	``dict_items`` 返回空列表而合法的 ``friendList`` 永远不会被读取
+	（Issue #1351）。``result`` 缺失或为空列表时沿用既有回退语义。
+	"""
+	result_items = platform_data.get("result")
+	if isinstance(result_items, list) and result_items:
+		return dict_items(result_items)
+	return dict_items(platform_data.get("friendList"))
+
+
 def collect_friend_list_items(
 	platform: Any,
 	*,
@@ -58,7 +72,7 @@ def collect_friend_list_page(
 			platform_data = {}
 		# 列表元素混入 null / 数字 / 字符串时只跳过坏元素（Issue #1141 同一口径），
 		# 否则下游 build_pipeline_items / _friend_record 读键会整条命令崩溃。
-		page_items = dict_items(platform_data.get("result") or platform_data.get("friendList"))
+		page_items = friend_list_page_items(platform_data)
 		if not page_items:
 			break
 

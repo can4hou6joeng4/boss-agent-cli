@@ -29,6 +29,36 @@ def current_friend_security_id_or_emit(
 	return None
 
 
+def current_friend_uid_or_emit(
+	ctx: Any,
+	command: str,
+	friend_item: dict[str, Any],
+) -> str | None:
+	"""读取本次 friend_list 返回的稳定 uid；缺失时安全停止。
+
+	``uid`` 键存在但为 null 时，旧实现 ``str(item.get("uid", ""))`` 会得到
+	字符串 ``"None"``，被当作 gid 发请求或写进 uniqueId / friendId
+	（Issue #1352）。空 uid 不是可用的联系人身份：必须停止，而不是把空值
+	或占位文本发给平台。
+	"""
+	from boss_agent_cli.display import boss_command_for_ctx, handle_error_output
+
+	uid = str(friend_item.get("uid") or "").strip()
+	if uid:
+		return uid
+	chat_cmd = boss_command_for_ctx(ctx, "chat", include_data_dir=True)
+	handle_error_output(
+		ctx,
+		command,
+		code="NETWORK_ERROR",
+		message="沟通列表返回的联系人缺少稳定 uid，已停止执行；按当前列表重试不会改变结果",
+		recoverable=False,
+		recovery_action=f"用 {chat_cmd} 刷新沟通列表并取到联系人 uid 后再执行 {command}",
+		hints={"next_actions": [chat_cmd]},
+	)
+	return None
+
+
 def resolve_friend_or_emit(
 	ctx: Any,
 	command: str,
@@ -70,13 +100,21 @@ def resolve_friend_or_emit(
 		handle_not_supported(ctx, command, exc, fallback_message="当前平台不支持沟通列表能力")
 		return None
 	except FriendLookupLimitExceeded as exc:
+		# 分页上限是确定性结果：按会轮换的 securityId 重试同一段查询不会改变
+		# 结论。与 wizard 的 _candidate_friend 同一口径，给出可执行的 uid 路径
+		# （Issue #1353）。
+		chat_cmd = boss_command_for_ctx(ctx, "chat", include_data_dir=True)
 		handle_error_output(
 			ctx,
 			command,
 			code="NETWORK_ERROR",
 			message=str(exc),
 			recoverable=True,
-			recovery_action="重试",
+			recovery_action=(
+				f"先用 {chat_cmd} 确认联系人仍在沟通列表并取到 uid，再用 uid 重试；"
+				"按会轮换的 securityId 查询超过分页上限时，重试同样的查询不会改变结果"
+			),
+			hints={"next_actions": [chat_cmd]},
 		)
 		return None
 	if friends_error is not None:

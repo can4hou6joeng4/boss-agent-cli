@@ -3,7 +3,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
-from boss_agent_cli.commands._contact_lookup import resolve_friend_or_emit
+from boss_agent_cli.commands._contact_lookup import current_friend_uid_or_emit, resolve_friend_or_emit
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_message_panel
 
 _LABEL_MAP = {
@@ -53,7 +53,9 @@ def mark_cmd(ctx: click.Context, security_id: str, label: str, remove: bool) -> 
 		friend_item = resolve_friend_or_emit(ctx, "mark", platform, security_id)
 		if friend_item is None:
 			return
-		friend_id = str(friend_item.get("uid", ""))
+		friend_id = current_friend_uid_or_emit(ctx, "mark", friend_item)
+		if friend_id is None:
+			return
 		friend_source = friend_item.get("friendSource", 0)
 		friend_name = friend_item.get("name") or "-"
 
