@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.44（2026-11-16）：缓存 TTL、风险锁时间戳与刷新前的登录态读取收口。`search_cache` / `job_desc_cache` 的坏 `created_at` 按过期删除；风险锁 `locked_at` 的超大整数 / `inf` 按时间未知展示且锁仍有效，`raise_if_locked` 保持风控契约；刷新 stoken 前先校验 `cookies` 结构（Issue #1214）。
 - ✅ v3.4.43（2026-11-16）：预算表、`crawl_jobs`、向导展示与风控锁四处本地记录漂移收口。调度时间戳按无历史 / 0 容错并清理 `typeof` 漂移行，坏冷却不再吞掉服务器 429 反馈；`page_no` / `detail_done` 在读取边界校验，`CACHE_RECORD_INVALID` 取代 `ok:true` 的 stopped；历史 `jobs_seen` / `jobs` 漂移降级展示；登录态 `cookies` 结构漂移不再掩盖风控信封（Issue #1212）。
 - ✅ v3.4.42（2026-11-16）：`boss ai` 各命令、`boss agent crawl` 与向导 AI 步骤在构造 `AIService` 前校验 `ai_temperature` / `ai_max_tokens`。坏值（字符串、数组、`bool`、负数、`inf`/`nan`）此前会原样进入请求 payload，由服务商返回 400、只看到泛化的 `AI_API_ERROR`；现在返回 `INVALID_PARAM` 并给出 `boss ai config` 修复命令，向导步骤抛同码错误，`null` 与缺键继续按默认值（Issue #1209）。
 - ✅ v3.4.41（2026-11-16）：`crawl resume --background` 在断点 `updated_at` 列被写成非数字文本时不再返回可重试的 `NETWORK_ERROR`。时间戳与状态排序、排队探测共用同一容错读数，漂移按 0 降级，后台恢复照常排队/启动，预检失败还原时写回归一后的 0.0（Issue #1206）。
