@@ -2,6 +2,14 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.66] - 2026-11-17
+
+### Fixed
+- 向导 `candidate_mark` 从平台返回的联系人记录里读 `friendSource` 后直接 `int()`：字段漂移成非数字字符串时 `ValueError` 被兜成可重试的 `NETWORK_ERROR`（重试同一份数据必然复现），漂移成对象 / 数组时落成 `INTERNAL_ERROR`（Issue #1314）。`friendSource` 只是回传给标签接口的定位参数，现在非数字值一律按缺失的默认 0 处理。
+
+### Docs
+- ROADMAP 中英「已发布 / Released」列表从 v3.4.54 起把新条目直接拼在上一版条目后面，12 条挤成一整行 3000+ 字符（Issue #1312）。现已按版本拆成独立列表项，并新增文档测试断言防止后续发版继续粘连。
+
 ## [3.4.65] - 2026-11-17
 
 ### Fixed
