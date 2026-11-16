@@ -10,7 +10,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from boss_agent_cli.services.friend_list_pages import collect_friend_list_items, collect_friend_list_page
+import pytest
+
+from boss_agent_cli.services.friend_list_pages import (
+	collect_friend_list_items,
+	collect_friend_list_page,
+	friend_list_page_items,
+)
 
 
 class _PagePlatform:
@@ -156,3 +162,33 @@ def test_page_collector_not_truncated_when_empty_page_ends_scan() -> None:
 	assert pages_scanned == 2
 	assert truncated is False
 	assert len(items) == 1
+
+
+# ── result 只含坏元素时回退 friendList（Issue #1402） ─────────────────
+
+
+_BAD_RESULT_ELEMENTS = [
+	pytest.param([None], id="null-element"),
+	pytest.param([5], id="numeric-element"),
+	pytest.param([None, 5, "legacy-payload"], id="mixed-bad-elements"),
+]
+
+
+@pytest.mark.parametrize("result_items", _BAD_RESULT_ELEMENTS)
+def test_result_with_only_bad_elements_falls_back_to_friend_list(result_items: list[Any]) -> None:
+	"""``dict_items`` 跳过坏元素后为空时必须回退，不能把非空 result 当成有效页。"""
+	platform_data = {"result": result_items, "friendList": [{"uid": 10001, "name": "联系人甲"}]}
+
+	assert friend_list_page_items(platform_data) == [{"uid": 10001, "name": "联系人甲"}]
+
+
+def test_result_with_valid_elements_still_wins_over_friend_list() -> None:
+	"""混合坏元素里只要还有对象元素，result 就仍优先于 friendList。"""
+	platform_data = {"result": [None, {"uid": 10001}], "friendList": [{"uid": 20002}]}
+
+	assert friend_list_page_items(platform_data) == [{"uid": 10001}]
+
+
+@pytest.mark.parametrize("platform_data", [{}, {"result": None}, {"friendList": None}])
+def test_missing_or_null_containers_still_return_empty(platform_data: dict[str, Any]) -> None:
+	assert friend_list_page_items(platform_data) == []

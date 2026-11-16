@@ -21,12 +21,20 @@ import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
+from boss_agent_cli.output import is_local_io_error
+from boss_agent_cli.services.json_files import write_json_atomic
+from boss_agent_cli.services.private_files import write_private_bytes
 from boss_agent_cli.services.text_files import write_text_atomic
 
 
 def _write_error(path: Path) -> OSError:
 	"""带 filename 的本地 IO 错误：main 才会归类为 LOCAL_IO_ERROR。"""
 	return OSError(errno.ENOSPC, "No space left on device", str(path))
+
+
+def _fd_level_write_error() -> OSError:
+	"""fd 级写失败的真实形态：os.fsync / handle.write 抛出的 OSError 没有 filename。"""
+	return OSError(errno.ENOSPC, "No space left on device")
 
 
 # ── 服务层 ──────────────────────────────────────────────────────────
@@ -65,6 +73,34 @@ def test_write_text_atomic_newline_passthrough(tmp_path: Path):
 	target = tmp_path / "chat.csv"
 	write_text_atomic(target, "a,b\r\n1,2\r\n", newline="")
 	assert target.read_bytes() == b"a,b\r\n1,2\r\n"
+
+
+# ── fd 级写入失败：异常补上目标路径（Issue #1400） ───────────────────
+
+
+@pytest.mark.parametrize(
+	"write",
+	[
+		pytest.param(lambda path: write_text_atomic(path, "new content"), id="text"),
+		pytest.param(lambda path: write_json_atomic(path, {"new": True}), id="json"),
+		pytest.param(lambda path: write_private_bytes(path, b"new content"), id="private"),
+	],
+)
+def test_fd_level_write_failure_gets_target_filename(write, tmp_path: Path):
+	"""磁盘满（ENOSPC）在 fd 层抛出时 filename 为 None：写入入口要补上目标路径，
+	分类才会落成本地 IO 错误；原文件与目录内容保持不变。"""
+	target = tmp_path / "state.bin"
+	target.write_bytes(b"previous content")
+
+	with patch("os.fsync", side_effect=_fd_level_write_error()):
+		with pytest.raises(OSError) as raised:
+			write(target)
+
+	assert raised.value.errno == errno.ENOSPC
+	assert raised.value.filename == str(target)
+	assert is_local_io_error(raised.value) is True
+	assert target.read_bytes() == b"previous content"
+	assert [item.name for item in tmp_path.iterdir()] == ["state.bin"]
 
 
 # ── 命令层：写入失败给 LOCAL_IO_ERROR，旧文件保留 ────────────────────
@@ -135,6 +171,24 @@ def test_stats_write_failure_returns_local_io_error(tmp_path: Path):
 	target.write_text("上一次的完整报表", encoding="utf-8")
 
 	with patch("boss_agent_cli.commands.stats.write_text_atomic", side_effect=_write_error(target)):
+		result = CliRunner().invoke(
+			cli,
+			["--json", "--data-dir", str(tmp_path), "stats", "--format", "html", "-o", str(target)],
+		)
+
+	_assert_local_io_error(result, target, "上一次的完整报表")
+
+
+def test_stats_fd_level_write_failure_returns_local_io_error(tmp_path: Path):
+	"""os.fsync 在 fd 层抛 ENOSPC（没有 filename）时，信封必须仍不可重试。
+
+	以前只有带 filename 的 OSError 才被归成本地错误，磁盘满会兜成可重试的
+	NETWORK_ERROR，Agent 会无限重试同一条写不进去的命令（Issue #1400）。
+	"""
+	target = tmp_path / "stats.html"
+	target.write_text("上一次的完整报表", encoding="utf-8")
+
+	with patch("os.fsync", side_effect=_fd_level_write_error()):
 		result = CliRunner().invoke(
 			cli,
 			["--json", "--data-dir", str(tmp_path), "stats", "--format", "html", "-o", str(target)],

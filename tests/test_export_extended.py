@@ -70,6 +70,36 @@ def test_write_export_file_stringifies_list_items(tmp_path):
 	assert rows[0]["welfare"] == "True"
 
 
+def test_write_export_file_csv_disables_newline_translation(tmp_path, monkeypatch):
+	"""csv 模块已按行写出 \\r\\n；文本模式默认会再翻译一次，Windows 上变成
+	``\\r\\r\\n``（Issue #1401）。CSV 分支必须显式传 ``newline=""``。"""
+	calls: list[tuple[object, str, dict]] = []
+
+	def capture(path, body, **kwargs):
+		calls.append((path, body, kwargs))
+		return Path(path)
+
+	monkeypatch.setattr("boss_agent_cli.services.job_export.write_text_atomic", capture)
+
+	write_export_file([{"title": "Go"}], "csv", str(tmp_path / "jobs.csv"))
+
+	assert len(calls) == 1
+	_, body, kwargs = calls[0]
+	assert kwargs.get("newline") == ""
+	assert "\r\n" in body
+	assert "\r\r\n" not in body
+
+
+def test_write_export_file_csv_writes_single_crlf(tmp_path):
+	"""落盘产物不能含被二次翻译的 ``\\r\\r\\n``。"""
+	path = tmp_path / "jobs.csv"
+	write_export_file([{"title": "Go"}], "csv", str(path))
+
+	data = path.read_bytes()
+	assert b"\r\n" in data
+	assert b"\r\r\n" not in data
+
+
 def test_write_export_file_keeps_existing_file_on_serialization_failure(tmp_path):
 	"""序列化失败不能截断已有文件：写临时文件后原子替换（Issue #1134）。"""
 	path = tmp_path / "jobs.json"
