@@ -84,6 +84,18 @@ class WorkflowStore:
 			run = enrich_run_with_live_crawl(run, self._cache, job_limit=BROWSE_JOB_LIMIT)
 		return run
 
+	def get_for_result(self, run_id: str) -> dict[str, Any] | None:
+		"""执行结果读取：优先带实时采集叠加，叠加数据损坏时退回断点本身。
+
+		执行结束后返回给命令层的是展示用的完整任务；内部 crawl 记录损坏只影响
+		jobs / live_status 这些叠加字段，不能把已经执行完的任务报成
+		`CACHE_RECORD_INVALID`。断点自身损坏仍按原状抛出（与 #1128 同族）。
+		"""
+		try:
+			return self.get(run_id)
+		except CacheRecordInvalid:
+			return self.get_checkpoint(run_id)
+
 	def list_recent(self, *, limit: int = 20) -> list[dict[str, Any]]:
 		from boss_agent_cli.wizard.live_crawl import (
 			LIST_ENRICH_JOB_LIMIT,

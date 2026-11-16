@@ -246,7 +246,8 @@ class WorkflowRunner:
 				f"wizard --resume {shell_argument(target)}", platform_name=plan.platform, data_dir=data_dir
 			)
 		deadline = started_at + timeout_seconds if timeout_seconds is not None else None
-		existing = self._store.get(run_id)
+		# 控制读取只认断点本身：展示用的实时采集叠加损坏不能挡住恢复（Issue #1176）。
+		existing = self._store.get_checkpoint(run_id)
 		if existing is None:
 			self._store.create(run_id, plan)
 		else:
@@ -256,7 +257,7 @@ class WorkflowRunner:
 		prior_results: dict[str, Any] = {}
 		# waiting_input 步骤结果仍传给 action（如 crawl run_id），但不会跳过重跑。
 		waiting_priors: dict[str, Any] = {}
-		stored_run = self._store.get(run_id)
+		stored_run = self._store.get_checkpoint(run_id)
 		if stored_run is None:
 			raise RuntimeError(f"workflow run {run_id!r} was not persisted")
 		stored_run = self._settle_interrupted_writes(run_id, stored_run)
@@ -294,7 +295,7 @@ class WorkflowRunner:
 					last_result=stored_run.get("last_result"),
 					error=blocked_steps[blocked_step],
 				)
-				return self._store.get(run_id) or stored_run
+				return self._store.get_for_result(run_id) or stored_run
 			return stored_run
 
 		self._store.update_run(
@@ -307,7 +308,7 @@ class WorkflowRunner:
 				continue
 			if step_name in blocked_steps:
 				# 正常路径已在循环前返回；持久化状态异常时也不重放，恢复原失败状态。
-				persisted = self._store.get(run_id) or {}
+				persisted = self._store.get_checkpoint(run_id) or {}
 				self._store.update_run(
 					run_id,
 					status=WorkflowStatus.FAILED.value,
@@ -315,8 +316,8 @@ class WorkflowRunner:
 					last_result=persisted.get("last_result"),
 					error=blocked_steps[step_name],
 				)
-				return self._store.get(run_id) or {}
-			current = self._store.get(run_id) or {}
+				return self._store.get_for_result(run_id) or {}
+			current = self._store.get_checkpoint(run_id) or {}
 			if current.get("status") == WorkflowStatus.STOPPED.value:
 				return current
 			if timeout_seconds is not None and time.monotonic() - started_at >= timeout_seconds:
@@ -371,7 +372,7 @@ class WorkflowRunner:
 						self._store.set_step_error(run_id, step_name, None)
 						# 动作可能在失败前已保存内部任务绑定；自动重试也要读取最新断点，
 						# 否则 crawl_start 会另建任务并丢开原任务的进度与预算（Issue #972）。
-						persisted = self._store.get(run_id) or {}
+						persisted = self._store.get_checkpoint(run_id) or {}
 						checkpoint = next(
 							(step.get("result") for step in persisted.get("steps", []) if step["step_name"] == step_name),
 							None,
@@ -550,16 +551,16 @@ class WorkflowRunner:
 				if on_event:
 					on_event("step_finished", step_name, result_data)
 				if signal == "stop":
-					return self._store.get(run_id) or {}
+					return self._store.get_for_result(run_id) or {}
 				if result.status == WorkflowStatus.WAITING_INPUT:
-					return self._store.get(run_id) or {}
+					return self._store.get_for_result(run_id) or {}
 				continue
 
 			error_data = error.to_dict()
 			failed_status = (
 				WorkflowStatus.STOPPED.value if error.code == "WORKFLOW_STOPPED" else WorkflowStatus.FAILED.value
 			)
-			persisted = self._store.get(run_id) or {}
+			persisted = self._store.get_checkpoint(run_id) or {}
 			step_result = next(
 				(step.get("result") for step in persisted.get("steps", []) if step["step_name"] == step_name),
 				None,
@@ -573,7 +574,7 @@ class WorkflowRunner:
 			)
 			if on_event:
 				on_event("step_failed", step_name, error_data)
-			return self._store.get(run_id) or {}
+			return self._store.get_for_result(run_id) or {}
 
 		self._store.update_run(
 			run_id,
@@ -581,7 +582,7 @@ class WorkflowRunner:
 			current_step=None,
 			last_result=prior_results.get(plan.requested_steps[-1]) if plan.requested_steps else {},
 		)
-		return self._store.get(run_id) or {}
+		return self._store.get_for_result(run_id) or {}
 
 	def _settle_interrupted_writes(self, run_id: str, stored_run: dict[str, Any]) -> dict[str, Any]:
 		"""把上一个执行器留下的在途写请求落成「结果未知」的失败。
@@ -614,7 +615,7 @@ class WorkflowRunner:
 			current_step=first["step_name"],
 			error={**first["error"], "message": _INTERRUPTED_WRITE_MESSAGE},
 		)
-		return self._store.get(run_id) or stored_run
+		return self._store.get_checkpoint(run_id) or stored_run
 
 	@staticmethod
 	def _assert_plan_matches(existing: Mapping[str, Any], plan: WorkflowPlan) -> None:
@@ -659,7 +660,7 @@ class WorkflowRunner:
 			"recoverable": True,
 			"recovery_action": recovery_action,
 		}
-		stored_run = self._store.get(run_id) or {}
+		stored_run = self._store.get_checkpoint(run_id) or {}
 		step_result = next(
 			(step.get("result") for step in stored_run.get("steps", []) if step["step_name"] == step_name),
 			None,
@@ -676,4 +677,4 @@ class WorkflowRunner:
 			last_result=step_result,
 			error=error,
 		)
-		return self._store.get(run_id) or {}
+		return self._store.get_for_result(run_id) or {}
