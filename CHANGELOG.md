@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.58] - 2026-11-16
+
+### Fixed
+- `boss agent run --dry-run` 遇到上一轮真实运行中断后遗留的 `executing` 待执行行时会打开熔断并改写队列（Issue #1257）：预览的 `process_pending` 把该行转成 `verification-required` 并写入 `stop.json`，之后普通 `agent run` 直接返回 `CIRCUIT_BREAKER_OPEN`，操作者需要额外 `--resume` 才能继续，违反「预览不改写待执行队列」的契约。现在 dry-run 只追加一条 `DRY_RUN` 事件，说明真实运行会把它转为 `verification-required` 并要求人工核对、不会自动重发，不改写队列也不打开熔断；真实运行保持既有行为。
+
 ## [3.4.57] - 2026-11-16
 
 ### Fixed
