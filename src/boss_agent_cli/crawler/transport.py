@@ -20,7 +20,7 @@ from boss_agent_cli.api.request_budget import (
 	is_request_stop,
 	retry_after_seconds,
 )
-from boss_agent_cli.crawler.controls import CrawlProfileBusy, CrawlRuntimeUnavailable
+from boss_agent_cli.crawler.controls import CrawlProfileBusy, CrawlProfilePathInvalid, CrawlRuntimeUnavailable
 from boss_agent_cli.crawler.hooks import HookInjection, HookRegistrationError, inject_hook_profile
 from boss_agent_cli.display import risk_error_message
 from boss_agent_cli.services.install_extras import EXTRA_MODULES, extras_requirement, module_available
@@ -193,8 +193,16 @@ class DrissionCrawlerSession:
 		except ImportError as exc:
 			raise CrawlRuntimeUnavailable("crawl 需要 DrissionPage；请安装 boss-agent-cli[crawl]") from exc
 		options = ChromiumOptions()
-		self._profile_path = self._profile_path.resolve()
-		self._profile_path.mkdir(parents=True, exist_ok=True)
+		try:
+			self._profile_path = self._profile_path.resolve()
+			self._profile_path.mkdir(parents=True, exist_ok=True)
+		except OSError as exc:
+			# 路径被同名文件占用或不可写：确定性本地失败。原样上抛会被 _run 兜成
+			# status=stopped + crawl resume，重跑永远复现（Issue #1290）。
+			raise CrawlProfilePathInvalid(
+				f"采集配置目录 {self._profile_path} 无法创建或不是目录（{exc}）；"
+				"请检查该路径是否被同名文件占用，或修复数据目录的写权限后重试"
+			) from exc
 		port_busy = self._port_is_in_use(self._cdp_port)
 		if port_busy:
 			# risk_stopped 后会故意保留采集 Chrome；恢复时附着同一调试端口，而不是报占用。

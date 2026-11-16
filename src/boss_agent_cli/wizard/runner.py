@@ -15,6 +15,7 @@ from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded, request_control
 from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 from boss_agent_cli.cache.store import CacheBusyError, CacheRecordInvalid, is_cache_busy_error
+from boss_agent_cli.crawler.controls import CrawlProfilePathInvalid
 from boss_agent_cli.display import (
 	INTERNAL_ERROR_TYPES,
 	boss_command,
@@ -527,6 +528,20 @@ class WorkflowRunner:
 						str(exc),
 						recoverable=record_recoverable,
 						recovery_action=record_recovery,
+						replay_safe=False,
+					)
+				# 采集配置目录路径不可用是确定性本地失败：重试或恢复只会复现
+				# （Issue #1290），与 CLI 路径的 LOCAL_IO_ERROR 同口径。
+				elif isinstance(exc, CrawlProfilePathInvalid):
+					io_recoverable, _ = error_contract_for_code("LOCAL_IO_ERROR")
+					error = WorkflowActionError(
+						"LOCAL_IO_ERROR",
+						str(exc),
+						recoverable=io_recoverable,
+						recovery_action=(
+							"检查数据目录下的 crawl/chrome-profile 是否被同名文件占用、"
+							"目录权限与磁盘空间是否正常，修正后重新执行"
+						),
 						replay_safe=False,
 					)
 				else:
