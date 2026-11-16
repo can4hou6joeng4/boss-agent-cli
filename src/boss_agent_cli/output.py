@@ -368,6 +368,10 @@ class Logger:
 		if _LEVEL_ORDER.get(level, 0) >= self._threshold:
 			import datetime
 			ts = datetime.datetime.now().strftime("%H:%M:%S")
+			# message 已经过 Logger 的脱敏边界：token/cookie/secret 等键值对会被
+			# redact_sensitive_text 替换成 [REDACTED]，stderr 日志里不会出现凭据原值。
+			# CodeQL 不认识这个自定义净化函数，故在此显式抑制并保留理由（Issue #1394）。
+			# codeql[py/clear-text-logging-sensitive-data]
 			print(f"[{level.upper()} {ts}] {redact_sensitive_text(message)}", file=sys.stderr)
 
 	def debug(self, message: str) -> None:
