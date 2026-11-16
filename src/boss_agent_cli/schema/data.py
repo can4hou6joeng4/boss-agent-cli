@@ -743,7 +743,7 @@ SCHEMA_DATA = {
 						"type": "object",
 						"properties": {
 							"run_id": {"type": "string", "description": "crawl run 标识，由 boss crawl start 返回"},
-							"page": {"type": "integer", "description": "只返回该 crawl 页的结果，省略则返回全部"},
+							"page": {"type": "integer", "minimum": 1, "description": "只返回该 crawl 页的结果，省略则返回全部"},
 							"detail_status": {
 								"type": "string",
 								"enum": ["completed", "pending"],
