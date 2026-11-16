@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 简历 JSON 字段类型漂移的读取判定统一（Issue #1189）：`name` 写成对象、`personal_info` 写成字符串、`rows` 元素写成字符串等坏文件，此前 `resume list` 当正常条目、`resume show` 原样返回错误类型、`resume export --format html` 把 `'str' object has no attribute 'get'` 兜成 `EXPORT_FAILED`。现在模型读取边界按字段校验类型（消息给字段路径与期望类型），list 与按名读取共用同一判定：坏文件进 `hints.corrupt`，show/export 返回 `RESUME_FILE_INVALID` 并指出字段，`resume import` 仍是 `INVALID_PARAM` 字段级提示；合法旧格式不变。
+
 ## [3.4.36] - 2026-11-16
 
 ### Fixed
