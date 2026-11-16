@@ -1311,6 +1311,19 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 				if is_browser_kernel_missing(str(e)):
 					handle_browser_kernel_missing(ctx, command_name, e)
 					return
+				# 孤立代理字符等不可编码 / 不可解码的本地文本是确定性失败：
+				# 重试只会复现，不能兜成 NETWORK_ERROR +「重试」（Issue #1294）。
+				if isinstance(e, UnicodeError):
+					encode_recoverable, encode_recovery = error_contract_for_code("LOCAL_IO_ERROR")
+					handle_error_output(
+						ctx,
+						command_name,
+						code="LOCAL_IO_ERROR",
+						message=f"{command_name} 处理本地文本失败: {e}",
+						recoverable=encode_recoverable,
+						recovery_action=encode_recovery,
+					)
+					return
 				handle_error_output(
 					ctx,
 					command_name,

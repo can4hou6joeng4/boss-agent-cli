@@ -217,6 +217,7 @@ def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
 
 	try:
 		parsed_value = _parse_value(key, value, DEFAULTS[key])
+		_ensure_encodable_value(key, parsed_value)
 		if key == "automation":
 			# config.json 是 agent run/train 的直接输入，先用正式解析器校验内容，
 			# 避免把非法枚举或数值写进去后，运行时才在依赖内部抛 traceback。
@@ -338,6 +339,20 @@ def _emit_write_error(config_path: Path, exc: OSError) -> None:
 		code="LOCAL_IO_ERROR",
 		message=f"写入 {config_path} 失败: {exc.strerror or exc}",
 	)
+
+
+def _ensure_encodable_value(key: str, value: Any) -> None:
+	"""拒绝无法按 UTF-8 编码的孤立代理字符（Issue #1294）。
+
+	argv 里的非法字节会被 Python 解码成 U+DCFF 之类的孤立代理；写进
+	config.json 后，之后每次读配置（config list、启动期加载）都可能让
+	输出信封无法编码、stdout 丢掉整个 JSON。在输入边界直接报
+	INVALID_PARAM，而不是静默写入一份读出来就崩的配置。
+	"""
+	try:
+		json.dumps(value, ensure_ascii=False).encode("utf-8")
+	except UnicodeEncodeError as exc:
+		raise ValueError(f"{key} 含无法按 UTF-8 编码的字符（{exc.reason}）") from exc
 
 
 def _parse_value(key: str, raw: str, default: Any) -> Any:

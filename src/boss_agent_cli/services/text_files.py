@@ -28,7 +28,10 @@ def write_text_atomic(
 	fd, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
 	temporary = Path(temporary_name)
 	try:
-		with os.fdopen(fd, "w", encoding=encoding, newline=newline) as handle:
+		# 与 json_files 同口径：孤立代理字符无法按 UTF-8 编码，严格模式会让
+		# 导出在写盘时抛 UnicodeEncodeError、命令丢掉信封（Issue #1294）。
+		# backslashreplace 写出 ``\udcff`` 字面转义，导出文件仍可正常打开。
+		with os.fdopen(fd, "w", encoding=encoding, newline=newline, errors="backslashreplace") as handle:
 			handle.write(body)
 			handle.flush()
 			os.fsync(handle.fileno())
