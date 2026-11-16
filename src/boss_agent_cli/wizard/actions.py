@@ -30,7 +30,7 @@ from boss_agent_cli.crawler.service import (
 	crawl_int_setting,
 	unused_local_port,
 )
-from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
+from boss_agent_cli.crawler.controls import CrawlProfileBusy, CrawlRuntimeUnavailable
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.digest import build_digest
@@ -1210,6 +1210,17 @@ def _crawl_busy_error(context: ActionContext, exc: CrawlBusyError) -> WorkflowAc
 	)
 
 
+def _crawl_profile_busy_error(context: ActionContext, exc: CrawlProfileBusy) -> WorkflowActionError:
+	"""采集配置目录被另一个运行中的采集 Chrome 占用：本次没有发出请求。"""
+	status_command = _hint_command(context, "crawl status")
+	return WorkflowActionError(
+		"CRAWL_PROFILE_BUSY",
+		str(exc),
+		recoverable=bool(ERROR_CODES["CRAWL_PROFILE_BUSY"]["recoverable"]),
+		recovery_action=f"用 {status_command} 查看正在运行的采集，等它结束后再继续；不要并发使用同一数据目录的采集浏览器",
+	)
+
+
 def _crawl_unavailable_error(context: ActionContext, exc: CrawlRuntimeUnavailable) -> WorkflowActionError:
 	"""crawl 可选依赖缺失：不是网络抖动，重试或恢复只会复现，指向安装（Issue #1050）。"""
 	configure_command = _hint_command(context, "crawl configure")
@@ -1286,6 +1297,8 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 			outcome = _crawl_service(context, cache).create_and_run(settings)
 		except CrawlBusyError as exc:
 			raise _crawl_busy_error(context, exc) from exc
+		except CrawlProfileBusy as exc:
+			raise _crawl_profile_busy_error(context, exc) from exc
 		except CrawlRuntimeUnavailable as exc:
 			raise _crawl_unavailable_error(context, exc) from exc
 		return _crawl_outcome_result(outcome, cache)
@@ -1338,6 +1351,8 @@ def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 			raise WorkflowActionError("CRAWL_RUN_NOT_FOUND", f"未找到 crawl run: {run_id}") from exc
 		except CrawlBusyError as exc:
 			raise _crawl_busy_error(context, exc) from exc
+		except CrawlProfileBusy as exc:
+			raise _crawl_profile_busy_error(context, exc) from exc
 		except CrawlRuntimeUnavailable as exc:
 			raise _crawl_unavailable_error(context, exc) from exc
 		return _crawl_outcome_result(outcome, cache)

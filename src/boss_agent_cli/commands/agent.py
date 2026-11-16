@@ -40,7 +40,7 @@ from boss_agent_cli.commands.crawl import (
 	_seeded_transport_factory,
 	_settings_from_context,
 )
-from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
+from boss_agent_cli.crawler.controls import CrawlProfileBusy, CrawlRuntimeUnavailable
 from boss_agent_cli.crawler.operations import crawl_status, import_crawl_shortlist
 from boss_agent_cli.crawler.service import CrawlBusyError, CrawlService
 from boss_agent_cli.display import (
@@ -252,6 +252,18 @@ def crawl_cmd(
 		return
 	except _LoginSeedUnavailable as exc:
 		_report_login_required(ctx, "agent.crawl", str(exc))
+		return
+	except CrawlProfileBusy as exc:
+		# 同一数据目录的采集配置目录被另一个运行中的 Chrome 占用：本次没有发出
+		# 请求，也不能让下面的 RuntimeError 兜成「安装 crawl 依赖」（Issue #1266）。
+		status_command = boss_command_for_ctx(ctx, "crawl status", include_data_dir=True)
+		handle_error_output(
+			ctx,
+			"agent.crawl",
+			code="CRAWL_PROFILE_BUSY",
+			message=str(exc),
+			hints={"next_actions": [status_command]},
+		)
 		return
 	except CrawlRuntimeUnavailable as exc:
 		_report_crawl_runtime_missing(ctx, "agent.crawl", str(exc))
