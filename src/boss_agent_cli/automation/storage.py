@@ -247,9 +247,17 @@ class AutomationStore:
 				updated_reviews.append(item)
 		if pending is None:
 			return None
+		# 先入队、再标记复核项：入队失败时复核项仍是 review，操作员可以直接重试；
+		# 反过来先写 approved 会让动作永久丢失（Issue #1248）。上一次若在两步之间
+		# 失败，pending 里已有同一个 approved_review_id，不重复入队，只补写复核队列。
+		existing = next(
+			(item for item in self.read_pending() if item.approved_review_id == review_id),
+			None,
+		)
+		if existing is None:
+			self.append_pending(pending)
 		self.write_reviews(updated_reviews)
-		self.append_pending(pending)
-		return pending
+		return existing if existing is not None else pending
 
 	def reject_review(
 		self,
