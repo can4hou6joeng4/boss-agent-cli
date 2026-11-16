@@ -1159,3 +1159,61 @@ def test_reply_falls_back_to_defaults_for_null_ai_numeric_config(tmp_path, monke
 	payload = post.call_args.kwargs["json"]
 	assert payload["max_tokens"] == 4096
 	assert payload["temperature"] == 0.7
+
+
+# ── 响应体深嵌套（Issue #1365） ──────────────────────────────
+
+
+def test_polish_recursive_response_body_returns_envelope(tmp_path, monkeypatch):
+	"""HTTP 200 + 深嵌套响应体（3.11–3.13 解析抛 RecursionError）仍要输出一个信封。"""
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+
+	mock_resp = MagicMock()
+	mock_resp.status_code = 200
+	mock_resp.json.side_effect = RecursionError("maximum recursion depth exceeded")
+	mock_resp.raise_for_status = MagicMock()
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=mock_resp):
+		result = _invoke(runner, tmp_path, ["polish", "test-resume"])
+
+	assert result.exit_code == 1
+	assert result.output.strip(), "stdout 必须包含 JSON 信封，不能为空"
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	# 与既有「响应格式异常」分支一致：响应体解析不了按 AI 服务调用失败上报。
+	assert parsed["error"]["code"] == "AI_API_ERROR"
+	assert parsed["error"]["recoverable"] is True
+
+
+def test_analyze_jd_recursive_error_body_returns_envelope(tmp_path, monkeypatch):
+	"""HTTP 错误 + 深嵌套错误体：_error_detail 不能让 RecursionError 冒泡成 traceback。"""
+	import httpx
+
+	_setup_ai_config(tmp_path, monkeypatch)
+	_setup_resume(tmp_path)
+	runner = CliRunner()
+
+	request = httpx.Request("POST", "https://api.example.com/v1/chat/completions")
+	mock_resp = MagicMock()
+	mock_resp.status_code = 400
+	mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError("bad request", request=request, response=mock_resp)
+	mock_resp.json.side_effect = RecursionError("maximum recursion depth exceeded")
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=mock_resp):
+		result = _invoke(runner, tmp_path, ["analyze-jd", "some jd", "--resume", "test-resume"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "AI_API_ERROR"
+	assert "HTTP 400" in parsed["error"]["message"]
+
+
+def test_error_detail_returns_empty_on_recursion_error():
+	"""错误体深嵌套时 _error_detail 返回空串，不抛 RecursionError。"""
+	from boss_agent_cli.ai.service import _error_detail
+
+	mock_resp = MagicMock()
+	mock_resp.json.side_effect = RecursionError("maximum recursion depth exceeded")
+
+	assert _error_detail(mock_resp) == ""
