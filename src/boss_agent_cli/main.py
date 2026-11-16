@@ -16,6 +16,7 @@ from boss_agent_cli.config import (
 	DEFAULT_REQUEST_DELAY,
 	DEFAULTS,
 	ROLES,
+	expand_budget_directory,
 	is_valid_cdp_url,
 	load_config,
 	validate_request_config,
@@ -87,6 +88,71 @@ def _resolve_data_dir(data_dir: str) -> Path:
 	# 用户可读。历史安装的宽松权限在启动时尽力收紧；共享目录（如 /tmp）不动。
 	tighten_private_directory(resolved)
 	return resolved
+
+
+class _StartupConfigBadParameter(click.BadParameter):
+	"""启动期配置文件错误：恢复指引要直接点名需要修正的文件。
+
+	通用的 ``BadParameter`` 恢复指引停在「用 boss --help 查看参数说明」，
+	而这里要修的是数据目录外的另一份 config.json，必须把路径交给 Agent。
+	"""
+
+	def __init__(self, message: str, *, recovery_action: str, param_hint: str) -> None:
+		super().__init__(message, param_hint=param_hint)
+		self.recovery_action = recovery_action
+
+
+def _validate_group_budget_config(data_dir: Path, cfg: dict[str, Any]) -> None:
+	"""启动期加载并校验共享请求预算目录的 config.json。
+
+	成员目录的 ``request_budget_dir`` 指向组目录时，``RequestBudget.for_data_dir``
+	会在客户端构造阶段读取组目录配置。组配置是坏 JSON 或限流值非法时，那里的
+	``ValueError`` 会被命令层通用兜底报成 ``NETWORK_ERROR`` + ``recoverable=true``，
+	而重试必然复现（Issue #1367）。这里在启动期按参数错误拒绝，命令不会构造客户端。
+	"""
+	raw = cfg.get("request_budget_dir")
+	if raw is None:
+		return
+	if not isinstance(raw, str):
+		# validate_request_config 已把非法类型按参数错误拒绝；这里只防御直接调用。
+		return
+	try:
+		group_dir = expand_budget_directory(raw).resolve()
+	except ValueError as exc:
+		raise _StartupConfigBadParameter(
+			f"成员配置的 request_budget_dir 无效：{exc}",
+			recovery_action=f"修正 {data_dir / 'config.json'} 的 request_budget_dir 后重试",
+			param_hint="config.json 的 request_budget_dir",
+		) from exc
+	if group_dir == data_dir.resolve():
+		# 指向自身时没有共享组目录，仍是启动期已校验过的主目录 config，不重复校验。
+		return
+	group_config_path = group_dir / "config.json"
+	recovery = f"修正或删除 {group_config_path} 后重试；每次平台命令都会在启动期读取该文件"
+	try:
+		group_cfg = load_config(group_config_path)
+	except OSError as exc:
+		raise _StartupConfigBadParameter(
+			f"无法读取共享请求预算目录的配置 {group_config_path}: {exc.strerror or exc}；"
+			"修正文件权限或删除该文件后重试",
+			recovery_action=recovery,
+			param_hint="config.json 的 request_budget_dir",
+		) from exc
+	except (ValueError, TypeError) as exc:
+		# load_config 的消息已带文件路径与行列，统一前缀便于定位是组目录配置。
+		raise _StartupConfigBadParameter(
+			f"共享请求预算目录的配置不可用：{exc}",
+			recovery_action=recovery,
+			param_hint="config.json 的 request_budget_dir",
+		) from exc
+	try:
+		validate_request_config(group_cfg)
+	except (ValueError, TypeError) as exc:
+		raise _StartupConfigBadParameter(
+			f"共享请求预算目录的配置 {group_config_path} 无效：{exc}",
+			recovery_action=recovery,
+			param_hint="config.json 的 request_budget_dir",
+		) from exc
 
 
 def _missing_subcommand_error(ctx: click.Context | None) -> tuple[str, str, dict[str, Any]] | None:
@@ -447,9 +513,13 @@ def _localized_bad_parameter_error(exc: click.ClickException) -> tuple[str, str,
 		return None
 	hint = _parameter_display_name(exc)
 	subject = f"的 {hint} 取值无效" if hint else "的参数取值无效"
+	custom_recovery = getattr(exc, "recovery_action", None)
+	recovery_action = (
+		custom_recovery if isinstance(custom_recovery, str) and custom_recovery else f"用 {path} --help 查看参数说明"
+	)
 	return (
 		f"{path} {subject}：{exc.message}",
-		f"用 {path} --help 查看参数说明",
+		recovery_action,
 		{"next_actions": [f"{path} --help"]},
 	)
 
@@ -936,6 +1006,9 @@ def cli(
 			validate_request_config({**cfg, "request_delay": ctx.obj["delay"]})
 		except ValueError as exc:
 			raise click.BadParameter(str(exc), param_hint="config.json") from exc
+		# 组目录配置只在客户端构造时才会加载；启动期先校验，避免确定性配置
+		# 错误被兜成可重试的 NETWORK_ERROR，也避免命令先构造客户端再失败。
+		_validate_group_budget_config(resolved_dir, cfg)
 
 	raw_level = log_level or cfg["log_level"]
 	# Logger 对未知级别会静默回退到 error 阈值：config.json 手改出的坏值会让
