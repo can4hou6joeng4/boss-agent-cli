@@ -15,6 +15,7 @@ from rich.table import Table
 
 from boss_agent_cli import display
 from boss_agent_cli.wizard.catalog import GOALS
+from boss_agent_cli.wizard.models import count_or_none
 from boss_agent_cli.wizard.prompts import STATUS_LABELS
 
 STEP_LABELS = {
@@ -551,8 +552,8 @@ def render_run(
 		data = _as_mapping(last.get("data")) or {}
 		# Live crawl already finished with jobs — prefer crawl result panel.
 		live = str(data.get("live_crawl_status") or data.get("status") or "")
-		jobs_seen = data.get("jobs_seen")
-		if live == "completed" and int(jobs_seen or 0) > 0:
+		jobs_seen = count_or_none(data.get("jobs_seen"))
+		if live == "completed" and (jobs_seen or 0) > 0:
 			if _render_crawl_summary(run, with_preview=with_preview):
 				return
 		reason = display.escape_markup(
@@ -566,7 +567,7 @@ def render_run(
 		]
 		if inner:
 			lines.append(f"内部采集编号：{inner}")
-		if int(jobs_seen or 0) > 0:
+		if (jobs_seen or 0) > 0:
 			lines.append(f"本地已有职位：{jobs_seen} 条（可在「查看采集进度与产物」中浏览）")
 		operator_actions = last.get("operator_actions") or []
 		if operator_actions:
@@ -1213,17 +1214,17 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 		return False
 
 	crawl_status = data.get("live_crawl_status") or data.get("status") or last.get("status")
-	jobs_seen = data.get("jobs_seen")
+	jobs_seen = count_or_none(data.get("jobs_seen"))
 	completed_like = (
 		str(crawl_status) == "completed"
 		or bool(run.get("effective_completed"))
 		or str(run.get("status")) == "completed"
 	)
-	success = completed_like and int(jobs_seen or 0) > 0
+	jobs_count = jobs_seen or 0
+	success = completed_like and jobs_count > 0
 
 	# ── Headline: strongest visual weight ───────────────────────────
 	headline = Text()
-	jobs_count = int(jobs_seen or 0)
 	if success:
 		headline.append("● ", style="bold green")
 		headline.append(f"{jobs_count} 个职位", style="bold cyan")
@@ -1321,7 +1322,7 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 
 	if preview_rows:
 		shown = len(preview_rows)
-		total = int(jobs_seen or shown)
+		total = jobs_seen or shown
 		section = Text()
 		section.append("职位预览", style="bold")
 		section.append(f"  ·  前 {shown}/{total} 条", style="dim")
@@ -1332,7 +1333,7 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 				section,
 				_render_job_preview_table(
 					preview_rows,
-					total=int(jobs_seen) if jobs_seen is not None else None,
+					total=jobs_seen,
 				),
 			]
 		)

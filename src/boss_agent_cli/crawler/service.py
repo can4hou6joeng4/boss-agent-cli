@@ -632,10 +632,11 @@ class CrawlService:
 		except CrawlStopRequested as exc:
 			status = "stopped"
 			error = str(exc)
-		except (CrawlRuntimeUnavailable, CrawlExportError) as exc:
-			# 可选依赖缺失与导出失败都是确定性失败：保存断点后原样抛出，由入口按
-			# CRAWL_UNAVAILABLE / LOCAL_IO_ERROR 回报。落成普通的 stopped 会让调用方
-			# 拿到成功信封与恢复指引（Issue #1050、#1135）。
+		except (CrawlRuntimeUnavailable, CrawlExportError, CacheRecordInvalid) as exc:
+			# 可选依赖缺失、导出失败与本地记录损坏都是确定性失败：保存断点后原样
+			# 抛出，由入口按 CRAWL_UNAVAILABLE / LOCAL_IO_ERROR / CACHE_RECORD_INVALID
+			# 回报。落成普通的 stopped 会让调用方拿到成功信封与恢复指引，而重跑
+			# 仍会读同一坏记录（Issue #1050、#1135、#1212）。
 			status = "stopped"
 			error = str(exc)
 			raise

@@ -72,7 +72,13 @@ class AuthManager:
 		prior_lock = details.get("risk_lock", {})
 		raw_code = details.get("platform_code", prior_lock.get("platform_code") if isinstance(prior_lock, dict) else None) if error is not None else 37
 		saved_token = token or self._token or {}
-		stoken = saved_token.get("stoken") or saved_token.get("cookies", {}).get(cdp_risk_lock.STOKEN_COOKIE)
+		cookies = saved_token.get("cookies")
+		# 登录态结构漂移（cookies 不是对象）时按缺失处理：这里的 AttributeError
+		# 会替换正在传播的 PlatformRiskError，掩盖 ACCOUNT_RISK / ENVIRONMENT_RISK
+		# 信封并跳过风险锁写入（Issue #1212）。
+		stoken = saved_token.get("stoken") or (
+			cookies.get(cdp_risk_lock.STOKEN_COOKIE) if isinstance(cookies, dict) else None
+		)
 		lock = cdp_risk_lock.RiskLock(
 			stoken_sha256=cdp_risk_lock.hash_stoken(stoken) if isinstance(stoken, str) else None,
 			locked_at=time.time(), cdp_url=cdp_url, reason=reason,
@@ -237,9 +243,9 @@ class AuthManager:
 		return {**token, "_method": "cURL 导入"}
 
 	def _has_primary_cookie(self, token: dict[str, Any]) -> bool:
-		cookies = token.get("cookies", {})
+		cookies = token.get("cookies")
 		primary_cookie = "wt2"
-		return bool(cookies.get(primary_cookie))
+		return isinstance(cookies, dict) and bool(cookies.get(primary_cookie))
 
 	def _verify_cookie(self, token: dict[str, Any]) -> bool:
 		"""验证 Cookie 是否有效。"""

@@ -27,6 +27,20 @@ if TYPE_CHECKING:
 	from boss_agent_cli.api.cdp_risk_lock import RiskLock
 
 
+def _tolerated_timestamp(raw: Any, *, default: float = 0.0) -> float:
+	"""节流元数据的容错读取：漂移值按 0 处理。
+
+	``request_state`` / ``request_attempts`` 是本地调度缓存，坏值不能让所有平台
+	请求抛 ``TypeError``（会被兜成不可重试的 ``INTERNAL_ERROR``），也不能让等待
+	时间无限延长（Issue #1212）。
+	"""
+	try:
+		parsed = float(raw)
+	except (TypeError, ValueError):
+		return default
+	return parsed if math.isfinite(parsed) else default
+
+
 class RequestBudgetExceeded(RuntimeError):
 	"""An unsent operation cannot obtain a slot within its remaining time."""
 
@@ -356,12 +370,25 @@ class RequestBudget:
 				self._check(check)
 				now = time.time()
 				with self._database() as db:
+					# typeof 漂移的行既不会被数值比较删除，也会让 MIN() 返回文本；
+					# 本地调度元数据无保留价值，直接归零让下一轮自愈。
+					db.execute(
+						"UPDATE request_state SET last_at=0,next_at=0 "
+						"WHERE typeof(last_at) NOT IN ('integer','real') OR typeof(next_at) NOT IN ('integer','real')"
+					)
+					db.execute(
+						"UPDATE request_state SET cooldown_until=0 WHERE typeof(cooldown_until) NOT IN ('integer','real')"
+					)
 					last_at, next_at, cooldown = db.execute(
 						"SELECT last_at,next_at,cooldown_until FROM request_state WHERE id=1"
 					).fetchone()
+					last_at = _tolerated_timestamp(last_at)
+					next_at = _tolerated_timestamp(next_at)
+					cooldown = _tolerated_timestamp(cooldown)
 					db.execute("DELETE FROM request_attempts WHERE requested_at <= ?", (now - 60.0,))
+					db.execute("DELETE FROM request_attempts WHERE typeof(requested_at) NOT IN ('integer','real')")
 					count, oldest = db.execute("SELECT COUNT(*),MIN(requested_at) FROM request_attempts").fetchone()
-					window_ready = oldest + 60.0 if count >= self.max_per_minute else 0.0
+					window_ready = _tolerated_timestamp(oldest) + 60.0 if count >= self.max_per_minute else 0.0
 					ready = max(next_at, last_at + self.interval if last_at else 0.0, cooldown, window_ready)
 					wait = max(0.0, ready - now)
 					if wait <= 0:
