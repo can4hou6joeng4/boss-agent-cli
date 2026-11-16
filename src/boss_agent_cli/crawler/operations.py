@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.crawler.service import CrawlSettings
 from boss_agent_cli.display import boss_command, shell_argument
 
 _PUBLIC_JOB_FIELDS = {
@@ -24,6 +25,9 @@ def crawl_status(cache: CacheStore, run_id: str, *, data_dir: Path | None = None
 	run = cache.get_crawl_run(run_id)
 	if run is None:
 		raise KeyError(run_id)
+	# 与 resume 共用同一套断点校验：params 里 query/city 类型漂移时，status 不能
+	# 把错误类型原样放进 ok=true 信封、而 resume 对同一行报损坏（Issue #1192）。
+	settings = CrawlSettings.from_dict(run["params"], run_id=run_id)
 	jobs = cache.list_crawl_jobs(run_id)
 	details_completed = sum(1 for item in jobs if item["detail_done"])
 	checkpoint: dict[str, Any] = {
@@ -38,8 +42,8 @@ def crawl_status(cache: CacheStore, run_id: str, *, data_dir: Path | None = None
 	return {
 		"run_id": run_id,
 		"status": run["status"],
-		"query": run["params"].get("query", ""),
-		"city_code": run["params"].get("city_code", ""),
+		"query": settings.query,
+		"city_code": settings.city_code,
 		"next_page": run["next_page"],
 		"pages_completed": max(0, int(run["next_page"]) - 1),
 		"list_finished": run["list_finished"],
@@ -50,7 +54,14 @@ def crawl_status(cache: CacheStore, run_id: str, *, data_dir: Path | None = None
 			"requests_attempted": run["requests_attempted"],
 			"detail_requests_attempted": run["detail_requests_attempted"],
 			"elapsed_seconds": run["elapsed_seconds"],
-			"limits": run["params"].get("limits", {}),
+			# 输出有效预算而不是原始 params：limits 写成字符串时 resume 按默认值
+			# 执行，status 回显原始坏值会让调用方以为限制真的生效（Issue #1192）。
+			"limits": {
+				"max_requests": settings.max_requests,
+				"max_details": settings.max_details,
+				"max_seconds": settings.max_seconds,
+				"max_retries": settings.max_retries,
+			},
 		},
 		"output_dir": run["output_dir"],
 		"error": run["error"],

@@ -191,6 +191,14 @@ def enrich_runs_with_live_crawl(
 	return [enrich_run_with_live_crawl(run, cache, job_limit=job_limit) for run in runs]
 
 
+def _as_timestamp(value: Any) -> float:
+	"""展示排序用的时间戳；类型漂移按 0 参与排序，不能让任务列表 traceback。"""
+	try:
+		return float(value or 0)
+	except (TypeError, ValueError):
+		return 0.0
+
+
 def sort_runs_for_status_picker(runs: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
 	"""Prefer completed crawls with jobs; de-prioritize stale waiting shells."""
 
@@ -198,7 +206,7 @@ def sort_runs_for_status_picker(runs: Sequence[Mapping[str, Any]]) -> list[dict[
 		status = str(run.get("status") or "")
 		live = str(run.get("live_crawl_status") or "")
 		jobs = int(run.get("live_jobs_seen") or 0)
-		updated = float(run.get("updated_at") or 0)
+		updated = _as_timestamp(run.get("updated_at"))
 		if (status == "completed" or run.get("effective_completed")) and jobs > 0:
 			tier = 0
 		elif status == "completed":

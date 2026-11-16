@@ -113,6 +113,26 @@ def _decode_optional_record(
 	return None if not raw else _decode_record(kind, record_id, column, raw, expected=expected)
 
 
+def _decode_int_column(kind: str, record_id: str, column: str, raw: Any) -> int:
+	"""整数列的类型漂移在读取边界拦下并带上列名。
+
+	SQLite 是动态类型：INTEGER 列里被写进文本（手工改库、早期版本写入）时，
+	命令层的裸 ``int()`` 会抛 ``ValueError``——``BossCliGroup`` 只兜
+	``TypeError / AttributeError / KeyError`` 一类，结果 stdout 为空、只剩
+	traceback，连 JSON 信封都没有（Issue #1192）。
+	"""
+	if isinstance(raw, int) and not isinstance(raw, bool):
+		return raw
+	raise CacheRecordInvalid(kind, record_id, column, f"期望整数，实际是 {type(raw).__name__}")
+
+
+def _decode_bool_column(kind: str, record_id: str, column: str, raw: Any) -> bool:
+	"""0/1 整数列；文本 ``"false"`` 被 ``bool()`` 当成 True 同样是类型漂移。"""
+	if isinstance(raw, int) and not isinstance(raw, bool) and raw in (0, 1):
+		return bool(raw)
+	raise CacheRecordInvalid(kind, record_id, column, f"期望 0 或 1，实际是 {type(raw).__name__}")
+
+
 def _validate_workflow_params(run_id: str, params: dict[str, Any]) -> dict[str, Any]:
 	"""workflow_runs.params 的嵌套结构同样要在读取边界校验。
 
@@ -580,9 +600,13 @@ class CacheStore:
 			"run_id": row[0],
 			"params": _decode_record("crawl_run", run_id, "params", row[1], expected=dict),
 			"status": row[2],
-			"stop_requested": bool(row[3]),
-			"requests_attempted": int(row[4]), "detail_requests_attempted": int(row[5]), "elapsed_seconds": int(row[6]),
-			"next_page": row[7], "list_finished": bool(row[8]), "output_dir": row[9], "error": row[10],
+			"stop_requested": _decode_bool_column("crawl_run", run_id, "stop_requested", row[3]),
+			"requests_attempted": _decode_int_column("crawl_run", run_id, "requests_attempted", row[4]),
+			"detail_requests_attempted": _decode_int_column("crawl_run", run_id, "detail_requests_attempted", row[5]),
+			"elapsed_seconds": _decode_int_column("crawl_run", run_id, "elapsed_seconds", row[6]),
+			"next_page": _decode_int_column("crawl_run", run_id, "next_page", row[7]),
+			"list_finished": _decode_bool_column("crawl_run", run_id, "list_finished", row[8]),
+			"output_dir": row[9], "error": row[10],
 			"hook_results": _decode_record("crawl_run", run_id, "hook_results", row[11], expected=list),
 			"created_at": row[12], "updated_at": row[13],
 		}
