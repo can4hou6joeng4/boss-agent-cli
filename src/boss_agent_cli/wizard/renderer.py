@@ -78,6 +78,7 @@ ERROR_LABELS = {
 	"CRAWL_BUSY": "该采集任务正在另一个窗口或进程中执行",
 	"CRAWL_PROFILE_BUSY": "采集配置目录正被运行中的采集浏览器占用",
 	"CACHE_BUSY": "本地缓存正被另一个进程写入",
+	"CACHE_DATABASE_INVALID": "本地缓存数据库已损坏",
 	"CACHE_RECORD_INVALID": "本地任务记录已损坏",
 	"CRAWL_UNAVAILABLE": "采集所需的可选依赖没有安装",
 	"WORKFLOW_PLAN_MISMATCH": "任务信息与已有记录不一致",
@@ -141,6 +142,7 @@ RECOVERY_LABELS = {
 	"CRAWL_BUSY": "请等它结束；需要确认进度时执行 boss crawl status <run_id>，不要并发恢复同一个任务。",
 	"CRAWL_PROFILE_BUSY": "请等正在运行的采集结束；需要确认进度时执行 boss crawl status <run_id>，不要删除 profile 目录里的 SingletonLock，也不要并发使用同一数据目录的采集浏览器。",
 	"CACHE_BUSY": "请等正在运行的 boss 命令结束后选择“恢复已有任务”继续；库文件本身完好，不需要删除。",
+	"CACHE_DATABASE_INVALID": "先备份 cache/boss_agent.db（--data-dir 指定时在对应目录下），再删除该文件后重新执行；命令会自动重建空库。",
 	"CACHE_RECORD_INVALID": "请返回并重新创建任务；同一条损坏记录重试无法恢复。",
 }
 
