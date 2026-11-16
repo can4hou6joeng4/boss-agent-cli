@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.48] - 2026-11-16
 
 ### Fixed
 - 本地 JSON 读取补齐「超长整数」与「深嵌套」两类确定性解析异常（Issue #1227）：Python 3.11+ 的 `json.loads` 对超过 4300 位的整数字面量抛裸 `ValueError`（不是 `JSONDecodeError`），深嵌套数组在 3.11–3.13 抛 `RecursionError`；只捕 `JSONDecodeError` 的读取边界会让它们穿透成 traceback 或可重试的 `NETWORK_ERROR`。`boss agent stats` / `boss resume show` 之前直接 traceback、stdout 没有信封；`automation/storage.py` 的熔断 latch（`stop.json`）读不出来时没有 fail-closed。现在所有本地解析边界统一按各自契约兜底：熔断 latch 返回 `open: true` / `corrupt: true`，`state.json` 与队列记录报 `AUTOMATION_STATE_INVALID`，简历文件报 `RESUME_FILE_INVALID` / `ResumeImportError`，聊天快照按不可用降级，SQLite 断点报 `CACHE_RECORD_INVALID` / `SavedSearchParamsError`，坏行跳过，配置文件与 `--input-json` / `--set` 结构化值按损坏输入处理。

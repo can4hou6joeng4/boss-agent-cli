@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.48（2026-11-16）：本地 JSON 读取补齐超长整数与深嵌套两类确定性解析异常；熔断 latch 读不出来时 fail-closed，`agent stats` / `resume show` 返回契约错误码而不是 traceback（Issue #1227）。
 - ✅ v3.4.47（2026-11-16）：索引缓存读路径的解析、自洽与展示边界收口。超长整数 / 深嵌套按「没有缓存」返回 `INVALID_PARAM`；`count` 始终等于 `len(jobs)`；孤立代理字符的 `source` 按空串归一；`page` / `saved_at` 加合理区间（Issue #1224）。
 - ✅ v3.4.46（2026-11-16）：索引缓存元信息的类型漂移不再原样进入 `index_snapshot` 信封。非字符串 `source` 按空串、非法 `page` 按 `None`、非法 `count` 回退 `len(jobs)`、非有限 `saved_at` 按 0，`jobs` 可用时不整体丢弃缓存（Issue #1221）。
 - ✅ v3.4.45（2026-11-16）：`boss_hr_last_messages` 的显式空 `friend_ids` 不再退化为抓取当前页候选人。schema 声明 `minItems: 1`，MCP 入口按 schema 校验并返回 `INVALID_PARAM`；缺省仍走 page 模式，合法非空数组行为不变（Issue #1218）。
