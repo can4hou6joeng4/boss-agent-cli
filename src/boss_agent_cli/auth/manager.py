@@ -319,6 +319,10 @@ class AuthManager:
 				raise BrowserSourceUnavailable(
 					policy, attempted=(), detail="stoken 刷新需要 --cdp-url，该来源不会探测默认端口"
 				)
+			cookies = current.get("cookies")
+			if not isinstance(cookies, dict):
+				# 本地登录态结构漂移：不要发起刷新再被兜成泛化的「刷新失败」。
+				raise TokenRefreshFailed("本地登录态缺少 cookies，无法刷新，请重新登录")
 			self._logger.info("Token 过期，正在静默刷新...")
 			try:
 				# 按来源策略优先复用 CDP；风险仍须原样停止，不保证平台接受。
@@ -334,7 +338,7 @@ class AuthManager:
 				else:
 					self._logger.info("CDP 不可用，降级到 headless 刷新 stoken")
 					new_stoken = refresh_stoken(
-						current["cookies"],
+						cookies,
 						current.get("user_agent", ""),
 					)
 				refreshed = {**current, "stoken": new_stoken}
