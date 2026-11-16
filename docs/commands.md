@@ -263,7 +263,7 @@ boss hr location 10001 --yes
 
 `boss agent stop --reason <原因>` 保存独立的停止标志，运行中的旧状态快照不能覆盖它。招聘者自动化在动作边界重新读取停止状态，每个已确认动作及时保存防重结果；风险、正常超时或中断时保存已取得的 checkpoint。平台请求已提交但没有确认结果时，先在官方页面核对，禁止自动重发。写动作派发前先落盘 `executing` 标记：请求发出后中断（Ctrl+C、进程被杀、页面风控）时该行保持 `executing`，下一轮按结果未知转成 `verification-required` 并打开熔断。自动化的页面写动作返回 `ACTION_UNCONFIRMED` 时，本轮事件记为 `PLATFORM_VERIFICATION_REQUIRED` 并打开熔断，对应待执行项标记为 `verification-required` 退出 `pending` 队列；`--resume` 不会把它变回待执行，避免重发可能已生效的动作。
 
-`--dry-run` 只预览决策，不改写任何业务状态：`automation/state.json` 里的对话阶段字段（`questionnaire_sent_at` / `follow_up_sent_at` / `exchange_contact_at`）不会因演练而更新，`pending-actions.jsonl` 里已批准项保持 `pending`，`interview-leads.csv` 也不会追加演练产生的线索。因此先 `--dry-run` 预览、再真实运行，得到的动作序列与从未预览过时一致。
+`--dry-run` 只预览决策，不改写任何业务状态：`automation/state.json` 里的对话阶段字段（`questionnaire_sent_at` / `follow_up_sent_at` / `exchange_contact_at`）不会因演练而更新，`pending-actions.jsonl` 里已批准项保持 `pending`，`interview-leads.csv` 也不会追加演练产生的线索。因此先 `--dry-run` 预览、再真实运行，得到的动作序列与从未预览过时一致。预览遇到上一轮中断遗留的 `executing` 行时同样不改写它、不打开熔断，只报告真实运行会把它转为 `verification-required` 并要求人工核对。
 
 招聘自动化命令的后继与恢复提示显式携带原 `--data-dir` 与 `--role recruiter`：`agent run` / `train` / `stats` / `control` / `stop` 与 `agent review list|approve|reject`、`agent pending list` 的 `hints.next_actions`、终端 `next_steps`、`agent control` 返回的 `data.commands`，以及复核项缺失、`automation` 配置损坏时的 `recovery_action` 都指回同一份 `automation/` 状态。`agent` 组不在 `hr` 组下，重放招聘者命令必须显式带角色，否则会按候选人角色读取另一套本地状态。候选人侧的 `agent crawl` 后继命令只保留目录、不强制角色；AI 未配置时给出的 `ai config` 与 AI 匹配失败后的重试命令同样保留目录。
 

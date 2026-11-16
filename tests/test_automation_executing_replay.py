@@ -107,6 +107,21 @@ def test_dry_run_keeps_action_pending_without_inflight_marker(tmp_path):
 	assert _statuses(store) == [("approved-1", "pending")]
 
 
+def test_dry_run_with_inflight_row_does_not_open_breaker_or_rewrite_queue(tmp_path):
+	store = AutomationStore(tmp_path)
+	_seed(store, status="executing")
+
+	report = run_automation_cycle(_Adapter(), store, AutomationConfig(), platform="zhipin", dry_run=True)
+
+	# 预览不是执行：遗留的 executing 行保持原样，也不装熔断（Issue #1257）。
+	assert _statuses(store) == [("approved-1", "executing")]
+	assert not store.stop_path.exists()
+	assert report.status == "OK"
+	event = report.events[-1]
+	assert event.status == "DRY_RUN"
+	assert "verification-required" in event.reason
+
+
 def test_guard_rejection_restores_pending_before_dispatch(tmp_path):
 	store = AutomationStore(tmp_path)
 	_seed(store)
