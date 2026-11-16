@@ -381,10 +381,14 @@ def test_budget_directory_unknown_home_is_value_error(tmp_path):
 
 @pytest.mark.parametrize("value", [5, True, ["auto"], {"name": "auto"}])
 def test_non_string_browser_source_in_config_returns_envelope(tmp_path, value):
-	"""config.json 里 browser_source 不是字符串时不能 traceback，要按参数错误给信封。"""
+	"""config.json 里 browser_source 不是字符串时不能 traceback，要按参数错误给信封。
+
+	断言用普通命令（doctor）：config 子命令是坏配置的修复入口，见
+	`tests/test_config_repair_exemption.py`，它必须能继续运行以便 reset。
+	"""
 	(tmp_path / "config.json").write_text(json.dumps({"browser_source": value}), encoding="utf-8")
 
-	code, parsed = _invoke("config", "list", tmp_path=tmp_path)
+	code, parsed = _invoke("doctor", tmp_path=tmp_path)
 
 	assert code == 1
 	assert parsed["error"]["code"] == "INVALID_PARAM"
