@@ -422,6 +422,11 @@ class RequestBudget:
 
 	def _store_cooldown(self, seconds: float) -> None:
 		with self._database() as db:
+			row = db.execute("SELECT cooldown_until FROM request_state WHERE id=1").fetchone()
+			# 已有值漂移成文本 / inf 时 SQL 的 MAX(text, real) 会选中文本，
+			# 新冷却被静默吞掉（服务器冷却失效）。先归一再取较大值。
+			existing = _tolerated_timestamp(row[0]) if row is not None else 0.0
 			db.execute(
-				"UPDATE request_state SET cooldown_until=MAX(cooldown_until,?) WHERE id=1", (time.time() + seconds,)
+				"UPDATE request_state SET cooldown_until=? WHERE id=1",
+				(max(existing, time.time() + seconds),),
 			)

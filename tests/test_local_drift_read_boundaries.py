@@ -12,6 +12,7 @@
 
 import io
 import sqlite3
+import time
 
 import pytest
 from rich.console import Console
@@ -115,6 +116,22 @@ def test_request_budget_cleans_drifted_attempt_rows(tmp_path):
 	with budget._database() as db:
 		remaining = db.execute("SELECT COUNT(*) FROM request_attempts").fetchone()[0]
 	assert remaining == 1  # 只有本次合法登记的一条
+
+
+@pytest.mark.parametrize("drifted", ["later", float("inf")])
+def test_request_budget_cooldown_overwrites_drifted_state(tmp_path, drifted):
+	"""SQLite 的 MAX(text, real) 会选中文本，导致服务器冷却被静默吞掉。"""
+	budget = RequestBudget(tmp_path, interval=0.0, wait_timeout=0.5, max_per_minute=3)
+	with budget._database() as db:
+		db.execute("UPDATE request_state SET cooldown_until=? WHERE id=1", (drifted,))
+	budget.cooldown(0.0)
+	with budget._database() as db:
+		value = db.execute("SELECT cooldown_until FROM request_state WHERE id=1").fetchone()[0]
+	assert isinstance(value, float)
+	assert time.time() - 5 <= value <= time.time() + 5
+	# 下一轮 attempt 不会因为坏冷却永久等待。
+	with budget.attempt("test"):
+		pass
 
 
 # ── 2. crawl_jobs ───────────────────────────────────────────────────
