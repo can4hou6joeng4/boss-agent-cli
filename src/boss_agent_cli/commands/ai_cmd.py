@@ -9,7 +9,13 @@ from typing import Any, cast
 
 import click
 
-from boss_agent_cli.ai.config import AIConfigStore, PROVIDER_BASE_URLS, provider_endpoint
+from boss_agent_cli.ai.config import (
+	AIConfigStore,
+	PROVIDER_BASE_URLS,
+	ai_float_setting,
+	ai_int_setting,
+	provider_endpoint,
+)
 from boss_agent_cli.ai.prompts import (
 	CHAT_COACH_PROMPT,
 	CHAT_REPLY_PROMPT,
@@ -50,7 +56,13 @@ def _hint_command(ctx: click.Context, command: str) -> str:
 
 
 def _create_ai_service(ctx: click.Context) -> AIService | None:
-	"""从配置创建 AIService 实例，未配置时返回 None。"""
+	"""从配置创建 AIService 实例，未配置时返回 None。
+
+	数值项在构造前统一校验：``ai_temperature`` / ``ai_max_tokens`` 被写成
+	字符串或数组时，坏值会被原样塞进请求 payload、由服务商返回 400，调用方
+	只看到泛化的平台错误（Issue #1209）。``ValueError`` 由调用方映射成
+	``INVALID_PARAM`` 与修复命令，不能兜成可重试的网络错误。
+	"""
 	store = _get_ai_config_store(ctx)
 	if not store.is_configured():
 		return None
@@ -59,18 +71,33 @@ def _create_ai_service(ctx: click.Context) -> AIService | None:
 	base_url = store.get_base_url()
 	if not api_key or not base_url:
 		return None
+	temperature = ai_float_setting(config, "ai_temperature", 0.7)
+	max_tokens = ai_int_setting(config, "ai_max_tokens", 4096)
 	return AIService(
 		base_url=base_url,
 		api_key=api_key,
 		model=config["ai_model"],
-		temperature=config.get("ai_temperature", 0.7),
-		max_tokens=config.get("ai_max_tokens", 4096),
+		temperature=temperature,
+		max_tokens=max_tokens,
 	)
 
 
 def _require_ai_service(ctx: click.Context) -> AIService | None:
 	"""获取 AIService，未配置时输出错误信封并返回 None。"""
-	svc = _create_ai_service(ctx)
+	try:
+		svc = _create_ai_service(ctx)
+	except ValueError as exc:
+		# 本地配置坏值：重试同一条命令必然复现，给 INVALID_PARAM 与修复命令，
+		# 不能落成可重试的 NETWORK_ERROR（Issue #1209）。
+		handle_error_output(
+			ctx, "ai",
+			code="INVALID_PARAM",
+			message=f"本地 AI 配置损坏：{exc}",
+			recoverable=True,
+			recovery_action=_hint_command(ctx, "ai config --max-tokens 4096 --temperature 0.7"),
+		)
+		ctx.exit(1)
+		return None
 	if svc is None:
 		# provider / model / api_key 都在、只缺端点时，笼统的「AI 服务未配置」会把人
 		# 引去重填 key；真正要改的是 provider 名或补 base_url。

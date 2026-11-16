@@ -6,6 +6,7 @@ Reuses the auth salt file for key derivation.
 
 import hashlib
 import json
+import math
 import os
 import platform
 from base64 import urlsafe_b64encode
@@ -68,6 +69,26 @@ def ai_int_setting(config: dict[str, Any], key: str, default: int, *, minimum: i
 	if value < minimum:
 		raise ValueError(f"AI 配置项 {key} 不能小于 {minimum}")
 	return value
+
+
+def ai_float_setting(config: dict[str, Any], key: str, default: float, *, minimum: float = 0.0) -> float:
+	"""读取 AI 配置里的非负数值项（如 ``ai_temperature``）；漂移给明确错误。
+
+	与 :func:`ai_int_setting` 同口径：``load_config`` 只合并默认值，``"hot"``
+	这类坏值会被原样塞进请求 payload，由服务商返回 400，调用方只看到泛化的
+	平台错误（Issue #1209）。``bool`` 不是合法温度；``None`` 与缺键按默认值。
+	"""
+	value = config.get(key)
+	if value is None:
+		return default
+	if isinstance(value, bool) or not isinstance(value, (int, float)):
+		raise ValueError(f"AI 配置项 {key} 必须是数值，实际是 {type(value).__name__}")
+	parsed = float(value)
+	if not math.isfinite(parsed):
+		raise ValueError(f"AI 配置项 {key} 必须是有限数值")
+	if parsed < minimum:
+		raise ValueError(f"AI 配置项 {key} 不能小于 {minimum}")
+	return parsed
 
 
 _DEFAULT_CONFIG: dict[str, Any] = {

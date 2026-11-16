@@ -12,7 +12,7 @@ from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.auth.identity import account_scope
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.api.endpoints import CITY_CODES
-from boss_agent_cli.ai.config import AIConfigStore
+from boss_agent_cli.ai.config import AIConfigStore, ai_float_setting, ai_int_setting
 from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action_for
 from boss_agent_cli.cache.store import CacheStore, SavedSearchParamsError
 from boss_agent_cli.platforms.factory import build_platform_instance, build_recruiter_platform_instance
@@ -912,12 +912,24 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 				context, "ai config --provider <provider> --model <model> --api-key <key>"
 			),
 		)
+	# 数值项与 ai 命令同口径校验：坏值不能原样发给服务商、只换回泛化的
+	# 平台错误；本地配置问题给 INVALID_PARAM 与修复命令（Issue #1209）。
+	try:
+		temperature = ai_float_setting(config, "ai_temperature", 0.7)
+		max_tokens = ai_int_setting(config, "ai_max_tokens", 4096)
+	except ValueError as exc:
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"本地 AI 配置损坏：{exc}",
+			recoverable=True,
+			recovery_action=_hint_command(context, "ai config --max-tokens 4096 --temperature 0.7"),
+		) from exc
 	service = AIService(
 		str(base_url),
 		api_key,
 		str(model),
-		temperature=config.get("ai_temperature", 0.7),
-		max_tokens=config.get("ai_max_tokens", 4096),
+		temperature=temperature,
+		max_tokens=max_tokens,
 	)
 	try:
 		result = service.chat(

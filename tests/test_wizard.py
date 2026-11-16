@@ -4886,3 +4886,18 @@ def test_empty_resume_prompt_keeps_the_bare_command_without_a_data_dir():
 	labels = menu.text_labels
 	assert "可先用 boss resume import <文件> 导入" in labels[0]
 	assert "--data-dir" not in labels[0]
+
+
+@pytest.mark.parametrize(("key", "value"), [("ai_max_tokens", "512"), ("ai_temperature", "hot")])
+def test_ai_assist_rejects_invalid_numeric_ai_config(tmp_path, monkeypatch, key, value):
+	"""向导 AI 步骤与 ai 命令同口径：坏数值在发请求前拦下并给修复命令（Issue #1209）。"""
+	_configure_ai(tmp_path, monkeypatch, ai_provider="moonshot", ai_model="moonshot-v1-8k", **{key: value})
+
+	with patch("boss_agent_cli.ai.service.httpx.post") as post:
+		with pytest.raises(WorkflowActionError) as exc_info:
+			DEFAULT_ACTIONS["ai_assist"](_action_context(tmp_path), {"resume": "default", "prompt": "优化"}, {})
+
+	assert exc_info.value.code == "INVALID_PARAM"
+	assert key in str(exc_info.value)
+	assert "--max-tokens" in exc_info.value.recovery_action
+	assert not post.called, "坏配置必须在发请求之前拦下"

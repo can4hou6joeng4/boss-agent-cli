@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- `boss ai` 各命令、`boss agent crawl` 与向导 AI 步骤不再把坏 AI 配置原样发给服务商（Issue #1209）：`ai_temperature` / `ai_max_tokens` 被手改成字符串、数组或 `bool` 时，构造 `AIService` 时裸读，坏值进入请求 payload，由服务商返回 400，用户只看到泛化的 `AI_API_ERROR`。现在与非向导消费点（#1196）同口径：`ai/config.py` 新增 `ai_float_setting`，两个消费点在发请求前校验，命令返回 `INVALID_PARAM` 并把 recovery 指向 `boss ai config --max-tokens 4096 --temperature 0.7`；向导步骤抛同码的 `WorkflowActionError`。`null` 与缺键继续按默认值。
+
 ## [3.4.41] - 2026-11-16
 
 ### Fixed

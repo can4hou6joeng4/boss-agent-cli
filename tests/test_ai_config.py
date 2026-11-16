@@ -1,6 +1,8 @@
 """Tests for AI configuration store."""
 
-from boss_agent_cli.ai.config import AIConfigStore, PROVIDER_BASE_URLS, provider_endpoint
+import pytest
+
+from boss_agent_cli.ai.config import AIConfigStore, PROVIDER_BASE_URLS, ai_float_setting, provider_endpoint
 from boss_agent_cli.ai.local_models import RUNTIME_BASE_URLS
 
 #: registry 的期望全集。新增 / 移除 provider 时必须同步这里——这正是让
@@ -299,3 +301,32 @@ def test_provider_base_url_shape():
 		assert isinstance(url, str) and url, f"{name} 的 base_url 为空"
 		assert url.startswith(("http://", "https://")), f"{name} 的 base_url 不是 http(s)：{url!r}"
 		assert not url.endswith("/"), f"{name} 的 base_url 带尾斜杠，与表内其余条目不一致：{url!r}"
+
+
+# ── ai_float_setting ─────────────────────────────────────────
+
+
+@pytest.mark.parametrize("value", ["hot", [], {}, True])
+def test_ai_float_setting_rejects_non_numeric(value):
+	with pytest.raises(ValueError, match="ai_temperature"):
+		ai_float_setting({"ai_temperature": value}, "ai_temperature", 0.7)
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("nan")])
+def test_ai_float_setting_rejects_non_finite(value):
+	with pytest.raises(ValueError, match="ai_temperature"):
+		ai_float_setting({"ai_temperature": value}, "ai_temperature", 0.7)
+
+
+def test_ai_float_setting_rejects_negative_temperature():
+	with pytest.raises(ValueError, match="ai_temperature"):
+		ai_float_setting({"ai_temperature": -0.1}, "ai_temperature", 0.7)
+
+
+def test_ai_float_setting_defaults_for_missing_and_null():
+	assert ai_float_setting({}, "ai_temperature", 0.7) == 0.7
+	assert ai_float_setting({"ai_temperature": None}, "ai_temperature", 0.7) == 0.7
+
+
+def test_ai_float_setting_accepts_int_temperature():
+	assert ai_float_setting({"ai_temperature": 1}, "ai_temperature", 0.7) == 1.0
