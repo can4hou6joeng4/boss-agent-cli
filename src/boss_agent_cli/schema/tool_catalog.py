@@ -991,6 +991,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"friend_ids": {
 						"type": "array",
 						"items": {"type": "integer"},
+						"minItems": 1,
 						"description": "候选人会话 friend_id 列表；不传时从 hr chat 页获取当前页候选人",
 					},
 					"page": {"type": "integer", "description": "沟通列表页码", "default": 1},

@@ -2156,3 +2156,38 @@ def test_build_args_export_format_default_omitted():
 def test_build_args_export_include_private_false_omitted():
 	args = _build_args("boss_export", {"query": "前端", "include_private": False})
 	assert "--include-private" not in args
+
+
+def test_hr_last_messages_friend_ids_declares_min_items():
+	"""空数组与不传必须在 schema 上可区分（Issue #1218）。"""
+	tool = next(item for item in TOOLS if item.name == "boss_hr_last_messages")
+	assert tool.input_schema["properties"]["friend_ids"]["minItems"] == 1
+
+
+def test_call_tool_rejects_empty_friend_ids_array(monkeypatch):
+	"""friend_ids=[] 不能退化成抓取当前页候选人并发起平台请求（Issue #1218）。"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+
+	async def fake_run(*args, **kwargs):
+		raise AssertionError("空数组不应触达 CLI")
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+
+	result = asyncio.run(
+		mcp_server.call_tool(
+			None,
+			CallToolRequestParams(name="boss_hr_last_messages", arguments={"friend_ids": []}),
+		)
+	)
+
+	payload = json.loads(result.content[0].text)
+	assert result.is_error is True
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "friend_ids" in payload["error"]["message"]
+	assert "至少" in payload["error"]["message"]
