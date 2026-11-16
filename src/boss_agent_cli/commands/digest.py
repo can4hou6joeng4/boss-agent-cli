@@ -1,5 +1,4 @@
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +13,7 @@ from boss_agent_cli.services.text_files import write_text_atomic
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.digest import build_digest, render_digest_markdown
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output, json_forced, render_message_panel, render_simple_list, shell_argument
-from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
+from boss_agent_cli.pipeline_state import build_pipeline_items, now_ts_or_clock, select_follow_up_candidates
 
 
 # 会话类条目（新匹配 / 待跟进）与面试条目的展示列。两者字段形状相同，
@@ -99,7 +98,7 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 	items = build_pipeline_items(
 		chat_items=chat_items,
 		interview_items=interview_items,
-		now_ts_ms=now_ts_ms or int(time.time() * 1000),
+		now_ts_ms=now_ts_or_clock(now_ts_ms),
 		stale_days=days_stale,
 	)
 	follow_ups = select_follow_up_candidates(items)

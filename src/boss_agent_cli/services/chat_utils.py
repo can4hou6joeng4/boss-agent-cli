@@ -1,5 +1,6 @@
 """Chat 共享常量和安全工具函数。"""
 
+import datetime
 from typing import Any
 
 from boss_agent_cli.api.models import dict_items
@@ -11,6 +12,21 @@ MSG_STATUS_LABELS: dict[object, str] = {1: "未读", 2: "已读"}
 
 # 已知分组渲染顺序
 GROUP_ORDER = ["对方主动", "我主动", "投递"]
+
+
+def safe_local_time(ts_ms: Any, *, tz: datetime.tzinfo | None = None) -> datetime.datetime | None:
+	"""毫秒时间戳转 datetime；越界 / 非有限值返回 None（Issue #1295）。
+
+	平台把纳秒时间戳当毫秒传来、或 JSON 里的 ``1e400`` 变成 ``inf`` 时，
+	``datetime.fromtimestamp`` 抛 ``ValueError`` / ``OverflowError``。时间字段
+	只是展示信息，坏值按「无时间」处理，不能让整条命令失败——否则
+	``handle_auth_errors`` 会把确定性的坏数据兜成可重试的 ``NETWORK_ERROR``，
+	Agent 拿着同一份坏数据反复重试、消耗请求预算。
+	"""
+	try:
+		return datetime.datetime.fromtimestamp(ts_ms / 1000, tz=tz)
+	except (TypeError, ValueError, OverflowError, OSError):
+		return None
 
 
 def int_code(value: Any) -> int | None:

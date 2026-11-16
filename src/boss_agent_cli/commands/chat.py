@@ -15,7 +15,7 @@ from boss_agent_cli.services.text_files import write_text_atomic
 from boss_agent_cli.services.chat_snapshot import save_snapshot_and_diff, load_snapshot
 from boss_agent_cli.services.chat_utils import (
 	RELATION_LABELS, FROM_FILTER, MSG_STATUS_LABELS,
-	contact_identity, int_code, sanitize_csv_cell, escape_md_cell,
+	contact_identity, int_code, safe_local_time, sanitize_csv_cell, escape_md_cell,
 )
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_simple_list
 
@@ -269,7 +269,12 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 
 def _format_ts(ts_ms: int) -> str:
 	"""将毫秒时间戳格式化为可读日期（使用本地时区）"""
-	dt = datetime.datetime.fromtimestamp(ts_ms / 1000, tz=datetime.timezone.utc).astimezone()
+	dt = safe_local_time(ts_ms, tz=datetime.timezone.utc)
+	if dt is None:
+		# 越界 / 非有限时间戳只是展示信息：按「无时间」输出，不让整条命令
+		# 落成可重试的 NETWORK_ERROR（Issue #1295）。
+		return "-"
+	dt = dt.astimezone()
 	now = datetime.datetime.now(tz=datetime.timezone.utc).astimezone()
 	if dt.date() == now.date():
 		return dt.strftime("今天 %H:%M")
