@@ -57,7 +57,9 @@ def _config_int(data: dict[str, Any], key: str, default: int, *, minimum: int) -
 		raise ValueError(f"{key} 必须是整数，收到 {value!r}")
 	try:
 		parsed = int(value)
-	except (TypeError, ValueError) as exc:
+	# OverflowError：合法 JSON 的 ``1e400`` 解析成 inf、大整数转 float 也溢出，
+	# 都是用户可修复的配置错误，不能落成 INTERNAL_ERROR（Issue #1230）。
+	except (TypeError, ValueError, OverflowError) as exc:
 		raise ValueError(f"{key} 必须是整数，收到 {value!r}") from exc
 	if parsed < minimum:
 		raise ValueError(f"{key} 必须是不小于 {minimum} 的整数，收到 {value!r}")
@@ -76,7 +78,7 @@ def _config_confidence(data: dict[str, Any], key: str, default: float) -> float:
 		raise ValueError(f"{key} 必须是 0 到 1 之间的数值，收到 {value!r}")
 	try:
 		parsed = float(value)
-	except (TypeError, ValueError) as exc:
+	except (TypeError, ValueError, OverflowError) as exc:
 		raise ValueError(f"{key} 必须是 0 到 1 之间的数值，收到 {value!r}") from exc
 	if not math.isfinite(parsed) or not 0 <= parsed <= 1:
 		raise ValueError(f"{key} 必须是 0 到 1 之间的数值，收到 {value!r}")

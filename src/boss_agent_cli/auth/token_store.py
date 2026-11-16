@@ -109,7 +109,8 @@ class TokenStore:
 		try:
 			plaintext = fernet.decrypt(encrypted)
 			decoded = json.loads(plaintext)
-		except (InvalidToken, ValueError, TypeError, json.JSONDecodeError):
+		# RecursionError：密文明文深嵌套时解析失败，与其它损坏登录态一样按未登录处理。
+		except (InvalidToken, ValueError, TypeError, json.JSONDecodeError, RecursionError):
 			return None
 		if not isinstance(decoded, dict):
 			return None

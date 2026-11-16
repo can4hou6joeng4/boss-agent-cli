@@ -184,7 +184,8 @@ def crawl_int_setting(cfg: Mapping[str, Any], key: str, default: int, *, minimum
 		return default
 	try:
 		parsed = int(value)
-	except (TypeError, ValueError) as exc:
+	# OverflowError：``1e400`` 解析成 inf，用户可修复，不能落成 INTERNAL_ERROR。
+	except (TypeError, ValueError, OverflowError) as exc:
 		raise ValueError(f"crawl 配置项 {key} 必须是整数") from exc
 	if parsed < minimum:
 		raise ValueError(f"crawl 配置项 {key} 不能小于 {minimum}")
@@ -204,7 +205,7 @@ def crawl_cdp_port(value: Any) -> int:
 	"""校验 crawl 配置中的 cdp_port：1-65535 的整数。"""
 	try:
 		port = int(value)
-	except (TypeError, ValueError) as exc:
+	except (TypeError, ValueError, OverflowError) as exc:
 		raise ValueError("crawl 配置项 cdp_port 必须是整数") from exc
 	if not 1 <= port <= 65535:
 		raise ValueError("crawl 配置项 cdp_port 必须在 1-65535 之间")

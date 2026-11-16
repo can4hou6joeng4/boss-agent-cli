@@ -57,7 +57,10 @@ def _parse_cached_result(raw: str) -> dict[str, Any] | None:
 	"""
 	try:
 		parsed = json.loads(raw)
-	except json.JSONDecodeError:
+	# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长整数
+	# 上限；RecursionError 覆盖深嵌套。缓存是本地确定性数据，坏了按未命中处理，
+	# 不能让 Agent 拿到「重试」指引反复命中同一坏行（Issue #1230）。
+	except (ValueError, RecursionError):
 		return None
 	if not isinstance(parsed, dict) or not isinstance(parsed.get("data"), list):
 		return None
