@@ -2,6 +2,19 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.74] - 2026-11-17
+
+### Fixed
+- 采集浏览器的 Cookie 注入失败被静默吞掉，平台返回登录页后误报 `CrawlRiskError` 并写入 `cdp_risk_lock`，要求人工清锁；现在 `_seed_session_cookies` 返回注入明细，失败时抛本地认证错误并映射 `AUTH_REQUIRED`（指引 `boss login`），不写风险锁。真实安全页仍 `risk_stopped` 并保留浏览器与风险锁（Issue #1405）。
+- `crawl resume` 不做 Hook 预检、相对 `--hook-dir` 被原样写入断点，换 cwd 或删改 hook 后要等浏览器导航才报错且 CLI 仍 `ok:true` 提示无限 resume；现在 resume 前校验 hook 清单，断点存绝对路径，`HookRegistrationError` 映射不可恢复的 `LOCAL_IO_ERROR`（Issue #1408）。
+- 导出目录被同名文件占用时 `mkdir` 的 `FileExistsError` 落在异常转换之外，被记成普通 `stopped` 并无限 resume；现在转换为 `CrawlExportError` → `LOCAL_IO_ERROR`（Issue #1409）。
+- 对已完成的 crawl run 执行 `resume` 仍先要求登录；现在登录态按需读取，`crawl run` 仍提前预检，`resume` 在确认有续跑工作后才预检，已完成 run 直接返回结果（Issue #1412）。
+- automation 队列文件不可读（权限/目录/IO）被当作空队列，`agent pending list` 返回 `ok=true items=[]`、`agent run` 静默跳过已批准动作；现在只有 `FileNotFoundError` 视为空队列，其余 fail-closed 报 `AUTOMATION_STATE_INVALID` 并带文件路径与修复方式（Issue #1406）。
+- automation 的 pending `status` 为数组/对象时抛 `TypeError` 被兜成 `INTERNAL_ERROR`；现在先校验字符串类型，按状态损坏报 `AUTOMATION_STATE_INVALID`（Issue #1410）。
+- `agent crawl` 在校验 `--resume` 之前完成整轮采集与短名单导入，`--query` 与 `--run-id` 两条路径都会先产生平台请求与本地写入；现在简历检查前移，空名/缺失/损坏分别报 `INVALID_PARAM`、`RESUME_NOT_FOUND`、`RESUME_FILE_INVALID`（Issue #1407）。
+- `agent crawl` 的简历校验前移后又越过了风险锁检查：已记录 `cdp_risk_lock` 时会先报 `RESUME_NOT_FOUND`，引导用户补完简历后继续触发平台风控；现在 `--query` 路径先检查风险锁（`ENVIRONMENT_RISK_LOCKED`），`--run-id` 只读本地结果与短名单，仍不受锁影响（Issue #1419）。
+- 复核/待办 TTY 列表列键用了不存在的 `review_id` / `score`，两列恒显示 `-`；改为 `id` / `confidence` 并加模型字段守卫（Issue #1411）。
+
 ## [3.4.73] - 2026-11-17
 
 ### Fixed
