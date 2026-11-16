@@ -1,3 +1,4 @@
+import errno
 import json
 import math
 import re
@@ -70,6 +71,12 @@ _FILESYSTEM_ERROR_TYPES: tuple[type[OSError], ...] = (
 	IsADirectoryError,
 	NotADirectoryError,
 )
+# fd 级写入（write / flush / fsync）失败时异常不带 filename：磁盘满、配额耗尽、
+# 设备 I/O 错误只可能来自本地文件系统，兜成可重试的 NETWORK_ERROR 会让 Agent
+# 无限重试同一条命令（Issue #1400）。Windows 的 errno 模块不一定定义 EDQUOT。
+_LOCAL_IO_ERRNOS: frozenset[int] = frozenset(
+	code for code in (errno.ENOSPC, errno.EIO, getattr(errno, "EDQUOT", None)) if code is not None
+)
 
 
 def is_local_io_error(exc: BaseException) -> bool:
@@ -81,7 +88,9 @@ def is_local_io_error(exc: BaseException) -> bool:
 	"""
 	if not isinstance(exc, OSError) or isinstance(exc, (ConnectionError, TimeoutError)):
 		return False
-	return isinstance(exc, _FILESYSTEM_ERROR_TYPES) or getattr(exc, "filename", None) is not None
+	if isinstance(exc, _FILESYSTEM_ERROR_TYPES) or getattr(exc, "filename", None) is not None:
+		return True
+	return exc.errno in _LOCAL_IO_ERRNOS
 
 
 def redact_sensitive(value: Any) -> Any:

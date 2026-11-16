@@ -1,4 +1,5 @@
 import ast
+import errno
 import json
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from boss_agent_cli.output import (
 	envelope_error,
 	emit_error,
 	emit_success,
+	is_local_io_error,
 	json_safe_value,
 	Logger,
 )
@@ -701,3 +703,34 @@ def test_config_get_with_non_finite_value_emits_strict_json(tmp_path: Path) -> N
 	assert parsed["ok"] is True
 	assert parsed["data"]["value"] == [None, 5]
 	assert "NaN" not in result.output
+
+
+# ── 本地 IO 分类：fd 级失败不带 filename（Issue #1400） ────────────────
+
+
+# Windows 的 errno 模块不一定定义 EDQUOT；缺失时该用例不参与参数化。
+_LOCAL_IO_ERRNOS = [errno.ENOSPC, errno.EIO]
+if hasattr(errno, "EDQUOT"):
+	_LOCAL_IO_ERRNOS.append(errno.EDQUOT)
+
+
+@pytest.mark.parametrize("code", _LOCAL_IO_ERRNOS)
+def test_filename_less_local_io_errnos_are_local(code: int) -> None:
+	"""write / flush / fsync 在 fd 层失败时异常没有 filename，仍是本地写失败。"""
+	exc = OSError(code, "local io failure")
+
+	assert exc.filename is None
+	assert is_local_io_error(exc) is True
+
+
+def test_filename_less_socket_reset_stays_network_error() -> None:
+	"""扩展 errno 判定不能把普通套接字错误也算成本地文件问题。"""
+	exc = OSError(errno.ECONNRESET, "Connection reset by peer")
+
+	assert exc.filename is None
+	assert is_local_io_error(exc) is False
+
+
+@pytest.mark.parametrize("exc", [ConnectionResetError(errno.ECONNRESET, "reset"), TimeoutError("timed out")])
+def test_network_error_types_stay_network_even_with_no_filename(exc: OSError) -> None:
+	assert is_local_io_error(exc) is False

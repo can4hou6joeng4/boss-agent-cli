@@ -9,15 +9,13 @@ MAX_FRIEND_LIST_PAGES = 50
 def friend_list_page_items(platform_data: dict[str, Any]) -> list[dict[str, Any]]:
 	"""取沟通列表页里的联系人条目。
 
-	``result`` 只有是**非空列表**时才优先使用；平台把 ``result`` 漂移成对象 /
-	数字 / 非空字符串时，``result or friendList`` 会选中这个真值容器，
-	``dict_items`` 返回空列表而合法的 ``friendList`` 永远不会被读取
-	（Issue #1351）。``result`` 缺失或为空列表时沿用既有回退语义。
+	``result`` 只有能取出至少一个对象元素时才优先使用；平台把 ``result`` 漂移成
+	对象 / 数字 / 非空字符串时，``result or friendList`` 会选中这个真值容器，
+	``dict_items`` 返回空列表而合法的 ``friendList`` 永远不会被读取（Issue #1351）。
+	``result`` 是 ``[None]`` / ``[5]`` 这类只含坏元素的非空列表时同理（Issue #1402）：
+	元素级漂移由 ``dict_items`` 跳过，跳过之后为空就回退 ``friendList``。
 	"""
-	result_items = platform_data.get("result")
-	if isinstance(result_items, list) and result_items:
-		return dict_items(result_items)
-	return dict_items(platform_data.get("friendList"))
+	return dict_items(platform_data.get("result")) or dict_items(platform_data.get("friendList"))
 
 
 def collect_friend_list_items(

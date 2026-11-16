@@ -83,7 +83,9 @@ def write_export_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 			# CSV 公式注入防护；与 chat 导出一致（剥 Tab/CR，Issue #876）。
 			row = {k: sanitize_csv_cell(str(v)) for k, v in row.items()}
 			writer.writerow(row)
-		write_text_atomic(path, buffer.getvalue())
+		# csv 模块按行写出 ``\r\n``；文本模式默认会再翻译一次换行，Windows 上
+		# 落盘变成 ``\r\r\n``（Issue #1401）。与 chat 导出同口径关掉翻译。
+		write_text_atomic(path, buffer.getvalue(), newline="")
 
 
 # 向后兼容别名：旧测试与调用方按模块内私有名取用。

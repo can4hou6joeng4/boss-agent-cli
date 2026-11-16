@@ -27,9 +27,10 @@ def write_json_atomic(
 	# os.replace 替换符号链接本身而不是写穿目标；入口直接拒绝，避免静默破坏链接。
 	refuse_symlink_target(path)
 	path.parent.mkdir(parents=True, exist_ok=True)
-	fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-	temporary = Path(temporary_name)
+	temporary: Path | None = None
 	try:
+		fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+		temporary = Path(temporary_name)
 		# 孤立代理字符（如 argv 里的非法 UTF-8 字节解码出的 U+DCFF）无法按 UTF-8
 		# 编码，严格模式会让整条命令在写盘时抛 UnicodeEncodeError、stdout 无信封
 		# （Issue #1294）。backslashreplace 把它写成 JSON 合法的 ``\udcff`` 转义，
@@ -41,5 +42,13 @@ def write_json_atomic(
 			handle.flush()
 			os.fsync(handle.fileno())
 		os.replace(temporary, path)
+	except OSError as error:
+		# fd 级写入（write / flush / fsync）失败的异常没有 filename：补上目标路径，
+		# 调用方才会把它归成本地文件错误，而不是一次值得重试的网络异常
+		# （与 file_lock._acquire 同口径，Issue #1400）。
+		if error.filename is None:
+			error.filename = str(path)
+		raise
 	finally:
-		temporary.unlink(missing_ok=True)
+		if temporary is not None:
+			temporary.unlink(missing_ok=True)

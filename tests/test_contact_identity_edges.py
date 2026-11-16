@@ -174,6 +174,44 @@ def test_chat_export_snapshot_keeps_contacts_when_result_is_truthy_non_list(
 	assert [(item["uid"], item["name"]) for item in snapshot] == [(10001, "联系人甲")]
 
 
+# ── 1b. result 只含坏元素时回退 friendList（Issue #1402） ─────────────
+
+_BAD_RESULT_ELEMENTS = [
+	pytest.param([None], id="null-element"),
+	pytest.param([5], id="numeric-element"),
+	pytest.param([None, 5, "legacy-payload"], id="mixed-bad-elements"),
+]
+
+
+@pytest.mark.parametrize("bad_result", _BAD_RESULT_ELEMENTS)
+def test_find_friend_reads_friend_list_when_result_has_only_bad_elements(bad_result):
+	"""result 是非空列表但全是 null / 数字 / 字符串时，也要回退到合法的 friendList。"""
+	response = _friend_page([_friend_item()], result=bad_result)
+	platform = SimpleNamespace(
+		friend_list=lambda *, page: response,
+		is_success=lambda resp: True,
+		unwrap_data=lambda resp: resp.get("zpData"),
+	)
+
+	friend_item, error_response = find_friend(platform, "10001")
+
+	assert friend_item == _friend_item()
+	assert error_response is None
+
+
+@pytest.mark.parametrize("bad_result", _BAD_RESULT_ELEMENTS)
+def test_chat_reads_friend_list_when_result_has_only_bad_elements(bad_result, tmp_path: Path):
+	response = _friend_page([_friend_item()], result=bad_result)
+
+	result, _ = _invoke(
+		"boss_agent_cli.commands.chat", ["chat"], response, tmp_path=tmp_path,
+	)
+
+	assert result.exit_code == 0, result.output
+	parsed = json.loads(result.output)
+	assert [(item["uid"], item["name"]) for item in parsed["data"]] == [(10001, "联系人甲")]
+
+
 # ── 2. uid 为 null 不能被字符串化成 "None"（Issue #1352） ──────────────
 
 _UID_NULL_CASES = [
