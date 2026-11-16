@@ -409,8 +409,13 @@ def _awaiting_queued_worker(run: dict[str, Any]) -> bool:
 	"""任务刚排队：原 worker 可能正要取锁，父进程不探测、不抢占。"""
 	if run["status"] != "queued":
 		return False
-	# 时钟回拨得到负值时按仍在窗口内处理，宁可多等也不抢。
-	return time.time() - float(run["updated_at"]) < _QUEUE_HANDOFF_GRACE_SECONDS
+	# 时钟回拨得到负值时按仍在窗口内处理，宁可多等也不抢；时间戳类型漂移
+	# 无法判断新鲜度，按「排队已久」去探测锁，不能让父进程 traceback（Issue #1192）。
+	try:
+		updated = float(run["updated_at"])
+	except (TypeError, ValueError):
+		return False
+	return time.time() - updated < _QUEUE_HANDOFF_GRACE_SECONDS
 
 
 def _prepare_background_resume(

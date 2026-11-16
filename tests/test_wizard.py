@@ -731,9 +731,19 @@ def test_crawl_actions_use_fixture_service_and_persist_stop(tmp_path, monkeypatc
 	assert service.created_settings.with_detail is True
 
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		# 断点 params 按真实写入形状给全：crawl status 现在与 resume 共用
+		# CrawlSettings.from_dict 校验，缺键记录两个入口都报损坏（Issue #1192）。
 		cache.create_crawl_run(
 			"crawl-existing",
-			{"query": "Python", "city_code": "101010100"},
+			{
+				"query": "Python",
+				"city_code": "101010100",
+				"pages": 1,
+				"with_detail": False,
+				"browser": {"profile_path": str(tmp_path / "profile"), "cdp_port": 0},
+				"hook": {"profile": "none", "source": "user-supplied", "directory": None},
+				"limits": {"max_requests": 20, "max_details": 50, "max_seconds": 600, "max_retries": 1},
+			},
 			str(tmp_path / "crawl" / "runs" / "crawl-existing"),
 		)
 	status = DEFAULT_ACTIONS["crawl_status"](context, {"run_id": "crawl-existing"}, {})
