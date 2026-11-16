@@ -381,6 +381,11 @@ def test_login_risk_control_error_is_not_suggested_as_plain_network_retry(mock_a
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "LOGIN_RISK_CONTROL"
 	assert "风控" in parsed["error"]["message"]
+	# 风控是硬边界：登记表声明不可恢复，恢复动作取登记表原文（Issue #1390）。
+	from boss_agent_cli.schema.error_codes import ERROR_CODES
+
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["error"]["recovery_action"] == ERROR_CODES["LOGIN_RISK_CONTROL"]["recovery_action"]
 	# 风控下没有安全的可执行命令可推荐；指引全部走面向真人的通道。
 	assert parsed["hints"]["next_actions"] == []
 	assert any("暂停自动化重试" in action for action in parsed["hints"]["operator_actions"])
@@ -445,6 +450,8 @@ def test_login_error_hints_split_by_audience(mock_auth_cls, side_effect, expecte
 	hints = json.loads(result.output)["error"]
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == expected_code
+	# 只有风控码不可恢复；其余登录错误码保持既有的可重试语义（Issue #1390）。
+	assert parsed["error"]["recoverable"] is (expected_code != "LOGIN_RISK_CONTROL")
 
 	hints = parsed["hints"]
 	assert set(hints) == {"next_actions", "operator_actions"}

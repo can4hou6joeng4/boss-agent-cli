@@ -14,6 +14,7 @@ from boss_agent_cli.api import cdp_risk_lock
 from boss_agent_cli.api.client import AccountRiskError, EnvironmentRiskError
 from boss_agent_cli.display import risk_error_contract
 from boss_agent_cli.main import cli
+from boss_agent_cli.output import redact_sensitive_text
 
 
 # ── 辅助 ─────────────────────────────────────────────────────────────
@@ -280,6 +281,24 @@ def test_auth_session_file_exists_but_undecryptable(tmp_path):
 	session = _find_check(parsed["data"]["checks"], "auth_session")
 	assert session["status"] == "error"
 	assert "损坏" in session["detail"]
+
+
+@pytest.mark.parametrize(
+	"token, expected",
+	[
+		({"cookies": {"wt2": "fixture", "wbg": "1", "zp_at": "a"}, "stoken": "real-secret-stoken"}, "存在"),
+		({"cookies": {"wt2": "fixture", "wbg": "1", "zp_at": "a"}}, "缺失"),
+	],
+)
+def test_auth_session_detail_survives_free_text_redaction(tmp_path, token, expected):
+	"""auth_session 的 stoken 结论不能被自由文本脱敏整段替换（Issue #1393）。"""
+	_, parsed = _invoke_doctor(tmp_path, token=token)
+	session = _find_check(parsed["data"]["checks"], "auth_session")
+	detail = redact_sensitive_text(session["detail"])
+	assert f"stoken_present={expected}" in detail
+	# 结论可读不等于放松脱敏：真实凭据值仍按原规则替换。
+	assert redact_sensitive_text("stoken=real-secret-stoken") == "stoken=[REDACTED]"
+	assert redact_sensitive_text("token=real-secret-token；继续") == "token=[REDACTED]；继续"
 
 
 # ── 6. CDP 可用/不可用 ───────────────────────────────────────────────

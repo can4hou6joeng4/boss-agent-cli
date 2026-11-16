@@ -150,7 +150,10 @@ def assess_auth_health(
 		checks.append(AuthHealthCheck(
 			"auth_session",
 			"ok",
-			f"检测到登录态文件: {session_path}（cookies={len(cookies)}, {config.secondary_token_label}={'存在' if has_secondary else '缺失'}）",
+			# 用 ``<label>_present=`` 而不是 ``<label>=``：自由文本脱敏按词边界匹配
+			# ``stoken=``，会把这条检查的结论整个换成 [REDACTED]（Issue #1393）；
+			# 下划线不是词边界，真实凭据值仍照常脱敏。
+			f"检测到登录态文件: {session_path}（cookies={len(cookies)}, {config.secondary_token_label}_present={'存在' if has_secondary else '缺失'}）",
 		))
 	else:
 		status = "error" if session_path.exists() else "warn"
