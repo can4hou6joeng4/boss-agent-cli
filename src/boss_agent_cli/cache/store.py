@@ -144,12 +144,22 @@ def _tolerated_timestamp(raw: Any, *, default: float = 0.0) -> float:
 	``crawl_budget.last_request_at`` 是本地节流元数据，不是任务断点：坏值不能
 	拦停采集，更不能被兜成可重试错误。``inf`` / ``nan`` 也不能进入后续的
 	``max()`` 与等待计算，否则一个坏值会让调度永远等下去（Issue #1212）。
+	有限的远未来值同样超出合法预留窗口，由 ``reserve_crawl_budget`` 判定并
+	覆盖自愈（Issue #1422）。
 	"""
 	try:
 		parsed = float(raw)
 	except (TypeError, ValueError):
 		return default
 	return parsed if math.isfinite(parsed) else default
+
+
+#: ``crawl_budget`` 的合法未来预留窗口（Issue #1422）。
+#:
+#: 写入方最多把 ``last_request_at`` 推到 ``now + interval``；更远的有限未来值
+#: 只能是漂移。它会让 ``reserve_crawl_budget`` 返回一个巨大的等待秒数，并把
+#: 值继续推向未来，采集预算永远无法自愈。
+_CRAWL_FUTURE_SKEW_SECONDS = 60.0
 
 
 def _cache_entry_expired(created_at: Any, ttl: float) -> bool:
@@ -890,6 +900,10 @@ class CacheStore:
 				(budget_key,),
 			).fetchone()
 			last_reserved = _tolerated_timestamp(row[0]) if row is not None else None
+			# 有限的远未来值与文本 / nan / inf 一样按漂移处理：当作没有预留，
+			# 本次预留会覆盖坏值，等待时间回到一个 interval 以内（Issue #1422）。
+			if last_reserved is not None and last_reserved > now + interval + _CRAWL_FUTURE_SKEW_SECONDS:
+				last_reserved = None
 			reserved_at = now if last_reserved is None else max(now, last_reserved + interval)
 			self._conn.execute(
 				"INSERT OR REPLACE INTO crawl_budget (budget_key, last_request_at) VALUES (?, ?)",

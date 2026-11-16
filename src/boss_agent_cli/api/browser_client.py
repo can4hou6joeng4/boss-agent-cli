@@ -27,7 +27,7 @@ from boss_agent_cli.api.browser_source import (
 	BrowserSourceUnavailable,
 	resolve_policy,
 )
-from boss_agent_cli.api.proxy import WEBRTC_LEAK_GUARD_ARGS, resolve_proxy
+from boss_agent_cli.api.proxy import WEBRTC_LEAK_GUARD_ARGS, ProxyConfigurationError, resolve_proxy
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
 from boss_agent_cli.api.endpoints_loader import EndpointSpec, endpoint_for_request
 from boss_agent_cli.api.httpx_helpers import new_trace_id
@@ -621,7 +621,10 @@ class BrowserSession:
 			return True
 		except Exception as error:
 			self._close_browser_quietly()
-			if is_request_stop(error):
+			# 代理环境变量非法是确定性配置错误：换下一个 CDP 候选或降级通道
+			# 只会用同一份坏配置再失败一次，还可能让操作者以为「CDP 不可用」。
+			# 原样上抛，由命令层统一映射 INVALID_PARAM（Issue #1423）。
+			if is_request_stop(error) or isinstance(error, ProxyConfigurationError):
 				raise
 			return False
 
@@ -1037,11 +1040,19 @@ def _pick_chat_target_ws(cdp_http_url: str) -> str:
 	except Exception as exc:
 		raise RuntimeError(f"cannot reach CDP at {list_url}: {exc}") from exc
 
-	for t in tabs:
-		if t.get("type") == "page" and is_zhipin_url(t.get("url", "")) and "/web/chat/index" in t.get("url", ""):
+	# /json 的容器漂移（对象而非数组、数组混入非对象元素）必须在打开
+	# WebSocket 之前收口：AttributeError 会被聊天动作执行器的宽泛捕获当成
+	# 「动作已发出、结果未知」，而实际上脚本还没开始执行（Issue #1424）。
+	for t in tabs if isinstance(tabs, list) else ():
+		if not isinstance(t, dict):
+			continue
+		url = t.get("url")
+		if t.get("type") != "page" or not isinstance(url, str):
+			continue
+		if is_zhipin_url(url) and "/web/chat/index" in url:
 			target_ws = t.get("webSocketDebuggerUrl")
-			if target_ws:
-				return cast("str", target_ws)
+			if isinstance(target_ws, str) and target_ws:
+				return target_ws
 	raise RecruiterChatTabRequired()
 
 

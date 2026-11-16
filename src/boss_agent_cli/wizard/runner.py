@@ -12,6 +12,7 @@ from typing import Any
 from boss_agent_cli.api.browser_client import BrowserNavigationError
 from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserSourceUnsupported
 from boss_agent_cli.api.client import PlatformRiskError
+from boss_agent_cli.api.proxy import ProxyConfigurationError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded, request_control
 from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 from boss_agent_cli.cache.store import CacheBusyError, CacheDatabaseInvalid, CacheRecordInvalid, is_cache_busy_error
@@ -564,9 +565,20 @@ class WorkflowRunner:
 						"NETWORK_ERROR", str(exc), recoverable=True, recovery_action="重试当前 run_id"
 					)
 			except Exception as exc:
+				# 代理环境变量非法是确定性配置错误：重试或恢复同一 run_id 只会
+				# 复现，不能兜成 NETWORK_ERROR +「重试当前 run_id」（Issue #1423）。
+				if isinstance(exc, ProxyConfigurationError):
+					invalid_recoverable, invalid_recovery = error_contract_for_code("INVALID_PARAM")
+					error = WorkflowActionError(
+						"INVALID_PARAM",
+						str(exc),
+						recoverable=invalid_recoverable,
+						recovery_action=invalid_recovery,
+						replay_safe=True,
+					)
 				# 本地缓存锁冲突不是网络问题（Issue #1118）：等锁释放后重试同一
 				# run_id 即可，不能兜成 NETWORK_ERROR。
-				if isinstance(exc, CacheBusyError) or is_cache_busy_error(exc):
+				elif isinstance(exc, CacheBusyError) or is_cache_busy_error(exc):
 					busy_recoverable, busy_recovery = error_contract_for_code("CACHE_BUSY")
 					error = WorkflowActionError(
 						"CACHE_BUSY",

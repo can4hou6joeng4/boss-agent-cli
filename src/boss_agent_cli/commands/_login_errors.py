@@ -3,6 +3,7 @@
 import click
 
 from boss_agent_cli.api.client import PlatformRiskError
+from boss_agent_cli.api.proxy import ProxyConfigurationError
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	error_contract_for_code,
@@ -74,6 +75,22 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 			"recovery_action": recovery,
 			"hints": hints or None,
 			"details": exc.details or None,
+		}
+
+	if isinstance(exc, ProxyConfigurationError):
+		# 代理环境变量非法是确定性配置错误：登录链路不重试、不回退直连，
+		# 也不能把带凭据的代理 URL 透传到信封（Issue #1423）。
+		return {
+			"code": "INVALID_PARAM",
+			"message": str(exc),
+			"recoverable": False,
+			"recovery_action": "修正或清除 HTTPS_PROXY/ALL_PROXY 等代理环境变量后重试",
+			"hints": {
+				"operator_actions": [
+					"确认代理地址形如 scheme://host:port，端口为 1-65535 的整数",
+					"不使用代理时请清除 HTTPS_PROXY/ALL_PROXY 等对应环境变量；CLI 不会回退为直连",
+				]
+			},
 		}
 
 	if isinstance(exc, ValueError):
