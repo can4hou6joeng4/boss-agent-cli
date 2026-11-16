@@ -148,6 +148,17 @@ def _tolerated_timestamp(raw: Any, *, default: float = 0.0) -> float:
 	return parsed if math.isfinite(parsed) else default
 
 
+def _cache_entry_expired(created_at: Any, ttl: float) -> bool:
+	"""缓存 TTL 判断；``created_at`` 漂移时按已过期处理（Issue #1214）。
+
+	``search_cache`` / ``job_desc_cache`` 是本地可再生成的缓存：坏时间戳只应
+	导致一次未命中并删除坏行，不能把 ``TypeError`` 兜成 ``INTERNAL_ERROR``，
+	也不能让 crawl 详情阶段永远停在同一个坏行上。
+	"""
+	parsed = _tolerated_timestamp(created_at, default=-1.0)
+	return parsed < 0 or time.time() - parsed > ttl
+
+
 def _validate_workflow_params(run_id: str, params: dict[str, Any]) -> dict[str, Any]:
 	"""workflow_runs.params 的嵌套结构同样要在读取边界校验。
 
@@ -1137,7 +1148,7 @@ class CacheStore:
 		).fetchone()
 		if row is None:
 			return None
-		if time.time() - row[1] > self._search_ttl:
+		if _cache_entry_expired(row[1], self._search_ttl):
 			self._conn.execute("DELETE FROM search_cache WHERE cache_key = ?", (key,))
 			self._conn.commit()
 			return None
@@ -1168,7 +1179,7 @@ class CacheStore:
 		).fetchone()
 		if row is None:
 			return None
-		if time.time() - row[1] > self._search_ttl:
+		if _cache_entry_expired(row[1], self._search_ttl):
 			self._conn.execute("DELETE FROM job_desc_cache WHERE job_id = ?", (job_id,))
 			self._conn.commit()
 			return None

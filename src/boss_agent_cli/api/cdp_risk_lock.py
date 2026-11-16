@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import time
 from dataclasses import dataclass
@@ -27,6 +28,23 @@ ABSENT_STOKEN = "absent"
 _ZHIPIN_HOST = "zhipin.com"
 
 _LOCK_VERSION = 1
+
+#: 风险锁诊断时间的合理上界（2100-01-01）；超过按写坏处理，锁本身仍有效。
+_MAX_TIMESTAMP = 4_102_444_800.0
+
+
+def _finite_timestamp(raw: Any) -> float:
+	"""``locked_at`` 只用于展示与诊断；超大整数 / ``inf`` 不能穿透到调用方。
+
+	``float(10**400)`` 抛 ``OverflowError``，会绕过 ``read_lock`` 的 fail-closed
+	分支；``inf`` 能通过读取，却会让 ``lock_status`` 的 ``time.localtime`` 崩溃。
+	两种坏值都按「时间未知」处理，锁的阻断语义不变（Issue #1214）。
+	"""
+	try:
+		parsed = float(raw or 0)
+	except (OverflowError, TypeError, ValueError):
+		return 0.0
+	return parsed if math.isfinite(parsed) and 0 <= parsed <= _MAX_TIMESTAMP else 0.0
 
 
 def lock_path(data_dir: Path) -> Path:
@@ -80,7 +98,7 @@ def read_lock(data_dir: Path) -> RiskLock | None:
 			raise ValueError("lock payload is not an object")
 		raw_hash = payload.get("stoken_sha256")
 		stoken_hash = str(raw_hash) if isinstance(raw_hash, str) and raw_hash else None
-		locked_at = float(payload.get("locked_at") or 0)
+		locked_at = _finite_timestamp(payload.get("locked_at"))
 		cdp_url = payload.get("cdp_url")
 		reason = "ACCOUNT_RISK" if payload.get("reason") == "ACCOUNT_RISK" else "ENVIRONMENT_RISK"
 		raw_code = payload.get("platform_code", 36 if reason == "ACCOUNT_RISK" else 37)
@@ -91,7 +109,7 @@ def read_lock(data_dir: Path) -> RiskLock | None:
 			reason=reason,
 			platform_code=normalize_risk_code(raw_code),
 		)
-	except (OSError, ValueError, TypeError):
+	except (OSError, ValueError, TypeError, OverflowError):
 		# 损坏的锁按「仍被锁」处理（fail-closed），提示用户手动清除。
 		return RiskLock(stoken_sha256=None, locked_at=0.0, corrupt=True)
 
@@ -164,8 +182,12 @@ def lock_status(data_dir: Path, *, now: float | None = None) -> dict[str, Any]:
 		"stoken_recorded": lock.stoken_sha256 is not None and lock.stoken_sha256 != ABSENT_STOKEN,
 	}
 	if lock.locked_at > 0:
-		info["locked_at"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(lock.locked_at))
-		info["age_seconds"] = max(0, int(current - lock.locked_at))
+		try:
+			info["locked_at"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(lock.locked_at))
+			info["age_seconds"] = max(0, int(current - lock.locked_at))
+		except (OverflowError, OSError, ValueError):
+			# 展示层不得因为一个坏时间戳崩掉 doctor / status；锁仍然有效。
+			info["locked_at"] = "未知时间"
 	return info
 
 
