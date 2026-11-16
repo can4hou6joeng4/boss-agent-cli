@@ -94,14 +94,21 @@ def _wizard_error(
 
 
 def _run_after_stop(store: WorkflowStore, run_id: str) -> dict[str, Any]:
-	"""停止已落盘后取展示用的 run；内部 crawl 结果损坏时退回断点本身。
+	"""停止已落盘后取展示用的 run；读不出来时退回最小可用记录。
 
-	停止标记已经写入，不能因为叠加实时采集结果失败就把这次停止报成错误。
+	停止标记已经写入，不能因为展示读取失败就把这次停止报成错误：叠加的实时
+	采集损坏时退回断点本身；断点本体也损坏（如 ``params`` 不是合法 JSON）时，
+	只回报已确认的 ``run_id`` 与 ``stopped``，让调用方看到停止确实生效。
+	``--status`` 仍按展示契约报告损坏（Issue #1186）。
 	"""
 	try:
 		return store.get(run_id) or {}
 	except CacheRecordInvalid:
+		pass
+	try:
 		return store.get_checkpoint(run_id, validate_replay_markers=False) or {}
+	except CacheRecordInvalid:
+		return {"run_id": run_id, "status": "stopped", "steps": []}
 
 
 def _workflow_inner_run_id(run: Mapping[str, Any]) -> str:

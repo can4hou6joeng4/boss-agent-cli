@@ -4527,10 +4527,14 @@ def _seed_corrupt_workflow_run(tmp_path, run_id: str = "corrupt-run") -> None:
 		)
 
 
-@pytest.mark.parametrize("flag", [["--status"], ["--resume"], ["--stop"]])
+@pytest.mark.parametrize("flag", [["--status"], ["--resume"]])
 @pytest.mark.parametrize("column", ["params", "last_result"])
 def test_corrupt_workflow_run_reports_envelope(tmp_path, flag, column):
-	"""workflow 记录写坏时不能 traceback，也不能被兜底成可重试的 NETWORK_ERROR。"""
+	"""workflow 记录写坏时不能 traceback，也不能被兜底成可重试的 NETWORK_ERROR。
+
+	``--stop`` 不在此列：停止标记先于展示读取落盘，断点写坏只影响展示
+	（Issue #1186，见 ``test_wizard_stop_corrupt_checkpoint.py``）。
+	"""
 	_seed_corrupt_workflow_run(tmp_path)
 	_break_workflow_column(tmp_path, "workflow_runs", column)
 	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "wizard", *flag, "corrupt-run"])
@@ -4540,6 +4544,19 @@ def test_corrupt_workflow_run_reports_envelope(tmp_path, flag, column):
 	assert payload["error"]["code"] == "CACHE_RECORD_INVALID"
 	assert payload["error"]["recoverable"] is True
 	assert "workflow" in payload["error"]["message"]
+
+
+@pytest.mark.parametrize("column", ["params", "last_result"])
+def test_corrupt_workflow_run_stop_still_reports_success(tmp_path, column):
+	"""停止已落盘：断点写坏只影响展示字段，不能把这次停止报成失败（Issue #1186）。"""
+	_seed_corrupt_workflow_run(tmp_path)
+	_break_workflow_column(tmp_path, "workflow_runs", column)
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "wizard", "--stop", "corrupt-run"])
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.output)
+	assert payload["ok"] is True
+	assert payload["data"]["run_id"] == "corrupt-run"
+	assert payload["data"]["status"] == "stopped"
 
 
 def test_corrupt_workflow_step_reports_envelope(tmp_path):
