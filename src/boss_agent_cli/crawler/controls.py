@@ -27,3 +27,7 @@ class CrawlRuntimeUnavailable(RuntimeError):
 
 class CrawlExportError(RuntimeError):
 	"""采集结果无法写出到本地：确定性失败，重试或恢复同一断点无法改变结果。"""
+
+
+class CrawlProfileBusy(RuntimeError):
+	"""采集配置目录正被另一个运行中的采集 Chrome 使用；本次调用没有发出任何请求。"""

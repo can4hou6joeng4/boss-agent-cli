@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import socket
 import time
@@ -19,7 +20,7 @@ from boss_agent_cli.api.request_budget import (
 	is_request_stop,
 	retry_after_seconds,
 )
-from boss_agent_cli.crawler.controls import CrawlRuntimeUnavailable
+from boss_agent_cli.crawler.controls import CrawlProfileBusy, CrawlRuntimeUnavailable
 from boss_agent_cli.crawler.hooks import HookInjection, HookRegistrationError, inject_hook_profile
 from boss_agent_cli.display import risk_error_message
 from boss_agent_cli.services.install_extras import EXTRA_MODULES, extras_requirement, module_available
@@ -201,6 +202,15 @@ class DrissionCrawlerSession:
 			options.existing_only(True)
 		else:
 			# 上次异常退出会留下 lock；端口空闲时清理，避免“闪一下就退出/起不来”。
+			# 但端口按 run 随机分配，端口空闲不代表配置目录空闲：另一个 run 的采集
+			# Chrome 可能正用同一个 profile，删掉它的 SingletonLock 会把两边都
+			# 搞坏（Issue #1266）。锁里记录的进程还活着时不删锁、不起第二个实例。
+			owner = self._profile_owner(self._profile_path)
+			if owner is not None:
+				raise CrawlProfileBusy(
+					f"采集配置目录 {self._profile_path} 正被运行中的采集 Chrome（pid {owner}）使用；"
+					"请等待该采集结束或先停止它，不要并发使用同一数据目录的采集浏览器，也不要删除 SingletonLock"
+				)
 			self._clear_stale_profile_locks(self._profile_path)
 			if self._chrome_path:
 				options.set_browser_path(self._chrome_path)
@@ -558,6 +568,39 @@ class DrissionCrawlerSession:
 					set_cookies(item)
 			except Exception:
 				continue
+
+	@staticmethod
+	def _profile_owner(profile_path: Path) -> int | None:
+		"""返回正在使用该配置目录的 Chrome pid；锁陈旧、跨主机或不可解析时返回 None。
+
+		Chrome 的 SingletonLock 是指向 ``<hostname>-<pid>`` 的符号链接。端口按 run
+		随机分配时两个 run 的端口互不相同，端口探测发现不了共享 profile 的另一个
+		Chrome，只有锁里的 pid 能说明配置目录正在被使用（Issue #1266）。读不出
+		或者格式不认识时按陈旧处理，保持异常退出后自动恢复的既有行为；非 POSIX
+		平台没有可读的锁目标，同样走清理路径。
+		"""
+		try:
+			target = os.readlink(profile_path / "SingletonLock")
+		except (OSError, ValueError):
+			return None
+		host, _, pid_text = target.rpartition("-")
+		if host != socket.gethostname():
+			return None
+		try:
+			pid = int(pid_text)
+		except ValueError:
+			return None
+		if pid <= 0:
+			return None
+		try:
+			os.kill(pid, 0)
+		except ProcessLookupError:
+			return None
+		except PermissionError:
+			return pid
+		except OSError:
+			return None
+		return pid
 
 	@staticmethod
 	def _clear_stale_profile_locks(profile_path: Path) -> None:

@@ -28,7 +28,7 @@ from boss_agent_cli.crawler.service import (
 	crawl_int_setting,
 	unused_local_port,
 )
-from boss_agent_cli.crawler.controls import CrawlExportError, CrawlRuntimeUnavailable
+from boss_agent_cli.crawler.controls import CrawlExportError, CrawlProfileBusy, CrawlRuntimeUnavailable
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_install_hint, extras_requirement
 from boss_agent_cli.services.json_files import write_json_atomic
@@ -368,6 +368,19 @@ def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[s
 			message=str(exc),
 			recoverable=False,
 			recovery_action="确认输出目录可写（不是同名的已有文件）、目录权限与磁盘空间正常，修正后重新执行 crawl resume",
+		)
+		return
+	except CrawlProfileBusy as exc:
+		# 同一数据目录的采集共用一个 Chrome 配置目录：另一个 run 的 Chrome 正在
+		# 使用时，本次调用既没有发出请求，也不该删锁或起第二个实例（Issue #1266）。
+		note("CRAWL_PROFILE_BUSY", str(exc))
+		status_command = boss_command_for_ctx(ctx, "crawl status", include_data_dir=True)
+		handle_error_output(
+			ctx,
+			"crawl",
+			code="CRAWL_PROFILE_BUSY",
+			message=str(exc),
+			hints={"next_actions": [status_command]},
 		)
 		return
 	except RuntimeError as exc:
