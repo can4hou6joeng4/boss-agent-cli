@@ -21,7 +21,12 @@ from boss_agent_cli.automation.models import (
 	RunReport,
 )
 from boss_agent_cli.automation.runner import run_automation_cycle
-from boss_agent_cli.automation.storage import AutomationControlBusy, AutomationStateError, AutomationStore
+from boss_agent_cli.automation.storage import (
+	AutomationControlBusy,
+	AutomationRunBusy,
+	AutomationStateError,
+	AutomationStore,
+)
 from boss_agent_cli.ai.service import AIServiceError
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands.ai_cmd import _build_fit_prompt, _create_ai_service
@@ -406,6 +411,9 @@ def review_approve_cmd(ctx: click.Context, review_id: str) -> None:
 	store = AutomationStore(ctx.obj["data_dir"])
 	try:
 		pending = store.approve_review(review_id, now_iso())
+	except AutomationRunBusy as exc:
+		_emit_run_busy(ctx, "agent.review.approve", exc)
+		return
 	except AutomationStateError as exc:
 		_emit_state_error(ctx, "agent.review.approve", exc)
 		return
@@ -430,6 +438,9 @@ def review_reject_cmd(ctx: click.Context, review_id: str, reason: str) -> None:
 	store = AutomationStore(ctx.obj["data_dir"])
 	try:
 		rejected = store.reject_review(review_id, reason, now_iso())
+	except AutomationRunBusy as exc:
+		_emit_run_busy(ctx, "agent.review.reject", exc)
+		return
 	except AutomationStateError as exc:
 		_emit_state_error(ctx, "agent.review.reject", exc)
 		return
@@ -576,6 +587,18 @@ def _emit_control_busy(ctx: click.Context, command: str, exc: AutomationControlB
 	ctx.exit(1)
 
 
+def _emit_run_busy(ctx: click.Context, command: str, exc: AutomationRunBusy) -> NoReturn:
+	"""执行锁冲突：另一个 agent run 正在执行，本次调用没有发出任何请求（Issue #1253）。"""
+	handle_error_output(
+		ctx,
+		command,
+		code="AUTOMATION_RUN_BUSY",
+		message=str(exc),
+		hints={"next_actions": [_hint_command(ctx, "agent stats")]},
+	)
+	ctx.exit(1)
+
+
 def _emit_state_error(ctx: click.Context, command: str, exc: AutomationStateError) -> NoReturn:
 	"""状态文件损坏时输出信封：自动化不能带着未知状态继续发送。"""
 	handle_error_output(
@@ -634,8 +657,6 @@ def _run_agent(
 	platform = ctx.obj.get("platform") or "zhipin"
 	store = AutomationStore(ctx.obj["data_dir"])
 	try:
-		if resume:
-			store.resume()
 		adapter = build_automation_adapter(
 			platform,
 			data_dir=ctx.obj["data_dir"],
@@ -650,7 +671,10 @@ def _run_agent(
 			platform=platform,
 			dry_run=dry_run,
 			limit=limit,
+			resume=resume,
 		)
+	except AutomationRunBusy as exc:
+		_emit_run_busy(ctx, command, exc)
 	except AutomationControlBusy as exc:
 		_emit_control_busy(ctx, command, exc)
 	except AutomationStateError as exc:

@@ -45,6 +45,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "本次操作没有生效：等待占用 automation/.control-lock.sqlite3 的其他 boss 命令结束后重试；可先用 boss agent stats 查看当前状态。锁文件本身完好，不需要删除",
 	},
+	"AUTOMATION_RUN_BUSY": {
+		"message": "招聘自动化正在由另一进程执行，本次调用未发出任何请求",
+		"recoverable": True,
+		"recovery_action": "等待另一个 boss agent run 结束后重试；可先用 boss agent stats 查看当前状态。不要并发运行同一数据目录",
+	},
 	"AUTOMATION_STATE_INVALID": {
 		"message": "招聘自动化状态文件损坏",
 		"recoverable": True,

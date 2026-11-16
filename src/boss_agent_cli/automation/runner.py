@@ -29,8 +29,37 @@ def run_automation_cycle(
 	platform: str,
 	dry_run: bool,
 	limit: int | None = None,
+	resume: bool = False,
 ) -> RunReport:
-	"""Run one recruiter automation cycle."""
+	"""Run one recruiter automation cycle under the cross-process execution lock.
+
+	队列是整文件回写的：两个 executor 同时运行会互相覆盖在途标记，同一条动作
+	可能被派发两次（Issue #1253）。显式 `--resume` 也在锁内执行，第二个 executor
+	不会在第一个运行时抢先清除熔断。
+	"""
+	with store.execution_lock():
+		if resume:
+			store.resume()
+		return _run_cycle_locked(
+			adapter,
+			store,
+			config,
+			platform=platform,
+			dry_run=dry_run,
+			limit=limit,
+		)
+
+
+def _run_cycle_locked(
+	adapter: RecruiterAutomationPlatform,
+	store: AutomationStore,
+	config: AutomationConfig,
+	*,
+	platform: str,
+	dry_run: bool,
+	limit: int | None = None,
+) -> RunReport:
+	"""Run one recruiter automation cycle while holding the execution lock."""
 	state = store.read_state()
 	guard = SafetyGuard(config, state, dry_run=dry_run, store=store)
 	events: list[AutomationEvent] = []

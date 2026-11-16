@@ -34,6 +34,10 @@ class AutomationControlBusy(RuntimeError):
 	"""automation 控制锁被其他进程占用：本次控制更新没有生效，可稍后重试。"""
 
 
+class AutomationRunBusy(RuntimeError):
+	"""另一个 agent run 正在同一数据目录执行：本次调用没有发出任何请求。"""
+
+
 class AutomationStore:
 	"""Small JSONL-backed store for the recruiter automation engine."""
 
@@ -107,6 +111,32 @@ class AutomationStore:
 			self._write_json_atomic(self.state_path, state)
 			self._write_json_atomic(self.stop_path, closed)
 			return True
+
+	@contextmanager
+	def execution_lock(self) -> Iterator[None]:
+		"""Hold a cross-process execution lock for one automation cycle.
+
+		待执行队列是整文件回写的：两个 executor 同时读到同一份快照时，后写者会
+		用旧行覆盖先写者的在途标记，同一条动作可能被派发两次（Issue #1253）。
+		执行锁串行化整个周期；它独立于 `.control-lock.sqlite3`，因此 `agent stop`
+		仍能在运行期间立即写入熔断。
+		"""
+		connection: sqlite3.Connection | None = None
+		try:
+			connection = sqlite3.connect(self.root / ".run-lock.sqlite3", timeout=0.5)
+			try:
+				connection.execute("BEGIN IMMEDIATE")
+			except sqlite3.OperationalError as exc:
+				if is_cache_busy_error(exc):
+					raise AutomationRunBusy(
+						"另一个 boss agent run 正在执行，本次没有发出任何请求"
+					) from exc
+				raise
+			yield
+			connection.commit()
+		finally:
+			if connection is not None:
+				connection.close()
 
 	@contextmanager
 	def _control_lock(self) -> Iterator[None]:
@@ -226,6 +256,12 @@ class AutomationStore:
 		self.write_jsonl("pending-actions.jsonl", [asdict(item) for item in items])
 
 	def approve_review(self, review_id: str, reviewed_at: str) -> PendingAction | None:
+		# 批准会追加待执行行、改写复核队列：与运行中的 cycle 串行化，避免刚入队
+		# 的动作被整文件回写的旧快照覆盖丢失（Issue #1253）。
+		with self.execution_lock():
+			return self._approve_review_locked(review_id, reviewed_at)
+
+	def _approve_review_locked(self, review_id: str, reviewed_at: str) -> PendingAction | None:
 		reviews = self.read_reviews()
 		updated_reviews: list[ReviewItem] = []
 		pending: PendingAction | None = None
@@ -275,6 +311,16 @@ class AutomationStore:
 		return existing if existing is not None else pending
 
 	def reject_review(
+		self,
+		review_id: str,
+		reason: str,
+		reviewed_at: str,
+	) -> ReviewItem | None:
+		# 拒绝也会改写复核队列：与运行中的 cycle 串行化（Issue #1253）。
+		with self.execution_lock():
+			return self._reject_review_locked(review_id, reason, reviewed_at)
+
+	def _reject_review_locked(
 		self,
 		review_id: str,
 		reason: str,
