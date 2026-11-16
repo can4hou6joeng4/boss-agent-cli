@@ -2,6 +2,17 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.72] - 2026-11-17
+
+### Fixed
+- wizard 遇到缓存库损坏（含取数阶段才暴露的坏页）时被兜成可重试的 `NETWORK_ERROR`，Agent 会在同一坏库上无限重试。`wizard/runner.py` 现在输出 `CACHE_DATABASE_INVALID`（`replay_safe=false`），TTY 补齐对应文案（Issue #1362）。
+- 简历 `modules[].rows[]` 的 `content` / `tags` 类型漂移：`content: 123` 抛 `TypeError`，`tags: "abc"` 被拆成 `a, b, c`；`agent crawl` 里该异常被兜成可重试 `NETWORK_ERROR`（重试会重新发起采集），`ai` 落 `INTERNAL_ERROR`。`ai polish` / `agent crawl --resume` 还把损坏简历报成「不存在」。现在行内容按元素归一，损坏简历报 `RESUME_FILE_INVALID` 并给出 `resume delete` 指引，空名报 `INVALID_PARAM`（Issue #1370、#1369）。
+- `agent crawl` 把 `CrawlProfilePathInvalid` / `CrawlExportError` 兜成 `CRAWL_UNAVAILABLE`（安装依赖），按提示重试永远复现；现在与 `crawl run` 同口径报 `LOCAL_IO_ERROR`（Issue #1366）。
+- AI provider 响应与平台 httpx 响应是极深嵌套 JSON 时 `json.loads` 抛 `RecursionError`：AI 命令 stdout 为空 + traceback，平台命令被兜成可重试 `NETWORK_ERROR`。现在两处都捕获 `RecursionError`，AI 按解析失败报 `AI_API_ERROR`，平台响应按不可恢复的 `INTERNAL_ERROR`（不重试）；CDP 探测与页面风险跟踪器的二次解析同步收口（Issue #1365、#1368）。
+- 组预算目录的 `config.json` 损坏（坏 JSON / `request_max_per_minute: 0`）时，平台命令被兜成可重试 `NETWORK_ERROR`；现在启动期校验并输出 `INVALID_PARAM`（不可恢复），指向具体配置文件（Issue #1367）。
+- MCP 响应含孤立代理字符（如 `\udcff`）时，工具结果序列化抛 `PydanticSerializationError`，异常穿出 `stdio_server()`，整个 MCP 进程退出；`boss mark --label ""` 的空标签被模糊匹配成「新招呼」并在平台改标签；`boss_digest` / `boss_stats` 的显式空输出路径被吞成 `ok=true` 但不写文件。现在响应文本按 CLI 同口径把代理写成字面转义、空标签在构造平台实例前报 `INVALID_PARAM`、显式空路径原样下发（Issue #1375、#1376、#1377）。
+- 认证 Cookie 探测与 CDP 探测的响应解析只捕 `ValueError`：极深嵌套 JSON 的 `RecursionError` 逃出后按网络错误处理；现在两处补捕并按「响应无法解析」走既有降级 / 不可用路径（Issue #1378）。
+
 ## [3.4.71] - 2026-11-17
 
 ### Fixed
