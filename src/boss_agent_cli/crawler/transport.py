@@ -663,7 +663,9 @@ class DrissionCrawlerSession:
 		if not callable(find):
 			return
 		try:
-			if find(".job-list-box", timeout=0) is None and find(".job-card-wrapper", timeout=0) is None:
+			# DrissionPage 未命中时返回 NoneElement（__bool__ 为 False、__eq__(None)
+			# 为 True），不是 None；`is None` 会让这项风险检查永远不触发（Issue #1276）。
+			if not find(".job-list-box", timeout=0) and not find(".job-card-wrapper", timeout=0):
 				raise CrawlRiskError("页面缺少职位列表容器，疑似未登录或安全页")
 		except CrawlRiskError:
 			raise
