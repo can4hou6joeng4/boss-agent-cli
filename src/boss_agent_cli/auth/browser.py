@@ -293,7 +293,9 @@ def probe_cdp(cdp_url: str | None = None) -> str | None:
 	try:
 		resp = httpx.get(f"{base}/json/version", timeout=_CDP_PROBE_TIMEOUT)
 		return cast("str | None", resp.json().get("webSocketDebuggerUrl"))
-	except (httpx.HTTPError, ValueError, KeyError):
+	# ValueError 覆盖 JSON 语法错误；深嵌套响应在 3.11–3.13 抛 RecursionError。
+	# 与解析失败一样按「响应无法解析」处理：拿不到调试端口即视为探测不可用（Issue #1378）。
+	except (httpx.HTTPError, ValueError, KeyError, RecursionError):
 		return None
 
 

@@ -268,7 +268,9 @@ class AuthManager:
 			)
 			try:
 				data = resp.json()
-			except ValueError:
+			except (ValueError, RecursionError):
+				# ValueError 覆盖 JSON 语法错误；深嵌套响应在 3.11–3.13 抛 RecursionError。
+				# 与解析失败一样按「响应无法解析」处理：Cookie 校验视为失败（Issue #1378）。
 				data = None
 			if isinstance(data, dict):
 				raise_platform_risk_response(data)
