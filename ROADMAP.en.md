@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.66 (2026-11-17): wizard `friendSource` type drift falls back to the default (Issue #1314); ROADMAP release entries are separate list items again (Issue #1312).
 - ✅ v3.4.65 (2026-11-17): automation lock corruption reported as state errors and zero-dispatch conflict semantics (Issues #1304, #1307); empty stoken refresh failures (Issue #1305); strict ASCII digit parsing (Issue #1306).
 - ✅ v3.4.64 (2026-11-17): lone surrogate handling (Issue #1294); out-of-range timestamps, mixed-type pipeline sorting and `--now-ts-ms 0` (Issues #1295, #1297, #1298); HTML export with non-string fields (Issue #1296).
 - ✅ v3.4.63 (2026-11-16): wizard crawl actions report corrupt records, export failures and invalid profile paths as deterministic errors (Issues #1286, #1287, #1290); `OverflowError` boundaries closed (Issue #1288); `CRAWL_PROFILE_BUSY` hints include the `<run_id>` placeholder (Issue #1289).
