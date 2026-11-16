@@ -1115,3 +1115,47 @@ def test_ai_http_400_surfaces_provider_reason_and_param_hint(tmp_path, monkeypat
 	assert parsed["error"]["code"] == "AI_API_ERROR"
 	assert "does not support 0.7" in parsed["error"]["message"]
 	assert "--model" in parsed["error"]["recovery_action"]
+
+
+@pytest.mark.parametrize(
+	("key", "value"),
+	[
+		("ai_max_tokens", "512"),
+		("ai_max_tokens", [512]),
+		("ai_max_tokens", True),
+		("ai_max_tokens", 0),
+		("ai_temperature", "hot"),
+		("ai_temperature", []),
+	],
+)
+def test_reply_rejects_invalid_numeric_ai_config(tmp_path, monkeypatch, key, value):
+	"""坏数值不能原样发给服务商，也不能兜成可重试的网络错误（Issue #1209）。"""
+	store = _setup_ai_config(tmp_path, monkeypatch)
+	store.save_config(**{key: value})
+	runner = CliRunner()
+
+	with patch("boss_agent_cli.ai.service.httpx.post") as post:
+		result = _invoke(runner, tmp_path, ["reply", "你好"])
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert key in parsed["error"]["message"]
+	assert "--max-tokens" in parsed["error"]["recovery_action"]
+	assert not post.called, "坏配置必须在发请求之前拦下"
+
+
+def test_reply_falls_back_to_defaults_for_null_ai_numeric_config(tmp_path, monkeypatch):
+	"""显式 null 与缺键同口径回落到默认值（与 ai_int_setting 一致）。"""
+	store = _setup_ai_config(tmp_path, monkeypatch)
+	store.save_config(ai_max_tokens=None, ai_temperature=None)
+	runner = CliRunner()
+
+	mock_result = {"intent_analysis": "x", "reply_drafts": [], "key_points": [], "avoid": []}
+	with patch("boss_agent_cli.ai.service.httpx.post", return_value=_mock_ai_response(mock_result)) as post:
+		result = _invoke(runner, tmp_path, ["reply", "你好"])
+
+	assert result.exit_code == 0, result.output
+	payload = post.call_args.kwargs["json"]
+	assert payload["max_tokens"] == 4096
+	assert payload["temperature"] == 0.7
