@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.41] - 2026-11-16
 
 ### Fixed
 - `crawl resume --background` 在断点的 `updated_at` 列被写成非数字文本时不再返回可重试的 `NETWORK_ERROR`（Issue #1206）：`_prepare_background_resume` 用裸 `float()` 读取该列（存储层按 #1192 的既定口径故意不校验时间戳），`ValueError` 被 `handle_auth_errors` 兜成「重试」，Agent 会拿同一条命令无限重试。现在与状态排序、排队探测共用同一容错读数，漂移按 0 降级，后台恢复照常排队/启动，预检失败还原时写回归一后的 0.0。
