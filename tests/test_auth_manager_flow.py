@@ -125,6 +125,34 @@ def test_login_goes_straight_to_browser_when_cdp_unavailable(
 
 
 @patch("boss_agent_cli.auth.manager.TokenStore")
+@patch("boss_agent_cli.auth.manager.login_via_browser")
+@patch("boss_agent_cli.auth.manager.extract_cookies")
+@patch("httpx.get")
+def test_login_falls_back_to_scan_when_cdp_probe_payload_not_object(
+	mock_get, mock_extract, mock_login_via_browser, mock_store_cls, tmp_path
+):
+	"""CDP 探测拿到非对象 JSON 时按 CDP 不可用处理，继续降级到扫码（Issue #1421）。
+
+	走真实 ``probe_cdp`` 实现（不 patch 掉它），只 mock 它的 httpx 响应与扫码降级函数：
+	修复前 ``[]`` 会让 ``resp.json().get`` 抛 AttributeError，在降级链之外直接中止。
+	"""
+	store = _make_store()
+	mock_store_cls.return_value = store
+	mock_extract.return_value = None
+	probe_response = MagicMock()
+	probe_response.json.return_value = []
+	mock_get.return_value = probe_response
+	browser_token = {"cookies": {"wt2": "browser-cookie"}, "stoken": "browser-token"}
+	mock_login_via_browser.return_value = browser_token
+
+	result = AuthManager(tmp_path).login(timeout=30)
+
+	mock_login_via_browser.assert_called_once_with(timeout=30, platform="zhipin")
+	store.save.assert_called_once_with(browser_token)
+	assert result["_method"] == "扫码登录"
+
+
+@patch("boss_agent_cli.auth.manager.TokenStore")
 def test_force_refresh_raises_when_no_token(mock_store_cls, tmp_path):
 	store = _make_store(token=None)
 	mock_store_cls.return_value = store
