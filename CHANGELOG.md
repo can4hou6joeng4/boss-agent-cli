@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.57] - 2026-11-16
+
+### Fixed
+- automation 执行周期没有跨进程互斥（Issue #1253）：待执行队列按整文件回写，两个 executor 同时处理同一数据目录时，后写者会用旧快照覆盖先写者的 `executing` 在途标记（Issue #1245），同一条已批准动作可能被发送两次，被覆盖回 `pending` 的动作下一轮还会再发；并发的 `agent review approve` 也可能被整文件回写吞掉。现在整个周期持有 `automation/.run-lock.sqlite3` 的跨进程执行锁，第二个 executor 在发出任何请求前返回新登记的 `AUTOMATION_RUN_BUSY`（可重试，附 `agent stats`），显式 `--resume` 也在锁内执行；`agent review approve` / `reject` 与执行周期互斥，冲突时不入队、复核项保持 `review`。执行锁独立于控制锁，`agent stop` 仍能在运行期间立即写入熔断。
+
 ## [3.4.56] - 2026-11-16
 
 ### Fixed
