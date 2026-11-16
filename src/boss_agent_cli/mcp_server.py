@@ -514,6 +514,12 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 		if not _matches_json_type(value, expected):
 			errors.append(f"{key} 应为 {expected}，收到 {type(value).__name__}")
 			continue
+		if expected == "array":
+			# 空数组与「不传」在 mapping 层不可区分：例如 last-messages 的
+			# friend_ids=[] 会退化成抓取当前页候选人并发出平台请求（Issue #1218）。
+			min_items = prop.get("minItems")
+			if isinstance(min_items, int) and not isinstance(min_items, bool) and len(value) < min_items:
+				errors.append(f"{key} 至少需要 {min_items} 个元素")
 		items = prop.get("items")
 		item_type = items.get("type") if isinstance(items, dict) else None
 		if expected != "array" or not isinstance(item_type, str) or item_type not in _JSON_TYPE_CHECKS:

@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- `boss_hr_last_messages` 显式传空 `friend_ids` 数组不再退化为抓取当前页候选人（Issue #1218）：映射层的 `for friend_id in arguments.get("friend_ids") or []` 把空数组与未传混为一谈，CLI 的 `--friend-id` 是 `multiple=True`，于是进入 page 模式发起平台请求并返回非 null 的 `pagination`。现在 schema 声明 `minItems: 1`，MCP 入口统一校验 `minItems` / `maxItems` 并返回 `INVALID_PARAM`；缺省仍走 page 模式，合法非空数组行为不变。
+
 ## [3.4.44] - 2026-11-16
 
 ### Fixed
