@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.31] - 2026-11-16
 
 ### Fixed
 - `digest --format md -o`、`stats --format html -o`、`chat --export -o` 与 `resume export -o` 改为原子写入（Issue #1171）：`Path.write_text` / `open("w")` / Chromium 直写目标路径会先截断或留下半截文件，写入中途被中断（Ctrl-C、进程被杀、磁盘写满）就毁掉上一次的完整导出。现在与 `export`（#1137）共用 `write_text_atomic`，PDF 也先写临时文件再替换：失败时保留旧文件、不残留临时文件，写入失败仍返回 `LOCAL_IO_ERROR` 信封。
