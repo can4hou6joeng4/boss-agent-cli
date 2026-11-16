@@ -68,6 +68,21 @@ def agent_group() -> None:
 	"""招聘自动化入口。"""
 
 
+# 复核 / 待执行队列的 TTY 展示列。键名必须是数据模型字段
+# （ReviewItem.id / confidence、PendingAction.id），否则 Rich 表格恒显示 “-”
+# （Issue #1411）。
+_REVIEW_LIST_COLUMNS: list[tuple[str, str, str]] = [
+	("ID", "id", "bold cyan"),
+	("动作", "action", "green"),
+	("分数", "confidence", "yellow"),
+]
+_PENDING_LIST_COLUMNS: list[tuple[str, str, str]] = [
+	("ID", "id", "bold cyan"),
+	("动作", "action", "green"),
+	("状态", "status", "yellow"),
+]
+
+
 def _hint_command(ctx: click.Context, command: str) -> str:
 	"""招聘自动化的后继与恢复命令保留数据目录与招聘者角色。
 
@@ -173,6 +188,28 @@ def crawl_cmd(
 		return
 
 	data_dir = ctx.obj["data_dir"]
+	# 简历必须在任何平台调用、run 创建与短名单导入之前校验：非空但不存在的
+	# 名字先采集一轮再报 RESUME_NOT_FOUND，既发出真实请求又留下本地写入
+	# （Issue #1407）。损坏与缺失沿用 Issue #1369 的错误码区分。
+	resume_text, load_error = _resume_text(data_dir, resume_name)
+	if resume_text is None:
+		if load_error is not None:
+			# 文件存在但读不出来：不能报成「简历不存在」，提示修正或删除坏文件（Issue #1369）。
+			delete_cmd = _crawl_hint_command(ctx, f"resume delete {shell_argument(resume_name)}")
+			handle_error_output(
+				ctx,
+				"agent.crawl",
+				code="RESUME_FILE_INVALID",
+				message=f"简历文件 '{resume_name}.json' 损坏：{load_error}",
+				recovery_action=(
+					f"修正 resumes/{resume_name}.json 的 JSON 内容后重试，"
+					f"或执行 {delete_cmd} 后重新创建；该文件只存在本机"
+				),
+				hints={"next_actions": [delete_cmd, _crawl_hint_command(ctx, "resume list")]},
+			)
+			return
+		handle_error_output(ctx, "agent.crawl", code="RESUME_NOT_FOUND", message=f"简历 '{resume_name}' 不存在")
+		return
 	if query:
 		raise_if_locked(data_dir)
 	try:
@@ -325,25 +362,6 @@ def crawl_cmd(
 		)
 		return
 
-	resume_text, load_error = _resume_text(data_dir, resume_name)
-	if resume_text is None:
-		if load_error is not None:
-			# 文件存在但读不出来：不能报成「简历不存在」，提示修正或删除坏文件（Issue #1369）。
-			delete_cmd = _crawl_hint_command(ctx, f"resume delete {shell_argument(resume_name)}")
-			handle_error_output(
-				ctx,
-				"agent.crawl",
-				code="RESUME_FILE_INVALID",
-				message=f"简历文件 '{resume_name}.json' 损坏：{load_error}",
-				recovery_action=(
-					f"修正 resumes/{resume_name}.json 的 JSON 内容后重试，"
-					f"或执行 {delete_cmd} 后重新创建；该文件只存在本机"
-				),
-				hints={"next_actions": [delete_cmd, _crawl_hint_command(ctx, "resume list")]},
-			)
-			return
-		handle_error_output(ctx, "agent.crawl", code="RESUME_NOT_FOUND", message=f"简历 '{resume_name}' 不存在")
-		return
 	if not jobs:
 		resume_command = boss_command_for_ctx(ctx, f"crawl resume {shell_argument(run_id or '')} --with-detail", include_data_dir=True)
 		handle_output(
@@ -475,7 +493,7 @@ def review_list_cmd(ctx: click.Context) -> None:
 		render=lambda d: render_list_result(
 			d.get("items", []),
 			"reviews",
-			[("ID", "review_id", "bold cyan"), ("动作", "action", "green"), ("分数", "score", "yellow")],
+			_REVIEW_LIST_COLUMNS,
 			next_steps=[_hint_command(ctx, "agent review approve <id>"), _hint_command(ctx, "agent review reject <id>")],
 		),
 		hints=_agent_hints(ctx),
@@ -566,7 +584,7 @@ def pending_list_cmd(ctx: click.Context) -> None:
 		render=lambda d: render_list_result(
 			d.get("items", []),
 			"pending",
-			[("ID", "review_id", "bold cyan"), ("动作", "action", "green"), ("状态", "status", "yellow")],
+			_PENDING_LIST_COLUMNS,
 			next_steps=[_hint_command(ctx, "agent stats")],
 		),
 		hints=_agent_hints(ctx),
@@ -708,11 +726,14 @@ def _emit_state_error(ctx: click.Context, command: str, exc: AutomationStateErro
 		command,
 		code="AUTOMATION_STATE_INVALID",
 		message=f"{exc.path} 无法解析：{exc.detail}",
-		# 登记表的指引只针对 state.json；队列文件损坏时指向实际出问题的文件。
+		# 登记表的指引只针对 state.json；队列文件损坏或读不出来时指向实际出问题的文件。
 		recovery_action=(
 			None
 			if exc.path.name == "state.json"
-			else f"修正或移除 {exc.path} 中的问题记录后重试；建议先备份该文件"
+			else (
+				f"确认 {exc.path} 可读（权限正常、路径不是目录），"
+				"修正或移除其中的问题记录后重试；建议先备份该文件"
+			)
 		),
 	)
 	ctx.exit(1)

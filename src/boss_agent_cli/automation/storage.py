@@ -377,13 +377,22 @@ class AutomationStore:
 
 	def read_jsonl(self, name: str) -> list[dict[str, Any]]:
 		path = self.root / name
-		if not path.exists():
-			return []
 		rows: list[dict[str, Any]] = []
 		try:
 			payload = path.read_bytes()
-		except OSError:
+		except FileNotFoundError:
+			# 只有「文件不存在」才是空队列。不能先用 path.exists() 预判：
+			# 预判与读取之间文件可能被删除，那个 TOCTOU 窗口会让删除变成失败。
 			return rows
+		except OSError as exc:
+			# 权限不足、路径被同名目录占用、磁盘错误都把队列读成空列表时，
+			# `agent run` 会静默跳过已批准动作并照常报 OK（Issue #1406）。
+			# 状态未知时 fail-closed，交由命令层输出 AUTOMATION_STATE_INVALID。
+			raise AutomationStateError(
+				path,
+				f"队列文件无法读取（{exc}）；请确认文件可读（权限正常、路径不是目录）后重试，"
+				"文件损坏时先备份再修正或移除",
+			) from exc
 		for raw_line in payload.splitlines():
 			try:
 				line = raw_line.decode("utf-8")
@@ -533,10 +542,12 @@ _PENDING_STATUSES = frozenset({"pending", "executing", "executed", "verification
 
 def _pending_from_row(row: dict[str, Any], path: Path) -> PendingAction:
 	status = row.get("status", "pending")
-	if status not in _PENDING_STATUSES:
-		# status 漂移（null / 数字 / 大小写不符 / 旧版 "dry-run"）会被
+	if not isinstance(status, str) or status not in _PENDING_STATUSES:
+		# status 漂移（null / 数字 / 数组 / 对象 / 大小写不符 / 旧版 "dry-run"）会被
 		# process_pending 静默 continue：已批准的动作永远不执行，agent run
-		# 仍报 OK。与 confidence / action 同口径 fail-closed（Issue #1337）。
+		# 仍报 OK。数组 / 对象的 `in frozenset` 还会抛 TypeError 被兜成
+		# INTERNAL_ERROR，所以先做类型校验再比对取值。
+		# 与 confidence / action 同口径 fail-closed（Issue #1337 / #1410）。
 		raise AutomationStateError(
 			path, f"记录 {str(row.get('id', ''))!r} 的 status {status!r} 不是已知状态"
 		)
