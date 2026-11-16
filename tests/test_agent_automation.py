@@ -1121,6 +1121,32 @@ def test_local_ai_null_content_falls_back_to_template_and_cycle_continues(tmp_pa
 		assert "template fallback" in event.reason
 
 
+def test_local_ai_max_tokens_config_drift_falls_back_to_template(tmp_path: Path, monkeypatch) -> None:
+	"""#1196：上限配置写成数组时退回模板话术，不能把整轮自动化打成 TypeError。"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	store = AutomationStore(tmp_path)
+	ai_store = AIConfigStore(tmp_path)
+	ai_store.save_config(ai_provider="vllm", ai_model="Qwen/Qwen3-8B", ai_max_tokens=[2048])
+	ai_store.save_api_key("local")
+	text = "你好，我在上海做过3年销售，擅长客户沟通，大专，想看机会"
+	adapter = RecordingMockRecruiterAutomationPlatform("zhipin", [_conversation(text, "候选人一")])
+
+	with patch("boss_agent_cli.ai.service.httpx.post") as post:
+		report = run_automation_cycle(
+			adapter,
+			store,
+			AutomationConfig(reply_strategy=ReplyStrategy.LOCAL_AI),
+			platform="zhipin",
+			dry_run=True,
+			limit=1,
+		)
+
+	assert len(report.events) == 1
+	post.assert_not_called()
+	assert "local ai config invalid" in report.events[0].reason
+	assert "template fallback" in report.events[0].reason
+
+
 def test_dry_run_does_not_advance_conversation_phase(tmp_path: Path) -> None:
 	"""预览不能改写对话阶段：演练后 live 必须仍从问卷开始（Issue #889）。
 

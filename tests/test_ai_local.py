@@ -9,6 +9,8 @@ from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
+import pytest
+
 from boss_agent_cli.ai.config import AIConfigStore
 from boss_agent_cli.main import cli
 
@@ -242,3 +244,22 @@ def test_ai_local_smoke_uses_configured_max_tokens(tmp_path: Path, monkeypatch) 
 
 	assert result.exit_code == 0
 	assert post.call_args.kwargs["json"]["max_tokens"] == 2048
+
+
+@pytest.mark.parametrize("drifted", [[512], "512", True, 0])
+def test_ai_local_smoke_rejects_invalid_max_tokens_config(tmp_path: Path, monkeypatch, drifted) -> None:
+	"""#1196：ai_max_tokens 手改成数组 / 字符串时按参数错误给信封，不发请求。"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["configure", "--runtime", "ollama", "--model", "qwen3:14b"])
+	AIConfigStore(tmp_path).save_config(ai_max_tokens=drifted)
+
+	with patch("boss_agent_cli.ai.service.httpx.post") as post:
+		result = _invoke(runner, tmp_path, ["smoke"])
+
+	assert result.exit_code == 1
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "ai_max_tokens" in payload["error"]["message"]
+	assert "--max-tokens" in payload["error"]["recovery_action"]
+	post.assert_not_called()

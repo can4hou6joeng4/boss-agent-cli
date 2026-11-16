@@ -50,6 +50,26 @@ def provider_endpoint(provider: str | None, base_url: str | None = None) -> str 
 	return None
 
 
+def ai_int_setting(config: dict[str, Any], key: str, default: int, *, minimum: int = 1) -> int:
+	"""读取 AI 配置里的正整数项；类型漂移给明确错误，由消费点决定如何降级。
+
+	``load_config`` 只做默认值合并，不校验值类型：``ai_max_tokens`` 被手工
+	改成数组或字符串时，裸 ``int()`` 会抛 ``TypeError``，被命令兜底成
+	``INTERNAL_ERROR``（recovery 还写着「不要重试」），而自动回复会让整轮
+	执行中止（Issue #1196）。``bool`` 是 ``int`` 子类，但不是合法上限；
+	显式 ``0`` 也不能当成「缺省」悄悄改回默认值（与 ``crawl_int_setting``
+	同口径）。
+	"""
+	value = config.get(key)
+	if value is None:
+		return default
+	if not isinstance(value, int) or isinstance(value, bool):
+		raise ValueError(f"AI 配置项 {key} 必须是整数，实际是 {type(value).__name__}")
+	if value < minimum:
+		raise ValueError(f"AI 配置项 {key} 不能小于 {minimum}")
+	return value
+
+
 _DEFAULT_CONFIG: dict[str, Any] = {
 	"ai_provider": None,
 	"ai_model": None,

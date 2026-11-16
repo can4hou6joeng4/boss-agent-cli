@@ -9,7 +9,7 @@ from json import JSONDecodeError
 from pathlib import Path
 from typing import Any
 
-from boss_agent_cli.ai.config import AIConfigStore
+from boss_agent_cli.ai.config import AIConfigStore, ai_int_setting
 from boss_agent_cli.ai.local_models import RUNTIME_BASE_URLS
 from boss_agent_cli.ai.service import AIService, AIServiceError
 from boss_agent_cli.automation.config import AutomationConfig, ReplyStrategy
@@ -69,13 +69,21 @@ def _draft_with_local_ai(
 	model = ai_config.get("ai_model")
 	if not api_key or not base_url or not model:
 		return decision
+	# 上限类型漂移同样走模板降级：一处本地配置写坏不能中止整轮自动化（Issue #1196）。
+	try:
+		max_tokens = ai_int_setting(ai_config, "ai_max_tokens", 512)
+	except ValueError as exc:
+		return replace(
+			decision,
+			reason=f"{decision.reason}; local ai config invalid ({exc}), template fallback",
+		)
 	service = AIService(
 		base_url=base_url,
 		api_key=api_key,
 		model=str(model),
 		temperature=0.3,
 		# 上限跟随配置（ai local configure 写入 512）：思考模型写不完时可用 boss ai config --max-tokens 调大
-		max_tokens=int(ai_config.get("ai_max_tokens") or 512),
+		max_tokens=max_tokens,
 	)
 	try:
 		raw = service.chat(_reply_messages(decision, conversation))
