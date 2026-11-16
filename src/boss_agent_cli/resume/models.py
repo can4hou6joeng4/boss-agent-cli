@@ -257,8 +257,26 @@ def dict_to_resume(data: dict[str, Any]) -> ResumeData:
 	)
 
 
+def _row_tags_text(value: Any) -> str:
+	"""把 tags 行归一成一段文本，容忍字段类型漂移（Issue #1370）。
+
+	字符串按整串使用（此前被逐字符拆成 ``"a, b, c"``）；数组只拼接其中的字符串
+	元素；其它类型没有可读文本，直接忽略。合法输入（字符串数组）输出不变。
+	"""
+	if isinstance(value, str):
+		return value
+	if isinstance(value, list):
+		return ", ".join(item for item in value if isinstance(item, str))
+	return ""
+
+
 def resume_to_text(resume: ResumeData) -> str:
-	"""将简历转为纯文本（用于 AI 输入）"""
+	"""将简历转为纯文本（用于 AI 输入）
+
+	``rows[].content/tags`` 是自由 JSON：数字、混入非字符串的数组、写错的标量
+	都会通过 ``dict_to_resume`` 的 rows 校验。这里按元素归一，合法输入的输出
+	逐字节不变，漂移输入不再让调用方抛 ``TypeError``（Issue #1370）。
+	"""
 	lines: list[str] = []
 
 	lines.append(resume.name)
@@ -281,17 +299,19 @@ def resume_to_text(resume: ResumeData) -> str:
 		for row in mod.rows:
 			row_type = row.get("type", "")
 			if row_type == "tags":
-				tags = row.get("tags", [])
+				tags = _row_tags_text(row.get("tags", []))
 				if tags:
-					lines.append(", ".join(tags))
-			elif row_type == "richtext":
-				content = row.get("content", [])
-				for line in content:
-					lines.append(line)
+					lines.append(tags)
 			else:
+				# richtext 与其它类型共用同一套归一：richtext 此前直接 append 原值，
+				# 末尾 join 遇到数字同样会抛 TypeError。
 				content = row.get("content", [])
-				for line in content:
-					lines.append(str(line))
+				if isinstance(content, str):
+					lines.append(content)
+				elif isinstance(content, list):
+					lines.extend(item for item in content if isinstance(item, str))
+				elif content is not None:
+					lines.append(str(content))
 		lines.append("")
 
 	return "\n".join(lines).strip()
