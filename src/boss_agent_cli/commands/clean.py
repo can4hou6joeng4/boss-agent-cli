@@ -13,7 +13,7 @@ import click
 from rich.table import Table
 
 from boss_agent_cli import display
-from boss_agent_cli.api.cdp_risk_lock import lock_path
+from boss_agent_cli.api.cdp_risk_lock import lock_paths
 from boss_agent_cli.api.request_budget import budget_directory
 from boss_agent_cli.cache.store import CacheDatabaseInvalid
 from boss_agent_cli.display import boss_command_for_ctx, handle_output, render_next_steps, shell_argument
@@ -56,9 +56,12 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 		directories = dict.fromkeys((Path(data_dir).resolve(), budget_directory(Path(data_dir))))
 		freed, count = 0, 0
 		for directory in directories:
-			removed_bytes, removed_count = _clean_path(lock_path(directory), dry_run=dry_run)
-			freed += removed_bytes
-			count += removed_count
+			# 主位置与后备位置都要清理：任一份残留都会让 fail-closed 检查继续阻断
+			# 用户已确认恢复的访问（Issue #1270）。
+			for path in lock_paths(directory):
+				removed_bytes, removed_count = _clean_path(path, dry_run=dry_run)
+				freed += removed_bytes
+				count += removed_count
 		results.append({"target": "CDP 风控锁", "cleaned": count, "bytes_freed": freed})
 		total_freed += freed
 
