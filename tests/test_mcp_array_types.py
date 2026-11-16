@@ -20,6 +20,28 @@ _ARRAY_PROPERTIES = [
 	if prop.get("type") == "array"
 ]
 _ARRAY_IDS = [f"{tool.name}-{key}" for tool, key, _ in _ARRAY_PROPERTIES]
+
+
+def _min_items(tool, key) -> int:
+	value = tool.input_schema["properties"][key].get("minItems")
+	return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+# 声明 minItems 的属性上，空数组会被当作「没传」并触达平台（Issue #1218），
+# 因此「空数组原样保留」只覆盖没有下限的属性；有下限的另行断言被拒绝。
+_KEEP_VALUE_CASES = [
+	(tool, key, expected, empty)
+	for tool, key, expected in _ARRAY_PROPERTIES
+	for empty in (False, True)
+	if not (empty and _min_items(tool, key))
+]
+_KEEP_VALUE_IDS = [
+	f"{tool.name}-{key}-{'empty' if empty else 'values'}" for tool, key, _, empty in _KEEP_VALUE_CASES
+]
+_REQUIRED_ITEM_CASES = [
+	(tool, key, minimum) for tool, key, _ in _ARRAY_PROPERTIES if (minimum := _min_items(tool, key))
+]
+_REQUIRED_ITEM_IDS = [f"{tool.name}-{key}" for tool, key, _ in _REQUIRED_ITEM_CASES]
 _VALID_ELEMENTS = {"string": ["synthetic", "--help"], "integer": [7, 101]}
 _INVALID_ELEMENTS = {
 	"string": [None, False, True, 1, 1.5, {}, []],
@@ -88,8 +110,7 @@ def test_invalid_array_elements_fail_before_mapping(tool, key, expected, bad, fa
 	fake_cli.assert_not_called()
 
 
-@pytest.mark.parametrize(("tool", "key", "expected"), _ARRAY_PROPERTIES, ids=_ARRAY_IDS)
-@pytest.mark.parametrize("empty", [False, True])
+@pytest.mark.parametrize(("tool", "key", "expected", "empty"), _KEEP_VALUE_CASES, ids=_KEEP_VALUE_IDS)
 def test_valid_and_empty_arrays_keep_their_values(tool, key, expected, empty, fake_cli):
 	arguments = {**_arguments(tool), key: [] if empty else list(_VALID_ELEMENTS[expected])}
 	original = deepcopy(arguments)
@@ -101,6 +122,36 @@ def test_valid_and_empty_arrays_keep_their_values(tool, key, expected, empty, fa
 	assert json.loads(result.content[0].text)["ok"] is True
 	assert arguments == original
 	fake_cli.assert_awaited_once_with(*expected_args, may_write=mcp_server._tool_may_write(tool.name, arguments))
+
+
+@pytest.mark.parametrize(("tool", "key", "minimum"), _REQUIRED_ITEM_CASES, ids=_REQUIRED_ITEM_IDS)
+def test_empty_array_is_rejected_when_schema_declares_min_items(tool, key, minimum, fake_cli, monkeypatch):
+	"""空数组与缺失参数不可区分：声明了 minItems 就必须在映射前拒绝（Issue #1218）。"""
+	arguments = {**_arguments(tool), key: []}
+	original = deepcopy(arguments)
+	mapping = MagicMock(side_effect=AssertionError("空数组不应进入参数映射"))
+	monkeypatch.setattr(mcp_server, "_build_args", mapping)
+
+	result = _call(tool, arguments)
+
+	assert result.is_error is True
+	payload = json.loads(result.content[0].text)
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert f"{key} 至少需要 {minimum} 个元素" in payload["error"]["message"]
+	assert arguments == original
+	mapping.assert_not_called()
+	fake_cli.assert_not_called()
+
+
+def test_min_items_declarations_are_positive_integers():
+	"""minItems=0 等于没有约束，应直接省略；布尔值会绕过校验。"""
+	assert _REQUIRED_ITEM_CASES, "friend_ids 应声明 minItems，空数组用例不能被静默跳过"
+	for tool, key, _ in _ARRAY_PROPERTIES:
+		raw = tool.input_schema["properties"][key].get("minItems")
+		if raw is None:
+			continue
+		assert isinstance(raw, int) and not isinstance(raw, bool) and raw >= 1, f"{tool.name}.{key} 的 minItems={raw!r}"
 
 
 @pytest.mark.parametrize(("tool", "key", "_expected"), _ARRAY_PROPERTIES, ids=_ARRAY_IDS)

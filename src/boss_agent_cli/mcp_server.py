@@ -520,9 +520,6 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 			min_items = prop.get("minItems")
 			if isinstance(min_items, int) and not isinstance(min_items, bool) and len(value) < min_items:
 				errors.append(f"{key} 至少需要 {min_items} 个元素")
-			max_items = prop.get("maxItems")
-			if isinstance(max_items, int) and not isinstance(max_items, bool) and len(value) > max_items:
-				errors.append(f"{key} 最多允许 {max_items} 个元素")
 		items = prop.get("items")
 		item_type = items.get("type") if isinstance(items, dict) else None
 		if expected != "array" or not isinstance(item_type, str) or item_type not in _JSON_TYPE_CHECKS:
