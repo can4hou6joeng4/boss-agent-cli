@@ -31,3 +31,7 @@ class CrawlExportError(RuntimeError):
 
 class CrawlProfileBusy(RuntimeError):
 	"""采集配置目录正被另一个运行中的采集 Chrome 使用；本次调用没有发出任何请求。"""
+
+
+class CrawlProfilePathInvalid(RuntimeError):
+	"""采集配置目录无法创建或不是目录：确定性本地路径失败，重试或恢复只会复现（Issue #1290）。"""

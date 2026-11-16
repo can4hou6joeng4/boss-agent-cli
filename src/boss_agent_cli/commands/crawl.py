@@ -28,7 +28,12 @@ from boss_agent_cli.crawler.service import (
 	crawl_int_setting,
 	unused_local_port,
 )
-from boss_agent_cli.crawler.controls import CrawlExportError, CrawlProfileBusy, CrawlRuntimeUnavailable
+from boss_agent_cli.crawler.controls import (
+	CrawlExportError,
+	CrawlProfileBusy,
+	CrawlProfilePathInvalid,
+	CrawlRuntimeUnavailable,
+)
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_install_hint, extras_requirement
 from boss_agent_cli.services.json_files import write_json_atomic
@@ -382,6 +387,22 @@ def _run_service(ctx: click.Context, service_call: Any, *, on_error: Callable[[s
 			code="CRAWL_PROFILE_BUSY",
 			message=str(exc),
 			hints={"next_actions": [status_command]},
+		)
+		return
+	except CrawlProfilePathInvalid as exc:
+		# 配置目录被同名文件占用或不可写：确定性本地路径失败，重试或 resume 只会
+		# 复现同一个错误，不能给 ok=true 的 stopped 与恢复指引（Issue #1290）。
+		note("LOCAL_IO_ERROR", str(exc))
+		handle_error_output(
+			ctx,
+			"crawl",
+			code="LOCAL_IO_ERROR",
+			message=str(exc),
+			recoverable=False,
+			recovery_action=(
+				"检查数据目录下的 crawl/chrome-profile 是否被同名文件占用、"
+				"目录权限与磁盘空间是否正常，修正后重新执行"
+			),
 		)
 		return
 	except RuntimeError as exc:
