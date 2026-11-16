@@ -151,10 +151,18 @@ def test_cache_with_overlong_integer_literal_reports_missing(tmp_path):
 	assert get_index_snapshot(tmp_path) is None
 
 
-def test_deeply_nested_cache_reports_missing(tmp_path):
+def test_deeply_nested_cache_never_raises(tmp_path):
+	"""深嵌套在 3.11–3.13 抛 RecursionError（按缺失处理），3.14 起解析器不再受限。
+
+	两种解释器行为都必须给出可用的信封数据，不能把解析异常冒泡成网络错误。
+	"""
 	_write_raw(tmp_path, '{"jobs": [], "count": ' + "[" * 100_000 + "]" * 100_000 + "}")
 
-	assert get_index_info(tmp_path)["exists"] is False
+	info = get_index_info(tmp_path)
+
+	assert set(info) == {"exists", "source", "page", "count", "saved_at"}
+	assert info["count"] == 0
+	assert info["saved_at"] == 0
 
 
 def test_show_out_of_range_uses_actual_job_count(tmp_path):
