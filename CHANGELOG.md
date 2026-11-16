@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.59] - 2026-11-16
+
+### Fixed
+- `boss agent run` / `agent train` 被 Ctrl+C 中断时 stdout 没有任何 JSON 信封（Issue #1262）：runner 打开熔断并保留 checkpoint 后原样重抛 `KeyboardInterrupt`，Click 在 `standalone_mode=False` 下把它转成 `Abort` 上抛，进程以空输出退出；MCP 通过子进程解析 stdout，只能把这次写调用当成结果未知。现在命令层捕获中断并输出 `CIRCUIT_BREAKER_OPEN` 信封（可重试），说明执行被中断、熔断已打开并保留 checkpoint，恢复指引为核对未确认动作后执行 `--resume`。
+
 ## [3.4.58] - 2026-11-16
 
 ### Fixed
