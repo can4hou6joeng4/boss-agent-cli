@@ -96,8 +96,9 @@ def render_html_export(items: list[dict[str, Any]]) -> str:
 	def esc(value: Any) -> str:
 		# 平台字段类型漂移（数字 / 对象）时 html.escape 直接抛 AttributeError，
 		# 整次 HTML 导出落成 INTERNAL_ERROR；csv 已用 str() 兜底，这里统一
-		# 同口径（Issue #1296）。
-		return _html.escape(str(value))
+		# 同口径（Issue #1296）。null 字段是「缺失」，不能渲染成字面量 "None"
+		# （Issue #1354）。
+		return "" if value is None else _html.escape(str(value))
 
 	if not items:
 		return "<html><body><p>无数据</p></body></html>"

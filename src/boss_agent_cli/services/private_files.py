@@ -14,6 +14,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from boss_agent_cli.services.output_path import refuse_symlink_target
+
 DIRECTORY_MODE = 0o700
 FILE_MODE = 0o600
 
@@ -51,8 +53,10 @@ def write_private_bytes(path: Path, data: bytes) -> None:
 	"""原子写入仅当前用户可读的字节文件。
 
 	``mkstemp`` 默认 0600 且同目录 ``os.replace`` 原子替换，避免半截文件与默认
-	umask 的 0644 权限。
+	umask 的 0644 权限。私有文件写入不经过 ``-o`` 预检，符号链接目标必须在这里
+	直接拒绝：``os.replace`` 只会替换链接本身（Issue #1355）。
 	"""
+	refuse_symlink_target(path)
 	path.parent.mkdir(parents=True, exist_ok=True)
 	fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
 	temporary = Path(temporary_name)
