@@ -108,6 +108,87 @@ def test_call_tool_surrogate_result_keeps_ok_envelope(monkeypatch: pytest.Monkey
 	assert payload["command"] == "status"
 
 
+# ── 严格 JSON 工具结果（Issue #1391）──────────────────────────────
+
+
+def _reject_json_constant(value: str) -> None:
+	"""严格 JSON 解析器：遇到 NaN / Infinity / -Infinity 直接失败。"""
+	raise ValueError(f"非严格 JSON 常量: {value}")
+
+
+def _strict_json_loads(text: str):
+	return json.loads(text, parse_constant=_reject_json_constant)
+
+
+def test_dumps_tool_result_normalizes_non_finite_floats() -> None:
+	payload = {
+		"ok": True,
+		"schema_version": "1.0",
+		"command": "status",
+		"data": {"score": float("nan"), "limits": [float("inf"), float("-inf"), 1]},
+		"pagination": None,
+		"error": None,
+		"hints": {"confidence": float("nan")},
+	}
+
+	text = mcp_server._dumps_tool_result(payload)
+
+	assert "NaN" not in text
+	assert "Infinity" not in text
+	parsed = _strict_json_loads(text)
+	assert parsed["data"]["score"] is None
+	assert parsed["data"]["limits"] == [None, None, 1]
+	assert parsed["hints"]["confidence"] is None
+
+
+def test_dumps_tool_result_normalizes_oversized_integer() -> None:
+	payload = {
+		"ok": True,
+		"schema_version": "1.0",
+		"command": "status",
+		"data": {"value": 10**5000},
+		"pagination": None,
+		"error": None,
+		"hints": None,
+	}
+
+	parsed = _strict_json_loads(mcp_server._dumps_tool_result(payload))
+	assert parsed["data"]["value"] is None
+
+
+def test_dumps_tool_result_last_resort_returns_error_envelope_for_nan_key() -> None:
+	"""NaN 键无法归一：出口返回可解析的 INTERNAL_ERROR 信封，而不是抛异常。"""
+	parsed = _strict_json_loads(
+		mcp_server._dumps_tool_result({"ok": True, "command": "status", "data": {float("nan"): 1}})
+	)
+	assert parsed["ok"] is False
+	assert parsed["command"] == "status"
+	assert parsed["error"]["code"] == "INTERNAL_ERROR"
+
+
+def test_call_tool_normalizes_nan_from_cli_wire(monkeypatch: pytest.MonkeyPatch) -> None:
+	"""旧版 CLI 输出里的 NaN 被 ``json.loads`` 接受后，MCP 结果仍必须是严格 JSON。"""
+	_patch_result_types(monkeypatch)
+	wire = (
+		'{"ok": true, "schema_version": "1.0", "command": "status", '
+		'"data": {"score": NaN}, "pagination": null, "error": null, "hints": null}'
+	)
+
+	async def fake_run(*args: str, **kwargs: Any) -> dict[str, Any]:
+		return mcp_server._parse_cli_output(args, wire, "")
+
+	monkeypatch.setattr(mcp_server, "_run_boss_async", fake_run)
+
+	result = asyncio.run(
+		mcp_server.call_tool(None, SimpleNamespace(name="boss_status", arguments={}))
+	)
+
+	assert result.is_error is False
+	text = result.content[0].text
+	assert "NaN" not in text
+	assert _strict_json_loads(text)["data"]["score"] is None
+
+
 _SDK_PROBE = dedent(
 	"""\
 	import asyncio

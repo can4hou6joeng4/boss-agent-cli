@@ -3,9 +3,27 @@ import json
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
-from boss_agent_cli.output import envelope_success, envelope_error, emit_error, emit_success, Logger
+from boss_agent_cli.main import cli
+from boss_agent_cli.output import (
+	envelope_success,
+	envelope_error,
+	emit_error,
+	emit_success,
+	json_safe_value,
+	Logger,
+)
 from boss_agent_cli.schema.error_codes import ERROR_CODES
+
+
+def _reject_json_constant(value: str) -> None:
+	"""严格 JSON 解析器：遇到 NaN / Infinity / -Infinity 直接失败。"""
+	raise ValueError(f"非严格 JSON 常量: {value}")
+
+
+def _strict_json_loads(text: str):
+	return json.loads(text, parse_constant=_reject_json_constant)
 
 
 def test_envelope_success_minimal():
@@ -582,3 +600,104 @@ def test_caller_supplied_replay_safe_wins_over_registry():
 	details = payload["error"]["details"]
 	assert details["replay_safe"] is True
 	assert details["outcome_unknown"] is False
+
+
+# ── 严格 JSON 出口（Issue #1391）──────────────────────────────────
+
+
+def test_envelope_success_normalizes_non_finite_floats_to_null() -> None:
+	"""NaN / ±Infinity 不能写成裸字面量，归一为 null 后 stdout 仍是严格 JSON。"""
+	result = envelope_success(
+		"config",
+		{"value": [float("nan"), 5.0, float("inf"), float("-inf")]},
+		hints={"next_actions": ["boss config list"], "score": float("nan")},
+	)
+
+	parsed = _strict_json_loads(result)
+	assert parsed["data"]["value"] == [None, 5.0, None, None]
+	assert parsed["hints"]["score"] is None
+	assert "NaN" not in result
+	assert "Infinity" not in result
+
+
+def test_envelope_success_normalizes_nested_tuple_and_keeps_regular_values() -> None:
+	result = envelope_success(
+		"status",
+		{
+			"pair": (1, float("nan")),
+			"nested": {"items": [float("inf"), (2, float("-inf"))]},
+			"flag": True,
+			"count": 0,
+			"big_but_safe": 2**63,
+			"zero": 0.0,
+		},
+	)
+
+	parsed = _strict_json_loads(result)
+	assert parsed["data"]["pair"] == [1, None]
+	assert parsed["data"]["nested"]["items"] == [None, [2, None]]
+	assert parsed["data"]["flag"] is True
+	assert parsed["data"]["count"] == 0
+	assert parsed["data"]["big_but_safe"] == 2**63
+	assert parsed["data"]["zero"] == 0.0
+
+
+def test_envelope_success_normalizes_oversized_integer_to_null() -> None:
+	"""超过 int→str 上限的整数不能让出口抛 ValueError（默认上限 4300 位）。"""
+	huge = 10**5000
+	result = envelope_success("status", {"value": huge, "items": [huge, 1]})
+
+	parsed = _strict_json_loads(result)
+	assert parsed["ok"] is True
+	assert parsed["data"]["value"] is None
+	assert parsed["data"]["items"] == [None, 1]
+	# 归一为 null 而不是把 5000 位数字写进 stdout。
+	assert "0" * 1000 not in result
+
+
+def test_envelope_success_keeps_largest_serializable_integer() -> None:
+	"""4300 位以内（bit_length <= 14284）的整数仍按原值输出。"""
+	value = 10**4300 - 1
+	parsed = _strict_json_loads(envelope_success("status", {"value": value}))
+	assert parsed["data"]["value"] == value
+
+
+def test_json_safe_value_preserves_bool_before_int_branch() -> None:
+	assert json_safe_value(True) is True
+	assert json_safe_value(False) is False
+	assert json_safe_value({"ok": True}) == {"ok": True}
+
+
+def test_envelope_success_last_resort_returns_error_envelope_for_nan_key() -> None:
+	"""NaN 作为 dict 键时键保持原样，归一无法救回——出口返回可解析的错误信封。"""
+	result = envelope_success("status", {float("nan"): "value"})
+
+	parsed = _strict_json_loads(result)
+	assert parsed["ok"] is False
+	assert parsed["command"] == "status"
+	assert parsed["error"]["code"] == "INTERNAL_ERROR"
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["error"]["recovery_action"]
+
+
+def test_envelope_success_last_resort_handles_unserializable_type() -> None:
+	result = envelope_success("status", {"blob": b"not-json"})
+
+	parsed = _strict_json_loads(result)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "INTERNAL_ERROR"
+
+
+def test_config_get_with_non_finite_value_emits_strict_json(tmp_path: Path) -> None:
+	"""真实路径：config.json 手写 NaN 后，config get 的 stdout 仍是严格 JSON。"""
+	(tmp_path / "config.json").write_text('{"request_delay": [NaN, 5]}', encoding="utf-8")
+
+	result = CliRunner().invoke(
+		cli, ["--data-dir", str(tmp_path), "config", "get", "request_delay"]
+	)
+
+	assert result.exit_code == 0
+	parsed = _strict_json_loads(result.output)
+	assert parsed["ok"] is True
+	assert parsed["data"]["value"] == [None, 5]
+	assert "NaN" not in result.output

@@ -30,7 +30,7 @@ from mcp.types import (
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.mcp_tools import TOOLS
-from boss_agent_cli.output import envelope_error
+from boss_agent_cli.output import envelope_error, json_safe_value, serialization_failure_envelope
 
 # 向后兼容的再导出：这些符号在拆分前属于本模块，`mcp-server/server.py` wrapper
 # 与既有测试仍按 `boss_agent_cli.mcp_server.<name>` 取用。本模块自身不再使用它们，
@@ -309,8 +309,22 @@ def _dumps_tool_result(payload: dict[str, Any]) -> str:
 	写工具的成功响应就此丢失，客户端还可能重试（Issue #1375）。
 	与 CLI 信封同口径用 ``backslashreplace`` 转成字面 ``\\udcff`` 转义，解析出的
 	值不变，响应始终可编码。
+
+	``allow_nan=False`` 与 CLI 出口同口径（Issue #1391）：NaN / ±Infinity / 超长
+	整数先经 :func:`json_safe_value` 归一为 ``null``；归一后仍无法严格序列化时返回
+	固定 ``INTERNAL_ERROR`` 信封，异常不会穿出工具 handler。
 	"""
-	text = json.dumps(payload, ensure_ascii=False, indent=2)
+	try:
+		# 快路径：正常结果与修复前逐字节一致。
+		text = json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)
+	except (TypeError, ValueError, RecursionError):
+		try:
+			text = json.dumps(json_safe_value(payload), ensure_ascii=False, indent=2, allow_nan=False)
+		except (TypeError, ValueError, RecursionError):
+			command = payload.get("command") if isinstance(payload, dict) else None
+			text = json.dumps(
+				serialization_failure_envelope(command), ensure_ascii=False, indent=2, allow_nan=False
+			)
 	return text.encode("utf-8", "backslashreplace").decode("utf-8")
 
 
