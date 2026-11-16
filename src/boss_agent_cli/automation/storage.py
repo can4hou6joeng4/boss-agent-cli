@@ -381,10 +381,17 @@ class AutomationStore:
 			return []
 		rows: list[dict[str, Any]] = []
 		try:
-			lines = path.read_text(encoding="utf-8").splitlines()
-		except (UnicodeDecodeError, OSError):
+			payload = path.read_bytes()
+		except OSError:
 			return rows
-		for line in lines:
+		for raw_line in payload.splitlines():
+			try:
+				line = raw_line.decode("utf-8")
+			except UnicodeDecodeError:
+				# 整文件 read_text() 解码失败会把前面所有合法行一起丢掉：
+				# 一个 GBK 字节就让 pending / stats 看到空队列（Issue #1337）。
+				# 按行跳过坏字节行，与单行 JSON 损坏的容错口径一致。
+				continue
 			if not line.strip():
 				continue
 			try:
@@ -519,14 +526,27 @@ def _review_from_row(row: dict[str, Any], path: Path) -> ReviewItem:
 	)
 
 
+#: 待执行队列的合法状态：pending 可执行；executing / verification-required 表示
+#: 动作可能已派发，必须跳过且不重发；executed 是终态。
+_PENDING_STATUSES = frozenset({"pending", "executing", "executed", "verification-required"})
+
+
 def _pending_from_row(row: dict[str, Any], path: Path) -> PendingAction:
+	status = row.get("status", "pending")
+	if status not in _PENDING_STATUSES:
+		# status 漂移（null / 数字 / 大小写不符 / 旧版 "dry-run"）会被
+		# process_pending 静默 continue：已批准的动作永远不执行，agent run
+		# 仍报 OK。与 confidence / action 同口径 fail-closed（Issue #1337）。
+		raise AutomationStateError(
+			path, f"记录 {str(row.get('id', ''))!r} 的 status {status!r} 不是已知状态"
+		)
 	return PendingAction(
 		id=str(row.get("id", "")),
 		ts=str(row.get("ts", "")),
 		platform=str(row.get("platform", "")),
 		candidate_key=str(row.get("candidate_key", "")),
 		action=str(row.get("action", "")),
-		status=str(row.get("status", "pending")),
+		status=status,
 		confidence=_row_confidence(row, path),
 		reason=str(row.get("reason", "")),
 		message=str(row.get("message", "")),
