@@ -16,6 +16,12 @@ _LABEL_NAMES = {v: k for k, v in _LABEL_MAP.items()}
 
 def _resolve_label(label_input: str) -> int:
 	"""将标签名称或 ID 解析为数字 ID。"""
+	# 空串是任何标签名的子串，模糊匹配会把它解析成「新招呼」并真的在平台上
+	# 添加 / 移除标签（Issue #1376）；纯空白同样不可能是有效标签。
+	if not label_input.strip():
+		raise click.BadParameter(
+			f"标签不能为空。可用: {', '.join(_LABEL_MAP.keys())}"
+		)
 	if label_input in _LABEL_MAP:
 		return _LABEL_MAP[label_input]
 	# 全角 / 上标数字（'①'、'²'）的 `isdigit()` 为真但 `int()` 会抛 ValueError，

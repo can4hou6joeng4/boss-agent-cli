@@ -296,7 +296,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"security_id": {"type": "string", "description": "联系人的 uid（推荐）或 security_id"},
-					"tag": {"type": "string", "description": "标签名称"},
+					"tag": {"type": "string", "minLength": 1, "description": "标签名称"},
 					"remove": {"type": "boolean", "description": "是否移除标签", "default": False},
 				},
 				"required": ["security_id", "tag"],
