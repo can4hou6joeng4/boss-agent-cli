@@ -187,7 +187,8 @@ class AIConfigStore:
 				saved = json.loads(self._config_path.read_text(encoding="utf-8"))
 				if isinstance(saved, dict):
 					config.update(saved)
-			except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+			# 超长整数（3.11+）与深嵌套同样按配置损坏处理，不让 AI 配置读取崩在解析上。
+			except (ValueError, OSError, RecursionError):
 				pass
 		return config
 

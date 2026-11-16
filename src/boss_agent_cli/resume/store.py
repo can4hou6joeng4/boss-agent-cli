@@ -79,7 +79,9 @@ class ResumeStore:
 			return None, None
 		try:
 			raw = json.loads(path.read_text(encoding="utf-8"))
-		except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+		# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长整数
+		# 上限；RecursionError 覆盖深嵌套。读不出来就是文件损坏，报原因而不是冒泡。
+		except (ValueError, OSError, RecursionError) as exc:
 			return None, f"JSON 读取失败：{exc}"
 		if not isinstance(raw, dict):
 			return None, "顶层必须是 JSON 对象"
@@ -141,8 +143,14 @@ class ResumeStore:
 			raise ResumeImportError("文件不是 UTF-8 编码的文本；请先转存为 UTF-8 的 JSON 再导入") from exc
 		try:
 			raw = json.loads(raw_text)
-		except json.JSONDecodeError as exc:
-			raise ResumeImportError(f"不是合法 JSON（第 {exc.lineno} 行第 {exc.colno} 列：{exc.msg}）") from exc
+		except ValueError as exc:
+			# 只有 JSONDecodeError 带行列信息；超长整数（3.11+）与编码问题没有。
+			position = (
+				f"第 {exc.lineno} 行第 {exc.colno} 列：" if isinstance(exc, json.JSONDecodeError) else ""
+			)
+			raise ResumeImportError(f"不是合法 JSON（{position}{exc}）") from exc
+		except RecursionError as exc:
+			raise ResumeImportError("不是合法 JSON（嵌套层级过深）") from exc
 
 		if isinstance(raw, dict) and "version" in raw and "data" in raw and isinstance(raw["data"], dict):
 			raw = raw["data"]

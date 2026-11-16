@@ -96,7 +96,9 @@ def read_imported_models(data_dir: Path, *, strict: bool = False) -> list[Import
 		return []
 	try:
 		rows = json.loads(path.read_text(encoding="utf-8"))
-	except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+	# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长整数
+	# 上限；RecursionError 覆盖深嵌套。登记表坏了按既定语义降级或报错。
+	except (ValueError, OSError, RecursionError) as exc:
 		if strict:
 			raise _registry_corrupt_error(path, str(exc)) from exc
 		return []

@@ -52,7 +52,10 @@ _SAVED_SEARCH_STRING_KEYS = (
 def _decode_saved_params(name: str, raw: Any) -> dict[str, Any]:
 	try:
 		parsed = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
-	except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as exc:
+	# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError，以及 Python 3.11+ 对
+	# 超长整数字面量的位数上限；RecursionError 覆盖深嵌套（3.14 起解析器不再
+	# 受限，不能按解释器行为区分）。两者都是确定性损坏，必须报参数无法解析。
+	except (ValueError, TypeError, RecursionError) as exc:
 		raise SavedSearchParamsError(name, str(exc)) from exc
 	if not isinstance(parsed, dict):
 		raise SavedSearchParamsError(name, "顶层必须是 JSON object")
@@ -97,7 +100,7 @@ class CacheRecordInvalid(ValueError):
 def _decode_record(kind: str, record_id: str, column: str, raw: Any, *, expected: type | None = None) -> Any:
 	try:
 		parsed = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
-	except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as exc:
+	except (ValueError, TypeError, RecursionError) as exc:
 		raise CacheRecordInvalid(kind, record_id, column, str(exc)) from exc
 	# 结构漂移（合法 JSON 但不是预期的容器）与语法损坏等价：后续按 dict / list
 	# 使用时同样是 AttributeError traceback，必须在读取边界一次拦下。
@@ -1004,7 +1007,8 @@ class CacheStore:
 			return []
 		try:
 			parsed = json.loads(raw)
-		except json.JSONDecodeError:
+		# 超长整数 / 深嵌套与语法损坏等价：退回旧的逗号分隔写法。
+		except (ValueError, RecursionError):
 			return cls._normalize_shortlist_tags(raw.split(","))
 		if not isinstance(parsed, list):
 			return []

@@ -53,7 +53,9 @@ def save_snapshot_and_diff(
 				for item in prev_today:
 					if isinstance(item, dict) and contact_identity(item):
 						existing[contact_identity(item)] = item
-		except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+		except (ValueError, OSError, RecursionError):
+			# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长
+			# 整数上限；RecursionError 覆盖深嵌套。坏快照按没有历史处理。
 			pass
 
 	# 用当前数据更新（新数据优先）
@@ -109,7 +111,7 @@ def load_snapshot(path: str, logger: Logger) -> list[dict[str, Any]] | None:
 	try:
 		with open(path, encoding="utf-8") as f:
 			data = json.load(f)
-	except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+	except (ValueError, OSError, RecursionError):
 		logger.warning(f"无法读取快照: {path}")
 		return None
 

@@ -55,7 +55,10 @@ class AutomationStore:
 			return {}
 		try:
 			loaded = json.loads(self.stop_path.read_text(encoding="utf-8"))
-		except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+		# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长整数
+		# 上限；RecursionError 覆盖深嵌套。熔断状态读不出来必须 fail-closed：
+		# 抛出去会让调用方按「未知状态」继续，只有 corrupt 标记能通知人工核对。
+		except (ValueError, OSError, RecursionError) as exc:
 			return {"open": True, "reason": f"stop.json 无法解析，已按熔断处理：{exc}", "corrupt": True}
 		if not isinstance(loaded, dict):
 			return {"open": True, "reason": "stop.json 顶层不是 JSON object，已按熔断处理", "corrupt": True}
@@ -107,7 +110,7 @@ class AutomationStore:
 		else:
 			try:
 				loaded = json.loads(self.state_path.read_text(encoding="utf-8"))
-			except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+			except (ValueError, OSError, RecursionError) as exc:
 				raise AutomationStateError(self.state_path, str(exc)) from exc
 			if not isinstance(loaded, dict):
 				raise AutomationStateError(self.state_path, "顶层必须是 JSON object")
@@ -275,8 +278,9 @@ class AutomationStore:
 				continue
 			try:
 				parsed = json.loads(line)
-			except json.JSONDecodeError:
-				# 单行损坏（手工编辑、外部写入）不该让 stats / pending 整体失败。
+			except (ValueError, RecursionError):
+				# 单行损坏（手工编辑、外部写入、超长整数、深嵌套）不该让
+				# stats / pending 整体失败。
 				continue
 			if isinstance(parsed, dict):
 				rows.append(parsed)

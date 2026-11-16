@@ -109,8 +109,10 @@ def read_lock(data_dir: Path) -> RiskLock | None:
 			reason=reason,
 			platform_code=normalize_risk_code(raw_code),
 		)
-	except (OSError, ValueError, TypeError, OverflowError):
-		# 损坏的锁按「仍被锁」处理（fail-closed），提示用户手动清除。
+	# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长整数
+	# 上限；RecursionError 覆盖深嵌套。损坏的锁按「仍被锁」处理（fail-closed），
+	# 提示用户手动清除；解析异常穿透会让风控信封被兜成内部错误。
+	except (OSError, ValueError, TypeError, OverflowError, RecursionError):
 		return RiskLock(stoken_sha256=None, locked_at=0.0, corrupt=True)
 
 
