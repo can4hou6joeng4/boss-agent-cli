@@ -2,6 +2,14 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.65] - 2026-11-17
+
+### Fixed
+- 自动化执行锁 / 控制锁打开阶段的 `sqlite3.OperationalError`（锁文件被目录占位、不可写、磁盘满）原样上抛，命令层要么报成让人去删缓存的 `CACHE_BUSY`，要么丢掉 JSON 信封（Issue #1304）。现在只有锁冲突报 `AUTOMATION_RUN_BUSY` / `AUTOMATION_CONTROL_BUSY`，其余按 `AUTOMATION_STATE_INVALID` 返回；顶层兜底把非 busy 的 `DatabaseError` 收口为 `LOCAL_IO_ERROR`。
+- 自动化周期里控制锁冲突一律包装成 `LOCAL_STATE_WRITE_FAILED` + `replay_safe=false`，零派发（如刚启动就被 `agent stop` 抢占）时也提示「平台动作可能已发出」（Issue #1307）。现在只有真正派发过动作后才升级该语义，零派发冲突按普通「没有生效」上报。
+- headless 刷新通道返回空 stoken 时被当成功写进登录态，之后所有请求拿空凭证打平台、重试到预算耗尽，`TOKEN_REFRESH_FAILED` 永不产生（Issue #1305）。现在空值按刷新失败处理并保留旧登录态，与 CDP 通道同口径。
+- `str.isdigit()` 对 '①' / '²' 等非 ASCII 数字为真但 `int()` 会抛 `ValueError`：向导标签 / 城市、`mark --label`、`crawl` 城市代码、菜单序号、搜索筛选原始代码与 `hr chatmsg` 游标都会崩溃或被兜成可重试的 `NETWORK_ERROR`（Issue #1306）。现在只把 ASCII 数字串当数字，非法输入走各入口的确定性参数错误。
+
 ## [3.4.64] - 2026-11-17
 
 ### Fixed
