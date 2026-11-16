@@ -22,6 +22,9 @@ from typing import Any
 from boss_agent_cli.api.zhipin_errors import normalize_risk_code
 
 LOCK_FILENAME = "cdp_risk_lock.json"
+#: 主锁写盘失败时的后备位置（Issue #1270）。cache 子目录不随 `clean --risk-lock`
+#: 之外的清理被删除，读写路径与主位置同源，fail-closed 语义不变。
+FALLBACK_LOCK_DIR = "cache"
 STOKEN_COOKIE = "__zp_stoken__"
 #: 记录时没有 stoken cookie 的诊断占位摘要，不用于决定恢复权限。
 ABSENT_STOKEN = "absent"
@@ -49,6 +52,11 @@ def _finite_timestamp(raw: Any) -> float:
 
 def lock_path(data_dir: Path) -> Path:
 	return data_dir / LOCK_FILENAME
+
+
+def lock_paths(data_dir: Path) -> tuple[Path, Path]:
+	"""风险锁的候选位置：主位置在前，后备位置在后（Issue #1270）。"""
+	return (lock_path(data_dir), data_dir / FALLBACK_LOCK_DIR / LOCK_FILENAME)
 
 
 def hash_stoken(value: str | None) -> str:
@@ -88,10 +96,7 @@ class RiskLock:
 		return current_hash == self.stoken_sha256
 
 
-def read_lock(data_dir: Path) -> RiskLock | None:
-	path = lock_path(data_dir)
-	if not path.exists():
-		return None
+def _read_lock_file(path: Path) -> RiskLock:
 	try:
 		payload = json.loads(path.read_text(encoding="utf-8"))
 		if not isinstance(payload, dict):
@@ -116,6 +121,30 @@ def read_lock(data_dir: Path) -> RiskLock | None:
 		return RiskLock(stoken_sha256=None, locked_at=0.0, corrupt=True)
 
 
+def _read_lock_entry(data_dir: Path) -> tuple[RiskLock, Path] | None:
+	"""返回命中的锁与实际文件路径；毫不过问主 / 后备之外的来源。"""
+	corrupt: tuple[RiskLock, Path] | None = None
+	for path in lock_paths(data_dir):
+		if not path.exists():
+			continue
+		lock = _read_lock_file(path)
+		if not lock.corrupt:
+			return lock, path
+		if corrupt is None:
+			corrupt = (lock, path)
+	return corrupt
+
+
+def read_lock(data_dir: Path) -> RiskLock | None:
+	"""读风险锁：主位置与后备位置任一存在即锁定（Issue #1270）。
+
+	主位置写盘失败时后备位置可能持有锁；两份都可解析时以主位置为准，
+	损坏的那份按 fail-closed 返回（不能因为备份较好而放行）。
+	"""
+	entry = _read_lock_entry(data_dir)
+	return entry[0] if entry is not None else None
+
+
 def write_lock(
 	data_dir: Path,
 	stoken_sha256: str | None,
@@ -125,14 +154,17 @@ def write_lock(
 	reason: str = "ENVIRONMENT_RISK",
 	platform_code: int | None = 37,
 ) -> RiskLock:
-	"""原子写入锁文件（0600）。``stoken_sha256`` 必须是摘要，不接受原值。"""
+	"""原子写入锁文件（0600）。``stoken_sha256`` 必须是摘要，不接受原值。
+
+	主位置写失败时尝试后备位置（Issue #1270）：主文件本身被占用 / 权限损坏时，
+	后备位置仍能让新进程 fail-closed 读到阻断。两处都失败才抛出最后一个
+	``OSError``，调用方保留进程内锁并在信封里说明「新进程不再受保护」。
+	写入成功后清掉另一位置的旧锁，避免主锁被手工删除后陈旧后备复活。
+	"""
 	lock = RiskLock(
 		stoken_sha256=stoken_sha256, locked_at=time.time() if now is None else now, cdp_url=cdp_url,
 		reason=reason, platform_code=platform_code,
 	)
-	data_dir.mkdir(parents=True, exist_ok=True)
-	path = lock_path(data_dir)
-	tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
 	payload = {
 		"version": _LOCK_VERSION,
 		"reason": lock.reason,
@@ -141,22 +173,41 @@ def write_lock(
 		"locked_at": lock.locked_at,
 		"cdp_url": cdp_url,
 	}
-	tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-	try:
-		os.chmod(tmp, 0o600)
-	except OSError:
-		pass
-	os.replace(tmp, path)
-	return lock
+	errors: list[OSError] = []
+	for path in lock_paths(data_dir):
+		try:
+			path.parent.mkdir(parents=True, exist_ok=True)
+			tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+			tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+			try:
+				os.chmod(tmp, 0o600)
+			except OSError:
+				pass
+			os.replace(tmp, path)
+		except OSError as exc:
+			errors.append(exc)
+			continue
+		for stale in lock_paths(data_dir):
+			if stale == path:
+				continue
+			try:
+				stale.unlink()
+			except OSError:
+				pass
+		return lock
+	raise errors[-1]
 
 
 def clear_lock(data_dir: Path) -> bool:
-	"""删除锁文件；原本没有锁时返回 False。"""
-	try:
-		lock_path(data_dir).unlink()
-		return True
-	except FileNotFoundError:
-		return False
+	"""删除主位置与后备位置的锁文件；原本没有锁时返回 False。"""
+	removed = False
+	for path in lock_paths(data_dir):
+		try:
+			path.unlink()
+			removed = True
+		except FileNotFoundError:
+			continue
+	return removed
 
 
 def raise_if_locked(data_dir: Path) -> None:
@@ -170,13 +221,14 @@ def raise_if_locked(data_dir: Path) -> None:
 
 def lock_status(data_dir: Path, *, now: float | None = None) -> dict[str, Any]:
 	"""给 doctor / status 用的只读摘要：只读本地文件，不连浏览器、不访问网络。"""
-	lock = read_lock(data_dir)
-	if lock is None:
+	entry = _read_lock_entry(data_dir)
+	if entry is None:
 		return {"locked": False}
+	lock, path = entry
 	current = time.time() if now is None else now
 	info: dict[str, Any] = {
 		"locked": True,
-		"path": str(lock_path(data_dir)),
+		"path": str(path),
 		"corrupt": lock.corrupt,
 		"reason": lock.reason,
 		"platform_code": lock.platform_code,
