@@ -9,7 +9,7 @@ from pathlib import Path
 
 import click
 
-from boss_agent_cli.ai.config import AIConfigStore
+from boss_agent_cli.ai.config import AIConfigStore, ai_int_setting
 from boss_agent_cli.ai.local_models import (
 	RUNTIME_BASE_URLS,
 	LocalModelManifestError,
@@ -265,13 +265,27 @@ def local_smoke_cmd(ctx: click.Context) -> None:
 		)
 		return
 	# 输出上限用配置值而不是写死的小数：思考模型在几十个 token 内写不完思考，
-	# 健康检查应和自动化用同一个上限，「调大 max_tokens」的建议才对它生效
+	# 健康检查应和自动化用同一个上限，「调大 max_tokens」的建议才对它生效。
+	# 配置值被手改成数组 / 字符串时按参数错误给信封，而不是 INTERNAL_ERROR
+	# 加「不要重试」（Issue #1196）。
+	try:
+		max_tokens = ai_int_setting(config, "ai_max_tokens", 512)
+	except ValueError as exc:
+		handle_error_output(
+			ctx,
+			"ai.local.smoke",
+			code="INVALID_PARAM",
+			message=str(exc),
+			recoverable=True,
+			recovery_action=_hint_command(ctx, "ai config --max-tokens 512"),
+		)
+		return
 	service = AIService(
 		base_url=base_url,
 		api_key=api_key,
 		model=str(model),
 		temperature=0.1,
-		max_tokens=int(config.get("ai_max_tokens") or 512),
+		max_tokens=max_tokens,
 	)
 	try:
 		reply = service.chat([
