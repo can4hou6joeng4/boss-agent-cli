@@ -64,6 +64,11 @@ def _parse_cached_result(raw: str) -> dict[str, Any] | None:
 		return None
 	if not isinstance(parsed, dict) or not isinstance(parsed.get("data"), list):
 		return None
+	# 元素必须都是对象：坏元素（字符串 / null）命中后会让 `--sort score` 的
+	# `.get` 与索引缓存写入直接 AttributeError，把「本地缓存写坏」升级成
+	# INTERNAL_ERROR；按未命中处理，本次搜索会覆盖同一坏行（Issue #1318）。
+	if not all(isinstance(item, dict) for item in parsed["data"]):
+		return None
 	# pagination 只能是对象或 null：形状漂移的缓存按未命中处理，不让非法类型
 	# 原样进入成功信封（Issue #1136）。
 	if parsed.get("pagination") is not None and not isinstance(parsed["pagination"], dict):
@@ -73,7 +78,13 @@ def _parse_cached_result(raw: str) -> dict[str, Any] | None:
 
 def _sort_search_items(items: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
 	if sort == "score":
-		return sorted(items, key=lambda item: item.get("match_score", 0), reverse=True)
+		# match_score 由本工具写成整数；缓存被改坏成字符串时会与整数混合
+		# 比较抛 TypeError（Issue #1318）。
+		def _score(item: dict[str, Any]) -> int:
+			value = item.get("match_score")
+			return value if type(value) is int else 0
+
+		return sorted(items, key=_score, reverse=True)
 	return items
 
 
