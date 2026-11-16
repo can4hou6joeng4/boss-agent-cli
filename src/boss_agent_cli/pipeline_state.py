@@ -1,8 +1,8 @@
-import datetime
+import time
 from typing import Any
 
 from boss_agent_cli.api.models import dict_items
-from boss_agent_cli.services.chat_utils import RELATION_LABELS, int_code
+from boss_agent_cli.services.chat_utils import RELATION_LABELS, int_code, safe_local_time
 
 
 _FOLLOW_UP_STATES = {"reply_needed", "follow_up", "interview"}
@@ -11,8 +11,14 @@ _FOLLOW_UP_STATES = {"reply_needed", "follow_up", "interview"}
 def _ts_to_label(ts_ms: int) -> str:
 	if not ts_ms:
 		return "-"
-	dt = datetime.datetime.fromtimestamp(ts_ms / 1000)
-	return dt.strftime("%m-%d %H:%M")
+	# 越界 / 非有限时间戳按「无时间」输出（Issue #1295）。
+	dt = safe_local_time(ts_ms)
+	return dt.strftime("%m-%d %H:%M") if dt is not None else "-"
+
+
+def now_ts_or_clock(now_ts_ms: int | None) -> int:
+	"""``--now-ts-ms 0`` 是合法的显式值（测试钩子），不能用真值回退（Issue #1298）。"""
+	return now_ts_ms if now_ts_ms is not None else int(time.time() * 1000)
 
 
 def _chat_stage(item: dict[str, Any], *, now_ts_ms: int, stale_days: int) -> str:
@@ -71,7 +77,12 @@ def build_pipeline_items(*, chat_items: list[dict[str, Any]], interview_items: l
 		)
 
 	priority = {"reply_needed": 0, "interview": 1, "follow_up": 2, "applied": 3, "chatting": 4}
-	return sorted(items, key=lambda item: (priority.get(item["stage"], 99), item["company"], item["title"]))
+	# 排序键统一转字符串：平台字段类型漂移（数字 / 对象）时，跨类型比较会抛
+	# TypeError 并让整份日报落成 INTERNAL_ERROR（Issue #1297）。
+	return sorted(
+		items,
+		key=lambda item: (priority.get(item["stage"], 99), str(item["company"]), str(item["title"])),
+	)
 
 
 def select_follow_up_candidates(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

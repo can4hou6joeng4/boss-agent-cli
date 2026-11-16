@@ -1,4 +1,3 @@
-import time
 from typing import Any
 
 import click
@@ -9,7 +8,7 @@ from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output, render_simple_list
-from boss_agent_cli.pipeline_state import build_pipeline_items, select_follow_up_candidates
+from boss_agent_cli.pipeline_state import build_pipeline_items, now_ts_or_clock, select_follow_up_candidates
 
 
 def _collect_pipeline_items(
@@ -34,7 +33,7 @@ def _collect_pipeline_items(
 	items = build_pipeline_items(
 		chat_items=chat_items,
 		interview_items=interview_items,
-		now_ts_ms=now_ts_ms or int(time.time() * 1000),
+		now_ts_ms=now_ts_or_clock(now_ts_ms),
 		stale_days=stale_days,
 	)
 	# 达到分页上限时 data 只覆盖前 N 页，必须显式告诉 Agent，否则会把前缀当全量（Issue #885）。

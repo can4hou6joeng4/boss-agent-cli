@@ -1,5 +1,4 @@
 """招聘者 — 候选人沟通。"""
-import datetime
 from typing import Any
 
 import click
@@ -9,7 +8,7 @@ from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.services.chat_utils import MSG_STATUS_LABELS, message_list
+from boss_agent_cli.services.chat_utils import MSG_STATUS_LABELS, message_list, safe_local_time
 from boss_agent_cli.services.pagination import (
 	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
 	list_pagination,
@@ -40,10 +39,17 @@ def _format_chat_time(value: Any) -> str | None:
 	if isinstance(value, int | float):
 		if value <= 0:
 			return None
-		return datetime.datetime.fromtimestamp(value / 1000).strftime("%m-%d %H:%M")
+		# 越界 / 非有限时间戳是确定性坏数据，按「无时间」处理（Issue #1295）。
+		dt = safe_local_time(value)
+		return dt.strftime("%m-%d %H:%M") if dt is not None else None
 	text = str(value).strip()
 	if text.isdigit():
-		return _format_chat_time(int(text))
+		try:
+			parsed = int(text)
+		except (ValueError, OverflowError):
+			# 超过 4300 位的数字串 ``int()`` 抛 ValueError：原样展示平台字符串。
+			return text or None
+		return _format_chat_time(parsed)
 	return text or None
 
 
