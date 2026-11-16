@@ -219,22 +219,25 @@ def test_login_via_browser_falls_back_to_cookie_jar_when_home_nav_stalls(mock_sl
 	mock_browser.close.assert_called_once()
 
 
-def test_refresh_stoken_returns_empty_when_home_nav_stalls():
+def test_refresh_stoken_raises_when_home_nav_stalls_and_jar_empty():
 	mock_page = MagicMock()
 	mock_page.goto.side_effect = TimeoutError("Timeout 15000ms exceeded")
 	mock_page.wait_for_load_state.side_effect = Exception("Timeout 3000ms exceeded")
 
 	mock_context = MagicMock()
 	mock_context.new_page.return_value = mock_page
+	mock_context.cookies.return_value = []
 
 	mock_browser = MagicMock()
 	mock_browser.new_context.return_value = mock_context
 
 	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=_mock_playwright_context(mock_browser)):
 		with patch("boss_agent_cli.auth.browser._extract_stoken") as mock_extract:
-			result = refresh_stoken({"wt2": "cookie"}, "UA")
+			# 与 CDP 路径同口径：刷新拿不到 stoken 是失败，不能把空串当成功
+			# 返回、覆盖调用方本地的旧 stoken（Issue #1305）。
+			with pytest.raises(RuntimeError, match="页面未生成 stoken"):
+				refresh_stoken({"wt2": "cookie"}, "UA")
 
-	assert result == ""
 	mock_extract.assert_not_called()
 	mock_browser.close.assert_called_once()
 

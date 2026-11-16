@@ -341,6 +341,11 @@ class AuthManager:
 						cookies,
 						current.get("user_agent", ""),
 					)
+				if not isinstance(new_stoken, str) or not new_stoken.strip():
+					# 刷新通道返回空值（headless 首页迟迟不产出 stoken）：不能把
+					# 空串存进登录态覆盖旧 stoken，否则之后所有请求都拿空凭证
+					# 打平台、重试到预算耗尽（Issue #1305）。
+					raise TokenRefreshFailed("Token 刷新失败：刷新通道未返回 stoken，请重新登录")
 				refreshed = {**current, "stoken": new_stoken}
 				self._store.save(refreshed)
 				self._token = refreshed
@@ -348,6 +353,9 @@ class AuthManager:
 				self._record_cdp_risk_lock(cdp_url, error=error, token=current)
 				raise
 			except BrowserSourceUnavailable:
+				raise
+			except TokenRefreshFailed:
+				# 刷新链里已经明确失败（例如返回空 stoken），不要二次包装。
 				raise
 			except Exception as e:
 				raise TokenRefreshFailed(f"Token 刷新失败: {e}") from e
