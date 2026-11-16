@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 
 from boss_agent_cli.api.client import PlatformRiskError
+from boss_agent_cli.api.models import platform_data_dict
 from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.api.recruiter_client import RecruiterAuthError
 from boss_agent_cli.api.recruiter_resume import ResumeValidationError
@@ -158,7 +159,7 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 		handle_output(
 			ctx,
 			command,
-			{"friend_id": friend_id, "message_id": message_id, "downloaded": True, **platform.unwrap_data(result)},
+			{"friend_id": friend_id, "message_id": message_id, "downloaded": True, **platform_data_dict(platform.unwrap_data(result))},
 			# 附件落盘后没有下一步：Agent 只能自己猜文件在哪、也不会回到会话继续沟通。
 			hints={
 				"next_actions": [hint_command(ctx, f"hr chatmsg {friend_id}")],
