@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.46] - 2026-11-16
 
 ### Fixed
 - `index_cache.json` 的元信息字段类型漂移不再原样进入 `index_snapshot` 信封（Issue #1221）：`_load_cache` 只校验顶层与 `jobs`，`source` / `page` / `count` / `saved_at` 被写成字符串、布尔或 `inf` 时，`boss show` 的 `data.index_snapshot` 与 `search` / `recommend` 的 `pagination.index_snapshot` 会带出违反 schema 的类型（`count: "many"`、`saved_at: "yesterday"`），Agent 按 schema 解析失败。现在读路径按容错口径归一：非字符串 `source` 按空串、非法 `page` 按 `None`、非法 `count` 回退 `len(jobs)`、非有限 `saved_at` 按 0，`jobs` 可用时不整体丢弃缓存。
