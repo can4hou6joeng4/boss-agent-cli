@@ -351,7 +351,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `WORKFLOW_BUSY` | 同一 `run_id` 正在由另一次调用执行（另一个终端、Agent 或 MCP 调用）；本次调用没有执行任何步骤，也没有改动 checkpoint | 用 `boss wizard --status <run_id>` 查看进度，等当前执行结束后再 `--resume`；不要并发恢复同一个 `run_id` |
 | `WORKFLOW_NOT_FOUND` | 本地 workflow 任务不存在或 `run_id` 有误（`boss wizard --status` / `--stop` / `--resume`） | 执行 `boss wizard` 新建任务，或先用 `boss wizard --status <run_id>` 核对 ID |
 | `CRAWL_BUSY` | 同一采集任务正由另一次调用执行；本次调用未发出请求，也未修改采集断点 | 用返回的同一数据目录的 `boss crawl status <run_id>` 查看进度，等当前执行结束后再恢复；不要并发恢复同一任务；`status` / `results` / `stop` 仍可用 |
-| `CRAWL_PROFILE_BUSY` | 同一数据目录的采集配置目录正被另一个运行中的采集 Chrome 使用（`SingletonLock` 里的 pid 仍存活）；本次调用未发出请求，也没有删除锁文件 | 用 `boss crawl status` 查看正在运行的采集，等它结束后再启动或恢复；不要并发使用同一数据目录的采集浏览器，也不要删除 `SingletonLock` |
+| `CRAWL_PROFILE_BUSY` | 同一数据目录的采集配置目录正被另一个运行中的采集 Chrome 使用（`SingletonLock` 里的 pid 仍存活）；本次调用未发出请求，也没有删除锁文件 | 用 `boss crawl status <run_id>` 查看正在运行的采集，等它结束后再启动或恢复；不要并发使用同一数据目录的采集浏览器，也不要删除 `SingletonLock` |
 | `CRAWL_RUN_NOT_FOUND` | 本地采集任务不存在或 `run_id` 有误（`boss crawl status` / `resume` / `results` 等） | 执行 `boss crawl start <query>` 新建任务，或用真实 `run_id` 执行 `boss crawl status <run_id>` 核对 |
 | `CONTACT_NOT_FOUND` | 沟通列表里没有这个联系人：`security_id` 可能已轮换，或对方已不在列表 | 先 `boss chat` 查看会话；已知 uid 时改用 uid 重试 |
 | `SAVED_SEARCH_NOT_FOUND` | 本地预设或 watch 不存在：`boss search --preset` / `boss watch run` 引用了没保存过的名字 | `boss preset list` / `boss watch list` 查看已有条目，需要时用 `boss preset add` / `boss watch add` 重建 |
