@@ -625,7 +625,7 @@ class CacheStore:
 		).fetchone()
 		if row is None:
 			return None
-		return {
+		record = {
 			"run_id": row[0],
 			"params": _decode_record("crawl_run", run_id, "params", row[1], expected=dict),
 			"status": row[2],
@@ -639,6 +639,22 @@ class CacheStore:
 			"hook_results": _decode_record("crawl_run", run_id, "hook_results", row[11], expected=list),
 			"created_at": row[12], "updated_at": row[13],
 		}
+		# 范围与文本校验：负的 next_page 会让 resume 反复抓第 1 页并把
+		# crawl_jobs.page_no 写成负数，负计数器会推迟预算触发；BLOB 的
+		# output_dir 会让 wizard 的 Path() 抛 TypeError（Issue #1325）。
+		if record["next_page"] < 1:
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "next_page", f"必须从第 1 页开始，实际是 {record['next_page']}"
+			)
+		for column in ("requests_attempted", "detail_requests_attempted", "elapsed_seconds"):
+			if record[column] < 0:
+				raise CacheRecordInvalid("crawl_run", run_id, column, f"不能为负数，实际是 {record[column]}")
+		for column in ("status", "output_dir", "error"):
+			if not isinstance(record[column], str):
+				raise CacheRecordInvalid(
+					"crawl_run", run_id, column, f"期望字符串，实际是 {type(record[column]).__name__}"
+				)
+		return record
 
 	def update_crawl_run_params(self, run_id: str, params: dict[str, Any]) -> None:
 		self._conn.execute(

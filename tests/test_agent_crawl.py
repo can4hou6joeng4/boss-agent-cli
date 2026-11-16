@@ -33,7 +33,8 @@ def _settings(tmp_path: Path) -> CrawlSettings:
 		profile_path=tmp_path / "profile",
 		chrome_path=None,
 		cdp_port=9222,
-		hook_profile="screenshot-full",
+		# 断点必须满足自身约束：screenshot-full 需要 hook 目录，这里用 none。
+		hook_profile="none",
 	)
 
 

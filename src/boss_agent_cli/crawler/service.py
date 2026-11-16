@@ -134,6 +134,10 @@ class CrawlSettings:
 		# bool 是 int 的子类：`pages=true` 是类型漂移，不是第 1 页。
 		if not isinstance(pages, int) or isinstance(pages, bool):
 			raise CacheRecordInvalid("crawl_run", run_id, "params.pages", f"期望整数，实际是 {type(pages).__name__}")
+		# 页数必须至少为 1：0 / 负数会通过读取，到 resume 才落成误导性的
+		# INVALID_PARAM（configure 也没有 pages 选项）（Issue #1325）。
+		if pages < 1:
+			raise CacheRecordInvalid("crawl_run", run_id, "params.pages", f"必须是正整数，实际是 {pages}")
 		# chrome_path 原样传给 transport，非字符串会在 set_browser_path 抛 TypeError，
 		# 被 `_run` 记成 stopped 并给出「恢复」指引，重跑永远复现（Issue #1278）。
 		chrome_path = raw.get("chrome_path")
@@ -159,6 +163,46 @@ class CrawlSettings:
 				if value is None
 			]
 			raise CacheRecordInvalid("crawl_run", run_id, "params", f"缺少字段 {', '.join(missing_browser)}")
+		# 断点里的端口必须落在 1–65535：越界值会在 transport 的
+		# socket.connect_ex 抛 OverflowError，被吞成 ok:true 的 stopped 并给出
+		# 可复现的 resume 指引（Issue #1325）。
+		try:
+			parsed_cdp_port = crawl_cdp_port(cdp_port)
+		except ValueError as exc:
+			raise CacheRecordInvalid("crawl_run", run_id, "params.browser.cdp_port", str(exc)) from exc
+		hook_profile = str(hook_profile)
+		if hook_profile not in ("none", "screenshot-full"):
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "params.hook.profile",
+				f"期望 none 或 screenshot-full，实际是 {hook_profile!r}",
+			)
+		hook_dir_raw = raw.get("hook_dir") or hook.get("directory")
+		hook_dir = Path(str(hook_dir_raw)) if hook_dir_raw else None
+		if hook_profile == "screenshot-full" and hook_dir is None:
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "params.hook.directory", "screenshot-full 需要 hook 目录"
+			)
+
+		def _limit(key: str, default: int, *, minimum: int) -> int:
+			# 不能用 `value or default`：0 是损坏值，不能被静默替换成默认预算，
+			# 否则 status 与 resume 对同一行口径不一致（Issue #1325）。
+			value = raw.get(key)
+			if value is None:
+				value = limits.get(key, default)
+			if isinstance(value, bool):
+				raise CacheRecordInvalid("crawl_run", run_id, f"params.limits.{key}", "期望整数，实际是 bool")
+			try:
+				parsed = int(value)
+			except (TypeError, ValueError, OverflowError) as exc:
+				raise CacheRecordInvalid(
+					"crawl_run", run_id, f"params.limits.{key}", f"字段类型无法解析（{exc}）"
+				) from exc
+			if parsed < minimum:
+				raise CacheRecordInvalid(
+					"crawl_run", run_id, f"params.limits.{key}", f"不能小于 {minimum}，实际是 {parsed}"
+				)
+			return parsed
+
 		try:
 			return cls(
 				query=query,
@@ -167,16 +211,14 @@ class CrawlSettings:
 				with_detail=with_detail,
 				profile_path=Path(str(profile_path)),
 				chrome_path=chrome_path,
-				cdp_port=int(cdp_port),
-				hook_profile=str(hook_profile),
-				hook_dir=Path(str(raw.get("hook_dir") or hook.get("directory")))
-				if raw.get("hook_dir") or hook.get("directory")
-				else None,
+				cdp_port=parsed_cdp_port,
+				hook_profile=hook_profile,
+				hook_dir=hook_dir,
 				hook_source=str(raw.get("hook_source") or hook.get("source", "user-supplied")),
-				max_requests=int(raw.get("max_requests") or limits.get("max_requests", 20)),
-				max_details=int(raw.get("max_details") or limits.get("max_details", 50)),
-				max_seconds=int(raw.get("max_seconds") or limits.get("max_seconds", 600)),
-				max_retries=int(raw.get("max_retries") or limits.get("max_retries", 1)),
+				max_requests=_limit("max_requests", 20, minimum=1),
+				max_details=_limit("max_details", 50, minimum=1),
+				max_seconds=_limit("max_seconds", 600, minimum=1),
+				max_retries=_limit("max_retries", 1, minimum=0),
 				operating_mode=str(raw.get("operating_mode", "assisted")),
 			)
 		except (TypeError, ValueError, OverflowError) as exc:
@@ -215,6 +257,10 @@ def crawl_chrome_path(value: Any) -> str | None:
 
 def crawl_cdp_port(value: Any) -> int:
 	"""校验 crawl 配置中的 cdp_port：1-65535 的整数。"""
+	# bool 是 int 子类（true 不是端口）；float / 1e400 的 int() 会截断或溢出，
+	# 只接受整数与数字字符串，与 CLI 的 IntRange 同口径（Issue #1325）。
+	if isinstance(value, bool) or not isinstance(value, (int, str)):
+		raise ValueError("crawl 配置项 cdp_port 必须是整数")
 	try:
 		port = int(value)
 	except (TypeError, ValueError, OverflowError) as exc:
