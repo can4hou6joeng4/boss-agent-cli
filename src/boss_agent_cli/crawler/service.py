@@ -32,6 +32,7 @@ from boss_agent_cli.crawler.controls import (
 	CrawlProfileBusy as CrawlProfileBusy,
 	CrawlProfilePathInvalid as CrawlProfilePathInvalid,
 	CrawlRuntimeUnavailable as CrawlRuntimeUnavailable,
+	CrawlSessionAuthError as CrawlSessionAuthError,
 	CrawlStopRequested as CrawlStopRequested,
 	CrawlWorkflowStopRequested as CrawlWorkflowStopRequested,
 	CrawlTimeoutRequested as CrawlTimeoutRequested,
@@ -40,6 +41,7 @@ from boss_agent_cli.crawler.exporter import write_run_outputs
 from boss_agent_cli.crawler.hooks import (
 	HookInjection,
 	HookRegistrationError,
+	verify_hook_profile,
 )
 from boss_agent_cli.crawler.transport import CrawlRiskError, CrawlTransport
 from boss_agent_cli.display import boss_command, risk_error_message, shell_argument
@@ -426,6 +428,7 @@ class CrawlService:
 		budget_factory: Callable[[CacheStore], CrawlBudget] = CrawlBudget,
 		control_probe: Callable[[], str | None] | None = None,
 		on_run_created: Callable[[str], None] | None = None,
+		preflight: Callable[[], None] | None = None,
 	) -> None:
 		self._cache = cache
 		self._data_dir = data_dir
@@ -433,6 +436,9 @@ class CrawlService:
 		self._budget_factory = budget_factory
 		self._control_probe = control_probe
 		self._on_run_created = on_run_created
+		# 登录态 / 浏览器运行时的本地预检。命令层只在确认还有恢复工作之后
+		# 调用它：已完成的 run 直接返回既有结果（Issue #1412）。
+		self._preflight = preflight
 		self._unpersisted_risk_lock: cdp_risk_lock.RiskLock | None = None
 		self._request_budget = RequestBudget.for_data_dir(data_dir)
 		self._lock_dir = data_dir / "cache" / "crawl-locks"
@@ -553,6 +559,14 @@ class CrawlService:
 		self._validate_settings(settings)
 		if not self.has_resume_work(run, pages=pages, with_detail=with_detail):
 			return self._completed_outcome(run)
+		# Hook 目录是本地状态：resume 没有 --hook-dir 参数可以修复，必须在
+		# 打开浏览器之前用与 crawl run/start 相同的清单 / 摘要校验拒绝坏目录
+		# （Issue #1408）。已完成的 run 在上面直接返回，不因目录后来被删而失败。
+		verify_hook_profile(settings.hook_profile, settings.hook_dir)
+		if self._preflight is not None:
+			# 登录态与运行时预检放在断点修改与 clear_stop 之前：预检失败时本次
+			# 调用不改动任务（与后台恢复的既有约定一致）。
+			self._preflight()
 		self._check_risk_lock()
 		self._cache.update_crawl_run_params(run_id, settings.as_dict())
 		if clear_stop:
@@ -687,9 +701,13 @@ class CrawlService:
 			rows = [item["payload"] for item in self._cache.list_crawl_jobs(run_id)]
 			paths = write_run_outputs(output_dir, rows)
 		except HookRegistrationError as exc:
+			# Hook 注入失败是确定性本地失败：保存断点后原样抛出，由入口按
+			# LOCAL_IO_ERROR 回报并给出具体目录。落成普通 stopped 会让调用方拿到
+			# ok:true 和会无限重复的 resume 指引（Issue #1408）。
 			hooks = exc.injections
 			status = "stopped"
 			error = str(exc)
+			raise
 		except CrawlRiskError as exc:
 			status = "risk_stopped"
 			error = str(exc)
@@ -727,16 +745,19 @@ class CrawlService:
 			CrawlExportError,
 			CrawlProfileBusy,
 			CrawlProfilePathInvalid,
+			CrawlSessionAuthError,
 			CacheRecordInvalid,
 			CacheDatabaseInvalid,
 		) as exc:
 			# 可选依赖缺失、导出失败、配置目录被另一个采集 Chrome 占用、配置目录
-			# 路径不可用、本地记录损坏与缓存库损坏（含取数阶段才暴露的坏页）都是
-			# 确定性失败：保存断点后原样抛出，由入口按 CRAWL_UNAVAILABLE /
-			# LOCAL_IO_ERROR / CRAWL_PROFILE_BUSY / CACHE_RECORD_INVALID /
-			# CACHE_DATABASE_INVALID 回报。落成普通的 stopped 会让调用方拿到成功
-			# 信封与恢复指引，而重跑仍会撞上同一个占用者、坏路径或坏库
-			# （Issue #1050、#1135、#1212、#1266、#1290、#1350）。
+			# 路径不可用、本地登录态无法注入采集浏览器、本地记录损坏与缓存库损坏
+			# （含取数阶段才暴露的坏页）都是确定性失败：保存断点后原样抛出，由入口
+			# 按 CRAWL_UNAVAILABLE / LOCAL_IO_ERROR / CRAWL_PROFILE_BUSY /
+			# AUTH_REQUIRED / CACHE_RECORD_INVALID / CACHE_DATABASE_INVALID 回报。
+			# 落成普通的 stopped 会让调用方拿到成功信封与恢复指引，而重跑仍会撞上
+			# 同一个占用者、坏路径、坏目录或坏库（Issue #1050、#1135、#1212、#1266、
+			# #1290、#1350）。CrawlSessionAuthError 尤其不能进入风控分支：本地
+			# Cookie 注入失败不是平台风控，写风险锁会误导用户去 clean（Issue #1405）。
 			status = "stopped"
 			error = str(exc)
 			raise

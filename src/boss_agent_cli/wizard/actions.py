@@ -15,7 +15,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.api.endpoints import CITY_CODES
 from boss_agent_cli.ai.config import AIConfigStore, ai_float_setting, ai_int_setting
 from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action_for
-from boss_agent_cli.cache.store import CacheStore, SavedSearchParamsError
+from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore, SavedSearchParamsError
 from boss_agent_cli.platforms.factory import build_platform_instance, build_recruiter_platform_instance
 from boss_agent_cli.services.contact_lookup import FriendLookupLimitExceeded, find_friend
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
@@ -31,8 +31,13 @@ from boss_agent_cli.crawler.service import (
 	crawl_int_setting,
 	unused_local_port,
 )
-from boss_agent_cli.crawler.controls import CrawlExportError, CrawlProfileBusy, CrawlRuntimeUnavailable
-from boss_agent_cli.crawler.hooks import verify_hook_profile
+from boss_agent_cli.crawler.controls import (
+	CrawlExportError,
+	CrawlProfileBusy,
+	CrawlRuntimeUnavailable,
+	CrawlSessionAuthError,
+)
+from boss_agent_cli.crawler.hooks import HookRegistrationError, verify_hook_profile
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.digest import build_digest
@@ -1439,6 +1444,34 @@ def _crawl_export_error(exc: CrawlExportError) -> WorkflowActionError:
 	)
 
 
+def _crawl_hook_error(exc: HookRegistrationError) -> WorkflowActionError:
+	"""Hook 注入失败是确定性本地失败：重试或恢复只会复现（Issue #1408）。
+
+	与 CLI 的 ``LOCAL_IO_ERROR`` 同口径，并保留具体目录供操作者修复。
+	"""
+	recoverable, _ = error_contract_for_code("LOCAL_IO_ERROR")
+	return WorkflowActionError(
+		"LOCAL_IO_ERROR",
+		str(exc),
+		recoverable=recoverable,
+		recovery_action=(
+			"停止自动重试：核对 Hook 目录中的 7 个脚本与 SHA256SUMS，修复后重新执行；"
+			"目录已迁移时用新的 --hook-dir 重新创建采集任务"
+		),
+		replay_safe=False,
+	)
+
+
+def _crawl_session_auth_error(context: ActionContext, exc: CrawlSessionAuthError) -> WorkflowActionError:
+	"""本地 Cookie 注入失败不是平台风控：按认证前置条件回报（Issue #1405）。"""
+	return WorkflowActionError(
+		"AUTH_REQUIRED",
+		str(exc),
+		recoverable=True,
+		recovery_action=_hint_command(context, "login"),
+	)
+
+
 def _crawl_unavailable_error(context: ActionContext, exc: CrawlRuntimeUnavailable) -> WorkflowActionError:
 	"""crawl 可选依赖缺失：不是网络抖动，重试或恢复只会复现，指向安装（Issue #1050）。"""
 	configure_command = _hint_command(context, "crawl configure")
@@ -1553,6 +1586,10 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 			raise _crawl_unavailable_error(context, exc) from exc
 		except CrawlExportError as exc:
 			raise _crawl_export_error(exc) from exc
+		except HookRegistrationError as exc:
+			raise _crawl_hook_error(exc) from exc
+		except CrawlSessionAuthError as exc:
+			raise _crawl_session_auth_error(context, exc) from exc
 		return _crawl_outcome_result(outcome, cache)
 
 
@@ -1603,6 +1640,18 @@ def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 			)
 		except KeyError as exc:
 			raise WorkflowActionError("CRAWL_RUN_NOT_FOUND", f"未找到 crawl run: {run_id}") from exc
+		except CacheRecordInvalid:
+			# 断点记录损坏由 runner 统一按 CACHE_RECORD_INVALID 回报；它也是
+			# ValueError 子类，不能下面的 Hook 参数分支吞掉。
+			raise
+		except ValueError as exc:
+			# 断点里的 Hook 目录在恢复前会被重新校验（Issue #1408）；坏目录是
+			# 确定性本地参数失败，不能兜成可重试的 NETWORK_ERROR。
+			raise WorkflowActionError(
+				"INVALID_PARAM",
+				str(exc),
+				recovery_action="修正断点中的 Hook 目录（7 个脚本与 SHA256SUMS）后重试，或重新创建采集任务",
+			) from exc
 		except CrawlBusyError as exc:
 			raise _crawl_busy_error(context, exc) from exc
 		except CrawlProfileBusy as exc:
@@ -1611,6 +1660,10 @@ def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 			raise _crawl_unavailable_error(context, exc) from exc
 		except CrawlExportError as exc:
 			raise _crawl_export_error(exc) from exc
+		except HookRegistrationError as exc:
+			raise _crawl_hook_error(exc) from exc
+		except CrawlSessionAuthError as exc:
+			raise _crawl_session_auth_error(context, exc) from exc
 		return _crawl_outcome_result(outcome, cache)
 
 

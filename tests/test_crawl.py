@@ -15,7 +15,7 @@ from openpyxl import load_workbook
 
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.config import DEFAULTS
-from boss_agent_cli.crawler.controls import CrawlExportError
+from boss_agent_cli.crawler.controls import CrawlExportError, CrawlSessionAuthError
 from boss_agent_cli.crawler.exporter import write_run_outputs
 from boss_agent_cli.crawler.hooks import HOOK_SCRIPT_NAMES, HookInjection, HookRegistrationError, inject_hook_profile
 from boss_agent_cli.crawler.operations import crawl_results, import_crawl_shortlist
@@ -1294,3 +1294,135 @@ def test_crawl_outcome_quotes_run_id_in_resume_command():
 		hooks=(),
 	)
 	assert outcome.as_dict()["checkpoint"]["resume_command"] == "boss crawl resume 'run; echo pwn'"
+
+
+# ── 本地 Cookie 注入失败不能落成平台风控（Issue #1405） ──────────────
+
+class _SeedOptions:
+	def set_local_port(self, port: int) -> None:
+		pass
+
+	def set_user_data_path(self, path: str) -> None:
+		pass
+
+	def existing_only(self, on_off: bool = True) -> None:
+		pass
+
+	def set_browser_path(self, path: str) -> None:
+		pass
+
+
+class _LoginPage:
+	url = "https://www.zhipin.com/web/user/?ka=header-login"
+	html = "<html><body>扫码登录</body></html>"
+
+	def __init__(self, set_cookies) -> None:
+		self.set = types.SimpleNamespace(cookies=set_cookies)
+
+	def get(self, url: str) -> None:
+		pass
+
+	def quit(self) -> None:
+		pass
+
+
+def _seed_session(monkeypatch, tmp_path, page, *, cookies=None):
+	monkeypatch.setitem(
+		sys.modules,
+		"DrissionPage",
+		types.SimpleNamespace(ChromiumOptions=_SeedOptions, ChromiumPage=lambda options: page),
+	)
+	session = DrissionCrawlerSession(
+		profile_path=tmp_path / "profile",
+		chrome_path=None,
+		cdp_port=_free_port(),
+		hook_profile="none",
+		hook_dir=None,
+		seed_cookies=cookies if cookies is not None else {"wt2": "secret-cookie-value", "wbg": "1"},
+	)
+	# 直接调用 _seed_session_cookies 的用例不经过 open() 的 ChromiumPage 构造。
+	session._page = page
+	return session
+
+
+def test_cookie_injection_failure_on_login_page_is_local_auth_not_risk(monkeypatch, tmp_path):
+	"""set.cookies 全部失败 + 登录页 → 本地认证异常，不能按平台风控停止。"""
+
+	def broken(items):
+		raise RuntimeError("cdp cookie injection failed")
+
+	session = _seed_session(monkeypatch, tmp_path, _LoginPage(broken))
+
+	with pytest.raises(CrawlSessionAuthError) as excinfo:
+		session.open()
+
+	message = str(excinfo.value)
+	assert "Cookie 注入失败 2/2" in message
+	assert "未命中平台风控" in message
+	assert "secret-cookie-value" not in message, "失败明细只能含 Cookie 名称，不能带原值"
+
+
+def test_seed_session_cookies_reports_batch_success(monkeypatch, tmp_path):
+	seeded: list = []
+	session = _seed_session(monkeypatch, tmp_path, _LoginPage(seeded.append))
+
+	result = session._seed_session_cookies()
+
+	assert (result.attempted, result.injected, result.failures, result.navigation_error) == (2, 2, (), "")
+	assert seeded and isinstance(seeded[0], list)
+
+
+def test_seed_session_cookies_reports_partial_fallback_failures(monkeypatch, tmp_path):
+	def partial(items):
+		if isinstance(items, list):
+			raise RuntimeError("batch unsupported")
+		if items["name"] == "wbg":
+			raise RuntimeError("denied")
+		return None
+
+	session = _seed_session(monkeypatch, tmp_path, _LoginPage(partial))
+
+	result = session._seed_session_cookies()
+
+	assert (result.attempted, result.injected) == (2, 1)
+	assert result.missing == 1
+	assert len(result.failures) == 1
+	assert "wbg" in result.failures[0] and "denied" in result.failures[0]
+	assert all("wt2" not in item for item in result.failures)
+
+
+def test_seed_navigation_failure_is_not_swallowed(monkeypatch, tmp_path):
+	"""seed 导航异常（非 stop）必须成为本地认证失败，而不是被静默吞掉。"""
+
+	class _NavigationFails(_LoginPage):
+		def get(self, url: str) -> None:
+			raise TimeoutError("seed navigation timed out")
+
+	session = _seed_session(monkeypatch, tmp_path, _NavigationFails(lambda items: None))
+
+	with pytest.raises(CrawlSessionAuthError) as excinfo:
+		session.open()
+
+	assert "seed 首页导航失败" in str(excinfo.value)
+	assert "seed navigation timed out" in str(excinfo.value)
+
+
+def test_real_security_page_still_raises_platform_risk(monkeypatch, tmp_path):
+	"""真正的安全页仍是 CrawlRiskError → risk_stopped 的硬边界，不能被本地认证分支接管。"""
+
+	class _SecurityPage:
+		url = "https://www.zhipin.com/web/passport/zp/403.html?code=31"
+		html = "<html><title>访问受限</title></html>"
+
+		def get(self, url: str) -> None:
+			pass
+
+		def quit(self) -> None:
+			pass
+
+	session = _seed_session(monkeypatch, tmp_path, _SecurityPage())
+
+	with pytest.raises(CrawlRiskError) as excinfo:
+		session.open()
+
+	assert excinfo.value.reason == "ENVIRONMENT_RISK"
