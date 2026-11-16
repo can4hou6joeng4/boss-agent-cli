@@ -14,6 +14,18 @@ from boss_agent_cli.output import Logger
 _SNAPSHOT_NAME_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
+def _unread_count(item: dict[str, Any]) -> int:
+	"""快照里的 unread 只认真正的整数，其余按 0 参与比较（Issue #1194）。
+
+	当日快照由本工具写成整数；上一份快照被手工改过或来自旧格式时可能是
+	字符串——``str`` 与 ``int`` 比较会抛 ``TypeError``，把整次导出打断。
+	``bool`` 是 ``int`` 子类，但 ``True`` 不是「未读数」，与 ``int_code``
+	同口径排除；``None`` 一直按 0 处理（既有行为）。
+	"""
+	value = item.get("unread")
+	return value if type(value) is int else 0
+
+
 def save_snapshot_and_diff(
 	snapshot_dir: str,
 	friends: list[dict[str, Any]],
@@ -77,8 +89,8 @@ def save_snapshot_and_diff(
 	# 新增未读：检测任何未读增量
 	new_unread = []
 	for key in (curr_ids & prev_ids):
-		prev_unread = prev_map[key].get("unread", 0) or 0
-		curr_unread = curr_map[key].get("unread", 0) or 0
+		prev_unread = _unread_count(prev_map[key])
+		curr_unread = _unread_count(curr_map[key])
 		if curr_unread > prev_unread:
 			new_unread.append(curr_map[key])
 
