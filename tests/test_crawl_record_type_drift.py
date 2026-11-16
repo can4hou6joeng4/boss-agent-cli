@@ -12,8 +12,9 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
 from boss_agent_cli.commands.crawl import _awaiting_queued_worker, _prepare_background_resume
+from boss_agent_cli.crawler.service import CrawlSettings
 from boss_agent_cli.main import cli
 from boss_agent_cli.wizard.live_crawl import sort_runs_for_status_picker
 
@@ -86,6 +87,22 @@ def test_crawl_status_rejects_params_type_drift_like_resume(tmp_path):
 	_seed_run(tmp_path, _params(tmp_path, query=5))
 
 	_assert_corrupt_envelope(_invoke(tmp_path, "status", "run-1"), column="params.query")
+
+
+def test_crawl_status_rejects_chrome_path_type_drift_like_resume(tmp_path):
+	# chrome_path 原样进 transport.set_browser_path 会抛 TypeError，被记成 stopped
+	# 并给出永远复现的「恢复」指引（Issue #1278）。
+	_seed_run(tmp_path, _params(tmp_path, chrome_path=123))
+
+	_assert_corrupt_envelope(_invoke(tmp_path, "status", "run-1"), column="params.chrome_path")
+
+
+def test_crawl_settings_from_dict_validates_chrome_path(tmp_path):
+	with pytest.raises(CacheRecordInvalid, match="params.chrome_path"):
+		CrawlSettings.from_dict(_params(tmp_path, chrome_path={"path": "x"}), run_id="run-1")
+
+	assert CrawlSettings.from_dict(_params(tmp_path, chrome_path=None), run_id="run-1").chrome_path is None
+	assert CrawlSettings.from_dict(_params(tmp_path, chrome_path="/opt/chrome"), run_id="run-1").chrome_path == "/opt/chrome"
 
 
 def test_crawl_status_rejects_missing_params_keys_like_resume(tmp_path):
