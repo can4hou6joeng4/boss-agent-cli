@@ -2,6 +2,14 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.70] - 2026-11-17
+
+### Fixed
+- 搜索预筛与详情描述对平台字段类型漂移直接消费：`salary` / `experience` / `education` / `city` 为数字、数组或对象时 `.replace` / `in` 抛 `TypeError`，`search` 与 wizard 共用同一条预筛路径直接崩溃；详情 `postDescription` 非字符串时也会在描述筛选处抛错。现在非字符串值一律视为「预筛不排除、后续详情确认」，`postDescription` 非字符串按空文本处理（Issue #1335）。
+- 请求预算库损坏被兜成 `INTERNAL_ERROR`：`<data_dir>/request-budget.sqlite3` 被截断、写入非 SQLite 内容或权限不可读时，`sqlite3.DatabaseError` 直接冒到顶层，恢复指引只说「重试」。现在按 `LOCAL_IO_ERROR` 上报，并给出带数据目录的删除重建指引；`locked` / `busy` 仍走 `CACHE_BUSY`（Issue #1336）。
+- automation 队列坏 `status` 与非 UTF-8 字节被静默吞掉：`null` / 数字 / 大小写不符 / 旧版 `dry-run` 的值被 `str()` 成未知状态后静默跳过，`agent pending list` 看起来「没有待办」；混入非 UTF-8 字节（例如 GBK 手工编辑）会让整个队列文件静默变空。现在未知状态报 `AUTOMATION_STATE_INVALID`，坏行按行跳过、合法行保留（Issue #1337）。
+- watch 与 wizard 运行存量搜索参数时不重新校验：未知城市在流水线深处抛 `ValueError` 被兜成可重试的 `NETWORK_ERROR`，未知薪资 / 经验 / 学历标签被静默丢弃，`watch run` 仍返回 `ok: true`；参数被手工改成数组 / 数字时落 `INTERNAL_ERROR`。现在 `watch run` / `watch run --all` / wizard `candidate_search` / `candidate_watch` 都在平台请求前按 `watch add` 同口径校验：单条失效报 `SAVED_SEARCH_INVALID` 并给出删除重建指引，`--all` 继续执行其余 watch 并在 `invalid` 中列出坏记录（Issue #1338）。
+
 ## [3.4.69] - 2026-11-17
 
 ### Fixed

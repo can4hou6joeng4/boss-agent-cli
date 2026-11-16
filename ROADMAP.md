@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.70（2026-11-17）：搜索预筛容忍字段类型漂移（Issue #1335）；请求预算库损坏按本地 IO 错误上报（Issue #1336）；automation 队列坏状态与非 UTF-8 字节不再静默变空（Issue #1337）；watch / wizard 运行存量搜索参数时重新校验（Issue #1338）。
 - ✅ v3.4.69（2026-11-17）：welfare 筛选跳过 `welfareList` 坏元素（Issue #1329）；wizard 输入 / 配置 / 导出路径边界前置校验（Issue #1330）；wizard 简历损坏与联系人查找上限的错误语义（Issue #1331）。
 - ✅ v3.4.68（2026-11-17）：MCP 显式空串原样下发（Issue #1324）；crawl 断点读取补齐范围、枚举与文本校验（Issue #1325）；辅助工作流不再依赖 `pull_request_target`（Issue #1322）。
 - ✅ v3.4.67（2026-11-17）：chat 家族三处字段漂移按缺失处理（Issue #1317）；搜索缓存元素与 `browsers.json` 形状漂移按不可用处理（Issue #1318）。
