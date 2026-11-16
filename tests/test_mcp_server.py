@@ -879,6 +879,13 @@ def test_build_args_greet():
 	assert args == ["greet", "s1", "j1"]
 
 
+def test_build_args_greet_forwards_message():
+	"""自定义招呼语必须落到 --message；空串按未传处理、仍用平台默认招呼（Issue #1202）。"""
+	args = _build_args("boss_greet", {"security_id": "s1", "job_id": "j1", "message": "您好"})
+	assert args == ["greet", "s1", "j1", "--message", "您好"]
+	assert _build_args("boss_greet", {"security_id": "s1", "job_id": "j1", "message": ""}) == ["greet", "s1", "j1"]
+
+
 def test_build_args_chat_no_options():
 	args = _build_args("boss_chat", {})
 	assert args == ["chat"]
@@ -972,6 +979,13 @@ def test_build_args_exchange_empty_type_reaches_cli():
 
 def test_build_args_apply():
 	assert _build_args("boss_apply", {"security_id": "s1", "job_id": "j1"}) == ["apply", "s1", "j1"]
+
+
+def test_build_args_apply_forwards_lid():
+	"""列表项访问上下文与 detail 的 lid 同口径：可选、空串按未传处理（Issue #1202）。"""
+	args = _build_args("boss_apply", {"security_id": "s1", "job_id": "j1", "lid": "lid-1"})
+	assert args == ["apply", "s1", "j1", "--lid", "lid-1"]
+	assert _build_args("boss_apply", {"security_id": "s1", "job_id": "j1", "lid": ""}) == ["apply", "s1", "j1"]
 
 
 def test_build_args_batch_greet():

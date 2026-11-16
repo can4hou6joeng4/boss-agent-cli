@@ -138,7 +138,10 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return _literal_positionals(args)
 
 	if name == "greet":
-		return _literal_positionals([name, arguments["security_id"], arguments["job_id"]], count=2)
+		args = [name, arguments["security_id"], arguments["job_id"]]
+		# 缺省使用平台默认招呼语；自由文本空串按未传处理（Issue #1202）。
+		_optional(args, "--message", "message", arguments)
+		return _literal_positionals(args, count=2)
 
 	if name == "chat":
 		args = [name]
@@ -193,7 +196,10 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return _literal_positionals(args)
 
 	if name == "apply":
-		return _literal_positionals([name, arguments["security_id"], arguments["job_id"]], count=2)
+		args = [name, arguments["security_id"], arguments["job_id"]]
+		# 与 detail 的 lid 同口径：列表项访问上下文可选，空串按未传处理（Issue #1202）。
+		_optional(args, "--lid", "lid", arguments)
+		return _literal_positionals(args, count=2)
 
 	if name == "batch_greet":
 		args = ["batch-greet", arguments["query"]]
