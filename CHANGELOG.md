@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.67] - 2026-11-17
+
+### Fixed
+- chat 家族三处平台字段漂移：`lastMessageInfo` 非对象时 `boss chat` 落成 `INTERNAL_ERROR`；上一份快照的 `last_ts` 是字符串时 `boss chat --export` 的筛选比较抛 `TypeError`；超过 4300 位的 ASCII 数字 `mid` 让 `boss hr chatmsg` 落成可重试的 `NETWORK_ERROR`。三处现均按「字段不可用」处理（Issue #1317）。
+- 搜索缓存命中时 `data` 的元素不是对象，会让 `--sort score` 与索引缓存写入直接 `AttributeError`；`match_score` 漂移成字符串时排序键混合比较抛 `TypeError`。patchright `browsers.json` 形状漂移（顶层数组 / `browsers` 非数组 / 混入 null）也会打断 `boss doctor`。两处本地读取边界现按「不可用」处理（Issue #1318）。
+
 ## [3.4.66] - 2026-11-17
 
 ### Fixed
