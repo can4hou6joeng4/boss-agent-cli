@@ -11,7 +11,7 @@ from typing import Any, Callable, Mapping, Protocol, Sequence, cast
 import click
 
 from boss_agent_cli.wizard.catalog import GOALS, catalog_data
-from boss_agent_cli.wizard.models import WizardInput, WorkflowInputError
+from boss_agent_cli.wizard.models import WizardInput, WorkflowInputError, count_or_none
 from boss_agent_cli.wizard.runner import has_blocked_step
 
 
@@ -565,7 +565,7 @@ def _collect_control(
 			run
 			for run in available_runs
 			if str(run.get("run_id")) not in seen
-			and (run.get("effective_completed") or int(run.get("live_jobs_seen") or 0) > 0)
+			and (run.get("effective_completed") or (count_or_none(run.get("live_jobs_seen")) or 0) > 0)
 		]
 		runs = list(runs) + extra
 	if not runs:
@@ -584,12 +584,12 @@ def _collect_control(
 		else:
 			status_text = STATUS_LABELS.get(raw_status, "状态未知")
 		platform_text = PLATFORM_LABELS.get(str(run.get("platform") or ""), "其他招聘平台")
-		jobs = run.get("live_jobs_seen")
+		jobs = count_or_none(run.get("live_jobs_seen"))
 		if jobs is None:
 			last = run.get("last_result") or {}
 			data = last.get("data") if isinstance(last, Mapping) else {}
-			if isinstance(data, Mapping) and data.get("jobs_seen") is not None:
-				jobs = data.get("jobs_seen")
+			if isinstance(data, Mapping):
+				jobs = count_or_none(data.get("jobs_seen"))
 		# 主标签给人看：事项 + 状态 + 职位数；编号放次要描述，避免满屏 wrn_。
 		label = f"{index}. {goal_text} · {status_text}"
 		if jobs not in (None, "", 0):
@@ -1268,12 +1268,12 @@ def has_result_follow_up(run: Mapping[str, Any]) -> bool:
 	if str(run.get("status")) not in {"completed", "waiting_input"} and not run.get("effective_completed"):
 		return False
 	if str(run.get("status")) == "waiting_input" and not (
-		run.get("effective_completed") or int(run.get("live_jobs_seen") or 0) > 0
+		run.get("effective_completed") or (count_or_none(run.get("live_jobs_seen")) or 0) > 0
 	):
 		# Only allow browsing when live crawl already produced jobs.
 		last = run.get("last_result") or {}
 		data = last.get("data") if isinstance(last, Mapping) else {}
-		if not (isinstance(data, Mapping) and int(data.get("jobs_seen") or 0) > 0 and data.get("jobs")):
+		if not (isinstance(data, Mapping) and (count_or_none(data.get("jobs_seen")) or 0) > 0 and data.get("jobs")):
 			return False
 	resolved = _resolve_list_follow_up(run)
 	return resolved is not None and bool(resolved[0])
@@ -1515,7 +1515,7 @@ def collect_waiting_recovery(
 	driver = menu or _menu_driver()
 	actions: list[MenuOption] = []
 	live_done = bool(run.get("effective_completed")) or str(run.get("live_crawl_status")) == "completed"
-	jobs_ready = int(run.get("live_jobs_seen") or 0) > 0 or has_result_follow_up(run)
+	jobs_ready = (count_or_none(run.get("live_jobs_seen")) or 0) > 0 or has_result_follow_up(run)
 	if goal in {"crawl_start", "crawl_resume"} and inner:
 		if live_done and jobs_ready:
 			actions.extend(
@@ -1600,12 +1600,13 @@ def collect_completed_crawl_follow_up(
 	if goal not in {"crawl_start", "crawl_resume", "crawl_status"} and not run.get("effective_completed"):
 		return None
 	driver = menu or _menu_driver()
-	count = int(run.get("live_jobs_seen") or 0)
+	count = count_or_none(run.get("live_jobs_seen")) or 0
 	if count <= 0:
 		last = run.get("last_result") or {}
 		data = last.get("data") if isinstance(last, Mapping) else {}
 		if isinstance(data, Mapping):
-			count = int(data.get("jobs_seen") or len(data.get("jobs") or []) or 0)
+			jobs = data.get("jobs")
+			count = count_or_none(data.get("jobs_seen")) or (len(jobs) if isinstance(jobs, list) else 0)
 	try:
 		choice = driver.select(
 			f"采集结果已就绪（约 {count} 个职位），请选择",

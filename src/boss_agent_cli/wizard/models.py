@@ -20,6 +20,22 @@ class WorkflowInputError(ValueError):
 	"""Raised when wizard/headless input cannot form a workflow plan."""
 
 
+def count_or_none(value: Any) -> int | None:
+	"""展示层读取持久化计数的容错入口：缺失或漂移返回 None。
+
+	``workflow_runs.last_result`` 是历史落库的 JSON；``jobs_seen`` 被写成文本、
+	数组或负数时，渲染器的裸 ``int()`` 会让整个状态面板 traceback（渲染没有
+	命令层的错误出口兜底）。展示问题不得中断主流程（Issue #1212）。
+	"""
+	if value is None or isinstance(value, bool):
+		return None
+	try:
+		parsed = int(value)
+	except (TypeError, ValueError, OverflowError):
+		return None
+	return parsed if parsed >= 0 else None
+
+
 @dataclass(frozen=True)
 class WizardInput:
 	role: str

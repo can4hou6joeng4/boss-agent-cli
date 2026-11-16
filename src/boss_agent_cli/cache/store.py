@@ -1,5 +1,6 @@
 import hashlib
 import json
+import math
 import secrets
 import sqlite3
 import time
@@ -131,6 +132,20 @@ def _decode_bool_column(kind: str, record_id: str, column: str, raw: Any) -> boo
 	if isinstance(raw, int) and not isinstance(raw, bool) and raw in (0, 1):
 		return bool(raw)
 	raise CacheRecordInvalid(kind, record_id, column, f"期望 0 或 1，实际是 {type(raw).__name__}")
+
+
+def _tolerated_timestamp(raw: Any, *, default: float = 0.0) -> float:
+	"""调度用时间戳的容错读取：漂移值按无历史处理（与 Issue #1206 同口径）。
+
+	``crawl_budget.last_request_at`` 是本地节流元数据，不是任务断点：坏值不能
+	拦停采集，更不能被兜成可重试错误。``inf`` / ``nan`` 也不能进入后续的
+	``max()`` 与等待计算，否则一个坏值会让调度永远等下去（Issue #1212）。
+	"""
+	try:
+		parsed = float(raw)
+	except (TypeError, ValueError):
+		return default
+	return parsed if math.isfinite(parsed) else default
 
 
 def _validate_workflow_params(run_id: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -712,8 +727,9 @@ class CacheStore:
 		if row is None:
 			return None
 		return {
-			"selector": row[0], "page_no": row[1],
-			"payload": _decode_record("crawl_job", job_key, "payload", row[2], expected=dict), "detail_done": bool(row[3]),
+			"selector": row[0], "page_no": _decode_int_column("crawl_job", job_key, "page_no", row[1]),
+			"payload": _decode_record("crawl_job", job_key, "payload", row[2], expected=dict),
+			"detail_done": _decode_bool_column("crawl_job", job_key, "detail_done", row[3]),
 		}
 
 	def list_crawl_jobs(self, run_id: str) -> list[dict[str, Any]]:
@@ -723,15 +739,20 @@ class CacheStore:
 		).fetchall()
 		return [
 			{
-				"job_key": row[0], "selector": row[1], "page_no": row[2],
-				"payload": _decode_record("crawl_job", str(row[0]), "payload", row[3], expected=dict), "detail_done": bool(row[4]),
+				"job_key": row[0], "selector": row[1],
+				"page_no": _decode_int_column("crawl_job", str(row[0]), "page_no", row[2]),
+				"payload": _decode_record("crawl_job", str(row[0]), "payload", row[3], expected=dict),
+				"detail_done": _decode_bool_column("crawl_job", str(row[0]), "detail_done", row[4]),
 			}
 			for row in rows
 		]
 
 	def get_crawl_budget(self, budget_key: str) -> float | None:
 		row = self._conn.execute("SELECT last_request_at FROM crawl_budget WHERE budget_key = ?", (budget_key,)).fetchone()
-		return float(row[0]) if row is not None else None
+		if row is None:
+			return None
+		last_request_at = _tolerated_timestamp(row[0], default=-1.0)
+		return last_request_at if last_request_at >= 0 else None
 
 	def put_crawl_budget(self, budget_key: str, requested_at: float) -> None:
 		self._conn.execute(
@@ -753,7 +774,7 @@ class CacheStore:
 				"SELECT last_request_at FROM crawl_budget WHERE budget_key = ?",
 				(budget_key,),
 			).fetchone()
-			last_reserved = float(row[0]) if row is not None else None
+			last_reserved = _tolerated_timestamp(row[0]) if row is not None else None
 			reserved_at = now if last_reserved is None else max(now, last_reserved + interval)
 			self._conn.execute(
 				"INSERT OR REPLACE INTO crawl_budget (budget_key, last_request_at) VALUES (?, ?)",
