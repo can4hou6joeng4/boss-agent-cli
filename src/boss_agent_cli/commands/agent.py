@@ -21,7 +21,7 @@ from boss_agent_cli.automation.models import (
 	RunReport,
 )
 from boss_agent_cli.automation.runner import run_automation_cycle
-from boss_agent_cli.automation.storage import AutomationStateError, AutomationStore
+from boss_agent_cli.automation.storage import AutomationControlBusy, AutomationStateError, AutomationStore
 from boss_agent_cli.ai.service import AIServiceError
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands.ai_cmd import _build_fit_prompt, _create_ai_service
@@ -533,7 +533,10 @@ def control_cmd(ctx: click.Context) -> None:
 def stop_cmd(ctx: click.Context, reason: str) -> None:
 	"""打开招聘自动化熔断。"""
 	store = AutomationStore(ctx.obj["data_dir"])
-	store.request_stop(reason)
+	try:
+		store.request_stop(reason)
+	except AutomationControlBusy as exc:
+		_emit_control_busy(ctx, "agent.stop", exc)
 	handle_output(
 		ctx,
 		"agent.stop",
@@ -557,6 +560,18 @@ def _emit_review_missing(ctx: click.Context, command: str, review_id: str) -> No
 		message=f"复核项 '{review_id}' 不存在或已处理",
 		recovery_action=f"用 {list_command} 核对当前待复核项后重试",
 		hints={"next_actions": [list_command]},
+	)
+	ctx.exit(1)
+
+
+def _emit_control_busy(ctx: click.Context, command: str, exc: AutomationControlBusy) -> NoReturn:
+	"""控制锁冲突：本次控制更新没有生效，指引指向真正的锁文件（Issue #1251）。"""
+	handle_error_output(
+		ctx,
+		command,
+		code="AUTOMATION_BUSY",
+		message=str(exc),
+		hints={"next_actions": [_hint_command(ctx, "agent stats")]},
 	)
 	ctx.exit(1)
 
@@ -636,6 +651,8 @@ def _run_agent(
 			dry_run=dry_run,
 			limit=limit,
 		)
+	except AutomationControlBusy as exc:
+		_emit_control_busy(ctx, command, exc)
 	except AutomationStateError as exc:
 		_emit_state_error(ctx, command, exc)
 

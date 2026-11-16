@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from boss_agent_cli.automation.models import AutomationEvent, PendingAction, PlatformAction, ReviewItem
+from boss_agent_cli.cache.store import is_cache_busy_error
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell
 
 
@@ -27,6 +28,10 @@ class AutomationStateError(ValueError):
 		super().__init__(f"{path} 无法解析（{detail}）")
 		self.path = path
 		self.detail = detail
+
+
+class AutomationControlBusy(RuntimeError):
+	"""automation 控制锁被其他进程占用：本次控制更新没有生效，可稍后重试。"""
 
 
 class AutomationStore:
@@ -108,7 +113,17 @@ class AutomationStore:
 		"""Serialize tiny control updates across processes with a bounded wait."""
 		connection = sqlite3.connect(self.root / ".control-lock.sqlite3", timeout=1.0)
 		try:
-			connection.execute("BEGIN IMMEDIATE")
+			try:
+				connection.execute("BEGIN IMMEDIATE")
+			except sqlite3.OperationalError as exc:
+				# 锁冲突是 automation 自己的并发边界，不是缓存库问题：直接上抛会被
+				# main 的兜底层报成 CACHE_BUSY 并指向 cache/boss_agent.db，而实际的
+				# 锁文件是 automation/.control-lock.sqlite3（Issue #1251）。
+				if is_cache_busy_error(exc):
+					raise AutomationControlBusy(
+						"automation 控制锁正被其他进程占用，本次操作没有生效"
+					) from exc
+				raise
 			yield
 			connection.commit()
 		finally:
