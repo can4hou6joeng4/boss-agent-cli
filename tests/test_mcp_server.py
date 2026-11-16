@@ -952,6 +952,22 @@ def test_build_args_mark_remove():
 
 def test_build_args_exchange():
 	assert _build_args("boss_exchange", {"security_id": "s1"}) == ["exchange", "s1"]
+	# 省略 type 与显式 phone 都等价于 CLI 默认值，不额外下发选项。
+	assert _build_args("boss_exchange", {"security_id": "s1", "type": "phone"}) == ["exchange", "s1"]
+
+
+def test_build_args_exchange_forwards_wechat():
+	"""工具描述承诺「手机号或微信」，微信交换必须真的落到 --type（Issue #1200）。"""
+	assert _build_args("boss_exchange", {"security_id": "s1", "type": "wechat"}) == [
+		"exchange", "s1", "--type", "wechat",
+	]
+
+
+def test_build_args_exchange_empty_type_reaches_cli():
+	# 空串是写错的取值：原样下发给 CLI 的 Choice 拒绝（Issue #982），不能化装成「没传」。
+	assert _build_args("boss_exchange", {"security_id": "s1", "type": ""}) == [
+		"exchange", "s1", "--type", "",
+	]
 
 
 def test_build_args_apply():
@@ -2001,6 +2017,15 @@ def test_build_args_hr_chat_omits_unset_summary_limit():
 def test_build_args_hr_chatmsg():
 	args = _build_args("boss_hr_chatmsg", {"friend_id": 12345, "count": 10, "max_msg_id": 9001})
 	assert args == ["hr", "chatmsg", "12345", "--count", "10", "--max-msg-id", "9001"]
+
+
+def test_build_args_hr_chatmsg_forwards_zero_cursor():
+	"""0 不是合法游标但必须原样下发，由 CLI 的 IntRange(min=1) 拒绝。
+
+	真值判断会把它化装成「没传」，调用方拿到默认最新一页却以为翻页生效（Issue #1199）。
+	"""
+	args = _build_args("boss_hr_chatmsg", {"friend_id": 12345, "max_msg_id": 0})
+	assert args == ["hr", "chatmsg", "12345", "--max-msg-id", "0"]
 
 
 def test_build_args_hr_last_messages():

@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- `boss_hr_chatmsg` 的显式游标 0 不再被 MCP 映射层静默吞掉（Issue #1199）：`max_msg_id` 此前用真值判断，传 `0` 时 argv 不含 `--max-msg-id`，工具却返回 `ok=true`，调用方以为翻页生效、实际拿到默认最新一页。现在键存在即下发（显式 `null` 仍在入口剥离），由 CLI 的 `IntRange(min=1)` 返回 `INVALID_PARAM`；schema 标注 `minimum: 1`。
+- `boss_exchange` 可以通过 MCP 请求微信交换（Issue #1200）：工具描述承诺「手机号或微信」，但 schema 没有 `type`、映射固定走默认 phone，显式传 `type` 会被未知参数拒绝。现在 schema 暴露 `type`（enum `phone|wechat`，默认 `phone`），映射省略 `type` 或传 `phone` 时不带选项、`wechat` 下发 `--type wechat`、空串原样交给 CLI 枚举诊断（与 `boss_hr_exchange` 同口径）。
+
 ## [3.4.38] - 2026-11-16
 
 ### Fixed
