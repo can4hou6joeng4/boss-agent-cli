@@ -190,6 +190,11 @@ def crawl_cmd(
 		return
 
 	data_dir = ctx.obj["data_dir"]
+	# 风控锁是硬边界：仅对会发起平台采集的 --query 路径，先于简历校验报告，
+	# 避免已记录风险锁时被 RESUME_NOT_FOUND 引导去补简历后继续触发风控；
+	# --run-id 只读本地结果与短名单，不受锁影响（Issue #1407 回归）。
+	if query:
+		raise_if_locked(data_dir)
 	# 简历必须在任何平台调用、run 创建与短名单导入之前校验：非空但不存在的
 	# 名字先采集一轮再报 RESUME_NOT_FOUND，既发出真实请求又留下本地写入
 	# （Issue #1407）。损坏与缺失沿用 Issue #1369 的错误码区分。
@@ -212,8 +217,6 @@ def crawl_cmd(
 			return
 		handle_error_output(ctx, "agent.crawl", code="RESUME_NOT_FOUND", message=f"简历 '{resume_name}' 不存在")
 		return
-	if query:
-		raise_if_locked(data_dir)
 	try:
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 			if query:

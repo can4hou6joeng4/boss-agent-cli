@@ -364,3 +364,21 @@ def test_agent_crawl_new_query_without_crawl_dependencies_creates_no_run(tmp_pat
 	assert "next_actions" not in payload["hints"]
 	with sqlite3.connect(tmp_path / "cache" / "boss_agent.db") as conn:
 		assert conn.execute("SELECT COUNT(*) FROM crawl_runs").fetchone()[0] == 0, "依赖缺失不该留下任务"
+
+
+def test_agent_crawl_reports_recorded_risk_lock_before_missing_resume(tmp_path: Path) -> None:
+	"""风控锁优先于简历校验：不禁导用户补完简历再撞平台风控（#1407 回归）。"""
+	from boss_agent_cli.api import cdp_risk_lock
+
+	cdp_risk_lock.write_lock(tmp_path, None, reason="ENVIRONMENT_RISK", platform_code=37)
+	result = CliRunner().invoke(
+		cli,
+		[
+			"--data-dir", str(tmp_path), "--json", "agent", "crawl",
+			"--query", "fixture", "--city", "杭州", "--resume", "ghost",
+		],
+	)
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["command"] == "agent.crawl"
+	assert payload["error"]["code"] == "ENVIRONMENT_RISK_LOCKED"
