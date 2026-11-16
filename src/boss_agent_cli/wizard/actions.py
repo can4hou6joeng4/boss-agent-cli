@@ -30,7 +30,7 @@ from boss_agent_cli.crawler.service import (
 	crawl_int_setting,
 	unused_local_port,
 )
-from boss_agent_cli.crawler.controls import CrawlProfileBusy, CrawlRuntimeUnavailable
+from boss_agent_cli.crawler.controls import CrawlExportError, CrawlProfileBusy, CrawlRuntimeUnavailable
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.digest import build_digest
@@ -1221,6 +1221,27 @@ def _crawl_profile_busy_error(context: ActionContext, exc: CrawlProfileBusy) -> 
 	)
 
 
+def _crawl_export_error(exc: CrawlExportError) -> WorkflowActionError:
+	"""导出失败是本地目录 / 权限问题：重试或恢复只会复现（Issue #1287）。
+
+	CLI 的 `crawl run` / `crawl resume` 对同一异常返回 `LOCAL_IO_ERROR`、
+	recoverable=false；wizard 原先兜成可重试的 `NETWORK_ERROR`，`--max-retries>0`
+	时还会自动重跑步骤、重新打开采集 Chrome。采集请求可能已经发出，因此同时
+	声明 `replay_safe=False`。
+	"""
+	recoverable, _ = error_contract_for_code("LOCAL_IO_ERROR")
+	return WorkflowActionError(
+		"LOCAL_IO_ERROR",
+		str(exc),
+		recoverable=recoverable,
+		recovery_action=(
+			"确认输出目录可写（不是同名的已有文件）、目录权限与磁盘空间正常，"
+			"修正后重新执行 crawl resume"
+		),
+		replay_safe=False,
+	)
+
+
 def _crawl_unavailable_error(context: ActionContext, exc: CrawlRuntimeUnavailable) -> WorkflowActionError:
 	"""crawl 可选依赖缺失：不是网络抖动，重试或恢复只会复现，指向安装（Issue #1050）。"""
 	configure_command = _hint_command(context, "crawl configure")
@@ -1301,6 +1322,8 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 			raise _crawl_profile_busy_error(context, exc) from exc
 		except CrawlRuntimeUnavailable as exc:
 			raise _crawl_unavailable_error(context, exc) from exc
+		except CrawlExportError as exc:
+			raise _crawl_export_error(exc) from exc
 		return _crawl_outcome_result(outcome, cache)
 
 
@@ -1355,6 +1378,8 @@ def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 			raise _crawl_profile_busy_error(context, exc) from exc
 		except CrawlRuntimeUnavailable as exc:
 			raise _crawl_unavailable_error(context, exc) from exc
+		except CrawlExportError as exc:
+			raise _crawl_export_error(exc) from exc
 		return _crawl_outcome_result(outcome, cache)
 
 
