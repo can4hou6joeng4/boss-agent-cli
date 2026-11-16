@@ -15,6 +15,8 @@ import shlex
 import sqlite3
 import subprocess
 import sys
+import types
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -27,6 +29,7 @@ from boss_agent_cli.commands.crawl import (
 	_prepare_background_resume,
 	_save_crawl_config,
 )
+from boss_agent_cli.crawler.hooks import HOOK_SCRIPT_NAMES, HookInjection, HookRegistrationError
 from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
 from boss_agent_cli.main import cli
 from boss_agent_cli.services.install_extras import extras_requirement
@@ -566,9 +569,13 @@ def test_worker_resuming_a_leftover_running_run_records_why_it_could_not_start(t
 	assert "AUTH_REQUIRED" in run["error"]
 
 
-@pytest.mark.parametrize("status", ["stopped", "budget_stopped", "risk_stopped", "completed"])
+@pytest.mark.parametrize("status", ["stopped", "budget_stopped", "risk_stopped"])
 def test_worker_that_could_not_start_keeps_an_earlier_terminal_state(tmp_path, status):
-	"""终态是上一次真实执行的结果：没接手的 worker 不改写它，也不覆盖原错误。"""
+	"""终态是上一次真实执行的结果：没接手的 worker 不改写它，也不覆盖原错误。
+
+	``completed`` 已由 ``test_resume_completed_run_without_login_returns_existing_result``
+	覆盖：没有恢复工作时 worker 直接返回既有结果，不需要登录（Issue #1412）。
+	"""
 	_seed_run(tmp_path, "run-ended", status=status, jobs=0)
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
 		cache.update_crawl_run("run-ended", status=status, next_page=2, error="上一次执行的原因", list_finished=False)
@@ -723,7 +730,7 @@ def test_resume_missing_run_reports_not_found_before_requiring_login(tmp_path):
 
 def test_resume_existing_run_without_login_still_requires_auth(tmp_path):
 	"""存在性检查不能把「已登录才可恢复」这条前置条件吞掉。"""
-	_seed_run(tmp_path)
+	_seed_run(tmp_path, status="stopped")
 	runner = CliRunner()
 	_enable_research(runner, tmp_path)
 
@@ -731,6 +738,25 @@ def test_resume_existing_run_without_login_still_requires_auth(tmp_path):
 
 	assert result.exit_code == 1
 	assert _envelope(result)["error"]["code"] == "AUTH_REQUIRED"
+
+
+def test_resume_completed_run_without_login_returns_existing_result(tmp_path, monkeypatch):
+	"""已完成的 run 没有恢复工作：先要求登录只会把调用方送去无意义的 boss login（Issue #1412）。"""
+	_seed_run(tmp_path, "run-done", status="completed", jobs=2)
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._crawl_preflight",
+		lambda ctx: pytest.fail("已完成的 run 不应触发登录 / transport 预检"),
+	)
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+
+	result = runner.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "resume", "run-done"])
+
+	assert result.exit_code == 0, result.output
+	payload = _envelope(result)
+	assert payload["data"]["status"] == "completed"
+	assert payload["data"]["jobs_seen"] == 2
+	_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl results run-done")
 
 
 def test_empty_run_id_is_invalid_param_not_run_not_found(tmp_path):
@@ -1875,3 +1901,255 @@ def test_crawl_status_rewrites_bare_commands_in_stored_error(tmp_path):
 	error = _envelope(result)["data"]["error"]
 	assert f"boss --data-dir {tmp_path.resolve()} clean --risk-lock" in error
 	assert "由用户执行 boss clean --risk-lock" not in error
+
+
+# ── 本地失败路径：Cookie 注入 / Hook 目录 / 导出目录（Issue #1405/#1408/#1409） ──
+
+
+class _RunOptions:
+	def set_local_port(self, port: int) -> None:
+		pass
+
+	def set_user_data_path(self, path: str) -> None:
+		pass
+
+	def existing_only(self, on_off: bool = True) -> None:
+		pass
+
+	def set_browser_path(self, path: str) -> None:
+		pass
+
+
+class _InjectionFailPage:
+	url = "https://www.zhipin.com/web/user/?ka=header-login"
+	html = "<html><body>扫码登录</body></html>"
+
+	def get(self, url: str) -> None:
+		pass
+
+	def quit(self) -> None:
+		pass
+
+	class set:
+		@staticmethod
+		def cookies(items) -> None:
+			raise RuntimeError("fixture cdp cookie denied")
+
+
+class _SecurityPage:
+	url = "https://www.zhipin.com/web/passport/zp/403.html?code=31"
+	html = "<html><title>访问受限</title></html>"
+
+	def get(self, url: str) -> None:
+		pass
+
+	def quit(self) -> None:
+		pass
+
+
+def _fake_drissionpage(monkeypatch, page) -> None:
+	monkeypatch.setitem(
+		sys.modules,
+		"DrissionPage",
+		types.SimpleNamespace(ChromiumOptions=_RunOptions, ChromiumPage=lambda options: page),
+	)
+
+
+def test_cookie_injection_failure_returns_auth_required_without_risk_lock(tmp_path, monkeypatch):
+	"""本地 set.cookies 失败 + 登录页：ok:false、AUTH_REQUIRED，且不得写风险锁（Issue #1405）。"""
+	from boss_agent_cli.api import cdp_risk_lock
+
+	_fake_drissionpage(monkeypatch, _InjectionFailPage())
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+
+	result = _invoke(runner, tmp_path, "crawl", "run", "AI", "--city", "杭州")
+
+	assert result.exit_code == 1, result.output
+	payload = _envelope(result)
+	assert payload["ok"] is False
+	error = payload["error"]
+	assert error["code"] == "AUTH_REQUIRED"
+	assert error["recoverable"] is True
+	assert "Cookie 注入失败" in error["message"]
+	assert cdp_risk_lock.read_lock(tmp_path) is None, "本地注入失败不能落平台风险锁"
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		run = cache.get_crawl_run(_all_run_ids(tmp_path)[0])
+	assert run["status"] == "stopped"
+	assert run["status"] != "risk_stopped"
+
+
+def test_real_security_page_still_risk_stops_and_writes_the_lock(tmp_path, monkeypatch):
+	"""真正的安全页仍是 risk_stopped 硬边界：保持 Chrome 并写风险锁（Issue #1405 的对照）。"""
+	from boss_agent_cli.api import cdp_risk_lock
+
+	_fake_drissionpage(monkeypatch, _SecurityPage())
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+
+	result = _invoke(runner, tmp_path, "crawl", "run", "AI", "--city", "杭州")
+
+	assert result.exit_code == 0, result.output
+	payload = _envelope(result)
+	assert payload["data"]["status"] == "risk_stopped"
+	lock = cdp_risk_lock.read_lock(tmp_path)
+	assert lock is not None
+	assert lock.reason == "ENVIRONMENT_RISK"
+
+
+class _HookFailureTransport:
+	def open(self):
+		raise HookRegistrationError(
+			[HookInjection(name="hook_clear", success=False, reason="fixture cdp denied")],
+			hook_dir=Path("/fixture/hooks"),
+		)
+
+	def close(self, **kwargs) -> None:
+		pass
+
+
+def test_runtime_hook_registration_failure_is_local_io_error(tmp_path, monkeypatch):
+	"""Hook 注入失败不能被兜成可重试的 stopped + resume 指引（Issue #1408）。"""
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._seeded_transport_factory",
+		lambda ctx: lambda settings: _HookFailureTransport(),
+	)
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+
+	result = _invoke(runner, tmp_path, "crawl", "run", "AI", "--city", "杭州")
+
+	assert result.exit_code == 1, result.output
+	error = _envelope(result)["error"]
+	assert error["code"] == "LOCAL_IO_ERROR"
+	assert error["recoverable"] is False
+	assert "/fixture/hooks" in error["message"]
+	assert "hook_clear" in error["message"]
+	assert "/fixture/hooks" in error["recovery_action"]
+
+
+def test_resume_rejects_invalid_hook_dir_before_opening_browser(tmp_path, monkeypatch):
+	"""resume 没有 --hook-dir 可修复坏目录：必须在打开浏览器之前按参数错误拒绝（Issue #1408）。"""
+	missing = tmp_path / "missing-hooks"
+	db_path = tmp_path / "cache" / "boss_agent.db"
+	db_path.parent.mkdir(parents=True, exist_ok=True)
+	with CacheStore(db_path) as cache:
+		cache.create_crawl_run(
+			"run-hook",
+			CrawlSettings(
+				query="AI", city_code="101210100", pages=1, with_detail=False,
+				profile_path=tmp_path / "profile", chrome_path=None, cdp_port=9222,
+				hook_profile="screenshot-full", hook_dir=missing,
+				operating_mode="research",
+			).as_dict(),
+			str(tmp_path / "crawl" / "runs" / "run-hook"),
+			status="stopped",
+		)
+		before = cache.get_crawl_run("run-hook")
+
+	def forbidden(*args, **kwargs):
+		raise AssertionError("坏 Hook 目录不应构造浏览器")
+
+	monkeypatch.setattr("boss_agent_cli.commands.crawl._transport_factory", forbidden)
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+
+	result = _invoke(runner, tmp_path, "crawl", "resume", "run-hook")
+
+	assert result.exit_code == 1, result.output
+	error = _envelope(result)["error"]
+	assert error["code"] == "INVALID_PARAM"
+	assert error["recoverable"] is False
+	assert str(missing) in error["message"]
+	with CacheStore(db_path) as cache:
+		assert cache.get_crawl_run("run-hook") == before, "预检失败不能改动断点"
+
+
+def _write_hook_dir(root: Path) -> Path:
+	root.mkdir(parents=True, exist_ok=True)
+	lines: list[str] = []
+	for index, (_, filename) in enumerate(HOOK_SCRIPT_NAMES, 1):
+		payload = f"globalThis.hook{index} = true;\n".encode()
+		(root / filename).write_bytes(payload)
+		lines.append(f"{filename} {sha256(payload).hexdigest()}")
+	(root / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="ascii")
+	return root
+
+
+def test_relative_hook_dir_is_stored_as_an_absolute_path(tmp_path, monkeypatch):
+	"""--hook-dir 相对路径必须 resolve：断点换 cwd 后仍指向同一目录（Issue #1408）。"""
+	captured: dict[str, CrawlSettings] = {}
+
+	class _Outcome:
+		run_id = "run-hook"
+		status = "completed"
+		output_paths: dict[str, str] = {}
+
+		def as_dict(self) -> dict:
+			return {"run_id": self.run_id, "status": self.status, "output_paths": {}}
+
+	def _capture(self, settings):
+		captured["settings"] = settings
+		return _Outcome()
+
+	monkeypatch.setattr(CrawlService, "create_and_run", _capture)
+	monkeypatch.setattr("boss_agent_cli.commands.crawl._seeded_transport_factory", lambda ctx: lambda settings: None)
+	monkeypatch.chdir(tmp_path)
+	_write_hook_dir(tmp_path / "hooks")
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+
+	result = _invoke(
+		runner, tmp_path, "crawl", "run", "AI", "--city", "杭州",
+		"--hook-profile", "screenshot-full", "--hook-dir", "hooks",
+	)
+
+	assert result.exit_code == 0, result.output
+	hook_dir = captured["settings"].hook_dir
+	assert hook_dir == (tmp_path / "hooks").resolve()
+	assert hook_dir.is_absolute()
+	assert Path(str(captured["settings"].as_dict()["hook"]["directory"])).is_absolute()
+
+
+class _OnePageTransport:
+	def open(self) -> list:
+		return []
+
+	def fetch_page(self, query: str, city_code: str, page_no: int) -> dict:
+		return {"code": 0, "zpData": {"jobList": [], "hasMore": False}}
+
+	def close(self, **kwargs) -> None:
+		pass
+
+
+def test_export_directory_blocked_by_a_file_returns_local_io_error(tmp_path, monkeypatch):
+	"""输出目录被同名文件占用：ok:false + LOCAL_IO_ERROR，不再提示可以 resume 修好（Issue #1409）。"""
+	cache = CacheStore(tmp_path / "cache" / "boss_agent.db")
+	with cache:
+		service = CrawlService(cache, data_dir=tmp_path, transport_factory=lambda settings: None)
+		run_id = service.create(
+			CrawlSettings(
+				query="AI", city_code="101210100", pages=1, with_detail=False,
+				profile_path=tmp_path / "profile", chrome_path=None, cdp_port=9222,
+				hook_profile="none", operating_mode="research",
+			)
+		)
+	output_dir = tmp_path / "crawl" / "runs" / run_id
+	output_dir.parent.mkdir(parents=True, exist_ok=True)
+	output_dir.write_text("not a directory", encoding="utf-8")
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._seeded_transport_factory",
+		lambda ctx: lambda settings: _OnePageTransport(),
+	)
+	runner = CliRunner()
+	_enable_research(runner, tmp_path)
+
+	result = _invoke(runner, tmp_path, "crawl", "resume", run_id)
+
+	assert result.exit_code == 1, result.output
+	error = _envelope(result)["error"]
+	assert error["code"] == "LOCAL_IO_ERROR"
+	assert error["recoverable"] is False
+	assert str(output_dir) in error["message"]
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.get_crawl_run(run_id)["status"] == "stopped"

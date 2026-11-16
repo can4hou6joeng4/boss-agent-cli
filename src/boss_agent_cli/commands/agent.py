@@ -45,7 +45,9 @@ from boss_agent_cli.crawler.controls import (
 	CrawlProfileBusy,
 	CrawlProfilePathInvalid,
 	CrawlRuntimeUnavailable,
+	CrawlSessionAuthError,
 )
+from boss_agent_cli.crawler.hooks import HookRegistrationError
 from boss_agent_cli.crawler.operations import crawl_status, import_crawl_shortlist
 from boss_agent_cli.crawler.service import CrawlBusyError, CrawlService
 from boss_agent_cli.display import (
@@ -307,6 +309,24 @@ def crawl_cmd(
 		return
 	except _LoginSeedUnavailable as exc:
 		_report_login_required(ctx, "agent.crawl", str(exc))
+		return
+	except CrawlSessionAuthError as exc:
+		# 本地 Cookie 注入失败不是平台风控；按认证前置条件回报，不提示 clean
+		# --risk-lock（Issue #1405）。
+		_report_login_required(ctx, "agent.crawl", str(exc))
+		return
+	except HookRegistrationError as exc:
+		# Hook 注入失败是确定性本地失败：不能被下面的 RuntimeError 兜成可重试的
+		# CRAWL_UNAVAILABLE（Issue #1408）。
+		hook_dir = f" {exc.hook_dir}" if exc.hook_dir is not None else ""
+		handle_error_output(
+			ctx,
+			"agent.crawl",
+			code="LOCAL_IO_ERROR",
+			message=str(exc),
+			recoverable=False,
+			recovery_action=f"停止自动重试：核对 Hook 目录{hook_dir} 中的脚本与 SHA256SUMS，修复后重新执行 agent crawl",
+		)
 		return
 	except CrawlProfileBusy as exc:
 		# 同一数据目录的采集配置目录被另一个运行中的 Chrome 占用：本次没有发出

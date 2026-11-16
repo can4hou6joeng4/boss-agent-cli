@@ -32,10 +32,14 @@ class HookInjection:
 class HookRegistrationError(RuntimeError):
 	"""Raised when a requested user-owned script cannot be verified or injected."""
 
-	def __init__(self, injections: list[HookInjection]) -> None:
+	def __init__(self, injections: list[HookInjection], *, hook_dir: Path | None = None) -> None:
 		self.injections = tuple(injections)
+		# 运行期注入失败要能让命令层提示具体目录：`crawl resume` 没有
+		# `--hook-dir` 参数，只说「注入失败」无法定位要修的路径（Issue #1408）。
+		self.hook_dir = hook_dir
+		location = f"（{hook_dir}）" if hook_dir is not None else ""
 		failed = [item for item in injections if not item.success]
-		super().__init__("Hook 注入失败: " + "; ".join(f"{item.name}: {item.reason}" for item in failed))
+		super().__init__(f"Hook 注入失败{location}: " + "; ".join(f"{item.name}: {item.reason}" for item in failed))
 
 
 def inject_hook_profile(page: Any, profile: str, hook_dir: Path | None) -> list[HookInjection]:
@@ -46,15 +50,19 @@ def inject_hook_profile(page: Any, profile: str, hook_dir: Path | None) -> list[
 		raise ValueError(f"unknown crawl hook profile: {profile}")
 	if hook_dir is None:
 		raise ValueError("screenshot-full 需要 --hook-dir 指向用户提供的原始脚本目录")
+	try:
+		verified = _verified_scripts(hook_dir)
+	except HookRegistrationError as exc:
+		raise HookRegistrationError(list(exc.injections), hook_dir=hook_dir) from exc
 	results: list[HookInjection] = []
-	for name, digest, source in _verified_scripts(hook_dir):
+	for name, digest, source in verified:
 		try:
 			page.run_cdp("Page.addScriptToEvaluateOnNewDocument", source=source)
 			results.append(HookInjection(name=name, success=True, sha256=digest))
 		except Exception as exc:
 			results.append(HookInjection(name=name, success=False, reason=str(exc)))
 	if any(not item.success for item in results):
-		raise HookRegistrationError(results)
+		raise HookRegistrationError(results, hook_dir=hook_dir)
 	return results
 
 

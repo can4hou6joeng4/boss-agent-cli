@@ -152,6 +152,17 @@ def test_explicit_false_has_more_stops_after_first_page(tmp_path):
 # ── 导出替换失败 ─────────────────────────────────────────────────────
 
 
+def test_export_output_directory_blocked_by_a_file_raises_export_error(tmp_path):
+	"""mkdir 在异常转换之外时原始 FileExistsError 会被 _run 兜成 ok:true 的 stopped（Issue #1409）。"""
+	output_dir = tmp_path / "blocked"
+	output_dir.write_text("not a directory", encoding="utf-8")
+
+	with pytest.raises(CrawlExportError) as excinfo:
+		write_run_outputs(output_dir, [{"title": "AI"}])
+
+	assert str(output_dir) in str(excinfo.value)
+
+
 def test_export_target_directory_raises_and_cleans_temporaries(tmp_path):
 	(tmp_path / "jobs.xlsx").mkdir()
 

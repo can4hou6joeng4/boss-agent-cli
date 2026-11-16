@@ -60,7 +60,6 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 	serializer cannot leave the others half-updated (Issue #1135).
 	"""
 	export_rows = [{field: row.get(field, "") for field in FIELDS} for row in rows]
-	output_dir.mkdir(parents=True, exist_ok=True)
 	json_path = output_dir / "jobs.json"
 	csv_path = output_dir / "jobs.csv"
 	xlsx_path = output_dir / "jobs.xlsx"
@@ -69,6 +68,10 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 	# 才能指向具体产物。
 	current_target: Path | None = None
 	try:
+		# mkdir 也必须在 try 内：输出目录被同名文件占用时 FileExistsError /
+		# NotADirectoryError 会原样上抛，被 _run 兜成 ok:true 的 stopped 并提示
+		# resume（Issue #1409）。
+		output_dir.mkdir(parents=True, exist_ok=True)
 		json_tmp = _temporary_for(json_path)
 		temporaries.append(json_tmp)
 		json_tmp.write_text(json.dumps(export_rows, ensure_ascii=False, indent=2), encoding="utf-8")
