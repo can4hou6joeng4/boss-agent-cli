@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.50 (2026-11-16): payload container drift. When `zpData` is a non-object truthy value, wizard `last_messages` continues with an empty page, `hr download-resume` no longer crashes after the file is saved, `hr jobs detail` normalizes to an empty object, and `favorites list` returns a retryable `NETWORK_ERROR` (Issue #1233).
 - ✅ v3.4.49 (2026-11-16): numeric-overflow edges of local conversion. Legal large integers / `1e400` no longer turn search caches, startup config validation, automation / crawl / AI settings and local-model outputs into `INTERNAL_ERROR` or retryable `NETWORK_ERROR` (Issue #1230).
 - ✅ v3.4.48 (2026-11-16): local JSON reads now handle overlong integers and deep nesting; an unreadable stop latch fails closed, and `agent stats` / `resume show` return contract error codes instead of tracebacks (Issue #1227).
 - ✅ v3.4.47 (2026-11-16): parse, consistency and rendering edges of the index-cache read path. Overlong integers / deep nesting now report `INVALID_PARAM` as a missing cache, `count` always equals `len(jobs)`, a surrogate-bearing `source` becomes an empty string, and `page` / `saved_at` get sane bounds (Issue #1224).

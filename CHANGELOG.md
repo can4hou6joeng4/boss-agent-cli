@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.50] - 2026-11-16
+
+### Fixed
+- 平台成功包络里的 `zpData` 返回非对象真值（字符串 / 数组 / 数字 / 布尔）时，`unwrap_data(...) or {}` 只挡 `null` 与空容器（Issue #1233）：`boss wizard --goal last_messages` 读 `friendList` 抛 `AttributeError`、整轮 wizard 落不可重试的 `INTERNAL_ERROR`；`boss hr download-resume` 在附件已经落盘后用 `**` 展开抛 `TypeError`，用户拿到失败信封但文件已下载；`boss hr jobs detail` 把畸形值放进 `ok:true` 的 `data`；`boss favorites list` 走写操作口径的 `UNKNOWN`（「先核对是否生效」），对只读列表不可重试且误导。现在按期望容器类型兜底：wizard 按空页继续、download-resume 报下载成功、jobs detail 的 `data` 归一为空对象、favorites list 返回可重试的 `NETWORK_ERROR`；列表命令与 `me` 各 section 的 `data` 保持既有原样透传契约。
+
 ## [3.4.49] - 2026-11-16
 
 ### Fixed
