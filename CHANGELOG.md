@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.60] - 2026-11-16
+
+### Fixed
+- `boss agent run` / `agent train` 执行周期内 checkpoint 撞上 `automation/.control-lock.sqlite3` 时，命令层原先按 `AUTOMATION_BUSY` 报「本次操作没有生效，可稍后重试」（Issue #1267）：动作派发成功、队列已写回 `executed` 之后平台动作可能已经发出，按此指引重试会让操作者误以为消息没有发送。现在 runner 把周期内的控制锁冲突转换成 `AutomationControlBusyDispatched`，命令层按 `LOCAL_STATE_WRITE_FAILED`（`replay_safe: false`）上报：平台动作可能已发出、本地状态保存失败，恢复指引为先核对官方页面、不自动重发。`--dry-run` 与 `--resume` 入口的锁冲突没有产生平台动作，仍返回 `AUTOMATION_BUSY`。
+
 ## [3.4.59] - 2026-11-16
 
 ### Fixed
