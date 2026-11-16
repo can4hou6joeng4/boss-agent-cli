@@ -2,6 +2,15 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.63] - 2026-11-16
+
+### Fixed
+- 向导的 `crawl_status` / `crawl_resume` 指向本地损坏的采集记录时，`CacheRecordInvalid` 被 runner 通用兜底记成可重试的 `NETWORK_ERROR`（「重试当前 run_id」），照做只会无限重试同一条坏记录（Issue #1286）。现在 runner 统一映射为 `CACHE_RECORD_INVALID`，恢复方式为重建任务（`replay_safe=false`）。
+- 向导的 `crawl_start` / `crawl_resume` 遇到导出失败（输出目录是同名文件、无权限、磁盘满）时被兜成 `NETWORK_ERROR`，`--max-retries>0` 还会自动重跑步骤、重新打开采集 Chrome 并再次发出平台请求（Issue #1287）。现在与 CLI 一致返回 `LOCAL_IO_ERROR`（recoverable=false，`replay_safe=false`），指引修复输出目录与权限。
+- 采集断点 `params.cdp_port` / `limits.*` 为 `Infinity` / `1e400`，或向导输入 `pages: 1e400` 时，`int()` 抛出的 `OverflowError` 未被捕获，落成 `INTERNAL_ERROR`（「先升级版本」）（Issue #1288）。现在 `CrawlSettings.from_dict` 按记录损坏报 `CACHE_RECORD_INVALID`，向导按 `INVALID_PARAM` 报错。
+- `CRAWL_PROFILE_BUSY` 的信封 `next_actions`、登记表恢复文案与向导恢复文案引用不带值的 `boss crawl status`，照抄返回 `INVALID_PARAM`（缺少必填 `RUN_ID`）（Issue #1289）。现在统一使用 `crawl status <run_id>` 占位形式。
+- 采集配置目录 `crawl/chrome-profile` 被同名文件占用或不可写时，`CrawlTransport.open()` 的 `OSError` 被 `_run` 兜成 `ok=true` 的 `stopped`，`crawl resume` 永远复现（Issue #1290）。现在抛出 `CrawlProfilePathInvalid`：CLI 与向导都按 `LOCAL_IO_ERROR`（recoverable=false）上报，指引检查路径、权限与磁盘空间。
+
 ## [3.4.62] - 2026-11-16
 
 ### Fixed
