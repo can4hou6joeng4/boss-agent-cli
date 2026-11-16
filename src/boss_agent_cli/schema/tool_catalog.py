@@ -110,7 +110,10 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"requested_steps": {
 						"type": "array",
 						"items": {"type": "string"},
-						"description": "可选的 goal 内步骤子集",
+						# 空数组会在 plan 层被折叠成全量步骤（含真实写操作），
+						# 与「不传」语义不同，必须在入口拒绝（Issue #1236）。
+						"minItems": 1,
+						"description": "可选的 goal 内步骤子集；省略表示执行全部步骤，空数组非法",
 					},
 					"run_id": {"type": "string", "description": "resume/status/stop 的显式 workflow run_id"},
 					"timeout": {"type": "number", "description": "workflow 超时秒数"},
