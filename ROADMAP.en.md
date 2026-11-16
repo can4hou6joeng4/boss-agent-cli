@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.53 (2026-11-16): the breaker `open` field only accepts booleans. Non-boolean values fail closed in `stop.json` and raise a state error in `state.json`, keeping `SafetyGuard` and `hr location` consistent (Issue #1242).
 - ✅ v3.4.52 (2026-11-16): crawl stop and export state machine. Ambient control signals map to `workflow_stopped` / `timeout_stopped`, the final export happens before `completed` is persisted, export failures map to `LOCAL_IO_ERROR`, and stop / exhausted budgets only point at the read-only `crawl status` (Issue #1238).
 - ✅ v3.4.51 (2026-11-16): wizard `requested_steps` empty-array semantics and MCP argv text boundary. An empty array no longer collapses to all steps, and NUL / lone surrogates are rejected with `INVALID_PARAM` before spawning the CLI (Issue #1236).
 - ✅ v3.4.50 (2026-11-16): payload container drift. When `zpData` is a non-object truthy value, wizard `last_messages` continues with an empty page, `hr download-resume` no longer crashes after the file is saved, `hr jobs detail` normalizes to an empty object, and `favorites list` returns a retryable `NETWORK_ERROR` (Issue #1233).

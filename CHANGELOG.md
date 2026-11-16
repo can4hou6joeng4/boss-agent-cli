@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.53] - 2026-11-16
+
+### Fixed
+- 招聘自动化的熔断开关 `circuit_breaker.open` 只按 JSON 真值读取（Issue #1242）：`stop.json` 为 `{"open": 0}` / `{"open": null}` 时停止开关被错误关闭、自动化照常发送写操作，且该轮 checkpoint 会把 `state.json` 里原本的 `open: true` 覆写成 `0`；`{"open": 1}` / `{"open": "true"}` 时 `SafetyGuard` 与 `boss hr location` 的读取口径相反。现在 `read_stop` 对非布尔 `open` fail-closed 并标记损坏，`read_state` / `write_state` 对类型漂移报 `AUTOMATION_STATE_INVALID`，操作员仍可通过显式 `agent resume` 解除熔断。
+
 ## [3.4.52] - 2026-11-16
 
 ### Fixed

@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.53（2026-11-16）：熔断 `open` 字段只接受布尔。非布尔值在 `stop.json` 中 fail-closed、在 `state.json` 中报状态损坏，`SafetyGuard` 与 `hr location` 的读取口径一致（Issue #1242）。
 - ✅ v3.4.52（2026-11-16）：收口 crawl 停止与导出的状态机。ambient 控制信号按错误码落成 `workflow_stopped` / `timeout_stopped`，最后一页导出先于 `completed` 落库，导出失败映射 `LOCAL_IO_ERROR`，stop / 预算用尽只指引只读的 `crawl status`（Issue #1238）。
 - ✅ v3.4.51（2026-11-16）：收口 wizard `requested_steps` 空数组语义与 MCP argv 文本边界。空数组不再折叠为全量步骤，NUL / 孤立代理项在派生 CLI 前以 `INVALID_PARAM` 拒绝（Issue #1236）。
 - ✅ v3.4.50（2026-11-16）：收口平台载荷的容器漂移。`zpData` 为非对象真值时，wizard `last_messages` 按空页继续、`hr download-resume` 不再在附件落盘后崩溃、`hr jobs detail` 归一为空对象、`favorites list` 返回可重试的 `NETWORK_ERROR`（Issue #1233）。
