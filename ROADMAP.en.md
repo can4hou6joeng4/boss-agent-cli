@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.33 (2026-11-16): when a task's checkpoint is intact but its bound inner crawl record is corrupt, `wizard --resume` is no longer rejected as `CACHE_RECORD_INVALID`; resume and the runner read control state from the checkpoint, execution results prefer the live-crawl overlay and fall back to the checkpoint when it is unreadable, and `--status` still reports corruption as the display contract.
 - ✅ v3.4.32 (2026-11-16): when the cache schema drifts (a database created by an older version lacks added columns, or a migration was interrupted), commands going through `CacheStore` such as `shortlist list` / `shortlist add` no longer emit a traceback; they return a `CACHE_DATABASE_INVALID` envelope with backup-and-rebuild guidance. Lock contention remains the retryable `CACHE_BUSY`, and a `ProgrammingError` caused by our own SQL stays unwrapped.
 - ✅ v3.4.31 (2026-11-16): `-o` exports of `digest`, `stats`, `chat` and `resume export` are written atomically; a failed or interrupted write keeps the previous complete export instead of leaving a truncated file, and still returns a `LOCAL_IO_ERROR` envelope.
 - ✅ v3.4.30 (2026-11-16): bad `config.json` values for `role` / `platform` / `browser_source` / `cdp_url` (type) no longer block the repair entry point `boss config reset`; other commands still reject them as parameter errors, and explicit command-line overrides stay strictly validated.
