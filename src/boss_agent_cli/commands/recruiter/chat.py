@@ -89,9 +89,13 @@ def _message_cursor_id(value: Any) -> int | None:
 		return None
 	if isinstance(value, int):
 		return value if value > 0 else None
-	if isinstance(value, str) and value.strip().isdigit():
-		cursor = int(value.strip())
-		return cursor if cursor > 0 else None
+	if isinstance(value, str):
+		# 平台字段漂移成 '①' / '²' 时 `isdigit()` 为真但 `int()` 会抛
+		# ValueError，让整个聊天历史命令丢掉信封；只认 ASCII 数字串（Issue #1306）。
+		text = value.strip()
+		if text.isascii() and text.isdigit():
+			cursor = int(text)
+			return cursor if cursor > 0 else None
 	return None
 
 

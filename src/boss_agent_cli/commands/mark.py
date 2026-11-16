@@ -18,7 +18,9 @@ def _resolve_label(label_input: str) -> int:
 	"""将标签名称或 ID 解析为数字 ID。"""
 	if label_input in _LABEL_MAP:
 		return _LABEL_MAP[label_input]
-	if label_input.isdigit():
+	# 全角 / 上标数字（'①'、'²'）的 `isdigit()` 为真但 `int()` 会抛 ValueError，
+	# 落成参数错误以外的内部错误；只接受 ASCII 数字串（Issue #1306）。
+	if label_input.isascii() and label_input.isdigit():
 		return int(label_input)
 	for name, lid in _LABEL_MAP.items():
 		if label_input in name:

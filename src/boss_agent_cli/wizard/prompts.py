@@ -469,7 +469,7 @@ class ClickMenu:
 				raw = str(click.prompt("请输入序号", default=str(default_index), err=True)).strip()
 			except click.Abort as exc:
 				raise WizardCancelled from exc
-			if raw.isdigit() and 1 <= int(raw) <= len(items):
+			if raw.isascii() and raw.isdigit() and 1 <= int(raw) <= len(items):
 				return _resolve_navigation(items[int(raw) - 1].value)
 			click.echo(f"请输入 1 到 {len(items)} 之间的序号。", err=True)
 

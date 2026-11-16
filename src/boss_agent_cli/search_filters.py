@@ -322,7 +322,9 @@ def resolve_lookup_codes(value: str | None, lookup: dict[str, str], label: str) 
 		return None
 	codes: list[str] = []
 	for part in _split_multi_value(value):
-		if part.isdigit():
+		# '①' 这类非 ASCII 数字串 `isdigit()` 为真，但不是平台代码；
+		# 交给标签表按未知标签拒绝，而不是原样发给平台（Issue #1306）。
+		if part.isascii() and part.isdigit():
 			code = part
 		else:
 			found = lookup.get(part)
