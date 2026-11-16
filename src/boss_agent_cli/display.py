@@ -20,6 +20,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
+from boss_agent_cli.api._base_client import PlatformResponseInvalid
 from boss_agent_cli.cache.store import CacheBusyError, CacheDatabaseInvalid, is_cache_busy_error
 from boss_agent_cli.output import emit_success, is_local_io_error, redact_sensitive_text
 from boss_agent_cli.schema.error_codes import ERROR_CODES
@@ -1058,7 +1059,16 @@ def _with_httpx_only_hint(ctx: Any, hints: dict[str, list[str]] | None) -> dict[
 
 # 解析平台数据或 CLI 自身的缺陷：同样的输入必然得到同样的结果。归为 NETWORK_ERROR
 # 并建议「重试」会让 Agent 反复重试，重试的若是平台请求，还会白白消耗请求预算。
-INTERNAL_ERROR_TYPES: tuple[type[Exception], ...] = (TypeError, AttributeError, KeyError, IndexError, OverflowError)
+# PlatformResponseInvalid：平台响应不是 JSON 对象，或深嵌套让 resp.json() 抛
+# RecursionError；同一响应重试必然复现，按 INTERNAL_ERROR（不可恢复）上报（Issue #1368）。
+INTERNAL_ERROR_TYPES: tuple[type[Exception], ...] = (
+	TypeError,
+	AttributeError,
+	KeyError,
+	IndexError,
+	OverflowError,
+	PlatformResponseInvalid,
+)
 
 
 def _handle_cache_busy_error(ctx: Any, command_name: str, message: str) -> None:

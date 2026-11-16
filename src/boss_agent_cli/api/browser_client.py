@@ -649,7 +649,8 @@ class BrowserSession:
 			if not isinstance(payload, dict):
 				return None
 			return cast("str | None", payload.get("webSocketDebuggerUrl"))
-		except (httpx.HTTPError, ValueError, KeyError):
+		# RecursionError：极深嵌套的探测响应与无效 JSON 一样按「拿不到 WS 地址」处理。
+		except (httpx.HTTPError, ValueError, KeyError, RecursionError):
 			return None
 
 	@staticmethod
@@ -1220,7 +1221,9 @@ class _PageRiskResponseTracker:
 					return None
 			try:
 				data = json.loads(body)
-			except ValueError:
+			# RecursionError：平台响应正文深嵌套时同样无法解析，按非 JSON 正文
+			# 处理，不能让观测线程整个崩掉（Issue #1368）。
+			except (ValueError, RecursionError):
 				# JSON 内的普通说明即使包含 HTML 验证标题，也不是安全页。
 				page_risk = platform_risk_page_response(content_type="text/html", body=body)
 				if page_risk is not None:
