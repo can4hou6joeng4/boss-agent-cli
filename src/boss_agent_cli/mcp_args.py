@@ -10,13 +10,28 @@ import json
 from typing import Any
 
 #: 枚举参数（按 MCP 侧 JSON 键登记，Issue #982）。
-#: 这些参数在 CLI 层有取值校验，显式空串会得到 ``INVALID_PARAM`` + 可选值列表；
+#: 这些参数在某条命令上有取值校验，显式空串会得到 ``INVALID_PARAM`` + 可选值列表；
 #: 映射层若用真值判断，空串被化装成「没传」，调用方误以为参数生效（``format=""``
 #: 静默落回默认格式、``sort=""`` 静默按默认排序）。键存在且值不为 ``None`` 时
 #: 原样下发；``None`` 与缺键仍等价于未传（与 Issue #958 的 ``query`` / ``url`` 一致）。
-#: ``active`` 不在此列：``resolve_active_level("")`` 本来就返回 ``None``（空值等于未传）。
+#: 自由文本命令（如 ``search --industry``）收到空串时本来就按未传处理，原样下发
+#: 不改变行为；``active`` 不在此列：``resolve_active_level("")`` 返回 ``None``。
 _ENUM_KEYS: frozenset[str] = frozenset(
-	{"sort", "detail_status", "from_who", "format", "section", "lang", "tone", "type"}
+	{
+		"sort",
+		"detail_status",
+		"from_who",
+		"format",
+		"section",
+		"lang",
+		"tone",
+		"type",
+		# preset / watch / batch-greet 的筛选键是 Click Choice（Issue #1180）。
+		"industry",
+		"scale",
+		"stage",
+		"job_type",
+	}
 )
 
 
@@ -178,10 +193,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "batch_greet":
 		args = ["batch-greet", arguments["query"]]
 		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage"):
-			if arguments.get(opt):
-				args.extend([f"--{opt}", str(arguments[opt])])
-		if arguments.get("job_type"):
-			args.extend(["--job-type", str(arguments["job_type"])])
+			_optional(args, f"--{opt}", opt, arguments)
+		_optional(args, "--job-type", "job_type", arguments)
 		# MCP 侧参数名是 limit，CLI 选项名是 --count。默认值要显式下发：不传就落到
 		# CLI 的默认 10，比工具声明的 5 多打一倍招呼。
 		args.extend(["--count", str(arguments.get("limit", 5))])
@@ -427,8 +440,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "preset_add":
 		args = ["preset", "add", arguments["name"], arguments["query"]]
 		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type", "welfare", "active"):
-			if arguments.get(opt):
-				args.extend([f"--{opt.replace('_', '-')}", str(arguments[opt])])
+			_optional(args, f"--{opt.replace('_', '-')}", opt, arguments)
 		return _literal_positionals(args, start=2, count=2)
 
 	if name == "preset_remove":
@@ -437,8 +449,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "watch_add":
 		args = ["watch", "add", arguments["name"], arguments["query"]]
 		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "job_type", "welfare"):
-			if arguments.get(opt):
-				args.extend([f"--{opt.replace('_', '-')}", str(arguments[opt])])
+			_optional(args, f"--{opt.replace('_', '-')}", opt, arguments)
 		return _literal_positionals(args, start=2, count=2)
 
 	if name == "watch_remove":

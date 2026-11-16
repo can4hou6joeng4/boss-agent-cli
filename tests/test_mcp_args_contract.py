@@ -404,6 +404,30 @@ _ENUM_EMPTY_CASES: list[tuple[str, dict[str, Any], list[str]]] = [
 	("boss_hr_exchange", {"friend_id": "f", "type": ""}, ["--type", ""]),
 ]
 
+# preset / watch / batch-greet 的筛选键在 CLI 层是 Click Choice，但 MCP schema
+# 只声明 string（可选值见 boss schema），不能靠 schema enum 守卫发现（Issue #1180）。
+_CHOICE_FILTER_EMPTY_CASES: list[tuple[str, dict[str, Any], str]] = [
+	("boss_preset_add", {"name": "n", "query": "q", "industry": ""}, "--industry"),
+	("boss_watch_add", {"name": "n", "query": "q", "stage": ""}, "--stage"),
+	("boss_batch_greet", {"query": "q", "scale": ""}, "--scale"),
+	("boss_batch_greet", {"query": "q", "job_type": ""}, "--job-type"),
+]
+
+
+@pytest.mark.parametrize(
+	("tool_name", "arguments", "flag"),
+	_CHOICE_FILTER_EMPTY_CASES,
+	ids=[f"{name}-{flag}" for name, _, flag in _CHOICE_FILTER_EMPTY_CASES],
+)
+def test_choice_filter_empty_string_reaches_cli_verbatim(tool_name, arguments, flag) -> None:
+	"""筛选键的空串必须到达 CLI 的 Choice 校验（与 #982 同一口径，Issue #1180）。"""
+	argv = _build_args(tool_name, arguments)
+	assert flag in argv, argv
+	assert argv[argv.index(flag) + 1] == "", argv
+	command, rest = _resolve_command(argv)
+	with pytest.raises(click.BadParameter):
+		command.make_context(command.name, rest)
+
 
 @pytest.mark.parametrize(
 	("tool_name", "arguments", "expected_tail"),
@@ -435,8 +459,20 @@ def test_enum_empty_string_reaches_cli_verbatim(
 		("boss_stats", {"format": None}, ["--format"]),
 		("boss_ai_cover_letter", {"resume": "r", "tone": "", "lang": None}, ["--lang"]),
 		("boss_hr_exchange", {"friend_id": "f", "type": None}, ["--type"]),
+		("boss_preset_add", {"name": "n", "query": "q", "industry": None}, ["--industry"]),
+		("boss_batch_greet", {"query": "q", "scale": None}, ["--scale"]),
 	],
-	ids=["search-null-sort", "search-empty-city", "chat-null", "me-null", "stats-null", "ai-empty-tone-null-lang", "hr-exchange-null"],
+	ids=[
+		"search-null-sort",
+		"search-empty-city",
+		"chat-null",
+		"me-null",
+		"stats-null",
+		"ai-empty-tone-null-lang",
+		"hr-exchange-null",
+		"preset-add-null-industry",
+		"batch-greet-null-scale",
+	],
 )
 def test_non_enum_empty_and_none_values_stay_omitted(
 	tool_name: str, arguments: dict[str, Any], absent_flags: list[str],
@@ -503,3 +539,6 @@ def test_every_enum_schema_property_is_covered_by_the_empty_value_rule() -> None
 	assert enum_keys - {"active", "action", "role"} <= set(mcp_args._ENUM_KEYS), (
 		f"schema 声明了枚举但映射层未登记：{sorted(enum_keys - set(mcp_args._ENUM_KEYS))}"
 	)
+	# 这些筛选键在 preset / watch / batch-greet 上是 Click Choice，schema 只声明
+	# string（可选值见 boss schema），枚举守卫覆盖不到，单独钉住（Issue #1180）。
+	assert {"industry", "scale", "stage", "job_type"} <= set(mcp_args._ENUM_KEYS)
