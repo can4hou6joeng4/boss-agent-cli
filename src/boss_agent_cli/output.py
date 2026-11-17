@@ -286,7 +286,11 @@ def envelope_error(
 	recovery_action: str | None = None,
 	details: dict[str, Any] | None = None,
 	hints: dict[str, Any] | None = None,
+	data: Any = None,
 ) -> str:
+	# ``data`` 默认 None（绝大多数错误没有可带回的结果）；批量删除这类
+	# 「部分完成」失败必须让调用方看到已完成 / 失败项（Issue #1497），
+	# 但仍保持七键信封不变。
 	# 调用方未显式给出时按错误码登记表补齐，保证信封元数据与 schema 真源一致。
 	# None 表示「未声明」，显式 False 仍表示不可恢复，不会被登记表覆盖。
 	spec = ERROR_CODES.get(code, {})
@@ -326,7 +330,8 @@ def envelope_error(
 				"ok": False,
 				"schema_version": "1.0",
 				"command": command,
-				"data": None,
+				# 部分完成的清理需要带回已完成项；其余错误保持 data=null。
+				"data": None if data is None else redact_sensitive(data),
 				"pagination": None,
 				"error": error,
 				"hints": redact_sensitive(hints),

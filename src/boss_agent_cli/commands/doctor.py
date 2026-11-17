@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._doctor_checks import _add_live_probe_checks, _add_quality_baseline_checks, _doctor_command
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
+	handle_error_output,
 	handle_output,
 	login_action_for_ctx,
 	platform_error_contract,
@@ -287,12 +289,44 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 	# 6) Data dir writable
 	try:
 		auth_health.auth_dir.mkdir(parents=True, exist_ok=True)
-		probe_file = auth_health.auth_dir / ".doctor-write-test"
-		probe_file.write_text("ok", encoding="utf-8")
-		probe_file.unlink(missing_ok=True)
+		# 唯一临时文件名 + mkstemp 的 O_CREAT|O_EXCL（POSIX 上还带 O_NOFOLLOW）：
+		# 不写穿调用前已存在的 auth/.doctor-write-test 符号链接，也不删除用户
+		# 预置的路径（Issue #1498）。只清理本次创建的文件。
+		fd, probe_name = tempfile.mkstemp(prefix=".doctor-write-test-", dir=auth_health.auth_dir)
+		probe_file = Path(probe_name)
+		try:
+			with os.fdopen(fd, "w", encoding="utf-8") as handle:
+				handle.write("ok")
+				handle.flush()
+				os.fsync(handle.fileno())
+		finally:
+			probe_file.unlink(missing_ok=True)
 		add_check("data_dir", "ok", f"数据目录可写: {data_dir}")
 	except Exception as e:
+		# 写探针失败是确定性本地 IO 问题：按 LOCAL_IO_ERROR 出错误信封，同时
+		# 保留已完成的检查项，不能静默当成 ok 通过。
 		add_check("data_dir", "error", f"数据目录不可写: {e}", "修改 --data-dir 或目录权限")
+		handle_error_output(
+			ctx,
+			"doctor",
+			code="LOCAL_IO_ERROR",
+			message=f"doctor 无法写入数据目录: {e}",
+			data={
+				"summary": "broken",
+				"auth_state": auth_health.auth_state,
+				"data_dir": str(data_dir),
+				"live_probe": live_probe,
+				"live_probe_risk": live_probe_risk,
+				"cdp_risk_lock": risk_lock,
+				"check_count": len(checks),
+				"checks": checks,
+				"failed_check": "data_dir",
+			},
+			hints={
+				"operator_actions": ["确认 --data-dir 存在、可写且磁盘空间充足后再运行 doctor"],
+			},
+		)
+		return
 
 	status_rank = {"ok": 0, "warn": 1, "error": 2}
 	worst = max((status_rank[item["status"]] for item in checks), default=0)
