@@ -521,6 +521,22 @@ class RecruiterAuthError(Exception):
 	pass
 
 
+class ChatFriendDataError(LookupError):
+	"""friend_detail 前置读取失败，并保留平台原响应。
+
+	平台返回非 0 码（401 / 9 / 37 等）时不能在这里退化成通用 ``-1``：
+	原响应要原样交给 ``RecruiterPlatform.parse_error``，才能映射成
+	AUTH_EXPIRED / RATE_LIMITED / TOKEN_REFRESH_FAILED。客户端自己判定的
+	失败（friend_detail 成功但没有唯一匹配）用 ``error_code`` 标注
+	CONTACT_NOT_FOUND（Issue #1485）。
+	"""
+
+	def __init__(self, message: str, *, response: dict[str, Any], error_code: str | None = None) -> None:
+		super().__init__(message)
+		self.response = response
+		self.error_code = error_code
+
+
 class BossRecruiterClient(_BaseHttpClient):
 	"""Recruiter-side hybrid API client."""
 
@@ -572,14 +588,19 @@ class BossRecruiterClient(_BaseHttpClient):
 
 		BOSS 的 friend_detail 仍用 uid，而聊天页 Vue 组件期待 friendId/uniqueId。
 		把这层映射集中在一个 helper，避免 reply / exchange 各自拼字段后漂移。
+
+		失败时抛 :class:`ChatFriendDataError` 并保留平台原响应（含 ``code``）：
+		401 / 9 / 37 由平台 ``parse_error`` 映射成稳定错误码，而不是在这里
+		丢码后统一退化成 UNKNOWN（Issue #1485）。
 		"""
 		self._check_cdp_risk_lock()
 		fd_resp = self.friend_detail([friend_id])
 		if not isinstance(fd_resp, dict):
-			raise LookupError("friend_detail 读取失败，未执行聊天动作")
+			raise ChatFriendDataError("friend_detail 读取失败，未执行聊天动作", response={})
+		# 风控必须先于业务码终止；其余非 0 码保留原响应交给调用方分类。
 		self._raise_platform_risk_response(fd_resp)
 		if fd_resp.get("code") != 0:
-			raise LookupError("friend_detail 读取失败，未执行聊天动作")
+			raise ChatFriendDataError("friend_detail 读取失败，未执行聊天动作", response=fd_resp)
 		# zpData / friendList 形状漂移（字符串、对象、混入非对象元素）按空处理：
 		# 这里只做「未找到唯一候选人就拒绝发消息」的判断，不能把坏格式变成
 		# AttributeError 后继续执行聊天动作（Issue #1141 同一口径）。
@@ -592,7 +613,12 @@ class BossRecruiterClient(_BaseHttpClient):
 			and (item.get("uid") is None or str(item["uid"]) == str(friend_id))
 		]
 		if len(matches) != 1:
-			raise LookupError("friend_detail 未返回唯一匹配的目标候选人，未执行聊天动作")
+			# friend_id 写错或联系人已变化是确定性结果：不重试，指引刷新沟通列表。
+			raise ChatFriendDataError(
+				f"friend_detail 未返回唯一匹配的目标候选人（friend_id={friend_id}），未执行聊天动作",
+				response=fd_resp,
+				error_code="CONTACT_NOT_FOUND",
+			)
 
 		friend_data: dict[str, Any] = {**matches[0]}
 		if "friendId" not in friend_data and "uid" in friend_data:
@@ -892,9 +918,18 @@ class BossRecruiterClient(_BaseHttpClient):
 
 	@staticmethod
 	def _chat_action_failure_response(
-		*, message: str, payload: dict[str, Any], error_code: str | None = None
+		*,
+		message: str,
+		payload: dict[str, Any],
+		error_code: str | None = None,
+		platform_response: dict[str, Any] | None = None,
 	) -> dict[str, Any]:
-		"""聊天页写操作失败信封：zpData 保留完整诊断，同时作为 error.details 透出。"""
+		"""聊天页写操作失败信封：zpData 保留完整诊断，同时作为 error.details 透出。
+
+		``platform_response`` 用于 friend_detail 这类平台前置读取失败：原响应
+		（含平台 ``code``）必须原样交给平台 ``parse_error``，诊断只并入
+		``__cli_error_details__``，不能把码改写成通用 ``-1``（Issue #1485）。
+		"""
 		details = {
 			key: payload[key]
 			for key in (
@@ -917,6 +952,16 @@ class BossRecruiterClient(_BaseHttpClient):
 			)
 			if key in payload
 		}
+		if platform_response is not None:
+			preserved: dict[str, Any] = dict(platform_response)
+			if not any(key in preserved for key in ("message", "msg", "error")):
+				preserved["message"] = message
+			existing_details = preserved.get("__cli_error_details__")
+			preserved["__cli_error_details__"] = {
+				**(existing_details if isinstance(existing_details, dict) else {}),
+				**details,
+			}
+			return preserved
 		response: dict[str, Any] = {
 			"code": -1,
 			"message": message,
@@ -926,6 +971,44 @@ class BossRecruiterClient(_BaseHttpClient):
 		if error_code:
 			response["__cli_error_code__"] = error_code
 		return response
+
+	def _chat_friend_lookup_failure(
+		self,
+		*,
+		action: str,
+		friend_id: int,
+		exc: ChatFriendDataError,
+		expected_bits: list[str],
+		extra: dict[str, Any] | None = None,
+	) -> dict[str, Any]:
+		"""friend_detail 前置失败的统一收口（reply / exchange 共用，Issue #1485）。
+
+		平台返回非 0 码时保留原响应（含 code），命令层再用平台 ``parse_error``
+		映射 AUTH_EXPIRED / RATE_LIMITED / TOKEN_REFRESH_FAILED；客户端自己
+		判定「无唯一匹配」时用 CLI 内部码 CONTACT_NOT_FOUND 标注。
+		"""
+		payload = self._chat_action_failure_data(
+			action=action,
+			friend_id=friend_id,
+			error=str(exc),
+			expected_bits=expected_bits,
+			extra=extra,
+		)
+		raw_code = exc.response.get("code")
+		# 只有「平台确实返回了非 0 码」才保留原响应；code 0（无唯一匹配）与
+		# 无法解析的响应仍走 code=-1 的合成信封，避免 is_success 误判成功。
+		platform_failure = (
+			exc.error_code is None
+			and raw_code is not None
+			and not isinstance(raw_code, bool)
+			and str(raw_code) != "0"
+		)
+		return self._chat_action_failure_response(
+			message=str(exc),
+			payload=payload,
+			error_code=exc.error_code,
+			platform_response=exc.response if platform_failure else None,
+		)
 
 	# ── Public API ───────────────────────────────────────────────────
 
@@ -1212,17 +1295,13 @@ class BossRecruiterClient(_BaseHttpClient):
 		"""
 		try:
 			friend_data = self._require_chat_friend_data(friend_id)
-		except LookupError as exc:
-			return {
-				"code": -1,
-				"message": str(exc),
-				"zpData": self._chat_action_failure_data(
-					action="reply",
-					friend_id=friend_id,
-					error=str(exc),
-					expected_bits=[content],
-				),
-			}
+		except ChatFriendDataError as exc:
+			return self._chat_friend_lookup_failure(
+				action="reply",
+				friend_id=friend_id,
+				exc=exc,
+				expected_bits=[content],
+			)
 		baseline_mids, _ = self._chat_history_snapshot(friend_id)
 		started_ms = int(time.time() * 1000)
 		result, events = self._run_chat_frontend_action(
@@ -1378,18 +1457,14 @@ class BossRecruiterClient(_BaseHttpClient):
 		"""
 		try:
 			friend_data = self._require_chat_friend_data(friend_id)
-		except LookupError as exc:
-			return {
-				"code": -1,
-				"message": str(exc),
-				"zpData": self._chat_action_failure_data(
-					action="exchange",
-					friend_id=friend_id,
-					error=str(exc),
-					expected_bits=[],
-					extra={"exchange_type": exchange_type},
-				),
-			}
+		except ChatFriendDataError as exc:
+			return self._chat_friend_lookup_failure(
+				action="exchange",
+				friend_id=friend_id,
+				exc=exc,
+				expected_bits=[],
+				extra={"exchange_type": exchange_type},
+			)
 
 		component_name = _EXCHANGE_COMPONENT_NAMES.get(exchange_type)
 		if component_name is None:
