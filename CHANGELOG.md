@@ -2,6 +2,27 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.75] - 2026-11-17
+
+### Fixed
+- CDP 探测（`/json/version`）返回非对象 JSON（`[]` / `null` / 标量）时 `resp.json().get` 抛 `AttributeError`，在登录降级链之外直接中止；现在按「拿不到调试端口」处理，继续既有降级（Issue #1421）。
+- `login_via_cdp` 的握手与 `browser.contexts` 读取在 `try` 之外，失败时泄漏 Playwright driver；现在纳入统一收尾，失败即 `pw.stop()`（Issue #1425）。
+- 请求预算与采集节流的有限远未来时间戳让等待永久无法自愈；现在按 `now + interval + 60s` / 1 小时冷却上限判定漂移并写回自愈（Issue #1422）。
+- 非法代理端口（`abc` / `99999` / 显式 `:0`）抛裸 `ValueError` 并落到可重试网络错误；新增 `ProxyConfigurationError`，登录 / `me` / wizard / 通用装饰器统一映射 `INVALID_PARAM`，文案不含代理凭据（Issue #1423）。
+- CDP `/json` 返回对象或混入非对象元素时，`_pick_chat_target_ws` 抛 `AttributeError` 被当成「结果未知」；现在打开 WebSocket 前收口为 `RECRUITER_CHAT_TAB_REQUIRED`（Issue #1424）。
+- `ai_model` 被手改成数组 / 数字后服务层 `rsplit` 崩溃，所有 `boss ai *` 命令落 `INTERNAL_ERROR`；现在构造前校验字符串项，报 `INVALID_PARAM` 并给出 `ai config --model` 修复指引（Issue #1428）。
+- `--base-url` 接受空白串 / 缺 scheme / 非 http(s) 地址，之后每条 AI 命令抛 `UnsupportedProtocol` 并被报成可重试错误；现在写入与解析端点两侧都校验（Issue #1431）。
+- 简历 HTML/PDF 模板对 rows 自由字段直接迭代：数字 `content` 抛 `TypeError`、字符串 `tags` 被逐字符渲染、字符串 `columns` 崩溃；现在按 `resume_to_text` 同口径归一（Issue #1429）。
+- PDF 导出绕过符号链接拒绝，静默替换 `-o` 指向的链接；现在与原子写同口径拒绝（Issue #1434）。
+- `resume export --format json` 写出裸 `NaN` / `Infinity`，严格解析器拒绝整份文件；现在与 stdout 信封同口径归一（Issue #1435）。
+- 招聘者 `parse_error` 未走通用兜底：HTTP 401 合成响应与数字字符串码（`"9"` / `"121"`）全部退化为 `UNKNOWN`；现在共用 `classify_platform_error`（保留消息关键词关闭，`code=-1` 仍为 `UNKNOWN`），401 → `AUTH_EXPIRED`（Issue #1430）。
+- `match_score` 与学历 / 经验阈值对平台字段类型漂移直接消费：`skills` 混入数字、期望字段为数组时抛 `TypeError` 落 `INTERNAL_ERROR`；现在逐项归一、坏字段按无此维度处理（Issue #1432）。
+- `ai local import --model registry.json` 会把登记表路径建成目录，登记表自此不可用；现在拒绝与登记表同名的模型名（含大小写变体）（Issue #1433）。
+- `mark --label` 的 4301 位以上数字串让 `int()` 抛裸 `ValueError`，被兜成可重试网络错误；现在报 `INVALID_PARAM` 且消息截断（Issue #1437）。wizard `candidate_mark` 与回退菜单同口径（Issue #1442、#1438）。
+- `mark` 把漂移的 `friendSource` 原样发给标签写接口，发出注定失败的写请求；现在与向导同口径按 0 处理（Issue #1439）。
+- `resume init --template` 接受任意值却固定生成默认模板、成功信封还回显未生效的模板名；现在只接受 `default`（Issue #1440）。
+- `digest` / `stats` / `resume export` 的提示写死 macOS 的 `open`；现在按平台生成 `open` / `cmd /c start` / `xdg-open`（Issue #1441）。
+
 ## [3.4.74] - 2026-11-17
 
 ### Fixed
