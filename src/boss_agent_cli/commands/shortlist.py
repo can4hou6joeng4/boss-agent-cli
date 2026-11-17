@@ -169,7 +169,7 @@ def shortlist_annotate_cmd(
 	remove_tag: tuple[str, ...],
 	note: str | None,
 ) -> None:
-	"""给候选池条目增删标签或替换备注；条目不存在时报错而不是静默成功。"""
+	"""给候选池条目增删标签或替换备注；至少提供一个修改参数，条目不存在时报错而不是静默成功。"""
 	# 空标识不可能命中候选池里的任何条目：继续查下去会报 SHORTLIST_ENTRY_NOT_FOUND
 	# 「候选池中没有该职位:  / 」，把 argv 少传参数说成「这条职位不在池子里」。
 	if not security_id.strip() or not job_id.strip():
@@ -181,6 +181,33 @@ def shortlist_annotate_cmd(
 			message="security_id 与 job_id 不能为空",
 			recovery_action=f"补上两个编号后重试；候选池条目的编号可用 {list_cmd} 查看",
 			hints={"next_actions": [list_cmd]},
+		)
+		return
+	# annotate 是一次显式修改：既没有标签也没给 note 时，旧实现仍返回
+	# updated=true，Agent 会以为字段已经写入；空标签同样被 _parse_tags 丢掉，
+	# 信封却报告成功（Issue #1565）。两者都要在查找条目与写库之前拒绝。
+	blank_tag = next((value for value in (*add_tag, *remove_tag) if not _parse_tags(value)), None)
+	if blank_tag is not None:
+		list_cmd = _hint_command(ctx, "shortlist list")
+		handle_error_output(
+			ctx,
+			"shortlist",
+			code="INVALID_PARAM",
+			message="--add-tag / --remove-tag 的标签值不能为空或只含逗号 / 空白",
+			recovery_action=f"传入非空标签后重试；候选池条目的现有标签可用 {list_cmd} 查看",
+			hints={"next_actions": [list_cmd]},
+		)
+		return
+	if not add_tag and not remove_tag and note is None:
+		list_cmd = _hint_command(ctx, "shortlist list")
+		compare_cmd = _hint_command(ctx, "shortlist compare")
+		handle_error_output(
+			ctx,
+			"shortlist",
+			code="INVALID_PARAM",
+			message="没有要修改的字段：至少提供 --add-tag、--remove-tag 或 --note",
+			recovery_action=f"补上要修改的标签或备注后重试；可用 {list_cmd} 查看候选池条目",
+			hints={"next_actions": [list_cmd, compare_cmd]},
 		)
 		return
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
@@ -225,7 +252,21 @@ def shortlist_annotate_cmd(
 @click.pass_context
 def shortlist_compare_cmd(ctx: click.Context, tag: str | None) -> None:
 	"""并排比较候选池条目（可按标签过滤）。"""
-	normalized_tag = tag.strip() if tag else None
+	# 显式空标签不是「不过滤」：旧实现把它 strip 成 None 后比较全部条目，
+	# 调用方以为得到按标签筛选的结果（Issue #1565）。省略 --tag 才是全部。
+	if tag is not None and not tag.strip():
+		compare_cmd = _hint_command(ctx, "shortlist compare")
+		list_cmd = _hint_command(ctx, "shortlist list")
+		handle_error_output(
+			ctx,
+			"shortlist",
+			code="INVALID_PARAM",
+			message="--tag 不能为空或只含空白；省略该选项才会比较全部候选职位",
+			recovery_action=f"去掉 --tag 比较全部，或传入非空标签；可用 {list_cmd} 查看条目标签",
+			hints={"next_actions": [compare_cmd, list_cmd]},
+		)
+		return
+	normalized_tag = tag.strip() if tag is not None else None
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		pool = cache.list_shortlist()
 	items = pool

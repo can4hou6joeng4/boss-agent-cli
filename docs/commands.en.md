@@ -213,6 +213,8 @@ The `hints.next_actions` from `favorites` and `shortlist` preserve the original 
 
 `boss shortlist add <sid> <jid> --lid <lid>` saves access context from the same list item as `sid`; `list` / `compare` return it, and crawl and favorites imports retain the matching context while favorites previews remain redacted. `lid` is optional. Storage does not establish current validity, a lifetime, or identity across accounts.
 
+`boss shortlist annotate` requires at least one non-empty `--add-tag` / `--remove-tag` or `--note`; blank tags and a blank `--tag` return `INVALID_PARAM` instead of silently becoming "no filter" or `updated: true`. `--note ""` still clears the note.
+
 `history` / `favorites list` follow the same `pagination.has_more` contract as `recommend` / `chat`: `true` / `false` only when the platform returns a boolean `hasMore`; a missing or ambiguous value is `null` with `has_more_source=unknown`, never defaulted to `false`, and no next-page action is suggested. `total` is always the number of rows on this page (`total_kind=returned_page_count`).
 
 ## Recruiter mode

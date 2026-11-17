@@ -211,6 +211,8 @@ boss crawl stop <run_id>
 
 `boss shortlist add <sid> <jid> --lid <lid>` 可保存与 `sid` 同一列表项的访问上下文，`list` / `compare` 会返回该值；crawl 和 favorites 导入也保留对应上下文，favorites 预览继续脱敏。`lid` 可省略，保存不代表其仍有效，不推断有效期或跨账号身份。
 
+`boss shortlist annotate` 至少需要一个非空 `--add-tag` / `--remove-tag` 或 `--note`；空标签与空 `--tag` 会返回 `INVALID_PARAM`，不会静默变成「没有过滤」或 `updated: true`。`--note ""` 仍表示清空备注。
+
 `history` / `favorites list` 的 `pagination.has_more` 与 `recommend` / `chat` 同一口径：只有平台返回布尔 `hasMore` 时才是 `true` / `false`；缺失或类型不明确时为 `null`、`has_more_source=unknown`，不会默认成 `false`，也不提示下一页。`total` 始终是本页返回条数（`total_kind=returned_page_count`）。
 
 ## 招聘者模式

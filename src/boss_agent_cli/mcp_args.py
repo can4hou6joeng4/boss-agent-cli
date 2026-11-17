@@ -565,7 +565,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "shortlist_compare":
 		args = ["shortlist", "compare"]
-		if arguments.get("tag"):
+		# 显式空串必须原样下发：CLI 统一按 INVALID_PARAM 拒绝，真值判断会把它
+		# 化装成「没传」并比较全部条目（Issue #1565）。
+		if arguments.get("tag") is not None:
 			args.extend(["--tag", str(arguments["tag"])])
 		return args
 
