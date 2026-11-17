@@ -368,128 +368,187 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 			stop_error: Exception | None = None
 			unconfirmed: dict[str, Any] | None = None
 			cache_write_failed = False
+			# 尚未落到 results 的候选人：SIGINT 落在请求或重试等待中时，它的最后一次
+			# 招呼可能已经发出，不能当成未执行（Issue #1491）。
+			current_item: JobItem | None = None
 
-			for idx, item in enumerate(candidates):
-				retry_count = 0
-				success = False
+			try:
+				for idx, item in enumerate(candidates):
+					current_item = item
+					retry_count = 0
+					success = False
 
-				while retry_count <= 1:
-					try:
-						resp = platform.greet(item.security_id, item.job_id)
-						if not platform.is_success(resp):
-							error_code, error_message = platform.parse_error(resp)
-							risk_cls = RISK_ERROR_BY_CODE.get(error_code)
-							if risk_cls is not None:
-								# 响应字典形态的风控与异常形态走同一条终止分支，
-								# 不再靠 message 里的「频率」字样误判成 RATE_LIMITED（Issue #419）。
-								raise risk_cls(error_message or error_code)
-							if error_code == "ACTION_UNCONFIRMED":
-								# 请求已发出、结果未知（`__cli_error_details__.replay_safe=false`）：
-								# 重试等于在不知道是否已送达时再发一次招呼。立即停批，
-								# 把阻止重放的详情原样带回（Issue #984）。
-								unconfirmed = {
-									**item.to_dict(),
-									"status": "unconfirmed",
-									"error": error_code,
-									"details": _cli_error_details(resp),
-								}
-								results.append(unconfirmed)
-								stopped_reason = error_code
-								logger.warning(
-									f"招呼结果未确认，停止批量打招呼: {item.title} @ {item.company}"
-								)
-								break
-							if error_code == "UNKNOWN":
-								# 未识别的响应同样无法证明招呼没发出去：sleep 后重发就是
-								# 在不确定的情况下重复写操作（Issue #990）。
-								unconfirmed = {
-									**item.to_dict(),
-									"status": "unconfirmed",
-									"error": error_code,
-									"details": {"outcome_unknown": True, "replay_safe": False, **_cli_error_details(resp)},
-								}
-								results.append(unconfirmed)
-								stopped_reason = "UNKNOWN"
-								logger.warning(
-									f"招呼结果未确认（平台响应未识别），停止批量打招呼: {item.title} @ {item.company}"
-								)
-								break
-							raise RuntimeError(error_code)
-						entry: dict[str, Any] = {
-							"security_id": item.security_id,
-							"job_id": item.job_id,
-							"title": item.title,
-							"company": item.company,
-							"status": "success",
-						}
+					while retry_count <= 1:
 						try:
-							cache.record_greet(item.security_id, item.job_id, account=account)
-						except Exception:
-							# 记账失败不能落进下面的通用失败分支：那会 sleep 后重发同一个招呼。
-							# 标记后停止批次，由收尾逻辑输出不可重试的本地状态错误。
-							entry["recorded"] = False
-							cache_write_failed = True
-							logger.warning(f"本地记账失败，停止批量打招呼: {item.title} @ {item.company}")
-						results.append(entry)
-						success = True
-						logger.info(f"打招呼成功: {item.title} @ {item.company}")
-						break
-					except PlatformRiskError as exc:
-						# 风控：立即停批，不重试、不 sleep、不继续下一个候选人。
-						risk_error = exc
-						stopped_reason = exc.code
-						logger.warning(f"平台风控，停止批量打招呼: {item.title} @ {item.company}")
-						break
-					except Exception as e:
-						if is_request_stop(e):
-							# 预算/超时不是普通失败：不 sleep、不重试、不继续下一个候选人。
-							stop_error = e
-							stopped_reason = getattr(e, "code", None) or "REQUEST_BUDGET_EXHAUSTED"
-							logger.warning(f"请求预算耗尽，停止批量打招呼: {item.title} @ {item.company}")
-							break
-						error_msg = str(e)
-						if "ACTION_UNCONFIRMED" in error_msg:
-							# 异常形态的未知结果（平台层直接 raise 时）同样不能重试（Issue #984）。
-							unconfirmed = {
-								**item.to_dict(),
-								"status": "unconfirmed",
-								"error": "ACTION_UNCONFIRMED",
-								"details": {"outcome": "unknown", "replay_safe": False},
-							}
-							results.append(unconfirmed)
-							stopped_reason = "ACTION_UNCONFIRMED"
-							logger.warning(f"招呼结果未确认，停止批量打招呼: {item.title} @ {item.company}")
-							break
-						if "RATE_LIMITED" in error_msg or "频率" in error_msg:
-							stopped_reason = "RATE_LIMITED"
-							break
-						if "GREET_LIMIT" in error_msg or "上限" in error_msg:
-							stopped_reason = "GREET_LIMIT"
-							break
-						if retry_count == 0:
-							logger.warning(f"打招呼失败，重试中: {item.title}")
-							retry_count += 1
-							time.sleep(random.uniform(1.0, 2.0))
-						else:
-							results.append({
+							resp = platform.greet(item.security_id, item.job_id)
+							if not platform.is_success(resp):
+								error_code, error_message = platform.parse_error(resp)
+								risk_cls = RISK_ERROR_BY_CODE.get(error_code)
+								if risk_cls is not None:
+									# 响应字典形态的风控与异常形态走同一条终止分支，
+									# 不再靠 message 里的「频率」字样误判成 RATE_LIMITED（Issue #419）。
+									raise risk_cls(error_message or error_code)
+								if error_code == "ACTION_UNCONFIRMED":
+									# 请求已发出、结果未知（`__cli_error_details__.replay_safe=false`）：
+									# 重试等于在不知道是否已送达时再发一次招呼。立即停批，
+									# 把阻止重放的详情原样带回（Issue #984）。
+									unconfirmed = {
+										**item.to_dict(),
+										"status": "unconfirmed",
+										"error": error_code,
+										"details": _cli_error_details(resp),
+									}
+									results.append(unconfirmed)
+									stopped_reason = error_code
+									logger.warning(
+										f"招呼结果未确认，停止批量打招呼: {item.title} @ {item.company}"
+									)
+									break
+								if error_code == "UNKNOWN":
+									# 未识别的响应同样无法证明招呼没发出去：sleep 后重发就是
+									# 在不确定的情况下重复写操作（Issue #990）。
+									unconfirmed = {
+										**item.to_dict(),
+										"status": "unconfirmed",
+										"error": error_code,
+										"details": {"outcome_unknown": True, "replay_safe": False, **_cli_error_details(resp)},
+									}
+									results.append(unconfirmed)
+									stopped_reason = "UNKNOWN"
+									logger.warning(
+										f"招呼结果未确认（平台响应未识别），停止批量打招呼: {item.title} @ {item.company}"
+									)
+									break
+								raise RuntimeError(error_code)
+							entry: dict[str, Any] = {
 								"security_id": item.security_id,
 								"job_id": item.job_id,
 								"title": item.title,
 								"company": item.company,
-								"status": "failed",
-								"error": error_msg,
-							})
+								"status": "success",
+							}
+							try:
+								cache.record_greet(item.security_id, item.job_id, account=account)
+							except Exception:
+								# 记账失败不能落进下面的通用失败分支：那会 sleep 后重发同一个招呼。
+								# 标记后停止批次，由收尾逻辑输出不可重试的本地状态错误。
+								entry["recorded"] = False
+								cache_write_failed = True
+								logger.warning(f"本地记账失败，停止批量打招呼: {item.title} @ {item.company}")
+							results.append(entry)
+							success = True
+							logger.info(f"打招呼成功: {item.title} @ {item.company}")
 							break
+						except PlatformRiskError as exc:
+							# 风控：立即停批，不重试、不 sleep、不继续下一个候选人。
+							risk_error = exc
+							stopped_reason = exc.code
+							logger.warning(f"平台风控，停止批量打招呼: {item.title} @ {item.company}")
+							break
+						except Exception as e:
+							if is_request_stop(e):
+								# 预算/超时不是普通失败：不 sleep、不重试、不继续下一个候选人。
+								stop_error = e
+								stopped_reason = getattr(e, "code", None) or "REQUEST_BUDGET_EXHAUSTED"
+								logger.warning(f"请求预算耗尽，停止批量打招呼: {item.title} @ {item.company}")
+								break
+							error_msg = str(e)
+							if "ACTION_UNCONFIRMED" in error_msg:
+								# 异常形态的未知结果（平台层直接 raise 时）同样不能重试（Issue #984）。
+								unconfirmed = {
+									**item.to_dict(),
+									"status": "unconfirmed",
+									"error": "ACTION_UNCONFIRMED",
+									"details": {"outcome": "unknown", "replay_safe": False},
+								}
+								results.append(unconfirmed)
+								stopped_reason = "ACTION_UNCONFIRMED"
+								logger.warning(f"招呼结果未确认，停止批量打招呼: {item.title} @ {item.company}")
+								break
+							if "RATE_LIMITED" in error_msg or "频率" in error_msg:
+								stopped_reason = "RATE_LIMITED"
+								break
+							if "GREET_LIMIT" in error_msg or "上限" in error_msg:
+								stopped_reason = "GREET_LIMIT"
+								break
+							if retry_count == 0:
+								logger.warning(f"打招呼失败，重试中: {item.title}")
+								retry_count += 1
+								time.sleep(random.uniform(1.0, 2.0))
+							else:
+								results.append({
+									"security_id": item.security_id,
+									"job_id": item.job_id,
+									"title": item.title,
+									"company": item.company,
+									"status": "failed",
+									"error": error_msg,
+								})
+								break
 
-				if stopped_reason:
-					break
+					current_item = None
+					if stopped_reason:
+						break
 
-				if cache_write_failed:
-					break
+					if cache_write_failed:
+						break
 
-				if success and idx < len(candidates) - 1:
-					bg_delay = ctx.obj.get("config", {}).get("batch_greet_delay", [2.0, 5.0])
-					time.sleep(random.uniform(bg_delay[0], bg_delay[1]))
+					if success and idx < len(candidates) - 1:
+						bg_delay = ctx.obj.get("config", {}).get("batch_greet_delay", [2.0, 5.0])
+						time.sleep(random.uniform(bg_delay[0], bg_delay[1]))
+
+			except KeyboardInterrupt:
+				# Ctrl-C / MCP 超时 SIGINT：Click 默认直接退出且 stdout 为空，MCP 只能
+				# 报「结果未知」而拿不到已完成的部分。这里把结果与在途候选人放进错误
+				# 信封，并明确禁止原样重放（Issue #1491）。
+				completed = list(results)
+				interrupted = (
+					{
+						**current_item.to_dict(),
+						"status": "unconfirmed",
+						"error": "WORKFLOW_STOPPED",
+						"details": {"outcome_unknown": True, "replay_safe": False},
+					}
+					if current_item is not None
+					else None
+				)
+				data: dict[str, Any] = {
+					"completed": completed,
+					# 与成功信封的 greeted / failed 保持同形，Agent 不必为中断路径换解析。
+					"greeted": [r for r in completed if r["status"] == "success"],
+					"failed": [r for r in completed if r["status"] == "failed"],
+					"processed": len(completed),
+					"remaining": max(0, len(candidates) - len(completed)),
+					"total_greeted": sum(1 for r in completed if r["status"] == "success"),
+					"total_failed": sum(1 for r in completed if r["status"] == "failed"),
+					"unconfirmed": interrupted,
+				}
+				chat_cmd = _hint_command(ctx, "chat")
+				handle_error_output(
+					ctx,
+					"batch-greet",
+					code="WORKFLOW_STOPPED",
+					message="批量打招呼被中断：已完成的部分如下，最后一个动作的结果可能未知，不要原样重试",
+					recoverable=False,
+					recovery_action=(
+						f"先到 BOSS 直聘官方页面核对最后一个招呼是否已送达，再用 {chat_cmd} 查看会话；"
+						"确认后只对未完成的候选人重新执行，不要原样重试本次批次"
+					),
+					details={
+						**data,
+						"outcome_unknown": True,
+						"replay_safe": False,
+					},
+					hints={
+						"next_actions": [chat_cmd],
+						"operator_actions": [
+							"先在 BOSS 直聘官方会话列表核对最后一个招呼是否已送达；不要原样重试本次批次",
+						],
+					},
+				)
+				# 不能用 ctx.exit()：click.exceptions.Exit 是 RuntimeError 子类，会被
+				# @handle_auth_errors 的兜底 except Exception 再发一份信封。
+				raise SystemExit(1)
 
 			data = {
 				"greeted": [r for r in results if r["status"] == "success"],

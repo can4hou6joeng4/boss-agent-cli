@@ -321,6 +321,73 @@ def test_batch_greet_dry_run(mock_cache_cls, mock_auth_cls, mock_client_cls, moc
 	assert parsed["data"]["count"] == 1
 
 
+def _batch_greet_job(index: int) -> dict:
+	return {
+		"encryptJobId": f"j{index}",
+		"jobName": f"Golang {index}",
+		"brandName": f"Company {index}",
+		"salaryDesc": "30K",
+		"cityName": "北京",
+		"jobExperience": "3-5年",
+		"jobDegree": "本科",
+		"bossName": "张",
+		"bossTitle": "CTO",
+		"bossOnline": True,
+		"securityId": f"sec_{index}",
+	}
+
+
+@patch("boss_agent_cli.commands.greet.time")
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
+@patch("boss_agent_cli.commands.greet.AuthManager")
+@patch("boss_agent_cli.commands.greet.CacheStore")
+def test_batch_greet_keyboard_interrupt_emits_partial_progress(
+	mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time,
+):
+	"""SIGINT 中断批打招呼时必须给出部分结果与「不要原样重试」的七键信封（Issue #1491）。
+
+	MCP 超时后发送 SIGINT：stdout 为空时调用方只能报结果未知。这里确认 CLI
+	自己输出已完成列表、在途候选人，并明确 ``replay_safe=false``。
+	"""
+	mock_cache = _ctx_mock(mock_cache_cls)
+	mock_cache.is_greeted.return_value = False
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = {
+		"zpData": {"jobList": [_batch_greet_job(1), _batch_greet_job(2), _batch_greet_job(3)]},
+	}
+	# 第一个候选人成功，第二个请求收到 SIGINT（等价于 MCP 超时信号）。
+	mock_client.greet.side_effect = [{"code": 0}, KeyboardInterrupt()]
+
+	runner = CliRunner()
+	result = runner.invoke(cli, ["--json", "batch-greet", "golang", "--count", "3"])
+
+	assert result.exit_code == 1
+	# stdout 必须恰好是一个信封；多余输出会让 MCP 的 json.loads 失败。
+	parsed = json.loads(result.output)
+	assert set(parsed) == {
+		"ok", "schema_version", "command", "data", "pagination", "error", "hints",
+	}
+	assert parsed["ok"] is False
+	assert parsed["command"] == "batch-greet"
+	assert parsed["data"] is None
+	assert parsed["error"]["code"] == "WORKFLOW_STOPPED"
+	assert parsed["error"]["recoverable"] is False
+	assert parsed["error"]["details"]["outcome_unknown"] is True
+	assert parsed["error"]["details"]["replay_safe"] is False
+	# 第一个招呼已完成；第二个在途未知；第三个尚未触碰。
+	assert parsed["error"]["details"]["processed"] == 1
+	assert parsed["error"]["details"]["remaining"] == 2
+	assert parsed["error"]["details"]["total_greeted"] == 1
+	assert [item["security_id"] for item in parsed["error"]["details"]["completed"]] == ["sec_1"]
+	assert [item["security_id"] for item in parsed["error"]["details"]["greeted"]] == ["sec_1"]
+	assert parsed["error"]["details"]["unconfirmed"]["security_id"] == "sec_2"
+	assert parsed["error"]["details"]["unconfirmed"]["status"] == "unconfirmed"
+	assert "不要原样重试" in parsed["error"]["recovery_action"]
+	assert parsed["hints"]["operator_actions"]
+	assert "核对" in parsed["hints"]["operator_actions"][0]
+	assert "不要原样重试" in parsed["hints"]["operator_actions"][0]
+
+
 def test_cities_command():
 	runner = CliRunner()
 	result = runner.invoke(cli, ["cities"])
