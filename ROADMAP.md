@@ -4,7 +4,7 @@
 
 ## 已发布
 
-- ✅ v3.4.96（2026-11-18）：第六轮子系统审计——`stop.json` 缺少 `open` 与平台 `code=false` 不再被误判为「未停止 / 成功」，automation 整数预算与向导 `pages` 拒绝小数和布尔值（Issue #1598–#1601）。
+- ✅ v3.4.97（2026-11-18）：第六轮子系统审计——`stop.json` 缺少 `open` 与平台 `code=false` 不再被误判为「未停止 / 成功」，automation 整数预算与向导 `pages` 拒绝小数和布尔值（Issue #1598–#1601）。
 - ✅ v3.4.91（2026-11-18）：第五轮子系统审计——`agent run --dry-run --resume` 不再解除操作者停止闩锁；wizard 错误元数据漂移在读取边界 fail-closed；MCP 校验条件必填字符串、数值上下界与数组元素长度，并封顶 wizard 宿主等待（Issue #1591–#1595）。
 - ✅ v3.4.90（2026-11-18）：第四轮子系统审计——automation 按勾选项扫描并独立限制每个 tab 的会话数（Issue #1581）；wizard 与 CLI 同口径拒绝空白采集关键词（Issue #1582）；超大锁 pid 与空 `securityId` 不再伪造成功或可重试状态（Issue #1583、#1584）；`wizard --stop` 区分已完成与不存在，坏 Hook 目录统一按本地状态错误收口（Issue #1585、#1586）。
 - ✅ v3.4.88（2026-11-17）：显式参数与 schema 说明继续收口——候选池 `compare --tag ""` 与 `annotate` 的空标签、空操作在读取缓存之前返回 `INVALID_PARAM`（Issue #1565）；`watch run` / `crawl` / `agent crawl` 的 schema 补上互斥、必填与空串约束（Issue #1566）；`agent train` 的 `--dry-run` 与 `--live` 改为独立标志并拒绝同时给出（Issue #1568）；`search` 的显式关键词不再被预设覆盖（Issue #1569）；`clean` / `export` / `search` / `hr resume` / `resume init` / `crawl configure` 的六处描述按实现修正（Issue #1570）。
