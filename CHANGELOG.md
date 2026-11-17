@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.90] - 2026-11-18
+
 ### Fixed
 - `boss agent run` 的 automation `tabs` 配置只写 `["新招呼"]`（或为空）时，`scan_conversations` 仍会调用未读列表并把未勾选会话交给执行层，且两个 tab 的候选合并后才截断 `max_per_tab`；现在严格按配置选择数据源，空配置不扫描，每个 tab 各自遵守上限（Issue #1581）。
 - wizard 的 `crawl_start` 接受纯空白 `query` 并写出采集任务，而 `boss crawl run` 会拒绝同一输入；现在 `build_plan`、动作层与 `CrawlService` 三层统一拒绝空白关键词，不写库、不启动浏览器（Issue #1582）。
