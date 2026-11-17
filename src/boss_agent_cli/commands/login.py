@@ -97,7 +97,10 @@ def login_cmd(
 			# 文件解码、解析器或网络库的异常可能包含凭据，禁止透传原异常文本。
 			emit_error(
 				"login", code="INVALID_PARAM" if isinstance(e, ValueError) else "LOGIN_CREDENTIAL_EXTRACTION_FAILED",
-				message="cURL 登录态导入失败，未完成会话更新", recoverable=True,
+				# ValueError 表示 cURL 文本本身无效；与登记表及相邻参数分支一致，
+				# 不能把「修正输入」标成可重试（Issue #1624）。
+				message="cURL 登录态导入失败，未完成会话更新",
+				recoverable=not isinstance(e, ValueError),
 				recovery_action="核对 BOSS cURL 原始文本、选项及平台登录状态后重新导入",
 				hints={"operator_actions": [
 					"仅支持 BOSS 直聘 Copy as cURL (bash) 原始文本，不能与 --cdp 或 --cookie-source 混用",

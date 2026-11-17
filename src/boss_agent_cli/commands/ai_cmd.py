@@ -4,6 +4,7 @@
 """
 
 import json
+import math
 from pathlib import Path
 from typing import Any, cast
 
@@ -489,6 +490,18 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 			ctx.exit(1)
 			return
 	if temperature is not None:
+		# click.FloatRange 只比较大小：NaN / ±Inf / 1e400 会穿过参数校验，
+		# 由 json.dump 写成裸 NaN / Infinity，后续严格解析器读不回来（Issue #1623）。
+		if not math.isfinite(temperature):
+			handle_error_output(
+				ctx, "ai-config",
+				code="INVALID_PARAM",
+				message="--temperature 必须是有限数字",
+				recovery_action="传入 0 以上的有限数字后重试",
+				hints={"next_actions": [_hint_command(ctx, "ai config --temperature 0.7")]},
+			)
+			ctx.exit(1)
+			return
 		updates["ai_temperature"] = temperature
 	if max_tokens is not None:
 		updates["ai_max_tokens"] = max_tokens
