@@ -12,6 +12,8 @@
 
 ## [Unreleased]
 
+## [3.4.96] - 2026-11-18
+
 ### Fixed
 - `ai config --temperature` 接受 `inf` / `nan` / `1e400` 并写入非法严格 JSON；现在解析阶段按 `INVALID_PARAM` 拒绝非有限数，不写配置（Issue #1623）。
 - `login --curl-file` 的解析 `ValueError` 把 `INVALID_PARAM` 标成可恢复，诱导 Agent 用同一错误输入重试；现在与登记表统一为不可恢复（Issue #1624）。
