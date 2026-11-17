@@ -37,12 +37,50 @@ from boss_agent_cli.search_filters import (
 	resolve_search_code_params,
 )
 from boss_agent_cli.commands._filter_errors import emit_filter_error
+from boss_agent_cli.services.candidate_actions import (
+	CandidateActionBlocked,
+	CandidateActionNotRecorded,
+	classify_platform_response,
+	release_candidate_action,
+	reserve_candidate_action,
+	run_candidate_action,
+	settle_candidate_action,
+	was_provably_unsent,
+)
 from boss_agent_cli.services.job_identity import deduplicate_job_result
 
 
 def _hint_command(ctx: click.Context, command: str) -> str:
 	"""招呼完成或被本地去重拦截后，继续在原目录中操作。"""
 	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
+def _emit_already_greeted(ctx: click.Context) -> None:
+	chat_cmd = _hint_command(ctx, "chat")
+	search_cmd = _hint_command(ctx, "search <query>")
+	handle_error_output(
+		ctx, "greet",
+		code="ALREADY_GREETED",
+		message="已向该招聘者打过招呼",
+		recovery_action=f"该招聘者已打过招呼：用 {chat_cmd} 查看会话，或用 {search_cmd} 换一批职位",
+		hints={"next_actions": [search_cmd]},
+	)
+
+
+def _emit_greet_unconfirmed(ctx: click.Context, message: str) -> None:
+	chat_cmd = _hint_command(ctx, "chat")
+	handle_error_output(
+		ctx, "greet",
+		code="ACTION_UNCONFIRMED",
+		message=message,
+		recoverable=False,
+		recovery_action=f"动作可能已生效：先用 {chat_cmd} 核对会话，不要直接重试",
+		details={"outcome_unknown": True, "replay_safe": False},
+		hints={
+			"next_actions": [chat_cmd],
+			"operator_actions": ["先到 BOSS 直聘会话列表核对这条招呼是否已送达；不要自动重发"],
+		},
+	)
 
 
 @click.command("greet")
@@ -78,15 +116,7 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		if cache.is_greeted(security_id, job_id=job_id, account=account):
-			chat_cmd = _hint_command(ctx, "chat")
-			search_cmd = _hint_command(ctx, "search <query>")
-			handle_error_output(
-				ctx, "greet",
-				code="ALREADY_GREETED",
-				message="已向该招聘者打过招呼",
-				recovery_action=f"该招聘者已打过招呼：用 {chat_cmd} 查看会话，或用 {search_cmd} 换一批职位",
-				hints={"next_actions": [search_cmd]},
-			)
+			_emit_already_greeted(ctx)
 			return
 
 		with get_platform_instance(ctx, auth) as platform:
@@ -109,7 +139,38 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 					)
 					return
 
-			resp = platform.greet(security_id, job_id, message)
+			try:
+				resp = run_candidate_action(
+					cache,
+					security_id=security_id,
+					job_id=job_id,
+					action="greet",
+					account=account,
+					send=lambda: platform.greet(security_id, job_id, message),
+					classify=lambda response: classify_platform_response(platform, response),
+				)
+			except CandidateActionBlocked as blocked:
+				# 预检查与真实发送之间，另一个进程可能已经预约 / 完成同一动作。
+				if blocked.code == "ALREADY_GREETED":
+					_emit_already_greeted(ctx)
+				else:
+					_emit_greet_unconfirmed(ctx, blocked.message)
+				return
+			except CandidateActionNotRecorded:
+				# 平台已确认招呼发出，本地记账失败不能降级成 NETWORK_ERROR「重试」：
+				# 重跑会绕过 is_greeted / 预约检查，把同一个人再打一次招呼。
+				recoverable, recovery_action = error_contract_for_code("LOCAL_STATE_WRITE_FAILED")
+				handle_error_output(
+					ctx, "greet",
+					code="LOCAL_STATE_WRITE_FAILED",
+					message="已向该招聘者打招呼，但本地状态保存失败；不要自动重发",
+					recoverable=recoverable,
+					recovery_action=recovery_action,
+					details={"security_id": security_id, "job_id": job_id, "greeted": True, "recorded": False},
+					hints={"operator_actions": ["先在 BOSS 直聘官方页面核对是否已打过招呼；不要自动重发本次招呼"]},
+				)
+				return
+
 			if not platform.is_success(resp):
 				error_code, _ = platform.parse_error(resp)
 				if error_code == "ACTION_UNCONFIRMED":
@@ -145,22 +206,7 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 				)
 				return
 
-			try:
-				cache.record_greet(security_id, job_id, account=account)
-			except Exception:
-				# 平台已确认招呼发出，本地记账失败不能降级成 NETWORK_ERROR「重试」：
-				# 重跑会绕过 is_greeted 检查，把同一个人再打一次招呼。
-				recoverable, recovery_action = error_contract_for_code("LOCAL_STATE_WRITE_FAILED")
-				handle_error_output(
-					ctx, "greet",
-					code="LOCAL_STATE_WRITE_FAILED",
-					message="已向该招聘者打招呼，但本地状态保存失败；不要自动重发",
-					recoverable=recoverable,
-					recovery_action=recovery_action,
-					details={"security_id": security_id, "job_id": job_id, "greeted": True, "recorded": False},
-					hints={"operator_actions": ["先在 BOSS 直聘官方页面核对是否已打过招呼；不要自动重发本次招呼"]},
-				)
-				return
+			# 成功路径已由 run_candidate_action 统一 settle（旧记录表 + 预约）。
 
 			# greet_after hook
 			if hooks:
@@ -378,6 +424,32 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 					retry_count = 0
 					success = False
 
+					# 发送前先在本地原子预约：两个进程并发跑同名批次时，只有抢到
+					# pending 的一方真正发送（Issue #1508）。预过滤后的竞态窗口在
+					# 这里收口；已有 pending 说明上一次结果未知，禁止重发。
+					try:
+						reserve_candidate_action(
+							cache, item.security_id, item.job_id, "greet", account=account
+						)
+					except CandidateActionBlocked as blocked:
+						if blocked.code == "ALREADY_GREETED":
+							logger.info(f"另一个进程已打过招呼，跳过: {item.title} @ {item.company}")
+							current_item = None
+							continue
+						unconfirmed = {
+							**item.to_dict(),
+							"status": "unconfirmed",
+							"error": "ACTION_UNCONFIRMED",
+							"details": {"outcome_unknown": True, "replay_safe": False},
+						}
+						results.append(unconfirmed)
+						stopped_reason = "ACTION_UNCONFIRMED"
+						logger.warning(
+							f"上一次招呼结果未确认，停止批量打招呼: {item.title} @ {item.company}"
+						)
+						current_item = None
+						break
+
 					while retry_count <= 1:
 						try:
 							resp = platform.greet(item.security_id, item.job_id)
@@ -419,6 +491,9 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 										f"招呼结果未确认（平台响应未识别），停止批量打招呼: {item.title} @ {item.company}"
 									)
 									break
+								# 其余平台错误码是明确失败、没有产生记录：撤销预约，
+								# 修正参数 / 等待后仍可重试该候选人。
+								release_candidate_action(cache, item.job_id, "greet", account=account)
 								raise RuntimeError(error_code)
 							entry: dict[str, Any] = {
 								"security_id": item.security_id,
@@ -428,7 +503,9 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 								"status": "success",
 							}
 							try:
-								cache.record_greet(item.security_id, item.job_id, account=account)
+								settle_candidate_action(
+									cache, item.security_id, item.job_id, "greet", account=account
+								)
 							except Exception:
 								# 记账失败不能落进下面的通用失败分支：那会 sleep 后重发同一个招呼。
 								# 标记后停止批次，由收尾逻辑输出不可重试的本地状态错误。
@@ -448,6 +525,10 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 						except Exception as e:
 							if is_request_stop(e):
 								# 预算/超时不是普通失败：不 sleep、不重试、不继续下一个候选人。
+								# request_sent=False / 通道不可用可以证明未发出，撤销预约；
+								# 风控与超时可能已产生写入，保留 pending 按结果未知处理。
+								if was_provably_unsent(e):
+									release_candidate_action(cache, item.job_id, "greet", account=account)
 								stop_error = e
 								stopped_reason = getattr(e, "code", None) or "REQUEST_BUDGET_EXHAUSTED"
 								logger.warning(f"请求预算耗尽，停止批量打招呼: {item.title} @ {item.company}")
@@ -466,9 +547,13 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 								logger.warning(f"招呼结果未确认，停止批量打招呼: {item.title} @ {item.company}")
 								break
 							if "RATE_LIMITED" in error_msg or "频率" in error_msg:
+								# 平台明确限流、没有写入：撤销预约，冷却后可重试该候选人。
+								release_candidate_action(cache, item.job_id, "greet", account=account)
 								stopped_reason = "RATE_LIMITED"
 								break
 							if "GREET_LIMIT" in error_msg or "上限" in error_msg:
+								# 配额上限是明确拒绝，同样没有写入。
+								release_candidate_action(cache, item.job_id, "greet", account=account)
 								stopped_reason = "GREET_LIMIT"
 								break
 							if retry_count == 0:

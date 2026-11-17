@@ -29,6 +29,7 @@ def _invoke_greet(*args, tmp_path, cache_greeted=False, greet_side_effect=None, 
 	):
 		mock_cache = MagicMock()
 		mock_cache.is_greeted.return_value = cache_greeted
+		mock_cache.claim_candidate_action.return_value = None
 		mock_cache_cls.return_value.__enter__ = lambda s: mock_cache
 		mock_cache_cls.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -194,6 +195,7 @@ def _invoke_batch_greet(*args, tmp_path, search_result=None, greeted_ids=None, i
 	):
 		mock_cache = MagicMock()
 		mock_cache.is_greeted.side_effect = lambda sid, *, job_id="", account="": sid in greeted
+		mock_cache.claim_candidate_action.return_value = None
 		mock_cache_cls.return_value.__enter__ = lambda s: mock_cache
 		mock_cache_cls.return_value.__exit__ = MagicMock(return_value=False)
 

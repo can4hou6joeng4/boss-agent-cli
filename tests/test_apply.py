@@ -14,6 +14,7 @@ def _ctx_mock(mock_cls):
 	instance = mock_cls.return_value
 	instance.__enter__ = lambda self: self
 	instance.__exit__ = lambda self, *a: None
+	instance.claim_candidate_action.return_value = None
 	return instance
 
 

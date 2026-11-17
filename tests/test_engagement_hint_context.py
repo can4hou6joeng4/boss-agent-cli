@@ -39,6 +39,7 @@ def engagement_context(tmp_path):
 	cache.__enter__.return_value = cache
 	cache.is_applied.return_value = False
 	cache.is_greeted.return_value = False
+	cache.claim_candidate_action.return_value = None
 	cache.get_search.return_value = None
 	auth = MagicMock()
 	auth.account_fingerprint.return_value = "account_fixture"

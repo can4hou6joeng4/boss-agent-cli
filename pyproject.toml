@@ -296,6 +296,7 @@ module = [
 	"boss_agent_cli.schema.tool_catalog",
 	"boss_agent_cli.services",
 	"boss_agent_cli.services.browser_runtime",
+	"boss_agent_cli.services.candidate_actions",
 	"boss_agent_cli.services.job_card",
 	"boss_agent_cli.services.job_identity",
 	"boss_agent_cli.services.job_export",

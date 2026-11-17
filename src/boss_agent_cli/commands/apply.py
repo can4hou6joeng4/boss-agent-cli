@@ -5,11 +5,48 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output, render_message_panel
+from boss_agent_cli.services.candidate_actions import (
+	CandidateActionBlocked,
+	CandidateActionNotRecorded,
+	classify_platform_response,
+	run_candidate_action,
+)
 
 
 def _hint_command(ctx: click.Context, command: str) -> str:
 	"""投递后的记录查询与错误恢复沿用原登录态及数据目录。"""
 	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
+def _emit_already_applied(ctx: click.Context) -> None:
+	deliver_cmd = _hint_command(ctx, "me --section deliver")
+	chat_cmd = _hint_command(ctx, "chat")
+	handle_error_output(
+		ctx,
+		"apply",
+		code="ALREADY_APPLIED",
+		message="已对该职位发起过投递/立即沟通",
+		recovery_action=f"该职位已投递过：用 {deliver_cmd} 查看投递记录，或用 {chat_cmd} 跟进",
+		hints={"next_actions": [deliver_cmd, chat_cmd]},
+	)
+
+
+def _emit_apply_unconfirmed(ctx: click.Context, message: str) -> None:
+	deliver_cmd = _hint_command(ctx, "me --section deliver")
+	chat_cmd = _hint_command(ctx, "chat")
+	handle_error_output(
+		ctx,
+		"apply",
+		code="ACTION_UNCONFIRMED",
+		message=message,
+		recoverable=False,
+		recovery_action=f"动作可能已生效：先用 {deliver_cmd} 核对投递记录，不要直接重试",
+		details={"outcome_unknown": True, "replay_safe": False},
+		hints={
+			"next_actions": [deliver_cmd, chat_cmd],
+			"operator_actions": ["先到 BOSS 直聘投递记录页核对本次投递是否已提交；不要自动重发"],
+		},
+	)
 
 
 @click.command("apply")
@@ -45,20 +82,50 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 		if cache.is_applied(security_id, job_id, account=account):
-			deliver_cmd = _hint_command(ctx, "me --section deliver")
-			chat_cmd = _hint_command(ctx, "chat")
-			handle_error_output(
-				ctx,
-				"apply",
-				code="ALREADY_APPLIED",
-				message="已对该职位发起过投递/立即沟通",
-				recovery_action=f"该职位已投递过：用 {deliver_cmd} 查看投递记录，或用 {chat_cmd} 跟进",
-				hints={"next_actions": [deliver_cmd, chat_cmd]},
-			)
+			_emit_already_applied(ctx)
 			return
 
 		with get_platform_instance(ctx, auth) as platform:
-			resp = platform.apply(security_id, job_id, lid=lid)
+			try:
+				resp = run_candidate_action(
+					cache,
+					security_id=security_id,
+					job_id=job_id,
+					action="apply",
+					account=account,
+					send=lambda: platform.apply(security_id, job_id, lid=lid),
+					classify=lambda response: classify_platform_response(platform, response),
+				)
+			except CandidateActionBlocked as blocked:
+				# 预检查与真实发送之间，另一个进程可能已经预约 / 完成同一动作。
+				if blocked.code == "ALREADY_APPLIED":
+					_emit_already_applied(ctx)
+				else:
+					_emit_apply_unconfirmed(ctx, blocked.message)
+				return
+			except CandidateActionNotRecorded:
+				# 平台已接受投递，本地记账失败不能降级成 NETWORK_ERROR「重试」：
+				# 重跑会绕过 is_applied / 预约检查，把同一次投递再提交一遍。
+				recoverable, recovery_action = error_contract_for_code("LOCAL_STATE_WRITE_FAILED")
+				handle_error_output(
+					ctx,
+					"apply",
+					code="LOCAL_STATE_WRITE_FAILED",
+					message="投递/立即沟通已提交，但本地状态保存失败；不要自动重发",
+					recoverable=recoverable,
+					recovery_action=recovery_action,
+					details={
+						"security_id": security_id,
+						"job_id": job_id,
+						"lid": lid,
+						"mode": "immediate_chat_apply",
+						"applied": True,
+						"recorded": False,
+					},
+					hints={"operator_actions": ["先在 BOSS 直聘官方页面核对投递状态；不要自动重发本次投递"]},
+				)
+				return
+
 			if not platform.is_success(resp):
 				error_code, _ = platform.parse_error(resp)
 				if error_code == "ACTION_UNCONFIRMED":
@@ -93,30 +160,7 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 					fallback_message="投递/立即沟通提交失败",
 				)
 				return
-			try:
-				cache.record_apply(security_id, job_id, account=account)
-			except Exception:
-				# 平台已接受投递，本地记账失败不能降级成 NETWORK_ERROR「重试」：
-				# 重跑会绕过 is_applied 检查，把同一次投递再提交一遍。
-				recoverable, recovery_action = error_contract_for_code("LOCAL_STATE_WRITE_FAILED")
-				handle_error_output(
-					ctx,
-					"apply",
-					code="LOCAL_STATE_WRITE_FAILED",
-					message="投递/立即沟通已提交，但本地状态保存失败；不要自动重发",
-					recoverable=recoverable,
-					recovery_action=recovery_action,
-					details={
-						"security_id": security_id,
-						"job_id": job_id,
-						"lid": lid,
-						"mode": "immediate_chat_apply",
-						"applied": True,
-						"recorded": False,
-					},
-					hints={"operator_actions": ["先在 BOSS 直聘官方页面核对投递状态；不要自动重发本次投递"]},
-				)
-				return
+			# 成功路径已由 run_candidate_action 统一 settle（旧记录表 + 预约）。
 
 	handle_output(
 		ctx,
