@@ -240,13 +240,15 @@ class _BaseHttpClient:
 				platform_code=lock.platform_code,
 			)
 			self._unpersisted_risk_lock = None
-		except OSError:
+		# UnicodeError 不在 OSError 之下：记录风控的分支里任何异常逃逸都会替换
+		# 原始 PlatformRiskError，把风控硬边界降级成可重试错误（Issue #1487）。
+		except (OSError, UnicodeError):
 			pass
 		budget = getattr(self, "_request_budget", None)
 		if budget is not None and budget.root != data_dir.resolve():
 			try:
 				budget.record_risk(reason=lock.reason, platform_code=lock.platform_code)
-			except OSError:
+			except (OSError, UnicodeError):
 				self._unpersisted_risk_lock = lock
 		if error is not None:
 			error.details["risk_lock"] = {

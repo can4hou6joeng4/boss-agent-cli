@@ -13,13 +13,13 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.api.zhipin_errors import normalize_risk_code
+from boss_agent_cli.services.json_files import write_json_atomic
 
 LOCK_FILENAME = "cdp_risk_lock.json"
 #: 主锁写盘失败时的后备位置（Issue #1270）。cache 子目录不随 `clean --risk-lock`
@@ -173,18 +173,17 @@ def write_lock(
 		"locked_at": lock.locked_at,
 		"cdp_url": cdp_url,
 	}
-	errors: list[OSError] = []
+	errors: list[OSError | UnicodeError] = []
 	for path in lock_paths(data_dir):
 		try:
-			path.parent.mkdir(parents=True, exist_ok=True)
-			tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-			tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-			try:
-				os.chmod(tmp, 0o600)
-			except OSError:
-				pass
-			os.replace(tmp, path)
-		except OSError as exc:
+			# 走统一的原子 JSON 写入：`mkstemp` 默认 0600，且用
+			# `errors="backslashreplace"` 处理孤立代理字符（Issue #1294 / #1487）。
+			# 风险锁里的 `cdp_url` 直接来自 CLI / 配置，非法 UTF-8 字节解码出的
+			# U+DCFF 会让严格编码抛 `UnicodeEncodeError`；它是 `ValueError` 而不是
+			# `OSError`，既不会触发后备位置，还会在记录风控的分支里覆盖原始
+			# `PlatformRiskError`，把风控硬边界降级成可重试的本地错误。
+			write_json_atomic(path, payload, indent=None)
+		except (OSError, UnicodeError) as exc:
 			errors.append(exc)
 			continue
 		for stale in lock_paths(data_dir):

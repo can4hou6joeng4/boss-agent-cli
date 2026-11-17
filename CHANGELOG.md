@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 风险锁文件写入改用统一的原子 JSON 写入（`backslashreplace`），`cdp_url` 含孤立代理字符时不再抛 `UnicodeEncodeError`；记录风控的路径同时按 `(OSError, UnicodeError)` fail-closed，原始 `PlatformRiskError` 不会被本地编码错误替换成可重试的 `NETWORK_ERROR`（Issue #1487）。
+
 ## [3.4.78] - 2026-11-17
 
 ### Fixed
