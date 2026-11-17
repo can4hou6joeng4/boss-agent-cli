@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.86] - 2026-11-17
 
 ### Fixed
 - `crawl` 的采集浏览器启动失败（Chrome 未安装、`chrome_path` 配错、调试端口被占用或上次保留的窗口已关闭）被 `CrawlService._run` 的通用异常分支吞成 `ok:true` 的 `stopped`，只给一条会反复失败的 resume 指引；现在按确定性本地失败返回 `CRAWL_UNAVAILABLE` 并保存断点，`crawl run/resume`、`crawl start`、`agent crawl` 与 wizard 的恢复指引检查 Chrome / `chrome_path` / 调试端口，不再只提示安装可选依赖（Issue #1553）。
