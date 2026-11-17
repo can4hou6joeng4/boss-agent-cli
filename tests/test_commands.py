@@ -2627,3 +2627,26 @@ def test_mark_rejects_blank_identifier(mock_auth_cls, mock_client_cls):
 	assert parsed["hints"]["next_actions"] == [f"boss --data-dir {_DEFAULT_DATA_DIR} chat"]
 	assert f"boss --data-dir {_DEFAULT_DATA_DIR} chat" in parsed["error"]["recovery_action"]
 	mock_client.friend_list.assert_not_called()
+
+
+@patch("boss_agent_cli.commands.mark.get_platform_instance")
+@patch("boss_agent_cli.commands.mark.AuthManager")
+@patch("boss_agent_cli.commands.mark.resolve_friend_or_emit")
+@patch("boss_agent_cli.commands.mark.current_friend_uid_or_emit")
+def test_mark_normalizes_drifted_friend_source_to_zero(
+	mock_uid, mock_resolve, mock_auth_cls, mock_platform_cls, tmp_path
+):
+	"""friendSource 漂移成对象 / 字符串时按 0 处理，不把坏值原样发给标签写接口
+	（与向导侧 Issue #1314 同口径，Issue #1439）。"""
+	platform = _ctx_mock(mock_platform_cls)
+	platform.friend_label.return_value = {"code": 0, "zpData": {}}
+	mock_resolve.return_value = {"uid": "u1", "name": "候选人", "securityId": "s1", "friendSource": {"bad": 1}}
+	mock_uid.return_value = "u1"
+
+	runner = CliRunner()
+	result = runner.invoke(
+		cli, ["--json", "--data-dir", str(tmp_path), "mark", "u1", "--label", "沟通中"]
+	)
+
+	assert result.exit_code == 0, result.output
+	platform.friend_label.assert_called_once_with("u1", 2, 0, remove=False)

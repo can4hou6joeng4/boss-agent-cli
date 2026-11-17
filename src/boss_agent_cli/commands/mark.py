@@ -14,6 +14,13 @@ _LABEL_MAP = {
 _LABEL_NAMES = {v: k for k, v in _LABEL_MAP.items()}
 
 
+def _brief_label(value: str, limit: int = 40) -> str:
+	"""错误信息里回显的标签值：超长输入截断，信封不随输入规模膨胀（Issue #1437）。"""
+	if len(value) <= limit:
+		return value
+	return f"{value[:limit]}…（共 {len(value)} 字符）"
+
+
 def _resolve_label(label_input: str) -> int:
 	"""将标签名称或 ID 解析为数字 ID。"""
 	# 空串是任何标签名的子串，模糊匹配会把它解析成「新招呼」并真的在平台上
@@ -26,8 +33,15 @@ def _resolve_label(label_input: str) -> int:
 		return _LABEL_MAP[label_input]
 	# 全角 / 上标数字（'①'、'²'）的 `isdigit()` 为真但 `int()` 会抛 ValueError，
 	# 落成参数错误以外的内部错误；只接受 ASCII 数字串（Issue #1306）。
+	# 长度上限：4300 位以上纯数字串让 int() 抛裸 ValueError（int_max_str_digits），
+	# 被顶层兜成可重试的 NETWORK_ERROR（Issue #1437）。标签 ID 是远端小整数。
 	if label_input.isascii() and label_input.isdigit():
-		return int(label_input)
+		try:
+			return int(label_input)
+		except ValueError:
+			raise click.BadParameter(
+				f"标签 ID 无效: {_brief_label(label_input)}。可用: {', '.join(_LABEL_MAP.keys())}"
+			) from None
 	for name, lid in _LABEL_MAP.items():
 		if label_input in name:
 			return lid
@@ -63,6 +77,13 @@ def mark_cmd(ctx: click.Context, security_id: str, label: str, remove: bool) -> 
 		if friend_id is None:
 			return
 		friend_source = friend_item.get("friendSource", 0)
+		# friendSource 只是回传给标签接口的定位参数：平台字段漂移成非数字串 /
+		# 对象 / 1e400 时按缺失的默认 0 处理，与向导侧同口径（Issue #1314、#1439）。
+		# 原值直接进 httpx params 会发出一次注定失败的写请求（消耗预算、可能触发风控）。
+		try:
+			friend_source = int(friend_source or 0)
+		except (TypeError, ValueError, OverflowError):
+			friend_source = 0
 		friend_name = friend_item.get("name") or "-"
 
 		try:

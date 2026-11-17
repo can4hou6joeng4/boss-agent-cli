@@ -897,9 +897,15 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 	remove = _bool_input(inputs, "remove")
 	# `str.isdigit()` 对 '①' / '²' 这类非 ASCII 数字也为真，但 `int()` 会抛
 	# ValueError，落成可重试的网络错误；只有纯 ASCII 数字串才当 ID（Issue #1306）。
-	label_id = int(label) if label.isascii() and label.isdigit() else _LABEL_IDS.get(label)
+	# 4300 位以上的纯数字串让 int() 抛裸 ValueError，被 runner 兜成
+	# NETWORK_ERROR +「重试当前 run_id」（Issue #1442）：与未知标签同口径。
+	try:
+		label_id = int(label) if label.isascii() and label.isdigit() else _LABEL_IDS.get(label)
+	except (ValueError, OverflowError):
+		label_id = None
 	if label_id is None:
-		raise WorkflowActionError("INVALID_PARAM", f"未知标签: {label}（可选: 新招呼、沟通中、已约面、已获取简历、不合适、收藏）")
+		shown = label if len(label) <= 40 else f"{label[:40]}…（共 {len(label)} 字符）"
+		raise WorkflowActionError("INVALID_PARAM", f"未知标签: {shown}（可选: 新招呼、沟通中、已约面、已获取简历、不合适、收藏）")
 	with context.candidate_platform() as platform:
 		friend = _candidate_friend(platform, identifier, context=context)
 		uid = str(friend.get("uid") or "")

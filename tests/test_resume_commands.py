@@ -918,3 +918,24 @@ def test_delete_corrupt_resume_still_removes_file(tmp_path):
 	assert not (tmp_path / "resumes" / "broken.json").exists()
 	listed = json.loads(_invoke(runner, tmp_path, ["list"]).output)
 	assert "corrupt" not in listed["hints"]
+
+
+def test_init_rejects_unsupported_template(tmp_path):
+	"""仓库只有 default 一种模板：接受 --template foo 却在信封里回显 foo 会让
+	调用方误以为模板生效（Issue #1440）。"""
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["init", "--name", "x", "--template", "foo"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "default" in parsed["error"]["message"]
+	assert not (tmp_path / "resumes" / "x.json").exists()
+
+
+def test_init_rejects_whitespace_template(tmp_path):
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["init", "--name", "x", "--template", " "])
+
+	assert result.exit_code == 1
+	assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"
