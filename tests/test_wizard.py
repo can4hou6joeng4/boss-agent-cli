@@ -167,11 +167,7 @@ def test_catalog_rejects_platform_and_missing_inputs():
 def test_catalog_unknown_goal_lists_available_goals():
 	"""未知 goal 的报错要带可选值，Agent 不必再调一次 boss schema 才能猜对。"""
 	with pytest.raises(WorkflowInputError) as excinfo:
-		build_plan(
-			WizardInput.from_mapping(
-				{"role": "candidate", "platform": "zhipin", "goal": "bogus", "inputs": {}}
-			)
-		)
+		build_plan(WizardInput.from_mapping({"role": "candidate", "platform": "zhipin", "goal": "bogus", "inputs": {}}))
 	message = str(excinfo.value)
 	assert "不支持 goal 'bogus'" in message
 	assert "可选:" in message
@@ -355,12 +351,14 @@ class _FakeCandidatePlatform:
 		return {
 			"code": 0,
 			"data": {
-				"result": [{
-					"uid": 10001,
-					"securityId": "sid_current",
-					"name": "联系人甲",
-					"friendSource": 0,
-				}],
+				"result": [
+					{
+						"uid": 10001,
+						"securityId": "sid_current",
+						"name": "联系人甲",
+						"friendSource": 0,
+					}
+				],
 				"hasMore": False,
 			},
 		}
@@ -393,8 +391,12 @@ def _action_context(tmp_path, *, role="candidate", candidate=None, recruiter=Non
 		platform="zhipin",
 		role=role,
 		logger=Logger(),
-		candidate_factory=(lambda name, auth, delay, cdp_url, browser_source=None: candidate if candidate is not None else None),
-		recruiter_factory=(lambda name, auth, delay, cdp_url, browser_source=None: recruiter if recruiter is not None else None),
+		candidate_factory=(
+			lambda name, auth, delay, cdp_url, browser_source=None: candidate if candidate is not None else None
+		),
+		recruiter_factory=(
+			lambda name, auth, delay, cdp_url, browser_source=None: recruiter if recruiter is not None else None
+		),
 	)
 
 
@@ -468,9 +470,7 @@ def test_candidate_write_actions_mark_local_state_failure_as_not_retryable(tmp_p
 
 	monkeypatch.setattr(CacheStore, "record_greet", fail_record)
 	with pytest.raises(WorkflowActionError) as greeted:
-		DEFAULT_ACTIONS["candidate_greet"](
-			context, {"security_id": "sec-2", "job_id": "job-2", "message": "你好"}, {}
-		)
+		DEFAULT_ACTIONS["candidate_greet"](context, {"security_id": "sec-2", "job_id": "job-2", "message": "你好"}, {})
 	assert greeted.value.code == "LOCAL_STATE_WRITE_FAILED"
 	assert greeted.value.recoverable is False
 	assert greeted.value.replay_safe is False
@@ -544,9 +544,7 @@ def test_candidate_export_expands_tilde_in_output_path(tmp_path, monkeypatch):
 		items: list = []
 
 	with patch("boss_agent_cli.wizard.actions.execute_candidate_search", return_value=_Result()):
-		result = DEFAULT_ACTIONS["candidate_export"](
-			context, {"query": "golang", "output": "~/wizard/out.json"}, {}
-		)
+		result = DEFAULT_ACTIONS["candidate_export"](context, {"query": "golang", "output": "~/wizard/out.json"}, {})
 
 	expected = tmp_path / "wizard" / "out.json"
 	assert result.data["path"] == str(expected)
@@ -557,15 +555,9 @@ def test_candidate_contact_actions_refresh_rotating_security_id(tmp_path):
 	platform = _FakeCandidatePlatform()
 	context = _action_context(tmp_path, candidate=platform)
 
-	exchanged = DEFAULT_ACTIONS["candidate_exchange"](
-		context, {"security_id": "10001", "type": "wechat"}, {}
-	)
-	marked = DEFAULT_ACTIONS["candidate_mark"](
-		context, {"security_id": "10001", "label": "沟通中"}, {}
-	)
-	history = DEFAULT_ACTIONS["candidate_chat_history"](
-		context, {"gid": "10001"}, {}
-	)
+	exchanged = DEFAULT_ACTIONS["candidate_exchange"](context, {"security_id": "10001", "type": "wechat"}, {})
+	marked = DEFAULT_ACTIONS["candidate_mark"](context, {"security_id": "10001", "label": "沟通中"}, {})
+	history = DEFAULT_ACTIONS["candidate_chat_history"](context, {"gid": "10001"}, {})
 
 	assert exchanged.data["uid"] == "10001"
 	assert exchanged.data["security_id"] == "sid_current"
@@ -589,9 +581,7 @@ def test_candidate_exchange_rejects_unknown_type(tmp_path, value):
 	context = _action_context(tmp_path, candidate=platform)
 
 	with pytest.raises(WorkflowActionError) as exc_info:
-		DEFAULT_ACTIONS["candidate_exchange"](
-			context, {"security_id": "10001", "type": value}, {}
-		)
+		DEFAULT_ACTIONS["candidate_exchange"](context, {"security_id": "10001", "type": value}, {})
 
 	assert exc_info.value.code == "INVALID_PARAM"
 	assert "wechat" in str(exc_info.value)
@@ -624,7 +614,10 @@ def test_local_and_ai_actions_return_structured_recovery(tmp_path):
 	assert exc_info.value.recoverable is True
 	# 照抄恢复提示必须把新密钥写回本次运行的数据目录（Issue #976）。
 	assert shlex.split(exc_info.value.recovery_action)[:4] == [
-		"boss", "--data-dir", str(tmp_path.resolve()), "ai",
+		"boss",
+		"--data-dir",
+		str(tmp_path.resolve()),
+		"ai",
 	]
 
 
@@ -641,9 +634,7 @@ def test_candidate_watch_stores_string_params(tmp_path):
 	assert all(isinstance(v, (str, type(None))) for v in record["params"].values())
 
 	with pytest.raises(WorkflowActionError) as exc_info:
-		DEFAULT_ACTIONS["candidate_watch"](
-			context, {"action": "add", "name": "bad", "query": ["Python"]}, {}
-		)
+		DEFAULT_ACTIONS["candidate_watch"](context, {"action": "add", "name": "bad", "query": ["Python"]}, {})
 	assert exc_info.value.code == "INVALID_PARAM"
 	assert "query" in str(exc_info.value)
 
@@ -666,16 +657,19 @@ def test_candidate_watch_corrupt_params_reports_recovery(tmp_path):
 	assert exc_info.value.code == "SAVED_SEARCH_INVALID"
 	# 动作层恢复命令保留触发本次 workflow 的数据目录（Issue #976）。
 	assert shlex.split(exc_info.value.recovery_action.split("；")[0]) == [
-		"boss", "--data-dir", str(tmp_path.resolve()), "watch", "remove", "daily",
+		"boss",
+		"--data-dir",
+		str(tmp_path.resolve()),
+		"watch",
+		"remove",
+		"daily",
 	]
 
 
 def test_candidate_watch_corrupt_params_quotes_name_with_spaces(tmp_path):
 	"""watch 名是 wizard 的自由文本输入：恢复指引里的名字带空格时必须整体加引号。"""
 	context = _action_context(tmp_path)
-	DEFAULT_ACTIONS["candidate_watch"](
-		context, {"action": "add", "name": "我的 监控", "query": "Python"}, {}
-	)
+	DEFAULT_ACTIONS["candidate_watch"](context, {"action": "add", "name": "我的 监控", "query": "Python"}, {})
 	conn = sqlite3.connect(tmp_path / "cache" / "boss_agent.db")
 	conn.execute("UPDATE saved_searches SET params = ? WHERE name = ?", ("{not json", "我的 监控"))
 	conn.commit()
@@ -686,10 +680,21 @@ def test_candidate_watch_corrupt_params_quotes_name_with_spaces(tmp_path):
 	assert exc_info.value.code == "SAVED_SEARCH_INVALID"
 	remove_cmd, _, rebuild = exc_info.value.recovery_action.partition("；再用 ")
 	assert shlex.split(remove_cmd) == [
-		"boss", "--data-dir", str(tmp_path.resolve()), "watch", "remove", "我的 监控",
+		"boss",
+		"--data-dir",
+		str(tmp_path.resolve()),
+		"watch",
+		"remove",
+		"我的 监控",
 	]
 	assert shlex.split(rebuild.removesuffix(" 重建")) == [
-		"boss", "--data-dir", str(tmp_path.resolve()), "watch", "add", "我的 监控", "<关键词>",
+		"boss",
+		"--data-dir",
+		str(tmp_path.resolve()),
+		"watch",
+		"add",
+		"我的 监控",
+		"<关键词>",
 	]
 
 
@@ -753,7 +758,12 @@ def test_crawl_actions_use_fixture_service_and_persist_stop(tmp_path, monkeypatc
 	status = DEFAULT_ACTIONS["crawl_status"](context, {"run_id": "crawl-existing"}, {})
 	assert status.data["run_id"] == "crawl-existing"
 	assert shlex.split(status.data["checkpoint"]["resume_command"]) == [
-		"boss", "--data-dir", str(tmp_path.resolve()), "crawl", "resume", "crawl-existing",
+		"boss",
+		"--data-dir",
+		str(tmp_path.resolve()),
+		"crawl",
+		"resume",
+		"crawl-existing",
 	]
 	resumed = DEFAULT_ACTIONS["crawl_resume"](
 		context,
@@ -807,7 +817,12 @@ def test_crawl_action_rejects_invalid_config(tmp_path, monkeypatch, crawl_config
 	assert excinfo.value.auto_retry is False
 	assert field in str(excinfo.value)
 	assert shlex.split(excinfo.value.recovery_action) == [
-		"boss", "--data-dir", str(tmp_path.resolve()), "config", "reset", "crawl",
+		"boss",
+		"--data-dir",
+		str(tmp_path.resolve()),
+		"config",
+		"reset",
+		"crawl",
 	]
 	assert service.created_settings is None
 
@@ -836,7 +851,10 @@ def test_crawl_action_rejects_unsupported_hook_profile(tmp_path, monkeypatch, ho
 	assert "hook_profile" in str(excinfo.value)
 	# 文本参数只用作说明；机器可执行的是 recovery_action 里的 crawl run 命令。
 	assert shlex.split(str(excinfo.value.recovery_action))[:4] == [
-		"boss", "--data-dir", str(tmp_path.resolve()), "crawl",
+		"boss",
+		"--data-dir",
+		str(tmp_path.resolve()),
+		"crawl",
 	]
 	assert excinfo.value.recovery_action.endswith(
 		"crawl run <query> --city <城市> --hook-profile screenshot-full --hook-dir <脚本目录>"
@@ -1057,9 +1075,7 @@ def test_recruiter_exchange_rejects_unknown_type(tmp_path):
 	context = _action_context(tmp_path, role="recruiter", recruiter=platform)
 
 	with pytest.raises(WorkflowActionError) as exc_info:
-		DEFAULT_ACTIONS["recruiter_exchange_contact"](
-			context, {"friend_id": 42, "type": "wecaht"}, {}
-		)
+		DEFAULT_ACTIONS["recruiter_exchange_contact"](context, {"friend_id": 42, "type": "wecaht"}, {})
 
 	assert exc_info.value.code == "INVALID_PARAM"
 	assert "wechat" in str(exc_info.value)
@@ -1117,7 +1133,14 @@ def test_runner_normalizes_auth_and_network_failures(tmp_path):
 	last = auth_run["last_result"]
 	assert last["status"] == "waiting_input"
 	assert last["data"]["authenticated"] is False
-	assert shlex.split(last["next_action"]) == ["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--resume", "auth-required-run"]
+	assert shlex.split(last["next_action"]) == [
+		"boss",
+		"--data-dir",
+		str(tmp_path.resolve()),
+		"wizard",
+		"--resume",
+		"auth-required-run",
+	]
 	login_action = f"boss --data-dir {shlex.quote(str(tmp_path.resolve()))} login"
 	assert any(login_action in action for action in last["operator_actions"])
 
@@ -1140,7 +1163,12 @@ def test_runner_auth_wait_quotes_run_id_in_resume_next_action(tmp_path):
 		)
 	assert run["status"] == "waiting_input"
 	assert shlex.split(run["last_result"]["next_action"]) == [
-		"boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--resume", "auth; echo pwn",
+		"boss",
+		"--data-dir",
+		str(tmp_path.resolve()),
+		"wizard",
+		"--resume",
+		"auth; echo pwn",
 	]
 
 	def broken(context, inputs, prior):
@@ -1417,7 +1445,9 @@ def test_automatic_retry_reuses_newly_bound_inner_checkpoint(tmp_path):
 		return StepResult({"run_id": inner_run_id})
 
 	plan = replace(
-		_plan("auth_status", "crawl_start"), goal="crawl_start", inputs={"query": "Python", "city": "北京"},
+		_plan("auth_status", "crawl_start"),
+		goal="crawl_start",
+		inputs={"query": "Python", "city": "北京"},
 	)
 	with WorkflowStore(tmp_path) as store:
 		run = WorkflowRunner(
@@ -1582,9 +1612,7 @@ def test_resume_after_timeout_forwards_bound_inner_checkpoint_to_action(tmp_path
 	with WorkflowStore(tmp_path) as store:
 
 		def flaky(context, inputs, prior):
-			store.update_step(
-				"run-resume-bound", "crawl_start", status="running", result={"inner_run_id": "crw_inner"}
-			)
+			store.update_step("run-resume-bound", "crawl_start", status="running", result={"inner_run_id": "crw_inner"})
 			raise WorkflowActionError(
 				"WORKFLOW_TIMEOUT",
 				"workflow 超过设定时限",
@@ -1656,6 +1684,7 @@ def test_runner_records_timeout_at_action_boundary(tmp_path):
 
 def test_runner_timeout_quotes_run_id_in_recovery_action(tmp_path):
 	"""run_id 是本地自由文本，拼进可执行的 --resume 提示前必须按 shell 参数转义。"""
+
 	def slow(context, inputs, prior):
 		time.sleep(0.01)
 		return StepResult({"done": True})
@@ -3239,10 +3268,10 @@ def test_wizard_status_and_stop_use_explicit_run_id(tmp_path):
 	)
 	assert stop.exit_code == 1
 	envelope = json.loads(stop.stdout)
-	assert envelope["error"]["code"] == "WORKFLOW_NOT_FOUND"
-	# 任务记录缺失是本地状态问题：Agent 需要一条能直接执行的重建入口。
+	assert envelope["error"]["code"] == "WORKFLOW_ALREADY_FINISHED"
+	# 已完成不是 ID 写错：Agent 要看到结果读取入口，而不是被引导去重建任务。
 	assert envelope["error"]["recovery_action"]
-	assert envelope["hints"]["next_actions"] == [f"boss --data-dir {tmp_path.resolve()} wizard"]
+	assert envelope["hints"]["next_actions"] == [f"boss --data-dir {tmp_path.resolve()} wizard --status {run_id}"]
 
 
 def test_wizard_status_reports_resume_next_action(tmp_path):
@@ -3389,9 +3418,7 @@ def test_wizard_stopped_run_offers_bound_crawl_resume(tmp_path):
 	with WorkflowStore(tmp_path) as store:
 		store.create("wrn_crawl", plan)
 		store.update_run("wrn_crawl", status="running", current_step="crawl_start")
-		store.update_step(
-			"wrn_crawl", "crawl_start", status="running", result={"inner_run_id": "crw_inner"}
-		)
+		store.update_step("wrn_crawl", "crawl_start", status="running", result={"inner_run_id": "crw_inner"})
 		store._cache.create_crawl_run(
 			"crw_inner",
 			{"query": "Python"},
@@ -3449,9 +3476,7 @@ def test_auth_status_waiting_input_is_resumable_and_reruns_step(tmp_path):
 	"""A6：未登录挂起后，同一 run_id 可 resume，且 auth_status 会重跑而非被跳过。"""
 	run_id = "waiting-login-run"
 	with WorkflowStore(tmp_path) as store:
-		first = WorkflowRunner(store, DEFAULT_ACTIONS).run(
-			_auth_plan(), _action_context(tmp_path), run_id=run_id
-		)
+		first = WorkflowRunner(store, DEFAULT_ACTIONS).run(_auth_plan(), _action_context(tmp_path), run_id=run_id)
 	assert first["status"] == "waiting_input"
 	assert first["error"] is None
 
@@ -3488,7 +3513,14 @@ def test_auth_status_operator_actions_are_natural_language(tmp_path):
 			_auth_plan(), _action_context(tmp_path), run_id="operator-actions-run"
 		)
 	last = run["last_result"]
-	assert shlex.split(last["next_action"]) == ["boss", "--data-dir", str(tmp_path.resolve()), "wizard", "--resume", "operator-actions-run"]
+	assert shlex.split(last["next_action"]) == [
+		"boss",
+		"--data-dir",
+		str(tmp_path.resolve()),
+		"wizard",
+		"--resume",
+		"operator-actions-run",
+	]
 	actions = last["operator_actions"]
 	assert len(actions) == 2
 	assert any("扫码" in action for action in actions)
@@ -3859,8 +3891,11 @@ def test_recovery_completion_falls_through_to_result_browsing(tmp_path, monkeypa
 		wizard_mod,
 		"collect_waiting_recovery",
 		lambda run, **kw: WizardInput(
-			role="candidate", platform="zhipin", goal="crawl_resume",
-			inputs={"run_id": "crawl-inner"}, mode="tty",
+			role="candidate",
+			platform="zhipin",
+			goal="crawl_resume",
+			inputs={"run_id": "crawl-inner"},
+			mode="tty",
 		),
 	)
 	browsed = []
@@ -3872,15 +3907,32 @@ def test_recovery_completion_falls_through_to_result_browsing(tmp_path, monkeypa
 	)
 
 	ctx = SimpleNamespace()
-	ctx.obj = {"data_dir": tmp_path, "logger": Logger(), "platform": "zhipin",
-	           "role": "candidate", "cdp_url": None, "delay": (0, 0), "config": {}}
-	plan = build_plan(WizardInput(
-		role="candidate", platform="zhipin", goal="crawl_start",
-		inputs={"query": "Golang", "city": "广州"}, mode="tty",
-	))
+	ctx.obj = {
+		"data_dir": tmp_path,
+		"logger": Logger(),
+		"platform": "zhipin",
+		"role": "candidate",
+		"cdp_url": None,
+		"delay": (0, 0),
+		"config": {},
+	}
+	plan = build_plan(
+		WizardInput(
+			role="candidate",
+			platform="zhipin",
+			goal="crawl_start",
+			inputs={"query": "Golang", "city": "广州"},
+			mode="tty",
+		)
+	)
 	result = wizard_mod._run_plan(
-		ctx, object(), plan,
-		interactive=True, resume_run_id=None, timeout_seconds=None, max_retries=0,
+		ctx,
+		object(),
+		plan,
+		interactive=True,
+		resume_run_id=None,
+		timeout_seconds=None,
+		max_retries=0,
 	)
 	assert browsed == ["recovery-1"], "recovery 完成后应进入结果浏览，而不是直接返回主菜单"
 	assert result["run_id"] == "recovery-1"
@@ -4281,7 +4333,9 @@ def test_runner_browser_navigation_timeout_is_not_generic_network_error(tmp_path
 		)
 
 	with WorkflowStore(tmp_path) as store:
-		run = WorkflowRunner(store, {"stalled": stalled}).run(_plan("stalled"), object(), run_id="nav-run", max_retries=2)
+		run = WorkflowRunner(store, {"stalled": stalled}).run(
+			_plan("stalled"), object(), run_id="nav-run", max_retries=2
+		)
 
 	assert run["status"] == "failed"
 	assert run["error"]["code"] == "BROWSER_NAV_TIMEOUT"
@@ -4389,7 +4443,9 @@ def test_resume_rejects_run_saved_with_removed_platform(tmp_path):
 			),
 		)
 
-	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "wizard", "--resume", "legacy-zhilian-run"])
+	result = CliRunner().invoke(
+		cli, ["--data-dir", str(tmp_path), "--json", "wizard", "--resume", "legacy-zhilian-run"]
+	)
 
 	assert result.exit_code == 1, result.output
 	payload = json.loads(result.output)
@@ -4415,7 +4471,9 @@ def _configure_ai(tmp_path, monkeypatch, **config):
 
 
 def test_ai_assist_uses_configured_temperature_and_max_tokens(tmp_path, monkeypatch):
-	_configure_ai(tmp_path, monkeypatch, ai_provider="moonshot", ai_model="moonshot-v1-8k", ai_temperature=0.2, ai_max_tokens=1536)
+	_configure_ai(
+		tmp_path, monkeypatch, ai_provider="moonshot", ai_model="moonshot-v1-8k", ai_temperature=0.2, ai_max_tokens=1536
+	)
 	reply = _ai_reply({"choices": [{"message": {"content": "建议"}}]})
 
 	with patch("boss_agent_cli.ai.service.httpx.post", return_value=reply) as post:
@@ -4667,7 +4725,7 @@ def test_bool_input_only_accepts_json_booleans():
 
 
 def test_candidate_mark_rejects_string_remove_before_platform_calls(tmp_path):
-	""""false" 不能被当成 true 删除标签；非法输入不能先查联系人。"""
+	""" "false" 不能被当成 true 删除标签；非法输入不能先查联系人。"""
 	platform = _FakeCandidatePlatform()
 	context = _action_context(tmp_path, candidate=platform)
 
@@ -4679,9 +4737,7 @@ def test_candidate_mark_rejects_string_remove_before_platform_calls(tmp_path):
 	assert platform.calls == []
 
 	# 真正的布尔 false 仍然表示「添加标签」。
-	DEFAULT_ACTIONS["candidate_mark"](
-		context, {"security_id": "sid_current", "label": "沟通中", "remove": False}, {}
-	)
+	DEFAULT_ACTIONS["candidate_mark"](context, {"security_id": "sid_current", "label": "沟通中", "remove": False}, {})
 	assert ("friend_label", "10001", 2, 0, False) in platform.calls
 
 
@@ -4787,20 +4843,62 @@ def test_wizard_runner_does_not_resume_unknown_write_step(tmp_path):
 @pytest.mark.parametrize(
 	"role,action,method,inputs,check_args",
 	[
-		("candidate", "candidate_apply", "apply", {"security_id": "synthetic-sid", "job_id": "synthetic-job"}, ["me", "--section", "deliver"]),
-		("candidate", "candidate_greet", "greet", {"security_id": "synthetic-sid", "job_id": "synthetic-job"}, ["chat"]),
+		(
+			"candidate",
+			"candidate_apply",
+			"apply",
+			{"security_id": "synthetic-sid", "job_id": "synthetic-job"},
+			["me", "--section", "deliver"],
+		),
+		(
+			"candidate",
+			"candidate_greet",
+			"greet",
+			{"security_id": "synthetic-sid", "job_id": "synthetic-job"},
+			["chat"],
+		),
 		("candidate", "candidate_exchange", "exchange_contact", {"security_id": "sid_current"}, ["chat"]),
 		("candidate", "candidate_mark", "friend_label", {"security_id": "sid_current", "label": "沟通中"}, ["chat"]),
-		("recruiter", "recruiter_reply", "send_message_by_friend", {"friend_id": 42, "message": "你好"}, ["hr", "chatmsg", "42"]),
-		("recruiter", "recruiter_request_resume", "exchange_request_by_friend", {"friend_id": 42}, ["hr", "chatmsg", "42"]),
-		("recruiter", "recruiter_exchange_contact", "exchange_request_by_friend", {"friend_id": 42}, ["hr", "chatmsg", "42"]),
+		(
+			"recruiter",
+			"recruiter_reply",
+			"send_message_by_friend",
+			{"friend_id": 42, "message": "你好"},
+			["hr", "chatmsg", "42"],
+		),
+		(
+			"recruiter",
+			"recruiter_request_resume",
+			"exchange_request_by_friend",
+			{"friend_id": 42},
+			["hr", "chatmsg", "42"],
+		),
+		(
+			"recruiter",
+			"recruiter_exchange_contact",
+			"exchange_request_by_friend",
+			{"friend_id": 42},
+			["hr", "chatmsg", "42"],
+		),
 		("recruiter", "recruiter_jobs_online", "job_online", {"job_id": "synthetic-job"}, ["hr", "jobs", "list"]),
 		("recruiter", "recruiter_jobs_offline", "job_offline", {"job_id": "synthetic-job"}, ["hr", "jobs", "list"]),
-		("recruiter", "recruiter_resume", "view_geek", {"geek_id": "synthetic-geek", "job_id": "synthetic-job"}, ["hr", "chat"]),
+		(
+			"recruiter",
+			"recruiter_resume",
+			"view_geek",
+			{"geek_id": "synthetic-geek", "job_id": "synthetic-job"},
+			["hr", "chat"],
+		),
 	],
 )
 def test_default_wizard_actions_never_replay_unknown_results(
-	tmp_path, error_code, role, action, method, inputs, check_args,
+	tmp_path,
+	error_code,
+	role,
+	action,
+	method,
+	inputs,
+	check_args,
 ):
 	"""真实适配器连接默认动作与 runner：有限重试、恢复都只能调用一次。"""
 	from boss_agent_cli.platforms.zhipin import BossPlatform
@@ -4815,7 +4913,10 @@ def test_default_wizard_actions_never_replay_unknown_results(
 	getattr(client, method).return_value = response
 	client.friend_list.return_value = {
 		"code": 0,
-		"zpData": {"result": [{"uid": 10001, "securityId": "sid_current", "name": "测试联系人", "friendSource": 0}], "hasMore": False},
+		"zpData": {
+			"result": [{"uid": 10001, "securityId": "sid_current", "name": "测试联系人", "friendSource": 0}],
+			"hasMore": False,
+		},
 	}
 	platform = BossPlatform(client) if role == "candidate" else BossRecruiterPlatform(client)
 	context = _action_context(data_dir, role=role, candidate=platform, recruiter=platform)

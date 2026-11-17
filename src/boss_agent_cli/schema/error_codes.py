@@ -205,6 +205,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": "boss shortlist add <security_id> <job_id>（先加入候选池），或 boss shortlist list 核对已有条目",
 	},
+	"WORKFLOW_ALREADY_FINISHED": {
+		"message": "workflow 任务已结束，停止请求没有生效",
+		"recoverable": False,
+		"recovery_action": "boss wizard --status <run_id> 查看最终状态与结果，或 boss wizard 新建 workflow",
+	},
 	"WORKFLOW_NOT_FOUND": {
 		"message": "本地 workflow 任务不存在或 run_id 有误",
 		"recoverable": False,

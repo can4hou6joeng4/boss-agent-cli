@@ -65,6 +65,7 @@ def packet_page_no(packet: Any) -> int | None:
 		return None
 	return page_no if page_no >= 1 else None
 
+
 _CRAWL_FETCH_SCRIPT = """
 async function (path, params, timeoutMs) {
 	const controller = new AbortController();
@@ -375,9 +376,7 @@ class DrissionCrawlerSession:
 				try:
 					position = self._page_no
 					if position is None or target_page <= position:
-						self._page.get(
-							f"https://www.zhipin.com/web/geek/jobs?city={city_code}&query={quote(query)}"
-						)
+						self._page.get(f"https://www.zhipin.com/web/geek/jobs?city={city_code}&query={quote(query)}")
 						position = 1
 					while position < target_page:
 						self._trigger_next_page()
@@ -543,7 +542,9 @@ class DrissionCrawlerSession:
 	def fetch_detail(self, security_id: str) -> dict[str, Any]:
 		"""在采集页签里取 job_card（同源请求，不把浏览器 Cookie / stoken 拷给 httpx）。"""
 		if not security_id:
-			return {"code": 0, "zpData": {"jobCard": {}}}
+			# 空 ID 无法构造详情请求；伪造成功会让缺字段的条目永久标记完成
+			# （Issue #1584）。调用方应保留 pending 状态。
+			raise ValueError("security_id 不能为空，无法抓取职位详情")
 		if self._page is None:
 			raise RuntimeError("Drission crawler session is not open")
 		payload = self._fetch_json_in_page(JOB_CARD_PATH, {"securityId": security_id})
@@ -701,7 +702,9 @@ class DrissionCrawlerSession:
 			return None
 		try:
 			os.kill(pid, 0)
-		except ProcessLookupError:
+		except (ProcessLookupError, OverflowError):
+			# 超大 pid 无法转成 C long：符号链接格式不认识，按陈旧锁处理
+			# （Issue #1583），不能让确定性本地失败被记成可重试的 stopped。
 			return None
 		except PermissionError:
 			return pid

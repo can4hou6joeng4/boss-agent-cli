@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Fixed
+- `boss agent run` 的 automation `tabs` 配置只写 `["新招呼"]`（或为空）时，`scan_conversations` 仍会调用未读列表并把未勾选会话交给执行层，且两个 tab 的候选合并后才截断 `max_per_tab`；现在严格按配置选择数据源，空配置不扫描，每个 tab 各自遵守上限（Issue #1581）。
+- wizard 的 `crawl_start` 接受纯空白 `query` 并写出采集任务，而 `boss crawl run` 会拒绝同一输入；现在 `build_plan`、动作层与 `CrawlService` 三层统一拒绝空白关键词，不写库、不启动浏览器（Issue #1582）。
+- 采集 profile 的 `SingletonLock` 指向超大 pid 时，`os.kill(pid, 0)` 抛 `OverflowError`，run 被记成可重试的 `stopped`，CLI 返回 `ok:true` 并给出必然再次失败的 `crawl resume` 指引；现在按无法识别的陈旧锁处理并继续（Issue #1583）。
+- 列表项缺少 `securityId` 时，`fetch_detail("")` 返回伪成功空卡片，详情被标记已完成且不再出现在 pending 列表与恢复队列；现在保留 `detail_done=false`，状态标记为 `missing-security-id`（Issue #1584）。
+- `boss wizard --stop <run_id>` 对已完成的任务误报 `WORKFLOW_NOT_FOUND` 并建议新建 workflow；现在返回不可恢复的 `WORKFLOW_ALREADY_FINISHED`，指引为 `--status` 查看结果（Issue #1585）。
+- wizard `crawl_resume` 遇到断点中坏的 Hook 目录返回可重试的 `INVALID_PARAM`，而 CLI 的同一异常返回不可重试的 `LOCAL_IO_ERROR`；现在两条入口统一按本地状态错误收口并停止自动重试（Issue #1586）。
+
 ## [3.4.89] - 2026-11-17
 
 ### Fixed

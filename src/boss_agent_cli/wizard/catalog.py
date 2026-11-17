@@ -145,9 +145,7 @@ def require_supported_platform(role: str, platform: str) -> None:
 	role_spec = catalog_data()["roles"].get(role) or {}
 	platforms = list(role_spec.get("platforms") or [])
 	if platform not in platforms:
-		raise WorkflowInputError(
-			f"角色 {role} 不支持平台 {platform!r}，可选: {', '.join(platforms) or '-'}"
-		)
+		raise WorkflowInputError(f"角色 {role} 不支持平台 {platform!r}，可选: {', '.join(platforms) or '-'}")
 
 
 def build_plan(wizard_input: WizardInput) -> WorkflowPlan:
@@ -157,14 +155,16 @@ def build_plan(wizard_input: WizardInput) -> WorkflowPlan:
 		# 与 require_supported_platform 同口径：报错要带可选值，否则 Agent 只知道
 		# 自己写错了，还得再调一次 boss schema 才能凑出合法输入。
 		available = ", ".join(sorted(role_goals)) or "-"
-		raise WorkflowInputError(
-			f"角色 {wizard_input.role} 不支持 goal {wizard_input.goal!r}，可选: {available}"
-		)
+		raise WorkflowInputError(f"角色 {wizard_input.role} 不支持 goal {wizard_input.goal!r}，可选: {available}")
 	require_supported_platform(wizard_input.role, wizard_input.platform)
+	# 与 CLI 的关键词校验同口径：纯空白等于「不筛选」，会按城市默认列表逐页抓取，
+	# 消耗请求预算并扩大风控面（Issue #1582）。字符串输入先去空白再判空，其他类型
+	# 仍交给动作层 / CLI 报错，不在 build_plan 里改变语义。
 	missing = [
 		name
 		for name in goal.required_inputs
-		if wizard_input.inputs.get(name) is None or wizard_input.inputs.get(name) == ""
+		if wizard_input.inputs.get(name) is None
+		or (isinstance(wizard_input.inputs.get(name), str) and not wizard_input.inputs[name].strip())
 	]
 	if missing:
 		raise WorkflowInputError(f"goal {goal.name!r} 缺少 inputs: {', '.join(missing)}")
@@ -172,8 +172,7 @@ def build_plan(wizard_input: WizardInput) -> WorkflowPlan:
 	unknown_steps = [step for step in steps if step not in goal.steps]
 	if unknown_steps:
 		raise WorkflowInputError(
-			f"requested_steps 不属于 goal {goal.name!r}: {', '.join(unknown_steps)}"
-			f"；可选: {', '.join(goal.steps)}"
+			f"requested_steps 不属于 goal {goal.name!r}: {', '.join(unknown_steps)}；可选: {', '.join(goal.steps)}"
 		)
 	duplicates = sorted({step for step in steps if steps.count(step) > 1})
 	if duplicates:
