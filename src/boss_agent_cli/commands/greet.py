@@ -254,7 +254,7 @@ def _batch_greet_dry_run_rerun(ctx: click.Context, query: str) -> str:
 @click.option("--scale", default=None, type=click.Choice(list(SCALE_CODES.keys()), case_sensitive=False), help="公司规模（如 100-499人）")
 @click.option("--stage", default=None, type=click.Choice(list(STAGE_CODES.keys()), case_sensitive=False), help="融资阶段（如 已上市、A轮）")
 @click.option("--job-type", default=None, type=click.Choice(list(JOB_TYPE_CODES.keys()), case_sensitive=False), help="职位类型（全职/兼职/实习）")
-@click.option("--count", default=10, type=click.IntRange(0), help="打招呼数量上限（最大 10）")
+@click.option("--count", default=10, type=click.IntRange(0, 10), help="打招呼数量上限（最大 10）")
 @click.option("--dry-run", is_flag=True, default=False, help="仅模拟执行，不实际打招呼")
 @click.pass_context
 @handle_auth_errors("batch-greet")
@@ -263,10 +263,23 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 	if not require_compliance_allowed(ctx, "batch-greet"):
 		return
 
+	# 空串 / 纯空白关键词会让搜索退化成「没有关键词」的默认列表，随后对列表里的
+	# 职位真实发出招呼：用户只是漏填参数，却产生了不可撤回的写操作。与 search
+	# 同口径，在任何平台调用之前按参数错误拒绝。
+	if not query.strip():
+		search_cmd = _hint_command(ctx, "search <关键词>")
+		handle_error_output(
+			ctx,
+			"batch-greet",
+			code="INVALID_PARAM",
+			message="搜索关键词不能为空；批量打招呼需要一个明确的关键词来限定范围",
+			recovery_action=f"传入非空关键词后重试；可先用 {search_cmd} 确认搜索范围",
+			hints={"next_actions": [search_cmd]},
+		)
+		return
+
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
-
-	count = min(count, 10)
 
 	# 筛选条件必须在搜索之前校验：非法城市会抛 ValueError 被兜成可重试的
 	# NETWORK_ERROR；未知薪资 / 经验 / 学历会被静默丢弃，等于不筛选就直接打招呼。

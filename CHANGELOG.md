@@ -16,6 +16,8 @@
 - `crawl` 把 `--data-dir` 相对路径原样存进断点，在另一个目录执行 `crawl resume` 会把产物写到当前工作目录，`output_dir=''` 时同样落到 `.`；现在创建时持久化绝对路径，读取时按 `CACHE_RECORD_INVALID` 拒绝相对或空值（Issue #1481）。
 - 断点里的 `profile_path` 含 NUL / 控制字符时 `Path.resolve()` 抛 `ValueError`，被泛化分支记成 `stopped` 并返回 `ok:true`；现在读取边界按 `CACHE_RECORD_INVALID` 拒绝，transport 层同时把 `ValueError` 转成 `CrawlProfilePathInvalid`（Issue #1482）。
 - `hook_results.success` 用 `bool()` 归一，字符串 `"false"` 会被报告成成功；现在要求严格布尔，类型漂移按 `CACHE_RECORD_INVALID` 拒绝（Issue #1484）。
+- `boss batch-greet` 的空串 / 纯空白关键词会退化成无关键词搜索，并对默认列表里的职位真实发出招呼；现在在任何平台调用之前返回 `INVALID_PARAM`，工具 schema 的 `query` 同步声明 `minLength: 1`（Issue #1490）。
+- `boss batch-greet --count` 超过 10 时被静默截断，CLI 行为与 schema 声明的上界不一致；现在 `--count` 改为 `IntRange(0, 10)` 在解析阶段拒绝越界值，MCP `limit` 越界同样返回 `INVALID_PARAM`，原生 schema 补上 `maximum: 10`（Issue #1494）。
 
 ## [3.4.78] - 2026-11-17
 

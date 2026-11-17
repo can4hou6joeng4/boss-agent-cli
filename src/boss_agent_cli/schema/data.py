@@ -322,6 +322,7 @@ SCHEMA_DATA = {
 					"type": "int",
 					"default": 10,
 					"minimum": 0,
+					"maximum": 10,
 					"description": "打招呼数量上限（最大 10）",
 				},
 				"--dry-run": {
