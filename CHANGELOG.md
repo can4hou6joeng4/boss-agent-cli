@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.87] - 2026-11-17
 
 ### Fixed
 - `boss agent crawl --run-id` 只分析已完成任务，但 `--city`、`--pages`、`--with-detail` 被整组静默丢弃，显式空 `--run-id` 也会被当成「没传」而与 `--query` 同时通过校验；现在这些参数组合在读取任务之前返回 `INVALID_PARAM`，`--run-id` 与 `--query`（含空串）按互斥拒绝，显式空 `--query` 同样在创建任务之前拒绝（Issue #1558）。
