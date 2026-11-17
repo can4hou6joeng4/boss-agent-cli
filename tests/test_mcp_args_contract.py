@@ -375,7 +375,7 @@ def test_read_tool_schema_lists_every_cli_parameter(
 _MAINTENANCE_SINGLE_COMMAND_TOOLS = {
 	"boss_clean": (clean_cmd_module.clean_cmd, {"clean_all": "all"}, {"privacy", "risk_lock"}),
 	"boss_agent_run": (agent_cmd_module.run_cmd, {}, set()),
-	"boss_agent_train": (agent_cmd_module.train_cmd, {}, {"dry_run"}),
+	"boss_agent_train": (agent_cmd_module.train_cmd, {}, {"dry_run", "live"}),
 }
 
 

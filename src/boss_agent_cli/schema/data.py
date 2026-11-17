@@ -182,7 +182,7 @@ SCHEMA_DATA = {
 				"--welfare": {
 					"type": "string",
 					"default": None,
-					"description": "福利筛选关键词（如 双休、五险一金）。启用后会逐个检查职位详情，自动翻页直到找到匹配结果",
+					"description": "福利筛选关键词（如 双休、五险一金）。启用后会逐个检查职位详情，最多自动翻页 5 页；达到上限仍未匹配时返回已扫描结果",
 					"examples": ["双休", "五险一金", "年终奖", "餐补", "住房补贴"],
 				},
 				"--active": {
@@ -355,7 +355,7 @@ SCHEMA_DATA = {
 					"description": "输出格式",
 					"enum": ["html", "csv", "json"],
 				},
-				"-o, --output": {"type": "string", "default": None, "description": "输出文件路径（不指定则输出到 stdout JSON 信封）"},
+				"-o, --output": {"type": "string", "default": None, "description": "输出文件路径；CSV/JSON 不指定时输出到 stdout JSON 信封，HTML 不指定时直出 stdout（--json 下放入 data.content）"},
 				"--include-private": {
 					"type": "bool",
 					"default": False,
@@ -583,7 +583,7 @@ SCHEMA_DATA = {
 			"args": [],
 			"options": {
 				"configure": {
-				"description": "设置 crawl 专用 Chrome 和 Hook 配置。",
+				"description": "设置 crawl 专用 Chrome、调试端口与请求预算。",
 					"--chrome-path": {"type": "string", "default": None, "minLength": 1, "description": "chrome.exe 路径；省略时保留当前配置，空字符串会被拒绝"},
 					"--port": {"type": "int", "default": None, "minimum": 1, "maximum": 65535, "description": "Chrome 远程调试端口（1-65535）"},
 					"--max-requests": {"type": "int", "default": None, "minimum": 1, "description": "每个 crawl run 的总请求上限（≥1）"},
@@ -984,7 +984,7 @@ SCHEMA_DATA = {
 				"--privacy": {
 					"type": "bool",
 					"default": False,
-					"description": "清理本地敏感数据（登录会话、简历、聊天快照和导出文件）；清理后需要重新登录",
+					"description": "清理本地敏感数据（登录会话、简历、聊天快照、导出文件，以及 crawl 任务、预算与导出）；清理后需要重新登录",
 				},
 				"--risk-lock": {
 					"type": "bool",
@@ -1093,7 +1093,7 @@ SCHEMA_DATA = {
 				},
 			},
 			"subcommands": {
-				"init": "从 BOSS 直聘简历或默认模板初始化本地简历",
+				"init": "从默认模板初始化本地简历",
 				"list": "列出所有本地简历",
 				"show": "查看简历详情",
 				"edit": "编辑简历字段",
@@ -1373,11 +1373,11 @@ SCHEMA_DATA = {
 				"resume": {
 				"description": "查看候选人简历或请求交换联系方式。",
 					"args": [
-						{"name": "geek_id", "required": False, "description": "候选人 geek ID；省略时使用 --security-id"},
+						{"name": "geek_id", "required": False, "description": "候选人 geek ID；查看简历时必填，需与 --security-id 和 --job-id 同时提供；交换联系方式时不需要"},
 					],
-					"--job-id": {"type": "string", "default": "", "description": "职位 ID"},
-					"--security-id": {"type": "string", "default": None, "description": "安全 ID"},
-					"--exchange": {"type": "bool", "default": False, "description": "请求交换联系方式"},
+					"--job-id": {"type": "string", "default": "", "description": "职位 ID；查看简历时必填（非空），交换联系方式路径不需要"},
+					"--security-id": {"type": "string", "default": None, "description": "安全 ID；查看简历时必填"},
+					"--exchange": {"type": "bool", "default": False, "description": "请求交换联系方式；需要 --friend-id（从 hr chat 获取）"},
 					"--type": {
 						"type": "string",
 						"default": "phone",
