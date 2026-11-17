@@ -172,7 +172,9 @@ def test_export_target_directory_raises_and_cleans_temporaries(tmp_path):
 	message = str(excinfo.value)
 	assert "jobs.xlsx" in message
 	assert "IsADirectoryError" in message
-	assert sorted(path.name for path in tmp_path.iterdir()) == ["jobs.csv", "jobs.json", "jobs.xlsx"]
+	# 替换失败必须回滚此前已替换的 json/csv，三份产物不能停留在不同批次
+	# （Issue #1616）；同时临时文件与备份都要清理干净。
+	assert sorted(path.name for path in tmp_path.iterdir()) == ["jobs.xlsx"]
 	assert not any(path.name.startswith(".jobs.") for path in tmp_path.iterdir())
 
 

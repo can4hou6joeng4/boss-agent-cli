@@ -313,25 +313,32 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 		# 整数除法避免超大 JSON 整数在浮点除法时抛 OverflowError（Issue #1609）。
 		# 超时最终按 900 秒封顶，这里没必要保留比封顶更大的精确页数。
 		pages = -(-count // _SEARCH_PAGE_SIZE)
-		return min(pages, int(_MAX_CLI_TIMEOUT_SECONDS // _REQUEST_BUDGET_SECONDS) + 1)
+		return min(pages, _MAX_ESTIMATED_REQUESTS)
 	if command == "hr":
 		subcommand = args[1] if len(args) > 1 else ""
 		if subcommand == "chat":
 			summary_limit = _int_option(args, "--summary-limit", _HR_DEFAULT_LIMIT)
 			if summary_limit is None:
 				return None
-			# 1 次好友列表 + 每 50 条摘要一批。
-			return 1 + math.ceil(max(summary_limit, 0) / _HR_BATCH_SIZE)
+			# 1 次好友列表 + 每 50 条摘要一批。整数除法避免超大整数在
+			# 浮点除法时抛 OverflowError（Issue #1612）。
+			batches = -(-max(summary_limit, 0) // _HR_BATCH_SIZE)
+			return min(1 + batches, _MAX_ESTIMATED_REQUESTS)
 		if subcommand == "last-messages":
 			limit = _int_option(args, "--limit", _HR_DEFAULT_LIMIT)
 			if limit is None or limit < 1:
 				return None
-			return math.ceil(limit / _HR_BATCH_SIZE)
+			# 与 summary-limit 分支同口径：整数分页并封顶（Issue #1612）。
+			return min(-(-limit // _HR_BATCH_SIZE), _MAX_ESTIMATED_REQUESTS)
 		return None
 	if command in {"pipeline", "follow-up", "digest"}:
 		# 好友列表逐页聚合，按 5 页上限估算。
 		return _FRIEND_LIST_ESTIMATE_PAGES
 	return None
+
+
+# 任何单命令的超时估算都不会超过这个上限；同时作为大整数分页的封顶值。
+_MAX_ESTIMATED_REQUESTS = int(_MAX_CLI_TIMEOUT_SECONDS // _REQUEST_BUDGET_SECONDS) + 1
 
 
 def _cli_timeout(args: tuple[str, ...]) -> float:
@@ -455,12 +462,29 @@ def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
 	unsafe_reason = _unsafe_argv_reason(cmd)
 	if unsafe_reason is not None:
 		return _cli_failure(args, "INVALID_PARAM", unsafe_reason)
+	# 超时估算同样必须遵守 schema 的数值边界；本地参数错误不能伪装成 CLI 失败。
+	try:
+		timeout = _cli_timeout(args)
+	except (ArithmeticError, ValueError) as exc:
+		estimate_error = _cli_failure(
+			args,
+			"INVALID_PARAM",
+			f"参数超出本地估算范围：{exc}",
+			outcome_unknown=False,
+		)
+		# envelope_error 会从登记表补齐 recovery_action；本地参数错误未启动子进程，
+		# 不能沿用其它 INVALID_PARAM 来源的「修正参数」笼统文案。
+		estimate_error["error"]["recovery_action"] = (
+			"减小 --summary-limit / --limit / --count 后重试；本次未启动子进程。"
+			"参数提示由 --help 给出，输入未进入 CLI"
+		)
+		return estimate_error
 	try:
 		result = subprocess.run(
 			cmd,
 			capture_output=True,
 			text=True,
-			timeout=_cli_timeout(args),
+			timeout=timeout,
 			stdin=subprocess.DEVNULL,
 		)
 	except subprocess.TimeoutExpired:
@@ -728,14 +752,23 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 		)
 		if len(invalid) > _MAX_ELEMENT_TYPE_ERRORS:
 			errors.append(f"{key} 另有 {len(invalid) - _MAX_ELEMENT_TYPE_ERRORS} 个元素类型错误")
-		items = prop.get("items")
-		item_min_length = items.get("minLength") if isinstance(items, dict) else None
-		if isinstance(item_min_length, int) and not isinstance(item_min_length, bool):
-			# schema 的 items.minLength 是客户端与入口共同的契约：空标签不会
-			# 走到 CLI，也不会在 mapping 层被拼成 `--add-tag ""`（Issue #1595）。
-			for index, item in enumerate(value):
+		if not isinstance(items, dict):
+			return errors
+		item_min_length = items.get("minLength")
+		item_minimum = items.get("minimum")
+		item_maximum = items.get("maximum")
+		for index, item in enumerate(value):
+			if isinstance(item_min_length, int) and not isinstance(item_min_length, bool):
+				# schema 的 items.minLength 是客户端与入口共同的契约：空标签不会
+				# 走到 CLI，也不会在 mapping 层被拼成 `--add-tag ""`（Issue #1595）。
 				if isinstance(item, str) and len(item) < item_min_length:
 					errors.append(f"{key}[{index}] 至少需要 {item_min_length} 个字符")
+			if isinstance(item_minimum, (int, float)) and not isinstance(item_minimum, bool):
+				if isinstance(item, (int, float)) and not isinstance(item, bool) and item < item_minimum:
+					errors.append(f"{key}[{index}]={item} 不能小于 {item_minimum}")
+			if isinstance(item_maximum, (int, float)) and not isinstance(item_maximum, bool):
+				if isinstance(item, (int, float)) and not isinstance(item, bool) and item > item_maximum:
+					errors.append(f"{key}[{index}]={item} 不能大于 {item_maximum}")
 	return errors
 
 

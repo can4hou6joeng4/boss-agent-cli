@@ -51,11 +51,11 @@ def _resolve_label(label_input: str) -> int:
 			f"未知标签 ID: {_brief_label(label_input)}。可用数字 ID: "
 			f"{', '.join(str(v) for v in sorted(_LABEL_MAP.values()))}"
 		)
-	for name, lid in _LABEL_MAP.items():
-		if label_input in name:
-			return lid
+	# 部分子串（如「招呼」「面」）过去会模糊命中标签并发起真实写操作；MCP enum
+	# 与 CLI help 都只承诺精确名称 / 数字 ID，这里同步收口（Issue #1615）。
 	raise click.BadParameter(
-		f"未知标签: {label_input}。可用: {', '.join(_LABEL_MAP.keys())}"
+		f"未知标签: {_brief_label(label_input)}。可用: {', '.join(_LABEL_MAP.keys())}；"
+		f"数字 ID: {', '.join(str(v) for v in sorted(_LABEL_MAP.values()))}"
 	)
 
 

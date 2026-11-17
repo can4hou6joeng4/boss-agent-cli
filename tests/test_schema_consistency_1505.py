@@ -75,7 +75,7 @@ def test_chat_export_without_config_uses_data_dir_fallback(tmp_path):
 def test_mark_label_enum_covers_implementation():
 	label = SCHEMA_DATA["commands"]["mark"]["options"]["--label"]
 
-	assert set(label["enum"]) == set(_LABEL_MAP)
+	assert set(label["enum"]) == set(_LABEL_MAP) | {str(value) for value in _LABEL_MAP.values()}
 	assert "牛人发起" in label["enum"]
 	assert "数字 ID" in label["description"]
 

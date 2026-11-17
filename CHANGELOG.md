@@ -12,6 +12,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- MCP 同步兼容入口和 HR 请求数估算仍用浮点除法，`hr chat --summary-limit` / `hr last-messages --limit` 的超大整数抛 `OverflowError` 并穿过同步入口；现在统一整数分页封顶并返回标准参数错误信封（Issue #1612）。
+- `boss_mark.tag` 的 schema enum 缺少 CLI 明确支持的数字 ID，而实现又接受任意子串模糊匹配；现在 enum 覆盖精确名称与数字 ID，实现只接受精确值，文档与测试同步（Issue #1615）。
+- MCP `friend_ids` 等数组元素声明了 `minimum` / `maximum`，入口却只校验类型，非法整数会启动注定失败的 CLI 子进程；现在数组元素按 schema 边界在 spawn 前拒绝并指出下标（Issue #1614）。
+- 向导恢复只认 `replay_safe=false`，缺该字段的 `ACTION_UNCONFIRMED` 在途写步骤会被重放；现在与 `_persisted_write_marker()` 统一口径并写回规范化标记（Issue #1617）。
+- 采集三份产物逐个 `os.replace`，第三个目标失败时前两个已更新，留下混合代际；现在替换失败回滚已替换文件，全部成功后才清理备份（Issue #1616）。
+
 ## [3.4.93] - 2026-11-18
 
 ### Fixed

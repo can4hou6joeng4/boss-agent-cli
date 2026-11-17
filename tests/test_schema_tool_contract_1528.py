@@ -48,7 +48,7 @@ def test_filter_enums_match_click_choices():
 def test_mark_tag_enum_matches_label_map():
 	"""boss_mark.tag 的枚举必须与 mark 命令的 _LABEL_MAP 逐值相等。"""
 	tag = _tools()["boss_mark"].input_schema["properties"]["tag"]
-	assert tag["enum"] == list(_LABEL_MAP)
+	assert set(tag["enum"]) == set(_LABEL_MAP) | {str(value) for value in _LABEL_MAP.values()}
 	assert tag["minLength"] == 1
 
 
