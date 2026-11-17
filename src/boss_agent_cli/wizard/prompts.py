@@ -469,8 +469,15 @@ class ClickMenu:
 				raw = str(click.prompt("请输入序号", default=str(default_index), err=True)).strip()
 			except click.Abort as exc:
 				raise WizardCancelled from exc
-			if raw.isascii() and raw.isdigit() and 1 <= int(raw) <= len(items):
-				return _resolve_navigation(items[int(raw) - 1].value)
+			if raw.isascii() and raw.isdigit():
+				try:
+					index = int(raw)
+				except (ValueError, OverflowError):
+					# 4300 位以上纯数字串让 int() 抛裸 ValueError；回退菜单不能
+					# 让 traceback 穿出交互向导（Issue #1438）。
+					index = 0
+				if 1 <= index <= len(items):
+					return _resolve_navigation(items[index - 1].value)
 			click.echo(f"请输入 1 到 {len(items)} 之间的序号。", err=True)
 
 	def text(self, label: str, *, default: str = "", required: bool = True) -> str:

@@ -83,3 +83,37 @@ def test_chat_cursor_ignores_non_ascii_digits(mid):
 
 	pagination = _chat_history_pagination({"messages": [{"mid": mid}, {"mid": "42"}, {"mid": 43}]})
 	assert pagination["next_max_msg_id"] == 42
+
+
+# ── 超长数字串（int_max_str_digits）不能兜成网络错误（Issue #1437 / #1442 / #1438） ──
+
+_LONG_DIGITS = "9" * 4301
+
+
+def test_mark_rejects_overlong_numeric_label_with_bounded_message():
+	"""4301 位数字串让 int() 抛裸 ValueError；必须按参数错误上报且回显截断。"""
+	with pytest.raises(click.BadParameter) as excinfo:
+		_resolve_label(_LONG_DIGITS)
+
+	message = str(excinfo.value)
+	assert "标签 ID 无效" in message
+	assert len(message) < 200  # 信封不能随输入规模膨胀
+
+
+def test_wizard_mark_reports_invalid_param_for_overlong_numeric_label(tmp_path):
+	context = ActionContext(data_dir=tmp_path, platform="zhipin", role="candidate", logger=Logger())
+
+	with pytest.raises(WorkflowActionError) as excinfo:
+		DEFAULT_ACTIONS["candidate_mark"](context, {"security_id": "sid", "label": _LONG_DIGITS}, {})
+
+	assert excinfo.value.code == "INVALID_PARAM"
+	assert len(str(excinfo.value)) < 250
+
+
+def test_menu_select_reprompts_on_overlong_digit(monkeypatch):
+	"""回退菜单遇到超长数字不能 traceback，必须重新提示序号。"""
+	answers = iter([_LONG_DIGITS, "1"])
+	monkeypatch.setattr(click, "prompt", lambda *args, **kwargs: next(answers))
+
+	options = [SimpleNamespace(value="one", label="一", description="")]
+	assert ClickMenu().select("选择", options) == "one"

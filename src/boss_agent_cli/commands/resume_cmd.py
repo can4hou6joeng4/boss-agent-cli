@@ -229,6 +229,18 @@ def resume_init_cmd(ctx: click.Context, name: str | None, template: str | None) 
 	store = _get_store(ctx)
 	if template is None:
 		template = "default"
+	# 仓库只有默认模板一种实现：接受任意 --template 却在成功信封里回显未生效的
+	# 名字，调用方会误以为指定模板已经生效（Issue #1440）。
+	if template.strip() != "default":
+		handle_error_output(
+			ctx, "resume",
+			code="INVALID_PARAM",
+			message=f"不支持的模板: {template!r}；当前仅提供 default",
+			recovery_action="省略 --template 或传 --template default 后重试",
+			hints={"next_actions": [_hint_command(ctx, "resume init --name <name> --template default")]},
+		)
+		ctx.exit(1)
+		return
 	if name is None:
 		name = "default"
 	# 空名称的简历能被写出来，却没法点名：`resume show ` / `resume edit ` 都缺参数，
