@@ -37,11 +37,20 @@ def _resolve_label(label_input: str) -> int:
 	# 被顶层兜成可重试的 NETWORK_ERROR（Issue #1437）。标签 ID 是远端小整数。
 	if label_input.isascii() and label_input.isdigit():
 		try:
-			return int(label_input)
+			label_id = int(label_input)
 		except ValueError:
 			raise click.BadParameter(
 				f"标签 ID 无效: {_brief_label(label_input)}。可用: {', '.join(_LABEL_MAP.keys())}"
 			) from None
+		# 数字 ID 与标签名一一对应（Issue #1575）：999 之类的任意数字既不是
+		# 已知标签，也不能原样发给平台标签接口，否则会在平台上创建一个
+		# 无名标签或直接失败。
+		if label_id in _LABEL_NAMES:
+			return label_id
+		raise click.BadParameter(
+			f"未知标签 ID: {_brief_label(label_input)}。可用数字 ID: "
+			f"{', '.join(str(v) for v in sorted(_LABEL_MAP.values()))}"
+		)
 	for name, lid in _LABEL_MAP.items():
 		if label_input in name:
 			return lid

@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Fixed
+- `boss search <关键词> --preset <名称>` 用 `or` 链合并预设，把显式空筛选（如 `--city ""`）当成「没传」并用预设值覆盖，显式传入的空城市反而按预设城市筛选；现在只有未提供（None）的项才由预设补齐，显式空串保持「该项不筛选」（Issue #1573）。
+- `boss crawl stop` 对已结束的 run 也返回 `ok:true` 且 `data.status` 为 `stop_requested`，但实际什么都没停、`crawl status` 也不会出现该状态；现在只有 `queued` / `running` 接受停止请求，终态返回不可恢复的 `CRAWL_RUN_FINISHED` 并给出 `crawl status` / `crawl results` 指引（Issue #1574）。
+- `boss mark --label 999`（MCP `boss_mark` 的 `tag`）把任意 ASCII 数字原样当作标签 ID 发给平台，而 schema 只列出 9 个标签；现在数字 ID 只接受与标签名一一对应的 1/2/3/4/5/6/7/8/11，其他数字按 `INVALID_PARAM` 拒绝并列出可用 ID（Issue #1575）。
+- `boss_ai_resume_optimize` / `boss_ai_cover_letter` 的 MCP schema 只编码了 `jd_text` 与 `job_id` 互斥，没有编码「至少给一个」：不传 JD 来源的调用能通过 schema 但 CLI 必然失败；现在 schema 增加 `anyOf`，native 描述写明「必须且只能给一个」（Issue #1576）。
+- `boss_crawl_shortlist` 的 schema 未编码 `selectors` 与 `all` 恰好一个：省略两者或同时给出都能通过 schema，但 CLI 必然返回 `INVALID_PARAM`；现在 `selectors` 带 `minItems: 1`，并增加 `anyOf` / `not` 约束（Issue #1577）。
+- 全局 `--delay ""` 与 `--cdp-url ""` 被真值回退当成「没传」，静默使用配置文件里的请求区间与调试地址；现在显式空串按参数错误拒绝，未提供时才回落配置，与 `--platform ""` 同口径（Issue #1578）。
+
 ## [3.4.88] - 2026-11-17
 
 ### Fixed

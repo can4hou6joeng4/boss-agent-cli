@@ -829,8 +829,10 @@ def test_resume_background_resets_old_stop_and_honors_stop_during_launch(tmp_pat
 			cdp_port=9222, hook_profile="none",
 		).as_dict())
 	runner = CliRunner()
-	stopped = _invoke(runner, tmp_path, "crawl", "stop", "run-stopped")
-	assert stopped.exit_code == 0, stopped.output
+	# 旧停止标记直接写库构造：终态 run 上的 `crawl stop` 现在会被拒绝
+	# （Issue #1574），而本测试关心的是后台恢复是否清除旧标记。
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.request_crawl_stop("run-stopped") is True
 	resumed = _invoke(runner, tmp_path, "crawl", "resume", "run-stopped", "--background")
 	assert resumed.exit_code == 0, resumed.output
 	assert _envelope(resumed)["data"]["status"] == "queued"
@@ -1845,9 +1847,18 @@ def test_queued_worker_without_crawl_dependencies_records_the_cause(tmp_path, mo
 	assert extras_requirement("crawl") in run["error"]
 
 
-@pytest.mark.parametrize("args", [("status", "run-1"), ("results", "run-1"), ("stop", "run-1")])
-def test_local_crawl_commands_do_not_need_crawl_dependencies(tmp_path, monkeypatch, args):
-	_seed_run(tmp_path, "run-1", status="stopped")
+@pytest.mark.parametrize(
+	("args", "status"),
+	[
+		(("status", "run-1"), "stopped"),
+		(("results", "run-1"), "stopped"),
+		# 停止只对 queued / running 生效；终态 run 的 CRAWL_RUN_FINISHED 同样
+		# 不依赖 crawl 运行依赖（Issue #1574）。
+		(("stop", "run-1"), "running"),
+	],
+)
+def test_local_crawl_commands_do_not_need_crawl_dependencies(tmp_path, monkeypatch, args, status):
+	_seed_run(tmp_path, "run-1", status=status)
 	_block_crawl_runtime(monkeypatch)
 	result = _invoke(CliRunner(), tmp_path, "crawl", *args)
 	assert result.exit_code == 0, result.output

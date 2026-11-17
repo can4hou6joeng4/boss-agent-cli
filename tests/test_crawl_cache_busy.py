@@ -98,9 +98,24 @@ def test_crawl_commands_report_cache_busy_when_wal_conversion_is_locked(tmp_path
 
 
 def test_crawl_stop_reports_cache_busy_when_write_lock_is_held(tmp_path, monkeypatch):
-	"""WAL 库初始化正常，锁在 `request_crawl_stop` 的 UPDATE 上暴露。"""
+	"""WAL 库初始化正常，锁在 `request_crawl_stop` 的 UPDATE 上暴露。
+
+	先读取 run 状态判断是否处于可停止状态（Issue #1574），因此这里必须
+	seed 一个 running 的任务，让写锁冲突发生在停止标记的 UPDATE 上。
+	"""
 	monkeypatch.setattr(cache_store, "_BUSY_TIMEOUT_SECONDS", 0.05)
 	db_path = _initialized_wal_db(tmp_path)
+	with CacheStore(db_path) as cache:
+		cache.create_crawl_run(
+			"run-1",
+			CrawlSettings(
+				query="AI", city_code="101210100", pages=1, with_detail=False,
+				profile_path=tmp_path / "profile", chrome_path=None,
+				cdp_port=9222, hook_profile="none",
+			).as_dict(),
+			str(tmp_path / "crawl" / "run-1"),
+			status="running",
+		)
 	with _write_lock(db_path):
 		result = _invoke(tmp_path, "crawl", "stop", "run-1")
 	_assert_cache_busy(result, command="crawl")
