@@ -2,6 +2,18 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- `boss stats -o <路径>`（默认 `--format json`）与 `boss digest -o <路径>`（默认 json）把 `-o` 静默忽略却返回 `ok:true`，调用方以为报表 / 日报已经写出；现在在任何平台请求与本地读取之前返回 `INVALID_PARAM`，恢复指引给出 `--format html|md -o <路径>` 的可执行写法。显式空 `-o` 同样按参数错误拒绝，不再落到 `LOCAL_IO_ERROR` 或静默回退；`boss_stats` / `boss_digest` 的工具 schema 用 `if`-`then` 声明同一约束（Issue #1546）。
+- `boss clean` 把 SQLite 锁冲突与只读 / 磁盘错误统一归为 `CACHE_DATABASE_INVALID`，恢复指引要求删除缓存库：库本身完好时按指引会丢掉候选池、预设与采集断点；现在锁冲突报可重试的 `CACHE_BUSY`（明确说明库文件无需删除），只读 / 磁盘错误按 `LOCAL_IO_ERROR` 上报，只有真正的内容损坏才报 `CACHE_DATABASE_INVALID`（Issue #1547）。
+- `boss clean --risk-lock` 在缓存库损坏时于清锁之前失败：`--risk-lock` 是风控人工恢复入口，锁清理不读缓存库，却被无关的坏库阻断；现在只有 `--privacy` 保留「删除前先确认库可读」的预检，风险锁清理不再依赖缓存库（后续缓存清理步骤仍按真实错误上报）（Issue #1548）。
+- 联系人分页遍历超过 50 页是确定性结果，但 `mark` / `exchange` / `chatmsg` / `chat-summary` 与 wizard 的联系人查找返回 `recoverable=true`，按 recoverable 决策的自动重试会再翻 50 页并消耗请求预算；现在按 `recoverable=false` 上报，`next_actions` 只给刷新沟通列表取 uid 的 `boss chat`（Issue #1549）。
+- `boss detail` 收到未识别的平台响应时沿用写操作的 `UNKNOWN` 契约，要求核对「本次操作是否生效」；detail 只读，现在与 search / watch 同口径归一为可重试的 `NETWORK_ERROR`，风控码与已知错误码不变（Issue #1550）。
+
+### Changed
+- eval 运行产物不再污染工作树：`evals/results/*.json` 加入 `.gitignore`，已入库的两份样例结果保留。
+
 ## [3.4.84] - 2026-11-17
 
 ### Fixed
