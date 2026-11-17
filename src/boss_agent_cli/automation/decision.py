@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from boss_agent_cli.automation.config import AutomationConfig
 from boss_agent_cli.automation.models import (
@@ -30,7 +31,7 @@ class ConversationStatus:
 def decide_action(
 	conversation: Conversation,
 	config: AutomationConfig,
-	prior: dict[str, str],
+	prior: dict[str, Any],
 ) -> Decision:
 	"""Choose the next action for a candidate conversation."""
 	candidate = conversation.candidate or snapshot_from_conversation(conversation)
@@ -166,7 +167,7 @@ def _skip(candidate_key: CandidateKey, reason: str, matching: MatchScore) -> Dec
 
 def _conversation_status(
 	conversation: Conversation,
-	prior: dict[str, str],
+	prior: dict[str, Any],
 	config: AutomationConfig,
 ) -> ConversationStatus:
 	texts = [message[1] for message in conversation.ordered_messages] or [

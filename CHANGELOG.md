@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 招聘自动化直接扫描路径在派发写动作前没有把在途动作落盘：发送后进程被杀或 checkpoint 撞控制锁时没有记录，下一轮凭 transcript 重新决策，本地 AI 改写后的问卷匹配不到模板会再次发送；现在派发前把 `inflight_action`（动作、消息 hash、时间、会话 ref）写进 `automation/state.json`，成功后与阶段字段原子清除，重放时转 `verification-required` 并给出核对指引，只有确定未发出的异常才释放标记（Issue #1511）。
+
 ## [3.4.80] - 2026-11-17
 
 ### Fixed
