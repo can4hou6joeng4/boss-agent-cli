@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.86（2026-11-17）：采集运行环境与本地并发的错误分类——采集浏览器启动失败按确定性本地失败返回 `CRAWL_UNAVAILABLE` 并保存断点（Issue #1553）；登录态刷新锁改用内核文件锁，等待超时不再误删他人的锁、按可重试的共享等待超时返回（Issue #1554）；出口与声明的语言/时区矛盾统一返回 `EGRESS_CONTRADICTION`（Issue #1555）；共享请求预算等待超时落成 `throttle_stopped`，不再提示新建任务（Issue #1556）。
 - ✅ v3.4.85（2026-11-17）：`stats` / `digest` 的 `-o` 在默认 json 下被静默忽略，现在返回 `INVALID_PARAM`，工具 schema 同步声明格式约束（Issue #1546）；`clean` 把 SQLite 锁冲突与只读 / 磁盘错误分别归为 `CACHE_BUSY` / `LOCAL_IO_ERROR`，不再误导删库（Issue #1547）；`clean --risk-lock` 不再被损坏的缓存库阻断（Issue #1548）；联系人分页上限按不可重试上报（Issue #1549）；`detail` 的未识别响应按只读归一为可重试 `NETWORK_ERROR`（Issue #1550）。
 - ✅ v3.4.84（2026-11-17）：wizard 的 crawl 恢复改为惰性预检——已完成任务与写错的 `run_id` 不再先要求登录或安装采集依赖，与 CLI `crawl resume` 口径一致（Issue #1540）；`resume export` 的显式空 `-o` 返回 `INVALID_PARAM`、默认 html/pdf 输出名与存储层共用文件名清洗（Issue #1541 / #1542）；`BROWSER_KERNEL_MISSING` 与 `CRAWL_UNAVAILABLE` 不再进入 wizard 自动重试（Issue #1543）。
 - ✅ v3.4.83（2026-11-17）：配置损坏改用独立错误码 `CONFIG_INVALID` 并不在同一轮自动重试（Issue #1525）；工具契约与 native schema 对齐——MCP 工具补枚举取值域、条件必填、required 字符串 `minLength` 与 CLI 默认值，`ai cover-letter` / `resume-optimize` 同时传 `--jd` 与 `--job-id` 不再静默覆盖，`agent` 的 availability 说明适配器键语义，新增只读工具 `boss_schema`（Issue #1528–#1536）。
