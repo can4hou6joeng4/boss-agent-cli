@@ -178,12 +178,16 @@ class CrawlSettings:
 		# （Issue #1347）。
 		if not isinstance(profile_path, str):
 			raise CacheRecordInvalid(
-				"crawl_run", run_id, "params.browser.profile_path",
+				"crawl_run",
+				run_id,
+				"params.browser.profile_path",
 				f"期望绝对路径字符串，实际是 {type(profile_path).__name__}",
 			)
 		if not profile_path.strip():
 			raise CacheRecordInvalid(
-				"crawl_run", run_id, "params.browser.profile_path",
+				"crawl_run",
+				run_id,
+				"params.browser.profile_path",
 				f"期望非空绝对路径字符串，实际是空字符串（{type(profile_path).__name__}）",
 			)
 		# NUL 等控制字符能通过「非空绝对路径」检查，但会在 transport 的
@@ -192,12 +196,16 @@ class CrawlSettings:
 		# 损坏或手工篡改。
 		if any(ord(char) < 0x20 for char in profile_path):
 			raise CacheRecordInvalid(
-				"crawl_run", run_id, "params.browser.profile_path",
+				"crawl_run",
+				run_id,
+				"params.browser.profile_path",
 				f"期望绝对路径字符串，实际包含控制字符 {profile_path!r}",
 			)
 		if not Path(profile_path).is_absolute():
 			raise CacheRecordInvalid(
-				"crawl_run", run_id, "params.browser.profile_path",
+				"crawl_run",
+				run_id,
+				"params.browser.profile_path",
 				f"期望绝对路径，实际是相对路径 {profile_path!r}（{type(profile_path).__name__}）",
 			)
 		# 断点里的端口必须落在 1–65535：越界值会在 transport 的
@@ -210,15 +218,15 @@ class CrawlSettings:
 		hook_profile = str(hook_profile)
 		if hook_profile not in ("none", "screenshot-full"):
 			raise CacheRecordInvalid(
-				"crawl_run", run_id, "params.hook.profile",
+				"crawl_run",
+				run_id,
+				"params.hook.profile",
 				f"期望 none 或 screenshot-full，实际是 {hook_profile!r}",
 			)
 		hook_dir_raw = raw.get("hook_dir") or hook.get("directory")
 		hook_dir = Path(str(hook_dir_raw)) if hook_dir_raw else None
 		if hook_profile == "screenshot-full" and hook_dir is None:
-			raise CacheRecordInvalid(
-				"crawl_run", run_id, "params.hook.directory", "screenshot-full 需要 hook 目录"
-			)
+			raise CacheRecordInvalid("crawl_run", run_id, "params.hook.directory", "screenshot-full 需要 hook 目录")
 
 		def _limit(key: str, default: int, *, minimum: int) -> int:
 			# 不能用 `value or default`：0 是损坏值，不能被静默替换成默认预算，
@@ -953,6 +961,13 @@ class CrawlService:
 				row["detail_status"] = "cached"
 			else:
 				security_id = str(row.get("security_id", ""))
+				if not security_id:
+					# 列表项没有 securityId 时无法请求详情；保留 pending 让 resume
+					# 与 `crawl results --detail-status pending` 如实反映缺口，
+					# 不能伪造空卡片并标记完成（Issue #1584）。
+					row["detail_status"] = "missing-security-id"
+					self._cache.put_crawl_job(run_id, item["job_key"], int(item["page_no"]), row, detail_done=False)
+					continue
 
 				def fetch_detail() -> dict[str, Any]:
 					# 结构校验与请求共用有限重试；失败时条目仍保留在待补队列。
@@ -1055,6 +1070,10 @@ class CrawlService:
 
 	@staticmethod
 	def _validate_settings(settings: CrawlSettings) -> None:
+		if not settings.query.strip():
+			# 各创建入口都在前面校验了关键词，这里是 service 层的最后一道防线：
+			# 空白关键词等于不筛选，会按城市默认列表抓取并放大风控面（Issue #1582）。
+			raise ValueError("搜索关键词不能为空")
 		if settings.pages < 1:
 			raise ValueError("pages 必须是正整数")
 		if settings.max_requests < 1:

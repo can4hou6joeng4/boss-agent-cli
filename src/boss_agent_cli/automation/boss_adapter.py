@@ -84,12 +84,25 @@ class BossRecruiterAutomationPlatform:
 		if recruiter is None:
 			return [_diagnostic_ref("zhipin", self._warning)]
 		self._ensure_not_risk_stopped()
-		items: list[dict[str, Any]] = []
+		# tabs 是操作者勾选的扫描范围：空配置或不匹配的 tab 不能回退到未读列表。
+		# 每个 tab 单独截断，避免「新招呼」占满上限后「未读」完全扫不到（Issue #1581）。
+		refs: list[ConversationRef] = []
+		seen_ids: set[str] = set()
 		if "新招呼" in tabs:
-			items.extend(_items_from_response(self._checked_response(lambda: recruiter.greet_list(page=1))))
-		if "未读" in tabs or not items:
-			items.extend(_items_from_response(self._checked_response(lambda: recruiter.friend_list(page=1))))
-		return [_ref_from_item(item) for item in items[:max_per_tab]]
+			items = _items_from_response(self._checked_response(lambda: recruiter.greet_list(page=1)))
+			refs.extend(_ref_from_item(item) for item in items[:max_per_tab])
+		if "未读" in tabs:
+			items = _items_from_response(self._checked_response(lambda: recruiter.friend_list(page=1)))
+			refs.extend(_ref_from_item(item) for item in items[:max_per_tab])
+		# 同一候选可能同时出现在两个 tab：只按最新勾选的 tab 处理一次，避免一轮内
+		# 对同一会话读取两次历史、甚至重复派发写动作。
+		unique: list[ConversationRef] = []
+		for ref in refs:
+			if ref.id in seen_ids:
+				continue
+			seen_ids.add(ref.id)
+			unique.append(ref)
+		return unique
 
 	def read_conversation(self, ref: ConversationRef) -> Conversation:
 		self._ensure_not_risk_stopped()

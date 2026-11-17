@@ -14,9 +14,12 @@ from boss_agent_cli.wizard.store import WorkflowStore
 
 def _create_bound_run(data_dir, binding):
 	plan = WorkflowPlan(
-		role="candidate", platform="zhipin", goal="crawl_start",
+		role="candidate",
+		platform="zhipin",
+		goal="crawl_start",
 		inputs={"query": "Python", "city": "北京"},
-		requested_steps=("crawl_start",), mode="headless",
+		requested_steps=("crawl_start",),
+		mode="headless",
 	)
 	with WorkflowStore(data_dir) as store:
 		store.create("outer-stop", plan)
@@ -48,7 +51,11 @@ def test_stop_repairs_crash_after_outer_marker(tmp_path, binding):
 def test_stop_retry_repairs_transient_inner_write_failure(tmp_path):
 	_create_bound_run(tmp_path, {"inner_run_id": "inner-stop"})
 	with WorkflowStore(tmp_path) as store:
-		with patch.object(CacheStore, "request_crawl_stop", side_effect=CacheBusyError(tmp_path / "cache" / "boss_agent.db", "fixture busy")):
+		with patch.object(
+			CacheStore,
+			"request_crawl_stop",
+			side_effect=CacheBusyError(tmp_path / "cache" / "boss_agent.db", "fixture busy"),
+		):
 			with pytest.raises(CacheBusyError):
 				store.request_stop("outer-stop")
 		assert store.get_checkpoint("outer-stop")["status"] == "stopped"
@@ -82,7 +89,8 @@ def test_stop_still_rejects_missing_or_completed_runs(tmp_path, exists):
 	result = _stop(tmp_path)
 
 	assert result.exit_code == 1, result.output
-	assert json.loads(result.stdout)["error"]["code"] == "WORKFLOW_NOT_FOUND"
+	code = json.loads(result.stdout)["error"]["code"]
+	assert code == ("WORKFLOW_ALREADY_FINISHED" if exists else "WORKFLOW_NOT_FOUND")
 	if exists:
 		with WorkflowStore(tmp_path) as store:
 			assert store.cache.get_crawl_run("inner-stop")["stop_requested"] is False

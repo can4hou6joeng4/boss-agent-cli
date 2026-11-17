@@ -295,8 +295,7 @@ def _run_plan(
 
 	# TTY：列表结果可连续选择；职位详情后提供打招呼等操作；失败交给 _emit_run。
 	if interactive and (
-		run.get("status") == "completed"
-		or (run.get("effective_completed") and has_result_follow_up(run))
+		run.get("status") == "completed" or (run.get("effective_completed") and has_result_follow_up(run))
 	):
 		list_run = run
 		if has_result_follow_up(list_run):
@@ -425,7 +424,13 @@ def _emit_run(ctx: click.Context, run: Mapping[str, Any], *, interactive: bool) 
 		"wizard",
 		run,
 		render=lambda payload: render_run(payload, command_for=_command_for_ctx(ctx)),
-		hints={"next_actions": [boss_command_for_ctx(ctx, f"wizard --status {shell_argument(str(run['run_id']))}", include_data_dir=True)]},
+		hints={
+			"next_actions": [
+				boss_command_for_ctx(
+					ctx, f"wizard --status {shell_argument(str(run['run_id']))}", include_data_dir=True
+				)
+			]
+		},
 	)
 
 
@@ -811,6 +816,33 @@ def _run_wizard_command(
 			)
 			return
 		if stop_run_id:
+			# 先读断点区分「不存在」与「已结束」：request_stop 只排除 completed，
+			# 把存在但已完成的任务误报为 ID 写错（Issue #1585）。损坏的断点不影响
+			# 停止标记本身，仍交给 request_stop 按既有补偿语义处理。
+			existing_run: dict[str, Any] | None = None
+			try:
+				existing_run = store.get_checkpoint(stop_run_id, validate_replay_markers=False)
+			except CacheRecordInvalid:
+				pass
+			if existing_run is not None and existing_run.get("status") == "completed":
+				_wizard_error(
+					ctx,
+					interactive,
+					code="WORKFLOW_ALREADY_FINISHED",
+					message=f"任务已结束，无法停止: {stop_run_id}",
+					recovery_action=(
+						f"{boss_command_for_ctx(ctx, 'wizard --status <run_id>', include_data_dir=True)} 查看结果与最终状态，或 "
+						f"{boss_command_for_ctx(ctx, 'wizard', include_data_dir=True)} 新建 workflow"
+					),
+					hints={
+						"next_actions": [
+							boss_command_for_ctx(
+								ctx, f"wizard --status {shell_argument(stop_run_id)}", include_data_dir=True
+							)
+						]
+					},
+				)
+				return
 			if not store.request_stop(stop_run_id):
 				_wizard_error(
 					ctx,
@@ -825,7 +857,9 @@ def _run_wizard_command(
 				)
 				return
 			run = _run_after_stop(store, stop_run_id)
-			handle_output(ctx, "wizard", run, render=render_run, hints={"next_actions": _workflow_next_actions(ctx, run)})
+			handle_output(
+				ctx, "wizard", run, render=render_run, hints={"next_actions": _workflow_next_actions(ctx, run)}
+			)
 			return
 
 		# 纯 TTY 无 flag：多轮主菜单循环；flag / headless 仍是单次执行。
@@ -928,7 +962,13 @@ def _run_wizard_command(
 		"wizard",
 		run,
 		render=lambda payload: render_run(payload, command_for=_command_for_ctx(ctx)),
-		hints={"next_actions": [boss_command_for_ctx(ctx, f"wizard --status {shell_argument(str(run['run_id']))}", include_data_dir=True)]},
+		hints={
+			"next_actions": [
+				boss_command_for_ctx(
+					ctx, f"wizard --status {shell_argument(str(run['run_id']))}", include_data_dir=True
+				)
+			]
+		},
 	)
 
 
