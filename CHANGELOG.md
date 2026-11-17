@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.79] - 2026-11-17
 
 ### Fixed
 - 静默刷新 stoken 成功但登录态落盘失败（权限 / 磁盘满）时，本地 `OSError` 被包装成可恢复的 `TokenRefreshFailed` 并提示重新登录；现在原样上抛，按不可重试的 `LOCAL_IO_ERROR` 上报（Issue #1479）。
