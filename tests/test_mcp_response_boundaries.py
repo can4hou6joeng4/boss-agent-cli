@@ -344,28 +344,27 @@ def test_boss_mark_empty_tag_call_tool_returns_invalid_param(
 			{"format": "html", "output_file": ""},
 			["stats", "--format", "html", "--output", ""],
 		),
+		(
+			"boss_chat",
+			{"format": "md", "output_file": ""},
+			["chat", "--export", "md", "--output", ""],
+		),
+		(
+			"boss_export",
+			{"query": "python", "format": "md", "output_file": ""},
+			["export", "python", "--format", "md", "-o", ""],
+		),
 	],
-	ids=["digest-output", "stats-output-file"],
+	ids=["digest-output", "stats-output-file", "chat", "export"],
 )
 def test_empty_output_path_reaches_cli_verbatim(
 	tool_name: str, arguments: dict[str, Any], expected: list[str],
 ) -> None:
-	"""显式空串的输出路径必须留在 argv 里，让 CLI 自己给出错误信封。"""
-	assert _build_args(tool_name, arguments) == expected
+	"""显式空串的输出路径必须留在 argv 里，让 CLI 自己给出错误信封。
 
-
-@pytest.mark.parametrize(
-	("tool_name", "arguments", "expected"),
-	[
-		("boss_chat", {"format": "md", "output_file": ""}, ["chat", "--export", "md"]),
-		("boss_export", {"query": "python", "format": "md", "output_file": ""}, ["export", "python", "--format", "md"]),
-	],
-	ids=["chat", "export"],
-)
-def test_other_empty_output_paths_stay_omitted(
-	tool_name: str, arguments: dict[str, Any], expected: list[str],
-) -> None:
-	"""chat / export 的 ``-o ""`` 行为不变：仍按未传处理。"""
+	chat / export 的 ``-o ""`` 也不再按未传处理：CLI 会对空路径返回
+	``INVALID_PARAM``，映射层丢弃空串会让 MCP 调用方以为文件已写出（Issue #1501）。
+	"""
 	assert _build_args(tool_name, arguments) == expected
 
 

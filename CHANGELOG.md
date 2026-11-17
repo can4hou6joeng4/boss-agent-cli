@@ -2,6 +2,14 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 显式空 `-o ""` 被真值判断当成「未提供」：`boss chat --export md -o ""` 静默写出默认导出文件，`boss export --format html -o ""` 直接向 stdout 输出裸 HTML，`--format csv -o ""` 不写文件却返回成功；现在 chat / export 在任何平台请求前返回 `INVALID_PARAM` 并说明省略 `-o` 才使用默认路径 / stdout，MCP 映射层也把空串原样下发给 CLI 校验（Issue #1501）。
+- `boss chat -o <路径>` 没配 `--export` 时路径被静默忽略，命令仍返回 `ok:true` 与空列表，调用方以为文件已写出；现在入口返回 `INVALID_PARAM`（`-o` 需要配合 `--export`），schema 中 chat 的选项说明同步标注该约束（Issue #1502）。
+- `boss hr download-resume` 把本地写盘 `OSError`（磁盘满、只读目录、权限不足）报成可修正参数的 `INVALID_PARAM`；现在保留 `FileExistsError` 的 `INVALID_PARAM` 分支，其余按不可重试的 `LOCAL_IO_ERROR` 上报，恢复指引包含磁盘空间与目录权限（Issue #1503）。
+- 联系人按 uid 命中但缺少 `securityId` 时被报成可重试的 `NETWORK_ERROR` + 「重试」，却没有后继指引；现在与缺少 uid 的分支同口径，按 `recoverable=false` 上报，并在 `hints.next_actions` 给出带 `--data-dir` 的 `boss chat` 刷新命令（Issue #1504）。
+
 ## [3.4.80] - 2026-11-17
 
 ### Fixed

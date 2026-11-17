@@ -37,7 +37,7 @@ _escape_md_cell = escape_md_cell
 	type=click.Choice(["html", "md", "csv", "json"]),
 	help="导出格式：html=HTML / md=Markdown / csv=CSV / json=JSON")
 @click.option("-o", "--output", "output_path", default=None,
-	help="输出文件路径（不指定则自动保存到配置的 export_dir）")
+	help="输出文件路径（需配合 --export；不指定则自动保存到配置的 export_dir）")
 @click.pass_context
 @handle_auth_errors("chat")
 def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | None, export_fmt: str | None, output_path: str | None) -> None:
@@ -45,9 +45,39 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 	if not require_compliance_allowed(ctx, "chat"):
 		ctx.exit(1)
 
+	# `-o` 只在导出分支里生效：没配 `--export` 时路径被静默忽略却仍返回
+	# ok:true，调用方以为文件已经写出（Issue #1502）。入口直接拒绝。
+	if output_path is not None and export_fmt is None:
+		list_cmd = boss_command_for_ctx(ctx, "chat", include_data_dir=True)
+		handle_error_output(
+			ctx,
+			"chat",
+			code="INVALID_PARAM",
+			message="-o / --output 需要配合 --export 使用；不导出时请省略 -o",
+			recovery_action=(
+				f"加上 --export md（或 html/csv/json）后再指定 -o，例如 {list_cmd} --export md -o <文件路径>；"
+				"只想查看沟通列表时省略 -o"
+			),
+			hints={"next_actions": [list_cmd]},
+		)
+		return
+
 	# 只在真要导出时校验：`-o` 指向目录这类参数错误必须在第一次平台请求之前暴露，
 	# 而不是抓完沟通列表、写完快照之后再报一个与真正原因无关的信封。
-	if export_fmt and output_path:
+	if export_fmt and output_path is not None:
+		# 显式空串不是「用默认路径」的写法：旧的真值判断把它化装成「没传」，
+		# 于是 `--export md -o ""` 静默写出了默认导出文件（Issue #1501）。
+		if not output_path.strip():
+			chat_export_cmd = boss_command_for_ctx(ctx, f"chat --export {export_fmt}", include_data_dir=True)
+			handle_error_output(
+				ctx,
+				"chat",
+				code="INVALID_PARAM",
+				message="-o / --output 不能为空；省略 -o 才会自动保存到默认导出目录",
+				recovery_action=f"给出完整文件路径后重试，例如 {chat_export_cmd} -o <文件路径>",
+				hints={"next_actions": [chat_export_cmd]},
+			)
+			return
 		validated = validate_output_path_or_emit(ctx, "chat", output_path)
 		if validated is None:
 			return
@@ -167,7 +197,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			content = render_export(friends, export_fmt, from_who, days, diff_result)
 
 			# 未指定 -o 时，自动生成默认路径（日期命名，同天覆盖）
-			if not output_path:
+			if output_path is None:
 				today = datetime.date.today().isoformat()
 				# 优先读 config 中的 export_dir，否则 fallback 到 data_dir/chat-export
 				export_dir = ctx.obj.get("config", {}).get("export_dir")

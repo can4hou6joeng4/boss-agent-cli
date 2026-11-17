@@ -437,7 +437,7 @@ SCHEMA_DATA = {
 				"-o, --output": {
 					"type": "string",
 					"default": None,
-					"description": "输出文件路径（不指定则自动保存到 config.export_dir，默认 ~/Documents/files/boss，按日期命名同天覆盖）",
+					"description": "输出文件路径；必须配合 --export 使用（只给 -o 会返回 INVALID_PARAM），显式空串无效。省略 -o 时自动保存到 config.export_dir（默认 ~/Documents/files/boss，按日期命名同天覆盖）",
 				},
 				"--page": {
 					"type": "int",
