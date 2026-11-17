@@ -24,7 +24,7 @@ from boss_agent_cli.api.request_budget import (
 	is_request_stop,
 	request_control,
 )
-from boss_agent_cli.api.zhipin_errors import normalize_risk_code
+from boss_agent_cli.api.zhipin_errors import is_platform_success_code, normalize_risk_code
 from boss_agent_cli.cache.store import (
 	CacheBusyError,
 	CacheDatabaseInvalid,
@@ -1025,8 +1025,9 @@ class CrawlService:
 			if normalize_risk_code(payload.get("code")) is not None:
 				raise CrawlRiskError.from_response(payload)
 		self._raise_if_stop_requested(run_id)
-		if payload.get("code") not in (None, 0):
-			raise RuntimeError(f"第 {page_no} 页接口错误 code={payload.get('code')}: {payload.get('message', '')}")
+		code = payload.get("code")
+		if code is not None and not is_platform_success_code(code):
+			raise RuntimeError(f"第 {page_no} 页接口错误 code={code}: {payload.get('message', '')}")
 		data = payload.get("zpData")
 		if not isinstance(data, dict) or not isinstance(data.get("jobList"), list):
 			raise RuntimeError(f"第 {page_no} 页响应缺少有效的 zpData.jobList 列表")
@@ -1051,8 +1052,9 @@ class CrawlService:
 			if normalize_risk_code(payload.get("code")) is not None:
 				raise CrawlRiskError.from_response(payload)
 		self._raise_if_stop_requested(run_id)
-		if payload.get("code") not in (None, 0):
-			raise RuntimeError(f"职位详情接口错误 code={payload.get('code')}: {payload.get('message', '')}")
+		code = payload.get("code")
+		if code is not None and not is_platform_success_code(code):
+			raise RuntimeError(f"职位详情接口错误 code={code}: {payload.get('message', '')}")
 		return payload
 
 	def _raise_if_stop_requested(self, run_id: str) -> None:

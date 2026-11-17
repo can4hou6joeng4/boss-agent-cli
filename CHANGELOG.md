@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- `stop.json` 只剩 `reason` 而缺少 `open` 时，`read_stop()` 原样返回，`SafetyGuard` 与 `hr location` 都认为没有停止，`resume()` 也无法解除；现在与字段类型漂移同口径 fail-closed，并允许显式恢复（Issue #1598）。
+- 平台响应的 `code=false` 在 Python 中等于 `0`，采集列表 / 详情会把错误响应当成功数据，自动化的写动作会被标为 `executed`；现在统一只允许整数或整数字符串零作为成功码，布尔按形状异常收口（Issue #1599）。
+- automation 配置的整数预算字段接受 `1.9`、`"3"` 等值并静默截断 / 转换，实际扫描与动作预算和操作者配置不一致；现在非整数 JSON 值一律按配置错误拒绝（Issue #1600）。
+- wizard 的 `pages` 输入接受 `true` / `2.9`，`int()` 会静默变成 1 / 2 并触发真实采集；现在与 `_coerce_int` 同口径拒绝 bool 与非整数浮点（Issue #1601）。
+
 ## [3.4.91] - 2026-11-18
 
 ### Fixed

@@ -55,12 +55,11 @@ def _config_int(data: dict[str, Any], key: str, default: int, *, minimum: int) -
 	value = data.get(key, default)
 	if isinstance(value, bool):
 		raise ValueError(f"{key} 必须是整数，收到 {value!r}")
-	try:
-		parsed = int(value)
-	# OverflowError：合法 JSON 的 ``1e400`` 解析成 inf、大整数转 float 也溢出，
-	# 都是用户可修复的配置错误，不能落成 INTERNAL_ERROR（Issue #1230）。
-	except (TypeError, ValueError, OverflowError) as exc:
-		raise ValueError(f"{key} 必须是整数，收到 {value!r}") from exc
+	# 配置里的预算必须是真正的整数：int(1.9) 会静默截断，int("3") 会把
+	# 手写的字符串悄悄变成有效配置，扫描 / 动作预算与操作者看到的不一致（Issue #1600）。
+	if not isinstance(value, int):
+		raise ValueError(f"{key} 必须是整数，收到 {value!r}")
+	parsed = value
 	if parsed < minimum:
 		raise ValueError(f"{key} 必须是不小于 {minimum} 的整数，收到 {value!r}")
 	return parsed

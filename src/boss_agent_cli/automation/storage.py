@@ -80,7 +80,16 @@ class AutomationStore:
 			return {"open": True, "reason": f"stop.json 无法解析，已按熔断处理：{exc}", "corrupt": True}
 		if not isinstance(loaded, dict):
 			return {"open": True, "reason": "stop.json 顶层不是 JSON object，已按熔断处理", "corrupt": True}
-		if "open" in loaded and not isinstance(loaded["open"], bool):
+		if "open" not in loaded:
+			# 缺少开关字段同样意味着「停止状态未知」：老读者会把它当没停止，
+			# resume() 也看不到可解除的闩锁（Issue #1598）。与类型漂移、解析
+			# 失败一样 fail-closed，不给自动化放行任何写操作。
+			return {
+				"open": True,
+				"reason": "stop.json 缺少 open 字段，已按熔断处理",
+				"corrupt": True,
+			}
+		if not isinstance(loaded["open"], bool):
 			# 熔断开关只认布尔：0 / null / "false" 这类真值漂移若被当成「已关闭」，
 			# 一次写坏就能放行自动化写操作；而 "true" 又会让两个读取器（SafetyGuard
 			# 的真值与 location 的 `is not True`）得到相反结论（Issue #1242）。

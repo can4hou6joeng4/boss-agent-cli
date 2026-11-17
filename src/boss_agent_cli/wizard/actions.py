@@ -1777,7 +1777,18 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 
 
 def _positive_int(value: Any, *, name: str) -> int:
-	"""解析 workflow 输入的正整数；非法值按参数错误返回，不落成可重试的网络错误。"""
+	"""解析 workflow 输入的正整数；非法值按参数错误返回，不落成可重试的网络错误。
+
+	输入来自 ``--input-json`` / MCP，bool 与小数不是页数：`int(True)` 是 1、
+	`int(2.9)` 是 2。与同文件 `_coerce_int` 同口径拒绝，避免非法输入变成真实
+	采集请求（Issue #1601）。整数字符串仍按既有兼容口径接受。
+	"""
+	if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"{name} 必须是整数: {value!r}",
+			recovery_action=f"传入 1 以上的整数 {name}",
+		)
 	try:
 		parsed = int(value)
 	# OverflowError：`1e400` 解析成 inf，`int(inf)` 抛错；调用方改输入即可修复，

@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from boss_agent_cli.api.client import PlatformRiskError
-from boss_agent_cli.api.zhipin_errors import raise_platform_risk_response, response_message
+from boss_agent_cli.api.zhipin_errors import (
+	is_platform_success_code,
+	raise_platform_risk_response,
+	response_message,
+)
 from boss_agent_cli.display import risk_error_message
 
 from boss_agent_cli.automation.models import (
@@ -159,7 +163,7 @@ class BossRecruiterAutomationPlatform:
 			self._warning = risk_error_message(exc.code)
 			self._risk = exc
 			raise
-		if require_success and not (response.get("code") == 0 or response.get("ok") is True):
+		if require_success and not (is_platform_success_code(response.get("code")) or response.get("ok") is True):
 			raise RuntimeError(response_message(response) or "招聘者读取失败，不能将错误响应视为空列表")
 		return response
 
@@ -227,7 +231,7 @@ def _friend_id(value: str) -> int:
 
 def _action_result(response: dict[str, Any]) -> ActionResult:
 	code = response.get("code")
-	if code == 0 or response.get("ok") is True:
+	if is_platform_success_code(code) or response.get("ok") is True:
 		return ActionResult("executed", {"response": response})
 	if response.get("__cli_error_code__") == "ACTION_UNCONFIRMED":
 		# 页面动作可能已经生效：这不是「确定没发出」的普通失败，
