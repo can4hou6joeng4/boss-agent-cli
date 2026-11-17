@@ -99,6 +99,9 @@ def _browser_kernel_missing_error(
 		"BROWSER_KERNEL_MISSING",
 		"patchright 浏览器内核缺失或与所需修订版不匹配",
 		recoverable=recoverable,
+		# 内核没装好时重试同一动作只会再起一次浏览器、得到同一结果；浏览器未启动
+		# 也没有发出平台写请求，因此 replay_safe 保持 True（Issue #1543）。
+		auto_retry=False,
 		# 与命令层同一份可执行指引：裸 `patchright install chromium` 在
 		# `uv tool install` 环境下不在 PATH 上（Issue #1060）。
 		recovery_action=patchright_install_command(),

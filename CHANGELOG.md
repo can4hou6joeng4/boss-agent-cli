@@ -2,6 +2,14 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- wizard 的 crawl 恢复在读取断点与判断剩余工作之前就构造登录态、校验 crawl 运行时：已完成的任务或写错的 `run_id` 会先被要求登录 / 安装采集依赖，与 CLI `crawl resume` 的行为不一致；现在恢复路径把预检推迟到确认仍有剩余工作之后，新建任务仍在执行前立即预检（Issue #1540）。
+- `resume export --format json -o ""` 因真值判断把显式空路径当成「未提供」，返回 `ok:true` 却不写文件；现在在任何读取之前返回 `INVALID_PARAM`，与 chat / export 的空 `-o` 口径一致（Issue #1541）。
+- `resume export` 的 html/pdf 默认输出名直接拼接简历名，绕过存储层的文件名清洗：名为 `../x` 的简历会写出到当前工作目录之外，Windows 保留设备名同样不生效；现在默认名与读写路径共用 `_safe_filename`（Issue #1542）。
+- `BROWSER_KERNEL_MISSING` 与 `CRAWL_UNAVAILABLE` 仍进入 wizard 的自动重试：内核没装或采集依赖缺失时每次重试都会再起一次浏览器并得到同一结果；现在两者标记 `auto_retry=false`，修复后由调用方手动恢复（Issue #1543）。
+
 ## [3.4.83] - 2026-11-17
 
 ### Fixed
