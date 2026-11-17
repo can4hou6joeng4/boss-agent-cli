@@ -66,7 +66,10 @@ def find_friend(
 		page += 1
 
 	if not terminated:
-		raise FriendLookupLimitExceeded("沟通列表分页遍历超过上限，未能确认联系人是否存在，请重试")
+		raise FriendLookupLimitExceeded(
+			"沟通列表分页遍历超过上限，未能确认联系人是否存在；"
+			"请先用 boss chat 取到稳定 uid 再查询，不要重放同一 security_id 查询"
+		)
 	return None, None
 
 

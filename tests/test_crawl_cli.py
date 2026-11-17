@@ -1919,6 +1919,9 @@ class _RunOptions:
 	def set_browser_path(self, path: str) -> None:
 		pass
 
+	def set_user_agent(self, user_agent: str) -> None:
+		pass
+
 
 class _InjectionFailPage:
 	url = "https://www.zhipin.com/web/user/?ka=header-login"

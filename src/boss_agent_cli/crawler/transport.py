@@ -246,6 +246,11 @@ class DrissionCrawlerSession:
 			self._clear_stale_profile_locks(self._profile_path)
 			if self._chrome_path:
 				options.set_browser_path(self._chrome_path)
+			if self._user_agent:
+				# 采集 Cookie 是在登录浏览器的 UA 下取得的；新起的采集浏览器不声明
+				# 同一个 UA，平台看到的登录态与指纹就不一致。参数一直从登录态透传
+				# 到这里却从未应用，注入等于静默丢失（Issue #1413）。
+				options.set_user_agent(self._user_agent)
 			options.set_local_port(self._cdp_port)
 			options.set_user_data_path(str(self._profile_path))
 		# 采集浏览器与日常 Chrome 隔离；必须注入 boss login 的 Cookie，否则首页是登录 HTML。
