@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.82] - 2026-11-17
 
 ### Fixed
 - 招聘自动化的队列派发不读 `state.json` 的会话在途标记：扫描路径发送后进程被杀留下的未确认动作，会被同候选人的已批准队列行再发送一次。现在队列派发前按与扫描路径相同的 fail-closed 口径检查标记，命中时不发送，`verification-required` 状态只跳过该候选人的队列行，其余情况打开熔断，队列行保持 `pending` 供人工核对后继续（Issue #1514）。
