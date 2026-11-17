@@ -1322,15 +1322,29 @@ def _crawl_seed_session(context: ActionContext) -> tuple[dict[str, str], str]:
 	return cookies, user_agent
 
 
-def _crawl_service(context: ActionContext, cache: CacheStore) -> CrawlService:
+def _crawl_service(context: ActionContext, cache: CacheStore, *, lazy: bool = False) -> CrawlService:
+	"""构造 crawl service。
+
+	``lazy=True``（恢复路径）把登录态与运行时检查推迟到 ``preflight``：已完成的
+	run 不需要浏览器就能返回既有结果，若在构造时先跑 ``ensure_crawl_runtime`` /
+	取 Cookie，已完成 run 也会被要求登录或安装 crawl 依赖，与 CLI 的
+	``crawl resume`` 口径不一致（Issue #1412 / #1540）。新建任务仍立即预检：
+	依赖缺失时不能留下一个只会在执行阶段失败的 run（Issue #1050）。
+	"""
 	control = context.workflow_control
-	# 依赖先于登录态：没装 crawl 依赖时登录也无法采集，也不应创建内部任务。
-	ensure_crawl_runtime()
-	seed_cookies, user_agent = _crawl_seed_session(context)
-	return CrawlService(
-		cache,
-		data_dir=context.data_dir,
-		transport_factory=lambda settings: DrissionCrawlerSession(
+
+	def load_session() -> tuple[dict[str, str], str]:
+		# 依赖先于登录态：没装 crawl 依赖时登录也无法采集，也不应创建内部任务。
+		ensure_crawl_runtime()
+		return _crawl_seed_session(context)
+
+	session: list[tuple[dict[str, str], str]] = []
+
+	def transport(settings: Any) -> DrissionCrawlerSession:
+		if not session:
+			session.append(load_session())
+		seed_cookies, user_agent = session[0]
+		return DrissionCrawlerSession(
 			profile_path=settings.profile_path,
 			chrome_path=settings.chrome_path,
 			cdp_port=settings.cdp_port,
@@ -1338,9 +1352,21 @@ def _crawl_service(context: ActionContext, cache: CacheStore) -> CrawlService:
 			hook_dir=settings.hook_dir,
 			seed_cookies=seed_cookies,
 			user_agent=user_agent,
-		),
+		)
+
+	def preflight() -> None:
+		if not session:
+			session.append(load_session())
+
+	if not lazy:
+		preflight()
+	return CrawlService(
+		cache,
+		data_dir=context.data_dir,
+		transport_factory=transport,
 		control_probe=control.poll if control is not None else None,
 		on_run_created=control.bind_inner_run if control is not None else None,
+		preflight=preflight,
 	)
 
 
@@ -1525,6 +1551,9 @@ def _crawl_unavailable_error(context: ActionContext, exc: CrawlRuntimeUnavailabl
 		str(exc),
 		recoverable=bool(ERROR_CODES["CRAWL_UNAVAILABLE"]["recoverable"]),
 		recovery_action=f"安装 {extras_requirement('crawl')} 并执行 {configure_command}",
+		# 可选依赖没装，重试同一动作必然复现；浏览器从未启动，无平台副作用
+		# （Issue #1543）。
+		auto_retry=False,
 	)
 
 
@@ -1683,7 +1712,7 @@ def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 	with_detail = _bool_input(inputs, "with_detail")
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		try:
-			outcome = _crawl_service(context, cache).resume(
+			outcome = _crawl_service(context, cache, lazy=True).resume(
 				run_id,
 				pages=pages,
 				with_detail=with_detail,

@@ -45,7 +45,7 @@ def test_wizard_maps_cache_database_invalid_to_its_own_code(tmp_path, monkeypatc
 
 	monkeypatch.setattr(
 		"boss_agent_cli.wizard.actions._crawl_service",
-		lambda context, cache: _Boom(),
+		lambda context, cache, **_: _Boom(),
 	)
 
 	exit_code, payload = _invoke_wizard(tmp_path, "crawl_resume", {"run_id": "run-1"})
@@ -74,7 +74,7 @@ def test_wizard_maps_raw_sqlite_local_io_error_to_local_io(tmp_path, monkeypatch
 
 	monkeypatch.setattr(
 		"boss_agent_cli.wizard.actions._crawl_service",
-		lambda context, cache: _Boom(),
+		lambda context, cache, **_: _Boom(),
 	)
 
 	exit_code, payload = _invoke_wizard(tmp_path, "crawl_resume", {"run_id": "run-1"})

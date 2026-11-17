@@ -19,7 +19,7 @@ from boss_agent_cli.display import (
 )
 from boss_agent_cli.output import is_local_io_error
 from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, resume_to_dict
-from boss_agent_cli.resume.store import ResumeAlreadyExistsError, ResumeImportError, ResumeStore
+from boss_agent_cli.resume.store import ResumeAlreadyExistsError, ResumeImportError, ResumeStore, _safe_filename
 from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.text_files import write_text_atomic
@@ -432,6 +432,20 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 	store = _get_store(ctx)
 	if not _require_resume_name(ctx, name):
 		return
+	if output_path is not None and not output_path.strip():
+		# 显式空 -o 不能当成「没传」：脚本里 `-o "$OUT"` 而 OUT 未设置时，真值判断
+		# 会静默跳过写文件却返回 ok=true（Issue #1541）；pdf/html 分支又会在
+		# Path("") 上报错，同一输入三种格式三种行为。与 chat 的 #1501 同口径。
+		handle_error_output(
+			ctx,
+			"resume",
+			code="INVALID_PARAM",
+			message="-o 的值不能为空",
+			recovery_action="省略 -o 使用默认输出路径，或传入非空文件路径后重试",
+			hints={"next_actions": [_hint_command(ctx, f"resume export {shell_argument(name)} --format {fmt}")]},
+		)
+		ctx.exit(1)
+		return
 	# 文件存在但读不出来（手写坏、字段类型写错）与「不存在」走同一个契约：
 	# 其它子命令都是这样。json 导出若交给 export_json 内部的 FileNotFoundError，
 	# 会被顶层 OSError 网兜报成 LOCAL_IO_ERROR「本地文件读写失败」，指引用户去查
@@ -441,7 +455,10 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 		return
 	if fmt in ("pdf", "html"):
 		if output_path is None:
-			output_path = f"{name}.{fmt}"
+			# 默认输出名必须与存储层共用同一份清洗（Issue #1542）：`resume init
+			# --name "../x"` 落盘时被清洗成 `.._x.json`，这里若拼原始 argv 就会
+			# 写出到 cwd 之外；Windows 的 `CON` 等保留设备名同理。
+			output_path = f"{_safe_filename(name)}.{fmt}"
 		try:
 			out = prepare_output_path(output_path)
 		except OSError as exc:
@@ -468,7 +485,7 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 		return
 	json_str = store.export_json(name)
 	export_data = json.loads(json_str)
-	if output_path:
+	if output_path is not None:
 		try:
 			write_text_atomic(prepare_output_path(output_path), json_str)
 		except OSError as exc:

@@ -103,7 +103,7 @@ def test_wizard_profile_busy_recovery_carries_run_id_placeholder(tmp_path, monke
 
 	monkeypatch.setattr(
 		"boss_agent_cli.wizard.actions._crawl_service",
-		lambda context, cache: _Boom(),
+		lambda context, cache, **_: _Boom(),
 	)
 	_seed_login(tmp_path)
 	result = CliRunner().invoke(

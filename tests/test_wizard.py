@@ -18,7 +18,7 @@ from click.testing import CliRunner
 
 from boss_agent_cli.ai.config import AIConfigStore
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.crawler.service import CrawlOutcome
+from boss_agent_cli.crawler.service import CrawlOutcome, CrawlSettings
 from boss_agent_cli.resume.models import ResumeData
 from boss_agent_cli.resume.store import ResumeStore
 from boss_agent_cli.search_filters import resolve_welfare_keywords
@@ -722,7 +722,7 @@ class _FakeCrawlService:
 
 def test_crawl_actions_use_fixture_service_and_persist_stop(tmp_path, monkeypatch):
 	service = _FakeCrawlService()
-	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache: service)
+	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache, **_: service)
 	context = _action_context(tmp_path)
 	started = DEFAULT_ACTIONS["crawl_start"](
 		context,
@@ -772,7 +772,7 @@ def test_crawl_actions_use_fixture_service_and_persist_stop(tmp_path, monkeypatc
 
 def test_crawl_action_honors_configured_zero_max_retries(tmp_path, monkeypatch):
 	service = _FakeCrawlService()
-	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache: service)
+	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache, **_: service)
 	context = replace(
 		_action_context(tmp_path),
 		config={"crawl": {"max_retries": 0, "cdp_port": 9333, "chrome_path": "/opt/chrome"}},
@@ -798,7 +798,7 @@ def test_crawl_action_honors_configured_zero_max_retries(tmp_path, monkeypatch):
 )
 def test_crawl_action_rejects_invalid_config(tmp_path, monkeypatch, crawl_config, field):
 	service = _FakeCrawlService()
-	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache: service)
+	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache, **_: service)
 	context = replace(_action_context(tmp_path), config={"crawl": crawl_config})
 	with pytest.raises(WorkflowActionError) as excinfo:
 		DEFAULT_ACTIONS["crawl_start"](context, {"query": "Python", "city": "北京"}, {})
@@ -824,7 +824,7 @@ def test_crawl_action_rejects_invalid_pages(tmp_path, pages):
 @pytest.mark.parametrize("hook_profile", ["screenshot-full", "weird"])
 def test_crawl_action_rejects_unsupported_hook_profile(tmp_path, monkeypatch, hook_profile):
 	service = _FakeCrawlService()
-	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache: service)
+	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache, **_: service)
 	context = _action_context(tmp_path)
 	with pytest.raises(WorkflowActionError) as excinfo:
 		DEFAULT_ACTIONS["crawl_start"](
@@ -847,7 +847,7 @@ def test_crawl_action_rejects_unsupported_hook_profile(tmp_path, monkeypatch, ho
 @pytest.mark.parametrize("pages", ["abc", 0])
 def test_crawl_resume_rejects_invalid_pages(tmp_path, monkeypatch, pages):
 	service = _FakeCrawlService()
-	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache: service)
+	monkeypatch.setattr("boss_agent_cli.wizard.actions._crawl_service", lambda context, cache, **_: service)
 	context = _action_context(tmp_path)
 	with pytest.raises(WorkflowActionError) as excinfo:
 		DEFAULT_ACTIONS["crawl_resume"](context, {"run_id": "crawl-existing", "pages": pages}, {})
@@ -2508,7 +2508,7 @@ def test_crawl_start_resumes_existing_run_from_prior_waiting_result():
 	import boss_agent_cli.wizard.actions as actions_mod
 
 	orig = actions_mod._crawl_service
-	actions_mod._crawl_service = lambda context, cache: _Svc()
+	actions_mod._crawl_service = lambda context, cache, **_: _Svc()
 	try:
 		result = DEFAULT_ACTIONS["crawl_start"](
 			ctx,
@@ -2564,7 +2564,7 @@ def test_crawl_start_resumes_bound_inner_run_from_interrupted_step():
 	import boss_agent_cli.wizard.actions as actions_mod
 
 	orig = actions_mod._crawl_service
-	actions_mod._crawl_service = lambda context, cache: _Svc()
+	actions_mod._crawl_service = lambda context, cache, **_: _Svc()
 	try:
 		result = DEFAULT_ACTIONS["crawl_start"](
 			ctx,
@@ -4867,7 +4867,18 @@ def test_crawl_resume_without_crawl_dependencies_leaves_the_run_untouched(tmp_pa
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
 		cache.create_crawl_run(
 			"crawl-existing",
-			{"query": "Python", "city_code": "101010100"},
+			# 恢复路径现在先读断点、确认还有工作才调用 preflight：断点必须是
+			# 可解析的完整 params，否则会先按记录损坏失败（Issue #1540）。
+			CrawlSettings(
+				query="Python",
+				city_code="101010100",
+				pages=5,
+				with_detail=False,
+				profile_path=tmp_path / "crawl" / "chrome-profile",
+				chrome_path=None,
+				cdp_port=9333,
+				hook_profile="none",
+			).as_dict(),
 			str(tmp_path / "crawl" / "runs" / "crawl-existing"),
 			status="stopped",
 		)
