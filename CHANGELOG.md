@@ -2,6 +2,25 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- `clean` 的 `_clean_dir` / `_clean_path` 跟随目录符号链接：`chat-history` / `chat-export` 指向数据目录外时，按 mtime 清理会删掉链接目标里的文件；`--privacy` 先删除登录态、再在目录链接上抛错，留下半完成状态且错误信封 `data=null`。现在 `_clean_dir` 的目录参数、`_clean_path` 的目录链接或目标祖先目录是符号链接时一律跳过，并在结果中用 `skipped_symlinks` 与 `warning` 说明（文件链接仍只删除链接本身，不碰目标）；隐私清理在删除前先做只读预检，失败时错误信封的 `data` 带回已完成 / 失败 / 未处理项（Issue #1497）。
+- `doctor` 的写探针固定写 `auth/.doctor-write-test` 再 `unlink`，该路径是符号链接时会写穿目标并删除链接。现在使用唯一临时文件（`mkstemp` 的 `O_CREAT|O_EXCL`，可用时带 `O_NOFOLLOW`），只清理本次创建的文件；写失败按 `LOCAL_IO_ERROR` 出错误信封，并保留已完成的检查项（Issue #1498）。
+- `boss ai config` 用真值判断「是否提供了更新」：显式空 `--model` / `--provider` / `--base-url` 被当成没传而退回查看模式，`--api-key ""` 还会把已存密钥覆盖成空串，查看输出却仍报 `api_key_set=true`。现在四类字符串选项一律用 `is not None` 判断，并在任何写盘之前返回 `INVALID_PARAM`；新增 `--clear-api-key` 显式清除凭据（与 `--api-key` 互斥），`api_key_set` 按真实存储状态报告，空串与纯空白视为未设置（Issue #1499）。
+- `boss ai local configure --model ""` 会把空模型名写入配置，`ai local status` 随即变成 `configured=false`；`--base-url ""` 被 `or` 静默回退到运行时默认端点。现在两者都在写盘之前返回 `INVALID_PARAM`，只有省略 `--base-url` 才使用默认地址（Issue #1500）。
+- 显式空 `-o ""` 被真值判断当成「未提供」：`boss chat --export md -o ""` 静默写出默认导出文件，`boss export --format html -o ""` 直接向 stdout 输出裸 HTML，`--format csv -o ""` 不写文件却返回成功；现在 chat / export 在任何平台请求前返回 `INVALID_PARAM` 并说明省略 `-o` 才使用默认路径 / stdout，MCP 映射层也把空串原样下发给 CLI 校验（Issue #1501）。
+- `boss chat -o <路径>` 没配 `--export` 时路径被静默忽略，命令仍返回 `ok:true` 与空列表，调用方以为文件已写出；现在入口返回 `INVALID_PARAM`（`-o` 需要配合 `--export`），schema 中 chat 的选项说明同步标注该约束（Issue #1502）。
+- `boss hr download-resume` 把本地写盘 `OSError`（磁盘满、只读目录、权限不足）报成可修正参数的 `INVALID_PARAM`；现在保留 `FileExistsError` 的 `INVALID_PARAM` 分支，其余按不可重试的 `LOCAL_IO_ERROR` 上报，恢复指引包含磁盘空间与目录权限（Issue #1503）。
+- 联系人按 uid 命中但缺少 `securityId` 时被报成可重试的 `NETWORK_ERROR` + 「重试」，却没有后继指引；现在与缺少 uid 的分支同口径，按 `recoverable=false` 上报，并在 `hints.next_actions` 给出带 `--data-dir` 的 `boss chat` 刷新命令（Issue #1504）。
+- `boss schema` 把 `chat -o` 的默认目录写成不存在的 `~/Documents/files/boss`，而实现未配置 `export_dir` 时回退到 `<data-dir>/chat-export`，且 `-o` 仅在 `--export` 时生效；现在 schema 与 `chat --help` 都按实现描述默认路径与生效条件（Issue #1505）。
+- `boss schema` 的 `mark --label` 封闭枚举漏掉实现支持的 `牛人发起`，也未说明接受数字 ID；现在 enum 覆盖 `_LABEL_MAP` 的全部标签，并注明「标签名称或数字 ID」（Issue #1506）。
+- 简历文件名清洗只替换 `/`、`\` 与 NUL，Windows 上 `name="D:evil"` 生成的 `D:evil.json` 与 resumes 目录拼接后会脱离 base；现在 `:` 一并替换，`CON` / `NUL` / `COM1` 等保留设备名（含带扩展名形式）与纯点号名称同样改写，`resume import` 对不安全名称直接返回 `INVALID_PARAM`（Issue #1507，待 Windows 实机验证）。
+- 招聘自动化直接扫描路径在派发写动作前没有把在途动作落盘：发送后进程被杀或 checkpoint 撞控制锁时没有记录，下一轮凭 transcript 重新决策，本地 AI 改写后的问卷匹配不到模板会再次发送；现在派发前把 `inflight_action`（动作、消息 hash、时间、会话 ref）写进 `automation/state.json`，成功后与阶段字段原子清除，重放时转 `verification-required` 并给出核对指引，只有确定未发出的异常才释放标记（Issue #1511）。
+- 求职者 `greet` / `apply` 的去重是跨进程 check-then-act：两个进程同时通过 `is_greeted` / `is_applied` 检查后会各发一次真实请求；现在发送前按 `(账号, job_id, 动作)` 在 SQLite 里原子预约，抢不到时已成功回 `ALREADY_*`、发送中回不可重试的 `ACTION_UNCONFIRMED`，CLI `greet` / `apply` / `batch-greet` 与 wizard 的 candidate_greet / candidate_apply 共用同一收口，旧记录表继续参与去重（Issue #1508）。
+- `watch` 命中写入先 `SELECT` 再 `INSERT`，两个进程对同一个 watch 并发记录时第二个会撞主键抛 `IntegrityError` 并被误判为缓存库损坏；现在改为 `INSERT OR IGNORE` + `UPDATE`，新增 / 已见计数语义不变（Issue #1509）。
+- `shortlist_records`、`crawl_runs`、`crawl_jobs` 的旧库迁移没有事务，双进程首次打开会各自执行 `ALTER TABLE`，第二个拿到 `duplicate column name` 并被误判为库损坏；现在与去重键迁移一致，先 `BEGIN IMMEDIATE` 拿写锁再重读 `table_info`，真实迁移失败（类型不符、唯一索引冲突）仍原样上抛（Issue #1510）。
+
 ## [3.4.80] - 2026-11-17
 
 ### Fixed

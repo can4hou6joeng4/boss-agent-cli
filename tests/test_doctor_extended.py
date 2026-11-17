@@ -518,6 +518,7 @@ def test_doctor_damaged_auth_requires_human_confirmation(tmp_path):
 		health = assess.return_value
 		health.token_present = True
 		health.auth_state = "invalid"
+		health.auth_dir = tmp_path / "auth"
 		health.salt_path = tmp_path / "salt"
 		health.checks_as_dicts.return_value = [{"name": "auth_token_quality", "status": "error", "detail": "损坏"}]
 		code, parsed = _invoke_doctor(tmp_path, cdp_ws="ws://fixture")

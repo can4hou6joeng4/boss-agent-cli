@@ -61,7 +61,7 @@ def _hint_command(ctx: click.Context, command: str) -> str:
 @click.option("--job-type", default=None, help="职位类型，支持逗号分隔多选")
 @click.option("--count", default=50, type=click.IntRange(min=1), help="导出数量")
 @click.option("--format", "fmt", default="csv", type=click.Choice(["html", "csv", "json"]), help="输出格式")
-@click.option("--output", "-o", default=None, help="输出文件路径（csv/json 不指定时输出到 stdout JSON 信封；html 不指定时直出 HTML，--json 时放进 data.content）")
+@click.option("--output", "-o", default=None, help="输出文件路径（csv/json 不指定时输出到 stdout JSON 信封；html 不指定时直出 HTML，--json 时放进 data.content；显式空串无效）")
 @click.option(
 	"--include-private",
 	is_flag=True,
@@ -175,7 +175,24 @@ def export_cmd(
 
 	# 参数错误必须在第一次平台请求之前暴露：`-o` 指向目录时，抓完 5 页再报路径
 	# 错误既消耗请求预算、也可能触发风控，而真正该做的只是换个文件名。
-	if output:
+	if output is not None:
+		# 显式空串不是「输出到默认位置」的写法：旧的真值判断把它化装成「没传」，
+		# `--format html -o ""` 直接向 stdout 输出裸 HTML，csv/json 则静默不写
+		# 文件（Issue #1501）。必须在任何平台请求前拒绝。
+		if not output.strip():
+			export_example = _hint_command(ctx, "export <关键词> -o <文件路径>")
+			handle_error_output(
+				ctx,
+				"export",
+				code="INVALID_PARAM",
+				message=(
+					"-o / --output 不能为空；省略 -o 才会输出到默认位置"
+					"（--format html 直接写 stdout，其余格式进 JSON 信封）"
+				),
+				recovery_action=f"给出完整文件路径后重试，例如 {export_example}",
+				hints={"next_actions": [export_example]},
+			)
+			return
 		validated = validate_output_path_or_emit(ctx, "export", output)
 		if validated is None:
 			return
@@ -255,7 +272,7 @@ def export_cmd(
 			stop_reason = "count_reached"
 		truncated = stop_reason == "page_budget_exhausted"
 
-		if output:
+		if output is not None:
 			output = str(prepare_output_path(output))
 			if html_mode:
 				write_html_export(html_items, output)

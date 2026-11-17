@@ -346,20 +346,31 @@ def ai_group() -> None:
 @ai_group.command("config")
 @click.option("--provider", default=None, help="AI 提供商（openai/deepseek/moonshot/openrouter/qwen/zhipu/siliconflow/ollama/vllm/custom）")
 @click.option("--model", default=None, help="模型名称（如 gpt-4o / claude-sonnet-4.5 / deepseek-chat）")
-@click.option("--api-key", default=None, help="API 密钥（将加密存储）")
+@click.option("--api-key", default=None, help="API 密钥（将加密存储；空值会被拒绝，清除密钥请用 --clear-api-key）")
+@click.option("--clear-api-key", is_flag=True, default=False, help="删除已存储的 API 密钥（与 --api-key 互斥；没有密钥时也安全）")
 @click.option("--base-url", default=None, help="自定义 API 基础地址（provider=custom 或自建代理时使用）")
 @click.option("--temperature", default=None, type=click.FloatRange(min=0), help="生成温度")
 @click.option("--max-tokens", default=None, type=click.IntRange(min=1), help="最大令牌数")
 @click.pass_context
-def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, api_key: str | None, base_url: str | None, temperature: float | None, max_tokens: int | None) -> None:
+def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, api_key: str | None, clear_api_key: bool, base_url: str | None, temperature: float | None, max_tokens: int | None) -> None:
 	"""查看或设置 AI 服务配置"""
 	store = _get_ai_config_store(ctx)
 
-	# 无参数时显示当前配置
-	has_updates = any([provider, model, api_key, base_url, temperature is not None, max_tokens is not None])
+	# 无参数时显示当前配置。字符串项必须用 `is not None` 判断：`--model ""`
+	# 是显式传入的空值，按真值判断会退化成查看配置，悄悄吞掉调用方的意图
+	# （Issue #1499）。
+	has_updates = (
+		provider is not None
+		or model is not None
+		or api_key is not None
+		or clear_api_key
+		or base_url is not None
+		or temperature is not None
+		or max_tokens is not None
+	)
 	if not has_updates:
 		config = store.load_config()
-		config["api_key_set"] = store.get_api_key() is not None
+		config["api_key_set"] = store.api_key_is_set()
 		config.pop("ai_api_key", None)
 		# 回显解析后的实际端点：只设 --provider 时 ai_base_url 是空的，
 		# 真正生效的地址来自 PROVIDER_BASE_URLS 查表，用户此前无从确认。
@@ -379,6 +390,44 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 				_hint_command(ctx, "ai local configure --runtime ollama --model qwen3:14b"),
 			]},
 		)
+		return
+
+	# 所有校验都在任何写盘之前完成：显式空值绝不能落成空配置、更不能把已存
+	# 密钥覆盖成空串（Issue #1499）。
+	if api_key is not None and clear_api_key:
+		handle_error_output(
+			ctx, "ai-config",
+			code="INVALID_PARAM",
+			message="--api-key 与 --clear-api-key 不能同时使用",
+			recovery_action="设置新密钥用 --api-key <key>，清除已存密钥用 --clear-api-key，二选一",
+		)
+		ctx.exit(1)
+		return
+	if provider is not None and not provider.strip():
+		handle_error_output(
+			ctx, "ai-config",
+			code="INVALID_PARAM",
+			message="--provider 不能为空或只包含空白字符",
+			recovery_action="按 next_actions 传入已登记的 provider 后重试",
+			hints={"next_actions": [
+				_hint_command(ctx, "ai config --provider openai --model gpt-4o --api-key <key>"),
+				_hint_command(ctx, "ai config"),
+			]},
+		)
+		ctx.exit(1)
+		return
+	if api_key is not None and not api_key.strip():
+		handle_error_output(
+			ctx, "ai-config",
+			code="INVALID_PARAM",
+			message="--api-key 不能为空或只包含空白字符；如需清除已存密钥请使用 --clear-api-key",
+			recovery_action="传入真实密钥，或用 --clear-api-key 显式清除已存凭据",
+			hints={"next_actions": [
+				_hint_command(ctx, "ai config --api-key <key>"),
+				_hint_command(ctx, "ai config --clear-api-key"),
+			]},
+		)
+		ctx.exit(1)
 		return
 
 	# provider 写错（如 `openai-cn`）或 provider=custom 没给 base_url 时，端点解析为
@@ -446,12 +495,18 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 		store.save_config(**updates)
 	if api_key is not None:
 		store.save_api_key(api_key)
+	elif clear_api_key:
+		store.clear_api_key()
 
+	updated_fields = list(updates.keys())
+	if api_key is not None or clear_api_key:
+		updated_fields.append("api_key")
 	handle_output(
 		ctx, "ai-config",
 		{
 			"action": "update",
-			"updated_fields": list(updates.keys()) + (["api_key"] if api_key else []),
+			"updated_fields": updated_fields,
+			"api_key_set": store.api_key_is_set(),
 			# 写入后立刻回显生效的端点，让「刚配的这个 provider 会把数据发去哪」
 			# 在同一屏内可确认，而不是要再跑一次 boss ai config 才看得到。
 			"resolved_base_url": store.get_base_url(),

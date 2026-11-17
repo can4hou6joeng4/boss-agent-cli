@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import sqlite3
 import time
@@ -16,7 +17,7 @@ from boss_agent_cli import display
 from boss_agent_cli.api.cdp_risk_lock import lock_paths
 from boss_agent_cli.api.request_budget import budget_directory
 from boss_agent_cli.cache.store import CacheDatabaseInvalid
-from boss_agent_cli.display import boss_command_for_ctx, handle_output, render_next_steps, shell_argument
+from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, render_next_steps, shell_argument
 
 
 @click.command("clean")
@@ -51,75 +52,132 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 	if db_path.exists():
 		_open_cache_db(db_path).close()
 
-	# 0) 本地风险锁：显式 opt-in，文件名及 target 标签沿用历史协议，不连浏览器。
-	if risk_lock:
-		directories = dict.fromkeys((Path(data_dir).resolve(), budget_directory(Path(data_dir))))
-		freed, count = 0, 0
-		for directory in directories:
-			# 主位置与后备位置都要清理：任一份残留都会让 fail-closed 检查继续阻断
-			# 用户已确认恢复的访问（Issue #1270）。
-			for path in lock_paths(directory):
-				removed_bytes, removed_count = _clean_path(path, dry_run=dry_run)
-				freed += removed_bytes
-				count += removed_count
-		results.append({"target": "CDP 风控锁", "cleaned": count, "bytes_freed": freed})
-		total_freed += freed
-
-	# 1) 搜索缓存
-	freed, count = _clean_search_cache(data_dir, dry_run=dry_run, clean_all=clean_all)
-	results.append({"target": "搜索缓存", "cleaned": count, "bytes_freed": freed})
-	total_freed += freed
-
-	# 2) 索引缓存
-	freed, count = _clean_index_cache(data_dir, dry_run=dry_run)
-	results.append({"target": "索引缓存", "cleaned": count, "bytes_freed": freed})
-	total_freed += freed
-
-	# 3) 聊天快照
-	freed, count = _clean_dir(data_dir / "chat-history", days=days, dry_run=dry_run)
-	results.append({"target": "聊天快照", "cleaned": count, "bytes_freed": freed})
-	total_freed += freed
-
-	# 4) 导出文件
-	freed, count = _clean_dir(data_dir / "chat-export", days=days, dry_run=dry_run)
-	results.append({"target": "导出文件", "cleaned": count, "bytes_freed": freed})
-	total_freed += freed
-
-	# 5) 隐私清理：显式 opt-in，避免误删登录态和本地简历
+	# 隐私清理的只读预检必须发生在任何删除之前：否则登录态先被删掉，随后
+	# 在某个目录链接 / 不可写目录上失败，用户既看不到已完成项，也无法判断
+	# 隐私数据是否真的清理干净（Issue #1497）。符号链接目标按「跳过并报告」
+	# 处理，属于可安全完成；真正不可处理的路径直接出错误信封。
+	privacy_targets: list[tuple[str, Path]] = []
 	if privacy:
-		for target, path in (
+		privacy_targets = [
 			("登录会话", data_dir / "auth" / "session.enc"),
 			("本地简历", data_dir / "resumes"),
 			("聊天快照", data_dir / "chat-history"),
 			("导出文件", data_dir / "chat-export"),
-		):
-			freed, count = _clean_path(path, dry_run=dry_run)
-			results.append({"target": target, "cleaned": count, "bytes_freed": freed})
+			("crawl 任务与导出", data_dir / "crawl"),
+		]
+		if not dry_run:
+			problems = _privacy_preflight(data_dir, privacy_targets)
+			if problems:
+				failed_targets = {item["target"] for item in problems}
+				_emit_privacy_failure(
+					ctx,
+					dry_run=dry_run,
+					results=[],
+					completed=[],
+					failed=problems,
+					remaining=[target for target, _ in privacy_targets if target not in failed_targets],
+					message=f"隐私清理预检失败：{problems[0]['target']}（{problems[0]['reason']}）",
+				)
+				return
+
+	# 0) 本地风险锁：显式 opt-in，文件名及 target 标签沿用历史协议，不连浏览器。
+	if risk_lock:
+		directories = dict.fromkeys((Path(data_dir).resolve(), budget_directory(Path(data_dir))))
+		freed, count, skipped = 0, 0, 0
+		for directory in directories:
+			# 主位置与后备位置都要清理：任一份残留都会让 fail-closed 检查继续阻断
+			# 用户已确认恢复的访问（Issue #1270）。
+			for path in lock_paths(directory):
+				removed_bytes, removed_count, removed_skipped = _clean_path(
+					path, dry_run=dry_run, root=directory
+				)
+				freed += removed_bytes
+				count += removed_count
+				skipped += removed_skipped
+		results.append(_clean_result("CDP 风控锁", freed, count, skipped))
+		total_freed += freed
+
+	# 1) 搜索缓存
+	freed, count = _clean_search_cache(data_dir, dry_run=dry_run, clean_all=clean_all)
+	results.append(_clean_result("搜索缓存", freed, count))
+	total_freed += freed
+
+	# 2) 索引缓存
+	freed, count, skipped = _clean_index_cache(data_dir, dry_run=dry_run)
+	results.append(_clean_result("索引缓存", freed, count, skipped))
+	total_freed += freed
+
+	# 3) 聊天快照
+	freed, count, skipped = _clean_dir(data_dir / "chat-history", days=days, dry_run=dry_run)
+	results.append(_clean_result("聊天快照", freed, count, skipped))
+	total_freed += freed
+
+	# 4) 导出文件
+	freed, count, skipped = _clean_dir(data_dir / "chat-export", days=days, dry_run=dry_run)
+	results.append(_clean_result("导出文件", freed, count, skipped))
+	total_freed += freed
+
+	# 5) 隐私清理：显式 opt-in，避免误删登录态和本地简历
+	if privacy:
+		crawl_target = privacy_targets[-1]
+		targets = privacy_targets[:-1]
+		completed: list[dict[str, Any]] = []
+		for index, (target, path) in enumerate(targets):
+			try:
+				freed, count, skipped = _clean_path(path, dry_run=dry_run, root=data_dir)
+			except OSError as exc:
+				_emit_privacy_failure(
+					ctx,
+					dry_run=dry_run,
+					results=list(results),
+					completed=completed,
+					failed=[{"target": target, "path": str(path), "reason": str(exc)}],
+					remaining=[name for name, _ in targets[index + 1:]],
+					message=f"隐私清理在删除{target}时失败: {exc}",
+				)
+				return
+			entry = _clean_result(target, freed, count, skipped)
+			results.append(entry)
+			completed.append(entry)
 			total_freed += freed
-		freed, count = _clean_crawl_data(data_dir, dry_run=dry_run)
-		results.append({"target": "crawl 任务与导出", "cleaned": count, "bytes_freed": freed})
+		try:
+			freed, count, skipped = _clean_crawl_data(data_dir, dry_run=dry_run)
+		except (OSError, sqlite3.DatabaseError, CacheDatabaseInvalid) as exc:
+			_emit_privacy_failure(
+				ctx,
+				dry_run=dry_run,
+				results=list(results),
+				completed=completed,
+				failed=[{"target": crawl_target[0], "path": str(crawl_target[1]), "reason": str(exc)}],
+				remaining=[],
+				message=f"隐私清理在删除{crawl_target[0]}时失败: {exc}",
+			)
+			return
+		entry = _clean_result(crawl_target[0], freed, count, skipped)
+		results.append(entry)
+		completed.append(entry)
 		total_freed += freed
 
 	# 6) 全量清理额外项
 	if clean_all:
 		freed, count = _clean_greet_records(data_dir, dry_run=dry_run)
-		results.append({"target": "打招呼记录", "cleaned": count, "bytes_freed": freed})
+		results.append(_clean_result("打招呼记录", freed, count))
 		total_freed += freed
 
 		freed, count = _clean_recruiter_greet_records(data_dir, dry_run=dry_run)
-		results.append({"target": "招聘者打招呼记录", "cleaned": count, "bytes_freed": freed})
+		results.append(_clean_result("招聘者打招呼记录", freed, count))
 		total_freed += freed
 
 		freed, count = _clean_apply_records(data_dir, dry_run=dry_run)
-		results.append({"target": "投递记录", "cleaned": count, "bytes_freed": freed})
+		results.append(_clean_result("投递记录", freed, count))
 		total_freed += freed
 
 		freed, count = _clean_location_records(data_dir, dry_run=dry_run)
-		results.append({"target": "工作地点发送记录", "cleaned": count, "bytes_freed": freed})
+		results.append(_clean_result("工作地点发送记录", freed, count))
 		total_freed += freed
 
 		freed, count = _clean_job_desc_cache(data_dir, dry_run=dry_run)
-		results.append({"target": "职位描述缓存", "cleaned": count, "bytes_freed": freed})
+		results.append(_clean_result("职位描述缓存", freed, count))
 		total_freed += freed
 
 	data = {
@@ -187,6 +245,11 @@ def _render_clean(data: dict[str, Any], next_steps: list[str]) -> None:
 			_human_bytes(row.get("bytes_freed", 0)),
 		)
 	display.console.print(table)
+	for row in data.get("results", []):
+		if row.get("skipped_symlinks"):
+			display.console.print(
+				f"  跳过符号链接 [bold]{row['skipped_symlinks']}[/bold] 个（{row.get('target', '-')}）：不删除链接或链接目标"
+			)
 	display.console.print(f"  合计释放 [bold]{data.get('total_bytes_freed_display', '0 B')}[/bold]")
 	render_next_steps(next_steps)
 
@@ -259,47 +322,182 @@ def _clean_search_cache(data_dir: Path, *, dry_run: bool, clean_all: bool) -> tu
 		conn.close()
 
 
-def _clean_index_cache(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
-	"""清理索引缓存文件。"""
-	path = data_dir / "cache" / "index_cache.json"
-	if not path.exists():
-		return 0, 0
-	size = path.stat().st_size
-	if not dry_run:
-		path.unlink()
-	return size, 1
+def _clean_result(target: str, freed: int, count: int, skipped: int = 0) -> dict[str, Any]:
+	"""单条清理结果；符号链接跳过时在结果里说明原因。"""
+	entry: dict[str, Any] = {
+		"target": target,
+		"cleaned": count,
+		"bytes_freed": freed,
+		"skipped_symlinks": skipped,
+	}
+	if skipped:
+		entry["warning"] = f"{target} 含符号链接，已跳过：不删除链接，也不删除链接目标"
+	return entry
 
 
-def _clean_dir(dir_path: Path, *, days: int, dry_run: bool) -> tuple[int, int]:
-	"""清理指定目录中超过指定天数的文件。"""
+def _first_symlink_component(root: Path, path: Path) -> Path | None:
+	"""返回 ``root`` 之下（含 ``path`` 本身）最靠前的符号链接。
+
+	clean 只应删除数据目录内的真实文件：目标本身或任意一级祖先目录是符号
+	链接时，删除都会落到目录外。``root`` 自身允许是链接（用户显式选择的
+	``--data-dir``），因此从它的子项开始检查。
+	"""
+	try:
+		relative = path.relative_to(root)
+	except ValueError:
+		return None
+	current = root
+	for part in relative.parts:
+		current = current / part
+		if current.is_symlink():
+			return current
+	return None
+
+
+def _is_writable(path: Path) -> bool:
+	"""预检用的可写判断；独立成函数便于测试替换 ``os.access``。"""
+	return os.access(path, os.W_OK | os.X_OK)
+
+
+def _privacy_preflight(data_dir: Path, targets: list[tuple[str, Path]]) -> list[dict[str, str]]:
+	"""只读预检隐私清理目标，返回不可处理项。
+
+	不创建、不删除任何路径。符号链接（目标本身或祖先）按「跳过并报告」处理，
+	属于可安全完成的目标；其余已存在目标要求父目录可写，目录自身还要可写
+	（``shutil.rmtree`` 需要先删掉子项）。
+	"""
+	problems: list[dict[str, str]] = []
+	for target, path in targets:
+		if _first_symlink_component(data_dir, path) is not None:
+			continue
+		try:
+			path.lstat()
+		except FileNotFoundError:
+			continue
+		except OSError as exc:
+			problems.append({"target": target, "path": str(path), "reason": f"无法读取路径: {exc}"})
+			continue
+		if not _is_writable(path.parent):
+			problems.append({"target": target, "path": str(path), "reason": "父目录不可写"})
+			continue
+		if path.is_dir() and not _is_writable(path):
+			problems.append({"target": target, "path": str(path), "reason": "目录不可写"})
+	db_path = data_dir / "cache" / "boss_agent.db"
+	# 文件只需要写权限；X_OK 对普通文件恒为假，不能复用目录的 W_OK|X_OK 判断。
+	if db_path.exists() and not os.access(db_path, os.W_OK):
+		problems.append(
+			{"target": "crawl 任务与导出", "path": str(db_path), "reason": "缓存库不可写"}
+		)
+	return problems
+
+
+def _emit_privacy_failure(
+	ctx: click.Context,
+	*,
+	dry_run: bool,
+	results: list[dict[str, Any]],
+	completed: list[dict[str, Any]],
+	failed: list[dict[str, str]],
+	remaining: list[str],
+	message: str,
+) -> None:
+	"""隐私清理失败时输出错误信封，并带回已完成 / 失败 / 未处理项。
+
+	错误信封通常 ``data=null``；批量删除可能已经删掉一部分，必须让用户和
+	Agent 看到实际进度，不能只剩一句 ``LOCAL_IO_ERROR``（Issue #1497）。
+	"""
+	freed_bytes = sum(int(item.get("bytes_freed", 0)) for item in results)
+	data: dict[str, Any] = {
+		"dry_run": dry_run,
+		"results": results,
+		"total_bytes_freed": freed_bytes,
+		"total_bytes_freed_display": _format_size(freed_bytes),
+		"completed": completed,
+		"failed": failed,
+		"remaining": remaining,
+	}
+	handle_error_output(
+		ctx,
+		"clean",
+		code="LOCAL_IO_ERROR",
+		message=message,
+		data=data,
+		hints={
+			"operator_actions": [
+				"隐私清理在完成前失败：按 failed 中的路径确认权限或改用可写的数据目录后重新执行 clean --privacy"
+			]
+		},
+	)
+
+
+def _clean_index_cache(data_dir: Path, *, dry_run: bool) -> tuple[int, int, int]:
+	"""清理索引缓存文件；符号链接走统一的不跟随路径。"""
+	return _clean_path(data_dir / "cache" / "index_cache.json", dry_run=dry_run, root=data_dir)
+
+
+def _clean_dir(dir_path: Path, *, days: int, dry_run: bool) -> tuple[int, int, int]:
+	"""清理指定目录中超过指定天数的文件。
+
+	返回 ``(释放字节数, 清理条数, 跳过的符号链接数)``。整个目录是符号链接时
+	直接跳过：``iterdir()`` 会跟随链接，把链接目标里的文件按 mtime 删掉
+	（Issue #1497）。目录内的文件符号链接仍按既有语义只 ``unlink`` 链接本身，
+	不会删除链接目标。
+	"""
+	if dir_path.is_symlink():
+		return 0, 0, 1
 	if not dir_path.exists():
-		return 0, 0
+		return 0, 0, 0
 
 	cutoff = time.time() - days * 86400
 	total_size = 0
 	count = 0
+	skipped = 0
 
 	for f in dir_path.iterdir():
+		if f.is_symlink() and not f.is_file():
+			# 指向目录的链接、悬空链接：不跟随，也不假装清理过。
+			skipped += 1
+			continue
 		if f.is_file() and f.stat().st_mtime < cutoff:
 			total_size += f.stat().st_size
 			count += 1
 			if not dry_run:
 				f.unlink()
 
-	return total_size, count
+	return total_size, count, skipped
 
 
-def _clean_path(path: Path, *, dry_run: bool) -> tuple[int, int]:
-	"""清理单个文件或目录，返回 (释放字节数, 清理条数)。"""
+def _clean_path(path: Path, *, dry_run: bool, root: Path | None = None) -> tuple[int, int, int]:
+	"""清理单个文件或目录，返回 ``(释放字节数, 清理条数, 跳过的符号链接数)``。
+
+	祖先目录是符号链接时一律跳过：继续删除会落到数据目录之外（Issue #1497）。
+	路径本身是目录链接时也跳过并报告，``shutil.rmtree`` 对它只会抛 ``OSError``；
+	文件链接沿用既有语义，只 ``unlink`` 链接本身，绝不写穿或删除链接目标。
+	"""
+	if root is not None:
+		link = _first_symlink_component(root, path)
+		if link is not None and link != path:
+			return 0, 0, 1
+	if path.is_symlink():
+		if path.is_dir():
+			# 目录链接：不跟随、不 rmtree，链接目标里的文件必须保留。
+			return 0, 0, 1
+		if path.exists():
+			# 文件链接：only unlink the link itself; the target is untouched.
+			if not dry_run:
+				path.unlink()
+			return 0, 1, 0
+		# 悬空链接维持既有语义：没有可清理内容，保持原样。
+		return 0, 0, 0
 	if not path.exists():
-		return 0, 0
+		return 0, 0, 0
 	size, count = _path_stats(path)
 	if not dry_run:
 		if path.is_dir():
 			shutil.rmtree(path)
 		else:
 			path.unlink()
-	return size, count
+	return size, count, 0
 
 
 def _path_stats(path: Path) -> tuple[int, int]:
@@ -346,15 +544,15 @@ def _clean_job_desc_cache(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 	return _clean_table(data_dir, "job_desc_cache", dry_run=dry_run)
 
 
-def _clean_crawl_data(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
-	files_size, files_count = _clean_path(data_dir / "crawl", dry_run=dry_run)
+def _clean_crawl_data(data_dir: Path, *, dry_run: bool) -> tuple[int, int, int]:
+	files_size, files_count, skipped = _clean_path(data_dir / "crawl", dry_run=dry_run, root=data_dir)
 	db_path = data_dir / "cache" / "boss_agent.db"
 	if not db_path.exists():
-		return files_size, files_count
+		return files_size, files_count, skipped
 	conn = _open_cache_db(db_path)
 	try:
 		if not _table_exists(conn, "crawl_runs"):
-			return files_size, files_count
+			return files_size, files_count, skipped
 		row = conn.execute("SELECT COUNT(*) FROM crawl_runs").fetchone()
 		count = int(row[0])
 		if not dry_run:
@@ -362,7 +560,7 @@ def _clean_crawl_data(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 				if _table_exists(conn, table):
 					conn.execute(f"DELETE FROM {table}")  # noqa: S608 - 表名来自固定白名单
 			conn.commit()
-		return files_size + count * 200, files_count + count
+		return files_size + count * 200, files_count + count, skipped
 	finally:
 		conn.close()
 

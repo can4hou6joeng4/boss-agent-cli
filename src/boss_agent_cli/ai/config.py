@@ -226,6 +226,26 @@ class AIConfigStore:
 			return None
 		return plaintext.decode("utf-8")
 
+	def api_key_is_set(self) -> bool:
+		"""是否存有可用的 API key；空串与纯空白按未设置处理（Issue #1499）。
+
+		旧版本 `ai config --api-key ""` 会把空串加密落盘，``get_api_key()``
+		返回空串而不是 ``None``；只看「是不是 None」会把未配置误报成已配置。
+		"""
+		key = self.get_api_key()
+		return bool(key and key.strip())
+
+	def clear_api_key(self) -> None:
+		"""删除已存储的 API key（Issue #1499）。
+
+		清除凭据走删文件而不是写入空串：空串仍是一个「已保存」的密文，
+		既没有实际用途，又会让状态读取把未配置当成已配置。
+		"""
+		try:
+			self._key_path.unlink()
+		except FileNotFoundError:
+			pass
+
 	def save_config(self, **kwargs: Any) -> None:
 		"""Save configuration, merging with existing values."""
 		current = self.load_config()
@@ -272,5 +292,4 @@ class AIConfigStore:
 		config = self.load_config()
 		provider = config.get("ai_provider")
 		model = config.get("ai_model")
-		api_key = self.get_api_key()
-		return bool(all([provider, model, api_key]) and self.get_base_url())
+		return bool(all([provider, model]) and self.api_key_is_set() and self.get_base_url())

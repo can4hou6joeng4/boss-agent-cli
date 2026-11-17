@@ -301,13 +301,14 @@ def test_chat_export_blocked_ancestor_stops_before_request_and_snapshot(mock_aut
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
-def test_chat_without_export_ignores_output_path_check(mock_auth_cls, mock_client_cls, tmp_path: Path):
-	"""没传 --export 时 `-o` 不生效，不能因此拒绝一次普通查看。"""
-	mock_client = _ctx_mock(mock_client_cls)
-	mock_client.friend_list.return_value = _friend_list_response([_friend_item()])
-
+def test_chat_output_without_export_is_rejected_before_request(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	"""没传 --export 时 `-o` 不会生效：必须报参数错误，不能静默忽略后返回空列表。"""
 	result = CliRunner().invoke(
 		cli, ["--data-dir", str(tmp_path), "--json", "chat", "-o", str(tmp_path)]
 	)
 
-	assert result.exit_code == 0, result.output
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.stdout)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "--export" in payload["error"]["message"]
+	mock_client_cls.assert_not_called()

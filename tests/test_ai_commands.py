@@ -1293,7 +1293,7 @@ def test_config_rejects_blank_model(tmp_path, monkeypatch):
 	assert AIConfigStore(tmp_path).load_config()["ai_model"] is None
 
 
-@pytest.mark.parametrize("bad_url", [" ", "api.example.com/v1", "ftp://example.com/v1"])
+@pytest.mark.parametrize("bad_url", ["", " ", "api.example.com/v1", "ftp://example.com/v1"])
 def test_config_rejects_invalid_base_url(tmp_path, monkeypatch, bad_url):
 	"""空白 / 缺 scheme / 非 http(s) 的 --base-url 写进去后每条 AI 命令都会失败。"""
 	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
@@ -1305,9 +1305,8 @@ def test_config_rejects_invalid_base_url(tmp_path, monkeypatch, bad_url):
 	runner = CliRunner()
 	result = _invoke(runner, tmp_path, ["config", "--base-url", bad_url])
 
-	# 空白串在 has_updates 的真值判断里就被当成「没传」——查看模式仍 exit 0，
-	# 但绝不能落盘成坏配置；其余两种必须 INVALID_PARAM。
-	assert "ai_base_url" not in (store.load_config() or {}) or store.load_config()["ai_base_url"] != bad_url
-	if bad_url.strip():
-		assert result.exit_code == 1
-		assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"
+	# 显式空串同样是「提供了更新」，必须在写盘前按 INVALID_PARAM 拒绝
+	# （Issue #1499）；配置里不能留下坏端点或空端点。
+	assert result.exit_code == 1
+	assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"
+	assert store.load_config()["ai_base_url"] is None

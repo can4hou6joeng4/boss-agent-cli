@@ -15,16 +15,22 @@ def current_friend_security_id_or_emit(
 	调用方传入的标识可能是 uid，绝不能在 securityId 缺失时把 uid 猜作
 	securityId，尤其不能用于联系方式交换等写请求。
 	"""
-	from boss_agent_cli.display import handle_error_output
+	from boss_agent_cli.display import boss_command_for_ctx, handle_error_output
 
 	security_id = str(friend_item.get("securityId") or friend_item.get("security_id") or "").strip()
 	if security_id:
 		return security_id
+	# 与本文件 current_friend_uid_or_emit 同一口径：这是本次列表数据的确定性
+	# 缺失，重放同一段查询不会改变结果，不能报成可重试的网络错误（Issue #1504）。
+	chat_cmd = boss_command_for_ctx(ctx, "chat", include_data_dir=True)
 	handle_error_output(
 		ctx,
 		command,
 		code="NETWORK_ERROR",
-		message="沟通列表返回的联系人缺少当前 securityId，已停止执行；请刷新沟通列表后重试",
+		message="沟通列表返回的联系人缺少当前 securityId，已停止执行；按当前列表重试不会改变结果",
+		recoverable=False,
+		recovery_action=f"用 {chat_cmd} 刷新沟通列表并取到联系人 security_id 后再执行 {command}",
+		hints={"next_actions": [chat_cmd]},
 	)
 	return None
 
