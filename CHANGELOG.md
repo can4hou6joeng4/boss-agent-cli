@@ -2,6 +2,17 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 扫码登录在最终读取时不再校验主 cookie：页面跳转后读取为空也会报登录成功并覆盖本地登录态；现在空结果直接失败，凭证不落盘（Issue #1454）。
+- CDP HTTP 端点不可达时聊天页动作被报成 `ACTION_UNCONFIRMED`（结果未知、禁止重试）；现在抛出可区分的 `ChatTabCdpUnreachable`，按「动作尚未发送」报告 `CDP_UNAVAILABLE`，重新执行是安全的（Issue #1455）。
+- 聊天页返回平台码 37（登录态失效）时被改写成 `ENVIRONMENT_RISK` 并提示不存在的风险锁；现在按 `TOKEN_REFRESH_FAILED` 报告并要求重新登录，`page_risk` 保留原始码（Issue #1456）。
+- 登录成功但本地登录态保存失败（权限 / 磁盘满）被报成可重试网络错误；现在按 `LOCAL_IO_ERROR` 报告并指向目录权限与磁盘空间（Issue #1457）。
+- 只读请求导航恢复超时时返回裸 `code=-1` 并被判为 `UNKNOWN` + 「勿重试」；读取没有副作用，现在返回可重试的 `NETWORK_ERROR`（Issue #1458）。
+- `agent run --dry-run` 命中安全提示时会把熔断写进 `stop.json`，一次无害预览冻结后续真实运行；现在预览不落闩锁、不改写待执行队列，报告仍显示 `CIRCUIT_BREAKER_OPEN`（Issue #1459）。
+- `crawl resume` 读到损坏的 Hook 目录被报成 `INVALID_PARAM` 并提示无法修复的 `crawl configure`；现在按不可重试的 `LOCAL_IO_ERROR` 收口，指向修复 7 个脚本与 `SHA256SUMS` 或用新 `--hook-dir` 重建任务（Issue #1460）。
+
 ## [3.4.76] - 2026-11-17
 
 ### Fixed

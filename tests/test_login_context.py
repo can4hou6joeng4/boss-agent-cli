@@ -285,3 +285,22 @@ def test_login_action_keeps_platform_and_directory(tmp_path):
 	assert shlex.split(login_action_for_ctx(ctx)) == [
 		"boss", "--platform", "otherplat", "--data-dir", str(ctx.obj["data_dir"].resolve()), "login",
 	]
+
+
+@pytest.mark.parametrize(
+	"exc",
+	[
+		PermissionError(13, "Permission denied", "/data/auth/token.json"),
+		OSError(28, "No space left on device"),
+	],
+)
+def test_login_save_failure_is_local_io_not_retryable_network(tmp_path, exc):
+	"""平台登录成功但本地凭证写不进去：确定性本地失败，不能让人重扫或查网络（Issue #1457）。"""
+	ctx = click.Context(click.Command("login"), obj={"data_dir": tmp_path})
+
+	payload = classify_login_error(exc, ctx)
+
+	assert payload["code"] == "LOCAL_IO_ERROR"
+	assert payload["recoverable"] is False
+	assert "网络" not in str(payload["message"])
+	assert payload["recovery_action"]

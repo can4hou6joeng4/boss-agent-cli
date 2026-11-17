@@ -110,10 +110,11 @@ def process_pending(
 				store.write_pending(actions)
 			raise
 		next_status = _next_pending_status(status)
-		actions[index] = _pending_with_status(item, next_status)
-		# Commit each confirmed queue effect before attempting another item. A
-		# later risk/error must not leave a successful action pending for replay.
-		store.write_pending(actions)
+		if not dry_run:
+			actions[index] = _pending_with_status(item, next_status)
+			# Commit each confirmed queue effect before attempting another item. A
+			# later risk/error must not leave a successful action pending for replay.
+			store.write_pending(actions)
 		# 预览不是执行：dry-run 期间写 prior 会让下一次真实运行误以为动作已发生
 		# （Issue #889），因此只有真正执行成功才更新业务状态。
 		if state is not None and status is EventStatus.AUTO_EXECUTED:
@@ -215,7 +216,11 @@ def execute_or_dry_run(
 	safety = guard.before_action(decision, adapter.detect_safety_warning() or "")
 	if not safety.allowed:
 		if safety.circuit_breaker:
-			guard.open_circuit_breaker(safety.reason)
+			if not dry_run:
+				# 预览不是执行：dry-run 只报告真实运行会打开熔断，不落 stop.json /
+				# 状态闩锁，否则一次演练会把后续真实运行全部挡到显式 --resume
+				# 之后（Issue #1459）。
+				guard.open_circuit_breaker(safety.reason)
 			return EventStatus.CIRCUIT_BREAKER_OPEN, safety.reason
 		return EventStatus.STOPPED_BY_SAFETY, safety.reason
 	if dry_run:

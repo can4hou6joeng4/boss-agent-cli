@@ -2032,7 +2032,7 @@ def test_runtime_hook_registration_failure_is_local_io_error(tmp_path, monkeypat
 
 
 def test_resume_rejects_invalid_hook_dir_before_opening_browser(tmp_path, monkeypatch):
-	"""resume 没有 --hook-dir 可修复坏目录：必须在打开浏览器之前按参数错误拒绝（Issue #1408）。"""
+	"""resume 没有 --hook-dir 可修复坏目录：打开浏览器前按确定性本地失败拒绝（Issue #1460）。"""
 	missing = tmp_path / "missing-hooks"
 	db_path = tmp_path / "cache" / "boss_agent.db"
 	db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2061,9 +2061,12 @@ def test_resume_rejects_invalid_hook_dir_before_opening_browser(tmp_path, monkey
 
 	assert result.exit_code == 1, result.output
 	error = _envelope(result)["error"]
-	assert error["code"] == "INVALID_PARAM"
+	assert error["code"] == "LOCAL_IO_ERROR"
 	assert error["recoverable"] is False
 	assert str(missing) in error["message"]
+	assert str(missing) in error["recovery_action"]
+	assert "SHA256SUMS" in error["recovery_action"]
+	assert "crawl configure" not in error["recovery_action"]
 	with CacheStore(db_path) as cache:
 		assert cache.get_crawl_run("run-hook") == before, "预检失败不能改动断点"
 

@@ -12,6 +12,7 @@ from boss_agent_cli.display import (
 	risk_error_message,
 	risk_lock_persistence_actions,
 )
+from boss_agent_cli.output import is_local_io_error
 from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
 
 
@@ -92,6 +93,17 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 				]
 			},
 		}
+
+	if is_local_io_error(exc):
+		# 平台侧登录可能已经成功，但登录态没写进本地：重复扫码或检查网络都不会
+		# 改变结果，必须报确定性本地失败（Issue #1457）。
+		return payload(
+			"LOCAL_IO_ERROR",
+			f"登录成功但本地登录态保存失败: {raw_message}",
+			[],
+			["确认登录态目录可写、磁盘空间充足后重新执行登录"],
+			recovery="修正本地目录权限或磁盘空间后重新执行登录",
+		)
 
 	if isinstance(exc, ValueError):
 		# 选项互斥等用法错误：不是登录链路失败，按 INVALID_PARAM 契约返回，不建议重试登录。

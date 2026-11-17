@@ -740,3 +740,63 @@ def test_chat_action_missing_tab_is_not_reported_as_unconfirmed():
 				settle_ms=0,
 			)
 	client.close()
+
+
+def test_pick_chat_target_ws_raises_pre_dispatch_error_when_cdp_http_unreachable(monkeypatch):
+	"""CDP HTTP /json 不可达发生在脚本发送前：必须是具名异常（Issue #1455）。"""
+	import urllib.request
+
+	from boss_agent_cli.api.browser_client import ChatTabCdpUnreachable, _pick_chat_target_ws
+
+	def _boom(*args, **kwargs):
+		raise OSError("connection refused")
+
+	monkeypatch.setattr(urllib.request, "urlopen", _boom)
+
+	with pytest.raises(ChatTabCdpUnreachable):
+		_pick_chat_target_ws("http://127.0.0.1:9222")
+
+
+def test_exchange_request_propagates_cdp_unreachable_before_dispatch():
+	"""未派发的 CDP 失败不能被吞成 ACTION_UNCONFIRMED（Issue #1455）。"""
+	from boss_agent_cli.api.browser_client import ChatTabCdpUnreachable
+
+	client = BossRecruiterClient(_make_auth())
+	friend_detail_resp = {
+		"code": 0,
+		"zpData": {
+			"friendList": [{"uid": 1, "encryptUid": "u", "encryptJobId": "j", "securityId": "s", "friendSource": 0}]
+		},
+	}
+	with (
+		patch.object(client, "_request", return_value=friend_detail_resp),
+		patch.object(client, "_get_browser") as mock_get_browser,
+		patch("boss_agent_cli.api.recruiter_client.time.sleep"),
+	):
+		mock_browser = MagicMock()
+		mock_browser.evaluate_js_with_chat_events.side_effect = ChatTabCdpUnreachable("cannot reach CDP")
+		mock_get_browser.return_value = mock_browser
+
+		with pytest.raises(ChatTabCdpUnreachable):
+			client.exchange_request_by_friend(1, exchange_type=4)
+	client.close()
+
+
+def test_page_risk_failure_keeps_token_expired_distinct_from_environment_risk():
+	"""code 37 token 失效不是环境风险：不得写「风控」字样或声明风险锁（Issue #1456）。"""
+	client = BossRecruiterClient(_make_auth())
+
+	response = client._page_risk_failure(
+		action="reply",
+		friend_id=7,
+		risk={"code": 37, "message": "登录状态已失效，请重新登录", "path": "/wapi/zpchat/message/send"},
+		result={"ok": False, "log": []},
+		events=[],
+		expected_bits=["hi"],
+	)
+
+	assert response["__cli_error_code__"] == "TOKEN_REFRESH_FAILED"
+	assert "风控" not in response["message"]
+	assert "risk_lock" not in response["__cli_error_details__"]
+	assert response["zpData"]["page_risk"]["code"] == 37
+	client.close()

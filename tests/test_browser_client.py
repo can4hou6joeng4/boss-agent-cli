@@ -732,7 +732,11 @@ def test_request_recovers_once_after_context_destroyed_mid_navigation():
 
 
 def test_request_returns_error_envelope_when_page_never_becomes_ready_after_navigation():
-	"""恢复等待超时：返回错误信封，不第二次 evaluate、不无界重试。"""
+	"""恢复等待超时：返回错误信封，不第二次 evaluate、不无界重试。
+
+	读取没有副作用，必须按可安全重放的中断上报（NETWORK_ERROR），不能返回
+	裸 code -1 让平台 parse_error 落到 UNKNOWN +「勿重试」（Issue #1458）。
+	"""
 	page = MagicMock()
 	page.evaluate.side_effect = RuntimeError("Execution context was destroyed")
 	page.wait_for_load_state.side_effect = TimeoutError("still navigating")
@@ -741,6 +745,8 @@ def test_request_returns_error_envelope_when_page_never_becomes_ready_after_navi
 	res = session.request("GET", "https://www.zhipin.com/wapi/zpgeek/job/detail.json")
 
 	assert res["code"] == -1
+	assert res["__cli_error_code__"] == "NETWORK_ERROR"
+	assert res["__cli_error_details__"]["replay_safe"] is True
 	assert page.evaluate.call_count == 1
 	assert session._page_ready is False
 

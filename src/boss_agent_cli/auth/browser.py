@@ -681,6 +681,11 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 			cookies = {
 				c["name"]: c["value"] for c in cookies_list if _is_cookie_domain(c.get("domain", ""), cookie_domain)
 			}
+			# 与 CDP 路径同口径（Issue #1454）：响应 URL 命中登录接口只说明流程走到了
+			# 确认页，不保证主 cookie 已写入。最终读取拿不到 success_cookie 时直接失败，
+			# 否则空凭证会被保存并在 CLI 里报「登录成功（扫码登录）」。
+			if not cookies.get(success_cookie):
+				raise RuntimeError(f"登录态校验失败：最终读取未拿到主 cookie（{success_cookie}），凭证不落盘")
 			if platform == "zhipin":
 				# 首页成功加载才对其 evaluate 提取 stoken；否则回退到 cookie jar，
 				# 避免页面卡在导航中导致 page.evaluate 永久挂起

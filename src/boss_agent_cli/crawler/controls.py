@@ -37,6 +37,18 @@ class CrawlProfilePathInvalid(RuntimeError):
 	"""采集配置目录无法创建或不是目录：确定性本地路径失败，重试或恢复只会复现（Issue #1290）。"""
 
 
+class CrawlHookDirInvalid(ValueError):
+	"""断点里的 Hook 目录 / 清单 / 摘要校验失败：确定性本地状态问题。
+
+	``crawl resume`` 没有 ``--hook-dir`` 参数可以修复，调用方不能把它兜成
+	「修正 crawl 配置」或可重试网络错误（Issue #1460）。
+	"""
+
+	def __init__(self, message: str, *, hook_dir: object = None) -> None:
+		super().__init__(message)
+		self.hook_dir = hook_dir
+
+
 class CrawlSessionAuthError(RuntimeError):
 	"""采集浏览器无法注入本地登录态：这是本地 Cookie / CDP 准备失败，不是平台风控。
 
