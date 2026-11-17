@@ -332,7 +332,10 @@ def login_via_cdp(
 	success_cookie = config["success_cookie"]
 	ws_url = probe_cdp(cdp_url)
 	if not ws_url:
-		raise ConnectionError("CDP 不可用，请先运行 boss-chrome 启动带调试端口的 Chrome")
+		raise ConnectionError(
+			"CDP 不可用：请先以 --remote-debugging-port=9222 启动带调试端口的 Chrome，"
+			"再用 --cdp-url 指向该端口重试"
+		)
 
 	pw = sync_playwright().start()
 	try:

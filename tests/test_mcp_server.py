@@ -1193,6 +1193,51 @@ def test_run_boss_passes_browser_source_before_command(mock_run):
 		_configure_boss_invocation()
 
 
+@pytest.mark.parametrize(
+	"kwargs,expected_global_args",
+	[
+		({"data_dir": ""}, ["--data-dir", ""]),
+		({"platform": ""}, ["--platform", ""]),
+		({"role": ""}, ["--role", ""]),
+		({"browser_source": ""}, ["--browser-source", ""]),
+	],
+)
+@patch("server.subprocess.run")
+def test_run_boss_forwards_explicit_empty_global_option(mock_run, kwargs, expected_global_args):
+	"""显式空串是调用方的取值，不能在映射层被真值判断吞掉（Issue #1471）。
+
+	空 ``--data-dir`` 若被丢弃，子进程会静默回落到 ``~/.boss-agent``；空平台 /
+	角色 / 浏览器来源同理。原样进 argv，由 CLI 参数校验报 INVALID_PARAM。
+	"""
+	mock_run.return_value = MagicMock(stdout='{"ok": true}', stderr="")
+	_configure_boss_invocation(**kwargs)
+	try:
+		_run_boss("status")
+		cmd = mock_run.call_args[0][0]
+		assert cmd == ["boss", "--json", *expected_global_args, "status"]
+	finally:
+		_configure_boss_invocation()
+
+
+def test_run_keeps_explicit_empty_boss_bin(monkeypatch):
+	"""run() 不能把显式空 --boss-bin 替换成默认值（Issue #1471）。"""
+	from boss_agent_cli import mcp_server
+
+	async def fake_main() -> None:
+		return None
+
+	def unexpected_default() -> str:
+		raise AssertionError("显式空 --boss-bin 不应触发默认值探测")
+
+	monkeypatch.setattr(mcp_server, "main", fake_main)
+	monkeypatch.setattr(mcp_server, "_default_boss_bin", unexpected_default)
+	try:
+		mcp_server.run(["--boss-bin", ""])
+		assert mcp_server._BOSS_BIN == ""
+	finally:
+		_configure_boss_invocation()
+
+
 @patch("server.subprocess.run")
 def test_run_boss_timeout(mock_run):
 	"""应设置 120 秒超时。"""

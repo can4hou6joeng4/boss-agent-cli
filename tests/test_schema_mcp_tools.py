@@ -46,6 +46,23 @@ def test_schema_mcp_tools_exposes_chatmsg_raw_option(tmp_path: Path) -> None:
 	assert "保真" in properties["raw"]["description"]
 
 
+def test_hr_last_messages_friend_ids_items_declare_minimum(tmp_path: Path) -> None:
+	"""数组元素下限与 CLI 的 IntRange(min=1) 一致（Issue #1472）。"""
+	tool = next(item for item in build_tool_catalog() if item.name == "boss_hr_last_messages")
+	items = tool.input_schema["properties"]["friend_ids"]["items"]
+	assert items["minimum"] == 1
+
+	result = CliRunner().invoke(
+		cli,
+		["--data-dir", str(tmp_path), "schema", "--format", "mcp-tools"],
+	)
+	assert result.exit_code == 0, result.output
+	exported = next(
+		item for item in json.loads(result.output)["data"]["tools"] if item["name"] == "boss_hr_last_messages"
+	)
+	assert exported["inputSchema"]["properties"]["friend_ids"]["items"]["minimum"] == 1
+
+
 def test_all_tool_formats_declare_no_additional_properties(tmp_path: Path) -> None:
 	"""三种导出格式都要带上与 call_tool 一致的顶层封闭声明。"""
 	runner = CliRunner()

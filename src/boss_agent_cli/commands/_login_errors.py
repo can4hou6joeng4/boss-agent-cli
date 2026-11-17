@@ -118,11 +118,11 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 		return payload(
 			"LOGIN_TIMEOUT",
 			f"登录等待超时: {raw_message}",
-			[f"{login_cmd} --timeout 180", "boss-chrome"],
+			[f"{login_cmd} --timeout 180"],
 			[
 				"确认二维码已完成扫码并在网页端授权登录",
 				"网络较慢时可延长超时时间后重试",
-				"如已打开本机 Chrome，可先启动带调试端口的 Chrome 再重试登录",
+				"如需复用已登录的 Chrome，请先以 --remote-debugging-port=9222 启动带调试端口的 Chrome，再重试登录",
 			],
 		)
 
@@ -140,9 +140,9 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 		return payload(
 			"CDP_UNAVAILABLE",
 			f"Chrome 调试连接不可用: {raw_message}",
-			["boss-chrome", login_cmd],
+			[login_cmd],
 			[
-				"启动带调试端口的 Chrome 后重试，或去掉 --cdp 让命令自动降级到 Cookie / 扫码链路",
+				"以 --remote-debugging-port=9222 启动带调试端口的 Chrome 后重试，或去掉 --cdp 让命令自动降级到 Cookie / 扫码链路",
 				"确认 --cdp-url 指向可访问的 Chrome DevTools 地址",
 			],
 		)
@@ -178,10 +178,11 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 		return payload(
 			"LOGIN_CREDENTIAL_EXTRACTION_FAILED",
 			f"登录成功后提取凭证失败: {raw_message}",
-			[f"{login_cmd} --cookie-source chrome", "boss-chrome"],
+			[f"{login_cmd} --cookie-source chrome"],
 			[
 				"确认浏览器已完成登录并进入平台首页",
 				"若 Cookie 提取失败，可改用 --cookie-source 指定 chrome/firefox/edge",
+				"如需通过 CDP 复用已登录的 Chrome，请先以 --remote-debugging-port=9222 启动带调试端口的 Chrome",
 			],
 		)
 

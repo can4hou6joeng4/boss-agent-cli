@@ -134,13 +134,16 @@ def _configure_boss_invocation(
 	global _BOSS_BIN, _BOSS_GLOBAL_ARGS
 	_BOSS_BIN = boss_bin
 	args: list[str] = []
-	if data_dir:
+	# 空串是显式取值，不是「未提供」：真值判断会在映射层丢弃它，子进程静默回落
+	# 到默认数据目录 / 平台（Issue #1471）。原样传给 CLI，由 CLI 参数校验报
+	# INVALID_PARAM，调用方才能看到自己传错了。
+	if data_dir is not None:
 		args.extend(["--data-dir", data_dir])
-	if platform:
+	if platform is not None:
 		args.extend(["--platform", platform])
-	if role:
+	if role is not None:
 		args.extend(["--role", role])
-	if browser_source:
+	if browser_source is not None:
 		args.extend(["--browser-source", browser_source])
 	_BOSS_GLOBAL_ARGS = args
 
@@ -767,7 +770,7 @@ def _parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
 def run(argv: list[str] | None = None) -> None:
 	args = _parse_cli_args(argv)
 	_configure_boss_invocation(
-		boss_bin=args.boss_bin or _default_boss_bin(),
+		boss_bin=args.boss_bin if args.boss_bin is not None else _default_boss_bin(),
 		data_dir=args.data_dir,
 		platform=args.platform,
 		role=args.role,

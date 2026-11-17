@@ -993,7 +993,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"friend_ids": {
 						"type": "array",
-						"items": {"type": "integer"},
+						"items": {"type": "integer", "minimum": 1},
 						"minItems": 1,
 						"description": "候选人会话 friend_id 列表；不传时从 hr chat 页获取当前页候选人",
 					},
