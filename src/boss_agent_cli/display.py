@@ -393,8 +393,13 @@ def handle_error_output(
 	recovery_action: str | None = None,
 	details: dict[str, Any] | None = None,
 	hints: dict[str, Any] | None = None,
+	data: Any = None,
 ) -> None:
-	"""Smart error output: TTY -> rich error, pipe -> JSON error envelope."""
+	"""Smart error output: TTY -> rich error, pipe -> JSON error envelope.
+
+	``data`` 只用于「部分完成」的失败：批量删除等操作需要把已完成项和失败项
+	带回给调用方，而不是只留 ``data=null``（Issue #1497）。默认仍是 None。
+	"""
 	from boss_agent_cli.output import emit_error
 
 	# 调用方未显式声明时按登记表补齐，TTY 与 JSON 两条路径看到同一份恢复契约。
@@ -434,6 +439,7 @@ def handle_error_output(
 			recovery_action=recovery_action,
 			details=details,
 			hints=hints,
+			data=data,
 		)
 	else:
 		# JSON 路径由 output.py 脱敏；TTY 分支同样不能把异常文本里的凭据
