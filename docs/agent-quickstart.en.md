@@ -56,6 +56,7 @@ Parsing contract:
 - Read JSON envelopes from `stdout` only
 - `ok=true` means success; when `ok=false`, inspect `error.code` and `error.recovery_action`
 - `boss schema` also returns `supported_platforms`, `supported_recruiter_platforms`, and per-command `availability`, so agents can route tools by `role/platform`
+- If you can only reach the project over MCP, call the read-only `boss_schema` tool (argument `format`) to read the same capability source of truth without opening a CLI
 - A `boss show <#>` number is bound to the latest `search` / `recommend` snapshot; `data.index_snapshot` reports `source`, `page`, `count`, and `saved_at`, and `pagination.index_snapshot` on `search` / `recommend` reports the same identity for direct comparison. After a rerun or page change the old number points at new results, so locate it again
 
 ### Agent authorization boundary
@@ -154,7 +155,7 @@ boss schema --format anthropic-tools
 boss schema --format mcp-tools
 ```
 
-All three tool formats use the shared runtime catalog of 79 MCP tools, with matching names and input parameters. Native schema continues to describe the CLI's 39 top-level commands.
+All three tool formats use the shared runtime catalog of 80 MCP tools, with matching names and input parameters. Native schema continues to describe the CLI's 39 top-level commands.
 
 Further reading:
 - [Agent Host Examples](agent-hosts.en.md)

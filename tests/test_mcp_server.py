@@ -309,7 +309,7 @@ def test_crawl_tools_only_read_or_locally_shortlist_existing_runs():
 
 def test_tool_count():
 	"""工具总数应与当前注册一致。"""
-	assert len(TOOLS) == 79
+	assert len(TOOLS) == 80
 
 
 def test_mcp_tool_count_matches_readme():
@@ -1985,7 +1985,7 @@ def test_build_args_favorites_list_omits_page_when_absent():
 
 def test_tool_count_after_pr41():
 	"""协议服务工具总数应与当前 MCP 暴露能力完全一致。"""
-	assert len(TOOLS) == 79
+	assert len(TOOLS) == 80
 
 
 def test_build_args_shortlist_add():
@@ -2342,9 +2342,13 @@ def _run_cli_in_process(tmp_path: Path):
 	return fake_run
 
 
-@pytest.mark.parametrize("query", ["", "   "])
-def test_call_tool_batch_greet_rejects_blank_query(monkeypatch, tmp_path, query):
-	"""空 / 纯空白 query 必须在 CLI 命令层被拒，不能进入无关键词搜索（Issue #1490）。"""
+@pytest.mark.parametrize("query, expected", [("", "至少需要 1 个字符"), ("   ", "搜索关键词不能为空")])
+def test_call_tool_batch_greet_rejects_blank_query(monkeypatch, tmp_path, query, expected):
+	"""空 / 纯空白 query 被拒，不能进入无关键词搜索（Issue #1490 / #1533）。
+
+	空串在入口按 schema 的 `minLength: 1` 拦下；纯空白能过 minLength，仍由
+	CLI 命令层拒绝。
+	"""
 	from types import SimpleNamespace
 
 	from boss_agent_cli import mcp_server
@@ -2365,7 +2369,7 @@ def test_call_tool_batch_greet_rejects_blank_query(monkeypatch, tmp_path, query)
 	assert result.is_error is True
 	assert payload["ok"] is False
 	assert payload["error"]["code"] == "INVALID_PARAM"
-	assert "搜索关键词不能为空" in payload["error"]["message"]
+	assert expected in payload["error"]["message"]
 
 
 def test_call_tool_batch_greet_rejects_limit_above_schema_maximum(monkeypatch, tmp_path):

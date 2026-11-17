@@ -4,12 +4,13 @@ from typing import Any, cast
 
 import click
 
+from boss_agent_cli.capabilities import (
+	LOCAL_CAPABILITIES as _LOCAL_CAPABILITIES,
+	READONLY_CAPABILITIES as _READONLY_CAPABILITIES,
+	WRITE_CAPABILITIES as _WRITE_CAPABILITIES,
+)
 from boss_agent_cli.display import boss_command_for_ctx, handle_output, shell_argument
 from boss_agent_cli.platforms import get_platform, list_platforms, list_recruiter_platforms
-
-_READONLY_CAPABILITIES = ["search", "detail", "show", "history", "interviews", "recommend", "me", "status"]
-_WRITE_CAPABILITIES = ["greet", "apply"]
-_LOCAL_CAPABILITIES = ["shortlist", "stats", "config", "schema"]
 
 _PLATFORM_CAPABILITY_STATUS: dict[str, dict[str, str]] = {
 	"zhipin": {

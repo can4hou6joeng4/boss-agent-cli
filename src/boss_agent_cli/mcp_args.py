@@ -159,6 +159,14 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	"""根据 tool name 和参数构建 CLI 参数列表。"""
 	name = tool_name.replace("boss_", "")
 
+	if name == "schema":
+		# 能力真源对 MCP-only Agent 同样可读；只读本地数据，不发平台请求。
+		args = ["schema"]
+		output_format = arguments.get("format")
+		if output_format is not None:
+			args.extend(["--format", str(output_format)])
+		return args
+
 	if name == "wizard":
 		# 未识别的 action 不能落进 run 分支（Issue #1002）：把 `resume` 拼错成
 		# `resum` 会静默新建一次 workflow run，调用方以为控制请求已生效。

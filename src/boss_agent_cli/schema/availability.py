@@ -67,10 +67,16 @@ def _command_availability(
 		return {
 			"roles": ["candidate", "recruiter"],
 			"candidate_platforms": ["zhipin"],
+			# 该字段对 agent 是「自动化适配器键」，等于 `boss --platform` 的取值，
+			# 不是 `hr` 命令使用的招聘者注册表名（zhipin-recruiter）；agent run/train
+			# 按 --platform 构造适配器，写注册表名会被当成未知平台落到 mock 兜底
+			# （Issue #1535）。
 			"recruiter_platforms": ["zhipin"],
 			"note": (
 				"agent run/train 等为招聘者自动化；agent crawl 为候选人本地编排，"
-				"可新建 crawl 或分析已完成的 crawl run。"
+				"可新建 crawl 或分析已完成的 crawl run。此处的 recruiter_platforms 是"
+				"自动化适配器键，与 `boss --platform` 取值一致，不是 hr 命令的招聘者"
+				"注册表名（zhipin-recruiter）。"
 			),
 		}
 	if cmd_name == "hr":

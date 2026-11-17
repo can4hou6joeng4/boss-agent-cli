@@ -56,6 +56,7 @@ boss --json wizard --resume <run_id>
 - `stdout` 只读 JSON 信封
 - `ok=true` 代表成功，`ok=false` 时读取 `error.code` 与 `error.recovery_action`
 - `boss schema` 除了返回 `supported_platforms` / `supported_recruiter_platforms`，还会给每个命令附带 `availability`，可直接按 `role/platform` 做工具路由
+- 只能通过 MCP 接入时，调用只读工具 `boss_schema`（参数 `format`）读取同一份能力真源，无需另开 CLI
 - `boss show <#>` 的编号绑定最近一次 `search` / `recommend` 的快照，`data.index_snapshot` 给出 `source` / `page` / `count` / `saved_at`；`search` / `recommend` 的 `pagination.index_snapshot` 返回同一份快照身份，可直接与 `show` 的字段比对。重跑搜索或翻页后旧编号会指向新结果，必须重新定位
 
 ### Agent 授权边界
@@ -156,7 +157,7 @@ boss schema --format anthropic-tools  # Claude Tool Use API
 boss schema --format mcp-tools        # Model Context Protocol Tools
 ```
 
-三个工具格式均来自运行时共享的 79 个 MCP 工具目录，名称与输入参数保持一致；原生格式继续按 39 个顶层命令描述 CLI。
+三个工具格式均来自运行时共享的 80 个 MCP 工具目录，名称与输入参数保持一致；原生格式继续按 39 个顶层命令描述 CLI。
 
 输出可直接喂给对应 host，无需手写适配。
 

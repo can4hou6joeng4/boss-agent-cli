@@ -933,6 +933,18 @@ def ai_suggest_keywords_cmd(ctx: click.Context, limit: int) -> None:
 @click.pass_context
 def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | None, job_id: str | None) -> None:
 	"""基于目标岗位优化简历措辞（仅建议，不修改简历）"""
+	if jd_text is not None and job_id is not None:
+		# 两者同时给时旧实现静默用缓存 JD 覆盖显式 JD（Issue #1529）。
+		handle_error_output(
+			ctx,
+			"ai",
+			code="INVALID_PARAM",
+			message="--jd 与 --job-id 只能二选一，不能同时提供",
+			recovery_action="只保留 --jd <职位描述> 或 --job-id <编号> 后重新执行",
+		)
+		ctx.exit(1)
+		return
+
 	svc = _require_ai_service(ctx)
 	if svc is None:
 		return
@@ -1004,6 +1016,18 @@ def ai_cover_letter_cmd(
 	ctx: click.Context, resume_name: str, jd_text: str | None, job_id: str | None, tone: str, lang: str
 ) -> None:
 	"""基于本地简历与目标岗位起草求职信/自我介绍（仅草稿，不发送）"""
+	if jd_text is not None and job_id is not None:
+		# 两者同时给时旧实现静默用缓存 JD 覆盖显式 JD（Issue #1529）。
+		handle_error_output(
+			ctx,
+			"ai",
+			code="INVALID_PARAM",
+			message="--jd 与 --job-id 只能二选一，不能同时提供",
+			recovery_action="只保留 --jd <职位描述> 或 --job-id <编号> 后重新执行",
+		)
+		ctx.exit(1)
+		return
+
 	svc = _require_ai_service(ctx)
 	if svc is None:
 		return

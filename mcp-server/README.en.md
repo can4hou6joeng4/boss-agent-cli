@@ -49,7 +49,7 @@ Add the server in Cursor Settings -> MCP Servers:
 
 ## Available tools
 
-The current MCP server exposes **79 implemented tools**.
+The current MCP server exposes **80 implemented tools**.
 
 ### Shared workflow
 
@@ -63,6 +63,7 @@ The current MCP server exposes **79 implemented tools**.
 |------|-------------|
 | `boss_status` | Check the current authenticated session |
 | `boss_doctor` | Run environment diagnostics |
+| `boss_schema` | Read the capability source of truth (commands, enums, error codes, wizard catalog) |
 | `boss_config` | View or update configuration |
 | `boss_clean` | Remove stale cache and temp files |
 
