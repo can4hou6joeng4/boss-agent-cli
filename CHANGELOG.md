@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.91] - 2026-11-18
+
 ### Fixed
 - `docs/troubleshooting.md` / `.en.md` 的错误码表未登记 3.4.90 新增的 `WORKFLOW_ALREADY_FINISHED`，按故障表排查的 Agent 会把已完成的 workflow 误判为 `run_id` 写错；现在补充该码与 `wizard --status` 结果读取指引（Issue #1589）。
 - `agent run --dry-run --resume` 会在预览前执行 `store.resume()`，把操作者设置的停止标志写成「已恢复」，之后真实运行不再受停止闩锁保护；`hr location` 的恢复指引也指向了该组合。现在 CLI / MCP 都拒绝该组合，恢复指引改为 live `agent run --resume`（Issue #1591）。
