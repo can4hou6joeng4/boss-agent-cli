@@ -1246,6 +1246,73 @@ def test_run_boss_timeout(mock_run):
 	assert mock_run.call_args[1]["timeout"] == 120
 
 
+@pytest.mark.parametrize(
+	"argv, minimum, maximum",
+	[
+		# batch-greet = 1 次搜索 + count 次招呼，每次 65s + 30s 固定余量。
+		(("batch-greet", "golang", "--count", "5"), 400, 900),
+		(("batch-greet", "golang", "--count", "10"), 700, 900),
+		(("batch-greet", "golang", "--count", "1"), 150, 300),
+		# 没有写请求（0 个候选 / dry-run）时只剩一次搜索，保持默认 120s。
+		(("batch-greet", "golang", "--count", "0"), 120, 120),
+		(("batch-greet", "golang", "--count", "5", "--dry-run"), 120, 120),
+		# 详情筛选逐条请求：welfare 5 页、active 非 online 3 页，都会顶到 900s 封顶。
+		(("search", "golang", "--welfare", "双休"), 600, 900),
+		(("search", "golang", "--active", "3day"), 600, 900),
+		# 普通搜索 / active=online 只翻一页列表，与默认一致。
+		(("search", "golang"), 120, 120),
+		(("search", "golang", "--active", "online"), 120, 120),
+		# export 默认 50 条 = ceil(50/15)=4 页，每页一次列表请求。
+		(("export", "golang"), 200, 400),
+		(("export", "golang", "--count", "300"), 600, 900),
+		# hr chat = 1 次好友列表 + ceil(summary_limit/50) 批。
+		(("hr", "chat"), 200, 300),
+		(("hr", "chat", "--summary-limit", "300"), 400, 600),
+		(("hr", "last-messages"), 120, 300),
+		(("hr", "last-messages", "--limit", "300"), 300, 600),
+		# 好友列表聚合按 5 页估算。
+		(("pipeline",), 300, 500),
+		(("follow-up",), 300, 500),
+		(("digest",), 300, 500),
+	],
+)
+def test_cli_timeout_estimates_from_arguments(argv, minimum, maximum):
+	"""超时必须按最坏请求数放宽，同时不超过 900s 封顶（Issue #1491 / #1492）。"""
+	from boss_agent_cli import mcp_server
+
+	timeout = mcp_server._cli_timeout(argv)
+
+	assert minimum <= timeout <= maximum
+	assert timeout <= 900
+
+
+@pytest.mark.parametrize(
+	"argv",
+	[
+		("doctor",),
+		("apply", "sec_1", "job_1"),
+		("greet", "sec_1", "job_1"),
+		("hr", "whoami"),
+		# 参数解析失败：不猜，回退默认 120s。
+		("batch-greet", "golang", "--count", "abc"),
+		("export", "golang", "--count", "0"),
+		("hr", "last-messages", "--limit", "abc"),
+		(),
+	],
+)
+def test_cli_timeout_unknown_commands_and_bad_values_stay_default(argv):
+	from boss_agent_cli import mcp_server
+
+	assert mcp_server._cli_timeout(argv) == 120.0
+
+
+def test_cli_timeout_wizard_deadline_is_unchanged():
+	"""wizard 仍按子进程自己的 --timeout 加落盘宽限，不参与请求数估算。"""
+	from boss_agent_cli import mcp_server
+
+	assert mcp_server._cli_timeout(("wizard", "--timeout", "60")) == 65.0
+
+
 @patch("server.subprocess.run")
 def test_run_boss_read_only_timeout_is_replay_safe(mock_run):
 	"""只读命令超时不能继承写操作的「结果未知」：读取没有副作用，可以直接重试。"""
@@ -1258,7 +1325,8 @@ def test_run_boss_read_only_timeout_is_replay_safe(mock_run):
 	assert result["error"]["recoverable"] is True
 	assert result["error"]["details"]["outcome_unknown"] is False
 	assert result["error"]["details"]["replay_safe"] is True
-	assert "可直接重新调用" in result["error"]["recovery_action"]
+	assert "降低 limit/count" in result["error"]["recovery_action"]
+	assert "可直接重新调用" not in result["error"]["recovery_action"]
 
 
 @patch("server.subprocess.run")
