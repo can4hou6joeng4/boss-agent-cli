@@ -79,12 +79,17 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 			handle_error_output(ctx, command, code="PLATFORM_NOT_SUPPORTED", message="当前平台不支持下载附件简历")
 			return
 		except OSError:
+			# 目标路径已通过预检，此时的 OSError 是本地写盘失败（磁盘满、只读
+			# 目录、权限不足等），不是参数错误：重试同样的参数不会改变结果，
+			# 按不可重试的 LOCAL_IO_ERROR 上报（Issue #1503）。
+			recoverable, recovery_action = error_contract_for_code("LOCAL_IO_ERROR")
 			handle_error_output(
 				ctx,
 				command,
-				code="INVALID_PARAM",
-				message="无法保存文件，请检查目标目录与写入权限",
-				recovery_action="确认 --output 的父目录存在且可写后重试",
+				code="LOCAL_IO_ERROR",
+				message="无法保存文件，请检查磁盘空间与目标目录的写入权限",
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
 			return
 		except (AuthRequired, RecruiterAuthError):

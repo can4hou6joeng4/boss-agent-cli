@@ -37,11 +37,14 @@ _ENUM_KEYS: frozenset[str] = frozenset(
 #: 显式空串必须原样下发的输出路径参数（按 (子命令, MCP 键) 登记，Issue #1377）。
 #: ``click.Path`` 把空串转成当前目录，真正写盘时得到 ``LOCAL_IO_ERROR``；映射层
 #: 若按真值判断丢弃，调用方以为已指定输出文件，CLI 却返回 ``ok:true`` 且不写文件。
-#: 只登记 digest / stats：chat 与 jobs export 的 ``-o ""`` 仍按未传处理。
+#: chat / export 的空 ``-o ""`` 会由 CLI 判成 ``INVALID_PARAM``（Issue #1501），
+#: 同样必须原样下发，否则 MCP 调用方仍会静默拿到默认导出文件。
 _EXPLICIT_EMPTY_KEYS: frozenset[tuple[str, str]] = frozenset(
 	{
 		("digest", "output"),
 		("stats", "output_file"),
+		("chat", "output_file"),
+		("export", "output_file"),
 	}
 )
 
@@ -255,7 +258,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
 		_optional(args, "--export", "format", arguments)
-		_optional(args, "--output", "output_file", arguments)
+		_optional(args, "--output", "output_file", arguments, command=name)
 		return args
 
 	if name == "me":
@@ -376,7 +379,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		if "count" in arguments:
 			args.extend(["--count", str(arguments["count"])])
 		_optional(args, "--format", "format", arguments)
-		_optional(args, "-o", "output_file", arguments)
+		_optional(args, "-o", "output_file", arguments, command=name)
 		if arguments.get("include_private"):
 			args.append("--include-private")
 		return _literal_positionals(args, count=int("query" in arguments and arguments["query"] is not None))

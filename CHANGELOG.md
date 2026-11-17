@@ -9,6 +9,10 @@
 - `doctor` 的写探针固定写 `auth/.doctor-write-test` 再 `unlink`，该路径是符号链接时会写穿目标并删除链接。现在使用唯一临时文件（`mkstemp` 的 `O_CREAT|O_EXCL`，可用时带 `O_NOFOLLOW`），只清理本次创建的文件；写失败按 `LOCAL_IO_ERROR` 出错误信封，并保留已完成的检查项（Issue #1498）。
 - `boss ai config` 用真值判断「是否提供了更新」：显式空 `--model` / `--provider` / `--base-url` 被当成没传而退回查看模式，`--api-key ""` 还会把已存密钥覆盖成空串，查看输出却仍报 `api_key_set=true`。现在四类字符串选项一律用 `is not None` 判断，并在任何写盘之前返回 `INVALID_PARAM`；新增 `--clear-api-key` 显式清除凭据（与 `--api-key` 互斥），`api_key_set` 按真实存储状态报告，空串与纯空白视为未设置（Issue #1499）。
 - `boss ai local configure --model ""` 会把空模型名写入配置，`ai local status` 随即变成 `configured=false`；`--base-url ""` 被 `or` 静默回退到运行时默认端点。现在两者都在写盘之前返回 `INVALID_PARAM`，只有省略 `--base-url` 才使用默认地址（Issue #1500）。
+- 显式空 `-o ""` 被真值判断当成「未提供」：`boss chat --export md -o ""` 静默写出默认导出文件，`boss export --format html -o ""` 直接向 stdout 输出裸 HTML，`--format csv -o ""` 不写文件却返回成功；现在 chat / export 在任何平台请求前返回 `INVALID_PARAM` 并说明省略 `-o` 才使用默认路径 / stdout，MCP 映射层也把空串原样下发给 CLI 校验（Issue #1501）。
+- `boss chat -o <路径>` 没配 `--export` 时路径被静默忽略，命令仍返回 `ok:true` 与空列表，调用方以为文件已写出；现在入口返回 `INVALID_PARAM`（`-o` 需要配合 `--export`），schema 中 chat 的选项说明同步标注该约束（Issue #1502）。
+- `boss hr download-resume` 把本地写盘 `OSError`（磁盘满、只读目录、权限不足）报成可修正参数的 `INVALID_PARAM`；现在保留 `FileExistsError` 的 `INVALID_PARAM` 分支，其余按不可重试的 `LOCAL_IO_ERROR` 上报，恢复指引包含磁盘空间与目录权限（Issue #1503）。
+- 联系人按 uid 命中但缺少 `securityId` 时被报成可重试的 `NETWORK_ERROR` + 「重试」，却没有后继指引；现在与缺少 uid 的分支同口径，按 `recoverable=false` 上报，并在 `hints.next_actions` 给出带 `--data-dir` 的 `boss chat` 刷新命令（Issue #1504）。
 
 ## [3.4.80] - 2026-11-17
 

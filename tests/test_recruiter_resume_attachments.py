@@ -495,15 +495,18 @@ def test_resume_auth_and_risk_failures_stop_without_leaking(action, error_type, 
 
 
 @pytest.mark.parametrize(
-	("side_effect", "message_fragment", "recovery_fragment", "expected_hints"),
+	("side_effect", "expected_code", "message_fragment", "recovery_fragment", "expected_hints"),
 	[
-		(FileExistsError(), "输出文件已存在", "换一个 --output 文件名", None),
-		(OSError("disk"), "无法保存文件", "父目录存在且可写", None),
-		(ResumeValidationError("该消息不是附件简历请求，不会执行联系方式交换"), "附件简历请求", _hint("hr chat"), [_hint("hr chat")]),
+		(FileExistsError(), "INVALID_PARAM", "输出文件已存在", "换一个 --output 文件名", None),
+		(OSError("disk"), "LOCAL_IO_ERROR", "无法保存文件", "磁盘空间", None),
+		(
+			ResumeValidationError("该消息不是附件简历请求，不会执行联系方式交换"),
+			"INVALID_PARAM", "附件简历请求", _hint("hr chat"), [_hint("hr chat")],
+		),
 	],
 )
 def test_download_resume_local_errors_give_actionable_recovery(
-	side_effect, message_fragment, recovery_fragment, expected_hints
+	side_effect, expected_code, message_fragment, recovery_fragment, expected_hints
 ):
 	"""本地文件与请求校验失败不能只回「修正参数」：要说明下一步怎么做。"""
 	module = "boss_agent_cli.commands.recruiter.download_resume"
@@ -513,7 +516,8 @@ def test_download_resume_local_errors_give_actionable_recovery(
 		result = _invoke("download-resume", "123", "--message-id", "456", "--output", "resume.pdf")
 
 	payload = json.loads(result.output)
-	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert payload["error"]["code"] == expected_code
+	assert payload["error"]["recoverable"] is error_contract_for_code(expected_code)[0]
 	assert message_fragment in payload["error"]["message"]
 	assert recovery_fragment in payload["error"]["recovery_action"]
 	if expected_hints is None:
