@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.78] - 2026-11-17
 
 ### Fixed
 - `me` 命令把本地缓存锁冲突与数据库错误兜成可重试的 `NETWORK_ERROR`；现在分别按 `CACHE_BUSY`、`CACHE_DATABASE_INVALID`、`LOCAL_IO_ERROR` 上报（Issue #1464）。
