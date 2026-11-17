@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.89] - 2026-11-17
+
 ### Fixed
 - `boss search <关键词> --preset <名称>` 用 `or` 链合并预设，把显式空筛选（如 `--city ""`）当成「没传」并用预设值覆盖，显式传入的空城市反而按预设城市筛选；现在只有未提供（None）的项才由预设补齐，显式空串保持「该项不筛选」（Issue #1573）。
 - `boss crawl stop` 对已结束的 run 也返回 `ok:true` 且 `data.status` 为 `stop_requested`，但实际什么都没停、`crawl status` 也不会出现该状态；现在只有 `queued` / `running` 接受停止请求，终态返回不可恢复的 `CRAWL_RUN_FINISHED` 并给出 `crawl status` / `crawl results` 指引（Issue #1574）。

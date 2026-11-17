@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.89（2026-11-17）：第三轮命令层审计——`search --preset` 不再用预设值覆盖显式空筛选（Issue #1573）；`crawl stop` 只对 queued / running 生效，终态返回 `CRAWL_RUN_FINISHED`（Issue #1574）；`mark` 数字标签只接受已知 ID（Issue #1575）；AI 工具与 `boss_crawl_shortlist` 的 schema 补齐「恰好一个」约束（Issue #1576、#1577）；全局 `--delay ""` / `--cdp-url ""` 不再回落配置（Issue #1578）。
 - ✅ v3.4.88（2026-11-17）：显式参数与 schema 说明继续收口——候选池 `compare --tag ""` 与 `annotate` 的空标签、空操作在读取缓存之前返回 `INVALID_PARAM`（Issue #1565）；`watch run` / `crawl` / `agent crawl` 的 schema 补上互斥、必填与空串约束（Issue #1566）；`agent train` 的 `--dry-run` 与 `--live` 改为独立标志并拒绝同时给出（Issue #1568）；`search` 的显式关键词不再被预设覆盖（Issue #1569）；`clean` / `export` / `search` / `hr resume` / `resume init` / `crawl configure` 的六处描述按实现修正（Issue #1570）。
 - ✅ v3.4.87（2026-11-17）：显式参数不再被静默丢弃——`agent crawl --run-id` 拒绝只对新采集有意义的 `--city` / `--pages` / `--with-detail` 与显式空值（Issue #1558）；`crawl run` / `start` 的 `--hook-dir` 缺 `screenshot-full` 或为空时在创建任务之前拒绝（Issue #1559）；`--chrome-path ""` 不再被归一成当前目录写入配置（Issue #1560）；`watch run` 的点名与 `--all` 互斥，不再静默运行全部（Issue #1561）。
 - ✅ v3.4.86（2026-11-17）：采集运行环境与本地并发的错误分类——采集浏览器启动失败按确定性本地失败返回 `CRAWL_UNAVAILABLE` 并保存断点（Issue #1553）；登录态刷新锁改用内核文件锁，等待超时不再误删他人的锁、按可重试的共享等待超时返回（Issue #1554）；出口与声明的语言/时区矛盾统一返回 `EGRESS_CONTRADICTION`（Issue #1555）；共享请求预算等待超时落成 `throttle_stopped`，不再提示新建任务（Issue #1556）。
