@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `docs/troubleshooting.md` / `.en.md` 的错误码表未登记 3.4.90 新增的 `WORKFLOW_ALREADY_FINISHED`，按故障表排查的 Agent 会把已完成的 workflow 误判为 `run_id` 写错；现在补充该码与 `wizard --status` 结果读取指引（Issue #1589）。
+
 ## [3.4.90] - 2026-11-18
 
 ### Fixed

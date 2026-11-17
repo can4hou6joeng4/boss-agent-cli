@@ -351,6 +351,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `WORKFLOW_PLAN_MISMATCH` | 现有 `run_id` 与请求 plan 不一致 | 使用原 plan 恢复，或不传 `run_id` 创建新任务 |
 | `WORKFLOW_BUSY` | 同一 `run_id` 正在由另一次调用执行（另一个终端、Agent 或 MCP 调用）；本次调用没有执行任何步骤，也没有改动 checkpoint | 用 `boss wizard --status <run_id>` 查看进度，等当前执行结束后再 `--resume`；不要并发恢复同一个 `run_id` |
 | `WORKFLOW_NOT_FOUND` | 本地 workflow 任务不存在或 `run_id` 有误（`boss wizard --status` / `--stop` / `--resume`） | 执行 `boss wizard` 新建任务，或先用 `boss wizard --status <run_id>` 核对 ID |
+| `WORKFLOW_ALREADY_FINISHED` | 对已完成（completed）的 workflow 请求停止；任务存在且没有修改状态 | 用 `boss wizard --status <run_id>` 查看结果与最终状态，需要时新建 workflow |
 | `CRAWL_BUSY` | 同一采集任务正由另一次调用执行；本次调用未发出请求，也未修改采集断点 | 用返回的同一数据目录的 `boss crawl status <run_id>` 查看进度，等当前执行结束后再恢复；不要并发恢复同一任务；`status` / `results` / `stop` 仍可用 |
 | `CRAWL_PROFILE_BUSY` | 同一数据目录的采集配置目录正被另一个运行中的采集 Chrome 使用（`SingletonLock` 里的 pid 仍存活）；本次调用未发出请求，也没有删除锁文件 | 用 `boss crawl status <run_id>` 查看正在运行的采集，等它结束后再启动或恢复；不要并发使用同一数据目录的采集浏览器，也不要删除 `SingletonLock` |
 | `CRAWL_RUN_NOT_FOUND` | 本地采集任务不存在或 `run_id` 有误（`boss crawl status` / `resume` / `results` 等） | 执行 `boss crawl start <query>` 新建任务，或用真实 `run_id` 执行 `boss crawl status <run_id>` 核对 |
