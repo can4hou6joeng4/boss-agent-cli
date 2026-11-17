@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from boss_agent_cli.api.recruiter_endpoints import BASE_URL, BOSS_CHAT_START_URL, CODE_ACCOUNT_RESTRICTED, CODE_IP_RESTRICTED, CODE_STOKEN_EXPIRED
-from boss_agent_cli.api.zhipin_errors import classify_code_37, response_message
+from boss_agent_cli.api.zhipin_errors import classify_code_37, is_platform_success_code, response_message
 from boss_agent_cli.platforms.base import classify_platform_error
 from boss_agent_cli.platforms.recruiter_base import RecruiterPlatform
 
@@ -55,7 +55,7 @@ def _remember_deprecated_endpoint(response: dict[str, Any], tracking_issue: str)
 
 def _greet_business_error(response: dict[str, Any]) -> tuple[str, str] | None:
 	"""首次开聊的 code=0 也可能只是成功返回权益拦截页。"""
-	if response.get("code") != 0 or response.get("__cli_endpoint_hint__") != BOSS_CHAT_START_URL:
+	if not is_platform_success_code(response.get("code")) or response.get("__cli_endpoint_hint__") != BOSS_CHAT_START_URL:
 		return None
 	data = response.get("zpData")
 	if not isinstance(data, dict) or type(data.get("chat")) is not int or data["chat"] != 0:
@@ -83,7 +83,7 @@ class BossRecruiterPlatform(RecruiterPlatform):
 	def is_success(self, response: dict[str, Any]) -> bool:
 		if _view_geek_retired(response):
 			return False
-		return response.get("code") == 0 and _greet_business_error(response) is None
+		return is_platform_success_code(response.get("code")) and _greet_business_error(response) is None
 
 	def unwrap_data(self, response: dict[str, Any]) -> Any:
 		return response.get("zpData")

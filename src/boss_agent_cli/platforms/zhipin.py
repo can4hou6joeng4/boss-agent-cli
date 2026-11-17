@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from boss_agent_cli.api.endpoints import BASE_URL, CODE_ACCOUNT_RESTRICTED, CODE_IP_RESTRICTED, CODE_STOKEN_EXPIRED
-from boss_agent_cli.api.zhipin_errors import classify_code_37, response_message
+from boss_agent_cli.api.zhipin_errors import classify_code_37, is_platform_success_code, response_message
 from boss_agent_cli.platforms.base import Platform
 
 if TYPE_CHECKING:
@@ -39,7 +39,7 @@ class BossPlatform(Platform):
 	# ── 包络适配 ────────────────────────────────────────
 
 	def is_success(self, response: dict[str, Any]) -> bool:
-		return response.get("code") == 0
+		return is_platform_success_code(response.get("code"))
 
 	def unwrap_data(self, response: dict[str, Any]) -> Any:
 		return response.get("zpData")

@@ -4,7 +4,7 @@ from typing import Any
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.proxy import ProxyConfigurationError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded
-from boss_agent_cli.api.zhipin_errors import normalize_risk_code
+from boss_agent_cli.api.zhipin_errors import is_platform_success_code, normalize_risk_code
 from boss_agent_cli.auth.browser import (
 	ReusedSessionStaleError,
 	login_via_browser,
@@ -304,7 +304,7 @@ class AuthManager:
 					details={"platform_code": None, "risk_source": "security_page_or_forbidden"},
 				)
 			resp.raise_for_status()
-			return bool(isinstance(data, dict) and data.get("code") == 0)
+			return bool(isinstance(data, dict) and is_platform_success_code(data.get("code")))
 		except PlatformRiskError as error:
 			self._record_cdp_risk_lock(error=error, token=token)
 			raise

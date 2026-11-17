@@ -82,7 +82,14 @@ def is_valid_cdp_url(value: str) -> bool:
 		_ = parsed.port  # 端口非数字 / 超出 1-65535 时抛 ValueError
 	except ValueError:
 		return False
-	return parsed.scheme in {"http", "https"} and bool(parsed.hostname)
+	# userinfo 会出现在 CDP 错误信封与 stderr 日志里；调试端点不需要凭据，
+	# 直接拒绝，避免口令随错误信息离开本机（Issue #1632）。
+	return (
+		parsed.scheme in {"http", "https"}
+		and bool(parsed.hostname)
+		and not parsed.username
+		and not parsed.password
+	)
 
 
 def expand_budget_directory(value: str) -> Path:
