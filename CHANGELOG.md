@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 静默刷新 stoken 成功但登录态落盘失败（权限 / 磁盘满）时，本地 `OSError` 被包装成可恢复的 `TokenRefreshFailed` 并提示重新登录；现在原样上抛，按不可重试的 `LOCAL_IO_ERROR` 上报（Issue #1479）。
+- CDP 登录成功但登录态落盘失败时被当成 CDP 失败并继续启动扫码链路，原始本地权限问题被扫码超时覆盖；现在保存动作不再参与降级判定，直接上抛 `LOCAL_IO_ERROR`，CDP 自身不可达时仍降级扫码（Issue #1480）。
+
 ## [3.4.78] - 2026-11-17
 
 ### Fixed
