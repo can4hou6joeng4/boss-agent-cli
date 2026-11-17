@@ -322,6 +322,35 @@ def test_delete_resume_clears_job_links(tmp_path):
 	assert json.loads(delete_result.output)["data"]["removed_links"] == 1
 
 
+def test_delete_resume_cache_failure_keeps_resume_files(tmp_path, monkeypatch):
+	"""缓存清理失败时简历必须原样保留：先删文件再清关联会留下 exit 1 但文件已没。
+
+	`resume delete` 的缓存库繁忙/损坏是本地失败，用户重试即可；简历文件若已
+	删除，重试只会得到 RESUME_NOT_FOUND（Issue #1465）。
+	"""
+	from boss_agent_cli.cache.store import CacheBusyError
+
+	runner = CliRunner()
+	_invoke(runner, tmp_path, ["init", "--name", "keepme", "--template", "default"])
+
+	def busy(self, resume_name: str) -> int:
+		raise CacheBusyError(tmp_path / "cache" / "boss_agent.db", "database is locked")
+
+	monkeypatch.setattr("boss_agent_cli.cache.store.CacheStore.remove_resume_links", busy)
+	result = _invoke(runner, tmp_path, ["delete", "keepme"])
+
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "CACHE_BUSY"
+	assert parsed["error"]["recoverable"] is True
+	assert (tmp_path / "resumes" / "keepme.json").exists()
+
+	monkeypatch.undo()
+	shown = _invoke(runner, tmp_path, ["show", "keepme"])
+	assert shown.exit_code == 0, shown.output
+	assert json.loads(shown.output)["data"]["name"] == "keepme"
+
+
 def test_delete_not_found(tmp_path):
 	runner = CliRunner()
 	result = _invoke(runner, tmp_path, ["delete", "nope"])

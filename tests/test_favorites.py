@@ -539,6 +539,47 @@ def test_collect_favorites_rejects_incomplete_page_budget():
 		collect_favorites_items(platform, max_pages=2)
 
 
+@pytest.mark.parametrize(
+	"zp_data",
+	["oops", ["oops"], None, {"cardList": "oops"}, {"cardList": {"jobName": "synthetic"}}],
+	ids=["zpData-str", "zpData-list", "zpData-null", "cardList-str", "cardList-dict"],
+)
+def test_collect_favorites_rejects_response_shape_drift(zp_data):
+	"""成功包络但 zpData / cardList 形状漂移时不能伪装成空收藏（Issue #1468）。"""
+	from unittest.mock import MagicMock
+
+	from boss_agent_cli.commands.favorites import FavoritesResponseInvalid, collect_favorites_items
+
+	platform = MagicMock()
+	platform.is_success.return_value = True
+	platform.unwrap_data.side_effect = lambda response: response["zpData"]
+	platform.job_favorites.return_value = {"code": 0, "zpData": zp_data}
+
+	with pytest.raises(FavoritesResponseInvalid) as excinfo:
+		collect_favorites_items(platform)
+	assert "职位收藏响应格式无效" in str(excinfo.value)
+
+
+@patch("boss_agent_cli.commands.favorites.collect_favorites_items")
+@patch("boss_agent_cli.commands.favorites.get_platform_instance")
+@patch("boss_agent_cli.commands.favorites.AuthManager")
+def test_favorites_sync_response_shape_drift_returns_network_error(
+	mock_auth_cls, mock_platform_cls, mock_collect, tmp_path,
+):
+	"""结构漂移不能落成 UNKNOWN/空批次：输出与 list 同类的可重试 NETWORK_ERROR。"""
+	from boss_agent_cli.commands.favorites import FavoritesResponseInvalid
+
+	_ctx_mock(mock_platform_cls)
+	mock_collect.side_effect = FavoritesResponseInvalid("职位收藏响应格式无效：zpData 不是对象")
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "favorites", "sync"])
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	assert parsed["error"]["recoverable"] is True
+	assert parsed["error"]["recovery_action"] == "重试；若持续出现，用 boss doctor 检查登录态与网络"
+	assert _shortlist_items(tmp_path) == []
+
+
 @patch("boss_agent_cli.commands.favorites.collect_favorites_items")
 @patch("boss_agent_cli.commands.favorites.get_platform_instance")
 @patch("boss_agent_cli.commands.favorites.AuthManager")

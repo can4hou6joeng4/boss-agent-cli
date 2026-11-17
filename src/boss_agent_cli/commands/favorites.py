@@ -31,6 +31,16 @@ class FavoritesPageLimitExceeded(RuntimeError):
 	"""The remote list still has more data after the bounded page budget."""
 
 
+class FavoritesResponseInvalid(ValueError):
+	"""成功包络里的 zpData / cardList 形状漂移（非对象 / 非列表）。
+
+	旧实现把这两种漂移 `return [], resp` 交给调用方：sync 拿到空列表与
+	error_response=None，落成 ok=true 或 UNKNOWN，Agent 无法判断该重试还是
+	核对（Issue #1468）。现在显式抛出，由 sync 输出与 `favorites list` 同类的
+	可重试 NETWORK_ERROR。
+	"""
+
+
 def _normalize_job_status(card: dict[str, Any]) -> str:
 	"""将 BOSS jobValidStatus 归一化为稳定的 Agent 输出值。"""
 	raw_status = card.get("jobValidStatus")
@@ -97,6 +107,7 @@ def collect_favorites_items(
 	返回 (items, error_response)：
 	- 成功聚合：([cards...], None)
 	- 任一页平台失败：([], raw_response)
+	- 成功包络但 zpData / cardList 形状漂移：抛 FavoritesResponseInvalid
 
 	v1 固定 isActive=true；平台仍可能返回 jobValidStatus=2 的失效职位，调用方必须按字段判断。
 	encryptJobId 做 seen_signature（比 securityId 稳定，避免 securityId 跨请求变化导致重复页检测失效）。
@@ -112,10 +123,12 @@ def collect_favorites_items(
 
 		platform_data = platform.unwrap_data(resp)
 		if not isinstance(platform_data, dict):
-			return [], resp
+			# 平台失败有 is_success 分支；成功包络里的形状漂移是协议问题，
+			# 不能用空列表伪装成功（Issue #1468）。
+			raise FavoritesResponseInvalid("职位收藏响应格式无效：zpData 不是对象")
 		page_items = platform_data.get("cardList") or []
 		if not isinstance(page_items, list):
-			return [], resp
+			raise FavoritesResponseInvalid("职位收藏响应格式无效：cardList 不是列表")
 		if not page_items:
 			break
 
@@ -269,6 +282,18 @@ def favorites_sync_cmd(ctx: click.Context) -> None:
 				message=str(exc),
 				recoverable=True,
 				recovery_action="缩小远端收藏数量后重试",
+			)
+			return
+		except FavoritesResponseInvalid as exc:
+			# 成功包络但结构漂移：与 list 同一契约，可重试，不能落成 UNKNOWN 或
+			# 静默导入空批次（Issue #1468）。
+			handle_error_output(
+				ctx,
+				"favorites-sync",
+				code="NETWORK_ERROR",
+				message=str(exc),
+				recoverable=True,
+				recovery_action="重试；若持续出现，用 boss doctor 检查登录态与网络",
 			)
 			return
 		if error_response is not None:

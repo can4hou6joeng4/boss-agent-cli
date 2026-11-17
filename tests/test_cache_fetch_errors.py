@@ -22,6 +22,8 @@ from boss_agent_cli.cache.store import (
 	CacheDatabaseInvalid,
 	CacheStore,
 	_GuardedCursor,
+	is_cache_busy_error,
+	is_cache_local_io_error,
 )
 from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
 from boss_agent_cli.main import cli
@@ -122,6 +124,73 @@ def test_fetch_busy_error_stays_retryable(tmp_path, monkeypatch):
 			store.list_shortlist()
 	assert excinfo.value.path == _db_path(tmp_path)
 	assert "database is locked" in str(excinfo.value)
+
+
+# ── 本地 IO 失败不落 CACHE_DATABASE_INVALID（Issue #1467） ─────────────
+
+
+_LOCAL_IO_MESSAGES = (
+	"attempt to write a readonly database",
+	"disk I/O error",
+	"database or disk is full",
+	"unable to open database file",
+)
+
+
+def _raise_local_io(message: str) -> Any:
+	def raise_error(*_args: Any, **_kwargs: Any) -> Any:
+		raise sqlite3.OperationalError(message)
+	return raise_error
+
+
+@pytest.mark.parametrize("message", _LOCAL_IO_MESSAGES)
+def test_local_io_error_is_not_translated_to_cache_database_invalid(tmp_path, monkeypatch, message):
+	"""只读目录 / 磁盘满 / 设备 IO 故障不能被说成库损坏让人删库（Issue #1467）。"""
+	with CacheStore(_db_path(tmp_path)) as store:
+		store.add_shortlist({"security_id": "s1", "job_id": "j1", "title": "t"})
+		monkeypatch.setattr(_GuardedCursor, "_cursor_call", _raise_local_io(message))
+		with pytest.raises(sqlite3.OperationalError) as excinfo:
+			store.list_shortlist()
+	assert not isinstance(excinfo.value, CacheDatabaseInvalid)
+	assert str(excinfo.value) == message
+	assert is_cache_local_io_error(excinfo.value)
+
+
+def test_open_local_io_error_is_not_cache_database_invalid(tmp_path, monkeypatch):
+	"""打开阶段的本地 IO 失败同样保留原始异常（Issue #1467）。"""
+	db_path = _db_path(tmp_path)
+	db_path.parent.mkdir(parents=True, exist_ok=True)
+
+	class _FailingConnection:
+		def execute(self, *_args: Any, **_kwargs: Any) -> Any:
+			raise sqlite3.OperationalError("unable to open database file")
+
+	monkeypatch.setattr("boss_agent_cli.cache.store.sqlite3.connect", lambda *_a, **_k: _FailingConnection())
+	with pytest.raises(sqlite3.OperationalError) as excinfo:
+		CacheStore(db_path)
+	assert not isinstance(excinfo.value, CacheDatabaseInvalid)
+	assert str(excinfo.value) == "unable to open database file"
+
+
+@pytest.mark.parametrize("message", _LOCAL_IO_MESSAGES)
+def test_cache_busy_and_local_io_predicates_are_mutually_exclusive(message):
+	exc = sqlite3.OperationalError(message)
+	assert is_cache_local_io_error(exc)
+	assert not is_cache_busy_error(exc)
+
+
+@pytest.mark.parametrize("message", ["database is locked", "database table is locked", "database is busy"])
+def test_busy_messages_are_not_local_io_errors(message):
+	exc = sqlite3.OperationalError(message)
+	assert is_cache_busy_error(exc)
+	assert not is_cache_local_io_error(exc)
+
+
+def test_local_io_predicate_only_matches_operational_errors():
+	"""其他 sqlite 错误（库损坏、写错的 SQL）不属于本地 IO。"""
+	assert not is_cache_local_io_error(sqlite3.DatabaseError("disk I/O error"))
+	assert not is_cache_local_io_error(RuntimeError("disk I/O error"))
+	assert not is_cache_local_io_error(sqlite3.OperationalError("no such column: title"))
 
 
 # ── 真实坏页 ──────────────────────────────────────────────────────────
