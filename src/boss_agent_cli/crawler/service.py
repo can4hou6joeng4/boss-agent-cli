@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import socket
+import sqlite3
 import sys
 import time
 import uuid
@@ -754,6 +755,7 @@ class CrawlService:
 			CrawlSessionAuthError,
 			CacheRecordInvalid,
 			CacheDatabaseInvalid,
+			sqlite3.DatabaseError,
 		) as exc:
 			# 可选依赖缺失、导出失败、配置目录被另一个采集 Chrome 占用、配置目录
 			# 路径不可用、本地登录态无法注入采集浏览器、本地记录损坏与缓存库损坏
@@ -944,7 +946,9 @@ class CrawlService:
 		for _ in range(max_retries + 1):
 			try:
 				return action()
-			except (PlatformRiskError, CrawlRiskError, CrawlLimitExceeded, CrawlStopRequested):
+			except (PlatformRiskError, CrawlRiskError, CrawlLimitExceeded, CrawlStopRequested, sqlite3.DatabaseError):
+				# 只读目录 / 磁盘满等本地数据库故障重试同一次请求不会自愈；保留原始
+				# `sqlite3.DatabaseError` 让上层按 LOCAL_IO_ERROR 收口（Issue #1467）。
 				raise
 			except Exception as exc:
 				if is_request_stop(exc):

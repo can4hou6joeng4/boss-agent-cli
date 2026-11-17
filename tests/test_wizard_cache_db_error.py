@@ -5,6 +5,7 @@
 """
 
 import json
+import sqlite3
 
 from click.testing import CliRunner
 
@@ -61,3 +62,26 @@ def test_wizard_maps_cache_database_invalid_to_its_own_code(tmp_path, monkeypatc
 def test_cache_database_invalid_has_tty_labels():
 	assert ERROR_LABELS["CACHE_DATABASE_INVALID"]
 	assert "boss_agent.db" in RECOVERY_LABELS["CACHE_DATABASE_INVALID"]
+
+
+def test_wizard_maps_raw_sqlite_local_io_error_to_local_io(tmp_path, monkeypatch):
+	"""只读 / 磁盘满的原始 sqlite 错误不能落成可重试 NETWORK_ERROR（Issue #1467）。"""
+	_seed_login(tmp_path)
+
+	class _Boom:
+		def resume(self, *args, **kwargs):
+			raise sqlite3.OperationalError("attempt to write a readonly database")
+
+	monkeypatch.setattr(
+		"boss_agent_cli.wizard.actions._crawl_service",
+		lambda context, cache: _Boom(),
+	)
+
+	exit_code, payload = _invoke_wizard(tmp_path, "crawl_resume", {"run_id": "run-1"})
+
+	assert exit_code == 1, payload
+	error = payload["error"]
+	assert error["code"] == "LOCAL_IO_ERROR"
+	assert error["recoverable"] is False
+	assert "本地数据库文件无法打开" in error["message"]
+	assert "NETWORK_ERROR" not in json.dumps(payload, ensure_ascii=False)
