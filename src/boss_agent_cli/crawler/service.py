@@ -747,12 +747,16 @@ class CrawlService:
 			status = "budget_stopped"
 			error = str(exc)
 		except RequestBudgetExceeded as exc:
+			# REQUEST_BUDGET_EXHAUSTED 是本地共享请求预算的等待超时（另一个进程持有
+			# 租约、冷却未结束或等不到下一个请求间隔），run 自己的预算并没有耗尽：
+			# 落成 budget_stopped 会让入口提示「新建任务」，而等待后用 resume 就能
+			# 从断点继续（Issue #1556）。run 预算耗尽走 CrawlLimitExceeded。
 			status = (
 				"timeout_stopped"
 				if exc.code == "WORKFLOW_TIMEOUT"
 				else "workflow_stopped"
 				if exc.code == "WORKFLOW_STOPPED"
-				else "budget_stopped"
+				else "throttle_stopped"
 			)
 			error = str(exc)
 		except CrawlTimeoutRequested as exc:
