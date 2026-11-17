@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.80] - 2026-11-17
 
 ### Fixed
 - MCP 子进程固定 120s 超时让 `batch-greet` 的默认 5 次招呼（每次节流上界 60s）必然超时，SIGINT 后 stdout 为空、结果未知且没有可恢复的部分结果；现在按 argv 估算超时（1 次搜索 + `--count` 次招呼，单次 60s 节流上界 + 5s 抖动 + 30s 余量，封顶 900s），CLI 在批打招呼被中断时输出已完成列表、在途候选人与 `replay_safe=false` 的七键错误信封，并明确不要原样重试（Issue #1491）。
