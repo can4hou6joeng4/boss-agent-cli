@@ -2,6 +2,21 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- `me` 命令把本地缓存锁冲突与数据库错误兜成可重试的 `NETWORK_ERROR`；现在分别按 `CACHE_BUSY`、`CACHE_DATABASE_INVALID`、`LOCAL_IO_ERROR` 上报（Issue #1464）。
+- `resume delete` 先删除简历文件再清理职位关联，缓存失败会留下悬挂关联并让重试得到 `RESUME_NOT_FOUND`；现在先清理关联，成功后才删除文件（Issue #1465）。
+- 候选池批量导入刷新 `security_id` 时可能撞上 `(security_id, job_id)` 主键并整批回滚；现在冲突时删除旧重复行、保留目标行（Issue #1466）。
+- 缓存取数把只读目录、磁盘满与设备 IO 故障归成 `CACHE_DATABASE_INVALID` 并提示删库；现在保留原始错误，由 CLI 与 wizard 按 `LOCAL_IO_ERROR` 上报（Issue #1467）。
+- `favorites sync` 遇到成功包络但 `zpData` / `cardList` 形状漂移时报不可重试的 `UNKNOWN`；现在返回可重试的 `NETWORK_ERROR`（Issue #1468）。
+- automation 的 `ChatTabCdpUnreachable` / `RecruiterChatTabRequired` / `BrowserSourceUnavailable` 发生在请求发出前，却会把队列行永久留成 `executing`；现在先还原 `pending` 再抛出（Issue #1469）。
+- 风控 / 预算闩锁写入撞上控制锁时会覆盖原始异常并误报 `AUTOMATION_BUSY`；现在保留原始错误，详情标记 `risk_latch_persisted=false`，异常周期不再写 state（Issue #1470）。
+- MCP server 的显式空 `--data-dir` / `--boss-bin` 被真值判断静默丢弃并回落默认值；现在原样传给 CLI，由参数校验拒绝（Issue #1471）。
+- `boss_hr_last_messages` 的 `friend_ids.items` 缺少 `minimum: 1`，与 CLI 的 `IntRange(min=1)` 不一致；现在补上下限（Issue #1472）。
+- 登录错误提示的 `next_actions` 含不存在的 `boss-chrome` 命令；现在移除，并把 Chrome 调试端口指引移到 `operator_actions`（Issue #1473）。
+- 深层本地数据会让脱敏递归溢出，stdout 变成 0 字节并丢失七键信封；现在脱敏有深度上限，信封出口捕获 `RecursionError` 回退固定错误信封（Issue #1474）。
+
 ## [3.4.77] - 2026-11-17
 
 ### Fixed
