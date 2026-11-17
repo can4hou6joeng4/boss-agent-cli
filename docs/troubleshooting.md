@@ -343,6 +343,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `TOKEN_REFRESH_FAILED` | Token 刷新失败 | `boss login` |
 | `ENVIRONMENT_RISK` | 访问环境存在异常 | 停止自动化访问；保留当前专用 profile，在官方页面确认并降低访问频率 |
 | `ENVIRONMENT_RISK_LOCKED` | CDP Chrome 的 stoken 此前命中 code 37 且尚未更新，本次请求未发送 | 停止自动化；由用户在该 Chrome 打开职位列表页确认能正常加载，等几分钟后再重试（见上文） |
+| `EGRESS_CONTRADICTION` | 配置 `BOSS_EGRESS_PROBE_URL` 后探测到出口地区与客户端声明的语言/时区矛盾，采集在发起任何平台请求前停止 | 不要原样重试：保持声明的语言/时区不变，换回与之一致的出口；不需要该检查时撤销 `BOSS_EGRESS_PROBE_URL`。程序不会自动改写语言或时区，`error.details.egress` 给出矛盾项 |
 | `ACCOUNT_RISK` | 风控拦截 | 停止当前 workflow，保留 run ID/checkpoint；处理登录或安全页后再显式恢复 |
 | `COMPLIANCE_BLOCKED` | 历史版本模式策略阻断 | 升级当前版本后重试；当前版本不主动产生此错误 |
 | `WIZARD_INPUT_REQUIRED` | headless workflow 缺少 role/platform/goal/inputs | 按 `boss schema` catalog 补齐 `--input-json` |

@@ -84,7 +84,7 @@ CLI 中，`boss agent crawl --run-id <run_id> --resume <简历名>` 只处理已
 boss agent crawl --query "AI 工程师" --city 杭州 --pages 3 --with-detail --resume <简历名>
 ```
 
-默认不注入 Hook。只有拥有相应授权时，才可在 CLI 显式传 `--hook-profile screenshot-full --hook-dir <含 SHA256SUMS 的目录>`；项目不随包发布第三方脚本。需要立即终止时执行 `boss crawl stop <run_id>`。当 `crawl_status` 返回 `risk_stopped` 时，同 `data_dir` 的风险锁会在浏览器构造前阻断所有新采集和恢复；保留 `run_id`，由用户确认官方目标业务页恢复后执行 `boss clean --risk-lock`，再显式 `boss crawl resume <run_id>`。恢复步骤属于 `operator_actions`，Agent 不自行清锁。`budget_stopped` 需处理预算后恢复；两者均不应重新建任务或循环重试。本地状态、结果和导入仍可用。
+默认不注入 Hook。只有拥有相应授权时，才可在 CLI 显式传 `--hook-profile screenshot-full --hook-dir <含 SHA256SUMS 的目录>`；项目不随包发布第三方脚本。需要立即终止时执行 `boss crawl stop <run_id>`。当 `crawl_status` 返回 `risk_stopped` 时，同 `data_dir` 的风险锁会在浏览器构造前阻断所有新采集和恢复；保留 `run_id`，由用户确认官方目标业务页恢复后执行 `boss clean --risk-lock`，再显式 `boss crawl resume <run_id>`。恢复步骤属于 `operator_actions`，Agent 不自行清锁。`budget_stopped` 需处理预算后恢复；两者均不应重新建任务或循环重试。`throttle_stopped` 是本地共享请求预算等待超时（不是任务预算耗尽），等待后用 `crawl resume` 从断点继续。本地状态、结果和导入仍可用。
 
 同一 `run_id` 同时只允许一个执行器：另一次 `crawl start` / `crawl resume` / wizard 采集步骤还在执行时，后到者返回 `CRAWL_BUSY`，不发出请求、不推进断点，也不清除停止请求。按 `hints.next_actions` 查 `boss crawl status <run_id>`，等当前执行结束后再恢复；不要并发恢复同一个 `run_id`，也不要为了让位去 `--stop` 一次正常的执行。`status` / `results` / `stop` 不受影响，不同 `run_id` 互不阻塞；执行进程异常退出后执行权由操作系统自动释放，无须清理锁文件。
 

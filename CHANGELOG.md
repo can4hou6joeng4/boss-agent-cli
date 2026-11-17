@@ -2,6 +2,14 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- `crawl` 的采集浏览器启动失败（Chrome 未安装、`chrome_path` 配错、调试端口被占用或上次保留的窗口已关闭）被 `CrawlService._run` 的通用异常分支吞成 `ok:true` 的 `stopped`，只给一条会反复失败的 resume 指引；现在按确定性本地失败返回 `CRAWL_UNAVAILABLE` 并保存断点，`crawl run/resume`、`crawl start`、`agent crawl` 与 wizard 的恢复指引检查 Chrome / `chrome_path` / 调试端口，不再只提示安装可选依赖（Issue #1553）。
+- 登录态刷新锁改用内核文件锁：等待超时不再删除其他进程仍持有的 `refresh.lock`，先持有者退出时也不会删掉后来者的锁；等待期间若另一个进程已完成刷新则直接采纳新 stoken，仍拿不到锁时按「请求未发出」的可重试 `REQUEST_BUDGET_EXHAUSTED` 返回，不误导用户重新登录（Issue #1554）。
+- 配置 `BOSS_EGRESS_PROBE_URL` 后出口与客户端声明的语言/时区矛盾时，`crawl run/start/resume` 与 `agent crawl` 会误报 `CRAWL_UNAVAILABLE` 安装指引（`crawl start` 还会落成 `INTERNAL_ERROR`）；现在统一返回新的 `EGRESS_CONTRADICTION`（`recoverable: false`），`error.details.egress` 列出矛盾项（Issue #1555）。
+- 本地共享请求预算等待超时（其他进程占用或平台冷却未结束）被记成 `budget_stopped`，CLI 与向导提示「任务预算已用完、需要新建任务」；现在落成 `throttle_stopped`，说明本次没有发出请求并给 `crawl resume` 指引，`budget_stopped` 保留给真正的 run 预算耗尽（Issue #1556）。
+
 ## [3.4.85] - 2026-11-17
 
 ### Fixed

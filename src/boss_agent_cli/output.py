@@ -353,6 +353,7 @@ def emit_success(command: str, data: Any, **kwargs: Any) -> None:
 # 未列出的错误码与未知码一律回退 1。刻意不用 66（空结果）：本项目空结果 = ok=true。
 SYSEXITS_EXIT_CODES: dict[str, int] = {
 	"INVALID_PARAM": 78,  # EX_CONFIG
+	"EGRESS_CONTRADICTION": 78,  # EX_CONFIG
 	"AUTH_REQUIRED": 77,  # EX_NOPERM
 	"AUTH_EXPIRED": 77,
 	"LOGIN_EXPIRED": 77,

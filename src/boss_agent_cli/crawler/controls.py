@@ -25,6 +25,22 @@ class CrawlRuntimeUnavailable(RuntimeError):
 	"""The optional crawl dependencies cannot be imported; retrying or resuming cannot change that."""
 
 
+class CrawlBrowserStartError(CrawlRuntimeUnavailable):
+	"""采集浏览器无法启动或附着：确定性本地失败，本次没有发出任何平台请求。
+
+	DrissionPage 的异常都继承 ``BaseError(Exception)``，Chrome 进程启动失败也可能
+	抛 ``OSError``；``service._run`` 的通用 ``except Exception`` 会把它记成
+	``stopped`` 并返回 ``ok:true``，调用方照 resume 会反复撞同一个失败
+	（Issue #1553）。它与「可选依赖未安装」共用 ``CRAWL_UNAVAILABLE`` 码，但恢复
+	指引检查 Chrome 安装 / ``chrome_path`` / 调试端口，而不是只提示安装 extras。
+	"""
+
+	def __init__(self, message: str, *, cdp_port: int, attached: bool) -> None:
+		super().__init__(message)
+		self.cdp_port = cdp_port
+		self.attached = attached
+
+
 class CrawlExportError(RuntimeError):
 	"""采集结果无法写出到本地：确定性失败，重试或恢复同一断点无法改变结果。"""
 

@@ -124,6 +124,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": "在原会话的 BOSS 官方目标业务页确认风险解除后，由用户执行 boss clean --risk-lock 并显式恢复任务；令牌变化不会自动解锁",
 	},
+	"EGRESS_CONTRADICTION": {
+		"message": "出口地区与客户端声明的语言/时区矛盾，采集未启动",
+		"recoverable": False,
+		"recovery_action": "保持声明的语言/时区不变，换回与之一致的出口后重试；不需要出口一致性检查时撤销 BOSS_EGRESS_PROBE_URL。程序不会自动改写语言或时区",
+	},
 	"LOGIN_TIMEOUT": {
 		"message": "登录等待超时（扫码未完成或网络缓慢）",
 		"recoverable": True,

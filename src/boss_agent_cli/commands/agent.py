@@ -31,16 +31,20 @@ from boss_agent_cli.automation.storage import (
 from boss_agent_cli.ai.service import AIServiceError
 from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
 from boss_agent_cli.commands.ai_cmd import _build_fit_prompt, _create_ai_service
+from boss_agent_cli.api.egress import EgressContradictionError
 from boss_agent_cli.commands.crawl import (
 	_LoginSeedUnavailable,
 	_report_corrupt_run,
+	_report_crawl_browser_start_failure,
 	_report_crawl_runtime_missing,
+	_report_egress_contradiction,
 	_report_login_required,
 	_require_crawl_capabilities,
 	_seeded_transport_factory,
 	_settings_from_context,
 )
 from boss_agent_cli.crawler.controls import (
+	CrawlBrowserStartError,
 	CrawlExportError,
 	CrawlProfileBusy,
 	CrawlProfilePathInvalid,
@@ -370,8 +374,16 @@ def crawl_cmd(
 			),
 		)
 		return
+	except CrawlBrowserStartError as exc:
+		# 浏览器没起来：本次没有发出请求，不能兜成 stopped 的 ok:true（Issue #1553）。
+		_report_crawl_browser_start_failure(ctx, "agent.crawl", exc)
+		return
 	except CrawlRuntimeUnavailable as exc:
 		_report_crawl_runtime_missing(ctx, "agent.crawl", str(exc))
+		return
+	except EgressContradictionError as exc:
+		# 出口与声明的语言/时区矛盾：安全拒绝，不是依赖缺失（Issue #1555）。
+		_report_egress_contradiction(ctx, "agent.crawl", exc)
 		return
 	except RuntimeError as exc:
 		configure_cmd = boss_command_for_ctx(ctx, "crawl configure", include_data_dir=True)

@@ -36,7 +36,9 @@ from boss_agent_cli.crawler.service import (
 	crawl_int_setting,
 	unused_local_port,
 )
+from boss_agent_cli.api.egress import EgressContradictionError
 from boss_agent_cli.crawler.controls import (
+	CrawlBrowserStartError,
 	CrawlExportError,
 	CrawlProfileBusy,
 	CrawlRuntimeUnavailable,
@@ -1430,6 +1432,17 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 			recoverable=False,
 			recovery_action=status_command,
 		)
+	if outcome.status == "throttle_stopped":
+		# 本地共享请求预算等待超时：run 预算没有耗尽，等待后 resume 从断点继续
+		# （Issue #1556）。
+		raise WorkflowActionError(
+			"REQUEST_BUDGET_EXHAUSTED",
+			outcome.error or "本地请求节流等待超时，请求未发出",
+			recoverable=True,
+			recovery_action=resume_command,
+			# 立即重试仍可能撞上同一个冷却 / 占用者，交给操作者稍后恢复。
+			auto_retry=False,
+		)
 	if outcome.status in {"risk_stopped", "budget_stopped"}:
 		# 风控停止时 service 会 keep Chrome；把标记写入结果供向导文案使用。
 		browser_kept_open = outcome.status == "risk_stopped"
@@ -1559,6 +1572,49 @@ def _crawl_unavailable_error(context: ActionContext, exc: CrawlRuntimeUnavailabl
 	)
 
 
+def _crawl_browser_start_error(
+	context: ActionContext, exc: CrawlBrowserStartError
+) -> WorkflowActionError:
+	"""采集浏览器没能启动或附着：本次没有发出请求，指引检查 Chrome / 端口 / 路径。"""
+	configure_command = _hint_command(context, "crawl configure")
+	if exc.attached:
+		recovery = (
+			"上次保留的采集 Chrome 可能已关闭：重新执行同一动作即可新起浏览器；"
+			f"仍失败时用 {configure_command} 核对 chrome_path，并确认调试端口 {exc.cdp_port} 未被其他程序占用"
+		)
+	else:
+		recovery = (
+			f"确认本机已安装 Chrome 并用 {configure_command} 设置 chrome_path，"
+			f"确认调试端口 {exc.cdp_port} 未被其他程序占用、数据目录可写后重试；"
+			f"依赖缺失时安装 {extras_requirement('crawl')}"
+		)
+	return WorkflowActionError(
+		"CRAWL_UNAVAILABLE",
+		str(exc),
+		recoverable=True,
+		recovery_action=recovery,
+		# 新起浏览器失败时同一动作会再次撞上同一个本地原因；附着失败则可能只是
+		# 上次保留的窗口已关闭，允许自动重试来新起浏览器（本次没有发出请求，
+		# 重试安全，Issue #1553）。
+		auto_retry=exc.attached,
+	)
+
+
+def _crawl_egress_error(exc: EgressContradictionError) -> WorkflowActionError:
+	"""出口与声明的语言/时区矛盾：刻意拒绝启动，重试不会改变出口（Issue #1555）。"""
+	return WorkflowActionError(
+		"EGRESS_CONTRADICTION",
+		str(exc),
+		recoverable=False,
+		recovery_action=(
+			"保持客户端声明的语言/时区不变，换回与之一致的出口后重试；"
+			"不需要出口一致性检查时撤销 BOSS_EGRESS_PROBE_URL。程序不会自动改写语言或时区"
+		),
+		details={"egress": exc.verdict.as_dict()},
+		auto_retry=False,
+	)
+
+
 def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	# 恢复 waiting_input 时若已有内部 crawl run_id，必须续跑而不是新建采集。
 	existing_run_id = _optional_str(inputs.get("run_id") or inputs.get("crawl_run_id"))
@@ -1664,6 +1720,10 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 			raise _crawl_busy_error(context, exc) from exc
 		except CrawlProfileBusy as exc:
 			raise _crawl_profile_busy_error(context, exc) from exc
+		except CrawlBrowserStartError as exc:
+			raise _crawl_browser_start_error(context, exc) from exc
+		except EgressContradictionError as exc:
+			raise _crawl_egress_error(exc) from exc
 		except CrawlRuntimeUnavailable as exc:
 			raise _crawl_unavailable_error(context, exc) from exc
 		except CrawlExportError as exc:
@@ -1738,6 +1798,10 @@ def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 			raise _crawl_busy_error(context, exc) from exc
 		except CrawlProfileBusy as exc:
 			raise _crawl_profile_busy_error(context, exc) from exc
+		except CrawlBrowserStartError as exc:
+			raise _crawl_browser_start_error(context, exc) from exc
+		except EgressContradictionError as exc:
+			raise _crawl_egress_error(exc) from exc
 		except CrawlRuntimeUnavailable as exc:
 			raise _crawl_unavailable_error(context, exc) from exc
 		except CrawlExportError as exc:

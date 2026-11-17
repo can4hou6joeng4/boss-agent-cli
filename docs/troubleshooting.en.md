@@ -363,6 +363,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `TOKEN_REFRESH_FAILED` | stoken refresh failed | `boss login` |
 | `ENVIRONMENT_RISK` | The access environment was rejected | Stop automation; keep the current dedicated profile, verify it on the official site, and lower the request frequency |
 | `ENVIRONMENT_RISK_LOCKED` | The CDP Chrome's stoken already hit code 37 and has not rotated; the request was not sent | Stop automation; have the user open a job list page in that Chrome, confirm it loads, wait a few minutes, then retry (see above) |
+| `EGRESS_CONTRADICTION` | With `BOSS_EGRESS_PROBE_URL` configured, the probe found the exit region contradicts the client's declared language/timezone; the crawl stops before any platform request | Do not rerun unchanged: keep the declared language/timezone and switch back to a matching egress, or unset `BOSS_EGRESS_PROBE_URL` when the check is not needed. The CLI never rewrites language or timezone; `error.details.egress` lists the contradictions |
 | `ACCOUNT_RISK` | Risk-control block (code 36) | Stop the workflow, retain its run ID/checkpoint, and resume only after resolving the account or security page |
 | `COMPLIANCE_BLOCKED` | Historical mode-policy block | Upgrade to the current version and retry; current execution paths do not emit it |
 | `WIZARD_INPUT_REQUIRED` | A headless workflow lacks role/platform/goal/inputs | Complete `--input-json` from the `boss schema` catalog |

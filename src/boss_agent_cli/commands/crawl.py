@@ -14,6 +14,7 @@ from typing import Any
 import click
 
 from boss_agent_cli.api.cdp_risk_lock import unlock_operator_actions, raise_if_locked
+from boss_agent_cli.api.egress import EgressContradictionError
 from boss_agent_cli.api.endpoints import CITY_CODES
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired
 from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
@@ -30,6 +31,7 @@ from boss_agent_cli.crawler.service import (
 	unused_local_port,
 )
 from boss_agent_cli.crawler.controls import (
+	CrawlBrowserStartError,
 	CrawlExportError,
 	CrawlHookDirInvalid,
 	CrawlProfileBusy,
@@ -352,6 +354,55 @@ def _report_crawl_runtime_missing(ctx: click.Context, command: str, message: str
 	)
 
 
+def _report_crawl_browser_start_failure(
+	ctx: click.Context, command: str, exc: CrawlBrowserStartError
+) -> None:
+	"""采集浏览器没能启动或附着：没有发出请求，指引检查 Chrome / 端口 / 配置目录。
+
+	它与「可选依赖未安装」共用 ``CRAWL_UNAVAILABLE``，但两者的恢复动作不同：
+	只提示安装 extras 会让已装依赖、只是 Chrome 路径或端口有问题的用户反复重试
+	（Issue #1553）。
+	"""
+	configure_cmd = boss_command_for_ctx(ctx, "crawl configure", include_data_dir=True)
+	if exc.attached:
+		recovery_action = (
+			"上次保留的采集 Chrome 可能已关闭：直接重新执行恢复命令即可新起浏览器；"
+			f"仍失败时用 {configure_cmd} 核对 chrome_path，并确认调试端口 {exc.cdp_port} 未被其他程序占用"
+		)
+	else:
+		recovery_action = (
+			f"确认本机已安装 Chrome 并用 {configure_cmd} 设置 chrome_path，"
+			f"确认调试端口 {exc.cdp_port} 未被其他程序占用、数据目录可写后重试；"
+			f"依赖缺失时安装 {extras_requirement('crawl')}"
+		)
+	handle_error_output(
+		ctx,
+		command,
+		code="CRAWL_UNAVAILABLE",
+		message=str(exc),
+		recoverable=True,
+		recovery_action=recovery_action,
+	)
+
+
+def _report_egress_contradiction(
+	ctx: click.Context, command: str, exc: EgressContradictionError
+) -> None:
+	"""出口与声明的语言/时区矛盾：刻意的安全拒绝，不是依赖缺失或网络错误。"""
+	handle_error_output(
+		ctx,
+		command,
+		code="EGRESS_CONTRADICTION",
+		message=str(exc),
+		recoverable=False,
+		recovery_action=(
+			"保持客户端声明的语言/时区不变，换回与之一致的出口后重试；"
+			"不需要出口一致性检查时撤销 BOSS_EGRESS_PROBE_URL。程序不会自动改写语言或时区"
+		),
+		details={"egress": exc.verdict.as_dict()},
+	)
+
+
 def _run_service(
 	ctx: click.Context,
 	service_call: Any,
@@ -497,6 +548,18 @@ def _run_service(
 			),
 		)
 		return
+	except EgressContradictionError as exc:
+		# 出口与声明的语言/时区矛盾是刻意的安全拒绝：不是可选依赖缺失，也不是
+		# 可重试的网络错误（Issue #1555）。
+		note("EGRESS_CONTRADICTION", str(exc))
+		_report_egress_contradiction(ctx, "crawl", exc)
+		return
+	except CrawlBrowserStartError as exc:
+		# Chrome 未能启动：本次没有发出请求，但原样上抛会被 service 的通用分支
+		# 记成 stopped 的 ok:true（Issue #1553）。
+		note("CRAWL_UNAVAILABLE", str(exc))
+		_report_crawl_browser_start_failure(ctx, "crawl", exc)
+		return
 	except RuntimeError as exc:
 		message = str(exc)
 		if isinstance(exc, _LoginSeedUnavailable) or "未登录" in message or "Cookie" in message or "wt2" in message:
@@ -534,6 +597,17 @@ def _run_service(
 			"next_actions": [status_command],
 			"operator_actions": [
 				"该任务的预算已用完，继续采集需要新建任务（或调高 max_requests 后重新 crawl start）",
+			],
+		}
+	elif outcome.status == "throttle_stopped":
+		# 本地共享请求预算等待超时：run 自己的预算没有耗尽，也没有发出请求，
+		# 等待后 resume 即可从断点继续（Issue #1556）。
+		hints = {
+			"next_actions": [resume_command],
+			"operator_actions": [
+				"本地请求节流等待超时（共享请求预算正被其他进程使用或平台冷却未结束），"
+				"本次没有发出请求；等待片刻后执行 resume 从断点继续，不需要新建任务。"
+				f"进度可用 {status_command} 查看",
 			],
 		}
 	elif outcome.status == "workflow_stopped":
@@ -883,6 +957,11 @@ def start_cmd(
 		return
 	except CrawlRuntimeUnavailable as exc:
 		_report_crawl_runtime_missing(ctx, "crawl.start", str(exc))
+		return
+	except EgressContradictionError as exc:
+		# create() 在落库前做出口一致性检查；原样上抛会落成 INTERNAL_ERROR
+		# （Issue #1555）。
+		_report_egress_contradiction(ctx, "crawl.start", exc)
 		return
 	except ValueError as exc:
 		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help", include_data_dir=True)
