@@ -2,11 +2,18 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [3.4.79] - 2026-11-17
+## [Unreleased]
 
 ### Fixed
 - MCP 子进程固定 120s 超时让 `batch-greet` 的默认 5 次招呼（每次节流上界 60s）必然超时，SIGINT 后 stdout 为空、结果未知且没有可恢复的部分结果；现在按 argv 估算超时（1 次搜索 + `--count` 次招呼，单次 60s 节流上界 + 5s 抖动 + 30s 余量，封顶 900s），CLI 在批打招呼被中断时输出已完成列表、在途候选人与 `replay_safe=false` 的七键错误信封，并明确不要原样重试（Issue #1491）。
 - MCP 只读工具（`search` / `export` / `hr chat` / `hr last-messages` / `pipeline` / `follow-up` / `digest`）同样固定 120s，详情筛选与分页批量调用会在正常执行中被误杀；现在按参数估算超时（单次 65s + 30s 余量，封顶 900s，解析失败回退 120s），只读中断文案改为先降低 limit/count 或改用 active=online 再重试（Issue #1492）。
+- MCP 的 `boss_wizard` / `boss_config` / `boss_hr_jobs` 按 action 分派时静默丢弃越界参数：`resume` 的新 `goal`、`config list` 的 `key`、`hr jobs online` 的 `page` 等被忽略后仍返回 `ok:true`，调用方以为过滤 / 恢复 / 写入已经生效；现在映射层按 action → 允许键矩阵返回 `INVALID_PARAM` 并提示正确用法，缺省 action 与显式默认 action 行为一致，`run_id` 必须显式搭配 `resume` / `status` / `stop`（Issue #1493）。
+- `boss batch-greet` 的空串 / 纯空白关键词会退化成无关键词搜索，并对默认列表里的职位真实发出招呼；现在在任何平台调用之前返回 `INVALID_PARAM`，工具 schema 的 `query` 同步声明 `minLength: 1`（Issue #1490）。
+- `boss batch-greet --count` 超过 10 时被静默截断，CLI 行为与 schema 声明的上界不一致；现在 `--count` 改为 `IntRange(0, 10)` 在解析阶段拒绝越界值，MCP `limit` 越界同样返回 `INVALID_PARAM`，原生 schema 补上 `maximum: 10`（Issue #1494）。
+
+## [3.4.79] - 2026-11-17
+
+### Fixed
 - 静默刷新 stoken 成功但登录态落盘失败（权限 / 磁盘满）时，本地 `OSError` 被包装成可恢复的 `TokenRefreshFailed` 并提示重新登录；现在原样上抛，按不可重试的 `LOCAL_IO_ERROR` 上报（Issue #1479）。
 - CDP 登录成功但登录态落盘失败时被当成 CDP 失败并继续启动扫码链路，原始本地权限问题被扫码超时覆盖；现在保存动作不再参与降级判定，直接上抛 `LOCAL_IO_ERROR`，CDP 自身不可达时仍降级扫码（Issue #1480）。
 - wizard 在写请求发出后按 Ctrl-C 会用 `WORKFLOW_STOPPED` 覆盖已落盘的 `ACTION_UNCONFIRMED` 标记，checkpoint 丢掉 `replay_safe=false` 与该动作的核对命令，`--resume` 会重放结果未知的写操作；现在保留该标记并把步骤落成失败，标记损坏或 `replay_safe` 类型漂移时同样按结果未知处理（Issue #1478）。
@@ -18,8 +25,6 @@
 - `crawl` 把 `--data-dir` 相对路径原样存进断点，在另一个目录执行 `crawl resume` 会把产物写到当前工作目录，`output_dir=''` 时同样落到 `.`；现在创建时持久化绝对路径，读取时按 `CACHE_RECORD_INVALID` 拒绝相对或空值（Issue #1481）。
 - 断点里的 `profile_path` 含 NUL / 控制字符时 `Path.resolve()` 抛 `ValueError`，被泛化分支记成 `stopped` 并返回 `ok:true`；现在读取边界按 `CACHE_RECORD_INVALID` 拒绝，transport 层同时把 `ValueError` 转成 `CrawlProfilePathInvalid`（Issue #1482）。
 - `hook_results.success` 用 `bool()` 归一，字符串 `"false"` 会被报告成成功；现在要求严格布尔，类型漂移按 `CACHE_RECORD_INVALID` 拒绝（Issue #1484）。
-- `boss batch-greet` 的空串 / 纯空白关键词会退化成无关键词搜索，并对默认列表里的职位真实发出招呼；现在在任何平台调用之前返回 `INVALID_PARAM`，工具 schema 的 `query` 同步声明 `minLength: 1`（Issue #1490）。
-- `boss batch-greet --count` 超过 10 时被静默截断，CLI 行为与 schema 声明的上界不一致；现在 `--count` 改为 `IntRange(0, 10)` 在解析阶段拒绝越界值，MCP `limit` 越界同样返回 `INVALID_PARAM`，原生 schema 补上 `maximum: 10`（Issue #1494）。
 
 ## [3.4.78] - 2026-11-17
 

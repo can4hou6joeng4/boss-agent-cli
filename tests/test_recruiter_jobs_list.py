@@ -198,4 +198,7 @@ def test_schema_records_jobs_list_page() -> None:
 
 def test_hr_jobs_mcp_page_is_only_forwarded_for_list() -> None:
 	assert _build_args("boss_hr_jobs", {"action": "list", "page": 2}) == ["hr", "jobs", "list", "--page", "2"]
-	assert _build_args("boss_hr_jobs", {"action": "offline", "job_id": "j1", "page": 2}) == ["hr", "jobs", "offline", "j1"]
+	# 越界的 page 不能静默丢弃：online/offline 携带 page 会让调用方以为分页生效，
+	# 实际执行的是状态变更（Issue #1493）。
+	with pytest.raises(ValueError, match="page"):
+		_build_args("boss_hr_jobs", {"action": "offline", "job_id": "j1", "page": 2})

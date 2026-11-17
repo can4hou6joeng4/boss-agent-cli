@@ -81,6 +81,48 @@ def _sample_value(prop: dict[str, Any], name: str = "") -> Any:
 	}.get(prop.get("type"), "sample")
 
 
+#: action 条件键矩阵（Issue #1493）：JSON Schema 无法表达「某键只在某个 action
+#: 下生效」，按全部 properties 生成的样例必须按 action 裁剪，否则会被映射层的
+#: 条件校验拒绝。与 mcp_args 的实现独立维护，避免测试跟着实现一起漂移。
+_ACTION_SCOPED_KEYS: dict[str, dict[str, set[str]]] = {
+	"boss_wizard": {
+		"run": {"role", "platform", "goal", "inputs", "requested_steps"},
+		"resume": {"run_id"},
+		"status": {"run_id"},
+		"stop": {"run_id"},
+	},
+	"boss_config": {
+		"list": set(),
+		"get": {"key"},
+		"set": {"key", "value"},
+		"reset": {"key"},
+	},
+	"boss_hr_jobs": {
+		"list": {"page"},
+		"online": {"job_id"},
+		"offline": {"job_id"},
+	},
+}
+_ACTION_SHARED_KEYS = {"action", "timeout", "max_retries"}
+
+
+def _sample_arguments(tool, *, action: str | None = None) -> dict[str, Any]:
+	"""按所选 action 裁剪样例参数：只保留该 action 实际使用的键。"""
+	properties = tool.input_schema.get("properties") or {}
+	arguments = {key: _sample_value(prop, key) for key, prop in properties.items()}
+	if action is not None:
+		arguments["action"] = action
+	scoped = _ACTION_SCOPED_KEYS.get(tool.name)
+	effective = arguments.get("action")
+	if scoped is not None and isinstance(effective, str) and effective in scoped:
+		arguments = {
+			key: value
+			for key, value in arguments.items()
+			if key in _ACTION_SHARED_KEYS or key in scoped[effective]
+		}
+	return arguments
+
+
 def _resolve_command(argv: list[str]) -> tuple[click.Command, list[str]]:
 	"""把 argv 拆成「命令路径」与「参数」：沿 Group 的子命令往下钻。"""
 	command: click.Command = cli
@@ -96,8 +138,7 @@ def _resolve_command(argv: list[str]) -> tuple[click.Command, list[str]]:
 
 @pytest.mark.parametrize("tool", TOOLS, ids=[tool.name for tool in TOOLS])
 def test_tool_arguments_parse_with_cli(tool) -> None:
-	properties = tool.input_schema.get("properties") or {}
-	arguments = {key: _sample_value(prop, key) for key, prop in properties.items()}
+	arguments = _sample_arguments(tool)
 
 	argv = _build_args(tool.name, arguments)
 
@@ -112,17 +153,16 @@ def test_tool_arguments_parse_with_cli(tool) -> None:
 def test_tool_positionals_keep_option_like_text_literal(tool, literal: str) -> None:
 	"""工具字符串到达 Click 位置参数时必须保持字面值（Issue #1102）。"""
 	properties = tool.input_schema.get("properties") or {}
-	arguments = {key: _sample_value(prop, key) for key, prop in properties.items()}
 	text_values = {
 		key: f"sample_{key}"
 		for key, prop in properties.items()
 		if prop.get("type") == "string" and "enum" not in prop and key not in _FILTER_SAMPLE_VALUES
 	}
-	arguments.update(text_values)
 	# config 的 get / set 与 hr jobs 的 online / offline 才有位置参数，不能只测 list。
 	actions = properties.get("action", {}).get("enum", [None])
 	for action in actions:
-		case = {**arguments, **({"action": action} if action is not None else {})}
+		case = _sample_arguments(tool, action=action)
+		case.update({key: text_values[key] for key in case if key in text_values})
 		command, rest = _resolve_command(_build_args(tool.name, case))
 		with command.make_context(command.name, rest) as baseline:
 			expected_params = dict(baseline.params)
@@ -495,7 +535,7 @@ def test_enum_values_are_never_silently_replaced_by_a_default(tool) -> None:
 	for key, prop in properties.items():
 		if not isinstance(prop, dict) or "enum" not in prop:
 			continue
-		arguments = {name: _sample_value(value, name) for name, value in properties.items()}
+		arguments = _sample_arguments(tool)
 		arguments[key] = "bogus-enum-value"
 		try:
 			argv = _build_args(tool.name, arguments)
