@@ -102,7 +102,7 @@ def test_agent_run_invalid_config_recovery_replays_in_original_directory(agent_d
 	result = _run(agent_dir, "agent", "run", "--dry-run")
 	assert result.exit_code == 1, result.output
 	parsed = json.loads(result.stdout)
-	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["code"] == "CONFIG_INVALID"
 	parts = _prefix(parsed["error"]["recovery_action"], agent_dir)
 	assert parts[3:] == ["config", "reset", "automation"]
 	# 恢复命令只依赖原目录中的 config.json，直接重放即可修复。

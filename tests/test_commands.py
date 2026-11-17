@@ -1797,7 +1797,7 @@ def test_chat_export_unwritable_export_dir_returns_local_io_error(mock_auth_cls,
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
-def test_chat_export_non_string_export_dir_returns_invalid_param(mock_auth_cls, mock_client_cls, tmp_path):
+def test_chat_export_non_string_export_dir_returns_config_invalid(mock_auth_cls, mock_client_cls, tmp_path):
 	"""config.json 的 export_dir 不是字符串时不能抛 os.path.expanduser 的 TypeError。"""
 	import time
 	now_ms = int(time.time() * 1000)
@@ -1815,7 +1815,7 @@ def test_chat_export_non_string_export_dir_returns_invalid_param(mock_auth_cls, 
 	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "chat", "--export", "json"])
 	parsed = json.loads(result.output)
 	assert result.exit_code == 1
-	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["code"] == "CONFIG_INVALID"
 	assert "export_dir" in parsed["error"]["message"]
 	assert "9" in parsed["error"]["message"]
 	assert parsed["error"]["recoverable"] is True
@@ -1824,8 +1824,8 @@ def test_chat_export_non_string_export_dir_returns_invalid_param(mock_auth_cls, 
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
-def test_chat_export_container_export_dir_returns_invalid_param(mock_auth_cls, mock_client_cls, tmp_path):
-	"""数组 / 对象形态的 export_dir 同样按参数错误处理。"""
+def test_chat_export_container_export_dir_returns_config_invalid(mock_auth_cls, mock_client_cls, tmp_path):
+	"""数组 / 对象形态的 export_dir 同样按配置损坏处理。"""
 	import time
 	now_ms = int(time.time() * 1000)
 	mock_auth_cls.return_value.check_status.return_value = {"cookies": {}}
@@ -1839,7 +1839,7 @@ def test_chat_export_container_export_dir_returns_invalid_param(mock_auth_cls, m
 		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "chat", "--export", "json"])
 		parsed = json.loads(result.output)
 		assert result.exit_code == 1
-		assert parsed["error"]["code"] == "INVALID_PARAM"
+		assert parsed["error"]["code"] == "CONFIG_INVALID"
 		assert repr(value) in parsed["error"]["message"]
 
 

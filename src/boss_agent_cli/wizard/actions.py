@@ -501,13 +501,14 @@ def _classify_action_error(
 		"NETWORK_ERROR",
 		"TOKEN_REFRESH_FAILED",
 		"NOT_SUPPORTED",
-		"INVALID_PARAM",
+		"CONFIG_INVALID",
 	}
-	if code in {"AUTH_REQUIRED", "AUTH_EXPIRED", "TOKEN_REFRESH_FAILED"}:
+	if code in {"AUTH_REQUIRED", "AUTH_EXPIRED", "TOKEN_REFRESH_FAILED", "CONFIG_INVALID"}:
 		recovery = str(ERROR_CODES[code]["recovery_action"])
 	elif code == "NOT_SUPPORTED":
 		recovery = "切换平台或 workflow goal 后重试"
 	elif code == "INVALID_PARAM":
+		# 纯参数错误是确定性的：自动重试同一动作必然复现（Issue #1525）。
 		recovery = "换一条职位重试，或返回结果列表重新选择"
 	else:
 		recovery = "稍后重试，或返回主菜单选择其他事项"
@@ -1100,16 +1101,17 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 			),
 		)
 	# 数值项与 ai 命令同口径校验：坏值不能原样发给服务商、只换回泛化的
-	# 平台错误；本地配置问题给 INVALID_PARAM 与修复命令（Issue #1209）。
+	# 平台错误；本地配置问题给 CONFIG_INVALID 与修复命令（Issue #1209、#1525）。
 	try:
 		temperature = ai_float_setting(config, "ai_temperature", 0.7)
 		max_tokens = ai_int_setting(config, "ai_max_tokens", 4096)
 	except ValueError as exc:
 		raise WorkflowActionError(
-			"INVALID_PARAM",
+			"CONFIG_INVALID",
 			f"本地 AI 配置损坏：{exc}",
 			recoverable=True,
 			recovery_action=_hint_command(context, "ai config --max-tokens 4096 --temperature 0.7"),
+			auto_retry=False,
 		) from exc
 	service = AIService(
 		str(base_url),
@@ -1547,19 +1549,23 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 		# dict() / .get() 抛出的 TypeError / AttributeError 会被 runner 兜成可重试的
 		# NETWORK_ERROR，而重试同一条 run_id 永远复现（Issue #1330）。
 		raise WorkflowActionError(
-			"INVALID_PARAM",
+			"CONFIG_INVALID",
 			f"本地配置必须是 JSON 对象，收到 {type(context.config).__name__}",
+			recoverable=True,
 			recovery_action=f"修正或删除 {context.data_dir / 'config.json'} 后重试",
+			auto_retry=False,
 		)
 	crawl_value = context.config.get("crawl") if context.config is not None else None
 	if crawl_value is not None and not isinstance(crawl_value, Mapping):
 		raise WorkflowActionError(
-			"INVALID_PARAM",
+			"CONFIG_INVALID",
 			f"配置项 crawl 必须是 JSON 对象，收到 {type(crawl_value).__name__}",
+			recoverable=True,
 			recovery_action=(
 				f"{_hint_command(context, 'config reset crawl')}；"
 				f"或直接修正 {context.data_dir / 'config.json'} 的 crawl 段"
 			),
+			auto_retry=False,
 		)
 	crawl_config = dict(crawl_value or {})
 	city = str(_required(inputs, "city"))
@@ -1601,9 +1607,11 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 		# 手工编辑 config.json 写坏 crawl 段时不能落成可重试的 NETWORK_ERROR：
 		# 重试同一个 run_id 永远修不好配置。与 CLI 路径一致，指向 config reset。
 		raise WorkflowActionError(
-			"INVALID_PARAM",
+			"CONFIG_INVALID",
 			f"crawl 配置无效: {exc}",
+			recoverable=True,
 			recovery_action=_hint_command(context, "config reset crawl"),
+			auto_retry=False,
 		) from exc
 	try:
 		# 当前向导只允许 hook_profile=none，这里与 CLI 创建入口共用同一道只读

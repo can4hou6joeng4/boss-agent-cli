@@ -307,6 +307,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": False,
 		"recovery_action": "修正参数",
 	},
+	"CONFIG_INVALID": {
+		"message": "本地配置损坏或取值无效",
+		"recoverable": True,
+		"recovery_action": "按提示修正本地配置后重试，例如 boss ai config 或 boss config reset automation",
+	},
 	"ENDPOINT_DEPRECATED": {
 		"message": "服务端端点已迁移，CLI 当前实现无法直接发送",
 		"recoverable": False,

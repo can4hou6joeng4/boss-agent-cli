@@ -359,6 +359,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `RESUME_FILE_INVALID` | 本地简历文件损坏或字段类型不正确，`boss resume show` / `edit` / `export` / `clone` / `diff` 读不出来（`boss resume list` 会把这些文件列在 `hints.corrupt`） | 修正 `resumes/` 下对应的 `.json` 后重试，或 `boss resume delete <name>` 后重新创建；文件只在本机 |
 | `JOB_NOT_FOUND` | 职位不存在或已下架 | 用 `boss search <关键词>` 重新搜索，或 `boss recommend` 查看推荐职位 |
 | `INVALID_PARAM` | 参数错误 | 修正参数 |
+| `CONFIG_INVALID` | 本地配置文件（`config.json` / AI 配置）损坏或取值类型、枚举非法：命令在发起平台请求前停止，同一条命令重跑会复现 | 按信封的 `recovery_action` 用 `boss config reset <项>` / `boss ai config` / `boss ai local configure` 修正后再重试；修复前不要让 Agent 原样重跑 |
 | `ALREADY_GREETED` | 已打过招呼 | 跳过 |
 | `CONFIRMATION_REQUIRED` | 未确认操作目标与内容 | 先用 `hr greet --dry-run`、`hr accept-resume <friend_id> --message-id <mid> --dry-run` 或 `hr location <friend_id> --dry-run` 预览；操作者明确批准后才加 `--yes`，Agent 不可自行补确认 |
 | `RESUME_ACCEPT_RESULT_UNKNOWN` | 同意附件简历请求的结果未确认 | 保留 `accepted=null`，在官方页面核对请求状态；禁止自动重试同意操作 |

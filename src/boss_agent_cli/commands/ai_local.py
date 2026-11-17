@@ -297,15 +297,15 @@ def local_smoke_cmd(ctx: click.Context) -> None:
 		return
 	# 输出上限用配置值而不是写死的小数：思考模型在几十个 token 内写不完思考，
 	# 健康检查应和自动化用同一个上限，「调大 max_tokens」的建议才对它生效。
-	# 配置值被手改成数组 / 字符串时按参数错误给信封，而不是 INTERNAL_ERROR
-	# 加「不要重试」（Issue #1196）。
+	# 配置值被手改成数组 / 字符串时按配置损坏给信封，而不是 INTERNAL_ERROR
+	# 加「不要重试」（Issue #1196、#1525）。
 	try:
 		max_tokens = ai_int_setting(config, "ai_max_tokens", 512)
 	except ValueError as exc:
 		handle_error_output(
 			ctx,
 			"ai.local.smoke",
-			code="INVALID_PARAM",
+			code="CONFIG_INVALID",
 			message=str(exc),
 			recoverable=True,
 			recovery_action=_hint_command(ctx, "ai config --max-tokens 512"),

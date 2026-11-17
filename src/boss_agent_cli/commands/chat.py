@@ -203,11 +203,11 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				export_dir = ctx.obj.get("config", {}).get("export_dir")
 				if export_dir and not isinstance(export_dir, str):
 					# config.json 被手改成数字 / 数组时 os.path.expanduser 会抛 TypeError：
-					# 按参数错误给信封，并指出只改这一项的修复命令。
+					# 按配置损坏给信封，并指出只改这一项的修复命令（Issue #1525）。
 					handle_error_output(
 						ctx,
 						"chat",
-						code="INVALID_PARAM",
+						code="CONFIG_INVALID",
 						message=f"export_dir 必须是目录路径字符串或 null，收到 {export_dir!r}",
 						recoverable=True,
 						recovery_action=boss_command_for_ctx(ctx, "config reset export_dir", include_data_dir=True),

@@ -802,7 +802,9 @@ def test_crawl_action_rejects_invalid_config(tmp_path, monkeypatch, crawl_config
 	context = replace(_action_context(tmp_path), config={"crawl": crawl_config})
 	with pytest.raises(WorkflowActionError) as excinfo:
 		DEFAULT_ACTIONS["crawl_start"](context, {"query": "Python", "city": "北京"}, {})
-	assert excinfo.value.code == "INVALID_PARAM"
+	assert excinfo.value.code == "CONFIG_INVALID"
+	assert excinfo.value.recoverable is True
+	assert excinfo.value.auto_retry is False
 	assert field in str(excinfo.value)
 	assert shlex.split(excinfo.value.recovery_action) == [
 		"boss", "--data-dir", str(tmp_path.resolve()), "config", "reset", "crawl",
@@ -4909,7 +4911,9 @@ def test_ai_assist_rejects_invalid_numeric_ai_config(tmp_path, monkeypatch, key,
 		with pytest.raises(WorkflowActionError) as exc_info:
 			DEFAULT_ACTIONS["ai_assist"](_action_context(tmp_path), {"resume": "default", "prompt": "优化"}, {})
 
-	assert exc_info.value.code == "INVALID_PARAM"
+	assert exc_info.value.code == "CONFIG_INVALID"
+	assert exc_info.value.recoverable is True
+	assert exc_info.value.auto_retry is False
 	assert key in str(exc_info.value)
 	assert "--max-tokens" in exc_info.value.recovery_action
 	assert not post.called, "坏配置必须在发请求之前拦下"
