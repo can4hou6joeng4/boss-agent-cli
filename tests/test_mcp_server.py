@@ -12,6 +12,7 @@ from unittest.mock import patch, MagicMock
 
 import click
 import pytest
+from click.testing import CliRunner
 
 
 # mcp 包可能未安装，用 mock 模块替代以允许导入 server.py
@@ -2209,6 +2210,12 @@ def test_hr_last_messages_friend_ids_declares_min_items():
 	assert tool.input_schema["properties"]["friend_ids"]["minItems"] == 1
 
 
+def test_batch_greet_query_declares_non_empty():
+	"""空关键词与不传必须在 schema 上可区分（Issue #1490）。"""
+	tool = next(item for item in TOOLS if item.name == "boss_batch_greet")
+	assert tool.input_schema["properties"]["query"]["minLength"] == 1
+
+
 def test_call_tool_rejects_empty_friend_ids_array(monkeypatch):
 	"""friend_ids=[] 不能退化成抓取当前页候选人并发起平台请求（Issue #1218）。"""
 	from types import SimpleNamespace
@@ -2236,6 +2243,72 @@ def test_call_tool_rejects_empty_friend_ids_array(monkeypatch):
 	assert payload["error"]["code"] == "INVALID_PARAM"
 	assert "friend_ids" in payload["error"]["message"]
 	assert "至少" in payload["error"]["message"]
+
+
+# ── Issue #1490 / #1494：batch-greet 的空关键词与数量上限 ────────────
+
+
+def _run_cli_in_process(tmp_path: Path):
+	"""把 MCP 映射出的 argv 交给真实 Click 入口解析，返回 CLI 信封。"""
+
+	async def fake_run(*args, **kwargs):
+		result = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), *args])
+		return json.loads(result.output)
+
+	return fake_run
+
+
+@pytest.mark.parametrize("query", ["", "   "])
+def test_call_tool_batch_greet_rejects_blank_query(monkeypatch, tmp_path, query):
+	"""空 / 纯空白 query 必须在 CLI 命令层被拒，不能进入无关键词搜索（Issue #1490）。"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "_run_boss_async", _run_cli_in_process(tmp_path))
+
+	result = asyncio.run(
+		mcp_server.call_tool(
+			None,
+			CallToolRequestParams(name="boss_batch_greet", arguments={"query": query}),
+		)
+	)
+
+	payload = json.loads(result.content[0].text)
+	assert result.is_error is True
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "搜索关键词不能为空" in payload["error"]["message"]
+
+
+def test_call_tool_batch_greet_rejects_limit_above_schema_maximum(monkeypatch, tmp_path):
+	"""limit 越界不能交给 CLI 静默截断到 10（Issue #1494）。"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "_run_boss_async", _run_cli_in_process(tmp_path))
+
+	result = asyncio.run(
+		mcp_server.call_tool(
+			None,
+			CallToolRequestParams(
+				name="boss_batch_greet", arguments={"query": "g", "limit": 50},
+			),
+		)
+	)
+
+	payload = json.loads(result.content[0].text)
+	assert result.is_error is True
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "50" in payload["error"]["message"]
 
 
 # ── Issue #1236：wizard 空步骤与 argv 文本边界 ────────────────────────

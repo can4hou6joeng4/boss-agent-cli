@@ -7,6 +7,7 @@ import json
 import shlex
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
@@ -286,8 +287,8 @@ def test_batch_greet_skips_already_greeted(mock_cache_cls, mock_auth_cls, mock_c
 @patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
-def test_batch_greet_respects_count_cap(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
-	"""--count 最大 10，即使搜出 15 条也只处理 10 条。"""
+def test_batch_greet_rejects_count_above_cap(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time, legacy_args):
+	"""--count 最大 10：越界值按参数错误拒绝，不能静默截断后照常打招呼。"""
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	mock_client = _ctx_mock(mock_client_cls)
@@ -298,11 +299,43 @@ def test_batch_greet_respects_count_cap(mock_cache_cls, mock_auth_cls, mock_clie
 	mock_time.sleep = MagicMock()
 
 	runner = CliRunner()
-	result = runner.invoke(cli, ["batch-greet", "test", "--count", "99", "--dry-run"])
-	assert result.exit_code == 0
+	result = runner.invoke(cli, [*legacy_args, "batch-greet", "test", "--count", "99", "--dry-run"])
+	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	# --count 会被 cap 到 10
-	assert parsed["data"]["count"] == 10
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "10" in parsed["error"]["message"]
+	# 参数错误发生在任何平台调用之前。
+	mock_client.search_jobs.assert_not_called()
+	mock_client.greet.assert_not_called()
+
+
+@pytest.mark.parametrize("query", ["", "   "])
+@patch("boss_agent_cli.commands.greet.get_platform_instance")
+@patch("boss_agent_cli.commands.greet.AuthManager")
+@patch("boss_agent_cli.commands.greet.CacheStore")
+def test_batch_greet_rejects_blank_query(
+	mock_cache_cls, mock_auth_cls, mock_client_cls, legacy_args, query,
+):
+	"""空串 / 纯空白关键词不能进入无关键词搜索并真实打招呼（Issue #1490）。"""
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.search_jobs.return_value = {
+		"zpData": {"jobList": [_make_raw_job("Job", "s1")]}
+	}
+	mock_client.greet.return_value = None
+
+	result = CliRunner().invoke(cli, [*legacy_args, "batch-greet", query])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "搜索关键词不能为空" in parsed["error"]["message"]
+	# 校验在任何平台调用之前：不登录、不搜索、不打招呼。
+	mock_auth_cls.assert_not_called()
+	mock_cache_cls.assert_not_called()
+	mock_client.search_jobs.assert_not_called()
+	mock_client.greet.assert_not_called()
 
 
 # ── batch-greet 风控终止语义（Issue #419） ─────────────────

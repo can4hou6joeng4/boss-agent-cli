@@ -111,14 +111,6 @@ _TOOL_PARAMS: dict[str, tuple[click.Command, dict[str, str]]] = {
 	),
 }
 
-#: Click 没声明、但命令实现会收敛到的有效上界。
-#: `batch-greet --count` 是 `IntRange(0)`（无上界），命令内部会 `count = min(count, 10)`，
-#: 因此工具 schema 的 `maximum: 10` 是真实生效的上界，不能按 Click 的 `None` 断言。
-_EFFECTIVE_MAXIMUM: dict[tuple[str, str], int | float] = {
-	("boss_batch_greet", "limit"): 10,
-}
-
-
 def _catalog() -> dict[str, dict[str, Any]]:
 	return {tool.name: tool.input_schema for tool in build_tool_catalog()}
 
@@ -149,10 +141,9 @@ def test_mcp_numeric_bounds_match_click_params() -> None:
 			prop = schema["properties"][property_name]
 			param = params[param_name]
 			click_min, click_max = _click_bounds(param)
-			expected_max = _EFFECTIVE_MAXIMUM.get((tool_name, property_name), click_max)
 			for bound, expected, actual in (
 				("minimum", click_min, prop.get("minimum")),
-				("maximum", expected_max, prop.get("maximum")),
+				("maximum", click_max, prop.get("maximum")),
 			):
 				if actual != expected:
 					problems.append(

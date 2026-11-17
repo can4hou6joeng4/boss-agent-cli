@@ -333,7 +333,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"query": {"type": "string", "description": "搜索关键词"},
+					"query": {"type": "string", "minLength": 1, "description": "搜索关键词"},
 					"city": {"type": "string", "description": "城市名称"},
 					"salary": {"type": "string", "description": "薪资范围（如 20-50K）"},
 					"experience": {"type": "string", "description": "经验要求（如 3-5年）"},
