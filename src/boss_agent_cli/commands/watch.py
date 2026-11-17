@@ -335,6 +335,22 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 	if not require_compliance_allowed(ctx, "watch-run"):
 		ctx.exit(1)
 
+	# 点名与 --all 是两种运行范围：同时给出时旧实现进入 --all 分支，静默丢弃
+	# 点名的 watch 并运行全部，对每个 watch 都发起平台请求却仍返回 ok:true
+	# （Issue #1561）。必须在打开缓存与发出任何请求之前拒绝。
+	if run_all and name:
+		list_cmd = _hint_command(ctx, "watch list")
+		handle_error_output(
+			ctx,
+			"watch",
+			code="INVALID_PARAM",
+			message=f"--all 不能与 watch 名同时使用：{name!r} 会被忽略并运行全部 watch",
+			recoverable=False,
+			recovery_action="只点名运行一个 watch（省略 --all），或去掉名字改用 --all 运行全部",
+			hints={"next_actions": [list_cmd, _hint_command(ctx, "watch run --all")]},
+		)
+		return
+
 	data_dir = ctx.obj["data_dir"]
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:

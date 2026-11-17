@@ -127,7 +127,7 @@ boss crawl resume <run_id>
 boss crawl stop <run_id>
 ```
 
-配置值在开始运行时按类型与范围校验：`max_requests` / `max_details` / `max_seconds` 必须 ≥ 1，`max_retries` 可以设为 `0` 表示不重试，`cdp_port` 必须在 1-65535 之间，`chrome_path` 必须是字符串或 `null`。`config set crawl` 在写入时即按同一组规则校验并拒绝非法值（不落盘）；手工编辑写入的错误类型 / 越界值由 `crawl run` / `start` 返回 `INVALID_PARAM`，`boss wizard` 的采集动作返回 `CONFIG_INVALID`（修正后可重新执行）并指出配置项，不会悄悄套用默认值或落到 `INTERNAL_ERROR`。向导的采集动作只接受 `hook_profile=none`（自定义 Hook 需显式运行 `boss crawl run --hook-profile screenshot-full --hook-dir`），`pages` 输入（含恢复）要求 ≥ 1 的整数，非法值返回 `INVALID_PARAM`。
+配置值在开始运行时按类型与范围校验：`max_requests` / `max_details` / `max_seconds` 必须 ≥ 1，`max_retries` 可以设为 `0` 表示不重试，`cdp_port` 必须在 1-65535 之间，`chrome_path` 必须是字符串或 `null`。显式空 `--chrome-path`（`crawl configure` 与 `crawl run`）在写盘或创建任务之前返回 `INVALID_PARAM`，不会被当成当前目录。`config set crawl` 在写入时即按同一组规则校验并拒绝非法值（不落盘）；手工编辑写入的错误类型 / 越界值由 `crawl run` / `start` 返回 `INVALID_PARAM`，`boss wizard` 的采集动作返回 `CONFIG_INVALID`（修正后可重新执行）并指出配置项，不会悄悄套用默认值或落到 `INTERNAL_ERROR`。向导的采集动作只接受 `hook_profile=none`（自定义 Hook 需显式运行 `boss crawl run --hook-profile screenshot-full --hook-dir`），`pages` 输入（含恢复）要求 ≥ 1 的整数，非法值返回 `INVALID_PARAM`。
 
 | 命令 | 说明 |
 |------|------|
@@ -151,9 +151,9 @@ boss crawl stop <run_id>
 
 `crawl results` 的后继导入命令还携带本次返回职位的全部 `--selector`，只导入所见结果；`--page` / `--detail-status` 的筛选范围因此保持不变。空结果改为提示查看同一 run 的 `crawl status`。路径、run_id 和 selector 按 shell 参数转义，终端与信封使用同一条命令。
 
-默认 Hook 为 `none`。`screenshot-full` 仅在用户明确选择 `--hook-profile screenshot-full --hook-dir <目录>` 时启用；目录必须由用户拥有相应授权，并提供原始 7 个脚本及 `SHA256SUMS`。缺少 `--hook-dir` 时 `crawl run` / `crawl start` 在创建任务、打开浏览器之前返回 `INVALID_PARAM`。项目不再发布这些第三方脚本，运行前逐文件校验 SHA-256 并记录脚本标识与摘要；不记录 Cookie、请求头或完整请求体。
+默认 Hook 为 `none`。`screenshot-full` 仅在用户明确选择 `--hook-profile screenshot-full --hook-dir <目录>` 时启用；目录必须由用户拥有相应授权，并提供原始 7 个脚本及 `SHA256SUMS`。缺少 `--hook-dir` 时 `crawl run` / `crawl start` 在创建任务、打开浏览器之前返回 `INVALID_PARAM`；`--hook-dir` 与其它 profile 同时给出或显式为空时同样在创建任务之前拒绝，不会静默忽略目录。项目不再发布这些第三方脚本，运行前逐文件校验 SHA-256 并记录脚本标识与摘要；不记录 Cookie、请求头或完整请求体。
 
-候选人侧可用 `boss agent crawl --run-id <run_id> --resume <简历名>` 执行“完成的 crawl → shortlist → ai fit → 按匹配分排序”，不会启动浏览器；`boss agent crawl --query <关键词> --city <城市> --resume <简历名>` 会新建真实采集，与 `crawl run` 一样把 `boss login` 的登录 Cookie 与 User-Agent 注入独立采集浏览器；本地登录态缺失、没有 Cookie 或缺少 `wt2` 时在打开浏览器之前返回 `AUTH_REQUIRED`，不创建任务。已有同 `data_dir` 风险锁时，run/start/resume 和 agent 的新采集在浏览器构造、连接及后台拉起前阻断；resume 只恢复自身断点，不能清锁。新风险保持 `risk_stopped` outcome、已采集队列与 checkpoint，并在 `data.risk_lock` 保留结构化原因和可用业务码，未知业务码为 `null`；人工恢复步骤只放在 `hints.operator_actions`，不提供可自动执行的恢复动作。状态、结果、本地 shortlist 导入和读取已完成 run 仍可用。
+候选人侧可用 `boss agent crawl --run-id <run_id> --resume <简历名>` 执行“完成的 crawl → shortlist → ai fit → 按匹配分排序”，不会启动浏览器；`boss agent crawl --query <关键词> --city <城市> --resume <简历名>` 会新建真实采集，与 `crawl run` 一样把 `boss login` 的登录 Cookie 与 User-Agent 注入独立采集浏览器；本地登录态缺失、没有 Cookie 或缺少 `wt2` 时在打开浏览器之前返回 `AUTH_REQUIRED`，不创建任务。已有同 `data_dir` 风险锁时，run/start/resume 和 agent 的新采集在浏览器构造、连接及后台拉起前阻断；resume 只恢复自身断点，不能清锁。新风险保持 `risk_stopped` outcome、已采集队列与 checkpoint，并在 `data.risk_lock` 保留结构化原因和可用业务码，未知业务码为 `null`；人工恢复步骤只放在 `hints.operator_actions`，不提供可自动执行的恢复动作。状态、结果、本地 shortlist 导入和读取已完成 run 仍可用。`--run-id` 只分析已有任务：同时给出 `--city`、显式 `--pages` 或 `--with-detail` 时在读取任务之前返回 `INVALID_PARAM`，不再静默丢弃这些新采集参数；`--run-id` 与 `--query` 同时出现（含空串）按互斥参数拒绝，显式空 `--query` 同样在创建任务之前拒绝。
 
 每页完成后更新 `<data-dir>/crawl/runs/<run_id>/jobs.json`、`jobs.csv` 和带筛选/冻结首行的 `jobs.xlsx`。XLSX 保留完整值但所有数据行固定为单行和统一行高，长内容仅在表格中截断显示。JSON/CSV/XLSX 不包含 `security_id`、职位 ID、selector、招聘者姓名或职位；`crawl results` 同样不暴露平台标识与招聘者信息，但会返回供本地导入使用的 selector。真实平台标识保留在受限本地 SQLite 状态，`boss clean --privacy` 会删除 crawl 运行、预算和导出。风险码 `31` / `32` / `35` / `36` / `37`、code `38` 的身份资料流程、安全页、职位列表容器异常、预算耗尽或 stop 请求都会保存断点并停止；code `38` 不等同于验证码。stdout 始终只输出 JSON 信封和恢复命令。
 
@@ -198,7 +198,7 @@ boss crawl stop <run_id>
 | `boss pipeline` | 聚合会话和面试数据生成候选进度 |
 | `boss follow-up` | 筛选需要跟进的会话和面试项 |
 | `boss digest` | 汇总新增职位、待跟进会话和面试项 |
-| `boss watch add/list/remove/run` | 保存、列出、删除或执行增量职位监控 |
+| `boss watch add/list/remove/run` | 保存、列出、删除或执行增量职位监控（`run` 的点名与 `--all` 只能选一个） |
 | `boss shortlist add/list/annotate/compare/remove` | 本地候选池：支持标签、备注和离线对比 |
 | `boss favorites list/sync` | 读取 BOSS 职位收藏并呈现有效状态；sync 只导入明确有效职位（按职位去重、刷新动态访问 ID，保留首次收藏时间） |
 | `boss preset add/list/remove` | 搜索预设 |
