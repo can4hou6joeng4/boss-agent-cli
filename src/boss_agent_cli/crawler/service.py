@@ -25,7 +25,12 @@ from boss_agent_cli.api.request_budget import (
 	request_control,
 )
 from boss_agent_cli.api.zhipin_errors import normalize_risk_code
-from boss_agent_cli.cache.store import CacheDatabaseInvalid, CacheRecordInvalid, CacheStore
+from boss_agent_cli.cache.store import (
+	CacheBusyError,
+	CacheDatabaseInvalid,
+	CacheRecordInvalid,
+	CacheStore,
+)
 from boss_agent_cli.compliance import require_capability_mode
 from boss_agent_cli.crawler.controls import (
 	CrawlExportError as CrawlExportError,
@@ -180,6 +185,15 @@ class CrawlSettings:
 			raise CacheRecordInvalid(
 				"crawl_run", run_id, "params.browser.profile_path",
 				f"期望非空绝对路径字符串，实际是空字符串（{type(profile_path).__name__}）",
+			)
+		# NUL 等控制字符能通过「非空绝对路径」检查，但会在 transport 的
+		# resolve() / mkdir() 抛 ValueError，被 `_run` 兜成 ok:true 的 stopped
+		# （Issue #1482）。合法路径不可能包含这些字符，断点里出现只能是记录
+		# 损坏或手工篡改。
+		if any(ord(char) < 0x20 for char in profile_path):
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "params.browser.profile_path",
+				f"期望绝对路径字符串，实际包含控制字符 {profile_path!r}",
 			)
 		if not Path(profile_path).is_absolute():
 			raise CacheRecordInvalid(
@@ -481,7 +495,10 @@ class CrawlService:
 		if settings.hook_profile != "none":
 			require_capability_mode(settings.operating_mode, "crawl-hook")
 		run_id = uuid.uuid4().hex[:12]
-		output_dir = self._data_dir / "crawl" / "runs" / run_id
+		# 输出目录必须按当前工作目录解析成绝对路径再落盘：`--data-dir` 允许
+		# 相对路径，原样持久化会让换个 cwd 的 resume 把产物写到无关目录
+		# （Issue #1481）。
+		output_dir = (self._data_dir / "crawl" / "runs" / run_id).resolve()
 		self._cache.create_crawl_run(run_id, settings.as_dict(), str(output_dir), status="queued")
 		if self._on_run_created is not None:
 			self._on_run_created(run_id)
@@ -597,7 +614,7 @@ class CrawlService:
 			jobs_seen=len(rows),
 			detail_checks=0,
 			output_paths=_output_paths(output_dir),
-			hooks=_hook_injections(run.get("hook_results", [])),
+			hooks=_hook_injections(run.get("hook_results", []), run_id=str(run["run_id"])),
 			requests_attempted=int(run["requests_attempted"]),
 			detail_requests_attempted=int(run["detail_requests_attempted"]),
 			elapsed_seconds=int(run["elapsed_seconds"]),
@@ -747,6 +764,17 @@ class CrawlService:
 		except CrawlStopRequested as exc:
 			status = "stopped"
 			error = str(exc)
+		except (CacheBusyError, sqlite3.OperationalError) as exc:
+			# 缓存层写锁冲突：`CacheBusyError` 是 `_GuardedConnection` 归一后的形态，
+			# 原始 `sqlite3.OperationalError('database is locked')` 也可能直接从
+			# 取数路径抛出（`is_cache_busy_error` 的文本形态）。两者都必须保存断点
+			# 后原样上抛，由入口落成可重试的 CACHE_BUSY；落成普通 stopped 会让调用
+			# 方拿到 ok:true 与可无限重复的 resume 指引（Issue #1477）。非锁的
+			# OperationalError（坏页 / 只读库）同样原样上抛，按既有契约分类
+			# （Issue #1350、#1467）。
+			status = "stopped"
+			error = str(exc)
+			raise
 		except (
 			CrawlRuntimeUnavailable,
 			CrawlExportError,
@@ -1082,19 +1110,29 @@ def _hook_metadata(hooks: tuple[HookInjection, ...]) -> list[dict[str, Any]]:
 	]
 
 
-def _hook_injections(raw: Any) -> tuple[HookInjection, ...]:
+def _hook_injections(raw: Any, *, run_id: str = "") -> tuple[HookInjection, ...]:
 	if not isinstance(raw, list):
 		return ()
-	return tuple(
-		HookInjection(
-			name=str(item.get("name", "")),
-			success=bool(item.get("success", False)),
-			sha256=str(item.get("sha256", "")),
-			reason=str(item.get("reason", "")),
+	injections: list[HookInjection] = []
+	for item in raw:
+		if not isinstance(item, dict):
+			continue
+		success = item.get("success", False)
+		# bool("false") / bool(0) 都会把失败的注入显示成成功：断点里的 success
+		# 只认真正的布尔值，类型漂移按记录损坏处理（Issue #1484）。
+		if not isinstance(success, bool):
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "hook_results", f"success 期望布尔值，实际是 {type(success).__name__}"
+			)
+		injections.append(
+			HookInjection(
+				name=str(item.get("name", "")),
+				success=success,
+				sha256=str(item.get("sha256", "")),
+				reason=str(item.get("reason", "")),
+			)
 		)
-		for item in raw
-		if isinstance(item, dict)
-	)
+	return tuple(injections)
 
 
 def _output_paths(output_dir: Path) -> dict[str, str]:

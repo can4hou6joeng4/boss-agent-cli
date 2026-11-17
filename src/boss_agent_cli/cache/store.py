@@ -185,8 +185,18 @@ def _validate_workflow_params(run_id: str, params: dict[str, Any]) -> dict[str, 
 	if inputs is not None and not isinstance(inputs, dict):
 		raise CacheRecordInvalid("workflow_run", run_id, "params.inputs", "必须是 JSON object")
 	steps = params.get("requested_steps")
-	if steps is not None and (not isinstance(steps, list) or not all(isinstance(item, str) for item in steps)):
-		raise CacheRecordInvalid("workflow_run", run_id, "params.requested_steps", "必须是字符串数组")
+	if steps is not None:
+		if not isinstance(steps, list) or not all(isinstance(item, str) for item in steps):
+			raise CacheRecordInvalid("workflow_run", run_id, "params.requested_steps", "必须是字符串数组")
+		if not steps:
+			# 空计划恢复时不会执行任何步骤，runner 却会直接把它标成 completed：
+			# 与 WizardInput.from_mapping 拒绝显式空数组同口径（Issue #1483）。
+			raise CacheRecordInvalid(
+				"workflow_run",
+				run_id,
+				"params.requested_steps",
+				"不能是空数组；省略该字段才表示执行 goal 的全部步骤",
+			)
 	return params
 
 
@@ -787,6 +797,20 @@ class CacheStore:
 				raise CacheRecordInvalid(
 					"crawl_run", run_id, column, f"期望字符串，实际是 {type(record[column]).__name__}"
 				)
+		# 输出目录必须是绝对路径：配置允许相对 `--data-dir`，但落盘的必须是解析
+		# 后的绝对路径，否则换个 cwd 的 resume 会把产物写到无关目录（Issue #1481）。
+		# 旧版本断点里的相对路径无法安全推断原始位置，按记录损坏 fail-closed。
+		output_dir = record["output_dir"]
+		if not output_dir.strip():
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "output_dir",
+				"期望非空绝对路径，实际是空字符串；旧断点无法安全恢复，请重新执行 crawl start 创建任务",
+			)
+		if not Path(output_dir).is_absolute():
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "output_dir",
+				f"期望绝对路径，实际是相对路径 {output_dir!r}；旧断点无法安全恢复，请重新执行 crawl start 创建任务",
+			)
 		return record
 
 	def update_crawl_run_params(self, run_id: str, params: dict[str, Any]) -> None:

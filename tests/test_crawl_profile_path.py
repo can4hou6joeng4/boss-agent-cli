@@ -14,7 +14,7 @@ import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.auth.token_store import TokenStore
-from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
 from boss_agent_cli.crawler.controls import CrawlProfilePathInvalid
 from boss_agent_cli.crawler.service import CrawlBudget, CrawlService, CrawlSettings
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession
@@ -81,6 +81,38 @@ def test_service_does_not_swallow_profile_path_error(tmp_path):
 	with cache:
 		with pytest.raises(CrawlProfilePathInvalid):
 			service.create_and_run(_settings(tmp_path))
+
+
+# ── NUL / 控制字符路径（Issue #1482） ──────────────────────────────
+
+
+@pytest.mark.parametrize("control", ["\x00", "\n", "\t", "\x1f"])
+def test_from_dict_rejects_control_characters_in_profile_path(tmp_path, control):
+	"""控制字符能通过「非空绝对路径」检查，但 transport 会在 resolve() 抛 ValueError。"""
+	params = _settings(tmp_path).as_dict()
+	params["browser"]["profile_path"] = str(tmp_path / f"chrome{control}profile")
+
+	with pytest.raises(CacheRecordInvalid) as excinfo:
+		CrawlSettings.from_dict(params, run_id="run-1")
+
+	assert "profile_path" in str(excinfo.value)
+	assert "控制字符" in str(excinfo.value)
+
+
+def test_transport_open_rejects_nul_in_profile_path(tmp_path):
+	"""Path.resolve() / mkdir() 的 ValueError 必须是 CrawlProfilePathInvalid。"""
+	session = DrissionCrawlerSession(
+		profile_path=Path(f"{tmp_path}/crawl/chrome\x00profile"),
+		chrome_path=None,
+		cdp_port=9333,
+		hook_profile="none",
+		hook_dir=None,
+	)
+
+	with pytest.raises(CrawlProfilePathInvalid) as excinfo:
+		session.open()
+
+	assert "控制字符" in str(excinfo.value)
 
 
 class _ReadonlyTransport:

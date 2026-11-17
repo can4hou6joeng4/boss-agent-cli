@@ -105,6 +105,18 @@ def _browser_kernel_missing_error(
 #: 恢复时发现上一个执行器在写请求结果确认前消失，步骤与 run 落成失败时使用的说明。
 _INTERRUPTED_WRITE_MESSAGE = "上一次执行在写请求结果确认前中断，无法确认操作是否已生效，禁止自动重试"
 
+#: 中断时读不出已落盘写标记（记录损坏、字段类型漂移）的兜底记录（Issue #1478）。
+#:
+#: 无法证明这次写请求没有发出，就必须按「结果未知」拦下：宁可多拦一次，也不能
+#: 因为类型漂移把 ``replay_safe`` 判成可重放。
+_UNCONFIRMED_WRITE_FALLBACK: dict[str, Any] = {
+	"code": "ACTION_UNCONFIRMED",
+	"message": "写请求在途，结果尚未确认",
+	"recoverable": False,
+	"recovery_action": "先在官方页面核对该操作是否已生效，不要自动重试",
+	"replay_safe": False,
+}
+
 
 def _search_pipeline_error(
 	exc: SearchPipelinePlatformError,
@@ -478,12 +490,10 @@ class WorkflowRunner:
 				recoverable, recovery = error_contract_for_code(exc.code)
 				error = WorkflowActionError(exc.code, str(exc), recoverable=recoverable, recovery_action=recovery, details=exc.details)
 			except KeyboardInterrupt:
-				error = WorkflowActionError(
-					"WORKFLOW_STOPPED",
-					"workflow 被中断；开始新的运行前请先核对未完成的操作",
-					recoverable=True,
-					recovery_action="检查 checkpoint 与平台实际结果，再显式创建或恢复内部任务",
-				)
+				# 写请求已经发出时，``begin_write`` 已在步骤上落盘结果未知标记；用普通的
+				# WORKFLOW_STOPPED 覆盖它会让 checkpoint 丢掉 replay_safe=false 与该动作的
+				# 核对命令，``--resume`` 就会把结果未知的写操作再发一次（Issue #1478）。
+				error = self._interrupt_error(run_id, step_name)
 			except PlatformRiskError as exc:
 				# 风控：终止语义不能被下面的 NETWORK_ERROR 兜底反转成「重试当前 run_id」。
 				# checkpoint 照常落盘（下方 update_step/update_run），恢复只能由用户在
@@ -693,7 +703,12 @@ class WorkflowRunner:
 			failed_status = (
 				WorkflowStatus.STOPPED.value if error.code == "WORKFLOW_STOPPED" else WorkflowStatus.FAILED.value
 			)
-			persisted = self._store.get_checkpoint(run_id) or {}
+			try:
+				persisted = self._store.get_checkpoint(run_id) or {}
+			except CacheRecordInvalid:
+				# 记录里已有类型漂移（如被中断的写标记 replay_safe 不是布尔值）：
+				# 继续用已知的错误落盘覆盖它，不能因此让中断保护失效（Issue #1478）。
+				persisted = {}
 			step_result = next(
 				(step.get("result") for step in persisted.get("steps", []) if step["step_name"] == step_name),
 				None,
@@ -716,6 +731,74 @@ class WorkflowRunner:
 			last_result=prior_results.get(plan.requested_steps[-1]) if plan.requested_steps else {},
 		)
 		return self._store.get_for_result(run_id) or {}
+
+	def _interrupt_error(self, run_id: str, step_name: str) -> WorkflowActionError:
+		"""Ctrl-C 时保留已落盘的「写请求在途」标记（Issue #1478）。
+
+		只有本步骤没有该标记时才落成普通的 ``WORKFLOW_STOPPED``。标记存在（或读不出来）
+		时保留原错误码、核对命令与 ``replay_safe=false``，把步骤落成 failed，让
+		``--resume`` 与 ``--status`` 都按「结果未知、禁止重放」处理。
+		"""
+		marker = self._persisted_write_marker(run_id, step_name)
+		if marker is None:
+			return WorkflowActionError(
+				"WORKFLOW_STOPPED",
+				"workflow 被中断；开始新的运行前请先核对未完成的操作",
+				recoverable=True,
+				recovery_action="检查 checkpoint 与平台实际结果，再显式创建或恢复内部任务",
+			)
+		message = marker.get("message")
+		text = message if isinstance(message, str) and message else _UNCONFIRMED_WRITE_FALLBACK["message"]
+		if "中断" not in text:
+			# 合并中断文案，但不丢掉「结果尚未确认」这个核心事实。
+			text = f"{text}（workflow 被中断）"
+		code = marker.get("code")
+		recoverable = marker.get("recoverable")
+		recovery_action = marker.get("recovery_action")
+		details = marker.get("details")
+		return WorkflowActionError(
+			code if isinstance(code, str) and code else _UNCONFIRMED_WRITE_FALLBACK["code"],
+			text,
+			recoverable=recoverable if isinstance(recoverable, bool) else False,
+			recovery_action=recovery_action
+			if isinstance(recovery_action, str) and recovery_action
+			else _UNCONFIRMED_WRITE_FALLBACK["recovery_action"],
+			details=dict(details) if isinstance(details, Mapping) else None,
+			# 这条路径只处理「写请求可能已发出」：无论原记录怎么写，都不得重放。
+			replay_safe=False,
+		)
+
+	def _persisted_write_marker(self, run_id: str, step_name: str) -> dict[str, Any] | None:
+		"""读取本步骤已落盘的写前标记；返回 None 表示没有写请求在途的记录。
+
+		读取走原始步骤列表而不是 ``get_checkpoint``：后者会按记录损坏抛
+		``CacheRecordInvalid``，而中断路径恰恰不能因此丢掉保护。error 不是对象、
+		``replay_safe`` 不是布尔值时按「结果未知」处理（fail-closed）。
+		"""
+		try:
+			steps = self._store.cache.list_workflow_steps(run_id)
+		except CacheRecordInvalid:
+			return dict(_UNCONFIRMED_WRITE_FALLBACK)
+		error = next((step.get("error") for step in steps if step.get("step_name") == step_name), None)
+		if error is None:
+			return None
+		if not isinstance(error, Mapping):
+			return dict(_UNCONFIRMED_WRITE_FALLBACK)
+		replay_safe = error.get("replay_safe")
+		if replay_safe is not None and not isinstance(replay_safe, bool):
+			# 类型漂移（如 "false"）：不能按「可重放」放行，但保留可抢救的核对信息。
+			marker = dict(_UNCONFIRMED_WRITE_FALLBACK)
+			for key in ("message", "recovery_action"):
+				value = error.get(key)
+				if isinstance(value, str) and value:
+					marker[key] = value
+			details = error.get("details")
+			if isinstance(details, Mapping):
+				marker["details"] = dict(details)
+			return marker
+		if error.get("code") == _UNCONFIRMED_WRITE_FALLBACK["code"] or replay_safe is False:
+			return dict(error)
+		return None
 
 	def _settle_interrupted_writes(self, run_id: str, stored_run: dict[str, Any]) -> dict[str, Any]:
 		"""把上一个执行器留下的在途写请求落成「结果未知」的失败。

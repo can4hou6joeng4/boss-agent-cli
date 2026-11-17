@@ -206,17 +206,21 @@ class AuthManager:
 		# 第二步：CDP 自动探测
 		if probe_cdp(cdp_url):
 			self._logger.info("检测到 CDP 可用，尝试 CDP 登录...")
+			# 只有 CDP 登录本身失败才降级到扫码。落盘失败（权限 / 磁盘满）意味着
+			# 平台侧登录已经成功，再扫一次码只会重复失败并丢掉原始本地错误
+			# （Issue #1480）；保存动作因此放在降级 try 之外，原样上抛。
 			try:
 				token = self._cdp_login(cdp_url=cdp_url, timeout=timeout, reuse_existing=reuse_existing)
-				method = "CDP 扫码"
-				self._store.save(token)
-				self._token = token
-				return {**token, "_method": method}
 			except PlatformRiskError:
 				# 风控：立即停止，绝不降级到 patchright 再登一次（#419 / #422 契约）
 				raise
 			except Exception as e:
 				self._logger.info(f"CDP 登录失败（{e}），降级到 patchright")
+			else:
+				method = "CDP 扫码"
+				self._store.save(token)
+				self._token = token
+				return {**token, "_method": method}
 		else:
 			self._logger.info("CDP 不可用，改用浏览器扫码登录")
 
@@ -364,6 +368,13 @@ class AuthManager:
 				# 代理环境变量非法是确定性配置错误：包装成可重试的
 				# TOKEN_REFRESH_FAILED 只会诱导重试，保留 typed error 交给
 				# 命令层统一映射 INVALID_PARAM（Issue #1423）。
+				raise
+			except OSError:
+				# 刷新本身可能已经成功，失败点是本地登录态落盘（权限 / 磁盘满）：
+				# 包装成可恢复的 TokenRefreshFailed 会让命令层提示重新登录，而重登
+				# 仍会卡在同一次保存上（Issue #1479）。原样上抛，由命令层映射为
+				# 不可重试的 LOCAL_IO_ERROR；网络类 OSError 子类
+				# （ConnectionError / TimeoutError）不会命中本地 IO 分类。
 				raise
 			except Exception as e:
 				raise TokenRefreshFailed(f"Token 刷新失败: {e}") from e

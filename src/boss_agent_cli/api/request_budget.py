@@ -265,11 +265,11 @@ class RequestBudget:
 		self._unpersisted_risk_lock = cdp_risk_lock.RiskLock(
 			stoken_sha256=None, locked_at=time.time(), reason=reason, platform_code=platform_code
 		)
-		failure: OSError | None = None
+		failure: OSError | UnicodeError | None = None
 		for directory in dict.fromkeys((self.data_dir, self.root)):
 			try:
 				cdp_risk_lock.write_lock(directory, None, reason=reason, platform_code=platform_code)
-			except OSError as error:
+			except (OSError, UnicodeError) as error:
 				failure = error
 		if failure is not None:
 			raise failure

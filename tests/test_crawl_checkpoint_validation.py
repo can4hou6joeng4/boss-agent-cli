@@ -6,12 +6,13 @@ resume 被吞成 ``ok: true`` 的 stopped，或落成误导性的 ``INVALID_PARA
 """
 
 import json
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
-from boss_agent_cli.crawler.service import CrawlSettings
+from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
 from boss_agent_cli.main import cli
 
 
@@ -144,3 +145,101 @@ def test_crawl_status_rejects_blob_text_columns(tmp_path, column):
 	payload = json.loads(result.stdout)
 	assert payload["error"]["code"] == "CACHE_RECORD_INVALID"
 	assert column in payload["error"]["message"]
+
+
+# ── 输出目录必须是绝对路径（Issue #1481） ──────────────────────────
+
+
+@pytest.mark.parametrize("output_dir", ["", "   ", "crawl/run-1", "."])
+def test_get_crawl_run_rejects_non_absolute_output_dir(tmp_path, output_dir):
+	"""旧断点的相对 / 空输出目录会随 cwd 漂移，按记录损坏 fail-closed 并提示重建。"""
+	_seed_run(tmp_path, _params(tmp_path))
+	_exec(tmp_path, "UPDATE crawl_runs SET output_dir = ? WHERE run_id = 'run-1'", (output_dir,))
+
+	with pytest.raises(CacheRecordInvalid) as excinfo:
+		cache = CacheStore(tmp_path / "cache" / "boss_agent.db")
+		try:
+			cache.get_crawl_run("run-1")
+		finally:
+			cache.close()
+
+	assert "output_dir" in str(excinfo.value)
+	# 旧断点无法推断原始位置：错误信息必须给出「重新 crawl start」这一恢复路径。
+	assert "crawl start" in str(excinfo.value)
+
+
+def test_crawl_status_reports_cache_record_invalid_for_relative_output_dir(tmp_path):
+	_seed_run(tmp_path, _params(tmp_path))
+	_exec(tmp_path, "UPDATE crawl_runs SET output_dir = 'crawl/run-1' WHERE run_id = 'run-1'")
+
+	result = _invoke(tmp_path, "status", "run-1")
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.stdout)
+	assert payload["error"]["code"] == "CACHE_RECORD_INVALID"
+	assert "output_dir" in payload["error"]["message"]
+	assert "crawl start" in payload["error"]["message"]
+
+
+def test_create_persists_resolved_absolute_output_dir(tmp_path, monkeypatch):
+	"""相对 --data-dir 创建的任务也必须落盘绝对输出目录。"""
+	monkeypatch.chdir(tmp_path)
+	cache = CacheStore(tmp_path / "cache" / "boss_agent.db")
+	service = CrawlService(cache, data_dir=Path("state"), transport_factory=lambda settings: None)
+	settings = CrawlSettings(
+		query="python",
+		city_code="101210100",
+		pages=1,
+		with_detail=False,
+		profile_path=(tmp_path / "profile").resolve(),
+		chrome_path=None,
+		cdp_port=9333,
+		hook_profile="none",
+		operating_mode="research",
+	)
+
+	with cache:
+		run_id = service.create(settings)
+		run = cache.get_crawl_run(run_id)
+
+	assert Path(run["output_dir"]).is_absolute()
+	assert Path(run["output_dir"]) == (tmp_path / "state" / "crawl" / "runs" / run_id).resolve()
+
+
+# ── hook_results.success 只认布尔值（Issue #1484） ─────────────────
+
+
+@pytest.mark.parametrize("success", ["false", "true", 1, 0, None, [], {}])
+def test_completed_run_rejects_drifted_hook_success(tmp_path, success):
+	"""bool("false") / bool(1) 会把状态漂移显示成成功；断点里只认真布尔值。"""
+	_seed_run(tmp_path, _params(tmp_path))
+	_exec(
+		tmp_path,
+		"UPDATE crawl_runs SET status = 'completed', hook_results = ? WHERE run_id = 'run-1'",
+		(json.dumps([{"name": "hook_clear.js", "success": success}]),),
+	)
+
+	result = _invoke(tmp_path, "resume", "run-1")
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.stdout)
+	assert payload["error"]["code"] == "CACHE_RECORD_INVALID"
+	assert "hook_results" in payload["error"]["message"]
+	assert "布尔值" in payload["error"]["message"]
+
+
+def test_completed_run_accepts_boolean_hook_success(tmp_path):
+	_seed_run(tmp_path, _params(tmp_path))
+	_exec(
+		tmp_path,
+		"UPDATE crawl_runs SET status = 'completed', hook_results = ? WHERE run_id = 'run-1'",
+		(json.dumps([{"name": "hook_clear.js", "success": False, "reason": "blocked"}]),),
+	)
+
+	result = _invoke(tmp_path, "resume", "run-1")
+
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.stdout)
+	assert payload["data"]["hooks"] == [
+		{"name": "hook_clear.js", "success": False, "sha256": "", "reason": "blocked"}
+	]

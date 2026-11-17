@@ -2,6 +2,21 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 静默刷新 stoken 成功但登录态落盘失败（权限 / 磁盘满）时，本地 `OSError` 被包装成可恢复的 `TokenRefreshFailed` 并提示重新登录；现在原样上抛，按不可重试的 `LOCAL_IO_ERROR` 上报（Issue #1479）。
+- CDP 登录成功但登录态落盘失败时被当成 CDP 失败并继续启动扫码链路，原始本地权限问题被扫码超时覆盖；现在保存动作不再参与降级判定，直接上抛 `LOCAL_IO_ERROR`，CDP 自身不可达时仍降级扫码（Issue #1480）。
+- wizard 在写请求发出后按 Ctrl-C 会用 `WORKFLOW_STOPPED` 覆盖已落盘的 `ACTION_UNCONFIRMED` 标记，checkpoint 丢掉 `replay_safe=false` 与该动作的核对命令，`--resume` 会重放结果未知的写操作；现在保留该标记并把步骤落成失败，标记损坏或 `replay_safe` 类型漂移时同样按结果未知处理（Issue #1478）。
+- `params.requested_steps` 为空数组的 workflow 断点在 `--resume` 后不执行任何步骤却报 `completed`；现在读取边界按 `CACHE_RECORD_INVALID` 拒绝并提示重新创建任务（Issue #1483）。
+- 风险锁文件写入改用统一的原子 JSON 写入（`backslashreplace`），`cdp_url` 含孤立代理字符时不再抛 `UnicodeEncodeError`；记录风控的路径同时按 `(OSError, UnicodeError)` fail-closed，原始 `PlatformRiskError` 不会被本地编码错误替换成可重试的 `NETWORK_ERROR`（Issue #1487）。
+- 代理环境变量非空但解析不出 host（如 `HTTPS_PROXY=http://`、`http://:8080`）时，浏览器通道以 `proxy=None` 启动 Chromium 走真实出口，与挂载坏代理的 httpx 通道不一致；现在 `resolve_proxy` 抛 `ProxyConfigurationError`，登录链路、装饰器命令与 doctor 在线探测统一按 `INVALID_PARAM` 拒绝，不再静默回退直连（Issue #1486）。
+- 招聘者聊天动作读取 `friend_detail` 失败时丢弃平台码，401 / 9 / 37 全部退化成 `UNKNOWN` 并提示提交 issue；现在保留原响应交给平台 `parse_error`，分别映射 `AUTH_EXPIRED` / `RATE_LIMITED` / `TOKEN_REFRESH_FAILED`。`friend_detail` 成功但没有唯一匹配时返回不可重试的 `CONTACT_NOT_FOUND`，`hints.next_actions` 指向同一数据目录的 `hr chat`（Issue #1485）。
+- 采集执行期间另一个进程短暂持有 SQLite 写锁时，`CacheBusyError` 被通用分支吞成 `stopped`，命令却返回 `ok:true`；现在原样上抛，按可重试的 `CACHE_BUSY` 上报（Issue #1477）。
+- `crawl` 把 `--data-dir` 相对路径原样存进断点，在另一个目录执行 `crawl resume` 会把产物写到当前工作目录，`output_dir=''` 时同样落到 `.`；现在创建时持久化绝对路径，读取时按 `CACHE_RECORD_INVALID` 拒绝相对或空值（Issue #1481）。
+- 断点里的 `profile_path` 含 NUL / 控制字符时 `Path.resolve()` 抛 `ValueError`，被泛化分支记成 `stopped` 并返回 `ok:true`；现在读取边界按 `CACHE_RECORD_INVALID` 拒绝，transport 层同时把 `ValueError` 转成 `CrawlProfilePathInvalid`（Issue #1482）。
+- `hook_results.success` 用 `bool()` 归一，字符串 `"false"` 会被报告成成功；现在要求严格布尔，类型漂移按 `CACHE_RECORD_INVALID` 拒绝（Issue #1484）。
+
 ## [3.4.78] - 2026-11-17
 
 ### Fixed

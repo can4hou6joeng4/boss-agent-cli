@@ -12,6 +12,7 @@ from click.testing import CliRunner
 from rich.console import Console
 from boss_agent_cli.api import cdp_risk_lock
 from boss_agent_cli.api.client import AccountRiskError, EnvironmentRiskError
+from boss_agent_cli.api.proxy import ProxyConfigurationError
 from boss_agent_cli.display import risk_error_contract
 from boss_agent_cli.main import cli
 from boss_agent_cli.output import redact_sensitive_text
@@ -1072,6 +1073,38 @@ def test_doctor_live_probe_recovery_keeps_the_data_dir(tmp_path):
 	assert f"--data-dir {tmp_path.resolve()}" in recovery
 	assert "boss --data-dir" in recovery
 	assert "运行 boss status" not in recovery
+
+
+def test_doctor_live_probe_reports_hostless_proxy_as_invalid_param(tmp_path):
+	"""代理环境变量非法是在线探测发不出去的确定性配置错误（Issue #1486）。
+
+	不能落进「探测异常」通用兜底并建议检查登录态——那会让 Agent 在坏配置上
+	反复重试；恢复动作必须直接指向代理环境变量。
+	"""
+	parsed, _, _, _ = _run_live_probe(
+		tmp_path,
+		platform_side_effect=ProxyConfigurationError("HTTPS_PROXY"),
+	)
+
+	check = _find_check(parsed["data"]["checks"], "candidate_live_user_info")
+	assert check["status"] == "warn"
+	assert "INVALID_PARAM" in check["detail"]
+	assert "HTTPS_PROXY" in check["detail"]
+	assert "HTTPS_PROXY" in check["recovery_action"]
+	assert "不会回退为直连" in check["recovery_action"]
+	assert "status" not in check["recovery_action"]
+
+
+def test_doctor_live_probe_recruiter_probe_reports_hostless_proxy(tmp_path):
+	parsed, _, _, _ = _run_live_probe(
+		tmp_path,
+		recruiter_side_effect=ProxyConfigurationError("ALL_PROXY"),
+	)
+
+	check = _find_check(parsed["data"]["checks"], "recruiter_live_read")
+	assert "INVALID_PARAM" in check["detail"]
+	assert "ALL_PROXY" in check["recovery_action"]
+	assert "不会回退为直连" in check["recovery_action"]
 
 
 def test_doctor_recruiter_side_hint_keeps_the_data_dir(tmp_path):
