@@ -835,15 +835,15 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_shortlist_annotate",
-			description="更新本地候选池职位的标签和备注",
+			description="更新本地候选池职位的标签和备注；至少提供 add_tags、remove_tags 或 note 之一",
 			input_schema={
 				"type": "object",
 				"properties": {
 					"security_id": {"type": "string", "description": "职位安全 ID"},
 					"job_id": {"type": "string", "description": "加密职位 ID"},
-					"add_tags": {"type": "array", "items": {"type": "string"}, "description": "要添加的本地标签"},
-					"remove_tags": {"type": "array", "items": {"type": "string"}, "description": "要移除的本地标签"},
-					"note": {"type": "string", "description": "替换本地备注"},
+					"add_tags": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "要添加的本地标签（每个标签不能为空）"},
+					"remove_tags": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "要移除的本地标签（每个标签不能为空）"},
+					"note": {"type": "string", "description": "替换本地备注；空串表示清空"},
 				},
 				"required": ["security_id", "job_id"],
 			},
@@ -854,7 +854,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"tag": {"type": "string", "description": "只比较包含该标签的本地候选职位"},
+					"tag": {"type": "string", "minLength": 1, "description": "只比较包含该标签的本地候选职位；省略时比较全部"},
 				},
 				"required": [],
 			},

@@ -566,9 +566,9 @@ SCHEMA_DATA = {
 				"run": {
 				"description": "执行一条或全部 watch，把新增职位写入本地缓存。",
 					"args": [
-						{"name": "name", "required": False, "description": "只运行指定 watch；省略时运行全部"},
+						{"name": "name", "required": False, "description": "要运行的 watch 名称；与 --all 必须且只能选一个"},
 					],
-					"--all": {"type": "bool", "default": False, "description": "跑所有已保存 watch；风控命中时停止后续 watch"},
+					"--all": {"type": "bool", "default": False, "description": "运行全部已保存 watch（不能与 watch 名称同时使用）；风控命中时停止后续 watch"},
 				},
 			},
 			"subcommands": {
@@ -584,7 +584,7 @@ SCHEMA_DATA = {
 			"options": {
 				"configure": {
 				"description": "设置 crawl 专用 Chrome 和 Hook 配置。",
-					"--chrome-path": {"type": "string", "default": None, "description": "chrome.exe 路径"},
+					"--chrome-path": {"type": "string", "default": None, "minLength": 1, "description": "chrome.exe 路径；省略时保留当前配置，空字符串会被拒绝"},
 					"--port": {"type": "int", "default": None, "minimum": 1, "maximum": 65535, "description": "Chrome 远程调试端口（1-65535）"},
 					"--max-requests": {"type": "int", "default": None, "minimum": 1, "description": "每个 crawl run 的总请求上限（≥1）"},
 					"--max-details": {"type": "int", "default": None, "minimum": 1, "description": "每个 crawl run 的详情请求上限（≥1）"},
@@ -608,12 +608,14 @@ SCHEMA_DATA = {
 					"--hook-dir": {
 						"type": "string",
 						"default": None,
-						"description": "screenshot-full 必填：用户已授权的原始 Hook 目录，须含 SHA256SUMS",
+						"minLength": 1,
+						"description": "与 --hook-profile screenshot-full 成对使用：该 profile 下必填，其他 profile 下给出会被拒绝；用户已授权的原始 Hook 目录须含 SHA256SUMS",
 					},
 					"--chrome-path": {
 						"type": "string",
 						"default": None,
-						"description": "覆盖配置的 Chrome 可执行文件路径",
+						"minLength": 1,
+						"description": "覆盖配置的 Chrome 可执行文件路径；省略时读取 crawl 配置，空字符串会被拒绝",
 					},
 					"--port": {
 						"type": "int",
@@ -688,7 +690,8 @@ SCHEMA_DATA = {
 					"--hook-dir": {
 						"type": "string",
 						"default": None,
-						"description": "与 screenshot-full 一起显式指定的用户脚本目录，须含 SHA256SUMS",
+						"minLength": 1,
+						"description": "与 --hook-profile screenshot-full 成对使用：该 profile 下必填，其他 profile 下给出会被拒绝；用户脚本目录须含 SHA256SUMS",
 					},
 				},
 				"status": {
@@ -877,18 +880,18 @@ SCHEMA_DATA = {
 					"--note": {"type": "string", "default": "", "description": "本地备注"},
 				},
 				"annotate": {
-				"description": "给候选池条目增删标签或替换备注；条目不存在时报错而不是静默成功。",
+				"description": "给候选池条目增删标签或替换备注；条目不存在时报错而不是静默成功；至少提供 --add-tag、--remove-tag 或 --note。",
 					"args": [
 						{"name": "security_id", "required": True, "description": "安全 ID"},
 						{"name": "job_id", "required": True, "description": "加密职位 ID"},
 					],
-					"--add-tag": {"type": "string", "default": None, "description": "添加本地标签，可重复"},
-					"--remove-tag": {"type": "string", "default": None, "description": "移除本地标签，可重复"},
-					"--note": {"type": "string", "default": None, "description": "替换本地备注"},
+					"--add-tag": {"type": "string", "default": None, "minLength": 1, "description": "添加本地标签，可重复；空值或只含逗号 / 空白会被拒绝"},
+					"--remove-tag": {"type": "string", "default": None, "minLength": 1, "description": "移除本地标签，可重复；空值或只含逗号 / 空白会被拒绝"},
+					"--note": {"type": "string", "default": None, "description": "替换本地备注；显式空串表示清空"},
 				},
 				"compare": {
 				"description": "并排比较候选池条目（可按标签过滤）。",
-					"--tag": {"type": "string", "default": None, "description": "只比较包含该本地标签的候选职位"},
+					"--tag": {"type": "string", "default": None, "minLength": 1, "description": "只比较包含该本地标签的候选职位；省略时比较全部，空值或纯空白会被拒绝"},
 				},
 				"remove": {
 				"description": "从本地候选池中移除一个职位。",
@@ -1302,11 +1305,11 @@ SCHEMA_DATA = {
 				},
 				"crawl": {
 				"description": "新建或读取 crawl 结果，导入候选池并执行 ai fit。",
-					"--run-id": {"type": "string", "default": None, "description": "分析指定的已完成 crawl run"},
-					"--query": {"type": "string", "default": None, "description": "新采集的职位关键词"},
-					"--city": {"type": "string", "default": None, "description": "新采集城市；与 --query 同时使用"},
-					"--pages": {"type": "int", "default": 5, "minimum": 1, "description": "新采集严格页数上限"},
-					"--with-detail": {"type": "bool", "default": False, "description": "新采集时串行补职位详情"},
+					"--run-id": {"type": "string", "default": None, "minLength": 1, "description": "分析指定的已完成 crawl run；与 --query 必须且只能选一个，且不能与 --city / --pages / --with-detail 同时使用"},
+					"--query": {"type": "string", "default": None, "minLength": 1, "description": "新采集的职位关键词；与 --run-id 必须且只能选一个，使用时必须同时提供 --city"},
+					"--city": {"type": "string", "default": None, "description": "新采集城市；仅 --query 路径使用，--run-id 路径给出会被拒绝"},
+					"--pages": {"type": "int", "default": 5, "minimum": 1, "description": "新采集严格页数上限；仅 --query 路径使用，--run-id 路径给出会被拒绝"},
+					"--with-detail": {"type": "bool", "default": False, "description": "新采集时串行补职位详情；仅 --query 路径使用，--run-id 路径给出会被拒绝"},
 					"--resume": {"type": "string", "required": True, "description": "用于 ai fit 的本地简历名称"},
 					"--limit": {"type": "int", "default": 10, "minimum": 1, "description": "按匹配分返回前 N 个职位"},
 				},
