@@ -2,6 +2,16 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [3.4.76] - 2026-11-17
+
+### Fixed
+- 子命令前有带取值的全局选项（`boss --data-dir <dir> detail -<sid>`）时，security_id 保护落在选项取值上并整体失效；CLI 自己生成的 `hints.next_actions` 就是这种形态。现在按 Click 参数元数据跳过选项及其取值、递归定位叶子命令（Issue #1447）。
+- 位置参数在选项之前（`boss detail -<sid> --job-id <jid>`）时，补出的 `--` 把其后的选项吞成额外位置参数；现在把位置参数整体后移，选项及其取值保持原顺序（Issue #1448）。
+- 选项取值以横杠开头且形似 security_id 时（`--security-id -<sid>`、`export -o -2024-report-…`）被误当位置参数，`--` 插到了选项与取值之间；现在选项取值不参与改写（Issue #1449）。
+- `config.json` 的 `operating_mode` 被改成数组 / 对象后 `not in` 抛 `TypeError`，所有命令（含 `config reset`）在启动期失败；现在与 `"bogus"` 等取值同口径回退（Issue #1450）。
+- 登录态里的 User-Agent 一直透传到采集会话却从未应用到 `ChromiumOptions`，新起的采集浏览器与后端登录态指纹不一致；现在注入同一 UA（Issue #1413）。
+- 联系人分页上限的 message 结尾「请重试」与同一信封的 `recovery_action` 矛盾，只按错误码决策的 Agent 会重放最多 50 页；现在指向稳定 uid 查询（Issue #1451）。
+
 ## [3.4.75] - 2026-11-17
 
 ### Fixed
