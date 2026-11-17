@@ -57,9 +57,12 @@ class SafetyGuard:
 			self._store.write_state(self._state)
 
 	def raise_if_stopped(self) -> None:
+		# 熔断有自己的错误码与恢复指引（agent stats / --resume）；沿用
+		# WORKFLOW_STOPPED 会把 wizard 的「创建新 workflow」文案带给 agent run
+		# （Issue #1520）。
 		reason = self.stop_reason()
 		if reason is not None:
-			raise RequestBudgetExceeded(reason, code="WORKFLOW_STOPPED")
+			raise RequestBudgetExceeded(reason, code="CIRCUIT_BREAKER_OPEN")
 
 	def before_action(self, decision: Decision, warning: str = "") -> SafetyDecision:
 		stop = self.stop_reason()

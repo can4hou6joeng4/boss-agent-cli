@@ -358,6 +358,9 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 		# 风控命中后不再建议任何会触发平台请求的后续动作，停止指引以统一契约为准。
 		_, recovery_action, risk_hints = platform_error_contract(live_probe_risk, ctx=ctx)
 		next_actions.extend((risk_hints or {}).get("next_actions") or [])
+		# 风控契约把真人说明放在 operator_actions（Issue #1522）：doctor 的 TTY
+		# 报告同样要显示这些停止指引。
+		operator_actions.extend((risk_hints or {}).get("operator_actions") or [])
 		operator_actions.append(f"在线只读探测命中平台风控（{live_probe_risk}）：{recovery_action}")
 	if risk_lock["locked"]:
 		operator_actions.extend(unlock_operator_actions(clean_lock_command))

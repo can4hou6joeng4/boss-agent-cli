@@ -218,7 +218,10 @@ def registry_recovery_for_ctx(ctx: Any, text: str) -> str:
 		return text
 
 	def command_for(command: str) -> str:
-		return boss_command_for_ctx(ctx, command, include_data_dir=True)
+		# agent 命令不在 hr 组下：恢复命令必须显式带角色，否则会读另一套本地
+		# 状态，与同信封的 next_actions 也不一致（Issue #1524）。
+		role = "recruiter" if command.startswith("agent ") else None
+		return boss_command_for_ctx(ctx, command, include_data_dir=True, role=role)
 
 	return rewrite_command_examples(text, _REGISTRY_COMMANDS, command_for)
 
@@ -243,8 +246,13 @@ def platform_error_contract(
 	ctx: Any = None,
 	clean_command: str | None = None,
 	doctor_command: str | None = None,
+	read_only: bool = False,
 ) -> tuple[bool, str | None, dict[str, Any] | None]:
 	"""Return ``(recoverable, recovery_action, hints)`` for a platform error code.
+
+	``read_only`` 标记产生该响应的平台调用不产生写入：未识别的响应只说明
+	读取失败，按 ``NETWORK_ERROR`` 让 Agent 安全重试，而不是沿用写操作的
+	「先核对官方页面、勿重试」契约（Issue #1519）。未知命令默认按写处理。
 
 	风控码的恢复指引与 ``next_actions`` 一律以 ``RISK_ERROR_CONTRACTS`` 为准，
 	避免各命令手工拼装出互相矛盾的停止指令。有运行上下文的调用方传入 ``ctx``：
@@ -254,6 +262,8 @@ def platform_error_contract(
 	CONTACT_NOT_FOUND 是确定性结果：``next_actions`` 指向同一数据目录刷新沟通
 	列表（招聘者 ``hr chat`` / 求职者 ``chat``），不重放原命令（Issue #1485）。
 	"""
+	if code == "UNKNOWN" and read_only:
+		code = "NETWORK_ERROR"
 	recoverable, recovery_action = error_contract_for_code(code)
 	if code in RISK_ERROR_CONTRACTS:
 		recovery_action, hints = risk_error_contract(code, ctx=ctx, clean_command=clean_command, doctor_command=doctor_command)
@@ -468,6 +478,49 @@ def handle_not_supported(ctx: Any, command: str, exc: Exception, *, fallback_mes
 	)
 
 
+#: 不产生平台写入的命令（``handle_platform_error_output`` 的 ``command`` 取值）。
+#: 只用于区分未识别响应的恢复语义：在集合内按 ``NETWORK_ERROR`` 允许重试；
+#: 不在集合内（包括未来新增命令）一律按写处理，绝不告诉 Agent 重放可能已生效的写操作。
+_READ_ONLY_COMMANDS = frozenset({
+	"chat",
+	"chat-summary",
+	"chatmsg",
+	"digest",
+	"export",
+	"favorites-list",
+	"follow-up",
+	"history",
+	"interviews",
+	"me",
+	"pipeline",
+	"recommend",
+	"recruiter-applications",
+	"recruiter-candidates",
+	"recruiter-chat",
+	"recruiter-chatmsg",
+	"recruiter-jobs-detail",
+	"recruiter-jobs-list",
+	"recruiter-last-messages",
+	"recruiter-recommendations",
+	"recruiter-resume",
+	"recruiter-whoami",
+	"search",
+	"show",
+	"status",
+	"watch",
+})
+
+
+def read_only_platform_code(command: str, code: str) -> str:
+	"""只读命令的未识别响应按 ``NETWORK_ERROR`` 归一（Issue #1519）。
+
+	写命令与未知命令保持 ``UNKNOWN``：响应无法证明动作没有生效，重试就是重放。
+	"""
+	if code == "UNKNOWN" and command in _READ_ONLY_COMMANDS:
+		return "NETWORK_ERROR"
+	return code
+
+
 def handle_platform_error_output(
 	ctx: Any,
 	command: str,
@@ -486,7 +539,9 @@ def handle_platform_error_output(
 	（Issue #990）。
 	"""
 	code, message = platform.parse_error(response)
-	recoverable, recovery_action, risk_hints = platform_error_contract(code, ctx=ctx)
+	read_only = command in _READ_ONLY_COMMANDS
+	code = read_only_platform_code(command, code)
+	recoverable, recovery_action, risk_hints = platform_error_contract(code, ctx=ctx, read_only=read_only)
 	hints = {**(extra_hints or {}), **(risk_hints or {})} or None
 	details = None
 	if isinstance(response, dict):
@@ -945,24 +1000,28 @@ class SearchProgress:
 RISK_ERROR_CONTRACTS: dict[str, dict[str, Any]] = {
 	"ACCOUNT_RISK": {
 		"recovery_action": ERROR_CODES["ACCOUNT_RISK"]["recovery_action"],
-		"next_actions": [
+		# next_actions 只放可执行命令；真人说明放 operator_actions，TTY 只渲染后者
+		# （Issue #1522）。
+		"next_actions": ["boss doctor"],
+		"operator_actions": [
 			"不要通过 CDP、patchright 或其他通道重试该操作",
 			"锁未解除时只使用本地辅助和离线状态命令；官方目标业务页恢复后由用户显式清除本地锁",
 		],
 	},
 	"ENVIRONMENT_RISK": {
 		"recovery_action": ERROR_CODES["ENVIRONMENT_RISK"]["recovery_action"],
-		"next_actions": [
+		"next_actions": ["boss doctor"],
+		"operator_actions": [
 			"不要刷新 Token、重新登录或自动重试该请求",
 			"由用户在原会话确认官方目标业务页恢复后，显式清除本地锁并恢复任务",
 		],
 	},
 	"ENVIRONMENT_RISK_LOCKED": {
 		"recovery_action": ERROR_CODES["ENVIRONMENT_RISK_LOCKED"]["recovery_action"],
-		"next_actions": [
+		"next_actions": ["boss doctor"],
+		"operator_actions": [
 			"不要刷新 Token、重新登录或换通道重试；本次请求未发出",
 			"由用户在原会话确认官方目标业务页恢复后，执行 boss clean --risk-lock 并显式恢复任务；令牌变化不放行",
-			"boss doctor",
 		],
 	},
 }
@@ -1018,7 +1077,11 @@ def risk_error_contract(
 			"next_actions": [
 				_risk_contract_commands(str(item), clean_command, doctor_command)
 				for item in spec["next_actions"]
-			]
+			],
+			"operator_actions": [
+				_risk_contract_commands(str(item), clean_command, doctor_command)
+				for item in spec["operator_actions"]
+			],
 		},
 	)
 
@@ -1310,6 +1373,24 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 				)
 			except RequestBudgetExceeded as e:
 				budget_recoverable, budget_recovery = error_contract_for_code(e.code)
+				if e.code == "CIRCUIT_BREAKER_OPEN":
+					# 熔断不是预算冷却：恢复指引指向 agent stats / --resume（Issue #1520）。
+					stats_command = boss_command_for_ctx(
+						ctx, "agent stats", include_data_dir=True, role="recruiter"
+					)
+					resume_command = boss_command_for_ctx(
+						ctx, "agent run --resume", include_data_dir=True, role="recruiter"
+					)
+					budget_hints: dict[str, Any] | None = {
+						"next_actions": [stats_command],
+						"operator_actions": [
+							f"先到官方页面核实未确认动作；确认后执行 {resume_command} 显式恢复",
+						],
+					}
+				else:
+					budget_hints = _with_httpx_only_hint(
+						ctx, {"operator_actions": ["等待冷却并检查并发任务；确认后显式恢复，不自动清理风险锁"]}
+					)
 				handle_error_output(
 					ctx,
 					command_name,
@@ -1318,9 +1399,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recoverable=budget_recoverable,
 					recovery_action=budget_recovery,
 					details=e.details,
-					hints=_with_httpx_only_hint(
-						ctx, {"operator_actions": ["等待冷却并检查并发任务；确认后显式恢复，不自动清理风险锁"]}
-					),
+					hints=budget_hints,
 				)
 			except BrowserNavigationError as e:
 				nav_recoverable, nav_recovery = error_contract_for_code(e.code)

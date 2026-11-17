@@ -16,6 +16,7 @@ from boss_agent_cli.display import (
 	is_json_mode,
 	platform_error_contract,
 	platform_error_message,
+	read_only_platform_code,
 	render_job_table,
 	shell_argument,
 	show_command_for_ctx,
@@ -569,11 +570,15 @@ def search_cmd(
 			except SearchPipelinePlatformError as exc:
 				# 风控码必须走风险契约：不可恢复、不提示重试；登录过期等
 				# 可恢复错误按登记表给出 recovery_action，而不是一律 false。
-				recoverable, recovery_action, error_hints = platform_error_contract(exc.code, ctx=ctx)
+				# search 只读：未识别响应按 NETWORK_ERROR 允许安全重试（#1519）。
+				error_code = read_only_platform_code("search", exc.code)
+				recoverable, recovery_action, error_hints = platform_error_contract(
+					error_code, ctx=ctx, read_only=True
+				)
 				handle_error_output(
 					ctx, "search",
-					code=exc.code,
-					message=platform_error_message(exc.code, exc.message, "搜索结果获取失败"),
+					code=error_code,
+					message=platform_error_message(error_code, exc.message, "搜索结果获取失败"),
 					recoverable=recoverable,
 					recovery_action=recovery_action,
 					details=exc.details,

@@ -567,8 +567,9 @@ class TestHandlePlatformErrorOutput:
 		platform.parse_error.return_value = ("UNKNOWN", "服务开小差了")
 
 		with patch("boss_agent_cli.display.handle_error_output") as mock_err:
+			# 用写命令验证 UNKNOWN 契约；只读命令按 NETWORK_ERROR 处理（Issue #1519）。
 			handle_platform_error_output(
-				ctx, "search", platform, {"code": 999}, fallback_message="搜索失败"
+				ctx, "apply", platform, {"code": 999}, fallback_message="投递失败"
 			)
 			kwargs = mock_err.call_args[1]
 		assert kwargs["code"] == "UNKNOWN"
