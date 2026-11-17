@@ -269,3 +269,56 @@ def test_primary_color():
 	resume = _make_resume()
 	html = render_resume_html(resume)
 	assert "#2563eb" in html
+
+
+# ── rows 自由字段类型漂移（Issue #1429） ─────────────────────────
+
+
+def _resume_with_row(row):
+	return _make_resume(modules=[ResumeModule(id="m1", title="M", rows=[row])])
+
+
+def test_richtext_numeric_content_does_not_crash():
+	"""content 漂移成数字时模板不再抛 TypeError（此前兜成可重试的 EXPORT_FAILED）。"""
+	html = render_resume_html(_resume_with_row({"type": "richtext", "content": 5}))
+	assert "5" in html
+
+
+def test_richtext_list_skips_non_string_elements():
+	"""数组里混入非字符串元素时只渲染字符串项，整份导出不崩。"""
+	html = render_resume_html(_resume_with_row({"type": "richtext", "content": ["第一行", 3, None, "第二行"]}))
+	assert "第一行" in html
+	assert "第二行" in html
+
+
+def test_richtext_string_columns_are_treated_as_single_column():
+	"""columns 漂移成字符串此前在 `columns > 1` 处抛 TypeError，现按单列渲染。"""
+	html = render_resume_html(_resume_with_row({"type": "richtext", "content": ["行"], "columns": "2"}))
+	assert 'richtext-row multi-col' not in html
+
+
+def test_richtext_float_columns_are_treated_as_single_column():
+	"""columns 只接受整数：bool / 浮点 / 负数都按单列处理。"""
+	for value in (True, 2.0, -3, [2]):
+		html = render_resume_html(_resume_with_row({"type": "richtext", "content": ["行"], "columns": value}))
+		assert 'richtext-row multi-col' not in html
+
+
+def test_tags_string_is_rendered_as_single_tag():
+	"""tags 漂移成字符串时此前被逐字符渲染成单字标签，现整串作为一个标签。"""
+	html = render_resume_html(_resume_with_row({"type": "tags", "tags": "Python"}))
+	assert '<span class="tag">Python</span>' in html
+	assert '<span class="tag">P</span>' not in html
+
+
+def test_tags_list_skips_non_string_elements():
+	html = render_resume_html(_resume_with_row({"type": "tags", "tags": ["Python", 3, "Go"]}))
+	assert '<span class="tag">Python</span>' in html
+	assert '<span class="tag">Go</span>' in html
+	assert '<span class="tag">3</span>' not in html
+
+
+def test_unknown_row_type_with_string_content_renders_once():
+	"""未知 type 的 content 为字符串时整串渲染，不再逐字符。"""
+	html = render_resume_html(_resume_with_row({"type": "mystery", "content": "整段文本"}))
+	assert "<p>整段文本</p>" in html

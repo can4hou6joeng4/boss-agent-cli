@@ -1217,3 +1217,97 @@ def test_error_detail_returns_empty_on_recursion_error():
 	mock_resp.json.side_effect = RecursionError("maximum recursion depth exceeded")
 
 	assert _error_detail(mock_resp) == ""
+
+
+# ── 字符串项与 base_url 漂移（Issue #1428 / #1431） ────────────────
+
+
+def test_polish_reports_invalid_param_when_model_is_not_a_string(tmp_path, monkeypatch):
+	"""ai_model 被手改成数组时，命令必须报 INVALID_PARAM 与 --model 修复指引，
+	而不是服务层 rsplit 崩溃后落不可恢复的 INTERNAL_ERROR。"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	from boss_agent_cli.ai.config import AIConfigStore
+
+	store = AIConfigStore(tmp_path)
+	store.save_config(ai_provider="openai", ai_model=["gpt-4o"])
+	store.save_api_key("sk-test-key")
+
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["polish", "demo"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "ai_model" in parsed["error"]["message"]
+	assert parsed["error"]["recovery_action"].endswith("ai config --model <值>")
+
+
+def test_polish_reports_invalid_param_when_base_url_is_not_a_string(tmp_path, monkeypatch):
+	"""ai_base_url 漂移成数组时同样在构造服务前收口，指引 --base-url 修复。"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	from boss_agent_cli.ai.config import AIConfigStore
+
+	store = AIConfigStore(tmp_path)
+	store.save_config(ai_provider="openai", ai_model="gpt-4o", ai_base_url=["https://api.openai.com/v1"])
+	store.save_api_key("sk-test-key")
+
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["polish", "demo"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "ai_base_url" in parsed["error"]["message"]
+	assert "ai config --base-url" in parsed["error"]["recovery_action"]
+
+
+def test_polish_reports_invalid_param_when_base_url_has_no_scheme(tmp_path, monkeypatch):
+	"""缺 scheme 的 base_url 会让 httpx 抛 UnsupportedProtocol；必须按本地配置错误上报。"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	from boss_agent_cli.ai.config import AIConfigStore
+
+	store = AIConfigStore(tmp_path)
+	store.save_config(ai_provider="custom", ai_model="m", ai_base_url="api.example.com/v1")
+	store.save_api_key("sk-test-key")
+
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["polish", "demo"])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert "http(s)" in parsed["error"]["message"]
+
+
+def test_config_rejects_blank_model(tmp_path, monkeypatch):
+	"""--model ' ' 会写进配置并在每次调用时由服务商 400；写入前拒绝。"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	from boss_agent_cli.ai.config import AIConfigStore
+
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["config", "--model", " "])
+
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert AIConfigStore(tmp_path).load_config()["ai_model"] is None
+
+
+@pytest.mark.parametrize("bad_url", [" ", "api.example.com/v1", "ftp://example.com/v1"])
+def test_config_rejects_invalid_base_url(tmp_path, monkeypatch, bad_url):
+	"""空白 / 缺 scheme / 非 http(s) 的 --base-url 写进去后每条 AI 命令都会失败。"""
+	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
+	from boss_agent_cli.ai.config import AIConfigStore
+
+	store = AIConfigStore(tmp_path)
+	store.save_config(ai_provider="custom", ai_model="m")
+	store.save_api_key("sk-test-key")
+	runner = CliRunner()
+	result = _invoke(runner, tmp_path, ["config", "--base-url", bad_url])
+
+	# 空白串在 has_updates 的真值判断里就被当成「没传」——查看模式仍 exit 0，
+	# 但绝不能落盘成坏配置；其余两种必须 INVALID_PARAM。
+	assert "ai_base_url" not in (store.load_config() or {}) or store.load_config()["ai_base_url"] != bad_url
+	if bad_url.strip():
+		assert result.exit_code == 1
+		assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"

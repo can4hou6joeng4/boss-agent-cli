@@ -14,6 +14,64 @@ from types import TracebackType
 from typing import Any
 
 
+def classify_platform_error(
+	response: dict[str, Any],
+	code_map: dict[int, str] | None = None,
+	*,
+	default: str = "UNKNOWN",
+	message_keywords: bool = True,
+) -> tuple[str, str]:
+	"""把平台错误包络统一分类为 CLI 稳定错误码。
+
+	平台 adapter 可先传入各自的服务端错误码映射；未命中时按通用
+	HTTP 状态码与消息关键词兜底，避免 401/429/网络错误等跨平台
+	常见失败都退化为 UNKNOWN。
+
+	模块级函数而不是仅 ``Platform`` 方法：``RecruiterPlatform`` 不继承
+	``Platform``，招聘者适配器也要用同一套兜底（Issue #1430）。
+
+	``message_keywords=False`` 只保留 HTTP 状态码兜底，不做消息关键词推断：
+	招聘者侧有明确的平台码（如 ``-1`` 表示客户端合成失败），消息正文可能是
+	脱敏后的任意文本，按关键词猜 AUTH_EXPIRED 会改写既有的 UNKNOWN 契约。
+	"""
+	code = response.get("code")
+	status_code = response.get("status_code") or response.get("status")
+	message = str(
+		response.get("message")
+		or response.get("msg")
+		or response.get("error")
+		or response.get("zpData")
+		or ""
+	)
+	mapping = code_map or {}
+	if isinstance(code, int) and code in mapping:
+		return mapping[code], message
+
+	numeric_code = code if isinstance(code, int) else status_code
+	if numeric_code in (401, 40301):
+		return "AUTH_EXPIRED", message
+	if numeric_code == 403:
+		return "ACCOUNT_RISK", message
+	if numeric_code == 429:
+		return "RATE_LIMITED", message
+	if isinstance(numeric_code, int) and 500 <= numeric_code < 600:
+		return "NETWORK_ERROR", message
+
+	if not message_keywords:
+		return default, message
+	lower_msg = message.lower()
+	if any(token in lower_msg for token in ("stoken", "token", "unauthorized", "登录", "登陆", "未认证")):
+		return "AUTH_EXPIRED", message
+	if any(token in lower_msg for token in ("too many", "rate", "频繁", "限流", "稍后再试")):
+		return "RATE_LIMITED", message
+	if any(token in lower_msg for token in ("risk", "forbidden", "风控", "安全验证", "异常访问")):
+		return "ACCOUNT_RISK", message
+	if any(token in lower_msg for token in ("timeout", "timed out", "network", "connection", "网络", "连接")):
+		return "NETWORK_ERROR", message
+
+	return default, message
+
+
 class Platform(ABC):
 	"""招聘平台抽象基类。
 
@@ -76,46 +134,12 @@ class Platform(ABC):
 		*,
 		default: str = "UNKNOWN",
 	) -> tuple[str, str]:
-		"""把平台错误包络统一分类为 CLI 稳定错误码。
+		"""把平台错误包络统一分类为 CLI 稳定错误码（委托模块级函数）。
 
-		平台 adapter 可先传入各自的服务端错误码映射；未命中时按通用
-		HTTP 状态码与消息关键词兜底，避免 401/429/网络错误等跨平台
-		常见失败都退化为 UNKNOWN。
+		保留方法名是为了既有 adapter 与测试的调用方式不变；实现见
+		:func:`classify_platform_error`。
 		"""
-		code = response.get("code")
-		status_code = response.get("status_code") or response.get("status")
-		message = str(
-			response.get("message")
-			or response.get("msg")
-			or response.get("error")
-			or response.get("zpData")
-			or ""
-		)
-		mapping = code_map or {}
-		if isinstance(code, int) and code in mapping:
-			return mapping[code], message
-
-		numeric_code = code if isinstance(code, int) else status_code
-		if numeric_code in (401, 40301):
-			return "AUTH_EXPIRED", message
-		if numeric_code == 403:
-			return "ACCOUNT_RISK", message
-		if numeric_code == 429:
-			return "RATE_LIMITED", message
-		if isinstance(numeric_code, int) and 500 <= numeric_code < 600:
-			return "NETWORK_ERROR", message
-
-		lower_msg = message.lower()
-		if any(token in lower_msg for token in ("stoken", "token", "unauthorized", "登录", "登陆", "未认证")):
-			return "AUTH_EXPIRED", message
-		if any(token in lower_msg for token in ("too many", "rate", "频繁", "限流", "稍后再试")):
-			return "RATE_LIMITED", message
-		if any(token in lower_msg for token in ("risk", "forbidden", "风控", "安全验证", "异常访问")):
-			return "ACCOUNT_RISK", message
-		if any(token in lower_msg for token in ("timeout", "timed out", "network", "connection", "网络", "连接")):
-			return "NETWORK_ERROR", message
-
-		return default, message
+		return classify_platform_error(response, code_map, default=default)
 
 	@abstractmethod
 	def is_success(self, response: dict[str, Any]) -> bool:

@@ -12,6 +12,7 @@ import platform
 from base64 import urlsafe_b64encode
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
@@ -69,6 +70,54 @@ def ai_int_setting(config: dict[str, Any], key: str, default: int, *, minimum: i
 	if value < minimum:
 		raise ValueError(f"AI 配置项 {key} 不能小于 {minimum}")
 	return value
+
+
+class AIConfigValueError(ValueError):
+	"""AI 本地配置项类型或取值错误（Issue #1428）。
+
+	``recovery_hint`` 是给命令层生成修复指引用的子命令片段；不填时调用方沿用
+	既有的数值项提示。异常本身仍是 ``ValueError``，与 ``ai_int_setting`` /
+	``ai_float_setting`` 的契约一致。
+	"""
+
+	def __init__(self, message: str, *, recovery_hint: str | None = None) -> None:
+		super().__init__(message)
+		self.recovery_hint = recovery_hint
+
+
+def ai_text_setting(config: dict[str, Any], key: str, *, default: str | None = None) -> str | None:
+	"""读取 AI 配置里的字符串项；类型漂移给明确错误（Issue #1428）。
+
+	``load_config`` 只合并默认值；``ai_model`` 被手工改成数组 / 数字后，服务层
+	``_request_params`` 的 ``model.rsplit`` 抛 ``AttributeError``，每条 ``boss ai *``
+	命令都落成不可恢复的 ``INTERNAL_ERROR``。``None`` 与缺键按默认值。
+	"""
+	value = config.get(key, default)
+	if value is None:
+		return default
+	if not isinstance(value, str):
+		raise AIConfigValueError(
+			f"AI 配置项 {key} 必须是字符串，实际是 {type(value).__name__}",
+			recovery_hint=f"ai config --{key.removeprefix('ai_').replace('_', '-')} <值>",
+		)
+	return value
+
+
+def normalize_base_url(value: str) -> str:
+	"""校验显式 base_url：必须是 http(s) 绝对地址（Issue #1431）。
+
+	空白串、缺 scheme 或非 http(s) 的地址会被原样写进配置，之后每条 AI 命令由
+	httpx 抛 ``UnsupportedProtocol``，被兜成可重试的 ``AI_API_ERROR``——同一输入
+	必然复现。写入与解析端点时都走这里，报 ``INVALID_PARAM`` 级别的本地错误。
+	"""
+	text = value.strip()
+	parsed = urlsplit(text)
+	if not text or parsed.scheme not in {"http", "https"} or not parsed.netloc:
+		raise AIConfigValueError(
+			f"AI 配置项 ai_base_url 必须是 http(s):// 开头的绝对地址，实际是 {value.strip()!r}",
+			recovery_hint="ai config --base-url https://api.example.com/v1",
+		)
+	return text
 
 
 def ai_float_setting(config: dict[str, Any], key: str, default: float, *, minimum: float = 0.0) -> float:

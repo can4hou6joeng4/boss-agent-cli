@@ -10,13 +10,25 @@ from boss_agent_cli.search_filters import (
 )
 
 
+def _pref_text(value: Any) -> str | None:
+	"""求职期望字段只接受非空字符串（Issue #1432）。
+
+	``resume_expect`` 来自平台 / 简历的自由 JSON：``{"city": ["上海"]}`` 或
+	``{"degree": ["本科"]}`` 会让 ``in`` 比较与 ``dict.get`` 抛 ``TypeError``，
+	整页评分落 ``INTERNAL_ERROR``。单个坏字段按「无此维度」处理。
+	"""
+	if isinstance(value, str) and value.strip():
+		return value
+	return None
+
+
 def _extract_expect_preferences(expect_data: dict[str, Any] | None) -> dict[str, Any]:
 	if not expect_data:
 		return {}
 	return {
-		"city": expect_data.get("city") or expect_data.get("cityName") or expect_data.get("locationName"),
-		"salary": expect_data.get("salary") or expect_data.get("salaryDesc"),
-		"education": expect_data.get("degree") or expect_data.get("education"),
+		"city": _pref_text(expect_data.get("city") or expect_data.get("cityName") or expect_data.get("locationName")),
+		"salary": _pref_text(expect_data.get("salary") or expect_data.get("salaryDesc")),
+		"education": _pref_text(expect_data.get("degree") or expect_data.get("education")),
 	}
 
 
@@ -69,7 +81,9 @@ def score_job_item(job: JobItem, *, criteria: SearchFilterCriteria | None, expec
 
 	if criteria and criteria.query:
 		query = criteria.query.lower()
-		title_text = f"{job.title} {' '.join(job.skills)}".lower()
+		# skills 是平台数组，元素可能漂移成数字 / 对象（Issue #1432）；join 前逐项
+		# str()，与 search_filters.compute_match_score 同口径。
+		title_text = f"{job.title} {' '.join(str(skill) for skill in job.skills)}".lower()
 		if query in title_text:
 			score += 10
 			match_reasons.append("关键词直接命中")

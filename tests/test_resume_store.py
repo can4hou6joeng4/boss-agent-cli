@@ -191,3 +191,28 @@ def test_save_failure_keeps_previous_resume(tmp_path, monkeypatch):
 
 	assert path.read_bytes() == original
 	assert store.get("张三") is not None
+
+
+def test_export_json_normalizes_nan_and_infinity(tmp_path):
+	"""rows 里的 NaN / Infinity 不能让导出文件变成非严格 JSON（Issue #1435）。
+
+	stdout 信封经 json_safe_value 归一成 null；导出文件必须同口径，否则严格
+	解析器（Node JSON.parse 等）拒绝整份文件。
+	"""
+	store = ResumeStore(tmp_path / "resumes")
+	r = ResumeData(
+		name="张三",
+		title="开发",
+		modules=[ResumeModule(id="m1", title="模块", rows=[{"type": "richtext", "content": [float("nan"), float("inf")]}])],
+	)
+	store.save(r)
+
+	exported = store.export_json("张三")
+
+	assert "NaN" not in exported
+	assert "Infinity" not in exported
+	assert json.loads(exported, parse_constant=_reject_constant)["data"]["modules"][0]["rows"][0]["content"] == [None, None]
+
+
+def _reject_constant(value):
+	raise ValueError(f"非严格 JSON 常量: {value}")

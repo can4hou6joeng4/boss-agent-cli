@@ -333,3 +333,40 @@ def test_recruiter_instance_passes_browser_source_to_client(monkeypatch):
 	get_recruiter_platform_instance(_ctx(browser_source="stored-cookie"), MagicMock())
 
 	assert captured["browser_source"] == "stored-cookie"
+
+
+# ── parse_error 通用兜底（Issue #1430） ─────────────────────────
+
+
+def test_parse_error_http_401_synthesized_response_is_auth_expired():
+	"""客户端在 HTTP 401 时自合成 {"code": 401}：必须走通用兜底变 AUTH_EXPIRED，
+	而不是不可恢复的 UNKNOWN（与候选人侧同一响应同口径）。"""
+	platform = BossRecruiterPlatform(_mock_client())
+	unified, _ = platform.parse_error({"code": 401, "message": "平台认证已失效，请重新登录"})
+	assert unified == "AUTH_EXPIRED"
+
+
+@pytest.mark.parametrize("code, expected", [("9", "RATE_LIMITED"), ("7", "AUTH_REQUIRED"), ("36", "ACCOUNT_RISK")])
+def test_parse_error_numeric_string_codes_are_mapped(code, expected):
+	"""数字字符串码不能被 isinstance(code, int) 门禁整体绕过码表。"""
+	platform = BossRecruiterPlatform(_mock_client())
+	unified, _ = platform.parse_error({"code": code, "message": "x"})
+	assert unified == expected
+
+
+def test_parse_error_string_121_with_reply_hint_is_endpoint_deprecated():
+	"""字符串 "121" 同样参与端点漂移重映射（发送回复片段）。"""
+	platform = BossRecruiterPlatform(_mock_client())
+	unified, _ = platform.parse_error({
+		"code": "121",
+		"message": "参数错误",
+		"__cli_endpoint_hint__": "https://www.zhipin.com/wapi/zpchat/fastReply/sendReplyMsg",
+	})
+	assert unified == "ENDPOINT_DEPRECATED"
+
+
+def test_parse_error_unknown_code_still_unknown():
+	"""真正未知的码仍是 UNKNOWN，未被过度兜底。"""
+	platform = BossRecruiterPlatform(_mock_client())
+	unified, _ = platform.parse_error({"code": 9999, "message": "未知"})
+	assert unified == "UNKNOWN"

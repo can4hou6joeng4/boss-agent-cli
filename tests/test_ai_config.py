@@ -330,3 +330,58 @@ def test_ai_float_setting_defaults_for_missing_and_null():
 
 def test_ai_float_setting_accepts_int_temperature():
 	assert ai_float_setting({"ai_temperature": 1}, "ai_temperature", 0.7) == 1.0
+
+
+# ── 字符串项与 base_url 校验（Issue #1428、#1431） ─────────────────
+
+
+@pytest.mark.parametrize("value", [["gpt-4o"], 123, True, {"name": "gpt"}])
+def test_ai_text_setting_rejects_non_string_drift(value):
+	"""ai_model 被写成数组 / 数字 / 布尔后必须给明确 ValueError，而不是让服务层崩溃。"""
+	from boss_agent_cli.ai.config import ai_text_setting
+
+	with pytest.raises(ValueError, match="ai_model"):
+		ai_text_setting({"ai_model": value}, "ai_model")
+
+
+def test_ai_text_setting_defaults_for_missing_and_null():
+	from boss_agent_cli.ai.config import ai_text_setting
+
+	assert ai_text_setting({}, "ai_model") is None
+	assert ai_text_setting({"ai_model": None}, "ai_model") is None
+	assert ai_text_setting({"ai_model": "gpt-4o"}, "ai_model") == "gpt-4o"
+
+
+@pytest.mark.parametrize(
+	"value",
+	[" ", "\t", "api.example.com", "ftp://api.example.com/v1", "https://", "http:///v1", "localhost:8000"],
+)
+def test_normalize_base_url_rejects_non_http_absolute_urls(value):
+	"""空白串、缺 scheme、非 http(s)、缺 host 的 base_url 都会让 httpx 抛 UnsupportedProtocol。"""
+	from boss_agent_cli.ai.config import normalize_base_url
+
+	with pytest.raises(ValueError, match="ai_base_url"):
+		normalize_base_url(value)
+
+
+@pytest.mark.parametrize(
+	"value, expected",
+	[
+		("https://api.example.com/v1", "https://api.example.com/v1"),
+		("  http://localhost:11434/v1  ", "http://localhost:11434/v1"),
+	],
+)
+def test_normalize_base_url_accepts_valid_endpoints(value, expected):
+	from boss_agent_cli.ai.config import normalize_base_url
+
+	assert normalize_base_url(value) == expected
+
+
+def test_ai_config_value_error_carries_recovery_hint():
+	"""字符串项错误要带贴题的修复子命令，命令层据此替换通用的数值项提示。"""
+	from boss_agent_cli.ai.config import ai_text_setting
+
+	with pytest.raises(ValueError) as caught:
+		ai_text_setting({"ai_model": ["x"]}, "ai_model")
+
+	assert getattr(caught.value, "recovery_hint", None) == "ai config --model <值>"
