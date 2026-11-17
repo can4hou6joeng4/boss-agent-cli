@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.83（2026-11-17）：配置损坏改用独立错误码 `CONFIG_INVALID` 并不在同一轮自动重试（Issue #1525）；工具契约与 native schema 对齐——MCP 工具补枚举取值域、条件必填、required 字符串 `minLength` 与 CLI 默认值，`ai cover-letter` / `resume-optimize` 同时传 `--jd` 与 `--job-id` 不再静默覆盖，`agent` 的 availability 说明适配器键语义，新增只读工具 `boss_schema`（Issue #1528–#1536）。
 - ✅ v3.4.82（2026-11-17）：招聘自动化的队列与扫描路径共享 `state.json` 在途标记，成功先落盘再推进队列，未通知的熔断标记下一轮重开（Issue #1514–#1517）；错误码契约审计——只读命令的未识别响应归一为可重试的 `NETWORK_ERROR`、`agent run` 熔断改报 `CIRCUIT_BREAKER_OPEN`、wizard 缺失联系人不再自动重试（Issue #1519–#1521）；风控 hint 按 Agent 命令与真人指引分通道输出，MCP 只读白名单补齐，agent 恢复命令保留角色（Issue #1522–#1524）。
 - ✅ v3.4.81（2026-11-17）：清理与体检的文件系统边界收紧——`clean` 跳过目录符号链接并在失败时带回部分结果、`doctor` 写探针改用独占临时文件（Issue #1497 #1498）；AI / 聊天 / 导出拒绝显式空值与不安全文件名，新增 `--clear-api-key`（Issue #1499–#1507）；SQLite 写入与旧库迁移并发安全，`watch` 命中写入幂等（Issue #1509 #1510）；求职者 greet/apply 发送前原子预约、automation 派发前落盘在途标记，未知结果不再重发（Issue #1508 #1511）。
 - ✅ v3.4.80（2026-11-17）：`batch-greet` 拒绝空查询并收紧数量上限（Issue #1490 #1494）；MCP 子进程超时按 argv 估算，批打招呼中断输出已完成的部分结果（Issue #1491 #1492）；MCP action 条件参数按允许键矩阵校验，不再静默丢弃（Issue #1493）。

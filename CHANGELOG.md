@@ -2,9 +2,10 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.83] - 2026-11-17
 
 ### Fixed
+- `INVALID_PARAM` 同时承载「参数错误，不可重试」与「本地配置损坏，修好后可重试」两种语义：`agent` / `ai` / `ai local smoke` / `chat --export` 与 wizard 的 AI、crawl 配置损坏分支都用 `INVALID_PARAM` + `recoverable=true` 覆写，按 `recoverable` 决策的 Agent 会在未修复配置时反复重跑同一失败；wizard 的 `_classify_action_error` 还把纯参数错误标成可自动重试。现在新增 `CONFIG_INVALID`（`recoverable=true`，指向 `config reset` / `ai config` 等修复命令），`INVALID_PARAM` 保持不可重试，wizard 对确定性失败不再自动重试（Issue #1525）。
 - MCP 工具 schema 没有携带 native 已声明的枚举取值域：`boss_mark.tag`、`boss_batch_greet` / `boss_preset_add` / `boss_watch_add` 的 `industry` / `scale` / `stage` / `job_type` 只有类型与描述，MCP-only Agent 只能猜值；现在枚举与 `_LABEL_MAP`、Click `Choice` 逐值相等，并新增守卫测试（Issue #1528）。
 - `boss platforms --capability` 的 schema choices 只管实现集合里的 11 个能力，漏掉 `show` / `history` / `interviews`；现在实现与 schema 共用 `capabilities.py` 的能力分组，choices 与实收集合相等（Issue #1530）。
 - `boss ai cover-letter` / `ai resume-optimize` 同时传 `--jd` 与 `--job-id` 时静默用缓存 JD 覆盖显式 JD，生成结果与调用方预期不符且无任何提示；现在入口返回 `INVALID_PARAM`（`recoverable=false`），工具 schema 用 `not` 互斥声明同一约束（Issue #1529）。
@@ -19,7 +20,6 @@
 ## [3.4.82] - 2026-11-17
 
 ### Fixed
-- `INVALID_PARAM` 同时承载「参数错误，不可重试」与「本地配置损坏，修好后可重试」两种语义：`agent` / `ai` / `ai local smoke` / `chat --export` 与 wizard 的 AI、crawl 配置损坏分支都用 `INVALID_PARAM` + `recoverable=true` 覆写，按 `recoverable` 决策的 Agent 会在未修复配置时反复重跑同一失败；wizard 的 `_classify_action_error` 还把纯参数错误标成可自动重试。现在新增 `CONFIG_INVALID`（`recoverable=true`，指向 `config reset` / `ai config` 等修复命令），`INVALID_PARAM` 保持不可重试，wizard 对确定性失败不再自动重试（Issue #1525）。
 - 招聘自动化的队列派发不读 `state.json` 的会话在途标记：扫描路径发送后进程被杀留下的未确认动作，会被同候选人的已批准队列行再发送一次。现在队列派发前按与扫描路径相同的 fail-closed 口径检查标记，命中时不发送，`verification-required` 状态只跳过该候选人的队列行，其余情况打开熔断，队列行保持 `pending` 供人工核对后继续（Issue #1514）。
 - 队列行发送后被中断、转成 `verification-required` 时只改队列文件，不写 `state.json`；`--resume` 后扫描路径看不到这条结果未知的动作，会按 transcript 再发一次。现在队列行转 `verification-required` 时同步写入同一份会话在途标记，两条路径共享同一份状态（Issue #1515）。
 - 队列成功发送后先落 `executed` 再写 state checkpoint：checkpoint 写盘失败（磁盘满 / 控制锁）时队列行已推进、prior 丢失，下一轮扫描路径会再次发送。现在先持久化 state（prior 与在途标记）再推进队列行；state 未落盘时队列行保持 `executing`，下一轮按结果未知转 `verification-required`，不重发（Issue #1516）。
