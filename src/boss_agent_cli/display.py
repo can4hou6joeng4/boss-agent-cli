@@ -486,6 +486,7 @@ _READ_ONLY_COMMANDS = frozenset({
 	"chat",
 	"chat-summary",
 	"chatmsg",
+	"detail",
 	"digest",
 	"export",
 	"favorites-list",

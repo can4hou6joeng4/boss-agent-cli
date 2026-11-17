@@ -70,7 +70,8 @@ def test_friend_lookup_limit_points_to_chat_uid_retry(tmp_path, monkeypatch):
 
 	error = exc_info.value
 	assert error.code == "NETWORK_ERROR"
-	assert error.recoverable is True
+	# 分页上限是确定性结果：标成可重试会让 max_retries≥1 的向导再翻 50 页。
+	assert error.recoverable is False
 	assert "chat" in error.recovery_action
 	assert "uid" in error.recovery_action
 	assert "缩小沟通列表范围" not in error.recovery_action

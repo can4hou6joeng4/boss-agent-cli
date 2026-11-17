@@ -879,11 +879,13 @@ def _candidate_friend(platform: Any, identifier: str, *, context: ActionContext 
 	except FriendLookupLimitExceeded as exc:
 		# 候选人无法「缩小沟通列表范围」：照抄旧指引只会把同一段超过分页上限的
 		# 遍历再跑一遍。find_friend 优先匹配稳定 uid，给出可执行的 uid 路径。
+		# recoverable 必须是 false：分页上限是确定性结果，标成可重试会让
+		# max_retries≥1 的向导自动重翻 50 页并消耗请求预算（Issue #1549）。
 		chat_hint = _hint_command(context, "chat") if context is not None else "boss chat"
 		raise WorkflowActionError(
 			"NETWORK_ERROR",
 			str(exc),
-			recoverable=True,
+			recoverable=False,
 			recovery_action=(
 				f"先用 {chat_hint} 确认联系人仍在沟通列表并取到 uid，再用 uid 重试；"
 				"按会轮换的 securityId 查询超过分页上限时，重试同样的查询不会改变结果"

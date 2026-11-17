@@ -49,3 +49,8 @@ designs/
 
 # 真实平台抓包的原始产物（含 Cookie 头与响应体，永不入库）
 .capture/
+
+# eval 运行产物；仓库只保留样例结果，其余本地生成不入库
+evals/results/*.json
+!evals/results/20260624T103356Z-fixture.json
+!evals/results/necessary-conditions-2026-06-24.json

@@ -16,6 +16,7 @@ from boss_agent_cli.display import (
 	handle_output,
 	platform_error_contract,
 	platform_error_message,
+	read_only_platform_code,
 	render_job_detail,
 )
 from boss_agent_cli.platforms import Platform
@@ -91,11 +92,15 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 
 	if result is None:
 		if last_error:
-			recoverable, recovery_action, hints = platform_error_contract(last_error[0], ctx=ctx)
+			# detail 只读：未识别的平台响应按 NETWORK_ERROR 归一，允许安全重试，
+			# 而不是沿用写操作的「核对操作是否生效」（Issue #1550）。风控码与
+			# 已知错误码不受影响。
+			code = read_only_platform_code("detail", last_error[0])
+			recoverable, recovery_action, hints = platform_error_contract(code, ctx=ctx, read_only=True)
 			handle_error_output(
 				ctx, "detail",
-				code=last_error[0],
-				message=platform_error_message(last_error[0], last_error[1], "职位详情获取失败"),
+				code=code,
+				message=platform_error_message(code, last_error[1], "职位详情获取失败"),
 				recoverable=recoverable,
 				recovery_action=recovery_action,
 				details=last_error[2],

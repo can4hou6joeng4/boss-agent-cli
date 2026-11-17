@@ -108,14 +108,15 @@ def resolve_friend_or_emit(
 	except FriendLookupLimitExceeded as exc:
 		# 分页上限是确定性结果：按会轮换的 securityId 重试同一段查询不会改变
 		# 结论。与 wizard 的 _candidate_friend 同一口径，给出可执行的 uid 路径
-		# （Issue #1353）。
+		# （Issue #1353）；recoverable 必须是 false，否则按 recoverable 决策的
+		# 自动重试会再翻满 50 页并消耗请求预算（Issue #1549）。
 		chat_cmd = boss_command_for_ctx(ctx, "chat", include_data_dir=True)
 		handle_error_output(
 			ctx,
 			command,
 			code="NETWORK_ERROR",
 			message=str(exc),
-			recoverable=True,
+			recoverable=False,
 			recovery_action=(
 				f"先用 {chat_cmd} 确认联系人仍在沟通列表并取到 uid，再用 uid 重试；"
 				"按会轮换的 securityId 查询超过分页上限时，重试同样的查询不会改变结果"
