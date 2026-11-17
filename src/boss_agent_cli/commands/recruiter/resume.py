@@ -52,7 +52,9 @@ def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id
 			type_id = 2 if exchange_type == "wechat" else 1
 			result = platform.exchange_request_by_friend(friend_id, exchange_type=type_id)
 			if not platform.is_success(result):
-				handle_platform_error_output(ctx, "recruiter-resume", platform, result, fallback_message="联系方式交换请求失败")
+				handle_platform_error_output(
+					ctx, "recruiter-resume", platform, result, fallback_message="联系方式交换请求失败", read_only_operation=False
+				)
 				return
 			data = platform.unwrap_data(result)
 			if not isinstance(data, dict):

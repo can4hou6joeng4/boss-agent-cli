@@ -532,6 +532,7 @@ def handle_platform_error_output(
 	*,
 	fallback_message: str,
 	extra_hints: dict[str, Any] | None = None,
+	read_only_operation: bool | None = None,
 ) -> None:
 	"""Emit a schema-backed error envelope for an unsuccessful platform response.
 
@@ -540,10 +541,12 @@ def handle_platform_error_output(
 	``UNKNOWN`` 沿用登记表的「先核对、勿自动重试」契约：写命令曾把它改写成
 	可重试的 ``NETWORK_ERROR``，批量与 wizard 因此重放可能已生效的写操作
 	（Issue #990）。
+	``read_only_operation`` 供同一命令同时包含读写分支时覆盖按命令名的默认值：
+	`hr resume --exchange` 是写操作，不能被只读命令名误判成可重试（Issue #1605）。
 	"""
 	code, message = platform.parse_error(response)
-	read_only = command in _READ_ONLY_COMMANDS
-	code = read_only_platform_code(command, code)
+	read_only = command in _READ_ONLY_COMMANDS if read_only_operation is None else read_only_operation
+	code = code if read_only_operation is False else read_only_platform_code(command, code)
 	recoverable, recovery_action, risk_hints = platform_error_contract(code, ctx=ctx, read_only=read_only)
 	hints = {**(extra_hints or {}), **(risk_hints or {})} or None
 	details = None
