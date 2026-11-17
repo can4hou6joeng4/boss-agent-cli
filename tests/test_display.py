@@ -1513,3 +1513,34 @@ class TestRegistryRecoveryCommands:
 		handle_error_output(ctx, "fixture", code="INVALID_PARAM", message="缺少必填参数 query")
 
 		assert captured["message"] == "缺少必填参数 query"
+
+
+# ── open_file_command：按平台生成「打开文件」命令（Issue #1441） ──
+
+
+def test_open_file_command_uses_open_on_macos(monkeypatch):
+	from boss_agent_cli.display import open_file_command
+
+	monkeypatch.setattr(sys, "platform", "darwin")
+	assert open_file_command("/tmp/report.html") == "open /tmp/report.html"
+
+
+def test_open_file_command_uses_start_on_windows(monkeypatch):
+	from boss_agent_cli.display import open_file_command
+
+	monkeypatch.setattr(sys, "platform", "win32")
+	assert open_file_command("C:/out/report.html") == 'cmd /c start "" C:/out/report.html'
+
+
+def test_open_file_command_uses_xdg_open_on_linux(monkeypatch):
+	from boss_agent_cli.display import open_file_command
+
+	monkeypatch.setattr(sys, "platform", "linux")
+	assert open_file_command("/tmp/report.html") == "xdg-open /tmp/report.html"
+
+
+def test_open_file_command_quotes_paths_with_spaces(monkeypatch):
+	from boss_agent_cli.display import open_file_command
+
+	monkeypatch.setattr(sys, "platform", "linux")
+	assert open_file_command("/tmp/my report.html") == "xdg-open '/tmp/my report.html'"

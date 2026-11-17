@@ -18,7 +18,7 @@ from rich.table import Table
 
 from boss_agent_cli import display
 from boss_agent_cli.cache.store import CacheDatabaseInvalid
-from boss_agent_cli.display import boss_command_for_ctx, handle_output, json_forced, render_action_result, shell_argument
+from boss_agent_cli.display import boss_command_for_ctx, handle_output, json_forced, open_file_command, render_action_result
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.text_files import write_text_atomic
 
@@ -387,8 +387,8 @@ def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Pa
 			handle_output(
 				ctx, "stats",
 				{"format": "html", "path": str(target), "bytes": len(html_text.encode("utf-8"))},
-				render=lambda d: render_action_result(d, title="stats（HTML 报表）", next_steps=[f"open {shell_argument(str(target))}"]),
-				hints={"next_actions": [f"open {shell_argument(str(target))}"]},
+				render=lambda d: render_action_result(d, title="stats（HTML 报表）", next_steps=[open_file_command(str(target))]),
+				hints={"next_actions": [open_file_command(str(target))]},
 			)
 		elif json_forced(ctx):
 			# 同 digest：`--json` 下 stdout 必须是信封，把 HTML 放进 data.content。

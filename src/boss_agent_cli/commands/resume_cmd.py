@@ -11,6 +11,7 @@ from boss_agent_cli.display import (
 	handle_browser_kernel_missing,
 	handle_error_output,
 	handle_output,
+	open_file_command,
 	render_action_result,
 	render_list_result,
 	render_record_result,
@@ -459,7 +460,7 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 		handle_output(
 			ctx, "resume",
 			{"action": "export", "name": name, "format": fmt, "path": str(out.resolve())},
-			render=lambda d: render_action_result(d, title="resume export", next_steps=[f"open {shell_argument(str(out.resolve()))}"]),
+			render=lambda d: render_action_result(d, title="resume export", next_steps=[open_file_command(str(out.resolve()))]),
 			hints={"next_actions": [_hint_command(ctx, f"resume show {shell_argument(name)}")]},
 		)
 		return
