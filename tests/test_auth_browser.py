@@ -919,3 +919,27 @@ def test_login_via_cdp_stops_playwright_when_contexts_read_fails(mock_probe_cdp)
 			login_via_cdp()
 
 	mock_playwright.stop.assert_called_once()
+
+
+@patch("boss_agent_cli.auth.browser.time.sleep", return_value=None)
+def test_login_via_browser_rejects_empty_final_cookie_read(mock_sleep):
+	"""响应 URI 命中登录接口不等于登录成功：最终读取缺主 cookie 时不得返回空凭证（Issue #1454）。"""
+	mock_page = MagicMock()
+	mock_page.wait_for_load_state.return_value = None
+	mock_page.evaluate.return_value = "UA"
+
+	mock_context = MagicMock()
+	mock_context.new_page.return_value = mock_page
+	mock_context.cookies.side_effect = [
+		[{"name": "wt2", "value": "token", "domain": ".zhipin.com"}],
+		[],
+	]
+
+	mock_browser = MagicMock()
+	mock_browser.new_context.return_value = mock_context
+
+	with patch("boss_agent_cli.auth.browser.sync_playwright", return_value=_mock_playwright_context(mock_browser)):
+		with pytest.raises(RuntimeError, match="主 cookie"):
+			login_via_browser(timeout=2, platform="zhipin")
+
+	mock_browser.close.assert_called_once()

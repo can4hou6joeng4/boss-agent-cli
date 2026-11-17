@@ -224,7 +224,13 @@ def test_awaiting_queued_worker_treats_non_finite_timestamp_as_stale(updated_at)
 	assert _awaiting_queued_worker({"status": "queued", "updated_at": updated_at}) is False
 
 
-def _seed_run(tmp_path: Path, *, status: str = "queued") -> None:
+def _seed_run(
+	tmp_path: Path,
+	*,
+	status: str = "queued",
+	hook_profile: str = "none",
+	hook_dir: Path | None = None,
+) -> None:
 	params = {
 		"query": "AI",
 		"city_code": "101210100",
@@ -232,7 +238,11 @@ def _seed_run(tmp_path: Path, *, status: str = "queued") -> None:
 		"with_detail": False,
 		"browser": {"profile_path": str(tmp_path / "profile"), "cdp_port": 9333},
 		"chrome_path": None,
-		"hook": {"profile": "none", "source": "user-supplied", "directory": None},
+		"hook": {
+			"profile": hook_profile,
+			"source": "user-supplied",
+			"directory": None if hook_dir is None else str(hook_dir),
+		},
 		"limits": {"max_requests": 20, "max_details": 50, "max_seconds": 600, "max_retries": 1},
 		"operating_mode": "assisted",
 	}
@@ -264,3 +274,85 @@ def test_status_marks_non_finite_queue_as_overdue(tmp_path):
 	payload = json.loads(result.stdout)
 	next_actions = payload["hints"]["next_actions"]
 	assert any("crawl resume run-1 --background" in action for action in next_actions)
+
+
+# ── 缺陷 3：resume 读到坏 Hook 目录按确定性本地失败上报（Issue #1460）────────
+
+
+@pytest.mark.parametrize(
+	"builder", [_missing_hook_dir, _hook_dir_without_manifest], ids=["missing-dir", "no-manifest"]
+)
+def test_resume_with_broken_hook_dir_reports_local_io_not_configure_hint(tmp_path, monkeypatch, builder):
+	hook_dir = builder(tmp_path)
+	_seed_run(tmp_path, hook_profile="screenshot-full", hook_dir=hook_dir)
+	transport_calls: list[object] = []
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._transport_factory",
+		lambda settings: _explode(settings, transport_calls),
+	)
+
+	result = _invoke(tmp_path, "resume", "run-1")
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.stdout)
+	assert payload["ok"] is False
+	error = payload["error"]
+	assert error["code"] == "LOCAL_IO_ERROR"
+	assert error["recoverable"] is False
+	# resume 没有 --hook-dir 可改，recovery 不能再把人送去 crawl configure。
+	assert "crawl configure" not in error["recovery_action"]
+	assert "SHA256SUMS" in error["recovery_action"]
+	assert str(hook_dir) in error["recovery_action"]
+	# 校验失败不得打开浏览器或发出请求。
+	assert transport_calls == []
+
+
+def test_resume_with_modified_hook_script_reports_local_io(tmp_path, monkeypatch):
+	hook_dir = _write_hooks(tmp_path / "hooks")
+	_seed_run(tmp_path, hook_profile="screenshot-full", hook_dir=hook_dir)
+	(hook_dir / "hook_clear.js").write_text("changed", encoding="utf-8")
+	monkeypatch.setattr(
+		"boss_agent_cli.commands.crawl._transport_factory",
+		lambda settings: _explode(settings, []),
+	)
+
+	result = _invoke(tmp_path, "resume", "run-1")
+
+	assert result.exit_code == 1, result.output
+	error = json.loads(result.stdout)["error"]
+	assert error["code"] == "LOCAL_IO_ERROR"
+	assert error["recoverable"] is False
+	assert "hook_clear" in error["message"]
+
+
+def test_resume_with_valid_hook_dir_does_not_trip_new_mapping(tmp_path, monkeypatch):
+	"""坏目录映射不能被合法断点误伤：校验通过后应继续走到执行阶段。"""
+	from boss_agent_cli.commands import crawl as crawl_module
+
+	hook_dir = _write_hooks(tmp_path / "hooks")
+	_seed_run(tmp_path, hook_profile="screenshot-full", hook_dir=hook_dir)
+	captured = {}
+
+	class _Outcome:
+		run_id = "run-1"
+		status = "completed"
+
+		def as_dict(self):
+			return {"run_id": self.run_id, "status": self.status, "output_paths": {}}
+
+	def _capture(self, run_id, **kwargs):
+		captured["run_id"] = run_id
+		return _Outcome()
+
+	monkeypatch.setattr(crawl_module.CrawlService, "resume", _capture)
+	monkeypatch.setattr(crawl_module, "_LazySeededTransportFactory", lambda ctx: _NoopTransports())
+
+	result = _invoke(tmp_path, "resume", "run-1")
+
+	assert result.exit_code == 0, result.output
+	assert captured["run_id"] == "run-1"
+
+
+class _NoopTransports:
+	def preflight(self) -> None:
+		return None

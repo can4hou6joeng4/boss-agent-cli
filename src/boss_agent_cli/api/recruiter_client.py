@@ -684,14 +684,16 @@ class BossRecruiterClient(_BaseHttpClient):
 				return browser.evaluate_js(script, args), []
 			capture = browser.evaluate_js_with_chat_events(script, args, listen_ms=listen_ms)
 		except Exception as exc:
-			from boss_agent_cli.api.browser_client import RecruiterChatTabRequired
+			from boss_agent_cli.api.browser_client import ChatTabCdpUnreachable, RecruiterChatTabRequired
 			from boss_agent_cli.api.browser_source import BrowserSourceUnavailable
 			from boss_agent_cli.api.request_budget import is_request_stop
 
 			if isinstance(exc, PlatformRiskError):
 				self._record_cdp_risk_lock_raw(error=exc)
 				raise
-			if isinstance(exc, (RecruiterChatTabRequired, BrowserSourceUnavailable)):
+			if isinstance(exc, (RecruiterChatTabRequired, BrowserSourceUnavailable, ChatTabCdpUnreachable)):
+				# CDP 端点不可达发生在脚本发送之前：本次动作没有写平台，不能
+				# 报「结果未知、勿重试」（Issue #1455）。
 				raise
 			if is_request_stop(exc):
 				raise
@@ -749,6 +751,28 @@ class BossRecruiterClient(_BaseHttpClient):
 		extra: dict[str, Any] | None = None,
 	) -> dict[str, Any]:
 		"""页面请求命中风控：按平台风控码返回（parse_error 映射到 ENVIRONMENT_RISK / ACCOUNT_RISK），立即停止。"""
+		if risk["code"] == ep.CODE_STOKEN_EXPIRED and classify_code_37(risk) == "token_expired":
+			# token 失效不是环境风险：raise_platform_risk_response 对这类 37 不抛错，
+			# 本次路径也没有写风险锁。这里若沿用「风控拦截」文案，parse_error 会把
+			# 可恢复的重新登录改写成 ENVIRONMENT_RISK + clean --risk-lock（Issue #1456）。
+			payload = self._chat_action_failure_data(
+				action=action,
+				friend_id=friend_id,
+				error="页面请求命中登录态失效（code 37），动作未完成",
+				expected_bits=expected_bits,
+				result=result,
+				events=events,
+				extra=extra,
+			)
+			payload["page_risk"] = {
+				"path": risk.get("path"),
+				"code": risk.get("__cli_platform_code__", risk["code"]),
+			}
+			return self._chat_action_failure_response(
+				message=f"登录态已失效，请重新登录后再核对本次操作: {risk.get('message') or '登录状态已失效'}",
+				payload=payload,
+				error_code="TOKEN_REFRESH_FAILED",
+			)
 		message = risk.get("message") or (
 			"访问环境存在异常" if risk["code"] in (31, ep.CODE_STOKEN_EXPIRED) else "账户存在异常行为"
 		)

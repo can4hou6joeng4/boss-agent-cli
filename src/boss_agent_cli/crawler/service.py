@@ -28,6 +28,7 @@ from boss_agent_cli.cache.store import CacheDatabaseInvalid, CacheRecordInvalid,
 from boss_agent_cli.compliance import require_capability_mode
 from boss_agent_cli.crawler.controls import (
 	CrawlExportError as CrawlExportError,
+	CrawlHookDirInvalid as CrawlHookDirInvalid,
 	CrawlLimitExceeded as CrawlLimitExceeded,
 	CrawlProfileBusy as CrawlProfileBusy,
 	CrawlProfilePathInvalid as CrawlProfilePathInvalid,
@@ -562,7 +563,12 @@ class CrawlService:
 		# Hook 目录是本地状态：resume 没有 --hook-dir 参数可以修复，必须在
 		# 打开浏览器之前用与 crawl run/start 相同的清单 / 摘要校验拒绝坏目录
 		# （Issue #1408）。已完成的 run 在上面直接返回，不因目录后来被删而失败。
-		verify_hook_profile(settings.hook_profile, settings.hook_dir)
+		try:
+			verify_hook_profile(settings.hook_profile, settings.hook_dir)
+		except ValueError as exc:
+			# 恢复路径没有参数可改：按确定性本地状态失败上报，不能落进命令层
+			# 的「修正 crawl 配置 / crawl configure --help」通用分支（Issue #1460）。
+			raise CrawlHookDirInvalid(str(exc), hook_dir=settings.hook_dir) from exc
 		if self._preflight is not None:
 			# 登录态与运行时预检放在断点修改与 clear_stop 之前：预检失败时本次
 			# 调用不改动任务（与后台恢复的既有约定一致）。

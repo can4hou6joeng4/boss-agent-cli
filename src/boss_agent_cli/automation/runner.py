@@ -138,8 +138,13 @@ def _run_cycle_locked(
 		raise
 	finally:
 		store.write_state(state)
+	# dry-run 不落熔断闩锁，但报告仍需体现「真实运行会停下」：按本轮事件里的
+	# CIRCUIT_BREAKER_OPEN 判定，而不是只看 guard.stop_reason()（Issue #1459）。
+	breaker_open = guard.stop_reason() is not None or any(
+		event.status == EventStatus.CIRCUIT_BREAKER_OPEN.value for event in events
+	)
 	return RunReport(
-		status=EventStatus.CIRCUIT_BREAKER_OPEN.value if guard.stop_reason() is not None else "OK",
+		status=EventStatus.CIRCUIT_BREAKER_OPEN.value if breaker_open else "OK",
 		events=tuple(events),
 		dry_run=dry_run,
 		platform=platform,
@@ -156,7 +161,10 @@ def _stop_for_warning(
 	dry_run: bool,
 	warning: str,
 ) -> RunReport:
-	guard.open_circuit_breaker(warning)
+	if not dry_run:
+		# 预览不落熔断闩锁：stop.json 会让后续真实运行在显式 --resume 前一律停下
+		# （Issue #1459）。
+		guard.open_circuit_breaker(warning)
 	event = make_event(
 		platform,
 		"",

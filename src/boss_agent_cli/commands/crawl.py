@@ -31,6 +31,7 @@ from boss_agent_cli.crawler.service import (
 )
 from boss_agent_cli.crawler.controls import (
 	CrawlExportError,
+	CrawlHookDirInvalid,
 	CrawlProfileBusy,
 	CrawlProfilePathInvalid,
 	CrawlRuntimeUnavailable,
@@ -398,6 +399,23 @@ def _run_service(
 			details={"run_id": exc.run_id},
 			recovery_action=f"用 {status_command} 查看进度，等当前执行结束后再恢复；不要并发恢复同一个 run_id",
 			hints={"next_actions": [status_command]},
+		)
+		return
+	except CrawlHookDirInvalid as exc:
+		# 断点里的 Hook 目录坏了：resume 没有 --hook-dir 可改，crawl configure
+		# 也修不了已存任务。按确定性本地失败收口（Issue #1460）。
+		note("LOCAL_IO_ERROR", str(exc))
+		hook_dir = f" {exc.hook_dir}" if exc.hook_dir is not None else ""
+		handle_error_output(
+			ctx,
+			"crawl",
+			code="LOCAL_IO_ERROR",
+			message=str(exc),
+			recoverable=False,
+			recovery_action=(
+				f"停止自动重试：核对 Hook 目录{hook_dir} 中的 7 个脚本与 SHA256SUMS，"
+				"修复后重新执行 crawl resume；目录已迁移时用新的 --hook-dir 重新创建任务"
+			),
 		)
 		return
 	except ValueError as exc:

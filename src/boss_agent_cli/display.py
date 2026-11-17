@@ -1119,7 +1119,11 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 	def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
 		@wraps(func)
 		def wrapper(ctx: Any, *args: Any, **kwargs: Any) -> Any:
-			from boss_agent_cli.api.browser_client import BrowserNavigationError, RecruiterChatTabRequired
+			from boss_agent_cli.api.browser_client import (
+				BrowserNavigationError,
+				ChatTabCdpUnreachable,
+				RecruiterChatTabRequired,
+			)
 			from boss_agent_cli.api._base_client import BrowserChannelRequired
 			from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserSourceUnsupported
 			from boss_agent_cli.api.client import PlatformRiskError
@@ -1180,6 +1184,24 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					hints={
 						"operator_actions": [
 							"CDP 模式下所有平台请求只走浏览器通道；该操作暂无浏览器实现，请在 BOSS 直聘官方页面手动完成",
+						]
+					},
+				)
+			except ChatTabCdpUnreachable as e:
+				# CDP HTTP 端点在脚本发送前就不可达：动作未派发，可安全重试。
+				# 不能落成 ACTION_UNCONFIRMED（Issue #1455）。
+				cdp_recoverable, cdp_recovery = error_contract_for_code("CDP_UNAVAILABLE")
+				handle_error_output(
+					ctx,
+					command_name,
+					code="CDP_UNAVAILABLE",
+					message=f"CDP 调试端点不可达，聊天页动作尚未发送: {e}",
+					recoverable=cdp_recoverable,
+					recovery_action=cdp_recovery,
+					hints={
+						"operator_actions": [
+							"确认 Chrome 仍以调试端口运行，且 --cdp-url 指向的地址可访问后重试",
+							"本次操作没有发送，重新执行是安全的",
 						]
 					},
 				)

@@ -1222,6 +1222,74 @@ def test_dry_run_keeps_pending_actions_for_the_next_live_run(tmp_path: Path) -> 
 	assert adapter.messages == ["您好，想确认下近期是否看机会？"]
 
 
+def _pending_action(item_id: str = "approved-1") -> PendingAction:
+	return PendingAction(
+		id=item_id,
+		ts="2026-11-12T00:00:00+00:00",
+		platform="zhipin",
+		candidate_key="候选人A",
+		action=PlatformAction.SEND_QUESTIONNAIRE.value,
+		status="pending",
+		confidence=0.9,
+		reason="approved review",
+		message="您好，想确认下近期是否看机会？",
+	)
+
+
+def test_dry_run_startup_warning_does_not_write_stop_json(tmp_path: Path) -> None:
+	"""预览命中安全提示时只报告熔断，不得落 stop.json（Issue #1459）。
+
+	演练不是执行：写下的熔断闩锁会让之后每一次真实运行在显式 ``--resume``
+	之前全部停下，操作者一次无害的 preview 反而冻结了自动化。
+	"""
+	store = AutomationStore(tmp_path)
+	adapter = MockRecruiterAutomationPlatform("zhipin", [], warning="检测到安全验证页")
+	config = AutomationConfig()
+
+	preview = run_automation_cycle(adapter, store, config, platform="zhipin", dry_run=True)
+
+	assert preview.status == EventStatus.CIRCUIT_BREAKER_OPEN.value
+	assert [event.status for event in preview.events] == [EventStatus.CIRCUIT_BREAKER_OPEN.value]
+	assert not (store.root / "stop.json").exists()
+	assert store.read_state().get("autonomy", {}).get("circuit_breaker") is None
+
+	# 真实运行仍然保留熔断：同一提示必须在 live 周期落盘并挡住后续运行。
+	live = run_automation_cycle(adapter, store, config, platform="zhipin", dry_run=False)
+	assert live.status == EventStatus.CIRCUIT_BREAKER_OPEN.value
+	assert (store.root / "stop.json").exists()
+
+
+def test_dry_run_action_warning_does_not_latch_or_rewrite_pending_queue(tmp_path: Path) -> None:
+	"""动作前的安全提示在预览里只产生事件，不写队列、不落熔断（Issue #1459）。"""
+	store = AutomationStore(tmp_path)
+	store.append_pending(_pending_action())
+	before = store.pending_path.read_bytes()
+
+	class _WarningAfterStartup(MockRecruiterAutomationPlatform):
+		def __init__(self) -> None:
+			super().__init__("zhipin", [])
+			self.warning_calls = 0
+
+		def detect_safety_warning(self) -> str | None:
+			self.warning_calls += 1
+			# 第一次是周期启动探测；之后模拟页面在派发前出现安全提示。
+			return None if self.warning_calls == 1 else "检测到安全验证页"
+
+		def scan_conversations(self, tabs, max_per_tab):  # type: ignore[override]
+			return []
+
+	adapter = _WarningAfterStartup()
+	report = run_automation_cycle(adapter, store, AutomationConfig(), platform="zhipin", dry_run=True)
+
+	assert report.status == EventStatus.CIRCUIT_BREAKER_OPEN.value
+	assert [event.status for event in report.events] == [EventStatus.CIRCUIT_BREAKER_OPEN.value]
+	assert not (store.root / "stop.json").exists()
+	assert store.pending_path.read_bytes() == before
+	assert [item.status for item in store.read_pending()] == ["pending"]
+	assert adapter.executed == []
+
+
+
 def test_interview_lead_is_deduplicated_across_cycles(tmp_path: Path) -> None:
 	"""同一候选人的同一面试时间只记一次（Issue #889）。
 

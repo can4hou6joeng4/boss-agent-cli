@@ -90,6 +90,14 @@ class BrowserNavigationError(RuntimeError):
 		return payload
 
 
+class ChatTabCdpUnreachable(RuntimeError):
+	"""CDP HTTP 端点不可达，聊天页脚本尚未发送。
+
+	与「动作已发出、结果未知」严格区分：此时回复 / 交换联系方式没有产生任何
+	平台写入，可以安全重试，不能报 ACTION_UNCONFIRMED（Issue #1455）。
+	"""
+
+
 class RecruiterChatTabRequired(RuntimeError):
 	"""招聘者操作（issue #217 修复路径）需要用户已打开 chat/index 页。
 
@@ -801,11 +809,9 @@ class BrowserSession:
 			try:
 				self._page.wait_for_load_state("domcontentloaded", timeout=_NAV_TIMEOUT_MS)
 			except Exception:
-				return {
-					"code": -1,
-					"message": "页面在请求期间发生导航且未在超时内就绪，无法发起请求；请稍后重试",
-					"zpData": {},
-				}
+				# 读取没有副作用，且本次请求尚未发出：按可安全重放的中断收口，
+				# 不能返回裸 code -1 让信封落到 UNKNOWN +「勿重试」（Issue #1458）。
+				return self._interrupted_request_response(endpoint)
 			self._page_ready = True
 			self._raise_if_security_page()
 			result = self._send_fetch(payload, endpoint)
@@ -1038,7 +1044,7 @@ def _pick_chat_target_ws(cdp_http_url: str) -> str:
 		with urllib.request.urlopen(list_url, timeout=3) as resp:
 			tabs = _json.load(resp)
 	except Exception as exc:
-		raise RuntimeError(f"cannot reach CDP at {list_url}: {exc}") from exc
+		raise ChatTabCdpUnreachable(f"cannot reach CDP at {list_url}: {exc}") from exc
 
 	# /json 的容器漂移（对象而非数组、数组混入非对象元素）必须在打开
 	# WebSocket 之前收口：AttributeError 会被聊天动作执行器的宽泛捕获当成

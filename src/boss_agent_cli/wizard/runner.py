@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from boss_agent_cli.api.browser_client import BrowserNavigationError
+from boss_agent_cli.api.browser_client import BrowserNavigationError, ChatTabCdpUnreachable
 from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserSourceUnsupported
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.proxy import ProxyConfigurationError
@@ -514,6 +514,16 @@ class WorkflowRunner:
 					recoverable=recoverable,
 					recovery_action=recovery,
 					details=exc.details(),
+				)
+			except ChatTabCdpUnreachable as exc:
+				# 脚本未发送，动作没有平台写入：按可重试的 CDP 不可用收口，
+				# 不进入「结果未知」分支（Issue #1455）。
+				recoverable, recovery = error_contract_for_code("CDP_UNAVAILABLE")
+				error = WorkflowActionError(
+					"CDP_UNAVAILABLE",
+					f"CDP 调试端点不可达，聊天页动作尚未发送: {exc}",
+					recoverable=recoverable,
+					recovery_action=recovery,
 				)
 			except BrowserSourceUnavailable as exc:
 				# 策略表的 doctor / status --live 读的是 <data_dir> 里的登录态与风险锁，
