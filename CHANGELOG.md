@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- `boss ai config` 用真值判断「是否提供了更新」：显式空 `--model` / `--provider` / `--base-url` 被当成没传而退回查看模式，`--api-key ""` 还会把已存密钥覆盖成空串，查看输出却仍报 `api_key_set=true`。现在四类字符串选项一律用 `is not None` 判断，并在任何写盘之前返回 `INVALID_PARAM`；新增 `--clear-api-key` 显式清除凭据（与 `--api-key` 互斥），`api_key_set` 按真实存储状态报告，空串与纯空白视为未设置（Issue #1499）。
+- `boss ai local configure --model ""` 会把空模型名写入配置，`ai local status` 随即变成 `configured=false`；`--base-url ""` 被 `or` 静默回退到运行时默认端点。现在两者都在写盘之前返回 `INVALID_PARAM`，只有省略 `--base-url` 才使用默认地址（Issue #1500）。
+
 ## [3.4.80] - 2026-11-17
 
 ### Fixed
