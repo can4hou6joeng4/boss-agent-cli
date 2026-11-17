@@ -28,9 +28,9 @@
 
 `operating_mode=assisted|research` 对已实现能力的权限一致。`COMPLIANCE_BLOCKED` 仅作历史协议兼容保留，当前不再按模式阻断能力。平台风控仍是硬边界：保留原会话与 checkpoint，遵循信封里的恢复指引，待官方目标业务页恢复后，由用户显式恢复任务。
 
-## 在独立终端运行
+## 运行 fixture 评测
 
-不要在进行中的 Agent 会话里嵌套启动 Agent。评估命令必须在独立终端运行：
+`fixture` 模式是纯本地评分：不启动子进程、不访问平台、不需要 TTY，可以直接在 Agent 会话里运行：
 
 ```bash
 uv run python evals/run_eval.py --mode fixture
@@ -68,7 +68,7 @@ result: evals/results/<timestamp>-fixture.json
 }
 ```
 
-同样只在独立终端执行：
+`external` 模式会启动外部 runner，必须放在独立终端执行，避免递归启动 Agent：
 
 ```bash
 uv run python evals/run_eval.py --mode external --runner-cmd "./your-agent-runner"

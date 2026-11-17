@@ -80,10 +80,10 @@ def test_external_runner_failure_does_not_fallback_to_fixture(tmp_path):
 @pytest.mark.parametrize(
 	"path,local_tokens",
 	[
-		(README_PATH, ["独立终端", "不引入遥测", "不得回退", "历史协议兼容"]),
+		(README_PATH, ["Agent 会话", "不引入遥测", "不得回退", "历史协议兼容"]),
 		(
 			README_PATH.with_name("README.en.md"),
-			["independent terminal", "No telemetry", "must not fall back", "historical protocol compatibility"],
+			["agent session", "No telemetry", "must not fall back", "historical protocol compatibility"],
 		),
 	],
 )

@@ -351,7 +351,7 @@ def test_site_copy_matches_current_version_and_counts():
 
 
 def test_contributing_documents_offline_mcp_evals():
-	"""离线评测必须能被贡献者发现：双语 CONTRIBUTING 说明场景、命令与独立终端要求。"""
+	"""离线评测必须能被贡献者发现：双语 CONTRIBUTING 说明场景、命令与运行方式。"""
 	zh = _read("CONTRIBUTING.md")
 	en = _read("CONTRIBUTING.en.md")
 
@@ -361,9 +361,11 @@ def test_contributing_documents_offline_mcp_evals():
 		assert "4/4 passed" in content
 
 	assert "## 离线 MCP 评测" in zh
-	assert "不要嵌套" in zh
+	assert "Agent 会话内" in zh
+	assert "--mode external" in zh
 	assert "## Offline MCP evals" in en
-	assert "do not nest" in en.lower()
+	assert "agent session" in en.lower()
+	assert "--mode external" in en
 
 
 def test_readme_links_offline_evals():
