@@ -32,6 +32,10 @@ _INFLIGHT_KEY: Final = "inflight_action"
 _INFLIGHT_EXECUTING: Final = "executing"
 _INFLIGHT_VERIFICATION_REQUIRED: Final = "verification-required"
 _INFLIGHT_STATUSES: Final = frozenset({_INFLIGHT_EXECUTING, _INFLIGHT_VERIFICATION_REQUIRED})
+#: 标记推进到 verification-required 后，「操作者已收到核对要求」是否已经落盘。
+#: 旧版本写下的标记没有该字段，按已通知处理以保持兼容；本版本在打开熔断前
+#: 显式写 False，熔断落盘成功后才改 True（Issue #1517）。
+_INFLIGHT_NOTIFIED_KEY: Final = "notified"
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +85,17 @@ def process_pending(
 				events.append(event)
 				store.append_event(event)
 				break
+			prior = _conversation_prior(state, item.candidate_key)
+			if prior is not None and state is not None:
+				# 队列行与扫描路径共享同一份会话在途标记：否则 `--resume` 后
+				# 扫描路径看不到这条结果未知的队列动作，会按 transcript 再发一次
+				# （Issue #1515）。标记先落盘，熔断成功后才置为已通知（#1517）。
+				_record_queue_inflight(prior, item)
+				store.write_state(state)
 			guard.open_circuit_breaker(f"platform verification required: {reason}")
+			if prior is not None and state is not None:
+				_mark_inflight_notified(prior)
+				_try_write_state(store, state)
 			actions[index] = _pending_with_status(item, "verification-required")
 			# 队列标记先落盘，再写事件：事件写失败也不会让该行回到可重放状态。
 			store.write_pending(actions)
@@ -109,6 +123,15 @@ def process_pending(
 		)
 		if item.platform != platform:
 			continue
+		prior = _conversation_prior(state, item.candidate_key)
+		if prior is not None and state is not None:
+			blocked = _queue_inflight_gate(store, guard, state, platform, dry_run, item.candidate_key, prior)
+			if blocked is not None:
+				event, stop = blocked
+				events.append(event)
+				if stop:
+					break
+				continue
 		if not dry_run:
 			# 先落盘「执行中」再派发：进程在写请求发出后中断时，下一轮看到
 			# executing 行就知道结果未知，不会把可能已生效的动作重发一遍
@@ -116,6 +139,19 @@ def process_pending(
 			actions[index] = _pending_with_status(item, "executing")
 			store.write_pending(actions)
 			actions[index] = item
+			if prior is not None and state is not None:
+				# 队列路径同样在派发前落会话级在途标记：队列行只保护队列自己，
+				# 扫描路径读不到它；两边共用标记后任意路径中断都不会重发
+				# （Issue #1514）。
+				_start_inflight(prior, decision, ref)
+				try:
+					store.write_state(state)
+				except Exception:
+					# 状态写不进去（控制锁被占 / 磁盘故障）不能挡住派发：队列行
+					# 已落盘为 executing，本身就是重放屏障；进程中断后下一轮会
+					# 把它转成 verification-required 并补写标记。发送成功而状态
+					# 仍未落盘时，队列行保持 executing，不会退回 pending 重放。
+					_clear_inflight(prior)
 			# 队列已把这一行标成 executing：接下来动作可能真的发出，控制锁
 			# 冲突的语义要按「可能已生效」处理（Issue #1307）。
 			if dispatched is not None:
@@ -126,7 +162,10 @@ def process_pending(
 			# 这三类异常都表示请求尚未发出（聊天页未就绪 / CDP 端点不可达 / 浏览器
 			# 通道全部不可用）：队列行必须回到 pending，否则下一轮会把一个从未派发
 			# 的动作当成结果未知，转成 verification-required 并打开熔断（Issue #1469）。
+			# 会话级在途标记同样释放（Issue #1514）。
 			if not dry_run:
+				if prior is not None and state is not None:
+					_release_inflight(prior, store, state)
 				actions[index] = _pending_with_status(item, "pending")
 				try:
 					store.write_pending(actions)
@@ -141,20 +180,35 @@ def process_pending(
 			# 恢复 pending；其它异常（含中断与响应风控）请求可能已发出，保守保留
 			# executing，下一轮按结果未知处理（Issue #1245）。
 			if exc.details.get("request_sent") is False:
+				if not dry_run and prior is not None and state is not None:
+					_release_inflight(prior, store, state)
 				actions[index] = _pending_with_status(item, "pending")
 				store.write_pending(actions)
 			raise
 		next_status = _next_pending_status(status)
 		if not dry_run:
+			if prior is not None and state is not None:
+				# 先持久化 state（prior / 在途标记），再把队列行推进到最终状态：
+				# 平台已确认发送但 state 没写下去时，队列行仍是 executing，下一轮
+				# 按结果未知处理，不会因为 prior 丢失而重发（Issue #1516）。
+				if status is EventStatus.AUTO_EXECUTED:
+					update_prior(prior, decision)
+					_clear_inflight(prior)
+				elif status is EventStatus.PLATFORM_VERIFICATION_REQUIRED:
+					_mark_inflight_verification_required(prior)
+					# 熔断已由 execute_or_dry_run 落盘，标记可以直接算作已通知。
+					_mark_inflight_notified(prior)
+				else:
+					# 安全停止 / 平台确定性拒绝发生在确认发送之前或没有产生写入：
+					# 释放在途标记，后续轮次可以重新决策。
+					_clear_inflight(prior)
+				store.write_state(state)
 			actions[index] = _pending_with_status(item, next_status)
 			# Commit each confirmed queue effect before attempting another item. A
 			# later risk/error must not leave a successful action pending for replay.
 			store.write_pending(actions)
 		# 预览不是执行：dry-run 期间写 prior 会让下一次真实运行误以为动作已发生
 		# （Issue #889），因此只有真正执行成功才更新业务状态。
-		if state is not None and status is EventStatus.AUTO_EXECUTED:
-			prior = state.setdefault("conversations", {}).setdefault(item.candidate_key, {})
-			update_prior(prior, decision)
 		guard.checkpoint()
 		event = make_event(
 			platform,
@@ -394,7 +448,122 @@ def _mark_inflight_verification_required(prior: dict[str, Any]) -> None:
 	record = dict(raw) if isinstance(raw, dict) else {}
 	record["status"] = _INFLIGHT_VERIFICATION_REQUIRED
 	record["updated_at"] = now_iso()
+	if record.get(_INFLIGHT_NOTIFIED_KEY) is not True:
+		# 打开熔断前先显式记下「操作者还没收到核对要求」：两步之间进程被杀时，
+		# 下一轮必须重开熔断，而不是把标记误当成已通知（Issue #1517）。
+		record[_INFLIGHT_NOTIFIED_KEY] = False
 	prior[_INFLIGHT_KEY] = record
+
+
+def _mark_inflight_notified(prior: dict[str, Any]) -> None:
+	raw = prior.get(_INFLIGHT_KEY)
+	if isinstance(raw, dict):
+		raw[_INFLIGHT_NOTIFIED_KEY] = True
+
+
+def _inflight_needs_notification(prior: dict[str, Any]) -> bool:
+	"""verification-required 标记是否还没成功通知操作者。"""
+	raw = prior.get(_INFLIGHT_KEY)
+	return isinstance(raw, dict) and raw.get(_INFLIGHT_NOTIFIED_KEY) is False
+
+
+def _try_write_state(store: AutomationStore, state: dict[str, Any]) -> None:
+	"""尽力写回 state：失败时磁盘上的「未通知」标记只会让下一轮重开一次熔断。"""
+	try:
+		store.write_state(state)
+	except Exception:
+		pass
+
+
+def _conversation_prior(state: dict[str, Any] | None, candidate_key: str) -> dict[str, Any] | None:
+	"""取出（必要时创建）候选人的会话状态；没有 state 时返回 None。"""
+	if state is None:
+		return None
+	conversations = state.get("conversations")
+	if not isinstance(conversations, dict):
+		conversations = {}
+		state["conversations"] = conversations
+	prior = conversations.get(candidate_key)
+	if not isinstance(prior, dict):
+		prior = {}
+		conversations[candidate_key] = prior
+	return prior
+
+
+def _record_queue_inflight(prior: dict[str, Any], item: PendingAction) -> None:
+	"""把中断的队列行同步成会话级在途标记，供扫描路径共用（Issue #1515）。"""
+	if _read_inflight(prior) is not None:
+		# 已有标记（例如扫描路径上次写到一半）：只推进状态，不覆盖原始动作信息。
+		_mark_inflight_verification_required(prior)
+		return
+	message_hash = ""
+	if item.message:
+		digest = hashlib.sha256(item.message.encode("utf-8", errors="backslashreplace")).hexdigest()
+		message_hash = f"sha256:{digest}"
+	prior[_INFLIGHT_KEY] = {
+		"action": item.action,
+		"message_hash": message_hash,
+		"started_at": item.ts or now_iso(),
+		"conversation_ref": item.candidate_key,
+		"status": _INFLIGHT_VERIFICATION_REQUIRED,
+	}
+
+
+def _queue_inflight_gate(
+	store: AutomationStore,
+	guard: SafetyGuard,
+	state: dict[str, Any],
+	platform: str,
+	dry_run: bool,
+	candidate_key: str,
+	prior: dict[str, Any],
+) -> tuple[AutomationEvent, bool] | None:
+	"""队列派发前检查会话在途标记；返回 (事件, 是否停止本周期)。"""
+	inflight = _read_inflight(prior)
+	if inflight is None:
+		return None
+	action = inflight.action or PlatformAction.SKIP
+	reason = _inflight_reason(candidate_key, inflight)
+	if inflight.status == _INFLIGHT_VERIFICATION_REQUIRED and not _inflight_needs_notification(prior):
+		# 操作者已收到过核对要求：只跳过该候选人的队列动作，其他候选人照常处理。
+		event = make_event(
+			platform,
+			candidate_key,
+			action,
+			EventStatus.SKIPPED,
+			0.0,
+			f"等待人工核对在途动作，已跳过队列动作：{reason}",
+		)
+		store.append_event(event)
+		return event, False
+	if dry_run:
+		event = make_event(
+			platform,
+			candidate_key,
+			action,
+			EventStatus.DRY_RUN,
+			0.0,
+			f"dry-run: {reason}；真实运行会打开熔断并要求人工核对，不会派发这条队列动作",
+		)
+		store.append_event(event)
+		return event, False
+	# 标记先落盘、熔断成功后才置为已通知（Issue #1517）；队列行保持 pending，
+	# 人工核对并清理标记后这条动作仍可继续（Issue #1514）。
+	_mark_inflight_verification_required(prior)
+	store.write_state(state)
+	guard.open_circuit_breaker(f"platform verification required: {reason}")
+	_mark_inflight_notified(prior)
+	_try_write_state(store, state)
+	event = make_event(
+		platform,
+		candidate_key,
+		action,
+		EventStatus.PLATFORM_VERIFICATION_REQUIRED,
+		0.0,
+		reason,
+	)
+	store.append_event(event)
+	return event, True
 
 
 def _release_inflight(prior: dict[str, Any], store: AutomationStore, state: dict[str, Any]) -> None:
@@ -433,7 +602,7 @@ def _process_inflight(
 	"""未 settle 的在途动作：不再跑决策，直接停下等人工核对（Issue #1511）。"""
 	action = inflight.action or PlatformAction.SKIP
 	reason = _inflight_reason(candidate_key, inflight)
-	if inflight.status == _INFLIGHT_VERIFICATION_REQUIRED:
+	if inflight.status == _INFLIGHT_VERIFICATION_REQUIRED and not _inflight_needs_notification(prior):
 		# 操作者已经收到过核对要求（可能已 --resume）：保持标记，不重复开熔断。
 		event = make_event(
 			platform,
@@ -456,10 +625,14 @@ def _process_inflight(
 	else:
 		# 与队列动作同一顺序：标记先推进到 verification-required 并落盘，
 		# 再打开熔断——即使熔断 checkpoint 失败，下一轮也不会把这条记录当成
-		# 可以凭 transcript 重新决策的会话。
+		# 可以凭 transcript 重新决策的会话。标记上的「已通知」位只在熔断
+		# 落盘成功后置位：两步之间被杀时下一轮会重开熔断，不会静默跳过让
+		# 操作者收不到核对要求（Issue #1517）。
 		_mark_inflight_verification_required(prior)
 		store.write_state(state)
 		guard.open_circuit_breaker(f"platform verification required: {reason}")
+		_mark_inflight_notified(prior)
+		_try_write_state(store, state)
 		event = make_event(
 			platform,
 			candidate_key,

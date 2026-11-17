@@ -1,6 +1,6 @@
 """周期内控制锁冲突的语义（Issue #1267）。
 
-动作派发成功、队列已写回 executed 之后，checkpoint 撞上控制锁时不能报
+动作派发成功、业务状态尚未落盘时，checkpoint 撞上控制锁不能报
 「本次操作没有生效」：平台动作可能已经发出。runner 把周期内的冲突转换成
 `AutomationControlBusyDispatched`，命令层按 `LOCAL_STATE_WRITE_FAILED` 上报
 （禁止自动重发，要求先核对官方页面）；`--dry-run` 与 `--resume` 入口的冲突
@@ -89,7 +89,8 @@ def test_cycle_marks_control_conflict_as_dispatched_after_action(tmp_path):
 	assert isinstance(excinfo.value, AutomationControlBusy)
 	# 动作确实已经发出，队列在 checkpoint 之前已写回 executed。
 	assert len(adapter.sent) == 1
-	assert [item.status for item in store.read_pending()] == ["executed"]
+	# 业务状态没落盘：队列行保持 executing，下一轮按结果未知转 verification-required。
+	assert [item.status for item in store.read_pending()] == ["executing"]
 
 
 def test_agent_run_reports_state_write_failure_after_dispatch(tmp_path, monkeypatch):
@@ -112,7 +113,8 @@ def test_agent_run_reports_state_write_failure_after_dispatch(tmp_path, monkeypa
 	assert any("agent stats" in action for action in payload["hints"]["next_actions"])
 	# 队列里的动作已确认执行，重新运行不会重发；但熔断状态没落盘。
 	assert len(adapter.sent) == 1
-	assert [item.status for item in store.read_pending()] == ["executed"]
+	# 业务状态没落盘：队列行保持 executing，下一轮按结果未知转 verification-required。
+	assert [item.status for item in store.read_pending()] == ["executing"]
 
 
 def test_dry_run_control_conflict_still_reports_not_effective(tmp_path, monkeypatch):

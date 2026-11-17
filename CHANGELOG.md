@@ -2,6 +2,14 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 招聘自动化的队列派发不读 `state.json` 的会话在途标记：扫描路径发送后进程被杀留下的未确认动作，会被同候选人的已批准队列行再发送一次。现在队列派发前按与扫描路径相同的 fail-closed 口径检查标记，命中时不发送，`verification-required` 状态只跳过该候选人的队列行，其余情况打开熔断，队列行保持 `pending` 供人工核对后继续（Issue #1514）。
+- 队列行发送后被中断、转成 `verification-required` 时只改队列文件，不写 `state.json`；`--resume` 后扫描路径看不到这条结果未知的动作，会按 transcript 再发一次。现在队列行转 `verification-required` 时同步写入同一份会话在途标记，两条路径共享同一份状态（Issue #1515）。
+- 队列成功发送后先落 `executed` 再写 state checkpoint：checkpoint 写盘失败（磁盘满 / 控制锁）时队列行已推进、prior 丢失，下一轮扫描路径会再次发送。现在先持久化 state（prior 与在途标记）再推进队列行；state 未落盘时队列行保持 `executing`，下一轮按结果未知转 `verification-required`，不重发（Issue #1516）。
+- 扫描路径先把标记推进到 `verification-required` 再打开熔断：两步之间进程被杀或熔断落盘失败时，磁盘上只有标记没有 `stop.json`，后续周期把「已通知操作者」误当成成立并静默跳过。现在标记记录 `notified` 位，只在熔断成功落盘后置位；未通知的标记下一轮会重开熔断（旧版本写下的标记按已通知处理，保持兼容）（Issue #1517）。
+
 ## [3.4.81] - 2026-11-17
 
 ### Fixed
