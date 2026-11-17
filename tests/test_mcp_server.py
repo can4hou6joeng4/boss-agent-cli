@@ -12,6 +12,7 @@ from unittest.mock import patch, MagicMock
 
 import click
 import pytest
+from click.testing import CliRunner
 
 
 # mcp 包可能未安装，用 mock 模块替代以允许导入 server.py
@@ -365,11 +366,31 @@ def test_every_tool_generated_argv_parses_on_click_tree():
 
 
 # 部分操作类型会要求额外参数；校验枚举值时补上，避免把条件必填误报成取值非法。
-_CONDITIONAL_ARGS = {
-	("boss_wizard", "action"): {"run_id": "run-1"},
-	("boss_hr_jobs", "action"): {"job_id": "job-1"},
-	("boss_config", "action"): {"key": "platform", "value": "zhipin"},
+# action 的兼容参数随取值变化（Issue #1493）：`run_id` 只配 resume/status/stop，
+# `key`/`value` 只配 get/set/reset，`job_id`/`page` 只配对应的 hr jobs 子命令。
+_ACTION_ENUM_ARGS = {
+	("boss_wizard", "run"): {"goal": "search"},
+	("boss_wizard", "resume"): {"run_id": "run-1"},
+	("boss_wizard", "status"): {"run_id": "run-1"},
+	("boss_wizard", "stop"): {"run_id": "run-1"},
+	("boss_hr_jobs", "list"): {"page": 2},
+	("boss_hr_jobs", "online"): {"job_id": "job-1"},
+	("boss_hr_jobs", "offline"): {"job_id": "job-1"},
+	("boss_config", "list"): {},
+	("boss_config", "get"): {"key": "platform"},
+	("boss_config", "set"): {"key": "platform", "value": "zhipin"},
+	("boss_config", "reset"): {"key": "platform"},
 }
+
+
+def _enum_test_arguments(tool, name, value):
+	"""枚举取值对应的合法参数组合（action 取不同值时条件参数不同）。"""
+	conditional = _ACTION_ENUM_ARGS.get((tool.name, value), {}) if name == "action" else {}
+	return {
+		**_required_arguments(tool),
+		**conditional,
+		name: value,
+	}
 
 
 def test_every_tool_enum_value_parses_on_click_tree():
@@ -382,11 +403,7 @@ def test_every_tool_enum_value_parses_on_click_tree():
 		properties = tool.input_schema.get("properties", {})
 		for name, schema in properties.items():
 			for value in schema.get("enum") or ():
-				arguments = {
-					**_required_arguments(tool),
-					**_CONDITIONAL_ARGS.get((tool.name, name), {}),
-					name: value,
-				}
+				arguments = _enum_test_arguments(tool, name, value)
 				args = _build_args(tool.name, arguments)
 				command, command_name, remaining = _resolve_click_command(args)
 				try:
@@ -1246,6 +1263,73 @@ def test_run_boss_timeout(mock_run):
 	assert mock_run.call_args[1]["timeout"] == 120
 
 
+@pytest.mark.parametrize(
+	"argv, minimum, maximum",
+	[
+		# batch-greet = 1 次搜索 + count 次招呼，每次 65s + 30s 固定余量。
+		(("batch-greet", "golang", "--count", "5"), 400, 900),
+		(("batch-greet", "golang", "--count", "10"), 700, 900),
+		(("batch-greet", "golang", "--count", "1"), 150, 300),
+		# 没有写请求（0 个候选 / dry-run）时只剩一次搜索，保持默认 120s。
+		(("batch-greet", "golang", "--count", "0"), 120, 120),
+		(("batch-greet", "golang", "--count", "5", "--dry-run"), 120, 120),
+		# 详情筛选逐条请求：welfare 5 页、active 非 online 3 页，都会顶到 900s 封顶。
+		(("search", "golang", "--welfare", "双休"), 600, 900),
+		(("search", "golang", "--active", "3day"), 600, 900),
+		# 普通搜索 / active=online 只翻一页列表，与默认一致。
+		(("search", "golang"), 120, 120),
+		(("search", "golang", "--active", "online"), 120, 120),
+		# export 默认 50 条 = ceil(50/15)=4 页，每页一次列表请求。
+		(("export", "golang"), 200, 400),
+		(("export", "golang", "--count", "300"), 600, 900),
+		# hr chat = 1 次好友列表 + ceil(summary_limit/50) 批。
+		(("hr", "chat"), 200, 300),
+		(("hr", "chat", "--summary-limit", "300"), 400, 600),
+		(("hr", "last-messages"), 120, 300),
+		(("hr", "last-messages", "--limit", "300"), 300, 600),
+		# 好友列表聚合按 5 页估算。
+		(("pipeline",), 300, 500),
+		(("follow-up",), 300, 500),
+		(("digest",), 300, 500),
+	],
+)
+def test_cli_timeout_estimates_from_arguments(argv, minimum, maximum):
+	"""超时必须按最坏请求数放宽，同时不超过 900s 封顶（Issue #1491 / #1492）。"""
+	from boss_agent_cli import mcp_server
+
+	timeout = mcp_server._cli_timeout(argv)
+
+	assert minimum <= timeout <= maximum
+	assert timeout <= 900
+
+
+@pytest.mark.parametrize(
+	"argv",
+	[
+		("doctor",),
+		("apply", "sec_1", "job_1"),
+		("greet", "sec_1", "job_1"),
+		("hr", "whoami"),
+		# 参数解析失败：不猜，回退默认 120s。
+		("batch-greet", "golang", "--count", "abc"),
+		("export", "golang", "--count", "0"),
+		("hr", "last-messages", "--limit", "abc"),
+		(),
+	],
+)
+def test_cli_timeout_unknown_commands_and_bad_values_stay_default(argv):
+	from boss_agent_cli import mcp_server
+
+	assert mcp_server._cli_timeout(argv) == 120.0
+
+
+def test_cli_timeout_wizard_deadline_is_unchanged():
+	"""wizard 仍按子进程自己的 --timeout 加落盘宽限，不参与请求数估算。"""
+	from boss_agent_cli import mcp_server
+
+	assert mcp_server._cli_timeout(("wizard", "--timeout", "60")) == 65.0
+
+
 @patch("server.subprocess.run")
 def test_run_boss_read_only_timeout_is_replay_safe(mock_run):
 	"""只读命令超时不能继承写操作的「结果未知」：读取没有副作用，可以直接重试。"""
@@ -1258,7 +1342,8 @@ def test_run_boss_read_only_timeout_is_replay_safe(mock_run):
 	assert result["error"]["recoverable"] is True
 	assert result["error"]["details"]["outcome_unknown"] is False
 	assert result["error"]["details"]["replay_safe"] is True
-	assert "可直接重新调用" in result["error"]["recovery_action"]
+	assert "降低 limit/count" in result["error"]["recovery_action"]
+	assert "可直接重新调用" not in result["error"]["recovery_action"]
 
 
 @patch("server.subprocess.run")
@@ -2209,6 +2294,12 @@ def test_hr_last_messages_friend_ids_declares_min_items():
 	assert tool.input_schema["properties"]["friend_ids"]["minItems"] == 1
 
 
+def test_batch_greet_query_declares_non_empty():
+	"""空关键词与不传必须在 schema 上可区分（Issue #1490）。"""
+	tool = next(item for item in TOOLS if item.name == "boss_batch_greet")
+	assert tool.input_schema["properties"]["query"]["minLength"] == 1
+
+
 def test_call_tool_rejects_empty_friend_ids_array(monkeypatch):
 	"""friend_ids=[] 不能退化成抓取当前页候选人并发起平台请求（Issue #1218）。"""
 	from types import SimpleNamespace
@@ -2236,6 +2327,72 @@ def test_call_tool_rejects_empty_friend_ids_array(monkeypatch):
 	assert payload["error"]["code"] == "INVALID_PARAM"
 	assert "friend_ids" in payload["error"]["message"]
 	assert "至少" in payload["error"]["message"]
+
+
+# ── Issue #1490 / #1494：batch-greet 的空关键词与数量上限 ────────────
+
+
+def _run_cli_in_process(tmp_path: Path):
+	"""把 MCP 映射出的 argv 交给真实 Click 入口解析，返回 CLI 信封。"""
+
+	async def fake_run(*args, **kwargs):
+		result = CliRunner().invoke(cli, ["--json", "--data-dir", str(tmp_path), *args])
+		return json.loads(result.output)
+
+	return fake_run
+
+
+@pytest.mark.parametrize("query", ["", "   "])
+def test_call_tool_batch_greet_rejects_blank_query(monkeypatch, tmp_path, query):
+	"""空 / 纯空白 query 必须在 CLI 命令层被拒，不能进入无关键词搜索（Issue #1490）。"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "_run_boss_async", _run_cli_in_process(tmp_path))
+
+	result = asyncio.run(
+		mcp_server.call_tool(
+			None,
+			CallToolRequestParams(name="boss_batch_greet", arguments={"query": query}),
+		)
+	)
+
+	payload = json.loads(result.content[0].text)
+	assert result.is_error is True
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "搜索关键词不能为空" in payload["error"]["message"]
+
+
+def test_call_tool_batch_greet_rejects_limit_above_schema_maximum(monkeypatch, tmp_path):
+	"""limit 越界不能交给 CLI 静默截断到 10（Issue #1494）。"""
+	from types import SimpleNamespace
+
+	from boss_agent_cli import mcp_server
+	from mcp.types import CallToolRequestParams
+
+	monkeypatch.setattr(mcp_server, "TextContent", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "CallToolResult", SimpleNamespace)
+	monkeypatch.setattr(mcp_server, "_run_boss_async", _run_cli_in_process(tmp_path))
+
+	result = asyncio.run(
+		mcp_server.call_tool(
+			None,
+			CallToolRequestParams(
+				name="boss_batch_greet", arguments={"query": "g", "limit": 50},
+			),
+		)
+	)
+
+	payload = json.loads(result.content[0].text)
+	assert result.is_error is True
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert "50" in payload["error"]["message"]
 
 
 # ── Issue #1236：wizard 空步骤与 argv 文本边界 ────────────────────────

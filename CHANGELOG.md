@@ -2,6 +2,15 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- MCP 子进程固定 120s 超时让 `batch-greet` 的默认 5 次招呼（每次节流上界 60s）必然超时，SIGINT 后 stdout 为空、结果未知且没有可恢复的部分结果；现在按 argv 估算超时（1 次搜索 + `--count` 次招呼，单次 60s 节流上界 + 5s 抖动 + 30s 余量，封顶 900s），CLI 在批打招呼被中断时输出已完成列表、在途候选人与 `replay_safe=false` 的七键错误信封，并明确不要原样重试（Issue #1491）。
+- MCP 只读工具（`search` / `export` / `hr chat` / `hr last-messages` / `pipeline` / `follow-up` / `digest`）同样固定 120s，详情筛选与分页批量调用会在正常执行中被误杀；现在按参数估算超时（单次 65s + 30s 余量，封顶 900s，解析失败回退 120s），只读中断文案改为先降低 limit/count 或改用 active=online 再重试（Issue #1492）。
+- MCP 的 `boss_wizard` / `boss_config` / `boss_hr_jobs` 按 action 分派时静默丢弃越界参数：`resume` 的新 `goal`、`config list` 的 `key`、`hr jobs online` 的 `page` 等被忽略后仍返回 `ok:true`，调用方以为过滤 / 恢复 / 写入已经生效；现在映射层按 action → 允许键矩阵返回 `INVALID_PARAM` 并提示正确用法，缺省 action 与显式默认 action 行为一致，`run_id` 必须显式搭配 `resume` / `status` / `stop`（Issue #1493）。
+- `boss batch-greet` 的空串 / 纯空白关键词会退化成无关键词搜索，并对默认列表里的职位真实发出招呼；现在在任何平台调用之前返回 `INVALID_PARAM`，工具 schema 的 `query` 同步声明 `minLength: 1`（Issue #1490）。
+- `boss batch-greet --count` 超过 10 时被静默截断，CLI 行为与 schema 声明的上界不一致；现在 `--count` 改为 `IntRange(0, 10)` 在解析阶段拒绝越界值，MCP `limit` 越界同样返回 `INVALID_PARAM`，原生 schema 补上 `maximum: 10`（Issue #1494）。
+
 ## [3.4.79] - 2026-11-17
 
 ### Fixed

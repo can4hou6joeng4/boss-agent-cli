@@ -25,6 +25,7 @@ from boss_agent_cli.main import cli
 	[
 		["--json", "search", "golang", "--page", "abc"],
 		["--json", "search", "golang", "--page", "0"],
+		["--json", "batch-greet", "golang", "--count", "11"],
 		["--json", "recommend", "--page", "-1"],
 		["--json", "chatmsg", "sec_1", "--page", "0"],
 		["--json", "chatmsg", "sec_1", "--count", "0"],
