@@ -841,28 +841,32 @@ class WorkflowRunner:
 		这次写操作可能已经生效，也可能没有——不重放，交给操作者核对（Issue #1019）。
 		没有这条记录的 running 步骤（只读、内部任务续跑、尚未走到写请求）照常重跑。
 		"""
-		interrupted = [
-			step
-			for step in stored_run["steps"]
-			if step["status"] == WorkflowStatus.RUNNING.value and (step.get("error") or {}).get("replay_safe") is False
-		]
+		interrupted: list[tuple[dict[str, Any], dict[str, Any]]] = []
+		for step in stored_run["steps"]:
+			if step["status"] != WorkflowStatus.RUNNING.value:
+				continue
+			# _persisted_write_marker 可能把缺失 / 漂移的 replay_safe 规范化成
+			# 后备标记；结算时也用规范化结果，不能把不完整的记录原样写回。
+			marker = self._persisted_write_marker(run_id, step["step_name"])
+			if marker is not None:
+				interrupted.append((step, marker))
 		if not interrupted:
 			return stored_run
-		for step in interrupted:
+		for step, marker in interrupted:
 			self._store.update_step(
 				run_id,
 				step["step_name"],
 				status=WorkflowStatus.FAILED.value,
 				result=step["result"],
-				error={**step["error"], "message": _INTERRUPTED_WRITE_MESSAGE},
+				error={**marker, "message": _INTERRUPTED_WRITE_MESSAGE, "replay_safe": False},
 			)
 		# 步骤按顺序执行，正常情况下只有一个；run 指向最先该执行的那一步。
-		first = interrupted[0]
+		first, first_marker = interrupted[0]
 		self._store.update_run(
 			run_id,
 			status=WorkflowStatus.FAILED.value,
 			current_step=first["step_name"],
-			error={**first["error"], "message": _INTERRUPTED_WRITE_MESSAGE},
+			error={**first_marker, "message": _INTERRUPTED_WRITE_MESSAGE, "replay_safe": False},
 		)
 		return self._store.get_checkpoint(run_id) or stored_run
 

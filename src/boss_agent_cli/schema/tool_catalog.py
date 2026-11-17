@@ -350,6 +350,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 							"不合适",
 							"牛人发起",
 							"收藏",
+							"1", "2", "3", "4", "5", "6", "7", "8", "11",
 						],
 						"description": "标签名称，或与之一一对应的数字 ID（1/2/3/4/5/6/7/8/11）；其他数字会被拒绝",
 					},

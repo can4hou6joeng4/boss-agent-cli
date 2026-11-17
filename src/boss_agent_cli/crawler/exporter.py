@@ -65,8 +65,10 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 	xlsx_path = output_dir / "jobs.xlsx"
 	temporaries: list[Path] = []
 	# 替换只能发生在三种序列化都成功之后；记录当前目标，替换失败时错误信息
-	# 才能指向具体产物。
+	# 才能指向具体产物。三个目标逐次替换，已替换的文件在后续失败时回滚到旧内容，
+	# 避免失败后磁盘上留着不同批次的产物（Issue #1617）。
 	current_target: Path | None = None
+	replaced: list[tuple[Path, Path | None]] = []
 	try:
 		# mkdir 也必须在 try 内：输出目录被同名文件占用时 FileExistsError /
 		# NotADirectoryError 会原样上抛，被 _run 兜成 ok:true 的 stopped 并提示
@@ -88,22 +90,52 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 		# 抛 OSError，原样上抛会被 _run 兜成 status=stopped 的 ok:true 信封，
 		# 且 `.jobs.*` 临时文件残留（Issue #1346）。
 		for temporary, current_target in ((json_tmp, json_path), (csv_tmp, csv_path), (xlsx_tmp, xlsx_path)):
-			os.replace(temporary, current_target)
+			backup: Path | None = None
+			if current_target.is_file():
+				backup = _temporary_for(current_target)
+				os.replace(current_target, backup)
+			try:
+				os.replace(temporary, current_target)
+			except OSError:
+				if backup is not None:
+					os.replace(backup, current_target)
+				raise
+			replaced.append((current_target, backup))
 	except CrawlRuntimeUnavailable:
+		_rollback_replacements(replaced)
 		for temporary in temporaries:
 			temporary.unlink(missing_ok=True)
 		raise
 	except OSError as exc:
+		_rollback_replacements(replaced)
 		for temporary in temporaries:
 			temporary.unlink(missing_ok=True)
 		raise CrawlExportError(
 			f"采集结果无法写出到 {current_target or output_dir}：{type(exc).__name__}: {exc}"
 		) from exc
 	except Exception as exc:
+		_rollback_replacements(replaced)
 		for temporary in temporaries:
 			temporary.unlink(missing_ok=True)
 		raise CrawlExportError(f"采集结果无法写出到 {output_dir}：{type(exc).__name__}: {exc}") from exc
+	# 全部替换成功后才清理备份：三份产物要么都是新批次，要么保持旧批次。
+	for _, backup in replaced:
+		if backup is not None:
+			backup.unlink(missing_ok=True)
 	return {"json": str(json_path), "csv": str(csv_path), "xlsx": str(xlsx_path)}
+
+
+def _rollback_replacements(replaced: list[tuple[Path, Path | None]]) -> None:
+	"""把本次导出已经替换的目标恢复到旧内容，失败不吞掉原始异常。"""
+	for target, backup in reversed(replaced):
+		try:
+			if backup is not None:
+				os.replace(backup, target)
+			else:
+				target.unlink(missing_ok=True)
+		except OSError:
+			# 回滚失败时保留备份文件，操作者可据此恢复；原始错误仍然上抛。
+			continue
 
 
 def _temporary_for(target: Path) -> Path:

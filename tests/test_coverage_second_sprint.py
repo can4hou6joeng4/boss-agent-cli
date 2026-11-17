@@ -136,10 +136,14 @@ def test_mark_resolve_label_by_numeric_id():
 	assert _resolve_label("3") == 3
 
 
-def test_mark_resolve_label_by_fuzzy_match():
+def test_mark_resolve_label_rejects_fuzzy_match():
+	import click
+	import pytest
 	from boss_agent_cli.commands.mark import _resolve_label
-	assert _resolve_label("招呼") == 1  # 模糊匹配"新招呼"
-	assert _resolve_label("面") == 3  # 模糊匹配"已约面"
+	# 子串曾会模糊命中标签并触发真实写操作，现已与 schema enum 收口（Issue #1615）。
+	for value in ("招呼", "面", "已交换"):
+		with pytest.raises(click.BadParameter):
+			_resolve_label(value)
 
 
 def test_mark_resolve_label_unknown_raises():
