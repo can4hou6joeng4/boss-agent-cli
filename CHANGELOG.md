@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 代理环境变量非空但解析不出 host（如 `HTTPS_PROXY=http://`、`http://:8080`）时，浏览器通道以 `proxy=None` 启动 Chromium 走真实出口，与挂载坏代理的 httpx 通道不一致；现在 `resolve_proxy` 抛 `ProxyConfigurationError`，登录链路、装饰器命令与 doctor 在线探测统一按 `INVALID_PARAM` 拒绝，不再静默回退直连（Issue #1486）。
+
 ## [3.4.78] - 2026-11-17
 
 ### Fixed

@@ -10,6 +10,7 @@ from typing import Any
 import click
 
 from boss_agent_cli.api.client import PlatformRiskError
+from boss_agent_cli.api.proxy import ProxyConfigurationError
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
@@ -126,6 +127,20 @@ def _live_probe_skipped_check(name: str, code: str) -> dict[str, Any]:
 	}
 
 
+def _live_probe_proxy_error_check(name: str, exc: ProxyConfigurationError) -> dict[str, Any]:
+	"""代理环境变量非法时在线探测根本发不出去：按 INVALID_PARAM 给确定性恢复指引。
+
+	通用兜底会把这条确定性配置错误写成「探测异常」并建议检查登录态，Agent
+	照着做只会再撞同一份坏配置（Issue #1486）。
+	"""
+	return {
+		"name": name,
+		"status": "warn",
+		"detail": f"在线只读探测未执行（INVALID_PARAM）：{exc}",
+		"recovery_action": "修正或清除 HTTPS_PROXY/ALL_PROXY 等代理环境变量后重试；不会回退为直连",
+	}
+
+
 def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[dict[str, Any]]) -> str | None:
 	"""Run explicit, low-frequency read probes only when requested.
 
@@ -166,6 +181,8 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 		checks.append(_live_probe_risk_check("candidate_live_user_info", exc.code, ctx=ctx))
 		checks.append(_live_probe_skipped_check("recruiter_live_read", exc.code))
 		return exc.code
+	except ProxyConfigurationError as exc:
+		checks.append(_live_probe_proxy_error_check("candidate_live_user_info", exc))
 	except Exception as exc:
 		checks.append(
 			{
@@ -218,6 +235,8 @@ def _add_live_probe_checks(ctx: click.Context, auth: AuthManager, checks: list[d
 	except PlatformRiskError as exc:
 		checks.append(_live_probe_risk_check("recruiter_live_read", exc.code, ctx=ctx))
 		return exc.code
+	except ProxyConfigurationError as exc:
+		checks.append(_live_probe_proxy_error_check("recruiter_live_read", exc))
 	except Exception as exc:
 		checks.append(
 			{
