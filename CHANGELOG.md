@@ -2,6 +2,20 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- MCP 工具 schema 没有携带 native 已声明的枚举取值域：`boss_mark.tag`、`boss_batch_greet` / `boss_preset_add` / `boss_watch_add` 的 `industry` / `scale` / `stage` / `job_type` 只有类型与描述，MCP-only Agent 只能猜值；现在枚举与 `_LABEL_MAP`、Click `Choice` 逐值相等，并新增守卫测试（Issue #1528）。
+- `boss platforms --capability` 的 schema choices 只管实现集合里的 11 个能力，漏掉 `show` / `history` / `interviews`；现在实现与 schema 共用 `capabilities.py` 的能力分组，choices 与实收集合相等（Issue #1530）。
+- `boss ai cover-letter` / `ai resume-optimize` 同时传 `--jd` 与 `--job-id` 时静默用缓存 JD 覆盖显式 JD，生成结果与调用方预期不符且无任何提示；现在入口返回 `INVALID_PARAM`（`recoverable=false`），工具 schema 用 `not` 互斥声明同一约束（Issue #1529）。
+- `boss agent run --dry-run` 的 MCP 缺省是 `true`（安全演练），与 native schema 声明的 `false` 相反且两处都没说明；现在工具描述、`dry_run` 参数描述与 native schema 都写明「MCP 缺省演练，真实执行需显式 `dry_run=false`」（Issue #1531）。
+- MCP 工具的条件必填与互斥只写在描述里：`boss_export` 的 `query` / `url` 至少一个、`boss_hr_jobs` 的 `online` / `offline` 需要 `job_id`、`boss_config` 的 `get` / `set` / `reset` 需要 `key`、`boss_wizard` 的 `resume` / `status` / `stop` 需要 `run_id` 都不在 JSON Schema 里，客户端会先认可一个必然失败的调用；现在用 `anyOf` / `if`-`then` 声明（Issue #1532）。
+- MCP 工具里 required 的字符串没有 `minLength`：`boss_greet` / `boss_apply` 的标识、`boss_hr_reply.message`、`boss_search.query`、`boss_preset_add` / `boss_watch_add` 的 `name` / `query` 等空串先通过 schema 校验才由 CLI 拒绝；现在目录统一为 required 字符串派生 `minLength: 1`，入口按同一约束拒绝（`hr greet.lid` 是唯一例外，平台可能给空值）（Issue #1533）。
+- MCP 工具漏抄 native schema 的默认值：`boss_agent_review_reject.reason`、`boss_ai_cover_letter.tone` / `lang`、`boss_favorites_list.page`、`boss_wizard.max_retries` 都没有 `default`，客户端无法得知 effective default；`boss_batch_greet.limit` 的 MCP 默认 5 与 native 10 的差异保留并在描述与测试中锁定（Issue #1534）。
+- `agent` 的 `availability.recruiter_platforms` 写的是 `zhipin`，与 `hr` 和顶层 `supported_recruiter_platforms` 的招聘者注册表名 `zhipin-recruiter` 混用同一字段语义，Agent 无法据此选择平台标识；现在说明它是自动化适配器键（等于 `--platform` 取值），不是 `--platform` 之外的注册表名（Issue #1535）。
+- native schema 内嵌的 `commands.crawl.mcp_tools` 缺少 `additionalProperties: false` 与可用性说明，与 `--format mcp-tools` 导出的同名工具不一致；现在 native 输出阶段复用同一份规范化结果，内嵌副本与导出逐字段相等（Issue #1536）。
+- MCP 侧缺少能力真源入口：只接 MCP 的 Agent 无法读到命令、枚举与错误码；新增只读工具 `boss_schema`（MCP 工具数 79 → 80），映射到 `boss schema [--format …]`（Issue #1528）。
+
 ## [3.4.82] - 2026-11-17
 
 ### Fixed

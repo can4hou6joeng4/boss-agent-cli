@@ -177,6 +177,7 @@ def _configure_boss_invocation(
 _READ_ONLY_TOOL_NAMES = frozenset({
 	"boss_status",
 	"boss_doctor",
+	"boss_schema",
 	"boss_search",
 	"boss_recommend",
 	"boss_detail",
@@ -677,6 +678,12 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 		if not _matches_json_type(value, expected):
 			errors.append(f"{key} 应为 {expected}，收到 {type(value).__name__}")
 			continue
+		if expected == "string":
+			# schema 声明了 minLength 时，入口按同一约束拒绝（Issue #1533）：
+			# 空串在 CLI 上大多只能得到参数错误，客户端本可以在发送前拦下。
+			min_length = prop.get("minLength")
+			if isinstance(min_length, int) and not isinstance(min_length, bool) and len(value) < min_length:
+				errors.append(f"{key} 至少需要 {min_length} 个字符")
 		if expected == "array":
 			# 空数组与「不传」在 mapping 层不可区分：例如 last-messages 的
 			# friend_ids=[] 会退化成抓取当前页候选人并发出平台请求（Issue #1218）。
@@ -727,7 +734,7 @@ async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
 		# `is True` 对 `"true"` 为假，`dry_run` / `yes` 会因此静默丢失或反向生效。
 		return _tool_argument_error(
 			params.name,
-			"参数类型错误：" + "；".join(type_errors) + "；请按 tools/list 的 inputSchema 传参",
+			"参数无效：" + "；".join(type_errors) + "；请按 tools/list 的 inputSchema 传参",
 		)
 	try:
 		args = _build_args(params.name, arguments)

@@ -8,6 +8,7 @@ import copy
 from dataclasses import dataclass, replace
 from typing import Any
 
+from boss_agent_cli.api.endpoints import INDUSTRY_CODES, JOB_TYPE_CODES, SCALE_CODES, STAGE_CODES
 from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
 from boss_agent_cli.schema.availability import availability_note, inject_availability
 from boss_agent_cli.schema.data import SCHEMA_DATA
@@ -89,6 +90,23 @@ def crawl_tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 	]
 
 
+def native_crawl_mcp_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
+	"""native schema 内嵌的 crawl 工具，与导出的工具目录逐字段一致（Issue #1536）。
+
+	`boss schema` 的 `commands.crawl.mcp_tools` 与 `--format mcp-tools` 导出的是
+	同一批工具：内嵌版本先前缺少 `additionalProperties: false` 与可用性说明，
+	只读 native 的调用方会拿到一份更宽松的契约。这里复用同一份规范化逻辑。
+	"""
+	return [
+		{"name": tool.name, "description": tool.description, "inputSchema": tool.input_schema}
+		for tool in build_tool_catalog(data)
+		if tool.name in _CRAWL_TOOL_NAMES
+	]
+
+
+_CRAWL_TOOL_NAMES = frozenset({"boss_crawl_status", "boss_crawl_results", "boss_crawl_shortlist"})
+
+
 def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 	return [
 		ToolDefinition(
@@ -117,9 +135,13 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					},
 					"run_id": {"type": "string", "description": "resume/status/stop 的显式 workflow run_id"},
 					"timeout": {"type": "number", "minimum": 0.001, "description": "workflow 超时秒数"},
-					"max_retries": {"type": "integer", "minimum": 0, "maximum": 10, "description": "可恢复步骤的最大重试次数"},
+					"max_retries": {"type": "integer", "minimum": 0, "maximum": 10, "default": 0, "description": "可恢复步骤的最大重试次数"},
 				},
 				"required": [],
+				# resume/status/stop 需要 run_id：缺参时映射层抛 KeyError 并返回
+				# INVALID_PARAM（Issue #1532）；不带 action 时映射层也拒绝（#1493）。
+				"if": {"properties": {"action": {"enum": ["resume", "status", "stop"]}}, "required": ["action"]},
+				"then": {"required": ["run_id"]},
 			},
 		),
 		ToolDefinition(
@@ -139,12 +161,28 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={"type": "object", "properties": {}, "required": []},
 		),
 		ToolDefinition(
+			name="boss_schema",
+			description="返回 CLI 能力真源（命令、选项、枚举 choices、错误码与 wizard catalog）；只读本地数据，不发平台请求",
+			input_schema={
+				"type": "object",
+				"properties": {
+					"format": {
+						"type": "string",
+						"enum": ["native", "openai-tools", "anthropic-tools", "mcp-tools"],
+						"default": "native",
+						"description": "输出格式；native 为命令与错误码的完整数据",
+					},
+				},
+				"required": [],
+			},
+		),
+		ToolDefinition(
 			name="boss_search",
 			description="按关键词和筛选条件搜索 BOSS 直聘职位列表。支持城市、薪资、经验、学历、行业、公司规模、融资阶段、职位类型、福利等多维度筛选；成功时 pagination.index_snapshot 给出本次写入的索引快照（source/page/count/saved_at），与 boss_show 的编号配套使用。",
 			input_schema={
 				"type": "object",
 				"properties": {
-					"query": {"type": "string", "description": "搜索关键词（如 Golang、Python 后端）"},
+					"query": {"type": "string", "minLength": 1, "description": "搜索关键词（如 Golang、Python 后端）"},
 					"city": {"type": "string", "description": "城市名称（如 北京、广州）"},
 					"salary": {"type": "string", "description": "薪资范围（如 20-50K）"},
 					"experience": {"type": "string", "description": "经验要求（如 3-5年）"},
@@ -199,8 +237,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"security_id": {"type": "string", "description": "职位的 security_id"},
-					"job_id": {"type": "string", "description": "职位的 encrypt_job_id"},
+					"security_id": {"type": "string", "minLength": 1, "description": "职位的 security_id"},
+					"job_id": {"type": "string", "minLength": 1, "description": "职位的 encrypt_job_id"},
 					"message": {"type": "string", "description": "自定义打招呼消息；缺省使用平台默认招呼语"},
 				},
 				"required": ["security_id", "job_id"],
@@ -296,7 +334,22 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"security_id": {"type": "string", "description": "联系人的 uid（推荐）或 security_id"},
-					"tag": {"type": "string", "minLength": 1, "description": "标签名称"},
+					"tag": {
+						"type": "string",
+						"minLength": 1,
+						"enum": [
+							"新招呼",
+							"沟通中",
+							"已约面",
+							"已获取简历",
+							"已交换电话",
+							"已交换微信",
+							"不合适",
+							"牛人发起",
+							"收藏",
+						],
+						"description": "标签名称或数字 ID",
+					},
 					"remove": {"type": "boolean", "description": "是否移除标签", "default": False},
 				},
 				"required": ["security_id", "tag"],
@@ -320,8 +373,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"security_id": {"type": "string", "description": "职位的 security_id"},
-					"job_id": {"type": "string", "description": "职位的 encrypt_job_id"},
+					"security_id": {"type": "string", "minLength": 1, "description": "职位的 security_id"},
+					"job_id": {"type": "string", "minLength": 1, "description": "职位的 encrypt_job_id"},
 					"lid": {"type": "string", "description": "与 security_id 同一列表项的访问上下文（取自 search 结果，可选）"},
 				},
 				"required": ["security_id", "job_id"],
@@ -338,10 +391,11 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"salary": {"type": "string", "description": "薪资范围（如 20-50K）"},
 					"experience": {"type": "string", "description": "经验要求（如 3-5年）"},
 					"education": {"type": "string", "description": "学历要求（如 本科）"},
-					"industry": {"type": "string", "description": "行业类型（可选值见 boss schema）"},
-					"scale": {"type": "string", "description": "公司规模（如 100-499人）"},
-					"stage": {"type": "string", "description": "融资阶段（如 已上市、A轮）"},
-					"job_type": {"type": "string", "description": "职位类型（全职/兼职/实习）"},
+					# 与 Click 的 click.Choice 一致（batch-greet 只接受单值，不支持逗号多选）。
+					"industry": {"type": "string", "enum": list(INDUSTRY_CODES), "description": "行业类型（可选值见 boss schema）"},
+					"scale": {"type": "string", "enum": list(SCALE_CODES), "description": "公司规模（如 100-499人）"},
+					"stage": {"type": "string", "enum": list(STAGE_CODES), "description": "融资阶段（如 已上市、A轮）"},
+					"job_type": {"type": "string", "enum": list(JOB_TYPE_CODES), "description": "职位类型（全职/兼职/实习）"},
 					"limit": {"type": "integer", "description": "最大打招呼数量", "default": 5, "minimum": 0, "maximum": 10},
 					"dry_run": {"type": "boolean", "description": "预览模式", "default": False},
 				},
@@ -381,6 +435,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"include_private": {"type": "boolean", "description": "CSV/JSON/stdout 保留 job_id/security_id/boss_name 明文；HTML 始终省略平台标识、招聘者姓名和薪资", "default": False},
 				},
 				"required": [],
+				# query 与 url 至少给一个：两者都没有时 CLI 返回 INVALID_PARAM（Issue #1532）。
+				"anyOf": [{"required": ["query"]}, {"required": ["url"]}],
 			},
 		),
 		ToolDefinition(
@@ -429,6 +485,15 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"value": {"type": "string", "description": "配置值（仅 set 时需要）"},
 				},
 				"required": ["action"],
+				# key 只属于 get/set/reset（Issue #1532）；set 还需要 value。
+				"if": {"properties": {"action": {"enum": ["get", "set", "reset"]}}, "required": ["action"]},
+				"then": {"required": ["key"]},
+				"allOf": [
+					{
+						"if": {"properties": {"action": {"const": "set"}}, "required": ["action"]},
+						"then": {"required": ["key", "value"]},
+					},
+				],
 			},
 		),
 		ToolDefinition(
@@ -465,13 +530,13 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 		),
 		ToolDefinition(
 			name="boss_agent_run",
-			description="招聘自动化：运行一轮自动扫描、决策、阈值控制、执行和线索生成",
+			description="招聘自动化：运行一轮自动扫描、决策、阈值控制、执行和线索生成。MCP 缺省 dry_run=true 仅演练；真实执行需显式 dry_run=false（CLI `agent run` 自身缺省为 live）",
 			input_schema={
 				"type": "object",
 				"properties": {
 					"dry_run": {
 						"type": "boolean",
-						"description": "只演练决策，不执行真实平台动作",
+						"description": "只演练决策，不执行真实平台动作；MCP 缺省 true，真实执行需显式传 false",
 						"default": True,
 					},
 					"limit": {"type": "integer", "minimum": 1, "description": "本轮最多处理多少个会话"},
@@ -518,7 +583,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"id": {"type": "string", "description": "review item id"},
-					"reason": {"type": "string", "description": "拒绝原因"},
+					"reason": {"type": "string", "default": "human-rejected", "description": "拒绝原因"},
 				},
 				"required": ["id"],
 			},
@@ -679,6 +744,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"job_id": {"type": "string", "description": "从缓存读取职位描述的 job_id（与 jd_text 二选一）"},
 				},
 				"required": ["resume"],
+				# 两个 JD 来源互斥：同时给出时 CLI 返回 INVALID_PARAM（Issue #1529）。
+				"not": {"required": ["jd_text", "job_id"]},
 			},
 		),
 		ToolDefinition(
@@ -694,10 +761,13 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 						"type": "string",
 						"description": "求职信语气",
 						"enum": ["简洁专业", "热情积极", "谨慎稳重"],
+						"default": "简洁专业",
 					},
-					"lang": {"type": "string", "description": "输出语言（zh 中文 / en 英文）", "enum": ["zh", "en"]},
+					"lang": {"type": "string", "description": "输出语言（zh 中文 / en 英文）", "enum": ["zh", "en"], "default": "zh"},
 				},
 				"required": ["resume"],
+				# 两个 JD 来源互斥：同时给出时 CLI 返回 INVALID_PARAM（Issue #1529）。
+				"not": {"required": ["jd_text", "job_id"]},
 			},
 		),
 		ToolDefinition(
@@ -732,7 +802,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"page": {"type": "integer", "minimum": 1, "description": "页码"},
+					"page": {"type": "integer", "minimum": 1, "default": 1, "description": "页码"},
 				},
 				"required": [],
 			},
@@ -743,8 +813,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"security_id": {"type": "string", "description": "职位安全 ID"},
-					"job_id": {"type": "string", "description": "加密职位 ID"},
+					"security_id": {"type": "string", "minLength": 1, "description": "职位安全 ID"},
+					"job_id": {"type": "string", "minLength": 1, "description": "加密职位 ID"},
 					"title": {"type": "string", "default": "", "description": "职位名称（可选，便于本地列表识别）"},
 					"company": {"type": "string", "default": "", "description": "公司名称（可选）"},
 					"city": {"type": "string", "default": "", "description": "城市（可选）"},
@@ -801,16 +871,17 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"name": {"type": "string", "description": "预设名称"},
-					"query": {"type": "string", "description": "搜索关键词"},
+					"name": {"type": "string", "minLength": 1, "description": "预设名称"},
+					"query": {"type": "string", "minLength": 1, "description": "搜索关键词"},
 					"city": {"type": "string", "description": "城市（可选）"},
 					"salary": {"type": "string", "description": "薪资范围（可选）"},
 					"experience": {"type": "string", "description": "经验要求（可选）"},
 					"education": {"type": "string", "description": "学历要求（可选）"},
-					"industry": {"type": "string", "description": "行业类型，支持逗号分隔多选（可选）"},
-					"scale": {"type": "string", "description": "公司规模，支持逗号分隔多选（可选）"},
-					"stage": {"type": "string", "description": "融资阶段，支持逗号分隔多选（可选）"},
-					"job_type": {"type": "string", "description": "职位类型（全职/兼职/实习），支持逗号分隔多选（可选）"},
+					# preset/watch 的 add 用 click.Choice 校验，只接受单值。
+					"industry": {"type": "string", "enum": list(INDUSTRY_CODES), "description": "行业类型（可选）"},
+					"scale": {"type": "string", "enum": list(SCALE_CODES), "description": "公司规模（可选）"},
+					"stage": {"type": "string", "enum": list(STAGE_CODES), "description": "融资阶段（可选）"},
+					"job_type": {"type": "string", "enum": list(JOB_TYPE_CODES), "description": "职位类型（可选）"},
 					"welfare": {"type": "string", "description": "福利筛选（可选）"},
 					"active": {
 						"type": "string",
@@ -838,16 +909,17 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"name": {"type": "string", "description": "监控名称"},
-					"query": {"type": "string", "description": "搜索关键词"},
+					"name": {"type": "string", "minLength": 1, "description": "监控名称"},
+					"query": {"type": "string", "minLength": 1, "description": "搜索关键词"},
 					"city": {"type": "string", "description": "城市（可选）"},
 					"salary": {"type": "string", "description": "薪资范围（可选）"},
 					"experience": {"type": "string", "description": "经验要求（可选）"},
 					"education": {"type": "string", "description": "学历要求（可选）"},
-					"industry": {"type": "string", "description": "行业类型，支持逗号分隔多选（可选）"},
-					"scale": {"type": "string", "description": "公司规模，支持逗号分隔多选（可选）"},
-					"stage": {"type": "string", "description": "融资阶段，支持逗号分隔多选（可选）"},
-					"job_type": {"type": "string", "description": "职位类型（全职/兼职/实习），支持逗号分隔多选（可选）"},
+					# preset/watch 的 add 用 click.Choice 校验，只接受单值。
+					"industry": {"type": "string", "enum": list(INDUSTRY_CODES), "description": "行业类型（可选）"},
+					"scale": {"type": "string", "enum": list(SCALE_CODES), "description": "公司规模（可选）"},
+					"stage": {"type": "string", "enum": list(STAGE_CODES), "description": "融资阶段（可选）"},
+					"job_type": {"type": "string", "enum": list(JOB_TYPE_CODES), "description": "职位类型（可选）"},
 					"welfare": {"type": "string", "description": "福利筛选（可选）"},
 				},
 				"required": ["name", "query"],
@@ -1044,7 +1116,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"type": "object",
 				"properties": {
 					"friend_id": {"type": "integer", "minimum": 1, "description": "候选人会话 friend_id"},
-					"message": {"type": "string", "description": "回复消息内容"},
+					"message": {"type": "string", "minLength": 1, "description": "回复消息内容"},
 				},
 				"required": ["friend_id", "message"],
 			},
@@ -1071,6 +1143,9 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"page": {"type": "integer", "minimum": 1, "description": "职位管理列表页码，仅 list 使用", "default": 1},
 				},
 				"required": [],
+				# online/offline 需要 job_id：缺参时映射层返回 INVALID_PARAM（Issue #1532）。
+				"if": {"properties": {"action": {"enum": ["online", "offline"]}}, "required": ["action"]},
+				"then": {"required": ["job_id"]},
 			},
 		),
 		ToolDefinition(
@@ -1114,6 +1189,44 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 	]
 
 
+#: 必填但允许空串的参数：CLI 不拒绝它们，声明 minLength 会挡掉当前合法的调用。
+#: `hr greet --lid` 是唯一一处「required 但平台可能给空值」的上下文字段。
+_EMPTY_ALLOWED_REQUIRED: dict[str, frozenset[str]] = {
+	"boss_hr_greet": frozenset({"lid"}),
+}
+
+
+def _with_required_string_bounds(tool: ToolDefinition) -> ToolDefinition:
+	"""给必填字符串补 ``minLength: 1``（Issue #1533）。
+
+	工具目录里 required 的字符串几乎都是标识、名称或正文：空串在任何 CLI 路径上
+	都不可能成功（多数命令还额外拒绝纯空白）。逐个属性手写 minLength 会漏，这里
+	统一派生；显式声明过的边界与 `_EMPTY_ALLOWED_REQUIRED` 登记的参数不覆盖。
+	"""
+	properties = tool.input_schema.get("properties")
+	required = tool.input_schema.get("required")
+	if not isinstance(properties, dict) or not isinstance(required, list):
+		return tool
+	exempt = _EMPTY_ALLOWED_REQUIRED.get(tool.name, frozenset())
+	updated: dict[str, Any] = {}
+	changed = False
+	for name, prop in properties.items():
+		if (
+			name in required
+			and name not in exempt
+			and isinstance(prop, dict)
+			and prop.get("type") == "string"
+			and "minLength" not in prop
+		):
+			updated[name] = {**prop, "minLength": 1}
+			changed = True
+		else:
+			updated[name] = prop
+	if not changed:
+		return tool
+	return replace(tool, input_schema={**tool.input_schema, "properties": updated})
+
+
 def build_tool_catalog(data: dict[str, Any] | None = None) -> list[ToolDefinition]:
 	"""构造独立目录，保证导出不能改写原生 schema 或后续运行时工具。"""
 	schema = build_schema_with_availability(data)
@@ -1127,6 +1240,7 @@ def build_tool_catalog(data: dict[str, Any] | None = None) -> list[ToolDefinitio
 			tool,
 			input_schema={**tool.input_schema, "additionalProperties": False},
 		)
+		tool = _with_required_string_bounds(tool)
 		availability = tool_availability(tool.name, schema)
 		if availability:
 			# availability_note 自带「可用性: 」前缀，这里不能再拼一次，

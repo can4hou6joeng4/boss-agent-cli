@@ -152,6 +152,7 @@ exclude = [
 [[tool.mypy.overrides]]
 module = [
 	"boss_agent_cli.output",
+	"boss_agent_cli.capabilities",
 	"boss_agent_cli.config",
 	"boss_agent_cli.hooks",
 	"boss_agent_cli.digest",

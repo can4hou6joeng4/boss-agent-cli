@@ -7,6 +7,7 @@ from boss_agent_cli.platforms import list_platforms, list_recruiter_platforms
 from boss_agent_cli.schema.availability import inject_availability
 from boss_agent_cli.schema.data import SCHEMA_DATA
 from boss_agent_cli.schema.formats import format_anthropic_tools, format_mcp_tools, format_openai_tools, schema_parameter_paths
+from boss_agent_cli.schema.tool_catalog import native_crawl_mcp_tools
 from boss_agent_cli.wizard.catalog import catalog_data
 
 
@@ -45,4 +46,10 @@ def schema_cmd(ctx: click.Context, output_format: str) -> None:
 		data = {"format": "mcp-tools", "tools": format_mcp_tools(data)}
 		emit_success("schema", data, schema_parameter_paths=schema_parameter_paths(data))
 		return
+	# native 内嵌的 crawl 工具与导出的工具目录共用同一份规范化结果（Issue #1536）。
+	# 只替换内嵌副本：导出路径直接读 data 的 mcp_tools，先改写会让可用性说明
+	# 被 append 两次。
+	commands = data.get("commands")
+	if isinstance(commands, dict) and isinstance(commands.get("crawl"), dict):
+		data["commands"] = {**commands, "crawl": {**commands["crawl"], "mcp_tools": native_crawl_mcp_tools(data)}}
 	emit_success("schema", data, schema_parameter_paths=schema_parameter_paths(data))

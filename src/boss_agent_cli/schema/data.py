@@ -2,6 +2,7 @@
 
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.api.endpoints import INDUSTRY_CODES
+from boss_agent_cli.capabilities import ALL_CAPABILITIES
 from boss_agent_cli.platforms import list_platforms
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 
@@ -55,19 +56,7 @@ SCHEMA_DATA = {
 					"type": "string",
 					"default": None,
 					"description": "按现有本地能力矩阵反查平台状态；返回 available / not_supported，blocked_by_policy 仅保留空兼容分组",
-					"choices": [
-						"search",
-						"detail",
-						"recommend",
-						"me",
-						"status",
-						"greet",
-						"apply",
-						"shortlist",
-						"stats",
-						"config",
-						"schema",
-					],
+					"choices": list(ALL_CAPABILITIES),
 				},
 			},
 		},
@@ -1302,7 +1291,7 @@ SCHEMA_DATA = {
 					"--dry-run": {
 						"type": "bool",
 						"default": False,
-						"description": "只演练自动化决策，不执行真实平台动作，也不改写对话阶段、待执行队列或面试线索",
+						"description": "只演练自动化决策，不执行真实平台动作，也不改写对话阶段、待执行队列或面试线索；MCP 工具 boss_agent_run 缺省为 true（安全演练），真实执行需显式传 false",
 					},
 					"--limit": {
 						"type": "int",

@@ -575,8 +575,9 @@ def test_every_enum_schema_property_is_covered_by_the_empty_value_rule() -> None
 	# 以下枚举键不走 `_optional`：
 	# - `active`：`resolve_active_level("")` 返回 None，空值本来就等于未传；
 	# - `action` / `role`：位置参数语义（wizard / config / hr jobs 的命令路由），
-	#   不是 `--flag value`；空串由各自的 KeyError / 路由分支处理。
-	assert enum_keys - {"active", "action", "role"} <= set(mcp_args._ENUM_KEYS), (
+	#   不是 `--flag value`；空串由各自的 KeyError / 路由分支处理；
+	# - `tag`：mark 的映射无条件下发 `--label`，空串本来就到达 CLI 并被拒绝。
+	assert enum_keys - {"active", "action", "role", "tag"} <= set(mcp_args._ENUM_KEYS), (
 		f"schema 声明了枚举但映射层未登记：{sorted(enum_keys - set(mcp_args._ENUM_KEYS))}"
 	)
 	# 这些筛选键在 preset / watch / batch-greet 上是 Click Choice，schema 只声明
