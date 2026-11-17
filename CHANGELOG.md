@@ -12,6 +12,8 @@
 
 ## [Unreleased]
 
+## [3.4.94] - 2026-11-18
+
 ### Fixed
 - MCP 同步兼容入口和 HR 请求数估算仍用浮点除法，`hr chat --summary-limit` / `hr last-messages --limit` 的超大整数抛 `OverflowError` 并穿过同步入口；现在统一整数分页封顶并返回标准参数错误信封（Issue #1612）。
 - `boss_mark.tag` 的 schema enum 缺少 CLI 明确支持的数字 ID，而实现又接受任意子串模糊匹配；现在 enum 覆盖精确名称与数字 ID，实现只接受精确值，文档与测试同步（Issue #1615）。
