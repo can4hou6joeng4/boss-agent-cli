@@ -12,6 +12,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- MCP 入口的 minimum/maximum 错误信息直接把超大整数转成十进制文本，在 Python 位数上限下抛 `ValueError` 并让 `tools/call` 丢失 JSON 信封；现在用有界数值表示并在校验边界兜住异常（Issue #1620）。
+
 ## [3.4.94] - 2026-11-18
 
 ### Fixed

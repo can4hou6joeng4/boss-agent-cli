@@ -687,6 +687,15 @@ _JSON_TYPE_CHECKS: dict[str, tuple[type, ...]] = {
 
 #: 单个数组最多逐条列出的元素错误数，其余只报数量：错误信封不随输入规模膨胀。
 _MAX_ELEMENT_TYPE_ERRORS = 3
+# 超过这个位数的整数不直接转十进制文本：Python 的 int→str 位数上限会让
+# 错误信息本身抛 ValueError，进而把 tools/call 变成内部错误（Issue #1620）。
+_MAX_BRIEF_NUMBER_BITS = 256
+
+
+def _brief_numeric(value: object) -> str:
+	if isinstance(value, int) and not isinstance(value, bool) and value.bit_length() > _MAX_BRIEF_NUMBER_BITS:
+		return f"超大整数（{value.bit_length()} bit）"
+	return str(value)
 
 
 def _matches_json_type(value: Any, expected: str) -> bool:
@@ -732,9 +741,9 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 			minimum = prop.get("minimum")
 			maximum = prop.get("maximum")
 			if isinstance(minimum, (int, float)) and not isinstance(minimum, bool) and value < minimum:
-				errors.append(f"{key}={value} 不能小于 {minimum}")
+				errors.append(f"{key}={_brief_numeric(value)} 不能小于 {minimum}")
 			if isinstance(maximum, (int, float)) and not isinstance(maximum, bool) and value > maximum:
-				errors.append(f"{key}={value} 不能大于 {maximum}")
+				errors.append(f"{key}={_brief_numeric(value)} 不能大于 {maximum}")
 		if expected == "array":
 			# 空数组与「不传」在 mapping 层不可区分：例如 last-messages 的
 			# friend_ids=[] 会退化成抓取当前页候选人并发出平台请求（Issue #1218）。
@@ -765,10 +774,10 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 					errors.append(f"{key}[{index}] 至少需要 {item_min_length} 个字符")
 			if isinstance(item_minimum, (int, float)) and not isinstance(item_minimum, bool):
 				if isinstance(item, (int, float)) and not isinstance(item, bool) and item < item_minimum:
-					errors.append(f"{key}[{index}]={item} 不能小于 {item_minimum}")
+					errors.append(f"{key}[{index}]={_brief_numeric(item)} 不能小于 {item_minimum}")
 			if isinstance(item_maximum, (int, float)) and not isinstance(item_maximum, bool):
 				if isinstance(item, (int, float)) and not isinstance(item, bool) and item > item_maximum:
-					errors.append(f"{key}[{index}]={item} 不能大于 {item_maximum}")
+					errors.append(f"{key}[{index}]={_brief_numeric(item)} 不能大于 {item_maximum}")
 	return errors
 
 
@@ -796,7 +805,11 @@ async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
 	# 在类型检查与映射之前剔除；必填参数传 null 因此走缺参分支，而不是把
 	# ``str(None)`` 拼成 "None" 发给 CLI（Issue #1108）。
 	arguments = {key: value for key, value in arguments.items() if value is not None}
-	type_errors = _argument_type_errors(params.name, arguments)
+	try:
+		type_errors = _argument_type_errors(params.name, arguments)
+	except (ArithmeticError, TypeError, ValueError) as exc:
+		# 本地校验不能把不可格式化的超大整数等异常漏成 MCP 内部错误（Issue #1620）。
+		return _tool_argument_error(params.name, f"参数校验失败：{type(exc).__name__}")
 	if type_errors:
 		# 类型错误同样不能交给 `_build_args` 的 truthiness 判断：`"false"` 是 truthy，
 		# `is True` 对 `"true"` 为假，`dry_run` / `yes` 会因此静默丢失或反向生效。
@@ -815,6 +828,10 @@ async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
 		return _tool_argument_error(params.name, f"缺少必填参数：{missing}")
 	except ValueError as exc:
 		# 映射层自己拒绝的非法枚举值（Issue #1002）：不能落进默认分支。
+		# 超大整数的十进制转换也可能在这里抛 ValueError（Issue #1620），
+		# 此时不能把 Python 的位数上限原文回显给调用方。
+		if "integer string conversion" in str(exc):
+			return _tool_argument_error(params.name, "参数取值非法：存在超出本地数值表示范围的参数")
 		return _tool_argument_error(params.name, f"参数取值非法：{exc}")
 	unsafe_reason = _unsafe_argv_reason(args)
 	if unsafe_reason is not None:
