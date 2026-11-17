@@ -9,7 +9,11 @@ _ZHIPIN_HOST = "zhipin.com"
 
 def _is_platform_url(url: str, expected_host: str) -> bool:
 	"""精确 hostname 校验：只接受该 host 及其子域，拒绝子串陷阱。"""
-	host = urlparse(url).hostname
+	try:
+		host = urlparse(url).hostname
+	except ValueError:
+		# 畸形 IPv6 / 括号等本地 URL 不是平台页面，继续检查其它标签（Issue #1630）。
+		return False
 	if host is None:
 		return False
 	host = host.rstrip(".").lower()

@@ -12,6 +12,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- 畸形 CDP 标签 URL 的 `urlparse().hostname` 抛 `ValueError`，未派发的聊天写动作被误标为结果未知；现在解析失败按非平台页跳过，并继续扫描其它标签（Issue #1630）。
+- 平台 / 认证 / 招聘者客户端残余的 `code == 0` 判断仍把布尔 `False` 当成功码；现在统一走 `is_platform_success_code`（Issue #1631）。
+- CDP URL 中的 userinfo 会原样进入错误信封与 stderr 日志；现在配置拒绝带凭据的调试地址，日志只保留 scheme / host / port（Issue #1632）。
+- `TokenStore` 首次生成 salt 存在跨进程竞态，可用后到 salt 破坏已保存登录态；现在用 `O_EXCL` 与刷新锁保证首写胜出、后到复用（Issue #1633）。
+
 ## [3.4.96] - 2026-11-18
 
 ### Fixed

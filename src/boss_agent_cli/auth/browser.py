@@ -147,7 +147,7 @@ def _probe_reused_session(page: Any, *, platform: str) -> str:
 		return "unverified"
 	from boss_agent_cli.api import endpoints
 	from boss_agent_cli.api.client import PlatformRiskError
-	from boss_agent_cli.api.zhipin_errors import platform_risk_page_response, raise_platform_risk_response
+	from boss_agent_cli.api.zhipin_errors import is_platform_success_code, platform_risk_page_response, raise_platform_risk_response
 
 	_raise_if_security_page(page, is_cdp=True)
 	try:
@@ -172,7 +172,7 @@ def _probe_reused_session(page: Any, *, platform: str) -> str:
 
 		raise AccountRiskError("复用会话探测遇到平台安全验证", is_cdp=True, details={"platform_code": None})
 	code = data.get("code")
-	if code == endpoints.CODE_SUCCESS:
+	if is_platform_success_code(code):
 		return "valid"
 	if code == -1:
 		return "unverified"

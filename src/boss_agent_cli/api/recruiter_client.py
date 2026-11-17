@@ -33,7 +33,7 @@ from boss_agent_cli.api.recruiter_resume import (
 	save_resume,
 	sent_by_self,
 )
-from boss_agent_cli.api.zhipin_errors import classify_code_37, raise_platform_risk_response, response_message
+from boss_agent_cli.api.zhipin_errors import classify_code_37, is_platform_success_code, raise_platform_risk_response, response_message
 
 _OPEN_CLIENTS, _close_open_clients = make_client_registry()
 
@@ -599,7 +599,7 @@ class BossRecruiterClient(_BaseHttpClient):
 			raise ChatFriendDataError("friend_detail 读取失败，未执行聊天动作", response={})
 		# 风控必须先于业务码终止；其余非 0 码保留原响应交给调用方分类。
 		self._raise_platform_risk_response(fd_resp)
-		if fd_resp.get("code") != 0:
+		if not is_platform_success_code(fd_resp.get("code")):
 			raise ChatFriendDataError("friend_detail 读取失败，未执行聊天动作", response=fd_resp)
 		# zpData / friendList 形状漂移（字符串、对象、混入非对象元素）按空处理：
 		# 这里只做「未找到唯一候选人就拒绝发消息」的判断，不能把坏格式变成
@@ -1655,7 +1655,7 @@ class BossRecruiterClient(_BaseHttpClient):
 		response = self.chat_history(friend_id, count=_HISTORY_PAGE_SIZE, retry=False)
 		if isinstance(response, dict):
 			self._raise_platform_risk_response(response)
-		if not isinstance(response, dict) or response.get("code") != 0:
+		if not isinstance(response, dict) or not is_platform_success_code(response.get("code")):
 			return None, None
 		data = response.get("zpData")
 		mids = {mid for message in history_messages(data) if (mid := message_mid(message)) is not None}
@@ -1684,7 +1684,7 @@ class BossRecruiterClient(_BaseHttpClient):
 					"control_stop": getattr(exc, "code", "WORKFLOW_STOPPED"), "error": type(exc).__name__}
 			return {"checked": False, "matched_count": 0, "resume_matched_count": 0,
 				"new_count": 0, "self_count": 0, "recipient_count": 0, "error": type(exc).__name__}
-		if not isinstance(response, dict) or response.get("code") != 0:
+		if not isinstance(response, dict) or not is_platform_success_code(response.get("code")):
 			code = response.get("code") if isinstance(response, dict) else None
 			return {
 				"checked": False,
@@ -1770,7 +1770,7 @@ class BossRecruiterClient(_BaseHttpClient):
 		if friend_id <= 0 or message_id <= 0:
 			raise ResumeValidationError("friend_id 和 message_id 必须为正整数")
 		history = self.chat_history(friend_id, count=100, max_msg_id=message_id + 1, retry=False)
-		if history.get("code") != 0:
+		if not is_platform_success_code(history.get("code")):
 			return history
 		message = incoming_message(history.get("zpData"), friend_id, message_id)
 		body = message.get("body") or {}
@@ -1780,7 +1780,7 @@ class BossRecruiterClient(_BaseHttpClient):
 		if dialog.get("operated") is not False:
 			raise ResumeValidationError("该请求已处理或状态不明，不会重复同意")
 		friends = self.friend_detail([friend_id], retry=False)
-		if friends.get("code") != 0:
+		if not is_platform_success_code(friends.get("code")):
 			return friends
 		friend = resume_friend(friends.get("zpData"), friend_id)
 		if not isinstance(friend.get("securityId"), str) or not friend["securityId"]:
@@ -1800,12 +1800,12 @@ class BossRecruiterClient(_BaseHttpClient):
 		if output.exists() or output.is_symlink():
 			raise FileExistsError("输出文件已存在，不会覆盖")
 		history = self.chat_history(friend_id, count=100, max_msg_id=message_id + 1, retry=False)
-		if history.get("code") != 0:
+		if not is_platform_success_code(history.get("code")):
 			return history
 		message = incoming_message(history.get("zpData"), friend_id, message_id)
 		params = attachment_params(message)
 		friends = self.friend_detail([friend_id], retry=False)
-		if friends.get("code") != 0:
+		if not is_platform_success_code(friends.get("code")):
 			return friends
 		friend = resume_friend(friends.get("zpData"), friend_id)
 		geek_id = friend.get("encryptUid")
@@ -1818,7 +1818,7 @@ class BossRecruiterClient(_BaseHttpClient):
 			retry=False,
 			follow_redirects=False,
 		)
-		if check.get("code") != 0:
+		if not is_platform_success_code(check.get("code")):
 			return check
 		detail = check.get("zpData")
 		if (
