@@ -56,6 +56,19 @@ class TestPlatformGlobalOption:
 		payload = json.loads(result.output)
 		assert payload["data"]["current_platform"] == "zhipin"
 
+	def test_empty_platform_exits_with_error(self, runner: CliRunner) -> None:
+		"""显式空 --platform 不能被真值回退静默换成配置或默认平台（Issue #1471）。"""
+		from boss_agent_cli.main import cli
+
+		result = runner.invoke(cli, ["--platform", "", "schema"])
+		assert result.exit_code == 1
+		payload = json.loads(result.output)
+		assert payload["ok"] is False
+		assert payload["error"]["code"] == "INVALID_PARAM"
+		assert payload["error"]["recoverable"] is False
+		assert "平台名不能为空" in payload["error"]["message"]
+		assert result.stderr == ""
+
 	def test_unknown_platform_exits_with_error(self, runner: CliRunner) -> None:
 		from boss_agent_cli.main import cli
 

@@ -1148,6 +1148,10 @@ def cli(
 		resolved_browser_source = DEFAULTS["browser_source"]
 	ctx.obj["browser_source"] = resolved_browser_source
 
+	if platform_name == "":
+		# 显式空平台与未提供不同：真值回退会静默使用配置或 zhipin，MCP 宿主
+		# 传错值却拿到另一份平台状态（Issue #1471）。
+		raise click.BadParameter("平台名不能为空", param_hint="--platform")
 	resolved_platform = platform_name or cfg.get("platform") or "zhipin"
 	available = list_platforms()
 	if resolved_platform not in available:
