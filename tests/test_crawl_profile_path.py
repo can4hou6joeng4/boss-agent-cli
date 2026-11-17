@@ -7,6 +7,7 @@ service 原样上抛，CLI 与 wizard 都按 `LOCAL_IO_ERROR`（recoverable=fals
 """
 
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -79,6 +80,25 @@ def test_service_does_not_swallow_profile_path_error(tmp_path):
 	)
 	with cache:
 		with pytest.raises(CrawlProfilePathInvalid):
+			service.create_and_run(_settings(tmp_path))
+
+
+class _ReadonlyTransport:
+	def open(self):
+		raise sqlite3.OperationalError("attempt to write a readonly database")
+
+
+def test_service_does_not_swallow_local_sqlite_io_error(tmp_path):
+	"""本地只读 / 磁盘满不能被 `_run` 兜成普通 stopped（Issue #1467）。"""
+	cache = CacheStore(tmp_path / "cache" / "boss_agent.db")
+	service = CrawlService(
+		cache,
+		data_dir=tmp_path,
+		transport_factory=lambda settings: _ReadonlyTransport(),
+		budget_factory=_NoDelayBudget,
+	)
+	with cache:
+		with pytest.raises(sqlite3.OperationalError, match="readonly"):
 			service.create_and_run(_settings(tmp_path))
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+import sqlite3
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -595,6 +596,19 @@ class WorkflowRunner:
 						str(exc) if isinstance(exc, CacheBusyError) else f"本地缓存库正被其他进程写入（{exc}）",
 						recoverable=busy_recoverable,
 						recovery_action=busy_recovery,
+					)
+				# 缓存层不再把只读目录 / 磁盘满等本地 IO 故障包装成
+				# CacheDatabaseInvalid（Issue #1467）；这些原始 sqlite 错误同样不能
+				# 落成可重试的 NETWORK_ERROR，否则 Agent 会在同一份只读库上反复
+				# 恢复 run_id。
+				elif isinstance(exc, sqlite3.DatabaseError):
+					io_recoverable, io_recovery = error_contract_for_code("LOCAL_IO_ERROR")
+					error = WorkflowActionError(
+						"LOCAL_IO_ERROR",
+						f"本地数据库文件无法打开: {exc}",
+						recoverable=io_recoverable,
+						recovery_action=io_recovery,
+						replay_safe=False,
 					)
 				# 内核缺失是确定性失败：同一条输入（含 --resume）永远复现，不能兜成
 				# NETWORK_ERROR +「重试当前 run_id」（Issue #1007）。

@@ -198,6 +198,71 @@ def test_me_generic_exception(mock_auth_cls, mock_client_cls):
 	assert parsed["error"]["code"] == "NETWORK_ERROR"
 
 
+@patch("boss_agent_cli.commands.me.get_platform_instance")
+@patch("boss_agent_cli.commands.me.AuthManager")
+def test_me_cache_busy_is_not_network_error(mock_auth_cls, mock_client_cls):
+	"""本地缓存锁冲突不是平台网络问题：等锁释放即可（Issue #1464）。"""
+	from boss_agent_cli.cache.store import CacheBusyError
+
+	platform = _ctx_mock(mock_client_cls)
+	platform.user_info.side_effect = CacheBusyError(Path("/tmp/synthetic-cache.db"), "database is locked")
+	result = CliRunner().invoke(cli, ["--json", "me"])
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "CACHE_BUSY"
+	assert parsed["error"]["recoverable"] is True
+	assert "等待占用" in parsed["error"]["recovery_action"]
+
+
+@patch("boss_agent_cli.commands.me.get_platform_instance")
+@patch("boss_agent_cli.commands.me.AuthManager")
+def test_me_raw_sqlite_busy_operational_error_is_cache_busy(mock_auth_cls, mock_client_cls):
+	"""未包装的 ``database is locked`` 同样不能被兜成可重试的 NETWORK_ERROR。"""
+	import sqlite3
+
+	platform = _ctx_mock(mock_client_cls)
+	platform.user_info.side_effect = sqlite3.OperationalError("database is locked")
+	result = CliRunner().invoke(cli, ["--json", "me"])
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "CACHE_BUSY"
+	assert parsed["error"]["recoverable"] is True
+
+
+@patch("boss_agent_cli.commands.me.get_platform_instance")
+@patch("boss_agent_cli.commands.me.AuthManager")
+def test_me_cache_database_invalid_points_at_backup_and_delete(mock_auth_cls, mock_client_cls, tmp_path):
+	"""坏库给「备份后删库」指引，不能让人反复重试平台。"""
+	from boss_agent_cli.cache.store import CacheDatabaseInvalid
+
+	db_path = tmp_path / "cache" / "boss_agent.db"
+	platform = _ctx_mock(mock_client_cls)
+	platform.user_info.side_effect = CacheDatabaseInvalid(db_path, "database disk image is malformed")
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "me"])
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "CACHE_DATABASE_INVALID"
+	assert parsed["error"]["recoverable"] is True
+	assert "备份" in parsed["error"]["recovery_action"]
+	assert str(db_path) in parsed["hints"]["operator_actions"][0]
+
+
+@patch("boss_agent_cli.commands.me.get_platform_instance")
+@patch("boss_agent_cli.commands.me.AuthManager")
+def test_me_sqlite_database_error_is_non_retryable_local_io_error(mock_auth_cls, mock_client_cls):
+	"""裸 sqlite3.DatabaseError 是确定性本地失败，不能标成可重试网络错误。"""
+	import sqlite3
+
+	platform = _ctx_mock(mock_client_cls)
+	platform.user_info.side_effect = sqlite3.DatabaseError("database disk image is malformed")
+	result = CliRunner().invoke(cli, ["--json", "me"])
+	assert result.exit_code == 1, result.output
+	parsed = json.loads(result.output)
+	assert parsed["error"]["code"] == "LOCAL_IO_ERROR"
+	assert parsed["error"]["recoverable"] is False
+	assert "本地数据库文件无法打开" in parsed["error"]["message"]
+
+
 # ── match_score 边界分支 ─────────────────────────────────
 
 

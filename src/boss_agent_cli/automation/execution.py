@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
+from boss_agent_cli.api.browser_client import ChatTabCdpUnreachable, RecruiterChatTabRequired
+from boss_agent_cli.api.browser_source import BrowserSourceUnavailable
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.automation.adapters import RecruiterAutomationPlatform
 from boss_agent_cli.automation.config import AutomationConfig
@@ -101,6 +103,20 @@ def process_pending(
 				dispatched[0] = True
 		try:
 			status, event_reason = execute_or_dry_run(adapter, guard, decision, ref, dry_run)
+		except (ChatTabCdpUnreachable, RecruiterChatTabRequired, BrowserSourceUnavailable):
+			# 这三类异常都表示请求尚未发出（聊天页未就绪 / CDP 端点不可达 / 浏览器
+			# 通道全部不可用）：队列行必须回到 pending，否则下一轮会把一个从未派发
+			# 的动作当成结果未知，转成 verification-required 并打开熔断（Issue #1469）。
+			if not dry_run:
+				actions[index] = _pending_with_status(item, "pending")
+				try:
+					store.write_pending(actions)
+				except Exception:
+					# 还原写盘失败不能掩盖原始的「请求未发出」异常：调用方仍要看到
+					# 真正的失败原因，而不是一条本地写错误；行留在 executing 时下一轮
+					# 仍按结果未知处理，保守但不会重发。
+					pass
+			raise
 		except RequestBudgetExceeded as exc:
 			# 预算 / 时限在动作发出前抛出的停止（details.request_sent=False）可以安全
 			# 恢复 pending；其它异常（含中断与响应风控）请求可能已发出，保守保留

@@ -1,3 +1,4 @@
+import sqlite3
 from typing import Any
 
 import click
@@ -6,6 +7,7 @@ from boss_agent_cli.api.client import AuthError, PlatformRiskError
 from boss_agent_cli.api.proxy import ProxyConfigurationError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
+from boss_agent_cli.cache.store import CacheBusyError, CacheDatabaseInvalid, is_cache_busy_error
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import (
 	INTERNAL_ERROR_TYPES,
@@ -177,6 +179,43 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 		recoverable, recovery_action = error_contract_for_code("INVALID_PARAM")
 		handle_error_output(
 			ctx, "me", code="INVALID_PARAM", message=str(e), recoverable=recoverable,
+			recovery_action=recovery_action,
+		)
+	except CacheDatabaseInvalid as e:
+		# 缓存库损坏是确定性本地失败：给登记表的「备份后删库」指引，不能兜成
+		# NETWORK_ERROR +「重试」让 Agent 在坏库上反复重试（Issue #1464）。
+		recoverable, recovery_action = error_contract_for_code("CACHE_DATABASE_INVALID")
+		handle_error_output(
+			ctx,
+			"me",
+			code="CACHE_DATABASE_INVALID",
+			message=str(e),
+			recoverable=recoverable,
+			recovery_action=recovery_action,
+			hints={
+				"operator_actions": [
+					f"备份后删除 {e.path}；候选池、预设、watch 历史与任务断点都随旧库一起作废",
+				],
+			},
+		)
+	except (CacheBusyError, sqlite3.DatabaseError) as e:
+		# 本地缓存库错误发生在平台调用之外：锁冲突等锁释放即可，其余本地数据库
+		# 错误（只读、磁盘满、无法打开）不是网络问题，重试同一条命令只会复现
+		# （Issue #1464）。
+		if isinstance(e, CacheBusyError) or is_cache_busy_error(e):
+			recoverable, recovery_action = error_contract_for_code("CACHE_BUSY")
+			message = str(e) if isinstance(e, CacheBusyError) else f"本地缓存库正被其他进程写入（{e}）"
+			code = "CACHE_BUSY"
+		else:
+			recoverable, recovery_action = error_contract_for_code("LOCAL_IO_ERROR")
+			message = f"本地数据库文件无法打开: {e}"
+			code = "LOCAL_IO_ERROR"
+		handle_error_output(
+			ctx,
+			"me",
+			code=code,
+			message=message,
+			recoverable=recoverable,
 			recovery_action=recovery_action,
 		)
 	except INTERNAL_ERROR_TYPES as e:

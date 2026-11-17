@@ -357,7 +357,9 @@ def test_login_timeout_error_has_actionable_diagnostics(mock_auth_cls):
 @patch("boss_agent_cli.commands.login.AuthManager")
 def test_login_connection_error_has_cdp_diagnostics(mock_auth_cls):
 	mock_auth = MagicMock()
-	mock_auth.login.side_effect = ConnectionError("CDP 不可用，请先运行 boss-chrome")
+	mock_auth.login.side_effect = ConnectionError(
+		"CDP 不可用：请先以 --remote-debugging-port=9222 启动带调试端口的 Chrome"
+	)
 	mock_auth_cls.return_value = mock_auth
 
 	runner = CliRunner()
@@ -366,7 +368,13 @@ def test_login_connection_error_has_cdp_diagnostics(mock_auth_cls):
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "CDP_UNAVAILABLE"
 	assert "Chrome 调试连接不可用" in parsed["error"]["message"]
-	assert any("boss-chrome" in action for action in parsed["hints"]["next_actions"])
+	# boss-chrome 从来不是本 CLI 的命令；next_actions 只放真实 boss 命令，
+	# 启动调试端口属于真人操作（Issue #1473）。
+	assert not any("boss-chrome" in action for action in parsed["hints"]["next_actions"])
+	assert any(
+		"--remote-debugging-port=9222" in action
+		for action in parsed["hints"]["operator_actions"]
+	)
 
 
 @patch("boss_agent_cli.commands.login.AuthManager")
@@ -465,6 +473,8 @@ def test_login_error_hints_split_by_audience(mock_auth_cls, side_effect, expecte
 			f"{expected_code} 的 next_actions 混入了非命令条目: {action!r}"
 		)
 		assert "，" not in action and "。" not in action
+	# boss-chrome 不是本 CLI 的命令；任何登录错误都不能把它当可执行动作（Issue #1473）。
+	assert "boss-chrome" not in hints["next_actions"]
 
 
 @patch("boss_agent_cli.commands.login.AuthManager")

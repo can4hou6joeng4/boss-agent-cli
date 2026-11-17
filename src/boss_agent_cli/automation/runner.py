@@ -90,6 +90,10 @@ def _run_cycle_locked(
 			mode=config.mode,
 		)
 
+	# 本周期是否以异常收尾：`finally` 只在正常路径写回 state。异常路径的本地
+	# 写入（熔断闩锁 / 状态快照）可能撞上控制锁，不能让它覆盖原始异常
+	# （Issue #1470）。
+	failure: BaseException | None = None
 	try:
 		startup_warning = guard.stop_reason() or adapter.detect_safety_warning()
 		if startup_warning:
@@ -122,22 +126,31 @@ def _run_cycle_locked(
 						continue
 					events.append(process_ref(adapter, store, config, guard, state, platform, dry_run, ref, dispatched=dispatched))
 	except PlatformRiskError as exc:
-		guard.open_circuit_breaker(exc.code)
-		store.append_event(
-			make_event(platform, "", PlatformAction.SKIP, EventStatus.CIRCUIT_BREAKER_OPEN, 0.0, exc.code)
-		)
+		failure = exc
+		latch_failure = _persist_breaker_latch(guard, store, platform, exc.code)
+		if latch_failure is not None:
+			exc.details.update(latch_failure)
 		raise
-	except KeyboardInterrupt:
-		guard.open_circuit_breaker("执行被中断，恢复前请先核对未完成的操作")
+	except KeyboardInterrupt as exc:
+		failure = exc
+		try:
+			guard.open_circuit_breaker("执行被中断，恢复前请先核对未完成的操作")
+		except Exception:
+			# 本地闩锁写不进去不能把中断替换成控制锁错误：调用方仍要看到中断。
+			pass
 		raise
 	except RequestBudgetExceeded as exc:
-		guard.open_circuit_breaker(exc.code)
-		store.append_event(
-			make_event(platform, "", PlatformAction.SKIP, EventStatus.CIRCUIT_BREAKER_OPEN, 0.0, exc.code)
-		)
+		failure = exc
+		latch_failure = _persist_breaker_latch(guard, store, platform, exc.code)
+		if latch_failure is not None:
+			exc.details.update(latch_failure)
+		raise
+	except BaseException as exc:
+		failure = exc
 		raise
 	finally:
-		store.write_state(state)
+		if failure is None:
+			store.write_state(state)
 	# dry-run 不落熔断闩锁，但报告仍需体现「真实运行会停下」：按本轮事件里的
 	# CIRCUIT_BREAKER_OPEN 判定，而不是只看 guard.stop_reason()（Issue #1459）。
 	breaker_open = guard.stop_reason() is not None or any(
@@ -150,6 +163,32 @@ def _run_cycle_locked(
 		platform=platform,
 		mode=config.mode,
 	)
+
+
+def _persist_breaker_latch(
+	guard: SafetyGuard,
+	store: AutomationStore,
+	platform: str,
+	code: str,
+) -> dict[str, object] | None:
+	"""落盘熔断闩锁与事件；本地写入失败时返回可合并进原始异常的说明。
+
+	风控 / 预算停止的闩锁写回可能撞上控制锁（``AutomationControlBusy``）。本地
+	写入失败不能掩盖原始异常：调用方必须继续看到 ACCOUNT_RISK / 预算停止，而不是
+	AUTOMATION_BUSY（Issue #1470）。这里只捕获 ``Exception``，中断与
+	``SystemExit`` 仍然照常上抛。
+	"""
+	try:
+		guard.open_circuit_breaker(code)
+		store.append_event(
+			make_event(platform, "", PlatformAction.SKIP, EventStatus.CIRCUIT_BREAKER_OPEN, 0.0, code)
+		)
+	except Exception as exc:
+		return {
+			"risk_latch_persisted": False,
+			"risk_latch_error": f"{type(exc).__name__}: {exc}",
+		}
+	return None
 
 
 def _stop_for_warning(

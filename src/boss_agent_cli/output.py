@@ -14,6 +14,10 @@ from boss_agent_cli.schema.error_codes import ERROR_CODES
 LOG_LEVELS: tuple[str, ...] = ("error", "warning", "info", "debug")
 _LEVEL_ORDER = {"debug": 0, "info": 1, "warning": 2, "error": 3}
 _REDACTED = "[REDACTED]"
+#: 脱敏递归的深度上限。平台响应或本地坏数据可以嵌套到 Python 递归上限之外，
+#: 无上限遍历会在出口抛 RecursionError，CLI 的 stdout 变成空文本、整个七键信封
+#: 丢失（Issue #1474）。超过上限的子树整体按敏感值处理，不展开、不泄漏。
+_MAX_REDACTION_DEPTH = 64
 _SENSITIVE_KEY_PARTS = (
 	"api_key",
 	"apikey",
@@ -95,10 +99,18 @@ def is_local_io_error(exc: BaseException) -> bool:
 
 def redact_sensitive(value: Any) -> Any:
 	"""Return a JSON-safe copy with credential-like fields redacted."""
-	return _redact_sensitive(value, {}, ())
+	return _redact_sensitive(value, {}, (), 0)
 
 
-def _redact_sensitive(value: Any, schema_parameters: SchemaParameterPaths, path: SchemaPath) -> Any:
+def _redact_sensitive(
+	value: Any,
+	schema_parameters: SchemaParameterPaths,
+	path: SchemaPath,
+	depth: int,
+) -> Any:
+	if depth >= _MAX_REDACTION_DEPTH:
+		# 超限子树不再展开：既避免递归爆栈，也避免把深处的凭据逐层带到信封里。
+		return _REDACTED
 	if isinstance(value, dict):
 		redacted: dict[Any, Any] = {}
 		parameter_name = schema_parameters.get(path, "").lower().replace("-", "_")
@@ -109,16 +121,16 @@ def _redact_sensitive(value: Any, schema_parameters: SchemaParameterPaths, path:
 			if sensitive_parameter and key_text in _SCHEMA_VALUE_FIELDS and not isinstance(item, _NON_CREDENTIAL_TYPES):
 				redacted[key] = _REDACTED
 			elif item_path in schema_parameters or _is_error_code_metadata(item) or key_text in _PUBLIC_METADATA_KEYS:
-				redacted[key] = _redact_sensitive(item, schema_parameters, item_path)
+				redacted[key] = _redact_sensitive(item, schema_parameters, item_path, depth + 1)
 			elif any(part in key_text for part in _SENSITIVE_KEY_PARTS) and not isinstance(item, _NON_CREDENTIAL_TYPES):
 				redacted[key] = _REDACTED
 			else:
-				redacted[key] = _redact_sensitive(item, schema_parameters, item_path)
+				redacted[key] = _redact_sensitive(item, schema_parameters, item_path, depth + 1)
 		return redacted
 	if isinstance(value, list):
-		return [_redact_sensitive(item, schema_parameters, (*path, index)) for index, item in enumerate(value)]
+		return [_redact_sensitive(item, schema_parameters, (*path, index), depth + 1) for index, item in enumerate(value)]
 	if isinstance(value, tuple):
-		return [_redact_sensitive(item, schema_parameters, (*path, index)) for index, item in enumerate(value)]
+		return [_redact_sensitive(item, schema_parameters, (*path, index), depth + 1) for index, item in enumerate(value)]
 	if isinstance(value, str):
 		return redact_sensitive_text(value)
 	return value
@@ -247,17 +259,22 @@ def envelope_success(
 	# 只有 schema 命令从内置目录显式声明的参数路径可保留元数据。
 	# 任意业务字典自称 type=object 不能获得豁免，参数默认值/示例仍按敏感名称脱敏。
 	public_parameters = (schema_parameter_paths or {}) if command == "schema" else {}
-	return _dumps_envelope(
-		{
-			"ok": True,
-			"schema_version": "1.0",
-			"command": command,
-			"data": _redact_sensitive(data, public_parameters, ()),
-			"pagination": redact_sensitive(pagination),
-			"error": None,
-			"hints": redact_sensitive(hints),
-		}
-	)
+	try:
+		return _dumps_envelope(
+			{
+				"ok": True,
+				"schema_version": "1.0",
+				"command": command,
+				"data": _redact_sensitive(data, public_parameters, (), 0),
+				"pagination": redact_sensitive(pagination),
+				"error": None,
+				"hints": redact_sensitive(hints),
+			}
+		)
+	except RecursionError:
+		# 脱敏阶段仍可能因容器自身深度或调用方构造的异常结构爆栈；stdout 必须
+		# 保留七键信封，不能只留空文本（Issue #1474）。
+		return _dumps_envelope(serialization_failure_envelope(command))
 
 
 def envelope_error(
@@ -286,34 +303,39 @@ def envelope_error(
 		if spec.get("outcome_unknown") is True:
 			implied["outcome_unknown"] = True
 		details = {**implied, **(details or {})}
-	error = {
-		"code": code,
-		"message": redact_sensitive_text(message),
-		"recoverable": recoverable,
-		"recovery_action": recovery_action,
-	}
-	if details is not None:
-		# 结果未知的写操作有两个来源：CLI 传输层写 ``outcome="unknown"`` +
-		# ``replay_safe=false``，MCP 强制终止写 ``outcome_unknown=true``。
-		# 两者含义相同（动作可能已生效，禁止自动重试），Agent 不该按入口猜键名：
-		# 这里补成同一组字段，CLI 与 MCP 的错误详情都能用 ``replay_safe`` 判定。
-		normalized_details = dict(details)
-		if normalized_details.get("outcome") == "unknown" and normalized_details.get("replay_safe") is False:
-			normalized_details.setdefault("outcome_unknown", True)
-		if "outcome_unknown" in normalized_details:
-			normalized_details.setdefault("replay_safe", not normalized_details["outcome_unknown"])
-		error["details"] = redact_sensitive(normalized_details)
-	return _dumps_envelope(
-		{
-			"ok": False,
-			"schema_version": "1.0",
-			"command": command,
-			"data": None,
-			"pagination": None,
-			"error": error,
-			"hints": redact_sensitive(hints),
+	try:
+		error = {
+			"code": code,
+			"message": redact_sensitive_text(message),
+			"recoverable": recoverable,
+			"recovery_action": recovery_action,
 		}
-	)
+		if details is not None:
+			# 结果未知的写操作有两个来源：CLI 传输层写 ``outcome="unknown"`` +
+			# ``replay_safe=false``，MCP 强制终止写 ``outcome_unknown=true``。
+			# 两者含义相同（动作可能已生效，禁止自动重试），Agent 不该按入口猜键名：
+			# 这里补成同一组字段，CLI 与 MCP 的错误详情都能用 ``replay_safe`` 判定。
+			normalized_details = dict(details)
+			if normalized_details.get("outcome") == "unknown" and normalized_details.get("replay_safe") is False:
+				normalized_details.setdefault("outcome_unknown", True)
+			if "outcome_unknown" in normalized_details:
+				normalized_details.setdefault("replay_safe", not normalized_details["outcome_unknown"])
+			error["details"] = redact_sensitive(normalized_details)
+		return _dumps_envelope(
+			{
+				"ok": False,
+				"schema_version": "1.0",
+				"command": command,
+				"data": None,
+				"pagination": None,
+				"error": error,
+				"hints": redact_sensitive(hints),
+			}
+		)
+	except RecursionError:
+		# 与成功信封同理：details / hints 或错误码登记表结构过深时也要保住七键
+		# 信封，不能让异常穿出 stdout 边界（Issue #1474）。
+		return _dumps_envelope(serialization_failure_envelope(command))
 
 
 def emit_success(command: str, data: Any, **kwargs: Any) -> None:

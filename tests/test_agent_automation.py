@@ -11,6 +11,9 @@ from unittest.mock import MagicMock, patch
 from click.testing import CliRunner
 
 from boss_agent_cli.ai.config import AIConfigStore
+from boss_agent_cli.api.browser_client import ChatTabCdpUnreachable, RecruiterChatTabRequired
+from boss_agent_cli.api.browser_source import POLICIES, BrowserSourceUnavailable
+from boss_agent_cli.api.client import AccountRiskError
 from boss_agent_cli.automation.adapters import build_automation_adapter
 from boss_agent_cli.automation.boss_adapter import BossRecruiterAutomationPlatform
 from boss_agent_cli.automation.mock_adapter import MockRecruiterAutomationPlatform
@@ -32,7 +35,7 @@ from boss_agent_cli.automation.models import (
 from boss_agent_cli.automation.runner import run_automation_cycle
 from boss_agent_cli.automation.reply_ai import parse_reply_draft
 from boss_agent_cli.automation.safety import SafetyGuard
-from boss_agent_cli.automation.storage import AutomationStore
+from boss_agent_cli.automation.storage import AutomationControlBusy, AutomationStore
 from boss_agent_cli.main import cli
 
 
@@ -1402,3 +1405,121 @@ def test_action_result_separates_unsent_page_errors_from_interrupted_actions() -
 		"message": "交换联系方式请求失败: ExchangeWx Vue component not found",
 	})
 	assert deterministic.status == "blocked"
+
+
+@pytest.mark.parametrize(
+	"make_error",
+	[
+		pytest.param(ChatTabCdpUnreachable, id="chat-tab-cdp-unreachable"),
+		pytest.param(RecruiterChatTabRequired, id="recruiter-chat-tab-required"),
+		pytest.param(
+			lambda: BrowserSourceUnavailable(POLICIES["existing-browser"], ("cdp",)),
+			id="browser-source-unavailable",
+		),
+	],
+)
+def test_predispatch_error_restores_pending_without_latch(tmp_path: Path, make_error) -> None:
+	"""发送前异常必须把队列行还原成 pending（Issue #1469）。
+
+	ChatTabCdpUnreachable / RecruiterChatTabRequired / BrowserSourceUnavailable
+	都明确表示请求尚未发出。旧实现只在 RequestBudgetExceeded 且
+	details.request_sent=False 时还原，这三类异常会让队列行永久停在 executing：
+	下一轮被当成结果未知转成 verification-required 并落 stop.json，一个从未派发
+	的动作反而冻结了后续自动化。
+	"""
+	store = AutomationStore(tmp_path)
+	store.append_pending(_pending_action())
+	error = make_error()
+
+	class _PreDispatchFailure(MockRecruiterAutomationPlatform):
+		def __init__(self) -> None:
+			super().__init__("zhipin", [])
+
+		def execute_action(
+			self,
+			action: PlatformAction,
+			message: str,
+			ref: ConversationRef,
+		) -> ActionResult:
+			raise error
+
+	with pytest.raises(type(error)):
+		run_automation_cycle(
+			_PreDispatchFailure(),
+			store,
+			AutomationConfig(),
+			platform="zhipin",
+			dry_run=False,
+		)
+
+	assert [item.status for item in store.read_pending()] == ["pending"]
+	assert not (store.root / "stop.json").exists()
+
+
+def test_risk_error_is_not_masked_by_control_lock_busy(tmp_path: Path, monkeypatch) -> None:
+	"""风控闩锁撞上控制锁时仍要上报原始风控异常（Issue #1470）。
+
+	旧实现里 ``guard.open_circuit_breaker()`` / ``store.append_event()`` 抛出的
+	``AutomationControlBusy`` 会覆盖 ``PlatformRiskError``，命令因此报
+	AUTOMATION_BUSY；``finally`` 无条件写 state 再撞一次锁，风控闩锁也没落盘。
+	"""
+	store = AutomationStore(tmp_path)
+
+	class _RiskAdapter(MockRecruiterAutomationPlatform):
+		def __init__(self) -> None:
+			super().__init__("zhipin", [])
+
+		def ensure_session(self) -> None:
+			raise AccountRiskError("risk")
+
+	def _busy(self, reason: str) -> None:
+		raise AutomationControlBusy("busy")
+
+	def _forbidden_write_state(state: dict) -> None:
+		raise AssertionError("异常周期不应再写 state")
+
+	monkeypatch.setattr(SafetyGuard, "open_circuit_breaker", _busy)
+	monkeypatch.setattr(store, "write_state", _forbidden_write_state)
+
+	with pytest.raises(AccountRiskError) as excinfo:
+		run_automation_cycle(
+			_RiskAdapter(),
+			store,
+			AutomationConfig(),
+			platform="zhipin",
+			dry_run=False,
+		)
+
+	assert excinfo.value.details["risk_latch_persisted"] is False
+	assert "AutomationControlBusy" in excinfo.value.details["risk_latch_error"]
+	assert "busy" in excinfo.value.details["risk_latch_error"]
+
+
+def test_normal_cycle_still_writes_state(tmp_path: Path, monkeypatch) -> None:
+	"""无异常周期仍要执行 finally 的 state 写回（Issue #1470）。
+
+	条件写回不能把正常路径一起跳过：本轮的成功 checkpoint / 阶段推进必须落盘。
+	"""
+	store = AutomationStore(tmp_path)
+	calls: list[dict] = []
+	real_write_state = store.write_state
+
+	def _spy_write_state(state: dict) -> None:
+		calls.append(state)
+		real_write_state(state)
+
+	class _QuietAdapter(MockRecruiterAutomationPlatform):
+		def scan_conversations(self, tabs: list[str], max_per_tab: int) -> list[ConversationRef]:
+			return []
+
+	monkeypatch.setattr(store, "write_state", _spy_write_state)
+	report = run_automation_cycle(
+		_QuietAdapter("zhipin", []),
+		store,
+		AutomationConfig(),
+		platform="zhipin",
+		dry_run=False,
+	)
+
+	assert report.status == "OK"
+	assert len(calls) == 1

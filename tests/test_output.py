@@ -15,6 +15,8 @@ from boss_agent_cli.output import (
 	is_local_io_error,
 	json_safe_value,
 	Logger,
+	_MAX_REDACTION_DEPTH,
+	redact_sensitive,
 )
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 
@@ -734,3 +736,62 @@ def test_filename_less_socket_reset_stays_network_error() -> None:
 @pytest.mark.parametrize("exc", [ConnectionResetError(errno.ECONNRESET, "reset"), TimeoutError("timed out")])
 def test_network_error_types_stay_network_even_with_no_filename(exc: OSError) -> None:
 	assert is_local_io_error(exc) is False
+
+
+# ── 脱敏深度上限：深层本地数据不能丢掉整个信封（Issue #1474） ────────
+
+
+def _nested_mapping(depth: int, leaf: dict) -> dict:
+	value: dict = leaf
+	for _ in range(depth):
+		value = {"child": value}
+	return value
+
+
+def _follow_child_chain(node: object) -> int:
+	depth = 0
+	while isinstance(node, dict) and "child" in node:
+		node = node["child"]
+		depth += 1
+	return depth
+
+
+def test_envelope_success_truncates_deeply_nested_data() -> None:
+	"""200+ 层 data 不能再让脱敏阶段爆栈、丢掉七键信封。"""
+	deep = _nested_mapping(_MAX_REDACTION_DEPTH * 3, {"token": "token-secret", "value": "value-secret"})
+
+	result = envelope_success("deep", deep)
+
+	parsed = json.loads(result)
+	assert set(parsed) == {"ok", "schema_version", "command", "data", "pagination", "error", "hints"}
+	assert parsed["ok"] is True
+	# 超出上限的子树整体按 [REDACTED] 截断：既不走递归，也不把深层值带进 stdout。
+	assert _follow_child_chain(parsed["data"]) == _MAX_REDACTION_DEPTH
+	assert "token-secret" not in result
+	assert "value-secret" not in result
+
+
+def test_envelope_error_truncates_deeply_nested_details() -> None:
+	deep = _nested_mapping(_MAX_REDACTION_DEPTH * 3, {"token": "token-secret", "value": "value-secret"})
+
+	result = envelope_error("deep", code="NETWORK_ERROR", message="请求失败", details=deep)
+
+	parsed = json.loads(result)
+	assert set(parsed) == {"ok", "schema_version", "command", "data", "pagination", "error", "hints"}
+	assert parsed["ok"] is False
+	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	assert _follow_child_chain(parsed["error"]["details"]) == _MAX_REDACTION_DEPTH
+	assert "token-secret" not in result
+	assert "value-secret" not in result
+
+
+@pytest.mark.parametrize("wrap", [lambda value: [value], lambda value: (value,)])
+def test_redact_sensitive_truncates_deep_list_and_tuple(wrap) -> None:
+	"""list / tuple 两条递归路径同样受深度上限约束。"""
+	value: object = {"token": "deep-secret"}
+	for _ in range(_MAX_REDACTION_DEPTH * 3):
+		value = wrap(value)
+
+	redacted = redact_sensitive(value)
+
+	assert "deep-secret" not in json.dumps(redacted)

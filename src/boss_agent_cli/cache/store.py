@@ -232,6 +232,35 @@ def is_cache_busy_error(exc: BaseException) -> bool:
 	return "locked" in message or "busy" in message
 
 
+#: 本地 SQLite 文件/磁盘层面的写失败标记（Issue #1467）。
+#:
+#: ``attempt to write a readonly database`` 是目录或文件只读，``disk I/O error``
+#: 是设备故障，``database or disk is full`` 是磁盘/配额耗尽，``unable to open
+#: database file`` 是路径不可打开。它们都不是库内容损坏：删库重建既修不好，
+#: 还会白白丢掉候选池与断点，所以必须保留原始 ``OperationalError``，由
+#: main/display 的本地 IO 分支给出 ``LOCAL_IO_ERROR``（不可重试）指引。
+_CACHE_LOCAL_IO_MARKERS: tuple[str, ...] = (
+	"attempt to write a readonly database",
+	"disk i/o error",
+	"database or disk is full",
+	"unable to open database file",
+)
+
+
+def is_cache_local_io_error(exc: BaseException) -> bool:
+	"""判断 SQLite 错误是否来自本地文件/磁盘，而不是库内容损坏。
+
+	只认 ``OperationalError``，且与 ``is_cache_busy_error`` 互斥：锁冲突优先按
+	可重试的 ``CACHE_BUSY`` 处理（消息里同时带锁与 IO 字样时以锁为准）。
+	"""
+	if not isinstance(exc, sqlite3.OperationalError):
+		return False
+	if is_cache_busy_error(exc):
+		return False
+	message = str(exc).lower()
+	return any(marker in message for marker in _CACHE_LOCAL_IO_MARKERS)
+
+
 def _has_sqlite_header(path: Path) -> bool:
 	try:
 		with path.open("rb") as handle:
@@ -336,6 +365,11 @@ class _GuardedConnection(sqlite3.Connection):
 			return None
 		if is_cache_busy_error(exc):
 			return CacheBusyError(self.db_path, str(exc))
+		if is_cache_local_io_error(exc):
+			# 只读目录、磁盘满、设备 IO 故障不是库损坏：保留原始 OperationalError，
+			# 让 main/display 的本地 IO 分支输出 LOCAL_IO_ERROR，而不是误导用户
+			# 备份并删除完好的缓存库（Issue #1467）。
+			return None
 		return CacheDatabaseInvalid(self.db_path, str(exc))
 
 	def _raise_translated(self, exc: sqlite3.DatabaseError) -> NoReturn:
@@ -418,6 +452,10 @@ class CacheStore:
 		except sqlite3.OperationalError as exc:
 			# 库文件头正常时多为并发锁或磁盘压力：锁冲突等锁释放后重试即可，单独
 			# 报 CACHE_BUSY；其余仍按原错误上抛（重试可能有效）。
+			# 只读目录 / 磁盘满 / 无法打开等本地 IO 失败与库内容无关：连文件头都
+			# 读不到时也不能归成 CACHE_DATABASE_INVALID 让人删库（Issue #1467）。
+			if is_cache_local_io_error(exc):
+				raise
 			if _has_sqlite_header(db_path):
 				if is_cache_busy_error(exc):
 					raise CacheBusyError(db_path, str(exc)) from exc
@@ -1585,12 +1623,21 @@ class CacheStore:
 				if job_id in existing_by_job_id:
 					old_security_id, old_source = existing_by_job_id[job_id]
 					if old_source == source and old_security_id != security_id:
-						self._conn.execute(
+						cursor = self._conn.execute(
 							# 原兼容刷新保留；动态上下文必须来自同一条输入，缺 lid 时不能拼上旧 lid。
-							"UPDATE shortlist_records SET security_id = ?, lid = ? "
+							# 同 job_id 可能已有两行（不同 security_id）：目标键若已存在，
+							# 直接 UPDATE 会撞 (security_id, job_id) 主键并整批回滚。
+							# OR IGNORE 冲突时返回 rowcount=0，再删掉被刷新的旧行、
+							# 保留目标行（Issue #1466）。
+							"UPDATE OR IGNORE shortlist_records SET security_id = ?, lid = ? "
 							"WHERE security_id = ? AND job_id = ?",
 							(security_id, lid, old_security_id, job_id),
 						)
+						if cursor.rowcount == 0:
+							self._conn.execute(
+								"DELETE FROM shortlist_records WHERE security_id = ? AND job_id = ?",
+								(old_security_id, job_id),
+							)
 						existing_by_job_id[job_id] = (security_id, old_source)
 					elif old_source == source and old_security_id == security_id and lid:
 						self._conn.execute(

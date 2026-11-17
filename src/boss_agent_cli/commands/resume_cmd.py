@@ -405,13 +405,15 @@ def resume_delete_cmd(ctx: click.Context, name: str) -> None:
 	if not store.exists(name):
 		_emit_resume_not_found(ctx, name)
 		return
-	store.delete(name)
 	# 关联表以简历名为外键，但没有任何外键约束：不同步清理的话，之后用同一个名字
 	# 重建简历（`resume init` 默认就叫 default）会继承旧简历的职位关联，包括已经
 	# 标成 applied 的状态和备注，`resume applications` 也就报出这份简历从没关联过的职位。
+	# 必须先清理关联再删简历文件：缓存库繁忙/损坏时命令会失败，但简历本身必须
+	# 原样保留，否则用户看到 exit 1 而文件已经没了（Issue #1465）。
 	removed_links = 0
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		removed_links = cache.remove_resume_links(name)
+	store.delete(name)
 	handle_output(
 		ctx, "resume",
 		{"action": "delete", "name": name, "deleted": True, "removed_links": removed_links},

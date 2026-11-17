@@ -228,6 +228,41 @@ def test_shortlist_repeat_add_applies_explicit_values(store):
 	assert item["note"] == "新备注"
 
 
+def test_shortlist_batch_refresh_ignores_existing_target_key_instead_of_rollback(store):
+	"""同 job_id 两行、刷新旧行时撞目标主键，不能整批回滚（Issue #1466）。
+
+	``existing_by_job_id`` 按 created_at ASC 建字典（较晚写入的旧 sid 胜出）；
+	批量导入新 sid 时 UPDATE 旧行会与已存在的新 sid 行撞 (security_id, job_id)
+	主键。旧实现抛 IntegrityError → CacheDatabaseInvalid 并回滚整批。
+	"""
+	store.add_shortlist({"security_id": "sid-new", "job_id": "j1", "source": "favorites"})
+	store.add_shortlist({"security_id": "sid-old", "job_id": "j1", "source": "favorites"})
+	# 固定时间戳，确保字典选中较晚的旧行（created_at ASC 的最后一行）。
+	store._conn.execute(
+		"UPDATE shortlist_records SET created_at = CASE security_id WHEN 'sid-new' THEN 1.0 ELSE 2.0 END"
+	)
+	store._conn.commit()
+
+	result = store.add_shortlist_batch([
+		{"security_id": "sid-new", "job_id": "j1", "source": "favorites"},
+	])
+
+	assert result == {"imported_count": 0, "existing_count": 1, "skipped_count": 0}
+	assert [item["security_id"] for item in store.list_shortlist()] == ["sid-new"]
+
+
+def test_shortlist_batch_refresh_propagates_unrelated_database_errors(store):
+	"""冲突安全不等于吞错：真正的数据库异常仍按缓存层契约上抛。"""
+	from boss_agent_cli.cache.store import CacheDatabaseInvalid
+
+	store.add_shortlist({"security_id": "sid-old", "job_id": "j1", "source": "favorites"})
+	store._conn.execute("DROP TABLE shortlist_records")
+	store._conn.commit()
+
+	with pytest.raises(CacheDatabaseInvalid):
+		store.add_shortlist_batch([{"security_id": "sid-new", "job_id": "j1", "source": "favorites"}])
+
+
 def test_shortlist_set_tags_and_note(store):
 	"""候选池标签和备注应能独立更新。"""
 	store.add_shortlist({"security_id": "s1", "job_id": "j1", "title": "", "company": "", "city": "", "salary": "", "source": ""})
