@@ -1426,3 +1426,103 @@ def test_real_security_page_still_raises_platform_risk(monkeypatch, tmp_path):
 		session.open()
 
 	assert excinfo.value.reason == "ENVIRONMENT_RISK"
+
+
+def test_open_applies_login_user_agent_to_crawler_browser(monkeypatch, tmp_path):
+	"""登录态里的 UA 必须用于采集浏览器；只透传到构造函数等于静默丢弃（Issue #1413）。"""
+	applied: list[str] = []
+
+	class Options:
+		def set_local_port(self, port: int) -> None:
+			pass
+
+		def set_user_data_path(self, path: str) -> None:
+			pass
+
+		def existing_only(self, on_off: bool = True) -> None:
+			pass
+
+		def set_user_agent(self, user_agent: str) -> None:
+			applied.append(user_agent)
+
+	class Listener:
+		def start(self, *args, **kwargs) -> None:
+			pass
+
+		def stop(self) -> None:
+			pass
+
+	class Page:
+		url = ""
+		html = ""
+		listen = Listener()
+
+		def quit(self) -> None:
+			pass
+
+	page = Page()
+	monkeypatch.setitem(
+		sys.modules,
+		"DrissionPage",
+		types.SimpleNamespace(ChromiumOptions=Options, ChromiumPage=lambda options: page),
+	)
+	session = DrissionCrawlerSession(
+		profile_path=tmp_path / "profile",
+		chrome_path=None,
+		cdp_port=_free_port(),
+		hook_profile="none",
+		hook_dir=None,
+		user_agent="UA-from-login",
+	)
+	session.open()
+
+	assert applied == ["UA-from-login"]
+
+
+def test_open_keeps_browser_default_user_agent_when_login_has_none(monkeypatch, tmp_path):
+	applied: list[str] = []
+
+	class Options:
+		def set_local_port(self, port: int) -> None:
+			pass
+
+		def set_user_data_path(self, path: str) -> None:
+			pass
+
+		def existing_only(self, on_off: bool = True) -> None:
+			pass
+
+		def set_user_agent(self, user_agent: str) -> None:
+			applied.append(user_agent)
+
+	class Listener:
+		def start(self, *args, **kwargs) -> None:
+			pass
+
+		def stop(self) -> None:
+			pass
+
+	class Page:
+		url = ""
+		html = ""
+		listen = Listener()
+
+		def quit(self) -> None:
+			pass
+
+	page = Page()
+	monkeypatch.setitem(
+		sys.modules,
+		"DrissionPage",
+		types.SimpleNamespace(ChromiumOptions=Options, ChromiumPage=lambda options: page),
+	)
+	session = DrissionCrawlerSession(
+		profile_path=tmp_path / "profile",
+		chrome_path=None,
+		cdp_port=_free_port(),
+		hook_profile="none",
+		hook_dir=None,
+	)
+	session.open()
+
+	assert applied == []

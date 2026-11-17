@@ -672,8 +672,74 @@ def _top_level_command_name(ctx: click.Context | None, fallback: str) -> str:
 	return top.info_name or fallback
 
 
+def _option_value_count(param: click.Option) -> int:
+	"""一个选项要吃掉几个后续 argv。布尔开关（is_flag / count）不取值。"""
+	if param.is_flag or param.count:
+		return 0
+	return max(int(param.nargs), 0)
+
+
+def _match_declared_option(command: click.Command, token: str) -> tuple[click.Option | None, bool]:
+	"""按 Click 参数元数据匹配选项，返回 ``(选项, 取值是否附着在同一 token)``。
+
+	长选项支持 ``--name`` 与 ``--name=value``；短选项支持 ``-o`` 与 ``-ovalue``
+	（Click 会把短选项后面剩余字符当成取值）。只匹配命令声明过的选项，其余
+	横杠 token 由调用方按「未知选项」跳过。
+	"""
+	if token in ("-", "--") or not token.startswith("-"):
+		return None, False
+	for param in command.params:
+		if not isinstance(param, click.Option):
+			continue
+		for name in (*param.opts, *param.secondary_opts):
+			if token == name:
+				return param, False
+			if name.startswith("--") and token.startswith(f"{name}="):
+				return param, True
+	for param in command.params:
+		if not isinstance(param, click.Option):
+			continue
+		for name in (*param.opts, *param.secondary_opts):
+			if not name.startswith("--") and len(name) == 2 and token.startswith(name) and len(token) > 2:
+				return param, True
+	return None, False
+
+
+def _resolve_argv_command(
+	group: click.Group, args: Sequence[str]
+) -> tuple[click.Command, int] | None:
+	"""定位 argv 里真正要执行的命令及其 token 结束位置。
+
+	子命令前可能有带取值的全局选项（``boss --data-dir <dir> detail …``），直接取
+	「第一个非横杠 token」会落在选项取值上；这里按参数元数据跳过选项及其取值，
+	并递归进入 ``hr`` 这类 Group，让后面的位置参数判定拿到叶子命令的选项表。
+	"""
+	current: click.Command = group
+	index = 0
+	path_end = 0
+	while index < len(args):
+		token = args[index]
+		if token == "--":
+			break
+		if isinstance(current, click.Group) and token in current.commands:
+			current = current.commands[token]
+			index += 1
+			path_end = index
+			continue
+		if token.startswith("-") and token != "-":
+			param, attached = _match_declared_option(current, token)
+			index += 1
+			if param is not None and not attached:
+				index += _option_value_count(param)
+			continue
+		break
+	if path_end == 0:
+		return None
+	return current, path_end
+
+
 def _declare_dash_prefixed_positionals(
-	group: click.Group, ctx: click.Context | None, args: list[str]
+	group: click.Group, ctx: click.Context | None, args: Sequence[str]
 ) -> list[str]:
 	"""在形如 security_id 的横杠开头位置参数前插入 ``--``。
 
@@ -683,35 +749,50 @@ def _declare_dash_prefixed_positionals(
 
 	限定两件事以免掩盖真正的拼写错误：
 
-	- 只处理**看起来像 security_id** 的取值（``-`` 开头 + ≥20 个 base64url 字符）；
+	- 只处理**看起来像 security_id** 的位置参数（``-`` 开头 + ≥20 个 base64url
+	  字符），选项取值即使形如 security_id 也不参与改写（Issue #1449）；
 	- 只处理命令**未声明**的选项名，且命令行里还没有 ``--`` 分隔符。
+
+	所有位置参数整体后移到 ``--`` 之后，选项及其取值保持原有相对顺序，避免补出来的
+	分隔符把「位置参数在先、选项在后」的调用（``boss detail <sid> --job-id <jid>``）
+	里的选项吞成位置参数（Issue #1448）。
 	"""
 	if "--" in args:
-		return args
+		return list(args)
 
-	command_index = next((i for i, token in enumerate(args) if not token.startswith("-")), None)
-	if command_index is None:
-		return args
-	if ctx is None:
-		command = group.commands.get(args[command_index])
-	else:
-		command = group.get_command(ctx, args[command_index])
-	if command is None or not isinstance(command, click.Command):
-		return args
+	resolved = _resolve_argv_command(group, args)
+	if resolved is None:
+		return list(args)
+	command, path_end = resolved
 
-	declared: set[str] = set()
-	for param in command.params:
-		if isinstance(param, click.Option):
-			declared.update(param.opts)
-			declared.update(param.secondary_opts)
-
-	for index in range(command_index + 1, len(args)):
+	kept = list(args[:path_end])
+	positionals: list[str] = []
+	index = path_end
+	while index < len(args):
 		token = args[index]
-		if token in declared:
+		param, attached = _match_declared_option(command, token)
+		if param is not None:
+			kept.append(token)
+			index += 1
+			if not attached:
+				value_count = _option_value_count(param)
+				kept.extend(args[index : index + value_count])
+				index += value_count
 			continue
-		if _SECURITY_ID_LIKE.match(token):
-			return [*args[:index], "--", *args[index:]]
-	return args
+		if token.startswith("-") and token != "-":
+			if _SECURITY_ID_LIKE.match(token):
+				# 选项匹配之后仍命中的，就是本函数要保护的位置参数。
+				positionals.append(token)
+			else:
+				kept.append(token)
+			index += 1
+			continue
+		positionals.append(token)
+		index += 1
+
+	if not any(_SECURITY_ID_LIKE.match(token) for token in positionals):
+		return list(args)
+	return [*kept, "--", *positionals]
 
 
 class BossCliGroup(click.Group):

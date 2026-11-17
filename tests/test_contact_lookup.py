@@ -58,8 +58,13 @@ def test_find_friend_by_security_id_raises_when_pagination_cap_reached_without_t
 		unwrap_data=lambda response: response["zpData"],
 	)
 
-	with pytest.raises(FriendLookupLimitExceeded):
+	with pytest.raises(FriendLookupLimitExceeded) as exc_info:
 		find_friend_by_security_id(platform, "sec_missing", max_pages=2)
+
+	message = str(exc_info.value)
+	# 分页上限是确定性结果：文案不能再引导调用方重放同一查询（Issue #1451）。
+	assert "请重试" not in message
+	assert "uid" in message
 
 
 def test_find_friend_by_security_id_returns_matching_item_and_stops_pagination():

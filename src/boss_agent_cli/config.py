@@ -169,12 +169,15 @@ def load_config(config_path: Path | None) -> dict[str, Any]:
 			raise ValueError(f"{config_path} 必须是 JSON 对象")
 		cfg.update(user_cfg)
 	mode = user_cfg.get("operating_mode")
-	if mode not in {"assisted", "research"}:
+	# 非字符串容器（[] / {} / ["assisted"]）不可哈希，直接 `not in` 会抛
+	# TypeError：启动期所有命令（含 config reset）都失败，而 "bogus" / 123
+	# 却安静回退默认值。与既有口径对齐，非字符串一律走回退分支（Issue #1450）。
+	if not isinstance(mode, str) or mode not in {"assisted", "research"}:
 		if "low_risk_mode" in user_cfg:
 			mode = "research" if user_cfg["low_risk_mode"] is False else "assisted"
 		else:
 			mode = DEFAULTS.get("operating_mode", "assisted")
-	if mode not in {"assisted", "research"}:
+	if not isinstance(mode, str) or mode not in {"assisted", "research"}:
 		mode = "assisted"
 	cfg["operating_mode"] = mode
 	return cfg

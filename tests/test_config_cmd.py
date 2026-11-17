@@ -10,7 +10,7 @@ import pytest
 from click.testing import CliRunner, Result
 
 from boss_agent_cli.automation.config import AutomationConfig, automation_config_from_dict
-from boss_agent_cli.config import DEFAULTS
+from boss_agent_cli.config import DEFAULTS, load_config
 from boss_agent_cli.main import cli
 
 
@@ -879,5 +879,31 @@ def test_config_reset_repairs_invalid_startup_config(tmp_path, key, raw):
 	"""坏值必须放行 config 子命令，否则用户没有命令行手段把它改回来。"""
 	(tmp_path / "config.json").write_text(f'{{"{key}": {raw}}}', encoding="utf-8")
 	code, parsed = _invoke("config", "reset", key, tmp_path=tmp_path)
+	assert code == 0
+	assert parsed["ok"] is True
+
+
+@pytest.mark.parametrize("raw", ["[]", "{}", '["assisted"]', "123", "null"])
+def test_load_config_falls_back_for_non_string_operating_mode(tmp_path, raw):
+	"""非字符串容器不可哈希，`mode not in {...}` 会抛 TypeError；与 "bogus" 同口径回退（Issue #1450）。"""
+	(tmp_path / "config.json").write_text(f'{{"operating_mode": {raw}}}', encoding="utf-8")
+	assert load_config(tmp_path / "config.json")["operating_mode"] == DEFAULTS["operating_mode"]
+
+
+def test_load_config_honours_low_risk_mode_when_operating_mode_is_unusable(tmp_path):
+	(tmp_path / "config.json").write_text('{"operating_mode": [], "low_risk_mode": false}', encoding="utf-8")
+	assert load_config(tmp_path / "config.json")["operating_mode"] == "research"
+
+
+def test_startup_tolerates_non_string_operating_mode(tmp_path):
+	(tmp_path / "config.json").write_text('{"operating_mode": []}', encoding="utf-8")
+	code, parsed = _invoke("config", "get", "operating_mode", tmp_path=tmp_path)
+	assert code == 0
+	assert parsed["ok"] is True
+
+
+def test_config_reset_repairs_non_string_operating_mode(tmp_path):
+	(tmp_path / "config.json").write_text('{"operating_mode": ["assisted"]}', encoding="utf-8")
+	code, parsed = _invoke("config", "reset", "operating_mode", tmp_path=tmp_path)
 	assert code == 0
 	assert parsed["ok"] is True
