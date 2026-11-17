@@ -70,7 +70,10 @@ def test_auth_decorator_keeps_hints_when_lock_is_persisted(tmp_path):
 
 	kwargs = mock_err.call_args.kwargs
 	assert kwargs["hints"]["next_actions"]
-	assert "operator_actions" not in (kwargs["hints"] or {})
+	# 风控说明本身在 operator_actions 中（Issue #1522）；未持久化警示不应混入。
+	operator_actions = kwargs["hints"]["operator_actions"]
+	assert operator_actions
+	assert not any("新的 boss 进程" in action for action in operator_actions)
 
 
 def test_login_classifier_appends_persistence_action(tmp_path):
@@ -87,4 +90,7 @@ def test_login_classifier_without_persistence_flag_keeps_plain_contract(tmp_path
 
 	assert payload["code"] == "ACCOUNT_RISK"
 	assert payload["hints"]["next_actions"]
-	assert "operator_actions" not in payload["hints"]
+	# 风控说明本身在 operator_actions 中；未持久化警示不应混入。
+	operator_actions = payload["hints"]["operator_actions"]
+	assert operator_actions
+	assert not any("新的 boss 进程" in action for action in operator_actions)

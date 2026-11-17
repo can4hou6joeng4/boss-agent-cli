@@ -839,7 +839,8 @@ def test_doctor_live_probe_stops_after_candidate_risk(tmp_path):
 	assert parsed["data"]["live_probe_risk"] == "ENVIRONMENT_RISK"
 	next_actions = parsed["hints"]["next_actions"]
 	assert not any("--live" in action for action in next_actions)
-	assert any("不要刷新 Token" in action for action in next_actions)
+	# 真人说明放 operator_actions，next_actions 只留可执行命令（Issue #1522）。
+	assert any("不要刷新 Token" in action for action in parsed["hints"]["operator_actions"])
 	# ENVIRONMENT_RISK 的解锁命令在 recovery_action 里：必须指向本次诊断的数据目录（Issue #978）。
 	assert f"boss --data-dir {tmp_path.resolve()} clean --risk-lock" in parsed["data"]["checks"][0].get(
 		"recovery_action", ""
@@ -867,7 +868,7 @@ def test_doctor_live_probe_stops_after_recruiter_risk(tmp_path):
 	)[0]
 	assert "secret-account-text" not in output
 	assert parsed["data"]["live_probe_risk"] == "ACCOUNT_RISK"
-	assert any("不要通过 CDP" in action for action in parsed["hints"]["next_actions"])
+	assert any("不要通过 CDP" in action for action in parsed["hints"]["operator_actions"])
 	recruiter.list_jobs.assert_called_once()
 
 
@@ -886,7 +887,7 @@ def test_doctor_live_probe_risk_response_does_not_continue(tmp_path):
 	assert _find_check(parsed["data"]["checks"], "recruiter_live_read") is not None
 	recruiter.list_jobs.assert_not_called()
 	assert parsed["data"]["live_probe_risk"] == "ENVIRONMENT_RISK"
-	assert any("不要刷新 Token" in action for action in parsed["hints"]["next_actions"])
+	assert any("不要刷新 Token" in action for action in parsed["hints"]["operator_actions"])
 	platform.is_success.assert_called_once()
 
 

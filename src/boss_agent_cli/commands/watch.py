@@ -19,6 +19,7 @@ from boss_agent_cli.display import (
 	handle_output,
 	platform_error_contract,
 	platform_error_message,
+	read_only_platform_code,
 	render_action_result,
 	render_job_table,
 	render_list_result,
@@ -441,12 +442,16 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 			return
 		except SearchPipelinePlatformError as exc:
 			# 与 search 一致：风控码给停止指引，登录过期等可恢复错误给恢复动作。
-			recoverable, recovery_action, hints = platform_error_contract(exc.code, ctx=ctx)
+			# watch 只读：未识别响应按 NETWORK_ERROR 允许安全重试（#1519）。
+			error_code = read_only_platform_code("watch", exc.code)
+			recoverable, recovery_action, hints = platform_error_contract(
+				error_code, ctx=ctx, read_only=True
+			)
 			handle_error_output(
 				ctx,
 				"watch",
-				code=exc.code,
-				message=platform_error_message(exc.code, exc.message, "搜索结果获取失败"),
+				code=error_code,
+				message=platform_error_message(error_code, exc.message, "搜索结果获取失败"),
 				recoverable=recoverable,
 				recovery_action=recovery_action,
 				details=exc.details,

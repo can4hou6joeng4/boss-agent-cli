@@ -237,6 +237,9 @@
               },
               "hints": {
                 "next_actions": [
+                  "boss doctor"
+                ],
+                "operator_actions": [
                   "不要通过 CDP、patchright 或其他通道重试该操作",
                   "锁未解除时只使用本地辅助和离线状态命令；官方目标业务页恢复后由用户显式清除本地锁"
                 ]
@@ -270,6 +273,9 @@
               },
               "hints": {
                 "next_actions": [
+                  "boss doctor"
+                ],
+                "operator_actions": [
                   "不要通过 CDP、patchright 或其他通道重试该操作",
                   "锁未解除时只使用本地辅助和离线状态命令；官方目标业务页恢复后由用户显式清除本地锁"
                 ]

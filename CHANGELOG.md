@@ -9,6 +9,12 @@
 - 队列行发送后被中断、转成 `verification-required` 时只改队列文件，不写 `state.json`；`--resume` 后扫描路径看不到这条结果未知的动作，会按 transcript 再发一次。现在队列行转 `verification-required` 时同步写入同一份会话在途标记，两条路径共享同一份状态（Issue #1515）。
 - 队列成功发送后先落 `executed` 再写 state checkpoint：checkpoint 写盘失败（磁盘满 / 控制锁）时队列行已推进、prior 丢失，下一轮扫描路径会再次发送。现在先持久化 state（prior 与在途标记）再推进队列行；state 未落盘时队列行保持 `executing`，下一轮按结果未知转 `verification-required`，不重发（Issue #1516）。
 - 扫描路径先把标记推进到 `verification-required` 再打开熔断：两步之间进程被杀或熔断落盘失败时，磁盘上只有标记没有 `stop.json`，后续周期把「已通知操作者」误当成成立并静默跳过。现在标记记录 `notified` 位，只在熔断成功落盘后置位；未通知的标记下一轮会重开熔断（旧版本写下的标记按已通知处理，保持兼容）（Issue #1517）。
+- 只读命令（`search` / `chat` 等）拿到无法识别的平台响应时沿用写操作的 `UNKNOWN` 契约：`recoverable=false`、`details.replay_safe=false`，恢复文案要求核对官方页面，Agent 因此拒绝本可安全执行的读取重试。现在按命令的读写属性归一：只读命令报 `NETWORK_ERROR` 并允许重试，写命令与未知命令保持不可重放（Issue #1519）。
+- `agent run` 在请求控制点观察到熔断时抛 `WORKFLOW_STOPPED`，错误信封带 wizard 的「创建新 workflow」文案与预算冷却提示。现在按 `CIRCUIT_BREAKER_OPEN` 上报，`next_actions` 给出带 `--data-dir` / `--role recruiter` 的 `agent stats`，真人指引指向核实后 `agent run --resume`（Issue #1520）。
+- wizard 的联系人缺少 `securityId` 分支返回 `recoverable=true`，`max_retries≥1` 时会自动重跑同一段确定性失败的查询；现在与命令层一致按不可自动重试上报，恢复指引要求先刷新沟通列表（Issue #1521）。
+- 风控信封把「不要通过 CDP 重试」这类真人说明放进了 `hints.next_actions`，而 TTY 只渲染 `operator_actions`，真人在终端反而看不到；现在 `next_actions` 只保留 `boss doctor` 等可执行命令，说明性条目移入 `operator_actions`（Issue #1522）。
+- MCP 只读工具白名单漏掉 `boss_chat_summary` / `boss_agent_stats` / `boss_agent_pending` / `boss_agent_review`，超时或取消被标成结果未知的写操作；现在这些纯读工具按可重试处理（Issue #1523）。
+- `recovery_action` 里的 `boss agent …` 示例命令经登记表改写后丢失 `--role recruiter`，与同信封 `next_actions` 不一致；现在 agent 命令统一保留当前角色（Issue #1524）。
 
 ## [3.4.81] - 2026-11-17
 

@@ -901,9 +901,9 @@ def _candidate_current_security_id(friend: Mapping[str, Any]) -> str:
 		return security_id
 	raise WorkflowActionError(
 		"NETWORK_ERROR",
-		"沟通列表返回的联系人缺少当前 securityId，已停止执行",
-		recoverable=True,
-		recovery_action="刷新沟通列表后重试",
+		"沟通列表返回的联系人缺少当前 securityId，已停止执行；按当前列表重试不会改变结果",
+		recoverable=False,
+		recovery_action="刷新沟通列表并取到联系人 security_id 后重新执行；不要自动重试同一列表结果",
 	)
 
 

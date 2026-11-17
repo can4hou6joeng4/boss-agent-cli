@@ -374,10 +374,13 @@ def test_greet_environment_risk_does_not_suggest_more_requests(
 	assert "停止自动化访问" in body["error"]["recovery_action"]
 	assert "clean --risk-lock" in body["error"]["recovery_action"]
 	assert "不要自动重发" in body["error"]["recovery_action"]
-	# 机器可读提示:只有解锁命令定位本次运行目录，其余条目不得包含任何继续请求平台的命令。
+	# 机器可读提示:next_actions 只留本地诊断 / 解锁命令，不得包含任何继续请求平台的命令。
 	next_actions = body["hints"]["next_actions"]
 	assert next_actions
-	assert all("boss " not in action or "clean --risk-lock" in action for action in next_actions)
+	assert all(
+		"boss " not in action or "clean --risk-lock" in action or action.endswith(" doctor")
+		for action in next_actions
+	)
 	assert "boss hr chat" not in json.dumps(body["hints"])
 	greeting_platform.start_chat.assert_called_once()
 	greeting_platform.friend_list.assert_not_called()
