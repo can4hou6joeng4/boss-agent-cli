@@ -9,6 +9,7 @@
 - CDP 登录成功但登录态落盘失败时被当成 CDP 失败并继续启动扫码链路，原始本地权限问题被扫码超时覆盖；现在保存动作不再参与降级判定，直接上抛 `LOCAL_IO_ERROR`，CDP 自身不可达时仍降级扫码（Issue #1480）。
 - wizard 在写请求发出后按 Ctrl-C 会用 `WORKFLOW_STOPPED` 覆盖已落盘的 `ACTION_UNCONFIRMED` 标记，checkpoint 丢掉 `replay_safe=false` 与该动作的核对命令，`--resume` 会重放结果未知的写操作；现在保留该标记并把步骤落成失败，标记损坏或 `replay_safe` 类型漂移时同样按结果未知处理（Issue #1478）。
 - `params.requested_steps` 为空数组的 workflow 断点在 `--resume` 后不执行任何步骤却报 `completed`；现在读取边界按 `CACHE_RECORD_INVALID` 拒绝并提示重新创建任务（Issue #1483）。
+- 风险锁文件写入改用统一的原子 JSON 写入（`backslashreplace`），`cdp_url` 含孤立代理字符时不再抛 `UnicodeEncodeError`；记录风控的路径同时按 `(OSError, UnicodeError)` fail-closed，原始 `PlatformRiskError` 不会被本地编码错误替换成可重试的 `NETWORK_ERROR`（Issue #1487）。
 
 ## [3.4.78] - 2026-11-17
 
