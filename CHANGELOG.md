@@ -2,6 +2,13 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 求职者 `greet` / `apply` 的去重是跨进程 check-then-act：两个进程同时通过 `is_greeted` / `is_applied` 检查后会各发一次真实请求；现在发送前按 `(账号, job_id, 动作)` 在 SQLite 里原子预约，抢不到时已成功回 `ALREADY_*`、发送中回不可重试的 `ACTION_UNCONFIRMED`，CLI `greet` / `apply` / `batch-greet` 与 wizard 的 candidate_greet / candidate_apply 共用同一收口，旧记录表继续参与去重（Issue #1508）。
+- `watch` 命中写入先 `SELECT` 再 `INSERT`，两个进程对同一个 watch 并发记录时第二个会撞主键抛 `IntegrityError` 并被误判为缓存库损坏；现在改为 `INSERT OR IGNORE` + `UPDATE`，新增 / 已见计数语义不变（Issue #1509）。
+- `shortlist_records`、`crawl_runs`、`crawl_jobs` 的旧库迁移没有事务，双进程首次打开会各自执行 `ALTER TABLE`，第二个拿到 `duplicate column name` 并被误判为库损坏；现在与去重键迁移一致，先 `BEGIN IMMEDIATE` 拿写锁再重读 `table_info`，真实迁移失败（类型不符、唯一索引冲突）仍原样上抛（Issue #1510）。
+
 ## [3.4.80] - 2026-11-17
 
 ### Fixed
