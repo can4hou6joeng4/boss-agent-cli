@@ -718,9 +718,9 @@ def _emit_control_busy_after_dispatch(
 ) -> NoReturn:
 	"""周期内控制锁冲突：平台动作可能已发出，禁止按「没有生效」重试（Issue #1267）。
 
-	动作派发后队列已写回 executed，但 checkpoint 撞锁没落盘。重新运行不会重发
-	已确认的行；但熔断状态可能落后，所以按 `LOCAL_STATE_WRITE_FAILED` 上报：
-	先核对官方页面，不自动重发。
+	动作已派发，但业务状态 / checkpoint 撞锁没落盘，队列行保持 executing。
+	重新运行会把该行按结果未知转成 verification-required，不会重发；但熔断状态
+	可能落后，所以按 `LOCAL_STATE_WRITE_FAILED` 上报：先核对官方页面，不自动重发。
 	"""
 	handle_error_output(
 		ctx,
