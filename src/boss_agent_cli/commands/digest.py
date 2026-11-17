@@ -12,7 +12,7 @@ from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.text_files import write_text_atomic
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.digest import build_digest, render_digest_markdown
-from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_output, handle_platform_error_output, json_forced, open_file_command, render_message_panel, render_simple_list
+from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output, json_forced, open_file_command, render_message_panel, render_simple_list
 from boss_agent_cli.pipeline_state import build_pipeline_items, now_ts_or_clock, select_follow_up_candidates
 
 
@@ -70,7 +70,7 @@ def _render_digest(data: dict[str, Any]) -> None:
 	"-o", "--output", "output_path",
 	type=click.Path(dir_okay=False, writable=True, path_type=Path),
 	default=None,
-	help="Markdown 输出路径（仅 --format md 时有效，未指定时写到 stdout；--json 时放进信封 data.content）",
+	help="Markdown 输出路径（仅 --format md 时有效，只给 -o 会返回 INVALID_PARAM；省略时 md 写到 stdout，--json 时放进信封 data.content）",
 )
 @click.pass_context
 @handle_auth_errors("digest")
@@ -78,6 +78,35 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 	"""汇总新增职位、待跟进会话与面试项的日报（JSON 或 Markdown）。"""
 	if not require_compliance_allowed(ctx, "digest"):
 		ctx.exit(1)
+
+	# 空 -o 经 click.Path 落成 Path(".")（`-o .` 已被 click 按目录拒绝）：
+	# md 分支的 `if output_path:` 会把它当「未提供」，静默回到 stdout（Issue #1546）。
+	if output_path is not None and str(output_path) == ".":
+		md_cmd = boss_command_for_ctx(ctx, "digest --format md -o <文件路径>", include_data_dir=True)
+		handle_error_output(
+			ctx,
+			"digest",
+			code="INVALID_PARAM",
+			message="-o / --output 不能为空；省略 -o 时 Markdown 写到 stdout（--json 下放进 data.content）",
+			recovery_action=f"给出完整文件路径后重试，例如 {md_cmd}",
+			hints={"next_actions": [md_cmd]},
+		)
+		ctx.exit(1)
+		return
+	# `-o` 只在 md 分支生效：默认 json 时路径被静默忽略却仍返回 ok:true，
+	# 调用方以为日报已经写出（Issue #1546）。在登录与平台请求之前拒绝。
+	if output_path is not None and output_format != "md":
+		md_cmd = boss_command_for_ctx(ctx, "digest --format md -o <文件路径>", include_data_dir=True)
+		handle_error_output(
+			ctx,
+			"digest",
+			code="INVALID_PARAM",
+			message="-o / --output 需要配合 --format md 使用；json 结果在信封 data 中",
+			recovery_action=f"要写 Markdown 日报请加 --format md，例如 {md_cmd}；只要 JSON 时省略 -o",
+			hints={"next_actions": [md_cmd]},
+		)
+		ctx.exit(1)
+		return
 
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

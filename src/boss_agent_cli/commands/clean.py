@@ -16,7 +16,7 @@ from rich.table import Table
 from boss_agent_cli import display
 from boss_agent_cli.api.cdp_risk_lock import lock_paths
 from boss_agent_cli.api.request_budget import budget_directory
-from boss_agent_cli.cache.store import CacheDatabaseInvalid
+from boss_agent_cli.cache.store import CacheDatabaseInvalid, is_cache_busy_error, is_cache_local_io_error
 from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, render_next_steps, shell_argument
 
 
@@ -48,8 +48,11 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 	# 库文件存在但读不动时，先在这里失败：main.py 会把 CacheDatabaseInvalid 转成
 	# CACHE_DATABASE_INVALID 信封。否则 --privacy 会先删掉登录态和简历，再在
 	# sqlite 里抛 traceback，用户既看不到信封，也不知道哪些文件已经删了。
+	# 只对 --privacy 预检：该命令同时是 `clean --risk-lock` 这个恢复入口，锁清理
+	# 不读缓存库，不能因为无关的坏库而清不掉锁（Issue #1548）。其余模式由
+	# _clean_search_cache 打开库时按同一口径报错。
 	db_path = data_dir / "cache" / "boss_agent.db"
-	if db_path.exists():
+	if privacy and db_path.exists():
 		_open_cache_db(db_path).close()
 
 	# 隐私清理的只读预检必须发生在任何删除之前：否则登录态先被删掉，随后
@@ -265,15 +268,21 @@ def _human_bytes(value: int) -> str:
 
 
 def _open_cache_db(db_path: Path) -> sqlite3.Connection:
-	"""打开缓存库，并把 sqlite3.DatabaseError 归一成 CacheDatabaseInvalid。
+	"""打开缓存库，并把内容损坏的 sqlite3.DatabaseError 归一成 CacheDatabaseInvalid。
 
 	clean 直接操作 SQLite，不经过 CacheStore 的启动校验；库文件损坏时若把
-	DatabaseError 抛给顶层，只会得到 traceback 而不是信封。
+	DatabaseError 抛给顶层，只会得到 traceback 而不是信封。锁冲突与本地 IO
+	错误不是内容损坏，原样上抛交给 main 分流成 CACHE_BUSY / LOCAL_IO_ERROR。
 	"""
 	try:
 		conn = sqlite3.connect(str(db_path))
 		conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchall()
 	except sqlite3.DatabaseError as exc:
+		# 锁冲突与只读 / 磁盘错误不是库内容损坏：等锁释放或修好磁盘即可，
+		# 指引用户删库会丢掉候选池、预设与采集断点（Issue #1547）。原样上抛，
+		# 由 main 的 sqlite 分支映射成可重试的 CACHE_BUSY / LOCAL_IO_ERROR。
+		if is_cache_busy_error(exc) or is_cache_local_io_error(exc):
+			raise
 		raise CacheDatabaseInvalid(db_path, str(exc)) from exc
 	return conn
 
@@ -317,6 +326,10 @@ def _clean_search_cache(data_dir: Path, *, dry_run: bool, clean_all: bool) -> tu
 			# 打开时正常、清理时才发现列漂移（旧库、迁移中断、同名表）：
 			# 与打开失败同口径报 CACHE_DATABASE_INVALID，不能让 clean 自己
 			# 变成 traceback——它正是缓存异常时的恢复入口（Issue #1139）。
+			# 但锁冲突 / 只读 / 磁盘错误不是内容损坏，原样上抛交给 main 分流，
+			# 不能引导用户删掉完好的本地库（Issue #1547）。
+			if is_cache_busy_error(exc) or is_cache_local_io_error(exc):
+				raise
 			raise CacheDatabaseInvalid(db_path, str(exc)) from exc
 	finally:
 		conn.close()

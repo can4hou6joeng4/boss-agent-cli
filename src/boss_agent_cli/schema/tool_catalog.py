@@ -469,9 +469,12 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"days_stale": {"type": "integer", "minimum": 0, "maximum": 36500, "description": "超过 N 天未推进视为待跟进", "default": 3},
 					"format": {"type": "string", "description": "输出格式", "enum": ["json", "md"], "default": "json"},
-					"output": {"type": "string", "description": "Markdown 输出路径（仅 format=md 时生效）"},
+					"output": {"type": "string", "description": "Markdown 输出路径（仅 format=md 时生效，只给 output 会返回 INVALID_PARAM）"},
 				},
 				"required": [],
+				# output 只在 md 分支生效：默认 json 下给出路径会被拒绝（Issue #1546）。
+				"if": {"required": ["output"]},
+				"then": {"required": ["format"], "properties": {"format": {"const": "md"}}},
 			},
 		),
 		ToolDefinition(
@@ -523,9 +526,12 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"days": {"type": "integer", "minimum": 0, "maximum": 36500, "description": "统计窗口天数", "default": 30},
 					"format": {"type": "string", "enum": ["json", "html"], "description": "输出格式；html 生成自包含报表", "default": "json"},
-					"output_file": {"type": "string", "description": "HTML 输出路径（仅 format=html 时生效）"},
+					"output_file": {"type": "string", "description": "HTML 输出路径（仅 format=html 时生效，只给 output_file 会返回 INVALID_PARAM）"},
 				},
 				"required": [],
+				# output_file 只在 html 分支生效：默认 json 下给出路径会被拒绝（Issue #1546）。
+				"if": {"required": ["output_file"]},
+				"then": {"required": ["format"], "properties": {"format": {"const": "html"}}},
 			},
 		),
 		ToolDefinition(

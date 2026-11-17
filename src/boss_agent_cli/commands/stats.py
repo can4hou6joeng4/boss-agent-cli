@@ -18,7 +18,14 @@ from rich.table import Table
 
 from boss_agent_cli import display
 from boss_agent_cli.cache.store import CacheDatabaseInvalid
-from boss_agent_cli.display import boss_command_for_ctx, handle_output, json_forced, open_file_command, render_action_result
+from boss_agent_cli.display import (
+	boss_command_for_ctx,
+	handle_error_output,
+	handle_output,
+	json_forced,
+	open_file_command,
+	render_action_result,
+)
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.text_files import write_text_atomic
 
@@ -369,11 +376,39 @@ def _percent(value: Any) -> str:
 	"-o", "--output", "output_path",
 	type=click.Path(dir_okay=False, writable=True, path_type=Path),
 	default=None,
-	help="HTML 输出路径（仅 --format html 时有效，未指定时写到 stdout；--json 时放进信封 data.content）",
+	help="HTML 输出路径（仅 --format html 时有效，只给 -o 会返回 INVALID_PARAM；省略时 html 写到 stdout，--json 时放进信封 data.content）",
 )
 @click.pass_context
 def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Path | None) -> None:
 	"""投递转化漏斗统计（只读聚合）"""
+	# 空 -o 经 click.Path 落成 Path(".")（`-o .` 已被 click 按目录拒绝），
+	# 继续走会把它当路径去建目录，报成 LOCAL_IO_ERROR（Issue #1546）。
+	if output_path is not None and str(output_path) == ".":
+		html_cmd = _hint_command(ctx, "stats --format html -o <文件路径>")
+		handle_error_output(
+			ctx,
+			"stats",
+			code="INVALID_PARAM",
+			message="-o / --output 不能为空；省略 -o 时 HTML 报表写到 stdout（--json 下放进 data.content）",
+			recovery_action=f"给出完整文件路径后重试，例如 {html_cmd}",
+			hints={"next_actions": [html_cmd]},
+		)
+		ctx.exit(1)
+		return
+	# `-o` 只在 html 分支生效：默认 json 时路径被静默忽略却仍返回 ok:true，
+	# 调用方以为报表已经写出（Issue #1546）。与 `chat -o` 无 --export 同口径。
+	if output_path is not None and output_format != "html":
+		html_cmd = _hint_command(ctx, "stats --format html -o <文件路径>")
+		handle_error_output(
+			ctx,
+			"stats",
+			code="INVALID_PARAM",
+			message="-o / --output 需要配合 --format html 使用；json 结果在信封 data 中",
+			recovery_action=f"要写 HTML 报表请加 --format html，例如 {html_cmd}；只要 JSON 时省略 -o",
+			hints={"next_actions": [html_cmd]},
+		)
+		ctx.exit(1)
+		return
 	data_dir: Path = ctx.obj["data_dir"]
 	db_path = data_dir / "cache" / "boss_agent.db"
 
