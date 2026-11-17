@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- wizard 在写请求发出后按 Ctrl-C 会用 `WORKFLOW_STOPPED` 覆盖已落盘的 `ACTION_UNCONFIRMED` 标记，checkpoint 丢掉 `replay_safe=false` 与该动作的核对命令，`--resume` 会重放结果未知的写操作；现在保留该标记并把步骤落成失败，标记损坏或 `replay_safe` 类型漂移时同样按结果未知处理（Issue #1478）。
+- `params.requested_steps` 为空数组的 workflow 断点在 `--resume` 后不执行任何步骤却报 `completed`；现在读取边界按 `CACHE_RECORD_INVALID` 拒绝并提示重新创建任务（Issue #1483）。
+
 ## [3.4.78] - 2026-11-17
 
 ### Fixed

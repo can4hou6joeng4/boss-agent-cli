@@ -3273,7 +3273,7 @@ def test_wizard_status_and_stop_after_stop_report_only_terminals(tmp_path):
 		platform="zhipin",
 		goal="shortlist",
 		inputs={},
-		requested_steps=(),
+		requested_steps=("local_shortlist",),
 		mode="headless",
 	)
 	with WorkflowStore(tmp_path) as store:
@@ -3414,7 +3414,7 @@ def test_wizard_stop_hints_quote_run_id_with_shell_metacharacters(tmp_path):
 		platform="zhipin",
 		goal="shortlist",
 		inputs={},
-		requested_steps=(),
+		requested_steps=("local_shortlist",),
 		mode="headless",
 	)
 	run_id = "wrn; echo pwn"
