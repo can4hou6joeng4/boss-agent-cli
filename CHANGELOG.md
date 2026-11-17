@@ -2,6 +2,11 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- 招聘者聊天动作读取 `friend_detail` 失败时丢弃平台码，401 / 9 / 37 全部退化成 `UNKNOWN` 并提示提交 issue；现在保留原响应交给平台 `parse_error`，分别映射 `AUTH_EXPIRED` / `RATE_LIMITED` / `TOKEN_REFRESH_FAILED`。`friend_detail` 成功但没有唯一匹配时返回不可重试的 `CONTACT_NOT_FOUND`，`hints.next_actions` 指向同一数据目录的 `hr chat`（Issue #1485）。
+
 ## [3.4.78] - 2026-11-17
 
 ### Fixed

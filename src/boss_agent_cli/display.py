@@ -125,6 +125,12 @@ def login_action_for_ctx(ctx: Any) -> str:
 	return boss_command_for_ctx(ctx, "login", include_data_dir=True)
 
 
+def contact_refresh_command_for_ctx(ctx: Any) -> str:
+	"""CONTACT_NOT_FOUND 的后继命令：招聘者刷新 hr chat，求职者刷新 chat。"""
+	command = "hr chat" if ctx and getattr(ctx, "obj", None) and ctx.obj.get("role") == "recruiter" else "chat"
+	return boss_command_for_ctx(ctx, command, include_data_dir=True)
+
+
 def auth_required_hints(ctx: Any) -> dict[str, list[str]]:
 	"""登录类错误附带的下一步：命令给 Agent 执行，说明给真人扫码。"""
 	login_action = login_action_for_ctx(ctx)
@@ -244,11 +250,19 @@ def platform_error_contract(
 	避免各命令手工拼装出互相矛盾的停止指令。有运行上下文的调用方传入 ``ctx``：
 	风险锁写在 ``<data_dir>/.cdp_risk_lock``，裸 ``boss clean --risk-lock`` 会去
 	默认目录解锁，自定义目录的锁原样保留且命令不报错（Issue #978）。
+
+	CONTACT_NOT_FOUND 是确定性结果：``next_actions`` 指向同一数据目录刷新沟通
+	列表（招聘者 ``hr chat`` / 求职者 ``chat``），不重放原命令（Issue #1485）。
 	"""
 	recoverable, recovery_action = error_contract_for_code(code)
 	if code in RISK_ERROR_CONTRACTS:
 		recovery_action, hints = risk_error_contract(code, ctx=ctx, clean_command=clean_command, doctor_command=doctor_command)
 		return recoverable, recovery_action, hints
+	if code == "CONTACT_NOT_FOUND":
+		# friend_id 写错或联系人已变化是确定性结果：给出去同一数据目录刷新沟通
+		# 列表的下一步，而不是让 Agent 重放同一条命令或让用户提 issue（#1485）。
+		chat_command = contact_refresh_command_for_ctx(ctx)
+		return recoverable, f"用 {chat_command} 核对联系人标识后重试", {"next_actions": [chat_command]}
 	if recovery_action:
 		# 登记表是通用示例；诊断类命令（doctor / crawl status / resume list）读的
 		# 是本次运行的数据目录（Issue #1092）。
