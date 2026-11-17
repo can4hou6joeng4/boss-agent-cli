@@ -365,11 +365,31 @@ def test_every_tool_generated_argv_parses_on_click_tree():
 
 
 # 部分操作类型会要求额外参数；校验枚举值时补上，避免把条件必填误报成取值非法。
-_CONDITIONAL_ARGS = {
-	("boss_wizard", "action"): {"run_id": "run-1"},
-	("boss_hr_jobs", "action"): {"job_id": "job-1"},
-	("boss_config", "action"): {"key": "platform", "value": "zhipin"},
+# action 的兼容参数随取值变化（Issue #1493）：`run_id` 只配 resume/status/stop，
+# `key`/`value` 只配 get/set/reset，`job_id`/`page` 只配对应的 hr jobs 子命令。
+_ACTION_ENUM_ARGS = {
+	("boss_wizard", "run"): {"goal": "search"},
+	("boss_wizard", "resume"): {"run_id": "run-1"},
+	("boss_wizard", "status"): {"run_id": "run-1"},
+	("boss_wizard", "stop"): {"run_id": "run-1"},
+	("boss_hr_jobs", "list"): {"page": 2},
+	("boss_hr_jobs", "online"): {"job_id": "job-1"},
+	("boss_hr_jobs", "offline"): {"job_id": "job-1"},
+	("boss_config", "list"): {},
+	("boss_config", "get"): {"key": "platform"},
+	("boss_config", "set"): {"key": "platform", "value": "zhipin"},
+	("boss_config", "reset"): {"key": "platform"},
 }
+
+
+def _enum_test_arguments(tool, name, value):
+	"""枚举取值对应的合法参数组合（action 取不同值时条件参数不同）。"""
+	conditional = _ACTION_ENUM_ARGS.get((tool.name, value), {}) if name == "action" else {}
+	return {
+		**_required_arguments(tool),
+		**conditional,
+		name: value,
+	}
 
 
 def test_every_tool_enum_value_parses_on_click_tree():
@@ -382,11 +402,7 @@ def test_every_tool_enum_value_parses_on_click_tree():
 		properties = tool.input_schema.get("properties", {})
 		for name, schema in properties.items():
 			for value in schema.get("enum") or ():
-				arguments = {
-					**_required_arguments(tool),
-					**_CONDITIONAL_ARGS.get((tool.name, name), {}),
-					name: value,
-				}
+				arguments = _enum_test_arguments(tool, name, value)
 				args = _build_args(tool.name, arguments)
 				command, command_name, remaining = _resolve_click_command(args)
 				try:

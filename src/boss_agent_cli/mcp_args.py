@@ -45,6 +45,84 @@ _EXPLICIT_EMPTY_KEYS: frozenset[tuple[str, str]] = frozenset(
 	}
 )
 
+#: action → 该 action 实际会下发的键（Issue #1493）。
+#: 矩阵之外的键若带非空值，`_build_args` 直接拒绝而不是静默丢弃：越界参数被
+#: 忽略后调用仍会成功，调用方会以为过滤、恢复或写入已经生效。
+#: 键集合以 CLI 为准：wizard 的 --timeout / --max-retries 对四种 action 都可用，
+#: config 的 key 对应 get/set/reset 三个子命令（没有 unset），hr jobs 的 page
+#: 只属于 list、job_id 只属于 online/offline。
+_WIZARD_ACTION_KEYS: dict[str, frozenset[str]] = {
+	"run": frozenset({"action", "role", "platform", "goal", "inputs", "requested_steps", "timeout", "max_retries"}),
+	"resume": frozenset({"action", "run_id", "timeout", "max_retries"}),
+	"status": frozenset({"action", "run_id", "timeout", "max_retries"}),
+	"stop": frozenset({"action", "run_id", "timeout", "max_retries"}),
+}
+_WIZARD_KEY_USAGE = {
+	"role": "仅用于 action=run",
+	"platform": "仅用于 action=run",
+	"goal": "仅用于 action=run",
+	"inputs": "仅用于 action=run",
+	"requested_steps": "仅用于 action=run",
+	"run_id": "仅用于 action=resume/status/stop",
+}
+_CONFIG_ACTION_KEYS: dict[str, frozenset[str]] = {
+	"list": frozenset({"action"}),
+	"get": frozenset({"action", "key"}),
+	"set": frozenset({"action", "key", "value"}),
+	"reset": frozenset({"action", "key"}),
+}
+_CONFIG_KEY_USAGE = {
+	"key": "仅用于 action=get/set/reset",
+	"value": "仅用于 action=set",
+}
+_HR_JOBS_ACTION_KEYS: dict[str, frozenset[str]] = {
+	"list": frozenset({"action", "page"}),
+	"online": frozenset({"action", "job_id"}),
+	"offline": frozenset({"action", "job_id"}),
+}
+_HR_JOBS_KEY_USAGE = {
+	"job_id": "仅用于 action=online/offline（这两个 action 必填）",
+	"page": "仅用于 action=list",
+}
+
+
+def _is_blank_action_value(value: Any) -> bool:
+	"""action 用不到的键只在值非空时才算越界（Issue #1493）。
+
+	显式 ``null`` 已在 `call_tool` 之前剥离；空串 / 空数组 / 空对象与「没传」
+	等价，不能因为 schema 里有这个字段就拒绝缺省形态。
+	"""
+	if value is None:
+		return True
+	if isinstance(value, (str, list, tuple, dict, set)):
+		return not value
+	return False
+
+
+def _reject_incompatible_action_args(
+	tool_name: str,
+	action: str,
+	arguments: dict[str, Any],
+	allowed: frozenset[str],
+	usage: dict[str, str],
+) -> None:
+	"""拒绝「值非空但该 action 用不到」的键，异常由 `call_tool` 转成 INVALID_PARAM。
+
+	错误消息点名参数、action 与正确用法，让 Agent 能自己改成合法组合。
+	"""
+	unused = [
+		key
+		for key, value in arguments.items()
+		if key not in allowed and not _is_blank_action_value(value)
+	]
+	if not unused:
+		return
+	details = "；".join(f"{key} {usage.get(key, '不适用于该 action')}" for key in unused)
+	raise ValueError(
+		f"{tool_name} 的 action={action} 与参数不兼容：{details}；"
+		"请去掉不适用于该 action 的参数，或改用支持它的 action"
+	)
+
 
 def _optional(
 	args: list[str],
@@ -84,9 +162,17 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		# 显式空串同样是非法取值（与 Issue #982 的枚举契约一致），只有缺省 /
 		# ``null`` 才落回 schema 默认的 run。
 		raw_action = arguments.get("action")
+		# schema 只说 run_id 是 resume/status/stop 的参数，没有承诺缺省 action 会
+		# 按 run_id 恢复；默认仍是 run，不能猜测调用方意图（Issue #1493）。
+		if raw_action is None and not _is_blank_action_value(arguments.get("run_id")):
+			raise ValueError(
+				"boss_wizard 收到 run_id 但缺少 action：run_id 仅用于 action=resume/status/stop，"
+				"缺省 action 是 run；请显式传入 action"
+			)
 		action = "run" if raw_action is None else str(raw_action)
-		if action not in {"run", "resume", "status", "stop"}:
+		if action not in _WIZARD_ACTION_KEYS:
 			raise ValueError(f"action 应为 run / resume / status / stop，收到 {action!r}")
+		_reject_incompatible_action_args("boss_wizard", action, arguments, _WIZARD_ACTION_KEYS[action], _WIZARD_KEY_USAGE)
 		if action in {"resume", "status", "stop"}:
 			run_id = str(arguments["run_id"])
 			args = ["wizard", f"--{action}", run_id]
@@ -308,6 +394,11 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		# 需要默认行为的工具（boss_hr_jobs / boss_wizard）在 schema 里声明
 		# 非 required + default，映射层才允许补默认值。
 		action = arguments["action"]
+		# 只有 list/get/set/reset 有矩阵；未识别的 action 原样交给 CLI 的
+		# "No such command" 拒绝，不在映射层猜测（Issue #1493）。
+		allowed_config = _CONFIG_ACTION_KEYS.get(action) if isinstance(action, str) else None
+		if allowed_config is not None:
+			_reject_incompatible_action_args("boss_config", action, arguments, allowed_config, _CONFIG_KEY_USAGE)
 		args = [name, action]
 		if action in ("get", "set", "reset") and "key" in arguments:
 			args.append(arguments["key"])
@@ -617,6 +708,10 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "hr_jobs":
 		action = arguments.get("action", "list")
+		# 缺省 action 与 schema 默认的 list 一致；未识别的 action 交给 CLI 拒绝。
+		allowed_jobs = _HR_JOBS_ACTION_KEYS.get(action) if isinstance(action, str) else None
+		if allowed_jobs is not None:
+			_reject_incompatible_action_args("boss_hr_jobs", action, arguments, allowed_jobs, _HR_JOBS_KEY_USAGE)
 		args = ["hr", "jobs", action]
 		if action in {"online", "offline"}:
 			args.append(str(arguments["job_id"]))

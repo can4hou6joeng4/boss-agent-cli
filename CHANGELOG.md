@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- MCP 的 `boss_wizard` / `boss_config` / `boss_hr_jobs` 按 action 分派时静默丢弃越界参数：`resume` 的新 `goal`、`config list` 的 `key`、`hr jobs online` 的 `page` 等被忽略后仍返回 `ok:true`，调用方以为过滤 / 恢复 / 写入已经生效；现在映射层按 action → 允许键矩阵返回 `INVALID_PARAM` 并提示正确用法，缺省 action 与显式默认 action 行为一致，`run_id` 必须显式搭配 `resume` / `status` / `stop`（Issue #1493）。
 - 静默刷新 stoken 成功但登录态落盘失败（权限 / 磁盘满）时，本地 `OSError` 被包装成可恢复的 `TokenRefreshFailed` 并提示重新登录；现在原样上抛，按不可重试的 `LOCAL_IO_ERROR` 上报（Issue #1479）。
 - CDP 登录成功但登录态落盘失败时被当成 CDP 失败并继续启动扫码链路，原始本地权限问题被扫码超时覆盖；现在保存动作不再参与降级判定，直接上抛 `LOCAL_IO_ERROR`，CDP 自身不可达时仍降级扫码（Issue #1480）。
 - wizard 在写请求发出后按 Ctrl-C 会用 `WORKFLOW_STOPPED` 覆盖已落盘的 `ACTION_UNCONFIRMED` 标记，checkpoint 丢掉 `replay_safe=false` 与该动作的核对命令，`--resume` 会重放结果未知的写操作；现在保留该标记并把步骤落成失败，标记损坏或 `replay_safe` 类型漂移时同样按结果未知处理（Issue #1478）。
