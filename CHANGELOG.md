@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.84] - 2026-11-17
 
 ### Fixed
 - wizard 的 crawl 恢复在读取断点与判断剩余工作之前就构造登录态、校验 crawl 运行时：已完成的任务或写错的 `run_id` 会先被要求登录 / 安装采集依赖，与 CLI `crawl resume` 的行为不一致；现在恢复路径把预检推迟到确认仍有剩余工作之后，新建任务仍在执行前立即预检（Issue #1540）。

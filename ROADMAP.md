@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.84（2026-11-17）：wizard 的 crawl 恢复改为惰性预检——已完成任务与写错的 `run_id` 不再先要求登录或安装采集依赖，与 CLI `crawl resume` 口径一致（Issue #1540）；`resume export` 的显式空 `-o` 返回 `INVALID_PARAM`、默认 html/pdf 输出名与存储层共用文件名清洗（Issue #1541 / #1542）；`BROWSER_KERNEL_MISSING` 与 `CRAWL_UNAVAILABLE` 不再进入 wizard 自动重试（Issue #1543）。
 - ✅ v3.4.83（2026-11-17）：配置损坏改用独立错误码 `CONFIG_INVALID` 并不在同一轮自动重试（Issue #1525）；工具契约与 native schema 对齐——MCP 工具补枚举取值域、条件必填、required 字符串 `minLength` 与 CLI 默认值，`ai cover-letter` / `resume-optimize` 同时传 `--jd` 与 `--job-id` 不再静默覆盖，`agent` 的 availability 说明适配器键语义，新增只读工具 `boss_schema`（Issue #1528–#1536）。
 - ✅ v3.4.82（2026-11-17）：招聘自动化的队列与扫描路径共享 `state.json` 在途标记，成功先落盘再推进队列，未通知的熔断标记下一轮重开（Issue #1514–#1517）；错误码契约审计——只读命令的未识别响应归一为可重试的 `NETWORK_ERROR`、`agent run` 熔断改报 `CIRCUIT_BREAKER_OPEN`、wizard 缺失联系人不再自动重试（Issue #1519–#1521）；风控 hint 按 Agent 命令与真人指引分通道输出，MCP 只读白名单补齐，agent 恢复命令保留角色（Issue #1522–#1524）。
 - ✅ v3.4.81（2026-11-17）：清理与体检的文件系统边界收紧——`clean` 跳过目录符号链接并在失败时带回部分结果、`doctor` 写探针改用独占临时文件（Issue #1497 #1498）；AI / 聊天 / 导出拒绝显式空值与不安全文件名，新增 `--clear-api-key`（Issue #1499–#1507）；SQLite 写入与旧库迁移并发安全，`watch` 命中写入幂等（Issue #1509 #1510）；求职者 greet/apply 发送前原子预约、automation 派发前落盘在途标记，未知结果不再重发（Issue #1508 #1511）。
