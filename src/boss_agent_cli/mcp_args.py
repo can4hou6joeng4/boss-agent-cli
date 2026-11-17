@@ -332,6 +332,14 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return _literal_positionals([name, str(arguments["number"])])
 
 	if name == "agent_run":
+		# 预览模式不能解除操作者停止闩锁：MCP 默认 dry_run=true，若这里直接
+		# 生成 `--dry-run --resume`，CLI 虽会拒绝，但 Agent 只看到一次无谓调用；
+		# 更危险的是将来 CLI 放宽该组合时预览就会静默解锁（Issue #1591）。
+		if arguments.get("resume", False) and arguments.get("dry_run", True):
+			raise ValueError(
+				"boss_agent_run 的 --dry-run 与 --resume 不能同时为真："
+				"恢复必须显式设置 dry_run=false 并真实执行一轮；仅预览时去掉 resume"
+			)
 		args = ["agent", "run"]
 		if arguments.get("dry_run", True):
 			args.append("--dry-run")

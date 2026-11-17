@@ -1298,7 +1298,7 @@ SCHEMA_DATA = {
 					"--resume": {
 						"type": "bool",
 						"default": False,
-						"description": "操作者确认官方验证完成后显式解除停止状态，保留已确认动作与断点；Agent 不应自行添加",
+						"description": "操作者确认官方验证完成后显式解除停止状态，保留已确认动作与断点；Agent 不应自行添加，不能与 --dry-run 同时使用",
 					},
 					"--dry-run": {
 						"type": "bool",

@@ -209,7 +209,7 @@ def test_stop_switch_blocks_preview_and_send(tmp_path: Path) -> None:
 		payload = _payload(result)
 		assert payload["error"]["code"] == "CIRCUIT_BREAKER_OPEN"
 		assert payload["error"]["recoverable"] is True
-		assert "agent run --dry-run --resume" in payload["error"]["recovery_action"]
+		assert "agent run --resume" in payload["error"]["recovery_action"]
 		assert "manual-stop" in payload["error"]["message"]
 		auth.assert_not_called()
 		factory.assert_not_called()

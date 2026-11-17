@@ -122,6 +122,22 @@ def _crawl_hint_command(ctx: click.Context, command: str) -> str:
 @handle_auth_errors("agent.run")
 def run_cmd(ctx: click.Context, dry_run: bool, limit: int | None, resume: bool) -> None:
 	"""运行一轮招聘自动化。"""
+	# --resume 会清除操作者停止标志与熔断闩锁；预览不得产生这种控制副作用。
+	# 拒绝要在构造 adapter / 取执行锁之前，避免 dry-run 误解锁后真实运行发动作（Issue #1591）。
+	if dry_run and resume:
+		handle_error_output(
+			ctx,
+			"agent.run",
+			code="INVALID_PARAM",
+			message="--dry-run 与 --resume 不能同时使用：预览不得解除停止标志或熔断",
+			recoverable=True,
+			recovery_action="仅预览时去掉 --resume；确认已完成官方验证并核对未确认动作后，由操作者单独执行 live 模式的 agent run --resume",
+			hints={
+				"next_actions": [_hint_command(ctx, "agent stats")],
+				"operator_actions": ["恢复必须如实执行一轮真实自动化，不能用预览代替"],
+			},
+		)
+		return
 	report = _run_agent(ctx, dry_run=dry_run, limit=limit, force_mode=None, command="agent.run", resume=resume)
 	handle_output(
 		ctx,
