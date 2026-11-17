@@ -83,6 +83,18 @@ def _interactive_error(
 	raise SystemExit(1)
 
 
+def _error_metadata(error: Mapping[str, Any]) -> tuple[bool, str | None]:
+	"""信封出口只接受已校验的布尔 / 字符串；任何漏网的漂移都按不可重试处理。
+
+	持久化记录在 WorkflowStore 读取边界已经 fail-closed（Issue #1592）；这里
+	再收一次类型，避免未来某条内存路径把 ``bool("false")`` 或数字恢复指引
+	直接写进信封。
+	"""
+	recoverable = error.get("recoverable")
+	recovery_action = error.get("recovery_action")
+	return recoverable is True, recovery_action if isinstance(recovery_action, str) else None
+
+
 def _wizard_error(
 	ctx: click.Context,
 	interactive: bool,
@@ -406,13 +418,14 @@ def _emit_run(ctx: click.Context, run: Mapping[str, Any], *, interactive: bool) 
 		if interactive:
 			render_run(run, command_for=_command_for_ctx(ctx))
 			return
+		recoverable, recovery_action = _error_metadata(error)
 		_wizard_error(
 			ctx,
 			interactive,
 			code=str(error.get("code") or "NETWORK_ERROR"),
 			message=str(error.get("message") or "任务执行失败"),
-			recoverable=bool(error.get("recoverable")),
-			recovery_action=error.get("recovery_action"),
+			recoverable=recoverable,
+			recovery_action=recovery_action,
 			details={"run": dict(run)},
 		)
 		return
@@ -946,13 +959,14 @@ def _run_wizard_command(
 		if interactive:
 			render_run(run, command_for=_command_for_ctx(ctx))
 			raise SystemExit(1)
+		recoverable, recovery_action = _error_metadata(error)
 		_wizard_error(
 			ctx,
 			interactive,
 			code=str(error.get("code") or "NETWORK_ERROR"),
 			message=str(error.get("message") or "任务执行失败"),
-			recoverable=bool(error.get("recoverable")),
-			recovery_action=error.get("recovery_action"),
+			recoverable=recoverable,
+			recovery_action=recovery_action,
 			details={"run": run},
 			hints=_busy_hints(ctx, error),
 		)
