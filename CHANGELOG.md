@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.88] - 2026-11-17
+
 ### Fixed
 - `boss shortlist compare --tag ""`（纯空白同理）被 `strip()` 后当成「没传」，返回 `ok:true` 却比较了全部候选职位；`boss shortlist annotate --add-tag ""` / `--remove-tag ""` 静默丢弃空标签，完全不给修改参数时也返回 `updated:true`。现在这些空参数与空操作都在读取缓存之前返回 `INVALID_PARAM`，`--note ""` 仍表示清空备注；MCP 的 `boss_shortlist_compare` 不再丢弃显式空 `tag`（Issue #1565）。
 - `boss schema` 中 `watch run` 的 `name` 仍写「省略时运行全部」，与「必须且只能选一个」的实现矛盾；`crawl configure/run/start` 的 `--chrome-path` / `--hook-dir` 未声明空串拒绝与 profile 配对，`agent crawl` 的 `--run-id` / `--query` 互斥与 `--city` 要求也未写入。现在这些说明与 `minLength` 约束和实现一致（Issue #1566）。
