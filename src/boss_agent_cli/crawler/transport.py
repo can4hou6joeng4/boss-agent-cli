@@ -220,12 +220,14 @@ class DrissionCrawlerSession:
 		try:
 			self._profile_path = self._profile_path.resolve()
 			self._profile_path.mkdir(parents=True, exist_ok=True)
-		except OSError as exc:
-			# 路径被同名文件占用或不可写：确定性本地失败。原样上抛会被 _run 兜成
-			# status=stopped + crawl resume，重跑永远复现（Issue #1290）。
+		except (OSError, ValueError) as exc:
+			# 路径被同名文件占用或不可写（OSError），或含 NUL 等控制字符
+			# （ValueError）：确定性本地失败。原样上抛会被 _run 兜成
+			# status=stopped + crawl resume，重跑永远复现（Issue #1290、#1482）。
 			raise CrawlProfilePathInvalid(
-				f"采集配置目录 {self._profile_path} 无法创建或不是目录（{exc}）；"
-				"请检查该路径是否被同名文件占用，或修复数据目录的写权限后重试"
+				f"采集配置目录 {self._profile_path!r} 无法创建或不是目录（{exc}）；"
+				"请检查该路径是否被同名文件占用、是否包含 NUL 等控制字符，"
+				"或修复数据目录的写权限后重试"
 			) from exc
 		port_busy = self._port_is_in_use(self._cdp_port)
 		if port_busy:

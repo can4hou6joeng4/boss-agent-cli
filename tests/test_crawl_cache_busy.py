@@ -19,6 +19,7 @@ from click.testing import CliRunner
 
 from boss_agent_cli.cache import store as cache_store
 from boss_agent_cli.cache.store import CacheBusyError, CacheStore, is_cache_busy_error
+from boss_agent_cli.crawler.service import CrawlBudget, CrawlService, CrawlSettings
 from boss_agent_cli.main import cli
 
 
@@ -136,3 +137,118 @@ def test_cache_busy_error_message_names_the_database(tmp_path):
 	exc = CacheBusyError(_db_path(tmp_path), "database is locked")
 	assert str(_db_path(tmp_path)) in str(exc)
 	assert "database is locked" in str(exc)
+
+
+# ── 执行期锁冲突不能被吞成 ok:true 的 stopped（Issue #1477） ─────────
+
+
+class _FakePages:
+	def open(self):
+		return []
+
+	def fetch_page(self, query, city_code, page_no):
+		return {"code": 0, "zpData": {"jobList": [], "hasMore": False}}
+
+	def close(self, *, quit_browser=True):
+		pass
+
+
+class _NoDelayBudget(CrawlBudget):
+	def wait(self, kind: str) -> None:
+		pass
+
+
+class _BusyOnRunningUpdate:
+	"""第一次 running 落库抛给定异常，终态（stopped）落库委托真实缓存。"""
+
+	def __init__(self, cache: CacheStore, exc: BaseException) -> None:
+		self._cache = cache
+		self._exc = exc
+		self._raised = False
+
+	def __getattr__(self, name: str) -> Any:
+		return getattr(self._cache, name)
+
+	def update_crawl_run(self, *args: Any, **kwargs: Any) -> None:
+		if not self._raised and kwargs.get("status") == "running":
+			self._raised = True
+			raise self._exc
+		return self._cache.update_crawl_run(*args, **kwargs)
+
+
+def _settings(tmp_path: Path) -> CrawlSettings:
+	return CrawlSettings(
+		query="AI",
+		city_code="101210100",
+		pages=1,
+		with_detail=False,
+		profile_path=tmp_path / "crawl" / "chrome-profile",
+		chrome_path=None,
+		cdp_port=9333,
+		hook_profile="none",
+		operating_mode="research",
+	)
+
+
+@pytest.mark.parametrize(
+	("exc_factory", "expected"),
+	[
+		# 缓存层归一后的形态。
+		(lambda: CacheBusyError(None, "database is locked"), CacheBusyError),
+		# 缓存层直接抛出的原始文本形态（is_cache_busy_error 识别的消息）。
+		(lambda: sqlite3.OperationalError("database is locked"), sqlite3.OperationalError),
+	],
+)
+def test_run_reraises_cache_lock_conflict_instead_of_reporting_stopped(tmp_path, exc_factory, expected):
+	"""锁冲突落在 `_run` 的执行体内时，入口必须拿到异常而不是 `status=stopped`。"""
+	cache = CacheStore(_db_path(tmp_path))
+	service = CrawlService(
+		_BusyOnRunningUpdate(cache, exc_factory()),
+		data_dir=tmp_path,
+		transport_factory=lambda settings: _FakePages(),
+		budget_factory=_NoDelayBudget,
+	)
+	run_id = service.create(_settings(tmp_path))
+
+	with cache:
+		with pytest.raises(expected, match="database is locked"):
+			service.resume(run_id)
+		run = cache.get_crawl_run(run_id)
+
+	# 断点已保存：调用方重试时可从同一状态继续，但本次不能报成功。
+	assert run["status"] == "stopped"
+	assert "database is locked" in run["error"]
+
+
+@pytest.mark.parametrize(
+	"busy_exc",
+	[
+		lambda: CacheBusyError(None, "database is locked"),
+		lambda: sqlite3.OperationalError("database is locked"),
+	],
+)
+def test_crawl_resume_maps_mid_run_cache_busy_to_cache_busy_envelope(tmp_path, monkeypatch, busy_exc):
+	"""执行期锁冲突的 CLI 出口是 CACHE_BUSY，不能是 ok:true 的 stopped。"""
+	with CacheStore(_db_path(tmp_path)) as cache:
+		cache.create_crawl_run(
+			"run-1", _settings(tmp_path).as_dict(), str(tmp_path / "crawl" / "run-1"), status="stopped"
+		)
+	real_update = CacheStore.update_crawl_run
+
+	def _busy_update(self, run_id, *, status, **kwargs):
+		if status == "running":
+			raise busy_exc()
+		return real_update(self, run_id, status=status, **kwargs)
+
+	monkeypatch.setattr(CacheStore, "update_crawl_run", _busy_update)
+	monkeypatch.setattr("boss_agent_cli.commands.crawl._crawl_preflight", lambda ctx: ({}, ""))
+	monkeypatch.setattr("boss_agent_cli.commands.crawl._transport_factory", lambda *args, **kwargs: _FakePages())
+
+	result = _invoke(tmp_path, "crawl", "resume", "run-1")
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "CACHE_BUSY"
+	assert payload["error"]["recoverable"] is True
+	assert "database is locked" in payload["error"]["message"]
