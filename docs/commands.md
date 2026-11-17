@@ -136,7 +136,7 @@ boss crawl stop <run_id>
 | `boss crawl start <query> --city <城市或代码> [...]` | 创建后台任务并立即返回 `run_id`；供本地任务调度使用 |
 | `boss crawl status <run_id>` / `boss crawl results <run_id>` | 仅读取 SQLite 中的页游标、风险状态、详情进度和已持久化职位；不打开浏览器 |
 | `boss crawl resume <run_id> [--pages N] [--with-detail] [--background]` | 从页游标、已见职位和待补详情队列恢复；`--background` 立即返回以便轮询；可提高正数页数上限并补全详情，不重复写入已完成项 |
-| `boss crawl stop <run_id>` | 请求运行中任务在下一个安全点停止并保留 checkpoint |
+| `boss crawl stop <run_id>` | 请求运行中任务在下一个安全点停止并保留 checkpoint；仅对 queued / running 生效，已结束的任务返回 `CRAWL_RUN_FINISHED` |
 | `boss crawl shortlist <run_id> (--all \| --selector <csel_...>)` | 将 crawl 结果导入原项目的本地候选池；不请求平台，保留内部职位关联和详情缓存供 `boss ai fit` 使用 |
 
 同一采集 `run_id` 同时只允许一个执行器。重叠的前台恢复返回 `CRAWL_BUSY`（`recoverable: true`，`--exit-codes sysexits` 下为 75），不发出请求、不修改断点或清除停止请求；`hints.next_actions` 只给原数据目录的 `crawl status <run_id>`，等当前执行结束后再恢复。新建采集、后台 worker 与向导采集步骤共用这项互斥；向导的失败信封与该失败任务的状态查询同样只建议查看内部采集状态。`--background` 对有待恢复工作的非排队任务先探测执行锁，再立即返回供轮询：仍被占用时返回 `running`，不另起 worker，也不清除停止请求；原 worker 已退出、锁已释放但记录仍为 `running` 时，会启动恢复并返回 `queued`。父进程在启动前释放探测锁，worker 重新取得执行权后才读取最新断点，保留已提交页面和累计预算。刚进入 `queued` 的任务继续等待原 worker；排队超过 30 秒仍未被接手（后台进程被强制终止等）时，同样先探测执行锁——仍被占用返回 `running`，空闲则重新启动 worker，此时 `crawl status` 的 `hints.next_actions` 也会给出 `crawl resume <run_id> --background`。`status` / `results` / `stop` 在执行期间照常可用；锁按 `run_id` 隔离，进程退出后由操作系统释放，不需手工删除锁文件。同一数据目录的采集共用一个 Chrome 配置目录（`crawl/chrome-profile`）：另一个 run 的采集 Chrome 仍在运行时，新 run 不会删除它的 `SingletonLock`，而是返回 `CRAWL_PROFILE_BUSY`（`recoverable: true`），不发出请求；只有锁里记录的进程已不存在时才按陈旧锁清理。无法准备执行锁时返回 `LOCAL_IO_ERROR`，不发出请求。Python API 的 `CrawlService.resume()` 在任务被占用时抛出 `CrawlBusyError`，可在当前执行结束后再次恢复。
@@ -177,7 +177,7 @@ boss crawl stop <run_id>
 | `boss chat` | 查看沟通列表，支持分页和来源筛选 |
 | `boss chatmsg <uid-or-sid> [--raw]` | 查看聊天历史；优先使用 `boss chat` 输出的稳定 `uid`，`--raw` 保留结构化 body、链接和职位卡片字段 |
 | `boss chat-summary <uid-or-sid>` | 基于聊天历史生成结构化摘要；优先使用稳定 `uid` |
-| `boss mark <uid-or-sid> --label X` | 添加或移除联系人标签；优先使用稳定 `uid` |
+| `boss mark <uid-or-sid> --label X` | 添加或移除联系人标签；优先使用稳定 `uid`；标签名或对应数字 ID（1/2/3/4/5/6/7/8/11），其他数字会被拒绝 |
 | `boss interviews` | 面试邀请 |
 | `boss history` | 浏览历史 |
 
@@ -383,7 +383,7 @@ HTTP `429` 或业务 code `9` 会保存共享冷却，支持 `Retry-After` 的�
 
 计量覆盖接入预算的 HTTP dispatch、浏览器 fetch / 首页导航 / 招聘者前端动作、附件下载，以及 crawl 的导航、分页动作、页面 fetch 和 CDP fallback；不同尝试分别计数。这是主动操作预算：一个页面动作可能产生多条网站请求，浏览器自主资源、轮询、自动重定向和认证启动内部请求未逐包计量，也不会按公网 IP 自动发现或合并其他进程。该机制限制本地负载，不保证平台接受访问，也不解除平台封禁。
 
-`--delay`、`request_delay` 和 `batch_greet_delay` 必须是有限数值且满足 `0 <= 下限 <= 上限`；非法预算配置返回 `INVALID_PARAM`，不会写入配置文件。已有非法配置仍可通过 `config set/reset` 修复。
+`--delay`、`request_delay` 和 `batch_greet_delay` 必须是有限数值且满足 `0 <= 下限 <= 上限`；非法预算配置返回 `INVALID_PARAM`，不会写入配置文件。已有非法配置仍可通过 `config set/reset` 修复。显式 `--delay ""` / `--cdp-url ""` 同样按参数错误拒绝，不会回落到配置文件；只有省略选项时才使用已保存的值。
 
 ## 搜索筛选参数详解
 

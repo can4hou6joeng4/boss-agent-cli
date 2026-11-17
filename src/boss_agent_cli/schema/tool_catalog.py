@@ -348,7 +348,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 							"牛人发起",
 							"收藏",
 						],
-						"description": "标签名称或数字 ID",
+						"description": "标签名称，或与之一一对应的数字 ID（1/2/3/4/5/6/7/8/11）；其他数字会被拒绝",
 					},
 					"remove": {"type": "boolean", "description": "是否移除标签", "default": False},
 				},
@@ -750,8 +750,13 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"job_id": {"type": "string", "description": "从缓存读取职位描述的 job_id（与 jd_text 二选一）"},
 				},
 				"required": ["resume"],
-				# 两个 JD 来源互斥：同时给出时 CLI 返回 INVALID_PARAM（Issue #1529）。
+				# 两个 JD 来源互斥且至少给一个：同时给出或都不给时 CLI 返回
+				# INVALID_PARAM（Issue #1529、#1576）。
 				"not": {"required": ["jd_text", "job_id"]},
+				"anyOf": [
+					{"required": ["jd_text"]},
+					{"required": ["job_id"]},
+				],
 			},
 		),
 		ToolDefinition(
@@ -772,8 +777,13 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"lang": {"type": "string", "description": "输出语言（zh 中文 / en 英文）", "enum": ["zh", "en"], "default": "zh"},
 				},
 				"required": ["resume"],
-				# 两个 JD 来源互斥：同时给出时 CLI 返回 INVALID_PARAM（Issue #1529）。
+				# 两个 JD 来源互斥且至少给一个：同时给出或都不给时 CLI 返回
+				# INVALID_PARAM（Issue #1529、#1576）。
 				"not": {"required": ["jd_text", "job_id"]},
+				"anyOf": [
+					{"required": ["jd_text"]},
+					{"required": ["job_id"]},
+				],
 			},
 		),
 		ToolDefinition(

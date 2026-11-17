@@ -1059,7 +1059,9 @@ def cli(
 	except (ValueError, TypeError) as exc:
 		raise click.BadParameter(str(exc), param_hint="config.json") from exc
 
-	if delay:
+	# 显式空串与未提供不同（Issue #1578）：真值回退会把 `--delay ""` 换成
+	# 配置文件里的区间，用户以为显式值已生效。空串交给下面的区间解析拒绝。
+	if delay is not None:
 		try:
 			low, high = delay.split("-", 1)
 			ctx.obj["delay"] = (float(low), float(high))
@@ -1110,7 +1112,8 @@ def cli(
 	# `boss config reset <键>` 也会被同一个坏值挡住，用户只能手改文件。
 	repair_mode = ctx.invoked_subcommand == "config"
 
-	resolved_cdp_url = cdp_url or cfg.get("cdp_url")
+	# 显式空串同样按「显式值」处理（Issue #1578）：不能回落到配置里的调试地址。
+	resolved_cdp_url = cdp_url if cdp_url is not None else cfg.get("cdp_url")
 	# 与 browser_source 同理：config.json 被手改成数字后，doctor 等命令会在 shlex.quote
 	# 上抛 TypeError traceback，启动期就要按参数错误挡住。
 	if resolved_cdp_url is not None and not isinstance(resolved_cdp_url, str):

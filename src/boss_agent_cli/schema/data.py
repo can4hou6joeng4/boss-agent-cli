@@ -482,7 +482,7 @@ SCHEMA_DATA = {
 				"--label": {
 					"type": "string",
 					"required": True,
-					"description": "标签名称或数字 ID（见 boss schema 的 enum；数字 ID 与标签名一一对应）",
+					"description": "标签名称或与之一一对应的数字 ID（1/2/3/4/5/6/7/8/11）；其他数字会被拒绝（见 boss schema 的 enum）",
 					"enum": ["新招呼", "沟通中", "已约面", "已获取简历", "已交换电话", "已交换微信", "不合适", "牛人发起", "收藏"],
 				},
 				"--remove": {"type": "boolean", "default": False, "description": "移除标签（默认为添加）"},
@@ -701,7 +701,7 @@ SCHEMA_DATA = {
 					],
 				},
 				"stop": {
-				"description": "请求运行中的 crawl 在下一安全点停止并保留 checkpoint。",
+				"description": "请求 queued / running 的 crawl 在下一安全点停止并保留 checkpoint；已结束的任务返回 CRAWL_RUN_FINISHED，不会报 stop_requested。",
 					"args": [
 						{"name": "run_id", "required": True, "description": "要停止的 crawl run 标识"},
 					],
@@ -756,17 +756,26 @@ SCHEMA_DATA = {
 							"selectors": {
 								"type": "array",
 								"items": {"type": "string"},
-								"description": "要导入的职位 selector 列表，取自 boss_crawl_results 的返回；与 all 二选一",
+								"minItems": 1,
+								"description": "要导入的职位 selector 列表，取自 boss_crawl_results 的返回；与 all 必须且只能选一个",
 							},
 							"all": {
 								"type": "boolean",
 								"default": False,
-								"description": "导入该 run 的全部可关联职位；与 selectors 二选一",
+								"description": "导入该 run 的全部可关联职位；与 selectors 必须且只能选一个",
 							},
 							"tags": {"type": "string", "description": "写入候选池的本地标签，逗号分隔"},
 							"note": {"type": "string", "description": "写入候选池的本地备注"},
 						},
 						"required": ["run_id"],
+						# CLI 用 include_all == bool(selectors) 拒绝缺省和同时给出
+						# （Issue #1577）；schema 必须编码同一约束，否则「schema 合法
+						# 但命令必失败」。
+						"anyOf": [
+							{"required": ["selectors"]},
+							{"properties": {"all": {"const": True}}, "required": ["all"]},
+						],
+						"not": {"required": ["selectors", "all"]},
 					},
 				},
 			],
@@ -1237,16 +1246,16 @@ SCHEMA_DATA = {
 					"args": [
 						{"name": "resume_name", "required": True, "description": "要优化的本地简历名称"},
 					],
-					"--jd": {"type": "string", "default": None, "description": "目标职位描述文本或 @文件路径"},
-					"--job-id": {"type": "string", "default": None, "description": "从缓存读取职位描述的 job_id"},
+					"--jd": {"type": "string", "default": None, "description": "目标职位描述文本或 @文件路径；与 --job-id 必须且只能给一个"},
+					"--job-id": {"type": "string", "default": None, "description": "从缓存读取职位描述的 job_id；与 --jd 必须且只能给一个"},
 				},
 				"cover-letter": {
 				"description": "基于本地简历与目标岗位起草求职信/自我介绍（仅草稿，不发送）。",
 					"args": [
 						{"name": "resume_name", "required": True, "description": "本地简历名称"},
 					],
-					"--jd": {"type": "string", "default": None, "description": "目标职位描述文本或 @文件路径"},
-					"--job-id": {"type": "string", "default": None, "description": "从缓存读取职位描述的 job_id"},
+					"--jd": {"type": "string", "default": None, "description": "目标职位描述文本或 @文件路径；与 --job-id 必须且只能给一个"},
+					"--job-id": {"type": "string", "default": None, "description": "从缓存读取职位描述的 job_id；与 --jd 必须且只能给一个"},
 					"--tone": {
 						"type": "string",
 						"default": "简洁专业",

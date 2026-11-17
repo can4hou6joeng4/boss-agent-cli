@@ -156,6 +156,7 @@ _REGISTRY_COMMANDS: dict[str, str] = {
 	"boss clean --risk-lock": "clean --risk-lock",
 	"boss config reset": "config reset",
 	"boss crawl configure": "crawl configure",
+	"boss crawl results": "crawl results",
 	"boss crawl resume": "crawl resume",
 	"boss crawl start": "crawl start",
 	"boss crawl status": "crawl status",

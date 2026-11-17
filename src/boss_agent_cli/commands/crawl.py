@@ -1253,10 +1253,31 @@ def stop_cmd(ctx: click.Context, run_id: str) -> None:
 	"""请求运行中的 crawl 在下一安全点停止并保留 checkpoint。"""
 	if not _require_run_id(ctx, "crawl.stop", run_id):
 		return
-	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
-		if not cache.request_crawl_stop(run_id):
-			handle_error_output(ctx, "crawl.stop", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))
-			return
+	try:
+		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
+			run = cache.get_crawl_run(run_id)
+			if run is None:
+				handle_error_output(ctx, "crawl.stop", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))
+				return
+			# 终态 run 上停止请求不会生效（Issue #1574）：继续报 stop_requested 会让
+			# 调用方以为任务已被叫停。只有 queued / running 接受停止请求。
+			status = run["status"]
+			if status not in ("queued", "running"):
+				status_command = boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True)
+				results_command = boss_command_for_ctx(ctx, f"crawl results {shell_argument(run_id)}", include_data_dir=True)
+				handle_error_output(
+					ctx,
+					"crawl.stop",
+					code="CRAWL_RUN_FINISHED",
+					message=f"crawl 任务已结束（{status}），停止请求没有生效",
+					recovery_action=f"用 {status_command} 查看最终状态，或 {results_command} 读取已采集结果；需要重新采集时新建 crawl 任务",
+					hints={"next_actions": [status_command, results_command]},
+				)
+				return
+			cache.request_crawl_stop(run_id)
+	except CacheRecordInvalid as exc:
+		_report_corrupt_run(ctx, "crawl.stop", run_id, exc)
+		return
 	status_command = boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True)
 	handle_output(
 		ctx,

@@ -354,6 +354,7 @@ httpx 带着从 Chrome 拷出来的 Cookie，把 `__zp_stoken__` 当查询参数
 | `CRAWL_BUSY` | 同一采集任务正由另一次调用执行；本次调用未发出请求，也未修改采集断点 | 用返回的同一数据目录的 `boss crawl status <run_id>` 查看进度，等当前执行结束后再恢复；不要并发恢复同一任务；`status` / `results` / `stop` 仍可用 |
 | `CRAWL_PROFILE_BUSY` | 同一数据目录的采集配置目录正被另一个运行中的采集 Chrome 使用（`SingletonLock` 里的 pid 仍存活）；本次调用未发出请求，也没有删除锁文件 | 用 `boss crawl status <run_id>` 查看正在运行的采集，等它结束后再启动或恢复；不要并发使用同一数据目录的采集浏览器，也不要删除 `SingletonLock` |
 | `CRAWL_RUN_NOT_FOUND` | 本地采集任务不存在或 `run_id` 有误（`boss crawl status` / `resume` / `results` 等） | 执行 `boss crawl start <query>` 新建任务，或用真实 `run_id` 执行 `boss crawl status <run_id>` 核对 |
+| `CRAWL_RUN_FINISHED` | 对已结束（completed / failed / stopped / risk_stopped）的采集任务请求停止；本次没有修改任务状态 | 用 `boss crawl status <run_id>` 查看最终状态、`boss crawl results <run_id>` 读取已采集结果；需要重新采集时新建任务 |
 | `CONTACT_NOT_FOUND` | 沟通列表里没有这个联系人：`security_id` 可能已轮换，或对方已不在列表 | 先 `boss chat` 查看会话；已知 uid 时改用 uid 重试 |
 | `SAVED_SEARCH_NOT_FOUND` | 本地预设或 watch 不存在：`boss search --preset` / `boss watch run` 引用了没保存过的名字 | `boss preset list` / `boss watch list` 查看已有条目，需要时用 `boss preset add` / `boss watch add` 重建 |
 | `SHORTLIST_ENTRY_NOT_FOUND` | 候选池里没有这个职位（`security_id` / `job_id` 组合），`boss shortlist annotate` 没有可标注的记录 | 先 `boss shortlist add <security_id> <job_id>` 加入候选池，或 `boss shortlist list` 核对已有条目 |

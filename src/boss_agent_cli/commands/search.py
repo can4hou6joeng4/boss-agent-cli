@@ -365,19 +365,19 @@ def search_cmd(
 			return
 		params = record["params"]
 		# 显式参数优先，preset 只补未提供的项（schema 的 --preset 描述）：
-		# 关键词也必须是 `query or ...`，否则 `search Python --preset golang`
-		# 会被预设改写成 golang，而其他筛选条件仍保留显式值（Issue #1569）。
-		query = query or params.get("query")
-		city = city or params.get("city")
-		salary = salary or params.get("salary")
-		experience = experience or params.get("experience")
-		education = education or params.get("education")
-		industry = industry or params.get("industry")
-		scale = scale or params.get("scale")
-		stage = stage or params.get("stage")
-		job_type = job_type or params.get("job_type")
-		welfare = welfare or params.get("welfare")
-		active = active or params.get("active")
+		# 这里必须用 `is not None` 而不是真值判断——显式空串（如 `--city ""`）
+		# 表示「该项不筛选」，不能被预设值反向覆盖（Issue #1569、#1573）。
+		query = query if query is not None else params.get("query")
+		city = city if city is not None else params.get("city")
+		salary = salary if salary is not None else params.get("salary")
+		experience = experience if experience is not None else params.get("experience")
+		education = education if education is not None else params.get("education")
+		industry = industry if industry is not None else params.get("industry")
+		scale = scale if scale is not None else params.get("scale")
+		stage = stage if stage is not None else params.get("stage")
+		job_type = job_type if job_type is not None else params.get("job_type")
+		welfare = welfare if welfare is not None else params.get("welfare")
+		active = active if active is not None else params.get("active")
 
 	if search_url:
 		try:

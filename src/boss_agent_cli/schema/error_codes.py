@@ -307,6 +307,11 @@ ERROR_CODES: dict[str, dict[str, Any]] = {
 		"recoverable": True,
 		"recovery_action": "处理浏览器验证后执行 boss crawl resume <run_id>",
 	},
+	"CRAWL_RUN_FINISHED": {
+		"message": "crawl 任务已结束，停止请求没有生效",
+		"recoverable": False,
+		"recovery_action": "用 boss crawl status <run_id> 查看最终状态，或 boss crawl results <run_id> 读取已采集结果；需要重新采集时新建 crawl 任务",
+	},
 	"INVALID_PARAM": {
 		"message": "参数校验失败",
 		"recoverable": False,
