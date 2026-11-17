@@ -524,20 +524,33 @@ def crawl_cmd(
 
 
 @agent_group.command("train")
-@click.option(
-	"--dry-run/--live",
-	"dry_run",
-	default=True,
-	help="训练模式默认只演练；传 --live 执行满足阈值的动作",
-)
+@click.option("--dry-run", is_flag=True, default=False, help="只演练不执行；不传 --live 时的默认行为")
+@click.option("--live", is_flag=True, default=False, help="执行满足阈值的动作；只有操作者明确授权时才可用")
 @click.option("--limit", default=None, type=click.IntRange(min=1), help="本轮最多处理多少个会话")
 @click.pass_context
 @handle_auth_errors("agent.train")
-def train_cmd(ctx: click.Context, dry_run: bool, limit: int | None) -> None:
+def train_cmd(ctx: click.Context, dry_run: bool, live: bool, limit: int | None) -> None:
 	"""运行训练校准模式：默认演练，--live 直接执行满足阈值的动作。"""
+	# 配对布尔标志 `--dry-run/--live` 在 Click 里不互斥，同时给出时最后一个生效：
+	# `--dry-run --live` 会真实执行，而 schema 声称两者互斥（Issue #1568）。
+	# 真实的写操作不能依赖 argv 顺序，必须在任何登录检查与 automation 周期之前拒绝。
+	if dry_run and live:
+		train_cmd_hint = _hint_command(ctx, "agent train")
+		handle_error_output(
+			ctx,
+			"agent.train",
+			code="INVALID_PARAM",
+			message="--dry-run 与 --live 只能选一个：同时给出时无法判断是否真实执行",
+			recovery_action="去掉其中一个后重试；不传 --live 就是默认演练",
+			hints={
+				"next_actions": [train_cmd_hint],
+				"operator_actions": ["确需真实执行时，由操作者确认后单独使用 --live，不要与 --dry-run 同时给出"],
+			},
+		)
+		return
 	report = _run_agent(
 		ctx,
-		dry_run=dry_run,
+		dry_run=not live,
 		limit=limit,
 		force_mode=AutomationMode.TRAINING,
 		command="agent.train",

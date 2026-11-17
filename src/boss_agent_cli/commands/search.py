@@ -364,7 +364,10 @@ def search_cmd(
 			)
 			return
 		params = record["params"]
-		query = params.get("query") or query
+		# 显式参数优先，preset 只补未提供的项（schema 的 --preset 描述）：
+		# 关键词也必须是 `query or ...`，否则 `search Python --preset golang`
+		# 会被预设改写成 golang，而其他筛选条件仍保留显式值（Issue #1569）。
+		query = query or params.get("query")
 		city = city or params.get("city")
 		salary = salary or params.get("salary")
 		experience = experience or params.get("experience")

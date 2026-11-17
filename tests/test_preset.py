@@ -419,3 +419,49 @@ def test_preset_add_hint_finds_preset_in_same_data_dir(
 	criteria = mock_pipeline.call_args.kwargs["criteria"]
 	assert criteria.query == "golang"
 	assert criteria.city == "广州"
+
+
+@patch("boss_agent_cli.index_cache.save_index")
+@patch("boss_agent_cli.commands.search.account_scope", return_value="acct")
+@patch("boss_agent_cli.commands.search.run_search_pipeline")
+@patch("boss_agent_cli.commands.search.get_platform_instance")
+@patch("boss_agent_cli.commands.search.AuthManager")
+def test_search_explicit_query_overrides_preset_query(
+	mock_auth_cls, mock_client_cls, mock_pipeline, mock_scope, mock_save_index, tmp_path,
+):
+	"""显式位置参数优先：预设只补未提供的筛选条件（Issue #1569）。"""
+	_ctx_mock(mock_client_cls)
+	mock_pipeline.return_value = SimpleNamespace(
+		items=[],
+		has_more=False,
+		has_more_reported=False,
+		total=0,
+		stats=SimpleNamespace(pages_scanned=1, jobs_seen=0, jobs_prefiltered=0, detail_checks=0),
+	)
+
+	runner = CliRunner()
+	added = runner.invoke(
+		cli,
+		[
+			"--data-dir", str(tmp_path),
+			"--json",
+			"preset", "add", "golang-gz", "golang",
+			"--city", "广州",
+			"--salary", "20-50K",
+		],
+	)
+	assert added.exit_code == 0, added.output
+
+	result = runner.invoke(
+		cli,
+		[
+			"--data-dir", str(tmp_path),
+			"--json",
+			"search", "python", "--preset", "golang-gz",
+		],
+	)
+	assert result.exit_code == 0, result.output
+	criteria = mock_pipeline.call_args.kwargs["criteria"]
+	assert criteria.query == "python"
+	assert criteria.city == "广州"
+	assert criteria.salary == "20-50K"

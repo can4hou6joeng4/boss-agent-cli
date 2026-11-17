@@ -7,6 +7,9 @@
 ### Fixed
 - `boss shortlist compare --tag ""`（纯空白同理）被 `strip()` 后当成「没传」，返回 `ok:true` 却比较了全部候选职位；`boss shortlist annotate --add-tag ""` / `--remove-tag ""` 静默丢弃空标签，完全不给修改参数时也返回 `updated:true`。现在这些空参数与空操作都在读取缓存之前返回 `INVALID_PARAM`，`--note ""` 仍表示清空备注；MCP 的 `boss_shortlist_compare` 不再丢弃显式空 `tag`（Issue #1565）。
 - `boss schema` 中 `watch run` 的 `name` 仍写「省略时运行全部」，与「必须且只能选一个」的实现矛盾；`crawl configure/run/start` 的 `--chrome-path` / `--hook-dir` 未声明空串拒绝与 profile 配对，`agent crawl` 的 `--run-id` / `--query` 互斥与 `--city` 要求也未写入。现在这些说明与 `minLength` 约束和实现一致（Issue #1566）。
+- `boss agent train` 的 `--dry-run` / `--live` 是 Click 配对布尔标志，同时给出时按最后一个生效：`--dry-run --live` 会真实执行，而 schema 声称二者互斥。现在改为两个独立标志，同时给出时在登录检查与 automation 周期之前返回 `INVALID_PARAM`（Issue #1568）。
+- `boss search <关键词> --preset <名称>` 中预设保存的关键词会覆盖显式位置参数，与其他筛选条件「显式优先」的方向相反；现在显式关键词优先，预设只补未提供的项（Issue #1569）。
+- `boss schema` 的 `clean --privacy` 漏列 crawl 任务与导出、`export -o` 未区分 HTML 直出、`search --welfare` 声称无上限翻页、`hr resume` 的 `geek_id` / `--job-id` / `--security-id` 必填关系、`resume init` 声称可从平台简历初始化、`crawl configure` 声称支持 Hook 配置，均已按实现修正（Issue #1570）。
 
 ## [3.4.87] - 2026-11-17
 
