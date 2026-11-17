@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.81] - 2026-11-17
 
 ### Fixed
 - `clean` 的 `_clean_dir` / `_clean_path` 跟随目录符号链接：`chat-history` / `chat-export` 指向数据目录外时，按 mtime 清理会删掉链接目标里的文件；`--privacy` 先删除登录态、再在目录链接上抛错，留下半完成状态且错误信封 `data=null`。现在 `_clean_dir` 的目录参数、`_clean_path` 的目录链接或目标祖先目录是符号链接时一律跳过，并在结果中用 `skipped_symlinks` 与 `warning` 说明（文件链接仍只删除链接本身，不碰目标）；隐私清理在删除前先做只读预检，失败时错误信封的 `data` 带回已完成 / 失败 / 未处理项（Issue #1497）。
