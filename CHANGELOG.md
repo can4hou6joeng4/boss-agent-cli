@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.77] - 2026-11-17
 
 ### Fixed
 - 扫码登录在最终读取时不再校验主 cookie：页面跳转后读取为空也会报登录成功并覆盖本地登录态；现在空结果直接失败，凭证不落盘（Issue #1454）。
@@ -12,6 +12,10 @@
 - 只读请求导航恢复超时时返回裸 `code=-1` 并被判为 `UNKNOWN` + 「勿重试」；读取没有副作用，现在返回可重试的 `NETWORK_ERROR`（Issue #1458）。
 - `agent run --dry-run` 命中安全提示时会把熔断写进 `stop.json`，一次无害预览冻结后续真实运行；现在预览不落闩锁、不改写待执行队列，报告仍显示 `CIRCUIT_BREAKER_OPEN`（Issue #1459）。
 - `crawl resume` 读到损坏的 Hook 目录被报成 `INVALID_PARAM` 并提示无法修复的 `crawl configure`；现在按不可重试的 `LOCAL_IO_ERROR` 收口，指向修复 7 个脚本与 `SHA256SUMS` 或用新 `--hook-dir` 重建任务（Issue #1460）。
+
+### Changed
+- `evals/run_eval.py --mode fixture` 不再要求独立终端：该模式纯本地评分，不启动子进程、不访问平台、不需要 TTY，可直接在 Agent 会话内运行；只有 `--mode external` 启动外部 runner 时仍需独立终端。同步修正 CONTRIBUTING、评测 README 与维护者文档。
+- 发布节奏改为批量：修复累积到 `[Unreleased]` 后按批次发布，不再每个 PR 合并即发一个补丁；补丁号不设上限。`docs/maintainer/release-checklist.md` 新增发布节奏一节。
 
 ## [3.4.76] - 2026-11-17
 
