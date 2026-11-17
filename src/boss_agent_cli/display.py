@@ -49,6 +49,21 @@ def escape_markup(value: Any) -> str:
 _SHELL_METACHARACTERS = frozenset("'\"`$\\!*?[]{}()<>|&;#")
 
 
+def open_file_command(path: str) -> str:
+	"""返回按当前平台打开本地文件的命令（Issue #1441）。
+
+	``hints.next_actions`` 是给 Agent 直接执行的通道；``open`` 只在 macOS 存在，
+	Windows / Linux 上会 command not found。Windows 用 ``cmd /c start``（cmd 与
+	PowerShell 都能调用），其余 Unix 用 ``xdg-open``。
+	"""
+	quoted = shell_argument(path)
+	if sys.platform == "darwin":
+		return f"open {quoted}"
+	if sys.platform.startswith("win"):
+		return f'cmd /c start "" {quoted}'
+	return f"xdg-open {quoted}"
+
+
 def shell_argument(value: str) -> str:
 	"""Quote *value* so it survives being copied into a runnable hint verbatim.
 
