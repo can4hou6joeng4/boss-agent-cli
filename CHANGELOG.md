@@ -12,6 +12,14 @@
 
 ## [Unreleased]
 
+### Fixed
+- 向导写请求已落盘 `replay_safe=false` 标记后，平台风控 / 预算异常会用自身的错误信封覆盖标记，`--resume` 因而重放结果未知的写操作；现在控制异常只替换原因，保留未知结果与核对指引（Issue #1604）。
+- `hr resume --exchange` 的 UNKNOWN 响应因命令名在只读白名单里被改写成可重试的 `NETWORK_ERROR`，批量流程可能重复发起联系方式交换；现在按写操作分支保留 UNKNOWN，普通简历读取仍可重试（Issue #1605）。
+- MCP `boss_chat` 的 schema 未声明 `output_file` 与 `format` 的绑定关系；现在传入文件时按 schema 要求同时传入格式（Issue #1606）。
+- MCP `boss_shortlist_annotate` 的 schema 允许三个修改参数全空并通过入口校验；现在至少提供一个修改，空 `note` 仍表示清空备注（Issue #1607）。
+- MCP 条件必填字符串（export / AI 工具的 JD 来源）漏掉 `minLength`，空串可穿过 schema 层；现在与顶层必填字符串统一边界（Issue #1608）。
+- MCP `boss_export` 的超大 `count` 在超时估算中触发 `OverflowError` 并漏出内部错误；现在用整数分页估算并封顶，异常路径安全停止子进程、返回标准失败信封（Issue #1609）。
+
 ## [3.4.91] - 2026-11-18
 
 ### Fixed

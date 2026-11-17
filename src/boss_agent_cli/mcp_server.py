@@ -310,7 +310,10 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 		count = _int_option(args, "--count", _EXPORT_DEFAULT_COUNT)
 		if count is None or count < 1:
 			return None
-		return math.ceil(count / _SEARCH_PAGE_SIZE)
+		# 整数除法避免超大 JSON 整数在浮点除法时抛 OverflowError（Issue #1609）。
+		# 超时最终按 900 秒封顶，这里没必要保留比封顶更大的精确页数。
+		pages = -(-count // _SEARCH_PAGE_SIZE)
+		return min(pages, int(_MAX_CLI_TIMEOUT_SECONDS // _REQUEST_BUDGET_SECONDS) + 1)
 	if command == "hr":
 		subcommand = args[1] if len(args) > 1 else ""
 		if subcommand == "chat":
@@ -573,8 +576,21 @@ async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 		stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
 		return _interrupted_failure(args, "WORKFLOW_STOPPED", stdout, may_write=may_write)
 	output = asyncio.create_task(process.communicate())
+	# 超时估算必须在 spawn 之后仍可安全求值：异常先停子进程并回标准失败信封，
+	# 不能把 OverflowError 漏成 MCP 内部错误（Issue #1609）。
 	try:
-		stdout, stderr = await asyncio.wait_for(asyncio.shield(output), _cli_timeout(args))
+		timeout = _cli_timeout(args)
+	except (ArithmeticError, ValueError) as exc:
+		stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
+		return _cli_failure(
+			args,
+			"INVALID_PARAM",
+			f"参数超出本地估算范围：{exc}",
+			outcome_unknown=False,
+			recovery_action="减小 count / summary-limit 后重试；本次子进程已停止，未返回结果",
+		)
+	try:
+		stdout, stderr = await asyncio.wait_for(asyncio.shield(output), timeout)
 	except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
 		stdout, _ = await asyncio.shield(_stop_cli_process(process, output))
 		code = "WORKFLOW_STOPPED" if isinstance(exc, asyncio.CancelledError) else "WORKFLOW_TIMEOUT"

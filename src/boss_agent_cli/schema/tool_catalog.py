@@ -261,6 +261,9 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"output_file": {"type": "string", "description": "导出文件路径（不指定则保存到配置的 export_dir）"},
 				},
 				"required": [],
+				# -o/--output 只在导出分支生效；CLI 对只有 output_file 的调用必返回 INVALID_PARAM。
+				"if": {"required": ["output_file"]},
+				"then": {"required": ["format"]},
 			},
 		),
 		ToolDefinition(
@@ -856,6 +859,12 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"note": {"type": "string", "description": "替换本地备注；空串表示清空"},
 				},
 				"required": ["security_id", "job_id"],
+				# 空 note 是「清空备注」的合法意图，所以只约束至少给一个修改字段。
+				"anyOf": [
+					{"required": ["add_tags"]},
+					{"required": ["remove_tags"]},
+					{"required": ["note"]},
+				],
 			},
 		),
 		ToolDefinition(
@@ -1209,6 +1218,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 #: `hr greet --lid` 是唯一一处「required 但平台可能给空值」的上下文字段。
 _EMPTY_ALLOWED_REQUIRED: dict[str, frozenset[str]] = {
 	"boss_hr_greet": frozenset({"lid"}),
+	# 空串是显式清空备注（Issue #872 / #1607），不能因 anyOf 条件必填被加上 minLength。
+	"boss_shortlist_annotate": frozenset({"note"}),
 }
 
 
@@ -1222,6 +1233,13 @@ def _conditionally_required_string_names(schema: dict[str, Any]) -> set[str]:
 		then = node.get("then")
 		if isinstance(then, dict) and isinstance(then.get("required"), list):
 			names.update(name for name in then["required"] if isinstance(name, str))
+		# anyOf 的分支同样是条件必填：export 的 query/url 与 AI 工具的 jd_text/job_id
+		# 允许空串会在 MCP 入口生成必然失败或被静默吞掉的 argv（Issue #1608）。
+		branches = node.get("anyOf")
+		if isinstance(branches, list):
+			for branch in branches:
+				if isinstance(branch, dict) and isinstance(branch.get("required"), list):
+					names.update(name for name in branch["required"] if isinstance(name, str))
 		branches = node.get("allOf")
 		if isinstance(branches, list):
 			for branch in branches:

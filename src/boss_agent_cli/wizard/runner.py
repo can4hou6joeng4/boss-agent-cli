@@ -494,31 +494,43 @@ class WorkflowRunner:
 					recovery_action=recovery,
 				)
 			except RequestBudgetExceeded as exc:
-				recoverable, recovery = error_contract_for_code(exc.code)
-				error = WorkflowActionError(exc.code, str(exc), recoverable=recoverable, recovery_action=recovery, details=exc.details)
+				# 若写请求发出前已落盘「结果未知」标记，异常只改变错误原因，不能把
+				# replay_safe 改回 True：否则 --resume 会重放可能已生效的写操作（Issue #1604）。
+				write_marker = self._persisted_write_marker(run_id, step_name)
+				if write_marker is not None:
+					error = self._unconfirmed_error(exc.code, write_marker)
+				else:
+					recoverable, recovery = error_contract_for_code(exc.code)
+					error = WorkflowActionError(exc.code, str(exc), recoverable=recoverable, recovery_action=recovery, details=exc.details)
 			except KeyboardInterrupt:
 				# 写请求已经发出时，``begin_write`` 已在步骤上落盘结果未知标记；用普通的
 				# WORKFLOW_STOPPED 覆盖它会让 checkpoint 丢掉 replay_safe=false 与该动作的
 				# 核对命令，``--resume`` 就会把结果未知的写操作再发一次（Issue #1478）。
 				error = self._interrupt_error(run_id, step_name)
 			except PlatformRiskError as exc:
-				# 风控：终止语义不能被下面的 NETWORK_ERROR 兜底反转成「重试当前 run_id」。
-				# checkpoint 照常落盘（下方 update_step/update_run），恢复只能由用户在
-				# 处理完账号/安全页后显式发起（Issue #419）。解锁命令必须指向本次
-				# workflow 的数据目录，否则 clean --risk-lock 会去默认目录空转（Issue #978）。
-				recovery_action, _ = risk_error_contract(
-					exc.code,
-					clean_command=boss_command(
-						"clean --risk-lock", platform_name=plan.platform, data_dir=data_dir
-					),
-					doctor_command=boss_command("doctor", platform_name=plan.platform, data_dir=data_dir),
-				)
-				error = WorkflowActionError(
-					exc.code,
-					risk_error_message(exc.code),
-					recoverable=False,
-					recovery_action=recovery_action,
-				)
+				# 写请求在途时命中风控：保留预写的「结果未知」标记与核对命令，
+				# 只让风控原因覆盖消息；否则 --resume 会重放结果未知的写操作（Issue #1604）。
+				write_marker = self._persisted_write_marker(run_id, step_name)
+				if write_marker is not None:
+					error = self._unconfirmed_error(exc.code, write_marker)
+				else:
+					# 风控：终止语义不能被下面的 NETWORK_ERROR 兜底反转成「重试当前 run_id」。
+					# checkpoint 照常落盘（下方 update_step/update_run），恢复只能由用户在
+					# 处理完账号/安全页后显式发起（Issue #419）。解锁命令必须指向本次
+					# workflow 的数据目录，否则 clean --risk-lock 会去默认目录空转（Issue #978）。
+					recovery_action, _ = risk_error_contract(
+						exc.code,
+						clean_command=boss_command(
+							"clean --risk-lock", platform_name=plan.platform, data_dir=data_dir
+						),
+						doctor_command=boss_command("doctor", platform_name=plan.platform, data_dir=data_dir),
+					)
+					error = WorkflowActionError(
+						exc.code,
+						risk_error_message(exc.code),
+						recoverable=False,
+						recovery_action=recovery_action,
+					)
 			except SearchPipelinePlatformError as exc:
 				# 搜索管线把平台错误包成自己的异常：保留原始错误码与契约，
 				# 不能兜成 NETWORK_ERROR（Issue #1384）。
@@ -772,6 +784,20 @@ class WorkflowRunner:
 			else _UNCONFIRMED_WRITE_FALLBACK["recovery_action"],
 			details=dict(details) if isinstance(details, Mapping) else None,
 			# 这条路径只处理「写请求可能已发出」：无论原记录怎么写，都不得重放。
+			replay_safe=False,
+		)
+
+	def _unconfirmed_error(self, code: str, marker: dict[str, Any]) -> WorkflowActionError:
+		"""把已落盘的在途写标记转成带原错误码的「结果未知」失败（Issue #1604）。"""
+		message = marker.get("message")
+		text = message if isinstance(message, str) and message else _UNCONFIRMED_WRITE_FALLBACK["message"]
+		recovery = marker.get("recovery_action")
+		return WorkflowActionError(
+			code,
+			text,
+			recoverable=False,
+			recovery_action=recovery if isinstance(recovery, str) and recovery else _UNCONFIRMED_WRITE_FALLBACK["recovery_action"],
+			details=dict(marker["details"]) if isinstance(marker.get("details"), Mapping) else None,
 			replay_safe=False,
 		)
 
