@@ -84,6 +84,7 @@ ERROR_LABELS = {
 	"CRAWL_UNAVAILABLE": "采集所需的可选依赖没有安装",
 	"WORKFLOW_PLAN_MISMATCH": "任务信息与已有记录不一致",
 	"INVALID_PARAM": "请求参数无效",
+	"CONFIG_INVALID": "本地配置损坏或取值无效",
 	"AUTH_EXPIRED": "登录状态已过期",
 	"AI_API_ERROR": "AI 服务调用失败",
 	"AI_NOT_CONFIGURED": "AI 服务尚未配置",
@@ -122,6 +123,7 @@ RECOVERY_LABELS = {
 	"WORKFLOW_TIMEOUT": "请选择“恢复已有任务”继续。",
 	"WORKFLOW_PLAN_MISMATCH": "请使用原任务恢复，或新建任务。",
 	"INVALID_PARAM": "请换一条结果重试，或返回结果列表重新选择。",
+	"CONFIG_INVALID": "按提示修正本地配置（boss config reset <项> 或 boss ai config）后重新执行；修复前重跑会复现。",
 	"AUTH_EXPIRED": "请重新登录当前平台，然后选择“恢复已有任务”。",
 	"AI_API_ERROR": "检查网络连接与 AI 密钥配置后重试。",
 	"AI_NOT_CONFIGURED": "先执行 boss ai config --provider <provider> --model <model> --api-key <key> 完成配置。",
@@ -163,6 +165,7 @@ _CONTEXT_AWARE_COMMAND = re.compile(r"""boss(?: --platform \S+)? --data-dir """)
 #: 的命令（Issue #1090）。
 _RECOVERY_COMMANDS: dict[str, tuple[str, ...]] = {
 	"boss ai config": ("ai config",),
+	"boss config reset": ("config reset",),
 	"boss me --section deliver": ("me --section deliver",),
 	"boss chat": ("chat",),
 	"boss preset remove": ("preset remove",),

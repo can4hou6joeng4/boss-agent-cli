@@ -51,6 +51,7 @@ class WorkflowActionError(Exception):
 		recovery_action: str | None = None,
 		details: dict[str, Any] | None = None,
 		replay_safe: bool = True,
+		auto_retry: bool = True,
 	) -> None:
 		super().__init__(message)
 		self.code = code
@@ -59,6 +60,9 @@ class WorkflowActionError(Exception):
 		self.details = details
 		# replay_safe=False 表示动作可能已经生效：--resume 不得重跑该步骤。
 		self.replay_safe = replay_safe
+		# recoverable 表示修正后可重新执行；auto_retry=False 的确定性失败
+		# （如本地配置损坏）不进入同一次运行的自动重试循环（Issue #1525）。
+		self.auto_retry = auto_retry
 
 	def to_dict(self) -> dict[str, Any]:
 		result: dict[str, Any] = {
@@ -433,7 +437,7 @@ class WorkflowRunner:
 							result = action(action_context, plan.inputs, action_prior)
 						break
 					except WorkflowActionError as exc:
-						if not exc.recoverable or not exc.replay_safe or attempt >= max_retries:
+						if not exc.recoverable or not exc.auto_retry or not exc.replay_safe or attempt >= max_retries:
 							raise
 						attempt += 1
 						control.raise_if_requested()

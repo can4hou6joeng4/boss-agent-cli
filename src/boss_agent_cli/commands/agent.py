@@ -406,13 +406,13 @@ def crawl_cmd(
 	try:
 		svc = _create_ai_service(ctx)
 	except ValueError as exc:
-		# 本地配置坏值重试必然复现：给 INVALID_PARAM 与修复命令（Issue #1209）。
+		# 本地配置坏值重试必然复现：给 CONFIG_INVALID 与修复命令（Issue #1209、#1525）。
 		# 字符串项自带更贴题的修复子命令（Issue #1428、#1431）。
 		hint = getattr(exc, "recovery_hint", None) or "ai config --max-tokens 4096 --temperature 0.7"
 		handle_error_output(
 			ctx,
 			"agent.crawl",
-			code="INVALID_PARAM",
+			code="CONFIG_INVALID",
 			message=f"本地 AI 配置损坏：{exc}",
 			recoverable=True,
 			recovery_action=_crawl_hint_command(ctx, hint),
@@ -780,7 +780,7 @@ def _run_agent(
 		handle_error_output(
 			ctx,
 			command,
-			code="INVALID_PARAM",
+			code="CONFIG_INVALID",
 			message="automation 配置必须是 JSON object",
 			recoverable=True,
 			recovery_action=boss_command_for_ctx(ctx, "config reset automation", include_data_dir=True),
@@ -794,7 +794,7 @@ def _run_agent(
 		handle_error_output(
 			ctx,
 			command,
-			code="INVALID_PARAM",
+			code="CONFIG_INVALID",
 			message=f"automation 配置无效: {exc}",
 			recoverable=True,
 			recovery_action=boss_command_for_ctx(ctx, "config reset automation", include_data_dir=True),

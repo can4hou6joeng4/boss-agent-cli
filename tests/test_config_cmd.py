@@ -673,7 +673,7 @@ def test_agent_run_rejects_non_object_automation_config(tmp_path):
 	"""手工编辑 config.json 写成字符串时，agent 也要给信封与修复入口，而不是 traceback。"""
 	(tmp_path / "config.json").write_text('{"automation": "foo"}', encoding="utf-8")
 	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "agent", "run", "--dry-run"])
-	parsed = _assert_single_stdout_json_error(result, command="agent.run", code="INVALID_PARAM")
+	parsed = _assert_single_stdout_json_error(result, command="agent.run", code="CONFIG_INVALID")
 	assert "JSON object" in parsed["error"]["message"]
 	assert parsed["error"]["recoverable"] is True
 	assert "config reset automation" in (parsed["error"]["recovery_action"] or "")
@@ -690,7 +690,7 @@ def test_agent_rejects_invalid_automation_value(tmp_path, args, command):
 	"""手工写入非法枚举值时，agent run/train 同样要给信封而不是 traceback。"""
 	(tmp_path / "config.json").write_text('{"automation": {"mode": "nonsense"}}', encoding="utf-8")
 	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), *args])
-	parsed = _assert_single_stdout_json_error(result, command=command, code="INVALID_PARAM")
+	parsed = _assert_single_stdout_json_error(result, command=command, code="CONFIG_INVALID")
 	assert "automation 配置无效" in parsed["error"]["message"]
 	assert parsed["error"]["recoverable"] is True
 	assert "config reset automation" in (parsed["error"]["recovery_action"] or "")

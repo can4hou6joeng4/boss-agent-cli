@@ -1139,7 +1139,7 @@ def test_reply_rejects_invalid_numeric_ai_config(tmp_path, monkeypatch, key, val
 
 	assert result.exit_code == 1, result.output
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["code"] == "CONFIG_INVALID"
 	assert key in parsed["error"]["message"]
 	assert "--max-tokens" in parsed["error"]["recovery_action"]
 	assert not post.called, "坏配置必须在发请求之前拦下"
@@ -1222,8 +1222,8 @@ def test_error_detail_returns_empty_on_recursion_error():
 # ── 字符串项与 base_url 漂移（Issue #1428 / #1431） ────────────────
 
 
-def test_polish_reports_invalid_param_when_model_is_not_a_string(tmp_path, monkeypatch):
-	"""ai_model 被手改成数组时，命令必须报 INVALID_PARAM 与 --model 修复指引，
+def test_polish_reports_config_invalid_when_model_is_not_a_string(tmp_path, monkeypatch):
+	"""ai_model 被手改成数组时，命令必须报 CONFIG_INVALID 与 --model 修复指引，
 	而不是服务层 rsplit 崩溃后落不可恢复的 INTERNAL_ERROR。"""
 	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
 	from boss_agent_cli.ai.config import AIConfigStore
@@ -1237,12 +1237,12 @@ def test_polish_reports_invalid_param_when_model_is_not_a_string(tmp_path, monke
 
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["code"] == "CONFIG_INVALID"
 	assert "ai_model" in parsed["error"]["message"]
 	assert parsed["error"]["recovery_action"].endswith("ai config --model <值>")
 
 
-def test_polish_reports_invalid_param_when_base_url_is_not_a_string(tmp_path, monkeypatch):
+def test_polish_reports_config_invalid_when_base_url_is_not_a_string(tmp_path, monkeypatch):
 	"""ai_base_url 漂移成数组时同样在构造服务前收口，指引 --base-url 修复。"""
 	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
 	from boss_agent_cli.ai.config import AIConfigStore
@@ -1256,12 +1256,12 @@ def test_polish_reports_invalid_param_when_base_url_is_not_a_string(tmp_path, mo
 
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["code"] == "CONFIG_INVALID"
 	assert "ai_base_url" in parsed["error"]["message"]
 	assert "ai config --base-url" in parsed["error"]["recovery_action"]
 
 
-def test_polish_reports_invalid_param_when_base_url_has_no_scheme(tmp_path, monkeypatch):
+def test_polish_reports_config_invalid_when_base_url_has_no_scheme(tmp_path, monkeypatch):
 	"""缺 scheme 的 base_url 会让 httpx 抛 UnsupportedProtocol；必须按本地配置错误上报。"""
 	monkeypatch.setenv("BOSS_AGENT_MACHINE_ID", "test-machine")
 	from boss_agent_cli.ai.config import AIConfigStore
@@ -1275,7 +1275,7 @@ def test_polish_reports_invalid_param_when_base_url_has_no_scheme(tmp_path, monk
 
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["code"] == "CONFIG_INVALID"
 	assert "http(s)" in parsed["error"]["message"]
 
 

@@ -102,13 +102,14 @@ def _require_ai_service(ctx: click.Context) -> AIService | None:
 	try:
 		svc = _create_ai_service(ctx)
 	except ValueError as exc:
-		# 本地配置坏值：重试同一条命令必然复现，给 INVALID_PARAM 与修复命令，
-		# 不能落成可重试的 NETWORK_ERROR（Issue #1209）。字符串项自带更贴题的
-		# 修复子命令（Issue #1428、#1431），数值项沿用冒烟提示。
+		# 本地配置坏值：重试同一条命令必然复现，给 CONFIG_INVALID 与修复命令，
+		# 不能落成可重试的 NETWORK_ERROR（Issue #1209）；独立错误码避免把
+		# 「配置修好后可重试」混入纯参数错误的 INVALID_PARAM（Issue #1525）。
+		# 字符串项自带更贴题的修复子命令（Issue #1428、#1431），数值项沿用冒烟提示。
 		hint = getattr(exc, "recovery_hint", None) or "ai config --max-tokens 4096 --temperature 0.7"
 		handle_error_output(
 			ctx, "ai",
-			code="INVALID_PARAM",
+			code="CONFIG_INVALID",
 			message=f"本地 AI 配置损坏：{exc}",
 			recoverable=True,
 			recovery_action=_hint_command(ctx, hint),

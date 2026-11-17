@@ -101,7 +101,9 @@ def test_crawl_start_rejects_non_mapping_crawl_config(tmp_path):
 		DEFAULT_ACTIONS["crawl_start"](
 			_context(tmp_path, config={"crawl": "oops"}), {"city": "北京"}, {}
 		)
-	assert exc_info.value.code == "INVALID_PARAM"
+	assert exc_info.value.code == "CONFIG_INVALID"
+	assert exc_info.value.recoverable is True
+	assert exc_info.value.auto_retry is False
 	assert "config reset crawl" in exc_info.value.recovery_action
 	assert str(tmp_path.resolve()) in exc_info.value.recovery_action
 
@@ -111,7 +113,9 @@ def test_crawl_start_rejects_non_mapping_config(tmp_path):
 		DEFAULT_ACTIONS["crawl_start"](
 			_context(tmp_path, config=cast(Any, ["oops"])), {"city": "北京"}, {}
 		)
-	assert exc_info.value.code == "INVALID_PARAM"
+	assert exc_info.value.code == "CONFIG_INVALID"
+	assert exc_info.value.recoverable is True
+	assert exc_info.value.auto_retry is False
 	assert "config.json" in exc_info.value.recovery_action
 
 

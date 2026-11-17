@@ -259,7 +259,8 @@ def test_ai_local_smoke_rejects_invalid_max_tokens_config(tmp_path: Path, monkey
 
 	assert result.exit_code == 1
 	payload = json.loads(result.output)
-	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert payload["error"]["code"] == "CONFIG_INVALID"
+	assert payload["error"]["recoverable"] is True
 	assert "ai_max_tokens" in payload["error"]["message"]
 	assert "--max-tokens" in payload["error"]["recovery_action"]
 	post.assert_not_called()

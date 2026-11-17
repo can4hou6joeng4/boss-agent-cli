@@ -402,6 +402,7 @@ Every error response contains `code`, `recoverable`, and `recovery_action`, so a
 | `UNKNOWN` | The platform returned an unrecognized error (it does not match expired session, rate limit or risk control), and a write response cannot prove the action did not happen | Do not retry automatically: check the official page for the actual result, run `boss doctor` to verify session and network, then run the command once more; if it still fails, open an issue with the command and `error.message`. The envelope always carries `replay_safe: false`; the browser channel reports a non-JSON write response as `ACTION_UNCONFIRMED` |
 | `INTERNAL_ERROR` | CLI bug or unexpected platform data shape | Do not retry; upgrade, and if it persists open an issue with the command and error.message |
 | `INVALID_PARAM` | Bad argument | Fix parameter |
+| `CONFIG_INVALID` | A local config file (`config.json` / AI settings) is corrupt or holds an invalid type or enum value: the command stops before any platform request, and rerunning it reproduces the failure | Fix it with `boss config reset <key>` / `boss ai config` / `boss ai local configure` as named in the envelope's `recovery_action`, then retry; do not rerun the same command unchanged |
 | `AI_NOT_CONFIGURED` | AI service not set up | `boss ai config` |
 | `AI_API_ERROR` | AI provider call failed | Retry / check key |
 | `AI_PARSE_ERROR` | AI response not JSON | Retry |
