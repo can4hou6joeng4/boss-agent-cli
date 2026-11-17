@@ -13,6 +13,9 @@
 - `boss chat -o <路径>` 没配 `--export` 时路径被静默忽略，命令仍返回 `ok:true` 与空列表，调用方以为文件已写出；现在入口返回 `INVALID_PARAM`（`-o` 需要配合 `--export`），schema 中 chat 的选项说明同步标注该约束（Issue #1502）。
 - `boss hr download-resume` 把本地写盘 `OSError`（磁盘满、只读目录、权限不足）报成可修正参数的 `INVALID_PARAM`；现在保留 `FileExistsError` 的 `INVALID_PARAM` 分支，其余按不可重试的 `LOCAL_IO_ERROR` 上报，恢复指引包含磁盘空间与目录权限（Issue #1503）。
 - 联系人按 uid 命中但缺少 `securityId` 时被报成可重试的 `NETWORK_ERROR` + 「重试」，却没有后继指引；现在与缺少 uid 的分支同口径，按 `recoverable=false` 上报，并在 `hints.next_actions` 给出带 `--data-dir` 的 `boss chat` 刷新命令（Issue #1504）。
+- `boss schema` 把 `chat -o` 的默认目录写成不存在的 `~/Documents/files/boss`，而实现未配置 `export_dir` 时回退到 `<data-dir>/chat-export`，且 `-o` 仅在 `--export` 时生效；现在 schema 与 `chat --help` 都按实现描述默认路径与生效条件（Issue #1505）。
+- `boss schema` 的 `mark --label` 封闭枚举漏掉实现支持的 `牛人发起`，也未说明接受数字 ID；现在 enum 覆盖 `_LABEL_MAP` 的全部标签，并注明「标签名称或数字 ID」（Issue #1506）。
+- 简历文件名清洗只替换 `/`、`\` 与 NUL，Windows 上 `name="D:evil"` 生成的 `D:evil.json` 与 resumes 目录拼接后会脱离 base；现在 `:` 一并替换，`CON` / `NUL` / `COM1` 等保留设备名（含带扩展名形式）与纯点号名称同样改写，`resume import` 对不安全名称直接返回 `INVALID_PARAM`（Issue #1507，待 Windows 实机验证）。
 
 ## [3.4.80] - 2026-11-17
 

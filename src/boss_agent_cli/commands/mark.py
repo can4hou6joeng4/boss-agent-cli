@@ -52,7 +52,7 @@ def _resolve_label(label_input: str) -> int:
 
 @click.command("mark")
 @click.argument("security_id", metavar="UID_OR_SECURITY_ID")
-@click.option("--label", required=True, help="标签名称（新招呼/沟通中/已约面/已获取简历/已交换电话/已交换微信/不合适/收藏）或 ID")
+@click.option("--label", required=True, help="标签名称（新招呼/沟通中/已约面/已获取简历/已交换电话/已交换微信/不合适/牛人发起/收藏）或数字 ID")
 @click.option("--remove", is_flag=True, default=False, help="移除标签（默认为添加）")
 @click.pass_context
 @handle_auth_errors("mark")
