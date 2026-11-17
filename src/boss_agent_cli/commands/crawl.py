@@ -178,7 +178,16 @@ def _settings_from_context(
 	resolved_hook = hook_profile or "none"
 	if resolved_hook not in _HOOK_CHOICES:
 		raise ValueError(f"unknown hook profile: {resolved_hook}")
-	resolved_chrome = crawl_chrome_path(chrome_path or cfg.get("chrome_path"))
+	# 显式空路径不是「未提供」：必须在使用配置回退或创建任务之前拒绝
+	# （Issue #1560）。`--hook-dir` 只有与 screenshot-full 一起使用才会生效，
+	# 单独给出时静默忽略同样会让成功信封与真实行为不符（Issue #1559）。
+	if chrome_path is not None and not chrome_path.strip():
+		raise ValueError("--chrome-path 不能为空；省略该选项才会使用 crawl 配置中的 chrome_path")
+	if hook_dir is not None and not hook_dir.strip():
+		raise ValueError("--hook-dir 不能为空；不需要页面 Hook 时省略该选项")
+	if hook_dir is not None and resolved_hook != "screenshot-full":
+		raise ValueError("--hook-dir 只与 --hook-profile screenshot-full 一起使用；当前 Hook 配置不会读取该目录")
+	resolved_chrome = crawl_chrome_path(chrome_path if chrome_path is not None else cfg.get("chrome_path"))
 	resolved_port = cdp_port
 	if resolved_port is None:
 		raw_port = cfg.get("cdp_port")
@@ -801,7 +810,7 @@ def _settle_unstarted_worker(data_dir: Path, run_id: str, detail: str) -> None:
 
 
 @crawl_group.command("configure")
-@click.option("--chrome-path", default=None, type=click.Path(path_type=Path), help="chrome.exe 路径")
+@click.option("--chrome-path", default=None, type=click.Path(), help="chrome.exe 路径")
 @click.option("--port", "cdp_port", default=None, type=click.IntRange(1, 65535), help="Chrome 远程调试端口")
 @click.option("--max-requests", type=click.IntRange(1), default=None, help="每个 crawl run 的总请求上限")
 @click.option("--max-details", type=click.IntRange(1), default=None, help="每个 crawl run 的详情请求上限")
@@ -810,7 +819,7 @@ def _settle_unstarted_worker(data_dir: Path, run_id: str, detail: str) -> None:
 @click.pass_context
 def configure_cmd(
 	ctx: click.Context,
-	chrome_path: Path | None,
+	chrome_path: str | None,
 	cdp_port: int | None,
 	max_requests: int | None,
 	max_details: int | None,
@@ -829,8 +838,22 @@ def configure_cmd(
 			hints={"next_actions": [configure_help]},
 		)
 		return
+	# 显式空路径不是「未提供」：原来的 click.Path(path_type=Path) 会把空串归一成
+	# 当前目录，随后把 "." 写进 crawl.chrome_path，下一次采集才在浏览器启动时
+	# 失败（Issue #1560）。必须在写盘之前拒绝。
+	if chrome_path is not None and not chrome_path.strip():
+		configure_help = boss_command_for_ctx(ctx, "crawl configure --help", include_data_dir=True)
+		handle_error_output(
+			ctx,
+			"crawl.configure",
+			code="INVALID_PARAM",
+			message="--chrome-path 不能为空；省略该选项才读取现有配置",
+			recovery_action=f"给出 Chrome 可执行文件的完整路径后重试；可用 {configure_help} 查看可配置项",
+			hints={"next_actions": [configure_help]},
+		)
+		return
 	updates = {
-		"chrome_path": str(chrome_path) if chrome_path is not None else None,
+		"chrome_path": chrome_path,
 		"cdp_port": cdp_port,
 		"max_requests": max_requests,
 		"max_details": max_details,
@@ -857,9 +880,9 @@ def configure_cmd(
 @click.option("--with-detail", is_flag=True, default=False, help="串行补全所有职位的 job_card")
 @click.option("--hook-profile", type=click.Choice(_HOOK_CHOICES), default=None, help="页面 Hook 配置：none（默认，不注入脚本）/ screenshot-full（注入用户授权脚本，需同时给 --hook-dir）")
 @click.option(
-	"--hook-dir", type=click.Path(path_type=Path), default=None, help="与 screenshot-full 一起显式指定的用户脚本目录"
+	"--hook-dir", type=click.Path(), default=None, help="与 screenshot-full 一起显式指定的用户脚本目录"
 )
-@click.option("--chrome-path", default=None, type=click.Path(path_type=Path), help="覆盖配置的 chrome.exe")
+@click.option("--chrome-path", default=None, type=click.Path(), help="覆盖配置的 chrome.exe")
 @click.option("--port", "cdp_port", default=None, type=click.IntRange(1, 65535), help="覆盖配置的调试端口")
 @click.pass_context
 @handle_auth_errors("crawl")
@@ -870,8 +893,8 @@ def run_cmd(
 	pages: int,
 	with_detail: bool,
 	hook_profile: str | None,
-	hook_dir: Path | None,
-	chrome_path: Path | None,
+	hook_dir: str | None,
+	chrome_path: str | None,
 	cdp_port: int | None,
 ) -> None:
 	"""开始一个可恢复的 DP 批量采集任务。"""
@@ -887,9 +910,9 @@ def run_cmd(
 			pages=pages,
 			with_detail=with_detail,
 			hook_profile=hook_profile,
-			hook_dir=str(hook_dir) if hook_dir else None,
+			hook_dir=hook_dir,
 			profile_path=None,
-			chrome_path=str(chrome_path) if chrome_path else None,
+			chrome_path=chrome_path,
 			cdp_port=cdp_port,
 		)
 	except ValueError as exc:
@@ -913,7 +936,7 @@ def run_cmd(
 @click.option("--with-detail", is_flag=True, default=False, help="串行补全所有职位的 job_card")
 @click.option("--hook-profile", type=click.Choice(_HOOK_CHOICES), default=None, help="页面 Hook 配置：none（默认，不注入脚本）/ screenshot-full（注入用户授权脚本，需同时给 --hook-dir）")
 @click.option(
-	"--hook-dir", type=click.Path(path_type=Path), default=None, help="与 screenshot-full 一起显式指定的用户脚本目录"
+	"--hook-dir", type=click.Path(), default=None, help="与 screenshot-full 一起显式指定的用户脚本目录"
 )
 @click.pass_context
 @handle_auth_errors("crawl.start")
@@ -924,7 +947,7 @@ def start_cmd(
 	pages: int,
 	with_detail: bool,
 	hook_profile: str | None,
-	hook_dir: Path | None,
+	hook_dir: str | None,
 ) -> None:
 	"""创建并后台运行一个 crawl 任务；适合 MCP 的任务式调度。"""
 	if not _require_crawl_capabilities(ctx, hook_profile):
@@ -940,7 +963,7 @@ def start_cmd(
 			pages=pages,
 			with_detail=with_detail,
 			hook_profile=hook_profile,
-			hook_dir=str(hook_dir) if hook_dir else None,
+			hook_dir=hook_dir,
 			profile_path=None,
 			chrome_path=None,
 			cdp_port=None,

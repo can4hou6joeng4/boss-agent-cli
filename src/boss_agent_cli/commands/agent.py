@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 import click
+from click.core import ParameterSource
 
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.api.cdp_risk_lock import unlock_operator_actions, raise_if_locked
@@ -169,7 +170,7 @@ def crawl_cmd(
 		return
 	crawl_by_run = _crawl_hint_command(ctx, "agent crawl --run-id <run_id> --resume <简历>")
 	crawl_by_query = _crawl_hint_command(ctx, "agent crawl --query <关键词> --city <城市> --resume <简历>")
-	if bool(run_id) == bool(query):
+	if (run_id is None) == (query is None):
 		handle_error_output(
 			ctx,
 			"agent.crawl",
@@ -177,6 +178,48 @@ def crawl_cmd(
 			message="必须且只能使用 --run-id 或 --query",
 			recovery_action="只传 --run-id，或只传 --query 后重试",
 			hints={"next_actions": [crawl_by_run, crawl_by_query]},
+		)
+		return
+	if run_id is not None:
+		# --run-id 只分析已完成任务：--city / --pages / --with-detail 只对 --query
+		# 新建采集有意义。旧实现用真值判断，显式空 run-id 会被静默当成「没传」，
+		# 这些参数则被整组丢弃却仍返回 ok:true（Issue #1558）。
+		if not run_id.strip():
+			handle_error_output(
+				ctx,
+				"agent.crawl",
+				code="INVALID_PARAM",
+				message="--run-id 的值不能为空",
+				recovery_action="补上要分析的 crawl run_id，或用 --query 新建采集",
+				hints={"next_actions": [crawl_by_run, crawl_by_query]},
+			)
+			return
+		ignored = []
+		if ctx.get_parameter_source("pages") == ParameterSource.COMMANDLINE:
+			ignored.append("--pages")
+		if city is not None:
+			ignored.append("--city")
+		if with_detail:
+			ignored.append("--with-detail")
+		if ignored:
+			handle_error_output(
+				ctx,
+				"agent.crawl",
+				code="INVALID_PARAM",
+				message=f"{'、'.join(ignored)} 只用于 --query 新建采集，--run-id 路径不会使用它们",
+				recovery_action="去掉这些参数后只分析已有任务，或改用 --query 新建采集",
+				hints={"next_actions": [crawl_by_run, crawl_by_query]},
+			)
+			return
+	elif query is not None and not query.strip():
+		# 显式空查询不是「不筛选」：与 crawl run/start 同口径，在创建任务之前拒绝。
+		handle_error_output(
+			ctx,
+			"agent.crawl",
+			code="INVALID_PARAM",
+			message="--query 的值不能为空",
+			recovery_action=f"补上搜索关键词后重试，例如 {crawl_by_query}",
+			hints={"next_actions": [crawl_by_query]},
 		)
 		return
 	if query and not _require_crawl_capabilities(ctx):

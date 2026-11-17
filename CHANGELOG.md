@@ -2,6 +2,14 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- `boss agent crawl --run-id` 只分析已完成任务，但 `--city`、`--pages`、`--with-detail` 被整组静默丢弃，显式空 `--run-id` 也会被当成「没传」而与 `--query` 同时通过校验；现在这些参数组合在读取任务之前返回 `INVALID_PARAM`，`--run-id` 与 `--query`（含空串）按互斥拒绝，显式空 `--query` 同样在创建任务之前拒绝（Issue #1558）。
+- `crawl run` / `crawl start` 的 `--hook-dir` 只有配合 `--hook-profile screenshot-full` 才会生效，但单独给出或显式为空时目录被静默忽略且任务照常创建；现在在创建任务与打开浏览器之前返回 `INVALID_PARAM`（Issue #1559）。
+- `crawl configure --chrome-path ""` 经 `click.Path` 归一成当前目录，`"."` 被写入 `crawl.chrome_path`，下一次采集才在浏览器启动时失败；`crawl run --chrome-path ""` 同样把本次任务绑到当前目录。现在两者都在写盘 / 创建任务之前返回 `INVALID_PARAM`，省略选项时仍读取已保存配置（Issue #1560）。
+- `boss watch run <名称> --all` 进入 `--all` 分支后静默忽略点名，运行全部 watch 并对每个 watch 发起平台请求；现在点名与 `--all` 同时给出时在打开缓存与发出请求之前返回 `INVALID_PARAM`（Issue #1561）。
+
 ## [3.4.86] - 2026-11-17
 
 ### Fixed
