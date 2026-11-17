@@ -12,6 +12,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- `ai config --temperature` 接受 `inf` / `nan` / `1e400` 并写入非法严格 JSON；现在解析阶段按 `INVALID_PARAM` 拒绝非有限数，不写配置（Issue #1623）。
+- `login --curl-file` 的解析 `ValueError` 把 `INVALID_PARAM` 标成可恢复，诱导 Agent 用同一错误输入重试；现在与登记表统一为不可恢复（Issue #1624）。
+- `ai local smoke` 只判真值并把类型漂移的 `ai_model` 字符串化后发请求；现在按配置损坏拒绝，不构造 AI 服务（Issue #1625）。
+- `ai local pull --model ""` 启动带空模型参数的子进程；现在参数阶段拒绝，不启动下载（Issue #1626）。
+- `me` 把 `TokenRefreshFailed` 误报成 `AUTH_REQUIRED` / 「未登录」；现在按 `TOKEN_REFRESH_FAILED` 返回真实语义（Issue #1627）。
+
 ## [3.4.95] - 2026-11-18
 
 ### Fixed

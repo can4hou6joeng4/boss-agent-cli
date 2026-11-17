@@ -149,8 +149,12 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 				hints=success_hints,
 			)
 
-	except (AuthRequired, TokenRefreshFailed):
+	except AuthRequired:
 		handle_error_output(ctx, "me", code="AUTH_REQUIRED", message="未登录", recoverable=True, recovery_action=login_action_for_ctx(ctx), hints=auth_required_hints(ctx))
+	except TokenRefreshFailed:
+		# 与 @handle_auth_errors 及招聘者写命令同口径：token 刷新失败不是「未登录」，
+		# 恢复动作仍是重新登录，但 Agent 必须能看到真实错误码（Issue #1627）。
+		handle_error_output(ctx, "me", code="TOKEN_REFRESH_FAILED", message="Token 刷新失败，请重新登录", recoverable=True, recovery_action=login_action_for_ctx(ctx), hints=auth_required_hints(ctx))
 	except AuthError:
 		handle_error_output(ctx, "me", code="AUTH_EXPIRED", message="登录态过期", recoverable=True, recovery_action=login_action_for_ctx(ctx), hints=auth_required_hints(ctx))
 	except PlatformRiskError as e:
