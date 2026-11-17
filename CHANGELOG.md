@@ -2,6 +2,13 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### Fixed
+- `boss schema` 把 `chat -o` 的默认目录写成不存在的 `~/Documents/files/boss`，而实现未配置 `export_dir` 时回退到 `<data-dir>/chat-export`，且 `-o` 仅在 `--export` 时生效；现在 schema 与 `chat --help` 都按实现描述默认路径与生效条件（Issue #1505）。
+- `boss schema` 的 `mark --label` 封闭枚举漏掉实现支持的 `牛人发起`，也未说明接受数字 ID；现在 enum 覆盖 `_LABEL_MAP` 的全部标签，并注明「标签名称或数字 ID」（Issue #1506）。
+- 简历文件名清洗只替换 `/`、`\` 与 NUL，Windows 上 `name="D:evil"` 生成的 `D:evil.json` 与 resumes 目录拼接后会脱离 base；现在 `:` 一并替换，`CON` / `NUL` / `COM1` 等保留设备名（含带扩展名形式）与纯点号名称同样改写，`resume import` 对不安全名称直接返回 `INVALID_PARAM`（Issue #1507，待 Windows 实机验证）。
+
 ## [3.4.80] - 2026-11-17
 
 ### Fixed

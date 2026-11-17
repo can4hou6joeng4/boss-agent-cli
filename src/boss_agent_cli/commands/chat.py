@@ -37,7 +37,7 @@ _escape_md_cell = escape_md_cell
 	type=click.Choice(["html", "md", "csv", "json"]),
 	help="导出格式：html=HTML / md=Markdown / csv=CSV / json=JSON")
 @click.option("-o", "--output", "output_path", default=None,
-	help="输出文件路径（不指定则自动保存到配置的 export_dir）")
+	help="输出文件路径，仅在 --export 时生效（不指定则保存到配置的 export_dir，未配置时使用 <data-dir>/chat-export）")
 @click.pass_context
 @handle_auth_errors("chat")
 def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | None, export_fmt: str | None, output_path: str | None) -> None:

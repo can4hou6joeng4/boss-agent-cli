@@ -541,7 +541,7 @@ def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 			ctx, "resume",
 			code="INVALID_PARAM",
 			message=f"文件 '{file_path}' 导入失败: {exc}",
-			recovery_action=f"按提示修正 JSON 文件（UTF-8 编码、合法 JSON、顶层对象、非空 name 字段）后重试；可用 {export_cmd} 对照结构",
+			recovery_action=f"按提示修正 JSON 文件（UTF-8 编码、合法 JSON、顶层对象、不含路径分隔符 / 盘符 / Windows 保留设备名的非空 name 字段）后重试；可用 {export_cmd} 对照结构",
 			hints={"next_actions": [export_cmd, _hint_command(ctx, "resume list")]},
 		)
 		ctx.exit(1)

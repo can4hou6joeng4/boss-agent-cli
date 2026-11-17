@@ -19,9 +19,55 @@ class ResumeAlreadyExistsError(ValueError):
 		self.name = name
 
 
+_WINDOWS_RESERVED_DEVICE_NAMES = frozenset(
+	{"CON", "PRN", "AUX", "NUL"}
+	| {f"COM{index}" for index in range(1, 10)}
+	| {f"LPT{index}" for index in range(1, 10)}
+)
+
+
+def _is_windows_device_name(name: str) -> bool:
+	"""名称是否解析到 Windows 保留设备（CON/NUL/COM1…，含带扩展名形式）。
+
+	Windows 对设备名不区分大小写，``CON.txt`` 与 ``CON`` 一样解析到设备；
+	Win32 还会先去掉名称结尾的空格再比较。
+	"""
+	stem = name.split(".", 1)[0].rstrip(" \t").upper()
+	return stem in _WINDOWS_RESERVED_DEVICE_NAMES
+
+
 def _safe_filename(name: str) -> str:
-	"""将简历名称转为安全的文件名"""
-	return name.replace("/", "_").replace("\\", "_").replace("\0", "_")
+	"""将简历名称转为安全的文件名。
+
+	除路径分隔符与 NUL 外，还要处理 Windows 上会改变路径语义的三种名称：
+	``:`` 会被解释成盘符（``D:evil.json`` 与 ``ntpath.join(r"C:\\base", ...)``
+	拼接后脱离 base）、CON/NUL/COM1 等保留设备名不会落成普通文件、纯点号名称
+	（``.`` / ``..``）拼接后指向目录本身或父目录。
+	"""
+	safe = name.replace("/", "_").replace("\\", "_").replace("\0", "_").replace(":", "_")
+	if safe and not safe.strip("."):
+		# "." / ".." 拼成 "<name>.json" 后仍会指回当前目录或父目录。
+		safe = safe.replace(".", "_")
+	if _is_windows_device_name(safe):
+		safe = f"_{safe}"
+	return safe
+
+
+def _unsafe_resume_name_reason(name: str) -> str | None:
+	"""名称不能安全落盘时返回给用户看的原因（Issue #1507）。
+
+	导入的 JSON 来自外部文件：名称里带盘符 / 路径分隔符、Windows 保留设备名或
+	只有点号时直接拒绝，而不是静默改名后让用户按原名称找不到简历。``resume
+	init`` / ``clone`` 的合法名称仍由 ``_safe_filename`` 统一清洗，读写两侧共用
+	同一份规则。
+	"""
+	if any(char in name for char in ("/", "\\", "\0", ":")):
+		return "name 不能包含路径分隔符、NUL 或 ':'（Windows 盘符）"
+	if not name.strip("."):
+		return "name 不能只由点号组成"
+	if _is_windows_device_name(name):
+		return f"name '{name}' 是 Windows 保留设备名，请换一个名称"
+	return None
 
 
 class ResumeStore:
@@ -159,6 +205,9 @@ class ResumeStore:
 		name = raw.get("name")
 		if not isinstance(name, str) or not name.strip():
 			raise ResumeImportError("缺少非空字符串字段 name")
+		unsafe_reason = _unsafe_resume_name_reason(name)
+		if unsafe_reason is not None:
+			raise ResumeImportError(f"{unsafe_reason}；请修改文件里的 name 字段后重试")
 		if not overwrite and self.exists(name):
 			raise ResumeAlreadyExistsError(name)
 
