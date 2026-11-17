@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.88（2026-11-17）：显式参数与 schema 说明继续收口——候选池 `compare --tag ""` 与 `annotate` 的空标签、空操作在读取缓存之前返回 `INVALID_PARAM`（Issue #1565）；`watch run` / `crawl` / `agent crawl` 的 schema 补上互斥、必填与空串约束（Issue #1566）；`agent train` 的 `--dry-run` 与 `--live` 改为独立标志并拒绝同时给出（Issue #1568）；`search` 的显式关键词不再被预设覆盖（Issue #1569）；`clean` / `export` / `search` / `hr resume` / `resume init` / `crawl configure` 的六处描述按实现修正（Issue #1570）。
 - ✅ v3.4.87（2026-11-17）：显式参数不再被静默丢弃——`agent crawl --run-id` 拒绝只对新采集有意义的 `--city` / `--pages` / `--with-detail` 与显式空值（Issue #1558）；`crawl run` / `start` 的 `--hook-dir` 缺 `screenshot-full` 或为空时在创建任务之前拒绝（Issue #1559）；`--chrome-path ""` 不再被归一成当前目录写入配置（Issue #1560）；`watch run` 的点名与 `--all` 互斥，不再静默运行全部（Issue #1561）。
 - ✅ v3.4.86（2026-11-17）：采集运行环境与本地并发的错误分类——采集浏览器启动失败按确定性本地失败返回 `CRAWL_UNAVAILABLE` 并保存断点（Issue #1553）；登录态刷新锁改用内核文件锁，等待超时不再误删他人的锁、按可重试的共享等待超时返回（Issue #1554）；出口与声明的语言/时区矛盾统一返回 `EGRESS_CONTRADICTION`（Issue #1555）；共享请求预算等待超时落成 `throttle_stopped`，不再提示新建任务（Issue #1556）。
 - ✅ v3.4.85（2026-11-17）：`stats` / `digest` 的 `-o` 在默认 json 下被静默忽略，现在返回 `INVALID_PARAM`，工具 schema 同步声明格式约束（Issue #1546）；`clean` 把 SQLite 锁冲突与只读 / 磁盘错误分别归为 `CACHE_BUSY` / `LOCAL_IO_ERROR`，不再误导删库（Issue #1547）；`clean --risk-lock` 不再被损坏的缓存库阻断（Issue #1548）；联系人分页上限按不可重试上报（Issue #1549）；`detail` 的未识别响应按只读归一为可重试 `NETWORK_ERROR`（Issue #1550）。
