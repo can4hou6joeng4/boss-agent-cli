@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [3.4.85] - 2026-11-17
 
 ### Fixed
 - `boss stats -o <路径>`（默认 `--format json`）与 `boss digest -o <路径>`（默认 json）把 `-o` 静默忽略却返回 `ok:true`，调用方以为报表 / 日报已经写出；现在在任何平台请求与本地读取之前返回 `INVALID_PARAM`，恢复指引给出 `--format html|md -o <路径>` 的可执行写法。显式空 `-o` 同样按参数错误拒绝，不再落到 `LOCAL_IO_ERROR` 或静默回退；`boss_stats` / `boss_digest` 的工具 schema 用 `if`-`then` 声明同一约束（Issue #1546）。
