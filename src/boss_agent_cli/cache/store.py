@@ -185,8 +185,18 @@ def _validate_workflow_params(run_id: str, params: dict[str, Any]) -> dict[str, 
 	if inputs is not None and not isinstance(inputs, dict):
 		raise CacheRecordInvalid("workflow_run", run_id, "params.inputs", "必须是 JSON object")
 	steps = params.get("requested_steps")
-	if steps is not None and (not isinstance(steps, list) or not all(isinstance(item, str) for item in steps)):
-		raise CacheRecordInvalid("workflow_run", run_id, "params.requested_steps", "必须是字符串数组")
+	if steps is not None:
+		if not isinstance(steps, list) or not all(isinstance(item, str) for item in steps):
+			raise CacheRecordInvalid("workflow_run", run_id, "params.requested_steps", "必须是字符串数组")
+		if not steps:
+			# 空计划恢复时不会执行任何步骤，runner 却会直接把它标成 completed：
+			# 与 WizardInput.from_mapping 拒绝显式空数组同口径（Issue #1483）。
+			raise CacheRecordInvalid(
+				"workflow_run",
+				run_id,
+				"params.requested_steps",
+				"不能是空数组；省略该字段才表示执行 goal 的全部步骤",
+			)
 	return params
 
 
