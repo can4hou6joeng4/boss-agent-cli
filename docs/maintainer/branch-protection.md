@@ -123,6 +123,11 @@ git diff --check master...HEAD
 Docker, release automation, or platform-specific launchers require their own
 focused verification in addition to this baseline.
 
+`evals/run_eval.py --mode fixture` is a pure local scoring pass: it starts no
+subprocesses, makes no platform calls, and needs no TTY, so the maintainer may
+run it directly inside an agent session. Only `--mode external`, which launches
+an external agent runner, requires a standalone terminal or external runner.
+
 ## Verification
 
 Run the full branch protection check first:

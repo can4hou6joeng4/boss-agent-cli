@@ -28,9 +28,9 @@ The risk scenario uses `max_tool_calls: 1` to limit the reported trace to one si
 
 `operating_mode=assisted|research` provides identical access to implemented capabilities. `COMPLIANCE_BLOCKED` is retained only for historical protocol compatibility and is not a current mode restriction. Platform risk errors remain a hard stop: preserve the session and checkpoint, follow the envelope's recovery action, and wait for explicit user resumption after the official target page has recovered.
 
-## Run In An Independent Terminal
+## Running the fixture eval
 
-Do not run nested agent invocations inside an active agent conversation. Run eval commands from an independent terminal:
+`fixture` mode is a pure local scoring pass: it starts no subprocesses, makes no platform calls, and needs no TTY, so it can run directly inside an agent session:
 
 ```bash
 uv run python evals/run_eval.py --mode fixture
@@ -68,7 +68,7 @@ A future external runner is responsible for enforcing its own request budget and
 }
 ```
 
-Run it only from an independent terminal:
+`external` mode launches an external runner, so it must run in a standalone terminal to avoid recursive agent launches:
 
 ```bash
 uv run python evals/run_eval.py --mode external --runner-cmd "./your-agent-runner"

@@ -51,7 +51,7 @@ uv run boss --help
 uv run boss schema --format native
 ```
 
-打开 PR 前再跑离线冒烟契约与 MCP eval（eval 只能在独立终端运行，不要嵌套在 Agent 会话里）：
+打开 PR 前再跑离线冒烟契约与 MCP eval（`fixture` 模式纯离线，可直接在 Agent 会话内运行；只有 `--mode external` 启动外部 runner 时才需要独立终端）：
 
 ```bash
 BOSS_SMOKE_DRY_RUN=1 uv run python scripts/smoke_p0.py
@@ -122,7 +122,7 @@ git diff --check
 
 `evals/` 提供 fixture-first 的可复现评测，用来比较接入本 CLI 的 MCP Agent 与基线 Agent 在四个场景上的记录证据（福利筛选 / 详情+候选池 / 平台风控停止 / 错误恢复），各场景的通过判据与失败信号见 [`evals/README.md`](evals/README.md) 的场景表。
 
-默认 `fixture` 模式完全离线：不调用平台、不需要登录态。**必须在该独立终端运行，不要嵌套在 Claude Code / Codex 等 Agent 会话里**——嵌套会挂起或产生假的「0 触发」结果。
+默认 `fixture` 模式完全离线：不调用平台、不需要登录态，**可以直接在 Claude Code / Codex 等 Agent 会话内运行**。只有 `--mode external` 会启动外部 Agent runner，才需要独立终端，避免递归启动与输出污染。
 
 ```bash
 uv run python evals/run_eval.py --mode fixture

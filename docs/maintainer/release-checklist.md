@@ -2,6 +2,14 @@
 
 Use this checklist before publishing a release tag.
 
+## 0. Release cadence
+
+Patch releases are batched. Accumulate fixes under `[Unreleased]` and publish
+when a batch is ready or at a daily cadence; do not publish a patch for every
+merged PR. Security, data-loss, or platform-risk-classification fixes may ship
+immediately. Patch numbers have no cap (`3.4.679` is valid); use minor versions
+for feature batches and major versions for breaking changes.
+
 ## 1. Confirm scope
 
 - The release has a single coherent theme.
@@ -60,9 +68,10 @@ The report distinguishes `passed`, `failed`, and `not_run`. A successful default
 check with `git.clean=false` is development evidence, not release readiness. Before
 publishing, use `--require-clean`; when the local tag already exists, also pass
 `--tag vX.Y.Z` to verify its version and commit. The script never creates or pushes
-Git tags and does not replace the local quality baseline or fixture eval. Run
-`uv run python evals/run_eval.py --mode fixture` in an independent terminal, not
-inside an active agent session.
+Git tags and does not replace the local quality baseline or fixture eval. `uv run python evals/run_eval.py --mode
+fixture` is a pure local scoring pass and may be run inside an active agent
+session; only `--mode external`, which launches an external runner, needs a
+standalone terminal.
 
 The tag-triggered `release.yml` runs the same artifact check
 (`--artifacts dist --tag "$GITHUB_REF_NAME" --require-clean`) between `uv build`

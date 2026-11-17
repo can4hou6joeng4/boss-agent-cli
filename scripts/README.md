@@ -32,7 +32,7 @@ uv run python scripts/verify_release.py --pypi-version 3.0.0 --python 3.11 --jso
 - `--timeout` 指定每个外部步骤的超时秒数，默认 180；`--python` 默认 3.11。Windows 使用临时环境的 `Scripts`，POSIX 使用 `bin`。
 - stdout 始终输出一个 JSON 报告（`--json` 可显式传入），stderr 输出步骤进度。`steps` 区分 `passed`、`failed`、`not_run`；没有请求的联网步骤不算通过。检查失败返回非零退出码。
 - 子进程失败时 `steps[].error` 带上 stderr 的有界尾部（末尾 12 行、单行 300 字符）；凭据先抹成 `[REDACTED]` 再截断（URL userinfo、无 scheme 的 `user:pass@host`、`token=` / `password=` 等键值与 Bearer 令牌）：刚发布后 PyPI 索引尚未传播与真实依赖冲突都表现为安装失败，只有 uv 自己的诊断能区分两者（Issue #1107）。
-- `_release_probe.py` 是安装验证使用的子进程探针，不是 `boss` 顶层命令。工具不代替 `quality_baseline.py`、smoke dry-run 或独立终端的 fixture eval，也不会修改 GitHub/PyPI。
+- `_release_probe.py` 是安装验证使用的子进程探针，不是 `boss` 顶层命令。工具不代替 `quality_baseline.py`、smoke dry-run 或 fixture eval，也不会修改 GitHub/PyPI。
 
 ## smoke_p0.py
 P0 冒烟测试：以子进程依次运行 `boss doctor/status/search/detail` 四步，并校验 stdout JSON 信封契约（恰好含 `ok/schema_version/command/data/pagination/error/hints` 七键、exit code 与 `ok` 一致、错误信封含 `code`/`recoverable`/`recovery_action`）。已登录时 search/detail 步骤会真实触网。CI 与本地排障复用。

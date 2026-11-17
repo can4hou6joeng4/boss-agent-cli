@@ -51,7 +51,7 @@ uv run boss --help
 uv run boss schema --format native
 ```
 
-Before opening a PR, also run the offline smoke contract and the MCP eval (the eval must run in a standalone terminal, not nested inside an Agent session):
+Before opening a PR, also run the offline smoke contract and the MCP eval (`fixture` mode is fully offline and can run inside an agent session; only `--mode external`, which launches an external runner, needs a standalone terminal):
 
 ```bash
 BOSS_SMOKE_DRY_RUN=1 uv run python scripts/smoke_p0.py
@@ -146,7 +146,7 @@ On error, the envelope must contain `error.code`, `error.recoverable`, and `erro
 
 `evals/` contains a fixture-first, reproducible evaluation that compares an MCP agent using this CLI with a baseline agent using recorded evidence across four scenarios (welfare filtering, detail + shortlist, platform risk stop, error recovery). Pass criteria and failure signals per scenario are listed in the scenario table in [`evals/README.md`](evals/README.md).
 
-The default `fixture` mode is fully offline: no platform calls and no login state. **Run it from an independent terminal — do not nest it inside Claude Code / Codex or other agent sessions**, where it can hang or produce false "0 trigger" results.
+The default `fixture` mode is fully offline: no platform calls and no login state. **It can run directly inside Claude Code / Codex or other agent sessions.** Only `--mode external`, which launches an external agent runner, needs a standalone terminal to avoid recursive launches and output contamination.
 
 ```bash
 uv run python evals/run_eval.py --mode fixture
