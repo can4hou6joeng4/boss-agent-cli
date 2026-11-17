@@ -11,9 +11,12 @@ import click
 
 from boss_agent_cli.ai.config import (
 	AIConfigStore,
+	AIConfigValueError,
 	PROVIDER_BASE_URLS,
 	ai_float_setting,
 	ai_int_setting,
+	ai_text_setting,
+	normalize_base_url,
 	provider_endpoint,
 )
 from boss_agent_cli.ai.prompts import (
@@ -68,7 +71,19 @@ def _create_ai_service(ctx: click.Context) -> AIService | None:
 		return None
 	config = store.load_config()
 	api_key = store.get_api_key()
-	base_url = store.get_base_url()
+	# 字符串项同样要在构造前校验（Issue #1428、#1431）：``ai_model`` 漂移成数组 /
+	# 数字会让服务层 ``rsplit`` 崩溃，``ai_base_url`` 写成空白串或非 URL 会让
+	# httpx 抛 UnsupportedProtocol，两者都被兜成与真实原因无关的错误。
+	model = ai_text_setting(config, "ai_model") or ""
+	if not model.strip():
+		raise AIConfigValueError(
+			"AI 配置项 ai_model 未设置或为空",
+			recovery_hint="ai config --model <model>",
+		)
+	provider = ai_text_setting(config, "ai_provider")
+	raw_base_url = ai_text_setting(config, "ai_base_url")
+	base_url = normalize_base_url(raw_base_url) if raw_base_url is not None else None
+	base_url = provider_endpoint(provider, base_url)
 	if not api_key or not base_url:
 		return None
 	temperature = ai_float_setting(config, "ai_temperature", 0.7)
@@ -76,7 +91,7 @@ def _create_ai_service(ctx: click.Context) -> AIService | None:
 	return AIService(
 		base_url=base_url,
 		api_key=api_key,
-		model=config["ai_model"],
+		model=model,
 		temperature=temperature,
 		max_tokens=max_tokens,
 	)
@@ -88,13 +103,15 @@ def _require_ai_service(ctx: click.Context) -> AIService | None:
 		svc = _create_ai_service(ctx)
 	except ValueError as exc:
 		# 本地配置坏值：重试同一条命令必然复现，给 INVALID_PARAM 与修复命令，
-		# 不能落成可重试的 NETWORK_ERROR（Issue #1209）。
+		# 不能落成可重试的 NETWORK_ERROR（Issue #1209）。字符串项自带更贴题的
+		# 修复子命令（Issue #1428、#1431），数值项沿用冒烟提示。
+		hint = getattr(exc, "recovery_hint", None) or "ai config --max-tokens 4096 --temperature 0.7"
 		handle_error_output(
 			ctx, "ai",
 			code="INVALID_PARAM",
 			message=f"本地 AI 配置损坏：{exc}",
 			recoverable=True,
-			recovery_action=_hint_command(ctx, "ai config --max-tokens 4096 --temperature 0.7"),
+			recovery_action=_hint_command(ctx, hint),
 		)
 		ctx.exit(1)
 		return None
@@ -393,9 +410,34 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 	if provider is not None:
 		updates["ai_provider"] = provider
 	if model is not None:
+		if not model.strip():
+			# 空白模型名会原样发进请求，由服务商返回 400，之后每条 AI 命令都
+			# 报可重试的 AI_API_ERROR；写入前拒绝（Issue #1428）。
+			handle_error_output(
+				ctx, "ai-config",
+				code="INVALID_PARAM",
+				message="--model 不能为空或只包含空白字符",
+				recovery_action="按 next_actions 传入真实模型名后重试",
+				hints={"next_actions": [_hint_command(ctx, "ai config --model <model>")]},
+			)
+			ctx.exit(1)
+			return
 		updates["ai_model"] = model
 	if base_url is not None:
-		updates["ai_base_url"] = base_url
+		try:
+			# 空白串 / 缺 scheme / 非 http(s) 地址会让之后每条 AI 命令抛
+			# UnsupportedProtocol 并被兜成可重试的网络错误；写入前拒绝（Issue #1431）。
+			updates["ai_base_url"] = normalize_base_url(base_url)
+		except AIConfigValueError as exc:
+			handle_error_output(
+				ctx, "ai-config",
+				code="INVALID_PARAM",
+				message=str(exc),
+				recovery_action="按 next_actions 传入 http(s) 绝对地址后重试",
+				hints={"next_actions": [_hint_command(ctx, "ai config --base-url https://api.example.com/v1")]},
+			)
+			ctx.exit(1)
+			return
 	if temperature is not None:
 		updates["ai_temperature"] = temperature
 	if max_tokens is not None:

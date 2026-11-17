@@ -407,13 +407,15 @@ def crawl_cmd(
 		svc = _create_ai_service(ctx)
 	except ValueError as exc:
 		# 本地配置坏值重试必然复现：给 INVALID_PARAM 与修复命令（Issue #1209）。
+		# 字符串项自带更贴题的修复子命令（Issue #1428、#1431）。
+		hint = getattr(exc, "recovery_hint", None) or "ai config --max-tokens 4096 --temperature 0.7"
 		handle_error_output(
 			ctx,
 			"agent.crawl",
 			code="INVALID_PARAM",
 			message=f"本地 AI 配置损坏：{exc}",
 			recoverable=True,
-			recovery_action=_crawl_hint_command(ctx, "ai config --max-tokens 4096 --temperature 0.7"),
+			recovery_action=_crawl_hint_command(ctx, hint),
 		)
 		return
 	if svc is None:

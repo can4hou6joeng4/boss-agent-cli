@@ -196,3 +196,21 @@ def test_local_import_reports_registry_error_instead_of_traceback(tmp_path, monk
 	assert parsed["error"]["code"] == "MODEL_REGISTRY_INVALID"
 	assert "registry.json" in parsed["error"]["message"]
 	assert parsed["error"]["recoverable"] is True
+
+
+@pytest.mark.parametrize("model", ["registry.json", "REGISTRY.JSON", "Registry.Json"])
+def test_import_local_model_rejects_registry_filename_as_model_name(tmp_path, model):
+	"""与登记表同名的模型名会把 models/registry.json 建成目录，登记表自此不可用（Issue #1433）。
+
+	大小写不敏感的文件系统（macOS / Windows 默认）上 REGISTRY.JSON 同样撞名。
+	"""
+	source = _make_model_source(tmp_path)
+	data_dir = tmp_path / "data"
+
+	with pytest.raises(LocalModelManifestError) as excinfo:
+		import_local_model(data_dir, source, model)
+
+	assert excinfo.value.code == "INVALID_PARAM"
+	assert "registry.json" in str(excinfo.value)
+	assert not (data_dir / "models").exists()
+	assert not model_registry_path(data_dir).exists()

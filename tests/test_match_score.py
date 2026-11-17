@@ -70,3 +70,42 @@ def test_score_job_item_nationwide_search_falls_back_to_expected_city():
 
 	with_expect = score_job_item(job, criteria=criteria, expect_data={"city": "上海"})
 	assert "城市匹配" in with_expect["match_reasons"]
+
+
+# ── 平台字段与求职期望类型漂移（Issue #1432） ───────────────────
+
+
+def test_skills_with_non_string_elements_do_not_crash_keyword_match():
+	"""skills 数组混入数字时 join 前逐项 str()，关键词匹配仍可用。"""
+	job = _job(skills=["Golang", 3, None])
+	criteria = SearchFilterCriteria(query="golang")
+
+	result = score_job_item(job, criteria=criteria, expect_data=None)
+
+	assert "关键词直接命中" in result["match_reasons"]
+
+
+def test_expect_city_list_is_ignored():
+	"""resume_expect 的 city / degree 漂移成数组时按「无此维度」处理，不抛 TypeError。"""
+	job = _job()
+	result = score_job_item(job, criteria=None, expect_data={"city": ["广州"], "degree": ["本科"]})
+
+	assert "城市匹配" not in result["match_reasons"]
+	assert "城市不匹配" not in result["mismatch_reasons"]
+	assert "学历满足要求" not in result["match_reasons"]
+	assert "学历低于要求" not in result["mismatch_reasons"]
+	assert result["match_score"] >= 0
+
+
+def test_expect_scalar_int_is_ignored_without_crash():
+	job = _job()
+	result = score_job_item(job, criteria=None, expect_data={"city": 123, "salary": 42, "degree": None})
+	assert isinstance(result["match_score"], int)
+
+
+def test_meets_education_threshold_tolerates_non_string_required():
+	"""期望学历漂移成数组时，字典查表不再抛 unhashable type。"""
+	from boss_agent_cli.search_filters import meets_education_threshold, meets_experience_threshold
+
+	assert meets_education_threshold("本科", ["本科"]) is True
+	assert meets_experience_threshold("3-5年", ["3-5年"]) is True

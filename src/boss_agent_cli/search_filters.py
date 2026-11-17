@@ -441,8 +441,8 @@ def parse_salary_range(value: str) -> tuple[int, int] | None:
 
 def meets_experience_threshold(candidate: str, required: str | None) -> bool:
 	"""Check if candidate experience meets or exceeds required threshold."""
-	if required is None:
-		return True
+	if not isinstance(required, str):
+		return True  # 期望字段漂移（数组 / 对象）按「无要求」处理，Issue #1432
 	if not isinstance(candidate, str):
 		return True  # unknown experience passes（平台字段漂移，Issue #1335）
 	c = _EXPERIENCE_ORDER.get(candidate)
@@ -456,8 +456,8 @@ def meets_experience_threshold(candidate: str, required: str | None) -> bool:
 
 def meets_education_threshold(candidate: str, required: str | None) -> bool:
 	"""Check if candidate education meets or exceeds required threshold."""
-	if required is None:
-		return True
+	if not isinstance(required, str):
+		return True  # 期望字段漂移（数组 / 对象）按「无要求」处理，Issue #1432
 	if not isinstance(candidate, str):
 		return True  # unknown education passes（平台字段漂移，Issue #1335）
 	c = _EDUCATION_ORDER.get(candidate)

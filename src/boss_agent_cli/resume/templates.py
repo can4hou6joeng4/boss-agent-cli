@@ -50,11 +50,35 @@ def _render_job_intention(resume: ResumeData) -> str:
 </div>"""
 
 
+def _row_lines(value: Any) -> list[str]:
+	"""按 ``resume_to_text`` 同口径归一 rows 自由字段（Issue #1429）。
+
+	``rows[].content/tags`` 是自由 JSON：数字、混入非字符串的数组、写错的标量
+	都会通过 ``dict_to_resume`` 的校验。模板此前直接迭代：数字抛 ``TypeError``
+	（兜成可重试的 ``EXPORT_FAILED``），字符串 tags 被逐字符渲染成单字标签。
+	合法输入的输出逐字节不变。
+	"""
+	if isinstance(value, str):
+		return [value] if value else []
+	if isinstance(value, list):
+		return [item for item in value if isinstance(item, str)]
+	if value is None:
+		return []
+	return [str(value)]
+
+
+def _row_columns(value: Any) -> int:
+	"""列数只接受大于 1 的整数；``"2"`` / ``True`` / 负数按单列处理（Issue #1429）。"""
+	if isinstance(value, bool) or not isinstance(value, int) or value < 2:
+		return 1
+	return value
+
+
 def _render_row(row: dict[str, Any]) -> str:
 	"""Render a single module row (richtext or tags)."""
 	row_type = row.get("type", "")
 	if row_type == "tags":
-		tags = row.get("tags", [])
+		tags = _row_lines(row.get("tags", []))
 		if not tags:
 			return ""
 		tags_html = "".join(
@@ -62,8 +86,8 @@ def _render_row(row: dict[str, Any]) -> str:
 		)
 		return f'<div class="tags-row">{tags_html}</div>'
 	elif row_type == "richtext":
-		content = row.get("content", [])
-		columns = row.get("columns", 1)
+		content = _row_lines(row.get("content", []))
+		columns = _row_columns(row.get("columns", 1))
 		if not content:
 			return ""
 		if columns > 1:
@@ -77,10 +101,10 @@ def _render_row(row: dict[str, Any]) -> str:
 		return f'<div class="richtext-row">{lines_html}</div>'
 	else:
 		# Unknown row type: render content if available
-		content = row.get("content", [])
+		content = _row_lines(row.get("content", []))
 		if not content:
 			return ""
-		lines_html = "".join(f"<p>{_esc(str(line))}</p>" for line in content)
+		lines_html = "".join(f"<p>{_esc(line)}</p>" for line in content)
 		return f'<div class="row">{lines_html}</div>'
 
 

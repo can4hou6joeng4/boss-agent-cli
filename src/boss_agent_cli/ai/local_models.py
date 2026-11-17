@@ -73,8 +73,12 @@ def recommended_model_rows() -> list[dict[str, Any]]:
 	return [asdict(item) for item in RECOMMENDED_MODELS]
 
 
+#: ``models/`` 下登记表的固定文件名；也是 ``--model`` 的保留名（Issue #1433）。
+_MODEL_REGISTRY_NAME = "registry.json"
+
+
 def model_registry_path(data_dir: Path) -> Path:
-	return data_dir / "models" / "registry.json"
+	return data_dir / "models" / _MODEL_REGISTRY_NAME
 
 
 def _registry_corrupt_error(path: Path, detail: str) -> LocalModelManifestError:
@@ -163,9 +167,11 @@ def _safe_model_dir(model: str) -> str:
 	`cache` 都可能这样被删掉。
 	"""
 	safe = "".join(char if char.isalnum() or char in {"-", "_", "."} else "-" for char in model).strip("-")
-	if not safe.strip("."):
+	if not safe.strip(".") or safe.casefold() == _MODEL_REGISTRY_NAME.casefold():
+		# casefold：macOS / Windows 的默认文件系统大小写不敏感，REGISTRY.JSON 同样
+		# 会撞上登记表（Issue #1433）。
 		raise LocalModelManifestError(
 			"INVALID_PARAM",
-			f"模型名无效: {model!r}；不能为空，也不能只由 . 和 - 组成",
+			f"模型名无效: {model!r}；不能为空，不能只由 . 和 - 组成，也不能与登记表文件名 {_MODEL_REGISTRY_NAME} 相同",
 		)
 	return safe

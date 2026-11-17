@@ -183,7 +183,11 @@ class ResumeStore:
 			"data": resume_to_dict(resume),
 			"metadata": envelope.metadata,
 		}
-		return json.dumps(d, ensure_ascii=False, indent=2)
+		# 与 stdout 信封同口径：rows 里的 NaN / Infinity 不能让导出文件变成非严格
+		# JSON（Issue #1435）。json_safe_value 归一后 allow_nan=False 兜底。
+		from boss_agent_cli.output import json_safe_value
+
+		return json.dumps(json_safe_value(d), ensure_ascii=False, allow_nan=False, indent=2)
 
 	def clone(self, name: str, new_name: str) -> ResumeData:
 		"""复制简历为新版本"""

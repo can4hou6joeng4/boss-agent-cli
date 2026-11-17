@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from boss_agent_cli.api.recruiter_endpoints import BASE_URL, BOSS_CHAT_START_URL, CODE_ACCOUNT_RESTRICTED, CODE_IP_RESTRICTED, CODE_STOKEN_EXPIRED
 from boss_agent_cli.api.zhipin_errors import classify_code_37, response_message
+from boss_agent_cli.platforms.base import classify_platform_error
 from boss_agent_cli.platforms.recruiter_base import RecruiterPlatform
 
 if TYPE_CHECKING:
@@ -107,10 +108,16 @@ class BossRecruiterPlatform(RecruiterPlatform):
 		if _view_geek_retired(response):
 			_remember_deprecated_endpoint(response, _ISSUE_472)
 			return "ENDPOINT_DEPRECATED", message
-		unified = _ERROR_CODE_MAP.get(code, "UNKNOWN") if isinstance(code, int) else "UNKNOWN"
+		# 数字字符串码（如 "9" / "121"）先归一成整数再分类：此前 isinstance(code, int)
+		# 门禁让它们整体绕过码表；HTTP 401 由客户端自己合成响应，必须走通用兜底变
+		# AUTH_EXPIRED 而不是 UNKNOWN（Issue #1430）。风险码分支上面的 str 形式不受影响。
+		numeric_code = int(code) if isinstance(code, str) and code.isdigit() else code
+		unified = classify_platform_error(
+			{**response, "code": numeric_code}, _ERROR_CODE_MAP, message_keywords=False
+		)[0]
 		# 端点漂移场景下重映射 121：调用方（_browser_request / _request）在 response dict 注入
 		# __cli_endpoint_hint__ 字段（CLI 内部命名空间，避免与服务端字段冲突）。
-		if code == 121 and _SEND_REPLY_FRAGMENT in _endpoint_hint(response):
+		if numeric_code == 121 and _SEND_REPLY_FRAGMENT in _endpoint_hint(response):
 			_remember_deprecated_endpoint(response, _ISSUE_217)
 			unified = "ENDPOINT_DEPRECATED"
 		return unified, message

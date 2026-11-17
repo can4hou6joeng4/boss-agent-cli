@@ -13,6 +13,7 @@ from pathlib import Path
 
 from boss_agent_cli.resume.models import ResumeData
 from boss_agent_cli.resume.templates import render_resume_html
+from boss_agent_cli.services.output_path import refuse_symlink_target
 from boss_agent_cli.services.text_files import write_text_atomic
 
 
@@ -33,6 +34,10 @@ def export_pdf(resume: ResumeData, output_path: Path) -> Path:
 	Creates parent directories if they don't exist.
 	Returns the output path.
 	"""
+	# 与 write_text_atomic / write_json_atomic 同口径：PDF 走 os.replace，替换的是
+	# 链接本身而不是真实目标，静默破坏用户的链接布局（Issue #1434）。放在浏览器
+	# 依赖导入之前，拒绝路径不需要 patchright。
+	refuse_symlink_target(output_path)
 	from patchright.sync_api import sync_playwright
 
 	html = render_resume_html(resume)

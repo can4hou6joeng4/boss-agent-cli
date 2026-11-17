@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from boss_agent_cli.main import cli
@@ -384,3 +385,22 @@ def test_cli_export_json_corrupt_resume_reports_file_invalid(tmp_path):
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "RESUME_FILE_INVALID"
+
+
+# ── PDF 符号链接拒绝（Issue #1434） ─────────────────────────────
+
+
+def test_export_pdf_refuses_symlink_target(tmp_path):
+	"""`-o` 指向符号链接时必须拒绝，不能 os.replace 掉链接本身（与 #1355 口径一致）。"""
+	real = tmp_path / "real.pdf"
+	real.write_text("old", encoding="utf-8")
+	link = tmp_path / "link.pdf"
+	link.symlink_to(real)
+
+	resume = _make_resume()
+	with pytest.raises(OSError) as caught:
+		export_pdf(resume, link)
+
+	assert caught.value.filename == str(link)
+	assert real.read_text(encoding="utf-8") == "old"
+	assert link.is_symlink()
