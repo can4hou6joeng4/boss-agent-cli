@@ -1212,23 +1212,45 @@ _EMPTY_ALLOWED_REQUIRED: dict[str, frozenset[str]] = {
 }
 
 
+def _conditionally_required_string_names(schema: dict[str, Any]) -> set[str]:
+	"""收集 ``if/then`` 与 ``allOf`` 条件分支里必填的字符串参数名。"""
+	names: set[str] = set()
+
+	def visit(node: Any) -> None:
+		if not isinstance(node, dict):
+			return
+		then = node.get("then")
+		if isinstance(then, dict) and isinstance(then.get("required"), list):
+			names.update(name for name in then["required"] if isinstance(name, str))
+		branches = node.get("allOf")
+		if isinstance(branches, list):
+			for branch in branches:
+				visit(branch)
+
+	visit(schema)
+	return names
+
+
 def _with_required_string_bounds(tool: ToolDefinition) -> ToolDefinition:
 	"""给必填字符串补 ``minLength: 1``（Issue #1533）。
 
-	工具目录里 required 的字符串几乎都是标识、名称或正文：空串在任何 CLI 路径上
+	工具目录里必填的字符串几乎都是标识、名称或正文：空串在任何 CLI 路径上
 	都不可能成功（多数命令还额外拒绝纯空白）。逐个属性手写 minLength 会漏，这里
 	统一派生；显式声明过的边界与 `_EMPTY_ALLOWED_REQUIRED` 登记的参数不覆盖。
+	条件必填的 run_id / key / value / job_id 也按同一规则处理，否则 schema 允许
+	空串，MCP 入口会生成 ``wizard --status ""`` 这样的空参数（Issue #1593）。
 	"""
 	properties = tool.input_schema.get("properties")
 	required = tool.input_schema.get("required")
 	if not isinstance(properties, dict) or not isinstance(required, list):
 		return tool
 	exempt = _EMPTY_ALLOWED_REQUIRED.get(tool.name, frozenset())
+	names = set(required) | _conditionally_required_string_names(tool.input_schema)
 	updated: dict[str, Any] = {}
 	changed = False
 	for name, prop in properties.items():
 		if (
-			name in required
+			name in names
 			and name not in exempt
 			and isinstance(prop, dict)
 			and prop.get("type") == "string"

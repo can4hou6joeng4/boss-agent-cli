@@ -6,6 +6,11 @@
 
 ### Fixed
 - `docs/troubleshooting.md` / `.en.md` 的错误码表未登记 3.4.90 新增的 `WORKFLOW_ALREADY_FINISHED`，按故障表排查的 Agent 会把已完成的 workflow 误判为 `run_id` 写错；现在补充该码与 `wizard --status` 结果读取指引（Issue #1589）。
+- `agent run --dry-run --resume` 会在预览前执行 `store.resume()`，把操作者设置的停止标志写成「已恢复」，之后真实运行不再受停止闩锁保护；`hr location` 的恢复指引也指向了该组合。现在 CLI / MCP 都拒绝该组合，恢复指引改为 live `agent run --resume`（Issue #1591）。
+- wizard 断点里的 `error.recoverable` / `error.recovery_action` 类型漂移没有被读取边界拦截，`bool("false")` 会把不可恢复错误变成可重试，数字 recovery_action 会进入信封；现在这两处与 `replay_safe` 一样按记录损坏 fail-closed（Issue #1592）。
+- MCP 的条件必填字符串（wizard 的 `run_id`、config 的 `key` / `value`、hr jobs 的 `job_id`）只有条件必填声明，没有 `minLength` 边界，空串原样进入 CLI；现在条件必填字符串与顶层必填采用同一边界，入口按 schema 拒绝（Issue #1593）。
+- MCP 入口没有校验 `minimum` / `maximum`，`timeout=-5` / `max_retries=100` 等越界值会进入 argv；wizard 的宿主等待也没有上限，`timeout=1e308` 可让 MCP server 近似无界等待。现在入口按 schema 校验数值边界，宿主等待封顶 900 秒（Issue #1594）。
+- MCP 的 `boss_shortlist_annotate.add_tags` / `remove_tags` 虽声明了 `items.minLength: 1`，入口却只校验元素类型，空标签被拼成 `--add-tag ""`；现在逐元素按 schema 校验（Issue #1595）。
 
 ## [3.4.90] - 2026-11-18
 

@@ -348,7 +348,9 @@ def _cli_timeout(args: tuple[str, ...]) -> float:
 		except (IndexError, ValueError):
 			return _CLI_TIMEOUT_SECONDS
 		if math.isfinite(requested) and requested > 0:
-			return requested + _CHECKPOINT_GRACE_SECONDS
+			# wizard 子进程自己的 --timeout 没有上限：宿主若按任意大值等待，
+			# 客户端一次超时调用会把 MCP server 挂到近似无界（Issue #1594）。
+			return min(requested + _CHECKPOINT_GRACE_SECONDS, _MAX_CLI_TIMEOUT_SECONDS)
 		return _CLI_TIMEOUT_SECONDS
 	requests = _estimated_requests(args) if args else None
 	if requests is None:
@@ -662,6 +664,8 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 	数组还要按 `items.type` 逐元素校验（Issue #1105）：`_build_args` 用 `str()`
 	拼装元素，布尔值或对象会变成 `False`、`{'k': 'v'}` 这样的文本写进本地标签，
 	整数数组里的错误元素则要到 CLI 才得到一条不指明位置的参数错误。
+	数值上下界与数组元素的 minLength 也按 inputSchema 校验（Issue #1594 / #1595），
+	避免越界值到 CLI 后被静默截断、空标签写进本地候选池。
 	"""
 	tool = next((item for item in TOOLS if item.name == tool_name), None)
 	if tool is None:
@@ -684,6 +688,13 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 			min_length = prop.get("minLength")
 			if isinstance(min_length, int) and not isinstance(min_length, bool) and len(value) < min_length:
 				errors.append(f"{key} 至少需要 {min_length} 个字符")
+		if expected in {"integer", "number"}:
+			minimum = prop.get("minimum")
+			maximum = prop.get("maximum")
+			if isinstance(minimum, (int, float)) and not isinstance(minimum, bool) and value < minimum:
+				errors.append(f"{key}={value} 不能小于 {minimum}")
+			if isinstance(maximum, (int, float)) and not isinstance(maximum, bool) and value > maximum:
+				errors.append(f"{key}={value} 不能大于 {maximum}")
 		if expected == "array":
 			# 空数组与「不传」在 mapping 层不可区分：例如 last-messages 的
 			# friend_ids=[] 会退化成抓取当前页候选人并发出平台请求（Issue #1218）。
@@ -701,6 +712,14 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 		)
 		if len(invalid) > _MAX_ELEMENT_TYPE_ERRORS:
 			errors.append(f"{key} 另有 {len(invalid) - _MAX_ELEMENT_TYPE_ERRORS} 个元素类型错误")
+		items = prop.get("items")
+		item_min_length = items.get("minLength") if isinstance(items, dict) else None
+		if isinstance(item_min_length, int) and not isinstance(item_min_length, bool):
+			# schema 的 items.minLength 是客户端与入口共同的契约：空标签不会
+			# 走到 CLI，也不会在 mapping 层被拼成 `--add-tag ""`（Issue #1595）。
+			for index, item in enumerate(value):
+				if isinstance(item, str) and len(item) < item_min_length:
+					errors.append(f"{key}[{index}] 至少需要 {item_min_length} 个字符")
 	return errors
 
 

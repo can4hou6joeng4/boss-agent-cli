@@ -37,6 +37,43 @@ def _validate_replay_markers(run: dict[str, Any]) -> dict[str, Any]:
 	return run
 
 
+def _validate_error_contract(run: dict[str, Any]) -> dict[str, Any]:
+	"""``error.recoverable`` / ``error.recovery_action`` 类型漂移按记录损坏拒绝。
+
+	信封出口把 ``recoverable`` 转成布尔、把 ``recovery_action`` 原样透传：
+	持久化的 ``"false"`` 会变成 ``true``，数字 ``123`` 会进入 error.recovery_action
+	让用户去执行一个不存在的地址（Issue #1592）。标记没有可猜测的原值，读取边界
+	按损坏拒绝，不改写断点。
+	"""
+	run_id = str(run.get("run_id") or "")
+	records = [("workflow_run", run_id, run.get("error"))]
+	records.extend(
+		("workflow_step", f"{run_id}/{step.get('step_name')}", step.get("error")) for step in run.get("steps") or []
+	)
+	for kind, record_id, error in records:
+		if not isinstance(error, dict):
+			continue
+		if "recoverable" in error and not isinstance(error["recoverable"], bool):
+			raise CacheRecordInvalid(
+				kind,
+				record_id,
+				"error.recoverable",
+				"必须是布尔值；不能从字符串或数字猜测是否可重试，重建任务前先核对实际状态",
+			)
+		if (
+			"recovery_action" in error
+			and error["recovery_action"] is not None
+			and not isinstance(error["recovery_action"], str)
+		):
+			raise CacheRecordInvalid(
+				kind,
+				record_id,
+				"error.recovery_action",
+				"必须是字符串或 null；其他类型无法作为真人恢复指引",
+			)
+	return run
+
+
 def _validate_statuses(run: dict[str, Any]) -> dict[str, Any]:
 	"""run 与每个 step 的 ``status`` 必须是 ``WorkflowStatus`` 的枚举值。
 
@@ -102,6 +139,7 @@ class WorkflowStore:
 			run["steps"] = self._cache.list_workflow_steps(run_id)
 			if validate_replay_markers:
 				_validate_replay_markers(run)
+				_validate_error_contract(run)
 				_validate_statuses(run)
 		return run
 
@@ -140,6 +178,7 @@ class WorkflowStore:
 			try:
 				run["steps"] = self._cache.list_workflow_steps(run_id)
 				_validate_replay_markers(run)
+				_validate_error_contract(run)
 				_validate_statuses(run)
 			except CacheRecordInvalid:
 				corrupt.append(run_id)

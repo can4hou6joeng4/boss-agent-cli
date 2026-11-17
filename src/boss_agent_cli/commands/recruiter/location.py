@@ -176,7 +176,7 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 	base: dict[str, Any] = {"friend_id": friend_id, "sent": False}
 	stop = _stop_reason(data_dir)
 	if stop is not None:
-		resume_cmd = hint_command(ctx, "agent run --dry-run --resume")
+		resume_cmd = hint_command(ctx, "agent run --resume")
 		_fail(
 			ctx,
 			code="CIRCUIT_BREAKER_OPEN",
