@@ -17,6 +17,11 @@ from boss_agent_cli.ai.config import AIConfigStore, ai_float_setting, ai_int_set
 from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action_for
 from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore, SavedSearchParamsError
 from boss_agent_cli.platforms.factory import build_platform_instance, build_recruiter_platform_instance
+from boss_agent_cli.services.candidate_actions import (
+	CandidateActionBlocked,
+	CandidateActionNotRecorded,
+	run_candidate_action,
+)
 from boss_agent_cli.services.contact_lookup import FriendLookupLimitExceeded, find_friend
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.services.output_path import OutputPathProblem, inspect_output_path, prepare_output_path
@@ -782,6 +787,22 @@ def _raise_local_state_write_failed(message: str, details: dict[str, Any]) -> No
 	)
 
 
+def _raise_candidate_action_blocked(
+	context: ActionContext, blocked: CandidateActionBlocked, *, check_command: str
+) -> NoReturn:
+	"""本地预约已存在：已成功回 ALREADY_*，pending 回不可重放的 ACTION_UNCONFIRMED。"""
+	if blocked.code in {"ALREADY_GREETED", "ALREADY_APPLIED"}:
+		raise WorkflowActionError(blocked.code, blocked.message)
+	raise WorkflowActionError(
+		"ACTION_UNCONFIRMED",
+		blocked.message,
+		recoverable=False,
+		recovery_action=_unconfirmed_write_recovery(context, check_command),
+		details={"outcome_unknown": True, "replay_safe": False},
+		replay_safe=False,
+	)
+
+
 def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	security_id = str(_required(inputs, "security_id"))
 	job_id = str(_required(inputs, "job_id"))
@@ -791,21 +812,29 @@ def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 		if cache.is_applied(security_id, job_id, account=account):
 			raise WorkflowActionError("ALREADY_APPLIED", "已对该职位发起过投递/立即沟通")
 		with context.candidate_platform() as platform:
-			data = _write_call(
-				context,
-				platform,
-				lambda: platform.apply(security_id, job_id, lid=lid),
-				"投递失败",
-				check_command="me --section deliver",
-			)
-		try:
-			cache.record_apply(security_id, job_id, account=account)
-		except Exception:
-			# 重试或 --resume 会绕过 is_applied 检查，把同一次投递再提交一遍。
-			_raise_local_state_write_failed(
-				"投递/立即沟通已提交，但本地状态保存失败；不要自动重发",
-				{"security_id": security_id, "job_id": job_id, "applied": True, "recorded": False},
-			)
+			try:
+				data = run_candidate_action(
+					cache,
+					security_id=security_id,
+					job_id=job_id,
+					action="apply",
+					account=account,
+					send=lambda: _write_call(
+						context,
+						platform,
+						lambda: platform.apply(security_id, job_id, lid=lid),
+						"投递失败",
+						check_command="me --section deliver",
+					),
+				)
+			except CandidateActionBlocked as blocked:
+				_raise_candidate_action_blocked(context, blocked, check_command="me --section deliver")
+			except CandidateActionNotRecorded:
+				# 重试或 --resume 会绕过 is_applied / 预约检查，把同一次投递再提交一遍。
+				_raise_local_state_write_failed(
+					"投递/立即沟通已提交，但本地状态保存失败；不要自动重发",
+					{"security_id": security_id, "job_id": job_id, "applied": True, "recorded": False},
+				)
 	return StepResult({"security_id": security_id, "job_id": job_id, "result": data})
 
 
@@ -818,20 +847,28 @@ def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: M
 		if cache.is_greeted(security_id, job_id=job_id, account=account):
 			raise WorkflowActionError("ALREADY_GREETED", "已向该招聘者打过招呼")
 		with context.candidate_platform() as platform:
-			data = _write_call(
-				context,
-				platform,
-				lambda: platform.greet(security_id, job_id, message),
-				"打招呼失败",
-			)
-		try:
-			cache.record_greet(security_id, job_id, account=account)
-		except Exception:
-			# 重试或 --resume 会绕过 is_greeted 检查，把同一个招呼再发一次。
-			_raise_local_state_write_failed(
-				"已向该招聘者打招呼，但本地状态保存失败；不要自动重发",
-				{"security_id": security_id, "job_id": job_id, "greeted": True, "recorded": False},
-			)
+			try:
+				data = run_candidate_action(
+					cache,
+					security_id=security_id,
+					job_id=job_id,
+					action="greet",
+					account=account,
+					send=lambda: _write_call(
+						context,
+						platform,
+						lambda: platform.greet(security_id, job_id, message),
+						"打招呼失败",
+					),
+				)
+			except CandidateActionBlocked as blocked:
+				_raise_candidate_action_blocked(context, blocked, check_command="chat")
+			except CandidateActionNotRecorded:
+				# 重试或 --resume 会绕过 is_greeted / 预约检查，把同一个招呼再发一次。
+				_raise_local_state_write_failed(
+					"已向该招聘者打招呼，但本地状态保存失败；不要自动重发",
+					{"security_id": security_id, "job_id": job_id, "greeted": True, "recorded": False},
+				)
 	return StepResult({"security_id": security_id, "job_id": job_id, "result": data})
 
 

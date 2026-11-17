@@ -17,6 +17,9 @@
 - `boss schema` 的 `mark --label` 封闭枚举漏掉实现支持的 `牛人发起`，也未说明接受数字 ID；现在 enum 覆盖 `_LABEL_MAP` 的全部标签，并注明「标签名称或数字 ID」（Issue #1506）。
 - 简历文件名清洗只替换 `/`、`\` 与 NUL，Windows 上 `name="D:evil"` 生成的 `D:evil.json` 与 resumes 目录拼接后会脱离 base；现在 `:` 一并替换，`CON` / `NUL` / `COM1` 等保留设备名（含带扩展名形式）与纯点号名称同样改写，`resume import` 对不安全名称直接返回 `INVALID_PARAM`（Issue #1507，待 Windows 实机验证）。
 - 招聘自动化直接扫描路径在派发写动作前没有把在途动作落盘：发送后进程被杀或 checkpoint 撞控制锁时没有记录，下一轮凭 transcript 重新决策，本地 AI 改写后的问卷匹配不到模板会再次发送；现在派发前把 `inflight_action`（动作、消息 hash、时间、会话 ref）写进 `automation/state.json`，成功后与阶段字段原子清除，重放时转 `verification-required` 并给出核对指引，只有确定未发出的异常才释放标记（Issue #1511）。
+- 求职者 `greet` / `apply` 的去重是跨进程 check-then-act：两个进程同时通过 `is_greeted` / `is_applied` 检查后会各发一次真实请求；现在发送前按 `(账号, job_id, 动作)` 在 SQLite 里原子预约，抢不到时已成功回 `ALREADY_*`、发送中回不可重试的 `ACTION_UNCONFIRMED`，CLI `greet` / `apply` / `batch-greet` 与 wizard 的 candidate_greet / candidate_apply 共用同一收口，旧记录表继续参与去重（Issue #1508）。
+- `watch` 命中写入先 `SELECT` 再 `INSERT`，两个进程对同一个 watch 并发记录时第二个会撞主键抛 `IntegrityError` 并被误判为缓存库损坏；现在改为 `INSERT OR IGNORE` + `UPDATE`，新增 / 已见计数语义不变（Issue #1509）。
+- `shortlist_records`、`crawl_runs`、`crawl_jobs` 的旧库迁移没有事务，双进程首次打开会各自执行 `ALTER TABLE`，第二个拿到 `duplicate column name` 并被误判为库损坏；现在与去重键迁移一致，先 `BEGIN IMMEDIATE` 拿写锁再重读 `table_info`，真实迁移失败（类型不符、唯一索引冲突）仍原样上抛（Issue #1510）。
 
 ## [3.4.80] - 2026-11-17
 

@@ -116,6 +116,7 @@ def test_cli_envelope_commands_point_at_the_custom_data_dir(tmp_path) -> None:
 		cache.__enter__ = lambda self: self
 		cache.__exit__ = lambda self, *a: None
 		cache.is_greeted.return_value = False
+		cache.claim_candidate_action.return_value = None
 		result = CliRunner().invoke(
 			cli, ["--data-dir", str(custom_dir), "--json", "greet", "sec", "job"]
 		)

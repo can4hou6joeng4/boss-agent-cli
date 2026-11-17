@@ -4,7 +4,8 @@ import math
 import secrets
 import sqlite3
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Literal, NoReturn, TypeVar, cast, overload
@@ -528,6 +529,15 @@ class CacheStore:
 				applied_at REAL NOT NULL,
 				PRIMARY KEY (account, job_id, security_id)
 			);
+			CREATE TABLE IF NOT EXISTS candidate_action_claims (
+				account TEXT NOT NULL DEFAULT '',
+				job_id TEXT NOT NULL,
+				action TEXT NOT NULL,
+				security_id TEXT NOT NULL DEFAULT '',
+				status TEXT NOT NULL,
+				updated_at REAL NOT NULL,
+				PRIMARY KEY (account, job_id, action)
+			);
 			CREATE TABLE IF NOT EXISTS shortlist_records (
 				security_id TEXT NOT NULL,
 				job_id TEXT NOT NULL,
@@ -633,6 +643,24 @@ class CacheStore:
 		self._migrate_crawl_jobs()
 		self._migrate_dedupe_keys()
 
+	@contextmanager
+	def _migration_write_transaction(self) -> Iterator[None]:
+		"""迁移的写事务：拿到写锁后调用方才重新读取 schema。
+
+		``PRAGMA table_info`` 与 ``ALTER TABLE`` 分开执行时，两个进程可能都看到
+		旧列并各自 ALTER，第二个拿到 ``duplicate column name``，被 ``__init__``
+		误判成缓存库损坏（Issue #1510）。``BEGIN IMMEDIATE`` 把「检查 + 变更」
+		串行化；等锁超时仍按 ``CacheBusyError`` 上报，真实失败（列类型不符、
+		唯一索引冲突）原样上抛，不能吞成「无需迁移」。
+		"""
+		self._conn.execute("BEGIN IMMEDIATE")
+		try:
+			yield
+		except BaseException:
+			self._conn.rollback()
+			raise
+		self._conn.commit()
+
 	def _migrate_dedupe_keys(self) -> None:
 		"""把 greet/apply 记录的键换成「账号指纹 + 稳定 job_id」。
 
@@ -655,8 +683,7 @@ class CacheStore:
 		# 需要迁移时才取写锁。整个重建过程放在一个写事务里：迁移中途崩溃不会留下
 		# 缺表或半迁移状态，并发的第二个进程拿到锁后会看到新主键，不会重复迁移
 		# 把账号指纹抹掉。
-		self._conn.execute("BEGIN IMMEDIATE")
-		try:
+		with self._migration_write_transaction():
 			for table, time_column in (("greet_records", "greeted_at"), ("apply_records", "applied_at")):
 				columns = self._conn.execute(f"PRAGMA table_info({table})").fetchall()
 				# table_info 按建表列序返回，pk 字段是该列在主键中的序号，不是主键顺序；
@@ -682,60 +709,97 @@ class CacheStore:
 				""")
 				self._conn.execute(f"DROP TABLE {table}")
 				self._conn.execute(f"ALTER TABLE {table}_new RENAME TO {table}")
-			self._conn.commit()
-		except Exception:
-			self._conn.rollback()
-			raise
 
 	def _migrate_shortlist_records(self) -> None:
 		columns = {
 			row[1]
 			for row in self._conn.execute("PRAGMA table_info(shortlist_records)").fetchall()
 		}
-		if "tags" not in columns:
-			self._conn.execute("ALTER TABLE shortlist_records ADD COLUMN tags TEXT DEFAULT ''")
-		if "note" not in columns:
-			self._conn.execute("ALTER TABLE shortlist_records ADD COLUMN note TEXT DEFAULT ''")
-		if "lid" not in columns:
-			# 未记录的访问上下文保持未知；不按 job_id 合并或替换历史记录。
-			self._conn.execute("ALTER TABLE shortlist_records ADD COLUMN lid TEXT NOT NULL DEFAULT ''")
-		self._conn.commit()
+		if {"tags", "note", "lid"} <= columns:
+			return
+		# 无锁快路径只用于跳过已是新结构的库；真正变更前必须拿到写锁并重读列，
+		# 否则并发打开的第二个进程会重复 ALTER 并抛 duplicate column（Issue #1510）。
+		with self._migration_write_transaction():
+			columns = {
+				row[1]
+				for row in self._conn.execute("PRAGMA table_info(shortlist_records)").fetchall()
+			}
+			if "tags" not in columns:
+				self._conn.execute("ALTER TABLE shortlist_records ADD COLUMN tags TEXT DEFAULT ''")
+			if "note" not in columns:
+				self._conn.execute("ALTER TABLE shortlist_records ADD COLUMN note TEXT DEFAULT ''")
+			if "lid" not in columns:
+				# 未记录的访问上下文保持未知；不按 job_id 合并或替换历史记录。
+				self._conn.execute("ALTER TABLE shortlist_records ADD COLUMN lid TEXT NOT NULL DEFAULT ''")
 
 	def _migrate_crawl_runs(self) -> None:
 		columns = {
 			row[1]
 			for row in self._conn.execute("PRAGMA table_info(crawl_runs)").fetchall()
 		}
-		if "list_finished" not in columns:
-			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN list_finished INTEGER NOT NULL DEFAULT 0")
-		if "stop_requested" not in columns:
-			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN stop_requested INTEGER NOT NULL DEFAULT 0")
-		if "requests_attempted" not in columns:
-			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN requests_attempted INTEGER NOT NULL DEFAULT 0")
-		if "detail_requests_attempted" not in columns:
-			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN detail_requests_attempted INTEGER NOT NULL DEFAULT 0")
-		if "elapsed_seconds" not in columns:
-			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN elapsed_seconds INTEGER NOT NULL DEFAULT 0")
-		if "hook_results" not in columns:
-			self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN hook_results TEXT NOT NULL DEFAULT '[]'")
-		self._conn.commit()
+		if {
+			"list_finished",
+			"stop_requested",
+			"requests_attempted",
+			"detail_requests_attempted",
+			"elapsed_seconds",
+			"hook_results",
+		} <= columns:
+			return
+		with self._migration_write_transaction():
+			columns = {
+				row[1]
+				for row in self._conn.execute("PRAGMA table_info(crawl_runs)").fetchall()
+			}
+			if "list_finished" not in columns:
+				self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN list_finished INTEGER NOT NULL DEFAULT 0")
+			if "stop_requested" not in columns:
+				self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN stop_requested INTEGER NOT NULL DEFAULT 0")
+			if "requests_attempted" not in columns:
+				self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN requests_attempted INTEGER NOT NULL DEFAULT 0")
+			if "detail_requests_attempted" not in columns:
+				self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN detail_requests_attempted INTEGER NOT NULL DEFAULT 0")
+			if "elapsed_seconds" not in columns:
+				self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN elapsed_seconds INTEGER NOT NULL DEFAULT 0")
+			if "hook_results" not in columns:
+				self._conn.execute("ALTER TABLE crawl_runs ADD COLUMN hook_results TEXT NOT NULL DEFAULT '[]'")
 
 	def _migrate_crawl_jobs(self) -> None:
+		if self._crawl_jobs_migration_done():
+			return
+		# 回填 + 唯一索引必须与列检查在同一写事务里：并发进程各自回填会让
+		# ``CREATE UNIQUE INDEX`` 撞上重复 selector，或重复执行 ALTER。
+		with self._migration_write_transaction():
+			columns = {row[1] for row in self._conn.execute("PRAGMA table_info(crawl_jobs)").fetchall()}
+			if "selector" not in columns:
+				self._conn.execute("ALTER TABLE crawl_jobs ADD COLUMN selector TEXT")
+			missing = self._conn.execute(
+				"SELECT run_id, job_key FROM crawl_jobs WHERE selector IS NULL OR selector = ''"
+			).fetchall()
+			for run_id, job_key in missing:
+				self._conn.execute(
+					"UPDATE crawl_jobs SET selector = ? WHERE run_id = ? AND job_key = ?",
+					(self._new_crawl_selector(), run_id, job_key),
+				)
+			self._conn.execute(
+				"CREATE UNIQUE INDEX IF NOT EXISTS crawl_jobs_run_selector ON crawl_jobs(run_id, selector)"
+			)
+
+	def _crawl_jobs_migration_done(self) -> bool:
 		columns = {row[1] for row in self._conn.execute("PRAGMA table_info(crawl_jobs)").fetchall()}
 		if "selector" not in columns:
-			self._conn.execute("ALTER TABLE crawl_jobs ADD COLUMN selector TEXT")
-		missing = self._conn.execute(
-			"SELECT run_id, job_key FROM crawl_jobs WHERE selector IS NULL OR selector = ''"
-		).fetchall()
-		for run_id, job_key in missing:
+			return False
+		index = self._conn.execute(
+			"SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'crawl_jobs_run_selector'"
+		).fetchone()
+		if index is None:
+			return False
+		return (
 			self._conn.execute(
-				"UPDATE crawl_jobs SET selector = ? WHERE run_id = ? AND job_key = ?",
-				(self._new_crawl_selector(), run_id, job_key),
-			)
-		self._conn.execute(
-			"CREATE UNIQUE INDEX IF NOT EXISTS crawl_jobs_run_selector ON crawl_jobs(run_id, selector)"
+				"SELECT 1 FROM crawl_jobs WHERE selector IS NULL OR selector = '' LIMIT 1"
+			).fetchone()
+			is None
 		)
-		self._conn.commit()
 
 	def _new_crawl_selector(self) -> str:
 		return f"csel_{secrets.token_urlsafe(18)}"
@@ -1492,16 +1556,17 @@ class CacheStore:
 		for item in items:
 			job_key = self._make_watch_job_key(item, account=account)
 			payload = json.dumps(item, ensure_ascii=False, sort_keys=True)
-			row = self._conn.execute(
-				"SELECT 1 FROM watch_hits WHERE search_name = ? AND job_key = ?",
-				(search_name, job_key),
-			).fetchone()
-			if row is None:
+			# 先 SELECT 再 INSERT 时，两个进程对同一个 watch 同时写入会都看到
+			# 「不存在」，第二个 INSERT 撞主键抛 IntegrityError，被上层误判成
+			# 缓存库损坏（Issue #1509）。INSERT OR IGNORE + UPDATE 的每条语句
+			# 本身是原子的：抢到插入的一方记新增，另一方只刷新 payload / 时间。
+			cursor = self._conn.execute(
+				"INSERT OR IGNORE INTO watch_hits (search_name, job_key, payload, first_seen_at, last_seen_at) "
+				"VALUES (?, ?, ?, ?, ?)",
+				(search_name, job_key, payload, now, now),
+			)
+			if cursor.rowcount:
 				new_items.append(item)
-				self._conn.execute(
-					"INSERT INTO watch_hits (search_name, job_key, payload, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?)",
-					(search_name, job_key, payload, now, now),
-				)
 			else:
 				seen_count += 1
 				self._conn.execute(
@@ -1547,6 +1612,79 @@ class CacheStore:
 			(account, job_id, security_id, time.time()),
 		)
 		self._conn.commit()
+
+	def claim_candidate_action(
+		self,
+		security_id: str,
+		job_id: str,
+		action: Literal["greet", "apply"],
+		*,
+		account: str = "",
+	) -> str | None:
+		"""原子预约求职者侧的 greet / apply；抢到返回 None，已有记录返回状态。
+
+		``is_greeted`` / ``is_applied`` + 发送 + ``record_*`` 是跨进程的
+		check-then-act：两个进程可以同时通过检查，各发一次真实请求
+		（Issue #1508）。这里按 ``(account, job_id, action)`` 用
+		``INSERT OR IGNORE`` 抢一个 pending 行，只有 rowcount=1 的那一方发送。
+
+		旧的 greet_records / apply_records 仍然参与判断（历史去重不能丢），
+		命中时返回 ``sent``；并发进程已经抢到 pending 时返回 ``pending``，
+		调用方必须按结果未知处理，不能再发。
+		"""
+		legacy_seen = (
+			self.is_greeted(security_id, job_id=job_id, account=account)
+			if action == "greet"
+			else self.is_applied(security_id, job_id, account=account)
+		)
+		if legacy_seen:
+			return "sent"
+		with self._conn:
+			cursor = self._conn.execute(
+				"INSERT OR IGNORE INTO candidate_action_claims "
+				"(account, job_id, action, security_id, status, updated_at) "
+				"VALUES (?, ?, ?, ?, 'pending', ?)",
+				(account, job_id, action, security_id, time.time()),
+			)
+			if cursor.rowcount:
+				return None
+			row = self._conn.execute(
+				"SELECT status FROM candidate_action_claims WHERE account = ? AND job_id = ? AND action = ?",
+				(account, job_id, action),
+			).fetchone()
+		# 冲突行只可能来自已提交的另一个进程；读不到时按 pending 保守处理。
+		return str(row[0]) if row is not None else "pending"
+
+	def mark_candidate_action_sent(
+		self,
+		security_id: str,
+		job_id: str,
+		action: Literal["greet", "apply"],
+		*,
+		account: str = "",
+	) -> None:
+		"""平台确认成功后把预约 settle 成 sent（历史记录由调用方先写入）。"""
+		with self._conn:
+			self._conn.execute(
+				"INSERT INTO candidate_action_claims "
+				"(account, job_id, action, security_id, status, updated_at) "
+				"VALUES (?, ?, ?, ?, 'sent', ?) "
+				"ON CONFLICT(account, job_id, action) DO UPDATE SET "
+				"security_id = excluded.security_id, status = 'sent', updated_at = excluded.updated_at",
+				(account, job_id, action, security_id, time.time()),
+			)
+
+	def release_candidate_action(
+		self, job_id: str, action: Literal["greet", "apply"], *, account: str = ""
+	) -> bool:
+		"""撤销确定未发出的预约；只删 pending，sent 与结果未知的记录保持原样。"""
+		with self._conn:
+			cursor = self._conn.execute(
+				"DELETE FROM candidate_action_claims "
+				"WHERE account = ? AND job_id = ? AND action = ? AND status = 'pending'",
+				(account, job_id, action),
+			)
+			return bool(cursor.rowcount)
 
 	def is_shortlisted(self, security_id: str, job_id: str) -> bool:
 		row = self._conn.execute(
