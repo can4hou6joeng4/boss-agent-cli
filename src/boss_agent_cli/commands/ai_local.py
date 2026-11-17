@@ -96,7 +96,7 @@ def local_status_cmd(ctx: click.Context) -> None:
 			"provider": config.get("ai_provider"),
 			"model": config.get("ai_model"),
 			"base_url": store.get_base_url(),
-			"api_key_set": store.get_api_key() is not None,
+			"api_key_set": store.api_key_is_set(),
 			"recommended_models": recommended_model_rows(),
 			"imported_models": [asdict(item) for item in read_imported_models(ctx.obj["data_dir"])],
 		},
@@ -112,11 +112,42 @@ def local_status_cmd(ctx: click.Context) -> None:
 @click.pass_context
 def local_configure_cmd(ctx: click.Context, runtime: str, model: str, base_url: str | None) -> None:
 	"""配置本地 OpenAI-compatible 模型服务。"""
+	# 显式空值不是「没传」：`--model ""` 会写入空模型名，`ai local status` 随即
+	# 变成 configured=false；`--base-url ""` 被 `or` 静默替换成运行时默认端点，
+	# 调用方以为指定了地址。两者都在任何写盘之前拒绝（Issue #1500）。
+	if not model.strip():
+		handle_error_output(
+			ctx,
+			"ai.local.configure",
+			code="INVALID_PARAM",
+			message="--model 不能为空或只包含空白字符",
+			recovery_action="传入真实的本地模型名后重试",
+			hints={"next_actions": [
+				_hint_command(ctx, "ai local configure --runtime ollama --model qwen3:14b"),
+				_hint_command(ctx, "ai local status"),
+			]},
+		)
+		ctx.exit(1)
+		return
+	if base_url is not None and not base_url.strip():
+		handle_error_output(
+			ctx,
+			"ai.local.configure",
+			code="INVALID_PARAM",
+			message="--base-url 不能为空或只包含空白字符；省略该选项才会使用 runtime 默认地址",
+			recovery_action="去掉 --base-url 使用 runtime 默认地址，或传入完整的 http(s) 地址",
+			hints={"next_actions": [
+				_hint_command(ctx, f"ai local configure --runtime {runtime} --model {shell_argument(model)}"),
+				_hint_command(ctx, "ai local status"),
+			]},
+		)
+		ctx.exit(1)
+		return
 	store = AIConfigStore(ctx.obj["data_dir"])
 	store.save_config(
 		ai_provider=runtime,
 		ai_model=model,
-		ai_base_url=base_url or RUNTIME_BASE_URLS[runtime],
+		ai_base_url=base_url if base_url is not None else RUNTIME_BASE_URLS[runtime],
 		ai_temperature=0.3,
 		ai_max_tokens=512,
 	)

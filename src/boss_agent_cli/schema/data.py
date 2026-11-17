@@ -1126,7 +1126,12 @@ SCHEMA_DATA = {
 						"description": "AI 提供商（openai/deepseek/moonshot/openrouter/qwen/zhipu/siliconflow/ollama/vllm/custom）",
 					},
 					"--model": {"type": "string", "default": None, "description": "模型名称（如 gpt-4o / deepseek-chat）"},
-					"--api-key": {"type": "string", "default": None, "description": "API 密钥（将加密存储）"},
+					"--api-key": {"type": "string", "default": None, "description": "API 密钥（将加密存储；空值会被拒绝，清除密钥请用 --clear-api-key）"},
+					"--clear-api-key": {
+						"type": "bool",
+						"default": False,
+						"description": "删除已存储的 API 密钥（与 --api-key 互斥）",
+					},
 					"--base-url": {
 						"type": "string",
 						"default": None,
