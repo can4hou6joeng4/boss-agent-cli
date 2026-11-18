@@ -9,8 +9,10 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
+import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -78,6 +80,17 @@ def exclusive_file_lock(path: Path) -> Iterator[bool]:
 def _acquire(path: Path) -> BinaryIO | None:
 	path.parent.mkdir(parents=True, exist_ok=True)
 	for _ in range(_ACQUIRE_ATTEMPTS):
+		# FIFO / 设备 open("a+b") 会在打开阶段永久阻塞，登录刷新、模型导入、
+		# 聊天导出与 crawl / wizard 恢复都会挂死（Issue #1734）。锁必须落在数据
+		# 目录内的普通文件上：符号链接会锁住链接目标、释放时又删掉链接。只有
+		# 「文件不存在」才允许创建新锁文件。这里用 lstat 而不是跟随链接，
+		# 3.14 的 exists() 又会把权限错误吞成 False。
+		try:
+			mode: int | None = path.lstat().st_mode
+		except FileNotFoundError:
+			mode = None
+		if mode is not None and (stat.S_ISLNK(mode) or not stat.S_ISREG(mode)):
+			raise OSError(errno.EINVAL, "锁文件不是普通文件", str(path))
 		handle = path.open("a+b")
 		acquired = False
 		try:
