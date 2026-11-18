@@ -600,9 +600,39 @@ class AutomationStore:
 		}
 
 	def _append_jsonl(self, name: str, row: dict[str, Any]) -> None:
-		with (self.root / name).open("a", encoding="utf-8") as handle:
-			handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
-			handle.write("\n")
+		path = self.root / name
+		try:
+			mode = _path_mode(path)
+		except (OSError, ValueError) as exc:
+			raise AutomationStateError(path, f"队列文件无法读取路径状态（{exc}）") from exc
+		# 追加打开 FIFO 会永久阻塞到出现读者，悬空链接会在目标处新建文件、
+		# 把队列写到数据目录之外（Issue #1741）。与 read_jsonl 同口径：
+		# 只有普通文件（含指向普通文件的符号链接，_path_mode 已解析目标类型）
+		# 才允许追加。
+		if mode is not None and stat.S_ISLNK(mode):
+			raise AutomationStateError(
+				path,
+				"队列文件无法写入：路径是悬空符号链接；请确认链接目标存在后重试，"
+				"文件损坏时先备份再修正或移除",
+			)
+		if mode is not None and not stat.S_ISREG(mode):
+			raise AutomationStateError(
+				path,
+				"队列文件无法写入：路径不是普通文件（目录 / FIFO / 设备）；"
+				"请确认文件可写（权限正常、路径不是目录）后重试，"
+				"文件损坏时先备份再修正或移除",
+			)
+		try:
+			with path.open("a", encoding="utf-8") as handle:
+				handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
+				handle.write("\n")
+		except OSError as exc:
+			# 只读文件 / 只读目录 / 磁盘满：动作已经发生，写不进日志同样必须
+			# 带着路径与原因停下，不能兜成可重试的通用错误。
+			raise AutomationStateError(
+				path,
+				f"队列文件无法写入（{exc}）；请确认文件可写（权限正常、路径不是目录）后重试",
+			) from exc
 
 
 def _row_confidence(row: dict[str, Any], path: Path) -> float:
