@@ -583,13 +583,28 @@ def _click_error_message(exc: click.ClickException) -> str:
 def _prescan_exit_codes(args: Sequence[str] | None) -> None:
 	"""Usage errors are raised before the group callback runs; scan raw argv so an
 	explicit `--exit-codes sysexits` still governs their exit code. Unknown values
-	are normalized to envelope by set_exit_codes_mode."""
+	are normalized to envelope by set_exit_codes_mode. Tokens after `--` are
+	positional arguments, and values of other global options are not options."""
 	tokens = list(args) if args is not None else sys.argv[1:]
-	for index, token in enumerate(tokens):
-		if token == "--exit-codes" and index + 1 < len(tokens):
-			set_exit_codes_mode(tokens[index + 1])
-		elif token.startswith("--exit-codes="):
+	index = 0
+	while index < len(tokens):
+		token = tokens[index]
+		if token == "--":
+			break
+		if token == "--exit-codes":
+			if index + 1 < len(tokens):
+				set_exit_codes_mode(tokens[index + 1])
+				index += 2
+			else:
+				index += 1
+			continue
+		if token.startswith("--exit-codes="):
 			set_exit_codes_mode(token.split("=", 1)[1])
+		elif token in _GLOBAL_OPTIONS_WITH_VALUE:
+			# `--data-dir --exit-codes` 中后者是前者的值，不是新的全局选项。
+			index += 2
+			continue
+		index += 1
 
 
 _SECURITY_ID_LIKE = re.compile(r"^-[A-Za-z0-9_-]{19,}$")

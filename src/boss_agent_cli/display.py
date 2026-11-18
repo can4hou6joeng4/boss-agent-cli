@@ -61,6 +61,10 @@ def open_file_command(path: str) -> str:
 		# 与 cmd 元字符。start 的第一个参数是窗口标题，保留空串占位。
 		windows_path = path.replace("^", "^^").replace("%", "%%").replace('"', '""')
 		return f'cmd /c start "" "{windows_path}"'
+	if path.startswith("-"):
+		# `open -report.md` / `xdg-open -report.md` 会把文件名当选项；相对路径
+		# 前置 `./` 后仍指向同一个文件，且不会被 getopt 识别为选项（Issue #1767）。
+		path = f"./{path}"
 	quoted = shell_argument(path)
 	if sys.platform == "darwin":
 		return f"open {quoted}"

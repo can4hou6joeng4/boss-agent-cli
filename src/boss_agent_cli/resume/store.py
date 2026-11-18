@@ -26,6 +26,9 @@ _WINDOWS_RESERVED_DEVICE_NAMES = frozenset(
 	| {f"COM{index}" for index in range(1, 10)}
 	| {f"LPT{index}" for index in range(1, 10)}
 )
+#: Windows 文件名不允许的字符（除路径分隔符、NUL 与 ':' 外的通配符 / 重定向符），
+#: 以及所有控制字符。它们不能出现在 `save()` 生成的 `<name>.json` 里。
+_WINDOWS_ILLEGAL_FILENAME_CHARACTERS = frozenset('*?|<>"')
 
 
 def _is_windows_device_name(name: str) -> bool:
@@ -36,6 +39,11 @@ def _is_windows_device_name(name: str) -> bool:
 	"""
 	stem = name.split(".", 1)[0].rstrip(" \t").upper()
 	return stem in _WINDOWS_RESERVED_DEVICE_NAMES
+
+
+def _is_windows_illegal_filename_char(char: str) -> bool:
+	"""Windows 文件名非法字符：通配符 / 重定向符与所有控制字符。"""
+	return char in _WINDOWS_ILLEGAL_FILENAME_CHARACTERS or ord(char) < 32 or ord(char) == 127
 
 
 def _safe_filename(name: str) -> str:
@@ -53,6 +61,16 @@ def _safe_filename(name: str) -> str:
 	if _is_windows_device_name(safe):
 		safe = f"_{safe}"
 	return safe
+
+
+def _portable_filename(name: str) -> str:
+	"""在 ``_safe_filename`` 之上再替换 Windows 无法落盘的字符（Issue #1768）。
+
+	``*?|<>"`` 与控制字符会让 Windows 的 ``open()`` / ``mkstemp()`` 直接失败。
+	新建的简历与默认导出名用这份文件名；旧版本在 macOS / Linux 上按原字符写出
+	的文件由 ``ResumeStore._path_for`` 继续按旧文件名找回。
+	"""
+	return "".join("_" if _is_windows_illegal_filename_char(char) else char for char in _safe_filename(name))
 
 
 def _unsafe_resume_name_reason(name: str) -> str | None:
@@ -97,7 +115,19 @@ class ResumeStore:
 		self._dir.mkdir(parents=True, exist_ok=True)
 
 	def _path_for(self, name: str) -> Path:
-		return self._dir / f"{_safe_filename(name)}.json"
+		portable = self._dir / f"{_portable_filename(name)}.json"
+		legacy = self._dir / f"{_safe_filename(name)}.json"
+		if legacy == portable:
+			return portable
+		# 旧版本按原字符落盘的简历仍要能读、改、删；状态读不出来时也交给旧路径，
+		# 由调用方按既有口径报告，不能悄悄改去写另一个文件。
+		try:
+			legacy.lstat()
+		except FileNotFoundError:
+			return portable
+		except OSError:
+			return legacy
+		return legacy
 
 	def list_all(self) -> list[dict[str, Any]]:
 		"""列出所有简历摘要（name, title, updated_at）"""

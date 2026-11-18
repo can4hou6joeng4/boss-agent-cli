@@ -20,6 +20,7 @@ _REDACTED = "[REDACTED]"
 _MAX_REDACTION_DEPTH = 64
 _SENSITIVE_KEY_PARTS = (
 	"api_key",
+	"api-key",
 	"apikey",
 	"authorization",
 	"cookie",
@@ -46,10 +47,11 @@ _SCHEMA_VALUE_FIELDS = {"default", "example", "examples", "const", "enum"}
 # ASCII 分隔符时，`stoken=abc）` 会把右括号算进值里，`Bearer x，然后`
 # 连后续中文说明一起被替换成 [REDACTED]，诊断文案就此残缺。
 _TEXT_VALUE_TERMINATORS = r"\s,;，。、；：（）「」『』【】《》！？…—"
-# 边界用 ASCII 单词字符而非 `\b`：中文紧邻凭据键时没有英文单词边界，
-# `登录token=abc` 曾整段漏脱敏（Issue #1662）。下划线与连字符属于同一个键，
-# `auth_token`、`x-api-key` 不会被从中间截断。
-_ASCII_KEY_BOUNDARY = r"(?<![A-Za-z0-9_-])"
+# 边界用 ASCII 字母数字而非 `\b`：中文紧邻凭据键时没有英文单词边界，
+# `登录token=abc` 曾整段漏脱敏（Issue #1662）。下划线与连字符是复合键的分隔符，
+# `access_token` / `x-api-key` 从凭据段开始匹配，前缀原样保留，替换后仍是完整键名
+# （Issue #1765）。键名后必须紧跟 `:` / `=`，所以 `token_expires_in` 等配置名不会命中。
+_ASCII_KEY_BOUNDARY = r"(?<![A-Za-z0-9])"
 _SENSITIVE_TEXT_PATTERNS = tuple(
 	re.compile(pattern, re.IGNORECASE)
 	for pattern in (

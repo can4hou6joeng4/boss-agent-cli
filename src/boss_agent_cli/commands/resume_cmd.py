@@ -21,7 +21,7 @@ from boss_agent_cli.display import (
 from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 from boss_agent_cli.output import is_local_io_error
 from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, resume_to_dict
-from boss_agent_cli.resume.store import ResumeAlreadyExistsError, ResumeImportError, ResumeStore, _safe_filename
+from boss_agent_cli.resume.store import ResumeAlreadyExistsError, ResumeImportError, ResumeStore, _portable_filename
 from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
 from boss_agent_cli.services.json_files import path_mode
 from boss_agent_cli.services.output_path import prepare_output_path
@@ -469,7 +469,7 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 			# 默认输出名必须与存储层共用同一份清洗（Issue #1542）：`resume init
 			# --name "../x"` 落盘时被清洗成 `.._x.json`，这里若拼原始 argv 就会
 			# 写出到 cwd 之外；Windows 的 `CON` 等保留设备名同理。
-			output_path = f"{_safe_filename(name)}.{fmt}"
+			output_path = f"{_portable_filename(name)}.{fmt}"
 			# 默认名同样要过 -o 预检：FIFO / 设备 / 链接不能被 os.replace
 			# 静默替换或写穿（Issue #1757）。
 			validated = validate_output_path_or_emit(ctx, "resume", output_path)

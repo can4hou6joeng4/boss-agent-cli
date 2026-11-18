@@ -1545,3 +1545,16 @@ def test_open_file_command_quotes_paths_with_spaces(monkeypatch):
 
 	monkeypatch.setattr(sys, "platform", "linux")
 	assert open_file_command("/tmp/my report.html") == "xdg-open '/tmp/my report.html'"
+
+
+@pytest.mark.parametrize(
+	"platform, prefix",
+	[("darwin", "open"), ("linux", "xdg-open")],
+)
+def test_open_file_command_prefixes_leading_dash(monkeypatch, platform, prefix):
+	"""前导连字符的相对路径不能让打开文件命令把它当选项（Issue #1767）。"""
+	from boss_agent_cli.display import open_file_command
+
+	monkeypatch.setattr(sys, "platform", platform)
+	assert open_file_command("-report.md") == f"{prefix} ./-report.md"
+	assert open_file_command("-my report.html") == f"{prefix} './-my report.html'"
