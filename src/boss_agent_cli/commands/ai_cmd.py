@@ -11,6 +11,7 @@ from typing import Any, cast
 import click
 
 from boss_agent_cli.ai.config import (
+	AIConfigInvalidError,
 	AIConfigStore,
 	AIConfigValueError,
 	PROVIDER_BASE_URLS,
@@ -506,7 +507,20 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 	if max_tokens is not None:
 		updates["ai_max_tokens"] = max_tokens
 	if updates:
-		store.save_config(**updates)
+		try:
+			store.save_config(**updates)
+		except AIConfigInvalidError as exc:
+			# 写入方不能复用只读接口的容错：坏文件时用默认值覆盖会清空其他设置（Issue #1706）。
+			handle_error_output(
+				ctx,
+				"ai-config",
+				code="CONFIG_INVALID",
+				message=str(exc),
+				recoverable=True,
+				recovery_action=f"备份并修正或删除 {exc.path} 后重试",
+			)
+			ctx.exit(1)
+			return
 	if api_key is not None:
 		store.save_api_key(api_key)
 	elif clear_api_key:
