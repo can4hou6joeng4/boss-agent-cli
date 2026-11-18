@@ -375,7 +375,7 @@ def render_operator_actions(hints: dict[str, Any] | None) -> None:
 	console.print()
 	for index, action in enumerate(actions):
 		prefix = "↓ 你需要：" if index == 0 else "　　　　　"
-		console.print(f"[yellow]{prefix}[/yellow]{escape_markup(action)}")
+		console.print(f"[yellow]{prefix}[/yellow]{escape_markup(redact_sensitive_text(str(action)))}")
 
 
 def handle_output(
