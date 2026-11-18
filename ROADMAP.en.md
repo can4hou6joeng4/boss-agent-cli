@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.104 (2026-11-18): stop-latch reads and explicit recovery now fail closed on path type, so a directory or symlinked `stop.json` can no longer bypass the stop switch or crash mid-resume; CHANGELOG version ordering is covered by a structural test (Issues #1675–#1676, #1678).
+
 - ✅ v3.4.103 (2026-11-18): `hr download-resume` validates `--output` emptiness and extension before credentials or platform requests, so an empty value is no longer read as the current directory (Issue #1672).
 
 - ✅ v3.4.102 (2026-11-18): automation statistics and cached-search parsing now use validated state, so corrupt queues and column type drift no longer masquerade as normal results (Issues #1667–#1668).
