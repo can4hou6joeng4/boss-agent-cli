@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from boss_agent_cli.automation.models import AutomationEvent, PendingAction, PlatformAction, ReviewItem
-from boss_agent_cli.cache.store import is_cache_busy_error
+from boss_agent_cli.cache.store import database_path_problem, is_cache_busy_error
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell
 
 
@@ -187,8 +187,16 @@ class AutomationStore:
 		"""
 		connection: sqlite3.Connection | None = None
 		try:
+			lock_path = self.root / ".run-lock.sqlite3"
 			try:
-				connection = sqlite3.connect(self.root / ".run-lock.sqlite3", timeout=0.5)
+				problem = database_path_problem(lock_path)
+			except (OSError, ValueError) as exc:
+				raise AutomationStateError(lock_path, f"自动化执行锁无法读取路径状态（{exc}）") from exc
+			# SQLite 会跟随符号链接把库写进目标文件（Issue #1743，与 #1739 同口径）。
+			if problem is not None:
+				raise AutomationStateError(lock_path, f"自动化执行锁无法打开（{problem}）")
+			try:
+				connection = sqlite3.connect(lock_path, timeout=0.5)
 				connection.execute("BEGIN IMMEDIATE")
 			except sqlite3.DatabaseError as exc:
 				if isinstance(exc, sqlite3.OperationalError) and is_cache_busy_error(exc):
@@ -199,7 +207,7 @@ class AutomationStore:
 				# 会让命令丢掉整个信封，或在 agent run 里被兜成可重试的
 				# NETWORK_ERROR（Issue #1304）。
 				raise AutomationStateError(
-					self.root / ".run-lock.sqlite3",
+					lock_path,
 					f"自动化执行锁无法打开（{exc}）",
 				) from exc
 			yield
@@ -213,8 +221,16 @@ class AutomationStore:
 		"""Serialize tiny control updates across processes with a bounded wait."""
 		connection: sqlite3.Connection | None = None
 		try:
+			lock_path = self.root / ".control-lock.sqlite3"
 			try:
-				connection = sqlite3.connect(self.root / ".control-lock.sqlite3", timeout=1.0)
+				problem = database_path_problem(lock_path)
+			except (OSError, ValueError) as exc:
+				raise AutomationStateError(lock_path, f"自动化控制锁无法读取路径状态（{exc}）") from exc
+			# 同执行锁：符号链接会让 SQLite 把控制锁库写进链接目标（Issue #1743）。
+			if problem is not None:
+				raise AutomationStateError(lock_path, f"自动化控制锁无法打开（{problem}）")
+			try:
+				connection = sqlite3.connect(lock_path, timeout=1.0)
 				connection.execute("BEGIN IMMEDIATE")
 			except sqlite3.DatabaseError as exc:
 				# 锁冲突是 automation 自己的并发边界，不是缓存库问题：直接上抛会被
@@ -226,7 +242,7 @@ class AutomationStore:
 					) from exc
 				# 锁文件损坏 / 路径被同名目录占用：确定性本地状态问题（Issue #1304）。
 				raise AutomationStateError(
-					self.root / ".control-lock.sqlite3",
+					lock_path,
 					f"自动化控制锁无法打开（{exc}）",
 				) from exc
 			yield
