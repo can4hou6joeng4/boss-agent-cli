@@ -1,3 +1,4 @@
+import errno
 import json
 import stat
 from datetime import datetime
@@ -5,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.resume.models import ResumeData, ResumeFile, dict_to_resume, resume_to_dict
-from boss_agent_cli.services.json_files import write_json_atomic
+from boss_agent_cli.services.json_files import path_mode, write_json_atomic
 
 
 class ResumeImportError(ValueError):
@@ -212,6 +213,12 @@ class ResumeStore:
 		`save()` 是整份覆盖，导入一份旧备份会静默丢掉本地已有的编辑（`resume init` /
 		`resume clone` 都拒绝同名）。只有调用方显式要求覆盖时才继续。
 		"""
+		mode = path_mode(file_path)
+		# 直接 read_text 会阻塞在 FIFO 上；目录 / 设备 / 悬空链接也没有可读文本。
+		if mode is None:
+			raise FileNotFoundError(errno.ENOENT, "简历文件不存在", str(file_path))
+		if not stat.S_ISREG(mode):
+			raise ResumeImportError("路径不是普通文件；请选择 UTF-8 编码的简历 JSON 文件")
 		try:
 			raw_text = file_path.read_text(encoding="utf-8")
 		except UnicodeDecodeError as exc:
