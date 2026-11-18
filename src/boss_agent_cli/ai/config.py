@@ -223,12 +223,17 @@ class AIConfigStore:
 		write_private_bytes(self._key_path, encrypted)
 
 	def get_api_key(self) -> str | None:
-		"""Load and decrypt the API key. Returns None if not set or decryption fails."""
-		if not self._key_path.exists():
+		"""Load and decrypt the API key. Returns None if not set or decryption fails.
+
+		路径状态不可读或不是普通文件时上抛 ``OSError``：返回 None 会让调用方
+		报 ``AI_NOT_CONFIGURED`` 并引导用户重新填 key，覆盖原密文（Issue #1709）。
+		"""
+		encrypted = read_bytes_if_regular(self._key_path)
+		if encrypted is None:
 			return None
 		fernet = Fernet(self._derive_key())
 		try:
-			plaintext = fernet.decrypt(self._key_path.read_bytes())
+			plaintext = fernet.decrypt(encrypted)
 		except (InvalidToken, ValueError):
 			return None
 		return plaintext.decode("utf-8")
