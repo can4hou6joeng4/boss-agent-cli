@@ -66,8 +66,9 @@ matches CI.
 
 The report distinguishes `passed`, `failed`, and `not_run`. A successful default
 check with `git.clean=false` is development evidence, not release readiness. Before
-publishing, use `--require-clean`; when the local tag already exists, also pass
-`--tag vX.Y.Z` to verify its version and commit. The script never creates or pushes
+publishing, use `--require-clean`. Before pushing the tag, rerun this check with
+`--tag vX.Y.Z` from the synced `master` worktree; a green check in a release
+worktree is not evidence that the tag targets `master`. The script never creates or pushes
 Git tags and does not replace the local quality baseline or fixture eval. `uv run python evals/run_eval.py --mode
 fixture` is a pure local scoring pass and may be run inside an active agent
 session; only `--mode external`, which launches an external runner, needs a
@@ -82,10 +83,27 @@ reasons are in `docs/maintainer/branch-protection.md` under "Workflow rules".
 
 ## 5. Publish
 
-Create an annotated release tag only after the local verification above is green:
+Tag immediately after the release PR is squash-merged to `master`, in the same
+session; do not defer tagging to a later batch. Never tag from a release worktree
+or a local pre-merge commit: it can have the same tree (and therefore the same
+version) as the squash merge commit, so artifact checks cannot tell them apart.
+
+Re-sync and confirm the tag target on `master` first:
 
 ```bash
-git tag -a vX.Y.Z -m "vX.Y.Z"
+git fetch origin
+git switch master
+git pull --ff-only
+git log -1 --format='%H %s'   # must be "chore: 发布 X.Y.Z (#<PR>)"
+```
+
+Create the tag with an explicit ref so the current worktree cannot decide the
+target, then verify and push it:
+
+```bash
+git tag -a vX.Y.Z -m "vX.Y.Z" origin/master
+test "$(git rev-parse 'vX.Y.Z^{commit}')" = "$(git rev-parse origin/master)"
+uv run python scripts/verify_release.py --artifacts dist/release-check --tag vX.Y.Z --require-clean --json
 git push origin vX.Y.Z
 ```
 
