@@ -510,7 +510,19 @@ class AutomationStore:
 		"""
 		path = self.root / "interview-leads.csv"
 		row = [sanitize_csv_cell(candidate_key), sanitize_csv_cell(interview_time), sanitize_csv_cell(reason)]
-		if path.exists():
+		try:
+			mode = _path_mode(path)
+		except (OSError, ValueError) as exc:
+			# 路径状态读不出来时不能当成「文件不存在」：紧接着的表头写入会
+			# 截断已有线索历史（Issue #1694）。
+			raise AutomationStateError(path, f"无法读取面试线索表的路径状态（{exc}）") from exc
+		if mode is not None and not stat.S_ISREG(mode):
+			# 目录 / FIFO / 设备 / 悬空链接都不能按 CSV 追加：FIFO 会阻塞，
+			# 其余路径写入会失败或丢掉链接目标之外的数据。
+			raise AutomationStateError(path, "interview-leads.csv 不是普通文件，请先检查该路径后重试")
+		if mode is None:
+			path.write_text("candidate_key,interview_time,reason\n", encoding="utf-8")
+		else:
 			try:
 				with path.open("r", encoding="utf-8", newline="") as handle:
 					if any(existing[:2] == row[:2] for existing in itertools.islice(csv.reader(handle), 1, None)):
@@ -519,8 +531,10 @@ class AutomationStore:
 				# 手工编辑或外部写入造成的坏文件不该让整轮自动化失败；无法判重时
 				# 继续追加，最坏只是多一行可见的重复记录。
 				pass
-		else:
-			path.write_text("candidate_key,interview_time,reason\n", encoding="utf-8")
+			except OSError as exc:
+				# 读不出来就无法判重，也无法确认不会覆盖历史：与队列读取同口径
+				# fail-closed，而不是让 PermissionError 冒成内部错误。
+				raise AutomationStateError(path, f"面试线索表无法读取（{exc}）") from exc
 		with path.open("a", encoding="utf-8", newline="") as handle:
 			csv.writer(handle).writerow(row)
 		return True

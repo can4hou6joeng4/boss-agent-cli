@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `append_interview_lead()` 在 `interview-leads.csv` 的路径状态读取失败时会把它当成新文件并写入表头，截断已有面试线索记录；现在只有 `FileNotFoundError` 才创建表头，目录、FIFO、悬空链接与不可读文件都按 `AUTOMATION_STATE_INVALID` 失败且不改动历史数据（Issue #1694）。
 - `agent stop` 在 `automation/stop.json` 被目录或指向目录的符号链接占用时，不再落到泛化的 `LOCAL_IO_ERROR`；写入前按 `AUTOMATION_STATE_INVALID` 报出实际路径，悬空符号链接仍可写入（Issue #1684）。
 - 风险锁路径为悬空符号链接、目录或 FIFO 时，`read_lock()` 会把「锁状态未知」当成「没有锁」；Python 3.14 下路径元数据读取失败也会被 `exists()` 吞掉。现在这些情况统一按损坏锁 fail-closed，且不再直接读取非普通文件（Issue #1686）。
 - `AIConfigStore` 在 `auth/salt` 的存在性判断失败时会重新生成共享 salt，覆盖后已有的 `session.enc` 与 `api_key.enc` 永久无法解密；现在与 `TokenStore` 共用 `O_EXCL` + 刷新锁的 salt 生命周期，读取失败时上抛而不是覆盖（Issue #1688）。
