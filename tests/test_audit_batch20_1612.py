@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -165,3 +166,55 @@ def test_export_success_replaces_all_artifacts(tmp_path: Path) -> None:
 	assert (tmp_path / "jobs.csv").exists()
 	assert (tmp_path / "jobs.xlsx").exists()
 	assert not [path for path in tmp_path.iterdir() if path.name.startswith(".jobs.")]
+
+
+# ── #1755：采集产物与目录的符号链接 / 特殊文件保护 ────────────────
+
+
+@pytest.mark.parametrize("name", ["jobs.json", "jobs.csv", "jobs.xlsx"])
+def test_export_refuses_symlink_artifact_without_touching_link_or_target(tmp_path: Path, name: str) -> None:
+	target = tmp_path / "outside-artifact"
+	target.write_text("OLD", encoding="utf-8")
+	link = tmp_path / name
+	try:
+		link.symlink_to(target)
+	except (OSError, NotImplementedError):
+		pytest.skip("当前文件系统不支持符号链接")
+
+	with pytest.raises(CrawlExportError) as exc_info:
+		write_run_outputs(tmp_path, [{"title": "NEW"}])
+
+	assert "符号链接" in str(exc_info.value)
+	assert link.is_symlink()
+	assert target.read_text(encoding="utf-8") == "OLD"
+	assert not [path for path in tmp_path.iterdir() if path.name.startswith(".jobs.")]
+
+
+def test_export_refuses_symlinked_output_dir(tmp_path: Path) -> None:
+	real_dir = tmp_path / "real-output"
+	real_dir.mkdir()
+	link = tmp_path / "crawl-output"
+	try:
+		link.symlink_to(real_dir, target_is_directory=True)
+	except (OSError, NotImplementedError):
+		pytest.skip("当前文件系统不支持符号链接")
+
+	with pytest.raises(CrawlExportError) as exc_info:
+		write_run_outputs(link, [{"title": "NEW"}])
+
+	assert "目录" in str(exc_info.value)
+	assert list(real_dir.iterdir()) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows 没有 POSIX FIFO")
+def test_export_refuses_fifo_artifact_without_replacing_it(tmp_path: Path) -> None:
+	import stat
+
+	artifact = tmp_path / "jobs.json"
+	os.mkfifo(artifact)
+
+	with pytest.raises(CrawlExportError) as exc_info:
+		write_run_outputs(tmp_path, [{"title": "NEW"}])
+
+	assert "不是普通文件" in str(exc_info.value)
+	assert stat.S_ISFIFO(artifact.lstat().st_mode)
