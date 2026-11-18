@@ -69,10 +69,18 @@ class AutomationStore:
 		熔断开关读不出来时按「已熔断」处理：状态未知时宁可停下等人工核对，
 		也不能让自动化继续向平台发送消息。
 		"""
-		if not self.stop_path.exists():
+		path = self.stop_path
+		# 非普通文件（目录、FIFO、设备、指向目录的符号链接）无法给出可信开关：
+		# 与原解析失败一样 fail-closed。不能直接 read_text：FIFO / 设备会阻塞，
+		# 目录只会得到一条与「状态未知」无关的 OSError（Issue #1675）。
+		if path.is_symlink() and not path.exists():
+			return {"open": True, "reason": "stop.json 是悬空符号链接，已按熔断处理", "corrupt": True}
+		if path.exists() and not path.is_file():
+			return {"open": True, "reason": "stop.json 不是普通文件，已按熔断处理", "corrupt": True}
+		if not path.exists():
 			return {}
 		try:
-			loaded = json.loads(self.stop_path.read_text(encoding="utf-8"))
+			loaded = json.loads(path.read_text(encoding="utf-8"))
 		# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长整数
 		# 上限；RecursionError 覆盖深嵌套。熔断状态读不出来必须 fail-closed：
 		# 抛出去会让调用方按「未知状态」继续，只有 corrupt 标记能通知人工核对。
@@ -115,6 +123,16 @@ class AutomationStore:
 	def resume(self) -> bool:
 		"""Explicit operator recovery; retain every confirmed business checkpoint."""
 		with self._control_lock():
+			# 解除标记通过 os.replace 落到 stop.json。目录 / 指向目录的符号链接 /
+			# FIFO / 设备等非普通路径无法被原子替换：先写 state.json 再写 stop.json
+			# 会在中途抛 IsADirectoryError，命令层只得到 LOCAL_IO_ERROR 的泛化指引，
+			# 而且 state.json 已被改成 closed（Issue #1678）。悬空符号链接本身可以
+			# 被 os.replace 直接替换，仍允许恢复。
+			if self.stop_path.exists() and not self.stop_path.is_file():
+				raise AutomationStateError(
+					self.stop_path,
+					"stop.json 不是普通文件，无法写入解除标记；请先修正或移除该路径后重试",
+				)
 			state = self.read_state()
 			if not state.get("autonomy", {}).get("circuit_breaker", {}).get("open"):
 				return False
