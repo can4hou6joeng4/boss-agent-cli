@@ -69,10 +69,18 @@ class AutomationStore:
 		熔断开关读不出来时按「已熔断」处理：状态未知时宁可停下等人工核对，
 		也不能让自动化继续向平台发送消息。
 		"""
-		if not self.stop_path.exists():
+		path = self.stop_path
+		# 非普通文件（目录、FIFO、设备、指向目录的符号链接）无法给出可信开关：
+		# 与原解析失败一样 fail-closed。不能直接 read_text：FIFO / 设备会阻塞，
+		# 目录只会得到一条与「状态未知」无关的 OSError（Issue #1675）。
+		if path.is_symlink() and not path.exists():
+			return {"open": True, "reason": "stop.json 是悬空符号链接，已按熔断处理", "corrupt": True}
+		if path.exists() and not path.is_file():
+			return {"open": True, "reason": "stop.json 不是普通文件，已按熔断处理", "corrupt": True}
+		if not path.exists():
 			return {}
 		try:
-			loaded = json.loads(self.stop_path.read_text(encoding="utf-8"))
+			loaded = json.loads(path.read_text(encoding="utf-8"))
 		# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长整数
 		# 上限；RecursionError 覆盖深嵌套。熔断状态读不出来必须 fail-closed：
 		# 抛出去会让调用方按「未知状态」继续，只有 corrupt 标记能通知人工核对。

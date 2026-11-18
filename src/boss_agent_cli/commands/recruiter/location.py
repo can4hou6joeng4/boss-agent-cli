@@ -38,7 +38,11 @@ def _cache_path(data_dir: Path) -> Path:
 
 def _stop_reason(data_dir: Path) -> str | None:
 	"""读取招聘自动化停止开关。文件不存在时不创建目录。"""
-	if not (data_dir / "automation" / "stop.json").is_file():
+	stop_path = data_dir / "automation" / "stop.json"
+	# 预检只在「完全不存在」时跳过，避免为普通调用创建 automation 目录。
+	# 用 is_file() 会把目录 / 悬空符号链接当成「没有停止开关」，与
+	# AutomationStore.read_stop() 的 fail-closed 结论相反（Issue #1675）。
+	if not stop_path.exists() and not stop_path.is_symlink():
 		return None
 	loaded = AutomationStore(data_dir).read_stop()
 	if loaded.get("open") is not True:
