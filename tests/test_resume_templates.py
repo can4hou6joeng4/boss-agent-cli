@@ -104,10 +104,24 @@ def test_personal_info_with_link():
 
 
 def test_avatar_rendered():
-	"""When avatar is set, an <img> tag appears."""
-	resume = _make_resume(avatar="https://example.com/photo.jpg")
+	"""When an embedded avatar is set, an <img> tag appears."""
+	resume = _make_resume(avatar="data:image/png;base64,iVBORw0KGgo=")
 	html = render_resume_html(resume)
-	assert '<img src="https://example.com/photo.jpg"' in html
+	assert '<img src="data:image/png;base64,iVBORw0KGgo="' in html
+
+
+def test_external_avatar_not_rendered():
+	"""An imported external avatar URL must not turn local export into egress."""
+	html = render_resume_html(_make_resume(avatar="https://example.com/photo.jpg"))
+	assert "<img" not in html
+
+
+def test_unsafe_link_scheme_not_rendered():
+	"""An imported javascript: link must not become an anchor href."""
+	items = [PersonalInfoItem(label="主页", value="click", link="javascript:alert(1)")]
+	html = render_resume_html(_make_resume(personal_info=PersonalInfoSection(items=items)))
+	assert "javascript:" not in html
+	assert "<a " not in html
 
 
 def test_avatar_not_rendered_when_empty():

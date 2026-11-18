@@ -298,6 +298,9 @@ def process_ref(
 		elif status is EventStatus.PLATFORM_VERIFICATION_REQUIRED:
 			# 动作可能已生效：标记推进到 verification-required，随 checkpoint 落盘。
 			_mark_inflight_verification_required(prior)
+			# 与队列路径同口径：熔断已由 execute_or_dry_run 落盘，标记可直接算已通知；
+			# 否则首次 resume 会重复开熔断（Issue #1658）。
+			_mark_inflight_notified(prior)
 		else:
 			# STOPPED_BY_SAFETY / CIRCUIT_BREAKER_OPEN 都发生在确认发送之前，
 			# 或由平台的确定性拒绝产生：释放在途标记，后续轮次可以重新决策。

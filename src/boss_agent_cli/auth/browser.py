@@ -732,7 +732,9 @@ def refresh_stoken_via_cdp(cdp_url: str | None = None) -> str:
 		stoken = _extract_stoken(page) if home_loaded else ""
 		if not stoken:
 			for cookie in ctx.cookies():
-				if cookie.get("name") == "__zp_stoken__":
+				if cookie.get("name") == "__zp_stoken__" and _is_cookie_domain(
+					str(cookie.get("domain", "")), "zhipin.com"
+				):
 					stoken = cookie.get("value", "")
 					break
 	finally:
@@ -765,7 +767,9 @@ def refresh_stoken(cookies: dict[str, Any], user_agent: str) -> str:
 			stoken = _extract_stoken(page) if home_loaded else ""
 			if not stoken:
 				for cookie in context.cookies():
-					if cookie.get("name") == "__zp_stoken__":
+					if cookie.get("name") == "__zp_stoken__" and _is_cookie_domain(
+						str(cookie.get("domain", "")), "zhipin.com"
+					):
 						stoken = cookie.get("value", "")
 						break
 		finally:

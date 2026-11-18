@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import json
 import os
 import re
 import tempfile
@@ -12,6 +11,7 @@ from typing import Any
 
 from boss_agent_cli.crawler.controls import CrawlExportError, CrawlRuntimeUnavailable
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell
+from boss_agent_cli.services.json_files import strict_json_text
 
 FIELDS = (
 	"query", "page", "rank", "title", "salary", "city", "district", "business_district",
@@ -31,7 +31,7 @@ def _csv_cell(value: Any) -> str:
 
 #: openpyxl 拒绝写入的控制字符（XML 1.0 不允许）。平台原文偶尔夹带，例如
 #: 垂直制表符 `\x0b`；保留其余文字，只去掉这些字符。
-_ILLEGAL_XLSX_CHARACTERS = re.compile(r"[\000-\010]|[\013-\014]|[\016-\037]")
+_ILLEGAL_XLSX_CHARACTERS = re.compile(r"[\000-\010]|[\013-\014]|[\016-\037]|[\ud800-\udfff]|[\ufffe\uffff]")
 
 
 def _xlsx_cell(value: Any) -> Any:
@@ -80,10 +80,11 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 		output_dir.mkdir(parents=True, exist_ok=True)
 		json_tmp = _temporary_for(json_path)
 		temporaries.append(json_tmp)
-		json_tmp.write_text(json.dumps(export_rows, ensure_ascii=False, indent=2), encoding="utf-8")
+		with json_tmp.open("w", encoding="utf-8", errors="backslashreplace") as file:
+			file.write(strict_json_text(export_rows))
 		csv_tmp = _temporary_for(csv_path)
 		temporaries.append(csv_tmp)
-		with csv_tmp.open("w", encoding="utf-8-sig", newline="") as file:
+		with csv_tmp.open("w", encoding="utf-8-sig", newline="", errors="backslashreplace") as file:
 			writer = csv.DictWriter(file, fieldnames=FIELDS, extrasaction="ignore")
 			writer.writeheader()
 			writer.writerows({field: _csv_cell(row.get(field)) for field in FIELDS} for row in export_rows)

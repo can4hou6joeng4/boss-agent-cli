@@ -3,12 +3,12 @@
 import csv
 import html as _html
 import io
-import json
 from typing import Any
 
 from boss_agent_cli.api.models import field_list
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell
 from boss_agent_cli.services.text_files import write_text_atomic
+from boss_agent_cli.services.json_files import strict_json_text
 
 
 def prepare_export_items(items: list[dict[str, Any]], *, include_private: bool) -> list[dict[str, Any]]:
@@ -44,8 +44,7 @@ def _join_cells(value: list[Any]) -> str:
 
 def write_export_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 	if fmt == "json":
-		body = json.dumps(items, ensure_ascii=False, indent=2)
-		write_text_atomic(path, body)
+		write_text_atomic(path, strict_json_text(items))
 	elif fmt == "csv":
 		if not items:
 			write_text_atomic(path, "")

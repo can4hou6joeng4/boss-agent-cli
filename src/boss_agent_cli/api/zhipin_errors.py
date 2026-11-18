@@ -82,7 +82,12 @@ def classify_code_37(response: dict[str, Any]) -> Code37Kind:
 def is_security_verification_response(*, url: str = "", content_type: str = "", body: str = "") -> bool:
 	"""识别官方安全页，不把 JSON 文案或业务页面里的验证说明当作安全页。"""
 	try:
-		if urlsplit(url).path.rstrip("/") in ("/web/passport/zp/verify.html", "/web/passport/zp/security.html"):
+		parts = urlsplit(url)
+		host = parts.hostname or ""
+		is_platform_host = not parts.netloc or host == "zhipin.com" or host.endswith(".zhipin.com")
+		if is_platform_host and parts.path.rstrip("/") in (
+			"/web/passport/zp/verify.html", "/web/passport/zp/security.html"
+		):
 			return True
 	except ValueError:
 		pass

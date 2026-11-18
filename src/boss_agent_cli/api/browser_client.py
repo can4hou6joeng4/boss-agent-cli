@@ -14,7 +14,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 from types import TracebackType
 from typing import Any, Callable, Mapping, cast
 from patchright.sync_api import sync_playwright
@@ -288,6 +288,8 @@ class BrowserSession:
 		self._identity = dict(identity or {})
 		self._started = False
 		self._cdp_url = cdp_url
+		# 自动发现（DevToolsActivePort / /json/version）成功时记录实际端点，供裸 CDP 使用。
+		self._connected_cdp_http_url: str | None = None
 		self._is_cdp = False
 		self._own_context = False  # 是否由我们创建的 context（需要在 close 时清理）
 		self._own_page = True  # 是否由我们新建的 page（复用用户已开页签时为 False，close 不关它）
@@ -573,6 +575,7 @@ class BrowserSession:
 		self._home_nav_error = None
 		try:
 			self._browser = self._pw.chromium.connect_over_cdp(url)
+			self._connected_cdp_http_url = _cdp_http_endpoint(url)
 			contexts = self._browser.contexts
 
 			if contexts:
@@ -949,7 +952,7 @@ class BrowserSession:
 		仅通过已有 CDP 浏览器及其招聘者聊天页执行；headless 实例无法访问用户的 Vue 运行时。
 		"""
 		self._require_cdp_source("evaluate_js")
-		cdp_url = self._cdp_url or DEFAULT_CDP_URL
+		cdp_url = self._cdp_url or self._connected_cdp_http_url or DEFAULT_CDP_URL
 		return _cdp_evaluate_in_chat_tab(cdp_url, script, arg)
 
 	def evaluate_js_with_chat_events(self, script: str, arg: Any = None, *, listen_ms: int = 3000) -> dict[str, Any]:
@@ -959,7 +962,7 @@ class BrowserSession:
 		from UI-only draft mutation or suggestion traffic.
 		"""
 		self._require_cdp_source("evaluate_js_with_chat_events")
-		cdp_url = self._cdp_url or DEFAULT_CDP_URL
+		cdp_url = self._cdp_url or self._connected_cdp_http_url or DEFAULT_CDP_URL
 		return _cdp_evaluate_with_chat_events_in_chat_tab(cdp_url, script, arg, listen_ms=listen_ms)
 
 	def _require_cdp_source(self, api: str) -> None:
@@ -1404,3 +1407,15 @@ def _cdp_evaluate_with_chat_events_in_chat_tab(
 					"utf8_bits": _carve_utf8_bits(bs)[:10],
 				}
 			)
+
+
+def _cdp_http_endpoint(endpoint: str) -> str | None:
+	"""Convert a connected CDP endpoint to the HTTP base used by raw CDP calls."""
+	if endpoint.startswith("http://") or endpoint.startswith("https://"):
+		return endpoint.rstrip("/")
+	parsed = urlsplit(endpoint)
+	if parsed.scheme not in {"ws", "wss"} or not parsed.hostname:
+		return None
+	scheme = "https" if parsed.scheme == "wss" else "http"
+	port = f":{parsed.port}" if parsed.port is not None else ""
+	return f"{scheme}://{parsed.hostname}{port}"
