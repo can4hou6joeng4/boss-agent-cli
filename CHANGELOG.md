@@ -4,13 +4,15 @@
 
 ## [Unreleased]
 
+## [3.4.110] - 2026-11-18
+
 ### Fixed
-- `boss show` / `recommend` / `search` 读取索引缓存时不再用 `exists()` + `read_text()`：缓存文件被换成 FIFO / 设备会永久阻塞，元数据错误又被当成「没有缓存」并提示重跑搜索。现在按 lstat 判定，只有文件确实不存在才算没有缓存；非普通文件与悬空链接报 `LOCAL_IO_ERROR`，指向普通文件的符号链接照常读取，损坏 JSON 仍按没有缓存处理（Issue #1732）。
-- 独占文件锁 `_acquire()` 打开前按 lstat 判定：`refresh.lock` / `import.lock` 与 run 锁被换成 FIFO / 设备时不再永久阻塞登录态刷新、模型导入、聊天导出与 `crawl` / `wizard` 恢复；符号链接、目录与悬空链接按带 `filename` 的 `OSError` 拒绝，由命令层兜底为 `LOCAL_IO_ERROR`。只有文件确实不存在才创建新锁文件，普通锁文件的加锁与释放行为不变（Issue #1734）。
-- `crawl --hook-profile screenshot-full --hook-dir` 的 Hook 预检与运行期注入不再直接 `read_bytes()`：脚本被换成 FIFO / 设备时不再永久阻塞，改为按 lstat 判定并进入既有的逐项失败列表；`SHA256SUMS` 也只有文件确实不存在才报「缺少完整性清单」，权限错误与特殊文件给出明确原因（Issue #1736）。
 - `hr download-resume` 的 `--output` 接入统一路径预检：FIFO / 设备 / 符号链接（含悬空链接）在取登录态与发出 `chat_history` / `friend_detail` / `preview-check` / 下载请求之前按 `INVALID_PARAM` 拒绝，父路径不可用按 `LOCAL_IO_ERROR` 拒绝；不再先花四个平台请求、再把特殊文件报成「输出文件已存在」（Issue #1726）。
 - `agent run` / `agent pending list` / `agent stats` 读取 `pending-actions.jsonl` / `action-log.jsonl` / `review-queue.jsonl` 时不再直接 `read_bytes()`：队列路径被换成 FIFO / 设备会永久阻塞在打开阶段，命令既不返回信封也不退出。现在与 `state.json` / `stop.json` 同口径按 lstat 判定，悬空链接与非普通文件报 `AUTOMATION_STATE_INVALID`；只有文件确实不存在才算空队列，指向普通文件的符号链接照常读取（Issue #1728）。
 - `chat --export` 读取上一份聊天快照时不再直接 `open()`：`chat-history/` 里按日期命名的 FIFO / 设备会永久阻塞在打开阶段，导出既不返回信封也不退出。现在与当天快照（#1698）同口径先按 lstat 判定类型，非普通文件与悬空链接按「快照不可用」告警并退化为首份快照；指向普通文件的符号链接照常读取（Issue #1730）。
+- `boss show` / `recommend` / `search` 读取索引缓存时不再用 `exists()` + `read_text()`：缓存文件被换成 FIFO / 设备会永久阻塞，元数据错误又被当成「没有缓存」并提示重跑搜索。现在按 lstat 判定，只有文件确实不存在才算没有缓存；非普通文件与悬空链接报 `LOCAL_IO_ERROR`，指向普通文件的符号链接照常读取，损坏 JSON 仍按没有缓存处理（Issue #1732）。
+- 独占文件锁 `_acquire()` 打开前按 lstat 判定：`refresh.lock` / `import.lock` 与 run 锁被换成 FIFO / 设备时不再永久阻塞登录态刷新、模型导入、聊天导出与 `crawl` / `wizard` 恢复；符号链接、目录与悬空链接按带 `filename` 的 `OSError` 拒绝，由命令层兜底为 `LOCAL_IO_ERROR`。只有文件确实不存在才创建新锁文件，普通锁文件的加锁与释放行为不变（Issue #1734）。
+- `crawl --hook-profile screenshot-full --hook-dir` 的 Hook 预检与运行期注入不再直接 `read_bytes()`：脚本被换成 FIFO / 设备时不再永久阻塞，改为按 lstat 判定并进入既有的逐项失败列表；`SHA256SUMS` 也只有文件确实不存在才报「缺少完整性清单」，权限错误与特殊文件给出明确原因（Issue #1736）。
 
 ## [3.4.109] - 2026-11-18
 
