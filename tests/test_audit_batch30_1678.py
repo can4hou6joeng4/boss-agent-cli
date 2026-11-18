@@ -1,8 +1,7 @@
-"""显式恢复在 stop.json 无法被替换时的回归测试（Issue #1678）。
+"""显式恢复时的停止标记路径校验（Issue #1678）。
 
-`AutomationStore.resume()` 先写 state.json、再写 stop.json。stop.json 被目录或
-指向目录的符号链接占用时，第二次原子替换会抛 IsADirectoryError，命令层只得到
-LOCAL_IO_ERROR 的泛化指引，而且 state.json 已经被改成 closed。
+同名目录会使 stop.json 的原子替换失败。目录与指向目录的符号链接都应在
+写入 state.json 之前报告状态损坏。
 """
 
 from __future__ import annotations

@@ -1,6 +1,7 @@
 """招聘者发送工作地点：离线契约。平台与登录态全部使用替身。"""
 
 import json
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -213,6 +214,30 @@ def test_stop_switch_blocks_preview_and_send(tmp_path: Path) -> None:
 		assert "manual-stop" in payload["error"]["message"]
 		auth.assert_not_called()
 		factory.assert_not_called()
+
+
+def test_stop_switch_lookup_error_blocks_before_auth(
+	tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+	stop_path = tmp_path / "automation" / "stop.json"
+	real_stat = os.stat
+
+	def deny_lookup(path: Any, *args: Any, **kwargs: Any) -> os.stat_result:
+		if path in (stop_path, str(stop_path)):
+			raise PermissionError(13, "测试路径状态读取失败", str(stop_path))
+		return real_stat(path, *args, **kwargs)
+
+	monkeypatch.setattr(os, "stat", deny_lookup)
+	monkeypatch.setattr(os, "lstat", deny_lookup)
+
+	result, auth, factory = _invoke(tmp_path, "--dry-run")
+	assert result.exit_code == 1, result.output
+	payload = _payload(result)
+	assert payload["error"]["code"] == "CIRCUIT_BREAKER_OPEN"
+	assert "stop.json" in payload["error"]["message"]
+	auth.assert_not_called()
+	factory.assert_not_called()
+	assert not (tmp_path / "automation").exists()
 
 
 def test_nonzero_api_code_is_not_recorded_as_sent(tmp_path: Path) -> None:

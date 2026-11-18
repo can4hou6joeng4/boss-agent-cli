@@ -8,6 +8,7 @@ import json
 import math
 import os
 import sqlite3
+import stat
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -47,11 +48,30 @@ class AutomationRunBusy(RuntimeError):
 	"""另一个 agent run 正在同一数据目录执行：本次调用没有发出任何请求。"""
 
 
+_AUTOMATION_DIR = "automation"
+_STOP_FILE = "stop.json"
+
+
+def _path_mode(path: Path) -> int | None:
+	"""仅对缺失路径返回 None，悬空链接保留链接自身的类型。"""
+	# 3.14 的 Path.exists() / is_file() 会吞掉权限等 OSError（Issue #1680）。
+	try:
+		mode = path.lstat().st_mode
+	except FileNotFoundError:
+		return None
+	if stat.S_ISLNK(mode):
+		try:
+			return path.stat().st_mode
+		except FileNotFoundError:
+			pass
+	return mode
+
+
 class AutomationStore:
 	"""Small JSONL-backed store for the recruiter automation engine."""
 
 	def __init__(self, data_dir: Path) -> None:
-		self.root = data_dir / "automation"
+		self.root = data_dir / _AUTOMATION_DIR
 		self.root.mkdir(parents=True, exist_ok=True)
 		(self.root / "archive").mkdir(exist_ok=True)
 
@@ -61,31 +81,31 @@ class AutomationStore:
 
 	@property
 	def stop_path(self) -> Path:
-		return self.root / "stop.json"
+		return self.root / _STOP_FILE
 
 	def read_stop(self) -> dict[str, Any]:
-		"""Read the independent stop latch; business snapshots cannot clear it.
+		"""读取独立停止标记，业务快照不能解除它。"""
+		return self.read_stop_for(self.root.parent)
 
-		熔断开关读不出来时按「已熔断」处理：状态未知时宁可停下等人工核对，
-		也不能让自动化继续向平台发送消息。
-		"""
-		path = self.stop_path
-		# 非普通文件（目录、FIFO、设备、指向目录的符号链接）无法给出可信开关：
-		# 与原解析失败一样 fail-closed。不能直接 read_text：FIFO / 设备会阻塞，
-		# 目录只会得到一条与「状态未知」无关的 OSError（Issue #1675）。
-		if path.is_symlink() and not path.exists():
-			return {"open": True, "reason": "stop.json 是悬空符号链接，已按熔断处理", "corrupt": True}
-		if path.exists() and not path.is_file():
-			return {"open": True, "reason": "stop.json 不是普通文件，已按熔断处理", "corrupt": True}
-		if not path.exists():
-			return {}
+	@staticmethod
+	def read_stop_for(data_dir: Path) -> dict[str, Any]:
+		"""只读停止标记，不创建目录；读取失败时保持熔断。"""
+		path = data_dir / _AUTOMATION_DIR / _STOP_FILE
 		try:
+			mode = _path_mode(path)
+			if mode is None:
+				return {}
+			if stat.S_ISLNK(mode):
+				return {"open": True, "reason": "stop.json 是悬空符号链接，已按熔断处理", "corrupt": True}
+			# FIFO / 设备不能直接 read_text，否则会阻塞（Issue #1675）。
+			if not stat.S_ISREG(mode):
+				return {"open": True, "reason": "stop.json 不是普通文件，已按熔断处理", "corrupt": True}
 			loaded = json.loads(path.read_text(encoding="utf-8"))
 		# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长整数
 		# 上限；RecursionError 覆盖深嵌套。熔断状态读不出来必须 fail-closed：
 		# 抛出去会让调用方按「未知状态」继续，只有 corrupt 标记能通知人工核对。
 		except (ValueError, OSError, RecursionError) as exc:
-			return {"open": True, "reason": f"stop.json 无法解析，已按熔断处理：{exc}", "corrupt": True}
+			return {"open": True, "reason": f"stop.json 无法读取或解析，已按熔断处理：{exc}", "corrupt": True}
 		if not isinstance(loaded, dict):
 			return {"open": True, "reason": "stop.json 顶层不是 JSON object，已按熔断处理", "corrupt": True}
 		if "open" not in loaded:
@@ -123,16 +143,15 @@ class AutomationStore:
 	def resume(self) -> bool:
 		"""Explicit operator recovery; retain every confirmed business checkpoint."""
 		with self._control_lock():
-			# 解除标记通过 os.replace 落到 stop.json。目录 / 指向目录的符号链接 /
-			# FIFO / 设备等非普通路径无法被原子替换：先写 state.json 再写 stop.json
-			# 会在中途抛 IsADirectoryError，命令层只得到 LOCAL_IO_ERROR 的泛化指引，
-			# 而且 state.json 已被改成 closed（Issue #1678）。悬空符号链接本身可以
-			# 被 os.replace 直接替换，仍允许恢复。
-			if self.stop_path.exists() and not self.stop_path.is_file():
-				raise AutomationStateError(
-					self.stop_path,
-					"stop.json 不是普通文件，无法写入解除标记；请先修正或移除该路径后重试",
-				)
+			path = self.stop_path
+			try:
+				mode = _path_mode(path)
+			except (OSError, ValueError) as exc:
+				raise AutomationStateError(path, f"无法读取 stop.json 的路径状态（{exc}）") from exc
+			# 先校验，避免同名目录导致第二次原子写失败（Issue #1678）。
+			# 其他现存非普通文件也需人工处理，悬空链接仍允许原子替换。
+			if mode is not None and not (stat.S_ISREG(mode) or stat.S_ISLNK(mode)):
+				raise AutomationStateError(path, "stop.json 不是普通文件，请先检查该路径后重试")
 			state = self.read_state()
 			if not state.get("autonomy", {}).get("circuit_breaker", {}).get("open"):
 				return False
@@ -208,13 +227,23 @@ class AutomationStore:
 				connection.close()
 
 	def read_state(self) -> dict[str, Any]:
-		if not self.state_path.exists():
+		path = self.state_path
+		try:
+			mode = _path_mode(path)
+		except (OSError, ValueError) as exc:
+			raise AutomationStateError(path, f"无法读取 state.json 的路径状态（{exc}）") from exc
+		if mode is None:
 			state: dict[str, Any] = {"conversations": {}, "autonomy": {}, "safety": {}}
 		else:
+			# 悬空链接 / 目录等路径给不出可信状态，不能静默当成空状态（Issue #1682）。
+			if stat.S_ISLNK(mode):
+				raise AutomationStateError(path, "state.json 是悬空符号链接，无法读取状态")
+			if not stat.S_ISREG(mode):
+				raise AutomationStateError(path, "state.json 不是普通文件")
 			try:
-				loaded = json.loads(self.state_path.read_text(encoding="utf-8"))
+				loaded = json.loads(path.read_text(encoding="utf-8"))
 			except (ValueError, OSError, RecursionError) as exc:
-				raise AutomationStateError(self.state_path, str(exc)) from exc
+				raise AutomationStateError(path, str(exc)) from exc
 			if not isinstance(loaded, dict):
 				raise AutomationStateError(self.state_path, "顶层必须是 JSON object")
 			state = cast("dict[str, Any]", loaded)
