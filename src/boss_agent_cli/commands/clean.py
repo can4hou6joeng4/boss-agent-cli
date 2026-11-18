@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import shutil
 import sqlite3
+import stat
 import time
 from pathlib import Path
 from typing import Any
@@ -295,7 +297,28 @@ def _open_cache_db(db_path: Path) -> sqlite3.Connection:
 	clean 直接操作 SQLite，不经过 CacheStore 的启动校验；库文件损坏时若把
 	DatabaseError 抛给顶层，只会得到 traceback 而不是信封。锁冲突与本地 IO
 	错误不是内容损坏，原样上抛交给 main 分流成 CACHE_BUSY / LOCAL_IO_ERROR。
+
+	打开前确认是普通文件：符号链接（含悬空链接）会让 SQLite 在链接目标处
+	创建或改写数据目录之外的文件，clean 的 DELETE / VACUUM 不能写穿链接。
 	"""
+	try:
+		mode = db_path.lstat().st_mode
+	except FileNotFoundError:
+		# 预检与打开之间被并发删除：交给 SQLite 按新库处理。
+		pass
+	except OSError as exc:
+		if exc.filename is None:
+			exc.filename = str(db_path)
+		raise
+	except ValueError as exc:
+		error = OSError(f"无法读取缓存库路径状态：{exc}")
+		error.filename = str(db_path)
+		raise error from exc
+	else:
+		if stat.S_ISLNK(mode):
+			raise OSError(errno.EINVAL, "缓存库是符号链接，拒绝打开", str(db_path))
+		if not stat.S_ISREG(mode):
+			raise OSError(errno.EINVAL, "缓存库不是普通文件", str(db_path))
 	try:
 		conn = sqlite3.connect(str(db_path))
 		conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchall()
@@ -318,7 +341,7 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
 def _clean_search_cache(data_dir: Path, *, dry_run: bool, clean_all: bool) -> tuple[int, int]:
 	"""清理搜索缓存，返回 (释放字节数, 清理条数)。"""
 	db_path = data_dir / "cache" / "boss_agent.db"
-	if not db_path.exists():
+	if not _cache_db_present(db_path):
 		return 0, 0
 
 	conn = _open_cache_db(db_path)
@@ -370,12 +393,51 @@ def _clean_result(target: str, freed: int, count: int, skipped: int = 0) -> dict
 	return entry
 
 
+def _lstat_mode(path: Path) -> int | None:
+	"""返回路径自身的 lstat 类型位；只有 ``FileNotFoundError`` 算缺失。
+
+	clean 的每个分支都在决定「删除还是跳过」：3.14 的 ``exists()`` /
+	``is_file()`` / ``is_symlink()`` 会把权限等 ``OSError`` 吞成 ``False``，
+	路径状态读不出来时曾被当成「没有可清理内容」，命令以成功结束
+	（Issue #1712）。其它错误带文件名上抛，由 main 分流成 ``LOCAL_IO_ERROR``。
+	"""
+	try:
+		return path.lstat().st_mode
+	except FileNotFoundError:
+		return None
+	except ValueError as exc:
+		error = OSError(f"无法读取路径状态：{exc}")
+		error.filename = str(path)
+		raise error from exc
+	except OSError as exc:
+		if exc.filename is None:
+			exc.filename = str(path)
+		raise
+
+
+def _stat_mode(path: Path) -> int | None:
+	"""跟随符号链接取目标类型位；悬空链接返回 None，其余错误上抛。"""
+	try:
+		return path.stat().st_mode
+	except FileNotFoundError:
+		return None
+	except ValueError as exc:
+		error = OSError(f"无法读取路径状态：{exc}")
+		error.filename = str(path)
+		raise error from exc
+	except OSError as exc:
+		if exc.filename is None:
+			exc.filename = str(path)
+		raise
+
+
 def _first_symlink_component(root: Path, path: Path) -> Path | None:
 	"""返回 ``root`` 之下（含 ``path`` 本身）最靠前的符号链接。
 
 	clean 只应删除数据目录内的真实文件：目标本身或任意一级祖先目录是符号
 	链接时，删除都会落到目录外。``root`` 自身允许是链接（用户显式选择的
-	``--data-dir``），因此从它的子项开始检查。
+	``--data-dir``），因此从它的子项开始检查。路径状态读不出来时上抛，
+	不能把「无法确认不是链接」当成「不是链接」（Issue #1712）。
 	"""
 	try:
 		relative = path.relative_to(root)
@@ -384,7 +446,10 @@ def _first_symlink_component(root: Path, path: Path) -> Path | None:
 	current = root
 	for part in relative.parts:
 		current = current / part
-		if current.is_symlink():
+		mode = _lstat_mode(current)
+		if mode is None:
+			return None
+		if stat.S_ISLNK(mode):
 			return current
 	return None
 
@@ -403,26 +468,38 @@ def _privacy_preflight(data_dir: Path, targets: list[tuple[str, Path]]) -> list[
 	"""
 	problems: list[dict[str, str]] = []
 	for target, path in targets:
-		if _first_symlink_component(data_dir, path) is not None:
+		try:
+			link = _first_symlink_component(data_dir, path)
+		except OSError as exc:
+			problems.append({"target": target, "path": str(path), "reason": f"无法读取路径状态: {exc}"})
+			continue
+		if link is not None:
 			continue
 		try:
-			path.lstat()
-		except FileNotFoundError:
-			continue
+			mode = _lstat_mode(path)
 		except OSError as exc:
 			problems.append({"target": target, "path": str(path), "reason": f"无法读取路径: {exc}"})
+			continue
+		if mode is None:
 			continue
 		if not _is_writable(path.parent):
 			problems.append({"target": target, "path": str(path), "reason": "父目录不可写"})
 			continue
-		if path.is_dir() and not _is_writable(path):
+		if stat.S_ISDIR(mode) and not _is_writable(path):
 			problems.append({"target": target, "path": str(path), "reason": "目录不可写"})
 	db_path = data_dir / "cache" / "boss_agent.db"
 	# 文件只需要写权限；X_OK 对普通文件恒为假，不能复用目录的 W_OK|X_OK 判断。
-	if db_path.exists() and not os.access(db_path, os.W_OK):
+	try:
+		db_present = _cache_db_present(db_path)
+	except OSError as exc:
 		problems.append(
-			{"target": "crawl 任务与导出", "path": str(db_path), "reason": "缓存库不可写"}
+			{"target": "crawl 任务与导出", "path": str(db_path), "reason": f"无法读取路径: {exc}"}
 		)
+	else:
+		if db_present and not os.access(db_path, os.W_OK):
+			problems.append(
+				{"target": "crawl 任务与导出", "path": str(db_path), "reason": "缓存库不可写"}
+			)
 	return problems
 
 
@@ -478,10 +555,13 @@ def _clean_dir(dir_path: Path, *, days: int, dry_run: bool) -> tuple[int, int, i
 	（Issue #1497）。目录内的文件符号链接仍按既有语义只 ``unlink`` 链接本身，
 	不会删除链接目标。
 	"""
-	if dir_path.is_symlink():
-		return 0, 0, 1
-	if not dir_path.exists():
+	mode = _lstat_mode(dir_path)
+	if mode is None:
 		return 0, 0, 0
+	if stat.S_ISLNK(mode):
+		return 0, 0, 1
+	if not stat.S_ISDIR(mode):
+		raise OSError(errno.ENOTDIR, "清理目标不是目录", str(dir_path))
 
 	cutoff = time.time() - days * 86400
 	total_size = 0
@@ -489,12 +569,25 @@ def _clean_dir(dir_path: Path, *, days: int, dry_run: bool) -> tuple[int, int, i
 	skipped = 0
 
 	for f in dir_path.iterdir():
-		if f.is_symlink() and not f.is_file():
-			# 指向目录的链接、悬空链接：不跟随，也不假装清理过。
-			skipped += 1
+		entry_mode = _lstat_mode(f)
+		if entry_mode is None:
+			# 枚举后被并发删除：没有可清理内容，也不算失败。
 			continue
-		if f.is_file() and f.stat().st_mtime < cutoff:
-			total_size += f.stat().st_size
+		if stat.S_ISLNK(entry_mode):
+			target_mode = _stat_mode(f)
+			if target_mode is None or not stat.S_ISREG(target_mode):
+				# 指向目录的链接、悬空链接：不跟随，也不假装清理过。
+				skipped += 1
+				continue
+		elif not stat.S_ISREG(entry_mode):
+			# 子目录、FIFO / 设备：不是可清理的快照文件。
+			continue
+		try:
+			info = f.stat()
+		except FileNotFoundError:
+			continue
+		if info.st_mtime < cutoff:
+			total_size += info.st_size
 			count += 1
 			if not dry_run:
 				f.unlink()
@@ -513,22 +606,24 @@ def _clean_path(path: Path, *, dry_run: bool, root: Path | None = None) -> tuple
 		link = _first_symlink_component(root, path)
 		if link is not None and link != path:
 			return 0, 0, 1
-	if path.is_symlink():
-		if path.is_dir():
+	mode = _lstat_mode(path)
+	if mode is None:
+		return 0, 0, 0
+	if stat.S_ISLNK(mode):
+		target_mode = _stat_mode(path)
+		if target_mode is not None and stat.S_ISDIR(target_mode):
 			# 目录链接：不跟随、不 rmtree，链接目标里的文件必须保留。
 			return 0, 0, 1
-		if path.exists():
+		if target_mode is not None:
 			# 文件链接：only unlink the link itself; the target is untouched.
 			if not dry_run:
 				path.unlink()
 			return 0, 1, 0
 		# 悬空链接维持既有语义：没有可清理内容，保持原样。
 		return 0, 0, 0
-	if not path.exists():
-		return 0, 0, 0
 	size, count = _path_stats(path)
 	if not dry_run:
-		if path.is_dir():
+		if stat.S_ISDIR(mode):
 			shutil.rmtree(path)
 		else:
 			path.unlink()
@@ -536,17 +631,39 @@ def _clean_path(path: Path, *, dry_run: bool, root: Path | None = None) -> tuple
 
 
 def _path_stats(path: Path) -> tuple[int, int]:
-	"""统计文件/目录字节数和文件数量。"""
-	if path.is_file():
+	"""统计文件/目录字节数和文件数量；路径元数据错误上抛（Issue #1712）。"""
+	mode = _lstat_mode(path)
+	if mode is None:
+		return 0, 0
+	if stat.S_ISLNK(mode):
+		target_mode = _stat_mode(path)
+		if target_mode is None or not stat.S_ISREG(target_mode):
+			return 0, 0
+		try:
+			return path.stat().st_size, 1
+		except FileNotFoundError:
+			return 0, 0
+	if stat.S_ISREG(mode):
 		return path.stat().st_size, 1
-	if not path.is_dir():
+	if not stat.S_ISDIR(mode):
 		return 0, 0
 	size = 0
 	count = 0
 	for item in path.rglob("*"):
-		if item.is_file():
+		item_mode = _lstat_mode(item)
+		if item_mode is None:
+			continue
+		if stat.S_ISLNK(item_mode):
+			target_mode = _stat_mode(item)
+			if target_mode is None or not stat.S_ISREG(target_mode):
+				continue
+		elif not stat.S_ISREG(item_mode):
+			continue
+		try:
 			size += item.stat().st_size
-			count += 1
+		except FileNotFoundError:
+			continue
+		count += 1
 	return size, count
 
 
@@ -582,7 +699,7 @@ def _clean_job_desc_cache(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 def _clean_crawl_data(data_dir: Path, *, dry_run: bool) -> tuple[int, int, int]:
 	files_size, files_count, skipped = _clean_path(data_dir / "crawl", dry_run=dry_run, root=data_dir)
 	db_path = data_dir / "cache" / "boss_agent.db"
-	if not db_path.exists():
+	if not _cache_db_present(db_path):
 		return files_size, files_count, skipped
 	conn = _open_cache_db(db_path)
 	try:
@@ -603,7 +720,7 @@ def _clean_crawl_data(data_dir: Path, *, dry_run: bool) -> tuple[int, int, int]:
 def _clean_table(data_dir: Path, table: str, *, dry_run: bool) -> tuple[int, int]:
 	"""清理数据库表，返回 (估算字节数, 行数)。"""
 	db_path = data_dir / "cache" / "boss_agent.db"
-	if not db_path.exists():
+	if not _cache_db_present(db_path):
 		return 0, 0
 
 	conn = _open_cache_db(db_path)
