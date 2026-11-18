@@ -70,6 +70,8 @@ def _status(tmp_path, run_id) -> str:
 @pytest.fixture
 def offline_cli(monkeypatch):
 	monkeypatch.setattr("boss_agent_cli.commands.crawl._session_seed", lambda ctx: ({}, ""))
+	# 预检会探测采集可选依赖与浏览器：测试不依赖本机是否装了它们。
+	monkeypatch.setattr("boss_agent_cli.commands.crawl._crawl_preflight", lambda ctx: ({}, ""))
 	return CliRunner()
 
 
@@ -97,7 +99,6 @@ def test_stop_is_accepted_while_a_resumed_run_opens_its_browser(tmp_path, offlin
 def test_background_resume_persists_queued_before_the_worker_starts(tmp_path, offline_cli, monkeypatch):
 	run_id = _stopped_run(tmp_path)
 	launched = []
-	monkeypatch.setattr("boss_agent_cli.commands.crawl._crawl_preflight", lambda ctx: None)
 	monkeypatch.setattr("boss_agent_cli.commands.crawl._launch_background_resume", lambda data_dir, rid, **kw: launched.append(rid))
 	argv = ["--data-dir", str(tmp_path), "--json", "crawl", "resume", run_id, "--background"]
 
@@ -119,7 +120,6 @@ def test_background_resume_launch_failure_does_not_leave_the_run_queued(tmp_path
 	def launch(data_dir, rid, **kwargs):
 		raise OSError("spawn failed")
 
-	monkeypatch.setattr("boss_agent_cli.commands.crawl._crawl_preflight", lambda ctx: None)
 	monkeypatch.setattr("boss_agent_cli.commands.crawl._launch_background_resume", launch)
 
 	result = offline_cli.invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "resume", run_id, "--background"])
@@ -129,8 +129,13 @@ def test_background_resume_launch_failure_does_not_leave_the_run_queued(tmp_path
 	assert _status(tmp_path, run_id) not in ("queued", "running")
 
 
-def test_corrupt_job_row_hint_names_the_run_not_the_job(tmp_path, offline_cli):
+def test_corrupt_job_row_hint_names_the_run_not_the_job(tmp_path, offline_cli, monkeypatch):
 	run_id = _stopped_run(tmp_path)
+	# 不依赖本机是否装了采集可选依赖：传输层用替身，损坏行在读取结果时暴露。
+	monkeypatch.setattr("boss_agent_cli.commands.crawl._transport_factory", lambda settings, **kwargs: _Pages())
+	monkeypatch.setattr("boss_agent_cli.commands.crawl.CrawlService", lambda cache, **kwargs: CrawlService(
+		cache, budget_factory=_NoDelayBudget, **kwargs,
+	))
 	with CacheStore(_db(tmp_path)) as cache:
 		cache.put_crawl_job(run_id, "jobkey_abc", 1, {"job_key": "jobkey_abc"}, detail_done=False)
 		cache._conn.execute("UPDATE crawl_jobs SET detail_done = 'yes' WHERE run_id = ?", (run_id,))
