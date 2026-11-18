@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import errno
 import os
+import stat
 from enum import Enum
 from pathlib import Path
 
@@ -19,6 +20,45 @@ class OutputPathProblem(Enum):
 	IS_DIRECTORY = "is_directory"
 	NOT_REGULAR = "not_regular"
 	PARENT_NOT_DIR = "parent_not_dir"
+
+
+def _lstat_mode(path: Path) -> int | None:
+	"""返回路径自身的 lstat 类型位；只有 ``FileNotFoundError`` 算缺失。
+
+	3.14 的 ``exists()`` / ``is_file()`` / ``is_symlink()`` 会把权限等
+	``OSError`` 吞成 ``False``，预检会据此报告「未发现问题」，把失败留给
+	平台请求之后的真正写入（Issue #1716）。
+	"""
+	try:
+		return path.lstat().st_mode
+	except (FileNotFoundError, NotADirectoryError):
+		# ENOTDIR 表示某一级父路径是文件：该路径不可能存在，交给父路径循环
+		# 报 PARENT_NOT_DIR，而不是把预检变成泛化 IO 错误。
+		return None
+	except ValueError as exc:
+		error = OSError(f"无法读取路径状态：{exc}")
+		error.filename = str(path)
+		raise error from exc
+	except OSError as exc:
+		if exc.filename is None:
+			exc.filename = str(path)
+		raise
+
+
+def _stat_mode(path: Path) -> int | None:
+	"""跟随符号链接取目标类型位；悬空链接返回 None，其余错误上抛。"""
+	try:
+		return path.stat().st_mode
+	except (FileNotFoundError, NotADirectoryError):
+		return None
+	except ValueError as exc:
+		error = OSError(f"无法读取路径状态：{exc}")
+		error.filename = str(path)
+		raise error from exc
+	except OSError as exc:
+		if exc.filename is None:
+			exc.filename = str(path)
+		raise
 
 
 def prepare_output_path(path: str | os.PathLike[str]) -> Path:
@@ -51,18 +91,26 @@ def inspect_output_path(path: str | os.PathLike[str]) -> tuple[Path, OutputPathP
 	# 可写，而原子写入的 ``os.replace`` 替换的是链接本身，真实目标保持旧内容
 	# （Issue #1355）。悬空链接的 ``exists()`` 为 False，同样必须按非普通文件
 	# 拒绝，否则会被当成「尚不存在的新文件」。
-	if target.is_symlink():
+	target_mode = _lstat_mode(target)
+	if target_mode is not None and stat.S_ISLNK(target_mode):
 		return target, OutputPathProblem.NOT_REGULAR
-	if target.is_dir():
+	if target_mode is not None and stat.S_ISDIR(target_mode):
 		return target, OutputPathProblem.IS_DIRECTORY
-	if target.exists() and not target.is_file():
+	if target_mode is not None and not stat.S_ISREG(target_mode):
 		return target, OutputPathProblem.NOT_REGULAR
 	# 缺失的父目录可以创建，但创建链上任意一级被文件或悬空符号链接占用都不行。
 	for parent in target.parents:
-		if parent.is_dir():
-			break
-		if parent.exists() or parent.is_symlink():
+		parent_mode = _lstat_mode(parent)
+		if parent_mode is None:
+			continue
+		if stat.S_ISLNK(parent_mode):
+			target_parent_mode = _stat_mode(parent)
+			if target_parent_mode is not None and stat.S_ISDIR(target_parent_mode):
+				break
 			return target, OutputPathProblem.PARENT_NOT_DIR
+		if stat.S_ISDIR(parent_mode):
+			break
+		return target, OutputPathProblem.PARENT_NOT_DIR
 	return target, None
 
 

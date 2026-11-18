@@ -6,8 +6,10 @@
 
 from __future__ import annotations
 
+import errno
 import html
 import sqlite3
+import stat
 import sys
 import time
 from pathlib import Path
@@ -26,6 +28,7 @@ from boss_agent_cli.display import (
 	open_file_command,
 	render_action_result,
 )
+from boss_agent_cli.services.json_files import path_mode
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.text_files import write_text_atomic
 
@@ -55,14 +58,24 @@ def _ratio(numer: int, denom: int) -> float:
 
 
 def _collect_stats(db_path: Path, days: int) -> dict[str, Any]:
-	"""从 SQLite 收集漏斗数据，返回结构化 dict。"""
-	if not db_path.exists():
+	"""从 SQLite 收集漏斗数据，返回结构化 dict。
+
+	只有 ``FileNotFoundError`` 才算缓存尚未建立：3.14 的 ``exists()`` 会把
+	权限等 ``OSError`` 吞成 ``False``，把「读不出来」报成「没有数据」
+	（Issue #1716）。
+	"""
+	mode = path_mode(db_path)
+	if mode is None:
 		return {
 			"funnel": {"greeted": 0, "applied": 0, "shortlist": 0, "watch_hits": 0},
 			"conversion": {"apply_rate": 0.0, "shortlist_rate": 0.0},
 			"window_days": days,
 			"note": "缓存尚未建立，先跑一次 search/greet/apply 再查看",
 		}
+	# 目录、FIFO / 设备与悬空链接不是可读的 SQLite 库；继续 connect 只会得到
+	# 与实际原因无关的错误。
+	if not stat.S_ISREG(mode):
+		raise OSError(errno.EINVAL, "缓存库不是普通文件", str(db_path))
 
 	since = time.time() - days * 86400
 	conn = sqlite3.connect(str(db_path))
