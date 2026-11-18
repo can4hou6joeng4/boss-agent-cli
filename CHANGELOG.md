@@ -8,6 +8,7 @@
 - `append_interview_lead()` 在 `interview-leads.csv` 的路径状态读取失败时会把它当成新文件并写入表头，截断已有面试线索记录；现在只有 `FileNotFoundError` 才创建表头，目录、FIFO、悬空链接与不可读文件都按 `AUTOMATION_STATE_INVALID` 失败且不改动历史数据（Issue #1694）。
 - 聊天快照在当天快照路径元数据不可读、被目录 / FIFO / 悬空链接占用或已有文件不可读时，不再把它当成「今天还没有快照」并用当前页覆盖已合并的分页结果；只有 `FileNotFoundError` 才从空历史开始，坏 JSON 仍按无历史处理（Issue #1698）。
 - 共享 salt 只接受 16 字节普通文件：创建改为完整写入后原子落位并在锁内读取，空文件、半截写入、目录 / FIFO / 悬空链接不再被静默接受，避免 PBKDF2 用错误 salt 派生密钥后旧密文永久解不开（Issue #1699）。
+- 本地模型登记表在路径元数据不可读、被目录 / FIFO / 悬空链接占用或文件不可读时，`strict=True` 的写入方不再返回空表并用空表覆盖已有登记；只有 `FileNotFoundError` 才算缺失（Issue #1700）。
 - `agent stop` 在 `automation/stop.json` 被目录或指向目录的符号链接占用时，不再落到泛化的 `LOCAL_IO_ERROR`；写入前按 `AUTOMATION_STATE_INVALID` 报出实际路径，悬空符号链接仍可写入（Issue #1684）。
 - 风险锁路径为悬空符号链接、目录或 FIFO 时，`read_lock()` 会把「锁状态未知」当成「没有锁」；Python 3.14 下路径元数据读取失败也会被 `exists()` 吞掉。现在这些情况统一按损坏锁 fail-closed，且不再直接读取非普通文件（Issue #1686）。
 - `AIConfigStore` 在 `auth/salt` 的存在性判断失败时会重新生成共享 salt，覆盖后已有的 `session.enc` 与 `api_key.enc` 永久无法解密；现在与 `TokenStore` 共用 `O_EXCL` + 刷新锁的 salt 生命周期，读取失败时上抛而不是覆盖（Issue #1688）。

@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Final
 
-from boss_agent_cli.services.json_files import write_json_atomic
+from boss_agent_cli.services.json_files import read_bytes_if_regular, write_json_atomic
 
 RUNTIME_BASE_URLS: Final = {
 	"ollama": "http://localhost:11434/v1",
@@ -96,13 +96,21 @@ def read_imported_models(data_dir: Path, *, strict: bool = False) -> list[Import
 	写入方必须传 strict=True：用空表覆盖掉原文件会丢掉还能人工修复的登记。
 	"""
 	path = model_registry_path(data_dir)
-	if not path.exists():
+	try:
+		raw = read_bytes_if_regular(path)
+	except OSError as exc:
+		# 路径元数据读不出来、目录 / FIFO / 悬空链接与不可读文件：strict 写入方
+		# 必须报损坏，不能拿空表覆盖其他登记（Issue #1700）。
+		if strict:
+			raise _registry_corrupt_error(path, str(exc)) from exc
+		return []
+	if raw is None:
 		return []
 	try:
-		rows = json.loads(path.read_text(encoding="utf-8"))
+		rows = json.loads(raw.decode("utf-8"))
 	# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长整数
 	# 上限；RecursionError 覆盖深嵌套。登记表坏了按既定语义降级或报错。
-	except (ValueError, OSError, RecursionError) as exc:
+	except (ValueError, RecursionError) as exc:
 		if strict:
 			raise _registry_corrupt_error(path, str(exc)) from exc
 		return []
