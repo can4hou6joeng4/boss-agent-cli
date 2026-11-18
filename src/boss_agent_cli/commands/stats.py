@@ -20,6 +20,7 @@ from rich.table import Table
 
 from boss_agent_cli import display
 from boss_agent_cli.cache.store import CacheDatabaseInvalid, is_cache_busy_error, is_cache_local_io_error
+from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	handle_error_output,
@@ -424,6 +425,14 @@ def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Pa
 		)
 		ctx.exit(1)
 		return
+	# FIFO / 设备 / 悬空链接不能被 write_text_atomic 的 os.replace 悄悄替换成
+	# 普通文件；目录与不可用父路径也在这里提前按参数错误暴露（Issue #1723）。
+	if output_path is not None:
+		validated = validate_output_path_or_emit(ctx, "stats", output_path)
+		if validated is None:
+			ctx.exit(1)
+			return
+		output_path = Path(validated)
 	data_dir: Path = ctx.obj["data_dir"]
 	db_path = data_dir / "cache" / "boss_agent.db"
 

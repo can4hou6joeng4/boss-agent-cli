@@ -99,18 +99,22 @@ def test_socket_errors_stay_network_error(exc):
 	assert payload["error"]["recoverable"] is True
 
 
-def test_uncaught_oserror_reports_actual_command_name(tmp_path):
+def test_uncaught_oserror_reports_actual_command_name(tmp_path, monkeypatch):
 	"""顶层 IO 兜底以前把所有写文件失败都记成 command=boss：看不出是哪个子命令，
 	按 command 过滤日志或按信封分发的调用方也会认错命令。
 
-	父目录不存在已不再是失败条件（`-o` 会自动建父目录），这里用同名普通文件
-	占住父路径触发 mkdir 的 OSError。
+	父路径不是目录现在由 `-o` 预检在写盘前拦截（Issue #1723），不再落到顶层
+	兜底；这里让写入阶段本身抛 OSError，继续覆盖兜底的 command 归属。
 	"""
-	blocker = tmp_path / "missing"
-	blocker.write_text("not a directory", encoding="utf-8")
+	target = tmp_path / "report.html"
+
+	def _fail_write(*args, **kwargs):
+		raise OSError(28, "No space left on device", str(target))
+
+	monkeypatch.setattr("boss_agent_cli.commands.stats.write_text_atomic", _fail_write)
 	result = CliRunner().invoke(cli, [
 		"--data-dir", str(tmp_path),
-		"stats", "--format", "html", "-o", str(blocker / "report.html"),
+		"stats", "--format", "html", "-o", str(target),
 	])
 	payload = json.loads(result.output)
 	assert result.exit_code == 1

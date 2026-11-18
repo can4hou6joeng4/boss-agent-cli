@@ -7,6 +7,7 @@
 ### Fixed
 - `stats` 把缓存库每次查询的 `sqlite3.OperationalError` 都吞成全零计数：遇到其他进程持有排他锁时返回 `ok:true` 的空漏斗，遇到磁盘 I/O 错误时报表不完整。现在只有旧库缺表返回 0；锁冲突报 `CACHE_BUSY`、磁盘与只读错误报 `LOCAL_IO_ERROR`，其余才按缓存库损坏处理（Issue #1718）。
 - `request-budget.sqlite3` 的只读库 / 只读目录 / 磁盘满 / 设备 I/O 错误不再被误判成「库损坏」并提示备份删除：这些失败与库内容无关，删库既修不好又会丢掉冷却时间与节流历史；现在保留原始 `OperationalError`，由命令层给出 `LOCAL_IO_ERROR` 通用指引，只有真正无法解析的库才提示删除重建（Issue #1721）。
+- `digest` 的 `-o` 在登录与平台请求之前接入统一路径预检：父路径不可用先报 `LOCAL_IO_ERROR`，不再先翻沟通列表、取面试数据后才失败；`digest` / `stats` / `resume export` 的 `-o` 遇到 FIFO / 设备 / 悬空链接按 `INVALID_PARAM` 拒绝，不再被原子写入替换成普通文件；`resume export -o <目录>` 与 `export` / `chat` 统一为 `INVALID_PARAM`（Issue #1723）。
 
 ## [3.4.108] - 2026-11-18
 
