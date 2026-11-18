@@ -203,3 +203,52 @@ def test_openai_tools_output_ready_for_openai_sdk():
 		for prop_name, prop_spec in params.get("properties", {}).items():
 			assert "type" in prop_spec
 			assert prop_spec["type"] in {"string", "integer", "boolean", "number", "array", "object"}
+
+
+# ── #1774：OpenAI / Anthropic 导出不带顶层组合与条件关键字 ─────────────
+
+_PROVIDER_REJECTED_TOP_LEVEL = ("anyOf", "oneOf", "allOf", "not", "if", "then", "else", "enum")
+
+
+def test_provider_tool_schemas_have_plain_object_top_level():
+	exported = {
+		"openai": {tool["function"]["name"]: tool["function"]["parameters"] for tool in format_openai_tools(SCHEMA_DATA)},
+		"anthropic": {tool["name"]: tool["input_schema"] for tool in format_anthropic_tools(SCHEMA_DATA)},
+	}
+	for provider, schemas in exported.items():
+		for name, schema in schemas.items():
+			assert schema["type"] == "object", (provider, name)
+			offending = [key for key in _PROVIDER_REJECTED_TOP_LEVEL if key in schema]
+			assert offending == [], (provider, name, offending)
+
+
+def test_provider_tool_descriptions_carry_the_moved_constraints():
+	catalog = {tool.name: tool for tool in build_tool_catalog(SCHEMA_DATA)}
+	exported = {tool["name"]: tool for tool in format_anthropic_tools(SCHEMA_DATA)}
+	moved = [name for name, tool in catalog.items() if any(key in tool.input_schema for key in _PROVIDER_REJECTED_TOP_LEVEL)]
+	assert "boss_export" in moved and "boss_config" in moved
+	for name in moved:
+		source = catalog[name]
+		description = exported[name]["description"]
+		assert description.startswith(source.description), name
+		_, _, note = description.partition("参数约束（JSON Schema 片段，由 CLI 校验）：")
+		constraints = json.loads(note)
+		assert constraints == {key: source.input_schema[key] for key in constraints}, name
+		assert {**exported[name]["input_schema"], **constraints} == source.input_schema, name
+		assert len(description) <= 1024, name
+	untouched = next(name for name in catalog if name not in moved)
+	assert exported[untouched]["description"] == catalog[untouched].description
+	assert exported[untouched]["input_schema"] == catalog[untouched].input_schema
+
+
+def test_mcp_tools_format_keeps_conditional_constraints():
+	from boss_agent_cli.schema.formats import format_mcp_tools
+
+	schema = {tool["name"]: tool["inputSchema"] for tool in format_mcp_tools(SCHEMA_DATA)}["boss_export"]
+	assert "anyOf" in schema
+
+
+def test_wizard_run_declares_role_platform_goal_required():
+	"""run（含省略 action）缺 role / platform / goal 时 schema 就应拒绝（Issue #1775）。"""
+	schema = {tool.name: tool.input_schema for tool in build_tool_catalog(SCHEMA_DATA)}["boss_wizard"]
+	assert schema["else"] == {"required": ["role", "platform", "goal"]}

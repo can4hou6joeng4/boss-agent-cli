@@ -954,6 +954,18 @@ class CacheStore:
 		)
 		self._conn.commit()
 
+	def mark_crawl_run_active(self, run_id: str, status: str) -> None:
+		"""恢复已取得执行权时把状态落成 queued / running（Issue #1771）。
+
+		只改状态、清掉上一轮的错误并刷新时间；断点游标与其他进程写入的停止标记
+		保持不动，这样恢复窗口内到达的 `crawl stop` 才会被接受。
+		"""
+		self._conn.execute(
+			"UPDATE crawl_runs SET status = ?, error = '', updated_at = ? WHERE run_id = ?",
+			(status, time.time(), run_id),
+		)
+		self._conn.commit()
+
 	def touch_crawl_run(self, run_id: str) -> None:
 		"""刷新排队交接时间，不改变其他进程写入的停止标记。"""
 		self._conn.execute("UPDATE crawl_runs SET updated_at = ? WHERE run_id = ?", (time.time(), run_id))

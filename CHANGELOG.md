@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- 恢复终态 crawl 任务时状态先落库再执行：前台恢复在打开采集浏览器之前写 `running`，后台恢复在启动 worker 之前写 `queued`，这段时间到达的 `crawl stop` 不再按旧终态被拒而采集照常继续，重复的后台恢复也不再拉起第二个 worker；worker 启动失败时把原因写回，不留无人执行的 `queued`（Issue #1771）。
+- wizard `crawl_start` 显式带 `run_id` 且 `query` / `city` 与断点不一致时返回 `INVALID_PARAM`，不再静默按旧关键词续跑并把结果记到新关键词名下；输入一致时续跑行为不变（Issue #1772）。
+- `crawl resume` 读到损坏的结果行时，`CACHE_RECORD_INVALID` 的后继命令使用真实 run_id，不再把 job_key 拼进 `crawl status`（Issue #1773）。
+- `boss schema --format openai-tools` / `anthropic-tools` 导出的参数 schema 顶层不再带 `anyOf` / `allOf` / `not` / `if` / `then` / `else`：12 个工具的这些约束改为附在工具描述里（JSON Schema 片段，仍由 CLI 校验），避免整份工具定义被接口拒绝；`mcp-tools` 与运行时 `tools/list` 保持完整 schema（Issue #1774）。
+- `boss_wizard` 的 schema 声明 run（含省略 `action`）时 `role` / `platform` / `goal` 必填，与实际校验一致（Issue #1775）。
+
 ## [3.4.115] - 2026-11-19
 
 ### Fixed
