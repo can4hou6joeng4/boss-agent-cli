@@ -11,7 +11,7 @@ from typing import Any
 
 from boss_agent_cli.services.chat_utils import contact_identity
 from boss_agent_cli.services.file_lock import exclusive_file_lock, run_lock_path
-from boss_agent_cli.services.json_files import write_json_atomic
+from boss_agent_cli.services.json_files import read_bytes_if_regular, write_json_atomic
 from boss_agent_cli.output import Logger
 
 _SNAPSHOT_NAME_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -115,15 +115,18 @@ def _merge_and_write(snapshot_path: str, friends: list[dict[str, Any]]) -> list[
 	"""调用方必须持有当日快照锁。"""
 	# 合并已有的当日快照（解决分页覆盖问题）
 	existing: dict[str, dict[str, Any]] = {}
-	if os.path.exists(snapshot_path):
+	# 只有「当天还没有快照」才从空历史开始。路径元数据读不出来、目录 / FIFO、
+	# 已有文件不可读时上抛 OSError：把它们当成没有历史会让随后的原子写覆盖
+	# 已合并的分页结果，次日 diff 误报联系人消失（Issue #1698）。
+	raw = read_bytes_if_regular(Path(snapshot_path))
+	if raw is not None:
 		try:
-			with open(snapshot_path, encoding="utf-8") as f:
-				prev_today = json.load(f)
+			prev_today = json.loads(raw.decode("utf-8"))
 			if isinstance(prev_today, list):
 				for item in prev_today:
 					if isinstance(item, dict) and contact_identity(item):
 						existing[contact_identity(item)] = item
-		except (ValueError, OSError, RecursionError):
+		except (ValueError, RecursionError):
 			# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长
 			# 整数上限；RecursionError 覆盖深嵌套。坏快照按没有历史处理。
 			pass
