@@ -220,6 +220,13 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 					export_dir = os.path.join(data_dir, "chat-export")
 				os.makedirs(export_dir, exist_ok=True)
 				output_path = os.path.join(export_dir, f"沟通列表-{today}.{export_fmt}")
+				# 默认路径与显式 -o 走同一预检：FIFO / 设备 / 符号链接目标不能被
+				# os.replace 静默替换（Issue #1757）。导出目录本身是链接也要拒绝。
+				validated = validate_output_path_or_emit(ctx, "chat", output_path)
+				if validated is None:
+					ctx.exit(1)
+					return
+				output_path = validated
 
 			# 显式指定的写入位置由用户负责，这里只展开 ~ 并建好父目录，
 			# 与 digest / stats / resume export 共用同一套 -o 语义。
