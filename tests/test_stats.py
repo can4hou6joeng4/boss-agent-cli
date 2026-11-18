@@ -3,10 +3,12 @@
 import json
 import sqlite3
 import time
+from contextlib import closing
 from pathlib import Path
 
 from click.testing import CliRunner
 
+from boss_agent_cli.commands import stats as stats_module
 from boss_agent_cli.main import cli
 
 
@@ -200,6 +202,57 @@ def test_stats_html_format_with_json_flag_returns_envelope(tmp_path):
 	# bytes 是落盘后的字节数，中文报表按 UTF-8 计算，不能是字符数。
 	assert parsed["data"]["bytes"] == len(parsed["data"]["content"].encode("utf-8"))
 	assert parsed["data"]["bytes"] > len(parsed["data"]["content"])
+
+
+def test_stats_locked_cache_returns_cache_busy(tmp_path, monkeypatch):
+	_seed_cache(tmp_path, greet=1)
+	connect = sqlite3.connect
+	with closing(connect(tmp_path / "cache" / "boss_agent.db")) as holder:
+		holder.execute("PRAGMA journal_mode = DELETE").fetchone()
+		holder.execute("BEGIN EXCLUSIVE")
+		monkeypatch.setattr(stats_module.sqlite3, "connect", lambda path: connect(path, timeout=0))
+		result = _invoke(tmp_path)
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.stdout)
+	assert payload["ok"] is False
+	assert payload["error"]["code"] == "CACHE_BUSY"
+	assert payload["error"]["recoverable"] is True
+
+
+def test_stats_window_query_io_error_preserves_existing_report(tmp_path, monkeypatch):
+	_seed_cache(tmp_path, greet=1)
+	out_path = tmp_path / "report.html"
+	out_path.write_text("离线报表", encoding="utf-8")
+	connect = sqlite3.connect
+
+	class DiskReadErrorConnection(sqlite3.Connection):
+		def execute(self, sql, parameters=()):
+			if "WHERE greeted_at" in sql:
+				raise sqlite3.OperationalError("disk I/O error")
+			return super().execute(sql, parameters)
+
+	monkeypatch.setattr(stats_module.sqlite3, "connect", lambda path: connect(path, factory=DiskReadErrorConnection))
+	result = _invoke(tmp_path, "--format", "html", "-o", str(out_path))
+
+	assert result.exit_code == 1, result.stdout
+	assert json.loads(result.stdout)["error"]["code"] == "LOCAL_IO_ERROR"
+	assert out_path.read_text(encoding="utf-8") == "离线报表"
+
+
+def test_stats_missing_tables_in_old_cache_keep_zero_counts(tmp_path):
+	path = tmp_path / "cache" / "boss_agent.db"
+	path.parent.mkdir()
+	with closing(sqlite3.connect(path)) as conn, conn:
+		conn.execute("CREATE TABLE greet_records (greeted_at REAL)")
+		conn.execute("INSERT INTO greet_records VALUES (?)", (time.time(),))
+
+	result = _invoke(tmp_path)
+
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.stdout)
+	assert payload["data"]["funnel"] == {"greeted": 1, "applied": 0, "shortlist": 0}
+	assert payload["data"]["window"] == {"greeted": 1, "applied": 0, "shortlist": 0, "watch_hits": 0}
 
 
 def test_stats_corrupt_cache_database_returns_envelope(tmp_path):

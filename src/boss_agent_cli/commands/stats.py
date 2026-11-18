@@ -19,7 +19,7 @@ import click
 from rich.table import Table
 
 from boss_agent_cli import display
-from boss_agent_cli.cache.store import CacheDatabaseInvalid
+from boss_agent_cli.cache.store import CacheDatabaseInvalid, is_cache_busy_error, is_cache_local_io_error
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	handle_error_output,
@@ -33,22 +33,23 @@ from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.text_files import write_text_atomic
 
 
-def _safe_count(conn: sqlite3.Connection, table: str) -> int:
+def _count_records(
+	conn: sqlite3.Connection, table: str, *, window: tuple[str, float] | None = None
+) -> int:
+	"""统计指定表的记录。旧库缺表时返回零，其余查询失败交给调用方处理。"""
+	query = f"SELECT COUNT(*) FROM {table}"
+	parameters: tuple[float, ...] = ()
+	if window is not None:
+		column, cutoff = window
+		query += f" WHERE {column} >= ?"
+		parameters = (cutoff,)
 	try:
-		result: int = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-		return result
-	except sqlite3.OperationalError:
-		return 0
-
-
-def _count_since(conn: sqlite3.Connection, table: str, column: str, since: float) -> int:
-	try:
-		result: int = conn.execute(
-			f"SELECT COUNT(*) FROM {table} WHERE {column} >= ?", (since,)
-		).fetchone()[0]
-		return result
-	except sqlite3.OperationalError:
-		return 0
+		result: int = conn.execute(query, parameters).fetchone()[0]
+	except sqlite3.OperationalError as exc:
+		if str(exc) == f"no such table: {table}":
+			return 0
+		raise
+	return result
 
 
 def _ratio(numer: int, denom: int) -> float:
@@ -81,17 +82,18 @@ def _collect_stats(db_path: Path, days: int) -> dict[str, Any]:
 	conn = sqlite3.connect(str(db_path))
 	try:
 		try:
-			greeted_total = _safe_count(conn, "greet_records")
-			applied_total = _safe_count(conn, "apply_records")
-			shortlist_total = _safe_count(conn, "shortlist_records")
+			greeted_total = _count_records(conn, "greet_records")
+			applied_total = _count_records(conn, "apply_records")
+			shortlist_total = _count_records(conn, "shortlist_records")
 
-			greeted_window = _count_since(conn, "greet_records", "greeted_at", since)
-			applied_window = _count_since(conn, "apply_records", "applied_at", since)
-			shortlist_window = _count_since(conn, "shortlist_records", "created_at", since)
-			watch_window = _count_since(conn, "watch_hits", "first_seen_at", since)
+			greeted_window = _count_records(conn, "greet_records", window=("greeted_at", since))
+			applied_window = _count_records(conn, "apply_records", window=("applied_at", since))
+			shortlist_window = _count_records(conn, "shortlist_records", window=("created_at", since))
+			watch_window = _count_records(conn, "watch_hits", window=("first_seen_at", since))
 		except sqlite3.DatabaseError as exc:
-			# 只读聚合直接开 SQLite，不经过 CacheStore 的启动校验；库文件损坏时
-			# 交给 main.py 统一出 CACHE_DATABASE_INVALID 信封，而不是 traceback。
+			# 锁冲突和磁盘错误交给 CLI 分流，避免给出删库指引（Issue #1718）。
+			if is_cache_busy_error(exc) or is_cache_local_io_error(exc):
+				raise
 			raise CacheDatabaseInvalid(db_path, str(exc)) from exc
 	finally:
 		conn.close()

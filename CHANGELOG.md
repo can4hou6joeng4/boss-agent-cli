@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `stats` 把缓存库每次查询的 `sqlite3.OperationalError` 都吞成全零计数：遇到其他进程持有排他锁时返回 `ok:true` 的空漏斗，遇到磁盘 I/O 错误时报表不完整。现在只有旧库缺表返回 0；锁冲突报 `CACHE_BUSY`、磁盘与只读错误报 `LOCAL_IO_ERROR`，其余才按缓存库损坏处理（Issue #1718）。
+
 ## [3.4.108] - 2026-11-18
 
 ### Fixed
