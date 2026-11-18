@@ -1791,8 +1791,11 @@ def test_chat_export_unwritable_export_dir_returns_local_io_error(mock_auth_cls,
 	assert result.exit_code == 1
 	assert parsed["error"]["code"] == "LOCAL_IO_ERROR"
 	assert parsed["error"]["recoverable"] is False
-	assert "本地文件读写失败" in parsed["error"]["message"]
-	assert "不要自动重试" in parsed["error"]["recovery_action"]
+	assert "父路径不是目录" in parsed["error"]["message"]
+	assert str(blocker) in parsed["error"]["message"]
+	mock_auth_cls.assert_not_called()
+	mock_client_cls.assert_not_called()
+	assert not (tmp_path / "chat-history").exists()
 
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
@@ -1833,7 +1836,7 @@ def test_chat_export_container_export_dir_returns_config_invalid(mock_auth_cls, 
 	mock_client_cls.return_value.friend_list.return_value = {
 		"zpData": {"result": [_make_friend_item("张HR", "阿里", 1, now_ms)]},
 	}
-	for value in (["/tmp/exports"], {"path": "/tmp/exports"}):
+	for value in (["/tmp/exports"], {"path": "/tmp/exports"}, [], {}, False, 0):
 		(tmp_path / "config.json").write_text(json.dumps({"export_dir": value}), encoding="utf-8")
 
 		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "chat", "--export", "json"])
@@ -1841,6 +1844,11 @@ def test_chat_export_container_export_dir_returns_config_invalid(mock_auth_cls, 
 		assert result.exit_code == 1
 		assert parsed["error"]["code"] == "CONFIG_INVALID"
 		assert repr(value) in parsed["error"]["message"]
+
+	mock_auth_cls.assert_not_called()
+	mock_client_cls.assert_not_called()
+	assert not (tmp_path / "chat-export").exists()
+	assert not (tmp_path / "chat-history").exists()
 
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")

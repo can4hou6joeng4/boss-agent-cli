@@ -62,12 +62,26 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 		)
 		return
 
-	# 只在真要导出时校验：`-o` 指向目录这类参数错误必须在第一次平台请求之前暴露，
-	# 而不是抓完沟通列表、写完快照之后再报一个与真正原因无关的信封。
-	if export_fmt and output_path is not None:
-		# 显式空串不是「用默认路径」的写法：旧的真值判断把它化装成「没传」，
-		# 于是 `--export md -o ""` 静默写出了默认导出文件（Issue #1501）。
-		if not output_path.strip():
+	data_dir = ctx.obj["data_dir"]
+	# 先确定导出路径，再做只读预检，避免因无效的本地路径消耗请求预算或更新快照。
+	if export_fmt is not None:
+		if output_path is None:
+			export_dir = ctx.obj.get("config", {}).get("export_dir")
+			if export_dir is not None and not isinstance(export_dir, str):
+				handle_error_output(
+					ctx,
+					"chat",
+					code="CONFIG_INVALID",
+					message=f"export_dir 必须是目录路径字符串或 null，收到 {export_dir!r}",
+					recoverable=True,
+					recovery_action=boss_command_for_ctx(ctx, "config reset export_dir", include_data_dir=True),
+				)
+				return
+			today = datetime.date.today().isoformat()
+			export_dir = export_dir or os.path.join(data_dir, "chat-export")
+			output_path = os.path.join(export_dir, f"沟通列表-{today}.{export_fmt}")
+		# 显式空串应报参数错误（Issue #1501）。
+		elif not output_path.strip():
 			chat_export_cmd = boss_command_for_ctx(ctx, f"chat --export {export_fmt}", include_data_dir=True)
 			handle_error_output(
 				ctx,
@@ -83,7 +97,6 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			return
 		output_path = validated
 
-	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 	auth = AuthManager(data_dir, logger=logger, platform=ctx.obj.get("platform", "zhipin"))
 
@@ -172,7 +185,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 		collection_complete = page == 1 and has_more is False
 
 		# ── 导出模式 ──────────────────────────────────────────────
-		if export_fmt:
+		if export_fmt is not None and output_path is not None:
 			# L3: 保存 JSON 快照 + diff
 			snapshot_dir = os.path.join(data_dir, "chat-history")
 			diff_result = save_snapshot_and_diff(
@@ -196,40 +209,7 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 
 			content = render_export(friends, export_fmt, from_who, days, diff_result)
 
-			# 未指定 -o 时，自动生成默认路径（日期命名，同天覆盖）
-			if output_path is None:
-				today = datetime.date.today().isoformat()
-				# 优先读 config 中的 export_dir，否则 fallback 到 data_dir/chat-export
-				export_dir = ctx.obj.get("config", {}).get("export_dir")
-				if export_dir and not isinstance(export_dir, str):
-					# config.json 被手改成数字 / 数组时 os.path.expanduser 会抛 TypeError：
-					# 按配置损坏给信封，并指出只改这一项的修复命令（Issue #1525）。
-					handle_error_output(
-						ctx,
-						"chat",
-						code="CONFIG_INVALID",
-						message=f"export_dir 必须是目录路径字符串或 null，收到 {export_dir!r}",
-						recoverable=True,
-						recovery_action=boss_command_for_ctx(ctx, "config reset export_dir", include_data_dir=True),
-					)
-					ctx.exit(1)
-					return
-				if export_dir:
-					export_dir = os.path.expanduser(export_dir)
-				else:
-					export_dir = os.path.join(data_dir, "chat-export")
-				os.makedirs(export_dir, exist_ok=True)
-				output_path = os.path.join(export_dir, f"沟通列表-{today}.{export_fmt}")
-				# 默认路径与显式 -o 走同一预检：FIFO / 设备 / 符号链接目标不能被
-				# os.replace 静默替换（Issue #1757）。导出目录本身是链接也要拒绝。
-				validated = validate_output_path_or_emit(ctx, "chat", output_path)
-				if validated is None:
-					ctx.exit(1)
-					return
-				output_path = validated
-
-			# 显式指定的写入位置由用户负责，这里只展开 ~ 并建好父目录，
-			# 与 digest / stats / resume export 共用同一套 -o 语义。
+			# 实际写出时才创建父目录。
 			target = prepare_output_path(output_path)
 			write_text_atomic(target, content, newline="")
 			output_path = str(target)
