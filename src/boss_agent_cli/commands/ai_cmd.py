@@ -975,7 +975,7 @@ def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | 
 		ctx.exit(1)
 		return
 
-	# 从缓存加载 JD
+	# 从缓存加载 JD；缓存内容按原文使用，@file 语法只适用于显式 --jd（Issue #1637）。
 	if job_id:
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			jd_text = cache.get_job_desc(job_id)
@@ -989,10 +989,8 @@ def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | 
 			)
 			ctx.exit(1)
 			return
-
-	# 支持 @file 语法
-	if jd_text:
-		resolved = _read_text_argument(ctx, jd_text)
+	else:
+		resolved = _read_text_argument(ctx, jd_text or "")
 		if resolved is None:
 			return
 		jd_text = resolved
@@ -1058,7 +1056,7 @@ def ai_cover_letter_cmd(
 		ctx.exit(1)
 		return
 
-	# 从缓存加载 JD（键为 encryptJobId）
+	# 从缓存加载 JD（键为 encryptJobId）；缓存内容不展开 @file（Issue #1637）。
 	if job_id:
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 			jd_text = cache.get_job_desc(job_id)
@@ -1072,10 +1070,8 @@ def ai_cover_letter_cmd(
 			)
 			ctx.exit(1)
 			return
-
-	# 支持 @file 语法
-	if jd_text:
-		resolved = _read_text_argument(ctx, jd_text)
+	else:
+		resolved = _read_text_argument(ctx, jd_text or "")
 		if resolved is None:
 			return
 		jd_text = resolved

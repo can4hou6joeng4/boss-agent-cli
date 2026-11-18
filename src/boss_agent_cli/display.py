@@ -56,11 +56,14 @@ def open_file_command(path: str) -> str:
 	Windows / Linux 上会 command not found。Windows 用 ``cmd /c start``（cmd 与
 	PowerShell 都能调用），其余 Unix 用 ``xdg-open``。
 	"""
+	if sys.platform.startswith("win"):
+		# cmd.exe 不认 POSIX 单引号；含空格路径必须用双引号，并中和 %VAR% 展开
+		# 与 cmd 元字符。start 的第一个参数是窗口标题，保留空串占位。
+		windows_path = path.replace("^", "^^").replace("%", "%%").replace('"', '""')
+		return f'cmd /c start "" "{windows_path}"'
 	quoted = shell_argument(path)
 	if sys.platform == "darwin":
 		return f"open {quoted}"
-	if sys.platform.startswith("win"):
-		return f'cmd /c start "" {quoted}'
 	return f"xdg-open {quoted}"
 
 

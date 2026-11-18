@@ -1221,6 +1221,8 @@ _EMPTY_ALLOWED_REQUIRED: dict[str, frozenset[str]] = {
 	"boss_hr_greet": frozenset({"lid"}),
 	# 空串是显式清空备注（Issue #872 / #1607），不能因 anyOf 条件必填被加上 minLength。
 	"boss_shortlist_annotate": frozenset({"note"}),
+	# config set 把某些键的空串解析为 null，是 CLI 支持的显式清空语义（Issue #1640）。
+	"boss_config": frozenset({"value"}),
 }
 
 

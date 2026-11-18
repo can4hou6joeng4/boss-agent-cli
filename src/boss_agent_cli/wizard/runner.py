@@ -589,7 +589,11 @@ class WorkflowRunner:
 			except OSError as exc:
 				# 本地文件读写失败（导出路径不可写、磁盘满）重试同一 run_id 也不会成功；
 				# 套接字层的 ConnectionError / TimeoutError 仍是网络问题，保持可重试语义。
-				if is_browser_kernel_missing(str(exc)):
+				# 但写请求发出后已落盘的结果未知标记不能被 NETWORK_ERROR 覆盖（Issue #1639）。
+				write_marker = self._persisted_write_marker(run_id, step_name)
+				if write_marker is not None:
+					error = self._unconfirmed_error("NETWORK_ERROR", write_marker)
+				elif is_browser_kernel_missing(str(exc)):
 					# Playwright 的「内核缺失」也是 OSError 子类：重试只会再起一个浏览器。
 					error = _browser_kernel_missing_error(exc, plan, data_dir)
 				elif is_local_io_error(exc):
@@ -605,9 +609,14 @@ class WorkflowRunner:
 						"NETWORK_ERROR", str(exc), recoverable=True, recovery_action="重试当前 run_id"
 					)
 			except Exception as exc:
+				# 写请求已发出后无论什么异常都不能把结果未知标记覆盖成「可重试」；
+				# 分类照常记在错误码里，恢复时由标记强制禁止重放（Issue #1639）。
+				write_marker = self._persisted_write_marker(run_id, step_name)
+				if write_marker is not None:
+					error = self._unconfirmed_error("NETWORK_ERROR", write_marker)
 				# 代理环境变量非法是确定性配置错误：重试或恢复同一 run_id 只会
 				# 复现，不能兜成 NETWORK_ERROR +「重试当前 run_id」（Issue #1423）。
-				if isinstance(exc, ProxyConfigurationError):
+				elif isinstance(exc, ProxyConfigurationError):
 					invalid_recoverable, invalid_recovery = error_contract_for_code("INVALID_PARAM")
 					error = WorkflowActionError(
 						"INVALID_PARAM",

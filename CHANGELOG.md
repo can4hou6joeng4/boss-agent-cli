@@ -12,6 +12,14 @@
 
 ## [Unreleased]
 
+### Fixed
+- `ai local configure` 接受无效 `--base-url` 并落盘，`ai local smoke` 又把确定的配置错误报成可重试网络故障；现在写盘与探测前都按 URL 格式校验（Issue #1636）。
+- `--job-id` 读取的缓存 JD 若以 `@` 开头会被误当文件路径展开；现在 `@file` 只适用于显式 `--jd`（Issue #1637）。
+- 出口一致性检查把全部 `America/` 时区推断成美国，多伦多 / 圣保罗 / 墨西哥城被静默放行；现在只映射明确的美国时区，其余返回 unknown（Issue #1638）。
+- wizard 的 `OSError` / 通用异常分支会把写请求在途标记覆盖成可重试错误，`--resume` 重放消息投递；现在保留结果未知语义（Issue #1639）。
+- MCP `boss_config` 无法传空串清空 `export_dir` 等配置；现在与 CLI 一致接受空值（Issue #1640）。
+- Windows 下打开文件提示用 POSIX 单引号包裹路径，`cmd.exe` 无法解析；现在用 cmd 可解析的双引号并中和 `%` 展开（Issue #1641）。
+
 ## [3.4.97] - 2026-11-18
 
 ### Fixed

@@ -152,7 +152,6 @@ def test_wizard_rejects_drifted_recovery_metadata(
 		("boss_wizard", {"action": "status", "run_id": ""}, "run_id"),
 		("boss_hr_jobs", {"action": "online", "job_id": ""}, "job_id"),
 		("boss_config", {"action": "set", "key": "", "value": "zhipin"}, "key"),
-		("boss_config", {"action": "set", "key": "platform", "value": ""}, "value"),
 	],
 )
 def test_mcp_rejects_empty_conditional_required_strings(

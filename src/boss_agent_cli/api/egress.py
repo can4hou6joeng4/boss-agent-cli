@@ -44,7 +44,22 @@ _TZ_REGION_HINTS: tuple[tuple[str, str], ...] = (
 	("Asia/Singapore", "SG"),
 	("Asia/Tokyo", "JP"),
 	("Asia/Seoul", "KR"),
-	("America/", "US"),
+	("America/New_York", "US"),
+	("America/Chicago", "US"),
+	("America/Denver", "US"),
+	("America/Los_Angeles", "US"),
+	("America/Phoenix", "US"),
+	("America/Anchorage", "US"),
+	("America/Honolulu", "US"),
+	("America/Indiana/", "US"),
+	("America/Kentucky/", "US"),
+	("America/Detroit", "US"),
+	("America/Boise", "US"),
+	("America/Juneau", "US"),
+	("America/Metlakatla", "US"),
+	("America/Nome", "US"),
+	("America/Sitka", "US"),
+	("America/Yakutat", "US"),
 	("Europe/London", "GB"),
 	("Europe/Berlin", "DE"),
 )
@@ -134,6 +149,14 @@ def evaluate_egress(
 			exit_country=country,
 			contradictions=tuple(contradictions),
 			detail="；".join(contradictions),
+		)
+	# 非空的未知时区不能返回 ok：`America/Toronto` 等时区此前被通配前缀误判为
+	# 美国，收窄映射后若仍声称「一致」，等于用未知信息放行一致性门禁（Issue #1638）。
+	if timezone.strip() and not timezone_region(timezone):
+		return EgressVerdict(
+			status="unknown",
+			exit_country=country,
+			detail=f"时区 {timezone.strip()} 不在已知映射表，无法确认与出口 {country} 一致",
 		)
 	return EgressVerdict(status="ok", exit_country=country, detail=f"出口 {country} 与语言/时区一致")
 

@@ -9,7 +9,13 @@ from pathlib import Path
 
 import click
 
-from boss_agent_cli.ai.config import AIConfigStore, ai_int_setting, ai_text_setting
+from boss_agent_cli.ai.config import (
+	AIConfigValueError,
+	AIConfigStore,
+	ai_int_setting,
+	ai_text_setting,
+	normalize_base_url,
+)
 from boss_agent_cli.ai.local_models import (
 	RUNTIME_BASE_URLS,
 	LocalModelManifestError,
@@ -129,20 +135,39 @@ def local_configure_cmd(ctx: click.Context, runtime: str, model: str, base_url: 
 		)
 		ctx.exit(1)
 		return
-	if base_url is not None and not base_url.strip():
-		handle_error_output(
-			ctx,
-			"ai.local.configure",
-			code="INVALID_PARAM",
-			message="--base-url 不能为空或只包含空白字符；省略该选项才会使用 runtime 默认地址",
-			recovery_action="去掉 --base-url 使用 runtime 默认地址，或传入完整的 http(s) 地址",
-			hints={"next_actions": [
-				_hint_command(ctx, f"ai local configure --runtime {runtime} --model {shell_argument(model)}"),
-				_hint_command(ctx, "ai local status"),
-			]},
-		)
-		ctx.exit(1)
-		return
+	if base_url is not None:
+		if not base_url.strip():
+			handle_error_output(
+				ctx,
+				"ai.local.configure",
+				code="INVALID_PARAM",
+				message="--base-url 不能为空或只包含空白字符；省略该选项才会使用 runtime 默认地址",
+				recoverable=False,
+				recovery_action="去掉 --base-url 使用 runtime 默认地址，或传入完整的 http(s) 地址",
+				hints={"next_actions": [
+					_hint_command(ctx, f"ai local configure --runtime {runtime} --model {shell_argument(model)}"),
+					_hint_command(ctx, "ai local status"),
+				]},
+			)
+			ctx.exit(1)
+			return
+		try:
+			base_url = normalize_base_url(base_url)
+		except AIConfigValueError as exc:
+			handle_error_output(
+				ctx,
+				"ai.local.configure",
+				code="INVALID_PARAM",
+				message=str(exc),
+				recoverable=False,
+				recovery_action=exc.recovery_hint,
+				hints={"next_actions": [
+					_hint_command(ctx, f"ai local configure --runtime {runtime} --model {shell_argument(model)}"),
+					_hint_command(ctx, "ai local status"),
+				]},
+			)
+			ctx.exit(1)
+			return
 	store = AIConfigStore(ctx.obj["data_dir"])
 	store.save_config(
 		ai_provider=runtime,
@@ -314,7 +339,8 @@ def local_smoke_cmd(ctx: click.Context) -> None:
 		max_tokens = ai_int_setting(config, "ai_max_tokens", 512)
 		model_value = ai_text_setting(config, "ai_model")
 		model = model_value or ""
-	except ValueError as exc:
+		base_url = normalize_base_url(base_url)
+	except (AIConfigValueError, ValueError) as exc:
 		handle_error_output(
 			ctx,
 			"ai.local.smoke",
