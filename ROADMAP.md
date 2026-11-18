@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.118（2026-11-19）：wizard 的 `crawl_stop` 拒绝已结束的任务；`stats` / `digest` 的 `-o` 拒绝纯空白路径（Issue #1786 #1788）。
 - ✅ v3.4.117（2026-11-19）：`ai config --base-url` 拒绝无法解析的主机 / 端口；脱敏覆盖 URL 里的口令；AI 服务以 HTTP 200 返回的错误对象带出说明与恢复建议；`hr greet` 识别标记类型漂移的权益拦截页；招聘者命令拒绝空 ID；`hr jobs` 后继命令对职位 ID 加引用（Issue #1778–#1783）。
 - ✅ v3.4.116（2026-11-19）：恢复 crawl 任务时状态先落库，恢复窗口内的停止请求不再被拒；wizard `crawl_start` 拒绝与断点不一致的 `query` / `city`；损坏结果行的后继命令使用真实 run_id；`openai-tools` / `anthropic-tools` 导出的参数 schema 顶层不再带组合与条件关键字；`boss_wizard` 声明 run 的必填字段（Issue #1771–#1775）。
 - ✅ v3.4.115（2026-11-19）：自由文本脱敏覆盖 `access_token=` / `x-api-key=` 等复合凭据键；`--exit-codes` 预扫描在 `--` 处停止；以 `-` 开头的「打开文件」提示路径加 `./` 前缀；含 Windows 非法字符的简历名改用可移植文件名并兼容旧文件（Issue #1765–#1768）。
