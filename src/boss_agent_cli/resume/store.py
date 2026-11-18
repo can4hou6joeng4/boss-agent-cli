@@ -1,4 +1,5 @@
 import json
+import stat
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -70,6 +71,23 @@ def _unsafe_resume_name_reason(name: str) -> str | None:
 	return None
 
 
+def _path_mode(path: Path) -> int | None:
+	"""仅对缺失路径返回 None；悬空链接保留链接自身的类型（Issue #1692）。"""
+	# 3.14 的 Path.exists() / is_file() 会把权限等 OSError 吞掉并返回 False，
+	# 同名覆盖保护会因此把「读不到」当成「不存在」而继续写入。
+	try:
+		mode = path.lstat().st_mode
+	except FileNotFoundError:
+		return None
+	if stat.S_ISLNK(mode):
+		try:
+			return path.stat().st_mode
+		except FileNotFoundError:
+			# 悬空链接仍是目录项：按存在处理，删除时只 unlink 链接本身。
+			pass
+	return mode
+
+
 class ResumeStore:
 	"""简历文件存储（JSON 文件），存储路径 ~/.boss-agent/resumes/"""
 
@@ -121,8 +139,17 @@ class ResumeStore:
 		文件不存在返回 ``(None, None)``；语法/编码/权限问题与顶层不是对象都
 		返回错误说明，交给调用方报 ``RESUME_FILE_INVALID``。
 		"""
-		if not path.exists():
+		try:
+			mode = _path_mode(path)
+		except (OSError, ValueError) as exc:
+			# 路径状态读不出来与「文件不存在」不同：列表要把这份标成损坏，
+			# show/export 要报 RESUME_FILE_INVALID，不能误报 not found。
+			return None, f"路径状态读取失败：{exc}"
+		if mode is None:
 			return None, None
+		if not stat.S_ISREG(mode):
+			# 目录 / FIFO / 悬空链接不能直接 read_text：FIFO 会阻塞。
+			return None, "简历路径不是普通文件"
 		try:
 			raw = json.loads(path.read_text(encoding="utf-8"))
 		# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长整数
@@ -159,16 +186,20 @@ class ResumeStore:
 		write_json_atomic(self._path_for(resume.name), d)
 
 	def delete(self, name: str) -> bool:
-		"""删除简历，返回是否成功"""
+		"""删除简历，返回是否成功；悬空链接只删除链接本身。"""
 		path = self._path_for(name)
-		if not path.exists():
+		if not self.exists(name):
 			return False
 		path.unlink()
 		return True
 
 	def exists(self, name: str) -> bool:
-		"""检查简历是否存在"""
-		return self._path_for(name).exists()
+		"""检查简历是否存在。
+
+		路径状态无法读取时上抛 ``OSError``：同名覆盖保护必须拒绝写入，
+		不能把「读不到」当成「不存在」（Issue #1692）。
+		"""
+		return _path_mode(self._path_for(name)) is not None
 
 	def is_corrupt(self, name: str) -> bool:
 		"""文件存在但读不出来（JSON 语法损坏、字段类型写错）。"""
