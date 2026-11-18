@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.100 (2026-11-18): seventh export and rendering audit — non-finite numbers and invalid characters in artifacts, cross-page dedup, security-page host checks, stoken cookie domains, CDP endpoint reuse, inflight markers and external requests during resume PDF rendering are all closed (Issues #1653–#1659).
 - ✅ v3.4.99 (2026-11-18): sixth subsystem audit — a missing `open` in `stop.json` and a platform `code=false` are no longer read as "not stopped / success", and automation integer budgets and wizard `pages` reject floats and booleans (Issues #1598–#1601).
 - ✅ v3.4.91 (2026-11-18): fifth subsystem audit — `agent run --dry-run --resume` no longer clears the operator stop latch; drifted wizard error metadata is rejected fail-closed; MCP validates conditionally required strings, numeric bounds and array element lengths, and caps the host wait for wizard runs (Issues #1591–#1595).
 - ✅ v3.4.90 (2026-11-18): fourth subsystem audit — automation scans only selected tabs with per-tab caps (Issue #1581); wizard rejects blank crawl queries like the CLI (Issue #1582); oversized lock PIDs and empty `securityId` no longer fake success or retryable states (Issue #1583, #1584); `wizard --stop` distinguishes completed runs from missing ones, and bad Hook directories are uniformly classified as local state errors (Issue #1585, #1586).
