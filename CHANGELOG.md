@@ -7,6 +7,8 @@
 ### Fixed
 - 缓存库 `cache/boss_agent.db` 与请求节流库 `request-budget.sqlite3` 在打开前按 lstat 判定路径类型：路径是符号链接（含悬空链接）时报 `CACHE_DATABASE_INVALID` / `LOCAL_IO_ERROR` 并给出移除指引，不再让 SQLite 跟随链接把数据库创建或改写进数据目录之外的目标文件；目录 / FIFO / 设备等非普通文件同样明确拒绝，与 `clean` 的库预检（#1712）同口径（Issue #1739）。
 - automation 队列追加写入（`pending-actions.jsonl` / `action-log.jsonl` / `human-review-queue.jsonl`）在打开前按 lstat 判定路径类型：队列被换成 FIFO 时不再永久阻塞在 `open("a")`（`agent run` 会在动作已执行后挂死），悬空符号链接不再在目标处新建文件、把动作日志写到数据目录之外；FIFO / 目录 / 设备 / 悬空链接统一报 `AUTOMATION_STATE_INVALID`，指向普通文件的符号链接照常追加。`agent review reject` 的日志追加失败也改为返回信封而不是 traceback（Issue #1741）。
+- `stats` 读取缓存库前改为直接 lstat 判定：`cache/boss_agent.db` 是符号链接（含悬空链接）时不再跟随链接读取外部数据库、也不再在链接目标旁创建 / 改写 WAL 的 `-shm` / `-wal`，统一按 `LOCAL_IO_ERROR` 拒绝；只有文件确实不存在才返回「缓存尚未建立」（Issue #1743）。
+- automation 的 `.run-lock.sqlite3` / `.control-lock.sqlite3` 在 `sqlite3.connect` 前拒绝符号链接与非普通文件，SQLite 不再跟随链接把锁库写进数据目录之外的目标；普通库与缺失文件自动建库的行为不变（Issue #1743）。
 
 ## [3.4.110] - 2026-11-18
 
