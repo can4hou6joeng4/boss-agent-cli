@@ -15,10 +15,12 @@ import tempfile
 from pathlib import Path
 
 from boss_agent_cli.services.file_lock import exclusive_file_lock
+from boss_agent_cli.services.json_files import read_bytes_if_regular
 from boss_agent_cli.services.output_path import refuse_symlink_target
 
 DIRECTORY_MODE = 0o700
 FILE_MODE = 0o600
+SALT_BYTES = 16
 
 
 def chmod_best_effort(path: Path, mode: int) -> None:
@@ -50,34 +52,79 @@ def tighten_private_directory(path: Path) -> None:
 	chmod_best_effort(path, DIRECTORY_MODE)
 
 
+def _read_salt(salt_path: Path) -> bytes | None:
+	"""读取普通文件 salt；缺失返回 None，状态异常按 RuntimeError 报出。
+
+	目录、FIFO、悬空链接不能直接 ``read_bytes()``：FIFO 会阻塞在打开阶段。
+	权限错误保持 ``PermissionError`` 原样上抛，与既有调用方口径一致。
+	"""
+	try:
+		return read_bytes_if_regular(salt_path)
+	except PermissionError:
+		raise
+	except OSError as exc:
+		raise RuntimeError(
+			f"登录态 salt 路径状态异常（{exc}）；请确认 {salt_path} 是普通文件后重试"
+		) from exc
+
+
+def _validated_salt(raw: bytes, salt_path: Path) -> bytes:
+	"""只接受 16 字节 salt；空文件或半截写入必须 fail-closed（Issue #1699）。"""
+	if len(raw) != SALT_BYTES:
+		raise RuntimeError(
+			f"登录态 salt 长度异常（{len(raw)} 字节，应为 {SALT_BYTES}）："
+			f"请备份后删除 {salt_path}，已有登录态与 AI 密钥需要重新配置"
+		)
+	return raw
+
+
+def _create_salt(salt_path: Path) -> bytes:
+	"""写入完整 salt 后再原子落位；并发创建者只能复用胜出值。"""
+	fd, temporary_name = tempfile.mkstemp(prefix=f".{salt_path.name}.", dir=salt_path.parent)
+	temporary = Path(temporary_name)
+	try:
+		payload = os.urandom(SALT_BYTES)
+		with os.fdopen(fd, "wb") as handle:
+			handle.write(payload)
+			handle.flush()
+			os.fsync(handle.fileno())
+		try:
+			os.link(temporary, salt_path)
+		except FileExistsError:
+			# 另一个进程（可能是旧版本）已经创建：绝不覆盖，读回胜出值。
+			raw = _read_salt(salt_path)
+			if raw is None:
+				raise RuntimeError("登录态 salt 在创建过程中消失，请重试") from None
+			return raw
+		chmod_best_effort(salt_path, FILE_MODE)
+		return payload
+	finally:
+		temporary.unlink(missing_ok=True)
+
+
 def load_or_create_private_salt(auth_dir: Path) -> bytes:
 	"""读取共享 salt；缺失时由唯一创建者生成，禁止覆盖已有值。
 
 	salt 决定 session.enc 与 ai/api_key.enc 的派生密钥：两个进程首次运行
 	各自生成一次，后写盘的那份会让先保存的密文永久解不开（Issue #1633）。
-	``O_CREAT|O_EXCL`` 保证只有一个创建者；随后在刷新锁内重读，后到者必须
-	复用胜出值。只有 ``FileNotFoundError`` 才表示 salt 确实缺失；权限、
-	IO 等错误必须上抛，不能用新 salt 覆盖旧密文（Issue #1688）。
+	创建与落位全程持有刷新锁，且只有写满 16 字节后才通过硬链接出现；空文件、
+	半截写入、目录 / FIFO / 悬空链接都按状态损坏失败，不再静默派生密钥
+	（Issue #1688、#1699）。
 	"""
 	auth_dir.mkdir(parents=True, exist_ok=True, mode=DIRECTORY_MODE)
 	chmod_best_effort(auth_dir, DIRECTORY_MODE)
 	salt_path = auth_dir / "salt"
-	try:
-		fd = os.open(salt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, FILE_MODE)
-	except FileExistsError:
-		pass
-	else:
-		with os.fdopen(fd, "wb") as handle:
-			handle.write(os.urandom(16))
-	chmod_best_effort(salt_path, FILE_MODE)
 	with exclusive_file_lock(auth_dir / "refresh.lock") as acquired:
 		if acquired:
-			return salt_path.read_bytes()
-	# 锁不可用时也不能生成第二份 salt：读到什么就用什么；确实不存在才报错。
-	try:
-		return salt_path.read_bytes()
-	except FileNotFoundError:
-		raise RuntimeError("登录态 salt 尚未创建，且无法获取跨进程锁") from None
+			raw = _read_salt(salt_path)
+			if raw is None:
+				raw = _create_salt(salt_path)
+			return _validated_salt(raw, salt_path)
+	# 锁不可用时也不能生成第二份 salt：读到什么就用什么；确实不存在或损坏才报错。
+	raw = _read_salt(salt_path)
+	if raw is None:
+		raise RuntimeError("登录态 salt 尚未创建，且无法获取跨进程锁")
+	return _validated_salt(raw, salt_path)
 
 
 def write_private_bytes(path: Path, data: bytes) -> None:
