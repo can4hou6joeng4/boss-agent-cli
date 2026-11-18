@@ -35,6 +35,16 @@ def _make_stop_path(tmp_path: Path, shape: str) -> Path:
 	return stop_path
 
 
+def _make_stop_symlink_to_file(tmp_path: Path) -> Path:
+	root = tmp_path / "automation"
+	root.mkdir()
+	target = tmp_path / "target.json"
+	target.write_text(json.dumps({"open": True, "reason": "manual-stop"}), encoding="utf-8")
+	stop_path = root / "stop.json"
+	stop_path.symlink_to(target)
+	return stop_path
+
+
 def _invoke(tmp_path: Path, *args: str):
 	with patch("boss_agent_cli.commands.recruiter.location.AuthManager") as auth, patch(
 		"boss_agent_cli.commands.recruiter.location.get_recruiter_platform_instance"
@@ -64,6 +74,16 @@ def test_location_stop_check_matches_read_stop(tmp_path: Path, shape: str) -> No
 	_make_stop_path(tmp_path, shape)
 
 	assert _stop_reason(tmp_path) is not None
+
+
+def test_read_stop_follows_symlink_to_regular_file(tmp_path: Path) -> None:
+	_make_stop_symlink_to_file(tmp_path)
+
+	latch = AutomationStore(tmp_path).read_stop()
+	assert latch["open"] is True
+	assert latch["reason"] == "manual-stop"
+	assert "corrupt" not in latch
+	assert _stop_reason(tmp_path) == "manual-stop"
 
 
 def test_location_preview_is_blocked_by_non_regular_stop_path(tmp_path: Path) -> None:

@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 目录权限等问题导致 `automation/stop.json` 的路径状态无法读取时，停止开关保持熔断。`hr location` 共用只读检查，`agent run --resume` 会在写入状态前报告 `AUTOMATION_STATE_INVALID`（Issue #1680）。
+
 ## [3.4.104] - 2026-11-18
 
 ### Fixed

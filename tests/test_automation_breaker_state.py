@@ -5,8 +5,11 @@
 读取器（`SafetyGuard` 的真值判断与 `location` 的 `is not True`）得到相反结论。
 """
 
+import errno
 import json
+import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -86,6 +89,38 @@ def test_resume_clears_a_corrupt_latch_after_explicit_operator_action(tmp_path):
 	assert store.resume() is True
 	assert _guard(store).stop_reason() is None
 	assert _stop_reason(tmp_path) is None
+
+
+@pytest.mark.parametrize("error_number", [errno.EACCES, errno.EIO])
+def test_stop_metadata_error_keeps_latch_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error_number: int) -> None:
+	store = _store(tmp_path, stop={"open": True}, state={"autonomy": {"circuit_breaker": {"open": True}}})
+	stop_before = store.stop_path.read_bytes()
+	state_before = store.state_path.read_bytes()
+
+	def deny_lookup(get_info: Any) -> Any:
+		def lookup(path: Any, *args: Any, **kwargs: Any) -> os.stat_result:
+			if path in (store.stop_path, str(store.stop_path)):
+				raise OSError(error_number, "测试路径状态读取失败", str(store.stop_path))
+			return get_info(path, *args, **kwargs)
+
+		return lookup
+
+	with monkeypatch.context() as patch:
+		patch.setattr(os, "stat", deny_lookup(os.stat))
+		patch.setattr(os, "lstat", deny_lookup(os.lstat))
+		latch = store.read_stop()
+		assert latch["open"] is True
+		assert latch["corrupt"] is True
+		assert "stop.json" in latch["reason"]
+		assert _guard(store).stop_reason() == latch["reason"]
+		assert _stop_reason(tmp_path) == latch["reason"]
+		with pytest.raises(AutomationStateError) as caught:
+			store.resume()
+		assert caught.value.path == store.stop_path
+		assert "路径状态" in caught.value.detail
+
+	assert store.stop_path.read_bytes() == stop_before
+	assert store.state_path.read_bytes() == state_before
 
 
 def test_write_state_rejects_non_boolean_open(tmp_path):
