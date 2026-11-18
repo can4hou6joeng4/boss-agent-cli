@@ -12,6 +12,8 @@
 
 ## [Unreleased]
 
+## [3.4.103] - 2026-11-18
+
 ### Fixed
 - `hr download-resume --output ""` 被 `click.Path` 归一成当前目录，登录前报 `AUTH_REQUIRED`、登录后报「文件已存在」；不支持的扩展名要等四个平台请求完成后才报错。现在两者都在取凭据与发请求前按 `INVALID_PARAM` 拒绝（Issue #1672）。
 

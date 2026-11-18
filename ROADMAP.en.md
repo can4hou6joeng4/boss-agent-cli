@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.103 (2026-11-18): `hr download-resume` validates `--output` emptiness and extension before credentials or platform requests, so an empty value is no longer read as the current directory (Issue #1672).
+
 - ✅ v3.4.102 (2026-11-18): automation statistics and cached-search parsing now use validated state, so corrupt queues and column type drift no longer masquerade as normal results (Issues #1667–#1668).
 
 - ✅ v3.4.101 (2026-11-18): free-text and TTY operator hints now share the same redaction rules; CJK-adjacent credential keys and all Authorization schemes no longer leak secrets (Issues #1662–#1664).
