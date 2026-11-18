@@ -444,10 +444,34 @@ class AutomationStore:
 		path = self.root / name
 		rows: list[dict[str, Any]] = []
 		try:
-			payload = path.read_bytes()
-		except FileNotFoundError:
+			mode = _path_mode(path)
+		except (OSError, ValueError) as exc:
+			raise AutomationStateError(path, f"队列文件无法读取路径状态（{exc}）") from exc
+		if mode is None:
 			# 只有「文件不存在」才是空队列。不能先用 path.exists() 预判：
 			# 预判与读取之间文件可能被删除，那个 TOCTOU 窗口会让删除变成失败。
+			return rows
+		# FIFO / 设备直接 read_bytes() 会永久阻塞在打开阶段，agent run /
+		# pending list / stats 都会挂死且没有任何信封（Issue #1728）。与
+		# read_state() / read_stop() 同口径：悬空链接与非普通文件 fail-closed。
+		# 指向普通文件的符号链接在 _path_mode 里已解析成目标类型，照常读取。
+		if stat.S_ISLNK(mode):
+			raise AutomationStateError(
+				path,
+				"队列文件无法读取：路径是悬空符号链接；请确认链接目标存在后重试，"
+				"文件损坏时先备份再修正或移除",
+			)
+		if not stat.S_ISREG(mode):
+			raise AutomationStateError(
+				path,
+				"队列文件无法读取：路径不是普通文件（目录 / FIFO / 设备）；"
+				"请确认文件可读（权限正常、路径不是目录）后重试，"
+				"文件损坏时先备份再修正或移除",
+			)
+		try:
+			payload = path.read_bytes()
+		except FileNotFoundError:
+			# lstat 与读取之间文件被删除：仍然只是「队列为空」。
 			return rows
 		except OSError as exc:
 			# 权限不足、路径被同名目录占用、磁盘错误都把队列读成空列表时，
