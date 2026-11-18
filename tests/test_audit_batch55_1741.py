@@ -100,11 +100,12 @@ def test_dangling_symlink_append_does_not_create_target(tmp_path):
 	with pytest.raises(AutomationStateError) as exc_info:
 		store.append_event(_event())
 
-	assert "悬空" in str(exc_info.value)
+	assert "符号链接" in str(exc_info.value)
 	assert not target.exists(), "追加不能新建链接目标"
 
 
-def test_symlink_to_regular_queue_still_appends_through_link(tmp_path):
+def test_symlink_to_regular_queue_is_refused(tmp_path):
+	"""读取侧允许跟随链接，写入侧不能写穿（Issue #1746）。"""
 	store = AutomationStore(tmp_path)
 	real = tmp_path / "real-action-log.jsonl"
 	real.write_text("", encoding="utf-8")
@@ -113,11 +114,12 @@ def test_symlink_to_regular_queue_still_appends_through_link(tmp_path):
 	except (OSError, NotImplementedError):
 		pytest.skip("当前文件系统不支持符号链接")
 
-	store.append_event(_event())
+	with pytest.raises(AutomationStateError) as exc_info:
+		store.append_event(_event())
 
-	lines = real.read_text(encoding="utf-8").splitlines()
-	assert len(lines) == 1
-	assert json.loads(lines[0])["candidate_key"] == "candidate-1"
+	assert "符号链接" in str(exc_info.value)
+	assert real.read_text(encoding="utf-8") == "", "目标文件不能被写穿"
+	assert (store.root / "action-log.jsonl").is_symlink(), "链接本身不能被替换"
 
 
 def test_missing_queue_file_is_created_by_append(tmp_path):
