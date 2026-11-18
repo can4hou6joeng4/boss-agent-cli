@@ -7,6 +7,8 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
+from boss_agent_cli.services.json_files import read_bytes_if_regular
+
 HOOK_SCRIPT_NAMES = (
 	("Bypass_Debugger", "Bypass_Debugger.js"),
 	("Hook_CryptoJS", "Hook_CryptoJS.js"),
@@ -101,7 +103,12 @@ def _verified_scripts(hook_dir: Path) -> list[tuple[str, str, str]]:
 	results: list[HookInjection] = []
 	for name, filename in HOOK_SCRIPT_NAMES:
 		try:
-			content = (hook_dir / filename).read_bytes()
+			# Hook 目录是用户显式提供的输入：FIFO / 设备直接 read_bytes() 会永久
+			# 阻塞预检与运行期注入（Issue #1736）。缺失与特殊文件都进入逐项失败
+			# 列表，由调用方给出具体文件与原因。
+			content = read_bytes_if_regular(hook_dir / filename)
+			if content is None:
+				raise ValueError(f"脚本不存在: {filename}")
 			digest = sha256(content).hexdigest()
 			expected = checksums.get(filename)
 			if expected is None or expected != digest:
@@ -117,10 +124,13 @@ def _verified_scripts(hook_dir: Path) -> list[tuple[str, str, str]]:
 
 
 def _read_checksums(path: Path) -> dict[str, str]:
-	if not path.is_file():
+	# 只有文件确实不存在才是「缺少完整性清单」；权限错误与非普通文件要把
+	# 真正原因带出来（3.14 的 is_file() 会把 OSError 吞成 False，Issue #1736）。
+	raw = read_bytes_if_regular(path)
+	if raw is None:
 		raise ValueError(f"缺少 Hook 完整性清单: {path.name}")
 	checksums: dict[str, str] = {}
-	for line in path.read_text(encoding="ascii").splitlines():
+	for line in raw.decode("ascii").splitlines():
 		parts = line.split()
 		if len(parts) != 2:
 			continue
