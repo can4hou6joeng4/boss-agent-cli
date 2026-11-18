@@ -7,6 +7,7 @@
 解析端点：解析不出来（未登记且没有 `--base-url`）直接拒绝，不留坏配置。
 """
 
+import pytest
 import json
 
 from click.testing import CliRunner
@@ -118,3 +119,40 @@ def test_view_reports_null_endpoint_for_legacy_unknown_provider(tmp_path):
 	data = _run(tmp_path)["data"]
 
 	assert data["resolved_base_url"] is None
+
+
+@pytest.mark.parametrize("base_url", ["http://[::1/v1", "http://127.0.0.1:abc/v1"])
+def test_ai_config_rejects_unparseable_base_url_with_envelope(tmp_path, base_url):
+	"""坏主机 / 坏端口在写入时报 INVALID_PARAM，不写配置（Issue #1778）。"""
+	import json as _json
+
+	from click.testing import CliRunner as _Runner
+
+	from boss_agent_cli.main import cli as _cli
+
+	result = _Runner().invoke(_cli, [
+		"--data-dir", str(tmp_path), "--json", "ai", "config",
+		"--provider", "custom", "--base-url", base_url, "--model", "m",
+	])
+
+	assert result.exit_code == 1, result.output
+	payload = _json.loads(result.stdout)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+
+
+def test_ai_config_masks_base_url_password_in_envelope(tmp_path):
+	"""带 Basic Auth 的代理地址可以保存，但口令不回显进信封（Issue #1779）。"""
+	import json as _json
+
+	from click.testing import CliRunner as _Runner
+
+	from boss_agent_cli.main import cli as _cli
+
+	argv = ["--data-dir", str(tmp_path), "--json", "ai", "config"]
+	saved = _Runner().invoke(_cli, [*argv, "--provider", "custom", "--base-url", "https://alice:fixturePass@proxy.example/v1", "--model", "m"])
+	shown = _Runner().invoke(_cli, argv)
+
+	assert saved.exit_code == 0, saved.output
+	for result in (saved, shown):
+		assert "fixturePass" not in result.stdout
+	assert _json.loads(shown.stdout)["data"]["ai_base_url"] == "https://alice:[REDACTED]@proxy.example/v1"

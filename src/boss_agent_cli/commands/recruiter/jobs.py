@@ -6,7 +6,7 @@ import click
 from boss_agent_cli.api.models import platform_data_dict
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.commands.recruiter._hints import hint_command
+from boss_agent_cli.commands.recruiter._hints import hint_command, positional_hint
 from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_error_output,
@@ -125,7 +125,7 @@ def jobs_offline_cmd(ctx: click.Context, job_id: str) -> None:
 		# 只回一句 message 时两条路径都没有可执行的后继命令。
 		next_actions = [
 			hint_command(ctx, "hr jobs list"),
-			hint_command(ctx, f"hr jobs online {job_id}"),
+			hint_command(ctx, f"hr jobs online {positional_hint(job_id)}"),
 		]
 		handle_output(
 			ctx,
@@ -166,7 +166,7 @@ def jobs_online_cmd(ctx: click.Context, job_id: str) -> None:
 		data = {"job_id": job_id, "message": "职位已上线"}
 		next_actions = [
 			hint_command(ctx, "hr jobs list"),
-			hint_command(ctx, f"hr jobs offline {job_id}"),
+			hint_command(ctx, f"hr jobs offline {positional_hint(job_id)}"),
 		]
 		handle_output(
 			ctx,
@@ -210,8 +210,8 @@ def jobs_detail_cmd(ctx: click.Context, enc_job_id: str) -> None:
 			data,
 			hints={
 				"next_actions": [
-					hint_command(ctx, f"hr jobs offline {enc_job_id}"),
-					hint_command(ctx, f"hr jobs online {enc_job_id}"),
+					hint_command(ctx, f"hr jobs offline {positional_hint(enc_job_id)}"),
+					hint_command(ctx, f"hr jobs online {positional_hint(enc_job_id)}"),
 					hint_command(ctx, "hr jobs list"),
 				]
 			},

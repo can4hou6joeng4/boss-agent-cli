@@ -82,6 +82,18 @@ def _error_detail(response: httpx.Response) -> str:
 	return text[:_ERROR_DETAIL_LIMIT]
 
 
+def _embedded_status(body: Any) -> int | None:
+	"""HTTP 200 的错误对象里携带的状态码（`error.code` / `error.status`）；取不到返回 None。"""
+	error = body.get("error") if isinstance(body, dict) else None
+	if not isinstance(error, dict):
+		return None
+	for key in ("code", "status"):
+		value = error.get(key)
+		if isinstance(value, int) and not isinstance(value, bool) and 400 <= value <= 599:
+			return value
+	return None
+
+
 class AIService:
 	"""Client for OpenAI-compatible chat completion APIs."""
 
@@ -144,14 +156,30 @@ class AIService:
 			) from exc
 		except httpx.RequestError as exc:
 			raise AIServiceError(f"网络请求失败: {exc}") from exc
+		except httpx.InvalidURL as exc:
+			# InvalidURL 不是 RequestError 的子类：手工改坏的 base_url 绕过配置校验
+			# 直达这里时也要落成信封，而不是 traceback（Issue #1778）。
+			raise AIServiceError(f"AI 服务地址无效: {exc}；请用 boss ai config --base-url 重新设置") from exc
 
 		try:
 			data = response.json()
-			choice = data["choices"][0]
-			content = choice["message"]["content"]
 		# RecursionError：3.11–3.13 的 json.loads 对极深嵌套响应抛它，按响应格式异常上报，
 		# 与裸 ValueError（非法 JSON / 超长整数）走同一个 AIServiceError 信封分支。
-		except (KeyError, IndexError, TypeError, ValueError, RecursionError) as exc:
+		except (ValueError, RecursionError) as exc:
+			raise AIServiceError(f"响应格式异常: {exc}") from exc
+		choices = data.get("choices") if isinstance(data, dict) else None
+		if not isinstance(choices, list) or not choices:
+			# 有的网关用 HTTP 200 带回错误对象（限流 / 额度 / 鉴权）：读出服务商的说明，
+			# 并用其中的状态码选恢复建议，而不是报 KeyError 的文本（Issue #1780）。
+			detail = _error_detail(response)
+			raise AIServiceError(
+				f"API 返回了错误（{detail}）" if detail else "响应格式异常: 响应里没有 choices",
+				status_code=_embedded_status(data),
+			)
+		try:
+			choice = choices[0]
+			content = choice["message"]["content"]
+		except (KeyError, IndexError, TypeError) as exc:
 			raise AIServiceError(f"响应格式异常: {exc}") from exc
 		finish_reason = choice.get("finish_reason") if isinstance(choice, dict) else None
 		if finish_reason == "length" and not content:

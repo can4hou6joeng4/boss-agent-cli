@@ -17,6 +17,7 @@ from boss_agent_cli.output import (
 	Logger,
 	_MAX_REDACTION_DEPTH,
 	redact_sensitive,
+	redact_sensitive_text,
 )
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 
@@ -813,3 +814,25 @@ def test_redact_sensitive_truncates_deep_list_and_tuple(wrap) -> None:
 	redacted = redact_sensitive(value)
 
 	assert "deep-secret" not in json.dumps(redacted)
+
+
+@pytest.mark.parametrize(
+	("text", "expected"),
+	[
+		("https://alice:s3cretPass@proxy.example/v1", "https://alice:[REDACTED]@proxy.example/v1"),
+		("连接 http://:pw@127.0.0.1:8080 失败", "连接 http://:[REDACTED]@127.0.0.1:8080 失败"),
+		("socks5://u:p@h:1080，然后重试", "socks5://u:[REDACTED]@h:1080，然后重试"),
+	],
+)
+def test_redaction_masks_url_userinfo_password(text, expected):
+	"""URL 里的 Basic Auth 口令没有 key=value 形态，也要遮掉（Issue #1779）。"""
+	assert redact_sensitive_text(text) == expected
+	assert redact_sensitive({"ai_base_url": text, "nested": [text]}) == {"ai_base_url": expected, "nested": [expected]}
+
+
+@pytest.mark.parametrize(
+	"text",
+	["http://host:8080/a@b", "https://example.com/users/@me", "mailto:someone@example.com", "http://[::1]:9222/json", "邮箱 a:b@c 不是 URL"],
+)
+def test_redaction_leaves_urls_without_userinfo_password(text):
+	assert redact_sensitive_text(text) == text

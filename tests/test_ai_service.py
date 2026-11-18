@@ -356,3 +356,45 @@ def test_chat_http_error_without_json_body_keeps_plain_status(mock_post):
 )
 def test_recovery_action_for_maps_failure_kind(exc, expected):
 	assert expected in recovery_action_for(exc, "调用方默认建议")
+
+
+# ── #1778 / #1780：坏地址与 HTTP 200 的错误对象 ───────────────────────
+
+
+@patch("boss_agent_cli.ai.service.httpx.post")
+def test_chat_reports_invalid_url_as_service_error(mock_post):
+	mock_post.side_effect = httpx.InvalidURL("Invalid port: 'abc'")
+	service = AIService(base_url="http://127.0.0.1:abc/v1", api_key="k", model="m")
+	with pytest.raises(AIServiceError) as exc_info:
+		service.chat([{"role": "user", "content": "hi"}])
+	assert "地址无效" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+	("error", "status"),
+	[
+		({"message": "Rate limit exceeded: free-models-per-day", "code": 429}, 429),
+		({"message": "No auth credentials found", "code": 401}, 401),
+		({"message": "upstream said no", "code": "rate_limited"}, None),
+		({"message": "upstream said no", "code": True}, None),
+	],
+)
+@patch("boss_agent_cli.ai.service.httpx.post")
+def test_chat_surfaces_error_object_returned_with_http_200(mock_post, error, status):
+	mock_post.return_value = httpx.Response(200, json={"error": error}, request=httpx.Request("POST", "https://x/v1"))
+	service = AIService(base_url="https://x/v1", api_key="k", model="m")
+	with pytest.raises(AIServiceError) as exc_info:
+		service.chat([{"role": "user", "content": "hi"}])
+	assert error["message"] in str(exc_info.value)
+	assert "'choices'" not in str(exc_info.value)
+	assert exc_info.value.status_code == status
+
+
+@pytest.mark.parametrize("body", [{"choices": None}, {"choices": {}}, [], "text"])
+@patch("boss_agent_cli.ai.service.httpx.post")
+def test_chat_reports_missing_choices_without_python_exception_text(mock_post, body):
+	mock_post.return_value = httpx.Response(200, json=body, request=httpx.Request("POST", "https://x/v1"))
+	service = AIService(base_url="https://x/v1", api_key="k", model="m")
+	with pytest.raises(AIServiceError) as exc_info:
+		service.chat([{"role": "user", "content": "hi"}])
+	assert str(exc_info.value) == "响应格式异常: 响应里没有 choices"
