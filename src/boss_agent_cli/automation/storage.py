@@ -471,8 +471,11 @@ class AutomationStore:
 
 	def stats(self) -> dict[str, Any]:
 		events = self.read_jsonl("action-log.jsonl")
-		reviews = self.read_jsonl("human-review-queue.jsonl")
-		pending = self.read_jsonl("pending-actions.jsonl")
+		# 与 agent pending list / agent run 共用同一套行校验：统计页是熔断后的
+		# 恢复入口，若用原始 JSONL 行计数，坏 confidence / status 会被当作
+		# 正常待执行量，操作者据此判断「还有多少动作要核对」（Issue #1667）。
+		reviews = [asdict(item) for item in self.read_reviews()]
+		pending = [asdict(item) for item in self.read_pending()]
 		state = self.read_state()
 		today = datetime.now(timezone.utc).date().isoformat()
 		recent_errors = [
