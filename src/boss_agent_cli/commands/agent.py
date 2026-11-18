@@ -661,7 +661,13 @@ def review_reject_cmd(ctx: click.Context, review_id: str, reason: str) -> None:
 		rejected.confidence,
 		f"human rejected: {reason}",
 	)
-	store.append_event(event)
+	try:
+		store.append_event(event)
+	except AutomationStateError as exc:
+		# 队列路径在复核记录改写之后坏掉（FIFO / 悬空链接 / 只读）：动作日志
+		# 写不进去同样要返回信封，不能把 traceback 甩给 Agent（Issue #1741）。
+		_emit_state_error(ctx, "agent.review.reject", exc)
+		return
 	handle_output(
 		ctx,
 		"agent.review.reject",
