@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import errno
 import json
+import os
 import shutil
+import stat
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Final
 
-from boss_agent_cli.services.json_files import read_bytes_if_regular, write_json_atomic
+from boss_agent_cli.services.file_lock import exclusive_file_lock
+from boss_agent_cli.services.json_files import path_mode, read_bytes_if_regular, write_json_atomic
+from boss_agent_cli.services.output_path import refuse_symlink_target
 
 RUNTIME_BASE_URLS: Final = {
 	"ollama": "http://localhost:11434/v1",
@@ -130,40 +136,113 @@ def read_imported_models(data_dir: Path, *, strict: bool = False) -> list[Import
 
 
 def import_local_model(data_dir: Path, source: Path, model: str) -> ImportedLocalModel:
-	"""Copy an external model artifact into the user data directory and register it."""
-	if not source.exists():
+	"""Copy an external model artifact into the user data directory and register it.
+
+	导入全程持有跨进程锁，复制先落临时路径、成功后再替换目标：重导入复制失败
+	时旧副本与登记表原样保留，两个并发导入不会互相覆盖 `registry.json`
+	（Issue #1705）。源 / 目标的路径状态读不出来时上抛，不误报「不存在」。
+	"""
+	safe_name = _safe_model_dir(model)
+	models_dir = data_dir / "models"
+	models_dir.mkdir(parents=True, exist_ok=True)
+	lock_path = models_dir / "import.lock"
+	with exclusive_file_lock(lock_path) as acquired:
+		if not acquired:
+			raise OSError(errno.EAGAIN, "另一个模型导入正在进行，请等待其完成后重试", str(lock_path))
+		return _import_local_model_locked(data_dir, source, model, safe_name)
+
+
+def _import_local_model_locked(
+	data_dir: Path,
+	source: Path,
+	model: str,
+	safe_name: str,
+) -> ImportedLocalModel:
+	"""调用方必须持有 `models/import.lock`。"""
+	mode = path_mode(source)
+	if mode is None:
 		raise LocalModelManifestError("MODEL_SOURCE_NOT_FOUND", f"模型路径不存在: {source}")
+	source_is_dir = stat.S_ISDIR(mode)
+	if not source_is_dir and not stat.S_ISREG(mode):
+		# FIFO / 设备会阻塞读取，悬空链接也不能复制（Issue #1705）。
+		raise LocalModelManifestError(
+			"INVALID_PARAM",
+			f"模型路径不是普通文件或目录: {source}；FIFO、设备与悬空链接不能导入",
+		)
 	# 先读登记表再复制：登记表损坏时直接报错，不留下一份复制了却没登记进来的模型目录。
-	target_dir = data_dir / "models" / _safe_model_dir(model)
-	# 先读登记表再复制：登记表损坏时直接报错，不留下一份复制了却没登记进来的模型目录。
+	target_dir = data_dir / "models" / safe_name
 	rows = [item for item in read_imported_models(data_dir, strict=True) if item.model != model]
 	target = target_dir / source.name
+	# 悬空链接的 exists() 为假，copy2 会顺着链接在数据目录外创建文件；指向普通
+	# 文件的链接则会被写穿替换外部目标（Issue #1705）。
+	refuse_symlink_target(target)
 	src_resolved = source.resolve()
 	tgt_resolved = target.resolve()
-	if source.is_dir() and src_resolved != tgt_resolved and (
+	if source_is_dir and src_resolved != tgt_resolved and (
 		src_resolved in tgt_resolved.parents or tgt_resolved in src_resolved.parents
 	):
 		# 源目录包含目标、或目标包含源目录：copytree 会把已写出的副本再当成源一路
-		# 复制下去（直到 File name too long），或先 rmtree 掉源目录再复制失败。
+		# 复制下去（直到 File name too long），或先删掉源目录再复制失败。
 		# 例如 `--path ~/.boss-agent --model qwen3`，目标就在源目录里面。
 		raise LocalModelManifestError(
 			"INVALID_PARAM",
 			f"源目录与导入目标互相包含: {source} -> {target}；复制会递归到自身或先删掉源目录，请换一个源目录或 --model 名",
 		)
 	target_dir.mkdir(parents=True, exist_ok=True)
-	if src_resolved == tgt_resolved:
-		# 已经在目标位置（例如重复导入同一路径）：不复制、只登记。
-		pass
-	elif source.is_dir():
-		if target.exists():
-			shutil.rmtree(target)
-		shutil.copytree(source, target)
-	else:
-		shutil.copy2(source, target)
+	if src_resolved != tgt_resolved:
+		# 已经在目标位置（例如重复导入同一路径）时不复制，只登记。
+		_replace_model_target(source, target, is_dir=source_is_dir)
 	imported = ImportedLocalModel(model=model, path=str(target), runtime="custom")
 	rows.append(imported)
 	write_json_atomic(model_registry_path(data_dir), [asdict(item) for item in rows])
 	return imported
+
+
+def _staging_path(parent: Path, name: str) -> Path:
+	"""在目标同目录预留一个临时名；失败时不会让旧副本半截可见。"""
+	fd, raw = tempfile.mkstemp(prefix=f".{name}.staging-", dir=parent)
+	os.close(fd)
+	path = Path(raw)
+	path.unlink()
+	return path
+
+
+def _discard(path: Path) -> None:
+	try:
+		if path.is_symlink() or not path.is_dir():
+			path.unlink(missing_ok=True)
+		else:
+			shutil.rmtree(path)
+	except FileNotFoundError:
+		pass
+
+
+def _replace_model_target(source: Path, target: Path, *, is_dir: bool) -> None:
+	"""完整复制到临时路径后再替换目标；复制失败时旧副本保持原样。"""
+	staging = _staging_path(target.parent, target.name)
+	backup: Path | None = None
+	try:
+		if is_dir:
+			shutil.copytree(source, staging)
+		else:
+			shutil.copy2(source, staging)
+		if path_mode(target) is not None:
+			backup = _staging_path(target.parent, target.name)
+			os.rename(target, backup)
+		try:
+			os.replace(staging, target)
+		except BaseException:
+			if backup is not None and path_mode(target) is None:
+				os.rename(backup, target)
+			raise
+		if backup is not None:
+			# 旧副本清理失败不应把已经成功的新副本回滚；残留的备用路径可人工删除。
+			try:
+				_discard(backup)
+			except OSError:
+				pass
+	finally:
+		_discard(staging)
 
 
 def _safe_model_dir(model: str) -> str:
