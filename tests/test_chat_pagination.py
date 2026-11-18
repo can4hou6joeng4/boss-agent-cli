@@ -319,9 +319,8 @@ def test_chat_output_without_export_is_rejected_before_request(mock_auth_cls, mo
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
 def test_chat_export_default_fifo_is_rejected_before_request(mock_auth_cls, mock_client_cls, tmp_path: Path):
-	"""默认导出路径与显式 -o 同样拒绝 FIFO（Issue #1757）。"""
+	"""默认导出路径无效时，跳过认证、平台请求和快照。"""
 	import datetime
-	import os
 	import stat
 
 	mock_client = _ctx_mock(mock_client_cls)
@@ -337,3 +336,6 @@ def test_chat_export_default_fifo_is_rejected_before_request(mock_auth_cls, mock
 	payload = json.loads(result.output)
 	assert payload["error"]["code"] == "INVALID_PARAM"
 	assert stat.S_ISFIFO(fifo.lstat().st_mode)
+	mock_auth_cls.assert_not_called()
+	mock_client_cls.assert_not_called()
+	assert not (tmp_path / "chat-history").exists()

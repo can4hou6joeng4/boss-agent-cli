@@ -4,13 +4,16 @@
 
 ## [Unreleased]
 
+### Fixed
+- `chat --export` 在认证和保存快照前检查默认导出目标。无效的父路径返回 `LOCAL_IO_ERROR`，非字符串且非 `null` 的 `export_dir` 返回 `CONFIG_INVALID`（Issue #1760）。
+
 ## [3.4.113] - 2026-11-18
 
 ### Fixed
 - `agent resume` 不再绕过 `state.json` 的符号链接保护：显式恢复时直接原子写状态文件会替换链接、留下目标中的旧熔断与 checkpoint（恢复链接后旧状态复活），现在同样报 `AUTOMATION_STATE_INVALID` 且不解除熔断；`stop.json` 的悬空链接原子替换仍按现有设计允许（Issue #1751）。
 - `request-budget.lease` 在打开前按 lstat 判定路径类型：符号链接（含悬空）不再把请求租约写进数据目录之外的目标，FIFO 不再让所有平台请求在打开租约时永久阻塞，目录 / 设备也明确拒绝；普通文件与缺失文件自动创建的行为不变（Issue #1753）。
 - `crawl` 三份导出产物（`jobs.json` / `jobs.csv` / `jobs.xlsx`）与输出目录在替换前按 lstat 判定：符号链接不再被备份机制移到临时文件后删除、目标也不再保留旧内容，FIFO / 设备不再被 `os.replace` 静默替换；同名目录仍保留既有 `IsADirectoryError` 回滚契约（Issue #1755）。
-- `resume export` 与 `chat --export` 不传 `-o` 时生成的默认导出路径也走统一预检：FIFO / 设备 / 符号链接目标返回 `INVALID_PARAM`，不再由 `os.replace` 静默替换或写穿；`chat` 的导出目录是符号链接时也被拒绝（Issue #1757）。
+- `resume export` 与 `chat --export` 检查省略 `-o` 时生成的默认导出文件。文件目标为 FIFO、设备或符号链接时返回 `INVALID_PARAM`，保留原目标（Issue #1757）。
 
 ## [3.4.112] - 2026-11-18
 
