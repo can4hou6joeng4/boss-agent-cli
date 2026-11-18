@@ -23,6 +23,7 @@ from boss_agent_cli.services.private_files import (
 	DIRECTORY_MODE,
 	FILE_MODE,
 	chmod_best_effort,
+	load_or_create_private_salt,
 	write_private_bytes,
 )
 
@@ -185,16 +186,12 @@ class AIConfigStore:
 		return hashlib.sha256(fingerprint.encode()).hexdigest()
 
 	def _get_salt(self) -> bytes:
-		"""Reuse auth salt file, or create one if it doesn't exist."""
-		self._auth_dir.mkdir(parents=True, exist_ok=True, mode=DIRECTORY_MODE)
-		chmod_best_effort(self._auth_dir, DIRECTORY_MODE)
-		salt_path = self._auth_dir / "salt"
-		if salt_path.exists():
-			chmod_best_effort(salt_path, FILE_MODE)
-			return salt_path.read_bytes()
-		salt = os.urandom(16)
-		write_private_bytes(salt_path, salt)
-		return salt
+		"""Reuse the auth salt; create it only when it is really missing.
+
+		Shares the auth-side lifecycle so a failed existence check can never
+		replace the salt that decrypts session.enc / api_key.enc (Issue #1688).
+		"""
+		return load_or_create_private_salt(self._auth_dir)
 
 	def _derive_key(self) -> bytes:
 		"""Derive a Fernet key from machine ID and salt."""
