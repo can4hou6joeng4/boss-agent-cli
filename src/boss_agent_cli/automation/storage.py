@@ -193,6 +193,10 @@ class AutomationStore:
 			state = self.read_state()
 			if not state.get("autonomy", {}).get("circuit_breaker", {}).get("open"):
 				return False
+			# resume 直接走原子写、不经过 write_state：不在这里拒链接会静默替换
+			# state.json 链接，目标保留旧熔断 / checkpoint，恢复链接后旧状态复活
+			# （Issue #1751）。stop.json 的悬空链接仍允许原子替换。
+			_refuse_symlink_write(self.state_path, "state.json")
 			closed = {
 				"open": False,
 				"reason": "explicit-resume-after-verification",

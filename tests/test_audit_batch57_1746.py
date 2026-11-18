@@ -97,3 +97,23 @@ def test_missing_regular_files_are_still_created(tmp_path):
 
 	assert len(store.read_pending()) == 2
 	assert store.read_state()["autonomy"] == {}
+
+
+def test_resume_refuses_symlinked_state_without_replacing_it(tmp_path):
+	"""resume 直接原子写 state.json，不能绕过 write_state 的链接保护（Issue #1751）。"""
+	store = AutomationStore(tmp_path)
+	store._set_stop("人工停止")
+	target = tmp_path / "outside-state.json"
+	target.write_text(
+		'{"autonomy": {"circuit_breaker": {"open": true, "reason": "旧熔断"}}}',
+		encoding="utf-8",
+	)
+	_link(store.state_path, target)
+
+	with pytest.raises(AutomationStateError) as exc_info:
+		store.resume()
+
+	assert "符号链接" in str(exc_info.value)
+	assert store.state_path.is_symlink()
+	assert "旧熔断" in target.read_text(encoding="utf-8")
+	assert store.read_stop().get("open") is True, "失败不能解除熔断"
