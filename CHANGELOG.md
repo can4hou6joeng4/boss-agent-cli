@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `agent resume` 不再绕过 `state.json` 的符号链接保护：显式恢复时直接原子写状态文件会替换链接、留下目标中的旧熔断与 checkpoint（恢复链接后旧状态复活），现在同样报 `AUTOMATION_STATE_INVALID` 且不解除熔断；`stop.json` 的悬空链接原子替换仍按现有设计允许（Issue #1751）。
+
 ## [3.4.112] - 2026-11-18
 
 ### Fixed
