@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.114] - 2026-11-19
+
 ### Fixed
 - 文本 / JSON / 私有字节与简历 PDF 的原子写入器在准备临时文件和 `os.replace` 提交前都检查目标：FIFO / 设备等特殊文件不再被静默替换成普通文件，符号链接与目录明确拒绝；拒绝时保留目标、清理临时文件并携带路径供 `LOCAL_IO_ERROR` 分类（Issue #1762）。
 - `chat --export` 在认证和保存快照前检查默认导出目标。无效的父路径返回 `LOCAL_IO_ERROR`，非字符串且非 `null` 的 `export_dir` 返回 `CONFIG_INVALID`（Issue #1760）。
