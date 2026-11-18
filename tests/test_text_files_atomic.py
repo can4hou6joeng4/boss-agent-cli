@@ -14,6 +14,8 @@
 
 import errno
 import json
+import os
+import stat
 from pathlib import Path
 from unittest.mock import patch
 
@@ -75,17 +77,37 @@ def test_write_text_atomic_newline_passthrough(tmp_path: Path):
 	assert target.read_bytes() == b"a,b\r\n1,2\r\n"
 
 
+_ATOMIC_WRITERS = [
+	pytest.param(lambda path: write_text_atomic(path, "new content"), id="text"),
+	pytest.param(lambda path: write_json_atomic(path, {"new": True}), id="json"),
+	pytest.param(lambda path: write_private_bytes(path, b"new content"), id="private"),
+]
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="当前平台不支持 FIFO")
+@pytest.mark.parametrize("write", _ATOMIC_WRITERS)
+@pytest.mark.parametrize("during_write", [False, True], ids=["existing", "after-flush"])
+def test_atomic_writer_preserves_fifo(write, during_write, tmp_path: Path, monkeypatch):
+	"""原子写入拒绝文件目标上的 FIFO，包括写入临时文件后才出现的 FIFO。"""
+	target = tmp_path / "output"
+	if during_write:
+		monkeypatch.setattr(os, "fsync", lambda _fd: os.mkfifo(target))
+	else:
+		os.mkfifo(target)
+
+	with pytest.raises(OSError) as raised:
+		write(target)
+
+	assert raised.value.filename == str(target)
+	assert is_local_io_error(raised.value)
+	assert stat.S_ISFIFO(target.lstat().st_mode)
+	assert list(tmp_path.iterdir()) == [target]
+
+
 # ── fd 级写入失败：异常补上目标路径（Issue #1400） ───────────────────
 
 
-@pytest.mark.parametrize(
-	"write",
-	[
-		pytest.param(lambda path: write_text_atomic(path, "new content"), id="text"),
-		pytest.param(lambda path: write_json_atomic(path, {"new": True}), id="json"),
-		pytest.param(lambda path: write_private_bytes(path, b"new content"), id="private"),
-	],
-)
+@pytest.mark.parametrize("write", _ATOMIC_WRITERS)
 def test_fd_level_write_failure_gets_target_filename(write, tmp_path: Path):
 	"""磁盘满（ENOSPC）在 fd 层抛出时 filename 为 None：写入入口要补上目标路径，
 	分类才会落成本地 IO 错误；原文件与目录内容保持不变。"""

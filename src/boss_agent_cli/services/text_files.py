@@ -14,7 +14,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from boss_agent_cli.services.output_path import refuse_symlink_target
+from boss_agent_cli.services.output_path import refuse_non_regular_target
 
 
 def write_text_atomic(
@@ -26,8 +26,7 @@ def write_text_atomic(
 ) -> Path:
 	"""原子替换写入文本文件；失败时保留原文件，不留下临时文件。"""
 	target = Path(path)
-	# os.replace 替换符号链接本身而不是写穿目标；入口直接拒绝，避免静默破坏链接。
-	refuse_symlink_target(target)
+	refuse_non_regular_target(target)
 	target.parent.mkdir(parents=True, exist_ok=True)
 	temporary: Path | None = None
 	try:
@@ -40,6 +39,7 @@ def write_text_atomic(
 			handle.write(body)
 			handle.flush()
 			os.fsync(handle.fileno())
+		refuse_non_regular_target(target)
 		os.replace(temporary, target)
 	except OSError as error:
 		# fd 级写入（write / flush / fsync）失败的异常没有 filename：补上目标路径，

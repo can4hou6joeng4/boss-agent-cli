@@ -115,14 +115,22 @@ def inspect_output_path(path: str | os.PathLike[str]) -> tuple[Path, OutputPathP
 
 
 def refuse_symlink_target(target: Path) -> None:
-	"""原子写入入口的兜底：目标本身是符号链接时拒绝写入。
-
-	``write_text_atomic`` / ``write_json_atomic`` / ``write_private_bytes`` 都靠
-	同目录临时文件 + ``os.replace`` 落盘，替换的是链接本身，不会写穿到真实目标。
-	命令层的 ``-o`` 预检已覆盖一部分调用方，其余内部状态写入也必须走这里，避免
-	静默破坏用户的链接布局（Issue #1355）。
-
-	抛出的 ``OSError`` 带 ``filename``，顶层网兜会把它归成 ``LOCAL_IO_ERROR``。
-	"""
+	"""允许替换目录的调用方仍须拒绝符号链接目标。"""
 	if target.is_symlink():
 		raise OSError(errno.EINVAL, "拒绝写入符号链接目标", str(target))
+
+
+def refuse_non_regular_target(target: Path) -> None:
+	"""文件写入器仅允许替换普通文件或创建缺失的文件。
+
+	临时文件写好后应在提交替换前复查，以保留在写入期间出现的特殊文件。
+	拒绝时携带目标路径，供命令层报告 ``LOCAL_IO_ERROR``。
+	"""
+	mode = _lstat_mode(target)
+	if mode is None or stat.S_ISREG(mode):
+		return
+	if stat.S_ISLNK(mode):
+		raise OSError(errno.EINVAL, "拒绝写入符号链接目标", str(target))
+	if stat.S_ISDIR(mode):
+		raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), str(target))
+	raise OSError(errno.EINVAL, "输出目标不是普通文件", str(target))
