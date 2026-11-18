@@ -268,6 +268,24 @@ def test_redaction_stops_at_cjk_punctuation() -> None:
 	assert redact_sensitive_text("cookie: sessionid=xyz；继续") == "cookie: [REDACTED]；继续"
 
 
+def test_redaction_covers_composite_credential_keys() -> None:
+	"""复合键里的凭据段不能因为前面有 `_` / `-` 就漏掉（Issue #1765）。"""
+	from boss_agent_cli.output import envelope_error, redact_sensitive, redact_sensitive_text
+
+	for key in ("access_token", "refresh_token", "auth_token", "session_token", "x-api-key", "client_secret"):
+		assert redact_sensitive_text(f"{key}=SUPERSECRET") == f"{key}=[REDACTED]"
+
+	assert redact_sensitive({"x-api-key": "SUPERSECRET", "client_secret": "SUPERSECRET"}) == {
+		"x-api-key": "[REDACTED]",
+		"client_secret": "[REDACTED]",
+	}
+	message = json.loads(
+		envelope_error("config", code="INVALID_PARAM", message="必须是整数，收到 'access_token=SUPERSECRET'")
+	)["error"]["message"]
+	assert "SUPERSECRET" not in message
+	assert "access_token=[REDACTED]" in message
+
+
 def test_logger_filters_by_level(capsys):
 	logger = Logger("warning")
 	logger.debug("debug msg")

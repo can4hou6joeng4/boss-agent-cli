@@ -18,6 +18,7 @@ from boss_agent_cli.resume.store import (
 	ResumeImportError,
 	ResumeStore,
 	_WINDOWS_RESERVED_DEVICE_NAMES,
+	_portable_filename,
 	_safe_filename,
 )
 
@@ -79,6 +80,36 @@ def test_dot_only_names_do_not_point_at_directories(name):
 	assert joined.stem.strip(".") != ""
 
 
+@pytest.mark.parametrize("char", ['*', '?', '|', '<', '>', '"', '\t', '\n'])
+def test_safe_filename_replaces_windows_illegal_characters(char):
+	"""`init` / `clone` 的合法名称要清洗成 Windows 可落盘的文件名（Issue #1768）。"""
+	assert _portable_filename(f"A{char}B") == "A_B"
+
+
+def test_new_resume_with_illegal_characters_uses_portable_filename(tmp_path):
+	store = ResumeStore(tmp_path / "resumes")
+	store.save(ResumeData(name="A*B", title="开发"))
+
+	assert [path.name for path in store._dir.glob("*.json")] == ["A_B.json"]
+	loaded = store.get("A*B")
+	assert loaded is not None and loaded.name == "A*B"
+
+
+def test_legacy_resume_file_with_illegal_characters_stays_reachable(tmp_path):
+	"""旧版本在 macOS / Linux 上写出的 `A*B.json` 仍能读、改、删。"""
+	store = ResumeStore(tmp_path / "resumes")
+	legacy = store._dir / "A*B.json"
+	legacy.write_text(json.dumps({"name": "A*B", "title": "旧"}), encoding="utf-8")
+
+	loaded = store.get("A*B")
+	assert loaded is not None and loaded.title == "旧"
+	loaded.title = "新"
+	store.save(loaded)
+	assert [path.name for path in store._dir.glob("*.json")] == ["A*B.json"]
+	assert store.delete("A*B") is True
+	assert list(store._dir.glob("*.json")) == []
+
+
 def test_store_round_trips_drive_letter_name_inside_base(tmp_path):
 	"""即使名称里带盘符，保存 / 读取也都在 resumes 目录内完成。"""
 	store = ResumeStore(tmp_path / "resumes")
@@ -106,6 +137,17 @@ def test_import_rejects_unsafe_names(tmp_path, name):
 
 	assert "name" in str(excinfo.value)
 	assert list(store._dir.glob("*.json")) == []
+
+
+def test_import_keeps_name_with_windows_illegal_characters(tmp_path):
+	"""导入不改名也不拒绝：文件名可移植，按原名称仍能找到（Issue #1768）。"""
+	store = ResumeStore(tmp_path / "resumes")
+	src = tmp_path / "input.json"
+	src.write_text(json.dumps({"name": "A*B", "title": "开发"}), encoding="utf-8")
+
+	assert store.import_file(src).name == "A*B"
+	assert [path.name for path in store._dir.glob("*.json")] == ["A_B.json"]
+	assert store.exists("A*B")
 
 
 def test_resume_import_cli_reports_invalid_param_for_drive_letter(tmp_path):

@@ -92,6 +92,18 @@ def test_sysexits_prescan_covers_group_level_parse_errors(tmp_path) -> None:
 	assert result.exit_code == 78
 
 
+def test_prescan_stops_at_option_delimiter(tmp_path) -> None:
+	"""`--` 之后的 token 是位置参数，不能被当成全局退出码选项（Issue #1766）。"""
+	result = CliRunner().invoke(
+		cli,
+		["--data-dir", str(tmp_path), "--json", "--", "--exit-codes", "sysexits"],
+	)
+	assert result.exit_code == 1
+	payload = json.loads(result.output.strip())
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert output.exit_code_for_error("INVALID_PARAM") == 1
+
+
 def test_invalid_exit_codes_value_is_usage_error(tmp_path) -> None:
 	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--exit-codes", "nope", "schema"])
 	assert result.exit_code == 1
