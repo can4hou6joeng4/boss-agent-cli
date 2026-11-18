@@ -270,10 +270,9 @@ def test_hr_tool_schema_lists_every_cli_parameter(tool_name: str, command: click
 _CORE_SINGLE_COMMAND_TOOLS = {
 	"boss_search": (
 		search_cmd_module.search_cmd,
-		{"sort_mode": "sort"},
-		# 二者与 query 是互斥输入源，而工具 schema 把 query 标为必填；
-		# 要暴露需先设计 oneOf，本次不改契约。
-		{"search_url", "preset"},
+		{"sort_mode": "sort", "search_url": "url"},
+		# query / url / preset 由 anyOf 保证至少提供一个（Issue #1648）。
+		set(),
 	),
 	"boss_recommend": (recommend_cmd_module.recommend_cmd, {}, set()),
 	"boss_batch_greet": (greet_cmd_module.batch_greet_cmd, {"count": "limit"}, set()),

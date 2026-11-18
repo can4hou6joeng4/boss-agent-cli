@@ -162,6 +162,10 @@ def _tolerated_timestamp(raw: Any, *, default: float = 0.0) -> float:
 #: 值继续推向未来，采集预算永远无法自愈。
 _CRAWL_FUTURE_SKEW_SECONDS = 60.0
 
+#: 本地缓存允许的最大未来预留窗口。写入方不应把 created_at 放到当前时间之后；
+#: 更远的有限未来值只可能来自时钟回拨或外部写坏的库（Issue #1647）。
+_CACHE_FUTURE_SKEW_SECONDS = 60.0
+
 
 def _cache_entry_expired(created_at: Any, ttl: float) -> bool:
 	"""缓存 TTL 判断；``created_at`` 漂移时按已过期处理（Issue #1214）。
@@ -171,7 +175,8 @@ def _cache_entry_expired(created_at: Any, ttl: float) -> bool:
 	也不能让 crawl 详情阶段永远停在同一个坏行上。
 	"""
 	parsed = _tolerated_timestamp(created_at, default=-1.0)
-	return parsed < 0 or time.time() - parsed > ttl
+	now = time.time()
+	return parsed < 0 or parsed > now + _CACHE_FUTURE_SKEW_SECONDS or now - parsed > ttl
 
 
 def _validate_workflow_params(run_id: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -1623,6 +1628,10 @@ class CacheStore:
 	) -> str | None:
 		"""原子预约求职者侧的 greet / apply；抢到返回 None，已有记录返回状态。
 
+		空 ``job_id`` 不能预约：预约表以 ``(account, job_id, action)`` 为主键，
+		空串会让所有职位共用一行，导致不同候选人被误报已处理（Issue #1645）。
+		返回 ``"pending"`` 让调用方按结果未知处理，且不写任何全局键。
+
 		``is_greeted`` / ``is_applied`` + 发送 + ``record_*`` 是跨进程的
 		check-then-act：两个进程可以同时通过检查，各发一次真实请求
 		（Issue #1508）。这里按 ``(account, job_id, action)`` 用
@@ -1632,6 +1641,10 @@ class CacheStore:
 		命中时返回 ``sent``；并发进程已经抢到 pending 时返回 ``pending``，
 		调用方必须按结果未知处理，不能再发。
 		"""
+		if not job_id.strip():
+			# 旧智能体依赖 claim 返回值判断；缺 ID 条目统一按「结果未知」拒绝，
+			# 由调用方如实报告跳过，不能当成普通可重试失败（Issue #1645）。
+			return "pending"
 		legacy_seen = (
 			self.is_greeted(security_id, job_id=job_id, account=account)
 			if action == "greet"
@@ -1664,6 +1677,8 @@ class CacheStore:
 		account: str = "",
 	) -> None:
 		"""平台确认成功后把预约 settle 成 sent（历史记录由调用方先写入）。"""
+		if not job_id.strip():
+			return
 		with self._conn:
 			self._conn.execute(
 				"INSERT INTO candidate_action_claims "
@@ -1678,6 +1693,8 @@ class CacheStore:
 		self, job_id: str, action: Literal["greet", "apply"], *, account: str = ""
 	) -> bool:
 		"""撤销确定未发出的预约；只删 pending，sent 与结果未知的记录保持原样。"""
+		if not job_id.strip():
+			return False
 		with self._conn:
 			cursor = self._conn.execute(
 				"DELETE FROM candidate_action_claims "

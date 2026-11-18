@@ -35,9 +35,13 @@ _ILLEGAL_XLSX_CHARACTERS = re.compile(r"[\000-\010]|[\013-\014]|[\016-\037]")
 
 
 def _xlsx_cell(value: Any) -> Any:
+	# 单条平台字段漂移成 dict/list 时 openpyxl 会抛 ValueError，让整套产物无法
+	# 替换且 run 永远停在 stopped（Issue #1646）。这里兜成文本，保留原始信息。
 	if isinstance(value, str):
 		return _ILLEGAL_XLSX_CHARACTERS.sub("", value)
-	return value
+	if isinstance(value, (int, float, bool)) or value is None:
+		return value
+	return _ILLEGAL_XLSX_CHARACTERS.sub("", str(value))
 
 
 def _force_text_cell(cell: Any) -> None:

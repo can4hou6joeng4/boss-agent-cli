@@ -182,7 +182,9 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"query": {"type": "string", "minLength": 1, "description": "搜索关键词（如 Golang、Python 后端）"},
+					"query": {"type": "string", "description": "搜索关键词（如 Golang、Python 后端）；与 url / preset 至少提供一个"},
+					"url": {"type": "string", "description": "BOSS 直聘搜索页 URL；提供后 query 可省略"},
+					"preset": {"type": "string", "description": "本地预设名称；提供后 query 可省略"},
 					"city": {"type": "string", "description": "城市名称（如 北京、广州）"},
 					"salary": {"type": "string", "description": "薪资范围（如 20-50K）"},
 					"experience": {"type": "string", "description": "经验要求（如 3-5年）"},
@@ -202,7 +204,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"with_score": {"type": "boolean", "description": "附加匹配分和原因（使用本地简历）", "default": False},
 					"sort": {"type": "string", "enum": ["relevance", "score"], "description": "排序方式", "default": "relevance"},
 				},
-				"required": ["query"],
+				"required": [],
+				"anyOf": [{"required": ["query"]}, {"required": ["url"]}, {"required": ["preset"]}],
 			},
 		),
 		*crawl_tool_definitions(data),

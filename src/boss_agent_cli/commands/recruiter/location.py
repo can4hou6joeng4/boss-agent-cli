@@ -7,7 +7,7 @@ from typing import Any
 
 import click
 
-from boss_agent_cli.api.client import PlatformRiskError
+from boss_agent_cli.api.client import RISK_ERROR_BY_CODE, PlatformRiskError
 from boss_agent_cli.api.recruiter_client import RecruiterAuthError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
@@ -16,6 +16,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands.recruiter._hints import hint_command
+from boss_agent_cli.services.candidate_actions import was_provably_unsent
 from boss_agent_cli.display import (
 	error_contract_for_code,
 	handle_auth_errors,
@@ -249,8 +250,15 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 			return
 		try:
 			result = platform.send_job_location(job_id=job_id, to_user_id=friend_id, security_id=security_id)
-		except (RequestBudgetExceeded, PlatformRiskError, AuthRequired, RecruiterAuthError, TokenRefreshFailed):
+		except (AuthRequired, RecruiterAuthError, TokenRefreshFailed):
 			_release(cache, friend_id)
+			raise
+		except PlatformRiskError:
+			# 风控可能在请求已经发出后命中；保留 pending，后续调用必须按结果未知拦住（Issue #1644）。
+			raise
+		except RequestBudgetExceeded as exc:
+			if was_provably_unsent(exc):
+				_release(cache, friend_id)
 			raise
 		except NotImplementedError:
 			_release(cache, friend_id)
@@ -272,7 +280,8 @@ def location_cmd(ctx: click.Context, friend_id: int, yes: bool, dry_run: bool) -
 			return
 		if not platform.is_success(result):
 			code, _message = platform.parse_error(result)
-			if code != "ACTION_UNCONFIRMED":
+			# 风控响应同样不能证明请求未发出；只有明确失败才释放预约（Issue #1644）。
+			if code != "ACTION_UNCONFIRMED" and code not in RISK_ERROR_BY_CODE:
 				_release(cache, friend_id)
 			handle_platform_error_output(
 				ctx,

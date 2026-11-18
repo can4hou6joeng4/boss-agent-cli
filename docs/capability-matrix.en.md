@@ -26,7 +26,7 @@ Compatibility modes `assisted` and `research` can both call every implemented ca
 | Personalized recommendations | `boss recommend` | Yes | Platform adapter |
 | Job detail | `boss detail` | Yes | httpx first, browser fallback |
 | Show by index | `boss show` | No | Local cache |
-| City catalog | `boss cities` | No | httpx |
+| City catalog | `boss cities` | No | Local |
 | Browsing history | `boss history` | Yes | httpx |
 
 ## Candidate actions
@@ -59,7 +59,7 @@ Compatibility modes `assisted` and `research` can both call every implemented ca
 | Incremental watch | `boss watch run` | Yes | Platform read + local state; add/list/remove are local |
 | Search presets | `boss preset` | No | Local |
 | Shortlist management | `boss shortlist` | No | Local |
-| Shortlist management (shows favorite validity, syncs active only) | `boss favorites` | No | Platform read-only + Local |
+| Shortlist management (shows favorite validity, syncs active only) | `boss favorites` | Yes | Platform read-only + Local |
 
 ## User profile
 
