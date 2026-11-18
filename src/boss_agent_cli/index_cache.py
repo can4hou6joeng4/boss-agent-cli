@@ -1,14 +1,16 @@
 """搜索结果索引缓存，支持 boss show N 快速导航。
 缓存文件: ~/.boss-agent/cache/index_cache.json
 """
+import errno
 import json
 import math
+import stat
 import time
 from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.output import Logger
-from boss_agent_cli.services.json_files import write_json_atomic
+from boss_agent_cli.services.json_files import path_mode, write_json_atomic
 
 _CACHE_FILE = "index_cache.json"
 # 合理时间戳上限（2100-01-01），与 api/cdp_risk_lock 的区间判定同口径：
@@ -77,11 +79,21 @@ def _load_cache(data_dir: Path) -> dict[str, Any] | None:
 	（那条指引会让人去升级版本 / 提 issue，而真正该做的是重跑搜索）。
 	"""
 	path = _cache_path(data_dir)
-	if not path.exists():
+	# 缓存文件是 `boss show` 的唯一数据源：FIFO / 设备直接 read_text() 会永久
+	# 阻塞（Issue #1732）；`exists()` 又会把 3.14 下权限等元数据错误吞成
+	# 「没有缓存」，误导用户重跑搜索。与 stats 缓存库（#1716）同口径按 lstat
+	# 判定：只有 FileNotFoundError 才算没有缓存，非普通文件上抛 OSError。
+	mode = path_mode(path)
+	if mode is None:
 		return None
+	if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+		raise OSError(errno.EINVAL, "索引缓存不是普通文件", str(path))
+	# 文件本身读不出来（权限、磁盘错误）同样是本地状态未知，交给命令层按
+	# LOCAL_IO_ERROR 上报，而不是谎报「先 search 建立缓存」。
+	raw = path.read_bytes()
 	try:
-		loaded = json.loads(path.read_text(encoding="utf-8"))
-	except (ValueError, OSError, RecursionError):
+		loaded = json.loads(raw.decode("utf-8"))
+	except (ValueError, RecursionError):
 		# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError，以及 Python 3.11+
 		# 对超长整数字面量的位数上限；深嵌套会抛 RecursionError。损坏缓存一律
 		# 按「没有缓存」处理，不能冒泡成可重试的 NETWORK_ERROR（Issue #1224）。
