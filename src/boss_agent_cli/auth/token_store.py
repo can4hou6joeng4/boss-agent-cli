@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 
 from boss_agent_cli.services.file_lock import exclusive_file_lock
+from boss_agent_cli.services.json_files import read_bytes_if_regular
 from boss_agent_cli.services.private_files import (
 	chmod_best_effort,
 	load_or_create_private_salt,
@@ -110,10 +111,16 @@ class TokenStore:
 		write_private_bytes(self._session_path, encrypted)
 
 	def load(self) -> dict[str, Any] | None:
-		if not self._session_path.exists():
+		"""读取登录态；只有文件缺失才按未登录处理。
+
+		路径元数据不可读、目录 / FIFO / 悬空链接与不可读文件必须上抛，
+		否则 status / doctor 会报「未登录」并引导用户重新登录，覆盖那份可能
+		仍然有效的密文（Issue #1709）。
+		"""
+		encrypted = read_bytes_if_regular(self._session_path)
+		if encrypted is None:
 			return None
 		fernet = Fernet(self._derive_key())
-		encrypted = self._session_path.read_bytes()
 		try:
 			plaintext = fernet.decrypt(encrypted)
 			decoded = json.loads(plaintext)
