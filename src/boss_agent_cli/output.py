@@ -46,12 +46,18 @@ _SCHEMA_VALUE_FIELDS = {"default", "example", "examples", "const", "enum"}
 # ASCII 分隔符时，`stoken=abc）` 会把右括号算进值里，`Bearer x，然后`
 # 连后续中文说明一起被替换成 [REDACTED]，诊断文案就此残缺。
 _TEXT_VALUE_TERMINATORS = r"\s,;，。、；：（）「」『』【】《》！？…—"
+# 边界用 ASCII 单词字符而非 `\b`：中文紧邻凭据键时没有英文单词边界，
+# `登录token=abc` 曾整段漏脱敏（Issue #1662）。下划线与连字符属于同一个键，
+# `auth_token`、`x-api-key` 不会被从中间截断。
+_ASCII_KEY_BOUNDARY = r"(?<![A-Za-z0-9_-])"
 _SENSITIVE_TEXT_PATTERNS = tuple(
 	re.compile(pattern, re.IGNORECASE)
 	for pattern in (
-		rf"\b(authorization)\b(\s*[:=]\s*)(bearer\s+)?([^{_TEXT_VALUE_TERMINATORS}]+)",
-		rf"\b(api[_-]?key|authorization|cookie|credential|password|secret|session(?:[_-]?id)?|stoken|token)\b(\s*[:=]\s*)([^{_TEXT_VALUE_TERMINATORS}]+)",
-		rf"\b(bearer)\s+([^{_TEXT_VALUE_TERMINATORS}]+)",
+		# Authorization 的方案名（Basic / Token / Digest / Bearer）属于凭据的一部分，
+		# 只替换键后的值时会把真正的密钥留在文本里（Issue #1663）。
+		rf"{_ASCII_KEY_BOUNDARY}(?P<key>authorization)(?P<sep>\s*[:=]\s*)(?P<scheme>(?:bearer|basic|digest|token)\s+)?(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
+		rf"{_ASCII_KEY_BOUNDARY}(?P<key>api[_-]?key|authorization|cookie|credential|password|secret|session(?:[_-]?id)?|stoken|token)(?P<sep>\s*[:=]\s*)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
+		rf"{_ASCII_KEY_BOUNDARY}(?P<key>bearer)(?P<sep>\s+)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
 	)
 )
 
@@ -140,10 +146,7 @@ def redact_sensitive_text(message: str) -> str:
 	"""Redact credential-like values embedded in free-form text."""
 	redacted = message
 	for pattern in _SENSITIVE_TEXT_PATTERNS:
-		if pattern.pattern.startswith("\\b(bearer)"):
-			redacted = pattern.sub(r"\1 [REDACTED]", redacted)
-		else:
-			redacted = pattern.sub(r"\1\2[REDACTED]", redacted)
+		redacted = pattern.sub(r"\g<key>\g<sep>[REDACTED]", redacted)
 	return redacted
 
 
