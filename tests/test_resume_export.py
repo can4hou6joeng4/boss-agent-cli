@@ -2,6 +2,8 @@
 
 import errno
 import json
+import os
+import stat
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -112,6 +114,19 @@ def test_export_pdf_mock_patchright(tmp_path):
 	mock_page.set_content.assert_called_once()
 	mock_page.pdf.assert_called_once()
 	mock_browser.close.assert_called_once()
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="当前平台不支持 FIFO")
+def test_export_pdf_refuses_fifo_before_browser(tmp_path):
+	out = tmp_path / "resume.pdf"
+	os.mkfifo(out)
+	with patch("patchright.sync_api.sync_playwright") as playwright:
+		with pytest.raises(OSError) as raised:
+			export_pdf(_make_resume(), out)
+
+	assert raised.value.filename == str(out)
+	playwright.assert_not_called()
+	assert stat.S_ISFIFO(out.lstat().st_mode)
 
 
 def test_export_pdf_call_params(tmp_path):
