@@ -1530,7 +1530,7 @@ def test_open_file_command_uses_start_on_windows(monkeypatch):
 	from boss_agent_cli.display import open_file_command
 
 	monkeypatch.setattr(sys, "platform", "win32")
-	assert open_file_command("C:/out/report.html") == 'cmd /c start "" C:/out/report.html'
+	assert open_file_command("C:/out/report.html") == 'cmd /c start "" "C:/out/report.html"'
 
 
 def test_open_file_command_uses_xdg_open_on_linux(monkeypatch):
