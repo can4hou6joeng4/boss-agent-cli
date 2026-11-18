@@ -923,7 +923,7 @@ def test_corrupt_stop_latch_fails_closed(tmp_path: Path) -> None:
 	stop = store.read_stop()
 	assert stop["open"] is True
 	assert stop["corrupt"] is True
-	assert "无法解析" in stop["reason"]
+	assert "无法读取或解析" in stop["reason"]
 
 	state = store.read_state()
 	assert state["autonomy"]["circuit_breaker"]["open"] is True
