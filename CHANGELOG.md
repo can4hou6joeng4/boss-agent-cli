@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- wizard 的 `crawl_stop` 目标在任务已结束时返回 `CRAWL_RUN_FINISHED`，不再报告 `stop_requested` 并写入停止标记；与 `boss crawl stop` 口径一致（Issue #1786）。
+
 ## [3.4.117] - 2026-11-19
 
 ### Fixed

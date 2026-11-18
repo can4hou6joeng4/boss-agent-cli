@@ -5029,3 +5029,38 @@ def test_ai_assist_rejects_invalid_numeric_ai_config(tmp_path, monkeypatch, key,
 	assert key in str(exc_info.value)
 	assert "--max-tokens" in exc_info.value.recovery_action
 	assert not post.called, "坏配置必须在发请求之前拦下"
+
+
+@pytest.mark.parametrize("status", ["completed", "failed", "stopped", "risk_stopped"])
+def test_crawl_stop_action_rejects_finished_run(tmp_path, status):
+	"""wizard 的 crawl_stop 与 `boss crawl stop` 同口径（Issue #1786）。"""
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.create_crawl_run("done-1", {"query": "Python"}, str(tmp_path / "crawl" / "runs" / "done-1"))
+		cache.update_crawl_run("done-1", status=status, next_page=1)
+	with pytest.raises(WorkflowActionError) as caught:
+		DEFAULT_ACTIONS["crawl_stop"](_action_context(tmp_path), {"run_id": "done-1"}, {})
+	assert caught.value.code == "CRAWL_RUN_FINISHED"
+	assert caught.value.recoverable is False
+	assert caught.value.auto_retry is False
+	assert status in str(caught.value)
+	assert "crawl status done-1" in caught.value.recovery_action
+	assert str(tmp_path) in caught.value.recovery_action
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.get_crawl_run("done-1")["stop_requested"] is False
+
+
+@pytest.mark.parametrize("status", ["queued", "running"])
+def test_crawl_stop_action_accepts_active_run(tmp_path, status):
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.create_crawl_run("live-1", {"query": "Python"}, str(tmp_path / "crawl" / "runs" / "live-1"))
+		cache.update_crawl_run("live-1", status=status, next_page=1)
+	stopped = DEFAULT_ACTIONS["crawl_stop"](_action_context(tmp_path), {"run_id": "live-1"}, {})
+	assert stopped.data == {"run_id": "live-1", "status": "stop_requested"}
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.get_crawl_run("live-1")["stop_requested"] is True
+
+
+def test_crawl_stop_action_missing_run_is_not_found(tmp_path):
+	with pytest.raises(WorkflowActionError) as caught:
+		DEFAULT_ACTIONS["crawl_stop"](_action_context(tmp_path), {"run_id": "ghost"}, {})
+	assert caught.value.code == "CRAWL_RUN_NOT_FOUND"
