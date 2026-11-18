@@ -12,6 +12,10 @@ import httpx
 from boss_agent_cli.auth.manager import AuthRequired
 
 MAX_RESUME_BYTES = 20 * 1024 * 1024
+#: `hr download-resume --output` 允许的扩展名（Issue #1672）。具体附件内容仍由
+#: `save_resume` 与扩展名精确匹配；这里只是允许范围，便于在平台请求前拒绝
+#: 不可能的路径。
+SUPPORTED_RESUME_SUFFIXES = frozenset({".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"})
 
 
 class ResumeValidationError(ValueError):
