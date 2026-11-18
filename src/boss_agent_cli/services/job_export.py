@@ -80,7 +80,8 @@ def write_export_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 			if isinstance(row.get("welfare"), list):
 				row["welfare"] = _join_cells(row["welfare"])
 			# CSV 公式注入防护；与 chat 导出一致（剥 Tab/CR，Issue #876）。
-			row = {k: sanitize_csv_cell(str(v)) for k, v in row.items()}
+			# null 写成空单元格，与 HTML 路径同口径（Issue #1354 #1793）。
+			row = {k: "" if v is None else sanitize_csv_cell(str(v)) for k, v in row.items()}
 			writer.writerow(row)
 		# csv 模块按行写出 ``\r\n``；文本模式默认会再翻译一次换行，Windows 上
 		# 落盘变成 ``\r\r\n``（Issue #1401）。与 chat 导出同口径关掉翻译。

@@ -116,8 +116,9 @@ def test_corrupt_today_snapshot_still_falls_back_to_no_history(tmp_path: Path) -
 def test_paged_export_still_merges_today_contacts(tmp_path: Path) -> None:
 	snapshot_dir = tmp_path / "snapshots"
 
-	save_snapshot_and_diff(str(snapshot_dir), _items(("甲", "uid-a", 0)), MagicMock())
-	save_snapshot_and_diff(str(snapshot_dir), _items(("乙", "uid-b", 0)), MagicMock())
+	# 分页采集是不完整观察：完整采集会直接替换当日快照（Issue #1791）。
+	save_snapshot_and_diff(str(snapshot_dir), _items(("甲", "uid-a", 0)), MagicMock(), complete=False)
+	save_snapshot_and_diff(str(snapshot_dir), _items(("乙", "uid-b", 0)), MagicMock(), complete=False)
 
 	saved = json.loads(_today_path(str(snapshot_dir)).read_text(encoding="utf-8"))
 	assert {item["uid"] for item in saved} == {"uid-a", "uid-b"}

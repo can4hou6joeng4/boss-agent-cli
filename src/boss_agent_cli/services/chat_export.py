@@ -30,7 +30,8 @@ def prepare_render_data(
 
 	me_items = groups.get("我主动", [])
 	me_read = sum(1 for x in me_items if x.get("msg_status") == "已读")
-	me_unread = len(me_items) - me_read
+	# 状态缺失或漂移时命令层给的是「未知」，不能算进未读（Issue #1794）。
+	me_unread = sum(1 for x in me_items if x.get("msg_status") == "未读")
 
 	added_ids = {contact_identity(item) for item in diff_result.get("added", [])}
 
@@ -146,7 +147,8 @@ def _render_csv(friends: list[dict[str, Any]]) -> str:
 	writer = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
 	writer.writeheader()
 	for item in friends:
-		safe_row = {k: sanitize_csv_cell(str(v)) for k, v in item.items()}
+		# null 写成空单元格，不落成字面量 None（Issue #1793）。
+		safe_row = {k: "" if v is None else sanitize_csv_cell(str(v)) for k, v in item.items()}
 		writer.writerow(safe_row)
 	return buf.getvalue()
 

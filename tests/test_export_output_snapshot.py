@@ -172,6 +172,7 @@ def test_concurrent_snapshot_saves_keep_both_pages(tmp_path):
 				str(snapshot_dir),
 				[{"uid": uid, "name": name}],
 				MagicMock(),
+				complete=False,
 			)
 		except BaseException as exc:
 			errors.append(exc)

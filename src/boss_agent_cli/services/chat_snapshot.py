@@ -52,7 +52,7 @@ def save_snapshot_and_diff(
 
 	# 读-合并-写必须在同一个临界区内：两个并发导出各自读到旧快照再各自覆盖，
 	# 后写者会丢掉另一页的联系人，次日 diff 误报 added（Issue #1356）。
-	merged = _merge_and_write_locked(snapshot_dir, snapshot_path, friends)
+	merged = _merge_and_write_locked(snapshot_dir, snapshot_path, friends, replace=complete)
 
 	# 查找上一次快照
 	prev_path = _find_previous_snapshot(snapshot_dir, today)
@@ -95,6 +95,8 @@ def _merge_and_write_locked(
 	snapshot_dir: str,
 	snapshot_path: str,
 	friends: list[dict[str, Any]],
+	*,
+	replace: bool = False,
 ) -> list[dict[str, Any]]:
 	"""在跨进程独占锁内完成读-合并-写，返回合并后的快照内容。
 
@@ -105,21 +107,31 @@ def _merge_and_write_locked(
 	for attempt in range(_LOCK_ATTEMPTS):
 		with exclusive_file_lock(lock_path) as acquired:
 			if acquired:
-				return _merge_and_write(snapshot_path, friends)
+				return _merge_and_write(snapshot_path, friends, replace=replace)
 		if attempt + 1 < _LOCK_ATTEMPTS:
 			time.sleep(_LOCK_RETRY_INTERVAL_SECONDS)
 	raise OSError(errno.EAGAIN, "当日聊天快照正被其他进程写入，等待互斥锁超时", snapshot_path)
 
 
-def _merge_and_write(snapshot_path: str, friends: list[dict[str, Any]]) -> list[dict[str, Any]]:
-	"""调用方必须持有当日快照锁。"""
+def _merge_and_write(
+	snapshot_path: str,
+	friends: list[dict[str, Any]],
+	*,
+	replace: bool = False,
+) -> list[dict[str, Any]]:
+	"""调用方必须持有当日快照锁。
+
+	``replace=True`` 表示本次是完整采集：它就是当天的完整列表，直接替换当日
+	快照。继续与旧内容合并会把当天早些时候见过、现在已消失的联系人留在快照里，
+	同日重跑报不出「已消失」，推迟到次日才报（Issue #1791）。
+	"""
 	# 合并已有的当日快照（解决分页覆盖问题）
 	existing: dict[str, dict[str, Any]] = {}
 	# 只有「当天还没有快照」才从空历史开始。路径元数据读不出来、目录 / FIFO、
 	# 已有文件不可读时上抛 OSError：把它们当成没有历史会让随后的原子写覆盖
 	# 已合并的分页结果，次日 diff 误报联系人消失（Issue #1698）。
 	raw = read_bytes_if_regular(Path(snapshot_path))
-	if raw is not None:
+	if raw is not None and not replace:
 		try:
 			prev_today = json.loads(raw.decode("utf-8"))
 			if isinstance(prev_today, list):
