@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.106 (2026-11-18): local state, config and registry reads are now fail-closed, so permission errors, non-regular files and empty salts are no longer treated as missing state and never overwrite existing history (Issues #1684, #1686, #1688, #1690, #1692, #1694, #1695, #1698, #1699, #1700).
+
 - ✅ v3.4.105 (2026-11-18): stop-latch and state-file path metadata are now fail-closed, so permission errors, dangling links and non-regular files are no longer read as a missing latch or empty state (Issues #1680, #1682).
 
 - ✅ v3.4.104 (2026-11-18): stop-latch reads and explicit recovery now fail closed on path type, so a directory or symlinked `stop.json` can no longer bypass the stop switch or crash mid-resume; CHANGELOG version ordering is covered by a structural test (Issues #1675–#1676, #1678).
