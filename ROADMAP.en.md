@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.120 (2026-11-19): `watch` / `shortlist` follow-up commands prefix `--` before names starting with `-`; stored watches with a blank query report an invalid parameter; a corrupt `tags` row no longer breaks the whole shortlist; `watch run` rejects whitespace-only names (Issues #1797–#1800).
 - ✅ v3.4.119 (2026-11-19): a complete `chat --export` run replaces the day's snapshot so removed contacts are reported on a same-day rerun; Markdown export escapes cells that drift into lists or objects; CSV writes missing values as empty cells and keeps the `-` placeholder; the unread count no longer includes contacts with unknown status (Issues #1791–#1794).
 - ✅ v3.4.118 (2026-11-19): the wizard `crawl_stop` goal rejects finished runs; `stats` / `digest` reject whitespace-only `-o` paths (Issues #1786 #1788).
 - ✅ v3.4.117 (2026-11-19): `ai config --base-url` rejects unparseable hosts and ports; redaction covers passwords embedded in URLs; error objects returned by AI services with HTTP 200 surface their message and recovery advice; `hr greet` recognises quota pages whose flags drift in type; recruiter commands reject blank IDs; `hr jobs` follow-up commands quote job IDs (Issues #1778–#1783).
