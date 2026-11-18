@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.117] - 2026-11-19
+
 ### Fixed
 - `ai config --base-url` 拒绝主机或端口无法解析的地址（如 `http://[::1/v1`、`http://127.0.0.1:abc/v1`），返回 `INVALID_PARAM`，不再在写入时崩成 traceback 或存进配置后让每条 AI 命令崩溃；手工改坏的地址在请求时落成 `AI_API_ERROR` 信封（Issue #1778）。
 - 信封与日志的自由文本脱敏覆盖 URL 的 userinfo 口令：`https://user:password@host` 形态的地址（如带 Basic Auth 的 AI 代理 `ai_base_url`）不再把口令原样回显（Issue #1779）。
