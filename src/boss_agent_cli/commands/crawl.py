@@ -42,7 +42,7 @@ from boss_agent_cli.crawler.controls import (
 from boss_agent_cli.crawler.hooks import HookRegistrationError, verify_hook_profile
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_install_hint, extras_requirement
-from boss_agent_cli.services.json_files import write_json_atomic
+from boss_agent_cli.services.json_files import read_bytes_if_regular, write_json_atomic
 from boss_agent_cli.display import (
 	auth_required_hints,
 	boss_command_for_ctx,
@@ -117,13 +117,15 @@ def _crawl_config(ctx: click.Context) -> dict[str, Any]:
 def _save_crawl_config(data_dir: Path, updates: dict[str, Any]) -> dict[str, Any]:
 	config_path = data_dir / "config.json"
 	user_cfg: dict[str, Any] = {}
-	if config_path.exists():
+	# 路径状态读不出来时上抛，不能带着空配置整文件覆盖（Issue #1695）。
+	raw = read_bytes_if_regular(config_path)
+	if raw is not None:
 		try:
-			loaded = json.loads(config_path.read_text(encoding="utf-8"))
+			loaded = json.loads(raw)
 			if isinstance(loaded, dict):
 				user_cfg = loaded
 		# 超长整数（3.11+）与深嵌套同样按配置损坏降级，不能挡住 crawl 配置写入。
-		except (ValueError, OSError, RecursionError):
+		except (ValueError, RecursionError):
 			pass
 	crawl_cfg = user_cfg.get("crawl", {})
 	if not isinstance(crawl_cfg, dict):

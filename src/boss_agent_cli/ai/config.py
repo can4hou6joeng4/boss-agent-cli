@@ -18,7 +18,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-from boss_agent_cli.services.json_files import write_json_atomic
+from boss_agent_cli.services.json_files import read_bytes_if_regular, write_json_atomic
 from boss_agent_cli.services.private_files import (
 	DIRECTORY_MODE,
 	FILE_MODE,
@@ -250,15 +250,20 @@ class AIConfigStore:
 		write_json_atomic(self._config_path, current)
 
 	def load_config(self) -> dict[str, Any]:
-		"""Load configuration with defaults for missing keys."""
+		"""Load configuration with defaults for missing keys.
+
+		路径状态读不出来时上抛 ``OSError``，不能带着默认值整文件写回并
+		丢掉已保存的 AI 设置（Issue #1695）。
+		"""
 		config = dict(_DEFAULT_CONFIG)
-		if self._config_path.exists():
+		raw = read_bytes_if_regular(self._config_path)
+		if raw is not None:
 			try:
-				saved = json.loads(self._config_path.read_text(encoding="utf-8"))
+				saved = json.loads(raw)
 				if isinstance(saved, dict):
 					config.update(saved)
 			# 超长整数（3.11+）与深嵌套同样按配置损坏处理，不让 AI 配置读取崩在解析上。
-			except (ValueError, OSError, RecursionError):
+			except (ValueError, RecursionError):
 				pass
 		return config
 

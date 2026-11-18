@@ -5,6 +5,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from boss_agent_cli.automation.config import AutomationConfig
+from boss_agent_cli.services.json_files import read_bytes_if_regular
 
 #: 请求间隔默认值。来源：实测评测显示 15 秒间隔连续 3 次 search 会在第 3 次命中
 #: code 37（「您的环境存在异常」），90 秒间隔 3/3 通过
@@ -151,10 +152,11 @@ def validate_request_config(cfg: dict[str, Any]) -> None:
 def load_config(config_path: Path | None) -> dict[str, Any]:
 	cfg = dict(DEFAULTS)
 	user_cfg: dict[str, Any] = {}
-	if config_path and config_path.exists():
-		with open(config_path, encoding="utf-8") as f:
+	if config_path:
+		raw = read_bytes_if_regular(config_path)
+		if raw is not None:
 			try:
-				user_cfg = json.load(f)
+				user_cfg = json.loads(raw)
 			except ValueError as exc:
 				# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError，以及 Python
 				# 3.11+ 对超长整数字面量的位数上限；只有 JSONDecodeError 带行列。
@@ -172,9 +174,9 @@ def load_config(config_path: Path | None) -> dict[str, Any]:
 					f"{config_path} 不是合法 JSON（嵌套层级过深）："
 					"修正该文件或删除它后重试；删除后所有配置回到默认值"
 				) from exc
-		if not isinstance(user_cfg, dict):
-			raise ValueError(f"{config_path} 必须是 JSON 对象")
-		cfg.update(user_cfg)
+			if not isinstance(user_cfg, dict):
+				raise ValueError(f"{config_path} 必须是 JSON 对象")
+			cfg.update(user_cfg)
 	mode = user_cfg.get("operating_mode")
 	# 非字符串容器（[] / {} / ["assisted"]）不可哈希，直接 `not in` 会抛
 	# TypeError：启动期所有命令（含 config reset）都失败，而 "bogus" / 123

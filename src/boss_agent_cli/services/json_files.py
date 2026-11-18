@@ -7,14 +7,47 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import math
 import os
+import stat
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.services.output_path import refuse_symlink_target
+
+
+def path_mode(path: Path) -> int | None:
+	"""仅对缺失路径返回 None；悬空链接保留链接自身的类型（Issue #1695）。"""
+	# 3.14 的 Path.exists() / is_file() 会把权限等 OSError 吞掉并返回 False，
+	# 配置读取会因此把「读不到」当成「文件不存在」并覆盖写回默认值。
+	try:
+		mode = path.lstat().st_mode
+	except FileNotFoundError:
+		return None
+	if stat.S_ISLNK(mode):
+		try:
+			return path.stat().st_mode
+		except FileNotFoundError:
+			pass
+	return mode
+
+
+def read_bytes_if_regular(path: Path) -> bytes | None:
+	"""读取普通文件；缺失返回 None，元数据错误或非普通文件上抛 OSError。
+
+	目录、FIFO / 设备与悬空链接不能直接 ``read_bytes()``：FIFO 会阻塞在打开
+	阶段，目录只会抛裸 ``IsADirectoryError``。调用方据 ``None`` 区分「确实
+	没有配置文件」与「状态未知」，后者禁止整文件覆盖写回（Issue #1695）。
+	"""
+	mode = path_mode(path)
+	if mode is None:
+		return None
+	if not stat.S_ISREG(mode):
+		raise OSError(errno.EINVAL, "路径不是普通文件", str(path))
+	return path.read_bytes()
 
 
 def write_json_atomic(
