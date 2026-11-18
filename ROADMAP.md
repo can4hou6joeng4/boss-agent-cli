@@ -4,6 +4,7 @@
 
 ## 已发布
 
+- ✅ v3.4.111（2026-11-18）：SQLite 打开前统一拒绝符号链接——缓存库、请求节流库、`stats` 与 automation 锁库不再跟随链接写穿数据目录；automation 队列追加对 FIFO / 悬空链接 fail-closed，`agent run` 不再在动作执行后挂死（Issue #1739、#1741、#1743）。
 - ✅ v3.4.110（2026-11-18）：本地路径状态 fail-closed 扩展到 FIFO / 设备族——automation 队列、聊天快照、索引缓存、独占文件锁与 crawl Hook 目录在特殊文件上不再永久阻塞，`hr download-resume` 的 `--output` 也在平台请求前预检（Issue #1726、#1728、#1730、#1732、#1734、#1736）。
 - ✅ v3.4.109（2026-11-18）：本地 SQLite 错误分类与 `-o` 预检覆盖——`stats` 遇到锁冲突 / 磁盘错误不再返回全零报表，`request-budget.sqlite3` 只读 / 磁盘满不再被误判成库损坏并提示删库，`digest` 的 `-o` 在登录与平台请求前预检、`digest` / `stats` / `resume export` 不再把 FIFO / 设备目标原子替换成普通文件（Issue #1718、#1721、#1723）。
 
