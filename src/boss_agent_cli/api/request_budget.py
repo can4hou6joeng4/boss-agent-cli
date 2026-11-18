@@ -11,6 +11,7 @@ import contextvars
 import math
 import os
 import sqlite3
+import stat
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -318,6 +319,19 @@ class RequestBudget:
 		self._check(check)
 		self.root.mkdir(parents=True, exist_ok=True)
 		path = self.root / "request-budget.lease"
+		# 租约文件与 SQLite 库一样属于本地调度元数据：符号链接会让锁落到数据目录
+		# 之外的目标，悬空链接会在目标处建文件，FIFO 会在 open("a+b") 永久阻塞
+		# （Issue #1753）。与 services/file_lock 的锁文件同口径，直接 lstat。
+		try:
+			mode = path.lstat().st_mode
+		except FileNotFoundError:
+			mode = None
+		except (OSError, ValueError) as exc:
+			raise sqlite3.OperationalError(f"无法读取请求租约文件 {path} 的路径状态（{exc}）") from exc
+		if mode is not None and stat.S_ISLNK(mode):
+			raise sqlite3.OperationalError(f"{path} 是符号链接，请求租约拒绝写穿链接目标")
+		if mode is not None and not stat.S_ISREG(mode):
+			raise sqlite3.OperationalError(f"{path} 不是普通文件（FIFO / 目录 / 设备），请求租约拒绝打开")
 		with path.open("a+b") as handle:
 			if path.stat().st_size == 0:
 				handle.write(b"\0")

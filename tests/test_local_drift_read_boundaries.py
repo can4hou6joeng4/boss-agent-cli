@@ -11,7 +11,9 @@
 """
 
 import io
+import os
 import sqlite3
+import stat
 import time
 
 import pytest
@@ -366,3 +368,61 @@ def test_sqlite_returns_text_for_drifted_real_column(tmp_path):
 	db.execute("INSERT INTO t (v) VALUES ('yesterday')")
 	assert db.execute("SELECT v FROM t").fetchone()[0] == "yesterday"
 	db.close()
+
+
+# ── 请求租约路径类型（Issue #1753） ────────────────────────────────
+
+
+def _lease_path(tmp_path):
+	root = tmp_path / "budget"
+	root.mkdir(exist_ok=True)
+	return root / "request-budget.lease"
+
+
+def test_request_budget_lease_refuses_symlink_without_touching_target(tmp_path):
+	lease = _lease_path(tmp_path)
+	target = tmp_path / "outside.lease"
+	target.write_bytes(b"keep")
+	try:
+		lease.symlink_to(target)
+	except (OSError, NotImplementedError):
+		pytest.skip("当前文件系统不支持符号链接")
+
+	budget = RequestBudget(tmp_path, interval=0.0, wait_timeout=1.0, root=lease.parent)
+	with pytest.raises(sqlite3.DatabaseError) as exc_info:
+		with budget.attempt("test"):
+			pass
+
+	assert "符号链接" in str(exc_info.value)
+	assert lease.is_symlink()
+	assert target.read_bytes() == b"keep"
+
+
+def test_request_budget_lease_refuses_dangling_symlink_without_creating_target(tmp_path):
+	lease = _lease_path(tmp_path)
+	target = tmp_path / "missing.lease"
+	try:
+		lease.symlink_to(target)
+	except (OSError, NotImplementedError):
+		pytest.skip("当前文件系统不支持符号链接")
+
+	budget = RequestBudget(tmp_path, interval=0.0, wait_timeout=1.0, root=lease.parent)
+	with pytest.raises(sqlite3.DatabaseError):
+		with budget.attempt("test"):
+			pass
+
+	assert not target.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows 没有 POSIX FIFO")
+def test_request_budget_lease_refuses_fifo_without_blocking(tmp_path):
+	lease = _lease_path(tmp_path)
+	os.mkfifo(lease)
+	budget = RequestBudget(tmp_path, interval=0.0, wait_timeout=1.0, root=lease.parent)
+
+	with pytest.raises(sqlite3.DatabaseError) as exc_info:
+		with budget.attempt("test"):
+			pass
+
+	assert "不是普通文件" in str(exc_info.value)
+	assert stat.S_ISFIFO(lease.lstat().st_mode)
