@@ -134,7 +134,16 @@ class AutomationStore:
 			self._set_stop(reason)
 
 	def _set_stop(self, reason: str) -> None:
-		self._write_json_atomic(self.stop_path, {
+		path = self.stop_path
+		try:
+			mode = _path_mode(path)
+		except (OSError, ValueError) as exc:
+			raise AutomationStateError(path, f"无法读取 stop.json 的路径状态（{exc}）") from exc
+		# 目录 / 指向目录的符号链接无法通过 os.replace 写入，先报状态损坏（Issue #1684）。
+		# 悬空链接本身可以被原子替换，仍允许写入。
+		if mode is not None and not (stat.S_ISREG(mode) or stat.S_ISLNK(mode)):
+			raise AutomationStateError(path, "stop.json 不是普通文件，请先检查该路径后重试")
+		self._write_json_atomic(path, {
 			"open": True,
 			"reason": reason,
 			"opened_at": datetime.now(timezone.utc).isoformat(),

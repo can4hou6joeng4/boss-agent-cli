@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `agent stop` 在 `automation/stop.json` 被目录或指向目录的符号链接占用时，不再落到泛化的 `LOCAL_IO_ERROR`；写入前按 `AUTOMATION_STATE_INVALID` 报出实际路径，悬空符号链接仍可写入（Issue #1684）。
+
 ## [3.4.105] - 2026-11-18
 
 ### Fixed
