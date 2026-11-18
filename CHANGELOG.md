@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.106] - 2026-11-18
+
 ### Fixed
 - `append_interview_lead()` 在 `interview-leads.csv` 的路径状态读取失败时会把它当成新文件并写入表头，截断已有面试线索记录；现在只有 `FileNotFoundError` 才创建表头，目录、FIFO、悬空链接与不可读文件都按 `AUTOMATION_STATE_INVALID` 失败且不改动历史数据（Issue #1694）。
 - 聊天快照在当天快照路径元数据不可读、被目录 / FIFO / 悬空链接占用或已有文件不可读时，不再把它当成「今天还没有快照」并用当前页覆盖已合并的分页结果；只有 `FileNotFoundError` 才从空历史开始，坏 JSON 仍按无历史处理（Issue #1698）。
