@@ -8,6 +8,7 @@ from boss_agent_cli.api.models import dict_items, field_list
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.text_files import write_text_atomic
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
@@ -107,6 +108,15 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 		)
 		ctx.exit(1)
 		return
+	# 与 export / chat 同口径：-o 指向目录 / FIFO / 设备 / 悬空链接时必须在
+	# 登录与平台请求之前拒绝。否则 digest 会先翻沟通列表、取面试数据，把请求
+	# 预算花在一个注定写不出去的目标上（Issue #1723）。
+	if output_path is not None:
+		validated = validate_output_path_or_emit(ctx, "digest", output_path)
+		if validated is None:
+			ctx.exit(1)
+			return
+		output_path = Path(validated)
 
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

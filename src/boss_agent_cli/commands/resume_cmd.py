@@ -18,6 +18,7 @@ from boss_agent_cli.display import (
 	render_record_result,
 	shell_argument,
 )
+from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 from boss_agent_cli.output import is_local_io_error
 from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, resume_to_dict
 from boss_agent_cli.resume.store import ResumeAlreadyExistsError, ResumeImportError, ResumeStore, _safe_filename
@@ -448,6 +449,14 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 		)
 		ctx.exit(1)
 		return
+	# 显式 -o 先过统一预检：目录 / FIFO / 设备 / 悬空链接按参数错误拒绝，
+	# 避免 write_text_atomic 的 os.replace 把特殊文件替换成普通文件（Issue #1723）。
+	if output_path is not None:
+		validated = validate_output_path_or_emit(ctx, "resume", output_path)
+		if validated is None:
+			ctx.exit(1)
+			return
+		output_path = validated
 	# 文件存在但读不出来（手写坏、字段类型写错）与「不存在」走同一个契约：
 	# 其它子命令都是这样。json 导出若交给 export_json 内部的 FileNotFoundError，
 	# 会被顶层 OSError 网兜报成 LOCAL_IO_ERROR「本地文件读写失败」，指引用户去查
