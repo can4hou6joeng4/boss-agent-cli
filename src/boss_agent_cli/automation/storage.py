@@ -123,6 +123,16 @@ class AutomationStore:
 	def resume(self) -> bool:
 		"""Explicit operator recovery; retain every confirmed business checkpoint."""
 		with self._control_lock():
+			# 解除标记通过 os.replace 落到 stop.json。目录 / 指向目录的符号链接 /
+			# FIFO / 设备等非普通路径无法被原子替换：先写 state.json 再写 stop.json
+			# 会在中途抛 IsADirectoryError，命令层只得到 LOCAL_IO_ERROR 的泛化指引，
+			# 而且 state.json 已被改成 closed（Issue #1678）。悬空符号链接本身可以
+			# 被 os.replace 直接替换，仍允许恢复。
+			if self.stop_path.exists() and not self.stop_path.is_file():
+				raise AutomationStateError(
+					self.stop_path,
+					"stop.json 不是普通文件，无法写入解除标记；请先修正或移除该路径后重试",
+				)
 			state = self.read_state()
 			if not state.get("autonomy", {}).get("circuit_breaker", {}).get("open"):
 				return False

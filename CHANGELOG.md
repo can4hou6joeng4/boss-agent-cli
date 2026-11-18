@@ -7,6 +7,7 @@
 ### Fixed
 - `automation/stop.json` 为目录、指向目录的符号链接或悬空链接时，`read_stop()` 已按熔断 fail-closed，但 `hr location` 的 `is_file()` 预检把它当成「没有停止开关」，仍会预览 / 发送工作地点；现在两个读取器同口径拦截（Issue #1675）。
 - `CHANGELOG.md` 的 `[3.4.92]` 段落在 3.4.92 发版时被留在 `[Unreleased]` 上方，版本顺序倒置；现在移回 3.4.93 与 3.4.91 之间，并新增结构测试（Issue #1676）。
+- `agent run --resume` 在 `stop.json` 为目录或指向目录的符号链接时先改写 `state.json`、再抛 `IsADirectoryError`，最终只得到泛化的 `LOCAL_IO_ERROR`；现在写任何状态前按 `AUTOMATION_STATE_INVALID` 报出实际路径，悬空符号链接仍可恢复（Issue #1678）。
 
 ## [3.4.103] - 2026-11-18
 
