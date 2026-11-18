@@ -1,4 +1,5 @@
 import json
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,7 @@ from boss_agent_cli.output import is_local_io_error
 from boss_agent_cli.resume.models import ResumeData, PersonalInfoSection, resume_to_dict
 from boss_agent_cli.resume.store import ResumeAlreadyExistsError, ResumeImportError, ResumeStore, _safe_filename
 from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
+from boss_agent_cli.services.json_files import path_mode
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.text_files import write_text_atomic
 
@@ -520,7 +522,30 @@ def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 		ctx.exit(1)
 		return
 	path = Path(file_path)
-	if path.is_dir():
+	try:
+		mode = path_mode(path)
+	# 元数据读不出来时不能报「不存在」：权限 / 文件系统错误会被伪装成参数错误。
+	except OSError as exc:
+		handle_error_output(
+			ctx, "resume",
+			code="LOCAL_IO_ERROR",
+			message=f"读取文件 '{file_path}' 的路径状态失败: {exc}",
+			recovery_action=_hint_command(ctx, "resume import <简历JSON路径>"),
+			hints={"next_actions": [_hint_command(ctx, "resume import <file>"), _hint_command(ctx, "resume list")]},
+		)
+		ctx.exit(1)
+		return
+	if mode is None:
+		handle_error_output(
+			ctx, "resume",
+			code="INVALID_PARAM",
+			message=f"文件 '{file_path}' 不存在",
+			recovery_action=_hint_command(ctx, "resume import <简历JSON路径>"),
+			hints={"next_actions": [_hint_command(ctx, "resume import <file>"), _hint_command(ctx, "resume list")]},
+		)
+		ctx.exit(1)
+		return
+	if stat.S_ISDIR(mode):
 		handle_error_output(
 			ctx, "resume",
 			code="INVALID_PARAM",
@@ -530,11 +555,12 @@ def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 		)
 		ctx.exit(1)
 		return
-	if not path.exists():
+	# FIFO / 设备 / 悬空链接不能直接 read_text：前者会永久阻塞，后两者没有内容。
+	if not stat.S_ISREG(mode):
 		handle_error_output(
 			ctx, "resume",
 			code="INVALID_PARAM",
-			message=f"文件 '{file_path}' 不存在",
+			message=f"文件 '{file_path}' 不是普通文件，无法作为简历 JSON 导入",
 			recovery_action=_hint_command(ctx, "resume import <简历JSON路径>"),
 			hints={"next_actions": [_hint_command(ctx, "resume import <file>"), _hint_command(ctx, "resume list")]},
 		)
