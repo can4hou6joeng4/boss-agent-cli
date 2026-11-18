@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.109 (2026-11-18): local SQLite error classification and wider `-o` preflight coverage — `stats` no longer returns an all-zero report on cache locks or disk errors, `request-budget.sqlite3` read-only/disk-full failures are no longer misreported as corruption with delete-the-database advice, and `digest` validates `-o` before login and platform requests while `digest` / `stats` / `resume export` no longer atomically replace FIFO or device targets (Issues #1718, #1721, #1723).
+
 - ✅ v3.4.108 (2026-11-18): non-privacy `clean`, `ai @file`, `resume import`, `stats` and `-o` preflight now fail closed on path state, so unreadable metadata and non-regular files are no longer skipped silently, reported as success, or read as blocking streams (Issues #1712, #1714, #1716).
 
 - ✅ v3.4.107 (2026-11-18): model re-imports copy to a staging path and replace atomically, corrupt AI config is never overwritten by defaults, and unreadable session/key ciphertext is reported as a local IO error instead of a logged-out state (Issues #1705, #1706, #1709).
