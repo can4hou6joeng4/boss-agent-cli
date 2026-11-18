@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.108 (2026-11-18): non-privacy `clean`, `ai @file`, `resume import`, `stats` and `-o` preflight now fail closed on path state, so unreadable metadata and non-regular files are no longer skipped silently, reported as success, or read as blocking streams (Issues #1712, #1714, #1716).
+
 - ✅ v3.4.107 (2026-11-18): model re-imports copy to a staging path and replace atomically, corrupt AI config is never overwritten by defaults, and unreadable session/key ciphertext is reported as a local IO error instead of a logged-out state (Issues #1705, #1706, #1709).
 
 - ✅ v3.4.106 (2026-11-18): local state, config and registry reads are now fail-closed, so permission errors, non-regular files and empty salts are no longer treated as missing state and never overwrite existing history (Issues #1684, #1686, #1688, #1690, #1692, #1694, #1695, #1698, #1699, #1700).
