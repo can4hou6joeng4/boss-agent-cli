@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import os
 import re
+import stat
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -78,6 +79,25 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 		# NotADirectoryError 会原样上抛，被 _run 兜成 ok:true 的 stopped 并提示
 		# resume（Issue #1409）。
 		output_dir.mkdir(parents=True, exist_ok=True)
+		# 产物目标直接 lstat：is_file() 会跟随符号链接，把链接移到备份再删掉，
+		# 静默破坏用户的链接布局；FIFO / 设备则会被 os.replace 替换掉（Issue #1755）。
+		# 输出目录本身是链接时也会让三份产物落到数据目录之外。
+		_dir_mode = output_dir.lstat().st_mode
+		if not stat.S_ISDIR(_dir_mode):
+			raise CrawlExportError(f"采集结果目录 {output_dir} 不是普通目录（符号链接或特殊文件）")
+		for target in (json_path, csv_path, xlsx_path):
+			try:
+				mode = target.lstat().st_mode
+			except FileNotFoundError:
+				continue
+			if stat.S_ISLNK(mode):
+				raise CrawlExportError(f"采集产物 {target} 是符号链接，拒绝替换链接或写穿目标")
+			if stat.S_ISDIR(mode):
+				# 同名目录留给下面的 os.replace 抛 IsADirectoryError：保留既有
+				# 回滚与临时文件清理契约（Issue #1616）。
+				continue
+			if not stat.S_ISREG(mode):
+				raise CrawlExportError(f"采集产物 {target} 不是普通文件（FIFO / 设备），拒绝替换")
 		json_tmp = _temporary_for(json_path)
 		temporaries.append(json_tmp)
 		with json_tmp.open("w", encoding="utf-8", errors="backslashreplace") as file:
