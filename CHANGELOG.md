@@ -4,8 +4,6 @@
 
 ## [Unreleased]
 
-## [3.4.119] - 2026-11-19
-
 ### Fixed
 - `watch` / `shortlist` 的后继命令对以 `-` 开头的名字前置 `--`，照抄提示不再报「没有选项」（Issue #1797）。
 - 存量 watch 的 `query` 缺失或为 null 时 `watch run` 返回 `SAVED_SEARCH_INVALID`，不再把 `None` / 空串当关键词发给平台并报成功（Issue #1798）。
