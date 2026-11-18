@@ -146,10 +146,20 @@ def _merge_and_write(snapshot_path: str, friends: list[dict[str, Any]]) -> list[
 
 def load_snapshot(path: str, logger: Logger) -> list[dict[str, Any]] | None:
 	"""加载并校验快照文件，返回 None 表示不可用。"""
+	# 快照目录里的 FIFO / 设备直接 open() 会永久阻塞（Issue #1730）：与当天
+	# 快照（#1698）同口径先按 lstat 判定类型。上一份快照只影响 diff 精度、
+	# 不会被写回，所以这里沿用「警告并当作没有历史」的既有容错。
 	try:
-		with open(path, encoding="utf-8") as f:
-			data = json.load(f)
-	except (ValueError, OSError, RecursionError):
+		raw = read_bytes_if_regular(Path(path))
+	except OSError:
+		logger.warning(f"无法读取快照: {path}")
+		return None
+	if raw is None:
+		logger.warning(f"无法读取快照: {path}")
+		return None
+	try:
+		data = json.loads(raw.decode("utf-8"))
+	except (ValueError, RecursionError):
 		logger.warning(f"无法读取快照: {path}")
 		return None
 
