@@ -52,7 +52,7 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 	# 不读缓存库，不能因为无关的坏库而清不掉锁（Issue #1548）。其余模式由
 	# _clean_search_cache 打开库时按同一口径报错。
 	db_path = data_dir / "cache" / "boss_agent.db"
-	if privacy and db_path.exists():
+	if privacy and _cache_db_present(db_path):
 		_open_cache_db(db_path).close()
 
 	# 隐私清理的只读预检必须发生在任何删除之前：否则登录态先被删掉，随后
@@ -265,6 +265,28 @@ def _human_bytes(value: int) -> str:
 			return f"{int(size)} {unit}" if unit == "B" else f"{size:.1f} {unit}"
 		size /= 1024
 	return f"{size:.1f} GB"
+
+
+def _cache_db_present(db_path: Path) -> bool:
+	"""缓存库是否存在；只有 ``FileNotFoundError`` 才算不存在。
+
+	3.14 的 ``Path.exists()`` 会把权限等 ``OSError`` 吞成 ``False``。隐私预检
+	若据此跳过，后续会先删掉登录态与简历，再把数据库当成不存在静默返回 0
+	（Issue #1690）。路径状态读不出来时上抛本地 IO 错误，禁止继续删除。
+	"""
+	try:
+		db_path.lstat()
+	except FileNotFoundError:
+		return False
+	except OSError as exc:
+		if exc.filename is None:
+			exc.filename = str(db_path)
+		raise
+	except ValueError as exc:
+		error = OSError(f"无法读取缓存库路径状态：{exc}")
+		error.filename = str(db_path)
+		raise error from exc
+	return True
 
 
 def _open_cache_db(db_path: Path) -> sqlite3.Connection:
