@@ -12,6 +12,8 @@
 
 ## [Unreleased]
 
+## [3.4.101] - 2026-11-18
+
 ### Fixed
 - 自由文本脱敏依赖英文单词边界，中文紧邻的 `token` / `stoken` / `api_key` 会原样进入错误信封与日志；现在按 ASCII 键边界匹配（Issue #1662）。
 - `Authorization: Basic/Token/Digest` 只脱敏方案名、留下真实密钥；现在所有方案整段脱敏（Issue #1663）。
