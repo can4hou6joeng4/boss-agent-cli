@@ -359,13 +359,16 @@ class RequestBudget:
 				);
 			""")
 		except sqlite3.DatabaseError as exc:
-			# 锁冲突保持原有语义（等锁释放即可）；其余是文件损坏 / 被同名目录
-			# 占位，属于确定性本地失败。带上路径与自愈方式，命令层统一报
-			# LOCAL_IO_ERROR，而不是 NETWORK_ERROR +「重试」让 Agent 反复打平台
-			# （Issue #1336）。
-			if isinstance(exc, sqlite3.OperationalError) and any(
-				word in str(exc).lower() for word in ("locked", "busy")
-			):
+			# 锁冲突保持原有语义（等锁释放即可）；本地文件 / 磁盘错误——只读库、
+			# 只读目录、磁盘满、设备 I/O 故障——与库内容无关，删库既修不好又会
+			# 丢掉冷却时间与节流历史，必须保留原始 OperationalError，让命令层
+			# 报 LOCAL_IO_ERROR 的通用指引（Issue #1721，与 #1467/#1718 同口径）。
+			# 其余才是文件损坏 / 被同名目录占位：带上路径与自愈方式，命令层统一
+			# 报 LOCAL_IO_ERROR，而不是 NETWORK_ERROR +「重试」让 Agent 反复打
+			# 平台（Issue #1336）。
+			from boss_agent_cli.cache.store import is_cache_busy_error, is_cache_local_io_error
+
+			if is_cache_busy_error(exc) or is_cache_local_io_error(exc):
 				raise
 			raise sqlite3.DatabaseError(
 				f"{path} 不是可用的 SQLite 数据库（{exc}）；"

@@ -6,6 +6,7 @@
 
 ### Fixed
 - `stats` 把缓存库每次查询的 `sqlite3.OperationalError` 都吞成全零计数：遇到其他进程持有排他锁时返回 `ok:true` 的空漏斗，遇到磁盘 I/O 错误时报表不完整。现在只有旧库缺表返回 0；锁冲突报 `CACHE_BUSY`、磁盘与只读错误报 `LOCAL_IO_ERROR`，其余才按缓存库损坏处理（Issue #1718）。
+- `request-budget.sqlite3` 的只读库 / 只读目录 / 磁盘满 / 设备 I/O 错误不再被误判成「库损坏」并提示备份删除：这些失败与库内容无关，删库既修不好又会丢掉冷却时间与节流历史；现在保留原始 `OperationalError`，由命令层给出 `LOCAL_IO_ERROR` 通用指引，只有真正无法解析的库才提示删除重建（Issue #1721）。
 
 ## [3.4.108] - 2026-11-18
 
