@@ -75,6 +75,9 @@ def sanitize_csv_cell(value: str) -> str:
 	if not isinstance(value, str):
 		return str(value)
 	value = value.replace("\t", " ").replace("\r", "")
+	# 单独一个 ``-`` 是导出里的缺失占位符，不是公式（Issue #1793）。
+	if value == "-":
+		return value
 	if value and value[0] in ("=", "+", "-", "@"):
 		return f"'{value}"
 	return value
@@ -90,7 +93,9 @@ def escape_md_cell(value: str) -> str:
 	叠加成双重转义。正常文本不受影响：Markdown 里转义字符渲染成原字符。
 	"""
 	if not isinstance(value, str):
-		return str(value)
+		# 平台把字段漂移成列表 / 对象时，其文本表示同样带 ``|`` 与链接语法：
+		# 先转成字符串再走同一套转义（Issue #1792）。
+		value = str(value)
 	value = value.replace("\n", " ").replace("\r", "")
 	value = value.replace("\\", "\\\\")
 	return value.replace("|", "\\|").replace("[", "\\[").replace("]", "\\]").replace("<", "\\<")

@@ -321,7 +321,7 @@ def test_same_day_merge_not_overwrite(tmp_path):
 
 	# 第二页数据
 	second_page = _make_items(("李四", "sid_b", 1))
-	save_snapshot_and_diff(snapshot_dir, second_page, _make_logger())
+	save_snapshot_and_diff(snapshot_dir, second_page, _make_logger(), complete=False)
 
 	with open(os.path.join(snapshot_dir, f"{today}.json"), encoding="utf-8") as f:
 		merged = json.load(f)
