@@ -366,7 +366,7 @@ boss --platform zhipin config set platform zhipin
 
 | 配置项 | 默认值 | 含义 |
 | --- | --- | --- |
-| `request_delay` | `[1.5, 3.0]` | 实例内间隔范围；高斯采样限制在该范围，额外停顿仍可能延长间隔 |
+| `request_delay` | `[30.0, 60.0]` | 实例内间隔范围；高斯采样限制在该范围，额外停顿仍可能延长间隔 |
 | `request_max_per_minute` | `20` | 共享滑动 60 秒窗口内的主动操作上限，必须为正整数 |
 | `request_wait_timeout` | `30.0` | 每次申请执行锁、节流、预算和冷却的总等待上限（秒）；workflow 截止时间更早时优先停止 |
 | `request_budget_dir` | `null` | 默认使用当前 `data_dir`；绝对路径可将多个数据目录显式加入同一预算组 |

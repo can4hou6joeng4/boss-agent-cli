@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from boss_agent_cli.api import cdp_risk_lock
+from boss_agent_cli.api.models import field_text
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.request_budget import (
 	RequestBudget,
@@ -976,10 +977,10 @@ class CrawlService:
 				card = self._with_retry(fetch_detail, max_retries=settings.max_retries)
 				row.update(
 					{
-						"post_description": card.get("postDescription", ""),
-						"address": card.get("address", ""),
-						"boss_name": card.get("bossName", ""),
-						"boss_title": card.get("bossTitle", ""),
+						"post_description": field_text(card, "postDescription"),
+						"address": field_text(card, "address"),
+						"boss_name": field_text(card, "bossName"),
+						"boss_title": field_text(card, "bossTitle"),
 						"detail_status": "fetched",
 					}
 				)
@@ -1091,7 +1092,7 @@ class CrawlService:
 def _normalize_job(raw: dict[str, Any], query: str, page_no: int, rank: int) -> tuple[str, dict[str, Any]]:
 	job_id = str(raw.get("encryptJobId") or "")
 	security_id = str(raw.get("securityId") or "")
-	job_key = job_id or security_id or f"{page_no}:{rank}:{raw.get('jobName', '')}"
+	job_key = job_id or security_id or f"{page_no}:{rank}:{field_text(raw, 'jobName')}"
 	labels = raw.get("jobLabels", [])
 	benefits = raw.get("welfareList", [])
 	return job_key, {
@@ -1101,22 +1102,22 @@ def _normalize_job(raw: dict[str, Any], query: str, page_no: int, rank: int) -> 
 		"job_id": job_id,
 		"security_id": security_id,
 		"lid": str(raw.get("lid") or ""),
-		"title": raw.get("jobName", ""),
-		"salary": raw.get("salaryDesc", ""),
-		"city": raw.get("cityName", ""),
-		"district": raw.get("areaDistrict", ""),
-		"business_district": raw.get("businessDistrict", ""),
-		"company": raw.get("brandName", ""),
-		"company_scale": raw.get("brandScaleName", ""),
-		"industry": raw.get("brandIndustry", ""),
-		"education": raw.get("jobDegree", ""),
-		"experience": raw.get("jobExperience", ""),
+		"title": field_text(raw, "jobName"),
+		"salary": field_text(raw, "salaryDesc"),
+		"city": field_text(raw, "cityName"),
+		"district": field_text(raw, "areaDistrict"),
+		"business_district": field_text(raw, "businessDistrict"),
+		"company": field_text(raw, "brandName"),
+		"company_scale": field_text(raw, "brandScaleName"),
+		"industry": field_text(raw, "brandIndustry"),
+		"education": field_text(raw, "jobDegree"),
+		"experience": field_text(raw, "jobExperience"),
 		"labels": "、".join(str(item) for item in labels) if isinstance(labels, list) else str(labels or ""),
 		"benefits": "、".join(str(item) for item in benefits) if isinstance(benefits, list) else str(benefits or ""),
 		"post_description": "",
 		"address": "",
-		"boss_name": raw.get("bossName", ""),
-		"boss_title": raw.get("bossTitle", ""),
+		"boss_name": field_text(raw, "bossName"),
+		"boss_title": field_text(raw, "bossTitle"),
 		"detail_status": "not_requested",
 	}
 

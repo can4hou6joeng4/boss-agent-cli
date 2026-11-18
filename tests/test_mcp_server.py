@@ -673,10 +673,11 @@ def test_call_tool_rejects_unknown_tool_name(monkeypatch):
 	assert "tools/list" in payload["error"]["message"]
 
 
-def test_search_tool_requires_query():
-	"""搜索工具应要求 query 参数。"""
+def test_search_tool_requires_query_or_alternative_source():
+	"""query / url / preset 至少给一个（Issue #1648）。"""
 	search = next(t for t in TOOLS if t.name == "boss_search")
-	assert "query" in search.input_schema.get("required", [])
+	alternatives = {item["required"][0] for item in search.input_schema.get("anyOf", [])}
+	assert {"query", "url", "preset"} <= alternatives
 
 
 def test_all_implemented_tools_are_exposed():

@@ -201,7 +201,13 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return args
 
 	if name == "search":
-		args = [name, arguments["query"]]
+		# query / url / preset 至少一个；没有 query 时先放占位，最后按 CLI 的
+		# 位置参数语义清理，避免把 --url 误当成关键词（Issue #1648）。
+		args = [name]
+		if arguments.get("query") is not None:
+			args.append(str(arguments["query"]))
+		_optional(args, "--url", "url", arguments)
+		_optional(args, "--preset", "preset", arguments)
 		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "welfare", "active"):
 			_optional(args, f"--{opt}", opt, arguments)
 		_optional(args, "--job-type", "job_type", arguments)
@@ -212,7 +218,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		if arguments.get("with_score"):
 			args.append("--with-score")
 		_optional(args, "--sort", "sort", arguments)
-		return _literal_positionals(args)
+		return _literal_positionals(args, count=1 if arguments.get("query") is not None else 0)
 
 	if name == "crawl_status":
 		return _literal_positionals(["crawl", "status", str(arguments["run_id"])], start=2)

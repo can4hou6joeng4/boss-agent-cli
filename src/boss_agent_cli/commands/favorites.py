@@ -251,7 +251,7 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 				("company", "company", "green"),
 				("city", "city", "yellow"),
 				("salary", "salary", "dim"),
-				("job_status", "status", "magenta"),
+				("job_status", "job_status", "magenta"),
 				("source", "source", "magenta"),
 			],
 		),

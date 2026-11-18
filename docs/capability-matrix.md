@@ -26,7 +26,7 @@
 | 个性化推荐 | `boss recommend` | 是 | 平台适配器 |
 | 职位详情 | `boss detail` | 是 | httpx 优先，降级浏览器 |
 | 按编号查看 | `boss show` | 否 | 本地缓存 |
-| 城市列表 | `boss cities` | 否 | httpx |
+| 城市列表 | `boss cities` | 否 | 本地 |
 | 浏览历史 | `boss history` | 是 | httpx |
 
 ## 求职动作
@@ -59,7 +59,7 @@
 | 增量监控 | `boss watch run` | 是 | 平台读取 + 本地状态；add/list/remove 为本地 |
 | 搜索预设 | `boss preset` | 否 | 本地 |
 | 候选池 | `boss shortlist` | 否 | 本地 |
-| 候选池（显示收藏有效状态，仅同步有效项） | `boss favorites` | 否 | 平台只读 + 本地 |
+| 候选池（显示收藏有效状态，仅同步有效项） | `boss favorites` | 是 | 平台只读 + 本地 |
 
 ## 用户信息
 
