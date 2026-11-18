@@ -73,6 +73,16 @@ def ai_int_setting(config: dict[str, Any], key: str, default: int, *, minimum: i
 	return value
 
 
+class AIConfigInvalidError(ValueError):
+	"""AI 配置文件损坏，写入方不得用默认值覆盖（Issue #1706）。"""
+
+	def __init__(self, path: Path, detail: str) -> None:
+		super().__init__(
+			f"{path} 无法作为 AI 配置读取（{detail}）；请备份并修正或删除该文件后重试"
+		)
+		self.path = path
+
+
 class AIConfigValueError(ValueError):
 	"""AI 本地配置项类型或取值错误（Issue #1428）。
 
@@ -244,10 +254,30 @@ class AIConfigStore:
 			pass
 
 	def save_config(self, **kwargs: Any) -> None:
-		"""Save configuration, merging with existing values."""
-		current = self.load_config()
+		"""Save configuration, merging with existing values.
+
+		只有配置文件确实不存在才从默认值开始；JSON 损坏或顶层非对象时拒绝
+		写入，避免用「默认值 + 本次参数」清空其他设置（Issue #1706）。
+		"""
+		current = self._load_config_for_write()
 		current.update(kwargs)
 		write_json_atomic(self._config_path, current)
+
+	def _load_config_for_write(self) -> dict[str, Any]:
+		"""写入前严格读取；与只读接口的容错降级分开。"""
+		config = dict(_DEFAULT_CONFIG)
+		raw = read_bytes_if_regular(self._config_path)
+		if raw is None:
+			return config
+		try:
+			saved = json.loads(raw)
+		# 超长整数（3.11+）与深嵌套同样按配置损坏处理，不能继续覆盖写回。
+		except (ValueError, RecursionError) as exc:
+			raise AIConfigInvalidError(self._config_path, f"JSON 无法解析：{exc}") from exc
+		if not isinstance(saved, dict):
+			raise AIConfigInvalidError(self._config_path, "顶层必须是 JSON object")
+		config.update(saved)
+		return config
 
 	def load_config(self) -> dict[str, Any]:
 		"""Load configuration with defaults for missing keys.

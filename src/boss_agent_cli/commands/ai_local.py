@@ -10,6 +10,7 @@ from pathlib import Path
 import click
 
 from boss_agent_cli.ai.config import (
+	AIConfigInvalidError,
 	AIConfigValueError,
 	AIConfigStore,
 	ai_int_setting,
@@ -169,13 +170,26 @@ def local_configure_cmd(ctx: click.Context, runtime: str, model: str, base_url: 
 			ctx.exit(1)
 			return
 	store = AIConfigStore(ctx.obj["data_dir"])
-	store.save_config(
-		ai_provider=runtime,
-		ai_model=model,
-		ai_base_url=base_url if base_url is not None else RUNTIME_BASE_URLS[runtime],
-		ai_temperature=0.3,
-		ai_max_tokens=512,
-	)
+	try:
+		store.save_config(
+			ai_provider=runtime,
+			ai_model=model,
+			ai_base_url=base_url if base_url is not None else RUNTIME_BASE_URLS[runtime],
+			ai_temperature=0.3,
+			ai_max_tokens=512,
+		)
+	except AIConfigInvalidError as exc:
+		# 坏文件时不能用默认值整文件覆盖，否则其他 AI 设置全部丢失（Issue #1706）。
+		handle_error_output(
+			ctx,
+			"ai.local.configure",
+			code="CONFIG_INVALID",
+			message=str(exc),
+			recoverable=True,
+			recovery_action=f"备份并修正或删除 {exc.path} 后重试",
+		)
+		ctx.exit(1)
+		return
 	store.save_api_key("local")
 	handle_output(
 		ctx,
