@@ -17,6 +17,7 @@ from boss_agent_cli.display import (
 	render_export_summary,
 	render_job_table,
 )
+from boss_agent_cli.services.job_identity import deduplicate_job_result
 from boss_agent_cli.services.job_export import (
 	prepare_export_items,
 	public_html_export_item_from_api,
@@ -204,6 +205,7 @@ def export_cmd(
 		html_items: list[dict[str, Any]] = []
 		html_mode = fmt == "html"
 		collected = html_items if html_mode else all_items
+		seen_job_ids: set[str] = set()
 		page = 1
 		# 本地严格筛选可能剔除整页结果，额外扫描固定页数；上限仍由用户
 		# 显式请求的 count 决定，避免 hasMore 异常时形成无界请求。
@@ -247,7 +249,7 @@ def export_cmd(
 				stop_reason = "empty_page"
 				break
 
-			for raw_item in job_list:
+			for raw_item in deduplicate_job_result(job_list, seen_job_ids=seen_job_ids):
 				if len(collected) >= count:
 					break
 				matches, _ = prefilter_platform_job_type(raw_item, criteria, platform_name=platform.name)

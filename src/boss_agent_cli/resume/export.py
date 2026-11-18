@@ -51,6 +51,9 @@ def export_pdf(resume: ResumeData, output_path: Path) -> Path:
 			browser = p.chromium.launch(headless=True)
 			try:
 				page = browser.new_page()
+				# 导入简历只应渲染本地内容：阻断任何非 data: 的外部请求，避免
+				# PDF 导出成为可被导入文件触发的出网 / SSRF 通道（Issue #1659）。
+				page.route("**/*", lambda route: route.continue_() if route.request.url.startswith("data:") else route.abort())
 				page.set_content(html, wait_until="networkidle")
 				page.pdf(
 					path=str(temporary),

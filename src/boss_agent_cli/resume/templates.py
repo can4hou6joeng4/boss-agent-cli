@@ -6,6 +6,7 @@ optimized for A4 printing and PDF export.
 
 import html
 from typing import Any
+from urllib.parse import urlsplit
 
 from boss_agent_cli.resume.models import ResumeData
 
@@ -17,6 +18,21 @@ def _esc(text: str | None) -> str:
 	return html.escape(str(text))
 
 
+def _safe_link(value: str | None, *, avatar: bool = False) -> str:
+	"""Only emit link schemes that cannot turn a local export into a network call."""
+	if not value:
+		return ""
+	text = str(value).strip()
+	if avatar:
+		# 头像必须内嵌：外部 URL 会在 PDF 渲染时被浏览器请求（Issue #1659）。
+		return text if text.lower().startswith("data:image/") else ""
+	try:
+		parsed = urlsplit(text)
+	except ValueError:
+		return ""
+	return text if parsed.scheme.lower() in {"http", "https", "mailto"} else ""
+
+
 def _render_personal_info(resume: ResumeData) -> str:
 	"""Render personal info section."""
 	if not resume.personal_info.items:
@@ -25,8 +41,9 @@ def _render_personal_info(resume: ResumeData) -> str:
 	for item in resume.personal_info.items:
 		label = _esc(item.label)
 		value = _esc(item.value)
-		if item.link:
-			value = f'<a href="{_esc(item.link)}" style="color:#2563eb;text-decoration:none;">{value}</a>'
+		link = _safe_link(item.link)
+		if link:
+			value = f'<a href="{_esc(link)}" style="color:#2563eb;text-decoration:none;">{value}</a>'
 		items_html.append(f'<span class="info-item"><span class="info-label">{label}:</span> {value}</span>')
 	separator = " " if resume.personal_info.layout == "inline" else "<br>"
 	return f'<div class="personal-info">{separator.join(items_html)}</div>'
@@ -134,8 +151,9 @@ def render_resume_html(resume: ResumeData) -> str:
 	title_align = "center" if resume.center_title else "left"
 
 	avatar_html = ""
-	if resume.avatar:
-		avatar_html = f'<img src="{_esc(resume.avatar)}" class="avatar" alt="avatar">'
+	avatar = _safe_link(resume.avatar, avatar=True)
+	if avatar:
+		avatar_html = f'<img src="{_esc(avatar)}" class="avatar" alt="avatar">'
 
 	personal_info_html = _render_personal_info(resume)
 	job_intention_html = _render_job_intention(resume)

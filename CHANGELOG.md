@@ -12,6 +12,15 @@
 
 ## [Unreleased]
 
+### Fixed
+- 导出产物中的 NaN/Infinity 与孤立代理字符会让 JSON/CSV/XLSX 产物失败或生成非标准 JSON；现在非有限数归一为 `null`、不可编码字符转义后落盘（Issue #1653）。
+- `boss export` 跨页重复职位 ID 占用导出数量，用户拿到的条目少于 `--count`；现在同一次 workflow 内按非空职位 ID 去重（Issue #1654）。
+- 非 zhipin 域名的 verify/security 同名路径被误判成平台安全页，误开风控锁；现在只认平台域名或相对路径（Issue #1655）。
+- stoken Cookie 兜底只按名称匹配，异域同名 Cookie 会被写入登录态；现在校验 zhipin 域名（Issue #1656）。
+- DevToolsActivePort 自动发现的 CDP 端口未传给裸 CDP 聊天调用，`evaluate_js` 仍探测默认 9222；现在复用实际连接端点（Issue #1657）。
+- automation 扫描路径命中未确认写动作时漏标 notified，首次 `--resume` 会重复开熔断；现在与队列路径同口径（Issue #1658）。
+- PDF 导出会按导入简历里的头像 URL 出网，link 还可注入 `javascript:`；现在头像仅允许内嵌 data URI、链接限定白名单并阻断渲染期外部请求（Issue #1659）。
+
 ## [3.4.99] - 2026-11-18
 
 ## [3.4.98] - 2026-11-18

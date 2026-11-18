@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 from pathlib import Path
@@ -52,3 +53,25 @@ def write_json_atomic(
 	finally:
 		if temporary is not None:
 			temporary.unlink(missing_ok=True)
+
+
+def strict_json_text(value: Any, *, indent: int | None = 2) -> str:
+	"""Serialize a product JSON artifact under the same strict rules as stdout.
+
+	``json.dump`` in :func:`write_json_atomic` still allows NaN / Infinity and
+	fails on lone surrogates unless the file handle uses ``backslashreplace``.
+	Export artifacts are read as strict JSON by other tools, so normalize
+	non-finite numbers to null and forbid non-standard constants explicitly.
+	Lone surrogates are escaped by the caller's text writer and remain valid
+	JSON escapes.
+	"""
+	def normalize(item: Any) -> Any:
+		if isinstance(item, float):
+			return item if math.isfinite(item) else None
+		if isinstance(item, dict):
+			return {key: normalize(child) for key, child in item.items()}
+		if isinstance(item, (list, tuple)):
+			return [normalize(child) for child in item]
+		return item
+
+	return json.dumps(normalize(value), ensure_ascii=False, allow_nan=False, indent=indent)
