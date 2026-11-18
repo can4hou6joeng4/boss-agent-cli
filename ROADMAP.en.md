@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.101 (2026-11-18): free-text and TTY operator hints now share the same redaction rules; CJK-adjacent credential keys and all Authorization schemes no longer leak secrets (Issues #1662–#1664).
+
 - ✅ v3.4.100 (2026-11-18): seventh export and rendering audit — non-finite numbers and invalid characters in artifacts, cross-page dedup, security-page host checks, stoken cookie domains, CDP endpoint reuse, inflight markers and external requests during resume PDF rendering are all closed (Issues #1653–#1659).
 - ✅ v3.4.99 (2026-11-18): sixth subsystem audit — a missing `open` in `stop.json` and a platform `code=false` are no longer read as "not stopped / success", and automation integer budgets and wizard `pages` reject floats and booleans (Issues #1598–#1601).
 - ✅ v3.4.91 (2026-11-18): fifth subsystem audit — `agent run --dry-run --resume` no longer clears the operator stop latch; drifted wizard error metadata is rejected fail-closed; MCP validates conditionally required strings, numeric bounds and array element lengths, and caps the host wait for wizard runs (Issues #1591–#1595).
