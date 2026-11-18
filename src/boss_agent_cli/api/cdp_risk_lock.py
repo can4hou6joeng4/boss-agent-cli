@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import stat
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -96,6 +97,27 @@ class RiskLock:
 		return current_hash == self.stoken_sha256
 
 
+def _lock_path_mode(path: Path) -> int | None:
+	"""仅对缺失路径返回 None；悬空链接保留链接自身的类型（Issue #1686）。"""
+	# 3.14 的 Path.exists() / is_file() 会把权限等 OSError 吞掉并返回 False，
+	# 风险锁会因此被当成「没有锁」而放行（Issue #1686）。
+	try:
+		mode = path.lstat().st_mode
+	except FileNotFoundError:
+		return None
+	if stat.S_ISLNK(mode):
+		try:
+			return path.stat().st_mode
+		except FileNotFoundError:
+			# 悬空链接的锁状态未知：交给调用方按损坏锁 fail-closed 处理。
+			pass
+	return mode
+
+
+def _corrupt_lock() -> RiskLock:
+	return RiskLock(stoken_sha256=None, locked_at=0.0, corrupt=True)
+
+
 def _read_lock_file(path: Path) -> RiskLock:
 	try:
 		payload = json.loads(path.read_text(encoding="utf-8"))
@@ -125,7 +147,21 @@ def _read_lock_entry(data_dir: Path) -> tuple[RiskLock, Path] | None:
 	"""返回命中的锁与实际文件路径；毫不过问主 / 后备之外的来源。"""
 	corrupt: tuple[RiskLock, Path] | None = None
 	for path in lock_paths(data_dir):
-		if not path.exists():
+		try:
+			mode = _lock_path_mode(path)
+		except (OSError, ValueError):
+			# 路径状态无法读取（权限、符号链接环、文件系统错误）时锁状态未知：
+			# 按损坏锁阻断，不能当成「没有锁」（Issue #1686）。
+			if corrupt is None:
+				corrupt = (_corrupt_lock(), path)
+			continue
+		if mode is None:
+			continue
+		# FIFO / 设备不能直接 read_text，否则会阻塞在打开阶段；悬空链接、
+		# 目录等路径也给不出可信锁内容，统一按损坏锁 fail-closed（Issue #1686）。
+		if not stat.S_ISREG(mode):
+			if corrupt is None:
+				corrupt = (_corrupt_lock(), path)
 			continue
 		lock = _read_lock_file(path)
 		if not lock.corrupt:
