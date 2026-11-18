@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.102 (2026-11-18): automation statistics and cached-search parsing now use validated state, so corrupt queues and column type drift no longer masquerade as normal results (Issues #1667–#1668).
+
 - ✅ v3.4.101 (2026-11-18): free-text and TTY operator hints now share the same redaction rules; CJK-adjacent credential keys and all Authorization schemes no longer leak secrets (Issues #1662–#1664).
 
 - ✅ v3.4.100 (2026-11-18): seventh export and rendering audit — non-finite numbers and invalid characters in artifacts, cross-page dedup, security-page host checks, stoken cookie domains, CDP endpoint reuse, inflight markers and external requests during resume PDF rendering are all closed (Issues #1653–#1659).
