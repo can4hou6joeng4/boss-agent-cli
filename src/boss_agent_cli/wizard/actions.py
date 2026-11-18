@@ -1910,8 +1910,22 @@ def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 def _crawl_stop(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	run_id = str(_required(inputs, "run_id"))
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
-		if not cache.request_crawl_stop(run_id):
+		run = cache.get_crawl_run(run_id)
+		if run is None:
 			raise WorkflowActionError("CRAWL_RUN_NOT_FOUND", f"未找到 crawl run: {run_id}")
+		# 与 `boss crawl stop` 同口径（Issue #1574 #1786）：终态任务上的停止请求
+		# 不会生效，继续报 stop_requested 会让调用方以为任务已被叫停。
+		status = run["status"]
+		if status not in ("queued", "running"):
+			status_command = _hint_command(context, f"crawl status {shell_argument(run_id)}")
+			results_command = _hint_command(context, f"crawl results {shell_argument(run_id)}")
+			raise WorkflowActionError(
+				"CRAWL_RUN_FINISHED",
+				f"crawl 任务已结束（{status}），停止请求没有生效",
+				recovery_action=f"用 {status_command} 查看最终状态，或 {results_command} 读取已采集结果；需要重新采集时新建 crawl 任务",
+				auto_retry=False,
+			)
+		cache.request_crawl_stop(run_id)
 	return StepResult({"run_id": run_id, "status": "stop_requested"})
 
 
