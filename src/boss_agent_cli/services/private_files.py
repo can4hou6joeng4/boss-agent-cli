@@ -14,6 +14,7 @@ import os
 import tempfile
 from pathlib import Path
 
+from boss_agent_cli.services.file_lock import exclusive_file_lock
 from boss_agent_cli.services.output_path import refuse_symlink_target
 
 DIRECTORY_MODE = 0o700
@@ -47,6 +48,36 @@ def tighten_private_directory(path: Path) -> None:
 	if mode & 0o002 or not mode & 0o200:
 		return
 	chmod_best_effort(path, DIRECTORY_MODE)
+
+
+def load_or_create_private_salt(auth_dir: Path) -> bytes:
+	"""读取共享 salt；缺失时由唯一创建者生成，禁止覆盖已有值。
+
+	salt 决定 session.enc 与 ai/api_key.enc 的派生密钥：两个进程首次运行
+	各自生成一次，后写盘的那份会让先保存的密文永久解不开（Issue #1633）。
+	``O_CREAT|O_EXCL`` 保证只有一个创建者；随后在刷新锁内重读，后到者必须
+	复用胜出值。只有 ``FileNotFoundError`` 才表示 salt 确实缺失；权限、
+	IO 等错误必须上抛，不能用新 salt 覆盖旧密文（Issue #1688）。
+	"""
+	auth_dir.mkdir(parents=True, exist_ok=True, mode=DIRECTORY_MODE)
+	chmod_best_effort(auth_dir, DIRECTORY_MODE)
+	salt_path = auth_dir / "salt"
+	try:
+		fd = os.open(salt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, FILE_MODE)
+	except FileExistsError:
+		pass
+	else:
+		with os.fdopen(fd, "wb") as handle:
+			handle.write(os.urandom(16))
+	chmod_best_effort(salt_path, FILE_MODE)
+	with exclusive_file_lock(auth_dir / "refresh.lock") as acquired:
+		if acquired:
+			return salt_path.read_bytes()
+	# 锁不可用时也不能生成第二份 salt：读到什么就用什么；确实不存在才报错。
+	try:
+		return salt_path.read_bytes()
+	except FileNotFoundError:
+		raise RuntimeError("登录态 salt 尚未创建，且无法获取跨进程锁") from None
 
 
 def write_private_bytes(path: Path, data: bytes) -> None:
