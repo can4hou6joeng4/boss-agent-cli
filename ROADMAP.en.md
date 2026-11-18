@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.111 (2026-11-18): SQLite connections now refuse symlinks before opening — the cache database, request-budget database, `stats` and automation lock databases no longer follow links or write outside the data directory, and automation queue appends fail closed on FIFOs and dangling links instead of hanging `agent run` after an action has executed (Issues #1739, #1741, #1743).
 - ✅ v3.4.110 (2026-11-18): the local path-state fail-closed sweep now covers FIFOs and devices — automation queues, chat snapshots, the index cache, exclusive lock files and crawl hook directories no longer hang on special files, and `hr download-resume` validates `--output` before any platform request (Issues #1726, #1728, #1730, #1732, #1734, #1736).
 - ✅ v3.4.109 (2026-11-18): local SQLite error classification and wider `-o` preflight coverage — `stats` no longer returns an all-zero report on cache locks or disk errors, `request-budget.sqlite3` read-only/disk-full failures are no longer misreported as corruption with delete-the-database advice, and `digest` validates `-o` before login and platform requests while `digest` / `stats` / `resume export` no longer atomically replace FIFO or device targets (Issues #1718, #1721, #1723).
 
