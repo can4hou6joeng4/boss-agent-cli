@@ -55,6 +55,7 @@ from boss_agent_cli.display import (
 	error_contract_for_code,
 	risk_error_contract,
 	risk_error_message,
+	positional_hint,
 	shell_argument,
 )
 from boss_agent_cli.output import Logger
@@ -1231,8 +1232,8 @@ def _saved_search_invalid_error(context: ActionContext, name: str, detail: str) 
 		detail,
 		recoverable=True,
 		recovery_action=(
-			f"{_hint_command(context, f'watch remove {shell_argument(name)}')}；"
-			f"再用 {_hint_command(context, f'watch add {shell_argument(name)} <关键词>')} 重建"
+			f"{_hint_command(context, f'watch remove {positional_hint(name)}')}；"
+			f"再用 {_hint_command(context, f'watch add {positional_hint(name)} <关键词>')} 重建"
 		),
 	)
 

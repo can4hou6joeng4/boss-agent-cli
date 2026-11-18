@@ -4,7 +4,11 @@
 
 ## [Unreleased]
 
-## [3.4.119] - 2026-11-19
+### Fixed
+- `watch` / `shortlist` 的后继命令对以 `-` 开头的名字前置 `--`，照抄提示不再报「没有选项」（Issue #1797）。
+- 存量 watch 的 `query` 缺失或为 null 时 `watch run` 返回 `SAVED_SEARCH_INVALID`，不再把 `None` / 空串当关键词发给平台并报成功（Issue #1798）。
+- `shortlist` 的 `tags` 被写成 BLOB 时按损坏数据退化为空标签，一条坏行不再让 `list` / `compare` / `annotate` 全部落成 INTERNAL_ERROR（Issue #1799）。
+- `watch run` 对纯空白名字在入口返回 `INVALID_PARAM`，恢复提示不再指向一条必然再次失败的 `watch add`（Issue #1800）。
 
 ### Fixed
 - `chat --export` 的完整采集直接替换当日快照：同一天重跑时已消失的联系人当次即被报出，不再留在快照里推迟到次日（Issue #1791）。

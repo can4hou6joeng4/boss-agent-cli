@@ -24,7 +24,7 @@ from boss_agent_cli.display import (
 	render_job_table,
 	render_list_result,
 	render_message_panel,
-	shell_argument,
+	positional_hint,
 )
 from boss_agent_cli.crawler.service import CrawlBudget
 from boss_agent_cli.search_filters import (
@@ -134,7 +134,7 @@ def watch_add_cmd(
 	params, _ = _parse_watch_filters(query, city, salary, experience, education, industry, scale, stage, job_type, welfare)
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		cache.save_saved_search(name, params)
-	run_cmd = _hint_command(ctx, f"watch run {shell_argument(name)}")
+	run_cmd = _hint_command(ctx, f"watch run {positional_hint(name)}")
 	list_cmd = _hint_command(ctx, "watch list")
 	handle_output(
 		ctx, "watch",
@@ -219,6 +219,13 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 	# 存量记录可能由旧版本或 wizard 写入：运行前按 watch add 同口径重新校验。
 	# 未知城市留到 search_jobs 才抛 ValueError，会被兜成可重试的 NETWORK_ERROR；
 	# 未知薪资 / 经验标签会被静默丢弃，run 看起来成功但筛选已失效（Issue #1338）。
+	# 关键词与 watch add 同口径必填：缺失 / null / 空白的 query 会让 run 以
+	# None / 空串发起空泛搜索并返回 ok:true（Issue #1798）。读取侧旧记录可能
+	# 由旧版本或 wizard 写入，不能只在写入时校验。
+	query_value = params.get("query")
+	if not isinstance(query_value, str) or not query_value.strip():
+		raise SavedSearchParamsError(name, "关键词不能为空（缺失或为空值）")
+
 	for key in (
 		"query",
 		"city",
@@ -338,6 +345,22 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 	# 点名与 --all 是两种运行范围：同时给出时旧实现进入 --all 分支，静默丢弃
 	# 点名的 watch 并运行全部，对每个 watch 都发起平台请求却仍返回 ok:true
 	# （Issue #1561）。必须在打开缓存与发出任何请求之前拒绝。
+	if name is not None and not name.strip():
+		# 纯空白名不可能命中任何本地记录，NOT_FOUND 的重建提示又会被 watch add
+		# 的空白校验拒绝，Agent 会陷入 run → NOT_FOUND → add → INVALID_PARAM
+		# 的死循环（Issue #1800）。与 remove 同口径在入口拒绝。
+		list_cmd = _hint_command(ctx, "watch list")
+		handle_error_output(
+			ctx,
+			"watch",
+			code="INVALID_PARAM",
+			message="watch 名称不能为空",
+			recovery_action=f"补上 watch 名称后重试；用 {list_cmd} 查看已有 watch",
+			hints={"next_actions": [list_cmd]},
+		)
+		ctx.exit(1)
+		return
+
 	if run_all and name:
 		list_cmd = _hint_command(ctx, "watch list")
 		handle_error_output(
@@ -451,8 +474,8 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 				code="SAVED_SEARCH_INVALID",
 				message=str(exc),
 				hints={"next_actions": [
-					_hint_command(ctx, f"watch remove {shell_argument(name)}"),
-					_hint_command(ctx, f"watch add {shell_argument(name)} <关键词>"),
+					_hint_command(ctx, f"watch remove {positional_hint(name)}"),
+					_hint_command(ctx, f"watch add {positional_hint(name)} <关键词>"),
 				]},
 			)
 			return
@@ -481,7 +504,7 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 				recovery_action=f"用 {_hint_command(ctx, 'watch list')} 查看已保存的 watch 后重试",
 				hints={"next_actions": [
 					_hint_command(ctx, "watch list"),
-					_hint_command(ctx, f"watch add {shell_argument(name)} <关键词>"),
+					_hint_command(ctx, f"watch add {positional_hint(name)} <关键词>"),
 				]},
 			)
 			return

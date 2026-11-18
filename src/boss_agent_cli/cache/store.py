@@ -1285,9 +1285,16 @@ class CacheStore:
 		return json.dumps(normalized, ensure_ascii=False, sort_keys=True)
 
 	@classmethod
-	def _deserialize_shortlist_tags(cls, raw: str | None) -> list[str]:
+	def _deserialize_shortlist_tags(cls, raw: str | bytes | bytearray | None) -> list[str]:
 		if not raw:
 			return []
+		if isinstance(raw, (bytes, bytearray)):
+			# SQLite TEXT 列不强制类型：值被写成 BLOB 时不能在 str.split(",") 上
+			# 抛 TypeError 让整池条目落成 INTERNAL_ERROR（Issue #1799）。
+			try:
+				raw = raw.decode("utf-8")
+			except UnicodeDecodeError:
+				return []
 		try:
 			parsed = json.loads(raw)
 		# 超长整数 / 深嵌套与语法损坏等价：退回旧的逗号分隔写法。
