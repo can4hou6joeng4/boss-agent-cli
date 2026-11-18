@@ -1,5 +1,6 @@
 """把能力描述转换成 JSON Schema 与各家 tool-use 格式（OpenAI / Anthropic / MCP）。"""
 
+import json
 from typing import Any
 
 from boss_agent_cli.output import SchemaParameterPaths, SchemaPath
@@ -61,6 +62,25 @@ def command_to_json_schema(cmd_name: str, cmd_spec: dict[str, Any]) -> dict[str,
 	return schema
 
 
+#: OpenAI 与 Anthropic 的工具参数 schema 顶层只接受普通 object：带这些组合 /
+#: 条件关键字的定义会被接口以 400 拒绝，一个工具被拒整次请求失败（Issue #1774）。
+_TOP_LEVEL_CONSTRAINT_KEYWORDS = ("anyOf", "oneOf", "allOf", "not", "if", "then", "else")
+
+
+def _provider_tool_schema(description: str, input_schema: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+	"""把顶层组合 / 条件约束从参数 schema 挪进描述，返回（描述, schema）。
+
+	约束本身由 CLI 校验，模型侧只需要读到它：原样附上 JSON Schema 片段，不做
+	有损的自然语言改写。`mcp-tools` 与运行时 `tools/list` 仍保留完整 schema。
+	"""
+	constraints = {key: input_schema[key] for key in _TOP_LEVEL_CONSTRAINT_KEYWORDS if key in input_schema}
+	if not constraints:
+		return description, input_schema
+	plain = {key: value for key, value in input_schema.items() if key not in constraints}
+	note = json.dumps(constraints, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+	return f"{description}\n参数约束（JSON Schema 片段，由 CLI 校验）：{note}", plain
+
+
 def format_openai_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 	"""把实际可调用的共享工具目录包装为 OpenAI Tools API 格式。"""
 	return [
@@ -68,11 +88,12 @@ def format_openai_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 			"type": "function",
 			"function": {
 				"name": tool.name,
-				"description": tool.description,
-				"parameters": tool.input_schema,
+				"description": description,
+				"parameters": parameters,
 			},
 		}
 		for tool in build_tool_catalog(data)
+		for description, parameters in (_provider_tool_schema(tool.description, tool.input_schema),)
 	]
 
 
@@ -81,10 +102,11 @@ def format_anthropic_tools(data: dict[str, Any]) -> list[dict[str, Any]]:
 	return [
 		{
 			"name": tool.name,
-			"description": tool.description,
-			"input_schema": tool.input_schema,
+			"description": description,
+			"input_schema": input_schema,
 		}
 		for tool in build_tool_catalog(data)
+		for description, input_schema in (_provider_tool_schema(tool.description, tool.input_schema),)
 	]
 
 

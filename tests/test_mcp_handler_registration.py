@@ -56,6 +56,8 @@ print(json.dumps({
 
 # 协议层与实际 CLI 的工具导出必须与 mcp_tools.TOOLS 逐名、逐参数相等。
 # 不硬编码工具数量，且真实进程隔离 pytest 收集期的 SDK mock。
+from boss_agent_cli.schema.formats import _provider_tool_schema  # noqa: E402
+
 _CATALOG_PROBE = """
 import asyncio
 import json
@@ -159,4 +161,12 @@ def test_tools_over_protocol_and_cli_exports_match_the_catalog() -> None:
 	assert report["protocol_definitions"] == report["catalog_definitions"]
 	for output_format, exported in report["exports"].items():
 		assert exported["names"] == report["in_catalog"], f"{output_format} 导出的工具集合与运行时不一致"
-		assert exported["definitions"] == report["catalog_definitions"], f"{output_format} 的描述或参数与运行时不一致"
+		expected = report["catalog_definitions"]
+		if output_format != "mcp-tools":
+			# OpenAI / Anthropic 导出把顶层组合与条件约束挪进描述（Issue #1774）；
+			# 除此之外仍须与运行时目录逐项一致。
+			expected = {
+				name: dict(zip(("description", "inputSchema"), _provider_tool_schema(item["description"], item["inputSchema"])))
+				for name, item in expected.items()
+			}
+		assert exported["definitions"] == expected, f"{output_format} 的描述或参数与运行时不一致"

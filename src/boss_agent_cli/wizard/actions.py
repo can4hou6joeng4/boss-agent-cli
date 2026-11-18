@@ -1643,9 +1643,46 @@ def _crawl_egress_error(exc: EgressContradictionError) -> WorkflowActionError:
 	)
 
 
+def _require_crawl_inputs_match_run(context: ActionContext, run_id: str, inputs: Mapping[str, Any]) -> None:
+	"""显式 run_id 与本次的 query / city 不一致时拒绝续跑（Issue #1772）。
+
+	续跑只沿用断点里的关键词与城市：静默接受会让 workflow 记录写着新关键词，
+	实际向平台请求并导出的却是旧任务的数据。任务不存在或记录损坏交给
+	``_crawl_resume`` 按既有口径回报。
+	"""
+	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
+		try:
+			run = cache.get_crawl_run(run_id)
+		except CacheRecordInvalid:
+			return
+	params = run.get("params") if run is not None else None
+	if not isinstance(params, Mapping):
+		return
+	mismatched: list[str] = []
+	query = inputs.get("query")
+	stored_query = params.get("query")
+	if isinstance(query, str) and query.strip() and isinstance(stored_query, str) and query.strip() != stored_query.strip():
+		mismatched.append(f"query（任务为 {stored_query!r}，本次为 {query!r}）")
+	city = inputs.get("city")
+	stored_city = params.get("city_code")
+	if isinstance(city, str) and city.strip() and isinstance(stored_city, str):
+		city_code = CITY_CODES.get(city, city)
+		if city_code != stored_city:
+			mismatched.append(f"city（任务为 {stored_city}，本次为 {city!r}）")
+	if mismatched:
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"crawl 任务 {run_id} 的断点与本次输入不一致: {'；'.join(mismatched)}",
+			recoverable=True,
+			recovery_action="续跑原任务时去掉 query / city 或改用 goal=crawl_resume；采集新关键词时去掉 run_id 新建任务",
+			auto_retry=False,
+		)
+
+
 def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	# 恢复 waiting_input 时若已有内部 crawl run_id，必须续跑而不是新建采集。
-	existing_run_id = _optional_str(inputs.get("run_id") or inputs.get("crawl_run_id"))
+	explicit_run_id = _optional_str(inputs.get("run_id") or inputs.get("crawl_run_id"))
+	existing_run_id = explicit_run_id
 	if existing_run_id is None:
 		prior_step = prior.get("crawl_start")
 		if isinstance(prior_step, Mapping):
@@ -1657,6 +1694,8 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 				if isinstance(data, Mapping):
 					existing_run_id = _optional_str(data.get("run_id"))
 	if existing_run_id:
+		if explicit_run_id is not None:
+			_require_crawl_inputs_match_run(context, existing_run_id, inputs)
 		return _crawl_resume(context, {"run_id": existing_run_id, **dict(inputs)}, prior)
 
 	if context.config is not None and not isinstance(context.config, Mapping):

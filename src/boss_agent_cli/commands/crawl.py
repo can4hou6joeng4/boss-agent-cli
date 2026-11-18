@@ -318,17 +318,22 @@ class _LazySeededTransportFactory:
 		return self._ensure()(settings)
 
 
-def _report_corrupt_run(ctx: click.Context, command: str, run_id: str, exc: CacheRecordInvalid) -> None:
-	"""本地 run 记录写坏：断点读不出来，给「重新创建任务」指引而不是 traceback。"""
+def _report_corrupt_run(ctx: click.Context, command: str, run_id: str | None, exc: CacheRecordInvalid) -> None:
+	"""本地 run 记录写坏：断点读不出来，给「重新创建任务」指引而不是 traceback。
+
+	``run_id`` 未知（损坏的是结果行而调用方不知道所属任务）时不给 status 指引：
+	异常里的 ``record_id`` 可能是 job_key，拼进 `crawl status` 只会得到
+	``CRAWL_RUN_NOT_FOUND``（Issue #1773）。
+	"""
+	next_actions = [boss_command_for_ctx(ctx, "crawl start <关键词>", include_data_dir=True)]
+	if run_id is not None:
+		next_actions.append(boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True))
 	handle_error_output(
 		ctx,
 		command,
 		code="CACHE_RECORD_INVALID",
 		message=str(exc),
-		hints={"next_actions": [
-			boss_command_for_ctx(ctx, "crawl start <关键词>", include_data_dir=True),
-			boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True),
-		]},
+		hints={"next_actions": next_actions},
 	)
 
 
@@ -420,6 +425,7 @@ def _run_service(
 	*,
 	on_error: Callable[[str, str], None] | None = None,
 	defer_transport_preflight: bool = False,
+	run_id: str | None = None,
 ) -> None:
 	def note(code: str, message: str) -> None:
 		# 错误出口会直接结束进程：后台 worker 要在那之前留下原因（Issue #1042）。
@@ -446,7 +452,9 @@ def _run_service(
 		handle_error_output(ctx, "crawl", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {exc.args[0]}", hints=_run_not_found_hints(ctx))
 		return
 	except CacheRecordInvalid as exc:
-		_report_corrupt_run(ctx, "crawl", exc.record_id, exc)
+		# 结果行损坏时 record_id 是 job_key，不是 run_id（Issue #1773）。
+		known_run_id = run_id if run_id is not None else (exc.record_id if exc.kind == "crawl_run" else None)
+		_report_corrupt_run(ctx, "crawl", known_run_id, exc)
 		return
 	except CrawlBusyError as exc:
 		note("CRAWL_BUSY", str(exc))
@@ -729,9 +737,10 @@ def _prepare_background_resume(
 				if clear_stop and previous_stop:
 					cache.restore_crawl_stop_request(run_id, updated_at=previous_updated_at)
 				raise
-			if clear_stop:
-				# 重新给 worker 留足交接窗口（Issue #1045），只刷新时间而不清新 stop。
-				cache.touch_crawl_run(run_id)
+			# 信封报 queued，库里也要是 queued（Issue #1771）：否则 worker 接手前
+			# `crawl stop` 按旧终态被拒、重复的后台恢复会再拉起一个 worker。同时
+			# 刷新时间给 worker 留足交接窗口（Issue #1045），不清新到达的 stop。
+			cache.mark_crawl_run_active(run_id, "queued")
 		return "queued", True
 
 
@@ -1148,6 +1157,8 @@ def _resume(
 					with_detail=with_detail,
 				)
 			except OSError as exc:
+				# 状态已落成 queued：worker 没能拉起时把原因写回，不留无人执行的排队。
+				_settle_unstarted_worker(Path(ctx.obj["data_dir"]), run_id, f"无法启动后台任务: {exc}")
 				resume_command = boss_command_for_ctx(ctx, f"crawl resume {shell_argument(run_id)}", include_data_dir=True)
 				handle_error_output(
 					ctx,
@@ -1188,6 +1199,7 @@ def _resume(
 			clear_stop=not from_queue,
 		),
 		on_error=on_error,
+		run_id=run_id,
 		# 登录 / transport 预检延后到 CrawlService 确认 has_resume_work 之后：
 		# 已完成且无待补详情的 run 直接返回既有结果（Issue #1412）。
 		defer_transport_preflight=True,

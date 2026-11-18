@@ -142,6 +142,9 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				# INVALID_PARAM（Issue #1532）；不带 action 时映射层也拒绝（#1493）。
 				"if": {"properties": {"action": {"enum": ["resume", "status", "stop"]}}, "required": ["action"]},
 				"then": {"required": ["run_id"]},
+				# run（含省略 action）必须给出 role / platform / goal：否则调用方要连吃
+				# 三次各报一个缺失字段的 INVALID_PARAM 才能拼出合法调用（Issue #1775）。
+				"else": {"required": ["role", "platform", "goal"]},
 			},
 		),
 		ToolDefinition(

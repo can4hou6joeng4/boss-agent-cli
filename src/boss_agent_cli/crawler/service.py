@@ -681,6 +681,10 @@ class CrawlService:
 		if callable(bind_attempts):
 			bind_attempts(lambda kind: self._attempt(run_id, budget, run_budget, kind), self._request_budget.cooldown)
 		try:
+			# 恢复 stopped 等终态 run 时，状态要在打开浏览器之前落成 running：
+			# 否则浏览器启动与 seed 导航期间 `crawl stop` 会按终态被拒，而采集
+			# 照常继续（Issue #1771）。放在 try 内，任何失败都由 finally 写回终态。
+			self._cache.mark_crawl_run_active(run_id, "running")
 			self._raise_if_stop_requested(run_id)
 			hooks = tuple(transport.open())
 			self._raise_if_stop_requested(run_id)
