@@ -67,6 +67,35 @@ def _path_mode(path: Path) -> int | None:
 	return mode
 
 
+def _refuse_symlink_write(path: Path, label: str) -> None:
+	"""写入前拒绝符号链接与特殊文件。
+
+	读取侧允许沿「指向普通文件的符号链接」读取（Issue #1728），但写入侧不能
+	沿用同一判定：``open("a")`` 会写穿链接目标（数据落到数据目录之外），
+	临时文件 + ``os.replace`` 则会静默把链接替换成普通文件、让目标保留旧行；
+	恢复链接后旧的 pending / review 行会复活并可能被重放（Issue #1746）。
+	与 ``write_private_bytes`` 的符号链接拒绝（Issue #1355）同口径。
+	"""
+	try:
+		mode = path.lstat().st_mode
+	except FileNotFoundError:
+		return
+	except (OSError, ValueError) as exc:
+		raise AutomationStateError(path, f"{label} 无法读取路径状态（{exc}）") from exc
+	if stat.S_ISLNK(mode):
+		raise AutomationStateError(
+			path,
+			f"{label} 无法写入：路径是符号链接；请改用普通文件路径（先备份再移除链接），"
+			"自动化不会写穿链接或替换链接本身",
+		)
+	if not stat.S_ISREG(mode):
+		raise AutomationStateError(
+			path,
+			f"{label} 无法写入：路径不是普通文件（目录 / FIFO / 设备）；"
+			"请先检查该路径后重试",
+		)
+
+
 class AutomationStore:
 	"""Small JSONL-backed store for the recruiter automation engine."""
 
@@ -299,6 +328,7 @@ class AutomationStore:
 		# Preserve legacy callers that set the breaker through write_state. A stale
 		# snapshot lacking it can never remove the separate stop latch.
 		with self._control_lock():
+			_refuse_symlink_write(self.state_path, "state.json")
 			autonomy = state.get("autonomy", {})
 			if not isinstance(autonomy, dict):
 				raise AutomationStateError(self.state_path, "autonomy 必须是 JSON object")
@@ -520,6 +550,7 @@ class AutomationStore:
 
 	def write_jsonl(self, name: str, rows: list[dict[str, Any]]) -> None:
 		path = self.root / name
+		_refuse_symlink_write(path, "队列文件")
 		body = "".join(
 			f"{json.dumps(row, ensure_ascii=False, sort_keys=True)}\n"
 			for row in rows
@@ -617,27 +648,7 @@ class AutomationStore:
 
 	def _append_jsonl(self, name: str, row: dict[str, Any]) -> None:
 		path = self.root / name
-		try:
-			mode = _path_mode(path)
-		except (OSError, ValueError) as exc:
-			raise AutomationStateError(path, f"队列文件无法读取路径状态（{exc}）") from exc
-		# 追加打开 FIFO 会永久阻塞到出现读者，悬空链接会在目标处新建文件、
-		# 把队列写到数据目录之外（Issue #1741）。与 read_jsonl 同口径：
-		# 只有普通文件（含指向普通文件的符号链接，_path_mode 已解析目标类型）
-		# 才允许追加。
-		if mode is not None and stat.S_ISLNK(mode):
-			raise AutomationStateError(
-				path,
-				"队列文件无法写入：路径是悬空符号链接；请确认链接目标存在后重试，"
-				"文件损坏时先备份再修正或移除",
-			)
-		if mode is not None and not stat.S_ISREG(mode):
-			raise AutomationStateError(
-				path,
-				"队列文件无法写入：路径不是普通文件（目录 / FIFO / 设备）；"
-				"请确认文件可写（权限正常、路径不是目录）后重试，"
-				"文件损坏时先备份再修正或移除",
-			)
+		_refuse_symlink_write(path, "队列文件")
 		try:
 			with path.open("a", encoding="utf-8") as handle:
 				handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
