@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.105 (2026-11-18): stop-latch and state-file path metadata are now fail-closed, so permission errors, dangling links and non-regular files are no longer read as a missing latch or empty state (Issues #1680, #1682).
+
 - ✅ v3.4.104 (2026-11-18): stop-latch reads and explicit recovery now fail closed on path type, so a directory or symlinked `stop.json` can no longer bypass the stop switch or crash mid-resume; CHANGELOG version ordering is covered by a structural test (Issues #1675–#1676, #1678).
 
 - ✅ v3.4.103 (2026-11-18): `hr download-resume` validates `--output` emptiness and extension before credentials or platform requests, so an empty value is no longer read as the current directory (Issue #1672).
