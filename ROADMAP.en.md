@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.113 (2026-11-18): local write boundaries tightened — `agent resume`, the request lease, crawl artifacts and default resume/chat export paths now refuse symlinks, FIFOs and special files instead of silently replacing user files or writing outside the data directory (Issues #1751, #1753, #1755, #1757).
 - ✅ v3.4.112 (2026-11-18): automation writes now refuse symlinks — queue appends no longer write through link targets, state and queue rewrites no longer silently replace links, and interview leads no longer land outside the data directory (Issues #1746, #1748).
 - ✅ v3.4.111 (2026-11-18): SQLite connections now refuse symlinks before opening — the cache database, request-budget database, `stats` and automation lock databases no longer follow links or write outside the data directory, and automation queue appends fail closed on FIFOs and dangling links instead of hanging `agent run` after an action has executed (Issues #1739, #1741, #1743).
 - ✅ v3.4.110 (2026-11-18): the local path-state fail-closed sweep now covers FIFOs and devices — automation queues, chat snapshots, the index cache, exclusive lock files and crawl hook directories no longer hang on special files, and `hr download-resume` validates `--output` before any platform request (Issues #1726, #1728, #1730, #1732, #1734, #1736).
