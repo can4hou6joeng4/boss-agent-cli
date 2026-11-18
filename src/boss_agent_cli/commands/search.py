@@ -56,6 +56,10 @@ def _parse_cached_result(raw: str) -> dict[str, Any] | None:
 	`JSONDecodeError`、`result["data"]` 会抛 `KeyError`，两者都会让
 	`boss search` 直接 traceback；重新搜索会覆盖同键的坏条目。
 	"""
+	if not isinstance(raw, (str, bytes, bytearray)):
+		# 缓存 response 列类型漂移时 json.loads 会抛 TypeError，把本地坏行
+		# 升级成 INTERNAL_ERROR；与坏 JSON 一样按未命中处理（Issue #1668）。
+		return None
 	try:
 		parsed = json.loads(raw)
 	# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长整数

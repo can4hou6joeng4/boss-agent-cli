@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- `agent stats` 直接统计原始 JSONL，坏 confidence / status 仍报 ok 与虚假待执行量；现在与队列执行路径共用行校验（Issue #1667）。
+- 搜索缓存 `response` 列类型漂移时 `json.loads` 抛 `TypeError`，本地坏行升级成 `INTERNAL_ERROR`；现在非文本载荷按未命中处理（Issue #1668）。
+
 ## [3.4.101] - 2026-11-18
 
 ### Fixed
