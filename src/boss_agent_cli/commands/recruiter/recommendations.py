@@ -14,7 +14,7 @@ from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshF
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.commands.recruiter._hints import hint_command
+from boss_agent_cli.commands.recruiter._hints import blank_option_names, hint_command
 from boss_agent_cli.display import (
 	RISK_ERROR_CONTRACTS,
 	handle_auth_errors,
@@ -39,6 +39,18 @@ from boss_agent_cli.services.pagination import (
 def recommendations_cmd(ctx: click.Context, job_id: str, page: int) -> None:
 	"""读取推荐牛人完整卡片和首次开聊参数。"""
 	if not require_compliance_allowed(ctx, "recruiter-recommendations"):
+		return
+	if not job_id.strip():
+		# 空职位 ID 命中不了任何职位，却会带着空参数向平台发一次请求（Issue #1782）。
+		list_cmd = hint_command(ctx, "hr jobs list")
+		handle_error_output(
+			ctx,
+			"recruiter-recommendations",
+			code="INVALID_PARAM",
+			message=f"--job-id 不能为空；先用 {list_cmd} 取到职位 ID",
+			recovery_action=f"补上 --job-id 后重试；职位 ID 可从 {list_cmd} 的结果中取到",
+			hints={"next_actions": [list_cmd]},
+		)
 		return
 	auth = AuthManager(ctx.obj["data_dir"], logger=ctx.obj["logger"], platform=ctx.obj.get("platform", "zhipin"))
 	with get_recruiter_platform_instance(ctx, auth) as platform:
@@ -136,6 +148,20 @@ def greet_cmd(
 	if not require_compliance_allowed(ctx, "recruiter-greet"):
 		return
 	data: dict[str, Any] = {"geek_id": geek_id, "job_id": job_id, "sent": False}
+	blank = blank_option_names(geek_id=geek_id, job_id=job_id, expect_id=expect_id, lid=lid, security_id=security_id)
+	if blank:
+		# 首次招呼是不可逆写入：空 ID 不能发给平台，也不能以空键写下预约 / 已发送记录
+		# （Issue #1782）。必须排在取凭据与 claim 之前，dry-run 同样拒绝。
+		rec_cmd = hint_command(ctx, "hr recommendations --job-id <job_id>")
+		handle_error_output(
+			ctx,
+			"recruiter-greet",
+			code="INVALID_PARAM",
+			message=f"{' / '.join(blank)} 不能为空",
+			recovery_action=f"用 {rec_cmd} 取到候选人的开聊参数后重试",
+			hints={"next_actions": [rec_cmd]},
+		)
+		return
 	if not message.strip():
 		rec_cmd = hint_command(ctx, f"hr recommendations --job-id {shell_argument(job_id)}")
 		handle_error_output(

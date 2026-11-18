@@ -385,3 +385,19 @@ def test_ai_config_value_error_carries_recovery_hint():
 		ai_text_setting({"ai_model": ["x"]}, "ai_model")
 
 	assert getattr(caught.value, "recovery_hint", None) == "ai config --model <值>"
+
+
+@pytest.mark.parametrize("value", ["http://[::1/v1", "http://127.0.0.1:abc/v1", "https://host:99999/v1", "http://:8080/v1"])
+def test_normalize_base_url_rejects_unparseable_host_or_port(value):
+	"""裸 ValueError 不能逃出校验：写入时报参数错误，而不是 traceback（Issue #1778）。"""
+	from boss_agent_cli.ai.config import AIConfigValueError, normalize_base_url
+
+	with pytest.raises(AIConfigValueError):
+		normalize_base_url(value)
+
+
+@pytest.mark.parametrize("value", ["http://[::1]:8000/v1", "https://api.example.com/v1/", "http://127.0.0.1:11434/v1"])
+def test_normalize_base_url_keeps_valid_addresses(value):
+	from boss_agent_cli.ai.config import normalize_base_url
+
+	assert normalize_base_url(f"  {value} ") == value

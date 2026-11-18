@@ -53,15 +53,38 @@ def _remember_deprecated_endpoint(response: dict[str, Any], tracking_issue: str)
 	}
 
 
+def _flag_number(value: Any) -> int | None:
+	"""把平台的数值标记归一成整数；`"0"` / `0.0` 与 `0` 等价，布尔与其他形态返回 None。
+
+	开聊结果的 `chat` / `status` 漂移成字符串或浮点时，严格的 `type(...) is int`
+	会把权益拦截页放行成「已发送」，本地随即把候选人永久记成已打招呼（Issue #1781）。
+	"""
+	if isinstance(value, bool):
+		return None
+	if isinstance(value, int):
+		return value
+	if isinstance(value, float):
+		return int(value) if value.is_integer() else None
+	if isinstance(value, str):
+		text = value.strip()
+		if text.isascii() and text.lstrip("-").isdigit() and len(text) <= 9:
+			return int(text)
+	return None
+
+
+def _is_zero_flag(value: Any) -> bool:
+	return _flag_number(value) == 0
+
+
 def _greet_business_error(response: dict[str, Any]) -> tuple[str, str] | None:
 	"""首次开聊的 code=0 也可能只是成功返回权益拦截页。"""
 	if not is_platform_success_code(response.get("code")) or response.get("__cli_endpoint_hint__") != BOSS_CHAT_START_URL:
 		return None
 	data = response.get("zpData")
-	if not isinstance(data, dict) or type(data.get("chat")) is not int or data["chat"] != 0:
+	if not isinstance(data, dict) or not _is_zero_flag(data.get("chat")):
 		return None
 	title = data.get("limitTitle")
-	if type(data.get("status")) is int and data["status"] == 3 and isinstance(title, str) and title.strip():
+	if _flag_number(data.get("status")) == 3 and isinstance(title, str) and title.strip():
 		description = data.get("stateDesc") or data.get("stateDes")
 		return "GREET_LIMIT", f"{title}；{description}" if isinstance(description, str) and description else title
 	return "GREET_RESULT_UNKNOWN", "平台返回未开聊状态，未确认首次招呼成功"

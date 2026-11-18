@@ -122,8 +122,16 @@ def normalize_base_url(value: str) -> str:
 	必然复现。写入与解析端点时都走这里，报 ``INVALID_PARAM`` 级别的本地错误。
 	"""
 	text = value.strip()
-	parsed = urlsplit(text)
-	if not text or parsed.scheme not in {"http", "https"} or not parsed.netloc:
+	try:
+		parsed = urlsplit(text)
+		# 端口是惰性解析的：`http://host:abc/v1` 要读一次才会报错；未闭合的 IPv6
+		# 括号则在 urlsplit 里直接抛。两者都是裸 ValueError，放过去会在写入时
+		# 崩成 traceback，或存进配置后让每条 AI 命令在 httpx 里崩（Issue #1778）。
+		_ = parsed.port
+		valid = bool(text) and parsed.scheme in {"http", "https"} and bool(parsed.hostname)
+	except ValueError:
+		valid = False
+	if not valid:
 		raise AIConfigValueError(
 			f"AI 配置项 ai_base_url 必须是 http(s):// 开头的绝对地址，实际是 {value.strip()!r}",
 			recovery_hint="ai config --base-url https://api.example.com/v1",

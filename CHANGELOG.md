@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Fixed
+- `ai config --base-url` 拒绝主机或端口无法解析的地址（如 `http://[::1/v1`、`http://127.0.0.1:abc/v1`），返回 `INVALID_PARAM`，不再在写入时崩成 traceback 或存进配置后让每条 AI 命令崩溃；手工改坏的地址在请求时落成 `AI_API_ERROR` 信封（Issue #1778）。
+- 信封与日志的自由文本脱敏覆盖 URL 的 userinfo 口令：`https://user:password@host` 形态的地址（如带 Basic Auth 的 AI 代理 `ai_base_url`）不再把口令原样回显（Issue #1779）。
+- AI 服务用 HTTP 200 带回错误对象时，错误信息带出服务商的说明，并按其中的状态码给出限流 / 鉴权的恢复建议；缺少 `choices` 时不再把 Python 异常文本当作错误信息（Issue #1780）。
+- `hr greet` 在开聊结果的 `chat` / `status` 漂移成字符串或浮点（`"0"`、`0.0`）时仍识别权益拦截页，不再报成已发送并把候选人永久记成已打招呼（Issue #1781）。
+- `hr greet` / `hr recommendations` / `hr resume` 的必填 ID 为空或纯空白时返回 `INVALID_PARAM`，不再向平台发请求，也不以空键写下招呼记录（Issue #1782）。
+- `hr jobs offline` / `online` / `detail` 的后继命令对职位 ID 加 shell 引用，以 `-` 开头的 ID 前置 `--`（Issue #1783）。
+
 ## [3.4.116] - 2026-11-19
 
 ### Fixed

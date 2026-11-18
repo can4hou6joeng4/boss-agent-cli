@@ -144,9 +144,15 @@ def _redact_sensitive(
 	return value
 
 
+#: URL 的 userinfo 口令（`scheme://user:password@host`）：没有 `key=value` 形态，
+#: 键名规则与上面的文本规则都不命中，带 Basic Auth 的代理地址会把口令原样回显
+#: 进信封（Issue #1779）。口令段不含 `/`，所以 `http://host:8080/a@b` 不会误伤。
+_URL_USERINFO_PASSWORD = re.compile(r"(?P<prefix>[A-Za-z][A-Za-z0-9+.\-]*://[^\s/@:]*:)[^\s/@]+(?=@)")
+
+
 def redact_sensitive_text(message: str) -> str:
 	"""Redact credential-like values embedded in free-form text."""
-	redacted = message
+	redacted = _URL_USERINFO_PASSWORD.sub(rf"\g<prefix>{_REDACTED}", message)
 	for pattern in _SENSITIVE_TEXT_PATTERNS:
 		redacted = pattern.sub(r"\g<key>\g<sep>[REDACTED]", redacted)
 	return redacted
