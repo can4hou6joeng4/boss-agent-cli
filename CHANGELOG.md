@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `hr download-resume` 的 `--output` 接入统一路径预检：FIFO / 设备 / 符号链接（含悬空链接）在取登录态与发出 `chat_history` / `friend_detail` / `preview-check` / 下载请求之前按 `INVALID_PARAM` 拒绝，父路径不可用按 `LOCAL_IO_ERROR` 拒绝；不再先花四个平台请求、再把特殊文件报成「输出文件已存在」（Issue #1726）。
+
 ## [3.4.109] - 2026-11-18
 
 ### Fixed
