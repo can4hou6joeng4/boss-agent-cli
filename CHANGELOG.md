@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `stats` / `digest` 的 `-o` 拒绝纯空白路径并返回 `INVALID_PARAM`，不再在当前目录写出名为空格的文件；与 `chat --export`、`export`、`resume export` 口径一致（Issue #1788）。
 - wizard 的 `crawl_stop` 目标在任务已结束时返回 `CRAWL_RUN_FINISHED`，不再报告 `stop_requested` 并写入停止标记；与 `boss crawl stop` 口径一致（Issue #1786）。
 
 ## [3.4.117] - 2026-11-19

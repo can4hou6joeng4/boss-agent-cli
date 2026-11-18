@@ -82,7 +82,8 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 
 	# 空 -o 经 click.Path 落成 Path(".")（`-o .` 已被 click 按目录拒绝）：
 	# md 分支的 `if output_path:` 会把它当「未提供」，静默回到 stdout（Issue #1546）。
-	if output_path is not None and str(output_path) == ".":
+	# 纯空白值不是文件名：照写会在当前目录落一个几乎不可见的文件（Issue #1788）。
+	if output_path is not None and (str(output_path) == "." or not str(output_path).strip()):
 		md_cmd = boss_command_for_ctx(ctx, "digest --format md -o <文件路径>", include_data_dir=True)
 		handle_error_output(
 			ctx,
