@@ -8,7 +8,7 @@ from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.models import platform_data_dict
 from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.api.recruiter_client import RecruiterAuthError
-from boss_agent_cli.api.recruiter_resume import ResumeValidationError
+from boss_agent_cli.api.recruiter_resume import SUPPORTED_RESUME_SUFFIXES, ResumeValidationError
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
 from boss_agent_cli.compliance import require_compliance_allowed
@@ -47,6 +47,37 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 	if not require_compliance_allowed(ctx, "recruiter-download-resume"):
 		return
 	command = "recruiter-download-resume"
+	# 空 `--output` 经 click.Path 归一成当前目录 `Path(".")`：登录前会先报
+	# AUTH_REQUIRED，登录后又会被客户端的 exists 检查报成「文件已存在」。
+	# 与 chat / export / digest / stats 的空输出契约一致，在取凭据和发请求
+	# 之前按参数错误拒绝（Issue #1672）。
+	if output == Path(".") or not str(output).strip():
+		handle_error_output(
+			ctx,
+			command,
+			code="INVALID_PARAM",
+			message="--output 的值不能为空；需要本地文件路径，例如 resume.pdf",
+			recovery_action="给出完整文件名后重试，例如 --output resume.pdf",
+			hints={"next_actions": [hint_command(ctx, "hr download-resume --help")]},
+		)
+		return
+	# 下载链路在 save_resume 之前已经发出 chat_history / friend_detail /
+	# preview-check / 附件下载四个请求。扩展名不可能匹配任何附件时，先把
+	# 参数错误暴露出来，而不是等到下载完才发现；内容与扩展名的精确匹配
+	# 仍由 save_resume 判断。
+	if output.suffix.lower() not in SUPPORTED_RESUME_SUFFIXES:
+		supported = " / ".join(sorted(SUPPORTED_RESUME_SUFFIXES))
+		handle_error_output(
+			ctx,
+			command,
+			code="INVALID_PARAM",
+			message=(
+				f"--output 的扩展名不受支持：{output.suffix or '（没有扩展名）'}；"
+				f"支持 {supported}"
+			),
+			recovery_action=f"把 --output 改成 {supported} 之一结尾的文件名后重试",
+		)
+		return
 	# MCP 子进程调用不经 shell，`~` 不会被展开；父目录也可能尚不存在。
 	# 与其他 `-o` 命令一致，先展开并建好父目录；是否覆盖已有文件仍由客户端判断。
 	output = prepare_output_path(output)
