@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.115] - 2026-11-19
+
 ### Fixed
 - 自由文本脱敏覆盖复合凭据键：`access_token=` / `refresh_token=` / `client_secret=` / `x-api-key=` 等不再因为凭据段前有 `_` / `-` 而把值原样留在错误信封与日志里；字典键 `x-api-key` / `api-key` 同步脱敏（Issue #1765）。
 - `--exit-codes` 预扫描在 `--` 处停止，并跳过其他带值全局选项的值：`boss -- --exit-codes sysexits` 不再把位置参数当成全局选项、让默认模式的失败退出码变成 78（Issue #1766）。
