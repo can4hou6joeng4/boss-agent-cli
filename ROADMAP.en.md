@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.116 (2026-11-19): resuming a crawl run persists its status first, so stop requests during the resume window are accepted; wizard `crawl_start` rejects a `query` / `city` that differs from the checkpoint; corrupt result rows point follow-up commands at the real run id; `openai-tools` / `anthropic-tools` exports no longer carry top-level combinator or conditional keywords; `boss_wizard` declares the fields required to run (Issues #1771–#1775).
 - ✅ v3.4.115 (2026-11-19): free-text redaction covers composite credential keys such as `access_token=` / `x-api-key=`; the `--exit-codes` prescan stops at `--`; open-file hints prefix leading-dash paths with `./`; resume names with Windows-illegal characters use portable filenames while legacy files stay reachable (Issues #1765–#1768).
 - ✅ v3.4.114 (2026-11-19): default chat export paths are validated before authentication and snapshots; shared atomic writers check targets before and after staging, so FIFOs and other special files are never replaced silently (Issues #1760, #1762).
 - ✅ v3.4.113 (2026-11-18): local write boundaries tightened — `agent resume`, the request lease, crawl artifacts and default resume/chat export paths now refuse symlinks, FIFOs and special files instead of silently replacing user files or writing outside the data directory (Issues #1751, #1753, #1755, #1757).
