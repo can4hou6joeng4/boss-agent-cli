@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 缓存库 `cache/boss_agent.db` 与请求节流库 `request-budget.sqlite3` 在打开前按 lstat 判定路径类型：路径是符号链接（含悬空链接）时报 `CACHE_DATABASE_INVALID` / `LOCAL_IO_ERROR` 并给出移除指引，不再让 SQLite 跟随链接把数据库创建或改写进数据目录之外的目标文件；目录 / FIFO / 设备等非普通文件同样明确拒绝，与 `clean` 的库预检（#1712）同口径（Issue #1739）。
+
 ## [3.4.110] - 2026-11-18
 
 ### Fixed

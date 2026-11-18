@@ -3,6 +3,7 @@ import json
 import math
 import secrets
 import sqlite3
+import stat
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -240,6 +241,25 @@ class CacheBusyError(Exception):
 		self.detail = detail
 
 
+def database_path_problem(path: Path) -> str | None:
+	"""SQLite 打开前的路径类型判定，返回问题描述；``None`` 表示可以打开。
+
+	``sqlite3.connect`` 会跟随符号链接：链接指向空文件时数据库会直接写进目标
+	（数据目录之外），悬空链接会新建目标。目录 / FIFO / 设备只会得到
+	"unable to open database file"。``clean`` 已按同一口径拒绝符号链接库
+	（#1712），所有打开入口必须一致（Issue #1739）。
+	"""
+	try:
+		mode = path.lstat().st_mode
+	except FileNotFoundError:
+		return None
+	if stat.S_ISLNK(mode):
+		return "数据库路径是符号链接；SQLite 会跟随链接把数据库写进目标文件"
+	if not stat.S_ISREG(mode):
+		return "数据库路径不是普通文件（目录 / FIFO / 设备）"
+	return None
+
+
 def is_cache_busy_error(exc: BaseException) -> bool:
 	"""SQLite 写锁冲突的判定：busy timeout 内拿不到锁，等锁释放后可重试。"""
 	if not isinstance(exc, sqlite3.OperationalError):
@@ -457,6 +477,11 @@ class CacheStore:
 		self._db_path = db_path
 		self._search_ttl = search_ttl_seconds
 		db_path.parent.mkdir(parents=True, exist_ok=True)
+		# 符号链接 / 特殊文件不能作为缓存库：连接会在链接目标处创建或改写数据库
+		# （Issue #1739，与 clean 的 #1712 同口径）。
+		problem = database_path_problem(db_path)
+		if problem is not None:
+			raise CacheDatabaseInvalid(db_path, problem)
 		try:
 			self._conn = sqlite3.connect(
 				str(db_path),

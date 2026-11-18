@@ -346,6 +346,17 @@ class RequestBudget:
 
 	def _connect(self) -> sqlite3.Connection:
 		path = self.root / "request-budget.sqlite3"
+		# 符号链接会让 SQLite 把库写进目标文件（可能落在数据目录之外），目录 /
+		# FIFO / 设备只会得到 "unable to open"；与 CacheStore / clean 同口径
+		# 先按 lstat 判定（Issue #1739）。
+		from boss_agent_cli.cache.store import database_path_problem
+
+		problem = database_path_problem(path)
+		if problem is not None:
+			raise sqlite3.DatabaseError(
+				f"{path} 不是可用的 SQLite 数据库（{problem}）；"
+				"该文件只保存请求节流元数据，确认后移除该路径即可自动重建"
+			)
 		try:
 			connection = sqlite3.connect(path, timeout=0.1)
 			connection.executescript("""
