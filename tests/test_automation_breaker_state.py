@@ -123,6 +123,40 @@ def test_stop_metadata_error_keeps_latch_open(tmp_path: Path, monkeypatch: pytes
 	assert store.state_path.read_bytes() == state_before
 
 
+def test_state_metadata_error_is_state_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+	store = _store(tmp_path, state={"conversations": {"candidate": {"stage": "greeted"}}})
+	state_before = store.state_path.read_bytes()
+
+	def deny_lookup(get_info: Any) -> Any:
+		def lookup(path: Any, *args: Any, **kwargs: Any) -> os.stat_result:
+			if path in (store.state_path, str(store.state_path)):
+				raise PermissionError(13, "测试路径状态读取失败", str(store.state_path))
+			return get_info(path, *args, **kwargs)
+
+		return lookup
+
+	with monkeypatch.context() as patch:
+		patch.setattr(os, "stat", deny_lookup(os.stat))
+		patch.setattr(os, "lstat", deny_lookup(os.lstat))
+		with pytest.raises(AutomationStateError) as caught:
+			store.read_state()
+		assert caught.value.path == store.state_path
+		assert "路径状态" in caught.value.detail
+
+	assert store.state_path.read_bytes() == state_before
+
+
+def test_dangling_state_symlink_is_state_error(tmp_path: Path) -> None:
+	root = tmp_path / "automation"
+	root.mkdir()
+	(root / "state.json").symlink_to(tmp_path / "missing-state")
+
+	with pytest.raises(AutomationStateError) as caught:
+		AutomationStore(tmp_path).read_state()
+	assert caught.value.path == root / "state.json"
+	assert "悬空符号链接" in caught.value.detail
+
+
 def test_write_state_rejects_non_boolean_open(tmp_path):
 	store = _store(tmp_path)
 

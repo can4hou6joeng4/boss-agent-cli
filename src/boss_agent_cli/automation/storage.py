@@ -52,7 +52,7 @@ _AUTOMATION_DIR = "automation"
 _STOP_FILE = "stop.json"
 
 
-def _stop_path_mode(path: Path) -> int | None:
+def _path_mode(path: Path) -> int | None:
 	"""仅对缺失路径返回 None，悬空链接保留链接自身的类型。"""
 	# 3.14 的 Path.exists() / is_file() 会吞掉权限等 OSError（Issue #1680）。
 	try:
@@ -92,7 +92,7 @@ class AutomationStore:
 		"""只读停止标记，不创建目录；读取失败时保持熔断。"""
 		path = data_dir / _AUTOMATION_DIR / _STOP_FILE
 		try:
-			mode = _stop_path_mode(path)
+			mode = _path_mode(path)
 			if mode is None:
 				return {}
 			if stat.S_ISLNK(mode):
@@ -145,7 +145,7 @@ class AutomationStore:
 		with self._control_lock():
 			path = self.stop_path
 			try:
-				mode = _stop_path_mode(path)
+				mode = _path_mode(path)
 			except (OSError, ValueError) as exc:
 				raise AutomationStateError(path, f"无法读取 stop.json 的路径状态（{exc}）") from exc
 			# 先校验，避免同名目录导致第二次原子写失败（Issue #1678）。
@@ -227,13 +227,23 @@ class AutomationStore:
 				connection.close()
 
 	def read_state(self) -> dict[str, Any]:
-		if not self.state_path.exists():
+		path = self.state_path
+		try:
+			mode = _path_mode(path)
+		except (OSError, ValueError) as exc:
+			raise AutomationStateError(path, f"无法读取 state.json 的路径状态（{exc}）") from exc
+		if mode is None:
 			state: dict[str, Any] = {"conversations": {}, "autonomy": {}, "safety": {}}
 		else:
+			# 悬空链接 / 目录等路径给不出可信状态，不能静默当成空状态（Issue #1682）。
+			if stat.S_ISLNK(mode):
+				raise AutomationStateError(path, "state.json 是悬空符号链接，无法读取状态")
+			if not stat.S_ISREG(mode):
+				raise AutomationStateError(path, "state.json 不是普通文件")
 			try:
-				loaded = json.loads(self.state_path.read_text(encoding="utf-8"))
+				loaded = json.loads(path.read_text(encoding="utf-8"))
 			except (ValueError, OSError, RecursionError) as exc:
-				raise AutomationStateError(self.state_path, str(exc)) from exc
+				raise AutomationStateError(path, str(exc)) from exc
 			if not isinstance(loaded, dict):
 				raise AutomationStateError(self.state_path, "顶层必须是 JSON object")
 			state = cast("dict[str, Any]", loaded)
