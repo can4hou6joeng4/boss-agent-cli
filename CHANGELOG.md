@@ -9,6 +9,7 @@
 - 风险锁路径为悬空符号链接、目录或 FIFO 时，`read_lock()` 会把「锁状态未知」当成「没有锁」；Python 3.14 下路径元数据读取失败也会被 `exists()` 吞掉。现在这些情况统一按损坏锁 fail-closed，且不再直接读取非普通文件（Issue #1686）。
 - `AIConfigStore` 在 `auth/salt` 的存在性判断失败时会重新生成共享 salt，覆盖后已有的 `session.enc` 与 `api_key.enc` 永久无法解密；现在与 `TokenStore` 共用 `O_EXCL` + 刷新锁的 salt 生命周期，读取失败时上抛而不是覆盖（Issue #1688）。
 - `clean --privacy` 在缓存库路径元数据不可读时会把数据库当成不存在，跳过隐私预检并先删除登录态与简历；现在只有 `FileNotFoundError` 才视为没有库，其他读取失败在删除任何文件前以 `LOCAL_IO_ERROR` 中止（Issue #1690）。
+- 简历存在性判断改用 `lstat` / `stat`：路径元数据不可读时不再被 `Path.exists()` 当成「不存在」而绕过 `resume import` / `init` / `clone` 的同名覆盖保护；目录、FIFO、悬空链接按 `RESUME_FILE_INVALID` 报告，悬空链接仍可删除（Issue #1692）。
 
 ## [3.4.105] - 2026-11-18
 
