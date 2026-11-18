@@ -413,7 +413,8 @@ def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Pa
 	"""投递转化漏斗统计（只读聚合）"""
 	# 空 -o 经 click.Path 落成 Path(".")（`-o .` 已被 click 按目录拒绝），
 	# 继续走会把它当路径去建目录，报成 LOCAL_IO_ERROR（Issue #1546）。
-	if output_path is not None and str(output_path) == ".":
+	# 纯空白值不是文件名：照写会在当前目录落一个几乎不可见的文件（Issue #1788）。
+	if output_path is not None and (str(output_path) == "." or not str(output_path).strip()):
 		html_cmd = _hint_command(ctx, "stats --format html -o <文件路径>")
 		handle_error_output(
 			ctx,
