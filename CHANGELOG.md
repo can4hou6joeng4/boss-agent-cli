@@ -12,8 +12,6 @@
 
 ## [Unreleased]
 
-## [3.4.99] - 2026-11-18
-
 ### Fixed
 - 导出产物中的 NaN/Infinity 与孤立代理字符会让 JSON/CSV/XLSX 产物失败或生成非标准 JSON；现在非有限数归一为 `null`、不可编码字符转义后落盘（Issue #1653）。
 - `boss export` 跨页重复职位 ID 占用导出数量，用户拿到的条目少于 `--count`；现在同一次 workflow 内按非空职位 ID 去重（Issue #1654）。
@@ -35,7 +33,6 @@
 - MCP `boss_search` 未声明 CLI 支持的 `url` / `preset`，调用被当未知参数；现在导出契约与参数映射同步（Issue #1648）。
 - `request_delay` 文档默认值与 schema / 运行时相差一个数量级；中英文文档已同步（Issue #1649）。
 - `boss favorites` 的 TTY 状态列读取错误键，永远显示 `-`；现在显示归一后的职位状态（Issue #1650）。
-
 - `ai local configure` 接受无效 `--base-url` 并落盘，`ai local smoke` 又把确定的配置错误报成可重试网络故障；现在写盘与探测前都按 URL 格式校验（Issue #1636）。
 - `--job-id` 读取的缓存 JD 若以 `@` 开头会被误当文件路径展开；现在 `@file` 只适用于显式 `--jd`（Issue #1637）。
 - 出口一致性检查把全部 `America/` 时区推断成美国，多伦多 / 圣保罗 / 墨西哥城被静默放行；现在只映射明确的美国时区，其余返回 unknown（Issue #1638）。
