@@ -100,14 +100,18 @@ def test_fifo_is_rejected_without_blocking_or_reading(tmp_path: Path, monkeypatc
 		AutomationStore(tmp_path).append_interview_lead("候选人甲", "周二 14:00", "预约")
 
 
-def test_symlink_to_regular_file_appends_through_link(tmp_path: Path) -> None:
+def test_symlink_to_regular_file_is_refused_without_touching_target(tmp_path: Path) -> None:
+	"""读取侧允许跟随链接，写入侧不能把隐私线索写穿到数据目录之外（Issue #1748）。"""
 	path = _ensure_root(tmp_path)
 	target = tmp_path / "shared.csv"
 	target.write_text("candidate_key,interview_time,reason\n", encoding="utf-8")
 	path.symlink_to(target)
 
-	assert AutomationStore(tmp_path).append_interview_lead("候选人甲", "周二 14:00", "预约")
-	assert target.read_text(encoding="utf-8").splitlines()[1].startswith("候选人甲")
+	with pytest.raises(AutomationStateError) as caught:
+		AutomationStore(tmp_path).append_interview_lead("候选人甲", "周二 14:00", "预约")
+
+	assert "符号链接" in str(caught.value)
+	assert target.read_text(encoding="utf-8") == "candidate_key,interview_time,reason\n"
 	assert path.is_symlink()
 
 

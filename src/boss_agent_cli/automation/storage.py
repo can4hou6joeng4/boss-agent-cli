@@ -580,6 +580,7 @@ class AutomationStore:
 		重新命中同一时间，重复行只会污染运维清单（Issue #889）。
 		"""
 		path = self.root / "interview-leads.csv"
+		_refuse_symlink_write(path, "面试线索表")
 		row = [sanitize_csv_cell(candidate_key), sanitize_csv_cell(interview_time), sanitize_csv_cell(reason)]
 		try:
 			mode = _path_mode(path)

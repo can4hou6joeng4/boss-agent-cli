@@ -6,6 +6,7 @@
 
 ### Fixed
 - automation 写入侧统一拒绝符号链接与非普通文件：`_append_jsonl` 不再写穿指向普通文件的符号链接目标，`write_jsonl` / `write_state` 不再用 `os.replace` 静默把链接替换成普通文件（恢复链接后旧的 pending / review 行会复活并被重放），FIFO / 目录 / 设备也不再被整文件回写替换；统一报 `AUTOMATION_STATE_INVALID`，普通文件与缺失文件自动创建的行为不变，读取侧仍沿普通文件链接读取（Issue #1746）。
+- `append_interview_lead()` 不再沿符号链接把候选人面试线索写到数据目录之外：`interview-leads.csv` 是指向普通文件的链接时也直接拒绝并报 `AUTOMATION_STATE_INVALID`，链接与目标保持原样；普通文件与缺失文件自动建表的行为不变（Issue #1748）。
 
 ## [3.4.111] - 2026-11-18
 
