@@ -12,6 +12,8 @@
 
 ## [Unreleased]
 
+## [3.4.98] - 2026-11-18
+
 ### Fixed
 - `ai local configure` 接受无效 `--base-url` 并落盘，`ai local smoke` 又把确定的配置错误报成可重试网络故障；现在写盘与探测前都按 URL 格式校验（Issue #1636）。
 - `--job-id` 读取的缓存 JD 若以 `@` 开头会被误当文件路径展开；现在 `@file` 只适用于显式 `--jd`（Issue #1637）。
