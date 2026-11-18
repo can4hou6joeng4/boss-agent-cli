@@ -470,6 +470,13 @@ def resume_export_cmd(ctx: click.Context, name: str, fmt: str, output_path: str 
 			# --name "../x"` 落盘时被清洗成 `.._x.json`，这里若拼原始 argv 就会
 			# 写出到 cwd 之外；Windows 的 `CON` 等保留设备名同理。
 			output_path = f"{_safe_filename(name)}.{fmt}"
+			# 默认名同样要过 -o 预检：FIFO / 设备 / 链接不能被 os.replace
+			# 静默替换或写穿（Issue #1757）。
+			validated = validate_output_path_or_emit(ctx, "resume", output_path)
+			if validated is None:
+				ctx.exit(1)
+				return
+			output_path = validated
 		try:
 			out = prepare_output_path(output_path)
 		except OSError as exc:

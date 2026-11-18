@@ -1,5 +1,7 @@
 import json
+import os
 import shlex
+import stat
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -968,3 +970,20 @@ def test_init_rejects_whitespace_template(tmp_path):
 
 	assert result.exit_code == 1
 	assert json.loads(result.output)["error"]["code"] == "INVALID_PARAM"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows 没有 POSIX FIFO")
+def test_export_default_pdf_fifo_is_rejected_before_browser(tmp_path, monkeypatch):
+	"""不传 -o 的默认文件名同样要过输出路径预检（Issue #1757）。"""
+	runner = CliRunner()
+	monkeypatch.chdir(tmp_path)
+	_invoke(runner, tmp_path, ["init", "--name", "defaultpdf", "--template", "default"])
+	fifo = tmp_path / "defaultpdf.pdf"
+	os.mkfifo(fifo)
+	with patch("patchright.sync_api.sync_playwright") as playwright:
+		result = _invoke(runner, tmp_path, ["export", "defaultpdf", "--format", "pdf"])
+	assert result.exit_code == 1
+	parsed = json.loads(result.output)
+	_assert_error_envelope(parsed, "INVALID_PARAM")
+	assert stat.S_ISFIFO(fifo.lstat().st_mode)
+	playwright.assert_not_called()

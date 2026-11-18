@@ -11,6 +11,7 @@
 """
 
 import json
+import os
 import shlex
 from pathlib import Path
 from unittest.mock import patch
@@ -312,3 +313,27 @@ def test_chat_output_without_export_is_rejected_before_request(mock_auth_cls, mo
 	assert payload["error"]["code"] == "INVALID_PARAM"
 	assert "--export" in payload["error"]["message"]
 	mock_client_cls.assert_not_called()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows 没有 POSIX FIFO")
+@patch("boss_agent_cli.commands.chat.get_platform_instance")
+@patch("boss_agent_cli.commands.chat.AuthManager")
+def test_chat_export_default_fifo_is_rejected_before_request(mock_auth_cls, mock_client_cls, tmp_path: Path):
+	"""默认导出路径与显式 -o 同样拒绝 FIFO（Issue #1757）。"""
+	import datetime
+	import os
+	import stat
+
+	mock_client = _ctx_mock(mock_client_cls)
+	mock_client.friend_list.return_value = _friend_list_response([_friend_item()])
+	export_dir = tmp_path / "chat-export"
+	export_dir.mkdir(parents=True)
+	fifo = export_dir / f"沟通列表-{datetime.date.today().isoformat()}.md"
+	os.mkfifo(fifo)
+
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "chat", "--export", "md"])
+
+	assert result.exit_code == 1, result.output
+	payload = json.loads(result.output)
+	assert payload["error"]["code"] == "INVALID_PARAM"
+	assert stat.S_ISFIFO(fifo.lstat().st_mode)
