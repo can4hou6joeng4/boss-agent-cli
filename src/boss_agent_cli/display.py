@@ -88,6 +88,16 @@ def shell_argument(value: str) -> str:
 	return "'" + value.replace("'", "'\\''") + "'"
 
 
+def positional_hint(value: str) -> str:
+	"""把位置参数值安全地拼进后继命令（Issue #1783 #1797）。
+
+	加 shell 引用，避免空白 / 元字符拆开或改写命令；以 ``-`` 开头的值前置
+	``--``，否则重放时会被 click 当成选项。
+	"""
+	quoted = shell_argument(value)
+	return f"-- {quoted}" if value.startswith("-") else quoted
+
+
 def boss_command(command: str, *, platform_name: str = "zhipin", data_dir: Path | None = None, role: str | None = None) -> str:
 	"""构造后继命令；依赖本地状态时显式保留数据目录。"""
 	prefix = "boss" if platform_name == "zhipin" else f"boss --platform {platform_name}"

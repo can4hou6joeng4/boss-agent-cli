@@ -2,7 +2,13 @@ import click
 from typing import Any
 
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, render_simple_list, shell_argument
+from boss_agent_cli.display import (
+	boss_command_for_ctx,
+	handle_error_output,
+	handle_output,
+	positional_hint,
+	render_simple_list,
+)
 
 
 def _hint_command(ctx: click.Context, command: str) -> str:
@@ -119,7 +125,7 @@ def shortlist_add_cmd(
 		hints={
 			"next_actions": [
 				_hint_command(ctx, "shortlist list"),
-				_hint_command(ctx, f"shortlist remove {shell_argument(security_id)} {shell_argument(job_id)}"),
+				_hint_command(ctx, f"shortlist remove {positional_hint(security_id)} {positional_hint(job_id)}"),
 			]
 		},
 	)
@@ -222,7 +228,7 @@ def shortlist_annotate_cmd(
 				message=f"候选池中没有该职位: {security_id} / {job_id}",
 				hints={
 					"next_actions": [
-						_hint_command(ctx, f"shortlist add {shell_argument(security_id)} {shell_argument(job_id)}"),
+						_hint_command(ctx, f"shortlist add {positional_hint(security_id)} {positional_hint(job_id)}"),
 						_hint_command(ctx, "shortlist list"),
 					]
 				},

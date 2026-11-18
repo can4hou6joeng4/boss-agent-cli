@@ -102,15 +102,18 @@ def test_watch_remove_rejects_blank_name(tmp_path):
 
 
 def test_watch_run_blank_name_points_at_list_and_all(tmp_path):
-	"""``boss watch run ""`` 也要给出可选的两条路径：点名运行或 --all。"""
+	"""``boss watch run ""`` 也要给出可选的两条路径：点名运行或 --all。
+
+	空串与纯空白名同口径在入口报 INVALID_PARAM（Issue #1800）。
+	"""
 	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "watch", "run", ""])
 
 	assert result.exit_code == 1, result.output
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "INVALID_PARAM"
+	assert parsed["error"]["message"] == "watch 名称不能为空"
 	assert [shlex.split(cmd) for cmd in parsed["hints"]["next_actions"]] == [
 		_hinted_args(tmp_path, "watch", "list"),
-		_hinted_args(tmp_path, "watch", "run", "--all"),
 	]
 
 
