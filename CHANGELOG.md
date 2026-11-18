@@ -12,6 +12,8 @@
 
 ## [Unreleased]
 
+## [3.4.99] - 2026-11-18
+
 ### Fixed
 - 导出产物中的 NaN/Infinity 与孤立代理字符会让 JSON/CSV/XLSX 产物失败或生成非标准 JSON；现在非有限数归一为 `null`、不可编码字符转义后落盘（Issue #1653）。
 - `boss export` 跨页重复职位 ID 占用导出数量，用户拿到的条目少于 `--count`；现在同一次 workflow 内按非空职位 ID 去重（Issue #1654）。
