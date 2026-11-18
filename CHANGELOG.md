@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.116] - 2026-11-19
+
 ### Fixed
 - 恢复终态 crawl 任务时状态先落库再执行：前台恢复在打开采集浏览器之前写 `running`，后台恢复在启动 worker 之前写 `queued`，这段时间到达的 `crawl stop` 不再按旧终态被拒而采集照常继续，重复的后台恢复也不再拉起第二个 worker；worker 启动失败时把原因写回，不留无人执行的 `queued`（Issue #1771）。
 - wizard `crawl_start` 显式带 `run_id` 且 `query` / `city` 与断点不一致时返回 `INVALID_PARAM`，不再静默按旧关键词续跑并把结果记到新关键词名下；输入一致时续跑行为不变（Issue #1772）。
