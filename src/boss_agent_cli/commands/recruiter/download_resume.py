@@ -11,6 +11,7 @@ from boss_agent_cli.api.recruiter_client import RecruiterAuthError
 from boss_agent_cli.api.recruiter_resume import SUPPORTED_RESUME_SUFFIXES, ResumeValidationError
 from boss_agent_cli.auth.manager import AuthManager, AuthRequired, TokenRefreshFailed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
+from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.commands.recruiter._hints import hint_command
@@ -78,6 +79,14 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 			recovery_action=f"把 --output 改成 {supported} 之一结尾的文件名后重试",
 		)
 		return
+	# click 只拒绝目录：FIFO / 设备 / 悬空链接会通过扩展名检查，随后消耗
+	# chat_history / friend_detail / preview-check / 下载四个请求，最后被
+	# save_resume 的 O_EXCL 报成「文件已存在」。与 digest / stats / resume
+	# export 同口径，在取凭据和发请求之前按参数错误拒绝（Issue #1726）。
+	validated = validate_output_path_or_emit(ctx, command, output)
+	if validated is None:
+		return
+	output = Path(validated)
 	# MCP 子进程调用不经 shell，`~` 不会被展开；父目录也可能尚不存在。
 	# 与其他 `-o` 命令一致，先展开并建好父目录；是否覆盖已有文件仍由客户端判断。
 	output = prepare_output_path(output)
