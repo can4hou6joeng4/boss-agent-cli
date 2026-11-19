@@ -80,7 +80,7 @@ def _validated_salt(raw: bytes, salt_path: Path) -> bytes:
 
 def _create_salt(salt_path: Path) -> bytes:
 	"""写入完整 salt 后再原子落位；并发创建者只能复用胜出值。"""
-	fd, temporary_name = tempfile.mkstemp(prefix=f".{salt_path.name}.", dir=salt_path.parent)
+	fd, temporary_name = tempfile.mkstemp(prefix=f".{salt_path.name[:32]}.", dir=salt_path.parent)
 	temporary = Path(temporary_name)
 	try:
 		payload = os.urandom(SALT_BYTES)
@@ -137,7 +137,10 @@ def write_private_bytes(path: Path, data: bytes) -> None:
 	path.parent.mkdir(parents=True, exist_ok=True)
 	temporary: Path | None = None
 	try:
-		fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+		# 临时名只用截断后的目标名（最多 32 字符）：把完整目标名拼进前缀时，
+		# 接近 NAME_MAX 的合法文件名会让 mkstemp 直接 ENAMETOOLONG
+		# （Issue #2080，与 #1985/#1986 同口径）。
+		fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name[:32]}.", dir=path.parent)
 		temporary = Path(temporary_name)
 		with os.fdopen(fd, "wb") as handle:
 			handle.write(data)
