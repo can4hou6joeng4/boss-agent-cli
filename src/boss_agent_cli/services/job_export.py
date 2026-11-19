@@ -8,7 +8,7 @@ from typing import Any
 
 from boss_agent_cli.api.models import field_list
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell
-from boss_agent_cli.services.text_files import write_text_atomic
+from boss_agent_cli.services.text_files import sanitize_surrogates, write_text_atomic
 from boss_agent_cli.services.json_files import strict_json_text
 
 
@@ -39,12 +39,8 @@ def public_html_export_item_from_api(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sanitize_surrogates(text: str) -> str:
-	"""孤立代理项按 backslashreplace 归一，stdout / 文件路径同口径（Issue #2017）。"""
-	try:
-		text.encode("utf-8")
-	except UnicodeEncodeError:
-		return text.encode("utf-8", "backslashreplace").decode("utf-8")
-	return text
+	"""兼容旧调用点：实现已收敛到 services.text_files（Issue #2017、#2109）。"""
+	return sanitize_surrogates(text)
 
 
 def _cell_text(value: Any) -> str:

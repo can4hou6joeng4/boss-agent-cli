@@ -254,9 +254,11 @@ def load_snapshot(path: str, logger: Logger) -> list[dict[str, Any]] | None:
 		logger.warning(f"快照格式异常（非数组）: {path}")
 		return None
 
-	items = [item for item in data if isinstance(item, dict)]
+	items = [item for item in data if isinstance(item, dict) and contact_identity(item)]
 	# 非空数组但零个可用对象（手工改坏 / 旧格式漂移）与坏 JSON 同口径：
 	# 当作没有历史，而不是「完整但为空的基线」，否则次日全员误报新增（Issue #1993）。
+	# 「可用」与 _merge_and_write 同口径：必须带 identity，无身份字段的 dict
+	# 让 prev_map 为空，下次完整采集仍会全员误报新增（Issue #2111）。
 	if data and not items:
 		logger.warning(f"快照没有可用条目: {path}")
 		return None
