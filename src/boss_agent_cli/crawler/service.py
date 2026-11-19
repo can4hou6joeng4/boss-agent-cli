@@ -1149,7 +1149,11 @@ class CrawlService:
 def _normalize_job(raw: dict[str, Any], query: str, page_no: int, rank: int) -> tuple[str, dict[str, Any]]:
 	job_id = str(raw.get("encryptJobId") or "")
 	security_id = str(raw.get("securityId") or "")
-	job_key = job_id or security_id or f"{page_no}:{rank}:{field_text(raw, 'jobName')}"
+	# securityId 每次搜索请求都会轮换（operations.import_shortlist 同样不拿它做
+	# 跨 run 去重）：页内崩溃后 resume 重抓同一页会拿到新值，用它当身份会让同一
+	# 职位以新键再插一行。无稳定 job_id 时按「页 + 名次 + 标题」兜底，它们在
+	# 同一页的重复抓取之间保持不变（Issue #2029）。
+	job_key = job_id or f"{page_no}:{rank}:{field_text(raw, 'jobName')}"
 	labels = raw.get("jobLabels", [])
 	benefits = raw.get("welfareList", [])
 	return job_key, {
