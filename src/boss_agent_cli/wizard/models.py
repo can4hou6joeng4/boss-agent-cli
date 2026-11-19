@@ -21,22 +21,43 @@ class WorkflowInputError(ValueError):
 	"""Raised when wizard/headless input cannot form a workflow plan."""
 
 
-def _ensure_finite_inputs(value: Any, path: str = "inputs") -> None:
-	"""递归拒绝 NaN / Infinity（Issue #1883）。
+def _reject_lone_surrogates(text: str, path: str) -> None:
+	"""孤立代理字符无法按 UTF-8 编码（Issue #2058）。
+
+	``json.loads`` 会把 ``\\ud800`` 还原成孤立代理并放行；随后 sqlite3 绑参时抛
+	``UnicodeEncodeError``（不是 ``sqlite3.DatabaseError``，不经本地 IO 翻译），
+	命令层把它归成 ``LOCAL_IO_ERROR``，让操作者去查磁盘权限——实际是输入非法。
+	入口处直接拒绝，与 MCP 侧 ``_unsafe_argv_reason``（#1236/#1237）同口径。
+	"""
+	for char in text:
+		if 0xD800 <= ord(char) <= 0xDFFF:
+			raise WorkflowInputError(
+				f"{path} 含无法编码的代理字符（U+{ord(char):04X}）；请检查输入 JSON 的转义"
+			)
+
+
+def _ensure_storable_inputs(value: Any, path: str = "inputs") -> None:
+	"""递归拒绝 NaN / Infinity（Issue #1883）与孤立代理字符（Issue #2058）。
 
 	``json.loads`` 默认接受 ``NaN`` / ``Infinity``，而 ``nan != nan`` 恒真：
 	含非有限数值的 plan 一旦落库，恢复时永远比对不相等，run 永久不可恢复；
-	非标准 JSON 常量也不符合本仓库「严格 JSON」的输出契约。入口处一次拒绝，
-	CLI、MCP 与 Python API 共享同一条边界。
+	非标准 JSON 常量也不符合本仓库「严格 JSON」的输出契约。孤立代理字符同理：
+	``ensure_ascii=False`` 写 JSON 列时保留裸代理，sqlite3 绑参直接抛编码错误。
+	入口处一次拒绝，CLI、MCP 与 Python API 共享同一条边界。
 	"""
 	if isinstance(value, float) and not math.isfinite(value):
 		raise WorkflowInputError(f"{path} 不能包含 NaN 或 Infinity；请改用有限数值")
-	if isinstance(value, Mapping):
+	if isinstance(value, str):
+		_reject_lone_surrogates(value, path)
+	elif isinstance(value, Mapping):
 		for key, item in value.items():
-			_ensure_finite_inputs(item, f"{path}.{key}")
+			item_path = f"{path}.{key}"
+			if isinstance(key, str):
+				_reject_lone_surrogates(key, item_path)
+			_ensure_storable_inputs(item, item_path)
 	elif isinstance(value, (list, tuple)):
 		for index, item in enumerate(value):
-			_ensure_finite_inputs(item, f"{path}[{index}]")
+			_ensure_storable_inputs(item, f"{path}[{index}]")
 
 
 def count_or_none(value: Any) -> int | None:
@@ -73,17 +94,21 @@ class WizardInput:
 			raise WorkflowInputError("role 必须是 candidate 或 recruiter")
 		if not platform:
 			raise WorkflowInputError("platform 不能为空")
+		_reject_lone_surrogates(platform, "platform")
 		if not goal:
 			raise WorkflowInputError("goal 不能为空")
+		_reject_lone_surrogates(goal, "goal")
 		inputs = value.get("inputs", {})
 		if not isinstance(inputs, Mapping):
 			raise WorkflowInputError("inputs 必须是 JSON object")
-		_ensure_finite_inputs(inputs)
+		_ensure_storable_inputs(inputs)
 		requested: Any = ()
 		if "requested_steps" in value:
 			requested = value["requested_steps"]
 			if not isinstance(requested, (list, tuple)) or not all(isinstance(item, str) for item in requested):
 				raise WorkflowInputError("requested_steps 必须是字符串数组")
+			for index, step_name in enumerate(requested):
+				_reject_lone_surrogates(step_name, f"requested_steps[{index}]")
 			if not requested:
 				# 空数组不能折叠成「执行 goal 的全部步骤」：goal 里可能包含真实平台
 				# 写操作（如 candidate_greet），调用方显式传空子集的预期是不执行任何

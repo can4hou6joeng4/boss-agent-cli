@@ -367,6 +367,27 @@ class WorkflowRunner:
 			self._assert_plan_matches(existing, plan)
 			if existing["status"] == WorkflowStatus.STOPPED.value:
 				return existing
+			if existing["status"] == WorkflowStatus.COMPLETED.value:
+				# 已完成的 run 是终态（Issue #2054）：此前 --resume 会先无条件写
+				# running 并清空 last_result / error，末次写回失败时完成结果永久丢失
+				# （--stop 还能把它改成 stopped，结果再也读不到）。重跑应新建 run_id。
+				unfinished = [
+					str(step.get("step_name"))
+					for step in existing.get("steps") or []
+					if step.get("status") != WorkflowStatus.COMPLETED.value
+				]
+				if unfinished:
+					# completed 只应来自「所有步骤都 completed」；自相矛盾时无法判断
+					# 该不该重跑，按记录损坏确定性拒绝，不猜、不写。
+					raise WorkflowActionError(
+						"CACHE_RECORD_INVALID",
+						f"任务状态是 completed，但步骤 {', '.join(unfinished)} 未完成；"
+						"状态自相矛盾，无法判断是否重跑，请核对或新建 workflow",
+						recoverable=True,
+						replay_safe=True,
+						auto_retry=False,
+					)
+				return existing
 		prior_results: dict[str, Any] = {}
 		# waiting_input 步骤结果仍传给 action（如 crawl run_id），但不会跳过重跑。
 		waiting_priors: dict[str, Any] = {}

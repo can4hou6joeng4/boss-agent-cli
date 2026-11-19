@@ -844,6 +844,16 @@ def _run_wizard_command(
 			# 先读断点区分「不存在」与「已结束」：request_stop 只排除 completed，
 			# 把存在但已完成的任务误报为 ID 写错（Issue #1585）。损坏的断点不影响
 			# 停止标记本身，仍交给 request_stop 按既有补偿语义处理。
+			def _stop_already_finished(*, recovery_action: str, next_actions: list[str]) -> None:
+				_wizard_error(
+					ctx,
+					interactive,
+					code="WORKFLOW_ALREADY_FINISHED",
+					message=f"任务已结束，无法停止: {stop_run_id}",
+					recovery_action=recovery_action,
+					hints={"next_actions": next_actions},
+				)
+
 			existing_run: dict[str, Any] | None = None
 			record_corrupt = False
 			try:
@@ -854,22 +864,16 @@ def _run_wizard_command(
 				# （Issue #2035）。
 				record_corrupt = True
 			if existing_run is not None and existing_run.get("status") == "completed":
-				_wizard_error(
-					ctx,
-					interactive,
-					code="WORKFLOW_ALREADY_FINISHED",
-					message=f"任务已结束，无法停止: {stop_run_id}",
+				_stop_already_finished(
 					recovery_action=(
 						f"{boss_command_for_ctx(ctx, 'wizard --status <run_id>', include_data_dir=True)} 查看结果与最终状态，或 "
 						f"{boss_command_for_ctx(ctx, 'wizard', include_data_dir=True)} 新建 workflow"
 					),
-					hints={
-						"next_actions": [
-							boss_command_for_ctx(
-								ctx, f"wizard --status {shell_argument(stop_run_id)}", include_data_dir=True
-							)
-						]
-					},
+					next_actions=[
+						boss_command_for_ctx(
+							ctx, f"wizard --status {shell_argument(stop_run_id)}", include_data_dir=True
+						)
+					],
 				)
 				return
 			if not store.request_stop(stop_run_id):
@@ -886,6 +890,28 @@ def _run_wizard_command(
 							"如需查看结果，该 run 的断点已损坏、无法恢复"
 						),
 						hints={"next_actions": [boss_command_for_ctx(ctx, "wizard", include_data_dir=True)]},
+					)
+					return
+				# pre-read 与 request_stop 之间 worker 可能刚把 run 落成 completed
+				# （TOCTOU）：request_stop 的 WHERE status != 'completed' 返回 0 行，
+				# 与 run 不存在无法区分。重读断点再分类，恢复指引不能把已完成任务
+				# 说成 ID 写错（Issue #2057）。
+				after: dict[str, Any] | None = None
+				try:
+					after = store.get_checkpoint(stop_run_id, validate_replay_markers=False)
+				except CacheRecordInvalid:
+					after = None
+				if after is not None and after.get("status") == "completed":
+					_stop_already_finished(
+						recovery_action=(
+							f"{boss_command_for_ctx(ctx, 'wizard --status <run_id>', include_data_dir=True)} 查看结果与最终状态，或 "
+							f"{boss_command_for_ctx(ctx, 'wizard', include_data_dir=True)} 新建 workflow"
+						),
+						next_actions=[
+							boss_command_for_ctx(
+								ctx, f"wizard --status {shell_argument(stop_run_id)}", include_data_dir=True
+							)
+						],
 					)
 					return
 				_wizard_error(
