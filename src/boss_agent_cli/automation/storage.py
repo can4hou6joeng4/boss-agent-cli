@@ -586,6 +586,9 @@ class AutomationStore:
 				handle.flush()
 				os.fsync(handle.fileno())
 			os.replace(temporary, path)
+		except UnicodeEncodeError as exc:
+			# JSON 解码允许转义的孤立代理字符，UTF-8 写入会拒绝（Issue #2073）。
+			raise AutomationStateError(path, f"队列文件无法编码为 UTF-8（{exc}）") from exc
 		finally:
 			Path(temporary).unlink(missing_ok=True)
 
@@ -686,9 +689,16 @@ class AutomationStore:
 		path = self.root / name
 		_refuse_symlink_write(path, "队列文件")
 		try:
-			with path.open("a", encoding="utf-8") as handle:
-				handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
-				handle.write("\n")
+			# 上一次写入的末行可能缺少换行。保留其分隔符，避免追加后两条记录
+			# 粘成一行并在读取时一起丢失（Issue #2072）。
+			record = (json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+			with path.open("a+b") as handle:
+				handle.seek(0, os.SEEK_END)
+				if handle.tell() > 0:
+					handle.seek(-1, os.SEEK_END)
+					if handle.read(1) != b"\n":
+						record = b"\n" + record
+				handle.write(record)
 		except (OSError, ValueError, RecursionError) as exc:
 			# 只读文件 / 只读目录 / 磁盘满：动作已经发生，写不进日志同样必须
 			# 带着路径与原因停下，不能兜成可重试的通用错误。深嵌套 / 循环引用
@@ -746,12 +756,13 @@ def _review_from_row(row: dict[str, Any], path: Path) -> ReviewItem:
 		raise AutomationStateError(
 			path, f"记录 {str(row.get('id', ''))!r} 的 status {status!r} 不是已知状态"
 		)
+	action = str(row.get("action", ""))
 	return ReviewItem(
 		id=str(row.get("id", "")),
 		ts=str(row.get("ts", "")),
 		platform=_row_text(row, "platform", path),
 		candidate_key=_row_text(row, "candidate_key", path),
-		action=str(row.get("action", "")),
+		action=action,
 		status=status,
 		confidence=_row_confidence(row, path),
 		reason=_row_text(row, "reason", path),
@@ -785,12 +796,13 @@ def _pending_from_row(row: dict[str, Any], path: Path) -> PendingAction:
 		raise AutomationStateError(
 			path, f"记录 {str(row.get('id', ''))!r} 的 status {status!r} 不是已知状态"
 		)
+	action = str(row.get("action", ""))
 	return PendingAction(
 		id=str(row.get("id", "")),
 		ts=str(row.get("ts", "")),
 		platform=_row_text(row, "platform", path),
 		candidate_key=_row_text(row, "candidate_key", path),
-		action=str(row.get("action", "")),
+		action=action,
 		status=status,
 		confidence=_row_confidence(row, path),
 		reason=_row_text(row, "reason", path),
