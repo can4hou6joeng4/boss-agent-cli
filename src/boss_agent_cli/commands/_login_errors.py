@@ -136,18 +136,12 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 			recovery=install_command,
 		)
 
-	if "cdp" in message or "chrome" in message or isinstance(exc, ConnectionError):
-		return payload(
-			"CDP_UNAVAILABLE",
-			f"Chrome 调试连接不可用: {raw_message}",
-			[login_cmd],
-			[
-				"以 --remote-debugging-port=9222 启动带调试端口的 Chrome 后重试，或去掉 --cdp 让命令自动降级到 Cookie / 扫码链路",
-				"确认 --cdp-url 指向可访问的 Chrome DevTools 地址",
-			],
-		)
-
-	if any(term in message for term in ("403", "forbidden", "风控", "risk", "rate limit", "too many")):
+	# 风控判定必须先于 CDP / 浏览器文本启发式：Playwright / CDP 的异常文案可能
+	# 同时含「chrome / cdp」与风控词，先走 CDP 分支会把硬边界报成可重试的
+	# CDP_UNAVAILABLE 并建议重新登录（Issue #2145）。限流词只认完整的
+	# "too many requests"：本地 fd 耗尽的 strerror "Too many open files"
+	# 不是平台风控（Issue #2144）。
+	if any(term in message for term in ("403", "forbidden", "风控", "risk", "rate limit", "too many requests")):
 		# 风控是硬边界：恢复动作取登记表原文，不能沿用 login_action_for_ctx 的
 		# 默认「重新登录」，否则信封会诱导 Agent 反复重试（Issue #1390）。
 		_, risk_recovery = error_contract_for_code("LOGIN_RISK_CONTROL")
@@ -161,6 +155,17 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 				"必要时联系平台客服确认账号是否受限",
 			],
 			recovery=risk_recovery,
+		)
+
+	if "cdp" in message or "chrome" in message or isinstance(exc, ConnectionError):
+		return payload(
+			"CDP_UNAVAILABLE",
+			f"Chrome 调试连接不可用: {raw_message}",
+			[login_cmd],
+			[
+				"以 --remote-debugging-port=9222 启动带调试端口的 Chrome 后重试，或去掉 --cdp 让命令自动降级到 Cookie / 扫码链路",
+				"确认 --cdp-url 指向可访问的 Chrome DevTools 地址",
+			],
 		)
 
 	if any(term in message for term in ("401", "unauthorized", "expired", "过期", "未登录")):
