@@ -23,6 +23,7 @@
 - `hr location` 的发送记录存在性判断改用 `stat()`，只把 `FileNotFoundError` 当没有记录，权限类错误不再吞成「未发送」（Issue #1839）。
 - `blank_option_names` 对非字符串取值不再直接 `.strip()`，按非法参数返回选项名（Issue #1841）。
 - `hr chat` 的时间与消息文本只接受字符串或数值，dict / list 不再被 `str()` 写进输出数据（Issue #1842）。
+- `hr request-resume` 在任何请求前检查 `boss agent stop` 停止开关；异常分支不能证明请求未发出时返回不可重试的 `ACTION_UNCONFIRMED`，能证明未发送的异常保持原有可重试契约（Issue #1840）。
 
 ## [3.4.122] - 2026-11-19
 
