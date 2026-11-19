@@ -4,7 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
-v3.4.134 (2026-11-20): audit batch — login error classification, wizard writes and recovery, cache record validation, digest and job exports, resume links, favorites, and job deduplication (Issues #2114–#2149).
+v3.4.135 (2026-11-20): HTTP and risk-boundary fixes — one token refresh per query, undecodable write responses stay outcome-unknown, symlink loops no longer replace risk errors or crash startup, read-status error text and text redaction no longer carry the stoken, group budget config errors are rejected as invalid parameters (Issues #2151–#2159).
+- ✅ v3.4.134 (2026-11-20): audit batch — login error classification, wizard writes and recovery, cache record validation, digest and job exports, resume links, favorites, and job deduplication (Issues #2114–#2149).
 - ✅ v3.4.133 (2026-11-20): audit batch — log-in salt creation waits for a concurrent winner, agent --limit caps dispatched conversations per round, wizard checkpoints validate error.code, doctor handles unreadable browser caches and salt symlinks, request leases classify local errors, crawl exports normalize non-finite floats, stats HTML escapes dangling surrogates, and chat export identities plus snapshot baselines fail closed (Issues #2099–#2111).
 - ✅ v3.4.132 (2026-11-20): auth session integrity (stoken refresh rejects stale values, rate-limited probes no longer force a re-login, probe pages raise risk stops, scan polling propagates errors immediately) and crawl sequential pagination counts budget and leases per real request (Issues #2091–#2095).
 - ✅ v3.4.131 (2026-11-19): the MCP server resolves its default boss entry point at module load, so embedded calls and tests no longer depend on boss being on PATH (Issue #2088).
