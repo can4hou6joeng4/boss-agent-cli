@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.121] - 2026-11-19
+
 ### Fixed
 - `resume` 全族后继命令对以 `-` 开头的名字与 ID 前置 `--`，带选项的提示把选项挪到 `--` 之前，照抄执行不再报「没有选项」（Issue #1803）。
 - `resume edit --field` 拒绝系统托管的 `name` / `created_at` / `updated_at`：不再报成功却值不生效，或把任意字符串写进 `created_at`（Issue #1806）。
