@@ -96,6 +96,31 @@ def _refuse_symlink_write(path: Path, label: str) -> None:
 		)
 
 
+def _unparsed_jsonl_lines(payload: bytes) -> list[bytes]:
+	"""返回读取路径会跳过的原始行：坏编码 / 坏 JSON / 非 object（Issue #2172）。
+
+	判定必须与 ``AutomationStore.read_jsonl`` 的容错口径保持一致：这里多留一行
+	无害，少留一行就是整文件回写时的静默数据丢失。
+	"""
+	unparsed: list[bytes] = []
+	for raw_line in payload.splitlines():
+		try:
+			line = raw_line.decode("utf-8")
+		except UnicodeDecodeError:
+			unparsed.append(raw_line)
+			continue
+		if not line.strip():
+			continue
+		try:
+			parsed = json.loads(line)
+		except (ValueError, RecursionError):
+			unparsed.append(raw_line)
+			continue
+		if not isinstance(parsed, dict):
+			unparsed.append(raw_line)
+	return unparsed
+
+
 class AutomationStore:
 	"""Small JSONL-backed store for the recruiter automation engine."""
 
@@ -330,6 +355,15 @@ class AutomationStore:
 			errors = state.get("safety", {}).get("consecutive_errors", 0)
 			if isinstance(errors, bool) or not isinstance(errors, int):
 				raise AutomationStateError(self.state_path, "safety.consecutive_errors 必须是整数")
+			if errors < 0:
+				# 失败计数只递增、归零；负值（外部编辑 / 迁移）会让连续失败熔断
+				# 需要更多次失败才打开，削弱安全闩锁，按状态损坏 fail-closed
+				# （Issue #1242、#1330、#2173）。
+				raise AutomationStateError(
+					self.state_path,
+					"safety.consecutive_errors 必须是非负整数；连续失败熔断按该计数判断，"
+					"负值会让熔断不按预期打开。请先备份 state.json，再修正该字段或移除它",
+				)
 		stop = self.read_stop()
 		if "open" in stop:
 			state.setdefault("autonomy", {})["circuit_breaker"] = stop
@@ -602,18 +636,44 @@ class AutomationStore:
 			raise AutomationStateError(
 				path, f"队列文件无法序列化（{type(exc).__name__}: {exc}）"
 			) from exc
+		# 读取路径会跳过坏行（Issue #1337），整文件回写不能因此把它们删掉：
+		# 一行可能是一条已批准但因崩溃截断的动作记录，静默删除后既不会执行、
+		# 也不会留下任何痕迹（Issue #2172）。坏行按原字节保留在文件末尾。
+		preserved = self._preserved_jsonl_lines(path)
 		fd, temporary = tempfile.mkstemp(prefix=f".{name}.", dir=self.root)
 		try:
-			with os.fdopen(fd, "w", encoding="utf-8") as handle:
-				handle.write(body)
+			with os.fdopen(fd, "wb") as handle:
+				try:
+					handle.write(body.encode("utf-8"))
+				except UnicodeEncodeError as exc:
+					# JSON 解码允许转义的孤立代理字符，UTF-8 写入会拒绝（Issue #2073）。
+					raise AutomationStateError(path, f"队列文件无法编码为 UTF-8（{exc}）") from exc
+				for raw_line in preserved:
+					handle.write(raw_line)
+					handle.write(b"\n")
 				handle.flush()
 				os.fsync(handle.fileno())
 			os.replace(temporary, path)
-		except UnicodeEncodeError as exc:
-			# JSON 解码允许转义的孤立代理字符，UTF-8 写入会拒绝（Issue #2073）。
-			raise AutomationStateError(path, f"队列文件无法编码为 UTF-8（{exc}）") from exc
 		finally:
 			Path(temporary).unlink(missing_ok=True)
+
+	def _preserved_jsonl_lines(self, path: Path) -> list[bytes]:
+		"""回写前读出读取路径会跳过的原始行，按原字节保留（Issue #2172）。
+
+		调用方已通过 ``_refuse_symlink_write`` 排除符号链接与特殊文件；这里
+		只需处理「文件不存在」与读取失败，读取失败按状态损坏 fail-closed。
+		"""
+		try:
+			payload = path.read_bytes()
+		except FileNotFoundError:
+			return []
+		except OSError as exc:
+			raise AutomationStateError(
+				path,
+				f"队列文件无法读取（{exc}）；回写会丢失无法解析的行，已停止。"
+				"请确认文件可读后重试，文件损坏时先备份再修正或移除",
+			) from exc
+		return _unparsed_jsonl_lines(payload)
 
 	def append_interview_lead(
 		self,
@@ -722,6 +782,10 @@ class AutomationStore:
 					if handle.read(1) != b"\n":
 						record = b"\n" + record
 				handle.write(record)
+				# 追加的是「已批准动作」等关键记录：与 _write_json_atomic 同口径
+				# fsync，缩小崩溃 / 断电只落下半行的窗口（Issue #2172）。
+				handle.flush()
+				os.fsync(handle.fileno())
 		except (OSError, ValueError, RecursionError) as exc:
 			# 只读文件 / 只读目录 / 磁盘满：动作已经发生，写不进日志同样必须
 			# 带着路径与原因停下，不能兜成可重试的通用错误。深嵌套 / 循环引用
