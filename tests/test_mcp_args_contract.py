@@ -105,11 +105,19 @@ _ACTION_SCOPED_KEYS: dict[str, dict[str, set[str]]] = {
 }
 _ACTION_SHARED_KEYS = {"action", "timeout", "max_retries"}
 
+#: schema 用 ``not`` 声明互斥的键：按全部 properties 生成的样例必须二选一，
+#: 否则映射层按互斥约束拒绝（Issue #2175），测试会在入口就撞上 ValueError。
+_EXCLUSIVE_SAMPLE_KEYS: dict[str, set[str]] = {
+	"boss_crawl_shortlist": {"all"},
+}
+
 
 def _sample_arguments(tool, *, action: str | None = None) -> dict[str, Any]:
-	"""按所选 action 裁剪样例参数：只保留该 action 实际使用的键。"""
+	"""按所选 action 与互斥约束裁剪样例参数。"""
 	properties = tool.input_schema.get("properties") or {}
 	arguments = {key: _sample_value(prop, key) for key, prop in properties.items()}
+	for key in _EXCLUSIVE_SAMPLE_KEYS.get(tool.name, ()):
+		arguments.pop(key, None)
 	if action is not None:
 		arguments["action"] = action
 	scoped = _ACTION_SCOPED_KEYS.get(tool.name)
