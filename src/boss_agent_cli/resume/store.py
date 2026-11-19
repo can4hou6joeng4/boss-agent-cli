@@ -216,6 +216,27 @@ class ResumeStore:
 		# 原子写：编辑到一半被中断不能把用户唯一一份简历写成半截 JSON。
 		write_json_atomic(self._path_for(resume.name), d)
 
+	def stored_name(self, name: str) -> str:
+		"""按 ``name`` 取到的那份文件里记录的真实名称；读不出来时返回 ``name``。
+
+		``a/b`` 与 ``a_b`` 清洗后落在同一个文件上：按别名取到的简历仍叫 ``a/b``，
+		编辑与清理关联都要用这个名字（Issue #1804）。文件里的名称指向另一个
+		文件时（手工复制出来的副本）不采信，仍按请求名处理。
+		"""
+		resume = self.get(name)
+		if resume is None or not isinstance(resume.name, str) or not resume.name:
+			return name
+		if self._path_for(resume.name) != self._path_for(name):
+			return name
+		return resume.name
+
+	def is_directory(self, name: str) -> bool:
+		"""简历路径本身是目录（不跟随链接）：``unlink`` 必然失败（Issue #1805）。"""
+		try:
+			return stat.S_ISDIR(self._path_for(name).lstat().st_mode)
+		except FileNotFoundError:
+			return False
+
 	def delete(self, name: str) -> bool:
 		"""删除简历，返回是否成功；悬空链接只删除链接本身。"""
 		path = self._path_for(name)
