@@ -29,6 +29,7 @@ from boss_agent_cli.crawler.service import (
 	crawl_chrome_path,
 	crawl_int_setting,
 	unused_local_port,
+	validate_pages_override,
 )
 from boss_agent_cli.crawler.controls import (
 	CrawlBrowserStartError,
@@ -758,6 +759,11 @@ def _prepare_background_resume(
 			# 将要启动 worker 才校验持锁重读的设置；损坏断点在修改 stop 或
 			# 探测依赖/登录态之前由父进程返回错误（Issue #1125）。
 			CrawlSettings.from_dict(run["params"], run_id=run_id)
+			# 与前台 resume 同口径：worker 会在同一个断点上再次校验，但父进程
+			# 必须先把矛盾的 --pages 报出来，不能先返回 queued 再让 worker
+			# 静默失败、任务停在无人执行的状态（Issue #2075）。
+			if pages is not None:
+				validate_pages_override(int(run["next_page"]), pages)
 			# 旧 stop 必须在预检之前清掉：预检要探测可选依赖、读取登录态，可能
 			# 耗时；这期间到达的新 stop 不能被后面的清理当成启动前残留一起清掉
 			# （Issue #1115）。预检失败时还原旧 stop 与时间戳，保持「失败的调用
@@ -1183,6 +1189,19 @@ def _resume(
 			return
 		except CacheRecordInvalid as exc:
 			_report_corrupt_run(ctx, "crawl.resume", run_id, exc)
+			return
+		except ValueError as exc:
+			# 后台恢复同样要像前台一样拒绝与断点进度矛盾的 --pages（Issue #2075）：
+			# 先返回 queued 再让 worker 静默失败，会让任务停在无人执行的状态。
+			status_command = boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True)
+			handle_error_output(
+				ctx,
+				"crawl.resume",
+				code="INVALID_PARAM",
+				message=str(exc),
+				recovery_action="按提示把 --pages 调整到断点进度允许的下界后重试；不带 --pages 可沿用原任务上限",
+				hints={"next_actions": [status_command]},
+			)
 			return
 		if should_launch:
 			# 先释放探测锁再启动，worker 会自行取得执行权并重读断点。
