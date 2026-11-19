@@ -465,7 +465,7 @@ _ERROR_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
 #: 源码中形如错误码、但不属于 CLI 信封错误码的全大写字面量。
 #: 新增环境变量名等会触发扫描失败；确认不是错误码后加到这里。
 _NON_ERROR_CODE_LITERALS = {
-	"ALL_PROXY", "HTTPS_PROXY", "HTTP_PROXY",  # 代理环境变量名
+	"ALL_PROXY", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY",  # 代理环境变量名
 	"BOSS_AGENT_MACHINE_ID", "BOSS_BROWSER_VERBOSE", "BOSS_DATA_DIR", "BOSS_EGRESS_PROBE_URL",  # 环境变量名
 	"INIT_CWD", "PLAYWRIGHT_BROWSERS_PATH",  # 浏览器驱动环境变量名
 	"CLI_ERROR",  # MCP 层「CLI 输出不可解析」分类，不进入 CLI 信封

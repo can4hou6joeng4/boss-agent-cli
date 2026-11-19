@@ -41,6 +41,11 @@
 - MCP 同步入口拒绝含 NUL / 孤立代理项的参数时明确「子进程未启动、没有平台写入」，不再套用检查 checkpoint 的写中断指引（Issue #1863）。
 - MCP server 定位同目录 `boss` 入口时只把「不存在」当未找到，权限等其它错误不再静默回退 PATH 上的另一份 boss（Issue #1864）。
 - MCP 的 `hr applications` / `hr chat` / `hr last-messages` 把显式空 `job_id` 原样下发给 CLI，不再静默当作未传（Issue #1865）。
+- 自动化队列的 `message` / `platform` / `candidate_key` / `reason` 只接受字符串，类型漂移按状态损坏上报，不再把 `str(None)` 当话术发给候选人（Issue #1867）。
+- 自动化在途标记的 `notified` 只有布尔 `true` 才算已通知；`0` / `""` / `"false"` 按未通知处理并重开熔断，不再静默跳过（Issue #1868）。
+- Chromium 代理不再使用 `HTTP_PROXY`（平台是 https，httpx 的 https 请求本就直连），`NO_PROXY` 原样转发为 `bypass`，两个通道对同一域名同进同出（Issue #1869）。
+- 代理地址里的 IPv6 字面量保留方括号，`http://[::1]:8080` 不再被拼成无法解析的 `http://::1:8080`（Issue #1870）。
+- `RequestThrottle` 不再用 `0.0` 当单调时钟哨兵：刚开机时首条请求不会白等一个间隔，也不会误报 `REQUEST_BUDGET_EXHAUSTED`（Issue #1871）。
 
 ## [3.4.122] - 2026-11-19
 

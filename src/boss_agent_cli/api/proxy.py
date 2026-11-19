@@ -44,14 +44,17 @@ class PlaywrightProxy(TypedDict, total=False):
 	password: str | None
 
 
+#: Chromium 只按 https 出口选代理：平台 API 全是 https，httpx 在 trust_env 下
+#: 也不会把 HTTP_PROXY 用于 https 请求，Chromium 若继续用它就会与 API 通道
+#: 分叉出第二个出口（Issue #1869）。
 PROXY_ENV_KEYS: tuple[str, ...] = (
 	"HTTPS_PROXY",
 	"https_proxy",
 	"ALL_PROXY",
 	"all_proxy",
-	"HTTP_PROXY",
-	"http_proxy",
 )
+
+_NO_PROXY_ENV_KEYS: tuple[str, ...] = ("NO_PROXY", "no_proxy")
 
 # Chromium keeps non-proxied UDP (STUN) out of the proxy by default, which
 # exposes the real address even when --proxy-server is honoured.
@@ -70,9 +73,14 @@ def resolve_proxy(environ: Mapping[str, str] | None = None) -> PlaywrightProxy |
 	instead of silently turning into ``None`` — otherwise Chromium would go
 	direct and leak the real egress while httpx keeps using the broken proxy
 	(Issue #1486).
+
+	Only https-capable proxy variables are considered and ``NO_PROXY`` is
+	forwarded as Chromium's ``bypass`` list, mirroring what httpx's
+	``trust_env=True`` does for https requests (Issue #1869).
 	"""
 	source = os.environ if environ is None else environ
 	raw = ""
+	key = ""
 	for key in PROXY_ENV_KEYS:
 		value = source.get(key, "").strip()
 		if value:
@@ -80,7 +88,22 @@ def resolve_proxy(environ: Mapping[str, str] | None = None) -> PlaywrightProxy |
 			break
 	if not raw:
 		return None
-	return parse_proxy_url(raw, env_key=key)
+	proxy = parse_proxy_url(raw, env_key=key)
+	if proxy is not None:
+		bypass = _no_proxy_value(source)
+		if bypass:
+			# Chromium 的 ``bypass`` 与 httpx 的 NO_PROXY 一样按目标主机生效：
+			# 原样传下去，两个通道对同一域名同时直连（Issue #1869）。
+			proxy["bypass"] = bypass
+	return proxy
+
+
+def _no_proxy_value(source: Mapping[str, str]) -> str:
+	for key in _NO_PROXY_ENV_KEYS:
+		value = source.get(key, "").strip()
+		if value:
+			return value
+	return ""
 
 
 def parse_proxy_url(raw: str, *, env_key: str | None = None) -> PlaywrightProxy | None:
@@ -109,7 +132,12 @@ def parse_proxy_url(raw: str, *, env_key: str | None = None) -> PlaywrightProxy 
 		# 静默当成「没有代理」会让 Chromium 直连并泄露真实出口（Issue #1486）。
 		raise ProxyConfigurationError(env_key)
 	scheme = parts.scheme or "http"
-	server = f"{scheme}://{parts.hostname}"
+	# ``urlsplit().hostname`` 会去掉 IPv6 方括号，拼回时必须补上，否则
+	# ``http://[::1]:8080`` 变成无法解析的 ``http://::1:8080``（Issue #1870）。
+	host = parts.hostname
+	if ":" in host:
+		host = f"[{host}]"
+	server = f"{scheme}://{host}"
 	if port is not None:
 		if port <= 0:
 			# 显式 :0 不是可用端口；静默省略会变成 scheme 的默认端口。

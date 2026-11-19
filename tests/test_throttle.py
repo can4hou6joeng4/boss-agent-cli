@@ -6,7 +6,9 @@ from boss_agent_cli.api.throttle import RequestThrottle
 
 def test_throttle_mark_records_time():
 	t = RequestThrottle(delay=(0.0, 0.0))
-	assert t._last_request_time == 0.0
+	# 首次哨兵不再是 0.0：单调时钟原点未定义，初始化即视为刚过一个最大间隔
+	# （Issue #1871）。
+	assert t._last_request_time <= time.monotonic()
 	t.mark()
 	assert t._last_request_time > 0
 	assert len(t._recent_times) == 1

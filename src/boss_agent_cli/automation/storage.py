@@ -687,17 +687,32 @@ def queued_action(item: ReviewItem | PendingAction, path: Path) -> PlatformActio
 		raise AutomationStateError(path, f"记录 {item.id!r} 的 action {item.action!r} 不是已知动作") from None
 
 
+def _row_text(row: dict[str, Any], key: str, path: Path, default: str = "") -> str:
+	"""读取队列记录的文本字段；类型漂移按状态损坏上报，不把 str(None) 当话术执行。
+
+	``message`` 会被真的发给候选人，``platform`` / ``candidate_key`` / ``reason``
+	参与匹配与审计；静默 ``str()`` 会把 ``null`` / 数字 / 容器变成 `"None"` /
+	`"123"` / `"{'text': 'hi'}"`（Issue #1867）。
+	"""
+	value = row.get(key, default)
+	if not isinstance(value, str):
+		raise AutomationStateError(
+			path, f"记录 {str(row.get('id', ''))!r} 的 {key} 不是字符串"
+		)
+	return value
+
+
 def _review_from_row(row: dict[str, Any], path: Path) -> ReviewItem:
 	return ReviewItem(
 		id=str(row.get("id", "")),
 		ts=str(row.get("ts", "")),
-		platform=str(row.get("platform", "")),
-		candidate_key=str(row.get("candidate_key", "")),
+		platform=_row_text(row, "platform", path),
+		candidate_key=_row_text(row, "candidate_key", path),
 		action=str(row.get("action", "")),
 		status=str(row.get("status", "review")),
 		confidence=_row_confidence(row, path),
-		reason=str(row.get("reason", "")),
-		message=str(row.get("message", "")),
+		reason=_row_text(row, "reason", path),
+		message=_row_text(row, "message", path),
 		reviewed_at=str(row.get("reviewed_at", "")),
 		rejection_reason=str(row.get("rejection_reason", "")),
 	)
@@ -722,13 +737,13 @@ def _pending_from_row(row: dict[str, Any], path: Path) -> PendingAction:
 	return PendingAction(
 		id=str(row.get("id", "")),
 		ts=str(row.get("ts", "")),
-		platform=str(row.get("platform", "")),
-		candidate_key=str(row.get("candidate_key", "")),
+		platform=_row_text(row, "platform", path),
+		candidate_key=_row_text(row, "candidate_key", path),
 		action=str(row.get("action", "")),
 		status=status,
 		confidence=_row_confidence(row, path),
-		reason=str(row.get("reason", "")),
-		message=str(row.get("message", "")),
+		reason=_row_text(row, "reason", path),
+		message=_row_text(row, "message", path),
 		approved_review_id=str(row.get("approved_review_id", "")),
 		updated_at=str(row.get("updated_at", "")),
 	)
