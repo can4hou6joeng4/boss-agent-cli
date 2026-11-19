@@ -28,6 +28,7 @@ from boss_agent_cli.display import (
 	render_message_panel,
 	risk_error_contract,
 	risk_error_message,
+	positional_hint,
 	shell_argument,
 )
 from boss_agent_cli.search_filters import (
@@ -94,8 +95,18 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 	if not require_compliance_allowed(ctx, "greet"):
 		return
 
-	# 空 ID 无法定位任何职位或招聘者：继续下去只会先查一次本地缓存、再带着空参数
-	# 发平台请求，错误看起来像网络或登录问题，真正的原因（argv 拼错）被掩盖。
+	if message and not message.strip():
+		# 拒绝会被平台当成招呼正文的纯空白内容（Issue #1817）。
+		handle_error_output(
+			ctx,
+			"greet",
+			code="INVALID_PARAM",
+			message="--message 不能只有空白字符",
+			recovery_action="省略 --message 使用默认招呼语，或传入非空内容后重试",
+		)
+		return
+
+	# 在读缓存或联系平台前报告缺失的职位标识。
 	if not security_id.strip() or not job_id.strip():
 		search_cmd = _hint_command(ctx, "search <关键词>")
 		handle_error_output(
@@ -270,7 +281,12 @@ def _batch_greet_dry_run_rerun(ctx: click.Context, query: str) -> str:
 	"""dry-run 之后真正要执行的那条命令：与本次调用同参数，只去掉 --dry-run。"""
 	params = ctx.params or {}
 	argv = boss_command_for_ctx(ctx, "batch-greet").split(" ")
-	argv = [*argv[:-1], *_explicit_global_options(ctx), argv[-1], query]
+	# 以 `-` 开头的关键词必须排在全部选项之后并用 `--` 隔开，否则照抄执行会被
+	# 当成选项（Issue #1815）；普通关键词保持「关键词在前」的写法。
+	dashed = query.startswith("-")
+	argv = [*argv[:-1], *_explicit_global_options(ctx), argv[-1]]
+	if not dashed:
+		argv.append(query)
 	for flag, key in (
 		("--city", "city"),
 		("--salary", "salary"),
@@ -287,7 +303,8 @@ def _batch_greet_dry_run_rerun(ctx: click.Context, query: str) -> str:
 	count = params.get("count")
 	if count is not None:
 		argv.extend(["--count", str(count)])
-	return " ".join(shell_argument(part) for part in argv)
+	rendered = " ".join(shell_argument(part) for part in argv)
+	return f"{rendered} {positional_hint(query)}" if dashed else rendered
 
 
 @click.command("batch-greet")
@@ -377,8 +394,18 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 				job_type=job_type,
 			)
 
+			# 先校验写请求所需的标识，避免坏条目遮住随后同职位的有效条目（Issue #1816）。
+			valid_jobs = [
+				job
+				for job in job_list
+				if all(isinstance(job.get(key), str) and job[key].strip() for key in ("securityId", "encryptJobId"))
+			]
+			skipped_invalid = len(job_list) - len(valid_jobs)
+			if skipped_invalid:
+				logger.warning(f"跳过 {skipped_invalid} 个缺少有效 security_id / job_id 的搜索结果")
+
 			candidates: list[JobItem] = []
-			for raw_item in deduplicate_job_result(job_list):
+			for raw_item in deduplicate_job_result(valid_jobs):
 				# 上限必须在下一次收集之前判断：放在 append 之后时 --count 0 仍会
 				# 收进 1 个候选并真实发出招呼（写操作）。
 				if len(candidates) >= count:
