@@ -217,7 +217,7 @@ The `hints.next_actions` from `favorites` and `shortlist` preserve the original 
 
 `boss shortlist annotate` requires at least one non-empty `--add-tag` / `--remove-tag` or `--note`; blank tags and a blank `--tag` return `INVALID_PARAM` instead of silently becoming "no filter" or `updated: true`. `--note ""` still clears the note.
 
-`history` / `favorites list` follow the same `pagination.has_more` contract as `recommend` / `chat`: `true` / `false` only when the platform returns a boolean `hasMore`; a missing or ambiguous value is `null` with `has_more_source=unknown`, never defaulted to `false`, and no next-page action is suggested. `total` is always the number of rows on this page (`total_kind=returned_page_count`).
+`history` / `favorites list` follow the same `pagination.has_more` contract as `recommend` / `chat`: `true` / `false` only when the platform returns a boolean `hasMore`; a missing or ambiguous value is `null` with `has_more_source=unknown`, never defaulted to `false`, and no next-page action is suggested. `total` is always the number of rows on this page (`total_kind=returned_page_count`). In a successful `favorites` envelope only `null` / a missing `cardList` is treated as an empty list; falsy non-lists such as `{}` / `""` / `0`, and pages whose elements are all non-objects, are reported as a retryable `NETWORK_ERROR` instead of being disguised as "no favorites" or as the page-limit error.
 
 ## Recruiter mode
 

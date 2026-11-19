@@ -388,7 +388,8 @@ def _percent(value: Any) -> str:
 	"""把 0~1 的比率渲染成百分比；非数值返回占位符。"""
 	try:
 		return f"{round(float(value) * 100, 1)}%"
-	except (TypeError, ValueError):
+	except (TypeError, ValueError, OverflowError):
+		# 合法大整数（如 10**400）转 float 抛 OverflowError，按非数值处理。
 		return "-"
 
 

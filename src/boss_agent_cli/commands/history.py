@@ -1,9 +1,50 @@
+from typing import Any
+
 import click
 
 from boss_agent_cli.api.models import dict_items, JobItem, field_list
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_job_table
+
+
+_HISTORY_ID_KEYS = ("encryptJobId", "securityId", "lid")
+_HISTORY_TEXT_KEYS = (
+	"jobName",
+	"brandName",
+	"salaryDesc",
+	"cityName",
+	"areaDistrict",
+	"jobExperience",
+	"jobDegree",
+	"brandIndustry",
+	"brandScaleName",
+	"brandStageName",
+	"bossName",
+	"bossTitle",
+	"daysPerWeekDesc",
+	"leastMonthDesc",
+)
+_HISTORY_LIST_KEYS = ("skills", "welfareList", "jobLabels")
+
+
+def _normalize_history_job(raw_item: dict[str, Any]) -> dict[str, Any]:
+	"""把类型漂移收敛成 `JobItem` 可安全消费的形状（Issue #1855）。
+
+	ID / 文本字段里的 dict / list 会被 ``field_text`` 的 ``str()`` 变成 Python
+	repr 并作为 job_id / security_id / job_url 写进信封，Agent 再拿它去跑
+	detail / apply / greet 只会得到参数错误。容器一律按缺失处理；列表字段
+	只保留字符串元素。
+	"""
+	item = dict(raw_item)
+	for key in (*_HISTORY_ID_KEYS, *_HISTORY_TEXT_KEYS):
+		if isinstance(item.get(key), (dict, list, tuple, set)):
+			item[key] = ""
+	for key in _HISTORY_LIST_KEYS:
+		value = item.get(key)
+		if isinstance(value, list):
+			item[key] = [element for element in value if isinstance(element, str)]
+	return item
 
 
 def _hint_command(ctx: click.Context, command: str) -> str:
@@ -40,7 +81,7 @@ def history_cmd(ctx: click.Context, page: int) -> None:
 			platform_data = {}
 		job_list = dict_items(field_list(platform_data, "jobList"))
 
-		items = [JobItem.from_api(raw_item).to_dict() for raw_item in job_list]
+		items = [JobItem.from_api(_normalize_history_job(raw_item)).to_dict() for raw_item in job_list]
 
 	# 平台缺失 hasMore 时不能当成 false：那会让 Agent 把「平台没说」读成
 	# 「确实没有下一页」并停止翻页。与 recommend / chat 同一套保守语义。
