@@ -192,7 +192,10 @@ def _rollback_replacements(replaced: list[tuple[Path, Path | None]], retained: s
 
 
 def _temporary_for(target: Path) -> Path:
-	fd, name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+	# 前缀只用截断后的目标名（最多 32 字符）：导出目标名可能接近 NAME_MAX，
+	# 拼完整名会让 mkstemp 直接 ENAMETOOLONG（Issue #2080）。截断仍让残留的
+	# 临时 / 备份文件能看出属于哪份产物。
+	fd, name = tempfile.mkstemp(prefix=f".{target.name[:32]}.", dir=target.parent)
 	os.close(fd)
 	return Path(name)
 
