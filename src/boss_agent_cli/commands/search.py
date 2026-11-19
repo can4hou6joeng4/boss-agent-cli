@@ -16,6 +16,7 @@ from boss_agent_cli.display import (
 	is_json_mode,
 	platform_error_contract,
 	platform_error_message,
+	positional_hint,
 	read_only_platform_code,
 	render_job_table,
 	shell_argument,
@@ -338,7 +339,7 @@ def search_cmd(
 	# 用户这次没传任何筛选参数，只说「未知薪资范围」看不出该改哪里。
 	preset_origin = ""
 	if preset and not any((city, salary, experience, education, industry, scale, stage, job_type)):
-		remove_cmd = _hint_command(ctx, f"preset remove {shell_argument(preset)}")
+		remove_cmd = _hint_command(ctx, f"preset remove {positional_hint(preset)}")
 		preset_origin = f"（来自 preset '{preset}'，可用 {remove_cmd} 删除后重建）"
 
 	if preset:
@@ -351,8 +352,8 @@ def search_cmd(
 				handle_error_output(
 					ctx, "search", code="SAVED_SEARCH_INVALID", message=str(exc),
 					hints={"next_actions": [
-						_hint_command(ctx, f"preset remove {shell_argument(preset)}"),
-						_hint_command(ctx, f"preset add {shell_argument(preset)} <关键词>"),
+						_hint_command(ctx, f"preset remove {positional_hint(preset)}"),
+						_hint_command(ctx, f"preset add {positional_hint(preset)} <关键词>"),
 					]},
 				)
 				return
@@ -363,7 +364,7 @@ def search_cmd(
 				recovery_action=f"用 {list_cmd} 查看已保存的预设后重试",
 				hints={"next_actions": [
 					list_cmd,
-					_hint_command(ctx, f"preset add {shell_argument(preset)} <关键词>"),
+					_hint_command(ctx, f"preset add {positional_hint(preset)} <关键词>"),
 				]},
 			)
 			return

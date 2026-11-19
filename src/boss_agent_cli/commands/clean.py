@@ -16,10 +16,16 @@ import click
 from rich.table import Table
 
 from boss_agent_cli import display
-from boss_agent_cli.api.cdp_risk_lock import lock_paths
+from boss_agent_cli.api.cdp_risk_lock import lock_paths, read_lock
 from boss_agent_cli.api.request_budget import budget_directory
 from boss_agent_cli.cache.store import CacheDatabaseInvalid, is_cache_busy_error, is_cache_local_io_error
-from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, render_next_steps, shell_argument
+from boss_agent_cli.display import (
+	boss_command_for_ctx,
+	handle_error_output,
+	handle_output,
+	render_next_steps,
+	shell_argument,
+)
 
 
 @click.command("clean")
@@ -44,8 +50,12 @@ from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, ha
 def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool, days: int, risk_lock: bool) -> None:
 	"""清理过期缓存和临时文件。"""
 	data_dir = ctx.obj["data_dir"]
-	results = []
+	results: list[dict[str, Any]] = []
 	total_freed = 0
+	# 清理中途失败时把已完成项带回信封（Issue #1830 #1831）；风险锁先于
+	# 其他步骤处理，锁的真实状态要单独记下来。
+	risk_lock_info: dict[str, Any] | None = None
+	current_target = "搜索缓存"
 
 	# 库文件存在但读不动时，先在这里失败：main.py 会把 CacheDatabaseInvalid 转成
 	# CACHE_DATABASE_INVALID 信封。否则 --privacy 会先删掉登录态和简历，再在
@@ -85,105 +95,173 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 				)
 				return
 
-	# 0) 本地风险锁：显式 opt-in，文件名及 target 标签沿用历史协议，不连浏览器。
-	if risk_lock:
-		directories = dict.fromkeys((Path(data_dir).resolve(), budget_directory(Path(data_dir))))
-		freed, count, skipped = 0, 0, 0
-		for directory in directories:
-			# 主位置与后备位置都要清理：任一份残留都会让 fail-closed 检查继续阻断
-			# 用户已确认恢复的访问（Issue #1270）。
-			for path in lock_paths(directory):
-				removed_bytes, removed_count, removed_skipped = _clean_path(
-					path, dry_run=dry_run, root=directory
-				)
-				freed += removed_bytes
-				count += removed_count
-				skipped += removed_skipped
-		results.append(_clean_result("CDP 风控锁", freed, count, skipped))
+	try:
+		# 0) 本地风险锁：显式 opt-in，文件名及 target 标签沿用历史协议，不连浏览器。
+		if risk_lock:
+			current_target = "CDP 风控锁"
+			directories = dict.fromkeys((Path(data_dir).resolve(), budget_directory(Path(data_dir))))
+			freed, count, skipped = 0, 0, 0
+			for directory in directories:
+				# 主位置与后备位置都要清理：任一份残留都会让 fail-closed 检查继续阻断
+				# 用户已确认恢复的访问（Issue #1270）。
+				for path in lock_paths(directory):
+					removed_bytes, removed_count, removed_skipped = _clean_lock_path(
+						path, dry_run=dry_run, root=directory
+					)
+					freed += removed_bytes
+					count += removed_count
+					skipped += removed_skipped
+			results.append(_clean_result("CDP 风控锁", freed, count, skipped))
+			total_freed += freed
+			# 锁是否真的解除要同时满足「确实删过锁项」与「清理后读不到锁」：
+			# 悬空链接、祖先链接跳过等情形下「删了几项」不代表 fail-closed 检查
+			# 不再阻断；而在没有锁的目录空转仍要报 false，继续充当
+			# 「数据目录选错」的探测器（Issue #1829，docs/commands.md）。
+			local_lock_removed = (
+				not dry_run
+				and count > 0
+				and all(read_lock(directory) is None for directory in directories)
+			)
+			risk_lock_info = {
+				"local_lock_removed": local_lock_removed,
+				"platform_risk_status": "unverified",
+			}
+
+		# 1) 搜索缓存
+		current_target = "搜索缓存"
+		freed, count = _clean_search_cache(data_dir, dry_run=dry_run, clean_all=clean_all)
+		results.append(_clean_result("搜索缓存", freed, count))
 		total_freed += freed
 
-	# 1) 搜索缓存
-	freed, count = _clean_search_cache(data_dir, dry_run=dry_run, clean_all=clean_all)
-	results.append(_clean_result("搜索缓存", freed, count))
-	total_freed += freed
+		# 2) 索引缓存
+		current_target = "索引缓存"
+		freed, count, skipped = _clean_index_cache(data_dir, dry_run=dry_run)
+		results.append(_clean_result("索引缓存", freed, count, skipped))
+		total_freed += freed
 
-	# 2) 索引缓存
-	freed, count, skipped = _clean_index_cache(data_dir, dry_run=dry_run)
-	results.append(_clean_result("索引缓存", freed, count, skipped))
-	total_freed += freed
+		# 3) 聊天快照
+		current_target = "聊天快照"
+		freed, count, skipped = _clean_dir(data_dir / "chat-history", days=days, dry_run=dry_run)
+		results.append(_clean_result("聊天快照", freed, count, skipped))
+		total_freed += freed
 
-	# 3) 聊天快照
-	freed, count, skipped = _clean_dir(data_dir / "chat-history", days=days, dry_run=dry_run)
-	results.append(_clean_result("聊天快照", freed, count, skipped))
-	total_freed += freed
+		# 4) 导出文件
+		current_target = "导出文件"
+		freed, count, skipped = _clean_dir(data_dir / "chat-export", days=days, dry_run=dry_run)
+		results.append(_clean_result("导出文件", freed, count, skipped))
+		total_freed += freed
 
-	# 4) 导出文件
-	freed, count, skipped = _clean_dir(data_dir / "chat-export", days=days, dry_run=dry_run)
-	results.append(_clean_result("导出文件", freed, count, skipped))
-	total_freed += freed
-
-	# 5) 隐私清理：显式 opt-in，避免误删登录态和本地简历
-	if privacy:
-		crawl_target = privacy_targets[-1]
-		targets = privacy_targets[:-1]
-		completed: list[dict[str, Any]] = []
-		for index, (target, path) in enumerate(targets):
+		# 5) 隐私清理：显式 opt-in，避免误删登录态和本地简历
+		if privacy:
+			crawl_target = privacy_targets[-1]
+			targets = privacy_targets[:-1]
+			completed: list[dict[str, Any]] = []
+			for index, (target, path) in enumerate(targets):
+				current_target = target
+				try:
+					freed, count, skipped = _clean_path(path, dry_run=dry_run, root=data_dir)
+				except OSError as exc:
+					_emit_privacy_failure(
+						ctx,
+						dry_run=dry_run,
+						results=list(results),
+						completed=completed,
+						failed=[{"target": target, "path": str(path), "reason": str(exc)}],
+						remaining=[name for name, _ in targets[index + 1:]],
+						message=f"隐私清理在删除{target}时失败: {exc}",
+					)
+					return
+				entry = _clean_result(target, freed, count, skipped)
+				results.append(entry)
+				completed.append(entry)
+				total_freed += freed
+			current_target = crawl_target[0]
 			try:
-				freed, count, skipped = _clean_path(path, dry_run=dry_run, root=data_dir)
-			except OSError as exc:
+				freed, count, skipped = _clean_crawl_data(data_dir, dry_run=dry_run)
+			except (OSError, sqlite3.DatabaseError, CacheDatabaseInvalid) as exc:
 				_emit_privacy_failure(
 					ctx,
 					dry_run=dry_run,
 					results=list(results),
 					completed=completed,
-					failed=[{"target": target, "path": str(path), "reason": str(exc)}],
-					remaining=[name for name, _ in targets[index + 1:]],
-					message=f"隐私清理在删除{target}时失败: {exc}",
+					failed=[{"target": crawl_target[0], "path": str(crawl_target[1]), "reason": str(exc)}],
+					remaining=[],
+					message=f"隐私清理在删除{crawl_target[0]}时失败: {exc}",
 				)
 				return
-			entry = _clean_result(target, freed, count, skipped)
+			entry = _clean_result(crawl_target[0], freed, count, skipped)
 			results.append(entry)
 			completed.append(entry)
 			total_freed += freed
-		try:
-			freed, count, skipped = _clean_crawl_data(data_dir, dry_run=dry_run)
-		except (OSError, sqlite3.DatabaseError, CacheDatabaseInvalid) as exc:
-			_emit_privacy_failure(
-				ctx,
-				dry_run=dry_run,
-				results=list(results),
-				completed=completed,
-				failed=[{"target": crawl_target[0], "path": str(crawl_target[1]), "reason": str(exc)}],
-				remaining=[],
-				message=f"隐私清理在删除{crawl_target[0]}时失败: {exc}",
-			)
-			return
-		entry = _clean_result(crawl_target[0], freed, count, skipped)
-		results.append(entry)
-		completed.append(entry)
-		total_freed += freed
 
-	# 6) 全量清理额外项
-	if clean_all:
-		freed, count = _clean_greet_records(data_dir, dry_run=dry_run)
-		results.append(_clean_result("打招呼记录", freed, count))
-		total_freed += freed
+		# 6) 全量清理额外项
+		if clean_all:
+			current_target = "打招呼记录"
+			freed, count = _clean_greet_records(data_dir, dry_run=dry_run)
+			results.append(_clean_result("打招呼记录", freed, count))
+			total_freed += freed
 
-		freed, count = _clean_recruiter_greet_records(data_dir, dry_run=dry_run)
-		results.append(_clean_result("招聘者打招呼记录", freed, count))
-		total_freed += freed
+			current_target = "招聘者打招呼记录"
+			freed, count = _clean_recruiter_greet_records(data_dir, dry_run=dry_run)
+			results.append(_clean_result("招聘者打招呼记录", freed, count))
+			total_freed += freed
 
-		freed, count = _clean_apply_records(data_dir, dry_run=dry_run)
-		results.append(_clean_result("投递记录", freed, count))
-		total_freed += freed
+			current_target = "投递记录"
+			freed, count = _clean_apply_records(data_dir, dry_run=dry_run)
+			results.append(_clean_result("投递记录", freed, count))
+			total_freed += freed
 
-		freed, count = _clean_location_records(data_dir, dry_run=dry_run)
-		results.append(_clean_result("工作地点发送记录", freed, count))
-		total_freed += freed
+			current_target = "工作地点发送记录"
+			freed, count = _clean_location_records(data_dir, dry_run=dry_run)
+			results.append(_clean_result("工作地点发送记录", freed, count))
+			total_freed += freed
 
-		freed, count = _clean_job_desc_cache(data_dir, dry_run=dry_run)
-		results.append(_clean_result("职位描述缓存", freed, count))
-		total_freed += freed
+			current_target = "职位描述缓存"
+			freed, count = _clean_job_desc_cache(data_dir, dry_run=dry_run)
+			results.append(_clean_result("职位描述缓存", freed, count))
+			total_freed += freed
+
+	except CacheDatabaseInvalid as exc:
+		# 缓存库损坏是确定性本地失败；已完成项照样带回（Issue #1831）。
+		_emit_clean_partial_failure(
+			ctx,
+			dry_run=dry_run,
+			results=results,
+			total_freed=total_freed,
+			target=current_target,
+			code="CACHE_DATABASE_INVALID",
+			exc=exc,
+			risk_lock_info=risk_lock_info,
+		)
+		return
+	except sqlite3.DatabaseError as exc:
+		# 锁冲突保持 CACHE_BUSY 的可重试语义，交给 main 分流；其余本地数据库
+		# 错误按 LOCAL_IO_ERROR 上报部分完成（Issue #1831）。
+		if is_cache_busy_error(exc):
+			raise
+		_emit_clean_partial_failure(
+			ctx,
+			dry_run=dry_run,
+			results=results,
+			total_freed=total_freed,
+			target=current_target,
+			code="LOCAL_IO_ERROR",
+			exc=exc,
+			risk_lock_info=risk_lock_info,
+		)
+		return
+	except OSError as exc:
+		_emit_clean_partial_failure(
+			ctx,
+			dry_run=dry_run,
+			results=results,
+			total_freed=total_freed,
+			target=current_target,
+			code="LOCAL_IO_ERROR",
+			exc=exc,
+			risk_lock_info=risk_lock_info,
+		)
+		return
 
 	data = {
 		"dry_run": dry_run,
@@ -192,18 +270,22 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 		"total_bytes_freed_display": _format_size(total_freed),
 	}
 	if risk_lock:
-		data["risk_lock"] = {
-			"local_lock_removed": bool(results[0]["cleaned"] and not dry_run),
+		data["risk_lock"] = risk_lock_info or {
+			"local_lock_removed": False,
 			"platform_risk_status": "unverified",
 		}
 
-	hint_prefix = boss_command_for_ctx(ctx, f"--data-dir {shell_argument(str(data_dir))}")
+	hint_prefix = boss_command_for_ctx(ctx, f"--data-dir {shell_argument(str(Path(data_dir).resolve()))}")
 	hints: dict[str, list[str]] = {"next_actions": []}
 	operator_actions: list[str] = []
 	if risk_lock:
 		operator_actions.append(
 			"本地清锁不解除服务器风险；请确认官方目标业务页已恢复，再由用户显式恢复原任务，若再次命中风险立即停止"
 		)
+		if not dry_run and risk_lock_info is not None and not risk_lock_info["local_lock_removed"]:
+			operator_actions.append(
+				"本地风控锁未能完全清除，后续命令仍会被阻断；检查数据目录下的 cdp_risk_lock.json 与后备位置 cache/cdp_risk_lock.json"
+			)
 	if dry_run:
 		clean_args = ["clean"]
 		if clean_all:
@@ -542,6 +624,48 @@ def _emit_privacy_failure(
 	)
 
 
+def _emit_clean_partial_failure(
+	ctx: click.Context,
+	*,
+	dry_run: bool,
+	results: list[dict[str, Any]],
+	total_freed: int,
+	target: str,
+	code: str,
+	exc: BaseException,
+	risk_lock_info: dict[str, Any] | None,
+) -> None:
+	"""clean 中途失败时输出错误信封，并带回已完成项与失败项。
+
+	各清理项彼此独立：已经删掉的内容不能让调用方从 ``data=null`` 里猜
+	（Issue #1497 #1831）。清锁先于其他步骤执行，后续失败还必须交代锁的
+	真实状态，不能让恢复入口的效果被 ``ok=false`` 吞掉（Issue #1830）。
+	"""
+	data: dict[str, Any] = {
+		"dry_run": dry_run,
+		"results": list(results),
+		"total_bytes_freed": total_freed,
+		"total_bytes_freed_display": _format_size(total_freed),
+		"failed": [{"target": target, "reason": str(exc)}],
+	}
+	message = f"清理在{target}时失败: {exc}"
+	operator_actions = [
+		"clean 的清理项彼此独立：按 data.results 确认已清理项，修正 failed 中的路径后重新执行 clean"
+	]
+	if risk_lock_info is not None and risk_lock_info.get("local_lock_removed"):
+		data["risk_lock"] = dict(risk_lock_info)
+		message += "；本地风控锁此前已清除，该部分不会回滚"
+		operator_actions.append("本地风控锁已清除，不需要因为本次失败重新执行 clean --risk-lock")
+	handle_error_output(
+		ctx,
+		"clean",
+		code=code,
+		message=message,
+		data=data,
+		hints={"operator_actions": operator_actions},
+	)
+
+
 def _clean_index_cache(data_dir: Path, *, dry_run: bool) -> tuple[int, int, int]:
 	"""清理索引缓存文件；符号链接走统一的不跟随路径。"""
 	return _clean_path(data_dir / "cache" / "index_cache.json", dry_run=dry_run, root=data_dir)
@@ -628,6 +752,35 @@ def _clean_path(path: Path, *, dry_run: bool, root: Path | None = None) -> tuple
 		else:
 			path.unlink()
 	return size, count, 0
+
+
+
+def _clean_lock_path(path: Path, *, dry_run: bool, root: Path) -> tuple[int, int, int]:
+	"""清理单个风险锁路径；符号链接一律只删除链接本身。
+
+	锁读取把悬空链接、目录等非常规路径按损坏锁 fail-closed 处理
+	（Issue #1686）；通用 ``_clean_path`` 对悬空链接「保持原样」，会让
+	``clean --risk-lock`` 以成功结束而锁仍生效（Issue #1829）。链接绝不
+	跟随：祖先目录是链接时与 ``_clean_path`` 同口径跳过并报告。
+	"""
+	link = _first_symlink_component(root, path)
+	if link is not None and link != path:
+		return 0, 0, 1
+	mode = _lstat_mode(path)
+	if mode is not None and stat.S_ISLNK(mode):
+		# 目标存在且是普通文件时沿用 _path_stats 的字节数口径；悬空链接按
+		# 0 字节记一条，链接本身才是阻断来源。
+		size = 0
+		target_mode = _stat_mode(path)
+		if target_mode is not None and stat.S_ISREG(target_mode):
+			try:
+				size = path.stat().st_size
+			except FileNotFoundError:
+				size = 0
+		if not dry_run:
+			path.unlink()
+		return size, 1, 0
+	return _clean_path(path, dry_run=dry_run, root=root)
 
 
 def _path_stats(path: Path) -> tuple[int, int]:
