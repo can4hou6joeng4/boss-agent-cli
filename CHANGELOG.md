@@ -11,6 +11,7 @@
 - `mark` 回显的 `security_id` 只认字符串并 strip：平台字段漂移成布尔 / 容器时不再把 Python repr（`True` / `{'a': 1}`）当令牌返回给 Agent（Issue #2138）。
 - egress 的语言地区解析只识别真正的地区子标签：`zh-Hans` / `sr-Latn` 等 script-only 标签不再被读成伪地区 `HANS` / `LATN` 把正常会话判成 mismatch 阻断启动，`en-US-u-ca-gregory` 等扩展标签取到 `US`；时区映射表的 `America/Honolulu` 纠正为有效的 `Pacific/Honolulu`，夏威夷出口的矛盾不再漏检成 unknown（Issue #2129）。
 - `status` / `doctor` 的 session 文件状态改为单次 lstat / stat：`stoken_freshness` 不再在 `exists()` 与 `stat()` 之间被并发 `logout` / 原子替换删除文件时把 `FileNotFoundError` 逃逸成 `LOCAL_IO_ERROR`；session 文件不可读时按 warn「无法读取 session 文件时间」报告而非「未提供时间」。`has_token=False` 分支不再连续三次 `exists()`（消除 `status=error` 却报「未检测到本地登录态」的自相矛盾），3.14 下权限错误也不会被吞成「没登录」（Issue #2131）。
+- automation 决策在转录里定位不到配置话术时不再退回 prior 标记判「已回复」：本地 AI 改写问卷 / 追问文本（#1511）或操作者中途改模板后，有方向信息的转录按我方最后一条消息判断候选人是否回复，候选人未回复时保持等待，不再真实自动发出追问与交换联系方式；转录不含我方消息或完全没有方向信息时保留 prior 兜底（Issue #2133）。
 - resume 的职位关联统一按文件真实名称落库：`resume link` 走 `stored_name`，`resume applications` 同时查请求名与真实名称并按职位去重，别名（`a/b` ↔ `a_b`）视角不再出现幽灵关联或查询不一致，按规范名删除能清掉别名方向建立的关联（Issue #1804、#2121）。
 - `resume import` 的输入路径与 `-o` 输出路径同口径展开 `~`：MCP 子进程 / argv 列表不经 shell 时，`~/cv.json` 不再被报成「文件不存在」（Issue #2122）。
 - `agent review reject` 清理 approve 中途失败遗留的 pending 行：尚未派发的关联行与复核状态一起收口，被人工拒绝的动作不再在下一轮被派发；已在执行 / 结果未知（executing、verification-required）的行反而阻断 reject 并提示先核对，不静默删除可能已生效的记录（Issue #2124）。

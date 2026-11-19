@@ -223,11 +223,25 @@ def _replied_after(
 
 	有方向的转录里能定位到话术时以转录为准：prior 时间戳在发送成功后必然写入，
 	而 ``incoming_messages`` 至少含触发问卷的旧消息，用它兜底会让下一轮无条件
-	判成「已回复」并自动发出追问 / 交换联系方式（Issue #1944）。只有转录里
-	找不到话术或没有方向信息时才退回 prior 标记。
+	判成「已回复」并自动发出追问 / 交换联系方式（Issue #1944）。
+
+	定位不到话术但转录有方向信息时同样以转录为准（Issue #2133）：本地 AI 会
+	改写问卷 / 追问的实际文本（#1511），操作者也可能中途修改模板，此时 prior
+	必然为真、``incoming_messages`` 又含触发旧消息，退回 prior 兜底等于无条件
+	「已回复」。看我方最后一条 outgoing 消息之后候选人是否回复。
+
+	转录有方向但**完全没有**我方消息时不能据此断言未回复（转录不完整，可能只
+	截取了候选人一侧），保留 prior 兜底；转录完全没有方向信息时同理。
 	"""
 	if marker_index >= 0 and conversation.ordered_messages:
 		return _has_incoming_after(conversation, marker_index)
+	if conversation.ordered_messages:
+		last_outgoing = -1
+		for index, (direction, _) in enumerate(conversation.ordered_messages):
+			if direction == "outgoing":
+				last_outgoing = index
+		if last_outgoing >= 0:
+			return _has_incoming_after(conversation, last_outgoing)
 	sent = prior.get(key)
 	return isinstance(sent, str) and bool(sent) and bool(conversation.incoming_messages)
 
