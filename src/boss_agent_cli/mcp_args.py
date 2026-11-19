@@ -45,6 +45,14 @@ _EXPLICIT_EMPTY_KEYS: frozenset[tuple[str, str]] = frozenset(
 		("stats", "output_file"),
 		("chat", "output_file"),
 		("export", "output_file"),
+		# CLI 对空 --url / --preset、空 --jd / --job-id 有专门诊断与互斥校验；
+		# 映射层吞掉后调用方会静默按其余参数成功（Issue #1941）。
+		("search", "url"),
+		("search", "preset"),
+		("ai_resume_optimize", "jd_text"),
+		("ai_resume_optimize", "job_id"),
+		("ai_cover_letter", "jd_text"),
+		("ai_cover_letter", "job_id"),
 	}
 )
 
@@ -206,8 +214,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = [name]
 		if arguments.get("query") is not None:
 			args.append(str(arguments["query"]))
-		_optional(args, "--url", "url", arguments)
-		_optional(args, "--preset", "preset", arguments)
+		_optional(args, "--url", "url", arguments, command=name)
+		_optional(args, "--preset", "preset", arguments, command=name)
 		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "welfare", "active"):
 			_optional(args, f"--{opt}", opt, arguments)
 		_optional(args, "--job-type", "job_type", arguments)
@@ -511,16 +519,14 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "ai_resume_optimize":
 		args = ["ai", "resume-optimize", arguments["resume"]]
-		if arguments.get("jd_text"):
-			args.extend(["--jd", arguments["jd_text"]])
-		if arguments.get("job_id"):
-			args.extend(["--job-id", arguments["job_id"]])
+		_optional(args, "--jd", "jd_text", arguments, command=name)
+		_optional(args, "--job-id", "job_id", arguments, command=name)
 		return _literal_positionals(args, start=2)
 
 	if name == "ai_cover_letter":
 		args = ["ai", "cover-letter", arguments["resume"]]
-		_optional(args, "--jd", "jd_text", arguments)
-		_optional(args, "--job-id", "job_id", arguments)
+		_optional(args, "--jd", "jd_text", arguments, command=name)
+		_optional(args, "--job-id", "job_id", arguments, command=name)
 		_optional(args, "--tone", "tone", arguments)
 		_optional(args, "--lang", "lang", arguments)
 		return _literal_positionals(args, start=2)

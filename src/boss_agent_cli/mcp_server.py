@@ -7,6 +7,7 @@
 
 import argparse
 import asyncio
+import errno
 import json
 import math
 import os
@@ -259,6 +260,9 @@ _SPAWN_FAILURE_RECOVERY = (
 	"底层 boss CLI 未能启动，未产生任何平台操作；确认 boss-agent-cli 已安装且 boss 在 "
 	"MCP server 进程的 PATH 中，或用 boss-mcp --boss-bin 指定可执行文件路径后重新调用"
 )
+_ARGV_TOO_LONG_RECOVERY = (
+	"底层 boss CLI 未启动，未产生任何平台操作；缩短文本参数或拆分成多次调用后重试"
+)
 _READ_UNPARSEABLE_RECOVERY = (
 	"只读命令未返回 JSON 信封，不产生平台写入；按 error.message 排查，"
 	"升级 boss-agent-cli 后重新调用，仍出现时附上 error.message 提交 issue"
@@ -425,6 +429,16 @@ def _cli_failure(
 
 
 def _spawn_failure(args: tuple[str, ...], exc: OSError) -> dict[str, Any]:
+	if exc.errno == errno.E2BIG:
+		# 参数超过系统 argv 上限：子进程从未启动，问题在入参而不是安装 / PATH
+		# （Issue #1943）。
+		return _cli_failure(
+			args,
+			"INVALID_PARAM",
+			"工具参数过长，超过系统命令行长度上限，底层 boss CLI 未启动",
+			recovery_action=_ARGV_TOO_LONG_RECOVERY,
+			outcome_unknown=False,
+		)
 	return _cli_failure(
 		args,
 		"CLI_ERROR",
@@ -439,7 +453,9 @@ def _parse_cli_output(
 ) -> dict[str, Any]:
 	try:
 		parsed = json.loads(stdout)
-	except json.JSONDecodeError:
+	except (ValueError, RecursionError):
+		# 超长整数抛裸 ValueError、超深嵌套抛 RecursionError，都不是
+		# JSONDecodeError；逃逸出去会让 handler 抛异常而不是返回信封（Issue #1942）。
 		parsed = None
 	if isinstance(parsed, dict):
 		return parsed
@@ -591,7 +607,8 @@ def _interrupted_failure(
 	# running-child path must surface that envelope (Issue #998).
 	try:
 		checkpoint_result = json.loads(stdout)
-	except (json.JSONDecodeError, UnicodeDecodeError):
+	except (ValueError, RecursionError):
+		# ValueError 已覆盖 JSONDecodeError / UnicodeDecodeError 与超长整数。
 		checkpoint_result = None
 	return _cli_failure(
 		args,
