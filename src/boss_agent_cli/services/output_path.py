@@ -20,6 +20,7 @@ class OutputPathProblem(Enum):
 	IS_DIRECTORY = "is_directory"
 	NOT_REGULAR = "not_regular"
 	PARENT_NOT_DIR = "parent_not_dir"
+	NOT_WRITABLE = "not_writable"
 
 
 def _lstat_mode(path: Path) -> int | None:
@@ -86,7 +87,9 @@ def inspect_output_path(path: str | os.PathLike[str]) -> tuple[Path, OutputPathP
 	必须在副作用之前暴露。
 
 	本函数**不建目录、不写文件**，只回答「这个路径能不能写」。``None`` 表示未
-	发现问题；仍需交给 ``prepare_output_path`` 建父目录。
+	发现问题；仍需交给 ``prepare_output_path`` 建父目录。最近的已存在祖先目录
+	不可写时同样算问题：不这样检查，合法的只读路径会先消耗一次平台请求、更新
+	当日快照，才在真正写文件时抛 ``PermissionError``（Issue #2197）。
 
 	保持纯函数（不依赖 click / display），出信封由命令层负责。
 	"""
@@ -103,6 +106,7 @@ def inspect_output_path(path: str | os.PathLike[str]) -> tuple[Path, OutputPathP
 	if target_mode is not None and not stat.S_ISREG(target_mode):
 		return target, OutputPathProblem.NOT_REGULAR
 	# 缺失的父目录可以创建，但创建链上任意一级被文件或悬空符号链接占用都不行。
+	ancestor: Path | None = None
 	for parent in target.parents:
 		parent_mode = _lstat_mode(parent)
 		if parent_mode is None:
@@ -110,11 +114,18 @@ def inspect_output_path(path: str | os.PathLike[str]) -> tuple[Path, OutputPathP
 		if stat.S_ISLNK(parent_mode):
 			target_parent_mode = _stat_mode(parent)
 			if target_parent_mode is not None and stat.S_ISDIR(target_parent_mode):
+				ancestor = parent
 				break
 			return target, OutputPathProblem.PARENT_NOT_DIR
 		if stat.S_ISDIR(parent_mode):
+			ancestor = parent
 			break
 		return target, OutputPathProblem.PARENT_NOT_DIR
+	# 原子写入的 ``os.replace`` 只需要最近祖先目录可写；目标文件自身只读不影响
+	# 替换。``os.access`` 跟随符号链接并检查 ACL，与真正写入的口径一致；权限在
+	# 预检之后被改动属于不可消除的 TOCTOU，由写入路径兜底。
+	if ancestor is not None and not os.access(ancestor, os.W_OK | os.X_OK):
+		return target, OutputPathProblem.NOT_WRITABLE
 	return target, None
 
 

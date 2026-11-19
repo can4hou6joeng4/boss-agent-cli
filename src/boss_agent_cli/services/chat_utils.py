@@ -3,7 +3,7 @@
 import datetime
 from typing import Any
 
-from boss_agent_cli.api.models import dict_items
+from boss_agent_cli.api.models import dict_items, safe_text
 
 # relationType 映射：API 返回值 → 可读标签（key 类型放宽为 object，兼容 API 返回 None/未知值走 default）
 RELATION_LABELS: dict[object, str] = {1: "对方主动", 2: "我主动", 3: "投递"}
@@ -97,7 +97,10 @@ def contact_identity(item: dict[str, Any]) -> str:
 def sanitize_csv_cell(value: str) -> str:
 	"""防止 CSV 公式注入：以 =+@- 开头的值前置单引号；过滤 Tab 和回车。"""
 	if not isinstance(value, str):
-		return str(value)
+		# 漂移值先转成字符串，再走与 str 完全相同的清洗链：直接 return
+		# str(value) 会跳过 Tab/回车过滤与公式前缀检查，超大整数的 str()
+		# 还会抛 ValueError（Issue #2198）。
+		value = safe_text(value)
 	value = value.replace("\t", " ").replace("\r", "")
 	# 单独一个 ``-`` 是导出里的缺失占位符，不是公式（Issue #1793）。
 	if value == "-":
@@ -118,8 +121,9 @@ def escape_md_cell(value: str) -> str:
 	"""
 	if not isinstance(value, str):
 		# 平台把字段漂移成列表 / 对象时，其文本表示同样带 ``|`` 与链接语法：
-		# 先转成字符串再走同一套转义（Issue #1792）。
-		value = str(value)
+		# 先转成字符串再走同一套转义（Issue #1792）。``safe_text`` 兜住超大
+		# 整数的 ``str()`` 上限（Issue #2198）。
+		value = safe_text(value)
 	value = value.replace("\n", " ").replace("\r", "")
 	value = value.replace("\\", "\\\\")
 	return value.replace("|", "\\|").replace("[", "\\[").replace("]", "\\]").replace("<", "\\<")

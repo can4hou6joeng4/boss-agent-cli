@@ -9,6 +9,8 @@
 - 采集断点的 `updated_at` 是有限但远在未来的值时（时钟快进后校正、手工写坏的库），queued 任务不再被永远当成「刚排队」：后台恢复探测执行锁并拉起 worker，`crawl status` 给出 `crawl resume --background` 提示；轻微时钟偏斜仍按刚排队处理（Issue #2193）。
 - `crawl_runs.output_dir` 含控制字符时断点读取边界按 `CACHE_RECORD_INVALID` fail-closed，`crawl status` 与 `crawl resume` 对同一断点同口径，不再把路径字符错误报成 `INVALID_PARAM`（Issue #2194）。
 - 后台恢复把状态落成 queued 失败时还原已清除的旧停止标记，保持「失败的调用不改动任务」；不再出现 stop 已清、worker 未起、状态未变的半写结果（Issue #2195）。
+- `-o` 输出路径预检增加父目录可写性检查：只读目录下的合法路径不再先消耗一次平台请求、更新当日聊天快照才报 `PermissionError`，改为在任何请求与快照写入之前返回 `LOCAL_IO_ERROR`（Issue #2197）。
+- CSV/Markdown 清洗函数的非字符串兜底改为经 `safe_text` 转成字符串并走同一套清洗链：漂移值同样执行公式前缀与 Tab/回车过滤，超大整数不再抛 `ValueError`（Issue #2198）。
 
 ## [3.4.137] - 2026-11-20
 
