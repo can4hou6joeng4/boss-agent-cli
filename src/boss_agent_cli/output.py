@@ -57,9 +57,13 @@ _SENSITIVE_TEXT_PATTERNS = tuple(
 	for pattern in (
 		# Authorization 的方案名（Basic / Token / Digest / Bearer）属于凭据的一部分，
 		# 只替换键后的值时会把真正的密钥留在文本里（Issue #1663）。
-		rf"{_ASCII_KEY_BOUNDARY}(?P<key>authorization)(?P<sep>\s*[:=]\s*)(?P<scheme>(?:bearer|basic|digest|token)\s+)?(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
-		rf"{_ASCII_KEY_BOUNDARY}(?P<key>api[_-]?key|authorization|cookie|credential|password|secret|session(?:[_-]?id)?|stoken|token)(?P<sep>\s*[:=]\s*)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
-		rf"{_ASCII_KEY_BOUNDARY}(?P<key>bearer)(?P<sep>\s+)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
+		# Cookie 头是多段 `a=b; c=d`：停在第一个分号会把后续段落的明文留在
+		# 文本里（Issue #1899）。空格后的 `key=value` 不当作 cookie 续段——
+		# 那通常是另一个独立字段，由通用规则分别脱敏。
+		rf"{_ASCII_KEY_BOUNDARY}(?P<key>cookie)(?P<quote>[\"']?)(?P<sep>\s*[:=]\s*)(?P<value>[^\s,;{_TEXT_VALUE_TERMINATORS}]+(?:\s*[;,]\s*[^\s,;{_TEXT_VALUE_TERMINATORS}]+)*)",
+		rf"{_ASCII_KEY_BOUNDARY}(?P<key>authorization)(?P<quote>[\"']?)(?P<sep>\s*[:=]\s*)(?P<scheme>(?:bearer|basic|digest|token)\s+)?(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
+		rf"{_ASCII_KEY_BOUNDARY}(?P<key>api[_-]?key|authorization|cookie|credential|password|secret|session(?:[_-]?id)?|stoken|token)(?P<quote>[\"']?)(?P<sep>\s*[:=]\s*)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
+		rf"{_ASCII_KEY_BOUNDARY}(?P<key>bearer)(?P<quote>)(?P<sep>\s+)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
 	)
 )
 
@@ -124,7 +128,12 @@ def _redact_sensitive(
 		parameter_name = schema_parameters.get(path, "").lower().replace("-", "_")
 		sensitive_parameter = any(part in parameter_name for part in _SENSITIVE_KEY_PARTS)
 		for key, item in value.items():
-			key_text = str(key).lower()
+			try:
+				key_text = str(key).lower()
+			except ValueError:
+				# 十进制位数超上限的整数键在 str() 就抛 ValueError；这里按空键名
+				# 处理，交给序列化兜底产出七键信封（Issue #1897）。
+				key_text = ""
 			item_path = (*path, key)
 			if sensitive_parameter and key_text in _SCHEMA_VALUE_FIELDS and not isinstance(item, _NON_CREDENTIAL_TYPES):
 				redacted[key] = _REDACTED
@@ -154,7 +163,7 @@ def redact_sensitive_text(message: str) -> str:
 	"""Redact credential-like values embedded in free-form text."""
 	redacted = _URL_USERINFO_PASSWORD.sub(rf"\g<prefix>{_REDACTED}", message)
 	for pattern in _SENSITIVE_TEXT_PATTERNS:
-		redacted = pattern.sub(r"\g<key>\g<sep>[REDACTED]", redacted)
+		redacted = pattern.sub(r"\g<key>\g<quote>\g<sep>[REDACTED]", redacted)
 	return redacted
 
 
@@ -282,9 +291,10 @@ def envelope_success(
 				"hints": redact_sensitive(hints),
 			}
 		)
-	except RecursionError:
-		# 脱敏阶段仍可能因容器自身深度或调用方构造的异常结构爆栈；stdout 必须
-		# 保留七键信封，不能只留空文本（Issue #1474）。
+	except (RecursionError, ValueError, TypeError):
+		# 脱敏阶段仍可能因容器自身深度、调用方构造的异常结构或无法 str() 的
+		# 键爆栈 / 抛错；stdout 必须保留七键信封，不能只留空文本
+		# （Issue #1474 #1897）。
 		return _dumps_envelope(serialization_failure_envelope(command))
 
 
@@ -334,7 +344,11 @@ def envelope_error(
 			if normalized_details.get("outcome") == "unknown" and normalized_details.get("replay_safe") is False:
 				normalized_details.setdefault("outcome_unknown", True)
 			if "outcome_unknown" in normalized_details:
-				normalized_details.setdefault("replay_safe", not normalized_details["outcome_unknown"])
+				marker = normalized_details["outcome_unknown"]
+				# 只有布尔 True 才意味着「禁止重放」；非布尔漂移（0 / None / ""）
+				# 不能派生 replay_safe=true，否则结果未知的写被标成可重放
+				# （Issue #1898）。
+				normalized_details.setdefault("replay_safe", not marker if isinstance(marker, bool) else False)
 			error["details"] = redact_sensitive(normalized_details)
 		return _dumps_envelope(
 			{
@@ -348,9 +362,9 @@ def envelope_error(
 				"hints": redact_sensitive(hints),
 			}
 		)
-	except RecursionError:
-		# 与成功信封同理：details / hints 或错误码登记表结构过深时也要保住七键
-		# 信封，不能让异常穿出 stdout 边界（Issue #1474）。
+	except (RecursionError, ValueError, TypeError):
+		# 与成功信封同理：details / hints 或错误码登记表结构过深、含无法 str()
+		# 的键时也要保住七键信封，不能让异常穿出 stdout 边界（Issue #1474 #1897）。
 		return _dumps_envelope(serialization_failure_envelope(command))
 
 

@@ -574,7 +574,11 @@ def handle_platform_error_output(
 	"""
 	code, message = platform.parse_error(response)
 	read_only = command in _READ_ONLY_COMMANDS if read_only_operation is None else read_only_operation
-	code = code if read_only_operation is False else read_only_platform_code(command, code)
+	# 显式 read_only_operation=True 同样参与 UNKNOWN 归一：只按命令名查表会漏掉
+	# 「同一命令的只读分支」这类声明，产出 code=UNKNOWN + recoverable=true 的
+	# 自相矛盾信封（Issue #1900）。
+	if read_only and code == "UNKNOWN":
+		code = "NETWORK_ERROR"
 	recoverable, recovery_action, risk_hints = platform_error_contract(code, ctx=ctx, read_only=read_only)
 	hints = {**(extra_hints or {}), **(risk_hints or {})} or None
 	details = None
