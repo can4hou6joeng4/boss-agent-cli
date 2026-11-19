@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [3.4.127] - 2026-11-19
+
+### Fixed
+- 职位 / 聊天导出的单元格把 bool 写成 JSON 字面量、深嵌套容器序列化失败按空值、孤立代理字符按转义清洗；`chat --export` 当日快照数组非空但零个可用对象（手工改坏 / 旧格式漂移）时不再当作完整基线，避免下一次 diff 把所有未翻到的联系人误报为新增（Issue #2015–#2018）。
+- automation 队列的 pending 行派发前按当前 `allowed_actions` 与置信度阈值门控，收紧配置后不再直接派发遗留 pending（行保持 pending，放开配置后仍可执行）；缺 `status` 字段的队列 / 复核记录按状态损坏拒绝，不再默认成 pending；`--limit` 按整轮全局上限生效，默认两个 tab 时不再处理 2×limit 个会话（Issue #2020–#2022）。
+- `boss_search` 与 preset 同用时十个筛选项的显式空串原样下发，CLI 按「关闭该项筛选」覆盖 preset 值；pipeline / follow-up / digest 的估算页数与 collector 真实翻页上限一致并计入追加的面试数据请求，`hr last-messages` 无 `--friend-id` 时计入沟通列表请求；wizard 的 `role` / `platform` / `goal` 空串在 MCP 入口即被拒绝（Issue #2023–#2026）。
+- `watch` 命中的保存搜索记录损坏（时间戳列类型漂移等）按 `SAVED_SEARCH_INVALID` 确定性失败上报，不再兜成可重试的 `NETWORK_ERROR`；`history` 达到可信页码上限时不再生成越界 `--page` 后继提示，改为引导缩小筛选条件（Issue #2011–#2012）。
+- crawl 断点续跑不再用每次搜索都会轮换的 `securityId` 兜底去重，页内崩溃后 resume 不会把同一职位重复落库并重复导出；`next_page` 超出 `params.pages + 1` 与结果表负页码按记录损坏拒绝；`crawl resume --background` 的 completed 快速路径同样校验断点设置（Issue #2029–#2032）。
+- wizard 恢复对 `params.inputs: null` 与省略 `requested_steps` 的合法断点不再误报 `WORKFLOW_PLAN_MISMATCH`；步骤记录缺失时在派发动作前以 `CACHE_RECORD_INVALID` 终止（本次没有平台写入，`replay_safe` 保持 true）；`--stop` 对记录存在但读不出、SQL 判定 completed 的任务报 `WORKFLOW_ALREADY_FINISHED`，不再误导成核对 run_id（Issue #2033–#2035）。
+
 ## [3.4.126] - 2026-11-19
 
 ### Fixed
