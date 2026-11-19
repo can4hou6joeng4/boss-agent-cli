@@ -735,7 +735,11 @@ def _row_text(row: dict[str, Any], key: str, path: Path, default: str = "") -> s
 
 
 def _review_from_row(row: dict[str, Any], path: Path) -> ReviewItem:
-	status = row.get("status", "review")
+	if "status" not in row:
+		# 与 pending 队列同口径（Issue #2022）：缺字段的复核项不能默认成
+		# 可等待 / 可批准的 review。
+		raise AutomationStateError(path, f"记录 {str(row.get('id', ''))!r} 缺少 status 字段")
+	status = row["status"]
 	if not isinstance(status, str) or status not in _REVIEW_STATUSES:
 		# 漂移值会让复核项永远不匹配 "review"，approve 报「不存在或已处理」，
 		# stats 也不再计数：与 pending 队列同口径 fail-closed（Issue #1931）。
@@ -766,7 +770,12 @@ _REVIEW_STATUSES = frozenset({"review", "approved", "rejected"})
 
 
 def _pending_from_row(row: dict[str, Any], path: Path) -> PendingAction:
-	status = row.get("status", "pending")
+	if "status" not in row:
+		# 缺字段不能默认成可执行的 pending：迁移 / 外部写入丢字段时该行实际
+		# 可能已是 executing / executed，默认 pending 会重复派发可能已生效的
+		# 写动作（Issue #2022）。
+		raise AutomationStateError(path, f"记录 {str(row.get('id', ''))!r} 缺少 status 字段")
+	status = row["status"]
 	if not isinstance(status, str) or status not in _PENDING_STATUSES:
 		# status 漂移（null / 数字 / 数组 / 对象 / 大小写不符 / 旧版 "dry-run"）会被
 		# process_pending 静默 continue：已批准的动作永远不执行，agent run
