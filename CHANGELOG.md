@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- 职位导出的标量兜底改走 `safe_text`：超过 4300 位的整数不再在裸 `str()` 抛 `ValueError` 中止整份 CSV / HTML 导出，与容器分支和 job_card 同口径按缺失单元格处理（Issue #2114）。
+- job_card 的容器字段改用 `strict_json_text` 序列化：嵌套的 `NaN` / `Infinity` 归一为 JSON `null`，不再把非标准字面量带进列表文本与 wizard 导出产物；深嵌套 / 超大整数仍按缺失处理（Issue #2115）。
+
 ## [3.4.133] - 2026-11-20
 
 ### Fixed
