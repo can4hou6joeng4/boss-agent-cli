@@ -62,6 +62,36 @@ def _hint_command(ctx: click.Context, command: str) -> str:
 	return boss_command_for_ctx(ctx, command, include_data_dir=True)
 
 
+def _ai_config_invalid(ctx: click.Context, exc: AIConfigValueError) -> None:
+	"""配置项类型漂移统一按 CONFIG_INVALID 上报并给修复命令。"""
+	handle_error_output(
+		ctx,
+		"ai-config",
+		code="CONFIG_INVALID",
+		message=str(exc),
+		recoverable=True,
+		recovery_action=f"{exc.recovery_hint or 'ai config'} 修正后重试",
+		hints={"next_actions": [_hint_command(ctx, exc.recovery_hint or "ai config")]},
+	)
+	ctx.exit(1)
+
+
+def _strict_resolved_base_url(ctx: click.Context, store: Any) -> str | None:
+	"""回显实际生效的端点；配置项类型漂移时按 CONFIG_INVALID 拒绝。
+
+	``load_config().get("ai_base_url")`` 拿到 ``true`` 这类漂移值会被
+	``provider_endpoint`` 原样当成地址回显（Issue #1967）。
+	"""
+	try:
+		config = store.load_config()
+		provider = ai_text_setting(config, "ai_provider")
+		base_url = ai_text_setting(config, "ai_base_url")
+	except AIConfigValueError as exc:
+		_ai_config_invalid(ctx, exc)
+		raise
+	return provider_endpoint(provider, base_url)
+
+
 def _create_ai_service(ctx: click.Context) -> AIService | None:
 	"""从配置创建 AIService 实例，未配置时返回 None。
 
@@ -379,10 +409,11 @@ def ai_group() -> None:
 @click.option("--api-key", default=None, help="API 密钥（将加密存储；空值会被拒绝，清除密钥请用 --clear-api-key）")
 @click.option("--clear-api-key", is_flag=True, default=False, help="删除已存储的 API 密钥（与 --api-key 互斥；没有密钥时也安全）")
 @click.option("--base-url", default=None, help="自定义 API 基础地址（provider=custom 或自建代理时使用）")
+@click.option("--clear-base-url", is_flag=True, default=False, help="清除已保存的自定义基础地址（与 --base-url 互斥），回到 provider 登记表里的默认端点")
 @click.option("--temperature", default=None, type=click.FloatRange(min=0), help="生成温度")
 @click.option("--max-tokens", default=None, type=click.IntRange(min=1), help="最大令牌数")
 @click.pass_context
-def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, api_key: str | None, clear_api_key: bool, base_url: str | None, temperature: float | None, max_tokens: int | None) -> None:
+def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, api_key: str | None, clear_api_key: bool, base_url: str | None, clear_base_url: bool, temperature: float | None, max_tokens: int | None) -> None:
 	"""查看或设置 AI 服务配置"""
 	store = _get_ai_config_store(ctx)
 
@@ -395,6 +426,7 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 		or api_key is not None
 		or clear_api_key
 		or base_url is not None
+		or clear_base_url
 		or temperature is not None
 		or max_tokens is not None
 	)
@@ -406,7 +438,7 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 		# 真正生效的地址来自 PROVIDER_BASE_URLS 查表，用户此前无从确认。
 		# provider 名相近时（如 openrouter / orcarouter）记混会把 API key 与
 		# 简历全文发到另一家，而界面上看不出任何差别。
-		config["resolved_base_url"] = store.get_base_url()
+		config["resolved_base_url"] = _strict_resolved_base_url(ctx, store)
 		handle_output(
 			ctx, "ai-config", config,
 			render=lambda d: render_action_result(
@@ -478,7 +510,11 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 	# None：写进配置后每条 AI 命令都只会回「AI 服务未配置」，用户看不出是 provider
 	# 名的问题，而配置和 api_key 已经落盘。写入前先拒绝，并列出登记表里的取值。
 	if provider is not None:
-		stored_base_url = store.load_config().get("ai_base_url")
+		try:
+			stored_base_url = ai_text_setting(store.load_config(), "ai_base_url")
+		except AIConfigValueError as exc:
+			_ai_config_invalid(ctx, exc)
+			return
 		effective_base_url = base_url if base_url is not None else stored_base_url
 		if provider_endpoint(provider, effective_base_url) is None:
 			if provider == "custom":
@@ -516,6 +552,19 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 			ctx.exit(1)
 			return
 		updates["ai_model"] = model
+	if base_url is not None and clear_base_url:
+		handle_error_output(
+			ctx, "ai-config",
+			code="INVALID_PARAM",
+			message="--base-url 与 --clear-base-url 只能二选一",
+			recovery_action="设置新地址用 --base-url，恢复默认端点用 --clear-base-url",
+			hints={"next_actions": [_hint_command(ctx, "ai config --clear-base-url")]},
+		)
+		ctx.exit(1)
+		return
+	if clear_base_url:
+		# 空串等价于未设置：provider_endpoint 按登记表解析（Issue #1967）。
+		updates["ai_base_url"] = ""
 	if base_url is not None:
 		try:
 			# 空白串 / 缺 scheme / 非 http(s) 地址会让之后每条 AI 命令抛
@@ -547,6 +596,12 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 		updates["ai_temperature"] = temperature
 	if max_tokens is not None:
 		updates["ai_max_tokens"] = max_tokens
+	# 先写密钥再写配置：反过来的话密钥写失败会留下「配置已改、密钥没变」的半截
+	# 更新，调用方按新配置继续用旧密钥（Issue #1967）。
+	if api_key is not None:
+		store.save_api_key(api_key)
+	elif clear_api_key:
+		store.clear_api_key()
 	if updates:
 		try:
 			store.save_config(**updates)
@@ -559,13 +614,10 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 				message=str(exc),
 				recoverable=True,
 				recovery_action=f"备份并修正或删除 {exc.path} 后重试",
+				details={"api_key_updated": api_key is not None or clear_api_key},
 			)
 			ctx.exit(1)
 			return
-	if api_key is not None:
-		store.save_api_key(api_key)
-	elif clear_api_key:
-		store.clear_api_key()
 
 	updated_fields = list(updates.keys())
 	if api_key is not None or clear_api_key:
@@ -578,7 +630,7 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 			"api_key_set": store.api_key_is_set(),
 			# 写入后立刻回显生效的端点，让「刚配的这个 provider 会把数据发去哪」
 			# 在同一屏内可确认，而不是要再跑一次 boss ai config 才看得到。
-			"resolved_base_url": store.get_base_url(),
+			"resolved_base_url": _strict_resolved_base_url(ctx, store),
 		},
 		render=lambda d: render_action_result(d, title="ai config", next_steps=[_hint_command(ctx, "ai config")]),
 		hints={"next_actions": [
