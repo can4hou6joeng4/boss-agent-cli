@@ -183,7 +183,12 @@ def process_pending(
 				if not dry_run and prior is not None and state is not None:
 					_release_inflight(prior, store, state)
 				actions[index] = _pending_with_status(item, "pending")
-				store.write_pending(actions)
+				try:
+					store.write_pending(actions)
+				except Exception:
+					# 与上面的分支同口径：还原写盘失败不能掩盖原始的预算 / 超时
+					# 停止码（Issue #1947）。
+					pass
 			raise
 		next_status = _next_pending_status(status)
 		if not dry_run:

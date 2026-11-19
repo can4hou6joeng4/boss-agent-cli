@@ -185,10 +185,12 @@ def _conversation_status(
 		has_exchange=bool(prior.get("exchange_contact_at")) or any(
 			"交换微信" in text or "已交换" in text for text in texts
 		),
-		candidate_after_questionnaire=_has_incoming_after(conversation, questionnaire_index)
-		or bool(prior.get("questionnaire_sent_at") and conversation.incoming_messages),
-		candidate_after_follow_up=_has_incoming_after(conversation, follow_up_index)
-		or bool(prior.get("follow_up_sent_at") and conversation.incoming_messages),
+		candidate_after_questionnaire=_replied_after(
+			conversation, questionnaire_index, prior, "questionnaire_sent_at"
+		),
+		candidate_after_follow_up=_replied_after(
+			conversation, follow_up_index, prior, "follow_up_sent_at"
+		),
 		interview_time=_extract_interview_time(latest_incoming),
 	)
 
@@ -211,8 +213,39 @@ def _has_incoming_after(conversation: Conversation, marker_index: int) -> bool:
 	)
 
 
+def _replied_after(
+	conversation: Conversation,
+	marker_index: int,
+	prior: dict[str, Any],
+	key: str,
+) -> bool:
+	"""候选人是否在我方话术之后回复过。
+
+	有方向的转录里能定位到话术时以转录为准：prior 时间戳在发送成功后必然写入，
+	而 ``incoming_messages`` 至少含触发问卷的旧消息，用它兜底会让下一轮无条件
+	判成「已回复」并自动发出追问 / 交换联系方式（Issue #1944）。只有转录里
+	找不到话术或没有方向信息时才退回 prior 标记。
+	"""
+	if marker_index >= 0 and conversation.ordered_messages:
+		return _has_incoming_after(conversation, marker_index)
+	sent = prior.get(key)
+	return isinstance(sent, str) and bool(sent) and bool(conversation.incoming_messages)
+
+
+def _candidate_texts(conversation: Conversation) -> tuple[str, ...]:
+	"""候选人一侧的文本；完全没有方向信息时才退回全部消息。"""
+	incoming = (
+		*conversation.incoming_messages,
+		*(text for direction, text in conversation.ordered_messages if direction == "incoming"),
+	)
+	if incoming or conversation.outgoing_messages or conversation.ordered_messages:
+		return incoming
+	return tuple(conversation.all_messages)
+
+
 def _escalation_reason(conversation: Conversation) -> str:
-	text = "\n".join((*conversation.incoming_messages, *conversation.all_messages))
+	# 只看候选人说的话：我方话术里出现「隐私 / 收费」等词不是候选人升级（Issue #1945）。
+	text = "\n".join(_candidate_texts(conversation))
 	for token in ("不要再联系", "投诉", "举报", "骚扰", "隐私", "收费", "押金"):
 		if token in text:
 			return f"candidate escalation detected: {token}"
@@ -252,6 +285,10 @@ def _extract_interview_time(text: str) -> str:
 	if match is None:
 		return ""
 	hour = match.group("prefix")
+	hour_digits = re.search(r"\d{1,2}$", hour)
+	if hour_digits is None or int(hour_digits.group()) > 23:
+		# 「25点」不是时间；写进面试线索会让操作者按一个不存在的时刻赴约（Issue #1946）。
+		return ""
 	if match.group("colon"):
 		minutes = match.group("colon_minutes")
 	elif match.group("ban"):
@@ -262,5 +299,7 @@ def _extract_interview_time(text: str) -> str:
 		minutes = match.group("point_minutes").zfill(2)
 	else:
 		minutes = "00"
+	if int(minutes) > 59:
+		return ""
 	# 保留日期/时段原样（旧格式如「周二 14:00」继续带内部空格），仅去首尾空白。
 	return f"{hour.strip()}:{minutes}"
