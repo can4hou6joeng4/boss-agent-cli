@@ -294,7 +294,9 @@ class RequestBudget:
 			remaining = min(remaining, deadline - time.monotonic())
 		return max(0.0, remaining)
 
-	def _pause(self, seconds: float, started: float, check: Callable[[], None] | None) -> None:
+	def _pause(
+		self, seconds: float, started: float, check: Callable[[], None] | None, *, lease_poll: bool = False
+	) -> None:
 		self._check(check)
 		if seconds > self._remaining(started) or self._remaining(started) <= 0:
 			deadline = _CONTROL.get().deadline
@@ -303,8 +305,12 @@ class RequestBudget:
 				if deadline is not None and deadline <= started + self.wait_timeout
 				else "REQUEST_BUDGET_EXHAUSTED"
 			)
+			# 租约轮询的 0.05s 切片不是真实等待值：窗口耗尽时对方还要持锁多久
+			# 未知，报最后一个切片会让恢复指引按 50ms 立刻重试（Issue #1990）。
 			raise RequestBudgetExceeded(
-				"剩余时间内拿不到请求预算或等不完冷却，请求未发出", code=code, retry_after=seconds
+				"剩余时间内拿不到请求预算或等不完冷却，请求未发出",
+				code=code,
+				retry_after=None if lease_poll else seconds,
 			)
 		cancellable_sleep(seconds, check=lambda: self._check(check))
 
@@ -378,7 +384,7 @@ class RequestBudget:
 			if fd is not None:
 				dir_fd = fd
 				break
-			self._pause(0.05, started, check)
+			self._pause(0.05, started, check, lease_poll=True)
 		try:
 			path = self.root / "request-budget.lease"
 			# 租约文件与 SQLite 库一样属于本地调度元数据：符号链接会让锁落到数据目录
@@ -407,7 +413,7 @@ class RequestBudget:
 						candidate.write(b"\0")
 						candidate.flush()
 					while not self._try_lease(candidate):
-						self._pause(0.05, started, check)
+						self._pause(0.05, started, check, lease_poll=True)
 					acquired = self._lease_names_locked_file(path, candidate)
 				finally:
 					if not acquired:
@@ -425,7 +431,11 @@ class RequestBudget:
 			except BaseException as error:
 				from boss_agent_cli.api.client import PlatformRiskError
 
-				if isinstance(error, PlatformRiskError):
+				if isinstance(error, PlatformRiskError) and "risk_lock" not in error.details:
+					# 错误没有 risk_lock 详情时锁尚未落盘，由租约异常路径兜底记录。
+					# 带 risk_lock 的错误来自已存在的锁（from_lock）或已在
+					# _record_cdp_risk_lock 中落盘：重写会用缺失的顶层平台码覆盖
+					# 原有诊断字段并刷新 locked_at（Issue #1989）。
 					try:
 						self.record_risk(
 							reason="ACCOUNT_RISK" if error.code == "ACCOUNT_RISK" else "ENVIRONMENT_RISK",
