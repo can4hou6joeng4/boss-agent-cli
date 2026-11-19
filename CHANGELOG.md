@@ -10,6 +10,7 @@
 - login 错误分类的风控判定移到 CDP / `ConnectionError` 启发式之前：Playwright / CDP 异常文案同时含「chrome / cdp」与风控词时不再报成可重试的 `CDP_UNAVAILABLE` 并建议重新登录，按硬边界返回不可恢复的 `LOGIN_RISK_CONTROL`（Issue #2145）。
 - login 错误分类的限流关键词收窄为完整的 `too many requests`：本地 fd 耗尽的 strerror「Too many open files」不再被误判为不可恢复的平台风控并诱导联系平台客服，回到网络 / 本地失败通道（Issue #2144）。
 - cache 的三处读取边界补上类型漂移解码：`shortlist_records.created_at` 与 `resume_job_links.linked_at/updated_at` 的 BLOB / 文本漂移不再让整条 `shortlist list` / `resume applications` 落成固定 `INTERNAL_ERROR`，按 `CACHE_RECORD_INVALID` 确定性上报；`saved_searches.name` 的 BLOB 漂移按 UTF-8 还原，无效行计入 `corrupt` 并跳过，`preset list` / `watch list` 其余项照常返回（Issue #2147）。
+- wizard 空 `requested_steps` 的计划不再零步执行后写 `completed`：读取边界把历史断点缺失的字段归一成空元组的路径（#2033）此前会让步骤行全部停留在 `pending`，下一次 `--resume` 撞上 completed 自相矛盾检查后该 run 永久不可恢复；现在入口按 `CACHE_RECORD_INVALID` 确定性拒绝，不执行任何步骤也不改写状态（Issue #2149）。
 - `shortlist annotate` 不再忽略 UPDATE 的 rowcount：security_id 以 BLOB 落库（#1885 的读取兼容）或行在 SELECT 与 UPDATE 之间被并发删除时，未写入不再报 `updated: true`，按 `SHORTLIST_ENTRY_NOT_FOUND` 输出错误并指向 `shortlist list` 核对（Issue #2135）。
 - `favorites list` 在 `cardList` 非空但没有一个可识别对象时按 `NETWORK_ERROR`「元素不是对象」上报，与 `favorites sync` 的格式错误契约一致，不再静默伪装成空收藏（Issue #2136）。
 - favorites 的三处恢复动作改用当前数据目录的 doctor 命令（`boss --data-dir … doctor`），自定义 `--data-dir` 时不再引导去诊断默认目录（Issue #2137）。
