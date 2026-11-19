@@ -5,10 +5,6 @@
 ## [Unreleased]
 
 ### Fixed
-- `chat --export` 的完整性旁车文件只认显式 `true`：`0` / `"false"` / `null` / 缺键等漂移值按不完整基线处理，不再把上一份不完整快照当成完整并误报新增（Issue #1911）。
-- 当日快照解析失败时完整性标记保持 `false`；旁车文件先写保守值、再写快照、最后写真实值，进程在两次原子写之间被杀也不会让部分页快照成为完整基线（Issue #1912）。
-- `chat --export` 的「已消失」表格与活动联系人 / CSV 行同口径，容器字段序列化为 JSON 文本而不是 Python repr（Issue #1913）。
-- 沟通列表页缺少 `result` / `friendList` 容器时不当作完整空列表，`chat --export` 不再因此清空当日快照并把旧联系人全报为已消失（Issue #1914）。
 - `--salary` 搜索遇到超长数字串的 `salaryDesc`（>4300 位）按「无法解析」处理，不再让整条搜索崩成 `INTERNAL_ERROR`（Issue #1889）。
 - 职位描述缓存只接受字符串 `encryptJobId` / 描述：类型漂移按未命中处理，`--welfare` 管线不再因 sqlite 绑定 dict 抛 `ProgrammingError`（Issue #1890）。
 - `write_json_atomic` / `strict_json_text` 把深嵌套与超长整数引发的 `RecursionError` / `ValueError` 归成本地 IO 错误，CLI 输出 `LOCAL_IO_ERROR` 信封而不是空 stdout 加 traceback（Issue #1891）。
