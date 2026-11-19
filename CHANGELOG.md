@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [3.4.125] - 2026-11-19
+
+### Fixed
+- automation 决策不再用 prior 时间戳压过会话转录：转录显示候选人未回复时不再自动发追问、也不再发交换联系方式请求；升级检测只读候选人一侧消息，自定义话术不再让候选人被静默跳过；面试时间越界（如「25点99」）不再写入线索；预算停止时队列还原写盘失败不再掩盖原始停止码（Issue #1944–#1947）。
+- MCP 参数映射把 `boss_search` 的显式空 `url` / `preset`、AI 工具的空 `jd_text` / `job_id` 原样下发，由 CLI 给出 `INVALID_PARAM` 诊断，不再静默按其余参数成功；子进程 stdout 含超长整数或超深嵌套时仍返回七键信封；参数超过系统 argv 上限（E2BIG）报 `INVALID_PARAM` 并指引缩短参数，不再误报成 CLI 未安装（Issue #1941–#1943）。
+- `ai` 命令在登录态 salt 路径状态异常时返回 `LOCAL_IO_ERROR` 信封而不是 traceback；`--resume ""` 返回 `INVALID_PARAM` 且不发起请求；`ai config --api-key` 去掉首尾空白并拒绝非 ASCII / 控制字符；服务商回显密钥时按当前密钥做字面量遮蔽，非 `sk-` 前缀或含点号的形态不再进入 `error.message`（Issue #1950–#1953）。
+- wizard 在写请求之后的停止 / 超时信号不再覆盖「结果未知」标记，`--resume` 不再重放可能已生效的写步骤；`stopped` 步骤带 `replay_safe:false` 时同样阻断重放；`bind_inner_run` 保留已落盘的写前标记；已完成步骤的 `result` 漂移成空值不重跑；断点的 `error.code` / `error.message` 类型漂移按记录损坏拒绝（Issue #1956–#1960）。
+
 ## [3.4.124] - 2026-11-19
 
 ### Fixed
