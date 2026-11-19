@@ -4,7 +4,7 @@ import json
 import math
 from typing import Any
 
-from boss_agent_cli.api.models import employment_type_from_raw, field_list, field_text
+from boss_agent_cli.api.models import employment_type_from_raw, field_list, field_text, safe_text
 
 
 def _text_item(value: Any) -> str:
@@ -12,10 +12,15 @@ def _text_item(value: Any) -> str:
 	if value is None:
 		return ""
 	if isinstance(value, (dict, list, tuple)):
-		return json.dumps(value, ensure_ascii=False)
+		# 平台若返回超深嵌套 / 超大整数，json.dumps 抛 RecursionError /
+		# ValueError；展示字段按缺失处理，不能让整条命令失败（Issue #2065）。
+		try:
+			return json.dumps(value, ensure_ascii=False)
+		except (ValueError, RecursionError):
+			return ""
 	if isinstance(value, float) and not math.isfinite(value):
 		return ""
-	return str(value)
+	return safe_text(value)
 
 
 def text_items(data: Any, key: str) -> list[str]:

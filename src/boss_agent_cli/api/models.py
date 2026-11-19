@@ -5,6 +5,24 @@ from typing import Any
 
 BOSS_INTERNSHIP_RESPONSE_JOB_TYPE = 4
 
+# 平台字段里超过 4300 位的整数会让 str() 抛 ValueError（Python 3.11+ 的安全
+# 上限）；与 output._MAX_SAFE_INT_BITS 同口径，超过即按缺失文本处理。
+_MAX_TEXT_INT_BITS = 14284
+
+
+def safe_text(value: Any) -> str:
+	"""``str(value)`` 的安全版本：超大整数 / 不可转换值返回空串（Issue #2065）。
+
+	平台字段漂移出超大整数时，裸 ``str()`` 抛 ValueError，从命令层穿出后
+	会被兜成 INTERNAL_ERROR 或可重试的 NETWORK_ERROR。展示字段按缺失处理。
+	"""
+	if isinstance(value, int) and not isinstance(value, bool) and value.bit_length() > _MAX_TEXT_INT_BITS:
+		return ""
+	try:
+		return str(value)
+	except ValueError:
+		return ""
+
 
 # 平台响应里的字段可能是显式的 null（"welfareList": null、"bossInfo": null）。
 # dict.get(key, default) 只在键不存在时用默认值，值为 null 时照样返回 None，
@@ -24,7 +42,7 @@ def field_text(data: Any, key: str, default: str = "") -> str:
 		return default
 	if isinstance(value, float) and not math.isfinite(value):
 		return default
-	return value if isinstance(value, str) else str(value)
+	return value if isinstance(value, str) else safe_text(value)
 
 
 def field_list(data: Any, key: str) -> list[Any]:
@@ -70,7 +88,7 @@ def job_public_url(job_id: str) -> str:
 
 def employment_type_from_raw(raw_job_type: Any) -> str:
 	"""Normalize verified BOSS response job types without guessing unknown codes."""
-	if str(raw_job_type) == str(BOSS_INTERNSHIP_RESPONSE_JOB_TYPE):
+	if safe_text(raw_job_type) == str(BOSS_INTERNSHIP_RESPONSE_JOB_TYPE):
 		return "实习"
 	return ""
 

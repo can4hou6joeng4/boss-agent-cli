@@ -1,5 +1,6 @@
 from typing import Any
 
+from boss_agent_cli.services.chat_utils import stable_uid
 from boss_agent_cli.services.friend_list_pages import friend_list_page_has_content, friend_list_page_items
 
 
@@ -26,7 +27,11 @@ def find_friend(
 	- 遍历完成仍未找到：返回 (None, None)
 	- 响应缺少列表容器：抛 FriendListShapeError，不能据此断言联系人不存在
 	"""
-	needle = str(identifier).strip()
+	try:
+		needle = str(identifier).strip()
+	except ValueError:
+		# 超过 4300 位的整数连 str() 都不可用；平台 uid 不可能是这种值。
+		return None, None
 	if not needle:
 		return None, None
 
@@ -46,17 +51,19 @@ def find_friend(
 		page_items = friend_list_page_items(platform_data)
 		# 同一页先完整检查稳定 uid，再回退到轮换的 securityId。这样即使某个
 		# securityId 恰好与另一条记录的 uid 文本相同，也不会命中错误联系人。
+		# uid 只认非空字符串：布尔 / 容器漂移时 str() 会让不同联系人共用
+		# 同一文本，匹配到错误对象（Issue #2063）。
 		for item in page_items:
-			if str(item.get("uid") or "").strip() == needle:
+			if stable_uid(item.get("uid")) == needle:
 				return item, None
 		for item in page_items:
-			if str(item.get("securityId") or "") == needle:
+			if stable_uid(item.get("securityId")) == needle:
 				return item, None
 
 		# securityId 会在请求间轮换，不能用于重复页判定；有 uid 时必须优先用 uid。
 		# 签名全为空时无法判断是否重复页，继续翻页，避免把缺字段的新页面
 		# 当成重复页提前结束（与 services/friend_list_pages 的聚合守卫一致）。
-		identities = [str(item.get("uid") or item.get("securityId") or "") for item in page_items]
+		identities = [stable_uid(item.get("uid")) or stable_uid(item.get("securityId")) for item in page_items]
 		if any(identities):
 			signature = tuple(identities)
 			if signature in seen_signatures:
