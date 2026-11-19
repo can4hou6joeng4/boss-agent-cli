@@ -4,7 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
-v3.4.130 (2026-11-19): path-state checks for resume downloads and crawl exports use lstat, so swallowed metadata errors no longer bypass overwrite protection or backups (Issues #2083–#2085).
+v3.4.131 (2026-11-19): the MCP server resolves its default boss entry point at module load, so embedded calls and tests no longer depend on boss being on PATH (Issue #2088).
+- ✅ v3.4.130 (2026-11-19): path-state checks for resume downloads and crawl exports use lstat, so swallowed metadata errors no longer bypass overwrite protection or backups (Issues #2083–#2085).
 - ✅ v3.4.129 (2026-11-19): local JSON serialization failures are classified as non-retryable local IO; private atomic writes and crawl exports truncate the target name in temporary files so legal names near NAME_MAX no longer raise ENAMETOOLONG (Issues #2078–#2080).
 - ✅ v3.4.128 (2026-11-19): contact identities and job_card text fail closed on drifted values; recruiter pagination clamping, positional replay and missing-parameter hints; automation queue dispatch-time field checks and JSONL write integrity; background crawl resume validates --pages before launching a worker (Issues #2063–#2075).
 - ✅ v3.4.127 (2026-11-19): export cells and chat snapshots, automation queue gating, MCP explicit empty filters and request estimates, and watch/history hints now share one contract; crawl checkpoint identity and page bounds plus wizard plan normalization and dispatch-time record checks close their failure paths (Issues #2011–#2035).
