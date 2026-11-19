@@ -5,10 +5,6 @@
 ## [Unreleased]
 
 ### Fixed
-- 超长整数作为 dict 键时脱敏 / 序列化阶段不再抛 `ValueError`，stdout 仍保留七键 `INTERNAL_ERROR` 信封（Issue #1897）。
-- `error.details.outcome_unknown` 非布尔漂移时 `replay_safe` 改为一律 `false`（fail-closed），结果未知的写操作不再被标成可重放（Issue #1898）。
-- 自由文本脱敏覆盖带引号的 JSON / dict-repr 形态（`{"token": "…"}`）与多段 Cookie 头，后续 `name=value` 段落不再明文残留（Issue #1899）。
-- `handle_platform_error_output` 的 `read_only_operation=True` 参与 `UNKNOWN` → `NETWORK_ERROR` 归一，只读分支不再产出「不可恢复 + 可重试」的自相矛盾信封（Issue #1900）。
 - `--salary` 搜索遇到超长数字串的 `salaryDesc`（>4300 位）按「无法解析」处理，不再让整条搜索崩成 `INTERNAL_ERROR`（Issue #1889）。
 - 职位描述缓存只接受字符串 `encryptJobId` / 描述：类型漂移按未命中处理，`--welfare` 管线不再因 sqlite 绑定 dict 抛 `ProgrammingError`（Issue #1890）。
 - `write_json_atomic` / `strict_json_text` 把深嵌套与超长整数引发的 `RecursionError` / `ValueError` 归成本地 IO 错误，CLI 输出 `LOCAL_IO_ERROR` 信封而不是空 stdout 加 traceback（Issue #1891）。
