@@ -46,6 +46,9 @@
 - Chromium 代理不再使用 `HTTP_PROXY`（平台是 https，httpx 的 https 请求本就直连），`NO_PROXY` 原样转发为 `bypass`，两个通道对同一域名同进同出（Issue #1869）。
 - 代理地址里的 IPv6 字面量保留方括号，`http://[::1]:8080` 不再被拼成无法解析的 `http://::1:8080`（Issue #1870）。
 - `RequestThrottle` 不再用 `0.0` 当单调时钟哨兵：刚开机时首条请求不会白等一个间隔，也不会误报 `REQUEST_BUDGET_EXHAUSTED`（Issue #1871）。
+- `crawl resume` 对已完成任务校验三份产物是否仍在，缺失时用本地缓存重新导出（不发平台请求），不再报成功却给出不存在的文件路径（Issue #1873）。
+- `crawl status` 的 `hooks.success` 与 resume 同口径只认真布尔，类型漂移按 `CACHE_RECORD_INVALID` 上报，不再原样透传（Issue #1874）。
+- 采集产物替换失败时清理已创建的 `.jobs.*` 备份临时文件，不再每次重试残留一个（Issue #1875）。
 
 ## [3.4.122] - 2026-11-19
 

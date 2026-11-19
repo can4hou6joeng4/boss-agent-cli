@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.crawler.service import CrawlSettings
+from boss_agent_cli.crawler.service import CrawlSettings, _hook_injections
 from boss_agent_cli.display import boss_command, shell_argument
 
 _PUBLIC_JOB_FIELDS = {
@@ -65,7 +65,12 @@ def crawl_status(cache: CacheStore, run_id: str, *, data_dir: Path | None = None
 		},
 		"output_dir": run["output_dir"],
 		"error": run["error"],
-		"hooks": run["hook_results"],
+		# 与 resume 同一口径解码：success 必须是真布尔，类型漂移按记录损坏上报
+		# （Issue #1484 / #1874）。
+		"hooks": [
+			{"name": item.name, "success": item.success, "sha256": item.sha256, "reason": item.reason}
+			for item in _hook_injections(run.get("hook_results", []), run_id=run_id)
+		],
 		"checkpoint": checkpoint,
 	}
 

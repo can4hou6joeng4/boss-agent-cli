@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import socket
+import stat
 import sqlite3
 import sys
 import time
@@ -586,6 +587,12 @@ class CrawlService:
 			settings = replace(settings, with_detail=True)
 		self._validate_settings(settings)
 		if not self.has_resume_work(run, pages=pages, with_detail=with_detail):
+			output_dir = Path(str(run["output_dir"]))
+			if not _artifacts_present(output_dir):
+				# 产物被删除 / 清理后 completed 快速路径仍会报成功并指向不存在的
+				# 文件（Issue #1873）：用本地缓存重新导出，不发出任何平台请求；
+				# 导出失败会抛 CrawlExportError，不再返回假成功。
+				write_run_outputs(output_dir, [item["payload"] for item in self._cache.list_crawl_jobs(run_id)])
 			return self._completed_outcome(run)
 		# Hook 目录是本地状态：resume 没有 --hook-dir 参数可以修复，必须在
 		# 打开浏览器之前用与 crawl run/start 相同的清单 / 摘要校验拒绝坏目录
@@ -1167,3 +1174,15 @@ def _hook_injections(raw: Any, *, run_id: str = "") -> tuple[HookInjection, ...]
 
 def _output_paths(output_dir: Path) -> dict[str, str]:
 	return {extension: str(output_dir / f"jobs.{extension}") for extension in ("json", "csv", "xlsx")}
+
+
+def _artifacts_present(output_dir: Path) -> bool:
+	"""三份产物是否都还是普通文件；任何 stat 错误按缺失处理，交给导出路径报确定性错误。"""
+	for extension in ("json", "csv", "xlsx"):
+		try:
+			mode = (output_dir / f"jobs.{extension}").lstat().st_mode
+		except OSError:
+			return False
+		if not stat.S_ISREG(mode):
+			return False
+	return True
