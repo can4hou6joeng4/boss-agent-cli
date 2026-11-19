@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [3.4.130] - 2026-11-19
+
+### Fixed
+- `hr download-resume` 的覆盖保护改按 `lstat` 判定目标路径：目标存在但元数据读不到时（权限等 `OSError` 被 `exists()` / `is_symlink()` 吞成 False）不再先发出四个平台请求才失败，客户端在发请求前 fail-closed，命令层按本地 IO 错误上报（Issue #2083）。
+- crawl 导出的备份判定复用预检的 `lstat` 结果：`is_file()` 吞错时仍会备份旧产物，替换中途失败的回滚不再丢失旧内容（Issue #2085）。
+
 ## [3.4.129] - 2026-11-19
 
 ### Fixed
