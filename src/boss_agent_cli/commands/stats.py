@@ -41,7 +41,9 @@ def _count_records(
 	parameters: tuple[float, ...] = ()
 	if window is not None:
 		column, cutoff = window
-		query += f" WHERE {column} >= ?"
+		# SQLite 的存储类排序让 BLOB / 文本漂移值永远 >= 数值阈值：一行十天前
+		# 的时间戳写成 BLOB 后仍被计入一天窗口。只统计数值存储类，漂移行不进窗口。
+		query += f" WHERE {column} >= ? AND typeof({column}) IN ('integer', 'real')"
 		parameters = (cutoff,)
 	try:
 		result: int = conn.execute(query, parameters).fetchone()[0]
