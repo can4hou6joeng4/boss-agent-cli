@@ -17,14 +17,18 @@ def deduplicate_job_result(
 	for item in items:
 		if not isinstance(item, dict):
 			continue
-		# 真值但不可用的 job_id（int / dict / list）不能遮蔽合法的 encryptJobId，
-		# 否则同一职位不再去重（Issue #1879）。
-		job_id = item.get("job_id")
-		if not (isinstance(job_id, str) and job_id):
-			job_id = item.get("encryptJobId")
-		if isinstance(job_id, str) and job_id:
+		# 真值但不可用的 job_id（int / dict / list / 纯空白串）不能遮蔽合法的
+		# encryptJobId：纯空白 job_id 会让不同职位共用同一个去重键而被合并，
+		# 带空白的真实 ID 又会与干净值分裂（Issue #1879、#2140）。
+		job_id = _usable_id(item.get("job_id")) or _usable_id(item.get("encryptJobId"))
+		if job_id:
 			if job_id in seen:
 				continue
 			seen.add(job_id)
 		unique.append(item)
 	return unique
+
+
+def _usable_id(value: Any) -> str:
+	"""ID 只认 strip 后非空的字符串；其他类型与空白串按缺失处理。"""
+	return value.strip() if isinstance(value, str) else ""
