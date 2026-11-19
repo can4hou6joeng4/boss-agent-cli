@@ -48,6 +48,7 @@ from boss_agent_cli.crawler.controls import (
 from boss_agent_cli.crawler.hooks import HookRegistrationError, verify_hook_profile
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_requirement
+from boss_agent_cli.services.labels import LABEL_MAP, brief_label, parse_label_id
 from boss_agent_cli.digest import build_digest
 from boss_agent_cli.display import (
 	RISK_ERROR_CONTRACTS,
@@ -151,7 +152,7 @@ def _invalid_welfare_conditions(raw: Any) -> WorkflowActionError:
 	return WorkflowActionError(
 		"INVALID_PARAM",
 		'wizard 输入 welfare_conditions 必须是福利标签字符串数组（如 ["双休", "五险一金"]），'
-		f"或 [[标签, [关键词...]], ...] 形状；收到 {raw!r}",
+		f"或 [[标签, [关键词...]], ...] 形状；收到 {_brief_value(raw)}",
 		recoverable=recoverable,
 		recovery_action=recovery,
 	)
@@ -347,6 +348,34 @@ def _optional_str(value: Any) -> str | None:
 	return str(value) if value is not None and value != "" else None
 
 
+def _brief_value(value: Any, limit: int = 60) -> str:
+	"""错误消息里回显的输入值：repr 后截断，信封与断点不随输入规模膨胀（Issue #1909）。"""
+	text = repr(value)
+	if len(text) <= limit:
+		return text
+	return f"{text[:limit]}…（共 {len(text)} 字符）"
+
+
+def _required_str(inputs: Mapping[str, Any], name: str) -> str:
+	"""读取必填字符串输入：容器 / 数字 / 布尔不能经 ``str()`` 变成 repr 发给真人。"""
+	raw = _required(inputs, name)
+	if not isinstance(raw, str):
+		raise WorkflowInputError(f"wizard 输入 {name} 必须是字符串，收到 {_brief_value(raw)}")
+	return raw
+
+
+def _optional_str_strict(inputs: Mapping[str, Any], name: str) -> str | None:
+	"""读取可选字符串输入：缺省 / null 为空，其余非字符串点名报错。"""
+	if name not in inputs:
+		return None
+	raw = inputs[name]
+	if raw is None:
+		return None
+	if not isinstance(raw, str):
+		raise WorkflowInputError(f"wizard 输入 {name} 必须是字符串，收到 {_brief_value(raw)}")
+	return raw
+
+
 def _validate_search_filters(params: Mapping[str, Any]) -> None:
 	"""按保存入口同口径校验搜索筛选（城市名 + 标签取值域）。
 
@@ -383,7 +412,7 @@ def _bool_input(inputs: Mapping[str, Any], name: str, default: bool = False) -> 
 		return default
 	if isinstance(raw, bool):
 		return raw
-	raise WorkflowInputError(f"wizard 输入 {name} 必须是布尔值，收到 {raw!r}")
+	raise WorkflowInputError(f"wizard 输入 {name} 必须是布尔值，收到 {_brief_value(raw)}")
 
 
 def _mapping_input(inputs: Mapping[str, Any], name: str) -> dict[str, Any]:
@@ -397,7 +426,7 @@ def _mapping_input(inputs: Mapping[str, Any], name: str) -> dict[str, Any]:
 	if raw is None:
 		return {}
 	if not isinstance(raw, Mapping):
-		raise WorkflowInputError(f"wizard 输入 {name} 必须是 JSON 对象，收到 {raw!r}")
+		raise WorkflowInputError(f"wizard 输入 {name} 必须是 JSON 对象，收到 {_brief_value(raw)}")
 	return dict(raw)
 
 
@@ -416,7 +445,7 @@ def _exchange_type(inputs: Mapping[str, Any]) -> int:
 		return 2
 	if raw == "phone":
 		return 1
-	raise WorkflowActionError("INVALID_PARAM", f"未知的交换类型: {raw!r}（可选: phone、wechat）")
+	raise WorkflowActionError("INVALID_PARAM", f"未知的交换类型: {_brief_value(raw)}（可选: phone、wechat）")
 
 
 def _coerce_int(raw: Any, name: str) -> int:
@@ -428,16 +457,16 @@ def _coerce_int(raw: Any, name: str) -> int:
 	条数」的合法取值：`int(True)` 会静默当成 1，`int(2.5)` 会静默截断成 2。
 	"""
 	if isinstance(raw, bool) or (isinstance(raw, float) and not raw.is_integer()):
-		raise WorkflowInputError(f"wizard 输入 {name} 必须是整数，收到 {raw!r}")
+		raise WorkflowInputError(f"wizard 输入 {name} 必须是整数，收到 {_brief_value(raw)}")
 	try:
 		return int(raw)
 	except (TypeError, ValueError) as exc:
-		raise WorkflowInputError(f"wizard 输入 {name} 必须是整数，收到 {raw!r}") from exc
+		raise WorkflowInputError(f"wizard 输入 {name} 必须是整数，收到 {_brief_value(raw)}") from exc
 
 
 def _check_minimum(value: int, raw: Any, name: str, minimum: int) -> int:
 	if value < minimum:
-		raise WorkflowInputError(f"wizard 输入 {name} 必须是不小于 {minimum} 的整数，收到 {raw!r}")
+		raise WorkflowInputError(f"wizard 输入 {name} 必须是不小于 {minimum} 的整数，收到 {_brief_value(raw)}")
 	return value
 
 
@@ -875,9 +904,11 @@ def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 
 
 def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	security_id = str(_required(inputs, "security_id"))
-	job_id = str(_required(inputs, "job_id"))
-	message = str(inputs.get("message") or "")
+	security_id = _required_str(inputs, "security_id")
+	job_id = _required_str(inputs, "job_id")
+	# message 可选，但类型必须严格：0 / false 经 ``or ""`` 会静默变成平台默认
+	# 招呼，容器会被 str() 成 repr 发给真人（Issue #1906）。
+	message = _optional_str_strict(inputs, "message") or ""
 	account = account_scope(context.auth())
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		if cache.is_greeted(security_id, job_id=job_id, account=account):
@@ -962,26 +993,22 @@ def _candidate_exchange(context: ActionContext, inputs: Mapping[str, Any], prior
 	return StepResult({"uid": uid, "security_id": security_id, "result": data})
 
 
-_LABEL_IDS = {"新招呼": 1, "沟通中": 2, "已约面": 3, "已获取简历": 4, "不合适": 7, "收藏": 11}
-
-
 def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	identifier = str(_required(inputs, "security_id"))
-	label = str(_required(inputs, "label"))
+	identifier = _required_str(inputs, "security_id")
+	label = _required_str(inputs, "label")
 	# 先校验布尔值，再查联系人：非法输入不应产生任何平台请求。
 	remove = _bool_input(inputs, "remove")
-	# `str.isdigit()` 对 '①' / '²' 这类非 ASCII 数字也为真，但 `int()` 会抛
-	# ValueError，落成可重试的网络错误；只有纯 ASCII 数字串才当 ID（Issue #1306）。
-	# 4300 位以上的纯数字串让 int() 抛裸 ValueError，被 runner 兜成
-	# NETWORK_ERROR +「重试当前 run_id」（Issue #1442）：与未知标签同口径。
-	try:
-		label_id = int(label) if label.isascii() and label.isdigit() else _LABEL_IDS.get(label)
-	except (ValueError, OverflowError):
-		label_id = None
+	# 标签名称 / 数字 ID 的映射是 services/labels.py 的单一真源（Issue #1905）：
+	# 未知名称、非成员数字（999）与非 ASCII 数字都按参数错误拒绝，绝不把任意
+	# label_id 发给平台去创建无名标签。
+	label_id = parse_label_id(label)
 	if label_id is None:
-		shown = label if len(label) <= 40 else f"{label[:40]}…（共 {len(label)} 字符）"
 		raise WorkflowActionError(
-			"INVALID_PARAM", f"未知标签: {shown}（可选: 新招呼、沟通中、已约面、已获取简历、不合适、收藏）"
+			"INVALID_PARAM",
+			f"未知标签: {brief_label(label)}（可选: {', '.join(LABEL_MAP)}；"
+			f"数字 ID: {', '.join(str(value) for value in sorted(LABEL_MAP.values()))}）",
+			recoverable=True,
+			recovery_action="改用已知标签名称或数字 ID 后重试（见 boss mark --help）",
 		)
 	with context.candidate_platform() as platform:
 		friend = _candidate_friend(platform, identifier, context=context)
@@ -1699,12 +1726,28 @@ def _require_crawl_inputs_match_run(context: ActionContext, run_id: str, inputs:
 	params = run.get("params") if run is not None else None
 	if not isinstance(params, Mapping):
 		return
-	mismatched: list[str] = []
 	query = inputs.get("query")
+	if query is not None and query != "" and not isinstance(query, str):
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"query 必须是字符串，收到 {_brief_value(query)}",
+			recoverable=True,
+			recovery_action="去掉 query 续跑原任务，或提供字符串关键词后重试",
+			auto_retry=False,
+		)
+	city = inputs.get("city")
+	if city is not None and city != "" and not isinstance(city, str):
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"city 必须是字符串，收到 {_brief_value(city)}",
+			recoverable=True,
+			recovery_action="去掉 city 续跑原任务，或提供城市名称后重试",
+			auto_retry=False,
+		)
+	mismatched: list[str] = []
 	stored_query = params.get("query")
 	if isinstance(query, str) and query.strip() and isinstance(stored_query, str) and query.strip() != stored_query.strip():
 		mismatched.append(f"query（任务为 {stored_query!r}，本次为 {query!r}）")
-	city = inputs.get("city")
 	stored_city = params.get("city_code")
 	if isinstance(city, str) and city.strip() and isinstance(stored_city, str):
 		city_code = CITY_CODES.get(city, city)
@@ -1728,6 +1771,7 @@ def _explicit_crawl_run_id(inputs: Mapping[str, Any]) -> str | None:
 	显式非字符串、纯空白都按参数错误拒绝，与 CLI 的 ``--run-id`` 同口径。
 	"""
 	found: str | None = None
+	found_key = ""
 	for key in ("run_id", "crawl_run_id"):
 		if key not in inputs:
 			continue
@@ -1741,8 +1785,18 @@ def _explicit_crawl_run_id(inputs: Mapping[str, Any]) -> str | None:
 				recoverable=True,
 				recovery_action="去掉该字段新建采集，或提供字符串 run_id 续跑已有任务；可用 crawl status <run_id> 核对",
 			)
-		if found is None:
-			found = raw.strip()
+		value = raw.strip()
+		if found is not None and value != found:
+			# 模板合并或复制粘贴残留两个指向不同任务的键：静默取第一个会续跑
+			# 并导出旧任务数据（Issue #1908），必须点名冲突。
+			raise WorkflowActionError(
+				"INVALID_PARAM",
+				f"run_id 与 crawl_run_id 同时给出且不一致（{found_key}={_brief_value(found)}，{key}={_brief_value(value)}）",
+				recoverable=True,
+				recovery_action="只保留一个 run_id 键后重试；两个键都指向同一个任务时才可同时提供",
+			)
+		found = value
+		found_key = key
 	return found
 
 
@@ -1761,9 +1815,11 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 				if isinstance(data, Mapping):
 					existing_run_id = _optional_str(data.get("run_id"))
 	if existing_run_id:
-		if explicit_run_id is not None:
-			_require_crawl_inputs_match_run(context, existing_run_id, inputs)
-		return _crawl_resume(context, {"run_id": existing_run_id, **dict(inputs)}, prior)
+		# plan.inputs 里的 "run_id": null（与「未提供」同义）不能覆盖刚解析出的
+		# 绑定 ID：字典展开放后面会把 run_id 改回 None，恢复链立刻报缺输入
+		# （Issue #1903）。显式 run_id / crawl_run_id 与断点的 query / city 一致性
+		# 由 _crawl_resume 统一校验（Issue #1904）。
+		return _crawl_resume(context, {**dict(inputs), "run_id": existing_run_id}, prior)
 
 	if context.config is not None and not isinstance(context.config, Mapping):
 		# config.json 由用户手工编辑：顶层或 crawl 段写成数组 / 字符串时，
@@ -1892,7 +1948,7 @@ def _positive_int(value: Any, *, name: str) -> int:
 	if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
 		raise WorkflowActionError(
 			"INVALID_PARAM",
-			f"{name} 必须是整数: {value!r}",
+			f"{name} 必须是整数: {_brief_value(value)}",
 			recovery_action=f"传入 1 以上的整数 {name}",
 		)
 	try:
@@ -1902,7 +1958,7 @@ def _positive_int(value: Any, *, name: str) -> int:
 	except (TypeError, ValueError, OverflowError) as exc:
 		raise WorkflowActionError(
 			"INVALID_PARAM",
-			f"{name} 必须是整数: {value!r}",
+			f"{name} 必须是整数: {_brief_value(value)}",
 			recovery_action=f"传入 1 以上的整数 {name}",
 		) from exc
 	if parsed < 1:
@@ -1915,18 +1971,31 @@ def _positive_int(value: Any, *, name: str) -> int:
 
 
 def _crawl_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
+	run_id = _require_run_id(inputs)
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		try:
-			run_id = _require_run_id(inputs)
 			data = crawl_status(cache, run_id, data_dir=context.data_dir)
 			data = _attach_wizard_jobs(data, cache, run_id)
 		except KeyError as exc:
-			raise WorkflowActionError("CRAWL_RUN_NOT_FOUND", str(exc)) from exc
+			# str(KeyError("run_id")) 会回显 "'run_id'"：任务不存在要给登记表里
+			# 指向 crawl status 的可执行指引（Issue #1907）。
+			raise WorkflowActionError(
+				"CRAWL_RUN_NOT_FOUND",
+				f"未找到 crawl run: {run_id}",
+				recovery_action=(
+					f"用 boss crawl status {shell_argument(run_id)} 核对 run_id，"
+					"或用 boss crawl start <query> 新建任务"
+				),
+			) from exc
 	return StepResult(data)
 
 
 def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	run_id = _require_run_id(inputs)
+	# 同一 run_id 配冲突的 query / city 时静默续跑旧断点，会让 workflow 记录写着
+	# 新关键词、实际请求与导出的却是旧任务数据；与 _crawl_start 的显式 run_id
+	# 路径同口径（Issue #1904）。
+	_require_crawl_inputs_match_run(context, run_id, inputs)
 	raw_pages = inputs.get("pages")
 	pages = None if raw_pages is None else _positive_int(raw_pages, name="pages")
 	with_detail = _bool_input(inputs, "with_detail")
@@ -2107,7 +2176,9 @@ def _recruiter_last_messages(context: ActionContext, inputs: Mapping[str, Any], 
 
 def _recruiter_reply(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	friend_id = _required_int(inputs, "friend_id", minimum=1)
-	message = str(_required(inputs, "message"))
+	# message 是发给真人的自由文本：LIST / dict / 数字经 str() 会把 Python repr
+	# 当成真实消息发出去（Issue #1906）；只在 --input-json / MCP 路径可达。
+	message = _required_str(inputs, "message")
 	return _recruiter_call(
 		context,
 		lambda platform: platform.send_message_by_friend(friend_id, message),

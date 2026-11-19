@@ -5,20 +5,11 @@ from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands._contact_lookup import current_friend_uid_or_emit, resolve_friend_or_emit
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_message_panel
-
-_LABEL_MAP = {
-	"新招呼": 1, "沟通中": 2, "已约面": 3, "已获取简历": 4,
-	"已交换电话": 5, "已交换微信": 6, "不合适": 7, "牛人发起": 8, "收藏": 11,
-}
-
-_LABEL_NAMES = {v: k for k, v in _LABEL_MAP.items()}
-
-
-def _brief_label(value: str, limit: int = 40) -> str:
-	"""错误信息里回显的标签值：超长输入截断，信封不随输入规模膨胀（Issue #1437）。"""
-	if len(value) <= limit:
-		return value
-	return f"{value[:limit]}…（共 {len(value)} 字符）"
+from boss_agent_cli.services.labels import (
+	LABEL_MAP as _LABEL_MAP,
+	LABEL_NAMES as _LABEL_NAMES,
+	brief_label as _brief_label,
+)
 
 
 def _resolve_label(label_input: str) -> int:

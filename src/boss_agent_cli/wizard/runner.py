@@ -57,6 +57,10 @@ class WorkflowActionError(Exception):
 		super().__init__(message)
 		self.code = code
 		self.recoverable = recoverable
+		if recovery_action is None:
+			# 登记表里的 recovery_action 是 Agent 的下一步真源：动作层漏传时按
+			# 错误码兜底补全，信封不再给出 null（Issue #1907）。显式传入优先。
+			recovery_action = error_contract_for_code(code)[1]
 		self.recovery_action = recovery_action
 		self.details = details
 		# replay_safe=False 表示动作可能已经生效：--resume 不得重跑该步骤。
