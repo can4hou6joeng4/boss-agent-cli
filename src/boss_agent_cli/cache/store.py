@@ -1002,6 +1002,15 @@ class CacheStore:
 				"crawl_run", run_id, "output_dir",
 				"期望非空绝对路径，实际是空字符串；旧断点无法安全恢复，请重新执行 crawl start 创建任务",
 			)
+		# NUL 等控制字符能通过「非空绝对路径」检查，但会在 lstat / 导出时抛
+		# ValueError，被命令层兜成 INVALID_PARAM，与 status 的 ok:true 口径冲突
+		# （Issue #2194）。与 `params.browser.profile_path` 同口径 fail-closed
+		# （Issue #1482）：合法路径不可能包含这些字符。
+		if any(ord(char) < 0x20 for char in output_dir):
+			raise CacheRecordInvalid(
+				"crawl_run", run_id, "output_dir",
+				f"期望绝对路径，实际包含控制字符 {output_dir!r}；旧断点无法安全恢复，请重新执行 crawl start 创建任务",
+			)
 		if not Path(output_dir).is_absolute():
 			raise CacheRecordInvalid(
 				"crawl_run", run_id, "output_dir",

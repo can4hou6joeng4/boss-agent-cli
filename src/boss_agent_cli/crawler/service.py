@@ -1259,7 +1259,9 @@ def _artifacts_present(output_dir: Path) -> bool:
 	for extension in ("json", "csv", "xlsx"):
 		try:
 			mode = (output_dir / f"jobs.{extension}").lstat().st_mode
-		except OSError:
+		except (OSError, ValueError):
+			# ValueError 来自路径里的 NUL 等控制字符；读取边界已经拒绝这类
+			# 断点（Issue #2194），这里再兜一层，避免字符错误逃成参数错误。
 			return False
 		if not stat.S_ISREG(mode):
 			return False

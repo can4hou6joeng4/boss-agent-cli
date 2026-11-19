@@ -701,6 +701,13 @@ def _run_service(
 # 仍是 queued 且锁空闲，说明它没有活下来（Issue #1045）。
 _QUEUE_HANDOFF_GRACE_SECONDS = 30.0
 
+#: 交接新鲜度允许的未来偏斜（与 `cache/store.py` 的未来偏斜同口径）。
+#:
+#: 写入方用 `time.time()` 落 `updated_at`；轻微时钟偏斜仍应视为「刚排队」。
+#: 更远的有限未来值只可能是漂移（时钟快进后校正、手工写坏的库），必须按
+#: 排队已久处理，否则任务永远留在交接窗口里（Issue #2193）。
+_QUEUE_FUTURE_SKEW_SECONDS = 60.0
+
 
 def _tolerated_timestamp(value: Any) -> float:
 	"""本地记录时间戳的容错读取：漂移值按 0 参与调度（与 Issue #1192 同口径）。
@@ -724,8 +731,14 @@ def _awaiting_queued_worker(run: dict[str, Any]) -> bool:
 		return False
 	# 时钟回拨得到负值时按仍在窗口内处理，宁可多等也不抢；时间戳类型漂移
 	# 无法判断新鲜度，按「排队已久」去探测锁，不能让父进程 traceback（Issue #1192）。
+	now = time.time()
 	updated = _tolerated_timestamp(run["updated_at"])
-	return time.time() - updated < _QUEUE_HANDOFF_GRACE_SECONDS
+	# 有限但远在未来的值是漂移：减法得到巨大负数，任务会被永远当成刚排队，
+	# 后台恢复不拉起 worker、status 也不报 queue_overdue（与 Issue #1349 的
+	# inf/nan 同一失败模式）。超过允许偏斜的按排队已久去探测执行锁。
+	if updated > now + _QUEUE_FUTURE_SKEW_SECONDS:
+		return False
+	return now - updated < _QUEUE_HANDOFF_GRACE_SECONDS
 
 
 def _prepare_background_resume(
@@ -785,14 +798,16 @@ def _prepare_background_resume(
 			try:
 				# worker 的错误信封写进空设备：依赖缺失与登录态不足要在这里由父进程报出来。
 				preflight()
+				# 信封报 queued，库里也要是 queued（Issue #1771）：否则 worker 接手前
+				# `crawl stop` 按旧终态被拒、重复的后台恢复会再拉起一个 worker。同时
+				# 刷新时间给 worker 留足交接窗口（Issue #1045），不清新到达的 stop。
+				# 这一步失败同样还原旧 stop：清掉 stop 却停在旧状态，任务既没有
+				# worker 也没有停止请求，违背「失败的调用不改动任务」（Issue #2195）。
+				cache.mark_crawl_run_active(run_id, "queued")
 			except BaseException:
 				if clear_stop and previous_stop:
 					cache.restore_crawl_stop_request(run_id, updated_at=previous_updated_at)
 				raise
-			# 信封报 queued，库里也要是 queued（Issue #1771）：否则 worker 接手前
-			# `crawl stop` 按旧终态被拒、重复的后台恢复会再拉起一个 worker。同时
-			# 刷新时间给 worker 留足交接窗口（Issue #1045），不清新到达的 stop。
-			cache.mark_crawl_run_active(run_id, "queued")
 		return "queued", True
 
 
