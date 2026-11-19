@@ -793,6 +793,7 @@ class WorkflowRunner:
 						message=f"workflow 超过 {timeout_seconds:g} 秒未完成",
 						recovery_action=resume_action_for(run_id),
 						preserve_result=True,
+						marker=declared_marker,
 					)
 				try:
 					self._store.update_run(
@@ -813,6 +814,24 @@ class WorkflowRunner:
 				if on_event:
 					on_event("step_finished", step_name, result_data)
 				if signal == "stop":
+					if declared_marker is not None:
+						# 同 #1956：action 已声明失败且写请求在途时，用户停止不能抹掉
+						# 标记，否则 --resume 会重放结果未知的写操作（Issue #2008）。
+						error_data = self._unconfirmed_error("WORKFLOW_STOPPED", declared_marker).to_dict()
+						self._store.update_step(
+							run_id,
+							step_name,
+							status=WorkflowStatus.FAILED.value,
+							result=result_data,
+							error=error_data,
+						)
+						self._store.update_run(
+							run_id,
+							status=WorkflowStatus.STOPPED.value,
+							current_step=step_name,
+							last_result=result_data,
+							error=error_data,
+						)
 					return self._store.get_for_result(run_id) or {}
 				if result.status == WorkflowStatus.WAITING_INPUT:
 					return self._store.get_for_result(run_id) or {}
@@ -1130,20 +1149,26 @@ class WorkflowRunner:
 		message: str,
 		recovery_action: str,
 		preserve_result: bool = False,
+		marker: dict[str, Any] | None = None,
 	) -> dict[str, Any]:
-		error = {
-			"code": code,
-			"message": message,
-			"recoverable": True,
-			"recovery_action": recovery_action,
-		}
+		if marker is not None:
+			# 写请求在途的证据不能因控制信号而消失：错误按「结果未知」落盘，
+			# 并在下面强制写回步骤，--resume 才能阻断重放（Issue #2008）。
+			error = self._unconfirmed_error(code, marker).to_dict()
+		else:
+			error = {
+				"code": code,
+				"message": message,
+				"recoverable": True,
+				"recovery_action": recovery_action,
+			}
 		stored_run = self._store.get_checkpoint(run_id) or {}
 		step_result = next(
 			(step.get("result") for step in stored_run.get("steps", []) if step["step_name"] == step_name),
 			None,
 		)
 		try:
-			if not preserve_result:
+			if marker is not None or not preserve_result:
 				# 超时/失败同样保留此前写入的结果（如 inner_run_id），恢复时才能续跑内部任务（Issue #882）。
 				self._store.update_step(
 					run_id, step_name, status=WorkflowStatus.FAILED.value, result=step_result, error=error
