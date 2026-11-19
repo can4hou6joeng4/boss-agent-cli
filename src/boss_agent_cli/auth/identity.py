@@ -19,7 +19,11 @@ def account_fingerprint(cookie_value: str, *, length: int = 16) -> str:
 	"""返回登录态 cookie 值的不可逆指纹；空值返回空串。"""
 	if not cookie_value:
 		return ""
-	return hashlib.sha256(cookie_value.encode("utf-8")).hexdigest()[:length]
+	# cookie 值可含孤立代理字符（非法 UTF-8 字节经 surrogateescape 解码）。指纹
+	# 只用于本地区分账号、不参与安全判定：严格编码会抛 UnicodeEncodeError，
+	# 让 CDP 复用路径在只读探测前就失败并无谓降级到扫码（Issue #2041）。
+	# surrogatepass 与 cdp_risk_lock.hash_stoken / file_lock 的口径一致。
+	return hashlib.sha256(cookie_value.encode("utf-8", "surrogatepass")).hexdigest()[:length]
 
 
 def account_scope(auth: "AuthManager") -> str:

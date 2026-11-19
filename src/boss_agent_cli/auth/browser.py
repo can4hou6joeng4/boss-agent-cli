@@ -356,25 +356,34 @@ def login_via_cdp(
 		with suppress(Exception):
 			pw.stop()
 		raise
-	if reuse_existing:
-		logged_in_ctx, ctx_index, ctx_account_fp = _find_logged_in_context(
-			all_contexts,
-			cookie_domain=cookie_domain,
-			success_cookie=success_cookie,
-		)
-	else:
-		logged_in_ctx, ctx_index, ctx_account_fp = None, -1, ""
-	already_logged_in = logged_in_ctx is not None
-	ctx = logged_in_ctx or (browser.contexts[0] if browser.contexts else browser.new_context())
-	if not reuse_existing:
-		# 强制重登：清掉当前 context 内目标平台域的 cookie。不清的话登录页会因残留
-		# 登录态直接跳回首页，轮询立刻命中旧 wt2，--force 形同虚设。
-		_clear_platform_cookies(ctx, cookie_domain=cookie_domain)
-		print(f"[boss] --force：跳过复用，已清除当前 context 的 {cookie_domain} 登录态，改为重新登录", file=sys.stderr)
-	page = _find_zhipin_page(ctx.pages) if already_logged_in and platform == "zhipin" else None
-	created_page = page is None
-	if page is None:
-		page = ctx.new_page()
+	try:
+		if reuse_existing:
+			logged_in_ctx, ctx_index, ctx_account_fp = _find_logged_in_context(
+				all_contexts,
+				cookie_domain=cookie_domain,
+				success_cookie=success_cookie,
+			)
+		else:
+			logged_in_ctx, ctx_index, ctx_account_fp = None, -1, ""
+		already_logged_in = logged_in_ctx is not None
+		ctx = logged_in_ctx or (browser.contexts[0] if browser.contexts else browser.new_context())
+		if not reuse_existing:
+			# 强制重登：清掉当前 context 内目标平台域的 cookie。不清的话登录页会因残留
+			# 登录态直接跳回首页，轮询立刻命中旧 wt2，--force 形同虚设。
+			_clear_platform_cookies(ctx, cookie_domain=cookie_domain)
+			print(f"[boss] --force：跳过复用，已清除当前 context 的 {cookie_domain} 登录态，改为重新登录", file=sys.stderr)
+		page = _find_zhipin_page(ctx.pages) if already_logged_in and platform == "zhipin" else None
+		created_page = page is None
+		if page is None:
+			page = ctx.new_page()
+	except Exception:
+		# connect 成功之后、主 try 之前的 context / 页面准备同样要收尾 driver：
+		# target 在握手后断开（clear_cookies / new_page 抛错）时异常直接穿透会
+		# 泄漏 Playwright driver 进程，普通登录随后还会降级再起一个 patchright
+		# （Issue #2043）。成功路径不在这里 stop，只由末尾 finally 统一收尾。
+		with suppress(Exception):
+			pw.stop()
+		raise
 
 	stage = "open_login"
 	try:
