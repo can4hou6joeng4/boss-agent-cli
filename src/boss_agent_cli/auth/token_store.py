@@ -1,3 +1,4 @@
+import errno
 import hashlib
 import json
 import os
@@ -102,7 +103,13 @@ class TokenStore:
 	def _get_salt(self) -> bytes:
 		# salt 决定 session.enc 的派生密钥；共享实现保证首个写入者获胜，
 		# 读取失败时不会用新 salt 覆盖旧密文（Issue #1633 / #1688）。
-		return load_or_create_private_salt(self._auth_dir)
+		try:
+			return load_or_create_private_salt(self._auth_dir)
+		except RuntimeError as exc:
+			# salt 路径是目录 / FIFO / 长度异常时共享实现抛 RuntimeError。status /
+			# doctor 等命令没有 AI 侧的转换，裸异常会变成 traceback 或可重试的
+			# NETWORK_ERROR（Issue #1996）。带上 filename 后全局分流按本地 IO 错误报。
+			raise OSError(errno.EINVAL, str(exc), str(self._auth_dir / "salt")) from exc
 
 	def _derive_key(self) -> bytes:
 		salt = self._get_salt()

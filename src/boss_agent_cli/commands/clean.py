@@ -100,6 +100,10 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 		if risk_lock:
 			current_target = "CDP 风控锁"
 			directories = dict.fromkeys((Path(data_dir).resolve(), budget_directory(Path(data_dir))))
+			# 清理前能读到锁（含空目录 / FIFO 这类损坏锁）才算本次解除过阻断：
+			# 空目录与 FIFO 删除成功时 _path_stats 记 0 项，用「删了几项」判断会把
+			# 已解除的锁报成仍阻断（Issue #1997）。
+			had_lock = any(read_lock(directory) is not None for directory in directories)
 			freed, count, skipped = 0, 0, 0
 			for directory in directories:
 				# 主位置与后备位置都要清理：任一份残留都会让 fail-closed 检查继续阻断
@@ -113,13 +117,13 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 					skipped += removed_skipped
 			results.append(_clean_result("CDP 风控锁", freed, count, skipped))
 			total_freed += freed
-			# 锁是否真的解除要同时满足「确实删过锁项」与「清理后读不到锁」：
-			# 悬空链接、祖先链接跳过等情形下「删了几项」不代表 fail-closed 检查
+			# 锁是否真的解除要同时满足「清理前确实读到锁」与「清理后读不到锁」：
+			# 悬空链接、祖先链接跳过等情形下删除动作不代表 fail-closed 检查
 			# 不再阻断；而在没有锁的目录空转仍要报 false，继续充当
 			# 「数据目录选错」的探测器（Issue #1829，docs/commands.md）。
 			local_lock_removed = (
 				not dry_run
-				and count > 0
+				and had_lock
 				and all(read_lock(directory) is None for directory in directories)
 			)
 			risk_lock_info = {
@@ -167,7 +171,7 @@ def clean_cmd(ctx: click.Context, dry_run: bool, clean_all: bool, privacy: bool,
 						results=list(results),
 						completed=completed,
 						failed=[{"target": target, "path": str(path), "reason": str(exc)}],
-						remaining=[name for name, _ in targets[index + 1:]],
+						remaining=[name for name, _ in targets[index + 1:]] + [crawl_target[0]],
 						message=f"隐私清理在删除{target}时失败: {exc}",
 					)
 					return
@@ -711,7 +715,14 @@ def _clean_dir(dir_path: Path, *, days: int, dry_run: bool) -> tuple[int, int, i
 		except FileNotFoundError:
 			continue
 		if info.st_mtime < cutoff:
-			total_size += info.st_size
+			size = info.st_size
+			if stat.S_ISLNK(entry_mode):
+				# 只删除链接本身：目标大小不是本次释放的字节数（Issue #2000）。
+				try:
+					size = f.lstat().st_size
+				except FileNotFoundError:
+					size = 0
+			total_size += size
 			count += 1
 			if not dry_run:
 				f.unlink()
@@ -768,13 +779,13 @@ def _clean_lock_path(path: Path, *, dry_run: bool, root: Path) -> tuple[int, int
 		return 0, 0, 1
 	mode = _lstat_mode(path)
 	if mode is not None and stat.S_ISLNK(mode):
-		# 目标存在且是普通文件时沿用 _path_stats 的字节数口径；悬空链接按
-		# 0 字节记一条，链接本身才是阻断来源。
+		# 目标存在且是普通文件时沿用 _path_stats 的字节数口径（lstat，只删链接
+		# 本身）；悬空链接按 0 字节记一条，链接本身才是阻断来源。
 		size = 0
 		target_mode = _stat_mode(path)
 		if target_mode is not None and stat.S_ISREG(target_mode):
 			try:
-				size = path.stat().st_size
+				size = path.lstat().st_size
 			except FileNotFoundError:
 				size = 0
 		if not dry_run:
@@ -793,7 +804,8 @@ def _path_stats(path: Path) -> tuple[int, int]:
 		if target_mode is None or not stat.S_ISREG(target_mode):
 			return 0, 0
 		try:
-			return path.stat().st_size, 1
+			# 删除只影响链接本身：字节数取 lstat，不能把目标大小记成已释放（Issue #2000）。
+			return path.lstat().st_size, 1
 		except FileNotFoundError:
 			return 0, 0
 	if stat.S_ISREG(mode):
