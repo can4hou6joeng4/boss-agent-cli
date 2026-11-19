@@ -215,7 +215,7 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 				code="NETWORK_ERROR",
 				message="职位收藏响应格式无效",
 				recoverable=True,
-				recovery_action="重试；若持续出现，用 boss doctor 检查登录态与网络",
+				recovery_action=f"重试；若持续出现，用 {_hint_command(ctx, 'doctor')} 检查登录态与网络",
 			)
 			return
 		raw_cards = platform_data.get("cardList")
@@ -227,11 +227,24 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 				code="NETWORK_ERROR",
 				message="职位收藏响应格式无效",
 				recoverable=True,
-				recovery_action="重试；若持续出现，用 boss doctor 检查登录态与网络",
+				recovery_action=f"重试；若持续出现，用 {_hint_command(ctx, 'doctor')} 检查登录态与网络",
 			)
 			return
 
 	valid_cards = [card for card in cards if isinstance(card, dict)]
+	if cards and not valid_cards:
+		# 非空响应里没有一个可识别的卡片：与 sync 的 FavoritesResponseInvalid
+		# （#1857）同一口径按可重试的格式错误处理，不能用空列表伪装「没有收藏」
+		# （Issue #2136）。
+		handle_error_output(
+			ctx,
+			"favorites-list",
+			code="NETWORK_ERROR",
+			message="职位收藏响应格式无效：cardList 元素不是对象",
+			recoverable=True,
+			recovery_action=f"重试；若持续出现，用 {_hint_command(ctx, 'doctor')} 检查登录态与网络",
+		)
+		return
 	status_counts = _count_job_statuses(valid_cards)
 	items = [_redact_for_display(_card_to_shortlist_item(card)) for card in valid_cards]
 
@@ -313,7 +326,7 @@ def favorites_sync_cmd(ctx: click.Context) -> None:
 				code="NETWORK_ERROR",
 				message=str(exc),
 				recoverable=True,
-				recovery_action="重试；若持续出现，用 boss doctor 检查登录态与网络",
+				recovery_action=f"重试；若持续出现，用 {_hint_command(ctx, 'doctor')} 检查登录态与网络",
 			)
 			return
 		if error_response is not None:

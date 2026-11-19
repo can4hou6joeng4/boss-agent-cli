@@ -5,6 +5,10 @@
 ## [Unreleased]
 
 ### Fixed
+- `shortlist annotate` 不再忽略 UPDATE 的 rowcount：security_id 以 BLOB 落库（#1885 的读取兼容）或行在 SELECT 与 UPDATE 之间被并发删除时，未写入不再报 `updated: true`，按 `SHORTLIST_ENTRY_NOT_FOUND` 输出错误并指向 `shortlist list` 核对（Issue #2135）。
+- `favorites list` 在 `cardList` 非空但没有一个可识别对象时按 `NETWORK_ERROR`「元素不是对象」上报，与 `favorites sync` 的格式错误契约一致，不再静默伪装成空收藏（Issue #2136）。
+- favorites 的三处恢复动作改用当前数据目录的 doctor 命令（`boss --data-dir … doctor`），自定义 `--data-dir` 时不再引导去诊断默认目录（Issue #2137）。
+- `mark` 回显的 `security_id` 只认字符串并 strip：平台字段漂移成布尔 / 容器时不再把 Python repr（`True` / `{'a': 1}`）当令牌返回给 Agent（Issue #2138）。
 - resume 的职位关联统一按文件真实名称落库：`resume link` 走 `stored_name`，`resume applications` 同时查请求名与真实名称并按职位去重，别名（`a/b` ↔ `a_b`）视角不再出现幽灵关联或查询不一致，按规范名删除能清掉别名方向建立的关联（Issue #1804、#2121）。
 - `resume import` 的输入路径与 `-o` 输出路径同口径展开 `~`：MCP 子进程 / argv 列表不经 shell 时，`~/cv.json` 不再被报成「文件不存在」（Issue #2122）。
 - `agent review reject` 清理 approve 中途失败遗留的 pending 行：尚未派发的关联行与复核状态一起收口，被人工拒绝的动作不再在下一轮被派发；已在执行 / 结果未知（executing、verification-required）的行反而阻断 reject 并提示先核对，不静默删除可能已生效的记录（Issue #2124）。
