@@ -71,7 +71,7 @@ def write_json_atomic(
 		with os.fdopen(fd, "w", encoding="utf-8", errors="backslashreplace") as handle:
 			# 本地状态与其他工具共用：非有限数必须是 null，不能写出裸
 			# Infinity / NaN 让 jq 等严格解析器失败（Issue #1851）。
-			json.dump(_json_safe_value(value), handle, ensure_ascii=False, indent=indent, allow_nan=False)
+			_serialize_into(handle, value, indent=indent)
 			if trailing_newline:
 				handle.write("\n")
 			handle.flush()
@@ -88,6 +88,19 @@ def write_json_atomic(
 	finally:
 		if temporary is not None:
 			temporary.unlink(missing_ok=True)
+
+
+def _serialize_into(handle: Any, value: Any, *, indent: int | None) -> None:
+	"""序列化失败（深嵌套 RecursionError、超长整数 ValueError）归成 OSError。
+
+	``json.loads`` 能读入的深嵌套文件在写回时会耗尽递归栈；异常若原样
+	上抛，命令层只兜 ``OSError``，CLI 就会 stdout 0 字节、stderr 裸
+	traceback（Issue #1891）。归成本地 IO 错误后走既有 LOCAL_IO_ERROR 通道。
+	"""
+	try:
+		json.dump(_json_safe_value(value), handle, ensure_ascii=False, indent=indent, allow_nan=False)
+	except (RecursionError, ValueError) as exc:
+		raise OSError(errno.EINVAL, f"本地状态无法序列化（{exc}）") from exc
 
 
 def _json_safe_value(value: Any) -> Any:
@@ -115,4 +128,7 @@ def strict_json_text(value: Any, *, indent: int | None = 2) -> str:
 	Lone surrogates are escaped by the caller's text writer and remain valid
 	JSON escapes.
 	"""
-	return json.dumps(_json_safe_value(value), ensure_ascii=False, allow_nan=False, indent=indent)
+	try:
+		return json.dumps(_json_safe_value(value), ensure_ascii=False, allow_nan=False, indent=indent)
+	except (RecursionError, ValueError) as exc:
+		raise OSError(errno.EINVAL, f"本地状态无法序列化（{exc}）") from exc

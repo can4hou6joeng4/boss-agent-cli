@@ -1464,8 +1464,12 @@ class CacheStore:
 	# 不要在 welfare 详情线程池的 worker 内访问。
 
 	def get_job_desc(self, job_id: str) -> str | None:
-		"""返回缓存的职位描述（命中且未过期），否则 None。"""
-		if not job_id:
+		"""返回缓存的职位描述（命中且未过期），否则 None。
+
+		``encryptJobId`` 漂移成 dict / 数字时按未命中处理：直接当 sqlite
+		参数会抛 ProgrammingError 并穿出整条 ``--welfare`` 管线（Issue #1890）。
+		"""
+		if not isinstance(job_id, str) or not job_id:
 			return None
 		row = self._conn.execute(
 			"SELECT description, created_at FROM job_desc_cache WHERE job_id = ?",
@@ -1480,8 +1484,11 @@ class CacheStore:
 		return cast("str", row[0])
 
 	def put_job_desc(self, job_id: str, description: str) -> None:
-		"""缓存非空职位描述，超过容量时淘汰保存时间最早的条目。"""
-		if not job_id or not description:
+		"""缓存非空职位描述，超过容量时淘汰保存时间最早的条目。
+
+		非字符串键 / 描述同样按「没有可缓存内容」跳过（Issue #1890）。
+		"""
+		if not isinstance(job_id, str) or not job_id or not isinstance(description, str) or not description:
 			return
 		self._conn.execute(
 			"INSERT OR REPLACE INTO job_desc_cache (job_id, description, created_at) VALUES (?, ?, ?)",

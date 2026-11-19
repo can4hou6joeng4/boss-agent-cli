@@ -425,14 +425,19 @@ def parse_salary_range(value: str) -> tuple[int, int] | None:
 	# 不能让整次搜索落 INTERNAL_ERROR（Issue #1335）。
 	if not isinstance(value, str) or not value or value == "面议":
 		return None
-	m = _SALARY_BELOW_RE.search(value)
-	if m:
-		return (0, int(m.group(1)))
-	m = _SALARY_RE.search(value)
-	if m:
-		low = int(m.group(1))
-		high = int(m.group(2)) if m.group(2) else low
-		return (low, high)
+	try:
+		m = _SALARY_BELOW_RE.search(value)
+		if m:
+			return (0, int(m.group(1)))
+		m = _SALARY_RE.search(value)
+		if m:
+			low = int(m.group(1))
+			high = int(m.group(2)) if m.group(2) else low
+			return (low, high)
+	except (ValueError, OverflowError):
+		# 平台返回超长数字串（>4300 位）时 int() 会抛 ValueError：与类型漂移
+		# 同口径按「无法解析」处理，不能让单条职位让整次搜索失败（Issue #1889）。
+		return None
 	return None
 
 
