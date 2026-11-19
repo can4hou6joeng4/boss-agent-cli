@@ -88,6 +88,10 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 		_dir_mode = output_dir.lstat().st_mode
 		if not stat.S_ISDIR(_dir_mode):
 			raise CrawlExportError(f"采集结果目录 {output_dir} 不是普通目录（符号链接或特殊文件）")
+		# 预检结果同时决定是否备份：替换阶段不再用 is_file() 判一次，3.14 起
+		# 它把权限等 OSError 吞成 False，跳过备份后替换失败时回滚只能删除新
+		# 产物，旧产物没有副本（Issue #2085）。
+		existing_regular: set[Path] = set()
 		for target in (json_path, csv_path, xlsx_path):
 			try:
 				mode = target.lstat().st_mode
@@ -101,6 +105,7 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 				continue
 			if not stat.S_ISREG(mode):
 				raise CrawlExportError(f"采集产物 {target} 不是普通文件（FIFO / 设备），拒绝替换")
+			existing_regular.add(target)
 		json_tmp = _temporary_for(json_path)
 		temporaries.append(json_tmp)
 		with json_tmp.open("w", encoding="utf-8", errors="backslashreplace") as file:
@@ -119,7 +124,7 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 		# 且 `.jobs.*` 临时文件残留（Issue #1346）。
 		for temporary, current_target in ((json_tmp, json_path), (csv_tmp, csv_path), (xlsx_tmp, xlsx_path)):
 			backup: Path | None = None
-			if current_target.is_file():
+			if current_target in existing_regular:
 				backup = _temporary_for(current_target)
 				# 备份由 mkstemp 先创建：若随后的搬运失败，它必须和序列化临时
 				# 文件一起被清理，否则每次重试都残留一个 `.jobs.*`（Issue #1875）。
