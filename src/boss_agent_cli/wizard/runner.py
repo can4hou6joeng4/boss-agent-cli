@@ -313,6 +313,18 @@ class WorkflowRunner:
 	) -> dict[str, Any]:
 		if max_retries < 0:
 			raise ValueError("max_retries must be >= 0")
+		if not plan.requested_steps:
+			# 读取边界会把历史断点缺失的 requested_steps 归一成空元组（#2033），
+			# 但空计划零步执行后无条件落 completed 会让步骤行仍是 pending：
+			# 下一次恢复撞上 #2118 的「completed 与未完成步骤自相矛盾」检查，
+			# 该 run 从此永久不可恢复（Issue #2149）。正常入口的 build_plan
+			# 永远给出非空步骤，空计划只可能来自脏断点或直接 API 误用。
+			raise WorkflowActionError(
+				"CACHE_RECORD_INVALID",
+				"workflow plan 没有任何步骤，无法执行或恢复",
+				recoverable=True,
+				auto_retry=False,
+			)
 		run_id = run_id or f"wrn_{secrets.token_urlsafe(12)}"
 		# 执行权必须先于执行快照取得：两次调用都读到旧快照时，后到者会把先到者已保存
 		# 的结果覆盖回 running，再把同一个写操作发一遍（Issue #1017）。
