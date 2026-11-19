@@ -61,10 +61,16 @@ def lock_paths(data_dir: Path) -> tuple[Path, Path]:
 
 
 def hash_stoken(value: str | None) -> str:
-	"""stoken → SHA-256 十六进制摘要；没有值时返回 ``ABSENT_STOKEN``。"""
+	"""stoken → SHA-256 十六进制摘要；没有值时返回 ``ABSENT_STOKEN``。
+
+	stoken 来自浏览器上下文，可能含非法 UTF-8 字节解码出的孤立代理字符
+	（U+DCFF）。严格编码会抛 UnicodeEncodeError，并在风控异常传播路径上把它
+	替换成内部错误、连锁都来不及落盘（Issue #1918）。摘要只作诊断，不参与
+	自动解锁，用 ``surrogatepass`` 编码与 file_lock 对任意 run_id 的口径一致。
+	"""
 	if not value:
 		return ABSENT_STOKEN
-	return hashlib.sha256(value.encode("utf-8")).hexdigest()
+	return hashlib.sha256(value.encode("utf-8", "surrogatepass")).hexdigest()
 
 
 def stoken_hash_from_cookies(cookies: Any) -> str:

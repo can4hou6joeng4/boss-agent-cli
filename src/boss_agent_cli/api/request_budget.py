@@ -267,12 +267,19 @@ class RequestBudget:
 			stoken_sha256=None, locked_at=time.time(), reason=reason, platform_code=platform_code
 		)
 		failure: OSError | UnicodeError | None = None
+		persisted = 0
 		for directory in dict.fromkeys((self.data_dir, self.root)):
 			try:
 				cdp_risk_lock.write_lock(directory, None, reason=reason, platform_code=platform_code)
 			except (OSError, UnicodeError) as error:
 				failure = error
-		if failure is not None:
+			else:
+				# write_lock 自身已按「主位置 / 后备位置」汇总：一次调用成功就
+				# 证明该目录至少有一处落盘。旧实现把「任一处失败」当成「全部
+				# 失败」，信封里的 persisted=false 与磁盘事实相反（Issue #1921）。
+				persisted += 1
+		if persisted == 0:
+			assert failure is not None
 			raise failure
 		self._unpersisted_risk_lock = None
 
@@ -309,6 +316,49 @@ class RequestBudget:
 	def _try_lease(handle: BinaryIO) -> bool:
 		return try_lock_exclusive(handle)
 
+	@staticmethod
+	def _lease_names_locked_file(path: Path, handle: BinaryIO) -> bool:
+		"""``path`` 是否仍指向 ``handle`` 打开、并已加锁的那个文件。
+
+		租约文件在请求在途时被外部清理后，另一个进程会创建新 inode 并同样
+		加锁成功——两个「唯一活跃操作」同时进入临界区（Issue #1919）。与
+		services/file_lock._names_locked_file 同口径：POSIX 用 samestat 复核，
+		Windows 不能删除仍被打开的文件，直接视为同一文件。
+		"""
+		if os.name == "nt":
+			return True
+		try:
+			return os.path.samestat(os.stat(path), os.fstat(handle.fileno()))
+		except OSError:
+			return False
+
+	@staticmethod
+	def _try_directory_lease(root: Path) -> tuple[bool, int | None]:
+		"""POSIX：锁住预算目录 inode；Windows 不能删除仍打开的文件，跳过。
+
+		租约文件被外部清理后，新 inode 的锁与旧 inode 互不排斥，两个进程会同时
+		进入临界区（Issue #1919）。目录本身在使用期间不会被删除，锁住它即可让
+		所有实例继续互斥。返回 ``(是否支持目录租约, 持锁 fd)``：不支持时退回文件
+		租约；忙时第二项为 None。
+		"""
+		if os.name == "nt":
+			return False, None
+		import errno
+		import fcntl
+
+		fd = os.open(root, os.O_RDONLY)
+		try:
+			fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+		except (BlockingIOError, PermissionError):
+			os.close(fd)
+			return True, None
+		except OSError as error:
+			os.close(fd)
+			if error.errno in {errno.EINVAL, errno.ENOTSUP, getattr(errno, "EOPNOTSUPP", errno.ENOTSUP)}:
+				return False, None
+			raise
+		return True, fd
+
 	@contextmanager
 	def _lease(self, started: float, check: Callable[[], None] | None) -> Iterator[None]:
 		key = (os.getpid(), threading.get_ident(), str(self.root))
@@ -318,26 +368,56 @@ class RequestBudget:
 			return
 		self._check(check)
 		self.root.mkdir(parents=True, exist_ok=True)
-		path = self.root / "request-budget.lease"
-		# 租约文件与 SQLite 库一样属于本地调度元数据：符号链接会让锁落到数据目录
-		# 之外的目标，悬空链接会在目标处建文件，FIFO 会在 open("a+b") 永久阻塞
-		# （Issue #1753）。与 services/file_lock 的锁文件同口径，直接 lstat。
+		# 先拿目录租约：租约文件被删除 / 替换时，目录 inode 的锁仍然互斥
+		# （Issue #1919）。文件系统不支持目录 flock 时退回文件租约。
+		dir_fd: int | None = None
+		while True:
+			supported, fd = self._try_directory_lease(self.root)
+			if not supported:
+				break
+			if fd is not None:
+				dir_fd = fd
+				break
+			self._pause(0.05, started, check)
 		try:
-			mode = path.lstat().st_mode
-		except FileNotFoundError:
-			mode = None
-		except (OSError, ValueError) as exc:
-			raise sqlite3.OperationalError(f"无法读取请求租约文件 {path} 的路径状态（{exc}）") from exc
-		if mode is not None and stat.S_ISLNK(mode):
-			raise sqlite3.OperationalError(f"{path} 是符号链接，请求租约拒绝写穿链接目标")
-		if mode is not None and not stat.S_ISREG(mode):
-			raise sqlite3.OperationalError(f"{path} 不是普通文件（FIFO / 目录 / 设备），请求租约拒绝打开")
-		with path.open("a+b") as handle:
-			if path.stat().st_size == 0:
-				handle.write(b"\0")
-				handle.flush()
-			while not self._try_lease(handle):
-				self._pause(0.05, started, check)
+			path = self.root / "request-budget.lease"
+			# 租约文件与 SQLite 库一样属于本地调度元数据：符号链接会让锁落到数据目录
+			# 之外的目标，悬空链接会在目标处建文件，FIFO 会在 open("a+b") 永久阻塞
+			# （Issue #1753）。与 services/file_lock 的锁文件同口径，直接 lstat。
+			# 加锁成功后还要复核 path 仍指向被锁住的 inode：文件在 open 与加锁之间
+			# 被替换时锁会落在孤儿 inode 上（Issue #1919）。
+			handle: BinaryIO | None = None
+			for _attempt in range(8):
+				try:
+					mode = path.lstat().st_mode
+				except FileNotFoundError:
+					mode = None
+				except (OSError, ValueError) as exc:
+					raise sqlite3.OperationalError(f"无法读取请求租约文件 {path} 的路径状态（{exc}）") from exc
+				if mode is not None and stat.S_ISLNK(mode):
+					raise sqlite3.OperationalError(f"{path} 是符号链接，请求租约拒绝写穿链接目标")
+				if mode is not None and not stat.S_ISREG(mode):
+					raise sqlite3.OperationalError(f"{path} 不是普通文件（FIFO / 目录 / 设备），请求租约拒绝打开")
+				candidate = path.open("a+b")
+				acquired = False
+				try:
+					# 写入与尺寸判断都按文件描述操作，避免 open 之后 path 被替换时把
+					# 新 inode 的尺寸当成旧 inode 的（Issue #1919）。
+					if os.fstat(candidate.fileno()).st_size == 0:
+						candidate.write(b"\0")
+						candidate.flush()
+					while not self._try_lease(candidate):
+						self._pause(0.05, started, check)
+					acquired = self._lease_names_locked_file(path, candidate)
+				finally:
+					if not acquired:
+						candidate.close()
+				if acquired:
+					handle = candidate
+					break
+			else:
+				raise sqlite3.OperationalError(f"请求租约文件 {path} 在获取期间被反复替换")
+			assert handle is not None
 			token = _LEASES.set((*_LEASES.get(), key))
 			try:
 				self._check(check)
@@ -357,6 +437,10 @@ class RequestBudget:
 			finally:
 				_LEASES.reset(token)
 				# Close releases the POSIX/Windows lease even after an exception.
+				handle.close()
+		finally:
+			if dir_fd is not None:
+				os.close(dir_fd)
 
 	def _connect(self) -> sqlite3.Connection:
 		path = self.root / "request-budget.sqlite3"
