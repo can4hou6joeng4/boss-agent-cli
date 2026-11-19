@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Mapping
@@ -18,6 +19,24 @@ class WorkflowStatus(str, Enum):
 
 class WorkflowInputError(ValueError):
 	"""Raised when wizard/headless input cannot form a workflow plan."""
+
+
+def _ensure_finite_inputs(value: Any, path: str = "inputs") -> None:
+	"""递归拒绝 NaN / Infinity（Issue #1883）。
+
+	``json.loads`` 默认接受 ``NaN`` / ``Infinity``，而 ``nan != nan`` 恒真：
+	含非有限数值的 plan 一旦落库，恢复时永远比对不相等，run 永久不可恢复；
+	非标准 JSON 常量也不符合本仓库「严格 JSON」的输出契约。入口处一次拒绝，
+	CLI、MCP 与 Python API 共享同一条边界。
+	"""
+	if isinstance(value, float) and not math.isfinite(value):
+		raise WorkflowInputError(f"{path} 不能包含 NaN 或 Infinity；请改用有限数值")
+	if isinstance(value, Mapping):
+		for key, item in value.items():
+			_ensure_finite_inputs(item, f"{path}.{key}")
+	elif isinstance(value, (list, tuple)):
+		for index, item in enumerate(value):
+			_ensure_finite_inputs(item, f"{path}[{index}]")
 
 
 def count_or_none(value: Any) -> int | None:
@@ -59,6 +78,7 @@ class WizardInput:
 		inputs = value.get("inputs", {})
 		if not isinstance(inputs, Mapping):
 			raise WorkflowInputError("inputs 必须是 JSON object")
+		_ensure_finite_inputs(inputs)
 		requested: Any = ()
 		if "requested_steps" in value:
 			requested = value["requested_steps"]

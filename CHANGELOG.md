@@ -4,12 +4,17 @@
 
 ## [Unreleased]
 
-## [3.4.123] - 2026-11-19
-
 ### Fixed
 - 沟通列表整页元素全是 null / 数字 / 字符串时继续翻页，不再据此宣称列表完整或联系人不存在（Issue #1878）。
 - 职位去重按可用性选择 `job_id` / `encryptJobId`，非字符串 `job_id` 不再遮蔽合法标识（Issue #1879）。
 - 分页信封对回退的请求页应用与平台回显页相同的上限，`page + 1` 的下一页提示不再可能撞上整数转换上限（Issue #1880）。
+- wizard 的 `INTERNAL_ERROR` 分支（含 `PlatformResponseInvalid`）先读本步骤写前标记，写请求发出后的响应解析失败按「结果未知」上报，`--resume` 不再重放（Issue #1881）。
+- 自定义 action 返回 `StepResult(status=FAILED)` 等非 COMPLETED / WAITING_INPUT 状态时，workflow 按失败 / 停止终止，不再继续执行后续步骤并落成 `completed`、`error=None`；写前标记存在时按结果未知处理（Issue #1882）。
+- `WizardInput` 入口递归拒绝 NaN / Infinity；含 NaN 的旧断点恢复时改按规范化 JSON 值比较，不再永久命中不可恢复的 `WORKFLOW_PLAN_MISMATCH`（Issue #1883）。
+
+## [3.4.123] - 2026-11-19
+
+### Fixed
 ### Fixed
 - `config set request_budget_dir` 拒绝已存在但不是目录的路径；启动期因此失败时恢复建议改为可直接执行的 `config reset request_budget_dir`（Issue #1822）。
 - `config reset operating_mode` 同时清除旧版 `low_risk_mode`，`config list` 把由旧键派生的模式标为用户配置（Issue #1823）。

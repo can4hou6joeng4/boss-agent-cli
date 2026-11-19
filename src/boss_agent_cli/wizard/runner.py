@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import secrets
 import sqlite3
 import time
@@ -579,13 +580,20 @@ class WorkflowRunner:
 					recovery_action=contract_recovery or fallback_recovery,
 				)
 			except INTERNAL_ERROR_TYPES as exc:
-				internal_recoverable, internal_recovery = error_contract_for_code("INTERNAL_ERROR")
-				error = WorkflowActionError(
-					"INTERNAL_ERROR",
-					f"{type(exc).__name__}: {exc}",
-					recoverable=internal_recoverable,
-					recovery_action=internal_recovery,
-				)
+				# 响应无法解析（PlatformResponseInvalid）等内部错误可能在写请求
+				# 发出之后才发生：与 NETWORK_ERROR 分支同口径，先读本步骤的写前
+				# 标记，命中时保留原错误码并强制禁止重放（Issue #1881）。
+				write_marker = self._persisted_write_marker(run_id, step_name)
+				if write_marker is not None:
+					error = self._unconfirmed_error("INTERNAL_ERROR", write_marker)
+				else:
+					internal_recoverable, internal_recovery = error_contract_for_code("INTERNAL_ERROR")
+					error = WorkflowActionError(
+						"INTERNAL_ERROR",
+						f"{type(exc).__name__}: {exc}",
+						recoverable=internal_recoverable,
+						recovery_action=internal_recovery,
+					)
 			except OSError as exc:
 				# 本地文件读写失败（导出路径不可写、磁盘满）重试同一 run_id 也不会成功；
 				# 套接字层的 ConnectionError / TimeoutError 仍是网络问题，保持可重试语义。
@@ -696,6 +704,13 @@ class WorkflowRunner:
 			else:
 				result_data = result.to_dict()
 				prior_results[step_name] = result_data
+				# 通用 update_step 会把步骤 error 清空；声明失败的 action 若已
+				# begin_write，必须在覆盖前抓住写前标记（Issue #1882）。
+				declared_marker = (
+					self._persisted_write_marker(run_id, step_name)
+					if result.status not in {WorkflowStatus.COMPLETED, WorkflowStatus.WAITING_INPUT}
+					else None
+				)
 				# A returned result confirms the action's outcome. Persist it before
 				# checking controls, so a late deadline cannot replay that effect.
 				self._store.update_step(run_id, step_name, status=result.status.value, result=result_data)
@@ -725,6 +740,12 @@ class WorkflowRunner:
 					return self._store.get_for_result(run_id) or {}
 				if result.status == WorkflowStatus.WAITING_INPUT:
 					return self._store.get_for_result(run_id) or {}
+				if result.status != WorkflowStatus.COMPLETED:
+					# StepResult.status 是完整 WorkflowStatus，自定义 action 可以
+					# 返回 FAILED / STOPPED。以前只把值抄进步骤状态，run 继续执行
+					# 并最终落成 completed、error=None（Issue #1882）；这里按失败
+					# 终止，不再把 action 已声明的失败当成成功继续。
+					return self._finish_declared_status(run_id, step_name, result, result_data, declared_marker)
 				continue
 
 			error_data = error.to_dict()
@@ -757,6 +778,49 @@ class WorkflowRunner:
 			status=WorkflowStatus.COMPLETED.value,
 			current_step=None,
 			last_result=prior_results.get(plan.requested_steps[-1]) if plan.requested_steps else {},
+		)
+		return self._store.get_for_result(run_id) or {}
+
+	def _finish_declared_status(
+		self,
+		run_id: str,
+		step_name: str,
+		result: StepResult,
+		result_data: dict[str, Any],
+		marker: dict[str, Any] | None = None,
+	) -> dict[str, Any]:
+		"""把 action 显式返回的失败状态落成 run 级失败（Issue #1882）。
+
+		``StepResult.status`` 允许完整 ``WorkflowStatus``，但 runner 只实现了
+		COMPLETED / WAITING_INPUT 两种终态；FAILED、STOPPED 以及非终态的
+		PENDING / RUNNING 都必须终止 workflow，不能继续执行后续步骤后报 completed。
+		"""
+		if result.status == WorkflowStatus.STOPPED:
+			code = "WORKFLOW_STOPPED"
+			message = f"步骤 {step_name!r} 返回 stopped，workflow 按停止处理"
+			failed_status = WorkflowStatus.STOPPED.value
+		else:
+			code = "INTERNAL_ERROR"
+			message = f"步骤 {step_name!r} 返回非终态 {result.status.value}，workflow 按失败终止"
+			failed_status = WorkflowStatus.FAILED.value
+		recoverable, recovery = error_contract_for_code(code)
+		if marker is not None:
+			# 写请求可能已发出：保留原码与核对信息，禁止重放。
+			error = self._unconfirmed_error(code, marker)
+		else:
+			error = WorkflowActionError(
+				code, message, recoverable=recoverable, recovery_action=recovery
+			)
+		error_data = error.to_dict()
+		self._store.update_step(
+			run_id, step_name, status=failed_status, result=result_data, error=error_data
+		)
+		self._store.update_run(
+			run_id,
+			status=failed_status,
+			current_step=step_name,
+			last_result=result_data,
+			error=error_data,
 		)
 		return self._store.get_for_result(run_id) or {}
 
@@ -898,13 +962,29 @@ class WorkflowRunner:
 			"inputs": dict(plan.inputs),
 			"requested_steps": list(plan.requested_steps),
 		}
-		if persisted != requested:
+		if not WorkflowRunner._plans_equal(persisted, requested):
 			raise WorkflowActionError(
 				"WORKFLOW_PLAN_MISMATCH",
 				"run_id 已绑定到不同的 workflow plan",
 				recoverable=False,
 				recovery_action="使用原 plan 恢复，或不传 run_id 创建新任务",
 			)
+
+	@staticmethod
+	def _plans_equal(persisted: Any, requested: Any) -> bool:
+		"""比较落库参数与本次 plan，NaN 按同值处理（Issue #1883）。
+
+		``json.loads`` 接受 ``NaN``，而 ``nan != nan`` 恒真：直接 ``!=`` 会让同一个
+		含 NaN 的 plan 恢复时永远命中 ``WORKFLOW_PLAN_MISMATCH``（recoverable=False），
+		run 永久不可恢复。先按值比较，再退到规范化 JSON 文本比较——两侧对 NaN
+		都序列化成 ``NaN``。
+		"""
+		if persisted == requested:
+			return True
+		try:
+			return json.dumps(persisted, sort_keys=True) == json.dumps(requested, sort_keys=True)
+		except (TypeError, ValueError, RecursionError):
+			return False
 
 	def _fail_controlled(
 		self,
