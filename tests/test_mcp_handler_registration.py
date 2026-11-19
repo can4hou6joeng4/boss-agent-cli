@@ -61,6 +61,7 @@ from boss_agent_cli.schema.formats import _provider_tool_schema  # noqa: E402
 _CATALOG_PROBE = """
 import asyncio
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -72,7 +73,15 @@ from boss_agent_cli.mcp_tools import TOOLS
 
 
 async def main():
-	params = StdioServerParameters(command=sys.executable, args=["-m", "boss_agent_cli.mcp_server"])
+	# stdio 子进程默认只继承白名单环境变量（不含 PYTHONPATH）：本地按
+	# `PYTHONPATH=src` 跑门禁时，协议层会悄悄启动 venv 里已安装的旧包，
+	# 与同一进程里读到的目录定义比对出「伪差异」。显式继承环境，保证协议层
+	# 与本测试读到的目录来自同一份源码树。
+	params = StdioServerParameters(
+		command=sys.executable,
+		args=["-m", "boss_agent_cli.mcp_server"],
+		env=dict(os.environ),
+	)
 	async with stdio_client(params) as (read_stream, write_stream):
 		async with ClientSession(read_stream, write_stream) as session:
 			await session.initialize()

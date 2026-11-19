@@ -199,8 +199,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 					"welfare": {"type": "string", "description": "福利筛选，逗号分隔 AND 逻辑（如 双休,五险一金）"},
 					"active": {
 						"type": "string",
-						"enum": ["online", "today", "3d", "week", "2w", "month", "half-year"],
-						"description": "只保留 HR 活跃度不低于该档的职位；online 只看列表、请求量与普通搜索相同，其余档位列表看不出时会逐个查详情（更慢、风控风险更高），活跃度未知的职位会被排除并写进 hints.active_filter",
+						"enum": ["", "online", "today", "3d", "week", "2w", "month", "half-year"],
+						"description": "只保留 HR 活跃度不低于该档的职位；online 只看列表、请求量与普通搜索相同，其余档位列表看不出时会逐个查详情（更慢、风控风险更高），活跃度未知的职位会被排除并写进 hints.active_filter；空串表示清除 preset 保存的活跃度筛选",
 					},
 					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
 					"no_cache": {"type": "boolean", "description": "跳过缓存，强制重新请求", "default": False},
@@ -861,8 +861,8 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"properties": {
 					"security_id": {"type": "string", "description": "职位安全 ID"},
 					"job_id": {"type": "string", "description": "加密职位 ID"},
-					"add_tags": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "要添加的本地标签（每个标签不能为空）"},
-					"remove_tags": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "要移除的本地标签（每个标签不能为空）"},
+					"add_tags": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1, "description": "要添加的本地标签（每个标签不能为空）"},
+					"remove_tags": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1, "description": "要移除的本地标签（每个标签不能为空）"},
 					"note": {"type": "string", "description": "替换本地备注；空串表示清空"},
 				},
 				"required": ["security_id", "job_id"],

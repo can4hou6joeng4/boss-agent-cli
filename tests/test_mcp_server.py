@@ -1601,8 +1601,9 @@ def test_read_only_tools_with_action_dimension_are_explicitly_classified():
 		& mcp_server._ACTION_DIMENSION_TOOL_NAMES
 	) - mcp_server._TOOL_WRITE_MODES.keys()
 	assert unclassified == set()
-	# 当前唯一带 action 维度的只读工具；新增这类工具时必须同步核实写模式。
-	assert "boss_hr_jobs" in mcp_server._ACTION_DIMENSION_TOOL_NAMES
+	# 带 action 维度的只读工具（hr_jobs 的 online/offline、config 的 set/reset）
+	# 都必须在 _TOOL_WRITE_MODES 登记写模式（Issue #968、#2177）。
+	assert {"boss_hr_jobs", "boss_config"} <= mcp_server._ACTION_DIMENSION_TOOL_NAMES
 
 
 def test_unregistered_action_dimension_defaults_to_write(monkeypatch):
