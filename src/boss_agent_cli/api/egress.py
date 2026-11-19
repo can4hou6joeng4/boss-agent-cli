@@ -50,7 +50,9 @@ _TZ_REGION_HINTS: tuple[tuple[str, str], ...] = (
 	("America/Los_Angeles", "US"),
 	("America/Phoenix", "US"),
 	("America/Anchorage", "US"),
-	("America/Honolulu", "US"),
+	# 夏威夷的 IANA 名是 Pacific/Honolulu；America/Honolulu 不存在于 tzdata，
+	# 原先的条目永远不命中，出口矛盾会被漏检成 unknown（Issue #2129）。
+	("Pacific/Honolulu", "US"),
 	("America/Indiana/", "US"),
 	("America/Kentucky/", "US"),
 	("America/Detroit", "US"),
@@ -73,9 +75,20 @@ def language_region(accept_language: str) -> str:
 	first = accept_language.split(",", 1)[0].strip()
 	first = first.split(";", 1)[0].strip()
 	parts = first.split("-")
-	if len(parts) < 2:
-		return ""
-	return parts[-1].upper()
+	# BCP 47 的第二段既可能是地区（``zh-CN``），也可能是书写系统
+	# （``zh-Hans`` / ``sr-Latn``）。把任意尾段当地区会得到 "HANS" 这种伪地区，
+	# egress 一致性检查会把正常会话判成 mismatch 而阻断启动（Issue #2129）。
+	# 只认真正的地区子标签：2 位 ASCII 字母或 3 位 ASCII 数字；跳过 4 位
+	# ASCII 字母的 script，遇到变体 / 扩展即停止。
+	for part in parts[1:]:
+		if len(part) == 4 and part.isascii() and part.isalpha():
+			continue
+		if (len(part) == 2 and part.isascii() and part.isalpha()) or (
+			len(part) == 3 and part.isascii() and part.isdigit()
+		):
+			return part.upper()
+		break
+	return ""
 
 
 def timezone_region(timezone: str) -> str:
