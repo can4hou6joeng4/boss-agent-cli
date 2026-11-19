@@ -45,6 +45,33 @@ def _make_raw_job(name: str = "Go 开发", security_id: str = "sec_x") -> dict:
 	}
 
 
+@pytest.mark.parametrize("send_error", [ConnectionError("连接中断"), RuntimeError("响应解析失败"), RuntimeError("频率服务连接失败")])
+def test_batch_greet_keeps_unknown_claim_and_does_not_resend(tmp_path, send_error):
+	with patch("boss_agent_cli.commands.greet.time") as mock_time, patch(
+		"boss_agent_cli.commands.greet.AuthManager"
+	), patch("boss_agent_cli.commands.greet.get_platform_instance") as mock_platform:
+		client = _ctx_mock(mock_platform)
+		client.is_success.side_effect = lambda response: response.get("code", 0) == 0
+		client.search_jobs.return_value = {"zpData": {"jobList": [_make_raw_job("A", "s1"), _make_raw_job("B", "s2")]}}
+		client.greet.side_effect = send_error
+		argv = ["--json", "--data-dir", str(tmp_path), "batch-greet", "test"]
+		runner = CliRunner()
+		out = runner.invoke(cli, argv)
+		assert out.exit_code == 1, out.output
+		error = json.loads(out.output)["error"]
+		assert error["code"] == "ACTION_UNCONFIRMED"
+		assert error["details"]["replay_safe"] is False
+		assert error["details"]["unconfirmed"]["job_id"] == "job_s1"
+		client.greet.assert_called_once_with("s1", "job_s1")
+		mock_time.sleep.assert_not_called()
+
+		client.greet.reset_mock(side_effect=True)
+		out = runner.invoke(cli, argv)
+		assert out.exit_code == 1, out.output
+		assert json.loads(out.output)["error"]["code"] == "ACTION_UNCONFIRMED"
+		client.greet.assert_not_called()
+
+
 # ── greet 成功路径 ─────────────────────────────────────────
 
 
@@ -149,10 +176,11 @@ def test_batch_greet_rate_limited_stops_remaining(mock_cache_cls, mock_auth_cls,
 	def greet_side_effect(sid, jid, msg=""):
 		if sid == "s1":
 			return {"code": 0, "zpData": {}}
-		raise RuntimeError("RATE_LIMITED 请求频率过高")
+		return {"code": 9}
 
 	mock_client.greet.side_effect = greet_side_effect
-	mock_client.is_success.return_value = True
+	mock_client.is_success.side_effect = lambda response: response.get("code", 0) == 0
+	mock_client.parse_error.return_value = ("RATE_LIMITED", "请求频率过高")
 	mock_time.sleep = MagicMock()
 
 	runner = CliRunner()
@@ -175,8 +203,9 @@ def test_batch_greet_greet_limit_stops_remaining(mock_cache_cls, mock_auth_cls, 
 	mock_client.search_jobs.return_value = {
 		"zpData": {"jobList": [_make_raw_job("A", "s1"), _make_raw_job("B", "s2")]}
 	}
-	mock_client.greet.side_effect = RuntimeError("GREET_LIMIT 今日上限已达")
-	mock_client.is_success.return_value = True
+	mock_client.greet.return_value = {"code": -1}
+	mock_client.is_success.side_effect = lambda response: response.get("code", 0) == 0
+	mock_client.parse_error.return_value = ("GREET_LIMIT", "今日上限已达")
 	mock_time.sleep = MagicMock()
 
 	runner = CliRunner()
@@ -187,12 +216,16 @@ def test_batch_greet_greet_limit_stops_remaining(mock_cache_cls, mock_auth_cls, 
 	assert parsed["data"]["total_greeted"] == 0
 
 
+class _UnsentConnectionError(ConnectionError):
+	details = {"request_sent": False}
+
+
 @patch("boss_agent_cli.commands.greet.time")
 @patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
-def test_batch_greet_network_error_retries_once_then_skips(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
-	"""普通网络错误：第一次重试仍失败 → 跳过该职位，继续下一个。"""
+def test_batch_greet_provably_unsent_retries_once_then_skips(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
+	"""明确未发送的异常重试一次。再次失败后释放预约，继续下一个。"""
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	mock_client = _ctx_mock(mock_client_cls)
@@ -205,8 +238,9 @@ def test_batch_greet_network_error_retries_once_then_skips(mock_cache_cls, mock_
 
 	def greet_side_effect(sid, jid, msg=""):
 		if sid == "s1":
+			mock_cache.release_candidate_action.assert_not_called()
 			call_counts["s1"] += 1
-			raise ConnectionError("network timeout")
+			raise _UnsentConnectionError("连接建立失败")
 		return {"code": 0, "zpData": {}}
 
 	mock_client.greet.side_effect = greet_side_effect
@@ -221,6 +255,8 @@ def test_batch_greet_network_error_retries_once_then_skips(mock_cache_cls, mock_
 	assert parsed["data"]["total_failed"] == 1
 	# s1 应该被重试过 1 次（共调用 2 次）
 	assert call_counts["s1"] == 2
+	assert mock_cache.release_candidate_action.call_count == 1
+	assert mock_cache.release_candidate_action.call_args.args == ("job_s1", "greet")
 	# s2 成功
 	assert any(r["security_id"] == "s2" for r in parsed["data"]["greeted"])
 
@@ -229,8 +265,8 @@ def test_batch_greet_network_error_retries_once_then_skips(mock_cache_cls, mock_
 @patch("boss_agent_cli.commands.greet.get_platform_instance")
 @patch("boss_agent_cli.commands.greet.AuthManager")
 @patch("boss_agent_cli.commands.greet.CacheStore")
-def test_batch_greet_network_error_first_retry_succeeds(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
-	"""第一次失败但重试成功，应算 success 不是 failed。"""
+def test_batch_greet_provably_unsent_first_retry_succeeds(mock_cache_cls, mock_auth_cls, mock_client_cls, mock_time):
+	"""第一次确定未发送，重试成功后正常记账。"""
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	mock_client = _ctx_mock(mock_client_cls)
@@ -243,7 +279,7 @@ def test_batch_greet_network_error_first_retry_succeeds(mock_cache_cls, mock_aut
 	def greet_side_effect(sid, jid, msg=""):
 		call_count["n"] += 1
 		if call_count["n"] == 1:
-			raise ConnectionError("transient")
+			raise _UnsentConnectionError("连接建立失败")
 		return {"code": 0, "zpData": {}}  # 第二次成功
 
 	mock_client.greet.side_effect = greet_side_effect
