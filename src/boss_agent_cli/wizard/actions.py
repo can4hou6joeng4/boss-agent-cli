@@ -203,6 +203,9 @@ def execute_candidate_search(
 	pipeline: Callable[..., Any] = run_search_pipeline,
 ) -> Any:
 	"""Shared platform search call used by the command and workflow action."""
+	# query 类型错误不能经 str() 静默变成空关键词或容器的 repr 文本：
+	# false / 0 会变成无关键词搜索，对象会按字面去搜（Issue #2009）。
+	query = _optional_str_strict(inputs, "query") or ""
 	welfare_conditions = inputs.get("welfare_conditions")
 	if welfare_conditions is None and inputs.get("welfare"):
 		raw_welfare = inputs["welfare"]
@@ -231,7 +234,7 @@ def execute_candidate_search(
 			),
 		) from exc
 	criteria = SearchFilterCriteria(
-		query=str(inputs.get("query") or ""),
+		query=query,
 		city=_optional_str(inputs.get("city")),
 		salary=_optional_str(inputs.get("salary")),
 		experience=_optional_str(inputs.get("experience")),
@@ -787,7 +790,7 @@ def _auth_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 
 
 def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	_required(inputs, "query")
+	_required_str(inputs, "query")
 	account = account_scope(context.auth())
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		with context.candidate_platform() as platform:
