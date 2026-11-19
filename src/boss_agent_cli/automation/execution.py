@@ -24,7 +24,7 @@ from boss_agent_cli.automation.models import (
 )
 from boss_agent_cli.automation.reply_ai import apply_reply_strategy
 from boss_agent_cli.automation.safety import SafetyGuard
-from boss_agent_cli.automation.storage import AutomationStore, queued_action
+from boss_agent_cli.automation.storage import AutomationStateError, AutomationStore, queued_action
 
 #: `state.json` 里每个会话的在途动作标记。直接扫描路径没有待执行队列行可以
 #: 提前标记，必须在派发前把「可能已发出」的动作落进 state（Issue #1511）。
@@ -138,6 +138,17 @@ def process_pending(
 			events.append(event)
 			store.append_event(event)
 			continue
+		# 队列展示允许历史空字段，但派发前必须有明确的候选人和有效话术。
+		# 缺字段不能默认成 friend_id=0 或向真实候选人发送空消息；此处尚未
+		# 写入 executing，失败后原队列保持 pending（Issue #2071）。
+		if not item.candidate_key.strip():
+			raise AutomationStateError(
+				store.pending_path, f"记录 {item.id!r} 缺少 candidate_key，无法安全派发"
+			)
+		if action in {PlatformAction.SEND_QUESTIONNAIRE, PlatformAction.SEND_FOLLOW_UP} and not item.message.strip():
+			raise AutomationStateError(
+				store.pending_path, f"记录 {item.id!r} 缺少 message，拒绝发送空消息"
+			)
 		prior = _conversation_prior(state, item.candidate_key)
 		if prior is not None and state is not None:
 			blocked = _queue_inflight_gate(store, guard, state, platform, dry_run, item.candidate_key, prior)
