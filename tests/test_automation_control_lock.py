@@ -90,7 +90,9 @@ def test_non_lock_operational_error_is_reported_as_state_error(tmp_path, monkeyp
 	store = _store(tmp_path)
 
 	def unavailable(*args, **kwargs):
-		raise sqlite3.OperationalError("unable to open database file")
+		# 损坏 / 不是数据库与本地 IO（只读目录、磁盘满）分属两类：
+		# 前者报状态损坏，后者交给 main 的 LOCAL_IO_ERROR（Issue #1930）。
+		raise sqlite3.OperationalError("file is not a database")
 
 	monkeypatch.setattr("boss_agent_cli.automation.storage.sqlite3.connect", unavailable)
 	# 打不开库不是锁冲突（不能伪装成「稍后重试即可」的占用），也不能裸抛

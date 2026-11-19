@@ -14,6 +14,11 @@ from boss_agent_cli.automation.storage import (
 PATH = Path("queue.jsonl")
 
 
+def _row_for(parser, **overrides: object) -> dict[str, object]:
+	status = "pending" if parser is _pending_from_row else "review"
+	return _row(status=status, **overrides)
+
+
 def _row(**overrides: object) -> dict[str, object]:
 	row: dict[str, object] = {
 		"id": "r1",
@@ -38,12 +43,12 @@ def _row(**overrides: object) -> dict[str, object]:
 @pytest.mark.parametrize("value", [None, 123, {}, [], True])
 def test_non_string_text_fields_fail_closed(parser, key: str, value: object) -> None:
 	with pytest.raises(AutomationStateError):
-		parser(_row(**{key: value}), PATH)
+		parser(_row_for(parser, **{key: value}), PATH)
 
 
 @pytest.mark.parametrize("parser", [_pending_from_row, _review_from_row], ids=["pending", "review"])
 def test_missing_text_fields_default_to_empty(parser) -> None:
-	row = _row()
+	row = _row_for(parser)
 	for key in ("platform", "candidate_key", "reason", "message"):
 		row.pop(key, None)
 
@@ -56,7 +61,7 @@ def test_missing_text_fields_default_to_empty(parser) -> None:
 
 @pytest.mark.parametrize("parser", [_pending_from_row, _review_from_row], ids=["pending", "review"])
 def test_string_text_fields_pass_through(parser) -> None:
-	item = parser(_row(), PATH)
+	item = parser(_row_for(parser), PATH)
 
 	assert item.message == "hi"
 	assert item.platform == "zhipin"
