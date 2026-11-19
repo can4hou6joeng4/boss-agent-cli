@@ -157,7 +157,10 @@ def raise_platform_risk_response(response: dict[str, Any], *, is_cdp: bool = Fal
 		details["risk_source"] = response["__cli_risk_source__"]
 	if path := response.get("path"):
 		details["path"] = str(path)
-	if code in (CODE_ACCOUNT_RESTRICTED, 35, 36):
+	# 38（身份资料流程）与 32/35/36 同属账号侧需人工处理的拦截：crawler 通道与
+	# AccountRiskError 的既有口径都把它当 ACCOUNT_RISK，这里此前漏接会让其余
+	# 命令把它降级成 UNKNOWN、只读命令再归一为可重试的 NETWORK_ERROR（Issue #2045）。
+	if code in (CODE_ACCOUNT_RESTRICTED, 35, 36, 38):
 		raise AccountRiskError(
 			response_message(response) or "平台要求完成安全验证", is_cdp=is_cdp,
 			details=details,
