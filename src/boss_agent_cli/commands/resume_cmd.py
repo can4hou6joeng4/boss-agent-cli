@@ -1,4 +1,5 @@
 import json
+import os
 import stat
 from pathlib import Path
 from typing import Any
@@ -574,7 +575,9 @@ def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 		)
 		ctx.exit(1)
 		return
-	path = Path(file_path)
+	# 读取侧与 -o 写入侧同口径展开 ~：MCP 子进程 / argv 列表不经 shell，
+	# `~/cv.json` 不会被展开，按字面路径检查只会报「不存在」（Issue #2122）。
+	path = Path(os.path.expanduser(str(file_path)))
 	try:
 		mode = path_mode(path)
 	# 元数据读不出来时不能报「不存在」：权限 / 文件系统错误会被伪装成参数错误。
@@ -766,7 +769,10 @@ def resume_link_cmd(ctx: click.Context, name: str, security_id: str, job_id: str
 		)
 		return
 	cache = CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db")
-	cache.link_resume_to_job(name, security_id, job_id, title, company)
+	# 关联落库用文件里的真实名称：`a/b` 与 `a_b` 落在同一个简历文件上，
+	# 按请求别名落库会让规范名视角看不到这条关联，删除规范名时也清不到它
+	# （Issue #1804、#2121）。
+	cache.link_resume_to_job(store.stored_name(name), security_id, job_id, title, company)
 	cache.close()
 	handle_output(
 		ctx, "resume",
@@ -790,8 +796,20 @@ def resume_applications_cmd(ctx: click.Context, name: str) -> None:
 		_emit_resume_not_found(ctx, name)
 		return
 	cache = CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db")
-	items = cache.get_resume_applications(name)
+	# 旧版本按请求别名落库：请求名与文件真实名称两种键都查，按
+	# (security_id, job_id) 去重并保持「最近关联在前」（Issue #1804、#2121）。
+	query_names = list(dict.fromkeys([store.stored_name(name), name]))
+	merged: dict[tuple[str, str], dict[str, Any]] = {}
+	for query_name in query_names:
+		for item in cache.get_resume_applications(query_name):
+			merged.setdefault((item["security_id"], item["job_id"]), item)
 	cache.close()
+
+	def _recency(item: dict[str, Any]) -> float:
+		value = item.get("updated_at")
+		return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
+
+	items = sorted(merged.values(), key=_recency, reverse=True)
 	handle_output(
 		ctx, "resume",
 		items,
