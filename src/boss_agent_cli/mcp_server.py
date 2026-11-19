@@ -33,6 +33,7 @@ from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.mcp_args import _build_args
 from boss_agent_cli.mcp_tools import TOOLS
 from boss_agent_cli.output import envelope_error, json_safe_value, serialization_failure_envelope
+from boss_agent_cli.services.friend_list_pages import MAX_FRIEND_LIST_PAGES
 from boss_agent_cli.search_filters import detail_filter_max_pages
 
 # 向后兼容的再导出：这些符号在拆分前属于本模块，`mcp-server/server.py` wrapper
@@ -114,8 +115,9 @@ _MAX_CLI_TIMEOUT_SECONDS = 900.0
 _SEARCH_PAGE_SIZE = 15
 #: 招聘者聊天摘要 / 最近消息按每批 50 条请求估算。
 _HR_BATCH_SIZE = 50
-#: pipeline / follow-up / digest 聚合好友列表的估算页数上限。
-_FRIEND_LIST_ESTIMATE_PAGES = 5
+#: pipeline / follow-up / digest 聚合好友列表的估算页数上限：与 collector
+#: 的真实翻页上限一致；按 5 页估算会让 8 页以上的账号被提前掐断（Issue #2024）。
+_FRIEND_LIST_ESTIMATE_PAGES = MAX_FRIEND_LIST_PAGES
 #: batch-greet 的 CLI 默认值与上限（命令内会把 --count 截断到 10）。
 _BATCH_GREET_DEFAULT_COUNT = 10
 _BATCH_GREET_MAX_COUNT = 10
@@ -357,7 +359,10 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 			if limit is None or limit < 1:
 				return None
 			# 与 summary-limit 分支同口径：整数分页并封顶（Issue #1612）。
-			return min(-(-limit // _HR_BATCH_SIZE), _MAX_ESTIMATED_REQUESTS)
+			batches = -(-limit // _HR_BATCH_SIZE)
+			# 无 --friend-id 时命令先取一页沟通列表再分批拉消息（Issue #2025）。
+			base = 0 if "--friend-id" in args else 1
+			return min(base + batches, _MAX_ESTIMATED_REQUESTS)
 		return None
 	if command == "watch" and len(args) > 1 and args[1] == "run":
 		# watch run 对保存的搜索应用福利 / 活跃度筛选，逐条查详情；
@@ -365,8 +370,8 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 		pages = detail_filter_max_pages("welfare", "today")
 		return pages * (_SEARCH_PAGE_SIZE + 1)
 	if command in {"pipeline", "follow-up", "digest"}:
-		# 好友列表逐页聚合，按 5 页上限估算。
-		return _FRIEND_LIST_ESTIMATE_PAGES
+		# 好友列表逐页聚合，再追加一次面试数据请求（Issue #2024）。
+		return _FRIEND_LIST_ESTIMATE_PAGES + 1
 	return None
 
 

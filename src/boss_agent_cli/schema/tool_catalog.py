@@ -1239,9 +1239,13 @@ def _conditionally_required_string_names(schema: dict[str, Any]) -> set[str]:
 	def visit(node: Any) -> None:
 		if not isinstance(node, dict):
 			return
-		then = node.get("then")
-		if isinstance(then, dict) and isinstance(then.get("required"), list):
-			names.update(name for name in then["required"] if isinstance(name, str))
+		# then / else 都是条件必填：wizard 的 role / platform / goal 在
+		# else 分支必填，漏收集会让空串通过入口校验再去 CLI 吃 INVALID_PARAM
+		# （Issue #2026）。
+		for key in ("then", "else"):
+			branch = node.get(key)
+			if isinstance(branch, dict) and isinstance(branch.get("required"), list):
+				names.update(name for name in branch["required"] if isinstance(name, str))
 		# anyOf 的分支同样是条件必填：export 的 query/url 与 AI 工具的 jd_text/job_id
 		# 允许空串会在 MCP 入口生成必然失败或被静默吞掉的 argv（Issue #1608）。
 		branches = node.get("anyOf")
