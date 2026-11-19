@@ -1433,11 +1433,19 @@ class CacheStore:
 			return str(row[0])
 
 	def record_recruiter_greet(self, geek_id: str, job_id: str, *, status: Literal["sent", "quota_limited"] = "sent") -> None:
+		"""把已确认发出的招呼记为 sent/quota_limited。
+
+		预约行被外部清理（如 boss clean --all）时 UPDATE 会命中 0 行：此时本地
+		没有任何已招呼记录，静默成功会让下一次 claim 再发一次真实招呼。按
+		record_location_send 的口径抛错，由命令层映射成 GREET_RESULT_UNKNOWN。
+		"""
 		with self._conn:
-			self._conn.execute(
+			cursor = self._conn.execute(
 				"UPDATE recruiter_greet_records SET status = ?, updated_at = ? WHERE geek_id = ? AND job_id = ?",
 				(status, time.time(), geek_id, job_id),
 			)
+			if cursor.rowcount != 1:
+				raise sqlite3.OperationalError("招聘者招呼记录不存在，无法标记发送结果")
 
 	def location_send_status(self, friend_id: int) -> str | None:
 		"""读取工作地点发送记录。没有记录时返回 None，不创建新行。"""
@@ -1683,18 +1691,29 @@ class CacheStore:
 		return cursor.rowcount > 0
 
 	@staticmethod
-	def _make_watch_job_key(item: dict[str, Any], *, account: str = "") -> str:
-		security_id = item.get("security_id") or item.get("securityId") or ""
-		job_id = item.get("job_id") or item.get("encryptJobId") or ""
+	def _watch_key_fragment(value: Any) -> str:
+		"""键片段消毒：孤立代理项无法绑定进 SQLite TEXT，统一转义成 ASCII 反斜杠序列。"""
+		text = value if isinstance(value, str) else str(value)
+		return text.encode("utf-8", "backslashreplace").decode("utf-8")
+
+	@classmethod
+	def _make_watch_job_key(cls, item: dict[str, Any], *, account: str = "") -> str:
+		security_id = cls._watch_key_fragment(item.get("security_id") or item.get("securityId") or "")
+		job_id = cls._watch_key_fragment(item.get("job_id") or item.get("encryptJobId") or "")
+		account = cls._watch_key_fragment(account)
 		# 有账号指纹时按稳定的 encryptJobId 去重：securityId 每次搜索都会轮换，
 		# 旧的复合键会让同一职位在每轮 watch 里反复算作新增。没有账号指纹时
 		# 保留旧复合键，避免把无归属的旧记录当成当前账号的已见记录。
+		# 账号指纹必须无条件入键：job_id 缺失时若丢掉账号，两个账号的已见记录
+		# 会互相串扰，第二个账号首次看到同一职位不会出现在 new_items。
 		if account and job_id:
 			return f"{account}:{job_id}"
 		if security_id or job_id:
-			return f"{security_id}:{job_id}"
-		raw = json.dumps(item, sort_keys=True, ensure_ascii=False)
-		return hashlib.sha256(raw.encode()).hexdigest()
+			composite = f"{security_id}:{job_id}"
+			return f"{account}:{composite}" if account else composite
+		raw = json.dumps(item, sort_keys=True, ensure_ascii=True)
+		digest = hashlib.sha256(raw.encode()).hexdigest()
+		return f"{account}:{digest}" if account else digest
 
 	def record_watch_results(self, search_name: str, items: list[dict[str, Any]], *, account: str = "") -> dict[str, Any]:
 		# 只去重本轮完整列表项；有账号指纹时跨 securityId 轮换按稳定 job_id 合并。
@@ -1702,27 +1721,31 @@ class CacheStore:
 		now = time.time()
 		new_items = []
 		seen_count = 0
-		for item in items:
-			job_key = self._make_watch_job_key(item, account=account)
-			payload = json.dumps(item, ensure_ascii=False, sort_keys=True)
-			# 先 SELECT 再 INSERT 时，两个进程对同一个 watch 同时写入会都看到
-			# 「不存在」，第二个 INSERT 撞主键抛 IntegrityError，被上层误判成
-			# 缓存库损坏（Issue #1509）。INSERT OR IGNORE + UPDATE 的每条语句
-			# 本身是原子的：抢到插入的一方记新增，另一方只刷新 payload / 时间。
-			cursor = self._conn.execute(
-				"INSERT OR IGNORE INTO watch_hits (search_name, job_key, payload, first_seen_at, last_seen_at) "
-				"VALUES (?, ?, ?, ?, ?)",
-				(search_name, job_key, payload, now, now),
-			)
-			if cursor.rowcount:
-				new_items.append(item)
-			else:
-				seen_count += 1
-				self._conn.execute(
-					"UPDATE watch_hits SET payload = ?, last_seen_at = ? WHERE search_name = ? AND job_key = ?",
-					(payload, now, search_name, job_key),
+		# payload 列只写不读，用 ensure_ascii=True 写入：平台 JSON 里的孤立代理项
+		#（如 "\ud800"）json.loads 会接受，ensure_ascii=False 保留原字符后 sqlite3
+		# 绑定抛 UnicodeEncodeError，整批 watch 结果丢弃。整轮包在事务里，中途
+		# 异常回滚，不会把半截结果留给同一连接上的后续写去提交。
+		with self._conn:
+			for item in items:
+				job_key = self._make_watch_job_key(item, account=account)
+				payload = json.dumps(item, ensure_ascii=True, sort_keys=True)
+				# 先 SELECT 再 INSERT 时，两个进程对同一个 watch 同时写入会都看到
+				# 「不存在」，第二个 INSERT 撞主键抛 IntegrityError，被上层误判成
+				# 缓存库损坏（Issue #1509）。INSERT OR IGNORE + UPDATE 的每条语句
+				# 本身是原子的：抢到插入的一方记新增，另一方只刷新 payload / 时间。
+				cursor = self._conn.execute(
+					"INSERT OR IGNORE INTO watch_hits (search_name, job_key, payload, first_seen_at, last_seen_at) "
+					"VALUES (?, ?, ?, ?, ?)",
+					(search_name, job_key, payload, now, now),
 				)
-		self._conn.commit()
+				if cursor.rowcount:
+					new_items.append(item)
+				else:
+					seen_count += 1
+					self._conn.execute(
+						"UPDATE watch_hits SET payload = ?, last_seen_at = ? WHERE search_name = ? AND job_key = ?",
+						(payload, now, search_name, job_key),
+					)
 		return {
 			"new_count": len(new_items),
 			"seen_count": seen_count,
