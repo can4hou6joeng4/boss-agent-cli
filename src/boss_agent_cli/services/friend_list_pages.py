@@ -90,7 +90,10 @@ def collect_friend_list_page(
 		page_items = friend_list_page_items(platform_data)
 		if not page_items:
 			if platform_data.get("hasMore") is not False and friend_list_page_has_content(platform_data):
-				# 整页元素被跳过：不是空页，继续翻页（Issue #1878）。
+				# 整页元素被跳过：不是空页，继续翻页（Issue #1878）。翻满上限时
+				# 同样是截断，否则坏元素页会让调用方把前缀当完整结果（Issue #2006）。
+				if pages_scanned >= max_pages:
+					truncated = True
 				page += 1
 				continue
 			break
