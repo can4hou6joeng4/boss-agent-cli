@@ -65,6 +65,24 @@ class CrawlBusyError(RuntimeError):
 		self.run_id = run_id
 
 
+def validate_pages_override(next_page: int, pages: int) -> None:
+	"""resume 的 ``--pages`` 不能缩到断点进度之前（Issue #2061）。
+
+	``pages`` 是采集范围的严格上限，断点的 ``next_page`` 最多是 ``pages + 1``
+	（与 cache 记录校验同一口径，Issue #2030）。把上限缩到断点进度之前会让
+	``params.pages`` 与 ``next_page`` 自相矛盾：先落盘、再被 ``_run`` 重读断点
+	时判成记录损坏，之后 ``status`` / ``results`` / ``resume`` 全部拒绝访问，
+	已采数据只能用 SQLite 手工取回。写盘之前按参数问题拒绝；不能静默 clamp
+	——缩小采集范围是调用方的显式意图，改写语义会误导。
+	"""
+	if next_page <= pages + 1:
+		return
+	raise ValueError(
+		f"--pages {pages} 小于断点进度：任务已推进到第 {next_page} 页，"
+		f"页数上限不能小于 {next_page - 1}；要按更小页数采集请用 crawl start 新建任务"
+	)
+
+
 @dataclass(frozen=True)
 class CrawlSettings:
 	query: str
@@ -602,6 +620,8 @@ class CrawlService:
 				# 导出失败会抛 CrawlExportError，不再返回假成功。
 				write_run_outputs(output_dir, [item["payload"] for item in self._cache.list_crawl_jobs(run_id)])
 			return self._completed_outcome(run)
+		if pages is not None:
+			validate_pages_override(int(run["next_page"]), settings.pages)
 		# Hook 目录是本地状态：resume 没有 --hook-dir 参数可以修复，必须在
 		# 打开浏览器之前用与 crawl run/start 相同的清单 / 摘要校验拒绝坏目录
 		# （Issue #1408）。已完成的 run 在上面直接返回，不因目录后来被删而失败。
