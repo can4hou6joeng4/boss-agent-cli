@@ -41,6 +41,11 @@ class FavoritesResponseInvalid(ValueError):
 	"""
 
 
+def _text(value: Any) -> str:
+	"""文本字段恒为 str：非字符串（含 null / 数字 / dict）归空串（Issue #1807）。"""
+	return value if isinstance(value, str) else ""
+
+
 def _normalize_job_status(card: dict[str, Any]) -> str:
 	"""将 BOSS jobValidStatus 归一化为稳定的 Agent 输出值。"""
 	raw_status = card.get("jobValidStatus")
@@ -63,24 +68,29 @@ def _count_job_statuses(cards: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def _card_to_shortlist_item(card: dict[str, Any]) -> dict[str, Any]:
-	"""geekGetJob card → shortlist record。
+	"""geekGetJob card → shortlist record；ID 不是字符串时归空串，由入库层按缺主键跳过。
 
 	字段名以 mitmproxy 实测为准（securityId/encryptJobId/jobName/brandName/cityName/jobSalary）。
 	NOT NULL 字段（title/company/city/salary）兜底空串，防脏 card 触发 IntegrityError。
 	"""
 	labels = card.get("jobLabels")
 	lid = card.get("lid")
+	security_id = card.get("securityId")
+	job_id = card.get("encryptJobId")
+	# 类型漂移的 ID 不能 str() 成 Python repr 落库（"True" / "5" /
+	# "{'a': 1}"），那会进候选池再喂给 apply / greet（Issue #1807）。
+	tags = labels if isinstance(labels, list) else []
 	return {
-		"security_id": str(card.get("securityId") or ""),
-		"job_id": str(card.get("encryptJobId") or ""),
+		"security_id": _text(security_id),
+		"job_id": _text(job_id),
 		"lid": lid if isinstance(lid, str) else "",
-		"title": str(card.get("jobName", "") or ""),
-		"company": str(card.get("brandName", "") or ""),
-		"city": str(card.get("cityName", "") or ""),
-		"salary": str(card.get("jobSalary", "") or ""),
+		"title": _text(card.get("jobName")),
+		"company": _text(card.get("brandName")),
+		"city": _text(card.get("cityName")),
+		"salary": _text(card.get("jobSalary")),
 		"job_status": _normalize_job_status(card),
 		"source": "favorites",
-		"tags": list(labels) if isinstance(labels, list) else [],
+		"tags": [tag for tag in tags if isinstance(tag, str) and tag],
 		"note": "",
 	}
 
