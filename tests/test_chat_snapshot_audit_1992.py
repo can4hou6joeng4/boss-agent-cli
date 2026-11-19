@@ -87,8 +87,10 @@ def test_page_with_only_bad_elements_is_not_a_complete_empty_page(
 
 @patch("boss_agent_cli.commands.chat.get_platform_instance")
 @patch("boss_agent_cli.commands.chat.AuthManager")
-def test_mixed_bad_and_good_elements_still_complete(mock_auth_cls, mock_platform_cls, tmp_path: Path) -> None:
-	"""容器里有可用元素时仍是完整采集（#1992 护栏）。"""
+def test_mixed_bad_and_good_elements_preserve_contacts_without_inferring_removal(
+	mock_auth_cls, mock_platform_cls, tmp_path: Path
+) -> None:
+	"""记录可用的联系人，过滤掉的条目使这次采集不完整（#2179）。"""
 	_seed_previous_snapshot(tmp_path)
 	platform = _ctx_mock(mock_platform_cls)
 	platform.friend_list.return_value = {
@@ -102,9 +104,11 @@ def test_mixed_bad_and_good_elements_still_complete(mock_auth_cls, mock_platform
 
 	assert result.exit_code == 0, result.output
 	payload = json.loads(result.stdout)
-	assert [item["uid"] for item in payload["data"]["diff"]["removed"]] == ["u_prev"]
+	assert payload["data"]["count"] == 1
+	assert payload["data"]["diff"]["complete"] is False
+	assert payload["data"]["diff"]["removed"] == []
 	today = _snapshot_path(tmp_path / "chat-history", 0)
-	assert json.loads(_meta_path(today).read_text(encoding="utf-8")) == {"complete": True}
+	assert json.loads(_meta_path(today).read_text(encoding="utf-8")) == {"complete": False}
 
 
 # ── #1993：元素全非对象的基线快照按不可用处理 ────────────────────────
