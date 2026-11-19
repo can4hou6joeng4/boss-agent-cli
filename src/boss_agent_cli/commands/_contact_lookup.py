@@ -17,7 +17,10 @@ def current_friend_security_id_or_emit(
 	"""
 	from boss_agent_cli.display import boss_command_for_ctx, handle_error_output
 
-	security_id = str(friend_item.get("securityId") or friend_item.get("security_id") or "").strip()
+	# 只认字符串：类型漂移成对象 / 布尔时 str() 会把 Python repr 当令牌发给
+	# 写请求（Issue #1812）。
+	raw_security_id = friend_item.get("securityId") or friend_item.get("security_id")
+	security_id = raw_security_id.strip() if isinstance(raw_security_id, str) else ""
 	if security_id:
 		return security_id
 	# 与本文件 current_friend_uid_or_emit 同一口径：这是本次列表数据的确定性
@@ -49,7 +52,12 @@ def current_friend_uid_or_emit(
 	"""
 	from boss_agent_cli.display import boss_command_for_ctx, handle_error_output
 
-	uid = str(friend_item.get("uid") or "").strip()
+	# uid 实测是整数或数字串；布尔与容器不是联系人身份，不能 str() 成
+	# "True" / "{'a': 1}" 发给平台（Issue #1812）。
+	raw_uid = friend_item.get("uid")
+	if isinstance(raw_uid, bool) or not isinstance(raw_uid, (str, int)):
+		raw_uid = ""
+	uid = str(raw_uid or "").strip()
 	if uid:
 		return uid
 	chat_cmd = boss_command_for_ctx(ctx, "chat", include_data_dir=True)

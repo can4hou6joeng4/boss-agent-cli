@@ -7,6 +7,10 @@
 ## [3.4.121] - 2026-11-19
 
 ### Fixed
+- `exchange` 对类型漂移的联系人字段安全处理：`name` 只认非空字符串，`uid` / `securityId` 不再被转成 Python repr 发给平台，后继 `chatmsg` 命令对 `-` 开头的 uid 前置 `--`（Issue #1812）。
+- `show` 对索引缓存里非字符串的 `security_id` 报参数无效且不发请求，`lid` 与平台 `jobCard.lid` 只认字符串，不再误报「数据库无法打开」（Issue #1813）。
+
+### Fixed
 - `resume` 全族后继命令对以 `-` 开头的名字与 ID 前置 `--`，带选项的提示把选项挪到 `--` 之前，照抄执行不再报「没有选项」（Issue #1803）。
 - `resume edit --field` 拒绝系统托管的 `name` / `created_at` / `updated_at`：不再报成功却值不生效，或把任意字符串写进 `created_at`（Issue #1806）。
 - `favorites sync` 把类型漂移的 `securityId` / `encryptJobId` 视为缺主键计入跳过，文本字段与标签归一为字符串，不再把 Python repr 写进候选池（Issue #1807）。

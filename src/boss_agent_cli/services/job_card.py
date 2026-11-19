@@ -23,7 +23,7 @@ def build_job_from_card(card: dict[str, Any], *, security_id: str, greeted: bool
 		"boss_title": field_text(card, "bossTitle"),
 		"boss_active": field_text(card, "activeTimeDesc", "离线"),
 		"security_id": security_id,
-		"lid": lid or card.get("lid") or "",
+		"lid": lid or (card.get("lid") if isinstance(card.get("lid"), str) else ""),
 		"raw_job_type": raw_job_type,
 		"employment_type": employment_type_from_raw(raw_job_type),
 		"days_per_week": field_text(card, "daysPerWeekDesc"),
