@@ -397,7 +397,7 @@ SCHEMA_DATA = {
 			"description": "查看最近浏览过的职位",
 			"args": [],
 			"options": {
-				"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
+				"--page": {"type": "int", "default": 1, "minimum": 1, "maximum": 1000000, "description": "页码"},
 			},
 		},
 		"chat": {

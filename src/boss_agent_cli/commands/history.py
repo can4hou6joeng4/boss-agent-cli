@@ -6,6 +6,7 @@ from boss_agent_cli.api.models import dict_items, JobItem, field_list
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_job_table
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE
 
 
 _HISTORY_ID_KEYS = ("encryptJobId", "securityId", "lid")
@@ -53,7 +54,10 @@ def _hint_command(ctx: click.Context, command: str) -> str:
 
 
 @click.command("history")
-@click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
+@click.option(
+	"--page", default=1, type=click.IntRange(min=1, max=MAX_TRUSTED_PAGE),
+	help="页码",
+)
 @click.pass_context
 @handle_auth_errors("history")
 def history_cmd(ctx: click.Context, page: int) -> None:

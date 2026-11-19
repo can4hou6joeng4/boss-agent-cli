@@ -304,7 +304,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 			input_schema={
 				"type": "object",
 				"properties": {
-					"page": {"type": "integer", "minimum": 1, "description": "页码", "default": 1},
+					"page": {"type": "integer", "minimum": 1, "maximum": 1000000, "description": "页码", "default": 1},
 				},
 				"required": [],
 			},
