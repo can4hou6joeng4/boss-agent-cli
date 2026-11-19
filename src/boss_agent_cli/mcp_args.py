@@ -61,6 +61,10 @@ _EXPLICIT_EMPTY_KEYS: frozenset[tuple[str, str]] = frozenset(
 		("search", "welfare"),
 		("search", "active"),
 		("search", "job_type"),
+		# 三个 AI 命令对显式空简历名有 INVALID_PARAM 诊断（Issue #1951）：
+		# 映射层丢弃空串会让调用方以为指定的简历生效，实际按「未指定」生成
+		# （Issue #2176）。
+		("ai_reply", "resume"),
 		("ai_resume_optimize", "jd_text"),
 		("ai_resume_optimize", "job_id"),
 		("ai_cover_letter", "jd_text"),
@@ -251,6 +255,10 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return _literal_positionals(args, start=2)
 
 	if name == "crawl_shortlist":
+		# schema 的 not 禁止 selectors 与 all 同时出现；入口不拦时映射只下发
+		# --selector，违反互斥约束的请求会被当成有效导入（Issue #2175）。
+		if "selectors" in arguments and "all" in arguments:
+			raise ValueError("boss_crawl_shortlist 的 selectors 与 all 必须且只能选一个；请去掉其中一个")
 		args = ["crawl", "shortlist", str(arguments["run_id"])]
 		for selector in arguments.get("selectors") or []:
 			args.extend(["--selector", str(selector)])
@@ -439,16 +447,25 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		# 需要默认行为的工具（boss_hr_jobs / boss_wizard）在 schema 里声明
 		# 非 required + default，映射层才允许补默认值。
 		action = arguments["action"]
-		# 只有 list/get/set/reset 有矩阵；未识别的 action 原样交给 CLI 的
-		# "No such command" 拒绝，不在映射层猜测（Issue #1493）。
-		allowed_config = _CONFIG_ACTION_KEYS.get(action) if isinstance(action, str) else None
-		if allowed_config is not None:
-			_reject_incompatible_action_args("boss_config", action, arguments, allowed_config, _CONFIG_KEY_USAGE)
+		# schema enum 之外的值（`--` / `--help` / 拼错的 action）不能原样拼进
+		# argv：CLI 会把 `--` 当成默认 list、把 `--help` 当帮助选项，请求以
+		# ok:true 或 CLI_ERROR 收场（Issue #2175）。与 boss_wizard 同口径在
+		# 映射层拒绝。
+		if not isinstance(action, str) or action not in _CONFIG_ACTION_KEYS:
+			allowed = " / ".join(_CONFIG_ACTION_KEYS)
+			raise ValueError(f"boss_config 的 action 应为 {allowed}，收到 {action!r}")
+		allowed_config = _CONFIG_ACTION_KEYS[action]
+		_reject_incompatible_action_args("boss_config", action, arguments, allowed_config, _CONFIG_KEY_USAGE)
 		args = [name, action]
 		if action in ("get", "set", "reset") and "key" in arguments:
 			args.append(arguments["key"])
-		if action == "set" and "value" in arguments:
-			args.append(arguments["value"])
+		if action == "set":
+			if "key" not in arguments:
+				# 缺 key 时 value 会被补进 KEY 位置，CLI 报的是「缺少 VALUE」，
+				# 恢复指引指向错误参数（Issue #2175）：按条件必填拒绝。
+				raise KeyError("key")
+			if "value" in arguments:
+				args.append(arguments["value"])
 		return _literal_positionals(args, start=2, count=len(args) - 2)
 
 	if name == "clean":
@@ -480,13 +497,15 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "ai_reply":
 		args = ["ai", "reply", arguments["recruiter_message"]]
 		_optional(args, "--context", "context", arguments)
-		_optional(args, "--resume", "resume", arguments)
+		_optional(args, "--resume", "resume", arguments, command=name)
 		_optional(args, "--tone", "tone", arguments)
 		return _literal_positionals(args, start=2)
 
 	if name == "ai_interview_prep":
 		args = ["ai", "interview-prep", arguments["jd_text"]]
-		if arguments.get("resume"):
+		# 显式空串要原样下发：CLI 对空简历名有 INVALID_PARAM 诊断（Issue #1951），
+		# truthiness 会把调用方的错误参数静默改成「未指定」（Issue #2176）。
+		if arguments.get("resume") is not None:
 			args.extend(["--resume", arguments["resume"]])
 		if "count" in arguments:
 			args.extend(["--count", str(arguments["count"])])
@@ -494,7 +513,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "ai_chat_coach":
 		args = ["ai", "chat-coach", arguments["chat_text"]]
-		if arguments.get("resume"):
+		if arguments.get("resume") is not None:
 			args.extend(["--resume", arguments["resume"]])
 		# 显式空串与缺省不是同一语义：CLI 会把 style 原样替换进 prompt，
 		# 空串要原样下发（Issue #1862，与 agent_stop.reason 同口径）。
@@ -757,10 +776,13 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "hr_jobs":
 		action = arguments.get("action", "list")
-		# 缺省 action 与 schema 默认的 list 一致；未识别的 action 交给 CLI 拒绝。
-		allowed_jobs = _HR_JOBS_ACTION_KEYS.get(action) if isinstance(action, str) else None
-		if allowed_jobs is not None:
-			_reject_incompatible_action_args("boss_hr_jobs", action, arguments, allowed_jobs, _HR_JOBS_KEY_USAGE)
+		# 缺省 action 与 schema 默认的 list 一致；enum 之外的值（`--help` 等）
+		# 原样下发会进入 Click 帮助 / 未知子命令分支（Issue #2175）。
+		if not isinstance(action, str) or action not in _HR_JOBS_ACTION_KEYS:
+			allowed = " / ".join(_HR_JOBS_ACTION_KEYS)
+			raise ValueError(f"boss_hr_jobs 的 action 应为 {allowed}，收到 {action!r}")
+		allowed_jobs = _HR_JOBS_ACTION_KEYS[action]
+		_reject_incompatible_action_args("boss_hr_jobs", action, arguments, allowed_jobs, _HR_JOBS_KEY_USAGE)
 		args = ["hr", "jobs", action]
 		if action in {"online", "offline"}:
 			args.append(str(arguments["job_id"]))

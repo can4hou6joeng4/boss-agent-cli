@@ -224,6 +224,7 @@ _READ_ONLY_TOOL_NAMES = frozenset({
 	"boss_agent_stats",
 	"boss_agent_pending",
 	"boss_agent_review",
+	"boss_config",
 	"boss_hr_whoami",
 	"boss_hr_applications",
 	"boss_hr_candidates",
@@ -241,6 +242,8 @@ _READ_ONLY_TOOL_NAMES = frozenset({
 #: 告诉 Agent「可直接重试」，就会在状态未知时重发一次状态变更（Issue #869）。
 _TOOL_WRITE_MODES: dict[str, frozenset[str]] = {
 	"boss_hr_jobs": frozenset({"online", "offline"}),
+	# config 的 list / get 只读本地配置；set / reset 才写本地文件，按写处理。
+	"boss_config": frozenset({"set", "reset"}),
 }
 
 #: schema 里带 action 维度的工具。只读白名单中的这类工具读写取决于参数，必须在
@@ -279,6 +282,12 @@ _READ_UNPARSEABLE_RECOVERY = (
 
 
 def _tool_may_write(tool_name: str, arguments: dict[str, Any] | None = None) -> bool:
+	arguments = arguments or {}
+	# --dry-run 的契约是只预览、不产生平台写入（batch-greet / clean / agent run /
+	# hr greet / hr location / hr accept-resume）。按工具名整体归为写会让超时 /
+	# 取消返回 outcome_unknown 并要求核对并不存在的平台写入（Issue #2177）。
+	if arguments.get("dry_run") is True:
+		return False
 	if tool_name not in _READ_ONLY_TOOL_NAMES:
 		return True
 	write_modes = _TOOL_WRITE_MODES.get(tool_name)
@@ -287,16 +296,29 @@ def _tool_may_write(tool_name: str, arguments: dict[str, Any] | None = None) -> 
 		# （与「未列出的工具按写」同一保守原则）。守卫测试保证现有工具不会走到这里。
 		return tool_name in _ACTION_DIMENSION_TOOL_NAMES
 	# 缺省 action 与 schema 默认值一致（list）：只有显式声明写模式才算写。
-	action = (arguments or {}).get("action", "list")
+	action = arguments.get("action", "list")
 	return isinstance(action, str) and action in write_modes
+
+
+def _option_region(args: tuple[str, ...]) -> tuple[str, ...]:
+	"""返回 ``--`` 之前的选项区；``--`` 之后一律是位置参数（Issue #2176）。
+
+	位置参数可以合法地以连字符开头（`_literal_positionals` 把它们放到 ``--``
+	之后）；把整段 argv 当选项扫描会把关键词误读成开关或选项取值。
+	"""
+	try:
+		return args[: args.index("--")]
+	except ValueError:
+		return args
 
 
 def _option_value(args: tuple[str, ...], flag: str) -> str | None:
 	"""取 ``--flag value`` / ``--flag=value`` 的取值；未出现时返回 None。"""
 	prefix = f"{flag}="
-	for index, arg in enumerate(args):
+	region = _option_region(args)
+	for index, arg in enumerate(region):
 		if arg == flag:
-			return args[index + 1] if index + 1 < len(args) else None
+			return region[index + 1] if index + 1 < len(region) else None
 		if arg.startswith(prefix):
 			return arg[len(prefix):]
 	return None
@@ -320,7 +342,9 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 	"""
 	command = args[0]
 	if command == "batch-greet":
-		if "--dry-run" in args:
+		# 只看 ``--`` 之前的选项：关键词恰好是 "--dry-run" 时不能把预算当成预览
+		# （Issue #2176）。
+		if "--dry-run" in _option_region(args):
 			# 只做一次搜索，没有写请求。
 			return 1
 		count = _int_option(args, "--count", _BATCH_GREET_DEFAULT_COUNT)
@@ -368,7 +392,7 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 			# 与 summary-limit 分支同口径：整数分页并封顶（Issue #1612）。
 			batches = -(-limit // _HR_BATCH_SIZE)
 			# 无 --friend-id 时命令先取一页沟通列表再分批拉消息（Issue #2025）。
-			base = 0 if "--friend-id" in args else 1
+			base = 0 if "--friend-id" in _option_region(args) else 1
 			return min(base + batches, _MAX_ESTIMATED_REQUESTS)
 		return None
 	if command == "watch" and len(args) > 1 and args[1] == "run":
@@ -397,9 +421,10 @@ def _cli_timeout(args: tuple[str, ...]) -> float:
 	#       按 900s 封顶；普通 search 只有 1 次列表请求 → 95s，仍取默认 120s。
 	# A wizard deadline belongs to the child. The host allows bounded extra
 	# time for that child to commit its result/checkpoint and emit the envelope.
-	if args and args[0] == "wizard" and "--timeout" in args:
+	if args and args[0] == "wizard" and "--timeout" in _option_region(args):
+		region = _option_region(args)
 		try:
-			requested = float(args[args.index("--timeout") + 1])
+			requested = float(region[region.index("--timeout") + 1])
 		except (IndexError, ValueError):
 			return _CLI_TIMEOUT_SECONDS
 		if math.isfinite(requested) and requested > 0:
@@ -769,6 +794,43 @@ def _matches_json_type(value: Any, expected: str) -> bool:
 	return isinstance(value, _JSON_TYPE_CHECKS[expected]) and (expected == "boolean" or not isinstance(value, bool))
 
 
+def _is_integral_float(value: Any) -> bool:
+	"""JSON Schema 的 ``integer`` 包含小数部分为零的浮点数（如 1.0）。
+
+	``float('inf')`` / ``float('nan')`` 的 ``is_integer()`` 为 False，不会进入
+	归一化；``bool`` 已被 ``isinstance(value, float)`` 排除。
+	"""
+	return isinstance(value, float) and value.is_integer()
+
+
+def _normalize_integral_numbers(tool_name: str, arguments: dict[str, Any]) -> None:
+	"""把参数里小数部分为零的浮点整数就地归一成 ``int``（Issue #2175）。
+
+	JSON 数字 ``1.0`` 按 schema 语义是合法 ``integer``，Python 解码成 ``float``
+	后会被类型检查拒绝；即使放行，``str(1.0)`` 拼进 argv 也会变成选项值
+	``"1.0"``。这里在类型检查与映射之前统一归一，两处共用同一份数据。
+	"""
+	tool = next((item for item in TOOLS if item.name == tool_name), None)
+	if tool is None:
+		return
+	properties = tool.input_schema.get("properties", {})
+	for key, value in list(arguments.items()):
+		prop = properties.get(key)
+		if not isinstance(prop, dict):
+			continue
+		if prop.get("type") == "integer" and _is_integral_float(value):
+			arguments[key] = int(value)
+			continue
+		items = prop.get("items")
+		if (
+			prop.get("type") == "array"
+			and isinstance(items, dict)
+			and items.get("type") == "integer"
+			and isinstance(value, list)
+		):
+			arguments[key] = [int(item) if _is_integral_float(item) else item for item in value]
+
+
 def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	"""按 inputSchema 校验参数类型，返回人类可读的错误列表。
 
@@ -871,6 +933,7 @@ async def call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
 	# 在类型检查与映射之前剔除；必填参数传 null 因此走缺参分支，而不是把
 	# ``str(None)`` 拼成 "None" 发给 CLI（Issue #1108）。
 	arguments = {key: value for key, value in arguments.items() if value is not None}
+	_normalize_integral_numbers(params.name, arguments)
 	try:
 		type_errors = _argument_type_errors(params.name, arguments)
 	except (ArithmeticError, TypeError, ValueError) as exc:
