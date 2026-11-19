@@ -236,8 +236,12 @@ class CrawlSettings:
 			value = raw.get(key)
 			if value is None:
 				value = limits.get(key, default)
-			if isinstance(value, bool):
-				raise CacheRecordInvalid("crawl_run", run_id, f"params.limits.{key}", "期望整数，实际是 bool")
+			# bool 是 int 子类；float 会静默截断（2.9 → 2）。两者都按记录损坏
+			# 处理，与 crawl_cdp_port / crawl_int_setting 同口径（Issue #1938）。
+			if isinstance(value, bool) or not isinstance(value, (int, str)):
+				raise CacheRecordInvalid(
+					"crawl_run", run_id, f"params.limits.{key}", f"期望整数，实际是 {type(value).__name__}"
+				)
 			try:
 				parsed = int(value)
 			except (TypeError, ValueError, OverflowError) as exc:
@@ -283,6 +287,10 @@ def crawl_int_setting(cfg: Mapping[str, Any], key: str, default: int, *, minimum
 	value = cfg.get(key)
 	if value is None:
 		return default
+	# bool 是 int 子类（true 会静默变成 1 秒预算）；float 会被 int() 静默截断。
+	# 只接受整数与数字字符串，与 crawl_cdp_port 同口径（Issue #1938）。
+	if isinstance(value, bool) or not isinstance(value, (int, str)):
+		raise ValueError(f"crawl 配置项 {key} 必须是整数")
 	try:
 		parsed = int(value)
 	# OverflowError：``1e400`` 解析成 inf，用户可修复，不能落成 INTERNAL_ERROR。

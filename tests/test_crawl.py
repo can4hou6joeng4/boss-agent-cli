@@ -258,10 +258,11 @@ def test_hook_requires_manifest_and_rejects_modified_file(tmp_path):
 	(root / "SHA256SUMS").unlink()
 	try:
 		inject_hook_profile(object(), "screenshot-full", root)
-	except ValueError as exc:
+	except HookRegistrationError as exc:
+		# 清单问题与脚本问题同契约，不再出现裸 ValueError（Issue #1937）。
 		assert "SHA256SUMS" in str(exc)
 	else:
-		raise AssertionError("expected ValueError")
+		raise AssertionError("expected HookRegistrationError")
 
 
 def test_joblist_listener_target_matches_reference_endpoint():
