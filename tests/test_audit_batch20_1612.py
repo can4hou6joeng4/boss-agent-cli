@@ -72,8 +72,10 @@ def test_huge_hr_numbers_have_bounded_timeout(args: tuple[str, ...]) -> None:
 
 
 def test_normal_hr_timeout_unchanged() -> None:
-	assert _estimated_requests(("hr", "last-messages", "--limit", "50")) == 1
+	# 无 --friend-id 时先取一页沟通列表再拉消息：1 次列表 + 1 批（Issue #2025）。
+	assert _estimated_requests(("hr", "last-messages", "--limit", "50")) == 2
 	assert _cli_timeout(("hr", "chat", "--summary-limit", "50")) == 160.0
+	assert _cli_timeout(("hr", "last-messages", "--limit", "50")) == 160.0
 
 
 # ── #1614：数组元素的数值边界 ──────────────────────────────────────

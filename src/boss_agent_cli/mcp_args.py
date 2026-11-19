@@ -49,6 +49,18 @@ _EXPLICIT_EMPTY_KEYS: frozenset[tuple[str, str]] = frozenset(
 		# 映射层吞掉后调用方会静默按其余参数成功（Issue #1941）。
 		("search", "url"),
 		("search", "preset"),
+		# 与 preset 同用时，空串表示「关闭该项筛选」并覆盖 preset 保存的值；
+		# 映射层吞掉后 CLI 会回填 preset 的城市 / 薪资等（Issue #2023）。
+		("search", "city"),
+		("search", "salary"),
+		("search", "experience"),
+		("search", "education"),
+		("search", "industry"),
+		("search", "scale"),
+		("search", "stage"),
+		("search", "welfare"),
+		("search", "active"),
+		("search", "job_type"),
 		("ai_resume_optimize", "jd_text"),
 		("ai_resume_optimize", "job_id"),
 		("ai_cover_letter", "jd_text"),
@@ -217,8 +229,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		_optional(args, "--url", "url", arguments, command=name)
 		_optional(args, "--preset", "preset", arguments, command=name)
 		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage", "welfare", "active"):
-			_optional(args, f"--{opt}", opt, arguments)
-		_optional(args, "--job-type", "job_type", arguments)
+			_optional(args, f"--{opt}", opt, arguments, command=name)
+		_optional(args, "--job-type", "job_type", arguments, command=name)
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
 		if arguments.get("no_cache"):

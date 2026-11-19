@@ -492,7 +492,8 @@ def test_enum_empty_string_reaches_cli_verbatim(
 	("tool_name", "arguments", "absent_flags"),
 	[
 		("boss_search", {"query": "python", "sort": None}, ["--sort"]),
-		("boss_search", {"query": "python", "city": ""}, ["--city"]),
+		# search 的自由文本筛选空串是「关闭该项筛选」的显式信号，不再省略
+		# （Issue #2023，见 tests/test_mcp_estimate_audit_2023.py）。
 		("boss_chat", {"format": None, "output_file": None}, ["--export", "--output"]),
 		("boss_me", {"section": None}, ["--section"]),
 		("boss_stats", {"format": None}, ["--format"]),
@@ -503,7 +504,6 @@ def test_enum_empty_string_reaches_cli_verbatim(
 	],
 	ids=[
 		"search-null-sort",
-		"search-empty-city",
 		"chat-null",
 		"me-null",
 		"stats-null",
