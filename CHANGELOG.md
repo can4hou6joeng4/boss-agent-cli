@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Fixed
+- 缓存文本列（候选池、crawl 任务与结果、workflow 任务与步骤、简历投递）在读取边界只接受文本：BLOB 按 UTF-8 还原、还原失败或其它类型按 `CACHE_RECORD_INVALID` 上报，不再让整个信封退化成固定 `INTERNAL_ERROR` 且 `exit 0` / `ok=false`（Issue #1885）。
+- 约束冲突 / 非法绑定值不再被当成缓存库损坏：新增 `CacheWriteRejected`，CLI 按 `INVALID_PARAM` 上报并说明库本身完好、无需删除；迁移期的冲突仍按 `CACHE_DATABASE_INVALID` 处理（Issue #1886）。
+- greet / apply 迁移不再丢弃 `job_id` 为空的旧去重记录，升级后仍可按 `security_id` 命中，不再重复打招呼 / 投递（Issue #1887）。
 - `--salary` 搜索遇到超长数字串的 `salaryDesc`（>4300 位）按「无法解析」处理，不再让整条搜索崩成 `INTERNAL_ERROR`（Issue #1889）。
 - 职位描述缓存只接受字符串 `encryptJobId` / 描述：类型漂移按未命中处理，`--welfare` 管线不再因 sqlite 绑定 dict 抛 `ProgrammingError`（Issue #1890）。
 - `write_json_atomic` / `strict_json_text` 把深嵌套与超长整数引发的 `RecursionError` / `ValueError` 归成本地 IO 错误，CLI 输出 `LOCAL_IO_ERROR` 信封而不是空 stdout 加 traceback（Issue #1891）。

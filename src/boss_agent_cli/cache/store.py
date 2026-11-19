@@ -81,7 +81,22 @@ _RECORD_LABELS = {
 	"crawl_job": "crawl 结果",
 	"workflow_run": "workflow 任务",
 	"workflow_step": "workflow 步骤",
+	"shortlist": "候选池记录",
+	"resume_link": "简历投递记录",
 }
+
+
+class CacheWriteRejected(ValueError):
+	"""SQLite 拒绝写入（约束冲突、绑定值非法），库本身完好（Issue #1886）。
+
+	唯一 / 非空约束冲突是输入或调用方问题，不是库损坏：不能落成
+	``CacheDatabaseInvalid``，否则 CLI 会引导用户备份并删除整个缓存库，
+	候选池、预设、watch 历史与任务断点全部作废。
+	"""
+
+	def __init__(self, db_path: Path, detail: str) -> None:
+		super().__init__(f"本地缓存库 {db_path} 拒绝了本次写入（{detail}）")
+		self.path = db_path
 
 
 class CacheRecordInvalid(ValueError):
@@ -118,6 +133,29 @@ def _decode_optional_record(
 	kind: str, record_id: str, column: str, raw: Any, *, expected: type | None = None
 ) -> Any:
 	return None if not raw else _decode_record(kind, record_id, column, raw, expected=expected)
+
+
+def _decode_text_column(
+	kind: str, record_id: str, column: str, raw: Any, *, allow_none: bool = False
+) -> str | None:
+	"""TEXT 列的类型漂移在读取边界拦下（Issue #1885）。
+
+	SQLite 的 TEXT 亲和性不强制类型：值被写成 BLOB 时读取返回 ``bytes``，
+	进入信封后 ``_dumps_envelope`` 只能回退成不含结果、也不含修复指引的固定
+	INTERNAL_ERROR，且成功路径照常 exit 0（``ok=false`` 但退出码 0）。
+	BLOB 先按 UTF-8 还原（与 #1799 的 tags 同口径），还原失败或其它类型
+	按记录损坏上报。
+	"""
+	if raw is None and allow_none:
+		return None
+	if isinstance(raw, str):
+		return raw
+	if isinstance(raw, (bytes, bytearray)):
+		try:
+			return bytes(raw).decode("utf-8")
+		except UnicodeDecodeError as exc:
+			raise CacheRecordInvalid(kind, record_id, column, f"不是有效的 UTF-8 文本（{exc}）") from exc
+	raise CacheRecordInvalid(kind, record_id, column, f"期望文本，实际是 {type(raw).__name__}")
 
 
 def _decode_int_column(kind: str, record_id: str, column: str, raw: Any) -> int:
@@ -391,6 +429,9 @@ class _GuardedConnection(sqlite3.Connection):
 	"""
 
 	db_path: Path
+	# 迁移事务进行中：此时的约束冲突说明旧数据自身不兼容（如重复 selector
+	# 建唯一索引失败），按库不可用处理，而不是调用方参数错误（Issue #1886）。
+	migrating: bool = False
 
 	def __init__(self, database: str, *args: Any, **kwargs: Any) -> None:
 		super().__init__(database, *args, **kwargs)
@@ -399,6 +440,12 @@ class _GuardedConnection(sqlite3.Connection):
 	def _translate(self, exc: sqlite3.DatabaseError) -> Exception | None:
 		if isinstance(exc, sqlite3.ProgrammingError):
 			return None
+		if isinstance(exc, (sqlite3.IntegrityError, sqlite3.InterfaceError, sqlite3.DataError)):
+			if getattr(self, "migrating", False):
+				return CacheDatabaseInvalid(self.db_path, str(exc))
+			# 约束冲突 / 绑定值非法是输入或调用方问题，库本身健康：
+			# 落成 CacheDatabaseInvalid 会让 CLI 引导用户删掉整个缓存库（Issue #1886）。
+			return CacheWriteRejected(self.db_path, str(exc))
 		if is_cache_busy_error(exc):
 			return CacheBusyError(self.db_path, str(exc))
 		if is_cache_local_io_error(exc):
@@ -683,13 +730,18 @@ class CacheStore:
 		串行化；等锁超时仍按 ``CacheBusyError`` 上报，真实失败（列类型不符、
 		唯一索引冲突）原样上抛，不能吞成「无需迁移」。
 		"""
-		self._conn.execute("BEGIN IMMEDIATE")
+		conn = self._conn
+		conn.migrating = True
 		try:
-			yield
-		except BaseException:
-			self._conn.rollback()
-			raise
-		self._conn.commit()
+			self._conn.execute("BEGIN IMMEDIATE")
+			try:
+				yield
+			except BaseException:
+				self._conn.rollback()
+				raise
+			self._conn.commit()
+		finally:
+			conn.migrating = False
 
 	def _migrate_dedupe_keys(self) -> None:
 		"""把 greet/apply 记录的键换成「账号指纹 + 稳定 job_id」。
@@ -735,7 +787,7 @@ class CacheStore:
 				self._conn.execute(f"""
 					INSERT OR REPLACE INTO {table}_new (job_id, account, security_id, {time_column})
 						SELECT job_id, {account_select}, security_id, {time_column}
-						FROM {table} WHERE job_id != ''
+						FROM {table} WHERE job_id IS NOT NULL
 				""")
 				self._conn.execute(f"DROP TABLE {table}")
 				self._conn.execute(f"ALTER TABLE {table}_new RENAME TO {table}")
@@ -865,14 +917,15 @@ class CacheStore:
 		record = {
 			"run_id": row[0],
 			"params": _decode_record("crawl_run", run_id, "params", row[1], expected=dict),
-			"status": row[2],
+			"status": _decode_text_column("crawl_run", run_id, "status", row[2]),
 			"stop_requested": _decode_bool_column("crawl_run", run_id, "stop_requested", row[3]),
 			"requests_attempted": _decode_int_column("crawl_run", run_id, "requests_attempted", row[4]),
 			"detail_requests_attempted": _decode_int_column("crawl_run", run_id, "detail_requests_attempted", row[5]),
 			"elapsed_seconds": _decode_int_column("crawl_run", run_id, "elapsed_seconds", row[6]),
 			"next_page": _decode_int_column("crawl_run", run_id, "next_page", row[7]),
 			"list_finished": _decode_bool_column("crawl_run", run_id, "list_finished", row[8]),
-			"output_dir": row[9], "error": row[10],
+			"output_dir": _decode_text_column("crawl_run", run_id, "output_dir", row[9]),
+			"error": _decode_text_column("crawl_run", run_id, "error", row[10], allow_none=True),
 			"hook_results": _decode_record("crawl_run", run_id, "hook_results", row[11], expected=list),
 			"created_at": row[12], "updated_at": row[13],
 		}
@@ -1020,7 +1073,8 @@ class CacheStore:
 		if row is None:
 			return None
 		return {
-			"selector": row[0], "page_no": _decode_int_column("crawl_job", job_key, "page_no", row[1]),
+			"selector": _decode_text_column("crawl_job", job_key, "selector", row[0]),
+			"page_no": _decode_int_column("crawl_job", job_key, "page_no", row[1]),
 			"payload": _decode_record("crawl_job", job_key, "payload", row[2], expected=dict),
 			"detail_done": _decode_bool_column("crawl_job", job_key, "detail_done", row[3]),
 		}
@@ -1030,15 +1084,18 @@ class CacheStore:
 			"SELECT job_key, selector, page_no, payload, detail_done FROM crawl_jobs WHERE run_id = ? ORDER BY page_no, rowid",
 			(run_id,),
 		).fetchall()
-		return [
-			{
-				"job_key": row[0], "selector": row[1],
-				"page_no": _decode_int_column("crawl_job", str(row[0]), "page_no", row[2]),
-				"payload": _decode_record("crawl_job", str(row[0]), "payload", row[3], expected=dict),
-				"detail_done": _decode_bool_column("crawl_job", str(row[0]), "detail_done", row[4]),
-			}
-			for row in rows
-		]
+		records: list[dict[str, Any]] = []
+		for row in rows:
+			job_key = _decode_text_column("crawl_job", str(row[0]), "job_key", row[0])
+			assert isinstance(job_key, str)
+			records.append({
+				"job_key": job_key,
+				"selector": _decode_text_column("crawl_job", job_key, "selector", row[1]),
+				"page_no": _decode_int_column("crawl_job", job_key, "page_no", row[2]),
+				"payload": _decode_record("crawl_job", job_key, "payload", row[3], expected=dict),
+				"detail_done": _decode_bool_column("crawl_job", job_key, "detail_done", row[4]),
+			})
+		return records
 
 	def get_crawl_budget(self, budget_key: str) -> float | None:
 		row = self._conn.execute("SELECT last_request_at FROM crawl_budget WHERE budget_key = ?", (budget_key,)).fetchone()
@@ -1124,13 +1181,13 @@ class CacheStore:
 		if row is None:
 			return None
 		return {
-			"run_id": row[0],
-			"role": row[1],
-			"platform": row[2],
-			"goal": row[3],
-			"mode": row[4],
-			"status": row[5],
-			"current_step": row[6],
+			"run_id": _decode_text_column("workflow_run", run_id, "run_id", row[0]),
+			"role": _decode_text_column("workflow_run", run_id, "role", row[1]),
+			"platform": _decode_text_column("workflow_run", run_id, "platform", row[2]),
+			"goal": _decode_text_column("workflow_run", run_id, "goal", row[3]),
+			"mode": _decode_text_column("workflow_run", run_id, "mode", row[4]),
+			"status": _decode_text_column("workflow_run", run_id, "status", row[5]),
+			"current_step": _decode_text_column("workflow_run", run_id, "current_step", row[6], allow_none=True),
 			"params": _validate_workflow_params(
 				run_id, _decode_record("workflow_run", run_id, "params", row[7], expected=dict)
 			),
@@ -1173,18 +1230,20 @@ class CacheStore:
 			"FROM workflow_steps WHERE run_id = ? ORDER BY ordinal",
 			(run_id,),
 		).fetchall()
-		return [
-			{
-				"step_name": row[0],
+		records: list[dict[str, Any]] = []
+		for row in rows:
+			record_id = f"{run_id}/{row[0]}"
+			step_name = _decode_text_column("workflow_step", record_id, "step_name", row[0])
+			records.append({
+				"step_name": step_name,
 				"ordinal": row[1],
-				"status": row[2],
-				"result": _decode_optional_record("workflow_step", f"{run_id}/{row[0]}", "result", row[3], expected=dict),
-				"error": _decode_optional_record("workflow_step", f"{run_id}/{row[0]}", "error", row[4], expected=dict),
+				"status": _decode_text_column("workflow_step", record_id, "status", row[2]),
+				"result": _decode_optional_record("workflow_step", record_id, "result", row[3], expected=dict),
+				"error": _decode_optional_record("workflow_step", record_id, "error", row[4], expected=dict),
 				"started_at": row[5],
 				"finished_at": row[6],
-			}
-			for row in rows
-		]
+			})
+		return records
 
 	def update_workflow_run(
 		self,
@@ -1913,18 +1972,24 @@ class CacheStore:
 		return [self._shortlist_row_to_dict(row) for row in rows]
 
 	def _shortlist_row_to_dict(self, row: Any) -> dict[str, Any]:
+		record_id = str(row[1] or row[0] or "")
+		security_id = _decode_text_column("shortlist", record_id, "security_id", row[0])
+		job_id = _decode_text_column("shortlist", record_id, "job_id", row[1])
+		source = _decode_text_column("shortlist", record_id, "source", row[6])
+		note = _decode_text_column("shortlist", record_id, "note", row[8], allow_none=True)
+		lid = _decode_text_column("shortlist", record_id, "lid", row[10], allow_none=True)
 		return {
-			"security_id": row[0],
-			"job_id": row[1],
-			"title": row[2],
-			"company": row[3],
-			"city": row[4],
-			"salary": row[5],
-			"source": row[6],
+			"security_id": security_id,
+			"job_id": job_id,
+			"title": _decode_text_column("shortlist", record_id, "title", row[2]),
+			"company": _decode_text_column("shortlist", record_id, "company", row[3]),
+			"city": _decode_text_column("shortlist", record_id, "city", row[4]),
+			"salary": _decode_text_column("shortlist", record_id, "salary", row[5]),
+			"source": source,
 			"tags": self._deserialize_shortlist_tags(row[7]),
-			"note": row[8] or "",
+			"note": note or "",
 			"created_at": row[9],
-			"lid": row[10] or self._crawl_shortlist_lid(str(row[0] or ""), str(row[1] or ""), str(row[6] or "")),
+			"lid": lid or self._crawl_shortlist_lid(security_id or "", job_id or "", source or ""),
 		}
 
 	def _crawl_shortlist_lid(self, security_id: str, job_id: str, source: str) -> str:
@@ -2038,6 +2103,20 @@ class CacheStore:
 		self._conn.commit()
 		return cursor.rowcount > 0
 
+	def _resume_link_row_to_dict(self, row: Any) -> dict[str, Any]:
+		record_id = f"{row[0]}/{row[1]}/{row[2]}"
+		return {
+			"resume_name": _decode_text_column("resume_link", record_id, "resume_name", row[0]),
+			"security_id": _decode_text_column("resume_link", record_id, "security_id", row[1]),
+			"job_id": _decode_text_column("resume_link", record_id, "job_id", row[2]),
+			"job_title": _decode_text_column("resume_link", record_id, "job_title", row[3]),
+			"company": _decode_text_column("resume_link", record_id, "company", row[4]),
+			"status": _decode_text_column("resume_link", record_id, "status", row[5]),
+			"notes": _decode_text_column("resume_link", record_id, "notes", row[6], allow_none=True),
+			"linked_at": row[7],
+			"updated_at": row[8],
+		}
+
 	def get_resume_applications(self, resume_name: str) -> list[dict[str, Any]]:
 		"""查看某份简历投递的所有职位"""
 		rows = self._conn.execute(
@@ -2045,20 +2124,7 @@ class CacheStore:
 			"FROM resume_job_links WHERE resume_name = ? ORDER BY updated_at DESC",
 			(resume_name,),
 		).fetchall()
-		return [
-			{
-				"resume_name": row[0],
-				"security_id": row[1],
-				"job_id": row[2],
-				"job_title": row[3],
-				"company": row[4],
-				"status": row[5],
-				"notes": row[6],
-				"linked_at": row[7],
-				"updated_at": row[8],
-			}
-			for row in rows
-		]
+		return [self._resume_link_row_to_dict(row) for row in rows]
 
 	def get_job_resumes(self, security_id: str, job_id: str) -> list[dict[str, Any]]:
 		"""查看某职位关联的所有简历版本"""
@@ -2067,20 +2133,7 @@ class CacheStore:
 			"FROM resume_job_links WHERE security_id = ? AND job_id = ? ORDER BY updated_at DESC",
 			(security_id, job_id),
 		).fetchall()
-		return [
-			{
-				"resume_name": row[0],
-				"security_id": row[1],
-				"job_id": row[2],
-				"job_title": row[3],
-				"company": row[4],
-				"status": row[5],
-				"notes": row[6],
-				"linked_at": row[7],
-				"updated_at": row[8],
-			}
-			for row in rows
-		]
+		return [self._resume_link_row_to_dict(row) for row in rows]
 
 	def remove_job_link(self, resume_name: str, security_id: str, job_id: str) -> bool:
 		"""移除简历职位关联"""

@@ -163,7 +163,8 @@ def test_legacy_tables_migrate_without_attributing_rows_to_an_account(tmp_path):
 		store.close()
 
 
-def test_legacy_migration_drops_rows_without_job_id(tmp_path):
+def test_legacy_migration_keeps_rows_without_job_id(tmp_path):
+	"""旧记录没有稳定 job_id 时仍按 security_id 命中，不再是「从未打过招呼」（Issue #1887）。"""
 	db = tmp_path / "cache" / "legacy.db"
 	db.parent.mkdir(parents=True)
 	conn = sqlite3.connect(str(db))
@@ -176,7 +177,8 @@ def test_legacy_migration_drops_rows_without_job_id(tmp_path):
 
 	store = CacheStore(db)
 	try:
-		assert store.is_greeted("sec") is False
+		assert store.is_greeted("sec") is True
+		assert store.get_job_id("sec") == ""
 	finally:
 		store.close()
 
