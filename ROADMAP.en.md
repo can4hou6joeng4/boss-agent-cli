@@ -4,7 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
-v3.4.132 (2026-11-20): auth session integrity (stoken refresh rejects stale values, rate-limited probes no longer force a re-login, probe pages raise risk stops, scan polling propagates errors immediately) and crawl sequential pagination counts budget and leases per real request (Issues #2091–#2095).
+v3.4.133 (2026-11-20): audit batch — log-in salt creation waits for a concurrent winner, agent --limit caps dispatched conversations per round, wizard checkpoints validate error.code, doctor handles unreadable browser caches and salt symlinks, request leases classify local errors, crawl exports normalize non-finite floats, stats HTML escapes dangling surrogates, and chat export identities plus snapshot baselines fail closed (Issues #2099–#2111).
+- ✅ v3.4.132 (2026-11-20): auth session integrity (stoken refresh rejects stale values, rate-limited probes no longer force a re-login, probe pages raise risk stops, scan polling propagates errors immediately) and crawl sequential pagination counts budget and leases per real request (Issues #2091–#2095).
 - ✅ v3.4.131 (2026-11-19): the MCP server resolves its default boss entry point at module load, so embedded calls and tests no longer depend on boss being on PATH (Issue #2088).
 - ✅ v3.4.130 (2026-11-19): path-state checks for resume downloads and crawl exports use lstat, so swallowed metadata errors no longer bypass overwrite protection or backups (Issues #2083–#2085).
 - ✅ v3.4.129 (2026-11-19): local JSON serialization failures are classified as non-retryable local IO; private atomic writes and crawl exports truncate the target name in temporary files so legal names near NAME_MAX no longer raise ENAMETOOLONG (Issues #2078–#2080).
