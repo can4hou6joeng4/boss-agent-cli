@@ -18,12 +18,12 @@ def _text_item(value: Any) -> str:
 	return str(value)
 
 
-def _text_items(data: Any, key: str) -> list[str]:
+def text_items(data: Any, key: str) -> list[str]:
 	"""列表字段逐个归一为文本并丢弃空元素，不把 repr / None 交给展示层。"""
 	return [text for item in field_list(data, key) if (text := _text_item(item))]
 
 
-def _scalar_or_none(value: Any) -> Any:
+def scalar_or_none(value: Any) -> Any:
 	"""raw_job_type 输出归一：容器与非有限数按缺失处理，不再落 Python repr。"""
 	if value is None or isinstance(value, (dict, list, tuple)):
 		return None
@@ -45,13 +45,13 @@ def build_job_from_card(card: dict[str, Any], *, security_id: str, greeted: bool
 		"education": field_text(card, "degreeName"),
 		"description": field_text(card, "postDescription"),
 		"address": field_text(card, "address"),
-		"skills": _text_items(card, "jobLabels"),
+		"skills": text_items(card, "jobLabels"),
 		"boss_name": field_text(card, "bossName"),
 		"boss_title": field_text(card, "bossTitle"),
 		"boss_active": field_text(card, "activeTimeDesc", "离线"),
 		"security_id": security_id,
 		"lid": lid or (card.get("lid") if isinstance(card.get("lid"), str) else ""),
-		"raw_job_type": _scalar_or_none(raw_job_type),
+		"raw_job_type": scalar_or_none(raw_job_type),
 		"employment_type": employment_type_from_raw(raw_job_type),
 		"days_per_week": field_text(card, "daysPerWeekDesc"),
 		"least_month": field_text(card, "leastMonthDesc"),

@@ -5,7 +5,7 @@ import click
 
 from boss_agent_cli.api.client import RISK_ERROR_BY_CODE
 from boss_agent_cli.api.request_budget import is_request_stop
-from boss_agent_cli.api.models import employment_type_from_raw, field_dict, field_list, field_text
+from boss_agent_cli.api.models import employment_type_from_raw, field_dict, field_text
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
@@ -20,7 +20,7 @@ from boss_agent_cli.display import (
 	render_job_detail,
 )
 from boss_agent_cli.platforms import Platform
-from boss_agent_cli.services.job_card import build_job_from_card
+from boss_agent_cli.services.job_card import build_job_from_card, scalar_or_none, text_items
 
 DetailError = tuple[str, str, dict[str, Any] | None]
 
@@ -171,12 +171,12 @@ def _detail_via_httpx(
 		"education": field_text(job_info, "degreeName"),
 		"description": field_text(platform_data, "jobDetail") or field_text(job_info, "postDescription"),
 		"address": field_text(job_info, "address"),
-		"skills": field_list(job_info, "jobLabels") or field_list(job_info, "skills"),
+		"skills": text_items(job_info, "jobLabels") or text_items(job_info, "skills"),
 		"boss_name": field_text(boss_info, "name"),
 		"boss_title": field_text(boss_info, "title"),
 		"boss_active": field_text(boss_info, "activeTimeDesc", "离线"),
 		"security_id": security_id,
-		"raw_job_type": raw_job_type,
+		"raw_job_type": scalar_or_none(raw_job_type),
 		"employment_type": employment_type_from_raw(raw_job_type),
 		"days_per_week": field_text(job_info, "daysPerWeekDesc"),
 		"least_month": field_text(job_info, "leastMonthDesc"),
