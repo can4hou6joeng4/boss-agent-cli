@@ -17,7 +17,13 @@ from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.proxy import ProxyConfigurationError
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded, request_control
 from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
-from boss_agent_cli.cache.store import CacheBusyError, CacheDatabaseInvalid, CacheRecordInvalid, is_cache_busy_error
+from boss_agent_cli.cache.store import (
+	CacheBusyError,
+	CacheDatabaseInvalid,
+	CacheRecordInvalid,
+	CacheWriteRejected,
+	is_cache_busy_error,
+)
 from boss_agent_cli.crawler.controls import CrawlProfilePathInvalid
 from boss_agent_cli.display import (
 	INTERNAL_ERROR_TYPES,
@@ -629,6 +635,17 @@ class WorkflowRunner:
 				# 代理环境变量非法是确定性配置错误：重试或恢复同一 run_id 只会
 				# 复现，不能兜成 NETWORK_ERROR +「重试当前 run_id」（Issue #1423）。
 				elif isinstance(exc, ProxyConfigurationError):
+					invalid_recoverable, invalid_recovery = error_contract_for_code("INVALID_PARAM")
+					error = WorkflowActionError(
+						"INVALID_PARAM",
+						str(exc),
+						recoverable=invalid_recoverable,
+						recovery_action=invalid_recovery,
+						replay_safe=True,
+					)
+				# 约束冲突 / 绑定值非法是调用方输入问题，缓存库本身健康：
+				# 不能兜成可重试的 NETWORK_ERROR（Issue #1886）。
+				elif isinstance(exc, CacheWriteRejected):
 					invalid_recoverable, invalid_recovery = error_contract_for_code("INVALID_PARAM")
 					error = WorkflowActionError(
 						"INVALID_PARAM",

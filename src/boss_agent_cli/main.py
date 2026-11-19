@@ -9,7 +9,13 @@ import click
 
 from boss_agent_cli import __version__
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
-from boss_agent_cli.cache.store import CacheBusyError, CacheDatabaseInvalid, is_cache_busy_error
+from boss_agent_cli.cache.store import (
+	CacheBusyError,
+	CacheDatabaseInvalid,
+	CacheRecordInvalid,
+	CacheWriteRejected,
+	is_cache_busy_error,
+)
 from boss_agent_cli.commands.register import register_candidate_commands, register_recruiter_commands
 from boss_agent_cli.config import (
 	CDP_URL_REQUIREMENT,
@@ -901,6 +907,34 @@ class BossCliGroup(click.Group):
 				message=str(exc),
 				recoverable=busy_recoverable,
 				recovery_action=busy_recovery_action,
+			)
+			return None
+		except CacheRecordInvalid as exc:
+			# 本地任务 / 候选池记录损坏是确定性失败：重试同一条命令只会再失败
+			# 一次，不能兜成可重试的 NETWORK_ERROR（Issue #1885）。
+			if not standalone_mode:
+				raise
+			record_recoverable, record_recovery_action = error_contract_for_code("CACHE_RECORD_INVALID")
+			emit_error(
+				_invoked_command_name(args, self.name or "boss"),
+				code="CACHE_RECORD_INVALID",
+				message=str(exc),
+				recoverable=record_recoverable,
+				recovery_action=record_recovery_action,
+			)
+			return None
+		except CacheWriteRejected as exc:
+			# 约束冲突 / 绑定值非法是输入问题，缓存库本身健康：这里绝不能给出
+			# 「备份并删除缓存库」的指引（Issue #1886）。
+			if not standalone_mode:
+				raise
+			invalid_recoverable, _invalid_recovery = error_contract_for_code("INVALID_PARAM")
+			emit_error(
+				_invoked_command_name(args, self.name or "boss"),
+				code="INVALID_PARAM",
+				message=str(exc),
+				recoverable=invalid_recoverable,
+				recovery_action="本次写入被本地缓存库拒绝（约束冲突或非法绑定值），库本身完好、无需删除；修正调用参数后重试",
 			)
 			return None
 		except sqlite3.DatabaseError as exc:
