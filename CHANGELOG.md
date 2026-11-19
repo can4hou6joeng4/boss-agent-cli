@@ -31,6 +31,10 @@
 - `prepare_output_path` 与 `refuse_symlink_target` 按 lstat 拒绝符号链接 / 目录 / 特殊文件，`digest` / `stats` / `chat --export` 等直接调用方不再把链接目标替换成新文件；`is_symlink()` 不再吞权限错误（Issue #1849）。
 - 文件锁只把 `EAGAIN` / `EWOULDBLOCK` / `EDEADLK` 当锁冲突，errno 36 等其余 `OSError` 按本地 IO 错误上抛，不再误报「已被占用」（Issue #1850）。
 - `chat --export` 的快照旁车文件记录采集完整性：上一份基线不完整时不再把没翻到的联系人误报为新增，`data.diff` 带 `baseline_complete`，摘要注明「上次采集不完整，未判断新增」；旧快照无标记时按完整处理（Issue #1852）。
+- `history` 先把 jobList 里的容器字段收敛成空值、列表字段只保留字符串，`job_id` / `security_id` / `job_url` 不再写入 Python repr（Issue #1855）。
+- `favorites` 的 `cardList` 只有 `null` / 缺失按空列表处理：`{}` / `""` / `0` 等假值非列表与真值非列表同口径报可重试 `NETWORK_ERROR`（Issue #1856）。
+- `favorites` 页内全为非对象元素时立即报 `NETWORK_ERROR`，不再累计垃圾元素、翻满 50 页后误报 `RESULT_LIMIT_REACHED`（Issue #1857）。
+- `stats` 的 `_percent` 对合法大整数抛 `OverflowError` 时按非数值返回占位符（Issue #1858）。
 
 ## [3.4.122] - 2026-11-19
 

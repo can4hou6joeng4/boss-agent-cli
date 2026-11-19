@@ -215,7 +215,7 @@ boss crawl stop <run_id>
 
 `boss shortlist annotate` 至少需要一个非空 `--add-tag` / `--remove-tag` 或 `--note`；空标签与空 `--tag` 会返回 `INVALID_PARAM`，不会静默变成「没有过滤」或 `updated: true`。`--note ""` 仍表示清空备注。
 
-`history` / `favorites list` 的 `pagination.has_more` 与 `recommend` / `chat` 同一口径：只有平台返回布尔 `hasMore` 时才是 `true` / `false`；缺失或类型不明确时为 `null`、`has_more_source=unknown`，不会默认成 `false`，也不提示下一页。`total` 始终是本页返回条数（`total_kind=returned_page_count`）。
+`history` / `favorites list` 的 `pagination.has_more` 与 `recommend` / `chat` 同一口径：只有平台返回布尔 `hasMore` 时才是 `true` / `false`；缺失或类型不明确时为 `null`、`has_more_source=unknown`，不会默认成 `false`，也不提示下一页。`total` 始终是本页返回条数（`total_kind=returned_page_count`）。`favorites` 的成功包络里 `cardList` 只有 `null` / 缺失才按空列表处理；`{}` / `""` / `0` 这类假值非列表、以及页内全为非对象元素同样按可重试 `NETWORK_ERROR` 上报，不会伪装成「没有收藏」或翻满上限后的数量超限。
 
 ## 招聘者模式
 

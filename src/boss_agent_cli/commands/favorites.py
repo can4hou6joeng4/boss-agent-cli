@@ -136,13 +136,22 @@ def collect_favorites_items(
 			# 平台失败有 is_success 分支；成功包络里的形状漂移是协议问题，
 			# 不能用空列表伪装成功（Issue #1468）。
 			raise FavoritesResponseInvalid("职位收藏响应格式无效：zpData 不是对象")
-		page_items = platform_data.get("cardList") or []
+		# 只有 null / 缺失才归空页；``{}`` / ``""`` / ``0`` 这类假值非列表同样是
+		# 形状漂移，不能静默变成「没有收藏」（Issue #1856）。
+		raw_page_items = platform_data.get("cardList")
+		page_items = [] if raw_page_items is None else raw_page_items
 		if not isinstance(page_items, list):
 			raise FavoritesResponseInvalid("职位收藏响应格式无效：cardList 不是列表")
 		if not page_items:
 			break
 
-		identities = [str(item.get("encryptJobId") or "") for item in page_items if isinstance(item, dict)]
+		dict_items = [item for item in page_items if isinstance(item, dict)]
+		if not dict_items:
+			# 页面非空但没有任何对象元素：重复页签名恒为空、聚合只会堆垃圾，
+			# 翻满上限后还会误报「收藏太多」（Issue #1857）。
+			raise FavoritesResponseInvalid("职位收藏响应格式无效：cardList 元素不是对象")
+
+		identities = [str(item.get("encryptJobId") or "") for item in dict_items]
 		# 卡片缺少 encryptJobId 时签名恒为空，无法判断是否重复页；此时继续聚合，
 		# 避免把缺字段的新页面当成重复页丢掉（终止交给 hasMore / max_pages）。
 		if any(identities):
@@ -150,7 +159,7 @@ def collect_favorites_items(
 			if signature in seen_signatures:
 				break
 			seen_signatures.add(signature)
-		items.extend(page_items)
+		items.extend(dict_items)
 
 		if platform_data.get("hasMore") is False:
 			break
@@ -209,7 +218,8 @@ def favorites_list_cmd(ctx: click.Context, page: int) -> None:
 				recovery_action="重试；若持续出现，用 boss doctor 检查登录态与网络",
 			)
 			return
-		cards = platform_data.get("cardList") or []
+		raw_cards = platform_data.get("cardList")
+		cards = [] if raw_cards is None else raw_cards
 		if not isinstance(cards, list):
 			handle_error_output(
 				ctx,
