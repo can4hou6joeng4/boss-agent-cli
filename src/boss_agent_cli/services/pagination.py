@@ -23,12 +23,14 @@ def list_pagination(
 	"""构造列表命令的分页证据；``page`` 不可信时回显请求页。"""
 	is_mapping = isinstance(platform_data, dict)
 	raw_page = platform_data.get("page") if is_mapping else None
-	current_page = (
-		raw_page
-		if isinstance(raw_page, int) and not isinstance(raw_page, bool)
-		and 1 <= raw_page <= MAX_TRUSTED_PAGE
-		else page
-	)
+	if isinstance(raw_page, int) and not isinstance(raw_page, bool) and 1 <= raw_page <= MAX_TRUSTED_PAGE:
+		current_page = raw_page
+	elif isinstance(page, int) and not isinstance(page, bool):
+		# 回退的请求页也必须钳制：九个调用点会用 ``pagination["page"] + 1``
+		# 拼下一页提示，超长整数在这里字符串化会抛 ValueError（Issue #1880）。
+		current_page = min(max(page, 1), MAX_TRUSTED_PAGE)
+	else:
+		current_page = 1
 	raw_has_more = platform_data.get("hasMore") if is_mapping else None
 	has_more = raw_has_more if isinstance(raw_has_more, bool) else None
 	return {

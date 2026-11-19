@@ -18,6 +18,23 @@ def friend_list_page_items(platform_data: dict[str, Any]) -> list[dict[str, Any]
 	return dict_items(platform_data.get("result")) or dict_items(platform_data.get("friendList"))
 
 
+def friend_list_page_has_content(platform_data: dict[str, Any]) -> bool:
+	"""页面容器是否带有内容（哪怕元素全被跳过）。
+
+	``friend_list_page_items`` 返回空列表有两种含义：平台本来就给了空页，或
+	容器非空但元素全是 null / 数字 / 字符串。后者不是「列表结束」，翻页方
+	据此继续请求，不能宣称结果完整或联系人不存在（Issue #1878）。
+	"""
+	for key in ("result", "friendList"):
+		raw = platform_data.get(key)
+		if isinstance(raw, list):
+			if raw:
+				return True
+		elif raw is not None:
+			return True
+	return False
+
+
 def collect_friend_list_items(
 	platform: Any,
 	*,
@@ -72,6 +89,10 @@ def collect_friend_list_page(
 		# 否则下游 build_pipeline_items / _friend_record 读键会整条命令崩溃。
 		page_items = friend_list_page_items(platform_data)
 		if not page_items:
+			if platform_data.get("hasMore") is not False and friend_list_page_has_content(platform_data):
+				# 整页元素被跳过：不是空页，继续翻页（Issue #1878）。
+				page += 1
+				continue
 			break
 
 		# securityId 在每次请求间都会轮换（见 services/contact_lookup.py），

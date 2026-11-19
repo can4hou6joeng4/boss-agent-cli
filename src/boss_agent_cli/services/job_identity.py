@@ -17,7 +17,11 @@ def deduplicate_job_result(
 	for item in items:
 		if not isinstance(item, dict):
 			continue
-		job_id = item.get("job_id") or item.get("encryptJobId")
+		# 真值但不可用的 job_id（int / dict / list）不能遮蔽合法的 encryptJobId，
+		# 否则同一职位不再去重（Issue #1879）。
+		job_id = item.get("job_id")
+		if not (isinstance(job_id, str) and job_id):
+			job_id = item.get("encryptJobId")
 		if isinstance(job_id, str) and job_id:
 			if job_id in seen:
 				continue
