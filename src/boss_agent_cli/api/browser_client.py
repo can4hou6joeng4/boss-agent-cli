@@ -331,34 +331,40 @@ class BrowserSession:
 				result = self._evaluate_fetch(payload)
 			finally:
 				self._throttle.mark()
-			if isinstance(result, dict):
-				limit = result.pop("__cli_rate_limit__", None)
-				if result.get("code") in (9, "9"):
-					result["code"] = 9
-				if budget is not None and (isinstance(limit, dict) or result.get("code") in (9, "9")):
-					budget.cooldown(
-						max(
-							10.0,
-							retry_after_seconds(limit.get("retry_after") if isinstance(limit, dict) else None) or 0.0,
-						)
+			if not isinstance(result, dict):
+				# JSON.parse 的顶层值可以是数组 / 字符串 / 数字 / null（Issue #2046）：
+				# 调用方与风险分类都假定对象响应。容器漂移若原样下传，会在
+				# response.get 处抛 AttributeError（命令层升级成 INTERNAL_ERROR），
+				# 且响应上的风控字段不被分类。按端点语义归一：读请求可重试，写
+				# 请求结果未知、不可重放。
+				return self._unparsed_response(endpoint)
+			limit = result.pop("__cli_rate_limit__", None)
+			if result.get("code") in (9, "9"):
+				result["code"] = 9
+			if budget is not None and (isinstance(limit, dict) or result.get("code") in (9, "9")):
+				budget.cooldown(
+					max(
+						10.0,
+						retry_after_seconds(limit.get("retry_after") if isinstance(limit, dict) else None) or 0.0,
 					)
-				security = result.pop("__cli_security_response__", None)
-				if isinstance(security, dict):
-					page_risk = platform_risk_page_response(
-						url=str(security.get("url") or ""),
-						content_type=str(security.get("content_type") or ""),
-						body="<title>访问受限</title>"
-						if security.get("restricted") is True
-						else f"<title>{security.get('title', '')}</title>",
-					)
-					if page_risk is not None:
-						raise_platform_risk_response(page_risk, is_cdp=self._is_cdp)
-				if budget is not None:
-					raise_platform_risk_response(result, is_cdp=self._is_cdp)
-				if result.pop("__cli_request_interrupted__", False):
-					return self._interrupted_request_response(endpoint)
-				if result.pop("__cli_unparsed_response__", False):
-					return self._unparsed_response(endpoint)
+				)
+			security = result.pop("__cli_security_response__", None)
+			if isinstance(security, dict):
+				page_risk = platform_risk_page_response(
+					url=str(security.get("url") or ""),
+					content_type=str(security.get("content_type") or ""),
+					body="<title>访问受限</title>"
+					if security.get("restricted") is True
+					else f"<title>{security.get('title', '')}</title>",
+				)
+				if page_risk is not None:
+					raise_platform_risk_response(page_risk, is_cdp=self._is_cdp)
+			if budget is not None:
+				raise_platform_risk_response(result, is_cdp=self._is_cdp)
+			if result.pop("__cli_request_interrupted__", False):
+				return self._interrupted_request_response(endpoint)
+			if result.pop("__cli_unparsed_response__", False):
+				return self._unparsed_response(endpoint)
 			return result
 
 	def _navigate_home(self, *, channel: str | None = None) -> None:
@@ -1171,8 +1177,9 @@ def _ws_frame_payload_bytes(frame: dict[str, Any]) -> bytes:
 		return payload_data.encode("utf-8", errors="ignore")
 
 
-#: 31 = IP/访问环境限制，32 = 账号访问限制；37 另保留明确过期的上下文分类。
-_PAGE_RISK_CODES = (31, "31", 32, "32", 35, "35", 36, "36", 37, "37")
+#: 31 = IP/访问环境限制，32 = 账号访问限制；37 另保留明确过期的上下文分类；
+#: 38 = 身份资料流程，与 live-response 分类同属账号侧风险（Issue #2045）。
+_PAGE_RISK_CODES = (31, "31", 32, "32", 35, "35", 36, "36", 37, "37", 38, "38")
 _MAX_TRACKED_RESPONSES = 64
 
 

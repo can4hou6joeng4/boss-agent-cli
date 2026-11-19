@@ -119,7 +119,7 @@ class BossRecruiterPlatform(RecruiterPlatform):
 		message = response_message(response)
 		if code in (CODE_IP_RESTRICTED, str(CODE_IP_RESTRICTED)):
 			return "ENVIRONMENT_RISK", message
-		if code in (CODE_ACCOUNT_RESTRICTED, str(CODE_ACCOUNT_RESTRICTED), 35, "35", 36, "36"):
+		if code in (CODE_ACCOUNT_RESTRICTED, str(CODE_ACCOUNT_RESTRICTED), 35, "35", 36, "36", 38, "38"):
 			return "ACCOUNT_RISK", message
 		if code in (CODE_STOKEN_EXPIRED, str(CODE_STOKEN_EXPIRED)):
 			unified = "TOKEN_REFRESH_FAILED" if classify_code_37(response) == "token_expired" else "ENVIRONMENT_RISK"

@@ -591,7 +591,9 @@ def handle_platform_error_output(
 		cli_details = response.get("__cli_error_details__")
 		if details is None and isinstance(cli_details, dict) and cli_details:
 			details = cli_details
-		if code in RISK_ERROR_CONTRACTS and response.get("code") in (31, "31", 32, "32", 35, "35", 36, "36", 37, "37"):
+		if code in RISK_ERROR_CONTRACTS and response.get("code") in (
+			31, "31", 32, "32", 35, "35", 36, "36", 37, "37", 38, "38"
+		):
 			details = {**(details or {}), "platform_code": response.get("__cli_platform_code__", int(response["code"]))}
 	handle_error_output(
 		ctx,

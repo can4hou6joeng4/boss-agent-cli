@@ -47,7 +47,9 @@ class BossPlatform(Platform):
 	def parse_error(self, response: dict[str, Any]) -> tuple[str, str]:
 		if response.get("code") in (CODE_IP_RESTRICTED, str(CODE_IP_RESTRICTED)):
 			return "ENVIRONMENT_RISK", response_message(response)
-		if response.get("code") in (CODE_ACCOUNT_RESTRICTED, str(CODE_ACCOUNT_RESTRICTED), 35, "35", 36, "36"):
+		if response.get("code") in (
+			CODE_ACCOUNT_RESTRICTED, str(CODE_ACCOUNT_RESTRICTED), 35, "35", 36, "36", 38, "38"
+		):
 			return "ACCOUNT_RISK", response_message(response)
 		if response.get("code") in (CODE_STOKEN_EXPIRED, str(CODE_STOKEN_EXPIRED)):
 			code = "TOKEN_REFRESH_FAILED" if classify_code_37(response) == "token_expired" else "ENVIRONMENT_RISK"
