@@ -65,6 +65,27 @@ class PlatformResponseInvalid(ValueError):
 	"""
 
 
+def _status_error_without_query(exc: httpx.HTTPStatusError) -> httpx.HTTPStatusError:
+	"""重建不带查询参数的 ``HTTPStatusError``，保留类型、状态码与路径。
+
+	GET 请求统一注入 ``__zp_stoken__`` 查询参数（``add_stoken_to_get_params``），
+	httpx 的异常文本默认是 ``Client error '404 Not Found' for url '<完整 URL>'``；
+	原样上抛会让 stoken 经 ``handle_auth_errors`` 的兜底进入 ``error.message``，
+	写进 stdout 信封与 Agent 记录（Issue #2157）。``output.py`` 只按键名脱敏，
+	扫不到消息正文里的凭证。
+	"""
+	request = exc.request
+	url = request.url
+	status = exc.response.status_code
+	reason = getattr(exc.response, "reason_phrase", "") or ""
+	message = f"{request.method} {url.path or '/'} 返回 HTTP {status} {reason}".rstrip()
+	try:
+		safe_request = httpx.Request(request.method, url.copy_with(query=None))
+	except (httpx.InvalidURL, httpx.UnsupportedProtocol, ValueError):
+		safe_request = request
+	return httpx.HTTPStatusError(message, request=safe_request, response=exc.response)
+
+
 _SelfT = TypeVar("_SelfT", bound="_BaseHttpClient")
 
 
@@ -462,9 +483,11 @@ class _BaseHttpClient:
 				try:
 					if resp.status_code != 429:
 						resp.raise_for_status()
-				except httpx.HTTPStatusError:
+				except httpx.HTTPStatusError as exc:
 					if not write_possible:
-						raise
+						# 读路径原样上抛：重建异常文本，查询参数里的 __zp_stoken__ 不能
+						# 随 error.message 进入信封（Issue #2157）。
+						raise _status_error_without_query(exc) from None
 					return self._unconfirmed_http_response(url, "http_status_error")
 				if data is None:
 					if write_possible:

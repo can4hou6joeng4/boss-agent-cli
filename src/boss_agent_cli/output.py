@@ -62,6 +62,9 @@ _SENSITIVE_TEXT_PATTERNS = tuple(
 		# 那通常是另一个独立字段，由通用规则分别脱敏。
 		rf"{_ASCII_KEY_BOUNDARY}(?P<key>cookie)(?P<quote>[\"']?)(?P<sep>\s*[:=]\s*)(?P<value>[^\s,;{_TEXT_VALUE_TERMINATORS}]+(?:\s*[;,]\s*[^\s,;{_TEXT_VALUE_TERMINATORS}]+)*)",
 		rf"{_ASCII_KEY_BOUNDARY}(?P<key>authorization)(?P<quote>[\"']?)(?P<sep>\s*[:=]\s*)(?P<scheme>(?:bearer|basic|digest|token)\s+)?(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
+		# BOSS 的 stoken 查询参数名是 `__zp_stoken__`：通用 `stoken` 规则要求键后
+		# 直接是分隔符，双下划线让它整个漏过（Issue #2157）。单列一条，键名原样回填。
+		rf"{_ASCII_KEY_BOUNDARY}(?P<key>__zp_stoken__)(?P<quote>[\"']?)(?P<sep>\s*[:=]\s*)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
 		rf"{_ASCII_KEY_BOUNDARY}(?P<key>api[_-]?key|authorization|cookie|credential|password|secret|session(?:[_-]?id)?|stoken|token)(?P<quote>[\"']?)(?P<sep>\s*[:=]\s*)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
 		rf"{_ASCII_KEY_BOUNDARY}(?P<key>bearer)(?P<quote>)(?P<sep>\s+)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
 	)
