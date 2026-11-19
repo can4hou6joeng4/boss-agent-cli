@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Fixed
+- `--salary` 搜索遇到超长数字串的 `salaryDesc`（>4300 位）按「无法解析」处理，不再让整条搜索崩成 `INTERNAL_ERROR`（Issue #1889）。
+- 职位描述缓存只接受字符串 `encryptJobId` / 描述：类型漂移按未命中处理，`--welfare` 管线不再因 sqlite 绑定 dict 抛 `ProgrammingError`（Issue #1890）。
+- `write_json_atomic` / `strict_json_text` 把深嵌套与超长整数引发的 `RecursionError` / `ValueError` 归成本地 IO 错误，CLI 输出 `LOCAL_IO_ERROR` 信封而不是空 stdout 加 traceback（Issue #1891）。
 - 沟通列表整页元素全是 null / 数字 / 字符串时继续翻页，不再据此宣称列表完整或联系人不存在（Issue #1878）。
 - 职位去重按可用性选择 `job_id` / `encryptJobId`，非字符串 `job_id` 不再遮蔽合法标识（Issue #1879）。
 - 分页信封对回退的请求页应用与平台回显页相同的上限，`page + 1` 的下一页提示不再可能撞上整数转换上限（Issue #1880）。
@@ -14,7 +17,6 @@
 
 ## [3.4.123] - 2026-11-19
 
-### Fixed
 ### Fixed
 - `config set request_budget_dir` 拒绝已存在但不是目录的路径；启动期因此失败时恢复建议改为可直接执行的 `config reset request_budget_dir`（Issue #1822）。
 - `config reset operating_mode` 同时清除旧版 `low_risk_mode`，`config list` 把由旧键派生的模式标为用户配置（Issue #1823）。
