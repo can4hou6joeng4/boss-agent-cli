@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import math
 import os
 import re
 import stat
@@ -26,7 +27,13 @@ _FORMULA_PREFIXES = ("=", "+", "-", "@")
 
 
 def _csv_cell(value: Any) -> str:
-	"""CSV 没有类型：一律按共享规则清洗后落盘，防止公式注入。"""
+	"""CSV 没有类型：一律按共享规则清洗后落盘，防止公式注入。
+
+	非有限浮点与 JSON 分支同口径归一成空值：``nan`` / ``inf`` 不是可移植的
+	文本值，也不该在产物里与合法数字混在一起（Issue #2107）。
+	"""
+	if isinstance(value, float) and not math.isfinite(value):
+		value = None
 	return sanitize_csv_cell(str(value if value is not None else ""))
 
 
@@ -38,6 +45,9 @@ _ILLEGAL_XLSX_CHARACTERS = re.compile(r"[\000-\010]|[\013-\014]|[\016-\037]|[\ud
 def _xlsx_cell(value: Any) -> Any:
 	# 单条平台字段漂移成 dict/list 时 openpyxl 会抛 ValueError，让整套产物无法
 	# 替换且 run 永远停在 stopped（Issue #1646）。这里兜成文本，保留原始信息。
+	if isinstance(value, float) and not math.isfinite(value):
+		# openpyxl 会为非有限数写出空的 <v></v> 数值单元格（Issue #2107）。
+		return None
 	if isinstance(value, str):
 		return _ILLEGAL_XLSX_CHARACTERS.sub("", value)
 	if isinstance(value, (int, float, bool)) or value is None:

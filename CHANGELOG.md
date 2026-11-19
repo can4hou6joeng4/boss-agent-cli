@@ -10,6 +10,8 @@
 - wizard 断点的 `error` 为非空对象时必须含非空字符串 `code`：外部漂移 / 旧数据缺 `code` 时按记录损坏拒绝，信封不再回退成可重试的 `NETWORK_ERROR` +「重试」指引（Issue #2101）。
 - doctor 的浏览器内核探测按 lstat 口径读取缓存根：权限错误不再让整份自检报告变成 `LOCAL_IO_ERROR`，改为对不可读缓存输出 `warn`「无法确认是否已安装」，不引导重装；默认缓存目录补上 Linux `XDG_CACHE_HOME` 与 Windows `~/AppData/Local` 回退，与 patchright 驱动同口径（Issue #2103）。
 - doctor 的 `auth_salt` 检查与登录路径同口径（`path_mode`）：指向普通文件的 salt 符号链接不再被报成 broken 并提示删除（那会作废已有 `session.enc` 与 AI 密钥）；悬空链接 / 目录 / FIFO 仍按损坏拒绝，悬空链接的提示改为说明目标缺失（Issue #2104）。
+- 请求租约的目录创建 / 打开失败不再泄漏裸 OSError：crawl 不再把它裹成 `ok:true` 的 stopped 并给出可重试 resume，入口按不可重试的 `LOCAL_IO_ERROR` 上报（Issue #2106）。
+- crawl 导出对非有限浮点使用同一归一规则：CSV 不再写 `nan` / `inf`、XLSX 不再落空数值单元格，与 JSON 的 null 口径一致（Issue #2107）。
 
 ## [3.4.132] - 2026-11-20
 
