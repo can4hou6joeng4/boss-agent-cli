@@ -319,7 +319,7 @@ def test_successful_queue_dispatch_settles_marker_and_prior(tmp_path: Path) -> N
 	state = store.read_state()
 	guard = SafetyGuard(AutomationConfig(), state, dry_run=False, store=store)
 
-	events = process_pending(adapter, store, guard, "zhipin", False, state=state)
+	events, _ = process_pending(adapter, store, guard, "zhipin", False, state=state)
 
 	assert len(adapter.sent) == 1
 	assert events[0].status == EventStatus.AUTO_EXECUTED.value
@@ -337,7 +337,7 @@ def test_process_pending_accepts_missing_state(tmp_path: Path) -> None:
 	adapter = _Adapter()
 	guard = SafetyGuard(AutomationConfig(), {}, dry_run=False)
 
-	events = process_pending(adapter, store, guard, "zhipin", False)
+	events, _ = process_pending(adapter, store, guard, "zhipin", False)
 
 	assert len(adapter.sent) == 1
 	assert events[0].status == EventStatus.AUTO_EXECUTED.value

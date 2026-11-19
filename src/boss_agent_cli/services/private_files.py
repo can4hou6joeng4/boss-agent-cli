@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 from pathlib import Path
 
 from boss_agent_cli.services.file_lock import exclusive_file_lock
@@ -21,6 +22,11 @@ from boss_agent_cli.services.output_path import refuse_non_regular_target
 DIRECTORY_MODE = 0o700
 FILE_MODE = 0o600
 SALT_BYTES = 16
+
+#: 锁被占用时等待另一进程创建 salt 的有界窗口：并发首次启动时持锁者通常几十
+#: 毫秒内完成创建，2 秒足够覆盖慢盘上的 fsync；仍然缺失才按失败报出（Issue #2099）。
+SALT_WAIT_SECONDS = 2.0
+SALT_POLL_SECONDS = 0.1
 
 
 def chmod_best_effort(path: Path, mode: int) -> None:
@@ -120,10 +126,16 @@ def load_or_create_private_salt(auth_dir: Path) -> bytes:
 			if raw is None:
 				raw = _create_salt(salt_path)
 			return _validated_salt(raw, salt_path)
-	# 锁不可用时也不能生成第二份 salt：读到什么就用什么；确实不存在或损坏才报错。
+	# 锁不可用时也不能生成第二份 salt：读到什么就用什么。锁忙通常表示另一个
+	# 进程正在创建：salt 在写满 16 字节后才通过硬链接出现，在有界窗口内等它
+	# 落位，仍然缺失或损坏才报错（Issue #2099）。
+	deadline = time.monotonic() + SALT_WAIT_SECONDS
 	raw = _read_salt(salt_path)
+	while raw is None and time.monotonic() < deadline:
+		time.sleep(SALT_POLL_SECONDS)
+		raw = _read_salt(salt_path)
 	if raw is None:
-		raise RuntimeError("登录态 salt 尚未创建，且无法获取跨进程锁")
+		raise RuntimeError("登录态 salt 尚未创建，且等待跨进程锁超时；请稍后重试")
 	return _validated_salt(raw, salt_path)
 
 
