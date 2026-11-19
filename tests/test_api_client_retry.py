@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+import httpx
 import pytest
 
 from boss_agent_cli.api import endpoints
@@ -123,6 +124,44 @@ def test_request_retries_after_stoken_expired_code(mock_http_client_cls, mock_sl
 	assert sum(call.args[0] for call in mock_sleep.call_args_list) == pytest.approx(1)
 	assert max(call.args[0] for call in mock_sleep.call_args_list) <= 0.1
 	assert second.calls[0]["kwargs"]["params"]["__zp_stoken__"] == "refreshed-1"
+
+
+@patch("boss_agent_cli.api._base_client.cancellable_sleep")
+@patch("boss_agent_cli.api._base_client.httpx.Client")
+def test_request_stops_when_refreshed_session_is_still_expired(mock_http_client_cls, mock_sleep):
+	auth = FakeAuthManager()
+	expired = {"code": endpoints.CODE_STOKEN_EXPIRED, "message": "stoken 已过期"}
+	http_client = FakeHttpxClient([FakeResponse(payload=expired) for _ in range(4)])
+	mock_http_client_cls.return_value = http_client
+	client = BossClient(auth)
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+
+	assert client.user_info() == expired
+	assert auth.refresh_calls == [None]
+	assert len(http_client.calls) == 2
+	mock_sleep.assert_called_once()
+
+
+def test_write_result_is_unconfirmed_if_response_decoding_fails():
+	auth = FakeAuthManager()
+	client = BossClient(auth)
+	http_client = FakeHttpxClient([])
+	client._client = http_client
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+
+	with patch.object(http_client, "request", side_effect=httpx.DecodingError("响应解码失败")) as request:
+		result = client.friend_label("test-friend", 1)
+
+	request.assert_called_once()
+	assert result["__cli_error_code__"] == "ACTION_UNCONFIRMED"
+	assert result["__cli_error_details__"] == {
+		"outcome": "unknown",
+		"replay_safe": False,
+		"reason": "invalid_response",
+	}
+	assert auth.refresh_calls == []
 
 
 @patch("boss_agent_cli.api._base_client.time.sleep")
