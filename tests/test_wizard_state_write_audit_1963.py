@@ -146,7 +146,9 @@ def test_missing_step_row_maps_to_cache_record_invalid(tmp_path) -> None:
 			runner.run(_plan("recruiter_reply"), _context(tmp_path), run_id=_RUN_ID)
 
 	assert caught.value.code == "CACHE_RECORD_INVALID"
-	assert caught.value.replay_safe is False
+	# 步骤行缺失时动作不再派发（Issue #2034）：本次没有平台写入，replay_safe
+	# 保持 True；记录修好后 resume 可以安全重跑。
+	assert caught.value.replay_safe is True
 
 
 # ── Issue #1964：时间戳列漂移成 BLOB / 文本按记录损坏拒绝 ────────────

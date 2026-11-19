@@ -79,8 +79,9 @@ def test_runner_refuses_to_dispatch_when_step_record_missing(tmp_path) -> None:
 			WorkflowRunner(store, {"s1": action}).run(plan, object(), run_id="wr-missing-step")
 
 	assert calls == []
-	assert excinfo.value.code == "LOCAL_STATE_WRITE_FAILED"
-	assert (excinfo.value.details or {}).get("original_code") == "CACHE_RECORD_INVALID"
+	assert excinfo.value.code == "CACHE_RECORD_INVALID"
+	# 动作没有派发，本次不存在平台写入：resume 修好记录后可以安全重跑。
+	assert excinfo.value.replay_safe is True
 
 
 def test_stop_on_completed_corrupt_run_reports_finished_not_missing(tmp_path) -> None:
