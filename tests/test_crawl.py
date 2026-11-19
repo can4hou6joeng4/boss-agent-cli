@@ -695,11 +695,11 @@ def test_resume_fetches_checkpoint_page_and_keeps_exported_page_numbers_aligned(
 	outcome = service.resume(run_id, operating_mode="research")
 
 	assert outcome.status == "completed"
-	# 导航与每次滚动翻页各计一次预算/租约（Issue #1982）：对齐到第 3 页需 1 次导航
-	# + 2 次翻页，之后每页各 1 次滚动，共 7 次 claim；page 1/2 未被重复请求。
+	# 导航与每次滚动翻页各计一次预算/租约（Issue #1982、#2094）：对齐到第 3 页需
+	# 1 次导航 + 2 次翻页，之后每页各 1 次滚动，共 5 次 claim；page 1/2 未被重复请求。
 	assert page.navigations == 1
 	assert page.scrolls == 4
-	assert outcome.requests_attempted == 7
+	assert outcome.requests_attempted == 5
 	assert page.current_page == 5
 	assert {item["job_key"]: item["page_no"] for item in cache.list_crawl_jobs(run_id)} == {
 		"job-1": 1,

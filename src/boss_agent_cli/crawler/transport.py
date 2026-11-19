@@ -375,6 +375,11 @@ class DrissionCrawlerSession:
 		# 请求预算（Issue #897）。同一页重试也要重新导航：上一次的页位置
 		# 不能当作这一次已经请求过。
 		navigating = self._page_no is None or target_page <= self._page_no
+		# 顺序翻页时外层 attempt 认领的就是本次第一页的滚动请求（见下方循环），
+		# 只有之后的翻页再各计一次：块内不会再发导航请求，外层不能额外多算一次
+		# 预算（Issue #1982、#2094）。外层 attempt 仍覆盖响应等待与风控检查，
+		# 风险锁在共享租约释放前落盘。
+		first_turn_covered = not navigating
 		try:
 			with self._attempt("list-navigation" if navigating else "list-pagination"):
 				try:
@@ -386,8 +391,12 @@ class DrissionCrawlerSession:
 						# 每次翻页都会触发一次真实的 joblist 请求：预算与共享租约
 						# 必须按次计入，否则从断点恢复到第 N 页时整段滚动只算 1 次
 						# 请求，max_requests 与跨进程节流被绕过（Issue #1982）。
-						with self._attempt("list-pagination"):
+						if first_turn_covered:
+							first_turn_covered = False
 							self._trigger_next_page()
+						else:
+							with self._attempt("list-pagination"):
+								self._trigger_next_page()
 						position += 1
 				except BaseException:
 					# 导航/滚动可能已让页签前进但没有完成：位置不可信，下次重新导航。
