@@ -223,6 +223,23 @@ def _load_resume_text(ctx: click.Context, resume_name: str) -> str | None:
 	return None
 
 
+def _ensure_text_not_blank(
+	ctx: click.Context, command: str, label: str, value: str, hint: str
+) -> None:
+	"""空白文本参数不得照常发起一次计费请求（Issue #1975）。"""
+	if value.strip():
+		return
+	handle_error_output(
+		ctx,
+		command,
+		code="INVALID_PARAM",
+		message=f"{label}不能为空或只包含空白字符",
+		recovery_action=f"传入{label}或 @文件路径 后重试",
+		hints={"next_actions": [_hint_command(ctx, hint)]},
+	)
+	ctx.exit(1)
+
+
 def _read_text_argument(ctx: click.Context, value: str) -> str | None:
 	"""展开 `@文件路径` 参数；读不出来时输出信封并返回 None。
 
@@ -660,6 +677,7 @@ def ai_analyze_jd_cmd(ctx: click.Context, jd_text: str, resume_name: str) -> Non
 		return
 	jd_text = resolved
 
+	_ensure_text_not_blank(ctx, "ai", "职位描述", jd_text, 'ai analyze-jd "<职位描述>" --resume <name>')
 	resume_text = _load_resume_text(ctx, resume_name)
 	if resume_text is None:
 		return
@@ -719,6 +737,7 @@ def ai_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str) -> None:
 		return
 	jd_text = resolved
 
+	_ensure_text_not_blank(ctx, "ai", "职位描述", jd_text, 'ai optimize <resume> --jd "<职位描述>"')
 	resume_text = _load_resume_text(ctx, resume_name)
 	if resume_text is None:
 		return
@@ -753,6 +772,7 @@ def ai_suggest_cmd(ctx: click.Context, resume_name: str, jd_text: str) -> None:
 		return
 	jd_text = resolved
 
+	_ensure_text_not_blank(ctx, "ai", "职位描述", jd_text, 'ai suggest <resume> "<职位描述>"')
 	resume_text = _load_resume_text(ctx, resume_name)
 	if resume_text is None:
 		return
@@ -871,6 +891,17 @@ def ai_reply_cmd(ctx: click.Context, recruiter_message: str, context: str, resum
 		return resolved
 
 	recruiter_message = _resolve_text(recruiter_message)
+	if not recruiter_message.strip():
+		# 空消息会照常发起一次计费请求，结果只是泛化的回复文本（Issue #1975）。
+		handle_error_output(
+			ctx, "ai-reply",
+			code="INVALID_PARAM",
+			message="招聘者消息不能为空或只包含空白字符",
+			recovery_action="传入要回复的招聘者消息文本或 @文件路径 后重试",
+			hints={"next_actions": [_hint_command(ctx, 'ai reply "<招聘者消息>" --resume <name>')]},
+		)
+		ctx.exit(1)
+		return
 	context_text = _resolve_text(context) if context else "（无）"
 
 	resume_text = "（未指定）"
@@ -923,6 +954,7 @@ def ai_interview_prep_cmd(ctx: click.Context, jd_text: str, resume_name: str | N
 		return
 	jd_text = resolved
 
+	_ensure_text_not_blank(ctx, "ai", "职位描述", jd_text, 'ai interview-prep "<职位描述>"')
 	resume_text = "（未指定）"
 	if resume_name is not None:
 		# 显式空串交给 _load_resume_text 报「简历名称不能为空」，不能静默当成未指定
@@ -970,6 +1002,8 @@ def ai_chat_coach_cmd(ctx: click.Context, chat_text: str, resume_name: str | Non
 	if resolved is None:
 		return
 	chat_text = resolved
+	_ensure_text_not_blank(ctx, "ai", "聊天记录", chat_text, 'ai chat-coach "<聊天记录>"')
+	_ensure_text_not_blank(ctx, "ai", "沟通风格", style, "ai chat-coach <chat_text> --style 简洁专业")
 
 	resume_text = "（未指定）"
 	if resume_name is not None:
@@ -1107,6 +1141,7 @@ def ai_resume_optimize_cmd(ctx: click.Context, resume_name: str, jd_text: str | 
 		if resolved is None:
 			return
 		jd_text = resolved
+		_ensure_text_not_blank(ctx, "ai", "职位描述", jd_text, 'ai resume-optimize <resume> --jd <职位描述>')
 
 	resume_text = _load_resume_text(ctx, resume_name)
 	if resume_text is None:
@@ -1188,6 +1223,7 @@ def ai_cover_letter_cmd(
 		if resolved is None:
 			return
 		jd_text = resolved
+		_ensure_text_not_blank(ctx, "ai", "职位描述", jd_text, 'ai cover-letter <resume> --jd <职位描述>')
 
 	resume_text = _load_resume_text(ctx, resume_name)
 	if resume_text is None:
