@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [3.4.129] - 2026-11-19
+
+### Fixed
+- 本地 JSON 序列化失败（深嵌套 / 超长整数）不再被报成可重试的 `NETWORK_ERROR`：无 `filename` 的 `EINVAL` 归为 `LOCAL_IO_ERROR`，Agent 不会反复重试同一份必然再次失败的数据（Issue #2078）。
+- 私有原子写（登录态、AI 密钥、salt）与 crawl 导出的临时名只使用截断到 32 字符的目标名作前缀，接近 `NAME_MAX` 的合法文件名不再触发 `ENAMETOOLONG`；残留的临时 / 备份文件仍可辨识归属（Issue #2080）。
+
 ## [3.4.128] - 2026-11-19
 
 ### Fixed

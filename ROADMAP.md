@@ -4,7 +4,8 @@
 
 ## 已发布
 
-v3.4.128（2026-11-19）：联系人稳定身份与 job_card 文本对漂移值 fail-closed；招聘者分页钳制、位置参数重放与缺失参数提示；automation 队列派发前字段校验与 JSONL 写入完整性；后台 crawl 恢复在派发 worker 前校验 --pages（Issue #2063–#2075）。
+v3.4.129（2026-11-19）：本地 JSON 序列化失败按不可重试的本地 IO 分类；私有原子写与 crawl 导出的临时名截断目标名，接近 NAME_MAX 的合法文件名不再 ENAMETOOLONG（Issue #2078–#2080）。
+- ✅ v3.4.128（2026-11-19）：联系人稳定身份与 job_card 文本对漂移值 fail-closed；招聘者分页钳制、位置参数重放与缺失参数提示；automation 队列派发前字段校验与 JSONL 写入完整性；后台 crawl 恢复在派发 worker 前校验 --pages（Issue #2063–#2075）。
 - ✅ v3.4.127（2026-11-19）：导出单元格与聊天快照、automation 队列门控、MCP 筛选空串与请求估算、watch/history 提示口径收口；crawl 断点身份与页码边界、wizard plan 归一化与派发前记录校验按同一失败契约处理（Issue #2011–#2035）。
 - ✅ v3.4.126（2026-11-19）：wizard 断点落盘、AI 配置、招聘者记录与 watch/stats 写回收口类型漂移与半截事务；聊天 / 职位导出、doctor/clean、batch-greet 与 history 分页按错误信封契约归一；控制信号不再丢失写前标记，搜索 query 增加类型校验（Issue #1963–#2009）。
 - ✅ v3.4.125（2026-11-19）：automation 决策回归转录证据、MCP 显式空值与参数过长、AI 密钥校验与错误脱敏、wizard 恢复重放阻断收口（Issue #1941–#1960）。
