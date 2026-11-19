@@ -272,14 +272,16 @@ class DrissionCrawlerSession:
 				attached=port_busy,
 			) from exc
 		self._raise_if_platform_risk_page()
-		# 注入 boss login 的 Cookie（附着已有窗口时也刷新，方便用户刚完成登录/验证）。
-		# 注入结果的失败信号必须在进入业务页之前消费：原来的 `pass`/`continue`
-		# 把本地 CDP 失败吞掉，随后登录页被误判成平台风控并写风险锁（Issue #1405）。
-		self._raise_if_seed_auth_failure(self._seed_session_cookies())
+		# Hook 必须在首个文档导航前注册：addScriptToEvaluateOnNewDocument 对已经
+		# 加载的文档不生效，而 seed 导航就是第一个平台文档（Issue #1935）。
 		results = inject_hook_profile(self._page, self._hook_profile, self._hook_dir)
 		failed = [item for item in results if not item.success]
 		if failed:
 			raise HookRegistrationError(results, hook_dir=self._hook_dir)
+		# 注入 boss login 的 Cookie（附着已有窗口时也刷新，方便用户刚完成登录/验证）。
+		# 注入结果的失败信号必须在进入业务页之前消费：原来的 `pass`/`continue`
+		# 把本地 CDP 失败吞掉，随后登录页被误判成平台风控并写风险锁（Issue #1405）。
+		self._raise_if_seed_auth_failure(self._seed_session_cookies())
 		self._start_joblist_listener()
 		return results
 
@@ -353,7 +355,9 @@ class DrissionCrawlerSession:
 				return text
 			try:
 				return json.loads(text)
-			except json.JSONDecodeError:
+			except (ValueError, RecursionError):
+				# 超长整数 / 深嵌套的裸 ValueError 也要按「非 JSON 文本」处理，
+				# 否则风险页文本判定不会执行（Issue #1936）。
 				return text
 		return body
 
@@ -475,7 +479,7 @@ class DrissionCrawlerSession:
 		if isinstance(raw, str):
 			try:
 				raw = json.loads(raw)
-			except json.JSONDecodeError as exc:
+			except (ValueError, RecursionError) as exc:
 				raise RuntimeError("页面内请求返回无法解析的传输结果") from exc
 		if not isinstance(raw, dict):
 			raise RuntimeError(f"页面内请求返回类型异常：{type(raw).__name__}（async JS 未等待完成时常见为 None）")
@@ -483,7 +487,7 @@ class DrissionCrawlerSession:
 		text = str(raw.get("text") or "")
 		try:
 			payload = json.loads(text)
-		except json.JSONDecodeError:
+		except (ValueError, RecursionError):
 			payload = None
 		if isinstance(payload, dict):
 			self._raise_if_risk_response(payload)
@@ -532,7 +536,7 @@ class DrissionCrawlerSession:
 		if isinstance(value, str):
 			try:
 				parsed = json.loads(value)
-			except json.JSONDecodeError:
+			except (ValueError, RecursionError):
 				return None
 			return parsed if isinstance(parsed, dict) else None
 		if isinstance(value, dict):

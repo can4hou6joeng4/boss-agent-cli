@@ -123,14 +123,25 @@ def _verified_scripts(hook_dir: Path) -> list[tuple[str, str, str]]:
 	return verified
 
 
+def _manifest_error(detail: str) -> HookRegistrationError:
+	# 清单问题与脚本问题走同一个异常契约：verify 会把它收敛成参数错误，
+	# inject 则带着 hook_dir 报目录错误，不再出现裸 UnicodeDecodeError
+	# 被 service 兜成 stopped 的情况（Issue #1937）。
+	return HookRegistrationError([HookInjection(name=HOOK_MANIFEST, success=False, reason=detail)])
+
+
 def _read_checksums(path: Path) -> dict[str, str]:
 	# 只有文件确实不存在才是「缺少完整性清单」；权限错误与非普通文件要把
 	# 真正原因带出来（3.14 的 is_file() 会把 OSError 吞成 False，Issue #1736）。
 	raw = read_bytes_if_regular(path)
 	if raw is None:
-		raise ValueError(f"缺少 Hook 完整性清单: {path.name}")
+		raise _manifest_error(f"缺少 Hook 完整性清单: {path.name}")
+	try:
+		text = raw.decode("ascii")
+	except UnicodeDecodeError as exc:
+		raise _manifest_error(f"SHA256SUMS 必须是 ASCII 清单（{path.name}）") from exc
 	checksums: dict[str, str] = {}
-	for line in raw.decode("ascii").splitlines():
+	for line in text.splitlines():
 		parts = line.split()
 		if len(parts) != 2:
 			continue
@@ -140,5 +151,5 @@ def _read_checksums(path: Path) -> dict[str, str]:
 		elif len(second) == 64:
 			checksums[first] = second.lower()
 	if {filename for _, filename in HOOK_SCRIPT_NAMES} - set(checksums):
-		raise ValueError("SHA256SUMS 必须包含全部 7 个 Hook 文件")
+		raise _manifest_error("SHA256SUMS 必须包含全部 7 个 Hook 文件")
 	return checksums
