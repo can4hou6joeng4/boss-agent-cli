@@ -1797,7 +1797,14 @@ class BossRecruiterClient(_BaseHttpClient):
 		"""下载已收到的指定附件；不自动同意请求，不返回临时下载凭据。"""
 		if friend_id <= 0 or message_id <= 0:
 			raise ResumeValidationError("friend_id 和 message_id 必须为正整数")
-		if output.exists() or output.is_symlink():
+		# 不用 exists()/is_symlink()：3.14 起它们把权限等 OSError 吞成 False，
+		# 「存在但读不到」的目标会绕过覆盖保护，先发出四个平台请求才在写入阶段
+		# 失败（Issue #2083）。只有 FileNotFoundError 算缺失，其余元数据错误上抛。
+		try:
+			output.lstat()
+		except FileNotFoundError:
+			pass
+		else:
 			raise FileExistsError("输出文件已存在，不会覆盖")
 		history = self.chat_history(friend_id, count=100, max_msg_id=message_id + 1, retry=False)
 		if not is_platform_success_code(history.get("code")):
