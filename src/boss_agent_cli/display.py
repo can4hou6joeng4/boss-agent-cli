@@ -23,7 +23,7 @@ from rich.table import Table
 
 from boss_agent_cli.api._base_client import PlatformResponseInvalid
 from boss_agent_cli.cache.store import CacheBusyError, CacheDatabaseInvalid, is_cache_busy_error
-from boss_agent_cli.output import emit_success, is_local_io_error, redact_sensitive_text
+from boss_agent_cli.output import emit_success, exit_code_for_error, is_local_io_error, redact_sensitive_text
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.services.browser_runtime import (
 	is_browser_kernel_missing,
@@ -492,7 +492,9 @@ def handle_error_output(
 		if safe_recovery:
 			console.print(f"  [dim]recovery: {escape(safe_recovery)}[/dim]")
 		render_operator_actions(hints)
-		raise SystemExit(1)
+		# TTY 与 JSON 出口同一退出码契约：--exit-codes sysexits 在终端下同样生效
+		# （此前硬编码 1，认证 / 限流 / 风控失败全部退 1，Issue #2051）。
+		raise SystemExit(exit_code_for_error(code))
 
 
 def handle_not_supported(ctx: Any, command: str, exc: Exception, *, fallback_message: str) -> None:
