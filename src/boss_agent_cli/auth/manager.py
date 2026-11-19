@@ -385,6 +385,15 @@ class AuthManager:
 						# 空串存进登录态覆盖旧 stoken，否则之后所有请求都拿空凭证
 						# 打平台、重试到预算耗尽（Issue #1305）。
 						raise TokenRefreshFailed("Token 刷新失败：刷新通道未返回 stoken，请重新登录")
+					previous_stoken = current.get("stoken")
+					if isinstance(previous_stoken, str) and previous_stoken and new_stoken == previous_stoken:
+						# 两条刷新通道在首页未加载时都会从 cookie jar 兜底读取，jar 里
+						# 可能仍是刷新前的旧值（CDP 是用户浏览器既有会话，headless 是
+						# 注入的旧 cookies）。把刚被平台拒绝的同一个 stoken 当成功写回，
+						# 调用方会继续拿它重试（Issue #2091）。
+						raise TokenRefreshFailed(
+							"Token 刷新失败：刷新通道返回的仍是原 stoken，请重新登录"
+						)
 					refreshed = {**current, "stoken": new_stoken}
 					# 登录 / 导入保存不持刷新锁（Issue #2042）：刷新走 CDP / headless
 					# 需要数秒，期间另一个进程可能已完成登录并写入全新会话。此时刷新
