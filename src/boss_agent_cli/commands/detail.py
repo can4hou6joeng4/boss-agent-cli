@@ -67,9 +67,12 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 	account = account_scope(auth)
 	with get_platform_instance(ctx, auth) as platform:
 		# 优先走 httpx 快速通道：显式传入 > 缓存查找 > 降级浏览器通道
-		if not job_id:
+		# 纯空白的 --job-id 按没传处理；缓存里非字符串的 job_id 按未命中处理
+		# （Issue #1817）。
+		if not job_id.strip():
 			with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
-				job_id = cache.get_job_id(security_id) or ""
+				cached_job_id = cache.get_job_id(security_id)
+			job_id = cached_job_id if isinstance(cached_job_id, str) and cached_job_id.strip() else ""
 			if job_id:
 				logger.info("从缓存命中 job_id，走 httpx 快速通道")
 
