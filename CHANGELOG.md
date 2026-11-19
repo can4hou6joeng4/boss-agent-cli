@@ -18,6 +18,11 @@
 - wizard 采集被限流 / 超时 / 停止时，错误详情带回 run_id、完成页数、jobs_seen 与已落盘输出路径（Issue #1834）。
 - `crawl resume` / `crawl run` 导出失败时信封带回已知 run_id 与可直接执行的恢复命令，不再只有 `data=null`（Issue #1835）。
 - wizard 的 `crawl_status` / `crawl_resume` / `crawl_stop` 只接受非空字符串 run_id，非字符串报 `INVALID_PARAM` 而不是「任务不存在」（Issue #1836）。
+- `hr chat` 的页面未读计数跳过 NaN / Infinity，不再整条命令崩溃并报成可重试的网络错误（Issue #1837）。
+- `hr location` 逐个尝试 `friendId` / `uid` 等标识键，`uid` 为 null 时仍能按 `friendId` 匹配会话，不再误报 `CONTACT_NOT_FOUND`（Issue #1838）。
+- `hr location` 的发送记录存在性判断改用 `stat()`，只把 `FileNotFoundError` 当没有记录，权限类错误不再吞成「未发送」（Issue #1839）。
+- `blank_option_names` 对非字符串取值不再直接 `.strip()`，按非法参数返回选项名（Issue #1841）。
+- `hr chat` 的时间与消息文本只接受字符串或数值，dict / list 不再被 `str()` 写进输出数据（Issue #1842）。
 
 ## [3.4.122] - 2026-11-19
 
