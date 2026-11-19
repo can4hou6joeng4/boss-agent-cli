@@ -6,7 +6,7 @@ import io
 import math
 from typing import Any
 
-from boss_agent_cli.api.models import field_list
+from boss_agent_cli.api.models import field_list, safe_text
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell
 from boss_agent_cli.services.text_files import sanitize_surrogates, write_text_atomic
 from boss_agent_cli.services.json_files import strict_json_text
@@ -67,7 +67,9 @@ def _cell_text(value: Any) -> str:
 			return ""
 	if isinstance(value, float) and not math.isfinite(value):
 		return ""
-	return _sanitize_surrogates(str(value))
+	# 标量兜底走 safe_text：超过 4300 位的整数在裸 str() 直接抛 ValueError，
+	# 会中止整份导出；与容器分支 / job_card 同口径按缺失处理（Issue #2114）。
+	return _sanitize_surrogates(safe_text(value))
 
 
 def _join_cells(value: list[Any]) -> str:

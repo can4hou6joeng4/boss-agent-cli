@@ -1,10 +1,10 @@
 """把 job_card 响应映射为统一职位字段（detail / show / wizard 共用）。"""
 
-import json
 import math
 from typing import Any
 
 from boss_agent_cli.api.models import employment_type_from_raw, field_list, field_text, safe_text
+from boss_agent_cli.services.json_files import strict_json_text
 
 
 def _text_item(value: Any) -> str:
@@ -12,11 +12,13 @@ def _text_item(value: Any) -> str:
 	if value is None:
 		return ""
 	if isinstance(value, (dict, list, tuple)):
-		# 平台若返回超深嵌套 / 超大整数，json.dumps 抛 RecursionError /
-		# ValueError；展示字段按缺失处理，不能让整条命令失败（Issue #2065）。
+		# 与 job_export._cell_text 同口径：strict_json_text 递归把嵌套的非有限数
+		# 归一为 null 并禁止 NaN / Infinity 字面量（Issue #1977）；平台若返回
+		# 超深嵌套 / 超大整数无法序列化，展示字段按缺失处理，不能让整条命令
+		# 失败（Issue #2065、#2115）。
 		try:
-			return json.dumps(value, ensure_ascii=False)
-		except (ValueError, RecursionError):
+			return strict_json_text(value, indent=None)
+		except OSError:
 			return ""
 	if isinstance(value, float) and not math.isfinite(value):
 		return ""
