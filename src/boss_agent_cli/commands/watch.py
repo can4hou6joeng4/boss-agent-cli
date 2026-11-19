@@ -34,6 +34,7 @@ from boss_agent_cli.search_filters import (
 	detail_channel_for,
 	detail_filter_max_pages,
 	ensure_supported_city,
+	resolve_active_level,
 	resolve_search_code_params,
 	resolve_welfare_keywords,
 	run_search_pipeline,
@@ -237,6 +238,7 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 		"stage",
 		"job_type",
 		"welfare",
+		"active",
 	):
 		value = params.get(key)
 		if value is not None and not isinstance(value, str):
@@ -248,6 +250,9 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 			)
 	try:
 		ensure_supported_city(params.get("city"))
+		# active 与其他筛选键同口径：未知取值必须落成 SAVED_SEARCH_INVALID，
+		# 不能留到 pipeline 里抛裸 ValueError 被兜成可重试的 NETWORK_ERROR（Issue #1847）。
+		resolve_active_level(params.get("active"))
 		resolve_search_code_params(
 			salary=params.get("salary"),
 			experience=params.get("experience"),

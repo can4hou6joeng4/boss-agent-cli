@@ -69,7 +69,9 @@ def write_json_atomic(
 		# （Issue #1294）。backslashreplace 把它写成 JSON 合法的 ``\udcff`` 转义，
 		# 读回值不变，写入不再失败。
 		with os.fdopen(fd, "w", encoding="utf-8", errors="backslashreplace") as handle:
-			json.dump(value, handle, ensure_ascii=False, indent=indent)
+			# 本地状态与其他工具共用：非有限数必须是 null，不能写出裸
+			# Infinity / NaN 让 jq 等严格解析器失败（Issue #1851）。
+			json.dump(_json_safe_value(value), handle, ensure_ascii=False, indent=indent, allow_nan=False)
 			if trailing_newline:
 				handle.write("\n")
 			handle.flush()
@@ -88,6 +90,21 @@ def write_json_atomic(
 			temporary.unlink(missing_ok=True)
 
 
+def _json_safe_value(value: Any) -> Any:
+	"""把非有限 float 归一为 null，其余值递归保留。
+
+	``json.dump`` / ``json.dumps`` 默认允许 NaN / Infinity；本地状态与导出
+	产物会被 jq 等严格解析器读取，必须显式归一（Issue #1851）。
+	"""
+	if isinstance(value, float):
+		return value if math.isfinite(value) else None
+	if isinstance(value, dict):
+		return {key: _json_safe_value(child) for key, child in value.items()}
+	if isinstance(value, (list, tuple)):
+		return [_json_safe_value(child) for child in value]
+	return value
+
+
 def strict_json_text(value: Any, *, indent: int | None = 2) -> str:
 	"""Serialize a product JSON artifact under the same strict rules as stdout.
 
@@ -98,13 +115,4 @@ def strict_json_text(value: Any, *, indent: int | None = 2) -> str:
 	Lone surrogates are escaped by the caller's text writer and remain valid
 	JSON escapes.
 	"""
-	def normalize(item: Any) -> Any:
-		if isinstance(item, float):
-			return item if math.isfinite(item) else None
-		if isinstance(item, dict):
-			return {key: normalize(child) for key, child in item.items()}
-		if isinstance(item, (list, tuple)):
-			return [normalize(child) for child in item]
-		return item
-
-	return json.dumps(normalize(value), ensure_ascii=False, allow_nan=False, indent=indent)
+	return json.dumps(_json_safe_value(value), ensure_ascii=False, allow_nan=False, indent=indent)

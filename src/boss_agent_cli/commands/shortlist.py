@@ -6,7 +6,7 @@ from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	handle_error_output,
 	handle_output,
-	positional_hint,
+	positional_args,
 	render_simple_list,
 )
 
@@ -125,7 +125,7 @@ def shortlist_add_cmd(
 		hints={
 			"next_actions": [
 				_hint_command(ctx, "shortlist list"),
-				_hint_command(ctx, f"shortlist remove {positional_hint(security_id)} {positional_hint(job_id)}"),
+				_hint_command(ctx, f"shortlist remove {positional_args(security_id, job_id)}"),
 			]
 		},
 	)
@@ -228,7 +228,7 @@ def shortlist_annotate_cmd(
 				message=f"候选池中没有该职位: {security_id} / {job_id}",
 				hints={
 					"next_actions": [
-						_hint_command(ctx, f"shortlist add {positional_hint(security_id)} {positional_hint(job_id)}"),
+						_hint_command(ctx, f"shortlist add {positional_args(security_id, job_id)}"),
 						_hint_command(ctx, "shortlist list"),
 					]
 				},

@@ -86,6 +86,10 @@ def write_export_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 		# csv 模块按行写出 ``\r\n``；文本模式默认会再翻译一次换行，Windows 上
 		# 落盘变成 ``\r\r\n``（Issue #1401）。与 chat 导出同口径关掉翻译。
 		write_text_atomic(path, buffer.getvalue(), newline="")
+	else:
+		# 共享 service 不能对未知格式静默不写文件（Issue #1853）；调用方
+		# （export / wizard）已在入口限制为 json / csv，这里兜底防回归。
+		raise ValueError(f"不支持的导出格式: {fmt}")
 
 
 # 向后兼容别名：旧测试与调用方按模块内私有名取用。
@@ -110,11 +114,16 @@ def render_html_export(items: list[dict[str, Any]]) -> str:
 		skills = item.get("skills", [])
 		if isinstance(skills, list):
 			skills_html = " ".join(f'<span class="tag sk">{esc(s)}</span>' for s in skills)
+		elif skills is None:
+			# null 是缺失，不能渲染成字面量 "None"（Issue #1853）。
+			skills_html = ""
 		else:
 			skills_html = esc(str(skills))
 		welfare = item.get("welfare", [])
 		if isinstance(welfare, list):
 			welfare_html = " ".join(f'<span class="tag wf">{esc(w)}</span>' for w in welfare)
+		elif welfare is None:
+			welfare_html = ""
 		else:
 			welfare_html = esc(str(welfare))
 		rows.append(

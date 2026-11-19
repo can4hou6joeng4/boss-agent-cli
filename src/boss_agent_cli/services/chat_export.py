@@ -8,6 +8,14 @@ import json
 from typing import Any
 
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell, escape_md_cell, contact_identity, GROUP_ORDER
+from boss_agent_cli.services.json_files import strict_json_text
+
+
+def _text_cell(value: Any) -> Any:
+	"""文本格式里的容器值序列化成 JSON 文本，不落 Python repr（Issue #1853）。"""
+	if isinstance(value, (dict, list, tuple)):
+		return json.dumps(value, ensure_ascii=False)
+	return value
 
 
 def prepare_render_data(
@@ -20,7 +28,8 @@ def prepare_render_data(
 
 	# 按 relationType 分组
 	groups: dict[str, list[dict[str, Any]]] = {}
-	for item in friends:
+	for raw_item in friends:
+		item = {key: _text_cell(value) for key, value in raw_item.items()}
 		key = item.get("initiated_by", "未知")
 		groups.setdefault(key, []).append(item)
 
@@ -91,7 +100,10 @@ def prepare_render_data(
 			is_new = key in added_ids
 			ref = f"S{global_idx}"
 			msg = str(item.get("last_msg") or "-")
-			unread = item.get("unread") or 0
+			# unread 只认真正的整数（与 chat_snapshot._unread_count 同口径）：
+			# 字符串 / 容器会在 ``row["unread"] > 0`` 抛 TypeError（Issue #1853）。
+			unread_value = item.get("unread")
+			unread = unread_value if type(unread_value) is int else 0
 			rows.append({
 				"ref": ref, "is_new": is_new, "sid": sid, "key": key,
 				"brand_name": item.get("brand_name") or "-",
@@ -126,7 +138,9 @@ def render_export(
 ) -> str:
 	"""将沟通列表渲染为指定格式的字符串。"""
 	if fmt == "json":
-		return json.dumps(friends, ensure_ascii=False, indent=2)
+		# 严格 JSON：平台数值漂移（NaN / Infinity）归一为 null，
+		# 不让 jq 等严格解析器拒绝整份导出（Issue #1851）。
+		return strict_json_text(friends)
 	if fmt == "csv":
 		return _render_csv(friends)
 	if fmt == "html":
@@ -148,7 +162,7 @@ def _render_csv(friends: list[dict[str, Any]]) -> str:
 	writer.writeheader()
 	for item in friends:
 		# null 写成空单元格，不落成字面量 None（Issue #1793）。
-		safe_row = {k: "" if v is None else sanitize_csv_cell(str(v)) for k, v in item.items()}
+		safe_row = {k: "" if v is None else sanitize_csv_cell(str(_text_cell(v))) for k, v in item.items()}
 		writer.writerow(safe_row)
 	return buf.getvalue()
 

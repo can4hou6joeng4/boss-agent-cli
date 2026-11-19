@@ -94,8 +94,19 @@ def positional_hint(value: str) -> str:
 	加 shell 引用，避免空白 / 元字符拆开或改写命令；以 ``-`` 开头的值前置
 	``--``，否则重放时会被 click 当成选项。
 	"""
-	quoted = shell_argument(value)
-	return f"-- {quoted}" if value.startswith("-") else quoted
+	return positional_args(value)
+
+
+def positional_args(*values: str) -> str:
+	"""把多个位置参数值安全地拼进同一条后继命令（Issue #1848）。
+
+	任一值以 ``-`` 开头时，只在最前面加一次 ``--``：逐参数各加会让第二个
+	``--`` 变成普通参数，提示不可重放。
+	"""
+	quoted = " ".join(shell_argument(value) for value in values)
+	if any(value.startswith("-") for value in values):
+		return f"-- {quoted}"
+	return quoted
 
 
 def boss_command(command: str, *, platform_name: str = "zhipin", data_dir: Path | None = None, role: str | None = None) -> str:
