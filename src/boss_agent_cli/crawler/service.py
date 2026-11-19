@@ -534,7 +534,15 @@ class CrawlService:
 		# 输出目录必须按当前工作目录解析成绝对路径再落盘：`--data-dir` 允许
 		# 相对路径，原样持久化会让换个 cwd 的 resume 把产物写到无关目录
 		# （Issue #1481）。
-		output_dir = (self._data_dir / "crawl" / "runs" / run_id).resolve()
+		try:
+			output_dir = (self._data_dir / "crawl" / "runs" / run_id).resolve()
+		except RuntimeError as exc:
+			# Path.resolve 在 3.11 / 3.12 遇到符号链接环抛 RuntimeError（3.13+ 不抛）：
+			# 确定性本地路径失败，落到入口兜底会被报成可重试的 NETWORK_ERROR（Issue #2169）。
+			raise CrawlProfilePathInvalid(
+				f"采集输出目录 {str(self._data_dir / 'crawl' / 'runs' / run_id)!r} 无法解析（{exc}）；"
+				"请检查数据目录下是否存在符号链接环，修正后重新创建任务"
+			) from exc
 		self._cache.create_crawl_run(run_id, settings.as_dict(), str(output_dir), status="queued")
 		if self._on_run_created is not None:
 			self._on_run_created(run_id)
