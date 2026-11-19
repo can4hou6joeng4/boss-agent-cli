@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 预算目录解析把 `Path.resolve()` 的符号链接环错误归一成带 `filename` 的 `OSError`：Python 3.11 / 3.12 上 `--data-dir` / `request_budget_dir` 含符号链接环时，`status` / `doctor` 不再 traceback；登录与请求路径记录风控时，后备目录检查抛出的 `RuntimeError` 不再替换正在传播的 `PlatformRiskError`，风控详情与硬边界都保留（Issue #2155）。
 - 职位去重只把 strip 后非空的字符串 `job_id` / `encryptJobId` 当 ID：纯空白 `job_id` 不再让不同职位共用 `" "` 去重键而被误合并，也不再遮蔽合法的 `encryptJobId`；带空白的真实 ID 与干净值按同一去重键归一，不再分裂（Issue #2140）。
 - `digest --format md` 在渲染出口归一孤立代理字符：平台公司 / 职位文本含被截断的 emoji 等代理字符时，`-o` 不再出现「文件已写出却报 LOCAL_IO_ERROR」，`--json` 的 `data.content` 与 md 直写 stdout 也不再编码失败，转义口径与 `stats --format html` 一致（Issue #2142）。
 - login 错误分类的风控判定移到 CDP / `ConnectionError` 启发式之前：Playwright / CDP 异常文案同时含「chrome / cdp」与风控词时不再报成可重试的 `CDP_UNAVAILABLE` 并建议重新登录，按硬边界返回不可恢复的 `LOGIN_RISK_CONTROL`（Issue #2145）。

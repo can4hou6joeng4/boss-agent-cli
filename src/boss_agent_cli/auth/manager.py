@@ -108,10 +108,11 @@ class AuthManager:
 		try:
 			root = budget_directory(self._data_dir)
 			same_root = root == self._data_dir.resolve()
-		except (OSError, ValueError):
+		except (OSError, ValueError, RuntimeError):
 			# 配置文件损坏 / 预算目录非法时跳过后备位置：这个函数只记录、不抛，
 			# 这里的异常绝不能替换正在传播的 PlatformRiskError，也不能跳过
-			# error.details 的写入（Issue #1892）。
+			# error.details 的写入（Issue #1892）。RuntimeError 覆盖 3.11 / 3.12
+			# 上 resolve() 遇到符号链接环的情况（Issue #2155）。
 			root, same_root = None, True
 		if root is not None and not same_root:
 			try:
@@ -142,7 +143,13 @@ class AuthManager:
 			raise PlatformRiskError.from_lock(lock)
 		from boss_agent_cli.api.request_budget import budget_directory, check_request_control
 		root = budget_directory(self._data_dir)
-		if root != self._data_dir.resolve():
+		try:
+			same_root = root == self._data_dir.resolve()
+		except RuntimeError:
+			# 数据目录本身含符号链接环时 resolve() 在 3.11 / 3.12 抛 RuntimeError。
+			# 查锁入口不能因此 traceback，按「不同目录」继续检查后备位置的锁（Issue #2155）。
+			same_root = False
+		if not same_root:
 			cdp_risk_lock.raise_if_locked(root)
 		check_request_control()
 

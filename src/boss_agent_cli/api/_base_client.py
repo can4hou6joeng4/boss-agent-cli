@@ -245,11 +245,19 @@ class _BaseHttpClient:
 		except (OSError, UnicodeError):
 			pass
 		budget = getattr(self, "_request_budget", None)
-		if budget is not None and budget.root != data_dir.resolve():
+		if budget is not None:
 			try:
-				budget.record_risk(reason=lock.reason, platform_code=lock.platform_code)
-			except (OSError, UnicodeError):
-				self._unpersisted_risk_lock = lock
+				same_root = budget.root == data_dir.resolve()
+			except RuntimeError:
+				# data_dir 含符号链接环时 resolve() 在 3.11 / 3.12 抛 RuntimeError：
+				# 记录风控的分支不能因此替换正在传播的 PlatformRiskError，按不同
+				# 目录把风控写进预算目录（fail-closed，Issue #2155）。
+				same_root = False
+			if not same_root:
+				try:
+					budget.record_risk(reason=lock.reason, platform_code=lock.platform_code)
+				except (OSError, UnicodeError):
+					self._unpersisted_risk_lock = lock
 		if error is not None:
 			error.details["risk_lock"] = {
 				"locked": True,

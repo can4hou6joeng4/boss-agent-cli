@@ -8,6 +8,7 @@ Neither a cooldown expiry nor a process exit clears a platform risk lock.
 from __future__ import annotations
 
 import contextvars
+import errno
 import math
 import os
 import sqlite3
@@ -184,15 +185,30 @@ def retry_after_seconds(value: object, *, now: float | None = None) -> float | N
 	return max(0.0, seconds) if math.isfinite(seconds) else None
 
 
+def _resolve_budget_path(path: Path) -> Path:
+	"""解析预算目录路径，把符号链接环归一成本地 IO 错误。
+
+	``Path.resolve()`` 在 3.11 / 3.12 遇到符号链接环抛 ``RuntimeError``（3.13
+	起改为返回原路径）。这个 ``RuntimeError`` 会绕过所有 ``OSError`` 兜底：
+	记录风控的分支因此替换掉正在传播的 ``PlatformRiskError``，``status`` /
+	``doctor`` 也没有对应分类（Issue #2155）。带 ``filename`` 的 ``OSError``
+	让全局分流按本地 IO 错误处理，与 ``token_store._get_salt()`` 同口径。
+	"""
+	try:
+		return path.resolve()
+	except RuntimeError as exc:
+		raise OSError(errno.EINVAL, str(exc), str(path)) from exc
+
+
 def budget_directory(data_dir: Path) -> Path:
 	from boss_agent_cli.config import expand_budget_directory, load_config
 
 	value = load_config(data_dir / "config.json").get("request_budget_dir")
 	if value is None:
-		return data_dir.resolve()
+		return _resolve_budget_path(data_dir)
 	if not isinstance(value, str) or not value.strip():
 		raise ValueError("request_budget_dir must be a nonempty absolute path or null")
-	return expand_budget_directory(value).resolve()
+	return _resolve_budget_path(expand_budget_directory(value))
 
 
 def risk_lock_status(data_dir: Path) -> dict[str, Any]:
@@ -200,7 +216,14 @@ def risk_lock_status(data_dir: Path) -> dict[str, Any]:
 	from boss_agent_cli.api import cdp_risk_lock
 	local = cdp_risk_lock.lock_status(data_dir)
 	root = budget_directory(data_dir)
-	if root == data_dir.resolve():
+	try:
+		same_root = root == data_dir.resolve()
+	except RuntimeError:
+		# 配置了后备预算目录时 budget_directory() 不会解析 data_dir；data_dir 本身
+		# 含符号链接环时 resolve() 在 3.11 / 3.12 抛 RuntimeError（Issue #2155）。
+		# 状态查询不能因此 traceback，按「不同目录」报告后备位置的状态。
+		same_root = False
+	if same_root:
 		return local
 	group = cdp_risk_lock.lock_status(root)
 	return {**(local if local["locked"] else group), "group_path": str(root), "group_locked": group["locked"]}
