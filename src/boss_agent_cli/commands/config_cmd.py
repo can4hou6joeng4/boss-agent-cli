@@ -119,7 +119,10 @@ def config_list_cmd(ctx: click.Context) -> None:
 	for key in sorted(_PUBLIC_CONFIG_KEYS):
 		default_val = DEFAULTS[key]
 		current_val = cfg.get(key, default_val)
-		is_custom = key in _load_user_overrides(config_path)
+		overrides = _load_user_overrides(config_path)
+		# 旧版的 low_risk_mode 会派生 operating_mode，只看新键会把非默认值
+		# 标成「默认值」（Issue #1823）。
+		is_custom = key in overrides or (key == "operating_mode" and "low_risk_mode" in overrides)
 		items.append(
 			{
 				"key": key,
@@ -291,6 +294,10 @@ def config_reset_cmd(ctx: click.Context, key: str) -> None:
 	config_path = ctx.obj["data_dir"] / "config.json"
 	user_cfg = _load_user_overrides(config_path)
 	user_cfg.pop(key, None)
+	if key == "operating_mode":
+		# 只删新键时旧版 low_risk_mode 会让生效值继续保持 research：
+		# reset 报成功、下一步 config get 却证伪（Issue #1823）。
+		user_cfg.pop("low_risk_mode", None)
 	try:
 		_save_user_overrides(config_path, user_cfg)
 	except OSError as exc:

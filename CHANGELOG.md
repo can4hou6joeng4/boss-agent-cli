@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+- `config set request_budget_dir` 拒绝已存在但不是目录的路径；启动期因此失败时恢复建议改为可直接执行的 `config reset request_budget_dir`（Issue #1822）。
+- `config reset operating_mode` 同时清除旧版 `low_risk_mode`，`config list` 把由旧键派生的模式标为用户配置（Issue #1823）。
+- 平台返回的页码超出合理范围时不再参与下一页提示，`me` / `chatmsg` 不会因超长整数被报成可重试的网络错误（Issue #1824）。
+
 ## [3.4.122] - 2026-11-19
 
 ### Fixed
