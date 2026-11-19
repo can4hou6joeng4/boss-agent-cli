@@ -7,7 +7,7 @@ import os
 import random
 import socket
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -222,13 +222,14 @@ class DrissionCrawlerSession:
 		try:
 			self._profile_path = self._profile_path.resolve()
 			self._profile_path.mkdir(parents=True, exist_ok=True)
-		except (OSError, ValueError) as exc:
-			# 路径被同名文件占用或不可写（OSError），或含 NUL 等控制字符
-			# （ValueError）：确定性本地失败。原样上抛会被 _run 兜成
-			# status=stopped + crawl resume，重跑永远复现（Issue #1290、#1482）。
+		except (OSError, RuntimeError, ValueError) as exc:
+			# 路径被同名文件占用或不可写（OSError）、符号链接环（3.11 / 3.12 的
+			# Path.resolve 抛 RuntimeError，3.13+ 不再抛），或含 NUL 等控制
+			# 字符（ValueError）：确定性本地失败。原样上抛会被 _run 兜成
+			# status=stopped + crawl resume，重跑永远复现（Issue #1290、#1482、#2169）。
 			raise CrawlProfilePathInvalid(
 				f"采集配置目录 {self._profile_path!r} 无法创建或不是目录（{exc}）；"
-				"请检查该路径是否被同名文件占用、是否包含 NUL 等控制字符，"
+				"请检查该路径是否被同名文件占用、是否存在符号链接环、是否包含 NUL 等控制字符，"
 				"或修复数据目录的写权限后重试"
 			) from exc
 		port_busy = self._port_is_in_use(self._cdp_port)
@@ -598,9 +599,19 @@ class DrissionCrawlerSession:
 			return connection.connect_ex(("127.0.0.1", port)) == 0
 
 	@staticmethod
-	def _failure_reason(error: BaseException) -> str:
-		"""异常文本只用于本地诊断：压成单行并截断，且绝不拼接 Cookie 原值。"""
-		text = str(error).replace("\r", " ").replace("\n", " ").strip()
+	def _failure_reason(error: BaseException, *, secrets: Iterable[str] = ()) -> str:
+		"""异常文本只用于本地诊断：先抹掉 Cookie 原值，再压成单行并截断。
+
+		DrissionPage 的注入异常会把整个 cookie 字典（含 ``value``）拼进消息，
+		而这段文本最终会进入 ``AUTH_REQUIRED`` 信封的 ``error.message``。
+		输出层的按键脱敏拦不住第三方异常里的 ``'value'`` 键，必须在源头做
+		值级替换（Issue #2168）；``SessionSeedResult`` 不保留任何原值。
+		"""
+		text = str(error)
+		for secret in secrets:
+			if secret:
+				text = text.replace(secret, "[REDACTED]")
+		text = text.replace("\r", " ").replace("\n", " ").strip()
 		if len(text) > 200:
 			text = text[:200] + "…"
 		return f"{type(error).__name__}: {text}" if text else type(error).__name__
@@ -625,7 +636,7 @@ class DrissionCrawlerSession:
 		except Exception as error:
 			if is_request_stop(error):
 				raise
-			navigation_error = self._failure_reason(error)
+			navigation_error = self._failure_reason(error, secrets=self._seed_cookies.values())
 		self._raise_if_platform_risk_page()
 		cookie_items = [
 			{
@@ -660,7 +671,9 @@ class DrissionCrawlerSession:
 				set_cookies(item)
 				injected += 1
 			except Exception as error:
-				failures.append(f"{item['name']}: {self._failure_reason(error)}")
+				failures.append(
+					f"{item['name']}: {self._failure_reason(error, secrets=self._seed_cookies.values())}"
+				)
 		return SessionSeedResult(
 			attempted=attempted,
 			injected=injected,

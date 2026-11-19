@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Fixed
+- 采集注入 Cookie 的失败原因做值级脱敏：`_failure_reason` 先把所有 seed Cookie 值替换成 `[REDACTED]` 再截断，DrissionPage 的 `ValueError` 把整个 cookie 字典（含 `value`）拼进消息时，`AUTH_REQUIRED` 信封的 `error.message` 不再输出真实 Cookie 值，`SessionSeedResult` 恢复「不保留任何原值」的承诺（Issue #2168）。
+- crawl 的三处 `Path.resolve()` 把符号链接环的 `RuntimeError` 按确定性本地失败收口：Python 3.11 / 3.12 上配置目录解析失败不再落成 `ok:true, status=stopped` + 无限 `crawl resume`，`crawl start` 的数据目录解析报 `INVALID_PARAM`，输出目录解析报 `LOCAL_IO_ERROR`，不再被兜成可重试的 `NETWORK_ERROR` 或成功信封（Issue #2169）。
 - 导出服务的函数边界补上非对象条目与超大整数标量兜底：`chat --export` 的 MD / CSV / HTML 通道对超过 4300 位的整数标量不再抛 `ValueError`（与 `job_export` / `job_card` 同口径按缺失处理）；chat 导出与职位导出的渲染入口跳过非对象条目，`diff` 列表容忍 `null` / 非列表 / 坏元素；`build_job_from_card` 对非对象入参按空卡片处理。CLI 调用方目前都已过滤，这是公共边界的纵深防御，避免本地形状漂移被兜成可重试的 `NETWORK_ERROR` 或裸 traceback（Issue #2162）。
 - `saved_searches` 名称的 BLOB 存储类漂移不再让预设 / watch「看得到却运行或删除不了」：`get_saved_search` / `delete_saved_search` / `save_saved_search` 同时匹配 TEXT 与 BLOB 两种存储类，保存时把同内容的 BLOB 漂移行归一成单一 TEXT 行；`watch run --all` 对运行前已消失的记录输出显式条目，不再静默少跑一个 watch（Issue #2164）。
 - `favorites sync` 的去重键改用与展示路径同一套 `_decode_text_column` 解码：候选池 ID 以 BLOB 存储类落库时不再被 `str(bytes)` 误读成 `"b'…'"`，同一职位不会被重复插入也不会误报为新导入（Issue #2165）。

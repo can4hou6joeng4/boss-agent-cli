@@ -177,7 +177,16 @@ def _settings_from_context(
 	# 断点里存的是绝对路径：`--data-dir` 允许相对路径（如 `state`），若把
 	# `state/crawl/chrome-profile` 原样落盘，之后在不同 cwd 下 resume 会指向
 	# 另一个目录，而 from_dict 的绝对路径校验也会把刚建的任务判成记录损坏。
-	resolved_profile = str((data_dir / "crawl" / "chrome-profile").resolve())
+	try:
+		resolved_profile = str((data_dir / "crawl" / "chrome-profile").resolve())
+	except RuntimeError as exc:
+		# Path.resolve 在 3.11 / 3.12 遇到符号链接环抛 RuntimeError（3.13+ 改为
+		# 不抛、返回原路径）。这是数据目录配置问题，落到入口兜底会被报成可重试的
+		# NETWORK_ERROR，按参数错误拒绝（Issue #2169）。
+		raise ValueError(
+			f"无法解析采集配置目录 {str(data_dir / 'crawl' / 'chrome-profile')!r}（{exc}）；"
+			"请检查数据目录下是否存在符号链接环，或改用不含符号链接环的 --data-dir"
+		) from exc
 	resolved_hook = hook_profile or "none"
 	if resolved_hook not in _HOOK_CHOICES:
 		raise ValueError(f"unknown hook profile: {resolved_hook}")
@@ -573,8 +582,8 @@ def _run_service(
 			message=str(exc),
 			recoverable=False,
 			recovery_action=(
-				"检查数据目录下的 crawl/chrome-profile 是否被同名文件占用、"
-				"目录权限与磁盘空间是否正常，修正后重新执行"
+				"检查数据目录下的采集路径（crawl/chrome-profile、crawl/runs）是否被同名文件占用、"
+				"是否存在符号链接环，目录权限与磁盘空间是否正常，修正后重新执行"
 			),
 		)
 		return
@@ -1039,6 +1048,20 @@ def start_cmd(
 		# create() 在落库前做出口一致性检查；原样上抛会落成 INTERNAL_ERROR
 		# （Issue #1555）。
 		_report_egress_contradiction(ctx, "crawl.start", exc)
+		return
+	except CrawlProfilePathInvalid as exc:
+		# 输出目录无法解析（如符号链接环）：确定性本地路径失败，原样上抛会被
+		# 装饰器兜成可重试的 NETWORK_ERROR（Issue #2169）。
+		handle_error_output(
+			ctx,
+			"crawl.start",
+			code="LOCAL_IO_ERROR",
+			message=str(exc),
+			recoverable=False,
+			recovery_action=(
+				"检查数据目录下的 crawl/runs 是否存在符号链接环、目录权限与磁盘空间是否正常，修正后重新执行"
+			),
+		)
 		return
 	except ValueError as exc:
 		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help", include_data_dir=True)
