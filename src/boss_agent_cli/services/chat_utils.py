@@ -56,6 +56,27 @@ def message_list(platform_data: Any) -> list[Any]:
 	return []
 
 
+# 超过 4300 位的整数 str() 会抛 ValueError（Python 3.11+ 安全上限）；
+# 与 output._MAX_SAFE_INT_BITS 同口径，超过即按缺失处理。
+_MAX_UID_INT_BITS = 14284
+
+
+def stable_uid(value: Any) -> str:
+	"""平台 uid 的稳定身份文本：只接受非空字符串或非 bool 整数（Issue #2063 / #2064）。
+
+	真实平台用整数 uid（如 ``10001``），历史快照也有字符串形态，两者都要
+	保留。布尔 / 容器 / 浮点漂移时 ``str()`` 会让不同联系人共用 ``"True"``
+	/ ``"{}"`` 这类 key——翻页签名误判重复页、整页联系人被当作已读跳过，
+	快照合并只留下最后一个；超过 4300 位的整数在 ``str()`` 直接抛
+	``ValueError``。漂移值按缺失处理，由调用方回退轮换的 securityId。
+	"""
+	if isinstance(value, str):
+		return value.strip()
+	if isinstance(value, int) and not isinstance(value, bool):
+		return str(value) if value.bit_length() <= _MAX_UID_INT_BITS else ""
+	return ""
+
+
 def contact_identity(item: dict[str, Any]) -> str:
 	"""返回联系人的稳定标识：优先 ``uid``，缺失时回退 ``security_id``。
 
@@ -63,11 +84,14 @@ def contact_identity(item: dict[str, Any]) -> str:
 	会拿到不同的值。因此凡是需要「跨请求比较同一个联系人」的场景
 	（快照合并、diff、映射表）都必须以 ``uid`` 为主键，
 	仅对缺少 uid 的历史快照数据回退到 ``security_id``。
+
+	两个字段都只接受非空字符串：布尔 / 容器 / 数字漂移曾让不同联系人共用
+	同一 identity，快照合并时互相覆盖（Issue #2064）。
 	"""
-	uid = item.get("uid")
-	if uid not in (None, ""):
-		return str(uid)
-	return str(item.get("security_id") or "")
+	uid = stable_uid(item.get("uid"))
+	if uid:
+		return uid
+	return stable_uid(item.get("security_id"))
 
 
 def sanitize_csv_cell(value: str) -> str:

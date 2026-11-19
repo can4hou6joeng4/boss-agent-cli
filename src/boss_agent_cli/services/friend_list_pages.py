@@ -1,6 +1,7 @@
 from typing import Any
 
 from boss_agent_cli.api.models import dict_items
+from boss_agent_cli.services.chat_utils import stable_uid
 
 
 MAX_FRIEND_LIST_PAGES = 50
@@ -100,8 +101,10 @@ def collect_friend_list_page(
 
 		# securityId 在每次请求间都会轮换（见 services/contact_lookup.py），
 		# 只能作为 uid 缺失时的回退标识；签名全为空时无法判断是否重复，
-		# 继续聚合，避免把缺字段的新页面当成重复页丢掉。
-		identities = [str(item.get("uid") or item.get("securityId") or "") for item in page_items]
+		# 继续聚合，避免把缺字段的新页面当成重复页丢掉。uid 必须是非空
+		# 字符串：布尔 / 容器漂移会让各页签名相同，整页联系人被当成重复页
+		# 丢弃且 reported complete（Issue #2063）。
+		identities = [stable_uid(item.get("uid")) or stable_uid(item.get("securityId")) for item in page_items]
 		if any(identities):
 			signature = tuple(identities)
 			if signature in seen_signatures:
