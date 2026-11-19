@@ -519,6 +519,17 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 									break
 								if error_code in {"RATE_LIMITED", "GREET_LIMIT"}:
 									release_candidate_action(cache, item.job_id, "greet", account=account)
+									# 触发停批的候选人同样要进结果：既不能从 greeted/failed
+									# 里消失，也不能让限流批次以 ok:true 收尾（Issue #2003）。
+									results.append({
+										"security_id": item.security_id,
+										"job_id": item.job_id,
+										"title": item.title,
+										"company": item.company,
+										"status": "failed",
+										"error": error_code,
+										"details": _cli_error_details(resp),
+									})
 									stopped_reason = error_code
 									break
 								error_msg = error_code
@@ -576,6 +587,14 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 							stop_code = getattr(e, "code", None)
 							if stop_code in ("RATE_LIMITED", "GREET_LIMIT"):
 								release_candidate_action(cache, item.job_id, "greet", account=account)
+								results.append({
+									"security_id": item.security_id,
+									"job_id": item.job_id,
+									"title": item.title,
+									"company": item.company,
+									"status": "failed",
+									"error": str(stop_code),
+								})
 								stopped_reason = str(stop_code)
 								break
 
@@ -714,6 +733,27 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 					recovery_action=recovery_action,
 					details=data,
 					hints=hints or None,
+				)
+				return
+
+			if stopped_reason in ("RATE_LIMITED", "GREET_LIMIT"):
+				# 限流停批必须回 ok:false：单次 greet 对同一响应就是 ok:false，
+				# GREET_LIMIT 还登记为不可恢复——ok:true 会让 Agent 把额度用完
+				# 当成批次成功（Issue #2003）。剩余候选人未处理。
+				recoverable, recovery_action = error_contract_for_code(stopped_reason)
+				handle_error_output(
+					ctx, "batch-greet",
+					code=stopped_reason,
+					message="批量打招呼被平台限流中断；剩余候选人未处理",
+					recoverable=recoverable,
+					recovery_action=recovery_action,
+					details=data,
+					hints={
+						"next_actions": [_hint_command(ctx, "chat")],
+						"operator_actions": [
+							"剩余候选人未发送；先在官方页面确认频率限制解除，再对未完成的候选人重新执行",
+						],
+					},
 				)
 				return
 
