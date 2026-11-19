@@ -124,7 +124,10 @@ def _validate_group_budget_config(data_dir: Path, cfg: dict[str, Any]) -> None:
 		return
 	try:
 		group_dir = expand_budget_directory(raw).resolve()
-	except ValueError as exc:
+	# RuntimeError：路径含符号链接环时 resolve() 在 3.11 / 3.12 抛错（3.13 起返回
+	# 原路径）。这是确定性的本地配置错误，与 ValueError 同口径拒绝；否则它会冲出
+	# BossCliGroup 的兜底链，连信封都没有（Issue #2159）。
+	except (ValueError, RuntimeError) as exc:
 		raise _StartupConfigBadParameter(
 			f"成员配置的 request_budget_dir 无效：{exc}",
 			recovery_action=f"修正 {data_dir / 'config.json'} 的 request_budget_dir 后重试",
