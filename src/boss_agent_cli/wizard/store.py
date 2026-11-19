@@ -53,6 +53,17 @@ def _validate_error_contract(run: dict[str, Any]) -> dict[str, Any]:
 	for kind, record_id, error in records:
 		if not isinstance(error, dict):
 			continue
+		if "code" in error and not (isinstance(error["code"], str) and error["code"]):
+			# 信封出口会把它转成字符串或落回 NETWORK_ERROR +「重试」：结果未知的写步骤
+			# 不能拿到一条重试指引（Issue #1960）。
+			raise CacheRecordInvalid(
+				kind,
+				record_id,
+				"error.code",
+				"必须是非空字符串；无法据此判断失败原因，重建任务前先核对实际状态",
+			)
+		if "message" in error and error["message"] is not None and not isinstance(error["message"], str):
+			raise CacheRecordInvalid(kind, record_id, "error.message", "必须是字符串或 null")
 		if "recoverable" in error and not isinstance(error["recoverable"], bool):
 			raise CacheRecordInvalid(
 				kind,
