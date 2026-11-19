@@ -386,6 +386,15 @@ class AuthManager:
 						# 打平台、重试到预算耗尽（Issue #1305）。
 						raise TokenRefreshFailed("Token 刷新失败：刷新通道未返回 stoken，请重新登录")
 					refreshed = {**current, "stoken": new_stoken}
+					# 登录 / 导入保存不持刷新锁（Issue #2042）：刷新走 CDP / headless
+					# 需要数秒，期间另一个进程可能已完成登录并写入全新会话。此时刷新
+					# 得到的新 stoken 属于快照里的旧账号，无条件写回会把新登录的整个
+					# jar 换回旧 cookies（换账号时尤其危险）。写回前重新读取，发现会话
+					# 已变就放弃写回、直接采纳对方写入的版本。
+					latest = self._store.load()
+					if latest != current:
+						self._token = latest
+						return
 					self._store.save(refreshed)
 					self._token = refreshed
 				except PlatformRiskError as error:

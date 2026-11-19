@@ -98,7 +98,7 @@ class TokenStore:
 			system or "unknown-system",
 			platform.machine() or "unknown-machine",
 		])
-		return hashlib.sha256(fingerprint.encode()).hexdigest()
+		return hashlib.sha256(fingerprint.encode("utf-8", "surrogatepass")).hexdigest()
 
 	def _get_salt(self) -> bytes:
 		# salt 决定 session.enc 的派生密钥；共享实现保证首个写入者获胜，
@@ -120,12 +120,22 @@ class TokenStore:
 			salt=salt,
 			iterations=480000,
 		)
-		key = kdf.derive(machine_id.encode())
+		# machine_id 只作密钥派生的本地输入（不参与安全边界），稳定唯一即可：
+		# BOSS_AGENT_MACHINE_ID 经 surrogateescape 解码可含孤立代理字符，严格编码
+		# 会让 load / save 直接抛 UnicodeEncodeError，绕过登录态的「未登录 / 本地
+		# IO 错误」两种既有分流（Issue #2044）。surrogatepass 与 file_lock /
+		# cdp_risk_lock 的口径一致。
+		key = kdf.derive(machine_id.encode("utf-8", "surrogatepass"))
 		return urlsafe_b64encode(key)
 
 	def save(self, token_data: dict[str, Any]) -> None:
 		fernet = Fernet(self._derive_key())
-		plaintext = json.dumps(token_data, ensure_ascii=False).encode()
+		# cookie / stoken 值可能含孤立代理字符（非法 UTF-8 字节经 surrogateescape
+		# 解码，Issue #1918 已认定可达）。严格编码会抛 UnicodeEncodeError，被登录
+		# 错误分流当成 INVALID_PARAM，把平台已成功的登录说成参数非法（Issue #2040）。
+		# backslashreplace 写出合法的 ``\udcff`` 转义，读回值不变，与
+		# services/json_files.py / output.py 同口径。
+		plaintext = json.dumps(token_data, ensure_ascii=False).encode("utf-8", "backslashreplace")
 		encrypted = fernet.encrypt(plaintext)
 		write_private_bytes(self._session_path, encrypted)
 
