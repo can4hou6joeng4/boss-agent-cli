@@ -1657,6 +1657,11 @@ class CacheStore:
 
 	def save_saved_search(self, name: str, params: dict[str, Any]) -> None:
 		now = time.time()
+		# name 是 TEXT 亲和性主键，但 SQLite 不强制类型：同内容的 BLOB 存储类
+		# 与 TEXT 比较时永不相等，INSERT OR REPLACE 会留下一行 BLOB、再插一行
+		# TEXT（Issue #2164，与 #2147 的读取兼容同族）。保存时先清掉同内容的
+		# BLOB 漂移行，把记录归一成单一 TEXT 行。
+		self._conn.execute("DELETE FROM saved_searches WHERE name = CAST(? AS BLOB)", (name,))
 		existing = self._conn.execute(
 			"SELECT created_at FROM saved_searches WHERE name = ?",
 			(name,),
@@ -1670,8 +1675,12 @@ class CacheStore:
 
 	def get_saved_search(self, name: str) -> dict[str, Any] | None:
 		row = self._conn.execute(
-			"SELECT name, params, created_at, updated_at FROM saved_searches WHERE name = ?",
-			(name,),
+			# 同时匹配 BLOB 存储类：#2147 的读取兼容把 BLOB 名称解码后展示，
+			# 但按键查找只用 `name = ?` 时永远找不到那一行，watch / preset
+			# 会「看得到却运行不了」（Issue #2164）。
+			"SELECT name, params, created_at, updated_at FROM saved_searches "
+			"WHERE name = ? OR name = CAST(? AS BLOB)",
+			(name, name),
 		).fetchone()
 		if row is None:
 			return None
@@ -1724,12 +1733,15 @@ class CacheStore:
 
 	def delete_saved_search(self, name: str) -> bool:
 		cursor = self._conn.execute(
-			"DELETE FROM saved_searches WHERE name = ?",
-			(name,),
+			# 与 get_saved_search 同口径：BLOB 存储类与 TEXT 永久不相等，只删
+			# `name = ?` 会让 `watch remove` 报 removed: false 且记录留下
+			# （Issue #2164）。
+			"DELETE FROM saved_searches WHERE name = ? OR name = CAST(? AS BLOB)",
+			(name, name),
 		)
 		self._conn.execute(
-			"DELETE FROM watch_hits WHERE search_name = ?",
-			(name,),
+			"DELETE FROM watch_hits WHERE search_name = ? OR search_name = CAST(? AS BLOB)",
+			(name, name),
 		)
 		self._conn.commit()
 		return cursor.rowcount > 0
@@ -1995,13 +2007,25 @@ class CacheStore:
 		existing_count = 0
 		skipped_count = 0
 		with self._conn:
-			existing_by_job_id: dict[str, tuple[str, str]] = {
-				str(row[1]): (str(row[0]), str(row[2]))
-				for row in self._conn.execute(
-					"SELECT security_id, job_id, source FROM shortlist_records WHERE job_id != '' "
-					"ORDER BY created_at ASC"
-				).fetchall()
-			}
+			existing_by_job_id: dict[str, tuple[str, str]] = {}
+			for row in self._conn.execute(
+				"SELECT security_id, job_id, source FROM shortlist_records WHERE job_id != '' "
+				"ORDER BY created_at ASC"
+			).fetchall():
+				# 去重键必须与读取展示路径同口径：BLOB 存储类经 str() 会变成
+				# "b'J'"，与平台返回的 "J" 永不相等，同一职位被重复插入
+				# （Issue #2165，与 #1885 / #2147 的 _decode_text_column 同源）。
+				try:
+					security_key = _decode_text_column("shortlist", str(row[0]), "security_id", row[0])
+					job_key = _decode_text_column("shortlist", str(row[1]), "job_id", row[1])
+					source_key = _decode_text_column("shortlist", str(row[2]), "source", row[2])
+				except CacheRecordInvalid:
+					# 无法解码的坏行不参与去重：它仍会出现在 list_shortlist 的
+					# corrupt 名单里，不能因此让整批导入失败。
+					continue
+				if not job_key:
+					continue
+				existing_by_job_id[job_key] = (security_key or "", source_key or "")
 			for item in items:
 				security_id = str(item.get("security_id") or "")
 				job_id = str(item.get("job_id") or "")
