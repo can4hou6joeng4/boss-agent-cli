@@ -432,6 +432,14 @@ def _run_service(
 		if on_error is not None:
 			on_error(code, message)
 
+	# 新建采集在导出前就已把 run 落库：导出失败时要把 run_id 交回调用方，
+	# 否则只能重建任务、重复采集（Issue #1835）。
+	created: dict[str, str] = {}
+
+	def capture_created(inner_run_id: str) -> None:
+		if isinstance(inner_run_id, str) and inner_run_id.strip():
+			created.setdefault("run_id", inner_run_id.strip())
+
 	try:
 		raise_if_locked(Path(ctx.obj["data_dir"]))
 		transports = _LazySeededTransportFactory(ctx)
@@ -445,6 +453,7 @@ def _run_service(
 				cache,
 				data_dir=Path(ctx.obj["data_dir"]),
 				transport_factory=transports,
+				on_run_created=capture_created,
 				preflight=transports.preflight,
 			)
 			outcome = service_call(service)
@@ -504,6 +513,30 @@ def _run_service(
 		# 导出失败是本地目录 / 权限问题：CrawlExportError 是 RuntimeError 子类，
 		# 不单独捕获会被兜成 CRAWL_UNAVAILABLE 并让人去安装 crawl 依赖（Issue #1238）。
 		note("LOCAL_IO_ERROR", str(exc))
+		known_run_id = run_id if run_id is not None else created.get("run_id")
+		if known_run_id:
+			# 采集结果已按 run 落库：给出可直接续跑的恢复命令，别让人重建任务
+			# 重复采集（Issue #1835）。
+			resume_command = boss_command_for_ctx(
+				ctx, f"crawl resume {shell_argument(known_run_id)}", include_data_dir=True
+			)
+			status_command = boss_command_for_ctx(
+				ctx, f"crawl status {shell_argument(known_run_id)}", include_data_dir=True
+			)
+			handle_error_output(
+				ctx,
+				"crawl",
+				code="LOCAL_IO_ERROR",
+				message=str(exc),
+				recoverable=False,
+				recovery_action=(
+					f"本次采集记录已保存在 crawl run {known_run_id}：确认输出目录可写（不是同名的已有文件）、"
+					f"目录权限与磁盘空间正常，然后执行 {resume_command} 从断点继续；进度可用 {status_command} 查看"
+				),
+				details={"run_id": known_run_id},
+				hints={"next_actions": [status_command]},
+			)
+			return
 		handle_error_output(
 			ctx,
 			"crawl",

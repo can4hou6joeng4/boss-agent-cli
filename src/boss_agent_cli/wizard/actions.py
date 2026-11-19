@@ -456,6 +456,24 @@ def _int_input(inputs: Mapping[str, Any], name: str, default: int, *, minimum: i
 	return _check_minimum(_coerce_int(raw, name), raw, name, minimum)
 
 
+def _require_run_id(inputs: Mapping[str, Any]) -> str:
+	"""wizard 的 run_id 只接受非空字符串（Issue #1836）。
+
+	``str(_required(...))`` 会把 123 / ``['r1']`` 拼成 "123" / "['r1']" 去查
+	cache，再报成「任务不存在」并给出新建任务的误导指引；与 #1812 的命令层
+	口径一致，非字符串或纯空白一律 INVALID_PARAM。
+	"""
+	raw = _required(inputs, "run_id")
+	if not isinstance(raw, str) or not raw.strip():
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"run_id 必须是非空字符串，收到 {type(raw).__name__}",
+			recoverable=True,
+			recovery_action="在 inputs 中提供 crawl run_id 字符串后用同一 run_id 重试；可用 crawl status <run_id> 核对",
+		)
+	return raw.strip()
+
+
 def _required(inputs: Mapping[str, Any], name: str) -> Any:
 	value = inputs.get(name)
 	if value is None or value == "":
@@ -1412,6 +1430,24 @@ def _is_stop_error(error: Any) -> bool:
 	return "stop requested" in message or "stop 请求" in message or "workflow stop" in message
 
 
+def _crawl_partial_details(data: Any) -> dict[str, Any]:
+	"""采集未完成时的断点信息：进度与已落盘结果（Issue #1834）。
+
+	限流 / 超时 / 停止分支原来只抛错误码，已经采集的页数、职位数与输出路径
+	全部丢失；这里按 outcome.as_dict() 取紧凑子集，避免把 jobs 列表塞进错误。
+	"""
+	if not isinstance(data, Mapping):
+		return {}
+	details: dict[str, Any] = {}
+	for key in ("run_id", "status", "next_page", "pages_completed", "jobs_seen", "detail_checks", "output_paths"):
+		if key in data:
+			details[key] = data[key]
+	checkpoint = data.get("checkpoint")
+	if isinstance(checkpoint, Mapping):
+		details["checkpoint"] = dict(checkpoint)
+	return details
+
+
 def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> StepResult:
 	data = outcome.as_dict()
 	checkpoint = data.get("checkpoint") if isinstance(data, dict) else None
@@ -1437,6 +1473,7 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 			outcome.error or "workflow 超过设定时限",
 			recoverable=True,
 			recovery_action=resume_command,
+			details=_crawl_partial_details(data),
 		)
 	if outcome.status == "workflow_stopped" or (outcome.status == "stopped" and _is_stop_error(outcome.error)):
 		raise WorkflowActionError(
@@ -1444,6 +1481,7 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 			outcome.error or "crawl 已停止",
 			recoverable=False,
 			recovery_action=status_command,
+			details=_crawl_partial_details(data),
 		)
 	if outcome.status == "throttle_stopped":
 		# 本地共享请求预算等待超时：run 预算没有耗尽，等待后 resume 从断点继续
@@ -1455,6 +1493,7 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 			recovery_action=resume_command,
 			# 立即重试仍可能撞上同一个冷却 / 占用者，交给操作者稍后恢复。
 			auto_retry=False,
+			details=_crawl_partial_details(data),
 		)
 	if outcome.status in {"risk_stopped", "budget_stopped"}:
 		# 风控停止时 service 会 keep Chrome；把标记写入结果供向导文案使用。
@@ -1493,6 +1532,7 @@ def _crawl_outcome_result(outcome: Any, cache: CacheStore | None = None) -> Step
 			outcome.error or f"crawl 以状态 {outcome.status} 停止",
 			recoverable=True,
 			recovery_action=resume_command,
+			details=_crawl_partial_details(data),
 		)
 	return StepResult(data, artifacts=tuple(outcome.output_paths.values()))
 
@@ -1680,9 +1720,35 @@ def _require_crawl_inputs_match_run(context: ActionContext, run_id: str, inputs:
 		)
 
 
+def _explicit_crawl_run_id(inputs: Mapping[str, Any]) -> str | None:
+	"""读取显式传入的 run_id / crawl_run_id（Issue #1833）。
+
+	真值 ``or`` 会吞掉 0 / false / []，把「显式传了非法值」当成「没传」，
+	直接新建采集任务并向平台发出真实请求。只有缺键与 null 才视为未提供；
+	显式非字符串、纯空白都按参数错误拒绝，与 CLI 的 ``--run-id`` 同口径。
+	"""
+	found: str | None = None
+	for key in ("run_id", "crawl_run_id"):
+		if key not in inputs:
+			continue
+		raw = inputs[key]
+		if raw is None:
+			continue
+		if not isinstance(raw, str) or not raw.strip():
+			raise WorkflowActionError(
+				"INVALID_PARAM",
+				f"{key} 必须是非空字符串，收到 {type(raw).__name__}",
+				recoverable=True,
+				recovery_action="去掉该字段新建采集，或提供字符串 run_id 续跑已有任务；可用 crawl status <run_id> 核对",
+			)
+		if found is None:
+			found = raw.strip()
+	return found
+
+
 def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	# 恢复 waiting_input 时若已有内部 crawl run_id，必须续跑而不是新建采集。
-	explicit_run_id = _optional_str(inputs.get("run_id") or inputs.get("crawl_run_id"))
+	explicit_run_id = _explicit_crawl_run_id(inputs)
 	existing_run_id = explicit_run_id
 	if existing_run_id is None:
 		prior_step = prior.get("crawl_start")
@@ -1851,7 +1917,7 @@ def _positive_int(value: Any, *, name: str) -> int:
 def _crawl_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		try:
-			run_id = str(_required(inputs, "run_id"))
+			run_id = _require_run_id(inputs)
 			data = crawl_status(cache, run_id, data_dir=context.data_dir)
 			data = _attach_wizard_jobs(data, cache, run_id)
 		except KeyError as exc:
@@ -1860,7 +1926,7 @@ def _crawl_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 
 
 def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	run_id = str(_required(inputs, "run_id"))
+	run_id = _require_run_id(inputs)
 	raw_pages = inputs.get("pages")
 	pages = None if raw_pages is None else _positive_int(raw_pages, name="pages")
 	with_detail = _bool_input(inputs, "with_detail")
@@ -1909,7 +1975,7 @@ def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 
 
 def _crawl_stop(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	run_id = str(_required(inputs, "run_id"))
+	run_id = _require_run_id(inputs)
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		run = cache.get_crawl_run(run_id)
 		if run is None:

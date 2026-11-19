@@ -14,6 +14,10 @@
 - `clean --risk-lock` 删除锁路径上的符号链接本身（含悬空链接）；`local_lock_removed` 要求确实删过锁项且清理后读不到锁，不再报成功而锁仍生效，也不再给「无锁目录」误报 true（Issue #1829）。
 - `clean` 中途失败时信封带回已完成项与失败项；清锁之后才失败会明确说明锁已清除（Issue #1830 #1831）。
 - `search` 的预设重建 / 删除后继命令对以 `-` 开头的预设名前置 `--`（Issue #1832）。
+- wizard 的 `crawl_start` 只把缺键与 null 视为未提供 run_id：显式 `0` / `false` / 空数组 / 空串按 `INVALID_PARAM` 拒绝，不再静默新建采集并发出真实请求（Issue #1833）。
+- wizard 采集被限流 / 超时 / 停止时，错误详情带回 run_id、完成页数、jobs_seen 与已落盘输出路径（Issue #1834）。
+- `crawl resume` / `crawl run` 导出失败时信封带回已知 run_id 与可直接执行的恢复命令，不再只有 `data=null`（Issue #1835）。
+- wizard 的 `crawl_status` / `crawl_resume` / `crawl_stop` 只接受非空字符串 run_id，非字符串报 `INVALID_PARAM` 而不是「任务不存在」（Issue #1836）。
 
 ## [3.4.122] - 2026-11-19
 
