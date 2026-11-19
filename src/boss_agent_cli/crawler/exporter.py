@@ -118,6 +118,9 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 			backup: Path | None = None
 			if current_target.is_file():
 				backup = _temporary_for(current_target)
+				# 备份由 mkstemp 先创建：若随后的搬运失败，它必须和序列化临时
+				# 文件一起被清理，否则每次重试都残留一个 `.jobs.*`（Issue #1875）。
+				temporaries.append(backup)
 				os.replace(current_target, backup)
 			try:
 				os.replace(temporary, current_target)
