@@ -87,10 +87,12 @@ def test_candidates_pagination_evidence_and_filters(mock_auth_cls, mock_platform
 	assert result.exit_code == 0
 	payload = json.loads(result.output)
 	_assert_pagination(payload, expected=expected, total=1)
-	next_pages = _next_pages(payload, "hr candidates python --page")
+	next_pages = _next_pages(payload, "hr candidates --page")
 	if expected is True:
+		# query 是位置参数，排在所有选项之后：横杠开头的 query 才能经
+		# ``--`` 安全重放（Issue #2068）。
 		assert next_pages == [
-			_hint("hr candidates python --page 3 --city 101020100 --degree 201,201 --select")
+			_hint("hr candidates --page 3 --city 101020100 --degree 201,201 --select python")
 		]
 	else:
 		assert next_pages == []

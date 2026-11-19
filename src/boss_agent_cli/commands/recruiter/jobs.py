@@ -14,6 +14,7 @@ from boss_agent_cli.display import (
 	handle_platform_error_output,
 	render_action_result,
 )
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE
 
 
 @click.group("jobs")
@@ -44,10 +45,14 @@ def jobs_list_cmd(ctx: click.Context, page: int) -> None:
 		# 「是否还有下一页」的证据。data 原样保留，避免破坏已有消费方。
 		if isinstance(data, dict):
 			raw_page = data.get("page")
+			# 平台回显页与请求页都要钳制：超长整数在 ``page + 1`` 的字符串化
+			# 处会撞上整数转换上限，把一次成功的只读读取报成可重试的
+			# NETWORK_ERROR（Issue #2067，与 services.pagination 的
+			# MAX_TRUSTED_PAGE 同口径）。
 			current_page = (
 				raw_page
-				if isinstance(raw_page, int) and not isinstance(raw_page, bool) and raw_page >= 1
-				else page
+				if isinstance(raw_page, int) and not isinstance(raw_page, bool) and 1 <= raw_page <= MAX_TRUSTED_PAGE
+				else min(max(page, 1), MAX_TRUSTED_PAGE)
 			)
 			raw_has_more = data.get("hasMore")
 			has_more = raw_has_more if isinstance(raw_has_more, bool) else None
@@ -69,7 +74,7 @@ def jobs_list_cmd(ctx: click.Context, page: int) -> None:
 			}
 		else:
 			pagination = {
-				"page": page,
+				"page": min(max(page, 1), MAX_TRUSTED_PAGE),
 				"has_more": None,
 				"has_more_source": "unknown",
 				"total": None,

@@ -67,14 +67,31 @@ def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id
 				return
 			data = result if show_raw else parse_resume(result)
 		else:
+			# 按实际缺失项生成提示：漏了位置参数 geek_id 时仍让人补
+			# --job-id / --security-id，Agent 会拿同一组参数重试循环
+			# （Issue #2069）。
 			apps_cmd = hint_command(ctx, "hr applications")
+			candidates_cmd = hint_command(ctx, "hr candidates")
+			missing: list[str] = []
+			sources: list[str] = []
+			if not (geek_id and geek_id.strip()):
+				missing.append("geek_id")
+				sources.append(f"geek_id 可从 {candidates_cmd} 的结果中取到")
+			job_missing = not job_id.strip()
+			security_missing = not (security_id and security_id.strip())
+			if job_missing:
+				missing.append("--job-id")
+			if security_missing:
+				missing.append("--security-id")
+			if job_missing or security_missing:
+				sources.append(f"--job-id 与 --security-id 可从 {apps_cmd} 的结果中取到")
 			handle_error_output(
 				ctx, "recruiter-resume",
 				code="INVALID_PARAM",
-				message="查看简历需要 --job-id 和 --security-id 参数",
+				message=f"查看简历缺少参数：{', '.join(missing)}",
 				recoverable=False,
-				recovery_action=f"补上 --job-id 与 --security-id 后重试；两个编号可从 {apps_cmd} 的结果中取到",
-				hints={"next_actions": [apps_cmd]},
+				recovery_action=f"补上 {' 与 '.join(missing)} 后重试；{'；'.join(sources)}",
+				hints={"next_actions": [apps_cmd if (job_missing or security_missing) else candidates_cmd]},
 			)
 			return
 
