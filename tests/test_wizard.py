@@ -3159,6 +3159,15 @@ def test_empty_selector_value_is_invalid_param(tmp_path):
 		assert payload["error"]["code"] == "INVALID_PARAM", flag
 		assert flag in payload["error"]["message"], flag
 		assert "不能为空" in payload["error"]["message"], flag
+		recovery = payload["error"]["recovery_action"]
+		next_actions = payload["hints"]["next_actions"]
+		if flag == "--input-json":
+			# 创建任务的输入是 JSON 对象，补 run_id 修不好它。
+			assert "JSON 对象" in recovery, flag
+			assert "schema" in next_actions[0], flag
+		else:
+			assert "run_id" in recovery, flag
+			assert next_actions[0].endswith("wizard"), flag
 
 
 def _once_then_cancel(value):

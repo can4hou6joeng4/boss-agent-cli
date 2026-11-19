@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 空 `wizard --input-json` 的恢复指引改为提示传入符合向导目录要求的 JSON 对象并查阅 `boss schema`，不再让调用方去补一个创建任务用不到的 `run_id`；其余空选择器仍提示补齐任务 ID（Issue #2190）。
 - wizard 断点里「状态是 pending、已落盘结果却是 completed」的矛盾不再被当成待执行步骤：恢复时按 `CACHE_RECORD_INVALID` 拒绝，可能已生效的写步骤不会被重放（Issue #2183）。
 - wizard 自定义动作返回非终态结果并声明写请求在途时，中断后留下的 `pending` 步骤与 `running` 同口径结算为「结果未知」，`--resume` 不再重发可能已生效的写请求（Issue #2184）。
 - wizard 恢复前核对断点的请求步骤与已落盘步骤行：`params.requested_steps` 漂移成子集时第一次恢复就拒绝，不再漏跑步骤却把 run 写成 `completed`（Issue #2185）。

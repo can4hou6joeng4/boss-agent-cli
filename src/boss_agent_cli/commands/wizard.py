@@ -827,13 +827,20 @@ def _run_wizard_command(
 		# 传了 flag 但值为空时，旧逻辑把它当成「没有选择器」，回一句
 		# 「非交互模式需要 --input-json、--resume、--status 或 --stop」——
 		# 用户明明传了，看到的却是「你没传」，只能再猜一次。
+		is_json_input = selectors[0][0] == "--input-json"
+		recovery = (
+			"给 --input-json 传入 JSON 对象；根据 boss schema 中的 wizard catalog 修正输入"
+			if is_json_input
+			else f"补上 run_id 后重试；用 {boss_command_for_ctx(ctx, 'wizard --status <run_id>', include_data_dir=True)} 核对已有任务"
+		)
+		next_action = boss_command_for_ctx(ctx, "schema" if is_json_input else "wizard", include_data_dir=True)
 		_wizard_error(
 			ctx,
 			interactive,
 			code="INVALID_PARAM",
 			message=f"{selectors[0][0]} 的值不能为空",
-			recovery_action=f"补上 run_id 后重试；用 {boss_command_for_ctx(ctx, 'wizard --status <run_id>', include_data_dir=True)} 核对已有任务",
-			hints={"next_actions": [boss_command_for_ctx(ctx, "wizard", include_data_dir=True)]},
+			recovery_action=recovery,
+			hints={"next_actions": [next_action]},
 		)
 		return
 
