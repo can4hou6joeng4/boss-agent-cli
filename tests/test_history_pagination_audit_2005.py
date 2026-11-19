@@ -59,9 +59,14 @@ def test_history_max_trusted_page_builds_next_hint_without_overflow(tmp_path) ->
 	assert result.exit_code == 0, result.output
 	payload = json.loads(result.stdout)
 	assert payload["pagination"]["page"] == MAX_TRUSTED_PAGE
-	assert any(
-		action.endswith(f"history --page {MAX_TRUSTED_PAGE + 1}")
+	# 上限页的 --page N+1 提示自己就过不了 --page 校验，不能给 Agent 一条
+	# 不可执行的命令（Issue #2012）。
+	assert not any(
+		f"history --page {MAX_TRUSTED_PAGE + 1}" in action
 		for action in payload["hints"]["next_actions"]
+	), payload["hints"]
+	assert any(
+		"可信页码上限" in action for action in payload["hints"]["operator_actions"]
 	), payload["hints"]
 
 

@@ -8,7 +8,7 @@ from boss_agent_cli.api.endpoints import (
 	STAGE_CODES,
 )
 from boss_agent_cli.auth.manager import AuthManager
-from boss_agent_cli.cache.store import CacheStore, SavedSearchParamsError
+from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore, SavedSearchParamsError
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.display import (
@@ -212,7 +212,12 @@ def watch_remove_cmd(ctx: click.Context, name: str) -> None:
 
 def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str, Any] | None:
 	"""执行单个 watch，返回聚合结果；找不到时返回 None。"""
-	record = cache.get_saved_search(name)
+	try:
+		record = cache.get_saved_search(name)
+	except CacheRecordInvalid as exc:
+		# 时间戳等列类型漂移与参数写坏同口径：本地记录损坏是确定性失败，
+		# 不能兜成可重试的 NETWORK_ERROR（Issue #2011）。
+		raise SavedSearchParamsError(name, f"本地记录损坏：{exc}") from exc
 	if record is None:
 		return None
 
