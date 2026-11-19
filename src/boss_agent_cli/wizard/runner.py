@@ -48,6 +48,10 @@ Action = Callable[[Any, Mapping[str, Any], Mapping[str, Any]], StepResult]
 WorkflowEvent = Callable[[str, str, Mapping[str, Any] | None], None]
 
 
+#: 带 ``replay_safe: false`` 时必须阻断重放的步骤状态。
+_REPLAY_BLOCKING_STATUSES = frozenset({WorkflowStatus.FAILED.value, WorkflowStatus.STOPPED.value})
+
+
 class WorkflowActionError(Exception):
 	def __init__(
 		self,
@@ -196,7 +200,7 @@ def has_blocked_step(run: Mapping[str, Any]) -> bool:
 	if not isinstance(steps, Sequence):
 		return False
 	for step in steps:
-		if not isinstance(step, Mapping) or str(step.get("status")) != WorkflowStatus.FAILED.value:
+		if not isinstance(step, Mapping) or str(step.get("status")) not in _REPLAY_BLOCKING_STATUSES:
 			continue
 		error = step.get("error")
 		if isinstance(error, Mapping) and error.get("replay_safe") is False:
@@ -225,11 +229,19 @@ class WorkflowControl:
 		return None
 
 	def bind_inner_run(self, inner_run_id: str) -> None:
+		# update_step 不带 error 会把它清空：已落盘的写前标记必须原样带回，否则
+		# 中断后 --resume 会重放结果未知的写操作（Issue #1958）。
+		try:
+			steps = self.store.cache.list_workflow_steps(self.run_id)
+		except CacheRecordInvalid:
+			steps = []
+		existing = next((step.get("error") for step in steps if step.get("step_name") == self.step_name), None)
 		self.store.update_step(
 			self.run_id,
 			self.step_name,
 			status=WorkflowStatus.RUNNING.value,
 			result={"inner_run_id": inner_run_id},
+			error=dict(existing) if isinstance(existing, Mapping) else None,
 		)
 
 	def begin_write(self, recovery_action: str) -> None:
@@ -352,15 +364,18 @@ class WorkflowRunner:
 		blocked_steps: dict[str, dict[str, Any]] = {}
 		for step in stored_run["steps"]:
 			error = step.get("error") or {}
-			if step["status"] == WorkflowStatus.FAILED.value and error.get("replay_safe") is False:
-				# 动作可能已经生效：--resume 不得再执行一次。
+			if step["status"] in _REPLAY_BLOCKING_STATUSES and error.get("replay_safe") is False:
+				# 动作可能已经生效：--resume 不得再执行一次。步骤落成 stopped 而 run
+				# 还没写完就中断时同样要阻断（Issue #1957）。
 				blocked_steps[step["step_name"]] = error
+				continue
+			if step["status"] == WorkflowStatus.COMPLETED.value:
+				# 已完成步骤的 result 漂移成空值也不能重跑：它可能是写操作（Issue #1959）。
+				prior_results[step["step_name"]] = step["result"] or {}
 				continue
 			if not step["result"]:
 				continue
-			if step["status"] == WorkflowStatus.COMPLETED.value:
-				prior_results[step["step_name"]] = step["result"]
-			elif step["status"] in {
+			if step["status"] in {
 				WorkflowStatus.WAITING_INPUT.value,
 				WorkflowStatus.FAILED.value,
 				WorkflowStatus.RUNNING.value,
@@ -494,6 +509,12 @@ class WorkflowRunner:
 					# action 的通用认证指引在写入 checkpoint 前补齐本次运行目录。
 					exc.recovery_action = login_action
 				error = exc
+				if exc.code in {"WORKFLOW_STOPPED", "WORKFLOW_TIMEOUT"} and exc.replay_safe:
+					# 写请求发出后的下一次控制检查抛出停止 / 超时：保留写前标记，
+					# 否则 --resume 会重放结果未知的写操作（Issue #1956）。
+					write_marker = self._persisted_write_marker(run_id, step_name)
+					if write_marker is not None:
+						error = self._unconfirmed_error(exc.code, write_marker)
 			except WorkflowInputError as exc:
 				# inputs 写错（类型不对）不是网络问题：落到下面的通用兜底会变成
 				# NETWORK_ERROR +「重试当前 run_id」，而重试同一条输入必然复现。
