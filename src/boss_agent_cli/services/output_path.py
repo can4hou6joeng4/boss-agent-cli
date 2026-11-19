@@ -70,6 +70,10 @@ def prepare_output_path(path: str | os.PathLike[str]) -> Path:
 	"""
 	target = Path(os.path.expanduser(os.fspath(path)))
 	target.parent.mkdir(parents=True, exist_ok=True)
+	# 原子写入的 ``os.replace`` 会替换符号链接本身，真实目标保持旧内容
+	# （Issue #1355）；目录 / FIFO / 设备也不能当文件写入。共享写入器统一在
+	# 准备阶段拒绝，不再依赖各命令是否先走 ``inspect_output_path``（Issue #1849）。
+	refuse_non_regular_target(target)
 	return target
 
 
@@ -116,7 +120,10 @@ def inspect_output_path(path: str | os.PathLike[str]) -> tuple[Path, OutputPathP
 
 def refuse_symlink_target(target: Path) -> None:
 	"""允许替换目录的调用方仍须拒绝符号链接目标。"""
-	if target.is_symlink():
+	# ``Path.is_symlink()`` 会把权限等 OSError 吞成 False（Issue #1716）；
+	# 用 lstat 类型位判定，读不到状态时上抛而不是放行（Issue #1849）。
+	mode = _lstat_mode(target)
+	if mode is not None and stat.S_ISLNK(mode):
 		raise OSError(errno.EINVAL, "拒绝写入符号链接目标", str(target))
 
 

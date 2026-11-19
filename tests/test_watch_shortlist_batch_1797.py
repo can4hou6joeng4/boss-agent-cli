@@ -55,7 +55,7 @@ def test_shortlist_add_hint_removes_leading_dash_ids(tmp_path):
 	)
 	assert result.exit_code == 0, result.output
 	payload = json.loads(result.output)
-	assert "shortlist remove -- -s1 -- -j1" in payload["hints"]["next_actions"][1]
+	assert "shortlist remove -- -s1 -j1" in payload["hints"]["next_actions"][1]
 
 
 def test_hint_with_leading_dash_name_actually_runs(tmp_path):
