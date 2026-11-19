@@ -68,8 +68,16 @@ _SENSITIVE_TEXT_PATTERNS = tuple(
 )
 
 
-def _is_error_code_metadata(value: Any) -> bool:
-	"""Schema error-code metadata is public even when the code contains TOKEN."""
+def _is_error_code_metadata(value: Any, path: SchemaPath = ()) -> bool:
+	"""Schema error-code metadata is public even when the code contains TOKEN.
+
+	只对 ``SCHEMA_DATA["error_codes"][<code>]`` 这一层生效：形状启发式（恰好只含
+	message / recoverable / recovery_action 三个键）在任意嵌套位置都会让键名含
+	token / cookie 的子树整体跳过键名遮盖，只要值恰好长得像错误码元数据
+	（Issue #2049）。
+	"""
+	if len(path) < 2 or path[-2] != "error_codes":
+		return False
 	if not isinstance(value, dict):
 		return False
 	keys = set(value)
@@ -137,7 +145,7 @@ def _redact_sensitive(
 			item_path = (*path, key)
 			if sensitive_parameter and key_text in _SCHEMA_VALUE_FIELDS and not isinstance(item, _NON_CREDENTIAL_TYPES):
 				redacted[key] = _REDACTED
-			elif item_path in schema_parameters or _is_error_code_metadata(item) or key_text in _PUBLIC_METADATA_KEYS:
+			elif item_path in schema_parameters or _is_error_code_metadata(item, item_path) or key_text in _PUBLIC_METADATA_KEYS:
 				redacted[key] = _redact_sensitive(item, schema_parameters, item_path, depth + 1)
 			elif any(part in key_text for part in _SENSITIVE_KEY_PARTS) and not isinstance(item, _NON_CREDENTIAL_TYPES):
 				redacted[key] = _REDACTED
@@ -232,19 +240,24 @@ def serialization_failure_envelope(command: Any = None) -> dict[str, Any]:
 	}
 
 
-def _dumps_strict_envelope(payload: dict[str, Any]) -> str:
-	"""按严格 JSON 序列化信封；必要时归一，最后防线返回固定错误信封。"""
+def _dumps_strict_envelope(payload: dict[str, Any]) -> tuple[str, bool]:
+	"""按严格 JSON 序列化信封；必要时归一，最后防线返回固定错误信封。
+
+	第二个返回值表示是否走到了最后防线（``ok=false`` 的兜底信封）。成功出口
+	据此设置失败退出码，``exit 0 ⇔ ok=true`` 的契约在最后防线也成立
+	（Issue #2053）。
+	"""
 	try:
 		# 快路径：正常信封输出与修复前逐字节一致，且不为深层合法结构多走一遍递归。
-		return json.dumps(payload, ensure_ascii=False, allow_nan=False)
+		return json.dumps(payload, ensure_ascii=False, allow_nan=False), False
 	except (TypeError, ValueError, RecursionError):
 		pass
 	try:
-		return json.dumps(json_safe_value(payload), ensure_ascii=False, allow_nan=False)
+		return json.dumps(json_safe_value(payload), ensure_ascii=False, allow_nan=False), False
 	except (TypeError, ValueError, RecursionError):
 		# 归一后仍无法严格序列化（NaN 键、bytes、循环引用等）：返回固定错误信封。
 		command = payload.get("command") if isinstance(payload, dict) else None
-		return json.dumps(serialization_failure_envelope(command), ensure_ascii=False, allow_nan=False)
+		return json.dumps(serialization_failure_envelope(command), ensure_ascii=False, allow_nan=False), True
 
 
 def _encode_stdout_text(text: str) -> str:
@@ -252,7 +265,7 @@ def _encode_stdout_text(text: str) -> str:
 	return text.encode("utf-8", "backslashreplace").decode("utf-8")
 
 
-def _dumps_envelope(payload: dict[str, Any]) -> str:
+def _dumps_envelope(payload: dict[str, Any]) -> tuple[str, bool]:
 	"""序列化信封并保证结果一定能按 UTF-8 写出（Issue #1294）。
 
 孤立代理字符（平台字段或本地坏文件里的 ``\\udcff`` / ``\\ud800``）会让
@@ -262,20 +275,22 @@ def _dumps_envelope(payload: dict[str, Any]) -> str:
 
 ``allow_nan=False`` 是严格 JSON 的最后防线（Issue #1391）：NaN / ±Infinity /
 超长整数先经 :func:`json_safe_value` 归一为 ``null``，归一后仍无法序列化时
-输出固定的 ``INTERNAL_ERROR`` 信封，异常不会穿出 stdout 边界。
+输出固定的 ``INTERNAL_ERROR`` 信封，异常不会穿出 stdout 边界。第二个返回值
+透传「是否走了兜底」（Issue #2053）。
 	"""
-	text = _dumps_strict_envelope(payload)
-	return _encode_stdout_text(text)
+	text, fallback = _dumps_strict_envelope(payload)
+	return _encode_stdout_text(text), fallback
 
 
-def envelope_success(
+def _success_envelope(
 	command: str,
 	data: Any,
 	*,
 	pagination: dict[str, Any] | None = None,
 	hints: dict[str, Any] | None = None,
 	schema_parameter_paths: SchemaParameterPaths | None = None,
-) -> str:
+) -> tuple[str, bool]:
+	"""构造成功信封；第二个返回值表示是否退化成固定错误信封（Issue #2053）。"""
 	# 只有 schema 命令从内置目录显式声明的参数路径可保留元数据。
 	# 任意业务字典自称 type=object 不能获得豁免，参数默认值/示例仍按敏感名称脱敏。
 	public_parameters = (schema_parameter_paths or {}) if command == "schema" else {}
@@ -295,7 +310,24 @@ def envelope_success(
 		# 脱敏阶段仍可能因容器自身深度、调用方构造的异常结构或无法 str() 的
 		# 键爆栈 / 抛错；stdout 必须保留七键信封，不能只留空文本
 		# （Issue #1474 #1897）。
-		return _dumps_envelope(serialization_failure_envelope(command))
+		return _dumps_envelope(serialization_failure_envelope(command))[0], True
+
+
+def envelope_success(
+	command: str,
+	data: Any,
+	*,
+	pagination: dict[str, Any] | None = None,
+	hints: dict[str, Any] | None = None,
+	schema_parameter_paths: SchemaParameterPaths | None = None,
+) -> str:
+	return _success_envelope(
+		command,
+		data,
+		pagination=pagination,
+		hints=hints,
+		schema_parameter_paths=schema_parameter_paths,
+	)[0]
 
 
 def envelope_error(
@@ -327,13 +359,25 @@ def envelope_error(
 		implied: dict[str, Any] = {"replay_safe": False}
 		if spec.get("outcome_unknown") is True:
 			implied["outcome_unknown"] = True
-		details = {**implied, **(details or {})}
+		# 非映射 details（list / str 漂移）不能在这里抛 TypeError 穿出 stdout 边界：
+		# 普通错误码的同类输入会落到下方 try 的 INTERNAL_ERROR 兜底，这里保持
+		# 一致（Issue #2052）。但 details 缺省（None）时不能连 implied 一起丢掉：
+		# 登记表要求的 ``replay_safe: false`` 是 Agent 判定「禁止自动重发」的唯一
+		# 依据（Issue #990），必须始终出现在信封里。
+		if isinstance(details, dict):
+			details = {**implied, **details}
+		elif details is None:
+			details = implied
 	try:
 		error = {
 			"code": code,
 			"message": redact_sensitive_text(message),
 			"recoverable": recoverable,
-			"recovery_action": recovery_action,
+			# 恢复指引可能内嵌 URL / 运行时字符串：与 message 同一脱敏契约，
+			# TTY 分支早已遮盖（Issue #880），JSON 出口此前漏了（Issue #2050）。
+			"recovery_action": (
+				redact_sensitive_text(recovery_action) if isinstance(recovery_action, str) else recovery_action
+			),
 		}
 		if details is not None:
 			# 结果未知的写操作有两个来源：CLI 传输层写 ``outcome="unknown"`` +
@@ -361,15 +405,21 @@ def envelope_error(
 				"error": error,
 				"hints": redact_sensitive(hints),
 			}
-		)
+		)[0]
 	except (RecursionError, ValueError, TypeError):
 		# 与成功信封同理：details / hints 或错误码登记表结构过深、含无法 str()
 		# 的键时也要保住七键信封，不能让异常穿出 stdout 边界（Issue #1474 #1897）。
-		return _dumps_envelope(serialization_failure_envelope(command))
+		return _dumps_envelope(serialization_failure_envelope(command))[0]
 
 
 def emit_success(command: str, data: Any, **kwargs: Any) -> None:
-	click.echo(envelope_success(command, data, **kwargs))
+	text, degraded = _success_envelope(command, data, **kwargs)
+	click.echo(text)
+	if degraded:
+		# 序列化兜底返回的是 ok=false 的 INTERNAL_ERROR 信封：成功出口也必须
+		# 遵守「exit 0 ⇔ ok=true」，否则调用方会把输出失败当成命令成功
+		# （Issue #2053）。
+		sys.exit(exit_code_for_error("INTERNAL_ERROR"))
 
 
 # ── 可选语义化退出码（--exit-codes sysexits）────────────────────────────
