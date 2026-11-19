@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Fixed
+- 记录风控锁时非法 / 损坏的配置文件不再替换正在传播的 `ACCOUNT_RISK` / `ENVIRONMENT_RISK`：后备预算目录按 best-effort 处理，`risk_lock.details` 始终写入，信封保持风控契约（Issue #1892）。
+- 只有 `request_budget_dir` 后备位置写锁成功时 `risk_lock.persisted` 正确报 `true`，不再误报「锁只留在进程内」（Issue #1893）。
+- `ioreg` / `reg` 输出格式漂移时机器 ID 解析落到主机名指纹兜底，不再抛 `IndexError`（Issue #1894）。
 - `--salary` 搜索遇到超长数字串的 `salaryDesc`（>4300 位）按「无法解析」处理，不再让整条搜索崩成 `INTERNAL_ERROR`（Issue #1889）。
 - 职位描述缓存只接受字符串 `encryptJobId` / 描述：类型漂移按未命中处理，`--welfare` 管线不再因 sqlite 绑定 dict 抛 `ProgrammingError`（Issue #1890）。
 - `write_json_atomic` / `strict_json_text` 把深嵌套与超长整数引发的 `RecursionError` / `ValueError` 归成本地 IO 错误，CLI 输出 `LOCAL_IO_ERROR` 信封而不是空 stdout 加 traceback（Issue #1891）。

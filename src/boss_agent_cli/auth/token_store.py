@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import time
@@ -24,6 +25,9 @@ from boss_agent_cli.services.private_files import (
 
 _LOCK_TIMEOUT = 30
 _LOCK_POLL_SECONDS = 0.05
+# 机器 ID 的外部命令输出按名字取值：格式漂移只应落到指纹兜底，不能
+# 因下标越界抛 IndexError（Issue #1894）。
+_IO_PLATFORM_UUID_RE = re.compile(r'"IOPlatformUUID"\s*=\s*"([^"]+)"')
 
 
 class RefreshLockBusy(Exception):
@@ -60,7 +64,11 @@ class TokenStore:
 					)
 					for line in result.stdout.splitlines():
 						if "IOPlatformUUID" in line:
-							return line.split('"')[-2]
+							# 输出格式漂移（shim / 封装脚本）时按下标取值会抛
+							# IndexError 并绕过指纹兜底（Issue #1894）。
+							match = _IO_PLATFORM_UUID_RE.search(line)
+							if match:
+								return match.group(1)
 			elif system == "Linux":
 				machine_id = Path("/etc/machine-id")
 				if machine_id.exists():
@@ -75,7 +83,11 @@ class TokenStore:
 					)
 					for line in result.stdout.splitlines():
 						if "MachineGuid" in line:
-							return line.split()[-1]
+							# 没有值字段的行（shim / 格式漂移）跳过继续找，不能让
+							# 下标越界抛 IndexError 绕过指纹兜底（Issue #1894）。
+							parts = line.split()
+							if len(parts) >= 2 and parts[-1] not in {"MachineGuid", "REG_SZ"}:
+								return parts[-1]
 		except (OSError, ValueError):
 			pass
 
