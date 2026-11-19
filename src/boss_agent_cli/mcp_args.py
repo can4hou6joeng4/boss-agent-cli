@@ -476,7 +476,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = ["ai", "chat-coach", arguments["chat_text"]]
 		if arguments.get("resume"):
 			args.extend(["--resume", arguments["resume"]])
-		if arguments.get("style"):
+		# 显式空串与缺省不是同一语义：CLI 会把 style 原样替换进 prompt，
+		# 空串要原样下发（Issue #1862，与 agent_stop.reason 同口径）。
+		if "style" in arguments:
 			args.extend(["--style", arguments["style"]])
 		return _literal_positionals(args, start=2)
 
@@ -611,7 +613,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "hr_applications":
 		args = ["hr", "applications"]
-		if arguments.get("job_id"):
+		# 空串不是「未传」：与 label_id 同口径按存在性下发，交给 CLI 归一
+		# （Issue #1865）。
+		if "job_id" in arguments:
 			args.extend(["--job-id", str(arguments["job_id"])])
 		if "label_id" in arguments:
 			args.extend(["--label-id", str(arguments["label_id"])])
@@ -636,7 +640,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		args = ["hr", "chat"]
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
-		if arguments.get("job_id"):
+		if "job_id" in arguments:
 			args.extend(["--job-id", str(arguments["job_id"])])
 		if "label_id" in arguments:
 			args.extend(["--label-id", str(arguments["label_id"])])
@@ -660,7 +664,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--friend-id", str(friend_id)])
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
-		if arguments.get("job_id"):
+		if "job_id" in arguments:
 			args.extend(["--job-id", str(arguments["job_id"])])
 		if "label_id" in arguments:
 			args.extend(["--label-id", str(arguments["label_id"])])
