@@ -448,7 +448,6 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 			try:
 				for idx, item in enumerate(candidates):
 					current_item = item
-					retry_count = 0
 					success = False
 
 					# 发送前先在本地原子预约：两个进程并发跑同名批次时，只有抢到
@@ -477,7 +476,7 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 						current_item = None
 						break
 
-					while retry_count <= 1:
+					for attempt in range(2):
 						try:
 							resp = platform.greet(item.security_id, item.job_id)
 							if not platform.is_success(resp):
@@ -518,31 +517,32 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 										f"招呼结果未确认（平台响应未识别），停止批量打招呼: {item.title} @ {item.company}"
 									)
 									break
-								# 其余平台错误码是明确失败、没有产生记录：撤销预约，
-								# 修正参数 / 等待后仍可重试该候选人。
-								release_candidate_action(cache, item.job_id, "greet", account=account)
-								raise RuntimeError(error_code)
-							entry: dict[str, Any] = {
-								"security_id": item.security_id,
-								"job_id": item.job_id,
-								"title": item.title,
-								"company": item.company,
-								"status": "success",
-							}
-							try:
-								settle_candidate_action(
-									cache, item.security_id, item.job_id, "greet", account=account
-								)
-							except Exception:
-								# 记账失败不能落进下面的通用失败分支：那会 sleep 后重发同一个招呼。
-								# 标记后停止批次，由收尾逻辑输出不可重试的本地状态错误。
-								entry["recorded"] = False
-								cache_write_failed = True
-								logger.warning(f"本地记账失败，停止批量打招呼: {item.title} @ {item.company}")
-							results.append(entry)
-							success = True
-							logger.info(f"打招呼成功: {item.title} @ {item.company}")
-							break
+								if error_code in {"RATE_LIMITED", "GREET_LIMIT"}:
+									release_candidate_action(cache, item.job_id, "greet", account=account)
+									stopped_reason = error_code
+									break
+								error_msg = error_code
+							else:
+								entry: dict[str, Any] = {
+									"security_id": item.security_id,
+									"job_id": item.job_id,
+									"title": item.title,
+									"company": item.company,
+									"status": "success",
+								}
+								try:
+									settle_candidate_action(
+										cache, item.security_id, item.job_id, "greet", account=account
+									)
+								except Exception:
+									# 平台已确认发送。记账失败交给批次收尾处理。
+									entry["recorded"] = False
+									cache_write_failed = True
+									logger.warning(f"本地记账失败，停止批量打招呼: {item.title} @ {item.company}")
+								results.append(entry)
+								success = True
+								logger.info(f"打招呼成功: {item.title} @ {item.company}")
+								break
 						except PlatformRiskError as exc:
 							# 风控：立即停批，不重试、不 sleep、不继续下一个候选人。
 							risk_error = exc
@@ -561,8 +561,8 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 								logger.warning(f"请求预算耗尽，停止批量打招呼: {item.title} @ {item.company}")
 								break
 							error_msg = str(e)
-							if "ACTION_UNCONFIRMED" in error_msg:
-								# 异常形态的未知结果（平台层直接 raise 时）同样不能重试（Issue #984）。
+							if not was_provably_unsent(e):
+								# 请求可能已发出。保留预约并停止，等待核对送达结果（Issue #1818）。
 								unconfirmed = {
 									**item.to_dict(),
 									"status": "unconfirmed",
@@ -573,30 +573,26 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 								stopped_reason = "ACTION_UNCONFIRMED"
 								logger.warning(f"招呼结果未确认，停止批量打招呼: {item.title} @ {item.company}")
 								break
-							if "RATE_LIMITED" in error_msg or "频率" in error_msg:
-								# 平台明确限流、没有写入：撤销预约，冷却后可重试该候选人。
+							stop_code = getattr(e, "code", None)
+							if stop_code in ("RATE_LIMITED", "GREET_LIMIT"):
 								release_candidate_action(cache, item.job_id, "greet", account=account)
-								stopped_reason = "RATE_LIMITED"
+								stopped_reason = str(stop_code)
 								break
-							if "GREET_LIMIT" in error_msg or "上限" in error_msg:
-								# 配额上限是明确拒绝，同样没有写入。
-								release_candidate_action(cache, item.job_id, "greet", account=account)
-								stopped_reason = "GREET_LIMIT"
-								break
-							if retry_count == 0:
-								logger.warning(f"打招呼失败，重试中: {item.title}")
-								retry_count += 1
-								time.sleep(random.uniform(1.0, 2.0))
-							else:
-								results.append({
-									"security_id": item.security_id,
-									"job_id": item.job_id,
-									"title": item.title,
-									"company": item.company,
-									"status": "failed",
-									"error": error_msg,
-								})
-								break
+
+						# 明确失败后可重试一次。保留预约，避免另一进程在等待期间发送。
+						if attempt == 0:
+							logger.warning(f"打招呼失败，重试中: {item.title}")
+							time.sleep(random.uniform(1.0, 2.0))
+							continue
+						release_candidate_action(cache, item.job_id, "greet", account=account)
+						results.append({
+							"security_id": item.security_id,
+							"job_id": item.job_id,
+							"title": item.title,
+							"company": item.company,
+							"status": "failed",
+							"error": error_msg,
+						})
 
 					current_item = None
 					if stopped_reason:
