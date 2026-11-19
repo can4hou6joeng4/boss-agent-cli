@@ -21,7 +21,13 @@ from click.testing import CliRunner
 
 from boss_agent_cli.cache.store import CacheRecordInvalid
 from boss_agent_cli.main import cli
-from boss_agent_cli.wizard.models import StepResult, WorkflowPlan, WorkflowStatus
+from boss_agent_cli.wizard.models import (
+	StepResult,
+	WorkflowInputError,
+	WorkflowPlan,
+	WorkflowStatus,
+	_ensure_storable_inputs,
+)
 from boss_agent_cli.wizard.runner import WorkflowActionError, WorkflowRunner
 from boss_agent_cli.wizard.store import WorkflowStore
 
@@ -143,7 +149,18 @@ def test_deep_input_json_returns_invalid_param_envelope(tmp_path) -> None:
 	assert result.exit_code == 1
 	assert payload["ok"] is False
 	assert payload["error"]["code"] == "INVALID_PARAM"
-	assert "嵌套超过" in payload["error"]["message"]
+	assert payload["error"]["message"]
+	# 3.11 的 json 解码本身先撞到递归上限（由解码边界转成 INVALID_PARAM），
+	# 3.12+ 解码通过后由结构校验的深度上限拒绝；两条路径都必须给信封。
+
+
+def test_input_depth_cap_rejects_deep_structure_directly() -> None:
+	value: object = 0
+	for _ in range(201):
+		value = [value]
+
+	with pytest.raises(WorkflowInputError, match="嵌套超过"):
+		_ensure_storable_inputs(value)
 
 
 # ── Issue #2187：失败 run 的空 error 回退到步骤错误 ────────────────
