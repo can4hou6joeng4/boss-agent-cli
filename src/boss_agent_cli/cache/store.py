@@ -171,6 +171,18 @@ def _decode_int_column(kind: str, record_id: str, column: str, raw: Any) -> int:
 	raise CacheRecordInvalid(kind, record_id, column, f"期望整数，实际是 {type(raw).__name__}")
 
 
+def _decode_page_no(kind: str, record_id: str, raw: Any) -> int:
+	"""页码读取边界：与 ``crawl_runs.next_page`` 同口径拒绝非正数。
+
+	负页码会让导出与 ``crawl results`` 输出 ``"page": -3`` 这类不存在的位置，
+	计数也随之失真（Issue #2031）。
+	"""
+	page_no = _decode_int_column(kind, record_id, "page_no", raw)
+	if page_no < 1:
+		raise CacheRecordInvalid(kind, record_id, "page_no", f"必须从第 1 页开始，实际是 {page_no}")
+	return page_no
+
+
 def _decode_bool_column(kind: str, record_id: str, column: str, raw: Any) -> bool:
 	"""0/1 整数列；文本 ``"false"`` 被 ``bool()`` 当成 True 同样是类型漂移。"""
 	if isinstance(raw, int) and not isinstance(raw, bool) and raw in (0, 1):
@@ -956,6 +968,23 @@ class CacheStore:
 			raise CacheRecordInvalid(
 				"crawl_run", run_id, "next_page", f"必须从第 1 页开始，实际是 {record['next_page']}"
 			)
+		# 上界校验：正常写入的 next_page 最多是 pages + 1（最后一页之后）。超大值
+		# 会让 resume 的页循环一次都不执行，随即把空结果报成 completed，status 也
+		# 会回显一个不存在的页数（Issue #2030）。params.pages 不合法时留给
+		# CrawlSettings 的校验，这里只做能做的交叉检查。
+		raw_pages = record["params"].get("pages")
+		if (
+			isinstance(raw_pages, int)
+			and not isinstance(raw_pages, bool)
+			and raw_pages >= 1
+			and record["next_page"] > raw_pages + 1
+		):
+			raise CacheRecordInvalid(
+				"crawl_run",
+				run_id,
+				"next_page",
+				f"超过页数上限 pages + 1（{raw_pages + 1}），实际是 {record['next_page']}",
+			)
 		for column in ("requests_attempted", "detail_requests_attempted", "elapsed_seconds"):
 			if record[column] < 0:
 				raise CacheRecordInvalid("crawl_run", run_id, column, f"不能为负数，实际是 {record[column]}")
@@ -1094,7 +1123,7 @@ class CacheStore:
 			return None
 		return {
 			"selector": _decode_text_column("crawl_job", job_key, "selector", row[0]),
-			"page_no": _decode_int_column("crawl_job", job_key, "page_no", row[1]),
+			"page_no": _decode_page_no("crawl_job", job_key, row[1]),
 			"payload": _decode_record("crawl_job", job_key, "payload", row[2], expected=dict),
 			"detail_done": _decode_bool_column("crawl_job", job_key, "detail_done", row[3]),
 		}
@@ -1111,7 +1140,7 @@ class CacheStore:
 			records.append({
 				"job_key": job_key,
 				"selector": _decode_text_column("crawl_job", job_key, "selector", row[1]),
-				"page_no": _decode_int_column("crawl_job", job_key, "page_no", row[2]),
+				"page_no": _decode_page_no("crawl_job", job_key, row[2]),
 				"payload": _decode_record("crawl_job", job_key, "payload", row[3], expected=dict),
 				"detail_done": _decode_bool_column("crawl_job", job_key, "detail_done", row[4]),
 			})

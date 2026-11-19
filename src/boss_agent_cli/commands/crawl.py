@@ -734,6 +734,10 @@ def _prepare_background_resume(
 		if run is None:
 			raise KeyError(run_id)
 		if not service.has_resume_work(run, pages=pages, with_detail=with_detail):
+			# completed 快速路径同样要过设置校验：与前台 resume 同口径，损坏断点
+			# 不能因为无需启动 worker 就被当成成功完成（Issue #2032）。后台信封
+			# 只回报 run_id / status，hook_results 漂移不参与这里的结果。
+			CrawlSettings.from_dict(run["params"], run_id=run_id)
 			return "completed", False
 		# 刚排队的任务不抢锁，以免让正准备启动的 worker 被拒绝；排队过久的
 		# 与遗留的 running 一样靠执行锁判断是否还有执行器。
