@@ -60,7 +60,10 @@ def _read_complete_marker(snapshot_path: str) -> bool:
 		data = json.loads(raw.decode("utf-8"))
 	except (ValueError, RecursionError):
 		return False
-	return not (isinstance(data, dict) and data.get("complete") is False)
+	# 只认显式 true：0 / "false" / null / 缺键 / 整个 meta 不是对象，都不能
+	# 证明基线完整；旧实现只拦字面 False，非布尔漂移会把上一份不完整快照
+	# 当成完整基线并误报新增（Issue #1911）。
+	return isinstance(data, dict) and data.get("complete") is True
 
 
 def save_snapshot_and_diff(
@@ -179,10 +182,12 @@ def _merge_and_write(
 	# 已有文件不可读时上抛 OSError：把它们当成没有历史会让随后的原子写覆盖
 	# 已合并的分页结果，次日 diff 误报联系人消失（Issue #1698）。
 	raw = read_bytes_if_regular(Path(snapshot_path))
+	today_parsed = False
 	if raw is not None and not replace:
 		try:
 			prev_today = json.loads(raw.decode("utf-8"))
 			if isinstance(prev_today, list):
+				today_parsed = True
 				for item in prev_today:
 					if isinstance(item, dict) and contact_identity(item):
 						existing[contact_identity(item)] = item
@@ -199,16 +204,23 @@ def _merge_and_write(
 
 	merged = list(existing.values())
 
-	# 保存合并后的快照；原子写避免中断后当日快照变成半截 JSON（下次读取会整个丢弃）。
-	write_json_atomic(Path(snapshot_path), merged)
 	# 快照本身保持 list 兼容旧读取方；完整性写在旁车文件里。完整采集覆盖当日
 	# 快照后可宣称完整；不完整采集只有在当日已有完整快照时才保持完整标记
-	# （此时当日快照仍覆盖完整列表的全部观察结果，Issue #1852）。
+	# （此时当日快照仍覆盖完整列表的全部观察结果，Issue #1852）。当日快照必须
+	# 确实解析为列表：坏 JSON 既不算历史，文件存在也不能当作完整性证据
+	# （Issue #1912）。
 	if replace:
 		stored_complete = True
 	else:
-		stored_complete = raw is not None and _read_complete_marker(snapshot_path)
-	write_json_atomic(Path(_meta_path(snapshot_path)), {"complete": stored_complete})
+		stored_complete = raw is not None and today_parsed and _read_complete_marker(snapshot_path)
+	# 快照与旁车文件是两次独立原子写：先落保守标记再写快照，最后写真实标记。
+	# 进程在两次写之间被杀时旁车文件保持 false，部分页快照不会被当成完整基线
+	# （Issue #1912 的崩溃窗口）。
+	meta_path = Path(_meta_path(snapshot_path))
+	write_json_atomic(meta_path, {"complete": False})
+	# 原子写避免中断后当日快照变成半截 JSON（下次读取会整个丢弃）。
+	write_json_atomic(Path(snapshot_path), merged)
+	write_json_atomic(meta_path, {"complete": stored_complete})
 	return merged
 
 

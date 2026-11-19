@@ -121,6 +121,15 @@ def prepare_render_data(
 
 		sections.append({"subtitle": subtitle, "rows": rows})
 
+	# 「已消失」表格与活动联系人 / CSV 行同口径：容器字段序列化为 JSON 文本，
+	# 不再在 Markdown / HTML 里落 Python repr（Issue #1913）。
+	removed = [
+		{key: _text_cell(value) for key, value in item.items()}
+		if isinstance(item, dict)
+		else item
+		for item in diff_result.get("removed", [])
+	]
+
 	return {
 		"now_str": now_str,
 		"total": total,
@@ -128,7 +137,7 @@ def prepare_render_data(
 		"diff_summary": diff_summary,
 		"sections": sections,
 		"id_map": id_map,
-		"removed": diff_result.get("removed", []),
+		"removed": removed,
 	}
 
 
