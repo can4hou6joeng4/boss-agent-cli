@@ -1142,6 +1142,11 @@ SCHEMA_DATA = {
 						"default": None,
 						"description": "自定义 API 基础地址（provider=custom 或自建代理时使用）",
 					},
+					"--clear-base-url": {
+						"type": "bool",
+						"default": False,
+						"description": "清除已保存的自定义 API 基础地址（与 --base-url 互斥）",
+					},
 					"--temperature": {"type": "float", "default": None, "minimum": 0, "description": "生成温度"},
 					"--max-tokens": {"type": "int", "default": None, "minimum": 1, "description": "最大令牌数"},
 				},
