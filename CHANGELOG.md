@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.132] - 2026-11-20
+
 ### Fixed
 - stoken 刷新不再把刷新前的旧值当新令牌返回：headless 通道的 cookie jar 兜底值必须区别于注入的旧 stoken，`force_refresh` 对两条通道统一拒绝与当前 stoken 相同的返回值，按 `TOKEN_REFRESH_FAILED` 保留旧登录态（Issue #2091）。
 - 复用 CDP 登录态的只读探测把限流（码 9 / HTTP 429）按 `unverified` 处理：限流不再被判为登录失效并触发清空用户浏览器里仍有效 Cookie 的强制重登；其余非 0 码维持 #424 的既有契约（Issue #2092）。
