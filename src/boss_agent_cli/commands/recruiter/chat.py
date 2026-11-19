@@ -1,4 +1,5 @@
 """招聘者 — 候选人沟通。"""
+import math
 from typing import Any
 
 import click
@@ -42,7 +43,10 @@ def _format_chat_time(value: Any) -> str | None:
 		# 越界 / 非有限时间戳是确定性坏数据，按「无时间」处理（Issue #1295）。
 		dt = safe_local_time(value)
 		return dt.strftime("%m-%d %H:%M") if dt is not None else None
-	text = str(value).strip()
+	if not isinstance(value, str):
+		# dict / list 等类型漂移不能变成 "{'a': 1}" 写进输出数据（Issue #1842）。
+		return None
+	text = value.strip()
 	if text.isdigit():
 		try:
 			parsed = int(text)
@@ -194,12 +198,15 @@ def _message_text(item: dict[str, Any]) -> str | None:
 		if isinstance(value, str | int | float) and not isinstance(value, bool) and value != "":
 			return str(value)
 	body = item.get("body")
-	if isinstance(body, dict) and body.get("text") not in (None, ""):
-		return str(body["text"])
+	if isinstance(body, dict):
+		value = body.get("text")
+		if isinstance(value, str | int | float) and not isinstance(value, bool) and value != "":
+			return str(value)
 	info = _last_info(item)
 	for key in ("showText", "text"):
-		if info.get(key) not in (None, ""):
-			return str(info[key])
+		value = info.get(key)
+		if isinstance(value, str | int | float) and not isinstance(value, bool) and value != "":
+			return str(value)
 	return None
 
 
@@ -349,6 +356,11 @@ def _clean_unread_by_tab(value: Any) -> dict[str, int] | None:
 	cleaned: dict[str, int] = {}
 	for key, count in value.items():
 		if isinstance(count, bool) or not isinstance(count, int | float):
+			continue
+		# NaN / Infinity 让 int(count) 抛 ValueError / OverflowError，整条
+		# hr chat 会被兜成可重试的网络错误（Issue #1837）。int 不做
+		# isfinite（巨大的合法整数转 float 会 OverflowError）。
+		if isinstance(count, float) and not math.isfinite(count):
 			continue
 		if count < 0 or count != int(count):
 			continue

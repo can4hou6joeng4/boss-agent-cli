@@ -49,8 +49,17 @@ def _stop_reason(data_dir: Path) -> str | None:
 
 def _location_status(data_dir: Path, friend_id: int) -> str | None:
 	path = _cache_path(data_dir)
-	if not path.is_file():
+	# 3.14 的 exists() / is_file() 会把权限错误吞成 False，重复发送守卫会把
+	# 「读不到记录」当成「没有记录」（Issue #1839）。stat() 对悬空链接抛
+	# FileNotFoundError、对其余 OSError 原样上抛。
+	try:
+		path.stat()
+	except FileNotFoundError:
 		return None
+	except OSError as exc:
+		if exc.filename is None:
+			exc.filename = str(path)
+		raise
 	with CacheStore(path) as cache:
 		return cache.location_send_status(friend_id)
 
@@ -106,6 +115,30 @@ def _duplicate_failure(ctx: click.Context, friend_id: int, status: str) -> None:
 	)
 
 
+def _friend_id_matches(item: dict[str, Any], friend_id: int) -> bool:
+	"""会话条目是否属于 friend_id：逐个尝试非空标识键（Issue #1838）。
+
+	``uid`` 键存在但值为 null 时旧的 ``get("uid", get("friendId"))`` 默认值
+	不生效，``str(None)`` 匹配不上任何 ID，明明在 friendList 里也报
+	CONTACT_NOT_FOUND。与 chat.py 的 ``_friend_id_for`` 同口径。
+	"""
+	for key in ("friendId", "friend_id", "uid", "gid"):
+		value = item.get(key)
+		if isinstance(value, bool) or value is None:
+			continue
+		if isinstance(value, int):
+			if value == friend_id:
+				return True
+			continue
+		if isinstance(value, str):
+			try:
+				if int(value.strip()) == friend_id:
+					return True
+			except ValueError:
+				continue
+	return False
+
+
 def _target_from_detail(detail: dict[str, Any], friend_id: int) -> tuple[str | int, str, dict[str, Any]]:
 	"""从本次 friend_detail 取出唯一会话。不用推荐卡片上的 securityId。"""
 	data = detail.get("zpData")
@@ -114,7 +147,7 @@ def _target_from_detail(detail: dict[str, Any], friend_id: int) -> tuple[str | i
 	matches = [
 		item
 		for item in items
-		if isinstance(item, dict) and str(item.get("uid", item.get("friendId", ""))) == str(friend_id)
+		if isinstance(item, dict) and _friend_id_matches(item, friend_id)
 	]
 	if len(matches) != 1:
 		raise _TargetError("friend_not_found")
