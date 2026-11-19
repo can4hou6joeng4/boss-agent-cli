@@ -4,10 +4,15 @@
 
 ## [Unreleased]
 
+### Fixed
+- 空 `wizard --input-json` 的恢复指引改为提示传入符合向导目录要求的 JSON 对象并查阅 `boss schema`，不再让调用方去补一个创建任务用不到的 `run_id`；其余空选择器仍提示补齐任务 ID（Issue #2190）。3.4.137 的构建不含此修复，条目从已发布段落移回。
+- 采集断点的 `updated_at` 是有限但远在未来的值时（时钟快进后校正、手工写坏的库），queued 任务不再被永远当成「刚排队」：后台恢复探测执行锁并拉起 worker，`crawl status` 给出 `crawl resume --background` 提示；轻微时钟偏斜仍按刚排队处理（Issue #2193）。
+- `crawl_runs.output_dir` 含控制字符时断点读取边界按 `CACHE_RECORD_INVALID` fail-closed，`crawl status` 与 `crawl resume` 对同一断点同口径，不再把路径字符错误报成 `INVALID_PARAM`（Issue #2194）。
+- 后台恢复把状态落成 queued 失败时还原已清除的旧停止标记，保持「失败的调用不改动任务」；不再出现 stop 已清、worker 未起、状态未变的半写结果（Issue #2195）。
+
 ## [3.4.137] - 2026-11-20
 
 ### Fixed
-- 空 `wizard --input-json` 的恢复指引改为提示传入符合向导目录要求的 JSON 对象并查阅 `boss schema`，不再让调用方去补一个创建任务用不到的 `run_id`；其余空选择器仍提示补齐任务 ID（Issue #2190）。
 - wizard 断点里「状态是 pending、已落盘结果却是 completed」的矛盾不再被当成待执行步骤：恢复时按 `CACHE_RECORD_INVALID` 拒绝，可能已生效的写步骤不会被重放（Issue #2183）。
 - wizard 自定义动作返回非终态结果并声明写请求在途时，中断后留下的 `pending` 步骤与 `running` 同口径结算为「结果未知」，`--resume` 不再重发可能已生效的写请求（Issue #2184）。
 - wizard 恢复前核对断点的请求步骤与已落盘步骤行：`params.requested_steps` 漂移成子集时第一次恢复就拒绝，不再漏跑步骤却把 run 写成 `completed`（Issue #2185）。
