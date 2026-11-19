@@ -8,6 +8,8 @@
 - 登录态 salt 并发首次创建：抢锁失败方不再把「另一进程正在创建」当成损坏直接失败，在有界窗口内等待 salt 落位后复用；绝不生成第二份 salt 的契约不变，窗口耗尽仍缺失才报错并提示稍后重试（Issue #2099）。
 - `agent run --limit` 同时约束待执行队列的派发：已批准会话先占用本轮全局上限，剩余预算才用于扫描；预算用满后不再发起扫描请求，未派发的 pending 行保持原状态留待下一轮（Issue #2100）。
 - wizard 断点的 `error` 为非空对象时必须含非空字符串 `code`：外部漂移 / 旧数据缺 `code` 时按记录损坏拒绝，信封不再回退成可重试的 `NETWORK_ERROR` +「重试」指引（Issue #2101）。
+- doctor 的浏览器内核探测按 lstat 口径读取缓存根：权限错误不再让整份自检报告变成 `LOCAL_IO_ERROR`，改为对不可读缓存输出 `warn`「无法确认是否已安装」，不引导重装；默认缓存目录补上 Linux `XDG_CACHE_HOME` 与 Windows `~/AppData/Local` 回退，与 patchright 驱动同口径（Issue #2103）。
+- doctor 的 `auth_salt` 检查与登录路径同口径（`path_mode`）：指向普通文件的 salt 符号链接不再被报成 broken 并提示删除（那会作废已有 `session.enc` 与 AI 密钥）；悬空链接 / 目录 / FIFO 仍按损坏拒绝，悬空链接的提示改为说明目标缺失（Issue #2104）。
 
 ## [3.4.132] - 2026-11-20
 

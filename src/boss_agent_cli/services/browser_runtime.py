@@ -72,9 +72,43 @@ def patchright_browser_cache_dirs() -> list[Path]:
 		Path.home() / ".cache" / "ms-playwright",
 		Path.home() / "Library" / "Caches" / "ms-playwright",
 	]
+	# 与驱动 computeDefaultCacheDirectory 同口径：Linux 尊重 XDG_CACHE_HOME，
+	# Windows 在 LOCALAPPDATA 缺失时回退到 ~/AppData/Local。漏掉会让自定义缓存
+	# 目录被误报成内核缺失、引导用户重复下载上百 MB（Issue #2103）。
+	if xdg_cache_home := os.environ.get("XDG_CACHE_HOME"):
+		dirs.append(Path(xdg_cache_home) / "ms-playwright")
 	if local_app_data := os.environ.get("LOCALAPPDATA"):
 		dirs.append(Path(local_app_data) / "ms-playwright")
+	else:
+		dirs.append(Path.home() / "AppData" / "Local" / "ms-playwright")
 	return dirs
+
+
+def _scan_browser_cache() -> tuple[list[Path], list[Path]]:
+	"""展开缓存条目，并收集「存在但无法读取」的缓存根。
+
+	``Path.exists()`` 在 3.14 只吞部分 errno，权限错误会抛到 doctor 顶层，
+	整份自检报告变成 LOCAL_IO_ERROR（Issue #2103）。按 lstat 口径只把
+	``FileNotFoundError`` 当缺失；其余 OSError 记为不可读——既不能让 doctor
+	崩溃，也不能当成「未安装内核」引导用户重复下载。
+	"""
+	entries: list[Path] = []
+	unreadable: list[Path] = []
+	for base in patchright_browser_cache_dirs():
+		try:
+			base.lstat()
+		except FileNotFoundError:
+			continue
+		except OSError:
+			unreadable.append(base)
+			continue
+		try:
+			entries.extend(base.glob("chromium-*"))
+			entries.extend(base.glob("chromium_headless_shell-*"))
+		except OSError:
+			# 目录存在但不可读（权限）：glob 在部分平台上直接抛错。
+			unreadable.append(base)
+	return entries, unreadable
 
 
 def installed_browser_dirs() -> list[Path]:
@@ -83,13 +117,16 @@ def installed_browser_dirs() -> list[Path]:
 	``evaluate_patchright_chromium`` 按条目名精确匹配修订版，只能接收展开后的
 	条目；直接把缓存根目录传进去永远匹配不上（见 Issue #1060 的向导预检）。
 	"""
-	entries: list[Path] = []
-	for base in patchright_browser_cache_dirs():
-		if not base.exists():
-			continue
-		entries.extend(base.glob("chromium-*"))
-		entries.extend(base.glob("chromium_headless_shell-*"))
-	return entries
+	return _scan_browser_cache()[0]
+
+
+def unreadable_browser_cache_dirs() -> list[Path]:
+	"""存在但无法读取的缓存根（权限等 OSError）。
+
+	doctor 据此提示「无法确认内核是否已安装」，而不是当成缺失去重装；
+	预检与登录路径行为不变（Issue #2103）。
+	"""
+	return _scan_browser_cache()[1]
 
 
 def patchright_importable() -> bool:
