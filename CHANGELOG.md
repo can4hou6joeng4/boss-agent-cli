@@ -5,8 +5,6 @@
 ## [Unreleased]
 
 ### Fixed
-- `field_text` 对 dict / list / tuple 与非有限数按缺失处理，job_card 的 `job_id` / `title` / `salary` 不再变成 Python repr 并进入后继命令提示；job_card 的列表字段逐元素归一，`raw_job_type` 容器按 None 输出（Issue #1917）。
-- 职位导出的 CSV / HTML 单元格统一归一：列表里的 null 与 `nan` / `inf` 写成空值、容器序列化为 JSON 文本，不再出现字面量 `None` 与 Python repr（Issue #1916）。
 - `--salary` 搜索遇到超长数字串的 `salaryDesc`（>4300 位）按「无法解析」处理，不再让整条搜索崩成 `INTERNAL_ERROR`（Issue #1889）。
 - 职位描述缓存只接受字符串 `encryptJobId` / 描述：类型漂移按未命中处理，`--welfare` 管线不再因 sqlite 绑定 dict 抛 `ProgrammingError`（Issue #1890）。
 - `write_json_atomic` / `strict_json_text` 把深嵌套与超长整数引发的 `RecursionError` / `ValueError` 归成本地 IO 错误，CLI 输出 `LOCAL_IO_ERROR` 信封而不是空 stdout 加 traceback（Issue #1891）。
