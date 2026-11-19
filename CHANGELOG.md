@@ -5,6 +5,12 @@
 ## [Unreleased]
 
 ### Fixed
+- wizard 断点里「状态是 pending、已落盘结果却是 completed」的矛盾不再被当成待执行步骤：恢复时按 `CACHE_RECORD_INVALID` 拒绝，可能已生效的写步骤不会被重放（Issue #2183）。
+- wizard 自定义动作返回非终态结果并声明写请求在途时，中断后留下的 `pending` 步骤与 `running` 同口径结算为「结果未知」，`--resume` 不再重发可能已生效的写请求（Issue #2184）。
+- wizard 恢复前核对断点的请求步骤与已落盘步骤行：`params.requested_steps` 漂移成子集时第一次恢复就拒绝，不再漏跑步骤却把 run 写成 `completed`（Issue #2185）。
+- `wizard --input-json` 的输入结构校验增加嵌套深度上限：深层嵌套不再让 `RecursionError` 逃出信封边界，按 `INVALID_PARAM` 返回确定诊断（Issue #2186）。
+- 失败 workflow 的顶层 `error` 漂移为空对象时，出口回退到断点步骤里已校验的错误：结果未知的写步骤不再被报成可重试的 `NETWORK_ERROR`，核对指引得以保留（Issue #2187）。
+- wizard 计划比较按 JSON 值类型进行：直接调用 `WorkflowRunner` 时 `False` 与 `0` 不再被当成同一份输入，同时保留 NaN 按同值处理的兼容（Issue #2188）。
 - 自动化队列的整文件回写保留读取路径会跳过的原始行：`pending-actions.jsonl` / `human-review-queue.jsonl` 里坏编码、坏 JSON 或非 object 的行不再在下一次 `write_pending` / `write_reviews` 时被静默删除（一行可能是一条已批准但因崩溃截断的动作记录，删除后既不执行也无痕迹）；旧文件读不出来时按 `AUTOMATION_STATE_INVALID` 停止回写；追加队列记录补 `flush` + `fsync`，缩小断电只落下半行的窗口（Issue #2172）。
 - `state.json` 的 `safety.consecutive_errors` 读取时要求非负整数：外部编辑写入的负值不再让连续失败熔断需要更多次失败才打开，按 `AUTOMATION_STATE_INVALID` 报状态损坏并提示修正方式（Issue #2173）。
 

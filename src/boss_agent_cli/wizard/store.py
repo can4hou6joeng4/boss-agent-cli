@@ -115,6 +115,31 @@ def _validate_statuses(run: dict[str, Any]) -> dict[str, Any]:
 	return run
 
 
+def _validate_step_result_consistency(run: dict[str, Any]) -> dict[str, Any]:
+	"""``pending`` 步骤的已落盘结果不能声明 ``completed``（Issue #2183）。
+
+	执行器落盘步骤结果与状态是同一个原子写；``failed`` / ``stopped`` 步骤保留
+	完成结果是结算超时、停止时的既有语义。唯独 ``pending``（等待执行）带着
+	``result.status == "completed"`` 无法由本工具产生：它是状态被外部改回
+	``pending`` 的痕迹，恢复时会把可能已生效的写步骤重放一次。矛盾没有可猜测
+	的真相，读取边界按记录损坏拒绝，不改写断点。
+	"""
+	run_id = str(run.get("run_id") or "")
+	for step in run.get("steps") or []:
+		if step.get("status") != WorkflowStatus.PENDING.value:
+			continue
+		result = step.get("result")
+		if isinstance(result, dict) and result.get("status") == WorkflowStatus.COMPLETED.value:
+			raise CacheRecordInvalid(
+				"workflow_step",
+				f"{run_id}/{step.get('step_name')}",
+				"status",
+				"步骤是 pending，但已落盘结果是 completed；无法判断该步骤是否已生效，"
+				"禁止重放，请核对平台实际状态后新建 workflow",
+			)
+	return run
+
+
 class WorkflowStore:
 	def __init__(self, data_dir: Path) -> None:
 		self._cache = CacheStore(data_dir / "cache" / "boss_agent.db")
@@ -155,6 +180,7 @@ class WorkflowStore:
 				_validate_replay_markers(run)
 				_validate_error_contract(run)
 				_validate_statuses(run)
+				_validate_step_result_consistency(run)
 		return run
 
 	def get(self, run_id: str) -> dict[str, Any] | None:
