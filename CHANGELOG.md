@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Fixed
+- crawl 导出在安装与回滚都失败时保留旧产物唯一的备份，并在 `CrawlExportError` 消息里给出路径，不再把旧文件删得无迹可寻（Issue #1924）。
+- crawl 导出失败路径的临时文件清理改为 best-effort：清理遇到权限 / 只读挂载错误不再替换原本正在传播的 `CrawlExportError` / `CrawlRuntimeUnavailable`（Issue #1925）。
+- crawl 导出成功后的备份清理失败不再把已完成的导出报成 `stopped`，三份新产物照常返回路径（Issue #1926）。
 - wizard 的 `crawl_start` 恢复时不再让 `plan.inputs` 里的 `run_id: null` 覆盖已绑定的内部 crawl run_id，中断后 `--resume` 能继续原任务（Issue #1903）。
 - wizard 的 `crawl_resume` 与 `crawl_start` 同口径校验断点 query / city：冲突或非字符串输入按 `INVALID_PARAM` 拒绝，不再静默续跑旧任务并导出旧数据（Issue #1904）。
 - 联系人标签名称与平台 ID 收敛到 `services/labels.py` 单一真源：wizard 接受 CLI 的全部 9 个标签，数字 ID 必须是已知成员，`label: "999"` 不再向平台发出写请求（Issue #1905）。

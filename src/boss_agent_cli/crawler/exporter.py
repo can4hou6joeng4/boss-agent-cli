@@ -74,6 +74,9 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 	# 避免失败后磁盘上留着不同批次的产物（Issue #1617）。
 	current_target: Path | None = None
 	replaced: list[tuple[Path, Path | None]] = []
+	# 回滚也失败时，备份是旧产物的唯一副本：清理临时文件必须跳过它，
+	# 并把路径写进错误消息（Issue #1924）。
+	retained: set[Path] = set()
 	try:
 		# mkdir 也必须在 try 内：输出目录被同名文件占用时 FileExistsError /
 		# NotADirectoryError 会原样上抛，被 _run 兜成 ok:true 的 stopped 并提示
@@ -126,34 +129,54 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 				os.replace(temporary, current_target)
 			except OSError:
 				if backup is not None:
-					os.replace(backup, current_target)
+					try:
+						os.replace(backup, current_target)
+					except OSError:
+						# 回滚失败：保留备份供人工恢复，不能让清理循环删掉它。
+						retained.add(backup)
 				raise
 			replaced.append((current_target, backup))
 	except CrawlRuntimeUnavailable:
-		_rollback_replacements(replaced)
-		for temporary in temporaries:
-			temporary.unlink(missing_ok=True)
+		_rollback_replacements(replaced, retained)
+		_discard(temporaries, retained)
 		raise
 	except OSError as exc:
-		_rollback_replacements(replaced)
-		for temporary in temporaries:
-			temporary.unlink(missing_ok=True)
+		_rollback_replacements(replaced, retained)
+		_discard(temporaries, retained)
 		raise CrawlExportError(
-			f"采集结果无法写出到 {current_target or output_dir}：{type(exc).__name__}: {exc}"
+			f"采集结果无法写出到 {current_target or output_dir}：{type(exc).__name__}: {exc}{_retained_hint(retained)}"
 		) from exc
 	except Exception as exc:
-		_rollback_replacements(replaced)
-		for temporary in temporaries:
-			temporary.unlink(missing_ok=True)
-		raise CrawlExportError(f"采集结果无法写出到 {output_dir}：{type(exc).__name__}: {exc}") from exc
+		_rollback_replacements(replaced, retained)
+		_discard(temporaries, retained)
+		raise CrawlExportError(
+			f"采集结果无法写出到 {output_dir}：{type(exc).__name__}: {exc}{_retained_hint(retained)}"
+		) from exc
 	# 全部替换成功后才清理备份：三份产物要么都是新批次，要么保持旧批次。
-	for _, backup in replaced:
-		if backup is not None:
-			backup.unlink(missing_ok=True)
+	# 清理失败不能把已成功的导出报成失败（Issue #1926）。
+	_discard([backup for _, backup in replaced if backup is not None], retained)
 	return {"json": str(json_path), "csv": str(csv_path), "xlsx": str(xlsx_path)}
 
 
-def _rollback_replacements(replaced: list[tuple[Path, Path | None]]) -> None:
+def _discard(temporaries: list[Path], retained: set[Path]) -> None:
+	"""best-effort 清理临时文件：失败只跳过，绝不覆盖正在传播的原始异常（Issue #1925）。"""
+	for temporary in temporaries:
+		if temporary in retained:
+			continue
+		try:
+			temporary.unlink(missing_ok=True)
+		except OSError:
+			continue
+
+
+def _retained_hint(retained: set[Path]) -> str:
+	if not retained:
+		return ""
+	paths = "、".join(str(path) for path in sorted(retained))
+	return f"；旧产物备份保留在 {paths}"
+
+
+def _rollback_replacements(replaced: list[tuple[Path, Path | None]], retained: set[Path]) -> None:
 	"""把本次导出已经替换的目标恢复到旧内容，失败不吞掉原始异常。"""
 	for target, backup in reversed(replaced):
 		try:
@@ -163,6 +186,8 @@ def _rollback_replacements(replaced: list[tuple[Path, Path | None]]) -> None:
 				target.unlink(missing_ok=True)
 		except OSError:
 			# 回滚失败时保留备份文件，操作者可据此恢复；原始错误仍然上抛。
+			if backup is not None:
+				retained.add(backup)
 			continue
 
 
