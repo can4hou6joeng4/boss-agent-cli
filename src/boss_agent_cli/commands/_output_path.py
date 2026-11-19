@@ -23,6 +23,7 @@ _PROBLEM_CONTRACTS: dict[OutputPathProblem, tuple[str, str]] = {
 	OutputPathProblem.IS_DIRECTORY: ("INVALID_PARAM", "在 --output 里给出完整文件名"),
 	OutputPathProblem.NOT_REGULAR: ("INVALID_PARAM", "换一个普通文件路径后重试"),
 	OutputPathProblem.PARENT_NOT_DIR: ("LOCAL_IO_ERROR", "换一个父目录存在且可写的路径后重试"),
+	OutputPathProblem.NOT_WRITABLE: ("LOCAL_IO_ERROR", "换一个父目录可写的路径后重试"),
 }
 
 
@@ -44,6 +45,8 @@ def validate_output_path_or_emit(ctx: Any, command: str, raw: str | os.PathLike[
 		recovery_action = f"{recovery_action}，例如 {_example(target / 'result.txt')}"
 	elif problem is OutputPathProblem.NOT_REGULAR:
 		message = f"{command} 的 -o / --output 需要普通文件路径，{str(target)!r} 不是普通文件"
+	elif problem is OutputPathProblem.NOT_WRITABLE:
+		message = f"{command} 的 -o / --output 的父目录不可写，无法创建输出文件: {str(target)!r}"
 	else:
 		message = f"{command} 的 -o / --output 无法创建父目录，某级父路径不是目录: {str(target)!r}"
 
