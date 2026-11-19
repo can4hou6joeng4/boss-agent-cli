@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.134] - 2026-11-20
+
 ### Fixed
 - 职位去重只把 strip 后非空的字符串 `job_id` / `encryptJobId` 当 ID：纯空白 `job_id` 不再让不同职位共用 `" "` 去重键而被误合并，也不再遮蔽合法的 `encryptJobId`；带空白的真实 ID 与干净值按同一去重键归一，不再分裂（Issue #2140）。
 - `digest --format md` 在渲染出口归一孤立代理字符：平台公司 / 职位文本含被截断的 emoji 等代理字符时，`-o` 不再出现「文件已写出却报 LOCAL_IO_ERROR」，`--json` 的 `data.content` 与 md 直写 stdout 也不再编码失败，转义口径与 `stats --format html` 一致（Issue #2142）。
