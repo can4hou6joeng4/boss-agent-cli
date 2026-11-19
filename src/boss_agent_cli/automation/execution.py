@@ -58,9 +58,17 @@ def process_pending(
 	*,
 	state: dict[str, Any] | None = None,
 	dispatched: list[bool] | None = None,
-) -> list[AutomationEvent]:
+	limit: int | None = None,
+) -> tuple[list[AutomationEvent], set[str]]:
+	"""派发待执行队列，返回 (事件列表, 本轮派发过的会话集合)。
+
+	``limit`` 是本轮全局会话上限（与扫描路径共用同一份预算）：达到上限后
+	剩余 pending 行保持原状态留待下一轮，不产生事件（Issue #2100）。同一会话
+	的多条动作只占一个名额，与 ``--limit`` 的「多少个会话」语义一致。
+	"""
 	actions = store.read_pending()
 	events: list[AutomationEvent] = []
+	dispatched_conversations: set[str] = set()
 	for index, item in enumerate(actions):
 		if guard.stop_reason() is not None:
 			break
@@ -138,6 +146,12 @@ def process_pending(
 			events.append(event)
 			store.append_event(event)
 			continue
+		if limit is not None and item.candidate_key not in dispatched_conversations:
+			if len(dispatched_conversations) >= limit:
+				# --limit 是本轮全局会话上限：预算用满后行保持 pending，留待
+				# 下一轮派发；不产生事件，队列统计不变（Issue #2100）。
+				continue
+			dispatched_conversations.add(item.candidate_key)
 		# 队列展示允许历史空字段，但派发前必须有明确的候选人和有效话术。
 		# 缺字段不能默认成 friend_id=0 或向真实候选人发送空消息；此处尚未
 		# 写入 executing，失败后原队列保持 pending（Issue #2071）。
@@ -251,7 +265,7 @@ def process_pending(
 		)
 		events.append(event)
 		store.append_event(event)
-	return events
+	return events, dispatched_conversations
 
 
 def process_ref(

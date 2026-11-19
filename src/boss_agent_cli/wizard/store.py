@@ -38,11 +38,13 @@ def _validate_replay_markers(run: dict[str, Any]) -> dict[str, Any]:
 
 
 def _validate_error_contract(run: dict[str, Any]) -> dict[str, Any]:
-	"""``error.recoverable`` / ``error.recovery_action`` 类型漂移按记录损坏拒绝。
+	"""``error.code`` / ``recoverable`` / ``recovery_action`` 类型漂移按记录损坏拒绝。
 
 	信封出口把 ``recoverable`` 转成布尔、把 ``recovery_action`` 原样透传：
 	持久化的 ``"false"`` 会变成 ``true``，数字 ``123`` 会进入 error.recovery_action
-	让用户去执行一个不存在的地址（Issue #1592）。标记没有可猜测的原值，读取边界
+	让用户去执行一个不存在的地址（Issue #1592）。非空 ``error`` 必须有非空字符串
+	``code``：出口对缺失值回退成 ``NETWORK_ERROR`` +「重试」，禁止重放的写步骤
+	会拿到误导性的重试指引（Issue #2101）。标记没有可猜测的原值，读取边界
 	按损坏拒绝，不改写断点。
 	"""
 	run_id = str(run.get("run_id") or "")
@@ -53,14 +55,15 @@ def _validate_error_contract(run: dict[str, Any]) -> dict[str, Any]:
 	for kind, record_id, error in records:
 		if not isinstance(error, dict):
 			continue
-		if "code" in error and not (isinstance(error["code"], str) and error["code"]):
-			# 信封出口会把它转成字符串或落回 NETWORK_ERROR +「重试」：结果未知的写步骤
-			# 不能拿到一条重试指引（Issue #1960）。
+		if error and not (isinstance(error.get("code"), str) and error["code"]):
+			# 信封出口会把缺失 / 空的 code 回退成 NETWORK_ERROR +「重试」：结果未知的
+			# 写步骤不能拿到一条重试指引。写入器总会带 code，缺失只可能来自外部
+			# 漂移或旧数据（Issue #1960、#2101）。
 			raise CacheRecordInvalid(
 				kind,
 				record_id,
 				"error.code",
-				"必须是非空字符串；无法据此判断失败原因，重建任务前先核对实际状态",
+				"缺失时必须补全为非空字符串；无法据此判断失败原因，重建任务前先核对实际状态",
 			)
 		if "message" in error and error["message"] is not None and not isinstance(error["message"], str):
 			raise CacheRecordInvalid(kind, record_id, "error.message", "必须是字符串或 null")
