@@ -126,7 +126,11 @@ def automation_config_from_dict(raw: dict[str, Any] | None) -> AutomationConfig:
 	raw_actions = data.get("allowed_actions", default_actions)
 	if not isinstance(raw_actions, (list, tuple)):
 		raise ValueError(f"allowed_actions 必须是字符串数组，收到 {raw_actions!r}")
-	unknown_actions = [item for item in raw_actions if item not in allowed_action_values]
+	# 非字符串元素直接归入未知动作：set 的成员判断对 list / dict 会抛裸
+	# TypeError（unhashable），绕过本函数的 ValueError 契约（Issue #2125）。
+	unknown_actions = [
+		item for item in raw_actions if not isinstance(item, str) or item not in allowed_action_values
+	]
 	if unknown_actions:
 		raise ValueError(
 			f"allowed_actions 包含未知动作：{unknown_actions}；"
