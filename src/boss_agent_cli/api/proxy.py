@@ -106,6 +106,10 @@ def _no_proxy_value(source: Mapping[str, str]) -> str:
 	return ""
 
 
+#: Chromium / Playwright 能使用的代理 scheme（Issue #1920）。
+_PROXY_SCHEMES = frozenset({"http", "https", "socks4", "socks5"})
+
+
 def parse_proxy_url(raw: str, *, env_key: str | None = None) -> PlaywrightProxy | None:
 	"""Convert ``scheme://[user:pass@]host:port`` into a Playwright proxy dict.
 
@@ -132,9 +136,18 @@ def parse_proxy_url(raw: str, *, env_key: str | None = None) -> PlaywrightProxy 
 		# 静默当成「没有代理」会让 Chromium 直连并泄露真实出口（Issue #1486）。
 		raise ProxyConfigurationError(env_key)
 	scheme = parts.scheme or "http"
+	# Playwright / Chromium 只支持 http(s) 与 SOCKS 代理：ftp / file /
+	# javascript 之类的 scheme 不可能成为可用代理，旧实现却原样返回，把错误
+	# 推迟到启动 / 请求阶段，绕过确定性的参数错误出口（Issue #1920）。
+	if scheme not in _PROXY_SCHEMES:
+		raise ProxyConfigurationError(env_key)
 	# ``urlsplit().hostname`` 会去掉 IPv6 方括号，拼回时必须补上，否则
 	# ``http://[::1]:8080`` 变成无法解析的 ``http://::1:8080``（Issue #1870）。
 	host = parts.hostname
+	# 空白 / 控制字符 / URL 分隔符不可能出现在合法 host 里；放行会让配置错误
+	# 直到浏览器启动才暴露（Issue #1920）。
+	if any(char.isspace() or ord(char) < 0x20 or char in "/?#@" for char in host):
+		raise ProxyConfigurationError(env_key)
 	if ":" in host:
 		host = f"[{host}]"
 	server = f"{scheme}://{host}"

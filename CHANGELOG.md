@@ -5,6 +5,10 @@
 ## [Unreleased]
 
 ### Fixed
+- 风控锁的 stoken 摘要对孤立代理字符改用 `surrogatepass` 编码，记录风控锁不再因 `UnicodeEncodeError` 替换正在传播的 `ACCOUNT_RISK` / `ENVIRONMENT_RISK`，锁文件与进程内锁都能落盘（Issue #1918）。
+- 请求租约在 POSIX 上同时锁住预算目录 inode：租约文件被外部删除 / 替换后仍保持跨进程互斥；加锁后复核 inode 身份并用 `fstat` 读取尺寸（Issue #1919）。
+- 代理解析对 scheme 做 http / https / socks4 / socks5 allowlist，并拒绝含空白 / 控制字符的 host；非法代理在解析阶段报 `INVALID_PARAM`，不再推迟到浏览器启动（Issue #1920）。
+- `record_risk` 只要主目录或共享目录任一处成功落盘即视为已持久化并清除进程内锁，`persisted` 元数据与磁盘事实一致；两处都失败才抛错（Issue #1921）。
 - `--salary` 搜索遇到超长数字串的 `salaryDesc`（>4300 位）按「无法解析」处理，不再让整条搜索崩成 `INTERNAL_ERROR`（Issue #1889）。
 - 职位描述缓存只接受字符串 `encryptJobId` / 描述：类型漂移按未命中处理，`--welfare` 管线不再因 sqlite 绑定 dict 抛 `ProgrammingError`（Issue #1890）。
 - `write_json_atomic` / `strict_json_text` 把深嵌套与超长整数引发的 `RecursionError` / `ValueError` 归成本地 IO 错误，CLI 输出 `LOCAL_IO_ERROR` 信封而不是空 stdout 加 traceback（Issue #1891）。
