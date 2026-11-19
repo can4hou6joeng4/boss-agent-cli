@@ -406,7 +406,9 @@ def resume_edit_cmd(ctx: click.Context, name: str, field: str, value: str) -> No
 	_set_nested(data, field, value)
 	from boss_agent_cli.resume.models import dict_to_resume
 	updated = dict_to_resume(data)
-	updated.name = name
+	# 按别名（`a_b` 之于 `a/b`）取到的简历保留文件里的真实名称，不能被请求名
+	# 静默改名（Issue #1804）。
+	updated.name = store.stored_name(name)
 	store.save(updated)
 	handle_output(
 		ctx, "resume",
@@ -432,9 +434,25 @@ def resume_delete_cmd(ctx: click.Context, name: str) -> None:
 	# 标成 applied 的状态和备注，`resume applications` 也就报出这份简历从没关联过的职位。
 	# 必须先清理关联再删简历文件：缓存库繁忙/损坏时命令会失败，但简历本身必须
 	# 原样保留，否则用户看到 exit 1 而文件已经没了（Issue #1465）。
+	if store.is_directory(name):
+		# 目录 unlink 必然失败：先清关联再失败会留下 exit 1 却丢了关联的半执行
+		# 状态，所以在动任何东西之前拒绝（Issue #1805）。
+		handle_error_output(
+			ctx, "resume",
+			code="LOCAL_IO_ERROR",
+			message=f"简历 '{name}' 的存储路径是一个目录，无法按简历删除；职位关联未改动",
+			recovery_action="该路径只存在本机：确认目录内容后手工移走或删除它，再重试",
+			hints={"next_actions": [_hint_command(ctx, "resume list")]},
+		)
+		ctx.exit(1)
+		return
+	# 按别名删除时关联记在文件里的真实名称下：两个名字都要清，否则重建的同名
+	# 简历会继承这些关联（Issue #1804）。
+	link_names = list(dict.fromkeys([name, store.stored_name(name)]))
 	removed_links = 0
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
-		removed_links = cache.remove_resume_links(name)
+		for link_name in link_names:
+			removed_links += cache.remove_resume_links(link_name)
 	store.delete(name)
 	handle_output(
 		ctx, "resume",
