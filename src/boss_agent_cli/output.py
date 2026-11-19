@@ -98,8 +98,11 @@ _FILESYSTEM_ERROR_TYPES: tuple[type[OSError], ...] = (
 # fd 级写入（write / flush / fsync）失败时异常不带 filename：磁盘满、配额耗尽、
 # 设备 I/O 错误只可能来自本地文件系统，兜成可重试的 NETWORK_ERROR 会让 Agent
 # 无限重试同一条命令（Issue #1400）。Windows 的 errno 模块不一定定义 EDQUOT。
+# EINVAL 同理由本地序列化失败构造（json_files 的深嵌套 / 超长整数，异常不带
+# filename）：项目内其余 EINVAL 都带目标路径，已由上面的 filename 分支覆盖；
+# 不在这条兜住会让确定性的本地失败被报成可重试网络错误（Issue #2078）。
 _LOCAL_IO_ERRNOS: frozenset[int] = frozenset(
-	code for code in (errno.ENOSPC, errno.EIO, getattr(errno, "EDQUOT", None)) if code is not None
+	code for code in (errno.ENOSPC, errno.EIO, errno.EINVAL, getattr(errno, "EDQUOT", None)) if code is not None
 )
 
 
