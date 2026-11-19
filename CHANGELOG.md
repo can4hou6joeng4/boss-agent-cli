@@ -5,6 +5,13 @@
 ## [Unreleased]
 
 ### Fixed
+- wizard 的 `crawl_start` 恢复时不再让 `plan.inputs` 里的 `run_id: null` 覆盖已绑定的内部 crawl run_id，中断后 `--resume` 能继续原任务（Issue #1903）。
+- wizard 的 `crawl_resume` 与 `crawl_start` 同口径校验断点 query / city：冲突或非字符串输入按 `INVALID_PARAM` 拒绝，不再静默续跑旧任务并导出旧数据（Issue #1904）。
+- 联系人标签名称与平台 ID 收敛到 `services/labels.py` 单一真源：wizard 接受 CLI 的全部 9 个标签，数字 ID 必须是已知成员，`label: "999"` 不再向平台发出写请求（Issue #1905）。
+- wizard 的 message / label 等自由文本输入只接受字符串：容器不再以 Python repr 发给真人，`0` / `false` 不再被吞成平台默认招呼（Issue #1906）。
+- `WorkflowActionError` 未显式给出 `recovery_action` 时按错误码登记表兜底，信封不再返回 null；`crawl_status` 缺任务的消息不再回显 `'run_id'`（Issue #1907）。
+- wizard 的 `run_id` 与 `crawl_run_id` 同时给出且指向不同任务时报 `INVALID_PARAM`，不再静默取第一个（Issue #1908）。
+- wizard 输入类型错误消息统一截断超长原始值，信封与 checkpoint 不再随输入规模膨胀（Issue #1909）。
 - `--salary` 搜索遇到超长数字串的 `salaryDesc`（>4300 位）按「无法解析」处理，不再让整条搜索崩成 `INTERNAL_ERROR`（Issue #1889）。
 - 职位描述缓存只接受字符串 `encryptJobId` / 描述：类型漂移按未命中处理，`--welfare` 管线不再因 sqlite 绑定 dict 抛 `ProgrammingError`（Issue #1890）。
 - `write_json_atomic` / `strict_json_text` 把深嵌套与超长整数引发的 `RecursionError` / `ValueError` 归成本地 IO 错误，CLI 输出 `LOCAL_IO_ERROR` 信封而不是空 stdout 加 traceback（Issue #1891）。

@@ -316,6 +316,7 @@ module = [
 	"boss_agent_cli.services.json_files",
 	"boss_agent_cli.services.text_files",
 	"boss_agent_cli.services.file_lock",
+	"boss_agent_cli.services.labels",
 	"boss_agent_cli.wizard.actions",
 	"boss_agent_cli.wizard.catalog",
 	"boss_agent_cli.wizard.live_crawl",
