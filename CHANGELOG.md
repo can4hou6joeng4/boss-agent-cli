@@ -28,6 +28,9 @@
 - 多位置参数的后继命令只前置一次 `--`（新增 `display.positional_args`），`shortlist remove` / `add` 提示不再出现第二个 `--` 而无法重放（Issue #1848）。
 - `chat --export json` 与本地 JSON 状态把非有限数归一为 `null`，不再写出裸 `Infinity` / `NaN`；`write_json_atomic` 同步禁止非标准常量（Issue #1851）。
 - `chat` 文本导出的容器字段序列化为 JSON 文本、`unread` 只认整数；`job` 的 HTML 导出不再渲染字面量 `None`，`write_export_file` 对未知格式抛错而不是静默不写（Issue #1853）。
+- `prepare_output_path` 与 `refuse_symlink_target` 按 lstat 拒绝符号链接 / 目录 / 特殊文件，`digest` / `stats` / `chat --export` 等直接调用方不再把链接目标替换成新文件；`is_symlink()` 不再吞权限错误（Issue #1849）。
+- 文件锁只把 `EAGAIN` / `EWOULDBLOCK` / `EDEADLK` 当锁冲突，errno 36 等其余 `OSError` 按本地 IO 错误上抛，不再误报「已被占用」（Issue #1850）。
+- `chat --export` 的快照旁车文件记录采集完整性：上一份基线不完整时不再把没翻到的联系人误报为新增，`data.diff` 带 `baseline_complete`，摘要注明「上次采集不完整，未判断新增」；旧快照无标记时按完整处理（Issue #1852）。
 
 ## [3.4.122] - 2026-11-19
 

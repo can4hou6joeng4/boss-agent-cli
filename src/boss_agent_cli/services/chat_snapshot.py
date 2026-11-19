@@ -16,6 +16,10 @@ from boss_agent_cli.output import Logger
 
 _SNAPSHOT_NAME_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
+#: 完整性旁车文件后缀：快照本身保持 list 形态兼容旧读取方；
+#: 不占用 `.json` 后缀，`chat-history/*.json` 仍然只匹配快照本体。
+_META_SUFFIX = ".meta"
+
 #: 当日快照锁被占用时的有限重试；锁只包住一次读-合并-写，正常持有时长是毫秒级。
 _LOCK_ATTEMPTS = 100
 _LOCK_RETRY_INTERVAL_SECONDS = 0.05
@@ -31,6 +35,32 @@ def _unread_count(item: dict[str, Any]) -> int:
 	"""
 	value = item.get("unread")
 	return value if type(value) is int else 0
+
+
+def _meta_path(snapshot_path: str) -> str:
+	return snapshot_path[: -len(".json")] + _META_SUFFIX if snapshot_path.endswith(".json") else snapshot_path + _META_SUFFIX
+
+
+def _read_complete_marker(snapshot_path: str) -> bool:
+	"""读取快照的完整性标记；旧快照没有旁车文件时按完整处理（保持原语义）。
+
+	标记存在且明确为 ``false`` 时返回 False：不完整采集只记录「看到了谁」，
+	不能作为判断新增的基线（Issue #1852）。标记损坏或读不出来时同样按
+	不完整处理——无法证明基线完整就不能宣称新增。
+	"""
+	try:
+		raw = read_bytes_if_regular(Path(_meta_path(snapshot_path)))
+	except FileNotFoundError:
+		return True
+	except OSError:
+		return False
+	if raw is None:
+		return True
+	try:
+		data = json.loads(raw.decode("utf-8"))
+	except (ValueError, RecursionError):
+		return False
+	return not (isinstance(data, dict) and data.get("complete") is False)
 
 
 def save_snapshot_and_diff(
@@ -57,11 +87,28 @@ def save_snapshot_and_diff(
 	# 查找上一次快照
 	prev_path = _find_previous_snapshot(snapshot_dir, today)
 	if prev_path is None:
-		return {"is_first": True, "complete": complete, "added": [], "removed": [], "new_unread": []}
+		return {
+			"is_first": True,
+			"complete": complete,
+			"baseline_complete": True,
+			"added": [],
+			"removed": [],
+			"new_unread": [],
+		}
 
 	prev_friends = load_snapshot(prev_path, logger)
 	if prev_friends is None:
-		return {"is_first": True, "complete": complete, "added": [], "removed": [], "new_unread": []}
+		return {
+			"is_first": True,
+			"complete": complete,
+			"baseline_complete": True,
+			"added": [],
+			"removed": [],
+			"new_unread": [],
+		}
+	# 上一份快照不完整时它只记录了「看到了谁」：把没翻到的联系人当新增会误报
+	# （Issue #1852）。不宣称新增，并在结果里标注基线不完整。
+	baseline_complete = _read_complete_marker(prev_path)
 
 	# 用稳定标识（uid 优先）做 key 对比
 	curr_map = {contact_identity(item): item for item in merged if contact_identity(item)}
@@ -69,7 +116,7 @@ def save_snapshot_and_diff(
 	curr_ids = set(curr_map)
 	prev_ids = set(prev_map)
 
-	added = [curr_map[key] for key in (curr_ids - prev_ids)]
+	added = [curr_map[key] for key in (curr_ids - prev_ids)] if baseline_complete else []
 	# 不完整的采集只能证明“看到了谁”，不能证明“谁消失了”。
 	removed = [prev_map[key] for key in (prev_ids - curr_ids)] if complete else []
 
@@ -84,6 +131,7 @@ def save_snapshot_and_diff(
 	return {
 		"is_first": False,
 		"complete": complete,
+		"baseline_complete": baseline_complete,
 		"prev_date": os.path.basename(prev_path).replace(".json", ""),
 		"added": added,
 		"removed": removed,
@@ -153,6 +201,14 @@ def _merge_and_write(
 
 	# 保存合并后的快照；原子写避免中断后当日快照变成半截 JSON（下次读取会整个丢弃）。
 	write_json_atomic(Path(snapshot_path), merged)
+	# 快照本身保持 list 兼容旧读取方；完整性写在旁车文件里。完整采集覆盖当日
+	# 快照后可宣称完整；不完整采集只有在当日已有完整快照时才保持完整标记
+	# （此时当日快照仍覆盖完整列表的全部观察结果，Issue #1852）。
+	if replace:
+		stored_complete = True
+	else:
+		stored_complete = raw is not None and _read_complete_marker(snapshot_path)
+	write_json_atomic(Path(_meta_path(snapshot_path)), {"complete": stored_complete})
 	return merged
 
 

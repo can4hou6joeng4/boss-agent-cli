@@ -50,7 +50,11 @@ def try_lock_exclusive(handle: BinaryIO) -> bool:
 	except (BlockingIOError, PermissionError):
 		return False
 	except OSError as error:
-		if error.errno in (11, 13, 35, 36):
+		# 只把真正表示「已被占用」的 errno 当成 busy：POSIX flock 冲突报
+		# EAGAIN / EWOULDBLOCK，个别系统报 EDEADLK。Windows 的 msvcrt 冲突是
+		# EACCES（已由 PermissionError 分支覆盖）。errno 36 在 Linux 是
+		# ENAMETOOLONG、在 macOS 是 EINPROGRESS，不是锁冲突（Issue #1850）。
+		if error.errno in (errno.EAGAIN, errno.EWOULDBLOCK, errno.EDEADLK):
 			return False
 		raise
 	return True

@@ -62,6 +62,9 @@ def prepare_render_data(
 			# 部分页或筛选结果缺少“谁不在列表里”的证据，不能显示“无变化”
 			# 让读者以为已确认联系人仍在（Issue #911）。
 			parts.append("本次采集不完整，未判断消失")
+		if diff_result.get("baseline_complete") is False:
+			# 上一份基线不完整时同样不能宣称新增（Issue #1852）。
+			parts.append("上次采集不完整，未判断新增")
 		diff_summary = {
 			"prev_date": prev_date,
 			"change": "，".join(parts) if parts else "无变化",

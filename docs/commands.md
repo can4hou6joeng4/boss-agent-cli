@@ -185,7 +185,7 @@ boss crawl stop <run_id>
 
 `boss chat --page N` 返回 `pagination`：`page` 是本次请求页；`has_more` 只在平台返回布尔 `hasMore` 时取 `true` 或 `false`，缺失或类型不明确时为 `null`，`has_more_source` 相应为 `platform_hasMore` 或 `unknown`；`total` 是本页经 `--from` / `--days` 筛选后的条数，`total_kind=returned_page_count`，不代表平台上的会话总数。只有 `has_more=true` 时 `hints.next_actions` 才附加下一页命令并保留筛选参数；`has_more=null` 时 `hints.operator_actions` 说明不能仅凭本页条数判断是否还有记录。
 
-`boss chat --export <格式>` 同时保存当日 `chat-history/YYYY-MM-DD.json` 快照并与上次快照对比。快照记录本次平台页面返回的全部联系人，`--from` / `--days` 只筛选导出正文与变化摘要；`data.diff.removed` 仅在本次覆盖完整列表（第 1 页且平台明确 `hasMore=false`）时才可能非空，否则为空且 `complete=false`，Markdown / HTML 摘要注明“本次采集不完整，未判断消失”。同日多次导出按稳定 `uid`（旧数据回退 `security_id`）合并为并集。
+`boss chat --export <格式>` 同时保存当日 `chat-history/YYYY-MM-DD.json` 快照并与上次快照对比。快照记录本次平台页面返回的全部联系人，`--from` / `--days` 只筛选导出正文与变化摘要；`data.diff.removed` 仅在本次覆盖完整列表（第 1 页且平台明确 `hasMore=false`）时才可能非空，否则为空且 `complete=false`，Markdown / HTML 摘要注明“本次采集不完整，未判断消失”。同日多次导出按稳定 `uid`（旧数据回退 `security_id`）合并为并集。采集完整性写在快照旁的 `YYYY-MM-DD.meta`（快照本身仍是 JSON 数组，旧快照无标记时按完整处理）；上一份快照不完整时 `data.diff.added` 为空且 `baseline_complete=false`，摘要注明“上次采集不完整，未判断新增”，不把当时没翻到的联系人误报为新增。
 
 `history` 的详情、投递、打招呼与下一页提示保留本次 `--data-dir` 与平台：`hints.next_actions` 与终端表尾的 `more:` 命令都携带按 shell 参数转义的绝对目录，换工作目录照抄提示时仍读取同一登录态与浏览记录。目录中的空格、引号与 Rich 标签按字面显示。
 
