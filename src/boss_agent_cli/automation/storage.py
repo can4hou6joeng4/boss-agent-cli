@@ -501,6 +501,29 @@ class AutomationStore:
 				updated_reviews.append(item)
 		if rejected is None:
 			return None
+		# approve 的「先入队、再写复核队列」可能在中途失败，留下携带
+		# approved_review_id 的 pending 行（Issue #1248）。人工拒绝后它不能再被
+		# 下一轮派发：尚未派发的行就地移除；已在执行 / 结果未知的行拒绝本次
+		# reject，先让操作者核对，绝不静默删除可能已生效的写操作（Issue #2124）。
+		pending_rows = self.read_pending()
+		linked = [row for row in pending_rows if row.approved_review_id == review_id]
+		inflight = [row for row in linked if row.status in {"executing", "verification-required"}]
+		if inflight:
+			raise AutomationStateError(
+				self.pending_path,
+				f"复核项 {review_id!r} 对应的动作已派发（状态 {inflight[0].status}），"
+				"结果未知；先核对平台与 action-log，再决定是否拒绝",
+			)
+		if any(row.status == "pending" for row in linked):
+			# 先移除队列行再改写复核：反过来失败会让 rejected 的复核仍留下可派发
+			# 的 pending 行。中断后复核仍是 review，可以再次 approve / reject。
+			self.write_pending(
+				[
+					row
+					for row in pending_rows
+					if not (row.approved_review_id == review_id and row.status == "pending")
+				]
+			)
 		self.write_reviews(updated_reviews)
 		return rejected
 
