@@ -1675,15 +1675,13 @@ class CacheStore:
 		).fetchone()
 		if row is None:
 			return None
+		decoded_name = _decode_text_column("saved_search", name, "name", row[0])
+		assert isinstance(decoded_name, str)
 		return {
-			"name": row[0],
-			"params": _decode_saved_params(str(row[0]), row[1]),
-			"created_at": _decode_timestamp_column(
-				"saved_search", str(row[0]), "created_at", row[2]
-			),
-			"updated_at": _decode_timestamp_column(
-				"saved_search", str(row[0]), "updated_at", row[3]
-			),
+			"name": decoded_name,
+			"params": _decode_saved_params(decoded_name, row[1]),
+			"created_at": _decode_timestamp_column("saved_search", decoded_name, "created_at", row[2]),
+			"updated_at": _decode_timestamp_column("saved_search", decoded_name, "updated_at", row[3]),
 		}
 
 	def list_saved_searches(self) -> list[dict[str, Any]]:
@@ -1703,19 +1701,20 @@ class CacheStore:
 		corrupt: list[str] = []
 		for row in rows:
 			try:
-				params = _decode_saved_params(str(row[0]), row[1])
-				created_at = _decode_timestamp_column(
-					"saved_search", str(row[0]), "created_at", row[2]
-				)
-				updated_at = _decode_timestamp_column(
-					"saved_search", str(row[0]), "updated_at", row[3]
-				)
+				# TEXT 亲和性不强制类型：name 列被写成 BLOB 时原样进信封会让
+				# 序列化兜成 INTERNAL_ERROR，且坏行不进 corrupt 名单
+				# （Issue #2147，与 #1885 / #2056 同口径）。
+				name = _decode_text_column("saved_search", str(row[0]), "name", row[0])
+				assert isinstance(name, str)
+				params = _decode_saved_params(name, row[1])
+				created_at = _decode_timestamp_column("saved_search", name, "created_at", row[2])
+				updated_at = _decode_timestamp_column("saved_search", name, "updated_at", row[3])
 			except (SavedSearchParamsError, CacheRecordInvalid):
 				corrupt.append(str(row[0]))
 				continue
 			items.append(
 				{
-					"name": row[0],
+					"name": name,
 					"params": params,
 					"created_at": created_at,
 					"updated_at": updated_at,
@@ -2090,7 +2089,9 @@ class CacheStore:
 			"source": source,
 			"tags": self._deserialize_shortlist_tags(row[7]),
 			"note": note or "",
-			"created_at": row[9],
+			# REAL 列漂移成 BLOB 时不能原样进信封：序列化会兜成固定
+			# INTERNAL_ERROR，与 #1964 的时间戳列同口径（Issue #2147）。
+			"created_at": _decode_timestamp_column("shortlist", record_id, "created_at", row[9]),
 			"lid": lid or self._crawl_shortlist_lid(security_id or "", job_id or "", source or ""),
 		}
 
@@ -2215,8 +2216,9 @@ class CacheStore:
 			"company": _decode_text_column("resume_link", record_id, "company", row[4]),
 			"status": _decode_text_column("resume_link", record_id, "status", row[5]),
 			"notes": _decode_text_column("resume_link", record_id, "notes", row[6], allow_none=True),
-			"linked_at": row[7],
-			"updated_at": row[8],
+			# 与 #1964 同口径：REAL 时间戳漂移不能以 bytes 进信封（Issue #2147）。
+			"linked_at": _decode_timestamp_column("resume_link", record_id, "linked_at", row[7]),
+			"updated_at": _decode_timestamp_column("resume_link", record_id, "updated_at", row[8]),
 		}
 
 	def get_resume_applications(self, resume_name: str) -> list[dict[str, Any]]:
