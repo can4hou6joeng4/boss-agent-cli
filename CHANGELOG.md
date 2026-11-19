@@ -2,6 +2,8 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
 ## [3.4.132] - 2026-11-20
 
 ### Fixed
