@@ -187,10 +187,17 @@ def _merge_and_write(
 		try:
 			prev_today = json.loads(raw.decode("utf-8"))
 			if isinstance(prev_today, list):
-				today_parsed = True
-				for item in prev_today:
-					if isinstance(item, dict) and contact_identity(item):
-						existing[contact_identity(item)] = item
+				usable = [
+					item
+					for item in prev_today
+					if isinstance(item, dict) and contact_identity(item)
+				]
+				# 非空数组但零个可用对象（手工改坏 / 旧格式漂移）与坏 JSON 同口径：
+				# 不能当作完整基线，否则下一次 diff 会把所有未翻到的联系人误报为
+				# 新增（Issue #1993 的 load_snapshot 守卫，Issue #2015）。
+				today_parsed = not prev_today or bool(usable)
+				for item in usable:
+					existing[contact_identity(item)] = item
 		except (ValueError, RecursionError):
 			# ValueError 覆盖 JSONDecodeError / UnicodeDecodeError 与 3.11+ 的超长
 			# 整数上限；RecursionError 覆盖深嵌套。坏快照按没有历史处理。

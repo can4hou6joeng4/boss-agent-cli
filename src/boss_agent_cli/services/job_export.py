@@ -38,6 +38,15 @@ def public_html_export_item_from_api(raw: dict[str, Any]) -> dict[str, Any]:
 	}
 
 
+def _sanitize_surrogates(text: str) -> str:
+	"""孤立代理项按 backslashreplace 归一，stdout / 文件路径同口径（Issue #2017）。"""
+	try:
+		text.encode("utf-8")
+	except UnicodeEncodeError:
+		return text.encode("utf-8", "backslashreplace").decode("utf-8")
+	return text
+
+
 def _cell_text(value: Any) -> str:
 	"""单元格文本：null / 非有限数 → 空串，容器 → JSON 文本，标量 → str。
 
@@ -48,13 +57,21 @@ def _cell_text(value: Any) -> str:
 	"""
 	if value is None:
 		return ""
+	if isinstance(value, bool):
+		# JSON 分支是 true / false：str(True) 会让 CSV / HTML 出现 Python
+		# 字面量（Issue #2018）。
+		return "true" if value else "false"
 	if isinstance(value, (dict, list, tuple)):
 		# 容器先递归归一非有限数，否则嵌套 Infinity / NaN 会写成非标准 JSON
-		# 字面量，与 JSON 分支的 null 口径不一致（Issue #1977）。
-		return strict_json_text(value, indent=None)
+		# 字面量，与 JSON 分支的 null 口径不一致（Issue #1977）。深嵌套无法
+		# 序列化时按缺失处理，单个坏单元格不能中止整份导出（Issue #2016）。
+		try:
+			return _sanitize_surrogates(strict_json_text(value, indent=None))
+		except OSError:
+			return ""
 	if isinstance(value, float) and not math.isfinite(value):
 		return ""
-	return str(value)
+	return _sanitize_surrogates(str(value))
 
 
 def _join_cells(value: list[Any]) -> str:
