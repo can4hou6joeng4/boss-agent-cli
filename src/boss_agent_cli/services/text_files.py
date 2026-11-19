@@ -30,7 +30,9 @@ def write_text_atomic(
 	target.parent.mkdir(parents=True, exist_ok=True)
 	temporary: Path | None = None
 	try:
-		fd, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+		# 与 json_files 同口径：临时名不含目标文件名，避免长文件名的 ENAMETOOLONG
+		# （Issue #1985）。
+		fd, temporary_name = tempfile.mkstemp(prefix=".boss-text-", dir=target.parent)
 		temporary = Path(temporary_name)
 		# 与 json_files 同口径：孤立代理字符无法按 UTF-8 编码，严格模式会让
 		# 导出在写盘时抛 UnicodeEncodeError、命令丢掉信封（Issue #1294）。

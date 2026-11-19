@@ -62,7 +62,9 @@ def write_json_atomic(
 	path.parent.mkdir(parents=True, exist_ok=True)
 	temporary: Path | None = None
 	try:
-		fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+		# 临时名不含目标文件名：NAME_MAX=255 时「.<完整名称>.<随机>」会让 241–255
+		# 字节的合法目标名在这里 ENAMETOOLONG（Issue #1985）。
+		fd, temporary_name = tempfile.mkstemp(prefix=".boss-json-", dir=path.parent)
 		temporary = Path(temporary_name)
 		# 孤立代理字符（如 argv 里的非法 UTF-8 字节解码出的 U+DCFF）无法按 UTF-8
 		# 编码，严格模式会让整条命令在写盘时抛 UnicodeEncodeError、stdout 无信封

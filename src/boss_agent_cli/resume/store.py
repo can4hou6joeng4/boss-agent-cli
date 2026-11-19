@@ -87,6 +87,12 @@ def _unsafe_resume_name_reason(name: str) -> str | None:
 		return "name 不能只由点号组成"
 	if _is_windows_device_name(name):
 		return f"name '{name}' 是 Windows 保留设备名，请换一个名称"
+	try:
+		name.encode("utf-8")
+	except UnicodeEncodeError:
+		# 孤立代理项（如 JSON 里的 "\udcff"）无法编码成文件名字节，后续 lstat
+		# 会抛 EILSEQ / UnicodeEncodeError，被误报成本地磁盘错误（Issue #1986）。
+		return "name 含有无法保存为文件名的字符（如孤立代理项）"
 	return None
 
 
@@ -156,8 +162,17 @@ class ResumeStore:
 			except (AttributeError, TypeError, ValueError):
 				corrupt.append(path.stem)
 				continue
+			raw_name = raw.get("name", "")
+			# 文件里的 name 必须能解析回同一个文件：手工复制出来的副本、改名后
+			# 遗留的文件或 export 信封（缺 name）若原样回信，会在列表里产生
+			# 重复 / 幽灵 / 空名条目，而 show / delete 按该名字找不到这份文件。
+			# 映射不回时改用文件自身的 stem，保证列表里每条都能被点名（Issue #1984）。
+			if isinstance(raw_name, str) and raw_name and self._path_for(raw_name) == path:
+				name = raw_name
+			else:
+				name = path.stem
 			results.append({
-				"name": raw.get("name", ""),
+				"name": name,
 				"title": raw.get("title", ""),
 				"updated_at": raw.get("updated_at", ""),
 			})
