@@ -7,6 +7,9 @@
 ### Fixed
 - 自动化队列的整文件回写保留读取路径会跳过的原始行：`pending-actions.jsonl` / `human-review-queue.jsonl` 里坏编码、坏 JSON 或非 object 的行不再在下一次 `write_pending` / `write_reviews` 时被静默删除（一行可能是一条已批准但因崩溃截断的动作记录，删除后既不执行也无痕迹）；旧文件读不出来时按 `AUTOMATION_STATE_INVALID` 停止回写；追加队列记录补 `flush` + `fsync`，缩小断电只落下半行的窗口（Issue #2172）。
 - `state.json` 的 `safety.consecutive_errors` 读取时要求非负整数：外部编辑写入的负值不再让连续失败熔断需要更多次失败才打开，按 `AUTOMATION_STATE_INVALID` 报状态损坏并提示修正方式（Issue #2173）。
+- MCP 入口落实 schema 里声明的条件约束：`boss_config` / `boss_hr_jobs` 的未知 `action`（如 `--`、`--help`）在映射层按 `INVALID_PARAM` 拒绝，不再被 CLI 当成默认 `list` 或帮助选项；`config set` 缺 `key` 时不再让 `value` 顶到 KEY 位置、报错误的「缺少 VALUE」；`crawl_shortlist` 同时给 `selectors` 与 `all` 时按互斥约束拒绝；JSON 数字 `1.0`（小数部分为零）按 JSON Schema 语义归一成整数，不再被入口误判为类型错误（Issue #2175）。
+- MCP 映射的三个 AI 工具把显式空 `resume` 原样下发，让 CLI 的 `INVALID_PARAM`「简历名称不能为空」诊断生效，不再静默生成无简历参考的结果；子进程超时估算只看 `--` 之前的选项，关键词恰好以 `--dry-run` / `--count=1` 开头时不再把长任务预算错误缩短（Issue #2176）。
+- MCP 的 schema 与只读分类对齐：`search.active` 的枚举补空字符串（清除 preset 保存的活跃度筛选）、`shortlist_annotate` 的标签数组要求至少一项；`dry_run` 调用与 `config list/get` 按只读回报中断恢复，不再要求核对不存在的平台写入（Issue #2177）。
 - 聊天快照会把混入非对象或缺失可用身份的沟通列表页视为不完整，并保留当天已观察到的联系人。历史快照过滤过条目时不推断联系人新增（Issue #2179）。
 - 聊天快照的负未读数按 0 比较，历史记录从 `-1` 恢复到 `0` 时不再误报新增未读（Issue #2180）。
 - 聊天导出在同一把日锁下读取历史快照及其完整性标记，跨日并发时不会把不同版本拼成一份基线（Issue #2181）。
