@@ -97,6 +97,7 @@ DEFAULT_HTTP_PATH = "/mcp"
 DEFAULT_SSE_PATH = "/sse"
 DEFAULT_MESSAGE_PATH = "/messages/"
 DEFAULT_BOSS_BIN = "boss"
+#: 初始值只是回退；模块加载末尾会用 `_default_boss_bin()` 解析成与 run() 相同的入口。
 _BOSS_BIN = DEFAULT_BOSS_BIN
 _BOSS_GLOBAL_ARGS: list[str] = []
 _CLI_TIMEOUT_SECONDS = 120.0
@@ -154,6 +155,12 @@ def _default_boss_bin(*, executable: str | None = None, windows: bool | None = N
 		if stat.S_ISREG(mode):
 			return str(candidate)
 	return DEFAULT_BOSS_BIN
+
+
+# 直接调用 `_run_boss()` / handler 而不经 run() 的嵌入方与测试也走同安装入口：
+# 默认值停留在裸名字会从 PATH 找 boss，PATH 上另一份旧安装（或坏 shim）会被
+# 静默驱动（Issue #1066 / #2088）。run() 的显式 --boss-bin 仍会覆盖这里。
+_BOSS_BIN = _default_boss_bin()
 
 
 def _configure_boss_invocation(
