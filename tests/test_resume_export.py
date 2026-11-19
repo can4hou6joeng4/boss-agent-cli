@@ -148,7 +148,8 @@ def test_export_pdf_call_params(tmp_path):
 	# 先写同目录临时文件再原子替换：Chromium 不直接写目标路径。
 	pdf_path = Path(pdf_call.kwargs["path"])
 	assert pdf_path.parent == out.parent
-	assert pdf_path.name.startswith(".output.pdf.")
+	# 临时名用固定短前缀，不再拼完整目标名（长文件名会 ENAMETOOLONG，Issue #1985）。
+	assert pdf_path.name.startswith(".boss-pdf-")
 	assert out.read_bytes() == b"%PDF-1.4 mock"
 
 

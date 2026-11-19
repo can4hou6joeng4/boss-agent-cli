@@ -41,7 +41,9 @@ def export_pdf(resume: ResumeData, output_path: Path) -> Path:
 	html = render_resume_html(resume)
 	output_path.parent.mkdir(parents=True, exist_ok=True)
 	# Chromium 直接写目标路径时，中断会留下半截 PDF；先写临时文件再替换。
-	fd, temporary_name = tempfile.mkstemp(prefix=f".{output_path.name}.", suffix=".pdf", dir=output_path.parent)
+	# 临时名不含目标文件名：长但合法的 PDF 输出名会让「.<完整名称>.<随机>.pdf」
+	# 超过 NAME_MAX 并报 ENAMETOOLONG（Issue #1985）。
+	fd, temporary_name = tempfile.mkstemp(prefix=".boss-pdf-", suffix=".pdf", dir=output_path.parent)
 	os.close(fd)
 	temporary = Path(temporary_name)
 	try:
