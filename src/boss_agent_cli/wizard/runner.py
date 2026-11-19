@@ -451,7 +451,7 @@ class WorkflowRunner:
 				status=WorkflowStatus.RUNNING.value,
 				current_step=step_name,
 			)
-			self._store.update_step(
+			step_running = self._store.update_step(
 				run_id,
 				step_name,
 				status=WorkflowStatus.RUNNING.value,
@@ -463,6 +463,17 @@ class WorkflowRunner:
 			action_context = with_control(control) if callable(with_control) else context
 			try:
 				control.raise_if_requested()
+				if not step_running:
+					# 步骤行缺失 / 被改名时不能在无记录的情况下派发动作：动作一旦
+					# 发出，结果无法记账，--resume 也无从判断是否重放（Issue #2034）。
+					# 本次没有平台写入，replay_safe 保持 True；确定性损坏不自动重试。
+					raise WorkflowActionError(
+						"CACHE_RECORD_INVALID",
+						f"步骤 {step_name} 的记录不存在，未执行任何动作",
+						recoverable=True,
+						replay_safe=True,
+						auto_retry=False,
+					)
 				action = self._actions.get(step_name)
 				if action is None:
 					raise WorkflowActionError(
@@ -1105,8 +1116,11 @@ class WorkflowRunner:
 			"platform": existing.get("platform"),
 			"goal": existing.get("goal"),
 			"mode": existing.get("mode"),
-			"inputs": params.get("inputs"),
-			"requested_steps": params.get("requested_steps"),
+			# 读取边界接受 `inputs: null` 与省略 `requested_steps`，`_plan_from_run`
+			# 会把它们归一成 `{}` / `()`；这里同样归一后再比较，否则合法断点会被
+			# 误报为 plan mismatch（Issue #2033）。
+			"inputs": dict(params.get("inputs") or {}),
+			"requested_steps": list(params.get("requested_steps") or ()),
 		}
 		requested = {
 			"role": plan.role,

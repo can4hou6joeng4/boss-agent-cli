@@ -845,10 +845,14 @@ def _run_wizard_command(
 			# 把存在但已完成的任务误报为 ID 写错（Issue #1585）。损坏的断点不影响
 			# 停止标记本身，仍交给 request_stop 按既有补偿语义处理。
 			existing_run: dict[str, Any] | None = None
+			record_corrupt = False
 			try:
 				existing_run = store.get_checkpoint(stop_run_id, validate_replay_markers=False)
 			except CacheRecordInvalid:
-				pass
+				# 记录存在但读不出来（params 等漂移）：request_stop 之后返回
+				# False 时不能报成「未找到」，否则与 --status 的损坏结论矛盾
+				# （Issue #2035）。
+				record_corrupt = True
 			if existing_run is not None and existing_run.get("status") == "completed":
 				_wizard_error(
 					ctx,
@@ -869,6 +873,21 @@ def _run_wizard_command(
 				)
 				return
 			if not store.request_stop(stop_run_id):
+				if record_corrupt:
+					# request_stop 的 SQL 只在 status = completed 时匹配 0 行，而记录
+					# 确实存在（刚读到损坏）：任务是已结束，不是 ID 写错（Issue #2035）。
+					_wizard_error(
+						ctx,
+						interactive,
+						code="WORKFLOW_ALREADY_FINISHED",
+						message=f"任务已结束，无法停止: {stop_run_id}（本地断点损坏，--status 可能无法读取）",
+						recovery_action=(
+							f"{boss_command_for_ctx(ctx, 'wizard', include_data_dir=True)} 新建 workflow；"
+							"如需查看结果，该 run 的断点已损坏、无法恢复"
+						),
+						hints={"next_actions": [boss_command_for_ctx(ctx, "wizard", include_data_dir=True)]},
+					)
+					return
 				_wizard_error(
 					ctx,
 					interactive,
