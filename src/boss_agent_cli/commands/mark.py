@@ -95,9 +95,13 @@ def mark_cmd(ctx: click.Context, security_id: str, label: str, remove: bool) -> 
 			handle_platform_error_output(ctx, "mark", platform, resp, fallback_message=f"{action_text}标签失败")
 			return
 
+		# 只认字符串并与 _contact_lookup 同口径：类型漂移成对象 / 布尔时
+		# str() 会把 Python repr 当 security_id 回显，Agent 会拿它继续调用
+		# detail / apply 等命令（Issue #1812、#2138）。
+		raw_security_id = friend_item.get("securityId") or friend_item.get("security_id")
 		data = {
 			"uid": friend_id,
-			"security_id": str(friend_item.get("securityId") or friend_item.get("security_id") or ""),
+			"security_id": raw_security_id.strip() if isinstance(raw_security_id, str) else "",
 			"name": friend_name,
 			"label": label_name,
 			"action": action_text,

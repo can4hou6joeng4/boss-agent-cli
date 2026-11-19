@@ -576,7 +576,9 @@ def test_favorites_sync_response_shape_drift_returns_network_error(
 	parsed = json.loads(result.output)
 	assert parsed["error"]["code"] == "NETWORK_ERROR"
 	assert parsed["error"]["recoverable"] is True
-	assert parsed["error"]["recovery_action"] == "重试；若持续出现，用 boss doctor 检查登录态与网络"
+	assert parsed["error"]["recovery_action"] == (
+		f"重试；若持续出现，用 boss --data-dir {tmp_path.resolve()} doctor 检查登录态与网络"
+	)
 	assert _shortlist_items(tmp_path) == []
 
 
