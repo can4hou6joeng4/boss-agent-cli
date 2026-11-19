@@ -9,15 +9,12 @@ from typing import Any
 
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell, escape_md_cell, contact_identity, GROUP_ORDER
 from boss_agent_cli.services.json_files import strict_json_text
+from boss_agent_cli.services.text_files import sanitize_surrogates
 
 
 def _sanitize_surrogates(text: str) -> str:
-	"""孤立代理项按 backslashreplace 归一，stdout / 文件路径同口径（Issue #2017）。"""
-	try:
-		text.encode("utf-8")
-	except UnicodeEncodeError:
-		return text.encode("utf-8", "backslashreplace").decode("utf-8")
-	return text
+	"""兼容旧调用点：实现已收敛到 services.text_files（Issue #2017、#2109）。"""
+	return sanitize_surrogates(text)
 
 
 def _text_cell(value: Any) -> Any:
@@ -52,21 +49,24 @@ def prepare_render_data(
 	"""公共数据准备：分组、统计、diff 标记、渲染顺序。供 MD/HTML 共用。"""
 	now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
-	# 按 relationType 分组
-	groups: dict[str, list[dict[str, Any]]] = {}
+	# 按 relationType 分组。身份用原始值计算并随展示项一起保存：_text_cell 会把
+	# 布尔 / 容器 uid 转成看似合法的文本（"true" / JSON），转换后再取身份会
+	# 绕过 stable_uid 的 fail-closed，映射表 key 与 added_ids 对不上
+	# （Issue #2064、#2110）。
+	groups: dict[str, list[tuple[dict[str, Any], str]]] = {}
 	for raw_item in friends:
 		item = {key: _text_cell(value) for key, value in raw_item.items()}
 		key = item.get("initiated_by", "未知")
-		groups.setdefault(key, []).append(item)
+		groups.setdefault(key, []).append((item, contact_identity(raw_item)))
 
 	total = len(friends)
 	counts = {k: len(v) for k, v in groups.items()}
 	count_parts = [f"{k} {v}" for k, v in counts.items()]
 
 	me_items = groups.get("我主动", [])
-	me_read = sum(1 for x in me_items if x.get("msg_status") == "已读")
+	me_read = sum(1 for x, _ in me_items if x.get("msg_status") == "已读")
 	# 状态缺失或漂移时命令层给的是「未知」，不能算进未读（Issue #1794）。
-	me_unread = sum(1 for x in me_items if x.get("msg_status") == "未读")
+	me_unread = sum(1 for x, _ in me_items if x.get("msg_status") == "未读")
 
 	added_ids = {contact_identity(item) for item in diff_result.get("added", [])}
 
@@ -122,10 +122,10 @@ def prepare_render_data(
 		subtitle += "）"
 
 		rows = []
-		for item in group_items:
+		for item, identity in group_items:
 			global_idx += 1
 			sid = item.get("security_id", "")
-			key = contact_identity(item)
+			key = identity
 			is_new = key in added_ids
 			ref = f"S{global_idx}"
 			msg = str(item.get("last_msg") or "-")

@@ -30,7 +30,7 @@ from boss_agent_cli.display import (
 	render_action_result,
 )
 from boss_agent_cli.services.output_path import prepare_output_path
-from boss_agent_cli.services.text_files import write_text_atomic
+from boss_agent_cli.services.text_files import sanitize_surrogates, write_text_atomic
 
 
 def _count_records(
@@ -457,7 +457,11 @@ def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Pa
 	data = _collect_stats(db_path, days)
 
 	if output_format == "html":
-		html_text = _render_html(ctx, data)
+		# HTML 内嵌 hints，其中的 --data-dir 路径可能带孤立代理字符（Linux 上
+		# 非 UTF-8 字节经 surrogateescape 解码）。先在出口归一，三个输出分支
+		# （-o / --json / stdout）与 bytes 计算才不会再抛 UnicodeEncodeError，
+		# 也不会出现「文件已写出却报失败」（Issue #2109）。
+		html_text = sanitize_surrogates(_render_html(ctx, data))
 		if output_path:
 			target = prepare_output_path(output_path)
 			write_text_atomic(target, html_text)
