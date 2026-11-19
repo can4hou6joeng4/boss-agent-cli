@@ -13,9 +13,13 @@ from boss_agent_cli.services.json_files import strict_json_text
 
 
 def prepare_export_items(items: list[dict[str, Any]], *, include_private: bool) -> list[dict[str, Any]]:
+	# 非对象条目不进入导出：``dict(item)`` / ``item.get`` 会抛 TypeError /
+	# AttributeError，把本地形状漂移升级成错误信封（Issue #2162）。CLI 调用方
+	# 目前都用 dict_items 过滤，这里是公共边界的纵深防御。
+	usable = [item for item in items if isinstance(item, dict)]
 	if include_private:
-		return items
-	return [redact_export_item(item) for item in items]
+		return usable
+	return [redact_export_item(item) for item in usable]
 
 
 def redact_export_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -109,6 +113,10 @@ def write_export_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 		writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
 		writer.writeheader()
 		for item in items:
+			if not isinstance(item, dict):
+				# 非对象条目跳过：``dict(item)`` 与 ``item.get`` 会让整份
+				# 导出落成 TypeError / AttributeError（Issue #2162）。
+				continue
 			row = dict(item)
 			if isinstance(row.get("skills"), list):
 				row["skills"] = _join_cells(row["skills"])
@@ -146,7 +154,13 @@ def render_html_export(items: list[dict[str, Any]]) -> str:
 		return "<html><body><p>无数据</p></body></html>"
 
 	rows = []
-	for i, item in enumerate(items, 1):
+	index = 0
+	for item in items:
+		if not isinstance(item, dict):
+			# 非对象条目没有可展示字段：跳过，不能让 ``item.get`` 的
+			# AttributeError 中止整份 HTML 导出（Issue #2162）。
+			continue
+		index += 1
 		skills = item.get("skills", [])
 		if isinstance(skills, list):
 			# 空元素不渲染成空标签；容器元素走 JSON 文本（Issue #1916）。
@@ -169,7 +183,7 @@ def render_html_export(items: list[dict[str, Any]]) -> str:
 			welfare_html = esc(welfare)
 		rows.append(
 			f"<tr>"
-			f"<td>{i}</td>"
+			f"<td>{index}</td>"
 			f"<td class='title'>{esc(item.get('title', ''))}</td>"
 			f"<td class='company'>{esc(item.get('company', ''))}</td>"
 			f"<td>{esc(item.get('city', ''))}</td>"

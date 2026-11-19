@@ -41,6 +41,11 @@ def scalar_or_none(value: Any) -> Any:
 
 def build_job_from_card(card: dict[str, Any], *, security_id: str, greeted: bool, lid: str = "") -> dict[str, Any]:
 	"""把 job_card 响应映射为统一职位字段 dict（show / detail 浏览器兜底通道共用）。"""
+	if not isinstance(card, dict):
+		# 调用方（show / detail / wizard）都已先走 field_dict；公共边界上非对象
+		# 入参按空卡片处理，``card.get`` 的 AttributeError 不能让整条命令落成
+		# INTERNAL_ERROR（Issue #2162）。
+		card = {}
 	raw_job_type = card.get("jobType")
 	return {
 		"job_id": field_text(card, "encryptJobId"),

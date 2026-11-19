@@ -7,6 +7,7 @@ import io
 import math
 from typing import Any
 
+from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell, escape_md_cell, contact_identity, GROUP_ORDER
 from boss_agent_cli.services.json_files import strict_json_text
 from boss_agent_cli.services.text_files import sanitize_surrogates
@@ -17,12 +18,17 @@ def _sanitize_surrogates(text: str) -> str:
 	return sanitize_surrogates(text)
 
 
-def _text_cell(value: Any) -> Any:
+def _text_cell(value: Any) -> str:
 	"""文本格式里的容器值序列化成 JSON 文本，不落 Python repr（Issue #1853）。
 
 	非有限 float 与 JSON 分支同口径按空值处理；容器先递归归一，避免嵌套
-	Infinity / NaN 被写成非标准 JSON 字面量（Issue #1976）。
+	Infinity / NaN 被写成非标准 JSON 字面量（Issue #1976）。null 与标量
+	统一转成文本：裸 ``str()`` 对超过 4300 位的整数抛 ``ValueError``，
+	会中止整份导出；与 ``job_export._cell_text`` / ``job_card._text_item``
+	同口径按缺失处理（Issue #2162）。
 	"""
+	if value is None:
+		return ""
 	if isinstance(value, bool):
 		# JSON 分支是 true / false：str(True) 会让文本导出出现 Python 字面量
 		# （Issue #2018）。
@@ -36,9 +42,19 @@ def _text_cell(value: Any) -> Any:
 			return ""
 	if isinstance(value, float) and not math.isfinite(value):
 		return ""
-	if isinstance(value, str):
-		return _sanitize_surrogates(value)
-	return value
+	return _sanitize_surrogates(safe_text(value))
+
+
+def _diff_items(diff_result: dict[str, Any], key: str) -> list[dict[str, Any]]:
+	"""diff 列表的防御读取：缺失 / null / 非列表按空处理，非对象元素跳过。
+
+	``save_snapshot_and_diff`` 正常只返回对象列表，但渲染入口是公共边界：
+	坏条目不能让整份导出落成 AttributeError / TypeError（Issue #2162）。
+	"""
+	raw = diff_result.get(key)
+	if not isinstance(raw, list):
+		return []
+	return [item for item in raw if isinstance(item, dict)]
 
 
 def prepare_render_data(
@@ -49,35 +65,40 @@ def prepare_render_data(
 	"""公共数据准备：分组、统计、diff 标记、渲染顺序。供 MD/HTML 共用。"""
 	now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
+	# 非对象元素在渲染入口跳过：公共边界上的坏条目不能让整份导出落成
+	# AttributeError（Issue #2162）。CLI 调用方目前都已过滤，这里是纵深防御。
+	usable = [item for item in friends if isinstance(item, dict)]
+
 	# 按 relationType 分组。身份用原始值计算并随展示项一起保存：_text_cell 会把
 	# 布尔 / 容器 uid 转成看似合法的文本（"true" / JSON），转换后再取身份会
 	# 绕过 stable_uid 的 fail-closed，映射表 key 与 added_ids 对不上
 	# （Issue #2064、#2110）。
-	groups: dict[str, list[tuple[dict[str, Any], str]]] = {}
-	for raw_item in friends:
+	groups: dict[str, list[tuple[dict[str, Any], str, dict[str, Any]]]] = {}
+	for raw_item in usable:
 		item = {key: _text_cell(value) for key, value in raw_item.items()}
 		key = item.get("initiated_by", "未知")
-		groups.setdefault(key, []).append((item, contact_identity(raw_item)))
+		groups.setdefault(key, []).append((item, contact_identity(raw_item), raw_item))
 
-	total = len(friends)
+	total = len(usable)
 	counts = {k: len(v) for k, v in groups.items()}
 	count_parts = [f"{k} {v}" for k, v in counts.items()]
 
 	me_items = groups.get("我主动", [])
-	me_read = sum(1 for x, _ in me_items if x.get("msg_status") == "已读")
+	me_read = sum(1 for x, _, _ in me_items if x.get("msg_status") == "已读")
 	# 状态缺失或漂移时命令层给的是「未知」，不能算进未读（Issue #1794）。
-	me_unread = sum(1 for x, _ in me_items if x.get("msg_status") == "未读")
+	me_unread = sum(1 for x, _, _ in me_items if x.get("msg_status") == "未读")
 
-	added_ids = {contact_identity(item) for item in diff_result.get("added", [])}
+	added = _diff_items(diff_result, "added")
+	added_ids = {contact_identity(item) for item in added}
 
 	# diff 摘要
 	diff_summary = None
 	if not diff_result.get("is_first", True):
 		prev_date = diff_result.get("prev_date", "?")
 		parts = []
-		added_count = len(diff_result.get("added", []))
-		removed_count = len(diff_result.get("removed", []))
-		new_unread_count = len(diff_result.get("new_unread", []))
+		added_count = len(added)
+		removed_count = len(_diff_items(diff_result, "removed"))
+		new_unread_count = len(_diff_items(diff_result, "new_unread"))
 		if added_count:
 			parts.append(f"新增 {added_count} 条")
 		if removed_count:
@@ -122,7 +143,7 @@ def prepare_render_data(
 		subtitle += "）"
 
 		rows = []
-		for item, identity in group_items:
+		for item, identity, raw_item in group_items:
 			global_idx += 1
 			sid = item.get("security_id", "")
 			key = identity
@@ -131,7 +152,9 @@ def prepare_render_data(
 			msg = str(item.get("last_msg") or "-")
 			# unread 只认真正的整数（与 chat_snapshot._unread_count 同口径）：
 			# 字符串 / 容器会在 ``row["unread"] > 0`` 抛 TypeError（Issue #1853）。
-			unread_value = item.get("unread")
+			# 判断必须用原始值：_text_cell 已把标量转成字符串，转换后的 "1"
+			# 会被 ``type(...) is int`` 误判为缺失（Issue #2162）。
+			unread_value = raw_item.get("unread")
 			unread = unread_value if type(unread_value) is int else 0
 			rows.append({
 				"ref": ref, "is_new": is_new, "sid": sid, "key": key,
@@ -148,13 +171,10 @@ def prepare_render_data(
 		sections.append({"subtitle": subtitle, "rows": rows})
 
 	# 「已消失」表格与活动联系人 / CSV 行同口径：容器字段序列化为 JSON 文本，
-	# 不再在 Markdown / HTML 里落 Python repr（Issue #1913）。
-	removed = [
-		{key: _text_cell(value) for key, value in item.items()}
-		if isinstance(item, dict)
-		else item
-		for item in diff_result.get("removed", [])
-	]
+	# 不再在 Markdown / HTML 里落 Python repr（Issue #1913）。非对象元素在
+	# 归一阶段丢弃，HTML 通道的 ``item.get`` 不会因坏条目抛 AttributeError
+	# （Issue #2162）。
+	removed = [{key: _text_cell(value) for key, value in item.items()} for item in _diff_items(diff_result, "removed")]
 
 	return {
 		"now_str": now_str,
@@ -199,6 +219,10 @@ def _render_csv(friends: list[dict[str, Any]]) -> str:
 	writer = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
 	writer.writeheader()
 	for item in friends:
+		if not isinstance(item, dict):
+			# 非对象条目跳过：``item.items()`` 的 AttributeError 会让整份
+			# CSV 导出落成错误信封（Issue #2162）。
+			continue
 		# null 写成空单元格，不落成字面量 None（Issue #1793）。
 		safe_row = {k: "" if v is None else sanitize_csv_cell(str(_text_cell(v))) for k, v in item.items()}
 		writer.writerow(safe_row)
@@ -291,8 +315,9 @@ def _render_html(
 	def esc(value: Any) -> str:
 		# 平台字段类型漂移（数字 / 对象）时 html.escape 直接抛 AttributeError，
 		# 整次 HTML 导出落成 INTERNAL_ERROR；md / csv 已用 str() 兜底，这里
-		# 统一同口径（Issue #1296）。
-		return _html.escape(str(value))
+		# 统一同口径（Issue #1296）。标量兜底走 safe_text：超过 4300 位的整数
+		# 裸 str() 抛 ValueError，与 csv / job_card 同口径按缺失处理（Issue #2162）。
+		return _html.escape(safe_text(value))
 
 	rd = prepare_render_data(friends, from_who, diff_result)
 

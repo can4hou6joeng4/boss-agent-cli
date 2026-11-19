@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 导出服务的函数边界补上非对象条目与超大整数标量兜底：`chat --export` 的 MD / CSV / HTML 通道对超过 4300 位的整数标量不再抛 `ValueError`（与 `job_export` / `job_card` 同口径按缺失处理）；chat 导出与职位导出的渲染入口跳过非对象条目，`diff` 列表容忍 `null` / 非列表 / 坏元素；`build_job_from_card` 对非对象入参按空卡片处理。CLI 调用方目前都已过滤，这是公共边界的纵深防御，避免本地形状漂移被兜成可重试的 `NETWORK_ERROR` 或裸 traceback（Issue #2162）。
+
 ## [3.4.135] - 2026-11-20
 
 ### Fixed
