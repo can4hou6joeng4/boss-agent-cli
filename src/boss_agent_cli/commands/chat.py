@@ -181,8 +181,14 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 		raw_has_more = platform_data.get("hasMore")
 		has_more = raw_has_more if isinstance(raw_has_more, bool) else None
 		# 只有第 1 页且平台明确没有下一页，才能证明本次看到完整沟通列表；
-		# 部分页或未知 hasMore 不能作为“联系人已消失”的证据。
-		collection_complete = page == 1 and has_more is False
+		# 部分页或未知 hasMore 不能作为“联系人已消失”的证据。页面还必须带有
+		# 可识别的列表容器：容器缺失 / 类型漂移时不能把「读不出任何元素」当成
+		# 完整空列表，否则会用完整采集清空当日快照并把旧联系人全报为已消失
+		# （Issue #1914）。
+		page_containers_valid = any(
+			isinstance(platform_data.get(key), list) for key in ("result", "friendList")
+		)
+		collection_complete = page == 1 and has_more is False and page_containers_valid
 
 		# ── 导出模式 ──────────────────────────────────────────────
 		if export_fmt is not None and output_path is not None:
