@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.136] - 2026-11-20
+
 ### Fixed
 - 采集注入 Cookie 的失败原因做值级脱敏：`_failure_reason` 先把所有 seed Cookie 值替换成 `[REDACTED]` 再截断，DrissionPage 的 `ValueError` 把整个 cookie 字典（含 `value`）拼进消息时，`AUTH_REQUIRED` 信封的 `error.message` 不再输出真实 Cookie 值，`SessionSeedResult` 恢复「不保留任何原值」的承诺（Issue #2168）。
 - crawl 的三处 `Path.resolve()` 把符号链接环的 `RuntimeError` 按确定性本地失败收口：Python 3.11 / 3.12 上配置目录解析失败不再落成 `ok:true, status=stopped` + 无限 `crawl resume`，`crawl start` 的数据目录解析报 `INVALID_PARAM`，输出目录解析报 `LOCAL_IO_ERROR`，不再被兜成可重试的 `NETWORK_ERROR` 或成功信封（Issue #2169）。
