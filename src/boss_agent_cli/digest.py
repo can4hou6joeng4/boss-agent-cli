@@ -2,6 +2,7 @@ import time
 from typing import Any
 
 from boss_agent_cli.services.chat_utils import escape_md_cell as _escape_md_cell
+from boss_agent_cli.services.text_files import sanitize_surrogates
 
 
 def build_digest(*, new_matches: list[dict[str, Any]], follow_ups: list[dict[str, Any]], interviews: list[dict[str, Any]]) -> dict[str, Any]:
@@ -143,4 +144,8 @@ def render_digest_markdown(data: dict[str, Any], *, generated_at: str | None = N
 	lines.append("_由 `boss digest --format md` 生成 · [boss-agent-cli](https://github.com/can4hou6joeng4/boss-agent-cli)_")
 	lines.append("")
 
-	return "\n".join(lines)
+	# 平台文本可能含孤立代理字符（如被截断的 emoji）：在渲染出口按
+	# backslashreplace 归一，`-o` 的 bytes 计算、`--json` 的 data.content 与
+	# md 直写 stdout 三个分支才不会再抛 UnicodeEncodeError，也不会出现
+	# 「文件已写出却报失败」（Issue #2142，与 stats #2109 同口径）。
+	return sanitize_surrogates("\n".join(lines))
