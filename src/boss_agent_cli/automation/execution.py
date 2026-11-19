@@ -465,9 +465,16 @@ def _mark_inflight_notified(prior: dict[str, Any]) -> None:
 
 
 def _inflight_needs_notification(prior: dict[str, Any]) -> bool:
-	"""verification-required 标记是否还没成功通知操作者。"""
+	"""verification-required 标记是否还没成功通知操作者。
+
+	只有布尔 ``True`` 才算已通知：``notified`` 漂移成 ``0`` / ``""`` / ``"false"``
+	时按未通知处理并重开熔断，不能静默跳过让操作者收不到核对要求（Issue #1868）。
+	缺字段保留旧标记的兼容语义（无需重新通知）。
+	"""
 	raw = prior.get(_INFLIGHT_KEY)
-	return isinstance(raw, dict) and raw.get(_INFLIGHT_NOTIFIED_KEY) is False
+	if not isinstance(raw, dict) or _INFLIGHT_NOTIFIED_KEY not in raw:
+		return False
+	return raw[_INFLIGHT_NOTIFIED_KEY] is not True
 
 
 def _try_write_state(store: AutomationStore, state: dict[str, Any]) -> None:

@@ -22,7 +22,10 @@ class RequestThrottle:
 		validate_delay(delay)
 		self._delay = delay
 		self._check = check
-		self._last_request_time = 0.0
+		# 用「一个最大间隔之前」当从未请求的哨兵：monotonic 的参考点未定义，
+		# 0.0 在刚开机时会让首次 wait() 补睡 interval - uptime，甚至触发
+		# 请求节流等待超时（Issue #1871）。
+		self._last_request_time = time.monotonic() - self._delay[1]
 		self._recent_times: deque[float] = deque(maxlen=12)
 		self._lock = threading.Lock()
 
