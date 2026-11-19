@@ -1263,7 +1263,16 @@ class CacheStore:
 		runs: list[dict[str, Any]] = []
 		corrupt: list[str] = []
 		for row in rows:
-			run_id = str(row[0])
+			try:
+				run_id = _decode_text_column("workflow_run", str(row[0]), "run_id", row[0])
+			except CacheRecordInvalid:
+				# BLOB / NULL 的 run_id 此前被 str() 成 "b'...'" / "None"，按它查询
+				# 必然查不到，条目从 runs 与 corrupt 两个名单同时消失（Issue #2056）。
+				corrupt.append(str(row[0]))
+				continue
+			if run_id is None:  # allow_none=False 时不会发生；防御性兜底
+				corrupt.append(str(row[0]))
+				continue
 			try:
 				run = self.get_workflow_run(run_id)
 			except CacheRecordInvalid:
@@ -1271,6 +1280,11 @@ class CacheStore:
 				continue
 			if run is not None:
 				runs.append(run)
+			else:
+				# SELECT 出这一行、按 run_id 却查不到：run_id 是解码后的 BLOB（原值是
+				# "b'...'"，必然查不到），或行在两条语句之间被删除。无论如何都不能
+				# 让它从 runs 与 corrupt 两个名单同时消失（Issue #2056）。
+				corrupt.append(run_id)
 		return runs, corrupt
 
 	def list_workflow_steps(self, run_id: str) -> list[dict[str, Any]]:
@@ -1285,7 +1299,9 @@ class CacheStore:
 			step_name = _decode_text_column("workflow_step", record_id, "step_name", row[0])
 			records.append({
 				"step_name": step_name,
-				"ordinal": row[1],
+				# ordinal 此前原样透传：BLOB / 文本漂移进入信封后只能退化成
+				# INTERNAL_ERROR，且成功路径 exit 0（Issue #2055）。与其余列同口径。
+				"ordinal": _decode_int_column("workflow_step", record_id, "ordinal", row[1]),
 				"status": _decode_text_column("workflow_step", record_id, "status", row[2]),
 				"result": _decode_optional_record("workflow_step", record_id, "result", row[3], expected=dict),
 				"error": _decode_optional_record("workflow_step", record_id, "error", row[4], expected=dict),
