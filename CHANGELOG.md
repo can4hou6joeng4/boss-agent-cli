@@ -4,7 +4,39 @@
 
 ## [Unreleased]
 
+## [3.4.124] - 2026-11-19
+
 ### Fixed
+- 缓存文本列（候选池、crawl 任务与结果、workflow 任务与步骤、简历投递）在读取边界只接受文本：BLOB 按 UTF-8 还原、还原失败或其它类型按 `CACHE_RECORD_INVALID` 上报，不再让整个信封退化成固定 `INTERNAL_ERROR` 且 `exit 0` / `ok=false`（Issue #1885）。
+- 约束冲突 / 非法绑定值不再被当成缓存库损坏：新增 `CacheWriteRejected`，CLI 按 `INVALID_PARAM` 上报并说明库本身完好、无需删除；迁移期的冲突仍按 `CACHE_DATABASE_INVALID` 处理（Issue #1886）。
+- greet / apply 迁移不再丢弃 `job_id` 为空的旧去重记录，升级后仍可按 `security_id` 命中，不再重复打招呼 / 投递（Issue #1887）。
+- 超长整数作为 dict 键时脱敏 / 序列化阶段不再抛 `ValueError`，stdout 仍保留七键 `INTERNAL_ERROR` 信封（Issue #1897）。
+- `error.details.outcome_unknown` 非布尔漂移时 `replay_safe` 改为一律 `false`（fail-closed），结果未知的写操作不再被标成可重放（Issue #1898）。
+- 自由文本脱敏覆盖带引号的 JSON / dict-repr 形态（`{"token": "…"}`）与多段 Cookie 头，后续 `name=value` 段落不再明文残留（Issue #1899）。
+- `handle_platform_error_output` 的 `read_only_operation=True` 参与 `UNKNOWN` → `NETWORK_ERROR` 归一，只读分支不再产出「不可恢复 + 可重试」的自相矛盾信封（Issue #1900）。
+- 记录风控锁时非法 / 损坏的配置文件不再替换正在传播的 `ACCOUNT_RISK` / `ENVIRONMENT_RISK`：后备预算目录按 best-effort 处理，`risk_lock.details` 始终写入，信封保持风控契约（Issue #1892）。
+- 只有 `request_budget_dir` 后备位置写锁成功时 `risk_lock.persisted` 正确报 `true`，不再误报「锁只留在进程内」（Issue #1893）。
+- `ioreg` / `reg` 输出格式漂移时机器 ID 解析落到主机名指纹兜底，不再抛 `IndexError`（Issue #1894）。
+- `chat --export` 的完整性旁车文件只认显式 `true`：`0` / `"false"` / `null` / 缺键等漂移值按不完整基线处理，不再把上一份不完整快照当成完整并误报新增（Issue #1911）。
+- 当日快照解析失败时完整性标记保持 `false`；旁车文件先写保守值、再写快照、最后写真实值，进程在两次原子写之间被杀也不会让部分页快照成为完整基线（Issue #1912）。
+- `chat --export` 的「已消失」表格与活动联系人 / CSV 行同口径，容器字段序列化为 JSON 文本而不是 Python repr（Issue #1913）。
+- 沟通列表页缺少 `result` / `friendList` 容器时不当作完整空列表，`chat --export` 不再因此清空当日快照并把旧联系人全报为已消失（Issue #1914）。
+- `field_text` 对 dict / list / tuple 与非有限数按缺失处理，job_card 的 `job_id` / `title` / `salary` 不再变成 Python repr 并进入后继命令提示；job_card 的列表字段逐元素归一，`raw_job_type` 容器按 None 输出（Issue #1917）。
+- 职位导出的 CSV / HTML 单元格统一归一：列表里的 null 与 `nan` / `inf` 写成空值、容器序列化为 JSON 文本，不再出现字面量 `None` 与 Python repr（Issue #1916）。
+- 风控锁的 stoken 摘要对孤立代理字符改用 `surrogatepass` 编码，记录风控锁不再因 `UnicodeEncodeError` 替换正在传播的 `ACCOUNT_RISK` / `ENVIRONMENT_RISK`，锁文件与进程内锁都能落盘（Issue #1918）。
+- 请求租约在 POSIX 上同时锁住预算目录 inode：租约文件被外部删除 / 替换后仍保持跨进程互斥；加锁后复核 inode 身份并用 `fstat` 读取尺寸（Issue #1919）。
+- 代理解析对 scheme 做 http / https / socks4 / socks5 allowlist，并拒绝含空白 / 控制字符的 host；非法代理在解析阶段报 `INVALID_PARAM`，不再推迟到浏览器启动（Issue #1920）。
+- `record_risk` 只要主目录或共享目录任一处成功落盘即视为已持久化并清除进程内锁，`persisted` 元数据与磁盘事实一致；两处都失败才抛错（Issue #1921）。
+- `agent stats` 对 action-log 的 `status` 先做类型校验，数组 / 对象不再让熔断后的恢复入口抛 `TypeError` 变 `INTERNAL_ERROR`（Issue #1928）。
+- automation 状态 / 队列写回把深嵌套与循环引用引发的 `RecursionError` / `ValueError` 归成本地状态错误，不再报成可重试的 `NETWORK_ERROR`（Issue #1929）。
+- automation 执行锁 / 控制锁命中本地 IO（只读目录、磁盘满、打不开库）时按 `LOCAL_IO_ERROR` 上报，只有真正损坏才报 `AUTOMATION_STATE_INVALID`（Issue #1930）。
+- 复核队列 `status` 增加类型与取值域校验，漂移值不再让复核项永久卡死且不出现在统计中（Issue #1931）。
+- `automation_config_from_dict` 只对 `None` 回退默认配置，`[]` / `""` / `0` / `False` 一律按配置错误拒绝（Issue #1932）。
+- 面试线索表的表头与追加写入包装 `OSError` / `UnicodeError`，错误信封带 `interview-leads.csv` 路径与修复指引（Issue #1933）。
+- crawl 会话在 seed 导航（首个平台文档）之前注册用户 Hook，首页 anti-debug / CryptoJS Hook 从第一个文档起生效（Issue #1935）。
+- crawl 传输层 JSON 解析统一捕获裸 `ValueError` / `RecursionError`：超长整数字段不再让监听降级并追加一次页面内请求，也不再让详情路径按瞬时错误重试（Issue #1936）。
+- Hook 目录的 SHA256SUMS 非 ASCII 或缺失时按 `HookRegistrationError` 上报，预检与运行期注入同一异常契约（Issue #1937）。
+- crawl 整数配置拒绝 bool 与静默截断的 float，与 `crawl_port` 校验同口径（Issue #1938）。
 - crawl 导出在安装与回滚都失败时保留旧产物唯一的备份，并在 `CrawlExportError` 消息里给出路径，不再把旧文件删得无迹可寻（Issue #1924）。
 - crawl 导出失败路径的临时文件清理改为 best-effort：清理遇到权限 / 只读挂载错误不再替换原本正在传播的 `CrawlExportError` / `CrawlRuntimeUnavailable`（Issue #1925）。
 - crawl 导出成功后的备份清理失败不再把已完成的导出报成 `stopped`，三份新产物照常返回路径（Issue #1926）。
