@@ -223,6 +223,28 @@ def _busy_hints(ctx: click.Context, error: Mapping[str, Any]) -> dict[str, list[
 	return {"next_actions": [status_cmd]}
 
 
+def _failed_run_error(run: Mapping[str, Any]) -> Mapping[str, Any]:
+	"""失败 run 的出口错误：顶层缺少有效 code 时回退到断点步骤的错误（Issue #2187）。
+
+	写入器总会给 run 的 ``error`` 带上 code；空对象只可能来自外部漂移。步骤里
+	仍保留 ``ACTION_UNCONFIRMED`` 与核对指引，用它出口比兜底成
+	``NETWORK_ERROR`` +「重试」更接近真实状态——重试并不会让被阻断的 workflow
+	继续，结果未知的写步骤需要先核对平台页面。
+	"""
+	top = run.get("error")
+	if isinstance(top, Mapping) and isinstance(top.get("code"), str) and top["code"]:
+		return top
+	current = run.get("current_step")
+	steps = [step for step in run.get("steps") or [] if isinstance(step, Mapping)]
+	# 优先当前步骤，其次按落盘顺序取第一个带有效错误的步骤。
+	steps.sort(key=lambda step: step.get("step_name") != current)
+	for step in steps:
+		step_error = step.get("error")
+		if isinstance(step_error, Mapping) and isinstance(step_error.get("code"), str) and step_error["code"]:
+			return step_error
+	return top if isinstance(top, Mapping) else {}
+
+
 def _plan_from_run(run: Mapping[str, Any]) -> WorkflowPlan:
 	# 历史 run 可能保存着已移除的平台（如 zhilian）；恢复前与新建 plan 走同一套校验，
 	# 否则会绕过 --platform 校验去读遗留登录态，并被兜底成可重试的 NETWORK_ERROR。
@@ -414,7 +436,7 @@ def _browse_list_results(
 
 def _emit_run(ctx: click.Context, run: Mapping[str, Any], *, interactive: bool) -> None:
 	if run.get("status") == "failed":
-		error = run.get("error") or {}
+		error = _failed_run_error(run)
 		if interactive:
 			render_run(run, command_for=_command_for_ctx(ctx))
 			return
@@ -1012,7 +1034,7 @@ def _run_wizard_command(
 			return
 
 	if run.get("status") == "failed":
-		error = run.get("error") or {}
+		error = _failed_run_error(run)
 		if interactive:
 			render_run(run, command_for=_command_for_ctx(ctx))
 			raise SystemExit(1)

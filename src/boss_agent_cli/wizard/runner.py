@@ -54,6 +54,11 @@ _RISK_CODES = frozenset({"ACCOUNT_RISK", "ENVIRONMENT_RISK"})
 #: 带 ``replay_safe: false`` 时必须阻断重放的步骤状态。
 _REPLAY_BLOCKING_STATUSES = frozenset({WorkflowStatus.FAILED.value, WorkflowStatus.STOPPED.value})
 
+#: 可能停在「写请求已声明、结算还没落盘」之间的步骤状态：running 的上一个
+#: 执行器没记录结果就消失了，pending 则是非终态结果已落盘但还没结算
+#: （Issue #2184）。两者只要带写前标记，--resume 都不得重放。
+_UNSETTLED_WRITE_STATUSES = frozenset({WorkflowStatus.RUNNING.value, WorkflowStatus.PENDING.value})
+
 
 class WorkflowActionError(Exception):
 	def __init__(
@@ -404,6 +409,7 @@ class WorkflowRunner:
 						auto_retry=False,
 					)
 				return existing
+			self._assert_steps_match_plan(existing, plan)
 		prior_results: dict[str, Any] = {}
 		# waiting_input 步骤结果仍传给 action（如 crawl run_id），但不会跳过重跑。
 		waiting_priors: dict[str, Any] = {}
@@ -1140,7 +1146,11 @@ class WorkflowRunner:
 		"""
 		interrupted: list[tuple[dict[str, Any], dict[str, Any]]] = []
 		for step in stored_run["steps"]:
-			if step["status"] != WorkflowStatus.RUNNING.value:
+			# pending 也可能停在「结果已落盘、结算还没写」之间：自定义动作返回
+			# 非终态结果时先落盘 pending + 写前标记，随后才结算成失败
+			# （Issue #2184）。带写前标记的 pending 与 running 同口径结算，
+			# 否则 --resume 会把结果未知的写请求再发一次。
+			if step["status"] not in _UNSETTLED_WRITE_STATUSES:
 				continue
 			# _persisted_write_marker 可能把缺失 / 漂移的 replay_safe 规范化成
 			# 后备标记；结算时也用规范化结果，不能把不完整的记录原样写回。
@@ -1169,6 +1179,28 @@ class WorkflowRunner:
 			error={**first_marker, "message": _INTERRUPTED_WRITE_MESSAGE, "replay_safe": False},
 		)
 		return self._store.get_checkpoint(run_id) or stored_run
+
+	@staticmethod
+	def _assert_steps_match_plan(existing: Mapping[str, Any], plan: WorkflowPlan) -> None:
+		"""断点的步骤行必须与请求步骤逐一对应（Issue #2185）。
+
+		`--resume` 从断点的 ``params.requested_steps`` 重建计划，单看计划与 params
+		是自我核对。该字段漂移成合法的真子集时，runner 只执行计划里的步骤，
+		漏跑的步骤行仍是 pending，run 却写成 completed。步骤行是创建时按请求
+		步骤逐条落盘的，两者在顺序与数量上必须一致；不一致就没有可靠的执行
+		范围，按记录损坏拒绝，不猜、不写。
+		"""
+		step_names = [str(step.get("step_name")) for step in existing.get("steps") or []]
+		if step_names == list(plan.requested_steps):
+			return
+		raise WorkflowActionError(
+			"CACHE_RECORD_INVALID",
+			f"断点的步骤行 {step_names} 与请求步骤 {list(plan.requested_steps)} 不一致；"
+			"无法确定该执行哪些步骤，请核对或新建 workflow",
+			recoverable=True,
+			replay_safe=True,
+			auto_retry=False,
+		)
 
 	@staticmethod
 	def _assert_plan_matches(existing: Mapping[str, Any], plan: WorkflowPlan) -> None:
@@ -1202,15 +1234,14 @@ class WorkflowRunner:
 
 	@staticmethod
 	def _plans_equal(persisted: Any, requested: Any) -> bool:
-		"""比较落库参数与本次 plan，NaN 按同值处理（Issue #1883）。
+		"""按 JSON 值类型比较落库参数与本次 plan（Issue #1883 / #2188）。
 
-		``json.loads`` 接受 ``NaN``，而 ``nan != nan`` 恒真：直接 ``!=`` 会让同一个
-		含 NaN 的 plan 恢复时永远命中 ``WORKFLOW_PLAN_MISMATCH``（recoverable=False），
-		run 永久不可恢复。先按值比较，再退到规范化 JSON 文本比较——两侧对 NaN
-		都序列化成 ``NaN``。
+		Python 的 ``==`` 把 ``False`` 与 ``0``、``True`` 与 ``1`` 视为相同，而
+		JSON 里它们是不同的值：直接相等会让直接调用 runner 的调用方用整数替掉
+		断点里的布尔输入后继续执行，步骤看到的输入与断点记录不一致。规范化
+		JSON 文本比较区分数值类型，同时保留 NaN 按同值处理的既有兼容——
+		两侧都序列化成 ``NaN``。
 		"""
-		if persisted == requested:
-			return True
 		try:
 			return json.dumps(persisted, sort_keys=True) == json.dumps(requested, sort_keys=True)
 		except (TypeError, ValueError, RecursionError):

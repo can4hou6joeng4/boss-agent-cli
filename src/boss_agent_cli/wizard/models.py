@@ -36,7 +36,12 @@ def _reject_lone_surrogates(text: str, path: str) -> None:
 			)
 
 
-def _ensure_storable_inputs(value: Any, path: str = "inputs") -> None:
+#: 输入结构校验的递归深度上限：真实 workflow 输入远达不到，超过后
+#: 递归校验会在解释器递归上限附近抛 RecursionError 并逃出信封边界（Issue #2186）。
+_MAX_INPUT_DEPTH = 200
+
+
+def _ensure_storable_inputs(value: Any, path: str = "inputs", depth: int = 0) -> None:
 	"""递归拒绝 NaN / Infinity（Issue #1883）与孤立代理字符（Issue #2058）。
 
 	``json.loads`` 默认接受 ``NaN`` / ``Infinity``，而 ``nan != nan`` 恒真：
@@ -44,7 +49,15 @@ def _ensure_storable_inputs(value: Any, path: str = "inputs") -> None:
 	非标准 JSON 常量也不符合本仓库「严格 JSON」的输出契约。孤立代理字符同理：
 	``ensure_ascii=False`` 写 JSON 列时保留裸代理，sqlite3 绑参直接抛编码错误。
 	入口处一次拒绝，CLI、MCP 与 Python API 共享同一条边界。
+
+	嵌套深度按显式上限拒绝（Issue #2186）：深嵌套输入会让这里的递归先于
+	``json.loads`` 的边界抛 ``RecursionError``，命令层拿不到信封。上限给出
+	确定、可复现的 ``INVALID_PARAM`` 诊断，不依赖解释器实现。
 	"""
+	if depth > _MAX_INPUT_DEPTH:
+		raise WorkflowInputError(
+			f"{path} 嵌套超过 {_MAX_INPUT_DEPTH} 层；workflow 输入不支持如此深的嵌套"
+		)
 	if isinstance(value, float) and not math.isfinite(value):
 		raise WorkflowInputError(f"{path} 不能包含 NaN 或 Infinity；请改用有限数值")
 	if isinstance(value, str):
@@ -54,10 +67,10 @@ def _ensure_storable_inputs(value: Any, path: str = "inputs") -> None:
 			item_path = f"{path}.{key}"
 			if isinstance(key, str):
 				_reject_lone_surrogates(key, item_path)
-			_ensure_storable_inputs(item, item_path)
+			_ensure_storable_inputs(item, item_path, depth + 1)
 	elif isinstance(value, (list, tuple)):
 		for index, item in enumerate(value):
-			_ensure_storable_inputs(item, f"{path}[{index}]")
+			_ensure_storable_inputs(item, f"{path}[{index}]", depth + 1)
 
 
 def count_or_none(value: Any) -> int | None:
