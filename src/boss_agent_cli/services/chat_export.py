@@ -4,7 +4,7 @@ import csv
 import datetime
 import html as _html
 import io
-import json
+import math
 from typing import Any
 
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell, escape_md_cell, contact_identity, GROUP_ORDER
@@ -12,9 +12,15 @@ from boss_agent_cli.services.json_files import strict_json_text
 
 
 def _text_cell(value: Any) -> Any:
-	"""文本格式里的容器值序列化成 JSON 文本，不落 Python repr（Issue #1853）。"""
+	"""文本格式里的容器值序列化成 JSON 文本，不落 Python repr（Issue #1853）。
+
+	非有限 float 与 JSON 分支同口径按空值处理；容器先递归归一，避免嵌套
+	Infinity / NaN 被写成非标准 JSON 字面量（Issue #1976）。
+	"""
 	if isinstance(value, (dict, list, tuple)):
-		return json.dumps(value, ensure_ascii=False)
+		return strict_json_text(value, indent=None)
+	if isinstance(value, float) and not math.isfinite(value):
+		return ""
 	return value
 
 

@@ -20,7 +20,7 @@ from boss_agent_cli.chat_summary import summarize_messages
 from boss_agent_cli.services.chat_utils import message_list
 from boss_agent_cli.main import cli
 from boss_agent_cli.pipeline_state import build_pipeline_items
-from boss_agent_cli.services.contact_lookup import find_friend
+from boss_agent_cli.services.contact_lookup import FriendListShapeError, find_friend
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 
 FRIEND = {
@@ -153,7 +153,9 @@ def test_find_friend_skips_bad_elements_and_stops_on_drifted_payload():
 	assert find_friend(platform, "u1") == (FRIEND, None)
 
 	drifted = _FakePlatform("oops")
-	assert find_friend(drifted, "u1") == (None, None)
+	# 成功但整页没有列表容器：不能断言联系人不存在，按不可判定报错（Issue #1978）。
+	with pytest.raises(FriendListShapeError):
+		find_friend(drifted, "u1")
 	assert drifted.friend_calls == 1
 
 
