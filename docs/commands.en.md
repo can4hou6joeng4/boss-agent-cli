@@ -161,6 +161,8 @@ Candidate workflow: `boss agent crawl --run-id <run_id> --resume <resume-name>` 
 
 A list item without `securityId` does not get a fake empty detail: the job stays pending with `detail_status` set to `missing-security-id`, is visible via `crawl results --detail-status pending`, and is retried on a later resume.
 
+An item whose detail request keeps failing after retries (for example, the platform returns an empty `jobCard` for a delisted or unauthorized job) stays pending with `detail_status` set to `detail-error`; the run keeps paging and exporting instead of stalling on one job. The same item is not retried again within one run, a later `crawl resume` tries it again, and `crawl status` still reports the gap through `details_pending`.
+
 After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a filtered/frozen `jobs.xlsx` are updated. XLSX keeps the complete values but every data row is a fixed-height single line, so long content is visually clipped rather than expanding the row. JSON/CSV/XLSX omit `security_id`, job IDs, selectors, recruiter names, and recruiter titles; `crawl results` also omits platform identifiers and recruiter information, but returns local selectors for shortlist imports. Actual platform identifiers remain in restricted local SQLite state, and `boss clean --privacy` deletes crawl runs, budgets, and exports. Risk codes `31` / `32` / `35` / `36` / `37`, the identity-profile flow indicated by code `38`, a security page, a missing job-list container, an exhausted budget, or a stop request checkpoint and stop immediately. Code `38` is not synonymous with a CAPTCHA. Stdout remains a JSON envelope containing the resume command.
 
 ## Candidate actions

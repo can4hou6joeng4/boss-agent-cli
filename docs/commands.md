@@ -157,6 +157,8 @@ boss crawl stop <run_id>
 
 列表项缺少 `securityId` 时不会伪造空详情：该职位保持待补状态，详情状态记为 `missing-security-id`，可用 `crawl results --detail-status pending` 查看，后续恢复会重试补全。
 
+详情接口重试耗尽仍失败的条目（如平台对已下架 / 无权限职位返回空 `jobCard`）保留待补状态并记为 `detail-error`，本轮继续翻页与导出，不会因单个职位卡死采集；同一轮内不重复重试同一条目，后续 `crawl resume` 会再次尝试，`crawl status` 的 `details_pending` 仍如实反映缺口。
+
 每页完成后更新 `<data-dir>/crawl/runs/<run_id>/jobs.json`、`jobs.csv` 和带筛选/冻结首行的 `jobs.xlsx`。XLSX 保留完整值但所有数据行固定为单行和统一行高，长内容仅在表格中截断显示。JSON/CSV/XLSX 不包含 `security_id`、职位 ID、selector、招聘者姓名或职位；`crawl results` 同样不暴露平台标识与招聘者信息，但会返回供本地导入使用的 selector。真实平台标识保留在受限本地 SQLite 状态，`boss clean --privacy` 会删除 crawl 运行、预算和导出。风险码 `31` / `32` / `35` / `36` / `37`、code `38` 的身份资料流程、安全页、职位列表容器异常、预算耗尽或 stop 请求都会保存断点并停止；code `38` 不等同于验证码。stdout 始终只输出 JSON 信封和恢复命令。
 
 ## 求职动作

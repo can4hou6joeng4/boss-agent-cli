@@ -674,7 +674,12 @@ class CrawlService:
 			),
 		)
 		hooks: tuple[HookInjection, ...] = ()
+		# 只有 transport.open() 返回（或 HookRegistrationError 带回了注入结果）
+		# 之后 hook_results 才可信；否则 finally 必须传 None 保留断点里的上一份
+		# 记录，不能把打开浏览器前的失败清成空列表（Issue #1983）。
+		hooks_recorded = False
 		detail_checks = 0
+		failed_detail_keys: set[str] = set()
 		status = "completed"
 		error = ""
 		# 成功路径在 completed 落库前导出并覆盖这里；异常路径保持空，错误信封
@@ -702,6 +707,7 @@ class CrawlService:
 			self._cache.mark_crawl_run_active(run_id, "running")
 			self._raise_if_stop_requested(run_id)
 			hooks = tuple(transport.open())
+			hooks_recorded = True
 			self._raise_if_stop_requested(run_id)
 			self._cache.update_crawl_run(
 				run_id,
@@ -710,7 +716,9 @@ class CrawlService:
 				list_finished=list_finished,
 				hook_results=_hook_metadata(hooks),
 			)
-			detail_checks += self._complete_pending_details(run_id, settings, transport, budget, run_budget)
+			detail_checks += self._complete_pending_details(
+				run_id, settings, transport, budget, run_budget, failed_keys=failed_detail_keys
+			)
 			while not list_finished and current_page <= settings.pages:
 				self._raise_if_stop_requested(run_id)
 				body = self._with_retry(
@@ -743,7 +751,9 @@ class CrawlService:
 					list_finished=list_finished,
 					hook_results=_hook_metadata(hooks),
 				)
-				detail_checks += self._complete_pending_details(run_id, settings, transport, budget, run_budget)
+				detail_checks += self._complete_pending_details(
+					run_id, settings, transport, budget, run_budget, failed_keys=failed_detail_keys
+				)
 				write_run_outputs(output_dir, [item["payload"] for item in self._cache.list_crawl_jobs(run_id)])
 				if list_finished:
 					break
@@ -757,6 +767,7 @@ class CrawlService:
 			# LOCAL_IO_ERROR 回报并给出具体目录。落成普通 stopped 会让调用方拿到
 			# ok:true 和会无限重复的 resume 指引（Issue #1408）。
 			hooks = exc.injections
+			hooks_recorded = True
 			status = "stopped"
 			error = str(exc)
 			raise
@@ -870,7 +881,7 @@ class CrawlService:
 					next_page=current_page,
 					error=error,
 					list_finished=list_finished,
-					hook_results=_hook_metadata(hooks),
+					hook_results=_hook_metadata(hooks) if hooks_recorded else None,
 				)
 			except Exception as exc:
 				cleanup_errors.append(exc)
@@ -964,6 +975,8 @@ class CrawlService:
 		transport: CrawlTransport,
 		budget: CrawlBudget,
 		run_budget: CrawlRunBudget,
+		*,
+		failed_keys: set[str] | None = None,
 	) -> int:
 		if not settings.with_detail:
 			return 0
@@ -971,6 +984,10 @@ class CrawlService:
 		for item in self._cache.list_crawl_jobs(run_id):
 			self._raise_if_stop_requested(run_id)
 			if item["detail_done"]:
+				continue
+			if failed_keys is not None and item["job_key"] in failed_keys:
+				# 本轮已经失败过的条目不再每翻一页重试，避免持续消耗详情预算；
+				# 下次 resume 会重新尝试（Issue #1981）。
 				continue
 			checks += 1
 			row = item["payload"]
@@ -993,7 +1010,28 @@ class CrawlService:
 					# 结构校验与请求共用有限重试；失败时条目仍保留在待补队列。
 					return _unwrap_card(self._fetch_detail(run_id, transport, budget, run_budget, security_id))
 
-				card = self._with_retry(fetch_detail, max_retries=settings.max_retries)
+				try:
+					card = self._with_retry(fetch_detail, max_retries=settings.max_retries)
+				except Exception as exc:
+					if is_request_stop(exc) or isinstance(
+						exc,
+						(
+							PlatformRiskError,
+							CrawlRiskError,
+							CrawlRuntimeUnavailable,
+							CrawlSessionAuthError,
+							sqlite3.DatabaseError,
+						),
+					):
+						raise
+					# 平台对已下架 / 无权限职位返回空 jobCard 或单条业务错误码很常见：
+					# 单个条目失败不能让列表翻页与导出永久卡死（Issue #1981）。保留
+					# 待补状态继续处理其余条目，下次 resume 再试。
+					row["detail_status"] = "detail-error"
+					self._cache.put_crawl_job(run_id, item["job_key"], int(item["page_no"]), row, detail_done=False)
+					if failed_keys is not None:
+						failed_keys.add(item["job_key"])
+					continue
 				row.update(
 					{
 						"post_description": field_text(card, "postDescription"),
