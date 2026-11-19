@@ -7,61 +7,6 @@ from boss_agent_cli.output import SchemaParameterPaths, SchemaPath
 from boss_agent_cli.schema.tool_catalog import build_tool_catalog
 
 
-# 类型转换：native schema → JSON Schema 基础类型
-_JSON_SCHEMA_TYPE_MAP = {
-	"string": "string",
-	"int": "integer",
-	"integer": "integer",
-	"bool": "boolean",
-	"boolean": "boolean",
-	"float": "number",
-	"number": "number",
-}
-
-
-def _option_to_json_schema_property(opt_spec: dict[str, Any]) -> dict[str, Any]:
-	"""把 native option 转成单个 JSON Schema 属性。"""
-	native_type = opt_spec.get("type", "string")
-	prop: dict[str, Any] = {"type": _JSON_SCHEMA_TYPE_MAP.get(native_type, "string")}
-	desc = opt_spec.get("description")
-	if desc:
-		prop["description"] = desc
-	default = opt_spec.get("default")
-	if default is not None:
-		prop["default"] = default
-	return prop
-
-
-def command_to_json_schema(cmd_name: str, cmd_spec: dict[str, Any]) -> dict[str, Any]:
-	"""把 native 命令描述转成 OpenAI Tools / Anthropic Tool Use 共用的 JSON Schema。"""
-	properties: dict[str, Any] = {}
-	required: list[str] = []
-
-	for arg in cmd_spec.get("args", []):
-		arg_name = arg["name"]
-		properties[arg_name] = {
-			"type": "string",
-			"description": arg.get("description", ""),
-		}
-		if arg.get("required"):
-			required.append(arg_name)
-
-	for opt_key, opt_spec in cmd_spec.get("options", {}).items():
-		if not opt_key.startswith("-"):
-			continue
-		# 去掉短/长选项前缀，保留长选项作为参数名
-		primary_name = opt_key.split(",")[-1].strip().lstrip("-").replace("-", "_")
-		properties[primary_name] = _option_to_json_schema_property(opt_spec)
-
-	schema: dict[str, Any] = {
-		"type": "object",
-		"properties": properties,
-	}
-	if required:
-		schema["required"] = required
-	return schema
-
-
 #: OpenAI 与 Anthropic 的工具参数 schema 顶层只接受普通 object：带这些组合 /
 #: 条件关键字的定义会被接口以 400 拒绝，一个工具被拒整次请求失败（Issue #1774）。
 _TOP_LEVEL_CONSTRAINT_KEYWORDS = ("anyOf", "oneOf", "allOf", "not", "if", "then", "else")

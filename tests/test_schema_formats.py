@@ -6,7 +6,6 @@ from click.testing import CliRunner
 
 from boss_agent_cli.schema.data import SCHEMA_DATA
 from boss_agent_cli.schema.formats import (
-	command_to_json_schema,
 	format_anthropic_tools,
 	format_mcp_tools,
 	format_openai_tools,
@@ -130,38 +129,6 @@ def test_tool_formats_have_single_availability_prefix():
 	]
 	assert all("可用性: 可用性:" not in description for description in descriptions)
 	assert all(description.count("可用性:") <= 1 for description in descriptions)
-
-
-def test_command_to_json_schema_required_args():
-	"""required=True 的参数应出现在 required 数组中。"""
-	cmd_spec = {
-		"args": [
-			{"name": "query", "required": True, "description": "关键词"},
-			{"name": "opt", "required": False, "description": "可选"},
-		],
-		"options": {},
-	}
-	schema = command_to_json_schema("test", cmd_spec)
-	assert "query" in schema["properties"]
-	assert "opt" in schema["properties"]
-	assert schema["required"] == ["query"]
-
-
-def test_command_to_json_schema_type_mapping():
-	"""native 类型应映射到 JSON Schema 类型（int → integer, bool → boolean）。"""
-	cmd_spec = {
-		"args": [],
-		"options": {
-			"--days": {"type": "int", "default": 30, "description": "天数"},
-			"--dry-run": {"type": "bool", "default": False, "description": "预览"},
-			"--name": {"type": "string", "default": None, "description": "名称"},
-		},
-	}
-	schema = command_to_json_schema("test", cmd_spec)
-	assert schema["properties"]["days"]["type"] == "integer"
-	assert schema["properties"]["days"]["default"] == 30
-	assert schema["properties"]["dry_run"]["type"] == "boolean"
-	assert schema["properties"]["name"]["type"] == "string"
 
 
 def test_command_name_dash_to_underscore():
