@@ -3,7 +3,6 @@
 import csv
 import html as _html
 import io
-import json
 import math
 from typing import Any
 
@@ -50,7 +49,9 @@ def _cell_text(value: Any) -> str:
 	if value is None:
 		return ""
 	if isinstance(value, (dict, list, tuple)):
-		return json.dumps(value, ensure_ascii=False)
+		# 容器先递归归一非有限数，否则嵌套 Infinity / NaN 会写成非标准 JSON
+		# 字面量，与 JSON 分支的 null 口径不一致（Issue #1977）。
+		return strict_json_text(value, indent=None)
 	if isinstance(value, float) and not math.isfinite(value):
 		return ""
 	return str(value)

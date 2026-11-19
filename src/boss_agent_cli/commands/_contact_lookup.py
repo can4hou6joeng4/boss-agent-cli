@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from boss_agent_cli.services.contact_lookup import FriendLookupLimitExceeded, find_friend
+from boss_agent_cli.services.contact_lookup import FriendListShapeError, FriendLookupLimitExceeded, find_friend
 
 
 def current_friend_security_id_or_emit(
@@ -112,6 +112,19 @@ def resolve_friend_or_emit(
 		friend_item, friends_error = find_friend(platform, identifier)
 	except NotImplementedError as exc:
 		handle_not_supported(ctx, command, exc, fallback_message="当前平台不支持沟通列表能力")
+		return None
+	except FriendListShapeError as exc:
+		# 响应缺少列表容器是可恢复的读取异常：刷新列表后可以重试，但不能把
+		# 不可判定的响应当成「联系人不存在」（Issue #1978）。
+		chat_cmd = boss_command_for_ctx(ctx, "chat", include_data_dir=True)
+		handle_error_output(
+			ctx,
+			command,
+			code="NETWORK_ERROR",
+			message=str(exc),
+			recovery_action=f"用 {chat_cmd} 刷新沟通列表后重试；响应缺少列表容器时不能判定联系人是否存在",
+			hints={"next_actions": [chat_cmd]},
+		)
 		return None
 	except FriendLookupLimitExceeded as exc:
 		# 分页上限是确定性结果：按会轮换的 securityId 重试同一段查询不会改变

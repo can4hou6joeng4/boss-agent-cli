@@ -22,7 +22,7 @@ from boss_agent_cli.services.candidate_actions import (
 	CandidateActionNotRecorded,
 	run_candidate_action,
 )
-from boss_agent_cli.services.contact_lookup import FriendLookupLimitExceeded, find_friend
+from boss_agent_cli.services.contact_lookup import FriendListShapeError, FriendLookupLimitExceeded, find_friend
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.services.output_path import OutputPathProblem, inspect_output_path, prepare_output_path
 from boss_agent_cli.crawler.operations import crawl_status
@@ -942,6 +942,16 @@ def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: M
 def _candidate_friend(platform: Any, identifier: str, *, context: ActionContext | None = None) -> dict[str, Any]:
 	try:
 		friend, error_response = find_friend(platform, identifier)
+	except FriendListShapeError as exc:
+		# 列表容器缺失是可恢复的读取异常：刷新列表后可重试，但不能把不可
+		# 判定的响应当成招聘者不存在（Issue #1978）。
+		chat_hint = _hint_command(context, "chat") if context is not None else "boss chat"
+		raise WorkflowActionError(
+			"NETWORK_ERROR",
+			str(exc),
+			recoverable=True,
+			recovery_action=f"先用 {chat_hint} 刷新沟通列表，确认列表可读后再重试；响应缺少列表容器时不能判定招聘者是否存在",
+		) from exc
 	except FriendLookupLimitExceeded as exc:
 		# 候选人无法「缩小沟通列表范围」：照抄旧指引只会把同一段超过分页上限的
 		# 遍历再跑一遍。find_friend 优先匹配稳定 uid，给出可执行的 uid 路径。
