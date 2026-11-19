@@ -15,7 +15,9 @@ _OPENAI_REASONING_MODEL = re.compile(r"^(?:o[1-9]\d*|gpt-(?:[5-9]|[1-9]\d+))(?:[
 # Kimi 新型号（K2.5 起）的 temperature 是固定值，官方文档要求不要显式传，传了直接报错。
 _KIMI_FIXED_TEMPERATURE_MODEL = re.compile(r"^kimi-k(?:2\.(?:[5-9]|[1-9]\d+)|[3-9]|[1-9]\d+)(?:[.:-]|$)", re.IGNORECASE)
 # 服务端报错偶尔回显部分密钥（如 sk-proj-****abcd），写进错误信息前遮掉
-_SECRET_LIKE = re.compile(r"\b((?:sk|ak|rk)-)[\w*-]{4,}|\*{3,}\w{0,8}")
+_SECRET_LIKE = re.compile(r"\b((?:sk|ak|rk)-)[\w*.-]{4,}|\*{3,}\w{0,8}")
+# 回显片段至少这么长才按密钥遮掉，避免把普通短词误伤成 ***。
+_SECRET_FRAGMENT_MIN = 8
 _ERROR_DETAIL_LIMIT = 200
 
 
@@ -58,7 +60,21 @@ def _request_params(model: str) -> tuple[str, bool]:
 	return token_param, send_temperature
 
 
-def _error_detail(response: httpx.Response) -> str:
+def _mask_api_key(text: str, api_key: str) -> str:
+	"""遮掉服务商原样回显的密钥及其被 ``.`` 分开的各段（Issue #1953）。
+
+	正则只认 sk- / ak- / rk- 前缀；其它形态（如 ``id.secret``）的密钥被回显时
+	会原样进入 ``error.message``。
+	"""
+	key = api_key.strip()
+	fragments = {key, *key.split(".")}
+	for fragment in sorted(fragments, key=len, reverse=True):
+		if len(fragment) >= _SECRET_FRAGMENT_MIN:
+			text = text.replace(fragment, "***")
+	return text
+
+
+def _error_detail(response: httpx.Response, api_key: str = "") -> str:
 	"""取 OpenAI 风格错误体里的说明，压成一行、遮掉疑似密钥并截断；取不到时返回空串。"""
 	try:
 		body = response.json()
@@ -77,7 +93,7 @@ def _error_detail(response: httpx.Response) -> str:
 			detail = body.get("message") or body.get("detail")
 	if not isinstance(detail, str):
 		return ""
-	text = " ".join(detail.split())
+	text = _mask_api_key(" ".join(detail.split()), api_key)
 	text = _SECRET_LIKE.sub(lambda m: f"{m.group(1)}***" if m.group(1) else "***", text)
 	return text[:_ERROR_DETAIL_LIMIT]
 
@@ -149,7 +165,7 @@ class AIService:
 			response.raise_for_status()
 		except httpx.HTTPStatusError as exc:
 			status = exc.response.status_code
-			detail = _error_detail(exc.response)
+			detail = _error_detail(exc.response, self.api_key)
 			raise AIServiceError(
 				f"API 请求失败: HTTP {status}" + (f"（{detail}）" if detail else ""),
 				status_code=status,
@@ -171,7 +187,7 @@ class AIService:
 		if not isinstance(choices, list) or not choices:
 			# 有的网关用 HTTP 200 带回错误对象（限流 / 额度 / 鉴权）：读出服务商的说明，
 			# 并用其中的状态码选恢复建议，而不是报 KeyError 的文本（Issue #1780）。
-			detail = _error_detail(response)
+			detail = _error_detail(response, self.api_key)
 			raise AIServiceError(
 				f"API 返回了错误（{detail}）" if detail else "响应格式异常: 响应里没有 choices",
 				status_code=_embedded_status(data),
