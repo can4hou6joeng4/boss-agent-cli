@@ -844,10 +844,10 @@ def test_build_args_search_forwards_cache_and_score_flags():
 	assert args == ["search", "python", "--no-cache", "--with-score"]
 
 
-def test_build_args_search_ignores_empty_options():
-	"""空选项不应出现在参数中。"""
+def test_build_args_search_forwards_empty_filter_and_drops_null():
+	"""显式空串是「关闭该项筛选」信号，null 仍等价于未传（Issue #2023）。"""
 	args = _build_args("boss_search", {"query": "java", "city": "", "salary": None})
-	assert "--city" not in args
+	assert args == ["search", "java", "--city", ""]
 	assert "--salary" not in args
 
 
@@ -1291,10 +1291,11 @@ def test_run_boss_timeout(mock_run):
 		(("hr", "chat", "--summary-limit", "300"), 400, 600),
 		(("hr", "last-messages"), 120, 300),
 		(("hr", "last-messages", "--limit", "300"), 300, 600),
-		# 好友列表聚合按 5 页估算。
-		(("pipeline",), 300, 500),
-		(("follow-up",), 300, 500),
-		(("digest",), 300, 500),
+		# 好友列表聚合按 collector 上限（50 页）+ 面试请求估算，超时封顶 900s
+		# （Issue #2024）。
+		(("pipeline",), 900, 900),
+		(("follow-up",), 900, 900),
+		(("digest",), 900, 900),
 	],
 )
 def test_cli_timeout_estimates_from_arguments(argv, minimum, maximum):
