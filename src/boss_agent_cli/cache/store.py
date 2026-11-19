@@ -178,6 +178,22 @@ def _decode_bool_column(kind: str, record_id: str, column: str, raw: Any) -> boo
 	raise CacheRecordInvalid(kind, record_id, column, f"期望 0 或 1，实际是 {type(raw).__name__}")
 
 
+def _decode_timestamp_column(
+	kind: str, record_id: str, column: str, raw: Any, *, allow_none: bool = False
+) -> float | None:
+	"""时间戳列的数值漂移在读取边界拦下（Issue #1964）。
+
+	REAL 列被写成 BLOB / 文本时，原样进入信封会让序列化兜底成固定
+	``INTERNAL_ERROR`` 且成功路径照常 exit 0（与 #1885 的文本列同口径）。
+	``inf`` / ``nan`` 仍按原样放行：输出层会把它们写成 null，不影响信封。
+	"""
+	if raw is None and allow_none:
+		return None
+	if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+		return float(raw)
+	raise CacheRecordInvalid(kind, record_id, column, f"期望数值时间戳，实际是 {type(raw).__name__}")
+
+
 def _tolerated_timestamp(raw: Any, *, default: float = 0.0) -> float:
 	"""调度用时间戳的容错读取：漂移值按无历史处理（与 Issue #1206 同口径）。
 
@@ -927,7 +943,11 @@ class CacheStore:
 			"output_dir": _decode_text_column("crawl_run", run_id, "output_dir", row[9]),
 			"error": _decode_text_column("crawl_run", run_id, "error", row[10], allow_none=True),
 			"hook_results": _decode_record("crawl_run", run_id, "hook_results", row[11], expected=list),
-			"created_at": row[12], "updated_at": row[13],
+			# crawl 的 updated_at 不参与契约校验（Issue #1192）：后台恢复只拿它做
+			# 预检失败时的还原，漂移按 0 降级（Issue #1206），不能在这里报损坏而
+			# 打断恢复；归一成数值也保证信封可序列化。
+			"created_at": _tolerated_timestamp(row[12]),
+			"updated_at": _tolerated_timestamp(row[13]),
 		}
 		# 范围与文本校验：负的 next_page 会让 resume 反复抓第 1 页并把
 		# crawl_jobs.page_no 写成负数，负计数器会推迟预算触发；BLOB 的
@@ -1193,8 +1213,8 @@ class CacheStore:
 			),
 			"last_result": _decode_optional_record("workflow_run", run_id, "last_result", row[8], expected=dict),
 			"error": _decode_optional_record("workflow_run", run_id, "error", row[9], expected=dict),
-			"created_at": row[10],
-			"updated_at": row[11],
+			"created_at": _decode_timestamp_column("workflow_run", run_id, "created_at", row[10]),
+			"updated_at": _decode_timestamp_column("workflow_run", run_id, "updated_at", row[11]),
 		}
 
 	def list_workflow_runs(self, *, limit: int = 20) -> list[dict[str, Any]]:
@@ -1240,8 +1260,12 @@ class CacheStore:
 				"status": _decode_text_column("workflow_step", record_id, "status", row[2]),
 				"result": _decode_optional_record("workflow_step", record_id, "result", row[3], expected=dict),
 				"error": _decode_optional_record("workflow_step", record_id, "error", row[4], expected=dict),
-				"started_at": row[5],
-				"finished_at": row[6],
+				"started_at": _decode_timestamp_column(
+					"workflow_step", record_id, "started_at", row[5], allow_none=True
+				),
+				"finished_at": _decode_timestamp_column(
+					"workflow_step", record_id, "finished_at", row[6], allow_none=True
+				),
 			})
 		return records
 
@@ -1601,8 +1625,12 @@ class CacheStore:
 		return {
 			"name": row[0],
 			"params": _decode_saved_params(str(row[0]), row[1]),
-			"created_at": row[2],
-			"updated_at": row[3],
+			"created_at": _decode_timestamp_column(
+				"saved_search", str(row[0]), "created_at", row[2]
+			),
+			"updated_at": _decode_timestamp_column(
+				"saved_search", str(row[0]), "updated_at", row[3]
+			),
 		}
 
 	def list_saved_searches(self) -> list[dict[str, Any]]:
@@ -1623,15 +1651,21 @@ class CacheStore:
 		for row in rows:
 			try:
 				params = _decode_saved_params(str(row[0]), row[1])
-			except SavedSearchParamsError:
+				created_at = _decode_timestamp_column(
+					"saved_search", str(row[0]), "created_at", row[2]
+				)
+				updated_at = _decode_timestamp_column(
+					"saved_search", str(row[0]), "updated_at", row[3]
+				)
+			except (SavedSearchParamsError, CacheRecordInvalid):
 				corrupt.append(str(row[0]))
 				continue
 			items.append(
 				{
 					"name": row[0],
 					"params": params,
-					"created_at": row[2],
-					"updated_at": row[3],
+					"created_at": created_at,
+					"updated_at": updated_at,
 				}
 			)
 		return items, corrupt
