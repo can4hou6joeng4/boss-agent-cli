@@ -459,6 +459,20 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 		)
 		ctx.exit(1)
 		return
+	if api_key is not None:
+		# 密钥要进 HTTP 请求头：首尾空白 / 换行直接去掉；非 ASCII 或控制字符永远
+		# 发不出去，落盘后每条 AI 命令都会报成网络或本地 IO 错误（Issue #1952）。
+		api_key = api_key.strip()
+		if not api_key.isascii() or not api_key.isprintable():
+			handle_error_output(
+				ctx, "ai-config",
+				code="INVALID_PARAM",
+				message="--api-key 只能包含可打印的 ASCII 字符；请检查是否混入了换行、中文或全角字符",
+				recovery_action="从服务商控制台重新复制密钥后重试",
+				hints={"next_actions": [_hint_command(ctx, "ai config --api-key <key>")]},
+			)
+			ctx.exit(1)
+			return
 
 	# provider 写错（如 `openai-cn`）或 provider=custom 没给 base_url 时，端点解析为
 	# None：写进配置后每条 AI 命令都只会回「AI 服务未配置」，用户看不出是 provider
@@ -808,7 +822,9 @@ def ai_reply_cmd(ctx: click.Context, recruiter_message: str, context: str, resum
 	context_text = _resolve_text(context) if context else "（无）"
 
 	resume_text = "（未指定）"
-	if resume_name:
+	if resume_name is not None:
+		# 显式空串交给 _load_resume_text 报「简历名称不能为空」，不能静默当成未指定
+		# 后照常发起请求（Issue #1951）。
 		loaded = _load_resume_text(ctx, resume_name)
 		if loaded is None:
 			return
@@ -856,7 +872,9 @@ def ai_interview_prep_cmd(ctx: click.Context, jd_text: str, resume_name: str | N
 	jd_text = resolved
 
 	resume_text = "（未指定）"
-	if resume_name:
+	if resume_name is not None:
+		# 显式空串交给 _load_resume_text 报「简历名称不能为空」，不能静默当成未指定
+		# 后照常发起请求（Issue #1951）。
 		loaded = _load_resume_text(ctx, resume_name)
 		if loaded is None:
 			return
@@ -902,7 +920,9 @@ def ai_chat_coach_cmd(ctx: click.Context, chat_text: str, resume_name: str | Non
 	chat_text = resolved
 
 	resume_text = "（未指定）"
-	if resume_name:
+	if resume_name is not None:
+		# 显式空串交给 _load_resume_text 报「简历名称不能为空」，不能静默当成未指定
+		# 后照常发起请求（Issue #1951）。
 		loaded = _load_resume_text(ctx, resume_name)
 		if loaded is None:
 			return

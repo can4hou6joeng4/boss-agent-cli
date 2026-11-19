@@ -90,7 +90,8 @@ def test_dangling_salt_and_busy_lock_fails_closed(tmp_path: Path, monkeypatch: p
 	salt_path.symlink_to(tmp_path / "missing")
 	monkeypatch.setattr(private_files, "exclusive_file_lock", _lock_unavailable)
 
-	with pytest.raises(RuntimeError, match="salt"):
+	# AI 侧把共享实现的 RuntimeError 转成带路径的 OSError，命令层才能出信封（Issue #1950）。
+	with pytest.raises(OSError, match="salt"):
 		store._get_salt()
 	assert salt_path.is_symlink()
 

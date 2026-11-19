@@ -4,6 +4,7 @@ Handles API key encryption (Fernet), provider settings, and model configuration.
 Reuses the auth salt file for key derivation.
 """
 
+import errno
 import hashlib
 import json
 import math
@@ -209,7 +210,13 @@ class AIConfigStore:
 		Shares the auth-side lifecycle so a failed existence check can never
 		replace the salt that decrypts session.enc / api_key.enc (Issue #1688).
 		"""
-		return load_or_create_private_salt(self._auth_dir)
+		try:
+			return load_or_create_private_salt(self._auth_dir)
+		except RuntimeError as exc:
+			# salt 路径是目录 / FIFO / 长度异常时共享实现抛 RuntimeError；AI 命令没有
+			# auth 侧的转换，裸异常会变成 traceback 而不是信封（Issue #1950）。
+			# 带上 filename，全局分流才会按本地 IO 错误报，而不是可重试的网络错误。
+			raise OSError(errno.EINVAL, str(exc), str(self._auth_dir / "salt")) from exc
 
 	def _derive_key(self) -> bytes:
 		"""Derive a Fernet key from machine ID and salt."""
