@@ -1,5 +1,7 @@
 import json
 import math
+import os
+import stat
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -146,7 +148,17 @@ def validate_request_config(cfg: dict[str, Any]) -> None:
 	if directory is not None:
 		if not isinstance(directory, str) or not directory.strip():
 			raise ValueError("request_budget_dir 必须是非空绝对路径或 null")
-		expand_budget_directory(directory)
+		path = expand_budget_directory(directory)
+		# 已存在的路径必须是目录：指向普通文件时之后每条命令都会在启动期
+		# 失败，连恢复都要求用户先手工修文件（Issue #1822）。
+		try:
+			mode = os.lstat(path).st_mode
+		except FileNotFoundError:
+			mode = None
+		except (OSError, ValueError) as exc:
+			raise ValueError(f"request_budget_dir 的路径状态无法读取（{exc}）：{path}") from exc
+		if mode is not None and not stat.S_ISDIR(mode):
+			raise ValueError(f"request_budget_dir 指向的路径已存在但不是目录：{path}；请换成目录路径，或用 null 清空该设置")
 
 
 def load_config(config_path: Path | None) -> dict[str, Any]:

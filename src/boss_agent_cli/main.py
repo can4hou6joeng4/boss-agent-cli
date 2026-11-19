@@ -22,7 +22,7 @@ from boss_agent_cli.config import (
 	validate_request_config,
 )
 from boss_agent_cli.api.request_budget import validate_delay
-from boss_agent_cli.display import INTERNAL_ERROR_TYPES, error_contract_for_code
+from boss_agent_cli.display import INTERNAL_ERROR_TYPES, error_contract_for_code, shell_argument
 from boss_agent_cli.hooks import create_hook_bus
 from boss_agent_cli.output import LOG_LEVELS, emit_error, is_local_io_error, Logger, set_exit_codes_mode
 from boss_agent_cli.platforms import list_platforms
@@ -128,7 +128,10 @@ def _validate_group_budget_config(data_dir: Path, cfg: dict[str, Any]) -> None:
 		# 指向自身时没有共享组目录，仍是启动期已校验过的主目录 config，不重复校验。
 		return
 	group_config_path = group_dir / "config.json"
-	recovery = f"修正或删除 {group_config_path} 后重试；每次平台命令都会在启动期读取该文件"
+	recovery = (
+		f"修正或删除 {group_config_path} 后重试；也可用 boss --data-dir {shell_argument(str(data_dir))} "
+		"config reset request_budget_dir 清空该设置；每次平台命令都会在启动期读取该文件"
+	)
 	try:
 		group_cfg = load_config(group_config_path)
 	except OSError as exc:
@@ -1103,6 +1106,16 @@ def cli(
 		try:
 			validate_request_config({**cfg, "request_delay": ctx.obj["delay"]})
 		except ValueError as exc:
+			if "request_budget_dir" in str(exc):
+				# 启动期拒绝时给出能直接执行的恢复命令，而不是「用 --help 看参数」（Issue #1822）。
+				raise _StartupConfigBadParameter(
+					f"boss 的 config.json 的 request_budget_dir 取值无效：{exc}",
+					recovery_action=(
+						f"用 boss --data-dir {shell_argument(str(resolved_dir))} "
+						"config reset request_budget_dir 清空该设置后重试"
+					),
+					param_hint="config.json 的 request_budget_dir",
+				) from exc
 			raise click.BadParameter(str(exc), param_hint="config.json") from exc
 		# 组目录配置只在客户端构造时才会加载；启动期先校验，避免确定性配置
 		# 错误被兜成可重试的 NETWORK_ERROR，也避免命令先构造客户端再失败。

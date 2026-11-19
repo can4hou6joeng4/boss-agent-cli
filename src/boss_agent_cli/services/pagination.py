@@ -9,6 +9,10 @@ from typing import Any
 
 UNKNOWN_HAS_MORE_OPERATOR_ACTION = "平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有记录"
 
+#: 下一页提示里可安全递增的页码上限。平台把 ``page`` 写成超长整数时，
+#: ``page + 1`` 的字符串化会撞上整数转换上限并报成可重试错误（Issue #1824）。
+MAX_TRUSTED_PAGE = 1_000_000
+
 
 def list_pagination(
 	platform_data: Any,
@@ -21,7 +25,8 @@ def list_pagination(
 	raw_page = platform_data.get("page") if is_mapping else None
 	current_page = (
 		raw_page
-		if isinstance(raw_page, int) and not isinstance(raw_page, bool) and raw_page >= 1
+		if isinstance(raw_page, int) and not isinstance(raw_page, bool)
+		and 1 <= raw_page <= MAX_TRUSTED_PAGE
 		else page
 	)
 	raw_has_more = platform_data.get("hasMore") if is_mapping else None
