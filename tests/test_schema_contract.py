@@ -467,7 +467,7 @@ _ERROR_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
 _NON_ERROR_CODE_LITERALS = {
 	"ALL_PROXY", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY",  # 代理环境变量名
 	"BOSS_AGENT_MACHINE_ID", "BOSS_BROWSER_VERBOSE", "BOSS_DATA_DIR", "BOSS_EGRESS_PROBE_URL",  # 环境变量名
-	"INIT_CWD", "PLAYWRIGHT_BROWSERS_PATH",  # 浏览器驱动环境变量名
+	"INIT_CWD", "PLAYWRIGHT_BROWSERS_PATH", "XDG_CACHE_HOME",  # 浏览器驱动环境变量名
 	"CLI_ERROR",  # MCP 层「CLI 输出不可解析」分类，不进入 CLI 信封
 	"CREATE_NO_WINDOW",  # Windows 子进程常量
 	"REG_SZ",  # Windows 注册表值类型，不是错误码
