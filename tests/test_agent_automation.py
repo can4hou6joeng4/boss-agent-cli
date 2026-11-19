@@ -890,7 +890,12 @@ def test_agent_queue_unknown_action_reports_state_invalid(tmp_path: Path, filena
 def test_agent_queue_accepts_numeric_confidence(tmp_path: Path) -> None:
 	queue_dir = tmp_path / "automation"
 	queue_dir.mkdir()
-	rows = [{"id": "p-1", "confidence": 1}, {"id": "p-2", "confidence": "0.5"}, {"id": "p-3"}]
+	# status 必须显式给出：缺字段按状态损坏拒绝（Issue #2022）。
+	rows = [
+		{"id": "p-1", "status": "pending", "confidence": 1},
+		{"id": "p-2", "status": "pending", "confidence": "0.5"},
+		{"id": "p-3", "status": "pending"},
+	]
 	(queue_dir / "pending-actions.jsonl").write_text(
 		"".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8",
 	)

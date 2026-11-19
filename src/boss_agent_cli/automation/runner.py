@@ -109,6 +109,11 @@ def _run_cycle_locked(
 				# 否则 `items[:负数]` 会反转成「去掉最后 N 个」。
 				max_per_tab = config.max_per_tab if limit is None else max(0, limit)
 				refs = adapter.scan_conversations(list(config.tabs), max_per_tab)
+				if limit is not None:
+					# --limit 是「本轮最多处理多少个会话」的全局上限：每个 tab
+					# 各切一份会让默认两个 tab 时处理 2×limit 个会话
+					# （Issue #2021）。max_per_tab 只用于限制每 tab 的拉取量。
+					refs = refs[: max(0, limit)]
 				for ref in refs:
 					if guard.stop_reason() is not None:
 						break

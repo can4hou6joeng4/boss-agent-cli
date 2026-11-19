@@ -123,6 +123,21 @@ def process_pending(
 		)
 		if item.platform != platform:
 			continue
+		if status_for_decision(guard.config, decision, dry_run) is EventStatus.SKIPPED:
+			# 队列路径同样受安全配置约束：操作者收紧 allowed_actions 或
+			# 提高置信度阈值后，遗留 pending 行不能被直接派发（Issue #2020）。
+			# 行保持 pending：放开配置后仍可执行。
+			event = make_event(
+				platform,
+				item.candidate_key,
+				action,
+				EventStatus.SKIPPED,
+				item.confidence,
+				"安全配置跳过（allowed_actions / 置信度阈值）",
+			)
+			events.append(event)
+			store.append_event(event)
+			continue
 		prior = _conversation_prior(state, item.candidate_key)
 		if prior is not None and state is not None:
 			blocked = _queue_inflight_gate(store, guard, state, platform, dry_run, item.candidate_key, prior)

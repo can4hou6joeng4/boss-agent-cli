@@ -44,6 +44,11 @@ class SafetyGuard:
 		state.setdefault("autonomy", {})
 		state.setdefault("safety", {})
 
+	@property
+	def config(self) -> AutomationConfig:
+		"""本次运行的配置：队列路径也需要按 allowed_actions / 阈值做同一套门控（Issue #2020）。"""
+		return self._config
+
 	def stop_reason(self) -> str | None:
 		if self._store is not None:
 			breaker = self._store.read_state().get("autonomy", {}).get("circuit_breaker", {})
