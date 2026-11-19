@@ -9,6 +9,7 @@
 - `resume import` 的输入路径与 `-o` 输出路径同口径展开 `~`：MCP 子进程 / argv 列表不经 shell 时，`~/cv.json` 不再被报成「文件不存在」（Issue #2122）。
 - `agent review reject` 清理 approve 中途失败遗留的 pending 行：尚未派发的关联行与复核状态一起收口，被人工拒绝的动作不再在下一轮被派发；已在执行 / 结果未知（executing、verification-required）的行反而阻断 reject 并提示先核对，不静默删除可能已生效的记录（Issue #2124）。
 - automation 的 `allowed_actions` 对数组 / 对象元素按配置错误上报：不再在 set 成员判断处抛裸 `TypeError: unhashable type`，非字符串元素与未知动作走同一条「未知动作」ValueError 文案（Issue #2125）。
+- crawl 的 `--hook-profile screenshot-full` 运行期注入读取 `SHA256SUMS` 失败时不再抛裸 `OSError`：清单被换成目录 / FIFO 或变得不可读统一收敛为 `HookRegistrationError`，命令层按 `LOCAL_IO_ERROR` 上报并给出 Hook 目录，不再被 service 兜成 stopped 成功信封与可重试 resume 指引；预检路径行为不变（Issue #2127）。
 - 职位导出的标量兜底改走 `safe_text`：超过 4300 位的整数不再在裸 `str()` 抛 `ValueError` 中止整份 CSV / HTML 导出，与容器分支和 job_card 同口径按缺失单元格处理（Issue #2114）。
 - job_card 的容器字段改用 `strict_json_text` 序列化：嵌套的 `NaN` / `Infinity` 归一为 JSON `null`，不再把非标准字面量带进列表文本与 wizard 导出产物；深嵌套 / 超大整数仍按缺失处理（Issue #2115）。
 - wizard 声明失败的步骤结果与写前标记一次落盘：action 在 `begin_write` 后返回非完成状态时，标记不再被通用 `update_step` 清空，此后任何中断都不会让 `--resume` 重放结果未知的写请求（Issue #2117）。

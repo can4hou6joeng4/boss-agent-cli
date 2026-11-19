@@ -133,7 +133,14 @@ def _manifest_error(detail: str) -> HookRegistrationError:
 def _read_checksums(path: Path) -> dict[str, str]:
 	# 只有文件确实不存在才是「缺少完整性清单」；权限错误与非普通文件要把
 	# 真正原因带出来（3.14 的 is_file() 会把 OSError 吞成 False，Issue #1736）。
-	raw = read_bytes_if_regular(path)
+	try:
+		raw = read_bytes_if_regular(path)
+	except OSError as exc:
+		# 清单被换成目录 / FIFO 或变得不可读时，预检与运行期注入必须走同一个
+		# 异常契约：verify 收敛成参数错误，inject 带 hook_dir 报错。裸 OSError
+		# 从 inject 逃逸会被 service 的通用 except 兜成 stopped 成功信封
+		# （Issue #2127）。
+		raise _manifest_error(f"无法读取 Hook 完整性清单（{path.name}）：{exc}") from exc
 	if raw is None:
 		raise _manifest_error(f"缺少 Hook 完整性清单: {path.name}")
 	try:
