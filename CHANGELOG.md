@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+## [3.4.126] - 2026-11-19
+
+### Fixed
+- wizard 断点落盘失败不再掩盖原始风控 / 预算停止码；缓存时间戳列漂移成 BLOB / 文本时信封不再退化成固定 `INTERNAL_ERROR`；步骤记录缺失按本地状态损坏报 `LOCAL_STATE_WRITE_FAILED`，不再报可重试的 `NETWORK_ERROR`（Issue #1963–#1965）。
+- `ai config` 新增 `--clear-base-url`，`ai_base_url` 写入后可清除，切 provider 后密钥不再发往旧端点；漂移成布尔值的 `ai_base_url` 不再回显为地址；同时改配置与密钥时密钥写失败不再留下半截更新；空白文本参数不再照常发起计费请求（Issue #1967–#1969 #1975）。
+- `record_recruiter_greet` 更新 0 行改为报错，不再在本地记录丢失后重复发送招呼；watch 结果写入不再因孤立代理项抛 `UnicodeEncodeError` 并留下半截事务；watch 去重键在缺 `job_id` 时保留账号前缀；`stats` 的 `first_seen_at` 漂移值不再让窗口计数虚高（Issue #1971–#1974）。
+- 聊天与职位导出把非有限数按 JSON 分支同口径归一，不再写出 `inf` / `nan` / `Infinity`；`find_friend` 对「成功但无列表容器」的响应返回可恢复的 `NETWORK_ERROR`，不再据此判定联系人不存在（Issue #1976–#1978）。
+- `crawl resume` 单个职位详情反复失败不再卡死列表翻页与导出（记为 `detail-error` 并继续），同一轮不重复重试；恢复时的滚动翻页按次计入请求预算与租约；打开浏览器前失败保留断点里的 hook 注入记录（Issue #1981–#1983）。
+- `resume list` 以文件自身名称列出副本与缺 name 的信封，不再产生无法点名的幽灵行；原子写与 PDF 导出的临时名改用固定短前缀，合法长文件名不再 `ENAMETOOLONG`；导入时孤立低代理项名称按参数错误拒绝（Issue #1984–#1986）。
+- 请求租约异常路径不再用缺失的平台码重写已落盘风险锁（保留 31/32/38 等诊断字段与锁定时间）；共享租约竞争耗尽等待窗口时省略误导性的 50ms `retry_after_seconds`（Issue #1989–#1990）。
+- `chat --export` 的元素全坏页不再被当成完整空列表（不覆盖当日快照、不误报全部联系人已消失）；元素全非对象的基线快照按不可用处理；`detail` 的 httpx 通道与浏览器通道对 `skills` / `raw_job_type` 同口径归一（Issue #1992–#1994）。
+- `auth/salt` 路径异常时 `doctor` 不再输出 traceback、`status` 不再报可重试 `NETWORK_ERROR`；doctor 的 `auth_salt` 检查按 lstat 判定；`clean --risk-lock` 删除空目录 / FIFO 锁后正确报 `local_lock_removed`；`--privacy` 中途失败时 `remaining` 不漏 crawl；符号链接清理的字节数按链接本身统计；`--live-probe` help 与默认站点连通性检查一致（Issue #1996–#2001）。
+- `batch-greet` 限流停批改为 `ok:false` 错误信封（`RATE_LIMITED` / `GREET_LIMIT`），触发停批的候选人保留在 `failed`；`history --page` 加可信页码上限，超长整数不再把确定性本地错误报成可重试的 `NETWORK_ERROR`；坏元素页翻满页数上限时正确标记 `truncated`（Issue #2003–#2006）。
+- wizard 在 action 已声明失败后到达的超时 / 停止信号不再丢弃已落盘的写前标记，`--resume` 不再重放结果未知的写请求；`candidate_search` 的 `query` 非字符串（`false` / `0` / 容器）按 `INVALID_PARAM` 拒绝，不再静默执行空关键词或字面量搜索（Issue #2008–#2009）。
+
 ## [3.4.125] - 2026-11-19
 
 ### Fixed
