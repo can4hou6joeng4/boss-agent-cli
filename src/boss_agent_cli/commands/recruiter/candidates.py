@@ -11,6 +11,7 @@ from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_output,
 	handle_platform_error_output,
+	positional_hint,
 	shell_argument,
 )
 from boss_agent_cli.services.pagination import (
@@ -71,10 +72,10 @@ def candidates_cmd(ctx: click.Context, query: str, city: str | None, job_id: str
 		]
 		if pagination["has_more"] is True:
 			# 翻页必须保留本次筛选条件，否则第 2 页与第 1 页不是同一组结果。
-			parts = ["hr", "candidates"]
-			if query:
-				parts.append(shell_argument(query))
-			parts.extend(["--page", str(pagination["page"] + 1)])
+			# query 是位置参数，必须放在所有选项之后并经 positional_hint 处理：
+			# 裸 shell_argument 会把横杠开头的 query（如 ``--select``）拼在
+			# 选项之前，重放时被 click 当成开关，静默换掉搜索语义（Issue #2068）。
+			parts = ["hr", "candidates", "--page", str(pagination["page"] + 1)]
 			for flag, value in (
 				("--city", city),
 				("--job-id", job_id),
@@ -90,6 +91,8 @@ def candidates_cmd(ctx: click.Context, query: str, city: str | None, job_id: str
 					parts.extend([flag, shell_argument(value)])
 			if select:
 				parts.append("--select")
+			if query:
+				parts.append(positional_hint(query))
 			next_actions.append(hint_command(ctx, " ".join(parts)))
 		hints: dict[str, Any] = {"next_actions": next_actions}
 		if pagination["has_more"] is None:
