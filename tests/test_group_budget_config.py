@@ -100,3 +100,37 @@ def test_valid_group_config_still_shares_budget_directory(tmp_path):
 	assert budget.root == group_config.parent.resolve()
 	assert budget.max_per_minute == 5
 	assert budget.wait_timeout == 12
+
+
+def test_looped_group_budget_dir_is_invalid_param(tmp_path, monkeypatch) -> None:
+	"""组预算目录含符号链接环：resolve() 的 RuntimeError 按配置错误拒绝（Issue #2159）。
+
+	resolve() 的符号链接环行为随解释器版本不同，这里按路径注入 RuntimeError，
+	断言与解释器无关：必须是 INVALID_PARAM 信封，而不是启动期 traceback。
+	"""
+	member = tmp_path / "member"
+	member.mkdir()
+	looped = tmp_path / "looped"
+	(member / "config.json").write_text(
+		json.dumps({"request_budget_dir": str(looped)}), encoding="utf-8"
+	)
+	original = Path.resolve
+	target = str(looped)
+
+	def fake(self, *args, **kwargs):
+		if str(self) == target:
+			raise RuntimeError(f"Symlink loop from '{self}'")
+		return original(self, *args, **kwargs)
+
+	monkeypatch.setattr(Path, "resolve", fake)
+
+	result = _invoke_search(member)
+
+	assert result.exit_code == 1, result.output
+	error = json.loads(result.output.strip())["error"]
+	assert error["code"] == "INVALID_PARAM"
+	assert error["recoverable"] is False
+	assert "request_budget_dir" in error["message"]
+	assert "Symlink loop" in error["message"]
+	assert str(member / "config.json") in error["recovery_action"]
+	assert "request_budget_dir" in error["recovery_action"]
