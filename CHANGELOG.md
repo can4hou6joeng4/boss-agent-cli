@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [3.4.128] - 2026-11-19
+
+### Fixed
+- 联系人身份只认非空字符串或非 bool 整数 uid：布尔 / 容器 / 超大整数漂移不再让不同联系人共用同一身份或让翻页签名误判重复页；`job_card` 与职位字段的超大整数按缺失处理，容器序列化失败按空单元格降级（Issue #2063–#2065）。
+- 招聘者 `hr jobs` 的分页信封与后继提示限制在可信页码内，非法平台回显回退到钳制后的请求页；`hr candidates --select` 作为关键词时按位置参数重放；`hr resume` 按实际缺失的 `geek_id` / `--job-id` / `--security-id` 生成错误与指引（Issue #2067–#2069）。
+- automation 队列在派发前拒绝缺少 `candidate_key` 或发送类动作缺 `message` 的记录（错误带实际队列路径，行保持 pending）；JSONL 追加在旧行缺少结尾换行时先补分隔符，避免新旧记录粘成一行一起丢失；孤立代理字符让整文件回写失败时按本地状态错误上报并保留原文件（Issue #2071–#2073）。
+- `crawl resume --background` 在派发 worker 前校验 `--pages` 覆盖值与断点进度，矛盾参数直接返回 `INVALID_PARAM`，不再先回报 `queued` 再让 worker 静默失败；`next_page == pages + 1` 保持合法（Issue #2075）。
+
 ## [3.4.127] - 2026-11-19
 
 ### Fixed
