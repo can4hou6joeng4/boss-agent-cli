@@ -1100,8 +1100,11 @@ def test_build_args_clean_forwards_days():
 
 
 @patch("server.subprocess.run")
-def test_run_boss_parses_json_output(mock_run):
+def test_run_boss_parses_json_output(mock_run, monkeypatch):
 	"""正常 JSON 输出应被正确解析。"""
+	# 默认入口在模块加载时解析成安装路径（Issue #2088）；这里固定裸名字，
+	# 断言的是 subprocess 收到什么，而不是入口探测结果。
+	monkeypatch.setattr(server._impl, "_BOSS_BIN", "boss")
 	mock_run.return_value = MagicMock(
 		stdout='{"ok": true, "data": {"status": "logged_in"}}',
 		stderr="",
@@ -1133,8 +1136,9 @@ def test_run_boss_handles_empty_output(mock_run):
 
 
 @patch("server.subprocess.run")
-def test_run_boss_passes_args(mock_run):
+def test_run_boss_passes_args(mock_run, monkeypatch):
 	"""参数应正确传递给 subprocess。"""
+	monkeypatch.setattr(server._impl, "_BOSS_BIN", "boss")
 	mock_run.return_value = MagicMock(stdout='{"ok": true}', stderr="")
 	_run_boss("search", "python", "--city", "北京")
 	cmd = mock_run.call_args[0][0]
@@ -1142,12 +1146,13 @@ def test_run_boss_passes_args(mock_run):
 
 
 @patch("server.subprocess.run")
-def test_run_boss_export_empty_url_reaches_cli_dedicated_error(mock_run):
+def test_run_boss_export_empty_url_reaches_cli_dedicated_error(mock_run, monkeypatch):
 	"""`boss_export {"url": ""}` 要把 CLI 的专门诊断原样带回（Issue #958）。
 
 	CLI 对 `export --url ""` 报「--url 的值不能为空」；映射层若用真值判断把
 	空串吞掉，Agent 收到的是误导性的「未提供 query，请传入搜索关键词或 --url」。
 	"""
+	monkeypatch.setattr(server._impl, "_BOSS_BIN", "boss")
 	empty_url_envelope = json.dumps(
 		{
 			"ok": False,
