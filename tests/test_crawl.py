@@ -695,7 +695,11 @@ def test_resume_fetches_checkpoint_page_and_keeps_exported_page_numbers_aligned(
 	outcome = service.resume(run_id, operating_mode="research")
 
 	assert outcome.status == "completed"
-	assert outcome.requests_attempted == 3, "只应请求第 3、4、5 页，不能重复抓第 1、2 页"
+	# 导航与每次滚动翻页各计一次预算/租约（Issue #1982）：对齐到第 3 页需 1 次导航
+	# + 2 次翻页，之后每页各 1 次滚动，共 7 次 claim；page 1/2 未被重复请求。
+	assert page.navigations == 1
+	assert page.scrolls == 4
+	assert outcome.requests_attempted == 7
 	assert page.current_page == 5
 	assert {item["job_key"]: item["page_no"] for item in cache.list_crawl_jobs(run_id)} == {
 		"job-1": 1,
@@ -981,7 +985,7 @@ def test_explicit_empty_detail_card_still_completes(tmp_path):
 	],
 )
 def test_incomplete_detail_response_stays_pending_for_resume(tmp_path, payload):
-	"""缺少详情结构不能标为 fetched；恢复只补取详情，不重抓已提交列表。"""
+	"""缺少详情结构不能标为 fetched；本轮继续完成，恢复只补取详情不重抓列表。"""
 	first = _FakeTransport(
 		{1: _page(_job("job-1", "sec-1"))}, detail_payloads={"sec-1": payload},
 	)
@@ -989,23 +993,26 @@ def test_incomplete_detail_response_stays_pending_for_resume(tmp_path, payload):
 	transports = iter((first, second))
 	cache, service = _service(tmp_path, lambda settings: next(transports))
 	with cache:
-		stopped = service.create_and_run(_settings(tmp_path, with_detail=True, max_retries=1))
-		assert stopped.status == "stopped"
-		assert stopped.next_page == 2
+		# 单条详情结构异常不再让整轮采集卡成可无限重复的 stopped（Issue #1981）：
+		# 列表翻页与导出照常完成，条目保留待补状态。
+		first_outcome = service.create_and_run(_settings(tmp_path, with_detail=True, max_retries=1))
+		assert first_outcome.status == "completed"
+		assert first_outcome.next_page == 2
 		assert first.page_calls == [1]
 		assert first.detail_calls == ["sec-1", "sec-1"]
 		assert first.closed is True
-		pending = cache.list_crawl_jobs(stopped.run_id)
+		assert first_outcome.output_paths
+		pending = cache.list_crawl_jobs(first_outcome.run_id)
 		assert len(pending) == 1
 		assert pending[0]["detail_done"] is False
-		assert pending[0]["payload"]["detail_status"] == "not_requested"
+		assert pending[0]["payload"]["detail_status"] == "detail-error"
 		assert cache.get_job_desc("job-1") is None
 
-		resumed = service.resume(stopped.run_id, with_detail=True)
+		resumed = service.resume(first_outcome.run_id, with_detail=True)
 		assert resumed.status == "completed"
 		assert second.page_calls == []
 		assert second.detail_calls == ["sec-1"]
-		completed = cache.list_crawl_jobs(stopped.run_id)
+		completed = cache.list_crawl_jobs(first_outcome.run_id)
 		assert completed[0]["detail_done"] is True
 		assert completed[0]["payload"]["detail_status"] == "fetched"
 		assert completed[0]["payload"]["post_description"] == "职位描述"

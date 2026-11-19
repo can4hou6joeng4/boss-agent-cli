@@ -383,7 +383,11 @@ class DrissionCrawlerSession:
 						self._page.get(f"https://www.zhipin.com/web/geek/jobs?city={city_code}&query={quote(query)}")
 						position = 1
 					while position < target_page:
-						self._trigger_next_page()
+						# 每次翻页都会触发一次真实的 joblist 请求：预算与共享租约
+						# 必须按次计入，否则从断点恢复到第 N 页时整段滚动只算 1 次
+						# 请求，max_requests 与跨进程节流被绕过（Issue #1982）。
+						with self._attempt("list-pagination"):
+							self._trigger_next_page()
 						position += 1
 				except BaseException:
 					# 导航/滚动可能已让页签前进但没有完成：位置不可信，下次重新导航。
