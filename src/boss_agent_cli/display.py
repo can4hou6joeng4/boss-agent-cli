@@ -22,7 +22,13 @@ from rich.panel import Panel
 from rich.table import Table
 
 from boss_agent_cli.api._base_client import PlatformResponseInvalid
-from boss_agent_cli.cache.store import CacheBusyError, CacheDatabaseInvalid, is_cache_busy_error
+from boss_agent_cli.cache.store import (
+	CacheBusyError,
+	CacheDatabaseInvalid,
+	CacheRecordInvalid,
+	CacheWriteRejected,
+	is_cache_busy_error,
+)
 from boss_agent_cli.output import emit_success, exit_code_for_error, is_local_io_error, redact_sensitive_text
 from boss_agent_cli.schema.error_codes import ERROR_CODES
 from boss_agent_cli.services.browser_runtime import (
@@ -1479,6 +1485,36 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 							f"备份后删除 {e.path}；候选池、预设、watch 历史与任务断点都随旧库一起作废",
 						]
 					},
+				)
+			except CacheRecordInvalid as e:
+				# 本地记录损坏是确定性失败：重试同一命令只会再失败一次。BossCliGroup
+				# 已有同样分支，但装饰器在命令函数外层先捕获，必须在这里收口，
+				# 否则被装饰的命令会把本地坏数据报成可重试的 NETWORK_ERROR
+				# （Issue #2166，与 #1885 / #1336 同口径）。
+				record_recoverable, record_recovery_action = error_contract_for_code("CACHE_RECORD_INVALID")
+				handle_error_output(
+					ctx,
+					command_name,
+					code="CACHE_RECORD_INVALID",
+					message=str(e),
+					recoverable=record_recoverable,
+					recovery_action=record_recovery_action,
+				)
+			except CacheWriteRejected as e:
+				# 约束冲突 / 绑定值非法是输入问题，缓存库本身健康：绝不能给出
+				# 「备份并删除缓存库」的指引，也不能建议重试同一组参数
+				# （Issue #2166，与 #1886 同口径）。
+				invalid_recoverable, _invalid_recovery = error_contract_for_code("INVALID_PARAM")
+				handle_error_output(
+					ctx,
+					command_name,
+					code="INVALID_PARAM",
+					message=str(e),
+					recoverable=invalid_recoverable,
+					recovery_action=(
+						"本次写入被本地缓存库拒绝（约束冲突或非法绑定值），库本身完好、无需删除；"
+						"修正调用参数后重试"
+					),
 				)
 			except INTERNAL_ERROR_TYPES as e:
 				internal_recoverable, internal_recovery = error_contract_for_code("INTERNAL_ERROR")
