@@ -4,11 +4,13 @@
 
 ## [Unreleased]
 
-## [3.4.121] - 2026-11-19
-
 ### Fixed
 - `exchange` 对类型漂移的联系人字段安全处理：`name` 只认非空字符串，`uid` / `securityId` 不再被转成 Python repr 发给平台，后继 `chatmsg` 命令对 `-` 开头的 uid 前置 `--`（Issue #1812）。
 - `show` 对索引缓存里非字符串的 `security_id` 报参数无效且不发请求，`lid` 与平台 `jobCard.lid` 只认字符串，不再误报「数据库无法打开」（Issue #1813）。
+
+## [3.4.121] - 2026-11-19
+
+### Fixed
 
 ### Fixed
 - `resume` 全族后继命令对以 `-` 开头的名字与 ID 前置 `--`，带选项的提示把选项挪到 `--` 之前，照抄执行不再报「没有选项」（Issue #1803）。
