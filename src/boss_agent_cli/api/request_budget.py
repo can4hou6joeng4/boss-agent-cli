@@ -352,7 +352,15 @@ class RequestBudget:
 		import errno
 		import fcntl
 
-		fd = os.open(root, os.O_RDONLY)
+		try:
+			fd = os.open(root, os.O_RDONLY)
+		except OSError as exc:
+			# 目录缺失 / 父目录不可写 / 只读挂载：确定性本地失败。裸 OSError 会被
+			# crawl 的通用异常分支裹成 ok:true 的 stopped 并给出可重试指引
+			# （Issue #2106），与下方 lstat 分支同口径归一。
+			raise sqlite3.OperationalError(
+				f"无法打开请求预算目录 {root}（{exc}）；请确认目录存在且可访问"
+			) from exc
 		try:
 			fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 		except (BlockingIOError, PermissionError):
@@ -373,7 +381,12 @@ class RequestBudget:
 			yield
 			return
 		self._check(check)
-		self.root.mkdir(parents=True, exist_ok=True)
+		try:
+			self.root.mkdir(parents=True, exist_ok=True)
+		except OSError as exc:
+			raise sqlite3.OperationalError(
+				f"无法创建请求预算目录 {self.root}（{exc}）；请确认数据目录可写"
+			) from exc
 		# 先拿目录租约：租约文件被删除 / 替换时，目录 inode 的锁仍然互斥
 		# （Issue #1919）。文件系统不支持目录 flock 时退回文件租约。
 		dir_fd: int | None = None
@@ -404,16 +417,26 @@ class RequestBudget:
 					raise sqlite3.OperationalError(f"{path} 是符号链接，请求租约拒绝写穿链接目标")
 				if mode is not None and not stat.S_ISREG(mode):
 					raise sqlite3.OperationalError(f"{path} 不是普通文件（FIFO / 目录 / 设备），请求租约拒绝打开")
-				candidate = path.open("a+b")
+				try:
+					candidate = path.open("a+b")
+				except OSError as exc:
+					raise sqlite3.OperationalError(
+						f"无法打开请求租约文件 {path}（{exc}）；请确认数据目录可写"
+					) from exc
 				acquired = False
 				try:
-					# 写入与尺寸判断都按文件描述操作，避免 open 之后 path 被替换时把
-					# 新 inode 的尺寸当成旧 inode 的（Issue #1919）。
-					if os.fstat(candidate.fileno()).st_size == 0:
-						candidate.write(b"\0")
-						candidate.flush()
-					while not self._try_lease(candidate):
-						self._pause(0.05, started, check, lease_poll=True)
+					try:
+						# 写入与尺寸判断都按文件描述操作，避免 open 之后 path 被替换时把
+						# 新 inode 的尺寸当成旧 inode 的（Issue #1919）。
+						if os.fstat(candidate.fileno()).st_size == 0:
+							candidate.write(b"\0")
+							candidate.flush()
+						while not self._try_lease(candidate):
+							self._pause(0.05, started, check, lease_poll=True)
+					except OSError as exc:
+						raise sqlite3.OperationalError(
+							f"请求租约文件 {path} 无法加锁（{exc}）；文件系统可能不支持文件锁"
+						) from exc
 					acquired = self._lease_names_locked_file(path, candidate)
 				finally:
 					if not acquired:
