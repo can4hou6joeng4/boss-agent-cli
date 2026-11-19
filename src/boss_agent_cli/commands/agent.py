@@ -60,6 +60,7 @@ from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_error_output,
 	handle_output,
+	positional_hint,
 	render_action_result,
 	render_list_result,
 	render_record_result,
@@ -265,7 +266,7 @@ def crawl_cmd(
 	if resume_text is None:
 		if load_error is not None:
 			# 文件存在但读不出来：不能报成「简历不存在」，提示修正或删除坏文件（Issue #1369）。
-			delete_cmd = _crawl_hint_command(ctx, f"resume delete {shell_argument(resume_name)}")
+			delete_cmd = _crawl_hint_command(ctx, f"resume delete {positional_hint(resume_name)}")
 			handle_error_output(
 				ctx,
 				"agent.crawl",
@@ -457,7 +458,7 @@ def crawl_cmd(
 		return
 
 	if not jobs:
-		resume_command = boss_command_for_ctx(ctx, f"crawl resume {shell_argument(run_id or '')} --with-detail", include_data_dir=True)
+		resume_command = boss_command_for_ctx(ctx, f"crawl resume {positional_hint(run_id or '')} --with-detail", include_data_dir=True)
 		handle_output(
 			ctx,
 			"agent.crawl",
@@ -520,7 +521,7 @@ def crawl_cmd(
 		results = []
 	results = _public_fit_results(sorted(results, key=_fit_score, reverse=True)[:limit], jobs)
 	next_steps = [
-		boss_command_for_ctx(ctx, f"crawl results {shell_argument(run_id or '')}", include_data_dir=True),
+		boss_command_for_ctx(ctx, f"crawl results {positional_hint(run_id or '')}", include_data_dir=True),
 		boss_command_for_ctx(ctx, "shortlist list", include_data_dir=True),
 	]
 	handle_output(
@@ -988,10 +989,14 @@ def _public_fit_results(results: list[Any], jobs: list[dict[str, Any]]) -> list[
 			for key, value in result.items()
 			if key not in {"job_id", "security_id", "boss_name", "boss_title", "recruiter"}
 		}
+		# 条件与取值只读取一次 title：缺键与空标题都统一成空串，
+		# 不能条件用 .get()、取值用 []（Issue #1827）。空标题不参与回填：
+		# 没有标题的结果无法可靠对应到某个职位。
+		title = str(result.get("title") or "")
 		if selector in selectors:
 			item["selector"] = selector
-		elif str(result.get("title") or "") in selectors_by_title:
-			item["selector"] = selectors_by_title[str(result["title"])]
+		elif title and title in selectors_by_title:
+			item["selector"] = selectors_by_title[title]
 		public.append(item)
 	return public
 

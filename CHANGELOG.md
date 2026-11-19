@@ -8,6 +8,12 @@
 - `config set request_budget_dir` 拒绝已存在但不是目录的路径；启动期因此失败时恢复建议改为可直接执行的 `config reset request_budget_dir`（Issue #1822）。
 - `config reset operating_mode` 同时清除旧版 `low_risk_mode`，`config list` 把由旧键派生的模式标为用户配置（Issue #1823）。
 - 平台返回的页码超出合理范围时不再参与下一页提示，`me` / `chatmsg` 不会因超长整数被报成可重试的网络错误（Issue #1824）。
+- `agent crawl` 的简历删除后继命令对以 `-` 开头的简历名前置 `--`，`crawl resume` / `crawl results` 的位置参数统一走同一保护（Issue #1826）。
+- `agent crawl` 按标题回填 AI 结果的 selector 时只读取一次 title，空标题不参与匹配，不再因缺 title 抛 KeyError 落成 INTERNAL_ERROR（Issue #1827）。
+- `clean` 后继提示里的 `--data-dir` 使用解析后的绝对路径（Issue #1828）。
+- `clean --risk-lock` 删除锁路径上的符号链接本身（含悬空链接）；`local_lock_removed` 要求确实删过锁项且清理后读不到锁，不再报成功而锁仍生效，也不再给「无锁目录」误报 true（Issue #1829）。
+- `clean` 中途失败时信封带回已完成项与失败项；清锁之后才失败会明确说明锁已清除（Issue #1830 #1831）。
+- `search` 的预设重建 / 删除后继命令对以 `-` 开头的预设名前置 `--`（Issue #1832）。
 
 ## [3.4.122] - 2026-11-19
 
