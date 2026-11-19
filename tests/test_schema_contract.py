@@ -470,6 +470,7 @@ _NON_ERROR_CODE_LITERALS = {
 	"INIT_CWD", "PLAYWRIGHT_BROWSERS_PATH",  # 浏览器驱动环境变量名
 	"CLI_ERROR",  # MCP 层「CLI 输出不可解析」分类，不进入 CLI 信封
 	"CREATE_NO_WINDOW",  # Windows 子进程常量
+	"REG_SZ",  # Windows 注册表值类型，不是错误码
 	"AUTO_EXECUTED", "DRY_RUN",  # 招聘自动化事件的成功状态，不是错误码
 	"HOOK_SCRIPT_NAMES",  # crawler 常量名
 	"PYTEST_CURRENT_TEST",  # pytest 环境变量

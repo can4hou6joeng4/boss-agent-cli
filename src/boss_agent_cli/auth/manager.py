@@ -94,25 +94,41 @@ class AuthManager:
 			platform_code=normalize_risk_code(raw_code),
 		)
 		self._unpersisted_risk_lock = lock
+		persisted = False
 		try:
 			cdp_risk_lock.write_lock(
 				self._data_dir, lock.stoken_sha256, cdp_url=lock.cdp_url, now=lock.locked_at,
 				reason=lock.reason, platform_code=lock.platform_code,
 			)
+			persisted = True
 			self._unpersisted_risk_lock = None
 		except OSError:
 			pass
 		from boss_agent_cli.api.request_budget import budget_directory
-		root = budget_directory(self._data_dir)
-		if root != self._data_dir.resolve():
+		try:
+			root = budget_directory(self._data_dir)
+			same_root = root == self._data_dir.resolve()
+		except (OSError, ValueError):
+			# 配置文件损坏 / 预算目录非法时跳过后备位置：这个函数只记录、不抛，
+			# 这里的异常绝不能替换正在传播的 PlatformRiskError，也不能跳过
+			# error.details 的写入（Issue #1892）。
+			root, same_root = None, True
+		if root is not None and not same_root:
 			try:
 				cdp_risk_lock.write_lock(root, None, now=lock.locked_at, reason=lock.reason, platform_code=lock.platform_code)
+				persisted = True
+				self._unpersisted_risk_lock = None
 			except OSError:
-				self._unpersisted_risk_lock = lock
+				pass
+		if not persisted:
+			# 两个位置都没写成功：保留进程内锁，fail-closed 到进程退出。
+			self._unpersisted_risk_lock = lock
 		if error is not None:
+			# 任一位置写成功都算已持久化：后备位置的新进程同样会读到锁
+			# （Issue #1893）。
 			error.details["risk_lock"] = {
 				"locked": True, "reason": lock.reason, "platform_code": lock.platform_code,
-				"explicit_resume_required": True, "persisted": self._unpersisted_risk_lock is None,
+				"explicit_resume_required": True, "persisted": persisted,
 			}
 
 	def _check_cdp_login_risk_lock(self, cdp_url: str | None) -> None:
