@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -9,9 +10,19 @@ BOSS_INTERNSHIP_RESPONSE_JOB_TYPE = 4
 # dict.get(key, default) 只在键不存在时用默认值，值为 null 时照样返回 None，
 # 下游一 join / 遍历 / 取子字段就崩，所以平台数据在边界处统一归一化。
 def field_text(data: Any, key: str, default: str = "") -> str:
-	"""取文本字段：缺失或为 null 时用默认值，数字等标量转成字符串。"""
+	"""取文本字段：缺失 / null / 容器 / 非有限数用默认值，数字等标量转成字符串。
+
+	平台字段漂移成 dict / list 时，旧实现会 ``str()`` 出 Python repr 并当成
+	真实文本透传（job_id、title 还会进入后继命令提示，Issue #1917）；NaN /
+	Infinity 同样不是可展示文本。容器与非有限数按缺失处理，与
+	``field_list`` / ``field_dict`` 的归一口径一致。
+	"""
 	value = data.get(key) if isinstance(data, dict) else None
 	if value is None:
+		return default
+	if isinstance(value, (dict, list, tuple)):
+		return default
+	if isinstance(value, float) and not math.isfinite(value):
 		return default
 	return value if isinstance(value, str) else str(value)
 
