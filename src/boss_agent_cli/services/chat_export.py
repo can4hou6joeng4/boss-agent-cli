@@ -11,16 +11,36 @@ from boss_agent_cli.services.chat_utils import sanitize_csv_cell, escape_md_cell
 from boss_agent_cli.services.json_files import strict_json_text
 
 
+def _sanitize_surrogates(text: str) -> str:
+	"""孤立代理项按 backslashreplace 归一，stdout / 文件路径同口径（Issue #2017）。"""
+	try:
+		text.encode("utf-8")
+	except UnicodeEncodeError:
+		return text.encode("utf-8", "backslashreplace").decode("utf-8")
+	return text
+
+
 def _text_cell(value: Any) -> Any:
 	"""文本格式里的容器值序列化成 JSON 文本，不落 Python repr（Issue #1853）。
 
 	非有限 float 与 JSON 分支同口径按空值处理；容器先递归归一，避免嵌套
 	Infinity / NaN 被写成非标准 JSON 字面量（Issue #1976）。
 	"""
+	if isinstance(value, bool):
+		# JSON 分支是 true / false：str(True) 会让文本导出出现 Python 字面量
+		# （Issue #2018）。
+		return "true" if value else "false"
 	if isinstance(value, (dict, list, tuple)):
-		return strict_json_text(value, indent=None)
+		try:
+			return _sanitize_surrogates(strict_json_text(value, indent=None))
+		except OSError:
+			# 深嵌套 / 超长整数无法序列化：单个坏单元格按缺失处理，不让整份
+			# 导出变成可重试的错误信封（Issue #2016）。
+			return ""
 	if isinstance(value, float) and not math.isfinite(value):
 		return ""
+	if isinstance(value, str):
+		return _sanitize_surrogates(value)
 	return value
 
 
