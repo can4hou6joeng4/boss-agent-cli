@@ -9,7 +9,7 @@ from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 from boss_agent_cli.services.chat_export import render_export
-from boss_agent_cli.services.friend_list_pages import friend_list_page_items
+from boss_agent_cli.services.friend_list_pages import friend_list_page_has_content, friend_list_page_items
 from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.text_files import write_text_atomic
 from boss_agent_cli.services.chat_snapshot import save_snapshot_and_diff, load_snapshot
@@ -188,7 +188,14 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 		page_containers_valid = any(
 			isinstance(platform_data.get(key), list) for key in ("result", "friendList")
 		)
-		collection_complete = page == 1 and has_more is False and page_containers_valid
+		# 容器非空但元素全不可用（null / 数字 / 字符串）不是「平台空页」：
+		# 跳过坏元素之后为空同样不能证明列表完整（Issue #1992）。
+		unusable_only_page = (
+			page_containers_valid and not items and friend_list_page_has_content(platform_data)
+		)
+		collection_complete = (
+			page == 1 and has_more is False and page_containers_valid and not unusable_only_page
+		)
 
 		# ── 导出模式 ──────────────────────────────────────────────
 		if export_fmt is not None and output_path is not None:

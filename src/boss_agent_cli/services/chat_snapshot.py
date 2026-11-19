@@ -247,8 +247,13 @@ def load_snapshot(path: str, logger: Logger) -> list[dict[str, Any]] | None:
 		logger.warning(f"快照格式异常（非数组）: {path}")
 		return None
 
-	# 过滤掉非 dict 项
-	return [item for item in data if isinstance(item, dict)]
+	items = [item for item in data if isinstance(item, dict)]
+	# 非空数组但零个可用对象（手工改坏 / 旧格式漂移）与坏 JSON 同口径：
+	# 当作没有历史，而不是「完整但为空的基线」，否则次日全员误报新增（Issue #1993）。
+	if data and not items:
+		logger.warning(f"快照没有可用条目: {path}")
+		return None
+	return items
 
 
 def _find_previous_snapshot(snapshot_dir: str, today: str) -> str | None:
