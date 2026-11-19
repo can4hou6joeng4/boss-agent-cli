@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+- ✅ v3.4.122 (2026-11-19): `exchange` and `show` accept only string identifiers; `batch-greet` dry-run follow-ups and write requests no longer carry drifted fields, and a greet whose outcome is unknown keeps its reservation and stops the batch; `greet` / `detail` reject blank parameters (Issues #1812–#1818).
 - ✅ v3.4.121 (2026-11-19): `resume` follow-up commands prefix `--` before names and IDs starting with `-`; `resume edit` rejects system-managed fields and no longer renames a resume reached through an alias; `resume delete` pre-checks directory paths and clears links stored under the real name; `favorites` and resume parsing no longer write Python reprs for drifted fields (Issues #1803–#1808).
 - ✅ v3.4.120 (2026-11-19): `watch` / `shortlist` follow-up commands prefix `--` before names starting with `-`; stored watches with a blank query report an invalid parameter; a corrupt `tags` row no longer breaks the whole shortlist; `watch run` rejects whitespace-only names (Issues #1797–#1800).
 - ✅ v3.4.119 (2026-11-19): a complete `chat --export` run replaces the day's snapshot so removed contacts are reported on a same-day rerun; Markdown export escapes cells that drift into lists or objects; CSV writes missing values as empty cells and keeps the `-` placeholder; the unread count no longer includes contacts with unknown status (Issues #1791–#1794).

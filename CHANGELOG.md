@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.122] - 2026-11-19
+
 ### Fixed
 - `batch-greet` 遇到发送结果未知的异常时保留预约并停止批次，引导用户核对送达状态。确认未发送时，保留预约直至重试结束（Issue #1818）。
 - `exchange` 对类型漂移的联系人字段安全处理：`name` 只认非空字符串，`uid` / `securityId` 不再被转成 Python repr 发给平台，后继 `chatmsg` 命令对 `-` 开头的 uid 前置 `--`（Issue #1812）。
