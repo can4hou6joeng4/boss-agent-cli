@@ -16,7 +16,21 @@ def friend_list_page_items(platform_data: dict[str, Any]) -> list[dict[str, Any]
 	``result`` 是 ``[None]`` / ``[5]`` 这类只含坏元素的非空列表时同理（Issue #1402）：
 	元素级漂移由 ``dict_items`` 跳过，跳过之后为空就回退 ``friendList``。
 	"""
-	return dict_items(platform_data.get("result")) or dict_items(platform_data.get("friendList"))
+	return friend_list_page_observation(platform_data)[0]
+
+
+def friend_list_page_observation(platform_data: dict[str, Any]) -> tuple[list[dict[str, Any]], bool]:
+	"""返回联系人及所用列表是否完整解析，保留原有的容器回退顺序。"""
+	for key in ("result", "friendList"):
+		raw = platform_data.get(key)
+		if isinstance(raw, list):
+			items = dict_items(raw)
+			if items:
+				return items, len(items) == len(raw)
+
+	# 至少有一个列表容器且整页无内容，才可认作平台明确返回的空页。
+	has_list = any(isinstance(platform_data.get(key), list) for key in ("result", "friendList"))
+	return [], has_list and not friend_list_page_has_content(platform_data)
 
 
 def friend_list_page_has_content(platform_data: dict[str, Any]) -> bool:

@@ -6,6 +6,8 @@ import json
 import os
 import re
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -80,8 +82,7 @@ def save_snapshot_and_diff(
 	``complete`` 表示本次观察是否覆盖完整沟通列表（第 1 页且平台明确
 	``hasMore=false``）。不完整时只记录观察结果，不推断联系人已消失：
 	筛选结果或部分页面缺少“该联系人不在列表中”的证据（Issue #911）。
-	即使 ``complete=True``，只要有条目因缺少可用身份被丢弃，本次观察也不能
-	证明「谁不在列表里」：不推断消失，落盘的完整性标记同样降级
+	缺少可用身份的条目会使本次观察降级为不完整，写入时与当天已有条目合并
 	（Issue #2179）。
 	"""
 	os.makedirs(snapshot_dir, exist_ok=True)
@@ -92,15 +93,13 @@ def save_snapshot_and_diff(
 	# 也不把 complete=true 写进当日快照——否则次日会把这份不完整快照当基线。
 	current_complete = complete and all(contact_identity(item) for item in friends)
 
-	# 读-合并-写必须在同一个临界区内：两个并发导出各自读到旧快照再各自覆盖，
-	# 后写者会丢掉另一页的联系人，次日 diff 误报 added（Issue #1356）。
-	merged = _merge_and_write_locked(
-		snapshot_dir, snapshot_path, friends, replace=complete, complete=current_complete
-	)
+	# 读、合并和写入共用一把锁，避免并发导出覆盖另一页联系人（#1356）。
+	with _snapshot_lock(snapshot_path):
+		merged = _merge_and_write(snapshot_path, friends, replace=current_complete)
 
-	# 查找上一次快照
 	prev_path = _find_previous_snapshot(snapshot_dir, today)
-	if prev_path is None:
+	previous = _load_previous_snapshot(prev_path, logger) if prev_path is not None else None
+	if previous is None or prev_path is None:
 		return {
 			"is_first": True,
 			"complete": current_complete,
@@ -109,26 +108,7 @@ def save_snapshot_and_diff(
 			"removed": [],
 			"new_unread": [],
 		}
-
-	# 先读完整性标记、再读快照本体（Issue #2181）：写入顺序是「标记 false →
-	# 快照 → 标记真实值」，反序读取会把旧的部分快照与随后写入的 complete=true
-	# 拼在一起，跨日并发时误报新增。标记为 true 时之后读到的快照不早于这次
-	# 完整写入，两者一致；标记为 false / 缺失时按保守基线处理。
-	baseline_complete = _read_complete_marker(prev_path)
-	prev_friends, prev_dropped = _load_snapshot_detailed(prev_path, logger)
-	if prev_friends is None:
-		return {
-			"is_first": True,
-			"complete": current_complete,
-			"baseline_complete": True,
-			"added": [],
-			"removed": [],
-			"new_unread": [],
-		}
-	# 上一份快照不完整时它只记录了「看到了谁」：把没翻到的联系人当新增会误报
-	# （Issue #1852）。不宣称新增，并在结果里标注基线不完整。旧快照里有条目
-	# 因缺少身份被丢弃时同样不能证明「新增」（Issue #2179）。
-	baseline_complete = baseline_complete and not prev_dropped
+	prev_friends, baseline_complete = previous
 
 	# 用稳定标识（uid 优先）做 key 对比
 	curr_map = {contact_identity(item): item for item in merged if contact_identity(item)}
@@ -159,38 +139,39 @@ def save_snapshot_and_diff(
 	}
 
 
-def _merge_and_write_locked(
-	snapshot_dir: str,
-	snapshot_path: str,
-	friends: list[dict[str, Any]],
-	*,
-	replace: bool = False,
-	complete: bool = True,
-) -> list[dict[str, Any]]:
-	"""在跨进程独占锁内完成读-合并-写，返回合并后的快照内容。
-
-	锁拿不到时有限重试；重试耗尽按本地 IO 错误上报（``OSError`` 带 ``filename``），
-	绝不在未持锁时读取基准或写入，避免并发导出互相覆盖（Issue #1356）。
-
-	``replace`` 表示本次观察就是当日完整列表；``complete`` 表示落盘时能否
-	把当日快照标记为完整基线（有条目被丢弃时为 False，Issue #2179）。
-	"""
-	lock_path = run_lock_path(Path(snapshot_dir), f"chat-snapshot-{os.path.basename(snapshot_path)}")
+@contextmanager
+def _snapshot_lock(snapshot_path: str) -> Iterator[None]:
+	"""为同一天的快照及其完整性标记获取跨进程锁，等待时间有限。"""
+	path = Path(snapshot_path)
+	lock_path = run_lock_path(path.parent, f"chat-snapshot-{path.name}")
 	for attempt in range(_LOCK_ATTEMPTS):
 		with exclusive_file_lock(lock_path) as acquired:
 			if acquired:
-				return _merge_and_write(snapshot_path, friends, replace=replace, complete=complete)
+				yield
+				return
 		if attempt + 1 < _LOCK_ATTEMPTS:
 			time.sleep(_LOCK_RETRY_INTERVAL_SECONDS)
-	raise OSError(errno.EAGAIN, "当日聊天快照正被其他进程写入，等待互斥锁超时", snapshot_path)
+	raise OSError(errno.EAGAIN, "聊天快照正被其他进程占用，等待互斥锁超时", snapshot_path)
+
+
+def _load_previous_snapshot(path: str, logger: Logger) -> tuple[list[dict[str, Any]], bool] | None:
+	# 同一把日锁覆盖两次读取，避免与跨日写入交错，把不同版本的快照和标记拼在一起（#2181）。
+	try:
+		with _snapshot_lock(path):
+			friends, dropped = _load_snapshot_detailed(path, logger)
+			if friends is None:
+				return None
+			return friends, not dropped and _read_complete_marker(path)
+	except OSError:
+		logger.warning(f"无法锁定上一份快照: {path}")
+		return None
 
 
 def _merge_and_write(
 	snapshot_path: str,
 	friends: list[dict[str, Any]],
 	*,
-	replace: bool = False,
-	complete: bool = True,
+	replace: bool,
 ) -> list[dict[str, Any]]:
 	"""调用方必须持有当日快照锁。
 
@@ -204,7 +185,7 @@ def _merge_and_write(
 	# 已有文件不可读时上抛 OSError：把它们当成没有历史会让随后的原子写覆盖
 	# 已合并的分页结果，次日 diff 误报联系人消失（Issue #1698）。
 	raw = read_bytes_if_regular(Path(snapshot_path))
-	today_parsed = False
+	today_complete = False
 	if raw is not None and not replace:
 		try:
 			prev_today = json.loads(raw.decode("utf-8"))
@@ -214,10 +195,8 @@ def _merge_and_write(
 					for item in prev_today
 					if isinstance(item, dict) and contact_identity(item)
 				]
-				# 非空数组但零个可用对象（手工改坏 / 旧格式漂移）与坏 JSON 同口径：
-				# 不能当作完整基线，否则下一次 diff 会把所有未翻到的联系人误报为
-				# 新增（Issue #1993 的 load_snapshot 守卫，Issue #2015）。
-				today_parsed = not prev_today or bool(usable)
+				# 合并时保留可用条目。只要丢弃过条目，就不能沿用旧的完整性标记。
+				today_complete = len(usable) == len(prev_today)
 				for item in usable:
 					existing[contact_identity(item)] = item
 		except (ValueError, RecursionError):
@@ -235,13 +214,9 @@ def _merge_and_write(
 
 	# 快照本身保持 list 兼容旧读取方；完整性写在旁车文件里。完整采集覆盖当日
 	# 快照后可宣称完整；不完整采集只有在当日已有完整快照时才保持完整标记
-	# （此时当日快照仍覆盖完整列表的全部观察结果，Issue #1852）。当日快照必须
-	# 确实解析为列表：坏 JSON 既不算历史，文件存在也不能当作完整性证据
-	# （Issue #1912）。
-	if replace:
-		stored_complete = complete
-	else:
-		stored_complete = raw is not None and today_parsed and _read_complete_marker(snapshot_path)
+	# （此时仍覆盖先前完整列表的观察结果，#1852）。整份快照必须解析成功，
+	# 才能继续信任既有的完整性标记（#1912、#2179）。
+	stored_complete = replace or (today_complete and _read_complete_marker(snapshot_path))
 	# 快照与旁车文件是两次独立原子写：先落保守标记再写快照，最后写真实标记。
 	# 进程在两次写之间被杀时旁车文件保持 false，部分页快照不会被当成完整基线
 	# （Issue #1912 的崩溃窗口）。

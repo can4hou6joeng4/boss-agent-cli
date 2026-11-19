@@ -3,7 +3,7 @@
 - 当前页有条目因缺少身份被丢弃时，不推断「已消失」，落盘标记降级；
 - 旧快照混有无法识别的条目时，不作为判断「新增」的完整基线；
 - 历史负未读数恢复为 0 不算新增未读；
-- 先读完整性标记再读快照本体，跨日并发不会把旧内容与新的完整标记拼在一起。
+- 持同一把锁读标记与快照本体，避免跨日并发读到不同版本。
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 from boss_agent_cli.output import Logger
 from boss_agent_cli.services import chat_snapshot as snapshot
+from boss_agent_cli.services.file_lock import exclusive_file_lock, run_lock_path
 
 
 def _write_previous(directory: Path, payload: list[object], *, complete: bool | None = None) -> Path:
@@ -95,29 +96,44 @@ def test_negative_current_unread_does_not_compare_as_increase(tmp_path: Path) ->
 	assert diff["new_unread"] == []
 
 
-# ── Issue #2181：先读标记、再读快照本体 ─────────────────────────────
+# ── Issue #2181：在同一把日锁下读快照与标记 ─────────────────────────
 
 
-def test_marker_read_before_snapshot_avoids_mixed_baseline(tmp_path: Path) -> None:
+def test_previous_snapshot_and_marker_hold_the_writer_lock(tmp_path: Path) -> None:
 	a, b = {"uid": "100"}, {"uid": "200"}
 	previous = _write_previous(tmp_path, [a], complete=False)
-	real_loader = snapshot._load_snapshot_detailed
+	lock = run_lock_path(tmp_path, f"chat-snapshot-{previous.name}")
+	read_snapshot = snapshot._load_snapshot_detailed
+	read_marker = snapshot._read_complete_marker
 
-	def finish_old_writer_between_reads(path: str, logger: Logger):
-		loaded = real_loader(path, logger)
-		# 昨天的导出进程在读取方拿到旧内容之后完成：快照写新、标记最后置 true。
-		Path(previous).write_text(json.dumps([a, b]), encoding="utf-8")
-		Path(snapshot._meta_path(str(previous))).write_text(
-			json.dumps({"complete": True}), encoding="utf-8"
-		)
-		return loaded
+	def check_snapshot_lock(path: str, logger: Logger):
+		with exclusive_file_lock(lock) as acquired:
+			assert not acquired
+		return read_snapshot(path, logger)
 
-	with patch.object(snapshot, "_load_snapshot_detailed", side_effect=finish_old_writer_between_reads):
+	def check_marker_lock(path: str) -> bool:
+		with exclusive_file_lock(lock) as acquired:
+			assert not acquired
+		return read_marker(path)
+
+	with (
+		patch.object(snapshot, "_load_snapshot_detailed", side_effect=check_snapshot_lock),
+		patch.object(snapshot, "_read_complete_marker", side_effect=check_marker_lock),
+	):
 		diff = snapshot.save_snapshot_and_diff(str(tmp_path), [a, b], Logger(), complete=True)
 
-	# 标记必须在读取快照之前取到 false；拼上新的 complete=true 会误报 b 新增。
 	assert diff["baseline_complete"] is False
 	assert diff["added"] == []
+
+
+def test_partial_write_drops_stale_complete_marker_from_mixed_same_day_snapshot(tmp_path: Path) -> None:
+	today = date.today()
+	(tmp_path / f"{today}.json").write_text(json.dumps([{"uid": "100"}, None]), encoding="utf-8")
+	(tmp_path / f"{today}.meta").write_text(json.dumps({"complete": True}), encoding="utf-8")
+
+	snapshot.save_snapshot_and_diff(str(tmp_path), [{"uid": "200"}], Logger(), complete=False)
+
+	assert _today_meta(tmp_path) == {"complete": False}
 
 
 def test_load_snapshot_public_wrapper_still_returns_items(tmp_path: Path) -> None:
