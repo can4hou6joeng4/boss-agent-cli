@@ -1,6 +1,6 @@
 from typing import Any
 
-from boss_agent_cli.services.friend_list_pages import friend_list_page_items
+from boss_agent_cli.services.friend_list_pages import friend_list_page_has_content, friend_list_page_items
 
 
 class FriendLookupLimitExceeded(RuntimeError):
@@ -60,7 +60,15 @@ def find_friend(
 			seen_signatures.add(signature)
 
 		has_more = platform_data.get("hasMore")
-		if not page_items or has_more is False:
+		if not page_items:
+			if has_more is not False and friend_list_page_has_content(platform_data):
+				# 整页元素被跳过：不是空页，继续翻页，不能据此断言联系人不存在
+				# （Issue #1878）。
+				page += 1
+				continue
+			terminated = True
+			break
+		if has_more is False:
 			terminated = True
 			break
 		page += 1

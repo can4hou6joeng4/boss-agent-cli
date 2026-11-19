@@ -7,6 +7,10 @@
 ## [3.4.123] - 2026-11-19
 
 ### Fixed
+- 沟通列表整页元素全是 null / 数字 / 字符串时继续翻页，不再据此宣称列表完整或联系人不存在（Issue #1878）。
+- 职位去重按可用性选择 `job_id` / `encryptJobId`，非字符串 `job_id` 不再遮蔽合法标识（Issue #1879）。
+- 分页信封对回退的请求页应用与平台回显页相同的上限，`page + 1` 的下一页提示不再可能撞上整数转换上限（Issue #1880）。
+### Fixed
 - `config set request_budget_dir` 拒绝已存在但不是目录的路径；启动期因此失败时恢复建议改为可直接执行的 `config reset request_budget_dir`（Issue #1822）。
 - `config reset operating_mode` 同时清除旧版 `low_risk_mode`，`config list` 把由旧键派生的模式标为用户配置（Issue #1823）。
 - 平台返回的页码超出合理范围时不再参与下一页提示，`me` / `chatmsg` 不会因超长整数被报成可重试的网络错误（Issue #1824）。
