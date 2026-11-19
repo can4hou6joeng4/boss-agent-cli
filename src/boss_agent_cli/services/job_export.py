@@ -3,6 +3,8 @@
 import csv
 import html as _html
 import io
+import json
+import math
 from typing import Any
 
 from boss_agent_cli.api.models import field_list
@@ -37,9 +39,26 @@ def public_html_export_item_from_api(raw: dict[str, Any]) -> dict[str, Any]:
 	}
 
 
+def _cell_text(value: Any) -> str:
+	"""单元格文本：null / 非有限数 → 空串，容器 → JSON 文本，标量 → str。
+
+	旧的 ``str()`` 兜底会把元素级 null 导出成字面量 ``None``、把 dict / list
+	导出成 Python repr，同一份数据的 JSON 分支却把非有限数归一为 null、
+	HTML 顶层 null 渲染为空（Issue #1851 #1853 #1916）。顶层单元格与列表元素
+	共用这一口径。
+	"""
+	if value is None:
+		return ""
+	if isinstance(value, (dict, list, tuple)):
+		return json.dumps(value, ensure_ascii=False)
+	if isinstance(value, float) and not math.isfinite(value):
+		return ""
+	return str(value)
+
+
 def _join_cells(value: list[Any]) -> str:
-	"""列表单元格按文本拼接：平台字段里混入非字符串元素不该让整次导出失败。"""
-	return ", ".join(str(item) for item in value)
+	"""列表单元格按文本拼接：空元素跳过，容器序列化为 JSON 文本。"""
+	return ", ".join(text for item in value if (text := _cell_text(item)))
 
 
 def write_export_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
@@ -80,8 +99,9 @@ def write_export_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 			if isinstance(row.get("welfare"), list):
 				row["welfare"] = _join_cells(row["welfare"])
 			# CSV 公式注入防护；与 chat 导出一致（剥 Tab/CR，Issue #876）。
-			# null 写成空单元格，与 HTML 路径同口径（Issue #1354 #1793）。
-			row = {k: "" if v is None else sanitize_csv_cell(str(v)) for k, v in row.items()}
+			# null / 非有限数写成空单元格、容器转 JSON 文本，与 HTML / JSON
+			# 路径同口径（Issue #1354 #1793 #1916）。
+			row = {k: sanitize_csv_cell(_cell_text(v)) for k, v in row.items()}
 			writer.writerow(row)
 		# csv 模块按行写出 ``\r\n``；文本模式默认会再翻译一次换行，Windows 上
 		# 落盘变成 ``\r\r\n``（Issue #1401）。与 chat 导出同口径关掉翻译。
@@ -101,10 +121,10 @@ def render_html_export(items: list[dict[str, Any]]) -> str:
 
 	def esc(value: Any) -> str:
 		# 平台字段类型漂移（数字 / 对象）时 html.escape 直接抛 AttributeError，
-		# 整次 HTML 导出落成 INTERNAL_ERROR；csv 已用 str() 兜底，这里统一
-		# 同口径（Issue #1296）。null 字段是「缺失」，不能渲染成字面量 "None"
-		# （Issue #1354）。
-		return "" if value is None else _html.escape(str(value))
+		# 整次 HTML 导出落成 INTERNAL_ERROR；csv 已用 _cell_text 兜底，这里统一
+		# 同口径（Issue #1296）。null 字段是「缺失」，不能渲染成字面量 "None"，
+		# 容器序列化为 JSON 文本而不是 Python repr（Issue #1354 #1916）。
+		return _html.escape(_cell_text(value))
 
 	if not items:
 		return "<html><body><p>无数据</p></body></html>"
@@ -113,19 +133,24 @@ def render_html_export(items: list[dict[str, Any]]) -> str:
 	for i, item in enumerate(items, 1):
 		skills = item.get("skills", [])
 		if isinstance(skills, list):
-			skills_html = " ".join(f'<span class="tag sk">{esc(s)}</span>' for s in skills)
+			# 空元素不渲染成空标签；容器元素走 JSON 文本（Issue #1916）。
+			skills_html = " ".join(
+				f'<span class="tag sk">{esc(s)}</span>' for s in skills if _cell_text(s)
+			)
 		elif skills is None:
 			# null 是缺失，不能渲染成字面量 "None"（Issue #1853）。
 			skills_html = ""
 		else:
-			skills_html = esc(str(skills))
+			skills_html = esc(skills)
 		welfare = item.get("welfare", [])
 		if isinstance(welfare, list):
-			welfare_html = " ".join(f'<span class="tag wf">{esc(w)}</span>' for w in welfare)
+			welfare_html = " ".join(
+				f'<span class="tag wf">{esc(w)}</span>' for w in welfare if _cell_text(w)
+			)
 		elif welfare is None:
 			welfare_html = ""
 		else:
-			welfare_html = esc(str(welfare))
+			welfare_html = esc(welfare)
 		rows.append(
 			f"<tr>"
 			f"<td>{i}</td>"
