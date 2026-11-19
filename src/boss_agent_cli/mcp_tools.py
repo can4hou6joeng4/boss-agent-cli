@@ -54,6 +54,8 @@ _MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES = {
 	"boss_follow_up": "follow-up",
 	"boss_watch_run": "watch-run",
 	"boss_hr_whoami": "recruiter-whoami",
+	"boss_hr_jobs": "recruiter-jobs-list",
+	"boss_hr_jobs_detail": "recruiter-jobs-detail",
 	"boss_hr_applications": "recruiter-applications",
 	"boss_hr_candidates": "recruiter-candidates",
 	"boss_hr_chat": "recruiter-chat",
@@ -71,15 +73,29 @@ _MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES = {
 }
 
 
-def _compliance_command_for_tool(tool_name: str) -> str:
+#: ``boss_hr_jobs`` 的合规命令随 action 变化：静态映射只能覆盖目录过滤用的
+#: 只读默认值（list），online / offline 的写语义由 ``mcp_server._TOOL_WRITE_MODES``
+#: 登记；调用方传了 arguments 时按 action 精确选择（Issue #1861）。
+_HR_JOBS_COMPLIANCE_COMMANDS = {
+	"list": "recruiter-jobs-list",
+	"online": "recruiter-jobs-online",
+	"offline": "recruiter-jobs-offline",
+}
+
+
+def _compliance_command_for_tool(tool_name: str, arguments: dict[str, Any] | None = None) -> str:
 	"""Map an MCP tool name to the CLI compliance command identifier."""
+	if tool_name == "boss_hr_jobs" and arguments is not None:
+		action = arguments.get("action", "list")
+		if isinstance(action, str) and action in _HR_JOBS_COMPLIANCE_COMMANDS:
+			return _HR_JOBS_COMPLIANCE_COMMANDS[action]
 	if override := _MCP_TOOL_COMPLIANCE_COMMAND_OVERRIDES.get(tool_name):
 		return override
 	return tool_name.removeprefix("boss_").replace("_", "-")
 
 
-def _is_low_risk_blocked_tool(tool_name: str) -> bool:
-	command = _compliance_command_for_tool(tool_name)
+def _is_low_risk_blocked_tool(tool_name: str, arguments: dict[str, Any] | None = None) -> bool:
+	command = _compliance_command_for_tool(tool_name, arguments)
 	return command in restricted_commands("assisted")
 
 

@@ -35,6 +35,12 @@
 - `favorites` 的 `cardList` 只有 `null` / 缺失按空列表处理：`{}` / `""` / `0` 等假值非列表与真值非列表同口径报可重试 `NETWORK_ERROR`（Issue #1856）。
 - `favorites` 页内全为非对象元素时立即报 `NETWORK_ERROR`，不再累计垃圾元素、翻满 50 页后误报 `RESULT_LIMIT_REACHED`（Issue #1857）。
 - `stats` 的 `_percent` 对合法大整数抛 `OverflowError` 时按非数值返回占位符（Issue #1858）。
+- MCP 的 `search --preset` 与 `watch run` 按详情筛选最坏情况估算超时（900 秒封顶），只读中断文案不再提示这两个命令没有的 limit/count（Issue #1860）。
+- MCP 的 `boss_hr_jobs` / `boss_hr_jobs_detail` 登记 `recruiter-jobs-*` 合规命令标识，`boss_hr_jobs` 随 action 选择 list / online / offline（Issue #1861）。
+- MCP 的 `boss_ai_chat_coach` 把显式空 `style` 原样下发，不再落回默认沟通风格（Issue #1862）。
+- MCP 同步入口拒绝含 NUL / 孤立代理项的参数时明确「子进程未启动、没有平台写入」，不再套用检查 checkpoint 的写中断指引（Issue #1863）。
+- MCP server 定位同目录 `boss` 入口时只把「不存在」当未找到，权限等其它错误不再静默回退 PATH 上的另一份 boss（Issue #1864）。
+- MCP 的 `hr applications` / `hr chat` / `hr last-messages` 把显式空 `job_id` 原样下发给 CLI，不再静默当作未传（Issue #1865）。
 
 ## [3.4.122] - 2026-11-19
 

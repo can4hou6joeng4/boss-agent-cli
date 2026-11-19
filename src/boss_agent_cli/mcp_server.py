@@ -11,6 +11,7 @@ import json
 import math
 import os
 import signal
+import stat
 import subprocess
 import sys
 from contextlib import asynccontextmanager
@@ -140,7 +141,14 @@ def _default_boss_bin(*, executable: str | None = None, windows: bool | None = N
 	on_windows = os.name == "nt" if windows is None else windows
 	for name in (("boss.exe", "boss") if on_windows else ("boss",)):
 		candidate = bin_dir / name
-		if candidate.is_file():
+		try:
+			mode = candidate.stat().st_mode
+		except FileNotFoundError:
+			continue
+		# 只把「不存在」当未找到：3.14 起 is_file() 会吞 EACCES，静默回退
+		# PATH 上另一份 boss 会驱动旧版本（Issue #1066 / #1864），这里让其它
+		# OSError 显式暴露。stat 跟随符号链接，指向普通文件的入口仍然可用。
+		if stat.S_ISREG(mode):
 			return str(candidate)
 	return DEFAULT_BOSS_BIN
 
@@ -234,6 +242,17 @@ _ACTION_DIMENSION_TOOL_NAMES = frozenset(
 
 _WRITE_INTERRUPT_RECOVERY = "检查本地 checkpoint 与平台实际结果，再显式恢复；未确认的写操作不要直接重试"
 _READ_INTERRUPT_RECOVERY = "只读命令已中断，不产生平台写入；先降低 limit/count 或改用 active=online 再重试"
+#: search / watch 没有 limit / count 参数，恢复文案不能提示不存在的选项（Issue #1860）。
+_FILTER_READ_INTERRUPT_RECOVERY = (
+	"只读命令已中断，不产生平台写入；该命令按福利 / 活跃度筛选逐条查详情，"
+	"改用 active=online 或缩小筛选范围后重试"
+)
+
+
+def _read_interrupt_recovery(args: tuple[str, ...]) -> str:
+	if args and args[0] in {"search", "watch"}:
+		return _FILTER_READ_INTERRUPT_RECOVERY
+	return _READ_INTERRUPT_RECOVERY
 #: 子进程没能启动：从未运行过，不可能有平台副作用。真正要处理的是安装 / 路径，
 #: 让 Agent 去核对 checkpoint 与平台结果只会把人引向不存在的现场（Issue #962）。
 _SPAWN_FAILURE_RECOVERY = (
@@ -299,6 +318,11 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 	if command == "search":
 		welfare = _option_value(args, "--welfare") or ""
 		active = _option_value(args, "--active") or ""
+		if _option_value(args, "--preset") is not None:
+			# 预设可能保存 welfare / active，展开后同样逐条查详情：1 次请求的
+			# 普通搜索估算只适用于无筛选调用（Issue #1860）。
+			pages = detail_filter_max_pages("welfare", "today")
+			return pages * (_SEARCH_PAGE_SIZE + 1)
 		if not welfare and active in ("", "online"):
 			# 普通搜索 / active=online 只看列表：每页 1 次请求。
 			return 1
@@ -331,6 +355,11 @@ def _estimated_requests(args: tuple[str, ...]) -> int | None:
 			# 与 summary-limit 分支同口径：整数分页并封顶（Issue #1612）。
 			return min(-(-limit // _HR_BATCH_SIZE), _MAX_ESTIMATED_REQUESTS)
 		return None
+	if command == "watch" and len(args) > 1 and args[1] == "run":
+		# watch run 对保存的搜索应用福利 / 活跃度筛选，逐条查详情；
+		# 最坏情况与 search --welfare 共用同一翻页上限（Issue #1860）。
+		pages = detail_filter_max_pages("welfare", "today")
+		return pages * (_SEARCH_PAGE_SIZE + 1)
 	if command in {"pipeline", "follow-up", "digest"}:
 		# 好友列表逐页聚合，按 5 页上限估算。
 		return _FRIEND_LIST_ESTIMATE_PAGES
@@ -461,7 +490,15 @@ def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
 	cmd = [_BOSS_BIN, "--json", *_BOSS_GLOBAL_ARGS, *args]
 	unsafe_reason = _unsafe_argv_reason(cmd)
 	if unsafe_reason is not None:
-		return _cli_failure(args, "INVALID_PARAM", unsafe_reason)
+		# 子进程从未启动：不能套用「核对 checkpoint」的写中断模板，写工具本次
+		# 同样没有平台写入（Issue #1863）。
+		return _cli_failure(
+			args,
+			"INVALID_PARAM",
+			unsafe_reason,
+			outcome_unknown=False,
+			recovery_action="参数未通过本地校验，子进程未启动，修正参数后重试；本次没有平台写入",
+		)
 	# 超时估算同样必须遵守 schema 的数值边界；本地参数错误不能伪装成 CLI 失败。
 	try:
 		timeout = _cli_timeout(args)
@@ -493,7 +530,7 @@ def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
 			"WORKFLOW_TIMEOUT",
 			"底层 CLI 超时",
 			outcome_unknown=may_write,
-			recovery_action=_WRITE_INTERRUPT_RECOVERY if may_write else _READ_INTERRUPT_RECOVERY,
+			recovery_action=_WRITE_INTERRUPT_RECOVERY if may_write else _read_interrupt_recovery(args),
 		)
 	except OSError as exc:
 		return _spawn_failure(args, exc)
@@ -561,7 +598,7 @@ def _interrupted_failure(
 		code,
 		"MCP 调用已取消" if code == "WORKFLOW_STOPPED" else "底层 CLI 超时",
 		outcome_unknown=may_write,
-		recovery_action=_WRITE_INTERRUPT_RECOVERY if may_write else _READ_INTERRUPT_RECOVERY,
+		recovery_action=_WRITE_INTERRUPT_RECOVERY if may_write else _read_interrupt_recovery(args),
 		checkpoint_result=checkpoint_result if isinstance(checkpoint_result, dict) else None,
 	)
 

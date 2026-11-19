@@ -1280,6 +1280,9 @@ def test_run_boss_timeout(mock_run):
 		# 普通搜索 / active=online 只翻一页列表，与默认一致。
 		(("search", "golang"), 120, 120),
 		(("search", "golang", "--active", "online"), 120, 120),
+		# preset 可能保存福利 / 活跃度筛选；watch run 同样逐条查详情（Issue #1860）。
+		(("search", "golang", "--preset", "p1"), 600, 900),
+		(("watch", "run", "w1"), 600, 900),
 		# export 默认 50 条 = ceil(50/15)=4 页，每页一次列表请求。
 		(("export", "golang"), 200, 400),
 		(("export", "golang", "--count", "300"), 600, 900),
