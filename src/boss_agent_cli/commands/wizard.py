@@ -754,6 +754,18 @@ def run_wizard_command(
 			recoverable=True,
 			recovery_action=f"{boss_command_for_ctx(ctx, 'wizard --input-json <object>', include_data_dir=True)} 重新创建任务；原记录无法恢复，已导出的文件不会自动删除",
 		)
+	except WorkflowActionError as exc:
+		# 断点落盘失败：runner 已把原始失败原因合成到这条错误里（Issue #1963）。
+		# 不能落到全局兜底变成 INTERNAL_ERROR，否则风控 / 预算的停止语义会丢。
+		_wizard_error(
+			ctx,
+			_is_interactive(ctx),
+			code=exc.code,
+			message=str(exc),
+			recoverable=exc.recoverable,
+			recovery_action=exc.recovery_action,
+			details=exc.details,
+		)
 
 
 def _run_wizard_command(

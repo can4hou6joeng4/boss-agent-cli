@@ -48,6 +48,9 @@ Action = Callable[[Any, Mapping[str, Any], Mapping[str, Any]], StepResult]
 WorkflowEvent = Callable[[str, str, Mapping[str, Any] | None], None]
 
 
+#: 命中即停止、且不允许重试的账号 / 环境风控码。
+_RISK_CODES = frozenset({"ACCOUNT_RISK", "ENVIRONMENT_RISK"})
+
 #: 带 ``replay_safe: false`` 时必须阻断重放的步骤状态。
 _REPLAY_BLOCKING_STATUSES = frozenset({WorkflowStatus.FAILED.value, WorkflowStatus.STOPPED.value})
 
@@ -262,7 +265,17 @@ class WorkflowControl:
 			replay_safe=False,
 		)
 		if not self.store.set_step_error(self.run_id, self.step_name, error.to_dict()):
-			raise RuntimeError(f"workflow step {self.step_name!r} of run {self.run_id!r} was not persisted")
+			# 记录缺失是确定性的状态损坏：报成可重试的 NETWORK_ERROR 会让每次恢复
+			# 都重跑前置步骤，而写请求永远发不出去（Issue #1965）。
+			_, recovery = error_contract_for_code("CACHE_RECORD_INVALID")
+			raise WorkflowActionError(
+				"CACHE_RECORD_INVALID",
+				f"workflow 步骤 {self.step_name!r}（run {self.run_id!r}）的记录不存在，写前标记无法落盘",
+				# 重试同一条命令必然复现：恢复方式是重建任务，不是「重试」。
+				recoverable=False,
+				recovery_action=recovery,
+				replay_safe=False,
+			)
 
 	def raise_if_requested(self) -> None:
 		signal = self.poll()
@@ -755,7 +768,22 @@ class WorkflowRunner:
 				)
 				# A returned result confirms the action's outcome. Persist it before
 				# checking controls, so a late deadline cannot replay that effect.
-				self._store.update_step(run_id, step_name, status=result.status.value, result=result_data)
+				# 落盘失败不能以可重试错误逃逸：步骤已成功而结果没写下去，重试会重发
+				# 一次平台请求（Issue #1963）。
+				try:
+					step_persisted = self._store.update_step(
+						run_id, step_name, status=result.status.value, result=result_data
+					)
+				except Exception as exc:
+					raise self._write_failed_error(
+						{"code": "LOCAL_STATE_WRITE_FAILED", "message": f"步骤 {step_name} 的结果未能落盘"},
+						exc,
+					) from exc
+				if not step_persisted:
+					raise self._write_failed_error(
+						{"code": "CACHE_RECORD_INVALID", "message": f"步骤 {step_name} 的记录已不存在"},
+						CacheRecordInvalid("workflow_step", f"{run_id}/{step_name}", "step", "步骤记录不存在"),
+					)
 				signal = control.poll()
 				if signal == "timeout":
 					return self._fail_controlled(
@@ -766,16 +794,22 @@ class WorkflowRunner:
 						recovery_action=resume_action_for(run_id),
 						preserve_result=True,
 					)
-				self._store.update_run(
-					run_id,
-					status=WorkflowStatus.STOPPED.value
-					if signal == "stop"
-					else result.status.value
-					if result.status == WorkflowStatus.WAITING_INPUT
-					else WorkflowStatus.RUNNING.value,
-					current_step=step_name,
-					last_result=result_data,
-				)
+				try:
+					self._store.update_run(
+						run_id,
+						status=WorkflowStatus.STOPPED.value
+						if signal == "stop"
+						else result.status.value
+						if result.status == WorkflowStatus.WAITING_INPUT
+						else WorkflowStatus.RUNNING.value,
+						current_step=step_name,
+						last_result=result_data,
+					)
+				except Exception as exc:
+					raise self._write_failed_error(
+						{"code": "LOCAL_STATE_WRITE_FAILED", "message": f"run {run_id} 的状态未能落盘"},
+						exc,
+					) from exc
 				if on_event:
 					on_event("step_finished", step_name, result_data)
 				if signal == "stop":
@@ -804,23 +838,24 @@ class WorkflowRunner:
 				(step.get("result") for step in persisted.get("steps", []) if step["step_name"] == step_name),
 				None,
 			)
-			self._store.update_step(run_id, step_name, status=failed_status, result=step_result, error=error_data)
-			self._store.update_run(
-				run_id,
-				status=failed_status,
-				current_step=step_name,
-				error=error_data,
+			self._persist_failure(
+				run_id, step_name, status=failed_status, result=step_result, error_data=error_data
 			)
 			if on_event:
 				on_event("step_failed", step_name, error_data)
 			return self._store.get_for_result(run_id) or {}
 
-		self._store.update_run(
-			run_id,
-			status=WorkflowStatus.COMPLETED.value,
-			current_step=None,
-			last_result=prior_results.get(plan.requested_steps[-1]) if plan.requested_steps else {},
-		)
+		try:
+			self._store.update_run(
+				run_id,
+				status=WorkflowStatus.COMPLETED.value,
+				current_step=None,
+				last_result=prior_results.get(plan.requested_steps[-1]) if plan.requested_steps else {},
+			)
+		except Exception as exc:
+			# 平台步骤都成功了，只是本地记账失败：按 LOCAL_STATE_WRITE_FAILED 上报，
+			# 让操作者核对页面而不是重跑整个 workflow（Issue #1963）。
+			raise self._write_failed_error({"code": WorkflowStatus.COMPLETED.value}, exc) from exc
 		return self._store.get_for_result(run_id) or {}
 
 	def _finish_declared_status(
@@ -854,15 +889,13 @@ class WorkflowRunner:
 				code, message, recoverable=recoverable, recovery_action=recovery
 			)
 		error_data = error.to_dict()
-		self._store.update_step(
-			run_id, step_name, status=failed_status, result=result_data, error=error_data
-		)
-		self._store.update_run(
+		self._persist_failure(
 			run_id,
+			step_name,
 			status=failed_status,
-			current_step=step_name,
+			result=result_data,
+			error_data=error_data,
 			last_result=result_data,
-			error=error_data,
 		)
 		return self._store.get_for_result(run_id) or {}
 
@@ -913,6 +946,66 @@ class WorkflowRunner:
 			recoverable=False,
 			recovery_action=recovery if isinstance(recovery, str) and recovery else _UNCONFIRMED_WRITE_FALLBACK["recovery_action"],
 			details=dict(marker["details"]) if isinstance(marker.get("details"), Mapping) else None,
+			replay_safe=False,
+		)
+
+	def _persist_failure(
+		self,
+		run_id: str,
+		step_name: str,
+		*,
+		status: str,
+		result: dict[str, Any] | None,
+		error_data: dict[str, Any],
+		last_result: dict[str, Any] | None = None,
+	) -> None:
+		"""落盘失败步骤与 run 终态；本地写失败不能掩盖原始失败原因（Issue #1963）。
+
+		缓存库被其它进程持写锁时 ``update_step`` 会抛 ``CacheBusyError``：直接
+		冒泡会让风控 / 预算这类终止码变成「可重试的缓存忙」，Agent 会照着重试
+		一个本该停下来核对页面的动作。
+		"""
+		try:
+			persisted = self._store.update_step(
+				run_id, step_name, status=status, result=result, error=error_data
+			)
+			if not persisted:
+				raise CacheRecordInvalid(
+					"workflow_step",
+					f"{run_id}/{step_name}",
+					"step",
+					"步骤记录不存在，无法落盘执行结果",
+				)
+			self._store.update_run(
+				run_id, status=status, current_step=step_name, last_result=last_result, error=error_data
+			)
+		except Exception as exc:
+			raise self._write_failed_error(error_data, exc) from exc
+
+	def _write_failed_error(self, error_data: dict[str, Any], exc: Exception) -> WorkflowActionError:
+		"""把「原始失败 + 断点写失败」合成一条不可重试的终止错误。"""
+		code = error_data.get("code")
+		message = error_data.get("message")
+		detail = f"本地断点写入失败：{exc}"
+		already_closed = error_data.get("recoverable") is False and error_data.get("replay_safe") is False
+		no_effect = error_data.get("replay_safe") is False
+		if isinstance(code, str) and (code in _RISK_CODES or (already_closed and no_effect)):
+			# 风控是硬边界：原码与停止指引优先，只把写失败附在消息里。
+			recovery = error_data.get("recovery_action")
+			return WorkflowActionError(
+				code,
+				f"原始失败：{message if isinstance(message, str) and message else '未知失败'}；本地断点写入失败：{detail}",
+				recoverable=False,
+				recovery_action=recovery if isinstance(recovery, str) and recovery else None,
+				replay_safe=False,
+			)
+		recoverable, recovery = error_contract_for_code("LOCAL_STATE_WRITE_FAILED")
+		return WorkflowActionError(
+			"LOCAL_STATE_WRITE_FAILED",
+			f"{detail}；原始失败：{code if isinstance(code, str) else '未知'}",
+			recoverable=recoverable,
+			recovery_action=recovery,
+			details={"original_code": code, "original_message": message},
 			replay_safe=False,
 		)
 
@@ -1049,16 +1142,19 @@ class WorkflowRunner:
 			(step.get("result") for step in stored_run.get("steps", []) if step["step_name"] == step_name),
 			None,
 		)
-		if not preserve_result:
-			# 超时/失败同样保留此前写入的结果（如 inner_run_id），恢复时才能续跑内部任务（Issue #882）。
-			self._store.update_step(
-				run_id, step_name, status=WorkflowStatus.FAILED.value, result=step_result, error=error
+		try:
+			if not preserve_result:
+				# 超时/失败同样保留此前写入的结果（如 inner_run_id），恢复时才能续跑内部任务（Issue #882）。
+				self._store.update_step(
+					run_id, step_name, status=WorkflowStatus.FAILED.value, result=step_result, error=error
+				)
+			self._store.update_run(
+				run_id,
+				status=WorkflowStatus.FAILED.value,
+				current_step=step_name,
+				last_result=step_result,
+				error=error,
 			)
-		self._store.update_run(
-			run_id,
-			status=WorkflowStatus.FAILED.value,
-			current_step=step_name,
-			last_result=step_result,
-			error=error,
-		)
+		except Exception as exc:
+			raise self._write_failed_error(error, exc) from exc
 		return self._store.get_for_result(run_id) or {}
