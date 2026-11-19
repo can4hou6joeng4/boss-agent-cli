@@ -407,6 +407,7 @@ class _BaseHttpClient:
 		write_possible = operation is None or operation.effect != "read"
 		max_retries = _MAX_RETRIES if retry and operation is not None and operation.replay_safe else 0
 		budget = getattr(self, "_request_budget", None)
+		refreshed = False
 		for attempt in range(max_retries + 1):
 			# 凭据在预算窗口内才读取，于是未登录时也会先记一个名额、把 next_at 推后
 			# 一个 interval（默认 30 秒）：请求根本没发出，却让紧接着的下一条命令
@@ -431,9 +432,11 @@ class _BaseHttpClient:
 					if isinstance(error, PlatformRiskError):
 						self._record_cdp_risk_lock(error=error)
 						raise
-					if not isinstance(error, httpx.TransportError) or not write_possible:
-						raise
-					return self._unconfirmed_http_response(url, "transport_error")
+					if write_possible and isinstance(error, httpx.TransportError):
+						return self._unconfirmed_http_response(url, "transport_error")
+					if write_possible and isinstance(error, httpx.DecodingError):
+						return self._unconfirmed_http_response(url, "invalid_response")
+					raise
 				finally:
 					self._throttle.mark()
 				self._merge_cookies(resp)
@@ -502,12 +505,13 @@ class _BaseHttpClient:
 					cooldown = max(cooldown or 0.0, min(60, 10 * (2**attempt)))
 					if budget is not None:
 						budget.cooldown(cooldown)
-			# stoken 过期 → 刷新重试（BOSS 客户端按语境分类，语义不明不刷新）
-			if self._should_refresh_token_response(data) and attempt < max_retries:
+			# 明确过期时每个请求只刷新一次，刷新后仍过期则交由调用方处理。
+			if not refreshed and attempt < max_retries and self._should_refresh_token_response(data):
 				backoff = (2**attempt) + random.uniform(0.5, 1.5)
 				cancellable_sleep(backoff, check=self._check_cdp_risk_lock)
 				self._auth.force_refresh(cdp_url=self._cdp_url, browser_source=self._browser_source)
 				self._client = None
+				refreshed = True
 				continue
 
 			# 频率限制 → 冷却重试

@@ -8,6 +8,8 @@
 - 预算目录解析把 `Path.resolve()` 的符号链接环错误归一成带 `filename` 的 `OSError`：Python 3.11 / 3.12 上 `--data-dir` / `request_budget_dir` 含符号链接环时，`status` / `doctor` 不再 traceback；登录与请求路径记录风控时，后备目录检查抛出的 `RuntimeError` 不再替换正在传播的 `PlatformRiskError`，风控详情与硬边界都保留（Issue #2155）。
 - 读请求的 HTTP 状态错误不再携带查询串：`__zp_stoken__` 由 `add_stoken_to_get_params` 注入每个 GET，httpx 的 `HTTPStatusError` 文本原本包含完整 URL，经 `handle_auth_errors` 兜底会把 stoken 写进 `error.message` 与 Agent 记录；现在按状态码、方法与路径重建异常，类型与 `NETWORK_ERROR` 分类不变，写路径的「结果未确认」契约不变；信封与日志的文本脱敏同时覆盖 `__zp_stoken__` 这个键名，此前通用 `stoken` 规则要求键后直接是分隔符，双下划线让它整体漏过（Issue #2157）。
 - 启动期组预算目录校验把 `Path.resolve()` 的符号链接环错误按配置错误拒绝：`request_budget_dir` 指向含符号链接环的路径时，Python 3.11 / 3.12 上不再冲出 traceback（没有信封），而是 `INVALID_PARAM` 并点名成员目录的 `config.json`，与同分支的 ValueError 同口径（Issue #2159）。
+- HTTP 客户端在同一次查询中最多自动刷新一次登录态。刷新后仍过期时返回现有的 `TOKEN_REFRESH_FAILED`，限流冷却继续按原有预算处理（Issue #2151）。
+- HTTP 写请求响应解码失败时报告 `ACTION_UNCONFIRMED`。调用方需先核对平台结果，`replay_safe=false`（Issue #2152）。
 
 ## [3.4.134] - 2026-11-20
 
