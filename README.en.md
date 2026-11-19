@@ -12,7 +12,7 @@
 [![PyPI Downloads](https://img.shields.io/pypi/dm/boss-agent-cli?style=flat-square)](https://pypi.org/project/boss-agent-cli/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://github.com/can4hou6joeng4/boss-agent-cli/pulls)
 
-[Getting Started](docs/getting-started.en.md) · [Architecture](docs/architecture.en.md) · [Agent Integration](#-agent-integration) · [Commands](#-commands) · [Troubleshooting](docs/troubleshooting.en.md) · [Roadmap](ROADMAP.en.md) · [中文](README.md) | **English**
+[Getting Started](docs/getting-started.en.md) · [Architecture](docs/architecture.en.md) · [Agent Integration](#-agent-integration) · [Commands](#-commands) · [Troubleshooting](docs/troubleshooting.en.md) · [Roadmap](ROADMAP.en.md) · [中文](README.md) | **English** | [日本語](README.ja.md)
 
 <a href="demo/showcase/boss-agent-cli-showcase.mp4" title="Watch the 48-second product keynote">
   <img src="demo/showcase/boss-agent-cli-showcase.gif?v=keynote-20261008" alt="boss-agent-cli Aurora Keynote: welfare filtering, dual-role workflows and agent integration" width="100%">
