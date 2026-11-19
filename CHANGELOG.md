@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `salt` 创建不再硬依赖硬链接：exFAT / 部分 SMB / FUSE 等不支持硬链接的文件系统上回退为独占创建，首次登录不再在保存登录态时确定性失败；回退的半写窗口由读取端有界等待兜住，写入失败会清理半写文件（Issue #2200）。
 - 空 `wizard --input-json` 的恢复指引改为提示传入符合向导目录要求的 JSON 对象并查阅 `boss schema`，不再让调用方去补一个创建任务用不到的 `run_id`；其余空选择器仍提示补齐任务 ID（Issue #2190）。3.4.137 的构建不含此修复，条目从已发布段落移回。
 - 采集断点的 `updated_at` 是有限但远在未来的值时（时钟快进后校正、手工写坏的库），queued 任务不再被永远当成「刚排队」：后台恢复探测执行锁并拉起 worker，`crawl status` 给出 `crawl resume --background` 提示；轻微时钟偏斜仍按刚排队处理（Issue #2193）。
 - `crawl_runs.output_dir` 含控制字符时断点读取边界按 `CACHE_RECORD_INVALID` fail-closed，`crawl status` 与 `crawl resume` 对同一断点同口径，不再把路径字符错误报成 `INVALID_PARAM`（Issue #2194）。

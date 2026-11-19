@@ -10,6 +10,7 @@ Windows 与不支持 chmod 的挂载点上收紧会失败：按 best-effort 处�
 
 from __future__ import annotations
 
+import errno
 import os
 import tempfile
 import time
@@ -27,6 +28,13 @@ SALT_BYTES = 16
 #: 毫秒内完成创建，2 秒足够覆盖慢盘上的 fsync；仍然缺失才按失败报出（Issue #2099）。
 SALT_WAIT_SECONDS = 2.0
 SALT_POLL_SECONDS = 0.1
+
+#: 不支持硬链接的文件系统错误码：``link`` 发布失败时改走独占创建回退
+#: （Issue #2200）。``ENOTSUP`` 与 ``EOPNOTSUPP`` 在部分平台取值相同，
+#: 用集合去重。
+_LINK_UNSUPPORTED_ERRNOS = frozenset(
+	code for code in (getattr(errno, "ENOTSUP", None), getattr(errno, "EOPNOTSUPP", None), errno.EPERM, errno.EXDEV) if code is not None
+)
 
 
 def chmod_best_effort(path: Path, mode: int) -> None:
@@ -102,10 +110,45 @@ def _create_salt(salt_path: Path) -> bytes:
 			if raw is None:
 				raise RuntimeError("登录态 salt 在创建过程中消失，请重试") from None
 			return raw
+		except OSError as exc:
+			if exc.errno not in _LINK_UNSUPPORTED_ERRNOS:
+				raise
+			# exFAT / 部分 SMB / FUSE 等不支持硬链接的挂载点：改走独占创建
+			# 回退，否则首次登录在保存登录态时确定性失败（Issue #2200）。
+			return _create_salt_exclusive(salt_path, payload)
 		chmod_best_effort(salt_path, FILE_MODE)
 		return payload
 	finally:
 		temporary.unlink(missing_ok=True)
+
+
+def _create_salt_exclusive(salt_path: Path, payload: bytes) -> bytes:
+	"""``link`` 不可用时的回退：独占创建并直接写满 salt。
+
+	文件在写满之前就对外可见（不同于 link 的原子落位），所以读取端在锁忙
+	窗口内对长度不符的 salt 继续等待；写入失败必须删除本次创建的文件，
+	不能留下永久的「长度异常」状态（Issue #2200）。
+	"""
+	try:
+		fd = os.open(salt_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, FILE_MODE)
+	except FileExistsError:
+		# 与 link 的 EEXIST 同口径：读回胜出值，绝不覆盖。
+		raw = _read_salt(salt_path)
+		if raw is None:
+			raise RuntimeError("登录态 salt 在创建过程中消失，请重试") from None
+		return raw
+	try:
+		written = 0
+		while written < len(payload):
+			written += os.write(fd, payload[written:])
+		os.fsync(fd)
+	except BaseException:
+		os.close(fd)
+		salt_path.unlink(missing_ok=True)
+		raise
+	os.close(fd)
+	chmod_best_effort(salt_path, FILE_MODE)
+	return payload
 
 
 def load_or_create_private_salt(auth_dir: Path) -> bytes:
@@ -113,9 +156,10 @@ def load_or_create_private_salt(auth_dir: Path) -> bytes:
 
 	salt 决定 session.enc 与 ai/api_key.enc 的派生密钥：两个进程首次运行
 	各自生成一次，后写盘的那份会让先保存的密文永久解不开（Issue #1633）。
-	创建与落位全程持有刷新锁，且只有写满 16 字节后才通过硬链接出现；空文件、
-	半截写入、目录 / FIFO / 悬空链接都按状态损坏失败，不再静默派生密钥
-	（Issue #1688、#1699）。
+	创建与落位全程持有刷新锁；支持硬链接时只有写满 16 字节后才通过 link
+	出现，不支持硬链接的文件系统回退为独占创建（读取端用有界等待兜住半写
+	窗口）；空文件、半截写入、目录 / FIFO / 悬空链接都按状态损坏失败，不再
+	静默派生密钥（Issue #1688、#1699、#2200）。
 	"""
 	auth_dir.mkdir(parents=True, exist_ok=True, mode=DIRECTORY_MODE)
 	chmod_best_effort(auth_dir, DIRECTORY_MODE)
@@ -127,11 +171,12 @@ def load_or_create_private_salt(auth_dir: Path) -> bytes:
 				raw = _create_salt(salt_path)
 			return _validated_salt(raw, salt_path)
 	# 锁不可用时也不能生成第二份 salt：读到什么就用什么。锁忙通常表示另一个
-	# 进程正在创建：salt 在写满 16 字节后才通过硬链接出现，在有界窗口内等它
-	# 落位，仍然缺失或损坏才报错（Issue #2099）。
+	# 进程正在创建：走 link 时 salt 在写满 16 字节后才出现，走独占创建回退时
+	# 文件会先以空文件出现，因此「缺失或长度不符」都要在有界窗口内继续等它
+	# 落位，仍然不符合才按状态损坏报错（Issue #2099、#2200）。
 	deadline = time.monotonic() + SALT_WAIT_SECONDS
 	raw = _read_salt(salt_path)
-	while raw is None and time.monotonic() < deadline:
+	while (raw is None or len(raw) != SALT_BYTES) and time.monotonic() < deadline:
 		time.sleep(SALT_POLL_SECONDS)
 		raw = _read_salt(salt_path)
 	if raw is None:
