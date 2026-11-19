@@ -185,10 +185,15 @@ def test_batch_greet_rate_limited_stops_remaining(mock_cache_cls, mock_auth_cls,
 
 	runner = CliRunner()
 	result = runner.invoke(cli, [*legacy_args, "batch-greet", "test", "--count", "3"])
-	assert result.exit_code == 0
+	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["data"]["total_greeted"] == 1
-	assert parsed["data"]["stopped_reason"] == "RATE_LIMITED"
+	assert parsed["error"]["code"] == "RATE_LIMITED"
+	assert parsed["error"]["recoverable"] is True
+	details = parsed["error"]["details"]
+	assert details["total_greeted"] == 1
+	assert details["stopped_reason"] == "RATE_LIMITED"
+	# 触发停批的候选人必须进 failed，不能从结果里消失（Issue #2003）。
+	assert [item["job_id"] for item in details["failed"]] == ["job_s2"]
 
 
 @patch("boss_agent_cli.commands.greet.time")
@@ -210,10 +215,14 @@ def test_batch_greet_greet_limit_stops_remaining(mock_cache_cls, mock_auth_cls, 
 
 	runner = CliRunner()
 	result = runner.invoke(cli, ["batch-greet", "test", "--count", "2"])
-	assert result.exit_code == 0
+	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["data"]["stopped_reason"] == "GREET_LIMIT"
-	assert parsed["data"]["total_greeted"] == 0
+	assert parsed["error"]["code"] == "GREET_LIMIT"
+	assert parsed["error"]["recoverable"] is False
+	details = parsed["error"]["details"]
+	assert details["stopped_reason"] == "GREET_LIMIT"
+	assert details["total_greeted"] == 0
+	assert [item["job_id"] for item in details["failed"]] == ["job_s1"]
 
 
 class _UnsentConnectionError(ConnectionError):
