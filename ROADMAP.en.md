@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.137 (2026-11-20): fixes for automation queue rewrites, MCP input contracts, chat snapshot completeness, and wizard checkpoint recovery.
 v3.4.136 (2026-11-20): audit batch — export function-boundary hardening, local cache BLOB storage-class drift and decorator error classification, crawl seed-cookie redaction, and symlink-loop handling in crawl path resolution (Issues #2162–#2169).
 v3.4.135 (2026-11-20): HTTP and risk-boundary fixes — one token refresh per query, undecodable write responses stay outcome-unknown, symlink loops no longer replace risk errors or crash startup, read-status error text and text redaction no longer carry the stoken, group budget config errors are rejected as invalid parameters (Issues #2151–#2159).
 - ✅ v3.4.134 (2026-11-20): audit batch — login error classification, wizard writes and recovery, cache record validation, digest and job exports, resume links, favorites, and job deduplication (Issues #2114–#2149).
