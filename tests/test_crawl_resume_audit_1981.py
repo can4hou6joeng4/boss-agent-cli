@@ -211,6 +211,36 @@ def test_resume_pagination_claims_budget_per_page(tmp_path: Path, monkeypatch) -
 	assert claims == ["list-navigation", "list-pagination", "list-pagination", "list-pagination"]
 
 
+def test_sequential_pagination_claims_budget_once_per_real_request(tmp_path: Path, monkeypatch) -> None:
+	"""顺序翻页没有导航请求，只按真实滚动计一次预算，不多记也不空等（#2094）。"""
+	page = _ScrollPage()
+	session = DrissionCrawlerSession(
+		profile_path=tmp_path / "profile",
+		chrome_path=None,
+		cdp_port=_free_port(),
+		hook_profile="none",
+		hook_dir=None,
+	)
+	session._page = page
+	session._page_no = 1
+	claims: list[str] = []
+
+	@contextmanager
+	def claim(kind: str):
+		claims.append(kind)
+		yield
+
+	session.bind_attempts(claim)
+	monkeypatch.setattr("boss_agent_cli.crawler.transport.cancellable_sleep", lambda *args, **kwargs: None)
+
+	payload = session.fetch_page("AI", "101210100", 2)
+
+	assert payload["code"] == 0
+	assert page.navigations == 0, "已在第 1 页时不得重新导航"
+	assert page.scrolls == 1
+	assert claims == ["list-pagination"]
+
+
 class _BusyOpenTransport:
 	def __init__(self) -> None:
 		self.close_calls = 0
