@@ -156,9 +156,21 @@ def assess_auth_health(
 			f"检测到登录态文件: {session_path}（cookies={len(cookies)}, {config.secondary_token_label}_present={'存在' if has_secondary else '缺失'}）",
 		))
 	else:
-		status = "error" if session_path.exists() else "warn"
-		detail = f"检测到 session 文件但无法解密/已损坏: {session_path}" if session_path.exists() else "未检测到本地登录态"
-		recovery = f"{login_action}；如为旧密钥残留，可先 {config.logout_action}" if session_path.exists() else login_action
+		# 一次 lstat 决断并在三处复用：连续 exists() 之间文件可能被并发删除 /
+		# 创建，会出现 status=error 却报「未检测到本地登录态」的自相矛盾组合。
+		# 3.14 的 exists() 还会把权限错误吞成 False——不可读的残留文件被误报成
+		# 「没登录」；按控制路径口径改为 lstat + 只认 FileNotFoundError，
+		# 其他 OSError 按「存在但不可读」处理（Issue #2131）。
+		try:
+			session_path.lstat()
+			session_exists = True
+		except FileNotFoundError:
+			session_exists = False
+		except OSError:
+			session_exists = True
+		status = "error" if session_exists else "warn"
+		detail = f"检测到 session 文件但无法解密/已损坏: {session_path}" if session_exists else "未检测到本地登录态"
+		recovery = f"{login_action}；如为旧密钥残留，可先 {config.logout_action}" if session_exists else login_action
 		checks.append(AuthHealthCheck("credential_file", status, detail, recovery))
 		checks.append(AuthHealthCheck("auth_session", status, detail, recovery))
 
@@ -253,13 +265,25 @@ def _stoken_freshness_check(
 			"无法评估 stoken 新鲜度：stoken 缺失",
 			"重新登录或通过 CDP 刷新登录态",
 		)
-	if not session_path.exists():
+	# 一次 stat 同时判定存在性与时间：exists() 与 stat() 分开调用时，并发
+	# `boss logout` / 原子替换落在两者之间会让 FileNotFoundError 逃逸成
+	# LOCAL_IO_ERROR，把无害的并发退出误报成状态损坏（Issue #2131）。
+	try:
+		mtime = session_path.stat().st_mtime
+	except FileNotFoundError:
 		return AuthHealthCheck(
 			"stoken_freshness",
 			"ok",
 			"stoken 存在；当前测试/模拟环境未提供 session 文件时间",
 		)
-	age_seconds = max(0.0, now - session_path.stat().st_mtime)
+	except OSError:
+		return AuthHealthCheck(
+			"stoken_freshness",
+			"warn",
+			"无法读取 session 文件时间，无法评估 stoken 新鲜度",
+			"检查数据目录权限后重新运行状态检查，或重新登录",
+		)
+	age_seconds = max(0.0, now - mtime)
 	age_hours = age_seconds / 3600
 	if age_seconds <= STOKEN_FRESH_SECONDS:
 		return AuthHealthCheck(
