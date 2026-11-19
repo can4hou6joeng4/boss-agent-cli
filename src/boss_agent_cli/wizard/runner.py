@@ -376,6 +376,10 @@ class WorkflowRunner:
 					for step in existing.get("steps") or []
 					if step.get("status") != WorkflowStatus.COMPLETED.value
 				]
+				# 断点缺行同样是自相矛盾：只遍历现有步骤会让缺失的请求步骤既不算
+				# 完成也不算未完成，run 仍按 completed 返回（Issue #2118）。
+				present_steps = {str(step.get("step_name")) for step in existing.get("steps") or []}
+				unfinished.extend(name for name in plan.requested_steps if name not in present_steps)
 				if unfinished:
 					# completed 只应来自「所有步骤都 completed」；自相矛盾时无法判断
 					# 该不该重跑，按记录损坏确定性拒绝，不猜、不写。
@@ -818,8 +822,15 @@ class WorkflowRunner:
 				# 落盘失败不能以可重试错误逃逸：步骤已成功而结果没写下去，重试会重发
 				# 一次平台请求（Issue #1963）。
 				try:
+					# 写前标记必须与步骤结果一次落盘：通用 update_step 的 error=None
+					# 会清空 begin_write 的记录，若随后 update_run / 结算补写之前
+					# 中断，--resume 会把结果未知的写请求再发一遍（Issue #2117）。
 					step_persisted = self._store.update_step(
-						run_id, step_name, status=result.status.value, result=result_data
+						run_id,
+						step_name,
+						status=result.status.value,
+						result=result_data,
+						error=declared_marker,
 					)
 				except Exception as exc:
 					raise self._write_failed_error(
@@ -1140,6 +1151,9 @@ class WorkflowRunner:
 			run_id,
 			status=WorkflowStatus.FAILED.value,
 			current_step=first["step_name"],
+			# 与 blocked 恢复分支同口径保留展示信息：不传 last_result 会写 NULL，
+			# TTY 恢复列表里的职位数 / 内部采集 run_id 随之丢失（Issue #2119）。
+			last_result=stored_run.get("last_result"),
 			error={**first_marker, "message": _INTERRUPTED_WRITE_MESSAGE, "replay_safe": False},
 		)
 		return self._store.get_checkpoint(run_id) or stored_run
