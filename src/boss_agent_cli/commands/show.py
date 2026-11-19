@@ -66,8 +66,14 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 		)
 		return
 
-	security_id = job.get("security_id", "")
-	lid = job.get("lid") or ""
+	# 索引缓存是本地文件：标识只认字符串，否则会先拿坏值发一次平台请求，
+	# 再在缓存层报成「数据库无法打开」（Issue #1813）。
+	raw_security_id = job.get("security_id")
+	security_id = raw_security_id.strip() if isinstance(raw_security_id, str) else ""
+	raw_job_id = job.get("job_id")
+	cached_job_id = raw_job_id if isinstance(raw_job_id, str) else ""
+	raw_lid = job.get("lid")
+	lid = raw_lid if isinstance(raw_lid, str) else ""
 	if not security_id:
 		handle_error_output(
 			ctx, "show",
@@ -106,7 +112,7 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 		return
 
 	with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
-		greeted = cache.is_greeted(security_id, job_id=str(job.get("job_id") or ""), account=account)
+		greeted = cache.is_greeted(security_id, job_id=cached_job_id, account=account)
 
 	result = build_job_from_card(card, security_id=security_id, greeted=greeted, lid=lid)
 	result["index"] = index
