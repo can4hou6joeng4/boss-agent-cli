@@ -9,7 +9,7 @@ from json import JSONDecodeError
 from pathlib import Path
 from typing import Any
 
-from boss_agent_cli.ai.config import AIConfigStore, ai_int_setting
+from boss_agent_cli.ai.config import AIConfigStore, AIConfigValueError, ai_int_setting
 from boss_agent_cli.ai.local_models import RUNTIME_BASE_URLS
 from boss_agent_cli.ai.service import AIService, AIServiceError
 from boss_agent_cli.automation.config import AutomationConfig, ReplyStrategy
@@ -65,7 +65,15 @@ def _draft_with_local_ai(
 	if provider not in _LOCAL_AI_PROVIDERS:
 		return decision
 	api_key = store.get_api_key()
-	base_url = store.get_base_url()
+	# 存量配置里的非法端点（手工编辑 / 旧版本写入）同样走模板降级：与下面的
+	# ai_max_tokens 漂移同口径，一处本地配置写坏不能中止整轮自动化（Issue #2254）。
+	try:
+		base_url = store.get_base_url()
+	except AIConfigValueError as exc:
+		return replace(
+			decision,
+			reason=f"{decision.reason}; local ai config invalid ({exc}), template fallback",
+		)
 	model = ai_config.get("ai_model")
 	if not api_key or not base_url or not model:
 		return decision

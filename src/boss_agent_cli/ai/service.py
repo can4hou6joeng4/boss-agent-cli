@@ -24,11 +24,25 @@ _ERROR_DETAIL_LIMIT = 200
 class AIServiceError(Exception):
 	"""Raised when an AI service call fails."""
 
-	def __init__(self, message: str, *, status_code: int | None = None, truncated: bool = False):
+	def __init__(
+		self,
+		message: str,
+		*,
+		status_code: int | None = None,
+		truncated: bool = False,
+		recovery_hint: str | None = None,
+		code: str = "AI_API_ERROR",
+		recoverable: bool = True,
+	):
 		super().__init__(message)
 		self.status_code = status_code
 		# 模型在给出正文前就用完了输出上限（思考模型常见），调大上限才能恢复
 		self.truncated = truncated
+		# 本地确定性失败（代理环境变量、请求内容无法编码）的专属恢复建议：这类错误
+		# 原样重试不会成功，不能沿用调用方「检查网络后重试」的默认文案（Issue #2254）。
+		self.recovery_hint = recovery_hint
+		self.code = code
+		self.recoverable = recoverable
 
 
 def recovery_action_for(exc: AIServiceError, default: str, *, config_command: str = "boss ai config") -> str:
@@ -37,6 +51,8 @@ def recovery_action_for(exc: AIServiceError, default: str, *, config_command: st
 	``config_command`` 允许调用方传入带 ``--data-dir`` 的等价命令，避免照抄恢复
 	提示后把新的 key / model 写进默认目录。
 	"""
+	if exc.recovery_hint:
+		return exc.recovery_hint
 	if exc.truncated:
 		return f"调大输出上限后重试：{config_command} --max-tokens <更大的值>；思考模型也可以关闭思考模式"
 	status = exc.status_code
@@ -49,6 +65,10 @@ def recovery_action_for(exc: AIServiceError, default: str, *, config_command: st
 	if status is not None and status >= 500:
 		return "AI 服务端异常，稍后重试"
 	return default
+
+
+#: httpx（trust_env）读取的代理环境变量；大小写两种写法都生效。
+_PROXY_ENV_HINT = "HTTPS_PROXY / HTTP_PROXY / ALL_PROXY"
 
 
 def _request_params(model: str) -> tuple[str, bool]:
@@ -171,11 +191,36 @@ class AIService:
 				status_code=status,
 			) from exc
 		except httpx.RequestError as exc:
-			raise AIServiceError(f"网络请求失败: {exc}") from exc
+			# 与状态错误分支同口径脱敏：异常文本里出现密钥时不原样带进信封（Issue #2254）。
+			raise AIServiceError(f"网络请求失败: {_mask_api_key(str(exc), self.api_key)}") from exc
 		except httpx.InvalidURL as exc:
 			# InvalidURL 不是 RequestError 的子类：手工改坏的 base_url 绕过配置校验
 			# 直达这里时也要落成信封，而不是 traceback（Issue #1778）。
 			raise AIServiceError(f"AI 服务地址无效: {exc}；请用 boss ai config --base-url 重新设置") from exc
+		except UnicodeEncodeError as exc:
+			# UnicodeEncodeError 是 ValueError 的子类，必须排在前面。httpx 按 UTF-8 编码
+			# 请求体，孤立代理字符（损坏文本里的 ``\ud800`` 等）编码不了；同一输入必然
+			# 复现，不是网络问题（Issue #2254）。不回显原文，只报位置。
+			raise AIServiceError(
+				f"请求内容包含无法按 UTF-8 编码的字符（位置 {exc.start}，如孤立代理字符）",
+				recovery_hint="清理输入文本里的损坏字符（如孤立代理字符）后重试；原样重试不会成功",
+				code="INVALID_PARAM",
+				recoverable=False,
+			) from exc
+		except ValueError as exc:
+			# httpx 在本地构造客户端 / 请求体时抛裸 ValueError，请求尚未发出：代理环境
+			# 变量用了不支持的 scheme（``socks4://`` / ``socks://`` / ``ftp://``）最常见，
+			# 其次是请求参数无法序列化（如 temperature 为 NaN）（Issue #2254）。
+			raise AIServiceError(
+				f"请求无法构造: {_mask_api_key(str(exc), self.api_key)}；"
+				f"请检查代理环境变量（{_PROXY_ENV_HINT}）与请求参数",
+				recovery_hint=(
+					f"检查代理环境变量（{_PROXY_ENV_HINT}）：使用 http:// / https:// / socks5:// 地址，"
+					"或取消设置；同时核对模型请求参数后重试，原样重试不会成功"
+				),
+				code="INVALID_PARAM",
+				recoverable=False,
+			) from exc
 
 		try:
 			data = response.json()

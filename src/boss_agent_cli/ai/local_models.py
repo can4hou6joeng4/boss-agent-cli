@@ -81,6 +81,9 @@ def recommended_model_rows() -> list[dict[str, Any]]:
 
 #: ``models/`` 下登记表的固定文件名；也是 ``--model`` 的保留名（Issue #1433）。
 _MODEL_REGISTRY_NAME = "registry.json"
+#: ``models/`` 下导入锁的固定文件名；同样是 ``--model`` 的保留名（Issue #2255）。
+_IMPORT_LOCK_NAME = "import.lock"
+_RESERVED_MODEL_DIRS = frozenset({_MODEL_REGISTRY_NAME.casefold(), _IMPORT_LOCK_NAME.casefold()})
 
 
 def model_registry_path(data_dir: Path) -> Path:
@@ -145,7 +148,7 @@ def import_local_model(data_dir: Path, source: Path, model: str) -> ImportedLoca
 	safe_name = _safe_model_dir(model)
 	models_dir = data_dir / "models"
 	models_dir.mkdir(parents=True, exist_ok=True)
-	lock_path = models_dir / "import.lock"
+	lock_path = models_dir / _IMPORT_LOCK_NAME
 	with exclusive_file_lock(lock_path) as acquired:
 		if not acquired:
 			raise OSError(errno.EAGAIN, "另一个模型导入正在进行，请等待其完成后重试", str(lock_path))
@@ -171,7 +174,19 @@ def _import_local_model_locked(
 		)
 	# 先读登记表再复制：登记表损坏时直接报错，不留下一份复制了却没登记进来的模型目录。
 	target_dir = data_dir / "models" / safe_name
-	rows = [item for item in read_imported_models(data_dir, strict=True) if item.model != model]
+	registered = read_imported_models(data_dir, strict=True)
+	owner = _directory_owner(registered, model, safe_name)
+	if owner is not None:
+		# 不同模型名折到同一个目录（`x:1` 与 `x-1`，或大小写不敏感文件系统上的
+		# `Qwen` 与 `qwen`）：源文件同名时后一次导入会替换前一个模型的文件，而
+		# 登记表里两条记录指向同一路径，前一个名字之后静默加载另一份权重
+		# （Issue #2255）。同名重新导入不受影响。
+		raise LocalModelManifestError(
+			"INVALID_PARAM",
+			f"模型名 {model!r} 与已导入的 {owner!r} 使用同一个目录 models/{safe_name}；"
+			"请换一个 --model 名，避免覆盖已有模型",
+		)
+	rows = [item for item in registered if item.model != model]
 	target = target_dir / source.name
 	# 悬空链接的 exists() 为假，copy2 会顺着链接在数据目录外创建文件；指向普通
 	# 文件的链接则会被写穿替换外部目标（Issue #1705）。
@@ -245,6 +260,26 @@ def _replace_model_target(source: Path, target: Path, *, is_dir: bool) -> None:
 		_discard(staging)
 
 
+def _directory_owner(registered: list[ImportedLocalModel], model: str, safe_name: str) -> str | None:
+	"""返回已占用 `models/<safe_name>` 的另一个模型名；没有冲突时返回 None。
+
+	按模型名重新计算目录名而不是读登记表里的 path：path 可能是旧版本写入的历史
+	数据。比较用 casefold，与大小写不敏感的默认文件系统口径一致。
+	"""
+	wanted = safe_name.casefold()
+	for item in registered:
+		if item.model == model:
+			continue
+		try:
+			other = _safe_model_dir(item.model)
+		except LocalModelManifestError:
+			# 手工改坏的登记行（空名等）不占用任何目录。
+			continue
+		if other.casefold() == wanted:
+			return item.model
+	return None
+
+
 def _safe_model_dir(model: str) -> str:
 	"""把模型名折成 `models/` 下的单层目录名。
 
@@ -254,11 +289,13 @@ def _safe_model_dir(model: str) -> str:
 	`cache` 都可能这样被删掉。
 	"""
 	safe = "".join(char if char.isalnum() or char in {"-", "_", "."} else "-" for char in model).strip("-")
-	if not safe.strip(".") or safe.casefold() == _MODEL_REGISTRY_NAME.casefold():
+	if not safe.strip(".") or safe.casefold() in _RESERVED_MODEL_DIRS:
 		# casefold：macOS / Windows 的默认文件系统大小写不敏感，REGISTRY.JSON 同样
-		# 会撞上登记表（Issue #1433）。
+		# 会撞上登记表（Issue #1433）。导入锁文件 import.lock 也在 models/ 下：
+		# 同名模型的目标目录会撞上锁文件，报成本地 IO 错误（Issue #2255）。
 		raise LocalModelManifestError(
 			"INVALID_PARAM",
-			f"模型名无效: {model!r}；不能为空，不能只由 . 和 - 组成，也不能与登记表文件名 {_MODEL_REGISTRY_NAME} 相同",
+			f"模型名无效: {model!r}；不能为空，不能只由 . 和 - 组成，也不能与保留文件名 "
+			f"{_MODEL_REGISTRY_NAME} / {_IMPORT_LOCK_NAME} 相同",
 		)
 	return safe

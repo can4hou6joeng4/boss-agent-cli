@@ -116,7 +116,10 @@ def _create_ai_service(ctx: click.Context) -> AIService | None:
 		)
 	provider = ai_text_setting(config, "ai_provider")
 	raw_base_url = ai_text_setting(config, "ai_base_url")
-	base_url = normalize_base_url(raw_base_url) if raw_base_url is not None else None
+	# 空串与 None / 缺键同口径视为未设置，与 ``AIConfigStore.get_base_url`` 一致：
+	# 旧版本的 ``--clear-base-url`` 写入的是空串，按 ``is not None`` 判断会把它送进
+	# 校验并让每条 AI 命令报 CONFIG_INVALID（Issue #2253）。纯空白串仍按损坏拒绝。
+	base_url = normalize_base_url(raw_base_url) if raw_base_url else None
 	base_url = provider_endpoint(provider, base_url)
 	if not api_key or not base_url:
 		return None
@@ -327,9 +330,9 @@ def _call_ai(ctx: click.Context, svc: AIService, prompt: str) -> dict[str, Any] 
 	except AIServiceError as exc:
 		handle_error_output(
 			ctx, "ai",
-			code="AI_API_ERROR",
+			code=exc.code,
 			message=f"AI 服务调用失败: {exc}",
-			recoverable=True,
+			recoverable=exc.recoverable,
 			recovery_action=recovery_action_for(
 				exc,
 				"检查网络连接和密钥配置，重试",
@@ -532,7 +535,9 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 		except AIConfigValueError as exc:
 			_ai_config_invalid(ctx, exc)
 			return
-		effective_base_url = base_url if base_url is not None else stored_base_url
+		# --clear-base-url 与 --provider 同时给出时，按清除后的状态判断端点能否解析：
+		# 否则 `--provider custom --clear-base-url` 会拿即将被清掉的旧地址通过检查。
+		effective_base_url = base_url if base_url is not None else (None if clear_base_url else stored_base_url)
 		if provider_endpoint(provider, effective_base_url) is None:
 			if provider == "custom":
 				message = "provider 'custom' 需要同时传 --base-url（自建 OpenAI 兼容端点）"
@@ -580,8 +585,9 @@ def ai_config_cmd(ctx: click.Context, provider: str | None, model: str | None, a
 		ctx.exit(1)
 		return
 	if clear_base_url:
-		# 空串等价于未设置：provider_endpoint 按登记表解析（Issue #1967）。
-		updates["ai_base_url"] = ""
+		# 写回默认值 None（与全新配置一致）：provider_endpoint 按登记表解析
+		# （Issue #1967）。旧版本这里写空串，服务构造把它当成非法地址（Issue #2253）。
+		updates["ai_base_url"] = None
 	if base_url is not None:
 		try:
 			# 空白串 / 缺 scheme / 非 http(s) 地址会让之后每条 AI 命令抛

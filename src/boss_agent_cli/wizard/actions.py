@@ -1208,9 +1208,9 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 		)
 	except AIServiceError as exc:
 		raise WorkflowActionError(
-			"AI_API_ERROR",
+			exc.code,
 			str(exc),
-			recoverable=True,
+			recoverable=exc.recoverable,
 			recovery_action=recovery_action_for(
 				exc,
 				"检查 AI 配置后重试",
