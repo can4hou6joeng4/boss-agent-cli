@@ -383,7 +383,7 @@ def _render_stats(ctx: click.Context, data: dict[str, Any]) -> None:
 		display.console.print("\n  [bold]下一步：[/bold]")
 		for hint in hints:
 			# 目录名是外部输入：含 Rich 标签时必须按字面渲染，否则会被吞或抛 MarkupError。
-			display.console.print(f"    [dim]{display.escape(hint)}[/dim]")
+			display.console.print(f"    [dim]{display.escape_markup(hint)}[/dim]")
 
 
 def _percent(value: Any) -> str:

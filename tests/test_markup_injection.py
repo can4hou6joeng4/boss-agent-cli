@@ -323,5 +323,5 @@ class TestEscapeMarkupHelper:
 	def test_returns_literal_text_for_rich_tags(self):
 		from boss_agent_cli.display import escape_markup
 
-		assert escape_markup("[bold]x[/bold]") == "\\[bold]x\\[/bold]"
+		assert escape_markup("[bold]x[/bold]") == "[none]\\[bold]x\\[/bold][/none]"
 		assert escape_markup(42) == "42"
