@@ -42,7 +42,7 @@ Compatibility modes `assisted` and `research` can both call every implemented ca
 
 | Capability | CLI command | Login required | Transport |
 |---|---|---|---|
-| Conversation list | `boss chat` | Yes | `auto` uses httpx with stored credentials; explicit `existing-browser` reuses an existing page through CDP |
+| Conversation list | `boss chat [--raw]` | Yes | `auto` uses httpx with stored credentials; explicit `existing-browser` reuses an existing page through CDP; `--raw` adds the original contact object with keys and codes preserved |
 | Message history | `boss chatmsg [--raw]` | Yes | Prefer the stable `uid` returned by `boss chat`; `auto` uses httpx with stored credentials, while explicit `existing-browser` reuses an existing page through CDP; `--raw` preserves structured body/link/job-card fields |
 | Conversation summary | `boss chat-summary` | Yes | Prefer the stable `uid`; platform adapter + local processing |
 | Contact labels | `boss mark` | Yes | Platform adapter |

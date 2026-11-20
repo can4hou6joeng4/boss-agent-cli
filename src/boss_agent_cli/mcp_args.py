@@ -301,6 +301,8 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			args.extend(["--page", str(arguments["page"])])
 		_optional(args, "--export", "format", arguments)
 		_optional(args, "--output", "output_file", arguments, command=name)
+		if arguments.get("raw"):
+			args.append("--raw")
 		return args
 
 	if name == "me":

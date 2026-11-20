@@ -38,9 +38,11 @@ _escape_md_cell = escape_md_cell
 	help="导出格式：html=HTML / md=Markdown / csv=CSV / json=JSON")
 @click.option("-o", "--output", "output_path", default=None,
 	help="输出文件路径，仅在 --export 时生效（只给 -o 会返回 INVALID_PARAM，显式空串无效）；省略时保存到配置的 export_dir，未配置时使用 <data-dir>/chat-export")
+@click.option("--raw", "raw", is_flag=True,
+	help="在普通输出的每条记录中附加 raw：该联系人的原始平台对象，保留原始键名与编码。与 --export 合用时不影响导出文件、快照与 diff")
 @click.pass_context
 @handle_auth_errors("chat")
-def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | None, export_fmt: str | None, output_path: str | None) -> None:
+def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | None, export_fmt: str | None, output_path: str | None, raw: bool) -> None:
 	"""查看沟通列表（支持按发起方、时间筛选，支持导出）"""
 	if not require_compliance_allowed(ctx, "chat"):
 		ctx.exit(1)
@@ -175,6 +177,13 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			)
 
 		friends = [friend for friend in all_friends if _matches_filter(friend)]
+		# `--raw` 只影响普通输出：按摘要记录的下标取回同一联系人对象，筛选后
+		# 顺序不变。快照与导出继续使用摘要记录，不写入原始键（Issue #2250）。
+		output_friends = friends
+		if raw:
+			selected_indexes = [index for index, friend in enumerate(all_friends) if _matches_filter(friend)]
+			output_friends = [{**all_friends[index], "raw": items[index]} for index in selected_indexes]
+
 
 		raw_has_more = platform_data.get("hasMore")
 		has_more = raw_has_more if isinstance(raw_has_more, bool) else None
@@ -276,13 +285,15 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 				next_cmd += f" --from {from_who}"
 			if days is not None:
 				next_cmd += f" --days {days}"
+			if raw:
+				next_cmd += " --raw"
 			next_actions.append(boss_command_for_ctx(ctx, next_cmd, include_data_dir=True))
 		hints: dict[str, Any] = {"next_actions": next_actions}
 		if has_more is None:
 			hints["operator_actions"] = ["平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有记录"]
 
 		handle_output(
-			ctx, "chat", friends,
+			ctx, "chat", output_friends,
 			render=_render,
 			pagination=pagination,
 			hints=hints,
