@@ -157,9 +157,7 @@ RECOVERY_LABELS = {
 }
 
 #: 风控恢复动作里由 runner / actions 注入的真实解锁命令（Issue #978 / #976）。
-_RISK_CLEAN_COMMAND = re.compile(
-	r"""boss(?: --platform \S+)? --data-dir (?:'[^']*'|"[^"]*"|\S+) clean --risk-lock"""
-)
+_RISK_CLEAN_COMMAND = re.compile(r"""boss(?: --platform \S+)? --data-dir (?:'[^']*'|"[^"]*"|\S+) clean --risk-lock""")
 _RISK_CODES = frozenset({"ACCOUNT_RISK", "ENVIRONMENT_RISK", "ENVIRONMENT_RISK_LOCKED"})
 
 #: 动作层已经给出带数据目录的完整恢复句子的错误码（Issue #1090）。静态文案的
@@ -196,6 +194,7 @@ def _rewrite_recovery_commands(text: str, command_for: Callable[[str], str] | No
 	return display.rewrite_command_examples(
 		text, {literal: command for literal, (command,) in _RECOVERY_COMMANDS.items()}, command_for
 	)
+
 
 # 这些步骤对真人噪声大，TTY 进度里默认静默。
 _SILENT_STEPS = {"auth_status"}
@@ -268,10 +267,7 @@ def recovery_message(
 		# 安装命令要带上已经可用的依赖组：uv tool install 会重建环境（Issue #1068）。
 		from boss_agent_cli.services.install_extras import extras_install_hint
 
-		return (
-			"这不是网络问题，重试不会有帮助。请退出向导，用 "
-			f"{extras_install_hint('crawl')} 补上采集依赖后重新执行。"
-		)
+		return f"这不是网络问题，重试不会有帮助。请退出向导，用 {extras_install_hint('crawl')} 补上采集依赖后重新执行。"
 	if localized:
 		return _rewrite_recovery_commands(localized, command_for)
 	if recovery_action and any("\u4e00" <= char <= "\u9fff" for char in str(recovery_action)):
@@ -293,7 +289,7 @@ def render_event(kind: str, step: str, data: Mapping[str, Any] | None) -> None:
 		display.console.print(f"[cyan]…[/cyan] {label}")
 	elif kind == "step_retrying":
 		attempt = data.get("attempt") if data else "?"
-		display.console.print(f"[yellow]正在重试[/yellow] {label}（第 {attempt} 次）")
+		display.console.print(f"[yellow]正在重试[/yellow] {label}（第 {display.escape_markup(attempt)} 次）")
 
 
 def _screen_control_unavailable() -> bool:
@@ -488,7 +484,8 @@ def render_job_card_zh(job: Mapping[str, Any]) -> None:
 	education = esc(job.get("education") or "-")
 	boss = esc(job.get("boss_name") or "-")
 	boss_title = esc(job.get("boss_title") or "")
-	skills = job.get("skills") or job.get("labels") or []
+	# 与 display.render_job_detail 同口径：字符串按单条、其余非列表按空（Issue #2252）。
+	skills = display.label_items(job.get("skills")) or display.label_items(job.get("labels"))
 	skill_str = "、".join(esc(item) for item in skills[:12]) if skills else "-"
 	desc = str(job.get("description") or "")
 	if len(desc) > 420:
@@ -528,11 +525,12 @@ def render_crawl_job_brief(job: Mapping[str, Any], *, with_description: bool = F
 	if boss:
 		boss_title = esc(job.get("boss_title") or "")
 		lines.append(f"招聘者 {boss}" + (f"（{boss_title}）" if boss_title else ""))
-	labels = job.get("labels") or []
-	if isinstance(labels, list) and labels:
+	labels = display.label_items(job.get("labels"))
+	if labels:
 		lines.append("标签 " + "、".join(esc(item) for item in labels[:8]))
 	if job.get("crawl_page") is not None:
-		lines.append(f"采集页 第 {job.get('crawl_page')} 页")
+		# 断点里的计数可能漂移成任意字符串：按外部值转义（Issue #2252）。
+		lines.append(f"采集页 第 {esc(job.get('crawl_page'))} 页")
 	if with_description:
 		desc = esc(job.get("description") or "").strip()
 		if desc:
@@ -822,11 +820,7 @@ def _render_list_preview_if_any(run: Mapping[str, Any], *, limit: int = 8) -> No
 				str(index),
 				_clip_text(item.get("name") or item.get("friendName") or item.get("geekName") or "未命名", 16),
 				_clip_text(
-					item.get("brandName")
-					or item.get("company")
-					or item.get("jobName")
-					or item.get("title")
-					or "—",
+					item.get("brandName") or item.get("company") or item.get("jobName") or item.get("title") or "—",
 					20,
 				),
 				_clip_text(item.get("lastMsg") or item.get("last_msg") or item.get("content") or "—", 28),
@@ -911,9 +905,9 @@ def _render_management_result(
 		meta = Table(show_header=False, box=None, pad_edge=False)
 		meta.add_column("k", style="dim", width=10)
 		meta.add_column("v", style="bold")
-		meta.add_row("新匹配", str(data.get("new_match_count") or 0))
-		meta.add_row("待跟进", str(data.get("follow_up_count") or 0))
-		meta.add_row("面试", str(data.get("interview_count") or 0))
+		meta.add_row("新匹配", display.escape_markup(data.get("new_match_count") or 0))
+		meta.add_row("待跟进", display.escape_markup(data.get("follow_up_count") or 0))
+		meta.add_row("面试", display.escape_markup(data.get("interview_count") or 0))
 		if summary:
 			meta.add_row("摘要", display.escape_markup(summary))
 		# Sample rows from each bucket.
@@ -977,9 +971,9 @@ def _render_management_result(
 			if data.get("removed") is not None:
 				table.add_row("已删除", "是" if data.get("removed") else "否")
 			if data.get("new_count") is not None:
-				table.add_row("新发现", str(data.get("new_count")))
+				table.add_row("新发现", display.escape_markup(data.get("new_count")))
 			if data.get("total") is not None:
-				table.add_row("命中", str(data.get("total")))
+				table.add_row("命中", display.escape_markup(data.get("total")))
 			display.console.print(Panel(table, title="监控结果", border_style="cyan"))
 			return True
 
@@ -1006,7 +1000,10 @@ def _render_management_result(
 			table.add_column("v", style="bold")
 			table.add_row("事项", goal_label(run.get("role"), goal))
 			table.add_row("格式", display.escape_markup(data.get("format") or "—"))
-			table.add_row("条数", str(data.get("count") if data.get("count") is not None else len(items)))
+			table.add_row(
+				"条数",
+				display.escape_markup(data.get("count") if data.get("count") is not None else len(items)),
+			)
 			table.add_row("文件", display.escape_markup(data.get("path")))
 			display.console.print(Panel(table, title="导出完成", border_style="green"))
 			return True
@@ -1292,14 +1289,16 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 
 	if jobs_seen is not None and not success:
 		row("职位数", f"[bold cyan]{jobs_seen}[/bold cyan]")
+	# 进度计数来自断点 / 命令结果，类型漂移成字符串时不能当 markup 解析（Issue #2252）。
+	esc = display.escape_markup
 	if pages is not None and not success:
-		row("已完成页", f"[bold]{pages}[/bold]")
+		row("已完成页", f"[bold]{esc(pages)}[/bold]")
 	if data.get("next_page") is not None and str(crawl_status) != "completed":
-		row("下一页", f"[bold]{data.get('next_page')}[/bold]")
+		row("下一页", f"[bold]{esc(data.get('next_page'))}[/bold]")
 	pending = data.get("details_pending")
 	done = data.get("details_completed")
 	if pending is not None or done is not None:
-		row("详情进度", f"完成 [bold]{done or 0}[/bold]  ·  待补 [bold]{pending or 0}[/bold]")
+		row("详情进度", f"完成 [bold]{esc(done or 0)}[/bold]  ·  待补 [bold]{esc(pending or 0)}[/bold]")
 
 	# Artifacts: short names, not full absolute paths.
 	paths = data.get("output_paths") if isinstance(data.get("output_paths"), Mapping) else {}
@@ -1366,11 +1365,15 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 	if footer_hint is not None:
 		parts.append(footer_hint)
 
-	border = "green" if success else (
-		"yellow"
-		if str(run.get("status")) == "waiting_input"
-		or str(crawl_status) in {"risk_stopped", "budget_stopped", "throttle_stopped", "stopped"}
-		else "cyan"
+	border = (
+		"green"
+		if success
+		else (
+			"yellow"
+			if str(run.get("status")) == "waiting_input"
+			or str(crawl_status) in {"risk_stopped", "budget_stopped", "throttle_stopped", "stopped"}
+			else "cyan"
+		)
 	)
 	panel_title = "采集已完成" if success else "采集任务状态"
 	display.console.print(Panel(Group(*parts), title=panel_title, border_style=border))

@@ -10,15 +10,15 @@ import re
 import sqlite3
 import sys
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Callable
 
 import click
-from rich.console import Console
+from rich.console import Console, ConsoleOptions, RenderableType
 from rich.errors import MarkupError
-from rich.markup import escape
 from rich.panel import Panel
+from rich.segment import Segment
 from rich.table import Table
 from rich.text import Text
 
@@ -38,19 +38,67 @@ from boss_agent_cli.services.browser_runtime import (
 	patchright_install_command,
 )
 
-# Rich output goes to stderr so stdout stays clean for Agent JSON
-console = Console(stderr=True)
-
-
 #: C0（保留 ``\t`` / ``\n``）与 C1 控制字符。Rich 只处理 markup，不会剥离原始
 #: 转义字节：平台文本里的 ESC / OSC / CSI 会原样写进终端，可改写标题、伪造
 #: 可点击链接或清屏（Issue #2245）。
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 
+#: 与 ``rich.markup.RE_TAGS`` 同形：Rich 认作标签的片段，连同紧邻的前导反斜杠。
+_MARKUP_TAG = re.compile(r"(\\*)(\[[a-z#/@][^[]*?])")
+#: 标签之外的 ``\[``：Rich 渲染时会还原成 ``[``，吃掉一个反斜杠。
+_BACKSLASHED_BRACKET = re.compile(r"(\\+)\[")
 
-def _strip_control(value: str) -> str:
-	"""剥离终端控制字符，保留制表符与换行（描述类字段需要多行渲染）。"""
+
+class _SanitizingConsole(Console):
+	"""在渲染出口按段剥离控制字符的 Console（Issue #2252）。
+
+	``escape_markup`` 只覆盖经它转义的值；``Text.append``、表格单元格等不走
+	markup 的路径曾经把平台文本里的 ESC 原样写进终端。所有内容最终都以
+	``Segment`` 形式经过 ``render``，在这里过滤一次即可覆盖现有与以后的
+	调用点。Rich 自己的光标 / 清屏指令走控制段（``segment.control`` 非空），
+	样式的 ANSI 序列在写出阶段由 style 生成，都不受影响。
+	"""
+
+	def render(
+		self,
+		renderable: RenderableType,
+		options: ConsoleOptions | None = None,
+	) -> Iterable[Segment]:
+		for segment in super().render(renderable, options):
+			if not segment.control and _CONTROL_CHARS.search(segment.text):
+				segment = Segment(_CONTROL_CHARS.sub("", segment.text), segment.style)
+			yield segment
+
+
+# Rich output goes to stderr so stdout stays clean for Agent JSON.
+# emoji=False：Rich 默认把文本里的 ``:name:`` 短码替换成 emoji，平台文本必须按字面显示。
+console: Console = _SanitizingConsole(stderr=True, emoji=False)
+
+
+def strip_control(value: str) -> str:
+	"""剥离终端控制字符，保留制表符与换行（描述类字段需要多行渲染）。
+
+	不经 Rich markup 的出口（``click.echo`` 菜单等）也用它清洗外部文本。
+	"""
 	return _CONTROL_CHARS.sub("", value)
+
+
+def _keep_backslashes(segment: str) -> str:
+	"""标签之外的文本：给每处「反斜杠 + ``[``」多补一个反斜杠，抵消 Rich 的还原。"""
+	return _BACKSLASHED_BRACKET.sub(lambda match: f"{match.group(1)}\\[", segment)
+
+
+def label_items(value: Any) -> list[Any]:
+	"""把技能 / 标签这类「应当是列表」的外部字段归一成列表。
+
+	平台字段漂移：字符串按单条处理（否则会被按字符拆开），其余非列表 / 元组
+	按空处理，不让切片或 join 抛 TypeError（Issue #2247；wizard 同口径见 #2252）。
+	"""
+	if isinstance(value, str):
+		return [value] if value else []
+	if isinstance(value, (list, tuple)):
+		return list(value)
+	return []
 
 
 def escape_markup(value: Any) -> str:
@@ -63,8 +111,32 @@ def escape_markup(value: Any) -> str:
 
 	同时剥离 ESC / OSC / CSI 等 C0 / C1 控制字符（Issue #2245）：``escape``
 	只挡 markup，挡不住原始转义字节。
+
+	返回值是自包含的（Issue #2251）：``rich.markup.escape`` 只转义值内部已经
+	成对的标签，两个各自转义的值拼进同一段 markup 时，前值留下的 ``[a`` 与
+	后值的 ``]`` 仍会配对成标签（吞掉中间文本或抛 MarkupError），结尾的
+	反斜杠还会吃掉代码紧跟着写的闭合标签。含 ``[`` 或以反斜杠结尾的值因此
+	包进空样式标签 ``[none]…[/none]``：Rich 的标签正则不能跨越 ``[``，值内
+	悬空的 ``[`` 够不到值外的 ``]``；结尾反斜杠加倍后恰好还原成原数量，
+	闭合标签保持有效。
 	"""
-	return escape(_strip_control(str(value)))
+	text = strip_control(str(value))
+	if "[" not in text and not text.endswith("\\"):
+		return text
+	parts: list[str] = []
+	position = 0
+	for match in _MARKUP_TAG.finditer(text):
+		parts.append(_keep_backslashes(text[position : match.start()]))
+		backslashes, tag = match.groups()
+		# 2n+1 个反斜杠：Rich 还原成 n 个字面反斜杠，并把标签当字面量。
+		parts.append(f"{backslashes}{backslashes}\\{tag}")
+		position = match.end()
+	tail = text[position:]
+	body = tail.rstrip("\\")
+	parts.append(_keep_backslashes(body))
+	# 紧贴闭合标签的 n 个反斜杠写成 2n 个：还原成 n 个，标签本身不被转义。
+	parts.append("\\" * ((len(tail) - len(body)) * 2))
+	return f"[none]{''.join(parts)}[/none]"
 
 
 _SHELL_METACHARACTERS = frozenset("'\"`$\\!*?[]{}()<>|&;#")
@@ -130,7 +202,9 @@ def positional_args(*values: str) -> str:
 	return quoted
 
 
-def boss_command(command: str, *, platform_name: str = "zhipin", data_dir: Path | None = None, role: str | None = None) -> str:
+def boss_command(
+	command: str, *, platform_name: str = "zhipin", data_dir: Path | None = None, role: str | None = None
+) -> str:
 	"""构造后继命令；依赖本地状态时显式保留数据目录。"""
 	prefix = "boss" if platform_name == "zhipin" else f"boss --platform {platform_name}"
 	if data_dir is not None:
@@ -234,6 +308,7 @@ _REGISTRY_COMMANDS: dict[str, str] = {
 	"boss --json wizard": "--json wizard",
 }
 
+
 def rewrite_command_examples(
 	text: str,
 	commands: Mapping[str, str],
@@ -317,7 +392,9 @@ def platform_error_contract(
 		code = "NETWORK_ERROR"
 	recoverable, recovery_action = error_contract_for_code(code)
 	if code in RISK_ERROR_CONTRACTS:
-		recovery_action, hints = risk_error_contract(code, ctx=ctx, clean_command=clean_command, doctor_command=doctor_command)
+		recovery_action, hints = risk_error_contract(
+			code, ctx=ctx, clean_command=clean_command, doctor_command=doctor_command
+		)
 		return recoverable, recovery_action, hints
 	if code == "CONTACT_NOT_FOUND":
 		# friend_id 写错或联系人已变化是确定性结果：给出去同一数据目录刷新沟通
@@ -513,7 +590,7 @@ def handle_error_output(
 		# 且它会落在我们自己加的方括号里——markup 转义在标签内部不生效（`[X\\[bold]`
 		# 仍会被解析），所以整行改用 Text 组装，不经过 markup 解析。
 		error_line = Text("error", style="red")
-		error_line.append(f" [{_strip_control(str(code))}] {_strip_control(safe_message)}")
+		error_line.append(f" [{strip_control(str(code))}] {strip_control(safe_message)}")
 		console.print(error_line)
 		if safe_recovery:
 			console.print(f"  [dim]recovery: {escape_markup(safe_recovery)}[/dim]")
@@ -539,35 +616,37 @@ def handle_not_supported(ctx: Any, command: str, exc: Exception, *, fallback_mes
 #: 不产生平台写入的命令（``handle_platform_error_output`` 的 ``command`` 取值）。
 #: 只用于区分未识别响应的恢复语义：在集合内按 ``NETWORK_ERROR`` 允许重试；
 #: 不在集合内（包括未来新增命令）一律按写处理，绝不告诉 Agent 重放可能已生效的写操作。
-_READ_ONLY_COMMANDS = frozenset({
-	"chat",
-	"chat-summary",
-	"chatmsg",
-	"detail",
-	"digest",
-	"export",
-	"favorites-list",
-	"follow-up",
-	"history",
-	"interviews",
-	"me",
-	"pipeline",
-	"recommend",
-	"recruiter-applications",
-	"recruiter-candidates",
-	"recruiter-chat",
-	"recruiter-chatmsg",
-	"recruiter-jobs-detail",
-	"recruiter-jobs-list",
-	"recruiter-last-messages",
-	"recruiter-recommendations",
-	"recruiter-resume",
-	"recruiter-whoami",
-	"search",
-	"show",
-	"status",
-	"watch",
-})
+_READ_ONLY_COMMANDS = frozenset(
+	{
+		"chat",
+		"chat-summary",
+		"chatmsg",
+		"detail",
+		"digest",
+		"export",
+		"favorites-list",
+		"follow-up",
+		"history",
+		"interviews",
+		"me",
+		"pipeline",
+		"recommend",
+		"recruiter-applications",
+		"recruiter-candidates",
+		"recruiter-chat",
+		"recruiter-chatmsg",
+		"recruiter-jobs-detail",
+		"recruiter-jobs-list",
+		"recruiter-last-messages",
+		"recruiter-recommendations",
+		"recruiter-resume",
+		"recruiter-whoami",
+		"search",
+		"show",
+		"status",
+		"watch",
+	}
+)
 
 
 def read_only_platform_code(command: str, code: str) -> str:
@@ -620,7 +699,18 @@ def handle_platform_error_output(
 		if details is None and isinstance(cli_details, dict) and cli_details:
 			details = cli_details
 		if code in RISK_ERROR_CONTRACTS and response.get("code") in (
-			31, "31", 32, "32", 35, "35", 36, "36", 37, "37", 38, "38"
+			31,
+			"31",
+			32,
+			"32",
+			35,
+			"35",
+			36,
+			"36",
+			37,
+			"37",
+			38,
+			"38",
 		):
 			details = {**(details or {}), "platform_code": response.get("__cli_platform_code__", int(response["code"]))}
 	handle_error_output(
@@ -710,13 +800,7 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 	boss_title = escape_markup(data.get("boss_title", "-"))
 	desc = str(data.get("description", ""))
 
-	# 平台字段漂移：字符串按单条技能处理（否则会被按字符拆开），其余非列表 /
-	# 元组按空处理，不再让 join 抛 TypeError（Issue #2247）。
-	skills = data.get("skills", [])
-	if isinstance(skills, str):
-		skills = [skills]
-	elif not isinstance(skills, (list, tuple)):
-		skills = []
+	skills = label_items(data.get("skills"))
 	skill_str = ", ".join(escape_markup(skill) for skill in skills) if skills else "-"
 
 	text = (
@@ -895,7 +979,9 @@ def render_export_summary(data: dict[str, Any]) -> None:
 	count = data.get("count", 0)
 	fmt = data.get("format", "")
 	if path:
-		console.print(f"[green]exported[/green] {count} jobs to [bold]{escape_markup(path)}[/bold] ({escape_markup(fmt)})")
+		console.print(
+			f"[green]exported[/green] {count} jobs to [bold]{escape_markup(path)}[/bold] ({escape_markup(fmt)})"
+		)
 	else:
 		console.print(f"[green]exported[/green] {count} jobs ({fmt})")
 	if data.get("truncated"):
@@ -1154,12 +1240,10 @@ def risk_error_contract(
 		_risk_contract_commands(str(spec["recovery_action"]), clean_command, doctor_command),
 		{
 			"next_actions": [
-				_risk_contract_commands(str(item), clean_command, doctor_command)
-				for item in spec["next_actions"]
+				_risk_contract_commands(str(item), clean_command, doctor_command) for item in spec["next_actions"]
 			],
 			"operator_actions": [
-				_risk_contract_commands(str(item), clean_command, doctor_command)
-				for item in spec["operator_actions"]
+				_risk_contract_commands(str(item), clean_command, doctor_command) for item in spec["operator_actions"]
 			],
 		},
 	)
@@ -1209,9 +1293,7 @@ def browser_policy_text_for_ctx(ctx: Any, text: str) -> str:
 	"""带数据目录与平台的来源策略文案；无上下文的纯函数调用保持原文。"""
 	if not text:
 		return text
-	return browser_policy_text(
-		text, lambda command: boss_command_for_ctx(ctx, command, include_data_dir=True)
-	)
+	return browser_policy_text(text, lambda command: boss_command_for_ctx(ctx, command, include_data_dir=True))
 
 
 def httpx_only_fallback_hint(ctx: Any) -> list[str]:
@@ -1469,9 +1551,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 				budget_recoverable, budget_recovery = error_contract_for_code(e.code)
 				if e.code == "CIRCUIT_BREAKER_OPEN":
 					# 熔断不是预算冷却：恢复指引指向 agent stats / --resume（Issue #1520）。
-					stats_command = boss_command_for_ctx(
-						ctx, "agent stats", include_data_dir=True, role="recruiter"
-					)
+					stats_command = boss_command_for_ctx(ctx, "agent stats", include_data_dir=True, role="recruiter")
 					resume_command = boss_command_for_ctx(
 						ctx, "agent run --resume", include_data_dir=True, role="recruiter"
 					)
@@ -1558,8 +1638,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					message=str(e),
 					recoverable=invalid_recoverable,
 					recovery_action=(
-						"本次写入被本地缓存库拒绝（约束冲突或非法绑定值），库本身完好、无需删除；"
-						"修正调用参数后重试"
+						"本次写入被本地缓存库拒绝（约束冲突或非法绑定值），库本身完好、无需删除；修正调用参数后重试"
 					),
 				)
 			except INTERNAL_ERROR_TYPES as e:

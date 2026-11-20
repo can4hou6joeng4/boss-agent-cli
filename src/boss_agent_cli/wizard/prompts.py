@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence, cast
 
 import click
 
+from boss_agent_cli import display
 from boss_agent_cli.wizard.catalog import GOALS, catalog_data
 from boss_agent_cli.wizard.models import WizardInput, WorkflowInputError, count_or_none
 from boss_agent_cli.wizard.runner import has_blocked_step
@@ -120,6 +121,26 @@ def _format_menu_description(description: str, *, limit: int = 40) -> str:
 	return desc
 
 
+def _menu_text(value: Any) -> str:
+	"""菜单里的单行文本：剥离终端控制字符并把换行 / 制表符折成空格（Issue #2252）。
+
+	选项标题来自平台（职位名、公司名、最近一条消息）。编号回退菜单用
+	``click.echo`` 直接写 stderr，不经 Rich：ESC 序列会原样到达终端，换行还能
+	伪造出额外的菜单行。两种菜单驱动都从 ``_augment_menu_options`` 取选项，
+	在那里统一清洗。
+	"""
+	# 只替换换行 / 制表符：标签里的连续空格是对齐用的，不能折叠。
+	return display.strip_control(str(value)).replace("\n", " ").replace("\t", " ")
+
+
+def _sanitized_option(item: MenuOption) -> MenuOption:
+	label = _menu_text(item.label)
+	description = _menu_text(item.description)
+	if label == item.label and description == item.description:
+		return item
+	return replace(item, label=label, description=description)
+
+
 def _augment_menu_options(
 	options: Sequence[MenuOption],
 	*,
@@ -127,7 +148,7 @@ def _augment_menu_options(
 	allow_exit: bool,
 ) -> list[MenuOption]:
 	"""Append back/exit nav items without duplicating an explicit exit choice."""
-	items = list(options)
+	items = [_sanitized_option(item) for item in options]
 	if allow_back and not any(item.value == _BACK for item in items):
 		items.append(MenuOption(_BACK, "返回上一步", kind="nav"))
 	if allow_exit and not any(item.value in {_EXIT, "exit"} or item.label.strip() == "退出向导" for item in items):
@@ -294,9 +315,7 @@ def _menu_content_lines(
 			prefix = "▌ " if active else "  "
 			label = _pad_label(item.label, content_label_w) if desc else item.label
 			# Only pad when any peer has a description; still left-align the "·" column.
-			if not desc and any(
-				(getattr(peer, "description", None) and not _is_nav_option(peer)) for peer in items
-			):
+			if not desc and any((getattr(peer, "description", None) and not _is_nav_option(peer)) for peer in items):
 				label = _pad_label(item.label, content_label_w)
 			lines.append((style, f"{prefix}{marker}  {label}"))
 			if desc:
@@ -342,6 +361,7 @@ class PromptToolkitMenu:
 
 		if clear_before:
 			clear_wizard_screen()
+		title = _menu_text(title)
 		items = _augment_menu_options(options, allow_back=allow_back, allow_exit=allow_exit)
 		selected = _default_select_index(items, default)
 
@@ -445,7 +465,7 @@ class ClickMenu:
 		items = _augment_menu_options(options, allow_back=allow_back, allow_exit=allow_exit)
 		content_label_w, nav_label_w = _menu_label_widths(items)
 		# Number prefix width: "  12. " / "    3. "
-		click.echo(f"\n{title}", err=True)
+		click.echo(f"\n{_menu_text(title)}", err=True)
 		click.echo("  （输入序号 · Enter 确认）", err=True)
 		saw_nav = False
 		for index, item in enumerate(items, start=1):
@@ -457,8 +477,10 @@ class ClickMenu:
 			desc = _format_menu_description(item.description)
 			label_w = nav_label_w if is_nav else content_label_w
 			label = _pad_label(item.label, label_w) if desc else item.label
-			if not desc and not is_nav and any(
-				(getattr(peer, "description", None) and not _is_nav_option(peer)) for peer in items
+			if (
+				not desc
+				and not is_nav
+				and any((getattr(peer, "description", None) and not _is_nav_option(peer)) for peer in items)
 			):
 				label = _pad_label(item.label, label_w)
 			detail = f"  ·  {desc}" if desc else ""
@@ -619,9 +641,7 @@ def _collect_control(
 	return WizardControl(action=action, run_id=run_id)
 
 
-def _visible_goal_groups(
-	role: str, *, local_only: bool = False
-) -> tuple[tuple[str, tuple[str, ...]], ...]:
+def _visible_goal_groups(role: str, *, local_only: bool = False) -> tuple[tuple[str, tuple[str, ...]], ...]:
 	"""goal 分组；local_only 时只保留无需登录（步骤不含 auth_status）的目标。"""
 	groups = GOAL_GROUPS.get(role, ())
 	if not local_only:
@@ -670,10 +690,7 @@ def _collect_new_plan(
 			if group_name is None:
 				group_name = menu.select(
 					"请选择目标分类",
-					[
-						MenuOption(name, name, GOAL_GROUP_HINTS.get(name, ""))
-						for name, _ in groups
-					],
+					[MenuOption(name, name, GOAL_GROUP_HINTS.get(name, "")) for name, _ in groups],
 				)
 			goal_names = next(goals for name, goals in groups if name == group_name)
 			goal = menu.select(
@@ -724,8 +741,6 @@ def _collect_inputs(
 		else:
 			# 提示里的命令要指向本次运行的数据目录，裸命令会让真人导入到默认目录
 			# （Issue #1090）。
-			from boss_agent_cli import display
-
 			resume_command = display.boss_command("resume import <文件>", data_dir=data_dir)
 			inputs["resume"] = menu.text(
 				f"本地简历名称（当前无简历，可先用 {resume_command} 导入）",
@@ -779,11 +794,7 @@ def _runs_with_status(available_runs: Sequence[Mapping[str, Any]], statuses: set
 
 def _resumable_runs(available_runs: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
 	statuses = {"pending", "running", "waiting_input", "failed"}
-	return [
-		run
-		for run in available_runs
-		if str(run.get("status")) in statuses and not has_blocked_step(run)
-	]
+	return [run for run in available_runs if str(run.get("status")) in statuses and not has_blocked_step(run)]
 
 
 def _main_menu_options(available_runs: Sequence[Mapping[str, Any]]) -> list[MenuOption]:
@@ -892,9 +903,7 @@ def _result_menu_options(
 			title = str(_first_value(item, ("name", "title")) or "未命名简历")
 			owner = "本地简历"
 			details = [
-				str(value)
-				for value in (_first_value(item, ("updated_at", "created_at")),)
-				if value not in (None, "")
+				str(value) for value in (_first_value(item, ("updated_at", "created_at")),) if value not in (None, "")
 			]
 		elif kind == "watch":
 			title = str(_first_value(item, ("name",)) or "未命名监控")

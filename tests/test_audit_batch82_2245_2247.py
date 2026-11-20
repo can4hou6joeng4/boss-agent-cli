@@ -61,7 +61,7 @@ def test_escape_markup_keeps_newlines_and_tabs() -> None:
 
 
 def test_escape_markup_still_escapes_markup() -> None:
-	assert escape_markup("[/bold]") == "\\[/bold]"
+	assert escape_markup("[/bold]") == "[none]\\[/bold][/none]"
 
 
 def test_render_job_table_strips_control_chars(rendered) -> None:
