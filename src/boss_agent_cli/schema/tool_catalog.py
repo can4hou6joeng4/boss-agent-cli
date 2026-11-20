@@ -265,6 +265,7 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 						"description": "导出格式；指定后把沟通列表写入文件而不是返回列表",
 					},
 					"output_file": {"type": "string", "description": "导出文件路径（不指定则保存到配置的 export_dir）"},
+					"raw": {"type": "boolean", "description": "为每条记录附加 raw 原始联系人对象，保留原始键名与编码；与 format 合用时不影响导出文件、快照与 diff"},
 				},
 				"required": [],
 				# -o/--output 只在导出分支生效；CLI 对只有 output_file 的调用必返回 INVALID_PARAM。

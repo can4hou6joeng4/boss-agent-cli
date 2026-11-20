@@ -42,7 +42,7 @@
 
 | 能力 | CLI 命令 | 需要登录 | 通道 |
 |---|---|---|---|
-| 沟通列表 | `boss chat` | 是 | `auto` 使用本地凭据的 httpx；显式 `existing-browser` 通过 CDP 复用已有页面 |
+| 沟通列表 | `boss chat [--raw]` | 是 | `auto` 使用本地凭据的 httpx；显式 `existing-browser` 通过 CDP 复用已有页面；`--raw` 附加原始联系人对象，保留原始键名与编码 |
 | 聊天消息 | `boss chatmsg [--raw]` | 是 | 优先接受 `boss chat` 输出的稳定 `uid`；`auto` 使用本地凭据的 httpx，显式 `existing-browser` 通过 CDP 复用已有页面；`--raw` 保留结构化 body/链接/职位卡片字段 |
 | 聊天摘要 | `boss chat-summary` | 是 | 优先接受稳定 `uid`；平台适配器 + 本地处理 |
 | 联系人标签 | `boss mark` | 是 | 平台适配器 |

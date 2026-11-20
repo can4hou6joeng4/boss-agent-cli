@@ -434,6 +434,11 @@ SCHEMA_DATA = {
 					"minimum": 1,
 					"description": "页码",
 				},
+				"--raw": {
+					"type": "boolean",
+					"default": False,
+					"description": "在普通输出的每条记录中附加 raw（该联系人的原始平台对象，保留原始键名与编码）；与 --export 合用时不影响导出文件、快照与 diff",
+				},
 			},
 		},
 		"chatmsg": {
