@@ -19,15 +19,36 @@ _WIN_UA = (
 _BRANDS = '"Chromium";v="145", "Not;A=Brand";v="99", "Google Chrome";v="145"'
 
 
+class _Cookie:
+	def __init__(self, name: str, value: str, domain: str = "", path: str = "/") -> None:
+		self.name = name
+		self.value = value
+		self.domain = domain
+		self.path = path
+
+
+class _Jar:
+	"""http.cookiejar.CookieJar 的最小替身：可迭代，可按名清理。"""
+
+	def __init__(self, cookies: list[_Cookie]) -> None:
+		self.cookies = list(cookies)
+
+	def __iter__(self):
+		return iter(list(self.cookies))
+
+	def clear(self, domain: str = "", path: str = "/", name: str | None = None) -> None:
+		self.cookies = [cookie for cookie in self.cookies if cookie.name != name]
+
+
 class _CookieJar:
 	def __init__(self, values: dict[str, str]) -> None:
 		self.values = dict(values)
+		self.jar = _Jar([_Cookie(name, value) for name, value in self.values.items()])
 
-	def items(self):
-		return self.values.items()
-
-	def set(self, name: str, value: str) -> None:
+	def set(self, name: str, value: str, domain: str = "", path: str = "/") -> None:
 		self.values[name] = value
+		self.jar.clear(name=name)
+		self.jar.cookies.append(_Cookie(name, value, domain, path))
 
 
 class _HttpClient:
