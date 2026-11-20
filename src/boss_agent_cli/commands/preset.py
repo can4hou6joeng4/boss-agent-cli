@@ -7,7 +7,7 @@ from boss_agent_cli.api.endpoints import (
 	SCALE_CODES,
 	STAGE_CODES,
 )
-from boss_agent_cli.cache.store import CacheStore
+from boss_agent_cli.cache.store import CacheStore, saved_search_name_error
 from boss_agent_cli.display import boss_command_for_ctx, handle_error_output, handle_output, render_action_result, render_list_result, shell_argument
 from boss_agent_cli.search_filters import (
 	ACTIVE_LEVELS,
@@ -90,6 +90,17 @@ def preset_add_cmd(
 			code="INVALID_PARAM",
 			message="preset 名称与搜索关键词不能为空",
 			recovery_action=f"补上预设名称和搜索关键词后重试；用 {list_cmd} 查看已有预设",
+			hints={"next_actions": [list_cmd]},
+		)
+		return
+	if problem := saved_search_name_error(name):
+		list_cmd = _hint_command(ctx, "preset list")
+		handle_error_output(
+			ctx,
+			"preset",
+			code="INVALID_PARAM",
+			message=f"预设{problem}",
+			recovery_action=f"换一个只含普通 Unicode 文本的名称重试；用 {list_cmd} 查看已有预设",
 			hints={"next_actions": [list_cmd]},
 		)
 		return
@@ -178,6 +189,17 @@ def preset_remove_cmd(ctx: click.Context, name: str) -> None:
 			code="INVALID_PARAM",
 			message="预设名称不能为空",
 			recovery_action=f"补上预设名称后重试；用 {list_cmd} 查看已有预设",
+			hints={"next_actions": [list_cmd]},
+		)
+		return
+	if problem := saved_search_name_error(name):
+		list_cmd = _hint_command(ctx, "preset list")
+		handle_error_output(
+			ctx,
+			"preset",
+			code="INVALID_PARAM",
+			message=f"预设{problem}",
+			recovery_action=f"换一个只含普通 Unicode 文本的名称重试；用 {list_cmd} 查看已有预设",
 			hints={"next_actions": [list_cmd]},
 		)
 		return

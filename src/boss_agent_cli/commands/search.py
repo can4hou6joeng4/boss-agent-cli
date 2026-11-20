@@ -4,7 +4,7 @@ from typing import Any, NamedTuple
 import click
 
 from boss_agent_cli.auth.manager import AuthManager
-from boss_agent_cli.cache.store import CacheStore, SavedSearchParamsError
+from boss_agent_cli.cache.store import CacheStore, SavedSearchParamsError, saved_search_name_error
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.crawler.service import CrawlBudget
 from boss_agent_cli.display import (
@@ -341,6 +341,18 @@ def search_cmd(
 	if preset and not any((city, salary, experience, education, industry, scale, stage, job_type)):
 		remove_cmd = _hint_command(ctx, f"preset remove {positional_hint(preset)}")
 		preset_origin = f"（来自 preset '{preset}'，可用 {remove_cmd} 删除后重建）"
+
+	if preset and (problem := saved_search_name_error(preset)):
+		list_cmd = _hint_command(ctx, "preset list")
+		handle_error_output(
+			ctx,
+			"search",
+			code="INVALID_PARAM",
+			message=f"预设{problem}",
+			recovery_action=f"换一条只含普通 Unicode 文本的预设名重试；用 {list_cmd} 查看已有预设",
+			hints={"next_actions": [list_cmd]},
+		)
+		return
 
 	if preset:
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
