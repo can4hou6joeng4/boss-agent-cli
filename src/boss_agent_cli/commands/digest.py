@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +12,7 @@ from boss_agent_cli.services.output_path import prepare_output_path
 from boss_agent_cli.services.text_files import write_text_atomic
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.digest import build_digest, render_digest_markdown
+from boss_agent_cli.output import write_document_stdout
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output, json_forced, open_file_command, render_message_panel, render_simple_list
 from boss_agent_cli.pipeline_state import build_pipeline_items, now_ts_or_clock, select_follow_up_candidates
 
@@ -177,8 +177,7 @@ def digest_cmd(ctx: click.Context, days_stale: int, now_ts_ms: int | None, outpu
 					"operator_actions": ["把 data.content 写成 .md 文件或直接发送"]},
 			)
 		else:
-			sys.stdout.write(md_text)
-			sys.stdout.flush()
+			write_document_stdout(md_text)
 		return
 
 	handle_output(

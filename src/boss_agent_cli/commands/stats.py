@@ -10,7 +10,6 @@ import errno
 import html
 import sqlite3
 import stat
-import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -21,6 +20,7 @@ from rich.table import Table
 from boss_agent_cli import display
 from boss_agent_cli.cache.store import CacheDatabaseInvalid, is_cache_busy_error, is_cache_local_io_error
 from boss_agent_cli.commands._output_path import validate_output_path_or_emit
+from boss_agent_cli.output import write_document_stdout
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	handle_error_output,
@@ -283,11 +283,11 @@ footer a {{ color: var(--accent); text-decoration: none; }}
 <body>
 
 <header>
-	<h1>📊 投递转化漏斗</h1>
+	<h1>投递转化漏斗</h1>
 	<div class="meta">窗口期：最近 {window_days} 天 · 生成时间：{generated_at}</div>
 </header>
 
-{f'<div class="note">⚠️ {note}</div>' if note else ''}
+{f'<div class="note">注意：{note}</div>' if note else ''}
 
 <section>
 	<h2>核心指标</h2>
@@ -481,8 +481,7 @@ def stats_cmd(ctx: click.Context, days: int, output_format: str, output_path: Pa
 			)
 		else:
 			# stdout 直出 HTML（便于管道重定向）
-			sys.stdout.write(html_text)
-			sys.stdout.flush()
+			write_document_stdout(html_text)
 		return
 
 	stats_hints: dict[str, Any] = {"next_actions": _build_hints(ctx, data)}

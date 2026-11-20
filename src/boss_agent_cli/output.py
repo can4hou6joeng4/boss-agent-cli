@@ -246,6 +246,12 @@ def serialization_failure_envelope(command: Any = None) -> dict[str, Any]:
 	}
 
 
+def _stdout_encoding() -> str:
+	"""stdout 的实际编码；取不到时按 UTF-8（Issue #2213）。"""
+	encoding = getattr(sys.stdout, "encoding", None)
+	return encoding if isinstance(encoding, str) and encoding else "utf-8"
+
+
 def _dumps_strict_envelope(payload: dict[str, Any]) -> tuple[str, bool]:
 	"""按严格 JSON 序列化信封；必要时归一，最后防线返回固定错误信封。
 
@@ -253,17 +259,35 @@ def _dumps_strict_envelope(payload: dict[str, Any]) -> tuple[str, bool]:
 	据此设置失败退出码，``exit 0 ⇔ ok=true`` 的契约在最后防线也成立
 	（Issue #2053）。
 	"""
+
+	def dump(ensure_ascii: bool) -> str:
+		return json.dumps(payload, ensure_ascii=ensure_ascii, allow_nan=False)
+
 	try:
 		# 快路径：正常信封输出与修复前逐字节一致，且不为深层合法结构多走一遍递归。
-		return json.dumps(payload, ensure_ascii=False, allow_nan=False), False
+		text = dump(False)
+		# stdout 不一定是 UTF-8：中文 Windows 的 cp936 重定向下，emoji 等字符
+		# 写不出去会让整条命令丢掉信封（Issue #2213）。改用以 \uXXXX 转义的
+		# ASCII 输出，仍是合法 JSON，任何 ASCII 兼容编码都能写出；孤立代理
+		# 字符（Issue #1294）同样被这条路径覆盖。
+		try:
+			text.encode(_stdout_encoding())
+		except (UnicodeEncodeError, LookupError):
+			text = dump(True)
+		return text, False
 	except (TypeError, ValueError, RecursionError):
 		pass
 	try:
-		return json.dumps(json_safe_value(payload), ensure_ascii=False, allow_nan=False), False
+		text = json.dumps(json_safe_value(payload), ensure_ascii=False, allow_nan=False)
+		try:
+			text.encode(_stdout_encoding())
+		except (UnicodeEncodeError, LookupError):
+			text = json.dumps(json_safe_value(payload), ensure_ascii=True, allow_nan=False)
+		return text, False
 	except (TypeError, ValueError, RecursionError):
 		# 归一后仍无法严格序列化（NaN 键、bytes、循环引用等）：返回固定错误信封。
 		command = payload.get("command") if isinstance(payload, dict) else None
-		return json.dumps(serialization_failure_envelope(command), ensure_ascii=False, allow_nan=False), True
+		return json.dumps(serialization_failure_envelope(command), ensure_ascii=True, allow_nan=False), True
 
 
 def _encode_stdout_text(text: str) -> str:
@@ -476,6 +500,28 @@ def exit_code_for_error(code: str) -> int:
 def emit_error(command: str, **kwargs: Any) -> None:
 	click.echo(envelope_error(command, **kwargs))
 	sys.exit(exit_code_for_error(str(kwargs.get("code") or "")))
+
+
+def write_document_stdout(text: str) -> None:
+	"""把报表 / Markdown 等文档直出到 stdout（Issue #2213）。
+
+	重定向与管道：按 UTF-8 字节写出，文件内容与 ``-o`` 写出的 UTF-8 文件一致，
+	HTML 的 ``<meta charset="UTF-8">`` 不会与实际编码矛盾。终端：按 stdout 的
+	实际编码归一后写出，避免中文 Windows（cp936）控制台因个别字符整条失败。
+	"""
+	stream = sys.stdout
+	isatty = getattr(stream, "isatty", None)
+	if callable(isatty) and isatty():
+		stream.write(text.encode(_stdout_encoding(), "backslashreplace").decode(_stdout_encoding(), "replace"))
+		stream.flush()
+		return
+	buffer = getattr(stream, "buffer", None)
+	if buffer is not None:
+		buffer.write(text.encode("utf-8", "backslashreplace"))
+		buffer.flush()
+		return
+	stream.write(text.encode(_stdout_encoding(), "backslashreplace").decode(_stdout_encoding(), "replace"))
+	stream.flush()
 
 
 class Logger:

@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Fixed
+- 非 UTF-8 stdout（中文 Windows 的 cp936 重定向 / 自定义 `PYTHONIOENCODING`）下报表与信封不再因 emoji 编码失败：信封在无法按 stdout 编码写出时回退为 `\uXXXX` 转义的 ASCII（仍是合法 JSON，值不变）；`stats --format html` / `digest --format md` / `export --format html` 的直出分支重定向时写 UTF-8 字节、终端时按实际编码归一；报表模板去掉 emoji（`📊` / `⚠️` 改为纯文本），不再误报「确认目标路径可写」的 `LOCAL_IO_ERROR`（Issue #2213）。
+- `render_digest_markdown` 对 `new_matches` / `follow_ups` / `interviews` 里的非对象条目按缺失过滤，与 #2162 的导出服务边界同口径：库内直接调用或未来调用方传入 `null` / 字符串 / 数字时不再抛 `AttributeError`，计数与展示只包含对象条目（Issue #2214）。
 - 采集执行中断点被 `clean --privacy` 删除后按「已停止」fail-closed：执行器不再把「行不存在」当成「没有 stop」，后续页的职位行不会复活已清理的 `crawl_jobs`、导出目录不会被重建、信封也不再报 `completed` 指向不存在的 run；执行器写职位行改为以 `crawl_runs` 行存在为前提的原子插入（`require_existing_run`），最后一页之后导出前再确认一次断点（Issue #2208）。
 - 前台 `crawl resume` 在预检之前清除旧停止标记、失败时还原：预检（依赖探测、登录态读取）期间到达的新 `crawl stop` 不再被预检后的清理当成上一轮残留清掉，采集立即按停止结算；与后台恢复路径同构（Issue #2209）。
 - `job_desc_cache.description` 的 BLOB 存储类漂移在读取边界按 UTF-8 解码，解码失败或其它类型按「未命中」处理并重新取详情：漂移值不再进入 payload 让 `put_crawl_job` 的 `json.dumps` 抛 `TypeError`、把任务永久停在 `stopped` 却报 `ok:true`；`search_filters` / `ai` / `agent` 的详情缓存消费点同口径（Issue #2210）。
