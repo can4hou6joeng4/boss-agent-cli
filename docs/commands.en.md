@@ -183,7 +183,7 @@ Follow-up commands from `apply`, `greet`, and `batch-greet` preserve the origina
 | Command | Description |
 |---------|-------------|
 | `boss chat [--raw]` | List conversations with pagination and source filters; `--raw` adds a `raw` original contact object per record in normal output (original keys and codes preserved), and has no effect on the export file, snapshot, or diff when combined with `--export` |
-| `boss chatmsg <uid-or-sid> [--raw]` | Read message history; prefer the stable `uid` returned by `boss chat`; `--raw` preserves structured body/link/card fields |
+| `boss chatmsg <uid-or-sid> [--friend-uid UID] [--raw]` | Read message history; prefer the stable `uid` returned by `boss chat`; `--raw` preserves structured body/link/card fields; with a known `uid` and this request's `security_id`, use `--friend-uid UID <security_id>` to skip the contact-list scan |
 | `boss chat-summary <uid-or-sid>` | Build a structured conversation summary; prefer the stable `uid` |
 | `boss mark <uid-or-sid> --label X` | Add or remove a contact label; prefer the stable `uid`; accepts a label name or its numeric ID (1/2/3/4/5/6/7/8/11), other numbers are rejected |
 | `boss interviews` | Interview invitations |

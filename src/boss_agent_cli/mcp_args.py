@@ -314,6 +314,10 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "chatmsg":
 		args = [name, arguments["security_id"]]
+		# 存在即下发：显式空串必须交给 CLI 按 INVALID_PARAM 拒绝，不能被真值
+		# 判断化装成「没传」而静默退回全列表扫描（Issue #2277）。
+		if "friend_uid" in arguments:
+			args.extend(["--friend-uid", str(arguments["friend_uid"])])
 		if "page" in arguments:
 			args.extend(["--page", str(arguments["page"])])
 		if "count" in arguments:
