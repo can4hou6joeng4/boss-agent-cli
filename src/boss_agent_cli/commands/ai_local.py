@@ -383,9 +383,9 @@ def local_smoke_cmd(ctx: click.Context) -> None:
 		handle_error_output(
 			ctx,
 			"ai.local.smoke",
-			code="AI_API_ERROR",
+			code=exc.code,
 			message=f"本地 AI 服务调用失败: {exc}",
-			recoverable=True,
+			recoverable=exc.recoverable,
 			recovery_action=recovery_action_for(
 				exc,
 				"确认本地模型服务已启动后重试",
