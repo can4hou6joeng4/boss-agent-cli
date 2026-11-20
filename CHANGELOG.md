@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Fixed
+- 自动化决策的 `has_exchange` 只看候选人一侧文本：我方问卷 / 追问话术里出现「交换微信」「已交换」时不再判定「已交换」并把候选人静默跳过，与升级检测的 #1945 同口径；我方动作仍以 `exchange_contact_at` 为准（Issue #2227）。
+- 面试时间按最近消息优先提取：候选人改期（「明天下午 3 点」→「改到后天上午 10 点」）不再取到已作废的旧时间，历史里的时间也不再每轮命中；有方向信息时以 `ordered_messages` 顺序为准（Issue #2228）。
+- 转录没有任何我方消息锚点时不再把触发问卷的旧消息当成候选人回复：自动追问与交换联系方式不再由一条历史消息触发，保守按等待回复处理（Issue #2229）。
 - 缓存层的本地 JSON 列统一按 `ensure_ascii=True` 写入、搜索键按 `backslashreplace` 编码：平台 JSON 里的孤立代理字符（`\ud800`）不再让 `put_crawl_job` 抛 `UnicodeEncodeError` 把采集任务永久卡在 `stopped`，`search` / `shortlist` 也不再以 `LOCAL_IO_ERROR` 失败；读回值不变（Issue #2223）。
 - `shortlist list` 逐行容错：单条记录字段写坏（如 `created_at` 是 BLOB）不再让整个候选池不可见，坏行跳过并通过 `hints.corrupt` 与操作指引指名删除重建；新增 `list_shortlist_with_corrupt`，与 watch / preset 的 corrupt 名单同口径（Issue #2224）。
 - 残留事务不再被误判为缓存库损坏：`BEGIN IMMEDIATE` 前先回滚连接上未提交的隐式事务；`cannot start a transaction within a transaction` 按写入拒绝上报，不再引导用户备份并删除完好的缓存库（Issue #2225）。

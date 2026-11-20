@@ -176,23 +176,42 @@ def _conversation_status(
 	]
 	questionnaire_index = _last_index(texts, config.questionnaire_message)
 	follow_up_index = _last_index(texts, config.follow_up_message)
-	latest_incoming = "\n".join(conversation.incoming_messages)
 	return ConversationStatus(
 		has_questionnaire=questionnaire_index >= 0
 		or bool(prior.get("questionnaire_sent_at")),
 		has_follow_up=follow_up_index >= 0
 		or bool(prior.get("follow_up_sent_at")),
-		has_exchange=bool(prior.get("exchange_contact_at")) or any(
-			"交换微信" in text or "已交换" in text for text in texts
-		),
+		# 只看候选人说的话：我方话术里出现「交换微信」不是候选人已交换
+		# （与 _escalation_reason 的 #1945 同口径，Issue #2227）。
+		has_exchange=bool(prior.get("exchange_contact_at"))
+		or any("交换微信" in text or "已交换" in text for text in _candidate_texts(conversation)),
 		candidate_after_questionnaire=_replied_after(
 			conversation, questionnaire_index, prior, "questionnaire_sent_at"
 		),
 		candidate_after_follow_up=_replied_after(
 			conversation, follow_up_index, prior, "follow_up_sent_at"
 		),
-		interview_time=_extract_interview_time(latest_incoming),
+		interview_time=_latest_interview_time(conversation),
 	)
+
+
+def _latest_interview_time(conversation: Conversation) -> str:
+	"""按最近消息优先提取面试时间；候选人改期后取到的是新时间（Issue #2228）。
+
+	旧实现把 incoming 拼成一段再 ``search``，返回最旧的一处匹配；改期消息
+	与历史时间都会被误当成当前约定。
+	"""
+	if conversation.ordered_messages:
+		texts = [
+			text for direction, text in reversed(conversation.ordered_messages) if direction == "incoming"
+		]
+	else:
+		texts = list(reversed(conversation.incoming_messages))
+	for text in texts:
+		interview_time = _extract_interview_time(text)
+		if interview_time:
+			return interview_time
+	return ""
 
 
 def _last_index(items: list[str], marker: str) -> int:
@@ -230,8 +249,10 @@ def _replied_after(
 	必然为真、``incoming_messages`` 又含触发旧消息，退回 prior 兜底等于无条件
 	「已回复」。看我方最后一条 outgoing 消息之后候选人是否回复。
 
-	转录有方向但**完全没有**我方消息时不能据此断言未回复（转录不完整，可能只
-	截取了候选人一侧），保留 prior 兜底；转录完全没有方向信息时同理。
+	没有任何我方消息锚点时（转录只截取了候选人一侧，或方向解析漂移）不再用
+	prior 兜底断言「已回复」：``incoming_messages`` 至少含触发问卷的旧消息，
+	按它自动发送追问 / 交换联系方式会让一条历史消息变成真实写动作的依据
+	（Issue #2229）。保守按未回复处理，等待方向信息恢复或人工核对。
 	"""
 	if marker_index >= 0 and conversation.ordered_messages:
 		return _has_incoming_after(conversation, marker_index)
@@ -243,7 +264,12 @@ def _replied_after(
 		if last_outgoing >= 0:
 			return _has_incoming_after(conversation, last_outgoing)
 	sent = prior.get(key)
-	return isinstance(sent, str) and bool(sent) and bool(conversation.incoming_messages)
+	return (
+		isinstance(sent, str)
+		and bool(sent)
+		and bool(conversation.incoming_messages)
+		and bool(conversation.outgoing_messages)
+	)
 
 
 def _candidate_texts(conversation: Conversation) -> tuple[str, ...]:

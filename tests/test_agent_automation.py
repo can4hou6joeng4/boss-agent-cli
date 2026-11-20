@@ -1049,9 +1049,19 @@ def test_unconfirmed_pending_action_is_not_replayed_after_resume(tmp_path: Path)
 
 
 def test_boss_adapter_uses_recruiter_platform_for_contact_exchange(tmp_path: Path) -> None:
+	class _ReplyFakeBossRecruiter(FakeBossRecruiter):
+		"""会话里带一条我方消息，让「候选人回复在它之后」可被证明（Issue #2229）。"""
+
+		def chat_history(self, gid: int, *, count: int = 20, max_msg_id: int | None = None) -> dict:
+			response = super().chat_history(gid, count=count, max_msg_id=max_msg_id)
+			response["zpData"]["result"].insert(
+				0, {"from": "boss", "content": "您好，我是招聘方，方便继续沟通吗？"}
+			)
+			return response
+
 	store = AutomationStore(tmp_path)
 	store.write_state({"conversations": {"101": {"follow_up_sent_at": "ts"}}})
-	recruiter = FakeBossRecruiter()
+	recruiter = _ReplyFakeBossRecruiter()
 	adapter = BossRecruiterAutomationPlatform(recruiter)
 
 	report = run_automation_cycle(
