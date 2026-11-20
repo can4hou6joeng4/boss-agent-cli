@@ -1,6 +1,7 @@
 import time
 from typing import Any
 
+from boss_agent_cli.api.models import dict_items
 from boss_agent_cli.services.chat_utils import escape_md_cell as _escape_md_cell
 from boss_agent_cli.services.text_files import sanitize_surrogates
 
@@ -87,9 +88,11 @@ def render_digest_markdown(data: dict[str, Any], *, generated_at: str | None = N
 	if generated_at is None:
 		generated_at = time.strftime("%Y-%m-%d %H:%M:%S")
 
-	new_matches = data.get("new_matches") or []
-	follow_ups = data.get("follow_ups") or []
-	interviews = data.get("interviews") or []
+	# 非对象条目按缺失过滤（与 #2162 的导出服务边界同口径）：列表元素是
+	# null / 字符串 / 数字时不能整份日报渲染失败（Issue #2214）。
+	new_matches = dict_items(data.get("new_matches"))
+	follow_ups = dict_items(data.get("follow_ups"))
+	interviews = dict_items(data.get("interviews"))
 
 	lines: list[str] = []
 	lines.append("# 每日求职摘要")
@@ -109,7 +112,7 @@ def render_digest_markdown(data: dict[str, Any], *, generated_at: str | None = N
 		# 达到沟通列表分页上限时计数只是前缀；这份 Markdown 常被直接转发，
 		# 不带说明会被当成全量日报（Issue #885）。
 		pages = data.get("chat_pages_scanned")
-		lines.append(f"> ⚠️ 沟通列表超过 {pages} 页上限，以上计数仅覆盖已扫描的前 {pages} 页。")
+		lines.append(f"> 注意：沟通列表超过 {pages} 页上限，以上计数仅覆盖已扫描的前 {pages} 页。")
 		lines.append("")
 
 	lines.append("## 新匹配")

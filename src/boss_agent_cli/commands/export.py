@@ -1,4 +1,3 @@
-import sys
 from typing import Any
 
 import click
@@ -6,6 +5,7 @@ import click
 from boss_agent_cli.api.models import dict_items, JobItem, field_list
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.output import write_document_stdout
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	console,
@@ -330,8 +330,7 @@ def export_cmd(
 				)
 			else:
 				# stdout 直出 HTML（便于 `boss export <query> --format html > jobs.html`）
-				sys.stdout.write(html_text)
-				sys.stdout.flush()
+				write_document_stdout(html_text)
 				if truncated:
 					# 直出模式没有信封，截断证据只能走 stderr，不能污染 stdout。
 					console.print(f"[yellow]注意：{_TRUNCATED_OPERATOR_ACTION}[/yellow]")
