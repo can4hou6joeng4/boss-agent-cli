@@ -15,7 +15,7 @@ import sys
 import tempfile
 from typing import Any
 
-from smoke_p0 import parse_envelope, validate_envelope_result
+from smoke_p0 import parse_envelope, stderr_tail, validate_envelope_result
 
 
 class ProbeError(Exception):
@@ -69,16 +69,25 @@ async def probe(version: str, data_dir: Path, timeout: float) -> dict[str, Any]:
 	for key in ("PYTHONPATH", "PYTHONHOME"):
 		env.pop(key, None)
 	for command in (("schema", "--format", "native"), ("platforms",)):
-		completed = subprocess.run(
-			[str(boss), "--data-dir", str(data_dir), "--json", *command],
-			cwd=data_dir,
-			env=env,
-			capture_output=True,
-			text=True,
-			encoding="utf-8",
-			timeout=min(timeout / 4, 20),
-		)
-		result = envelope(completed.stdout, completed.returncode)
+		limit = min(timeout / 4, 20)
+		try:
+			completed = subprocess.run(
+				[str(boss), "--data-dir", str(data_dir), "--json", *command],
+				cwd=data_dir,
+				env=env,
+				capture_output=True,
+				text=True,
+				encoding="utf-8",
+				errors="replace",
+				timeout=limit,
+			)
+		except subprocess.TimeoutExpired as exc:
+			raise ProbeError(f"CLI {command[0]} 超过 {limit:g} 秒未返回") from exc
+		try:
+			result = envelope(completed.stdout, completed.returncode)
+		except ProbeError as exc:
+			tail = stderr_tail(completed.stderr)
+			raise ProbeError(f"CLI {command[0]} 检查失败：{exc}" + (f"；stderr: {tail}" if tail else "")) from exc
 		require(
 			result["ok"] is True and result["command"] == command[0] and isinstance(result["data"], dict),
 			f"CLI {command[0]} 检查失败",
@@ -128,6 +137,27 @@ async def probe(version: str, data_dir: Path, timeout: float) -> dict[str, Any]:
 	}
 
 
+def describe_error(exc: BaseException, *, depth: int = 4) -> str:
+	"""把探针异常翻成可读原因。
+
+	MCP 阶段跑在 anyio 任务组里，块内异常会以 ``ExceptionGroup`` 到达这里：
+	优先取第一个 ``ProbeError`` 的消息，否则取第一个子异常的类型与消息。
+	"""
+	if isinstance(exc, BaseExceptionGroup):
+		if depth <= 0:
+			return "ExceptionGroup: 嵌套过深，未展开原因"
+		for sub in exc.exceptions:
+			text = describe_error(sub, depth=depth - 1)
+			if text:
+				return text
+		return "ExceptionGroup: 未包含子异常"
+	message = str(exc).strip()
+	if isinstance(exc, ProbeError):
+		return message or "安装环境不满足发布契约"
+	message = " ".join(message.split())
+	return f"{type(exc).__name__}: {message[:300]}" if message else type(exc).__name__
+
+
 def main(argv: list[str] | None = None) -> int:
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--version", required=True)
@@ -139,11 +169,7 @@ def main(argv: list[str] | None = None) -> int:
 		with tempfile.TemporaryDirectory(prefix="boss-release-probe-") as temporary:
 			result = asyncio.run(asyncio.wait_for(probe(args.version, Path(temporary), args.timeout), args.timeout))
 	except Exception as exc:
-		result = {
-			"ok": False,
-			"version": args.version,
-			"error": str(exc) if isinstance(exc, ProbeError) else type(exc).__name__,
-		}
+		result = {"ok": False, "version": args.version, "error": describe_error(exc)}
 	print(json.dumps(result, ensure_ascii=False))
 	return 0 if result["ok"] else 1
 

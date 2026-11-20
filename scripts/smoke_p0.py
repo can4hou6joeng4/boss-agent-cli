@@ -1,11 +1,20 @@
 import json
 import os
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_TIMEOUT_SECONDS = 30
+#: 视为「开启离线计划」的取值（大小写不敏感）；未知非空取值拒绝执行。
+_TRUTHY = frozenset({"1", "true", "yes", "on", "y"})
+_FALSY = frozenset({"", "0", "false", "no", "off", "n"})
+
+
+class SmokeConfigError(Exception):
+	"""环境变量取值不合法：拒绝执行，不退回到默认值或联网模式。"""
 
 
 @dataclass(frozen=True)
@@ -68,10 +77,48 @@ def build_default_steps(
 	]
 
 
+def parse_timeout(raw: str) -> int:
+	"""``BOSS_SMOKE_TIMEOUT``：空值走默认 30，非正整数或无法解析时报配置错误。"""
+	value = raw.strip()
+	if not value:
+		return DEFAULT_TIMEOUT_SECONDS
+	try:
+		seconds = int(value)
+	except ValueError:
+		seconds = 0
+	if seconds <= 0 or seconds > 86400:
+		raise SmokeConfigError(f"BOSS_SMOKE_TIMEOUT 必须是 1-86400 之间的整数秒，实际是 {value[:40]!r}")
+	return seconds
+
+
+def parse_dry_run(raw: str) -> bool:
+	"""``BOSS_SMOKE_DRY_RUN``：大小写不敏感；无法识别的取值拒绝执行而不是联网。"""
+	value = raw.strip().lower()
+	if value in _FALSY:
+		return False
+	if value in _TRUTHY:
+		return True
+	raise SmokeConfigError(
+		f"BOSS_SMOKE_DRY_RUN 取值无法识别：{value[:40]!r}；离线计划请设为 1，确需真实冒烟请清空该变量"
+	)
+
+
+def stderr_tail(stderr: str, *, secret: str = "", limit: int = 400) -> str:
+	"""stderr 末尾片段：单行化、抹掉已知敏感参数、按尾部截断。"""
+	lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+	if not lines:
+		return ""
+	text = " ⏎ ".join(lines)
+	if secret:
+		text = text.replace(secret, "<redacted>")
+	return text[-limit:]
+
+
 def parse_envelope(stdout: str) -> tuple[dict | None, str | None]:
 	try:
 		payload = json.loads(stdout.strip())
-	except json.JSONDecodeError:
+	except (ValueError, RecursionError):
+		# 超长整数让 json.loads 抛裸 ValueError，过深嵌套抛 RecursionError。
 		return None, "stdout was not a JSON envelope"
 	required = {"ok", "schema_version", "command", "data", "pagination", "error", "hints"}
 	if not isinstance(payload, dict) or set(payload) != required:
@@ -122,12 +169,18 @@ class SmokeRunner:
 		self._dry_run = dry_run
 
 	def _default_run_command(self, command, cwd, capture_output, text, timeout, check):
+		# 父子进程固定按 UTF-8 交换：父进程区域与子进程输出编码不一致时，
+		# 严格按区域解码会抛 UnicodeDecodeError，整份报告丢失。
+		env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
 		completed = subprocess.run(
 			command,
 			check=check,
 			cwd=cwd,
 			capture_output=capture_output,
 			text=text,
+			encoding="utf-8" if text else None,
+			errors="replace" if text else None,
+			env=env,
 			timeout=timeout,
 		)
 		return CommandResult(
@@ -172,13 +225,13 @@ class SmokeRunner:
 						payload, contract_error = parse_envelope(completed.stdout)
 						if contract_error:
 							status = "contract_error"
-							detail = contract_error
+							detail = _with_stderr(contract_error, step, completed.stderr)
 						else:
 							ok = payload["ok"]
 							result_error = validate_envelope_result(payload, returncode)
 							if result_error:
 								status = "contract_error"
-								detail = result_error
+								detail = _with_stderr(result_error, step, completed.stderr)
 							elif ok:
 								status = "pass"
 							else:
@@ -190,6 +243,9 @@ class SmokeRunner:
 					except subprocess.TimeoutExpired:
 						status = "timeout"
 						detail = f"command exceeded {self._timeout_seconds}s"
+					except UnicodeDecodeError as e:
+						status = "contract_error"
+						detail = f"command output was not valid UTF-8: {e}"
 					except OSError as e:
 						status = "env_error"
 						detail = str(e)
@@ -212,19 +268,49 @@ class SmokeRunner:
 		return {"steps": results}
 
 
-def main() -> None:
+def _with_stderr(detail: str, step: SmokeStep, stderr: str) -> str:
+	"""``contract_error`` 带上 stderr 尾部：区分「形状不对」与「进程崩溃」。
+
+	``detail`` 步骤的 security_id 仍按既有约定抹掉，不进入输出。
+	"""
+	secret = step.command[-1] if step.name == "detail" and step.command else ""
+	tail = stderr_tail(stderr, secret=secret)
+	return f"{detail}；stderr: {tail}" if tail else detail
+
+
+def write_report(report: dict, *, stream=None) -> None:
+	stream = stream or sys.stdout
+	text = json.dumps(report, ensure_ascii=False) + "\n"
+	try:
+		stream.write(text)
+	except UnicodeEncodeError:
+		# 终端/重定向编码不是 UTF-8 时保证报告仍以 ASCII 转义写出。
+		stream.write(json.dumps(report) + "\n")
+
+
+def exit_code(report: dict) -> int:
+	return 0 if all(step["status"] in {"pass", "dry_run"} for step in report["steps"]) else 1
+
+
+def main() -> int:
 	platform = os.environ.get("BOSS_SMOKE_PLATFORM", "zhipin").strip() or "zhipin"
 	query = os.environ.get("BOSS_SMOKE_QUERY", "golang").strip() or "golang"
 	security_id = os.environ.get("BOSS_SMOKE_SECURITY_ID", "demo-security-id").strip() or "demo-security-id"
-	timeout_seconds = int(os.environ.get("BOSS_SMOKE_TIMEOUT", "30"))
-	dry_run = os.environ.get("BOSS_SMOKE_DRY_RUN", "").strip() in {"1", "true", "yes"}
+	try:
+		timeout_seconds = parse_timeout(os.environ.get("BOSS_SMOKE_TIMEOUT", ""))
+		dry_run = parse_dry_run(os.environ.get("BOSS_SMOKE_DRY_RUN", ""))
+	except SmokeConfigError as exc:
+		print(f"error: {exc}", file=sys.stderr)
+		return 2
 	runner = SmokeRunner(
 		build_default_steps(platform, query=query, security_id=security_id),
 		timeout_seconds=timeout_seconds,
 		dry_run=dry_run,
 	)
-	print(json.dumps(runner.run(), ensure_ascii=False))
+	report = runner.run()
+	write_report(report)
+	return exit_code(report)
 
 
 if __name__ == "__main__":
-	main()
+	raise SystemExit(main())
