@@ -176,12 +176,25 @@ def cookie_value(cookies: Any, name: str) -> str:
 
 
 def add_stoken_to_get_params(method: str, kwargs: MutableMapping[str, Any], stoken: str) -> None:
-	"""Inject BOSS __zp_stoken__ into GET request params in-place."""
+	"""Inject BOSS __zp_stoken__ into GET request params in-place.
+
+	httpx 的 ``params`` 还接受 ``None``、字符串和键值对序列；只按 dict 处理会在
+	请求循环里抛 TypeError，被通用分支当成可重试的网络故障（Issue #2282）。
+	"""
 	if method != "GET":
 		return
-	params = kwargs.get("params", {})
-	params["__zp_stoken__"] = stoken
-	kwargs["params"] = params
+	params = kwargs.get("params")
+	if params is None:
+		kwargs["params"] = {"__zp_stoken__": stoken}
+	elif isinstance(params, Mapping):
+		params = dict(params)
+		params["__zp_stoken__"] = stoken
+		kwargs["params"] = params
+	elif isinstance(params, (list, tuple)):
+		kwargs["params"] = [(name, value) for name, value in params if name != "__zp_stoken__"] + [
+			("__zp_stoken__", stoken)
+		]
+	# 其余形态（已编码的字符串 / 字节）无法原地注入，保持原样交给 httpx。
 
 
 def make_client_registry() -> tuple[weakref.WeakSet[Any], Callable[[], None]]:

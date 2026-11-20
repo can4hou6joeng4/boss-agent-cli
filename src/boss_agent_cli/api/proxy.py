@@ -145,8 +145,13 @@ def parse_proxy_url(raw: str, *, env_key: str | None = None) -> PlaywrightProxy 
 	# ``http://[::1]:8080`` 变成无法解析的 ``http://::1:8080``（Issue #1870）。
 	host = parts.hostname
 	# 空白 / 控制字符 / URL 分隔符不可能出现在合法 host 里；放行会让配置错误
-	# 直到浏览器启动才暴露（Issue #1920）。
-	if any(char.isspace() or ord(char) < 0x20 or char in "/?#@" for char in host):
+	# 直到浏览器启动才暴露（Issue #1920）。反斜杠也要拒绝：Chromium 对特殊
+	# scheme 把 ``\`` 当路径分隔符，``ho\st`` 实际按主机 ``ho`` 建立连接，出口
+	# 与这里校验的值不一致（Issue #2281）。
+	if _illegal_host_characters(host):
+		raise ProxyConfigurationError(env_key)
+	# 百分号编码的 host 是否解码取决于客户端；解码后仍含非法字符即拒绝。
+	if "%" in host and ":" not in host and _illegal_host_characters(unquote(host)):
 		raise ProxyConfigurationError(env_key)
 	if ":" in host:
 		host = f"[{host}]"
@@ -162,3 +167,8 @@ def parse_proxy_url(raw: str, *, env_key: str | None = None) -> PlaywrightProxy 
 	if parts.password:
 		proxy["password"] = unquote(parts.password)
 	return proxy
+
+
+def _illegal_host_characters(host: str) -> bool:
+	"""host 里出现这些字符就不可能是合法代理主机。"""
+	return any(char.isspace() or ord(char) < 0x20 or char in "/?#@\\|" for char in host)

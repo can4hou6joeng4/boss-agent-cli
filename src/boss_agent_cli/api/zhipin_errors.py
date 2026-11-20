@@ -64,7 +64,16 @@ def response_message(response: dict[str, Any]) -> str:
 	# 兜底链与 platforms/base.py 的通用信封解析对齐（message/msg/error/zpData），
 	# 保证 code 37 短路分支与 _classify_platform_error 取到同一份文案，
 	# 避免 {"code": 37, "zpData": "..."} 这类响应的信封 message 退化为空串。
-	return str(response.get("message") or response.get("msg") or response.get("error") or response.get("zpData") or "")
+	# 只接受字符串：平台把结构化载荷塞进 message / zpData 时，容器 repr 会连同
+	# 其中可能存在的临时凭据一起进入 error.message，而信封只对 data / hints 按键名
+	# 脱敏（Issue #2283）。
+	if not isinstance(response, dict):
+		return ""
+	for key in ("message", "msg", "error", "zpData"):
+		value = response.get(key)
+		if isinstance(value, str) and value:
+			return value
+	return ""
 
 
 def classify_code_37(response: dict[str, Any]) -> Code37Kind:
@@ -79,8 +88,16 @@ def classify_code_37(response: dict[str, Any]) -> Code37Kind:
 	return "environment_risk"
 
 
+def _text(value: Any) -> str:
+	"""风控判定只接受字符串字段；缺失或类型漂移按空串处理，不抛异常（Issue #2284）。"""
+	return value if isinstance(value, str) else ""
+
+
 def is_security_verification_response(*, url: str = "", content_type: str = "", body: str = "") -> bool:
 	"""识别官方安全页，不把 JSON 文案或业务页面里的验证说明当作安全页。"""
+	url = _text(url)
+	content_type = _text(content_type)
+	body = _text(body)
 	try:
 		parts = urlsplit(url)
 		host = parts.hostname or ""
@@ -104,6 +121,9 @@ def platform_risk_page_response(*, url: str = "", content_type: str = "", body: 
 	的唯一 code 参数读取原因；页面同时包含的隐藏文案不能证明当前命中哪一类。
 	内部 code 36 仅用于复用历史风险信封，__cli_platform_code__ 始终保留原码/未知。
 	"""
+	url = _text(url)
+	content_type = _text(content_type)
+	body = _text(body)
 	code = None
 	restricted = False
 	try:
@@ -141,7 +161,7 @@ def platform_risk_page_response(*, url: str = "", content_type: str = "", body: 
 def _url_path(url: str) -> str:
 	"""返回 URL 的 path；解析失败返回空串，绝不因为展示信息再抛一次。"""
 	try:
-		return urlsplit(url or "").path
+		return urlsplit(_text(url)).path
 	except ValueError:
 		return ""
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any, Mapping
 
 PROBE_ENV_KEY = "BOSS_EGRESS_PROBE_URL"
@@ -71,6 +72,10 @@ def language_region(accept_language: str) -> str:
 	"""Return the region subtag of the first language tag, uppercase.
 
 	``"zh-CN,zh;q=0.9"`` -> ``"CN"``; ``"zh"`` -> ``""``.
+
+	3 位数字子标签是 BCP 47 的 UN M.49 地区（``es-419`` 拉美、``en-001``
+	世界）：原值保留，但它与国家码不是同一坐标系，是否可比较由调用方判断
+	（``evaluate_egress`` 只在两边都是 2 位字母地区时判矛盾，Issue #2280）。
 	"""
 	first = accept_language.split(",", 1)[0].strip()
 	first = first.split(";", 1)[0].strip()
@@ -78,21 +83,39 @@ def language_region(accept_language: str) -> str:
 	# BCP 47 的第二段既可能是地区（``zh-CN``），也可能是书写系统
 	# （``zh-Hans`` / ``sr-Latn``）。把任意尾段当地区会得到 "HANS" 这种伪地区，
 	# egress 一致性检查会把正常会话判成 mismatch 而阻断启动（Issue #2129）。
-	# 只认真正的地区子标签：2 位 ASCII 字母或 3 位 ASCII 数字；跳过 4 位
-	# ASCII 字母的 script，遇到变体 / 扩展即停止。
+	# 跳过 4 位 ASCII 字母的 script；认 2 位 ASCII 字母地区与 3 位数字 M.49
+	# 地区；遇到变体 / 扩展即停止。
 	for part in parts[1:]:
 		if len(part) == 4 and part.isascii() and part.isalpha():
 			continue
-		if (len(part) == 2 and part.isascii() and part.isalpha()) or (
-			len(part) == 3 and part.isascii() and part.isdigit()
-		):
+		if len(part) == 2 and part.isascii() and part.isalpha():
 			return part.upper()
+		if len(part) == 3 and part.isascii() and part.isdigit():
+			return part
 		break
 	return ""
 
 
+@lru_cache(maxsize=256)
+def _known_timezone(timezone: str) -> bool:
+	"""时区名是否是系统 tzdata 里真实存在的 IANA 名称。"""
+	import zoneinfo
+
+	try:
+		zoneinfo.ZoneInfo(timezone)
+	except (zoneinfo.ZoneInfoNotFoundError, ValueError, OSError):
+		return False
+	return True
+
+
 def timezone_region(timezone: str) -> str:
-	"""Return the region implied by ``timezone``, or ``""`` when unknown."""
+	"""Return the region implied by ``timezone``, or ``""`` when unknown.
+
+	先确认名称真实存在再做前缀匹配：``Asia/ShanghaiBogus`` 这类伪造 / 拼错的
+	名称命中前缀就会绕过「未知时区不得声称一致」的收尾判定（Issue #2279）。
+	"""
+	if not timezone or not _known_timezone(timezone):
+		return ""
 	for prefix, region in _TZ_REGION_HINTS:
 		if timezone.startswith(prefix):
 			return region
@@ -150,7 +173,9 @@ def evaluate_egress(
 	contradictions: list[str] = []
 
 	if lang := language_region(accept_language):
-		if lang != expected_lang:
+		# 数字地区（419 / 001）是国家码的超集（UN M.49），不是同一坐标系：拉美
+		# 西语会话从美国出口启动是正常组合，不能因此判矛盾（Issue #2280）。
+		if len(lang) == 2 and lang != expected_lang:
 			contradictions.append(f"Accept-Language 地区为 {lang}，出口在 {country}")
 	if tz := timezone_region(timezone):
 		if tz != country:
@@ -191,11 +216,15 @@ def probe_egress(
 		return EgressVerdict(status="unknown", detail=f"未配置 {PROBE_ENV_KEY}，未探测出口")
 
 	own_client = client is None
-	if own_client:
-		import httpx
-
-		client = httpx.Client(timeout=10)
 	try:
+		if own_client:
+			import httpx
+
+			# 构造也必须放在 try 内：代理环境变量畸形（如缺右括号的 IPv6）或缺少
+			# socksio 会让构造期抛 InvalidURL / ImportError 之类的本地错误，逃出
+			# 函数后经通用分支变成可重试的 NETWORK_ERROR，而探测的契约是任何失败
+			# 都返回 unknown（Issue #2278）。
+			client = httpx.Client(timeout=10)
 		response = client.get(target)
 		payload = response.json()
 	except Exception as exc:
