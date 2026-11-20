@@ -2583,13 +2583,14 @@ def test_detail_json_hints_expose_available_candidate_actions(mock_client_cls, m
 @patch("boss_agent_cli.commands.show.CacheStore")
 @patch("boss_agent_cli.commands.show.AuthManager")
 @patch("boss_agent_cli.commands.show.get_platform_instance")
-@patch("boss_agent_cli.commands.show.get_index_info")
-@patch("boss_agent_cli.commands.show.get_job_by_index")
+@patch("boss_agent_cli.commands.show.get_index_entry")
 def test_show_json_hints_expose_available_candidate_actions(
-	mock_get_job, mock_get_info, mock_client_cls, mock_auth_cls, mock_cache_cls,
+	mock_get_entry, mock_client_cls, mock_auth_cls, mock_cache_cls,
 ):
-	mock_get_job.return_value = {"security_id": "sec_001"}
-	mock_get_info.return_value = {"exists": True, "source": "search:Go", "count": 1, "saved_at": 1700000000.0}
+	mock_get_entry.return_value = (
+		{"exists": True, "source": "search:Go", "page": None, "count": 1, "saved_at": 1700000000.0},
+		{"security_id": "sec_001"},
+	)
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	mock_client = _ctx_mock(mock_client_cls)

@@ -8,6 +8,9 @@
 - `boss chatmsg --friend-uid UID <security_id>`：调用方已有稳定 uid 与本次请求的 security_id 时直接读取消息，跳过从第 1 页开始的沟通列表扫描；翻页提示保留直读形式，security_id 过期时按平台错误返回，不隐式退回全列表查找。MCP `boss_chatmsg` 同步暴露 `friend_uid`（Issue #2277）。
 
 ### Fixed
+- `boss show` 的元信息与职位改为一次读取索引缓存：并发的 `search` / `recommend` 覆盖缓存时，不再出现「职位来自新快照、`index_snapshot` 来自旧快照」或「共 N 条」与「编号 N 超出范围」自相矛盾的成功信封（Issue #2291）。
+- `search` / `recommend` 信封里的 `pagination.index_snapshot` 取本次写入的快照身份，不再在保存后回读可变文件：并发搜索不会再让本次结果挂上另一次搜索的来源与保存时间（Issue #2292）。
+- 索引缓存条目的 `security_id` / `job_id` / `lid` 读取时按与元信息同口径校验可编码性：孤立代理字符按缺失处理，`boss show` 在发出平台请求之前按 `INVALID_PARAM` 提示重新搜索，不再带着坏值请求、也不再把损坏缓存兜成带磁盘权限指引的 `LOCAL_IO_ERROR`（Issue #2293）。
 - 出口探测（`BOSS_EGRESS_PROBE_URL`）的客户端构造失败（代理环境变量畸形、缺少 socks 依赖）同样返回 `unknown`，不再逃出探测契约变成可重试的 `NETWORK_ERROR`（Issue #2278）。
 - 时区必须先是在系统 tzdata 里真实存在的 IANA 名称才参与地区推断：`Asia/ShanghaiBogus` 这类伪装成已知前缀的名称不再被当作与出口一致（Issue #2279）。
 - `Accept-Language` 的 3 位数字地区子标签（`es-419` 拉美、`en-001` 世界，UN M.49）不再与 2 位国家码直接比较：正常组合不再被判成出口矛盾而阻断启动，2 位字母地区的矛盾判定不变（Issue #2280）。

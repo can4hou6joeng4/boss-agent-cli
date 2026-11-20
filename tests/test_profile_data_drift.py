@@ -45,12 +45,11 @@ def _show(platform: _FakePlatform, *args: str):
 		patch("boss_agent_cli.commands.show.AuthManager"), \
 		patch("boss_agent_cli.commands.show.CacheStore") as cache_cls, \
 		patch(
-			"boss_agent_cli.commands.show.get_index_info",
-			return_value={"exists": True, "source": "search:x", "count": 1, "saved_at": 1.0},
-		), \
-		patch(
-			"boss_agent_cli.commands.show.get_job_by_index",
-			return_value={"security_id": "s1", "lid": "l1"},
+			"boss_agent_cli.commands.show.get_index_entry",
+			return_value=(
+				{"exists": True, "source": "search:x", "count": 1, "saved_at": 1.0, "page": None},
+				{"security_id": "s1", "lid": "l1"},
+			),
 		):
 		cache_cls.return_value.__enter__.return_value.is_greeted.return_value = False
 		return CliRunner().invoke(cli, ["--json", "show", "1", *args])
