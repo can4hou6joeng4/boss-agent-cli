@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCENARIOS_PATH = ROOT / "evals" / "scenarios.json"
 DEFAULT_RESULTS_DIR = ROOT / "evals" / "results"
 ENVELOPE_KEYS = {"ok", "schema_version", "command", "data", "pagination", "error", "hints"}
+RUN_SIDES = ("with_mcp", "baseline")
+REQUIRED_RUN_LISTS = ("tool_calls", "envelopes")
+OPTIONAL_RUN_LISTS = ("blocked_codes", "recovery_actions")
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,10 @@ def load_scenarios(path: Path = DEFAULT_SCENARIOS_PATH) -> list[EvalScenario]:
 		if scenario_id in seen:
 			raise ValueError(f"duplicate scenario id: {scenario_id}")
 		seen.add(scenario_id)
+		fixture = _required_dict(item, "fixture")
+		fixture_error = _run_data_error(fixture)
+		if fixture_error:
+			raise ValueError(f"scenario {scenario_id!r} fixture is not comparable: {fixture_error}")
 		scenarios.append(
 			EvalScenario(
 				scenario_id=scenario_id,
@@ -58,7 +65,7 @@ def load_scenarios(path: Path = DEFAULT_SCENARIOS_PATH) -> list[EvalScenario]:
 				risk=_required_dict(item, "risk"),
 				with_mcp_expectations=_required_dict(item, "with_mcp_expectations"),
 				baseline_failure_modes=_required_list(item, "baseline_failure_modes"),
-				fixture=_required_dict(item, "fixture"),
+				fixture=fixture,
 			)
 		)
 	return scenarios
@@ -97,6 +104,8 @@ def run_external_eval(
 			)
 		except subprocess.TimeoutExpired:
 			result = _external_error_result(scenario, "timeout", f"runner exceeded {timeout_seconds}s")
+		except UnicodeDecodeError:
+			result = _external_error_result(scenario, "contract_error", "runner output was not valid UTF-8")
 		except OSError as exc:
 			result = _external_error_result(scenario, "runner_error", str(exc))
 		else:
@@ -141,6 +150,7 @@ def _default_run_command(command, cwd, input, capture_output, text, timeout, che
 		input=input,
 		capture_output=capture_output,
 		text=text,
+		encoding="utf-8" if text else None,
 		timeout=timeout,
 		check=check,
 	)
@@ -183,15 +193,49 @@ def _evaluate_external_output(scenario: EvalScenario, completed: CommandResult) 
 		return _external_error_result(scenario, "runner_error", completed.stderr.strip() or "runner returned non-zero")
 	try:
 		payload = json.loads(completed.stdout)
-	except json.JSONDecodeError:
+	except (ValueError, RecursionError):
+		# json 对超长整数抛裸 ValueError，对过深嵌套抛 RecursionError；都算 runner 输出不合契约。
 		return _external_error_result(scenario, "contract_error", "runner stdout was not JSON")
 	if not isinstance(payload, dict):
 		return _external_error_result(scenario, "contract_error", "runner stdout must be a JSON object")
-	run_data = {
-		"with_mcp": payload.get("with_mcp", {}),
-		"baseline": payload.get("baseline", {}),
-	}
+	contract_error = _run_data_error(payload)
+	if contract_error:
+		return _external_error_result(scenario, "contract_error", contract_error)
+	run_data = {side: payload[side] for side in RUN_SIDES}
 	return _evaluate_scenario(scenario, mode="external", run_data=run_data)
+
+
+def _run_data_error(run_data: dict[str, Any]) -> str | None:
+	"""说明这组运行记录为何无法评分；两侧都可比较时返回 None。
+
+	缺失的一侧不能当成「没有调用」：基线缺失时它的评分必然失败，
+	会被误读成 MCP 优于基线的证据。空运行必须显式写成空数组。
+	"""
+	for side in RUN_SIDES:
+		if side not in run_data:
+			return f"missing {side} run"
+		run = run_data[side]
+		if not isinstance(run, dict):
+			return f"{side} must be an object"
+		for key in REQUIRED_RUN_LISTS:
+			if key not in run:
+				return f"{side}.{key} is required; report an empty run as []"
+			if not isinstance(run[key], list):
+				return f"{side}.{key} must be an array"
+		for key in OPTIONAL_RUN_LISTS:
+			if key in run and not isinstance(run[key], list):
+				return f"{side}.{key} must be an array"
+		for index, call in enumerate(run["tool_calls"]):
+			if not isinstance(call, dict):
+				return f"{side}.tool_calls[{index}] must be an object"
+			if not isinstance(call.get("name"), str) or not call["name"]:
+				return f"{side}.tool_calls[{index}].name must be a non-empty string"
+			if call.get("arguments") is not None and not isinstance(call["arguments"], dict):
+				return f"{side}.tool_calls[{index}].arguments must be an object"
+		for index, envelope in enumerate(run["envelopes"]):
+			if not isinstance(envelope, dict):
+				return f"{side}.envelopes[{index}] must be an object"
+	return None
 
 
 def _external_error_result(scenario: EvalScenario, status: str, detail: str) -> dict[str, Any]:

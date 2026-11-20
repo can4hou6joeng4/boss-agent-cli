@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 外部 eval 在评分前校验 runner 输出结构：`with_mcp` / `baseline` 缺失、不是对象，或 `tool_calls` / `envelopes` 缺失、不是对象数组时，该场景记为 `contract_error`，不再把缺失的基线算作「基线失败」而判定通过，也不再因类型错误、超长整数或非 UTF-8 输出中止整轮；其余场景照常评分并写入报告。场景夹具加载走同一校验，默认 runner 固定用 UTF-8 交换数据（Issue #2258）。
+
 ## [3.4.141] - 2026-11-20
 
 ### Fixed
