@@ -11,6 +11,9 @@
 - `probe_cdp` 把 `httpx.InvalidURL` 当作探测不可用：Python API 传畸形 `cdp-url` 时不再让裸异常打断登录降级链，继续按契约降级到 patchright 扫码（Issue #2235）。
 - Cookie 校验跟随重定向后按最终 URL / 正文做风控判定：平台以 302 送到 `403.html` / verify / security 页时不再被当成「Cookie 失效」，正确抛出风控异常并写入本地风险锁（Issue #2236）。
 - Cookie 校验把 429 与业务码 9（整数 / 字符串同口径）识别为限流而非登录态失效：`login` 不再报「Cookie 已失效」并降级 CDP / 扫码，`import_curl` 不再报「未通过验证」，统一报可重试的 `RATE_LIMITED` 并给出等待后重试的指引（Issue #2237）。
+- TTY 渲染统一剥离平台文本里的终端控制字符：`escape_markup` 在 Rich markup 转义前去掉 ESC / OSC / CSI 等 C0（保留 `\t` / `\n`）与 C1 控制字符，职位名、公司名、聊天内容与 AI 输出不再能把原始转义序列写进终端（改写标题、伪造可点击链接、清屏）；`display.py` 里直接 `escape(...)` 的外部文本调用点一并改走该入口（Issue #2245）。
+- 错误行的错误码按字面渲染：TTY 分支改用 `rich.text.Text` 组装整行，未注册错误码含未配对方括号时不再抛 `MarkupError` 把错误信息与退出码一起吞掉（Issue #2246）。
+- TTY 列表 / 详情渲染入口容忍形状漂移：`render_job_table` / `render_simple_list` 跳过非对象条目并按过滤后条目计数，`render_job_detail` 把字符串 `skills` 当单条、其余非列表按空处理，损坏缓存或平台字段变化不再兜成裸 `TypeError`（Issue #2247）。
 
 ## [3.4.139] - 2026-11-20
 

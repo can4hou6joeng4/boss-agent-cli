@@ -20,6 +20,7 @@ from rich.errors import MarkupError
 from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from boss_agent_cli.api._base_client import PlatformResponseInvalid
 from boss_agent_cli.cache.store import (
@@ -41,6 +42,17 @@ from boss_agent_cli.services.browser_runtime import (
 console = Console(stderr=True)
 
 
+#: C0（保留 ``\t`` / ``\n``）与 C1 控制字符。Rich 只处理 markup，不会剥离原始
+#: 转义字节：平台文本里的 ESC / OSC / CSI 会原样写进终端，可改写标题、伪造
+#: 可点击链接或清屏（Issue #2245）。
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def _strip_control(value: str) -> str:
+	"""剥离终端控制字符，保留制表符与换行（描述类字段需要多行渲染）。"""
+	return _CONTROL_CHARS.sub("", value)
+
+
 def escape_markup(value: Any) -> str:
 	"""把平台 / 用户外部字符串转成 Rich 按字面渲染的文本。
 
@@ -48,8 +60,11 @@ def escape_markup(value: Any) -> str:
 	MarkupError 让整条 TTY 输出崩掉，``[link=...]`` 则会把终端渲染成可点击
 	超链接（OSC 8）。公司名、职位名、职位描述、聊天内容、昵称都是平台外部
 	输入，进入 Rich 前一律经过这里；代码自身的样式标签保持不变。
+
+	同时剥离 ESC / OSC / CSI 等 C0 / C1 控制字符（Issue #2245）：``escape``
+	只挡 markup，挡不住原始转义字节。
 	"""
-	return escape(str(value))
+	return escape(_strip_control(str(value)))
 
 
 _SHELL_METACHARACTERS = frozenset("'\"`$\\!*?[]{}()<>|&;#")
@@ -494,9 +509,14 @@ def handle_error_output(
 		safe_recovery = redact_sensitive_text(recovery_action) if recovery_action else recovery_action
 		# 命令文本里可能带数据目录：方括号内容会被 Rich 当作样式标签吞掉，
 		# 未配对的闭合标签还会直接抛 MarkupError，恢复指引必须按字面显示。
-		console.print(f"[red]error[/red] [{code}] {escape(safe_message)}")
+		# 错误码同样按字面渲染（Issue #2246）：未注册的错误码可能是任意字符串，
+		# 且它会落在我们自己加的方括号里——markup 转义在标签内部不生效（`[X\\[bold]`
+		# 仍会被解析），所以整行改用 Text 组装，不经过 markup 解析。
+		error_line = Text("error", style="red")
+		error_line.append(f" [{_strip_control(str(code))}] {_strip_control(safe_message)}")
+		console.print(error_line)
 		if safe_recovery:
-			console.print(f"  [dim]recovery: {escape(safe_recovery)}[/dim]")
+			console.print(f"  [dim]recovery: {escape_markup(safe_recovery)}[/dim]")
 		render_operator_actions(hints)
 		# TTY 与 JSON 出口同一退出码契约：--exit-codes sysexits 在终端下同样生效
 		# （此前硬编码 1，认证 / 限流 / 风控失败全部退 1，Issue #2051）。
@@ -631,6 +651,9 @@ def render_job_table(
 	``show_command`` 只在调用方已把这批职位写进编号索引时传入：`boss show <#>`
 	读的是索引而不是屏幕上的表格，没写索引的列表给出编号提示会打开另一条职位。
 	"""
+	# 条目形状漂移（缓存损坏 / 平台字段变化）不能把 TTY 渲染兜成裸 traceback，
+	# 非对象条目直接跳过，与导出服务入口同口径（Issue #2162 / #2247）。
+	items = [job for job in items if isinstance(job, dict)]
 	if not items:
 		console.print("[yellow]no results[/yellow]")
 		return
@@ -660,9 +683,9 @@ def render_job_table(
 
 	console.print(table)
 	if show_command:
-		console.print(f"  [dim]use: {escape(show_command)} to view details[/dim]")
+		console.print(f"  [dim]use: {escape_markup(show_command)} to view details[/dim]")
 	if hint_next:
-		console.print(f"  [dim]{escape(hint_next)}[/dim]")
+		console.print(f"  [dim]{escape_markup(hint_next)}[/dim]")
 
 
 def _snapshot_time_label(value: Any) -> str:
@@ -687,7 +710,13 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 	boss_title = escape_markup(data.get("boss_title", "-"))
 	desc = str(data.get("description", ""))
 
+	# 平台字段漂移：字符串按单条技能处理（否则会被按字符拆开），其余非列表 /
+	# 元组按空处理，不再让 join 抛 TypeError（Issue #2247）。
 	skills = data.get("skills", [])
+	if isinstance(skills, str):
+		skills = [skills]
+	elif not isinstance(skills, (list, tuple)):
+		skills = []
 	skill_str = ", ".join(escape_markup(skill) for skill in skills) if skills else "-"
 
 	text = (
@@ -713,7 +742,7 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 	# 重搜之后一眼就能看出这条编号是不是已经指向另一次搜索。
 	snapshot = data.get("index_snapshot")
 	if isinstance(snapshot, dict):
-		source = escape(str(snapshot.get("source") or "-"))
+		source = escape_markup(snapshot.get("source") or "-")
 		count = snapshot.get("count")
 		count_label = str(count) if isinstance(count, int) and not isinstance(count, bool) else "-"
 		page = snapshot.get("page")
@@ -727,7 +756,7 @@ def render_job_detail(data: dict[str, Any], *, greet_command: str | None = None)
 	jid = data.get("job_id", "")
 	if sid and jid:
 		greet_command = greet_command or "boss greet <security_id> <job_id>"
-		console.print(f"  [dim]next: {escape(greet_command)}[/dim]")
+		console.print(f"  [dim]next: {escape_markup(greet_command)}[/dim]")
 
 
 def render_status(
@@ -767,6 +796,8 @@ def render_simple_list(
 
 	columns: list of (header, dict_key, style)
 	"""
+	# 与 render_job_table 同口径：非对象条目跳过，计数按过滤后条目（Issue #2247）。
+	items = [item for item in items if isinstance(item, dict)]
 	if not items:
 		console.print(f"[yellow]no {escape_markup(title)}[/yellow]")
 		return
@@ -887,7 +918,7 @@ def render_next_steps(actions: "Sequence[str] | None") -> None:
 	for action in actions:
 		# 命令里带数据目录等用户可控文本：不转义时 `[bold]` 会被 Rich 吞掉，
 		# 未配对的 `[/bold]` 直接抛 MarkupError，整个人工提示都打不出来。
-		console.print(f"    [dim]{escape(action)}[/dim]")
+		console.print(f"    [dim]{escape_markup(action)}[/dim]")
 
 
 def render_action_result(
@@ -934,13 +965,13 @@ def _ai_value_lines(value: Any) -> list[str]:
 		for item in value:
 			if isinstance(item, dict):
 				inline = "  ".join(f"{k}={v}" for k, v in item.items())
-				lines.append(f"  · {escape(str(inline))}")
+				lines.append(f"  · {escape_markup(inline)}")
 			else:
-				lines.append(f"  · {escape(str(item))}")
+				lines.append(f"  · {escape_markup(item)}")
 		return lines
 	if isinstance(value, dict):
-		return [f"  [bold]{escape(str(k))}:[/bold] {escape(str(v))}" for k, v in value.items()]
-	return [f"  {escape(str(value))}"]
+		return [f"  [bold]{escape_markup(k)}:[/bold] {escape_markup(v)}" for k, v in value.items()]
+	return [f"  {escape_markup(value)}"]
 
 
 def render_ai_result(
@@ -957,7 +988,7 @@ def render_ai_result(
 	"""
 	body: list[str] = []
 	for key, value in data.items():
-		body.append(f"[bold cyan]{escape(str(key))}[/bold cyan]")
+		body.append(f"[bold cyan]{escape_markup(key)}[/bold cyan]")
 		body.extend(_ai_value_lines(value))
 		body.append("")
 	console.print(Panel("\n".join(body).rstrip() or "[dim]empty[/dim]", title=title, border_style="magenta"))
@@ -1001,7 +1032,7 @@ class SearchProgress:
 		if text.startswith(self._MATCH_MARK):
 			with self._lock:
 				self.matched += 1
-			console.print(f"  [green]✓[/green] {escape(text.lstrip(self._MATCH_MARK).strip())}")
+			console.print(f"  [green]✓[/green] {escape_markup(text.lstrip(self._MATCH_MARK).strip())}")
 			return
 		if any(text.startswith(mark) for mark in self._EXCLUDE_MARKS):
 			# 逐条排除只计数不打印——刷屏会把真正有用的匹配结果冲掉
@@ -1013,10 +1044,10 @@ class SearchProgress:
 		"""调试细节不进 TTY 进度。"""
 
 	def warning(self, message: str) -> None:
-		console.print(f"  [yellow]{escape(message.strip())}[/yellow]")
+		console.print(f"  [yellow]{escape_markup(message.strip())}[/yellow]")
 
 	def error(self, message: str) -> None:
-		console.print(f"  [red]{escape(message.strip())}[/red]")
+		console.print(f"  [red]{escape_markup(message.strip())}[/red]")
 
 	# ── 状态行 ─────────────────────────────────────────────
 
@@ -1029,10 +1060,10 @@ class SearchProgress:
 		return " · ".join(parts)
 
 	def start(self) -> None:
-		console.print(f"[bold]{escape(self._title)}[/bold]")
+		console.print(f"[bold]{escape_markup(self._title)}[/bold]")
 
 	def finish(self) -> None:
-		console.print(f"  [dim]{escape(self.status_text())}[/dim]")
+		console.print(f"  [dim]{escape_markup(self.status_text())}[/dim]")
 
 	def waiting(self, seconds: float) -> None:
 		"""节流等待前的一次性提示（取整秒，不做倒计时刷屏）。"""
