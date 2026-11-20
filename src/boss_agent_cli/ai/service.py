@@ -195,8 +195,15 @@ class AIService:
 			raise AIServiceError(f"网络请求失败: {_mask_api_key(str(exc), self.api_key)}") from exc
 		except httpx.InvalidURL as exc:
 			# InvalidURL 不是 RequestError 的子类：手工改坏的 base_url 绕过配置校验
-			# 直达这里时也要落成信封，而不是 traceback（Issue #1778）。
-			raise AIServiceError(f"AI 服务地址无效: {exc}；请用 boss ai config --base-url 重新设置") from exc
+			# 直达这里时也要落成信封，而不是 traceback（Issue #1778）。它与相邻的
+			# ValueError / UnicodeEncodeError 一样是请求没有发出的本地构造失败，按
+			# 不可恢复的参数错误上报，否则调用方会对确定性失败反复重试（Issue #2285）。
+			raise AIServiceError(
+				f"AI 服务地址无效: {_mask_api_key(str(exc), self.api_key)}；请用 boss ai config --base-url 重新设置",
+				recovery_hint="用 boss ai config --base-url 把服务地址改回有效地址后重试；原样重试不会成功",
+				code="INVALID_PARAM",
+				recoverable=False,
+			) from exc
 		except UnicodeEncodeError as exc:
 			# UnicodeEncodeError 是 ValueError 的子类，必须排在前面。httpx 按 UTF-8 编码
 			# 请求体，孤立代理字符（损坏文本里的 ``\ud800`` 等）编码不了；同一输入必然

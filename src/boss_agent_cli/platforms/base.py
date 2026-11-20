@@ -13,6 +13,8 @@ from abc import ABC, abstractmethod
 from types import TracebackType
 from typing import Any
 
+from boss_agent_cli.api.zhipin_errors import response_message
+
 
 def classify_platform_error(
 	response: dict[str, Any],
@@ -36,13 +38,9 @@ def classify_platform_error(
 	"""
 	code = response.get("code")
 	status_code = response.get("status_code") or response.get("status")
-	message = str(
-		response.get("message")
-		or response.get("msg")
-		or response.get("error")
-		or response.get("zpData")
-		or ""
-	)
+	# 与 api/zhipin_errors.response_message 同口径，只取字符串文案：结构化载荷的
+	# repr 会把其中的字段（可能含临时凭据）带进信封 error.message（Issue #2283）。
+	message = response_message(response)
 	mapping = code_map or {}
 	if isinstance(code, int) and code in mapping:
 		return mapping[code], message

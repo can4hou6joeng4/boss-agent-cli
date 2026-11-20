@@ -7,6 +7,16 @@
 ### Added
 - `boss chatmsg --friend-uid UID <security_id>`：调用方已有稳定 uid 与本次请求的 security_id 时直接读取消息，跳过从第 1 页开始的沟通列表扫描；翻页提示保留直读形式，security_id 过期时按平台错误返回，不隐式退回全列表查找。MCP `boss_chatmsg` 同步暴露 `friend_uid`（Issue #2277）。
 
+### Fixed
+- 出口探测（`BOSS_EGRESS_PROBE_URL`）的客户端构造失败（代理环境变量畸形、缺少 socks 依赖）同样返回 `unknown`，不再逃出探测契约变成可重试的 `NETWORK_ERROR`（Issue #2278）。
+- 时区必须先是在系统 tzdata 里真实存在的 IANA 名称才参与地区推断：`Asia/ShanghaiBogus` 这类伪装成已知前缀的名称不再被当作与出口一致（Issue #2279）。
+- `Accept-Language` 的 3 位数字地区子标签（`es-419` 拉美、`en-001` 世界，UN M.49）不再与 2 位国家码直接比较：正常组合不再被判成出口矛盾而阻断启动，2 位字母地区的矛盾判定不变（Issue #2280）。
+- 代理 host 里的反斜杠、`|` 与百分号编码在解析阶段按 `INVALID_PARAM` 拒绝：Chromium 把 `\` 当路径分隔符，放行会让实际出口与校验值不一致（Issue #2281）。
+- stoken 注入不再假定 `params` 一定是可变映射：缺省时新建 dict，键值对序列追加且不产生重复键，已编码的字符串 / 字节原样交给 httpx，不再在请求循环里抛 `TypeError`（Issue #2282）。
+- 平台响应的 `message` / `zpData` 等字段只在是字符串时进入错误文案：结构化载荷的容器 repr 不再连同其中字段一起进入 `error.message`（Issue #2283）。
+- 风控页判定对缺失 / 类型漂移的 `url` / `content-type` / `body` 按空串处理，登录与请求链路不再因为探测字段为 `None` 而崩成未分类异常（Issue #2284）。
+- AI 服务的 `httpx.InvalidURL` 按本地参数错误分类：`INVALID_PARAM`、不可恢复、指引重新设置 `--base-url` 并脱敏，不再报成可重试的网络故障（Issue #2285）。
+
 ## [3.4.143] - 2026-11-20
 
 ### Added
