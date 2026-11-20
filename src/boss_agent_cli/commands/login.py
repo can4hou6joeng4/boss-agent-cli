@@ -2,6 +2,7 @@ from typing import TextIO
 
 import click
 
+from boss_agent_cli.auth.browser import ChromeSessionImportError
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.commands._login_errors import classify_login_error
@@ -11,6 +12,7 @@ from boss_agent_cli.output import emit_error, emit_success
 
 def _reject_conflicting_options(
 	ctx: click.Context, *, cookie_source: str | None, cdp: bool, force: bool, curl_file: TextIO | None,
+	existing_chrome: bool,
 ) -> None:
 	"""选项互斥是用法错误，必须在使用任何登录链路前判定。
 
@@ -36,6 +38,12 @@ def _reject_conflicting_options(
 			recovery_action=f"去掉 {joined} 后重试；用 {login_path} --help 查看可用组合",
 			hints={"next_actions": [f"{login_path} --help"]},
 		)
+	if existing_chrome and (curl_file is not None or curl_conflicts):
+		joined = "、".join([*(["--curl-file"] if curl_file is not None else []), *curl_conflicts])
+		emit_error(
+			"login", code="INVALID_PARAM", message=f"--existing-chrome 不能与 {joined} 同时使用",
+			recoverable=False, recovery_action=f"用 {login_path} --help 查看可用组合",
+		)
 	if force and cookie_source is not None:
 		emit_error(
 			"login",
@@ -48,16 +56,17 @@ def _reject_conflicting_options(
 
 
 @click.command("login")
-@click.option("--timeout", default=120, type=click.IntRange(min=1), help="扫码登录超时时间（秒）")
+@click.option("--timeout", default=120, type=click.IntRange(min=1), help="扫码或等待 Chrome 授权与会话验证的时间（秒）")
 @click.option("--cookie-source", default=None, help="指定浏览器提取 Cookie（如 chrome/firefox/edge），不指定则自动检测")
 @click.option("--cdp", is_flag=True, default=False, help="强制 CDP 模式（跳过 Cookie 提取，CDP 不可用直接报错）")
 @click.option("--force", is_flag=True, default=False, help="不复用任何既有登录态：跳过本地 Cookie 提取，CDP 下不复用已登录 context 并清掉目标平台 cookie 后重新登录")
 @click.option("--ignore-risk-lock", is_flag=True, default=False, help="历史兼容参数，不再跳过 BOSS 本地风控锁；恢复请由用户执行 clean --risk-lock")
+@click.option("--existing-chrome", is_flag=True, help="经 Chrome 弹窗授权复用一个已打开的 BOSS 标签页")
 @click.option("--curl-file", type=click.File("r", encoding="utf-8"), default=None, help="从 Copy as cURL (bash) 文件导入 BOSS 登录态；- 表示标准输入")
 @click.pass_context
 def login_cmd(
 	ctx: click.Context, timeout: int, cookie_source: str | None, cdp: bool, force: bool,
-	ignore_risk_lock: bool, curl_file: TextIO | None,
+	ignore_risk_lock: bool, curl_file: TextIO | None, existing_chrome: bool,
 ) -> None:
 	"""登录当前招聘平台（按平台走对应的 Cookie / CDP / 浏览器降级链路）"""
 	data_dir = ctx.obj["data_dir"]
@@ -66,9 +75,13 @@ def login_cmd(
 	platform_name = ctx.obj.get("platform") or "zhipin"
 
 	auth = AuthManager(data_dir, logger=logger, platform=platform_name)
-	_reject_conflicting_options(ctx, cookie_source=cookie_source, cdp=cdp, force=force, curl_file=curl_file)
+	_reject_conflicting_options(
+		ctx, cookie_source=cookie_source, cdp=cdp, force=force, curl_file=curl_file, existing_chrome=existing_chrome,
+	)
 	try:
-		if curl_file is not None:
+		if existing_chrome:
+			token = auth.import_existing_chrome(timeout=timeout)
+		elif curl_file is not None:
 			token = auth.import_curl(curl_file.read())
 		else:
 			token = auth.login(
@@ -89,6 +102,17 @@ def login_cmd(
 			hints={
 				"next_actions": [status_cmd, search_cmd, recommend_cmd],
 			},
+		)
+	except ChromeSessionImportError as error:
+		action = {
+			"CDP_UNAVAILABLE": "打开 chrome://inspect/#remote-debugging，启用远程调试并在 Chrome 弹窗选择「允许」",
+			"BROWSER_SESSION_NOT_FOUND": "在常用 Chrome 保留一个已打开的 BOSS 直聘官网标签页",
+			"AUTH_REQUIRED": "在原 BOSS 标签页刷新，或在同一标签页打开个人简历，再执行导入",
+			"LOGIN_CREDENTIAL_EXTRACTION_FAILED": "在原标签页打开 BOSS 职位列表，等待页面完成加载",
+		}.get(error.code, "检查原标签页是否已加载完成，以及 Chrome 的网络连接")
+		emit_error(
+			"login", code=error.code, message=str(error), recoverable=True, recovery_action=action,
+			hints={"operator_actions": [action]}, details=error.details,
 		)
 	except Exception as e:
 		if isinstance(e, PlatformRiskError):

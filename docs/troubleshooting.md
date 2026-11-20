@@ -43,6 +43,15 @@ boss doctor --live-probe
 
 ## 登录问题
 
+### 从常用 Chrome 导入登录态
+
+Windows 上 Chrome 的 Cookie 磁盘加密可能导致提取失败。Chrome 144 起，已经在常用 Chrome 登录的用户，可以走[浏览器授权连接](getting-started.md#复用常用-chrome-的登录态)。
+
+- CDP_UNAVAILABLE：在 Chrome 的 `chrome://inspect/#remote-debugging` 检查调试开关，并确认已在连接弹窗选择「允许」。
+- BROWSER_SESSION_NOT_FOUND：保留一个已打开的 BOSS 直聘官网标签页，方便 CLI 确定导入目标。
+- AUTH_REQUIRED 或 LOGIN_CREDENTIAL_EXTRACTION_FAILED：在原标签页核对登录和职位列表的加载情况。CLI 会在拿到完整凭据前保留原有本地会话。
+- ACCOUNT_RISK：保持原标签页打开，按官网提示完成验证。锁未解除时先暂停 CLI 在线操作。
+
 ### Cookie 提取失败
 
 ```bash

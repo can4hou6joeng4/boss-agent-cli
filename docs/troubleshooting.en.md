@@ -43,6 +43,15 @@ boss doctor --live-probe
 
 ## Login issues
 
+### Import from your everyday Chrome
+
+Chrome's on-disk Cookie encryption on Windows can prevent extraction. Starting with Chrome 144, users already signed in to BOSS Zhipin can use the [browser approval flow](getting-started.en.md#reuse-the-session-in-your-everyday-chrome).
+
+- `CDP_UNAVAILABLE` means Chrome could not connect. Check `chrome://inspect/#remote-debugging` and select **Allow** on the connection prompt.
+- `BROWSER_SESSION_NOT_FOUND` means the CLI could not identify a single target. Keep one BOSS Zhipin tab open in Chrome.
+- `AUTH_REQUIRED` or `LOGIN_CREDENTIAL_EXTRACTION_FAILED` means the session could not be imported. Check the job list and sign-in status in the original tab. The CLI keeps its previous session until it can import complete credentials.
+- If you see `ACCOUNT_RISK`, leave the tab open and follow the official site's instructions. Pause online CLI operations while the risk lock is in effect.
+
 ### Cookie extraction fails
 
 ```bash

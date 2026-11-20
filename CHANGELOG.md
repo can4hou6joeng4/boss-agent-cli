@@ -6,6 +6,7 @@
 
 ### Added
 - `boss chat --raw`：普通输出为每条记录附加 `raw`，保存该联系人的原始平台对象（`relationType`、`lastMessageInfo`、`unreadMsgCount` 等键名与编码原样保留），摘要字段照旧输出；`--from` / `--days` 筛选与分页计数不变，`hints.next_actions` 的翻页命令保留 `--raw`。与 `--export` 合用时导出文件、快照与 diff 仍只含摘要记录（Issue #2250）。
+- `boss login --existing-chrome` 支持经 Chrome 弹窗授权导入已登录的 BOSS 直聘会话。收到官网页面自身发起的认证成功响应后，沿用本地加密存储。
 
 ## [3.4.142] - 2026-11-20
 

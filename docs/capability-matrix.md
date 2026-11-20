@@ -11,6 +11,7 @@
 | 共享 workflow | `boss` / `boss wizard` | 视 goal | TTY / JSON / MCP + SQLite checkpoint |
 | 协议发现 | `boss schema` | 否 | 本地 |
 | 登录 | `boss login` | 否 | 用户主动登录 |
+| 导入常用 Chrome 登录态 | `boss login --existing-chrome` | 否 | 用户在 Chrome 授权并操作已登录的 BOSS 官网标签页 |
 | 退出登录 | `boss logout` | 否 | 本地 |
 | 登录态检查 | `boss status` | 是 | httpx |
 | 环境诊断 | `boss doctor` | 否 | 混合 |

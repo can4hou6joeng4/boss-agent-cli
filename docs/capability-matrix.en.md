@@ -11,6 +11,7 @@ Compatibility modes `assisted` and `research` can both call every implemented ca
 | Shared workflow | `boss` / `boss wizard` | Depends on goal | TTY / JSON / MCP + SQLite checkpoint |
 | Protocol discovery | `boss schema` | No | Local |
 | Log in | `boss login` | No | User-triggered login |
+| Import a session from Chrome | `boss login --existing-chrome` | No | User approves the connection in Chrome and uses the signed-in BOSS tab |
 | Log out | `boss logout` | No | Local |
 | Session status | `boss status` | Yes | httpx |
 | Environment diagnostics | `boss doctor` | No | Hybrid |

@@ -15,6 +15,12 @@ SCHEMA_DATA = {
 			"description": "按当前平台登录（zhipin）；两种兼容运行模式共享相同能力，平台风控仍会停止当前流程。",
 			"args": [],
 			"options": {
+				"--existing-chrome": {
+					"type": "bool",
+					"default": False,
+					"description": "经常用 Chrome 弹窗授权，验证并导入唯一一个已打开的 BOSS 官网标签页；"
+					"不能与 --cdp / --force / --cookie-source / --curl-file 混用，遇到风控停止",
+				},
 				"--curl-file": {
 					"type": "string",
 					"default": None,
@@ -24,7 +30,7 @@ SCHEMA_DATA = {
 					"type": "int",
 					"default": 120,
 					"minimum": 1,
-					"description": "登录超时时间（秒）",
+					"description": "扫码或等待 Chrome 授权与会话验证的时间（秒）",
 				},
 				"--cdp": {
 					"type": "bool",

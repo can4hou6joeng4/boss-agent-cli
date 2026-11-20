@@ -40,6 +40,16 @@ boss --json wizard --input-json '{"role":"candidate","platform":"zhipin","goal":
 boss --json wizard --status <run_id>
 ```
 
+### 复用常用 Chrome 的登录态
+
+如果 BOSS 直聘已经在常用 Chrome 中登录，可以使用 Chrome 144 或更新版本的本机连接授权。
+
+1. 在常用 Chrome 打开 `chrome://inspect/#remote-debugging`，启用远程调试，保留一个已打开的 BOSS 官网职位列表标签页。
+2. 执行 `boss login --existing-chrome`，在 Chrome 的连接提示中选择「允许」。按终端提示刷新原 BOSS 标签页，或在同一标签页打开个人简历。从仓库运行时使用 `uv run boss login --existing-chrome`。
+3. 执行 `boss status` 查看本地登录态。导入会等待该标签页自己的认证响应，通过后加密保存本地凭据。
+
+出现平台风控时，按[登录排障](troubleshooting.md#登录问题)处理。Chrome 授权连接失败时，检查 Chrome 的调试设置和弹窗；该命令会结束并保留原有标签页。
+
 ## 3. 第一个平台命令
 
 登录后先用搜索和详情验证平台链路，再继续投递、沟通或招聘者 workflow。

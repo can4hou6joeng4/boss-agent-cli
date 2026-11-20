@@ -41,6 +41,16 @@ boss --json wizard --input-json '{"role":"candidate","platform":"zhipin","goal":
 boss --json wizard --status <run_id>
 ```
 
+### Reuse the session in your everyday Chrome
+
+If you are signed in to BOSS Zhipin in your regular browser, Chrome 144 or later supports local debugging with your approval.
+
+1. In that Chrome, open `chrome://inspect/#remote-debugging` and enable remote debugging. Keep one BOSS Zhipin job list tab open.
+2. Run `boss login --existing-chrome` and select **Allow** in Chrome's connection prompt. When the terminal asks, refresh the original BOSS tab or open your own résumé in that tab. From the repository, run `uv run boss login --existing-chrome`.
+3. Run `boss status` to check the saved session. The import waits for the tab's own authentication response and encrypts the verified credentials locally.
+
+If BOSS shows a security page, follow the [login troubleshooting guide](troubleshooting.en.md#login-issues). If Chrome cannot connect, check its debugging setting and prompt. The command leaves your original tab open.
+
 ## 3. First platform command
 
 After login, verify the platform path with search and detail before continuing to application, messaging, or recruiter workflows.
