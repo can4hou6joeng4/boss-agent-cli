@@ -179,7 +179,7 @@ boss crawl stop <run_id>
 | 命令 | 说明 |
 |------|------|
 | `boss chat [--raw]` | 查看沟通列表，支持分页和来源筛选；`--raw` 在普通输出中为每条记录附加 `raw` 原始联系人对象（保留原始键名与编码），与 `--export` 合用时不影响导出文件、快照与 diff |
-| `boss chatmsg <uid-or-sid> [--raw]` | 查看聊天历史；优先使用 `boss chat` 输出的稳定 `uid`，`--raw` 保留结构化 body、链接和职位卡片字段 |
+| `boss chatmsg <uid-or-sid> [--friend-uid UID] [--raw]` | 查看聊天历史；优先使用 `boss chat` 输出的稳定 `uid`，`--raw` 保留结构化 body、链接和职位卡片字段；已知 `uid` 与本次 `security_id` 时用 `--friend-uid UID <security_id>` 跳过沟通列表扫描 |
 | `boss chat-summary <uid-or-sid>` | 基于聊天历史生成结构化摘要；优先使用稳定 `uid` |
 | `boss mark <uid-or-sid> --label X` | 添加或移除联系人标签；优先使用稳定 `uid`；标签名或对应数字 ID（1/2/3/4/5/6/7/8/11），其他数字会被拒绝 |
 | `boss interviews` | 面试邀请 |

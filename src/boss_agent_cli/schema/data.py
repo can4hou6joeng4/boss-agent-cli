@@ -451,6 +451,10 @@ SCHEMA_DATA = {
 				},
 			],
 			"options": {
+				"--friend-uid": {
+					"type": "str",
+					"description": "已知稳定 uid 时直接读取消息，位置参数按本次请求的 security_id 使用，跳过沟通列表扫描；security_id 过期时按平台错误返回",
+				},
 				"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
 				"--count": {"type": "int", "default": 20, "minimum": 1, "description": "每页消息数量"},
 				"--raw": {

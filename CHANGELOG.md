@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- `boss chatmsg --friend-uid UID <security_id>`：调用方已有稳定 uid 与本次请求的 security_id 时直接读取消息，跳过从第 1 页开始的沟通列表扫描；翻页提示保留直读形式，security_id 过期时按平台错误返回，不隐式退回全列表查找。MCP `boss_chatmsg` 同步暴露 `friend_uid`（Issue #2277）。
+
 ## [3.4.143] - 2026-11-20
 
 ### Added
