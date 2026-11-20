@@ -630,23 +630,34 @@ class CrawlService:
 			return self._completed_outcome(run)
 		if pages is not None:
 			validate_pages_override(int(run["next_page"]), settings.pages)
-		# Hook 目录是本地状态：resume 没有 --hook-dir 参数可以修复，必须在
-		# 打开浏览器之前用与 crawl run/start 相同的清单 / 摘要校验拒绝坏目录
-		# （Issue #1408）。已完成的 run 在上面直接返回，不因目录后来被删而失败。
-		try:
-			verify_hook_profile(settings.hook_profile, settings.hook_dir)
-		except ValueError as exc:
-			# 恢复路径没有参数可改：按确定性本地状态失败上报，不能落进命令层
-			# 的「修正 crawl 配置 / crawl configure --help」通用分支（Issue #1460）。
-			raise CrawlHookDirInvalid(str(exc), hook_dir=settings.hook_dir) from exc
-		if self._preflight is not None:
-			# 登录态与运行时预检放在断点修改与 clear_stop 之前：预检失败时本次
-			# 调用不改动任务（与后台恢复的既有约定一致）。
-			self._preflight()
-		self._check_risk_lock()
-		self._cache.update_crawl_run_params(run_id, settings.as_dict())
-		if clear_stop:
+		# 旧 stop 必须在预检之前清掉：预检要探测可选依赖、读取登录态，可能
+		# 耗时；这期间到达的新 stop 不能被后面的清理当成上一轮残留一起清掉
+		# （与后台恢复同构，Issue #1115 / #2209）。预检失败时还原旧 stop 与
+		# 时间戳，保持「失败的调用不改动任务」的既有约定（Issue #1042）；
+		# 失败且无旧 stop 时不写库。
+		previous_stop = bool(run.get("stop_requested"))
+		previous_updated_at = float(run.get("updated_at") or 0.0)
+		if clear_stop and previous_stop:
 			self._cache.clear_crawl_stop_request(run_id)
+		try:
+			# Hook 目录是本地状态：resume 没有 --hook-dir 参数可以修复，必须在
+			# 打开浏览器之前用与 crawl run/start 相同的清单 / 摘要校验拒绝坏目录
+			# （Issue #1408）。已完成的 run 在上面直接返回，不因目录后来被删而失败。
+			try:
+				verify_hook_profile(settings.hook_profile, settings.hook_dir)
+			except ValueError as exc:
+				# 恢复路径没有参数可改：按确定性本地状态失败上报，不能落进命令层
+				# 的「修正 crawl 配置 / crawl configure --help」通用分支（Issue #1460）。
+				raise CrawlHookDirInvalid(str(exc), hook_dir=settings.hook_dir) from exc
+			if self._preflight is not None:
+				self._preflight()
+			self._check_risk_lock()
+			self._cache.update_crawl_run_params(run_id, settings.as_dict())
+		except BaseException:
+			if clear_stop and previous_stop:
+				# 预检 / 参数落库失败：放回清除前的 stop，失败的调用不改动任务。
+				self._cache.restore_crawl_stop_request(run_id, updated_at=previous_updated_at)
+			raise
 		return self._run(
 			run_id,
 			settings,
@@ -764,7 +775,7 @@ class CrawlService:
 					if existing is not None:
 						continue
 					# 原始列表项必须先落库：详情的风险码或第二次超时不会丢失待补队列。
-					self._cache.put_crawl_job(run_id, job_key, current_page, row, detail_done=False)
+					self._put_crawl_job(run_id, job_key, current_page, row, detail_done=False)
 
 				current_page += 1
 				# 只有平台显式返回布尔 false 才算列表结束。`not bool(None)` 为真，
@@ -788,6 +799,9 @@ class CrawlService:
 			# 最后一页的导出必须在 completed 落库之前（Issue #1238）：第二次 resume
 			# 时页循环不执行，若导出留在 finally 之后，completed 会先写进数据库，
 			# 导出失败后再也无法重试，后续 resume 会报成功但产物不存在。
+			# 最后一页之后断点可能已被清理：导出前再确认一次，不能重建已删除的
+			# 产物目录并把 run 报成 completed（Issue #2208）。
+			self._raise_if_stop_requested(run_id)
 			rows = [item["payload"] for item in self._cache.list_crawl_jobs(run_id)]
 			paths = write_run_outputs(output_dir, rows)
 		except HookRegistrationError as exc:
@@ -1031,7 +1045,7 @@ class CrawlService:
 					# 与 `crawl results --detail-status pending` 如实反映缺口，
 					# 不能伪造空卡片并标记完成（Issue #1584）。
 					row["detail_status"] = "missing-security-id"
-					self._cache.put_crawl_job(run_id, item["job_key"], int(item["page_no"]), row, detail_done=False)
+					self._put_crawl_job(run_id, item["job_key"], int(item["page_no"]), row, detail_done=False)
 					continue
 
 				def fetch_detail() -> dict[str, Any]:
@@ -1056,7 +1070,7 @@ class CrawlService:
 					# 单个条目失败不能让列表翻页与导出永久卡死（Issue #1981）。保留
 					# 待补状态继续处理其余条目，下次 resume 再试。
 					row["detail_status"] = "detail-error"
-					self._cache.put_crawl_job(run_id, item["job_key"], int(item["page_no"]), row, detail_done=False)
+					self._put_crawl_job(run_id, item["job_key"], int(item["page_no"]), row, detail_done=False)
 					if failed_keys is not None:
 						failed_keys.add(item["job_key"])
 					continue
@@ -1070,7 +1084,7 @@ class CrawlService:
 					}
 				)
 				self._cache.put_job_desc(job_id, str(row["post_description"]))
-			self._cache.put_crawl_job(run_id, item["job_key"], int(item["page_no"]), row, detail_done=True)
+			self._put_crawl_job(run_id, item["job_key"], int(item["page_no"]), row, detail_done=True)
 		return checks
 
 	@staticmethod
@@ -1153,8 +1167,29 @@ class CrawlService:
 				self._cache.request_crawl_stop(run_id)
 				raise CrawlWorkflowStopRequested("workflow stop requested")
 		run = self._cache.get_crawl_run(run_id)
-		if run is not None and run["stop_requested"]:
+		if run is None:
+			# 取得执行权后断点行消失：`clean --privacy` 会删除 crawl_runs /
+			# crawl_jobs。继续采集会复活已清理的职位行、重建导出目录，而且
+			# `crawl stop` 已按 CRAWL_RUN_NOT_FOUND 无法再停止它（Issue #2208）。
+			# 控制路径按「已停止」fail-closed，不再向平台发请求。
+			raise CrawlStopRequested("采集断点已被删除（可能执行了 clean --privacy），停止本次采集")
+		if run["stop_requested"]:
 			raise CrawlStopRequested("stop requested")
+
+	def _put_crawl_job(
+		self,
+		run_id: str,
+		job_key: str,
+		page_no: int,
+		payload: dict[str, Any],
+		*,
+		detail_done: bool,
+	) -> None:
+		"""写入职位行；断点已消失时按停止结算，不复活已清理的数据（Issue #2208）。"""
+		if not self._cache.put_crawl_job(
+			run_id, job_key, page_no, payload, detail_done=detail_done, require_existing_run=True
+		):
+			raise CrawlStopRequested("采集断点已被删除（可能执行了 clean --privacy），停止本次采集")
 
 	@staticmethod
 	def _validate_settings(settings: CrawlSettings) -> None:
