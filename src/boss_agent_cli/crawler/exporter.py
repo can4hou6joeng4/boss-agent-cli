@@ -142,27 +142,14 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 				# 备份由 mkstemp 先创建：若随后的搬运失败，它必须和序列化临时
 				# 文件一起被清理，否则每次重试都残留一个 `.jobs.*`（Issue #1875）。
 				temporaries.append(backup)
-				try:
-					os.replace(current_target, backup)
-				except BaseException:
-					# 中断可能落在「目标已移走、备份已就位」之后：外层按 lstat
-					# 判断是否需要还原，不能把可能是旧产物唯一副本的备份当临时
-					# 文件删掉（Issue #2274）。
-					pending_backup = (current_target, backup)
-					raise
-			try:
-				os.replace(temporary, current_target)
-			except BaseException:
-				# 旧产物已经移到备份：搬运被中断 / 失败时目标会暂时消失，必须
-				# 先放回去再上抛，否则中断路径会丢掉旧产物（Issue #2274）。
-				if backup is not None:
-					try:
-						os.replace(backup, current_target)
-					except OSError:
-						# 回滚失败：保留备份供人工恢复，不能让清理循环删掉它。
-						retained.add(backup)
-				raise
+				# 搬运前登记：中断可能发生在 os.replace 已生效但还未返回时。
+				pending_backup = (current_target, backup)
+				os.replace(current_target, backup)
+			# 替换前登记回滚项，覆盖调用前 / 调用后两个中断窗口；首次导出没有
+			# 旧产物时，也要删除已经写入的新文件，恢复原来不存在的状态。
 			replaced.append((current_target, backup))
+			pending_backup = None
+			os.replace(temporary, current_target)
 	except CrawlRuntimeUnavailable:
 		_rollback_replacements(replaced, retained)
 		_restore_pending_backup(pending_backup, retained)

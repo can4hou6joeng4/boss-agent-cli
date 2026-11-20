@@ -152,22 +152,40 @@ def test_serialization_interrupt_cleans_temporaries(tmp_path, monkeypatch):
 	assert (tmp_path / "jobs.csv").read_text(encoding="utf-8") == "OLD-jobs.csv"
 
 
-def test_replacement_interrupt_rolls_back_and_cleans(tmp_path, monkeypatch):
-	_seed_old_outputs(tmp_path)
+@pytest.mark.parametrize(
+	("existing", "interrupt_call"),
+	[(True, call) for call in range(1, 7)] + [(False, call) for call in range(1, 4)],
+)
+@pytest.mark.parametrize("after_replace", [False, True])
+@pytest.mark.parametrize("interrupt_type", [KeyboardInterrupt, SystemExit])
+def test_replacement_interrupt_rolls_back_and_cleans(
+	tmp_path, monkeypatch, existing, after_replace, interrupt_call, interrupt_type,
+):
+	if existing:
+		_seed_old_outputs(tmp_path)
+	# 中断测试只关心文件替换，不依赖本机是否安装 openpyxl。
+	monkeypatch.setattr(exporter, "_write_xlsx", lambda path, rows: path.write_bytes(b"new-xlsx"))
 	real_replace = os.replace
 	calls = {"count": 0}
 
 	def _interrupting_replace(source, target):
 		calls["count"] += 1
-		if calls["count"] == 4:
-			raise KeyboardInterrupt
-		return real_replace(source, target)
+		interrupt = calls["count"] == interrupt_call
+		if interrupt and not after_replace:
+			raise interrupt_type
+		real_replace(source, target)
+		if interrupt:
+			raise interrupt_type
 
 	monkeypatch.setattr(exporter.os, "replace", _interrupting_replace)
 
-	with pytest.raises(KeyboardInterrupt):
+	with pytest.raises(interrupt_type):
 		write_run_outputs(tmp_path, _ROWS)
 
 	assert _hidden_jobs_files(tmp_path) == []
 	for name in ("jobs.json", "jobs.csv", "jobs.xlsx"):
-		assert (tmp_path / name).read_text(encoding="utf-8") == f"OLD-{name}"
+		if existing:
+			assert (tmp_path / name).read_text(encoding="utf-8") == f"OLD-{name}"
+		else:
+			with pytest.raises(FileNotFoundError):
+				(tmp_path / name).lstat()
