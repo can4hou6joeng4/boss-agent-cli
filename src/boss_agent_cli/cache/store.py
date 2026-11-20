@@ -1111,17 +1111,52 @@ class CacheStore:
 		)
 		self._conn.commit()
 
-	def put_crawl_job(self, run_id: str, job_key: str, page_no: int, payload: dict[str, Any], *, detail_done: bool) -> None:
+	def put_crawl_job(
+		self,
+		run_id: str,
+		job_key: str,
+		page_no: int,
+		payload: dict[str, Any],
+		*,
+		detail_done: bool,
+		require_existing_run: bool = False,
+	) -> bool:
+		"""写入职位行，返回是否真的落库。
+
+		``crawl_jobs`` 没有外键级联：断点被 ``clean --privacy`` 删除后，普通
+		INSERT 会复活一行没有归属的职位记录，导出目录也会被重建（Issue #2208）。
+		执行器传 ``require_existing_run=True``：插入改成单条
+		``INSERT ... SELECT ... WHERE EXISTS``，以 crawl_runs 行存在为前提原子
+		完成，断点消失时返回 ``False`` 且不落任何行。默认仍按普通写入，缓存层
+		本身不假设调用方一定先建 run（测试与离线工具会直接构造职位行）。
+		"""
 		existing = self._conn.execute(
 			"SELECT selector FROM crawl_jobs WHERE run_id = ? AND job_key = ?", (run_id, job_key)
 		).fetchone()
 		selector = str(existing[0]) if existing and existing[0] else self._new_crawl_selector()
-		self._conn.execute(
-			"INSERT OR REPLACE INTO crawl_jobs (run_id, job_key, selector, page_no, payload, detail_done, updated_at) "
-			"VALUES (?, ?, ?, ?, ?, ?, ?)",
-			(run_id, job_key, selector, page_no, json.dumps(payload, ensure_ascii=False, sort_keys=True), int(detail_done), time.time()),
+		values: tuple[Any, ...] = (
+			run_id,
+			job_key,
+			selector,
+			page_no,
+			json.dumps(payload, ensure_ascii=False, sort_keys=True),
+			int(detail_done),
+			time.time(),
 		)
+		if require_existing_run:
+			cursor = self._conn.execute(
+				"INSERT OR REPLACE INTO crawl_jobs (run_id, job_key, selector, page_no, payload, detail_done, updated_at) "
+				"SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM crawl_runs WHERE run_id = ?)",
+				(*values, run_id),
+			)
+		else:
+			cursor = self._conn.execute(
+				"INSERT OR REPLACE INTO crawl_jobs (run_id, job_key, selector, page_no, payload, detail_done, updated_at) "
+				"VALUES (?, ?, ?, ?, ?, ?, ?)",
+				values,
+			)
 		self._conn.commit()
+		return cursor.rowcount > 0
 
 	def get_crawl_job(self, run_id: str, job_key: str) -> dict[str, Any] | None:
 		row = self._conn.execute(
@@ -1613,6 +1648,12 @@ class CacheStore:
 
 		``encryptJobId`` 漂移成 dict / 数字时按未命中处理：直接当 sqlite
 		参数会抛 ProgrammingError 并穿出整条 ``--welfare`` 管线（Issue #1890）。
+
+		``description`` 是 BLOB / 其它类型时同样按未命中处理（Issue #2210）：
+		详情缓存是纯本地可重建缓存，漂移值进入 payload 会让 ``put_crawl_job``
+		的 ``json.dumps`` 抛 ``TypeError``，任务永久停在 ``stopped`` 却报
+		``ok:true``；重新取一次详情并覆盖是最小修复。BLOB 先按 UTF-8 还原
+		（与 #1885 / #2164 同口径）。
 		"""
 		if not isinstance(job_id, str) or not job_id:
 			return None
@@ -1626,7 +1667,15 @@ class CacheStore:
 			self._conn.execute("DELETE FROM job_desc_cache WHERE job_id = ?", (job_id,))
 			self._conn.commit()
 			return None
-		return cast("str", row[0])
+		raw = row[0]
+		if isinstance(raw, str):
+			return raw
+		if isinstance(raw, (bytes, bytearray)):
+			try:
+				return bytes(raw).decode("utf-8")
+			except UnicodeDecodeError:
+				return None
+		return None
 
 	def put_job_desc(self, job_id: str, description: str) -> None:
 		"""缓存非空职位描述，超过容量时淘汰保存时间最早的条目。

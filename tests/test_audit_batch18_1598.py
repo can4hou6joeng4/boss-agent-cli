@@ -121,10 +121,12 @@ def test_false_code_in_list_response_is_an_error(tmp_path: Path, code: object) -
 		budget_factory=_NoDelayBudget,
 	)
 	settings = _settings(tmp_path)
+	# 执行器内部方法要求断点存在（Issue #2208 的 fail-closed 检查）。
+	run_id = service.create(settings)
 
 	with cache, pytest.raises(RuntimeError, match="接口错误"):
 		service._fetch_list(
-			"run-1", transport, _NoDelayBudget(cache), CrawlRunBudget(settings), settings, 1
+			run_id, transport, _NoDelayBudget(cache), CrawlRunBudget(settings), settings, 1
 		)
 
 
@@ -139,9 +141,13 @@ def test_false_code_in_detail_response_is_an_error(tmp_path: Path, code: object)
 		budget_factory=_NoDelayBudget,
 	)
 
+	settings = _settings(tmp_path)
+	# 执行器内部方法要求断点存在（Issue #2208 的 fail-closed 检查）。
+	run_id = service.create(settings)
+
 	with cache, pytest.raises(RuntimeError, match="接口错误"):
 		service._fetch_detail(
-			"run-1", transport, _NoDelayBudget(cache), CrawlRunBudget(_settings(tmp_path)), "sec-1"
+			run_id, transport, _NoDelayBudget(cache), CrawlRunBudget(settings), "sec-1"
 		)
 
 

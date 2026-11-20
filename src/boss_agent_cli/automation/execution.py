@@ -131,6 +131,38 @@ def process_pending(
 		)
 		if item.platform != platform:
 			continue
+		prior = _conversation_prior(state, item.candidate_key)
+		stage_key = _ACTION_STAGE_KEYS.get(action)
+		if prior is not None and stage_key is not None and bool(prior.get(stage_key)):
+			# 同一动作在一个会话里只发生一次：扫描路径（或更早的队列行）已经
+			# 完成过这个阶段。队列行是操作者批准的动作，但再发一份问卷 / 跟进
+			# 是确定性的重复触达（Issue #2211）。标记为已执行而不是留在
+			# pending，否则下一轮还会派发同一条消息。
+			if dry_run:
+				event = make_event(
+					platform,
+					item.candidate_key,
+					action,
+					EventStatus.DRY_RUN,
+					item.confidence,
+					f"dry-run: 会话已完成 {stage_key}，真实运行会把这条队列动作标记为已执行，不再重复发送",
+				)
+				events.append(event)
+				store.append_event(event)
+				continue
+			actions[index] = _pending_with_status(item, "executed")
+			store.write_pending(actions)
+			event = make_event(
+				platform,
+				item.candidate_key,
+				action,
+				EventStatus.SKIPPED,
+				item.confidence,
+				f"会话已完成同一动作（{stage_key}），队列行标记为已执行，不再重复发送",
+			)
+			events.append(event)
+			store.append_event(event)
+			continue
 		if status_for_decision(guard.config, decision, dry_run) is EventStatus.SKIPPED:
 			# 队列路径同样受安全配置约束：操作者收紧 allowed_actions 或
 			# 提高置信度阈值后，遗留 pending 行不能被直接派发（Issue #2020）。
@@ -163,7 +195,10 @@ def process_pending(
 			raise AutomationStateError(
 				store.pending_path, f"记录 {item.id!r} 缺少 message，拒绝发送空消息"
 			)
-		prior = _conversation_prior(state, item.candidate_key)
+		# 本轮队列尝试过的候选人都要告诉调用方（含被平台拒绝后回到 pending 的）：
+		# 扫描路径据此跳过这些会话，不能在同一轮用模板话术顶替操作者批准的动作
+		# （Issue #2211）。不依赖 --limit 分支，limit 为 None 时同样记录。
+		dispatched_conversations.add(item.candidate_key)
 		if prior is not None and state is not None:
 			blocked = _queue_inflight_gate(store, guard, state, platform, dry_run, item.candidate_key, prior)
 			if blocked is not None:
@@ -414,16 +449,19 @@ def execute_or_dry_run(
 	return EventStatus.AUTO_EXECUTED, decision.reason
 
 
+#: 队列动作对应的「已完成」阶段键：`update_prior` 写入这些键，扫描路径的
+#: 决策也读它们；队列派发前用同一张表拒绝重复动作（Issue #2211）。
+_ACTION_STAGE_KEYS: dict[PlatformAction, str] = {
+	PlatformAction.SEND_QUESTIONNAIRE: "questionnaire_sent_at",
+	PlatformAction.SEND_FOLLOW_UP: "follow_up_sent_at",
+	PlatformAction.EXCHANGE_CONTACT: "exchange_contact_at",
+}
+
+
 def update_prior(prior: dict[str, Any], decision: Decision) -> None:
-	match decision.action:
-		case PlatformAction.SEND_QUESTIONNAIRE:
-			prior["questionnaire_sent_at"] = now_iso()
-		case PlatformAction.SEND_FOLLOW_UP:
-			prior["follow_up_sent_at"] = now_iso()
-		case PlatformAction.EXCHANGE_CONTACT:
-			prior["exchange_contact_at"] = now_iso()
-		case _:
-			return
+	stage_key = _ACTION_STAGE_KEYS.get(decision.action)
+	if stage_key is not None:
+		prior[stage_key] = now_iso()
 
 
 def _read_inflight(prior: dict[str, Any]) -> InflightAction | None:

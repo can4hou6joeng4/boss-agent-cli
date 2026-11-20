@@ -119,6 +119,19 @@ def _run_cycle_locked(
 				else:
 					max_per_tab = config.max_per_tab if remaining is None else remaining
 					refs = adapter.scan_conversations(list(config.tabs), max_per_tab)
+					# 队列（含本轮被平台拒绝后退回 pending、以及排队等下一轮的）
+					# 拥有该会话的最高优先级：扫描路径跳过这些候选人，不能在同一
+					# 轮用模板话术顶替操作者批准的动作，也不能跨轮把同一动作再发
+					# 一次（Issue #2211）。verification-required 不在这里排除：
+					# 它交给扫描路径既有的在途门控处理，操作者才能看到「等待人工
+					# 核对，已跳过」的 SKIPPED 事件（Issue #1515）。
+					claimed = set(pending_conversations)
+					claimed.update(
+						row.candidate_key
+						for row in store.read_pending()
+						if row.platform == platform and row.status in {"pending", "executing"}
+					)
+					refs = [ref for ref in refs if ref.id not in claimed]
 					if remaining is not None:
 						# 每个 tab 各切一份会让默认两个 tab 时处理 2×limit 个会话；
 						# max_per_tab 只用于限制每 tab 的拉取量。

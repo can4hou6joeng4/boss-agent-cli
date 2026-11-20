@@ -5,6 +5,10 @@
 ## [Unreleased]
 
 ### Fixed
+- 采集执行中断点被 `clean --privacy` 删除后按「已停止」fail-closed：执行器不再把「行不存在」当成「没有 stop」，后续页的职位行不会复活已清理的 `crawl_jobs`、导出目录不会被重建、信封也不再报 `completed` 指向不存在的 run；执行器写职位行改为以 `crawl_runs` 行存在为前提的原子插入（`require_existing_run`），最后一页之后导出前再确认一次断点（Issue #2208）。
+- 前台 `crawl resume` 在预检之前清除旧停止标记、失败时还原：预检（依赖探测、登录态读取）期间到达的新 `crawl stop` 不再被预检后的清理当成上一轮残留清掉，采集立即按停止结算；与后台恢复路径同构（Issue #2209）。
+- `job_desc_cache.description` 的 BLOB 存储类漂移在读取边界按 UTF-8 解码，解码失败或其它类型按「未命中」处理并重新取详情：漂移值不再进入 payload 让 `put_crawl_job` 的 `json.dumps` 抛 `TypeError`、把任务永久停在 `stopped` 却报 `ok:true`；`search_filters` / `ai` / `agent` 的详情缓存消费点同口径（Issue #2210）。
+- 自动化队列认领的会话不再交给扫描路径：本轮队列已尝试过（含被平台拒绝后退回 `pending`）以及仍有 `pending` / `executing` 队列行的候选人，扫描路径不会在同一轮用模板话术顶替、也不会跨轮把同一动作再发一次；同一动作已在会话中完成时（`questionnaire_sent_at` 等）遗留队列行标记为已执行而不是重发（Issue #2211）。
 - 登录态校验在任何请求之前先解析代理配置：`HTTPS_PROXY` / `ALL_PROXY` 是 `socks9://`、端口非数字这类坏值时，`login --cookie` 不再把 `ProxyConfigurationError` 当成 Cookie 失效、清掉刚保存的登录态并回退到扫码；按 `INVALID_PARAM` 报出代理配置错误（Issue #2203）。
 - AI 密钥派生与登录态侧同口径：`BOSS_AGENT_MACHINE_ID` 按 surrogateescape 解码出孤立代理字符时，AI 加密密钥改用 `surrogatepass` 编码，同一机器 ID 不再在 auth 侧可用、AI 侧抛 `UnicodeEncodeError`（Issue #2204）。
 - `ai_base_url` 的读取与写入走同一套校验：配置里缺 scheme 或含空白 / 控制字符的地址（`\t`、空格、DEL）按带修复指引的 `CONFIG_INVALID` 报本地配置错误（与 #1636 的持久化配置契约一致），不再让每条 AI 命令由 httpx 抛 `InvalidURL` / `UnsupportedProtocol` 并被兜成可重试的 `AI_API_ERROR`；`ai local status` 等无认证装饰器的命令路径也由 CLI 兜底出信封（Issue #2205）。
