@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.139 (2026-11-20): fixes for crawl checkpoint races, duplicate automation dispatch, shortlist and snapshot boundaries, non-UTF-8 terminal output, and API client error classification.
 v3.4.138 (2026-11-20): fixes for crawl control paths, export path preflight, sanitizer boundaries, and empty wizard input guidance.
 v3.4.137 (2026-11-20): fixes for automation queue rewrites, MCP input contracts, chat snapshot completeness, and wizard checkpoint recovery.
 v3.4.136 (2026-11-20): audit batch — export function-boundary hardening, local cache BLOB storage-class drift and decorator error classification, crawl seed-cookie redaction, and symlink-loop handling in crawl path resolution (Issues #2162–#2169).
