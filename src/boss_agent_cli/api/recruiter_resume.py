@@ -183,7 +183,14 @@ def history_self_message_state(data: Any, friend_id: int, *, page_size: int) -> 
 	if not messages:
 		return None
 	has_more = data.get("hasMore") if isinstance(data, dict) else None
-	complete = has_more is False or (has_more is None and len(messages) < page_size)
+	# 完整性必须按平台原始页长度判断：history_messages 会过滤掉非对象条目，
+	# 用过滤后的长度会把含形状漂移条目的满页误判成「已经拿全」，从而把拿不准
+	# 的「是否发过消息」当成确定没有（Issue #2272）。
+	raw_items = data.get("messages") if isinstance(data, dict) else None
+	page_length = len(raw_items) if isinstance(raw_items, list) else None
+	complete = has_more is False or (
+		has_more is None and page_length is not None and page_length < page_size
+	)
 	return False if complete else None
 
 

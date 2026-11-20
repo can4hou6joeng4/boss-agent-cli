@@ -1,5 +1,6 @@
 """招聘者 — 下载已收到的附件简历。"""
 
+import sqlite3
 from pathlib import Path
 
 import click
@@ -172,6 +173,12 @@ def download_resume_cmd(ctx: click.Context, friend_id: int, message_id: int, out
 				hints=risk_hints,
 			)
 			return
+		except sqlite3.DatabaseError:
+			# 请求预算库损坏 / 被同名目录占位是确定性本地故障：预算库在发出任何
+			# 请求之前就被打开，重试永远同一结果。交给 handle_auth_errors 按
+			# LOCAL_IO_ERROR 分类并给出删除预算库的指引，不能兜成可重试的
+			# NETWORK_ERROR 让 Agent 反复重打平台（Issue #2271）。
+			raise
 		except Exception as exc:
 			# 预算/超时停止不是下载失败：不能提示「检查网络后重试」，交给装饰器按停止契约输出。
 			if is_request_stop(exc):

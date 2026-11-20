@@ -84,6 +84,9 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 	# 避免失败后磁盘上留着不同批次的产物（Issue #1617）。
 	current_target: Path | None = None
 	replaced: list[tuple[Path, Path | None]] = []
+	# 备份搬运被中断时，备份可能是旧产物的唯一副本；必须在外层 try 之前初始化，
+	# 序列化阶段就中断时也要能安全读取。
+	pending_backup: tuple[Path, Path] | None = None
 	# 回滚也失败时，备份是旧产物的唯一副本：清理临时文件必须跳过它，
 	# 并把路径写进错误消息（Issue #1924）。
 	retained: set[Path] = set()
@@ -139,10 +142,19 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 				# 备份由 mkstemp 先创建：若随后的搬运失败，它必须和序列化临时
 				# 文件一起被清理，否则每次重试都残留一个 `.jobs.*`（Issue #1875）。
 				temporaries.append(backup)
-				os.replace(current_target, backup)
+				try:
+					os.replace(current_target, backup)
+				except BaseException:
+					# 中断可能落在「目标已移走、备份已就位」之后：外层按 lstat
+					# 判断是否需要还原，不能把可能是旧产物唯一副本的备份当临时
+					# 文件删掉（Issue #2274）。
+					pending_backup = (current_target, backup)
+					raise
 			try:
 				os.replace(temporary, current_target)
-			except OSError:
+			except BaseException:
+				# 旧产物已经移到备份：搬运被中断 / 失败时目标会暂时消失，必须
+				# 先放回去再上抛，否则中断路径会丢掉旧产物（Issue #2274）。
 				if backup is not None:
 					try:
 						os.replace(backup, current_target)
@@ -153,20 +165,32 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 			replaced.append((current_target, backup))
 	except CrawlRuntimeUnavailable:
 		_rollback_replacements(replaced, retained)
+		_restore_pending_backup(pending_backup, retained)
 		_discard(temporaries, retained)
 		raise
 	except OSError as exc:
 		_rollback_replacements(replaced, retained)
+		_restore_pending_backup(pending_backup, retained)
 		_discard(temporaries, retained)
 		raise CrawlExportError(
 			f"采集结果无法写出到 {current_target or output_dir}：{type(exc).__name__}: {exc}{_retained_hint(retained)}"
 		) from exc
 	except Exception as exc:
 		_rollback_replacements(replaced, retained)
+		_restore_pending_backup(pending_backup, retained)
 		_discard(temporaries, retained)
 		raise CrawlExportError(
 			f"采集结果无法写出到 {output_dir}：{type(exc).__name__}: {exc}{_retained_hint(retained)}"
 		) from exc
+	except BaseException:
+		# 用户中断（Ctrl-C / SIGTERM 转成的 KeyboardInterrupt、SystemExit）不是
+		# Exception：不回滚就会让三份产物落成不同批次，`.jobs.*` 临时 / 备份文件
+		# 也会永久残留（其中含整份采集数据）。回滚与清理本身失败时不吞掉原始
+		# 中断异常（Issue #2274）。
+		_rollback_replacements(replaced, retained)
+		_restore_pending_backup(pending_backup, retained)
+		_discard(temporaries, retained)
+		raise
 	# 全部替换成功后才清理备份：三份产物要么都是新批次，要么保持旧批次。
 	# 清理失败不能把已成功的导出报成失败（Issue #1926）。
 	_discard([backup for _, backup in replaced if backup is not None], retained)
@@ -204,6 +228,31 @@ def _rollback_replacements(replaced: list[tuple[Path, Path | None]], retained: s
 			if backup is not None:
 				retained.add(backup)
 			continue
+
+
+def _restore_pending_backup(pending: tuple[Path, Path] | None, retained: set[Path]) -> None:
+	"""备份搬运本身被中断：目标还在就丢弃备份，目标已消失就把备份放回去。
+
+	只有搬运中断时 ``replaced`` 里还没有这一项，备份可能是旧产物的唯一副本；
+	此时不能把它当临时文件清理掉（Issue #2274）。
+	"""
+	if pending is None:
+		return
+	target, backup = pending
+	try:
+		target.lstat()
+	except FileNotFoundError:
+		pass
+	except OSError:
+		# 状态无法确认：保留备份，宁可多一个隐藏文件也不丢旧产物。
+		retained.add(backup)
+		return
+	else:
+		return
+	try:
+		os.replace(backup, target)
+	except OSError:
+		retained.add(backup)
 
 
 def _temporary_for(target: Path) -> Path:
