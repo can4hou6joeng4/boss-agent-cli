@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.142 (2026-11-20): fixes for external eval scoring contracts, maintenance-script gate exit codes and diagnostics, response cookie merge write boundaries, and preset/watch name error classification.
 v3.4.141 (2026-11-20): fixes for cross-field terminal markup escaping and wizard rendering boundaries, AI endpoint clearing and validation, and local model import directory collisions.
 v3.4.140 (2026-11-20): fixes for login verification rate-limit and risk-control classification, crawl resume checkpoint races and handoff control, and TTY rendering control-character sanitization and shape drift.
 v3.4.139 (2026-11-20): fixes for crawl checkpoint races, duplicate automation dispatch, shortlist and snapshot boundaries, non-UTF-8 terminal output, and API client error classification.
