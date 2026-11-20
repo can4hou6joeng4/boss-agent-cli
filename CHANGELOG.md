@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 预设与 watch 名称含孤立代理字符（非法 UTF-8 字节经 surrogateescape、JSON 的 `"\udcff"` 转义）时，在 `preset add` / `preset remove` / `watch add` / `watch remove` / `watch run` / `search --preset` 入口按 `INVALID_PARAM` 拒绝，不再一路走到 SQLite 绑定参数才抛 `UnicodeEncodeError`、被兜成不可恢复且指引磁盘权限的 `LOCAL_IO_ERROR`（Issue #2268）。
 - 离线冒烟脚本的环境变量与退出码收口：`BOSS_SMOKE_TIMEOUT` 空值回到默认 30，非正整数以明确文案退出 2；`BOSS_SMOKE_DRY_RUN` 大小写不敏感并接受 `on` / `y`，无法识别的取值拒绝执行而不是切到联网；退出码改为全部 `pass` / `dry_run` 才为 0；子进程固定按 UTF-8 交换，解码失败、超长整数与 `RecursionError` 归入 `contract_error` 并附带抹掉 `security_id` 的 stderr 尾部（Issue #2261）。
 - 安装探针展开 MCP 阶段的 `ExceptionGroup`：`ProbeError` 的消息（如工具清单漂移）不再被压成 `"ExceptionGroup"`，普通异常报告「类型: 消息」，CLI 阶段失败附带 stderr 尾部与超时命令名（Issue #2262）。
 - 发布校验容忍子进程的非 UTF-8 诊断输出，不再把编码差异记成 `UnicodeDecodeError` 失败；JSON 报告在非 UTF-8 stdout 下退回 ASCII 转义，失败项记录「类型: 消息」而不是只有类名（Issue #2263）。

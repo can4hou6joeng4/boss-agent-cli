@@ -206,6 +206,20 @@ def _decode_timestamp_column(
 	raise CacheRecordInvalid(kind, record_id, column, f"期望数值时间戳，实际是 {type(raw).__name__}")
 
 
+def saved_search_name_error(name: str) -> str | None:
+	"""名称能否作为 SQLite TEXT 主键保存；不能时返回原因（Issue #2268）。
+
+	argv 里的非法 UTF-8 字节经 surrogateescape、JSON 的 ``"\\udcff"`` 转义都会
+	产生孤立代理字符；sqlite3 绑定参数时抛 ``UnicodeEncodeError``，被统一兜成
+	不可恢复的 ``LOCAL_IO_ERROR`` 并把恢复指引指向磁盘权限，与实际原因无关。
+	"""
+	try:
+		name.encode("utf-8")
+	except UnicodeEncodeError:
+		return "名称含有无法保存的字符（如孤立代理项），请换成普通 Unicode 文本"
+	return None
+
+
 def _tolerated_timestamp(raw: Any, *, default: float = 0.0) -> float:
 	"""调度用时间戳的容错读取：漂移值按无历史处理（与 Issue #1206 同口径）。
 

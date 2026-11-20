@@ -8,7 +8,12 @@ from boss_agent_cli.api.endpoints import (
 	STAGE_CODES,
 )
 from boss_agent_cli.auth.manager import AuthManager
-from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore, SavedSearchParamsError
+from boss_agent_cli.cache.store import (
+	CacheRecordInvalid,
+	CacheStore,
+	SavedSearchParamsError,
+	saved_search_name_error,
+)
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.display import (
@@ -119,6 +124,17 @@ def watch_add_cmd(
 			hints={"next_actions": [list_cmd]},
 		)
 		return
+	if problem := saved_search_name_error(name):
+		list_cmd = _hint_command(ctx, "watch list")
+		handle_error_output(
+			ctx,
+			"watch",
+			code="INVALID_PARAM",
+			message=f"watch {problem}",
+			recovery_action=f"换一个只含普通 Unicode 文本的名称重试；用 {list_cmd} 查看已有 watch",
+			hints={"next_actions": [list_cmd]},
+		)
+		return
 	# 保存时就把筛选条件校验掉：watch run 直接把存下来的参数交给平台客户端，
 	# 未知薪资 / 经验 / 学历在 `*_CODES.get(...)` 处返回 None，参数被静默丢弃，
 	# 之后每次 run 都在「没有筛选」的结果上报告新职位。
@@ -194,6 +210,17 @@ def watch_remove_cmd(ctx: click.Context, name: str) -> None:
 			code="INVALID_PARAM",
 			message="watch 名称不能为空",
 			recovery_action=f"补上 watch 名称后重试；用 {list_cmd} 查看已有 watch",
+			hints={"next_actions": [list_cmd]},
+		)
+		return
+	if problem := saved_search_name_error(name):
+		list_cmd = _hint_command(ctx, "watch list")
+		handle_error_output(
+			ctx,
+			"watch",
+			code="INVALID_PARAM",
+			message=f"watch {problem}",
+			recovery_action=f"换一个只含普通 Unicode 文本的名称重试；用 {list_cmd} 查看已有 watch",
 			hints={"next_actions": [list_cmd]},
 		)
 		return
@@ -366,6 +393,19 @@ def watch_run_cmd(ctx: click.Context, name: str | None, run_all: bool) -> None:
 			code="INVALID_PARAM",
 			message="watch 名称不能为空",
 			recovery_action=f"补上 watch 名称后重试；用 {list_cmd} 查看已有 watch",
+			hints={"next_actions": [list_cmd]},
+		)
+		ctx.exit(1)
+		return
+
+	if name is not None and (problem := saved_search_name_error(name)):
+		list_cmd = _hint_command(ctx, "watch list")
+		handle_error_output(
+			ctx,
+			"watch",
+			code="INVALID_PARAM",
+			message=f"watch {problem}",
+			recovery_action=f"换一个只含普通 Unicode 文本的名称重试；用 {list_cmd} 查看已有 watch",
 			hints={"next_actions": [list_cmd]},
 		)
 		ctx.exit(1)
