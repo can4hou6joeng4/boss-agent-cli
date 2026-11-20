@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.140] - 2026-11-20
+
 ### Fixed
 - 自由文本脱敏识别 camelCase 凭据键：`accessToken` / `refreshToken` / `clientSecret` / `sessionId` 等键名中关键字前是小写字母，此前的「非字母数字」边界不成立，凭据会明文进入 `error.message` / `recovery_action` 与 MCP 子进程失败信息；新边界只在小写→大写转折处成立，`token_expires_in` / `max_tokens` 等配置名不被误伤（Issue #2231）。
 - 结构化与文本脱敏补上 `passwd` 凭据键：此前只认 `password`，`{"passwd": "..."}` 与 `passwd=...` 都原样输出（Issue #2232）。
