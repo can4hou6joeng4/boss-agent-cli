@@ -96,7 +96,7 @@ def test_outgoing_only_transcript_without_reply_waits() -> None:
 	assert decision.action == PlatformAction.SKIP
 
 
-def test_no_direction_transcript_still_uses_prior_marker() -> None:
+def test_no_direction_transcript_without_outgoing_waits() -> None:
 	conversation = Conversation(
 		title="406",
 		incoming_messages=(_RICH,),
@@ -108,15 +108,20 @@ def test_no_direction_transcript_still_uses_prior_marker() -> None:
 		conversation, AutomationConfig(), {"questionnaire_sent_at": _QUESTIONNAIRE_TS}
 	)
 
-	# 没有方向信息时才保留 prior 兜底：视为候选人已回复，进入追问。
-	assert decision.action == PlatformAction.SEND_FOLLOW_UP
+	# 没有我方消息锚点时不再用 prior 兜底断言「已回复」：incoming 至少含触发问卷的
+	# 旧消息，据此自动追问等于让历史消息成为写动作的依据（Issue #2229）。
+	assert decision.action == PlatformAction.SKIP
+	assert "waiting for candidate reply after questionnaire" in decision.reason
 
-def test_direction_without_any_outgoing_still_uses_prior_marker() -> None:
-	# 转录带方向但完全没有我方消息：转录不完整，不能据此断言未回复，保留 prior 兜底。
+
+def test_direction_without_any_outgoing_waits() -> None:
+	# 转录带方向但完全没有我方消息：无法证明候选人的消息在我方话术之后，
+	# 保守按未回复处理，等待方向信息恢复或人工核对（Issue #2229）。
 	conversation = _conversation("407", [("incoming", _RICH)])
 
 	decision = decide_action(
 		conversation, AutomationConfig(), {"questionnaire_sent_at": _QUESTIONNAIRE_TS}
 	)
 
-	assert decision.action == PlatformAction.SEND_FOLLOW_UP
+	assert decision.action == PlatformAction.SKIP
+	assert "waiting for candidate reply after questionnaire" in decision.reason
