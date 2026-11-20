@@ -89,13 +89,21 @@ def save_snapshot_and_diff(
 	today = datetime.date.today().isoformat()
 	snapshot_path = os.path.join(snapshot_dir, f"{today}.json")
 
+	# 服务边界过滤非对象条目：平台列表页混入 null / 字符串 / 数字时，
+	# contact_identity 会在 .get 上抛 AttributeError，整次快照与导出失败
+	# （与 chat_export 的渲染边界同口径，Issue #2221）。丢弃过条目即不完整。
+	usable_friends = [item for item in friends if isinstance(item, dict)]
+	dropped_entries = len(usable_friends) != len(friends)
+
 	# 有条目因缺少身份被丢弃时不能声称完整（Issue #2179）：既不推断「已消失」，
 	# 也不把 complete=true 写进当日快照——否则次日会把这份不完整快照当基线。
-	current_complete = complete and all(contact_identity(item) for item in friends)
+	current_complete = (
+		complete and not dropped_entries and all(contact_identity(item) for item in usable_friends)
+	)
 
 	# 读、合并和写入共用一把锁，避免并发导出覆盖另一页联系人（#1356）。
 	with _snapshot_lock(snapshot_path):
-		merged = _merge_and_write(snapshot_path, friends, replace=current_complete)
+		merged = _merge_and_write(snapshot_path, usable_friends, replace=current_complete)
 
 	prev_path = _find_previous_snapshot(snapshot_dir, today)
 	previous = _load_previous_snapshot(prev_path, logger) if prev_path is not None else None

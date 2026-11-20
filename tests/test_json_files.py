@@ -50,7 +50,9 @@ def test_unserializable_value_keeps_previous_file(tmp_path):
 	path = tmp_path / "state.json"
 	write_json_atomic(path, {"version": 1})
 
-	with pytest.raises(TypeError):
+	# 不可序列化的值统一归成本地 IO 错误（Issue #2220）：TypeError 裸穿出
+	# 命令层会让 stdout 无信封、stderr 裸 traceback。
+	with pytest.raises(OSError):
 		write_json_atomic(path, {"bad": object()})
 
 	assert json.loads(path.read_text(encoding="utf-8")) == {"version": 1}

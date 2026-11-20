@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Fixed
+- 本地 JSON 序列化边界把 `TypeError` 也归成本地 IO 错误：写入不可序列化的值（元组键、`bytes`、`set`）时不再让裸 `TypeError` 穿出命令层（stdout 无信封、stderr 裸 traceback），按 `LOCAL_IO_ERROR` 报出且保留原文件与既有原子写语义（Issue #2220）。
+- 聊天快照服务边界过滤非对象条目：平台列表页混入 `null` / 字符串 / 数字时不再在 `contact_identity` 上抛 `AttributeError` 让整次快照与导出失败；丢弃过条目按不完整处理（不推断「已消失」、不写完整标记），与 `chat_export` 的渲染边界同口径（Issue #2221）。
 - 写请求只在「请求可能已发出」时落成 `ACTION_UNCONFIRMED`：`ConnectError` / `ConnectTimeout` / `PoolTimeout` / `ProxyError` / `UnsupportedProtocol` / `LocalProtocolError` 确定发生在连接建立或请求构造阶段，断网、DNS 失败或代理不可达时不再被报成不可恢复的「结果未知、禁止重试」，改为原样上抛、由命令出口按可重试的 `NETWORK_ERROR` 收口（Issue #2216）。
 - `job_card()` 在 `httpx-only` 策略下不再回退不存在的浏览器通道：httpx 失败时原样上抛真实错误，不再用 `BROWSER_DISABLED`「该能力需要页面通道」覆盖 5xx / 超时 / 解析失败的原因（Issue #2217）。
 - stoken 过期判断与其它业务码消费点同口径，字符串 `"37"` 与整数 `37` 一样触发刷新；平台码序列化类型漂移时不再漏刷新、把过期响应当普通结果返回（Issue #2218）。
