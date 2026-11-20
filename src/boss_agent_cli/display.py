@@ -1255,6 +1255,7 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 				ChatTabCdpUnreachable,
 				RecruiterChatTabRequired,
 			)
+			from boss_agent_cli.ai.config import AIConfigValueError
 			from boss_agent_cli.api._base_client import BrowserChannelRequired
 			from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserSourceUnsupported
 			from boss_agent_cli.api.client import PlatformRiskError
@@ -1396,6 +1397,20 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recovery_action=recovery_action,
 					details=e.details or None,
 					hints=risk_hints,
+				)
+			except AIConfigValueError as e:
+				# AI 本地配置项非法是确定性错误（Issue #2205）：读侧校验（如
+				# 手工编辑的 base_url）抛出的异常按既有的持久化配置契约报
+				# CONFIG_INVALID（Issue #1636），不能掉进下面泛化的可重试分支。
+				# 写入侧的参数校验仍由命令自己报 INVALID_PARAM。
+				invalid_recoverable, invalid_recovery = error_contract_for_code("CONFIG_INVALID")
+				handle_error_output(
+					ctx,
+					command_name,
+					code="CONFIG_INVALID",
+					message=str(e),
+					recoverable=invalid_recoverable,
+					recovery_action=f"{e.recovery_hint} 修正后重试" if e.recovery_hint else invalid_recovery,
 				)
 			except ProxyConfigurationError as e:
 				# 代理环境变量非法是确定性配置错误：重试只会复现，且不能静默回退

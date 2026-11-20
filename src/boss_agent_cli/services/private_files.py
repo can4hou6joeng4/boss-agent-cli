@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import errno
 import os
+import stat
 import tempfile
 import time
 from pathlib import Path
@@ -43,6 +44,22 @@ def chmod_best_effort(path: Path, mode: int) -> None:
 		os.chmod(path, mode)
 	except OSError:
 		pass
+
+
+def tighten_private_file(path: Path) -> None:
+	"""把已存在的普通文件尽力收紧为 ``FILE_MODE``。
+
+	符号链接不能跟随：``exists()`` 对「指向普通文件的链接」为 True，而
+	``chmod`` 会改到链接目标，等于修改数据目录之外的文件（Issue #2206）。
+	``lstat`` 只用 ``FileNotFoundError`` 判断缺失，权限等 ``OSError`` 静默
+	跳过（#1675 口径）；目录 / FIFO 等特殊文件同样不收紧。
+	"""
+	try:
+		mode = path.lstat().st_mode
+	except OSError:
+		return
+	if stat.S_ISREG(mode):
+		chmod_best_effort(path, FILE_MODE)
 
 
 def tighten_private_directory(path: Path) -> None:

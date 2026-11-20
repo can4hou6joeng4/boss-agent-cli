@@ -21,6 +21,7 @@ from boss_agent_cli.services.json_files import read_bytes_if_regular
 from boss_agent_cli.services.private_files import (
 	chmod_best_effort,
 	load_or_create_private_salt,
+	tighten_private_file,
 	write_private_bytes,
 )
 
@@ -45,8 +46,8 @@ class TokenStore:
 		self._salt_path = auth_dir / "salt"
 		self._lock_path = auth_dir / "refresh.lock"
 		for path in (self._salt_path, self._session_path):
-			if path.exists():
-				chmod_best_effort(path, 0o600)
+			# 只收紧普通文件：符号链接不能跟随（Issue #2206）。
+			tighten_private_file(path)
 
 	def _get_machine_id(self) -> str:
 		# 允许显式覆盖，便于测试 / CI / 沙箱环境稳定运行
