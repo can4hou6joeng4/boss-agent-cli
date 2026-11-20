@@ -83,7 +83,9 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 	# 才能指向具体产物。三个目标逐次替换，已替换的文件在后续失败时回滚到旧内容，
 	# 避免失败后磁盘上留着不同批次的产物（Issue #1617）。
 	current_target: Path | None = None
-	replaced: list[tuple[Path, Path | None]] = []
+	# 每项是（目标，旧产物备份，新内容的临时文件）：回滚要靠临时文件是否还在原位
+	# 判断这次替换有没有生效。
+	replaced: list[tuple[Path, Path | None, Path]] = []
 	# 备份搬运被中断时，备份可能是旧产物的唯一副本；必须在外层 try 之前初始化，
 	# 序列化阶段就中断时也要能安全读取。
 	pending_backup: tuple[Path, Path] | None = None
@@ -147,7 +149,7 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 				os.replace(current_target, backup)
 			# 替换前登记回滚项，覆盖调用前 / 调用后两个中断窗口；首次导出没有
 			# 旧产物时，也要删除已经写入的新文件，恢复原来不存在的状态。
-			replaced.append((current_target, backup))
+			replaced.append((current_target, backup, temporary))
 			pending_backup = None
 			os.replace(temporary, current_target)
 	except CrawlRuntimeUnavailable:
@@ -180,7 +182,7 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 		raise
 	# 全部替换成功后才清理备份：三份产物要么都是新批次，要么保持旧批次。
 	# 清理失败不能把已成功的导出报成失败（Issue #1926）。
-	_discard([backup for _, backup in replaced if backup is not None], retained)
+	_discard([backup for _, backup, _ in replaced if backup is not None], retained)
 	return {"json": str(json_path), "csv": str(csv_path), "xlsx": str(xlsx_path)}
 
 
@@ -202,19 +204,37 @@ def _retained_hint(retained: set[Path]) -> str:
 	return f"；旧产物备份保留在 {paths}"
 
 
-def _rollback_replacements(replaced: list[tuple[Path, Path | None]], retained: set[Path]) -> None:
+def _rollback_replacements(replaced: list[tuple[Path, Path | None, Path]], retained: set[Path]) -> None:
 	"""把本次导出已经替换的目标恢复到旧内容，失败不吞掉原始异常。"""
-	for target, backup in reversed(replaced):
+	for target, backup, temporary in reversed(replaced):
 		try:
 			if backup is not None:
 				os.replace(backup, target)
-			else:
+			elif _replacement_took_effect(temporary):
+				# 没有旧产物时只删除本次确实搬上去的新文件。回滚项在替换调用之前
+				# 就登记了，替换没有生效时目标位置上的东西（同名目录、别的进程
+				# 刚写的文件）不属于本次导出，不能删。
 				target.unlink(missing_ok=True)
 		except OSError:
 			# 回滚失败时保留备份文件，操作者可据此恢复；原始错误仍然上抛。
 			if backup is not None:
 				retained.add(backup)
 			continue
+
+
+def _replacement_took_effect(temporary: Path) -> bool:
+	"""新内容的临时文件已经不在原位，说明 ``os.replace`` 已经把它搬到目标上。
+
+	状态无法确认时按没有生效处理：宁可留下一份新产物，也不删除不属于本次
+	导出的文件。
+	"""
+	try:
+		temporary.lstat()
+	except FileNotFoundError:
+		return True
+	except OSError:
+		return False
+	return False
 
 
 def _restore_pending_backup(pending: tuple[Path, Path] | None, retained: set[Path]) -> None:

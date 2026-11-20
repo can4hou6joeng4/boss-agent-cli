@@ -15,6 +15,7 @@ import pytest
 
 from boss_agent_cli.api.recruiter_resume import history_self_message_state, sent_by_self
 from boss_agent_cli.crawler import exporter
+from boss_agent_cli.crawler.controls import CrawlExportError
 from boss_agent_cli.crawler.exporter import write_run_outputs
 from boss_agent_cli.main import cli
 
@@ -189,3 +190,78 @@ def test_replacement_interrupt_rolls_back_and_cleans(
 		else:
 			with pytest.raises(FileNotFoundError):
 				(tmp_path / name).lstat()
+
+
+@pytest.mark.parametrize("name", ["jobs.json", "jobs.csv", "jobs.xlsx"])
+def test_failed_replace_never_deletes_a_target_it_did_not_write(tmp_path, monkeypatch, name):
+	"""回滚项在替换之前登记：替换没有生效时，目标位置上的内容不属于本次导出。"""
+	monkeypatch.setattr(exporter, "_write_xlsx", lambda path, rows: path.write_bytes(b"new-xlsx"))
+	real_replace = os.replace
+	foreign = tmp_path / name
+
+	def _failing_replace(source, target):
+		if Path(target) == foreign:
+			# 预检之后才出现的文件：另一个进程刚写入，随后本次替换失败。
+			foreign.write_text("FOREIGN", encoding="utf-8")
+			raise PermissionError(13, "Permission denied")
+		real_replace(source, target)
+
+	monkeypatch.setattr(exporter.os, "replace", _failing_replace)
+
+	with pytest.raises(CrawlExportError):
+		write_run_outputs(tmp_path, _ROWS)
+
+	assert foreign.read_text(encoding="utf-8") == "FOREIGN"
+	assert _hidden_jobs_files(tmp_path) == []
+	for other in ("jobs.json", "jobs.csv", "jobs.xlsx"):
+		if other != name:
+			with pytest.raises(FileNotFoundError):
+				(tmp_path / other).lstat()
+
+
+def test_rollback_does_not_try_to_unlink_a_directory_target(tmp_path, monkeypatch):
+	"""同名目录让替换失败时，回滚不能指望操作系统拒绝删除目录。"""
+	directory = tmp_path / "jobs.xlsx"
+	directory.mkdir()
+	(directory / "keep.txt").write_text("KEEP", encoding="utf-8")
+	monkeypatch.setattr(exporter, "_write_xlsx", lambda path, rows: path.write_bytes(b"new-xlsx"))
+	real_unlink = Path.unlink
+	unlinked: list[Path] = []
+
+	def _recording_unlink(self, *args, **kwargs):
+		unlinked.append(Path(self))
+		return real_unlink(self, *args, **kwargs)
+
+	monkeypatch.setattr(Path, "unlink", _recording_unlink)
+
+	with pytest.raises(CrawlExportError):
+		write_run_outputs(tmp_path, _ROWS)
+
+	assert directory not in unlinked
+	assert (directory / "keep.txt").read_text(encoding="utf-8") == "KEEP"
+	assert _hidden_jobs_files(tmp_path) == []
+	for name in ("jobs.json", "jobs.csv"):
+		with pytest.raises(FileNotFoundError):
+			(tmp_path / name).lstat()
+
+
+def test_rollback_leaves_target_when_temporary_state_is_unknown(tmp_path, monkeypatch):
+	"""临时文件状态查不出来时按「替换没有生效」处理，不删除目标。"""
+	target = tmp_path / "jobs.json"
+	target.write_text("FOREIGN", encoding="utf-8")
+	temporary = tmp_path / ".jobs.json.tmp"
+	temporary.write_text("NEW", encoding="utf-8")
+	real_lstat = Path.lstat
+
+	def _denied_lstat(self, *args, **kwargs):
+		if Path(self) == temporary:
+			raise PermissionError(13, "Permission denied")
+		return real_lstat(self, *args, **kwargs)
+
+	monkeypatch.setattr(Path, "lstat", _denied_lstat)
+	retained: set[Path] = set()
+
+	exporter._rollback_replacements([(target, None, temporary)], retained)
+
+	assert target.read_text(encoding="utf-8") == "FOREIGN"
+	assert retained == set()
