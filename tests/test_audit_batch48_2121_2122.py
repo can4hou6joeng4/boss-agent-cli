@@ -86,16 +86,19 @@ def test_import_expands_tilde_against_home(
 	assert result["data"]["name"] == "demo"
 
 
-def test_import_unknown_user_tilde_is_reported_missing(
+def test_import_unknown_user_tilde_is_reported_as_expansion_failure(
 	tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
 	monkeypatch.setenv("HOME", str(tmp_path))
+	monkeypatch.chdir(tmp_path)
 
 	result = _payload(_invoke(tmp_path, "import", "~no-such-user/cv.json"))
 
 	assert result["ok"] is False
 	assert result["error"]["code"] == "INVALID_PARAM"
-	assert "不存在" in result["error"]["message"]
+	# ~某用户 无法展开时说清是家目录写法的问题，别伪装成文件缺失（Issue #2289）
+	assert "家目录写法无法展开" in result["error"]["message"]
+	assert not (tmp_path / "~no-such-user").exists()
 
 
 def test_import_absolute_path_still_works(tmp_path: Path) -> None:

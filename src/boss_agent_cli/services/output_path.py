@@ -21,6 +21,22 @@ class OutputPathProblem(Enum):
 	NOT_REGULAR = "not_regular"
 	PARENT_NOT_DIR = "parent_not_dir"
 	NOT_WRITABLE = "not_writable"
+	UNEXPANDABLE_USER = "unexpandable_user"
+
+
+def _expand_user(path: str | os.PathLike[str]) -> Path:
+	"""展开 `~` / `~user`，未知用户抛 ``RuntimeError``。
+
+	不能用 ``os.path.expanduser``：``~某用户`` 在系统里查不到时它原样返回字面
+	量，随后 ``mkdir`` 会在当前目录下建出一个名叫 ``~某用户`` 的目录、把报告写进
+	用户没想到的位置（Issue #2289）。``Path.expanduser`` 在同一情形抛
+	``RuntimeError``，与 ``--data-dir`` / ``request_budget_dir`` 的口径一致。
+	"""
+	return Path(os.fspath(path)).expanduser()
+
+
+class OutputPathExpansionError(ValueError):
+	"""`-o` 的家目录写法无法展开（系统里查不到该用户）。"""
 
 
 def _lstat_mode(path: Path) -> int | None:
@@ -69,7 +85,15 @@ def prepare_output_path(path: str | os.PathLike[str]) -> Path:
 	目标是否位于工作目录或数据目录内。创建失败（父路径是普通文件、无权限等）
 	由 OSError 冒到命令层，统一落进 `LOCAL_IO_ERROR` 信封。
 	"""
-	target = Path(os.path.expanduser(os.fspath(path)))
+	try:
+		target = _expand_user(path)
+	except RuntimeError as exc:
+		# 未知用户的 ``~user`` 不能按字面量落盘；这里抛类型化异常，命令层在
+		# 正常链路上已经由 ``inspect_output_path`` 先行拒绝（Issue #2289）。
+		raise OutputPathExpansionError(
+			f"-o / --output 的家目录写法无法展开（{exc}）：{os.fspath(path)!r}；"
+			"请改用绝对路径或 ~/ 开头的当前用户路径"
+		) from exc
 	target.parent.mkdir(parents=True, exist_ok=True)
 	# 原子写入的 ``os.replace`` 会替换符号链接本身，真实目标保持旧内容
 	# （Issue #1355）；目录 / FIFO / 设备也不能当文件写入。共享写入器统一在
@@ -93,7 +117,12 @@ def inspect_output_path(path: str | os.PathLike[str]) -> tuple[Path, OutputPathP
 
 	保持纯函数（不依赖 click / display），出信封由命令层负责。
 	"""
-	target = Path(os.path.expanduser(os.fspath(path)))
+	try:
+		target = _expand_user(path)
+	except RuntimeError:
+		# 未知用户无法展开成真实目录：按参数错误拒绝，而不是在 cwd 建一个字面量
+		# ``~user`` 目录并把产物写进去（Issue #2289）。
+		return Path(os.fspath(path)), OutputPathProblem.UNEXPANDABLE_USER
 	# 符号链接不是普通文件：``is_file()`` 会跟随链接把「链接指向普通文件」判成
 	# 可写，而原子写入的 ``os.replace`` 替换的是链接本身，真实目标保持旧内容
 	# （Issue #1355）。悬空链接的 ``exists()`` 为 False，同样必须按非普通文件

@@ -1,5 +1,4 @@
 import json
-import os
 import stat
 from pathlib import Path
 from typing import Any
@@ -577,7 +576,20 @@ def resume_import_cmd(ctx: click.Context, file_path: Path, force: bool) -> None:
 		return
 	# 读取侧与 -o 写入侧同口径展开 ~：MCP 子进程 / argv 列表不经 shell，
 	# `~/cv.json` 不会被展开，按字面路径检查只会报「不存在」（Issue #2122）。
-	path = Path(os.path.expanduser(str(file_path)))
+	# `~某用户` 在系统里查不到时不能原样当字面量：那会把「家目录写法写错」
+	# 报成「文件不存在」（Issue #2289）。
+	try:
+		path = Path(str(file_path)).expanduser()
+	except RuntimeError as exc:
+		handle_error_output(
+			ctx, "resume",
+			code="INVALID_PARAM",
+			message=f"文件路径的家目录写法无法展开（{exc}）: '{file_path}'",
+			recovery_action="改用绝对路径或 ~/ 开头的当前用户路径后重试",
+			hints={"next_actions": [_hint_command(ctx, "resume import <file>"), _hint_command(ctx, "resume list")]},
+		)
+		ctx.exit(1)
+		return
 	try:
 		mode = path_mode(path)
 	# 元数据读不出来时不能报「不存在」：权限 / 文件系统错误会被伪装成参数错误。

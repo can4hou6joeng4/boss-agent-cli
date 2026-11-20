@@ -16,6 +16,7 @@
 - 平台响应的 `message` / `zpData` 等字段只在是字符串时进入错误文案：结构化载荷的容器 repr 不再连同其中字段一起进入 `error.message`（Issue #2283）。
 - 风控页判定对缺失 / 类型漂移的 `url` / `content-type` / `body` 按空串处理，登录与请求链路不再因为探测字段为 `None` 而崩成未分类异常（Issue #2284）。
 - AI 服务的 `httpx.InvalidURL` 按本地参数错误分类：`INVALID_PARAM`、不可恢复、指引重新设置 `--base-url` 并脱敏，不再报成可重试的网络故障（Issue #2285）。
+- `-o` / `--output` 的家目录写法在系统里查不到该用户（`~某用户`）时按 `INVALID_PARAM` 拒绝，不再把字面量当路径在当前目录建出一个 `~某用户` 目录并把产物写进去；`resume import` 的同一情形改报「家目录写法无法展开」而不是「文件不存在」；wizard 导出的父目录不可写映射补上 `LOCAL_IO_ERROR`，不再因契约表缺项兜成 `INTERNAL_ERROR`（Issue #2289）。
 
 ## [3.4.143] - 2026-11-20
 

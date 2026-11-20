@@ -1225,6 +1225,8 @@ _EXPORT_OUTPUT_CONTRACTS: dict[OutputPathProblem, tuple[str, str]] = {
 	OutputPathProblem.IS_DIRECTORY: ("INVALID_PARAM", "在 output 里给出完整文件名"),
 	OutputPathProblem.NOT_REGULAR: ("INVALID_PARAM", "换一个普通文件路径后重试"),
 	OutputPathProblem.PARENT_NOT_DIR: ("LOCAL_IO_ERROR", "换一个父目录存在且可写的路径后重试"),
+	OutputPathProblem.NOT_WRITABLE: ("LOCAL_IO_ERROR", "换一个父目录可写的路径后重试"),
+	OutputPathProblem.UNEXPANDABLE_USER: ("INVALID_PARAM", "改用绝对路径或 ~/ 开头的当前用户路径"),
 }
 
 
@@ -1254,6 +1256,10 @@ def _export_output_path(context: ActionContext, inputs: Mapping[str, Any], fmt: 
 		recovery_action = f"{recovery_action}，例如 {target / 'result.txt'}"
 	elif problem is OutputPathProblem.NOT_REGULAR:
 		message = f"wizard export 的 output 需要普通文件路径，{str(target)!r} 不是普通文件"
+	elif problem is OutputPathProblem.UNEXPANDABLE_USER:
+		message = f"wizard export 的 output 里有一个系统里查不到的用户，无法展开家目录写法: {str(target)!r}"
+	elif problem is OutputPathProblem.NOT_WRITABLE:
+		message = f"wizard export 的 output 父目录不可写，无法创建输出文件: {str(target)!r}"
 	else:
 		message = f"wizard export 的 output 无法创建父目录，某级父路径不是目录: {str(target)!r}"
 	raise WorkflowActionError(code, message, recovery_action=recovery_action)
