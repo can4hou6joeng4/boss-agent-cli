@@ -1042,6 +1042,29 @@ class BossCliGroup(click.Group):
 				else None,
 			)
 			return None
+		except ValueError as exc:
+			# AI 本地配置项的确定性错误（如手工编辑的 base_url）也是 ValueError：
+			# ai local 这类没有统一装饰器的命令以前会把 traceback 直接甩出去
+			# （Issue #2205）。本分支放在链尾是有意的：CacheRecordInvalid /
+			# CacheWriteRejected / ProxyConfigurationError / PlatformResponseInvalid
+			# 都是 ValueError 子类，各自的专用分支必须先有机会处理；只认
+			# AIConfigValueError 一种 typed error，其余 ValueError 维持既有行为。
+			# 持久化配置的问题按既有契约报 CONFIG_INVALID（Issue #1636），
+			# 与本命令自己的写入参数校验（INVALID_PARAM）分开。
+			from boss_agent_cli.ai.config import AIConfigValueError
+
+			if not isinstance(exc, AIConfigValueError) or not standalone_mode:
+				raise
+			command = _invoked_command_name(args, self.name or "boss")
+			invalid_recoverable, invalid_recovery = error_contract_for_code("CONFIG_INVALID")
+			emit_error(
+				command,
+				code="CONFIG_INVALID",
+				message=str(exc),
+				recoverable=invalid_recoverable,
+				recovery_action=f"{exc.recovery_hint} 修正后重试" if exc.recovery_hint else invalid_recovery,
+			)
+			return None
 
 
 @click.group(

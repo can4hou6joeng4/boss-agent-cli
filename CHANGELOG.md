@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- 登录态校验在任何请求之前先解析代理配置：`HTTPS_PROXY` / `ALL_PROXY` 是 `socks9://`、端口非数字这类坏值时，`login --cookie` 不再把 `ProxyConfigurationError` 当成 Cookie 失效、清掉刚保存的登录态并回退到扫码；按 `INVALID_PARAM` 报出代理配置错误（Issue #2203）。
+- AI 密钥派生与登录态侧同口径：`BOSS_AGENT_MACHINE_ID` 按 surrogateescape 解码出孤立代理字符时，AI 加密密钥改用 `surrogatepass` 编码，同一机器 ID 不再在 auth 侧可用、AI 侧抛 `UnicodeEncodeError`（Issue #2204）。
+- `ai_base_url` 的读取与写入走同一套校验：配置里缺 scheme 或含空白 / 控制字符的地址（`\t`、空格、DEL）按带修复指引的 `CONFIG_INVALID` 报本地配置错误（与 #1636 的持久化配置契约一致），不再让每条 AI 命令由 httpx 抛 `InvalidURL` / `UnsupportedProtocol` 并被兜成可重试的 `AI_API_ERROR`；`ai local status` 等无认证装饰器的命令路径也由 CLI 兜底出信封（Issue #2205）。
+- 收紧登录态与 AI 密钥文件权限时不跟随符号链接：`session.enc` / `salt` / `api_key.enc` 是指向别处的符号链接时不再 `chmod` 目标文件（此前可能改掉用户其它文件的权限），只对普通文件收紧到 0600（Issue #2206）。
+
 ## [3.4.138] - 2026-11-20
 
 ### Fixed

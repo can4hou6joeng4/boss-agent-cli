@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Any
 
 from boss_agent_cli.api.client import PlatformRiskError
-from boss_agent_cli.api.proxy import ProxyConfigurationError
+from boss_agent_cli.api.proxy import ProxyConfigurationError, resolve_proxy
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.api.zhipin_errors import is_platform_success_code, normalize_risk_code
 from boss_agent_cli.auth.browser import (
@@ -286,6 +286,12 @@ class AuthManager:
 	def _verify_cookie(self, token: dict[str, Any]) -> bool:
 		"""验证 Cookie 是否有效。"""
 		self._check_cdp_login_risk_lock(None)
+		# 代理环境变量坏了不是 Cookie 失效：httpx 会在请求前抛 ValueError /
+		# InvalidURL，前者被下面的通用兜底吞成 False（login 白降级到 CDP /
+		# 扫码，import_curl 报「导入登录态未通过验证」），后者直接逃逸
+		# （Issue #2203）。先走共享解析器校验代理配置，坏配置按
+		# ProxyConfigurationError 上抛，命令层映射成确定性的 INVALID_PARAM。
+		resolve_proxy()
 		try:
 			import httpx
 			from boss_agent_cli.api import endpoints
