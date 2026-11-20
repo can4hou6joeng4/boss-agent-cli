@@ -862,24 +862,26 @@ def _clean_job_desc_cache(data_dir: Path, *, dry_run: bool) -> tuple[int, int]:
 
 
 def _clean_crawl_data(data_dir: Path, *, dry_run: bool) -> tuple[int, int, int]:
-	files_size, files_count, skipped = _clean_path(data_dir / "crawl", dry_run=dry_run, root=data_dir)
+	# 先删数据库行、再删产物文件（Issue #2241）：completed 快速路径在导出前后
+	# 重读 crawl_runs，行已消失即放弃写出 / 删除刚写的文件。反过来的顺序
+	# （先删文件再删行）会让并发的 resume 在两次删除之间重建隐私产物。
 	db_path = data_dir / "cache" / "boss_agent.db"
-	if not _cache_db_present(db_path):
-		return files_size, files_count, skipped
-	conn = _open_cache_db(db_path)
-	try:
-		if not _table_exists(conn, "crawl_runs"):
-			return files_size, files_count, skipped
-		row = conn.execute("SELECT COUNT(*) FROM crawl_runs").fetchone()
-		count = int(row[0])
-		if not dry_run:
-			for table in ("crawl_jobs", "crawl_runs", "crawl_budget"):
-				if _table_exists(conn, table):
-					conn.execute(f"DELETE FROM {table}")  # noqa: S608 - 表名来自固定白名单
-			conn.commit()
-		return files_size + count * 200, files_count + count, skipped
-	finally:
-		conn.close()
+	rows_removed = 0
+	if _cache_db_present(db_path):
+		conn = _open_cache_db(db_path)
+		try:
+			if _table_exists(conn, "crawl_runs"):
+				row = conn.execute("SELECT COUNT(*) FROM crawl_runs").fetchone()
+				rows_removed = int(row[0])
+				if not dry_run:
+					for table in ("crawl_jobs", "crawl_runs", "crawl_budget"):
+						if _table_exists(conn, table):
+							conn.execute(f"DELETE FROM {table}")  # noqa: S608 - 表名来自固定白名单
+					conn.commit()
+		finally:
+			conn.close()
+	files_size, files_count, skipped = _clean_path(data_dir / "crawl", dry_run=dry_run, root=data_dir)
+	return files_size + rows_removed * 200, files_count + rows_removed, skipped
 
 
 def _clean_table(data_dir: Path, table: str, *, dry_run: bool) -> tuple[int, int]:

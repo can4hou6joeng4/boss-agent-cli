@@ -870,7 +870,7 @@ def test_resume_background_does_not_relaunch_an_already_running_job(tmp_path, mo
 	assert launched == [], "已在运行的任务重复拉起会产生并发采集，属风控风险"
 
 
-def test_resume_background_keeps_a_pending_queue_and_its_stop_request(tmp_path, monkeypatch):
+def test_resume_background_defers_stop_clearing_during_handoff(tmp_path, monkeypatch):
 	launched: list[str] = []
 	monkeypatch.setattr(
 		"boss_agent_cli.commands.crawl._launch_background_resume",
@@ -885,9 +885,11 @@ def test_resume_background_keeps_a_pending_queue_and_its_stop_request(tmp_path, 
 		cache.request_crawl_stop("run-queued")
 		before = cache.get_crawl_run("run-queued")
 		result = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-queued", "--background")
+		# 交接窗口内的默认 clear_stop 无法应用：不能静默返回 queued 让调用方
+		# 误以为 stop 已清除（Issue #2243）；状态与停止标记保持不动。
 		assert cache.get_crawl_run("run-queued") == before
-	assert result.exit_code == 0, result.output
-	assert _envelope(result)["data"]["status"] == "queued"
+	assert result.exit_code == 1, result.output
+	assert _envelope(result)["error"]["code"] == "CRAWL_BUSY"
 	assert launched == []
 
 
@@ -950,7 +952,13 @@ def test_prepare_background_resume_preserves_a_new_stop_when_preflight_fails(tmp
 			_prepare_background_resume(
 				tmp_path, "run-1", pages=None, with_detail=False, clear_stop=True, preflight=failing_preflight
 			)
-		assert cache.get_crawl_run("run-1") == new_stops[0]
+		after = cache.get_crawl_run("run-1")
+		# 失败调用还原恢复前的状态，但预检窗口内到达的新 stop 及其时间戳保留：
+		# 不能把比本次标记更新的停止时间回拨（Issue #1115 / #2240）。
+		assert after["status"] == "stopped"
+		assert after["error"] == ""
+		assert after["stop_requested"] is True
+		assert after["updated_at"] == new_stops[0]["updated_at"]
 
 
 def _age_run(tmp_path: Path, run_id: str, seconds: float) -> None:
