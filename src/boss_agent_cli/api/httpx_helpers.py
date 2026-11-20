@@ -113,11 +113,66 @@ def referer_header(url: str, referer_map: Mapping[str, str], fallback: str) -> d
 	return {"Referer": referer_map.get(url, fallback)}
 
 
+def _response_cookie_entries(response: Any) -> list[tuple[str, str, str, str]]:
+	"""响应 Cookie 的 (name, value, domain, path)，同名条目一并保留。
+
+	不能用 ``response.cookies.items()``：jar 里同名 Cookie 多于一条时 httpx 抛
+	``CookieConflict``，而平台在多域 / 重定向下确实会这样下发（Issue #2266）。
+	"""
+	response_cookies = getattr(response, "cookies", None)
+	jar = getattr(response_cookies, "jar", None)
+	if jar is None:
+		# 测试替身可能只实现 items()；真实 httpx 响应总有 jar。
+		if response_cookies is None:
+			return []
+		try:
+			return [(str(name), str(value), "", "/") for name, value in response_cookies.items()]
+		except Exception:
+			return []
+	return [(cookie.name, cookie.value, cookie.domain, cookie.path) for cookie in list(jar)]
+
+
 def merge_response_cookies(http_client: Any, response: Any) -> None:
-	"""Copy non-empty response cookies onto an existing httpx client."""
-	for name, value in response.cookies.items():
-		if value:
-			http_client.cookies.set(name, value)
+	"""把响应 Cookie 按名称替换进客户端 jar，保留 Domain / Path。
+
+	``httpx.Client`` 已经把响应 Cookie 按域写进 jar；再用无作用域的
+	``set(name, value)`` 补一份会留下第二条同名条目，之后 ``cookies.get``
+	抛 ``CookieConflict``——在 recruiter 的 ``_headers_for`` 里就是请求发出前
+	抛异常，写动作被误报成结果未知。
+	"""
+	cookies = getattr(http_client, "cookies", None)
+	if cookies is None:
+		return
+	jar = getattr(cookies, "jar", None)
+	if jar is None:
+		# 只实现 set() 的测试替身：按旧行为写入，真实客户端走下面的替换路径。
+		for name, value, _domain, _path in _response_cookie_entries(response):
+			if value:
+				cookies.set(name, value)
+		return
+	for name, value, domain, path in _response_cookie_entries(response):
+		if not value:
+			continue
+		# 响应是更新的权威来源：同名旧条目（含其它域 / 路径）先删掉。
+		# CookieJar.clear 只支持按 (domain, path, name) 三元组删除。
+		for existing in list(jar):
+			if existing.name == name:
+				try:
+					jar.clear(existing.domain, existing.path, name)
+				except KeyError:  # 同一轮里已被删除
+					pass
+		cookies.set(name, value, domain=domain or "", path=path or "/")
+
+
+def cookie_value(cookies: Any, name: str) -> str:
+	"""按名称取 Cookie 值；同名多条时取最后一条，不抛 ``CookieConflict``。"""
+	try:
+		return str(cookies.get(name) or "")
+	except Exception:  # httpx.CookieConflict：同一名称存在多个域 / 路径
+		for cookie in reversed(list(getattr(cookies, "jar", []))):
+			if cookie.name == name and cookie.value:
+				return str(cookie.value)
+		return ""
 
 
 def add_stoken_to_get_params(method: str, kwargs: MutableMapping[str, Any], stoken: str) -> None:

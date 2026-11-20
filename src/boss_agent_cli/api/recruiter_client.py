@@ -16,7 +16,7 @@ from boss_agent_cli.api import recruiter_endpoints as ep
 from boss_agent_cli.api._base_client import _BaseHttpClient
 from boss_agent_cli.api.request_budget import cancellable_sleep, check_request_control, is_request_stop, retry_after_seconds
 from boss_agent_cli.api.client import PlatformRiskError
-from boss_agent_cli.api.httpx_helpers import make_client_registry
+from boss_agent_cli.api.httpx_helpers import cookie_value, make_client_registry
 from boss_agent_cli.api.models import field_dict, field_list
 from boss_agent_cli.api.recruiter_resume import (
 	ResumeValidationError,
@@ -561,8 +561,8 @@ class BossRecruiterClient(_BaseHttpClient):
 		if url in (ep.BOSS_RECOMMEND_GEEK_LIST_URL, ep.BOSS_CHAT_START_URL, ep.BOSS_SEND_JOB_LOCATION_URL):
 			# 从当前 jar 取值，包含上次响应轮换的 bst；不改变既有端点的请求头。
 			# sendJobLocation 与推荐开聊一样要带页面 zp_token（bst），空值不发。
-			if bst := self._get_client().cookies.get("bst"):
-				headers["zp_token"] = str(bst)
+			if bst := cookie_value(self._get_client().cookies, "bst"):
+				headers["zp_token"] = bst
 		return headers
 
 	def _should_refresh_token_response(self, data: dict[str, Any]) -> bool:
