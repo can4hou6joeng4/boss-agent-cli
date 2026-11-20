@@ -295,7 +295,7 @@ class AuthManager:
 		try:
 			import httpx
 			from boss_agent_cli.api import endpoints
-			from boss_agent_cli.api.client import AccountRiskError
+			from boss_agent_cli.api.client import AccountRiskError, PlatformRateLimitError
 			from boss_agent_cli.api.zhipin_errors import platform_risk_page_response, raise_platform_risk_response
 
 			resp = httpx.get(
@@ -307,6 +307,10 @@ class AuthManager:
 					"Referer": "https://www.zhipin.com/",
 				},
 				timeout=10,
+				# 平台可能以 302 把请求送到 403 / verify / security 页：不跟随重定向
+				# 时响应体是空的重定向页、resp.url 仍是原地址，风控页判定不命中，
+				# 风险锁也不会落盘（Issue #2236）。与 _base_client 的最终 URL 口径一致。
+				follow_redirects=True,
 			)
 			try:
 				data = resp.json()
@@ -331,6 +335,17 @@ class AuthManager:
 				raise AccountRiskError(
 					"Cookie 验证遇到平台安全页，请先在官方页面完成验证",
 					details={"platform_code": None, "risk_source": "security_page_or_forbidden"},
+				)
+			# 限流不是会话失效的证据（与 _probe_reused_session 的 #2092 同口径）：
+			# 429 或业务码 9 说明验证被拒，不能据此清登录态并降级到 CDP / 扫码，
+			# 而应等待限流窗口后重试（Issue #2237）。
+			rate_limited_code = endpoints.CODE_RATE_LIMITED
+			if resp.status_code == 429 or (
+				isinstance(data, dict)
+				and data.get("code") in (rate_limited_code, str(rate_limited_code))
+			):
+				raise PlatformRateLimitError(
+					"登录态验证被平台限流，当前无法确认 Cookie 是否有效；请等待后重试"
 				)
 			resp.raise_for_status()
 			return bool(isinstance(data, dict) and is_platform_success_code(data.get("code")))

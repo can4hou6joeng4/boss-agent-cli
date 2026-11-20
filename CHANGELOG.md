@@ -7,6 +7,10 @@
 ### Fixed
 - 自由文本脱敏识别 camelCase 凭据键：`accessToken` / `refreshToken` / `clientSecret` / `sessionId` 等键名中关键字前是小写字母，此前的「非字母数字」边界不成立，凭据会明文进入 `error.message` / `recovery_action` 与 MCP 子进程失败信息；新边界只在小写→大写转折处成立，`token_expires_in` / `max_tokens` 等配置名不被误伤（Issue #2231）。
 - 结构化与文本脱敏补上 `passwd` 凭据键：此前只认 `password`，`{"passwd": "..."}` 与 `passwd=...` 都原样输出（Issue #2232）。
+- 无请求预算的客户端也把 `Retry-After` 截断到本地冷却上限（1 小时）：Python API / MCP 子进程拿到 `429 + Retry-After: 86400`（或 HTTP-date 的远未来时间）时不再被 `cancellable_sleep` 挂起数小时到数天（Issue #2234）。
+- `probe_cdp` 把 `httpx.InvalidURL` 当作探测不可用：Python API 传畸形 `cdp-url` 时不再让裸异常打断登录降级链，继续按契约降级到 patchright 扫码（Issue #2235）。
+- Cookie 校验跟随重定向后按最终 URL / 正文做风控判定：平台以 302 送到 `403.html` / verify / security 页时不再被当成「Cookie 失效」，正确抛出风控异常并写入本地风险锁（Issue #2236）。
+- Cookie 校验把 429 与业务码 9（整数 / 字符串同口径）识别为限流而非登录态失效：`login` 不再报「Cookie 已失效」并降级 CDP / 扫码，`import_curl` 不再报「未通过验证」，统一报可重试的 `RATE_LIMITED` 并给出等待后重试的指引（Issue #2237）。
 
 ## [3.4.139] - 2026-11-20
 
