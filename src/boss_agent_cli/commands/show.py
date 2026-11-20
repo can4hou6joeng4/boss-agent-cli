@@ -6,7 +6,7 @@ from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
 from boss_agent_cli.services.job_card import build_job_from_card
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_error_output, handle_not_supported, handle_output, handle_platform_error_output, render_job_detail
-from boss_agent_cli.index_cache import get_index_info, get_job_by_index
+from boss_agent_cli.index_cache import get_index_entry
 
 
 def _hint_command(ctx: click.Context, command: str) -> str:
@@ -43,7 +43,8 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 	# 编号只对当前索引快照有效：后一次 search / recommend 会整份覆盖缓存，
 	# 同一个「结果 #3」可能已经指向别的职位。先取快照元信息，成功输出也要带上
 	# 来源与保存时间，Agent 才能发现自己手里的编号已经过期。
-	info = get_index_info(data_dir)
+	# 元信息与职位必须来自同一次读取（Issue #2291）。
+	info, job = get_index_entry(data_dir, index)
 	if not info["exists"]:
 		handle_error_output(
 			ctx, "show",
@@ -54,8 +55,6 @@ def show_cmd(ctx: click.Context, index: int) -> None:
 		)
 		return
 
-	# 从索引缓存获取职位信息
-	job = get_job_by_index(data_dir, index)
 	if job is None:
 		handle_error_output(
 			ctx, "show",

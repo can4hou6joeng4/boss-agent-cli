@@ -24,8 +24,14 @@ def _cache_path(data_dir: Path) -> Path:
 	return data_dir / "cache" / _CACHE_FILE
 
 
-def save_index(data_dir: Path, jobs: list[dict[str, Any]], source: str = "search", page: int | None = None) -> None:
-	"""保存搜索/推荐结果到索引缓存。"""
+def save_index(
+	data_dir: Path, jobs: list[dict[str, Any]], source: str = "search", page: int | None = None
+) -> dict[str, Any]:
+	"""保存搜索/推荐结果到索引缓存，返回本次写入的快照身份。
+
+	调用方要用这份身份填 ``pagination.index_snapshot``：保存后再读文件，并发
+	搜索可能让本次结果挂上另一次搜索的 ``source`` / ``page``（Issue #2292）。
+	"""
 	entries = []
 	for job in jobs:
 		entries.append({
@@ -52,23 +58,29 @@ def save_index(data_dir: Path, jobs: list[dict[str, Any]], source: str = "search
 		"saved_at": time.time(),
 		"jobs": entries,
 	}
+	# 与读回时的归一化完全同口径：信封装的是「读者会看到的」身份。
+	snapshot = _cache_metadata(cache_data)
 
 	path = _cache_path(data_dir)
 	write_json_atomic(path, cache_data)
+	return snapshot
 
 
 def try_save_index(
 	data_dir: Path, jobs: list[dict[str, Any]], *, source: str = "search",
 	page: int | None = None, logger: Logger | None = None,
-) -> bool:
-	"""Best-effort 保存索引缓存，失败时记录 warning，不影响主命令成功返回。"""
+) -> dict[str, Any] | None:
+	"""Best-effort 保存索引缓存，失败时记录 warning，不影响主命令成功返回。
+
+	返回本次写入的快照身份（写失败为 ``None``）：信封里的 ``index_snapshot``
+	必须来自这次写入，而不是保存后重新读到的可变文件（Issue #2292）。
+	"""
 	try:
-		save_index(data_dir, jobs, source=source, page=page)
-		return True
+		return save_index(data_dir, jobs, source=source, page=page)
 	except OSError as e:
 		if logger:
 			logger.warning(f"索引缓存写入失败，已跳过: {e}")
-		return False
+		return None
 
 
 def _load_cache(data_dir: Path) -> dict[str, Any] | None:
@@ -106,18 +118,35 @@ def _load_cache(data_dir: Path) -> dict[str, Any] | None:
 	return loaded
 
 
+#: 会进入 URL 编码 / SQLite 绑定的职位标识：孤立代理字符会让这些操作抛
+#: UnicodeEncodeError，被兜成带磁盘指引的 LOCAL_IO_ERROR（Issue #2293）。
+_IDENTIFIER_KEYS = ("security_id", "job_id", "lid")
+
+
+def _safe_job(job: dict[str, Any]) -> dict[str, Any]:
+	"""读取职位时净化标识；坏值按缺失（空串）处理，由命令层按参数错误拒绝。"""
+	safe = dict(job)
+	for key in _IDENTIFIER_KEYS:
+		raw = safe.get(key)
+		if isinstance(raw, str):
+			safe[key] = _safe_text(raw)
+	return safe
+
+
+def _job_at(cache_data: dict[str, Any], index: int) -> dict[str, Any] | None:
+	jobs = cache_data.get("jobs", [])
+	if not isinstance(jobs, list) or index < 1 or index > len(jobs):
+		return None
+	job = jobs[index - 1]
+	return _safe_job(job) if isinstance(job, dict) else None
+
+
 def get_job_by_index(data_dir: Path, index: int) -> dict[str, Any] | None:
 	"""按 1-based 编号获取缓存的职位信息。"""
 	cache_data = _load_cache(data_dir)
 	if cache_data is None:
 		return None
-
-	jobs = cache_data.get("jobs", [])
-	if not isinstance(jobs, list) or index < 1 or index > len(jobs):
-		return None
-
-	job = jobs[index - 1]
-	return job if isinstance(job, dict) else None
+	return _job_at(cache_data, index)
 
 
 def _finite_number(raw: Any) -> int | float | None:
@@ -174,13 +203,32 @@ def _cache_metadata(cache_data: dict[str, Any]) -> dict[str, Any]:
 	}
 
 
+_MISSING_INFO: dict[str, Any] = {"exists": False, "source": "", "page": None, "count": 0, "saved_at": 0}
+
+
+def _info_from(cache_data: dict[str, Any]) -> dict[str, Any]:
+	return {"exists": True, **_cache_metadata(cache_data)}
+
+
 def get_index_info(data_dir: Path) -> dict[str, Any]:
 	"""获取缓存元信息（来源、页码、数量、保存时间）。"""
 	cache_data = _load_cache(data_dir)
 	if cache_data is None:
-		return {"exists": False, "source": "", "page": None, "count": 0, "saved_at": 0}
+		return dict(_MISSING_INFO)
+	return _info_from(cache_data)
 
-	return {"exists": True, **_cache_metadata(cache_data)}
+
+def get_index_entry(data_dir: Path, index: int) -> tuple[dict[str, Any], dict[str, Any] | None]:
+	"""一次读取同时返回快照元信息与指定编号的职位。
+
+	``show`` 若分两次读取，并发的搜索覆盖缓存后会出现「职位来自第二份快照、
+	``index_snapshot`` 来自第一份」的成功信封；``index_snapshot`` 正是 Agent
+	判断编号失效的依据，错配等于让它把过期编号当成有效（Issue #2291）。
+	"""
+	cache_data = _load_cache(data_dir)
+	if cache_data is None:
+		return dict(_MISSING_INFO), None
+	return _info_from(cache_data), _job_at(cache_data, index)
 
 
 def get_index_snapshot(data_dir: Path) -> dict[str, Any] | None:

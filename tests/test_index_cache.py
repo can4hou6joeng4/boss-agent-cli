@@ -90,17 +90,18 @@ class TestSaveIndex:
 
 class TestTrySaveIndex:
 	def test_success(self, tmp_path):
-		assert try_save_index(tmp_path, _SAMPLE_JOBS) is True
+		snapshot = try_save_index(tmp_path, _SAMPLE_JOBS)
+		assert isinstance(snapshot, dict)
+		assert snapshot == get_index_snapshot(tmp_path)
 
-	def test_failure_returns_false(self, tmp_path, monkeypatch):
-		"""写入失败应返回 False；不用 chmod，避免 Windows 权限语义差异。"""
+	def test_failure_returns_none(self, tmp_path, monkeypatch):
+		"""写入失败应返回 None；不用 chmod，避免 Windows 权限语义差异。"""
 
 		def fail_replace(source, destination):
 			raise OSError("simulated write failure")
 
 		monkeypatch.setattr(os, "replace", fail_replace)
-		result = try_save_index(tmp_path, _SAMPLE_JOBS)
-		assert result is False
+		assert try_save_index(tmp_path, _SAMPLE_JOBS) is None
 
 
 class TestGetJobByIndex:

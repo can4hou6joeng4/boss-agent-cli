@@ -622,11 +622,11 @@ def test_detail_preserves_httpx_platform_error_when_browser_fallback_not_support
 
 
 @patch("boss_agent_cli.commands.show.CacheStore")
-@patch("boss_agent_cli.commands.show.get_job_by_index")
+@patch("boss_agent_cli.commands.show.get_index_entry")
 @patch("boss_agent_cli.commands.show.get_platform_instance")
 @patch("boss_agent_cli.commands.show.AuthManager")
-def test_show_reports_platform_error(mock_auth_cls, mock_client_cls, mock_get_job_by_index, mock_cache_cls):
-	mock_get_job_by_index.return_value = {"security_id": "sec_001"}
+def test_show_reports_platform_error(mock_auth_cls, mock_client_cls, mock_get_entry, mock_cache_cls):
+	mock_get_entry.return_value = ({"exists": True, "count": 1, "source": "search:x", "page": None, "saved_at": 0}, {"security_id": "sec_001"})
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	mock_client = _ctx_mock(mock_client_cls)
@@ -643,11 +643,11 @@ def test_show_reports_platform_error(mock_auth_cls, mock_client_cls, mock_get_jo
 
 
 @patch("boss_agent_cli.commands.show.CacheStore")
-@patch("boss_agent_cli.commands.show.get_job_by_index")
+@patch("boss_agent_cli.commands.show.get_index_entry")
 @patch("boss_agent_cli.commands.show.get_platform_instance")
 @patch("boss_agent_cli.commands.show.AuthManager")
-def test_show_reports_not_supported_when_job_card_missing(mock_auth_cls, mock_client_cls, mock_get_job_by_index, mock_cache_cls):
-	mock_get_job_by_index.return_value = {"security_id": "sec_001"}
+def test_show_reports_not_supported_when_job_card_missing(mock_auth_cls, mock_client_cls, mock_get_entry, mock_cache_cls):
+	mock_get_entry.return_value = ({"exists": True, "count": 1, "source": "search:x", "page": None, "saved_at": 0}, {"security_id": "sec_001"})
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	mock_client = _ctx_mock(mock_client_cls)
@@ -1268,11 +1268,14 @@ def test_detail_httpx_fallback_to_browser_on_none(mock_auth_cls, mock_client_cls
 
 
 @patch("boss_agent_cli.commands.show.CacheStore")
-@patch("boss_agent_cli.commands.show.get_job_by_index")
+@patch("boss_agent_cli.commands.show.get_index_entry")
 @patch("boss_agent_cli.commands.show.get_platform_instance")
 @patch("boss_agent_cli.commands.show.AuthManager")
-def test_show_uses_client_context_manager(mock_auth_cls, mock_client_cls, mock_get_job_by_index, mock_cache_cls):
-	mock_get_job_by_index.return_value = {"security_id": "sec_001"}
+def test_show_uses_client_context_manager(mock_auth_cls, mock_client_cls, mock_get_entry, mock_cache_cls):
+	mock_get_entry.return_value = (
+		{"exists": True, "count": 1, "source": "search:x", "page": None, "saved_at": 0},
+		{"security_id": "sec_001"},
+	)
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_greeted.return_value = False
 	instance = mock_client_cls.return_value
