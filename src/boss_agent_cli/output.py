@@ -26,6 +26,7 @@ _SENSITIVE_KEY_PARTS = (
 	"cookie",
 	"credential",
 	"password",
+	"passwd",
 	"private",
 	"secret",
 	"session",
@@ -51,7 +52,11 @@ _TEXT_VALUE_TERMINATORS = r"\s,;，。、；：（）「」『』【】《》！
 # `登录token=abc` 曾整段漏脱敏（Issue #1662）。下划线与连字符是复合键的分隔符，
 # `access_token` / `x-api-key` 从凭据段开始匹配，前缀原样保留，替换后仍是完整键名
 # （Issue #1765）。键名后必须紧跟 `:` / `=`，所以 `token_expires_in` 等配置名不会命中。
-_ASCII_KEY_BOUNDARY = r"(?<![A-Za-z0-9])"
+# camelCase 键（`accessToken` / `refreshToken` / `clientSecret`）的关键字前是小写
+# 字母，非字母数字边界不成立，整段漏脱敏（Issue #2231）；补一条「小写→大写」
+# 转折边界。转折比较必须区分大小写，否则 IGNORECASE 会把任意字母都当成转折，
+# 等于取消边界。
+_ASCII_KEY_BOUNDARY = r"(?:(?<![A-Za-z0-9])|(?-i:(?<=[a-z])(?=[A-Z])))"
 _SENSITIVE_TEXT_PATTERNS = tuple(
 	re.compile(pattern, re.IGNORECASE)
 	for pattern in (
@@ -65,7 +70,7 @@ _SENSITIVE_TEXT_PATTERNS = tuple(
 		# BOSS 的 stoken 查询参数名是 `__zp_stoken__`：通用 `stoken` 规则要求键后
 		# 直接是分隔符，双下划线让它整个漏过（Issue #2157）。单列一条，键名原样回填。
 		rf"{_ASCII_KEY_BOUNDARY}(?P<key>__zp_stoken__)(?P<quote>[\"']?)(?P<sep>\s*[:=]\s*)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
-		rf"{_ASCII_KEY_BOUNDARY}(?P<key>api[_-]?key|authorization|cookie|credential|password|secret|session(?:[_-]?id)?|stoken|token)(?P<quote>[\"']?)(?P<sep>\s*[:=]\s*)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
+		rf"{_ASCII_KEY_BOUNDARY}(?P<key>api[_-]?key|authorization|cookie|credential|password|passwd|secret|session(?:[_-]?id)?|stoken|token)(?P<quote>[\"']?)(?P<sep>\s*[:=]\s*)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
 		rf"{_ASCII_KEY_BOUNDARY}(?P<key>bearer)(?P<quote>)(?P<sep>\s+)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
 	)
 )
