@@ -2,7 +2,7 @@
 
 import click
 
-from boss_agent_cli.api.client import PlatformRiskError
+from boss_agent_cli.api.client import PlatformRateLimitError, PlatformRiskError
 from boss_agent_cli.api.proxy import ProxyConfigurationError
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
@@ -77,6 +77,20 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 			"hints": hints or None,
 			"details": exc.details or None,
 		}
+
+	if isinstance(exc, PlatformRateLimitError):
+		# 验证被限流不等于登录态失效：不清登录态、不降级到 CDP / 扫码，等待后重试
+		# （与 #2092 的复用探测口径一致，Issue #2237）。
+		return payload(
+			"RATE_LIMITED",
+			"登录态验证被平台限流，暂时无法确认 Cookie 是否有效",
+			[],
+			[
+				"等待一段时间后再执行登录验证",
+				"限流期间不要反复触发扫码或 cURL 导入，避免叠加请求",
+			],
+			recovery="等待平台限流窗口结束后重试登录",
+		)
 
 	if isinstance(exc, ProxyConfigurationError):
 		# 代理环境变量非法是确定性配置错误：登录链路不重试、不回退直连，

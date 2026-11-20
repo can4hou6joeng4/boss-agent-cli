@@ -17,6 +17,17 @@ class AuthError(Exception):
 	pass
 
 
+class PlatformRateLimitError(Exception):
+	"""平台限流拒绝了本次请求，不能据此判断登录态失效（Issue #2237）。
+
+	与 ``PlatformRiskError`` 不同：限流不是风控，不触发风险锁、不停止流程；调用方
+	应等待限流窗口后重试，而不是清空登录态或重新扫码。``code`` 对应错误码登记表
+	里的 ``RATE_LIMITED``。
+	"""
+
+	code = "RATE_LIMITED"
+
+
 class PlatformRiskError(Exception):
 	"""平台风控类异常的共同基类：命中即终止，不重试、不换通道、不继续下一项。
 

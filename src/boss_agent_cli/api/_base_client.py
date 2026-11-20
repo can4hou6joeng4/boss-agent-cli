@@ -32,6 +32,7 @@ from boss_agent_cli.api.httpx_helpers import (
 from boss_agent_cli.api.endpoints_loader import endpoint_for_request
 from boss_agent_cli.api.throttle import RequestThrottle
 from boss_agent_cli.api.request_budget import (
+	_MAX_COOLDOWN_SECONDS,
 	RequestBudget,
 	cancellable_sleep,
 	check_request_control,
@@ -524,6 +525,10 @@ class _BaseHttpClient:
 					data["code"] = self._CODE_RATE_LIMITED
 					cooldown = retry_after_seconds(response_headers.get("retry-after"))
 					cooldown = max(cooldown or 0.0, min(60, 10 * (2**attempt)))
+					# 服务端 Retry-After 可能是数小时甚至 HTTP-date 的未来时间：无预算
+					# 分支会把它原样交给 cancellable_sleep，一条 429 就能把进程挂起
+					# 数天（Issue #2234）。与 RequestBudget 的本地冷却上限同口径截断。
+					cooldown = min(cooldown, _MAX_COOLDOWN_SECONDS)
 					if budget is not None:
 						budget.cooldown(cooldown)
 			# 明确过期时每个请求只刷新一次，刷新后仍过期则交由调用方处理。

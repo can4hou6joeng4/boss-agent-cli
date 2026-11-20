@@ -309,7 +309,9 @@ def probe_cdp(cdp_url: str | None = None) -> str | None:
 		return cast("str | None", payload.get("webSocketDebuggerUrl"))
 	# ValueError 覆盖 JSON 语法错误；深嵌套响应在 3.11–3.13 抛 RecursionError。
 	# 与解析失败一样按「响应无法解析」处理：拿不到调试端口即视为探测不可用（Issue #1378）。
-	except (httpx.HTTPError, ValueError, KeyError, RecursionError):
+	# httpx.InvalidURL 直接继承 Exception（不是 HTTPError / ValueError）：畸形 cdp-url
+	# 会让探测异常逃逸、打断登录降级链（Issue #2235）。
+	except (httpx.HTTPError, httpx.InvalidURL, ValueError, KeyError, RecursionError):
 		return None
 
 
