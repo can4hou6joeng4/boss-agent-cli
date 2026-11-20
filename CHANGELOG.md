@@ -7,6 +7,11 @@
 ### Added
 - `boss chat --raw`：普通输出为每条记录附加 `raw`，保存该联系人的原始平台对象（`relationType`、`lastMessageInfo`、`unreadMsgCount` 等键名与编码原样保留），摘要字段照旧输出；`--from` / `--days` 筛选与分页计数不变，`hints.next_actions` 的翻页命令保留 `--raw`。与 `--export` 合用时导出文件、快照与 diff 仍只含摘要记录（Issue #2250）。
 
+### Fixed
+- `hr download-resume` 把请求预算库损坏 / 被同名目录占位等本地确定性故障交回统一分类：报不可重试的 `LOCAL_IO_ERROR` 并给出删除 `request-budget.sqlite3` 的指引，不再兜成可重试的 `NETWORK_ERROR`（Issue #2271）。
+- `history_self_message_state` 按平台原始页长度判断会话是否拿全：满页中含形状漂移条目时不再把「拿不准是否发过消息」误判成「确定没发过」，仍返回 `None`（Issue #2272）。
+- `crawl` 导出被 Ctrl-C / SIGTERM 打断（`KeyboardInterrupt` / `SystemExit`）时同样回滚已替换的产物并清理 `.jobs.*` 临时与备份文件，三份产物不再落成不同批次、旧采集数据不再长期残留在输出目录；回滚项在替换调用之前登记，中断落在替换生效之后同样能还原；首次导出没有旧产物时只删除本次确实写入的新文件，恢复到导出前的状态，替换没有生效时不动目标位置上的既有内容（Issue #2274）。
+
 ## [3.4.142] - 2026-11-20
 
 ### Fixed
