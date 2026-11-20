@@ -101,7 +101,10 @@ def _serialize_into(handle: Any, value: Any, *, indent: int | None) -> None:
 	"""
 	try:
 		json.dump(_json_safe_value(value), handle, ensure_ascii=False, indent=indent, allow_nan=False)
-	except (RecursionError, ValueError) as exc:
+	# TypeError 覆盖不可序列化的值（元组键、bytes、set 等）：不归成本地 IO
+	# 错误就会裸穿出命令层，stdout 无信封、stderr 裸 traceback（Issue #2220，
+	# 与 #1891 的深嵌套 / 超长整数同类）。
+	except (RecursionError, ValueError, TypeError) as exc:
 		raise OSError(errno.EINVAL, f"本地状态无法序列化（{exc}）") from exc
 
 
@@ -132,5 +135,5 @@ def strict_json_text(value: Any, *, indent: int | None = 2) -> str:
 	"""
 	try:
 		return json.dumps(_json_safe_value(value), ensure_ascii=False, allow_nan=False, indent=indent)
-	except (RecursionError, ValueError) as exc:
+	except (RecursionError, ValueError, TypeError) as exc:
 		raise OSError(errno.EINVAL, f"本地状态无法序列化（{exc}）") from exc

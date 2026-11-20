@@ -106,7 +106,9 @@ def test_write_export_file_keeps_existing_file_on_serialization_failure(tmp_path
 	path = tmp_path / "jobs.json"
 	path.write_text("previous export", encoding="utf-8")
 
-	with pytest.raises(TypeError):
+	# 序列化失败统一按本地 IO 错误上报（Issue #2220）：TypeError 裸穿出命令层
+	# 会让 stdout 无信封、stderr 裸 traceback。
+	with pytest.raises(OSError):
 		write_export_file([{"value": object()}], "json", str(path))
 
 	assert path.read_text(encoding="utf-8") == "previous export"
