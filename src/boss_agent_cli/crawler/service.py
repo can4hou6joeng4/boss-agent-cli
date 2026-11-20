@@ -626,7 +626,17 @@ class CrawlService:
 				# 产物被删除 / 清理后 completed 快速路径仍会报成功并指向不存在的
 				# 文件（Issue #1873）：用本地缓存重新导出，不发出任何平台请求；
 				# 导出失败会抛 CrawlExportError，不再返回假成功。
-				write_run_outputs(output_dir, [item["payload"] for item in self._cache.list_crawl_jobs(run_id)])
+				jobs = [item["payload"] for item in self._cache.list_crawl_jobs(run_id)]
+				# 并发 clean --privacy 可能已经删除断点：导出前后都重读 crawl_runs。
+				# 行已消失时不再写出隐私产物；导出期间被清理时删掉刚重建的文件，
+				# 不能复活已清理的数据（Issue #2241；clean 先删行再删文件，与本
+				# 检查同一时序契约）。
+				if self._cache.get_crawl_run(run_id) is None:
+					raise KeyError(run_id)
+				write_run_outputs(output_dir, jobs)
+				if self._cache.get_crawl_run(run_id) is None:
+					_remove_run_artifacts(output_dir)
+					raise KeyError(run_id)
 			return self._completed_outcome(run)
 		if pages is not None:
 			validate_pages_override(int(run["next_page"]), settings.pages)
@@ -637,9 +647,18 @@ class CrawlService:
 		# 失败且无旧 stop 时不写库。
 		previous_stop = bool(run.get("stop_requested"))
 		previous_updated_at = float(run.get("updated_at") or 0.0)
+		previous_status = str(run.get("status") or "")
+		previous_error = str(run.get("error") or "")
 		if clear_stop and previous_stop:
 			self._cache.clear_crawl_stop_request(run_id)
+		# 标记本身也可能失败（本地 IO）：此时没有写入时间，还原按旧口径处理。
+		marked_at: float | None = None
 		try:
+			# 取得执行权后、慢预检之前先把状态落成 running：预检（依赖探测、读取
+			# 登录态）期间到达的 `crawl stop` 不能被终态拒绝，否则停止请求丢失、
+			# 恢复照常发出平台请求（Issue #2240）。预检失败时在下方还原原状态 /
+			# 错误 / 时间戳，保持「失败的调用不改动任务」。
+			marked_at = self._cache.mark_crawl_run_active(run_id, "running")
 			# Hook 目录是本地状态：resume 没有 --hook-dir 参数可以修复，必须在
 			# 打开浏览器之前用与 crawl run/start 相同的清单 / 摘要校验拒绝坏目录
 			# （Issue #1408）。已完成的 run 在上面直接返回，不因目录后来被删而失败。
@@ -657,6 +676,13 @@ class CrawlService:
 			if clear_stop and previous_stop:
 				# 预检 / 参数落库失败：放回清除前的 stop，失败的调用不改动任务。
 				self._cache.restore_crawl_stop_request(run_id, updated_at=previous_updated_at)
+			self._cache.restore_crawl_run_state(
+				run_id,
+				status=previous_status,
+				error=previous_error,
+				updated_at=previous_updated_at,
+				marked_at=marked_at,
+			)
 			raise
 		return self._run(
 			run_id,
@@ -1208,6 +1234,19 @@ class CrawlService:
 		if settings.max_retries < 0:
 			raise ValueError("max_retries 不能为负数")
 
+	def validate_resume_settings(self, settings: CrawlSettings) -> None:
+		"""后台父进程的本地校验：与执行器同口径拒绝坏设置与坏 Hook 目录（Issue #2242）。
+
+		worker 的错误信封写进空设备：hook 目录损坏、关键词为空白这类确定性本地
+		失败必须在父进程返回 queued 之前报出来，不能先报成功再让任务停在无人
+		执行的状态。
+		"""
+		self._validate_settings(settings)
+		try:
+			verify_hook_profile(settings.hook_profile, settings.hook_dir)
+		except ValueError as exc:
+			raise CrawlHookDirInvalid(str(exc), hook_dir=settings.hook_dir) from exc
+
 
 def _normalize_job(raw: dict[str, Any], query: str, page_no: int, rank: int) -> tuple[str, dict[str, Any]]:
 	job_id = str(raw.get("encryptJobId") or "")
@@ -1287,6 +1326,19 @@ def _hook_injections(raw: Any, *, run_id: str = "") -> tuple[HookInjection, ...]
 
 def _output_paths(output_dir: Path) -> dict[str, str]:
 	return {extension: str(output_dir / f"jobs.{extension}") for extension in ("json", "csv", "xlsx")}
+
+
+def _remove_run_artifacts(output_dir: Path) -> None:
+	"""删掉三份确定性产物；缺失 / 无法删除的文件忽略（Issue #2241）。
+
+	清理失败不能把「断点已被清理」的确定性错误盖成 INTERNAL_ERROR：调用方
+	需要的结论是任务已不存在，而不是某个已失效文件删不掉。
+	"""
+	for extension in ("json", "csv", "xlsx"):
+		try:
+			(output_dir / f"jobs.{extension}").unlink(missing_ok=True)
+		except (OSError, ValueError):
+			pass
 
 
 def _artifacts_present(output_dir: Path) -> bool:

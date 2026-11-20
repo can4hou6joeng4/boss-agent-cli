@@ -741,6 +741,14 @@ def _awaiting_queued_worker(run: dict[str, Any]) -> bool:
 	return now - updated < _QUEUE_HANDOFF_GRACE_SECONDS
 
 
+class CrawlHandoffPending(RuntimeError):
+	"""后台 worker 交接窗口内显式恢复参数无法生效（Issue #2243）。
+
+	worker 已按旧的命令行参数启动；父进程既不能替它应用 --pages / --with-detail，
+	也不能清掉窗口内新到达的 stop。静默返回 queued 会让调用方误以为参数生效。
+	"""
+
+
 def _prepare_background_resume(
 	data_dir: Path,
 	run_id: str,
@@ -765,6 +773,13 @@ def _prepare_background_resume(
 		# 刚排队的任务不抢锁，以免让正准备启动的 worker 被拒绝；排队过久的
 		# 与遗留的 running 一样靠执行锁判断是否还有执行器。
 		if _awaiting_queued_worker(run):
+			# 交接窗口内 worker 已按旧的命令行参数启动：本次显式的 --pages /
+			# --with-detail 无法应用，清掉刚到达的 stop 也会覆盖用户意图。
+			# 静默返回 queued 会让调用方误以为参数已生效（Issue #2243）。
+			if pages is not None or with_detail or (clear_stop and bool(run.get("stop_requested"))):
+				raise CrawlHandoffPending(
+					"后台任务正在交接，本次恢复参数尚未生效；请稍后用 crawl status 确认状态再重试"
+				)
 			return "queued", False
 		with service.execution_lock(run_id) as acquired:
 			if not acquired:
@@ -779,13 +794,16 @@ def _prepare_background_resume(
 			if _awaiting_queued_worker(run):
 				return "queued", False
 			# 将要启动 worker 才校验持锁重读的设置；损坏断点在修改 stop 或
-			# 探测依赖/登录态之前由父进程返回错误（Issue #1125）。
-			CrawlSettings.from_dict(run["params"], run_id=run_id)
+			# 探测依赖/登录态之前由父进程返回错误（Issue #1125）。hook 目录与
+			# _validate_settings 也在父进程校验：worker 的 stderr 写进空设备，
+			# 确定性本地失败不能先返回 queued 再静默发生（Issue #2242）。
+			settings = CrawlSettings.from_dict(run["params"], run_id=run_id)
 			# 与前台 resume 同口径：worker 会在同一个断点上再次校验，但父进程
 			# 必须先把矛盾的 --pages 报出来，不能先返回 queued 再让 worker
 			# 静默失败、任务停在无人执行的状态（Issue #2075）。
 			if pages is not None:
 				validate_pages_override(int(run["next_page"]), pages)
+			service.validate_resume_settings(settings)
 			# 旧 stop 必须在预检之前清掉：预检要探测可选依赖、读取登录态，可能
 			# 耗时；这期间到达的新 stop 不能被后面的清理当成启动前残留一起清掉
 			# （Issue #1115）。预检失败时还原旧 stop 与时间戳，保持「失败的调用
@@ -793,20 +811,33 @@ def _prepare_background_resume(
 			previous_stop = bool(run.get("stop_requested"))
 			# 仅用于预检失败时还原；类型漂移按 0 降级，不能让恢复本身中断（Issue #1206）。
 			previous_updated_at = _tolerated_timestamp(run.get("updated_at"))
+			previous_status = str(run.get("status") or "")
+			previous_error = str(run.get("error") or "")
 			if clear_stop and previous_stop:
 				cache.clear_crawl_stop_request(run_id)
+			# 标记本身也可能失败（本地 IO）：此时没有写入时间，还原按旧口径处理。
+			marked_at: float | None = None
 			try:
+				# 信封报 queued，库里也要先落 queued（Issue #1771）：预检本身可能
+				# 耗时数秒，期间到达的 `crawl stop` 不能被旧终态拒绝（Issue #2240）。
+				# worker 接手前也不会因旧终态被拒、重复的后台恢复不会再拉起一个
+				# worker；同时刷新时间给 worker 留足交接窗口（Issue #1045），
+				# 不清新到达的 stop。
+				marked_at = cache.mark_crawl_run_active(run_id, "queued")
 				# worker 的错误信封写进空设备：依赖缺失与登录态不足要在这里由父进程报出来。
 				preflight()
-				# 信封报 queued，库里也要是 queued（Issue #1771）：否则 worker 接手前
-				# `crawl stop` 按旧终态被拒、重复的后台恢复会再拉起一个 worker。同时
-				# 刷新时间给 worker 留足交接窗口（Issue #1045），不清新到达的 stop。
-				# 这一步失败同样还原旧 stop：清掉 stop 却停在旧状态，任务既没有
-				# worker 也没有停止请求，违背「失败的调用不改动任务」（Issue #2195）。
-				cache.mark_crawl_run_active(run_id, "queued")
 			except BaseException:
 				if clear_stop and previous_stop:
 					cache.restore_crawl_stop_request(run_id, updated_at=previous_updated_at)
+				# 预检 / 落盘失败：状态、错误与时间戳还原到恢复前，失败的调用
+				# 不改动任务（Issue #1042 / #2195 / #2240）。
+				cache.restore_crawl_run_state(
+					run_id,
+					status=previous_status,
+					error=previous_error,
+					updated_at=previous_updated_at,
+					marked_at=marked_at,
+				)
 				raise
 		return "queued", True
 
@@ -1227,6 +1258,34 @@ def _resume(
 			return
 		except CacheRecordInvalid as exc:
 			_report_corrupt_run(ctx, "crawl.resume", run_id, exc)
+			return
+		except CrawlHandoffPending as exc:
+			# worker 已在交接窗口内启动：显式参数不会生效，报可重试的忙碌而不是成功。
+			status_command = boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True)
+			handle_error_output(
+				ctx,
+				"crawl.resume",
+				code="CRAWL_BUSY",
+				message=str(exc),
+				recovery_action=f"用 {status_command} 确认后台任务状态，交接窗口结束后再重试 crawl resume",
+				hints={"next_actions": [status_command]},
+			)
+			return
+		except CrawlHookDirInvalid as exc:
+			# 与前台 resume 同口径：Hook 目录坏了是确定性本地失败，不引导用户
+			# 修改 --pages 或反复重试（Issue #1460 / #2242）。
+			hook_dir = f" {exc.hook_dir}" if exc.hook_dir is not None else ""
+			handle_error_output(
+				ctx,
+				"crawl.resume",
+				code="LOCAL_IO_ERROR",
+				message=str(exc),
+				recoverable=False,
+				recovery_action=(
+					f"停止自动重试：核对 Hook 目录{hook_dir} 中的 7 个脚本与 SHA256SUMS，"
+					"修复后重新执行 crawl resume；目录已迁移时用新的 --hook-dir 重新创建任务"
+				),
+			)
 			return
 		except ValueError as exc:
 			# 后台恢复同样要像前台一样拒绝与断点进度矛盾的 --pages（Issue #2075）：

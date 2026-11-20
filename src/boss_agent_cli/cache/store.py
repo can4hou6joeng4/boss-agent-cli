@@ -1083,21 +1083,51 @@ class CacheStore:
 		)
 		self._conn.commit()
 
-	def mark_crawl_run_active(self, run_id: str, status: str) -> None:
+	def mark_crawl_run_active(self, run_id: str, status: str) -> float:
 		"""恢复已取得执行权时把状态落成 queued / running（Issue #1771）。
 
 		只改状态、清掉上一轮的错误并刷新时间；断点游标与其他进程写入的停止标记
 		保持不动，这样恢复窗口内到达的 `crawl stop` 才会被接受。
+
+		返回写入的 ``updated_at``：失败路径要区分「预检窗口内到达的新 stop」
+		与本次标记写入的时间，才能在不覆盖新 stop 的前提下完整还原（Issue #2240）。
 		"""
+		marked_at = time.time()
 		self._conn.execute(
 			"UPDATE crawl_runs SET status = ?, error = '', updated_at = ? WHERE run_id = ?",
-			(status, time.time(), run_id),
+			(status, marked_at, run_id),
 		)
 		self._conn.commit()
+		return marked_at
 
 	def touch_crawl_run(self, run_id: str) -> None:
 		"""刷新排队交接时间，不改变其他进程写入的停止标记。"""
 		self._conn.execute("UPDATE crawl_runs SET updated_at = ? WHERE run_id = ?", (time.time(), run_id))
+		self._conn.commit()
+
+	def restore_crawl_run_state(
+		self,
+		run_id: str,
+		*,
+		status: str,
+		error: str,
+		updated_at: float,
+		marked_at: float | None = None,
+	) -> None:
+		"""预检失败时还原恢复前的状态 / 错误 / 时间戳（Issue #2240）。
+
+		``mark_crawl_run_active`` 会在慢预检之前把状态改成 running / queued 并清空
+		错误；预检失败后任务仍是原来的终态，必须原样写回。预检窗口内到达的新
+		stop 会刷新 ``updated_at``：此时保留新时间，不能回拨（与
+		``restore_crawl_stop_request`` 同口径）。``marked_at`` 是本次
+		``mark_crawl_run_active`` 写入的时间；未提供时保持旧的「只增不减」口径。
+		"""
+		floor = updated_at if marked_at is None else marked_at
+		self._conn.execute(
+			"UPDATE crawl_runs SET status = ?, error = ?, "
+			"updated_at = CASE WHEN updated_at > ? THEN updated_at ELSE ? END WHERE run_id = ?",
+			(status, error, floor, updated_at, run_id),
+		)
 		self._conn.commit()
 
 	def restore_crawl_stop_request(self, run_id: str, *, updated_at: float) -> None:
