@@ -5,6 +5,10 @@
 ## [Unreleased]
 
 ### Fixed
+- 离线冒烟脚本的环境变量与退出码收口：`BOSS_SMOKE_TIMEOUT` 空值回到默认 30，非正整数以明确文案退出 2；`BOSS_SMOKE_DRY_RUN` 大小写不敏感并接受 `on` / `y`，无法识别的取值拒绝执行而不是切到联网；退出码改为全部 `pass` / `dry_run` 才为 0；子进程固定按 UTF-8 交换，解码失败、超长整数与 `RecursionError` 归入 `contract_error` 并附带抹掉 `security_id` 的 stderr 尾部（Issue #2261）。
+- 安装探针展开 MCP 阶段的 `ExceptionGroup`：`ProbeError` 的消息（如工具清单漂移）不再被压成 `"ExceptionGroup"`，普通异常报告「类型: 消息」，CLI 阶段失败附带 stderr 尾部与超时命令名（Issue #2262）。
+- 发布校验容忍子进程的非 UTF-8 诊断输出，不再把编码差异记成 `UnicodeDecodeError` 失败；JSON 报告在非 UTF-8 stdout 下退回 ASCII 转义，失败项记录「类型: 消息」而不是只有类名（Issue #2263）。
+- 便携包构建在删除旧包之前校验外部 wheel：必须是存在的普通文件、`.whl`、版本前缀与 `[project]` 版本一致，不符时保留上一份可用包；打包改为先写临时目录再替换，`uv build` 产物按当前版本挑选；项目版本改用 `tomllib` 只读 `[project]` 表（Issue #2264）。
 - 外部 eval 在评分前校验 runner 输出结构：`with_mcp` / `baseline` 缺失、不是对象，或 `tool_calls` / `envelopes` 缺失、不是对象数组时，该场景记为 `contract_error`，不再把缺失的基线算作「基线失败」而判定通过，也不再因类型错误、超长整数或非 UTF-8 输出中止整轮；其余场景照常评分并写入报告。场景夹具加载走同一校验，默认 runner 固定用 UTF-8 交换数据（Issue #2258）。
 
 ## [3.4.141] - 2026-11-20

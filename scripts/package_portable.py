@@ -18,11 +18,11 @@
 from __future__ import annotations
 
 import argparse
-import re
 import shutil
 import stat
 import subprocess
 import sys
+import tomllib
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,44 +53,78 @@ class PortableBuildError(Exception):
 
 
 def parse_project_version(pyproject_path: Path) -> str:
-	"""Read the project version from pyproject.toml without extra dependencies."""
-	text = pyproject_path.read_text(encoding="utf-8")
-	match = re.search(r'(?m)^version\s*=\s*"([^"]+)"\s*$', text)
-	if not match:
+	"""Read the ``[project]`` version from pyproject.toml.
+
+	正则取文件里第一个 ``version = "..."`` 会把其它表（如 ``[tool.example]``）
+	的值当成项目版本（Issue #2264）；按 TOML 解析只看 ``[project]``。
+	"""
+	try:
+		with pyproject_path.open("rb") as stream:
+			data = tomllib.load(stream)
+	except FileNotFoundError:
+		raise PortableBuildError(f"找不到 {pyproject_path}") from None
+	except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+		raise PortableBuildError(f"无法读取 {pyproject_path}：{exc}") from exc
+	project = data.get("project")
+	version = project.get("version") if isinstance(project, dict) else None
+	if not isinstance(version, str) or not version.strip():
 		raise PortableBuildError(f"version not found in {pyproject_path}")
-	return match.group(1)
+	return version.strip()
+
+
+def _validated_wheel(wheel_path: Path, version: str) -> Path:
+	"""校验外部提供的 wheel：存在、是普通文件、版本前缀与项目一致。"""
+	try:
+		mode = wheel_path.lstat().st_mode
+	except FileNotFoundError:
+		raise PortableBuildError(f"指定的 wheel 不存在：{wheel_path}") from None
+	if not stat.S_ISREG(mode):
+		raise PortableBuildError(f"指定的 wheel 不是普通文件：{wheel_path}")
+	if wheel_path.suffix != ".whl" or not wheel_path.name.startswith(f"boss_agent_cli-{version}-"):
+		raise PortableBuildError(f"wheel {wheel_path.name} 与项目版本 {version} 不一致")
+	return wheel_path
 
 
 def create_portable_bundle(config: PortableConfig) -> PortableBuildResult:
 	"""Create the portable directory and zip archive."""
 	project_root = config.project_root.resolve()
 	version = parse_project_version(project_root / "pyproject.toml")
-	wheel_path = config.wheel_path or _build_wheel(project_root)
+	# 先校验再删除：--wheel 路径写错或版本不符时不能把上一份可用包删掉。
+	wheel_path = config.wheel_path or _build_wheel(project_root, version)
+	wheel_path = _validated_wheel(wheel_path, version)
 	bundle_name = f"boss-agent-cli-{version}"
 	bundle_dir = config.output_root / bundle_name
 	archive_path = project_root / "dist" / f"boss-agent-cli-portable-{version}-{config.platform}.zip"
-	if bundle_dir.exists():
-		shutil.rmtree(bundle_dir)
-	bundle_dir.mkdir(parents=True)
-	(bundle_dir / "wheels").mkdir()
-	(bundle_dir / "bin").mkdir()
-	(bundle_dir / "examples").mkdir()
-	shutil.copy2(wheel_path, bundle_dir / "wheels" / wheel_path.name)
-	_write_executable(bundle_dir / "install.sh", _install_sh(wheel_path.name))
-	_write_executable(bundle_dir / "bin" / "boss", _boss_wrapper())
-	_write_executable(bundle_dir / "bin" / "boss-doctor", _boss_doctor_wrapper())
-	(bundle_dir / "README-PORTABLE.md").write_text(_portable_readme(version), encoding="utf-8")
-	_write_executable(bundle_dir / "examples" / "zhipin-recruiter.sh", _zhipin_example())
-	_write_executable(bundle_dir / "examples" / "local-model.sh", _local_model_example())
-	(bundle_dir / "examples" / "opencode.json").write_text(_opencode_example(), encoding="utf-8")
-	archive_path.parent.mkdir(parents=True, exist_ok=True)
-	if archive_path.exists():
-		archive_path.unlink()
-	_zip_dir(bundle_dir, archive_path)
+	staging = config.output_root / f".{bundle_name}.building"
+	if staging.exists():
+		shutil.rmtree(staging)
+	try:
+		staging.mkdir(parents=True)
+		(staging / "wheels").mkdir()
+		(staging / "bin").mkdir()
+		(staging / "examples").mkdir()
+		shutil.copy2(wheel_path, staging / "wheels" / wheel_path.name)
+		_write_executable(staging / "install.sh", _install_sh(wheel_path.name))
+		_write_executable(staging / "bin" / "boss", _boss_wrapper())
+		_write_executable(staging / "bin" / "boss-doctor", _boss_doctor_wrapper())
+		(staging / "README-PORTABLE.md").write_text(_portable_readme(version), encoding="utf-8")
+		_write_executable(staging / "examples" / "zhipin-recruiter.sh", _zhipin_example())
+		_write_executable(staging / "examples" / "local-model.sh", _local_model_example())
+		(staging / "examples" / "opencode.json").write_text(_opencode_example(), encoding="utf-8")
+		if bundle_dir.exists():
+			shutil.rmtree(bundle_dir)
+		staging.rename(bundle_dir)
+		archive_path.parent.mkdir(parents=True, exist_ok=True)
+		if archive_path.exists():
+			archive_path.unlink()
+		_zip_dir(bundle_dir, archive_path)
+	except OSError as exc:
+		shutil.rmtree(staging, ignore_errors=True)
+		raise PortableBuildError(f"构建便携包失败：{exc}") from exc
 	return PortableBuildResult(bundle_dir=bundle_dir, archive_path=archive_path, wheel_path=wheel_path)
 
 
-def _build_wheel(project_root: Path) -> Path:
+def _build_wheel(project_root: Path, version: str) -> Path:
 	result = subprocess.run(
 		["uv", "build", "--wheel"],
 		cwd=project_root,
@@ -101,9 +135,13 @@ def _build_wheel(project_root: Path) -> Path:
 	)
 	if result.returncode != 0:
 		raise PortableBuildError(result.stderr.strip() or result.stdout.strip() or "uv build --wheel failed")
-	wheels = sorted((project_root / "dist").glob("boss_agent_cli-*.whl"), key=lambda item: item.stat().st_mtime)
+	# 只挑当前版本：dist/ 里残留的旧 wheel 可能 mtime 更新（恢复的产物、时钟偏移）。
+	wheels = sorted(
+		(project_root / "dist").glob(f"boss_agent_cli-{version}-*.whl"),
+		key=lambda item: item.stat().st_mtime,
+	)
 	if not wheels:
-		raise PortableBuildError("uv build did not produce a boss_agent_cli wheel")
+		raise PortableBuildError(f"uv build 没有产出 {version} 的 boss_agent_cli wheel")
 	return wheels[-1]
 
 

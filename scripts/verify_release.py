@@ -71,6 +71,14 @@ def _stderr_tail(stderr: str) -> str:
 	return "\n".join(line[:_STDERR_LINE_LIMIT] for line in lines[-_STDERR_TAIL_LINES:])
 
 
+def describe_error(exc: BaseException) -> str:
+	"""失败项的原因：``VerificationError`` 原样，其余带类型与有界消息。"""
+	if isinstance(exc, VerificationError):
+		return str(exc)
+	message = " ".join(str(exc).split())
+	return f"{type(exc).__name__}: {message[:300]}" if message else type(exc).__name__
+
+
 def _failure_message(tool: str, returncode: int, stderr: str) -> str:
 	"""失败信息 = 退出码 + stderr 尾部；没有输出时保持原来的一句话。"""
 	message = f"{tool} 失败，退出码 {returncode}"
@@ -92,6 +100,9 @@ def run_command(
 		env=env,
 		text=True,
 		encoding="utf-8",
+		# 本地化的 uv / git / 构建后端会输出非 UTF-8 字节；诊断尾部本来就是
+		# 给人看的文本，替换字符好过让一次成功的命令报成 UnicodeDecodeError。
+		errors="replace",
 		stdout=subprocess.PIPE,
 		stderr=subprocess.PIPE,
 		start_new_session=os.name != "nt",
@@ -286,7 +297,7 @@ def verify(args: argparse.Namespace, root: Path = ROOT) -> dict[str, Any]:
 		try:
 			result = operation()
 		except Exception as exc:
-			item.update(status="failed", error=str(exc) if isinstance(exc, VerificationError) else type(exc).__name__)
+			item.update(status="failed", error=describe_error(exc))
 			raise
 		item.update(status="passed", result=result)
 		return result
@@ -380,8 +391,18 @@ def verify(args: argparse.Namespace, root: Path = ROOT) -> dict[str, Any]:
 		report["ok"] = True
 	except Exception as exc:
 		if not any(item["status"] == "failed" for item in steps):
-			steps.append({"name": "environment", "status": "failed", "error": type(exc).__name__})
+			steps.append({"name": "environment", "status": "failed", "error": describe_error(exc)})
 	return report
+
+
+def write_report(report: dict[str, Any], *, stream=None) -> None:
+	"""报告是唯一机器可读输出：stdout 编码不支持中文时退回 ASCII 转义。"""
+	stream = stream or sys.stdout
+	text = json.dumps(report, ensure_ascii=False) + "\n"
+	try:
+		stream.write(text)
+	except UnicodeEncodeError:
+		stream.write(json.dumps(report) + "\n")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -405,7 +426,7 @@ def main(argv: list[str] | None = None) -> int:
 	if args.fresh_install and not args.artifacts:
 		parser.error("--fresh-install 只适用于 --artifacts")
 	report = verify(args)
-	print(json.dumps(report, ensure_ascii=False))
+	write_report(report)
 	return 0 if report["ok"] else 1
 
 
