@@ -51,6 +51,20 @@ if TYPE_CHECKING:
 
 _MAX_RETRIES = 3
 
+# 确定发生在请求发出之前的传输异常：连接未建立、代理握手失败、协议或连接池
+# 在选择阶段就终结，一个字节都没发出。写请求遇到它们时平台侧副作用一定没有
+# 发生，不能按「结果未知」报成 ``ACTION_UNCONFIRMED`` 并禁止重试（Issue #2216）。
+# 其余 ``httpx.TransportError``（读 / 写超时、RemoteProtocolError 等）发生在
+# 请求可能已送出之后，仍按未知处理。
+_UNSENT_TRANSPORT_ERRORS: tuple[type[httpx.TransportError], ...] = (
+	httpx.ConnectError,
+	httpx.ConnectTimeout,
+	httpx.PoolTimeout,
+	httpx.ProxyError,
+	httpx.UnsupportedProtocol,
+	httpx.LocalProtocolError,
+)
+
 
 class BrowserChannelRequired(RuntimeError):
 	"""CDP / 显式浏览器来源下，该操作只有 httpx 实现，拒绝用 httpx 携带浏览器凭据发送。"""
@@ -432,7 +446,14 @@ class _BaseHttpClient:
 					if isinstance(error, PlatformRiskError):
 						self._record_cdp_risk_lock(error=error)
 						raise
-					if write_possible and isinstance(error, httpx.TransportError):
+					if (
+						write_possible
+						and isinstance(error, httpx.TransportError)
+						and not isinstance(error, _UNSENT_TRANSPORT_ERRORS)
+					):
+						# 只有「请求可能已发出」的传输异常才落成结果未知；确定未发出的
+						# 连接 / 代理 / 协议错误原样上抛，由命令出口按可重试的
+						# NETWORK_ERROR 收口（Issue #2216）。
 						return self._unconfirmed_http_response(url, "transport_error")
 					if write_possible and isinstance(error, httpx.DecodingError):
 						return self._unconfirmed_http_response(url, "invalid_response")

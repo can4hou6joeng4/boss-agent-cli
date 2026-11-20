@@ -4,7 +4,7 @@ from typing import Any
 from boss_agent_cli.api import endpoints
 from boss_agent_cli.api._base_client import _BaseHttpClient
 from boss_agent_cli.api.httpx_helpers import make_client_registry
-from boss_agent_cli.api.zhipin_errors import classify_code_37
+from boss_agent_cli.api.zhipin_errors import classify_code_37, normalize_risk_code
 
 # atexit safeguard: close any BossClient instances not explicitly closed
 _OPEN_CLIENTS, _close_open_clients = make_client_registry()
@@ -118,7 +118,13 @@ class BossClient(_BaseHttpClient):
 		_OPEN_CLIENTS.discard(self)
 
 	def _should_refresh_token_response(self, data: dict[str, Any]) -> bool:
-		return data.get("code") == endpoints.CODE_STOKEN_EXPIRED and classify_code_37(data) == "token_expired"
+		# 业务码在响应里可能是字符串 "37"（其余消费点 is_platform_success_code /
+		# normalize_risk_code 都按同一口径兼容）。只比较整数会漏刷新，让 token
+		# 过期按普通响应返回（Issue #2218）。
+		return (
+			normalize_risk_code(data.get("code")) == endpoints.CODE_STOKEN_EXPIRED
+			and classify_code_37(data) == "token_expired"
+		)
 
 	# ── Browser request (high-risk ops) ──────────────────────────────
 
@@ -260,6 +266,11 @@ class BossClient(_BaseHttpClient):
 			from boss_agent_cli.api.request_budget import is_request_stop
 
 			if is_request_stop(error):
+				raise
+			# httpx-only 策略没有浏览器通道：回退必然以 BROWSER_DISABLED 结束，
+			# 还会把真实的 HTTP / 超时 / 解析错误整体覆盖掉。原样上抛保留故障
+			# 分类（Issue #2217）。
+			if not self.browser_enabled():
 				raise
 		params = {"securityId": security_id, "lid": lid}
 		return self._browser_request("GET", endpoints.JOB_CARD_URL, params=params)

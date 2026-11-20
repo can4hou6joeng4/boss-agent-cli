@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Fixed
+- 写请求只在「请求可能已发出」时落成 `ACTION_UNCONFIRMED`：`ConnectError` / `ConnectTimeout` / `PoolTimeout` / `ProxyError` / `UnsupportedProtocol` / `LocalProtocolError` 确定发生在连接建立或请求构造阶段，断网、DNS 失败或代理不可达时不再被报成不可恢复的「结果未知、禁止重试」，改为原样上抛、由命令出口按可重试的 `NETWORK_ERROR` 收口（Issue #2216）。
+- `job_card()` 在 `httpx-only` 策略下不再回退不存在的浏览器通道：httpx 失败时原样上抛真实错误，不再用 `BROWSER_DISABLED`「该能力需要页面通道」覆盖 5xx / 超时 / 解析失败的原因（Issue #2217）。
+- stoken 过期判断与其它业务码消费点同口径，字符串 `"37"` 与整数 `37` 一样触发刷新；平台码序列化类型漂移时不再漏刷新、把过期响应当普通结果返回（Issue #2218）。
 - 非 UTF-8 stdout（中文 Windows 的 cp936 重定向 / 自定义 `PYTHONIOENCODING`）下报表与信封不再因 emoji 编码失败：信封在无法按 stdout 编码写出时回退为 `\uXXXX` 转义的 ASCII（仍是合法 JSON，值不变）；`stats --format html` / `digest --format md` / `export --format html` 的直出分支重定向时写 UTF-8 字节、终端时按实际编码归一；报表模板去掉 emoji（`📊` / `⚠️` 改为纯文本），不再误报「确认目标路径可写」的 `LOCAL_IO_ERROR`（Issue #2213）。
 - `render_digest_markdown` 对 `new_matches` / `follow_ups` / `interviews` 里的非对象条目按缺失过滤，与 #2162 的导出服务边界同口径：库内直接调用或未来调用方传入 `null` / 字符串 / 数字时不再抛 `AttributeError`，计数与展示只包含对象条目（Issue #2214）。
 - 采集执行中断点被 `clean --privacy` 删除后按「已停止」fail-closed：执行器不再把「行不存在」当成「没有 stop」，后续页的职位行不会复活已清理的 `crawl_jobs`、导出目录不会被重建、信封也不再报 `completed` 指向不存在的 run；执行器写职位行改为以 `crawl_runs` 行存在为前提的原子插入（`require_existing_run`），最后一页之后导出前再确认一次断点（Issue #2208）。
