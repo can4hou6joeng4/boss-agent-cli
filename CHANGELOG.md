@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Fixed
+- 缓存层的本地 JSON 列统一按 `ensure_ascii=True` 写入、搜索键按 `backslashreplace` 编码：平台 JSON 里的孤立代理字符（`\ud800`）不再让 `put_crawl_job` 抛 `UnicodeEncodeError` 把采集任务永久卡在 `stopped`，`search` / `shortlist` 也不再以 `LOCAL_IO_ERROR` 失败；读回值不变（Issue #2223）。
+- `shortlist list` 逐行容错：单条记录字段写坏（如 `created_at` 是 BLOB）不再让整个候选池不可见，坏行跳过并通过 `hints.corrupt` 与操作指引指名删除重建；新增 `list_shortlist_with_corrupt`，与 watch / preset 的 corrupt 名单同口径（Issue #2224）。
+- 残留事务不再被误判为缓存库损坏：`BEGIN IMMEDIATE` 前先回滚连接上未提交的隐式事务；`cannot start a transaction within a transaction` 按写入拒绝上报，不再引导用户备份并删除完好的缓存库（Issue #2225）。
 - 本地 JSON 序列化边界把 `TypeError` 也归成本地 IO 错误：写入不可序列化的值（元组键、`bytes`、`set`）时不再让裸 `TypeError` 穿出命令层（stdout 无信封、stderr 裸 traceback），按 `LOCAL_IO_ERROR` 报出且保留原文件与既有原子写语义（Issue #2220）。
 - 聊天快照服务边界过滤非对象条目：平台列表页混入 `null` / 字符串 / 数字时不再在 `contact_identity` 上抛 `AttributeError` 让整次快照与导出失败；丢弃过条目按不完整处理（不推断「已消失」、不写完整标记），与 `chat_export` 的渲染边界同口径（Issue #2221）。
 - 写请求只在「请求可能已发出」时落成 `ACTION_UNCONFIRMED`：`ConnectError` / `ConnectTimeout` / `PoolTimeout` / `ProxyError` / `UnsupportedProtocol` / `LocalProtocolError` 确定发生在连接建立或请求构造阶段，断网、DNS 失败或代理不可达时不再被报成不可恢复的「结果未知、禁止重试」，改为原样上抛、由命令出口按可重试的 `NETWORK_ERROR` 收口（Issue #2216）。

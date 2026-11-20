@@ -481,6 +481,11 @@ class _GuardedConnection(sqlite3.Connection):
 			# 让 main/display 的本地 IO 分支输出 LOCAL_IO_ERROR，而不是误导用户
 			# 备份并删除完好的缓存库（Issue #1467）。
 			return None
+		if "cannot start a transaction within a transaction" in str(exc):
+			# 连接上残留未提交事务不是库损坏：落成 CacheDatabaseInvalid 会让 CLI
+			# 引导用户备份并删除完好的缓存库（Issue #2225）。按调用方可修正的
+			# 写入拒绝上报，不给删库指引。
+			return CacheWriteRejected(self.db_path, str(exc))
 		return CacheDatabaseInvalid(self.db_path, str(exc))
 
 	def _raise_translated(self, exc: sqlite3.DatabaseError) -> NoReturn:
@@ -488,6 +493,19 @@ class _GuardedConnection(sqlite3.Connection):
 		if translated is None:
 			raise exc
 		raise translated from exc
+
+	def begin_immediate(self) -> None:
+		"""开始写事务；先结束连接上残留的隐式事务。
+
+		上一笔写在中途失败（序列化错误、commit 失败）时，连接上可能留下未提交
+		事务；同一连接再执行 ``BEGIN IMMEDIATE`` 会报 “cannot start a transaction
+		within a transaction”，此前被 ``_translate`` 误判成缓存库损坏并引导用户
+		删库（Issue #2225）。残留事务只含未提交的本地改动，回滚不会丢失已提交
+		数据。
+		"""
+		if self.in_transaction:
+			self.rollback()
+		self.execute("BEGIN IMMEDIATE")
 
 	@overload
 	def cursor(self, factory: None = None) -> sqlite3.Cursor: ...
@@ -761,7 +779,7 @@ class CacheStore:
 		conn = self._conn
 		conn.migrating = True
 		try:
-			self._conn.execute("BEGIN IMMEDIATE")
+			self._conn.begin_immediate()
 			try:
 				yield
 			except BaseException:
@@ -929,7 +947,7 @@ class CacheStore:
 		self._conn.execute(
 			"INSERT INTO crawl_runs (run_id, params, status, next_page, output_dir, error, created_at, updated_at) "
 			"VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-			(run_id, json.dumps(params, ensure_ascii=False, sort_keys=True), status, next_page, output_dir, "", now, now),
+			(run_id, json.dumps(params, ensure_ascii=True, sort_keys=True), status, next_page, output_dir, "", now, now),
 		)
 		self._conn.commit()
 
@@ -1021,7 +1039,7 @@ class CacheStore:
 	def update_crawl_run_params(self, run_id: str, params: dict[str, Any]) -> None:
 		self._conn.execute(
 			"UPDATE crawl_runs SET params = ?, updated_at = ? WHERE run_id = ?",
-			(json.dumps(params, ensure_ascii=False, sort_keys=True), time.time(), run_id),
+			(json.dumps(params, ensure_ascii=True, sort_keys=True), time.time(), run_id),
 		)
 		self._conn.commit()
 
@@ -1042,7 +1060,7 @@ class CacheStore:
 			values.append(int(list_finished))
 		if hook_results is not None:
 			assignments.append("hook_results = ?")
-			values.append(json.dumps(hook_results, ensure_ascii=False, sort_keys=True))
+			values.append(json.dumps(hook_results, ensure_ascii=True, sort_keys=True))
 		values.append(run_id)
 		self._conn.execute(
 			f"UPDATE crawl_runs SET {', '.join(assignments)} WHERE run_id = ?",
@@ -1139,7 +1157,7 @@ class CacheStore:
 			job_key,
 			selector,
 			page_no,
-			json.dumps(payload, ensure_ascii=False, sort_keys=True),
+			json.dumps(payload, ensure_ascii=True, sort_keys=True),
 			int(detail_done),
 			time.time(),
 		)
@@ -1212,7 +1230,7 @@ class CacheStore:
 		it represents an already-reserved request slot, not merely request history.
 		"""
 		try:
-			self._conn.execute("BEGIN IMMEDIATE")
+			self._conn.begin_immediate()
 			row = self._conn.execute(
 				"SELECT last_request_at FROM crawl_budget WHERE budget_key = ?",
 				(budget_key,),
@@ -1247,7 +1265,7 @@ class CacheStore:
 		steps: tuple[str, ...],
 	) -> None:
 		now = time.time()
-		params_json = json.dumps(params, ensure_ascii=False, sort_keys=True)
+		params_json = json.dumps(params, ensure_ascii=True, sort_keys=True)
 		with self._conn:
 			self._conn.execute(
 				"INSERT INTO workflow_runs "
@@ -1376,8 +1394,8 @@ class CacheStore:
 				preserve_stopped,
 				status,
 				current_step,
-				json.dumps(last_result, ensure_ascii=False, sort_keys=True) if last_result is not None else None,
-				json.dumps(error, ensure_ascii=False, sort_keys=True) if error is not None else None,
+				json.dumps(last_result, ensure_ascii=True, sort_keys=True) if last_result is not None else None,
+				json.dumps(error, ensure_ascii=True, sort_keys=True) if error is not None else None,
 				time.time(),
 				run_id,
 			),
@@ -1403,8 +1421,8 @@ class CacheStore:
 			"WHERE run_id = ? AND step_name = ?",
 			(
 				status,
-				json.dumps(result, ensure_ascii=False, sort_keys=True) if result is not None else None,
-				json.dumps(error, ensure_ascii=False, sort_keys=True) if error is not None else None,
+				json.dumps(result, ensure_ascii=True, sort_keys=True) if result is not None else None,
+				json.dumps(error, ensure_ascii=True, sort_keys=True) if error is not None else None,
 				started_at,
 				finished_at,
 				run_id,
@@ -1419,7 +1437,7 @@ class CacheStore:
 		cursor = self._conn.execute(
 			"UPDATE workflow_steps SET error = ? WHERE run_id = ? AND step_name = ?",
 			(
-				json.dumps(error, ensure_ascii=False, sort_keys=True) if error is not None else None,
+				json.dumps(error, ensure_ascii=True, sort_keys=True) if error is not None else None,
 				run_id,
 				step_name,
 			),
@@ -1454,7 +1472,7 @@ class CacheStore:
 		normalized = cls._normalize_shortlist_tags(tags)
 		if not normalized:
 			return ""
-		return json.dumps(normalized, ensure_ascii=False, sort_keys=True)
+		return json.dumps(normalized, ensure_ascii=True, sort_keys=True)
 
 	@classmethod
 	def _deserialize_shortlist_tags(cls, raw: str | bytes | bytearray | None) -> list[str]:
@@ -1479,7 +1497,9 @@ class CacheStore:
 	@staticmethod
 	def _make_search_key(params: dict[str, Any]) -> str:
 		raw = json.dumps(params, sort_keys=True, ensure_ascii=False)
-		return hashlib.sha256(raw.encode()).hexdigest()
+		# 孤立代理字符（平台 JSON 里的 "\ud800"）无法按 UTF-8 编码：backslashreplace
+		# 对它写成转义字节，与其它值保持同一份键；普通文本的哈希不变（Issue #2223）。
+		return hashlib.sha256(raw.encode("utf-8", "backslashreplace")).hexdigest()
 
 	def is_greeted(self, security_id: str = "", *, job_id: str = "", account: str = "") -> bool:
 		"""查询招呼记录：有账号作用域和 job_id 时按两者查，否则按 security_id。
@@ -1727,7 +1747,7 @@ class CacheStore:
 		created_at = existing[0] if existing else now
 		self._conn.execute(
 			"INSERT OR REPLACE INTO saved_searches (name, params, created_at, updated_at) VALUES (?, ?, ?, ?)",
-			(name, json.dumps(params, ensure_ascii=False, sort_keys=True), created_at, now),
+			(name, json.dumps(params, ensure_ascii=True, sort_keys=True), created_at, now),
 		)
 		self._conn.commit()
 
@@ -1836,7 +1856,7 @@ class CacheStore:
 		new_items = []
 		seen_count = 0
 		# payload 列只写不读，用 ensure_ascii=True 写入：平台 JSON 里的孤立代理项
-		#（如 "\ud800"）json.loads 会接受，ensure_ascii=False 保留原字符后 sqlite3
+		#（如 "\ud800"）json.loads 会接受，ensure_ascii=True 保留原字符后 sqlite3
 		# 绑定抛 UnicodeEncodeError，整批 watch 结果丢弃。整轮包在事务里，中途
 		# 异常回滚，不会把半截结果留给同一连接上的后续写去提交。
 		with self._conn:
@@ -2148,11 +2168,29 @@ class CacheStore:
 		}
 
 	def list_shortlist(self) -> list[dict[str, Any]]:
+		items, _corrupt = self.list_shortlist_with_corrupt()
+		return items
+
+	def list_shortlist_with_corrupt(self) -> tuple[list[dict[str, Any]], list[str]]:
+		"""列出候选池；无法解码的行跳过并单独返回标识（Issue #2224）。
+
+		单条记录字段写坏（如 ``created_at`` 是 BLOB）不能让整池不可见，也不能
+		假装坏条目不存在：调用方据此提示删除重建（与
+		``list_saved_searches_with_corrupt`` / ``list_workflow_runs_with_corrupt``
+		同口径）。
+		"""
 		rows = self._conn.execute(
 			"SELECT security_id, job_id, title, company, city, salary, source, tags, note, created_at, lid "
 			"FROM shortlist_records ORDER BY created_at DESC"
 		).fetchall()
-		return [self._shortlist_row_to_dict(row) for row in rows]
+		items: list[dict[str, Any]] = []
+		corrupt: list[str] = []
+		for row in rows:
+			try:
+				items.append(self._shortlist_row_to_dict(row))
+			except CacheRecordInvalid as exc:
+				corrupt.append(exc.record_id)
+		return items, corrupt
 
 	def _shortlist_row_to_dict(self, row: Any) -> dict[str, Any]:
 		record_id = str(row[1] or row[0] or "")

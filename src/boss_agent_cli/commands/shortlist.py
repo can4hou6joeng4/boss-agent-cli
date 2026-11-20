@@ -136,7 +136,20 @@ def shortlist_add_cmd(
 def shortlist_list_cmd(ctx: click.Context) -> None:
 	"""列出本地候选池中的全部职位。"""
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
-		items = cache.list_shortlist()
+		items, corrupt = cache.list_shortlist_with_corrupt()
+	hints: dict[str, Any] = {
+		"next_actions": [_hint_command(ctx, "shortlist add <security_id> <job_id>")]
+		if not items
+		else [_hint_command(ctx, "detail <security_id> --job-id <job_id>")]
+	}
+	if corrupt:
+		# 坏条目不能假装不存在：可用项照常返回，同时指明该删哪些（Issue #2224，
+		# 与 watch / preset 的 corrupt 名单同口径）。
+		hints["corrupt"] = corrupt
+		hints["operator_actions"] = [
+			"以下候选记录的字段已损坏、无法读取，先执行 "
+			f"{_hint_command(ctx, 'shortlist remove <security_id> <job_id>')} 再重新 shortlist add：{', '.join(corrupt)}"
+		]
 	handle_output(
 		ctx,
 		"shortlist",
@@ -154,9 +167,7 @@ def shortlist_list_cmd(ctx: click.Context) -> None:
 				("source", "source", "magenta"),
 			],
 		),
-		hints={"next_actions": [_hint_command(ctx, "shortlist add <security_id> <job_id>")]
-		if not items
-		else [_hint_command(ctx, "detail <security_id> --job-id <job_id>")]},
+		hints=hints,
 	)
 
 
