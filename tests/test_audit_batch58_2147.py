@@ -46,20 +46,20 @@ def _seed_shortlist(data_dir: Path) -> None:
 # shortlist_records.created_at
 
 
-def test_shortlist_created_at_blob_is_rejected_at_read_boundary(tmp_path) -> None:
-	"""REAL 时间戳漂移成 BLOB 时按记录损坏拒绝，而不是进信封后 INTERNAL_ERROR。"""
+def test_shortlist_created_at_blob_is_skipped_with_corrupt_list(tmp_path) -> None:
+	"""REAL 时间戳漂移成 BLOB 时跳过并回报，不再让整个候选池不可见（Issue #2224）。"""
 	_seed_shortlist(tmp_path)
 	with sqlite3.connect(_db(tmp_path)) as conn:
 		conn.execute("UPDATE shortlist_records SET created_at = X'FF'")
 
 	with CacheStore(_db(tmp_path)) as store:
-		with pytest.raises(CacheRecordInvalid) as excinfo:
-			store.list_shortlist()
+		items, corrupt = store.list_shortlist_with_corrupt()
 
-	assert excinfo.value.column == "created_at"
+	assert items == []
+	assert corrupt == ["J1"]
 
 
-def test_shortlist_list_reports_cache_record_invalid(tmp_path) -> None:
+def test_shortlist_list_reports_corrupt_entries(tmp_path) -> None:
 	_seed_shortlist(tmp_path)
 	with sqlite3.connect(_db(tmp_path)) as conn:
 		conn.execute("UPDATE shortlist_records SET created_at = X'414243'")
@@ -67,9 +67,10 @@ def test_shortlist_list_reports_cache_record_invalid(tmp_path) -> None:
 	result = _invoke(tmp_path, "shortlist", "list")
 
 	payload = _envelope(result)
-	assert result.exit_code == 1
-	assert payload["ok"] is False
-	assert payload["error"]["code"] == "CACHE_RECORD_INVALID"
+	assert result.exit_code == 0
+	assert payload["ok"] is True
+	assert payload["data"] == []
+	assert payload["hints"]["corrupt"] == ["J1"]
 
 
 # ── saved_searches.name ──────────────────────────────────────────────

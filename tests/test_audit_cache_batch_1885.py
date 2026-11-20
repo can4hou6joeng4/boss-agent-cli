@@ -67,20 +67,22 @@ def test_shortlist_blob_text_is_decoded(tmp_path) -> None:
 	assert items[0]["title"] == "ABC"
 
 
-def test_shortlist_invalid_blob_fails_as_record_invalid(tmp_path) -> None:
+def test_shortlist_invalid_blob_is_skipped_with_corrupt_list(tmp_path) -> None:
+	# 单条坏记录不再让整个候选池不可见：跳过并单独回报（Issue #2224，与
+	# watch / preset 的 corrupt 名单同口径）。
 	_seed_shortlist(tmp_path)
 	with sqlite3.connect(_db(tmp_path)) as conn:
 		conn.execute("UPDATE shortlist_records SET title = X'FF'")
 
 	with CacheStore(_db(tmp_path)) as store:
-		with pytest.raises(CacheRecordInvalid) as excinfo:
-			store.list_shortlist()
+		items, corrupt = store.list_shortlist_with_corrupt()
+		assert store.list_shortlist() == []
 
-	assert excinfo.value.column == "title"
+	assert items == []
+	assert corrupt == ["J1"]
 
 
-def test_cli_reports_cache_record_invalid_without_internal_error(tmp_path) -> None:
-	"""旧输出：固定 INTERNAL_ERROR 且 exit 0 / ok=false；现在按记录损坏上报。"""
+def test_cli_reports_shortlist_corrupt_entries_without_failing(tmp_path) -> None:
 	_seed_shortlist(tmp_path)
 	with sqlite3.connect(_db(tmp_path)) as conn:
 		conn.execute("UPDATE shortlist_records SET title = X'FF'")
@@ -88,11 +90,11 @@ def test_cli_reports_cache_record_invalid_without_internal_error(tmp_path) -> No
 	result = _invoke(tmp_path, "shortlist", "list")
 
 	payload = _envelope(result)
-	assert result.exit_code == 1
-	assert payload["ok"] is False
-	assert payload["error"]["code"] == "CACHE_RECORD_INVALID"
-	assert payload["error"]["recoverable"] is True
-	assert "重新创建任务" in payload["error"]["recovery_action"]
+	assert result.exit_code == 0
+	assert payload["ok"] is True
+	assert payload["data"] == []
+	assert payload["hints"]["corrupt"] == ["J1"]
+	assert any("已损坏" in action for action in payload["hints"]["operator_actions"])
 
 
 def test_workflow_run_text_columns_are_decoded_or_rejected(tmp_path) -> None:
