@@ -74,6 +74,10 @@ A future external runner is responsible for enforcing its own request budget and
 uv run python evals/run_eval.py --mode external --runner-cmd "./your-agent-runner"
 ```
 
+Both `with_mcp` and `baseline` must be objects, each carrying the `tool_calls` and `envelopes` arrays. When a run made no calls or produced no envelopes, report an empty array `[]` instead of omitting the field. Each `tool_calls` entry is an object with a non-empty `name`; `arguments` may be omitted or must be an object. Each `envelopes` entry is an object. The optional `blocked_codes` / `recovery_actions` must be arrays when present.
+
+A scenario whose output does not match this shape is recorded as `contract_error`; the remaining scenarios are still scored and written to the report. A missing baseline is never counted as a failing baseline that proves the MCP run is better. The runner and the harness exchange data as UTF-8.
+
 If the runner fails, times out, returns non-JSON, or omits comparable data, the harness records a failure. It must not fall back to fixture data or switch to another channel to bypass a platform risk stop.
 
 ## Safety Rules

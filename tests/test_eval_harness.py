@@ -219,3 +219,206 @@ def test_risk_fixture_matches_the_current_platform_contract():
 	assert scenario.fixture["with_mcp"] == run
 	for key, value in expectations.items():
 		assert scenario.with_mcp_expectations[key] == value
+
+
+# ── 外部 runner 输出契约（Issue #2258） ─────────────────────────────
+
+
+def _fixture_payload(scenario_input: str) -> tuple[str, dict]:
+	"""按 stdin 里的场景 id 取出仓库夹具，作为内存 runner 的合规输出。"""
+	scenario_id = json.loads(scenario_input)["id"]
+	raw = json.loads(SCENARIOS_PATH.read_text(encoding="utf-8"))
+	fixture = next(item["fixture"] for item in raw["scenarios"] if item["id"] == scenario_id)
+	return scenario_id, {"with_mcp": fixture["with_mcp"], "baseline": fixture["baseline"]}
+
+
+def _run_external(module, tmp_path, respond):
+	"""respond(scenario_id, payload) 返回 runner 的 stdout 文本，或直接抛异常。"""
+
+	def fake_run(command, cwd, input, capture_output, text, timeout, check):
+		scenario_id, payload = _fixture_payload(input)
+		return module.CommandResult(returncode=0, stdout=respond(scenario_id, payload), stderr="")
+
+	return module.run_external_eval(
+		module.load_scenarios(SCENARIOS_PATH),
+		runner_cmd=["in-memory-runner"],
+		results_dir=tmp_path,
+		run_command=fake_run,
+	)
+
+
+def test_external_runner_with_comparable_data_is_scored(tmp_path):
+	module = load_eval_module()
+
+	report = _run_external(module, tmp_path, lambda _id, payload: json.dumps(payload, ensure_ascii=False))
+
+	assert report["summary"]["label"] == "4/4 passed"
+	assert all(item["baseline"]["status"] == "fail" for item in report["scenarios"])
+
+
+def _drop(side, key=None):
+	def mutate(payload):
+		if key is None:
+			del payload[side]
+		else:
+			del payload[side][key]
+		return json.dumps(payload)
+
+	return mutate
+
+
+def _set(side, key, value):
+	def mutate(payload):
+		if key is None:
+			payload[side] = value
+		else:
+			payload[side][key] = value
+		return json.dumps(payload)
+
+	return mutate
+
+
+_CONTRACT_MUTATIONS = {
+	"missing_baseline": (_drop("baseline"), "missing baseline run"),
+	"missing_with_mcp": (_drop("with_mcp"), "missing with_mcp run"),
+	"baseline_empty_object": (_set("baseline", None, {}), "baseline.tool_calls is required"),
+	"baseline_null": (_set("baseline", None, None), "baseline must be an object"),
+	"with_mcp_null": (_set("with_mcp", None, None), "with_mcp must be an object"),
+	"with_mcp_list": (_set("with_mcp", None, []), "with_mcp must be an object"),
+	"tool_calls_null": (_set("with_mcp", "tool_calls", None), "with_mcp.tool_calls must be an array"),
+	"tool_calls_missing": (_drop("with_mcp", "tool_calls"), "with_mcp.tool_calls is required"),
+	"envelopes_missing": (_drop("baseline", "envelopes"), "baseline.envelopes is required"),
+	"envelopes_object": (_set("baseline", "envelopes", {}), "baseline.envelopes must be an array"),
+	"envelopes_scalar_item": (_set("with_mcp", "envelopes", [1]), "with_mcp.envelopes[0] must be an object"),
+	"tool_call_scalar_item": (
+		_set("with_mcp", "tool_calls", ["boss_search"]),
+		"with_mcp.tool_calls[0] must be an object",
+	),
+	"tool_call_without_name": (
+		_set("baseline", "tool_calls", [{"arguments": {}}]),
+		"baseline.tool_calls[0].name must be a non-empty string",
+	),
+	"tool_call_arguments_list": (
+		_set("baseline", "tool_calls", [{"name": "boss_search", "arguments": ["golang"]}]),
+		"baseline.tool_calls[0].arguments must be an object",
+	),
+	"blocked_codes_string": (
+		_set("with_mcp", "blocked_codes", "ACCOUNT_RISK"),
+		"with_mcp.blocked_codes must be an array",
+	),
+	"recovery_actions_object": (
+		_set("baseline", "recovery_actions", {}),
+		"baseline.recovery_actions must be an array",
+	),
+	"top_level_array": (lambda payload: "[]", "runner stdout must be a JSON object"),
+	"empty_stdout": (lambda payload: "", "runner stdout was not JSON"),
+	"oversized_integer": (lambda payload: '{"with_mcp": ' + "9" * 5000 + "}", "runner stdout was not JSON"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_CONTRACT_MUTATIONS))
+def test_external_contract_violation_fails_only_that_scenario(tmp_path, name):
+	module = load_eval_module()
+	mutate, expected_detail = _CONTRACT_MUTATIONS[name]
+
+	def respond(scenario_id, payload):
+		return mutate(payload) if scenario_id == "welfare_search" else json.dumps(payload, ensure_ascii=False)
+
+	report = _run_external(module, tmp_path, respond)
+
+	by_id = {item["id"]: item for item in report["scenarios"]}
+	broken = by_id.pop("welfare_search")
+	assert broken["passed"] is False
+	assert broken["with_mcp"]["status"] == "contract_error"
+	assert any(expected_detail in failure for failure in broken["with_mcp"]["failures"])
+	assert broken["baseline"]["status"] == "not_evaluated"
+	# 一个场景的契约错误不影响其余场景的评分与报告。
+	assert len(by_id) == 3
+	assert all(item["passed"] for item in by_id.values())
+	assert report["summary"]["label"] == "3/4 passed"
+	assert len(list(tmp_path.glob("*-external.json"))) == 1
+
+
+def test_external_runner_undecodable_output_is_a_contract_error(tmp_path):
+	module = load_eval_module()
+
+	def respond(scenario_id, payload):
+		if scenario_id == "detail_shortlist":
+			raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+		return json.dumps(payload, ensure_ascii=False)
+
+	report = _run_external(module, tmp_path, respond)
+
+	by_id = {item["id"]: item for item in report["scenarios"]}
+	assert by_id["detail_shortlist"]["with_mcp"]["status"] == "contract_error"
+	assert by_id["detail_shortlist"]["with_mcp"]["failures"] == ["runner output was not valid UTF-8"]
+	assert report["summary"]["label"] == "3/4 passed"
+
+
+def test_external_explicit_empty_baseline_is_still_comparable(tmp_path):
+	"""显式的空数组表示「确实没有调用、没有信封」，仍进入评分。"""
+	module = load_eval_module()
+
+	def respond(_scenario_id, payload):
+		payload["baseline"] = {"tool_calls": [], "envelopes": []}
+		return json.dumps(payload, ensure_ascii=False)
+
+	report = _run_external(module, tmp_path, respond)
+
+	assert report["summary"]["label"] == "4/4 passed"
+	assert all(item["baseline"]["status"] == "fail" for item in report["scenarios"])
+
+
+def test_external_tool_call_may_omit_or_null_arguments(tmp_path):
+	module = load_eval_module()
+
+	def respond(_scenario_id, payload):
+		payload["baseline"]["tool_calls"] = [{"name": "browser_scrape"}, {"name": "browser_scrape", "arguments": None}]
+		return json.dumps(payload, ensure_ascii=False)
+
+	report = _run_external(module, tmp_path, respond)
+
+	assert report["summary"]["label"] == "4/4 passed"
+
+
+@pytest.mark.parametrize("mutation", ["missing_baseline", "tool_calls_null", "envelopes_scalar_item"])
+def test_load_scenarios_rejects_incomparable_fixture(tmp_path, mutation):
+	module = load_eval_module()
+	raw = json.loads(SCENARIOS_PATH.read_text(encoding="utf-8"))
+	fixture = raw["scenarios"][0]["fixture"]
+	if mutation == "missing_baseline":
+		del fixture["baseline"]
+	elif mutation == "tool_calls_null":
+		fixture["with_mcp"]["tool_calls"] = None
+	else:
+		fixture["baseline"]["envelopes"] = [1]
+	path = tmp_path / "scenarios.json"
+	path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+
+	with pytest.raises(ValueError, match="fixture is not comparable"):
+		module.load_scenarios(path)
+
+
+def test_default_runner_exchanges_utf8_regardless_of_locale(monkeypatch):
+	"""场景 JSON 含中文且 ensure_ascii=False；不能跟随系统区域编码（如 GBK）。"""
+	module = load_eval_module()
+	seen = {}
+
+	class Completed:
+		returncode = 0
+		stdout = "{}"
+		stderr = ""
+
+	def fake_subprocess_run(command, **kwargs):
+		seen.update(kwargs)
+		return Completed()
+
+	monkeypatch.setattr(module.subprocess, "run", fake_subprocess_run)
+
+	result = module._default_run_command(
+		["runner"], cwd=ROOT, input="{}", capture_output=True, text=True, timeout=5, check=False
+	)
+
+	assert seen["encoding"] == "utf-8"
+	assert seen["text"] is True
+	assert result == module.CommandResult(returncode=0, stdout="{}", stderr="")

@@ -74,6 +74,10 @@ result: evals/results/<timestamp>-fixture.json
 uv run python evals/run_eval.py --mode external --runner-cmd "./your-agent-runner"
 ```
 
+`with_mcp` 与 `baseline` 都必须是对象，各自带 `tool_calls` 与 `envelopes` 两个数组；一侧确实没有调用或没有信封时写成空数组 `[]`，不要省略字段。`tool_calls` 的条目是带非空 `name` 的对象，`arguments` 可省略或为对象；`envelopes` 的条目是对象；可选的 `blocked_codes` / `recovery_actions` 若提供也必须是数组。
+
+结构不符时该场景记为 `contract_error`，其余场景照常评分并写入报告。缺失的基线不会被当成「基线失败」来证明 MCP 更好。runner 与评估器之间统一用 UTF-8 交换数据。
+
 runner 失败、超时、返回非 JSON 或缺少可比较数据时，评估记为失败；不得回退到 fixture 数据，也不得换通道绕过平台风控停止要求。
 
 ## 运行边界
