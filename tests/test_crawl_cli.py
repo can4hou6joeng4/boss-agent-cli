@@ -32,6 +32,7 @@ from boss_agent_cli.commands.crawl import (
 from boss_agent_cli.crawler.hooks import HOOK_SCRIPT_NAMES, HookInjection, HookRegistrationError
 from boss_agent_cli.crawler.service import CrawlService, CrawlSettings
 from boss_agent_cli.main import cli
+from boss_agent_cli.services.file_lock import exclusive_file_lock, run_lock_path
 from boss_agent_cli.services.install_extras import extras_requirement
 
 
@@ -1114,18 +1115,21 @@ def test_task_actions_stay_in_original_data_directory(tmp_path, monkeypatch, dir
 	_seed_run(default_dir, run_id, status="running", jobs=1)
 	monkeypatch.setenv("HOME", str(default_home))
 	runner = CliRunner()
-	result = runner.invoke(cli, ["--data-dir", str(data_dir), "--json", "crawl", "status", run_id])
-	assert result.exit_code == 0, result.output
-	payload = _envelope(result)
-	results_action, stop_action = payload["hints"]["next_actions"]
-	results = runner.invoke(cli, shlex.split(results_action)[1:])
-	assert results.exit_code == 0, results.output
-	assert _envelope(results)["data"]["count"] == 2
-	stopped = runner.invoke(cli, shlex.split(stop_action)[1:])
-	assert stopped.exit_code == 0, stopped.output
-	status_action = _envelope(stopped)["hints"]["next_actions"][0]
-	status = runner.invoke(cli, shlex.split(status_action)[1:])
-	assert status.exit_code == 0, status.output
+	# running 且持有执行锁才是「真的在跑」，status 才提示 stop（Issue #2465）。
+	with exclusive_file_lock(run_lock_path(data_dir / "cache" / "crawl-locks", run_id)) as acquired:
+		assert acquired
+		result = runner.invoke(cli, ["--data-dir", str(data_dir), "--json", "crawl", "status", run_id])
+		assert result.exit_code == 0, result.output
+		payload = _envelope(result)
+		results_action, stop_action = payload["hints"]["next_actions"]
+		results = runner.invoke(cli, shlex.split(results_action)[1:])
+		assert results.exit_code == 0, results.output
+		assert _envelope(results)["data"]["count"] == 2
+		stopped = runner.invoke(cli, shlex.split(stop_action)[1:])
+		assert stopped.exit_code == 0, stopped.output
+		status_action = _envelope(stopped)["hints"]["next_actions"][0]
+		status = runner.invoke(cli, shlex.split(status_action)[1:])
+		assert status.exit_code == 0, status.output
 	assert _envelope(status)["data"]["jobs_seen"] == 2
 	assert shlex.split(payload["data"]["checkpoint"]["resume_command"]) == [
 		"boss", "--data-dir", str(data_dir.resolve()), "crawl", "resume", run_id,
@@ -1182,7 +1186,10 @@ def test_status_returns_checkpoint_and_detail_progress(tmp_path):
 
 def test_status_running_points_to_results_and_stop(tmp_path):
 	_seed_run(tmp_path, "run-1", status="running")
-	payload = _envelope(_invoke(CliRunner(), tmp_path, "crawl", "status", "run-1"))
+	# 执行器持有执行锁才算在跑；否则 status 会按 stale 提示 resume（Issue #2465）。
+	with exclusive_file_lock(run_lock_path(tmp_path / "cache" / "crawl-locks", "run-1")) as acquired:
+		assert acquired
+		payload = _envelope(_invoke(CliRunner(), tmp_path, "crawl", "status", "run-1"))
 	_assert_state_commands(payload["hints"]["next_actions"], tmp_path, "crawl results run-1", "crawl stop run-1")
 
 
@@ -1267,7 +1274,10 @@ def test_stop_reports_run_not_found(tmp_path):
 
 def test_stop_records_the_kill_switch(tmp_path):
 	_seed_run(tmp_path, "run-1", status="running")
-	result = _invoke(CliRunner(), tmp_path, "crawl", "stop", "run-1")
+	# running 且持有执行锁才是「真的在跑」：stop 只写标记（Issue #2465）。
+	with exclusive_file_lock(run_lock_path(tmp_path / "cache" / "crawl-locks", "run-1")) as acquired:
+		assert acquired
+		result = _invoke(CliRunner(), tmp_path, "crawl", "stop", "run-1")
 	assert result.exit_code == 0, result.output
 	assert _envelope(result)["data"] == {"run_id": "run-1", "status": "stop_requested"}
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
