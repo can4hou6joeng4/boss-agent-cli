@@ -5,6 +5,11 @@
 ## [Unreleased]
 
 ### Fixed
+- 登录收尾的 stoken 提取与身份头采集同样会驱动页面事件循环：这期间锁存的迟到风控响应（`/wapi/` code 36/37）或主页面跳转到安全验证页，在 `login_via_browser` / `login_via_cdp` 返回成功凭证前复查并立即终止；复用会话探测的 evaluate 失败分支也先复查页面再按 `unverified` 收口，被风控的会话不再被当作「登录成功」落盘（Issue #2301）。
+- 身份头探针页的防御分支（`ctx.new_page()` 意外返回用户页签）先摘掉引用再返回，`finally` 不再把用户的页签关掉（Issue #2302）。
+- `boss login --timeout` 限定为 1–3600 秒，超界值在解析阶段按 `INVALID_PARAM` 拒绝；Python API 的 `AuthManager.login` 在碰浏览器之前同样校验，超大整数不再让 `time.time() + timeout` 抛 `OverflowError` 被报成可重试的 `NETWORK_ERROR`，也不会让 CDP 轮询变成无上界等待（Issue #2303）。
+- `login_via_browser` 在首页已加载但 stoken 提取失败（evaluate 返回空串）时回退 cookie jar 的 `__zp_stoken__`，与 `refresh_stoken` 同口径，不再把空 stoken 当登录成功保存（Issue #2304）。
+- wizard 写前标记落盘失败（步骤记录缺失 / 损坏）时的 `CACHE_RECORD_INVALID` 带 `details.request_sent=false`：写请求确实没有发出，候选人写动作的 pending 预约会被释放，不再永久挡住该职位；`replay_safe=false` 继续阻止 `--resume` 重放（Issue #2299）。
 - `greet` / `apply` / `batch-greet` 在请求派发之前失败（未登录 `AUTH_REQUIRED`、`TOKEN_REFRESH_FAILED`、代理配置非法、浏览器首页导航超时、浏览器内核缺失、本地风险锁）后释放预约：修好登录 / 代理后同一职位可以重新打招呼或投递，不再被 pending 预约永久挡成 `ACTION_UNCONFIRMED`；本地风险锁错误显式带 `request_sent=false`（Issue #2296）。
 - 单次 `greet` / `apply` 在无法证明请求未发出的异常（超时、浏览器驱动中断）时输出 `ACTION_UNCONFIRMED`（`outcome_unknown`、`replay_safe=false`、不可恢复，`details.cause` 保留错误码或类型名），与保留的预约一致；不再先报可重试的 `NETWORK_ERROR`、让 Agent 重试时撞上 pending 预约（Issue #2297）。
 - wizard 的 `candidate_greet` / `candidate_apply` 在派发前失败时撤销发送前落盘的「结果未知」写标记，`--resume` 可以重试一次从未发出的写请求；无法证明未发出的异常保持 fail-closed（Issue #2298）。

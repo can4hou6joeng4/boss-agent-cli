@@ -28,6 +28,12 @@ class TokenRefreshFailed(Exception):
 	pass
 
 
+#: 登录等待窗口上限（秒）：与 CLI ``--timeout`` 的上界一致。超过它的整数没有实际
+#: 意义，却会让 ``time.time() + timeout`` 抛 OverflowError、CDP 轮询变成事实上的
+#: 无上界等待；这是确定性输入错误，进入登录链路前就要拒绝（Issue #2303）。
+MAX_LOGIN_TIMEOUT_SECONDS = 3600
+
+
 def _stoken_changed(before: dict[str, Any] | None, after: dict[str, Any] | None) -> bool:
 	"""等待刷新锁期间登录态是否已被另一个进程更新。"""
 	if not isinstance(before, dict) or not isinstance(after, dict):
@@ -203,6 +209,11 @@ class AuthManager:
 				后重新登录。与 ``force_cdp`` 正交。
 			ignore_risk_lock: 历史兼容参数，不再跳过锁检查；仅用户显式清除本地锁后允许恢复。
 		"""
+		# 超过上界的等待窗口是确定性输入错误（Issue #2303）：CLI 用 IntRange 在解析
+		# 阶段拒绝，Python API 调用也要在碰浏览器之前失败，不能等到
+		# ``time.time() + timeout`` 抛 OverflowError 或被报成可重试的网络错误。
+		if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= MAX_LOGIN_TIMEOUT_SECONDS:
+			raise ValueError(f"timeout 必须是 1–{MAX_LOGIN_TIMEOUT_SECONDS} 之间的整数秒")
 		self._check_cdp_login_risk_lock(cdp_url)
 		method = "未知"
 		token: dict[str, Any] | None = None

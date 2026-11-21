@@ -2,7 +2,7 @@ from typing import TextIO
 
 import click
 
-from boss_agent_cli.auth.manager import AuthManager
+from boss_agent_cli.auth.manager import MAX_LOGIN_TIMEOUT_SECONDS, AuthManager
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.commands._login_errors import classify_login_error
 from boss_agent_cli.display import boss_command_for_ctx
@@ -48,7 +48,12 @@ def _reject_conflicting_options(
 
 
 @click.command("login")
-@click.option("--timeout", default=120, type=click.IntRange(min=1), help="扫码登录超时时间（秒）")
+@click.option(
+	"--timeout",
+	default=120,
+	type=click.IntRange(min=1, max=MAX_LOGIN_TIMEOUT_SECONDS),
+	help=f"扫码登录超时时间（1-{MAX_LOGIN_TIMEOUT_SECONDS} 秒）",
+)
 @click.option("--cookie-source", default=None, help="指定浏览器提取 Cookie（如 chrome/firefox/edge），不指定则自动检测")
 @click.option("--cdp", is_flag=True, default=False, help="强制 CDP 模式（跳过 Cookie 提取，CDP 不可用直接报错）")
 @click.option("--force", is_flag=True, default=False, help="不复用任何既有登录态：跳过本地 Cookie 提取，CDP 下不复用已登录 context 并清掉目标平台 cookie 后重新登录")

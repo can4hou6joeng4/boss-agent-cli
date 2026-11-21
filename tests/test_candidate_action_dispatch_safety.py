@@ -27,9 +27,10 @@ from boss_agent_cli.output import Logger
 from boss_agent_cli.services.candidate_actions import (
 	candidate_action_provably_unsent,
 	run_candidate_action,
+	was_provably_unsent,
 )
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS
-from boss_agent_cli.wizard.runner import WorkflowControl
+from boss_agent_cli.wizard.runner import WorkflowActionError, WorkflowControl
 
 
 def _db(tmp_path) -> Any:
@@ -323,3 +324,39 @@ def test_workflow_control_clear_write_is_fail_closed_on_local_failure():
 	control = WorkflowControl(run_id="run-1", step_name="candidate_greet", store=store)
 
 	control.clear_write()
+
+
+def test_begin_write_failure_marks_request_unsent():
+	"""写前标记落不了盘时写请求没有发出：replay_safe=False 与 request_sent 是两条语义。"""
+	store = MagicMock()
+	store.set_step_error.return_value = False
+	control = WorkflowControl(run_id="run-1", step_name="candidate_greet", store=store)
+
+	with pytest.raises(WorkflowActionError) as caught:
+		control.begin_write("boss chat")
+
+	error = caught.value
+	assert error.code == "CACHE_RECORD_INVALID"
+	# 重试同一条命令必然复现，仍不可自动重跑……
+	assert error.replay_safe is False
+	assert error.recoverable is False
+	# ……但请求确实没发出，预约可以安全释放（Issue #2299）。
+	assert error.details == {"request_sent": False}
+	assert was_provably_unsent(error) is True
+
+
+def test_wizard_begin_write_failure_releases_claim(tmp_path):
+	"""begin_write 失败时平台方法没有被调用，pending 预约不能永久占用该职位。"""
+	store = MagicMock()
+	store.set_step_error.return_value = False
+	control = WorkflowControl(run_id="run-1", step_name="candidate_greet", store=store)
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, platform, control)
+
+	with pytest.raises(WorkflowActionError) as caught:
+		DEFAULT_ACTIONS["candidate_greet"](context, {"security_id": "sec-1", "job_id": "job-1"}, {})
+
+	assert caught.value.code == "CACHE_RECORD_INVALID"
+	assert _claim_state(tmp_path, "job-1", "greet") is None
+	# 标记从未落盘，清理调用只是尽力撤销；store 返回 False 也不算失败。
+	assert store.set_step_error.call_args_list[-1].args == ("run-1", "candidate_greet", None)

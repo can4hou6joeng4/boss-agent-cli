@@ -158,6 +158,14 @@ def _probe_reused_session(page: Any, *, platform: str) -> str:
 		raise
 	except Exception as exc:  # evaluate 本身失败（页面被关等）：无法验证，不阻断
 		_logger.debug("复用登录态探测 evaluate 失败: %s", exc)
+		# evaluate 失败也可能是页面刚被重定向到安全验证页（执行上下文销毁）。风控是
+		# 硬边界：先复查当前页面，再按 unverified 收口（Issue #2301）。
+		try:
+			_raise_if_security_page(page, is_cdp=True)
+		except PlatformRiskError:
+			raise
+		except Exception:
+			pass
 		return "unverified"
 	if not isinstance(data, dict):
 		return "unverified"
@@ -523,6 +531,9 @@ def login_via_cdp(
 			# 新建页签的路径已经在 _warm_home_for_runtime 里导航过，监听器抓到了启动请求；
 			# 复用已有页签时页面早已启动完且不再发请求，才需要临时页签补采一次。
 			page_identity = _capture_identity_from_probe_page(ctx, home_url, existing=page)
+		# 身份头采集与最终读取期间页面可能已被重定向到安全验证页：返回成功凭证前
+		# 最后一次复查（Issue #2301）。
+		_raise_if_security_page(page, is_cdp=True)
 		return {"cookies": all_cookies, "stoken": stoken, "user_agent": ua, **page_identity}
 	except PlatformRiskError as error:
 		if "login_diagnostic" not in error.details:
@@ -555,7 +566,9 @@ def _capture_identity_from_probe_page(ctx: Any, home_url: str, *, existing: Any 
 	try:
 		probe = ctx.new_page()
 		if probe is existing:
-			# 绝不把用户的页签当临时页签关闭。
+			# 绝不把用户的页签当临时页签关闭：先摘掉引用，finally 只关 probe 非空的对象
+			# （Issue #2302）。
+			probe = None
 			return {}
 		capture = PageIdentityCapture(probe)
 		# 首页常年在 domcontentloaded 上超时；commit 已足够，随后靠 wait_for_identity 驱动事件循环。
@@ -729,10 +742,17 @@ def login_via_browser(*, timeout: int = 120, platform: str = "zhipin") -> dict[s
 				raise RuntimeError(f"登录态校验失败：最终读取未拿到主 cookie（{success_cookie}），凭证不落盘")
 			if platform == "zhipin":
 				# 首页成功加载才对其 evaluate 提取 stoken；否则回退到 cookie jar，
-				# 避免页面卡在导航中导致 page.evaluate 永久挂起
-				stoken = _extract_stoken(page) if home_loaded else cookies.get("__zp_stoken__", "")
+				# 避免页面卡在导航中导致 page.evaluate 永久挂起。提取本身也是
+				# evaluate：失败时按 refresh_stoken 口径回退 cookie jar（Issue #2304）。
+				stoken = (_extract_stoken(page) if home_loaded else "") or cookies.get("__zp_stoken__", "")
 			else:
 				stoken = ""
+			# stoken 提取的 evaluate 会让页面继续处理排队响应，监听器可能刚刚锁存
+			# 风控响应或页面已被重定向到安全验证页：返回成功凭证前必须复查
+			# （与 UA 采集同一规则，Issue #2301）。
+			if response_risk is not None:
+				raise response_risk
+			_raise_if_security_page(page)
 
 		except PlatformRiskError as error:
 			if "login_diagnostic" not in error.details:

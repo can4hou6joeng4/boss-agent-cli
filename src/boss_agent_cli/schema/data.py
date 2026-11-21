@@ -24,7 +24,8 @@ SCHEMA_DATA = {
 					"type": "int",
 					"default": 120,
 					"minimum": 1,
-					"description": "登录超时时间（秒）",
+					"maximum": 3600,
+					"description": "登录超时时间（1-3600 秒）",
 				},
 				"--cdp": {
 					"type": "bool",
