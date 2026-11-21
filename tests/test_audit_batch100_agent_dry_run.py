@@ -21,12 +21,14 @@ def test_agent_run_omitted_dry_run_builds_dry_run_argv() -> None:
 	assert mcp_args._build_args("agent_run", {"dry_run": False}) == ["agent", "run"]
 
 
-def test_dry_run_default_tool_names_match_schema() -> None:
+def test_dry_run_default_tool_names_cover_schema_defaults() -> None:
 	# 动态守卫：TOOLS 里 schema 默认 dry_run=true 的工具必须全部登记，
-	# 新增同类工具漏登记时这里失败（Issue #2414）。
+	# 新增同类工具漏登记时这里失败（Issue #2414）。集合允许包含 schema 没有
+	# dry_run 键、但 MCP 映射固定演练的工具（boss_agent_train，Issue #2454）。
 	schema_defaults = {
 		tool.name
 		for tool in TOOLS
 		if tool.input_schema.get("properties", {}).get("dry_run", {}).get("default") is True
 	}
-	assert schema_defaults == set(mcp_server._DRY_RUN_DEFAULT_TOOL_NAMES)
+	assert schema_defaults <= set(mcp_server._DRY_RUN_DEFAULT_TOOL_NAMES)
+	assert "boss_agent_train" in mcp_server._DRY_RUN_DEFAULT_TOOL_NAMES
