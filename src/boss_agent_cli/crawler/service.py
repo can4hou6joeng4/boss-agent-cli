@@ -66,6 +66,10 @@ class CrawlBusyError(RuntimeError):
 		self.run_id = run_id
 
 
+class PagesOverrideError(ValueError):
+	"""resume 的 ``--pages`` 与断点进度矛盾：要调整的是本次参数，不是断点设置。"""
+
+
 def validate_pages_override(next_page: int, pages: int) -> None:
 	"""resume 的 ``--pages`` 不能缩到断点进度之前（Issue #2061）。
 
@@ -78,7 +82,7 @@ def validate_pages_override(next_page: int, pages: int) -> None:
 	"""
 	if next_page <= pages + 1:
 		return
-	raise ValueError(
+	raise PagesOverrideError(
 		f"--pages {pages} 小于断点进度：任务已推进到第 {next_page} 页，"
 		f"页数上限不能小于 {next_page - 1}；要按更小页数采集请用 crawl start 新建任务"
 	)
@@ -1274,6 +1278,16 @@ class CrawlService:
 			verify_hook_profile(settings.hook_profile, settings.hook_dir)
 		except ValueError as exc:
 			raise CrawlHookDirInvalid(str(exc), hook_dir=settings.hook_dir) from exc
+
+	def validate_resume_basics(self, settings: CrawlSettings) -> None:
+		"""completed 快速路径只校验设置语义，与前台 resume 的校验顺序一致。
+
+		前台在 ``has_resume_work`` 之前就执行 ``_validate_settings``；后台无需启动
+		worker 的 completed 路径也要先拒绝空白关键词等确定性坏设置，否则同一个
+		断点会因入口形式不同得到相反结论（Issue #2402）。Hook 目录探测留到真正
+		启动 worker 前，completed 路径不额外收紧。
+		"""
+		self._validate_settings(settings)
 
 
 def _normalize_job(raw: dict[str, Any], query: str, page_no: int, rank: int) -> tuple[str, dict[str, Any]]:

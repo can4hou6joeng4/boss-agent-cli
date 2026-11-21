@@ -25,6 +25,7 @@ from boss_agent_cli.crawler.service import (
 	CrawlBusyError,
 	CrawlService,
 	CrawlSettings,
+	PagesOverrideError,
 	crawl_cdp_port,
 	crawl_chrome_path,
 	crawl_int_setting,
@@ -749,6 +750,24 @@ class CrawlHandoffPending(RuntimeError):
 	"""
 
 
+def _raise_for_unapplied_handoff(
+	run: dict[str, Any],
+	*,
+	pages: int | None,
+	with_detail: bool,
+	clear_stop: bool,
+) -> None:
+	"""交接窗口内带显式恢复参数时拒绝报成功（Issue #2243、#2401）。
+
+	锁外与锁内重读共用同一判定：锁外通过、取锁前另一个进程刚把 run 标成 queued
+	时，内层分支同样不能静默丢弃本次的 --pages / --with-detail / 停止标记。
+	"""
+	if pages is not None or with_detail or (clear_stop and bool(run.get("stop_requested"))):
+		raise CrawlHandoffPending(
+			"后台任务正在交接，本次恢复参数尚未生效；请稍后用 crawl status 确认状态再重试"
+		)
+
+
 def _prepare_background_resume(
 	data_dir: Path,
 	run_id: str,
@@ -771,8 +790,10 @@ def _prepare_background_resume(
 		if not service.has_resume_work(run, pages=pages, with_detail=with_detail):
 			# completed 快速路径同样要过设置校验：与前台 resume 同口径，损坏断点
 			# 不能因为无需启动 worker 就被当成成功完成（Issue #2032）。后台信封
-			# 只回报 run_id / status，hook_results 漂移不参与这里的结果。
-			CrawlSettings.from_dict(run["params"], run_id=run_id)
+			# 只回报 run_id / status，hook_results 漂移不参与这里的结果；设置语义
+			# （空白关键词等）仍要拒绝（Issue #2402）。
+			settings = CrawlSettings.from_dict(run["params"], run_id=run_id)
+			service.validate_resume_basics(settings)
 			return "completed", False
 		# 刚排队的任务不抢锁，以免让正准备启动的 worker 被拒绝；排队过久的
 		# 与遗留的 running 一样靠执行锁判断是否还有执行器。
@@ -780,10 +801,7 @@ def _prepare_background_resume(
 			# 交接窗口内 worker 已按旧的命令行参数启动：本次显式的 --pages /
 			# --with-detail 无法应用，清掉刚到达的 stop 也会覆盖用户意图。
 			# 静默返回 queued 会让调用方误以为参数已生效（Issue #2243）。
-			if pages is not None or with_detail or (clear_stop and bool(run.get("stop_requested"))):
-				raise CrawlHandoffPending(
-					"后台任务正在交接，本次恢复参数尚未生效；请稍后用 crawl status 确认状态再重试"
-				)
+			_raise_for_unapplied_handoff(run, pages=pages, with_detail=with_detail, clear_stop=clear_stop)
 			return "queued", False
 		with service.execution_lock(run_id) as acquired:
 			if not acquired:
@@ -798,8 +816,15 @@ def _prepare_background_resume(
 			if pages is not None:
 				validate_pages_override(int(run["next_page"]), pages)
 			if not service.has_resume_work(run, pages=pages, with_detail=with_detail):
+				# 与锁外快速路径同一口径：completed 也要拒绝语义损坏的设置
+				# （Issue #2402）。
+				settings = CrawlSettings.from_dict(run["params"], run_id=run_id)
+				service.validate_resume_basics(settings)
 				return "completed", False
 			if _awaiting_queued_worker(run):
+				# 锁外读取之后、取锁之前另一个进程已把 run 标成 queued：同一判定
+				# 不能只在锁外生效（Issue #2401）。
+				_raise_for_unapplied_handoff(run, pages=pages, with_detail=with_detail, clear_stop=clear_stop)
 				return "queued", False
 			# 将要启动 worker 才校验持锁重读的设置；损坏断点在修改 stop 或
 			# 探测依赖/登录态之前由父进程返回错误（Issue #1125）。hook 目录与
@@ -1290,9 +1315,8 @@ def _resume(
 				),
 			)
 			return
-		except ValueError as exc:
-			# 后台恢复同样要像前台一样拒绝与断点进度矛盾的 --pages（Issue #2075）：
-			# 先返回 queued 再让 worker 静默失败，会让任务停在无人执行的状态。
+		except PagesOverrideError as exc:
+			# --pages 与断点进度矛盾：要调整的是本次参数（Issue #2075）。
 			status_command = boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True)
 			handle_error_output(
 				ctx,
@@ -1301,6 +1325,20 @@ def _resume(
 				message=str(exc),
 				recovery_action="按提示把 --pages 调整到断点进度允许的下界后重试；不带 --pages 可沿用原任务上限",
 				hints={"next_actions": [status_command]},
+			)
+			return
+		except ValueError as exc:
+			# 断点里的设置语义损坏（空白关键词、非法上限）：重试或调整 --pages
+			# 都不会成功，正确处置是修正断点或新建任务（Issue #2403）。
+			status_command = boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True)
+			start_command = boss_command_for_ctx(ctx, "crawl start <query>", include_data_dir=True)
+			handle_error_output(
+				ctx,
+				"crawl.resume",
+				code="INVALID_PARAM",
+				message=str(exc),
+				recovery_action=f"断点里的采集设置无效，按提示修正后重试；无法修正时用 {start_command} 新建任务",
+				hints={"next_actions": [status_command, start_command]},
 			)
 			return
 		if should_launch:
