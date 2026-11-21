@@ -27,6 +27,7 @@
 
 ### Added
 - `boss chat --raw`：普通输出为每条记录附加 `raw`，保存该联系人的原始平台对象（`relationType`、`lastMessageInfo`、`unreadMsgCount` 等键名与编码原样保留），摘要字段照旧输出；`--from` / `--days` 筛选与分页计数不变，`hints.next_actions` 的翻页命令保留 `--raw`。与 `--export` 合用时导出文件、快照与 diff 仍只含摘要记录（Issue #2250）。
+- `boss login --existing-chrome` 支持经 Chrome 弹窗授权导入已登录的 BOSS 直聘会话。收到官网页面自身发起的认证成功响应后，沿用本地加密存储。
 
 ### Fixed
 - `hr download-resume` 把请求预算库损坏 / 被同名目录占位等本地确定性故障交回统一分类：报不可重试的 `LOCAL_IO_ERROR` 并给出删除 `request-budget.sqlite3` 的指引，不再兜成可重试的 `NETWORK_ERROR`（Issue #2271）。

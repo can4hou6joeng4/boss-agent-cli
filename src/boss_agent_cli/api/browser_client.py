@@ -30,6 +30,7 @@ from boss_agent_cli.api.browser_source import (
 )
 from boss_agent_cli.api.proxy import WEBRTC_LEAK_GUARD_ARGS, ProxyConfigurationError, resolve_proxy
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
+from boss_agent_cli.api.chrome_devtools import read_chrome_devtools_endpoint
 from boss_agent_cli.api.endpoints_loader import EndpointSpec, endpoint_for_request
 from boss_agent_cli.api.httpx_helpers import new_trace_id
 from boss_agent_cli.api.throttle import RequestThrottle
@@ -691,16 +692,8 @@ class BrowserSession:
 	def _read_devtools_active_port() -> str | None:
 		"""Read Chrome's DevToolsActivePort file to get WS endpoint."""
 		for user_data_dir in _CHROME_USER_DATA_CANDIDATES:
-			port_file = user_data_dir / "DevToolsActivePort"
-			if port_file.exists():
-				try:
-					lines = port_file.read_text().strip().splitlines()
-					if len(lines) >= 2:
-						port = lines[0].strip()
-						ws_path = lines[1].strip()
-						return f"ws://127.0.0.1:{port}{ws_path}"
-				except Exception:
-					continue
+			if endpoint := read_chrome_devtools_endpoint(user_data_dir):
+				return endpoint
 		return None
 
 	def _start_headless(self) -> None:

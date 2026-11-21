@@ -49,6 +49,8 @@ boss schema --format native
 
 `chat` / `chatmsg` 在默认 `auto` 来源下保留 httpx 路径，本地没有凭据则返回 `AUTH_REQUIRED` + `boss login`。只有显式选择 `--browser-source existing-browser` 才会通过 CDP 复用已有目标页，不读取或导出 CLI 保存的 Cookie。CDP 可连接不等于已验证目标页面登录，平台返回的未登录响应仍按平台错误解析；CDP 会话或已有目标页不可用时返回 `BROWSER_SESSION_NOT_FOUND` + `boss doctor`，不会启动 headless 或登录流程。`stored-cookie` 只连接显式 `--cdp-url`，不自动探测或降级。浏览器通道不继承 httpx 的 stoken 刷新和限流重试语义。
 
+`boss login --existing-chrome` 由用户显式发起并在 Chrome 弹窗中授权。CLI 只在唯一的 BOSS 官网标签页等待由页面发出的认证请求成功，随后加密保存凭据。已有风控锁会在连接前阻止导入，遇到平台安全页时停止，保留用户原有窗口和标签页。
+
 Browser Bridge daemon 与扩展已在 v3.0.0 移除；升级 CLI 不会停止旧 daemon 或卸载旧扩展，需由用户手动清理。CDP 调试端口仅用于本机可信环境，不应暴露到公网；在官方页面手动完成登录，不得把迁移到 CDP 当成风控绕过路径。
 
 `boss status` 默认只检查本地加密凭据和分层健康状态，不请求真实平台；需要确认在线只读接口是否可用时，必须显式运行 `boss status --live` 或 `boss doctor --live-probe`。命中风控时停止当前 workflow 并保留 checkpoint。`wt2` 存在但 `__zp_stoken__` 缺失时属于部分登录态，通常需要通过真实页面 JS 生成；可在用户主动操作下以 Chrome CDP 远程调试端口启动浏览器后运行 `boss login --cdp`，但不得把 CDP 当成风控绕过通道。

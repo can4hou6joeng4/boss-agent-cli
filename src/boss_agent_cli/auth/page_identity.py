@@ -46,8 +46,9 @@ class PageIdentityCapture:
 	the stored session without these headers rather than fabricating them.
 	"""
 
-	def __init__(self, page: Any) -> None:
+	def __init__(self, page: Any, *, origin: str | None = None) -> None:
 		self._page = page
+		self._origin = origin
 		self._captured: dict[str, str] = {}
 		self._attached = False
 		self._attach()
@@ -61,7 +62,7 @@ class PageIdentityCapture:
 		if self._complete:
 			return
 		url = getattr(request, "url", "") or ""
-		if _WAPI_MARKER not in url:
+		if _WAPI_MARKER not in url or (self._origin is not None and not url.startswith(f"{self._origin}/")):
 			return
 		with suppress(Exception):
 			self._captured.update(extract_page_identity(getattr(request, "headers", {}) or {}))

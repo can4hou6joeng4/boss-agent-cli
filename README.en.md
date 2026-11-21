@@ -55,6 +55,7 @@ boss
 # Agents and advanced users can still call commands directly
 boss doctor                                                   # environment check
 boss login                                                    # platform-aware login
+boss login --existing-chrome                                  # import a BOSS session with Chrome approval
 boss status                                                   # verify login
 boss search "Golang" --city 广州 --welfare "双休,五险一金"     # search + welfare filtering
 boss search "Golang" --city 广州 --active 3d                  # only recruiters active in the last 3 days

@@ -55,6 +55,7 @@ boss
 # Agent / 高级用户仍可直接调用命令
 boss doctor                                                   # 环境自检
 boss login                                                    # 登录（按平台选择链路）
+boss login --existing-chrome                                  # 经 Chrome 授权导入 BOSS 登录态
 boss status                                                   # 验证登录态
 boss search "Golang" --city 广州 --welfare "双休,五险一金"     # 搜索 + 福利筛选
 boss search "Golang" --city 广州 --active 3d                  # 只看 3 日内活跃的 HR

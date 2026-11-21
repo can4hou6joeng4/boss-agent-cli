@@ -3,11 +3,13 @@ import logging
 import os
 import sys
 import time
-from typing import Any, cast
+from typing import Any, Callable, cast
+from urllib.parse import urlsplit
 
-from patchright.sync_api import sync_playwright
+from patchright.sync_api import BrowserContext, Error as PlaywrightError, Page, Response, sync_playwright
 
 from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
+from boss_agent_cli.api.chrome_devtools import default_chrome_user_data_dir, read_chrome_devtools_endpoint
 from boss_agent_cli.api.proxy import WEBRTC_LEAK_GUARD_ARGS, resolve_proxy
 from boss_agent_cli.auth.identity import account_fingerprint
 from boss_agent_cli.auth.login_diagnostics import login_diagnostic
@@ -313,6 +315,161 @@ def probe_cdp(cdp_url: str | None = None) -> str | None:
 	# 会让探测异常逃逸、打断登录降级链（Issue #2235）。
 	except (httpx.HTTPError, httpx.InvalidURL, ValueError, KeyError, RecursionError):
 		return None
+
+
+class ChromeSessionImportError(RuntimeError):
+	"""A redacted failure while importing from an explicitly approved Chrome session."""
+
+	def __init__(self, code: str, message: str, *, details: dict[str, int] | None = None) -> None:
+		super().__init__(message)
+		self.code = code
+		self.details = details
+
+
+def _is_boss_origin(page_url: str) -> bool:
+	try:
+		url = urlsplit(page_url)
+		return (
+			url.scheme == "https" and url.hostname == "www.zhipin.com"
+			and url.port in (None, 443) and url.username is None and url.password is None
+		)
+	except (AttributeError, ValueError):
+		return False
+
+
+def _read_existing_chrome_session(
+	context: BrowserContext, page: Page, *, deadline: float, before_probe: Callable[[], None],
+) -> dict[str, Any]:
+	from boss_agent_cli.api import endpoints
+	from boss_agent_cli.api.client import AccountRiskError, PlatformRateLimitError, PlatformRiskError
+	from boss_agent_cli.api.zhipin_errors import is_platform_success_code, platform_risk_page_response, raise_platform_risk_response
+
+	identity = PageIdentityCapture(page, origin=HOME_URL.rstrip("/"))
+	auth_paths = {urlsplit(url).path for url in (endpoints.USER_INFO_URL, endpoints.RESUME_BASEINFO_URL)}
+	response_risk: PlatformRiskError | None = None
+	verified = False
+	limited = False
+	last_status: dict[str, int] = {}
+
+	def on_response(response: Response) -> None:
+		nonlocal response_risk, verified, limited, last_status
+		if response_risk is not None or not _is_boss_origin(response.url):
+			return
+		try:
+			risk = platform_risk_page_response(url=response.url)
+			if risk is not None:
+				raise_platform_risk_response(risk, is_cdp=True)
+			if (
+				urlsplit(response.url).path not in auth_paths
+				or response.request.method != "GET"
+				or response.frame != page.main_frame
+			):
+				return
+			if response.status == 403:
+				raise AccountRiskError("官网会话验证请求返回访问限制", is_cdp=True)
+			if response.status == 429:
+				limited = True
+				return
+			last_status = {"http_status": response.status}
+			content_type = response.headers.get("content-type", "")
+			if "html" in content_type.lower():
+				risk = platform_risk_page_response(url=response.url, content_type=content_type, body=response.text())
+				if risk is not None:
+					raise_platform_risk_response(risk, is_cdp=True)
+				return
+			data = response.json()
+			if not isinstance(data, dict):
+				return
+			raise_platform_risk_response(data, is_cdp=True)
+			code = data.get("code")
+			if type(code) is int:
+				last_status["platform_code"] = code
+			if code in (endpoints.CODE_RATE_LIMITED, str(endpoints.CODE_RATE_LIMITED)):
+				limited = True
+			elif 200 <= response.status < 300 and is_platform_success_code(code) and data.get("zpData"):
+				verified = True
+		except (PlaywrightError, ValueError):
+			# 页面刷新可能中断旧响应的正文读取，继续等待新页面自己的请求。
+			return
+		except PlatformRiskError as error:
+			error.details["login_diagnostic"] = login_diagnostic(page, stage="probe_session", response=response)
+			response_risk = error
+
+	def check_page() -> str:
+		if response_risk is not None:
+			raise response_risk
+		_raise_if_security_page(page, is_cdp=True)
+		page_url = page.url
+		if page.is_closed() or not _is_boss_origin(page_url):
+			raise ChromeSessionImportError("BROWSER_SESSION_NOT_FOUND", "所选标签页已离开 BOSS 直聘官网")
+		return page_url
+
+	try:
+		check_page()
+		page.on("response", on_response)
+		before_probe()
+		print("[boss] 已连接 Chrome。请在原 BOSS 标签页刷新一次，或在该页打开个人简历。", file=sys.stderr)
+		while not verified and not limited:
+			check_page()
+			remaining_ms = (deadline - time.monotonic()) * 1000
+			if remaining_ms <= 0:
+				raise ChromeSessionImportError(
+					"AUTH_REQUIRED", "等待期间未观察到官网页面成功的账号验证响应", details=last_status or None,
+				)
+			page.wait_for_timeout(min(250, remaining_ms))
+		check_page()
+		if limited:
+			raise PlatformRateLimitError()
+		before_probe()
+		ua = _safe_user_agent(page)
+		page_url = check_page()
+		cookies = {
+			item["name"]: item["value"] for item in context.cookies([page_url, endpoints.USER_INFO_URL])
+			if _is_cookie_domain(item["domain"], "zhipin.com")
+		}
+		check_page()
+		if not cookies.get("wt2"):
+			raise ChromeSessionImportError("AUTH_REQUIRED", "已验证的 BOSS 标签页没有可保存的登录 Cookie")
+		stoken = cookies.get("__zp_stoken__") or _extract_stoken(page, origin=HOME_URL.rstrip("/"))
+		check_page()
+		if not stoken:
+			raise ChromeSessionImportError("LOGIN_CREDENTIAL_EXTRACTION_FAILED", "BOSS 标签页尚未生成 __zp_stoken__")
+		return {"cookies": cookies, "stoken": stoken, "user_agent": ua, **identity.captured}
+	except PlaywrightError:
+		if response_risk is not None:
+			raise response_risk
+		raise
+	finally:
+		identity.close()
+		with suppress(PlaywrightError):
+			page.remove_listener("response", on_response)
+
+
+def login_via_existing_chrome(*, timeout: int, before_probe: Callable[[], None]) -> dict[str, Any]:
+	"""Verify and import the sole open BOSS tab via Chrome's approval-based local connection."""
+	endpoint = read_chrome_devtools_endpoint(default_chrome_user_data_dir())
+	if endpoint is None:
+		raise ChromeSessionImportError("CDP_UNAVAILABLE", "未发现常用 Chrome 的本机授权连接")
+
+	print("[boss] 请在常用 Chrome 的调试连接弹窗中选择「允许」。", file=sys.stderr)
+	deadline = time.monotonic() + timeout
+	# 仅断开本次 Playwright 连接，用户仍可在原窗口处理官网提示。
+	with sync_playwright() as playwright:
+		try:
+			browser = playwright.chromium.connect_over_cdp(endpoint, no_defaults=True, timeout=timeout * 1000)
+		except PlaywrightError as exc:
+			raise ChromeSessionImportError("CDP_UNAVAILABLE", "Chrome 连接未获得授权、已超时或已关闭") from exc
+
+		try:
+			tabs = [(context, page) for context in browser.contexts for page in context.pages if _is_boss_origin(page.url)]
+			for _, page in tabs:
+				_raise_if_security_page(page, is_cdp=True)
+			if len(tabs) != 1:
+				raise ChromeSessionImportError("BROWSER_SESSION_NOT_FOUND", "请只保留一个已登录的 BOSS 直聘官网标签页")
+			context, page = tabs[0]
+			return _read_existing_chrome_session(context, page, deadline=deadline, before_probe=before_probe)
+		except PlaywrightError as exc:
+			raise ChromeSessionImportError("BROWSER_SESSION_NOT_FOUND", "Chrome 标签页已关闭或连接已断开") from exc
 
 
 def login_via_cdp(
@@ -834,16 +991,21 @@ def refresh_stoken(cookies: dict[str, Any], user_agent: str) -> str:
 	return stoken
 
 
-def _extract_stoken(page: Any) -> str:
+def _extract_stoken(page: Any, *, origin: str | None = None) -> str:
+	args = (origin,) if origin is not None else ()
 	try:
 		stoken = page.evaluate("""
-			() => {
+			(expectedOrigin) => {
+				if (expectedOrigin && location.origin !== expectedOrigin) return '';
 				const match = document.cookie.match(/__zp_stoken__=([^;]+)/);
 				return match ? match[1] : '';
 			}
-		""")
+		""", *args)
 		if not stoken:
-			stoken = page.evaluate("() => window.__zp_stoken__ || ''")
+			stoken = page.evaluate(
+				"(expectedOrigin) => expectedOrigin && location.origin !== expectedOrigin ? '' : window.__zp_stoken__ || ''",
+				*args,
+			)
 		return cast("str", stoken)
 	except Exception:
 		return ""

@@ -9,6 +9,7 @@ from boss_agent_cli.auth.browser import (
 	ReusedSessionStaleError,
 	login_via_browser,
 	login_via_cdp,
+	login_via_existing_chrome,
 	probe_cdp,
 	refresh_stoken,
 	refresh_stoken_via_cdp,
@@ -265,6 +266,22 @@ class AuthManager:
 		self._store.save(token)
 		self._token = token
 		return {**token, "_method": method}
+
+	def import_existing_chrome(self, *, timeout: int) -> dict[str, Any]:
+		"""Import a verified session without falling back to a different browser or login flow."""
+		if self._platform != "zhipin":
+			raise ValueError("常用 Chrome 会话导入目前仅支持 BOSS 直聘")
+		self._check_cdp_login_risk_lock(None)
+		try:
+			token = login_via_existing_chrome(timeout=timeout, before_probe=lambda: self._check_cdp_login_risk_lock(None))
+		except PlatformRiskError as error:
+			if "risk_lock" not in error.details:
+				self._record_cdp_risk_lock(error=error)
+			raise
+		self._check_cdp_login_risk_lock(None)
+		self._store.save(token)
+		self._token = token
+		return {**token, "_method": "常用 Chrome 授权导入"}
 
 	def import_curl(self, command: str) -> dict[str, Any]:
 		"""验证导入的 Cookie 后替换原生登录态；失败不降级、不覆盖旧会话。"""
