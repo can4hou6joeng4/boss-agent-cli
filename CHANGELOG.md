@@ -12,6 +12,8 @@
 - `safe_text` 同时捕获 `RecursionError`：深嵌套 `jobType` 按字段缺失处理，不再把整条职位命令落成 `INTERNAL_ERROR`（Issue #2319）。
 - wizard 的 `candidate_greet` / `candidate_apply` 在预约前拒绝纯空白 `security_id` / `job_id`，按 `INVALID_PARAM` 提示修正输入，不再误报「上一次预约仍在」（Issue #2320）。
 - 聊天导出入口归一非对象 `diff_result`，Markdown diff 摘要按单元格口径转义换行，JSON 分支清洗孤立代理字符，避免 `AttributeError` / 报告行注入 / 严格 UTF-8 写盘失败（Issue #2321）。
+- `crawl` 执行器在逐页 / 最终导出后重读断点：并发 `clean --privacy` 已删除任务行时撤销刚写出的 `jobs.json/csv/xlsx`，不再复活已清理的采集数据（Issue #2323）。
+- `crawl` 的 Drission 通道不再把预算 / 断点回调抛出的 `CacheBusyError` / `CacheRecordInvalid` / SQLite 故障吞成通用传输错误；`_with_retry` 对这几类不重试，避免虚增请求预算与重复占用节流槽（Issue #2324）。
 
 ## [3.4.146] - 2026-11-21
 

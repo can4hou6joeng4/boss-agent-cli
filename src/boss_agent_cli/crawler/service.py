@@ -820,6 +820,7 @@ class CrawlService:
 					run_id, settings, transport, budget, run_budget, failed_keys=failed_detail_keys
 				)
 				write_run_outputs(output_dir, [item["payload"] for item in self._cache.list_crawl_jobs(run_id)])
+				_discard_artifacts_if_run_removed(self._cache, run_id, output_dir)
 				if list_finished:
 					break
 			# 最后一页的导出必须在 completed 落库之前（Issue #1238）：第二次 resume
@@ -830,6 +831,7 @@ class CrawlService:
 			self._raise_if_stop_requested(run_id)
 			rows = [item["payload"] for item in self._cache.list_crawl_jobs(run_id)]
 			paths = write_run_outputs(output_dir, rows)
+			_discard_artifacts_if_run_removed(self._cache, run_id, output_dir)
 		except HookRegistrationError as exc:
 			# Hook 注入失败是确定性本地失败：保存断点后原样抛出，由入口按
 			# LOCAL_IO_ERROR 回报并给出具体目录。落成普通 stopped 会让调用方拿到
@@ -875,6 +877,12 @@ class CrawlService:
 		except CrawlStopRequested as exc:
 			status = "stopped"
 			error = str(exc)
+		except KeyError:
+			# 导出后重读断点发现行已被 clean --privacy 删除：产物已撤销，按
+			# run 不存在上抛，命令层回 CRAWL_RUN_NOT_FOUND（Issue #2323）。
+			status = "stopped"
+			error = "crawl run was removed while exporting"
+			raise
 		except (CacheBusyError, sqlite3.OperationalError) as exc:
 			# 缓存层写锁冲突：`CacheBusyError` 是 `_GuardedConnection` 归一后的形态，
 			# 原始 `sqlite3.OperationalError('database is locked')` 也可能直接从
@@ -1119,9 +1127,19 @@ class CrawlService:
 		for _ in range(max_retries + 1):
 			try:
 				return action()
-			except (PlatformRiskError, CrawlRiskError, CrawlLimitExceeded, CrawlStopRequested, sqlite3.DatabaseError):
+			except (
+				PlatformRiskError,
+				CrawlRiskError,
+				CrawlLimitExceeded,
+				CrawlStopRequested,
+				CacheBusyError,
+				CacheRecordInvalid,
+				sqlite3.DatabaseError,
+			):
 				# 只读目录 / 磁盘满等本地数据库故障重试同一次请求不会自愈；保留原始
 				# `sqlite3.DatabaseError` 让上层按 LOCAL_IO_ERROR 收口（Issue #1467）。
+				# 写锁冲突与断点损坏同样不重试：每次重跑都会重新 claim，虚增预算并
+				# 重复占用节流槽（Issue #2324）。
 				raise
 			except Exception as exc:
 				if is_request_stop(exc):
@@ -1326,6 +1344,18 @@ def _hook_injections(raw: Any, *, run_id: str = "") -> tuple[HookInjection, ...]
 
 def _output_paths(output_dir: Path) -> dict[str, str]:
 	return {extension: str(output_dir / f"jobs.{extension}") for extension in ("json", "csv", "xlsx")}
+
+
+def _discard_artifacts_if_run_removed(cache: CacheStore, run_id: str, output_dir: Path) -> None:
+	"""导出后重读断点：并发 ``clean --privacy`` 已删行时删掉刚写出的产物。
+
+	clean 先提交删行、再删产物；执行器可能在删行前读完 payload，序列化
+	CSV/XLSX 本身耗时，窗口不小。行消失说明清理已生效，不能把隐私数据重新
+	落盘（Issue #2241、#2323）。
+	"""
+	if cache.get_crawl_run(run_id) is None:
+		_remove_run_artifacts(output_dir)
+		raise KeyError(run_id)
 
 
 def _remove_run_artifacts(output_dir: Path) -> None:
