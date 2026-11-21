@@ -13,6 +13,12 @@
 - 聊天导出的 `from_who` 统计改为与可见分组同源：「总计」与分组计数不再包含被方向过滤掉的好友，避免出现总计 2 条却只渲染 1 行（Issue #2392）。
 - 登录降级链在 CDP 探测与扫码兜底前复查本地风控锁：Cookie 提取 / CDP 登录耗时期间另一进程写下的锁不再被忽略，扫码通道不会继续访问平台（Issue #2394）。
 - 写请求遇到 `httpx.TooManyRedirects` 时按结果未知收口（`ACTION_UNCONFIRMED`）：已跟随多次重定向的写操作不再逃逸成可重试的 `NETWORK_ERROR`，读请求仍按普通网络错误上抛（Issue #2396）。
+- automation 的 state.json 熔断快照缺少 `open` 字段时按状态损坏拒绝：`SafetyGuard` 不再把「停止状态未知」当成未熔断并继续自动化写操作，与 stop.json 的缺字段口径一致（Issue #2397）。
+- wizard 断点的 `ACTION_UNCONFIRMED` 即使缺少 `replay_safe` 布尔值也阻断重放：`has_blocked_step` 与 `--resume` 共用同一判定，旧数据 / 外部漂移不会再让结果未知的写步骤被重跑并落成 completed（Issue #2398）。
+- MCP 入口对数组元素的 `minLength` / 数值上下界错误与类型错误共用同一上限：十万个空标签只会得到前 3 条明细与一条汇总，错误信封不再随输入规模膨胀到数 MB（Issue #2399）。
+- 后台 `crawl resume` 在锁内重读进入交接窗口时同样拒绝显式 `--pages` / `--with-detail` / 停止标记，不再静默返回 queued（Issue #2401）。
+- `crawl resume` 的 completed 快速路径补上设置语义校验：空白关键词等损坏断点在前台与后台得到一致结论（Issue #2402）。
+- `crawl resume` 区分页数冲突与断点设置损坏的恢复指引：设置类错误改为引导修正断点或新建任务，不再反复提示调整 `--pages`（Issue #2403）。
 
 ## [3.4.148] - 2026-11-22
 

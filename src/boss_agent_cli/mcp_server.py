@@ -894,18 +894,34 @@ def _argument_type_errors(tool_name: str, arguments: dict[str, Any]) -> list[str
 		item_min_length = items.get("minLength")
 		item_minimum = items.get("minimum")
 		item_maximum = items.get("maximum")
+		# 取值错误与类型错误共用上限：十万个空标签逐个拼进 message 会让错误信封
+		# 膨胀到数 MB，与 `_MAX_ELEMENT_TYPE_ERRORS` 声明的「不随输入规模膨胀」
+		# 相悖（Issue #2399）。
+		value_errors: list[str] = []
+		value_error_count = 0
+
+		def _record_value_error(message: str) -> None:
+			nonlocal value_error_count
+			if len(value_errors) < _MAX_ELEMENT_TYPE_ERRORS:
+				value_errors.append(message)
+			else:
+				value_error_count += 1
+
 		for index, item in enumerate(value):
 			if isinstance(item_min_length, int) and not isinstance(item_min_length, bool):
 				# schema 的 items.minLength 是客户端与入口共同的契约：空标签不会
 				# 走到 CLI，也不会在 mapping 层被拼成 `--add-tag ""`（Issue #1595）。
 				if isinstance(item, str) and len(item) < item_min_length:
-					errors.append(f"{key}[{index}] 至少需要 {item_min_length} 个字符")
+					_record_value_error(f"{key}[{index}] 至少需要 {item_min_length} 个字符")
 			if isinstance(item_minimum, (int, float)) and not isinstance(item_minimum, bool):
 				if isinstance(item, (int, float)) and not isinstance(item, bool) and item < item_minimum:
-					errors.append(f"{key}[{index}]={_brief_numeric(item)} 不能小于 {item_minimum}")
+					_record_value_error(f"{key}[{index}]={_brief_numeric(item)} 不能小于 {item_minimum}")
 			if isinstance(item_maximum, (int, float)) and not isinstance(item_maximum, bool):
 				if isinstance(item, (int, float)) and not isinstance(item, bool) and item > item_maximum:
-					errors.append(f"{key}[{index}]={_brief_numeric(item)} 不能大于 {item_maximum}")
+					_record_value_error(f"{key}[{index}]={_brief_numeric(item)} 不能大于 {item_maximum}")
+		errors.extend(value_errors)
+		if value_error_count:
+			errors.append(f"{key} 另有 {value_error_count} 个元素取值错误")
 	return errors
 
 

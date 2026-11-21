@@ -366,6 +366,15 @@ class AutomationStore:
 			breaker = state.get("autonomy", {}).get("circuit_breaker", {})
 			if not isinstance(breaker, dict):
 				raise AutomationStateError(self.state_path, "autonomy.circuit_breaker 必须是 JSON object")
+			if breaker and "open" not in breaker:
+				# 熔断快照缺少开关字段 = 停止状态未知：SafetyGuard 的 ``.get("open")``
+				# 会把它当「已关闭」继续自动化写操作；与 stop.json 的缺字段口径一致
+				# fail-closed（Issue #1598、#2397）。空对象表示没有熔断。
+				raise AutomationStateError(
+					self.state_path,
+					"autonomy.circuit_breaker 缺少 open 字段；停止状态未知，"
+					"请先核对平台实际状态，再修正该字段或移除 circuit_breaker",
+				)
 			if "open" in breaker and not isinstance(breaker["open"], bool):
 				# 真值语义会让 0 / null 关闭熔断、"false" 打开熔断（Issue #1242）；
 				# 与 consecutive_errors 一样按状态损坏处理。
@@ -401,6 +410,14 @@ class AutomationStore:
 			breaker = autonomy.get("circuit_breaker", {})
 			if not isinstance(breaker, dict):
 				raise AutomationStateError(self.state_path, "autonomy.circuit_breaker 必须是 JSON object")
+			if breaker and "open" not in breaker:
+				# 不允许把「缺开关字段」的熔断快照写回磁盘：下次读取会按状态损坏
+				# 拒绝，而不是让自动化在停止状态未知时继续（Issue #2397）。
+				raise AutomationStateError(
+					self.state_path,
+					"autonomy.circuit_breaker 缺少 open 字段；停止状态未知，"
+					"请先核对平台实际状态，再修正该字段或移除 circuit_breaker",
+				)
 			if "open" in breaker and not isinstance(breaker["open"], bool):
 				raise AutomationStateError(self.state_path, "autonomy.circuit_breaker.open 必须是布尔值")
 			stop = self.read_stop()
