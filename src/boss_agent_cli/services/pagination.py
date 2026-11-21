@@ -5,7 +5,7 @@
 读成「确实没有下一页」，提前停止翻页。``total`` 始终是本次返回条数，
 不代表平台全集。
 """
-from typing import Any
+from typing import Any, Mapping
 
 UNKNOWN_HAS_MORE_OPERATOR_ACTION = "平台未提供可靠的下一页标记，不能仅凭本页数量判断是否还有记录"
 
@@ -40,6 +40,17 @@ def list_pagination(
 		"total": len(rows) if rows is not None else None,
 		"total_kind": "returned_page_count",
 	}
+
+
+def page_can_advance(pagination: Mapping[str, Any]) -> bool:
+	"""下一页提示是否还能前进：页码达到可信上限时返回 false。
+
+	九个调用点用 ``pagination["page"] + 1`` 拼下一页提示；钳制后的页码再加一
+	只会得到同一页并被再次钳制，Agent 会无界重复同一请求（Issue #2434，与
+	history 的 #2012 同口径）。``has_more`` 保留平台原始证据，不改写。
+	"""
+	page = pagination.get("page")
+	return isinstance(page, int) and not isinstance(page, bool) and page < MAX_TRUSTED_PAGE
 
 
 def rows_from(platform_data: Any, key: str) -> list[Any] | None:

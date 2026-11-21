@@ -36,8 +36,10 @@ def test_hr_jobs_list_huge_page_is_clamped_not_network_error(tmp_path) -> None:
 	payload = json.loads(result.stdout)
 	assert payload["ok"] is True
 	assert payload["pagination"]["page"] == 1_000_000
-	# 下一页提示里的页码也必须可字符串化（page + 1 不撞整数转换上限）。
-	assert any("--page 1000001" in action for action in payload["hints"]["next_actions"])
+	# 钳制后的页码已到可信上限：再提示 --page 1000001 只会被再次钳回同一页，
+	# Agent 会无界重复同一请求（Issue #2434），因此上限页不再生成下一页命令。
+	assert payload["pagination"]["has_more"] is True
+	assert not any("--page 1000001" in action for action in payload["hints"]["next_actions"])
 
 
 def test_hr_jobs_list_platform_huge_page_is_clamped(tmp_path) -> None:

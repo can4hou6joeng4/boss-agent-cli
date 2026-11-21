@@ -19,7 +19,7 @@ from boss_agent_cli.display import (
 	shell_argument,
 )
 from boss_agent_cli.services.chat_utils import int_code, message_list, safe_local_time
-from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION, list_pagination
+from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION, list_pagination, page_can_advance
 
 _MSG_TYPE_MAP = {
 	1: "文本", 2: "图片", 3: "招呼", 4: "简历", 5: "系统",
@@ -150,7 +150,7 @@ def chatmsg_cmd(
 			boss_command_for_ctx(ctx, "chat", include_data_dir=True),
 			boss_command_for_ctx(ctx, f"detail {fresh_security_id}", include_data_dir=True),
 		]}
-		if pagination["has_more"] is True:
+		if pagination["has_more"] is True and page_can_advance(pagination):
 			# 翻页命令必须保留 --raw：只写 --page / --count 时下一页的
 			# type_code / timestamp / body / links / security_id 全部消失，
 			# Agent 会以为保真字段只在第一页存在。

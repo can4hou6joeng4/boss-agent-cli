@@ -27,6 +27,7 @@ from boss_agent_cli.display import (
 from boss_agent_cli.services.pagination import (
 	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
 	list_pagination,
+	page_can_advance,
 	rows_from,
 )
 
@@ -67,7 +68,7 @@ def recommendations_cmd(ctx: click.Context, job_id: str, page: int) -> None:
 				"--security-id <id> --message <话术> --dry-run",
 			),
 		]
-		if pagination["has_more"] is True:
+		if pagination["has_more"] is True and page_can_advance(pagination):
 			next_actions.append(
 				hint_command(
 					ctx,

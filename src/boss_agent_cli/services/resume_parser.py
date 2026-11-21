@@ -110,11 +110,12 @@ def parse_resume(raw: dict[str, Any]) -> dict[str, Any]:
 		project_experience / education / competitive_analysis / certifications
 	"""
 	# `zpData` 为 null 时不能就此判空：旧格式把数据放在 `data` 里，null 遮蔽
-	# 有效数据会让整份简历解析成空（Issue #1808）。
+	# 有效数据会让整份简历解析成空（Issue #1808）。空对象 `{}` 同样是「无内容」，
+	# 不能让旧格式 `data` 里的整份简历被静默丢弃（Issue #2433）。
 	payload: Any = None
 	if isinstance(raw, dict):
 		candidate = raw.get("zpData")
-		if not isinstance(candidate, dict):
+		if not isinstance(candidate, dict) or not candidate:
 			candidate = raw.get("data", raw)
 		payload = candidate
 	if not isinstance(payload, dict):
