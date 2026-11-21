@@ -146,6 +146,13 @@ def import_local_model(data_dir: Path, source: Path, model: str) -> ImportedLoca
 	（Issue #1705）。源 / 目标的路径状态读不出来时上抛，不误报「不存在」。
 	"""
 	safe_name = _safe_model_dir(model)
+	if source.name in {"", ".", ".."}:
+		# `--path <dir>/model/..` 的末段不是可导入的名字：target 会解析成
+		# models/<name>/..（数据目录本体），rename 失败并留下空目录（Issue #2361）。
+		raise LocalModelManifestError(
+			"INVALID_PARAM",
+			f"模型路径必须以文件或目录名结尾: {source}；`.` / `..` 不能作为导入源",
+		)
 	models_dir = data_dir / "models"
 	models_dir.mkdir(parents=True, exist_ok=True)
 	lock_path = models_dir / _IMPORT_LOCK_NAME
@@ -213,9 +220,13 @@ def _import_local_model_locked(
 	return imported
 
 
-def _staging_path(parent: Path, name: str) -> Path:
-	"""在目标同目录预留一个临时名；失败时不会让旧副本半截可见。"""
-	fd, raw = tempfile.mkstemp(prefix=f".{name}.staging-", dir=parent)
+def _staging_path(parent: Path) -> Path:
+	"""在目标同目录预留一个临时名；失败时不会让旧副本半截可见。
+
+	临时名不含目标文件名：NAME_MAX=255 时「.<完整名称>.<随机>」会让合法的
+	长文件名在复制前 ENAMETOOLONG（Issue #1985、#2359）。
+	"""
+	fd, raw = tempfile.mkstemp(prefix=".staging-", dir=parent)
 	os.close(fd)
 	path = Path(raw)
 	path.unlink()
@@ -234,7 +245,7 @@ def _discard(path: Path) -> None:
 
 def _replace_model_target(source: Path, target: Path, *, is_dir: bool) -> None:
 	"""完整复制到临时路径后再替换目标；复制失败时旧副本保持原样。"""
-	staging = _staging_path(target.parent, target.name)
+	staging = _staging_path(target.parent)
 	backup: Path | None = None
 	try:
 		if is_dir:
@@ -242,7 +253,7 @@ def _replace_model_target(source: Path, target: Path, *, is_dir: bool) -> None:
 		else:
 			shutil.copy2(source, staging)
 		if path_mode(target) is not None:
-			backup = _staging_path(target.parent, target.name)
+			backup = _staging_path(target.parent)
 			os.rename(target, backup)
 		try:
 			os.replace(staging, target)

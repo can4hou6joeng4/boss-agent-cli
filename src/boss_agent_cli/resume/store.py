@@ -131,6 +131,11 @@ class ResumeStore:
 			legacy.lstat()
 		except FileNotFoundError:
 			return portable
+		except ValueError:
+			# 名字含无法编码的孤立代理项时，lstat 抛 UnicodeEncodeError（ValueError
+			# 子类）：这个 legacy 候选本来就落不了盘，退回 portable，列表据此回退
+			# 到文件名（Issue #2357）。
+			return portable
 		except OSError:
 			return legacy
 		return legacy
@@ -316,7 +321,14 @@ class ResumeStore:
 			raise ResumeAlreadyExistsError(name)
 
 		resume = dict_to_resume(raw)
-		self.save(resume)
+		try:
+			self.save(resume)
+		except OSError as exc:
+			# write_json_atomic 把深嵌套的 RecursionError 归成 EINVAL OSError；
+			# 这是输入文件的问题，不是本地磁盘故障（Issue #2358）。
+			if exc.errno == errno.EINVAL and "无法序列化" in str(exc):
+				raise ResumeImportError("不是合法 JSON（嵌套层级过深，无法保存）") from exc
+			raise
 		return resume
 
 	def export_json(self, name: str) -> str:
@@ -340,7 +352,16 @@ class ResumeStore:
 		# JSON（Issue #1435）。json_safe_value 归一后 allow_nan=False 兜底。
 		from boss_agent_cli.output import json_safe_value
 
-		return json.dumps(json_safe_value(d), ensure_ascii=False, allow_nan=False, indent=2)
+		try:
+			return json.dumps(json_safe_value(d), ensure_ascii=False, allow_nan=False, indent=2)
+		except (RecursionError, ValueError) as exc:
+			# 深嵌套 / 超长整数无法序列化：归成本地状态错误，命令层仍有信封，
+			# 不再 stdout 0 字节 + 裸 traceback（Issue #2356）。
+			raise OSError(
+				errno.EINVAL,
+				f"简历内容无法序列化为 JSON（{exc}）；请修复该简历后重试",
+				str(self._path_for(name)),
+			) from exc
 
 	def clone(self, name: str, new_name: str) -> ResumeData:
 		"""复制简历为新版本"""
