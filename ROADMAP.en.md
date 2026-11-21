@@ -4,6 +4,7 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.145 (2026-11-21): fixes candidate action reservations being held forever after pre-dispatch failures, outcome-unknown errors being reported as retryable, and wizard refusing `--resume` after such failures (Issues #2296–#2298).
 v3.4.144 (2026-11-20): adds `boss chatmsg --friend-uid` for direct message reads; fixes egress probe, proxy, stoken and platform error-text boundaries, unknown-user output paths, and single-read index snapshots.
 v3.4.143 (2026-11-20): adds `boss chat --raw` for raw contact objects; fixes error classification for request-budget database failures, session completeness detection, and export interrupt rollback.
 v3.4.142 (2026-11-20): fixes for external eval scoring contracts, maintenance-script gate exit codes and diagnostics, response cookie merge write boundaries, and preset/watch name error classification.

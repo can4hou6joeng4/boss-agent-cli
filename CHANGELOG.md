@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.145] - 2026-11-21
+
 ### Fixed
 - `greet` / `apply` / `batch-greet` 在请求派发之前失败（未登录 `AUTH_REQUIRED`、`TOKEN_REFRESH_FAILED`、代理配置非法、浏览器首页导航超时、浏览器内核缺失、本地风险锁）后释放预约：修好登录 / 代理后同一职位可以重新打招呼或投递，不再被 pending 预约永久挡成 `ACTION_UNCONFIRMED`；本地风险锁错误显式带 `request_sent=false`（Issue #2296）。
 - 单次 `greet` / `apply` 在无法证明请求未发出的异常（超时、浏览器驱动中断）时输出 `ACTION_UNCONFIRMED`（`outcome_unknown`、`replay_safe=false`、不可恢复，`details.cause` 保留错误码或类型名），与保留的预约一致；不再先报可重试的 `NETWORK_ERROR`、让 Agent 重试时撞上 pending 预约（Issue #2297）。
