@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.147] - 2026-11-21
+
 ### Fixed
 - 候选人写动作的预约释放在 SQLite 写失败时不再替换原始异常：可证明未发出的错误保留原错误码并附注释放失败，平台明确拒绝则报 `LOCAL_STATE_WRITE_FAILED`，不再让下一次调用误判为结果未知（Issue #2315）。
 - 候选人写动作把 `NETWORK_ERROR`（HTTP 5xx / 超时 / 连接中断）纳入结果未知集合，5xx 后保留 pending，避免 Agent 重发导致重复打招呼 / 投递（Issue #2316）。
