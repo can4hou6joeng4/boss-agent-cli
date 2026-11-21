@@ -14,7 +14,7 @@ from boss_agent_cli.display import (
 	risk_error_message,
 	risk_lock_persistence_actions,
 )
-from boss_agent_cli.output import is_local_io_error
+from boss_agent_cli.output import is_local_io_error, redact_sensitive_text
 from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
 
 
@@ -28,7 +28,10 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 	  next_actions     — 面向 Agent 的可执行命令
 	  operator_actions — 面向真人操作者的自然语言指引（多半要离开终端完成）
 	"""
-	raw_message = str(exc) or exc.__class__.__name__
+	# 登录链路本身处理 cURL / Cookie / CDP 输入，底层异常（cookie 库、Playwright、
+	# httpx）可能带 `wt2=...` / `at=...` 等会话凭据；所有文本启发式分支都会把
+	# 这段文本拼进 message，入口统一脱敏一次（Issue #2337）。
+	raw_message = redact_sensitive_text(str(exc) or exc.__class__.__name__)
 	message = raw_message.lower()
 	recovery_action = login_action_for_ctx(ctx)
 	login_cmd = login_action_for_ctx(ctx)
@@ -110,6 +113,28 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 			},
 		}
 
+	# 风控文本判定必须先于所有文本 / 类型启发式（本地 IO 除外）：Playwright 的
+	# 超时文案常带导航 URL / Call log，命中安全页时是「timeout + security.html」
+	# 混合文本；ValueError 也可能携带风控词。排在 timeout / ValueError / CDP
+	# 之后会把硬边界降级成可重试错误并诱导 Agent 继续重试（Issue #2145、#2336）。
+	# 数字码按完整词匹配：端口 4030、4290 里的子串不是平台状态码（Issue #2309）。
+	if re.search(r"\b403\b|\bforbidden\b|风控|\brisk\b|security\.html|verify\.html|安全验证", message):
+		# 风控是硬边界：恢复动作取登记表原文，不能沿用 login_action_for_ctx 的
+		# 默认「重新登录」，否则信封会诱导 Agent 反复重试（Issue #1390）。
+		# 平台响应文本可能带临时凭据，启发式分支同样只给登记表文案（Issue #2309）。
+		_, risk_recovery = error_contract_for_code("LOGIN_RISK_CONTROL")
+		return payload(
+			"LOGIN_RISK_CONTROL",
+			"登录请求可能触发平台风控",
+			[],
+			[
+				"暂停自动化重试，改用浏览器手动确认账号状态",
+				"降低请求频率，避免短时间重复登录或刷新",
+				"必要时联系平台客服确认账号是否受限",
+			],
+			recovery=risk_recovery,
+		)
+
 	if is_local_io_error(exc):
 		# 本地 IO 失败既可能发生在登录态保存阶段，也可能更早（临时目录、Cookie
 		# 库文件）：不能断言「登录成功」，恢复动作同时覆盖两类目录（Issue #2311）。
@@ -158,27 +183,6 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 			recovery=install_command,
 		)
 
-	# 风控判定必须先于 CDP / 浏览器文本启发式：Playwright / CDP 的异常文案可能
-	# 同时含「chrome / cdp」与风控词，先走 CDP 分支会把硬边界报成可重试的
-	# CDP_UNAVAILABLE 并建议重新登录（Issue #2145）。数字码按完整词匹配：端口
-	# 4030、4290 里的子串不是平台状态码（Issue #2309）。
-	if re.search(r"\b403\b|\bforbidden\b|风控|\brisk\b|security\.html|verify\.html|安全验证", message):
-		# 风控是硬边界：恢复动作取登记表原文，不能沿用 login_action_for_ctx 的
-		# 默认「重新登录」，否则信封会诱导 Agent 反复重试（Issue #1390）。
-		# 平台响应文本可能带临时凭据，启发式分支同样只给登记表文案（Issue #2309）。
-		_, risk_recovery = error_contract_for_code("LOGIN_RISK_CONTROL")
-		return payload(
-			"LOGIN_RISK_CONTROL",
-			"登录请求可能触发平台风控",
-			[],
-			[
-				"暂停自动化重试，改用浏览器手动确认账号状态",
-				"降低请求频率，避免短时间重复登录或刷新",
-				"必要时联系平台客服确认账号是否受限",
-			],
-			recovery=risk_recovery,
-		)
-
 	# 限流不是风控（与 typed PlatformRateLimitError 同口径）：非 typed 的 429 /
 	# 「too many requests」文本应等待限流窗口，而不是升级成硬停止（Issue #2309）。
 	if re.search(r"\b429\b", message) or "too many requests" in message or "rate limit" in message:
@@ -204,7 +208,14 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 			],
 		)
 
-	if any(term in message for term in ("401", "unauthorized", "expired", "过期", "未登录")):
+	# 401 只在「明确状态码」上下文里算登录过期：裸 `\b401\b` 会命中
+	# `failed at step 401`，端口 4010 里的 401 子串同样不是状态码
+	# （Issue #2309、#2335）。
+	if (
+		any(term in message for term in ("unauthorized", "expired", "过期", "未登录"))
+		or re.search(r"\b(?:http|status|code|error|response|returned|got|with)[\s:=-]*401\b", message)
+		or message.strip() == "401"
+	):
 		return payload(
 			"LOGIN_EXPIRED",
 			f"登录态已失效或授权不足: {raw_message}",

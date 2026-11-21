@@ -88,11 +88,15 @@ def _render_kernel_blocked(detail: str) -> None:
 def _render_login_failure(ctx: Any, exc: Exception) -> None:
 	"""复用 login 命令的错误分类，把双通道文案渲染给真人。"""
 	from boss_agent_cli.commands._login_errors import classify_login_error
+	from boss_agent_cli.output import redact_sensitive_text
 
 	payload = classify_login_error(exc, ctx)
 	raw_hints = payload.get("hints")
 	hints: dict[str, Any] = raw_hints if isinstance(raw_hints, dict) else {}
-	lines = [f"[red]{display.escape_markup(payload.get('message'))}[/red]"]
+	# TTY 渲染不经过 JSON 信封的出口脱敏：分类结果里的 message 可能含底层异常
+	# 文本，打印前再过一次统一的凭据脱敏（Issue #2337）。
+	message = redact_sensitive_text(str(payload.get("message") or ""))
+	lines = [f"[red]{display.escape_markup(message)}[/red]"]
 	operator_actions = hints.get("operator_actions") or []
 	if operator_actions:
 		lines.append("")
