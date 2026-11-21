@@ -144,7 +144,12 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				"then": {"required": ["run_id"]},
 				# run（含省略 action）必须给出 role / platform / goal：否则调用方要连吃
 				# 三次各报一个缺失字段的 INVALID_PARAM 才能拼出合法调用（Issue #1775）。
-				"else": {"required": ["role", "platform", "goal"]},
+				# run_id 只属于 resume/status/stop：在 run 分支显式禁止，schema 与
+				# 映射层的「run 不接受 run_id」同源（Issue #2339）。
+				"else": {
+					"required": ["role", "platform", "goal"],
+					"not": {"required": ["run_id"]},
+				},
 			},
 		),
 		ToolDefinition(
@@ -501,8 +506,11 @@ def _tool_definitions(data: dict[str, Any]) -> list[ToolDefinition]:
 				},
 				"required": ["action"],
 				# key 只属于 get/set/reset（Issue #1532）；set 还需要 value。
+				# list 分支显式禁止 key，与映射层的「list 不接受 key」同源
+				# （Issue #2339）。
 				"if": {"properties": {"action": {"enum": ["get", "set", "reset"]}}, "required": ["action"]},
 				"then": {"required": ["key"]},
+				"else": {"not": {"required": ["key"]}},
 				"allOf": [
 					{
 						"if": {"properties": {"action": {"const": "set"}}, "required": ["action"]},

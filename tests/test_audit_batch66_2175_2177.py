@@ -51,10 +51,18 @@ def test_config_set_builds_key_and_value() -> None:
 	]
 
 
-@pytest.mark.parametrize("all_value", [False, True])
-def test_crawl_shortlist_rejects_selectors_with_all(all_value: bool) -> None:
+def test_crawl_shortlist_rejects_selectors_with_all() -> None:
+	# 互斥按值判断：只有 all=true 才是第二个来源（Issue #2340）；
+	# all=false 与不传等价，selectors 模式照常构造。
 	with pytest.raises(ValueError, match="selectors 与 all"):
-		_build_args("boss_crawl_shortlist", {"run_id": "run-1", "selectors": ["1"], "all": all_value})
+		_build_args("boss_crawl_shortlist", {"run_id": "run-1", "selectors": ["1"], "all": True})
+	assert _build_args("boss_crawl_shortlist", {"run_id": "run-1", "selectors": ["1"], "all": False}) == [
+		"crawl",
+		"shortlist",
+		"run-1",
+		"--selector",
+		"1",
+	]
 
 
 def test_crawl_shortlist_single_mode_still_builds() -> None:

@@ -784,12 +784,16 @@ SCHEMA_DATA = {
 						"required": ["run_id"],
 						# CLI 用 include_all == bool(selectors) 拒绝缺省和同时给出
 						# （Issue #1577）；schema 必须编码同一约束，否则「schema 合法
-						# 但命令必失败」。
+						# 但命令必失败」。互斥按值表达：``all=false`` 是 schema 默认
+						# 值，与 selectors 同时出现不算冲突（Issue #2340）。
 						"anyOf": [
 							{"required": ["selectors"]},
 							{"properties": {"all": {"const": True}}, "required": ["all"]},
 						],
-						"not": {"required": ["selectors", "all"]},
+						"not": {
+							"required": ["selectors"],
+							"properties": {"all": {"const": True}},
+						},
 					},
 				},
 			],

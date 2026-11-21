@@ -216,6 +216,10 @@ def test_mcp_tools_format_keeps_conditional_constraints():
 
 
 def test_wizard_run_declares_role_platform_goal_required():
-	"""run（含省略 action）缺 role / platform / goal 时 schema 就应拒绝（Issue #1775）。"""
+	"""run（含省略 action）缺 role / platform / goal 时 schema 就应拒绝（Issue #1775）。
+
+	run 分支同时显式禁止 run_id，与映射层「run 不接受 run_id」同源（Issue #2339）。
+	"""
 	schema = {tool.name: tool.input_schema for tool in build_tool_catalog(SCHEMA_DATA)}["boss_wizard"]
-	assert schema["else"] == {"required": ["role", "platform", "goal"]}
+	assert schema["else"]["required"] == ["role", "platform", "goal"]
+	assert schema["else"]["not"] == {"required": ["run_id"]}
