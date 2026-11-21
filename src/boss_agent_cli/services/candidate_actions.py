@@ -9,7 +9,8 @@
 - 抢不到且仍是 ``pending``（上一次进程在发送窗口内退出）→
   ``ACTION_UNCONFIRMED``：结果未知、禁止重试；
 - 抢到后平台确认成功 → settle 成成功记录（旧表 + 预约 sent）；
-- 平台明确失败、或抛出可证明「请求未发出」的异常（``request_sent=false``）
+- 平台明确失败、或抛出可证明「请求未发出」的异常（``request_sent=false``，
+  以及候选人单次请求特有的派发前失败，见 ``candidate_action_provably_unsent``）
   → 释放 pending，允许后续重试；
 - 风控 / 超时 / ``UNKNOWN`` / 进程中断 → 保留 pending，后续按结果未知处理。
 
@@ -147,6 +148,46 @@ def was_provably_unsent(exc: BaseException) -> bool:
 	return getattr(exc, "replay_safe", None) is True
 
 
+def candidate_action_provably_unsent(exc: BaseException) -> bool:
+	"""候选人单次写请求（greet / apply）的异常是否证明请求尚未派发。
+
+	``platform.greet/apply`` 每次只发一个浏览器 fetch。下面这些异常都发生在
+	``BrowserSession._send_fetch`` 之前，异常本身却不带 ``request_sent`` 证据：
+
+	- ``AuthRequired`` / ``TokenRefreshFailed``：建立浏览器会话时取登录态失败；
+	- ``ProxyConfigurationError``：通道启动前解析代理环境变量失败；
+	- ``BrowserNavigationError``：首页导航在本次 fetch 之前失败；
+	- Playwright 内核缺失（普通 ``OSError`` / ``RuntimeError``，按文本识别）。
+
+	不释放预约会让该职位被 pending 永久挡住：没有 TTL，也没有清理命令
+	（Issue #2296）。这些类型**不能**并入共享的 ``was_provably_unsent``：
+	招聘者侧的复合动作在写之后还有读取，同一个类型（例如附件下载在传输之后
+	才报 ``AuthRequired``）在那些路径上不证明写请求未发出。
+	"""
+	if was_provably_unsent(exc):
+		return True
+
+	from boss_agent_cli.api.browser_client import BrowserNavigationError
+	from boss_agent_cli.api.proxy import ProxyConfigurationError
+	from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
+	from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing
+
+	if isinstance(exc, (AuthRequired, TokenRefreshFailed, ProxyConfigurationError, BrowserNavigationError)):
+		return True
+	return is_browser_kernel_missing(str(exc))
+
+
+def outcome_unknown_cause(exc: BaseException | None) -> dict[str, Any]:
+	"""结果未知信封的 ``cause`` 字段：只放错误码 / 类型名，不复制原始消息。
+
+	平台异常文本可能夹带临时凭据（Issue #2157），而 ``output.py`` 只按键名脱敏。
+	"""
+	if exc is None:
+		return {}
+	code = getattr(exc, "code", None)
+	return {"cause": code if isinstance(code, str) and code else type(exc).__name__}
+
+
 def run_candidate_action(
 	cache: CacheStore,
 	*,
@@ -170,7 +211,7 @@ def run_candidate_action(
 	try:
 		result = send()
 	except BaseException as exc:
-		if was_provably_unsent(exc):
+		if candidate_action_provably_unsent(exc):
 			release_candidate_action(cache, job_id, action, account=account)
 		raise
 	outcome = classify(result) if classify is not None else "success"

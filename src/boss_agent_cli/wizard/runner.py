@@ -282,6 +282,19 @@ class WorkflowControl:
 				replay_safe=False,
 			)
 
+	def clear_write(self) -> None:
+		"""撤销 ``begin_write`` 预落的写标记：异常已证明写请求没有发出。
+
+		候选人动作在 fetch 派发前失败（登录态、代理、导航、内核缺失）时，请求
+		从未发出，留着标记会让 ``--resume`` 拒绝重试一次不存在的写操作
+		（Issue #2298）。清理失败保持 fail-closed：标记仍在，恢复时仍按结果未知
+		处理，不用本地写错误替换原始异常。
+		"""
+		try:
+			self.store.set_step_error(self.run_id, self.step_name, None)
+		except Exception:
+			pass
+
 	def raise_if_requested(self) -> None:
 		signal = self.poll()
 		if signal == "stop":

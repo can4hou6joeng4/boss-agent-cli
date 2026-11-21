@@ -169,9 +169,9 @@ After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a 
 
 | Command | Description |
 |---------|-------------|
-| `boss greet <sid> <jid>` | Greet a recruiter; duplicates return `ALREADY_GREETED` |
+| `boss greet <sid> <jid>` | Greet a recruiter; duplicates return `ALREADY_GREETED`; failures before dispatch (not logged in, invalid proxy config, home navigation failure, missing browser kernel) release the local reservation so the action can be retried once fixed |
 | `boss batch-greet <query>` | Search and greet up to an explicit `--count`; supports `--dry-run`; on `ACCOUNT_RISK` / `ENVIRONMENT_RISK` the batch stops immediately with `ok:false`, and already-greeted items are returned in `error.details.greeted`; an unconfirmed greeting (a sent request whose response was interrupted, `ACTION_UNCONFIRMED`) also stops the batch immediately with `ok:false` and `error.details` carrying `outcome_unknown: true` / `replay_safe: false`, never auto-resending |
-| `boss apply <sid> <jid>` | Apply or start a conversation; duplicates return `ALREADY_APPLIED` |
+| `boss apply <sid> <jid>` | Apply or start a conversation; duplicates return `ALREADY_APPLIED`; pre-dispatch failures release the reservation like `greet` |
 | `boss exchange <uid-or-sid>` | Request a phone-number or WeChat exchange; prefer the stable `uid` returned by `boss chat` |
 
 The execution hint returned by `batch-greet --dry-run` preserves the current data directory and any explicitly given `--browser-source` / `--cdp-url` / `--delay`, removing only `--dry-run`, so following it uses the same login state, dedupe cache, browser channel, and throttle range as the preview.

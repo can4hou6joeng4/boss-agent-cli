@@ -71,6 +71,9 @@ class PlatformRiskError(Exception):
 			f"BOSS 直聘此前命中{cause}，本地风控锁尚未显式解除，本次请求未发送。{steps}。",
 			is_cdp=bool(getattr(lock, "cdp_url", None)),
 			details={
+				# 本地锁在任何通道发请求之前拦截：写动作的预约可以安全释放
+				# （`was_provably_unsent` 的唯一真源是这条显式证据，Issue #2296）。
+				"request_sent": False,
 				"risk_lock": {
 					"locked": True,
 					"reason": reason,

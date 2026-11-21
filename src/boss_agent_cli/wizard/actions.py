@@ -20,6 +20,7 @@ from boss_agent_cli.platforms.factory import build_platform_instance, build_recr
 from boss_agent_cli.services.candidate_actions import (
 	CandidateActionBlocked,
 	CandidateActionNotRecorded,
+	candidate_action_provably_unsent,
 	run_candidate_action,
 )
 from boss_agent_cli.services.contact_lookup import FriendListShapeError, FriendLookupLimitExceeded, find_friend
@@ -903,6 +904,12 @@ def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 					"投递/立即沟通已提交，但本地状态保存失败；不要自动重发",
 					{"security_id": security_id, "job_id": job_id, "applied": True, "recorded": False},
 				)
+			except BaseException as exc:
+				# 派发前失败：撤销 _write_call 预落的「结果未知」写标记，让 --resume
+				# 能重试一次从未发出的写请求（Issue #2298）。
+				if candidate_action_provably_unsent(exc) and context.workflow_control is not None:
+					context.workflow_control.clear_write()
+				raise
 	return StepResult({"security_id": security_id, "job_id": job_id, "result": data})
 
 
@@ -939,6 +946,12 @@ def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: M
 					"已向该招聘者打招呼，但本地状态保存失败；不要自动重发",
 					{"security_id": security_id, "job_id": job_id, "greeted": True, "recorded": False},
 				)
+			except BaseException as exc:
+				# 派发前失败：撤销 _write_call 预落的「结果未知」写标记，让 --resume
+				# 能重试一次从未发出的写请求（Issue #2298）。
+				if candidate_action_provably_unsent(exc) and context.workflow_control is not None:
+					context.workflow_control.clear_write()
+				raise
 	return StepResult({"security_id": security_id, "job_id": job_id, "result": data})
 
 
