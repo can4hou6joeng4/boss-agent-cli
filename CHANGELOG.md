@@ -27,6 +27,7 @@
 - `crawl shortlist` 的空 `run_id` 按参数错误上报 `INVALID_PARAM`，不再被当成任务不存在并引导重建（Issue #2411）。
 - 前台 `crawl resume` 的 `--pages` 冲突与断点设置损坏分别给出精确恢复指引，与后台入口同口径；`crawl configure` 不再被当成修复手段（Issue #2412）。
 - MCP 的 `boss_agent_run` 省略 `dry_run`（schema 默认 true）时按只读判定：超时 / 取消不再误报 `outcome_unknown` 并提示核对不存在的平台写入；显式 `dry_run=false` 仍按写处理（Issue #2414）。
+- 沟通列表容器漂移成字符串 / 对象时，`find_friend` 首屏即报 `FriendListShapeError`，不再翻满 50 页放大平台请求；空列表容器旁的 junk 兄弟键按空页终止（Issue #2415）。
 
 ## [3.4.148] - 2026-11-22
 

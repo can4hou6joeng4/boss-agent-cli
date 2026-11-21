@@ -34,18 +34,19 @@ def friend_list_page_observation(platform_data: dict[str, Any]) -> tuple[list[di
 
 
 def friend_list_page_has_content(platform_data: dict[str, Any]) -> bool:
-	"""页面容器是否带有内容（哪怕元素全被跳过）。
+	"""列表容器是否非空（哪怕元素全被跳过）。
 
 	``friend_list_page_items`` 返回空列表有两种含义：平台本来就给了空页，或
 	容器非空但元素全是 null / 数字 / 字符串。后者不是「列表结束」，翻页方
 	据此继续请求，不能宣称结果完整或联系人不存在（Issue #1878）。
+
+	只认 list 容器：``result`` / ``friendList`` 漂移成字符串 / 对象时
+	``dict_items`` 取不出条目，它们不是「列表还有内容」的证据。把这种兄弟键
+	当成有内容会让单页响应被连续翻满上限、放大平台请求（Issue #2415）。
 	"""
 	for key in ("result", "friendList"):
 		raw = platform_data.get(key)
-		if isinstance(raw, list):
-			if raw:
-				return True
-		elif raw is not None:
+		if isinstance(raw, list) and raw:
 			return True
 	return False
 

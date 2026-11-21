@@ -73,19 +73,23 @@ def find_friend(
 
 		has_more = platform_data.get("hasMore")
 		if not page_items:
-			if has_more is not False and friend_list_page_has_content(platform_data):
-				# 整页元素被跳过：不是空页，继续翻页，不能据此断言联系人不存在
-				# （Issue #1878）。
-				page += 1
-				continue
+			# 形状守卫先于内容守卫：没有可识别的列表容器时，兄弟键是字符串 /
+			# 对象这类真值也不能当成「整页元素被跳过」继续翻页，否则单个畸形
+			# 响应会翻满上限并放大平台请求（Issue #1978 / #2415）。
 			if has_more is not False and not _has_list_container(platform_data):
 				# 成功码但没有可识别的列表容器（zpData 缺失 / 非 dict / 键为
-				# null）：这一页不能证明列表完整，不能落成「联系人不存在」。
-				# 真正的空页 ``result: []`` 与显式 hasMore=false 仍按不存在处理。
+				# null 或漂移成字符串 / 对象）：这一页不能证明列表完整，不能
+				# 落成「联系人不存在」。真正的空页 ``result: []`` 与显式
+				# hasMore=false 仍按不存在处理。
 				raise FriendListShapeError(
 					"沟通列表响应不包含可识别的联系人列表，无法确认联系人是否存在；"
 					"请刷新沟通列表后重试，不要据此判定联系人不存在"
 				)
+			if has_more is not False and friend_list_page_has_content(platform_data):
+				# 容器非空但整页元素被跳过：不是空页，继续翻页，不能据此断言
+				# 联系人不存在（Issue #1878）。
+				page += 1
+				continue
 			terminated = True
 			break
 		if has_more is False:
