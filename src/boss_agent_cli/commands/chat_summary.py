@@ -7,7 +7,7 @@ from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands._contact_lookup import current_friend_security_id_or_emit, current_friend_uid_or_emit, resolve_friend_or_emit
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_message_panel
 from boss_agent_cli.services.chat_utils import message_list
-from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION, list_pagination
+from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION, list_pagination, page_can_advance
 
 
 @click.command("chat-summary")
@@ -57,7 +57,7 @@ def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int
 				boss_command_for_ctx(ctx, f"chatmsg {gid}", include_data_dir=True),
 			]
 		}
-		if pagination["has_more"] is True:
+		if pagination["has_more"] is True and page_can_advance(pagination):
 			hints["next_actions"].append(boss_command_for_ctx(
 				ctx, f"chat-summary {gid} --page {pagination['page'] + 1} --count {count}",
 				include_data_dir=True,

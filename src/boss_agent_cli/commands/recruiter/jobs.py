@@ -14,7 +14,7 @@ from boss_agent_cli.display import (
 	handle_platform_error_output,
 	render_action_result,
 )
-from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, page_can_advance
 
 
 @click.group("jobs")
@@ -84,7 +84,7 @@ def jobs_list_cmd(ctx: click.Context, page: int) -> None:
 		# 成功信封原先没有下一步：Agent 拿到职位清单后不知道可以点进详情
 		# （列表为空时更没有任何可执行动作），只能自己翻 `boss hr --help`。
 		next_actions = [hint_command(ctx, "hr jobs detail <enc_job_id>")]
-		if pagination["has_more"] is True:
+		if pagination["has_more"] is True and page_can_advance(pagination):
 			next_actions.append(hint_command(ctx, f"hr jobs list --page {pagination['page'] + 1}"))
 		hints: dict[str, Any] = {"next_actions": next_actions}
 		if pagination["has_more"] is None:

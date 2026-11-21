@@ -25,7 +25,7 @@ from boss_agent_cli.display import (
 	risk_error_message,
 )
 from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing
-from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION, list_pagination, rows_from
+from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION, list_pagination, rows_from, page_can_advance
 
 
 def _hint_command(ctx: click.Context, command: str) -> str:
@@ -135,7 +135,7 @@ def me_cmd(ctx: click.Context, section: str | None, deliver_page: int) -> None:
 				],
 			}
 			if pagination is not None:
-				if pagination["has_more"] is True:
+				if pagination["has_more"] is True and page_can_advance(pagination):
 					success_hints["next_actions"].append(_hint_command(
 						ctx, f"me --section deliver --deliver-page {pagination['page'] + 1}",
 					))

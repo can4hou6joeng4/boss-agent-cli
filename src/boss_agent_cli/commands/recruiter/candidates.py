@@ -17,6 +17,7 @@ from boss_agent_cli.display import (
 from boss_agent_cli.services.pagination import (
 	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
 	list_pagination,
+	page_can_advance,
 	rows_from,
 )
 from boss_agent_cli.wizard.actions import execute_recruiter_candidate_search
@@ -70,7 +71,7 @@ def candidates_cmd(ctx: click.Context, query: str, city: str | None, job_id: str
 			hint_command(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
 			hint_command(ctx, "hr chat"),
 		]
-		if pagination["has_more"] is True:
+		if pagination["has_more"] is True and page_can_advance(pagination):
 			# 翻页必须保留本次筛选条件，否则第 2 页与第 1 页不是同一组结果。
 			# query 是位置参数，必须放在所有选项之后并经 positional_hint 处理：
 			# 裸 shell_argument 会把横杠开头的 query（如 ``--select``）拼在

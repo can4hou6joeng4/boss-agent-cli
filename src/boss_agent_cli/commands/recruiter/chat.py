@@ -13,6 +13,7 @@ from boss_agent_cli.services.chat_utils import MSG_STATUS_LABELS, message_list, 
 from boss_agent_cli.services.pagination import (
 	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
 	list_pagination,
+	page_can_advance,
 	rows_from,
 )
 from boss_agent_cli.commands.recruiter._hints import hint_command
@@ -534,7 +535,7 @@ def recruiter_chat_cmd(ctx: click.Context, page: int, job_id: str | None, label_
 			hint_command(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
 			hint_command(ctx, "hr chatmsg <friend_id>"),
 		]}
-		if pagination["has_more"] is True:
+		if pagination["has_more"] is True and page_can_advance(pagination):
 			next_page = f"hr chat --page {pagination['page'] + 1}"
 			if job_id:
 				next_page += f" --job-id {shell_argument(job_id)}"
@@ -639,7 +640,7 @@ def recruiter_last_messages_cmd(
 				f"或用 {hint_command(ctx, 'hr candidates <关键词>')} 主动搜索候选人"
 			]
 			if pagination is not None:
-				if pagination["has_more"] is True:
+				if pagination["has_more"] is True and page_can_advance(pagination):
 					next_actions.append(_last_messages_page(ctx, pagination, job_id, label_id, limit))
 				if pagination["has_more"] is None:
 					operator_actions.append(UNKNOWN_HAS_MORE_OPERATOR_ACTION)
@@ -675,7 +676,7 @@ def recruiter_last_messages_cmd(
 		]
 		hints: dict[str, Any] = {"next_actions": next_actions}
 		if pagination is not None:
-			if pagination["has_more"] is True:
+			if pagination["has_more"] is True and page_can_advance(pagination):
 				next_actions.append(_last_messages_page(ctx, pagination, job_id, label_id, limit))
 			if pagination["has_more"] is None:
 				hints["operator_actions"] = [UNKNOWN_HAS_MORE_OPERATOR_ACTION]

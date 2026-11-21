@@ -16,6 +16,7 @@ from boss_agent_cli.display import (
 from boss_agent_cli.services.pagination import (
 	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
 	list_pagination,
+	page_can_advance,
 	rows_from,
 )
 
@@ -46,7 +47,7 @@ def applications_cmd(ctx: click.Context, job_id: str | None, label_id: int, page
 			hint_command(ctx, "hr resume <geek_id> --job-id <id> --security-id <id>"),
 			hint_command(ctx, "hr chat"),
 		]
-		if pagination["has_more"] is True:
+		if pagination["has_more"] is True and page_can_advance(pagination):
 			next_page = f"hr applications --page {pagination['page'] + 1}"
 			if job_id:
 				next_page += f" --job-id {shell_argument(job_id)}"
