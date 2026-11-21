@@ -112,7 +112,7 @@ def test_without_outgoing_messages_follow_up_is_not_a_reply() -> None:
 
 	decision = _decision(
 		conversation,
-		{"questionnaire_sent_at": "x", "follow_up_sent_at": "y"},
+		{"questionnaire_sent_at": "2026-11-20T00:00:00", "follow_up_sent_at": "2026-11-20T00:00:01"},
 	)
 
 	assert decision.action == PlatformAction.SKIP

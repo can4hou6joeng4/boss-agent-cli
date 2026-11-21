@@ -1060,7 +1060,7 @@ def test_boss_adapter_uses_recruiter_platform_for_contact_exchange(tmp_path: Pat
 			return response
 
 	store = AutomationStore(tmp_path)
-	store.write_state({"conversations": {"101": {"follow_up_sent_at": "ts"}}})
+	store.write_state({"conversations": {"101": {"follow_up_sent_at": "2026-11-20T00:00:00"}}})
 	recruiter = _ReplyFakeBossRecruiter()
 	adapter = BossRecruiterAutomationPlatform(recruiter)
 
