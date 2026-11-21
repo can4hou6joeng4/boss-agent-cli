@@ -391,9 +391,12 @@ class BrowserSession:
 					# 请求结果未知、不可重放。
 					return self._unparsed_response(endpoint)
 				limit = result.pop("__cli_rate_limit__", None)
-				if result.get("code") in (9, "9"):
-					result["code"] = 9
-				if budget is not None and (isinstance(limit, dict) or result.get("code") in (9, "9")):
+				# 限流码来自 response_codes 单一真源：硬编码 9 会让 YAML 的调整只对
+				# httpx 通道生效，两条通道对同一平台响应的分类就此分叉（Issue #2446）。
+				rate_code = endpoints.CODE_RATE_LIMITED
+				if result.get("code") in (rate_code, str(rate_code)):
+					result["code"] = rate_code
+				if budget is not None and (isinstance(limit, dict) or result.get("code") in (rate_code, str(rate_code))):
 					budget.cooldown(
 						max(
 							10.0,
