@@ -15,6 +15,7 @@
 - 写请求遇到 `httpx.TooManyRedirects` 时按结果未知收口（`ACTION_UNCONFIRMED`）：已跟随多次重定向的写操作不再逃逸成可重试的 `NETWORK_ERROR`，读请求仍按普通网络错误上抛（Issue #2396）。
 - automation 的 state.json 熔断快照缺少 `open` 字段时按状态损坏拒绝：`SafetyGuard` 不再把「停止状态未知」当成未熔断并继续自动化写操作，与 stop.json 的缺字段口径一致（Issue #2397）。
 - wizard 断点的 `ACTION_UNCONFIRMED` 即使缺少 `replay_safe` 布尔值也阻断重放：`has_blocked_step` 与 `--resume` 共用同一判定，旧数据 / 外部漂移不会再让结果未知的写步骤被重跑并落成 completed（Issue #2398）。
+- MCP 入口对数组元素的 `minLength` / 数值上下界错误与类型错误共用同一上限：十万个空标签只会得到前 3 条明细与一条汇总，错误信封不再随输入规模膨胀到数 MB（Issue #2399）。
 
 ## [3.4.148] - 2026-11-22
 

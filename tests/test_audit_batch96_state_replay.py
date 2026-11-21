@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from boss_agent_cli.automation.storage import AutomationStateError, AutomationStore
+from boss_agent_cli.mcp_server import _argument_type_errors
 from boss_agent_cli.wizard.models import StepResult, WorkflowPlan
 from boss_agent_cli.wizard.runner import WorkflowRunner, has_blocked_step
 from boss_agent_cli.wizard.store import WorkflowStore
@@ -106,3 +107,15 @@ def test_resume_does_not_replay_unconfirmed_without_bool(tmp_path: Path) -> None
 	assert calls == [], "结果未知的写步骤不得重放"
 	assert result["status"] == "failed"
 	assert result["steps"][0]["error"]["code"] == "ACTION_UNCONFIRMED"
+
+
+# ── Issue #2399：数组元素取值错误按统一上限收口 ─────────────────────
+
+
+def test_array_value_errors_are_capped() -> None:
+	errors = _argument_type_errors("boss_shortlist_annotate", {"add_tags": [""] * 100000})
+
+	assert len(errors) == 4
+	assert errors[0] == "add_tags[0] 至少需要 1 个字符"
+	assert errors[-1] == "add_tags 另有 99997 个元素取值错误"
+	assert sum(len(error) for error in errors) < 1000
