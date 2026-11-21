@@ -277,8 +277,11 @@ class WorkflowControl:
 				"CACHE_RECORD_INVALID",
 				f"workflow 步骤 {self.step_name!r}（run {self.run_id!r}）的记录不存在，写前标记无法落盘",
 				# 重试同一条命令必然复现：恢复方式是重建任务，不是「重试」。
+				# request_sent=False 与 replay_safe=False 是两条独立语义：标记都没落盘，
+				# 写请求就没有发出，候选人动作预约可以安全释放（Issue #2299）。
 				recoverable=False,
 				recovery_action=recovery,
+				details={"request_sent": False},
 				replay_safe=False,
 			)
 
