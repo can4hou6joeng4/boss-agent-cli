@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import itertools
 import json
 import math
@@ -94,6 +95,26 @@ def _refuse_symlink_write(path: Path, label: str) -> None:
 			f"{label} 无法写入：路径不是普通文件（目录 / FIFO / 设备）；"
 			"请先检查该路径后重试",
 		)
+
+
+_INTERVIEW_LEAD_HEADER = "candidate_key,interview_time,reason\n"
+
+
+def _write_text_atomic(path: Path, text: str) -> None:
+	"""原子写小型文本文件：临时文件 + fsync + ``os.replace``。
+
+	表头用截断式 ``write_text`` 写到一半崩溃会留下 0 字节或半截表头，
+	之后每次追加都会把它当成数据行跳过 / 粘连（Issue #2331）。
+	"""
+	fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+	try:
+		with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+			handle.write(text)
+			handle.flush()
+			os.fsync(handle.fileno())
+		os.replace(temporary, path)
+	finally:
+		Path(temporary).unlink(missing_ok=True)
 
 
 def _unparsed_jsonl_lines(payload: bytes) -> list[bytes]:
@@ -396,9 +417,11 @@ class AutomationStore:
 			with os.fdopen(fd, "w", encoding="utf-8") as handle:
 				try:
 					json.dump(value, handle, ensure_ascii=False, indent=2, sort_keys=True)
-				except (ValueError, RecursionError) as exc:
+				except (ValueError, TypeError, RecursionError) as exc:
 					# 深嵌套 / 循环引用的状态读得进来却写不回去：必须报本地状态
 					# 不可写，不能兜成可重试的 NETWORK_ERROR（Issue #1929）。
+					# 不可序列化对象 / 混合类型键（sort_keys）抛 TypeError，同属
+					# 本地状态问题，不能裸穿成 INTERNAL_ERROR（Issue #2332）。
 					raise AutomationStateError(
 						path, f"状态文件无法序列化（{type(exc).__name__}: {exc}）"
 					) from exc
@@ -631,8 +654,9 @@ class AutomationStore:
 				f"{json.dumps(row, ensure_ascii=False, sort_keys=True)}\n"
 				for row in rows
 			)
-		except (ValueError, RecursionError) as exc:
-			# 与 _write_json_atomic 同口径：序列化失败是本地状态问题（Issue #1929）。
+		except (ValueError, TypeError, RecursionError) as exc:
+			# 与 _write_json_atomic 同口径：序列化失败是本地状态问题（Issue #1929、
+			# #2332：不可序列化对象 / 混合类型键的 TypeError）。
 			raise AutomationStateError(
 				path, f"队列文件无法序列化（{type(exc).__name__}: {exc}）"
 			) from exc
@@ -704,13 +728,23 @@ class AutomationStore:
 			raise AutomationStateError(path, "interview-leads.csv 不是普通文件，请先检查该路径后重试")
 		if mode is None:
 			try:
-				path.write_text("candidate_key,interview_time,reason\n", encoding="utf-8")
+				_write_text_atomic(path, _INTERVIEW_LEAD_HEADER)
 			except (OSError, UnicodeError) as exc:
 				raise AutomationStateError(path, f"面试线索表无法写入（{exc}）") from exc
 		else:
 			try:
 				with path.open("r", encoding="utf-8", newline="") as handle:
-					if any(existing[:2] == row[:2] for existing in itertools.islice(csv.reader(handle), 1, None)):
+					first_line = handle.readline()
+					# 只有首行确实是表头才跳过：0 字节文件（表头写入被中断的崩溃
+					# 窗口）或外部创建的无表头文件，第一条数据行必须参与判重，
+					# 否则同一线索会重复追加（Issue #2331）。
+					has_header = first_line.rstrip("\r\n") == _INTERVIEW_LEAD_HEADER.rstrip("\n")
+					tail: Iterator[list[str]]
+					if has_header:
+						tail = itertools.islice(csv.reader(handle), 0, None)
+					else:
+						tail = itertools.chain([next(csv.reader([first_line]), [])], csv.reader(handle))
+					if any(fields[:2] == row[:2] for fields in tail if len(fields) >= 2):
 						return False
 			except (UnicodeDecodeError, csv.Error):
 				# 手工编辑或外部写入造成的坏文件不该让整轮自动化失败；无法判重时
@@ -721,8 +755,20 @@ class AutomationStore:
 				# fail-closed，而不是让 PermissionError 冒成内部错误。
 				raise AutomationStateError(path, f"面试线索表无法读取（{exc}）") from exc
 		try:
-			with path.open("a", encoding="utf-8", newline="") as handle:
-				csv.writer(handle).writerow(row)
+			buffer = io.StringIO()
+			csv.writer(buffer).writerow(row)
+			record = buffer.getvalue().encode("utf-8")
+			with path.open("a+b") as handle:
+				handle.seek(0, os.SEEK_END)
+				if handle.tell() == 0:
+					# 空文件：补写表头，不能把第一条数据行当成表头（Issue #2331）。
+					handle.write(_INTERVIEW_LEAD_HEADER.encode("utf-8"))
+				else:
+					handle.seek(-1, os.SEEK_END)
+					if handle.read(1) != b"\n":
+						# 半截表头 / 外部写入的无换行末行：先补换行，避免与新行粘连。
+						handle.write(b"\n")
+				handle.write(record)
 		except (OSError, UnicodeError) as exc:
 			# 只读文件 / 磁盘满 / 孤立代理字符：带路径报状态不可写，与队列写入口径
 			# 一致（Issue #1933）。
@@ -786,10 +832,10 @@ class AutomationStore:
 				# fsync，缩小崩溃 / 断电只落下半行的窗口（Issue #2172）。
 				handle.flush()
 				os.fsync(handle.fileno())
-		except (OSError, ValueError, RecursionError) as exc:
+		except (OSError, ValueError, TypeError, RecursionError) as exc:
 			# 只读文件 / 只读目录 / 磁盘满：动作已经发生，写不进日志同样必须
-			# 带着路径与原因停下，不能兜成可重试的通用错误。深嵌套 / 循环引用
-			# 的序列化失败同属本地状态问题（Issue #1929）。
+			# 带着路径与原因停下，不能兜成可重试的通用错误。深嵌套 / 循环引用 /
+			# 不可序列化对象的序列化失败同属本地状态问题（Issue #1929、#2332）。
 			raise AutomationStateError(
 				path,
 				f"队列文件无法写入（{exc}）；请确认文件可写（权限正常、路径不是目录）后重试",
