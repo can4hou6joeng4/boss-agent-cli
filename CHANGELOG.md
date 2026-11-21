@@ -8,6 +8,9 @@
 - 登录错误分类只在明确状态码上下文（`HTTP 401` / `status: 401` / 单独 `401` 等）判为 `LOGIN_EXPIRED`：端口 4010、`step 401` 不再被误判并诱导重新登录（Issue #2335）。
 - 风控文本判定提前到所有文本类型启发式之前：`timeout + security.html` 混合文案与携带风控词的 `ValueError` 不再降级成可重试的 `LOGIN_TIMEOUT` / `INVALID_PARAM`，安全页命中仍是硬停止（Issue #2336）。
 - 登录错误分类入口对底层异常文本统一脱敏，`wt2` / `at` 进入敏感键名单，wizard 预检渲染前同样脱敏：会话 Cookie 明文不再进入信封或终端（Issue #2337）。
+- MCP 的 action 互斥把「等于 schema 默认值的参数」按缺省处理（`boss_hr_jobs` 的 `page=1`），并在 `boss_wizard` / `boss_config` 的 inputSchema 中显式禁止 run 带 `run_id` / list 带 `key`，schema 合法输入不再被映射层拒绝（Issue #2339）。
+- `boss_crawl_shortlist` 的 `selectors` / `all` 互斥改为按值判断：显式 `all=false` 与 `selectors` 并存不再报错，schema 的 `not` 条件同步改为值条件（Issue #2340）。
+- schema availability 的 hr 分支从传入 data 读取 `subcommands`，不再回落全局 `SCHEMA_DATA`；`supported_recruiter_platforms` 非列表时归一为空列表，定制 schema 不会再发布与数据不一致的可用性（Issue #2341）。
 
 ## [3.4.147] - 2026-11-21
 

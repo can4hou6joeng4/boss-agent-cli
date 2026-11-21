@@ -132,15 +132,25 @@ def _reject_incompatible_action_args(
 	arguments: dict[str, Any],
 	allowed: frozenset[str],
 	usage: dict[str, str],
+	*,
+	defaults: dict[str, Any] | None = None,
 ) -> None:
 	"""拒绝「值非空但该 action 用不到」的键，异常由 `call_tool` 转成 INVALID_PARAM。
 
 	错误消息点名参数、action 与正确用法，让 Agent 能自己改成合法组合。
+
+	``defaults`` 里的键在值恰好等于 schema 默认值（且类型一致）时按缺省处理：
+	schema 把带默认值的属性声明为所有 action 通用（如 hr jobs 的 ``page=1``），
+	自动补齐默认值的客户端会原样回传，按越界拒绝会让 schema 合法输入不可用
+	（Issue #2339）。
 	"""
+	defaults = defaults or {}
 	unused = [
 		key
 		for key, value in arguments.items()
-		if key not in allowed and not _is_blank_action_value(value)
+		if key not in allowed
+		and not _is_blank_action_value(value)
+		and not (key in defaults and type(value) is type(defaults[key]) and value == defaults[key])
 	]
 	if not unused:
 		return
@@ -255,9 +265,11 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		return _literal_positionals(args, start=2)
 
 	if name == "crawl_shortlist":
-		# schema 的 not 禁止 selectors 与 all 同时出现；入口不拦时映射只下发
-		# --selector，违反互斥约束的请求会被当成有效导入（Issue #2175）。
-		if "selectors" in arguments and "all" in arguments:
+		# schema 的 not 禁止「selectors 与 all=true 同时出现」。互斥按值判断：
+		# all 的 schema 默认值是 false，自动补齐默认值的客户端会带
+		# ``all=false``，语义上就是「不选 all」，不能按键存在性拒绝
+		# （Issue #2175、#2340）。
+		if arguments.get("selectors") and arguments.get("all") is True:
 			raise ValueError("boss_crawl_shortlist 的 selectors 与 all 必须且只能选一个；请去掉其中一个")
 		args = ["crawl", "shortlist", str(arguments["run_id"])]
 		for selector in arguments.get("selectors") or []:
@@ -788,7 +800,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 			allowed = " / ".join(_HR_JOBS_ACTION_KEYS)
 			raise ValueError(f"boss_hr_jobs 的 action 应为 {allowed}，收到 {action!r}")
 		allowed_jobs = _HR_JOBS_ACTION_KEYS[action]
-		_reject_incompatible_action_args("boss_hr_jobs", action, arguments, allowed_jobs, _HR_JOBS_KEY_USAGE)
+		_reject_incompatible_action_args(
+			"boss_hr_jobs", action, arguments, allowed_jobs, _HR_JOBS_KEY_USAGE, defaults={"page": 1},
+		)
 		args = ["hr", "jobs", action]
 		if action in {"online", "offline"}:
 			args.append(str(arguments["job_id"]))

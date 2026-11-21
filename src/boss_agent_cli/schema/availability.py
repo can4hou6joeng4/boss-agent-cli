@@ -1,9 +1,8 @@
 """按当前平台注册表为每个命令派生 availability（角色 / 平台可用性）。"""
 
-from typing import Any, cast
+from typing import Any
 
 from boss_agent_cli.platforms import list_platforms
-from boss_agent_cli.schema.data import SCHEMA_DATA
 
 
 _ROLE_BOTH_COMMANDS = {
@@ -62,6 +61,7 @@ def _command_availability(
 	*,
 	candidate_platforms: list[str],
 	recruiter_platforms: list[str],
+	commands: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
 	if cmd_name == "agent":
 		return {
@@ -80,8 +80,9 @@ def _command_availability(
 			),
 		}
 	if cmd_name == "hr":
-		commands = cast(dict[str, Any], SCHEMA_DATA.get("commands", {}))
-		hr_spec = commands.get("hr", {})
+		# subcommands 必须来自调用方传入的 schema 数据：build_schema_with_availability
+		# 是公开入口，裁剪过的 data 不能回落到模块全局 SCHEMA_DATA（Issue #2341）。
+		hr_spec = (commands or {}).get("hr", {})
 		if not isinstance(hr_spec, dict):
 			hr_spec = {}
 		subcommands = hr_spec.get("subcommands", {})
@@ -124,13 +125,19 @@ def inject_availability(data: dict[str, Any]) -> dict[str, Any]:
 	# supported_platforms 与 availability 均从当前注册表派生，避免 schema 漂移。
 	candidate_platforms = list_platforms()
 	recruiter_platforms = data.get("supported_recruiter_platforms", [])
+	if not isinstance(recruiter_platforms, list):
+		# 裁剪 / 手写 data 可能给出 null 或标量：availability_note 的 join 不能崩。
+		recruiter_platforms = []
+	command_specs = data.get("commands")
+	specs: dict[str, Any] = command_specs if isinstance(command_specs, dict) else {}
 	commands: dict[str, Any] = {}
-	for cmd_name, cmd_spec in data["commands"].items():
-		cmd_copy = dict(cmd_spec)
+	for cmd_name, cmd_spec in specs.items():
+		cmd_copy = dict(cmd_spec) if isinstance(cmd_spec, dict) else {}
 		cmd_copy["availability"] = _command_availability(
 			cmd_name,
 			candidate_platforms=candidate_platforms,
 			recruiter_platforms=recruiter_platforms,
+			commands=specs,
 		)
 		commands[cmd_name] = cmd_copy
 	data["commands"] = commands

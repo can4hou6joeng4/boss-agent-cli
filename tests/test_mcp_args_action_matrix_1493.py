@@ -33,7 +33,9 @@ _INVALID_CASES = [
 	("boss_config", {"action": "reset", "key": "k", "value": "x"}, "value"),
 	("boss_hr_jobs", {"action": "list", "job_id": "abc"}, "job_id"),
 	("boss_hr_jobs", {"action": "online", "job_id": "abc", "page": 3}, "page"),
-	("boss_hr_jobs", {"action": "offline", "job_id": "abc", "page": 1}, "page"),
+	# page=1 是 schema 默认值，自动补齐默认值的客户端会原样回传，按缺省处理；
+	# 非默认值仍拒绝（Issue #2339）。
+	("boss_hr_jobs", {"action": "offline", "job_id": "abc", "page": 2}, "page"),
 ]
 
 
