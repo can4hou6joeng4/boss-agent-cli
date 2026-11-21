@@ -23,6 +23,12 @@
 - 请求延迟与预算的数值校验对超过 float 上限的整数抛 `ValueError` 而不是 `OverflowError`，`validate_delay` / `RequestBudget` / `cooldown` 与文档承诺一致（Issue #2352）。
 - 本地 JSON 读取对含 NUL 的路径归一为带 `filename` 的 `OSError`，读路径与写路径同口径，不再泄露未分类 `ValueError`（Issue #2353）。
 - `RequestBudget` 构造与 `for_data_dir` 的目录解析改用 `_resolve_budget_path`：符号链接环归一为 `OSError(EINVAL)`，不再裸抛 `RuntimeError`（Issue #2354）。
+- `resume export --format json` 对深嵌套内容归成本地状态错误：不再抛裸 `RecursionError` 让 stdout 为空，命令层仍有信封与修复指引（Issue #2356）。
+- 简历名含孤立代理项叠加 portable 清洗字符时不再打断 `list` / `delete` / `edit`：`_path_for` 把无法编码的 legacy 候选视为不可用并回退，列表回退到文件名（Issue #2357）。
+- `resume import` 的深嵌套保存失败按输入错误上报（「嵌套层级过深」），不再误报成本地磁盘故障（Issue #2358）。
+- `ai local import` 的暂存名改用固定短前缀：合法长文件名的导入不再必然 `ENAMETOOLONG`（Issue #2359）。
+- `ai config --base-url` 的非法与超长分支不再回显 query / userinfo 中的凭据，与 query 分支同口径只展示前缀（Issue #2360）。
+- `ai local import` 拒绝末段为 `.` / `..` 的源路径：不再把数据目录当目标并在失败前留下空目录（Issue #2361）。
 
 ## [3.4.147] - 2026-11-21
 

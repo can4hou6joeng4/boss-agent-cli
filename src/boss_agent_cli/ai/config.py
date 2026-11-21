@@ -124,6 +124,20 @@ _BASE_URL_PREVIEW_LENGTH = 80
 _BASE_URL_UNSAFE_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
 
 
+def _base_url_preview(text: str) -> str:
+	"""错误回显用的 base_url 前缀：去掉 query / fragment 与 userinfo。
+
+	query 常带密钥（``?api-key=…``），userinfo 也可能带 token。非法与超长
+	分支与 query 分支同口径，不能把凭据写进信封（Issue #2254、#2360）。
+	"""
+	prefix = text.split("?", 1)[0].split("#", 1)[0]
+	head, sep, tail = prefix.partition("://")
+	if sep and "@" in tail:
+		_, _, host = tail.rpartition("@")
+		return f"{head}{sep}{host}"
+	return prefix
+
+
 def normalize_base_url(value: str) -> str:
 	"""校验显式 base_url：必须是 http(s) 绝对地址（Issue #1431）。
 
@@ -134,10 +148,12 @@ def normalize_base_url(value: str) -> str:
 	text = value.strip()
 	if len(text) > _BASE_URL_MAX_LENGTH:
 		# httpx 对超长地址抛 InvalidURL：写入成功、之后每条命令确定性失败。
-		# 错误信息里不回显整串（可能有数万字符），只给长度与开头（Issue #2254）。
+		# 错误信息里不回显整串（可能有数万字符），只给长度与开头；query 里的
+		# 密钥不能随预览泄露（Issue #2254、#2360）。
+		preview = _base_url_preview(text)[:_BASE_URL_PREVIEW_LENGTH]
 		raise AIConfigValueError(
 			f"AI 配置项 ai_base_url 过长（{len(text)} 个字符，上限 {_BASE_URL_MAX_LENGTH}），"
-			f"开头是 {text[:_BASE_URL_PREVIEW_LENGTH]!r}…",
+			f"开头是 {preview!r}…",
 			recovery_hint="ai config --base-url https://api.example.com/v1",
 		)
 	try:
@@ -165,15 +181,18 @@ def normalize_base_url(value: str) -> str:
 		has_query_or_fragment = False
 	if valid and has_query_or_fragment:
 		# query 里常带密钥（``?api-key=…``）：只回显分隔符之前的部分。
-		prefix = text.split("?", 1)[0].split("#", 1)[0]
+		prefix = _base_url_preview(text)
 		raise AIConfigValueError(
 			f"AI 配置项 ai_base_url 不能带 query（?）或 fragment（#）：{prefix!r} 之后的部分会吞掉"
 			"端点路径，请只保留到路径为止",
 			recovery_hint="ai config --base-url https://api.example.com/v1",
 		)
 	if not valid:
+		# 其他非法原因（空白、坏端口、非 http(s)）同样不能回显 query / userinfo
+		# 里的凭据（Issue #2360）。
+		preview = _base_url_preview(text)[:_BASE_URL_PREVIEW_LENGTH]
 		raise AIConfigValueError(
-			f"AI 配置项 ai_base_url 必须是 http(s):// 开头的绝对地址，实际是 {value.strip()!r}",
+			f"AI 配置项 ai_base_url 必须是 http(s):// 开头的绝对地址，实际是 {preview!r}",
 			recovery_hint="ai config --base-url https://api.example.com/v1",
 		)
 	return text
