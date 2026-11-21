@@ -65,12 +65,27 @@ def _ensure_storable_inputs(value: Any, path: str = "inputs", depth: int = 0) ->
 	elif isinstance(value, Mapping):
 		for key, item in value.items():
 			item_path = f"{path}.{key}"
-			if isinstance(key, str):
-				_reject_lone_surrogates(key, item_path)
+			# 键同样要能落成 JSON：json.dumps 只接受字符串键（数字 / 布尔 /
+			# null 会自动转成字符串），tuple 等容器键直接抛 TypeError（Issue #2420）。
+			if not isinstance(key, (str, bool, int, float)) and key is not None:
+				raise WorkflowInputError(
+					f"{item_path} 的键类型 {type(key).__name__} 不能落成 JSON；"
+					"对象键只支持字符串（或可自动转换的数字 / 布尔 / null）"
+				)
+			# 字符串键的代理字符与浮点键的非有限值由递归校验统一处理。
+			_ensure_storable_inputs(key, item_path, depth + 1)
 			_ensure_storable_inputs(item, item_path, depth + 1)
 	elif isinstance(value, (list, tuple)):
 		for index, item in enumerate(value):
 			_ensure_storable_inputs(item, f"{path}[{index}]", depth + 1)
+	elif value is not None and not isinstance(value, (bool, int, float)):
+		# JSON 原生类型之外的值（bytes / set / Decimal / 自定义对象）无法落到
+		# 断点的 JSON 列：WorkflowStore.create 的 json.dumps 会抛 TypeError，
+		# 落点在本边界之外，命令层只有通用兜底（Issue #2420）。
+		raise WorkflowInputError(
+			f"{path} 不是可存储为 JSON 的值（{type(value).__name__}）；"
+			"只支持 null / 布尔 / 数字 / 字符串 / 数组 / 对象"
+		)
 
 
 def count_or_none(value: Any) -> int | None:
