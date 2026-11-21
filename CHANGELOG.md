@@ -18,6 +18,11 @@
 - 招聘者候选人搜索的 `query` 与其余字符串筛选项走严格类型校验：`false` / `0` 不再变成空关键词搜索，对象 / 数组不再按 repr 发给平台（Issue #2347）。
 - `ai_assist` 的 `prompt` 经必填字符串校验且先于本地 AI 配置检查：旧断点缺该键时报输入错误，不再落成 `INTERNAL_ERROR` / `AI_NOT_CONFIGURED`（Issue #2348）。
 - 无表头面试线索表的多行首记录参与判重：引号字段含换行时不再每次调用重复追加同一线索（Issue #2349）。
+- `crawl` 的平台 job id / 兜底标题先做 UTF-8 安全化：含孤立代理项时不再让 SQLite 绑定抛 `UnicodeEncodeError` 并被吞成 ok:true 的 `stopped`，任务不会永久卡住（Issue #2350）。
+- `crawl` 的详情阶段把 `CacheBusyError` / `CacheRecordInvalid` 与列表路径同口径重抛：本地缓存锁冲突不再降级成单条 `detail-error` 后把整轮报成 `completed`（Issue #2351）。
+- 请求延迟与预算的数值校验对超过 float 上限的整数抛 `ValueError` 而不是 `OverflowError`，`validate_delay` / `RequestBudget` / `cooldown` 与文档承诺一致（Issue #2352）。
+- 本地 JSON 读取对含 NUL 的路径归一为带 `filename` 的 `OSError`，读路径与写路径同口径，不再泄露未分类 `ValueError`（Issue #2353）。
+- `RequestBudget` 构造与 `for_data_dir` 的目录解析改用 `_resolve_budget_path`：符号链接环归一为 `OSError(EINVAL)`，不再裸抛 `RuntimeError`（Issue #2354）。
 
 ## [3.4.147] - 2026-11-21
 

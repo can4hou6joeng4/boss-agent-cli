@@ -27,6 +27,10 @@ def path_mode(path: Path) -> int | None:
 		mode = path.lstat().st_mode
 	except FileNotFoundError:
 		return None
+	except ValueError as exc:
+		# 含 NUL 的路径在 lstat 处抛 ValueError；与写路径 _lstat_mode 同口径
+		# 归一为带 filename 的 OSError，读路径不再泄露未分类异常（Issue #2353）。
+		raise OSError(errno.EINVAL, str(exc), str(path)) from exc
 	if stat.S_ISLNK(mode):
 		try:
 			return path.stat().st_mode
