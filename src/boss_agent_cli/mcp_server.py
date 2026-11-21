@@ -257,7 +257,12 @@ _ACTION_DIMENSION_TOOL_NAMES = frozenset(
 #: 生成 ``--dry-run``，实际语义是只预览。不能按「未显式声明只读」归为写，否则
 #: 超时 / 取消会误报 ``outcome_unknown`` 并让 Agent 去核对并不存在的平台写入
 #: （Issue #2414）。守卫测试保证集合与 TOOLS 的 schema 默认值一致。
-_DRY_RUN_DEFAULT_TOOL_NAMES = frozenset({"boss_agent_run"})
+#: MCP 侧固定不产生平台写入的工具：schema 缺省 ``dry_run=true`` 的 ``boss_agent_run``，
+#: 以及从不生成 ``--live`` 的 ``boss_agent_train``（CLI 的 ``agent train`` 不传
+#: ``--live`` 即演练，MCP 工具没有 live 参数）。不能按「未显式声明只读」归为写，
+#: 否则超时 / 取消会误报 ``outcome_unknown`` 并让 Agent 去核对并不存在的平台写入
+#: （Issue #2414、#2454）。守卫测试保证 schema 默认 dry_run=true 的工具都登记在案。
+_DRY_RUN_DEFAULT_TOOL_NAMES = frozenset({"boss_agent_run", "boss_agent_train"})
 
 _WRITE_INTERRUPT_RECOVERY = "检查本地 checkpoint 与平台实际结果，再显式恢复；未确认的写操作不要直接重试"
 _READ_INTERRUPT_RECOVERY = "只读命令已中断，不产生平台写入；先降低 limit/count 或改用 active=online 再重试"
@@ -266,9 +271,13 @@ _FILTER_READ_INTERRUPT_RECOVERY = (
 	"只读命令已中断，不产生平台写入；该命令按福利 / 活跃度筛选逐条查详情，"
 	"改用 active=online 或缩小筛选范围后重试"
 )
+#: agent train 的 MCP 映射固定演练，没有 active 等筛选参数（Issue #2454）。
+_DRY_RUN_INTERRUPT_RECOVERY = "演练命令已中断，不产生平台写入；可直接重试或降低 limit"
 
 
 def _read_interrupt_recovery(args: tuple[str, ...]) -> str:
+	if args[:2] == ("agent", "train"):
+		return _DRY_RUN_INTERRUPT_RECOVERY
 	if args and args[0] in {"search", "watch"}:
 		return _FILTER_READ_INTERRUPT_RECOVERY
 	return _READ_INTERRUPT_RECOVERY
