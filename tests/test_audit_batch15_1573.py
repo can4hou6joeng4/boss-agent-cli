@@ -14,6 +14,7 @@ from boss_agent_cli.crawler.service import CrawlSettings
 from boss_agent_cli.main import cli
 from boss_agent_cli.schema.data import SCHEMA_DATA
 from boss_agent_cli.schema.tool_catalog import build_tool_catalog
+from boss_agent_cli.services.file_lock import exclusive_file_lock, run_lock_path
 
 
 def _settings(tmp_path: Path, run_id: str = "run-1") -> CrawlSettings:
@@ -103,7 +104,12 @@ def test_crawl_stop_rejects_finished_run(tmp_path, status):
 @pytest.mark.parametrize("status", ["queued", "running"])
 def test_crawl_stop_accepts_active_run(tmp_path, status):
 	_seed_run(tmp_path, "active-1", status)
-	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "stop", "active-1"])
+	# running 必须真的持有执行锁才算「有执行器」（Issue #2465）：锁文件存在且
+	# 被持有时 stop 仍只写停止标记，交给执行器在下一安全点生效。
+	lock = exclusive_file_lock(run_lock_path(tmp_path / "cache" / "crawl-locks", "active-1"))
+	with lock as acquired:
+		assert acquired
+		result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "stop", "active-1"])
 	assert result.exit_code == 0, result.output
 	payload = json.loads(result.output)
 	assert payload["data"]["status"] == "stop_requested"
@@ -111,6 +117,29 @@ def test_crawl_stop_accepts_active_run(tmp_path, status):
 		run = cache.get_crawl_run("active-1")
 	assert run is not None
 	assert run["stop_requested"] is True
+	assert run["status"] == status
+
+
+@pytest.mark.parametrize("status", ["queued", "running"])
+def test_crawl_stop_recovers_run_whose_executor_exited(tmp_path, status):
+	# 执行器被 SIGKILL 后锁已释放、状态停在 running / queued：停止请求没有
+	# 任何执行器会消费，继续报 stop_requested 等于假成功（Issue #2465）。
+	_seed_run(tmp_path, "stale-1", status)
+	if status == "queued":
+		# queued 在交接宽限内按仍有 worker 处理，先让排队时间过期。
+		with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+			cache._conn.execute("UPDATE crawl_runs SET updated_at = updated_at - 120 WHERE run_id = ?", ("stale-1",))
+			cache._conn.commit()
+	result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path), "--json", "crawl", "stop", "stale-1"])
+	assert result.exit_code == 0, result.output
+	payload = json.loads(result.output)
+	assert payload["data"] == {"run_id": "stale-1", "status": "stopped", "stale_recovered": True}
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		run = cache.get_crawl_run("stale-1")
+	assert run is not None
+	assert run["status"] == "stopped"
+	assert "resume" in run["error"]
+	assert payload["hints"]["next_actions"]
 
 
 def test_crawl_stop_missing_run_still_not_found(tmp_path):
