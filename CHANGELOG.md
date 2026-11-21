@@ -19,6 +19,10 @@
 - 后台 `crawl resume` 在锁内重读进入交接窗口时同样拒绝显式 `--pages` / `--with-detail` / 停止标记，不再静默返回 queued（Issue #2401）。
 - `crawl resume` 的 completed 快速路径补上设置语义校验：空白关键词等损坏断点在前台与后台得到一致结论（Issue #2402）。
 - `crawl resume` 区分页数冲突与断点设置损坏的恢复指引：设置类错误改为引导修正断点或新建任务，不再反复提示调整 `--pages`（Issue #2403）。
+- 采集 XLSX 导出把超过 1000 bit 的整数按文本写出：openpyxl 保存时不再因整数转 float 抛 `OverflowError` 让整份产物替换失败（Issue #2405）。
+- 采集 JSON / CSV 导出与职位 / 聊天导出同口径降级超长整数：JSON 数值降级为 null，CSV 按缺失处理，单个字段漂移不再让整份产物失败（Issue #2406）。
+- 采集导出的非对象行按缺失跳过：`row.get` 的 `AttributeError` 不再绕过导出错误包装、让命令层拿到裸异常（Issue #2407）。
+- `crawl shortlist` 导入把显式 null 主键按缺失处理：不再生成 `security_id` / `job_id` 都是 `"None"` 的伪记录，空主键行计入 `skipped_count`（Issue #2408）。
 
 ## [3.4.148] - 2026-11-22
 
