@@ -116,23 +116,21 @@ def _validate_statuses(run: dict[str, Any]) -> dict[str, Any]:
 
 
 def _validate_step_result_consistency(run: dict[str, Any]) -> dict[str, Any]:
-	"""非终态步骤的已落盘结果不能声明 ``completed``（Issue #2183、#2418）。
+	"""步骤状态不是 ``completed`` 时，已落盘结果不能声明 ``completed``（Issue #2183、#2418、#2442）。
 
-	执行器落盘步骤结果与状态是同一个原子写；``failed`` / ``stopped`` 步骤保留
-	完成结果是结算超时、停止时的既有语义。其余状态（``pending`` / ``running`` /
-	``waiting_input``）带着 ``result.status == "completed"`` 无法由本工具产生：它
-	是状态被外部改回非终态的痕迹，恢复时会把可能已生效的写步骤重放一次。矛盾
-	没有可猜测的真相，读取边界按记录损坏拒绝，不改写断点。
+	执行器落盘步骤结果与状态是同一个原子写。只有步骤状态本身为 ``completed`` 时，
+	完成结果才是自洽的；其余状态（``pending`` / ``running`` / ``waiting_input`` /
+	``failed`` / ``stopped``）带着 ``result.status == "completed"`` 无法由本工具产生：
+	恢复循环只把 ``completed`` 步骤视为已完成，会把这类步骤重跑一次——对写步骤就是
+	重复提交。``failed`` / ``stopped`` 原本以「结算超时、停止的既有语义」豁免，但
+	代码审查确认当前执行器不会写出这种组合（``_fail_controlled`` 无写标记时不改
+	步骤状态，``_settle_interrupted_writes`` 只改写 running/pending），该豁免只会
+	放大漂移风险。矛盾没有可猜测的真相，读取边界按记录损坏拒绝，不改写断点。
 	"""
 	run_id = str(run.get("run_id") or "")
-	settled = {
-		WorkflowStatus.COMPLETED.value,
-		WorkflowStatus.FAILED.value,
-		WorkflowStatus.STOPPED.value,
-	}
 	for step in run.get("steps") or []:
 		status = step.get("status")
-		if status in settled:
+		if status == WorkflowStatus.COMPLETED.value:
 			continue
 		result = step.get("result")
 		if isinstance(result, dict) and result.get("status") == WorkflowStatus.COMPLETED.value:
@@ -171,6 +169,10 @@ class WorkflowStore:
 			params={"inputs": dict(plan.inputs), "requested_steps": list(plan.requested_steps)},
 			steps=plan.requested_steps,
 		)
+
+	def get_run_status(self, run_id: str) -> str | None:
+		"""只读 run 的原始 status 列（供执行中的控制轮询，Issue #2443）。"""
+		return self._cache.get_workflow_run_status(run_id)
 
 	def get_checkpoint(self, run_id: str, *, validate_replay_markers: bool = True) -> dict[str, Any] | None:
 		"""只读 workflow 自己的断点（run + steps），不叠加内部 crawl 的实时结果。

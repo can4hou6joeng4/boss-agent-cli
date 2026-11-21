@@ -239,9 +239,12 @@ class WorkflowControl:
 	resume_action: str | None = None
 
 	def poll(self) -> str | None:
-		# 只看断点里的状态：叠加实时采集结果会让损坏的 crawl 记录挡住停止信号。
-		run = self.store.get_checkpoint(self.run_id)
-		if run is not None and run.get("status") == WorkflowStatus.STOPPED.value:
+		# 只看 run 的原始状态列：完整断点校验会让任一字段漂移（如 replay_safe
+		# 变成字符串）在停止 / 截止时间到达时抛 CacheRecordInvalid，把控制信号
+		# 吞掉并让 runner 用写前标记把只读步骤改写成「结果未知」（Issue #2443，
+		# 与 #1128 的「记录读不出来也要能停」同口径）。
+		status = self.store.get_run_status(self.run_id)
+		if status == WorkflowStatus.STOPPED.value:
 			return "stop"
 		if self.deadline is not None and time.monotonic() >= self.deadline:
 			return "timeout"

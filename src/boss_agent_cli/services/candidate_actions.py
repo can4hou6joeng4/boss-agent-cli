@@ -165,9 +165,9 @@ def was_provably_unsent(exc: BaseException) -> bool:
 
 
 def candidate_action_provably_unsent(exc: BaseException) -> bool:
-	"""候选人单次写请求（greet / apply）的异常是否证明请求尚未派发。
+	"""单请求写操作（greet / apply / exchange / mark / 职位上下线）的异常是否证明请求尚未派发。
 
-	``platform.greet/apply`` 每次只发一个浏览器 fetch。下面这些异常都发生在
+	这些动作每次只发一个浏览器 fetch 或一个表单请求。下面这些异常都发生在
 	``BrowserSession._send_fetch`` 之前，异常本身却不带 ``request_sent`` 证据：
 
 	- ``AuthRequired`` / ``TokenRefreshFailed``：建立浏览器会话时取登录态失败；
@@ -176,9 +176,10 @@ def candidate_action_provably_unsent(exc: BaseException) -> bool:
 	- Playwright 内核缺失（普通 ``OSError`` / ``RuntimeError``，按文本识别）。
 
 	不释放预约会让该职位被 pending 永久挡住：没有 TTL，也没有清理命令
-	（Issue #2296）。这些类型**不能**并入共享的 ``was_provably_unsent``：
-	招聘者侧的复合动作在写之后还有读取，同一个类型（例如附件下载在传输之后
-	才报 ``AuthRequired``）在那些路径上不证明写请求未发出。
+	（Issue #2296）；wizard 侧则以同一判定撤销预落的写标记（Issue #2441）。
+	这些类型**不能**并入共享的 ``was_provably_unsent``，也**不能**用于复合
+	动作：招聘者侧在写之后还有读取，同一个类型（例如附件下载在传输之后才报
+	``AuthRequired``）在那些路径上不证明写请求未发出。
 	"""
 	if was_provably_unsent(exc):
 		return True
