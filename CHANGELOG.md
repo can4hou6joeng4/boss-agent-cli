@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- 写请求不再跟随 HTTP 重定向：首跳 3xx 直接按 `ACTION_UNCONFIRMED`（`outcome=unknown`、`replay_safe=false`）收口，跟随后的连接类异常不再把可能已生效的写操作报成可重试的 `NETWORK_ERROR`（Issue #2424）。
+- 招聘者端 stoken 过期判断与候选端同口径，兼容字符串业务码 `"37"`，不再漏掉自动刷新（Issue #2425）。
+
 ## [3.4.150] - 2026-11-22
 
 ### Fixed

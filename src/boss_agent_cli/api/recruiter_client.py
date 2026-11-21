@@ -33,7 +33,13 @@ from boss_agent_cli.api.recruiter_resume import (
 	save_resume,
 	sent_by_self,
 )
-from boss_agent_cli.api.zhipin_errors import classify_code_37, is_platform_success_code, raise_platform_risk_response, response_message
+from boss_agent_cli.api.zhipin_errors import (
+	classify_code_37,
+	is_platform_success_code,
+	normalize_risk_code,
+	raise_platform_risk_response,
+	response_message,
+)
 
 _OPEN_CLIENTS, _close_open_clients = make_client_registry()
 
@@ -566,7 +572,9 @@ class BossRecruiterClient(_BaseHttpClient):
 		return headers
 
 	def _should_refresh_token_response(self, data: dict[str, Any]) -> bool:
-		return data.get("code") == ep.CODE_STOKEN_EXPIRED and classify_code_37(data) == "token_expired"
+		# 与候选端同口径：业务码在响应里可能是字符串 "37"（Issue #2218）。
+		# 只比较整数会漏刷新，让过期 token 按普通响应返回（Issue #2425）。
+		return normalize_risk_code(data.get("code")) == ep.CODE_STOKEN_EXPIRED and classify_code_37(data) == "token_expired"
 
 	def _browser_request(
 		self, method: str, url: str, *, params: dict[str, Any] | None = None, data: dict[str, Any] | None = None
