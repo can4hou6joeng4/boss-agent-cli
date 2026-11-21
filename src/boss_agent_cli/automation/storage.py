@@ -743,7 +743,11 @@ class AutomationStore:
 					if has_header:
 						tail = itertools.islice(csv.reader(handle), 0, None)
 					else:
-						tail = itertools.chain([next(csv.reader([first_line]), [])], csv.reader(handle))
+						# 无表头文件要整体交给同一个 reader：第一条记录可能带
+						# 换行的引号字段，按物理行拆开会让它永远不参与判重，
+						# 同一线索会被反复追加（Issue #2349）。
+						handle.seek(0)
+						tail = csv.reader(handle)
 					if any(fields[:2] == row[:2] for fields in tail if len(fields) >= 2):
 						return False
 			except (UnicodeDecodeError, csv.Error):

@@ -11,6 +11,13 @@
 - MCP 的 action 互斥把「等于 schema 默认值的参数」按缺省处理（`boss_hr_jobs` 的 `page=1`），并在 `boss_wizard` / `boss_config` 的 inputSchema 中显式禁止 run 带 `run_id` / list 带 `key`，schema 合法输入不再被映射层拒绝（Issue #2339）。
 - `boss_crawl_shortlist` 的 `selectors` / `all` 互斥改为按值判断：显式 `all=false` 与 `selectors` 并存不再报错，schema 的 `not` 条件同步改为值条件（Issue #2340）。
 - schema availability 的 hr 分支从传入 data 读取 `subcommands`，不再回落全局 `SCHEMA_DATA`；`supported_recruiter_platforms` 非列表时归一为空列表，定制 schema 不会再发布与数据不一致的可用性（Issue #2341）。
+- 聊天导出把超大整数 `unread` 按缺失处理：md / html 通道不再因整数转字符串上限抛裸 `ValueError`，与 CSV 及 #2162 口径一致（Issue #2343）。
+- Markdown 导出的分组标题与总计行转义 `initiated_by`：换行与链接语法不再能向导出报告插入伪造章节（Issue #2344）。
+- 职位 HTML 导出的「共 N 条」只统计实际渲染的对象条目，与表格行数一致（Issue #2345）。
+- `wizard` 的 `list_recent` 补上 pending + completed 一致性校验：只能重建的 run 不再出现在恢复列表，与 `--resume` 结论一致（Issue #2346）。
+- 招聘者候选人搜索的 `query` 与其余字符串筛选项走严格类型校验：`false` / `0` 不再变成空关键词搜索，对象 / 数组不再按 repr 发给平台（Issue #2347）。
+- `ai_assist` 的 `prompt` 经必填字符串校验且先于本地 AI 配置检查：旧断点缺该键时报输入错误，不再落成 `INTERNAL_ERROR` / `AI_NOT_CONFIGURED`（Issue #2348）。
+- 无表头面试线索表的多行首记录参与判重：引号字段含换行时不再每次调用重复追加同一线索（Issue #2349）。
 
 ## [3.4.147] - 2026-11-21
 
