@@ -865,8 +865,10 @@ def test_resume_background_does_not_relaunch_an_already_running_job(tmp_path, mo
 			before = cache.get_crawl_run("run-active")
 			result = _invoke(runner, tmp_path, "crawl", "resume", "run-active", "--background")
 			assert cache.get_crawl_run("run-active") == before
-	assert result.exit_code == 0, result.output
-	assert _envelope(result)["data"]["status"] == "running"
+	# 本次 resume 的意图（清除 stop 让任务继续）没有生效：执行锁被另一执行器
+	# 持有，不能以 ok:true 的 running 静默丢弃；报可重试的忙碌（Issue #2410）。
+	assert result.exit_code == 1, result.output
+	assert _envelope(result)["error"]["code"] == "CRAWL_BUSY"
 	assert launched == [], "已在运行的任务重复拉起会产生并发采集，属风控风险"
 
 
@@ -1010,8 +1012,10 @@ def test_resume_background_leaves_an_overdue_queue_alone_while_an_executor_holds
 			before = cache.get_crawl_run("run-queued")
 			result = _invoke(CliRunner(), tmp_path, "crawl", "resume", "run-queued", "--background")
 			assert cache.get_crawl_run("run-queued") == before
-	assert result.exit_code == 0, result.output
-	assert _envelope(result)["data"]["status"] == "running"
+	# 执行器仍持有锁：本次 resume 的清 stop 意图没有生效，报可重试的忙碌
+	# （Issue #2410）。
+	assert result.exit_code == 1, result.output
+	assert _envelope(result)["error"]["code"] == "CRAWL_BUSY"
 	assert launched == []
 
 
