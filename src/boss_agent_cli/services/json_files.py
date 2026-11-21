@@ -11,6 +11,7 @@ import errno
 import json
 import math
 import os
+import re
 import stat
 import tempfile
 from pathlib import Path
@@ -158,6 +159,30 @@ def _json_safe_value(value: Any, *, null_oversized_ints: bool = False) -> Any:
 	return value
 
 
+#: JSON 文本里合法的代理对（两个码元）与必须单独处理的孤立代理项。
+_SURROGATE_PAIR = re.compile("[\ud800-\udbff][\udc00-\udfff]")
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def escape_lone_surrogates(text: str) -> str:
+	"""把序列化文本里的孤立代理项改成字面 ``\\ud800`` 文本（Issue #2457）。
+
+	``write_text_atomic`` 的 ``backslashreplace`` 会把孤立代理字符原样写成
+	``\\ud800`` 六个字符，但那在 JSON 里是**未配对**的代理项转义：RFC 8259
+	下不可移植，jq / 严格解析器直接拒绝整份产物。这里先替换成「反斜杠 +
+	uXXXX」的普通文本，``json.dumps`` 会把反斜杠再转义，落盘为 ``\\\\ud800``，
+	解析回字面量 ``\\ud800``，与 stdout 的 ``sanitize_surrogates`` 口径一致。
+
+	合法代理对（``json.loads`` 对 ``\\ud83d\\ude00`` 这类转义会保留两个码元）
+	先合并为单个码点，不误伤正常 emoji。
+	"""
+	text = _SURROGATE_PAIR.sub(
+		lambda match: match.group().encode("utf-16", "surrogatepass").decode("utf-16"),
+		text,
+	)
+	return _LONE_SURROGATE.sub(lambda match: f"\\\\u{ord(match.group()):04x}", text)
+
+
 def strict_json_text(value: Any, *, indent: int | None = 2, null_oversized_ints: bool = False) -> str:
 	"""Serialize a product JSON artifact under the same strict rules as stdout.
 
@@ -165,11 +190,13 @@ def strict_json_text(value: Any, *, indent: int | None = 2, null_oversized_ints:
 	fails on lone surrogates unless the file handle uses ``backslashreplace``.
 	Export artifacts are read as strict JSON by other tools, so normalize
 	non-finite numbers to null and forbid non-standard constants explicitly.
-	Lone surrogates are escaped by the caller's text writer and remain valid
-	JSON escapes.
+	Lone surrogates become the literal ``\\ud800`` text via
+	:func:`escape_lone_surrogates`: a bare ``\\ud800`` escape is not a valid
+	JSON string and strict parsers such as jq reject the whole artifact
+	(Issue #2457).
 	"""
 	try:
-		return json.dumps(
+		text = json.dumps(
 			_json_safe_value(value, null_oversized_ints=null_oversized_ints),
 			ensure_ascii=False,
 			allow_nan=False,
@@ -177,3 +204,4 @@ def strict_json_text(value: Any, *, indent: int | None = 2, null_oversized_ints:
 		)
 	except (RecursionError, ValueError, TypeError) as exc:
 		raise OSError(errno.EINVAL, f"本地状态无法序列化（{exc}）") from exc
+	return escape_lone_surrogates(text)

@@ -25,6 +25,7 @@ _PROBLEM_CONTRACTS: dict[OutputPathProblem, tuple[str, str]] = {
 	OutputPathProblem.PARENT_NOT_DIR: ("LOCAL_IO_ERROR", "换一个父目录存在且可写的路径后重试"),
 	OutputPathProblem.NOT_WRITABLE: ("LOCAL_IO_ERROR", "换一个父目录可写的路径后重试"),
 	OutputPathProblem.UNEXPANDABLE_USER: ("INVALID_PARAM", "改用绝对路径或 ~/ 开头的当前用户路径"),
+	OutputPathProblem.FILENAME_NOT_UTF8: ("INVALID_PARAM", "改用合法 UTF-8 的文件名后重试"),
 }
 
 
@@ -48,6 +49,8 @@ def validate_output_path_or_emit(ctx: Any, command: str, raw: str | os.PathLike[
 		message = f"{command} 的 -o / --output 需要普通文件路径，{str(target)!r} 不是普通文件"
 	elif problem is OutputPathProblem.UNEXPANDABLE_USER:
 		message = f"{command} 的 -o / --output 里有一个系统里查不到的用户，无法展开家目录写法: {str(target)!r}"
+	elif problem is OutputPathProblem.FILENAME_NOT_UTF8:
+		message = f"{command} 的 -o / --output 的文件名不是合法 UTF-8，当前文件系统无法创建: {str(target)!r}"
 	elif problem is OutputPathProblem.NOT_WRITABLE:
 		message = f"{command} 的 -o / --output 的父目录不可写，无法创建输出文件: {str(target)!r}"
 	else:
