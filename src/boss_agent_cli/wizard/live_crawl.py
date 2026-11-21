@@ -50,8 +50,16 @@ def _output_paths(output_dir: str | None) -> dict[str, str]:
 	paths: dict[str, str] = {}
 	for kind in ("json", "csv", "xlsx"):
 		path = base / f"jobs.{kind}"
-		if path.exists():
-			paths[kind] = str(path)
+		try:
+			path.lstat()
+		except FileNotFoundError:
+			continue
+		except (OSError, ValueError):
+			# 展示型探测：目录存在但不可读（权限 / 挂载异常 / 非法路径）时
+			# 按「无法确认产物」处理。`Path.exists()` 在 3.11 / 3.12 会把
+			# PermissionError 抛给状态面板、3.14 又静默返回 False（Issue #2371）。
+			continue
+		paths[kind] = str(path)
 	return paths
 
 
