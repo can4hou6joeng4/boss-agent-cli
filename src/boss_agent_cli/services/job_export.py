@@ -153,13 +153,12 @@ def render_html_export(items: list[dict[str, Any]]) -> str:
 	if not items:
 		return "<html><body><p>无数据</p></body></html>"
 
+	# 非对象条目没有可展示字段：先过滤，总数与渲染行数保持同源，不能让
+	# 「共 N 条」把被跳过的坏条目也算进去（Issue #2162、#2345）。
+	usable = [item for item in items if isinstance(item, dict)]
 	rows = []
 	index = 0
-	for item in items:
-		if not isinstance(item, dict):
-			# 非对象条目没有可展示字段：跳过，不能让 ``item.get`` 的
-			# AttributeError 中止整份 HTML 导出（Issue #2162）。
-			continue
+	for item in usable:
 		index += 1
 		skills = item.get("skills", [])
 		if isinstance(skills, list):
@@ -217,7 +216,7 @@ def render_html_export(items: list[dict[str, Any]]) -> str:
   .wf {{ background: #fff3e0; color: #e65100; }}
 </style></head><body>
 <h1>BOSS 直聘搜索结果</h1>
-<div class="sub">共 {len(items)} 条</div>
+<div class="sub">共 {len(usable)} 条</div>
 <table>
   <thead><tr>
     <th>#</th><th>岗位</th><th>公司</th><th>城市</th>

@@ -159,7 +159,10 @@ def prepare_render_data(
 			# 判断必须用原始值：_text_cell 已把标量转成字符串，转换后的 "1"
 			# 会被 ``type(...) is int`` 误判为缺失（Issue #2162）。
 			unread_value = raw_item.get("unread")
-			unread = unread_value if type(unread_value) is int else 0
+			# 超大整数（>4300 位十进制）在 md/html 的 str()/f-string 里抛裸
+			# ValueError，整份导出会落成无信封的 traceback；与 safe_text 同口径
+			# 按缺失处理（Issue #2343）。
+			unread = unread_value if type(unread_value) is int and safe_text(unread_value) else 0
 			rows.append({
 				"ref": ref, "is_new": is_new, "sid": sid, "key": key,
 				"brand_name": item.get("brand_name") or "-",
@@ -248,7 +251,7 @@ def _render_markdown(
 		"# BOSS 直聘沟通列表",
 		"",
 		f"> 生成时间：{rd['now_str']}  ",
-		f"> 总计：{rd['total']} 条（{' / '.join(rd['count_parts'])}）",
+		f"> 总计：{rd['total']} 条（{' / '.join(escape_md_cell(part) for part in rd['count_parts'])}）",
 	]
 
 	if rd["diff_summary"]:
@@ -262,7 +265,9 @@ def _render_markdown(
 	lines.append("")
 
 	for section in rd["sections"]:
-		lines.append(f"## {section['subtitle']}")
+		# 分组标题来自平台字段 initiated_by：换行 / 链接语法不转义可向导出报告
+		# 插入伪造章节（与 #2321 的 diff 行同口径，Issue #2344）。
+		lines.append(f"## {escape_md_cell(section['subtitle'])}")
 		lines.append("")
 		lines.append("| # | 公司 | 联系人 | 职称 | 时间 | 未读 | 已读 | 最近消息 |")
 		lines.append("|---|------|--------|------|------|------|------|----------|")

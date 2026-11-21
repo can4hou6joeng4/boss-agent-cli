@@ -290,21 +290,23 @@ def execute_recruiter_candidate_search(platform: Any, inputs: Mapping[str, Any])
 	"""Shared recruiter search call used by the command and workflow action."""
 	# platform 按鸭子类型接收真实适配器与测试替身，返回的平台响应字典由调用方
 	# 按 API 响应契约读取；这里显式收敛 Any，避免整条调用链丢失类型。
+	# 字符串筛选项与求职者侧同口径走 strict：false / 0 / 容器不能经 str()
+	# 静默变成空关键词或 repr 文本后真实发往平台（Issue #2009、#2347）。
 	return cast(
 		"dict[str, Any]",
 		platform.search_geeks(
-			str(inputs.get("query") or ""),
-			city=_optional_str(inputs.get("city")),
+			_optional_str_strict(inputs, "query") or "",
+			city=_optional_str_strict(inputs, "city") or None,
 			page=_int_input(inputs, "page", 1, minimum=1),
-			job_id=_optional_str(inputs.get("job_id")),
-			experience=_optional_str(inputs.get("experience")),
-			degree=_optional_str(inputs.get("degree")),
-			age=_optional_str(inputs.get("age")),
-			school_level=_optional_str(inputs.get("school_level")),
-			activeness=_optional_str(inputs.get("activeness")),
-			source=_optional_str(inputs.get("source")),
+			job_id=_optional_str_strict(inputs, "job_id") or None,
+			experience=_optional_str_strict(inputs, "experience") or None,
+			degree=_optional_str_strict(inputs, "degree") or None,
+			age=_optional_str_strict(inputs, "age") or None,
+			school_level=_optional_str_strict(inputs, "school_level") or None,
+			activeness=_optional_str_strict(inputs, "activeness") or None,
+			source=_optional_str_strict(inputs, "source") or None,
 			select=_bool_input(inputs, "select"),
-			salary=_optional_str(inputs.get("salary")),
+			salary=_optional_str_strict(inputs, "salary") or None,
 		),
 	)
 
@@ -1210,6 +1212,10 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 		)
 	if resume is None:
 		raise WorkflowActionError("RESUME_NOT_FOUND", f"简历 {resume_name!r} 不存在")
+	# 其余输入都经 _required* 校验；prompt 也必须走同口径，且先于本地 AI 配置
+	# 检查：旧断点缺该键时应是参数 / 输入错误，而不是 KeyError 被归入
+	# INTERNAL_ERROR 或先报 AI_NOT_CONFIGURED（Issue #2348）。
+	prompt = _required_str(inputs, "prompt")
 	config_store = AIConfigStore(context.data_dir)
 	config = config_store.load_config()
 	api_key = config_store.get_api_key()
@@ -1246,7 +1252,7 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 		result = service.chat(
 			[
 				{"role": "system", "content": "你是求职顾问。"},
-				{"role": "user", "content": f"{inputs['prompt']}\n\n简历:\n{resume_to_text(resume)}"},
+				{"role": "user", "content": f"{prompt}\n\n简历:\n{resume_to_text(resume)}"},
 			]
 		)
 	except AIServiceError as exc:

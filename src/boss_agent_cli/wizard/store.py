@@ -220,6 +220,9 @@ class WorkflowStore:
 				_validate_replay_markers(run)
 				_validate_error_contract(run)
 				_validate_statuses(run)
+				# 与 get_checkpoint 同口径：pending 步骤带着 completed 结果无法
+				# 恢复，不能把只能重建的 run 当作正常任务展示（Issue #2346）。
+				_validate_step_result_consistency(run)
 			except CacheRecordInvalid:
 				corrupt.append(run_id)
 				continue
