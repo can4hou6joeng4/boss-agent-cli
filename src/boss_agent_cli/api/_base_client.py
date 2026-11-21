@@ -132,7 +132,11 @@ class _BaseHttpClient:
 		self._browser_session: "BrowserSession | None" = None
 		self._throttle = RequestThrottle(delay, check=self._check_cdp_risk_lock)
 		data_dir = self._risk_lock_dir()
-		self._request_budget = RequestBudget.for_data_dir(data_dir, interval=delay[0]) if data_dir is not None else None
+		self._request_budget = (
+			RequestBudget.for_data_dir(data_dir, interval=delay[0], pacing_limit=delay[1])
+			if data_dir is not None
+			else None
+		)
 		self._cdp_url = cdp_url
 		# 浏览器通道来源意图；None = auto（默认路径行为不变）。
 		# 只在此处保存并透传给唯一的 BrowserSession 构造点，不在本类上派生

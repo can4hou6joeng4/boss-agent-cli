@@ -241,6 +241,11 @@ def risk_lock_status(data_dir: Path) -> dict[str, Any]:
 	return {**(local if local["locked"] else group), "group_path": str(root), "group_locked": group["locked"]}
 
 
+#: 节流间隔之外的等待余量：高斯间隔的高值已按 60 秒计，burst 罚时最多再 +7 秒、
+#: 5% 概率的额外停顿 +2–5 秒，15 秒覆盖这些抖动（Issue #2461）。
+_PACING_WAIT_MARGIN = 15.0
+
+
 class RequestBudget:
 	"""One active operation per local budget directory, with a shared ceiling."""
 
@@ -267,7 +272,9 @@ class RequestBudget:
 		self._unpersisted_risk_lock: RiskLock | None = None
 
 	@classmethod
-	def for_data_dir(cls, data_dir: Path, *, interval: float = 1.5) -> RequestBudget:
+	def for_data_dir(
+		cls, data_dir: Path, *, interval: float = 1.5, pacing_limit: float | None = None
+	) -> RequestBudget:
 		from boss_agent_cli.config import load_config
 
 		root = budget_directory(data_dir)
@@ -279,12 +286,19 @@ class RequestBudget:
 		group_interval = (
 			max(interval, float(config["request_delay"][0])) if root != _resolve_budget_path(data_dir) else interval
 		)
+		wait_timeout = float(config["request_wait_timeout"])
+		if pacing_limit is not None:
+			# 等待上限必须容得下刻意节流本身：默认间隔 30–60 秒时 30 秒的上限让
+			# 同进程第 2 次请求必然失败（Issue #2461）。显式配置过小的用户也在
+			# 运行时自愈；组配置的 request_delay 上限一并计入。
+			pacing_high = max(pacing_limit, float(config["request_delay"][1]))
+			wait_timeout = max(wait_timeout, pacing_high + _PACING_WAIT_MARGIN)
 		return cls(
 			data_dir,
 			root=root,
 			interval=group_interval,
 			max_per_minute=config["request_max_per_minute"],
-			wait_timeout=config["request_wait_timeout"],
+			wait_timeout=wait_timeout,
 		)
 
 	def check_risk(self) -> None:
