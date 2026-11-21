@@ -26,6 +26,7 @@
 - 后台 `crawl resume` 在执行锁被其他执行器占用时，显式 `--pages` / `--with-detail` / 停止标记清理未生效就报可重试的 `CRAWL_BUSY`，不再以 ok:true 的 running 静默丢弃参数（Issue #2410）。
 - `crawl shortlist` 的空 `run_id` 按参数错误上报 `INVALID_PARAM`，不再被当成任务不存在并引导重建（Issue #2411）。
 - 前台 `crawl resume` 的 `--pages` 冲突与断点设置损坏分别给出精确恢复指引，与后台入口同口径；`crawl configure` 不再被当成修复手段（Issue #2412）。
+- MCP 的 `boss_agent_run` 省略 `dry_run`（schema 默认 true）时按只读判定：超时 / 取消不再误报 `outcome_unknown` 并提示核对不存在的平台写入；显式 `dry_run=false` 仍按写处理（Issue #2414）。
 
 ## [3.4.148] - 2026-11-22
 

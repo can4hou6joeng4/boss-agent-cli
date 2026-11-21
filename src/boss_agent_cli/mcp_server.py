@@ -253,6 +253,12 @@ _ACTION_DIMENSION_TOOL_NAMES = frozenset(
 	tool.name for tool in TOOLS if "action" in tool.input_schema.get("properties", {})
 )
 
+#: schema 缺省 ``dry_run=true`` 的工具：省略该键时 ``mcp_args._build_args`` 仍会
+#: 生成 ``--dry-run``，实际语义是只预览。不能按「未显式声明只读」归为写，否则
+#: 超时 / 取消会误报 ``outcome_unknown`` 并让 Agent 去核对并不存在的平台写入
+#: （Issue #2414）。守卫测试保证集合与 TOOLS 的 schema 默认值一致。
+_DRY_RUN_DEFAULT_TOOL_NAMES = frozenset({"boss_agent_run"})
+
 _WRITE_INTERRUPT_RECOVERY = "检查本地 checkpoint 与平台实际结果，再显式恢复；未确认的写操作不要直接重试"
 _READ_INTERRUPT_RECOVERY = "只读命令已中断，不产生平台写入；先降低 limit/count 或改用 active=online 再重试"
 #: search / watch 没有 limit / count 参数，恢复文案不能提示不存在的选项（Issue #1860）。
@@ -287,6 +293,9 @@ def _tool_may_write(tool_name: str, arguments: dict[str, Any] | None = None) -> 
 	# hr greet / hr location / hr accept-resume）。按工具名整体归为写会让超时 /
 	# 取消返回 outcome_unknown 并要求核对并不存在的平台写入（Issue #2177）。
 	if arguments.get("dry_run") is True:
+		return False
+	if tool_name in _DRY_RUN_DEFAULT_TOOL_NAMES and "dry_run" not in arguments:
+		# schema 默认 dry_run=true：省略键与显式 true 的 argv 完全相同。
 		return False
 	if tool_name not in _READ_ONLY_TOOL_NAMES:
 		return True
