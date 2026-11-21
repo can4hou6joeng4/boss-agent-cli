@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -53,6 +54,11 @@ def _remember_deprecated_endpoint(response: dict[str, Any], tracking_issue: str)
 	}
 
 
+#: 数值标记的整串形态：只接受 ASCII 十进制数字与至多一个前导负号。
+#: ``\d`` 会匹配 Unicode 数字（如 ``²``），显式用 ``[0-9]``（Issue #2431）。
+_FLAG_NUMBER_RE = re.compile(r"-?[0-9]+")
+
+
 def _flag_number(value: Any) -> int | None:
 	"""把平台的数值标记归一成整数；`"0"` / `0.0` 与 `0` 等价，布尔与其他形态返回 None。
 
@@ -67,7 +73,10 @@ def _flag_number(value: Any) -> int | None:
 		return int(value) if value.is_integer() else None
 	if isinstance(value, str):
 		text = value.strip()
-		if text.isascii() and text.lstrip("-").isdigit() and len(text) <= 9:
+		# 整串正则校验后再转换：``lstrip("-")`` 会把 "--0" / "--3" 也放行，
+		# 随后 ``int()`` 抛 ValueError 并被出口兜成可重试的 NETWORK_ERROR
+		# （Issue #2431）。
+		if len(text) <= 9 and _FLAG_NUMBER_RE.fullmatch(text):
 			return int(text)
 	return None
 
@@ -134,7 +143,12 @@ class BossRecruiterPlatform(RecruiterPlatform):
 		# 数字字符串码（如 "9" / "121"）先归一成整数再分类：此前 isinstance(code, int)
 		# 门禁让它们整体绕过码表；HTTP 401 由客户端自己合成响应，必须走通用兜底变
 		# AUTH_EXPIRED 而不是 UNKNOWN（Issue #1430）。风险码分支上面的 str 形式不受影响。
-		numeric_code = int(code) if isinstance(code, str) and code.isdigit() else code
+		# 转换前同样加 ASCII / 长度守卫：超长数字串会触发 CPython 的 4300 位限制，
+		# ``²`` 这类 isdigit() 为真但非十进制的字符也过不了 int()（Issue #2431）。
+		if isinstance(code, str) and len(code) <= 9 and _FLAG_NUMBER_RE.fullmatch(code):
+			numeric_code: Any = int(code)
+		else:
+			numeric_code = code
 		unified = classify_platform_error(
 			{**response, "code": numeric_code}, _ERROR_CODE_MAP, message_keywords=False
 		)[0]

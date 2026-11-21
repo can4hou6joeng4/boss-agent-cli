@@ -9,11 +9,16 @@ Week 1 交付：接口定义 + BOSS 直聘 adapter，不改动现有命令行为
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from types import TracebackType
 from typing import Any
 
 from boss_agent_cli.api.zhipin_errors import response_message
+
+#: 英文限流关键词按词边界匹配：``"rate" in msg`` 会误伤 generate / accurate
+#: 这类普通英文单词（Issue #2430）。
+_RATE_WORD_RE = re.compile(r"\brate\b")
 
 
 def classify_platform_error(
@@ -58,12 +63,29 @@ def classify_platform_error(
 	if not message_keywords:
 		return default, message
 	lower_msg = message.lower()
+	# 风控必须先于 auth 判定（Issue #2430）：平台的阻断文案常同时带「登录」与
+	# 「安全验证」之类的词，先匹配 auth 会把不可恢复的风控响应降级成可重试的
+	# AUTH_EXPIRED，命令层不再按硬边界停手。环境风险短语与
+	# zhipin_errors._ENVIRONMENT_RISK_MARKERS 同口径，但只收具体短语：裸「异常」
+	# 会把「网络异常」这类普通失败也判成风控。
+	if any(
+		token in lower_msg
+		for token in ("环境异常", "环境存在异常", "访问环境异常", "请求环境异常", "登录状态异常")
+	):
+		return "ENVIRONMENT_RISK", message
+	if any(
+		token in lower_msg
+		for token in ("risk", "forbidden", "风控", "安全验证", "安全校验", "风险验证", "异常访问", "账号异常", "账户异常")
+	):
+		return "ACCOUNT_RISK", message
 	if any(token in lower_msg for token in ("stoken", "token", "unauthorized", "登录", "登陆", "未认证")):
 		return "AUTH_EXPIRED", message
-	if any(token in lower_msg for token in ("too many", "rate", "频繁", "限流", "稍后再试")):
+	# 英文 rate 用词边界：子串匹配会让 generate / accurate / separate 等
+	# 确定性失败被报成可重试的 RATE_LIMITED（Issue #2430）。
+	if _RATE_WORD_RE.search(lower_msg) or any(
+		token in lower_msg for token in ("too many", "频繁", "限流", "稍后再试")
+	):
 		return "RATE_LIMITED", message
-	if any(token in lower_msg for token in ("risk", "forbidden", "风控", "安全验证", "异常访问")):
-		return "ACCOUNT_RISK", message
 	if any(token in lower_msg for token in ("timeout", "timed out", "network", "connection", "网络", "连接")):
 		return "NETWORK_ERROR", message
 
