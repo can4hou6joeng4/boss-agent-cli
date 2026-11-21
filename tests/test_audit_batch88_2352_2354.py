@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -58,11 +59,17 @@ def test_request_budget_symlink_loop_raises_oserror(tmp_path: Path) -> None:
 	loop = tmp_path / "loop"
 	os.symlink(loop, loop)
 
-	with pytest.raises(OSError) as excinfo:
-		RequestBudget(loop, root=tmp_path)
-
-	assert excinfo.value.errno == errno.EINVAL
-	assert excinfo.value.filename == str(loop)
+	# 3.11 / 3.12 的 Path.resolve() 对符号链接环抛 RuntimeError；3.13 起改为
+	# 返回原路径。两种版本都不能让裸 RuntimeError 穿出，3.13+ 构造成功后
+	# 保留环路径即可。
+	try:
+		budget = RequestBudget(loop, root=tmp_path)
+	except OSError as exc:
+		assert exc.errno == errno.EINVAL
+		assert exc.filename == str(loop)
+	else:
+		assert sys.version_info >= (3, 13)
+		assert budget.data_dir == loop
 
 
 def test_request_budget_resolves_normal_directory(tmp_path: Path) -> None:
