@@ -55,6 +55,7 @@ from boss_agent_cli.crawler.hooks import (
 from boss_agent_cli.crawler.transport import CrawlRiskError, CrawlTransport
 from boss_agent_cli.display import boss_command, risk_error_message, shell_argument
 from boss_agent_cli.services.file_lock import exclusive_file_lock, run_lock_path
+from boss_agent_cli.services.text_files import sanitize_surrogates
 
 
 class CrawlBusyError(RuntimeError):
@@ -1089,6 +1090,9 @@ class CrawlService:
 				try:
 					card = self._with_retry(fetch_detail, max_retries=settings.max_retries)
 				except Exception as exc:
+					# 本地缓存锁冲突 / 断点损坏与 _with_retry 同口径原样上抛，
+					# 不能降级成单条 detail-error 后把整轮报成 completed
+					# （Issue #2324、#2351）。
 					if is_request_stop(exc) or isinstance(
 						exc,
 						(
@@ -1096,6 +1100,8 @@ class CrawlService:
 							CrawlRiskError,
 							CrawlRuntimeUnavailable,
 							CrawlSessionAuthError,
+							CacheBusyError,
+							CacheRecordInvalid,
 							sqlite3.DatabaseError,
 						),
 					):
@@ -1267,13 +1273,17 @@ class CrawlService:
 
 
 def _normalize_job(raw: dict[str, Any], query: str, page_no: int, rank: int) -> tuple[str, dict[str, Any]]:
-	job_id = str(raw.get("encryptJobId") or "")
-	security_id = str(raw.get("securityId") or "")
+	# 平台 JSON 可能出现孤立代理项（与 cache/store.py 的 watch 路径同源）：job_id
+	# 与兜底标题会作为 SQLite 参数绑定，严格 UTF-8 编码抛 UnicodeEncodeError 后
+	# 被 _run 的通用分支吞成 ok:true 的 stopped，任务永远无法推进（Issue #2350）。
+	# 与导出文本同口径归一为可编码的转义文本。
+	job_id = sanitize_surrogates(str(raw.get("encryptJobId") or ""))
+	security_id = sanitize_surrogates(str(raw.get("securityId") or ""))
 	# securityId 每次搜索请求都会轮换（operations.import_shortlist 同样不拿它做
 	# 跨 run 去重）：页内崩溃后 resume 重抓同一页会拿到新值，用它当身份会让同一
 	# 职位以新键再插一行。无稳定 job_id 时按「页 + 名次 + 标题」兜底，它们在
 	# 同一页的重复抓取之间保持不变（Issue #2029）。
-	job_key = job_id or f"{page_no}:{rank}:{field_text(raw, 'jobName')}"
+	job_key = job_id or f"{page_no}:{rank}:{sanitize_surrogates(field_text(raw, 'jobName'))}"
 	labels = raw.get("jobLabels", [])
 	benefits = raw.get("welfareList", [])
 	return job_key, {
