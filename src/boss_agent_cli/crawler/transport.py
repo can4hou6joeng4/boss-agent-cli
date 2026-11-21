@@ -6,6 +6,7 @@ import json
 import os
 import random
 import socket
+import sqlite3
 import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager, nullcontext
@@ -21,6 +22,7 @@ from boss_agent_cli.api.request_budget import (
 	is_request_stop,
 	retry_after_seconds,
 )
+from boss_agent_cli.cache.store import CacheBusyError, CacheRecordInvalid
 from boss_agent_cli.crawler.controls import (
 	CrawlBrowserStartError,
 	CrawlProfileBusy,
@@ -38,6 +40,16 @@ JOBLIST_URL = "https://www.zhipin.com/wapi/zpgeek/search/joblist.json"
 JOB_CARD_URL = "https://www.zhipin.com/wapi/zpgeek/job/card.json"
 JOBLIST_PATH = "/wapi/zpgeek/search/joblist.json"
 JOB_CARD_PATH = "/wapi/zpgeek/job/card.json"
+
+
+def _is_local_cache_error(exc: BaseException) -> bool:
+	"""attempt 回调里抛出的本地缓存错误。
+
+	预算 / 断点读写通过 ``bind_attempts`` 回调在本模块内执行；``CacheBusyError``、
+	``CacheRecordInvalid`` 与 ``sqlite3.DatabaseError`` 重试同一次请求不会自愈，
+	也不能被兜成可重试的传输错误（Issue #2324）。
+	"""
+	return isinstance(exc, (CacheBusyError, CacheRecordInvalid, sqlite3.DatabaseError))
 
 
 def packet_page_no(packet: Any) -> int | None:
@@ -425,7 +437,7 @@ class DrissionCrawlerSession:
 		except CrawlRiskError:
 			raise
 		except Exception as exc:
-			if is_request_stop(exc):
+			if is_request_stop(exc) or _is_local_cache_error(exc):
 				raise
 			listen_error = exc
 
@@ -443,7 +455,7 @@ class DrissionCrawlerSession:
 		except CrawlRiskError:
 			raise
 		except Exception as page_exc:
-			if is_request_stop(page_exc):
+			if is_request_stop(page_exc) or _is_local_cache_error(page_exc):
 				raise
 			errors.append(f"页面内 fetch 失败：{page_exc}")
 		self._raise_if_security_page(require_job_list=True)
