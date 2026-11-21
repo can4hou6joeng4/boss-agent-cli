@@ -16,6 +16,7 @@
 - wizard 的单请求写步骤（`exchange` / `mark` / hr 职位上下线）在派发前失败（代理配置、内核缺失、导航、预算）时撤销预落的「结果未知」标记：恢复指引与错误码回到原始异常，`--resume` 不再永久阻断一条从未发出的请求（Issue #2441）。
 - wizard 断点的 `failed` / `stopped` 步骤带 `result.status=completed` 时按 `CACHE_RECORD_INVALID` 拒绝恢复，与其余非终态同口径：状态漂移不再让已完成步骤被重跑（Issue #2442）。
 - `WorkflowControl.poll` 改为只读 run 的原始 `status` 列：断点里任一字段漂移不再吞掉 `--stop` / 截止时间信号，也不会把只读步骤误标成「写请求结果未知」（Issue #2443）。
+- 自动化的派发前预检（限额 / stop / 安全告警）移到 `executing` 行与在途标记落盘之前：预检拒绝后的本地写失败不再被误报成「平台动作可能已发出」，不会留下需要人工核对的假在途标记，队列行保持 pending 可安全重试（Issue #2451）。
 - 浏览器通道把预算租约 / 节流等待 / 请求前检查的本地状态错误（`sqlite3.Error` / `OSError`）与「请求已派发」区分：写请求不再被误报成 `ACTION_UNCONFIRMED`，原始 `LOCAL_IO_ERROR` 恢复指引保留（Issue #2437）。
 - 浏览器通道在解析平台响应后先剥除平台对象上的 `__cli_*` 顶层键，再由 CLI 注入自己的传输标记：平台响应不能再伪造「未发出 / 已中断 / 安全页」改变写请求的重试语义（Issue #2438）。
 - 聊天页 CDP 脚本的参数序列化与 WebSocket 握手失败包装成 `ChatTabCdpUnreachable`：`send_message` / `request_resume` / `exchange` 在首个 CDP 帧写出前失败时按「确定未发出、可安全重试」收口，不再报成结果未知（Issue #2439）。
