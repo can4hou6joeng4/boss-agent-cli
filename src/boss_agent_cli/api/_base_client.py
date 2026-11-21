@@ -57,6 +57,8 @@ _MAX_RETRIES = 3
 # 发生，不能按「结果未知」报成 ``ACTION_UNCONFIRMED`` 并禁止重试（Issue #2216）。
 # 其余 ``httpx.TransportError``（读 / 写超时、RemoteProtocolError 等）发生在
 # 请求可能已送出之后，仍按未知处理。
+# 写请求不自动跟随重定向（Issue #2424），所以这些异常对写请求只可能来自首跳，
+# 「未发出」判定完整；3xx 响应本身按结果未知收口。
 _UNSENT_TRANSPORT_ERRORS: tuple[type[httpx.TransportError], ...] = (
 	httpx.ConnectError,
 	httpx.ConnectTimeout,
@@ -439,6 +441,13 @@ class _BaseHttpClient:
 				# traceid 是请求级的：真实页面每个请求都换一个，不能放进客户端级默认头。
 				headers = {**self._headers_for(url), "traceid": new_trace_id(), **extra_headers_override}
 				check_request_control(self._check_cdp_risk_lock)
+				if write_possible:
+					# 写请求不跟随重定向：首跳 3xx 说明平台已经收到请求，307/308
+					# 还会让中间层把 body 重发到新地址；跟随之后抛出的连接类异常
+					# 再也无法证明「一个字节都没发出」，按未发出上抛会让 Agent
+					# 重试并重复写入（Issue #2424）。3xx 响应本身在下方按结果
+					# 未知收口；读请求保持既有的跟随行为（登录跳转、页面迁移）。
+					kwargs["follow_redirects"] = False
 				try:
 					resp = client.request(method, url, headers=headers, **kwargs)
 				except Exception as error:
@@ -499,6 +508,11 @@ class _BaseHttpClient:
 				except PlatformRiskError as error:
 					self._record_cdp_risk_lock(error=error)
 					raise
+				if write_possible and 300 <= resp.status_code < 400:
+					# 写请求已按 follow_redirects=False 发出：首跳 3xx 说明平台已
+					# 接收，307/308 还会让中间层把 body 重发到新地址，副作用无法
+					# 证明不存在，按结果未知收口（Issue #2424）。
+					return self._unconfirmed_http_response(url, "redirect")
 				if resp.status_code == 401:
 					return {"code": 401, "message": "平台认证已失效，请重新登录", "zpData": {}}
 				if resp.status_code == 429:
