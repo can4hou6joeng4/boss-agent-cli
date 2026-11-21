@@ -63,6 +63,10 @@ def prepare_render_data(
 	diff_result: dict[str, Any],
 ) -> dict[str, Any]:
 	"""公共数据准备：分组、统计、diff 标记、渲染顺序。供 MD/HTML 共用。"""
+	# 公共入口可能收到 None / 非对象：直接 ``.get`` 会落成 AttributeError，
+	# 整份导出变成 INTERNAL_ERROR（Issue #2321）。
+	if not isinstance(diff_result, dict):
+		diff_result = {}
 	now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
 	# 非对象元素在渲染入口跳过：公共边界上的坏条目不能让整份导出落成
@@ -197,8 +201,10 @@ def render_export(
 	"""将沟通列表渲染为指定格式的字符串。"""
 	if fmt == "json":
 		# 严格 JSON：平台数值漂移（NaN / Infinity）归一为 null，
-		# 不让 jq 等严格解析器拒绝整份导出（Issue #1851）。
-		return strict_json_text(friends)
+		# 不让 jq 等严格解析器拒绝整份导出（Issue #1851）。孤立代理字符
+		# （平台 JSON 的 "\ud800"）会绕过文本单元格的清洗，按严格 UTF-8 写盘
+		# 时抛 UnicodeEncodeError，返回前统一替换（Issue #2321）。
+		return _sanitize_surrogates(strict_json_text(friends))
 	if fmt == "csv":
 		return _render_csv(friends)
 	if fmt == "html":
@@ -247,7 +253,11 @@ def _render_markdown(
 
 	if rd["diff_summary"]:
 		ds = rd["diff_summary"]
-		lines.append(f"> 较上次（{ds['prev_date']}）变化：{ds['change']}")
+		# 快照来自本地旧版本，值可能含换行 / 链接语法：与表格单元格同口径转义，
+		# 避免向导出报告注入额外行（Issue #2321）。
+		lines.append(
+			f"> 较上次（{escape_md_cell(ds['prev_date'])}）变化：{escape_md_cell(ds['change'])}"
+		)
 
 	lines.append("")
 

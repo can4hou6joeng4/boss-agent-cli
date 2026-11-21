@@ -41,6 +41,7 @@ from boss_agent_cli.commands._filter_errors import emit_filter_error
 from boss_agent_cli.services.candidate_actions import (
 	CandidateActionBlocked,
 	CandidateActionNotRecorded,
+	CandidateActionReleaseFailed,
 	candidate_action_provably_unsent,
 	classify_platform_response,
 	outcome_unknown_cause,
@@ -184,6 +185,19 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 					hints={"operator_actions": ["先在 BOSS 直聘官方页面核对是否已打过招呼；不要自动重发本次招呼"]},
 				)
 				return
+			except CandidateActionReleaseFailed:
+				# 平台拒绝了本次招呼（未产生记录），但本地 pending 预约没删掉。
+				# 直接重试会被预约拦住：报本地状态错误，提示先修缓存再重试。
+				handle_error_output(
+					ctx, "greet",
+					code="LOCAL_STATE_WRITE_FAILED",
+					message="平台未接受本次打招呼，但本地预约未释放；修复本地缓存后再重试",
+					recoverable=False,
+					recovery_action="先确认数据目录可写（磁盘空间、缓存目录权限），再重新执行同一条打招呼命令",
+					details={"security_id": security_id, "job_id": job_id, "request_sent": False, "recorded": False},
+					hints={"operator_actions": ["检查磁盘空间与 ~/.boss-agent 目录权限；本次招呼没有被平台接受，修好后可重试"]},
+				)
+				return
 			except Exception as exc:
 				# 不能证明请求未发出：预约已保留，本次调用必须与下一次调用的口径
 				# 一致——报结果未知，而不是可重试的 NETWORK_ERROR。否则 Agent 按
@@ -205,9 +219,11 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 
 			if not platform.is_success(resp):
 				error_code, _ = platform.parse_error(resp)
-				if error_code == "ACTION_UNCONFIRMED":
+				if error_code in ("ACTION_UNCONFIRMED", "NETWORK_ERROR"):
 					# 求职者侧结果未知：登记表的恢复文案是给招聘者的
 					# `boss hr chatmsg`，这里换成核对自己的会话（Issue #990）。
+					# NETWORK_ERROR 覆盖 HTTP 5xx / 超时文案：写请求可能已在
+					# 平台落库，不能给「重试」指引（Issue #2316）。
 					chat_cmd = _hint_command(ctx, "chat")
 					handle_error_output(
 						ctx, "greet",
@@ -523,6 +539,22 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 										f"招呼结果未确认，停止批量打招呼: {item.title} @ {item.company}"
 									)
 									break
+								if error_code == "NETWORK_ERROR":
+									# HTTP 5xx / 超时文案无法证明招呼没发出去：sleep 后
+									# 重发就是在不确定时重复写操作，保留预约并停批
+									# （Issue #2316，与 UNKNOWN 分支同口径）。
+									unconfirmed = {
+										**item.to_dict(),
+										"status": "unconfirmed",
+										"error": error_code,
+										"details": {"outcome_unknown": True, "replay_safe": False, **_cli_error_details(resp)},
+									}
+									results.append(unconfirmed)
+									stopped_reason = error_code
+									logger.warning(
+										f"招呼结果未确认（网络错误响应），停止批量打招呼: {item.title} @ {item.company}"
+									)
+									break
 								if error_code == "UNKNOWN":
 									# 未识别的响应同样无法证明招呼没发出去：sleep 后重发就是
 									# 在不确定的情况下重复写操作（Issue #990）。
@@ -780,9 +812,11 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 
 			if unconfirmed is not None:
 				# 结果未知的招呼不能以 ok:true 回报：Agent 会当成普通失败重发（Issue #984）。
-				# UNKNOWN 与 ACTION_UNCONFIRMED 同义——响应无法证明招呼没发出去（Issue #990）。
+				# UNKNOWN / NETWORK_ERROR 与 ACTION_UNCONFIRMED 同义——响应无法证明
+				# 招呼没发出去（Issue #990、#2316）。NETWORK_ERROR 登记表本身标可重试，
+				# 这里必须按结果未知统一覆盖为不可重试。
 				unconfirmed_code = str(unconfirmed.get("error") or "ACTION_UNCONFIRMED")
-				recoverable, _ = error_contract_for_code(unconfirmed_code)
+				recoverable = False
 				chat_cmd = _hint_command(ctx, "chat")
 				recovery_action = f"动作可能已生效：先用 {chat_cmd} 核对会话，不要自动重试"
 				handle_error_output(

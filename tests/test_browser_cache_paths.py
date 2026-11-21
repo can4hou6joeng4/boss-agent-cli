@@ -12,21 +12,32 @@ from boss_agent_cli.wizard.preflight import _browser_kernel_status
 
 
 @pytest.mark.parametrize("configured", [None, ""])
-def test_default_cache_paths_remain_available_without_override(
-	tmp_path: Path, monkeypatch: pytest.MonkeyPatch, configured: str | None,
+@pytest.mark.parametrize(
+	("platform", "expected"),
+	[
+		("linux", Path(".cache") / "ms-playwright"),
+		("darwin", Path("Library") / "Caches" / "ms-playwright"),
+		("win32", Path("AppData") / "Local" / "ms-playwright"),
+	],
+)
+def test_default_cache_paths_follow_driver_platform_root(
+	tmp_path: Path,
+	monkeypatch: pytest.MonkeyPatch,
+	configured: str | None,
+	platform: str,
+	expected: Path,
 ) -> None:
+	"""驱动只读取当前平台的那一个默认缓存根（Issue #2318）。"""
 	if configured is None:
 		monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
 	else:
 		monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", configured)
 	monkeypatch.setattr(Path, "home", lambda: tmp_path)
-	monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
+	monkeypatch.setattr(browser_runtime.sys, "platform", platform)
+	monkeypatch.delenv("LOCALAPPDATA", raising=False)
+	monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
 
-	dirs = browser_runtime.patchright_browser_cache_dirs()
-
-	assert tmp_path / ".cache" / "ms-playwright" in dirs
-	assert tmp_path / "Library" / "Caches" / "ms-playwright" in dirs
-	assert tmp_path / "AppData" / "Local" / "ms-playwright" in dirs
+	assert browser_runtime.patchright_browser_cache_dirs() == [tmp_path / expected]
 
 
 def test_explicit_cache_is_the_only_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -76,7 +87,9 @@ def test_login_gate_uses_configured_cache_instead_of_healthy_default(
 	default_cache = tmp_path / ".cache" / "ms-playwright"
 	for root in ([default_cache, cache] if custom_installed else [default_cache]):
 		for name in ("chromium-123", "chromium_headless_shell-123"):
-			(root / name).mkdir(parents=True)
+			entry = root / name
+			entry.mkdir(parents=True)
+			(entry / "INSTALLATION_COMPLETE").write_text("", encoding="utf-8")
 	monkeypatch.setattr(Path, "home", lambda: tmp_path)
 	monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(cache))
 	monkeypatch.setattr(browser_runtime, "patchright_chromium_revision", lambda: "123")

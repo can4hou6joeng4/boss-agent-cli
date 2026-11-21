@@ -139,9 +139,9 @@ def doctor_cmd(ctx: click.Context, live_probe: bool, probe_cookies: bool) -> Non
 		# 也不能让 doctor 整份失败（Issue #2103）。
 		chromium_status = "warn"
 		chromium_detail = (
-			f"{chromium_detail}；另有缓存目录无法读取："
+			f"{chromium_detail}；另有缓存条目无法读取："
 			+ "、".join(str(path) for path in unreadable_caches)
-			+ "（权限问题？无法确认内核是否已安装）"
+			+ "（权限问题或安装不完整？无法确认内核是否已安装）"
 		)
 	add_check(
 		"patchright_chromium",

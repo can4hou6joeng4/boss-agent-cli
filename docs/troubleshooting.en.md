@@ -23,7 +23,7 @@ boss doctor --live-probe
 | Check | What it means |
 |-------|---------------|
 | `python` | Python ≥ 3.11 installed |
-| `patchright_chromium` | The Chromium and headless shell revisions required by patchright are installed; Windows also checks `%LOCALAPPDATA%\ms-playwright` |
+| `patchright_chromium` | The Chromium and headless shell revisions required by patchright are installed (the directory must contain the `INSTALLATION_COMPLETE` marker); only the current platform's cache root is probed, following the driver's priority (Windows `%LOCALAPPDATA%\ms-playwright`, macOS `~/Library/Caches/ms-playwright`, Linux `$XDG_CACHE_HOME` or `~/.cache`) |
 | `windows_uv_tool_path` | Whether the global `uv tool` command directory is on PATH on Windows |
 | `quality_baseline` | Source checkout only: whether the local P0 quality script exists |
 | `quality_tool_ruff` / `quality_tool_pytest` / `quality_tool_mypy` | Source checkout only: whether developer tools are available directly or through uv |

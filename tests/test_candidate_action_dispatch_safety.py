@@ -231,6 +231,25 @@ def test_batch_greet_releases_claim_after_pre_dispatch_failure(tmp_path):
 	assert _claim_state(tmp_path, "job-1", "greet") is None
 
 
+def test_batch_greet_stops_on_network_error_response(tmp_path):
+	"""5xx 响应不是可重试失败：不 sleep / 不重发，预约保持 pending（Issue #2316）。"""
+	platform = _batch_platform()
+	platform.greet.return_value = {"code": 500, "message": "server error"}
+	platform.is_success.side_effect = lambda response: response.get("code") == 0
+	platform.parse_error.return_value = ("NETWORK_ERROR", "server error")
+
+	with patch("boss_agent_cli.commands.greet.time.sleep") as sleep:
+		result = _invoke("greet", platform, tmp_path, ["batch-greet", "golang", "--count", "1"])
+
+	assert result.exit_code == 1, result.output
+	assert sleep.call_count == 0
+	assert platform.greet.call_count == 1
+	error = json.loads(result.stdout)["error"]
+	assert error["recoverable"] is False
+	assert error["details"]["outcome_unknown"] is True
+	assert _claim_state(tmp_path, "job-1", "greet") == "pending"
+
+
 # ── wizard ─────────────────────────────────────────────────────────
 
 

@@ -78,6 +78,7 @@ def test_apply_duplicate_is_blocked(mock_cache_cls, mock_auth_cls, mock_get_plat
 @patch("boss_agent_cli.commands.apply.AuthManager")
 @patch("boss_agent_cli.commands.apply.CacheStore")
 def test_apply_failure_does_not_record_local_state(mock_cache_cls, mock_auth_cls, mock_get_platform):
+	"""网络错误响应不能证明投递未生效：不记账、不释放预约、不给重试指引（Issue #2316）。"""
 	mock_cache = _ctx_mock(mock_cache_cls)
 	mock_cache.is_applied.return_value = False
 	mock_platform = _ctx_mock(mock_get_platform)
@@ -89,8 +90,11 @@ def test_apply_failure_does_not_record_local_state(mock_cache_cls, mock_auth_cls
 	result = runner.invoke(cli, ["apply", "sec_001", "job_001"])
 	assert result.exit_code == 1
 	parsed = json.loads(result.output)
-	assert parsed["error"]["code"] == "NETWORK_ERROR"
+	assert parsed["error"]["code"] == "ACTION_UNCONFIRMED"
+	assert parsed["error"]["recoverable"] is False
+	assert "不要直接重试" in parsed["error"]["recovery_action"]
 	mock_cache.record_apply.assert_not_called()
+	mock_cache.release_candidate_action.assert_not_called()
 
 
 @patch("boss_agent_cli.commands.apply.get_platform_instance")

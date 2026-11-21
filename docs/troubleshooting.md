@@ -23,7 +23,7 @@ boss doctor --live-probe
 |--------|------|
 | `python` | Python 版本 >= 3.11 |
 | `patchright` | CLI 已安装 |
-| `patchright_chromium` | patchright 所需的 Chromium 与 headless shell 修订版已安装；Windows 同时检查 `%LOCALAPPDATA%\ms-playwright` |
+| `patchright_chromium` | patchright 所需的 Chromium 与 headless shell 修订版已安装（目录需带 `INSTALLATION_COMPLETE` 标记）；按驱动优先级只探测当前平台的缓存根（Windows `%LOCALAPPDATA%\ms-playwright`，macOS `~/Library/Caches/ms-playwright`，Linux `$XDG_CACHE_HOME` 或 `~/.cache`） |
 | `windows_uv_tool_path` | Windows 全局 `uv tool` 命令目录是否在 PATH 中 |
 | `quality_baseline` | 源码仓库内的 P0 本地质量基线入口是否可用 |
 | `quality_tool_ruff` / `quality_tool_pytest` / `quality_tool_mypy` | 本机质量工具可用性；缺失时可通过 `uv run` 或 `uv sync --all-extras` 使用项目环境 |

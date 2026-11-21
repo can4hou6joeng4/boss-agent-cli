@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shlex
+import stat
 import sys
 from pathlib import Path
 
@@ -45,8 +46,32 @@ def patchright_chromium_revision() -> str | None:
 			continue
 		if browser.get("name") == "chromium":
 			revision = browser.get("revision")
-			return str(revision) if revision else None
+			# 形状漂移（bool / dict / list）时 str() 会生成 "True" / repr 作为
+			# 伪修订版，让 doctor 按不存在的版本比对（Issue #2318）。
+			if isinstance(revision, bool) or not isinstance(revision, (str, int)):
+				return None
+			text = str(revision).strip()
+			return text or None
 	return None
+
+
+def _default_browser_cache_dirs() -> list[Path]:
+	"""与驱动 ``computeDefaultCacheDirectory`` 同优先级选择唯一缓存根。
+
+	驱动只会读取当前平台对应的一个目录；把多个平台候选混在一起会让 doctor
+	在错误的根上命中并报「已安装」（Issue #2318）：
+
+	- Windows：``LOCALAPPDATA``，缺失时回退 ``~/AppData/Local``；
+	- macOS：``~/Library/Caches``（不读 XDG）；
+	- 其它（Linux）：``XDG_CACHE_HOME``，缺失时回退 ``~/.cache``。
+	"""
+	if sys.platform == "win32":
+		base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+	elif sys.platform == "darwin":
+		base = Path.home() / "Library" / "Caches"
+	else:
+		base = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+	return [base / "ms-playwright"]
 
 
 def patchright_browser_cache_dirs() -> list[Path]:
@@ -67,64 +92,97 @@ def patchright_browser_cache_dirs() -> list[Path]:
 			base = Path(os.environ.get("INIT_CWD") or Path.cwd())
 			cache = Path(os.path.abspath(base / cache))
 		return [cache]
-	# 未显式配置时保留已有的默认缓存探测。
-	dirs = [
-		Path.home() / ".cache" / "ms-playwright",
-		Path.home() / "Library" / "Caches" / "ms-playwright",
-	]
-	# 与驱动 computeDefaultCacheDirectory 同口径：Linux 尊重 XDG_CACHE_HOME，
-	# Windows 在 LOCALAPPDATA 缺失时回退到 ~/AppData/Local。漏掉会让自定义缓存
-	# 目录被误报成内核缺失、引导用户重复下载上百 MB（Issue #2103）。
-	if xdg_cache_home := os.environ.get("XDG_CACHE_HOME"):
-		dirs.append(Path(xdg_cache_home) / "ms-playwright")
-	if local_app_data := os.environ.get("LOCALAPPDATA"):
-		dirs.append(Path(local_app_data) / "ms-playwright")
-	else:
-		dirs.append(Path.home() / "AppData" / "Local" / "ms-playwright")
-	return dirs
+	return _default_browser_cache_dirs()
+
+
+#: 驱动安装完成后写入的标记文件；缺失说明目录只是残留或安装未完成。
+_INSTALLATION_MARKER = "INSTALLATION_COMPLETE"
+
+
+def _is_usable_browser_entry(entry: Path) -> bool:
+	"""缓存条目是否为完整安装：必须是目录且带安装完成标记。
+
+	只看目录名会把悬空符号链接、空目录或同名普通文件当成「已安装」，doctor
+	通过后 ``chromium.launch()`` 仍报 ``Executable doesn't exist``（Issue #2318）。
+	``stat()`` 跟随符号链接：指向完整安装的链接仍可用，悬空链接按 OSError 拒绝。
+	"""
+	try:
+		mode = entry.stat().st_mode
+	except (OSError, ValueError, RuntimeError):
+		return False
+	if not stat.S_ISDIR(mode):
+		return False
+	try:
+		return (entry / _INSTALLATION_MARKER).is_file()
+	except (OSError, ValueError, RuntimeError):
+		return False
 
 
 def _scan_browser_cache() -> tuple[list[Path], list[Path]]:
-	"""展开缓存条目，并收集「存在但无法读取」的缓存根。
+	"""展开缓存条目，并收集「存在但无法读取」的缓存根 / 条目。
 
 	``Path.exists()`` 在 3.14 只吞部分 errno，权限错误会抛到 doctor 顶层，
 	整份自检报告变成 LOCAL_IO_ERROR（Issue #2103）。按 lstat 口径只把
 	``FileNotFoundError`` 当缺失；其余 OSError 记为不可读——既不能让 doctor
 	崩溃，也不能当成「未安装内核」引导用户重复下载。
+
+	缓存根枚举在 cwd 已删除 / HOME 无法解析 / 环境变量含 NUL 时也会抛
+	``OSError`` / ``RuntimeError`` / ``ValueError``：统一按不可读兜底，不能让
+	确定性的本地配置问题打穿整份自检（Issue #2317）。
 	"""
+	try:
+		bases = patchright_browser_cache_dirs()
+	except (OSError, ValueError, RuntimeError):
+		return [], []
+
 	entries: list[Path] = []
 	unreadable: list[Path] = []
-	for base in patchright_browser_cache_dirs():
+	for base in bases:
 		try:
-			base.lstat()
+			mode = base.stat().st_mode
 		except FileNotFoundError:
 			continue
-		except OSError:
+		except (OSError, ValueError, RuntimeError):
+			unreadable.append(base)
+			continue
+		if not stat.S_ISDIR(mode):
+			# 缓存根本身是普通文件 / 悬空链接：glob 会返回空，不能报成「未安装」
+			# 并引导用户重复下载。
 			unreadable.append(base)
 			continue
 		try:
-			entries.extend(base.glob("chromium-*"))
-			entries.extend(base.glob("chromium_headless_shell-*"))
-		except OSError:
+			candidates = list(base.glob("chromium-*")) + list(base.glob("chromium_headless_shell-*"))
+		except (OSError, ValueError, RuntimeError):
 			# 目录存在但不可读（权限）：glob 在部分平台上直接抛错。
 			unreadable.append(base)
+			continue
+		for entry in candidates:
+			if _is_usable_browser_entry(entry):
+				entries.append(entry)
+			else:
+				# 名称匹配但安装不完整（残留 / 悬空链接 / 同名文件）：单独上报，
+				# 不当作可用条目。
+				unreadable.append(entry)
 	return entries, unreadable
 
 
 def installed_browser_dirs() -> list[Path]:
-	"""展开缓存根目录下的全部浏览器条目（``chromium-*`` / ``chromium_headless_shell-*``）。
+	"""展开缓存根目录下的完整浏览器安装（``chromium-*`` / ``chromium_headless_shell-*``）。
 
 	``evaluate_patchright_chromium`` 按条目名精确匹配修订版，只能接收展开后的
 	条目；直接把缓存根目录传进去永远匹配不上（见 Issue #1060 的向导预检）。
+	只有带 ``INSTALLATION_COMPLETE`` 标记的目录才算已安装：悬空链接、空目录
+	与同名普通文件都会让 ``chromium.launch()`` 报 Executable doesn't exist
+	（Issue #2318）。
 	"""
 	return _scan_browser_cache()[0]
 
 
 def unreadable_browser_cache_dirs() -> list[Path]:
-	"""存在但无法读取的缓存根（权限等 OSError）。
+	"""存在但无法读取的缓存根 / 名称匹配但安装不完整的条目。
 
 	doctor 据此提示「无法确认内核是否已安装」，而不是当成缺失去重装；
-	预检与登录路径行为不变（Issue #2103）。
+	预检与登录路径行为不变（Issue #2103、#2318、#2317）。
 	"""
 	return _scan_browser_cache()[1]
 
