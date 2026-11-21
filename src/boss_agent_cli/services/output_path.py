@@ -94,7 +94,14 @@ def prepare_output_path(path: str | os.PathLike[str]) -> Path:
 			f"-o / --output 的家目录写法无法展开（{exc}）：{os.fspath(path)!r}；"
 			"请改用绝对路径或 ~/ 开头的当前用户路径"
 		) from exc
-	target.parent.mkdir(parents=True, exist_ok=True)
+	try:
+		target.parent.mkdir(parents=True, exist_ok=True)
+	except ValueError as exc:
+		# 内嵌 NUL 的父路径在 mkdir 处只抛裸 ValueError；与 _stat_mode 同口径
+		# 归一为带 filename 的 OSError（Issue #2375）。
+		error = OSError(errno.EINVAL, str(exc))
+		error.filename = str(target)
+		raise error from exc
 	# 原子写入的 ``os.replace`` 会替换符号链接本身，真实目标保持旧内容
 	# （Issue #1355）；目录 / FIFO / 设备也不能当文件写入。共享写入器统一在
 	# 准备阶段拒绝，不再依赖各命令是否先走 ``inspect_output_path``（Issue #1849）。

@@ -56,7 +56,7 @@ def tighten_private_file(path: Path) -> None:
 	"""
 	try:
 		mode = path.lstat().st_mode
-	except OSError:
+	except (OSError, ValueError):
 		return
 	if stat.S_ISREG(mode):
 		chmod_best_effort(path, FILE_MODE)
@@ -76,7 +76,7 @@ def tighten_private_directory(path: Path) -> None:
 	"""
 	try:
 		mode = path.stat().st_mode
-	except OSError:
+	except (OSError, ValueError):
 		return
 	if mode & 0o002 or not mode & 0o200:
 		return
@@ -178,7 +178,12 @@ def load_or_create_private_salt(auth_dir: Path) -> bytes:
 	窗口）；空文件、半截写入、目录 / FIFO / 悬空链接都按状态损坏失败，不再
 	静默派生密钥（Issue #1688、#1699、#2200）。
 	"""
-	auth_dir.mkdir(parents=True, exist_ok=True, mode=DIRECTORY_MODE)
+	try:
+		auth_dir.mkdir(parents=True, exist_ok=True, mode=DIRECTORY_MODE)
+	except ValueError as exc:
+		# 内嵌 NUL 等非法目录名在 mkdir 处只抛裸 ValueError；补上 filename
+		# 后命令层按本地路径错误报，而不是未分类异常（Issue #2374）。
+		raise OSError(errno.EINVAL, str(exc), str(auth_dir)) from exc
 	chmod_best_effort(auth_dir, DIRECTORY_MODE)
 	salt_path = auth_dir / "salt"
 	with exclusive_file_lock(auth_dir / "refresh.lock") as acquired:
