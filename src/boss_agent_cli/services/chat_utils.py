@@ -94,18 +94,31 @@ def contact_identity(item: dict[str, Any]) -> str:
 	return stable_uid(item.get("security_id"))
 
 
+#: 会被 Excel / openpyxl 当成公式开头的字符。
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+#: 表格软件可能忽略的前导控制字符；紧随其后的公式前缀同样危险（Issue #2459）。
+_CSV_IGNORED_LEADING = "\n\x0b\x0c\x00﻿"
+
+
 def sanitize_csv_cell(value: str) -> str:
-	"""防止 CSV 公式注入：以 =+@- 开头的值前置单引号；过滤 Tab 和回车。"""
+	"""防止 CSV 公式注入：以 =+@- 开头的值前置单引号；过滤 Tab 和回车。
+
+	前缀判定先跳过前导换行 / VT / FF / NUL / BOM：``"\\n=cmd"`` 这类单元格
+	在部分表格软件里会忽略前导控制字符后按公式求值，只看 ``value[0]`` 会放行
+	（Issue #2459）。跳过只用于判定，不改写原文。
+	"""
 	if not isinstance(value, str):
 		# 漂移值先转成字符串，再走与 str 完全相同的清洗链：直接 return
 		# str(value) 会跳过 Tab/回车过滤与公式前缀检查，超大整数的 str()
 		# 还会抛 ValueError（Issue #2198）。
 		value = safe_text(value)
 	value = value.replace("\t", " ").replace("\r", "")
+	candidate = value.lstrip(_CSV_IGNORED_LEADING)
 	# 单独一个 ``-`` 是导出里的缺失占位符，不是公式（Issue #1793）。
-	if value == "-":
+	if candidate == "-":
 		return value
-	if value and value[0] in ("=", "+", "-", "@"):
+	if candidate and candidate[0] in _CSV_FORMULA_PREFIXES:
 		return f"'{value}"
 	return value
 

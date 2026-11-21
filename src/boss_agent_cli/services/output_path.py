@@ -10,6 +10,7 @@ from __future__ import annotations
 import errno
 import os
 import stat
+import sys
 from enum import Enum
 from pathlib import Path
 
@@ -22,6 +23,24 @@ class OutputPathProblem(Enum):
 	PARENT_NOT_DIR = "parent_not_dir"
 	NOT_WRITABLE = "not_writable"
 	UNEXPANDABLE_USER = "unexpandable_user"
+	FILENAME_NOT_UTF8 = "filename_not_utf8"
+
+
+#: APFS 拒绝创建文件名不是合法 UTF-8 的文件（``os.replace`` 抛 EILSEQ）；
+#: Linux 允许任意字节，所以只在 darwin 上做这项预检（Issue #2458）。模块级
+#: 常量让测试可以 monkeypatch 两个分支。
+_FS_REQUIRES_UTF8_NAMES = sys.platform == "darwin"
+
+
+def _utf8_representable(path: Path) -> bool:
+	"""路径能否以合法 UTF-8 字节表示（argv 非法字节会解码成孤立代理项）。"""
+	try:
+		os.fsencode(os.fspath(path)).decode("utf-8")
+	except (UnicodeDecodeError, UnicodeEncodeError):
+		# UnicodeEncodeError：MCP JSON 参数里可能直接带 U+D800 这类高位孤立
+		# 代理项，surrogateescape 只能编码 U+DC80–U+DCFF。
+		return False
+	return True
 
 
 def _expand_user(path: str | os.PathLike[str]) -> Path:
@@ -120,7 +139,8 @@ def inspect_output_path(path: str | os.PathLike[str]) -> tuple[Path, OutputPathP
 	本函数**不建目录、不写文件**，只回答「这个路径能不能写」。``None`` 表示未
 	发现问题；仍需交给 ``prepare_output_path`` 建父目录。最近的已存在祖先目录
 	不可写时同样算问题：不这样检查，合法的只读路径会先消耗一次平台请求、更新
-	当日快照，才在真正写文件时抛 ``PermissionError``（Issue #2197）。
+	当日快照，才在真正写文件时抛 ``PermissionError``（Issue #2197）。macOS 上
+	文件名必须是合法 UTF-8，预检同样提前拒绝（Issue #2458）。
 
 	保持纯函数（不依赖 click / display），出信封由命令层负责。
 	"""
@@ -130,6 +150,11 @@ def inspect_output_path(path: str | os.PathLike[str]) -> tuple[Path, OutputPathP
 		# 未知用户无法展开成真实目录：按参数错误拒绝，而不是在 cwd 建一个字面量
 		# ``~user`` 目录并把产物写进去（Issue #2289）。
 		return Path(os.fspath(path)), OutputPathProblem.UNEXPANDABLE_USER
+	# APFS 在创建文件时才校验文件名是合法 UTF-8，预检若不拦截，非法字节路径
+	# 会先消耗完平台分页、更新当日快照，最后才在 os.replace 上抛 EILSEQ；参数
+	# 错误必须在副作用之前暴露（Issue #2458）。
+	if _FS_REQUIRES_UTF8_NAMES and not _utf8_representable(target):
+		return target, OutputPathProblem.FILENAME_NOT_UTF8
 	# 符号链接不是普通文件：``is_file()`` 会跟随链接把「链接指向普通文件」判成
 	# 可写，而原子写入的 ``os.replace`` 替换的是链接本身，真实目标保持旧内容
 	# （Issue #1355）。悬空链接的 ``exists()`` 为 False，同样必须按非普通文件
