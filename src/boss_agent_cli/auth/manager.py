@@ -389,6 +389,11 @@ class AuthManager:
 		snapshot = self._store.load()
 		try:
 			with self._store.refresh_lock():
+				# 刷新锁最长等待 30 秒，等锁期间另一个进程/通道可能已落下风控锁。
+				# 拿到锁后、启动任何浏览器通道前必须复查同一把锁（与 login 的
+				# 逐级复查同口径，Issue #2394）；命中即停止，不写回新凭证
+				# （Issue #2427）。
+				self._check_cdp_login_risk_lock(cdp_url)
 				current = self._store.load()
 				if current is None:
 					raise TokenRefreshFailed("无法刷新 Token，请重新登录")
