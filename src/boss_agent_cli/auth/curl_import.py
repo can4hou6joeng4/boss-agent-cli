@@ -17,7 +17,9 @@ _FLAG_OPTIONS = {"--compressed", "--globoff", "-g", "--insecure", "-k"}
 
 def parse_curl_auth(command: str) -> dict[str, Any]:
 	"""只返回原生 TokenStore 字段；不保存请求头、URL 或业务请求体。"""
-	parts = shlex.split(command.replace("\\\r\n", "").replace("\\\n", ""))
+	# Windows 记事本保存的文本可能带 UTF-8 BOM：shlex 会把它粘在 "curl" 上，
+	# 让用户看到「需要原始文本」而不知道原因（Issue #2310）。
+	parts = shlex.split(command.lstrip("﻿").replace("\\\r\n", "").replace("\\\n", ""))
 	if not parts or parts[0] != "curl":
 		raise ValueError("需要浏览器 Copy as cURL (bash) 原始文本")
 	values: dict[str, list[str]] = {"cookie": [], "header": [], "user-agent": [], "url": []}
@@ -39,8 +41,12 @@ def parse_curl_auth(command: str) -> dict[str, Any]:
 			kind = _VALUE_OPTIONS[option]
 			if kind != "ignore":
 				values[kind].append(value)
-		elif part.startswith("https://"):
+		elif part[:8].lower() == "https://":
+			# scheme 大小写不敏感（后续 urlsplit 也会小写归一）；与 URL 校验同口径。
 			values["url"].append(part)
+		elif part.startswith("$"):
+			# shlex 不解析 bash 的 ANSI-C 引号（$'...'），它会退化成 "$https://..."。
+			raise ValueError("不支持 ANSI-C 引号（$'…'），请粘贴 Copy as cURL (bash) 原始文本")
 		else:
 			raise ValueError("不支持此 cURL 语法，请使用 Copy as cURL (bash)")
 

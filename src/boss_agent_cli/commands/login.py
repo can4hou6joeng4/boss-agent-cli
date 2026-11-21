@@ -1,12 +1,41 @@
+import os
+import stat
+import sys
 from typing import TextIO
 
 import click
 
+from boss_agent_cli.api.client import PlatformRateLimitError, PlatformRiskError
+from boss_agent_cli.api.proxy import ProxyConfigurationError
 from boss_agent_cli.auth.manager import MAX_LOGIN_TIMEOUT_SECONDS, AuthManager
-from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.commands._login_errors import classify_login_error
-from boss_agent_cli.display import boss_command_for_ctx
-from boss_agent_cli.output import emit_error, emit_success
+from boss_agent_cli.display import INTERNAL_ERROR_TYPES, boss_command_for_ctx, error_contract_for_code
+from boss_agent_cli.output import emit_error, emit_success, is_local_io_error
+
+#: ``--curl-file`` 的读取上限（字符数）：粘贴的 cURL 文本远小于此值；``/dev/zero``、
+#: FIFO 或不结束的 stdin 不能把登录命令拖成无界读取（Issue #2310）。
+_MAX_CURL_FILE_CHARS = 1024 * 1024
+
+
+def _read_curl_command(curl_file: TextIO) -> str:
+	"""有界读取 ``--curl-file``：只接受普通文件或标准输入。"""
+	is_stdin = curl_file is sys.stdin or getattr(curl_file, "name", None) == "<stdin>"
+	if not is_stdin:
+		name = getattr(curl_file, "name", None)
+		if not isinstance(name, str):
+			raise ValueError("--curl-file 必须是普通文件或标准输入（-）")
+		try:
+			mode = os.stat(name).st_mode
+		except OSError as exc:
+			raise ValueError("--curl-file 必须是普通文件或标准输入（-）") from exc
+		if not stat.S_ISREG(mode):
+			raise ValueError("--curl-file 必须是普通文件或标准输入（-）")
+	text = curl_file.read(_MAX_CURL_FILE_CHARS + 1)
+	if not isinstance(text, str):
+		raise ValueError("--curl-file 内容不是文本")
+	if len(text) > _MAX_CURL_FILE_CHARS:
+		raise ValueError(f"--curl-file 内容超过 {_MAX_CURL_FILE_CHARS // 1024} KiB 上限")
+	return text
 
 
 def _reject_conflicting_options(
@@ -70,11 +99,13 @@ def login_cmd(
 	cdp_url = ctx.obj.get("cdp_url")
 	platform_name = ctx.obj.get("platform") or "zhipin"
 
-	auth = AuthManager(data_dir, logger=logger, platform=platform_name)
 	_reject_conflicting_options(ctx, cookie_source=cookie_source, cdp=cdp, force=force, curl_file=curl_file)
 	try:
+		# 构造也放进 try：--data-dir 不可写等本地 IO 失败要走 LOCAL_IO_ERROR，
+		# 而不是逃出命令层被兜成 INTERNAL_ERROR（Issue #2311）。
+		auth = AuthManager(data_dir, logger=logger, platform=platform_name)
 		if curl_file is not None:
-			token = auth.import_curl(curl_file.read())
+			token = auth.import_curl(_read_curl_command(curl_file))
 		else:
 			token = auth.login(
 				timeout=timeout,
@@ -98,19 +129,50 @@ def login_cmd(
 	except Exception as e:
 		if isinstance(e, PlatformRiskError):
 			emit_error("login", **classify_login_error(e, ctx))
-		elif curl_file is not None:
-			# 文件解码、解析器或网络库的异常可能包含凭据，禁止透传原异常文本。
+		elif isinstance(e, (PlatformRateLimitError, ProxyConfigurationError)):
+			# 限流 / 代理配置错误带专用契约；curl 分支不能把它们兜成通用的
+			# 「导入失败、可重试」（Issue #2308）。
+			emit_error("login", **classify_login_error(e, ctx))
+		elif isinstance(e, INTERNAL_ERROR_TYPES):
+			# 确定性内部错误不能落到文本启发式被报成可重试网络故障。登录输入
+			# 可能夹带凭据，message 只放类型名，不回显异常文本（Issue #2307）。
+			recoverable, recovery_action = error_contract_for_code("INTERNAL_ERROR")
 			emit_error(
-				"login", code="INVALID_PARAM" if isinstance(e, ValueError) else "LOGIN_CREDENTIAL_EXTRACTION_FAILED",
-				# ValueError 表示 cURL 文本本身无效；与登记表及相邻参数分支一致，
-				# 不能把「修正输入」标成可重试（Issue #1624）。
-				message="cURL 登录态导入失败，未完成会话更新",
-				recoverable=not isinstance(e, ValueError),
-				recovery_action="核对 BOSS cURL 原始文本、选项及平台登录状态后重新导入",
-				hints={"operator_actions": [
-					"仅支持 BOSS 直聘 Copy as cURL (bash) 原始文本，不能与 --cdp 或 --cookie-source 混用",
-					"检查文件格式、网络和网页登录状态；导入失败不会自动打开浏览器或重放请求",
-				]},
+				"login",
+				code="INTERNAL_ERROR",
+				message=f"登录流程内部错误: {type(e).__name__}",
+				recoverable=recoverable,
+				recovery_action=recovery_action,
 			)
+		elif is_local_io_error(e):
+			# 本地目录 / 磁盘错误不是网络问题，也不该被 curl 分支的通用文案吞掉。
+			emit_error("login", **classify_login_error(e, ctx))
+		elif curl_file is not None:
+			operator_actions = [
+				"仅支持 BOSS 直聘 Copy as cURL (bash) 原始文本，不能与 --cdp 或 --cookie-source 混用",
+				"检查文件格式、网络和网页登录状态；导入失败不会自动打开浏览器或重放请求",
+			]
+			if isinstance(e, ValueError):
+				# 解析器 / 有界读取的 ValueError 文案是固定文本，不含输入内容；回显
+				# 它能定位 BOM、大小上限等具体原因（Issue #2310）。非 ValueError
+				# （网络库 / 未知异常）仍可能与凭据有关，完全透传原文被禁止。
+				emit_error(
+					"login",
+					code="INVALID_PARAM",
+					message=f"cURL 登录态导入失败: {e}",
+					# 与登记表及相邻参数分支一致：修正输入不可重试（Issue #1624）。
+					recoverable=False,
+					recovery_action="核对 BOSS cURL 原始文本、选项及平台登录状态后重新导入",
+					hints={"operator_actions": operator_actions},
+				)
+			else:
+				emit_error(
+					"login",
+					code="LOGIN_CREDENTIAL_EXTRACTION_FAILED",
+					message="cURL 登录态导入失败，未完成会话更新",
+					recoverable=True,
+					recovery_action="核对 BOSS cURL 原始文本、选项及平台登录状态后重新导入",
+					hints={"operator_actions": operator_actions},
+				)
 		else:
 			emit_error("login", **classify_login_error(e, ctx))

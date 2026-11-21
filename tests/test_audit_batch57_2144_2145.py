@@ -30,12 +30,12 @@ def test_emfile_is_not_classified_as_platform_risk(tmp_path):
 	)
 
 
-def test_rate_limit_text_still_classified_as_risk(tmp_path):
-	"""收窄后真实限流文案仍按风控硬边界处理。"""
+def test_rate_limit_text_is_classified_as_rate_limited(tmp_path):
+	"""限流不是风控：文本兜底与 typed PlatformRateLimitError 同口径（Issue #2309）。"""
 	payload = _classify(RuntimeError("429 Too many requests"), tmp_path)
 
-	assert payload["code"] == "LOGIN_RISK_CONTROL"
-	assert payload["recoverable"] is False
+	assert payload["code"] == "RATE_LIMITED"
+	assert payload["recoverable"] is True
 
 
 def test_cdp_text_does_not_mask_risk_control(tmp_path):

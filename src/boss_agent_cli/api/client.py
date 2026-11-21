@@ -40,7 +40,9 @@ class PlatformRiskError(Exception):
 
 	def __init__(self, message: str = "", is_cdp: bool = False, *, details: dict[str, Any] | None = None):
 		self.is_cdp = is_cdp
-		self.details = details or {}
+		# 容器漂移防御：非对象 details 会让信封构造 dict(details) 失败，风控码被
+		# 兜成 INTERNAL_ERROR。只接受 dict，其余按空证据处理（Issue #2312）。
+		self.details = details if isinstance(details, dict) else {}
 		super().__init__(message)
 
 	@staticmethod

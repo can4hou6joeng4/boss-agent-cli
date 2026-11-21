@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Fixed
+- `boss login` 的确定性内部异常（`TypeError` / `KeyError` 等）与本地 IO 失败按 `INTERNAL_ERROR` / `LOCAL_IO_ERROR` 输出，不再被文本启发式兜成可重试的 `NETWORK_ERROR`；内部错误 message 只含类型名，不回显可能夹带凭据的异常文本（Issue #2307）。
+- `--curl-file` 导入在平台限流（`RATE_LIMITED`）、代理环境变量非法（`INVALID_PARAM`）与本地 IO 失败时保留专用错误契约，不再一律报成可重试的「导入失败」（Issue #2308）。
+- 登录错误文本启发式按词边界匹配状态码与关键词：端口 4030 / 4290、`asterisk` 与路径里的 timeout 不再误判为风控 / 限流 / 超时；非 typed 的限流文本与 `PlatformRateLimitError` 同口径报 `RATE_LIMITED`；启发式风控分支只输出登记表文案，不回显原始异常文本（Issue #2309）。
+- `--curl-file` 有界读取（上限 1 MiB）并只接受普通文件或标准输入，`/dev/zero` 等无界输入不再耗尽内存；cURL 文本容忍 UTF-8 BOM 与大小写 scheme，ANSI-C 引号（`$'…'`）给出明确提示（Issue #2310）。
+- 登录互斥选项在任何本地副作用之前校验；`AuthManager` 构造失败按 `LOCAL_IO_ERROR` 输出；本地 IO 文案改为中性表述，不再一律断言「登录成功但保存失败」（Issue #2311）。
+- `PlatformRiskError` 的 `details` 非对象时归一为空证据，风控信封不再因 `dict(details)` 失败退化为 `INTERNAL_ERROR`（Issue #2312）。
+- Cookie 提取失败的 stderr 诊断经统一文本脱敏后再输出（Issue #2313）。
+
 ## [3.4.145] - 2026-11-21
 
 ### Fixed

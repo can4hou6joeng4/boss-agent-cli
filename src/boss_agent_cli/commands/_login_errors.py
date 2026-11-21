@@ -1,5 +1,7 @@
 """把登录失败归类成带双通道 hints 的错误信封载荷（login 命令与 wizard 预检共用）。"""
 
+import re
+
 import click
 
 from boss_agent_cli.api.client import PlatformRateLimitError, PlatformRiskError
@@ -109,13 +111,13 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 		}
 
 	if is_local_io_error(exc):
-		# 平台侧登录可能已经成功，但登录态没写进本地：重复扫码或检查网络都不会
-		# 改变结果，必须报确定性本地失败（Issue #1457）。
+		# 本地 IO 失败既可能发生在登录态保存阶段，也可能更早（临时目录、Cookie
+		# 库文件）：不能断言「登录成功」，恢复动作同时覆盖两类目录（Issue #2311）。
 		return payload(
 			"LOCAL_IO_ERROR",
-			f"登录成功但本地登录态保存失败: {raw_message}",
+			f"本地文件操作失败，登录态可能未保存: {raw_message}",
 			[],
-			["确认登录态目录可写、磁盘空间充足后重新执行登录"],
+			["确认登录态目录与临时目录可写、磁盘空间充足后重新执行登录"],
 			recovery="修正本地目录权限或磁盘空间后重新执行登录",
 		)
 
@@ -128,7 +130,13 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 			"recovery_action": "修正参数",
 		}
 
-	if isinstance(exc, TimeoutError) or "timeout" in message or "超时" in raw_message:
+	# 文本兜底要求「timed out」短语或紧跟在 timeout 后的分隔符 / 数字：路径或选项名
+	# 里的 timeout 子串不再命中（Issue #2309）。
+	if (
+		isinstance(exc, TimeoutError)
+		or re.search(r"\btimed[ -]?out\b|\btimeout\b(?=[ :]|\d|$)", message)
+		or "超时" in raw_message
+	):
 		return payload(
 			"LOGIN_TIMEOUT",
 			f"登录等待超时: {raw_message}",
@@ -152,16 +160,16 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 
 	# 风控判定必须先于 CDP / 浏览器文本启发式：Playwright / CDP 的异常文案可能
 	# 同时含「chrome / cdp」与风控词，先走 CDP 分支会把硬边界报成可重试的
-	# CDP_UNAVAILABLE 并建议重新登录（Issue #2145）。限流词只认完整的
-	# "too many requests"：本地 fd 耗尽的 strerror "Too many open files"
-	# 不是平台风控（Issue #2144）。
-	if any(term in message for term in ("403", "forbidden", "风控", "risk", "rate limit", "too many requests")):
+	# CDP_UNAVAILABLE 并建议重新登录（Issue #2145）。数字码按完整词匹配：端口
+	# 4030、4290 里的子串不是平台状态码（Issue #2309）。
+	if re.search(r"\b403\b|\bforbidden\b|风控|\brisk\b|security\.html|verify\.html|安全验证", message):
 		# 风控是硬边界：恢复动作取登记表原文，不能沿用 login_action_for_ctx 的
 		# 默认「重新登录」，否则信封会诱导 Agent 反复重试（Issue #1390）。
+		# 平台响应文本可能带临时凭据，启发式分支同样只给登记表文案（Issue #2309）。
 		_, risk_recovery = error_contract_for_code("LOGIN_RISK_CONTROL")
 		return payload(
 			"LOGIN_RISK_CONTROL",
-			f"登录请求可能触发平台风控: {raw_message}",
+			"登录请求可能触发平台风控",
 			[],
 			[
 				"暂停自动化重试，改用浏览器手动确认账号状态",
@@ -169,6 +177,20 @@ def classify_login_error(exc: Exception, ctx: click.Context) -> dict[str, object
 				"必要时联系平台客服确认账号是否受限",
 			],
 			recovery=risk_recovery,
+		)
+
+	# 限流不是风控（与 typed PlatformRateLimitError 同口径）：非 typed 的 429 /
+	# 「too many requests」文本应等待限流窗口，而不是升级成硬停止（Issue #2309）。
+	if re.search(r"\b429\b", message) or "too many requests" in message or "rate limit" in message:
+		return payload(
+			"RATE_LIMITED",
+			"登录请求被平台限流，暂时无法完成验证",
+			[],
+			[
+				"等待一段时间后再执行登录验证",
+				"限流期间不要反复触发扫码或 cURL 导入，避免叠加请求",
+			],
+			recovery="等待平台限流窗口结束后重试登录",
 		)
 
 	if "cdp" in message or "chrome" in message or isinstance(exc, ConnectionError):

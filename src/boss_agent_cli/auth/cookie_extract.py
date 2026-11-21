@@ -320,5 +320,9 @@ def _try_extract(
 		# 异常树里。本函数是 best-effort 降级链路的一环，任何失败都应静默返回 None
 		# 让上层尝试下一个浏览器/通道，而非中断整条调用链。
 		if failures is not None:
-			failures.append(f"{type(exc).__name__}: {str(exc)[:160]}")
+			# 库异常文本可能夹带 Cookie / 解密片段：进入 stderr 诊断前按统一规则
+			# 脱敏（Issue #2313）。
+			from boss_agent_cli.output import redact_sensitive_text
+
+			failures.append(redact_sensitive_text(f"{type(exc).__name__}: {str(exc)[:160]}"))
 		return None
