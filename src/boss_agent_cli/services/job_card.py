@@ -3,7 +3,13 @@
 import math
 from typing import Any
 
-from boss_agent_cli.api.models import employment_type_from_raw, field_list, field_text, safe_text
+from boss_agent_cli.api.models import (
+	employment_type_from_raw,
+	field_list,
+	field_text,
+	safe_text,
+	scalar_or_none,
+)
 from boss_agent_cli.services.json_files import strict_json_text
 
 
@@ -28,15 +34,6 @@ def _text_item(value: Any) -> str:
 def text_items(data: Any, key: str) -> list[str]:
 	"""列表字段逐个归一为文本并丢弃空元素，不把 repr / None 交给展示层。"""
 	return [text for item in field_list(data, key) if (text := _text_item(item))]
-
-
-def scalar_or_none(value: Any) -> Any:
-	"""raw_job_type 输出归一：容器与非有限数按缺失处理，不再落 Python repr。"""
-	if value is None or isinstance(value, (dict, list, tuple)):
-		return None
-	if isinstance(value, float) and not math.isfinite(value):
-		return None
-	return value
 
 
 def build_job_from_card(card: dict[str, Any], *, security_id: str, greeted: bool, lid: str = "") -> dict[str, Any]:
