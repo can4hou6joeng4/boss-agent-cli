@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Fixed
+- 候选人写动作的预约释放在 SQLite 写失败时不再替换原始异常：可证明未发出的错误保留原错误码并附注释放失败，平台明确拒绝则报 `LOCAL_STATE_WRITE_FAILED`，不再让下一次调用误判为结果未知（Issue #2315）。
+- 候选人写动作把 `NETWORK_ERROR`（HTTP 5xx / 超时 / 连接中断）纳入结果未知集合，5xx 后保留 pending，避免 Agent 重发导致重复打招呼 / 投递（Issue #2316）。
+- `boss doctor` 的浏览器缓存探测统一兜底 `OSError` / `ValueError` / `RuntimeError`：cwd 已删除、HOME 无法解析或路径含 NUL 时不再打穿整份自检（Issue #2317）。
+- 浏览器内核「已安装」改为要求带 `INSTALLATION_COMPLETE` 标记的目录，悬空链接 / 空目录 / 同名文件不再误报；默认缓存根按驱动平台优先级只探测一个，`browsers.json` 的 `revision` 形状漂移按不可读处理（Issue #2318）。
+- `safe_text` 同时捕获 `RecursionError`：深嵌套 `jobType` 按字段缺失处理，不再把整条职位命令落成 `INTERNAL_ERROR`（Issue #2319）。
+- wizard 的 `candidate_greet` / `candidate_apply` 在预约前拒绝纯空白 `security_id` / `job_id`，按 `INVALID_PARAM` 提示修正输入，不再误报「上一次预约仍在」（Issue #2320）。
+- 聊天导出入口归一非对象 `diff_result`，Markdown diff 摘要按单元格口径转义换行，JSON 分支清洗孤立代理字符，避免 `AttributeError` / 报告行注入 / 严格 UTF-8 写盘失败（Issue #2321）。
+
 ## [3.4.146] - 2026-11-21
 
 ### Fixed

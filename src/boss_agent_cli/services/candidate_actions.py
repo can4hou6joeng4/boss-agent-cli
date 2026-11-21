@@ -36,7 +36,9 @@ _ALREADY_MESSAGE: dict[str, str] = {
 }
 _ACTION_LABEL: dict[str, str] = {"greet": "打招呼", "apply": "投递"}
 #: 无法证明请求没有生效的错误码：保留 pending，禁止自动重放。
-_UNKNOWN_CODES = frozenset({"ACTION_UNCONFIRMED", "UNKNOWN"}) | frozenset(RISK_ERROR_BY_CODE)
+#: ``NETWORK_ERROR`` 包含 HTTP 5xx 与超时 / 连接中断文案：写请求可能已在平台
+#: 落库，不能当成明确拒绝释放预约（Issue #2316）。
+_UNKNOWN_CODES = frozenset({"ACTION_UNCONFIRMED", "UNKNOWN", "NETWORK_ERROR"}) | frozenset(RISK_ERROR_BY_CODE)
 
 
 class CandidateActionBlocked(Exception):
@@ -57,6 +59,20 @@ class CandidateActionNotRecorded(Exception):
 
 	保留原始异常（``__cause__``）供日志诊断，但命令层不能把它当成可重试的
 	发送失败：重跑会绕过位于 pending/sent 的预约再发一次。
+	"""
+
+	def __init__(self, action: CandidateAction, cause: BaseException) -> None:
+		super().__init__(str(cause) or type(cause).__name__)
+		self.action = action
+		self.cause = cause
+
+
+class CandidateActionReleaseFailed(Exception):
+	"""平台明确拒绝本次请求，但释放本地预约失败。
+
+	请求本身可以重试（限流 / 参数 / 登录态），但 pending 行仍在：直接重试会
+	撞上 ``ACTION_UNCONFIRMED``。命令层必须输出不可重试的本地状态错误，说明
+	「平台未接受本次请求，但本地预约未释放」，而不是结果未知（Issue #2315）。
 	"""
 
 	def __init__(self, action: CandidateAction, cause: BaseException) -> None:
@@ -212,7 +228,13 @@ def run_candidate_action(
 		result = send()
 	except BaseException as exc:
 		if candidate_action_provably_unsent(exc):
-			release_candidate_action(cache, job_id, action, account=account)
+			# 释放本身也可能写失败（database is locked / 磁盘满）：不能让它替换
+			# 原始异常，否则命令层会把「请求未发出」报成结果未知，丢掉真正的
+			# 恢复动作（重新登录 / 修代理，Issue #2315）。释放失败只记 note。
+			try:
+				release_candidate_action(cache, job_id, action, account=account)
+			except Exception as release_exc:
+				exc.add_note(f"释放候选人动作预约失败: {type(release_exc).__name__}: {release_exc}")
 		raise
 	outcome = classify(result) if classify is not None else "success"
 	if outcome == "success":
@@ -222,6 +244,11 @@ def run_candidate_action(
 			raise CandidateActionNotRecorded(action, exc) from exc
 	elif outcome == "retryable":
 		# 平台明确拒绝且没有产生记录：释放预约，修正参数 / 等待限流后可重试。
-		release_candidate_action(cache, job_id, action, account=account)
+		try:
+			release_candidate_action(cache, job_id, action, account=account)
+		except Exception as exc:
+			# 平台没接受请求，但 pending 行还在：直接重试会被预约拦住。报明确的
+			# 本地状态错误，而不是让下一次调用落成 ACTION_UNCONFIRMED。
+			raise CandidateActionReleaseFailed(action, exc) from exc
 	# outcome == "unknown"：保留 pending，后续调用按结果未知处理。
 	return result

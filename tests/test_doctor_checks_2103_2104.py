@@ -45,38 +45,48 @@ def test_xdg_cache_home_is_probed(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 	"""Linux 的 XDG_CACHE_HOME 布局与驱动同口径探测，不能误报内核缺失。"""
 	monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
 	monkeypatch.setattr(Path, "home", lambda: tmp_path)
+	monkeypatch.setattr(browser_runtime.sys, "platform", "linux")
 	monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
 	monkeypatch.delenv("LOCALAPPDATA", raising=False)
 
 	dirs = browser_runtime.patchright_browser_cache_dirs()
 
-	assert tmp_path / "xdg-cache" / "ms-playwright" in dirs
+	assert dirs == [tmp_path / "xdg-cache" / "ms-playwright"]
+
+
+def test_linux_without_xdg_uses_dot_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+	monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
+	monkeypatch.setattr(Path, "home", lambda: tmp_path)
+	monkeypatch.setattr(browser_runtime.sys, "platform", "linux")
+	monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+
+	assert browser_runtime.patchright_browser_cache_dirs() == [tmp_path / ".cache" / "ms-playwright"]
 
 
 def test_windows_default_fallback_is_probed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 	"""LOCALAPPDATA 缺失时驱动回退 ~/AppData/Local，探测也要覆盖。"""
 	monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
 	monkeypatch.setattr(Path, "home", lambda: tmp_path)
+	monkeypatch.setattr(browser_runtime.sys, "platform", "win32")
 	monkeypatch.delenv("LOCALAPPDATA", raising=False)
-	monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
 
 	dirs = browser_runtime.patchright_browser_cache_dirs()
 
-	assert tmp_path / "AppData" / "Local" / "ms-playwright" in dirs
+	assert dirs == [tmp_path / "AppData" / "Local" / "ms-playwright"]
 
 
 def test_unreadable_cache_root_is_reported_not_raised(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 	"""缓存根元数据读不出来（权限）时跳过并单独上报，不能抛到 doctor 顶层。"""
 	blocked = tmp_path / "blocked" / "ms-playwright"
 	monkeypatch.setattr(browser_runtime, "patchright_browser_cache_dirs", lambda: [blocked])
-	real_lstat = Path.lstat
+	real_stat = Path.stat
 
-	def fake_lstat(self: Path):
+	def fake_stat(self: Path, *args, **kwargs):
 		if self == blocked:
 			raise PermissionError(13, "permission denied", str(self))
-		return real_lstat(self)
+		return real_stat(self, *args, **kwargs)
 
-	monkeypatch.setattr(Path, "lstat", fake_lstat)
+	monkeypatch.setattr(Path, "stat", fake_stat)
 
 	assert browser_runtime.installed_browser_dirs() == []
 	assert browser_runtime.unreadable_browser_cache_dirs() == [blocked]

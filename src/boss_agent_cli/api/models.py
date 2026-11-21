@@ -15,12 +15,14 @@ def safe_text(value: Any) -> str:
 
 	平台字段漂移出超大整数时，裸 ``str()`` 抛 ValueError，从命令层穿出后
 	会被兜成 INTERNAL_ERROR 或可重试的 NETWORK_ERROR。展示字段按缺失处理。
+	深嵌套容器在 ``str()`` 时抛 ``RecursionError``（与本地 JSON 解析异常族
+	同口径），同样按缺失处理，不能穿出映射层（Issue #2319）。
 	"""
 	if isinstance(value, int) and not isinstance(value, bool) and value.bit_length() > _MAX_TEXT_INT_BITS:
 		return ""
 	try:
 		return str(value)
-	except ValueError:
+	except (ValueError, RecursionError):
 		return ""
 
 

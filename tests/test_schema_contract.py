@@ -473,6 +473,7 @@ _NON_ERROR_CODE_LITERALS = {
 	"REG_SZ",  # Windows 注册表值类型，不是错误码
 	"AUTO_EXECUTED", "DRY_RUN",  # 招聘自动化事件的成功状态，不是错误码
 	"HOOK_SCRIPT_NAMES",  # crawler 常量名
+	"INSTALLATION_COMPLETE",  # Playwright 浏览器安装完成标记文件名
 	"PYTEST_CURRENT_TEST",  # pytest 环境变量
 	"SERVER_INSTRUCTIONS",  # MCP server 常量名
 	"UID_OR_SECURITY_ID",  # click metavar

@@ -368,6 +368,25 @@ def _required_str(inputs: Mapping[str, Any], name: str) -> str:
 	return raw
 
 
+def _required_nonblank_str(inputs: Mapping[str, Any], name: str) -> str:
+	"""读取必填的非空白字符串。
+
+	``CacheStore.claim_candidate_action`` 对纯空白 job_id 返回 ``"pending"``
+	（Issue #1645 的空 ID 保护），预约层会把它当成「上一次动作仍在」并给出
+	结果未知指引。wizard 必须在预约前把空白参数报成 INVALID_PARAM，让 Agent
+	修正输入而不是去平台核对一个不存在的动作（Issue #2320）。
+	"""
+	value = _required_str(inputs, name).strip()
+	if not value:
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"wizard 输入 {name} 不能只有空白字符",
+			recoverable=True,
+			recovery_action=f"在 inputs 中提供有效的 {name} 后重试",
+		)
+	return value
+
+
 def _optional_str_strict(inputs: Mapping[str, Any], name: str) -> str | None:
 	"""读取可选字符串输入：缺省 / null 为空，其余非字符串点名报错。"""
 	if name not in inputs:
@@ -547,6 +566,10 @@ def _classify_action_error(
 			code = "INVALID_PARAM"
 		elif not write:
 			code = "NETWORK_ERROR"
+	if code == "NETWORK_ERROR" and write:
+		# HTTP 5xx / 超时文案的写响应无法证明动作没有生效：按结果未知处理，
+		# 与候选人预约保留 pending 的口径一致（Issue #2316）。
+		code = "ACTION_UNCONFIRMED"
 	if code == "UNKNOWN":
 		# 写操作的未识别响应：沿用登记表的「先核对、勿自动重试」契约。
 		return code, False, str(ERROR_CODES[code]["recovery_action"])
@@ -873,8 +896,8 @@ def _raise_candidate_action_blocked(
 
 
 def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	security_id = str(_required(inputs, "security_id"))
-	job_id = str(_required(inputs, "job_id"))
+	security_id = _required_nonblank_str(inputs, "security_id")
+	job_id = _required_nonblank_str(inputs, "job_id")
 	lid = str(inputs.get("lid") or "")
 	account = account_scope(context.auth())
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
@@ -914,8 +937,8 @@ def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 
 
 def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	security_id = _required_str(inputs, "security_id")
-	job_id = _required_str(inputs, "job_id")
+	security_id = _required_nonblank_str(inputs, "security_id")
+	job_id = _required_nonblank_str(inputs, "job_id")
 	# message 可选，但类型必须严格：0 / false 经 ``or ""`` 会静默变成平台默认
 	# 招呼，容器会被 str() 成 repr 发给真人（Issue #1906）。
 	message = _optional_str_strict(inputs, "message") or ""

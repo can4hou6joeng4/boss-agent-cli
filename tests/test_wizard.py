@@ -3766,9 +3766,11 @@ def test_gate_kernel_status_compares_real_cache_entries(tmp_path, monkeypatch):
 	# 缓存根目录存在但没有所需修订版：必须判定为 error。
 	assert preflight._browser_kernel_status()[0] == "error"
 
-	# 装上所需修订版后必须判定为 ok。
-	(tmp_path / "chromium-1234").mkdir()
-	(tmp_path / "chromium_headless_shell-1234").mkdir()
+	# 装上所需修订版后必须判定为 ok（目录需带安装完成标记，Issue #2318）。
+	for name in ("chromium-1234", "chromium_headless_shell-1234"):
+		entry = tmp_path / name
+		entry.mkdir()
+		(entry / "INSTALLATION_COMPLETE").write_text("", encoding="utf-8")
 	assert preflight._browser_kernel_status()[0] == "ok"
 
 
