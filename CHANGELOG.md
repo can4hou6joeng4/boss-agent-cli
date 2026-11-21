@@ -7,6 +7,8 @@
 ### Fixed
 - 写请求不再跟随 HTTP 重定向：首跳 3xx 直接按 `ACTION_UNCONFIRMED`（`outcome=unknown`、`replay_safe=false`）收口，跟随后的连接类异常不再把可能已生效的写操作报成可重试的 `NETWORK_ERROR`（Issue #2424）。
 - 招聘者端 stoken 过期判断与候选端同口径，兼容字符串业务码 `"37"`，不再漏掉自动刷新（Issue #2425）。
+- 平台兜底错误分类先判风控再判 auth，环境风险短语（「环境存在异常」「访问环境异常」「登录状态异常」等）归类为 `ENVIRONMENT_RISK`；英文 `rate` 改为词边界匹配，不再误伤 generate 等普通单词（Issue #2430）。
+- 招聘者数值标记与数字字符串业务码的转换先做整串校验：`"--0"`、超长数字串与 `"²"` 等不再抛 `ValueError` 并被兜成可重试的 `NETWORK_ERROR`（Issue #2431）。
 
 ## [3.4.150] - 2026-11-22
 
