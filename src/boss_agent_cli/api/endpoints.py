@@ -18,6 +18,9 @@ WEB_GEEK_RESUME_URL = _spec.web_pages.get("geek_resume", f"{WEB_GEEK_BASE}/resum
 
 # ── API endpoints ────────────────────────────────────────────────────
 def _url(name: str) -> str:
+	if name not in _spec.endpoints:
+		# 包内 YAML 缺端点时给出键名，而不是裸 KeyError: 'search'（Issue #2447）。
+		raise ValueError(f"boss.yaml: endpoints 缺少 {name}")
 	return _spec.endpoints[name].url
 
 SEARCH_URL = _url("search")

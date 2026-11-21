@@ -19,6 +19,9 @@
 - 浏览器通道把预算租约 / 节流等待 / 请求前检查的本地状态错误（`sqlite3.Error` / `OSError`）与「请求已派发」区分：写请求不再被误报成 `ACTION_UNCONFIRMED`，原始 `LOCAL_IO_ERROR` 恢复指引保留（Issue #2437）。
 - 浏览器通道在解析平台响应后先剥除平台对象上的 `__cli_*` 顶层键，再由 CLI 注入自己的传输标记：平台响应不能再伪造「未发出 / 已中断 / 安全页」改变写请求的重试语义（Issue #2438）。
 - 聊天页 CDP 脚本的参数序列化与 WebSocket 握手失败包装成 `ChatTabCdpUnreachable`：`send_message` / `request_resume` / `exchange` 在首个 CDP 帧写出前失败时按「确定未发出、可安全重试」收口，不再报成结果未知（Issue #2439）。
+- `response_codes` 在解析期统一归一为整数：YAML 里带引号的 `"37"` / `"31"` 不再让风控码、限流码与 token 刷新静默失效，非整数、bool、null 与超长数字串按带路径的配置错误拒绝；风控码白名单与浏览器通道限流码改用 `endpoints` 常量，配置真正成为单一真源（Issue #2446）。
+- API YAML 加载期校验顶层与各子结构的形状：空文件、null 子表、非字符串 header / 端点字段与语法错误都带文件名与路径报配置错误，不再在导入期以裸 `TypeError` / `AttributeError` / `KeyError` 崩溃；`url: ""` 不再静默回落到首页（Issue #2447）。
+- `endpoint_for_request` 分别加载候选者与招聘者 spec：单个 YAML 损坏只让该侧端点退回未声明语义（写请求不可重放），不再打断另一侧的请求（Issue #2448）。
 
 ## [3.4.150] - 2026-11-22
 

@@ -6,7 +6,7 @@ import re
 from typing import Any, Literal
 from urllib.parse import parse_qs, urlsplit
 
-from boss_agent_cli.api.endpoints import CODE_ACCOUNT_RESTRICTED, CODE_IP_RESTRICTED
+from boss_agent_cli.api.endpoints import CODE_ACCOUNT_RESTRICTED, CODE_IP_RESTRICTED, CODE_STOKEN_EXPIRED
 
 def is_platform_success_code(value: Any) -> bool:
 	"""按平台成功码判定 ``code``；布尔值不是状态码（Issue #1599）。
@@ -20,10 +20,28 @@ def is_platform_success_code(value: Any) -> bool:
 
 Code37Kind = Literal["token_expired", "environment_risk"]
 
+# 阻断码白名单：配置项从 boss.yaml 取（单一真源），35 / 36 / 38 是平台观察到的
+# 固定码，YAML 不提供对应键。不能在这里硬编码 37：那会让
+# ``response_codes.stoken_expired`` 的配置改动完全失效（Issue #2446）。
+_RISK_CODES = (
+	CODE_IP_RESTRICTED,
+	str(CODE_IP_RESTRICTED),
+	CODE_ACCOUNT_RESTRICTED,
+	str(CODE_ACCOUNT_RESTRICTED),
+	CODE_STOKEN_EXPIRED,
+	str(CODE_STOKEN_EXPIRED),
+	35,
+	"35",
+	36,
+	"36",
+	38,
+	"38",
+)
+
 
 def normalize_risk_code(value: Any) -> int | None:
 	"""只保留明确观察到的平台阻断码，不根据异常或文案猜造业务码。"""
-	return int(value) if value in (CODE_IP_RESTRICTED, str(CODE_IP_RESTRICTED), CODE_ACCOUNT_RESTRICTED, str(CODE_ACCOUNT_RESTRICTED), 35, "35", 36, "36", 37, "37", 38, "38") else None
+	return int(value) if value in _RISK_CODES else None
 
 _ENVIRONMENT_RISK_MARKERS = (
 	"环境存在异常",
