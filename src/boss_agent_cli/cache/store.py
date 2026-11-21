@@ -1327,6 +1327,20 @@ class CacheStore:
 				],
 			)
 
+	def get_workflow_run_status(self, run_id: str) -> str | None:
+		"""只读 run 的 status 列，供执行中的控制轮询使用。
+
+		停止 / 超时信号只依赖这一列：``get_workflow_run`` 会解析 params /
+		error / last_result，任一列漂移就让控制轮询抛 ``CacheRecordInvalid``，
+		吞掉 stop/timeout 信号（Issue #2443）。单列读取不做任何 JSON 解码；
+		列不是文本时按无法识别返回 ``None``，不伪造状态。
+		"""
+		row = self._conn.execute("SELECT status FROM workflow_runs WHERE run_id = ?", (run_id,)).fetchone()
+		if row is None:
+			return None
+		value = row[0]
+		return value if isinstance(value, str) else None
+
 	def get_workflow_run(self, run_id: str) -> dict[str, Any] | None:
 		row = self._conn.execute(
 			"SELECT run_id, role, platform, goal, mode, status, current_step, params, last_result, error, created_at, updated_at "

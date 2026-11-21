@@ -674,6 +674,7 @@ def _write_call(
 	fallback: str,
 	*,
 	check_command: str | None = None,
+	provably_unsent: Callable[[BaseException], bool] | None = None,
 ) -> Any:
 	"""发出一次写请求并按写语义解包响应；所有写动作都经由这里。
 
@@ -682,12 +683,22 @@ def _write_call(
 	``--resume`` 凭这条记录拒绝重放（Issue #1019）。``call`` 只负责发请求：参数的
 	校验与前置读取放在调用之前，那时被终止的步骤没有记录，恢复后照常重跑。
 
+	``provably_unsent`` 只由**单请求**写动作传入：异常命中判定时撤销预落的
+	「结果未知」标记，让 ``--resume`` 能重试一次从未发出的写请求（与
+	greet / apply 的 #2298 同口径）。复合动作（写后还有读取，例如
+	``view_geek`` 或聊天页发送）不得传入：同一异常类型可能发生在写请求之后。
+
 	不经 runner 直接调用动作时没有步骤可记，直接执行。
 	"""
 	control = context.workflow_control
 	if control is not None:
 		control.begin_write(_unconfirmed_write_recovery(context, check_command))
-	return _unwrap(platform, call(), fallback, context=context, write=True, check_command=check_command)
+	try:
+		return _unwrap(platform, call(), fallback, context=context, write=True, check_command=check_command)
+	except BaseException as exc:
+		if provably_unsent is not None and provably_unsent(exc) and control is not None:
+			control.clear_write()
+		raise
 
 
 def execute_candidate_detail(
@@ -1047,6 +1058,10 @@ def _candidate_exchange(context: ActionContext, inputs: Mapping[str, Any], prior
 			platform,
 			lambda: platform.exchange_contact(security_id, uid, name, exchange_type=exchange_type),
 			"联系方式交换失败",
+			# exchange_contact 是单次写请求：浏览器通道在 fetch 派发前失败
+			# （代理 / 内核 / 导航 / 预算）时撤销写标记，--resume 可重试
+			# 一次从未发出的请求（Issue #2441）。
+			provably_unsent=candidate_action_provably_unsent,
 		)
 	return StepResult({"uid": uid, "security_id": security_id, "result": data})
 
@@ -1084,6 +1099,8 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 			platform,
 			lambda: platform.friend_label(uid, label_id, friend_source, remove=remove),
 			"联系人标签更新失败",
+			# friend_label 是单次写请求（Issue #2441）。
+			provably_unsent=candidate_action_provably_unsent,
 		)
 	return StepResult(
 		{
@@ -2149,10 +2166,18 @@ def _recruiter_call(
 	list_keys: tuple[str, ...] = (),
 	write: bool = False,
 	check_command: str | None = None,
+	provably_unsent: Callable[[BaseException], bool] | None = None,
 ) -> StepResult:
 	with context.recruiter_platform() as platform:
 		if write:
-			data = _write_call(context, platform, lambda: call(platform), fallback, check_command=check_command)
+			data = _write_call(
+				context,
+				platform,
+				lambda: call(platform),
+				fallback,
+				check_command=check_command,
+				provably_unsent=provably_unsent,
+			)
 		else:
 			data = _unwrap(platform, call(platform), fallback, context=context, check_command=check_command)
 	payload: dict[str, Any] = {"result": data}
@@ -2322,14 +2347,26 @@ def _recruiter_jobs_detail(context: ActionContext, inputs: Mapping[str, Any], pr
 def _recruiter_jobs_online(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	job_id = _required_str(inputs, "job_id")
 	return _recruiter_call(
-		context, lambda platform: platform.job_online(job_id), "职位上线失败", write=True, check_command="hr jobs list"
+		context,
+		lambda platform: platform.job_online(job_id),
+		"职位上线失败",
+		write=True,
+		check_command="hr jobs list",
+		# 单次写请求：派发前失败不保留「结果未知」标记（Issue #2441）。
+		provably_unsent=candidate_action_provably_unsent,
 	)
 
 
 def _recruiter_jobs_offline(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	job_id = _required_str(inputs, "job_id")
 	return _recruiter_call(
-		context, lambda platform: platform.job_offline(job_id), "职位下线失败", write=True, check_command="hr jobs list"
+		context,
+		lambda platform: platform.job_offline(job_id),
+		"职位下线失败",
+		write=True,
+		check_command="hr jobs list",
+		# 单次写请求：派发前失败不保留「结果未知」标记（Issue #2441）。
+		provably_unsent=candidate_action_provably_unsent,
 	)
 
 

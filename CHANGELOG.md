@@ -13,6 +13,9 @@
 - crawl 的职位监听器启动失败不再逃出降级路径：会话跳过监听等待、直接走页面内同源请求，确定性失败不会被记成可 resume 的 `stopped` 并永久重复（Issue #2428）。
 - 简历解析在 `zpData` 为空对象时回落到旧格式 `data`，整份简历不再静默变成空结构（Issue #2433）。
 - 列表命令在页码达到可信上限（`MAX_TRUSTED_PAGE`）后不再生成无法前进的下一页提示，Agent 不会无界重复同一请求；`has_more` 保留平台原始证据（Issue #2434）。
+- wizard 的单请求写步骤（`exchange` / `mark` / hr 职位上下线）在派发前失败（代理配置、内核缺失、导航、预算）时撤销预落的「结果未知」标记：恢复指引与错误码回到原始异常，`--resume` 不再永久阻断一条从未发出的请求（Issue #2441）。
+- wizard 断点的 `failed` / `stopped` 步骤带 `result.status=completed` 时按 `CACHE_RECORD_INVALID` 拒绝恢复，与其余非终态同口径：状态漂移不再让已完成步骤被重跑（Issue #2442）。
+- `WorkflowControl.poll` 改为只读 run 的原始 `status` 列：断点里任一字段漂移不再吞掉 `--stop` / 截止时间信号，也不会把只读步骤误标成「写请求结果未知」（Issue #2443）。
 
 ## [3.4.150] - 2026-11-22
 

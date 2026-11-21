@@ -37,13 +37,15 @@ def test_non_terminal_step_with_completed_result_is_rejected(tmp_path: Path, sta
 
 
 @pytest.mark.parametrize("status", ["failed", "stopped"])
-def test_terminal_step_may_keep_completed_result(tmp_path: Path, status: str) -> None:
-	# failed / stopped 保留完成结果是结算超时、停止时的既有语义。
+def test_terminal_step_with_completed_result_is_rejected(tmp_path: Path, status: str) -> None:
+	# failed / stopped 步骤带完成结果时恢复循环会把它重跑一次（Issue #2442）；
+	# 当前执行器不会写出这种组合，读取边界按记录损坏拒绝。
 	with WorkflowStore(tmp_path) as store:
 		store.create("r", _plan("step"))
 		store.update_step("r", "step", status=status, result=StepResult({}).to_dict())
 
-		assert store.get_checkpoint("r")["run_id"] == "r"
+		with pytest.raises(CacheRecordInvalid, match=f"步骤状态是 {status}"):
+			store.get_checkpoint("r")
 
 
 # ── Issue #2419：ID 字段拒绝容器，不能转 repr 发给平台 ─────────────
