@@ -352,7 +352,7 @@ CLI calls, Python clients, MCP subprocesses and crawl using the same `data_dir` 
 | --- | --- | --- |
 | `request_delay` | `[30.0, 60.0]` | Per-instance interval range; Gaussian samples stay within it, while additional pauses may lengthen the interval |
 | `request_max_per_minute` | `20` | Positive integer ceiling for active operations in the shared rolling 60-second window |
-| `request_wait_timeout` | `30.0` | Total seconds allowed per lease, pacing, budget and cooldown acquisition; an earlier workflow deadline takes precedence |
+| `request_wait_timeout` | `120.0` | Total seconds allowed per lease, pacing, budget and cooldown acquisition; an earlier workflow deadline takes precedence. The effective value never drops below `request_delay` high + 15 seconds, so a smaller explicit value cannot make intentional pacing time out |
 | `request_budget_dir` | `null` | Uses the current `data_dir` by default; an absolute path explicitly groups multiple data directories |
 
 To share limits across local tasks, configure the group directory and point each member to it:

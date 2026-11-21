@@ -47,7 +47,7 @@ DEFAULTS: dict[str, Any] = {
 	"request_delay": list(DEFAULT_REQUEST_DELAY),
 	"request_budget_dir": None,
 	"request_max_per_minute": 20,
-	"request_wait_timeout": 30.0,
+	"request_wait_timeout": 120.0,
 	"batch_greet_delay": [2.0, 5.0],
 	"log_level": "error",
 	"cdp_url": None,
