@@ -148,6 +148,17 @@ _UNCONFIRMED_WRITE_FALLBACK: dict[str, Any] = {
 }
 
 
+def _error_blocks_replay(error: Mapping[str, Any]) -> bool:
+	"""错误标记是否声明「写动作可能已生效、不得重放」。
+
+	``replay_safe: false`` 是显式证据；``ACTION_UNCONFIRMED`` 本身已表示结果
+	未知（``_persisted_write_marker`` 同口径）。旧数据 / 外部漂移缺少布尔值时
+	按错误码 fail-closed，否则 --resume 会重放结果未知的写步骤并把 run 落成
+	completed（Issue #2398，与 #1159 的类型漂移同族）。
+	"""
+	return error.get("replay_safe") is False or error.get("code") == _UNCONFIRMED_WRITE_FALLBACK["code"]
+
+
 def _search_pipeline_error(
 	exc: SearchPipelinePlatformError,
 	plan: WorkflowPlan,
@@ -211,7 +222,7 @@ def has_blocked_step(run: Mapping[str, Any]) -> bool:
 		if not isinstance(step, Mapping) or str(step.get("status")) not in _REPLAY_BLOCKING_STATUSES:
 			continue
 		error = step.get("error")
-		if isinstance(error, Mapping) and error.get("replay_safe") is False:
+		if isinstance(error, Mapping) and _error_blocks_replay(error):
 			return True
 	return False
 
@@ -436,7 +447,7 @@ class WorkflowRunner:
 		blocked_steps: dict[str, dict[str, Any]] = {}
 		for step in stored_run["steps"]:
 			error = step.get("error") or {}
-			if step["status"] in _REPLAY_BLOCKING_STATUSES and error.get("replay_safe") is False:
+			if step["status"] in _REPLAY_BLOCKING_STATUSES and _error_blocks_replay(error):
 				# 动作可能已经生效：--resume 不得再执行一次。步骤落成 stopped 而 run
 				# 还没写完就中断时同样要阻断（Issue #1957）。
 				blocked_steps[step["step_name"]] = error
