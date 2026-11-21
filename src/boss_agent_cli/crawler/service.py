@@ -621,6 +621,12 @@ class CrawlService:
 		if with_detail:
 			settings = replace(settings, with_detail=True)
 		self._validate_settings(settings)
+		# --pages 与断点进度的矛盾必须在 completed 快速路径之前判定：已完成任务
+		# 若绕过校验，会把「缩小页数上限」静默接受成成功，与 stopped / queued
+		# 任务的 INVALID_PARAM 口径不一致（Issue #2386，同 #2061 的不能静默
+		# clamp 契约）。
+		if pages is not None:
+			validate_pages_override(int(run["next_page"]), settings.pages)
 		if not self.has_resume_work(run, pages=pages, with_detail=with_detail):
 			output_dir = Path(str(run["output_dir"]))
 			if not _artifacts_present(output_dir):
@@ -639,8 +645,6 @@ class CrawlService:
 					_remove_run_artifacts(output_dir)
 					raise KeyError(run_id)
 			return self._completed_outcome(run)
-		if pages is not None:
-			validate_pages_override(int(run["next_page"]), settings.pages)
 		# 旧 stop 必须在预检之前清掉：预检要探测可选依赖、读取登录态，可能
 		# 耗时；这期间到达的新 stop 不能被后面的清理当成上一轮残留一起清掉
 		# （与后台恢复同构，Issue #1115 / #2209）。预检失败时还原旧 stop 与

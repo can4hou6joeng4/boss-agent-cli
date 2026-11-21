@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### Fixed
+- 浏览器通道的上下文销毁标记补上 patchright `TargetClosedError` 的实际文案（`Target page, context or browser has been closed`）：复用的页签被用户关闭时，读请求进入既有的有界恢复而不是裸抛（Issue #2379）。
+- 浏览器通道区分「确定未发出」：CDP 会话建立与请求载荷序列化失败、JS 侧 `fetch()` 调用前抛出的异常返回可重试的 `NETWORK_ERROR` 并附 `request_sent=false`，写请求不再被误报成不可重放的 `ACTION_UNCONFIRMED`（Issue #2380）。
+- 招聘者聊天事件的 WebSocket 帧解析限制扫描 8KB、最多收集 10 个片段，并跳过不可能开启片段的字节：8MB 二进制帧不再让同步解析卡住数十秒、拖垮监听 deadline（Issue #2381）。
+- `crawl resume` 的 `--pages` 与断点进度交叉校验提前到 completed 快速路径之前：已完成任务不再静默接受把页数上限缩到断点之前的矛盾参数，前台与后台入口一致返回 `INVALID_PARAM`（Issue #2386）。
+- 本地 JSON 序列化把十进制超过 4300 位的整数归一为 null：聊天快照与职位 / 聊天 JSON 导出不再因单个数值漂移整体失败并误报 `LOCAL_IO_ERROR`，与 CSV / HTML 通道的降级口径一致（Issue #2387、#2388）。
+- 聊天导出的 `from_who` 统计改为与可见分组同源：「总计」与分组计数不再包含被方向过滤掉的好友，避免出现总计 2 条却只渲染 1 行（Issue #2392）。
+- 登录降级链在 CDP 探测与扫码兜底前复查本地风控锁：Cookie 提取 / CDP 登录耗时期间另一进程写下的锁不再被忽略，扫码通道不会继续访问平台（Issue #2394）。
+- 写请求遇到 `httpx.TooManyRedirects` 时按结果未知收口（`ACTION_UNCONFIRMED`）：已跟随多次重定向的写操作不再逃逸成可重试的 `NETWORK_ERROR`，读请求仍按普通网络错误上抛（Issue #2396）。
+
 ## [3.4.148] - 2026-11-22
 
 ### Fixed

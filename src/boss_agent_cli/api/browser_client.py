@@ -166,6 +166,10 @@ _FETCH_SCRIPT = r"""
 			async ({method, url, params, data, referer, timeoutMs, identity, traceId}) => {
 				const controller = new AbortController();
 				let timer;
+				// fetch() 调用之前抛出的异常（URL / headers 构造失败）确定没有发出
+				// 请求；catch 里回传该证据，写路径才能区分「未发出」与「结果未知」
+				// （Issue #2380）。
+				let started = false;
 				const deadline = new Promise((_, reject) => {
 					timer = setTimeout(() => {
 						controller.abort();
@@ -204,6 +208,7 @@ _FETCH_SCRIPT = r"""
 						options.body = formData.toString();
 					}
 
+					started = true;
 					const resp = await fetch(fetchUrl, options);
 					if (resp.status === 403) {
 						controller.abort();
@@ -235,7 +240,7 @@ _FETCH_SCRIPT = r"""
 					})()]);
 				} catch (e) {
 					return {code: -1, message: 'browser request interrupted', zpData: {},
-						__cli_request_interrupted__: true};
+						__cli_request_interrupted__: true, __cli_request_started__: started};
 				} finally {
 					clearTimeout(timer);
 				}
@@ -247,13 +252,27 @@ _CONTEXT_DESTROYED_MARKERS = (
 	"execution context is not available",
 	"cannot find context with specified id",
 	"target closed",
+	# patchright 的 TargetClosedError 文案是「Target page, context or browser has
+	# been closed」，不含 "target closed"（Issue #2379）。用户关闭复用的页签后，
+	# 读请求此前直接裸抛该异常，跳过既有的有界恢复。
+	"has been closed",
+	"target page, context or browser",
 )
 
 
 def _is_context_destroyed_error(exc: BaseException) -> bool:
-	"""页面在 evaluate 期间发生导航/重载时 patchright 抛出的那一类错误。"""
+	"""页面在 evaluate 期间发生导航/重载/关闭时 patchright 抛出的那一类错误。"""
 	text = str(exc).lower()
 	return any(marker in text for marker in _CONTEXT_DESTROYED_MARKERS)
+
+
+class RequestNotSentError(RuntimeError):
+	"""CDP 通道在写出 ``Runtime.evaluate`` 之前失败。
+
+	会话建立与请求载荷序列化都发生在任何 CDP 消息发出之前，平台侧确定没有
+	收到请求；与 httpx 通道的 ``_UNSENT_TRANSPORT_ERRORS`` 同口径，读 / 写都
+	可以安全重试（Issue #2380）。
+	"""
 
 
 class BrowserSession:
@@ -361,7 +380,12 @@ class BrowserSession:
 					raise_platform_risk_response(page_risk, is_cdp=self._is_cdp)
 			if budget is not None:
 				raise_platform_risk_response(result, is_cdp=self._is_cdp)
+			started = result.pop("__cli_request_started__", True)
 			if result.pop("__cli_request_interrupted__", False):
+				# 只有明确回传 started=false 才算「确定未发出」；缺少证据（例如
+				# Runtime.evaluate 自身超时）仍按结果未知收口（Issue #2380）。
+				if started is False:
+					return self._not_sent_response()
 				return self._interrupted_request_response(endpoint)
 			if result.pop("__cli_unparsed_response__", False):
 				return self._unparsed_response(endpoint)
@@ -814,6 +838,10 @@ class BrowserSession:
 		}
 		try:
 			result = self._send_fetch(payload, endpoint)
+		except RequestNotSentError:
+			# 页面 / 上下文在写出 Runtime.evaluate 之前已关闭，或载荷无法序列化：
+			# 平台侧确定没有收到请求，读 / 写都可安全重试（Issue #2379、#2380）。
+			return self._not_sent_response()
 		except Exception as exc:
 			# 复用用户页签时，用户恰好在请求那一瞬间手动导航会让执行上下文被销毁
 			# （Chromium 返回 "Execution context was destroyed"）。仅明确可重放的读取
@@ -837,7 +865,10 @@ class BrowserSession:
 				return self._interrupted_request_response(endpoint)
 			self._page_ready = True
 			self._raise_if_security_page()
-			result = self._send_fetch(payload, endpoint)
+			try:
+				result = self._send_fetch(payload, endpoint)
+			except RequestNotSentError:
+				return self._not_sent_response()
 		return result
 
 	def _raise_if_security_page(self) -> None:
@@ -854,12 +885,25 @@ class BrowserSession:
 		Playwright driver transport still requires its normal disconnect handling;
 		this does not cancel a write which the platform may already have accepted.
 		"""
-		cdp = self._context.new_cdp_session(self._page)
 		try:
+			cdp = self._context.new_cdp_session(self._page)
+		except Exception as exc:
+			if is_request_stop(exc):
+				raise
+			# 会话建立发生在任何 Runtime.evaluate 写出之前：平台侧确定没有副作用，
+			# 不能把写请求报成「可能已生效」（Issue #2379、#2380）。
+			raise RequestNotSentError(f"browser CDP session unavailable before dispatch: {exc}") from exc
+		try:
+			try:
+				expression = _build_eval_expression(_FETCH_SCRIPT, payload)
+			except (TypeError, ValueError, RecursionError) as exc:
+				# 请求载荷在 Python 侧序列化失败（如超出 int 转换上限的超大整数、
+				# 非 JSON 类型漂移）：同样确定未发出（Issue #2380）。
+				raise RequestNotSentError(f"browser request payload could not be serialized: {exc}") from exc
 			response = cdp.send(
 				"Runtime.evaluate",
 				{
-					"expression": _build_eval_expression(_FETCH_SCRIPT, payload),
+					"expression": expression,
 					"returnByValue": True,
 					"awaitPromise": True,
 					"timeout": _EVALUATE_TIMEOUT_MS,
@@ -904,6 +948,21 @@ class BrowserSession:
 			"zpData": {},
 			"__cli_error_code__": code,
 			"__cli_error_details__": details,
+		}
+
+	@staticmethod
+	def _not_sent_response() -> dict[str, Any]:
+		"""请求在写出前失败：平台侧确定没有副作用，读 / 写都可安全重试。
+
+		与 httpx 通道的 ``_UNSENT_TRANSPORT_ERRORS`` 同口径：确定未发出的失败
+		不能报成不可重放的 ``ACTION_UNCONFIRMED``（Issue #2380）。
+		"""
+		return {
+			"code": -1,
+			"message": "浏览器通道在请求发出前中断，平台侧未收到请求；可安全重试",
+			"zpData": {},
+			"__cli_error_code__": "NETWORK_ERROR",
+			"__cli_error_details__": {"outcome": "not_sent", "request_sent": False, "replay_safe": True},
 		}
 
 	@staticmethod
@@ -1093,11 +1152,30 @@ def _build_eval_expression(script: str, arg: Any) -> str:
 	return script
 
 
-def _carve_utf8_bits(bs: bytes) -> list[str]:
+#: WebSocket 帧只用于聊天事件摘要：单帧最多扫描 8KB、最多取 10 个片段。
+#: 原实现对每个起始字节从 240 向下尝试 decode（每字节最多 236 次），收包循环
+#: 又接受二进制帧，1MB 帧要扫描数十秒，同步调用会让 30s 的 listen deadline
+#: 失效（Issue #2381）。
+_CARVE_SCAN_LIMIT = 8 * 1024
+_CARVE_MAX_FRAGMENTS = 10
+
+#: 可作为可打印 UTF-8 片段首字节的候选：可打印 ASCII、\t\n\r 与 0xC2–0xF4 的
+#: 多字节前导字节。续字节（0x80–0xBF）、NUL 等控制字符与非法前导不能开启片段，
+#: 直接跳过，避免对每个字节做最多 236 次 decode 尝试。
+_CARVE_START_BYTES = frozenset({0x09, 0x0A, 0x0D, *range(0x20, 0x7F), *range(0xC2, 0xF5)})
+
+
+def _carve_utf8_bits(
+	bs: bytes, *, limit: int = _CARVE_MAX_FRAGMENTS, scan_limit: int = _CARVE_SCAN_LIMIT
+) -> list[str]:
 	out: list[str] = []
+	stop = min(len(bs), scan_limit)
 	i = 0
-	while i < len(bs):
-		for length in range(min(len(bs) - i, 240), 4, -1):
+	while i < stop and len(out) < limit:
+		if bs[i] not in _CARVE_START_BYTES:
+			i += 1
+			continue
+		for length in range(min(stop - i, 240), 4, -1):
 			try:
 				text = bs[i : i + length].decode("utf-8")
 			except UnicodeDecodeError:
@@ -1411,7 +1489,7 @@ def _cdp_evaluate_with_chat_events_in_chat_tab(
 					"ts": time.time(),
 					"kind": "ws_send" if method.endswith("Sent") else "ws_recv",
 					"bytes": len(bs),
-					"utf8_bits": _carve_utf8_bits(bs)[:10],
+					"utf8_bits": _carve_utf8_bits(bs),
 				}
 			)
 

@@ -764,6 +764,10 @@ def _prepare_background_resume(
 		run = cache.get_crawl_run(run_id)
 		if run is None:
 			raise KeyError(run_id)
+		# 与前台 resume 同口径（Issue #2386）：completed 快速路径之前先拒绝
+		# 矛盾 --pages，不能把缩小页数上限静默接受成已完成。
+		if pages is not None:
+			validate_pages_override(int(run["next_page"]), pages)
 		if not service.has_resume_work(run, pages=pages, with_detail=with_detail):
 			# completed 快速路径同样要过设置校验：与前台 resume 同口径，损坏断点
 			# 不能因为无需启动 worker 就被当成成功完成（Issue #2032）。后台信封
@@ -789,6 +793,10 @@ def _prepare_background_resume(
 			run = cache.get_crawl_run(run_id)
 			if run is None:
 				raise KeyError(run_id)
+			# 与前台 resume 同口径（Issue #2386）：矛盾的 --pages 在 completed
+			# 快速路径之前报出，后台入口不能把缩小页数上限静默接受成已完成。
+			if pages is not None:
+				validate_pages_override(int(run["next_page"]), pages)
 			if not service.has_resume_work(run, pages=pages, with_detail=with_detail):
 				return "completed", False
 			if _awaiting_queued_worker(run):
@@ -798,11 +806,6 @@ def _prepare_background_resume(
 			# _validate_settings 也在父进程校验：worker 的 stderr 写进空设备，
 			# 确定性本地失败不能先返回 queued 再静默发生（Issue #2242）。
 			settings = CrawlSettings.from_dict(run["params"], run_id=run_id)
-			# 与前台 resume 同口径：worker 会在同一个断点上再次校验，但父进程
-			# 必须先把矛盾的 --pages 报出来，不能先返回 queued 再让 worker
-			# 静默失败、任务停在无人执行的状态（Issue #2075）。
-			if pages is not None:
-				validate_pages_override(int(run["next_page"]), pages)
 			service.validate_resume_settings(settings)
 			# 旧 stop 必须在预检之前清掉：预检要探测可选依赖、读取登录态，可能
 			# 耗时；这期间到达的新 stop 不能被后面的清理当成启动前残留一起清掉

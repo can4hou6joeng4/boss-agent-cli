@@ -18,6 +18,11 @@ from typing import Any
 
 from boss_agent_cli.services.output_path import refuse_non_regular_target
 
+#: 与 ``output._MAX_SAFE_INT_BITS`` 同口径：十进制超过 4300 位的整数在
+#: ``json.dump`` / ``json.dumps`` 转字符串时抛 ValueError（Python 3.11+
+#: 的整数转换上限），整份本地状态 / 导出会落成本地 IO 错误（Issue #2388）。
+_MAX_JSON_INT_BITS = 14284
+
 
 def path_mode(path: Path) -> int | None:
 	"""仅对缺失路径返回 None；悬空链接保留链接自身的类型（Issue #1695）。"""
@@ -113,13 +118,21 @@ def _serialize_into(handle: Any, value: Any, *, indent: int | None) -> None:
 
 
 def _json_safe_value(value: Any) -> Any:
-	"""把非有限 float 归一为 null，其余值递归保留。
+	"""把非有限 float 与超长整数归一为 null，其余值递归保留。
 
 	``json.dump`` / ``json.dumps`` 默认允许 NaN / Infinity；本地状态与导出
 	产物会被 jq 等严格解析器读取，必须显式归一（Issue #1851）。
+
+	十进制位数可能超过 4300 位的整数同样归 null：``json.dump`` 在转换时抛
+	``ValueError``，快照 / 导出会整体失败并误报成本地 IO 错误
+	（Issue #2388）。bool 是 int 子类，先于 int 分支返回，保留 true/false。
 	"""
 	if isinstance(value, float):
 		return value if math.isfinite(value) else None
+	if isinstance(value, bool):
+		return value
+	if isinstance(value, int):
+		return value if value.bit_length() <= _MAX_JSON_INT_BITS else None
 	if isinstance(value, dict):
 		return {key: _json_safe_value(child) for key, child in value.items()}
 	if isinstance(value, (list, tuple)):

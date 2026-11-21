@@ -246,6 +246,9 @@ class AuthManager:
 			self._logger.info("未能从浏览器提取 Cookie，降级到 CDP")
 
 		# 第二步：CDP 自动探测
+		# Cookie 提取（钥匙串弹窗）可能耗时数十秒，期间另一进程可能写下风控锁：
+		# 每一级自动通道在真正发起平台访问之前都要复查同一把锁（Issue #2394）。
+		self._check_cdp_login_risk_lock(cdp_url)
 		if probe_cdp(cdp_url):
 			self._logger.info("检测到 CDP 可用，尝试 CDP 登录...")
 			# 只有 CDP 登录本身失败才降级到扫码。落盘失败（权限 / 磁盘满）意味着
@@ -267,6 +270,9 @@ class AuthManager:
 			self._logger.info("CDP 不可用，改用浏览器扫码登录")
 
 		# 第三步：patchright 扫码（兜底）
+		# CDP 探测 / 登录同样可能耗时，扫码通道在打开浏览器访问平台前必须复查
+		# 风控锁，不能把另一进程新写下的一致锁完全忽略（Issue #2394）。
+		self._check_cdp_login_risk_lock(cdp_url)
 		try:
 			token = login_via_browser(timeout=timeout, platform=self._platform)
 		except PlatformRiskError as error:
