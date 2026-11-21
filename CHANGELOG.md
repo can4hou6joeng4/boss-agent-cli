@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- 招聘自动化的 `verification-required` 队列行在人工处置完成前继续认领该候选人：按旧指引只删除 `inflight_action` 标记后，扫描路径不再把批准文案当成从未发出、用模板问卷补位；恢复指引区分「确认已发出」（先写阶段时间并把队列行标为 `executed`）与「确认未发出」（队列行恢复 `pending`），最后才删除标记（Issue #2452）。
+- crawl 的 `running` 状态不再被当作「仍在执行」的证据：`crawl status` 探测执行锁并回报 `executor_active` / `running_stale`，执行器被 SIGKILL 后不再永远显示运行中，也不再提示去 stop 一个没人消费的标记（Issue #2465）。
+- `crawl stop` 在 queued / running 但没有执行器持锁时直接按断点落 `stopped` 并回报 `stale_recovered`，不再写一条永远没人消费的停止标记后报成功；执行器仍持锁时维持原停止语义（Issue #2465）。
+- crawl 恢复的预检与 transport / 预算构造移入终止路径：构造失败或命中风控锁时按断点写回 `stopped`（保留上一轮错误与断点里的预算计数），不再把执行权标记永久留在 `running`、清空错误并让随后的 `crawl stop` 假成功（Issue #2466）。
+
 ## [3.4.151] - 2026-11-22
 
 ### Fixed
@@ -31,9 +37,6 @@
 - 导出 JSON 的孤立代理项改为字面 `\ud800` 文本（合法代理对合并为单个码点）：`backslashreplace` 写出的未配对转义会让 jq 等严格解析器拒绝整份产物（Issue #2457）。
 - `-o` 预检在 macOS 上提前拒绝 APFS 无法创建的非法 UTF-8 文件名，参数错误不再留到平台分页与快照更新之后才以 EILSEQ 暴露（Issue #2458）。
 - CSV 清洗在判定公式前缀时跳过前导换行 / VT / FF / NUL / BOM，`"\n=..."` 一类单元格不再绕过单引号前缀（Issue #2459）。
-- crawl 的 `running` 状态不再被当作「仍在执行」的证据：`crawl status` 探测执行锁并回报 `executor_active` / `running_stale`，执行器被 SIGKILL 后不再永远显示运行中，也不再提示去 stop 一个没人消费的标记（Issue #2465）。
-- `crawl stop` 在 queued / running 但没有执行器持锁时直接按断点落 `stopped` 并回报 `stale_recovered`，不再写一条永远没人消费的停止标记后报成功；执行器仍持锁时维持原停止语义（Issue #2465）。
-- crawl 恢复的预检与 transport / 预算构造移入终止路径：构造失败或命中风控锁时按断点写回 `stopped`（保留上一轮错误与断点里的预算计数），不再把执行权标记永久留在 `running`、清空错误并让随后的 `crawl stop` 假成功（Issue #2466）。
 
 ## [3.4.150] - 2026-11-22
 

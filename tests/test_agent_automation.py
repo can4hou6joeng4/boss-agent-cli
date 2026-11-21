@@ -1044,7 +1044,8 @@ def test_unconfirmed_pending_action_is_not_replayed_after_resume(tmp_path: Path)
 		platform="zhipin",
 		dry_run=False,
 	)
-	assert resumed.events == ()
+	assert [event.status for event in resumed.events] == [EventStatus.SKIPPED.value]
+	assert "等待人工核对" in resumed.events[0].reason
 	assert recruiter.sent == [(101, "继续沟通")]
 
 

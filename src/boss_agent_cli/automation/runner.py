@@ -122,14 +122,16 @@ def _run_cycle_locked(
 					# 队列（含本轮被平台拒绝后退回 pending、以及排队等下一轮的）
 					# 拥有该会话的最高优先级：扫描路径跳过这些候选人，不能在同一
 					# 轮用模板话术顶替操作者批准的动作，也不能跨轮把同一动作再发
-					# 一次（Issue #2211）。verification-required 不在这里排除：
-					# 它交给扫描路径既有的在途门控处理，操作者才能看到「等待人工
-					# 核对，已跳过」的 SKIPPED 事件（Issue #1515）。
+					# 一次（Issue #2211）。verification-required 同样认领：操作者
+					# 按指引删掉会话在途标记后，队列行是该候选人唯一的重发保护，
+					# 不认领会让扫描路径把批准文案当成缺失、用模板问卷补位
+					# （Issue #2452）。
 					claimed = set(pending_conversations)
 					claimed.update(
 						row.candidate_key
 						for row in store.read_pending()
-						if row.platform == platform and row.status in {"pending", "executing"}
+						if row.platform == platform
+						and row.status in {"pending", "executing", "verification-required"}
 					)
 					refs = [ref for ref in refs if ref.id not in claimed]
 					if remaining is not None:

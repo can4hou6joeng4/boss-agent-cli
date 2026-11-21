@@ -232,7 +232,7 @@ def test_interrupted_queue_row_writes_marker_scan_path_cannot_resend(tmp_path: P
 	assert recovery_store.read_stop()["open"] is True
 	assert _pending_statuses(recovery_store) == ["verification-required"]
 
-	# --resume 后扫描路径看到同一份标记：只跳过，不按 transcript 重新决策。
+	# --resume 后队列仍认领该会话并报告跳过，扫描路径不会凭转录重新决策。
 	resumed_store = AutomationStore(tmp_path)
 	resumed = _Adapter()
 	report = _cycle(resumed, resumed_store, resume=True)
@@ -240,6 +240,7 @@ def test_interrupted_queue_row_writes_marker_scan_path_cannot_resend(tmp_path: P
 	assert resumed.sent == []
 	assert report.events[-1].status == EventStatus.SKIPPED.value
 	assert _inflight(resumed_store)["status"] == "verification-required"
+	assert _pending_statuses(resumed_store) == ["verification-required"]
 
 
 def test_state_write_failure_after_send_does_not_resend(tmp_path: Path, monkeypatch) -> None:
