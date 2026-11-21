@@ -23,6 +23,9 @@
 - 采集 JSON / CSV 导出与职位 / 聊天导出同口径降级超长整数：JSON 数值降级为 null，CSV 按缺失处理，单个字段漂移不再让整份产物失败（Issue #2406）。
 - 采集导出的非对象行按缺失跳过：`row.get` 的 `AttributeError` 不再绕过导出错误包装、让命令层拿到裸异常（Issue #2407）。
 - `crawl shortlist` 导入把显式 null 主键按缺失处理：不再生成 `security_id` / `job_id` 都是 `"None"` 的伪记录，空主键行计入 `skipped_count`（Issue #2408）。
+- 后台 `crawl resume` 在执行锁被其他执行器占用时，显式 `--pages` / `--with-detail` / 停止标记清理未生效就报可重试的 `CRAWL_BUSY`，不再以 ok:true 的 running 静默丢弃参数（Issue #2410）。
+- `crawl shortlist` 的空 `run_id` 按参数错误上报 `INVALID_PARAM`，不再被当成任务不存在并引导重建（Issue #2411）。
+- 前台 `crawl resume` 的 `--pages` 冲突与断点设置损坏分别给出精确恢复指引，与后台入口同口径；`crawl configure` 不再被当成修复手段（Issue #2412）。
 
 ## [3.4.148] - 2026-11-22
 

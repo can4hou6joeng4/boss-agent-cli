@@ -508,8 +508,40 @@ def _run_service(
 			),
 		)
 		return
+	except PagesOverrideError as exc:
+		# 前台 resume 与后台入口同口径（Issue #2075 / #2403 / #2412）：--pages
+		# 与断点进度矛盾时要调整的是本次参数，不是 crawl 配置。run_id 为空表示
+		# crawl start，没有断点进度可矛盾，不会抛这个异常。
+		note("INVALID_PARAM", str(exc))
+		status_target = shell_argument(run_id) if run_id is not None else "<run_id>"
+		status_command = boss_command_for_ctx(ctx, f"crawl status {status_target}", include_data_dir=True)
+		handle_error_output(
+			ctx,
+			"crawl",
+			code="INVALID_PARAM",
+			message=str(exc),
+			recovery_action="按提示把 --pages 调整到断点进度允许的下界后重试；不带 --pages 可沿用原任务上限",
+			hints={"next_actions": [status_command]},
+		)
+		return
 	except ValueError as exc:
 		note("INVALID_PARAM", str(exc))
+		if run_id is not None:
+			# 前台 resume：断点里的设置语义损坏（空白关键词、非法上限），
+			# 重试或调整 --pages 都不会成功；与后台入口同口径（Issue #2403 / #2412）。
+			status_command = boss_command_for_ctx(
+				ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True
+			)
+			start_command = boss_command_for_ctx(ctx, "crawl start <query>", include_data_dir=True)
+			handle_error_output(
+				ctx,
+				"crawl",
+				code="INVALID_PARAM",
+				message=str(exc),
+				recovery_action=f"断点里的采集设置无效，按提示修正后重试；无法修正时用 {start_command} 新建任务",
+				hints={"next_actions": [status_command, start_command]},
+			)
+			return
 		configure_cmd = boss_command_for_ctx(ctx, "crawl configure --help", include_data_dir=True)
 		handle_error_output(
 			ctx,
@@ -757,14 +789,16 @@ def _raise_for_unapplied_handoff(
 	with_detail: bool,
 	clear_stop: bool,
 ) -> None:
-	"""交接窗口内带显式恢复参数时拒绝报成功（Issue #2243、#2401）。
+	"""交接窗口或执行锁被占用时，带显式恢复参数就拒绝报成功（Issue #2243、#2401）。
 
 	锁外与锁内重读共用同一判定：锁外通过、取锁前另一个进程刚把 run 标成 queued
 	时，内层分支同样不能静默丢弃本次的 --pages / --with-detail / 停止标记。
+	执行锁被另一执行器持有时同理：显式参数没有生效，ok:true 的 running 会让
+	调用方误以为 --pages 已应用（Issue #2410）。
 	"""
 	if pages is not None or with_detail or (clear_stop and bool(run.get("stop_requested"))):
 		raise CrawlHandoffPending(
-			"后台任务正在交接，本次恢复参数尚未生效；请稍后用 crawl status 确认状态再重试"
+			"后台任务正在执行或交接，本次恢复参数尚未生效；请稍后用 crawl status 确认状态再重试"
 		)
 
 
@@ -805,6 +839,10 @@ def _prepare_background_resume(
 			return "queued", False
 		with service.execution_lock(run_id) as acquired:
 			if not acquired:
+				# 执行锁被另一执行器持有：显式 --pages / --with-detail 同样无法
+				# 应用，静默返回 running 会让调用方以为参数已生效（Issue #2410）。
+				# 与交接窗口同口径报可重试的忙碌；纯状态查询不受影响。
+				_raise_for_unapplied_handoff(run, pages=pages, with_detail=with_detail, clear_stop=clear_stop)
 				return "running", False
 			# running 可能来自已退出的 worker（Issue #1038）：锁空闲才
 			# 重读最新断点，不能把旧状态当作进程仍在执行的证据。
@@ -1549,6 +1587,10 @@ def shortlist_cmd(
 	note: str,
 ) -> None:
 	"""将 crawl 结果导入原项目的本地职位候选池。"""
+	# 空 run_id 是 argv 少传了值，不是「任务不存在」：与其他 crawl 子命令同口径
+	# 报 INVALID_PARAM，避免把漏值当成任务丢了而重建（Issue #2411）。
+	if not _require_run_id(ctx, "crawl.shortlist", run_id):
+		return
 	if include_all == bool(selectors):
 		results_cmd = boss_command_for_ctx(ctx, f"crawl results {shell_argument(run_id)}", include_data_dir=True)
 		handle_error_output(
