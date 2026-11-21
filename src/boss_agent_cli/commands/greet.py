@@ -41,12 +41,13 @@ from boss_agent_cli.commands._filter_errors import emit_filter_error
 from boss_agent_cli.services.candidate_actions import (
 	CandidateActionBlocked,
 	CandidateActionNotRecorded,
+	candidate_action_provably_unsent,
 	classify_platform_response,
+	outcome_unknown_cause,
 	release_candidate_action,
 	reserve_candidate_action,
 	run_candidate_action,
 	settle_candidate_action,
-	was_provably_unsent,
 )
 from boss_agent_cli.services.job_identity import deduplicate_job_result
 
@@ -68,7 +69,9 @@ def _emit_already_greeted(ctx: click.Context) -> None:
 	)
 
 
-def _emit_greet_unconfirmed(ctx: click.Context, message: str) -> None:
+def _emit_greet_unconfirmed(
+	ctx: click.Context, message: str, *, cause: BaseException | None = None
+) -> None:
 	chat_cmd = _hint_command(ctx, "chat")
 	handle_error_output(
 		ctx, "greet",
@@ -76,7 +79,7 @@ def _emit_greet_unconfirmed(ctx: click.Context, message: str) -> None:
 		message=message,
 		recoverable=False,
 		recovery_action=f"动作可能已生效：先用 {chat_cmd} 核对会话，不要直接重试",
-		details={"outcome_unknown": True, "replay_safe": False},
+		details={"outcome_unknown": True, "replay_safe": False, **outcome_unknown_cause(cause)},
 		hints={
 			"next_actions": [chat_cmd],
 			"operator_actions": ["先到 BOSS 直聘会话列表核对这条招呼是否已送达；不要自动重发"],
@@ -181,6 +184,24 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 					hints={"operator_actions": ["先在 BOSS 直聘官方页面核对是否已打过招呼；不要自动重发本次招呼"]},
 				)
 				return
+			except Exception as exc:
+				# 不能证明请求未发出：预约已保留，本次调用必须与下一次调用的口径
+				# 一致——报结果未知，而不是可重试的 NETWORK_ERROR。否则 Agent 按
+				# 「重试」再调一次只会撞上 pending 预约（Issue #2297）。预算 / 时限
+				# 停止保留各自错误码（它们带 request_sent=false，预约已释放），
+				# 风控保留 RISK_ERROR_CONTRACTS 的终止语义。
+				if (
+					not is_request_stop(exc)
+					and not isinstance(exc, PlatformRiskError)
+					and not candidate_action_provably_unsent(exc)
+				):
+					_emit_greet_unconfirmed(
+						ctx,
+						"打招呼结果未确认；请求可能已生效，请先到平台核对，勿直接重试",
+						cause=exc,
+					)
+					return
+				raise
 
 			if not platform.is_success(resp):
 				error_code, _ = platform.parse_error(resp)
@@ -563,16 +584,16 @@ def batch_greet_cmd(ctx: click.Context, query: str, city: str | None, salary: st
 						except Exception as e:
 							if is_request_stop(e):
 								# 预算/超时不是普通失败：不 sleep、不重试、不继续下一个候选人。
-								# request_sent=False / 通道不可用可以证明未发出，撤销预约；
-								# 风控与超时可能已产生写入，保留 pending 按结果未知处理。
-								if was_provably_unsent(e):
+								# request_sent=False / 通道不可用 / 派发前失败可以证明未发出，撤销
+								# 预约；风控与超时可能已产生写入，保留 pending 按结果未知处理。
+								if candidate_action_provably_unsent(e):
 									release_candidate_action(cache, item.job_id, "greet", account=account)
 								stop_error = e
 								stopped_reason = getattr(e, "code", None) or "REQUEST_BUDGET_EXHAUSTED"
 								logger.warning(f"请求预算耗尽，停止批量打招呼: {item.title} @ {item.company}")
 								break
 							error_msg = str(e)
-							if not was_provably_unsent(e):
+							if not candidate_action_provably_unsent(e):
 								# 请求可能已发出。保留预约并停止，等待核对送达结果（Issue #1818）。
 								unconfirmed = {
 									**item.to_dict(),
