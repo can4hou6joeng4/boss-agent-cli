@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.150] - 2026-11-22
+
 ### Fixed
 - wizard 断点的非终态步骤（`pending` / `running` / `waiting_input`）带 `completed` 结果时按 `CACHE_RECORD_INVALID` 拒绝恢复，不再重放可能已生效的写步骤；`failed` / `stopped` 的既有语义不变（Issue #2418）。
 - wizard 的 ID 字段（`security_id` / `gid` / `job_id` / `geek_id` / `resume` / `name` / `city`）要求字符串：容器不再经 `str()` 变成 repr 发给平台或用于本地查询（Issue #2419）。
