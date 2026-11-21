@@ -215,7 +215,7 @@ def render_export(
 		# 不让 jq 等严格解析器拒绝整份导出（Issue #1851）。孤立代理字符
 		# （平台 JSON 的 "\ud800"）会绕过文本单元格的清洗，按严格 UTF-8 写盘
 		# 时抛 UnicodeEncodeError，返回前统一替换（Issue #2321）。
-		return _sanitize_surrogates(strict_json_text(friends))
+		return _sanitize_surrogates(strict_json_text(friends, null_oversized_ints=True))
 	if fmt == "csv":
 		return _render_csv(friends)
 	if fmt == "html":
