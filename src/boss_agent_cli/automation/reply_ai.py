@@ -166,13 +166,29 @@ def parse_reply_draft(raw: str) -> ReplyDraft:
 	if not isinstance(risk_flags, list):
 		raise TypeError("risk_flags must be a list")
 	return ReplyDraft(
-		action=action,
+		action=_utf8_text(action, "action"),
 		confidence=confidence,
 		# 首尾空白对聊天话术没有意义；全空白回复按空串处理，调用方退回模板。
-		reply=reply.strip(),
-		reason=str(data["reason"]),
-		risk_flags=tuple(str(item) for item in risk_flags),
+		reply=_utf8_text(reply, "reply").strip(),
+		reason=_utf8_text(str(data["reason"]), "reason"),
+		risk_flags=tuple(_utf8_text(str(item), "risk_flags") for item in risk_flags),
 	)
+
+
+def _utf8_text(value: str, field: str) -> str:
+	"""解析阶段就拒绝不可 UTF-8 编码的文本。
+
+	JSON 允许 ``\\ud800`` 这类转义的孤立代理项，``parse_reply_draft`` 曾经原样
+	接收；真实发送完成后，``AutomationStore.append_event`` 以
+	``ensure_ascii=False`` 序列化并编码 UTF-8 时抛 ``UnicodeEncodeError``，
+	整轮以本地状态错误中止、action-log 缺记录（Issue #2366）。提前抛
+	``ValueError`` 走既有的「本地 AI 解析失败」模板降级分支。
+	"""
+	try:
+		value.encode("utf-8")
+	except UnicodeEncodeError as exc:
+		raise ValueError(f"reply draft {field} is not valid UTF-8 text") from exc
+	return value
 
 
 def _draft_confidence(value: Any) -> float:

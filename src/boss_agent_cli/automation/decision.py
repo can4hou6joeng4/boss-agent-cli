@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from boss_agent_cli.automation.config import AutomationConfig
@@ -178,13 +179,14 @@ def _conversation_status(
 	follow_up_index = _last_index(texts, config.follow_up_message)
 	return ConversationStatus(
 		has_questionnaire=questionnaire_index >= 0
-		or bool(prior.get("questionnaire_sent_at")),
+		or _prior_sent(prior, "questionnaire_sent_at"),
 		has_follow_up=follow_up_index >= 0
-		or bool(prior.get("follow_up_sent_at")),
+		or _prior_sent(prior, "follow_up_sent_at"),
 		# 只看候选人说的话：我方话术里出现「交换微信」不是候选人已交换
-		# （与 _escalation_reason 的 #1945 同口径，Issue #2227）。
-		has_exchange=bool(prior.get("exchange_contact_at"))
-		or any("交换微信" in text or "已交换" in text for text in _candidate_texts(conversation)),
+		# （与 _escalation_reason 的 #1945 同口径，Issue #2227）；裸「交换微信」
+		# 还会命中否定 / 疑问句，已完成语义只由明确措辞认定（Issue #2367）。
+		has_exchange=_prior_sent(prior, "exchange_contact_at")
+		or any(_exchange_completed(text) for text in _candidate_texts(conversation)),
 		candidate_after_questionnaire=_replied_after(
 			conversation, questionnaire_index, prior, "questionnaire_sent_at"
 		),
@@ -195,11 +197,40 @@ def _conversation_status(
 	)
 
 
+def _prior_sent(prior: dict[str, Any], key: str) -> bool:
+	"""prior 时间戳只认本模块写出的 ISO 时间字符串。
+
+	state.json 是本地可编辑状态，字段值类型可能漂移：``"false"`` 是真值、
+	``0`` 是假值，直接 ``bool()`` 会让「是否已发送问卷 / 已交换」的判定反转，
+	从未发出的动作被跳过，或已发出的动作被重复执行（Issue #2365）。写入侧
+	固定为 ``now_iso()``（``datetime.isoformat``），解析不了的字符串一律按缺失
+	处理，与 ``_replied_after`` 的转型口径一致。
+	"""
+	value = prior.get(key)
+	if not isinstance(value, str):
+		return False
+	try:
+		datetime.fromisoformat(value.strip())
+	except ValueError:
+		return False
+	return True
+
+
+#: 候选人明确表示已完成联系方式交换的措辞。裸「交换微信」不能作数：
+#: 「还没交换微信呢」「可以交换微信吗」同样包含该词（Issue #2367）。
+_EXCHANGE_DONE_TOKENS = ("已交换", "已经交换", "微信已加", "加了微信", "加过微信", "微信加上了")
+
+
+def _exchange_completed(text: str) -> bool:
+	return any(token in text for token in _EXCHANGE_DONE_TOKENS)
+
+
 def _latest_interview_time(conversation: Conversation) -> str:
 	"""按最近消息优先提取面试时间；候选人改期后取到的是新时间（Issue #2228）。
 
 	旧实现把 incoming 拼成一段再 ``search``，返回最旧的一处匹配；改期消息
-	与历史时间都会被误当成当前约定。
+	与历史时间都会被误当成当前约定。单条消息内部同样按「最新陈述优先」：
+	「明天下午3点不行，改到周五下午4点」应取周五（Issue #2364）。
 	"""
 	if conversation.ordered_messages:
 		texts = [
@@ -263,10 +294,8 @@ def _replied_after(
 				last_outgoing = index
 		if last_outgoing >= 0:
 			return _has_incoming_after(conversation, last_outgoing)
-	sent = prior.get(key)
 	return (
-		isinstance(sent, str)
-		and bool(sent)
+		_prior_sent(prior, key)
 		and bool(conversation.incoming_messages)
 		and bool(conversation.outgoing_messages)
 	)
@@ -320,26 +349,30 @@ def _extract_interview_time(text: str) -> str:
 	把「点」一律替换成 `:00`，于是「3点30」变成 `3:0030`、「3点半」静默截成
 	`3:00`——操作者会按 15:00 赴约而候选人说的是 15:30（Issue #891）。这里显式
 	解析每种分钟形态；识别不出时返回空串，调用方据此不生成面试线索。
+
+	同一条消息里出现多个时间时取最后一个有效匹配：「明天下午3点不行，改到
+	周五下午4点」是改期，写最旧的时刻会让操作者按作废时间赴约（Issue #2364）。
+	越界时刻（25点 / 99 分）跳过而不是让整条消息失效。
 	"""
-	match = _INTERVIEW_TIME.search(text)
-	if match is None:
-		return ""
-	hour = match.group("prefix")
-	hour_digits = re.search(r"\d{1,2}$", hour)
-	if hour_digits is None or int(hour_digits.group()) > 23:
-		# 「25点」不是时间；写进面试线索会让操作者按一个不存在的时刻赴约（Issue #1946）。
-		return ""
-	if match.group("colon"):
-		minutes = match.group("colon_minutes")
-	elif match.group("ban"):
-		minutes = "30"
-	elif match.group("quarter"):
-		minutes = "15" if match.group("quarter") == "一" else "45"
-	elif match.group("point_minutes"):
-		minutes = match.group("point_minutes").zfill(2)
-	else:
-		minutes = "00"
-	if int(minutes) > 59:
-		return ""
-	# 保留日期/时段原样（旧格式如「周二 14:00」继续带内部空格），仅去首尾空白。
-	return f"{hour.strip()}:{minutes}"
+	interview_time = ""
+	for match in _INTERVIEW_TIME.finditer(text):
+		hour = match.group("prefix")
+		hour_digits = re.search(r"\d{1,2}$", hour)
+		if hour_digits is None or int(hour_digits.group()) > 23:
+			# 「25点」不是时间；写进面试线索会让操作者按一个不存在的时刻赴约（Issue #1946）。
+			continue
+		if match.group("colon"):
+			minutes = match.group("colon_minutes")
+		elif match.group("ban"):
+			minutes = "30"
+		elif match.group("quarter"):
+			minutes = "15" if match.group("quarter") == "一" else "45"
+		elif match.group("point_minutes"):
+			minutes = match.group("point_minutes").zfill(2)
+		else:
+			minutes = "00"
+		if int(minutes) > 59:
+			continue
+		# 保留日期/时段原样（旧格式如「周二 14:00」继续带内部空格），仅去首尾空白。
+		interview_time = f"{hour.strip()}:{minutes}"
+	return interview_time
