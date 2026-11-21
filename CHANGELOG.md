@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.149] - 2026-11-22
+
 ### Fixed
 - 浏览器通道的上下文销毁标记补上 patchright `TargetClosedError` 的实际文案（`Target page, context or browser has been closed`）：复用的页签被用户关闭时，读请求进入既有的有界恢复而不是裸抛（Issue #2379）。
 - 浏览器通道区分「确定未发出」：CDP 会话建立与请求载荷序列化失败、JS 侧 `fetch()` 调用前抛出的异常返回可重试的 `NETWORK_ERROR` 并附 `request_sent=false`，写请求不再被误报成不可重放的 `ACTION_UNCONFIRMED`（Issue #2380）。
