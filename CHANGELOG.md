@@ -37,6 +37,10 @@
 - wizard 等待面板对类型漂移的 `operator_actions` 按缺失处理：数字不再中断渲染，字符串不再被逐字符拆成多条假指引（Issue #2369）。
 - wizard 状态表对类型漂移的 `artifacts` 按缺失处理：数字不再崩溃，单个路径字符串不再显示成十余条假产物（Issue #2370）。
 - wizard 采集产物探测改用 `lstat` 并吞掉权限 / 非法路径错误：3.11–3.14 行为一致，状态面板不再被 `PermissionError` 打断（Issue #2371）。
+- 锁文件的含 NUL 路径在 `mkdir` / `lstat` 处归一为带 `filename` 的 `OSError(EINVAL)`，不再泄露未分类 `ValueError`（Issue #2373）。
+- 私有 salt 的目录准备把非法路径归一为带 `filename` 的 `OSError`；`tighten_private_file` / `tighten_private_directory` 对非法路径静默跳过（Issue #2374）。
+- `prepare_output_path` 的父目录创建对含 NUL 的路径归一为带 `filename` 的 `OSError`，与 `inspect_output_path` 同口径（Issue #2375）。
+- 候选人动作的「可证明未发出」判定在异常自身无法转成文本时 fail-open：不再用二次异常替换原始错误，也不放宽 pending 预约释放（Issue #2376）。
 
 ## [3.4.147] - 2026-11-21
 

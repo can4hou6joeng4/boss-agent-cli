@@ -190,7 +190,14 @@ def candidate_action_provably_unsent(exc: BaseException) -> bool:
 
 	if isinstance(exc, (AuthRequired, TokenRefreshFailed, ProxyConfigurationError, BrowserNavigationError)):
 		return True
-	return is_browser_kernel_missing(str(exc))
+	try:
+		text = str(exc)
+	except Exception:
+		# 异常对象自身无法转成文本（如携带超长整数的 ValueError）时不能证明
+		# 写请求未发出：fail-open 保留原始异常继续传播，不放宽预约释放判定
+		# （Issue #2376）。
+		return False
+	return is_browser_kernel_missing(text)
 
 
 def outcome_unknown_cause(exc: BaseException | None) -> dict[str, Any]:

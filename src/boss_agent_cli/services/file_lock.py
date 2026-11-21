@@ -81,8 +81,20 @@ def exclusive_file_lock(path: Path) -> Iterator[bool]:
 		_release(path, handle)
 
 
+def _invalid_path_error(exc: ValueError, path: Path) -> OSError:
+	"""路径字符串本身非法（如内嵌 NUL）时归一为带 filename 的 OSError。"""
+	error = OSError(errno.EINVAL, str(exc))
+	error.filename = str(path)
+	return error
+
+
 def _acquire(path: Path) -> BinaryIO | None:
-	path.parent.mkdir(parents=True, exist_ok=True)
+	try:
+		path.parent.mkdir(parents=True, exist_ok=True)
+	except ValueError as exc:
+		# 内嵌 NUL 的路径在 mkdir 处只会抛裸 ValueError；与 json_files.path_mode
+		# 同口径归一，命令层才能落进 LOCAL_IO_ERROR（Issue #2373）。
+		raise _invalid_path_error(exc, path) from exc
 	for _ in range(_ACQUIRE_ATTEMPTS):
 		# FIFO / 设备 open("a+b") 会在打开阶段永久阻塞，登录刷新、模型导入、
 		# 聊天导出与 crawl / wizard 恢复都会挂死（Issue #1734）。锁必须落在数据
@@ -93,6 +105,8 @@ def _acquire(path: Path) -> BinaryIO | None:
 			mode: int | None = path.lstat().st_mode
 		except FileNotFoundError:
 			mode = None
+		except ValueError as exc:
+			raise _invalid_path_error(exc, path) from exc
 		if mode is not None and (stat.S_ISLNK(mode) or not stat.S_ISREG(mode)):
 			raise OSError(errno.EINVAL, "锁文件不是普通文件", str(path))
 		handle = path.open("a+b")
