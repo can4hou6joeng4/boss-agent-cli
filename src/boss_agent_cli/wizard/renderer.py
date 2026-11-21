@@ -592,7 +592,11 @@ def render_run(
 			lines.append(f"内部采集编号：{inner}")
 		if (jobs_seen or 0) > 0:
 			lines.append(f"本地已有职位：{jobs_seen} 条（可在「查看采集进度与产物」中浏览）")
-		operator_actions = last.get("operator_actions") or []
+		operator_actions = last.get("operator_actions")
+		if not isinstance(operator_actions, (list, tuple)):
+			# 值级类型漂移（旧 run / 手工编辑）按缺失处理：字符串会被逐字符
+			# 迭代成多条假指引，非序列类型直接中断状态面板（Issue #2369）。
+			operator_actions = []
 		if operator_actions:
 			# 数据驱动：step 自己声明「人该做什么」，renderer 不再猜。
 			lines.append("")
@@ -675,7 +679,11 @@ def render_run(
 		table.add_row("摘要", f"[bold]{display.escape_markup(data.get('summary'))}[/bold]")
 	if data.get("path"):
 		table.add_row("文件", f"[bold]{display.escape_markup(data.get('path'))}[/bold]")
-	artifacts = last.get("artifacts") or []
+	artifacts = last.get("artifacts")
+	if not isinstance(artifacts, (Mapping, list, tuple)):
+		# 类型漂移的产物字段按缺失处理：字符串会被逐字符迭代成假产物、
+		# 数字直接让面板崩溃（Issue #2370）。
+		artifacts = {}
 	if artifacts:
 		names, directory = _short_artifact_lines(artifacts)
 		if names:
@@ -708,7 +716,11 @@ def _render_empty_result(
 		"last_messages": "暂无最近消息。",
 		"jobs_list": "暂无已发布职位。",
 	}
-	message = _rewrite_recovery_commands(hints.get(goal, "没有可展示的结果。"), command_for)
+	# 恢复命令可能内嵌 `--data-dir`（用户可控）：整段按字面量转义，路径里的
+	# `[/bold]` 之类不能再当作 Rich 标签（Issue #2368）。
+	message = display.escape_markup(
+		_rewrite_recovery_commands(hints.get(goal, "没有可展示的结果。"), command_for)
+	)
 	display.console.print(
 		Panel(
 			f"[bold]{title}[/bold]\n\n[dim]{message}[/dim]",
@@ -1110,6 +1122,10 @@ def _short_artifact_lines(paths: Mapping[str, Any] | Sequence[Any]) -> tuple[str
 		for kind, raw in paths.items():
 			path = Path(str(raw))
 			entries.append((str(kind), path))
+	elif isinstance(paths, (str, bytes)):
+		# 单个路径不是产物列表：旧 run 的字段漂移不能让字符串被逐字符拆开
+		# 显示成十几条假产物（Issue #2370）。
+		return "", ""
 	else:
 		for raw in paths:
 			path = Path(str(raw))
@@ -1307,9 +1323,10 @@ def _render_crawl_summary(run: Mapping[str, Any], *, with_preview: bool = True) 
 	if paths:
 		artifact_names, artifact_dir = _short_artifact_lines(paths)
 	else:
-		artifacts = last.get("artifacts") or []
-		if artifacts:
-			artifact_names, artifact_dir = _short_artifact_lines(artifacts)
+		artifacts = last.get("artifacts")
+		if isinstance(artifacts, (Mapping, list, tuple)):
+			if artifacts:
+				artifact_names, artifact_dir = _short_artifact_lines(artifacts)
 	if artifact_names:
 		row("产物", artifact_names)
 	if artifact_dir:
