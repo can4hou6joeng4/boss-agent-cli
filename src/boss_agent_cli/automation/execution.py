@@ -11,7 +11,7 @@ from boss_agent_cli.api.browser_source import BrowserSourceUnavailable
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.automation.adapters import RecruiterAutomationPlatform
 from boss_agent_cli.automation.config import AutomationConfig
-from boss_agent_cli.automation.decision import decide_action
+from boss_agent_cli.automation.decision import decide_action, prior_sent
 from boss_agent_cli.automation.events import make_event, now_iso
 from boss_agent_cli.automation.models import (
 	AutomationEvent,
@@ -133,11 +133,19 @@ def process_pending(
 			continue
 		prior = _conversation_prior(state, item.candidate_key)
 		stage_key = _ACTION_STAGE_KEYS.get(action)
-		if prior is not None and stage_key is not None and bool(prior.get(stage_key)):
+		if prior is not None and stage_key is not None and prior_sent(prior, stage_key):
 			# 同一动作在一个会话里只发生一次：扫描路径（或更早的队列行）已经
 			# 完成过这个阶段。队列行是操作者批准的动作，但再发一份问卷 / 跟进
 			# 是确定性的重复触达（Issue #2211）。标记为已执行而不是留在
 			# pending，否则下一轮还会派发同一条消息。
+			#
+			# 阶段字段与决策路径共用 ``prior_sent`` 的 ISO 校验：只按 ``bool()``
+			# 会把 ``"false"`` 这类漂移值当作已完成，丢掉批准消息，同时让扫描
+			# 路径按「缺失」判定并同轮改发模板（Issue #2450）。
+			#
+			# 该候选人已由队列处置，加入本轮已派发集合：扫描路径不得再用模板
+			# 话术补位，即使两条路径对同一份 prior 的判断再次出现分歧。
+			dispatched_conversations.add(item.candidate_key)
 			if dry_run:
 				event = make_event(
 					platform,

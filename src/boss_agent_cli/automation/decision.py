@@ -179,13 +179,13 @@ def _conversation_status(
 	follow_up_index = _last_index(texts, config.follow_up_message)
 	return ConversationStatus(
 		has_questionnaire=questionnaire_index >= 0
-		or _prior_sent(prior, "questionnaire_sent_at"),
+		or prior_sent(prior, "questionnaire_sent_at"),
 		has_follow_up=follow_up_index >= 0
-		or _prior_sent(prior, "follow_up_sent_at"),
+		or prior_sent(prior, "follow_up_sent_at"),
 		# 只看候选人说的话：我方话术里出现「交换微信」不是候选人已交换
 		# （与 _escalation_reason 的 #1945 同口径，Issue #2227）；裸「交换微信」
 		# 还会命中否定 / 疑问句，已完成语义只由明确措辞认定（Issue #2367）。
-		has_exchange=_prior_sent(prior, "exchange_contact_at")
+		has_exchange=prior_sent(prior, "exchange_contact_at")
 		or any(_exchange_completed(text) for text in _candidate_texts(conversation)),
 		candidate_after_questionnaire=_replied_after(
 			conversation, questionnaire_index, prior, "questionnaire_sent_at"
@@ -197,14 +197,15 @@ def _conversation_status(
 	)
 
 
-def _prior_sent(prior: dict[str, Any], key: str) -> bool:
+def prior_sent(prior: dict[str, Any], key: str) -> bool:
 	"""prior 时间戳只认本模块写出的 ISO 时间字符串。
 
 	state.json 是本地可编辑状态，字段值类型可能漂移：``"false"`` 是真值、
 	``0`` 是假值，直接 ``bool()`` 会让「是否已发送问卷 / 已交换」的判定反转，
 	从未发出的动作被跳过，或已发出的动作被重复执行（Issue #2365）。写入侧
 	固定为 ``now_iso()``（``datetime.isoformat``），解析不了的字符串一律按缺失
-	处理，与 ``_replied_after`` 的转型口径一致。
+	处理，与 ``_replied_after`` 的转型口径一致。队列路径必须与本模块共用同一
+	判定，否则同一份漂移值会被两边解释成相反的事实（Issue #2450）。
 	"""
 	value = prior.get(key)
 	if not isinstance(value, str):
@@ -295,7 +296,7 @@ def _replied_after(
 		if last_outgoing >= 0:
 			return _has_incoming_after(conversation, last_outgoing)
 	return (
-		_prior_sent(prior, key)
+		prior_sent(prior, key)
 		and bool(conversation.incoming_messages)
 		and bool(conversation.outgoing_messages)
 	)
