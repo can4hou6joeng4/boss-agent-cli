@@ -70,6 +70,10 @@ _SENSITIVE_TEXT_PATTERNS = tuple(
 		# BOSS 的 stoken 查询参数名是 `__zp_stoken__`：通用 `stoken` 规则要求键后
 		# 直接是分隔符，双下划线让它整个漏过（Issue #2157）。单列一条，键名原样回填。
 		rf"{_ASCII_KEY_BOUNDARY}(?P<key>__zp_stoken__)(?P<quote>[\"']?)(?P<sep>\s*[:=]\s*)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
+		# BOSS 主会话 Cookie 名是 wt2 / at，不含 cookie / token 关键词，通用规则
+		# 匹配不到；登录链路的底层异常会带 `wt2=...` / `at=...` 明文（Issue #2337）。
+		# `at` 要求键前是非字母数字边界，`cat=` / `format=` 不会误伤。
+		rf"{_ASCII_KEY_BOUNDARY}(?P<key>wt2|at)(?P<quote>[\"']?)(?P<sep>\s*[:=]\s*)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
 		rf"{_ASCII_KEY_BOUNDARY}(?P<key>api[_-]?key|authorization|cookie|credential|password|passwd|secret|session(?:[_-]?id)?|stoken|token)(?P<quote>[\"']?)(?P<sep>\s*[:=]\s*)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
 		rf"{_ASCII_KEY_BOUNDARY}(?P<key>bearer)(?P<quote>)(?P<sep>\s+)(?P<value>[^{_TEXT_VALUE_TERMINATORS}]+)",
 	)

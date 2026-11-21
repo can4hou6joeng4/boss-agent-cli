@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+- 登录错误分类只在明确状态码上下文（`HTTP 401` / `status: 401` / 单独 `401` 等）判为 `LOGIN_EXPIRED`：端口 4010、`step 401` 不再被误判并诱导重新登录（Issue #2335）。
+- 风控文本判定提前到所有文本类型启发式之前：`timeout + security.html` 混合文案与携带风控词的 `ValueError` 不再降级成可重试的 `LOGIN_TIMEOUT` / `INVALID_PARAM`，安全页命中仍是硬停止（Issue #2336）。
+- 登录错误分类入口对底层异常文本统一脱敏，`wt2` / `at` 进入敏感键名单，wizard 预检渲染前同样脱敏：会话 Cookie 明文不再进入信封或终端（Issue #2337）。
+
 ## [3.4.147] - 2026-11-21
 
 ### Fixed
