@@ -11,6 +11,7 @@ Supports two modes:
 
 import base64
 import json
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -33,7 +34,12 @@ from boss_agent_cli.api.browser_urls import DEFAULT_CDP_URL, is_zhipin_url
 from boss_agent_cli.api.endpoints_loader import EndpointSpec, endpoint_for_request
 from boss_agent_cli.api.httpx_helpers import new_trace_id
 from boss_agent_cli.api.throttle import RequestThrottle
-from boss_agent_cli.api.request_budget import RequestBudget, check_request_control, is_request_stop, retry_after_seconds
+from boss_agent_cli.api.request_budget import (
+	RequestBudget,
+	check_request_control,
+	is_request_stop,
+	retry_after_seconds,
+)
 from boss_agent_cli.api.zhipin_errors import platform_risk_page_response, raise_platform_risk_response
 
 HOME_URL = "https://www.zhipin.com/"
@@ -223,6 +229,16 @@ _FETCH_SCRIPT = r"""
 					const body = await resp.text();
 					try {
 						const result = JSON.parse(body);
+						// __cli_* 是页面脚本与 CLI 之间的传输标记，不是平台字段。
+						// 平台响应可以带任意顶层键名：解析后先剔除同名键，防止
+						// 平台（或被注入的响应）伪造「未发出 / 已中断 / 安全页」
+						// 改变写请求的重试语义（Issue #2438）。CLI 自己的标记在
+						// 剥除之后再注入。
+						if (result && typeof result === 'object' && !Array.isArray(result)) {
+							for (const key of Object.keys(result)) {
+								if (key.startsWith('__cli_')) delete result[key];
+							}
+						}
 						if (result && (result.code === 9 || result.code === '9')) {
 							result.__cli_rate_limit__ = {retry_after: resp.headers.get('Retry-After') || ''};
 						}
@@ -272,6 +288,17 @@ class RequestNotSentError(RuntimeError):
 	会话建立与请求载荷序列化都发生在任何 CDP 消息发出之前，平台侧确定没有
 	收到请求；与 httpx 通道的 ``_UNSENT_TRANSPORT_ERRORS`` 同口径，读 / 写都
 	可以安全重试（Issue #2380）。
+	"""
+
+
+class RequestNotSentLocalError(RequestNotSentError):
+	"""预派发阶段的本地状态错误：平台侧确定没有收到请求。
+
+	预算租约、节流等待与请求前检查都在 ``Runtime.evaluate`` 写出之前执行；
+	其中的 ``sqlite3.Error`` / ``OSError`` 是本地状态问题，不是网络故障。
+	保留原始 cause 让命令层继续按 ``LOCAL_IO_ERROR`` 的恢复指引收口，同时
+	维持「确定未发出」的重试语义（Issue #2437）。``RequestBudgetExceeded``
+	本身带 ``request_sent=False`` 且经 ``is_request_stop`` 原样上抛，不走这里。
 	"""
 
 
@@ -337,59 +364,77 @@ class BrowserSession:
 		from contextlib import nullcontext
 
 		budget = getattr(self, "_request_budget", None)
-		window = (
-			budget.attempt("browser-fetch", check=self._check_request, before_wait=self._throttle.wait)
-			if budget is not None
-			else nullcontext()
-		)
-		with window:
-			if budget is None:
-				self._throttle.wait()
-			check_request_control(self._check_request)
-			try:
-				result = self._evaluate_fetch(payload)
-			finally:
-				self._throttle.mark()
-			if not isinstance(result, dict):
-				# JSON.parse 的顶层值可以是数组 / 字符串 / 数字 / null（Issue #2046）：
-				# 调用方与风险分类都假定对象响应。容器漂移若原样下传，会在
-				# response.get 处抛 AttributeError（命令层升级成 INTERNAL_ERROR），
-				# 且响应上的风控字段不被分类。按端点语义归一：读请求可重试，写
-				# 请求结果未知、不可重放。
-				return self._unparsed_response(endpoint)
-			limit = result.pop("__cli_rate_limit__", None)
-			if result.get("code") in (9, "9"):
-				result["code"] = 9
-			if budget is not None and (isinstance(limit, dict) or result.get("code") in (9, "9")):
-				budget.cooldown(
-					max(
-						10.0,
-						retry_after_seconds(limit.get("retry_after") if isinstance(limit, dict) else None) or 0.0,
+		# 预算窗口的进入（租约 / 节流等待 / SQLite 调度元数据）与请求前检查都
+		# 发生在任何 Runtime.evaluate 写出之前。记录「已派发」边界，让外层
+		# 只把真正的预派发失败报成「确定未发出」（Issue #2437）。
+		dispatched = False
+		try:
+			window = (
+				budget.attempt("browser-fetch", check=self._check_request, before_wait=self._throttle.wait)
+				if budget is not None
+				else nullcontext()
+			)
+			with window:
+				if budget is None:
+					self._throttle.wait()
+				check_request_control(self._check_request)
+				dispatched = True
+				try:
+					result = self._evaluate_fetch(payload)
+				finally:
+					self._throttle.mark()
+				if not isinstance(result, dict):
+					# JSON.parse 的顶层值可以是数组 / 字符串 / 数字 / null（Issue #2046）：
+					# 调用方与风险分类都假定对象响应。容器漂移若原样下传，会在
+					# response.get 处抛 AttributeError（命令层升级成 INTERNAL_ERROR），
+					# 且响应上的风控字段不被分类。按端点语义归一：读请求可重试，写
+					# 请求结果未知、不可重放。
+					return self._unparsed_response(endpoint)
+				limit = result.pop("__cli_rate_limit__", None)
+				if result.get("code") in (9, "9"):
+					result["code"] = 9
+				if budget is not None and (isinstance(limit, dict) or result.get("code") in (9, "9")):
+					budget.cooldown(
+						max(
+							10.0,
+							retry_after_seconds(limit.get("retry_after") if isinstance(limit, dict) else None) or 0.0,
+						)
 					)
-				)
-			security = result.pop("__cli_security_response__", None)
-			if isinstance(security, dict):
-				page_risk = platform_risk_page_response(
-					url=str(security.get("url") or ""),
-					content_type=str(security.get("content_type") or ""),
-					body="<title>访问受限</title>"
-					if security.get("restricted") is True
-					else f"<title>{security.get('title', '')}</title>",
-				)
-				if page_risk is not None:
-					raise_platform_risk_response(page_risk, is_cdp=self._is_cdp)
-			if budget is not None:
-				raise_platform_risk_response(result, is_cdp=self._is_cdp)
-			started = result.pop("__cli_request_started__", True)
-			if result.pop("__cli_request_interrupted__", False):
-				# 只有明确回传 started=false 才算「确定未发出」；缺少证据（例如
-				# Runtime.evaluate 自身超时）仍按结果未知收口（Issue #2380）。
-				if started is False:
-					return self._not_sent_response()
-				return self._interrupted_request_response(endpoint)
-			if result.pop("__cli_unparsed_response__", False):
-				return self._unparsed_response(endpoint)
-			return result
+				security = result.pop("__cli_security_response__", None)
+				if isinstance(security, dict):
+					page_risk = platform_risk_page_response(
+						url=str(security.get("url") or ""),
+						content_type=str(security.get("content_type") or ""),
+						body="<title>访问受限</title>"
+						if security.get("restricted") is True
+						else f"<title>{security.get('title', '')}</title>",
+					)
+					if page_risk is not None:
+						raise_platform_risk_response(page_risk, is_cdp=self._is_cdp)
+				if budget is not None:
+					raise_platform_risk_response(result, is_cdp=self._is_cdp)
+				started = result.pop("__cli_request_started__", True)
+				if result.pop("__cli_request_interrupted__", False):
+					# 只有明确回传 started=false 才算「确定未发出」；缺少证据（例如
+					# Runtime.evaluate 自身超时）仍按结果未知收口（Issue #2380）。
+					if started is False:
+						return self._not_sent_response()
+					return self._interrupted_request_response(endpoint)
+				if result.pop("__cli_unparsed_response__", False):
+					return self._unparsed_response(endpoint)
+				return result
+		except Exception as exc:
+			if dispatched or isinstance(exc, RequestNotSentError) or is_request_stop(exc):
+				raise
+			from boss_agent_cli.api.client import PlatformRiskError
+
+			if isinstance(exc, PlatformRiskError):
+				raise
+			if isinstance(exc, (sqlite3.Error, OSError)):
+				raise RequestNotSentLocalError(
+					f"browser request throttling failed before dispatch: {exc}"
+				) from exc
+			raise RequestNotSentError(f"browser request throttling failed before dispatch: {exc}") from exc
 
 	def _navigate_home(self, *, channel: str | None = None) -> None:
 		"""打开首页并确认 domcontentloaded。
@@ -838,6 +883,14 @@ class BrowserSession:
 		}
 		try:
 			result = self._send_fetch(payload, endpoint)
+		except RequestNotSentLocalError as exc:
+			# 预算 / 租约等本地状态错误只可能发生在派发之前：平台侧确定没有
+			# 收到请求，但恢复指引属于原始错误码（LOCAL_IO_ERROR 等），不能
+			# 折叠成 NETWORK_ERROR 或 ACTION_UNCONFIRMED（Issue #2437）。
+			cause = exc.__cause__
+			if cause is None:
+				return self._not_sent_response()
+			raise cause
 		except RequestNotSentError:
 			# 页面 / 上下文在写出 Runtime.evaluate 之前已关闭，或载荷无法序列化：
 			# 平台侧确定没有收到请求，读 / 写都可安全重试（Issue #2379、#2380）。
@@ -867,6 +920,11 @@ class BrowserSession:
 			self._raise_if_security_page()
 			try:
 				result = self._send_fetch(payload, endpoint)
+			except RequestNotSentLocalError as exc:
+				cause = exc.__cause__
+				if cause is None:
+					return self._not_sent_response()
+				raise cause
 			except RequestNotSentError:
 				return self._not_sent_response()
 		return result
@@ -1189,6 +1247,29 @@ def _carve_utf8_bits(
 	return out
 
 
+def _open_chat_tab_websocket(cdp_http_url: str, script: str, arg: Any) -> tuple[Any, str]:
+	"""连接聊天页 CDP WebSocket，返回 ``(connection, expression)``。
+
+	参数序列化与 WebSocket 握手都发生在首个 CDP 帧写出之前：失败时聊天页
+	动作确定没有派发，必须与「动作已发出、结果未知」区分（Issue #2439）。
+	连接建立后的 ``send`` / ``recv`` 失败仍保持结果未知，不在这里包装。
+	"""
+	import websockets.sync.client as _ws_client
+
+	target_ws = _pick_chat_target_ws(cdp_http_url)
+	try:
+		expression = _build_eval_expression(script, arg)
+	except (TypeError, ValueError, RecursionError) as exc:
+		raise ChatTabCdpUnreachable(f"chat tab script could not be serialized before dispatch: {exc}") from exc
+	try:
+		ws = _ws_client.connect(target_ws, max_size=8 * 1024 * 1024, open_timeout=5, close_timeout=1)
+	except Exception as exc:
+		if is_request_stop(exc):
+			raise
+		raise ChatTabCdpUnreachable(f"cannot open CDP websocket at {safe_cdp_endpoint(target_ws)}: {exc}") from exc
+	return ws, expression
+
+
 def _cdp_evaluate_in_chat_tab(cdp_http_url: str, script: str, arg: Any) -> Any:
 	"""Send Runtime.evaluate to the BOSS recruiter chat tab via raw CDP.
 
@@ -1200,12 +1281,9 @@ def _cdp_evaluate_in_chat_tab(cdp_http_url: str, script: str, arg: Any) -> Any:
 	"""
 	import json as _json
 
-	import websockets.sync.client as _ws_client
+	ws, expression = _open_chat_tab_websocket(cdp_http_url, script, arg)
 
-	target_ws = _pick_chat_target_ws(cdp_http_url)
-	expression = _build_eval_expression(script, arg)
-
-	with _ws_client.connect(target_ws, max_size=8 * 1024 * 1024, open_timeout=5, close_timeout=1) as ws:
+	with ws:
 		ws.send(
 			_json.dumps(
 				{
@@ -1405,12 +1483,9 @@ def _cdp_evaluate_with_chat_events_in_chat_tab(
 ) -> dict[str, Any]:
 	import json as _json
 
-	import websockets.sync.client as _ws_client
+	ws, expression = _open_chat_tab_websocket(cdp_http_url, script, arg)
 
-	target_ws = _pick_chat_target_ws(cdp_http_url)
-	expression = _build_eval_expression(script, arg)
-
-	with _ws_client.connect(target_ws, max_size=8 * 1024 * 1024, open_timeout=5, close_timeout=1) as ws:
+	with ws:
 		ws.send(_json.dumps({"id": 1, "method": "Network.enable"}))
 		ws.send(
 			_json.dumps(
