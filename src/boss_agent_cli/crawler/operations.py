@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.crawler.service import CrawlSettings, _hook_injections
 from boss_agent_cli.display import boss_command, shell_argument
@@ -144,14 +145,17 @@ def import_crawl_shortlist(
 	# security_id 每次搜索请求都会轮换，不能参与跨 run 去重：同一职位重新采集后
 	# 再次导入会带着新值，复合键永远对不上，候选池里就多出一条重复记录。只按稳定
 	# 的 job_id 判断是否已存在；命中时保留已有标签、备注和首次加入时间（Issue #899）。
-	known_job_ids = {str(item.get("job_id", "")) for item in cache.list_shortlist()}
+	known_job_ids = {safe_text(item.get("job_id") or "") for item in cache.list_shortlist()}
 	imported: list[dict[str, str]] = []
 	existing_count = 0
 	skipped_count = 0
 	for selected_item in selected:
 		item = selected_item["payload"]
-		security_id = str(item.get("security_id", ""))
-		job_id = str(item.get("job_id", ""))
+		# 显式 null 不能经 ``str(None)`` 变成真值 "None"：那样空值检查失效，不同
+		# 职位会以同一个伪主键互相去重，候选池里落出一条 security_id/job_id 都是
+		# "None" 的记录（Issue #2408）。与展示字段同口径按缺失处理。
+		security_id = safe_text(item.get("security_id") or "")
+		job_id = safe_text(item.get("job_id") or "")
 		if not security_id or not job_id:
 			skipped_count += 1
 			continue
@@ -161,15 +165,15 @@ def import_crawl_shortlist(
 		cache.add_shortlist({
 			"security_id": security_id,
 			"job_id": job_id,
-			"title": str(item.get("title", "")),
-			"company": str(item.get("company", "")),
-			"city": str(item.get("city", "")),
-			"salary": str(item.get("salary", "")),
+			"title": safe_text(item.get("title") or ""),
+			"company": safe_text(item.get("company") or ""),
+			"city": safe_text(item.get("city") or ""),
+			"salary": safe_text(item.get("salary") or ""),
 			"source": f"crawl:{run_id}",
 			"tags": list(tags),
 			"note": note,
 		})
-		imported.append({"selector": str(selected_item["selector"]), "title": str(item.get("title", ""))})
+		imported.append({"selector": str(selected_item["selector"]), "title": safe_text(item.get("title") or "")})
 		known_job_ids.add(job_id)
 	return {
 		"run_id": run_id,

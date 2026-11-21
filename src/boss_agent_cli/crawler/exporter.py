@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.crawler.controls import CrawlExportError, CrawlRuntimeUnavailable
 from boss_agent_cli.services.chat_utils import sanitize_csv_cell
 from boss_agent_cli.services.json_files import strict_json_text
@@ -30,11 +31,12 @@ def _csv_cell(value: Any) -> str:
 	"""CSV 没有类型：一律按共享规则清洗后落盘，防止公式注入。
 
 	非有限浮点与 JSON 分支同口径归一成空值：``nan`` / ``inf`` 不是可移植的
-	文本值，也不该在产物里与合法数字混在一起（Issue #2107）。
+	文本值，也不该在产物里与合法数字混在一起（Issue #2107）。超长整数同样按
+	缺失处理：裸 ``str()`` 会抛 ``ValueError``，整份导出中止（Issue #2406）。
 	"""
 	if isinstance(value, float) and not math.isfinite(value):
 		value = None
-	return sanitize_csv_cell(str(value if value is not None else ""))
+	return sanitize_csv_cell("" if value is None else safe_text(value))
 
 
 #: openpyxl 拒绝写入的控制字符（XML 1.0 不允许）。平台原文偶尔夹带，例如
@@ -48,6 +50,15 @@ def _xlsx_cell(value: Any) -> Any:
 	if isinstance(value, float) and not math.isfinite(value):
 		# openpyxl 会为非有限数写出空的 <v></v> 数值单元格（Issue #2107）。
 		return None
+	if isinstance(value, int) and not isinstance(value, bool) and value.bit_length() > 1000:
+		# 保存时 openpyxl 会把数值转 float：超过 1024 bit 的整数抛
+		# ``OverflowError: int too large to convert to float``，整份导出失败
+		# （Issue #2405）。按文本保留；4300 位以上连 ``str()`` 都不可用，
+		# 与展示字段同口径按缺失处理（Issue #2065）。
+		try:
+			return str(value)
+		except ValueError:
+			return None
 	if isinstance(value, str):
 		return _ILLEGAL_XLSX_CHARACTERS.sub("", value)
 	if isinstance(value, (int, float, bool)) or value is None:
@@ -74,7 +85,12 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 	first and only replaced once every format succeeded, so a failure in one
 	serializer cannot leave the others half-updated (Issue #1135).
 	"""
-	export_rows = [{field: row.get(field, "") for field in FIELDS} for row in rows]
+	# 非对象行直接丢弃：``row.get`` 会抛 AttributeError，绕过下面的导出错误包装，
+	# 让命令层拿到裸异常（与 services/job_export 的边界口径一致，Issue #2407）。
+	# 缓存读取本身已要求 payload 是 object，这里是公共边界的纵深防御。
+	export_rows = [
+		{field: row.get(field, "") for field in FIELDS} for row in rows if isinstance(row, dict)
+	]
 	json_path = output_dir / "jobs.json"
 	csv_path = output_dir / "jobs.csv"
 	xlsx_path = output_dir / "jobs.xlsx"
@@ -124,7 +140,9 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 		json_tmp = _temporary_for(json_path)
 		temporaries.append(json_tmp)
 		with json_tmp.open("w", encoding="utf-8", errors="backslashreplace") as file:
-			file.write(strict_json_text(export_rows))
+			# 与职位 / 聊天 JSON 导出同口径：超长整数按 null 降级，单个数值漂移
+			# 不再让整份产物失败（Issue #2387、#2406）。
+			file.write(strict_json_text(export_rows, null_oversized_ints=True))
 		csv_tmp = _temporary_for(csv_path)
 		temporaries.append(csv_tmp)
 		with csv_tmp.open("w", encoding="utf-8-sig", newline="", errors="backslashreplace") as file:
