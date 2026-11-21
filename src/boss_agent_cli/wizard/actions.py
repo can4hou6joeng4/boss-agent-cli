@@ -8,7 +8,14 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, NoReturn, cast
 
-from boss_agent_cli.api.models import dict_items, field_dict, field_list, platform_data_dict
+from boss_agent_cli.api.models import (
+	dict_items,
+	field_dict,
+	field_list,
+	field_text,
+	platform_data_dict,
+	scalar_or_none,
+)
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.auth.identity import account_scope
 from boss_agent_cli.auth.manager import AuthManager
@@ -697,7 +704,7 @@ def execute_candidate_detail(
 	风控异常原样上抛，不再换通道补请求。
 	"""
 	from boss_agent_cli.api.models import employment_type_from_raw
-	from boss_agent_cli.services.job_card import build_job_from_card
+	from boss_agent_cli.services.job_card import build_job_from_card, text_items
 
 	greeted = False
 	if data_dir is not None:
@@ -716,28 +723,28 @@ def execute_candidate_detail(
 			if job_info:
 				boss_info = field_dict(platform_data, "bossInfo")
 				brand_info = field_dict(platform_data, "brandComInfo")
-				raw_job_type = job_info.get("jobType")
+				raw_job_type = scalar_or_none(job_info.get("jobType"))
 				return {
 					"job_id": job_id,
-					"title": job_info.get("jobName", ""),
-					"company": brand_info.get("brandName", ""),
-					"salary": job_info.get("salaryDesc", ""),
-					"city": job_info.get("cityName", ""),
-					"experience": job_info.get("experienceName", ""),
-					"education": job_info.get("degreeName", ""),
-					"description": platform_data.get("jobDetail", "") or job_info.get("postDescription", ""),
-					"address": job_info.get("address", ""),
-					"skills": field_list(job_info, "jobLabels") or field_list(job_info, "skills"),
-					"boss_name": boss_info.get("name", ""),
-					"boss_title": boss_info.get("title", ""),
-					"boss_active": boss_info.get("activeTimeDesc", "离线"),
+					"title": field_text(job_info, "jobName"),
+					"company": field_text(brand_info, "brandName"),
+					"salary": field_text(job_info, "salaryDesc"),
+					"city": field_text(job_info, "cityName"),
+					"experience": field_text(job_info, "experienceName"),
+					"education": field_text(job_info, "degreeName"),
+					"description": field_text(platform_data, "jobDetail") or field_text(job_info, "postDescription"),
+					"address": field_text(job_info, "address"),
+					"skills": text_items(job_info, "jobLabels") or text_items(job_info, "skills"),
+					"boss_name": field_text(boss_info, "name"),
+					"boss_title": field_text(boss_info, "title"),
+					"boss_active": field_text(boss_info, "activeTimeDesc", "离线"),
 					"security_id": security_id,
 					"lid": lid,
 					"raw_job_type": raw_job_type,
 					"employment_type": employment_type_from_raw(raw_job_type),
-					"days_per_week": job_info.get("daysPerWeekDesc", ""),
-					"least_month": job_info.get("leastMonthDesc", ""),
-					"pay_type": job_info.get("payTypeDesc", ""),
+					"days_per_week": field_text(job_info, "daysPerWeekDesc"),
+					"least_month": field_text(job_info, "leastMonthDesc"),
+					"pay_type": field_text(job_info, "payTypeDesc"),
 					"greeted": greeted,
 					"channel": "job_detail",
 				}
