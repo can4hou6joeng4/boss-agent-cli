@@ -858,7 +858,7 @@ def _candidate_recommend(context: ActionContext, inputs: Mapping[str, Any], prio
 def _candidate_detail(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	from boss_agent_cli.wizard.renderer import busy_status
 
-	security_id = str(_required(inputs, "security_id"))
+	security_id = _required_str(inputs, "security_id")
 	job_id = _optional_str(inputs.get("job_id"))
 	lid = str(inputs.get("lid") or "")
 	with busy_status("正在读取职位详情…"):
@@ -1035,7 +1035,7 @@ def _candidate_current_security_id(friend: Mapping[str, Any]) -> str:
 
 
 def _candidate_exchange(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	identifier = str(_required(inputs, "security_id"))
+	identifier = _required_str(inputs, "security_id")
 	exchange_type = _exchange_type(inputs)
 	with context.candidate_platform() as platform:
 		friend = _candidate_friend(platform, identifier, context=context)
@@ -1109,7 +1109,7 @@ def _candidate_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 
 def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	with context.candidate_platform() as platform:
-		friend = _candidate_friend(platform, str(_required(inputs, "gid")), context=context)
+		friend = _candidate_friend(platform, _required_str(inputs, "gid"), context=context)
 		gid = str(friend.get("uid") or "")
 		security_id = _candidate_current_security_id(friend)
 		response = platform.chat_history(
@@ -1195,7 +1195,7 @@ def _local_resumes(context: ActionContext, inputs: Mapping[str, Any], prior: Map
 
 
 def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	resume_name = str(_required(inputs, "resume"))
+	resume_name = _required_str(inputs, "resume")
 	resume, load_error = ResumeStore(context.data_dir / "resumes").get_with_error(resume_name)
 	if resume is None and load_error is not None:
 		# 文件存在但读不出来：报「不存在」会让 Agent 去 resume init，又被同名
@@ -1360,7 +1360,7 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 			if corrupt:
 				data["corrupt"] = corrupt
 			return StepResult(data)
-		name = str(_required(inputs, "name"))
+		name = _required_str(inputs, "name")
 		if action == "add":
 			params: dict[str, Any] = {}
 			for key in (
@@ -1379,7 +1379,15 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 				if key == "welfare" and isinstance(value, (list, tuple)):
 					# 存储格式与 CLI `watch add --welfare` 一致（逗号分隔字符串）：
 					# 直接写数组会让后续 `watch run` 在 `.split(",")` 上抛 AttributeError。
-					value = ",".join(str(item).strip() for item in value if str(item).strip())
+					# 元素必须是字符串：容器经 ``str()`` 会变成 repr 并持久化，后续
+					# 筛选把不可识别的标签静默当成关键词（Issue #2421）。
+					for index, item in enumerate(value):
+						if not isinstance(item, str):
+							raise WorkflowActionError(
+								"INVALID_PARAM",
+								f"watch 参数 welfare 的第 {index} 个元素必须是字符串（收到 {type(item).__name__}）",
+							)
+					value = ",".join(item.strip() for item in value if item.strip())
 				elif value is not None and not isinstance(value, str):
 					raise WorkflowActionError(
 						"INVALID_PARAM", f"watch 参数 {key} 必须是字符串（收到 {type(value).__name__}）"
@@ -1914,7 +1922,7 @@ def _crawl_start(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 		)
 	crawl_config = dict(crawl_value or {})
 	raw_query = inputs.get("query")
-	city = str(_required(inputs, "city"))
+	city = _required_str(inputs, "city")
 	city_code = CITY_CODES.get(city, city if city.isascii() and city.isdigit() else None)
 	if city_code is None:
 		raise WorkflowActionError("INVALID_PARAM", f"未知城市: {city}")
@@ -2177,8 +2185,8 @@ def _recruiter_applications(context: ActionContext, inputs: Mapping[str, Any], p
 
 
 def _recruiter_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	geek_id = str(_required(inputs, "geek_id"))
-	job_id = str(_required(inputs, "job_id"))
+	geek_id = _required_str(inputs, "geek_id")
+	job_id = _required_str(inputs, "job_id")
 	security_id = _optional_str(inputs.get("security_id"))
 	return _recruiter_call(
 		context,
@@ -2307,19 +2315,19 @@ def _recruiter_jobs_list(context: ActionContext, inputs: Mapping[str, Any], prio
 
 
 def _recruiter_jobs_detail(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	job_id = str(_required(inputs, "job_id"))
+	job_id = _required_str(inputs, "job_id")
 	return _recruiter_call(context, lambda platform: platform.job_detail(job_id), "职位详情获取失败")
 
 
 def _recruiter_jobs_online(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	job_id = str(_required(inputs, "job_id"))
+	job_id = _required_str(inputs, "job_id")
 	return _recruiter_call(
 		context, lambda platform: platform.job_online(job_id), "职位上线失败", write=True, check_command="hr jobs list"
 	)
 
 
 def _recruiter_jobs_offline(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	job_id = str(_required(inputs, "job_id"))
+	job_id = _required_str(inputs, "job_id")
 	return _recruiter_call(
 		context, lambda platform: platform.job_offline(job_id), "职位下线失败", write=True, check_command="hr jobs list"
 	)

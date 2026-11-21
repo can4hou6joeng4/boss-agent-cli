@@ -116,17 +116,23 @@ def _validate_statuses(run: dict[str, Any]) -> dict[str, Any]:
 
 
 def _validate_step_result_consistency(run: dict[str, Any]) -> dict[str, Any]:
-	"""``pending`` 步骤的已落盘结果不能声明 ``completed``（Issue #2183）。
+	"""非终态步骤的已落盘结果不能声明 ``completed``（Issue #2183、#2418）。
 
 	执行器落盘步骤结果与状态是同一个原子写；``failed`` / ``stopped`` 步骤保留
-	完成结果是结算超时、停止时的既有语义。唯独 ``pending``（等待执行）带着
-	``result.status == "completed"`` 无法由本工具产生：它是状态被外部改回
-	``pending`` 的痕迹，恢复时会把可能已生效的写步骤重放一次。矛盾没有可猜测
-	的真相，读取边界按记录损坏拒绝，不改写断点。
+	完成结果是结算超时、停止时的既有语义。其余状态（``pending`` / ``running`` /
+	``waiting_input``）带着 ``result.status == "completed"`` 无法由本工具产生：它
+	是状态被外部改回非终态的痕迹，恢复时会把可能已生效的写步骤重放一次。矛盾
+	没有可猜测的真相，读取边界按记录损坏拒绝，不改写断点。
 	"""
 	run_id = str(run.get("run_id") or "")
+	settled = {
+		WorkflowStatus.COMPLETED.value,
+		WorkflowStatus.FAILED.value,
+		WorkflowStatus.STOPPED.value,
+	}
 	for step in run.get("steps") or []:
-		if step.get("status") != WorkflowStatus.PENDING.value:
+		status = step.get("status")
+		if status in settled:
 			continue
 		result = step.get("result")
 		if isinstance(result, dict) and result.get("status") == WorkflowStatus.COMPLETED.value:
@@ -134,7 +140,7 @@ def _validate_step_result_consistency(run: dict[str, Any]) -> dict[str, Any]:
 				"workflow_step",
 				f"{run_id}/{step.get('step_name')}",
 				"status",
-				"步骤是 pending，但已落盘结果是 completed；无法判断该步骤是否已生效，"
+				f"步骤状态是 {status}，但已落盘结果是 completed；无法判断该步骤是否已生效，"
 				"禁止重放，请核对平台实际状态后新建 workflow",
 			)
 	return run
