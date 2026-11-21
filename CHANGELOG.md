@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.146] - 2026-11-21
+
 ### Fixed
 - `boss login` 的确定性内部异常（`TypeError` / `KeyError` 等）与本地 IO 失败按 `INTERNAL_ERROR` / `LOCAL_IO_ERROR` 输出，不再被文本启发式兜成可重试的 `NETWORK_ERROR`；内部错误 message 只含类型名，不回显可能夹带凭据的异常文本（Issue #2307）。
 - `--curl-file` 导入在平台限流（`RATE_LIMITED`）、代理环境变量非法（`INVALID_PARAM`）与本地 IO 失败时保留专用错误契约，不再一律报成可重试的「导入失败」（Issue #2308）。
