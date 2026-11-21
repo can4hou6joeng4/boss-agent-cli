@@ -83,8 +83,16 @@ def prepare_render_data(
 		key = item.get("initiated_by", "未知")
 		groups.setdefault(key, []).append((item, contact_identity(raw_item), raw_item))
 
-	total = len(usable)
-	counts = {k: len(v) for k, v in groups.items()}
+	# from_who 决定最终可见分组：总计 / 分组统计必须与 sections 同源，否则
+	# 直接传入全部好友再按方向过滤时会出现「总计 2 条」却只渲染 1 行
+	# （Issue #2392）。未知 from_who 与 sections 的条件一致，保持全部可见。
+	visible_keys = {
+		key
+		for key in groups
+		if not (from_who == "boss" and key != "对方主动") and not (from_who == "me" and key != "我主动")
+	}
+	total = sum(len(groups[key]) for key in visible_keys)
+	counts = {k: len(groups[k]) for k in groups if k in visible_keys}
 	count_parts = [f"{k} {v}" for k, v in counts.items()]
 
 	me_items = groups.get("我主动", [])
@@ -207,7 +215,7 @@ def render_export(
 		# 不让 jq 等严格解析器拒绝整份导出（Issue #1851）。孤立代理字符
 		# （平台 JSON 的 "\ud800"）会绕过文本单元格的清洗，按严格 UTF-8 写盘
 		# 时抛 UnicodeEncodeError，返回前统一替换（Issue #2321）。
-		return _sanitize_surrogates(strict_json_text(friends))
+		return _sanitize_surrogates(strict_json_text(friends, null_oversized_ints=True))
 	if fmt == "csv":
 		return _render_csv(friends)
 	if fmt == "html":

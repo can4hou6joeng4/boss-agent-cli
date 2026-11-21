@@ -86,10 +86,10 @@ def test_corrupt_today_snapshot_with_incomplete_collection_stays_incomplete(tmp_
 def test_crash_between_snapshot_and_marker_leaves_conservative_marker(tmp_path: Path, monkeypatch) -> None:
 	real_write = chat_snapshot.write_json_atomic
 
-	def flaky_write(path, value):
+	def flaky_write(path, value, **kwargs):
 		if Path(path).name.endswith(".json"):
 			raise OSError(28, "No space left on device")
-		return real_write(path, value)
+		return real_write(path, value, **kwargs)
 
 	monkeypatch.setattr(chat_snapshot, "write_json_atomic", flaky_write)
 

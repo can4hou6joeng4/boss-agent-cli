@@ -18,6 +18,11 @@ from typing import Any
 
 from boss_agent_cli.services.output_path import refuse_non_regular_target
 
+#: 与 ``output._MAX_SAFE_INT_BITS`` 同口径：十进制超过 4300 位的整数在
+#: ``json.dump`` / ``json.dumps`` 转字符串时抛 ValueError（Python 3.11+
+#: 的整数转换上限），整份本地状态 / 导出会落成本地 IO 错误（Issue #2388）。
+_MAX_JSON_INT_BITS = 14284
+
 
 def path_mode(path: Path) -> int | None:
 	"""仅对缺失路径返回 None；悬空链接保留链接自身的类型（Issue #1695）。"""
@@ -60,8 +65,14 @@ def write_json_atomic(
 	*,
 	indent: int | None = 2,
 	trailing_newline: bool = False,
+	null_oversized_ints: bool = False,
 ) -> None:
-	"""原子替换写入 JSON 文件；失败时保留原文件，不留下临时文件。"""
+	"""原子替换写入 JSON 文件；失败时保留原文件，不留下临时文件。
+
+	``null_oversized_ints`` 只给导出 / 快照产物使用：这些数据来自平台响应，
+	单个数值漂移不应中止整份产物（Issue #2388）。本地状态（配置、简历、
+	登记表）保持既有契约——超长整数按本地 IO 错误收口（Issue #1891）。
+	"""
 	refuse_non_regular_target(path)
 	path.parent.mkdir(parents=True, exist_ok=True)
 	temporary: Path | None = None
@@ -77,7 +88,7 @@ def write_json_atomic(
 		with os.fdopen(fd, "w", encoding="utf-8", errors="backslashreplace") as handle:
 			# 本地状态与其他工具共用：非有限数必须是 null，不能写出裸
 			# Infinity / NaN 让 jq 等严格解析器失败（Issue #1851）。
-			_serialize_into(handle, value, indent=indent)
+			_serialize_into(handle, value, indent=indent, null_oversized_ints=null_oversized_ints)
 			if trailing_newline:
 				handle.write("\n")
 			handle.flush()
@@ -96,7 +107,7 @@ def write_json_atomic(
 			temporary.unlink(missing_ok=True)
 
 
-def _serialize_into(handle: Any, value: Any, *, indent: int | None) -> None:
+def _serialize_into(handle: Any, value: Any, *, indent: int | None, null_oversized_ints: bool = False) -> None:
 	"""序列化失败（深嵌套 RecursionError、超长整数 ValueError）归成 OSError。
 
 	``json.loads`` 能读入的深嵌套文件在写回时会耗尽递归栈；异常若原样
@@ -104,7 +115,13 @@ def _serialize_into(handle: Any, value: Any, *, indent: int | None) -> None:
 	traceback（Issue #1891）。归成本地 IO 错误后走既有 LOCAL_IO_ERROR 通道。
 	"""
 	try:
-		json.dump(_json_safe_value(value), handle, ensure_ascii=False, indent=indent, allow_nan=False)
+		json.dump(
+			_json_safe_value(value, null_oversized_ints=null_oversized_ints),
+			handle,
+			ensure_ascii=False,
+			indent=indent,
+			allow_nan=False,
+		)
 	# TypeError 覆盖不可序列化的值（元组键、bytes、set 等）：不归成本地 IO
 	# 错误就会裸穿出命令层，stdout 无信封、stderr 裸 traceback（Issue #2220，
 	# 与 #1891 的深嵌套 / 超长整数同类）。
@@ -112,22 +129,36 @@ def _serialize_into(handle: Any, value: Any, *, indent: int | None) -> None:
 		raise OSError(errno.EINVAL, f"本地状态无法序列化（{exc}）") from exc
 
 
-def _json_safe_value(value: Any) -> Any:
-	"""把非有限 float 归一为 null，其余值递归保留。
+def _json_safe_value(value: Any, *, null_oversized_ints: bool = False) -> Any:
+	"""把非有限 float 与（可选）超长整数归一为 null，其余值递归保留。
 
 	``json.dump`` / ``json.dumps`` 默认允许 NaN / Infinity；本地状态与导出
 	产物会被 jq 等严格解析器读取，必须显式归一（Issue #1851）。
+
+	十进制位数可能超过 4300 位的整数在 ``null_oversized_ints`` 为真时归 null：
+	``json.dump`` 在转换时抛 ``ValueError``，快照 / 导出会整体失败并误报成本地
+	IO 错误（Issue #2388）。默认不动整数，保留本地状态写入的 EINVAL 契约
+	（Issue #1891）；bool 是 int 子类，先于 int 分支返回，保留 true/false。
 	"""
 	if isinstance(value, float):
 		return value if math.isfinite(value) else None
+	if isinstance(value, bool):
+		return value
+	if isinstance(value, int):
+		if null_oversized_ints and value.bit_length() > _MAX_JSON_INT_BITS:
+			return None
+		return value
 	if isinstance(value, dict):
-		return {key: _json_safe_value(child) for key, child in value.items()}
+		return {
+			key: _json_safe_value(child, null_oversized_ints=null_oversized_ints)
+			for key, child in value.items()
+		}
 	if isinstance(value, (list, tuple)):
-		return [_json_safe_value(child) for child in value]
+		return [_json_safe_value(child, null_oversized_ints=null_oversized_ints) for child in value]
 	return value
 
 
-def strict_json_text(value: Any, *, indent: int | None = 2) -> str:
+def strict_json_text(value: Any, *, indent: int | None = 2, null_oversized_ints: bool = False) -> str:
 	"""Serialize a product JSON artifact under the same strict rules as stdout.
 
 	``json.dump`` in :func:`write_json_atomic` still allows NaN / Infinity and
@@ -138,6 +169,11 @@ def strict_json_text(value: Any, *, indent: int | None = 2) -> str:
 	JSON escapes.
 	"""
 	try:
-		return json.dumps(_json_safe_value(value), ensure_ascii=False, allow_nan=False, indent=indent)
+		return json.dumps(
+			_json_safe_value(value, null_oversized_ints=null_oversized_ints),
+			ensure_ascii=False,
+			allow_nan=False,
+			indent=indent,
+		)
 	except (RecursionError, ValueError, TypeError) as exc:
 		raise OSError(errno.EINVAL, f"本地状态无法序列化（{exc}）") from exc

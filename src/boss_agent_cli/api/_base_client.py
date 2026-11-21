@@ -449,12 +449,15 @@ class _BaseHttpClient:
 						raise
 					if (
 						write_possible
-						and isinstance(error, httpx.TransportError)
+						and isinstance(error, (httpx.TransportError, httpx.TooManyRedirects))
 						and not isinstance(error, _UNSENT_TRANSPORT_ERRORS)
 					):
 						# 只有「请求可能已发出」的传输异常才落成结果未知；确定未发出的
 						# 连接 / 代理 / 协议错误原样上抛，由命令出口按可重试的
 						# NETWORK_ERROR 收口（Issue #2216）。
+						# TooManyRedirects 是 RequestError 而非 TransportError：客户端
+						# 已跟随重定向多次，写请求可能已在其中一次生效，读路径仍按
+						# 普通网络错误上抛（Issue #2396）。
 						return self._unconfirmed_http_response(url, "transport_error")
 					if write_possible and isinstance(error, httpx.DecodingError):
 						return self._unconfirmed_http_response(url, "invalid_response")

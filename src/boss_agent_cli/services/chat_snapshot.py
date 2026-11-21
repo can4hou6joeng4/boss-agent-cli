@@ -231,7 +231,7 @@ def _merge_and_write(
 	meta_path = Path(_meta_path(snapshot_path))
 	write_json_atomic(meta_path, {"complete": False})
 	# 原子写避免中断后当日快照变成半截 JSON（下次读取会整个丢弃）。
-	write_json_atomic(Path(snapshot_path), merged)
+	write_json_atomic(Path(snapshot_path), merged, null_oversized_ints=True)
 	write_json_atomic(meta_path, {"complete": stored_complete})
 	return merged
 

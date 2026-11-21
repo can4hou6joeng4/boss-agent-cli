@@ -83,7 +83,9 @@ def _join_cells(value: list[Any]) -> str:
 
 def write_export_file(items: list[dict[str, Any]], fmt: str, path: str) -> None:
 	if fmt == "json":
-		write_text_atomic(path, strict_json_text(items))
+		# 导出产物的单个数值漂移不应中止整份文件：超长整数按 null 输出，
+		# 与 CSV / HTML 通道的降级口径一致（Issue #2387）。
+		write_text_atomic(path, strict_json_text(items, null_oversized_ints=True))
 	elif fmt == "csv":
 		if not items:
 			write_text_atomic(path, "")
