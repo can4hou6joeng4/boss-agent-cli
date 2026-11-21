@@ -13,24 +13,33 @@ from boss_agent_cli.ai.local_models import LocalModelManifestError, import_local
 from boss_agent_cli.resume.store import ResumeImportError, ResumeStore
 
 
-def _deep_resume_document() -> str:
-	"""990 层嵌套的 rows.content：json.loads 能读，写回时耗尽递归栈。"""
-	depth = 990
-	content = "[" * depth + "]" * depth
+def _resume_document() -> str:
+	"""结构合法的普通简历文档；序列化异常由下面的 monkeypatch 直接注入。"""
 	return (
 		'{"name":"张测试","title":"t","modules":[{"id":"m","title":"M","rows":'
-		'[{"type":"richtext","content":' + content + "}]}]}"
+		'[{"type":"richtext","content":["ok"]}]}]}'
 	)
 
 
-# ── Issue #2356：export_json 深嵌套不再裸 RecursionError ─────────────
+# ── Issue #2356：export_json 序列化失败不再裸 RecursionError ─────────
 
 
-def test_export_json_deep_nesting_raises_local_state_error(tmp_path: Path) -> None:
+def test_export_json_serialization_failure_is_local_state_error(
+	tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+	# 深嵌套的表现随 Python 版本漂移：3.11 在读取阶段就抛 RecursionError
+	# （被 _read_payload 归为损坏文件，走不到写回），3.13+ 的 json 又不再因
+	# 深嵌套抛异常。直接模拟序列化异常，锁定「归成本地状态错误」的转换逻辑
+	# （Issue #2356）。
 	resumes = tmp_path / "resumes"
 	resumes.mkdir()
-	(resumes / "deep.json").write_text(_deep_resume_document(), encoding="utf-8")
+	(resumes / "deep.json").write_text(_resume_document(), encoding="utf-8")
 	store = ResumeStore(resumes)
+
+	def boom(*args: object, **kwargs: object) -> str:
+		raise RecursionError("maximum recursion depth exceeded")
+
+	monkeypatch.setattr(json, "dumps", boom)
 
 	with pytest.raises(OSError) as excinfo:
 		store.export_json("deep")
@@ -59,10 +68,21 @@ def test_list_handles_name_with_surrogate_and_portable_chars(tmp_path: Path) -> 
 # ── Issue #2358：导入深嵌套文件报输入错误而不是本地 IO ──────────────
 
 
-def test_import_deep_nesting_reports_input_error(tmp_path: Path) -> None:
+def test_import_serialization_failure_reports_input_error(
+	tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+	# 与 #2356 同理：深嵌套的异常时点随版本漂移，这里模拟 write_json_atomic
+	# 的序列化失败（EINVAL），锁定 import_file 的转换逻辑。
 	source = tmp_path / "deep.json"
-	source.write_text(_deep_resume_document(), encoding="utf-8")
+	source.write_text(_resume_document(), encoding="utf-8")
 	store = ResumeStore(tmp_path / "resumes")
+
+	import boss_agent_cli.resume.store as store_module
+
+	def boom(*args: object, **kwargs: object) -> None:
+		raise OSError(errno.EINVAL, "本地状态无法序列化（maximum recursion depth exceeded）")
+
+	monkeypatch.setattr(store_module, "write_json_atomic", boom)
 
 	with pytest.raises(ResumeImportError, match="嵌套层级过深"):
 		store.import_file(source)
