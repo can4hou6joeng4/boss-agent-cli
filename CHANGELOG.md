@@ -10,6 +10,7 @@
 - 向导与 MCP 的 `crawl_status` 步骤与 `boss crawl status` 同口径：用同一次任务行读取回报 `executor_active`，`running` 无执行器时标记 `running_stale`、`queued` 超出交接窗口时标记 `queue_overdue`，并在步骤指引里给出 `crawl resume <run_id> --background`（Issue #2479）。
 - `crawl status` 在 queued / running 时回报待处理的 `stop_requested`；执行器已退出但停止请求还没被消费时，下一步建议 `crawl stop` 按断点结算，不再建议会先清除标记的 `crawl resume --background`。向导与 MCP 的 `crawl_status` 步骤同口径（Issue #2482）。
 - 本地断点里可空的 JSON 列（`workflow_steps.error` / `result`、`workflow_runs.error` / `last_result`）只在 SQL NULL 时视为缺失：空串 / 空 BLOB / 空数组 / 数字漂移一律按记录损坏处理。写请求发出后标记漂移成空值时，恢复按结果未知 fail-closed（`replay_safe: false`），不再重放可能已生效的写操作（Issue #2484）。
+- 向导输入的对象键只接受字符串：数字 / 布尔 / null 键及其混合键此前能通过 `WizardInput.from_mapping`，落库时 `json.dumps(sort_keys=True)` 抛 `TypeError` 并被兜成 `INTERNAL_ERROR`；现在入口直接给出 `INVALID_PARAM` 诊断（Issue #2485）。
 
 ## [3.4.153] - 2026-11-23
 

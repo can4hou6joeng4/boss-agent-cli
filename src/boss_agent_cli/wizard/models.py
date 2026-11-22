@@ -65,14 +65,16 @@ def _ensure_storable_inputs(value: Any, path: str = "inputs", depth: int = 0) ->
 	elif isinstance(value, Mapping):
 		for key, item in value.items():
 			item_path = f"{path}.{key}"
-			# 键同样要能落成 JSON：json.dumps 只接受字符串键（数字 / 布尔 /
-			# null 会自动转成字符串），tuple 等容器键直接抛 TypeError（Issue #2420）。
-			if not isinstance(key, (str, bool, int, float)) and key is not None:
+			# JSON 对象键只能是字符串。数字 / 布尔 / null 会被 json.dumps 静默转成
+			# 字符串，但混合类型键在 sort_keys=True 排序时抛 TypeError：落点跑到
+			# WorkflowStore.create，命令层只能兜成 INTERNAL_ERROR（Issue #2420 /
+			# #2485）。入口统一拒绝，CLI、MCP 与 Python API 共享同一条诊断。
+			if not isinstance(key, str):
 				raise WorkflowInputError(
 					f"{item_path} 的键类型 {type(key).__name__} 不能落成 JSON；"
-					"对象键只支持字符串（或可自动转换的数字 / 布尔 / null）"
+					"对象键只支持字符串"
 				)
-			# 字符串键的代理字符与浮点键的非有限值由递归校验统一处理。
+			# 字符串键的代理字符由递归校验统一处理。
 			_ensure_storable_inputs(key, item_path, depth + 1)
 			_ensure_storable_inputs(item, item_path, depth + 1)
 	elif isinstance(value, (list, tuple)):
