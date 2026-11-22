@@ -63,7 +63,13 @@ def _xlsx_cell(value: Any) -> Any:
 		return _ILLEGAL_XLSX_CHARACTERS.sub("", value)
 	if isinstance(value, (int, float, bool)) or value is None:
 		return value
-	return _ILLEGAL_XLSX_CHARACTERS.sub("", str(value))
+	try:
+		return _ILLEGAL_XLSX_CHARACTERS.sub("", str(value))
+	except (ValueError, RecursionError):
+		# 容器内含 4300 位以上整数时 `str()` 抛 ValueError；深嵌套容器抛
+		# RecursionError。单条漂移字段按缺失处理，不能中止整份导出
+		# （Issue #2490，与 safe_text 的 #2065 / #2319 同口径）。
+		return None
 
 
 def _force_text_cell(cell: Any) -> None:
@@ -103,7 +109,7 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 	# 判断这次替换有没有生效。
 	replaced: list[tuple[Path, Path | None, Path]] = []
 	# 备份搬运被中断时，备份可能是旧产物的唯一副本；必须在外层 try 之前初始化，
-	# 序列化阶段就中断时也要能安全读取。
+	# 序列化阶段就中断时也要能安全读取。备份不预建空文件（Issue #2491）。
 	pending_backup: tuple[Path, Path] | None = None
 	# 回滚也失败时，备份是旧产物的唯一副本：清理临时文件必须跳过它，
 	# 并把路径写进错误消息（Issue #1924）。
@@ -156,11 +162,16 @@ def write_run_outputs(output_dir: Path, rows: list[dict[str, Any]]) -> dict[str,
 		# 抛 OSError，原样上抛会被 _run 兜成 status=stopped 的 ok:true 信封，
 		# 且 `.jobs.*` 临时文件残留（Issue #1346）。
 		for temporary, current_target in ((json_tmp, json_path), (csv_tmp, csv_path), (xlsx_tmp, xlsx_path)):
+			# 序列化可能耗时，期间目标可以被换成符号链接 / FIFO：预检结果在替换
+			# 阶段必须复核（Issue #2492）。
+			regular_now = _replacement_target_state(current_target)
 			backup: Path | None = None
-			if current_target in existing_regular:
-				backup = _temporary_for(current_target)
-				# 备份由 mkstemp 先创建：若随后的搬运失败，它必须和序列化临时
-				# 文件一起被清理，否则每次重试都残留一个 `.jobs.*`（Issue #1875）。
+			if regular_now and current_target in existing_regular:
+				# 备份只借用唯一文件名，不预建空文件：预建的空备份在「搬运前
+				# 目标消失」的窗口里会被当成旧产物恢复成 0 字节产物
+				# （Issue #2491）。搬运失败时名字仍参与临时文件清理，不残留
+				# `.jobs.*`（Issue #1875）。
+				backup = _backup_path_for(current_target)
 				temporaries.append(backup)
 				# 搬运前登记：中断可能发生在 os.replace 已生效但还未返回时。
 				pending_backup = (current_target, backup)
@@ -255,15 +266,48 @@ def _replacement_took_effect(temporary: Path) -> bool:
 	return False
 
 
+def _replacement_target_state(target: Path) -> bool:
+	"""替换阶段复核目标仍是预检时的普通文件（Issue #2492）。
+
+	序列化可能耗时，期间目标可以被换成符号链接或 FIFO。``os.replace`` 搬运的
+	是链接本身而不是它指向的内容：不复核就会把用户的链接搬进备份，安装成功后
+	清理备份时静默删除链接（预检时目标不存在、期间被换成链接的窗口同样如此），
+	预检承诺的「拒绝替换链接或写穿目标」（Issue #1755）随之失效。目标已消失
+	返回 False，按首次导出处理；同名目录同样返回 False，交给 ``os.replace``
+	抛 ``IsADirectoryError``，保留既有回滚契约（Issue #1616）。
+	"""
+	try:
+		mode = target.lstat().st_mode
+	except FileNotFoundError:
+		return False
+	if stat.S_ISREG(mode):
+		return True
+	if stat.S_ISDIR(mode):
+		return False
+	if stat.S_ISLNK(mode):
+		raise CrawlExportError(f"采集产物 {target} 变成了符号链接，拒绝替换链接或写穿目标")
+	raise CrawlExportError(f"采集产物 {target} 变成了非普通文件（FIFO / 设备），拒绝替换")
+
+
 def _restore_pending_backup(pending: tuple[Path, Path] | None, retained: set[Path]) -> None:
 	"""备份搬运本身被中断：目标还在就丢弃备份，目标已消失就把备份放回去。
 
 	只有搬运中断时 ``replaced`` 里还没有这一项，备份可能是旧产物的唯一副本；
-	此时不能把它当临时文件清理掉（Issue #2274）。
+	此时不能把它当临时文件清理掉（Issue #2274）。备份路径不预建文件：它不存在
+	就说明搬运调用没有生效，旧产物（若还在）仍在目标位置，不能凭空放回空文件
+	（Issue #2491）。
 	"""
 	if pending is None:
 		return
 	target, backup = pending
+	try:
+		backup.lstat()
+	except FileNotFoundError:
+		return
+	except OSError:
+		# 状态无法确认：保留备份，宁可多一个隐藏文件也不丢旧产物。
+		retained.add(backup)
+		return
 	try:
 		target.lstat()
 	except FileNotFoundError:
@@ -287,6 +331,17 @@ def _temporary_for(target: Path) -> Path:
 	fd, name = tempfile.mkstemp(prefix=f".{target.name[:32]}.", dir=target.parent)
 	os.close(fd)
 	return Path(name)
+
+
+def _backup_path_for(target: Path) -> Path:
+	"""为旧产物生成备份路径，但不预建文件（Issue #2491）。
+
+	预建的空备份在「搬运前目标消失」的窗口里会被 ``_restore_pending_backup``
+	当成旧产物恢复成 0 字节产物。名字沿用 ``_temporary_for`` 的截断前缀
+	（Issue #2080），后缀用 128 bit 随机数保证唯一；备份只在 ``os.replace``
+	真正把旧产物搬进来后才存在，因此不存在需要清理的空占位文件。
+	"""
+	return target.parent / f".{target.name[:32]}.{os.urandom(16).hex()}"
 
 
 def _write_xlsx(path: Path, rows: list[dict[str, Any]]) -> None:
