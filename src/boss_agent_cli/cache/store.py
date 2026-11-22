@@ -145,7 +145,7 @@ def _decode_optional_record(
 
 
 def _decode_text_column(
-	kind: str, record_id: str, column: str, raw: Any, *, allow_none: bool = False
+	kind: str, record_id: str, column: str, raw: Any, *, allow_none: bool = False, allow_surrogates: bool = False
 ) -> str | None:
 	"""TEXT 列的类型漂移在读取边界拦下（Issue #1885）。
 
@@ -161,7 +161,7 @@ def _decode_text_column(
 		return raw
 	if isinstance(raw, (bytes, bytearray)):
 		try:
-			return bytes(raw).decode("utf-8")
+			return bytes(raw).decode("utf-8", errors="surrogatepass" if allow_surrogates else "strict")
 		except UnicodeDecodeError as exc:
 			raise CacheRecordInvalid(kind, record_id, column, f"不是有效的 UTF-8 文本（{exc}）") from exc
 	raise CacheRecordInvalid(kind, record_id, column, f"期望文本，实际是 {type(raw).__name__}")
@@ -236,6 +236,15 @@ def _shortlist_text(value: Any) -> Any:
 def _shortlist_display_text(value: Any) -> str:
 	"""候选池展示字段：沿用既有字符串转换后处理孤立代理项（Issue #2502）。"""
 	return sanitize_surrogates(value if isinstance(value, str) else str(value or ""))
+
+
+def _resume_name_key(name: str) -> str | bytes:
+	"""按原值绑定简历名；不可编码的文件名用 BLOB 区分（Issue #2503）。"""
+	try:
+		name.encode("utf-8")
+	except UnicodeEncodeError:
+		return name.encode("utf-8", errors="surrogatepass")
+	return name
 
 
 def saved_search_name_error(name: str) -> str | None:
@@ -2395,23 +2404,24 @@ class CacheStore:
 		`job_id` 已有记录时，把该行迁到本次的新标识，而不是再插入一行 `prepared` 记录
 		（Issue #901）。
 		"""
+		resume_key = _resume_name_key(resume_name)
 		now = time.time()
 		with self._conn:
 			exact = self._conn.execute(
 				"SELECT 1 FROM resume_job_links WHERE resume_name = ? AND security_id = ? AND job_id = ?",
-				(resume_name, security_id, job_id),
+				(resume_key, security_id, job_id),
 			).fetchone()
 			if exact is None:
 				existing = self._conn.execute(
 					"SELECT security_id FROM resume_job_links "
 					"WHERE resume_name = ? AND job_id = ? ORDER BY updated_at DESC LIMIT 1",
-					(resume_name, job_id),
+					(resume_key, job_id),
 				).fetchone()
 				if existing is not None:
 					self._conn.execute(
 						"UPDATE resume_job_links SET security_id = ?, updated_at = ? "
 						"WHERE resume_name = ? AND security_id = ? AND job_id = ?",
-						(security_id, now, resume_name, str(existing[0]), job_id),
+						(security_id, now, resume_key, str(existing[0]), job_id),
 					)
 			self._conn.execute(
 				"INSERT INTO resume_job_links "
@@ -2421,7 +2431,7 @@ class CacheStore:
 				"job_title = COALESCE(NULLIF(excluded.job_title, ''), resume_job_links.job_title), "
 				"company = COALESCE(NULLIF(excluded.company, ''), resume_job_links.company), "
 				"updated_at = excluded.updated_at",
-				(resume_name, security_id, job_id, job_title, company, now, now),
+				(resume_key, security_id, job_id, job_title, company, now, now),
 			)
 
 	def update_job_link_status(
@@ -2437,7 +2447,7 @@ class CacheStore:
 		cursor = self._conn.execute(
 			"UPDATE resume_job_links SET status = ?, notes = ?, updated_at = ? "
 			"WHERE resume_name = ? AND security_id = ? AND job_id = ?",
-			(status, notes, now, resume_name, security_id, job_id),
+			(status, notes, now, _resume_name_key(resume_name), security_id, job_id),
 		)
 		self._conn.commit()
 		return cursor.rowcount > 0
@@ -2445,7 +2455,7 @@ class CacheStore:
 	def _resume_link_row_to_dict(self, row: Any) -> dict[str, Any]:
 		record_id = f"{row[0]}/{row[1]}/{row[2]}"
 		return {
-			"resume_name": _decode_text_column("resume_link", record_id, "resume_name", row[0]),
+			"resume_name": _decode_text_column("resume_link", record_id, "resume_name", row[0], allow_surrogates=True),
 			"security_id": _decode_text_column("resume_link", record_id, "security_id", row[1]),
 			"job_id": _decode_text_column("resume_link", record_id, "job_id", row[2]),
 			"job_title": _decode_text_column("resume_link", record_id, "job_title", row[3]),
@@ -2462,7 +2472,7 @@ class CacheStore:
 		rows = self._conn.execute(
 			"SELECT resume_name, security_id, job_id, job_title, company, status, notes, linked_at, updated_at "
 			"FROM resume_job_links WHERE resume_name = ? ORDER BY updated_at DESC",
-			(resume_name,),
+			(_resume_name_key(resume_name),),
 		).fetchall()
 		return [self._resume_link_row_to_dict(row) for row in rows]
 
@@ -2479,7 +2489,7 @@ class CacheStore:
 		"""移除简历职位关联"""
 		cursor = self._conn.execute(
 			"DELETE FROM resume_job_links WHERE resume_name = ? AND security_id = ? AND job_id = ?",
-			(resume_name, security_id, job_id),
+			(_resume_name_key(resume_name), security_id, job_id),
 		)
 		self._conn.commit()
 		return cursor.rowcount > 0
@@ -2492,7 +2502,7 @@ class CacheStore:
 		"""
 		cursor = self._conn.execute(
 			"DELETE FROM resume_job_links WHERE resume_name = ?",
-			(resume_name,),
+			(_resume_name_key(resume_name),),
 		)
 		self._conn.commit()
 		return cursor.rowcount

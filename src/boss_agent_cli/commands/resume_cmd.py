@@ -26,7 +26,7 @@ from boss_agent_cli.resume.store import ResumeAlreadyExistsError, ResumeImportEr
 from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing, patchright_install_command
 from boss_agent_cli.services.json_files import path_mode
 from boss_agent_cli.services.output_path import prepare_output_path
-from boss_agent_cli.services.text_files import write_text_atomic
+from boss_agent_cli.services.text_files import is_utf8_encodable, write_text_atomic
 
 
 def _get_store(ctx: click.Context) -> ResumeStore:
@@ -49,6 +49,28 @@ def _args_hint(options: str, *values: str, tail: str = "") -> str:
 	if any(v.startswith("-") for v in values):
 		return f"{options} -- {args}".strip()
 	return f"{args} {options}".strip()
+
+
+def _reject_unencodable_job_fields(ctx: click.Context, fields: tuple[tuple[str, str], ...]) -> bool:
+	"""`resume link` 的职位字段会绑定给 sqlite：不可编码时在入口报 INVALID_PARAM（Issue #2503）。
+
+	孤立代理项（argv 里的非 UTF-8 字节经 surrogateescape）在 sqlite3 绑定时抛
+	``UnicodeEncodeError``，会被全局兜成带磁盘指引的 ``LOCAL_IO_ERROR``。简历名
+	本身不在此校验：它可能是文件系统里真实存在的名字，用户仍要能删除 / 查看。
+	"""
+	bad = [name for name, value in fields if not is_utf8_encodable(value)]
+	if not bad:
+		return True
+	search_cmd = _hint_command(ctx, "search <关键词>")
+	handle_error_output(
+		ctx,
+		"resume",
+		code="INVALID_PARAM",
+		message=f"{' / '.join(bad)} 含有无法按 UTF-8 编码的字符（孤立代理项），不能写入职位关联",
+		recovery_action=f"从搜索结果重新复制这些字段后重试；可用 {search_cmd} 取完整的职位参数",
+		hints={"next_actions": [search_cmd]},
+	)
+	return False
 
 
 def _require_resume_name(ctx: click.Context, name: str) -> bool:
@@ -779,6 +801,16 @@ def resume_link_cmd(ctx: click.Context, name: str, security_id: str, job_id: str
 			recovery_action=f"先用 {search_cmd} 取到完整的职位参数，再关联到简历",
 			hints={"next_actions": [search_cmd]},
 		)
+		return
+	if not _reject_unencodable_job_fields(
+		ctx,
+		(
+			("security_id", security_id),
+			("job_id", job_id),
+			("--title", title),
+			("--company", company),
+		),
+	):
 		return
 	cache = CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db")
 	# 关联落库用文件里的真实名称：`a/b` 与 `a_b` 落在同一个简历文件上，
