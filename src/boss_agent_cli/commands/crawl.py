@@ -28,7 +28,6 @@ from boss_agent_cli.crawler.service import (
 	crawl_cdp_port,
 	crawl_chrome_path,
 	crawl_execution_lock,
-	crawl_executor_active,
 	crawl_int_setting,
 	crawl_run_awaiting_worker as _awaiting_queued_worker,
 	tolerated_timestamp as _tolerated_timestamp,
@@ -1413,22 +1412,16 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 			if run is None:
 				raise KeyError(run_id)
 			payload = crawl_status_from_run(cache, run, data_dir=data_dir)
-			queue_in_handoff = _awaiting_queued_worker(run)
-			queue_overdue = run["status"] == "queued" and not queue_in_handoff
-			executor_active = run["status"] in _UNSETTLED_STATUSES and (
-				queue_in_handoff or crawl_executor_active(data_dir, run_id)
-			)
 	except KeyError:
 		handle_error_output(ctx, "crawl.status", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))
 		return
 	except CacheRecordInvalid as exc:
 		_report_corrupt_run(ctx, "crawl.status", run_id, exc)
 		return
-	# running 的 run 没有执行器持锁说明执行器已被杀、状态不会再前进（Issue #2465）。
-	running_stale = payload["status"] == "running" and not executor_active
-	payload["executor_active"] = executor_active
-	if running_stale:
-		payload["running_stale"] = True
+	# 执行器字段由 crawl_status_from_run 用同一次任务行读取生成（Issue #2479）：
+	# running 无执行器说明它已被杀、状态不会再前进（Issue #2465）。
+	running_stale = bool(payload.get("running_stale"))
+	queue_overdue = bool(payload.get("queue_overdue"))
 	hints: dict[str, list[str]] | None = None
 	# TTY 与信封共用下一步指引，终态任务只提示读取结果。
 	next_steps = [boss_command_for_ctx(ctx, f"crawl results {shell_argument(run_id)}", include_data_dir=True)]

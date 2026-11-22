@@ -134,7 +134,7 @@ boss crawl stop <run_id>
 | `boss crawl configure [--chrome-path PATH] [--port N] [--max-* N]` | 设置 crawl 专用 Chrome 和请求、详情、墙钟、重试预算；profile 固定为 `<data-dir>/crawl/chrome-profile` |
 | `boss crawl run <query> --city <城市或代码> [--pages N] [--with-detail]` | 串行采集；`--pages` 默认 `5` 且必须为正数；`--with-detail` 串行补全职位详情 |
 | `boss crawl start <query> --city <城市或代码> [...]` | 创建后台任务并立即返回 `run_id`；供本地任务调度使用 |
-| `boss crawl status <run_id>` / `boss crawl results <run_id>` | 仅读取 SQLite 中的页游标、风险状态、详情进度和已持久化职位；不打开浏览器 |
+| `boss crawl status <run_id>` / `boss crawl results <run_id>` | 仅读取 SQLite 中的页游标、风险状态、详情进度和已持久化职位；不打开浏览器。`status` 探测执行锁并回报 `executor_active`，`running` 无执行器时标记 `running_stale`、`queued` 超出交接窗口时标记 `queue_overdue`；向导与 MCP 的 `crawl_status` 步骤同口径 |
 | `boss crawl resume <run_id> [--pages N] [--with-detail] [--background]` | 从页游标、已见职位和待补详情队列恢复；`--background` 立即返回以便轮询；可提高正数页数上限并补全详情，不重复写入已完成项 |
 | `boss crawl stop <run_id>` | 请求运行中任务在下一个安全点停止并保留 checkpoint；仅对 queued / running 生效。执行器已退出（执行锁空闲）时按断点结算 `stopped` 并回报 `stale_recovered`；向导与 MCP 的 `crawl_stop` 步骤同口径。已结束的任务返回 `CRAWL_RUN_FINISHED` |
 | `boss crawl shortlist <run_id> (--all \| --selector <csel_...>)` | 将 crawl 结果导入原项目的本地候选池；不请求平台，保留内部职位关联和详情缓存供 `boss ai fit` 使用 |
