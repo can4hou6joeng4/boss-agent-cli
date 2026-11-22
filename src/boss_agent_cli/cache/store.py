@@ -12,6 +12,7 @@ from types import TracebackType
 from typing import Any, Literal, NoReturn, TypeVar, cast, overload
 
 from boss_agent_cli.services.job_identity import deduplicate_job_result
+from boss_agent_cli.services.text_files import is_utf8_encodable, sanitize_surrogates
 
 _SEARCH_TTL = 86400  # 24 hours
 _MAX_SEARCH_CACHE = 100
@@ -212,6 +213,29 @@ def _decode_timestamp_column(
 	if isinstance(raw, (int, float)) and not isinstance(raw, bool):
 		return float(raw)
 	raise CacheRecordInvalid(kind, record_id, column, f"期望数值时间戳，实际是 {type(raw).__name__}")
+
+
+def _shortlist_text(value: Any) -> Any:
+	"""候选池文本字段的写入归一（Issue #2502）。
+
+	平台原文的 ``"\\ud800"`` 会解码成孤立代理项，sqlite3 绑定抛
+	``UnicodeEncodeError``，把整批收藏同步 / crawl 导入兜成带磁盘指引的
+	``LOCAL_IO_ERROR``。候选池是本地缓存：单个字段漂移按字面转义保存
+	（``\\ud800``），不丢弃整条职位记录；argv 输入仍由命令入口按
+	``INVALID_PARAM`` 拒绝（与 #2499 同口径）。
+
+	非字符串原样返回：``None`` / 整数仍交给 sqlite 按列约束判定，不能让
+	归一把 ``title=None`` 变成空串、绕过 NOT NULL（Issue #1886 的约束冲突
+	契约）。
+	"""
+	if isinstance(value, str):
+		return sanitize_surrogates(value)
+	return value
+
+
+def _shortlist_display_text(value: Any) -> str:
+	"""候选池展示字段：沿用既有字符串转换后处理孤立代理项（Issue #2502）。"""
+	return sanitize_surrogates(value if isinstance(value, str) else str(value or ""))
 
 
 def saved_search_name_error(name: str) -> str | None:
@@ -1545,7 +1569,9 @@ class CacheStore:
 		normalized: list[str] = []
 		seen: set[str] = set()
 		for tag in tags:
-			clean = str(tag).strip()
+			# 孤立代理项落库后读回来仍不可编码，TTY 渲染 / 严格 UTF-8 出口会炸；
+			# 写入与读取共用的归一在这里按字面转义（Issue #2502）。
+			clean = sanitize_surrogates(str(tag)).strip()
 			if not clean or clean in seen:
 				continue
 			normalized.append(clean)
@@ -2106,9 +2132,11 @@ class CacheStore:
 		"""
 		security_id = str(item.get("security_id") or "")
 		job_id = str(item.get("job_id") or "")
-		source = str(item.get("source") or "")
+		if not is_utf8_encodable(security_id) or not is_utf8_encodable(job_id):
+			raise CacheWriteRejected(self._db_path, "security_id 与 job_id 必须可按 UTF-8 编码")
+		source = _shortlist_display_text(item.get("source"))
 		lid_value = item.get("lid")
-		lid = lid_value if isinstance(lid_value, str) else ""
+		lid = lid_value if isinstance(lid_value, str) and is_utf8_encodable(lid_value) else ""
 		if not lid:
 			lid = self._crawl_shortlist_lid(security_id, job_id, source)
 		self._conn.execute(
@@ -2128,13 +2156,13 @@ class CacheStore:
 			(
 				security_id,
 				job_id,
-				item.get("title", ""),
-				item.get("company", ""),
-				item.get("city", ""),
-				item.get("salary", ""),
+				_shortlist_text(item.get("title", "")),
+				_shortlist_text(item.get("company", "")),
+				_shortlist_text(item.get("city", "")),
+				_shortlist_text(item.get("salary", "")),
 				source,
 				self._serialize_shortlist_tags(item.get("tags", [])),
-				item.get("note", ""),
+				_shortlist_text(item.get("note", "")),
 				lid,
 				security_id,
 				job_id,
@@ -2169,6 +2197,7 @@ class CacheStore:
 		imported_count = 0
 		existing_count = 0
 		skipped_count = 0
+		source = sanitize_surrogates(source)
 		with self._conn:
 			existing_by_job_id: dict[str, tuple[str, str]] = {}
 			for row in self._conn.execute(
@@ -2193,8 +2222,9 @@ class CacheStore:
 				security_id = str(item.get("security_id") or "")
 				job_id = str(item.get("job_id") or "")
 				lid_value = item.get("lid")
-				lid = lid_value if isinstance(lid_value, str) else ""
-				if not security_id or not job_id:
+				lid = lid_value if isinstance(lid_value, str) and is_utf8_encodable(lid_value) else ""
+				# 转义标识可能与已有合法标识相同，导致更新错误的条目。
+				if not security_id or not job_id or not is_utf8_encodable(security_id) or not is_utf8_encodable(job_id):
 					skipped_count += 1
 					continue
 				if job_id in existing_by_job_id:
@@ -2223,6 +2253,7 @@ class CacheStore:
 						)
 					existing_count += 1
 					continue
+				item_source = _shortlist_text(item.get("source") or source)
 				cursor = self._conn.execute(
 					"INSERT OR IGNORE INTO shortlist_records "
 					"(security_id, job_id, title, company, city, salary, source, tags, note, lid, created_at) "
@@ -2230,20 +2261,20 @@ class CacheStore:
 					(
 						security_id,
 						job_id,
-						str(item.get("title", "") or ""),
-						str(item.get("company", "") or ""),
-						str(item.get("city", "") or ""),
-						str(item.get("salary", "") or ""),
-						item.get("source") or source,
+						_shortlist_display_text(item.get("title", "")),
+						_shortlist_display_text(item.get("company", "")),
+						_shortlist_display_text(item.get("city", "")),
+						_shortlist_display_text(item.get("salary", "")),
+						item_source,
 						self._serialize_shortlist_tags(item.get("tags", [])),
-						str(item.get("note", "") or ""),
+						_shortlist_display_text(item.get("note", "")),
 						lid,
 						time.time(),
 					),
 				)
 				if cursor.rowcount == 1:
 					imported_count += 1
-					existing_by_job_id[job_id] = (security_id, str(item.get("source") or source))
+					existing_by_job_id[job_id] = (security_id, str(item_source))
 				else:
 					existing_count += 1
 		return {
@@ -2319,7 +2350,7 @@ class CacheStore:
 		if str(payload.get("job_id") or "") != job_id or str(payload.get("security_id") or "") != security_id:
 			return ""
 		lid = payload.get("lid")
-		return lid if isinstance(lid, str) else ""
+		return lid if isinstance(lid, str) and is_utf8_encodable(lid) else ""
 
 	def set_shortlist_tags(self, security_id: str, job_id: str, tags: list[str]) -> bool:
 		cursor = self._conn.execute(
@@ -2332,7 +2363,7 @@ class CacheStore:
 	def set_shortlist_note(self, security_id: str, job_id: str, note: str) -> bool:
 		cursor = self._conn.execute(
 			"UPDATE shortlist_records SET note = ? WHERE security_id = ? AND job_id = ?",
-			(note, security_id, job_id),
+			(_shortlist_text(note), security_id, job_id),
 		)
 		self._conn.commit()
 		return cursor.rowcount > 0
