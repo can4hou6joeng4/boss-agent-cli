@@ -422,11 +422,10 @@ def search_cmd(
 			page = parsed_url.page
 
 	# 预设里的空白关键词与 `watch run` 同口径拒绝（Issue #1798、#2511、#2513）：
-	# 命令行参数的空白关键词已在合并预设之前归一为 None，存量记录里的 `"   "`
-	# 却能通过下面的 `if not query`（真值）并作为无关键词搜索发给平台，返回
-	# ok: true 的空泛结果。给了 --url 时预设的空白值仍是真值、会覆盖链接里的
-	# query，所以同样按记录失效处理；显式命令行关键词（非 None）不受影响。
-	if preset and not (query or "").strip():
+	# 命令行参数的空白关键词已在合并预设之前归一为 None，合并时空白预设值也
+	# 按缺失处理，所以 --url 链接里的 query 仍会生效。没有 --url 时若最终仍无
+	# 关键词，按记录失效明确拒绝，而不是把真值的 `"   "` 发给平台。
+	if preset and not search_url and not (query or "").strip():
 		handle_error_output(
 			ctx,
 			"search",

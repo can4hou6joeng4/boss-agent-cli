@@ -90,6 +90,27 @@ def test_search_url_query_overrides_blank_stored_query(tmp_path: Path) -> None:
 	assert mock_pipeline.call_args.kwargs["criteria"].query == "Golang"
 
 
+def test_search_url_without_query_still_runs(tmp_path: Path) -> None:
+	"""--url 自带筛选参数时按链接搜索：预设的空白关键词按缺失处理，不再报失效。"""
+	_seed(tmp_path, "blank", {"query": "   "})
+
+	with patch("boss_agent_cli.commands.search.run_search_pipeline") as mock_pipeline, \
+		patch("boss_agent_cli.commands.search.AuthManager"), \
+		patch("boss_agent_cli.commands.search.get_platform_instance") as mock_platform_cls:
+		_platform_mock(mock_platform_cls)
+		mock_pipeline.return_value = SearchPipelineResult()
+		result = CliRunner().invoke(
+			cli,
+			[
+				"--data-dir", str(tmp_path), "--json", "search", "--preset", "blank",
+				"--url", "https://www.zhipin.com/web/geek/job?city=101280100",
+			],
+		)
+
+	assert result.exit_code == 0, result.output
+	assert mock_pipeline.call_args.kwargs["criteria"].query == ""
+
+
 def test_wizard_search_rejects_blank_query(tmp_path: Path) -> None:
 	context = ActionContext(data_dir=tmp_path, platform="zhipin", role="candidate", logger=Logger())
 
