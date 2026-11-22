@@ -32,6 +32,7 @@ from boss_agent_cli.crawler.controls import (
 )
 from boss_agent_cli.crawler.hooks import HookInjection, HookRegistrationError, inject_hook_profile
 from boss_agent_cli.display import risk_error_message
+from boss_agent_cli.services.file_lock import exclusive_file_lock
 from boss_agent_cli.services.install_extras import EXTRA_MODULES, extras_requirement, module_available
 
 # 兼容 search / pc 等变体；监听只作主路径，失败时退到页面内同源请求（不走 httpx）。
@@ -78,6 +79,43 @@ def _page_no_from_params(params: dict[str, list[str]]) -> int | None:
 	except ValueError:
 		return None
 	return page_no if page_no >= 1 else None
+
+
+def _browser_process_id(page: Any) -> int | None:
+	"""返回 CDP 连接的浏览器主进程号；读不到（或类型漂移）时返回 None。"""
+	process_id = getattr(getattr(page, "browser", None), "process_id", None)
+	if isinstance(process_id, bool) or not isinstance(process_id, int) or process_id <= 0:
+		return None
+	return process_id
+
+
+def _browser_cmdline_profile(process_id: int) -> str | None:
+	"""读浏览器进程命令行里的 ``--user-data-dir``；读不到返回 None。
+
+	Windows 没有 POSIX 的 SingletonLock，附着校验只能靠命令行。psutil 随 crawl
+	依赖（DrissionPage）传递安装，缺失或无权读取时按「无法确认」处理，由调用方
+	决定是否拒绝。
+	"""
+	try:
+		import psutil
+	except ImportError:
+		return None
+	try:
+		arguments = psutil.Process(process_id).cmdline()
+	except (psutil.Error, OSError, ValueError):
+		return None
+	for argument in arguments:
+		if argument.startswith("--user-data-dir="):
+			return argument.split("=", 1)[1] or None
+	return None
+
+
+def _same_profile_directory(candidate: str, expected: Path) -> bool:
+	try:
+		return Path(candidate).expanduser().resolve(strict=False) == expected
+	except (OSError, RuntimeError, ValueError):
+		# 符号链接环（3.11 / 3.12 的 resolve 抛 RuntimeError）或含 NUL 等控制字符。
+		return False
 
 
 _CRAWL_FETCH_SCRIPT = """
@@ -255,6 +293,13 @@ class DrissionCrawlerSession:
 				"请检查该路径是否被同名文件占用、是否存在符号链接环、是否包含 NUL 等控制字符，"
 				"或修复数据目录的写权限后重试"
 			) from exc
+		# 「读锁 → 清陈旧锁 → 启动」必须在跨进程锁内完成：两个 run 同时判定
+		# 空闲时，后一个会清掉前一个刚写下的 SingletonLock 并抢同一个配置目录
+		# （Issue #1266 的残余窗口）。
+		with self._profile_open_lock():
+			return self._open_browser(options, ChromiumPage)
+
+	def _open_browser(self, options: Any, chromium_page: Any) -> list[HookInjection]:
 		port_busy = self._port_is_in_use(self._cdp_port)
 		if port_busy:
 			# risk_stopped 后会故意保留采集 Chrome；恢复时附着同一调试端口，而不是报占用。
@@ -283,7 +328,7 @@ class DrissionCrawlerSession:
 			options.set_user_data_path(str(self._profile_path))
 		# 采集浏览器与日常 Chrome 隔离；必须注入 boss login 的 Cookie，否则首页是登录 HTML。
 		try:
-			self._page = ChromiumPage(options)
+			self._page = chromium_page(options)
 		except Exception as exc:
 			# 这里是唯一知道「浏览器没起来」的位置。原样上抛会被 service 的通用
 			# except Exception 记成 stopped 并返回 ok:true（Issue #1553）：Chrome 未
@@ -296,6 +341,10 @@ class DrissionCrawlerSession:
 				attached=port_busy,
 			) from exc
 		self._raise_if_platform_risk_page()
+		# 端口上先有浏览器不代表它是采集 Chrome：日常 Chrome 或别的工具占着调试
+		# 端口时，DrissionPage 会直接附着，Cookie 会被注入用户自己的浏览器。确认
+		# 归属之前不注册 Hook、不注入 Cookie（Issue #2464）。
+		self._verify_browser_profile_ownership(attached=port_busy)
 		# Hook 必须在首个文档导航前注册：addScriptToEvaluateOnNewDocument 对已经
 		# 加载的文档不生效，而 seed 导航就是第一个平台文档（Issue #1935）。
 		results = inject_hook_profile(self._page, self._hook_profile, self._hook_dir)
@@ -742,16 +791,49 @@ class DrissionCrawlerSession:
 			+ "。请重新执行 boss login 并确认采集 Chrome 可正常启动后重试"
 		)
 
-	@staticmethod
-	def _profile_owner(profile_path: Path) -> int | None:
-		"""返回正在使用该配置目录的 Chrome pid；锁陈旧、跨主机或不可解析时返回 None。
+	@contextmanager
+	def _profile_open_lock(self) -> Iterator[None]:
+		"""串行化同一配置目录的打开流程；已被另一个进程持有时按占用处理。"""
+		lock_path = self._profile_path / ".crawl-open.lock"
+		with exclusive_file_lock(lock_path) as acquired:
+			if not acquired:
+				raise CrawlProfileBusy(
+					f"采集配置目录 {self._profile_path} 正被另一个进程打开；请等待该进程完成浏览器启动或附着后重试"
+				)
+			yield
 
-		Chrome 的 SingletonLock 是指向 ``<hostname>-<pid>`` 的符号链接。端口按 run
-		随机分配时两个 run 的端口互不相同，端口探测发现不了共享 profile 的另一个
-		Chrome，只有锁里的 pid 能说明配置目录正在被使用（Issue #1266）。读不出
-		或者格式不认识时按陈旧处理，保持异常退出后自动恢复的既有行为；非 POSIX
-		平台没有可读的锁目标，同样走清理路径。
+	def _verify_browser_profile_ownership(self, *, attached: bool) -> None:
+		"""确认 CDP 连接的浏览器进程使用的是本采集配置目录（Issue #2464）。
+
+		调试端口被日常 Chrome 或别的工具占用时，DrissionPage 会直接附着到那个
+		浏览器：boss login 的 Cookie 会被注入用户自己的浏览器，「保留窗口供人工
+		核对」的关闭路径还会退出它。归属由配置目录 SingletonLock 里的 Chrome
+		主进程 pid 与 CDP 报告的浏览器进程比对；Windows 没有该锁时退回读进程
+		命令行的 ``--user-data-dir``。附着路径确认不了就拒绝，且不碰该浏览器。
 		"""
+		process_id = _browser_process_id(self._page)
+		lock_pid = self._profile_lock_pid(self._profile_path)
+		if process_id is not None and lock_pid == process_id:
+			return
+		cmdline_profile = _browser_cmdline_profile(process_id) if process_id is not None else None
+		if cmdline_profile is not None and _same_profile_directory(cmdline_profile, self._profile_path):
+			return
+		if not attached and process_id is None:
+			# 端口空闲时浏览器由本进程拉起：读不到进程号（测试替身、受限平台）
+			# 无法进一步确认，保持既有启动行为。
+			return
+		self._page = None
+		owner = f"进程 {process_id}" if process_id is not None else "进程号不可读"
+		raise CrawlProfileBusy(
+			f"调试端口 {self._cdp_port} 上的浏览器（{owner}）不是采集配置目录 "
+			f"{self._profile_path} 的 Chrome；已停止本次采集且未注入登录 Cookie。"
+			"该端口可能被日常 Chrome 或其他工具占用：请关闭占用者，"
+			"或为采集改用其他调试端口后重试"
+		)
+
+	@staticmethod
+	def _profile_lock_pid(profile_path: Path) -> int | None:
+		"""读 SingletonLock 记录的 Chrome 主进程 pid，不判断该进程是否存活。"""
 		try:
 			target = os.readlink(profile_path / "SingletonLock")
 		except (OSError, ValueError):
@@ -763,7 +845,20 @@ class DrissionCrawlerSession:
 			pid = int(pid_text)
 		except ValueError:
 			return None
-		if pid <= 0:
+		return pid if pid > 0 else None
+
+	@staticmethod
+	def _profile_owner(profile_path: Path) -> int | None:
+		"""返回正在使用该配置目录的 Chrome pid；锁陈旧、跨主机或不可解析时返回 None。
+
+		Chrome 的 SingletonLock 是指向 ``<hostname>-<pid>`` 的符号链接。端口按 run
+		随机分配时两个 run 的端口互不相同，端口探测发现不了共享 profile 的另一个
+		Chrome，只有锁里的 pid 能说明配置目录正在被使用（Issue #1266）。读不出
+		或者格式不认识时按陈旧处理，保持异常退出后自动恢复的既有行为；非 POSIX
+		平台没有可读的锁目标，同样走清理路径。
+		"""
+		pid = DrissionCrawlerSession._profile_lock_pid(profile_path)
+		if pid is None:
 			return None
 		try:
 			os.kill(pid, 0)
