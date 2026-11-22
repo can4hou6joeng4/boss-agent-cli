@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.158 (2026-11-23): shortlist imports skip unencodable job identifiers, and shortlist commands require UTF-8-encodable tag arguments (Issues #2502 and #2506). Resume commands can link, list, and remove job associations for existing resumes whose filenames contain non-UTF-8 bytes (Issue #2503).
+
 v3.4.157 (2026-11-23): crawl and wizard run ids are checked for encodability at the command entry, so input containing lone surrogates reports INVALID_PARAM instead of a LOCAL_IO_ERROR with disk guidance (Issue #2499).
 
 v3.4.156 (2026-11-23): unencodable inner run ids in checkpoints no longer break the wizard status / list / stop control paths, and chat export md / html results now sanitize lone surrogates the same way as the JSON branch (Issues #2495, #2496).
