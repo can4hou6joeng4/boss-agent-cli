@@ -132,7 +132,15 @@ def _decode_record(kind: str, record_id: str, column: str, raw: Any, *, expected
 def _decode_optional_record(
 	kind: str, record_id: str, column: str, raw: Any, *, expected: type | None = None
 ) -> Any:
-	return None if not raw else _decode_record(kind, record_id, column, raw, expected=expected)
+	"""可空 JSON 列的读取：只有 SQL NULL 表示「没有值」（Issue #2484）。
+
+	不能用 ``not raw`` 判空：空串 / 空 BLOB / 空数组 / 0 都是漂移值，按「没有
+	值」解码会让 ``workflow_steps.error`` 里的写前标记凭空消失——恢复时
+	``_persisted_write_marker`` 读不到标记，结果未知的写操作会被重放。
+	非 NULL 的值统一交给 ``_decode_record`` 校验，损坏时报 ``CacheRecordInvalid``，
+	由调用方按 fail-closed 处理。
+	"""
+	return None if raw is None else _decode_record(kind, record_id, column, raw, expected=expected)
 
 
 def _decode_text_column(
