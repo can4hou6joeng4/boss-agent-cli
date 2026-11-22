@@ -43,13 +43,8 @@ def _find_shortlist_item(items: list[dict[str, Any]], security_id: str, job_id: 
 
 
 def _reject_unencodable_fields(ctx: click.Context, fields: tuple[tuple[str, str], ...]) -> bool:
-	"""argv 文本要绑定给 sqlite：不可编码时在入口报 INVALID_PARAM（Issue #2502）。
-
-	孤立代理项（argv 里的非 UTF-8 字节经 surrogateescape 进入 Python）在
-	sqlite3 绑定时抛 ``UnicodeEncodeError``，会被全局兜成带磁盘指引的
-	``LOCAL_IO_ERROR``，把输入错误说成磁盘问题（与 #2499 的 run_id 同口径）。
-	"""
-	bad = [name for name, value in fields if not is_utf8_encodable(value)]
+	"""在存储或匹配前拒绝无法按 UTF-8 编码的候选池参数。"""
+	bad = dict.fromkeys(name for name, value in fields if not is_utf8_encodable(value))
 	if not bad:
 		return True
 	list_cmd = _hint_command(ctx, "shortlist list")
@@ -57,7 +52,7 @@ def _reject_unencodable_fields(ctx: click.Context, fields: tuple[tuple[str, str]
 		ctx,
 		"shortlist",
 		code="INVALID_PARAM",
-		message=f"{' / '.join(bad)} 含有无法按 UTF-8 编码的字符（孤立代理项），不能写入本地候选池",
+		message=f"{' / '.join(bad)} 含有无法按 UTF-8 编码的字符（孤立代理项），请使用有效的文本参数",
 		recovery_action=f"重新复制这些字段后重试；候选池现有条目可用 {list_cmd} 查看",
 		hints={"next_actions": [list_cmd]},
 	)
@@ -134,6 +129,7 @@ def shortlist_add_cmd(
 			("--salary", salary),
 			("--source", source),
 			("--lid", lid),
+			("--tags", tags),
 			("--note", note),
 		),
 	):
@@ -241,7 +237,13 @@ def shortlist_annotate_cmd(
 	note_fields: tuple[tuple[str, str], ...] = (("--note", note),) if note is not None else ()
 	if not _reject_unencodable_fields(
 		ctx,
-		(("security_id", security_id), ("job_id", job_id), *note_fields),
+		(
+			("security_id", security_id),
+			("job_id", job_id),
+			*note_fields,
+			*(("--add-tag", value) for value in add_tag),
+			*(("--remove-tag", value) for value in remove_tag),
+		),
 	):
 		return
 	# annotate 是一次显式修改：既没有标签也没给 note 时，旧实现仍返回
@@ -342,6 +344,8 @@ def shortlist_compare_cmd(ctx: click.Context, tag: str | None) -> None:
 			recovery_action=f"去掉 --tag 比较全部，或传入非空标签；可用 {list_cmd} 查看条目标签",
 			hints={"next_actions": [compare_cmd, list_cmd]},
 		)
+		return
+	if tag is not None and not _reject_unencodable_fields(ctx, (("--tag", tag),)):
 		return
 	normalized_tag = tag.strip() if tag is not None else None
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
