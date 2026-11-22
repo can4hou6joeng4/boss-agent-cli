@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,7 @@ from boss_agent_cli.crawler.service import (
 	PagesOverrideError,
 	crawl_cdp_port,
 	crawl_chrome_path,
+	crawl_execution_lock,
 	crawl_executor_active,
 	crawl_int_setting,
 	unused_local_port,
@@ -1523,61 +1525,53 @@ def stop_cmd(ctx: click.Context, run_id: str) -> None:
 	"""请求运行中的 crawl 在下一安全点停止并保留 checkpoint。"""
 	if not _require_run_id(ctx, "crawl.stop", run_id):
 		return
+	data_dir = Path(ctx.obj["data_dir"])
+	accepted = False
+	settle_reason = None
 	try:
-		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
+		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 			run = cache.get_crawl_run(run_id)
-			if run is None:
-				handle_error_output(ctx, "crawl.stop", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))
-				return
-			# 终态 run 上停止请求不会生效（Issue #1574）：继续报 stop_requested 会让
-			# 调用方以为任务已被叫停。只有 queued / running 接受停止请求。
-			status = run["status"]
-			if status not in ("queued", "running"):
-				status_command = boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True)
-				results_command = boss_command_for_ctx(ctx, f"crawl results {shell_argument(run_id)}", include_data_dir=True)
-				handle_error_output(
-					ctx,
-					"crawl.stop",
-					code="CRAWL_RUN_FINISHED",
-					message=f"crawl 任务已结束（{status}），停止请求没有生效",
-					recovery_action=f"用 {status_command} 查看最终状态，或 {results_command} 读取已采集结果；需要重新采集时新建 crawl 任务",
-					hints={"next_actions": [status_command, results_command]},
-				)
-				return
-			# queued / running 但没有执行器持锁：worker 已被杀或从未启动，停止请求
-			# 没有可送达的执行器，等它自己生效永远等不到（Issue #2465）。直接按
-			# 断点落 stopped；同时留下 stop 标记，避免探测与落库之间刚启动的
-			# worker 无视本次意图继续抓页。next_page 原样写回：类型漂移的断点
-			# 继续由 status / resume 按损坏记录上报，这里不做静默修正。
-			if not _executor_active(ctx.obj["data_dir"], run, run_id):
-				cache.request_crawl_stop(run_id)
-				cache.update_crawl_run(
-					run_id,
-					status="stopped",
-					next_page=run["next_page"],
-					error="executor exited before this stop request; resume to continue from the checkpoint",
-				)
-				status_command = boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True)
-				resume_command = boss_command_for_ctx(ctx, f"crawl resume {shell_argument(run_id)} --background", include_data_dir=True)
-				handle_output(
-					ctx,
-					"crawl.stop",
-					{"run_id": run_id, "status": "stopped", "stale_recovered": True},
-					render=lambda d: render_action_result(d, title="crawl stop", next_steps=[status_command, resume_command]),
-					hints={"next_actions": [status_command, resume_command]},
-				)
-				return
-			cache.request_crawl_stop(run_id)
+			status = str(run["status"]) if run is not None else None
+			if run is not None and status in _UNSETTLED_STATUSES:
+				# 交接中的 worker 可能马上取锁。向它写停止标记即可。
+				lock = nullcontext(False) if _awaiting_queued_worker(run) else crawl_execution_lock(data_dir, run_id)
+				with lock as acquired:
+					if acquired:
+						# 持锁重读交接时间，并持锁至写入完成。另一执行器可能在
+						# 首次读取后已更新断点或安排了新的交接（Issue #2470）。
+						run = cache.get_crawl_run(run_id)
+						if run is not None and not _awaiting_queued_worker(run):
+							settle_reason = "executor exited before this stop request; resume to continue from the checkpoint"
+					accepted, status = cache.stop_active_crawl_run(run_id, settle_reason=settle_reason)
 	except CacheRecordInvalid as exc:
 		_report_corrupt_run(ctx, "crawl.stop", run_id, exc)
 		return
 	status_command = boss_command_for_ctx(ctx, f"crawl status {shell_argument(run_id)}", include_data_dir=True)
+	if not accepted:
+		if status is None:
+			handle_error_output(ctx, "crawl.stop", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))
+			return
+		results_command = boss_command_for_ctx(ctx, f"crawl results {shell_argument(run_id)}", include_data_dir=True)
+		handle_error_output(
+			ctx,
+			"crawl.stop",
+			code="CRAWL_RUN_FINISHED",
+			message=f"crawl 任务已结束（{status}），停止请求没有生效",
+			recovery_action=f"用 {status_command} 查看最终状态，或 {results_command} 读取已采集结果；需要重新采集时新建 crawl 任务",
+			hints={"next_actions": [status_command, results_command]},
+		)
+		return
+	payload: dict[str, Any] = {"run_id": run_id, "status": "stop_requested"}
+	next_steps = [status_command]
+	if settle_reason is not None:
+		payload = {"run_id": run_id, "status": "stopped", "stale_recovered": True}
+		next_steps.append(boss_command_for_ctx(ctx, f"crawl resume {shell_argument(run_id)} --background", include_data_dir=True))
 	handle_output(
 		ctx,
 		"crawl.stop",
-		{"run_id": run_id, "status": "stop_requested"},
-		render=lambda d: render_action_result(d, title="crawl stop", next_steps=[status_command]),
-		hints={"next_actions": [status_command]},
+		payload,
+		render=lambda d: render_action_result(d, title="crawl stop", next_steps=next_steps),
+		hints={"next_actions": next_steps},
 	)
 
 

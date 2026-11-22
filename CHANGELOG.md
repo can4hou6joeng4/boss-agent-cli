@@ -9,6 +9,7 @@
 - crawl 的 `running` 状态不再被当作「仍在执行」的证据：`crawl status` 探测执行锁并回报 `executor_active` / `running_stale`，执行器被 SIGKILL 后不再永远显示运行中，也不再提示去 stop 一个没人消费的标记（Issue #2465）。
 - `crawl stop` 在 queued / running 但没有执行器持锁时直接按断点落 `stopped` 并回报 `stale_recovered`，不再写一条永远没人消费的停止标记后报成功；执行器仍持锁时维持原停止语义（Issue #2465）。
 - crawl 恢复的预检与 transport / 预算构造移入终止路径：构造失败或命中风控锁时按断点写回 `stopped`（保留上一轮错误与断点里的预算计数），不再把执行权标记永久留在 `running`、清空错误并让随后的 `crawl stop` 假成功（Issue #2466）。
+- `crawl stop` 持有执行锁直到无执行器的任务完成停止结算，并在同一笔更新中写入停止标记和终态。并发恢复推进的游标、新安排的交接和已完成任务的终态得以保留，已被清理的任务返回 `CRAWL_RUN_NOT_FOUND`（Issue #2470）。
 
 ## [3.4.151] - 2026-11-22
 

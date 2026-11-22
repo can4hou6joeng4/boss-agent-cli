@@ -473,6 +473,10 @@ class CrawlRunBudget:
 		return self._elapsed_before_start + max(0, int(self._clock() - self._started_at))
 
 
+def crawl_execution_lock(data_dir: Path, run_id: str) -> AbstractContextManager[bool]:
+	return exclusive_file_lock(run_lock_path(data_dir / "cache" / "crawl-locks", run_id))
+
+
 def crawl_executor_active(data_dir: Path, run_id: str) -> bool:
 	"""探测 crawl run 是否仍有执行器持有执行锁。
 
@@ -518,15 +522,13 @@ class CrawlService:
 		self._preflight = preflight
 		self._unpersisted_risk_lock: cdp_risk_lock.RiskLock | None = None
 		self._request_budget = RequestBudget.for_data_dir(data_dir)
-		self._lock_dir = data_dir / "cache" / "crawl-locks"
 
 	def execution_lock(self, run_id: str) -> AbstractContextManager[bool]:
 		"""同一 crawl run 的执行权：跨进程独占、不等待，进程退出时由操作系统释放。
 
-		只约束「执行」。`crawl status` / `crawl results` 等只读命令不取这把锁，执行
-		期间照常可用；不同 run 各用各的锁文件，互不阻塞。
+		每个 run 使用独立锁。执行和无执行器时的停止结算共用这把锁。
 		"""
-		return exclusive_file_lock(run_lock_path(self._lock_dir, run_id))
+		return crawl_execution_lock(self._data_dir, run_id)
 
 	@contextmanager
 	def _execution_right(self, run_id: str) -> Iterator[None]:
