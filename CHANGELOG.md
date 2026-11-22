@@ -7,6 +7,8 @@
 ### Fixed
 - `shortlist add/annotate/remove` 在命令入口校验会写入 sqlite 的文本字段：含孤立代理项（argv 的非 UTF-8 字节经 surrogateescape）时报 `INVALID_PARAM` 并指明字段，不再被 sqlite3 绑定异常兜成带磁盘恢复指引的 `LOCAL_IO_ERROR`（Issue #2502）。
 - 收藏同步与采集导入遇到无法按 UTF-8 编码的职位标识时跳过该条目并计入 `skipped_count`，有效条目继续导入。候选池按字面转义保存职位描述中的孤立代理项，并将无法编码的 `lid` 视为缺失（Issue #2502）。
+- `resume link` 的职位字段（security_id / job_id / `--title` / `--company`）在命令入口校验可编码性：含孤立代理项时报 `INVALID_PARAM` 并指明字段，不再被 sqlite3 绑定异常兜成带磁盘恢复指引的 `LOCAL_IO_ERROR`（Issue #2503）。
+- `resume link`、`resume applications` 和 `resume delete` 支持文件名含非 UTF-8 字节的现有简历。简历职位关联按原始名称区分，删除简历时只清理对应名称的关联（Issue #2503）。
 
 ## [3.4.157] - 2026-11-23
 
