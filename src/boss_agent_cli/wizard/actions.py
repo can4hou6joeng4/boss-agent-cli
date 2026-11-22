@@ -59,6 +59,7 @@ from boss_agent_cli.crawler.hooks import HookRegistrationError, verify_hook_prof
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.services.labels import LABEL_MAP, brief_label, parse_label_id
+from boss_agent_cli.services.saved_searches import validate_stored_search_params
 from boss_agent_cli.digest import build_digest
 from boss_agent_cli.display import (
 	RISK_ERROR_CONTRACTS,
@@ -1382,7 +1383,17 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 			if corrupt:
 				data["corrupt"] = corrupt
 			return StepResult(data)
+		# 名称与 CLI `watch add/remove/run` 同口径：空白名不可能被命令点名，
+		# 存下来后 CLI 既不能 run 也不能 remove（Issue #2511）。这里只校验、
+		# 不 strip：CLI 允许名称首尾带空格，向导必须能按原值寻址。
 		name = _required_str(inputs, "name")
+		if not name.strip():
+			raise WorkflowActionError(
+				"INVALID_PARAM",
+				"wizard 输入 name 不能只有空白字符",
+				recoverable=True,
+				recovery_action="在 inputs 中提供有效的 name 后重试",
+			)
 		if action == "add":
 			params: dict[str, Any] = {}
 			for key in (
@@ -1420,7 +1431,9 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 					params["active"] = resolve_active_level(str(inputs.get("active")))
 				except ValueError as exc:
 					raise WorkflowActionError("INVALID_PARAM", str(exc)) from exc
-			_required(inputs, "query")
+			# 与 CLI `watch add` 同口径：纯空白关键词会让 run 发起空泛搜索并
+			# 返回成功，必须在写入前拒绝（Issue #1798、#2511）。
+			_required_nonblank_str(inputs, "query")
 			try:
 				_validate_search_filters(params)
 			except ValueError as exc:
@@ -1439,8 +1452,10 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 			raise _saved_search_invalid_error(context, name, str(exc)) from exc
 		if record is None:
 			raise WorkflowActionError("SAVED_SEARCH_NOT_FOUND", f"未找到 watch: {name}")
+		# 读取侧与 CLI `watch run` 共用同一份校验：旧版本 / 手工编辑写下的
+		# 空白关键词与类型漂移不能以空泛搜索返回成功（Issue #1338、#1798、#2511）。
 		try:
-			_validate_search_filters(record["params"])
+			validate_stored_search_params(record["params"])
 		except ValueError as exc:
 			raise _saved_search_invalid_error(context, name, f"watch {name!r} 的参数已失效：{exc}") from exc
 		account = account_scope(context.auth())
