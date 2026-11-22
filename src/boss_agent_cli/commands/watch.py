@@ -39,11 +39,11 @@ from boss_agent_cli.search_filters import (
 	detail_channel_for,
 	detail_filter_max_pages,
 	ensure_supported_city,
-	resolve_active_level,
 	resolve_search_code_params,
 	resolve_welfare_keywords,
 	run_search_pipeline,
 )
+from boss_agent_cli.services.saved_searches import validate_stored_search_params
 from boss_agent_cli.commands._filter_errors import emit_filter_error
 
 
@@ -250,50 +250,10 @@ def _execute_single_watch(ctx: click.Context, cache: Any, name: str) -> dict[str
 
 	params = record["params"]
 	# 存量记录可能由旧版本或 wizard 写入：运行前按 watch add 同口径重新校验。
-	# 未知城市留到 search_jobs 才抛 ValueError，会被兜成可重试的 NETWORK_ERROR；
-	# 未知薪资 / 经验标签会被静默丢弃，run 看起来成功但筛选已失效（Issue #1338）。
-	# 关键词与 watch add 同口径必填：缺失 / null / 空白的 query 会让 run 以
-	# None / 空串发起空泛搜索并返回 ok:true（Issue #1798）。读取侧旧记录可能
-	# 由旧版本或 wizard 写入，不能只在写入时校验。
-	query_value = params.get("query")
-	if not isinstance(query_value, str) or not query_value.strip():
-		raise SavedSearchParamsError(name, "关键词不能为空（缺失或为空值）")
-
-	for key in (
-		"query",
-		"city",
-		"salary",
-		"experience",
-		"education",
-		"industry",
-		"scale",
-		"stage",
-		"job_type",
-		"welfare",
-		"active",
-	):
-		value = params.get(key)
-		if value is not None and not isinstance(value, str):
-			# 存量参数可能被手工改成数组 / 数字：先在类型上失败，避免
-			# `ensure_supported_city` / `.split()` 抛 TypeError / AttributeError
-			# 被兜成 NETWORK_ERROR（Issue #1338）。
-			raise SavedSearchParamsError(
-				name, f"参数 {key} 必须是字符串（收到 {type(value).__name__}）"
-			)
+	# 关键词必填、参数类型、城市 / 标签 / 活跃度取值域与向导共用同一份判定
+	# （Issue #1338、#1798、#2511）。
 	try:
-		ensure_supported_city(params.get("city"))
-		# active 与其他筛选键同口径：未知取值必须落成 SAVED_SEARCH_INVALID，
-		# 不能留到 pipeline 里抛裸 ValueError 被兜成可重试的 NETWORK_ERROR（Issue #1847）。
-		resolve_active_level(params.get("active"))
-		resolve_search_code_params(
-			salary=params.get("salary"),
-			experience=params.get("experience"),
-			education=params.get("education"),
-			industry=params.get("industry"),
-			scale=params.get("scale"),
-			stage=params.get("stage"),
-			job_type=params.get("job_type"),
-		)
+		validate_stored_search_params(params)
 	except ValueError as exc:
 		raise SavedSearchParamsError(name, str(exc)) from exc
 	welfare = params.get("welfare")

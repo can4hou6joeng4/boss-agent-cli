@@ -195,6 +195,7 @@ module = [
 	"boss_agent_cli.commands.export",
 	"boss_agent_cli.commands.schema",
 	"boss_agent_cli.services.chat_export",
+	"boss_agent_cli.services.saved_searches",
 	"boss_agent_cli.commands.config_cmd",
 	"boss_agent_cli.commands.ai_cmd",
 	"boss_agent_cli.commands.resume_cmd",
