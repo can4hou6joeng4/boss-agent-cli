@@ -266,6 +266,8 @@ class WorkflowStore:
 		return self._cache.set_workflow_step_error(run_id, step_name, error)
 
 	def request_stop(self, run_id: str) -> bool:
+		from boss_agent_cli.wizard.live_crawl import bindable_run_id
+
 		# 先落盘停止标记，再读断点传给内部 crawl：断点或采集结果读不出来
 		# 都不能挡住停止本身（Issue #1128）。
 		if not self._cache.request_workflow_stop(run_id):
@@ -282,7 +284,13 @@ class WorkflowStore:
 			if inner_run_id is None and isinstance(result.get("data"), dict):
 				inner_run_id = result["data"].get("run_id")
 			if inner_run_id:
-				self._cache.request_crawl_stop(str(inner_run_id))
+				crawl_id = bindable_run_id(inner_run_id)
+				if crawl_id is None:
+					# 值无法绑定给 sqlite（孤立代理字符等）：内部任务无法寻址，
+					# 跳过该步骤继续处理其余绑定。停止标记已经落盘，不能报成
+					# 失败让调用方重试（Issue #2495）。
+					continue
+				self._cache.request_crawl_stop(crawl_id)
 		return True
 
 	def close(self) -> None:

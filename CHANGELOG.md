@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- 向导的状态 / 任务列表 / 停止不再被断点里不可编码的内部 `run_id`（如 `\ud800`）拖垮：绑定 sqlite 前先把值归一成可写编码，不可寻址的内部任务按「没有绑定」跳过；`wizard --stop` 在停止标记已落盘后返回成功，不再报 `LOCAL_IO_ERROR`（Issue #2495）。
+- 沟通导出的 md / html 返回值与 JSON 分支同口径归一孤立代理字符：联系人映射表 key、diff 的 `prev_date` 等原始平台字段不再让 Python API 拿到不可严格 UTF-8 编码的文本（Issue #2496）。
+
 ## [3.4.155] - 2026-11-23
 
 ### Fixed

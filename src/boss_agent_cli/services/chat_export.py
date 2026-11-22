@@ -209,18 +209,23 @@ def render_export(
 	days: int | None,
 	diff_result: dict[str, Any],
 ) -> str:
-	"""将沟通列表渲染为指定格式的字符串。"""
+	"""将沟通列表渲染为指定格式的字符串。
+
+	返回值必须可按严格 UTF-8 编码：平台 JSON 的 ``\\ud800`` 会绕过文本单元格
+	清洗（映射表 key 与 diff 的 ``prev_date`` 直接来自原始平台字段 / 快照），
+	md / html 同样要在出口统一归一，与 JSON 分支同口径（Issue #2321 / #2496）。
+	"""
 	if fmt == "json":
 		# 严格 JSON：平台数值漂移（NaN / Infinity）归一为 null，
-		# 不让 jq 等严格解析器拒绝整份导出（Issue #1851）。孤立代理字符
-		# （平台 JSON 的 "\ud800"）会绕过文本单元格的清洗，按严格 UTF-8 写盘
-		# 时抛 UnicodeEncodeError，返回前统一替换（Issue #2321）。
+		# 不让 jq 等严格解析器拒绝整份导出（Issue #1851）。
 		return _sanitize_surrogates(strict_json_text(friends, null_oversized_ints=True))
 	if fmt == "csv":
-		return _render_csv(friends)
-	if fmt == "html":
-		return _render_html(friends, from_who, days, diff_result)
-	return _render_markdown(friends, from_who, days, diff_result)
+		rendered = _render_csv(friends)
+	elif fmt == "html":
+		rendered = _render_html(friends, from_who, days, diff_result)
+	else:
+		rendered = _render_markdown(friends, from_who, days, diff_result)
+	return _sanitize_surrogates(rendered)
 
 
 def _render_csv(friends: list[dict[str, Any]]) -> str:

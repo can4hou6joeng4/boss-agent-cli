@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Mapping
 
+from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.cache.store import CacheStore
 
 _CRAWL_GOALS = frozenset({"crawl_start", "crawl_resume", "crawl_status", "crawl_stop"})
@@ -24,22 +25,44 @@ def is_crawl_goal(goal: Any) -> bool:
 	return str(goal or "") in _CRAWL_GOALS
 
 
+def bindable_run_id(value: Any) -> str | None:
+	"""把断点里的内部 run_id 归一成可绑定给 sqlite 的文本（Issue #2495）。
+
+	JSON 列用 ``ensure_ascii=True`` 落库，``\\ud800`` 这类孤立代理字符能通过
+	读取校验，再作为 sqlite 参数绑定却抛 ``UnicodeEncodeError``（不是
+	``sqlite3.DatabaseError``，不在 ``CacheRecordInvalid`` 的捕获范围内），
+	把状态 / 列表 / 停止控制路径整体拖垮。这样的值不可能对应 ``crawl_runs``
+	里的真实记录（写入时同样过不了绑定），按「没有绑定内部任务」处理；
+	``safe_text`` 同时兜住超大整数 / 深嵌套的 ``str()`` 异常。
+	"""
+	if value is None:
+		return None
+	text = safe_text(value)
+	if not text:
+		return None
+	try:
+		text.encode("utf-8")
+	except UnicodeEncodeError:
+		return None
+	return text
+
+
 def inner_crawl_run_id(run: Mapping[str, Any]) -> str | None:
 	"""Extract the crawler run_id nested in a workflow last_result / params."""
 	last = run.get("last_result")
 	if isinstance(last, Mapping):
 		data = last.get("data")
 		if isinstance(data, Mapping) and data.get("run_id"):
-			return str(data["run_id"])
+			return bindable_run_id(data["run_id"])
 		if last.get("run_id"):
-			return str(last["run_id"])
+			return bindable_run_id(last["run_id"])
 	params = run.get("params")
 	if isinstance(params, Mapping):
 		inputs = params.get("inputs")
 		if isinstance(inputs, Mapping):
 			for key in ("run_id", "crawl_run_id"):
 				if inputs.get(key):
-					return str(inputs[key])
+					return bindable_run_id(inputs[key])
 	return None
 
 
