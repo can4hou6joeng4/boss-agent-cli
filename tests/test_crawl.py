@@ -287,7 +287,10 @@ def test_hook_registration_happens_before_first_navigation(monkeypatch, tmp_path
 			events.append("listen")
 
 		def wait(self, **kwargs):
-			return types.SimpleNamespace(response=types.SimpleNamespace(body=_page()))
+			return types.SimpleNamespace(
+				url="https://www.zhipin.com/wapi/zpgeek/search/joblist.json?query=AI&city=101210100",
+				response=types.SimpleNamespace(body=_page()),
+			)
 
 	class Page:
 		url = ""
@@ -530,7 +533,10 @@ def test_listener_parses_string_json_response(monkeypatch, tmp_path):
 			pass
 
 		def wait(self, **kwargs):
-			return types.SimpleNamespace(response=types.SimpleNamespace(body=json.dumps(_page(_job("job-1", "sec-1")))))
+			return types.SimpleNamespace(
+				url="https://www.zhipin.com/wapi/zpgeek/search/joblist.json?query=AI&city=101210100",
+				response=types.SimpleNamespace(body=json.dumps(_page(_job("job-1", "sec-1")))),
+			)
 
 	class Page:
 		url = ""
@@ -731,7 +737,7 @@ def test_wait_for_joblist_packet_skips_unrecognizable_and_earlier_pages(tmp_path
 	page.packets.append(unknown)
 	page._enqueue(1)
 	page._enqueue(2)
-	target = session._wait_for_joblist_packet(2)
+	target = session._wait_for_joblist_packet(2, query="AI", city_code="101210100")
 	assert target is not None
 	assert packet_page_no(target) == 2
 	assert page.packets == [], "第 1 页与无法识别页码的包都应被丢弃，而不是当成第 2 页"
@@ -747,15 +753,17 @@ def test_wait_for_joblist_packet_skips_unrecognizable_and_earlier_pages(tmp_path
 		{"body": {}, "status": 403},
 	],
 )
-def test_fetch_page_stops_on_risk_in_an_earlier_page(tmp_path, monkeypatch, response):
-	"""丢弃非目标页之前也必须检查风险，不能因此改走页面内请求。"""
+def test_fetch_page_stops_on_risk_in_an_unmatched_packet(tmp_path, monkeypatch, response):
+	"""关键词和页码不匹配的响应也必须先检查风险。"""
 	session, page = _paging_session(tmp_path, monkeypatch)
 	enqueue = page._enqueue
 
 	def enqueue_with_risk(page_no):
 		enqueue(page_no)
 		if page_no == 1:
-			page.packets[-1].response = types.SimpleNamespace(**response)
+			packet = page.packets[-1]
+			packet.url = packet.url.replace("query=AI", "query=Python")
+			packet.response = types.SimpleNamespace(**response)
 
 	monkeypatch.setattr(page, "_enqueue", enqueue_with_risk)
 	fallback_calls = []
@@ -784,13 +792,28 @@ def test_fetch_page_keeps_rate_limits_from_an_earlier_page(tmp_path, monkeypatch
 	assert len(page.packets) == 2
 
 
-def test_wait_for_joblist_packet_accepts_unrecognizable_packet_for_first_page(tmp_path, monkeypatch):
-	"""请求第 1 页时监听到的包没有可解析页码，仍按原有行为接受。"""
+@pytest.mark.parametrize("change", [
+	("query=AI", "query=Python"),
+	("city=101210100", "city=101020100"),
+	("&city=101210100", ""),
+	("query=AI", "query=AI&query=Python"),
+	("page=1", "page=invalid"),
+])
+def test_fetch_page_ignores_same_page_with_mismatched_request(tmp_path, monkeypatch, change):
 	session, page = _paging_session(tmp_path, monkeypatch)
-	session._start_joblist_listener()
-	unknown = types.SimpleNamespace(response=types.SimpleNamespace(body={"code": 0}))
-	page.packets.append(unknown)
-	assert session._wait_for_joblist_packet(1) is unknown
+	enqueue = page._enqueue
+
+	def enqueue_with_unrelated_packet(page_no):
+		enqueue(page_no)
+		matched = page.packets[-1]
+		unrelated = types.SimpleNamespace(
+			url=matched.url.replace(*change),
+			response=types.SimpleNamespace(body=_page(_job("unrelated", "fixture"))),
+		)
+		page.packets.insert(0, unrelated)
+
+	monkeypatch.setattr(page, "_enqueue", enqueue_with_unrelated_packet)
+	assert session.fetch_page("AI", "101210100", 1)["zpData"]["jobList"][0]["encryptJobId"] == "job-1"
 
 
 def test_wait_for_joblist_packet_returns_none_when_only_earlier_pages_arrive(tmp_path, monkeypatch):
@@ -798,7 +821,7 @@ def test_wait_for_joblist_packet_returns_none_when_only_earlier_pages_arrive(tmp
 	session, page = _paging_session(tmp_path, monkeypatch)
 	session._start_joblist_listener()
 	page._enqueue(1)
-	assert session._wait_for_joblist_packet(3) is None
+	assert session._wait_for_joblist_packet(3, query="AI", city_code="101210100") is None
 
 
 def test_non_json_login_html_is_not_mislabelled_as_captcha_only():
