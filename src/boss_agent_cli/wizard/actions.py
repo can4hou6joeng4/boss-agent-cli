@@ -2087,9 +2087,14 @@ def _crawl_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 			) from exc
 	# 执行器已退出 / 排队超时的任务只轮询状态永远等不到结果：与 `boss crawl status`
 	# 一样把后台恢复作为下一步，数据里的 executor_active 供调用方判定（Issue #2479）。
+	# 已受理的停止请求还没被消费时改为按断点结算 stop：resume --background 会先
+	# 清除 stop 标记，跟随指引就撤销了用户的停止请求（Issue #2482）。
 	next_action = None
 	if data.get("running_stale") or data.get("queue_overdue"):
-		next_action = _hint_command(context, f"crawl resume {shell_argument(run_id)} --background")
+		if data.get("stop_requested"):
+			next_action = _hint_command(context, f"crawl stop {shell_argument(run_id)}")
+		else:
+			next_action = _hint_command(context, f"crawl resume {shell_argument(run_id)} --background")
 	return StepResult(data, next_action=next_action)
 
 
