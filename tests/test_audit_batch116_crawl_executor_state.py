@@ -124,6 +124,30 @@ def test_status_terminal_run_never_probes_or_claims_stale(tmp_path):
 	assert not any("crawl stop" in action for action in payload["hints"]["next_actions"])
 
 
+def test_status_uses_same_run_snapshot_for_status_and_executor(tmp_path, monkeypatch):
+	run_id = _seed_run(tmp_path, status="stopped")
+	get_crawl_run = CacheStore.get_crawl_run
+	reads = 0
+
+	def read_during_resume(cache, requested_id):
+		nonlocal reads
+		record = get_crawl_run(cache, requested_id)
+		reads += 1
+		if reads == 1:
+			cache.update_crawl_run(run_id, status="running", next_page=2)
+		return record
+
+	monkeypatch.setattr(CacheStore, "get_crawl_run", read_during_resume)
+	with exclusive_file_lock(_lock_path(tmp_path, run_id)) as acquired:
+		assert acquired
+		payload = _envelope(_invoke(tmp_path, "status", run_id))
+
+	assert payload["data"]["status"] == "stopped"
+	assert payload["data"]["next_page"] == 1
+	assert payload["data"]["executor_active"] is False
+	assert reads == 1
+
+
 # ── Issue #2465：stop 在无执行器时按断点落 stopped ───────────────────
 
 

@@ -26,6 +26,14 @@ def crawl_status(cache: CacheStore, run_id: str, *, data_dir: Path | None = None
 	run = cache.get_crawl_run(run_id)
 	if run is None:
 		raise KeyError(run_id)
+	return crawl_status_from_run(cache, run, data_dir=data_dir)
+
+
+def crawl_status_from_run(
+	cache: CacheStore, run: dict[str, Any], *, data_dir: Path | None = None
+) -> dict[str, Any]:
+	"""根据已读取的任务行组装状态和详情进度。"""
+	run_id = str(run["run_id"])
 	# 与 resume 共用同一套断点校验：params 里 query/city 类型漂移时，status 不能
 	# 把错误类型原样放进 ok=true 信封、而 resume 对同一行报损坏（Issue #1192）。
 	settings = CrawlSettings.from_dict(run["params"], run_id=run_id)

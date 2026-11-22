@@ -21,7 +21,7 @@ from boss_agent_cli.auth.manager import AuthManager, AuthRequired
 from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore
 from boss_agent_cli.compliance import operating_mode, require_compliance_allowed
 from boss_agent_cli.config import DEFAULTS
-from boss_agent_cli.crawler.operations import crawl_results, crawl_status, import_crawl_shortlist
+from boss_agent_cli.crawler.operations import crawl_results, crawl_status_from_run, import_crawl_shortlist
 from boss_agent_cli.crawler.service import (
 	CrawlBusyError,
 	CrawlService,
@@ -779,20 +779,6 @@ def _awaiting_queued_worker(run: dict[str, Any]) -> bool:
 	return now - updated < _QUEUE_HANDOFF_GRACE_SECONDS
 
 
-def _executor_active(data_dir: Path, run: dict[str, Any], run_id: str) -> bool:
-	"""queued / running 的 run 是否仍有执行器持有执行锁。
-
-	DB 的 ``running`` 可能来自被 SIGKILL 的执行器（内核已释放锁），状态不会
-	自己变；不探测就会让 ``crawl stop`` 写一条没人消费的标记并报成功，状态页
-	也永远显示运行中（Issue #2465）。queued 在交接宽限内按仍有 worker 处理。
-	"""
-	if run["status"] not in ("queued", "running"):
-		return False
-	if run["status"] == "queued" and _awaiting_queued_worker(run):
-		return True
-	return crawl_executor_active(data_dir, run_id)
-
-
 class CrawlHandoffPending(RuntimeError):
 	"""后台 worker 交接窗口内显式恢复参数无法生效（Issue #2243）。
 
@@ -1464,12 +1450,18 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 	"""读取 crawl 任务状态，不打开浏览器。"""
 	if not _require_run_id(ctx, "crawl.status", run_id):
 		return
+	data_dir = ctx.obj["data_dir"]
 	try:
-		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
-			payload = crawl_status(cache, run_id, data_dir=ctx.obj["data_dir"])
+		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 			run = cache.get_crawl_run(run_id)
-			queue_overdue = run is not None and run["status"] == "queued" and not _awaiting_queued_worker(run)
-			executor_active = run is not None and _executor_active(ctx.obj["data_dir"], run, run_id)
+			if run is None:
+				raise KeyError(run_id)
+			payload = crawl_status_from_run(cache, run, data_dir=data_dir)
+			queue_in_handoff = _awaiting_queued_worker(run)
+			queue_overdue = run["status"] == "queued" and not queue_in_handoff
+			executor_active = run["status"] in _UNSETTLED_STATUSES and (
+				queue_in_handoff or crawl_executor_active(data_dir, run_id)
+			)
 	except KeyError:
 		handle_error_output(ctx, "crawl.status", code="CRAWL_RUN_NOT_FOUND", message=f"未找到 crawl run: {run_id}", hints=_run_not_found_hints(ctx))
 		return
@@ -1482,13 +1474,12 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 	if running_stale:
 		payload["running_stale"] = True
 	hints: dict[str, list[str]] | None = None
-	# TTY 的下一步与信封 hints 必须同一口径：只有还在跑的 run 才值得提示 stop，
-	# 已结束的 run 上 `crawl stop` 仍会返回 stop_requested，但什么都不会停。
+	# TTY 与信封共用下一步指引，终态任务只提示读取结果。
 	next_steps = [boss_command_for_ctx(ctx, f"crawl results {shell_argument(run_id)}", include_data_dir=True)]
 	resume_command = boss_command_for_ctx(ctx, f"crawl resume {shell_argument(run_id)} --background", include_data_dir=True)
 	if payload["status"] in ("queued", "running"):
 		if running_stale:
-			# 执行器已不在：stop 不会生效，下一步是重新拉起 worker 从断点继续。
+			# 执行器已退出，可重新启动 worker 从断点继续。
 			next_steps.append(resume_command)
 		else:
 			next_steps.append(boss_command_for_ctx(ctx, f"crawl stop {shell_argument(run_id)}", include_data_dir=True))
