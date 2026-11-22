@@ -14,6 +14,7 @@ from boss_agent_cli.crawler.service import (
 	crawl_run_awaiting_worker,
 )
 from boss_agent_cli.display import boss_command, shell_argument
+from boss_agent_cli.services.text_files import is_utf8_encodable
 
 _PUBLIC_JOB_FIELDS = {
 	"query", "page", "rank", "title", "salary", "city", "district", "business_district",
@@ -199,7 +200,7 @@ def import_crawl_shortlist(
 		# "None" 的记录（Issue #2408）。与展示字段同口径按缺失处理。
 		security_id = safe_text(item.get("security_id") or "")
 		job_id = safe_text(item.get("job_id") or "")
-		if not security_id or not job_id:
+		if not security_id or not job_id or not is_utf8_encodable(security_id) or not is_utf8_encodable(job_id):
 			skipped_count += 1
 			continue
 		if job_id in known_job_ids:
