@@ -6,6 +6,7 @@
 
 ### Fixed
 - 向导与 MCP 的 `crawl_stop` 步骤与 `boss crawl stop` 同口径：执行器已退出（执行锁空闲）时按断点结算 `stopped` 并回报 `stale_recovered`，不再写一条没人消费的停止标记后报 `stop_requested`；写停止标记改为只对 queued / running 生效，执行器并发写下的终态会按 `CRAWL_RUN_FINISHED` 回报真实状态（Issue #2478）。
+- 采集附着已有调试端口前核对浏览器归属：配置目录 `SingletonLock` 记录的 Chrome 主进程 pid 必须与 CDP 报告的浏览器进程一致，Windows 没有该锁时退回读进程命令行的 `--user-data-dir`；确认不了归属（如端口被日常 Chrome 占用）时按 `CRAWL_PROFILE_BUSY` 停止，不注入 boss login 的 Cookie、不注册 Hook，也不退出对方的浏览器。同一配置目录的打开流程增加跨进程锁（Issue #2464）。
 
 ## [3.4.153] - 2026-11-23
 
