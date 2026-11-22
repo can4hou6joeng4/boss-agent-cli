@@ -1609,6 +1609,17 @@ def shortlist_cmd(
 			hints={"next_actions": [results_cmd]},
 		)
 		return
+	if not is_utf8_encodable(tags):
+		list_cmd = boss_command_for_ctx(ctx, "shortlist list", include_data_dir=True)
+		handle_error_output(
+			ctx,
+			"crawl.shortlist",
+			code="INVALID_PARAM",
+			message="--tags 含有无法按 UTF-8 编码的字符（孤立代理项）",
+			recovery_action=f"请重新输入标签或省略 --tags；候选池现有标签可用 {list_cmd} 查看",
+			hints={"next_actions": [list_cmd]},
+		)
+		return
 
 	try:
 		with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:

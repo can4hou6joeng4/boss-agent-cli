@@ -197,6 +197,54 @@ def test_annotate_storage_normalizes_note_and_tags(tmp_path: Path) -> None:
 	assert item["tags"] == [f"tag{_BAD_LITERAL}", "正常标签"]
 
 
+@pytest.mark.parametrize(
+	("args", "field"),
+	[
+		(("add", "sec-1", "job-1", "--tags", _BAD), "--tags"),
+		(("annotate", "sec-1", "job-1", "--add-tag", _BAD), "--add-tag"),
+		(("annotate", "sec-1", "job-1", "--remove-tag", _BAD), "--remove-tag"),
+		(("compare", "--tag", _BAD), "--tag"),
+	],
+)
+def test_shortlist_rejects_unencodable_tags(tmp_path: Path, args: tuple[str, ...], field: str) -> None:
+	with CacheStore(_db(tmp_path)) as cache:
+		original = cache.add_shortlist({"security_id": "sec-1", "job_id": "job-1", "tags": [_BAD]})
+
+	error = _error(_invoke(tmp_path, *args))
+
+	assert error["code"] == "INVALID_PARAM"
+	assert field in error["message"]
+	with CacheStore(_db(tmp_path)) as cache:
+		assert cache.list_shortlist() == [original]
+
+
+def test_crawl_shortlist_rejects_unencodable_tags(tmp_path: Path) -> None:
+	result = CliRunner().invoke(
+		cli, ["--json", "--data-dir", str(tmp_path), "crawl", "shortlist", "run-1", "--all", "--tags", _BAD]
+	)
+
+	error = _error(result)
+	assert error["code"] == "INVALID_PARAM"
+	assert "--tags" in error["message"]
+	assert not _db(tmp_path).exists()
+
+
+def test_shortlist_accepts_escaped_tag_from_list_for_compare_and_remove(tmp_path: Path) -> None:
+	with CacheStore(_db(tmp_path)) as cache:
+		cache.add_shortlist({"security_id": "sec-1", "job_id": "job-1", "tags": [_BAD]})
+
+	listed = _invoke(tmp_path, "list")
+	assert listed.exit_code == 0, listed.output
+	tag = json.loads(listed.stdout)["data"][0]["tags"][0]
+	assert tag == _BAD_LITERAL
+	compared = _invoke(tmp_path, "compare", "--tag", tag)
+	assert compared.exit_code == 0, compared.output
+	assert json.loads(compared.stdout)["data"]["count"] == 1
+	annotated = _invoke(tmp_path, "annotate", "sec-1", "job-1", "--remove-tag", tag)
+	assert annotated.exit_code == 0, annotated.output
+	assert json.loads(annotated.stdout)["data"]["item"]["tags"] == []
+
+
 def test_normal_shortlist_flow_is_unchanged(tmp_path: Path) -> None:
 	result = _invoke(tmp_path, "add", "sec-1", "job-1", "--title", "示例岗位", "--note", "关注")
 	assert result.exit_code == 0, result.output
