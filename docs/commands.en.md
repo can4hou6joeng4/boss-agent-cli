@@ -165,6 +165,8 @@ An item whose detail request keeps failing after retries (for example, the platf
 
 After every page, `<data-dir>/crawl/runs/<run_id>/jobs.json`, `jobs.csv`, and a filtered/frozen `jobs.xlsx` are updated. XLSX keeps the complete values but every data row is a fixed-height single line, so long content is visually clipped rather than expanding the row. JSON/CSV/XLSX omit `security_id`, job IDs, selectors, recruiter names, and recruiter titles; `crawl results` also omits platform identifiers and recruiter information, but returns local selectors for shortlist imports. Actual platform identifiers remain in restricted local SQLite state, and `boss clean --privacy` deletes crawl runs, budgets, and exports. Risk codes `31` / `32` / `35` / `36` / `37`, the identity-profile flow indicated by code `38`, a security page, a missing job-list container, an exhausted budget, or a stop request checkpoint and stop immediately. Code `38` is not synonymous with a CAPTCHA. Stdout remains a JSON envelope containing the resume command.
 
+When resuming from page 2 or later, crawl compares the minimum number of requests needed to reach that page with the run's remaining budget before opening the browser. If the budget is too low, the run reports `budget_stopped` with the target page and request counts. Use `crawl results <run_id>` to read existing data. Each navigation and pagination request still counts against the budget as it is sent.
+
 ## Candidate actions
 
 | Command | Description |

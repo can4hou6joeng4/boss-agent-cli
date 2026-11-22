@@ -690,11 +690,13 @@ def _run_service(
 			*risk_lock_persistence_actions({"risk_lock": outcome.risk_lock}),
 		]}
 	elif outcome.status == "budget_stopped":
-		# 预算计数与 settings 都持久化，resume 不会推进（Issue #1238）：只给只读状态。
+		# 预算计数随断点持久化。先提供只读状态与已有结果（Issue #1238、#2463）。
+		results_command = boss_command_for_ctx(ctx, f"crawl results {shell_argument(outcome.run_id)}", include_data_dir=True)
 		hints = {
 			"next_actions": [status_command],
 			"operator_actions": [
-				"该任务的预算已用完，继续采集需要新建任务（或调高 max_requests 后重新 crawl start）",
+				f"该任务的预算已用完或不足以到达断点。可用 {results_command} 读取已采集的数据。"
+				"如需继续采集，请按所需预算配置并新建任务。",
 			],
 		}
 	elif outcome.status == "throttle_stopped":

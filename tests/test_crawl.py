@@ -1032,6 +1032,34 @@ def test_budget_stops_and_persists_across_resume(tmp_path):
 	assert second.page_calls == []
 
 
+def test_deep_checkpoint_with_insufficient_budget_does_not_open_browser(tmp_path, monkeypatch):
+	settings = _settings(tmp_path, pages=20, max_requests=20)
+	session = DrissionCrawlerSession(
+		profile_path=tmp_path / "profile",
+		chrome_path=None,
+		cdp_port=settings.cdp_port,
+		hook_profile="none",
+		hook_dir=None,
+	)
+
+	def unexpected_open():
+		pytest.fail("已确定无法抵达断点，不应启动浏览器")
+
+	monkeypatch.setattr(session, "open", unexpected_open)
+	cache, service = _service(tmp_path, lambda settings: session)
+	with cache:
+		run_id = service.create(settings)
+		cache.update_crawl_run(run_id, status="stopped", next_page=13)
+		cache.update_crawl_run_budget(run_id, requests_attempted=12, detail_requests_attempted=0, elapsed_seconds=0)
+		outcome = service.resume(run_id)
+		run = cache.get_crawl_run(run_id)
+
+	assert outcome.status == run["status"] == "budget_stopped"
+	assert outcome.next_page == run["next_page"] == 13
+	assert outcome.requests_attempted == run["requests_attempted"] == 12
+	assert outcome.error == run["error"] == "到达采集断点第 13 页至少需要 13 次请求，剩余预算为 8 次"
+
+
 def test_stop_request_checkpoints_before_detail(tmp_path):
 	transport = _FakeTransport({1: _page(_job("job-1", "sec-1"))})
 	cache, service = _service(tmp_path, lambda settings: transport)

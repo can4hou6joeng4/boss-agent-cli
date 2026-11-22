@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `crawl resume` 在打开浏览器前检查剩余预算能否到达深层断点。预算不足时记录目标页、最低请求数和剩余预算，保留断点及已有结果，避免重复导航消耗剩余额度（Issue #2463）。
 - 招聘自动化的 `verification-required` 队列行在人工处置完成前继续认领该候选人：按旧指引只删除 `inflight_action` 标记后，扫描路径不再把批准文案当成从未发出、用模板问卷补位；恢复指引区分「确认已发出」（先写阶段时间并把队列行标为 `executed`）与「确认未发出」（队列行恢复 `pending`），最后才删除标记（Issue #2452）。
 - crawl 的 `running` 状态不再被当作「仍在执行」的证据：`crawl status` 探测执行锁并回报 `executor_active` / `running_stale`，执行器被 SIGKILL 后不再永远显示运行中，也不再提示去 stop 一个没人消费的标记（Issue #2465）。
 - `crawl stop` 在 queued / running 但没有执行器持锁时直接按断点落 `stopped` 并回报 `stale_recovered`，不再写一条永远没人消费的停止标记后报成功；执行器仍持锁时维持原停止语义（Issue #2465）。
