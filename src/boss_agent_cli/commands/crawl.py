@@ -1422,17 +1422,22 @@ def status_cmd(ctx: click.Context, run_id: str) -> None:
 	# running 无执行器说明它已被杀、状态不会再前进（Issue #2465）。
 	running_stale = bool(payload.get("running_stale"))
 	queue_overdue = bool(payload.get("queue_overdue"))
+	stop_pending = bool(payload.get("stop_requested"))
 	hints: dict[str, list[str]] | None = None
 	# TTY 与信封共用下一步指引，终态任务只提示读取结果。
 	next_steps = [boss_command_for_ctx(ctx, f"crawl results {shell_argument(run_id)}", include_data_dir=True)]
 	resume_command = boss_command_for_ctx(ctx, f"crawl resume {shell_argument(run_id)} --background", include_data_dir=True)
+	stop_command = boss_command_for_ctx(ctx, f"crawl stop {shell_argument(run_id)}", include_data_dir=True)
 	if payload["status"] in ("queued", "running"):
-		if running_stale:
+		if running_stale and not stop_pending:
 			# 执行器已退出，可重新启动 worker 从断点继续。
 			next_steps.append(resume_command)
-		else:
-			next_steps.append(boss_command_for_ctx(ctx, f"crawl stop {shell_argument(run_id)}", include_data_dir=True))
-	if queue_overdue:
+		elif stop_pending or not running_stale:
+			# 已受理的停止请求还没被消费：执行器已退出时再执行一次 stop 会按断点
+			# 结算 stopped；不能建议 resume --background——它默认清除 stop 标记，
+			# 跟随工具指引就等于静默撤销用户已受理的停止请求（Issue #2482）。
+			next_steps.append(stop_command)
+	if queue_overdue and not stop_pending:
 		# 排队过久多半是后台进程没活下来：只轮询 status 永远等不到结果。后台恢复
 		# 会先探测执行锁，仍有执行器时只回报 running，不会重复启动（Issue #1045）。
 		next_steps.append(resume_command)

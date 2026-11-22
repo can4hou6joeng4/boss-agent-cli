@@ -93,7 +93,7 @@ def crawl_status_from_run(
 
 
 def _with_executor_state(payload: dict[str, Any], run: dict[str, Any], *, data_dir: Path) -> dict[str, Any]:
-	"""给状态数据补上执行器证据，用组装状态用的同一行判定（Issue #2479）。
+	"""给状态数据补上执行器证据与待处理的停止请求，用组装状态用的同一行判定。
 
 	``crawl status`` 与向导 / MCP 的 ``crawl_status`` 步骤共用这份数据：记录仍是
 	``running`` / ``queued`` 不代表还有进程在推进，执行锁空闲时 Agent 继续轮询
@@ -108,6 +108,10 @@ def _with_executor_state(payload: dict[str, Any], run: dict[str, Any], *, data_d
 	queue_in_handoff = crawl_run_awaiting_worker(run)
 	executor_active = queue_in_handoff or crawl_executor_active(data_dir, run_id)
 	payload["executor_active"] = executor_active
+	# 已受理但还没被执行器消费的停止请求：终态不回显，避免把已生效的历史标记
+	# 再报一次；未结算状态必须让调用方看见，否则陈旧的 running / queued 会被
+	# 引导去 resume --background，而 resume 会先清除该标记（Issue #2482）。
+	payload["stop_requested"] = run["stop_requested"]
 	if status == "running" and not executor_active:
 		payload["running_stale"] = True
 	if status == "queued" and not queue_in_handoff:
