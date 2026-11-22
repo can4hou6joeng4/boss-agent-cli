@@ -68,16 +68,20 @@ def process_pending(
 	的多条动作只占一个名额，与 ``--limit`` 的「多少个会话」语义一致。
 	"""
 	actions = store.read_pending()
+	awaiting_verification = {
+		item.candidate_key for item in actions
+		if item.platform == platform and item.status == "verification-required"
+	}
 	events: list[AutomationEvent] = []
 	dispatched_conversations: set[str] = set()
 	for index, item in enumerate(actions):
 		if guard.stop_reason() is not None:
 			break
+		if item.platform != platform:
+			continue
 		if item.status == "executing":
 			# 上一次执行在写请求已发出后中断：结果未知，不能自动重发（Issue #1245）。
 			# 转成 verification-required 并打开熔断，先让操作者核对官方页面。
-			if item.platform != platform:
-				continue
 			reason = f"pending action {item.id!r} was interrupted while executing"
 			if dry_run:
 				# 预览不是执行：dry-run 不改写队列、不打开熔断（Issue #1257）。
@@ -119,7 +123,17 @@ def process_pending(
 			events.append(event)
 			store.append_event(event)
 			break
-		if item.status != "pending":
+		if item.status == "verification-required" and state is not None:
+			# 队列已认领会话，保留原来由扫描路径发出的核对提示。
+			prior = _conversation_prior(state, item.candidate_key)
+			if prior is not None:
+				blocked = _queue_inflight_gate(store, guard, state, platform, dry_run, item.candidate_key, prior)
+				if blocked is not None:
+					event, stop = blocked
+					events.append(event)
+					if stop:
+						break
+		if item.status != "pending" or item.candidate_key in awaiting_verification:
 			continue
 		action = queued_action(item, store.pending_path)
 		ref = ConversationRef(id=item.candidate_key, tab="pending")
@@ -130,8 +144,6 @@ def process_pending(
 			candidate_key=CandidateKey(item.candidate_key),
 			message=item.message,
 		)
-		if item.platform != platform:
-			continue
 		prior = _conversation_prior(state, item.candidate_key)
 		stage_key = _ACTION_STAGE_KEYS.get(action)
 		if prior is not None and stage_key is not None and prior_sent(prior, stage_key):
@@ -715,11 +727,21 @@ def _inflight_reason(candidate_key: str, inflight: InflightAction) -> str:
 	action = inflight.action.value if inflight.action is not None else "unknown action"
 	started_at = inflight.started_at or "unknown time"
 	conversation_ref = inflight.conversation_ref or "unknown ref"
+	# 删除标记必须放在最后：只删标记而不先写入事实（阶段时间 / 队列行状态），
+	# 扫描路径会把批准文案当成从未发出并用模板问卷补位（Issue #2452）。
+	stage_key = _ACTION_STAGE_KEYS.get(inflight.action) if inflight.action is not None else None
+	if stage_key is None:
+		disposition = "先核对动作类型和结果，确认两者后再处置对应队列行并清除标记"
+	else:
+		disposition = (
+			f"确认已发出时先把该会话的 {stage_key} 写成 ISO 时间，如有对应队列行则标记为 executed。"
+			"确认未发出时，如有对应队列行则恢复 pending。最后再删除该标记"
+		)
 	return (
 		f"conversation {candidate_key!r} has an unconfirmed {action} in flight "
 		f"since {started_at} (ref {conversation_ref})；"
 		"请在官方聊天页核对是否已发出，确认前不会自动重发；"
-		f"处理后需更新 automation/state.json 中该会话的 {_INFLIGHT_KEY} 标记，自动化才会继续处理它"
+		f"{disposition}（标记在 automation/state.json 的该会话 {_INFLIGHT_KEY} 字段），自动化才会继续处理它"
 	)
 
 
