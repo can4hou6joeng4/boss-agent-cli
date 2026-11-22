@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.157 (2026-11-23): crawl and wizard run ids are checked for encodability at the command entry, so input containing lone surrogates reports INVALID_PARAM instead of a LOCAL_IO_ERROR with disk guidance (Issue #2499).
+
 v3.4.156 (2026-11-23): unencodable inner run ids in checkpoints no longer break the wizard status / list / stop control paths, and chat export md / html results now sanitize lone surrogates the same way as the JSON branch (Issues #2495, #2496).
 
 v3.4.155 (2026-11-23): crawl exports re-check that each target is still a regular file before replacing (links and FIFOs are rejected), backups are no longer pre-created so a vanished target is installed fresh instead of restored as an empty file, and oversized integers inside XLSX container fields degrade to missing (Issues #2490, #2491, #2492).
