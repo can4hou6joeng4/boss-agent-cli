@@ -385,6 +385,24 @@ def _required_str(inputs: Mapping[str, Any], name: str) -> str:
 	return raw
 
 
+def _required_nonblank_value(inputs: Mapping[str, Any], name: str) -> str:
+	"""必填且非空白的原始字符串：只校验、不 strip。
+
+	CLI 的位置参数只判断 ``.strip()``、原样透传（`detail` / `hr jobs` /
+	`hr reply`），向导必须同口径：空白值在入口报 ``INVALID_PARAM``，非空白值
+	不被悄悄改写（Issue #2516）。
+	"""
+	value = _required_str(inputs, name)
+	if not value.strip():
+		raise WorkflowActionError(
+			"INVALID_PARAM",
+			f"wizard 输入 {name} 不能只有空白字符",
+			recoverable=True,
+			recovery_action=f"在 inputs 中提供有效的 {name} 后重试",
+		)
+	return value
+
+
 def _required_nonblank_str(inputs: Mapping[str, Any], name: str) -> str:
 	"""读取必填的非空白字符串。
 
@@ -393,15 +411,7 @@ def _required_nonblank_str(inputs: Mapping[str, Any], name: str) -> str:
 	结果未知指引。wizard 必须在预约前把空白参数报成 INVALID_PARAM，让 Agent
 	修正输入而不是去平台核对一个不存在的动作（Issue #2320）。
 	"""
-	value = _required_str(inputs, name).strip()
-	if not value:
-		raise WorkflowActionError(
-			"INVALID_PARAM",
-			f"wizard 输入 {name} 不能只有空白字符",
-			recoverable=True,
-			recovery_action=f"在 inputs 中提供有效的 {name} 后重试",
-		)
-	return value
+	return _required_nonblank_value(inputs, name).strip()
 
 
 def _optional_str_strict(inputs: Mapping[str, Any], name: str) -> str | None:
@@ -880,7 +890,9 @@ def _candidate_recommend(context: ActionContext, inputs: Mapping[str, Any], prio
 def _candidate_detail(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	from boss_agent_cli.wizard.renderer import busy_status
 
-	security_id = _required_str(inputs, "security_id")
+	# 与 CLI `detail` 同口径：空 security_id 不是「查不到」，而是参数构造错了；
+	# 照常发请求只会换来一次注定失败的平台往返（Issue #2516）。
+	security_id = _required_nonblank_value(inputs, "security_id")
 	job_id = _optional_str(inputs.get("job_id"))
 	lid = str(inputs.get("lid") or "")
 	with busy_status("正在读取职位详情…"):
@@ -2357,7 +2369,9 @@ def _recruiter_reply(context: ActionContext, inputs: Mapping[str, Any], prior: M
 	friend_id = _required_int(inputs, "friend_id", minimum=1)
 	# message 是发给真人的自由文本：LIST / dict / 数字经 str() 会把 Python repr
 	# 当成真实消息发出去（Issue #1906）；只在 --input-json / MCP 路径可达。
-	message = _required_str(inputs, "message")
+	# 纯空白消息与 CLI `hr reply` 同口径拒绝：它会被当成一条空消息真正发给
+	# 候选人（Issue #2516）。
+	message = _required_nonblank_value(inputs, "message")
 	return _recruiter_call(
 		context,
 		lambda platform: platform.send_message_by_friend(friend_id, message),
@@ -2418,12 +2432,14 @@ def _recruiter_jobs_list(context: ActionContext, inputs: Mapping[str, Any], prio
 
 
 def _recruiter_jobs_detail(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	job_id = _required_str(inputs, "job_id")
+	# 与 CLI `hr jobs detail` 同口径：空 job_id 无法命中任何职位（Issue #2516）。
+	job_id = _required_nonblank_value(inputs, "job_id")
 	return _recruiter_call(context, lambda platform: platform.job_detail(job_id), "职位详情获取失败")
 
 
 def _recruiter_jobs_online(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	job_id = _required_str(inputs, "job_id")
+	# 空白 job_id 的「上线」请求只会换来一次无意义的平台状态变更（Issue #2516）。
+	job_id = _required_nonblank_value(inputs, "job_id")
 	return _recruiter_call(
 		context,
 		lambda platform: platform.job_online(job_id),
@@ -2436,7 +2452,8 @@ def _recruiter_jobs_online(context: ActionContext, inputs: Mapping[str, Any], pr
 
 
 def _recruiter_jobs_offline(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	job_id = _required_str(inputs, "job_id")
+	# 与 online 同理（Issue #2516）。
+	job_id = _required_nonblank_value(inputs, "job_id")
 	return _recruiter_call(
 		context,
 		lambda platform: platform.job_offline(job_id),

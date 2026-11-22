@@ -11,6 +11,7 @@
 - `search --preset` 在读取预设时拒绝纯空白关键词：记录报 `SAVED_SEARCH_INVALID` 并给出带数据目录的 `preset remove` + `preset add` 删除重建指引，不再以空泛搜索返回成功；显式命令行关键词或 `--url` 链接里的关键词仍可覆盖（Issue #2513）。
 - 向导的 search 动作在入口拒绝纯空白关键词（`INVALID_PARAM`），与 CLI `search " "` 及 watch 动作同口径，不再以无关键词的空泛搜索返回成功（Issue #2514）。
 - 向导 watch 动作的名称按 CLI 同口径校验可编码性：含孤立代理项的名称在 `add` / `run` / `remove` 均报 `INVALID_PARAM`，不再以 `UnicodeEncodeError` 崩溃并被兜成带磁盘指引的 `LOCAL_IO_ERROR`（Issue #2512）。
+- 向导的 `candidate_detail`、`recruiter_jobs_detail/online/offline` 与 `recruiter_reply` 在入口拒绝纯空白标识与空消息（`INVALID_PARAM`），与 CLI `detail` / `hr jobs` / `hr reply` 同口径，不再把空白参数发到平台或把空消息发给候选人；非空白值按原样透传（Issue #2516）。
 
 ## [3.4.158] - 2026-11-23
 
