@@ -7,7 +7,12 @@ from typing import Any
 
 from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.crawler.service import CrawlSettings, _hook_injections
+from boss_agent_cli.crawler.service import (
+	CrawlSettings,
+	_hook_injections,
+	crawl_executor_active,
+	crawl_run_awaiting_worker,
+)
 from boss_agent_cli.display import boss_command, shell_argument
 
 _PUBLIC_JOB_FIELDS = {
@@ -48,7 +53,7 @@ def crawl_status_from_run(
 		# 不把解锁命令写进机器可执行的 resume_command：风险锁必须由用户确认官方
 		# 页面恢复后显式解除。
 		checkpoint["resume_requires_operator_unlock"] = True
-	return {
+	payload = {
 		"run_id": run_id,
 		"status": run["status"],
 		"query": settings.query,
@@ -82,6 +87,32 @@ def crawl_status_from_run(
 		],
 		"checkpoint": checkpoint,
 	}
+	if data_dir is not None:
+		payload = _with_executor_state(payload, run, data_dir=data_dir)
+	return payload
+
+
+def _with_executor_state(payload: dict[str, Any], run: dict[str, Any], *, data_dir: Path) -> dict[str, Any]:
+	"""给状态数据补上执行器证据，用组装状态用的同一行判定（Issue #2479）。
+
+	``crawl status`` 与向导 / MCP 的 ``crawl_status`` 步骤共用这份数据：记录仍是
+	``running`` / ``queued`` 不代表还有进程在推进，执行锁空闲时 Agent 继续轮询
+	只会永远等不到结果（Issue #2465）。``data_dir`` 为空时不便探锁（纯本地读取
+	调用），保持原数据形状。
+	"""
+	run_id = str(run["run_id"])
+	status = run["status"]
+	if status not in ("queued", "running"):
+		payload["executor_active"] = False
+		return payload
+	queue_in_handoff = crawl_run_awaiting_worker(run)
+	executor_active = queue_in_handoff or crawl_executor_active(data_dir, run_id)
+	payload["executor_active"] = executor_active
+	if status == "running" and not executor_active:
+		payload["running_stale"] = True
+	if status == "queued" and not queue_in_handoff:
+		payload["queue_overdue"] = True
+	return payload
 
 
 def crawl_results(

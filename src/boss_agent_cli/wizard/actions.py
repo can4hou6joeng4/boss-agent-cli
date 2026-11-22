@@ -2085,7 +2085,12 @@ def _crawl_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 					"或用 boss crawl start <query> 新建任务"
 				),
 			) from exc
-	return StepResult(data)
+	# 执行器已退出 / 排队超时的任务只轮询状态永远等不到结果：与 `boss crawl status`
+	# 一样把后台恢复作为下一步，数据里的 executor_active 供调用方判定（Issue #2479）。
+	next_action = None
+	if data.get("running_stale") or data.get("queue_overdue"):
+		next_action = _hint_command(context, f"crawl resume {shell_argument(run_id)} --background")
+	return StepResult(data, next_action=next_action)
 
 
 def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
