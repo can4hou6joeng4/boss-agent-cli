@@ -22,7 +22,12 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.api.endpoints import CITY_CODES
 from boss_agent_cli.ai.config import AIConfigStore, ai_float_setting, ai_int_setting
 from boss_agent_cli.ai.service import AIService, AIServiceError, recovery_action_for
-from boss_agent_cli.cache.store import CacheRecordInvalid, CacheStore, SavedSearchParamsError
+from boss_agent_cli.cache.store import (
+	CacheRecordInvalid,
+	CacheStore,
+	SavedSearchParamsError,
+	saved_search_name_error,
+)
 from boss_agent_cli.platforms.factory import build_platform_instance, build_recruiter_platform_instance
 from boss_agent_cli.services.candidate_actions import (
 	CandidateActionBlocked,
@@ -1396,6 +1401,16 @@ def _candidate_watch(context: ActionContext, inputs: Mapping[str, Any], prior: M
 				"wizard 输入 name 不能只有空白字符",
 				recoverable=True,
 				recovery_action="在 inputs 中提供有效的 name 后重试",
+			)
+		# 名称要作为 SQLite TEXT 键绑定：孤立代理项（JSON 的 ``"\udcff"`` 转义）
+		# 会在绑定参数时抛 ``UnicodeEncodeError``，被顶层兜成带磁盘指引的
+		# ``LOCAL_IO_ERROR``。CLI 在入口用同一判据拒绝（Issue #2268、#2512）。
+		if problem := saved_search_name_error(name):
+			raise WorkflowActionError(
+				"INVALID_PARAM",
+				f"watch 名称无效：{problem}",
+				recoverable=True,
+				recovery_action="换一个只含普通 Unicode 文本的名称后重试",
 			)
 		if action == "add":
 			params: dict[str, Any] = {}

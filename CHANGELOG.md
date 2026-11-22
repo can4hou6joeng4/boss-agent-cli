@@ -9,6 +9,7 @@
 - 向导的 watch 动作与 CLI 对齐：空白名称与空白关键词在写入时按 `INVALID_PARAM` 拒绝；运行存量记录时复用 CLI 的读取侧校验（关键词必填、参数类型、城市 / 标签 / 活跃度取值域），失效记录报 `SAVED_SEARCH_INVALID` 并给出可执行的删除重建指引（Issue #2511）。
 - `search --preset` 在读取预设时拒绝纯空白关键词：记录报 `SAVED_SEARCH_INVALID` 并给出带数据目录的 `preset remove` + `preset add` 删除重建指引，不再以空泛搜索返回成功；显式命令行关键词或 `--url` 链接里的关键词仍可覆盖（Issue #2513）。
 - 向导的 search 动作在入口拒绝纯空白关键词（`INVALID_PARAM`），与 CLI `search " "` 及 watch 动作同口径，不再以无关键词的空泛搜索返回成功（Issue #2514）。
+- 向导 watch 动作的名称按 CLI 同口径校验可编码性：含孤立代理项的名称在 `add` / `run` / `remove` 均报 `INVALID_PARAM`，不再以 `UnicodeEncodeError` 崩溃并被兜成带磁盘指引的 `LOCAL_IO_ERROR`（Issue #2512）。
 
 ## [3.4.158] - 2026-11-23
 
