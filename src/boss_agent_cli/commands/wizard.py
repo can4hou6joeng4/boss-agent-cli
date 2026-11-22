@@ -12,6 +12,7 @@ import click
 from boss_agent_cli.cache.store import CacheRecordInvalid
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
 from boss_agent_cli.display import boss_command_for_ctx, console, handle_error_output, handle_output, shell_argument
+from boss_agent_cli.services.text_files import is_utf8_encodable
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS
 from boss_agent_cli.wizard.catalog import build_plan, require_supported_platform
 from boss_agent_cli.wizard.models import WorkflowInputError, WorkflowPlan, WizardInput
@@ -841,6 +842,26 @@ def _run_wizard_command(
 			message=f"{selectors[0][0]} 的值不能为空",
 			recovery_action=recovery,
 			hints={"next_actions": [next_action]},
+		)
+		return
+	if (
+		len(selectors) == 1
+		and selectors[0][0] != "--input-json"
+		and not is_utf8_encodable(selectors[0][1])
+	):
+		# run_id 从 argv 来：非法 UTF-8 字节经 surrogateescape 成为孤立代理项。
+		# 绑定 sqlite 抛 UnicodeEncodeError 会被兜成带磁盘指引的 LOCAL_IO_ERROR，
+		# 与「输入非法」不符；入口直接拒绝（Issue #2499）。
+		_wizard_error(
+			ctx,
+			interactive,
+			code="INVALID_PARAM",
+			message=f"{selectors[0][0]} 的 run_id 含有无法按 UTF-8 编码的字符（孤立代理项）",
+			recovery_action=(
+				f"从 {boss_command_for_ctx(ctx, 'wizard --status <run_id>', include_data_dir=True)} "
+				"或任务列表重新复制 run_id 后重试"
+			),
+			hints={"next_actions": [boss_command_for_ctx(ctx, "wizard", include_data_dir=True)]},
 		)
 		return
 

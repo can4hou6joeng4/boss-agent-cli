@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `crawl resume/status/stop/results/shortlist` 与 `wizard --status/--resume/--stop` 的 `run_id` 在命令入口校验可编码性：含孤立代理项（argv 的非 UTF-8 字节经 surrogateescape）时报 `INVALID_PARAM` 并提示重新复制 run_id，不再被兜成带磁盘恢复指引的 `LOCAL_IO_ERROR`；正常 run_id 的「任务不存在」分类保持不变（Issue #2499）。
+
 ## [3.4.156] - 2026-11-23
 
 ### Fixed

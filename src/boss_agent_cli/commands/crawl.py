@@ -47,6 +47,7 @@ from boss_agent_cli.crawler.hooks import HookRegistrationError, verify_hook_prof
 from boss_agent_cli.crawler.transport import DrissionCrawlerSession, ensure_crawl_runtime
 from boss_agent_cli.services.install_extras import extras_install_hint, extras_requirement
 from boss_agent_cli.services.json_files import read_bytes_if_regular, write_json_atomic
+from boss_agent_cli.services.text_files import is_utf8_encodable
 from boss_agent_cli.display import (
 	auth_required_hints,
 	boss_command_for_ctx,
@@ -85,15 +86,33 @@ def _run_not_found_hints(ctx: click.Context) -> dict[str, list[str]]:
 
 
 def _require_run_id(ctx: click.Context, command: str, run_id: str) -> bool:
-	"""空 run_id 是 argv 少传了值，不是「任务不存在」。
+	"""空 run_id 与不可编码文本都是 argv 问题，不是「任务不存在」。
 
 	``--data-dir`` 拼错、复制命令时漏掉最后一个词都会落到这里。原样查缓存会报
 	``CRAWL_RUN_NOT_FOUND``「未找到 crawl run: 」（冒号后面什么都没有），Agent 会
 	以为任务丢了而重建；``crawl resume ""`` 更先撞上登录校验，报 ``AUTH_REQUIRED``，
 	把参数写错的人送去重新登录。
+
+	argv 里的非法 UTF-8 字节经 surrogateescape 成为孤立代理项，绑定 sqlite 时
+	抛 ``UnicodeEncodeError``，会被全局兜成「处理本地文本失败」的
+	``LOCAL_IO_ERROR`` 并给出磁盘恢复指引——实际是输入非法，重试与查磁盘都不会
+	改变结果（Issue #2499）。
 	"""
 	if run_id.strip():
-		return True
+		if is_utf8_encodable(run_id):
+			return True
+		handle_error_output(
+			ctx,
+			command,
+			code="INVALID_PARAM",
+			message="run_id 含有无法按 UTF-8 编码的字符（孤立代理项）；它不可能是 boss crawl 生成的 ID",
+			recovery_action=(
+				f"从 {boss_command_for_ctx(ctx, 'crawl status <run_id>', include_data_dir=True)} "
+				"输出的 run_id 重新复制后重试"
+			),
+			hints=_run_not_found_hints(ctx),
+		)
+		return False
 	handle_error_output(
 		ctx,
 		command,
