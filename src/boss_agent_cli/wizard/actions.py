@@ -41,7 +41,9 @@ from boss_agent_cli.crawler.service import (
 	CrawlSettings,
 	crawl_cdp_port,
 	crawl_chrome_path,
+	crawl_execution_lock,
 	crawl_int_setting,
+	crawl_run_awaiting_worker,
 	unused_local_port,
 )
 from boss_agent_cli.api.egress import EgressContradictionError
@@ -2139,25 +2141,51 @@ def _crawl_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapp
 		return _crawl_outcome_result(outcome, cache)
 
 
+def _crawl_run_finished_error(context: ActionContext, run_id: str, status: str | None) -> WorkflowActionError:
+	status_command = _hint_command(context, f"crawl status {shell_argument(run_id)}")
+	results_command = _hint_command(context, f"crawl results {shell_argument(run_id)}")
+	return WorkflowActionError(
+		"CRAWL_RUN_FINISHED",
+		f"crawl 任务已结束（{status}），停止请求没有生效",
+		recovery_action=f"用 {status_command} 查看最终状态，或 {results_command} 读取已采集结果；需要重新采集时新建 crawl 任务",
+		auto_retry=False,
+	)
+
+
 def _crawl_stop(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	run_id = _require_run_id(inputs)
+	settle_reason = None
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		run = cache.get_crawl_run(run_id)
 		if run is None:
 			raise WorkflowActionError("CRAWL_RUN_NOT_FOUND", f"未找到 crawl run: {run_id}")
-		# 与 `boss crawl stop` 同口径（Issue #1574 #1786）：终态任务上的停止请求
-		# 不会生效，继续报 stop_requested 会让调用方以为任务已被叫停。
+		# 与 `boss crawl stop` 同口径（Issue #1574 #1786 #2465）：终态任务上的
+		# 停止请求不会生效；记录仍是 queued / running 但执行锁空闲说明执行器已
+		# 退出，此时只写停止标记没人消费，必须按断点结算 stopped。
 		status = run["status"]
 		if status not in ("queued", "running"):
-			status_command = _hint_command(context, f"crawl status {shell_argument(run_id)}")
-			results_command = _hint_command(context, f"crawl results {shell_argument(run_id)}")
-			raise WorkflowActionError(
-				"CRAWL_RUN_FINISHED",
-				f"crawl 任务已结束（{status}），停止请求没有生效",
-				recovery_action=f"用 {status_command} 查看最终状态，或 {results_command} 读取已采集结果；需要重新采集时新建 crawl 任务",
-				auto_retry=False,
-			)
-		cache.request_crawl_stop(run_id)
+			raise _crawl_run_finished_error(context, run_id, status)
+		accepted = False
+		final_status: str | None = status
+		if crawl_run_awaiting_worker(run):
+			# 交接窗口内的 worker 可能正要取锁：只写停止标记，交给它消费。
+			accepted, final_status = cache.stop_active_crawl_run(run_id)
+		else:
+			with crawl_execution_lock(context.data_dir, run_id) as acquired:
+				if acquired:
+					# 持锁重读：另一执行器可能在首次读取后更新断点或安排新交接。
+					run = cache.get_crawl_run(run_id)
+					if run is not None and not crawl_run_awaiting_worker(run):
+						settle_reason = (
+							"executor exited before this stop request; resume to continue from the checkpoint"
+						)
+				accepted, final_status = cache.stop_active_crawl_run(run_id, settle_reason=settle_reason)
+	if not accepted:
+		if final_status is None:
+			raise WorkflowActionError("CRAWL_RUN_NOT_FOUND", f"未找到 crawl run: {run_id}")
+		raise _crawl_run_finished_error(context, run_id, final_status)
+	if settle_reason is not None:
+		return StepResult({"run_id": run_id, "status": "stopped", "stale_recovered": True})
 	return StepResult({"run_id": run_id, "status": "stop_requested"})
 
 

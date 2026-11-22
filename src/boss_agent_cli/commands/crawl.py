@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import math
 import subprocess
 import sys
-import time
 from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
@@ -32,6 +30,8 @@ from boss_agent_cli.crawler.service import (
 	crawl_execution_lock,
 	crawl_executor_active,
 	crawl_int_setting,
+	crawl_run_awaiting_worker as _awaiting_queued_worker,
+	tolerated_timestamp as _tolerated_timestamp,
 	unused_local_port,
 	validate_pages_override,
 )
@@ -733,50 +733,6 @@ def _run_service(
 		render=lambda d: render_record_result(d, title="crawl", next_steps=hints.get("next_actions", [])),
 		hints=hints,
 	)
-
-
-# worker 从被拉起到取得执行锁只需要解释器启动与一次本地读取；超过这段时间
-# 仍是 queued 且锁空闲，说明它没有活下来（Issue #1045）。
-_QUEUE_HANDOFF_GRACE_SECONDS = 30.0
-
-#: 交接新鲜度允许的未来偏斜（与 `cache/store.py` 的未来偏斜同口径）。
-#:
-#: 写入方用 `time.time()` 落 `updated_at`；轻微时钟偏斜仍应视为「刚排队」。
-#: 更远的有限未来值只可能是漂移（时钟快进后校正、手工写坏的库），必须按
-#: 排队已久处理，否则任务永远留在交接窗口里（Issue #2193）。
-_QUEUE_FUTURE_SKEW_SECONDS = 60.0
-
-
-def _tolerated_timestamp(value: Any) -> float:
-	"""本地记录时间戳的容错读取：漂移值按 0 参与调度（与 Issue #1192 同口径）。
-
-	`get_crawl_run` 故意不校验 `created_at` / `updated_at`，消费方必须自行降级；
-	纯本地元数据问题不能拦停恢复，更不能被兜成可重试的 NETWORK_ERROR（Issue #1206）。
-	`inf` / `nan` 同样按 0：`time.time() - inf` 是 `-inf`，小于交接窗口，会让
-	queued 任务被永远当成「刚排队」，后台恢复返回成功却不启动 worker（Issue #1349）；
-	超大整数在 `float()` 抛 `OverflowError`，也不能逃成 INTERNAL_ERROR。
-	"""
-	try:
-		parsed = float(value or 0.0)
-	except (TypeError, ValueError, OverflowError):
-		return 0.0
-	return parsed if math.isfinite(parsed) else 0.0
-
-
-def _awaiting_queued_worker(run: dict[str, Any]) -> bool:
-	"""任务刚排队：原 worker 可能正要取锁，父进程不探测、不抢占。"""
-	if run["status"] != "queued":
-		return False
-	# 时钟回拨得到负值时按仍在窗口内处理，宁可多等也不抢；时间戳类型漂移
-	# 无法判断新鲜度，按「排队已久」去探测锁，不能让父进程 traceback（Issue #1192）。
-	now = time.time()
-	updated = _tolerated_timestamp(run["updated_at"])
-	# 有限但远在未来的值是漂移：减法得到巨大负数，任务会被永远当成刚排队，
-	# 后台恢复不拉起 worker、status 也不报 queue_overdue（与 Issue #1349 的
-	# inf/nan 同一失败模式）。超过允许偏斜的按排队已久去探测执行锁。
-	if updated > now + _QUEUE_FUTURE_SKEW_SECONDS:
-		return False
-	return now - updated < _QUEUE_HANDOFF_GRACE_SECONDS
 
 
 class CrawlHandoffPending(RuntimeError):

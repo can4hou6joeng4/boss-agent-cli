@@ -18,7 +18,7 @@ from click.testing import CliRunner
 
 from boss_agent_cli.ai.config import AIConfigStore
 from boss_agent_cli.cache.store import CacheStore
-from boss_agent_cli.crawler.service import CrawlOutcome, CrawlSettings
+from boss_agent_cli.crawler.service import CrawlOutcome, CrawlSettings, crawl_execution_lock
 from boss_agent_cli.resume.models import ResumeData
 from boss_agent_cli.resume.store import ResumeStore
 from boss_agent_cli.search_filters import resolve_welfare_keywords
@@ -775,9 +775,13 @@ def test_crawl_actions_use_fixture_service_and_persist_stop(tmp_path, monkeypatc
 		("crawl-existing", {"pages": 4, "with_detail": True, "clear_stop": True}),
 	]
 	stopped = DEFAULT_ACTIONS["crawl_stop"](context, {"run_id": "crawl-existing"}, {})
-	assert stopped.data == {"run_id": "crawl-existing", "status": "stop_requested"}
+	# 这个 run 只由测试直接落库，没有执行器持锁：按 Issue #2465 口径结算为
+	# stopped，而不是写一条没人消费的停止标记。
+	assert stopped.data == {"run_id": "crawl-existing", "status": "stopped", "stale_recovered": True}
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
-		assert cache.get_crawl_run("crawl-existing")["stop_requested"] is True
+		run = cache.get_crawl_run("crawl-existing")
+	assert run["stop_requested"] is True
+	assert run["status"] == "stopped"
 
 
 def test_crawl_action_honors_configured_zero_max_retries(tmp_path, monkeypatch):
@@ -5060,15 +5064,81 @@ def test_crawl_stop_action_rejects_finished_run(tmp_path, status):
 		assert cache.get_crawl_run("done-1")["stop_requested"] is False
 
 
-@pytest.mark.parametrize("status", ["queued", "running"])
-def test_crawl_stop_action_accepts_active_run(tmp_path, status):
+def test_crawl_stop_action_accepts_fresh_queued_run(tmp_path):
+	"""排队交接窗口内 worker 可能正要取锁：只写停止标记，交给它消费。"""
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
 		cache.create_crawl_run("live-1", {"query": "Python"}, str(tmp_path / "crawl" / "runs" / "live-1"))
-		cache.update_crawl_run("live-1", status=status, next_page=1)
+		cache.update_crawl_run("live-1", status="queued", next_page=1)
 	stopped = DEFAULT_ACTIONS["crawl_stop"](_action_context(tmp_path), {"run_id": "live-1"}, {})
 	assert stopped.data == {"run_id": "live-1", "status": "stop_requested"}
 	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
-		assert cache.get_crawl_run("live-1")["stop_requested"] is True
+		run = cache.get_crawl_run("live-1")
+	assert run["status"] == "queued"
+	assert run["stop_requested"] is True
+
+
+def test_crawl_stop_action_requests_stop_when_executor_holds_lock(tmp_path):
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.create_crawl_run("live-1", {"query": "Python"}, str(tmp_path / "crawl" / "runs" / "live-1"))
+	with crawl_execution_lock(tmp_path, "live-1") as acquired:
+		assert acquired
+		stopped = DEFAULT_ACTIONS["crawl_stop"](_action_context(tmp_path), {"run_id": "live-1"}, {})
+	assert stopped.data == {"run_id": "live-1", "status": "stop_requested"}
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		run = cache.get_crawl_run("live-1")
+	assert run["status"] == "running"
+	assert run["stop_requested"] is True
+
+
+def test_crawl_stop_action_settles_running_run_without_executor(tmp_path):
+	"""执行器已退出时不能写一条没人消费的停止标记并回报 stop_requested（Issue #2465）。"""
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.create_crawl_run("live-1", {"query": "Python"}, str(tmp_path / "crawl" / "runs" / "live-1"))
+	stopped = DEFAULT_ACTIONS["crawl_stop"](_action_context(tmp_path), {"run_id": "live-1"}, {})
+
+	assert stopped.data == {"run_id": "live-1", "status": "stopped", "stale_recovered": True}
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		run = cache.get_crawl_run("live-1")
+	assert run["status"] == "stopped"
+	assert run["stop_requested"] is True
+	assert "executor exited" in run["error"]
+
+
+def test_crawl_stop_action_settles_overdue_queued_run_without_worker(tmp_path):
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.create_crawl_run("live-1", {"query": "Python"}, str(tmp_path / "crawl" / "runs" / "live-1"))
+		cache.update_crawl_run("live-1", status="queued", next_page=1)
+		cache._conn.execute("UPDATE crawl_runs SET updated_at = updated_at - 120 WHERE run_id = 'live-1'")
+		cache._conn.commit()
+	stopped = DEFAULT_ACTIONS["crawl_stop"](_action_context(tmp_path), {"run_id": "live-1"}, {})
+
+	assert stopped.data == {"run_id": "live-1", "status": "stopped", "stale_recovered": True}
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		assert cache.get_crawl_run("live-1")["status"] == "stopped"
+
+
+def test_crawl_stop_action_reports_concurrent_completion(tmp_path, monkeypatch):
+	"""执行器在写停止标记前已写终态：回报真实状态，不报假成功。"""
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		cache.create_crawl_run("live-1", {"query": "Python"}, str(tmp_path / "crawl" / "runs" / "live-1"))
+	stop_active = CacheStore.stop_active_crawl_run
+
+	def finish_first(cache, run_id, **kwargs):
+		with CacheStore(tmp_path / "cache" / "boss_agent.db") as other:
+			other.update_crawl_run(run_id, status="completed", next_page=2)
+		return stop_active(cache, run_id, **kwargs)
+
+	monkeypatch.setattr(CacheStore, "stop_active_crawl_run", finish_first)
+
+	with pytest.raises(WorkflowActionError) as caught:
+		DEFAULT_ACTIONS["crawl_stop"](_action_context(tmp_path), {"run_id": "live-1"}, {})
+
+	assert caught.value.code == "CRAWL_RUN_FINISHED"
+	assert "completed" in str(caught.value)
+	with CacheStore(tmp_path / "cache" / "boss_agent.db") as cache:
+		run = cache.get_crawl_run("live-1")
+	assert run["status"] == "completed"
+	assert run["stop_requested"] is False
 
 
 def test_crawl_stop_action_missing_run_is_not_found(tmp_path):
