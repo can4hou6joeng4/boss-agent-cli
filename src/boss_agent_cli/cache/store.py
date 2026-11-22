@@ -238,13 +238,19 @@ def _shortlist_display_text(value: Any) -> str:
 	return sanitize_surrogates(value if isinstance(value, str) else str(value or ""))
 
 
-def _resume_name_key(name: str) -> str | bytes:
-	"""按原值绑定简历名；不可编码的文件名用 BLOB 区分（Issue #2503）。"""
+def _text_key(value: str) -> str | bytes:
+	"""按原值绑定可作唯一键的文本；不可编码时用 BLOB 区分（Issue #2503、#2509）。
+
+	简历名来自文件系统、职位标识来自平台 JSON：两者都可能带孤立代理项。把原值
+	转义成文本会与合法字面标识碰撞（例如 ``\\ud800`` 转义后撞上同文本的职位），
+	所以不可编码时改绑定 ``surrogatepass`` 字节串——可逆、与所有 TEXT 行不相等，
+	普通文本仍按 TEXT 绑定，存量记录不受影响。
+	"""
 	try:
-		name.encode("utf-8")
+		value.encode("utf-8")
 	except UnicodeEncodeError:
-		return name.encode("utf-8", errors="surrogatepass")
-	return name
+		return value.encode("utf-8", errors="surrogatepass")
+	return value
 
 
 def saved_search_name_error(name: str) -> str | None:
@@ -1631,12 +1637,12 @@ class CacheStore:
 		if account and job_id:
 			row = self._conn.execute(
 				"SELECT 1 FROM greet_records WHERE account = ? AND job_id = ?",
-				(account, job_id),
+				(_text_key(account), _text_key(job_id)),
 			).fetchone()
 		elif security_id:
 			row = self._conn.execute(
 				"SELECT 1 FROM greet_records WHERE security_id = ?",
-				(security_id,),
+				(_text_key(security_id),),
 			).fetchone()
 		else:
 			return False
@@ -1649,15 +1655,17 @@ class CacheStore:
 		进程退出或响应丢失时保留 pending，禁止自动再次发送。
 		"""
 		with self._conn:
+			geek_key = _text_key(geek_id)
+			job_key = _text_key(job_id)
 			cursor = self._conn.execute(
 				"INSERT OR IGNORE INTO recruiter_greet_records VALUES (?, ?, ?, ?)",
-				(geek_id, job_id, "pending", time.time()),
+				(geek_key, job_key, "pending", time.time()),
 			)
 			if cursor.rowcount:
 				return None
 			row = self._conn.execute(
 				"SELECT status FROM recruiter_greet_records WHERE geek_id = ? AND job_id = ?",
-				(geek_id, job_id),
+				(geek_key, job_key),
 			).fetchone()
 			return str(row[0])
 
@@ -1671,7 +1679,7 @@ class CacheStore:
 		with self._conn:
 			cursor = self._conn.execute(
 				"UPDATE recruiter_greet_records SET status = ?, updated_at = ? WHERE geek_id = ? AND job_id = ?",
-				(status, time.time(), geek_id, job_id),
+				(status, time.time(), _text_key(geek_id), _text_key(job_id)),
 			)
 			if cursor.rowcount != 1:
 				raise sqlite3.OperationalError("招聘者招呼记录不存在，无法标记发送结果")
@@ -1713,7 +1721,7 @@ class CacheStore:
 			cursor = self._conn.execute(
 				"UPDATE recruiter_location_records SET status = 'sent', job_id = ?, name = '', updated_at = ? "
 				"WHERE friend_id = ?",
-				(job_id, time.time(), str(friend_id)),
+				(_text_key(job_id), time.time(), str(friend_id)),
 			)
 			if cursor.rowcount != 1:
 				raise sqlite3.OperationalError("工作地点发送记录不存在，无法标记为已发送")
@@ -1736,21 +1744,34 @@ class CacheStore:
 		with self._conn:
 			cursor = self._conn.execute(
 				"DELETE FROM recruiter_greet_records WHERE geek_id = ? AND job_id = ? AND status = 'pending'",
-				(geek_id, job_id),
+				(_text_key(geek_id), _text_key(job_id)),
 			)
 			return bool(cursor.rowcount)
 
 	def get_job_id(self, security_id: str) -> str | None:
 		row = self._conn.execute(
 			"SELECT job_id FROM greet_records WHERE security_id = ? ORDER BY greeted_at DESC LIMIT 1",
-			(security_id,),
+			(_text_key(security_id),),
 		).fetchone()
-		return row[0] if row else None
+		if row is None:
+			return None
+		# 不可编码的 job_id 以 BLOB 落库（Issue #2509），按原值还原；其它漂移
+		# BLOB（无效 UTF-8）与类型漂移一样按「没有可用的 job_id」处理
+		# （与 get_job_desc 同口径，Issue #1815）。
+		raw = row[0]
+		if isinstance(raw, str):
+			return raw
+		if isinstance(raw, (bytes, bytearray)):
+			try:
+				return bytes(raw).decode("utf-8", errors="surrogatepass")
+			except UnicodeDecodeError:
+				return None
+		return None
 
 	def record_greet(self, security_id: str, job_id: str, *, account: str = "") -> None:
 		self._conn.execute(
 			"INSERT OR REPLACE INTO greet_records (account, job_id, security_id, greeted_at) VALUES (?, ?, ?, ?)",
-			(account, job_id, security_id, time.time()),
+			(_text_key(account), _text_key(job_id), _text_key(security_id), time.time()),
 		)
 		self._conn.commit()
 
@@ -1797,14 +1818,15 @@ class CacheStore:
 		"""
 		if not isinstance(job_id, str) or not job_id:
 			return None
+		job_key = _text_key(job_id)
 		row = self._conn.execute(
 			"SELECT description, created_at FROM job_desc_cache WHERE job_id = ?",
-			(job_id,),
+			(job_key,),
 		).fetchone()
 		if row is None:
 			return None
 		if _cache_entry_expired(row[1], self._search_ttl):
-			self._conn.execute("DELETE FROM job_desc_cache WHERE job_id = ?", (job_id,))
+			self._conn.execute("DELETE FROM job_desc_cache WHERE job_id = ?", (job_key,))
 			self._conn.commit()
 			return None
 		raw = row[0]
@@ -1820,13 +1842,15 @@ class CacheStore:
 	def put_job_desc(self, job_id: str, description: str) -> None:
 		"""缓存非空职位描述，超过容量时淘汰保存时间最早的条目。
 
-		非字符串键 / 描述同样按「没有可缓存内容」跳过（Issue #1890）。
+		非字符串键 / 描述同样按「没有可缓存内容」跳过（Issue #1890）。平台文本里的
+		孤立代理项无法绑定进 SQLite TEXT：描述按展示口径转义，职位标识走可逆
+		BLOB 键，一个漂移字段不再拖垮整条 ``--welfare`` 管线（Issue #2509）。
 		"""
 		if not isinstance(job_id, str) or not job_id or not isinstance(description, str) or not description:
 			return
 		self._conn.execute(
 			"INSERT OR REPLACE INTO job_desc_cache (job_id, description, created_at) VALUES (?, ?, ?)",
-			(job_id, description, time.time()),
+			(_text_key(job_id), sanitize_surrogates(description), time.time()),
 		)
 		self._conn.commit()
 		self._evict_old_job_desc_cache()
@@ -2015,18 +2039,18 @@ class CacheStore:
 		if account and job_id:
 			row = self._conn.execute(
 				"SELECT 1 FROM apply_records WHERE account = ? AND job_id = ?",
-				(account, job_id),
+				(_text_key(account), _text_key(job_id)),
 			).fetchone()
 		elif security_id and job_id:
 			# 没有账号作用域时保留旧语义：(security_id, job_id) 组合命中
 			row = self._conn.execute(
 				"SELECT 1 FROM apply_records WHERE security_id = ? AND job_id = ?",
-				(security_id, job_id),
+				(_text_key(security_id), _text_key(job_id)),
 			).fetchone()
 		elif security_id:
 			row = self._conn.execute(
 				"SELECT 1 FROM apply_records WHERE security_id = ?",
-				(security_id,),
+				(_text_key(security_id),),
 			).fetchone()
 		else:
 			row = None
@@ -2035,7 +2059,7 @@ class CacheStore:
 	def record_apply(self, security_id: str, job_id: str, *, account: str = "") -> None:
 		self._conn.execute(
 			"INSERT OR REPLACE INTO apply_records (account, job_id, security_id, applied_at) VALUES (?, ?, ?, ?)",
-			(account, job_id, security_id, time.time()),
+			(_text_key(account), _text_key(job_id), _text_key(security_id), time.time()),
 		)
 		self._conn.commit()
 
@@ -2078,13 +2102,13 @@ class CacheStore:
 				"INSERT OR IGNORE INTO candidate_action_claims "
 				"(account, job_id, action, security_id, status, updated_at) "
 				"VALUES (?, ?, ?, ?, 'pending', ?)",
-				(account, job_id, action, security_id, time.time()),
+				(_text_key(account), _text_key(job_id), action, _text_key(security_id), time.time()),
 			)
 			if cursor.rowcount:
 				return None
 			row = self._conn.execute(
 				"SELECT status FROM candidate_action_claims WHERE account = ? AND job_id = ? AND action = ?",
-				(account, job_id, action),
+				(_text_key(account), _text_key(job_id), action),
 			).fetchone()
 		# 冲突行只可能来自已提交的另一个进程；读不到时按 pending 保守处理。
 		return str(row[0]) if row is not None else "pending"
@@ -2107,7 +2131,7 @@ class CacheStore:
 				"VALUES (?, ?, ?, ?, 'sent', ?) "
 				"ON CONFLICT(account, job_id, action) DO UPDATE SET "
 				"security_id = excluded.security_id, status = 'sent', updated_at = excluded.updated_at",
-				(account, job_id, action, security_id, time.time()),
+				(_text_key(account), _text_key(job_id), action, _text_key(security_id), time.time()),
 			)
 
 	def release_candidate_action(
@@ -2120,14 +2144,14 @@ class CacheStore:
 			cursor = self._conn.execute(
 				"DELETE FROM candidate_action_claims "
 				"WHERE account = ? AND job_id = ? AND action = ? AND status = 'pending'",
-				(account, job_id, action),
+				(_text_key(account), _text_key(job_id), action),
 			)
 			return bool(cursor.rowcount)
 
 	def is_shortlisted(self, security_id: str, job_id: str) -> bool:
 		row = self._conn.execute(
 			"SELECT 1 FROM shortlist_records WHERE security_id = ? AND job_id = ?",
-			(security_id, job_id),
+			(_text_key(security_id), _text_key(job_id)),
 		).fetchone()
 		return row is not None
 
@@ -2404,7 +2428,7 @@ class CacheStore:
 		`job_id` 已有记录时，把该行迁到本次的新标识，而不是再插入一行 `prepared` 记录
 		（Issue #901）。
 		"""
-		resume_key = _resume_name_key(resume_name)
+		resume_key = _text_key(resume_name)
 		now = time.time()
 		with self._conn:
 			exact = self._conn.execute(
@@ -2447,7 +2471,7 @@ class CacheStore:
 		cursor = self._conn.execute(
 			"UPDATE resume_job_links SET status = ?, notes = ?, updated_at = ? "
 			"WHERE resume_name = ? AND security_id = ? AND job_id = ?",
-			(status, notes, now, _resume_name_key(resume_name), security_id, job_id),
+			(status, notes, now, _text_key(resume_name), security_id, job_id),
 		)
 		self._conn.commit()
 		return cursor.rowcount > 0
@@ -2472,7 +2496,7 @@ class CacheStore:
 		rows = self._conn.execute(
 			"SELECT resume_name, security_id, job_id, job_title, company, status, notes, linked_at, updated_at "
 			"FROM resume_job_links WHERE resume_name = ? ORDER BY updated_at DESC",
-			(_resume_name_key(resume_name),),
+			(_text_key(resume_name),),
 		).fetchall()
 		return [self._resume_link_row_to_dict(row) for row in rows]
 
@@ -2489,7 +2513,7 @@ class CacheStore:
 		"""移除简历职位关联"""
 		cursor = self._conn.execute(
 			"DELETE FROM resume_job_links WHERE resume_name = ? AND security_id = ? AND job_id = ?",
-			(_resume_name_key(resume_name), security_id, job_id),
+			(_text_key(resume_name), security_id, job_id),
 		)
 		self._conn.commit()
 		return cursor.rowcount > 0
@@ -2502,7 +2526,7 @@ class CacheStore:
 		"""
 		cursor = self._conn.execute(
 			"DELETE FROM resume_job_links WHERE resume_name = ?",
-			(_resume_name_key(resume_name),),
+			(_text_key(resume_name),),
 		)
 		self._conn.commit()
 		return cursor.rowcount
