@@ -837,7 +837,10 @@ def _auth_status(context: ActionContext, inputs: Mapping[str, Any], prior: Mappi
 
 
 def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	_required_str(inputs, "query")
+	# 纯空白关键词与 CLI `search " "` / 向导 watch 同口径拒绝（Issue #1798、
+	# #2511、#2514）：`execute_candidate_search` 里 `_optional_str_strict(...) or ""`
+	# 会原样接受它，平台按「无关键词」返回推荐并向动作报成功。
+	_required_nonblank_str(inputs, "query")
 	account = account_scope(context.auth())
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		with context.candidate_platform() as platform:

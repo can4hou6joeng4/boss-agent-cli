@@ -384,7 +384,13 @@ def search_cmd(
 		# 显式参数优先，preset 只补未提供的项（schema 的 --preset 描述）：
 		# 这里必须用 `is not None` 而不是真值判断——显式空串（如 `--city ""`）
 		# 表示「该项不筛选」，不能被预设值反向覆盖（Issue #1569、#1573）。
-		query = query if query is not None else params.get("query")
+		preset_query = params.get("query")
+		# 存量记录里的空白关键词按缺失处理：否则它是真值，会挡住 --url 链接里的
+		# query，并把空白关键词发给平台（Issue #2513）。没有 --url 时下面按记录
+		# 失效明确拒绝，而不是报容易误导的「未提供 query」。
+		if isinstance(preset_query, str) and not preset_query.strip():
+			preset_query = None
+		query = query if query is not None else preset_query
 		city = city if city is not None else params.get("city")
 		salary = salary if salary is not None else params.get("salary")
 		experience = experience if experience is not None else params.get("experience")
@@ -414,6 +420,23 @@ def search_cmd(
 		raw_params.update(parsed_url.params)
 		if parsed_url.page is not None and page == 1:
 			page = parsed_url.page
+
+	# 预设里的空白关键词与 `watch run` 同口径拒绝（Issue #1798、#2511、#2513）：
+	# 命令行参数的空白关键词已在合并预设之前归一为 None，合并时空白预设值也
+	# 按缺失处理，所以 --url 链接里的 query 仍会生效。没有 --url 时若最终仍无
+	# 关键词，按记录失效明确拒绝，而不是把真值的 `"   "` 发给平台。
+	if preset and not search_url and not (query or "").strip():
+		handle_error_output(
+			ctx,
+			"search",
+			code="SAVED_SEARCH_INVALID",
+			message=f"预设 '{preset}' 的参数已失效：关键词不能为空（缺失或为空值）",
+			hints={"next_actions": [
+				_hint_command(ctx, f"preset remove {positional_hint(preset)}"),
+				_hint_command(ctx, f"preset add {positional_hint(preset)} <关键词>"),
+			]},
+		)
+		return
 
 	if not query and not search_url:
 		search_cmd = _hint_command(ctx, "search <关键词>")
