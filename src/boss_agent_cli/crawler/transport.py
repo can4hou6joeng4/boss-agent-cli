@@ -207,6 +207,12 @@ class DrissionCrawlerSession:
 		self._attempt_callback: Callable[[str], ContextManager[None]] | None = None
 		self._cooldown_callback: Callable[[float], None] | None = None
 
+	def minimum_list_requests(self, page_no: int, *, before_open: bool = False) -> int:
+		"""计算列表导航和翻页所需的最少请求数，打开前也计入登录态初始化。"""
+		position = None if before_open else self._page_no
+		turns = page_no if position is None or page_no <= position else page_no - position
+		return turns + int(before_open and bool(self._seed_cookies))
+
 	def bind_attempts(
 		self, callback: Callable[[str], ContextManager[None]], cooldown: Callable[[float], None] | None = None
 	) -> None:

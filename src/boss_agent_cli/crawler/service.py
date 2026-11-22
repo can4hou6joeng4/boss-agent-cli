@@ -452,6 +452,16 @@ class CrawlRunBudget:
 		self.requests_attempted = requests_attempted
 		self.detail_requests_attempted = detail_requests_attempted
 
+	def check_list_request_capacity(self, transport: CrawlTransport, page_no: int, *, before_open: bool = False) -> None:
+		"""在多次导航开始前检查请求下限，实际请求仍逐次认领预算。"""
+		minimum_list_requests = getattr(transport, "minimum_list_requests", None)
+		if not callable(minimum_list_requests):
+			return
+		required = minimum_list_requests(page_no, before_open=before_open)
+		remaining = max(0, self._settings.max_requests - self.requests_attempted)
+		if required > remaining:
+			raise CrawlLimitExceeded(f"到达采集断点第 {page_no} 页至少需要 {required} 次请求，剩余预算为 {remaining} 次")
+
 	def claim_request(self, kind: str) -> None:
 		self.check_time()
 		if self.requests_attempted >= self._settings.max_requests:
@@ -819,6 +829,9 @@ class CrawlService:
 			# 照常继续（Issue #1771）。放在 try 内，任何失败都由 finally 写回终态。
 			self._cache.mark_crawl_run_active(run_id, "running")
 			self._raise_if_stop_requested(run_id)
+			if not list_finished and 1 < next_page <= settings.pages:
+				# 深层断点的导航本身就可能超过剩余预算，先检查再打开浏览器（Issue #2463）。
+				run_budget.check_list_request_capacity(transport, next_page, before_open=True)
 			hooks = tuple(transport.open())
 			hooks_recorded = True
 			self._raise_if_stop_requested(run_id)
@@ -1216,6 +1229,9 @@ class CrawlService:
 		page_no: int,
 	) -> dict[str, Any]:
 		self._raise_if_stop_requested(run_id)
+		if page_no > 1:
+			# 详情补取和前一次导航失败都可能改变可用预算。
+			run_budget.check_list_request_capacity(transport, page_no)
 		window = (
 			nullcontext()
 			if callable(getattr(transport, "bind_attempts", None))

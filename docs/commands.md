@@ -161,6 +161,8 @@ boss crawl stop <run_id>
 
 每页完成后更新 `<data-dir>/crawl/runs/<run_id>/jobs.json`、`jobs.csv` 和带筛选/冻结首行的 `jobs.xlsx`。XLSX 保留完整值但所有数据行固定为单行和统一行高，长内容仅在表格中截断显示。JSON/CSV/XLSX 不包含 `security_id`、职位 ID、selector、招聘者姓名或职位；`crawl results` 同样不暴露平台标识与招聘者信息，但会返回供本地导入使用的 selector。真实平台标识保留在受限本地 SQLite 状态，`boss clean --privacy` 会删除 crawl 运行、预算和导出。风险码 `31` / `32` / `35` / `36` / `37`、code `38` 的身份资料流程、安全页、职位列表容器异常、预算耗尽或 stop 请求都会保存断点并停止；code `38` 不等同于验证码。stdout 始终只输出 JSON 信封和恢复命令。
 
+恢复到第 2 页或更深的断点时，采集会在打开浏览器前比较到达该页所需的最低请求数与任务的剩余预算。如果预算不足，返回 `budget_stopped` 并记录目标页和请求数。可用 `crawl results <run_id>` 读取已有数据。实际发送的导航和翻页请求仍逐次计入预算。
+
 ## 求职动作
 
 | 命令 | 说明 |
