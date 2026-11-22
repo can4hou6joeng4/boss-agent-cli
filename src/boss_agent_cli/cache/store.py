@@ -1090,6 +1090,25 @@ class CacheStore:
 		self._conn.commit()
 		return cursor.rowcount > 0
 
+	def stop_active_crawl_run(self, run_id: str, *, settle_reason: str | None = None) -> tuple[bool, str | None]:
+		"""停止活跃任务。调用方持有执行锁时可一并写入终态和原因。"""
+		assignments = "stop_requested = 1, updated_at = ?"
+		values: list[Any] = [time.time()]
+		if settle_reason is not None:
+			assignments += ", status = 'stopped', error = ?"
+			values.append(settle_reason)
+		cursor = self._conn.execute(
+			f"UPDATE crawl_runs SET {assignments} WHERE run_id = ? AND status IN ('queued', 'running')",
+			[*values, run_id],
+		)
+		if cursor.rowcount:
+			self._conn.commit()
+			return True, None
+		# 在同一事务读取失败原因，避免并发恢复改变本次更新所见的状态。
+		row = self._conn.execute("SELECT status FROM crawl_runs WHERE run_id = ?", (run_id,)).fetchone()
+		self._conn.commit()
+		return False, _decode_text_column("crawl_run", run_id, "status", row[0]) if row is not None else None
+
 	def clear_crawl_stop_request(self, run_id: str) -> None:
 		self._conn.execute(
 			"UPDATE crawl_runs SET stop_requested = 0, updated_at = ? WHERE run_id = ?",
