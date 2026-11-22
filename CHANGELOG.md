@@ -9,6 +9,7 @@
 - 采集附着已有调试端口前核对浏览器归属：配置目录 `SingletonLock` 记录的 Chrome 主进程 pid 必须与 CDP 报告的浏览器进程一致，Windows 没有该锁时退回读进程命令行的 `--user-data-dir`；确认不了归属（如端口被日常 Chrome 占用）时按 `CRAWL_PROFILE_BUSY` 停止，不注入 boss login 的 Cookie、不注册 Hook，也不退出对方的浏览器。同一配置目录的打开流程增加跨进程锁（Issue #2464）。
 - 向导与 MCP 的 `crawl_status` 步骤与 `boss crawl status` 同口径：用同一次任务行读取回报 `executor_active`，`running` 无执行器时标记 `running_stale`、`queued` 超出交接窗口时标记 `queue_overdue`，并在步骤指引里给出 `crawl resume <run_id> --background`（Issue #2479）。
 - `crawl status` 在 queued / running 时回报待处理的 `stop_requested`；执行器已退出但停止请求还没被消费时，下一步建议 `crawl stop` 按断点结算，不再建议会先清除标记的 `crawl resume --background`。向导与 MCP 的 `crawl_status` 步骤同口径（Issue #2482）。
+- 本地断点里可空的 JSON 列（`workflow_steps.error` / `result`、`workflow_runs.error` / `last_result`）只在 SQL NULL 时视为缺失：空串 / 空 BLOB / 空数组 / 数字漂移一律按记录损坏处理。写请求发出后标记漂移成空值时，恢复按结果未知 fail-closed（`replay_safe: false`），不再重放可能已生效的写操作（Issue #2484）。
 
 ## [3.4.153] - 2026-11-23
 
