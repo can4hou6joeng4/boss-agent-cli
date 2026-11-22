@@ -104,5 +104,5 @@ def test_wait_for_packet_skips_when_listener_not_ready(tmp_path: Any) -> None:
 	session = _session(tmp_path, _Page(listener))
 	session._start_joblist_listener()
 
-	assert session._wait_for_joblist_packet(1) is None
+	assert session._wait_for_joblist_packet(1, query="AI", city_code="101210100") is None
 	assert listener.wait_calls == 0
