@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 向导与 MCP 的 `crawl_stop` 步骤与 `boss crawl stop` 同口径：执行器已退出（执行锁空闲）时按断点结算 `stopped` 并回报 `stale_recovered`，不再写一条没人消费的停止标记后报 `stop_requested`；写停止标记改为只对 queued / running 生效，执行器并发写下的终态会按 `CRAWL_RUN_FINISHED` 回报真实状态（Issue #2478）。
+
 ## [3.4.153] - 2026-11-23
 
 ### Fixed
