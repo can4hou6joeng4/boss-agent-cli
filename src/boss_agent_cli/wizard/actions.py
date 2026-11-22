@@ -1350,6 +1350,10 @@ def _candidate_export(context: ActionContext, inputs: Mapping[str, Any], prior: 
 
 	# 参数与路径必须在平台请求之前校验：非法 format 不能先翻完页才发现，
 	# `output` 指向目录也不能消耗一次受限请求（与命令层 `-o` 预检同口径）。
+	# 纯空白 query 与 CLI `export " "` / `candidate_search` 同口径拒绝：否则
+	# `execute_candidate_search` 的 ``or ""`` 会让平台按无关键词返回空泛结果，
+	# 导出文件照常生成并报成功（Issue #2519）。
+	_required_nonblank_str(inputs, "query")
 	include_private = _bool_input(inputs, "include_private")
 	fmt = str(inputs.get("format") or "json")
 	if fmt not in {"json", "csv"}:
