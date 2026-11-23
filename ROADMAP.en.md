@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.170 (2026-11-23): `chat --export` degrades individual unserializable contact fields with the same stack depth as the final write, so one malformed contact no longer fails the whole export with misleading disk guidance (Issue #2593).
+
 v3.4.169 (2026-11-23): a failed response-body decode on read requests is reported as a deterministic `INTERNAL_ERROR` instead of a retryable network error (Issue #2590).
 
 v3.4.168 (2026-11-23): when an in-flight action for a candidate has an unknown outcome, the append-only queue no longer dispatches another message for that candidate; pending actions stay unchanged for human verification (Issue #2586).
