@@ -446,6 +446,45 @@ def test_candidate_write_actions_persist_idempotence_records(tmp_path):
 	]
 
 
+@pytest.mark.parametrize("message", ["", "   ", "\t"])
+def test_candidate_greet_rejects_blank_message(tmp_path, message):
+	"""显式空白招呼语不能静默退回平台默认招呼（Issue #2623）。
+
+	顶层 `boss greet --message ""` 已在平台调用前报 `INVALID_PARAM`
+	（Issue #2603）；向导 / MCP 若把空串当「未提供」，Agent 会以为自定义
+	招呼已发出，实际发出的是平台默认招呼。
+	"""
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	with pytest.raises(WorkflowActionError) as exc_info:
+		DEFAULT_ACTIONS["candidate_greet"](
+			context,
+			{"security_id": "sec-9", "job_id": "job-9", "message": message},
+			{},
+		)
+
+	assert exc_info.value.code == "INVALID_PARAM"
+	assert "message" in str(exc_info.value)
+	assert platform.calls == []
+
+
+@pytest.mark.parametrize(
+	"inputs",
+	[
+		pytest.param({"security_id": "sec-9", "job_id": "job-9"}, id="omitted"),
+		pytest.param({"security_id": "sec-9", "job_id": "job-9", "message": None}, id="null"),
+	],
+)
+def test_candidate_greet_uses_default_message_only_when_omitted(tmp_path, inputs):
+	"""缺省 / null 才用平台默认招呼语（Issue #2623）。"""
+	platform = _FakeCandidatePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	assert DEFAULT_ACTIONS["candidate_greet"](context, inputs, {}).data["result"]["greeted"] is True
+	assert platform.calls == [("greet", "sec-9", "job-9", "")]
+
+
 def test_candidate_write_actions_mark_local_state_failure_as_not_retryable(tmp_path, monkeypatch):
 	"""平台确认成功、本地记账失败时不能回成可重试的 NETWORK_ERROR。"""
 	platform = _FakeCandidatePlatform()

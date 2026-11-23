@@ -435,13 +435,20 @@ def _optional_str_strict(inputs: Mapping[str, Any], name: str) -> str | None:
 	return raw
 
 
-def _optional_nonblank_str(inputs: Mapping[str, Any], name: str) -> str | None:
-	"""读取可选的招聘者筛选项：缺省 / null 为空，显式空白按参数错误拒绝。
+def _optional_nonblank_str(
+	inputs: Mapping[str, Any],
+	name: str,
+	*,
+	recovery_action: str | None = None,
+) -> str | None:
+	"""读取可选的非空白字符串：缺省 / null 为空，显式空白按参数错误拒绝。
 
 	顶层 `hr candidates` / `hr applications` / `hr chat` / `hr last-messages`
 	已在平台调用前拒绝显式空筛选项（Issue #2600）；向导入口若把空串归一成
 	``None``，同一条件会静默按「不筛选」执行，Agent 会以为过滤已生效
-	（Issue #2618）。非空白值原样透传，不 strip。
+	（Issue #2618）。同样的口径适用于自由文本字段：`boss greet --message ""`
+	会报参数错误，向导 / MCP 不能静默退回默认招呼语（Issue #2623）。
+	非空白值原样透传，不 strip。
 	"""
 	raw = _optional_str_strict(inputs, name)
 	if raw is None:
@@ -451,7 +458,8 @@ def _optional_nonblank_str(inputs: Mapping[str, Any], name: str) -> str | None:
 			"INVALID_PARAM",
 			f"wizard 输入 {name} 不能只有空白字符",
 			recoverable=True,
-			recovery_action=f"在 inputs 中补上有效的 {name} 后重试；不按该条件筛选时省略该字段",
+			recovery_action=recovery_action
+			or f"在 inputs 中补上有效的 {name} 后重试；不按该条件筛选时省略该字段",
 		)
 	return raw
 
@@ -1060,8 +1068,17 @@ def _candidate_greet(context: ActionContext, inputs: Mapping[str, Any], prior: M
 	security_id = _required_nonblank_str(inputs, "security_id")
 	job_id = _required_nonblank_str(inputs, "job_id")
 	# message 可选，但类型必须严格：0 / false 经 ``or ""`` 会静默变成平台默认
-	# 招呼，容器会被 str() 成 repr 发给真人（Issue #1906）。
-	message = _optional_str_strict(inputs, "message") or ""
+	# 招呼，容器会被 str() 成 repr 发给真人（Issue #1906）。显式空白同样不能
+	# 退化成默认招呼：顶层 `boss greet --message ""` 已报参数错误
+	# （Issue #2603），向导 / MCP 必须同口径（Issue #2623）。
+	message = (
+		_optional_nonblank_str(
+			inputs,
+			"message",
+			recovery_action="省略 message 使用默认招呼语，或传入非空内容后重试",
+		)
+		or ""
+	)
 	account = account_scope(context.auth())
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		if cache.is_greeted(security_id, job_id=job_id, account=account):
