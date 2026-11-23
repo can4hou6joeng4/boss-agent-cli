@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.161] - 2026-11-23
+
 ### Fixed
 - 请求参数的编码失败不再被误报成本地磁盘问题：`httpx` 在构造 URL / 请求体时抛出的不可编码错误统一翻译成 `RequestTextEncodingError`，命令出口按 `INVALID_PARAM` 收口（此前是带「检查目录权限 / 磁盘空间」指引、不可重试的 `LOCAL_IO_ERROR`）。`detail` / `chatmsg` / `apply` / `greet` / `hr candidates` / `hr resume` / `hr jobs detail|online|offline` 在入口先拒绝不可编码的标识、关键词与消息文本，`detail` 与 `job_card` 不再为此白降级一次浏览器；单请求写操作把它认定为「确定未发出」并释放预约，修正参数后可立即重试（Issue #2533）。
 - `search` / `export` 的关键词与 `watch add` / `preset add` 的写入参数在入口校验 UTF-8 可编码性：argv 的孤立代理项按 `INVALID_PARAM` 拒绝，不再等到 `httpx` 组 URL 参数时被兜成带磁盘指引的 `LOCAL_IO_ERROR`。存量记录的可编码性纳入 `validate_stored_search_params`，`watch run` / `search --preset` 对坏记录报 `SAVED_SEARCH_INVALID` 并给删除重建指引，`watch run --all` 不再因一条坏记录中止整批；编码无效的预设关键词同样按预设失效处理（Issue #2528）。
