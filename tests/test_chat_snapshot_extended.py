@@ -492,6 +492,30 @@ def test_snapshot_diff_ignores_backup_json_in_directory(tmp_path):
 	assert [item["uid"] for item in result["removed"]] == [10001]
 
 
+@pytest.mark.parametrize("newer_is_directory", [True, False])
+def test_snapshot_diff_skips_directory_but_not_corrupt_file(tmp_path, newer_is_directory):
+	today = datetime.date.today()
+	baseline = (today - datetime.timedelta(days=2)).isoformat()
+	newer = (today - datetime.timedelta(days=1)).isoformat()
+	(tmp_path / f"{baseline}.json").write_text('[{"uid": 1}]', encoding="utf-8")
+	newer_path = tmp_path / f"{newer}.json"
+	if newer_is_directory:
+		newer_path.mkdir()
+	else:
+		newer_path.write_text("[", encoding="utf-8")
+
+	result = save_snapshot_and_diff(str(tmp_path), [{"uid": 1}, {"uid": 2}], _make_logger())
+
+	if newer_is_directory:
+		assert result["is_first"] is False
+		assert result["prev_date"] == baseline
+		assert [item["uid"] for item in result["added"]] == [2]
+	else:
+		# 最近的普通文件是真实观测的一部分，即使损坏也不静默改用更早基线。
+		assert result["is_first"] is True
+		assert result["added"] == []
+
+
 # ── 稳定标识：security_id 每请求轮换，主键必须是 uid ──────────────────
 
 

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from boss_agent_cli.api import cdp_risk_lock
-from boss_agent_cli.api.models import field_text
+from boss_agent_cli.api.models import field_text, safe_text
 from boss_agent_cli.api.client import PlatformRiskError
 from boss_agent_cli.api.request_budget import (
 	RequestBudget,
@@ -921,6 +921,16 @@ class CrawlService:
 					job_key, row = _normalize_job(raw, settings.query, current_page, rank)
 					existing = self._cache.get_crawl_job(run_id, job_key)
 					if existing is not None:
+						# 游标尚未推进时重抓同一页，需补全待处理行缺失的详情标识；
+						# 保留原始列表证据和已经完成的详情（Issue #2574）。
+						previous = existing["payload"]
+						if (
+							not existing["detail_done"]
+							and row["security_id"]
+							and not _detail_id(previous.get("security_id"))
+						):
+							previous["security_id"] = row["security_id"]
+							self._put_crawl_job(run_id, job_key, existing["page_no"], previous, detail_done=False)
 						continue
 					# 原始列表项必须先落库：详情的风险码或第二次超时不会丢失待补队列。
 					self._put_crawl_job(run_id, job_key, current_page, row, detail_done=False)
@@ -1199,7 +1209,7 @@ class CrawlService:
 				row["post_description"] = cached
 				row["detail_status"] = "cached"
 			else:
-				security_id = str(row.get("security_id", ""))
+				security_id = _detail_id(row.get("security_id"))
 				if not security_id:
 					# 列表项没有 securityId 时无法请求详情；保留 pending 让 resume
 					# 与 `crawl results --detail-status pending` 如实反映缺口，
@@ -1410,13 +1420,30 @@ class CrawlService:
 		self._validate_settings(settings)
 
 
+def _detail_id(value: Any) -> str:
+	"""详情标识必须是可发送的非空文本，不能把容器或空值变成请求参数。"""
+	if not isinstance(value, str) or not value.strip():
+		return ""
+	try:
+		value.encode("utf-8")
+	except UnicodeEncodeError:
+		return ""
+	return value
+
+
 def _normalize_job(raw: dict[str, Any], query: str, page_no: int, rank: int) -> tuple[str, dict[str, Any]]:
-	# 平台 JSON 可能出现孤立代理项（与 cache/store.py 的 watch 路径同源）：job_id
-	# 与兜底标题会作为 SQLite 参数绑定，严格 UTF-8 编码抛 UnicodeEncodeError 后
-	# 被 _run 的通用分支吞成 ok:true 的 stopped，任务永远无法推进（Issue #2350）。
-	# 与导出文本同口径归一为可编码的转义文本。
-	job_id = sanitize_surrogates(str(raw.get("encryptJobId") or ""))
-	security_id = sanitize_surrogates(str(raw.get("securityId") or ""))
+	# 不能把对象等异常值变成稳定身份，否则不同职位可能共用去重键（Issue #2574）。
+	raw_id = raw.get("encryptJobId")
+	if isinstance(raw_id, str):
+		job_id = raw_id if raw_id.strip() else ""
+	elif type(raw_id) is int and raw_id != 0:
+		job_id = safe_text(raw_id)
+	else:
+		job_id = ""
+	# 平台 JSON 可能出现孤立代理项；SQLite 绑定的去重键需保留可编码的形式
+	# （Issue #2350）。详情标识用于请求，不得发送改写过的值。
+	job_id = sanitize_surrogates(job_id)
+	security_id = _detail_id(raw.get("securityId"))
 	# securityId 每次搜索请求都会轮换（operations.import_shortlist 同样不拿它做
 	# 跨 run 去重）：页内崩溃后 resume 重抓同一页会拿到新值，用它当身份会让同一
 	# 职位以新键再插一行。无稳定 job_id 时按「页 + 名次 + 标题」兜底，它们在
