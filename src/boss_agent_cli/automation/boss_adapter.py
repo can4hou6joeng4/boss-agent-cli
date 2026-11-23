@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from boss_agent_cli.api.client import PlatformRiskError
+from boss_agent_cli.api.models import safe_text
 from boss_agent_cli.api.zhipin_errors import (
 	is_platform_success_code,
 	raise_platform_risk_response,
@@ -21,6 +22,9 @@ from boss_agent_cli.automation.models import (
 	PlatformAction,
 	PlatformHealth,
 )
+
+
+_INVALID_FRIEND_ID = "会话缺少有效的正整数 friend_id，未访问平台"
 
 
 class BossRecruiterPlatformLike(Protocol):
@@ -124,9 +128,8 @@ class BossRecruiterAutomationPlatform:
 		recruiter = self._recruiter
 		if recruiter is None:
 			return Conversation(title=ref.id, fingerprint=ConversationFingerprint(ref.id))
-		try:
-			gid = int(ref.id)
-		except ValueError:
+		gid = _friend_id(ref.id)
+		if gid is None:
 			return Conversation(title=ref.id, fingerprint=ConversationFingerprint(ref.id))
 		return _conversation_from_history(ref.id, self._checked_response(lambda: recruiter.chat_history(gid)))
 
@@ -140,7 +143,11 @@ class BossRecruiterAutomationPlatform:
 		if recruiter is None:
 			return ActionResult("blocked", {"reason": self._warning})
 		self._ensure_not_risk_stopped()
+		if action is PlatformAction.CREATE_INTERVIEW_LEAD:
+			return ActionResult("executed", {"local_only": True})
 		friend_id = _friend_id(ref.id)
+		if friend_id is None:
+			return ActionResult("blocked", {"reason": _INVALID_FRIEND_ID})
 		match action:
 			case PlatformAction.SEND_QUESTIONNAIRE | PlatformAction.SEND_FOLLOW_UP:
 				result = self._checked_response(
@@ -150,8 +157,6 @@ class BossRecruiterAutomationPlatform:
 				result = self._checked_response(
 					lambda: recruiter.exchange_request_by_friend(friend_id, 2), require_success=False
 				)
-			case PlatformAction.CREATE_INTERVIEW_LEAD:
-				return ActionResult("executed", {"local_only": True})
 			case _:
 				return ActionResult("blocked", {"reason": f"unsupported action {action}"})
 		return _action_result(result)
@@ -204,9 +209,23 @@ def _items_from_response(response: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _ref_from_item(item: dict[str, Any]) -> ConversationRef:
-	raw_id = item.get("friendId") or item.get("gid") or item.get("id") or item.get("uid")
-	title = str(item.get("name") or item.get("geekName") or raw_id or "candidate")
-	return ConversationRef(id=str(raw_id or title), tab="scan", reason=title)
+	for key in ("friendId", "gid", "id", "uid"):
+		raw_id = item.get(key)
+		# null / 空串 / 0 是「这个字段没填」，沿用原先按顺序回退的口径；
+		# 非空但不合法的标识会直接停下，见下方 break。
+		if raw_id is None or raw_id == "" or raw_id == 0:
+			continue
+		friend_id = _friend_id(raw_id)
+		if friend_id is not None:
+			# 保留已有字符串身份，避免改变历史队列与会话状态的匹配键。
+			ref_id = str(raw_id)
+			name = item.get("name") or item.get("geekName")
+			title = name if isinstance(name, str) else ref_id
+			return ConversationRef(id=ref_id, tab="scan", reason=title)
+		# 主要标识存在但不可信：不能改用可能属于别的空间的低优先级标识。
+		break
+	# 展示名不是会话地址；无效条目只出诊断，不进入读取或写入路径（Issue #2580）。
+	return _diagnostic_ref("zhipin-invalid-friend-id", _INVALID_FRIEND_ID)
 
 
 def _conversation_from_history(ref_id: str, response: dict[str, Any]) -> Conversation:
@@ -231,11 +250,16 @@ def _conversation_from_history(ref_id: str, response: dict[str, Any]) -> Convers
 	)
 
 
-def _friend_id(value: str) -> int:
+def _friend_id(value: Any) -> int | None:
+	if type(value) is int:
+		return value if value > 0 and safe_text(value) else None
+	if not isinstance(value, str) or not value.isascii() or not value.isdecimal():
+		return None
 	try:
-		return int(value)
+		parsed = int(value)
 	except ValueError:
-		return 0
+		return None
+	return parsed if parsed > 0 and safe_text(parsed) else None
 
 
 def _action_result(response: dict[str, Any]) -> ActionResult:
