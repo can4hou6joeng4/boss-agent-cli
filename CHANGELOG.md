@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.172] - 2026-11-23
+
 ### Fixed
 - `batch-greet` 对显式传空的 `--city` / `--salary` / `--experience` / `--education` 按 `INVALID_PARAM` 拒绝，不再在未限定筛选范围的结果上批量发出招呼；空值判定从招聘者命令下沉到公共 CLI 参数守卫（Issue #2602）。
 - `greet --message ""` 不再退化为默认招呼语：自定义正文选项改为区分缺省与显式空值，空串与纯空白都在任何平台调用前拒绝，省略选项仍发送默认正文（Issue #2603）。

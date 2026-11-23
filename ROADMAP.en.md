@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.172 (2026-11-23): blank `batch-greet` filters and a blank `greet --message` are rejected before any platform call instead of greeting an unbounded result set or silently sending the default text; `agent crawl` reports a blank city accurately (Issues #2602 / #2603 / #2604).
+
 v3.4.171 (2026-11-23): recruiter write requests that provably never left the machine release local reservations and retry as network errors, precheck failures on resume acceptance use the read-only error contract, and explicitly blank filters are rejected instead of silently widening results (Issues #2596 / #2597 / #2598).
 
 v3.4.170 (2026-11-23): `chat --export` degrades individual unserializable contact fields with the same stack depth as the final write, so one malformed contact no longer fails the whole export with misleading disk guidance (Issue #2593).
