@@ -173,6 +173,8 @@ def candidate_action_provably_unsent(exc: BaseException) -> bool:
 	- ``AuthRequired`` / ``TokenRefreshFailed``：建立浏览器会话时取登录态失败；
 	- ``ProxyConfigurationError``：通道启动前解析代理环境变量失败；
 	- ``BrowserNavigationError``：首页导航在本次 fetch 之前失败；
+	- ``RequestTextEncodingError``：请求参数在编码阶段就失败（孤立代理项等），
+	  一个字节都没有发出（Issue #2533）；
 	- Playwright 内核缺失（普通 ``OSError`` / ``RuntimeError``，按文本识别）。
 
 	不释放预约会让该职位被 pending 永久挡住：没有 TTL，也没有清理命令
@@ -184,12 +186,16 @@ def candidate_action_provably_unsent(exc: BaseException) -> bool:
 	if was_provably_unsent(exc):
 		return True
 
+	from boss_agent_cli.api._base_client import RequestTextEncodingError
 	from boss_agent_cli.api.browser_client import BrowserNavigationError
 	from boss_agent_cli.api.proxy import ProxyConfigurationError
 	from boss_agent_cli.auth.manager import AuthRequired, TokenRefreshFailed
 	from boss_agent_cli.services.browser_runtime import is_browser_kernel_missing
 
-	if isinstance(exc, (AuthRequired, TokenRefreshFailed, ProxyConfigurationError, BrowserNavigationError)):
+	if isinstance(
+		exc,
+		(AuthRequired, TokenRefreshFailed, ProxyConfigurationError, BrowserNavigationError, RequestTextEncodingError),
+	):
 		return True
 	try:
 		text = str(exc)

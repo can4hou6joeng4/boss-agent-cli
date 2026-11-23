@@ -4,6 +4,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
+from boss_agent_cli.commands._text_guard import reject_unencodable_params
 from boss_agent_cli.services.resume_parser import parse_resume
 from boss_agent_cli.commands.recruiter._hints import hint_command
 from boss_agent_cli.display import handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output
@@ -28,6 +29,13 @@ def resume_cmd(ctx: click.Context, geek_id: str | None, job_id: str, security_id
 	--job-id 使用 encryptJobId（请求参数 encryptJid）。
 	"""
 	if not require_compliance_allowed(ctx, "recruiter-resume"):
+		return
+
+	# view_geek 把这些标识原样拼进 httpx 查询参数：不可编码的字符会在发送
+	# 阶段失败，入口先按参数错误拒绝（Issue #2533）。
+	if reject_unencodable_params(
+		ctx, "recruiter-resume", geek_id=geek_id, job_id=job_id, security_id=security_id
+	):
 		return
 
 	data_dir = ctx.obj["data_dir"]

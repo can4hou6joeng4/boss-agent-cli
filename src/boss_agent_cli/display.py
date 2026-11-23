@@ -22,7 +22,7 @@ from rich.segment import Segment
 from rich.table import Table
 from rich.text import Text
 
-from boss_agent_cli.api._base_client import PlatformResponseInvalid
+from boss_agent_cli.api._base_client import PlatformResponseInvalid, RequestTextEncodingError
 from boss_agent_cli.cache.store import (
 	CacheBusyError,
 	CacheDatabaseInvalid,
@@ -1725,6 +1725,23 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 				# 兜成 NETWORK_ERROR +「重试」让 Agent 反复打平台。
 				if is_browser_kernel_missing(str(e)):
 					handle_browser_kernel_missing(ctx, command_name, e)
+					return
+				# 请求参数在 httpx 编码阶段失败（孤立代理项等）是输入问题：
+				# 请求确定未发出，不能给磁盘 / 权限指引，也不能建议无脑重试
+				# （Issue #2533）。
+				if isinstance(e, RequestTextEncodingError):
+					encoding_recoverable, _encoding_recovery = error_contract_for_code("INVALID_PARAM")
+					handle_error_output(
+						ctx,
+						command_name,
+						code="INVALID_PARAM",
+						message=f"{command_name} 请求参数含有无法按 UTF-8 编码的字符（如孤立代理项），请求未发出",
+						recoverable=encoding_recoverable,
+						recovery_action=(
+							"检查命令中的标识 / 关键词 / 消息文本，去掉无效字符后重试；"
+							"编号建议重新从 search 或 chat 的结果中取"
+						),
+					)
 					return
 				# 孤立代理字符等不可编码 / 不可解码的本地文本是确定性失败：
 				# 重试只会复现，不能兜成 NETWORK_ERROR +「重试」（Issue #1294）。

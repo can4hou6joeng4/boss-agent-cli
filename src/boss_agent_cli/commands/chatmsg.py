@@ -7,6 +7,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._contact_lookup import current_friend_security_id_or_emit, current_friend_uid_or_emit, resolve_friend_or_emit
 from boss_agent_cli.commands._platform import get_platform_instance
+from boss_agent_cli.commands._text_guard import reject_unencodable_params
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	handle_auth_errors,
@@ -57,6 +58,11 @@ def chatmsg_cmd(
 	"""
 	if not require_compliance_allowed(ctx, "chatmsg"):
 		ctx.exit(1)
+
+	# 直读路径会把 security_id 原样发给 chat/history：孤立代理项会在 httpx
+	# 编码阶段失败，入口先按参数错误拒绝（Issue #2533）。
+	if reject_unencodable_params(ctx, "chatmsg", security_id=security_id, **{"--friend-uid": friend_uid}):
+		return
 
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

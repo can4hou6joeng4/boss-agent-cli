@@ -6,6 +6,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
+from boss_agent_cli.commands._text_guard import reject_unencodable_params
 from boss_agent_cli.display import boss_command_for_ctx, error_contract_for_code, handle_auth_errors, handle_error_output, handle_output, handle_platform_error_output, render_message_panel
 from boss_agent_cli.services.candidate_actions import (
 	CandidateActionBlocked,
@@ -79,6 +80,11 @@ def apply_cmd(ctx: click.Context, security_id: str, job_id: str, lid: str) -> No
 			recovery_action=f"补上两个编号后重试；完整职位参数可从 {search_cmd} 的结果中取到",
 			hints={"next_actions": [search_cmd]},
 		)
+		return
+
+	# 标识要进平台请求体：不可编码的字符不可能命中职位，入口按参数错误拒绝，
+	# 避免起一次浏览器再失败（Issue #2533）。
+	if reject_unencodable_params(ctx, "apply", security_id=security_id, job_id=job_id, lid=lid):
 		return
 
 	data_dir = ctx.obj["data_dir"]

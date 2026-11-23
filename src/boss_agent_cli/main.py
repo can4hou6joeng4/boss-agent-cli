@@ -8,6 +8,7 @@ from typing import Any
 import click
 
 from boss_agent_cli import __version__
+from boss_agent_cli.api._base_client import RequestTextEncodingError
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.cache.store import (
 	CacheBusyError,
@@ -1001,6 +1002,25 @@ class BossCliGroup(click.Group):
 				message=f"{command} 失败: {type(exc).__name__}: {exc}",
 				recoverable=internal_recoverable,
 				recovery_action=internal_recovery_action,
+			)
+			return None
+		except RequestTextEncodingError:
+			# 请求参数编码失败（孤立代理项等）是输入问题：请求未发出，不能给
+			# 磁盘 / 权限指引（Issue #2533）。装饰器命令已由 handle_auth_errors
+			# 收口，这里兜住没有装饰器的命令。
+			if not standalone_mode:
+				raise
+			command = _invoked_command_name(args, self.name or "boss")
+			encoding_recoverable, _encoding_recovery = error_contract_for_code("INVALID_PARAM")
+			emit_error(
+				command,
+				code="INVALID_PARAM",
+				message=f"{command} 请求参数含有无法按 UTF-8 编码的字符（如孤立代理项），请求未发出",
+				recoverable=encoding_recoverable,
+				recovery_action=(
+					"检查命令中的标识 / 关键词 / 消息文本，去掉无效字符后重试；"
+					"编号建议重新从 search 或 chat 的结果中取"
+				),
 			)
 			return None
 		except UnicodeError as exc:

@@ -231,6 +231,7 @@ module = [
 	"boss_agent_cli.platforms.base",
 	"boss_agent_cli.platforms.zhipin",
 	"boss_agent_cli.commands._platform",
+	"boss_agent_cli.commands._text_guard",
 	"boss_agent_cli.display",
 	"boss_agent_cli.automation.safety",
 	"boss_agent_cli.automation.storage",

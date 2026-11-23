@@ -17,6 +17,7 @@ from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
+from boss_agent_cli.commands._text_guard import reject_unencodable_params
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	error_contract_for_code,
@@ -121,6 +122,11 @@ def greet_cmd(ctx: click.Context, security_id: str, job_id: str, message: str) -
 			recovery_action=f"补上两个编号后重试；完整职位参数可从 {search_cmd} 的结果中取到",
 			hints={"next_actions": [search_cmd]},
 		)
+		return
+
+	# 招呼正文与标识都会进平台请求：不可编码的字符只会在发送阶段失败，
+	# 入口按参数错误拒绝（Issue #2533）。
+	if reject_unencodable_params(ctx, "greet", security_id=security_id, job_id=job_id, **{"--message": message}):
 		return
 
 	data_dir = ctx.obj["data_dir"]

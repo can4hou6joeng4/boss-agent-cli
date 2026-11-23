@@ -2,7 +2,7 @@ import atexit
 from typing import Any
 
 from boss_agent_cli.api import endpoints
-from boss_agent_cli.api._base_client import _BaseHttpClient
+from boss_agent_cli.api._base_client import RequestTextEncodingError, _BaseHttpClient
 from boss_agent_cli.api.httpx_helpers import make_client_registry
 from boss_agent_cli.api.zhipin_errors import classify_code_37, normalize_risk_code
 
@@ -281,7 +281,9 @@ class BossClient(_BaseHttpClient):
 		except Exception as error:
 			from boss_agent_cli.api.request_budget import is_request_stop
 
-			if is_request_stop(error):
+			# 参数不可编码是确定性失败：换浏览器通道仍会带同一组坏参数，
+			# 不该白起一次浏览器（Issue #2533）。
+			if is_request_stop(error) or isinstance(error, RequestTextEncodingError):
 				raise
 			# httpx-only 策略没有浏览器通道：回退必然以 BROWSER_DISABLED 结束，
 			# 还会把真实的 HTTP / 超时 / 解析错误整体覆盖掉。原样上抛保留故障
