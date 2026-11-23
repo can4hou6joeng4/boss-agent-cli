@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.162 (2026-11-23): `agent` input-encoding and chat-snapshot lock timeouts are now reported for what they are. Unencodable `--reason` / `--run-id` values are no longer misreported as corrupt state files, and concurrent exports contending for the snapshot lock advise a retry instead of a disk fault (Issues #2537, #2538).
+
 v3.4.161 (2026-11-23): request-parameter encoding failures are now reported as input errors. Lone surrogates are no longer misreported as disk problems, write actions no longer leave an uncleanable reservation, and `watch` / `preset` recovery hints for corrupt records are now executable (Issues #2528, #2529, #2533).
 
 v3.4.160 (2026-11-23): the wizard's AI-assist, contact, and candidate-resume actions now reject blank inputs. A blank prompt no longer triggers a billed AI request, and blank contact or job identifiers no longer send doomed platform requests; both report `INVALID_PARAM` in the same way as the CLI (Issues #2523 and #2525).
