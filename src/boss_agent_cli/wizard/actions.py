@@ -1332,8 +1332,11 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 
 
 def _candidate_pipeline_data(
-	context: ActionContext, inputs: Mapping[str, Any]
+	context: ActionContext, inputs: Mapping[str, Any], *, max_days_stale: int | None = None
 ) -> tuple[list[dict[str, Any]], int, bool]:
+	# 参数先于平台请求校验：非法输入不应消耗受节流约束的读取配额（Issue #2631）。
+	now_ts_ms = _int_input(inputs, "now_ts_ms", int(time.time() * 1000))
+	stale_days = _int_input(inputs, "days_stale", 3, maximum=max_days_stale)
 	with context.candidate_platform() as platform:
 		# 沟通列表是分页的：只看第 1 页会静默漏掉后续页里待跟进的沟通，
 		# 与顶层 `boss pipeline` / `boss digest` 的聚合结果不一致（Issue #881）。
@@ -1345,8 +1348,8 @@ def _candidate_pipeline_data(
 	items = build_pipeline_items(
 		chat_items=chat_items,
 		interview_items=interview_items,
-		now_ts_ms=_int_input(inputs, "now_ts_ms", int(time.time() * 1000)),
-		stale_days=_int_input(inputs, "days_stale", 3),
+		now_ts_ms=now_ts_ms,
+		stale_days=stale_days,
 	)
 	return items, pages_scanned, truncated
 
@@ -1364,7 +1367,8 @@ def _candidate_pipeline(context: ActionContext, inputs: Mapping[str, Any], prior
 
 
 def _candidate_digest(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	items, pages_scanned, truncated = _candidate_pipeline_data(context, inputs)
+	# 上限与顶层 `boss digest --days-stale` 一致。
+	items, pages_scanned, truncated = _candidate_pipeline_data(context, inputs, max_days_stale=36500)
 	follow_ups = select_follow_up_candidates(items)
 	data = build_digest(
 		new_matches=[item for item in items if item.get("source") == "chat" and item.get("stage") == "reply_needed"],

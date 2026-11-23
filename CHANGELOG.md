@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 向导 / MCP `boss_wizard` 的 `candidate_pipeline` 与 `candidate_digest` 在任何平台请求之前校验 `days_stale` / `now_ts_ms`，非法输入不再先读取沟通列表与面试列表；digest 的 `days_stale` 上限与顶层 `boss digest` 一致为 36500（Issue #2631）。
+
 ## [3.4.178] - 2026-11-24
 
 ### Fixed
