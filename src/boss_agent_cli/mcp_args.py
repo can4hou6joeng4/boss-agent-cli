@@ -69,6 +69,15 @@ _EXPLICIT_EMPTY_KEYS: frozenset[tuple[str, str]] = frozenset(
 		("ai_resume_optimize", "job_id"),
 		("ai_cover_letter", "jd_text"),
 		("ai_cover_letter", "job_id"),
+		# CLI 在平台调用前拒绝显式空正文 / 空筛选（Issue #2602 / #2603）：
+		# 映射层吞掉空串会静默改用默认招呼语或无筛选批量派发（Issue #2615）。
+		("greet", "message"),
+		("batch_greet", "city"),
+		("batch_greet", "salary"),
+		("batch_greet", "experience"),
+		("batch_greet", "education"),
+		("hr_candidates", "city"),
+		("hr_candidates", "job_id"),
 	}
 )
 
@@ -313,8 +322,9 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 	if name == "greet":
 		args = [name, arguments["security_id"], arguments["job_id"]]
-		# 缺省使用平台默认招呼语；自由文本空串按未传处理（Issue #1202）。
-		_optional(args, "--message", "message", arguments)
+		# 缺省使用平台默认招呼语；显式空串必须交给 CLI 的 INVALID_PARAM 守卫，
+		# 不能被真值判断化装成「没传」而静默发送默认招呼语（Issue #2615）。
+		_optional(args, "--message", "message", arguments, command=name)
 		return _literal_positionals(args, count=2)
 
 	if name == "chat":
@@ -384,7 +394,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 	if name == "batch_greet":
 		args = ["batch-greet", arguments["query"]]
 		for opt in ("city", "salary", "experience", "education", "industry", "scale", "stage"):
-			_optional(args, f"--{opt}", opt, arguments)
+			_optional(args, f"--{opt}", opt, arguments, command=name)
 		_optional(args, "--job-type", "job_type", arguments)
 		# MCP 侧参数名是 limit，CLI 选项名是 --count。默认值要显式下发：不传就落到
 		# CLI 的默认 10，比工具声明的 5 多打一倍招呼。
@@ -705,8 +715,7 @@ def _build_args(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 		if arguments.get("query"):
 			args.append(arguments["query"])
 		for opt in ("city", "job_id", "experience", "degree", "age", "school_level", "activeness", "source", "salary"):
-			if arguments.get(opt):
-				args.extend(_option_pair(f"--{opt.replace('_', '-')}", str(arguments[opt])))
+			_optional(args, f"--{opt.replace('_', '-')}", opt, arguments, command=name)
 		if arguments.get("select"):
 			args.append("--select")
 		if "page" in arguments:
