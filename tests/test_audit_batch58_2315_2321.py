@@ -281,7 +281,9 @@ def test_cache_enumeration_failure_is_reported_not_raised(
 	monkeypatch.setattr(browser_runtime, "patchright_browser_cache_dirs", boom)
 
 	assert browser_runtime.installed_browser_dirs() == []
-	assert browser_runtime.unreadable_browser_cache_dirs() == []
+	# 枚举整体失败同样不能落成「未安装」：doctor 按占位条目报「无法确认」
+	# 而不是引导重复下载（Issue #2559）。
+	assert browser_runtime.unreadable_browser_cache_dirs() == [browser_runtime._CACHE_ROOT_UNKNOWN]
 
 
 def test_browser_cache_root_with_nul_is_unreadable(

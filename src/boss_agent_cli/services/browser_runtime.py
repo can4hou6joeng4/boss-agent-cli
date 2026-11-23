@@ -74,9 +74,24 @@ def _default_browser_cache_dirs() -> list[Path]:
 	return [base / "ms-playwright"]
 
 
+def _playwright_env(name: str) -> str | None:
+	"""按驱动 ``getFromENV`` 的顺序读取环境变量。
+
+	驱动依次读同名变量、``npm_config_<name>`` 与
+	``npm_package_config_<name>``（``driver/package/lib/coreBundle.js`` 的
+	``getFromENV``）；从 npm 脚本启动 CLI 时 Node 只注入后两者。只读第一个
+	变量会让 doctor 与驱动定位到不同缓存根，误报已装 / 未装（Issue #2559）。
+	"""
+	for key in (name, f"npm_config_{name.lower()}", f"npm_package_config_{name.lower()}"):
+		value = os.environ.get(key)
+		if value is not None:
+			return value
+	return None
+
+
 def patchright_browser_cache_dirs() -> list[Path]:
 	"""按驱动的缓存位置检测浏览器，显式配置时不混入默认缓存。"""
-	if configured := os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+	if configured := _playwright_env("PLAYWRIGHT_BROWSERS_PATH"):
 		if configured == "0":
 			try:
 				import patchright
@@ -89,7 +104,7 @@ def patchright_browser_cache_dirs() -> list[Path]:
 		cache = Path(configured)
 		if not cache.is_absolute():
 			# 与驱动一致：相对路径以 INIT_CWD（未设置时为当前目录）为基准。
-			base = Path(os.environ.get("INIT_CWD") or Path.cwd())
+			base = Path(_playwright_env("INIT_CWD") or Path.cwd())
 			cache = Path(os.path.abspath(base / cache))
 		return [cache]
 	return _default_browser_cache_dirs()
@@ -97,6 +112,9 @@ def patchright_browser_cache_dirs() -> list[Path]:
 
 #: 驱动安装完成后写入的标记文件；缺失说明目录只是残留或安装未完成。
 _INSTALLATION_MARKER = "INSTALLATION_COMPLETE"
+
+#: 缓存根解析整体失败时的占位条目：doctor 据此报「无法确认」而不是引导重装。
+_CACHE_ROOT_UNKNOWN = Path("<浏览器缓存根无法确定>")
 
 
 def _is_usable_browser_entry(entry: Path) -> bool:
@@ -128,34 +146,54 @@ def _scan_browser_cache() -> tuple[list[Path], list[Path]]:
 
 	缓存根枚举在 cwd 已删除 / HOME 无法解析 / 环境变量含 NUL 时也会抛
 	``OSError`` / ``RuntimeError`` / ``ValueError``：统一按不可读兜底，不能让
-	确定性的本地配置问题打穿整份自检（Issue #2317）。
+	确定性的本地配置问题打穿整份自检（Issue #2317）。整份解析失败时用
+	:data:`_CACHE_ROOT_UNKNOWN` 占位，doctor 据此报「无法确认」（Issue #2559）。
 	"""
 	try:
 		bases = patchright_browser_cache_dirs()
 	except (OSError, ValueError, RuntimeError):
-		return [], []
+		# 缓存根解析不出来时不能落成「未安装」：doctor 会引导用户重复下载。
+		return [], [_CACHE_ROOT_UNKNOWN]
 
 	entries: list[Path] = []
 	unreadable: list[Path] = []
 	for base in bases:
 		try:
-			mode = base.stat().st_mode
+			link_mode = base.lstat().st_mode
 		except FileNotFoundError:
 			continue
 		except (OSError, ValueError, RuntimeError):
 			unreadable.append(base)
 			continue
+		if stat.S_ISLNK(link_mode):
+			try:
+				mode = base.stat().st_mode
+			except (OSError, ValueError, RuntimeError):
+				# 悬空 / 无法跟随的链接：glob 与 listdir 都会返回空或抛错，
+				# 不能报成「未安装」并引导用户重复下载（Issue #2559）。
+				unreadable.append(base)
+				continue
+		else:
+			mode = link_mode
 		if not stat.S_ISDIR(mode):
-			# 缓存根本身是普通文件 / 悬空链接：glob 会返回空，不能报成「未安装」
+			# 缓存根本身是普通文件：枚举会返回空，不能报成「未安装」
 			# 并引导用户重复下载。
 			unreadable.append(base)
 			continue
 		try:
-			candidates = list(base.glob("chromium-*")) + list(base.glob("chromium_headless_shell-*"))
+			# 不能用 Path.glob：3.9–3.13 对不可读目录静默返回空列表，
+			# 权限错误会被当成「没有安装任何内核」（Issue #2559）。
+			names = os.listdir(base)
+		except FileNotFoundError:
+			# stat 之后目录被删除：与开头的缺失分支同口径。
+			continue
 		except (OSError, ValueError, RuntimeError):
-			# 目录存在但不可读（权限）：glob 在部分平台上直接抛错。
+			# 目录存在但不可读（权限）：单独上报，不当作缺失。
 			unreadable.append(base)
 			continue
+		candidates = [
+			base / name for name in names if name.startswith(("chromium-", "chromium_headless_shell-"))
+		]
 		for entry in candidates:
 			if _is_usable_browser_entry(entry):
 				entries.append(entry)
