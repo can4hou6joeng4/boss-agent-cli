@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.163] - 2026-11-23
+
 ### Fixed
 - `agent review reject` 不再因 `pending-actions.jsonl` 里 `approved_review_id` 类型漂移而漏拦已批准动作：`null` / 容器值此前经 `str()` 变成 `"None"` / `"{...}"`，拒绝时找不到关联行，复核项写成 `rejected` 但那条待派发动作仍留在 `pending`。现在与 `status` / `confidence` 同口径按状态损坏 fail-closed，并在改写复核之前报错（Issue #2562）。
 - `crawl resume` 预检失败后的状态还原不再顶替原始错误：还原写库失败（磁盘满 / 库锁冲突）时保留预检异常的类型与文案，还原失败以 note 附加并提示先核对 `crawl status`，不再让操作者只看到本地 IO 错误而 run 停在 `running`（Issue #2562）。
