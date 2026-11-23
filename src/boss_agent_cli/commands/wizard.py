@@ -11,7 +11,14 @@ import click
 
 from boss_agent_cli.cache.store import CacheRecordInvalid
 from boss_agent_cli.config import DEFAULT_REQUEST_DELAY
-from boss_agent_cli.display import boss_command_for_ctx, console, handle_error_output, handle_output, shell_argument
+from boss_agent_cli.display import (
+	RISK_ERROR_CONTRACTS,
+	boss_command_for_ctx,
+	console,
+	handle_error_output,
+	handle_output,
+	shell_argument,
+)
 from boss_agent_cli.services.text_files import is_utf8_encodable
 from boss_agent_cli.wizard.actions import ActionContext, DEFAULT_ACTIONS
 from boss_agent_cli.wizard.catalog import build_plan, require_supported_platform
@@ -157,6 +164,29 @@ def _workflow_inner_run_id(run: Mapping[str, Any]) -> str:
 		if inner:
 			return str(inner)
 	return ""
+
+
+def _workflow_risk_code(run: Mapping[str, Any]) -> str | None:
+	"""run 或任一步骤是否记录了风控错误；命中即按终止契约处理。"""
+	errors: list[Any] = [run.get("error")]
+	for step in run.get("steps") or []:
+		if isinstance(step, Mapping):
+			errors.append(step.get("error"))
+	for error in errors:
+		if isinstance(error, Mapping) and error.get("code") in RISK_ERROR_CONTRACTS:
+			return str(error["code"])
+	return None
+
+
+def _workflow_hints(ctx: click.Context, run: Mapping[str, Any]) -> dict[str, list[str]]:
+	"""状态与停止后的后继提示；风控断点不给 ``--resume``（Issue #2608）。"""
+	code = _workflow_risk_code(run)
+	if code:
+		return {
+			"next_actions": [boss_command_for_ctx(ctx, "doctor", include_data_dir=True)],
+			"operator_actions": list(RISK_ERROR_CONTRACTS[code]["operator_actions"]),
+		}
+	return {"next_actions": _workflow_next_actions(ctx, run)}
 
 
 def _workflow_next_actions(ctx: click.Context, run: Mapping[str, Any]) -> list[str]:
@@ -887,7 +917,7 @@ def _run_wizard_command(
 				"wizard",
 				run,
 				render=lambda payload: render_run(payload, command_for=_command_for_ctx(ctx)),
-				hints={"next_actions": _workflow_next_actions(ctx, run)},
+				hints=_workflow_hints(ctx, run),
 			)
 			return
 		if stop_run_id:
@@ -978,7 +1008,7 @@ def _run_wizard_command(
 				return
 			run = _run_after_stop(store, stop_run_id)
 			handle_output(
-				ctx, "wizard", run, render=render_run, hints={"next_actions": _workflow_next_actions(ctx, run)}
+				ctx, "wizard", run, render=render_run, hints=_workflow_hints(ctx, run)
 			)
 			return
 

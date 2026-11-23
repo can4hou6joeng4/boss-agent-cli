@@ -52,13 +52,22 @@ WorkflowEvent = Callable[[str, str, Mapping[str, Any] | None], None]
 #: 命中即停止、且不允许重试的账号 / 环境风控码。
 _RISK_CODES = frozenset({"ACCOUNT_RISK", "ENVIRONMENT_RISK"})
 
-#: 带 ``replay_safe: false`` 时必须阻断重放的步骤状态。
-_REPLAY_BLOCKING_STATUSES = frozenset({WorkflowStatus.FAILED.value, WorkflowStatus.STOPPED.value})
+#: 带 ``replay_safe: false`` 时必须阻断重放的步骤状态。``waiting_input``
+#: 也可能带着写前标记（旧数据 / 手工漂移）：执行器自身会清空它，但读到就不能放行。
+_REPLAY_BLOCKING_STATUSES = frozenset({
+	WorkflowStatus.FAILED.value,
+	WorkflowStatus.STOPPED.value,
+	WorkflowStatus.WAITING_INPUT.value,
+})
 
 #: 可能停在「写请求已声明、结算还没落盘」之间的步骤状态：running 的上一个
 #: 执行器没记录结果就消失了，pending 则是非终态结果已落盘但还没结算
 #: （Issue #2184）。两者只要带写前标记，--resume 都不得重放。
-_UNSETTLED_WRITE_STATUSES = frozenset({WorkflowStatus.RUNNING.value, WorkflowStatus.PENDING.value})
+_UNSETTLED_WRITE_STATUSES = frozenset({
+	WorkflowStatus.RUNNING.value,
+	WorkflowStatus.PENDING.value,
+	WorkflowStatus.WAITING_INPUT.value,
+})
 
 
 class WorkflowActionError(Exception):
@@ -149,6 +158,14 @@ _UNCONFIRMED_WRITE_FALLBACK: dict[str, Any] = {
 }
 
 
+def _is_unconfirmed_write_code(code: Any) -> bool:
+	"""错误码是否指向「写请求结果未知」；大小写与分隔符漂移都按同一码处理。"""
+	if not isinstance(code, str):
+		return False
+	normalized = code.casefold().replace("_", "").replace("-", "").replace(" ", "")
+	return normalized == "actionunconfirmed"
+
+
 def _error_blocks_replay(error: Mapping[str, Any]) -> bool:
 	"""错误标记是否声明「写动作可能已生效、不得重放」。
 
@@ -157,7 +174,10 @@ def _error_blocks_replay(error: Mapping[str, Any]) -> bool:
 	按错误码 fail-closed，否则 --resume 会重放结果未知的写步骤并把 run 落成
 	completed（Issue #2398，与 #1159 的类型漂移同族）。
 	"""
-	return error.get("replay_safe") is False or error.get("code") == _UNCONFIRMED_WRITE_FALLBACK["code"]
+	return (
+		error.get("replay_safe") is False
+		or _is_unconfirmed_write_code(error.get("code"))
+	)
 
 
 def _search_pipeline_error(
@@ -210,22 +230,46 @@ def _search_pipeline_error(
 	)
 
 
+def _run_error_blocks_replay(run: Mapping[str, Any]) -> bool:
+	"""run 级错误声明结果未知时，当前步骤同样不得重放（Issue #2609）。
+
+	步骤行的 error 可能被写前标记之外的路径清空（手工修复、旧版本、半写入），
+	此时 run 级 error 仍是唯一证据。只在终结态且 ``current_step`` 指向具体步骤
+	时阻断，避免正常失败后新建任务也被误伤。
+	"""
+	if str(run.get("status") or "") not in {
+		WorkflowStatus.FAILED.value,
+		WorkflowStatus.STOPPED.value,
+	}:
+		return False
+	error = run.get("error")
+	if not isinstance(error, Mapping) or not error or not _error_blocks_replay(error):
+		return False
+	current = str(run.get("current_step") or "")
+	if not current:
+		return False
+	return any(
+		isinstance(step, Mapping) and str(step.get("step_name")) == current
+		for step in run.get("steps") or []
+	)
+
+
 def has_blocked_step(run: Mapping[str, Any]) -> bool:
 	"""是否有失败步骤声明 ``replay_safe: false``：动作可能已生效，恢复只会返回原失败。
 
 	``--resume`` 与 TTY 的「恢复已有任务」列表都以此为准，避免同一份状态在两处
-	得出不同结论（Issue #1021）。
+	得出不同结论（Issue #1021）。run 级错误同样纳入，提示层与执行层共用一套口径。
 	"""
 	steps = run.get("steps")
 	if not isinstance(steps, Sequence):
-		return False
+		return _run_error_blocks_replay(run)
 	for step in steps:
 		if not isinstance(step, Mapping) or str(step.get("status")) not in _REPLAY_BLOCKING_STATUSES:
 			continue
 		error = step.get("error")
 		if isinstance(error, Mapping) and _error_blocks_replay(error):
 			return True
-	return False
+	return _run_error_blocks_replay(run)
 
 
 @dataclass(frozen=True)
@@ -414,6 +458,11 @@ class WorkflowRunner:
 		else:
 			self._assert_plan_matches(existing, plan)
 			if existing["status"] == WorkflowStatus.STOPPED.value:
+				return existing
+			# 风控断点不在这里设终态：契约要求操作者处理完官方页面、清除本地风险锁后
+			# 显式恢复原任务（Issue #419）。锁还在时请求层会在发出前拦下；这里只
+			# 保证提示层不把 --resume 递给 Agent（Issue #2608）。
+			if _run_error_blocks_replay(existing):
 				return existing
 			if existing["status"] == WorkflowStatus.COMPLETED.value:
 				# 已完成的 run 是终态（Issue #2054）：此前 --resume 会先无条件写
@@ -1167,7 +1216,8 @@ class WorkflowRunner:
 
 		读取走原始步骤列表而不是 ``get_checkpoint``：后者会按记录损坏抛
 		``CacheRecordInvalid``，而中断路径恰恰不能因此丢掉保护。error 不是对象、
-		``replay_safe`` 不是布尔值时按「结果未知」处理（fail-closed）。
+		``replay_safe`` 不是布尔值时按「结果未知」处理（fail-closed）；错误码
+		大小写 / 分隔符漂移也按同一码处理。
 		"""
 		try:
 			steps = self._store.cache.list_workflow_steps(run_id)
@@ -1189,6 +1239,15 @@ class WorkflowRunner:
 			details = error.get("details")
 			if isinstance(details, Mapping):
 				marker["details"] = dict(details)
+			return marker
+		if _is_unconfirmed_write_code(error.get("code")) and error.get("code") != _UNCONFIRMED_WRITE_FALLBACK["code"]:
+			# 码名漂移（如 action_unconfirmed）不能再按「可重放」放行；归一成
+			# 登记表里的规范错误码后再落盘 / 出信封（Issue #2609）。
+			marker = dict(_UNCONFIRMED_WRITE_FALLBACK)
+			for key in ("message", "recovery_action"):
+				value = error.get(key)
+				if isinstance(value, str) and value:
+					marker[key] = value
 			return marker
 		if error.get("code") == _UNCONFIRMED_WRITE_FALLBACK["code"] or replay_safe is False:
 			return dict(error)
