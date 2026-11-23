@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.167 (2026-11-23): recruiter automation reads conversations in the platform's real chat-history shape, and system messages no longer look like candidate replies. Unconfirmed candidate conversation identities are no longer sent to the platform as `friend_id=0`; pending actions stay unchanged (Issues #2580, #2582).
+
 v3.4.166 (2026-11-23): recruiter automation checks existing local and shared-budget risk locks before marking actions as executing. A lock still stops the run and leaves pending actions unchanged; in-flight replay protection remains in place (Issue #2577).
 
 v3.4.165 (2026-11-23): privacy cleanup previews report unreadable subdirectories, and recursive statistics count nested file symlinks by link size, not target size; crawls ignore malformed deduplication keys and fill in missing detail identifiers when a page is fetched again; date-named directories no longer hide earlier chat snapshots (Issues #2572, #2574, #2575).
