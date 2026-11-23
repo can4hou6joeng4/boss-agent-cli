@@ -2307,8 +2307,11 @@ def _recruiter_applications(context: ActionContext, inputs: Mapping[str, Any], p
 
 
 def _recruiter_resume(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	geek_id = _required_str(inputs, "geek_id")
-	job_id = _required_str(inputs, "job_id")
+	# 与 CLI `hr resume` 同口径：geek_id / job_id 去空白后必须非空。view_geek
+	# 声明 effect: unknown，空白标识的请求不可能命中候选人，必须在构造平台
+	# 之前按参数错误收口（Issue #2525）。
+	geek_id = _required_nonblank_value(inputs, "geek_id")
+	job_id = _required_nonblank_value(inputs, "job_id")
 	security_id = _optional_str(inputs.get("security_id"))
 	return _recruiter_call(
 		context,
