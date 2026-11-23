@@ -115,7 +115,10 @@ def _with_executor_state(payload: dict[str, Any], run: dict[str, Any], *, data_d
 	payload["stop_requested"] = run["stop_requested"]
 	if status == "running" and not executor_active:
 		payload["running_stale"] = True
-	if status == "queued" and not queue_in_handoff:
+	# 执行器已持锁时不算排队超时：worker 可能正在校验 / 列 jobs、尚未把状态
+	# 改成 running，此时提示 resume 会引导出与持锁 worker 并发的第二个执行器
+	# （Issue #2642）。
+	if status == "queued" and not executor_active:
 		payload["queue_overdue"] = True
 	return payload
 
