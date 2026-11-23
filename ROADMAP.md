@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.181（2026-11-24）：`clean --risk-lock --privacy` 在隐私清理失败时带回本地风控锁已清除的真实状态；`clean --privacy --dry-run` 不再重复统计旧快照与导出文件，预览与实际释放量一致（Issue #2639）。
+
 v3.4.180（2026-11-24）：向导 / MCP `boss_wizard` 的投递动作拒绝非字符串 lid，在本地预约与平台调用之前按参数错误返回（Issue #2636）。
 
 v3.4.179（2026-11-24）：向导 / MCP `boss_wizard` 的 pipeline 与 digest 在任何平台请求之前校验 days_stale / now_ts_ms，digest 的 days_stale 上限与顶层命令一致；招聘者简历动作拒绝非字符串 security_id（Issue #2631、#2633）。
