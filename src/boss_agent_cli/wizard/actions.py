@@ -47,6 +47,7 @@ from boss_agent_cli.services.contact_lookup import (
 )
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.services.output_path import OutputPathProblem, inspect_output_path, prepare_output_path
+from boss_agent_cli.services.pagination import MAX_TRUSTED_COUNT, MAX_TRUSTED_PAGE
 from boss_agent_cli.crawler.operations import crawl_status
 from boss_agent_cli.crawler.service import (
 	CrawlBudget,
@@ -295,7 +296,7 @@ def execute_candidate_search(
 		cache,
 		logger,
 		criteria=criteria,
-		start_page=_int_input(inputs, "page", 1, minimum=1),
+		start_page=_int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE),
 		max_pages=_int_input(inputs, "max_pages", detail_filter_max_pages(welfare_conditions, active), minimum=1),
 		welfare_conditions=welfare_conditions,
 		before_list_request=inputs.get("before_list_request"),
@@ -558,19 +559,39 @@ def _check_minimum(value: int, raw: Any, name: str, minimum: int) -> int:
 	return value
 
 
-def _int_input(inputs: Mapping[str, Any], name: str, default: int, *, minimum: int = 0) -> int:
-	"""读取整数输入并校验下界。
+def _check_maximum(value: int, raw: Any, name: str, maximum: int) -> int:
+	if value > maximum:
+		raise WorkflowInputError(f"wizard 输入 {name} 必须是不大于 {maximum} 的整数，收到 {_brief_value(raw)}")
+	return value
+
+
+def _int_input(
+	inputs: Mapping[str, Any],
+	name: str,
+	default: int,
+	*,
+	minimum: int = 0,
+	maximum: int | None = None,
+) -> int:
+	"""读取整数输入并校验下界（可选上界）。
 
 	下游把这些值直接当页码 / 翻页次数 / 条数用：`max_pages=-3` 会让
 	`range(max_pages)` 一次都不循环，workflow 以「成功」收尾但结果为空；
 	负数页码则会原样作为 page 参数发给平台。这类输入重试多少次都是同一个结果。
+
+	`maximum` 只在调用方对应的 CLI 选项本身有上限时传（如求职者分页命令的
+	`IntRange(max=MAX_TRUSTED_PAGE)`）：向导 / MCP 绕过 Click，不能把越界页码
+	原样发往平台（Issue #2625）。
 	"""
 	raw = inputs.get(name)
 	# 只有「没给」才用默认值；显式写的 0 不能被当成缺省悄悄换成默认值
 	# （`0 or default` 会让 `count: 0` 变成 20 条）。
 	if raw is None or raw == "":
 		return default
-	return _check_minimum(_coerce_int(raw, name), raw, name, minimum)
+	value = _check_minimum(_coerce_int(raw, name), raw, name, minimum)
+	if maximum is not None:
+		value = _check_maximum(value, raw, name, maximum)
+	return value
 
 
 def _optional_int_input(inputs: Mapping[str, Any], name: str, *, minimum: int = 0) -> int | None:
@@ -949,7 +970,7 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 		{
 			"items": result.items,
 			"pagination": {
-				"page": _int_input(inputs, "page", 1, minimum=1),
+				"page": _int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE),
 				# 与顶层 `boss search` 同一口径（Issue #887）：平台没说 hasMore 时为 null。
 				"has_more": result.has_more_reported,
 				"has_more_source": "platform_hasMore" if result.has_more_reported is not None else "unknown",
@@ -961,10 +982,12 @@ def _candidate_search(context: ActionContext, inputs: Mapping[str, Any], prior: 
 
 
 def _candidate_recommend(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
+	# 页码在打开平台前校验：越界值不应先构造平台实例（Issue #2625）。
+	page = _int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE)
 	with context.candidate_platform() as platform:
 		data = _unwrap(
 			platform,
-			platform.recommend_jobs(page=_int_input(inputs, "page", 1, minimum=1)),
+			platform.recommend_jobs(page=page),
 			"推荐职位获取失败",
 			context=context,
 		)
@@ -1246,10 +1269,12 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 
 
 def _candidate_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
+	# 页码在打开平台前校验：越界值不应先构造平台实例（Issue #2625）。
+	page = _int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE)
 	with context.candidate_platform() as platform:
 		data = _unwrap(
 			platform,
-			platform.friend_list(page=_int_input(inputs, "page", 1, minimum=1)),
+			platform.friend_list(page=page),
 			"沟通列表获取失败",
 			context=context,
 		)
@@ -1261,6 +1286,9 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 	# 空白 gid 不可能命中联系人：CLI chatmsg 在 resolve_friend_or_emit 里直接报
 	# 参数错误，向导同样不能先翻一遍沟通列表再报 CONTACT_NOT_FOUND（Issue #2523）。
 	identifier = _required_nonblank_value(inputs, "gid")
+	# 页码在解析联系人之前校验：越界值不应先翻一遍沟通列表再拒绝（Issue #2625）。
+	page = _int_input(inputs, "page", 1, minimum=1, maximum=MAX_TRUSTED_PAGE)
+	count = _int_input(inputs, "count", 20, minimum=1, maximum=MAX_TRUSTED_COUNT)
 	with context.candidate_platform() as platform:
 		friend = _candidate_friend(platform, identifier, context=context)
 		gid = _candidate_current_uid(friend)
@@ -1268,8 +1296,8 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 		response = platform.chat_history(
 			gid,
 			security_id,
-			page=_int_input(inputs, "page", 1, minimum=1),
-			count=_int_input(inputs, "count", 20, minimum=1),
+			page=page,
+			count=count,
 		)
 		data = _unwrap(platform, response, "聊天记录获取失败", context=context)
 	items = _extract_list_items(data, ("messageList", "messages", "list", "items", "result"))
