@@ -68,7 +68,9 @@ from boss_agent_cli.display import (
 )
 from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
+from boss_agent_cli.commands._text_guard import reject_unencodable_params
 from boss_agent_cli.services.install_extras import extras_requirement
+from boss_agent_cli.services.text_files import is_utf8_encodable
 
 
 @click.group("agent")
@@ -208,6 +210,19 @@ def crawl_cmd(
 				code="INVALID_PARAM",
 				message="--run-id 的值不能为空",
 				recovery_action="补上要分析的 crawl run_id，或用 --query 新建采集",
+				hints={"next_actions": [crawl_by_run, crawl_by_query]},
+			)
+			return
+		# 与 commands/crawl.py 的 _require_run_id 同口径：argv 的非法 UTF-8 字节
+		# 经 surrogateescape 成为孤立代理项，查缓存时会在 sqlite 绑定阶段失败，
+		# 被兜成「修正关键词 / 城市 / crawl 配置」的无关指引（Issue #2537）。
+		if not is_utf8_encodable(run_id):
+			handle_error_output(
+				ctx,
+				"agent.crawl",
+				code="INVALID_PARAM",
+				message="--run-id 含有无法按 UTF-8 编码的字符（孤立代理项）；它不可能是 boss crawl 生成的 ID",
+				recovery_action="从 boss crawl status <run_id> 输出的 run_id 重新复制后重试",
 				hints={"next_actions": [crawl_by_run, crawl_by_query]},
 			)
 			return
@@ -642,6 +657,11 @@ def review_approve_cmd(ctx: click.Context, review_id: str) -> None:
 @click.pass_context
 def review_reject_cmd(ctx: click.Context, review_id: str, reason: str) -> None:
 	"""拒绝一条旧版本人工复核动作，并记录跳过事件。"""
+	# --reason 会进 review 记录与事件日志（JSONL，严格 UTF-8 写入）：不可编码
+	# 的字符只会在写入层炸开并被误报成「状态文件无法解析」，入口先按参数
+	# 错误拒绝（Issue #2537）。
+	if reject_unencodable_params(ctx, "agent.review.reject", **{"--reason": reason}):
+		return
 	store = AutomationStore(ctx.obj["data_dir"])
 	try:
 		rejected = store.reject_review(review_id, reason, now_iso())
@@ -756,6 +776,10 @@ def control_cmd(ctx: click.Context) -> None:
 @click.pass_context
 def stop_cmd(ctx: click.Context, reason: str) -> None:
 	"""打开招聘自动化熔断。"""
+	# stop.json 以严格 UTF-8 写入：不可编码的 reason 会在写入层失败并被误报成
+	# 状态文件损坏，入口先按参数错误拒绝（Issue #2537）。
+	if reject_unencodable_params(ctx, "agent.stop", **{"--reason": reason}):
+		return
 	store = AutomationStore(ctx.obj["data_dir"])
 	try:
 		store.request_stop(reason)

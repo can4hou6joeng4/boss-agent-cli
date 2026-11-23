@@ -27,6 +27,15 @@ _LOCK_ATTEMPTS = 100
 _LOCK_RETRY_INTERVAL_SECONDS = 0.05
 
 
+class ChatSnapshotBusyError(OSError):
+	"""同一份聊天快照正被其他进程写入，等待锁超时。
+
+	并发导出是正常场景：等另一进程写完即可，不是磁盘 / 权限故障。继承
+	``OSError`` 以保留 ``_load_previous_snapshot`` 的「读不到上一份就降级」
+	逻辑，命令出口单独按可重试的忙状态收口（Issue #2538）。
+	"""
+
+
 def _unread_count(item: dict[str, Any]) -> int:
 	"""快照里的 unread 只认真正的非负整数，其余按 0 参与比较（Issue #1194 / #2180）。
 
@@ -159,7 +168,9 @@ def _snapshot_lock(snapshot_path: str) -> Iterator[None]:
 				return
 		if attempt + 1 < _LOCK_ATTEMPTS:
 			time.sleep(_LOCK_RETRY_INTERVAL_SECONDS)
-	raise OSError(errno.EAGAIN, "聊天快照正被其他进程占用，等待互斥锁超时", snapshot_path)
+	raise ChatSnapshotBusyError(
+		errno.EAGAIN, "聊天快照正被其他进程写入，等待互斥锁超时；请稍后重试", snapshot_path
+	)
 
 
 def _load_previous_snapshot(path: str, logger: Logger) -> tuple[list[dict[str, Any]], bool] | None:

@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- `agent stop` / `agent review reject` 的 `--reason` 与 `agent crawl --run-id` 在入口校验 UTF-8 可编码性：孤立代理项不再在 JSONL 写入层被误报成「自动化状态文件无法解析」（`AUTOMATION_STATE_INVALID`，还可能引导删除待审队列），也不再让 `agent crawl` 指向无关的 crawl 配置；三个入口统一按 `INVALID_PARAM` 指明具体参数（Issue #2537）。
+- 聊天快照锁等待超时不再被兜成不可重试的 `LOCAL_IO_ERROR` + 磁盘 / 权限指引：`ChatSnapshotBusyError` 在命令出口按可重试的 `CACHE_BUSY` 上报并提示稍后重试，并发导出的正常锁争用不再让 Agent 直接放弃；上一份快照读取失败时的降级行为保持不变（Issue #2538）。
+
 ## [3.4.161] - 2026-11-23
 
 ### Fixed

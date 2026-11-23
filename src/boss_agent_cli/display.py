@@ -1652,7 +1652,24 @@ def handle_auth_errors(command_name: str) -> Callable[[Callable[..., Any]], Call
 					recovery_action=internal_recovery,
 				)
 			except OSError as e:
-				if is_browser_kernel_missing(str(e)):
+				from boss_agent_cli.services.chat_snapshot import ChatSnapshotBusyError
+
+				if isinstance(e, ChatSnapshotBusyError):
+					# 并发导出的正常争用：等另一进程写完快照即可，不能落成
+					# 不可重试的 LOCAL_IO_ERROR + 磁盘 / 权限指引（Issue #2538）。
+					busy_recoverable, _busy_recovery = error_contract_for_code("CACHE_BUSY")
+					handle_error_output(
+						ctx,
+						command_name,
+						code="CACHE_BUSY",
+						message=str(e),
+						recoverable=busy_recoverable,
+						recovery_action=(
+							"稍后重试本命令；并发导出同一数据目录时会短暂争用当天快照锁，"
+							"快照文件本身完好，不需要删除"
+						),
+					)
+				elif is_browser_kernel_missing(str(e)):
 					# Playwright 以 OSError 子类抛「内核缺失」时同样不能被兜成可重试。
 					handle_browser_kernel_missing(ctx, command_name, e)
 				elif is_local_io_error(e):
