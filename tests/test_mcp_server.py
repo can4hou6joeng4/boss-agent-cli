@@ -1108,8 +1108,12 @@ def test_run_boss_parses_json_output(mock_run, monkeypatch):
 	# 断言的是 subprocess 收到什么，而不是入口探测结果。
 	monkeypatch.setattr(server._impl, "_BOSS_BIN", "boss")
 	mock_run.return_value = MagicMock(
-		stdout='{"ok": true, "data": {"status": "logged_in"}}',
+		stdout=json.dumps({
+			"ok": True, "schema_version": "1.0", "command": "status", "data": {"status": "logged_in"},
+			"pagination": None, "error": None, "hints": None,
+		}),
 		stderr="",
+		returncode=0,
 	)
 	result = _run_boss("status")
 	assert result["ok"] is True
@@ -1172,7 +1176,7 @@ def test_run_boss_export_empty_url_reaches_cli_dedicated_error(mock_run, monkeyp
 		},
 		ensure_ascii=False,
 	)
-	mock_run.return_value = MagicMock(stdout=empty_url_envelope, stderr="")
+	mock_run.return_value = MagicMock(stdout=empty_url_envelope, stderr="", returncode=1)
 	result = _run_boss("export", "--url", "")
 	assert result["ok"] is False
 	assert result["error"]["message"] == "--url 的值不能为空"

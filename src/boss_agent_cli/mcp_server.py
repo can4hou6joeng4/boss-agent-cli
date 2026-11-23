@@ -523,8 +523,30 @@ def _spawn_failure(args: tuple[str, ...], exc: OSError) -> dict[str, Any]:
 	)
 
 
+_CLI_ENVELOPE_KEYS = frozenset({"ok", "schema_version", "command", "data", "pagination", "error", "hints"})
+
+
+def _is_cli_envelope(payload: dict[str, Any], returncode: int | None) -> bool:
+	if payload.keys() != _CLI_ENVELOPE_KEYS or type(payload["ok"]) is not bool:
+		return False
+	if not isinstance(payload["schema_version"], str) or not isinstance(payload["command"], str):
+		return False
+	ok = payload["ok"]
+	if returncode is not None and returncode != (0 if ok else 1):
+		return False
+	error = payload["error"]
+	if ok:
+		return error is None
+	return (
+		isinstance(error, dict)
+		and isinstance(error.get("code"), str)
+		and type(error.get("recoverable")) is bool
+		and "recovery_action" in error
+	)
+
+
 def _parse_cli_output(
-	args: tuple[str, ...], stdout: str, stderr: str, *, may_write: bool = True,
+	args: tuple[str, ...], stdout: str, stderr: str, *, returncode: int | None = None, may_write: bool = True,
 ) -> dict[str, Any]:
 	try:
 		parsed = json.loads(stdout)
@@ -532,16 +554,14 @@ def _parse_cli_output(
 		# 超长整数抛裸 ValueError、超深嵌套抛 RecursionError，都不是
 		# JSONDecodeError；逃逸出去会让 handler 抛异常而不是返回信封（Issue #1942）。
 		parsed = None
-	if isinstance(parsed, dict):
+	if isinstance(parsed, dict) and _is_cli_envelope(parsed, returncode):
 		return parsed
-	# CLI 契约保证 stdout 是 JSON 信封对象；拿到别的形状（解析失败或非对象）
-	# 一律按命令失败处理，而不是把非 dict 结果透传给调用方。进程已经运行过：
-	# 写工具的结果此时未知，与超时 / 取消同样标 outcome_unknown；只读工具没有
-	# 平台写入，不能套用「未确认的写操作不要直接重试」（Issue #962）。
+	# 可解码的对象也可能不是信封；退出码与 ok 矛盾时同样不能确认结果。
+	# 进程已经运行过，不能把缺失或失真的写结果当作未发出（Issue #962）。
 	return _cli_failure(
 		args,
 		"CLI_ERROR",
-		stderr or "命令执行失败",
+		stderr or "底层 CLI 未返回与退出码一致的 JSON 信封",
 		recovery_action=_write_interrupt_recovery(args) if may_write else _READ_UNPARSEABLE_RECOVERY,
 		outcome_unknown=may_write,
 	)
@@ -576,20 +596,22 @@ def _dumps_tool_result(payload: dict[str, Any]) -> str:
 	return text.encode("utf-8", "backslashreplace").decode("utf-8")
 
 
+def _invalid_launch_args(args: tuple[str, ...], reason: str) -> dict[str, Any]:
+	# 子进程从未启动，不应引导调用方核对不存在的写入（Issue #1863）。
+	return _cli_failure(
+		args,
+		"INVALID_PARAM",
+		reason,
+		outcome_unknown=False,
+		recovery_action="参数未通过本地校验，子进程未启动，修正参数后重试；本次没有平台写入",
+	)
+
+
 def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
 	"""Synchronous compatibility entrypoint; MCP handlers use the async path."""
 	cmd = [_BOSS_BIN, "--json", *_BOSS_GLOBAL_ARGS, *args]
-	unsafe_reason = _unsafe_argv_reason(cmd)
-	if unsafe_reason is not None:
-		# 子进程从未启动：不能套用「核对 checkpoint」的写中断模板，写工具本次
-		# 同样没有平台写入（Issue #1863）。
-		return _cli_failure(
-			args,
-			"INVALID_PARAM",
-			unsafe_reason,
-			outcome_unknown=False,
-			recovery_action="参数未通过本地校验，子进程未启动，修正参数后重试；本次没有平台写入",
-		)
+	if unsafe_reason := _unsafe_argv_reason(cmd):
+		return _invalid_launch_args(args, unsafe_reason)
 	# 超时估算同样必须遵守 schema 的数值边界；本地参数错误不能伪装成 CLI 失败。
 	try:
 		timeout = _cli_timeout(args)
@@ -625,7 +647,7 @@ def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
 		)
 	except OSError as exc:
 		return _spawn_failure(args, exc)
-	return _parse_cli_output(args, result.stdout, result.stderr, may_write=may_write)
+	return _parse_cli_output(args, result.stdout, result.stderr, returncode=result.returncode, may_write=may_write)
 
 
 async def _stop_cli_process(
@@ -712,6 +734,9 @@ async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 			recovery_action="减小 count / summary-limit 后重试；本次子进程未启动",
 		)
 	cmd = [_BOSS_BIN, "--json", *_BOSS_GLOBAL_ARGS, *args]
+	# handler 校验工具参数；实际启动前还要覆盖宿主注入的全局选项和可执行文件名。
+	if unsafe_reason := _unsafe_argv_reason(cmd):
+		return _invalid_launch_args(args, unsafe_reason)
 	spawn = asyncio.create_task(
 		asyncio.create_subprocess_exec(
 			*cmd,
@@ -754,6 +779,7 @@ async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 		args,
 		stdout.decode("utf-8", errors="replace"),
 		stderr.decode("utf-8", errors="replace"),
+		returncode=process.returncode,
 		may_write=may_write,
 	)
 
