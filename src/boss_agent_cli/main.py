@@ -8,7 +8,7 @@ from typing import Any
 import click
 
 from boss_agent_cli import __version__
-from boss_agent_cli.api._base_client import RequestTextEncodingError
+from boss_agent_cli.api._base_client import PlatformStatusRejected, RequestTextEncodingError, parameter_status_code
 from boss_agent_cli.api.browser_source import POLICIES as BROWSER_SOURCES
 from boss_agent_cli.cache.store import (
 	CacheBusyError,
@@ -995,6 +995,20 @@ class BossCliGroup(click.Group):
 			if not standalone_mode:
 				raise
 			command = _invoked_command_name(args, self.name or "boss")
+			status = parameter_status_code(exc)
+			if isinstance(exc, PlatformStatusRejected) and status is not None:
+				# 平台对同一组参数的确定性拒绝（400 / 406 / 409 / 410 / 422）：
+				# 与命令层同口径报 INVALID_PARAM，不给 INTERNAL_ERROR 的升级指引
+				# （Issue #2567）。
+				invalid_recoverable, invalid_recovery = error_contract_for_code("INVALID_PARAM")
+				emit_error(
+					command,
+					code="INVALID_PARAM",
+					message=f"{command} 请求被平台拒绝（HTTP {status}），同一组参数重试不会改变结果",
+					recoverable=invalid_recoverable,
+					recovery_action=invalid_recovery,
+				)
+				return None
 			internal_recoverable, internal_recovery_action = error_contract_for_code("INTERNAL_ERROR")
 			emit_error(
 				command,

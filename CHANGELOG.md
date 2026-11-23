@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- 风控信封的 `error.details.risk_lock.persisted` 与实际落盘一致：主锁位置与请求预算组目录任一写成功即报 `true` 并清掉进程内锁。此前主锁写失败但组锁写成功仍报 `false`（宣称「新进程不会再被阻止」，实际新进程仍被 `ACCOUNT_RISK` 拦住），主锁写成功而组锁失败时也被反向覆盖成 `false`（Issue #2566）。
+- 读请求的确定性 4xx（400 / 404 / 405 / 409 / 410 / 412 / 422 等，401 / 403 / 429 与暂时性的 408 除外）不再兜成可重试的 `NETWORK_ERROR` +「重试」：同一请求重试必然复现，只会白白消耗请求预算。参数类 4xx（400 / 406 / 409 / 410 / 422）与 `detail` / `show` / 向导同口径报 `INVALID_PARAM`，其余 4xx 报不可重试的 `INTERNAL_ERROR`；5xx 与 408 保持可重试，写请求 4xx 仍按结果未知（`ACTION_UNCONFIRMED`）收口（Issue #2567）。
+- 导出 / 快照的 `null_oversized_ints` 只把真正无法转字符串的整数（十进制超过 4300 位）归 `null`：位长度快速路径不变，超过阈值时用 `str()` 精确判定，`2**14284` 这类仍可被 `json.dumps` 序列化的 4300 位整数不再被静默丢弃（Issue #2568）。
+- `resume list` 与向导 `local_resumes` 在简历目录不可读时不再静默报告为空：枚举改用 `os.listdir`，只把 `FileNotFoundError` 当缺失，其余 `OSError` 由命令出口按不可重试的 `LOCAL_IO_ERROR` 收口，不再引导用户以为简历丢失并重建；单份坏文件仍进 `hints.corrupt`（Issue #2569）。
+
 ## [3.4.163] - 2026-11-23
 
 ### Fixed
