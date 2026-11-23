@@ -11,6 +11,7 @@ from boss_agent_cli.commands._output_path import validate_output_path_or_emit
 from boss_agent_cli.services.chat_export import render_export
 from boss_agent_cli.services.friend_list_pages import friend_list_page_observation
 from boss_agent_cli.services.output_path import prepare_output_path
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, page_can_advance
 from boss_agent_cli.services.text_files import write_text_atomic
 from boss_agent_cli.services.chat_snapshot import save_snapshot_and_diff, load_snapshot
 from boss_agent_cli.services.chat_utils import (
@@ -29,7 +30,7 @@ _escape_md_cell = escape_md_cell
 
 
 @click.command("chat")
-@click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
+@click.option("--page", default=1, type=click.IntRange(min=1, max=MAX_TRUSTED_PAGE), help="页码")
 @click.option("--from", "from_who", default=None, type=click.Choice(["boss", "me"]),
 	help="筛选发起方：boss=对方主动联系 / me=我主动打招呼")
 @click.option("--days", default=None, type=click.IntRange(min=0, max=36500), help="只显示最近 N 天的记录")
@@ -268,8 +269,12 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 		# --page 一直存在，但此前不从平台响应推导分页事实：Agent 翻页时既不知道
 		# 当前是哪一页，也没有「是否还有下一页」的证据。与 recommend 保持同一套
 		# 保守语义：只有平台返回布尔 hasMore 才据此给出下一页命令。
+		# 请求页钳制到可信上限：MCP / 直接调用可以绕过 Click 的 IntRange，
+		# 而 ``page + 1`` 在 4300 位整数上字符串化会抛 ValueError，被兜成
+		# 可重试的 NETWORK_ERROR（Issue #2542，与 #1824 / #1880 同口径）。
+		current_page = min(max(page, 1), MAX_TRUSTED_PAGE)
 		pagination: dict[str, Any] = {
-			"page": page,
+			"page": current_page,
 			"has_more": has_more,
 			"has_more_source": "platform_hasMore" if has_more is not None else "unknown",
 			"total": len(friends),
@@ -279,8 +284,10 @@ def chat_cmd(ctx: click.Context, page: int, from_who: str | None, days: int | No
 			boss_command_for_ctx(ctx, "detail <security_id>", include_data_dir=True),
 			boss_command_for_ctx(ctx, "chatmsg <uid>", include_data_dir=True),
 		]
-		if has_more is True:
-			next_cmd = f"chat --page {page + 1}"
+		if has_more is True and page_can_advance(pagination):
+			# 达到可信页码上限时不再给下一页提示：钳制后的页码再加一仍是同一页，
+			# Agent 会无界重复同一请求（Issue #2542，与 #2434 同口径）。
+			next_cmd = f"chat --page {pagination['page'] + 1}"
 			if from_who:
 				next_cmd += f" --from {from_who}"
 			if days is not None:
@@ -311,15 +318,24 @@ def _format_ts(ts_ms: int) -> str:
 		# 越界 / 非有限时间戳只是展示信息：按「无时间」输出，不让整条命令
 		# 落成可重试的 NETWORK_ERROR（Issue #1295）。
 		return "-"
-	dt = dt.astimezone()
+	try:
+		dt = dt.astimezone()
+	except (OverflowError, ValueError):
+		# 本地时区偏移可能把 UTC 边界时间推过 year 10000 上限：与 fromtimestamp
+		# 越界同口径按「无时间」输出（Issue #2542）。
+		return "-"
 	now = datetime.datetime.now(tz=datetime.timezone.utc).astimezone()
 	if dt.date() == now.date():
 		return dt.strftime("今天 %H:%M")
 	delta = (now.date() - dt.date()).days
 	if delta == 1:
 		return dt.strftime("昨天 %H:%M")
-	if delta < 7:
+	if 0 < delta < 7:
 		return f"{delta}天前"
+	if delta <= 0:
+		# 未来时间戳（平台时钟漂移 / 测试数据）不能渲染成负的「N天前」
+		# （Issue #2542）。
+		return dt.strftime("%Y-%m-%d %H:%M")
 	return dt.strftime("%m-%d %H:%M")
 
 
