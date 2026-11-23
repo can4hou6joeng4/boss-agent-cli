@@ -32,6 +32,7 @@ from boss_agent_cli.search_filters import (
 	detail_channel_for,
 	detail_filter_max_pages,
 	ensure_supported_city,
+	ensure_text_encodable,
 	parse_boss_search_url,
 	resolve_active_level,
 	resolve_search_code_params,
@@ -338,6 +339,9 @@ def search_cmd(
 	# 校验失败的筛选项若完全来自 preset，错误消息要点名是哪条本地预设：
 	# 用户这次没传任何筛选参数，只说「未知薪资范围」看不出该改哪里。
 	preset_origin = ""
+	# 记录最终关键词是否由预设补上：坏预设要让用户看到删除重建指引，
+	# 而不是只报一条通用的参数错误（Issue #2528）。
+	query_from_preset = False
 	if preset and not any((city, salary, experience, education, industry, scale, stage, job_type)):
 		remove_cmd = _hint_command(ctx, f"preset remove {positional_hint(preset)}")
 		preset_origin = f"（来自 preset '{preset}'，可用 {remove_cmd} 删除后重建）"
@@ -358,8 +362,7 @@ def search_cmd(
 		with CacheStore(data_dir / "cache" / "boss_agent.db") as cache:
 			try:
 				record = cache.get_saved_search(preset)
-			except SavedSearchParamsError as exc:
-				# 预设参数写坏时给可执行的删除重建指引，而不是把 JSON 解析错误
+			except SavedSearchParamsError as exc:				# 预设参数写坏时给可执行的删除重建指引，而不是把 JSON 解析错误
 				# 兜成 NETWORK_ERROR 让 Agent 无限重试。
 				handle_error_output(
 					ctx, "search", code="SAVED_SEARCH_INVALID", message=str(exc),
@@ -390,6 +393,8 @@ def search_cmd(
 		# 失效明确拒绝，而不是报容易误导的「未提供 query」。
 		if isinstance(preset_query, str) and not preset_query.strip():
 			preset_query = None
+		if query is None and preset_query is not None:
+			query_from_preset = True
 		query = query if query is not None else preset_query
 		city = city if city is not None else params.get("city")
 		salary = salary if salary is not None else params.get("salary")
@@ -416,7 +421,10 @@ def search_cmd(
 				hints={"next_actions": [search_cmd]},
 			)
 			return
-		query = query or parsed_url.query
+		if parsed_url.query and not query:
+			# --url 链接补上的关键词来源明确：不做「坏预设」指引。
+			query = parsed_url.query
+			query_from_preset = False
 		raw_params.update(parsed_url.params)
 		if parsed_url.page is not None and page == 1:
 			page = parsed_url.page
@@ -436,6 +444,27 @@ def search_cmd(
 				_hint_command(ctx, f"preset add {positional_hint(preset)} <关键词>"),
 			]},
 		)
+		return
+
+	# 关键词原样进入 httpx 的 URL 参数：孤立代理项会抛 UnicodeEncodeError，
+	# 被全局兜成带磁盘指引的 LOCAL_IO_ERROR（Issue #2528）。预设里的坏关键词
+	# 与空白关键词同口径报 SAVED_SEARCH_INVALID 并给删除重建命令。
+	try:
+		ensure_text_encodable("搜索关键词", query)
+	except ValueError as exc:
+		if preset and query_from_preset:
+			handle_error_output(
+				ctx,
+				"search",
+				code="SAVED_SEARCH_INVALID",
+				message=f"预设 '{preset}' 的参数已失效：{exc}",
+				hints={"next_actions": [
+					_hint_command(ctx, f"preset remove {positional_hint(preset)}"),
+					_hint_command(ctx, f"preset add {positional_hint(preset)} <关键词>"),
+				]},
+			)
+		else:
+			emit_filter_error(ctx, "search", exc)
 		return
 
 	if not query and not search_url:

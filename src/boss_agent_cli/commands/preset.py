@@ -13,6 +13,7 @@ from boss_agent_cli.search_filters import (
 	ACTIVE_LEVELS,
 	build_search_params,
 	ensure_supported_city,
+	ensure_text_encodable,
 	resolve_active_level,
 	resolve_search_code_params,
 )
@@ -108,6 +109,9 @@ def preset_add_cmd(
 	# 写进预设后，`search --preset` 每次都要先在参数解析处失败，而预设本身
 	# 仍显示为「已保存」，用户很难看出该改的是这条本地记录。
 	try:
+		# 与 watch add 同口径：关键词最终进入 httpx 的 URL 参数，孤立代理项
+		# 会在组参数时抛 UnicodeEncodeError（Issue #2528）。
+		ensure_text_encodable("搜索关键词", query)
 		ensure_supported_city(city)
 		resolve_search_code_params(
 			salary=salary, experience=experience, education=education,

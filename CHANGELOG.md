@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `search` / `export` 的关键词与 `watch add` / `preset add` 的写入参数在入口校验 UTF-8 可编码性：argv 的孤立代理项按 `INVALID_PARAM` 拒绝，不再等到 `httpx` 组 URL 参数时被兜成带磁盘指引的 `LOCAL_IO_ERROR`。存量记录的可编码性纳入 `validate_stored_search_params`，`watch run` / `search --preset` 对坏记录报 `SAVED_SEARCH_INVALID` 并给删除重建指引，`watch run --all` 不再因一条坏记录中止整批；编码无效的预设关键词同样按预设失效处理（Issue #2528）。
+
 ## [3.4.160] - 2026-11-23
 
 ### Fixed

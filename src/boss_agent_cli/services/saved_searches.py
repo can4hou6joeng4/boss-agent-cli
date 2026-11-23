@@ -20,6 +20,7 @@ from boss_agent_cli.search_filters import (
 	resolve_active_level,
 	resolve_search_code_params,
 )
+from boss_agent_cli.services.text_files import is_utf8_encodable
 
 #: 存储格式为「字符串或 null」的参数键：``build_search_params`` 的 10 键加 active。
 SEARCH_PARAM_KEYS = (
@@ -53,6 +54,11 @@ def validate_stored_search_params(params: Mapping[str, Any]) -> None:
 			# 存量参数可能被手工改成数组 / 数字：先在类型上失败，避免
 			# `ensure_supported_city` / `.split()` 抛 TypeError / AttributeError。
 			raise ValueError(f"参数 {key} 必须是字符串（收到 {type(value).__name__}）")
+		if isinstance(value, str) and not is_utf8_encodable(value):
+			# 关键词最终进入 httpx 的 URL 参数：孤立代理项会在那里抛
+			# UnicodeEncodeError，被兜成带磁盘指引的 LOCAL_IO_ERROR，且
+			# `watch run --all` 的一条坏记录会中止整批（Issue #2528）。
+			raise ValueError(f"参数 {key} 含有无法按 UTF-8 编码的字符（如孤立代理项）")
 	ensure_supported_city(params.get("city"))
 	# active 与其他筛选键同口径：未知取值必须落成 SAVED_SEARCH_INVALID，
 	# 不能留到 pipeline 里抛裸 ValueError 被兜成可重试的 NETWORK_ERROR（Issue #1847）。
