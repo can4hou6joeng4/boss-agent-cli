@@ -3,12 +3,14 @@ from typing import Any
 
 import click
 
+from boss_agent_cli.api._base_client import RequestTextEncodingError
 from boss_agent_cli.api.client import RISK_ERROR_BY_CODE
 from boss_agent_cli.api.request_budget import is_request_stop
 from boss_agent_cli.api.models import employment_type_from_raw, field_dict, field_text
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.cache.store import CacheStore
 from boss_agent_cli.commands._platform import account_scope, get_platform_instance
+from boss_agent_cli.commands._text_guard import reject_unencodable_params
 from boss_agent_cli.display import (
 	boss_command_for_ctx,
 	handle_auth_errors,
@@ -60,6 +62,10 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 			hints={"next_actions": [_hint_command(ctx, "search <关键词>"), _hint_command(ctx, "show <编号>")]},
 		)
 		return
+	# 不可编码的标识在 httpx 构造请求时才会失败，而 detail 会把该失败当作
+	# 「快速通道不可用」降级到浏览器通道；入口先按参数错误拒绝（Issue #2533）。
+	if reject_unencodable_params(ctx, "detail", security_id=security_id, job_id=job_id, lid=lid):
+		return
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
 
@@ -83,7 +89,9 @@ def detail_cmd(ctx: click.Context, security_id: str, lid: str, job_id: str) -> N
 				result, last_error = _detail_via_httpx(platform, security_id, job_id, data_dir, account=account)
 			except Exception as e:
 				# 风控、预算与超时都是停止信号：继续降级会再发一次请求。
-				if is_request_stop(e):
+				# 请求参数不可编码同理：换浏览器通道仍会带同一组坏参数
+				# （Issue #2533）。
+				if is_request_stop(e) or isinstance(e, RequestTextEncodingError):
 					raise
 				logger.info(f"httpx 快速通道失败（{e}），降级到浏览器通道")
 				result = None

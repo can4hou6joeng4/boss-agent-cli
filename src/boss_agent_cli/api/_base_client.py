@@ -82,6 +82,17 @@ class PlatformResponseInvalid(ValueError):
 	"""
 
 
+class RequestTextEncodingError(ValueError):
+	"""请求参数含有无法按 UTF-8 编码的字符（如孤立代理项）。
+
+	httpx 在构造 URL / 表单体 / JSON 体时同步抛 ``UnicodeError``，此时请求
+	还没有发出。裸 ``UnicodeError`` 会被全局兜底当成本地磁盘问题
+	（``LOCAL_IO_ERROR`` + 权限 / 磁盘指引），写操作还会被当成「结果未知」
+	保留预约（Issue #2533）。子类化 ``ValueError`` 而不是 ``UnicodeError``，
+	让命令出口按 ``INVALID_PARAM`` 收口，也避免混入其他 Unicode 兜底分支。
+	"""
+
+
 def _status_error_without_query(exc: httpx.HTTPStatusError) -> httpx.HTTPStatusError:
 	"""重建不带查询参数的 ``HTTPStatusError``，保留类型、状态码与路径。
 
@@ -454,6 +465,11 @@ class _BaseHttpClient:
 					kwargs["follow_redirects"] = False
 				try:
 					resp = client.request(method, url, headers=headers, **kwargs)
+				except UnicodeError as error:
+					# URL / 请求体的 UTF-8 编码在发出第一个字节之前就失败了：
+					# 这是参数本身不可编码（如孤立代理项），不是本地磁盘问题，
+					# 也证明请求没有发出（Issue #2533）。
+					raise RequestTextEncodingError(str(error)) from error
 				except Exception as error:
 					from boss_agent_cli.api.client import PlatformRiskError
 

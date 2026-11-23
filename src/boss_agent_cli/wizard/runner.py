@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from boss_agent_cli.api._base_client import RequestTextEncodingError
 from boss_agent_cli.api.browser_client import BrowserNavigationError, ChatTabCdpUnreachable
 from boss_agent_cli.api.browser_source import BrowserSourceUnavailable, BrowserSourceUnsupported
 from boss_agent_cli.api.client import PlatformRiskError
@@ -774,6 +775,19 @@ class WorkflowRunner:
 						str(exc),
 						recoverable=invalid_recoverable,
 						recovery_action=invalid_recovery,
+						replay_safe=True,
+					)
+				# 请求参数在编码阶段失败（孤立代理项等）是输入问题：请求未发出，
+				# 修正参数后重试同一 run_id 是安全的（Issue #2533）。
+				elif isinstance(exc, RequestTextEncodingError):
+					invalid_recoverable, invalid_recovery = error_contract_for_code("INVALID_PARAM")
+					error = WorkflowActionError(
+						"INVALID_PARAM",
+						str(exc),
+						recoverable=invalid_recoverable,
+						recovery_action=(
+							"检查工作流输入中的标识 / 关键词 / 消息文本，去掉无效字符后重试同一 run_id"
+						),
 						replay_safe=True,
 					)
 				# 约束冲突 / 绑定值非法是调用方输入问题，缓存库本身健康：

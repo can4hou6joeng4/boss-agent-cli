@@ -6,6 +6,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
+from boss_agent_cli.commands._text_guard import reject_unencodable_params
 from boss_agent_cli.commands.recruiter._hints import hint_command
 from boss_agent_cli.display import (
 	handle_auth_errors,
@@ -41,6 +42,24 @@ from boss_agent_cli.wizard.actions import execute_recruiter_candidate_search
 def candidates_cmd(ctx: click.Context, query: str, city: str | None, job_id: str | None, experience: str | None, degree: str | None, age: str | None, school_level: str | None, activeness: str | None, source: str | None, salary: str | None, select: bool, page: int) -> None:
 	"""搜索候选人"""
 	if not require_compliance_allowed(ctx, "recruiter-candidates"):
+		return
+
+	# 关键词与筛选项都会进 httpx 查询参数：孤立代理项在编码阶段才会失败，
+	# 入口按参数错误拒绝（Issue #2533）。
+	if reject_unencodable_params(
+		ctx,
+		"recruiter-candidates",
+		query=query,
+		city=city,
+		job_id=job_id,
+		experience=experience,
+		degree=degree,
+		age=age,
+		school_level=school_level,
+		activeness=activeness,
+		source=source,
+		salary=salary,
+	):
 		return
 
 	data_dir = ctx.obj["data_dir"]
