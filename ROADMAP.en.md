@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.169 (2026-11-23): a failed response-body decode on read requests is reported as a deterministic `INTERNAL_ERROR` instead of a retryable network error (Issue #2590).
+
 v3.4.168 (2026-11-23): when an in-flight action for a candidate has an unknown outcome, the append-only queue no longer dispatches another message for that candidate; pending actions stay unchanged for human verification (Issue #2586).
 
 v3.4.167 (2026-11-23): recruiter automation reads conversations in the platform's real chat-history shape, and system messages no longer look like candidate replies. Unconfirmed candidate conversation identities are no longer sent to the platform as `friend_id=0`; pending actions stay unchanged (Issues #2580, #2582).
