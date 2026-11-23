@@ -1066,7 +1066,8 @@ def _raise_candidate_action_blocked(
 def _candidate_apply(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	security_id = _required_nonblank_str(inputs, "security_id")
 	job_id = _required_nonblank_str(inputs, "job_id")
-	lid = str(inputs.get("lid") or "")
+	# lid 直接进入投递写请求：非字符串不能经 str() 变成 repr（与 candidate_detail 同口径）。
+	lid = _optional_str_strict(inputs, "lid") or ""
 	account = account_scope(context.auth())
 	with CacheStore(context.data_dir / "cache" / "boss_agent.db") as cache:
 		if cache.is_applied(security_id, job_id, account=account):
