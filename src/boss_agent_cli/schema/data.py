@@ -327,7 +327,7 @@ SCHEMA_DATA = {
 			"description": "基于用户登录态获取个性化职位推荐；成功时 pagination.index_snapshot 给出本次写入的索引快照（source/page/count/saved_at），与 show 的编号配套使用。",
 			"args": [],
 			"options": {
-				"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
+				"--page": {"type": "int", "default": 1, "minimum": 1, "maximum": 1000000, "description": "页码"},
 				"--with-score": {"type": "bool", "default": False, "description": "附加匹配分和原因"},
 			},
 		},
@@ -458,8 +458,8 @@ SCHEMA_DATA = {
 					"type": "str",
 					"description": "已知稳定 uid 时直接读取消息，位置参数按本次请求的 security_id 使用，跳过沟通列表扫描；security_id 过期时按平台错误返回",
 				},
-				"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
-				"--count": {"type": "int", "default": 20, "minimum": 1, "description": "每页消息数量"},
+				"--page": {"type": "int", "default": 1, "minimum": 1, "maximum": 1000000, "description": "页码"},
+				"--count": {"type": "int", "default": 20, "minimum": 1, "maximum": 1000000, "description": "每页消息数量"},
 				"--raw": {
 					"type": "bool",
 					"default": False,
@@ -477,8 +477,8 @@ SCHEMA_DATA = {
 				},
 			],
 			"options": {
-				"--page": {"type": "int", "default": 1, "minimum": 1, "description": "页码"},
-				"--count": {"type": "int", "default": 20, "minimum": 1, "description": "每页消息数量"},
+				"--page": {"type": "int", "default": 1, "minimum": 1, "maximum": 1000000, "description": "页码"},
+				"--count": {"type": "int", "default": 20, "minimum": 1, "maximum": 1000000, "description": "每页消息数量"},
 			},
 		},
 		"mark": {

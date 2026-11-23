@@ -7,19 +7,30 @@ from boss_agent_cli.commands._platform import get_platform_instance
 from boss_agent_cli.commands._contact_lookup import current_friend_security_id_or_emit, current_friend_uid_or_emit, resolve_friend_or_emit
 from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, handle_not_supported, handle_output, handle_platform_error_output, render_message_panel
 from boss_agent_cli.services.chat_utils import message_list
-from boss_agent_cli.services.pagination import UNKNOWN_HAS_MORE_OPERATOR_ACTION, list_pagination, page_can_advance
+from boss_agent_cli.services.pagination import (
+	MAX_TRUSTED_COUNT,
+	MAX_TRUSTED_PAGE,
+	UNKNOWN_HAS_MORE_OPERATOR_ACTION,
+	clamp_trusted,
+	list_pagination,
+	page_can_advance,
+)
 
 
 @click.command("chat-summary")
 @click.argument("security_id", metavar="UID_OR_SECURITY_ID")
-@click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
-@click.option("--count", default=20, type=click.IntRange(min=1), help="每页消息数量")
+@click.option("--page", default=1, type=click.IntRange(min=1, max=MAX_TRUSTED_PAGE), help="页码")
+@click.option("--count", default=20, type=click.IntRange(min=1, max=MAX_TRUSTED_COUNT), help="每页消息数量")
 @click.pass_context
 @handle_auth_errors("chat-summary")
 def chat_summary_cmd(ctx: click.Context, security_id: str, page: int, count: int) -> None:
 	"""基于聊天历史生成结构化摘要与下一步建议。"""
 	if not require_compliance_allowed(ctx, "chat-summary"):
 		ctx.exit(1)
+
+	# 直接调用回调也要限制页码和数量，避免超长整数进入请求序列化（Issue #2550）。
+	page = clamp_trusted(page)
+	count = clamp_trusted(count, MAX_TRUSTED_COUNT)
 
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]

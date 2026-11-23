@@ -15,6 +15,7 @@
 - `chat` 的时间列不再因时间戳边界让整条命令失败：本地时区偏移把 UTC 边界时间推过 year 10000 时 `astimezone()` 的 `OverflowError` 按「无时间」输出 `-`（与 #1295 的 `fromtimestamp` 越界同口径），`chat --export` 因此不再整体失败；未来时间戳不再渲染成负的「N天前」，改为绝对日期（Issue #2542）。
 - `detail` / `show` 的通道降级不再掩盖确定性失败：详情响应为 `RATE_LIMITED` 时不再换浏览器通道再撞同一限流窗口；参数类 HTTP 4xx（400 / 406 / 409 / 410 / 422）不再回退浏览器，按 `INVALID_PARAM` 收口；httpx 卡片成功但 `zpData.jobCard` 缺失时回退浏览器（`job_card` 此前只在抛异常时降级），仍为空才报 `JOB_NOT_FOUND`；本地缓存锁冲突 / 库损坏不再被当作「httpx 通道不可用」触发降级；响应 `code` 为布尔时按不可重试的 `INTERNAL_ERROR` 收口，不再兜成可重试的 `NETWORK_ERROR`（Issue #2548）。
 - `detail` 从缓存取出的 job_id 含孤立代理项时按未命中处理，继续用 `security_id` 走卡片通道，不再让整条命令报 `INVALID_PARAM`（显式 `--job-id` 仍按输入错误拒绝）；`show` / `detail` 的 TTY 渲染把平台文本里的孤立代理项归一为可编码文本，严格 UTF-8 的 stderr 不再抛 `UnicodeEncodeError`；`jobType` 漂移成布尔时 `raw_job_type` 按缺失输出，不再出现 `true`（Issue #2549）。
+- `recommend` / `chatmsg` / `chat-summary` 的 `--page` 与 `--count` 与 `search` / `chat` 同口径钳制到可信上限（`MAX_TRUSTED_PAGE` / `MAX_TRUSTED_COUNT`）：4300 位数值不再在 httpx 参数序列化、本地索引写入或 `page + 1` 提示拼接时抛 `ValueError` 被兜成可重试的 `NETWORK_ERROR` / `INTERNAL_ERROR`；`boss schema` 与 MCP 工具目录两个来源同步补 `maximum`（Issue #2550）。
 
 ## [3.4.162] - 2026-11-23
 

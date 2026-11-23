@@ -11,6 +11,7 @@ from boss_agent_cli.display import boss_command_for_ctx, handle_auth_errors, han
 from boss_agent_cli.index_cache import try_save_index
 from boss_agent_cli.match_score import score_job_dict
 from boss_agent_cli.services.job_identity import deduplicate_job_result
+from boss_agent_cli.services.pagination import MAX_TRUSTED_PAGE, clamp_trusted, page_can_advance
 
 
 def _hint_command(ctx: click.Context, command: str) -> str:
@@ -19,7 +20,7 @@ def _hint_command(ctx: click.Context, command: str) -> str:
 
 
 @click.command("recommend")
-@click.option("--page", default=1, type=click.IntRange(min=1), help="页码")
+@click.option("--page", default=1, type=click.IntRange(min=1, max=MAX_TRUSTED_PAGE), help="页码")
 @click.option("--with-score", is_flag=True, default=False, help="附加匹配分和原因")
 @click.pass_context
 @handle_auth_errors("recommend")
@@ -27,6 +28,9 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 	"""基于简历的个性化职位推荐"""
 	if not require_compliance_allowed(ctx, "recommend"):
 		ctx.exit(1)
+
+	# 直接调用回调时也保护平台请求、信封与索引写入（Issue #2550）。
+	page = clamp_trusted(page)
 
 	data_dir = ctx.obj["data_dir"]
 	logger = ctx.obj["logger"]
@@ -90,7 +94,7 @@ def recommend_cmd(ctx: click.Context, page: int, with_score: bool) -> None:
 				_hint_command(ctx, "greet <security_id> <job_id>"),
 			],
 		}
-		if has_more is True:
+		if has_more is True and page_can_advance(pagination):
 			# 翻页命令必须保留本次的 --with-score：只写 --page 时下一页的
 			# match_score 全部消失，Agent 会以为排序依据变了。
 			next_page = f"recommend --page {page + 1}"
