@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.181 (2026-11-24): `clean --risk-lock --privacy` reports the real cleared state of the local risk lock when the privacy step fails, and `clean --privacy --dry-run` no longer counts aged snapshots and exports twice, matching the real run (Issue #2639).
+
 v3.4.180 (2026-11-24): the wizard / MCP `boss_wizard` apply action rejects a non-string lid as a parameter error before the local claim and any platform call (Issue #2636).
 
 v3.4.179 (2026-11-24): the wizard / MCP `boss_wizard` pipeline and digest actions validate days_stale / now_ts_ms before any platform request, with digest sharing the top-level days_stale cap; the recruiter resume action rejects a non-string security_id (Issues #2631, #2633).
