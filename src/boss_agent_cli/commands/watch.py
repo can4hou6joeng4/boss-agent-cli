@@ -153,6 +153,14 @@ def watch_add_cmd(
 		return
 
 	params, _ = _parse_watch_filters(query, city, salary, experience, education, industry, scale, stage, job_type, welfare)
+	# 与读取侧（watch run）共用同一份存量校验：入口此前只校验关键词的可编码性，
+	# `--welfare "\udcff"` 之类能保存成功，随后每次 run 都以 SAVED_SEARCH_INVALID
+	# 拒绝该记录，删除后按同样参数重建仍然失败（Issue #2543）。
+	try:
+		validate_stored_search_params(params)
+	except ValueError as exc:
+		emit_filter_error(ctx, "watch", exc)
+		return
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		cache.save_saved_search(name, params)
 	run_cmd = _hint_command(ctx, f"watch run {positional_hint(name)}")

@@ -18,6 +18,7 @@ from boss_agent_cli.search_filters import (
 	resolve_search_code_params,
 )
 from boss_agent_cli.commands._filter_errors import emit_filter_error
+from boss_agent_cli.services.saved_searches import validate_stored_search_params
 
 
 def _build_params(
@@ -130,6 +131,15 @@ def preset_add_cmd(
 	if active_level:
 		# 只在设置时写入，旧预设和不带 --active 的预设保持原有 10 个键
 		params["active"] = active_level
+	# 与读取侧（search --preset / watch run）共用同一份存量校验：入口此前只
+	# 校验关键词的可编码性，`--welfare "\udcff"` 之类能保存成功，随后每次
+	# 运行都以 SAVED_SEARCH_INVALID 拒绝，删除后按同样参数重建仍然失败
+	# （Issue #2543）。
+	try:
+		validate_stored_search_params(params)
+	except ValueError as exc:
+		emit_filter_error(ctx, "preset", exc)
+		return
 	with CacheStore(ctx.obj["data_dir"] / "cache" / "boss_agent.db") as cache:
 		cache.save_saved_search(name, params)
 	next_actions = [

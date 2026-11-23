@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- 联系人身份判定在 CLI 与向导之间统一到 `services/contact_lookup`：向导的 `candidate_exchange` / `candidate_mark` / `candidate_chat_history` 不再把漂移成布尔 / 容器的 `securityId` / `uid` 经 `str()` 变成 `"True"` / `"{'a': 1}"` 发给平台（`candidate_exchange` 属写请求），类型漂移与缺失一律按 `NETWORK_ERROR`、`recoverable=false` 停止；`current_friend_uid_or_emit` 对超过 4300 位的整数不再落成可重试错误，与 `stable_uid` 同口径按缺失 uid 处理（Issue #2543）。
+- `preset add` / `watch add` 在写库前调用读取侧同一份 `validate_stored_search_params`：`--welfare "\udcff"` 之类不可编码的筛选参数不再能保存成「每次运行都报 `SAVED_SEARCH_INVALID`、删除重建仍然失败」的记录（此前入口只校验关键词，Issue #2543）。
+
 ## [3.4.162] - 2026-11-23
 
 ### Fixed

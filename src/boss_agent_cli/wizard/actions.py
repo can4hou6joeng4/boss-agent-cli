@@ -35,7 +35,13 @@ from boss_agent_cli.services.candidate_actions import (
 	candidate_action_provably_unsent,
 	run_candidate_action,
 )
-from boss_agent_cli.services.contact_lookup import FriendListShapeError, FriendLookupLimitExceeded, find_friend
+from boss_agent_cli.services.contact_lookup import (
+	FriendListShapeError,
+	FriendLookupLimitExceeded,
+	find_friend,
+	friend_security_id,
+	friend_uid,
+)
 from boss_agent_cli.services.friend_list_pages import collect_friend_list_page
 from boss_agent_cli.services.output_path import OutputPathProblem, inspect_output_path, prepare_output_path
 from boss_agent_cli.crawler.operations import crawl_status
@@ -1057,7 +1063,10 @@ def _candidate_friend(platform: Any, identifier: str, *, context: ActionContext 
 
 
 def _candidate_current_security_id(friend: Mapping[str, Any]) -> str:
-	security_id = str(friend.get("securityId") or friend.get("security_id") or "").strip()
+	# 与 CLI 侧 commands/_contact_lookup 共用同一份判定：布尔 / 容器漂移时
+	# str() 出的 "True" / "{'a': 1}" 绝不能当身份发给 exchange_contact 等
+	# 写请求（Issue #1812 只修了 CLI 侧，Issue #2543 统一）。
+	security_id = friend_security_id(friend)
 	if security_id:
 		return security_id
 	raise WorkflowActionError(
@@ -1068,12 +1077,25 @@ def _candidate_current_security_id(friend: Mapping[str, Any]) -> str:
 	)
 
 
+def _candidate_current_uid(friend: Mapping[str, Any]) -> str:
+	"""读取本次列表返回的稳定 uid；缺失 / 类型漂移时安全停止（Issue #2543）。"""
+	uid = friend_uid(friend)
+	if uid:
+		return uid
+	raise WorkflowActionError(
+		"NETWORK_ERROR",
+		"沟通列表返回的联系人缺少稳定 uid，已停止执行；按当前列表重试不会改变结果",
+		recoverable=False,
+		recovery_action="刷新沟通列表并取到联系人 uid 后重新执行；不要自动重试同一列表结果",
+	)
+
+
 def _candidate_exchange(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
 	identifier = _required_nonblank_value(inputs, "security_id")
 	exchange_type = _exchange_type(inputs)
 	with context.candidate_platform() as platform:
 		friend = _candidate_friend(platform, identifier, context=context)
-		uid = str(friend.get("uid") or "")
+		uid = _candidate_current_uid(friend)
 		security_id = _candidate_current_security_id(friend)
 		name = str(friend.get("name") or "-")
 		data = _write_call(
@@ -1108,7 +1130,7 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 		)
 	with context.candidate_platform() as platform:
 		friend = _candidate_friend(platform, identifier, context=context)
-		uid = str(friend.get("uid") or "")
+		uid = _candidate_current_uid(friend)
 		# friendSource 只是回传给标签接口的定位参数：平台字段漂移成非数字串 /
 		# 对象 / 1e400 时按缺失的默认 0 处理，不能让 int() 的 ValueError 把整个
 		# 步骤兜成可重试的 NETWORK_ERROR（Issue #1314）。
@@ -1128,7 +1150,7 @@ def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 	return StepResult(
 		{
 			"uid": uid,
-			"security_id": str(friend.get("securityId") or friend.get("security_id") or ""),
+			"security_id": friend_security_id(friend),
 			"label": label,
 			"result": data,
 		}
@@ -1153,7 +1175,7 @@ def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 	identifier = _required_nonblank_value(inputs, "gid")
 	with context.candidate_platform() as platform:
 		friend = _candidate_friend(platform, identifier, context=context)
-		gid = str(friend.get("uid") or "")
+		gid = _candidate_current_uid(friend)
 		security_id = _candidate_current_security_id(friend)
 		response = platform.chat_history(
 			gid,
