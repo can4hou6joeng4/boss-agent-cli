@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.180 (2026-11-24): the wizard / MCP `boss_wizard` apply action rejects a non-string lid as a parameter error before the local claim and any platform call (Issue #2636).
+
 v3.4.179 (2026-11-24): the wizard / MCP `boss_wizard` pipeline and digest actions validate days_stale / now_ts_ms before any platform request, with digest sharing the top-level days_stale cap; the recruiter resume action rejects a non-string security_id (Issues #2631, #2633).
 
 v3.4.178 (2026-11-24): the wizard / MCP `boss_wizard` detail action reuses a valid cached job_id for the httpx fast path and tightens job_id / lid type, blank and encoding checks, matching the top-level `boss detail` command (Issue #2628).
