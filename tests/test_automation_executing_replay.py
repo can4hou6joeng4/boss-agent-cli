@@ -4,8 +4,15 @@
 下一轮按「结果未知」转成 `verification-required` 并打开熔断，绝不自动重发。
 """
 
+import json
+from pathlib import Path
+from unittest.mock import Mock
+
 import pytest
 
+from boss_agent_cli.api import cdp_risk_lock
+from boss_agent_cli.api.client import PlatformRiskError
+from boss_agent_cli.automation.boss_adapter import BossRecruiterAutomationPlatform
 from boss_agent_cli.api.request_budget import RequestBudgetExceeded
 from boss_agent_cli.automation.config import AutomationConfig
 from boss_agent_cli.automation.models import ActionResult, EventStatus, PendingAction, PlatformAction
@@ -63,6 +70,39 @@ def _seed(
 
 def _statuses(store: AutomationStore) -> list[tuple[str, str]]:
 	return [(item.id, item.status) for item in store.read_pending()]
+
+
+@pytest.mark.parametrize("scope", ["local", "group"])
+def test_local_risk_preflight_stops_without_marking_pending_action(
+	tmp_path: Path, scope: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+	data_dir = tmp_path / "data"
+	store = AutomationStore(data_dir)
+	_seed(store)
+	before = store.pending_path.read_bytes()
+	lock_dir = data_dir
+	if scope == "group":
+		lock_dir = tmp_path / "shared-budget"
+		(data_dir / "config.json").write_text(json.dumps({"request_budget_dir": str(lock_dir)}), encoding="utf-8")
+	cdp_risk_lock.write_lock(lock_dir, None, reason="ENVIRONMENT_RISK", platform_code=37)
+	adapter = BossRecruiterAutomationPlatform.from_context(data_dir=data_dir, delay=(0, 0), cdp_url=None, live=True)
+	# 用离线替身断言两个平台入口都不可达；本地预检沿用真实风险锁读取。
+	dispatch = Mock(side_effect=AssertionError("风控停止不得派发"))
+	scan = Mock(side_effect=AssertionError("风控停止不得扫描"))
+	monkeypatch.setattr(adapter, "execute_action", dispatch)
+	monkeypatch.setattr(adapter, "scan_conversations", scan)
+
+	with pytest.raises(PlatformRiskError) as caught:
+		run_automation_cycle(adapter, store, AutomationConfig(), platform="zhipin", dry_run=False)
+
+	assert caught.value.code == "ENVIRONMENT_RISK_LOCKED"
+	assert caught.value.details["request_sent"] is False
+	assert store.pending_path.read_bytes() == before
+	assert store.read_state().get("conversations", {}) == {}
+	assert store.read_stop()["open"] is True
+	assert cdp_risk_lock.read_lock(lock_dir) is not None
+	dispatch.assert_not_called()
+	scan.assert_not_called()
 
 
 def test_interrupted_action_stays_executing_and_is_never_replayed(tmp_path):
