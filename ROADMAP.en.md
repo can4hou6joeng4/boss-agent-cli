@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.175 (2026-11-24): MCP argument mapping no longer drops explicit empty strings for write tools (`boss_greet` message, `boss_batch_greet` filters, `boss_hr_candidates` city / job); the CLI rejects them with `INVALID_PARAM` before any platform call (Issue #2615).
+
 v3.4.174 (2026-11-24): every recruiter write entry point now reads the circuit breaker from both `stop.json` and `state.json`; a persisted breaker, unreadable state or a wizard / MCP write action returns `CIRCUIT_BREAKER_OPEN` before dispatch (Issue #2612).
 
 v3.4.173 (2026-11-23): wizard checkpoints after a platform-risk failure no longer offer or execute `--resume`; write-result markers cover run-level errors, waiting-input steps and error-code drift (Issues #2608 / #2609).

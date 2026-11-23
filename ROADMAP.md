@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.175（2026-11-24）：MCP 参数映射不再吞掉写工具的显式空串（`boss_greet` 消息、`boss_batch_greet` 筛选项、`boss_hr_candidates` 城市 / 职位），空值由 CLI 在平台调用前按 `INVALID_PARAM` 拒绝（Issue #2615）。
+
 v3.4.174（2026-11-24）：招聘写入口统一读取 `stop.json` 与 `state.json` 的熔断状态；持久化熔断仍打开、状态损坏或 wizard / MCP 写动作都会在派发前返回 `CIRCUIT_BREAKER_OPEN`（Issue #2612）。
 
 v3.4.173（2026-11-23）：风控失败的向导断点不再把 `--resume` 当后继命令或直接重放；写请求结果未知的判定覆盖 run 级错误、等待输入步骤与错误码漂移（Issue #2608 / #2609）。
