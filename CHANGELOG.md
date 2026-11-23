@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.159] - 2026-11-23
+
 ### Fixed
 - 招呼 / 投递 / 招聘者招呼记录与职位描述缓存不再被无法按 UTF-8 编码的平台标识拖垮：标识在可编码时仍按 TEXT 存储，不可编码时按可逆的 BLOB 键绑定，转义后的字面标识不会与之碰撞。`search` / `recommend` 的 `greeted` 标记、平台确认发送后的去重记录与 `--welfare` 管线因此不再被单张漂移卡片报成带磁盘指引的 `LOCAL_IO_ERROR`（Issue #2509）。
 - 向导的 export 动作在发起平台请求前拒绝纯空白关键词（`INVALID_PARAM`），与 CLI `export` / `search` 及 `candidate_search` 同口径，不再生成一份看似成功、实际没有关键词筛选的导出文件（Issue #2519）。
