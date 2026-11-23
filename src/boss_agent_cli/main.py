@@ -1039,6 +1039,27 @@ class BossCliGroup(click.Group):
 			)
 			return None
 		except OSError as exc:
+			from boss_agent_cli.services.chat_snapshot import ChatSnapshotBusyError
+
+			# 快照锁争用是并发导出的正常现象：可重试，且不能给磁盘 / 权限指引
+			# （Issue #2538）。chat 命令已有装饰器收口，这里兜住没有装饰器的
+			# 调用路径。
+			if isinstance(exc, ChatSnapshotBusyError):
+				if not standalone_mode:
+					raise
+				command = _invoked_command_name(args, self.name or "boss")
+				busy_recoverable, _ = error_contract_for_code("CACHE_BUSY")
+				emit_error(
+					command,
+					code="CACHE_BUSY",
+					message=str(exc),
+					recoverable=busy_recoverable,
+					recovery_action=(
+						"稍后重试本命令；并发导出同一数据目录时会短暂争用当天快照锁，"
+						"快照文件本身完好，不需要删除"
+					),
+				)
+				return None
 			# 网兜：导出、保存配置这类直接写文件的路径没有统一装饰器，
 			# 写失败时必须给信封，而不是把 traceback 甩给 Agent。
 			if not standalone_mode:
