@@ -428,6 +428,52 @@ def test_candidate_pipeline_action_aggregates_every_friend_list_page(tmp_path):
 	assert truncated is False
 
 
+class _PipelinePlatform(_FakeCandidatePlatform):
+	def friend_list(self, *, page=1):
+		self.calls.append(("friend_list", page))
+		return {"code": 0, "data": {"result": [], "hasMore": False}}
+
+	def interview_data(self):
+		self.calls.append(("interview_data",))
+		return {"code": 0, "data": {"interviewList": []}}
+
+
+@pytest.mark.parametrize("action_name", ["candidate_pipeline", "candidate_digest"])
+@pytest.mark.parametrize(
+	"inputs",
+	[{"days_stale": -1}, {"days_stale": "abc"}, {"days_stale": True}, {"now_ts_ms": -1}, {"now_ts_ms": "x"}],
+)
+def test_candidate_pipeline_actions_validate_inputs_before_platform(tmp_path, action_name, inputs):
+	"""非法 days_stale / now_ts_ms 必须在任何平台请求之前被拒绝（Issue #2631）。"""
+	from boss_agent_cli.wizard.actions import DEFAULT_ACTIONS
+	from boss_agent_cli.wizard.models import WorkflowInputError
+
+	platform = _PipelinePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	with pytest.raises(WorkflowInputError):
+		DEFAULT_ACTIONS[action_name](context, inputs, {})
+
+	assert platform.calls == []
+
+
+def test_candidate_digest_action_caps_days_stale_like_cli(tmp_path):
+	"""digest 的 days_stale 上限与顶层命令一致，pipeline 保持无上限（Issue #2631）。"""
+	from boss_agent_cli.wizard.actions import DEFAULT_ACTIONS
+	from boss_agent_cli.wizard.models import WorkflowInputError
+
+	platform = _PipelinePlatform()
+	context = _action_context(tmp_path, candidate=platform)
+
+	with pytest.raises(WorkflowInputError):
+		DEFAULT_ACTIONS["candidate_digest"](context, {"days_stale": 36501}, {})
+	assert platform.calls == []
+
+	DEFAULT_ACTIONS["candidate_digest"](context, {"days_stale": 36500}, {})
+	DEFAULT_ACTIONS["candidate_pipeline"](context, {"days_stale": 36501}, {})
+	assert ("interview_data",) in platform.calls
+
+
 def test_candidate_write_actions_persist_idempotence_records(tmp_path):
 	platform = _FakeCandidatePlatform()
 	context = _action_context(tmp_path, candidate=platform)
