@@ -535,8 +535,13 @@ class _BaseHttpClient:
 						# 已跟随重定向多次，写请求可能已在其中一次生效，读路径仍按
 						# 普通网络错误上抛（Issue #2396）。
 						return self._unconfirmed_http_response(url, "transport_error")
-					if write_possible and isinstance(error, httpx.DecodingError):
-						return self._unconfirmed_http_response(url, "invalid_response")
+					if isinstance(error, httpx.DecodingError):
+						if write_possible:
+							return self._unconfirmed_http_response(url, "invalid_response")
+						# 响应体在解压 / 解码阶段就损坏，走不到 resp.json() 的解析收口；
+						# 与无效 JSON 同口径按确定性失败上报，不能让 Agent 重试同一请求
+						# 白白消耗请求预算（Issue #2590）。
+						raise PlatformResponseInvalid("平台响应解码失败，无法解析") from error
 					raise
 				finally:
 					self._throttle.mark()

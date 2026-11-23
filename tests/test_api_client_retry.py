@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from boss_agent_cli.api import endpoints
+from boss_agent_cli.api._base_client import PlatformResponseInvalid
 from boss_agent_cli.api.client import AccountRiskError, BossClient, EnvironmentRiskError
 
 
@@ -80,6 +81,27 @@ def test_request_get_adds_stoken_and_merges_cookies():
 	assert data["code"] == 0
 	assert http_client.calls[0]["kwargs"]["params"]["__zp_stoken__"] == "initial-stoken"
 	assert http_client.cookies.get("bst") == "cookie-from-resp"
+
+
+def test_read_decoding_error_is_deterministic_invalid_response():
+	"""读响应解码失败不是网络抖动，不能兜成可重试的 NETWORK_ERROR（Issue #2590）。"""
+	auth = FakeAuthManager()
+	http_client = FakeHttpxClient([])
+
+	def corrupt_response(*args, **kwargs):
+		http_client.calls.append({"method": args[0], "url": args[1]})
+		raise httpx.DecodingError("corrupt body")
+
+	http_client.request = corrupt_response
+	client = BossClient(auth)
+	client._client = http_client
+	client._throttle.wait = lambda: None
+	client._throttle.mark = lambda: None
+
+	with pytest.raises(PlatformResponseInvalid):
+		client._request("GET", endpoints.USER_INFO_URL)
+
+	assert len(http_client.calls) == 1
 
 
 @patch("boss_agent_cli.api._base_client.random.uniform", return_value=0)

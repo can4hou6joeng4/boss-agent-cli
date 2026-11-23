@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 读请求响应体在解压 / 解码阶段损坏时按确定性的 `INTERNAL_ERROR` 上报，不再让裸 `httpx.DecodingError` 兜成可重试的 `NETWORK_ERROR` 引导 Agent 反复打平台；写请求仍按结果未知收口（Issue #2590）。
+
 ## [3.4.168] - 2026-11-23
 
 ### Fixed
