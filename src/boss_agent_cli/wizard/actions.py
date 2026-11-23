@@ -1069,7 +1069,7 @@ def _candidate_current_security_id(friend: Mapping[str, Any]) -> str:
 
 
 def _candidate_exchange(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	identifier = _required_str(inputs, "security_id")
+	identifier = _required_nonblank_value(inputs, "security_id")
 	exchange_type = _exchange_type(inputs)
 	with context.candidate_platform() as platform:
 		friend = _candidate_friend(platform, identifier, context=context)
@@ -1090,7 +1090,7 @@ def _candidate_exchange(context: ActionContext, inputs: Mapping[str, Any], prior
 
 
 def _candidate_mark(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	identifier = _required_str(inputs, "security_id")
+	identifier = _required_nonblank_value(inputs, "security_id")
 	label = _required_str(inputs, "label")
 	# 先校验布尔值，再查联系人：非法输入不应产生任何平台请求。
 	remove = _bool_input(inputs, "remove")
@@ -1148,8 +1148,11 @@ def _candidate_chat(context: ActionContext, inputs: Mapping[str, Any], prior: Ma
 
 
 def _candidate_chat_history(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
+	# 空白 gid 不可能命中联系人：CLI chatmsg 在 resolve_friend_or_emit 里直接报
+	# 参数错误，向导同样不能先翻一遍沟通列表再报 CONTACT_NOT_FOUND（Issue #2523）。
+	identifier = _required_nonblank_value(inputs, "gid")
 	with context.candidate_platform() as platform:
-		friend = _candidate_friend(platform, _required_str(inputs, "gid"), context=context)
+		friend = _candidate_friend(platform, identifier, context=context)
 		gid = str(friend.get("uid") or "")
 		security_id = _candidate_current_security_id(friend)
 		response = platform.chat_history(
@@ -1235,7 +1238,9 @@ def _local_resumes(context: ActionContext, inputs: Mapping[str, Any], prior: Map
 
 
 def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping[str, Any]) -> StepResult:
-	resume_name = _required_str(inputs, "resume")
+	# 空白简历名在 CLI 由 `_load_resume_text` 报 INVALID_PARAM，不能落到
+	# RESUME_NOT_FOUND 把参数错误伪装成「简历不存在」（Issue #2523）。
+	resume_name = _required_nonblank_value(inputs, "resume")
 	resume, load_error = ResumeStore(context.data_dir / "resumes").get_with_error(resume_name)
 	if resume is None and load_error is not None:
 		# 文件存在但读不出来：报「不存在」会让 Agent 去 resume init，又被同名
@@ -1255,7 +1260,9 @@ def _ai_assist(context: ActionContext, inputs: Mapping[str, Any], prior: Mapping
 	# 其余输入都经 _required* 校验；prompt 也必须走同口径，且先于本地 AI 配置
 	# 检查：旧断点缺该键时应是参数 / 输入错误，而不是 KeyError 被归入
 	# INTERNAL_ERROR 或先报 AI_NOT_CONFIGURED（Issue #2348）。
-	prompt = _required_str(inputs, "prompt")
+	# 空白 prompt 不能照常发起一次计费请求：CLI ai 命令族自 Issue #1975 起
+	# 统一经 _ensure_text_not_blank 拒绝，向导必须在同一位置收口（Issue #2523）。
+	prompt = _required_nonblank_value(inputs, "prompt")
 	config_store = AIConfigStore(context.data_dir)
 	config = config_store.load_config()
 	api_key = config_store.get_api_key()

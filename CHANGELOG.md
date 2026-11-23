@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 向导 `ai_assist` 的 `resume` / `prompt` 与联系人动作 `candidate_exchange` / `candidate_mark` / `candidate_chat_history` 在入口拒绝纯空白输入（`INVALID_PARAM`）：空白提示词不再照常发起一次计费 AI 请求，空白联系人标识不再先翻一遍沟通列表再报「联系人不存在」。与 CLI `ai` 命令族及 `resolve_friend_or_emit` 同口径，非空白值按原样透传（Issue #2523）。
+
 ## [3.4.159] - 2026-11-23
 
 ### Fixed
