@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `clean --risk-lock --privacy` 在清锁成功、隐私清理失败时，错误信封带回风控锁已清除的真实状态与恢复指引；`clean --privacy --dry-run` 不再把旧快照与导出文件统计两次，预览与实际执行的释放量一致（Issue #2639）。
+
 ## [3.4.180] - 2026-11-24
 
 ### Fixed
