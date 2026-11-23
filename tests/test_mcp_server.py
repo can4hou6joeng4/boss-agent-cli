@@ -900,10 +900,16 @@ def test_build_args_greet():
 
 
 def test_build_args_greet_forwards_message():
-	"""自定义招呼语必须落到 --message；空串按未传处理、仍用平台默认招呼（Issue #1202）。"""
+	"""自定义招呼语必须落到 --message；空串原样下发交给 CLI 拒绝（Issue #2615）。"""
 	args = _build_args("boss_greet", {"security_id": "s1", "job_id": "j1", "message": "您好"})
 	assert args == ["greet", "s1", "j1", "--message", "您好"]
-	assert _build_args("boss_greet", {"security_id": "s1", "job_id": "j1", "message": ""}) == ["greet", "s1", "j1"]
+	assert _build_args("boss_greet", {"security_id": "s1", "job_id": "j1", "message": ""}) == [
+		"greet",
+		"s1",
+		"j1",
+		"--message",
+		"",
+	]
 
 
 def test_build_args_chat_no_options():
