@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
 from boss_agent_cli.output import Logger
+from boss_agent_cli.wizard import runner as wizard_runner
 from boss_agent_cli.wizard.actions import ActionContext, _candidate_search, execute_candidate_search
 from boss_agent_cli.wizard.models import StepResult, WorkflowInputError, WorkflowPlan, WorkflowStatus
 from boss_agent_cli.wizard.runner import WorkflowRunner
@@ -36,15 +36,21 @@ def _context(data_dir) -> ActionContext:
 # ── #2008：action 声明失败后到达的控制信号保留写前标记 ───────────────
 
 
-def test_timeout_after_declared_failure_keeps_write_marker(tmp_path) -> None:
+def test_timeout_after_declared_failure_keeps_write_marker(
+	tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+	# 用受控时钟代替 sleep：机器繁忙时 0.05 秒可能在动作开始前就到点，
+	# 那样测的是「动作前的超时」，而不是写标记后的超时（Issue #2008）。
+	clock = [1000.0]
+	monkeypatch.setattr(wizard_runner, "time", SimpleNamespace(monotonic=lambda: clock[0]))
 	calls: list[int] = []
 
 	def write_then_fail(context, inputs, prior):
 		calls.append(1)
 		control = context.workflow_control
 		control.begin_write(_CHECK_COMMAND)
-		# 慢到超过 deadline，让 runner 在 action 返回之后才轮询到超时。
-		time.sleep(0.2)
+		# 声明写标记后才越过 deadline，确保 runner 在动作返回后轮询到超时。
+		clock[0] += 1.0
 		return StepResult({"sent": False}, status=WorkflowStatus.FAILED)
 
 	with WorkflowStore(tmp_path) as store:
