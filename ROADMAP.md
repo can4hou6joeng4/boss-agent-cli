@@ -4,6 +4,8 @@
 
 ## 已发布
 
+v3.4.179（2026-11-24）：向导 / MCP `boss_wizard` 的 pipeline 与 digest 在任何平台请求之前校验 days_stale / now_ts_ms，digest 的 days_stale 上限与顶层命令一致；招聘者简历动作拒绝非字符串 security_id（Issue #2631、#2633）。
+
 v3.4.178（2026-11-24）：向导 / MCP `boss_wizard` 的职位详情在未显式传 job_id 时复用缓存值走 httpx 快速通道，并收紧 job_id / lid 的类型、空白与编码校验，与顶层 `boss detail` 同口径（Issue #2628）。
 
 v3.4.177（2026-11-24）：向导 / MCP `boss_wizard` 的聊天记录游标拒绝显式 `max_msg_id: 0` / 负数，打招呼拒绝显式空白 `message`，求职者分页动作拒绝超过 `MAX_TRUSTED_PAGE` 的页码，三处均与顶层命令同口径（Issue #2621 / #2623 / #2625）。
