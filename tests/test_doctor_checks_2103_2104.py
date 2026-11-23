@@ -79,14 +79,16 @@ def test_unreadable_cache_root_is_reported_not_raised(tmp_path: Path, monkeypatc
 	"""缓存根元数据读不出来（权限）时跳过并单独上报，不能抛到 doctor 顶层。"""
 	blocked = tmp_path / "blocked" / "ms-playwright"
 	monkeypatch.setattr(browser_runtime, "patchright_browser_cache_dirs", lambda: [blocked])
-	real_stat = Path.stat
+	# 探测先用 lstat 判链接（Issue #2559）。3.12 的 Path.lstat 委托 self.stat，
+	# 3.14 起独立实现；只 patch lstat 在两个版本上都覆盖元数据读取。
+	real_lstat = Path.lstat
 
-	def fake_stat(self: Path, *args, **kwargs):
+	def fake_lstat(self: Path, *args, **kwargs):
 		if self == blocked:
 			raise PermissionError(13, "permission denied", str(self))
-		return real_stat(self, *args, **kwargs)
+		return real_lstat(self, *args, **kwargs)
 
-	monkeypatch.setattr(Path, "stat", fake_stat)
+	monkeypatch.setattr(Path, "lstat", fake_lstat)
 
 	assert browser_runtime.installed_browser_dirs() == []
 	assert browser_runtime.unreadable_browser_cache_dirs() == [blocked]
@@ -97,14 +99,14 @@ def test_unreadable_cache_entries_are_reported(tmp_path: Path, monkeypatch: pyte
 	base = tmp_path / "ms-playwright"
 	base.mkdir()
 	monkeypatch.setattr(browser_runtime, "patchright_browser_cache_dirs", lambda: [base])
-	real_glob = Path.glob
+	real_listdir = os.listdir
 
-	def fake_glob(self: Path, pattern: str):
-		if self == base:
-			raise PermissionError(13, "permission denied", str(self))
-		return real_glob(self, pattern)
+	def fake_listdir(path):
+		if Path(path) == base:
+			raise PermissionError(13, "permission denied", str(path))
+		return real_listdir(path)
 
-	monkeypatch.setattr(Path, "glob", fake_glob)
+	monkeypatch.setattr(browser_runtime.os, "listdir", fake_listdir)
 
 	assert browser_runtime.installed_browser_dirs() == []
 	assert browser_runtime.unreadable_browser_cache_dirs() == [base]

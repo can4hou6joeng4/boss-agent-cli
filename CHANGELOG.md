@@ -13,6 +13,7 @@
 - MCP 调用在 CLI 子进程启动期间或运行中被取消时，宿主仍会停止并回收自己启动的进程，保留已返回的断点信息，不把派发过的写调用标为安全重试。超时估算失败改在启动前拒绝，不再先启动子进程（Issue #2555）。
 - MCP 只接受字段完整、`ok` 为布尔且与 CLI 退出码一致的 JSON 信封；畸形对象或矛盾的退出状态按 `CLI_ERROR` 上报。已启动的写命令保留结果未知、不可自动重发的标记（Issue #2556）。
 - MCP 异步调用在启动前与同步入口一样校验完整 argv：宿主注入的 `--data-dir` 等全局值或 CLI 路径含 NUL / 孤立代理项时按 `INVALID_PARAM` 拒绝，不再漏成 MCP 内部错误（Issue #2558）。
+- `doctor` 的浏览器缓存探测不再把「读不出来」当成「没安装」：不可读的缓存根（`Path.glob` 对权限错误静默返回空）、缓存根解析整体失败、悬空的符号链接根都归入「无法确认」并按 warn 提示，而不是引导重复下载内核；缓存条目枚举改用 `listdir`，只把 `FileNotFoundError` 当缺失。缓存根解析与 patchright 驱动同优先级读取 `PLAYWRIGHT_BROWSERS_PATH` → `npm_config_playwright_browsers_path` → `npm_package_config_playwright_browsers_path`（及 `INIT_CWD` 的回退），从 npm 脚本启动时不再与驱动定位到不同根（Issue #2559）。
 - `search` 读取缓存时，单行 `response` 存了非法 UTF-8 不再被归成「缓存库损坏」并引导删除整库（候选池、预设、断点都在里面）：`CacheRowDecodeError` 让该行按缓存未命中处理并删除，本次搜索重新请求覆盖；`response` 列类型漂移（BLOB / 数字）同样按未命中；缓存里的 `pagination` 字段类型漂移（`page=true` / `has_more` 为字符串等）不再原样进入成功信封（Issue #2545）。
 - 平台职位字段含孤立代理项时，搜索缓存文本改用默认 JSON 转义后落库：SQLite 绑定阶段不再抛 `UnicodeEncodeError` 被兜成带磁盘指引的 `LOCAL_IO_ERROR`，普通搜索与加 `--with-score` 一样能返回结果（Issue #2545）。
 - `search --page` 与 URL 里的 `page` 统一钳制到 `MAX_TRUSTED_PAGE`，达到上限时保留平台的 `has_more` 证据但不再生成必然重复同一请求的下一页命令；4300 位页码在发出请求前按 `INVALID_PARAM` 拒绝。格式错误的 `--url`（如无效 IPv6 主机名）转成 `SearchUrlParseError`，按 `INVALID_PARAM` 提示修正链接，不再是可重试的 `NETWORK_ERROR`（Issue #2546）。
