@@ -2,7 +2,13 @@
 
 from typing import Any
 
-from boss_agent_cli.services.contact_lookup import FriendListShapeError, FriendLookupLimitExceeded, find_friend
+from boss_agent_cli.services.contact_lookup import (
+	FriendListShapeError,
+	FriendLookupLimitExceeded,
+	find_friend,
+	friend_security_id,
+	friend_uid,
+)
 
 
 def current_friend_security_id_or_emit(
@@ -18,9 +24,9 @@ def current_friend_security_id_or_emit(
 	from boss_agent_cli.display import boss_command_for_ctx, handle_error_output
 
 	# 只认字符串：类型漂移成对象 / 布尔时 str() 会把 Python repr 当令牌发给
-	# 写请求（Issue #1812）。
-	raw_security_id = friend_item.get("securityId") or friend_item.get("security_id")
-	security_id = raw_security_id.strip() if isinstance(raw_security_id, str) else ""
+	# 写请求（Issue #1812）。判定与 wizard 侧共用 services.contact_lookup
+	# 的同一份实现（Issue #2543）。
+	security_id = friend_security_id(friend_item)
 	if security_id:
 		return security_id
 	# 与本文件 current_friend_uid_or_emit 同一口径：这是本次列表数据的确定性
@@ -53,11 +59,10 @@ def current_friend_uid_or_emit(
 	from boss_agent_cli.display import boss_command_for_ctx, handle_error_output
 
 	# uid 实测是整数或数字串；布尔与容器不是联系人身份，不能 str() 成
-	# "True" / "{'a': 1}" 发给平台（Issue #1812）。
-	raw_uid = friend_item.get("uid")
-	if isinstance(raw_uid, bool) or not isinstance(raw_uid, (str, int)):
-		raw_uid = ""
-	uid = str(raw_uid or "").strip()
+	# "True" / "{'a': 1}" 发给平台（Issue #1812）。超过 4300 位的整数连
+	# str() 都会抛 ValueError，与 chat_utils.stable_uid 同口径按缺失处理
+	# （Issue #2543）。
+	uid = friend_uid(friend_item)
 	if uid:
 		return uid
 	chat_cmd = boss_command_for_ctx(ctx, "chat", include_data_dir=True)

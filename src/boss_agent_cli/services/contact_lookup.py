@@ -1,7 +1,27 @@
-from typing import Any
+from typing import Any, Mapping
 
 from boss_agent_cli.services.chat_utils import stable_uid
 from boss_agent_cli.services.friend_list_pages import friend_list_page_has_content, friend_list_page_items
+
+
+def friend_security_id(item: Mapping[str, Any]) -> str:
+	"""读取本次列表返回的 securityId；类型漂移按缺失处理。
+
+	只认字符串：布尔 / 容器经 ``str()`` 后会变成 ``"True"`` / ``"{'a': 1}"``，
+	发给平台写请求就是伪造身份。CLI 侧此前已按此口径收口（Issue #1812），
+	wizard 侧仍会把 repr 文本发给 ``exchange_contact`` 等写接口（Issue #2543）。
+	"""
+	raw = item.get("securityId") or item.get("security_id")
+	return raw.strip() if isinstance(raw, str) else ""
+
+
+def friend_uid(item: Mapping[str, Any]) -> str:
+	"""读取本次列表返回的稳定 uid；布尔 / 容器 / 超长整数按缺失处理。
+
+	与 ``chat_utils.stable_uid`` 同口径：超过 4300 位的整数连 ``str()`` 都会
+	抛 ``ValueError``（Issue #2543）。
+	"""
+	return stable_uid(item.get("uid"))
 
 
 class FriendLookupLimitExceeded(RuntimeError):
