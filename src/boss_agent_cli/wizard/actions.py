@@ -565,6 +565,20 @@ def _int_input(inputs: Mapping[str, Any], name: str, default: int, *, minimum: i
 	return _check_minimum(_coerce_int(raw, name), raw, name, minimum)
 
 
+def _optional_int_input(inputs: Mapping[str, Any], name: str, *, minimum: int = 0) -> int | None:
+	"""读取可选整数游标：缺省 / null / 空串视为未提供，显式值仍按取值范围校验。
+
+	可选游标若用 `inputs.get(name)` 真值判断决定是否下发，显式 `0` 会被当成
+	「没给」静默丢弃（Issue #2621）：向导 / MCP 的 `recruiter_chat_history`
+	因此把 `max_msg_id: 0` 悄悄换成最新一页，而顶层 `hr chatmsg --max-msg-id 0`
+	由 Click `IntRange(min=1)` 报 `INVALID_PARAM`。两份实现必须同口径。
+	"""
+	raw = inputs.get(name)
+	if raw is None or raw == "":
+		return None
+	return _check_minimum(_coerce_int(raw, name), raw, name, minimum)
+
+
 def _require_run_id(inputs: Mapping[str, Any]) -> str:
 	"""wizard 的 run_id 只接受非空字符串（Issue #1836）。
 
@@ -2489,7 +2503,7 @@ def _recruiter_chat_history(context: ActionContext, inputs: Mapping[str, Any], p
 		lambda platform: platform.chat_history(
 			friend_id,
 			count=_int_input(inputs, "count", 20, minimum=1),
-			max_msg_id=_int_input(inputs, "max_msg_id", 0) if inputs.get("max_msg_id") else None,
+			max_msg_id=_optional_int_input(inputs, "max_msg_id", minimum=1),
 		),
 		"聊天记录获取失败",
 		list_keys=("messageList", "messages", "list", "items", "result"),

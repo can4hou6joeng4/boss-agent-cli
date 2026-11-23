@@ -1109,6 +1109,41 @@ def test_recruiter_actions_accept_omitted_or_null_optional_filters(tmp_path):
 	assert [call[0] for call in platform.calls] == ["search_geeks", "friend_list", "friend_list", "last_messages"]
 
 
+@pytest.mark.parametrize("max_msg_id", [0, -1, "0", "-3"])
+def test_recruiter_chat_history_rejects_non_positive_max_msg_id(tmp_path, max_msg_id):
+	"""显式 0 / 负数游标不能被真值判断吞成「未提供」（Issue #2621）。
+
+	顶层 `hr chatmsg --max-msg-id` 是 Click `IntRange(min=1)`，向导 / MCP 必须
+	同样拒绝，而不是静默回退最新一页——Agent 会以为游标翻页已生效。
+	"""
+	platform = _FakeRecruiterPlatform()
+	context = _action_context(tmp_path, role="recruiter", recruiter=platform)
+
+	with pytest.raises(WorkflowInputError, match="max_msg_id"):
+		DEFAULT_ACTIONS["recruiter_chat_history"](
+			context,
+			{"friend_id": 42, "max_msg_id": max_msg_id},
+			{},
+		)
+
+	assert platform.calls == []
+
+
+@pytest.mark.parametrize("max_msg_id", [None, ""])
+def test_recruiter_chat_history_treats_absent_max_msg_id_as_latest_page(tmp_path, max_msg_id):
+	"""省略 / null / 空串仍表示未提供游标，保持读最新一页（Issue #2621）。"""
+	platform = _FakeRecruiterPlatform()
+	context = _action_context(tmp_path, role="recruiter", recruiter=platform)
+
+	DEFAULT_ACTIONS["recruiter_chat_history"](
+		context,
+		{"friend_id": 42, "max_msg_id": max_msg_id},
+		{},
+	)
+
+	assert platform.calls == [("chat_history", 42, 20, None)]
+
+
 def test_recruiter_exchange_rejects_unknown_type(tmp_path):
 	"""招聘者侧非法交换类型同样不能静默按手机号发出请求（Issue #905）。"""
 	platform = _FakeRecruiterPlatform()

@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 向导 / MCP `boss_wizard` 的 `recruiter_chat_history` 对显式 `max_msg_id: 0` / 负数按 `INVALID_PARAM` 拒绝，与顶层 `hr chatmsg --max-msg-id` 的 `IntRange(min=1)` 同口径，不再因真值判断静默丢弃游标、改读最新一页（Issue #2621）。
+
 ## [3.4.176] - 2026-11-24
 
 ### Fixed
