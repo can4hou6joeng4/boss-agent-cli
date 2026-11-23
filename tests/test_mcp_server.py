@@ -482,9 +482,11 @@ def test_call_tool_rejects_unknown_wizard_action(monkeypatch, arguments, shown):
 	payload = json.loads(result.content[0].text)
 	assert payload["ok"] is False
 	assert payload["error"]["code"] == "INVALID_PARAM"
-	assert "参数取值非法" in payload["error"]["message"]
+	# 入口按 inputSchema 的 enum 拒绝（Issue #2553）：非法 action 到不了映射层，
+	# 错误信息直接给出全部合法取值。
+	assert "参数无效" in payload["error"]["message"]
 	assert shown in payload["error"]["message"]
-	assert "run / resume / status / stop" in payload["error"]["message"]
+	assert "run、resume、status、stop" in payload["error"]["message"]
 
 
 @patch("server.subprocess.run")
@@ -1568,13 +1570,14 @@ def test_read_only_tool_classification_covers_real_tools_only():
 	assert mcp_server._READ_ONLY_TOOL_NAMES <= catalog
 	write_tools = {
 		"boss_apply", "boss_greet", "boss_batch_greet", "boss_mark", "boss_exchange",
-		"boss_wizard", "boss_clean", "boss_crawl_shortlist", "boss_agent_run",
+		"boss_clean", "boss_crawl_shortlist", "boss_agent_run",
 		"boss_agent_review_approve", "boss_agent_review_reject",
 		"boss_shortlist_add", "boss_shortlist_annotate", "boss_shortlist_remove",
 		"boss_preset_add", "boss_preset_remove", "boss_watch_add", "boss_watch_remove",
 		"boss_hr_greet", "boss_hr_location", "boss_hr_reply", "boss_hr_request_resume",
 		"boss_hr_accept_resume", "boss_hr_exchange",
 	}
+	# boss_wizard 只有 status 只读，写模式按 action 单独登记（Issue #2552）。
 	assert not (mcp_server._READ_ONLY_TOOL_NAMES & write_tools)
 	# 按参数判写的工具同样必须在只读白名单里，否则规则本身就没机会生效。
 	assert mcp_server._TOOL_WRITE_MODES.keys() <= mcp_server._READ_ONLY_TOOL_NAMES
@@ -1589,7 +1592,11 @@ def test_write_modes_only_reference_declared_enum_actions():
 		tool = by_name[tool_name]
 		allowance = tool.input_schema["properties"]["action"]
 		assert set(allowance["enum"]) >= modes
-		assert allowance.get("default", "list") not in modes
+		default_action = allowance.get("default", "list")
+		# 缺省 action 是只读的常规情况不允许出现在写模式；wizard 的缺省 run 本身
+		# 是写，必须同时在 _DEFAULT_ACTION_BY_TOOL 显式登记（Issue #2552）。
+		assert (default_action in modes) == (tool_name in mcp_server._DEFAULT_ACTION_BY_TOOL)
+		assert mcp_server._DEFAULT_ACTION_BY_TOOL.get(tool_name, default_action) == default_action
 
 
 def test_read_only_tools_with_action_dimension_are_explicitly_classified():
