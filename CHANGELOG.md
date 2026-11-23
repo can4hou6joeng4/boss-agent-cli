@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [3.4.175] - 2026-11-24
+
 ### Fixed
 - MCP 参数映射保留写工具的显式空串（`boss_greet` 的 `message`、`boss_batch_greet` 的筛选项、`boss_hr_candidates` 的 `city` / `job_id`），由 CLI 在平台调用前按 `INVALID_PARAM` 拒绝，不再静默改用默认招呼语或无筛选派发（Issue #2615）。
 
