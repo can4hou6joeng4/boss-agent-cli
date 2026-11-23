@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from boss_agent_cli import mcp_server
+from mcp.types import CallToolRequestParams
 
 
 def _success_wire(**overrides):
@@ -64,3 +65,23 @@ def test_valid_error_envelope_retains_recovery_fields():
 	error = {"code": "INVALID_PARAM", "recoverable": False, "recovery_action": "修正参数"}
 	wire = _success_wire(ok=False, error=error)
 	assert mcp_server._parse_cli_output(("wizard",), wire, "", returncode=1) == json.loads(wire)
+
+
+@pytest.mark.parametrize(("value", "problem"), [("bad\0path", "NUL"), ("bad\ud800path", "代理项")])
+@pytest.mark.parametrize("source", ["executable", "global_option"])
+def test_invalid_host_arguments_do_not_spawn_cli(value, problem, source, monkeypatch):
+	async def unexpected_spawn(*args, **kwargs):
+		pytest.fail("无效的宿主参数不应启动子进程")
+
+	monkeypatch.setattr(mcp_server.asyncio, "create_subprocess_exec", unexpected_spawn)
+	if source == "executable":
+		monkeypatch.setattr(mcp_server, "_BOSS_BIN", value)
+	else:
+		monkeypatch.setattr(mcp_server, "_BOSS_GLOBAL_ARGS", ["--data-dir", value])
+	result = asyncio.run(mcp_server.call_tool(None, CallToolRequestParams(name="boss_schema")))
+	assert result.is_error is True
+	error = json.loads(result.content[0].text)["error"]
+	assert error["code"] == "INVALID_PARAM"
+	assert error["details"]["outcome_unknown"] is False
+	assert problem in error["message"]
+	assert "子进程未启动" in error["recovery_action"]

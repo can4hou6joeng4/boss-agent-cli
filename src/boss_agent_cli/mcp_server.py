@@ -596,20 +596,22 @@ def _dumps_tool_result(payload: dict[str, Any]) -> str:
 	return text.encode("utf-8", "backslashreplace").decode("utf-8")
 
 
+def _invalid_launch_args(args: tuple[str, ...], reason: str) -> dict[str, Any]:
+	# 子进程从未启动，不应引导调用方核对不存在的写入（Issue #1863）。
+	return _cli_failure(
+		args,
+		"INVALID_PARAM",
+		reason,
+		outcome_unknown=False,
+		recovery_action="参数未通过本地校验，子进程未启动，修正参数后重试；本次没有平台写入",
+	)
+
+
 def _run_boss(*args: str, may_write: bool = True) -> dict[str, Any]:
 	"""Synchronous compatibility entrypoint; MCP handlers use the async path."""
 	cmd = [_BOSS_BIN, "--json", *_BOSS_GLOBAL_ARGS, *args]
-	unsafe_reason = _unsafe_argv_reason(cmd)
-	if unsafe_reason is not None:
-		# 子进程从未启动：不能套用「核对 checkpoint」的写中断模板，写工具本次
-		# 同样没有平台写入（Issue #1863）。
-		return _cli_failure(
-			args,
-			"INVALID_PARAM",
-			unsafe_reason,
-			outcome_unknown=False,
-			recovery_action="参数未通过本地校验，子进程未启动，修正参数后重试；本次没有平台写入",
-		)
+	if unsafe_reason := _unsafe_argv_reason(cmd):
+		return _invalid_launch_args(args, unsafe_reason)
 	# 超时估算同样必须遵守 schema 的数值边界；本地参数错误不能伪装成 CLI 失败。
 	try:
 		timeout = _cli_timeout(args)
@@ -732,6 +734,9 @@ async def _run_boss_async(*args: str, may_write: bool = True) -> dict[str, Any]:
 			recovery_action="减小 count / summary-limit 后重试；本次子进程未启动",
 		)
 	cmd = [_BOSS_BIN, "--json", *_BOSS_GLOBAL_ARGS, *args]
+	# handler 校验工具参数；实际启动前还要覆盖宿主注入的全局选项和可执行文件名。
+	if unsafe_reason := _unsafe_argv_reason(cmd):
+		return _invalid_launch_args(args, unsafe_reason)
 	spawn = asyncio.create_task(
 		asyncio.create_subprocess_exec(
 			*cmd,
