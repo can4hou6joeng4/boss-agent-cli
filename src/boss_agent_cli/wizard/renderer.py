@@ -92,6 +92,7 @@ ERROR_LABELS = {
 	"AI_API_ERROR": "AI 服务调用失败",
 	"AI_NOT_CONFIGURED": "AI 服务尚未配置",
 	"ACTION_UNCONFIRMED": "操作可能已生效，但未能确认",
+	"CIRCUIT_BREAKER_OPEN": "招聘自动化已停止，本次操作未发出",
 	"ALREADY_APPLIED": "已投递过该职位",
 	"ALREADY_GREETED": "已向该招聘者打过招呼",
 	"ENDPOINT_DEPRECATED": "平台接口已迁移，当前版本无法发送",
@@ -132,6 +133,7 @@ RECOVERY_LABELS = {
 	"AI_API_ERROR": "检查网络连接与 AI 密钥配置后重试。",
 	"AI_NOT_CONFIGURED": "先执行 boss ai config --provider <provider> --model <model> --api-key <key> 完成配置。",
 	"ACTION_UNCONFIRMED": "动作可能已生效：先用 boss hr chatmsg <friend_id> 核实，不要直接重试。",
+	"CIRCUIT_BREAKER_OPEN": "人工核对未确认动作后执行 boss agent run --resume 关闭熔断，再由操作者显式重试；不要自动重发。",
 	"ALREADY_APPLIED": "该职位已投递过：用 boss me --section deliver 查看投递记录，或用 boss chat 跟进。",
 	"ALREADY_GREETED": "已打过招呼：用 boss chat 查看会话，或返回重新搜索换一批职位。",
 	"ENDPOINT_DEPRECATED": "停止重试：该平台端点已下线，请升级到最新版本并查看 error.details.tracking_issue。",
@@ -183,6 +185,7 @@ _RECOVERY_COMMANDS: dict[str, tuple[str, ...]] = {
 	"boss hr chatmsg": ("hr chatmsg",),
 	"boss hr reply": ("hr reply",),
 	"boss doctor": ("doctor",),
+	"boss agent run --resume": ("agent run --resume",),
 	"boss clean --risk-lock": ("clean --risk-lock",),
 }
 

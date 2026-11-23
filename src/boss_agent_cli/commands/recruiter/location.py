@@ -37,14 +37,8 @@ def _cache_path(data_dir: Path) -> Path:
 
 
 def _stop_reason(data_dir: Path) -> str | None:
-	"""读取招聘自动化停止开关。"""
-	loaded = AutomationStore.read_stop_for(data_dir)
-	if loaded.get("open") is not True:
-		return None
-	reason = loaded.get("reason")
-	if isinstance(reason, str) and reason.strip():
-		return reason.strip()
-	return "招聘自动化已停止"
+	"""读取招聘自动化停止开关与熔断快照（Issue #2612）。"""
+	return AutomationStore.stop_reason_for(data_dir)
 
 
 def _location_status(data_dir: Path, friend_id: int) -> str | None:
