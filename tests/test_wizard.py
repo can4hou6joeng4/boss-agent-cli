@@ -1073,6 +1073,42 @@ def test_recruiter_read_write_and_job_actions_preserve_arguments(tmp_path):
 	]
 
 
+@pytest.mark.parametrize(
+	("action", "inputs", "blank"),
+	[
+		("recruiter_candidates", {"query": "Python", "city": ""}, "city"),
+		("recruiter_candidates", {"query": "Python", "city": "   "}, "city"),
+		("recruiter_candidates", {"query": "Python", "job_id": ""}, "job_id"),
+		("recruiter_applications", {"job_id": ""}, "job_id"),
+		("recruiter_chat", {"job_id": " "}, "job_id"),
+		("recruiter_last_messages", {"job_id": ""}, "job_id"),
+	],
+)
+def test_recruiter_actions_reject_blank_optional_filters(tmp_path, action, inputs, blank):
+	"""向导入口与顶层 `hr ...` 命令同口径：显式空筛选项不能静默按不筛选执行（Issue #2618）。"""
+	platform = _FakeRecruiterPlatform()
+	context = _action_context(tmp_path, role="recruiter", recruiter=platform)
+
+	with pytest.raises(WorkflowActionError) as exc_info:
+		DEFAULT_ACTIONS[action](context, inputs, {})
+
+	assert exc_info.value.code == "INVALID_PARAM"
+	assert blank in str(exc_info.value)
+	assert platform.calls == []
+
+
+def test_recruiter_actions_accept_omitted_or_null_optional_filters(tmp_path):
+	"""省略 / null 仍表示未提供；只有显式空白才是参数错误（Issue #2618）。"""
+	platform = _FakeRecruiterPlatform()
+	context = _action_context(tmp_path, role="recruiter", recruiter=platform)
+
+	DEFAULT_ACTIONS["recruiter_candidates"](context, {"query": "Python", "city": None}, {})
+	DEFAULT_ACTIONS["recruiter_applications"](context, {"job_id": None}, {})
+	DEFAULT_ACTIONS["recruiter_last_messages"](context, {"job_id": None}, {})
+
+	assert [call[0] for call in platform.calls] == ["search_geeks", "friend_list", "friend_list", "last_messages"]
+
+
 def test_recruiter_exchange_rejects_unknown_type(tmp_path):
 	"""招聘者侧非法交换类型同样不能静默按手机号发出请求（Issue #905）。"""
 	platform = _FakeRecruiterPlatform()
