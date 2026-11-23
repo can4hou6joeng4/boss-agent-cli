@@ -4,6 +4,8 @@ This document tracks the medium-term and long-term direction of `boss-agent-cli`
 
 ## Released
 
+v3.4.159 (2026-11-23): the cache layer binds unencodable platform identifiers reversibly, so greet/apply records and job-description caching no longer break search and greeting flows (Issue #2509). The wizard's watch/search actions and `search --preset` now validate input and stored records: blank names, keywords, or identifiers, unencodable names, and invalid saved parameters are rejected with `INVALID_PARAM` / `SAVED_SEARCH_INVALID` before any platform request, with actionable delete-and-recreate hints (Issues #2511, #2512, #2513, #2514, #2516, and #2519).
+
 v3.4.158 (2026-11-23): shortlist imports skip unencodable job identifiers, and shortlist commands require UTF-8-encodable tag arguments (Issues #2502 and #2506). Resume commands can link, list, and remove job associations for existing resumes whose filenames contain non-UTF-8 bytes (Issue #2503).
 
 v3.4.157 (2026-11-23): crawl and wizard run ids are checked for encodability at the command entry, so input containing lone surrogates reports INVALID_PARAM instead of a LOCAL_IO_ERROR with disk guidance (Issue #2499).
