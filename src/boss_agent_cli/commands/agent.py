@@ -68,7 +68,7 @@ from boss_agent_cli.display import (
 )
 from boss_agent_cli.resume.models import resume_to_text
 from boss_agent_cli.resume.store import ResumeStore
-from boss_agent_cli.commands._text_guard import reject_unencodable_params
+from boss_agent_cli.commands._text_guard import blank_option_names, reject_unencodable_params
 from boss_agent_cli.services.install_extras import extras_requirement
 from boss_agent_cli.services.text_files import is_utf8_encodable
 
@@ -256,6 +256,17 @@ def crawl_cmd(
 		return
 	if query and not _require_crawl_capabilities(ctx):
 		ctx.exit(1)
+		return
+	if query is not None and blank_option_names(city=city):
+		# 显式空值与「没传」要分开报：后者才是「必须提供」（Issue #2604）。
+		handle_error_output(
+			ctx,
+			"agent.crawl",
+			code="INVALID_PARAM",
+			message="--city 的值不能为空",
+			recovery_action=f"补上 --city <城市> 后重试，例如 {crawl_by_query}",
+			hints={"next_actions": [crawl_by_query]},
+		)
 		return
 	if query and not city:
 		handle_error_output(

@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+- `batch-greet` 对显式传空的 `--city` / `--salary` / `--experience` / `--education` 按 `INVALID_PARAM` 拒绝，不再在未限定筛选范围的结果上批量发出招呼；空值判定从招聘者命令下沉到公共 CLI 参数守卫（Issue #2602）。
+- `greet --message ""` 不再退化为默认招呼语：自定义正文选项改为区分缺省与显式空值，空串与纯空白都在任何平台调用前拒绝，省略选项仍发送默认正文（Issue #2603）。
+- `agent crawl --query` 显式传空的 `--city` 单独提示「--city 的值不能为空」，不再误报为未提供城市（Issue #2604）。
+
 ## [3.4.171] - 2026-11-23
 
 ### Fixed
