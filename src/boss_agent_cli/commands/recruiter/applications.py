@@ -6,7 +6,7 @@ import click
 from boss_agent_cli.auth.manager import AuthManager
 from boss_agent_cli.compliance import require_compliance_allowed
 from boss_agent_cli.commands._recruiter_platform import get_recruiter_platform_instance
-from boss_agent_cli.commands.recruiter._hints import hint_command
+from boss_agent_cli.commands.recruiter._hints import reject_blank_options, hint_command
 from boss_agent_cli.display import (
 	handle_auth_errors,
 	handle_output,
@@ -30,6 +30,8 @@ from boss_agent_cli.services.pagination import (
 def applications_cmd(ctx: click.Context, job_id: str | None, label_id: int, page: int) -> None:
 	"""查看候选人投递申请列表"""
 	if not require_compliance_allowed(ctx, "recruiter-applications"):
+		return
+	if reject_blank_options(ctx, "recruiter-applications", job_id=job_id):
 		return
 
 	data_dir = ctx.obj["data_dir"]
